@@ -9,7 +9,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { textCodec } from '@velaros-ai/text-files'
+import { textCodec } from '@velaros-ai/core/text-files'
 
 import { typescriptPlugin } from '../index'
 import { completeProjectCoverage } from '../utils/editing/planner-coverage'

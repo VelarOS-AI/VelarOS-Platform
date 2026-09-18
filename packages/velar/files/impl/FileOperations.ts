@@ -8,9 +8,9 @@ import { stat } from 'node:fs/promises'
 
 import { isArray, isBlank, isEmpty, isNull, isPresent, isString, isUndefined, Log, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
-import { currentPlatform } from '@velaros-ai/platform'
-import { textCodec } from '@velaros-ai/text-files'
+import type { PlatformCompatibilityApi } from '@velaros-ai/core/platform'
+import { currentPlatform } from '@velaros-ai/core/platform'
+import { textCodec } from '@velaros-ai/core/text-files'
 
 import { FileErrorCodes, FileLimits } from '../contract/constants.js'
 import type { FileOperationContext } from '../contract/requires.js'

@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { constants } from 'node:os'
 
 import { isNotNull, readErrnoCode } from '@velaros-ai/core'
-import { currentPlatform } from '@velaros-ai/platform'
+import { currentPlatform } from '@velaros-ai/core/platform'
 
 import { VelarosCliErrorCodes, VelarosCliExitCodes } from '../contract/constants.js'
 import type { VelarosCliNamespaceRunResult, VelarosCliRunOptions } from '../types/cli.js'

@@ -4,7 +4,7 @@
  */
 
 import { isArray, isBoolean, isFiniteNumber, isNumber, isRecord, isString, isTrue, isUndefined } from '@velaros-ai/core'
-import { textCodec } from '@velaros-ai/text-files'
+import { textCodec } from '@velaros-ai/core/text-files'
 
 import type { ProjectChangeRecordInput } from '../../types/change-feed.js'
 import type { ProjectTransactionFileState, ProjectTransactionPendingOperation, ProjectTransactionStateSnapshot, StoredTransaction } from '../../types/transaction.js'

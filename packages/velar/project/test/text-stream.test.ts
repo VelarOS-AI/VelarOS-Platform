@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 
-import { textCodec } from '@velaros-ai/text-files'
+import { textCodec } from '@velaros-ai/core/text-files'
 
 import { createProjectKernel } from '../index'
 import { detectBinaryByPrefix, hashFileAndDetectBinary, limitContent, readLimitedTextPrefix, readProjectTextFile, readTextLineWindow } from '../utils/files/file-reader'
@@ -17,7 +17,7 @@ afterEach(async () => { await rm(root, { recursive: true, force: true }) })
 
 const encodings = ['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-nobom', 'gb18030'] as const
 
-// 编码识别、流式识别、极短无 BOM UTF-16、拒绝覆盖认不出编码的文件这些纯编解码用例在 @velaros-ai/text-files 的测试里；这里是项目读取层的用例。
+// 编码识别、流式识别、极短无 BOM UTF-16、拒绝覆盖认不出编码的文件这些纯编解码用例在 @velaros-ai/core/text-files 的测试里；这里是项目读取层的用例。
 test.each(encodings)('bounded reads keep complete characters and literal escapes for %s', async (encoding) => {
   const content = 'long ascii source\r\n中文🙂\\n\\uD800\r\n'
   const path = join(root, 'source.txt')

@@ -21,9 +21,9 @@ import { lstat, mkdir, readFile, rename, rm, stat } from 'node:fs/promises'
 import * as path from 'node:path'
 
 import { isNull, isObject, isPresent, isUndefined, optionalWhen, toOptional } from '@velaros-ai/core'
+import { textCodec, textFileIo } from '@velaros-ai/core/text-files'
+import type { ExpectedBytes, TextEncoding } from '@velaros-ai/core/text-files/contracts'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
-import { textCodec, textFileIo } from '@velaros-ai/text-files'
-import type { ExpectedBytes, TextEncoding } from '@velaros-ai/text-files/contracts'
 
 import type { CommandProvider, FileFilterProvider } from '../../contract/requires.js'
 import type {

@@ -1,7 +1,7 @@
 /**
  * 路径判定与资源定位的原语：包含判断、符号链接判断、PDF 标准字体的位置。
  *
- * 包含判断用公共件 `@velaros-ai/platform` 的 `isPathTextInside`（带分隔符边界，名字以 `..` 开头的目录照常算在里面），
+ * 包含判断用公共件 `@velaros-ai/core/platform` 的 `isPathTextInside`（带分隔符边界，名字以 `..` 开头的目录照常算在里面），
  * 不自己写 `startsWith('..')`；真实路径由 `RendererPaths` 先算好再交给这里。
  */
 import { lstat } from 'node:fs/promises'
@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import { AppError, readErrnoCode } from '@velaros-ai/core'
-import { currentPlatform } from '@velaros-ai/platform'
+import { currentPlatform } from '@velaros-ai/core/platform'
 
 import { DocumentRendererErrorCodes } from '../contract/constants.js'
 

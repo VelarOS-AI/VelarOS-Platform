@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto'
 import { open } from 'node:fs/promises'
 
 import { isEmpty, isUndefined, mapDefined, optionalWhen } from '@velaros-ai/core'
-import { textCodec, textFileIo } from '@velaros-ai/text-files'
-import type { TextChunk, TextEncoding } from '@velaros-ai/text-files/contracts'
+import { textCodec, textFileIo } from '@velaros-ai/core/text-files'
+import type { TextChunk, TextEncoding } from '@velaros-ai/core/text-files/contracts'
 
 import type { ByteLimitedContent, LineWindowReadResult, ReadCursor } from '../../types/file-store.js'
 import type { ReadInput, ReadResult } from '../../types/io.js'

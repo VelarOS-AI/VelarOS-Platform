@@ -2,7 +2,7 @@
  * 路径准入：三条路径（projectRoot、inputPath、outputPath）解开符号链接之后都必须仍在 projectRoot 内。
  *
  * 真实路径由 `@velaros-ai/core` 的 `resolveRealPath` 算（还不存在的输出路径会解析到最近一个存在的祖先，
- * 再把尚不存在的尾巴拼回去），包含判断由 `utils/paths.ts` 经 `@velaros-ai/platform` 做。
+ * 再把尚不存在的尾巴拼回去），包含判断由 `utils/paths.ts` 经 `@velaros-ai/core/platform` 做。
  *
  * 顺序是安全性的一部分：**先判定、后建目录**。反过来写的话，`outputPath` 经项目内的符号链接指向外面时，
  * 目录已经在 projectRoot 之外建出来了，回执才说 PATH_DENIED。

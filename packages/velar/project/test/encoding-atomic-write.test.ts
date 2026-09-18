@@ -11,7 +11,7 @@ let root = ''
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-atomic-')) })
 afterEach(async () => { await rm(root, { recursive: true, force: true }) })
 
-// 编码与原子写入本身的用例在 @velaros-ai/text-files；这里只测项目怎么用它：事务的整批语义，以及公共件的失败在文件网关上翻成 ProjectError。
+// 编码与原子写入本身的用例在 @velaros-ai/core/text-files；这里只测项目怎么用它：事务的整批语义，以及公共件的失败在文件网关上翻成 ProjectError。
 describe('lossless text and atomic replacement', () => {
   test('rejects a malformed late operation before an earlier valid edit is applied', async () => {
     await writeFile(join(root, 'source.txt'), 'original')

@@ -4,8 +4,8 @@ import { stat } from 'node:fs/promises'
 
 import { isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { textFileIo } from '@velaros-ai/text-files'
-import { TextFileErrorCodes } from '@velaros-ai/text-files/contracts'
+import { textFileIo } from '@velaros-ai/core/text-files'
+import { TextFileErrorCodes } from '@velaros-ai/core/text-files/contracts'
 
 import type { ImageRegion } from '../types/images.js'
 import type { ImageMediaType, ImageResizeRequest, ImageResizeResult } from '../types/space.js'

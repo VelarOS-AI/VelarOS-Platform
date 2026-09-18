@@ -49,7 +49,7 @@
 
 - `@velaros-ai/velar/office/renderer`：Office 预览解析与 PNG、PDF 单页渲染的原语（原生依赖都在那边）。
 - `@velaros-ai/core`：`AppError`（错误码即控制流）、`resolveRealPath`、几个类型守卫与 `truncate`。
-- `@velaros-ai/platform`：`isPathTextInside`，路径包含判断的公共件。
+- `@velaros-ai/core/platform`：`isPathTextInside`，路径包含判断的公共件。
 - `zod`：请求 schema。
 - 环境变量 `VELAROS_DOCUMENT_RENDERER_RESOURCES_ROOT`：产品启动器设的资源根，渲染 PDF 时从这里取标准字体；没设就交给 pdfjs 自己找。
 

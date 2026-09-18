@@ -56,7 +56,7 @@ VelarOS 唯一的正式命令行发行包，装出来的可执行文件叫 `vela
 ## 依赖什么
 
 - `@velaros-ai/core`：`AppError.getMessage`、`stringifyPretty`、`isFalse`、`isNotNull`、`readErrnoCode`。
-- `@velaros-ai/platform`：`currentPlatform.isWindows()`，用来决定起 Termel 时要不要过 shell（Windows 上 npm 装出来的是 `termel.cmd` 垫片）。
+- `@velaros-ai/core/platform`：`currentPlatform.isWindows()`，用来决定起 Termel 时要不要过 shell（Windows 上 npm 装出来的是 `termel.cmd` 垫片）。
 - Node 内置：`node:child_process` 起子进程、`node:os` 读信号号。两者只在 `impl/TerminalNamespace.ts` 里，`./contracts` 这条链上一个都没有。
 - 环境变量只读一个 `VELAROS_TERMEL_COMMAND`，登记在常量表里。
 

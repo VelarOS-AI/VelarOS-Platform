@@ -84,9 +84,9 @@
 ## 依赖什么
 
 - `@velaros-ai/core`：类型守卫、缺席值、日志、`AppError`。
-- `@velaros-ai/path-rules`：glob 匹配（include/exclude 都经 `utils/glob.ts` 调它，大小写按盘的规矩）、.gitignore 判定与列举时的忽略策略（`git check-ignore` 的执行口由本包注入）。
-- `@velaros-ai/platform`：路径文本的包含判定与本平台的大小写规矩。
-- `@velaros-ai/text-files`：磁盘文本的编码识别、严格解码、按原编码无损写回（GB18030 下保留没改片段的原字节）、原子替换写入、有界读与流式读；它的失败在 `utils/errors.ts` 的 `projectErrorFromTextFile` 一处按错误码翻成 `ProjectError`。
+- `@velaros-ai/core/path-rules`：glob 匹配（include/exclude 都经 `utils/glob.ts` 调它，大小写按盘的规矩）、.gitignore 判定与列举时的忽略策略（`git check-ignore` 的执行口由本包注入）。
+- `@velaros-ai/core/platform`：路径文本的包含判定与本平台的大小写规矩。
+- `@velaros-ai/core/text-files`：磁盘文本的编码识别、严格解码、按原编码无损写回（GB18030 下保留没改片段的原字节）、原子替换写入、有界读与流式读；它的失败在 `utils/errors.ts` 的 `projectErrorFromTextFile` 一处按错误码翻成 `ProjectError`。
 - `typescript`（JS/TS 解析）、`diff`（差量）、`execa`（子进程）。
 - 同包的单元：`@velaros-ai/velar/shell`（命令判定，决定前台命令走读门还是写门；执行端口的形状）、`@velaros-ai/velar/sandbox` 与 `@velaros-ai/velar/images`（端口形状），经它们的根入口引用。
 - 不读环境变量。

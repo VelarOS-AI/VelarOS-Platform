@@ -8,7 +8,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { textCodec } from '@velaros-ai/text-files'
+import { textCodec } from '@velaros-ai/core/text-files'
 
 import { failureOf, projectToolFixture } from './support/tools'
 

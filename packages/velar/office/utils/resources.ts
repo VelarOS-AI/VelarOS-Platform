@@ -5,8 +5,8 @@ import { createRequire } from 'node:module'
 import { delimiter, join, resolve } from 'node:path'
 
 import { isEmpty, Log, toNullable } from '@velaros-ai/core'
+import { velarosSharedResources } from '@velaros-ai/core/platform/shared-resources'
 import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
-import { velarosSharedResources } from '@velaros-ai/platform/shared-resources'
 
 const log = Log.tag('OfficeResources')
 

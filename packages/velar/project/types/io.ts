@@ -1,4 +1,4 @@
-import type { TextEncoding } from "@velaros-ai/text-files/contracts";
+import type { TextEncoding } from "@velaros-ai/core/text-files/contracts";
 
 import type { Range, TrustLabel } from "./common.js";
 import type { CommandToolRequirement } from "./provider.js";

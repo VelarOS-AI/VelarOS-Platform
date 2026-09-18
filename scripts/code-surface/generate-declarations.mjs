@@ -12,6 +12,8 @@ import { fileURLToPath } from 'node:url'
 
 import ts from 'typescript'
 
+import { GovernedModules } from '../ownership/governed-modules.mjs'
+
 import {
   AgentViewTag,
   BannedModelFacingAliases,
@@ -86,15 +88,23 @@ function workspaceSourceFiles(packageRoot) {
 }
 
 /**
- * 一个包的源码文件：普通的包在 src/ 下；能力单元的包（`@velaros-ai/velar`）没有 src/，单元目录就在包根上，
+ * 一个包的源码文件：普通的包在 src/ 下；能力单元的包（`@velaros-ai/velar`）没有 src/，单元目录就在包根上；
+ * 有的包两样都有（`@velaros-ai/core` 的基础原语在 src/，底层单元在包根的单元目录里），单元以所有权登记表为准。
  * 每个单元的 spec/ 与 test/ 不算源码，构建产物与依赖也不算。
  */
 function packageSourceFiles(packageRoot) {
-  const sourceRoot = resolve(packageRoot, 'src')
-  if (ts.sys.directoryExists(sourceRoot)) return ts.sys.readDirectory(sourceRoot, ['.ts'])
   const skipped = new Set(['node_modules', 'dist', 'spec', 'test'])
-  return ts.sys.readDirectory(packageRoot, ['.ts'])
-    .filter((fileName) => !fileName.slice(packageRoot.length + 1).split('/').some((part) => skipped.has(part)))
+  const outsideSkipped = (base) => (fileName) => !fileName.slice(base.length + 1).split('/').some((part) => skipped.has(part))
+  const sourceRoot = resolve(packageRoot, 'src')
+  if (!ts.sys.directoryExists(sourceRoot)) return ts.sys.readDirectory(packageRoot, ['.ts']).filter(outsideSkipped(packageRoot))
+  const directory = packageRoot.slice(resolve(RepoRoot, 'packages').length + 1)
+  const unitFiles = GovernedModules
+    .filter((module) => module.directory === directory && module.unit)
+    .flatMap((module) => {
+      const unitRoot = resolve(packageRoot, module.unit)
+      return ts.sys.readDirectory(unitRoot, ['.ts']).filter(outsideSkipped(unitRoot))
+    })
+  return [...ts.sys.readDirectory(sourceRoot, ['.ts']), ...unitFiles]
 }
 
 /** 节点前面的 trivia（空行、分节注释、JSDoc 都在这里）。 */

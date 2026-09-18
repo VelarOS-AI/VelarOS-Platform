@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 
 import { isFalse, Log, optionalWhen, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
+import type { PlatformCompatibilityApi } from '@velaros-ai/core/platform'
 
 import { ShellLimits } from '../../contract/constants.js'
 import type { ShellProcessConfinementProvider } from '../../contract/requires.js'

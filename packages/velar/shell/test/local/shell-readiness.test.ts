@@ -3,7 +3,7 @@ import { win32 } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { createPlatform } from '@velaros-ai/platform'
+import { createPlatform } from '@velaros-ai/core/platform'
 
 import { shellResolver } from '../../impl/local/ShellResolver.js'
 import { ShellUnavailableError } from '../../impl/local/ShellUnavailableError.js'

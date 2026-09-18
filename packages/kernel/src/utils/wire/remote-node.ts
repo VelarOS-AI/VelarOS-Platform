@@ -151,7 +151,7 @@ export const RemoteNodeToolDescriptorSchema = z.strictObject({
  * 节点能力清单。
  *
  * `revision` = 清单内容的稳定摘要,充当新鲜度门:Node 侧任一开关变化都会换 revision,
- * 携旧 revision 的调用一律拒绝(与 surface-protocol 的 catalogRevision 同一纪律)。
+ * 携旧 revision 的调用一律拒绝:目录一变,旧 revision 下的调用就不再作数。
  */
 export const RemoteNodeManifestSchema = z.strictObject({
   revision: z.string().min(1),

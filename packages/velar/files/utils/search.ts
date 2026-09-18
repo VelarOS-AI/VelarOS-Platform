@@ -1,10 +1,10 @@
 /**
- * 搜索：逐行文本匹配、路径名匹配、系统搜索跳过哪些目录。.gitignore 的解析与判定在 `@velaros-ai/path-rules`。
+ * 搜索：逐行文本匹配、路径名匹配、系统搜索跳过哪些目录。.gitignore 的解析与判定在 `@velaros-ai/core/path-rules`。
  */
 
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { DiscoverySkippedDirectoryNames } from '@velaros-ai/path-rules/contracts'
+import { DiscoverySkippedDirectoryNames } from '@velaros-ai/core/path-rules/contracts'
 
 import type { FileSearchOptions } from '../types/files.js'
 import type { FileSearchProtectedDirectoryInput } from '../types/search.js'

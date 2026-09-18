@@ -3,7 +3,7 @@
  * 只放类型；后一部分只在包内用，公开签名不引用它们，所以不出包。
  */
 
-import type { DecodedText, TextEncoding } from '@velaros-ai/text-files/contracts'
+import type { DecodedText, TextEncoding } from '@velaros-ai/core/text-files/contracts'
 
 import type { FileFailure } from './files.js'
 

@@ -3,7 +3,7 @@
  */
 
 import { isString, isUndefined } from "@velaros-ai/core";
-import { textCodec } from "@velaros-ai/text-files";
+import { textCodec } from "@velaros-ai/core/text-files";
 
 import type { PreparedPatch } from "../../types/edit.js";
 import type { StoredTransaction, TransactionBytePatch, TransactionBytePlan } from "../../types/transaction.js";

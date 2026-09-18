@@ -1,4 +1,4 @@
-import type { TextEncoding } from "@velaros-ai/text-files/contracts";
+import type { TextEncoding } from "@velaros-ai/core/text-files/contracts";
 
 import type { JsonValue, RiskLevel } from "./common.js";
 import type { FileSnapshot } from "./snapshot.js";

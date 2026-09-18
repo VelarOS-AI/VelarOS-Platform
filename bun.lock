@@ -12,8 +12,6 @@
         "@velaros-ai/html-artifacts": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
         "@velaros-ai/model": "workspace:*",
-        "@velaros-ai/platform": "workspace:*",
-        "@velaros-ai/surface-protocol": "workspace:*",
         "@velaros-ai/ui": "workspace:*",
       },
       "devDependencies": {
@@ -29,8 +27,6 @@
         "@typescript-eslint/eslint-plugin": "^8.67.0",
         "@typescript-eslint/parser": "^8.67.0",
         "@velaros-ai/arch-guard": "github:VelarOS-AI/VelarOS-Arch-Guard#ce2b221d99c1b93736568f281a180ad3593f086f",
-        "@velaros-ai/path-rules": "workspace:*",
-        "@velaros-ai/text-files": "workspace:*",
         "@velaros-ai/tool-contract": "workspace:*",
         "@velaros-ai/velar": "workspace:*",
         "@vitejs/plugin-react": "^6.0.5",
@@ -100,7 +96,6 @@
       },
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
-        "@velaros-ai/platform": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "^22.19.17",
@@ -113,7 +108,6 @@
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
-        "@velaros-ai/path-rules": "workspace:*",
         "@velaros-ai/tool-contract": "workspace:*",
         "typescript": "^5.7.0",
         "zod": "^4.3.6",
@@ -125,8 +119,14 @@
     "packages/core": {
       "name": "@velaros-ai/core",
       "version": "0.4.3",
+      "dependencies": {
+        "diff": "^8.0.4",
+        "iconv-lite": "^0.7.2",
+        "picomatch": "^4.0.3",
+      },
       "devDependencies": {
         "@types/node": "^22.19.17",
+        "@types/picomatch": "^3.0.1",
         "typescript": "^5.7.0",
       },
     },
@@ -136,7 +136,6 @@
       "dependencies": {
         "@codemirror/lang-python": "^6.2.1",
         "@velaros-ai/core": "workspace:*",
-        "@velaros-ai/platform": "workspace:*",
         "@velaros-ai/velar": "workspace:*",
         "typescript": "^5.7.0",
       },
@@ -152,7 +151,6 @@
       "version": "0.2.0",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
-        "@velaros-ai/platform": "workspace:*",
         "@velaros-ai/velar": "workspace:*",
         "zod": "^4.3.6",
       },
@@ -200,55 +198,6 @@
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
         "ai": "^6.0.168",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "typescript": "^5.7.0",
-      },
-    },
-    "packages/path-rules": {
-      "name": "@velaros-ai/path-rules",
-      "version": "0.1.0",
-      "dependencies": {
-        "@velaros-ai/core": "workspace:*",
-        "@velaros-ai/platform": "workspace:*",
-        "picomatch": "^4.0.3",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "@types/picomatch": "^3.0.1",
-        "typescript": "^5.7.0",
-      },
-    },
-    "packages/platform": {
-      "name": "@velaros-ai/platform",
-      "version": "0.1.0",
-      "dependencies": {
-        "@velaros-ai/core": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "typescript": "^5.7.0",
-      },
-    },
-    "packages/surface-protocol": {
-      "name": "@velaros-ai/surface-protocol",
-      "version": "0.2.0",
-      "dependencies": {
-        "zod": "^4.3.6",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "typescript": "^5.7.0",
-      },
-    },
-    "packages/text-files": {
-      "name": "@velaros-ai/text-files",
-      "version": "0.1.0",
-      "dependencies": {
-        "@velaros-ai/core": "workspace:*",
-        "diff": "^8.0.4",
-        "iconv-lite": "^0.7.2",
       },
       "devDependencies": {
         "@types/node": "^22.19.17",
@@ -311,9 +260,6 @@
         "@velaros-ai/code-surface": "workspace:*",
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
-        "@velaros-ai/path-rules": "workspace:*",
-        "@velaros-ai/platform": "workspace:*",
-        "@velaros-ai/text-files": "workspace:*",
         "@velaros-ai/tool-contract": "workspace:*",
         "diff": "^8.0.4",
         "docx": "^9.6.1",
@@ -933,14 +879,6 @@
     "@velaros-ai/kernel": ["@velaros-ai/kernel@workspace:packages/kernel"],
 
     "@velaros-ai/model": ["@velaros-ai/model@workspace:packages/model"],
-
-    "@velaros-ai/path-rules": ["@velaros-ai/path-rules@workspace:packages/path-rules"],
-
-    "@velaros-ai/platform": ["@velaros-ai/platform@workspace:packages/platform"],
-
-    "@velaros-ai/surface-protocol": ["@velaros-ai/surface-protocol@workspace:packages/surface-protocol"],
-
-    "@velaros-ai/text-files": ["@velaros-ai/text-files@workspace:packages/text-files"],
 
     "@velaros-ai/tool-contract": ["@velaros-ai/tool-contract@workspace:packages/tool-contract"],
 

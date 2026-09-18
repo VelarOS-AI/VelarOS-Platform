@@ -6,8 +6,8 @@ import { statSync } from 'node:fs'
 import { win32 } from 'node:path'
 
 import { isEmpty, Log } from '@velaros-ai/core'
-import { createPlatform, currentPlatform } from '@velaros-ai/platform'
-import type { CommandSpec } from '@velaros-ai/platform/contracts'
+import { createPlatform, currentPlatform } from '@velaros-ai/core/platform'
+import type { CommandSpec } from '@velaros-ai/core/platform/contracts'
 
 import type { ShellCommandKind } from '../contract/constants.js'
 import { ShellEnvironmentVariables } from '../contract/constants.js'

@@ -7,8 +7,8 @@ import { resolve } from 'node:path'
 
 import { isObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { currentPlatform } from '@velaros-ai/core/platform'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
-import { currentPlatform } from '@velaros-ai/platform'
 
 import type { WorkspaceFileEntry } from '../types/browser.js'
 import type { ProjectReadFileResult } from '../types/browser.js'

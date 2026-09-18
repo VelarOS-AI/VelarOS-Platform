@@ -21,13 +21,12 @@ VelarOS Platform 包含 19 个 package workspace，其中 18 个独立发布。�
 | --- | --- |
 | Kernel | `@velaros-ai/kernel` |
 | Agent 运行时 | `@velaros-ai/agent` |
-| 共享原语 | `@velaros-ai/core`、`@velaros-ai/platform` |
-| 能力公共件 | `@velaros-ai/code-surface`、`@velaros-ai/velar`、`@velaros-ai/text-files`、`@velaros-ai/path-rules`、`@velaros-ai/tool-contract` |
+| 共享原语 | `@velaros-ai/core`（基础原语，外加 `platform`、`text-files`、`path-rules` 三个单元） |
+| 能力公共件 | `@velaros-ai/code-surface`、`@velaros-ai/velar`、`@velaros-ai/tool-contract` |
 | 模型供应方 | `@velaros-ai/model` |
 | 能力 | `@velaros-ai/cli`、`@velaros-ai/development` |
 | UI | `@velaros-ai/ui` |
 | HTML 工件 | `@velaros-ai/html-artifacts` |
-| Surface 协议 | `@velaros-ai/surface-protocol` |
 | 评测 | `@velaros-ai/agent-lab` |
 
 根 `package.json` 中的包清单是机械核对的身份单源。公开 API 以包 manifest 和包 README 为准；架构与协议裁决归本仓 `docs/` 所有。

@@ -4,8 +4,8 @@
  */
 
 import { isString, isUndefined, optionalWhen } from "@velaros-ai/core";
-import { textCodec } from "@velaros-ai/text-files";
-import type { ExpectedBytes, TextEncoding } from "@velaros-ai/text-files/contracts";
+import { textCodec } from "@velaros-ai/core/text-files";
+import type { ExpectedBytes, TextEncoding } from "@velaros-ai/core/text-files/contracts";
 
 import type { PreparedPatch } from "../../types/edit.js";
 import type { ProjectFileAccess } from "../../types/file-access.js";

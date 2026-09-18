@@ -8,7 +8,7 @@
 // 两层必须共用同一份边界判定；分成两份实现时，**弱的那份就是实际安全水位**。
 import * as path from "node:path";
 
-import { currentPlatform } from '@velaros-ai/platform'
+import { currentPlatform } from '@velaros-ai/core/platform'
 
 import { ProjectError } from "./errors.js";
 

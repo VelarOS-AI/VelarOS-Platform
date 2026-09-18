@@ -5,8 +5,8 @@
 
 import { isPresent, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
-import { currentPlatform } from '@velaros-ai/platform'
+import type { PlatformCompatibilityApi } from '@velaros-ai/core/platform'
+import { currentPlatform } from '@velaros-ai/core/platform'
 
 import { ImageLimits } from '../contract/constants.js'
 import type { ImageOperationContext } from '../contract/requires.js'

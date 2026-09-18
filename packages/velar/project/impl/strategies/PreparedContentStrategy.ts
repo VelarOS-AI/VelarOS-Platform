@@ -4,7 +4,7 @@
  */
 
 import { isString } from '@velaros-ai/core'
-import { textCodec } from '@velaros-ai/text-files'
+import { textCodec } from '@velaros-ai/core/text-files'
 
 import type { PatchStrategy } from '../../contract/requires.js'
 import type { PreparedPatch } from '../../types/edit.js'

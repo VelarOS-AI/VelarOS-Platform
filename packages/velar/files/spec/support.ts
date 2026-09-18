@@ -10,9 +10,9 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import type { CodeProgramResult, CodeSurfaceOutcome } from '@velaros-ai/code-surface'
 import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/code-surface'
 import { AppError } from '@velaros-ai/core/error'
-import { textFileIo } from '@velaros-ai/text-files'
-import type { ExpectedBytes } from '@velaros-ai/text-files/contracts'
-import { TextFileErrorCodes } from '@velaros-ai/text-files/contracts'
+import { textFileIo } from '@velaros-ai/core/text-files'
+import type { ExpectedBytes } from '@velaros-ai/core/text-files/contracts'
+import { TextFileErrorCodes } from '@velaros-ai/core/text-files/contracts'
 
 import type { FileOperationContext, FileSpacePort, FileWrite } from '../index'
 import { fileOperations } from '../index'

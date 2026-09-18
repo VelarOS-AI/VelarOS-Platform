@@ -7,8 +7,8 @@ import { resolve } from 'node:path'
 
 import { isNull, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { currentPlatform } from '@velaros-ai/core/platform'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
-import { currentPlatform } from '@velaros-ai/platform'
 
 /** 项目内核的原因码对应到通用码：看图说的是跨空间共用的那一套码（PERMISSION、NOT_FOUND……）。 */
 const AppCodeOfReason: Readonly<Record<string, string>> = Object.freeze({

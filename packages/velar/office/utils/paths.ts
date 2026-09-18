@@ -5,8 +5,8 @@ import { dirname, extname, isAbsolute, join, resolve } from 'node:path'
 
 import { isPlainObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { currentPlatform } from '@velaros-ai/core/platform'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
-import { currentPlatform } from '@velaros-ai/platform'
 
 import { OfficeErrorCodes } from '../contract/constants.js'
 import type { OfficeWordInput, OfficeWritten } from '../types/office.js'

@@ -6,7 +6,7 @@ import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { isEmpty, isNonBlankString, isString } from '@velaros-ai/core'
-import { velarosSharedResources } from '@velaros-ai/platform/shared-resources'
+import { velarosSharedResources } from '@velaros-ai/core/platform/shared-resources'
 
 import { ComputerResourceLayout } from '../contract/constants.js'
 import type { ComputerResourcePort } from '../contract/requires.js'

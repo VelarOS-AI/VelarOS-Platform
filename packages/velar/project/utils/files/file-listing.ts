@@ -3,8 +3,8 @@ import { readdir } from 'node:fs/promises'
 import * as path from 'node:path'
 
 import { isEmpty, isTrue } from '@velaros-ai/core'
-import type { GitCheckIgnoreRunner } from '@velaros-ai/path-rules'
-import { createIgnorePolicy } from '@velaros-ai/path-rules'
+import type { GitCheckIgnoreRunner } from '@velaros-ai/core/path-rules'
+import { createIgnorePolicy } from '@velaros-ai/core/path-rules'
 
 import type { CommandProvider } from '../../contract/requires.js'
 import type { ListedDirectory, ListingDependencies, ListingDirectory, ListingNode } from '../../types/file-store.js'

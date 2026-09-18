@@ -12,7 +12,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 
-import { textCodec } from "@velaros-ai/text-files";
+import { textCodec } from "@velaros-ai/core/text-files";
 
 import { FileStore } from "../impl/files/FileStore";
 import { createProjectKernel } from "../impl/kernel/LocalProjectKernel";

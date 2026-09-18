@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { textCodec } from '@velaros-ai/text-files'
+import { textCodec } from '@velaros-ai/core/text-files'
 
 import { FileProjectTransactionStateStore } from '../impl/persistence/FileProjectTransactionStateStore'
 import { createProjectKernel, type EditIntent, type ProjectKernel, type ProjectPlugin } from '../index'

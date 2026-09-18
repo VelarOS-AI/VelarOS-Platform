@@ -12,6 +12,6 @@
 | INV-3 | outputPath 不许是符号链接：链接指向的文件一个字节都不动，直接 PATH_DENIED | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | `describe` 报的版本就是 `package.json` 的 version：代码里只有 `DocumentRendererProtocol.packageVersion` 这一处，打包脚本按它核对可执行文件的身份 | 测试 | `spec/acceptance.test.ts` |
 | INV-5 | 失败回执只有 `contract/constants.ts` 里的四个错误码，`message` 是一句中文（字段路径与期望原样夹在里面），不是 zod 的原始 issue 文本 | 测试 | `spec/acceptance.test.ts` |
-| INV-6 | 名字以 `..` 开头的目录（`..cache`）照常算在 projectRoot 里，不当越界；包含判断走 `@velaros-ai/platform` 的公共件，不自己写 `startsWith('..')` | 测试 | `spec/acceptance.test.ts` |
+| INV-6 | 名字以 `..` 开头的目录（`..cache`）照常算在 projectRoot 里，不当越界；包含判断走 `@velaros-ai/core/platform` 的公共件，不自己写 `startsWith('..')` | 测试 | `spec/acceptance.test.ts` |
 | INV-7 | `./contracts` 入口整条引用链不碰 Node 内置模块：只想按协议拼请求、读回执的调用方引它就够；schema 与渲染实现不出包 | 门禁 | `check:module-ownership` |
 | INV-8 | 请求形状的单一来源是手写类型：`utils/request.ts` 的每个 schema 都 `satisfies z.ZodType<…>` 对齐它，schema 与类型走形就编译不过 | 类型 | `src/types/rendering.ts::DocumentRendererRequest` |

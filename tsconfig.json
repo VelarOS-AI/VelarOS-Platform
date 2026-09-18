@@ -45,6 +45,27 @@
       "@velaros-ai/html-artifacts/contracts": [
         "./packages/html-artifacts/src/contracts.ts"
       ],
+      "@velaros-ai/core/platform": [
+        "./packages/core/platform/index.ts"
+      ],
+      "@velaros-ai/core/platform/contracts": [
+        "./packages/core/platform/contracts.ts"
+      ],
+      "@velaros-ai/core/platform/shared-resources": [
+        "./packages/core/platform/shared-resources.ts"
+      ],
+      "@velaros-ai/core/text-files": [
+        "./packages/core/text-files/index.ts"
+      ],
+      "@velaros-ai/core/text-files/contracts": [
+        "./packages/core/text-files/contracts.ts"
+      ],
+      "@velaros-ai/core/path-rules": [
+        "./packages/core/path-rules/index.ts"
+      ],
+      "@velaros-ai/core/path-rules/contracts": [
+        "./packages/core/path-rules/contracts.ts"
+      ],
       "@velaros-ai/core/*": [
         "./packages/core/src/*"
       ],
@@ -62,18 +83,6 @@
       ],
       "@velaros-ai/kernel/remote": [
         "./packages/kernel/src/remote.ts"
-      ],
-      "@velaros-ai/platform": [
-        "./packages/platform/src/index.ts"
-      ],
-      "@velaros-ai/platform/*": [
-        "./packages/platform/src/*"
-      ],
-      "@velaros-ai/path-rules": [
-        "./packages/path-rules/src/index.ts"
-      ],
-      "@velaros-ai/path-rules/*": [
-        "./packages/path-rules/src/*"
       ],
       "@velaros-ai/velar/files": [
         "./packages/velar/files/index.ts"
@@ -93,23 +102,11 @@
       "@velaros-ai/velar/*": [
         "./packages/velar/*"
       ],
-      "@velaros-ai/text-files": [
-        "./packages/text-files/src/index.ts"
-      ],
-      "@velaros-ai/text-files/*": [
-        "./packages/text-files/src/*"
-      ],
       "@velaros-ai/tool-contract": [
         "./packages/tool-contract/src/index.ts"
       ],
       "@velaros-ai/tool-contract/*": [
         "./packages/tool-contract/src/*"
-      ],
-      "@velaros-ai/surface-protocol": [
-        "./packages/surface-protocol/src/index.ts"
-      ],
-      "@velaros-ai/surface-protocol/*": [
-        "./packages/surface-protocol/src/*"
       ],
       "@velaros-ai/document-renderer": [
         "./packages/document-renderer/src/index.ts"

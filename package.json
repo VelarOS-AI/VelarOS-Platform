@@ -26,14 +26,11 @@
         "agent"
       ],
       "core": [
-        "core",
-        "platform"
+        "core"
       ],
       "foundations": [
         "code-surface",
         "velar",
-        "text-files",
-        "path-rules",
         "tool-contract"
       ],
       "model": [
@@ -51,9 +48,6 @@
       ],
       "products": [
         "document-renderer"
-      ],
-      "surface": [
-        "surface-protocol"
       ],
       "evaluation": [
         "agent-lab"
@@ -138,8 +132,6 @@
     "@typescript-eslint/eslint-plugin": "^8.67.0",
     "@typescript-eslint/parser": "^8.67.0",
     "@velaros-ai/arch-guard": "github:VelarOS-AI/VelarOS-Arch-Guard#ce2b221d99c1b93736568f281a180ad3593f086f",
-    "@velaros-ai/path-rules": "workspace:*",
-    "@velaros-ai/text-files": "workspace:*",
     "@velaros-ai/tool-contract": "workspace:*",
     "@velaros-ai/velar": "workspace:*",
     "@vitejs/plugin-react": "^6.0.5",
@@ -180,8 +172,6 @@
     "@velaros-ai/html-artifacts": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
     "@velaros-ai/model": "workspace:*",
-    "@velaros-ai/platform": "workspace:*",
-    "@velaros-ai/surface-protocol": "workspace:*",
     "@velaros-ai/ui": "workspace:*"
   },
   "repository": {

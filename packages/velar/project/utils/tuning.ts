@@ -97,7 +97,7 @@ export const ProjectTuning = Object.freeze({
   }),
   /** 文件访问：FileStore、ProjectGitIndex，以及列目录、读文件的工具函数。 */
   files: Object.freeze({
-    /** 流式读文件算内容哈希、顺带认编码时每块读多少字节；解码正文的分块在公共件 @velaros-ai/text-files。 */
+    /** 流式读文件算内容哈希、顺带认编码时每块读多少字节；解码正文的分块在公共件 @velaros-ai/core/text-files。 */
     readChunkBytes: 64 * 1024,
     /** 版本按 metadata 算时，判断是不是二进制只看文件开头多少字节。 */
     binarySampleBytes: 8_000,

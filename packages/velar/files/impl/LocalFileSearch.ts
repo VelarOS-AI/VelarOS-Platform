@@ -1,6 +1,6 @@
 /**
  * 本机全局搜索：`LocalFileSearch`，接口 `LocalFileSearchApi` 在本文件的类上方，由 `createLocalFileSearch` 创建。
- * 给宿主自己的界面用（模型列目录、搜文本用命令）；遍历时跳过哪些条目由 `@velaros-ai/path-rules` 的忽略策略判定。
+ * 给宿主自己的界面用（模型列目录、搜文本用命令）；遍历时跳过哪些条目由 `@velaros-ai/core/path-rules` 的忽略策略判定。
  */
 
 import { lstat, readdir, readFile } from 'node:fs/promises'
@@ -8,8 +8,8 @@ import { homedir } from 'node:os'
 import { basename, extname, join, relative } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
-import { createIgnorePolicy } from '@velaros-ai/path-rules'
-import { textCodec } from '@velaros-ai/text-files'
+import { createIgnorePolicy } from '@velaros-ai/core/path-rules'
+import { textCodec } from '@velaros-ai/core/text-files'
 
 import type { LocalFileSearchOptions } from '../contract/requires.js'
 import type { FileSearchEntry, FileSearchMatch, FileSearchOptions, FileSearchResult } from '../types/files.js'

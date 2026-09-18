@@ -3,7 +3,7 @@
  * 把命令钉在一个根目录里跑：只许写这个根和它自己的临时目录，网络按建的时候的选择。演练沙箱的每个镜像根用一个。
  */
 
-import { createPlatform } from '@velaros-ai/platform'
+import { createPlatform } from '@velaros-ai/core/platform'
 
 import type { ConfinedShellRunnerOptions } from '../../contract/requires.js'
 import type { ShellCommandResult, ShellRunCommandOptions } from '../../types/shell-command.js'

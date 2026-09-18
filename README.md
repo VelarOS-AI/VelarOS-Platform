@@ -21,13 +21,12 @@ packages declare a shared `velaros.platform` generation for cross-package compat
 | --- | --- |
 | Kernel | `@velaros-ai/kernel` |
 | Agent runtime | `@velaros-ai/agent` |
-| Shared primitives | `@velaros-ai/core`, `@velaros-ai/platform` |
-| Shared capability foundations | `@velaros-ai/code-surface`, `@velaros-ai/velar`, `@velaros-ai/text-files`, `@velaros-ai/path-rules`, `@velaros-ai/tool-contract` |
+| Shared primitives | `@velaros-ai/core` (base primitives, plus the `platform`, `text-files` and `path-rules` units) |
+| Shared capability foundations | `@velaros-ai/code-surface`, `@velaros-ai/velar`, `@velaros-ai/tool-contract` |
 | Model providers | `@velaros-ai/model` |
 | Capabilities | `@velaros-ai/cli`, `@velaros-ai/development` |
 | UI | `@velaros-ai/ui` |
 | HTML artifacts | `@velaros-ai/html-artifacts` |
-| Surface protocol | `@velaros-ai/surface-protocol` |
 | Evaluation | `@velaros-ai/agent-lab` |
 
 The package inventory in the root `package.json` is the machine-checked source of truth. The

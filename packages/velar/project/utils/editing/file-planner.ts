@@ -1,7 +1,7 @@
 // 域：`velar:project` 的 edit 编译。计划是一份按步骤推进的「未来视图」：每个路径在计划里的文件身份、
 // fileRef / sourceRef 绑定到的身份，以及排好的事务操作。只生成计划，不读写磁盘，读取都经过 resolver。
 import { isEmpty, isUndefined, toOptional } from '@velaros-ai/core'
-import type { TextEncoding } from '@velaros-ai/text-files/contracts'
+import type { TextEncoding } from '@velaros-ai/core/text-files/contracts'
 
 import { ProjectFileLimits } from '../../contract/constants.js'
 import type { PrepareEditInput } from '../../types/edit.js'

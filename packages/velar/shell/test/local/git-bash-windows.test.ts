@@ -5,7 +5,7 @@ import { join, win32 } from 'node:path'
 
 import { expect, test } from 'bun:test'
 
-import { createPlatform } from '@velaros-ai/platform'
+import { createPlatform } from '@velaros-ai/core/platform'
 
 import { LocalShellHost } from '../../impl/local/LocalShellHost.js'
 import { shellResolver } from '../../impl/local/ShellResolver.js'

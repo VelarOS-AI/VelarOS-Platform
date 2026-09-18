@@ -3,8 +3,8 @@
  * （受管进程的收尾结果、选中的 shell 与自检结果、刷新后的环境、准备好的命令、控制台缓冲、带回调的选项）。只放类型；后一部分只在包内用，不出包。
  */
 
-import type { ShellCommandSpecOptions } from '@velaros-ai/platform'
-import type { CommandSpec } from '@velaros-ai/platform/contracts'
+import type { ShellCommandSpecOptions } from '@velaros-ai/core/platform'
+import type { CommandSpec } from '@velaros-ai/core/platform/contracts'
 
 import type { ShellProcessConfinementProvider } from '../contract/requires.js'
 

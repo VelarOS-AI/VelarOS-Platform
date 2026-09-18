@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { velarosSharedResources } from '@velaros-ai/platform/shared-resources'
+import { velarosSharedResources } from '@velaros-ai/core/platform/shared-resources'
 
 import { markItDownBinaryResolver } from '../index'
 

@@ -1,4 +1,4 @@
-import type { TextEncoding } from "@velaros-ai/text-files/contracts";
+import type { TextEncoding } from "@velaros-ai/core/text-files/contracts";
 
 /** 文件被删除或重命名后重建所需的属性。 */
 export interface FileAttributes {

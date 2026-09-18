@@ -55,7 +55,7 @@ macOS 上用系统自带的 sips 裁图缩图（裁与缩分两次调），别�
 
 ## 依赖什么
 
-- 上游包：`@velaros-ai/core`（类型守卫、`AppError`、日志、真实路径）、`@velaros-ai/platform`（规整用户输入的路径）、`@velaros-ai/text-files`（有界读）。
+- 上游包：`@velaros-ai/core`（类型守卫、`AppError`、日志、真实路径）、`@velaros-ai/core/platform`（规整用户输入的路径）、`@velaros-ai/core/text-files`（有界读）。
 - 只在验收里用：`@velaros-ai/code-surface`（dev 依赖），跑端到端的程序、给代码模版做类型检查。
 - 用到的 Node 内置模块：`fs/promises`（stat；sips 的临时文件）、`child_process`（调 sips）、`os`、`path`、`util`。只在根入口与 `./local` 的引用链上；`./contracts` 不碰。
 - 不读环境变量。

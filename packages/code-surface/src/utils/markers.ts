@@ -19,7 +19,7 @@ import { CodeSurfaceTuning } from './tuning.js'
 
 /**
  * 打标记时不算进去的文件名：系统自己随手写的（Finder、资源管理器），它们变了不代表工作区变了。
- * 被 .gitignore 忽略的与默认跳过的目录另外按 `@velaros-ai/path-rules` 的规矩判。
+ * 被 .gitignore 忽略的与默认跳过的目录另外按 `@velaros-ai/core/path-rules` 的规矩判。
  */
 export const MarkerSkippedFileNames: ReadonlySet<string> = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini'])
 

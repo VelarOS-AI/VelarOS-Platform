@@ -12,8 +12,8 @@ import { lstat, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { isEmpty, isUndefined } from '@velaros-ai/core'
-import { createIgnorePolicy } from '@velaros-ai/path-rules'
-import { DiscoverySkippedDirectoryNames } from '@velaros-ai/path-rules/contracts'
+import { createIgnorePolicy } from '@velaros-ai/core/path-rules'
+import { DiscoverySkippedDirectoryNames } from '@velaros-ai/core/path-rules/contracts'
 
 import type { ScriptFileChange } from '../types/code-surface.js'
 import type { MarkerStatEntry, WorkspaceScan } from '../types/timeline.js'

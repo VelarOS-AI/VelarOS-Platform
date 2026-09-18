@@ -13,8 +13,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { codeProgramChecker } from '@velaros-ai/code-surface'
 import { AppError } from '@velaros-ai/core/error'
-import { textCodec } from '@velaros-ai/text-files'
-import type { TextEncoding } from '@velaros-ai/text-files/contracts'
+import { textCodec } from '@velaros-ai/core/text-files'
+import type { TextEncoding } from '@velaros-ai/core/text-files/contracts'
 
 import { VelarFilesModule } from '../contract/surface'
 import type { FileLineRange, FileOperationContext, FileReadItem, FileText } from '../index'

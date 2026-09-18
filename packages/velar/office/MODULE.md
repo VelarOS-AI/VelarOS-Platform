@@ -76,7 +76,7 @@ word、presentation、spreadsheet、pdf、preview 各放本域的内部形状（
 
 ## 依赖什么
 
-- 上游包：`@velaros-ai/core`（类型守卫、缺席值、`AppError`）、`@velaros-ai/platform`（跨平台路径判定与共享资源根）。
+- 上游包：`@velaros-ai/core`（类型守卫、缺席值、`AppError`）、`@velaros-ai/core/platform`（跨平台路径判定与共享资源根）。
 - 只在验收里用：`@velaros-ai/code-surface`，跑端到端的程序、给代码模版做类型检查。
 - 文档库：`docx`、随包审过的 PptxGenJS（`vendor/pptxgenjs/`，经包清单的子路径导入 `#pptxgenjs` 取用，带本地安全补丁）、`exceljs`、`pdf-lib`、`pdfjs-dist`、
   `mammoth`、`jszip`、`parse5`、`@napi-rs/canvas`；入参核对用 `zod`。

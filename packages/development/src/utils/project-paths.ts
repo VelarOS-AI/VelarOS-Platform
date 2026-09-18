@@ -1,8 +1,8 @@
 import nodePath from 'node:path'
 
 import { AppError } from '@velaros-ai/core'
+import { currentPlatform } from '@velaros-ai/core/platform'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
-import { currentPlatform } from '@velaros-ai/platform'
 
 /**
  * 路径文本是否落在根目录里（含根本身）。

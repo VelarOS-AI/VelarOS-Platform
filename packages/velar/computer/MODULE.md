@@ -76,7 +76,7 @@
 
 ## 依赖什么
 
-- 上游包：`@velaros-ai/core`（类型守卫、缺席值、`AppError`、`TimerScope` 定时器租约）、`@velaros-ai/platform`（VelarOS 共享资源根）。
+- 上游包：`@velaros-ai/core`（类型守卫、缺席值、`AppError`、`TimerScope` 定时器租约）、`@velaros-ai/core/platform`（VelarOS 共享资源根）。
 - 同包的单元：`@velaros-ai/velar/images`，只借它交给模型的一张图的形状 `ImageAttachment`（类型，不在运行时引用）。
 - 只在验收里用：`@velaros-ai/code-surface`，跑端到端的程序、给代码模版做类型检查。
 - 用到的 Node 内置模块：`child_process`（拉起 helper）、`fs`、`path`、`module`、`url`。只在根入口的引用链上；`./computer/contracts` 不碰。

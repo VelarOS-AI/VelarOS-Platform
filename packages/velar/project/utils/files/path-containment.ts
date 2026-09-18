@@ -7,8 +7,8 @@
 import { resolve as resolvePath } from 'node:path'
 
 import { isNull } from '@velaros-ai/core'
+import { currentPlatform } from '@velaros-ai/core/platform'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
-import { currentPlatform } from '@velaros-ai/platform'
 
 import { ProjectError } from '../errors.js'
 import { isInsideRoot } from '../path.js'

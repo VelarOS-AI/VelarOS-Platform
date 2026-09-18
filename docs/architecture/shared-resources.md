@@ -24,7 +24,7 @@ Platform defaults are:
 - Linux: `$XDG_DATA_HOME/VelarOS` (falling back to `~/.local/share/VelarOS`)
 
 `VELAROS_SHARED_DATA_ROOT` replaces the `<VelarOS shared data>` prefix for portable deployments
-and tests. Products must consume `@velaros-ai/platform/shared-resources` instead of inventing a new
+and tests. Products must consume `@velaros-ai/core/platform/shared-resources` instead of inventing a new
 path policy.
 
 ## Ownership rules

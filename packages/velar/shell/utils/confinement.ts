@@ -7,7 +7,7 @@ import { delimiter, isAbsolute, resolve } from 'node:path'
 
 import { isEmpty, isFalse, isTrue } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { CommandSpec } from '@velaros-ai/platform/contracts'
+import type { CommandSpec } from '@velaros-ai/core/platform/contracts'
 
 import { ShellErrorCodes } from '../contract/constants.js'
 import type { ShellProcessConfinementBuildOptions, ShellProcessConfinementPolicy, ShellProcessConfinementRequest, ShellProcessConfinementResult } from '../types/local.js'

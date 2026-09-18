@@ -45,29 +45,23 @@
       "directory": "packages/core",
       "name": "@velaros-ai/core",
       "version": "0.4.3",
-      "description": "VelarOS 跨领域共享基础工具：断言、错误、结果、类型守卫与无领域语义的通用原语。",
+      "description": "VelarOS 跨领域共享的底层：断言、错误、结果、类型守卫与无领域语义的通用原语，外加三个底层单元——platform（跨平台约定：路径文本、shell 命令规格、进程与系统信息命令、应用与数据目录、VelarOS 共享资源目录）、text-files（磁盘文本的无损读写：认编码、严格解码、按原编码写回、原子替换、有界读）与 path-rules（glob 匹配、.gitignore 的解析与判定、遍历时的忽略策略）。",
       "exportSubpaths": [
         ".",
         "./assert",
         "./error",
         "./logger",
+        "./path-rules",
+        "./path-rules/contracts",
+        "./platform",
+        "./platform/contracts",
+        "./platform/shared-resources",
         "./result",
+        "./text-files",
+        "./text-files/contracts",
         "./utils/*"
       ],
       "repositoryDirectory": "packages/core"
-    },
-    {
-      "domain": "core",
-      "directory": "packages/platform",
-      "name": "@velaros-ai/platform",
-      "version": "0.1.0",
-      "description": "Cross-platform conventions for VelarOS hosts: path text, shells, process commands, app and data directories, and the VelarOS shared resource roots.",
-      "exportSubpaths": [
-        ".",
-        "./contracts",
-        "./shared-resources"
-      ],
-      "repositoryDirectory": "packages/platform"
     },
     {
       "domain": "evaluation",
@@ -92,30 +86,6 @@
         "./contracts"
       ],
       "repositoryDirectory": "packages/code-surface"
-    },
-    {
-      "domain": "foundations",
-      "directory": "packages/path-rules",
-      "name": "@velaros-ai/path-rules",
-      "version": "0.1.0",
-      "description": "Path rules shared by capability spaces: glob matching with directory-prefix semantics, .gitignore parsing and evaluation (negation, anchoring, directory-only, character classes), traversal ignore policy backed by git itself when available, and the directory names traversal skips by default.",
-      "exportSubpaths": [
-        ".",
-        "./contracts"
-      ],
-      "repositoryDirectory": "packages/path-rules"
-    },
-    {
-      "domain": "foundations",
-      "directory": "packages/text-files",
-      "name": "@velaros-ai/text-files",
-      "version": "0.1.0",
-      "description": "Lossless text files on disk for capability spaces: encoding detection (UTF-8, UTF-16 with or without BOM, GB18030), strict decoding, encoding back to the original bytes, atomic replacement that keeps permissions and links, and bounded or streaming reads.",
-      "exportSubpaths": [
-        ".",
-        "./contracts"
-      ],
-      "repositoryDirectory": "packages/text-files"
     },
     {
       "domain": "foundations",
@@ -203,18 +173,6 @@
         "./contracts"
       ],
       "repositoryDirectory": "packages/model"
-    },
-    {
-      "domain": "surface",
-      "directory": "packages/surface-protocol",
-      "name": "@velaros-ai/surface-protocol",
-      "version": "0.2.0",
-      "description": "provider 自持代理面（Agent Surface）的线格式合同：带版本、不认宿主。",
-      "exportSubpaths": [
-        ".",
-        "./contracts"
-      ],
-      "repositoryDirectory": "packages/surface-protocol"
     },
     {
       "domain": "ui",

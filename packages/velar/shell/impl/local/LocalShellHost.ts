@@ -7,9 +7,9 @@ import { cpus, freemem, homedir, loadavg, platform, release, totalmem } from 'no
 import { isAbsolute, join, resolve } from 'node:path'
 
 import { isEmpty, Log, toNullable } from '@velaros-ai/core'
-import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
-import { createPlatform } from '@velaros-ai/platform'
-import type { CommandSpec } from '@velaros-ai/platform/contracts'
+import type { PlatformCompatibilityApi } from '@velaros-ai/core/platform'
+import { createPlatform } from '@velaros-ai/core/platform'
+import type { CommandSpec } from '@velaros-ai/core/platform/contracts'
 
 import type { LocalShellHostOptions, ShellHostPort } from '../../contract/requires.js'
 import type { ResolvedShell } from '../../types/local.js'

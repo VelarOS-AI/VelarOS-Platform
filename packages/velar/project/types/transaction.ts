@@ -1,4 +1,4 @@
-import type { TextEncoding } from '@velaros-ai/text-files/contracts'
+import type { TextEncoding } from '@velaros-ai/core/text-files/contracts'
 
 import type { ProjectChangeRecordInput } from './change-feed.js'
 import type { Diagnostic } from './common.js'

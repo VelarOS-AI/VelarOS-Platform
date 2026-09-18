@@ -1,6 +1,6 @@
 import type * as ts from 'typescript'
 
-import type { TextEncoding } from '@velaros-ai/text-files/contracts'
+import type { TextEncoding } from '@velaros-ai/core/text-files/contracts'
 
 import type { EditIntent } from './edit.js'
 import type { ProjectVisibleCoverage } from './file-refs.js'

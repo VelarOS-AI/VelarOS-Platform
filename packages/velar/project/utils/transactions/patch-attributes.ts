@@ -3,8 +3,8 @@
  */
 
 import { isNumber } from '@velaros-ai/core'
-import { textCodec } from '@velaros-ai/text-files'
-import type { TextEncoding } from '@velaros-ai/text-files/contracts'
+import { textCodec } from '@velaros-ai/core/text-files'
+import type { TextEncoding } from '@velaros-ai/core/text-files/contracts'
 
 import type { PreparedPatch } from '../../types/edit.js'
 import type { FileAttributes } from '../../types/snapshot.js'

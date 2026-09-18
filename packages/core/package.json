@@ -4,7 +4,7 @@
   "velaros": {
     "platform": "0.6"
   },
-  "description": "VelarOS 跨领域共享基础工具：断言、错误、结果、类型守卫与无领域语义的通用原语。",
+  "description": "VelarOS 跨领域共享的底层：断言、错误、结果、类型守卫与无领域语义的通用原语，外加三个底层单元——platform（跨平台约定：路径文本、shell 命令规格、进程与系统信息命令、应用与数据目录、VelarOS 共享资源目录）、text-files（磁盘文本的无损读写：认编码、严格解码、按原编码写回、原子替换、有界读）与 path-rules（glob 匹配、.gitignore 的解析与判定、遍历时的忽略策略）。",
   "license": "Apache-2.0",
   "sideEffects": false,
   "engines": {
@@ -37,6 +37,34 @@
     "./utils/*": {
       "types": "./dist/utils/*.d.ts",
       "import": "./dist/utils/*.js"
+    },
+    "./platform": {
+      "types": "./dist/platform/index.d.ts",
+      "import": "./dist/platform/index.js"
+    },
+    "./platform/contracts": {
+      "types": "./dist/platform/contracts.d.ts",
+      "import": "./dist/platform/contracts.js"
+    },
+    "./platform/shared-resources": {
+      "types": "./dist/platform/shared-resources.d.ts",
+      "import": "./dist/platform/shared-resources.js"
+    },
+    "./text-files": {
+      "types": "./dist/text-files/index.d.ts",
+      "import": "./dist/text-files/index.js"
+    },
+    "./text-files/contracts": {
+      "types": "./dist/text-files/contracts.d.ts",
+      "import": "./dist/text-files/contracts.js"
+    },
+    "./path-rules": {
+      "types": "./dist/path-rules/index.d.ts",
+      "import": "./dist/path-rules/index.js"
+    },
+    "./path-rules/contracts": {
+      "types": "./dist/path-rules/contracts.d.ts",
+      "import": "./dist/path-rules/contracts.js"
     }
   },
   "files": [
@@ -47,14 +75,19 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/core/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
+    "build": "bun run clean && tsc -p tsconfig.build.json && tsc -p tsconfig.units.build.json && node ../../scripts/core/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test test",
+    "test": "bun test test platform/spec/acceptance.test.ts platform/test text-files/spec/acceptance.test.ts text-files/test path-rules/spec/acceptance.test.ts path-rules/test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/core"
   },
-  "dependencies": {},
+  "dependencies": {
+    "diff": "^8.0.4",
+    "iconv-lite": "^0.7.2",
+    "picomatch": "^4.0.3"
+  },
   "devDependencies": {
     "@types/node": "^22.19.17",
+    "@types/picomatch": "^3.0.1",
     "typescript": "^5.7.0"
   },
   "repository": {

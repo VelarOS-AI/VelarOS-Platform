@@ -7,7 +7,7 @@ import { dirname } from 'node:path'
 
 import { isPresent, isString, Log, readErrnoCode } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { textCodec } from '@velaros-ai/text-files'
+import { textCodec } from '@velaros-ai/core/text-files'
 
 import { FileLimits } from '../contract/constants.js'
 import type { FileEditPlan, FileEditProblem } from '../types/edit.js'

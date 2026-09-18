@@ -5,7 +5,8 @@
 // 都是 Core 的消费者，不能反向进入 Core 的类型、常量或运行时实现。
 //
 // 两条规则:
-//  ① 硬墙(零迁移清单):packages/core/src/** 出现产品域词即红。
+//  ① 硬墙(零迁移清单):packages/core 的源码(基础原语 src/ 与 platform、text-files、path-rules 三个单元,
+//     测试与验收不算)出现产品域词即红。
 //  ② 同名不同义豁免必须逐条写理由，按词形而不是按文件豁免。
 //
 // 有意的新增域语义 = 违反 §15.4,不提供 baseline 逃生门:要么改代码,要么改宪章。
@@ -15,7 +16,11 @@ import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const RepoRoot = resolve(HERE, '../..')
-const CoreSourceRoot = resolve(RepoRoot, 'packages/core/src')
+const CoreRoot = resolve(RepoRoot, 'packages/core')
+/** 要扫的源码目录:基础原语,与三个底层单元。 */
+const CoreSourceDirectories = ['src', 'platform', 'text-files', 'path-rules']
+/** 源码目录里不算源码的:单元的验收与测试。 */
+const NonSourceDirectories = new Set(['node_modules', 'dist', 'spec', 'test'])
 
 /** 具体域名词。命中即「Core 认识了这个域」。 */
 const DomainWords = [
@@ -64,6 +69,16 @@ const SenseExemptions = [
     pattern: /\|\s*'browser'|return\s+'browser'/u,
     reason: 'browser=JS 运行环境标签(window/document 存在与否),不是 VelarOS 浏览器能力域',
   },
+  {
+    // platform 单元读 Windows 的系统信息:WMI 属性 TotalVirtualMemorySize、FreeVirtualMemory
+    pattern: /(?:Total|Free)VirtualMemory/u,
+    reason: 'memory=操作系统的内存(WMI 属性名),不是 VelarOS 记忆能力域',
+  },
+  {
+    // text-files 单元的编码类型会出现在 velar:files 的模型面声明里,生成器要求闭包里的类型带这个标记
+    pattern: /@AgentView\b/u,
+    reason: '代码面声明生成器的标记(这个类型会给模型看),不是 Agent 执行域语义',
+  },
 ]
 
 const SourceExtensions = new Set(['.ts', '.tsx'])
@@ -72,7 +87,7 @@ function collectSourceFiles(dir) {
   const out = []
   if (!existsSync(dir)) return out
   for (const entry of readdirSync(dir)) {
-    if (entry === 'node_modules' || entry === 'dist') continue
+    if (NonSourceDirectories.has(entry)) continue
     const full = join(dir, entry)
     if (statSync(full).isDirectory()) {
       out.push(...collectSourceFiles(full))
@@ -110,14 +125,16 @@ function scanFile(file) {
 function main() {
   const violations = []
 
-  for (const file of collectSourceFiles(CoreSourceRoot)) {
-    const relativeFile = normalizeSeparators(relative(CoreSourceRoot, file))
-    const hits = scanFile(file)
-    if (hits.length === 0) continue
-    for (const hit of hits) {
-      violations.push(
-        `packages/core/src/${relativeFile}:${hit.line}: core 出现领域词「${hit.word}」:${hit.text}`,
-      )
+  for (const directory of CoreSourceDirectories) {
+    for (const file of collectSourceFiles(join(CoreRoot, directory))) {
+      const relativeFile = normalizeSeparators(relative(CoreRoot, file))
+      const hits = scanFile(file)
+      if (hits.length === 0) continue
+      for (const hit of hits) {
+        violations.push(
+          `packages/core/${relativeFile}:${hit.line}: core 出现领域词「${hit.word}」:${hit.text}`,
+        )
+      }
     }
   }
 

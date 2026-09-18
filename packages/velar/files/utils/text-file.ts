@@ -1,6 +1,6 @@
 /**
  * 文本文件：有界地读进来、认出图片与 PDF（只为把错误说清楚）、整份解码、版本号与印记。
- * 编码的识别、严格解码与按原编码写回在公共件 `@velaros-ai/text-files`；这里只把它的结论翻成本包的报错。
+ * 编码的识别、严格解码与按原编码写回在公共件 `@velaros-ai/core/text-files`；这里只把它的结论翻成本包的报错。
  * 每个函数都拿两个路径：`target` 是真正读的文件，`shown` 是报错里给模型看的写法。
  */
 
@@ -9,9 +9,9 @@ import type { Stats } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 
 import { AppError } from '@velaros-ai/core/error'
-import { textCodec, textFileIo } from '@velaros-ai/text-files'
-import type { DecodedText } from '@velaros-ai/text-files/contracts'
-import { TextFileErrorCodes } from '@velaros-ai/text-files/contracts'
+import { textCodec, textFileIo } from '@velaros-ai/core/text-files'
+import type { DecodedText } from '@velaros-ai/core/text-files/contracts'
+import { TextFileErrorCodes } from '@velaros-ai/core/text-files/contracts'
 
 import type { FileStamp } from '../types/edit.js'
 import type { FileMediaType, FileTextContent } from '../types/text.js'

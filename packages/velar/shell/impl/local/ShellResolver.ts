@@ -8,8 +8,8 @@ import { createHash } from 'node:crypto'
 import { win32 } from 'node:path'
 
 import { isPlainObject, isString, Log, toNullable } from '@velaros-ai/core'
-import { currentPlatform } from '@velaros-ai/platform'
-import type { CommandSpec } from '@velaros-ai/platform/contracts'
+import { currentPlatform } from '@velaros-ai/core/platform'
+import type { CommandSpec } from '@velaros-ai/core/platform/contracts'
 
 import type { RefreshedWindowsEnvironment, ResolvedShell, ResolveShellOptions,ShellProbeResult } from '../../types/local.js'
 import type { ShellCommandAvailability } from '../../types/shell-command.js'

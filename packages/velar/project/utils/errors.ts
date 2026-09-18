@@ -7,7 +7,7 @@
 // 加一项，别用 `INVALID_INPUT` 兜底掉真实原因。
 import { isNull, isUndefined } from "@velaros-ai/core";
 import { AppError } from '@velaros-ai/core/error'
-import { TextFileErrorCodes } from '@velaros-ai/text-files/contracts'
+import { TextFileErrorCodes } from '@velaros-ai/core/text-files/contracts'
 
 import { type ProjectErrorCode, ProjectErrorCodes } from "../contract/constants.js";
 
@@ -51,7 +51,7 @@ const TextFileErrorReasons: ReadonlyMap<string, ProjectErrorCode> = new Map([
 ])
 
 /**
- * 公共件 `@velaros-ai/text-files` 的失败按错误码翻成 `ProjectError`（文字照搬成 message，context 照搬成 details）；别的错误原样返回。
+ * 公共件 `@velaros-ai/core/text-files` 的失败按错误码翻成 `ProjectError`（文字照搬成 message，context 照搬成 details）；别的错误原样返回。
  * 调 text-files 的地方都在失败时 `throw projectErrorFromTextFile(error)`，按 `ProjectError` 分支的现有逻辑因此一处不用改。
  */
 export function projectErrorFromTextFile(error: unknown): unknown {

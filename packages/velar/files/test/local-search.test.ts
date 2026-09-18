@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { createIgnorePolicy } from '@velaros-ai/path-rules'
+import { createIgnorePolicy } from '@velaros-ai/core/path-rules'
 
 import { createLocalFileSearch } from '../impl/LocalFileSearch.js'
 import { shouldSkipProtectedSearchDirectory, shouldSkipSearchEntry } from '../utils/search.js'

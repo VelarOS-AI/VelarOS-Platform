@@ -1,5 +1,5 @@
 /**
- * 事务落盘的原字节：比较两份字节、把落盘的 base64 解回字节。按原编码写回、保留没改片段原字节的编码在公共件 @velaros-ai/text-files。
+ * 事务落盘的原字节：比较两份字节、把落盘的 base64 解回字节。按原编码写回、保留没改片段原字节的编码在公共件 @velaros-ai/core/text-files。
  */
 
 import { isUndefined } from "@velaros-ai/core";

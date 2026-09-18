@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { textCodec } from '@velaros-ai/text-files'
+import { textCodec } from '@velaros-ai/core/text-files'
 
 import { TextFileAdapter } from '../impl/adapters/TextFileAdapter'
 import { createProjectKernel } from '../index'

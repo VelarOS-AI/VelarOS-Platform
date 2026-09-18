@@ -8,9 +8,9 @@ import { isAbsolute, join } from 'node:path'
 
 import { isEmpty, isPresent, isUndefined, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { createIgnorePolicy } from '@velaros-ai/core/path-rules'
+import { textFileIo } from '@velaros-ai/core/text-files'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
-import { createIgnorePolicy } from '@velaros-ai/path-rules'
-import { textFileIo } from '@velaros-ai/text-files'
 import { createConfinedShellRunner } from '@velaros-ai/velar/shell/local'
 
 import { RehearsalSandboxLimits } from '../contract/constants.js'

@@ -62,7 +62,7 @@
 
 - 上游包：`@velaros-ai/core`（类型守卫、`AppError`）；`@velaros-ai/agent` 的 `tool-contract`（审批端口），peer 依赖。
 - 同包的单元：`@velaros-ai/velar/shell`（命令判定与危险命令的审批请求，`run` 用；本机沙箱的受约束执行器，经 `./local` 入口），经它的入口引用。
-- 本机实现另用：`@velaros-ai/path-rules`（镜像时的忽略策略）、`@velaros-ai/text-files`（清单的原子写、按编码解码）、`@velaros-ai/platform`（路径文本判定）、`diff`（文本差量）。
+- 本机实现另用：`@velaros-ai/core/path-rules`（镜像时的忽略策略）、`@velaros-ai/core/text-files`（清单的原子写、按编码解码）、`@velaros-ai/core/platform`（路径文本判定）、`diff`（文本差量）。
 - 只在验收里用：`@velaros-ai/code-surface`（dev 依赖），跑那条端到端的程序。
 - 根入口与 `./contracts` 整条引用链不碰 Node 内置模块，门禁核对；`./local` 只给 Node。
 - 不读环境变量。

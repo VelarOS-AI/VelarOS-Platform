@@ -6,9 +6,9 @@ import { unlink } from 'node:fs/promises'
 
 import { readErrnoCode } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { textFileIo } from '@velaros-ai/text-files'
-import type { ExpectedBytes } from '@velaros-ai/text-files/contracts'
-import { TextFileErrorCodes } from '@velaros-ai/text-files/contracts'
+import { textFileIo } from '@velaros-ai/core/text-files'
+import type { ExpectedBytes } from '@velaros-ai/core/text-files/contracts'
+import { TextFileErrorCodes } from '@velaros-ai/core/text-files/contracts'
 
 /** 把读文件时的系统错误翻成对应的错误码；已经是 AppError 的原样返回。 */
 export function normalizeReadError(err: unknown, path: string): Error {

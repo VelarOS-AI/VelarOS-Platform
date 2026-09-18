@@ -67,8 +67,8 @@
 
 ## 依赖什么
 
-- 上游包：`@velaros-ai/core`（类型守卫、`AppError`、日志、真实路径、errno 码）、`@velaros-ai/platform`（规整用户输入的路径、平台名）、`@velaros-ai/text-files`（编码识别、严格解码、按原编码编回、有界读、原子替换写入）、
-  `@velaros-ai/path-rules`（全局搜索的忽略策略）。
+- 上游包：`@velaros-ai/core`（类型守卫、`AppError`、日志、真实路径、errno 码）、`@velaros-ai/core/platform`（规整用户输入的路径、平台名）、`@velaros-ai/core/text-files`（编码识别、严格解码、按原编码编回、有界读、原子替换写入）、
+  `@velaros-ai/core/path-rules`（全局搜索的忽略策略）。
 - 只在验收里用：`@velaros-ai/code-surface`（dev 依赖），跑端到端的程序、给代码模版做类型检查。
 - 用到的 Node 内置模块：`fs/promises`（stat、读写文件、删除）、`crypto`（版本号、改动号）、`path`、`os`（家目录）。只在根入口与 `./local` 的引用链上；`./contracts` 不碰。
 - 不读环境变量。

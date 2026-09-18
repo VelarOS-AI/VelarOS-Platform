@@ -1,9 +1,9 @@
 /**
- * 路径 glob：项目里的每一次规则匹配都经这里。规则引擎在 `@velaros-ai/path-rules`，本文件只钉住项目自己的那条约定——按盘的大小写规矩比。
+ * 路径 glob：项目里的每一次规则匹配都经这里。规则引擎在 `@velaros-ai/core/path-rules`，本文件只钉住项目自己的那条约定——按盘的大小写规矩比。
  */
 
-import { pathMatcher } from '@velaros-ai/path-rules'
-import { currentPlatform } from '@velaros-ai/platform'
+import { pathMatcher } from '@velaros-ai/core/path-rules'
+import { currentPlatform } from '@velaros-ai/core/platform'
 
 /**
  * 本平台的路径比较区不区分大小写：macOS 与 Windows 的卷缺省不区分，`.ENV` 和 `.env` 是同一个文件。

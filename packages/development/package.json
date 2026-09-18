@@ -42,7 +42,6 @@
   "dependencies": {
     "@codemirror/lang-python": "^6.2.1",
     "@velaros-ai/core": "workspace:*",
-    "@velaros-ai/platform": "workspace:*",
     "@velaros-ai/velar": "workspace:*",
     "typescript": "^5.7.0"
   },

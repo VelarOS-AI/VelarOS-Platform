@@ -1,7 +1,7 @@
 // 域：项目文本的行列与匹配。模型给的正文先查孤立代理项、统一逻辑换行；正文里的偏移与行号互换；按换行符适配的文本匹配。
-// 磁盘编码的判定、严格解码与无损重建在公共件 @velaros-ai/text-files。
+// 磁盘编码的判定、严格解码与无损重建在公共件 @velaros-ai/core/text-files。
 import { isEmpty, isPresent } from '@velaros-ai/core'
-import { textCodec } from '@velaros-ai/text-files'
+import { textCodec } from '@velaros-ai/core/text-files'
 
 import type { Range } from '../types/common.js'
 import type { LineEndingAwareTextMatch } from '../types/text.js'
