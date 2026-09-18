@@ -234,6 +234,30 @@ describe('编辑的边界', () => {
     expect(failure.message).toContain('候选')
     expect(failure.message).toContain('下一步')
   })
+
+  test('INV-23 行号照 wc -l 数：结尾换行之后那个零宽的行不给模型看，读到最后一行就是读到头，末尾照样插得进去', async () => {
+    await writeFile(join(root, 'a.txt'), 'one\ntwo\n\n')
+    const { call, read } = await createProjectHarness(root)
+    const whole = await read('a.txt')
+    expect(whole.lines).toEqual([[1, 'one'], [2, 'two'], [3, '']])
+    expect(whole.totalLines).toBe(3)
+    // 范围停在一个空行上，那一行照样交出来；读到了最后一行，就没有续读。
+    const ranged = await read('a.txt', [2, 3])
+    expect(ranged.lines).toEqual([[2, 'two'], [3, '']])
+    expect(ranged.hasMore).toBeUndefined()
+    expect(ranged.continuation).toBeUndefined()
+    await call('project', 'edit', { steps: [{ action: 'edit', fileRef: ranged.fileRef, edits: [{ op: 'insert', at: 'end', text: 'four' }] }] })
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('one\ntwo\n\nfour\n')
+    // 空文件是 0 行；越出行数的行号报出文件实际有几行，并指向在末尾插入的写法。
+    await writeFile(join(root, 'empty.txt'), '')
+    const empty = await read('empty.txt')
+    expect(empty.lines).toEqual([])
+    expect(empty.totalLines).toBe(0)
+    const current = await read('a.txt')
+    const beyond = await failureOf(call('project', 'edit', { steps: [{ action: 'edit', fileRef: current.fileRef, edits: [{ op: 'replace', range: 9, text: 'x' }] }] }))
+    expect(beyond.message).toContain('第 9 行超出了文件的行数（4 行）')
+    expect(beyond.message).toContain("at: 'end'")
+  })
 })
 
 describe('命令与看图', () => {

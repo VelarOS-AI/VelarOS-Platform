@@ -28,3 +28,4 @@
 | INV-20 | 程序看得到的只有 `error.code` 与 `error.message`：code 是 `ProjectErrorCodes` 的原因码，details 里的位置（第几步第几处）、候选、诊断、改完之后的预览与下一步都写进 message | 测试 | `spec/acceptance.test.ts` |
 | INV-21 | 项目空间里看图（共用的 `velar:images`）只看项目里、项目读取策略许看的图：出了项目或在拒读名单里的那一张看不了（PERMISSION），别的照常交给模型 | 测试 | `spec/acceptance.test.ts` |
 | INV-22 | 两份代码模版（`templates/project.js`、`templates/code.js`）是一整份能照抄的程序，import 只写一次；它们整份照生成的真实声明过类型检查，并且原样嵌在声明的模块头里 | 测试 | `spec/acceptance.test.ts` |
+| INV-23 | 行号照 `wc -l` 数，和 `velar:files` 一样：结尾换行之后那个零宽的行不给模型看、不算进 totalLines（空文件是 0 行）；它仍在可见范围里，在文件末尾插入照样成立；按范围读到最后一行真实的行就是读到头，没有续读；停在空行上的范围照样交出那一空行 | 测试 | `spec/acceptance.test.ts` |

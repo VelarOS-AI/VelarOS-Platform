@@ -11,7 +11,7 @@ import { normalizeProjectLineRange } from './line-range.js'
 import { insertionLineText, replacementLineText } from './line-text.js'
 import { exactMatchCandidates, matchesElsewhere, missingMatchCandidates } from './match-feedback.js'
 import { assertVisibleLines, intersectWindows, visibleWindows } from './selection-coverage.js'
-import { createProjectSourceCoordinates, logicalSourceOffset, normalizePhysicalNewlines, physicalSourceOffset, sourceNewlineAt } from './source.js'
+import { createProjectSourceCoordinates, logicalSourceOffset, normalizePhysicalNewlines, physicalSourceOffset, sourceLineCount, sourceNewlineAt } from './source.js'
 
 const CandidateNextAction = '核对候选后缩小 range 或修正 match 再提交；把 match 扩成更长的原文时，替换的 text 也要带上候选的 prefix/suffix。候选只供确认，什么都没写。'
 
@@ -60,7 +60,12 @@ export function selectProjectMutations(view: ProjectEditView, edits: readonly Pr
       let end = view.content.length
       if (!isUndefined(edit.range)) {
         const [startLine, endLine] = normalizeProjectLineRange(edit.range)
-        if (endLine > source.lines.length) throw new ProjectError('INVALID_INPUT', '编辑范围超出文件行数。', { range: edit.range, totalLines: source.lines.length })
+        // 最后一行的下一行（结尾换行之后那个零宽的行）照样认：在那儿替换或插入就是加在末尾，原文件的结尾换行保留。
+        if (endLine > source.lines.length) {
+          const lineCount = sourceLineCount(source)
+          throw new ProjectError('INVALID_INPUT', `第 ${endLine} 行超出了文件的行数（${lineCount} 行）。`, { range: edit.range, totalLines: lineCount },
+            "要加在文件末尾用 { op: 'insert', at: 'end' }；行号照 read 给的写。")
+        }
         assertVisibleLines(view, startLine, endLine, isUndefined(edit.match))
         start = source.lines[startLine - 1].start
         end = source.lines[endLine - 1].end

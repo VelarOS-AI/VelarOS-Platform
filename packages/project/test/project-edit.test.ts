@@ -531,10 +531,11 @@ describe('编码与换行', () => {
       await writeFile(join(root, 'source.ts'), bytes)
       const { call, kernel } = await projectSpaceFixture({ root, plugins: [typescriptPlugin()] })
       const before = await readOne(call, 'source.ts')
-      expect(before.lines).toEqual([[1, 'export const message = "中文🙂\\n";'], [2, 'export const count = 1;'], [3, '']])
+      expect(before.lines).toEqual([[1, 'export const message = "中文🙂\\n";'], [2, 'export const count = 1;']])
+      expect(before.totalLines).toBe(2)
       expect((await kernel.listSymbols('source.ts')).map((symbol) => symbol.name)).toEqual(expect.arrayContaining(['message', 'count']))
       const result = await edit(call, [{ action: 'edit', fileRef: before.fileRef, edits: [{ op: 'replace', range: 2, match: 'count = 1', text: 'count = 2' }] }])
-      const after = [[1, 'export const message = "中文🙂\\n";'], [2, 'export const count = 2;'], [3, '']]
+      const after = [[1, 'export const message = "中文🙂\\n";'], [2, 'export const count = 2;']]
       // 回执窗口与重读看到的是同一份：行里不带 \r，转义原样。
       expect(result.files[0].lines).toEqual(after)
       expect((await readOne(call, 'source.ts')).lines).toEqual(after)

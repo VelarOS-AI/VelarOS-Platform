@@ -235,7 +235,7 @@ declare module 'velar:project' {
     path: string
     revision?: string
     fileRef?: string
-    /** 整个文件有几行。 */
+    /** 整个文件有几行，数法和 `wc -l` 一样：结尾那个换行不算多出一行，空文件是 0 行。 */
     totalLines?: number
     lines: Array<[number, string]>
     fragments?: ProjectFragment[]

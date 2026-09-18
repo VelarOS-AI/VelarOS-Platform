@@ -143,16 +143,24 @@ describe('read 的窗口与 fileRef', () => {
     expect((await loadFileView(context, next.fileRef)).content).toBe('other')
   })
 
-  test('空文件与末尾的空行都有零宽的整行覆盖', async () => {
+  test('行数照 wc -l 数：结尾换行之后那个零宽的行不给模型看，但在可见范围里，末尾照样插得进去', async () => {
     const { call, context } = await projectSpaceFixture({ root })
-    for (const original of ['', 'line\n']) {
+    for (const [original, lines] of [['', []], ['line\n', [[1, 'line']]], ['a\n\n', [[1, 'a'], [2, '']]], ['a\nb', [[1, 'a'], [2, 'b']]]] as const) {
       await writeFile(join(root, 'a.ts'), original)
       const window = await readOne(call, 'a.ts')
-      expect(window.lines.at(-1)).toEqual([original ? 2 : 1, ''])
+      expect(window.lines, JSON.stringify(original)).toEqual(lines)
+      expect(window.totalLines, JSON.stringify(original)).toBe(lines.length)
       const view = await loadFileView(context, window.fileRef)
       expect(view.coverage.at(-1)?.completeLines).toBe(true)
       expect(view.coverage.at(-1)?.endOffset).toBe(original.length)
     }
+    // 按范围读到最后一行真实的行，就算读到头了：没有续读，末尾插入要的那个零宽的行也在可见范围里。
+    await writeFile(join(root, 'a.ts'), 'a\n\n')
+    const ranged = await readOne(call, 'a.ts', [1, 2])
+    expect(ranged.lines).toEqual([[1, 'a'], [2, '']])
+    expect(ranged.hasMore).toBeUndefined()
+    await call('project', 'edit', { steps: [{ action: 'edit', fileRef: ranged.fileRef, edits: [{ op: 'insert', at: 'end', text: 'z' }] }] })
+    expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('a\n\nz\n')
     // 只有 \n 与 \r\n 算换行，孤立的 \r 是行里的字符。
     expect(projectSourceLines('a\r\nb\rc').map((line) => line.text)).toEqual(['a', 'b\rc'])
   })
@@ -188,7 +196,7 @@ describe('read 的窗口与 fileRef', () => {
   test('路径钳在项目里：项目里的绝对路径也认，出了项目就拒', async () => {
     await writeFile(join(root, 'a.txt'), 'inside\n')
     const { call } = await projectSpaceFixture({ root })
-    expect((await readOne(call, join(root, 'a.txt'))).lines).toEqual([[1, 'inside'], [2, '']])
+    expect((await readOne(call, join(root, 'a.txt'))).lines).toEqual([[1, 'inside']])
     const outside = await failureOf(readOne(call, '../outside.txt'))
     expect(outside.code).toBe('PERMISSION_DENIED')
     expect(outside.message).toContain('项目之内')
@@ -375,7 +383,8 @@ describe('search', () => {
     expect(window.revision).toBe(result.hits[0].revision)
     expect(window.lines).toContainEqual([2, 'const target = 1'])
     const view = await loadFileView(context, window.fileRef)
-    expect(view.coverage.map((range) => [range.startLine, range.endLine])).toEqual([[1, 3]])
+    // 窗口给到了最后一行，结尾换行之后那个零宽的行（内核里的第 4 行）也在可见范围里：在末尾插入要它。
+    expect(view.coverage.map((range) => [range.startLine, range.endLine])).toEqual([[1, 4]])
   })
 
   test('窗口总量有上限：装不下的命中只留位置与片段，标成不可直接编辑', async () => {

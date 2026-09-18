@@ -17,6 +17,12 @@ export function createProjectSourceCoordinates(content: string): ProjectSourceCo
   return { content, lines, logical: content.replace(/\r\n/g, '\n') }
 }
 
+/** 文件有几行，照 `wc -l` 数：结尾换行之后那个零宽的行不算（空文件是 0 行）。 */
+export function sourceLineCount(source: ProjectSourceCoordinates): number {
+  const last = source.lines.at(-1)
+  return last && last.start === last.end ? source.lines.length - 1 : source.lines.length
+}
+
 /** 偏移落在第几行（从 1 起）；logical 为 true 时把 offset 当逻辑偏移。 */
 export function sourceLineAt(source: ProjectSourceCoordinates, offset: number, logical = false): number {
   let low = 0

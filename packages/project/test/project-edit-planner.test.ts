@@ -164,7 +164,7 @@ describe('compact edit selector contract', () => {
 
   test('matches cannot extend beyond an explicit range', () => {
     expect(() => edit('one\ntwo\n', [{ op: 'replace', range: 1, match: 'one\ntwo', text: 'x' }])).toThrow('不在所选 range 内，它出现在第 1–2 行')
-    expect(() => edit('one\n', [{ op: 'replace', range: 3, text: 'x' }])).toThrow('超出文件')
+    expect(() => edit('one\n', [{ op: 'replace', range: 3, text: 'x' }])).toThrow('第 3 行超出了文件的行数（1 行）')
   })
 })
 

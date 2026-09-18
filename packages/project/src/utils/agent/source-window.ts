@@ -82,8 +82,9 @@ export async function presentFileRead(
     const to = from + content.length
     for (const line of fullLines) {
       if (line.line < startLine || line.start > to) continue
-      // 读到的内容止于换行符时，下一行的正文还没显示。
-      if (line.start === to && content.endsWith('\n') && to < original.length) continue
+      // 整读的正文带着行尾换行，止于换行符时下一行的正文还没显示；按范围读的正文不带末行的换行符，
+      // 以换行结尾是因为最后那行是空行，它已经交出去了。
+      if (!file.range && line.start === to && content.endsWith('\n') && to < original.length) continue
       if (line.bodyEnd < from) continue
       if (from <= line.start && to >= line.bodyEnd) result.lines.push([line.line, line.text])
       else {
@@ -93,6 +94,7 @@ export async function presentFileRead(
       }
     }
     result.viewSource = saveFileSource(ctx, { path: file.snapshot.path, revision: file.snapshot.revision!, content: original })
+    countLikeWc(result, fullLines)
   } else {
     // 只读降级也用于脱敏过的内容；末行的边界保守处理，免得扩大编辑范围。
     const parts = content.split('\n')
@@ -108,6 +110,25 @@ export async function presentFileRead(
     }
   }
   return result
+}
+
+/**
+ * 行数照 `wc -l` 数：结尾换行之后那个零宽的行不算一行（空文件是 0 行）。它在内核里照样有行号：
+ * 窗口交出了最后一行真实的行（或者文件是空的）时，把它记进可见范围——程序凭这个 fileRef 在文件末尾插入要它——
+ * 同时标成 trailingLine，交给模型之前去掉；这时文件已经读到头，续读也就没有了。
+ */
+function countLikeWc(result: ProjectSourceWindow, fullLines: readonly ProjectSourceLine[]): void {
+  const last = fullLines.at(-1)
+  // 最后一段长度为零：它就是结尾换行之后那个行（空文件里是唯一的那一行）；没有结尾换行的文件，最后一段是真实的一行。
+  if (!last || last.start !== last.end) return
+  result.totalLines = fullLines.length - 1
+  const lastReal = fullLines.at(-2)
+  const shown = new Set(result.lines.map(([line]) => line))
+  if (lastReal && !shown.has(lastReal.line)) return
+  if (!shown.has(last.line)) result.lines.push([last.line, ''])
+  result.trailingLine = last.line
+  result.hasMore = false
+  delete result.continuation
 }
 
 /** 是不是普通对象（可以当键值表读）。 */
@@ -236,9 +257,11 @@ export async function finalizeFileWindows(ctx: ProjectCallContext, windows: read
 
 /** 把签好的窗口写成模型面的 `ProjectWindow`：只留声明里的字段。 */
 export function toProjectWindow(window: Record<string, unknown>): ProjectWindow {
+  const lines = isArray(window.lines) ? window.lines as Array<[number, string]> : []
   const shaped: ProjectWindow = {
     path: String(window.path),
-    lines: isArray(window.lines) ? window.lines as Array<[number, string]> : [],
+    // 结尾换行之后那个零宽的行只进可见范围，不给模型看（模型面照 wc -l 数行）。
+    lines: isNumber(window.trailingLine) ? lines.filter(([line, text]) => line !== window.trailingLine || !isEmpty(text)) : lines,
   }
   if (isString(window.revision)) shaped.revision = window.revision
   if (isString(window.fileRef)) shaped.fileRef = window.fileRef

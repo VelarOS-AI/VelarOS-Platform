@@ -111,8 +111,8 @@
 
 ## 不变量
 
-共 21 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排（INV-15 作废，编号不复用）。
-按检验方式：测试 19 条、类型 1 条、门禁 1 条。未验证 0 条。
+共 22 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排（INV-15 作废，编号不复用）。
+按检验方式：测试 20 条、类型 1 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 
