@@ -50,7 +50,7 @@ describe('compact edit selector contract', () => {
 
   test('each combination has one meaning: ambiguous edits, two sources and internal operations are rejected at the code surface', async () => {
     await writeFile(join(root, 'x.txt'), 'x\n')
-    const { call, mutations } = await projectToolFixture({ root })
+    const { call, kernel } = await projectToolFixture({ root })
     const [file] = (await call('project', 'read', { files: [{ path: 'x.txt' }] })).files
     const rejected = async (steps: unknown[]) => (await failureOf(call('project', 'edit', { steps }))).code
     for (const operation of [
@@ -64,7 +64,7 @@ describe('compact edit selector contract', () => {
     expect(await rejected([{ action: 'edit', sourceRef: file.fileRef, path: 'x.txt', edits: [{ op: 'replace', range: 1, text: 'x' }] }])).toBe('INVALID_INPUT')
     // 内核内部的整段替换（replace_content）从代码面够不着：它只能由规划器按读到的范围编出来。
     expect(await rejected([{ action: 'replace_content', path: 'x.txt', expectedContent: 'x\n', content: 'y\n' }])).toBe('INVALID_INPUT')
-    expect(mutations).toEqual([])
+    expect(kernel.changeFeed.list()).toEqual([])
     expect(await readFile(join(root, 'x.txt'), 'utf8')).toBe('x\n')
   })
 

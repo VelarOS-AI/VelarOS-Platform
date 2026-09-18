@@ -22,13 +22,6 @@ export function operationFilePaths(operation: EditOperation): string[] {
   return isString(path) ? [path] : []
 }
 
-/** 一个编辑计划会碰到的文件路径（去重、按出现顺序）：提交之前拿它向宿主要写授权，确认卡片才列得出这次要改哪些文件。 */
-export function plannedFilePaths(operations: readonly EditIntent[]): string[] {
-  const paths = new Set<string>()
-  for (const intent of operations) for (const path of operationFilePaths(intent.operation)) paths.add(path)
-  return [...paths]
-}
-
 /** 把产生补丁的意图记进每个补丁的 metadata：操作原文（整篇替换只记类型）、约束、理由和 targetId，rebase 时据此重放。 */
 export function withIntentMetadata(patches: PreparedPatch[], intent: EditIntent): PreparedPatch[] {
   return patches.map((patchValue) => ({

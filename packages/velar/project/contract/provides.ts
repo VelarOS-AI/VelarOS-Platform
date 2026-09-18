@@ -7,7 +7,6 @@ import type { ProjectChangeListener, ProjectChangeListOptions, ProjectChangeReco
 
 // ── 类实现的产品面接口：定义在类上方，这里登记 ────────────────
 export type { ProjectKernel } from '../impl/kernel/LocalProjectKernel.js'
-export type { ProjectApprovalBridgeApi } from '../impl/kernel/ProjectApprovalBridge.js'
 export type { ProjectTransactionControllerApi } from '../impl/kernel/ProjectTransactionController.js'
 export type { ProjectCodeOperationsApi } from '../impl/operations/ProjectCodeOperations.js'
 export type { ProjectExecutionGateApi } from '../impl/operations/ProjectExecutionGate.js'

@@ -1,6 +1,6 @@
 /**
  * 代码面 `shell` 命名空间的三个操作：`ShellOperations` 与整个进程唯一的 `shellOperations`。接口 `ShellOperationsApi` 在本文件的类上方。
- * 这里只做三件事：执行前分类、要确认的先问用户、把回执整成模型看的样子；工作目录由空间端口解析，
+ * 这里只做三件事：执行前分类、危险命令先问用户、把回执整成模型看的样子；工作目录由空间端口解析，
  * 进程由空间端口起——一个进程都不在这里起（本机是 `@velaros-ai/system` 的本地内核）。
  */
 
@@ -33,9 +33,8 @@ import { shellCommandPolicy } from './ShellCommandPolicy.js'
  *
  * @AgentView
  * 跑命令、看和停后台任务、刷新 shell 环境。
- * 命令先按策略分类：危险命令每次都由用户亲自确认，长驻命令（开发服务器这类）要先问一声；
- * 当前空间还可能要求别的授权（比如会改东西的命令先过一次修改授权）。任何一关被拒时一个进程都没起，调用抛错。
- * 判定认全部五种 shell 的语法，换个 shell 写照样问。
+ * 危险命令（递归删除、丢掉未提交改动的 git 操作、提权这类）每次都由用户亲自确认，被拒时一个进程都没起，调用抛错；
+ * 判定认全部五种 shell 的语法，换个 shell 写照样问。别的命令直接跑。
  */
 export interface ShellOperationsApi {
   /**
@@ -77,16 +76,11 @@ export class ShellOperations implements ShellOperationsApi {
     const inBackground = !!interactive || (background ?? plan.shouldStartInBackground)
 
     // 危险命令必须每次由用户亲自裁决：审批端口会用操作身份覆盖 riskScope，只有手动确认选项能让宿主在任何档位都弹卡。
-    if (plan.shouldRequestConfirmation) {
+    if (plan.isDangerous) {
       const { scopeLabel, riskScope } = ctx.shell.commandPolicy(cwd)
-      const request = plan.isDangerous
-        ? this.approvals.dangerous({ command, plan, cwd: commandCwd, background: inBackground, scopeLabel, riskScope })
-        : { message: this.policy.confirmationMessage(command, plan, scopeLabel, inBackground), options: { approvalRisk: 'low' as const } }
+      const request = this.approvals.dangerous({ command, plan, cwd: commandCwd, background: inBackground, scopeLabel, riskScope })
       await ctx.approval.awaitConfirmation(request.message, ctx.abortSignal, request.options)
     }
-
-    // 空间自己还要过的关（项目空间在这里过写授权）：排在确认之后、起进程之前，被拒一个进程都不起。
-    await ctx.shell.reviewCommand?.({ command, plan, cwd: commandCwd })
 
     // 超时在这里钳，不靠调用方拦：超了按上限跑，别为一个数字废掉一整次调用。输出不折叠，只守内存的上限。
     const result = await ctx.shell.runCommand(

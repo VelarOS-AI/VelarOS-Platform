@@ -119,7 +119,6 @@ describe('project 空间的原有语料', () => {
     ]) {
       const plan = shellCommandPolicy.analyze(command)
       expect(plan.isDangerous).toBe(true)
-      expect(plan.shouldRequestConfirmation).toBe(true)
       expect(plan.dangerousReason).toContain('递归删除整个文件夹')
     }
 

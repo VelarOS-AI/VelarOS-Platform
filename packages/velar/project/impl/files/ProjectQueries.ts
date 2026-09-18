@@ -4,7 +4,6 @@
 import {
   isEmpty,
   isNotNull,
-  isNumber,
   isObject,
   isUndefined,
   optionalWhen,
@@ -27,7 +26,7 @@ import type {
   SearchResult,
 } from '../../types/io.js'
 import type { PipelinePhase } from '../../types/pipeline.js'
-import type { CorePolicy, PolicyDecisionInput } from '../../types/policy.js'
+import type { CorePolicy } from '../../types/policy.js'
 import type { ProjectRuntimeProviders } from '../../types/provider.js'
 import type { FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
 import type { ResolvedTarget, ResolveTargetInput, ResolveTargetResult } from '../../types/target.js'
@@ -39,32 +38,31 @@ import {
   uniqueSymbols,
 } from '../../utils/files/queries.js'
 import { searchWithRipgrep } from '../../utils/files/ripgrep.js'
-import { matchesAny } from '../../utils/glob.js'
 import { id } from '../../utils/id.js'
-import { clampSnippet, snippetWindow } from '../../utils/search-snippet.js'
+import { clampSnippet } from '../../utils/search-snippet.js'
 import { ProjectTuning } from '../../utils/tuning.js'
 import type { AuditJournalApi } from '../persistence/AuditJournal.js'
 
 /**
- * 内核的查询面：扫描、列举、读取、搜索、列符号、解析目标、建证据包。查询先过内核的策略门（多数还过一遍管线），读到的正文经宿主的脱敏再交出去；
+ * 内核的查询面：扫描、列举、读取、搜索、列符号、解析目标、建证据包。查询多数先过一遍管线，路径只受根内约束；
  * 解析出的目标与证据包在内存里按上限保留，供之后的编辑按 targetId、evidenceId 引用。实例归一个内核所有，内核的同名方法直接交给它。
  */
 export interface ProjectQueriesApi {
-  /** 扫描工作区，返回文件快照列表（不读正文）；先过策略门的 search 动作和 observe.input 管线。 */
+  /** 扫描工作区，返回文件快照列表（不读正文）；先过 observe.input 管线。 */
   observe(input?: ObserveInput): Promise<ProjectSnapshot>
-  /** 列出工作区里符合条件的文件和目录；先过策略门的 search 动作。 */
+  /** 列出工作区里符合条件的文件和目录。 */
   listFiles(input?: ObserveInput): Promise<FileListEntry[]>
-  /** 单个路径的轻量状态和建议读取范围；路径先授权、再过策略门的 read 动作，被拒时抛 PERMISSION_DENIED。 */
+  /** 单个路径的轻量状态和建议读取范围；路径出了项目抛 PERMISSION_DENIED。 */
   stat(input: FileStatInput): Promise<FileStatResult>
-  /** 读文件：授权、策略门、read.input 管线之后读取，正文经宿主脱敏；前后各发一次 BeforeRead、AfterRead hook。 */
+  /** 读文件：过 read.input 管线之后读取；前后各发一次 BeforeRead、AfterRead hook。 */
   read(input: ReadInput): Promise<ReadResult>
-  /** 在工作区里搜文本：能用 ripgrep 就先用它（旧编码文件交给适配器），失败或不可用时回退到适配器逐文件扫描；命中片段经宿主脱敏。 */
+  /** 在工作区里搜文本：能用 ripgrep 就先用它（旧编码文件交给适配器），失败或不可用时回退到适配器逐文件扫描。 */
   search(input: SearchInput): Promise<SearchResult>
   /** 列出文件里的符号：宿主开了代码智能就先问它，拿不到再用本地适配器解析；同一个符号只留一份。 */
   listSymbols(path: string): Promise<ProjectSymbol[]>
   /** 把路径、符号或文本线索解析成可复用的目标；解析到的目标记下来，之后按 targetId 引用。多个候选时返回 ambiguous，找不到返回 not_found。 */
   resolveTarget(input: ResolveTargetInput): Promise<ResolveTargetResult>
-  /** 按目标或路径范围建证据包：带目标附近的新鲜窗口（经脱敏）和前后续读建议，再交给宿主的上下文提供者补充、清洗。 */
+  /** 按目标或路径范围建证据包：带目标附近的新鲜窗口和前后续读建议，再交给宿主的上下文提供者补充、清洗。 */
   buildEvidencePack(input: BuildEvidencePackInput): Promise<EvidencePack>
   /** 内存里现存的目标个数（内核状态快照用）。 */
   readonly targetCount: number
@@ -72,29 +70,23 @@ export interface ProjectQueriesApi {
   getTarget(targetId?: string): ResolvedTarget | undefined
 }
 
-/** 查询面要内核交进来的东西：根目录、策略、宿主提供者、文件访问，以及策略门、快照补全、适配器、hook 与管线这几个回调。 */
+/** 查询面要内核交进来的东西：根目录、策略、宿主提供者、文件访问，以及快照补全、适配器、hook 与管线这几个回调。 */
 export interface ProjectQueriesDependencies {
   /** 工作区根目录的绝对路径。 */
   readonly root: string
-  /** 内核生效的策略：读、搜的上限，拒读名单，要不要先用 ripgrep。 */
+  /** 内核生效的策略：读、搜的上限，要不要先用 ripgrep。 */
   readonly policy: CorePolicy
-  /** 宿主提供者：命令（跑 ripgrep）、脱敏、代码智能、上下文。 */
+  /** 宿主提供者：命令（跑 ripgrep）、代码智能、上下文。 */
   readonly providers: ProjectRuntimeProviders
-  /** 文件访问：授权、快照、读取、stat、列举与扫描都经它，根目录约束和拒读名单在那一层执行。 */
+  /** 文件访问：根内约束、列举过滤、快照、读取、stat、列举与扫描都经它。 */
   readonly store: Pick<
     ProjectFileAccess,
-    'snapshot' | 'read' | 'stat' | 'listFiles' | 'observe' | 'authorize'
+    'snapshot' | 'read' | 'stat' | 'listFiles' | 'observe' | 'authorize' | 'visible'
   >
   /** 给搜索的文件分类：UTF-8 文本交给 ripgrep（native），旧编码文本解码后交给适配器（decoded），其余跳过（excluded）；不给时全交给 ripgrep。 */
   readonly searchTextKind?: (path: string) => Promise<'native' | 'decoded' | 'excluded'>
   /** 审计日志：每次查询记一条。 */
   readonly journal: Pick<AuditJournalApi, 'record'>
-  /** 内核的策略门：宿主的策略提供者可以拒绝或要求审批，被拒时抛 PERMISSION_DENIED。 */
-  readonly decide: (
-    action: PolicyDecisionInput['action'],
-    paths?: string[],
-    data?: unknown,
-  ) => Promise<void>
   /** 给文件快照补上能处理它的适配器 id。 */
   readonly enrichSnapshot: (snapshot: FileSnapshot) => Promise<FileSnapshot>
   /** 为一个文件快照创建能处理它的适配器，按优先级排好。 */
@@ -112,7 +104,6 @@ export class ProjectQueries implements ProjectQueriesApi {
 
   /** 扫描工作区并返回文件快照列表。 */
   public async observe(input: ObserveInput = {}): Promise<ProjectSnapshot> {
-    await this.dependencies.decide('search', undefined, input)
     const processed = await this.dependencies.transform('observe.input', input)
     const result = await this.dependencies.store.observe(processed)
     this.dependencies.journal.record({
@@ -125,35 +116,20 @@ export class ProjectQueries implements ProjectQueriesApi {
 
   /** 列出工作区内符合条件的文件和目录。 */
   public async listFiles(input: ObserveInput = {}): Promise<FileListEntry[]> {
-    await this.dependencies.decide('search', undefined, input)
     return this.dependencies.store.listFiles(input)
   }
 
   /** 返回单个路径的轻量状态信息和建议读取范围。 */
   public async stat(input: FileStatInput): Promise<FileStatResult> {
-    const access = await this.dependencies.store.authorize(input.path, 'read', '读取')
-    const authorizedInput = { ...input, path: access.rel }
-    await this.dependencies.decide('read', [access.rel], authorizedInput)
-    return this.dependencies.store.stat(authorizedInput, { skipFileFilter: true })
+    return this.dependencies.store.stat(input)
   }
 
-  /** 读取工作区文件内容，并执行权限、管线和脱敏处理。 */
+  /** 读取工作区文件内容：先过管线，再有界读取。 */
   public async read(input: ReadInput): Promise<ReadResult> {
     await this.dependencies.emit('BeforeRead', input)
     const processed = await this.dependencies.transform('read.input', input)
-    const access = await this.dependencies.store.authorize(processed.path, 'read', '读取')
-    const authorizedInput = { ...processed, path: access.rel }
-    await this.dependencies.decide('read', [access.rel], authorizedInput)
-    let result = await this.dependencies.store.read(authorizedInput, { skipFileFilter: true })
+    const result = await this.dependencies.store.read(processed)
     result.snapshot = await this.dependencies.enrichSnapshot(result.snapshot)
-    if (result.content && this.dependencies.providers.secretRedaction) {
-      const redacted = await this.dependencies.providers.secretRedaction.redact({
-        path: result.snapshot.path,
-        content: result.content,
-        trust: input.trust,
-      })
-      result = { ...result, content: redacted.content, redacted: redacted.redacted }
-    }
     await this.dependencies.emit('AfterRead', result)
     this.dependencies.journal.record({
       actor: 'system',
@@ -167,12 +143,9 @@ export class ProjectQueries implements ProjectQueriesApi {
   /** 在工作区内搜索文本，并优先使用可用的快速搜索后端。 */
   public async search(input: SearchInput): Promise<SearchResult> {
     await this.dependencies.emit('BeforeSearch', input)
-    await this.dependencies.decide('search', undefined, input)
     const processed = await this.dependencies.transform('search.input', input)
     const rootAccess = processed.root?.trim()
-      ? await this.dependencies.store.authorize(processed.root, 'search', '搜索', {
-          skipFileFilter: true,
-        })
+      ? await this.dependencies.store.authorize(processed.root)
       : null
     const authorizedProcessed = rootAccess ? { ...processed, root: rootAccess.rel } : processed
     const maxResults = processed.maxResults ?? ProjectTuning.queries.searchResults
@@ -214,7 +187,8 @@ export class ProjectQueries implements ProjectQueriesApi {
           for (const hit of rgResult.hits) {
             const kind = textKinds.get(hit.path)
             if (this.dependencies.searchTextKind && kind !== 'native') continue
-            if (matchesAny(hit.path, this.dependencies.policy.readDeny)) continue
+            // 点名的搜索起点下面不问列举过滤器，别处按它略过宿主不想列的文件（与列举同一个规矩）。
+            if (!rootAccess && !(await this.dependencies.store.visible(hit.path, 'search'))) continue
             try {
               let revision = revisionByPath.get(hit.path)
               if (isUndefined(revision)) {
@@ -224,7 +198,7 @@ export class ProjectQueries implements ProjectQueriesApi {
               enriched.push({
                 ...hit,
                 revision,
-                snippet: await this.redactedSnippet(hit),
+                snippet: clampSnippet(hit.snippet),
                 trust: { source: 'project', trust: 'untrusted' },
               })
             } catch {
@@ -291,46 +265,6 @@ export class ProjectQueries implements ProjectQueriesApi {
     return result
   }
 
-  /**
-   * 命中片段的脱敏与截断，顺序不能反：先把够宽的窗口（命中所在整行）脱敏，最后才截到展示长度。
-   * 先截后脱敏会把边界上的密钥切成半截，脱敏正则认不出来，半截密钥就原样回给模型了。
-   */
-  private async redactedSnippet(hit: Pick<SearchHit, 'path' | 'range' | 'snippet'>): Promise<Optional<string>> {
-    const snippet = hit.snippet
-    if (!snippet) return snippet
-    const redaction = this.dependencies.providers.secretRedaction
-    if (!redaction) return clampSnippet(snippet)
-    // ripgrep 按 --max-columns 截过片段：到了上限就说明整行更长，脱敏之前先把整行读回来。
-    const wide =
-      snippet.length >= ProjectTuning.ripgrep.snippetChars ? (await this.hitLineWindow(hit)) ?? snippet : snippet
-    const redacted = await redaction.redact({
-      path: hit.path,
-      content: wide,
-      trust: { source: 'project', trust: 'untrusted' },
-    })
-    return clampSnippet(redacted.content)
-  }
-
-  /** 把命中所在的整行读回来并按命中位置收窄成窗口；读不到（文件已变、不许读）就返回 undefined，调用方退回原片段。 */
-  private async hitLineWindow(hit: Pick<SearchHit, 'path' | 'range'>): Promise<Optional<string>> {
-    const startLine = hit.range?.startLine
-    if (!isNumber(startLine) || startLine < 1) return undefined
-    try {
-      const read = await this.dependencies.store.read({
-        path: hit.path,
-        range: { startLine, endLine: startLine },
-      })
-      const line = read.content?.replace(/\r?\n$/, '')
-      if (isUndefined(line)) return undefined
-      const from = Math.max(0, (hit.range?.startColumn ?? 1) - 1)
-      const to = Math.max(from, (hit.range?.endColumn ?? from + 1) - 1)
-      return snippetWindow(line, from, to)
-    } catch {
-      // arch-guard:silent-catch-ok 读不回整行时退回原片段，搜索不因为脱敏取窗失败而失败。
-      return undefined
-    }
-  }
-
   /** 快速后端只负责其可精确解释的文本；遗留编码在统一解码后交给同一搜索适配器。 */
   private async classifySearchFiles(input: SearchInput): Promise<Map<string, 'native' | 'decoded' | 'excluded'>> {
     const kinds = new Map<string, 'native' | 'decoded' | 'excluded'>()
@@ -385,7 +319,6 @@ export class ProjectQueries implements ProjectQueriesApi {
         continue
       }
       if (snap.isBinary || snap.size > this.dependencies.policy.maxSearchFileSizeBytes) continue
-      if (matchesAny(snap.path, this.dependencies.policy.readDeny)) continue
 
       const adapters = await this.dependencies.createAdapters(snap)
       for (const adapter of adapters) {
@@ -400,13 +333,13 @@ export class ProjectQueries implements ProjectQueriesApi {
         for (const hit of adapterHits) {
           hits.push({
             ...hit,
-            snippet: await this.redactedSnippet(hit),
+            snippet: clampSnippet(hit.snippet),
             revision: snap.revision,
             trust: { source: 'project', trust: 'untrusted' },
           })
         }
       }
-      // 命中已够：不再扫描剩余文件（这是 ripgrep 不可用时的回退路径，停止整树读取+脱敏，
+      // 命中已够：不再扫描剩余文件（这是 ripgrep 不可用时的回退路径，停止整树读取，
       // 避免命中很早就满足却仍把整个工作区读一遍）。停止即视为可能截断。
       if (hits.length >= maxResults) {
         stoppedEarly = true
@@ -485,13 +418,10 @@ export class ProjectQueries implements ProjectQueriesApi {
   public async resolveTarget(input: ResolveTargetInput): Promise<ResolveTargetResult> {
     await this.dependencies.emit('BeforeResolve', input)
     const processed = await this.dependencies.transform('resolve.input', input)
-    const access = await this.dependencies.store.authorize(processed.path, 'read', '读取')
+    const access = await this.dependencies.store.authorize(processed.path)
     const authorizedInput = { ...processed, path: access.rel }
-    await this.dependencies.decide('resolve', [access.rel], authorizedInput)
     const snap = await this.dependencies.enrichSnapshot(
-      await this.dependencies.store.snapshot(authorizedInput.path, true, {
-        skipFileFilter: true,
-      }),
+      await this.dependencies.store.snapshot(authorizedInput.path, true),
     )
     const codeIntel = this.dependencies.providers.codeIntelligence
     const symbolName = authorizedInput.target?.symbol?.name
@@ -593,16 +523,7 @@ export class ProjectQueries implements ProjectQueriesApi {
       })
       const revision = read.snapshot.revision ?? targetBaseRevision
       const contextRange = read.range ?? { startLine: contextStart, endLine: contextEnd }
-      let currentWindow = read.content
-      if (currentWindow && this.dependencies.providers.secretRedaction) {
-        currentWindow = (
-          await this.dependencies.providers.secretRedaction.redact({
-            path: read.snapshot.path,
-            content: currentWindow,
-            trust: { source: 'project', trust: 'untrusted' },
-          })
-        ).content
-      }
+      const currentWindow = read.content
 
       const suggestedReads: NonNullable<EvidencePack['freshContext']>['suggestedReads'] = []
       if (contextRange.startLine > 1) {
@@ -660,7 +581,6 @@ export class ProjectQueries implements ProjectQueriesApi {
       freshContext,
       trust: {
         projectContentIsUntrusted: true,
-        redactedSecrets: !!this.dependencies.providers.secretRedaction,
       },
       metadata: input.metadata,
     }

@@ -26,14 +26,11 @@ import type {
   SandboxRunOptions,
   SandboxSurfacePort,
 } from '../index'
-import { rehearsalSandboxRules, SandboxApplyOperationKind, type SandboxDiff, sandboxOperations } from '../index'
-import { RehearsalSandboxTuning } from '../utils/tuning'
+import { rehearsalSandboxRules, type SandboxDiff, sandboxOperations } from '../index'
 
 function diffOf(overrides: Partial<SandboxDiff> = {}): SandboxDiff {
   return { sandboxId: 's1', source: '/repo', created: [], modified: [], deleted: [], gitChanged: false, textDiffs: [], omittedDiffs: 0, fingerprint: 'fp1', ...overrides }
 }
-
-const base = { targetLabel: '/repo', closingNote: '删除和覆盖无法撤销。', riskScope: 'system-sandbox:apply' }
 
 /** 模型这一轮读到的能力声明：就是提交进仓的那份生成物，程序照着它过 typecheck。 */
 const ModelFacingDeclarations = readFileSync(
@@ -80,7 +77,6 @@ function fakeSpace(options: { root: string; clamp: boolean; approved?: boolean }
       calls.push({ discardSandbox: sandboxId })
       return { sandboxId, removed: true }
     },
-    applyPolicy: (source) => ({ targetLabel: source, closingNote: '删除和覆盖无法撤销。', riskScope: 'sandbox:apply' }),
   }
   const approval: ApprovalPort = {
     awaitConfirmation: async (message, _signal, confirmation) => {
@@ -141,31 +137,25 @@ export default !changes
   ? { 没跑过: ran.stderr }
   : touched.length > 20 ? await discard({ id: box.id }) : await apply({ id: box.id })`
 
-describe('落回前的核对与确认请求', () => {
-  test('INV-1 条数与敏感路径按完整三列算，操作身份带指纹与条数', () => {
-    const created = Array.from({ length: RehearsalSandboxTuning.confirmation.previewItems + 2100 }, (_, index) => `new/${index}.txt`)
-    const request = rehearsalSandboxRules.prepareApply({ ...base, diff: diffOf({ created, modified: ['.ssh/config'] }), isSensitive: (path) => path.startsWith('.ssh/') })
-    expect(request?.message).toContain(`新增 ${created.length} 个`)
-    expect(request?.message).toContain(`等 ${created.length} 个`)
-    expect(request?.message).toContain('其中是系统敏感路径或凭证文件的：.ssh/config')
-    expect(request?.selection.created).toHaveLength(created.length)
-    const key = request?.options.operation?.key ?? ''
-    expect(key.startsWith(`${SandboxApplyOperationKind}:`)).toBe(true)
-    expect(key).toContain('fp1')
-    const changed = rehearsalSandboxRules.prepareApply({ ...base, diff: diffOf({ created, modified: ['.ssh/config'], fingerprint: 'fp2' }) })
-    expect(changed?.options.operation?.key).not.toBe(key)
+describe('落回前的核对', () => {
+  test('INV-1 核对过的就是要落的：三列永远完整（不按条数截），交回的就是完整的三列', () => {
+    const created = Array.from({ length: 2120 }, (_, index) => `new/${index}.txt`)
+    const selection = rehearsalSandboxRules.prepareApply({ diff: diffOf({ created, modified: ['.ssh/config'] }) })
+    expect(selection).toEqual({ created, modified: ['.ssh/config'], deleted: [], unknown: [] })
   })
 
-  test('INV-2 点名了没有变化的路径在问用户之前就拒绝；什么都没变返回 null', () => {
-    expect(() => rehearsalSandboxRules.prepareApply({ ...base, diff: diffOf({ modified: ['a.ts'] }), paths: ['a.ts', 'ghost.ts'] })).toThrow('ghost.ts')
-    expect(rehearsalSandboxRules.prepareApply({ ...base, diff: diffOf() })).toBeNull()
-    expect(rehearsalSandboxRules.prepareApply({ ...base, diff: diffOf({ modified: ['a.ts'], deleted: ['b.ts'] }), paths: ['./a.ts'] })?.selection).toEqual({ created: [], modified: ['a.ts'], deleted: [], unknown: [] })
+  test('INV-2 点名了没有变化的路径就拒绝，什么都没写；什么都没变返回 null', () => {
+    expect(() => rehearsalSandboxRules.prepareApply({ diff: diffOf({ modified: ['a.ts'] }), paths: ['a.ts', 'ghost.ts'] })).toThrow('ghost.ts')
+    expect(rehearsalSandboxRules.prepareApply({ diff: diffOf() })).toBeNull()
+    expect(rehearsalSandboxRules.prepareApply({ diff: diffOf({ modified: ['a.ts'], deleted: ['b.ts'] }), paths: ['./a.ts'] })).toEqual({ created: [], modified: ['a.ts'], deleted: [], unknown: [] })
   })
 
-  test('INV-3 落回的审批是高风险、手动、不可记忆', () => {
-    const request = rehearsalSandboxRules.prepareApply({ ...base, diff: diffOf({ deleted: ['old.txt'] }) })
-    expect(request?.options).toMatchObject({ approvalRisk: 'high', requireManualApproval: true, rememberRiskScope: false, riskScope: 'system-sandbox:apply', operation: { target: '/repo' } })
-    expect(request?.message.endsWith('删除和覆盖无法撤销。')).toBe(true)
+  test('INV-3 落回不问用户：审批端口一次都没被叫到，删除与覆盖照样落', async () => {
+    const space = fakeSpace({ root: '/repo', clamp: false, approved: false })
+    const applied = await sandboxOperations.apply({ id: 'sb-1' }, space.context)
+    expect(applied).toEqual({ sandboxId: 'sb-1', created: ['note.txt'], modified: ['main.ts'], deleted: [], skippedGit: false })
+    expect(space.confirmations).toEqual([])
+    expect(space.calls.at(-1)).toEqual({ applySandbox: 'sb-1', fingerprint: 'fp1' })
   })
 })
 
@@ -180,11 +170,10 @@ describe('代码面 sandbox 命名空间', () => {
     expect(space.calls[0]).toEqual({ resolveSource: 'src' })
     expect(space.calls[1]).toEqual({ createSandbox: '/repo/src' })
     expect(space.calls[2]).toEqual({ runInSandbox: 'bun test', inSandbox: 'sb-1' })
-    // 落回前那次差量必须是不截断的完整差量，确认之后把同一个指纹交回宿主。
+    // 落回前那次差量必须是不截断的完整差量，核对之后把同一个指纹交回宿主；整条链没问过用户。
     expect(space.calls.at(-2)).toEqual({ diffSandbox: 'sb-1', paths: null, textDiffs: false })
     expect(space.calls.at(-1)).toEqual({ applySandbox: 'sb-1', fingerprint: 'fp1' })
-    expect(space.confirmations).toHaveLength(1)
-    expect(space.confirmations[0]).toContain('新增 1 个')
+    expect(space.confirmations).toEqual([])
   }, 30_000)
 
   test('INV-5 作用域由宿主注入，不由模型挑：project 那样的端口把越界的 source 拒掉，system 那样的收任意绝对路径', async () => {
@@ -207,24 +196,6 @@ export default outcome`)
 const box = await create({ source: '/etc/app' })
 export default box.source`)
     expect(mirrored).toBe('/etc/app')
-  }, 30_000)
-
-  test('INV-5 落回照样过那道确认：用户不点头就抛错，一个文件都不落', async () => {
-    const space = fakeSpace({ root: '/repo', clamp: true, approved: false })
-    const refused = await runModelProgram(space, `import { create, apply } from 'velar:sandbox'
-
-const box = await create({})
-let outcome
-try {
-  await apply({ id: box.id })
-  outcome = '没拦住'
-} catch (error) {
-  outcome = { 拒绝: error.message }
-}
-export default outcome`)
-    expect(refused).toEqual({ 拒绝: '用户没有同意。' })
-    expect(space.confirmations).toHaveLength(1)
-    expect(space.calls.some((call) => 'applySandbox' in call)).toBe(false)
   }, 30_000)
 })
 

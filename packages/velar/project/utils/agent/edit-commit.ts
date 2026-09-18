@@ -1,5 +1,5 @@
 /**
- * 一次 edit 的规划与提交：规划、过授权、交内核准备与提交、编回执。排队的项目资源门与问用户的审批桥在执行类里套，这里不管。
+ * 一次 edit 的规划与提交：规划、交内核准备与提交、编回执。排队的项目资源门在执行类里套，这里不管。
  */
 
 import { isEmpty, isPlainObject, optionalWhen } from '@velaros-ai/core'
@@ -8,10 +8,9 @@ import type { ProjectOperationContext } from '../../contract/requires.js'
 import type { PrepareEditInput } from '../../types/edit.js'
 import type { ProjectEditInput, ProjectEditResult, ProjectRecodeReceipt } from '../../types/files.js'
 import { compileProjectEdit } from '../editing/planner-index.js'
-import { plannedFilePaths } from '../transactions/edit-intents.js'
 import { rethrowNotApplied } from '../transactions/transaction-errors.js'
 
-import { authorizeProjectWrite, seenFileSpans } from './change-records.js'
+import { seenFileSpans } from './change-records.js'
 import { changeWindows } from './change-windows.js'
 import { withEditRecovery } from './edit-recovery.js'
 import { saveReceipt } from './file-refs.js'
@@ -19,8 +18,8 @@ import { projectPlannerResolver } from './planner-resolver.js'
 import { projectCreatedPaths, projectTransactionHasChanges } from './transaction-result.js'
 
 /**
- * 规划并提交一次改动：规划是纯计算（版本过期时按原意图重新定位）；计划有写入时带着要写的路径过宿主的修改授权，
- * 再由内核准备、校验、提交（回滚不了的高风险写入经审批端口问用户）。计划没有写入（全是已经是目标格式的 recode）时不开事务。
+ * 规划并提交一次改动：规划是纯计算（版本过期时按原意图重新定位）；计划有写入时由内核准备、校验、提交，不问用户。
+ * 计划没有写入（全是已经是目标格式的 recode）时不开事务。
  * 提交失败时丢掉事务，一个文件都没写。
  */
 export async function commitProjectEdit(steps: ProjectEditInput['steps'], ctx: ProjectOperationContext): Promise<ProjectEditResult> {
@@ -36,8 +35,6 @@ export async function commitProjectEdit(steps: ProjectEditInput['steps'], ctx: P
     if (recode) unchanged.recode = recode
     return unchanged
   }
-  // 规划之后、开事务之前问：确认卡片能列出这次会写哪些文件，被拒时一个字节都没写。
-  await authorizeProjectWrite(ctx, '改项目文件', plannedFilePaths(plan.operations))
   const previous = await seenFileSpans(steps, ctx)
   const kernel = await ctx.project.kernel()
   const prepared = await kernel.prepareEdit(plan).catch(rethrowNotApplied)

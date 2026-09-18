@@ -43,9 +43,9 @@ describe('项目工具的边界', () => {
   test('空间端口只留两件工具真会调的方法', () => {
     const source = readFileSync(resolve(SourceRoot, 'contract/requires.ts'), 'utf8')
     const port = source.slice(source.indexOf('export interface ProjectSpacePort'), source.indexOf('export interface ProjectOperationContext'))
-    for (const field of ['getRootPath', 'kernel', 'prepareMutation', 'queryCode']) expect(port).toContain(`${field}:`)
+    for (const field of ['getRootPath', 'kernel', 'queryCode']) expect(port).toContain(`${field}:`)
     // 命令、沙箱、缩图是空间给共用能力装端口时才要的，在 @velaros-ai/project 的宿主端口上，工具这边不留。
-    for (const removedField of ['runCommand', 'listBackgroundTasks', 'refreshShellEnvironment', 'sandbox', 'resizeImage', 'runInDirectory', 'runWithApproval', 'codingSession', 'listRoots', 'kernelForRoot']) {
+    for (const removedField of ['prepareMutation', 'runCommand', 'listBackgroundTasks', 'refreshShellEnvironment', 'sandbox', 'resizeImage', 'runInDirectory', 'runWithApproval', 'codingSession', 'listRoots', 'kernelForRoot']) {
       expect(port).not.toContain(`${removedField}:`)
     }
   })

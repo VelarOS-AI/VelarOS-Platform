@@ -20,7 +20,7 @@ import { createProjectSpace } from '../../src/impl/ProjectSpace'
 export interface RecordedConfirmation {
   message: string
   options?: Parameters<ApprovalPort['awaitConfirmation']>[2]
-  /** awaitConfirmation 被拒就抛；awaitConfirmationDecision 返回结构化决定（内核的审批桥走它）。 */
+  /** awaitConfirmation 被拒就抛；awaitConfirmationDecision 返回结构化决定。 */
   via: 'confirmation' | 'decision'
 }
 
@@ -30,8 +30,6 @@ export async function projectSpaceFixture(options: {
   plugins?: CreateProjectKernelOptions['plugins']
   corePolicy?: CreateProjectKernelOptions['corePolicy']
   providers?: CreateProjectKernelOptions['providers']
-  /** 项目修改授权：缺省一律放行。 */
-  prepareMutation?: ProjectHostPort['prepareMutation']
   /** 跑命令：缺省报「这个用例没接命令」。 */
   runCommand?: ProjectHostPort['runCommand']
   /** 代码查询：缺省返回空对象。 */
@@ -42,14 +40,13 @@ export async function projectSpaceFixture(options: {
   resizeImage?: ProjectHostPort['resizeImage']
   /** 宿主自己的看图通道：不给就走代码面的图片通道（端口回执里的 attachments）。 */
   attachImage?: (image: ImageAttachment) => void
-  /** 审批：缺省一律点头；每次确认的文案与选项都记下来。 */
+  /** 审批（只有危险命令会问）：缺省一律点头；每次确认的文案与选项都记下来。 */
   approve?: boolean
   /** 会话号：缺省每个夹具一个新会话，引用不在用例之间串。 */
   sessionId?: string
 }) {
   const kernel = await createProjectKernel({ root: options.root, plugins: options.plugins ?? [], corePolicy: options.corePolicy, providers: options.providers })
   const confirmations: RecordedConfirmation[] = []
-  const mutations: Array<{ operation: string; cwd?: string; paths?: string[] }> = []
   const queries: ProjectCodeQuery[] = []
   const attachments: CodeAttachment[] = []
   const approval: ApprovalPort = {
@@ -65,10 +62,6 @@ export async function projectSpaceFixture(options: {
   const host: ProjectHostPort = {
     getRootPath: () => options.root,
     kernel: async () => kernel,
-    prepareMutation: async (input) => {
-      mutations.push({ operation: input.operation, cwd: input.cwd, paths: input.paths })
-      return options.prepareMutation ? options.prepareMutation(input) : { approved: true, message: '已授权' }
-    },
     runCommand: options.runCommand ?? (async () => { throw new AppError('PLATFORM', '这个用例没接命令执行') }),
     listBackgroundTasks: async () => [],
     refreshShellEnvironment: async () => ({ shell: '/bin/sh', variableCount: 0, refreshedAt: 0 }),
@@ -91,7 +84,7 @@ export async function projectSpaceFixture(options: {
     if (outcome.error) throw Object.assign(new Error(outcome.error.message), { code: outcome.error.code })
     return throughJson(outcome.value) as T
   }
-  return { kernel, host, context, port, call, confirmations, mutations, queries, attachments }
+  return { kernel, host, context, port, call, confirmations, queries, attachments }
 }
 
 /** 跨进程之后的样子：undefined 的字段没了，只剩 JSON 能表达的值。 */

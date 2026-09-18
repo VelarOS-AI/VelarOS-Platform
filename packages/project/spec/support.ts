@@ -1,7 +1,7 @@
 /**
  * 验收测试的替身：一个装着真内核的假宿主。项目空间只经根入口拿（createProjectSpace），内核经 `@velaros-ai/velar/project` 的根入口拿（createProjectKernel），
  * 调用走代码面的能力端口（createCapabilityPort），和模型的程序调 `velar:project` 是同一条路：失败时程序只看得见 code 与 message。
- * 审批、修改授权、跑命令都记下来给断言用。
+ * 审批（只有危险命令会问）与跑命令都记下来给断言用。
  */
 
 import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
@@ -13,10 +13,9 @@ import type { ShellCommandResult } from '@velaros-ai/velar/shell/contracts'
 
 import { createProjectSpace, type ProjectCallContext, type ProjectHostPort, type ProjectSandboxPort } from '../src/index'
 
-/** 替身宿主的开关：用户点不点确认、宿主给不给项目修改授权、内核的策略与 provider、演练沙箱。 */
+/** 替身宿主的开关：用户点不点确认、内核的策略与 provider、演练沙箱。 */
 export interface ProjectHarnessOptions {
   approve?: boolean
-  authorizeMutation?: boolean
   corePolicy?: CreateProjectKernelOptions['corePolicy']
   providers?: ProjectProviders
   /** 宿主的演练沙箱端口；不给时项目空间里的 sandbox 用不了。 */
@@ -38,9 +37,6 @@ export interface ProgramFailure extends Error {
 export async function createProjectHarness(root: string, options: ProjectHarnessOptions = {}) {
   const kernel = await createProjectKernel({ root, corePolicy: options.corePolicy, providers: options.providers })
   const confirmations: RecordedConfirmation[] = []
-  const mutations: string[] = []
-  /** 每次修改授权带来的、这次会写的文件（相对项目根）；断言确认卡片列得出要改哪些文件。 */
-  const authorizedPaths: string[][] = []
   const commands: string[] = []
   const attached: ImageAttachment[] = []
   const approved = options.approve !== false
@@ -57,12 +53,6 @@ export async function createProjectHarness(root: string, options: ProjectHarness
   const project: ProjectHostPort = {
     getRootPath: () => root,
     kernel: async () => kernel,
-    prepareMutation: async ({ operation, paths }) => {
-      mutations.push(operation)
-      authorizedPaths.push(paths ?? [])
-      const authorized = options.authorizeMutation !== false
-      return { approved: authorized, message: authorized ? '已授权' : '宿主没有授权修改这个项目' }
-    },
     runCommand: async (command) => {
       commands.push(command)
       const result: ShellCommandResult = { command, cwd: root, exitCode: 0, signal: null, stdout: '', stderr: '', durationMs: 0, timedOut: false, aborted: false, truncated: false, success: true, verification: { kind: 'unknown', status: 'passed', issues: [] } }
@@ -95,7 +85,7 @@ export async function createProjectHarness(root: string, options: ProjectHarness
     if (range !== undefined) file.range = range
     return (await call('project', 'read', { files: [file] })).files[0]
   }
-  return { kernel, space, context, call, read, confirmations, mutations, authorizedPaths, commands, attached }
+  return { kernel, space, context, call, read, confirmations, commands, attached }
 }
 
 /** 等一次调用失败，交回程序看得到的那两样。 */

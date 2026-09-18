@@ -5,7 +5,7 @@ import type { CommandProvider } from '../contract/requires.js'
 import type { ProjectFileAccess } from './file-access.js'
 import type { FileListEntry, SearchHit } from './io.js'
 import type { CorePolicy } from './policy.js'
-import type { CommandToolRequirement,FileFilterInput } from './provider.js'
+import type { CommandToolRequirement } from './provider.js'
 
 export interface RipgrepSearchContext {
   rootAbs: string
@@ -70,11 +70,7 @@ export interface ListingDependencies {
   readonly root: string
   readonly command: CommandProvider
   readonly authorize: ProjectFileAccess['authorize']
-  readonly allowed: (
-    path: string,
-    action: FileFilterInput['action'],
-    options?: { skipFileFilter?: boolean },
-  ) => Promise<boolean>
+  readonly visible: ProjectFileAccess['visible']
 }
 
 /** listFiles 发现阶段通过全部过滤的条目；children 只在该目录被深入时填充。 */

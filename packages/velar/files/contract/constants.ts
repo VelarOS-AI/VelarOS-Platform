@@ -8,12 +8,12 @@
 /**
  * `velar:files` 专属的错误码：模型的程序接住异常时 `error.code` 就是它，声明里写着这几个值。
  * 别的失败沿用 `@velaros-ai/core` 的通用码：`VALIDATION`（入参不对、文件不是文本、太大、行号越界）、
- * `PERMISSION`（越出空间范围、用户拒绝读、没有写权限）、`NOT_FOUND`（文件不存在、改动号找不到）。
+ * `PERMISSION`（越出空间范围、文件权限不让读写）、`NOT_FOUND`（文件不存在、改动号找不到）。
  */
 export const FileErrorCodes = Object.freeze({
   /** edit 整批定不下来（版本过期、不是文本、行号越界、编不回原编码、同一个文件出现两次）：一个文件都没写，message 逐条写明每个问题。 */
   editUnresolved: 'FILES_EDIT_UNRESOLVED',
-  /** edit 里有文件的写入被拒绝（用户没点头，或空间不许写）：一个文件都没写。 */
+  /** edit 里有文件写不了（越出空间范围，或文件权限不让读写）：一个文件都没写。 */
   editDenied: 'FILES_EDIT_DENIED',
   /** undo 时有文件在那次改动之后又被改过：一个文件都没撤，message 点名是哪几个。 */
   undoConflict: 'FILES_UNDO_CONFLICT',

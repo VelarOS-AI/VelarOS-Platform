@@ -105,7 +105,7 @@ describe('read range clamping', () => {
     await expect(readAgentFile(project, { path: 'a.txt', baseRevision: 'stale-revision' })).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
     // 读得到的只投影 Agent 边界要的字段：没有续读位置，也没有绝对路径这些内核元数据。
     const read = await readAgentFile(project, { path: 'a.txt' })
-    expect(Object.keys(read).sort()).toEqual(['content', 'note', 'range', 'redacted', 'snapshot', 'totalLines', 'truncated'])
+    expect(Object.keys(read).sort()).toEqual(['content', 'note', 'range', 'snapshot', 'totalLines', 'truncated'])
     expect(read).toMatchObject({ content: 'alpha\n', truncated: false })
   })
 

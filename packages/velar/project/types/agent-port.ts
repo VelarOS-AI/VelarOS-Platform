@@ -56,7 +56,6 @@ export interface AgentProjectFileSnapshot {
 
 /** 内核读到的一个文件在 Agent 边界上的样子：快照只留定位要的字段，正文只放一份。 */
 export interface AgentProjectReadResult {
-  redacted?: boolean
   snapshot: AgentProjectFileSnapshot
   content?: string
   range?: {

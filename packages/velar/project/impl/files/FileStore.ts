@@ -1,23 +1,18 @@
 // 域：工作区底层文件系统网关——所有读/写/列举都必须经过它，没有第二条通往 fs 的路。
 //
 // ## 从哪读起
-//  1. `authorize`：**唯一**的准入点（根内约束 → deny glob → fileFilter），返回归一后的
-//     `{ abs, rel }`。下面所有公开方法都以它开头；绕过它 = 绕过全部边界。
+//  1. `authorize`：**唯一**的准入点（根内约束），返回归一后的 `{ abs, rel }`。下面所有公开方法
+//     都以它开头；绕过它 = 能读写到项目根外面去。
 //  2. `snapshot` / `read`：读路径，附带 revision 与文本编码/二进制判定。
 //  3. `write` / `remove` / `rename`：写路径。
-//  4. `listFiles` / `observe`：遍历路径，含 gitignore 过滤。
+//  4. `listFiles` / `observe`：遍历路径，含 gitignore 过滤与宿主的列举过滤（`visible`）。
 //
 // ## 安全门（挡什么、为什么门在这一层）
 //  - **两段式根内约束**：`toAbs` 拦词法穿越（`../`），`resolveConfinedRealPath` 对 realpath 结果
 //    再拦一次软链逃逸。门放在 FileStore 而不是各调用点，是因为「新增一个调用点忘了检查」
 //    在上层是查不出来的，在这里则不可能发生——上层拿不到 abs 路径。
-//  - **deny glob 优先于 fileFilter provider**：`skipFileFilter` 只关宿主注入的可见性过滤器
-//    （apply/rollback 需要写回自己刚写过、但对模型不可见的文件），**永远关不掉
-//    `policy.readDeny/writeDeny`**。把 deny 判定挪到 skipFileFilter 之后 = 宿主一个
-//    `skipFileFilter: true` 就能写 `.env`。
-//  - **策略按路径身份判，不按模型写的那串字**：deny 同时对请求路径和它解开符号链接后的真实路径判，
-//    任一命中就拒；glob 的大小写按盘的规矩（macOS、Windows 不区分）。只按字面判时，`.ENV`、
-//    `cfg/prod.key`（cfg 是指向 secrets 的链接）这类别名就能绕过 `.env`、`secrets/**`。
+//  - **没有读写名单**：根内的路径点名就能读写。宿主的列举过滤器（`fileFilter`）只决定列举、扫描、
+//    搜索时哪些条目不出现，点名访问从不问它——它管的是噪音，不是权限。
 //  - **已知且刻意接受的 TOCTOU**：authorize 与真正的 write 之间存在时间窗，期间新建的软链
 //    能逃逸。修它要 `openat` + `O_NOFOLLOW` 逐级打开（Node 无跨平台原语），代价远高于收益：
 //    本包的威胁模型是「模型给出坏路径」，不是「攻击者与我们竞速」。
@@ -25,13 +20,12 @@ import type { BigIntStats } from 'node:fs'
 import { lstat, mkdir, readFile, rename, rm, stat } from 'node:fs/promises'
 import * as path from 'node:path'
 
-import { isEmpty, isNull, isObject, isPresent, isUndefined, optionalWhen, toOptional } from '@velaros-ai/core'
+import { isNull, isObject, isPresent, isUndefined, optionalWhen, toOptional } from '@velaros-ai/core'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import { textCodec, textFileIo } from '@velaros-ai/text-files'
 import type { ExpectedBytes, TextEncoding } from '@velaros-ai/text-files/contracts'
 
 import type { CommandProvider, FileFilterProvider } from '../../contract/requires.js'
-import type { FileAccessOptions } from '../../types/file-access.js'
 import type {
   FileListEntry,
   FileStatInput,
@@ -43,7 +37,7 @@ import type {
 import type { CorePolicy } from '../../types/policy.js'
 import type { FileFilterInput } from '../../types/provider.js'
 import type { FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
-import { GitInternalWriteSuggestedNextAction, ProjectError, projectErrorFromTextFile, RevisionMismatchSuggestedNextAction } from '../../utils/errors.js'
+import { ProjectError, projectErrorFromTextFile, RevisionMismatchSuggestedNextAction } from '../../utils/errors.js'
 import { listProjectFiles } from '../../utils/files/file-listing.js'
 import {
   advanceReadCursor,
@@ -62,37 +56,38 @@ import {
 } from '../../utils/files/file-reader.js'
 import { relativeInsideRealRoot, resolveConfinedRealPath } from '../../utils/files/path-containment.js'
 import { validateReadBounds } from '../../utils/files/read-bounds.js'
-import { matchesAny } from '../../utils/glob.js'
 import { metadataFingerprint, metadataRevisionFor, revisionFor, sha256 } from '../../utils/hash.js'
-import { isGitInternalPath, toAbs, toRel } from '../../utils/path.js'
+import { toAbs, toRel } from '../../utils/path.js'
 import { sliceLines } from '../../utils/text.js'
 import { ProjectTuning } from '../../utils/tuning.js'
 
 /**
  * 工作区的文件网关：内核的读、写、删、改名、列举都经它，没有第二条通往文件系统的路。每个公开方法先过 authorize：
- * 根内约束（字面上的 `../` 与经符号链接的逃逸都拦）→ 策略的拒读、拒写名单 → 宿主的可见性过滤器（只有它能按 skipFileFilter 跳过）。
+ * 根内约束（字面上的 `../` 与经符号链接的逃逸都拦）；根内的路径点名就能读写。宿主的列举过滤器只在列举、扫描、搜索时用（`visible`）。
  * 快照带版本号（按策略用内容指纹或 metadata 算）与文本编码判定；写入是同目录临时文件加改名的原子替换，沿用原文件的编码与权限。实例归一个内核所有。
  */
 export interface FileStoreApi {
   /** 工作区根目录的绝对路径。 */
   readonly root: string
-  /** 只规范化路径并判断能不能做这个动作，不碰正文：返回绝对路径和相对根的路径；出了根或被名单、过滤器拒绝时抛 PERMISSION_DENIED（报错里写 deniedActionLabel）。 */
-  authorize(pathInput: string, action: FileFilterInput['action'], deniedActionLabel: string, options?: FileAccessOptions): Promise<{ abs: string; rel: string }>
+  /** 只规范化路径并确认它在根之内，不碰正文：返回绝对路径和相对根的路径；出了根（含经符号链接指到外面）抛 PERMISSION_DENIED。 */
+  authorize(pathInput: string): Promise<{ abs: string; rel: string }>
+  /** 列举、扫描、搜索时一个条目出不出现：宿主的列举过滤器说了算（没给就都出现），按路径与它解开符号链接后的真实路径各问一次。点名访问不问它。 */
+  visible(rel: string, action: FileFilterInput['action']): Promise<boolean>
   /** 取文件或目录的快照：是否存在、大小、版本、是不是二进制、文本编码与权限；includeContent 为真且文件不超读取上限时带正文。路径不存在时返回 exists 为假的快照，不抛错。 */
-  snapshot(pathInput: string, includeContent?: boolean, options?: FileAccessOptions): Promise<FileSnapshot>
+  snapshot(pathInput: string, includeContent?: boolean): Promise<FileSnapshot>
   /** 按行范围、字节数或字符数有界读取文本，带续读参数；给了 baseRevision 而版本对不上时抛 BASE_REVISION_MISMATCH，超出整读上限又没给范围或上限时抛 NOT_SUPPORTED。 */
-  read(input: ReadInput, options?: FileAccessOptions): Promise<ReadResult>
+  read(input: ReadInput): Promise<ReadResult>
   /** 搜索前给文件分类：UTF-8 文本能交给 ripgrep 直接搜（native），旧编码文本要解码后再搜（decoded），二进制、超搜索上限的跳过（excluded）；按文件身份与修改时间缓存。 */
   searchTextKind(pathInput: string): Promise<'native' | 'decoded' | 'excluded'>
   /** 轻量的文件状态：类型、大小、估算 token、行数（不太大的文本文件才数）、版本、编码和建议的首个读取窗口；不存在时返回 kind 为 missing。 */
-  stat(input: FileStatInput, options?: FileAccessOptions): Promise<FileStatResult>
+  stat(input: FileStatInput): Promise<FileStatResult>
   /** 原子写入文本并返回写后的快照：已有文本文件沿用自己的编码与权限，encoding、mode 只在路径上还没有文件时生效；给了 transactionBytes 就原样写这些字节，给了 expectedBytes 时磁盘上的字节对不上就抛 CONFLICT_WITH_EXTERNAL_EDIT。 */
-  write(pathInput: string, content: string, options?: FileAccessOptions & { encoding?: TextEncoding; mode?: number; transactionBytes?: Uint8Array; expectedBytes?: ExpectedBytes }): Promise<FileSnapshot>
-  /** 事务捕获原字节用：跳过宿主过滤器但仍执行根内约束和拒读名单，最多读 maximumBytes（缺省是整读上限）；文件不存在返回 undefined，类型或长度变了抛 CONFLICT_WITH_EXTERNAL_EDIT。 */
+  write(pathInput: string, content: string, options?: { encoding?: TextEncoding; mode?: number; transactionBytes?: Uint8Array; expectedBytes?: ExpectedBytes }): Promise<FileSnapshot>
+  /** 事务捕获原字节用：执行根内约束，最多读 maximumBytes（缺省是整读上限）；文件不存在返回 undefined，类型或长度变了抛 CONFLICT_WITH_EXTERNAL_EDIT。 */
   readTransactionBytes(pathInput: string, maximumBytes?: number): Promise<Buffer | undefined>
   /** 删除工作区里的单个文件（不存在也不报错）；给了 expectedBytes 时先核对磁盘字节，对不上抛 CONFLICT_WITH_EXTERNAL_EDIT。 */
-  remove(pathInput: string, options?: FileAccessOptions & { expectedBytes?: ExpectedBytes }): Promise<void>
-  /** 在工作区里改名或移动文件，目标目录不存在就建；两端都要过写入授权。 */
+  remove(pathInput: string, options?: { expectedBytes?: ExpectedBytes }): Promise<void>
+  /** 在工作区里改名或移动文件，目标目录不存在就建；两端都要在根之内。 */
   rename(from: string, to: string): Promise<void>
   /** 按路径、include、exclude、深度和条数列出文件与目录，默认排除 gitignore 的条目（优先问 git，git 不可用时按本地规则判断）。 */
   listFiles(input?: ObserveInput): Promise<FileListEntry[]>
@@ -100,7 +95,7 @@ export interface FileStoreApi {
   observe(input?: ObserveInput): Promise<ProjectSnapshot>
 }
 
-/** 底层文件系统网关，统一执行根目录约束、策略、过滤器和 revision 管理。 */
+/** 底层文件系统网关，统一执行根目录约束、列举过滤和 revision 管理。 */
 export class FileStore implements FileStoreApi {
   readonly root: string
   private fileFilter?: FileFilterProvider
@@ -123,34 +118,6 @@ export class FileStore implements FileStoreApi {
     this.command = command
   }
 
-  private async allowed(
-    rel: string,
-    action: FileFilterInput['action'],
-    options?: { skipFileFilter?: boolean },
-    realRel?: LooseOptional<string>,
-  ): Promise<boolean> {
-    // 顺序是安全语义的一部分：deny glob 是硬策略，必须先判且 skipFileFilter 关不掉；
-    // fileFilter 只是宿主注入的可见性过滤器，apply/rollback 写回时可以显式跳过。
-    const deny = action === 'write' ? this.policy.writeDeny : this.policy.readDeny
-    if (!isEmpty(deny) && (await this.deniedByPolicy(rel, deny, realRel))) return false
-    if (options?.skipFileFilter || !this.fileFilter) return true
-    if (!this.fileFilter.shouldInclude({ path: rel, action })) return false
-    // 宿主的可见性过滤器同样按身份判：项目内的链接、大小写别名指向同一个文件，遮住一条不能从另一条读出来。
-    const identity = realRel ?? (await this.realRelative(rel))
-    return isNull(identity) || identity === rel || this.fileFilter.shouldInclude({ path: identity, action })
-  }
-
-  /** deny 名单同时对请求路径和它的真实路径判：项目内的符号链接、大小写别名指向同一个物理文件，任一命中就拒。 */
-  private async deniedByPolicy(
-    rel: string,
-    deny: readonly string[],
-    realRel?: LooseOptional<string>,
-  ): Promise<boolean> {
-    if (matchesAny(rel, deny)) return true
-    const identity = realRel ?? (await this.realRelative(rel))
-    return !isNull(identity) && identity !== rel && matchesAny(identity, deny)
-  }
-
   /** 路径解开符号链接后相对真实根的写法（同一个物理文件的各种别名解出来是同一条）；解出来不在根里时返回 null。 */
   private async realRelative(rel: string): Promise<Nullable<string>> {
     const real = await resolveRealPath(path.resolve(this.root, rel))
@@ -162,38 +129,28 @@ export class FileStore implements FileStoreApi {
     return this.realRoot
   }
 
-  /** 只做路径规范化和可见性判断，不读取或写入文件内容。 */
-  public async authorize(
-    pathInput: string,
-    action: FileFilterInput['action'],
-    deniedActionLabel: string,
-    options?: { skipFileFilter?: boolean },
-  ): Promise<{ abs: string; rel: string }> {
+  /** 只做根内约束：规范化路径，再确认它（连同经符号链接指向的地方）在项目根之内，不碰正文。 */
+  public async authorize(pathInput: string): Promise<{ abs: string; rel: string }> {
     const abs = toAbs(this.root, pathInput)
-    const realRoot = await this.getRealRoot()
-    const realTarget = await resolveConfinedRealPath(realRoot, abs, pathInput)
-    const rel = toRel(this.root, abs)
-    if (!(await this.allowed(rel, action, options, relativeInsideRealRoot(realRoot, realTarget)))) {
-      throw new ProjectError(
-        'PERMISSION_DENIED',
-        `${deniedActionLabel}被拒绝：${rel}`,
-        { path: rel },
-        optionalWhen(action === 'write' && isGitInternalPath(rel), GitInternalWriteSuggestedNextAction),
-      )
-    }
-    return { abs, rel }
+    await resolveConfinedRealPath(await this.getRealRoot(), abs, pathInput)
+    return { abs, rel: toRel(this.root, abs) }
+  }
+
+  /** 列举、扫描、搜索时一个条目出不出现：项目内的链接、大小写别名指向同一个文件，挡住一条不能从另一条列出来。 */
+  public async visible(rel: string, action: FileFilterInput['action']): Promise<boolean> {
+    if (!this.fileFilter) return true
+    if (!(await this.fileFilter.shouldInclude({ path: rel, action }))) return false
+    const identity = await this.realRelative(rel)
+    return isNull(identity) || identity === rel || this.fileFilter.shouldInclude({ path: identity, action })
   }
 
   /** 读取文件或目录的元数据，并按需附带文本内容。 */
   public async snapshot(
     pathInput: string,
     includeContent = true,
-    options?: { skipFileFilter?: boolean },
   ): Promise<FileSnapshot> {
     // 所有公开读写路径都先按工作区根目录规范化。
-    const { abs, rel } = await this.authorize(pathInput, 'read', '读取', {
-      skipFileFilter: options?.skipFileFilter,
-    })
+    const { abs, rel } = await this.authorize(pathInput)
     // 用 bigint stat 一次拿到纳秒级 mtime：metadata 模式据此区分相邻写入，content 模式仍按毫秒计算保持兼容。
     let st: BigIntStats
     try {
@@ -311,9 +268,9 @@ export class FileStore implements FileStoreApi {
   }
 
   /** 按范围、字节数或字符数限制读取文本内容。 */
-  public async read(input: ReadInput, options?: { skipFileFilter?: boolean }): Promise<ReadResult> {
+  public async read(input: ReadInput): Promise<ReadResult> {
     validateReadBounds(input)
-    const snap = await this.snapshot(input.path, true, options)
+    const snap = await this.snapshot(input.path, true)
     if (input.baseRevision && snap.revision !== input.baseRevision) {
       throw new ProjectError(
         'BASE_REVISION_MISMATCH',
@@ -512,7 +469,7 @@ export class FileStore implements FileStoreApi {
 
   /** 搜索只缓存物理格式分类；纳秒 mtime/ctime 与文件身份变化都会重新严格探测。 */
   public async searchTextKind(pathInput: string): Promise<'native' | 'decoded' | 'excluded'> {
-    const { abs, rel } = await this.authorize(pathInput, 'search', '搜索')
+    const { abs, rel } = await this.authorize(pathInput)
     const metadata = await stat(abs, { bigint: true })
     if (!metadata.isFile() || metadata.size > this.policy.maxSearchFileSizeBytes) return 'excluded'
     const token = [metadata.dev, metadata.ino, metadata.size, metadata.mtimeNs, metadata.ctimeNs].join(':')
@@ -536,14 +493,11 @@ export class FileStore implements FileStoreApi {
   }
 
   /** 返回轻量文件状态和建议的安全读取窗口。 */
-  public async stat(
-    input: FileStatInput,
-    options?: { skipFileFilter?: boolean },
-  ): Promise<FileStatResult> {
+  public async stat(input: FileStatInput): Promise<FileStatResult> {
     // stat 比 read 更轻量，并返回推荐的安全读取窗口。
     // 这里取 includeContent=true：对可读文本文件复用同一次读取的正文来数行数，
     // 避免「先为哈希读一遍、再为行数读一遍」的重复整文件读取。
-    const snap = await this.snapshot(input.path, true, options)
+    const snap = await this.snapshot(input.path, true)
     const warnings: string[] = []
 
     if (!snap.exists) {
@@ -649,9 +603,9 @@ export class FileStore implements FileStoreApi {
   public async write(
     pathInput: string,
     content: string,
-    options?: { skipFileFilter?: boolean; encoding?: TextEncoding; mode?: number; transactionBytes?: Uint8Array; expectedBytes?: ExpectedBytes },
+    options?: { encoding?: TextEncoding; mode?: number; transactionBytes?: Uint8Array; expectedBytes?: ExpectedBytes },
   ): Promise<FileSnapshot> {
-    const { abs, rel } = await this.authorize(pathInput, 'write', '写入', options)
+    const { abs, rel } = await this.authorize(pathInput)
     await mkdir(path.dirname(abs), { recursive: true })
     const written = options?.transactionBytes
       ? textFileIo.writeBytes(abs, options.transactionBytes, { mode: options.mode, expected: options.expectedBytes })
@@ -659,22 +613,21 @@ export class FileStore implements FileStoreApi {
     await written.catch((error: unknown) => {
       throw projectErrorFromTextFile(error)
     })
-    return this.snapshot(rel, true, { skipFileFilter: true })
+    return this.snapshot(rel, true)
   }
 
-  /** 私有事务捕获；根目录与 deny 规则始终执行。 */
+  /** 私有事务捕获；根内约束始终执行。 */
   public async readTransactionBytes(pathInput: string, maximumBytes = this.policy.maxFileSizeToReadBytes): Promise<Buffer | undefined> {
-    const { abs } = await this.authorize(pathInput, 'read', '读取事务原字节', { skipFileFilter: true })
+    const { abs } = await this.authorize(pathInput)
     return textFileIo.readBounded(abs, maximumBytes).catch((error: unknown) => {
       throw projectErrorFromTextFile(error)
     })
   }
 
-  /** 删除工作区内的单个文件；给了 expectedBytes 时先核对磁盘字节（同读取事务原字节，照样执行根内约束与拒读名单）。 */
-  public async remove(pathInput: string, options?: { skipFileFilter?: boolean; expectedBytes?: ExpectedBytes }): Promise<void> {
-    const { abs } = await this.authorize(pathInput, 'write', '删除', options)
+  /** 删除工作区内的单个文件；给了 expectedBytes 时先核对磁盘字节。 */
+  public async remove(pathInput: string, options?: { expectedBytes?: ExpectedBytes }): Promise<void> {
+    const { abs } = await this.authorize(pathInput)
     if (options?.expectedBytes) {
-      await this.authorize(pathInput, 'read', '读取事务原字节', { skipFileFilter: true })
       await textFileIo.assertUnchanged(abs, options.expectedBytes).catch((error: unknown) => {
         throw projectErrorFromTextFile(error)
       })
@@ -684,8 +637,8 @@ export class FileStore implements FileStoreApi {
 
   /** 在工作区内重命名或移动文件。 */
   public async rename(from: string, to: string): Promise<void> {
-    const fromAccess = await this.authorize(from, 'write', '重命名')
-    const toAccess = await this.authorize(to, 'write', '重命名')
+    const fromAccess = await this.authorize(from)
+    const toAccess = await this.authorize(to)
     await mkdir(path.dirname(toAccess.abs), { recursive: true })
     await rename(fromAccess.abs, toAccess.abs)
   }
@@ -693,8 +646,8 @@ export class FileStore implements FileStoreApi {
     return listProjectFiles(input, {
       root: this.root,
       command: this.command,
-      authorize: (...args) => this.authorize(...args),
-      allowed: (...args) => this.allowed(...args),
+      authorize: (pathInput) => this.authorize(pathInput),
+      visible: (rel, action) => this.visible(rel, action),
     })
   }
 
@@ -710,7 +663,7 @@ export class FileStore implements FileStoreApi {
     for (const entry of entries) {
       if (entry.type !== 'file') continue
       try {
-        const snap = await this.snapshot(entry.path, false, { skipFileFilter: true })
+        const snap = await this.snapshot(entry.path, false)
         snapshots.push({
           path: snap.path,
           size: snap.size,

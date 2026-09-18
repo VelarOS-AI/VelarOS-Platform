@@ -3,15 +3,15 @@
  *
  * 一个空间就是一张装配表：给哪几件能力、每件能力用哪个端口。能力本身不在这里——`velar:files`（本机文件）、`velar:shell`、
  * `velar:sandbox`、`velar:images` 各有各的包，一件能力只有一份实现；这里只写系统空间的端口：
- * 路径可以是本机任意位置、`~` 展开到家目录，凭证文件与系统敏感路径先问用户，写是逐个原子替换（撤回新建时是核对后删掉），
+ * 路径可以是本机任意位置、`~` 展开到家目录，写是逐个原子替换（撤回新建时是核对后删掉），
  * 命令在本机任意目录跑，沙箱可以镜像任意目录，看图能看本机任意位置的图。这个文件里没有一个字是给模型看的。
  */
 
 import { mkdir } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname } from 'node:path'
 
 import type { CapabilityOperationContext, CapabilityOperationTable, MountedCapabilityModule } from '@velaros-ai/code-surface/contracts'
-import { AppError, isNotNull, isNull } from '@velaros-ai/core'
+import { AppError, isNull } from '@velaros-ai/core'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import type { FileOperationContext, FileSpacePort } from '@velaros-ai/velar/files'
 import { fileOperations } from '@velaros-ai/velar/files'
@@ -27,7 +27,6 @@ import { shellOperations } from '@velaros-ai/velar/shell'
 import { VelarShellModule } from '@velaros-ai/velar/shell/contracts'
 
 import type { SystemCallContext, SystemSpaceHost } from '../contract/requires.js'
-import { credentialConfirmation, isCredentialPath, isSensitiveSystemMutationPath, sensitiveMutationConfirmation } from '../utils/file-safety.js'
 import { removeSystemFile, writeSystemFileAtomically } from '../utils/fs.js'
 import { resizeImageWithSips } from '../utils/image.js'
 
@@ -54,8 +53,6 @@ class SystemSpace implements SystemSpaceApi {
     { surface: VelarSandboxModule, resident: false },
   ])
 
-  private static readonly SandboxClosingNote = '删除和覆盖无法撤销；落回前会核对这些文件自建沙箱以来没被别人改过，改过就整批不落。'
-
   private readonly filePort: FileSpacePort
   private readonly shellPort: ShellSpacePort
   private readonly sandboxPort: SandboxSurfacePort
@@ -78,7 +75,7 @@ class SystemSpace implements SystemSpaceApi {
   public get operations(): CapabilityOperationTable {
     const files = async (context: CapabilityOperationContext): Promise<FileOperationContext> => {
       const call = await this.call(context)
-      return { abortSignal: call.abortSignal, approval: call.approval, files: this.filePort }
+      return { abortSignal: call.abortSignal, files: this.filePort }
     }
     const images = async (context: CapabilityOperationContext): Promise<ImageOperationContext> => {
       const call = await this.call(context)
@@ -125,7 +122,7 @@ class SystemSpace implements SystemSpaceApi {
     return Promise.resolve(this.resolveCall(context.signal))
   }
 
-  /** `velar:files` 的系统空间端口：路径是本机任意位置，凭证文件与系统敏感路径先问用户，写是一个一个原子替换，撤回新建时核对后删掉。 */
+  /** `velar:files` 的系统空间端口：路径是本机任意位置，写是一个一个原子替换，撤回新建时核对后删掉。 */
   private createFilePort(): FileSpacePort {
     return {
       locate: async (path) => {
@@ -133,8 +130,6 @@ class SystemSpace implements SystemSpaceApi {
         const target = await resolveRealPath(resolved)
         return { path: resolved, target, linked: target !== resolved }
       },
-      reviewRead: async (target) => [credentialConfirmation(target, 'read')].filter(isNotNull),
-      reviewWrite: async (target) => [await sensitiveMutationConfirmation(target), credentialConfirmation(target, 'write')].filter(isNotNull),
       commit: async (writes) => {
         const applied: string[] = []
         for (const write of writes) {
@@ -195,12 +190,6 @@ class SystemSpace implements SystemSpaceApi {
         const result = await this.host.runCommand(options.command, { cwd: record.root, timeoutMs: options.timeoutMs, maxOutputChars: options.maxOutputChars }, false, abortSignal)
         return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, durationMs: result.durationMs, timedOut: result.timedOut, truncated: result.truncated, success: result.success }
       },
-      applyPolicy: (source) => ({
-        targetLabel: source,
-        closingNote: SystemSpace.SandboxClosingNote,
-        riskScope: 'system-sandbox:apply',
-        isSensitive: (path) => isSensitiveSystemMutationPath(join(source, path)) || isCredentialPath(join(source, path)),
-      }),
     }
   }
 }

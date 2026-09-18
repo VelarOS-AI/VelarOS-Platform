@@ -11,7 +11,6 @@ export interface ProjectSourceWindow {
   fileRef?: string
   lines: Array<[number, string]>
   totalLines?: number
-  redacted?: boolean
   editable?: false
   note?: string
   /** 签发不了编辑引用的原因（比如文件超过可编辑的大小），写进窗口的 note。 */

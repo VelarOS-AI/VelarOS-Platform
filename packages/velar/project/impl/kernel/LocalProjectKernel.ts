@@ -5,7 +5,7 @@
 // 完了，实际它带一层逆序还原。
 //
 // ## 组织（读的顺序）
-//  1. `prepareTransaction` → 意图 → 补丁，**不碰磁盘**；规模/受保护文件门在这里；
+//  1. `prepareTransaction` → 意图 → 补丁，**不碰磁盘**；规模门在这里；
 //  2. `buildTransactionContentOverlay` → 把已暂存补丁重放成"内存中的未来文件内容"，供
 //     validator / fixer 在写盘前看到暂存态；
 //  3. `applyEdit` → 取写锁 → 每个路径的首个补丁校验 base revision（不匹配则试 rebase，rebase
@@ -45,10 +45,7 @@
 //    补丁记下原文与 base revision，回滚写回原文；把它当新建删掉会永久丢失原文。
 //  - **风险按能否恢复划线，不按操作名**：能完整回滚的覆盖、删除、重命名都是日常写入，只按新建/规模
 //    分 low/medium；只有回滚恢复不了原文的补丁（二进制、超限文件的覆盖/删除，删除符号链接）才是 high。
-//    把可恢复写入重新划成 high，会让宿主按路径逐个文件打断用户审批。
-//  - **`decide` 是唯一策略/审批门**：provider 可直接拒，也可要求审批；高风险补丁按
-//    `policy.approval.requireForHighRiskPatch` 再走一次人审。绕过 `decide` 直接调 `store` = 无审批写盘。
-//    `rollback` 本身不走高风险审批：它有外部修改保护，且回滚后可以重做，属于可恢复操作。
+//    风险只记进事务与变更记录给界面、审计看，不拦写入、不问人。
 //
 // ## 内存治理（为什么有一堆保留上限）
 // 内核在长会话里常驻，`targets` / `evidence` / `transactions` 都是只增 Map。四个上限（ProjectTuning 的
@@ -57,7 +54,6 @@ import * as path from 'node:path'
 
 import {
   isEmpty,
-  isFalse,
   isNull,
   isPresent,
   isString,
@@ -107,8 +103,7 @@ import type {
   SearchInput,
   SearchResult,
 } from '../../types/io.js'
-import type { CorePolicy, PolicyDecisionInput } from '../../types/policy.js'
-import type { ProjectWriteAuthorization } from '../../types/project.js'
+import type { CorePolicy } from '../../types/policy.js'
 import type { ProjectRuntimeProviders } from '../../types/provider.js'
 import type { FileAttributes, FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
 import type { ResolveTargetInput, ResolveTargetResult } from '../../types/target.js'
@@ -117,7 +112,6 @@ import type { ValidateInput, ValidationResult } from '../../types/validation.js'
 import { combineDiffs } from '../../utils/diff.js'
 import { ProjectError } from '../../utils/errors.js'
 import { metadataPaths } from '../../utils/files/git-index.js'
-import { matchesAny } from '../../utils/glob.js'
 import { runBatch } from '../../utils/kernel/batch.js'
 import { createCorePolicy } from '../../utils/kernel/policy.js'
 import { boundedChangeIntents, projectChangePatches } from '../../utils/transactions/change-records.js'
@@ -156,23 +150,13 @@ import { TransactionStateMachine } from '../transactions/TransactionStateMachine
 import { TransactionValidation } from '../transactions/TransactionValidation.js'
 
 import { NodeCommandProvider } from './NodeCommandProvider.js'
-import { projectApprovalBridge } from './ProjectApprovalBridge.js'
 
 /**
  * 项目内核：一个工作区根上的读写、事务、校验与撤销。把「一次编辑意图」变成可预览、可校验、可回滚的磁盘写入：
- * 准备不碰磁盘，应用在写锁里核对版本、写盘失败逆序还原，回滚前先确认文件仍是应用后的样子。读写都先过文件网关的根内约束与名单，
- * 再过策略门（宿主的策略提供者可以拒绝或要求审批）。由 `createProjectKernel(options)` 创建，实例归宿主；项目工具、宿主界面与内核能力服务共用它。
+ * 准备不碰磁盘，应用在写锁里核对版本、写盘失败逆序还原，回滚前先确认文件仍是应用后的样子。读写只受文件网关的根内约束（出不了项目），
+ * 不问人、不按名单拒。由 `createProjectKernel(options)` 创建，实例归宿主；项目工具、宿主界面与内核能力服务共用它。
  */
 export interface ProjectKernel {
-  /** 对一段已经提交过的历史正文重新做读取授权与脱敏（文件上下文恢复时用），不重读可能已经变了的磁盘；路径被拒时抛 PERMISSION_DENIED。 */
-  prepareContextSnapshot(input: { path: string; content: string }): Promise<{ content: string; redacted: boolean }>
-  /**
-   * 核对一批路径能不能由项目写：逐条给出能不能写和被谁拦下（越界、readDeny/writeDeny、宿主可见范围、protectedFiles、generatedFiles）。
-   * 不碰磁盘、不建事务、不发审批；沙箱落回这类「不经事务链的整批写入」在问用户之前用它过一遍写治理。
-   */
-  authorizeWrites(paths: readonly string[]): Promise<ProjectWriteAuthorization[]>
-  /** 把一段要交给模型的文字过一遍宿主的脱敏后端（没有后端时原样返回）：命令输出这类不带路径的文字也走它。 */
-  redactText(input: { content: string; path?: string }): Promise<{ content: string; redacted: boolean }>
   /** 工作区根目录的绝对路径。 */
   readonly root: string
   /** 生效的策略：内核缺省策略（ProjectPolicyDefaults）按宿主给的 corePolicy 覆盖后的结果。 */
@@ -187,9 +171,9 @@ export interface ProjectKernel {
   listFiles(input?: ObserveInput): Promise<FileListEntry[]>
   /** 单个路径的轻量状态和建议的读取窗口。 */
   stat(input: FileStatInput): Promise<FileStatResult>
-  /** 有界读取文件（按行范围、字节数或字符数），正文经宿主脱敏；给了 baseRevision 而版本对不上时抛 BASE_REVISION_MISMATCH。 */
+  /** 有界读取文件（按行范围、字节数或字符数）；给了 baseRevision 而版本对不上时抛 BASE_REVISION_MISMATCH。 */
   read(input: ReadInput): Promise<ReadResult>
-  /** 在工作区里搜文本：先试 ripgrep，不可用或失败时回退到适配器逐文件扫描；命中片段经宿主脱敏。 */
+  /** 在工作区里搜文本：先试 ripgrep，不可用或失败时回退到适配器逐文件扫描。 */
   search(input: SearchInput): Promise<SearchResult>
   /** 列出文件里的符号：宿主开了代码智能就先问它，否则用本地适配器解析。 */
   listSymbols(path: string): Promise<ProjectSymbol[]>
@@ -197,7 +181,7 @@ export interface ProjectKernel {
   resolveTarget(input: ResolveTargetInput): Promise<ResolveTargetResult>
   /** 按目标或路径范围建证据包：目标附近的新鲜窗口加前后续读建议。 */
   buildEvidencePack(input: BuildEvidencePackInput): Promise<EvidencePack>
-  /** 把编辑意图准备成事务：生成补丁、diff 与风险等级，不碰磁盘；版本已变、规模超出策略预算、改到受保护或生成的文件时拒绝。 */
+  /** 把编辑意图准备成事务：生成补丁、diff 与风险等级，不碰磁盘；版本已变、规模超出策略预算时拒绝。 */
   prepareEdit(input: PrepareEditInput): Promise<PreparedTransaction>
   /** 丢弃一个尚未应用的已暂存事务（dryRun 预览用）；已应用的事务请用 rollback。 */
   discardTransaction(transactionId: string): { discarded: boolean }
@@ -205,7 +189,7 @@ export interface ProjectKernel {
   amendEdit(input: AmendEditInput): Promise<PreparedTransaction>
   /** 在事务的暂存内容上跑修复器，把真实的改动转成一次修订；暂存补丁不能干净重放时返回 ok 为假和诊断，什么都不改。 */
   fixTransaction(input: FixInput): Promise<FixResult>
-  /** 应用事务：先校验、过写入授权与审批，在写锁里逐个路径核对版本（允许的操作先 rebase 再复核校验）后写盘，任一文件失败就把已写的逆序还原；返回新旧版本。 */
+  /** 应用事务：先校验，在写锁里逐个路径核对版本（允许的操作先 rebase 再复核校验）后写盘，任一文件失败就把已写的逆序还原；返回新旧版本。 */
   applyEdit(input: ApplyEditInput): Promise<ApplyResult>
   /** 校验事务的暂存内容（不给事务时校验当前工作区），合并校验器与适配器的诊断。 */
   validate(input: ValidateInput): Promise<ValidationResult>
@@ -277,8 +261,6 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     this.providers = {
       ...(options.providers ?? {}),
       command: options.providers?.command ?? new NodeCommandProvider(),
-      // 宿主不给审批后端时装上审批桥：工具调用期间交给这次调用的审批端口，调用之外一律拒绝（与「不给就拒绝」的旧缺省等价）。
-      approval: options.providers?.approval ?? projectApprovalBridge.provider(),
     }
     this.changeFeedWriter = options.changeFeed ?? new MemoryProjectChangeFeed()
     this.changeFeed = this.changeFeedWriter
@@ -297,7 +279,6 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
       providers: this.providers,
       store: this.store,
       journal: this.journal,
-      decide: (action, paths, data) => this.decide(action, paths, data),
       enrichSnapshot: (snapshot) => this.enrichSnapshot(snapshot),
       createAdapters: (snapshot) => this.adapters.createAdapters(snapshot, this),
       emit: (event, data) => this.hooks.emit(event, this, data),
@@ -556,65 +537,9 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     this.pipelines.register(stage)
   }
 
-  private async decide(
-    action: PolicyDecisionInput['action'],
-    paths?: string[],
-    data?: unknown,
-    risk: 'low' | 'medium' | 'high' = 'low',
-    options?: { skipHighRiskUserApproval?: boolean },
-  ): Promise<void> {
-    // 策略 provider 可以直接拒绝，也可以要求再走一次审批。
-    const providerDecision = await this.providers.policy?.decide({ action, paths, risk, data })
-    if (providerDecision && !providerDecision.allow) {
-      this.journal.record({
-        actor: 'system',
-        action: `policy.${action}`,
-        inputSummary: paths?.join(','),
-        outputSummary: providerDecision.reason,
-        permissionDecision: 'deny',
-        risk,
-      })
-      throw new ProjectError(
-        'PERMISSION_DENIED',
-        providerDecision.reason ?? `策略拒绝执行 ${action}`,
-      )
-    }
-    const needsHighRiskApproval =
-      risk === 'high' &&
-      this.policy.approval.requireForHighRiskPatch &&
-      !options?.skipHighRiskUserApproval
-    if (providerDecision?.requireApproval || needsHighRiskApproval) {
-      if (!this.providers.approval) {
-        throw new ProjectError(
-          'PERMISSION_DENIED',
-          `${action} 需要审批，但宿主没有提供审批通道`,
-          { action, paths, risk },
-          '请在有用户审批上下文的宿主中重试，或缩小为非破坏性操作。',
-        )
-      }
-      const approved = await this.providers.approval.approve({
-        action,
-        paths,
-        risk,
-        reason: providerDecision?.reason ?? `${action} 需要审批`,
-        data,
-      })
-      if (isFalse(approved)) throw new ProjectError('PERMISSION_DENIED', `${action} 的审批被拒绝`)
-    }
-  }
-
-  private async authorizePaths(
-    paths: LooseOptional<readonly string[]>,
-    action: 'read' | 'write' | 'search' | 'observe',
-    deniedActionLabel: string,
-  ): Promise<LooseOptional<string[]>> {
-    if (!paths) return undefined
-    const authorized: string[] = []
-    for (const pathValue of paths) {
-      const access = await this.store.authorize(pathValue, action, deniedActionLabel)
-      authorized.push(access.rel)
-    }
-    return [...new Set(authorized)]
+  /** 核对一批路径都在项目根之内（字面的 `../` 与经符号链接的逃逸都拦）；出了根抛 PERMISSION_DENIED。 */
+  private async assertInsideRoot(paths: readonly string[]): Promise<void> {
+    for (const pathValue of paths) await this.store.authorize(pathValue)
   }
 
   private async enrichSnapshot(snapshot: FileSnapshot): Promise<FileSnapshot> {
@@ -691,7 +616,6 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
   /** 根据编辑意图生成待应用事务，但不修改磁盘文件。 */
   public async prepareEdit(input: PrepareEditInput): Promise<PreparedTransaction> {
     await this.hooks.emit('BeforePrepareEdit', this, input)
-    await this.decide('prepare_edit', undefined, input)
     const transactionsBeforePrepare = this.transactionRepository.snapshot()
     const bytesBeforePrepare = this.transactionRecovery.captureBytePlans()
     const projectionsBeforePrepare = this.transactionProjectionRepository.snapshot()
@@ -755,7 +679,6 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     const amendedStatus = this.transactionStateMachine.amend(tx)
     // 修订会更新已存储的生命周期；返回快照记录此次修订后的准备状态。
     const preparedTx = tx
-    await this.decide('amend_edit', tx.changedFiles, input, tx.risk)
     const overlay = await this.buildTransactionContentOverlay(input.transactionId)
     if (!isEmpty(overlay.diagnostics)) {
       const envelope = diagnosticsEnvelope(overlay.diagnostics)
@@ -830,7 +753,6 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
   private async fixTransactionSerialized(input: FixInput): Promise<FixResult> {
     const tx = this.getTransaction(input.transactionId)
     if (!tx) throw new ProjectError('INVALID_INPUT', `未知事务：${input.transactionId}`)
-    await this.decide('amend_edit', tx.changedFiles, input, tx.risk)
     const originalOverlay = await this.buildTransactionContentOverlay(input.transactionId)
     if (!isEmpty(originalOverlay.diagnostics))
       return {
@@ -931,7 +853,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     return this.runTransactionCommand(input.transactionId, () => this.applyEditSerialized(input))
   }
 
-  /** apply 写盘前的检查：事务状态、校验、写权限、审批，最后加锁。任何一步失败时磁盘都还没被改动。 */
+  /** apply 写盘前的检查：事务状态、校验、路径仍在项目之内，最后加锁。任何一步失败时磁盘都还没被改动。 */
   private async beginApplyCommand(input: ApplyEditInput) {
     await this.hooks.emit('BeforeApplyEdit', this, input)
     const tx = this.transactionRepository.get(input.transactionId)
@@ -943,8 +865,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     // validate 会把可变事务推进到 validated；execution token 必须从校验后的稳定状态开始，
     // 这样 apply 后续失败时仍恢复到现有语义下的 validated，而不是调用前的 prepared。
     const execution = this.transactionStateMachine.beginApply(tx)
-    const authorizedChangedFiles = await this.authorizePaths(tx.changedFiles, 'write', '写入')
-    await this.decide('apply_edit', toOptional(authorizedChangedFiles), input, tx.risk)
+    await this.assertInsideRoot(tx.changedFiles)
     const lock = await this.locks.lock(tx.changedFiles, tx.transactionId)
     return { tx, isRestoringRolledBackTransaction, execution, lock }
   }
@@ -988,7 +909,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
             }
             patch = chained
           } else if (patch.baseRevision) {
-            const current = await this.store.snapshot(patch.path, true, { skipFileFilter: true })
+            const current = await this.store.snapshot(patch.path, true)
             oldRevisions[patch.path] = current.revision
             attributes = { mode: current.mode, textEncoding: current.textEncoding }
             const canReplayRolledBackPatch =
@@ -1041,7 +962,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
         restoreByPath = await this.transactionRecovery.captureApplyRestoreState(tx.changedFiles)
         // 写盘时 mkdir --recursive 会把缺的父目录一并建出来；这里先记下缺哪几级，撤销时才知道哪些空目录是本事务留下的。
         createdDirectories = await missingAncestorDirectories(tx.changedFiles, async (directory) =>
-          (await this.store.snapshot(directory, false, { skipFileFilter: true })).exists,
+          (await this.store.snapshot(directory, false)).exists,
         )
         this.transactionRecovery.prepareBytePlan(tx, restoreByPath)
         pending = this.beginDurableOperation(tx, 'apply', restoreByPath)
@@ -1060,9 +981,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
             newRevisions[patch.path] = 'deleted'
           } else {
             if (isCreatePatch(patch)) {
-              const beforeWrite = await this.store.snapshot(patch.path, false, {
-                skipFileFilter: true,
-              })
+              const beforeWrite = await this.store.snapshot(patch.path, false)
               if (!beforeWrite.exists) createdFiles.push(patch.path)
             }
             const snap = await this.transactionRecovery.writePatch(tx, patch, 'apply')
@@ -1160,7 +1079,6 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     if (input.transactionId && !this.transactionRepository.has(input.transactionId)) {
       throw new ProjectError('INVALID_INPUT', `未知事务：${input.transactionId}`)
     }
-    await this.decide('validate', input.paths, input)
     const result = await this.runValidators(input)
     const transaction = input.transactionId
       ? this.transactionRepository.get(input.transactionId)
@@ -1252,7 +1170,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
           '请重新读取冲突文件并人工确认恢复内容；不要强制覆盖当前工作区。',
         )
       }
-      const current = await this.store.snapshot(pathValue, true, { skipFileFilter: true })
+      const current = await this.store.snapshot(pathValue, true)
       const finalPatch = [...tx.patches]
         .reverse()
         .find((patchValue) => patchValue.path === pathValue)
@@ -1291,8 +1209,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
         )
       }
     }
-    // 捕获回滚前状态；任一步写盘失败时按逆序还原，保持 rollback 自身的原子性
-    //（与 applyEdit 一致，并用 skipFileFilter 还原 apply 时绕过 fileFilter 的文件）。
+    // 捕获回滚前状态；任一步写盘失败时按逆序还原，保持 rollback 自身的原子性（与 applyEdit 一致）。
     return this.transactionRecovery.captureApplyRestoreState(tx.changedFiles)
   }
 
@@ -1361,7 +1278,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
       )
       // 文件回到 apply 之前了，本事务顺带建出来的目录也要回去：从深到浅删掉仍然空着的那几级。
       await removeEmptyDirectories(metadataPaths(tx.metadata?.createdDirectories), async (directory) =>
-        (await this.store.authorize(directory, 'write', '删除本次撤销留下的空目录', { skipFileFilter: true })).abs,
+        (await this.store.authorize(directory)).abs,
       )
       this.retainTerminalTransaction(tx.transactionId)
       this.persistCommittedTransactionState(tx.transactionId, 'git metadata or terminal retention')
@@ -1453,54 +1370,6 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
 
   public async stat(input: FileStatInput): Promise<FileStatResult> {
     return this.queries.stat(input)
-  }
-
-  /**
-   * 逐条核对写授权：文件网关的 authorize 管越界、writeDeny 与宿主可见范围，再在这里补上受保护文件与生成文件两道策略门。
-   * 只判定、不写盘、不发审批；不经事务链的整批写入（沙箱落回）靠它在问用户之前把不许写的路径挑出来。
-   */
-  public async authorizeWrites(paths: readonly string[]): Promise<ProjectWriteAuthorization[]> {
-    const results: ProjectWriteAuthorization[] = []
-    for (const pathValue of paths) {
-      try {
-        const { rel } = await this.store.authorize(pathValue, 'write', '写入')
-        if (matchesAny(rel, this.policy.protectedFiles)) {
-          results.push({ path: pathValue, allowed: false, reason: 'PROTECTED_FILE', message: `${rel} 在项目策略的受保护文件里。` })
-        } else if (matchesAny(rel, this.policy.generatedFiles)) {
-          results.push({ path: pathValue, allowed: false, reason: 'GENERATED_FILE', message: `${rel} 匹配项目策略的生成文件。` })
-        } else results.push({ path: pathValue, allowed: true })
-      } catch (error) {
-        // arch-guard:silent-catch-ok 拒绝原因与说明都如实写进这条判定，交给调用方展示。
-        results.push({
-          path: pathValue,
-          allowed: false,
-          reason: error instanceof ProjectError ? error.reason : 'PERMISSION_DENIED',
-          message: AppError.getMessage(error),
-        })
-      }
-    }
-    return results
-  }
-
-  /** 把一段要交给模型的文字过一遍宿主的脱敏后端；没有后端时原样返回。 */
-  public async redactText(input: { content: string; path?: string }): Promise<{ content: string; redacted: boolean }> {
-    if (!this.providers.secretRedaction || !input.content) return { content: input.content, redacted: false }
-    const result = await this.providers.secretRedaction.redact({
-      path: input.path,
-      content: input.content,
-      trust: { source: 'project', trust: 'untrusted' },
-    })
-    return { content: result.content, redacted: result.redacted }
-  }
-
-  /** 对已经提交的历史正文执行当前读取授权和脱敏，不重读可能已变化的磁盘内容。 */
-  public async prepareContextSnapshot(input: { path: string; content: string }): Promise<{ content: string; redacted: boolean }> {
-    const paths = await this.authorizePaths([input.path], 'read', '读取文件快照')
-    const path = paths?.[0] ?? input.path
-    await this.decide('read', [path], { path, source: 'file-context' })
-    return this.providers.secretRedaction
-      ? this.providers.secretRedaction.redact({ path, content: input.content, trust: { source: 'project', trust: 'untrusted' } })
-      : { content: input.content, redacted: false }
   }
 
   public async read(input: ReadInput): Promise<ReadResult> {

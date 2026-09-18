@@ -1,5 +1,3 @@
-import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
-
 import type { AgentProjectPreparedPatch } from './agent-port.js'
 
 export interface PathEffect {
@@ -22,11 +20,6 @@ export interface Gate {
 }
 
 export type RecordValue = Record<string, unknown>
-
-export interface ProjectApprovalContext {
-  approval: ApprovalPort
-  abortSignal: AbortSignal
-}
 
 export interface CodeSymbolTarget {
   path: string

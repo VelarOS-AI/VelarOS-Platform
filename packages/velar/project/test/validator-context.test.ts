@@ -21,7 +21,6 @@ function transaction(overrides: Partial<ProjectValidationTransaction> = {}): Pro
 function context(options: {
   transaction?: ProjectValidationTransaction
   providers?: ProjectProviders
-  protectedFiles?: readonly string[]
   readFile?: (path: string) => Promise<string | undefined>
 } = {}): ProjectValidationContext {
   const command = options.providers?.command ?? {
@@ -29,7 +28,7 @@ function context(options: {
   }
   return {
     root: '/workspace',
-    policy: createCorePolicy({ protectedFiles: [...(options.protectedFiles ?? ProjectPolicyDefaults.protectedFiles)] }),
+    policy: createCorePolicy(),
     providers: { ...options.providers, command },
     getTransaction: (transactionId) =>
       transactionId === options.transaction?.transactionId ? options.transaction : undefined,
@@ -70,12 +69,11 @@ describe('ProjectValidationContext', () => {
 
   test('built-in validators consume the minimal transaction projection and overlay reader', async () => {
     const tx = transaction({
-      changedFiles: ['protected.ts'],
+      changedFiles: ['source.ts'],
       changedLines: ProjectPolicyDefaults.maxChangedLinesPerTransaction + 1,
     })
     const validationContext = context({
       transaction: tx,
-      protectedFiles: ['protected.ts'],
       readFile: async () => 'future content',
     })
 
@@ -94,7 +92,6 @@ describe('ProjectValidationContext', () => {
     expect(scope.ok).toBe(false)
     expect(scope.diagnostics.map((diagnostic) => diagnostic.message)).toEqual([
       expect.stringContaining('变更行数'),
-      expect.stringContaining('受保护文件'),
     ])
     expect(postcondition.ok).toBe(true)
   })

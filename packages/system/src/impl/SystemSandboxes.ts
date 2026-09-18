@@ -20,9 +20,8 @@ import { SystemErrorCodes } from '../contract/constants.js'
 import type { SystemProcessConfinementProvider } from '../contract/requires.js'
 import type { SystemSandboxManifest } from '../types/sandbox.js'
 import { buildSystemProcessConfinementSpawnSpec } from '../utils/confinement.js'
-import { isPathInsideRoot } from '../utils/file-safety.js'
 import { writeSystemFileAtomically } from '../utils/fs.js'
-import { applyMirrorChanges, diffMirror, disableGitPush, isSandboxId, mirrorTree, newSandboxId, readSandboxManifest, removeSandboxDirectory, sandboxBaseDirectory, sandboxChangedSinceConfirmation, sandboxConfinementPolicy, sandboxDirectoryOf, scanTree, stampOfEntry } from '../utils/sandbox.js'
+import { applyMirrorChanges, diffMirror, disableGitPush, isPathInsideRoot, isSandboxId, mirrorTree, newSandboxId, readSandboxManifest, removeSandboxDirectory, sandboxBaseDirectory, sandboxChangedSinceDiff, sandboxConfinementPolicy, sandboxDirectoryOf, scanTree, stampOfEntry } from '../utils/sandbox.js'
 import { SystemTuning } from '../utils/tuning.js'
 
 import type { SystemCommandRunnerApi } from './SystemCommandRunner.js'
@@ -49,7 +48,7 @@ export interface SystemSandboxesApi {
   /** 镜像相对创建时的变化：新增、修改、删除三列（删除列永远完整），文本文件附有界的差量，.git 里的变化只汇总成一个布尔。 */
   diff(options: SandboxDiffOptions): Promise<SandboxDiff>
   /**
-   * 把镜像里的文件变化落回源目录：给了确认时的差量指纹就先核对，镜像在确认之后又变过整批不落（SYSTEM_SANDBOX_CHANGED）；
+   * 把镜像里的文件变化落回源目录：给了落回前核对的那份差量的指纹就先核对，镜像在这之后又变过整批不落（SYSTEM_SANDBOX_CHANGED）；
    * 再核对每一处在源目录里自镜像以来没被改过、上级路径不是符号链接，任何冲突整批不落并抛错（cause.details.conflicts）；
    * 内容先暂存再挪到位，暂存不全什么都不落，挪到位途中失败在 context.applied 里点名已落回的路径。.git 永远不落。审批由工具在调用前完成。
    */
@@ -169,8 +168,8 @@ export class SystemSandboxes implements SystemSandboxesApi {
     const manifest = await readSandboxManifest(entry.directory)
     // 落回按完整的三列算，不附文本差量。
     const changes = await diffMirror(manifest, await scanTree(entry.record.root), { textDiffs: false })
-    // 用户确认时看到的差量和现在的对不上（确认之后镜像又被改过）：整批不落，让调用方重新 diff、重新确认。
-    if (isPresent(options.fingerprint) && options.fingerprint !== changes.fingerprint) throw sandboxChangedSinceConfirmation()
+    // 落回前核对的那份差量和现在的对不上（核对之后镜像又被改过）：整批不落，让调用方重新 diff 再落。
+    if (isPresent(options.fingerprint) && options.fingerprint !== changes.fingerprint) throw sandboxChangedSinceDiff()
     const selection = rehearsalSandboxRules.select(changes, options.paths)
     if (!isEmpty(selection.unknown)) throw new AppError('VALIDATION', `这些路径在沙箱里没有变化：${selection.unknown.slice(0, SystemTuning.sandbox.listedPaths).join('、')}`)
     const applied = await applyMirrorChanges(manifest, selection)

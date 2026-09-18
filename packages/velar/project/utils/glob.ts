@@ -7,7 +7,7 @@ import { currentPlatform } from '@velaros-ai/platform'
 
 /**
  * 本平台的路径比较区不区分大小写：macOS 与 Windows 的卷缺省不区分，`.ENV` 和 `.env` 是同一个文件。
- * 策略名单（拒读、拒写、受保护、生成文件）与 include/exclude 都按同一个身份判，大小写变体不能绕过。
+ * include/exclude 按同一个身份判，大小写变体不会漏掉。
  */
 const PathComparisonIsCaseSensitive = !(currentPlatform.isMacOS() || currentPlatform.isWindows())
 

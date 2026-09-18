@@ -1,41 +1,9 @@
 /**
- * 可移植数据：经过空间端口（`ProjectSpacePort`）流动的数据形状，以及宿主实现代码查询要认的查询形状。
+ * 可移植数据：宿主实现代码查询（`ProjectSpacePort.queryCode`）要认的查询形状。
  * 不 import 任何东西（只从常量表 import type），不带函数，浏览器和渲染进程都能用；从 `@velaros-ai/velar/project/contracts` 取。
  */
 
 import type { ProjectCodeLanguageActions } from '../contract/constants.js'
-
-// ── 项目修改授权 ──────────────────────────────────────────────────
-
-/** 项目写操作的授权请求：做什么、在哪个目录、会写哪些文件（相对项目根）。这是全仓唯一权威定义。 */
-export interface ProjectMutationAuthorizationInput {
-  /** 给用户看的操作名，如「编辑项目源码」。 */
-  operation: string
-  /** 跑命令时的工作目录（相对项目根，空间已核对过在项目之内）；文件改动不带。 */
-  cwd?: string
-  /** 这次会写入的文件（相对项目根）：文件改动在规划之后、提交之前填，命令不填。 */
-  paths?: string[]
-}
-
-/** 一条路径的写治理判定：不许写时 reason 是合同错误原因（PERMISSION_DENIED、SCOPE_VIOLATION、PROTECTED_FILE、GENERATED_FILE）。 */
-export interface ProjectWriteAuthorization {
-  /** 判定的是哪条路径，原样回给调用方。 */
-  path: string
-  /** 项目允不允许写这条路径。 */
-  allowed: boolean
-  /** 不许写时的原因码。 */
-  reason?: string
-  /** 不许写时给模型看的说明。 */
-  message?: string
-}
-
-/** 项目变更授权的决定：批不批准，以及给模型看的说明（被拒时就是拒绝原因）。宿主自己的实现可以多返回字段，结构上兼容。 */
-export interface ProjectAuthorizationDecision {
-  /** 用户或策略允不允许这次写操作。 */
-  approved: boolean
-  /** 给模型看的说明：批准时是放行理由，被拒时是拒绝原因，工具原样交给模型。 */
-  message: string
-}
 
 // ── 宿主代码查询（ProjectSpacePort.queryCode 收到的查询） ─────────────────
 // `velar:code` 的入参由本包翻译成下面的查询交给宿主：语言服务类动作（find_symbols 等七个）由宿主的语言服务执行，

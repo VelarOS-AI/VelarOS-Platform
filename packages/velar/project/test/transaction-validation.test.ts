@@ -93,8 +93,6 @@ describe('TransactionValidation', () => {
         expect(context.providers).toEqual({ command: expect.any(Object) })
         expect(Object.isFrozen(context)).toBe(true)
         expect(Object.isFrozen(context.policy)).toBe(true)
-        expect(Object.isFrozen(context.policy.approval)).toBe(true)
-        expect(Object.isFrozen(context.policy.protectedFiles)).toBe(true)
         expect(Object.isFrozen(context.providers)).toBe(true)
         const transactionView = context.getTransaction(tx.transactionId)
         expect(transactionView).toEqual({
@@ -136,14 +134,7 @@ describe('TransactionValidation', () => {
   })
 
   test('exposes frozen policy, provider, and transaction views without mutating dependencies', async () => {
-    const localPolicy = {
-      ...policy,
-      approval: { ...policy.approval },
-      generatedFiles: [...policy.generatedFiles],
-      protectedFiles: ['protected.ts'],
-      readDeny: [...policy.readDeny],
-      writeDeny: [...policy.writeDeny],
-    }
+    const localPolicy = { ...policy }
     const commandWithState = {
       calls: 0,
       run() {
@@ -176,7 +167,6 @@ describe('TransactionValidation', () => {
         const transactionView = context.getTransaction(tx.transactionId)!
         expect(Reflect.set(context, 'root', '/other')).toBe(false)
         expect(Reflect.set(context.policy, 'maxChangedLinesPerTransaction', 0)).toBe(false)
-        expect(Reflect.set(context.policy.protectedFiles, '0', 'changed.ts')).toBe(false)
         expect(Reflect.set(context.providers, 'command', {})).toBe(false)
         expect(context.providers.codeIntelligence?.available).toBe(true)
         expect(context.providers.codeIntelligence?.isProjectEnabled('/workspace')).toBe(true)
@@ -199,7 +189,6 @@ describe('TransactionValidation', () => {
     await validation.run({ transactionId: tx.transactionId })
 
     expect(localPolicy.maxChangedLinesPerTransaction).toBe(policy.maxChangedLinesPerTransaction)
-    expect(localPolicy.protectedFiles).toEqual(['protected.ts'])
     expect(commandWithState.run).toBe(originalRun)
     expect(commandWithState.calls).toBe(1)
     expect(codeIntelligence.available).toBe(true)

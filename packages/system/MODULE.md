@@ -10,7 +10,7 @@
 系统空间：让 agent 在用户的整台机器上读写文件、跑命令、追踪后台任务、演练脚本，每一步都过宿主的审批边界。它由两件东西组成：
 
 - **本地内核**：本机能力的实现——命令与后台任务、交互式控制台、shell 选择与自检、进程约束、演练沙箱引擎，外加宿主自己的界面要的进程、端口、指标与全局搜索。
-- **系统空间的装配表**：一个空间就是一张表——给哪几件能力、每件能力用哪个端口。能力本身不在本包，是 `@velaros-ai/velar` 里的能力单元：`velar:files`（本机文件，系统空间专用；项目空间用的是 `velar:project`）、`velar:images`、`velar:shell`、`velar:sandbox`，一件能力只有一份实现。本包只写系统空间的端口：路径可以是本机任意位置、`~` 展开到家目录，凭证文件与系统敏感路径先问用户，写是逐个原子替换（撤回新建时核对后删掉），命令在本机任意目录跑，沙箱能镜像任意目录，看图能看本机任意位置的图。
+- **系统空间的装配表**：一个空间就是一张表——给哪几件能力、每件能力用哪个端口。能力本身不在本包，是 `@velaros-ai/velar` 里的能力单元：`velar:files`（本机文件，系统空间专用；项目空间用的是 `velar:project`）、`velar:images`、`velar:shell`、`velar:sandbox`，一件能力只有一份实现。本包只写系统空间的端口：路径可以是本机任意位置、`~` 展开到家目录，读写不问用户，写是逐个原子替换（撤回新建时核对后删掉），命令在本机任意目录跑，沙箱能镜像任意目录，看图能看本机任意位置的图。
 
 它不知道「项目」是什么，也不知道界面长什么样；项目空间是另一个包，两边互不引用。
 
@@ -51,10 +51,10 @@
 | 链路 | 怎么走 |
 | --- | --- |
 | 系统空间的一次调用 | 模型的程序调 `read(...)` / `run(...)` / `create(...)` → 能力端口按命名空间找到装配表里那一格 → `resolveCall` 给出这一次调用的审批通道、取消信号、会话 → 装成那件能力要的上下文（端口在构造时装好一次，上下文每次现装）→ 交给 `fileOperations` / `shellOperations` / `sandboxOperations` |
-| `velar:files` 的系统端口 | `locate`：`host.resolvePath`（`~` 与相对路径）→ 解开符号链接得到真实目标；`reviewRead`：凭证文件要问；`reviewWrite`：系统敏感路径（临时目录豁免）与凭证文件各要问一次；`commit`：按顺序写或删——写是补建上级目录后原子替换（同目录临时文件写完 fsync 再改名，权限位原样保留，核对 expected），删（撤回一次新建）是核对 expected 之后删掉；出错时在 context.applied 里点名已做的 |
+| `velar:files` 的系统端口 | `locate`：`host.resolvePath`（`~` 与相对路径）→ 解开符号链接得到真实目标；读写前不问用户；`commit`：按顺序写或删——写是补建上级目录后原子替换（同目录临时文件写完 fsync 再改名，权限位原样保留，核对 expected），删（撤回一次新建）是核对 expected 之后删掉；出错时在 context.applied 里点名已做的 |
 | `velar:images` 的系统端口 | `locate`：`host.resolvePath` → 解开符号链接得到真实目标；`resizeImage`：只在 macOS 上给，sips 先裁后缩、分两次调 |
 | `velar:shell` 的系统端口 | `resolveCwd`：`host.resolvePath`；`commandPolicy`：确认文案说在哪个目录（没给就是系统运行环境），风险分类 `system-command:dangerous`；跑命令、列后台任务、刷新环境、终止后台任务直接交给本地内核 |
-| `velar:sandbox` 的系统端口 | 建、看差量、落回、丢弃直接交给本地内核；`resolveSource`：`host.resolvePath`；`runInSandbox`：按沙箱 id 找到镜像根，交给 `host.runCommand`（cwd 落在镜像根里，内核就换成钉死在镜像里的执行器）；`applyPolicy`：落回到源目录本身，敏感路径与凭证文件在确认里点名，风险分类 `system-sandbox:apply` |
+| `velar:sandbox` 的系统端口 | 建、看差量、落回、丢弃直接交给本地内核；`resolveSource`：`host.resolvePath`；`runInSandbox`：按沙箱 id 找到镜像根，交给 `host.runCommand`（cwd 落在镜像根里，内核就换成钉死在镜像里的执行器）；落回不问用户 |
 | 本地内核跑命令 | `runCommand` 解析 cwd → cwd 在某个沙箱根里就交给那个沙箱的执行器，否则交给主执行器 `SystemCommandRunner.run` → 选 shell（挑定的种类本机没有就以 `VALIDATION` 拒绝、一个进程都不起；宿主给了 nativeCommand 就走原生 argv）→ 进程约束 → 受管进程启动 → 采集解码 → 超时 / 取消收敛 → 验证摘要 → 后台登记。每一步见 `SystemCommandRunner.ts` 类上方的说明 |
 | 本地内核的演练沙箱 | `SystemSandboxes`：镜像源目录（gitignore 忽略的目录按 ignored 处理，剪掉推送地址，指向源目录外的 `.git` 链接不进镜像）→ 清单落在沙箱目录旁 → 差量按清单算 → 落回先核对源目录、再暂存、再挪到位 → 丢弃只删基目录下正好一层 |
 
@@ -77,7 +77,7 @@
 - **受管子进程登记表**：整个进程一份（`systemProcessManager`），已结束的进程最多保留 512 条回执。
 - **能撤回的改动**：不归本包，在 `velar:files` 的文件操作里（`@velaros-ai/velar/files`）。
 - **shell 选择**：不缓存，每次运行前重新自检。本机可用的清单由 `inspectEnvironment().shells` 给出（第一个就是默认那个），宿主拿它写进每回合给模型的环境报告。
-- **审批记忆**：不归本模块。本模块只造确认请求，记不记、记多久由宿主的 `ApprovalPort` 决定。
+- **审批记忆**：不归本模块。危险命令的确认请求由 `velar:shell` 造，记不记、记多久由宿主的 `ApprovalPort` 决定。
 
 ## 生命周期
 
@@ -105,7 +105,7 @@
 
 - 不写能力本身：读写文件、跑命令、演练沙箱的操作各在自己的包里，本包只给系统空间的端口。
 - 不做项目感知：不发现项目、不读项目配置、不做开发环境诊断。空间之间的切换和协作是宿主的事。
-- 不做授权决策与权限记忆：只造确认请求，决定权在宿主。
+- 不做授权决策与权限记忆：读写文件、落回沙箱都不问人（ADR 0009）；危险命令的确认由 `velar:shell` 造，决定权在宿主。
 - 不提供 Electron 专属能力：通知、安装建议界面由产品壳扩展。
 - 不内置 Windows 的进程约束后端：需要受约束执行的 Windows 宿主自己注入 provider，否则明确失败。
 

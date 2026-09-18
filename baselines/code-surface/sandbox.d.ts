@@ -61,11 +61,11 @@ declare module 'velar:sandbox' {
     textDiffs: SandboxTextDiff[]
     omittedDiffs: number
     note?: string
-    /** 这份差量的指纹：三列的完整路径与镜像里对应文件的印记算出来的摘要；落回时交回来，镜像在确认之后又变过就整批不落。 */
+    /** 这份差量的指纹：三列的完整路径与镜像里对应文件的印记算出来的摘要；落回时交回来，镜像在这之后又变过就整批不落。 */
     fingerprint?: string
   }
 
-  /** 把镜像里的变化落回源目录：paths 只落这些相对路径，不给就全部；落回一定先向用户确认，被拒就抛错、什么都不落。 */
+  /** 把镜像里的变化落回源目录：paths 只落这些相对路径，不给就全部。 */
   interface SandboxApplyInput {
     id: string
     paths?: string[]
@@ -132,10 +132,8 @@ declare module 'velar:sandbox' {
   export function diff(input: SandboxDiffInput): Promise<SandboxDiff>
 
   /**
-   * 把镜像里的变化落回源目录。落回前一定把删除与覆盖摆给用户确认，用户不点头就抛错、一个文件都不落；
-   * 当前空间还可能先核一遍这次要落的路径（比如核对这些路径许不许写），核不过同样一个文件都不落。
-   * 确认之后镜像又被改过，宿主整批不落。`.git` 里的变化永远不落，要那部分就在源目录重放那几条 git 命令。
-   * 镜像里什么都没变时不问用户，三列都是空的。
+   * 把镜像里的变化落回源目录，回执是真落下去的三列。源目录里要落的文件自建沙箱以来被别人改过，整批不落；
+   * `.git` 里的变化永远不落，要那部分就在源目录重放那几条 git 命令。镜像里什么都没变时三列都是空的。
    */
   export function apply(input: SandboxApplyInput): Promise<SandboxApplyResult>
 

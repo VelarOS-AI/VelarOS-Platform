@@ -7,7 +7,6 @@ import { readFileSync } from 'node:fs'
 import { mkdir, realpath, unlink } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
-import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import type { CodeProgramResult, CodeSurfaceOutcome } from '@velaros-ai/code-surface'
 import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/code-surface'
 import { AppError } from '@velaros-ai/core/error'
@@ -15,7 +14,7 @@ import { textFileIo } from '@velaros-ai/text-files'
 import type { ExpectedBytes } from '@velaros-ai/text-files/contracts'
 import { TextFileErrorCodes } from '@velaros-ai/text-files/contracts'
 
-import type { FileConfirmation, FileOperationContext, FileSpacePort, FileWrite } from '../index'
+import type { FileOperationContext, FileSpacePort, FileWrite } from '../index'
 import { fileOperations } from '../index'
 
 /** 单元目录（packages/velar/files）。 */
@@ -54,23 +53,19 @@ async function writeFileBytes(write: FileWrite & { bytes: Buffer }): Promise<voi
 
 /**
  * 一个落在真磁盘上的空间：相对路径相对 root；`clamp` 为真时解开符号链接之后越出 root 就拒绝（回执里用相对 root 的写法）。
- * 审查按给的函数答（缺省什么都不问），每次确认交给 `answer`（缺省放行，抛错就是用户拒绝）；
- * 落盘一个一个来：bytes 是字节就原子替换，是 null 就核对后删掉，核对不上报 `VALIDATION`；
+ * 定位过的路径记在 `located`（操作方法交来的写法），落盘一个一个来：bytes 是字节就原子替换，是 null 就核对后删掉，核对不上报 `VALIDATION`；
  * `failOn` 命中的那一项模拟磁盘出错（`PLATFORM`），前面写进去的在错误的 `context.applied` 里点名。
  */
 export function diskSpace(options: {
   root: string
   clamp?: boolean
-  reviewRead?: (target: string) => FileConfirmation[]
-  reviewWrite?: (target: string) => FileConfirmation[]
-  answer?: (message: string) => void | Promise<void>
   failOn?: (target: string) => boolean
 }) {
-  const confirmations: string[] = []
   const commits: FileWrite[][] = []
-  const reviewed: Array<{ kind: 'read' | 'write'; target: string }> = []
+  const located: string[] = []
   const port: FileSpacePort = {
     locate: async (path) => {
+      located.push(path)
       const absolute = isAbsolute(path) ? resolve(path) : resolve(options.root, path)
       const target = await realTarget(absolute)
       if (options.clamp) {
@@ -78,14 +73,6 @@ export function diskSpace(options: {
         if (inside.startsWith('..') || isAbsolute(inside)) throw new AppError('PERMISSION', `${path} 在这个空间之外`)
       }
       return { path: options.clamp ? relative(options.root, absolute) : absolute, target, linked: target !== absolute }
-    },
-    reviewRead: async (target) => {
-      reviewed.push({ kind: 'read', target })
-      return options.reviewRead?.(target) ?? []
-    },
-    reviewWrite: async (target) => {
-      reviewed.push({ kind: 'write', target })
-      return options.reviewWrite?.(target) ?? []
     },
     commit: async (writes) => {
       commits.push([...writes])
@@ -104,20 +91,8 @@ export function diskSpace(options: {
       }
     },
   }
-  const approval: ApprovalPort = {
-    awaitConfirmation: async (message) => {
-      confirmations.push(message)
-      await options.answer?.(message)
-    },
-    awaitConfirmationDecision: async () => ({ approved: true, message: null, autoApproved: false }),
-  }
-  const context: FileOperationContext = { abortSignal: new AbortController().signal, files: port, approval }
-  return { port, context, confirmations, commits, reviewed }
-}
-
-/** 一个会问用户的审查结果：文案里是真实路径，选项是高风险。 */
-export function asking(target: string): FileConfirmation[] {
-  return [{ message: `要动 ${target} 吗？`, options: { approvalRisk: 'high' } }]
+  const context: FileOperationContext = { abortSignal: new AbortController().signal, files: port }
+  return { port, context, commits, located }
 }
 
 /** 等一个调用失败，交出它的码、说明与上下文。 */

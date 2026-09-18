@@ -10,16 +10,9 @@ import type { CorePolicy } from '../../types/policy.js'
 import type { StoredTransaction } from '../../types/transaction.js'
 import type { ProjectValidationPolicy, ProjectValidationProviders, ProjectValidationTransaction } from '../../types/validation.js'
 
-/** 复制并冻结一份策略给校验器：名单与审批设置都复制后冻结，改不到内核的策略。 */
+/** 复制并冻结一份策略给校验器，改不到内核的策略。 */
 export function validationPolicyView(policy: CorePolicy): ProjectValidationPolicy {
-  return Object.freeze({
-    ...policy,
-    approval: Object.freeze({ ...policy.approval }),
-    generatedFiles: Object.freeze([...policy.generatedFiles]),
-    protectedFiles: Object.freeze([...policy.protectedFiles]),
-    readDeny: Object.freeze([...policy.readDeny]),
-    writeDeny: Object.freeze([...policy.writeDeny]),
-  })
+  return Object.freeze({ ...policy })
 }
 
 /** 把一个宿主能力包成只读代理：读属性照常（方法绑回原对象），写、删、定义属性一律失败；没给能力返回 undefined。 */
@@ -45,14 +38,11 @@ export function validationProvidersView(
   providers: ProjectProviders & { command: CommandProvider }
 ): ProjectValidationProviders {
   return Object.freeze({
-    approval: readonlyProvider(providers.approval),
     codeIntelligence: readonlyProvider(providers.codeIntelligence),
     command: readonlyProvider(providers.command)!,
     context: readonlyProvider(providers.context),
     fileFilter: readonlyProvider(providers.fileFilter),
     logger: readonlyProvider(providers.logger),
-    policy: readonlyProvider(providers.policy),
-    secretRedaction: readonlyProvider(providers.secretRedaction),
     telemetry: readonlyProvider(providers.telemetry),
   })
 }

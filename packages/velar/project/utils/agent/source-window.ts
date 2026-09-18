@@ -36,19 +36,19 @@ export function projectSourceLines(content: string): ProjectSourceLine[] {
 
 /**
  * 能拿来签发编辑引用的整份原文：读的就是整个文件时就是读到的正文，只读了一段时钉住同一个版本再整份读一次。
- * 被遮住过、读不全、读的时候文件变了就拿不到；超过可编辑的大小的也不给，另外说一声，好给只读窗口一句说明。
+ * 读不全、读的时候文件变了就拿不到；超过可编辑的大小的也不给，另外说一声，好给只读窗口一句说明。
  */
 async function editableOriginal(ctx: ProjectOperationContext, file: AgentProjectReadResult, content: string, wholeFile: boolean): Promise<{ original?: string; beyondEditableSize?: boolean }> {
-  if (file.redacted || !file.snapshot.revision) return {}
+  if (!file.snapshot.revision) return {}
   let full: Optional<string>
   if (wholeFile && !file.truncated) full = content
   else {
     try {
       const kernel = await ctx.project.kernel()
       const read = await kernel.read({ path: file.snapshot.path, baseRevision: file.snapshot.revision, maxChars: ProjectTuning.agent.fullReadChars })
-      if (!read.redacted && !read.truncated && !read.hasMore && isString(read.content)) full = read.content
+      if (!read.truncated && !read.hasMore && isString(read.content)) full = read.content
     } catch (error) {
-      // 再读一次时文件变了或被拒：已经读到的照样给，只是不授予编辑范围。
+      // 再读一次时文件变了：已经读到的照样给，只是不授予编辑范围。
       log.debug('整份原文读不到，窗口只读', { error: String(error) })
     }
   }
@@ -82,14 +82,13 @@ function wcLineCount(fullLines: readonly ProjectSourceLine[]): number {
 
 /**
  * 把一次读取排成候选窗口：拿得到可编辑的整份原文时按原文定位每一行、落一份源码快照（编辑引用等 `finalizeFileWindows` 按实际交出去的行签发）；
- * 拿不到（遮住过、超过可编辑的大小、读的时候文件变了）就给只读窗口。requested 是请求的行范围，不给就是读了整个文件。
+ * 拿不到（超过可编辑的大小、读的时候文件变了）就给只读窗口。requested 是请求的行范围，不给就是读了整个文件。
  * 交进来的读取要是读全了的：调用方先挡掉 truncated。
  */
 export async function presentFileRead(ctx: ProjectOperationContext, file: AgentProjectReadResult, requested?: LineSpan): Promise<ProjectSourceWindow> {
   const content = file.content ?? ''
   const result: ProjectSourceWindow = { kind: 'project-source-window', path: file.snapshot.path, revision: file.snapshot.revision, lines: [] }
   if (isNumber(file.totalLines)) result.totalLines = file.totalLines
-  if (isTrue(file.redacted)) result.redacted = true
   if (isString(file.note)) result.note = file.note
   if (file.snapshot.isDirectory || file.snapshot.isBinary || !file.snapshot.exists) return result
   // 起始行在文件外时内核不回 range：起始行按请求的算。
@@ -115,7 +114,6 @@ export async function presentFileRead(ctx: ProjectOperationContext, file: AgentP
     result.viewSource = saveFileSource(ctx, { path: file.snapshot.path, revision: file.snapshot.revision!, content: original })
     countLikeWc(result, fullLines)
   } else {
-    // 只读降级也用于脱敏过的内容。
     readOnlyLines(result, content, startLine, file.totalLines)
     if (isTrue(beyondEditableSize)) {
       result.referenceUnavailable = `文件超过可编辑的上限（${Math.floor(ProjectPolicyDefaults.maxFileSizeToReadBytes / 1024 / 1024)} MiB），只给只读窗口：用命令处理它，或者先把文件拆小。`
@@ -160,7 +158,7 @@ export async function presentFileSpans(ctx: ProjectOperationContext, path: strin
   return window
 }
 
-/** 按窗口里真有的行算出可见范围：行文本对不上原文的（被遮住的）不算，相邻的行并成一段。 */
+/** 按窗口里真有的行算出可见范围：行文本对不上原文的不算，相邻的行并成一段。 */
 function visibleCoverage(sourceContent: string, lines: ReadonlyArray<[number, string]>): ProjectVisibleCoverage[] {
   const sourceLines = projectSourceLines(sourceContent)
   const coverage: ProjectVisibleCoverage[] = []
@@ -176,10 +174,10 @@ function visibleCoverage(sourceContent: string, lines: ReadonlyArray<[number, st
   return coverage
 }
 
-/** 给一个候选窗口签发 fileRef：源码快照对不上窗口（路径、版本）或窗口被遮住时不签，只读给出。 */
+/** 给一个候选窗口签发 fileRef：源码快照对不上窗口（路径、版本）时不签，只读给出。 */
 function signWindow(ctx: ProjectOperationContext, value: ProjectSourceWindow): ProjectSourceWindow {
   const { viewSource, ...result } = value
-  if (!isString(viewSource) || isTrue(result.redacted)) return result
+  if (!isString(viewSource)) return result
   try {
     const source = resolveFileSource(ctx, viewSource)
     if (source.path !== result.path || source.revision !== result.revision) return result
@@ -243,10 +241,9 @@ export function toProjectWindow(window: ProjectSourceWindow): ProjectWindow {
   if (isString(window.revision)) shaped.revision = window.revision
   if (isString(window.fileRef)) shaped.fileRef = window.fileRef
   if (isNumber(window.totalLines)) shaped.totalLines = window.totalLines
-  if (isTrue(window.redacted)) shaped.redacted = true
   if (!isString(window.fileRef)) shaped.editable = false
   const notes = [window.referenceUnavailable, window.note].filter(isString)
-  if (!isString(window.fileRef) && isEmpty(notes)) notes.push(isTrue(window.redacted) ? '有内容被遮住了，这段只能看、不能改。' : '这段只能看、不能改：重新 read 拿可编辑的窗口。')
+  if (!isString(window.fileRef) && isEmpty(notes)) notes.push('这段只能看、不能改：重新 read 拿可编辑的窗口。')
   if (!isEmpty(notes)) shaped.note = notes.join(' ')
   return shaped
 }

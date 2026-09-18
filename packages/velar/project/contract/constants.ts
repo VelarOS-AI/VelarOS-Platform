@@ -1,5 +1,5 @@
 /**
- * 常量表：版本、错误原因、脱敏占位符、读写与代码查询的公开上限、内核缺省策略、宿主代码查询的语言服务动作。
+ * 常量表：版本、错误原因、读写与代码查询的公开上限、内核缺省策略、宿主代码查询的语言服务动作。
  * 不 import 任何东西，浏览器和渲染进程都能用（从 `@velaros-ai/velar/project/contracts` 取）。
  */
 
@@ -7,17 +7,11 @@
 export const ProjectPackageVersion = '0.2.0' as const
 
 /**
- * 脱敏留下的占位符。读到的正文里像密钥的片段被换成它；写回去时看到这个字样（原文里本来没有）就整批拒绝——
- * 那会把真实的密钥覆盖掉。遮盖的实现与这道拦截用的是同一个常量。
- */
-export const ProjectRedactionMarker = '[REDACTED]' as const
-
-/**
  * 项目的两件工具与内核对外承诺的错误原因：`ProjectError` 的 reason，模型和宿主按它分支处理。码本身是契约，不得改名；
  * 新的失败形态先在这里加一项，不要拿 INVALID_INPUT 兜底。
  */
 export const ProjectErrorCodes = Object.freeze({
-  /** 路径出了项目（含经符号链接指到项目外），或被项目策略、授权、脱敏规则拒绝。 */
+  /** 路径出了项目（含经符号链接指到项目外）。 */
   permissionDenied: 'PERMISSION_DENIED',
   /** 文件（或列举出的目录）在读取之后被改过，手里的版本已经过期；重读、重列再来。 */
   baseRevisionMismatch: 'BASE_REVISION_MISMATCH',
@@ -31,10 +25,6 @@ export const ProjectErrorCodes = Object.freeze({
   patchApplyError: 'PATCH_APPLY_ERROR',
   /** 超出允许的范围：range 超出 fileRef 实际显示的范围、符号引用不属于当前项目、一个事务的文件数或行数超过预算，或者一次读、列、搜的量超过守内存的上限。 */
   scopeViolation: 'SCOPE_VIOLATION',
-  /** 目标在项目策略的受保护文件里。 */
-  protectedFile: 'PROTECTED_FILE',
-  /** 目标匹配项目策略的生成文件；改生成器的输入再重新生成。 */
-  generatedFile: 'GENERATED_FILE',
   /** 校验器没通过，改动没有提交。 */
   validationFailed: 'VALIDATION_FAILED',
   /** 提交或撤销时发现文件被外部改过，拒绝覆盖。 */
@@ -106,8 +96,8 @@ export const ProjectTransactionLimits = Object.freeze({
 })
 
 /**
- * 内核缺省策略：宿主建内核时不给 `corePolicy` 就用这些值，给了就按字段覆盖（`approval` 按子字段合并）。
- * 取向保守：整文件读取有上限、编辑要带读取时的版本、事务有规模预算、回滚恢复不了原文的写入要人审。README 写的事务预算就是这里的数。
+ * 内核缺省策略：宿主建内核时不给 `corePolicy` 就用这些值，给了就按字段覆盖。
+ * 只管正确性与守内存：整文件读取有上限、编辑要带读取时的版本、事务有规模预算。没有读写名单，也没有要人审的写入。README 写的事务预算就是这里的数。
  */
 export const ProjectPolicyDefaults = Object.freeze({
   /** 编辑必须带读取时拿到的版本（baseRevision），证明是在最新内容上改的。 */
@@ -132,23 +122,6 @@ export const ProjectPolicyDefaults = Object.freeze({
   maxChangedLinesPerTransaction: 50_000,
   /** 批处理同时最多跑几个任务；调用方给的并发只能比它小。 */
   maxConcurrentBatchTasks: 8,
-  /** 不许读的路径 glob。 */
-  readDeny: Object.freeze([]),
-  /**
-   * 不许写的路径 glob。缺省挡住版本库内部：`.git` 里的 hooks 与 config（`core.fsmonitor`、`core.pager` 这些）一旦被改，
-   * 内核自己后续的 git 调用（`git add -N`、`git check-ignore`）就会执行写进去的命令——普通一次编辑就变成任意命令执行。
-   * 要提交、切分支、改仓库配置，用命令跑 git（`velar:shell` 的 run）。
-   */
-  writeDeny: Object.freeze(['.git', '.git/**', '**/.git', '**/.git/**']),
-  /** 能读、但没有策略明确允许时不改的文件 glob。 */
-  protectedFiles: Object.freeze([]),
-  /** 当作生成文件的 glob：改生成器的输入再重新生成，不直接改。 */
-  generatedFiles: Object.freeze(['**/*.generated.*', '**/*.gen.*', '**/generated/**']),
-  /** 审批。 */
-  approval: Object.freeze({
-    /** 回滚恢复不了原文的高风险写入，必须经宿主审批。 */
-    requireForHighRiskPatch: true,
-  }),
 } as const)
 
 /** 宿主代码查询里由语言服务执行的七个动作；其余动作属于代码索引，宿主有代码图谱时执行。 */

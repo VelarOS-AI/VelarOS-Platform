@@ -1,22 +1,17 @@
 /**
  * 路径身份的回归：同一个物理文件的项目内别名（符号链接、大小写变体）不能当成两个文件，
- * 策略名单与宿主过滤器按身份判、按字面写法绕不过去，沙箱的源出不了项目，`.git` 缺省不许写。
+ * 宿主的列举过滤器按身份判（经链接的别名也列不出来）、点名读写从不问它，沙箱的源出不了项目，内核没有读写名单。
  */
 
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { platform } from 'node:process'
 
 import { describe, expect, test } from 'bun:test'
 
 import { createProjectKernel, type EditIntent, type ProjectKernel } from '../index'
-import type { CorePolicy } from '../types/policy'
 import type { FileFilterInput } from '../types/provider'
 import { insideProject } from '../utils/agent/ports'
-
-/** 盘区不区分大小写（macOS、Windows）：`.ENV` 和 `.env` 是同一个文件。 */
-const caseInsensitiveVolume = platform === 'darwin' || platform === 'win32'
 
 /** 建一个临时项目根，跑完删掉。 */
 async function withRoot(
@@ -88,48 +83,30 @@ describe('同一个文件的项目内别名', () => {
   })
 })
 
-describe('拒读拒写名单按路径身份判', () => {
-  const policy: Partial<CorePolicy> = { readDeny: ['.env', 'secrets/**'], writeDeny: ['.env'] }
+describe('宿主的列举过滤器只管列举', () => {
+  /** 宿主不想列 secrets 目录：它本身和它下面的都不列。 */
+  const hidden = (input: FileFilterInput): boolean => input.path !== 'secrets' && !input.path.startsWith('secrets/')
 
-  test('经项目内的符号链接读被拒的文件同样被拒', async () => {
+  test('列举与搜索略过它遮住的条目，经项目内链接的别名也略过；点名读照常读得到', async () => {
     await withRoot(
-      { '.env': 'API_KEY=sk-live-SECRET\n', 'secrets/prod.key': 'PRIVATE-KEY\n' },
+      { 'secrets/prod.key': 'PRIVATE-KEY\n', 'src/a.ts': 'export const a = 1\n' },
       async (root) => {
-        const project = await createProjectKernel({ root, corePolicy: policy })
-        await expect(project.read({ path: 'secrets/prod.key' })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
-        await expect(project.read({ path: 'cfg/prod.key' })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
-        await expect(project.read({ path: 'env.sample' })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
-      },
-      { cfg: 'secrets', 'env.sample': '.env' },
-    )
-  })
-
-  test('大小写不敏感的盘上大小写变体同样被拒', async () => {
-    if (!caseInsensitiveVolume) return
-    await withRoot({ '.env': 'API_KEY=sk-live-SECRET\n', 'secrets/prod.key': 'PRIVATE-KEY\n' }, async (root) => {
-      const project = await createProjectKernel({ root, corePolicy: policy })
-      await expect(project.read({ path: '.ENV' })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
-      await expect(project.read({ path: 'SECRETS/prod.key' })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
-    })
-  })
-
-  test('宿主的可见性过滤器遮住的文件，经链接与大小写变体也读不出来', async () => {
-    await withRoot(
-      { 'secrets/prod.key': 'PRIVATE-KEY\n' },
-      async (root) => {
-        const hidden = (input: FileFilterInput): boolean => !input.path.startsWith('secrets/')
-        const project = await createProjectKernel({
-          root,
-          providers: { fileFilter: { shouldInclude: hidden } },
-        })
-        await expect(project.read({ path: 'secrets/prod.key' })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
-        await expect(project.read({ path: 'cfg/prod.key' })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
+        const project = await createProjectKernel({ root, providers: { fileFilter: { shouldInclude: hidden } } })
+        const listed = (await project.listFiles({ recursive: true })).map((entry) => entry.path)
+        expect(listed).toContain('src/a.ts')
+        expect(listed.some((path) => path.startsWith('secrets') || path.startsWith('cfg'))).toBe(false)
+        const found = await project.search({ query: 'PRIVATE-KEY', useRipgrep: false })
+        expect(found.hits).toEqual([])
+        expect((await project.read({ path: 'secrets/prod.key' })).content).toBe('PRIVATE-KEY\n')
+        expect((await project.read({ path: 'cfg/prod.key' })).content).toBe('PRIVATE-KEY\n')
+        // 点名列那个目录：点名的起点下面不问过滤器。
+        expect((await project.listFiles({ path: 'secrets' })).map((entry) => entry.path)).toEqual(['secrets/prod.key'])
       },
       { cfg: 'secrets' },
     )
   })
 
-  test('没有 deny 名单时不会误拒项目内的普通链接', async () => {
+  test('没有过滤器时不会误拒项目内的普通链接', async () => {
     await withRoot(
       { 'src/a.ts': 'export const a = 1\n' },
       async (root) => {
@@ -163,29 +140,16 @@ describe('演练沙箱的源目录', () => {
   })
 })
 
-describe('版本库内部缺省不许写', () => {
-  test('改 .git 里的配置与钩子一律被拒，并说清楚该用命令跑 git（velar:shell 的 run）', async () => {
-    await withRoot({ '.git/config': '[core]\n', 'pkg/.git/config': '[core]\n' }, async (root) => {
+describe('内核没有读写名单', () => {
+  test('.git 里的文件、.env 这类照常能读能写：只受根内约束', async () => {
+    await withRoot({ '.git/info/exclude': '# local\n', '.env': 'API_KEY=local\n' }, async (root) => {
       const project = await createProjectKernel({ root })
-      for (const path of ['.git/config', '.git/hooks/pre-commit', 'pkg/.git/config']) {
-        const transaction = await project.prepareEdit({
-          operations: [{ operation: { type: 'create_file', path, content: 'x\n', overwrite: true } }],
-        })
-        await expect(project.applyEdit({ transactionId: transaction.transactionId })).rejects.toMatchObject({
-          reason: 'PERMISSION_DENIED',
-          suggestedNextAction: expect.stringContaining('velar:shell'),
-        })
-      }
-      expect(await readFile(join(root, '.git/config'), 'utf8')).toBe('[core]\n')
-      // 读不受影响：缺省只挡写。
-      expect((await project.read({ path: '.git/config' })).content).toBe('[core]\n')
-    })
-  })
-
-  test('缺省写策略就是合同常量表里那四条', async () => {
-    await withRoot({ 'a.ts': 'a\n' }, async (root) => {
-      const project = await createProjectKernel({ root })
-      expect(project.policy.writeDeny).toEqual(['.git', '.git/**', '**/.git', '**/.git/**'])
+      expect((await project.read({ path: '.env' })).content).toBe('API_KEY=local\n')
+      const transaction = await project.prepareEdit({
+        operations: [{ operation: { type: 'create_file', path: '.git/info/exclude', content: '# local\nscratch/\n', overwrite: true } }],
+      })
+      await project.applyEdit({ transactionId: transaction.transactionId })
+      expect(await readFile(join(root, '.git/info/exclude'), 'utf8')).toBe('# local\nscratch/\n')
     })
   })
 })

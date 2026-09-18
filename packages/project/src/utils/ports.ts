@@ -1,22 +1,18 @@
 /**
  * 项目空间给三件共用能力装的端口里不带状态的那部分：`velar:images` 与 `velar:sandbox` 的端口按这一次调用的上下文现装，
- * 命令输出脱敏、路径钳在项目内、沙箱落回前的写治理核对、项目内核的拒绝翻成通用码。
- * `velar:shell` 的端口要用项目资源门（带状态），留在 `impl/ProjectSpace.ts`。
+ * 路径钳在项目内、项目内核的拒绝翻成通用码。`velar:shell` 的端口要用项目资源门（带状态），留在 `impl/ProjectSpace.ts`。
  */
 
 import { resolve } from 'node:path'
 
-import { isEmpty, isNull, isString } from '@velaros-ai/core'
+import { isNull, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import { currentPlatform } from '@velaros-ai/platform'
 import type { ImageSpacePort } from '@velaros-ai/velar/images'
 import type { SandboxSurfacePort } from '@velaros-ai/velar/sandbox'
-import type { ShellCommandResult } from '@velaros-ai/velar/shell/contracts'
 
 import type { ProjectCallContext } from '../contract/requires.js'
-
-import { ProjectSpaceTuning } from './tuning.js'
 
 /** 项目内核的原因码对应到通用码：看图说的是跨空间共用的那一套码（PERMISSION、NOT_FOUND……）。 */
 const AppCodeOfReason: Readonly<Record<string, string>> = Object.freeze({
@@ -68,34 +64,7 @@ async function projectRelativePath(ctx: ProjectCallContext, requested: string): 
 }
 
 /**
- * 命令输出交给程序之前过一遍项目的脱敏后端：跑命令与在镜像里跑命令用同一条路，
- * 不然「在沙箱里 cat 一个私钥」就成了绕开项目读取治理的后门。宿主没有脱敏后端时原样返回。
- */
-export async function redactCommandOutput<T>(ctx: ProjectCallContext, result: T): Promise<T> {
-  const output = result as Partial<ShellCommandResult>
-  if (!isString(output?.stdout) && !isString(output?.stderr)) return result
-  const kernel = await ctx.project.kernel()
-  const stdout = isString(output.stdout) ? (await kernel.redactText({ content: output.stdout })).content : output.stdout
-  const stderr = isString(output.stderr) ? (await kernel.redactText({ content: output.stderr })).content : output.stderr
-  return { ...result, stdout, stderr }
-}
-
-/**
- * 落回前把三列里的每条路径过一遍项目的写授权（越界、writeDeny、宿主可见范围、受保护文件、生成文件）。
- * 有不许写的就在问用户之前整批拒绝：沙箱落回不经事务链，这里不拦就等于给了一条绕开写治理的路。
- */
-async function assertSandboxApplyWritable(ctx: ProjectCallContext, paths: readonly string[]): Promise<void> {
-  if (isEmpty(paths)) return
-  const kernel = await ctx.project.kernel()
-  const blocked = (await kernel.authorizeWrites(paths)).filter((decision) => !decision.allowed)
-  if (isEmpty(blocked)) return
-  const listed = blocked.slice(0, ProjectSpaceTuning.reportedBlockedPaths).map((decision) => `${decision.path}（${decision.reason}）`)
-  const rest = blocked.length > listed.length ? `，另有 ${blocked.length - listed.length} 条` : ''
-  throw new AppError('PERMISSION', `这些路径项目不许写，整批没落：${listed.join('、')}${rest}。用 paths 点名要落的文件、把它们去掉再 apply`)
-}
-
-/**
- * `velar:images` 的项目端口：只看项目里的图（经符号链接指到项目外的也不行），而且先过项目的读取策略（拒读名单、宿主可见范围）；
+ * `velar:images` 的项目端口：只看项目里的图（经符号链接指到项目外的也不行）；
  * 裁图缩图用宿主给的能力，宿主没给就明说做不了。
  */
 export function projectImagePort(ctx: ProjectCallContext): ImageSpacePort {
@@ -114,8 +83,7 @@ export function projectImagePort(ctx: ProjectCallContext): ImageSpacePort {
 }
 
 /**
- * `velar:sandbox` 的项目端口：只镜像项目内的目录，镜像里的命令走宿主的沙箱执行器（出不了镜像），
- * 落回前先把每条路径过一遍项目的写授权、再过一次项目的修改授权——两件都排在问用户之前。
+ * `velar:sandbox` 的项目端口：只镜像项目内的目录，镜像里的命令走宿主的沙箱执行器（出不了镜像）；落回不问人。
  */
 export function projectSandboxPort(ctx: ProjectCallContext): SandboxSurfacePort {
   const port = () => {
@@ -134,18 +102,7 @@ export function projectSandboxPort(ctx: ProjectCallContext): SandboxSurfacePort 
     resolveSource: (requested) => source(requested),
     runInSandbox: async (options, abortSignal) => {
       const result = await port().runInSandbox(options, abortSignal ?? ctx.abortSignal)
-      const shaped = await redactCommandOutput(ctx, result)
-      return { exitCode: shaped.exitCode, stdout: shaped.stdout, stderr: shaped.stderr, durationMs: shaped.durationMs, timedOut: shaped.timedOut, truncated: shaped.truncated, success: shaped.success }
+      return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, durationMs: result.durationMs, timedOut: result.timedOut, truncated: result.truncated, success: result.success }
     },
-    reviewApply: async (selection) => {
-      await assertSandboxApplyWritable(ctx, [...selection.created, ...selection.modified, ...selection.deleted])
-      const decision = await ctx.project.prepareMutation({ operation: '把演练沙箱的改动落回项目' })
-      if (!decision.approved) throw new AppError('PERMISSION', decision.message)
-    },
-    applyPolicy: () => ({
-      targetLabel: '当前项目',
-      closingNote: '删除和覆盖不经过项目的撤销账本；落回前会核对这些文件自建沙箱以来没被别人改过，改过就整批不落。',
-      riskScope: 'project-sandbox:apply',
-    }),
   }
 }

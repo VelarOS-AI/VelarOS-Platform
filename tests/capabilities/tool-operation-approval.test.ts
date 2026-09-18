@@ -63,9 +63,7 @@ function spaces(approved: boolean) {
       project: {
         getRootPath: () => workspaceRoot,
         runCommand: run,
-        prepareMutation: async () => ({ approved: true, message: 'allowed' }),
-        // 项目里的命令输出要过项目的脱敏后端，所以这里给一个只做脱敏的内核替身。
-        kernel: async () => ({ redactText: async ({ content }: { content: string }) => ({ content, redacted: false }) }) as never,
+        kernel: unused,
         listBackgroundTasks: unused,
         refreshShellEnvironment: unused,
         terminateBackgroundTask: unused,

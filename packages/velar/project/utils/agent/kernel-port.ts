@@ -24,7 +24,6 @@ export function projectAgentReadResult(filePath: string, result: AgentProjectKer
       revision: toOptional(result.snapshot.revision),
     },
     content: result.content,
-    redacted: result.redacted,
     range: result.range,
     totalLines: result.totalLines,
     truncated: result.truncated,

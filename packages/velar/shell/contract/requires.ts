@@ -12,7 +12,6 @@ import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import type {
   ShellBackgroundTaskQueryOptions,
   ShellBackgroundTaskRecord,
-  ShellCommandPlan,
   ShellCommandResult,
   ShellCommandSpacePolicy,
   ShellEnvironmentRefreshResult,
@@ -32,11 +31,6 @@ export interface ShellSpacePort {
   resolveCwd: (cwd?: string) => Promise<string>
   /** 这个空间对一条命令的口径：确认文案里「在哪儿执行」、危险命令审批的风险分类。`cwd` 是模型给的原样（可能没给）。 */
   commandPolicy: (cwd?: string) => ShellCommandSpacePolicy
-  /**
-   * 这个空间在执行之前还要过的关（可选）：排在危险命令的确认之后、起进程之前。
-   * 项目空间在这里过「会改项目的命令」的修改授权；不许跑就抛（`PERMISSION`，说明原样交给模型），一个进程都不起。
-   */
-  reviewCommand?: (input: { command: string; plan: ShellCommandPlan; cwd: string }) => Promise<void>
   /**
    * 跑一条命令：前台等它结束并返回输出；background 为真时登记成后台任务后立即返回。命令自己失败不抛错，如实写进结果；
    * 不能或不允许跑后台任务时以 `PERMISSION` 拒绝。`allowDangerous` 为真表示这条命令被判为危险、用户已经亲自确认过，宿主不必再问。
@@ -65,7 +59,7 @@ export interface ShellOperationContext {
   abortSignal: AbortSignal
   /** 这个空间的端口：作用域、口径、执行都经它，操作类自己不起进程。 */
   shell: ShellSpacePort
-  /** 审批端口（来自 agent 包）：要确认的命令经它问用户；无人值守的宿主给默认拒绝的端口。 */
+  /** 审批端口（来自 agent 包）：危险命令经它问用户；无人值守的宿主给默认拒绝的端口。 */
   approval: ApprovalPort
   /** 本次调用所属会话。给了，后台任务就按会话登记与核对归属，别的会话列不到；不给就不隔离。 */
   sessionId?: string

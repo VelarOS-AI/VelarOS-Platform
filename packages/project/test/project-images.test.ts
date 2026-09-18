@@ -57,25 +57,24 @@ describe('项目空间的 velar:images', () => {
     expect(attachments).toEqual([])
   })
 
-  test('出了项目（含经符号链接）、读取策略不许读的图看不了；一批里只有那几张失败，全失败才整个报错', async () => {
+  test('出了项目（含经符号链接）的图看不了，项目里的都看得了；一批里只有那几张失败，全失败才整个报错', async () => {
     await writeFile(join(root, 'img.png'), Pixel)
     await writeFile(join(root, 'secret.png'), Pixel)
     await writeFile(join(outside, 'far.png'), Pixel)
     await symlink(join(outside, 'far.png'), join(root, 'link.png'))
-    const { call, attachments } = await projectSpaceFixture({ root, corePolicy: { readDeny: ['secret.png'] } })
+    const { call, attachments } = await projectSpaceFixture({ root })
     const result = await call('images', 'view', { files: [
-      { path: 'img.png' }, { path: join(outside, 'far.png') }, { path: 'link.png' }, { path: 'secret.png' }, { path: 'missing.png' },
+      { path: 'img.png' }, { path: 'secret.png' }, { path: join(outside, 'far.png') }, { path: 'link.png' }, { path: 'missing.png' },
     ] })
-    expect(result.files[0]).toMatchObject({ path: 'img.png', width: 1 })
-    expect(result.files.slice(1).map((file: { path: string; error?: { code: string } }) => [file.path, file.error?.code])).toEqual([
+    expect(result.files.slice(0, 2)).toMatchObject([{ path: 'img.png', width: 1 }, { path: 'secret.png', width: 1 }])
+    expect(result.files.slice(2).map((file: { path: string; error?: { code: string } }) => [file.path, file.error?.code])).toEqual([
       [join(outside, 'far.png'), 'PERMISSION'],
       ['link.png', 'PERMISSION'],
-      ['secret.png', 'PERMISSION'],
       ['missing.png', 'NOT_FOUND'],
     ])
-    expect(attachments).toHaveLength(1)
-    const denied = await failureOf(call('images', 'view', { files: [{ path: 'secret.png' }] }))
-    expect(denied.code).toBe('PERMISSION')
+    expect(attachments).toHaveLength(2)
+    const outsideOnly = await failureOf(call('images', 'view', { files: [{ path: 'link.png' }] }))
+    expect(outsideOnly.code).toBe('PERMISSION')
   })
 
   test('超出上限的图由宿主来缩；宿主缩不了就明说，不交一张超限的图', async () => {

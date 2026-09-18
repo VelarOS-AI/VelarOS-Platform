@@ -12,7 +12,7 @@ import type { ProjectOperationContext } from '../../contract/requires.js'
 import { ProjectError } from '../errors.js'
 import { resolveInsideProject } from '../files/path-containment.js'
 
-/** 端口、审批抛的通用码对应到哪个原因码：项目的能力只用一套码。 */
+/** 空间端口抛的通用码对应到哪个原因码：项目的能力只用一套码。 */
 const ReasonOfAppCode: Readonly<Record<string, string>> = Object.freeze({
   PERMISSION: 'PERMISSION_DENIED',
   VALIDATION: 'INVALID_INPUT',
@@ -74,7 +74,7 @@ function describeProjectFailure(error: ProjectError): string {
 
 /**
  * 把失败翻成交给程序的样子：代码面只把 error.code 与 error.message 交出去，所以项目错误的 `reason` 当错误码（程序按它分支），
- * details 里的位置、候选、诊断与下一步都写进 message——不写进去就等于没说；端口与审批抛的通用码换成对应的原因码，别的原样抛回去。
+ * details 里的位置、候选、诊断与下一步都写进 message——不写进去就等于没说；空间端口抛的通用码换成对应的原因码，别的原样抛回去。
  */
 export function projectFailure(error: unknown): unknown {
   if (error instanceof ProjectError) return new AppError(error.reason, describeProjectFailure(error), error)

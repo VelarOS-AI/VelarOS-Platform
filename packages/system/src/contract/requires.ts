@@ -44,7 +44,7 @@ export interface SystemCallContext {
   abortSignal: AbortSignal
   /** 本次调用所属会话。给了，后台任务就按会话登记与核对归属，别的会话列不到也停不了；不给就不隔离。 */
   sessionId?: string
-  /** 审批端口（来自 agent 包）：写敏感路径、碰凭证文件、跑危险命令、落回沙箱前经它向用户确认。 */
+  /** 审批端口（来自 agent 包）：跑危险命令（本机与沙箱镜像里）前经它向用户确认。 */
   approval: ApprovalPort
   /** 把一张图交给模型看；宿主收着，在这次结果后面按顺序放出来。不给就用不了 view。 */
   attachImage?: (image: ImageAttachment) => void

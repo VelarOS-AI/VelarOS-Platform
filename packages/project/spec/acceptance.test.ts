@@ -36,70 +36,57 @@ describe('装配', () => {
 })
 
 describe('共用能力的项目端口', () => {
-  test('INV-2 危险命令每次都由用户亲自确认；被拒一个进程都不起；会改项目的命令先过修改授权，只读命令不打扰', async () => {
+  test('INV-2 危险命令每次都由用户亲自确认；被拒一个进程都不起；别的命令（会改项目的也一样）不问，直接跑', async () => {
     const denied = await createProjectHarness(root, { approve: false })
     expect((await failureOf(denied.call('shell', 'run', { command: 'rm -rf ./dist' }))).code).toBe('PERMISSION')
     expect(denied.commands).toEqual([])
     expect(denied.confirmations[0]?.options).toMatchObject({ approvalRisk: 'high', requireManualApproval: true, rememberRiskScope: false, riskScope: 'project-command:dangerous' })
 
-    const unauthorized = await createProjectHarness(root, { authorizeMutation: false })
-    expect((await failureOf(unauthorized.call('shell', 'run', { command: 'touch created.txt' }))).code).toBe('PERMISSION')
-    expect(unauthorized.mutations).toHaveLength(1)
-    expect(unauthorized.commands).toEqual([])
-
-    const readOnly = await createProjectHarness(root, { authorizeMutation: false })
-    await readOnly.call('shell', 'run', { command: 'ls' })
-    expect(readOnly.mutations).toEqual([])
-    expect(readOnly.commands).toEqual(['ls'])
+    const writes = await createProjectHarness(root, { approve: false })
+    await writes.call('shell', 'run', { command: 'touch created.txt' })
+    await writes.call('shell', 'run', { command: 'ls' })
+    expect(writes.confirmations).toEqual([])
+    expect(writes.commands).toEqual(['touch created.txt', 'ls'])
   })
 
   test('INV-3 命令的工作目录与沙箱的源目录钳在项目内：出了项目在问用户之前就拒绝', async () => {
     const outside = await createProjectHarness(root)
     expect((await failureOf(outside.call('shell', 'run', { command: 'ls', cwd: '..' }))).code).toBe('PERMISSION')
     expect(outside.confirmations).toEqual([])
-    expect(outside.mutations).toEqual([])
     expect(outside.commands).toEqual([])
 
     const sandboxed = await createProjectHarness(root, { sandbox: { createSandbox: async () => { throw new Error('不该建到这里') } } as never })
     expect((await failureOf(sandboxed.call('sandbox', 'create', { source: '..' }))).code).toBe('PERMISSION')
   })
 
-  test('INV-4 演练沙箱落回过同一套写治理：有一条不许写就在问用户之前整批拒绝，一个文件都不落', async () => {
+  test('INV-4 演练沙箱落回不问人、不按名单拦：点名的路径核过就交给宿主落回', async () => {
     const applied: unknown[] = []
     const sandbox = {
       createSandbox: async () => ({ id: 'sb', root: join(root, '.mirror'), source: root, createdAt: 1, network: false, ignored: 'link' as const, fileCount: 1, bytes: 1, linkedDirectories: [], git: false }),
       runInSandbox: async () => { throw new Error('用不到') },
       diffSandbox: async () => ({ sandboxId: 'sb', source: root, created: ['src/api.generated.ts'], modified: ['notes.txt'], deleted: ['deploy.key'], truncated: false, gitChanged: false, textDiffs: [], omittedDiffs: 0, fingerprint: 'fp' }),
-      applySandbox: async (options: unknown) => { applied.push(options); return { sandboxId: 'sb', created: [], modified: [], deleted: [], skippedGit: false } },
+      applySandbox: async (options: unknown) => { applied.push(options); return { sandboxId: 'sb', created: ['src/api.generated.ts'], modified: ['notes.txt'], deleted: ['deploy.key'], skippedGit: false } },
       discardSandbox: async () => ({ sandboxId: 'sb', removed: true }),
     }
-    await writeFile(join(root, 'notes.txt'), 'notes\n')
-    const { call, confirmations, mutations } = await createProjectHarness(root, { sandbox: sandbox as never, corePolicy: { writeDeny: ['deploy.key'] } })
-    const failure = await failureOf(call('sandbox', 'apply', { id: 'sb' }))
-    expect(failure.code).toBe('PERMISSION')
-    expect(failure.message).toContain('deploy.key')
-    // 拒绝发生在修改授权与用户确认之前，宿主一个文件都没落。
-    expect(mutations).toEqual([])
+    const { call, confirmations } = await createProjectHarness(root, { sandbox: sandbox as never, approve: false })
+    const result = await call('sandbox', 'apply', { id: 'sb' })
+    expect(result).toMatchObject({ created: ['src/api.generated.ts'], modified: ['notes.txt'], deleted: ['deploy.key'] })
+    expect(applied).toEqual([{ sandboxId: 'sb', fingerprint: 'fp' }])
     expect(confirmations).toEqual([])
-    expect(applied).toEqual([])
-    // 点名只落许写的那一个，照常落回。
-    await call('sandbox', 'apply', { id: 'sb', paths: ['notes.txt'] })
-    expect(applied).toHaveLength(1)
   })
 
-  test('INV-5 项目空间里看图只看项目里、读取策略许看的图', async () => {
+  test('INV-5 项目空间里看图只看项目里的图，项目里的都看得了', async () => {
     await writeFile(join(root, 'shot.png'), pngHeader(40, 30))
-    await writeFile(join(root, 'private.png'), pngHeader(10, 10))
+    await writeFile(join(root, '.env.png'), pngHeader(10, 10))
     const outside = await mkdtemp(join(tmpdir(), 'project-space-acceptance-image-'))
     try {
       await writeFile(join(outside, 'far.png'), pngHeader(10, 10))
-      const { call, attached } = await createProjectHarness(root, { corePolicy: { readDeny: ['private.png'] } })
-      const seen = await call('images', 'view', { files: [{ path: 'shot.png' }] })
-      expect(seen.files[0]).toMatchObject({ path: 'shot.png', width: 40, height: 30 })
-      expect(attached).toHaveLength(1)
-      expect((await failureOf(call('images', 'view', { files: [{ path: 'private.png' }] }))).code).toBe('PERMISSION')
+      const { call, attached } = await createProjectHarness(root)
+      const seen = await call('images', 'view', { files: [{ path: 'shot.png' }, { path: '.env.png' }] })
+      expect(seen.files).toMatchObject([{ path: 'shot.png', width: 40, height: 30 }, { path: '.env.png', width: 10 }])
+      expect(attached).toHaveLength(2)
       expect((await failureOf(call('images', 'view', { files: [{ path: join(outside, 'far.png') }] }))).code).toBe('PERMISSION')
-      expect(attached).toHaveLength(1)
+      expect(attached).toHaveLength(2)
     } finally {
       await rm(outside, { recursive: true, force: true })
     }

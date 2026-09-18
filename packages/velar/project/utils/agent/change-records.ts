@@ -1,5 +1,5 @@
 /**
- * edit、inspect、undo 共用的几步：过宿主的项目修改授权、取回 fileRef 原来看得到的整行、凭 changeRef 取回事务。
+ * edit、inspect、undo 共用的几步：取回 fileRef 原来看得到的整行、凭 changeRef 取回事务。
  */
 
 import { isString, Log } from '@velaros-ai/core'
@@ -12,12 +12,6 @@ import { ProjectError } from '../errors.js'
 import { loadFileView, readReceipt } from './file-refs.js'
 
 const log = Log.tag('ProjectChangeRecords')
-
-/** 过宿主的项目修改授权：确认卡片列出这次要写的文件；被拒就抛，一个字节都不写。 */
-export async function authorizeProjectWrite(ctx: ProjectOperationContext, operation: string, paths: readonly string[]): Promise<void> {
-  const decision = await ctx.project.prepareMutation({ operation, paths: [...paths] })
-  if (!decision.approved) throw new ProjectError('PERMISSION_DENIED', decision.message, { executionOutcome: 'not-applied' }, '一个文件都没写。除非用户明确改了主意，别自己重试。')
-}
 
 /** 这次编辑凭的 fileRef 原来看得到哪些整行：改完之后沿补丁链迁过去，回执窗口照样给程序看这些地方。 */
 export async function seenFileSpans(steps: ProjectEditInput['steps'], ctx: ProjectOperationContext): Promise<Record<string, LineSpan[]>> {

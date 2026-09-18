@@ -7,12 +7,12 @@
 
 ## 这是什么
 
-项目空间：让 agent 在一个项目根里读源码、改源码、问代码、跑命令、演练脚本、看图，出不了项目，每一步都过项目的治理与宿主的审批边界。
+项目空间：让 agent 在一个项目根里读源码、改源码、问代码、跑命令、演练脚本、看图，出不了项目；只有危险命令问人。
 
 一个空间就是一张装配表——给哪几件能力、每件能力用哪个端口。能力本身不在本包，都是 `@velaros-ai/velar` 里的能力单元，一件只有一份实现：
 
 - 项目独有的两件在 `@velaros-ai/velar/project`：`velar:project`（受项目治理的文件：带行号与 fileRef 的读、事务编辑与撤销）与 `velar:code`（问代码之间的关系），连同它们底下的项目内核。空间把宿主给的上下文原样交给它们——宿主端口在结构上满足它们要的空间端口。
-- 跨空间共用的三件：`velar:shell`、`velar:sandbox`、`velar:images`。本包只写它们在项目里的端口：命令的工作目录钳在项目内、会改项目的命令先过修改授权再进项目资源门、输出交给程序之前脱敏；沙箱只镜像项目内的目录、落回前核对项目的写治理与修改授权；看图只看项目里、读取策略许看的图。
+- 跨空间共用的三件：`velar:shell`、`velar:sandbox`、`velar:images`。本包只写它们在项目里的端口：命令的工作目录钳在项目内、前台命令进项目资源门排队、输出原样交回；沙箱只镜像项目内的目录、落回不问人；看图只看项目里的图。
 
 另外交给 agent 的编码会话一条判据：改到哪些文件之后值得再跑一次验证。它不知道系统空间，也不知道界面长什么样；两个空间互不引用。
 
@@ -32,7 +32,7 @@
 | 注入点 | 必须 | 谁给、什么时候 |
 | --- | --- | --- |
 | `ProjectCallContext` | 是 | 宿主每次分发调用时给：取消信号、审批端口 `ApprovalPort`（来自 agent 包）、会话、可选的交图通道，以及宿主端口 |
-| `ProjectHostPort` | 是 | 继承两件项目工具的空间端口（`@velaros-ai/velar/project` 的 `ProjectSpacePort`：项目根、内核、修改授权、代码查询），再加共用能力的项目端口要的：跑命令、列后台任务、刷新 shell 环境，可选的演练沙箱与裁图缩图。它自己声明的每个方法都有端口在调，门禁核对 |
+| `ProjectHostPort` | 是 | 继承两件项目工具的空间端口（`@velaros-ai/velar/project` 的 `ProjectSpacePort`：项目根、内核、代码查询），再加共用能力的项目端口要的：跑命令、列后台任务、刷新 shell 环境，可选的演练沙箱与裁图缩图。它自己声明的每个方法都有端口在调，门禁核对 |
 | `ProjectSandboxPort` | 否 | 宿主有演练沙箱时给：公共沙箱端口加上在镜像里跑命令；不给，项目空间里的 `velar:sandbox` 明说做不了 |
 
 **数据面**是 `types/`：`host.ts` 里只有在镜像里跑命令的选项 `ProjectSandboxRunOptions`（它引用 shell 的命令种类，所以从根入口导出）。本包没有自己的可移植数据；**常量表**是 `contract/constants.ts`，只有空间身份 `ProjectSpaceId`。两件项目工具的数据、上限与错误原因在 `@velaros-ai/velar/project/contracts`。
@@ -49,9 +49,9 @@
 | 链路 | 怎么走 |
 | --- | --- |
 | 项目空间的一次调用 | 模型的程序调 `read(...)` / `run(...)` / `view(...)` → 能力端口按命名空间找到装配表里那一格 → `resolveCall` 给出这一次调用的上下文（项目根、内核、审批通道、取消信号、会话）→ 交给那件能力：`project`、`code` 直接拿这份上下文，`shell`、`sandbox`、`images` 装成它们要的上下文与端口 |
-| `velar:shell` 的项目端口 | `resolveCwd`：按真实路径钳在项目内；`commandPolicy`：确认文案说「当前项目」，风险分类 `project-command:dangerous`；`reviewCommand`：只读命令放行，其余先过宿主的修改授权；`runCommand`：后台命令直接交宿主，前台命令在项目资源门里跑（只读走读门，其余走写门），输出过内核的脱敏后端 |
-| `velar:sandbox` 的项目端口 | `resolveSource`：源目录按真实路径钳在项目内；建、看差量、丢弃交宿主的沙箱端口；`runInSandbox`：交宿主、输出脱敏；`reviewApply`：三列路径先过内核的写授权（有一条不许写就在问用户之前整批拒绝并点名），再过宿主的修改授权；`applyPolicy`：风险分类 `project-sandbox:apply` |
-| `velar:images` 的项目端口 | `locate`：路径钳在项目内、换成相对项目根的写法，经内核的 `stat` 过读取策略（内核的拒绝按 `reason` 翻成通用码）；`resizeImage`：宿主给了才有 |
+| `velar:shell` 的项目端口 | `resolveCwd`：按真实路径钳在项目内；`commandPolicy`：确认文案说「当前项目」，风险分类 `project-command:dangerous`；`runCommand`：后台命令直接交宿主，前台命令在项目资源门里跑（只读走读门，其余走写门），输出原样交回 |
+| `velar:sandbox` 的项目端口 | `resolveSource`：源目录按真实路径钳在项目内；建、看差量、丢弃交宿主的沙箱端口；`runInSandbox`：交宿主、输出原样交回；落回不问人 |
+| `velar:images` 的项目端口 | `locate`：路径钳在项目内、换成相对项目根的写法，经内核的 `stat` 取真实路径（内核的拒绝按 `reason` 翻成通用码）；`resizeImage`：宿主给了才有 |
 
 ## 依赖什么
 
@@ -71,7 +71,7 @@
 
 ## 失败语义
 
-- 共用能力的项目端口抛通用码：出了项目、修改授权被拒、写治理拦下都是 `PERMISSION`，message 里点名为什么与下一步；宿主没接演练沙箱是 `UNAVAILABLE`。
+- 共用能力的项目端口抛通用码：出了项目、危险命令被用户拒绝是 `PERMISSION`，message 里点名为什么与下一步；宿主没接演练沙箱是 `UNAVAILABLE`。
 - 看图时内核的拒绝按原因码翻成通用码（`PERMISSION_DENIED` → `PERMISSION`，`TARGET_NOT_FOUND` → `NOT_FOUND`），下一步照写进 message。
 - 被拒时一个进程都不起、一个文件都不落；命令自己失败（非零退出、超时）不抛错，如实写进回执。
 - 两件项目工具的失败语义见 `@velaros-ai/velar/project` 的卡片。
@@ -95,8 +95,8 @@ src/
   contract/     对外合同：provides.ts 登记产品面，requires.ts 宿主端口与调用上下文，constants.ts 空间身份
   types/        只放类型：host.ts 是在镜像里跑命令的选项
   impl/         扁平，一个类一个文件：ProjectSpace.ts 装配表（shell 端口要用资源门，写在这里）、ProjectVerificationPolicy.ts 验证判据
-  utils/        ports.ts 是不带状态的两个端口与它们用到的判定（路径钳制、输出脱敏、落回前的写授权、失败翻译）；
-                verification-paths.ts 是「什么算代码文件」的判据；tuning.ts 是可调参数
+  utils/        ports.ts 是不带状态的两个端口与它们用到的判定（路径钳制、失败翻译）；
+                verification-paths.ts 是「什么算代码文件」的判据
   index.ts      `.` 入口，只转发
   contracts.ts  `./contracts` 入口，只转发
 spec/           不变量登记与验收测试

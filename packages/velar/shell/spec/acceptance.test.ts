@@ -220,7 +220,6 @@ describe('只读与危险判定', () => {
     ]) {
       const plan = shellCommandPolicy.analyze(command)
       expect(plan.isDangerous).toBe(true)
-      expect(plan.shouldRequestConfirmation).toBe(true)
       expect(plan.dangerousReason).toContain('递归删除整个文件夹')
     }
 
@@ -303,9 +302,8 @@ export default { passed: tests.success, cwd: tests.cwd, auto: server.backgroundP
     // 后台任务按会话登记、按会话查，不设条数：要看多少由程序定。
     expect(space.calls[1]?.options.sessionId).toBe('session-1')
     expect(space.listed).toEqual([{ onlyRunning: undefined, taskId: 'task-1', sessionId: 'session-1' }])
-    // 长驻命令问过一声（低风险），不是危险命令的手动确认。
-    expect(space.confirmations).toHaveLength(1)
-    expect(space.confirmations[0]?.manual).toBeUndefined()
+    // 长驻命令只转后台，不问用户：只有危险命令才要确认。
+    expect(space.confirmations).toHaveLength(0)
   }, 30_000)
 
   test('INV-5 作用域由空间注入，不由模型挑：钳在根里的端口把越界的 cwd 拒在确认与执行之前', async () => {

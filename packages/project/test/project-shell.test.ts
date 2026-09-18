@@ -1,6 +1,6 @@
 /**
- * 项目空间里的 `velar:shell`：共用的命令操作配上项目端口——工作目录钳在项目内、会改项目的命令先过修改授权、
- * 选项原样交给宿主。命令输出的脱敏在 command-output-redaction.test.ts，危险命令的确认卡片在 approval-context.test.ts。
+ * 项目空间里的 `velar:shell`：共用的命令操作配上项目端口——工作目录钳在项目内、选项原样交给宿主、输出原样交回。
+ * 只有危险命令问人，确认卡片在 approval-context.test.ts。
  */
 
 import { execFile } from 'node:child_process'
@@ -74,7 +74,7 @@ describe('项目空间的 velar:shell', () => {
   test('工作目录钳在项目里：项目里的子目录照常，出了项目在任何确认之前就拒', async () => {
     await mkdir(join(root, 'src'))
     const runs: HostRun[] = []
-    const { call, confirmations, mutations } = await projectSpaceFixture({ root, runCommand: realShell(runs) })
+    const { call, confirmations } = await projectSpaceFixture({ root, runCommand: realShell(runs) })
     await call('shell', 'run', { command: 'ls', cwd: 'src' })
     expect(runs[0]!.options?.cwd).toBe(join(root, 'src'))
     for (const cwd of ['..', '/etc']) {
@@ -83,30 +83,23 @@ describe('项目空间的 velar:shell', () => {
       expect(outside.message, cwd).toContain('项目之内')
     }
     expect(confirmations).toEqual([])
-    expect(mutations).toEqual([])
     expect(runs).toHaveLength(1)
   })
 
-  test('会改项目的命令先过项目的修改授权，被拒一个进程都不起；只读命令不打扰', async () => {
+  test('会改项目的命令、长驻命令都不问，直接跑；输出原样交回（像密钥的片段也不遮）', async () => {
     const runs: HostRun[] = []
-    let approved = true
-    const { call, mutations } = await projectSpaceFixture({
-      root, runCommand: realShell(runs),
-      prepareMutation: async () => ({ approved, message: approved ? '已授权' : '这个会话不许改项目' }),
-    })
-    await call('shell', 'run', { command: 'ls' })
-    expect(mutations).toEqual([])
+    const { call, confirmations } = await projectSpaceFixture({ root, runCommand: realShell(runs) })
+    const secret = ['sk', 'live', '0123456789abcdefghijklmnopqrstuvwxyz'].join('-')
     await call('shell', 'run', { command: 'touch made.txt' })
-    expect(mutations).toEqual([{ operation: '运行可能修改项目的命令：touch made.txt', cwd: root, paths: undefined }])
-    approved = false
-    const denied = await failureOf(call('shell', 'run', { command: 'touch denied.txt' }))
-    expect(denied).toEqual({ code: 'PERMISSION', message: '这个会话不许改项目' })
-    expect(runs.map((run) => run.command)).toEqual(['ls', 'touch made.txt'])
+    const printed = await call('shell', 'run', { command: `printf 'key=${secret}'` })
+    expect(printed.stdout).toBe(`key=${secret}`)
+    expect(confirmations).toEqual([])
+    expect(runs.map((run) => run.command)).toEqual(['touch made.txt', `printf 'key=${secret}'`])
   })
 
-  test('危险命令用户点过头之后，还要过修改授权，宿主才收到「已确认的危险命令」', async () => {
+  test('危险命令用户点过头之后，宿主收到「已确认的危险命令」', async () => {
     const runs: Array<{ command: string; allowDangerous?: boolean }> = []
-    const { call, confirmations, mutations } = await projectSpaceFixture({
+    const { call, confirmations } = await projectSpaceFixture({
       root,
       runCommand: async (command, _options, allowDangerous) => {
         runs.push({ command, allowDangerous })
@@ -115,7 +108,6 @@ describe('项目空间的 velar:shell', () => {
     })
     await call('shell', 'run', { command: 'rm -rf ./dist' })
     expect(confirmations).toHaveLength(1)
-    expect(mutations).toHaveLength(1)
     expect(runs).toEqual([{ command: 'rm -rf ./dist', allowDangerous: true }])
   })
 

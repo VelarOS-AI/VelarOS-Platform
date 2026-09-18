@@ -60,7 +60,7 @@ export function projectPlannerResolver(ctx: ProjectOperationContext): ProjectPla
       if (!result.snapshot.exists) throw new ProjectError('TARGET_NOT_FOUND', `${path} 不存在。`, { path }, '先 list 出准确的路径再转换。')
       if (result.snapshot.isDirectory) throw new ProjectError('NOT_SUPPORTED', `${path} 是目录；recode 只收文件路径。`, { path }, '先 list 出目录里的文件（include 写 glob），再把文件路径交给 recode。')
       if (result.snapshot.isBinary) throw new ProjectError('NOT_SUPPORTED', `${path} 是二进制文件，没有可转换的文本。`, { path }, 'recode 只转换文本文件：把这条路径去掉再提交。')
-      if (!result.snapshot.revision || result.redacted || result.truncated || result.hasMore || !isString(result.content)) {
+      if (!result.snapshot.revision || result.truncated || result.hasMore || !isString(result.content)) {
         throw new ProjectError('NOT_SUPPORTED', `${path} 的正文读不全，不能转换编码。`, { path })
       }
       const stat = await kernel.stat({ path: result.snapshot.path })

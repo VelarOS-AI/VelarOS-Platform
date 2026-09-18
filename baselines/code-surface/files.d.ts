@@ -4,7 +4,6 @@ declare module 'velar:files' {
    * 相对路径、`~` 怎么解析，哪些路径越出了范围，由当前空间决定（环境报告里写着）；越界的直接拒绝。
    * 读出来的是带行号的行；改的时候按行号改几处，或者整份写。读写保留原文件的编码（UTF-8、带 BOM、UTF-16、GB18030）与换行风格，
    * 认不出编码或有非法字节的按二进制处理。写是原子的，失败不会留下半截文件；路径是符号链接时读写它指向的那个文件，链接本身不变。
-   * 哪些文件要先问用户（凭证、系统敏感路径……）也由当前空间决定：读被拒只是那一项失败，写被拒是整批不写。
    * 列目录、搜文本用命令做（`velar:shell` 的 run：ls、find、`rg -n`）；看图片用 `velar:images`。
    */
 
@@ -27,7 +26,7 @@ declare module 'velar:files' {
    * files 与入参的 files 一一对应。changeId 是这次改动的号，交给 `undo` 整次撤回。
    * undoable 为 false 时这次改动撤不回（有文件改之前超过 2 MB，原文没留下来）。
    * 任何一个写不下去就整个抛错、一个文件都不写：error.code 是 `FILES_EDIT_UNRESOLVED`（message 逐条写明第几个文件、为什么，
-   * 版本对不上的带上现在的版本）或 `FILES_EDIT_DENIED`（被拒）。写到一半出了意外时，message 点名哪几个已经写进去了、怎么撤回。
+   * 版本对不上的带上现在的版本）或 `FILES_EDIT_DENIED`（越出空间范围，或文件权限不让写）。写到一半出了意外时，message 点名哪几个已经写进去了、怎么撤回。
    */
   interface FileEditResult {
     changeId: string
@@ -139,7 +138,7 @@ declare module 'velar:files' {
 
   /**
    * 改文件：按行号改几处，或者整份写。**优先整批改**：files 里放几个就改几个，整批一次成败，成了给一个 changeId。
-   * 等用户确认那段时间里文件被别人改过，整批不写。
+   * 定下改法之后、写进去之前文件被别人改过，整批不写。
    * 路径是管道、设备、套接字，或文件有多个硬链接时不碰。新内容编不成原编码（孤立代理项、GB18030 表示不了的字符）就整批不写。
    */
   export function edit(input: FileEditInput): Promise<FileEditResult>

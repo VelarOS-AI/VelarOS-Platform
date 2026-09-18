@@ -23,9 +23,9 @@ velar:images    view                                          看图（@velaros-
 
 ## 给共用能力装的项目端口
 
-- 命令：工作目录按真实路径钳在项目内；只读命令直接跑，会改项目的命令先过宿主的修改授权，前台命令在项目资源门里排队（与两件项目工具共用一扇门）；输出交给程序之前过内核的脱敏后端。
-- 演练沙箱：只镜像项目内的目录；落回前先把每条路径过一遍项目的写治理（越界、拒写名单、受保护与生成文件、宿主可见范围），有一条不许写就整批拒绝，再过一次修改授权，都排在问用户之前。
-- 看图：只看项目里、读取策略许看的图；裁图缩图用宿主的能力，宿主没有就明说做不了。
+- 命令：工作目录按真实路径钳在项目内；只有危险命令问用户，别的直接跑；前台命令在项目资源门里排队（与两件项目工具共用一扇门）；输出原样交回。
+- 演练沙箱：只镜像项目内的目录；落回不问人，核对点名的路径后把同一份差量交给宿主落回。
+- 看图：只看项目里的图；裁图缩图用宿主的能力，宿主没有就明说做不了。
 
 ## 宿主怎么接
 
@@ -39,7 +39,7 @@ const space = createProjectSpace({ resolveCall: (): ProjectCallContext => ({ abo
 const capabilities = createCapabilityPort(space.operations)
 ```
 
-`host` 是宿主对 `ProjectHostPort` 的实现：项目根、按项目根缓存的内核（`kernel: async () => kernel`）、修改授权、代码查询，
+`host` 是宿主对 `ProjectHostPort` 的实现：项目根、按项目根缓存的内核（`kernel: async () => kernel`）、代码查询，
 加上跑命令、列后台任务、刷新 shell 环境，可选的演练沙箱与缩图。内核、事务控制与落盘的变更记录怎么建，见 `@velaros-ai/velar` 的说明。
 
 模块卡片见 [MODULE.md](./MODULE.md)，不变量见 [spec/invariants.md](./spec/invariants.md)。

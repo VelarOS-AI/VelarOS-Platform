@@ -1,7 +1,7 @@
 /**
  * 注入面：宿主每次分发调用时给的上下文 `ProjectCallContext`，里面是宿主端口 `ProjectHostPort`（写作 `ctx.project`）与审批端口 `ApprovalPort`。
  *
- * 宿主端口在项目工具的空间端口（`@velaros-ai/velar/project` 的 `ProjectSpacePort`：项目根、内核、修改授权、代码查询）之上，
+ * 宿主端口在项目工具的空间端口（`@velaros-ai/velar/project` 的 `ProjectSpacePort`：项目根、内核、代码查询）之上，
  * 再给三件共用能力要的东西：跑命令、列与停后台任务、刷新 shell 环境（`velar:shell`），可选的演练沙箱端口 `ProjectSandboxPort`（`velar:sandbox`）
  * 与裁图缩图（`velar:images`）。空间把同一份上下文交给两件项目工具，它在结构上满足工具要的 `ProjectOperationContext`。
  *
@@ -17,8 +17,8 @@ import type { ShellBackgroundTaskQueryOptions, ShellBackgroundTaskRecord, ShellC
 import type { ProjectSandboxRunOptions } from '../types/host.js'
 
 /**
- * 宿主端口：项目空间在运行时能向宿主要什么，写作 `ctx.project`。宿主每次分发调用时给一份，绑定当前项目根、会话与这次调用的审批端口。
- * 两件项目工具要的四件（项目根、内核、修改授权、代码查询）来自 `ProjectSpacePort`；这里只列共用能力的项目端口要的，门禁从装配表出发核对。
+ * 宿主端口：项目空间在运行时能向宿主要什么，写作 `ctx.project`。宿主每次分发调用时给一份，绑定当前项目根与会话。
+ * 两件项目工具要的三件（项目根、内核、代码查询）来自 `ProjectSpacePort`；这里只列共用能力的项目端口要的，门禁从装配表出发核对。
  */
 export interface ProjectHostPort extends ProjectSpacePort {
   /**
@@ -60,9 +60,9 @@ export interface ProjectSandboxPort extends RehearsalSandboxHostPort {
 export interface ProjectCallContext {
   /** 本次调用的取消信号：用户取消或上层超时时触发；空间在排队与每一步之间核对，宿主的命令与查询也应随之停下。 */
   abortSignal: AbortSignal
-  /** 宿主端口：项目根、内核、修改授权、命令、代码查询与演练沙箱都经它要。 */
+  /** 宿主端口：项目根、内核、命令、代码查询与演练沙箱都经它要。 */
   project: ProjectHostPort
-  /** 审批端口（来自 agent 包）：危险命令、沙箱落回、提交改动要用户亲自确认时经它；无人值守的宿主给默认拒绝的端口。 */
+  /** 审批端口（来自 agent 包）：危险命令（项目里与沙箱镜像里）要用户亲自确认时经它；无人值守的宿主给默认拒绝的端口。 */
   approval: ApprovalPort
   /** 本次调用所属会话；给了，后台任务就按会话登记与核对归属，项目工具的引用也按它签发。 */
   sessionId?: string

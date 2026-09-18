@@ -277,7 +277,6 @@ describe('项目空间里的模版', () => {
     const host: ProjectHostPort = {
       getRootPath: () => root,
       kernel: async () => kernel,
-      prepareMutation: async () => ({ approved: true, message: '已授权' }),
       queryCode,
       runCommand: (command, options, allowDangerous, abortSignal) => commands.runCommand(command, options, allowDangerous, abortSignal),
       listBackgroundTasks: (options) => commands.listBackgroundTasks(options),

@@ -57,10 +57,8 @@ export interface SandboxOperationsApi {
   diff(input: SandboxDiffInput, ctx: SandboxOperationContext): Promise<SandboxDiff>
   /**
    * @AgentView
-   * 把镜像里的变化落回源目录。落回前一定把删除与覆盖摆给用户确认，用户不点头就抛错、一个文件都不落；
-   * 当前空间还可能先核一遍这次要落的路径（比如核对这些路径许不许写），核不过同样一个文件都不落。
-   * 确认之后镜像又被改过，宿主整批不落。`.git` 里的变化永远不落，要那部分就在源目录重放那几条 git 命令。
-   * 镜像里什么都没变时不问用户，三列都是空的。
+   * 把镜像里的变化落回源目录，回执是真落下去的三列。源目录里要落的文件自建沙箱以来被别人改过，整批不落；
+   * `.git` 里的变化永远不落，要那部分就在源目录重放那几条 git 命令。镜像里什么都没变时三列都是空的。
    */
   apply(input: SandboxApplyInput, ctx: SandboxOperationContext): Promise<SandboxApplyResult>
   /**
@@ -105,13 +103,9 @@ export class SandboxOperations implements SandboxOperationsApi {
   public async apply(input: SandboxApplyInput, ctx: SandboxOperationContext): Promise<SandboxApplyResult> {
     ctx.abortSignal.throwIfAborted()
     sandboxIdOf(input?.id)
-    // 「确认的就是要落的」：条数、预览、敏感路径都按完整的三列算，确认之后把同一个指纹交给宿主。
+    // 「核对过的就是要落的」：点名的路径按完整的三列核，再把同一个指纹交给宿主，镜像在这之后又变过就整批不落。
     const changes = await ctx.sandbox.diffSandbox({ sandboxId: input.id, textDiffs: false })
-    const request = this.rules.prepareApply({ ...ctx.sandbox.applyPolicy(changes.source), diff: changes, paths: input.paths })
-    if (!request) return { sandboxId: input.id, created: [], modified: [], deleted: [], skippedGit: changes.gitChanged }
-    // 空间自己要核的那一关排在问用户之前：注定落不下去的东西不拿去打扰用户。
-    await ctx.sandbox.reviewApply?.(request.selection)
-    await ctx.approval.awaitConfirmation(request.message, ctx.abortSignal, request.options)
+    if (!this.rules.prepareApply({ diff: changes, paths: input.paths })) return { sandboxId: input.id, created: [], modified: [], deleted: [], skippedGit: changes.gitChanged }
     return ctx.sandbox.applySandbox({ sandboxId: input.id, paths: input.paths, fingerprint: changes.fingerprint })
   }
 

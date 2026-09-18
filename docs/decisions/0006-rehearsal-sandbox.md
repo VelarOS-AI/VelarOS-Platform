@@ -1,8 +1,9 @@
 # 0006: 演练沙箱——脚本先在受约束的镜像里跑，看过差量再落到真实目录
 
-- Status: accepted
+- Status: accepted（落回的用户确认与敏感路径复审由 0009 取代）
 - Date: 2026-09-15
 - Owners: `@velaros-ai/system` 工具面；第二阶段扩到 `@velaros-ai/project`
+- Amended by: [0009](0009-no-permission-gates.md)（2026-09-18：`apply` 不再问用户，也不再按源路径复审敏感路径与凭证；镜像里的危险命令照常问）
 
 ## Context
 

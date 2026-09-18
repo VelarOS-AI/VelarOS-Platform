@@ -35,8 +35,7 @@ export class TextFileAdapter implements FileAdapter {
         score: 1,
         kind: 'text',
         range: rangeFromOffsets(content, start, end),
-        // 交出去的是整行窗口（必要时以命中为中心收窄）：脱敏在这一层之后、截断之前做，
-        // 先截后脱敏会把边界上的密钥切成半截，脱敏正则就认不出来了。
+        // 交出去的是整行窗口，行太长时以命中为中心收窄：命中一定在片段里。
         snippet: snippetWindow(content, start, end),
         adapterId: this.id,
       })

@@ -82,7 +82,7 @@ export interface FileWritten {
  * files 与入参的 files 一一对应。changeId 是这次改动的号，交给 `undo` 整次撤回。
  * undoable 为 false 时这次改动撤不回（有文件改之前超过 2 MB，原文没留下来）。
  * 任何一个写不下去就整个抛错、一个文件都不写：error.code 是 `FILES_EDIT_UNRESOLVED`（message 逐条写明第几个文件、为什么，
- * 版本对不上的带上现在的版本）或 `FILES_EDIT_DENIED`（被拒）。写到一半出了意外时，message 点名哪几个已经写进去了、怎么撤回。
+ * 版本对不上的带上现在的版本）或 `FILES_EDIT_DENIED`（越出空间范围，或文件权限不让写）。写到一半出了意外时，message 点名哪几个已经写进去了、怎么撤回。
  */
 export interface FileEditResult {
   changeId: string

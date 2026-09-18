@@ -1,5 +1,5 @@
 /**
- * 常量表：演练沙箱的公开上限与落回审批的操作身份。`velar:sandbox` 的声明与宿主的沙箱实现都引这里的数字。
+ * 常量表：演练沙箱的公开上限。`velar:sandbox` 的声明与宿主的沙箱实现都引这里的数字。
  * 不 import 任何东西，浏览器和渲染进程都能用（从 `@velaros-ai/velar/sandbox/contracts` 取）。
  */
 
@@ -25,6 +25,3 @@ export const RehearsalSandboxLimits = Object.freeze({
   /** 拒绝落回时报错里最多点名几条路径。 */
   reportedPaths: 10,
 })
-
-/** 落回审批的操作身份种类：参数是沙箱 id、确认时的差量指纹与三列条数；镜像在确认之后又变过，就不是同一个操作。 */
-export const SandboxApplyOperationKind = 'sandbox-apply' as const

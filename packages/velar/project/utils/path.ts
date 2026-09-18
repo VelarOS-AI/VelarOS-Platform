@@ -43,11 +43,6 @@ export function toRel(root: string, absOrRel: string): string {
   return normalizeRel(path.relative(rootAbs, abs));
 }
 
-/** 相对路径是不是版本库内部的东西：任意一层的 `.git` 目录本身或它里面（嵌套仓库、子模块的也算）。 */
-export function isGitInternalPath(rel: string): boolean {
-  return /(?:^|\/)\.git(?:\/|$)/u.test(normalizeRel(rel));
-}
-
 /** 取小写的扩展名（带点，如 .ts）；没有扩展名时是空串。 */
 export function ext(input: string): string {
   return path.extname(input).toLowerCase();

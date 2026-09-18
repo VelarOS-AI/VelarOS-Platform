@@ -1,6 +1,6 @@
 /**
- * 项目空间里的 `velar:sandbox`：共用的沙箱操作配上项目端口——源目录钳在项目内、落回前先过项目的写授权与修改授权、
- * 镜像里跑命令的输出过项目的脱敏。宿主的沙箱是假的（记下每次调用），内核是真的（写授权、脱敏都用它）。
+ * 项目空间里的 `velar:sandbox`：共用的沙箱操作配上项目端口——源目录钳在项目内；落回不问人，镜像里跑命令的输出原样交回。
+ * 宿主的沙箱是假的（记下每次调用），内核是真的。
  */
 
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -9,7 +9,6 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { createSecretRedactionProvider } from '@velaros-ai/velar/project'
 import type { SandboxDiff, SandboxRecord } from '@velaros-ai/velar/sandbox/contracts'
 import { ShellLimits } from '@velaros-ai/velar/shell/contracts'
 
@@ -91,68 +90,27 @@ describe('项目空间的 velar:sandbox', () => {
     expect(calls).toEqual([])
   })
 
-  test('apply 先过项目的修改授权再问用户；任何一关被拒都抛错，一个文件都不落', async () => {
-    const declined: Array<Record<string, unknown>> = []
-    const notAuthorized = await projectSpaceFixture({ root, sandbox: fakePort(declined), prepareMutation: async () => ({ approved: false, message: '宿主不许落回' }) })
-    const unauthorized = await failureOf(notAuthorized.call('sandbox', 'apply', { id: 'sb' }))
-    expect(unauthorized).toEqual({ code: 'PERMISSION', message: '宿主不许落回' })
-    // 修改授权排在问用户之前：被它拒了就不打扰用户。
-    expect(notAuthorized.confirmations).toEqual([])
-    const notConfirmed = await projectSpaceFixture({ root, sandbox: fakePort(declined), approve: false })
-    expect((await failureOf(notConfirmed.call('sandbox', 'apply', { id: 'sb' }))).code).toBe('PERMISSION')
-    expect(notConfirmed.mutations).toEqual([{ operation: '把演练沙箱的改动落回项目', cwd: undefined, paths: undefined }])
-    expect(actions(declined)).not.toContain('apply')
-
+  test('apply 不问人：要不附文本差量的完整三列核对点名的路径，再把差量指纹交给宿主落回', async () => {
     const calls: Array<Record<string, unknown>> = []
-    const { call, confirmations } = await projectSpaceFixture({ root, sandbox: fakePort(calls) })
-    const applied = await call('sandbox', 'apply', { id: 'sb', paths: ['src/a.ts'] })
-    expect(applied.modified).toEqual(['src/a.ts'])
-    // 落回前要的是不附文本差量的完整三列；确认之后把差量指纹一起交给宿主。
+    const { call, confirmations } = await projectSpaceFixture({ root, sandbox: fakePort(calls, { modified: ['src/a.ts', 'src/api.generated.ts'] }), approve: false })
+    const applied = await call('sandbox', 'apply', { id: 'sb', paths: ['src/a.ts', 'src/api.generated.ts'] })
+    expect(applied.modified).toEqual(['src/a.ts', 'src/api.generated.ts'])
     expect(calls.at(-2)).toEqual({ diff: { sandboxId: 'sb', textDiffs: false } })
-    expect(calls.at(-1)).toEqual({ apply: { sandboxId: 'sb', paths: ['src/a.ts'], fingerprint: 'fp1' } })
-    // 确认卡片：落到当前项目，高风险、必须用户亲自点。
-    expect(confirmations).toHaveLength(1)
-    expect(confirmations[0]!.message).toContain('当前项目')
-    expect(confirmations[0]!.message).toContain('覆盖：src/a.ts')
-    expect(confirmations[0]!.options).toMatchObject({ approvalRisk: 'high', riskScope: 'project-sandbox:apply', requireManualApproval: true })
+    expect(calls.at(-1)).toEqual({ apply: { sandboxId: 'sb', paths: ['src/a.ts', 'src/api.generated.ts'], fingerprint: 'fp1' } })
+    // 审批端口一次都没被叫到（它会拒）：落回照常做完。
+    expect(confirmations).toEqual([])
     const unknown = await failureOf(call('sandbox', 'apply', { id: 'sb', paths: ['nope.ts'] }))
     expect(unknown.code).toBe('VALIDATION')
     expect(unknown.message).toContain('nope.ts')
   })
 
-  test('确认文案按完整的三列算', async () => {
-    const many = Array.from({ length: 2100 }, (_, index) => `gen/${index}.ts`)
-    const full = await projectSpaceFixture({ root, sandbox: fakePort([], { created: many, modified: [], deleted: [] }) })
-    await full.call('sandbox', 'apply', { id: 'sb' })
-    expect(full.confirmations[0]!.message).toContain('新增 2100 个')
-  })
-
-  test('落回前每条路径都过项目的写授权：有不许写的就在问用户之前整批拒绝', async () => {
-    const calls: Array<Record<string, unknown>> = []
-    const blocked = await projectSpaceFixture({ root, sandbox: fakePort(calls, { modified: ['src/api.generated.ts'] }) })
-    const refusal = await failureOf(blocked.call('sandbox', 'apply', { id: 'sb' }))
-    expect(refusal.code).toBe('PERMISSION')
-    expect(refusal.message).toContain('src/api.generated.ts（GENERATED_FILE）')
-    expect(refusal.message).toContain('用 paths 点名要落的文件')
-    // 问用户、问修改授权之前就拒绝，一个都不落。
-    expect(blocked.confirmations).toEqual([])
-    expect(blocked.mutations).toEqual([])
-    expect(actions(calls)).not.toContain('apply')
-    // 把不许写的那条从 paths 里去掉，剩下的照常落回。
-    const allowed = await blocked.call('sandbox', 'apply', { id: 'sb', paths: ['src/new.ts'] })
-    expect(allowed.created).toEqual(['src/new.ts'])
-    expect(calls.at(-1)).toEqual({ apply: { sandboxId: 'sb', paths: ['src/new.ts'], fingerprint: 'fp1' } })
-  })
-
-  test('镜像里跑命令的输出和 velar:shell 一样过项目的脱敏', async () => {
+  test('镜像里跑命令的输出原样交回：像密钥的片段也不遮', async () => {
     const secret = ['sk', 'live', '0123456789abcdefghij'].join('-')
     const port = fakePort([])
-    port.runInSandbox = async () => ({ command: 'cat .env', cwd: '/tmp', exitCode: 0, stdout: `${secret}\n`, stderr: `api_key=${secret}`, durationMs: 1, timedOut: false, truncated: false, success: true }) as never
-    const { call } = await projectSpaceFixture({ root, sandbox: port, providers: { secretRedaction: createSecretRedactionProvider() } })
+    port.runInSandbox = async () => ({ command: 'cat .env', cwd: '/tmp', exitCode: 0, stdout: `${secret}\n`, stderr: '', durationMs: 1, timedOut: false, truncated: false, success: true }) as never
+    const { call } = await projectSpaceFixture({ root, sandbox: port })
     const ran = await call('sandbox', 'run', { id: 'sb', command: 'cat .env' })
-    expect(ran.stdout).toBe('[REDACTED]\n')
-    expect(ran.stderr).toContain('[REDACTED]')
-    expect(JSON.stringify(ran)).not.toContain(secret)
+    expect(ran.stdout).toBe(`${secret}\n`)
   })
 
   test('diff 与 discard 原样转给宿主', async () => {

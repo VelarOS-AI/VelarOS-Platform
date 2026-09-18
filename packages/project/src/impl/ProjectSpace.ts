@@ -4,13 +4,12 @@
  * 一个空间就是一张装配表：给哪几件能力、每件能力用哪个端口。能力都在 `@velaros-ai/velar` 里、一件只有一份实现：
  * 项目独有的两件是 `velar:project`（受项目治理的文件：带行号与 fileRef 的读、事务编辑与撤销）与 `velar:code`（问代码之间的关系），
  * 同在 `@velaros-ai/velar/project`；跨空间共用的三件是 `velar:shell`、`velar:sandbox`、`velar:images`。
- * 给共用能力装的项目端口：命令的工作目录钳在项目内、会改项目的命令过修改授权与资源门、输出脱敏（在这个文件里，它要用资源门）；
- * 沙箱只镜像项目内的目录、落回前先核对项目许不许写，看图只看项目里、读取策略许看的（这两个不带状态，在 `utils/ports.ts`）。
+ * 给共用能力装的项目端口：命令的工作目录钳在项目内、前台命令在项目资源门里排队（在这个文件里，它要用资源门）；
+ * 沙箱只镜像项目内的目录，看图只看项目里的（这两个不带状态，在 `utils/ports.ts`）。不问人，只有危险命令由 `velar:shell` 问。
  * 这里没有一个字是给模型看的：模型面是五份生成的声明。
  */
 
 import type { CapabilityOperationContext, CapabilityOperationTable, MountedCapabilityModule } from '@velaros-ai/code-surface/contracts'
-import { AppError } from '@velaros-ai/core/error'
 import type { ImageOperationContext } from '@velaros-ai/velar/images'
 import { imageOperations } from '@velaros-ai/velar/images'
 import type { ImageViewInput } from '@velaros-ai/velar/images/contracts'
@@ -26,7 +25,7 @@ import { shellCommandPolicy, shellOperations } from '@velaros-ai/velar/shell'
 import { VelarShellModule } from '@velaros-ai/velar/shell/contracts'
 
 import type { ProjectCallContext } from '../contract/requires.js'
-import { insideProject, projectImagePort, projectSandboxPort, redactCommandOutput } from '../utils/ports.js'
+import { insideProject, projectImagePort, projectSandboxPort } from '../utils/ports.js'
 
 /** 项目空间：代码面的一张操作表，项目独有的两件能力，加上三件跨空间的能力配上项目的端口。 */
 export interface ProjectSpaceApi {
@@ -115,28 +114,19 @@ class ProjectSpace implements ProjectSpaceApi {
 
 
   /**
-   * `velar:shell` 的项目端口：工作目录钳在项目内，会改项目的命令先过项目的修改授权，
-   * 前台命令在项目资源门里排队（只读走读门，其余走写门），输出交给程序之前先脱敏。
+   * `velar:shell` 的项目端口：工作目录钳在项目内，前台命令在项目资源门里排队（只读走读门，其余走写门）。
    */
   private shellPort(ctx: ProjectCallContext): ShellSpacePort {
     const root = () => ctx.project.getRootPath()
     return {
       resolveCwd: (cwd) => insideProject(root(), cwd ?? '.', '工作目录'),
       commandPolicy: () => ({ scopeLabel: '当前项目', riskScope: 'project-command:dangerous' }),
-      reviewCommand: async ({ command, plan, cwd }) => {
-        // 只读命令不打扰用户；其余的先过项目的修改授权（宿主可能按会话记住）。
-        if (plan.isReadOnly) return
-        const decision = await ctx.project.prepareMutation({ cwd, operation: `运行可能修改项目的命令：${command}` })
-        if (!decision.approved) throw new AppError('PERMISSION', decision.message)
-      },
       runCommand: async (command, options, allowDangerous, abortSignal) => {
         const invoke = () => ctx.project.runCommand(command, options, allowDangerous, abortSignal)
-        const signal = abortSignal ?? ctx.abortSignal
         // 后台命令交给宿主的任务管理，不占门；前台命令按只读与否走读门或写门。
-        const result = options?.background
-          ? await invoke()
-          : await this.gate.run(root(), !shellCommandPolicy.isReadOnly(command), signal, invoke)
-        return redactCommandOutput(ctx, result)
+        return options?.background
+          ? invoke()
+          : this.gate.run(root(), !shellCommandPolicy.isReadOnly(command), abortSignal ?? ctx.abortSignal, invoke)
       },
       listBackgroundTasks: (options) => ctx.project.listBackgroundTasks(options),
       refreshShellEnvironment: () => ctx.project.refreshShellEnvironment(),

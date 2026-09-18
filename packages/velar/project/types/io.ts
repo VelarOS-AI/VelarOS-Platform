@@ -35,7 +35,6 @@ export interface ReadInput {
 }
 
 export interface ReadResult {
-  redacted?: boolean;
   snapshot: FileSnapshot;
   content?: string;
   range?: Range;

@@ -1,5 +1,5 @@
 /**
- * 演练沙箱：镜像一棵目录树、记印记、算差量、落回源目录、剪断镜像仓库的推送，以及只许删沙箱基目录之下东西的守卫。
+ * 演练沙箱：镜像一棵目录树、记印记、算差量、落回源目录、剪断镜像仓库的推送，以及只许删沙箱基目录之下东西的守卫与路径在不在根里的判定。
  */
 
 import { createHash, randomBytes } from 'node:crypto'
@@ -7,6 +7,7 @@ import type { Stats } from 'node:fs'
 import { constants } from 'node:fs'
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, readlink, rename, rm, rmdir, symlink, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import * as path from 'node:path'
 import { dirname, join, posix, resolve } from 'node:path'
 
 import { createTwoFilesPatch } from 'diff'
@@ -14,7 +15,8 @@ import { createTwoFilesPatch } from 'diff'
 import { isEmpty, isFalse, isNull, isPresent, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
-import { currentPlatform } from '@velaros-ai/platform'
+import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
+import { createPlatform, currentPlatform } from '@velaros-ai/platform'
 import { textCodec, textFileIo } from '@velaros-ai/text-files'
 import type { SandboxApplyResult, SandboxDiff, SandboxIgnoredMode, SandboxTextDiff } from '@velaros-ai/velar/sandbox/contracts'
 import { RehearsalSandboxLimits } from '@velaros-ai/velar/sandbox/contracts'
@@ -23,9 +25,19 @@ import { SystemErrorCodes } from '../contract/constants.js'
 import type { SystemProcessConfinementPolicy } from '../types/commands.js'
 import type { SystemSandboxConflict, SystemSandboxFileStamp, SystemSandboxManifest, SystemSandboxStampTable } from '../types/sandbox.js'
 
-import { isPathInsideRoot } from './file-safety.js'
 import { readErrnoCode } from './fs.js'
 import { SystemTuning } from './tuning.js'
+
+/** 判断一个路径是否在某个根目录之内（含根目录本身）：交给 platform 的路径文本判定，Windows 与 macOS 上不区分大小写；根是 `/`、`C:\\` 这种也对。 */
+export function isPathInsideRoot(
+  candidatePath: string,
+  rootPath: string,
+  platform: NodeJS.Platform = process.platform
+): boolean {
+  const rules: PlatformCompatibilityApi = platform === currentPlatform.getPlatform() ? currentPlatform : createPlatform({ platform })
+  const paths = platform === 'win32' ? path.win32 : path.posix
+  return rules.isPathTextInside(paths.resolve(candidatePath), rootPath)
+}
 
 /** 沙箱都放在临时区的这个基目录之下；删除前核对路径确实在它之下。 */
 export function sandboxBaseDirectory(tempDir: string = tmpdir()): string {
@@ -290,7 +302,7 @@ export function renderTextDiff(path: string, oldText: string, newText: string, m
 /**
  * 比较镜像现在的印记和创建时的清单，算出新增、修改、删除三列（.git 里的东西只汇总成 gitChanged）。
  * 大小和权限位相同、只是修改时间变了的文件，再和源目录里没变过的那份比内容，内容一样就不算修改。
- * 三列永远完整，指纹按它们和镜像印记算，落回时拿它核对镜像在确认之后有没有再变。
+ * 三列永远完整，指纹按它们和镜像印记算，落回时拿它核对镜像在看过差量之后有没有再变。
  * 新增与修改的文本文件附统一差量（paths 只给这些文件附，textDiffs 为 false 时一个都不附）；只守内存的上限：
  * 比单文件上限还大的、装不下总上限的、二进制的、源目录那份也变了没有基线的不附，note 里分别说。
  */
@@ -387,11 +399,11 @@ export function sandboxApplyConflict(conflicts: readonly SystemSandboxConflict[]
   )
 }
 
-/** 落回时镜像跟用户确认时看到的不一样了：什么都没写，码是 SYSTEM_SANDBOX_CHANGED。 */
-export function sandboxChangedSinceConfirmation(): AppError {
+/** 落回时镜像跟落回前核对的那份差量不一样了：什么都没写，码是 SYSTEM_SANDBOX_CHANGED。 */
+export function sandboxChangedSinceDiff(): AppError {
   return new AppError(
     SystemErrorCodes.sandboxChanged,
-    '确认之后沙箱里的改动又变了（镜像里可能还有命令在跑），什么都没写；先用 listTasks 找到并停掉镜像里还在跑的任务，再 diff、apply',
+    '看过差量之后沙箱里的改动又变了（镜像里可能还有命令在跑），什么都没写；先用 listTasks 找到并停掉镜像里还在跑的任务，再 diff、apply',
     undefined,
     { executionOutcome: 'not-applied' }
   )

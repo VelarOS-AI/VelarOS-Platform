@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { lstat, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -9,7 +9,6 @@ import { describe, expect, test } from 'bun:test'
 import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
 import { SystemGlobalSearch } from '../src/impl/SystemGlobalSearch.js'
 import { buildSystemProcessConfinementSpawnSpec, buildSystemSeatbeltProfile } from '../src/utils/confinement.js'
-import { credentialConfirmation, isSensitiveSystemMutationPath, sensitiveMutationConfirmation } from '../src/utils/file-safety.js'
 
 describe('System capability', () => {
 
@@ -112,14 +111,6 @@ describe('System capability', () => {
 
 
 
-  test('sensitive-path judgement: macOS login items are caught after case folding, temp dirs never ask, Linux has no LaunchAgents', () => {
-    expect(isSensitiveSystemMutationPath('/Users/example/Library/LaunchAgents/com.evil.plist', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
-    expect(isSensitiveSystemMutationPath('/Users/example/Library/LaunchDaemons/com.evil.plist', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
-    expect(isSensitiveSystemMutationPath('/Users/example/Library/Preferences/x.plist', { homeDir: '/Users/example', platform: 'darwin' })).toBe(false)
-    expect(isSensitiveSystemMutationPath('/home/someone/Library/LaunchAgents/x', { homeDir: '/home/someone', platform: 'linux' })).toBe(false)
-    expect(isSensitiveSystemMutationPath('/private/var/folders/ab/T/velaros-x/note.txt', { homeDir: '/Users/example', platform: 'darwin', tempDir: '/private/var/folders/ab/T' })).toBe(false)
-  })
-
   test('global path search reports truncated only when more matches exist, and env alone is read-only', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-search-'))
     try {
@@ -153,24 +144,6 @@ describe('System capability', () => {
   })
 
 
-
-  test('confirmation requests: credential files ask for read and write with the real path, temp files never ask', async () => {
-    expect(credentialConfirmation('/Users/example/.ssh/id_ed25519', 'read')).toMatchObject({
-      message: expect.stringContaining('读取凭证文件'),
-      options: { approvalRisk: 'high', riskScope: 'system-read:credential', operation: { target: '/Users/example/.ssh/id_ed25519' } },
-    })
-    expect(credentialConfirmation('/tmp/notes.txt', 'write')).toBeNull()
-    // 传进来的是真实路径：macOS 的临时目录是 /var 的链接，解开之后才在豁免范围里
-    expect(await sensitiveMutationConfirmation(join(await realpath(tmpdir()), 'velaros-x', 'note.txt'))).toBeNull()
-    expect(await sensitiveMutationConfirmation('/etc/hosts')).toMatchObject({ options: { riskScope: 'system-mutation:sensitive-path', operation: { target: '/etc/hosts' } } })
-  })
-
-  test('sensitive-path judgement covers /Applications and files directly under the root', () => {
-    expect(isSensitiveSystemMutationPath('/Applications/Foo.app/Contents/MacOS/foo', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
-    expect(isSensitiveSystemMutationPath('/velaros-root-file', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
-    expect(isSensitiveSystemMutationPath('/tmp/velaros-x/file', { homeDir: '/Users/example', platform: 'darwin' })).toBe(false)
-    expect(isSensitiveSystemMutationPath('/Users/example/Documents/notes.txt', { homeDir: '/Users/example', platform: 'darwin' })).toBe(false)
-  })
 
 
 

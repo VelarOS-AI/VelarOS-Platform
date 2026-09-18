@@ -23,7 +23,6 @@ export interface TransactionRecoveryStore extends Pick<ProjectFileAccess, "snaps
   remove(
     path: string,
     options?: {
-      skipFileFilter?: boolean;
       expectedBytes?: ExpectedBytes;
     },
   ): Promise<void>;
@@ -34,7 +33,6 @@ export interface TransactionRecoveryStore extends Pick<ProjectFileAccess, "snaps
     path: string,
     content: string,
     options?: {
-      skipFileFilter?: boolean;
       encoding?: TextEncoding;
       mode?: number;
       transactionBytes?: Uint8Array;
@@ -189,7 +187,6 @@ export class TransactionRecovery implements TransactionRecoveryApi {
       patch.path,
       (kind === "apply" ? patch.newContent : patch.oldContent) ?? "",
       {
-        skipFileFilter: true,
         encoding: target ?? attributes.textEncoding,
         mode: attributes.mode,
         transactionBytes: bytes?.after,
@@ -212,7 +209,6 @@ export class TransactionRecovery implements TransactionRecoveryApi {
     );
     const bytes = entry ? plannedBytes(entry, kind) : undefined;
     await this.dependencies.store.remove(patch.path, {
-      skipFileFilter: true,
       expectedBytes:
         bytes && !(kind === "apply" && entry?.beforeUnavailable)
           ? { exists: !isUndefined(bytes.before), bytes: bytes.before }
@@ -248,9 +244,7 @@ export class TransactionRecovery implements TransactionRecoveryApi {
     const restoreByPath = new Map<string, ApplyRestoreState>();
     for (const file of paths) {
       if (restoreByPath.has(file)) continue;
-      const before = await this.dependencies.store.snapshot(file, true, {
-        skipFileFilter: true,
-      });
+      const before = await this.dependencies.store.snapshot(file, true);
       const bytes = isString(before.content)
         ? await this.dependencies.store.readTransactionBytes(file)
         : undefined;
@@ -309,13 +303,7 @@ export class TransactionRecovery implements TransactionRecoveryApi {
       expected?: Uint8Array;
     }> = [];
     for (const restore of [...pending.restore].reverse()) {
-      const current = await this.dependencies.store.snapshot(
-        restore.path,
-        true,
-        {
-          skipFileFilter: true,
-        },
-      );
+      const current = await this.dependencies.store.snapshot(restore.path, true);
       const currentBytes =
         current.exists && !current.isDirectory
           ? await this.dependencies.store.readTransactionBytes(restore.path)
@@ -350,7 +338,6 @@ export class TransactionRecovery implements TransactionRecoveryApi {
           restore.path,
           restore.content!,
           {
-            skipFileFilter: true,
             encoding: restore.encoding,
             transactionBytes: decodeStoredBytes(restore.bytes),
             expectedBytes: { exists: !isUndefined(expected), bytes: expected },
@@ -360,16 +347,9 @@ export class TransactionRecovery implements TransactionRecoveryApi {
         recovered.set(restore.path, snapshot);
       } else {
         await this.dependencies.store.remove(restore.path, {
-          skipFileFilter: true,
           expectedBytes: { exists: !isUndefined(expected), bytes: expected },
         });
-        const snapshot = await this.dependencies.store.snapshot(
-          restore.path,
-          true,
-          {
-            skipFileFilter: true,
-          },
-        );
+        const snapshot = await this.dependencies.store.snapshot(restore.path, true);
         recovered.set(restore.path, snapshot);
       }
     }

@@ -29,7 +29,7 @@ import type {
 } from '../types/files.js'
 import type { FileWrite } from '../types/space.js'
 import type { FileReadResult, FileText } from '../types/text.js'
-import { batchItems, commitFailure, confirmAll, failureEntry, unresolvedEditFailure, withLinkTarget, writeOfPlan } from '../utils/batch.js'
+import { batchItems, commitFailure, failureEntry, unresolvedEditFailure, withLinkTarget, writeOfPlan } from '../utils/batch.js'
 import { lineSpan, numberedLines, splitLines } from '../utils/lines.js'
 import { fileIdentity } from '../utils/paths.js'
 import { planFileEdit } from '../utils/plan.js'
@@ -58,7 +58,6 @@ const log = Log.tag('FileOperations')
  * 相对路径、`~` 怎么解析，哪些路径越出了范围，由当前空间决定（环境报告里写着）；越界的直接拒绝。
  * 读出来的是带行号的行；改的时候按行号改几处，或者整份写。读写保留原文件的编码（UTF-8、带 BOM、UTF-16、GB18030）与换行风格，
  * 认不出编码或有非法字节的按二进制处理。写是原子的，失败不会留下半截文件；路径是符号链接时读写它指向的那个文件，链接本身不变。
- * 哪些文件要先问用户（凭证、系统敏感路径……）也由当前空间决定：读被拒只是那一项失败，写被拒是整批不写。
  * 列目录、搜文本用命令做（`velar:shell` 的 run：ls、find、`rg -n`）；看图片用 `velar:images`。
  */
 export interface FileOperationsApi {
@@ -71,7 +70,7 @@ export interface FileOperationsApi {
   /**
    * @AgentView
    * 改文件：按行号改几处，或者整份写。**优先整批改**：files 里放几个就改几个，整批一次成败，成了给一个 changeId。
-   * 等用户确认那段时间里文件被别人改过，整批不写。
+   * 定下改法之后、写进去之前文件被别人改过，整批不写。
    * 路径是管道、设备、套接字，或文件有多个硬链接时不碰。新内容编不成原编码（孤立代理项、GB18030 表示不了的字符）就整批不写。
    */
   edit(input: FileEditInput, ctx: FileOperationContext): Promise<FileEditResult>
@@ -118,8 +117,8 @@ export class FileOperations implements FileOperationsApi {
   public async edit(input: FileEditInput, ctx: FileOperationContext): Promise<FileEditResult> {
     ctx.abortSignal.throwIfAborted()
     const items = batchItems<FileEditItem>(input, FileLimits.editFiles, 'edit')
-    // 第一段：每个文件定位、按真实路径判重、把改法定下来；不问人、不写。
-    // 有任何问题就整批失败，问题全部列出来让程序一次改完——这一批注定不写，就不为它打扰用户。
+    // 第一段：每个文件定位、按真实路径判重、把改法定下来，不写。
+    // 有任何问题就整批失败，问题全部列出来让程序一次改完。
     const plans: FileEditPlan[] = []
     const problems: FileEditProblem[] = []
     const seen = new Set<string>()
@@ -142,24 +141,13 @@ export class FileOperations implements FileOperationsApi {
     }
     if (!isEmpty(problems)) throw unresolvedEditFailure(problems)
 
-    // 第二段：这一批写得下去，才问空间要问的事（凭证文件、系统敏感路径）；第一次被拒就停，整批不写，后面的不再问。
-    for (const plan of plans) {
-      try {
-        await confirmAll(await ctx.files.reviewWrite(plan.target), ctx)
-      } catch (error) {
-        const failure = AppError.from(error)
-        log.debug('a write was not allowed', { code: failure.code })
-        throw unresolvedEditFailure([{ file: plan.index, path: plan.path, reason: 'denied', message: failure.message }])
-      }
-    }
-
-    // 审批期间文件可能又被别人改了：写之前再 stat 一次，印记没变的大文件不重读，其余重读核版本；变了就整批不写。
+    // 定改法的这段时间里文件可能又被别人改了：写之前再 stat 一次，印记没变的大文件不重读，其余重读核版本；变了就整批不写。
     for (const plan of plans) {
       const now = stampOf(await stat(plan.target).catch(() => null))
       if (stampProvesUnchanged(plan.stamp, now)) continue
       const current = await currentFileVersion(plan.target)
       if (current !== plan.baseVersion) {
-        problems.push({ file: plan.index, path: plan.path, reason: 'stale', message: '等用户确认期间文件被改过了；重新读一遍再改', currentVersion: toOptional(current) })
+        problems.push({ file: plan.index, path: plan.path, reason: 'stale', message: '定下改法之后文件又被改过了；重新读一遍再改', currentVersion: toOptional(current) })
       }
     }
     if (!isEmpty(problems)) throw unresolvedEditFailure(problems)
@@ -204,7 +192,6 @@ export class FileOperations implements FileOperationsApi {
     if (!isEmpty(conflicts)) {
       throw new AppError(FileErrorCodes.undoConflict, `这些文件在那次改动之后又被改过，一个文件都没撤：${conflicts.join('、')}；read 看看现状，要改回去就再 edit 一次`)
     }
-    for (const { entry } of pending) await confirmAll(await ctx.files.reviewWrite(entry.target), ctx)
     const writes: FileWrite[] = pending.map(({ entry, current }) => ({ target: entry.target, bytes: toNullable(entry.before), expected: { exists: true, bytes: current } }))
     try {
       await ctx.files.commit(writes)
@@ -234,12 +221,11 @@ export class FileOperations implements FileOperationsApi {
     }))
   }
 
-  /** 读一个文件：定位、过审查、有界读、认出图片与文档就拒、严格解码，再按 range 交出带行号的行；超过这次调用剩下的预算就这一项失败，不回半份。 */
+  /** 读一个文件：定位、有界读、认出图片与文档就拒、严格解码，再按 range 交出带行号的行；超过这次调用剩下的预算就这一项失败，不回半份。 */
   private async readOne(item: FileReadItem, budgetChars: number, ctx: FileOperationContext): Promise<FileText> {
     const { path, target, linked } = await this.locate(item.path, ctx)
     const span = isPresent(item.range) ? lineSpan(item.range) : null
     if (isPresent(item.range) && !span) throw new AppError('VALIDATION', `range 要行号或 [首行, 末行]（从 1 起，末行不小于首行），这里给的是 ${JSON.stringify(item.range)}`)
-    await confirmAll(await ctx.files.reviewRead(target), ctx)
     const buffer = await readBoundedFile(target, path, FileLimits.fileBytes)
     // 先认文本：内容恰好以 GIF8、%PDF- 开头的文本文件照样是文本；解不出文本的，再看是不是图片或文档，把该怎么办说清楚。
     const decoded = textCodec.decode(buffer)

@@ -1,13 +1,13 @@
 /**
  * 文件引用：源码快照（source:）、可编辑视图（view:，就是 fileRef）与改动回执（change:）的签发与解析。
  * 引用是记录的内容哈希。记录按会话存在进程内存里，每个会话有条数与字符数上限，最久没用的先出；进程重启后引用全部作废，重读就是。
- * 解析时核对会话与项目根，编辑前再按当前的读取授权与脱敏复核一遍。
+ * 解析时核对会话与项目根。
  */
 
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 
-import type { AgentProjectKernelPort, ProjectOperationContext } from '../../contract/requires.js'
+import type { ProjectOperationContext } from '../../contract/requires.js'
 import type { ProjectFileView, ProjectVisibleCoverage, ReceiptRecord, RefRecord, RefSession, SourceRecord } from '../../types/file-refs.js'
 import { ProjectError } from '../errors.js'
 import { ProjectTuning } from '../tuning.js'
@@ -79,10 +79,9 @@ function get(ctx: ProjectOperationContext, ref: string, prefixes: readonly strin
   return entry.record
 }
 
-/** 签发引用的项目必须就是当前项目：项目换了，引用就作废。交回当前项目的内核。 */
-async function kernelOf(ctx: ProjectOperationContext, root: string, ref: string): Promise<AgentProjectKernelPort> {
+/** 签发引用的项目必须就是当前项目：项目换了，引用就作废。 */
+function assertCurrentProject(ctx: ProjectOperationContext, root: string, ref: string): void {
   if (root !== currentRoot(ctx)) throw new ProjectError('INVALID_INPUT', '这个引用属于另一个项目，在这里用不了。', { ref }, ReadForReferenceNextAction)
-  return ctx.project.kernel()
 }
 
 /** 当前项目根的绝对路径：引用记录里记的就是它。 */
@@ -113,21 +112,14 @@ export function saveFileRef(ctx: ProjectOperationContext, source: string, covera
   return put(ctx, { kind: 'project-file-view', version: 1, source: sourceRef, coverage }, 'view:')
 }
 
-/**
- * 取回 fileRef 对应的视图（路径、版本、正文、可见范围）：只认 view: 引用，
- * 而且历史正文要按当前的读取授权与脱敏再过一遍，现在不许读或会被遮住就不能凭它编辑。
- */
+/** 取回 fileRef 对应的视图（路径、版本、正文、可见范围）：只认 view: 引用，而且要是当前项目签发的。 */
 export async function loadFileView(ctx: ProjectOperationContext, fileRef: string): Promise<ProjectFileView> {
   const record = get(ctx, fileRef, ['view:', 'source:'])
   if (record.kind !== 'project-file-view') {
     throw new ProjectError('INVALID_INPUT', '这不是可编辑的 fileRef：编辑只收窗口上的 view:… 引用。', { ref: fileRef }, ReadForReferenceNextAction)
   }
   const source = resolveFileSource(ctx, record.source)
-  const kernel = await kernelOf(ctx, source.root, fileRef)
-  const authorized = await kernel.prepareContextSnapshot({ path: source.path, content: source.content })
-  if (authorized.redacted || authorized.content !== source.content) {
-    throw new ProjectError('PERMISSION_DENIED', '这个文件现在的读取策略遮住了（或不许读）fileRef 背后的内容，不能凭它编辑。', { path: source.path })
-  }
+  assertCurrentProject(ctx, source.root, fileRef)
   return { path: source.path, revision: source.revision, contentRevision: source.contentRevision, content: source.content, coverage: structuredClone(record.coverage) }
 }
 
@@ -139,7 +131,7 @@ export async function resolveFileRef(ctx: ProjectOperationContext, fileRef: stri
   const view = await loadFileView(ctx, fileRef)
   const kernel = await ctx.project.kernel()
   const current = await kernel.read({ path: view.path, maxChars: Math.max(view.content.length + 1, 1) })
-  if (current.redacted || current.truncated || current.hasMore || current.content !== view.content || !current.snapshot.revision) {
+  if (current.truncated || current.hasMore || current.content !== view.content || !current.snapshot.revision) {
     throw new ProjectError('BASE_REVISION_MISMATCH', `${view.path} 在这个 fileRef 之后改过（当前版本 ${current.snapshot.revision ?? '未知'}）。`,
       { path: view.path, expected: view.revision, actual: current.snapshot.revision },
       '可能就是你上一次改的：用上一次 edit 回执里这个文件的新 fileRef 按新行号重做；回执里没有这个文件的，重新 read 要改的那几行。')

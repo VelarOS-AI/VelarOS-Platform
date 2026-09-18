@@ -10,7 +10,6 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { ProjectFileLimits, ProjectPolicyDefaults } from '../contract/constants'
-import { createSecretRedactionProvider } from '../index'
 import { loadFileView } from '../utils/agent/file-refs'
 import { projectSourceLines } from '../utils/agent/source-window'
 
@@ -180,16 +179,14 @@ describe('read 的窗口与 fileRef', () => {
     expect(outside.message).toContain('项目之内')
   })
 
-  test('像密钥的片段读出来是遮住的，这样的窗口只能看、不能改', async () => {
+  test('像密钥的片段原样读出来，窗口照常能改', async () => {
     const secret = ['sk', 'live', '0123456789abcdefghij'].join('-')
     await writeFile(join(root, 'env.ts'), `const token = "${secret}"\nconst plain = 1\n`)
-    const { call } = await projectToolFixture({ root, providers: { secretRedaction: createSecretRedactionProvider() } })
+    const { call } = await projectToolFixture({ root })
     const window = await readOne(call, 'env.ts')
-    expect(window.lines[0]).toEqual([1, 'const token = "[REDACTED]"'])
-    expect(window).toMatchObject({ redacted: true, editable: false })
-    expect(window.fileRef).toBeUndefined()
-    expect(window.note).toContain('遮住')
-    expect(JSON.stringify(window)).not.toContain(secret)
+    expect(window.lines[0]).toEqual([1, `const token = "${secret}"`])
+    expect(typeof window.fileRef).toBe('string')
+    expect(window.editable).toBeUndefined()
   })
 
   test('超过可编辑上限的大文件只给只读窗口并说明，不签发用起来必然失败的 fileRef', async () => {
@@ -226,15 +223,16 @@ describe('批量读', () => {
     expect(single.message).toContain('list')
   })
 
-  test('不许读的文件进 issues，其余文件照常给可编辑的窗口', async () => {
+  test('读不到的文件进 issues（出了项目、不存在），其余文件照常给可编辑的窗口', async () => {
     await writeFile(join(root, 'open.txt'), 'visible\n')
-    await writeFile(join(root, 'denied.txt'), 'private\n')
-    const { call } = await projectToolFixture({ root, corePolicy: { readDeny: ['denied.txt'] } })
-    const result = await call('project', 'read', { files: [{ path: 'denied.txt' }, { path: 'open.txt', range: 1 }] })
+    const { call } = await projectToolFixture({ root })
+    const result = await call('project', 'read', { files: [{ path: '../outside.txt' }, { path: 'missing.txt' }, { path: 'open.txt', range: 1 }] })
     expect(result.files.map((window: { path: string }) => window.path)).toEqual(['open.txt'])
     expect(result.files[0].fileRef).toStartWith('view:')
-    expect(result.issues).toEqual([expect.objectContaining({ path: 'denied.txt', code: 'PERMISSION_DENIED' })])
-    expect(JSON.stringify(result)).not.toContain('private')
+    expect(result.issues).toEqual([
+      expect.objectContaining({ path: '../outside.txt', code: 'PERMISSION_DENIED' }),
+      expect.objectContaining({ path: 'missing.txt', code: 'TARGET_NOT_FOUND' }),
+    ])
   })
 
   test('批量读每个文件都整份交回，各带 fileRef', async () => {

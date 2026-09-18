@@ -6,7 +6,7 @@
  * 能力本身（`velar:files`、`velar:images`、`velar:shell`、`velar:sandbox` 的操作）在各自的能力单元里验收；这里验收本机宿主，以及系统空间把它们装起来之后的样子。
  */
 
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { chmod, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -28,20 +28,27 @@ const canConfine = (process.platform === 'darwin' && existsSync('/usr/bin/sandbo
   || (process.platform === 'linux' && ['/usr/bin/bwrap', '/usr/local/bin/bwrap'].some((path) => existsSync(path)))
 
 /**
- * 一个真的系统空间：真本地内核、真操作表；审批端口记下每次确认，按 `answer` 回答（缺省放行）。
+ * 一个真的系统空间：真本地内核、真操作表；审批端口记下每次确认并放行。
+ * `onResolve` 在内核每次解析模型给的路径时先被叫到（同步），测试借它在「定改法」与「落盘」之间插一手。
  * 用完调 `dispose`，内核起过的后台进程一并停掉。
  */
-function systemSpaceAt(cwd: string, answer?: (message: string) => void | Promise<void>) {
+function systemSpaceAt(cwd: string, onResolve?: (path: Optional<string>) => void) {
   const kernel = createLocalSystemKernel({ cwd })
   const confirmations: string[] = []
   const approval: ApprovalPort = {
     awaitConfirmation: async (message) => {
       confirmations.push(message)
-      await answer?.(message)
     },
     awaitConfirmationDecision: async () => ({ approved: true, message: null, autoApproved: false }),
   }
-  const space = createSystemSpace({ host: kernel, resolveCall: (signal) => ({ abortSignal: signal ?? new AbortController().signal, approval, sessionId: 'session-1' }) })
+  const host = new Proxy(kernel, {
+    get: (target, property) => {
+      if (property === 'resolvePath') return (path?: string) => { onResolve?.(path); return target.resolvePath(path) }
+      const value: unknown = Reflect.get(target, property, target)
+      return typeof value === 'function' ? value.bind(target) : value
+    },
+  })
+  const space = createSystemSpace({ host, resolveCall: (signal) => ({ abortSignal: signal ?? new AbortController().signal, approval, sessionId: 'session-1' }) })
   const port = createCapabilityPort(space.operations)
   const program = async (source: string) => {
     const session = createCodeSurfaceSession({ checker: codeProgramChecker, runner: nodeSubprocessCodeRunner, capabilities: port })
@@ -374,7 +381,7 @@ describe('演练沙箱', () => {
     }
   })
 
-  test.skipIf(!canConfine)('INV-27 落回只落用户确认过的那份差量：确认之后镜像又变了就整批不落', async () => {
+  test.skipIf(!canConfine)('INV-27 落回只落核对过的那份差量：核对之后镜像又变了就整批不落', async () => {
     const source = await makeSource()
     const kernel = createLocalSystemKernel({ cwd: source })
     let sandboxId = ''
@@ -382,8 +389,8 @@ describe('演练沙箱', () => {
       const record = await kernel.createSandbox({})
       sandboxId = record.id
       await writeFile(join(record.root, 'b.txt'), 'beta\n')
-      // 用户看确认卡的时候镜像里还有命令在写（这里直接写一个新文件）：确认的是一份，镜像里已经是另一份。
-      // 确认用的那份差量算完之后，镜像又变了，落回时拿旧指纹去核对就必须整批不落。
+      // 核对完差量之后镜像里还有命令在写（这里直接写一个新文件）：核对的是一份，镜像里已经是另一份。
+      // 落回时拿旧指纹去核对就必须整批不落。
       const confirmed = await kernel.diffSandbox({ sandboxId, textDiffs: false })
       expect(confirmed.created).toEqual(['b.txt'])
       await writeFile(join(record.root, 'c.txt'), 'late\n')
@@ -441,53 +448,48 @@ describe('演练沙箱', () => {
 })
 
 describe('系统空间：四件能力配上本机端口', () => {
-  test('INV-19 写系统敏感路径与凭证文件前按真实路径问用户，被拒整批不写；读凭证文件被拒只是那一项失败；临时目录不打扰用户', async () => {
+  test('INV-19 读写凭证文件与系统敏感路径不问用户：经符号链接改私钥、读私钥、撤回，一次确认都没有', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-inv19-')))
-    const system = systemSpaceAt(root, (message) => {
-      if (message.includes('凭证文件')) throw new Error('用户没同意')
-    })
+    const system = systemSpaceAt(root)
     try {
       await writeFile(join(root, 'deploy.pem'), '-----BEGIN PRIVATE KEY-----\nabc\n')
       await symlink(join(root, 'deploy.pem'), join(root, 'notes.txt'))
-      await writeFile(join(root, 'plain.txt'), 'alpha\n')
-      // 临时目录里的普通文件：不问用户就写了
-      const written = await system.port.invoke({ namespace: 'files', operation: 'edit', input: { files: [{ path: 'plain.txt', newText: 'beta\n' }] } })
-      expect(written.error).toBeUndefined()
-      expect(system.confirmations).toEqual([])
-      // 凭证文件藏在符号链接后面也要问，问的是它指向的那个；被拒整批不写
-      const denied = await system.port.invoke({ namespace: 'files', operation: 'edit', input: { files: [{ path: 'plain.txt', newText: 'gamma\n' }, { path: 'notes.txt', newText: 'x\n' }] } })
-      expect(denied.error?.code).toBe('FILES_EDIT_DENIED')
-      expect(system.confirmations[0]).toContain(join(root, 'deploy.pem'))
-      expect(await readFile(join(root, 'plain.txt'), 'utf8')).toBe('beta\n')
+      const edited = await system.port.invoke({ namespace: 'files', operation: 'edit', input: { files: [{ path: 'notes.txt', newText: 'rotated\n' }] } })
+      expect(edited.error).toBeUndefined()
+      expect(await readFile(join(root, 'deploy.pem'), 'utf8')).toBe('rotated\n')
+      const read = await system.port.invoke({ namespace: 'files', operation: 'read', input: { files: [{ path: 'deploy.pem' }] } })
+      expect(read.value).toMatchObject({ files: [{ lines: [[1, 'rotated']] }] })
+      const undone = await system.port.invoke({ namespace: 'files', operation: 'undo', input: { changeId: (edited.value as { changeId: string }).changeId } })
+      expect(undone.error).toBeUndefined()
       expect(await readFile(join(root, 'deploy.pem'), 'utf8')).toContain('PRIVATE KEY')
-      // 读凭证文件同样要问，被拒只是那一项失败
-      const read = await system.port.invoke({ namespace: 'files', operation: 'read', input: { files: [{ path: 'deploy.pem' }, { path: 'plain.txt' }] } })
-      expect(read.value).toMatchObject({ files: [{ error: { message: '用户没同意' } }, { lines: [[1, 'beta']] }] })
+      expect(system.confirmations).toEqual([])
     } finally {
       await system.dispose()
       await rm(root, { recursive: true, force: true })
     }
   })
 
-  test('INV-20 本机落盘核对计划时的字节：审批期间被同尺寸、同修改时间地改掉，也不覆盖', async () => {
+  test('INV-20 本机落盘核对计划时的字节：定下改法之后被同尺寸、同修改时间地改掉，也不覆盖', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-inv20-')))
     const plain = join(root, 'plain.txt')
     // 超过 64 KB：这么大的文件落盘前只看「大小 + 修改时间」，两样都没变就不重读（小文件一律重读，拦不到这里）。
     const concurrent = `${'z'.repeat(100 * 1024)}\n`
     const pinned = 1_700_000_000
-    // 用户看凭证文件的确认卡时，别人把第一个文件改成同样长度的内容，并把修改时间拨回整数秒
-    const system = systemSpaceAt(root, async () => {
-      await writeFile(plain, concurrent)
-      await utimes(plain, pinned, pinned)
+    // 定第二个文件的改法时，别人把第一个文件改成同样长度的内容，并把修改时间拨回整数秒
+    const system = systemSpaceAt(root, (path) => {
+      if (path !== 'second.txt') return
+      writeFileSync(plain, concurrent)
+      utimesSync(plain, pinned, pinned)
     })
     try {
       await writeFile(plain, `${'a'.repeat(100 * 1024)}\n`)
       await utimes(plain, pinned, pinned)
-      await writeFile(join(root, 'deploy.pem'), 'secret\n')
-      const outcome = await system.port.invoke({ namespace: 'files', operation: 'edit', input: { files: [{ path: 'plain.txt', newText: 'beta\n' }, { path: 'deploy.pem', newText: 'x\n' }] } })
+      await writeFile(join(root, 'second.txt'), 'second\n')
+      const outcome = await system.port.invoke({ namespace: 'files', operation: 'edit', input: { files: [{ path: 'plain.txt', newText: 'beta\n' }, { path: 'second.txt', newText: 'x\n' }] } })
       expect(outcome.error?.code).toBe('VALIDATION')
       expect(outcome.error?.message).toContain('被别人改了')
       expect(await readFile(plain, 'utf8')).toBe(concurrent)
+      expect(await readFile(join(root, 'second.txt'), 'utf8')).toBe('second\n')
     } finally {
       await system.dispose()
       await rm(root, { recursive: true, force: true })
@@ -590,7 +592,7 @@ export default { path: file.path, listed: listed.stdout.includes('notes.txt'), c
     }
   })
 
-  test.skipIf(!canConfine)('INV-35 系统空间的沙箱：镜像任意目录，镜像里的命令写不到外面，落回前按源目录问用户', async () => {
+  test.skipIf(!canConfine)('INV-35 系统空间的沙箱：镜像任意目录，镜像里的命令写不到外面，落回不问用户', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-inv35-sandbox-')))
     const system = systemSpaceAt(tmpdir())
     try {
@@ -607,8 +609,7 @@ export default { inside: inside.success, escaped: outside.success, created: chan
       expect(outcome.result.value).toEqual({ inside: true, escaped: false, created: ['b.txt'], applied: ['b.txt'] })
       expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('beta')
       expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('alpha\n')
-      expect(system.confirmations).toHaveLength(1)
-      expect(system.confirmations[0]).toContain(root)
+      expect(system.confirmations).toEqual([])
       for (const record of system.kernel.listSandboxes()) await system.kernel.discardSandbox(record.id)
     } finally {
       await system.dispose()

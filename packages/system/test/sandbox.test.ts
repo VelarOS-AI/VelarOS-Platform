@@ -10,8 +10,7 @@ import { createCapabilityPort } from '@velaros-ai/code-surface'
 
 import type { LocalSystemKernelApi } from '../src/index'
 import { createLocalSystemKernel, createSystemSpace } from '../src/index'
-import { isPathInsideRoot } from '../src/utils/file-safety.js'
-import { assertInsideSandboxBase, isSandboxId, sandboxBaseDirectory } from '../src/utils/sandbox.js'
+import { assertInsideSandboxBase, isPathInsideRoot, isSandboxId, sandboxBaseDirectory } from '../src/utils/sandbox.js'
 
 /** 本机有没有进程约束后端：macOS 的 sandbox-exec 或 Linux 的 bubblewrap；没有就跳过要真跑命令的用例。 */
 const canConfine = (process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'))
@@ -33,15 +32,15 @@ async function makeSource(): Promise<string> {
 
 /**
  * 经系统空间里真实的沙箱端口调 `velar:sandbox`，走的就是代码面那条路：程序看得见的只有返回值、错误码与说明。
- * `answer` 为 false 时每次确认都拒绝，是函数时把确认文案交给它（记下、或者趁机改镜像）再放行。
+ * 每次确认都记进 `asked` 再拒绝：落回不该问，问了就会失败。
  */
-function sandboxVia(kernel: LocalSystemKernelApi, answer: boolean | ((message: string) => void) = true) {
+function sandboxVia(kernel: LocalSystemKernelApi, asked: string[] = []) {
   const approval: ApprovalPort = {
     awaitConfirmation: async (message) => {
-      if (answer === false) throw new Error('user said no')
-      if (typeof answer === 'function') answer(message)
+      asked.push(message)
+      throw new Error('user said no')
     },
-    awaitConfirmationDecision: async () => ({ approved: answer !== false, message: null, autoApproved: false }),
+    awaitConfirmationDecision: async () => ({ approved: false, message: null, autoApproved: false }),
   }
   const space = createSystemSpace({ host: kernel, resolveCall: (signal) => ({ abortSignal: signal ?? new AbortController().signal, approval }) })
   const port = createCapabilityPort(space.operations)
@@ -191,7 +190,7 @@ describe('rehearsal sandbox', () => {
     }
   })
 
-  test.skipIf(!canConfine)('diff lists created, modified and deleted files with text diffs; apply asks, writes back, and refuses conflicts', async () => {
+  test.skipIf(!canConfine)('diff lists created, modified and deleted files with text diffs; apply writes back without asking, and refuses conflicts', async () => {
     const source = await makeSource()
     const kernel = createLocalSystemKernel({ cwd: source })
     const record = await kernel.createSandbox({})
@@ -206,13 +205,10 @@ describe('rehearsal sandbox', () => {
       expect(changes.textDiffs.find((entry) => entry.path === 'src/a.txt')?.diff).toContain('-alpha')
       expect(changes.textDiffs.find((entry) => entry.path === 'src/a.txt')?.diff).toContain('+ALPHA')
 
-      // 拒绝确认：什么都不落。
-      await expect(sandboxVia(kernel, false)('apply', { id: record.id })).rejects.toThrow('user said no')
-      expect(await readFile(join(source, 'src', 'a.txt'), 'utf8')).toBe('alpha\nbeta\n')
-      expect(existsSync(join(source, 'README.md'))).toBe(true)
-
-      // 批准：三列都落回，.git 不落。
-      const applied = await sandboxVia(kernel)<{ created: string[]; modified: string[]; deleted: string[]; skippedGit: boolean }>('apply', { id: record.id })
+      // 落回不问用户：三列都落回，.git 不落。
+      const asked: string[] = []
+      const applied = await sandboxVia(kernel, asked)<{ created: string[]; modified: string[]; deleted: string[]; skippedGit: boolean }>('apply', { id: record.id })
+      expect(asked).toEqual([])
       expect(applied).toMatchObject({ created: ['src/new.txt'], modified: ['src/a.txt'], deleted: ['README.md'], skippedGit: true })
       expect(await readFile(join(source, 'src', 'a.txt'), 'utf8')).toBe('ALPHA\nbeta\n')
       expect(await readFile(join(source, 'src', 'new.txt'), 'utf8')).toBe('fresh\n')
@@ -241,7 +237,7 @@ describe('rehearsal sandbox', () => {
     }
   })
 
-  test.skipIf(!canConfine)('diff lists every change and apply asks with the full change set; paths that did not change are refused before asking', async () => {
+  test.skipIf(!canConfine)('diff lists every change and apply writes the full change set; paths that did not change are refused', async () => {
     const source = await makeSource()
     const kernel = createLocalSystemKernel({ cwd: source })
     const record = await kernel.createSandbox({})
@@ -252,13 +248,11 @@ describe('rehearsal sandbox', () => {
       // 三列不截断：看多少由程序定。
       const listed = await kernel.diffSandbox({ sandboxId: record.id, textDiffs: false })
       expect(listed.created).toHaveLength(count)
-      const messages: string[] = []
-      const applied = await sandboxVia(kernel, (message) => { messages.push(message) })<{ created: string[] }>('apply', { id: record.id })
-      expect(messages[0]).toContain(`新增 ${count} 个`)
+      const asked: string[] = []
+      const applied = await sandboxVia(kernel, asked)<{ created: string[] }>('apply', { id: record.id })
       expect(applied.created.length).toBe(count)
 
-      const asked: string[] = []
-      await expect(sandboxVia(kernel, (message) => { asked.push(message) })('apply', { id: record.id, paths: ['never-changed.txt'] }))
+      await expect(sandboxVia(kernel, asked)('apply', { id: record.id, paths: ['never-changed.txt'] }))
         .rejects.toMatchObject({ code: 'VALIDATION' })
       expect(asked).toEqual([])
     } finally {

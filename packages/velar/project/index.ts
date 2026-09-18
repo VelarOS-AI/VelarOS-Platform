@@ -9,13 +9,10 @@
 // ── 子集入口 ────────────────────────────────────────────────────
 export * from './contracts.js'
 
-// ── 产品面：项目文件、代码理解、项目资源门、领域内核、有限事务面、落盘变更记录、审批桥 ───────
+// ── 产品面：项目文件、代码理解、项目资源门、领域内核、有限事务面、落盘变更记录 ───────
 export type { ProjectChangeFeed } from './contract/provides.js'
 export type { ProjectKernel } from './impl/kernel/LocalProjectKernel.js'
 export { createProjectKernel } from './impl/kernel/LocalProjectKernel.js'
-export { createSecretRedactionProvider } from './impl/kernel/PatternSecretRedactionProvider.js'
-export type { ProjectApprovalBridgeApi } from './impl/kernel/ProjectApprovalBridge.js'
-export { projectApprovalBridge } from './impl/kernel/ProjectApprovalBridge.js'
 export type { ProjectTransactionControllerApi } from './impl/kernel/ProjectTransactionController.js'
 export { createProjectTransactionController } from './impl/kernel/ProjectTransactionController.js'
 export type { ProjectCodeOperationsApi } from './impl/operations/ProjectCodeOperations.js'
@@ -31,7 +28,6 @@ export { typescriptPlugin } from './impl/plugins/TypeScriptProjectPlugin.js'
 // ── 注入面：宿主要给的东西，以及插件与扩展点 ─────────────────────────
 export type {
   AgentProjectKernelPort,
-  ApprovalProvider,
   CommandProvider,
   ContextProvider,
   CreateProjectKernelOptions,
@@ -41,7 +37,6 @@ export type {
   LoggerProvider,
   PatchStrategy,
   PipelineStage,
-  PolicyProvider,
   ProjectChangeFeedWriter,
   ProjectCodeIntelligenceHost,
   ProjectFixer,
@@ -52,13 +47,11 @@ export type {
   ProjectProviders,
   ProjectSpacePort,
   ProjectValidator,
-  SecretRedactionProvider,
   TelemetryProvider,
 } from './contract/requires.js'
 
 // ── 上面两面用到、又不在可移植文件里的数据 ───────────────────────
 export type { AdapterCapability, AdapterKind, AdapterPrepareEditInput, AdapterSearchHit, AdapterSearchInput, AdapterValidateInput, ParseInput, ParseResult, ProjectSymbol, SymbolInfo } from './types/adapter.js'
-export type { ProjectApprovalContext } from './types/agent.js'
 export type { AgentProjectApplyResult, AgentProjectCommandToolRequirement, AgentProjectFileSnapshot, AgentProjectKernelReadResult, AgentProjectPreparedPatch, AgentProjectPreparedTransaction, AgentProjectReadResult, AgentProjectSearchHit, AgentProjectSearchResult, AgentProjectStoredTransaction } from './types/agent-port.js'
 export type { BatchConflict, BatchInput, BatchMetrics, BatchResult, BatchTask, BatchTaskOperation, BatchTaskResult } from './types/batch.js'
 export type { FileProjectChangeFeedOptions, ProjectChangeLifecycle, ProjectChangeListener, ProjectChangeListOptions, ProjectChangePatch, ProjectChangeRecord, ProjectChangeRecordInput, ProjectChangeRevision } from './types/change-feed.js'
@@ -98,8 +91,8 @@ export type { FileListEntry, FileStatInput, FileStatResult, ObserveInput, ReadIn
 export type { PatchStrategyInput } from './types/patch.js'
 export type { PipelineContext, PipelinePhase } from './types/pipeline.js'
 export type { TypeScriptPluginOptions } from './types/plugins.js'
-export type { ApprovalRequest, CorePolicy, PolicyDecision, PolicyDecisionInput } from './types/policy.js'
-export type { CommandRunInput, CommandRunResult, CommandToolRequirement, CommandToolRequirementKind, FileFilterInput, ProjectIntelligenceLocation, ProjectIntelligenceSymbol, ProjectRuntimeProviders, RedactionInput, RedactionResult } from './types/provider.js'
+export type { CorePolicy } from './types/policy.js'
+export type { CommandRunInput, CommandRunResult, CommandToolRequirement, CommandToolRequirementKind, FileFilterInput, ProjectIntelligenceLocation, ProjectIntelligenceSymbol, ProjectRuntimeProviders } from './types/provider.js'
 export type { FileAttributes, FileSnapshot, ProjectSnapshot } from './types/snapshot.js'
 export type { ResolvedTarget,ResolveTargetInput, ResolveTargetResult } from './types/target.js'
 export type { ProjectTransactionInput, ProjectTransactionStatus, StoredTransaction } from './types/transaction.js'

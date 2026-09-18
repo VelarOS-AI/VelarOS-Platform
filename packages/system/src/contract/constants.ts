@@ -26,7 +26,7 @@ export const SystemErrorCodes = Object.freeze({
   processConfinementUnavailable: 'SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE',
   /** 沙箱落回时源目录里的文件自建沙箱以来变过，或者上级路径是符号链接、会写到源目录外：什么都没写，message 列出每处冲突。 */
   sandboxConflict: 'SYSTEM_SANDBOX_CONFLICT',
-  /** 沙箱落回时镜像在用户确认之后又变过（镜像里可能还有命令在跑）：什么都没写，重新 diff、重新确认。 */
+  /** 沙箱落回时镜像在落回前核对之后又变过（镜像里可能还有命令在跑）：什么都没写，重新 diff 再落。 */
   sandboxChanged: 'SYSTEM_SANDBOX_CHANGED',
 } as const)
 

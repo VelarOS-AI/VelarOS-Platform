@@ -4,16 +4,7 @@ import type { Diagnostic } from "./common.js";
 import type { CorePolicy } from "./policy.js";
 import type { CommandToolRequirement } from "./provider.js";
 
-export type ProjectValidationPolicy = Omit<
-  Readonly<CorePolicy>,
-  "approval" | "generatedFiles" | "protectedFiles" | "readDeny" | "writeDeny"
-> & {
-  readonly approval: Readonly<CorePolicy["approval"]>;
-  readonly generatedFiles: readonly string[];
-  readonly protectedFiles: readonly string[];
-  readonly readDeny: readonly string[];
-  readonly writeDeny: readonly string[];
-};
+export type ProjectValidationPolicy = Readonly<CorePolicy>;
 
 export type ReadonlyProvider<Provider> = Provider extends object
   ? Readonly<Provider>

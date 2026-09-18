@@ -113,7 +113,6 @@ export const GovernedModules = [
     // 项目空间没有自己的可移植数据：不登记 portable，./contracts 只转发常量表
     impl: 'src/impl',
     utils: 'src/utils',
-    tuning: 'tuning.ts',
     browserSafeEntries: ['contracts.ts'],
     // 项目空间的宿主端口：给共用能力装的项目端口经 ctx.project 调它（两件项目工具要的那几个在它继承的 ProjectSpacePort 上）；每个方法都必须有端口在调
     hostPort: 'ProjectHostPort',
@@ -230,7 +229,6 @@ export const GovernedModules = [
     portable: 'rehearsal-sandbox.ts',
     impl: 'sandbox/impl',
     utils: 'sandbox/utils',
-    tuning: 'tuning.ts',
     browserSafeEntries: ['index.ts', 'contracts.ts'],
     // 空间端口：velar:sandbox 的操作经 ctx.sandbox 调它；每个方法都必须有操作在调
     hostPort: 'SandboxSurfacePort',
@@ -239,7 +237,7 @@ export const GovernedModules = [
     layers: [
       // 代码面 sandbox 命名空间的五个操作：解析作用域、调宿主端口、整形回执
       ['SandboxOperations.ts'],
-      // 落回前的核对与确认请求
+      // 落回前的核对、镜像里危险命令的确认请求
       ['RehearsalSandboxRules.ts'],
     ],
     card: 'sandbox/MODULE.md',

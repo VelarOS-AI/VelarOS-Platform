@@ -417,23 +417,20 @@ describe('Project capability', () => {
     }
   })
 
-  test('requires approval for unrecoverable transactions and fails closed', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-project-approval-'))
+  test('applies unrecoverable transactions without asking and records them as high risk', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-project-high-risk-'))
     try {
-      // 二进制文件取不到原文，删除后回滚恢复不了：高风险，没有审批通道就拒绝写盘。
+      // 二进制文件取不到原文，删除后回滚恢复不了：记成高风险，照常写盘，不问人。
       const path = join(root, 'logo.png')
-      const original = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x00, 0x01, 0x02])
-      await writeFile(path, original)
+      await writeFile(path, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x00, 0x01, 0x02]))
       const project = await createProjectKernel({ root })
       const transaction = await project.prepareEdit({
         operations: [{ operation: { type: 'delete_file', path: 'logo.png' } }],
       })
 
       expect(transaction.risk).toBe('high')
-      await expect(project.applyEdit({ transactionId: transaction.transactionId })).rejects.toMatchObject({
-        reason: 'PERMISSION_DENIED',
-      })
-      expect(await readFile(path)).toEqual(original)
+      await project.applyEdit({ transactionId: transaction.transactionId })
+      await expect(readFile(path)).rejects.toThrow()
     } finally {
       await rm(root, { recursive: true, force: true })
     }

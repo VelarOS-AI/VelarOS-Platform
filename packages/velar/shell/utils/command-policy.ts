@@ -748,12 +748,11 @@ export function isShellCommandReadOnly(command: string): boolean {
   })
 }
 
-/** 执行前给命令分类：是否只读、是否危险、是否该转入后台、是否要用户确认，以及可能占用的端口。 */
+/** 执行前给命令分类：是否只读、是否危险、是否该转入后台，以及可能占用的端口。 */
 export function analyzeCommandExecution(command: string): ShellCommandPlan {
   const trimmed = command.trim()
   if (!trimmed) return {
     isReadOnly: false,
-    shouldRequestConfirmation: false,
     shouldStartInBackground: false,
     reason: null,
     isDangerous: false,
@@ -766,7 +765,6 @@ export function analyzeCommandExecution(command: string): ShellCommandPlan {
       : null
   return {
     isReadOnly: isShellCommandReadOnly(trimmed),
-    shouldRequestConfirmation: !!dangerousReason || !!reason,
     shouldStartInBackground: !!reason,
     reason,
     isDangerous: !!dangerousReason,
@@ -775,7 +773,7 @@ export function analyzeCommandExecution(command: string): ShellCommandPlan {
   }
 }
 
-/** 判断一次命令调用能否与其他调用并发：不转后台、只读且无需确认；optIn 为真时还要求入参显式声明 parallel: true，为假时只拒绝显式的 parallel: false。 */
+/** 判断一次命令调用能否与其他调用并发：只读、不危险、不转后台；optIn 为真时还要求入参显式声明 parallel: true，为假时只拒绝显式的 parallel: false。 */
 export function isParallelCommandExecutionSafe(input: {
   command?: unknown
   background?: unknown
@@ -784,31 +782,25 @@ export function isParallelCommandExecutionSafe(input: {
   if (optIn ? !isTrue(input.parallel) : isFalse(input.parallel)) return false
   if (isTrue(input.background) || !isString(input.command)) return false
   const plan = analyzeCommandExecution(input.command)
-  return plan.isReadOnly && !plan.shouldRequestConfirmation && !plan.shouldStartInBackground
+  return plan.isReadOnly && !plan.isDangerous && !plan.shouldStartInBackground
 }
 
 
-/** 生成危险命令或长驻命令的确认文案，写明命令、理由、是否后台运行与可能占用的端口。 */
-export function buildBackgroundCommandConfirmationMessage(
+/** 生成危险命令的确认文案，写明命令、理由、是否后台运行与可能占用的端口。 */
+export function buildDangerousCommandConfirmationMessage(
   command: string,
   plan: ShellCommandPlan,
   scopeLabel: string,
   willRunInBackground: boolean
 ): string {
   const portSuffix = !isEmpty(plan.ports) ? ` 可能涉及端口：${plan.ports.join(', ')}。` : ''
-  if (plan.isDangerous) return [
-      `准备在${scopeLabel}执行高风险命令：${command}`,
-      plan.dangerousReason ?? '该命令可能造成不可逆结果。',
-      ...(plan.dangerousReason === RecursiveRemoveReason || plan.dangerousReason === TreeDeleteReason
-        ? ['如果目标是一个项目或仓库目录（含 .git），未推送的提交和未提交的改动会一起没掉，无法找回。']
-        : []),
-      willRunInBackground ? `该命令还可能长期驻留。${portSuffix}` : '这是一次需要显式确认的危险操作。',
-      '是否继续？',
-    ].join('\n')
   return [
-    `准备在${scopeLabel}启动一个可能长期驻留的命令：${command}`,
-    plan.reason ?? '该命令可能会保持后台运行。',
-    `执行后可手动终止。${portSuffix}`,
+    `准备在${scopeLabel}执行高风险命令：${command}`,
+    plan.dangerousReason ?? '该命令可能造成不可逆结果。',
+    ...(plan.dangerousReason === RecursiveRemoveReason || plan.dangerousReason === TreeDeleteReason
+      ? ['如果目标是一个项目或仓库目录（含 .git），未推送的提交和未提交的改动会一起没掉，无法找回。']
+      : []),
+    willRunInBackground ? `该命令还可能长期驻留。${portSuffix}` : '这是一次需要显式确认的危险操作。',
     '是否继续？',
   ].join('\n')
 }

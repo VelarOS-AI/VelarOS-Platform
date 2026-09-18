@@ -20,7 +20,7 @@ import { VelarFilesModule } from '../contract/surface'
 import type { FileLineRange, FileOperationContext, FileReadItem, FileText } from '../index'
 import { FileErrorCodes, FileLimits, fileOperations } from '../index'
 
-import { asking, Declarations, diskSpace, failureOf, runModelProgram, submitModelProgram,UnitRoot } from './support'
+import { Declarations, diskSpace, failureOf, runModelProgram, submitModelProgram,UnitRoot } from './support'
 
 let root = ''
 beforeEach(async () => {
@@ -107,51 +107,51 @@ describe('写：一批一次成败', () => {
     expect(await readFile(join(root, 'deep', 'new.txt'), 'utf8')).toBe('one\ntwo\n')
   })
 
-  test('INV-2 落盘时核对计划时看到的字节：等用户确认期间被同尺寸、同修改时间地改掉，也不覆盖', async () => {
+  test('INV-2 落盘时核对计划时看到的字节：计划之后被同尺寸、同修改时间地改掉，也不覆盖', async () => {
     const plain = join(root, 'plain.txt')
     // 超过 64 KB：这么大的文件落盘前只看「大小 + 修改时间」，两样都没变就不重读（小文件一律重读，拦不到这里）。
     const original = `${'a'.repeat(100 * 1024)}\n`
     const concurrent = `${'z'.repeat(100 * 1024)}\n`
     await writeFile(plain, original)
-    await writeFile(join(root, 'deploy.pem'), 'secret\n')
+    await writeFile(join(root, 'second.txt'), 'second\n')
     // 修改时间先落在整数秒上：拨回去时才能分毫不差，否则纳秒级的差别会让印记核对自己就发现了
     const pinned = 1_700_000_000
     await utimes(plain, pinned, pinned)
-    const space = diskSpace({
-      root,
-      reviewWrite: (target) => (target.endsWith('.pem') ? asking(target) : []),
-      // 用户看确认卡的时候，别人把第一个文件改成同样长度的内容，并把修改时间拨回去
-      answer: async () => {
+    const space = diskSpace({ root })
+    // 定第二个文件的改法时，别人把第一个文件改成同样长度的内容，并把修改时间拨回去：印记核对看不出来，只能靠落盘时核字节
+    const locate = space.port.locate
+    space.port.locate = async (path) => {
+      if (path === 'second.txt') {
         await writeFile(plain, concurrent)
         await utimes(plain, pinned, pinned)
-      },
-    })
-    const failure = await failureOf(fileOperations.edit({ files: [{ path: 'plain.txt', newText: 'beta\n' }, { path: 'deploy.pem', newText: 'x\n' }] }, space.context))
+      }
+      return locate(path)
+    }
+    const failure = await failureOf(fileOperations.edit({ files: [{ path: 'plain.txt', newText: 'beta\n' }, { path: 'second.txt', newText: 'x\n' }] }, space.context))
     expect(failure.code).toBe('VALIDATION')
     expect(failure.message).toContain('这一批没有写进去')
     expect(failure.context).toEqual({ applied: [] })
     expect(space.commits[0]?.[0]?.expected).toEqual({ exists: true, bytes: Buffer.from(original) })
     expect(await readFile(plain, 'utf8')).toBe(concurrent)
-    expect(await readFile(join(root, 'deploy.pem'), 'utf8')).toBe('secret\n')
+    expect(await readFile(join(root, 'second.txt'), 'utf8')).toBe('second\n')
   })
 
-  test('INV-2 新建的核对它仍不存在：确认期间或者落盘前一刻别人建了同名文件，都不覆盖', async () => {
+  test('INV-2 新建的核对它仍不存在：定改法期间或者落盘前一刻别人建了同名文件，都不覆盖', async () => {
     const created = diskSpace({ root })
     await fileOperations.edit({ files: [{ path: 'fresh/new.txt', newText: 'hi\n' }] }, created.context)
     expect(created.commits[0]?.[0]?.expected).toEqual({ exists: false })
 
-    // 等用户确认期间别人建了它：写之前再核一次，整批不写
-    await writeFile(join(root, 'deploy.pem'), 'secret\n')
-    const waiting = diskSpace({
-      root,
-      reviewWrite: (target) => (target.endsWith('.pem') ? asking(target) : []),
-      answer: async () => {
-        await writeFile(join(root, 'mine.txt'), 'theirs\n')
-      },
-    })
-    const stale = await failureOf(fileOperations.edit({ files: [{ path: 'mine.txt', newText: 'mine\n' }, { path: 'deploy.pem', newText: 'x\n' }] }, waiting.context))
+    // 定第二个文件的改法时别人建了它：写之前再核一次，整批不写
+    await writeFile(join(root, 'second.txt'), 'second\n')
+    const waiting = diskSpace({ root })
+    const locate = waiting.port.locate
+    waiting.port.locate = async (path) => {
+      if (path === 'second.txt') await writeFile(join(root, 'mine.txt'), 'theirs\n')
+      return locate(path)
+    }
+    const stale = await failureOf(fileOperations.edit({ files: [{ path: 'mine.txt', newText: 'mine\n' }, { path: 'second.txt', newText: 'x\n' }] }, waiting.context))
     expect(stale.code).toBe(FileErrorCodes.editUnresolved)
-    expect(stale.message).toContain('等用户确认期间文件被改过了')
+    expect(stale.message).toContain('定下改法之后文件又被改过了')
     expect(await readFile(join(root, 'mine.txt'), 'utf8')).toBe('theirs\n')
 
     // 核完到落盘之间别人建了它：空间拿 expected 核对，不覆盖
@@ -193,16 +193,15 @@ describe('写：一批一次成败', () => {
     expect(nothing.context).toEqual({ applied: [] })
   })
 
-  test('INV-2 撤回同样核对：撤回前读到的字节在落盘时再核一次，等用户确认期间被改过就不覆盖', async () => {
+  test('INV-2 撤回同样核对：撤回前读到的字节在落盘时再核一次，核完之后被改过就不覆盖', async () => {
     await writeFile(join(root, 'deploy.pem'), 'secret\n')
     const change = await fileOperations.edit({ files: [{ path: 'deploy.pem', newText: 'rotated\n' }] }, diskSpace({ root }).context)
-    const space = diskSpace({
-      root,
-      reviewWrite: (target) => (target.endsWith('.pem') ? asking(target) : []),
-      answer: async () => {
-        await writeFile(join(root, 'deploy.pem'), 'rotated again\n')
-      },
-    })
+    const space = diskSpace({ root })
+    const commit = space.port.commit
+    space.port.commit = async (writes) => {
+      await writeFile(join(root, 'deploy.pem'), 'rotated again\n')
+      await commit(writes)
+    }
     const failure = await failureOf(fileOperations.undo({ changeId: change.changeId }, space.context))
     expect(failure.code).toBe('VALIDATION')
     expect(space.commits[0]?.[0]).toEqual({ target: join(root, 'deploy.pem'), bytes: Buffer.from('secret\n'), expected: { exists: true, bytes: Buffer.from('rotated\n') } })
@@ -385,7 +384,7 @@ describe('大小分档', () => {
   }, 60_000)
 })
 
-describe('作用域与策略由空间注入', () => {
+describe('作用域由空间注入', () => {
   test('INV-5 越出空间范围的路径（经符号链接越出去的也算）：读的那一项失败，写的那一批整批不写，code 是 FILES_EDIT_DENIED', async () => {
     const space = diskSpace({ root, clamp: true })
     const outside = await realpath(await mkdtemp(join(tmpdir(), 'velaros-files-outside-')))
@@ -410,57 +409,6 @@ describe('作用域与策略由空间注入', () => {
     } finally {
       await rm(outside, { recursive: true, force: true })
     }
-  })
-
-  test('INV-5 空间要问的就问，问的是真实路径；写的时候第一次被拒就停，后面的不再打扰，整批不写', async () => {
-    await writeFile(join(root, 'deploy.pem'), 'secret\n')
-    await symlink(join(root, 'deploy.pem'), join(root, 'notes.txt'))
-    await writeFile(join(root, 'other.pem'), 'secret 2\n')
-    await writeFile(join(root, 'plain.txt'), 'alpha\n')
-    const space = diskSpace({
-      root,
-      reviewWrite: (target) => (target.endsWith('.pem') ? asking(target) : []),
-      answer: () => {
-        throw new Error('用户没同意')
-      },
-    })
-    // 普通文件不问
-    await fileOperations.edit({ files: [{ path: 'plain.txt', newText: 'beta\n' }] }, space.context)
-    expect(space.confirmations).toHaveLength(0)
-    // 凭证文件藏在符号链接后面也要问（问的是它指向的那个）；被拒整批不写，第二个凭证文件不再问
-    const failure = await failureOf(fileOperations.edit({
-      files: [{ path: 'plain.txt', newText: 'gamma\n' }, { path: 'notes.txt', newText: 'x\n' }, { path: 'other.pem', newText: 'y\n' }],
-    }, space.context))
-    expect(failure.code).toBe(FileErrorCodes.editDenied)
-    expect(failure.message).toContain(`files[1] ${join(root, 'notes.txt')}：用户没同意`)
-    expect(failure.message).not.toContain('files[2]')
-    expect(space.confirmations).toEqual([`要动 ${join(root, 'deploy.pem')} 吗？`])
-    expect(space.reviewed.filter((entry) => entry.kind === 'write').map((entry) => entry.target)).not.toContain(join(root, 'other.pem'))
-    expect(await readFile(join(root, 'plain.txt'), 'utf8')).toBe('beta\n')
-    expect(await readFile(join(root, 'deploy.pem'), 'utf8')).toBe('secret\n')
-    expect(await readFile(join(root, 'other.pem'), 'utf8')).toBe('secret 2\n')
-  })
-
-  test('INV-5 读被拒只是那一项失败；撤回也算写，要问的照样问真实路径，被拒就不撤', async () => {
-    await writeFile(join(root, 'deploy.pem'), 'key\n')
-    await symlink(join(root, 'deploy.pem'), join(root, 'notes.txt'))
-    await writeFile(join(root, 'plain.txt'), 'plain\n')
-    const reading = diskSpace({ root, reviewRead: (target) => (target.endsWith('.pem') ? asking(target) : []), answer: () => { throw new Error('不给看') } })
-    const read = await fileOperations.read({ files: [{ path: 'notes.txt' }, { path: 'plain.txt' }] }, reading.context)
-    expect(read.files[0]).toMatchObject({ path: 'notes.txt', error: { message: '不给看' } })
-    expect(read.files[1]).toMatchObject({ lines: [[1, 'plain']] })
-    expect(reading.confirmations).toEqual([`要动 ${join(root, 'deploy.pem')} 吗？`])
-
-    const change = await fileOperations.edit({ files: [{ path: 'notes.txt', newText: 'rotated\n' }] }, diskSpace({ root }).context)
-    const refusing = diskSpace({ root, reviewWrite: (target) => (target.endsWith('.pem') ? asking(target) : []), answer: () => { throw new Error('不许撤') } })
-    const refused = await failureOf(fileOperations.undo({ changeId: change.changeId }, refusing.context))
-    expect(refused.message).toContain('不许撤')
-    expect(refusing.confirmations).toEqual([`要动 ${join(root, 'deploy.pem')} 吗？`])
-    expect(refusing.commits).toHaveLength(0)
-    expect(await readFile(join(root, 'deploy.pem'), 'utf8')).toBe('rotated\n')
-    // 被拒的撤回不算撤过：用户点了头就能撤
-    await fileOperations.undo({ changeId: change.changeId }, diskSpace({ root }).context)
-    expect(await readFile(join(root, 'deploy.pem'), 'utf8')).toBe('key\n')
   })
 })
 
@@ -487,7 +435,7 @@ export default file.lines.length`)
     // 读旧写法的 version、写旧写法的 restore、不先分开失败那支就取 lines：三行各被拦一次
     expect([...new Set(outcome.check.diagnostics.map((diagnostic) => diagnostic.line))]).toEqual([3, 4, 5])
     expect(existsSync(join(root, 'made.txt'))).toBe(false)
-    expect(space.reviewed).toHaveLength(0)
+    expect(space.located).toHaveLength(0)
     expect(space.commits).toHaveLength(0)
   }, 60_000)
 
@@ -570,7 +518,7 @@ describe('入参', () => {
     expect((await failureOf(fileOperations.read({ files: reads }, space.context))).message).toContain(`最多 ${FileLimits.readFiles} 个文件`)
     const edits = Array.from({ length: FileLimits.editFiles + 1 }, (_, index) => ({ path: `${index}.txt`, newText: '' }))
     expect((await failureOf(fileOperations.edit({ files: edits }, space.context))).message).toContain(`最多 ${FileLimits.editFiles} 个文件`)
-    expect(space.reviewed).toHaveLength(0)
+    expect(space.located).toHaveLength(0)
     expect(space.commits).toHaveLength(0)
   })
 
@@ -669,7 +617,7 @@ describe('模型面', () => {
     // 声明只有三个方法，签名里没有宿主的上下文
     expect(Declarations.match(/export function \w+/g)).toEqual(['export function read', 'export function edit', 'export function undo'])
     expect(Declarations).toContain('export function read(input: FileReadInput): Promise<FileReadResult>')
-    for (const hidden of ['FileSpacePort', 'FileOperationContext', 'FileConfirmation', 'FileWrite', 'FileLocation', 'locate', 'reviewRead', 'reviewWrite', 'commit', 'abortSignal', 'approval']) {
+    for (const hidden of ['FileSpacePort', 'FileOperationContext', 'FileWrite', 'FileLocation', 'locate', 'commit', 'abortSignal']) {
       expect(`${hidden}:${Declarations.includes(hidden)}`).toBe(`${hidden}:false`)
     }
     expect(Declarations).toContain('看图片用 `velar:images`')

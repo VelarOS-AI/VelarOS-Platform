@@ -1,12 +1,10 @@
 /**
  * 验收测试的替身：一个装着真内核的假空间。两件工具只经根入口拿（projectFileOperations、projectCodeOperations、createProjectKernel），
  * 调用走代码面的能力端口（createCapabilityPort），和模型的程序调 `velar:project` 是同一条路：失败时程序只看得见 code 与 message。
- * 审批与修改授权都记下来给断言用。空间怎么把它们与共用能力装在一起，在 `@velaros-ai/project` 的验收里测。
+ * 两件工具不问人，所以替身空间里没有审批端口，也没有授权口子。空间怎么把它们与共用能力装在一起，在 `@velaros-ai/project` 的验收里测。
  */
 
-import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import { createCapabilityPort } from '@velaros-ai/code-surface'
-import { AppError } from '@velaros-ai/core/error'
 
 import {
   type CodeAnalysisInput,
@@ -25,18 +23,10 @@ import {
   type ProjectSpacePort,
 } from '../index'
 
-/** 替身空间的开关：用户点不点确认、给不给项目修改授权、内核的策略与 provider。 */
+/** 替身空间的开关：内核的策略与 provider。 */
 export interface ProjectHarnessOptions {
-  approve?: boolean
-  authorizeMutation?: boolean
   corePolicy?: CreateProjectKernelOptions['corePolicy']
   providers?: ProjectProviders
-}
-
-/** 一次确认请求：文案与选项。 */
-export interface RecordedConfirmation {
-  message: string
-  options?: Record<string, unknown>
 }
 
 /** 程序看得到的一次失败：错误码与说明。 */
@@ -47,33 +37,12 @@ export interface ProgramFailure extends Error {
 /** 在 root 上建一个真内核和替身空间，返回按「命名空间.操作」调用的 call 与记录。 */
 export async function createProjectHarness(root: string, options: ProjectHarnessOptions = {}) {
   const kernel = await createProjectKernel({ root, corePolicy: options.corePolicy, providers: options.providers })
-  const confirmations: RecordedConfirmation[] = []
-  const mutations: string[] = []
-  /** 每次修改授权带来的、这次会写的文件（相对项目根）；断言确认卡片列得出要改哪些文件。 */
-  const authorizedPaths: string[][] = []
-  const approved = options.approve !== false
-  const approval: ApprovalPort = {
-    awaitConfirmationDecision: async (message, _signal, confirmation) => {
-      confirmations.push({ message, options: confirmation as Record<string, unknown> | undefined })
-      return { approved, message: approved ? null : '用户拒绝了', autoApproved: false }
-    },
-    awaitConfirmation: async (message, _signal, confirmation) => {
-      confirmations.push({ message, options: confirmation as Record<string, unknown> | undefined })
-      if (!approved) throw new AppError('PERMISSION', '用户拒绝了')
-    },
-  }
   const project: ProjectSpacePort = {
     getRootPath: () => root,
     kernel: async () => kernel,
-    prepareMutation: async ({ operation, paths }) => {
-      mutations.push(operation)
-      authorizedPaths.push(paths ?? [])
-      const authorized = options.authorizeMutation !== false
-      return { approved: authorized, message: authorized ? '已授权' : '宿主没有授权修改这个项目' }
-    },
     queryCode: async () => ({}),
   }
-  const context: ProjectOperationContext = { abortSignal: new AbortController().signal, project, approval, sessionId: 'project-acceptance' }
+  const context: ProjectOperationContext = { abortSignal: new AbortController().signal, project, sessionId: 'project-acceptance' }
   // 空间装配时给两件工具的就是这张表：每次调用交同一份上下文。
   const operations = {
     project: {
@@ -102,7 +71,7 @@ export async function createProjectHarness(root: string, options: ProjectHarness
     if (range !== undefined) file.range = range
     return (await call('project', 'read', { files: [file] })).files[0]
   }
-  return { kernel, operations, context, call, read, confirmations, mutations, authorizedPaths }
+  return { kernel, operations, context, call, read }
 }
 
 /** 等一次调用失败，交回程序看得到的那两样。 */

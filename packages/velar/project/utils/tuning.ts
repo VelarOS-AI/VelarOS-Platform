@@ -134,10 +134,8 @@ export const ProjectTuning = Object.freeze({
     evidenceWindowBytes: 80_000,
     /** 证据包给「往前 / 往后接着读」的建议时，至少建议读几行。 */
     evidenceSuggestedReadLines: 20,
-    /** 交给模型的命中片段最多多少字符；脱敏之后才截，截断不会把密钥切成脱敏正则认不出的半截。 */
+    /** 交给模型的命中片段最多多少字符：命中所在的整行，行比它还长时以命中为中心向两侧各取一半。 */
     snippetChars: 400,
-    /** 脱敏前先取多宽的窗口：命中所在的整行，行比它还长时以命中为中心向两侧各取一半。 */
-    snippetWindowChars: 4_000,
   }),
   /** ripgrep 搜索（utils/files/ripgrep.ts）。 */
   ripgrep: Object.freeze({

@@ -60,11 +60,11 @@ export interface SandboxDiff {
   textDiffs: SandboxTextDiff[]
   omittedDiffs: number
   note?: string
-  /** 这份差量的指纹：三列的完整路径与镜像里对应文件的印记算出来的摘要；落回时交回来，镜像在确认之后又变过就整批不落。 */
+  /** 这份差量的指纹：三列的完整路径与镜像里对应文件的印记算出来的摘要；落回时交回来，镜像在这之后又变过就整批不落。 */
   fingerprint?: string
 }
 
-/** 落回源目录的选项：paths 只落这些相对路径，不给就全部；fingerprint 是确认时看到的差量指纹，给了就先核对，镜像又变过就整批不落。 */
+/** 落回源目录的选项：paths 只落这些相对路径，不给就全部；fingerprint 是落回前核对的那份差量的指纹，给了就先核对，镜像又变过就整批不落。 */
 export interface SandboxApplyOptions {
   sandboxId: string
   paths?: string[]
@@ -135,7 +135,7 @@ export interface SandboxDiffInput {
   paths?: string[]
 }
 
-/** @AgentView 把镜像里的变化落回源目录：paths 只落这些相对路径，不给就全部；落回一定先向用户确认，被拒就抛错、什么都不落。 */
+/** @AgentView 把镜像里的变化落回源目录：paths 只落这些相对路径，不给就全部。 */
 export interface SandboxApplyInput {
   id: string
   paths?: string[]

@@ -61,7 +61,7 @@ export function normalizeFilterList(values: LooseOptional<readonly string[]>): s
 
 /**
  * 按路径、include、exclude、深度与条数列出文件和目录：一层层读目录，每层条目的 gitignore 判定合成一次 git check-ignore
- * （git 不可用时按逐级累积的本地 .gitignore 规则判断）；版本库内部、被忽略、被排除或不可见的目录不再深入，输出按深度优先、满 maxFiles 即止。
+ * （git 不可用时按逐级累积的本地 .gitignore 规则判断）；版本库内部、被忽略、被排除或宿主不想列的目录不再深入，输出按深度优先、满 maxFiles 即止。
  */
 export async function listProjectFiles(
   input: ObserveInput,
@@ -76,7 +76,7 @@ export async function listProjectFiles(
   const startPathInput = input.path?.trim()
   const hasExplicitStartPath = !!startPathInput && startPathInput !== '.'
   const startAccess = startPathInput
-    ? await dependencies.authorize(startPathInput, 'observe', '列出', { skipFileFilter: true })
+    ? await dependencies.authorize(startPathInput)
     : { abs: dependencies.root, rel: '.' }
   const startDir = startAccess.abs
   const startRel = startAccess.rel || '.'
@@ -127,21 +127,14 @@ export async function listProjectFiles(
       for (const { entry, abs, rel } of entries) {
         if (ignored.has(abs)) continue
         if (!isEmpty(exclude) && matchesAny(rel, exclude)) continue
-        const action = entry.isDirectory() ? 'observe' : 'search'
         let outputRel = rel
+        // 经符号链接指到项目外的条目不列；点名的起点下面不问列举过滤器，别处按它略过宿主不想列的条目。
         if (entry.isSymbolicLink()) {
-          const access = await dependencies
-            .authorize(rel, action, entry.isDirectory() ? '遍历' : '搜索', {
-              skipFileFilter: hasExplicitStartPath,
-            })
-            .catch(() => null)
+          const access = await dependencies.authorize(rel).catch(() => null)
           if (!access) continue
           outputRel = access.rel
-        } else if (
-          !(await dependencies.allowed(rel, action, { skipFileFilter: hasExplicitStartPath }))
-        ) {
-          continue
         }
+        if (!hasExplicitStartPath && !(await dependencies.visible(rel, entry.isDirectory() ? 'observe' : 'search'))) continue
         const node: ListingNode = {
           entry: { path: outputRel, type: entry.isDirectory() ? 'directory' : 'file' },
           included: isEmpty(include) || matchesAny(rel, include),

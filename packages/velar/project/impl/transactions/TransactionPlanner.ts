@@ -1,6 +1,6 @@
 /**
  * 事务规划：`TransactionPlanner`。接口 `TransactionPlannerApi`、注入回调 `TransactionPlannerDependencies` 与准备选项 `TransactionPlannerPrepareOptions` 在本文件的类上方。
- * 把编辑意图按版本化快照变成补丁，汇总事务的净变化与风险，守住事务规模与受保护文件；不写盘、不持有事务仓库。
+ * 把编辑意图按版本化快照变成补丁，汇总事务的净变化与风险，守住事务规模；不写盘、不持有事务仓库。
  */
 
 import { resolve } from 'node:path'
@@ -26,8 +26,7 @@ import type { StagedFileContent } from '../../types/transaction.js'
 import { combineDiffs, unifiedDiff } from '../../utils/diff.js'
 import { replaceSnapshotLineRanges } from '../../utils/editing/line-edit.js'
 import { createTextPatch } from '../../utils/editing/prepared-patch.js'
-import { GeneratedFileSuggestedNextAction, ProjectError } from '../../utils/errors.js'
-import { matchesAny } from '../../utils/glob.js'
+import { ProjectError } from '../../utils/errors.js'
 import { id } from '../../utils/id.js'
 import { toAbs, toRel } from '../../utils/path.js'
 import { assertWellFormedProjectText, countChangedLines } from '../../utils/text.js'
@@ -41,7 +40,7 @@ import { recoveryRead, revisionMismatch } from '../../utils/transactions/transac
 export interface TransactionPlannerDependencies {
   /** 项目根目录的绝对路径；路径进事务前按它规范成根相对形式。 */
   readonly root: string
-  /** 内核策略：revision 检查、事务规模上限、受保护与生成文件名单都从这里读。 */
+  /** 内核策略：revision 检查、事务规模上限都从这里读。 */
   readonly policy: CorePolicy
   /** 读文件快照的端口（带不带正文由第二个参数决定）。 */
   readonly store: Pick<ProjectFileAccess, 'snapshot'>
@@ -70,8 +69,8 @@ export interface TransactionPlannerPrepareOptions {
 /**
  * 根据版本化快照把编辑意图变成补丁；不持有事务仓库，不写文件。实例由内核持有，一个内核一份。
  *
- * 预期内的失败都抛 ProjectError：revision 已变化抛 BASE_REVISION_MISMATCH，超出事务规模抛 SCOPE_VIOLATION，
- * 碰受保护文件抛 PROTECTED_FILE，碰生成文件抛 GENERATED_FILE；单个操作失败时消息前缀「第 N 个编辑操作失败」，
+ * 预期内的失败都抛 ProjectError：revision 已变化抛 BASE_REVISION_MISMATCH，超出事务规模抛 SCOPE_VIOLATION；
+ * 单个操作失败时消息前缀「第 N 个编辑操作失败」，
  * details 带操作序号、路径、stage: 'prepare'、written: false 与回读建议 recovery。adapter、补丁策略抛出的其他错误原样抛出。
  */
 export interface TransactionPlannerApi {
@@ -88,7 +87,7 @@ export interface TransactionPlannerApi {
    * 算出改动文件、改动行数与风险；单个文件改动行数超过策略上限抛 SCOPE_VIOLATION。
    */
   summarizePatches(patches: readonly PreparedPatch[]): Pick<PreparedTransaction, 'changedFiles' | 'diff' | 'changedLines' | 'risk'>
-  /** 事务规模与受保护、生成文件的唯一判定点：prepare 与 amend 都走它，超出文件数或行数上限、碰受保护或生成文件都抛出。 */
+  /** 事务规模的唯一判定点：prepare 与 amend 都走它，超出文件数或行数上限就抛出。 */
   assertScopeWithinPolicy(changedFiles: readonly string[], changedLines: number): void
   /**
    * 用最新快照重放补丁记下的原始意图，得到接在新内容上的补丁（保留补丁号，metadata 记下 rebase 来源）。
@@ -453,7 +452,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
 
   /**
    * 事务摘要描述每个文件的**净变化**（事务前 → 最终内容）。同一文件的多个补丁首尾相接，逐补丁
-   * diff 的拼接会把中间态 hunk 叠在一起，行数也被重复计算；模型与审批看到的必须就是将要写下的。
+   * diff 的拼接会把中间态 hunk 叠在一起，行数也被重复计算；模型与界面看到的必须就是将要写下的。
    * 单补丁文件直接沿用补丁自带的 diff，保留策略/插件自己的 diff 表达。
    */
   public summarizePatches(
@@ -505,8 +504,8 @@ export class TransactionPlanner implements TransactionPlannerApi {
 
   /**
    * 事务风险按「能否恢复」划线：只要有一个补丁回滚后恢复不了原文（`canRevertToOriginal` 为假）
-   * 就是 high，交给 `decide` 请人审。能完整回滚的覆盖、删除、重命名是日常写入，与普通编辑一样只按
-   * 新建与规模分 medium/low——宿主按路径记忆审批，把它们划成 high 会让每个不同文件都打断一次用户。
+   * 就是 high。能完整回滚的覆盖、删除、重命名是日常写入，与普通编辑一样只按新建与规模分 medium/low。
+   * 风险只记进事务与变更记录给界面、审计看，不拦写入、不问人。
    */
   private resolveTransactionRisk(
     patches: readonly PreparedPatch[],
@@ -523,8 +522,8 @@ export class TransactionPlanner implements TransactionPlannerApi {
   }
 
   /**
-   * 事务规模与受保护文件的**唯一**判定点：prepare（首次成型）与 amend（追加后重算）都走它。
-   * 判据：两条路径此前各写了一份完全相同的三项检查，任何一侧改阈值/加规则都会留下另一侧的
+   * 事务规模的**唯一**判定点：prepare（首次成型）与 amend（追加后重算）都走它。
+   * 判据：两条路径此前各写了一份完全相同的检查，任何一侧改阈值/加规则都会留下另一侧的
    * 缺口——而缺口只在「amend 把事务撑过阈值」这种少见路径上暴露。
    */
   public assertScopeWithinPolicy(changedFiles: readonly string[], changedLines: number): void {
@@ -546,14 +545,6 @@ export class TransactionPlanner implements TransactionPlannerApi {
         { actual: changedLines, maximum: this.dependencies.policy.maxChangedLinesPerTransaction },
         `请按独立意图拆成每批最多 ${this.dependencies.policy.maxChangedLinesPerTransaction} 行的多个原子事务。`,
       )
-    }
-    for (const file of changedFiles) {
-      if (matchesAny(file, this.dependencies.policy.protectedFiles))
-        throw new ProjectError('PROTECTED_FILE', `受保护文件不能改：${file}（项目策略 protectedFiles），没有写入。`, { path: file },
-          '这个文件受项目策略保护：告诉用户需要改它，由用户调整策略；不要换路径或用命令绕过。')
-      if (matchesAny(file, this.dependencies.policy.generatedFiles))
-        throw new ProjectError('GENERATED_FILE', `生成文件不能手工修改：${file}`, { path: file },
-          GeneratedFileSuggestedNextAction)
     }
   }
 

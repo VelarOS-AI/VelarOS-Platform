@@ -57,7 +57,6 @@ export interface EvidencePack {
   trust: {
     /** 构造 prompt 时，工作区文件一律按不可信输入处理。 */
     projectContentIsUntrusted: boolean;
-    redactedSecrets: boolean;
   };
   metadata?: Record<string, any>;
 }

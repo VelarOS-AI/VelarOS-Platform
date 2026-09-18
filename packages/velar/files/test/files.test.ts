@@ -11,7 +11,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import { FileChanges } from '../impl/FileChanges'
 import { FileErrorCodes, FileLimits, fileOperations } from '../index'
-import { asking, diskSpace, failureOf } from '../spec/support'
+import { diskSpace, failureOf } from '../spec/support'
 import type { FileEditPlan } from '../types/edit'
 import { commitFailure, staleProblem, unresolvedEditFailure, withLinkTarget, writeOfPlan } from '../utils/batch'
 import { applyLineEdits, joinLines, lineCount, lineSpan, numberedLines, splitLines, toFileNewlines } from '../utils/lines'
@@ -335,37 +335,21 @@ describe('读写的边角', () => {
     expect(all.message).toContain('路径是目录')
   })
 
-  test('预算用完之后的文件不审查、不读盘，那一项是失败条目', async () => {
+  test('预算用完之后的文件不定位、不读盘，那一项是失败条目', async () => {
     await writeFile(join(root, 'big.txt'), 'a'.repeat(FileLimits.readChars))
     await writeFile(join(root, 'note.txt'), 'here')
     const space = diskSpace({ root })
     const budget = await fileOperations.read({ files: [{ path: 'big.txt' }, { path: 'note.txt' }] }, space.context)
     expect(budget.files[1]).toEqual({ path: 'note.txt', error: { code: 'VALIDATION', message: expect.stringContaining('预算已被前面的文件用完') } })
-    expect(space.reviewed.map((entry) => entry.target)).toEqual([join(root, 'big.txt')])
+    expect(space.located).toEqual(['big.txt'])
   }, 30_000)
 
-  test('读被拒只是那一项失败；只有这一项时整个调用报出拒绝原因', async () => {
-    await writeFile(join(root, 'deploy.pem'), 'key\n')
+  test('读越界只是那一项失败；只有这一项时整个调用报出拒绝原因', async () => {
     await writeFile(join(root, 'note.txt'), 'here')
-    const space = diskSpace({ root, reviewRead: (target) => (target.endsWith('.pem') ? asking(target) : []), answer: () => { throw new Error('user said no') } })
-    const refused = await fileOperations.read({ files: [{ path: 'note.txt' }, { path: 'deploy.pem' }] }, space.context)
-    expect(refused.files.map((entry) => ('error' in entry ? entry.error.message : entry.lines))).toEqual([[[1, 'here']], 'user said no'])
-    await expect(fileOperations.read({ files: [{ path: 'deploy.pem' }] }, space.context)).rejects.toThrow('user said no')
-  })
-
-  test('空间不许写（审查直接抛）也算被拒，整批不写，不再往下问', async () => {
-    await writeFile(join(root, 'a.txt'), 'a\n')
-    const space = diskSpace({
-      root,
-      reviewWrite: (target) => {
-        if (target.endsWith('a.txt')) throw new AppError('PERMISSION', '这个空间不许写 a.txt')
-        return []
-      },
-    })
-    const failure = await failureOf(fileOperations.edit({ files: [{ path: 'a.txt', newText: 'x' }, { path: 'b.txt', newText: 'y' }] }, space.context))
-    expect(failure.code).toBe(FileErrorCodes.editDenied)
-    expect(failure.message).toContain('这个空间不许写 a.txt')
-    expect(space.reviewed.map((entry) => entry.target)).toEqual([join(root, 'a.txt')])
+    const space = diskSpace({ root, clamp: true })
+    const refused = await fileOperations.read({ files: [{ path: 'note.txt' }, { path: '/etc/hosts' }] }, space.context)
+    expect(refused.files.map((entry) => ('error' in entry ? entry.error.code : entry.lines))).toEqual([[[1, 'here']], 'PERMISSION'])
+    await expect(fileOperations.read({ files: [{ path: '/etc/hosts' }] }, space.context)).rejects.toThrow('在这个空间之外')
   })
 
   test.skipIf(process.platform === 'win32')('已有文件的权限位原样保留，新文件的权限由 umask 定', async () => {
@@ -401,14 +385,13 @@ describe('读写的边角', () => {
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('a\n')
   })
 
-  test('同一个文件换个写法也算出现两次；这一批注定不写，就一次都不问', async () => {
+  test('同一个文件换个写法也算出现两次，整批不写', async () => {
     await writeFile(join(root, 'a.pem'), 'a\n')
-    const space = diskSpace({ root, reviewWrite: (target) => (target.endsWith('.pem') ? asking(target) : []) })
+    const space = diskSpace({ root })
     const failure = await failureOf(fileOperations.edit({ files: [{ path: 'a.pem', newText: 'x' }, { path: './sub/../a.pem', newText: 'y' }] }, space.context))
     expect(failure.message).toContain('files[1]')
     expect(failure.message).toContain('不止一次')
-    // 这一批注定不写：一次都不问用户。
-    expect(space.confirmations).toHaveLength(0)
+    expect(space.commits).toHaveLength(0)
     expect(await readFile(join(root, 'a.pem'), 'utf8')).toBe('a\n')
   })
 
@@ -470,12 +453,13 @@ describe('这一轮修的几处', () => {
     expect(failure.message).not.toContain('做到一半')
   })
 
-  test('这一批注定不写（第一项越界、第二项要问）：一次都不问用户', async () => {
+  test('第一项越界：整批不写，后面那一项也不写', async () => {
     await writeFile(join(root, 'k.pem'), 'k\n')
-    const space = diskSpace({ root, clamp: true, reviewWrite: (target) => (target.endsWith('.pem') ? asking(target) : []) })
+    const space = diskSpace({ root, clamp: true })
     const failure = await failureOf(fileOperations.edit({ files: [{ path: '/etc/hosts', newText: 'x' }, { path: 'k.pem', newText: 'y\n' }] }, space.context))
     expect(failure.code).toBe(FileErrorCodes.editDenied)
-    expect(space.confirmations).toEqual([])
+    expect(space.commits).toEqual([])
+    expect(await readFile(join(root, 'k.pem'), 'utf8')).toBe('k\n')
   })
 
   test('写出去超过 20 MB 的不写：那样的文件之后读不了也改不了', async () => {

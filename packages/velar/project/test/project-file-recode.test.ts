@@ -51,7 +51,7 @@ describe('edit 的 recode', () => {
   test('转成带 BOM 的 UTF-16、CRLF；已是目标格式的跳过、不开事务；gb18030 不收 BOM', async () => {
     await writeFile(join(root, 'a.ts'), 'const a = "中文"\nconst b = 2\n')
     await writeFile(join(root, 'keep.txt'), 'plain\n')
-    const { call, mutations } = await projectToolFixture({ root })
+    const { call, kernel } = await projectToolFixture({ root })
     const recode = { action: 'recode', paths: ['a.ts'], encoding: 'utf-16le', bom: true, newline: 'crlf' }
     const result = await call('project', 'edit', { steps: [recode] })
     expect(result.changed).toBe(true)
@@ -61,8 +61,8 @@ describe('edit 的 recode', () => {
     expect(again).toMatchObject({ changeRef: '', changed: false, changedFiles: [], recode: { converted: [], unchanged: ['a.ts'] } })
     const noop = await call('project', 'edit', { steps: [{ action: 'recode', paths: ['keep.txt'] }] })
     expect(noop).toMatchObject({ changed: false, recode: { converted: [], unchanged: ['keep.txt'] } })
-    // 什么都不用写时不问修改授权。
-    expect(mutations).toHaveLength(1)
+    // 什么都不用写时不开事务：只有第一次转换记了一条改动。
+    expect(kernel.changeFeed.list()).toHaveLength(1)
     expect(await readFile(join(root, 'keep.txt'), 'utf8')).toBe('plain\n')
     const bom = await failureOf(call('project', 'edit', { steps: [{ action: 'recode', paths: ['keep.txt'], encoding: 'gb18030', bom: true }] }))
     expect(bom.code).toBe('INVALID_INPUT')

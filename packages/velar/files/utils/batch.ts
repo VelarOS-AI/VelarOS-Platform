@@ -1,15 +1,14 @@
 /**
- * 读和写都是一批文件：核对一批的条数，问完空间要问的，造读的失败条目，核对版本，把写入计划交给空间落盘，造写的整批失败。
+ * 读和写都是一批文件：核对一批的条数，造读的失败条目，核对版本，把写入计划交给空间落盘，造写的整批失败。
  */
 
 import { isArray, isEmpty, isPlainObject, isPresent, isString, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { FileErrorCodes } from '../contract/constants.js'
-import type { FileOperationContext } from '../contract/requires.js'
 import type { FileEditPlan, FileEditProblem } from '../types/edit.js'
 import type { FileFailure } from '../types/files.js'
-import type { FileConfirmation, FileWrite } from '../types/space.js'
+import type { FileWrite } from '../types/space.js'
 
 /**
  * 取出一批文件：入参来自模型的程序，形状不保证，先核对再用——files 要是数组、每项是对象，空的和超过 max 个的都拒绝。
@@ -60,13 +59,6 @@ export function staleProblem(expected: Optional<string>, current: Nullable<strin
 export function withLinkTarget<T extends { target?: string }>(result: T, target: string, linked: boolean): T {
   if (linked) result.target = target
   return result
-}
-
-/** 按顺序问完空间要求问的每一件事；任何一件被拒就抛出，后面的不再问。 */
-export async function confirmAll(confirmations: readonly FileConfirmation[], ctx: FileOperationContext): Promise<void> {
-  for (const confirmation of confirmations) {
-    await ctx.approval.awaitConfirmation(confirmation.message, ctx.abortSignal, confirmation.options)
-  }
 }
 
 /** 一份计划交给空间落盘的样子：计划时手上有原文的，落盘时核对磁盘上还是它；新建的核对它仍不存在；太大没留原文的只靠计划后那次印记核对。 */

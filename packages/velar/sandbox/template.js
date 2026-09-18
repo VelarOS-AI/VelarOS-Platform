@@ -20,7 +20,7 @@ async function showChanges(id = 'rehearse 交回的 id', paths = ['src/index.ts'
   return textDiffs.map((file) => `── ${file.path}\n${file.diff}`).join('\n')
 }
 
-// 看过没问题就落回：给 paths 只落那几个，不给就全部落；落回前一定先问用户。落完把镜像丢掉。
+// 看过没问题就落回：给 paths 只落那几个，不给就全部落。落完把镜像丢掉。
 async function applyAndClean(id = 'rehearse 交回的 id', paths = ['src/index.ts']) {
   const applied = await apply({ id, paths })
   await discard({ id })

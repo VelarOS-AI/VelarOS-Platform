@@ -1,5 +1,5 @@
 /**
- * 演练沙箱根入口（`@velaros-ai/velar/sandbox`）：落回前的核对与确认请求，外加它们用到的数据。
+ * 演练沙箱根入口（`@velaros-ai/velar/sandbox`）：落回前的核对、镜像里危险命令的确认请求，外加它们用到的数据。
  * 根入口整条引用链不碰 Node 模块，渲染进程也能加载。另一个入口 `./contracts` 是它的子集，只有可移植数据。
  */
 
@@ -16,4 +16,4 @@ export { sandboxOperations } from './impl/SandboxOperations.js'
 export type { RehearsalSandboxHostPort, SandboxOperationContext, SandboxSurfacePort } from './contract/requires.js'
 
 // ── 上面用到、又不在可移植文件里的数据 ───────────────────────────
-export type { SandboxApplyPolicy, SandboxApplyPrepareInput, SandboxApplyRequest } from './types/apply.js'
+export type { SandboxApplyPrepareInput } from './types/apply.js'

@@ -1,7 +1,5 @@
 import type { CommandProvider,ProjectProviders } from '../contract/requires.js'
 
-import type { TrustLabel } from "./common.js";
-
 export interface MissingCommandDetectionInput {
   command: string;
   sourceCommand?: string;
@@ -39,18 +37,6 @@ export interface ProjectIntelligenceLocation {
 export interface FileFilterInput {
   path: string;
   action: "read" | "write" | "search" | "observe";
-}
-
-export interface RedactionInput {
-  path?: string;
-  content: string;
-  trust?: TrustLabel;
-}
-
-export interface RedactionResult {
-  content: string;
-  redacted: boolean;
-  markers?: string[];
 }
 
 export type CommandToolRequirementKind = "missing-command";

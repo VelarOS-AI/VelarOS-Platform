@@ -11,7 +11,6 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { textCodec } from '@velaros-ai/text-files'
 
-import type { ProjectProviders } from '../contract/requires'
 import { typescriptPlugin } from '../index'
 import { completeProjectCoverage } from '../utils/editing/planner-coverage'
 import { suggestProjectEditLocations } from '../utils/editing/stale-location'
@@ -242,7 +241,7 @@ describe('edit：几步合成一个事务', () => {
 
   test('入参自己核对：步骤的形状不对当场拒绝，一步都不做', async () => {
     await writeFile(join(root, 'a.txt'), 'a\n')
-    const { call, mutations } = await projectToolFixture({ root })
+    const { call, kernel } = await projectToolFixture({ root })
     const file = await readOne(call, 'a.txt')
     for (const steps of [
       [],
@@ -258,57 +257,16 @@ describe('edit：几步合成一个事务', () => {
     const forged = await failureOf(editLine(call, 'view:abc', 1, 'x'))
     expect(forged.code).toBe('INVALID_INPUT')
     expect(forged.message).toContain('不能手写')
-    expect(mutations).toEqual([])
+    expect(kernel.changeFeed.list()).toEqual([])
     expect(await disk('a.txt')).toBe('a\n')
   })
 })
 
-describe('治理：授权、策略、校验', () => {
-  test('修改授权被拒：一个文件都不写，message 说别自己重试', async () => {
-    await writeFile(join(root, 'a.txt'), 'old\n')
-    const { call, mutations } = await projectToolFixture({ root, prepareMutation: async () => ({ approved: false, message: '用户没同意改文件' }) })
-    const file = await readOne(call, 'a.txt')
-    for (const steps of [
-      [{ action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'new' }] }],
-      [{ action: 'create', path: 'new.txt', text: 'new' }],
-    ]) {
-      const denied = await failureOf(edit(call, steps))
-      expect(denied.code).toBe('PERMISSION_DENIED')
-      expect(denied.message).toContain('用户没同意改文件')
-      expect(denied.message).toContain('一个文件都没写')
-    }
-    // 确认卡片能列出这次要写哪些文件。
-    expect(mutations).toEqual([{ operation: '改项目文件', cwd: undefined, paths: ['a.txt'] }, { operation: '改项目文件', cwd: undefined, paths: ['new.txt'] }])
-    expect(await disk('a.txt')).toBe('old\n')
-    await expect(readFile(join(root, 'new.txt'))).rejects.toThrow()
-  })
-
-  test('宿主策略在提交时拒绝：按没写处理', async () => {
-    await writeFile(join(root, 'a.txt'), 'old\n')
-    const policy = { decide: async ({ action }: { action: string }) => action === 'apply_edit' ? { allow: false, reason: 'writes paused' } : { allow: true } }
-    const { call } = await projectToolFixture({ root, providers: { policy } as ProjectProviders })
-    const file = await readOne(call, 'a.txt')
-    expect((await failureOf(editLine(call, file.fileRef, 1, 'new'))).code).toBe('PERMISSION_DENIED')
-    expect(await disk('a.txt')).toBe('old\n')
-  })
-
-  test('fileRef 签发之后读取策略改成不许读：凭它编辑被拒', async () => {
-    await writeFile(join(root, 'a.txt'), 'key=1\n')
-    let denied = false
-    const policy = { decide: ({ action }: { action: string }) => ({ allow: !(denied && action === 'read') }) }
-    const { call } = await projectToolFixture({ root, providers: { policy } as ProjectProviders })
-    const file = await readOne(call, 'a.txt')
-    denied = true
-    expect((await failureOf(editLine(call, file.fileRef, 1, 'key=2'))).code).toBe('PERMISSION_DENIED')
-    expect(await disk('a.txt')).toBe('key=1\n')
-  })
-
-  test('生成文件不许手改，下一步指向改生成器再用命令重新生成', async () => {
+describe('治理：没有名单，只有校验', () => {
+  test('生成出来的文件也改得动：没有生成文件名单', async () => {
     const { call } = await projectToolFixture({ root })
-    const failure = await failureOf(edit(call, [{ action: 'create', path: 'src/api.generated.ts', text: 'export {}\n' }]))
-    expect(failure.code).toBe('GENERATED_FILE')
-    expect(failure.message).toContain('velar:shell')
-    await expect(readFile(join(root, 'src/api.generated.ts'))).rejects.toThrow()
+    await edit(call, [{ action: 'create', path: 'src/api.generated.ts', text: 'export {}\n' }])
+    expect(await disk('src/api.generated.ts')).toBe('export {}\n')
   })
 
   test('改完的内容过不了校验：文件原样，message 里带诊断', async () => {
@@ -432,19 +390,6 @@ describe('inspect 与 undo', () => {
     expect((await failureOf(call('project', 'inspect', { changeRef: 'view:abc' }))).code).toBe('INVALID_INPUT')
     expect(await disk('a.txt')).toBe('three\n')
     expect((await call('project', 'inspect', { changeRef: edited.changeRef })).status).toBe('applied')
-  })
-
-  test('撤销也过修改授权：被拒就什么都不动', async () => {
-    await writeFile(join(root, 'a.txt'), 'one\n')
-    let approved = true
-    const { call, mutations } = await projectToolFixture({ root, prepareMutation: async () => ({ approved, message: approved ? '已授权' : '用户不让撤销' }) })
-    const edited = await editLine(call, (await readOne(call, 'a.txt')).fileRef, 1, 'two')
-    approved = false
-    const denied = await failureOf(call('project', 'undo', { changeRef: edited.changeRef }))
-    expect(denied.code).toBe('PERMISSION_DENIED')
-    expect(denied.message).toContain('用户不让撤销')
-    expect(mutations.at(-1)).toEqual({ operation: '撤销项目文件的改动', cwd: undefined, paths: ['a.txt'] })
-    expect(await disk('a.txt')).toBe('two\n')
   })
 })
 

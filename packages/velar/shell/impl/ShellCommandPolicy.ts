@@ -4,7 +4,7 @@
  */
 
 import type { ShellCommandConcurrencyInput, ShellCommandConcurrencyOptions, ShellCommandPlan } from '../types/shell-command.js'
-import { analyzeCommandExecution, buildBackgroundCommandConfirmationMessage, isParallelCommandExecutionSafe, isShellCommandReadOnly } from '../utils/command-policy.js'
+import { analyzeCommandExecution, isParallelCommandExecutionSafe, isShellCommandReadOnly } from '../utils/command-policy.js'
 
 /**
  * 执行前给一条 shell 命令分类，实例是 `shellCommandPolicy`。`velar:shell` 的 run、演练沙箱里的 run、项目空间的 run、宿主的审批界面与无人值守放行都用这一份，判定处处一致。
@@ -13,14 +13,12 @@ import { analyzeCommandExecution, buildBackgroundCommandConfirmationMessage, isP
  * 危险判定是黑名单：递归删除、丢弃未提交改动的 Git 操作、mkfs、dd、shutdown、sudo 等；漏判只是少弹一次确认，真正的授权门在宿主的审批端口。
  */
 export interface ShellCommandPolicyApi {
-  /** 给一条命令做执行前分类：是否只读、是否危险及理由、是否该转后台及理由、要不要确认，以及命令里可能占用的端口。 */
+  /** 给一条命令做执行前分类：是否只读、是否危险及理由、是否该转后台及理由，以及命令里可能占用的端口。 */
   analyze(command: string): ShellCommandPlan
   /** 这条命令是否在任何参数组合下都不写盘、不执行别的程序；判成只读的才允许并发、无人值守放行。 */
   isReadOnly(command: string): boolean
-  /** 一次命令调用能不能与别的调用并发：只读、不转后台、不用确认；optIn（缺省为真）时还要求入参显式写了 parallel: true。 */
+  /** 一次命令调用能不能与别的调用并发：只读、不危险、不转后台；optIn（缺省为真）时还要求入参显式写了 parallel: true。 */
   isParallelSafe(input: ShellCommandConcurrencyInput, options?: ShellCommandConcurrencyOptions): boolean
-  /** 危险或长驻命令的确认文案：命令、理由、递归删除时的仓库提醒、是否后台、可能占用的端口；scopeLabel 是「在哪儿执行」那一段。 */
-  confirmationMessage(command: string, plan: ShellCommandPlan, scopeLabel: string, willRunInBackground: boolean): string
 }
 
 export class ShellCommandPolicy implements ShellCommandPolicyApi {
@@ -34,10 +32,6 @@ export class ShellCommandPolicy implements ShellCommandPolicyApi {
 
   public isParallelSafe(input: ShellCommandConcurrencyInput, options: ShellCommandConcurrencyOptions = {}): boolean {
     return isParallelCommandExecutionSafe(input, options.optIn ?? true)
-  }
-
-  public confirmationMessage(command: string, plan: ShellCommandPlan, scopeLabel: string, willRunInBackground: boolean): string {
-    return buildBackgroundCommandConfirmationMessage(command, plan, scopeLabel, willRunInBackground)
   }
 }
 

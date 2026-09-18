@@ -4,7 +4,7 @@
   "velaros": {
     "platform": "0.6"
   },
-  "description": "The project space for VelarOS hosts: the assembly that mounts velar:project and velar:code (the project tools and kernel from @velaros-ai/velar/project) together with velar:shell, velar:sandbox and velar:images on project ports — commands confined to the project root and its resource gate with output redacted, sandboxes mirroring only project directories and applying through the project's write governance, pictures only from inside the project — plus the verification policy handed to the agent's coding session.",
+  "description": "The project space for VelarOS hosts: the assembly that mounts velar:project and velar:code (the project tools and kernel from @velaros-ai/velar/project) together with velar:shell, velar:sandbox and velar:images on project ports — commands confined to the project root and its resource gate, sandboxes mirroring only project directories, pictures only from inside the project, and only dangerous commands asking the user — plus the verification policy handed to the agent's coding session.",
   "license": "Apache-2.0",
   "author": "VelarOS",
   "type": "module",

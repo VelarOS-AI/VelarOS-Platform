@@ -15,7 +15,6 @@ import { codeProgramChecker } from '@velaros-ai/code-surface'
 
 import { ProjectCodeLimits, ProjectFileLimits, ProjectPolicyDefaults, VelarCodeModule, VelarProjectModule } from '../contracts'
 import { ProjectExecutionGate } from '../impl/operations/ProjectExecutionGate'
-import { createSecretRedactionProvider } from '../index'
 
 import { createProjectHarness, failureOf } from './support'
 
@@ -142,7 +141,7 @@ describe('编辑的边界', () => {
     expect([...await readFile(join(root, 'fresh.txt'))]).toEqual([...Buffer.from('a\nb\n', 'utf8')])
   })
 
-  test('INV-13 同一个物理文件的项目内别名算同一个文件：一次编辑里出现两次整批拒绝，拒读名单按真实路径判', async () => {
+  test('INV-13 同一个物理文件的项目内别名算同一个文件：一次编辑里出现两次整批拒绝；宿主的列举过滤器按真实路径判、只管列举', async () => {
     await writeFile(join(root, 'real.txt'), 'L1\nL2\n')
     await symlink('real.txt', join(root, 'link.txt'))
     const { call, read } = await createProjectHarness(root)
@@ -155,27 +154,29 @@ describe('编辑的边界', () => {
     expect(failure.code).toBe('INVALID_INPUT')
     expect(await readFile(join(root, 'real.txt'), 'utf8')).toBe('L1\nL2\n')
 
-    await writeFile(join(root, '.env'), 'API_KEY=sk-live-SECRET\n')
+    await writeFile(join(root, '.env'), 'API_KEY=local\n')
     await symlink('.env', join(root, 'env.sample'))
-    const denied = await createProjectHarness(root, { corePolicy: { readDeny: ['.env'] } })
-    expect((await failureOf(denied.call('project', 'read', { files: [{ path: '.env' }] }))).code).toBe('PERMISSION_DENIED')
-    expect((await failureOf(denied.call('project', 'read', { files: [{ path: 'env.sample' }] }))).code).toBe('PERMISSION_DENIED')
+    const filtered = await createProjectHarness(root, { providers: { fileFilter: { shouldInclude: ({ path }) => path !== '.env' } } })
+    const listed = (await filtered.call('project', 'list', {})).entries.map((entry: { path: string }) => entry.path)
+    expect(listed).toContain('real.txt')
+    expect(listed).not.toContain('.env')
+    expect(listed).not.toContain('env.sample')
+    expect((await filtered.read('.env')).lines).toEqual([[1, 'API_KEY=local']])
   })
 
-  test('INV-14 版本库内部缺省不许写，报错说清楚要用命令跑 git', async () => {
-    const { call } = await createProjectHarness(root)
-    const failure = await failureOf(call('project', 'edit', { steps: [{ action: 'create', path: '.git/hooks/pre-commit', text: '#!/bin/sh\n' }] }))
-    expect(failure.code).toBe('PERMISSION_DENIED')
-    expect(failure.message).toContain('velar:shell')
-    await expect(readFile(join(root, '.git/hooks/pre-commit'))).rejects.toThrow()
+  test('INV-14 没有读写名单：.git 里的、.env 这类照常能读能写，只受根内约束', async () => {
+    await mkdir(join(root, '.git', 'info'), { recursive: true })
+    await writeFile(join(root, '.git', 'info', 'exclude'), '# local\n')
+    const { call, read } = await createProjectHarness(root)
+    const view = await read('.git/info/exclude')
+    await call('project', 'edit', { steps: [{ action: 'edit', fileRef: view.fileRef, edits: [{ op: 'insert', range: 1, side: 'after', text: 'scratch/' }] }] })
+    expect(await readFile(join(root, '.git', 'info', 'exclude'), 'utf8')).toBe('# local\nscratch/\n')
   })
 
-  test('INV-10 命中 generatedFiles 的文件不许手改，下一步是改生成器的输入再重新生成', async () => {
+  test('INV-10 没有生成文件名单：生成出来的文件也改得动', async () => {
     const { call } = await createProjectHarness(root)
-    const failure = await failureOf(call('project', 'edit', { steps: [{ action: 'create', path: 'src/api.generated.ts', text: 'export {}\n' }] }))
-    expect(failure.code).toBe('GENERATED_FILE')
-    expect(failure.message).toContain('生成')
-    await expect(readFile(join(root, 'src/api.generated.ts'))).rejects.toThrow()
+    await call('project', 'edit', { steps: [{ action: 'create', path: 'src/api.generated.ts', text: 'export {}\n' }] })
+    expect(await readFile(join(root, 'src/api.generated.ts'), 'utf8')).toBe('export {}\n')
   })
 
   test('INV-18 文件在读完之后被改过、原来要改的地方还唯一时，message 给出新行号与新 fileRef，换上它重提就成', async () => {
@@ -192,16 +193,16 @@ describe('编辑的边界', () => {
     expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('// header\nconst a = 1\nconst b = 20\nconst c = 3\n')
   })
 
-  test('INV-19 读出来被遮住的内容只能看不能改：窗口标 redacted、不给 fileRef', async () => {
+  test('INV-19 读出来的就是原文：像密钥的片段不遮，窗口照常签发 fileRef、能改', async () => {
     // 假密钥拼出来写：源码里写成整串，公开前的扫描会把它当成真的 API key。
     const fakeKey = ['sk', 'live', 'abcdefghijklmnopqrstuvwxyz0123456789'].join('-')
     await writeFile(join(root, 'config.ts'), `export const key = "${fakeKey}"\n`)
-    const { read } = await createProjectHarness(root, { providers: { secretRedaction: createSecretRedactionProvider() } })
+    const { call, read } = await createProjectHarness(root)
     const view = await read('config.ts')
-    expect(view.redacted).toBe(true)
-    expect(view.fileRef).toBeUndefined()
-    expect(view.editable).toBe(false)
-    expect(JSON.stringify(view.lines)).not.toContain(fakeKey)
+    expect(view.lines).toEqual([[1, `export const key = "${fakeKey}"`]])
+    expect(view.editable).toBeUndefined()
+    await call('project', 'edit', { steps: [{ action: 'edit', fileRef: view.fileRef, edits: [{ op: 'replace', range: 1, text: 'export const key = process.env.KEY' }] }] })
+    expect(await readFile(join(root, 'config.ts'), 'utf8')).toBe('export const key = process.env.KEY\n')
   })
 
   test('INV-20 程序看得到的只有 code 与 message：定位不唯一时 message 里有位置、候选与下一步', async () => {
@@ -300,18 +301,20 @@ describe('不折叠', () => {
   })
 })
 
-describe('授权与资源门', () => {
-  test('INV-17 修改授权带着这次要写的文件问，而且问在规划之后、写盘之前', async () => {
+describe('不问人，只排队', () => {
+  test('INV-17 改动与撤销不问人：上下文里没有审批端口、空间端口里没有授权口子，编辑、撤销照样做完', async () => {
     await writeFile(join(root, 'a.txt'), 'alpha\n')
     const harness = await createProjectHarness(root)
+    expect(Object.keys(harness.context).sort()).toEqual(['abortSignal', 'project', 'sessionId'])
     const file = await harness.read('a.txt')
-    await harness.call('project', 'edit', { steps: [
+    const edited = await harness.call('project', 'edit', { steps: [
       { action: 'create', path: 'created.txt', text: 'new\n' },
       { action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'ALPHA' }] },
     ] })
-    // 先规划、再带着路径问授权：确认卡片列得出这次会写哪些文件。
-    expect(harness.mutations).toEqual(['改项目文件'])
-    expect([...harness.authorizedPaths[0]!].sort()).toEqual(['a.txt', 'created.txt'])
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('ALPHA\n')
+    await harness.call('project', 'undo', { changeRef: edited.changeRef })
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('alpha\n')
+    await expect(readFile(join(root, 'created.txt'))).rejects.toThrow()
   })
 
   test('INV-8 同一项目根上写串行、读并发；排队的写者不被后来的读者饿死；取消了的等待者不运行', async () => {

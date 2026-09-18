@@ -11,7 +11,7 @@ describe('项目空间里的审批', () => {
     const root = await mkdtemp(join(tmpdir(), 'project-approval-dangerous-'))
     try {
       let ran = false
-      const { call, confirmations, mutations } = await projectSpaceFixture({
+      const { call, confirmations } = await projectSpaceFixture({
         root, approve: false,
         runCommand: async () => { ran = true; throw new Error('被拒的命令不该跑起来') },
       })
@@ -25,8 +25,7 @@ describe('项目空间里的审批', () => {
         rememberRiskScope: false,
         operation: { label: 'rm -rf ./dist', target: root },
       })
-      // 被拒之后既不再问项目的修改授权，也不起进程。
-      expect(mutations).toEqual([])
+      // 被拒之后不起进程。
       expect(ran).toBe(false)
     } finally {
       await rm(root, { recursive: true, force: true })

@@ -6,7 +6,7 @@ import { agentToolContracts } from '@velaros-ai/agent/tool-contract'
 
 import { ShellCommandOperationKind } from '../contract/constants.js'
 import type { ShellCommandApprovalInput, ShellCommandApprovalRequest } from '../types/approval.js'
-import { buildBackgroundCommandConfirmationMessage } from '../utils/command-policy.js'
+import { buildDangerousCommandConfirmationMessage } from '../utils/command-policy.js'
 
 /**
  * 构造危险命令的审批请求，实例是 `shellCommandApproval`。只出「请求」：确认文案和选项；交给哪个审批端口、被拒了是抛错还是返回结构化拒绝，由空间自己决定。
@@ -21,7 +21,7 @@ export interface ShellCommandApprovalApi {
 export class ShellCommandApproval implements ShellCommandApprovalApi {
   public dangerous(input: ShellCommandApprovalInput): ShellCommandApprovalRequest {
     return {
-      message: buildBackgroundCommandConfirmationMessage(input.command, input.plan, input.scopeLabel, input.background),
+      message: buildDangerousCommandConfirmationMessage(input.command, input.plan, input.scopeLabel, input.background),
       options: agentToolContracts.createManualApprovalOptions({
         approvalRisk: 'high',
         riskScope: input.riskScope,

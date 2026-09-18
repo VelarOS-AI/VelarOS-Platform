@@ -14,5 +14,5 @@ export { fileOperations } from './impl/FileOperations.js'
 export type { FileOperationContext, FileSpacePort } from './contract/requires.js'
 
 // ── 上面用到、又不在可移植文件里的数据 ───────────────────────────
-export type { FileConfirmation, FileWrite } from './types/space.js'
+export type { FileWrite } from './types/space.js'
 export type { FileReadResult, FileText } from './types/text.js'

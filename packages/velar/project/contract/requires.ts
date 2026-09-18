@@ -1,18 +1,16 @@
 /**
  * 注入面：宿主必须或可以塞进来的东西，每个注入点一个接口。本单元只从这些口子接收外部能力，别处不留钩子。
  *
- * - 调用上下文 `ProjectOperationContext`：必须。空间每次分发 `velar:project`、`velar:code` 的调用时给，里面是空间端口 `ProjectSpacePort`（写作 `ctx.project`）
- *   与审批端口 `ApprovalPort`；空间端口的 `kernel()` 交出项目内核的 Agent 视图 `AgentProjectKernelPort`。
+ * - 调用上下文 `ProjectOperationContext`：必须。空间每次分发 `velar:project`、`velar:code` 的调用时给，里面是空间端口 `ProjectSpacePort`（写作 `ctx.project`）；
+ *   空间端口的 `kernel()` 交出项目内核的 Agent 视图 `AgentProjectKernelPort`。
  *   项目空间（`@velaros-ai/project`）的宿主端口在它之上再加命令、演练沙箱与缩图，那些是给共用能力装端口用的，工具用不着。
- * - 内核配置 `CreateProjectKernelOptions`：建项目内核时必须。里面的宿主能力 `ProjectProviders`（策略、审批、文件过滤、脱敏、证据包、日志、子进程、遥测、代码智能）
+ * - 内核配置 `CreateProjectKernelOptions`：建项目内核时必须。里面的宿主能力 `ProjectProviders`（列举过滤、证据包、日志、子进程、遥测、代码智能）
  *   与变更记录写端 `ProjectChangeFeedWriter` 都可选。
  * - 插件 `ProjectPlugin`：可选，放在内核配置里给；插件在 setup 里经 `ProjectPluginContext` 登记文件适配器工厂 `FileAdapterFactory`、补丁策略 `PatchStrategy`、
  *   校验器 `ProjectValidator`、修复器 `ProjectFixer`、生命周期 hook `ProjectHook` 与管线阶段 `PipelineStage`。
  *
  * 这里的每个接口都必须从根入口导出。
  */
-
-import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 
 import type { AdapterCapability, AdapterKind, AdapterPrepareEditInput, AdapterSearchHit, AdapterSearchInput, AdapterValidateInput, ParseInput, ParseResult, ProjectSymbol } from '../types/adapter.js'
 import type { AgentProjectApplyResult, AgentProjectKernelReadResult, AgentProjectPreparedTransaction, AgentProjectSearchResult, AgentProjectStoredTransaction } from '../types/agent-port.js'
@@ -24,14 +22,9 @@ import type { HookContext,HookEvent } from '../types/hook.js'
 import type { FileStatInput, FileStatResult, ObserveInput, ReadInput, SearchInput } from '../types/io.js'
 import type { PatchStrategyInput } from '../types/patch.js'
 import type { PipelineContext, PipelinePhase } from '../types/pipeline.js'
-import type { ApprovalRequest,CorePolicy, PolicyDecision, PolicyDecisionInput } from '../types/policy.js'
-import type {
-  ProjectAuthorizationDecision,
-  ProjectCodeQuery,
-  ProjectMutationAuthorizationInput,
-  ProjectWriteAuthorization,
-} from '../types/project.js'
-import type { CommandRunInput, CommandRunResult,FileFilterInput, ProjectIntelligenceLocation, ProjectIntelligenceSymbol, RedactionInput, RedactionResult } from '../types/provider.js'
+import type { CorePolicy } from '../types/policy.js'
+import type { ProjectCodeQuery } from '../types/project.js'
+import type { CommandRunInput, CommandRunResult,FileFilterInput, ProjectIntelligenceLocation, ProjectIntelligenceSymbol } from '../types/provider.js'
 import type { FileSnapshot } from '../types/snapshot.js'
 import type { ResolveTargetInput, ResolveTargetResult } from '../types/target.js'
 import type { ProjectValidationContext,ValidateInput, ValidationResult } from '../types/validation.js'
@@ -41,24 +34,12 @@ import type { ProjectChangeFeed, ProjectKernel } from './provides.js'
 // ── 项目内核的 Agent 视图 ───────────────────────────────────────
 
 /**
- * 项目内核的 Agent 视图：工具经 `ctx.project.kernel()` 拿到它，读、列、搜、提交、撤销都经它过项目的授权、脱敏与事务。
+ * 项目内核的 Agent 视图：工具经 `ctx.project.kernel()` 拿到它，读、列、搜、提交、撤销都经它，改动走项目的事务。
  * 宿主一般直接交 `createProjectKernel` 建的内核（`ProjectKernel` 在结构上满足它）。自己实现时照内核的语义：路径一律相对项目根，
- * 出了项目或被策略拒绝抛 PERMISSION_DENIED；失败时抛带 `reason`（`ProjectErrorCodes` 里的码）、`details`、`suggestedNextAction` 的错误，
+ * 出了项目抛 PERMISSION_DENIED；失败时抛带 `reason`（`ProjectErrorCodes` 里的码）、`details`、`suggestedNextAction` 的错误，
  * 工具按码分支，模型按下一步自救。
  */
 export interface AgentProjectKernelPort {
-  /**
-   * 对一段已经拿在手里的历史正文（签发过的视图、归档的提交快照）按当前的读取授权与脱敏再过一遍，不重读磁盘：路径现在不许读就抛 PERMISSION_DENIED，
-   * 返回过滤后的正文和有没有被脱敏。凭 fileRef 编辑和会话恢复都靠它，所以是必须的（`ProjectKernel` 本来就实现了）。
-   */
-  prepareContextSnapshot(input: { path: string; content: string }): Promise<{ content: string; redacted: boolean }>
-  /**
-   * 核对一批相对路径能不能由项目写，逐条给出 allowed 与拒绝原因（越界、readDeny/writeDeny、宿主可见范围、protectedFiles、generatedFiles）。
-   * 不碰磁盘、不建事务、不发审批。`velar:sandbox` 的落回这类不经事务链的整批写入，在问用户之前用它把不许写的路径挑出来。
-   */
-  authorizeWrites(paths: readonly string[]): Promise<ProjectWriteAuthorization[]>
-  /** 把一段要交给模型的文字过一遍宿主的脱敏后端（没有后端时原样返回）：`velar:shell` 与 `velar:sandbox` 在项目里跑的命令输出都经它。 */
-  redactText(input: { content: string; path?: string }): Promise<{ content: string; redacted: boolean }>
   /**
    * 列项目里的文件和目录，每项是相对项目根的路径加类型：按 path、include/exclude、是否递归与深度过滤，缺省跳过 .gitignore 忽略的条目，
    * 按深度优先的稳定顺序最多给 maxFiles 条。
@@ -67,12 +48,12 @@ export interface AgentProjectKernelPort {
   /** 看一个路径的轻量状态：存不存在、文件还是目录、大小、是不是可读文本及其磁盘编码、行数、当前 revision 和建议的首次读取范围；不返回正文。 */
   stat(input: FileStatInput): Promise<FileStatResult>
   /**
-   * 读一个文件：可按行列范围、maxChars、maxBytes 截取，返回带 revision 的快照、正文（宿主有脱敏后端时已脱敏，redacted 标出）、实际范围、总行数、
+   * 读一个文件：可按行列范围、maxChars、maxBytes 截取，返回带 revision 的快照、正文、实际范围、总行数、
    * 是否还有后文与续读位置。给了 baseRevision 而文件已变时抛 BASE_REVISION_MISMATCH；目录、不存在、二进制不抛错，在快照里如实标出、不给正文。
    */
   read(input: ReadInput): Promise<AgentProjectKernelReadResult>
   /**
-   * 按字面文本（regex 为真时按正则）在项目或 root 子目录里搜，include/exclude 过滤、maxResults 封顶；返回命中的路径、revision、范围与片段（片段已脱敏）、
+   * 按字面文本（regex 为真时按正则）在项目或 root 子目录里搜，include/exclude 过滤、maxResults 封顶；返回命中的路径、revision、范围与片段、
    * 是否截断，以及缺搜索命令时的 toolRequirements。
    */
   search(input: SearchInput): Promise<AgentProjectSearchResult>
@@ -80,7 +61,7 @@ export interface AgentProjectKernelPort {
   listSymbols(path: string): Promise<ProjectSymbol[]>
   /**
    * 按编辑意图准备一个事务：算出每个文件的补丁、差量、改动行数与风险，不碰磁盘。baseRevisions 对不上抛 BASE_REVISION_MISMATCH；超出事务规模、
-   * 碰到受保护或生成文件、定位不到或不唯一时抛对应的错误码。返回的 transactionId 交给 applyEdit 提交，或交给 discardTransaction 丢弃。
+   * 定位不到或不唯一时抛对应的错误码。返回的 transactionId 交给 applyEdit 提交，或交给 discardTransaction 丢弃。
    */
   prepareEdit(input: PrepareEditInput): Promise<AgentProjectPreparedTransaction>
   /** 丢掉一个还没提交的事务，返回有没有丢：事务不存在返回 false；已提交的不能丢（要撤销用 rollback），正在执行的抛 INVALID_INPUT。改动工具在提交失败后用它清掉事务。 */
@@ -93,7 +74,7 @@ export interface AgentProjectKernelPort {
     transactionId: string
   ): AgentProjectStoredTransaction | undefined
   /**
-   * 提交一个事务：先跑校验（不过抛 VALIDATION_FAILED），再过写入授权与审批，锁住改动的文件后写盘；文件在准备之后被外部改过时先试着 rebase，
+   * 提交一个事务：先跑校验（不过抛 VALIDATION_FAILED），再锁住改动的文件写盘；文件在准备之后被外部改过时先试着 rebase，
    * 接不上抛 BASE_REVISION_MISMATCH。多个文件要么全部写入、要么全部还原；新建的文件在 git 仓库里挂上 intent-to-add。返回每个文件提交前后的 revision。
    */
   applyEdit(input: ApplyEditInput): Promise<AgentProjectApplyResult>
@@ -207,7 +188,7 @@ export interface FileAdapter {
   capabilities: AdapterCapability[]
   /** 解析快照，返回语法诊断与符号；宿主的代码智能用不上时，listSymbols 靠它列符号。 */
   parse?(input: ParseInput): Promise<ParseResult> | ParseResult
-  /** 在一个文件里搜；ripgrep 用不上时内核逐文件调它，命中的片段再由内核脱敏。 */
+  /** 在一个文件里搜；ripgrep 用不上时内核逐文件调它。 */
   search?(input: AdapterSearchInput): Promise<AdapterSearchHit[]> | AdapterSearchHit[]
   /** 在快照里定位目标（符号、文本线索）：第一个 resolved 的结果被采用，ambiguous 的候选汇总起来，都 not_found 时报找不到。 */
   resolveTarget?(
@@ -257,24 +238,6 @@ export interface ProjectPluginContext {
 
 // ── 内核的宿主能力 ──────────────────────────────────────────────
 
-/** 宿主应用可选的动态策略决策 hook，叠加在 corePolicy 的静态规则之上。内核在读、搜索（含列文件）、解析目标、准备与修补编辑、提交、校验之前问它；撤销不问。 */
-export interface PolicyProvider {
-  /**
-   * 给一个动作（action、涉及的路径、风险、请求数据）下决定：allow 为 false 时内核以 PERMISSION_DENIED 拒绝并带上 reason；
-   * requireApproval 为真时还要经审批后端确认。抛错时这次操作失败。
-   */
-  decide(input: PolicyDecisionInput): Promise<PolicyDecision> | PolicyDecision;
-}
-
-/**
- * 审批后端：策略要求审批、或高风险写入需要人审（corePolicy.approval.requireForHighRiskPatch）时，内核经它向人确认。
- * 走工具的宿主一般用 `projectApprovalBridge.install` 装上，把确认交给当前那次工具调用的审批端口。
- */
-export interface ApprovalProvider {
-  /** 请求一次确认（动作、路径、风险、原因），返回是否批准；false 时内核以 PERMISSION_DENIED 拒绝。需要审批而没有这个后端时同样拒绝。 */
-  approve(input: ApprovalRequest): Promise<boolean> | boolean;
-}
-
 /** 代码智能后端（例如宿主的 CodeGraph 索引）：给了而且对当前项目启用时，内核列符号、按符号名解析目标都先问它，出错或没结果再回退本地适配器。 */
 export interface ProjectCodeIntelligenceHost {
   /** 这个项目根是否启用了代码智能；返回 false 时内核完全不问这个后端。 */
@@ -294,19 +257,13 @@ export interface ProjectCodeIntelligenceHost {
   }): Promise<ProjectIntelligenceLocation[]>;
 }
 
-/** 宿主提供的文件可见性过滤器，叠加在静态 deny glob 之上。 */
+/** 宿主提供的列举过滤器：只管列举、扫描与搜索时哪些条目不出现，点名读写从不问它。 */
 export interface FileFilterProvider {
   /**
-   * 一个路径（相对项目根）在某个动作（读、写、搜索、列举）下对工具可不可见：点名的路径返回 false 就以 PERMISSION_DENIED 拒绝，从项目根列举时略过它拒绝的条目。
-   * corePolicy 的 readDeny、writeDeny 先判，这里放不回来；提交与撤销写回事务自己的文件时不问它。
+   * 一个路径（相对项目根）在列举、扫描、搜索时出不出现：返回 false 的条目不出现在结果里（按路径与它解开符号链接后的真实路径各问一次）。
+   * 点名的路径（读、写、stat、点名的列举或搜索起点及其下面的条目）不问它，照常能读能写。
    */
   shouldInclude(input: FileFilterInput): Promise<boolean> | boolean;
-}
-
-/** 脱敏后端：内核把项目内容交出去之前（读到的正文、搜索片段、证据包窗口、历史快照）先经它过滤。 */
-export interface SecretRedactionProvider {
-  /** 返回可以安全暴露给工具、日志和模型上下文的内容，并标明有没有改动；标了 redacted 的正文只能看，不能凭它编辑。 */
-  redact(input: RedactionInput): Promise<RedactionResult> | RedactionResult;
 }
 
 /** 证据包后端：内核建证据包（buildEvidencePack）时让宿主补充元数据，并在交出去之前做最后清洗。 */
@@ -346,14 +303,8 @@ export interface TelemetryProvider {
 
 /** 内核的可选宿主能力，建内核时经 `CreateProjectKernelOptions.providers` 一次给齐；每一项都可以不给，不给时按各项说的缺省处理。 */
 export interface ProjectProviders {
-  /** 动态策略：读、搜索、编辑、提交之前问它放不放行；不给就只按 corePolicy 的静态规则。 */
-  policy?: PolicyProvider;
-  /** 审批：策略要求审批或高风险写入需要人审时经它确认；不给时用内置审批桥——工具调用期间交给这次调用的审批端口，调用之外一律拒绝。 */
-  approval?: ApprovalProvider;
-  /** 文件可见性过滤，叠加在 corePolicy 的 deny glob 之上；不给就不额外过滤。 */
+  /** 列举过滤：列举、扫描、搜索时哪些条目不出现；不给就只按 .gitignore 与调用方的 exclude。 */
   fileFilter?: FileFilterProvider;
-  /** 脱敏：内容交给工具、日志和模型之前过滤；不给就原样交出。 */
-  secretRedaction?: SecretRedactionProvider;
   /** 证据包的补充与清洗；不给就用内核建的原样。 */
   context?: ContextProvider;
   /** 日志；不给就不记附带失败。 */
@@ -372,9 +323,9 @@ export interface ProjectProviders {
 export interface CreateProjectKernelOptions {
   /** 项目根目录；按绝对路径解析，所有路径都相对它，越出它的一律拒绝。 */
   root: string
-  /** 覆盖默认的静态策略（读写上限、deny glob、受保护与生成文件、事务规模、revision 算法、高风险审批等）；只给要改的项，approval 按字段合并。 */
+  /** 覆盖默认的静态策略（读写上限、事务规模、revision 算法等）；只给要改的项。 */
   corePolicy?: Partial<CorePolicy>
-  /** 可选的宿主能力：策略、审批、文件过滤、脱敏、证据包、日志、子进程、遥测、代码智能。 */
+  /** 可选的宿主能力：列举过滤、证据包、日志、子进程、遥测、代码智能。 */
   providers?: ProjectProviders
   /** 额外插件，按顺序装在内置核心插件之后；同名的只装一次，任一个 setup 抛错，建内核就失败。 */
   plugins?: ProjectPlugin[]
@@ -404,15 +355,8 @@ export interface ProjectSpacePort {
   /** 取当前项目根上的内核（Agent 视图）。每次调用都会取，宿主应当按项目根缓存同一个内核，不要每次新建。 */
   kernel: () => Promise<AgentProjectKernelPort>
   /**
-   * 项目写操作的授权：撤销一次改动之前问一次（文件改动由内核的 `applyEdit` 自己问）；空间给共用能力装端口时，跑可能改项目的命令、把沙箱落回项目之前也经它问。
-   * 宿主在这里向用户确认或按会话授权放行；被拒时什么都不做，`message` 原样交给模型。
-   */
-  prepareMutation: (
-    input: ProjectMutationAuthorizationInput
-  ) => Promise<ProjectAuthorizationDecision>
-  /**
    * 代码查询端口：`velar:code` 的两个操作翻译成 `ProjectCodeQuery` 交过来，本单元自己不带实现
-   * （语言服务那一半可以用 `@velaros-ai/development` 的 `createProjectCodeQuery`，代码图谱那一半由宿主的图后端提供）。
+   * （语言服务那一半可以用 `@velaros-ai/velar/development` 的 `createProjectCodeQuery`，代码图谱那一半由宿主的图后端提供）。
    * 语言服务类动作（`ProjectCodeLanguageActions` 里的七个）抛错时这次查询失败；代码图谱类动作没有后端时，抛 code 为 UNAVAILABLE
    * （或 reason 为 NOT_SUPPORTED）的错误：`query` 把它当降级写进回执，`analyze` 直接失败。
    * 返回普通对象，其中的 source、revision、truncated、degraded、note 会被装进回执。
@@ -426,10 +370,8 @@ export interface ProjectSpacePort {
 export interface ProjectOperationContext {
   /** 本次调用的取消信号：用户取消或上层超时时触发；工具在排队与每一步之间核对，宿主的查询也应随之停下。 */
   abortSignal: AbortSignal
-  /** 空间端口：项目根、内核、修改授权与代码查询都经它要。 */
+  /** 空间端口：项目根、内核与代码查询都经它要。 */
   project: ProjectSpacePort
-  /** 审批端口（来自 agent 包）：内核提交改动、撤销要用户点头时经它；无人值守的宿主给默认拒绝的端口。 */
-  approval: ApprovalPort
   /** 本次调用所属会话：fileRef、续读页与改动引用按会话签发与核对。 */
   sessionId?: string
 }

@@ -1,6 +1,4 @@
-import type { RiskLevel } from "./common.js";
-
-/** provider 运行前就会执行的内核静态安全限制和路径策略。 */
+/** 内核的静态限制：读、搜、事务规模的上限，版本号怎么算，要不要先用 ripgrep。只管正确性与守内存，不管谁能读写什么。 */
 export interface CorePolicy {
   /** 要求调用方证明自己基于最新已知 revision 编辑。 */
   requireBaseRevision: boolean;
@@ -22,38 +20,4 @@ export interface CorePolicy {
   maxChangedLinesPerFile: number;
   maxChangedLinesPerTransaction: number;
   maxConcurrentBatchTasks: number;
-  readDeny: string[];
-  writeDeny: string[];
-  /** 可读取但未明确策略允许时不应修改的文件。 */
-  protectedFiles: string[];
-  generatedFiles: string[];
-  approval: {
-    /** 高风险事务（回滚无法恢复原文的写入）是否必须经宿主审批；可完整回滚的写入不在此列。 */
-    requireForHighRiskPatch: boolean;
-  };
-}
-
-export interface PolicyDecision {
-  allow: boolean;
-  reason?: string;
-  risk?: RiskLevel;
-  /** 即使动作被允许，也要求 approval provider 再确认。 */
-  requireApproval?: boolean;
-}
-
-export interface PolicyDecisionInput {
-  /** 当前正在授权的内核动作。 */
-  action: "read" | "search" | "resolve" | "prepare_edit" | "amend_edit" | "apply_edit" | "validate" | "rollback";
-  paths?: string[];
-  risk?: RiskLevel;
-  data?: any;
-}
-
-/** 策略判断需要更多确认后发出的人类或宿主审批请求。 */
-export interface ApprovalRequest {
-  action: string;
-  paths?: string[];
-  risk: RiskLevel;
-  reason: string;
-  data?: any;
 }

@@ -25,7 +25,7 @@ function lineLabel(range: number | [number, number]): string {
 
 /**
  * 按原意图在当前内容里给一步 edit 重新定位：找得到就交回一条带新行号（放得下时再带签了新 fileRef 的确认窗口）的过期错误，
- * 找不到能确认的新位置（文件没了、被遮住、读不全、原文不再唯一、候选太多）就交回 undefined。
+ * 找不到能确认的新位置（文件没了、读不全、原文不再唯一、候选太多）就交回 undefined。
  */
 async function relocate(
   error: ProjectError,
@@ -36,7 +36,7 @@ async function relocate(
   const previous = await loadFileView(ctx, step.fileRef)
   const kernel = await ctx.project.kernel()
   const current = await kernel.read({ path: previous.path, maxChars: ProjectTuning.agent.fullReadChars })
-  if (!current.snapshot.exists || current.redacted || current.hasMore || current.truncated || !isString(current.content) || !current.snapshot.revision) return undefined
+  if (!current.snapshot.exists || current.hasMore || current.truncated || !isString(current.content) || !current.snapshot.revision) return undefined
   const candidates = suggestProjectEditLocations(previous, step.edits, current.content)
   if (!candidates?.length || candidates.length > ProjectTuning.agent.recoveryItems) return undefined
   const currentLines = projectSourceLines(current.content)
