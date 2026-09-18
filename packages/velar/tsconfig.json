@@ -48,6 +48,12 @@
       ],
       "@velaros-ai/velar/computer/contracts": [
         "packages/velar/computer/contracts.ts"
+      ],
+      "@velaros-ai/velar/knowledge": [
+        "packages/velar/knowledge/index.ts"
+      ],
+      "@velaros-ai/velar/knowledge/contracts": [
+        "packages/velar/knowledge/contracts.ts"
       ]
     }
   },
@@ -58,7 +64,8 @@
     "shell/**/*.ts",
     "sandbox/**/*.ts",
     "project/**/*.ts",
-    "computer/**/*.ts"
+    "computer/**/*.ts",
+    "knowledge/**/*.ts"
   ],
   "exclude": [
     "*/spec/**",

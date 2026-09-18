@@ -508,7 +508,6 @@ assert.equal(typeof memory.mountMemoryAdapter, 'function')
 assert.equal(typeof memory.memoryTools, 'object')
 assert.equal(typeof knowledge.createKnowledgeRuntime, 'function')
 assert.equal(typeof knowledge.createKnowledgeEmbeddingClient, 'function')
-assert.equal(typeof knowledge.knowledgeTools, 'object')
 `
   )
 }

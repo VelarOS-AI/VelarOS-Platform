@@ -185,7 +185,7 @@
       "directory": "packages/velar",
       "name": "@velaros-ai/velar",
       "version": "0.2.0",
-      "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project) and computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath). One plain directory per unit, one convention for all.",
+      "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath) and knowledge (workspace knowledge search; the knowledge index itself is @velaros-ai/knowledge). One plain directory per unit, one convention for all.",
       "exportSubpaths": [
         "./computer",
         "./computer/contracts",
@@ -193,6 +193,8 @@
         "./files/contracts",
         "./images",
         "./images/contracts",
+        "./knowledge",
+        "./knowledge/contracts",
         "./project",
         "./project/contracts",
         "./sandbox",
@@ -234,7 +236,7 @@
       "directory": "packages/knowledge",
       "name": "@velaros-ai/knowledge",
       "version": "0.6.0",
-      "description": "Workspace knowledge index for VelarOS-compatible runtimes: incremental ingestion of documents and code, chunking, SQLite full-text plus vector hybrid retrieval with embedding profile isolation, diagnostics and explicit rebuild, and the knowledge agent tools.",
+      "description": "Workspace knowledge index for VelarOS-compatible runtimes: incremental ingestion of documents and code, chunking, SQLite full-text plus vector hybrid retrieval with embedding profile isolation, diagnostics and explicit rebuild. The model face is velar:knowledge in @velaros-ai/velar; hosts implement its space port with this runtime.",
       "exportSubpaths": [
         ".",
         "./contracts"

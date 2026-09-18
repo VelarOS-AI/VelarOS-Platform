@@ -160,6 +160,7 @@ edit 与 inspect 交回完整差量，`velar:code` 不按条数截，`velar:shel
 | `velar:project` | read / list / search / edit / inspect / undo | — | ✓ 受项目治理的文件 | `@velaros-ai/velar` 的 `project/` |
 | `velar:code` | query / analyze | — | ✓ | `@velaros-ai/velar` 的 `project/` |
 | `velar:computer` | screenshot / move / click / typeText / key | 宿主装了桌面控制插件时挂 | — | `@velaros-ai/velar` 的 `computer/` |
+| `velar:knowledge` | search / sync / diagnostics | 宿主开了知识库时挂 | 宿主开了知识库时挂 | `@velaros-ai/velar` 的 `knowledge/`（知识库本身在 `@velaros-ai/knowledge`） |
 
 **一件能力只有一份实现、一份声明、一份代码模版**，不认识任何空间。空间之间不一样的地方全落在**注入的端口**上：
 
@@ -170,6 +171,7 @@ edit 与 inspect 交回完整差量，`velar:code` 不按条数截，`velar:shel
 | `velar:shell` | `ShellSpacePort` | `resolveCwd`：命令在哪儿跑；`commandPolicy`：危险命令的确认文案与风险分类；跑命令、列任务、刷新环境交给哪个宿主 |
 | `velar:sandbox` | `SandboxSurfacePort` | `resolveSource`：能镜像哪些目录；镜像里的命令交给谁 |
 | `velar:computer` | `ComputerSpacePort` | 桌面控制交给哪份运行时：宿主把 `createComputerRuntime` 造的那份直接交进来（结构上满足端口）；没有桌面的宿主不挂这件能力 |
+| `velar:knowledge` | `KnowledgeSpacePort` | `resolveWorkspace`：这次落在哪个工作区（项目空间是项目根，没有默认工作区的空间要调用方给）；检索、同步、诊断转给知识库引擎的领域门面 |
 
 **真正是两件事的不硬合。** 本机文件与项目文件看上去都是「读写文件」，其实不是一件事：项目里的文件有项目那一套——
 校验器、带版本防护的事务、撤销账本、fileRef 只许改看到过的行；本机上的文件没有这些，
@@ -183,7 +185,7 @@ edit 与 inspect 交回完整差量，`velar:code` 不按条数截，`velar:shel
 项目空间是 `@velaros-ai/project` 的 `createProjectSpace`——挂上两件项目独有的能力（`@velaros-ai/velar/project`），外加给共用能力装的项目端口：
 命令的工作目录钳在项目内、前台命令进项目资源门排队；沙箱只镜像项目内的目录；看图只看项目里的图。
 
-**能力单元是普通的目录，按同一套规范放在一起。** 模型 import 的每一件都在 `packages/velar/` 下——跨空间注入的 files、images、shell、sandbox，宿主装了插件才挂的 computer，
+**能力单元是普通的目录，按同一套规范放在一起。** 模型 import 的每一件都在 `packages/velar/` 下——跨空间注入的 files、images、shell、sandbox、knowledge，宿主装了插件才挂的 computer，
 和项目独有的 project、code——一件一个目录，目录名就是模块名（`velar:files` ⇄ `packages/velar/files/`）；它们合成一个包 `@velaros-ai/velar`，
 许可、说明、构建配置只有包根那一份，单元目录里不再各抄一遍。每个单元目录的样子一样：模块卡片 `MODULE.md`、入口 `index.ts` 与 `contracts.ts`、
 `contract/ types/ impl/ utils/` 四个目录、代码模版 `template.js`、`spec/`（不变量登记与验收）与 `test/`。宿主按 `@velaros-ai/velar/<单元>` 引用。

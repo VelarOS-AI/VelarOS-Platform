@@ -230,9 +230,7 @@
       "dependencies": {
         "@types/better-sqlite3": "^7.6.13",
         "@velaros-ai/core": "workspace:*",
-        "@velaros-ai/tool-contract": "workspace:*",
         "better-sqlite3": "^13.0.3",
-        "zod": "^4.3.6",
       },
       "devDependencies": {
         "@lancedb/lancedb": "^0.27.2",
@@ -242,7 +240,6 @@
       },
       "peerDependencies": {
         "@lancedb/lancedb": "^0.27.2",
-        "@velaros-ai/agent": "workspace:^",
       },
       "optionalPeers": [
         "@lancedb/lancedb",

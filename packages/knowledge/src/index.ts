@@ -10,16 +10,12 @@
 export type * from './contracts.js'
 
 // ── 合同：约定的常量表 ──────────────────────────────────────────
-export type { KnowledgeToolName } from './contract/constants.js'
 export {
   KnowledgeEmbeddingProfileIsolationMigration,
   KnowledgeIndexConfig,
   KnowledgeIndexStatuses,
   KnowledgeMatchTypes,
   KnowledgeSourceKinds,
-  KnowledgeToolCategoryId,
-  KnowledgeToolLimits,
-  KnowledgeToolNames,
 } from './contract/constants.js'
 
 // ── 产品面：类上方的 API 接口 ───────────────────────────────────
@@ -41,11 +37,8 @@ export type {
   KnowledgeLanceDbConnection,
   KnowledgeLanceDbLoader,
   KnowledgeLanceDbModule,
-  KnowledgeProjectApi,
   KnowledgeRuntimeProviders,
   KnowledgeStoragePathProvider,
-  KnowledgeToolApi,
-  KnowledgeToolContext,
 } from './contract/requires.js'
 
 // ── 上面两面用到、又不在可移植文件里的数据 ──────────────────────
@@ -74,10 +67,6 @@ export type {
   KnowledgeVectorMatch,
   KnowledgeVectorWriteResult,
 } from './types/storage.js'
-export type { KnowledgeTool } from './types/tool.js'
-
-// ── 工具集合 ────────────────────────────────────────────────────
-export { knowledgeTools } from './impl/KnowledgeTools.js'
 
 // ── 运行时与工厂 ────────────────────────────────────────────────
 export { createKnowledgeRuntime } from './impl/KnowledgeRuntime.js'

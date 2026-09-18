@@ -309,6 +309,29 @@ export const GovernedModules = [
     acceptance: 'computer/spec/acceptance.test.ts',
   },
   {
+    // 能力单元：工作区知识检索（velar:knowledge），只是工具那一层；知识库本身在 @velaros-ai/knowledge，
+    // 宿主拿它的领域门面实现空间端口的三个知识方法，工作区由空间自己定
+    directory: 'velar',
+    unit: 'knowledge',
+    name: '@velaros-ai/velar/knowledge',
+    contract: 'knowledge/contract',
+    types: 'knowledge/types',
+    portable: 'knowledge.ts',
+    impl: 'knowledge/impl',
+    utils: 'knowledge/utils',
+    // 空间端口：三个操作经 ctx.knowledge 调它；每个方法都必须有操作在调
+    hostPort: 'KnowledgeSpacePort',
+    hostPortField: 'knowledge',
+    surfaceFile: 'knowledge/impl/KnowledgeOperations.ts',
+    layers: [
+      // 代码面 knowledge 命名空间的三个操作：入参核对、定工作区、零命中补一次同步、结果投影
+      ['KnowledgeOperations.ts'],
+    ],
+    card: 'knowledge/MODULE.md',
+    invariants: 'knowledge/spec/invariants.md',
+    acceptance: 'knowledge/spec/acceptance.test.ts',
+  },
+  {
     directory: 'code-surface',
     name: '@velaros-ai/code-surface',
     // 只有一个工具：门本身（program:run）。模型交一段程序就用它，别的能力都在程序里 import
@@ -669,7 +692,8 @@ export const GovernedModules = [
   {
     directory: 'knowledge',
     name: '@velaros-ai/knowledge',
-    toolsFile: 'src/impl/KnowledgeTools.ts',
+    // 知识库本身，不是工具：模型面是 velar:knowledge（@velaros-ai/velar/knowledge），宿主拿本包的领域门面实现那边的空间端口，
+    // 所以不登记 toolsFile、toolDefiner、hostPort
     contract: 'src/contract',
     types: 'src/types',
     portable: 'knowledge.ts',
@@ -678,13 +702,7 @@ export const GovernedModules = [
     tuning: 'tuning.ts',
     // 根入口要 SQLite 与 LanceDB，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
-    hostPort: 'KnowledgeToolApi',
-    hostPortField: 'knowledge',
     layers: [
-      // 工具：三个知识工具的定义与挂载
-      ['KnowledgeTools.ts'],
-      // 工具执行：零命中补一次同步、回执拼装
-      ['KnowledgeToolOperations.ts'],
       // 运行时对象图
       ['KnowledgeRuntime.ts'],
       // 领域：门面、查询、写入、维护、摄入、工作区
@@ -692,7 +710,6 @@ export const GovernedModules = [
       // 存储：关系仓、向量表、嵌入客户端
       ['storage/'],
     ],
-    toolDefiner: 'defineKnowledgeTool',
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',

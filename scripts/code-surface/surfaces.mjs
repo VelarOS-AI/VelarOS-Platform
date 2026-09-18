@@ -66,6 +66,13 @@ export const CodeSurfaces = [
     interfaces: ['ComputerOperationsApi'],
     templates: 'template.js',
   },
+  {
+    namespace: 'knowledge',
+    directory: 'velar',
+    unit: 'knowledge',
+    interfaces: ['KnowledgeOperationsApi'],
+    templates: 'template.js',
+  },
 ]
 
 /**
@@ -79,6 +86,7 @@ export const HostContextTypes = new Set([
   'SandboxOperationContext',
   'ProjectOperationContext',
   'ComputerOperationContext',
+  'KnowledgeOperationContext',
 ])
 
 /** 进模型可观测面的标记；打在操作方法与它引用到的每个**领域类型**上。 */

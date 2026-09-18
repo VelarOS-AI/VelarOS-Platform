@@ -107,9 +107,4 @@ export const KnowledgeTuning = Object.freeze({
     /** 拿错误文字当去重键时最多截多少字符。 */
     messageKeyChars: 500,
   }),
-  /** 索引问题汇总。 */
-  indexIssues: Object.freeze({
-    /** 回执里的错误样本留多少字符。 */
-    sampleChars: 240,
-  }),
 })

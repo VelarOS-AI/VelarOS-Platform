@@ -8,7 +8,8 @@
 ## 这个包是什么
 
 **工作区资料与代码的知识域**:把一个工作区里的文件增量摄取、分块、建 SQLite FTS 与 LanceDB
-向量索引,提供混合检索、索引诊断与显式重建,并附带一组 agent 工具。
+向量索引,提供混合检索、索引诊断与显式重建。它不是工具:模型面在 `@velaros-ai/velar/knowledge`
+(`velar:knowledge` 的 search、sync、diagnostics),宿主拿本包的领域门面实现那边的空间端口。
 
 它**不拥有跨会话长期记忆,也不拥有 MemoryDream**——那些是记忆产品(包根入口)的事。
 `workspaceRoot` 在这里只是调用方给的**隔离键 + 文件根**,不代表本包依赖任何 Workspace 实现。
@@ -41,11 +42,11 @@ embedding 请求或索引实现。renderer、Web Worker、RPC schema 与前端�
 
 ### 主要端口
 
-- `KnowledgeRuntime` / `DefaultKnowledgeRuntime` —— 运行时对象图,公开 `domain` 与 `vectorStore`。
-- `KnowledgeDomain` —— 同步、搜索、诊断、显式重建的高层门面。
+- `createKnowledgeRuntime` → `KnowledgeRuntimeApi` —— 运行时对象图,公开 `knowledgeDomainService` 与 `knowledgeVectors`。
+- `KnowledgeDomainApi` —— 同步、搜索、诊断、显式重建的高层门面。
 - `KnowledgeRuntimeProviders` —— 所有外部依赖的组合接口。
 - `KnowledgeEmbeddingConfigPort` —— 返回**已经解析好**的 provider / model / profile。
-- `EmbeddingRequestFactory` / `KnowledgeHttpClient` —— embedding 协议与网络端口。
+- `KnowledgeEmbeddingRequestFactory` / `KnowledgeHttpClient` —— embedding 协议与网络端口。
 - `KnowledgeDatabaseProvider` / `KnowledgeStoragePathProvider` —— 关系与向量存储端口。
 - `KnowledgeCodeIntelligenceApi` / `KnowledgeIndexingPolicy` —— 可选代码智能与可见性策略。
 
@@ -68,16 +69,16 @@ embedding 请求或索引实现。renderer、Web Worker、RPC schema 与前端�
 
 ```ts
 import {
-  DefaultKnowledgeRuntime,
+  createKnowledgeRuntime,
   type KnowledgeRuntimeProviders,
 } from '@velaros-ai/knowledge'
 
 declare const providers: KnowledgeRuntimeProviders
 
-const knowledge = new DefaultKnowledgeRuntime(providers)
+const knowledge = createKnowledgeRuntime(providers)
 await knowledge.warmup()
-await knowledge.domain.ensureWorkspaceSynced('/srv/project')
-const results = await knowledge.domain.searchKnowledge('认证流程', {
+await knowledge.knowledgeDomainService.ensureWorkspaceSynced('/srv/project')
+const results = await knowledge.knowledgeDomainService.searchKnowledge('认证流程', {
   workspaceRoot: '/srv/project',
 })
 knowledge.close()
@@ -91,7 +92,7 @@ knowledge.close()
 
 ## 扩展点
 
-- `EmbeddingRequestFactory` → 接入任意 embedding provider;
+- `KnowledgeEmbeddingRequestFactory` → 接入任意 embedding provider;
 - `KnowledgeIndexingPolicy` → 实现沙箱、租户或忽略文件策略;
 - `KnowledgeCodeIntelligenceApi` → 接入 LSP、tree-sitter 或远程代码图;
-- 在 `KnowledgeApi` 前面加授权、审计或 RPC 门面。
+- 在 `KnowledgeDomainApi` 前面加审计或 RPC 门面。

@@ -1,6 +1,7 @@
 # @velaros-ai/velar
 
-模型在程序里 import 的能力单元：`velar:files`、`velar:images`、`velar:shell`、`velar:sandbox`、`velar:computer`，以及项目的两件 `velar:project`、`velar:code`。
+模型在程序里 import 的能力单元：`velar:files`、`velar:images`、`velar:shell`、`velar:sandbox`、`velar:computer`、`velar:knowledge`，以及项目的两件 `velar:project`、`velar:code`。
+这里只放工具：没有模型面的实现（语言服务、知识库引擎、本机宿主）是各自的包，宿主拿它们实现单元的空间端口。
 一件能力一个目录，目录名就是模块名（`velar:files` ⇄ `files/`；问代码离不开项目内核，和 `velar:project` 同住 `project/`）；每个空间挂哪几件、给每件装什么端口，由空间的装配表决定
 （系统空间在 `@velaros-ai/system`，项目空间在 `@velaros-ai/project`）。
 
@@ -12,6 +13,7 @@
 | `sandbox/` | `import { create, run, diff, apply, discard } from 'velar:sandbox'` | 演练沙箱：在镜像里先跑，看过变化再落回 | 系统空间、项目空间 |
 | `project/` | `import { read, list, search, edit, inspect, undo } from 'velar:project'`、`import { query, analyze } from 'velar:code'` | 受项目治理的文件（fileRef、事务、撤销）与问代码，连同底下的项目内核 | 项目空间 |
 | `computer/` | `import { screenshot, move, click, typeText, key } from 'velar:computer'` | 桌面控制：截主屏交给模型看，按截图坐标移动、点击，输入文字、按组合键；底下是管 Python helper 子进程的运行时与随包的 helper 脚本 | 宿主装了桌面控制插件时，挂在它的系统空间上 |
+| `knowledge/` | `import { search, sync, diagnostics } from 'velar:knowledge'` | 工作区知识检索：全文加语义的混合检索、增量同步、看索引健康；知识库本身是 `@velaros-ai/knowledge` | 宿主开了知识库的空间 |
 
 宿主按 `@velaros-ai/velar/<单元>` 引用（可移植数据在 `@velaros-ai/velar/<单元>/contracts`）。
 

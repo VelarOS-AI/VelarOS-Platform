@@ -9,17 +9,11 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import type { KnowledgeToolContext } from '../src/contract/requires'
-// 工具面经根入口；INV-3、INV-4、INV-6 盯的是嵌入 profile、工作区摄入与嵌入配置解析这三段包内行为，
+// INV-3、INV-4、INV-6 盯的是嵌入 profile、工作区摄入与嵌入配置解析这三段包内行为，
 // 0.6.0 之后它们不再出包（要它们的能力走 createKnowledgeRuntime），所以这里按相对路径直接引实现。
 import { KnowledgeWorkspace } from '../src/impl/domain/KnowledgeWorkspace'
 import { KnowledgeEmbeddingClient as EmbeddingApi } from '../src/impl/storage/KnowledgeEmbeddingClient'
 import { KnowledgeEmbeddings as Embeddings } from '../src/impl/storage/KnowledgeEmbeddings'
-import { knowledgeTools } from '../src/index'
-import type {
-  KnowledgeSearchResult,
-  KnowledgeWorkspaceSyncResult,
-} from '../src/types/knowledge'
 import {
   buildDocumentRevisionKey,
   buildEmbeddingProfileIdentity,
@@ -42,114 +36,6 @@ async function write(relativePath: string, content = 'content'): Promise<string>
   await writeFile(absolute, content)
   return absolute
 }
-
-/** 一份同步回执的空壳，只有点名的字段有值。 */
-function syncResult(patch: Partial<KnowledgeWorkspaceSyncResult> = {}): KnowledgeWorkspaceSyncResult {
-  return {
-    workspaceRoot: '/repo',
-    scanned: 0,
-    upserted: 0,
-    reindexed: 0,
-    reindexBlocked: 0,
-    removed: 0,
-    skipped: 0,
-    forced: false,
-    ...patch,
-  }
-}
-
-/** 造一个工具上下文：搜索按 pages 逐次返回，同步与根解析可以按用例替换。 */
-function toolContext(input: {
-  pages?: KnowledgeSearchResult[][]
-  projectRoot?: string | null
-  counters?: { search: number; sync: number }
-}): KnowledgeToolContext {
-  const pages = [...(input.pages ?? [])]
-  const counters = input.counters ?? { search: 0, sync: 0 }
-  return {
-    abortSignal: new AbortController().signal,
-    sessionId: 'session-acceptance',
-    hasProjectRoot: () => input.projectRoot != null,
-    project: { getRootPath: () => input.projectRoot ?? '' },
-    knowledge: {
-      getDiagnostics: () => {
-        throw new Error('本用例不读诊断')
-      },
-      reindexKnowledge: () => {
-        throw new Error('本用例不重建')
-      },
-      ensureWorkspaceSynced: async () => {
-        counters.sync += 1
-        return syncResult()
-      },
-      searchKnowledge: async () => {
-        counters.search += 1
-        return pages.shift() ?? []
-      },
-    },
-  } as unknown as KnowledgeToolContext
-}
-
-describe('检索', () => {
-  test('INV-1 有命中就不写：搜索不触发同步，也不多搜一次', async () => {
-    const counters = { search: 0, sync: 0 }
-    const result = (await knowledgeTools['knowledge:search'].execute(
-      { query: '认证流程' },
-      toolContext({
-        pages: [[{ id: 'doc-1' } as unknown as KnowledgeSearchResult]],
-        projectRoot: '/repo',
-        counters,
-      })
-    )) as Record<string, unknown>
-
-    expect(result.count).toBe(1)
-    expect(counters.sync).toBe(0)
-    expect(counters.search).toBe(1)
-  })
-
-  test('INV-1 零命中时只补一次增量同步，并在回执里说明', async () => {
-    const counters = { search: 0, sync: 0 }
-    const result = (await knowledgeTools['knowledge:search'].execute(
-      { query: '认证流程' },
-      toolContext({ pages: [[], []], projectRoot: '/repo', counters })
-    )) as Record<string, unknown>
-
-    expect(counters.sync).toBe(1)
-    expect(result.count).toBe(0)
-    expect(result.autoSync).toBeDefined()
-  })
-
-  test('INV-2 没有绑定工作区根时报错，不猜一个根', async () => {
-    await expect(
-      knowledgeTools['knowledge:search'].execute(
-        { query: '认证流程' },
-        toolContext({ pages: [[]], projectRoot: null })
-      )
-    ).rejects.toThrow(/workspaceRoot/u)
-  })
-
-  test('INV-7 诊断只读：不同步、不搜索、不重建', async () => {
-    const counters = { search: 0, sync: 0 }
-    const context = toolContext({ projectRoot: '/repo', counters })
-    let diagnosticsCalls = 0
-    const readOnly = {
-      ...context,
-      knowledge: {
-        ...context.knowledge,
-        getDiagnostics: async () => {
-          diagnosticsCalls += 1
-          return { documents: 0 }
-        },
-      },
-    } as unknown as KnowledgeToolContext
-
-    const result = (await knowledgeTools['knowledge:diagnostics'].execute({}, readOnly)) as Record<string, unknown>
-
-    expect(diagnosticsCalls).toBe(1)
-    expect(result.diagnostics).toEqual({ documents: 0 })
-    expect(counters).toEqual({ search: 0, sync: 0 })
-  })
-})
 
 describe('工作区摄入', () => {
   test('INV-4 只列根内的文件', async () => {

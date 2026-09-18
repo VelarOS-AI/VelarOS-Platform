@@ -38,7 +38,7 @@ export interface KnowledgeDomainApi {
    * 搜索知识库。
    *
    * 这必须是纯读路径，不触发同步、索引或重建。索引维护由手动入口、项目打开生命周期，
-   * 或 `knowledge:search` 工具在**零命中时**显式补一次 `ensureWorkspaceSynced` 触发——
+   * 或模型面 `velar:knowledge` 的 search 在**零命中时**显式补一次 `ensureWorkspaceSynced` 触发——
    * 那一层看得见「这次什么都没搜到」，本方法看不见，也不该在读路径上替调用方决定写。
    */
   searchKnowledge(

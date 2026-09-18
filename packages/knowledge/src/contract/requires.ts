@@ -23,13 +23,6 @@ import type {
   EmbeddingRequestConfig,
   KnowledgeEmbeddingRuntime,
 } from '../types/host.js'
-import type {
-  KnowledgeDiagnostics,
-  KnowledgeSearchOptions,
-  KnowledgeSearchResult,
-  KnowledgeWorkspaceSyncOptions,
-  KnowledgeWorkspaceSyncResult,
-} from '../types/knowledge.js'
 
 /** 取一条宿主管理的 SQLite 连接。必给：关系型索引全落在它上面，开关与事务调度都归宿主。 */
 export type KnowledgeDatabaseProvider = () => InstanceType<typeof BetterSqlite3>
@@ -154,44 +147,4 @@ export interface KnowledgeRuntimeProviders {
   codeIntelligence?: KnowledgeCodeIntelligenceApi
   /** 可选的工作区可见性策略。 */
   indexingPolicy?: KnowledgeIndexingPolicy
-}
-
-/**
- * 宿主端口：三个知识工具经上下文里的 `ctx.knowledge` 调它。
- *
- * 只放工具真会调的方法——显式重建索引是设置页的入口，不是模型面工具的能力，所以不在这里。
- */
-export interface KnowledgeToolApi {
-  /** 只读诊断：文档总量、内容策略过期、当前 profile 覆盖率、保留的向量状态。 */
-  getDiagnostics: () => Promise<KnowledgeDiagnostics>
-  /** 确保这个工作区的文档类知识已经同步，带短时 TTL。 */
-  ensureWorkspaceSynced: (
-    workspaceRoot: string,
-    options?: KnowledgeWorkspaceSyncOptions
-  ) => Promise<KnowledgeWorkspaceSyncResult>
-  /** 在已建索引里做一次混合检索，纯读路径。 */
-  searchKnowledge: (
-    query: string,
-    options: KnowledgeSearchOptions
-  ) => Promise<KnowledgeSearchResult[]>
-}
-
-/** 宿主当前激活的工作区；工具没拿到 workspaceRoot 时向它要一个根。 */
-export interface KnowledgeProjectApi {
-  /** 返回当前激活工作区的根路径。 */
-  getRootPath: () => string
-}
-
-/** 宿主每次调用知识工具时解析出来的上下文。 */
-export interface KnowledgeToolContext {
-  /** 本次调用的取消信号。 */
-  abortSignal: AbortSignal
-  /** 本次调用所属的会话 id。 */
-  sessionId: string
-  /** 知识库宿主端口。 */
-  knowledge: KnowledgeToolApi
-  /** 宿主这一刻有没有激活的工作区。 */
-  hasProjectRoot: () => boolean
-  /** 当前激活的工作区。 */
-  project: KnowledgeProjectApi
 }

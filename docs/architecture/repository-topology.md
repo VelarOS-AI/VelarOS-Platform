@@ -39,7 +39,8 @@ The repository is converging on three rules; packages move one at a time, each m
 | `project` | space assembly and ports → products; verification policy → `velar/project` | pending |
 | `text-files`, `path-rules` | stay foundations: libraries the `velar` units build on, not tools | done |
 | `computer` | `velar/computer` (`velar:computer`, with the helper sidecar runtime and its bundled Python helpers) | done |
-| `knowledge`, `office` (+ `document-renderer`), `memory`, `browser` | tool collections become `velar` modules; engines that are not tools stay separate packages | pending |
+| `knowledge` | tools → `velar/knowledge` (`velar:knowledge`); the knowledge index stays `packages/knowledge`, the engine behind the space port | done |
+| `office` (+ `document-renderer`), `memory`, `browser` | tool collections become `velar` modules; engines that are not tools stay separate packages | pending |
 | `ui`, `html-artifacts`, `cli`, `agent-lab` | grouped by responsibility after the moves above | pending |
 
 ## Shared infrastructure

@@ -1,25 +1,15 @@
 /**
- * 约定的常量表：工具身份与类别、索引状态与命中类型、写进工具说明与 schema 的上限、宿主拼装用的存储迁移。
+ * 约定的常量表：来源类型、索引状态与命中类型、索引与检索的公开参数、宿主拼装用的存储迁移。
  *
  * 这个文件随 `./contracts` 入口出包，所以它不 import 任何东西、不用 Node 专属类型，只放 `Object.freeze` 的表、
  * `as const` 的字符串身份，以及由它们 `typeof` 派生的类型别名。改这里等于改对外契约。
  * 包内可调的数字（超时、缓冲、保留条数）不在这里，在 `utils/tuning.ts`。
  */
 
-/** 知识库三个工具所属的工具类别身份，宿主按它把三个工具归到同一组。 */
-export const KnowledgeToolCategoryId = 'knowledge' as const
-
-/** 三个模型面工具的规范名；模型只认这三个名字，改名等于改对外契约。 */
-export const KnowledgeToolNames = Object.freeze({
-  /** 只读诊断：索引健康状况。 */
-  diagnostics: 'knowledge:diagnostics',
-  /** 把当前工作区的文档与代码增量摄入索引。 */
-  sync: 'knowledge:sync',
-  /** 在已建索引里做混合检索。 */
-  search: 'knowledge:search',
-} as const)
-
-/** 知识来源类型的取值表，`knowledge:search` 的 sourceKinds 过滤与 schema 都引它。 */
+/**
+ * 知识来源类型的取值表：摄入按它给每份文档定类型，检索按它过滤。
+ * 模型面 `velar:knowledge` 的来源类型与它一致（两边由 tests/capabilities 的接缝测试核对）。
+ */
 export const KnowledgeSourceKinds = Object.freeze([
   'markdown',
   'text',
@@ -28,21 +18,7 @@ export const KnowledgeSourceKinds = Object.freeze([
   'code',
 ] as const)
 
-/** 工具入参与回执的对外上限：写进工具说明与 schema，改一处模型看到的跟着变。 */
-export const KnowledgeToolLimits = Object.freeze({
-  /** 一次搜索最多传几种来源类型过滤；和来源类型总数一致，多传没有意义。 */
-  sourceKinds: 5,
-  /** 一次搜索最多传几条路径提示，用来抬高相关文件的排序。 */
-  pathHints: 20,
-  /** 一次搜索最多传几条符号提示，用来抬高相关代码知识的排序。 */
-  symbolHints: 20,
-  /** 一次搜索最多把范围限定在几个知识文档 id 上。 */
-  documentIds: 100,
-  /** 一次搜索最多返回几条结果；超出的自动钳到这个数。 */
-  searchResults: 20,
-} as const)
-
-/** 一份知识文档的索引状态；宿主与工具回执都按这几个值判断。 */
+/** 一份知识文档的索引状态；宿主与检索结果都按这几个值判断。 */
 export const KnowledgeIndexStatuses = Object.freeze({
   PENDING: 'pending',
   READY: 'ready',
@@ -71,7 +47,7 @@ export const KnowledgeIndexConfig = Object.freeze({
   DEFAULT_SEARCH_LIMIT: 8,
   /** 列表类查询的最大返回条数。 */
   MAX_LIST_LIMIT: 100,
-  /** 领域层允许的搜索上限；工具面另有更小的 `KnowledgeToolLimits.searchResults`，先被工具钳一次。 */
+  /** 一次检索最多排多少条：模型面 `velar:knowledge` 的 limit 上限与它一致。 */
   MAX_SEARCH_LIMIT: 50,
   /** 单个 chunk 的目标字符数。 */
   CHUNK_SIZE: 1200,
@@ -200,5 +176,3 @@ export const KnowledgeEmbeddingProfileIsolationMigration = Object.freeze({
   `,
 } as const)
 
-/** 工具名的联合类型，由工具名表派生。 */
-export type KnowledgeToolName = typeof KnowledgeToolNames[keyof typeof KnowledgeToolNames]
