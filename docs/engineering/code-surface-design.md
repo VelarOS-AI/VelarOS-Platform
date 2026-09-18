@@ -103,7 +103,7 @@ API 按 **base64 之后**的大小限（直连 10 MB、Bedrock/Google Cloud 5 MB
 
 ### 代码模版不能省
 
-我们知道这些能力怎么组合，模型未必知道。每个命名空间一份模版文件（`packages/<包>/templates/<ns>.js`），
+我们知道这些能力怎么组合，模型未必知道。每个命名空间一份模版文件（能力单元里是 `packages/velar/<单元>/template.js`，项目空间的两份在 `packages/project/templates/<ns>.js`），
 **import 只写一次**，下面一段一个函数、一种用法，嵌进生成的声明，模型打开模块就看得到。
 没有模版的命名空间生成器不给过；模版**整份照真实声明过类型检查**——写错的模版会把错的写法原样教出去。
 模版里的注释一律用 `//`：它嵌在块注释里，`*/` 会把外层注释提前截断，生成器也拦这件事。
@@ -116,33 +116,55 @@ API 按 **base64 之后**的大小限（直连 10 MB、Bedrock/Google Cloud 5 MB
 
 ## 能力按注入装配，不绑死在空间上
 
-**命名空间按能力起名，不按空间起名**：`velar:files`（read / view / edit）、`velar:shell`（run / listTasks / refreshEnvironment）、
-`velar:sandbox`（create / run / diff / apply / discard）。原来的 `velar:system` 拆掉了——系统空间与项目空间有一大半能力是同一件事
-（读写文件、跑命令、演练沙箱），各写一份就是两套实现、两份说明、两份模版，模型还得挑「这是哪个空间的读文件」。
+**命名空间按能力起名，不按空间起名**。模型那边一件能力一个模块：
 
-**一件能力只有一份实现、一份声明、一份代码模版**，住在自己的包里（`@velaros-ai/files`、`@velaros-ai/shell-command`、
-`@velaros-ai/rehearsal-sandbox`），不认识任何空间。空间之间不一样的地方全落在**注入的端口**上：
+| 模块 | 操作 | 系统空间 | 项目空间 | 实现住在 |
+| --- | --- | --- | --- | --- |
+| `velar:files` | read / edit / undo | ✓ 本机文件 | — | `@velaros-ai/velar` 的 `files/` |
+| `velar:images` | view | ✓ | ✓ | `@velaros-ai/velar` 的 `images/` |
+| `velar:shell` | run / listTasks / refreshEnvironment | ✓ | ✓ | `@velaros-ai/velar` 的 `shell/` |
+| `velar:sandbox` | create / run / diff / apply / discard | ✓ | ✓ | `@velaros-ai/velar` 的 `sandbox/` |
+| `velar:project` | read / list / search / edit / inspect / undo | — | ✓ 受项目治理的文件 | `@velaros-ai/project` |
+| `velar:code` | query / analyze | — | ✓ | `@velaros-ai/project` |
+
+**一件能力只有一份实现、一份声明、一份代码模版**，不认识任何空间。空间之间不一样的地方全落在**注入的端口**上：
 
 | 能力 | 端口 | 空间要回答的问题 |
 | --- | --- | --- |
-| `velar:files` | `FileSpacePort` | `locate`：路径怎么解析、越界算不算；`reviewRead` / `reviewWrite`：哪些要先问用户、哪些直接拒；`commit`：怎么落盘（逐个原子替换，还是一个事务）；`resizeImage`：宿主会不会缩图 |
-| `velar:shell` | `ShellSpacePort` | `resolveCwd`：命令在哪儿跑；`commandPolicy`：确认文案与风险分类；跑命令、列任务、刷新环境交给哪个宿主 |
-| `velar:sandbox` | `SandboxSurfacePort` | `resolveSource`：能镜像哪些目录；`applyPolicy`：落回时怎么确认；镜像里的命令交给谁 |
+| `velar:files` | `FileSpacePort` | `locate`：路径怎么解析、越界算不算；`reviewRead` / `reviewWrite`：哪些要先问用户、哪些直接拒；`commit`：怎么落盘（写或删，核对原字节） |
+| `velar:images` | `ImageSpacePort` | `locate`：能看哪儿的图、许不许看；`resizeImage`：宿主会不会裁图缩图 |
+| `velar:shell` | `ShellSpacePort` | `resolveCwd`：命令在哪儿跑；`commandPolicy`：确认文案与风险分类；`reviewCommand`：执行前还要过的关；跑命令、列任务、刷新环境交给哪个宿主 |
+| `velar:sandbox` | `SandboxSurfacePort` | `resolveSource`：能镜像哪些目录；`applyPolicy` / `reviewApply`：落回时怎么确认、落回前还要核什么；镜像里的命令交给谁 |
+
+**真正是两件事的不硬合。** 本机文件与项目文件看上去都是「读写文件」，其实不是一件事：项目里的文件受项目治理——
+读取授权与脱敏、受保护与生成文件、校验器、带版本防护的事务、撤销账本、fileRef 只许改看到过的行；本机上的文件没有这些，
+要的是路径哪儿都能到、凭证与系统敏感路径先问用户、写是原子的、改错了能整次撤回。硬合成一套，就得让系统空间在本机根目录上跑一个项目内核，
+把项目的规则一条条关掉，还把 TypeScript 编译器拖进系统空间——一边为另一边的规则买单。所以是两件能力：`velar:files` 给系统空间，
+`velar:project` 给项目空间，各有各的声明、模版与实现。两边在「怎么读」上仍然一致：读出来都是带行号的行（`[行号, 原文]`），带版本号，改的时候按行号改。
+看图对两边是同一件事，所以拆成单独的 `velar:images`，两个空间挂同一份。
 
 **空间就是一张装配表**：给哪几件能力、每件能力用哪个端口。系统空间是 `@velaros-ai/system` 的 `createSystemSpace`——
 路径可以是本机任意位置、`~` 展开到家目录，凭证文件与系统敏感路径先问用户，写是逐个原子替换，命令在本机任意目录跑。
-项目空间下一步照这个样子装：同样三件能力，端口把路径钳在项目内、写合成事务、命令先过项目的写授权，外加它独有的 `velar:code`。
+项目空间是 `@velaros-ai/project` 的 `createProjectSpace`——两件项目独有的能力，外加给共用能力装的项目端口：
+命令的工作目录钳在项目内、会改项目的命令过修改授权与资源门、输出脱敏；沙箱只镜像项目内的目录、落回前核对写治理；看图只看项目里、读取策略许看的图。
 
-判据和上一节是同一条：**所有空间都一样的事在能力里只做一份**（有界读、认编码、核版本、留版本、压图、一批的成败、
-命令分类、危险命令确认、钳上限），**只有空间真不一样的才进端口**。端口方法宁少勿多——项目空间接进来时要的钩子
-（输出脱敏、资源门、写授权、读到的内容能不能整份写回）等它真接的时候再加，不提前猜。
+**能力单元是普通的目录，按同一套规范放在一起。** 跨空间注入的这几件（files、images、shell、sandbox）都在 `packages/velar/` 下，
+一件一个目录，目录名就是模块名（`velar:files` ⇄ `packages/velar/files/`）；它们合成一个包 `@velaros-ai/velar`，
+许可、说明、构建配置只有包根那一份，单元目录里不再各抄一遍。每个单元目录的样子一样：模块卡片 `MODULE.md`、入口 `index.ts` 与 `contracts.ts`、
+`contract/ types/ impl/ utils/` 四个目录、代码模版 `template.js`、`spec/`（不变量登记与验收）与 `test/`。宿主按 `@velaros-ai/velar/<单元>` 引用。
+项目独有的两件（project、code）直接长在项目内核上，留在 `@velaros-ai/project`。
 
-模型那边：声明是空间中立的，说明里不写「系统空间怎样、项目空间怎样」，只写「由当前空间决定」；
+判据和上一节是同一条：**所有空间都一样的事在能力里只做一份**（有界读、认编码、核版本、留原文、压图、一批的成败、
+命令分类、危险命令确认、钳上限），**只有空间真不一样的才进端口**。端口方法宁少勿多：项目空间接进来时要的钩子
+（`reviewCommand` 过修改授权、`reviewApply` 核写治理）是它真接的时候才加的，没有提前猜。
+
+模型那边：共用能力的声明是空间中立的，说明里不写「系统空间怎样、项目空间怎样」，只写「由当前空间决定」；
 代码模版用相对路径，在哪个空间照抄都能跑。空间的差别由环境报告（根目录在哪）和端口的报错（为什么被拒）说清楚。
 
 程序里看得见的只有返回值、`error.code` 与 `error.message`——工具时代那套 `cause.details`、`context.applied`、
 `suggestedNextAction` 模型根本拿不到，所以要让模型知道的都写进 message，要让程序能分支的都给成专属错误码
-（`FILES_EDIT_UNRESOLVED`、`FILES_EDIT_DENIED`、`SYSTEM_SANDBOX_CONFLICT`、`SYSTEM_SANDBOX_CHANGED`）。
+（`FILES_EDIT_UNRESOLVED`、`FILES_EDIT_DENIED`、`FILES_UNDO_CONFLICT`、`SYSTEM_SANDBOX_CONFLICT`、`SYSTEM_SANDBOX_CHANGED`；
+项目那边直接用 `ProjectErrorCodes` 的原因码，候选、诊断、第几步第几处与下一步都写进 message）。
 
 ## schema 这一层直接消失
 

@@ -1,6 +1,6 @@
 /**
  * 预编译正文的补丁策略：`PreparedContentStrategy`，实现注入面的 `PatchStrategy`（contract/requires.ts）。
- * 只接受 project:edit 在内部编译好的整段正文（replace_content）；写入仍全部由事务链执行。
+ * 只接受 `velar:project` 的 edit 在内部编译好的整段正文（replace_content）；写入仍全部由事务链执行。
  */
 
 import { isString } from '@velaros-ai/core'

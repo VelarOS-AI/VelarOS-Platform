@@ -1,9 +1,8 @@
 /**
  * 注入面：宿主必须或可以塞进来的东西，每个注入点一个接口。本包只从这些口子接收外部能力，别处不留钩子。
  *
- * - 工具上下文 `ProjectToolContext`：必须。宿主每次调工具时给，里面是宿主端口 `ProjectToolApi`（工具里写作 `ctx.project`）与审批端口 `ApprovalPort`；
+ * - 调用上下文 `ProjectCallContext`：必须。宿主每次分发调用时给，里面是宿主端口 `ProjectHostPort`（写作 `ctx.project`）与审批端口 `ApprovalPort`；
  *   宿主端口的 `kernel()` 交出项目内核的 Agent 视图 `AgentProjectKernelPort`，可选的 `sandbox` 是演练沙箱端口 `ProjectSandboxPort`。
- * - 上下文解析器 `ProjectToolContextResolver`：把本包挂进内核、按名调用工具时必须，放在 `CreateProjectKernelModuleOptions` 里给。
  * - 内核配置 `CreateProjectKernelOptions`：建项目内核时必须。里面的宿主能力 `ProjectProviders`（策略、审批、文件过滤、脱敏、证据包、日志、子进程、遥测、代码智能）
  *   与变更记录写端 `ProjectChangeFeedWriter` 都可选。
  * - 插件 `ProjectPlugin`：可选，放在内核配置里给；插件在 setup 里经 `ProjectPluginContext` 登记文件适配器工厂 `FileAdapterFactory`、补丁策略 `PatchStrategy`、
@@ -12,11 +11,10 @@
  * 这里的每个接口都必须从根入口导出。
  */
 
-import type { ApprovalPort, FileContextCarrier } from '@velaros-ai/agent/tool-contract'
-import type {
-  ScopeRef,
-} from '@velaros-ai/kernel/contracts'
-import type { RehearsalSandboxHostPort } from '@velaros-ai/rehearsal-sandbox'
+import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
+import type { ImageAttachment, ImageResizeRequest, ImageResizeResult } from '@velaros-ai/velar/images'
+import type { RehearsalSandboxHostPort } from '@velaros-ai/velar/sandbox'
+import type { ShellBackgroundTaskQueryOptions, ShellBackgroundTaskRecord, ShellCommandResult, ShellEnvironmentRefreshResult, ShellRunCommandOptions } from '@velaros-ai/velar/shell/contracts'
 
 import type { AdapterCapability, AdapterKind, AdapterPrepareEditInput, AdapterSearchHit, AdapterSearchInput, AdapterValidateInput, ParseInput, ParseResult, ProjectSymbol } from '../types/adapter.js'
 import type { AgentProjectApplyResult, AgentProjectKernelReadResult, AgentProjectPreparedTransaction, AgentProjectSearchResult, AgentProjectStoredTransaction } from '../types/agent-port.js'
@@ -25,6 +23,7 @@ import type { EvidencePack } from '../types/context.js'
 import type { ApplyEditInput, PreparedPatch, PrepareEditInput, RollbackInput, RollbackResult } from '../types/edit.js'
 import type { FixInput, FixResult,ProjectFixContext } from '../types/fix.js'
 import type { HookContext,HookEvent } from '../types/hook.js'
+import type { ProjectSandboxRunOptions } from '../types/host.js'
 import type { FileStatInput, FileStatResult, ObserveInput, ReadInput, SearchInput } from '../types/io.js'
 import type { PatchStrategyInput } from '../types/patch.js'
 import type { PipelineContext, PipelinePhase } from '../types/pipeline.js'
@@ -32,10 +31,7 @@ import type { ApprovalRequest,CorePolicy, PolicyDecision, PolicyDecisionInput } 
 import type {
   ProjectAuthorizationDecision,
   ProjectCodeQuery,
-  ProjectCommandResult,
   ProjectMutationAuthorizationInput,
-  ProjectRunCommandOptions,
-  ProjectSandboxRunOptions,
   ProjectWriteAuthorization,
 } from '../types/project.js'
 import type { CommandRunInput, CommandRunResult,FileFilterInput, ProjectIntelligenceLocation, ProjectIntelligenceSymbol, RedactionInput, RedactionResult } from '../types/provider.js'
@@ -44,23 +40,6 @@ import type { ResolveTargetInput, ResolveTargetResult } from '../types/target.js
 import type { ProjectValidationContext,ValidateInput, ValidationResult } from '../types/validation.js'
 
 import type { ProjectChangeFeed, ProjectKernel } from './provides.js'
-
-// ── 挂进内核 ────────────────────────────────────────────────────
-
-/**
- * 按作用域给出一次项目工具调用的上下文。内核每次按名调用项目工具前调用一次；signal 是这次调用的取消信号，
- * 返回的上下文里的 abortSignal 会被换成它。抛错时这次调用失败。
- */
-export type ProjectToolContextResolver = (
-  scope: LooseOptional<ScopeRef>,
-  signal: AbortSignal,
-) => ProjectToolContext | Promise<ProjectToolContext>
-
-/** 把项目空间挂进内核（`createProjectKernelModule`）时宿主给的选项。 */
-export interface CreateProjectKernelModuleOptions {
-  /** 必须：按作用域给出项目工具上下文。模块激活时把七个工具登记成能力服务，之后每次按名调用都先经它拿上下文。 */
-  readonly resolveContext: ProjectToolContextResolver
-}
 
 // ── 项目内核的 Agent 视图 ───────────────────────────────────────
 
@@ -78,10 +57,10 @@ export interface AgentProjectKernelPort {
   prepareContextSnapshot(input: { path: string; content: string }): Promise<{ content: string; redacted: boolean }>
   /**
    * 核对一批相对路径能不能由项目写，逐条给出 allowed 与拒绝原因（越界、readDeny/writeDeny、宿主可见范围、protectedFiles、generatedFiles）。
-   * 不碰磁盘、不建事务、不发审批。project:sandbox 落回这类不经事务链的整批写入，在问用户之前用它把不许写的路径挑出来。
+   * 不碰磁盘、不建事务、不发审批。`velar:sandbox` 的落回这类不经事务链的整批写入，在问用户之前用它把不许写的路径挑出来。
    */
   authorizeWrites(paths: readonly string[]): Promise<ProjectWriteAuthorization[]>
-  /** 把一段要交给模型的文字过一遍宿主的脱敏后端（没有后端时原样返回）：project:run 与 project:sandbox 的命令输出都经它。 */
+  /** 把一段要交给模型的文字过一遍宿主的脱敏后端（没有后端时原样返回）：`velar:shell` 与 `velar:sandbox` 在项目里跑的命令输出都经它。 */
   redactText(input: { content: string; path?: string }): Promise<{ content: string; redacted: boolean }>
   /**
    * 列项目里的文件和目录，每项是相对项目根的路径加类型：按 path、include/exclude、是否递归与深度过滤，缺省跳过 .gitignore 忽略的条目，
@@ -100,7 +79,7 @@ export interface AgentProjectKernelPort {
    * 是否截断，以及缺搜索命令时的 toolRequirements。
    */
   search(input: SearchInput): Promise<AgentProjectSearchResult>
-  /** 列一个文件里的符号（名字、种类、容器、范围）：宿主的代码智能对这个项目启用时先问它，出错或没结果再用本地适配器解析。project:code 凭它核对目标符号的声明位置。 */
+  /** 列一个文件里的符号（名字、种类、容器、范围）：宿主的代码智能对这个项目启用时先问它，出错或没结果再用本地适配器解析。`velar:code` 凭它核对目标符号的声明位置。 */
   listSymbols(path: string): Promise<ProjectSymbol[]>
   /**
    * 按编辑意图准备一个事务：算出每个文件的补丁、差量、改动行数与风险，不碰磁盘。baseRevisions 对不上抛 BASE_REVISION_MISMATCH；超出事务规模、
@@ -111,7 +90,7 @@ export interface AgentProjectKernelPort {
   discardTransaction(transactionId: string): { discarded: boolean }
   /**
    * 按事务号取内核里的事务（补丁、改动文件、差量、状态、提交时间），调用方只读；不存在或已被淘汰时返回 undefined。
-   * 改动工具提交后凭它取最终补丁，project:edit 的 inspect、undo 凭它核对回执。
+   * `velar:project` 的 edit 提交后凭它取最终补丁，inspect、undo 凭它核对回执。
    */
   getTransaction(
     transactionId: string
@@ -123,7 +102,7 @@ export interface AgentProjectKernelPort {
   applyEdit(input: ApplyEditInput): Promise<AgentProjectApplyResult>
   /**
    * 撤销一个已提交的事务：先核对每个文件仍是提交后的样子（被外部改过就抛 CONFLICT_WITH_EXTERNAL_EDIT，不覆盖），再逆序写回原文、删掉事务新建的文件，
-   * 并撤回提交时对 git intent-to-add 的增删；要么全部撤回，要么保持原样。project:edit 的 undo 调它。
+   * 并撤回提交时对 git intent-to-add 的增删；要么全部撤回，要么保持原样。`velar:project` 的 undo 调它。
    */
   rollback(input: RollbackInput): Promise<RollbackResult>
   /** 内核的状态：项目根（绝对路径）与已登记的校验器 id。工具凭 root 核对当前工作区没有换。 */
@@ -419,65 +398,73 @@ export interface CreateProjectKernelOptions {
 // ── 工具上下文与宿主端口 ────────────────────────────────────────
 
 /**
- * 宿主端口：工具在运行时能向宿主要什么，工具里写作 `ctx.project`。宿主每次调工具时给一份，绑定当前项目根、会话与这次调用的审批端口。
- * 端口里只有工具真会调的方法，门禁按工具文件核对。
+ * 宿主端口：项目空间在运行时能向宿主要什么，写作 `ctx.project`。宿主每次分发调用时给一份，绑定当前项目根、会话与这次调用的审批端口。
+ * 端口里只有空间真会调的方法，门禁从装配表出发核对。
  */
-export interface ProjectToolApi {
-  /** 当前项目根的绝对路径：工具以它为基准解析相对路径、给项目资源门排队、核对回执属于哪个工作区。 */
+export interface ProjectHostPort {
+  /** 当前项目根的绝对路径：空间以它为基准解析相对路径、给项目资源门排队、核对回执属于哪个工作区。 */
   getRootPath: () => string
-  /** 取当前项目根上的内核（Agent 视图）。工具每次调用都会取，宿主应当按项目根缓存同一个内核，不要每次新建。 */
+  /** 取当前项目根上的内核（Agent 视图）。每次调用都会取，宿主应当按项目根缓存同一个内核，不要每次新建。 */
   kernel: () => Promise<AgentProjectKernelPort>
   /**
-   * 项目写操作的授权：改文件、撤销变更、跑可能改项目的命令、把沙箱落回项目之前各问一次。宿主在这里向用户确认或按会话授权放行，
-   * 文件改动会带上这次要写的路径（规划之后、提交之前问）；被拒时工具一个文件都不写，回执里原样交出 message。
+   * 项目写操作的授权：跑可能改项目的命令、把沙箱落回项目之前各问一次（文件改动由内核的 `applyEdit` 自己问）。
+   * 宿主在这里向用户确认或按会话授权放行；被拒时什么都不做，`message` 原样交给模型。
    */
   prepareMutation: (
     input: ProjectMutationAuthorizationInput
   ) => Promise<ProjectAuthorizationDecision>
   /**
-   * 在 options.cwd（相对项目根，缺省是项目根；工具已经核对过它在项目之内）跑一条 shell 命令，工具把结果原样交给模型。
+   * 在 options.cwd（绝对路径，空间已经核对过它在项目之内）跑一条 shell 命令，结果原样交给空间。
    * allowDangerous 为真表示这条命令被判为危险、用户已经亲自确认过，宿主不必再问；options.background 为真时宿主把它登记成后台任务后立即返回，做不到就抛错拒绝。
    * options.shell 挑定用哪个 shell（不给就用宿主自己挑的默认 shell）：宿主必须在挑定的那个里执行，本机没有它就在执行之前拒绝并点名可用的有哪些，不许换默认 shell 照跑。
    * 命令自己失败（非零退出、超时）写进结果，不抛错；abortSignal 触发时尽快停下。
    */
   runCommand: (
     command: string,
-    options?: ProjectRunCommandOptions,
+    options?: ShellRunCommandOptions,
     allowDangerous?: boolean,
     abortSignal?: AbortSignal
-  ) => Promise<ProjectCommandResult>
+  ) => Promise<ShellCommandResult>
+  /** 查询以后台方式启动的命令任务，最新的在前；`velar:shell` 的 listTasks 经它答。宿主按会话隔离时只看得到本会话起的那些。 */
+  listBackgroundTasks: (options?: ShellBackgroundTaskQueryOptions) => Promise<ShellBackgroundTaskRecord[]>
+  /** 重新选定能用的 shell 并读取它的环境变量；`velar:shell` 的 refreshEnvironment 经它答。 */
+  refreshShellEnvironment: () => Promise<ShellEnvironmentRefreshResult>
   /**
-   * 代码查询端口：project:code 与 project:code-analysis 的动作由本包翻译成 `ProjectCodeQuery` 交过来，本包自己不带实现
+   * 代码查询端口：`velar:code` 的两个操作由本包翻译成 `ProjectCodeQuery` 交过来，本包自己不带实现
    * （语言服务那一半可以用 `@velaros-ai/development` 的 `createProjectCodeQuery`，代码图谱那一半由宿主的图后端提供）。
    * 语言服务类动作（`ProjectCodeLanguageActions` 里的七个）抛错时这次查询失败；代码图谱类动作没有后端时，抛 code 为 UNAVAILABLE
-   * （或 reason 为 NOT_SUPPORTED）的错误：project:code 把它当降级写进回执，project:code-analysis 直接失败（它只在宿主有图后端时才登记）。
+   * （或 reason 为 NOT_SUPPORTED）的错误：`query` 把它当降级写进回执，`analyze` 直接失败。
    * 返回普通对象，其中的 source、revision、truncated、degraded、note 会被装进回执。
    */
-  queryCode: (input: ProjectCodeQuery, context: ProjectToolContext) => Promise<unknown>
-  /** 演练沙箱端口；宿主用系统能力实现（Desktop 用本地内核）。没接的宿主没有 project:sandbox。 */
+  queryCode: (input: ProjectCodeQuery, context: ProjectCallContext) => Promise<unknown>
+  /** 演练沙箱端口；宿主用系统能力实现（Desktop 用本地内核）。没接的宿主，项目空间里没有 `velar:sandbox`。 */
   sandbox?: ProjectSandboxPort
+  /** 裁图缩图（可选）：`velar:images` 看超过上限的图、只看一块区域时用。宿主没有图像处理能力就不给，view 遇到这种图会明说做不了。 */
+  resizeImage?: (request: ImageResizeRequest) => Promise<ImageResizeResult>
 }
 
 /**
  * 演练沙箱端口：公共沙箱端口 `RehearsalSandboxHostPort`（建镜像、看差量、落回、丢弃）加上在镜像里跑命令。镜像里跑的命令被宿主约束在镜像根之内。
- * 项目工具出不了项目边界，所以在镜像里跑命令也经这个端口（runInSandbox），不走 project:run。落回前工具向宿主要不截断的完整差量（`maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false`），
- * 确认之后把差量指纹随 applySandbox 交回，宿主据此发现确认之后镜像又变了。
+ * 项目空间出不了项目边界，所以在镜像里跑命令也经这个端口，不走普通的 `runCommand`。
  */
 export interface ProjectSandboxPort extends RehearsalSandboxHostPort {
-  /** 在镜像根里跑一条命令，约束钉在镜像根，写到项目会失败；`shell` 的规矩同 `runCommand`；危险命令已由工具向用户确认过，abortSignal 触发时尽快停下。 */
-  runInSandbox: (options: ProjectSandboxRunOptions, abortSignal?: AbortSignal) => Promise<ProjectCommandResult>
+  /** 在镜像根里跑一条命令，约束钉在镜像根，写到项目会失败；`shell` 的规矩同 `runCommand`；危险命令已由 `velar:sandbox` 向用户确认过，abortSignal 触发时尽快停下。 */
+  runInSandbox: (options: ProjectSandboxRunOptions, abortSignal?: AbortSignal) => Promise<ShellCommandResult>
 }
 
 /**
- * 每次调用项目工具时宿主给的上下文。继承 agent 包的 `FileContextCarrier`：sessionId 与 contextPayloadStore 都给了，fileRef、changeRef、
- * 列表续页游标、symbolRef 这些回执才能跨调用签发与核对（没给时 fileRef 退回进程内存保存，changeRef 退回事务号，project:list 不给续页游标）；
- * toolCallId 用于失败入参的复用和当前文件视图的归属。
+ * 每次调用项目空间的能力时宿主给的上下文。它不是模型能填的入参：宿主分发这次调用时装好，生成声明时整个丢掉。
  */
-export interface ProjectToolContext extends FileContextCarrier {
-  /** 本次调用的取消信号：用户取消或上层超时时触发；工具在排队与每一步之间核对，宿主的命令与查询也应随之停下。 */
+export interface ProjectCallContext {
+  /** 本次调用的取消信号：用户取消或上层超时时触发；空间在排队与每一步之间核对，宿主的命令与查询也应随之停下。 */
   abortSignal: AbortSignal
   /** 宿主端口：项目根、内核、修改授权、命令、代码查询与演练沙箱都经它要。 */
-  project: ProjectToolApi
+  project: ProjectHostPort
   /** 审批端口（来自 agent 包）：危险命令、沙箱落回要用户亲自确认时经它；无人值守的宿主给默认拒绝的端口。 */
   approval: ApprovalPort
+  /** 本次调用所属会话；给了，后台任务就按会话登记与核对归属。 */
+  sessionId?: string
+  /** 把一张图交给模型看（`velar:images` 的 view 用它）；宿主收着，在这次结果后面按顺序放出来。不给就用代码面自己的图片通道。 */
+  attachImage?: (image: ImageAttachment) => void
 }
+

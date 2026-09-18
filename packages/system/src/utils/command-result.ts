@@ -3,7 +3,7 @@
  */
 
 import { isNull } from '@velaros-ai/core'
-import type { ShellCommandOutputCapture, ShellCommandResult, ShellDescriptor, ShellProcessConfinementEvidence, ShellProcessOwnership } from '@velaros-ai/shell-command/contracts'
+import type { ShellCommandOutputCapture, ShellCommandResult, ShellDescriptor, ShellProcessConfinementEvidence, ShellProcessOwnership } from '@velaros-ai/velar/shell/contracts'
 
 import { takeUnicodeSafeTail } from './text.js'
 import { SystemTuning } from './tuning.js'

@@ -3,6 +3,8 @@
 //
 // 字段：
 //   directory       相对 packages/ 的目录
+//   unit            能力单元的目录名（不填就是普通模块）：几件能力按目录放在同一个包里，共用一份清单与许可；
+//                   源码根是 packages/<directory>/<unit>/（不是 src/），其余路径字段仍相对包根写；name 写成「包名/单元」
 //   name            包名
 //   toolsFile       工具文件（相对包根，没有工具的包不填）：全部工具定义都在这一个文件里，外加它们的分组与挂载。人最先看的地方，改了要在差量报告里点名；
 //                   execute 只放简单的一两步，语句多了就交给 impl 里的类
@@ -87,7 +89,7 @@ export const GovernedModules = [
     surfaceFile: 'src/impl/SystemSpace.ts',
     // 实现文件的分层，从上到下；上层可以引下层与同层，下层不许引上层
     layers: [
-      // 系统空间：三件能力配上本机端口的那张装配表
+      // 系统空间：四件能力配上本机端口的那张装配表
       ['SystemSpace.ts'],
       // 宿主：系统空间要的本机能力的实现
       ['LocalSystemKernel.ts'],
@@ -106,7 +108,6 @@ export const GovernedModules = [
   {
     directory: 'project',
     name: '@velaros-ai/project',
-    toolsFile: 'src/impl/ProjectTools.ts',
     contract: 'src/contract',
     types: 'src/types',
     portable: 'project.ts',
@@ -114,16 +115,20 @@ export const GovernedModules = [
     utils: 'src/utils',
     tuning: 'tuning.ts',
     browserSafeEntries: ['contracts.ts'],
-    hostPort: 'ProjectToolApi',
+    // 项目空间的宿主端口：装配表与两件项目独有的能力经 ctx.project 调它；每个方法都必须有操作在调
+    hostPort: 'ProjectHostPort',
     hostPortField: 'project',
+    surfaceFile: 'src/impl/ProjectSpace.ts',
     layers: [
-      ['ProjectTools.ts'],
+      // 项目空间：项目独有的两件能力，加上三件共用能力的项目端口
+      ['ProjectSpace.ts'],
+      // velar:project、velar:code 的操作与项目资源门
       ['operations/'],
+      // 项目内核
       ['kernel/'],
       ['plugins/'],
       ['transactions/', 'files/', 'strategies/', 'adapters/', 'registries/', 'persistence/'],
     ],
-    toolDefiner: 'defineProjectTool',
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
@@ -148,73 +153,104 @@ export const GovernedModules = [
     acceptance: 'spec/acceptance.test.ts',
   },
   {
-    directory: 'shell-command',
-    name: '@velaros-ai/shell-command',
-    contract: 'src/contract',
-    types: 'src/types',
-    portable: 'shell-command.ts',
-    impl: 'src/impl',
-    utils: 'src/utils',
-    browserSafeEntries: ['index.ts', 'contracts.ts'],
-    // 空间端口：velar:shell 的操作经 ctx.shell 调它；每个方法都必须有操作在调
-    hostPort: 'ShellSpacePort',
-    hostPortField: 'shell',
-    surfaceFile: 'src/impl/ShellOperations.ts',
-    layers: [
-      // 代码面 shell 命名空间的三个操作
-      ['ShellOperations.ts'],
-      // 命令策略与审批请求互不依赖，上面那一层与项目空间的工具共用
-      ['ShellCommandPolicy.ts', 'ShellCommandApproval.ts'],
-    ],
-    card: 'MODULE.md',
-    invariants: 'spec/invariants.md',
-    acceptance: 'spec/acceptance.test.ts',
-  },
-  {
-    directory: 'files',
-    name: '@velaros-ai/files',
-    contract: 'src/contract',
-    types: 'src/types',
+    // 能力单元：@velaros-ai/velar 里按目录放的四件共用能力，布局一样，清单与许可只在包根一份
+    directory: 'velar',
+    unit: 'files',
+    name: '@velaros-ai/velar/files',
+    contract: 'files/contract',
+    types: 'files/types',
     portable: 'files.ts',
-    impl: 'src/impl',
-    utils: 'src/utils',
+    impl: 'files/impl',
+    utils: 'files/utils',
     tuning: 'tuning.ts',
     // 根入口读磁盘，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
     // 空间端口：velar:files 的操作经 ctx.files 调它；每个方法都必须有操作在调
     hostPort: 'FileSpacePort',
     hostPortField: 'files',
-    surfaceFile: 'src/impl/FileOperations.ts',
+    surfaceFile: 'files/impl/FileOperations.ts',
     layers: [
       // 代码面 files 命名空间的三个操作
       ['FileOperations.ts'],
-      // 改动前留下的版本
-      ['FileHistory.ts'],
+      // 留着能撤回的改动
+      ['FileChanges.ts'],
     ],
-    card: 'MODULE.md',
-    invariants: 'spec/invariants.md',
-    acceptance: 'spec/acceptance.test.ts',
+    card: 'files/MODULE.md',
+    invariants: 'files/spec/invariants.md',
+    acceptance: 'files/spec/acceptance.test.ts',
   },
   {
-    directory: 'rehearsal-sandbox',
-    name: '@velaros-ai/rehearsal-sandbox',
-    // 没有工具：不登记 toolsFile、toolDefiner、hostPort
-    contract: 'src/contract',
-    types: 'src/types',
+    directory: 'velar',
+    unit: 'images',
+    name: '@velaros-ai/velar/images',
+    contract: 'images/contract',
+    types: 'images/types',
+    portable: 'images.ts',
+    impl: 'images/impl',
+    utils: 'images/utils',
+    tuning: 'tuning.ts',
+    // 根入口读磁盘，只给 Node；渲染进程只能加载可移植数据
+    browserSafeEntries: ['contracts.ts'],
+    // 空间端口：velar:images 的 view 经 ctx.images 调它；每个方法都必须有操作在调
+    hostPort: 'ImageSpacePort',
+    hostPortField: 'images',
+    surfaceFile: 'images/impl/ImageOperations.ts',
+    layers: [
+      // 代码面 images 命名空间的 view
+      ['ImageOperations.ts'],
+    ],
+    card: 'images/MODULE.md',
+    invariants: 'images/spec/invariants.md',
+    acceptance: 'images/spec/acceptance.test.ts',
+  },
+  {
+    directory: 'velar',
+    unit: 'shell',
+    name: '@velaros-ai/velar/shell',
+    contract: 'shell/contract',
+    types: 'shell/types',
+    portable: 'shell-command.ts',
+    impl: 'shell/impl',
+    utils: 'shell/utils',
+    browserSafeEntries: ['index.ts', 'contracts.ts'],
+    // 空间端口：velar:shell 的操作经 ctx.shell 调它；每个方法都必须有操作在调
+    hostPort: 'ShellSpacePort',
+    hostPortField: 'shell',
+    surfaceFile: 'shell/impl/ShellOperations.ts',
+    layers: [
+      // 代码面 shell 命名空间的三个操作
+      ['ShellOperations.ts'],
+      // 命令策略与审批请求互不依赖，上面那一层与演练沙箱共用
+      ['ShellCommandPolicy.ts', 'ShellCommandApproval.ts'],
+    ],
+    card: 'shell/MODULE.md',
+    invariants: 'shell/spec/invariants.md',
+    acceptance: 'shell/spec/acceptance.test.ts',
+  },
+  {
+    directory: 'velar',
+    unit: 'sandbox',
+    name: '@velaros-ai/velar/sandbox',
+    contract: 'sandbox/contract',
+    types: 'sandbox/types',
     portable: 'rehearsal-sandbox.ts',
-    impl: 'src/impl',
-    utils: 'src/utils',
+    impl: 'sandbox/impl',
+    utils: 'sandbox/utils',
     tuning: 'tuning.ts',
     browserSafeEntries: ['index.ts', 'contracts.ts'],
+    // 空间端口：velar:sandbox 的操作经 ctx.sandbox 调它；每个方法都必须有操作在调
+    hostPort: 'SandboxSurfacePort',
+    hostPortField: 'sandbox',
+    surfaceFile: 'sandbox/impl/SandboxOperations.ts',
     layers: [
       // 代码面 sandbox 命名空间的五个操作：解析作用域、调宿主端口、整形回执
       ['SandboxOperations.ts'],
-      // 落回前的核对与确认请求，两个空间的工具和上面那一层共用
+      // 落回前的核对与确认请求
       ['RehearsalSandboxRules.ts'],
     ],
-    card: 'MODULE.md',
-    invariants: 'spec/invariants.md',
-    acceptance: 'spec/acceptance.test.ts',
+    card: 'sandbox/MODULE.md',
+    invariants: 'sandbox/spec/invariants.md',
+    acceptance: 'sandbox/spec/acceptance.test.ts',
   },
   {
     directory: 'code-surface',

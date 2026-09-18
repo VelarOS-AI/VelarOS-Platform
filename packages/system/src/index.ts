@@ -3,7 +3,7 @@
  *
  * 只出三样东西：产品面（`contract/provides.ts` 登记的接口和它们的实例）、注入面（`contract/requires.ts` 的接口）、
  * 以及它们用到的数据（`types/`）与常量表（`contract/constants.ts`）。另一个入口 `./contracts` 是它的子集，只有可移植数据。
- * 能力本身在各自的包里：`@velaros-ai/files`、`@velaros-ai/shell-command`、`@velaros-ai/rehearsal-sandbox`。
+ * 能力本身在各自的包里：`@velaros-ai/velar/files`、`@velaros-ai/velar/shell`、`@velaros-ai/velar/sandbox`。
  */
 
 // ── 子集入口 ────────────────────────────────────────────────────

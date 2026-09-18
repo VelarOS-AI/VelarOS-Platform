@@ -1,9 +1,9 @@
 /**
  * 演练沙箱引擎自己的工作类型：镜像清单与文件印记、落回时的冲突。只在包内用，不出包。
- * 模型面上的沙箱是 `velar:sandbox` 那个跨空间命名空间（`@velaros-ai/rehearsal-sandbox`），本包只出引擎。
+ * 模型面上的沙箱是 `velar:sandbox` 那个跨空间命名空间（`@velaros-ai/velar/sandbox`），本包只出引擎。
  */
 
-import type { SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
+import type { SandboxRecord } from '@velaros-ai/velar/sandbox/contracts'
 
 /** 镜像里一个文件的印记：大小、修改时间、权限位；符号链接记它指向哪。 */
 export interface SystemSandboxFileStamp {

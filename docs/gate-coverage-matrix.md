@@ -36,7 +36,6 @@ The full check builds every package, runs type checking, lint, tests, maintained
 | UI | `check:ui-component-library` | Component API generation, documentation freshness, and isolation |
 | HTML Artifacts | `check:html-artifacts-package` | Package contract and distributable output |
 | Project | `check:project-arch` | Package shape and host/capability boundaries |
-| Project | `check:project-agent-contract` | Project tool integration contract |
 | Agent Lab | `check:agent-lab-package` | Evaluation package contract and tests |
 
 ## Repository-wide gates

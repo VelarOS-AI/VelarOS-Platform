@@ -1,4 +1,5 @@
-import type { PlannerCoverageWindow, ProjectEditView, ProjectResolvedMutation, ProjectVisibleCoverage } from '../../types/editing.js'
+import type { PlannerCoverageWindow, ProjectEditView, ProjectResolvedMutation } from '../../types/editing.js'
+import type { ProjectVisibleCoverage } from '../../types/file-refs.js'
 
 import { orderProjectMutations } from './content-planner.js'
 import { createProjectSourceCoordinates, sourceLineAt } from './source.js'

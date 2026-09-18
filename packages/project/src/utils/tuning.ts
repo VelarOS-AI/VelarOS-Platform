@@ -5,46 +5,51 @@
 
 /** 项目包的可调参数，按用途分组。 */
 export const ProjectTuning = Object.freeze({
-  /** project:search 搜源码（utils/agent/project-files.ts、kernel-port.ts）：命中列表与源码窗口交给模型的总量（缺省命中条数是对外承诺，在常量表）。 */
+  /** search 搜源码（utils/agent/file-reads.ts、kernel-port.ts）：命中列表与源码窗口的总量（缺省命中条数是对外承诺，在常量表）。 */
   search: Object.freeze({
-    /** 命中合成的源码窗口总共最多多少字符（按呈现给模型的 JSON 算，含路径、版本、引用这些固定元数据）；装不下的命中只留定位。 */
+    /** 命中合成的源码窗口总共最多多少字符（按窗口的 JSON 算，含路径、版本、引用这些固定元数据）；装不下的命中只留定位。 */
     windowBudgetChars: 12_000,
     /** 命中列表（只含路径、版本、范围、片段）按 JSON 算最多多少字符；装不下的命中截掉并标 truncated，让模型收窄条件。 */
     hitsBudgetChars: 24_000,
   }),
-  /** project:list 列文件（utils/agent/project-files.ts）的扫描上限。 */
+  /** list 列文件（utils/agent/file-reads.ts）的扫描上限。 */
   list: Object.freeze({
     /** 一次最多扫描多少个条目；超过就提示收窄 path 或 include。 */
     maxEntries: 100_000,
   }),
-  /** Agent 适配层（utils/agent）：要整份正文时的读取预算，编辑版本过期时的恢复回执。 */
+  /** 文件能力的适配层（utils/agent）：要整份正文时的读取预算，编辑版本过期时的恢复说明。 */
   agent: Object.freeze({
     /** 要整份正文时（签发可编辑视图、编辑恢复找新位置、编码转换）向内核读取的字符预算；读不全就不签发编辑引用、不给恢复候选、拒绝转换。 */
     fullReadChars: 16_000_000,
-    /** 编辑版本过期时，恢复回执里候选位置与确认窗口行数的上限，超过就不给候选；不能超过 agent 包给失败回执 details 每个数组留的项数（现为 10），否则会被截断。 */
+    /** 编辑版本过期时，恢复说明里候选位置与确认窗口行数的上限，超过就不给候选。 */
     recoveryItems: 10,
-    /** 恢复回执里确认窗口的行记录按 JSON 算最多多少字符；装不下就只给候选行号，让模型先 read。 */
+    /** 恢复说明里确认窗口的行最多多少字符；装不下就只给候选行号，让模型先 read。 */
     recoveryWindowChars: 10_000,
   }),
-  /** 当前文件视图（utils/agent/file-context.ts）：会话里「当前项目文件」刷新时读多少、编辑后看哪几段。 */
-  fileContext: Object.freeze({
-    /** 不超过这么多字节的文件整份放进视图；更大的只读模型看过的几段。 */
-    wholeFileBytes: 32_000,
-    /** 刷新一个文件的视图时，所有段共用的字符预算。 */
-    viewChars: 64_000,
-    /** 大文件的视图最多读几段；超过时先留和本次改动相交的段。 */
+  /** 文件引用（utils/agent/file-refs.ts）：fileRef、续读页、回执按会话存在进程内存里，这是它们的上限。 */
+  refs: Object.freeze({
+    /** 最多同时留几个会话的引用，超了丢掉最久没用的那个会话的全部引用。 */
+    sessions: 32,
+    /** 每个会话最多几条记录（源码快照、视图、续读页、回执各算一条），超了从最久没用的删起。 */
+    recordsPerSession: 2_000,
+    /** 每个会话的记录最多占多少字符（源码快照带完整正文），超了从最久没用的删起。 */
+    charsPerSession: 64_000_000,
+  }),
+  /** edit 回执里改过的文件的窗口（utils/agent/change-windows.ts）：看哪几段、带多少。 */
+  receiptWindows: Object.freeze({
+    /** 所有改过的文件的窗口共用的字符预算；装不下的文件不给窗口，要接着改先 read。 */
+    chars: 24_000,
+    /** 一个文件最多给几段；超过时先留和本次改动相交的段。 */
     focusRanges: 8,
-    /** 编辑后视图在每段改动前后各多带几行。 */
+    /** 每段改动前后各多带几行。 */
     changeContextLines: 5,
   }),
-  /** 代码查询（utils/agent/code-query.ts）：project:code 与 project:code-analysis 的回执体量（缺省条数是对外承诺，在常量表）。 */
+  /** 代码查询（utils/agent/code-query.ts）：`velar:code` 的 query 与 analyze 的回执体量（缺省条数是对外承诺，在常量表）。 */
   codeQuery: Object.freeze({
     /** 按符号名到代码图谱找节点时最多取几个候选；符号搜索回退到代码图谱时也不超过它。 */
     graphCandidates: 50,
     /** 关系查询结果里 output、relationshipMap 这类整段文字最多留多少字符，超出截断并标 truncated。 */
     relationTextChars: 20_000,
-    /** symbols 带 target 查详情时附带的声明源码最多多少字符。 */
-    symbolSourceChars: 20_000,
   }),
   /** 工具层的执行操作（impl/operations/ProjectExecutionOperations.ts 与 utils/agent/execution.ts）。 */
   execution: Object.freeze({
@@ -58,9 +63,9 @@ export const ProjectTuning = Object.freeze({
   }),
   /** 事务：回执带多长的差量、编辑失败的回读建议、校验失败回执、校验结果复用。 */
   transactions: Object.freeze({
-    /** 提交回执与 project:edit 的 inspect 各带多少字符的差量；超出截断并标 diffTruncated，要看全的去读改后的文件。 */
+    /** edit 回执与 inspect 各带多少字符的差量；超出截断并标 diffTruncated，要看全的去读改后的文件。 */
     receiptDiffChars: 16_000,
-    /** 编辑在 prepare 失败时，回执里建议模型回读出错文件用的 project:read maxChars（字符）。 */
+    /** 编辑在 prepare 失败时，建议回读出错文件用的 read maxChars（字符）。 */
     recoveryReadMaxChars: 12_000,
     /** 知道出错行时，建议回读的范围从出错行往上多读几行。 */
     recoveryReadLinesBefore: 3,
@@ -174,7 +179,7 @@ export const ProjectTuning = Object.freeze({
   }),
   /** 编辑定位失败时回给模型的线索（utils/editing 与 JS/TS 补丁策略）：候选几个、摘录多长、模糊定位的门槛；全都有上限，不把整个文件塞回上下文。 */
   editing: Object.freeze({
-    /** project:edit 的 match 零命中或多处命中时最多回几个候选；多处命中时也只收集这么多处精确匹配。 */
+    /** edit 的 match 零命中或多处命中时最多回几个候选；多处命中时也只收集这么多处精确匹配。 */
     candidates: 8,
     /** 每个候选最多带多少字符原文；更长的截断，也不再替它找能唯一定位的上下文。 */
     candidateChars: 1_200,

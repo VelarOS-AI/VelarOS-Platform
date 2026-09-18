@@ -1,9 +1,9 @@
 /**
  * 本地内核给宿主界面的数据里，引用到 shell 能力数据（后台任务状态、shell 描述）的那几个：终止后台任务的结果、
- * 控制台的增量输出与控制结果、环境体检。它们要从 `@velaros-ai/shell-command/contracts` 取类型，所以不在可移植文件里；从根入口导出。
+ * 控制台的增量输出与控制结果、环境体检。它们要从 `@velaros-ai/velar/shell/contracts` 取类型，所以不在可移植文件里；从根入口导出。
  */
 
-import type { ShellBackgroundTaskStatus, ShellCommandKind, ShellDescriptor, ShellRecommendation } from '@velaros-ai/shell-command/contracts'
+import type { ShellBackgroundTaskStatus, ShellCommandKind, ShellDescriptor, ShellRecommendation } from '@velaros-ai/velar/shell/contracts'
 
 import type { SystemEnvironmentCommandAvailability, SystemRuntimePlatform } from './system.js'
 

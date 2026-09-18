@@ -1,7 +1,7 @@
 /**
  * 约定的常量表（对外合同的一部分）：错误码与环境变量表。
- * 宿主按错误码判断失败、按环境变量表配置本包。模型看得见的上限在各能力包的常量表里（`@velaros-ai/files` 的 `FileLimits`、
- * `@velaros-ai/shell-command` 的 `ShellLimits`）；包内可调、不对外承诺的参数在 `utils/tuning.ts`。
+ * 宿主按错误码判断失败、按环境变量表配置本包。模型看得见的上限在各能力包的常量表里（`@velaros-ai/velar/files` 的 `FileLimits`、
+ * `@velaros-ai/velar/shell` 的 `ShellLimits`）；包内可调、不对外承诺的参数在 `utils/tuning.ts`。
  * 不 import 任何东西、不用 Node 专属类型，整个文件随 `./contracts` 入口出包。
  */
 

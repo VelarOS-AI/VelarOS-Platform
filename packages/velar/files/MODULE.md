@@ -1,0 +1,115 @@
+# @velaros-ai/velar/files 模块卡片
+
+> 这一页是本模块的压缩表示：读完就知道它是什么、给了外面什么、骨干链路怎么走、靠什么、状态在哪、失败什么样、哪些承诺不能破。
+> 模型面是 `baselines/code-surface/files.d.ts`（由 `@AgentView` 从 `FileOperationsApi` 与它引用的类型生成），那是模型看到的全部。
+> 先看 `impl/FileOperations.ts` 类上方的接口（`contract/provides.ts` 登记它），utils 里每个函数上方有一句说明。
+> 门禁：`bun run check:module-ownership`、`bun run check:code-surface`。
+
+## 这是什么
+
+本机文件的读写能力：代码面 `velar:files` 的 `read`、`edit`、`undo`，系统空间挂它。
+
+**本机文件与项目文件是两件能力。** 项目里的文件受项目治理（读取授权与脱敏、受保护与生成文件、校验器、事务与撤销账本），
+那一套在 `@velaros-ai/project` 的 `velar:project`；本机上的文件没有这些，要的是：路径哪儿都能到、凭证与系统敏感路径先问用户、
+写是原子的、改错了能整次撤回。两边硬合成一套，只会让一边为另一边的规则买单，所以各是一件能力、各有一份实现。
+看图对两边是同一件事，拆在 `@velaros-ai/velar/images`。
+
+**能力靠端口注入**：挂 `velar:files` 的空间给一个 `FileSpacePort`——路径怎么解析、越界算不算、哪些要问人、怎么落盘都在端口里。
+有界地读、认编码、按行拆合、核版本、留原文与撤回、一批的成败在这里只做一份。
+
+## 提供什么
+
+**产品面**，登记在 `contract/provides.ts`：
+
+| 值 | 接口 | 做什么 |
+| --- | --- | --- |
+| `fileOperations` | `FileOperationsApi` | 代码面 `files` 命名空间的三个操作：带行号地读、按行号改或整份写、整次撤回 |
+| `FileLimits` | 契约常量 | 公开上限：批量条数、单文件字节、读的字符预算、一个文件改几处、留原文的上限、留几次改动 |
+| `FileErrorCodes` | 契约常量 | 三个专属错误码：`FILES_EDIT_UNRESOLVED`、`FILES_EDIT_DENIED`、`FILES_UNDO_CONFLICT`，模型的程序接住异常时 `error.code` 就是它 |
+
+**数据面**是 `types/`：`types/files.ts` 是可移植数据（读的入参、写与撤回的入参和结果、空间定位出来的路径 `FileLocation`），
+`types/text.ts` 是读的结果（带文本编码，从根入口导出）与读的工作类型，`types/space.ts` 是空间端口上流动的数据
+（`FileConfirmation`、`FileWrite`，带 `Buffer`，从根入口导出），`types/edit.ts` 是写与撤回的工作类型（计划、印记、问题、留着的改动），不出包。
+
+两个入口对应包清单 `exports` 里的 `./files` 与 `./files/contracts`，源文件是单元目录上的 `index.ts` 与 `contracts.ts`，只有转发语句：
+
+| 入口 | 给谁用 | 里面有什么 |
+| --- | --- | --- |
+| `./files` | Node 宿主 | 三个操作、空间端口、它们用到的数据 |
+| `./files/contracts` | 任何进程，含浏览器 | 常量表与可移植数据 |
+
+**注入面**在 `contract/requires.ts`：
+
+| 接口 | 谁给、什么时候给 |
+| --- | --- |
+| `FileSpacePort` | 每个挂 `velar:files` 的空间一份：`locate`（作用域：给模型看的路径、真正读写的目标、是不是经过链接）、`reviewRead` / `reviewWrite`（策略：不许就抛，要问就交回确认请求）、`commit`（落盘：按顺序写或删、核对 expected、点名已做的） |
+| `FileOperationContext` | 宿主每次分发 `files` 命名空间的调用时装好：取消信号、上面那个端口、审批端口 |
+
+## 骨干链路
+
+| 能力 | 链路 |
+| --- | --- |
+| 读 `read` | `fileOperations.read`：核对取消信号 → `batchItems` 核对形状与条数 → 每个文件：`ctx.files.locate` → 核对 range → `ctx.files.reviewRead`，要问的经 `ctx.approval` 问 → `readBoundedFile`（20 MB 上限）→ 认出图片与 PDF 就拒 → `decodeText` 严格解码 → `splitLines` 按 `wc -l` 的数法拆行 → `numberedLines` 取出那几行（超出这次剩下的字符预算就单独失败）→ 某一项失败只标记它，全部失败才整个抛 |
+| 写 `edit` | `fileOperations.edit`：第一段每个文件定位（越界算被拒）→ 按真实路径判重 → `planFileEdit`（排除目录、特殊文件、多硬链接、超大文件、坏上级；已有的整份读进来：二进制拒改、核对 version；edits 经 `applyLineEdits` 按读到的那一版改，newText 经 `toFileNewlines` 换成原文件的换行；按原编码编好，GB18030 没改的片段沿用原字节；写出去超过 20 MB 的不写）→ 有问题整批抛 `FILES_EDIT_UNRESOLVED` / `FILES_EDIT_DENIED`，一次都不问用户 → 第二段逐个 `ctx.files.reviewWrite` 与确认（第一次被拒就停，整批不写）→ 再 stat 一次，印记证明不了没变的重读核版本 → 第三段 `ctx.files.commit`（每项带 expected）→ `FileChanges.record` 记成一次改动，交回改动号；落盘途中出错时点名已写的，并把已写的那几个记成一次改动、给出撤回的号 |
+| 撤回 `undo` | `fileOperations.undo`：`FileChanges.recall` 取回改动（没有就 `NOT_FOUND`，撤过的如实回执，原文没留的拒）→ 每个文件核对：还是那次改完的版本的要撤，已经是改之前的样子的（上一次撤回做了一半）跳过，别的就整个抛 `FILES_UNDO_CONFLICT` → `ctx.files.reviewWrite` 与确认 → `ctx.files.commit`（写回原文、删掉新建的，都带 expected）→ 标记已撤回；做到一半出错时点名已退回的，再撤一次接着撤剩下的 |
+
+## 依赖什么
+
+- 上游包：`@velaros-ai/core`（类型守卫、`AppError`、日志）、`@velaros-ai/platform`（规整用户输入的路径、平台名）、`@velaros-ai/text-files`（编码识别、严格解码、按原编码编回、有界读）；`@velaros-ai/agent` 的 `tool-contract`（审批端口）与 `contracts`（确认选项类型），peer 依赖。
+- 只在验收里用：`@velaros-ai/code-surface`（dev 依赖），跑端到端的程序、给代码模版做类型检查。
+- 用到的 Node 内置模块：`fs/promises`（stat、读文件）、`crypto`（版本号、改动号）、`path`。只在根入口的引用链上；`./contracts` 不碰。
+- 不读环境变量。
+
+## 状态归谁
+
+`fileOperations` 持有一份 `FileChanges`：留着能撤回的改动，只在内存里——每次改动每个文件改之前的原文（不超过 `FileLimits.undoBytes` 的才留，新建的记为不存在）与改完的版本；
+最多留最近 `FileLimits.undoChanges` 次、原文总量有上限，超了从最早的丢起。随进程消失；持久化的历史是宿主的事。
+
+## 生命周期
+
+没有需要释放的东西；留着的改动随进程存在。
+
+## 失败语义
+
+- 一批里的读：某一项失败只标记它（`{ path, error: { code, message } }`），全部失败才整个抛第一个失败。
+- 写：整批要么全写要么一个不写。写不下去抛 `FILES_EDIT_UNRESOLVED`，被拒（用户没点头、越出空间范围、空间不许写）抛 `FILES_EDIT_DENIED`，message 逐条写明；落盘途中出错时 message 点名已经写进去的文件，并给出撤回它们的改动号。
+- 撤回：整次要么全撤要么一个不撤；之后又被改过抛 `FILES_UNDO_CONFLICT`，点名是哪几个。
+- 形状不对、条数不对、文件太大、不是文本、行号越界、版本对不上：`VALIDATION`。找不到文件、改动号找不到：`NOT_FOUND`。没有权限、越出范围：`PERMISSION`。
+- 代码面只把 `code` 与 `message` 交给程序，所以模型要知道的都写在 message 里。
+
+## 不变量
+
+共 12 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 11 条、门禁 1 条。未验证 0 条。
+
+## 非目标
+
+- 不决定作用域与策略：路径相对谁、越界算不算、哪些要问人，全由空间注入的 `FileSpacePort` 说了算。
+- 不管项目文件：读取治理、事务、校验器是 `velar:project` 的事。
+- 不列目录、不搜文本、不看图、不读 PDF 与其他文档：列和搜用命令（`velar:shell`，`rg -n` 带行号），看图用 `velar:images`，文档另有能力。
+- 不分页：行落在程序的变量里，模型看不到它；模型自己在程序里切片、筛选，只交出要看的那几行。
+
+## 结构
+
+```text
+files/
+  contract/     对外合同：provides.ts 登记三个操作的 API，requires.ts 是空间端口与调用上下文，constants.ts 是错误码与公开上限
+  types/        只放类型：files.ts 是可移植数据，text.ts 是读的结果与读的工作类型，space.ts 是空间端口上的数据，edit.ts 是写与撤回的工作类型
+  impl/         一类一文件：FileOperations（velar:files）、FileChanges（留着能撤回的改动）
+  utils/        batch.ts（一批的核对与失败）、plan.ts（一个文件的写入规划）、lines.ts（拆行、按行号改、拼回、换行风格）、text-file.ts（有界读、解码、版本、印记、媒体类型）、
+                paths.ts（判重的身份键）、fs.ts（系统错误码）、tuning.ts（可调参数）；全是函数与常量，每个函数上方一句说明
+  index.ts      `./files` 入口，只转发
+  contracts.ts  `./files/contracts` 入口，只转发
+  template.js   代码模版，嵌进生成声明的模块头
+  spec/         不变量登记、验收测试、共用的真磁盘空间端口
+  test/         实现细节测试
+```
+
+**分层。** 上层是 `FileOperations.ts`（代码面的三个操作），下层是 `FileChanges.ts`（留着的改动）；上层持有下层。
+
+**类与接口。** 每个类实现一个接口，定义在类文件里、紧挨在类的上方并导出；公开的在 `contract/provides.ts` 登记。整个进程只需要一份的，文件末尾给出那一份，按公开接口标注类型。
+
+| 实现文件 | 接口 | 做什么 |
+| --- | --- | --- |
+| `FileOperations.ts` | `FileOperationsApi`（同文件，provides 登记） | 代码面 `files` 命名空间的三个操作 |
+| `FileChanges.ts` | `FileChangesApi`（同文件，包内） | 留着能撤回的改动：记、取、标记撤回、按预算淘汰 |

@@ -8,7 +8,6 @@ import { createProjectKernel } from '../src/index'
 import type { ReplaceLinesOperation } from '../src/types/edit'
 
 import { ProjectEditOperationSchema } from './support/edit-intent-schema'
-import { legacyProjectTools as projectTools } from './support/legacy-tools'
 
 let root = ''
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-line-edit-')) })
@@ -30,7 +29,7 @@ describe('revision-bound line edits', () => {
     const original = 'const path = "\\\\"\nconst path = "\\\\"\n尾部🙂\n'
     const { project, operation } = await fixture(original)
     operation.newLines = ['中文🙂', 'next']
-    expect(projectTools['project:edit'].schema.safeParse({ edits: [operation] }).success).toBe(true)
+    expect(ProjectEditOperationSchema.safeParse(operation).success).toBe(true)
     const tx = await project.prepareEdit({ operations: [
       { operation },
       { operation: { type: 'replace_text', path: operation.path, oldText: 'next', newText: 'done' } },

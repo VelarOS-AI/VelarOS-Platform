@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os'
 import { isFalse, Log, optionalWhen, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
-import type { ShellBackgroundProcessInfo, ShellBackgroundTaskQueryOptions, ShellBackgroundTaskRecord, ShellBackgroundTaskStatus, ShellCommandOutputCapture, ShellCommandResult, ShellConsoleSessionInfo, ShellProcessConfinementEvidence, ShellRunCommandOptions } from '@velaros-ai/shell-command/contracts'
+import type { ShellBackgroundProcessInfo, ShellBackgroundTaskQueryOptions, ShellBackgroundTaskRecord, ShellBackgroundTaskStatus, ShellCommandOutputCapture, ShellCommandResult, ShellConsoleSessionInfo, ShellProcessConfinementEvidence, ShellRunCommandOptions } from '@velaros-ai/velar/shell/contracts'
 
 import type { SystemProcessConfinementProvider } from '../contract/requires.js'
 import type { PreparedSystemCommand, SystemConsoleOutputBuffer, SystemProcessConfinementPolicy } from '../types/commands.js'

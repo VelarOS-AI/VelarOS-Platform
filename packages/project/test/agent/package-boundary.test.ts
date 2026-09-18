@@ -3,8 +3,7 @@ import { relative, resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { ProjectToolNames } from '../../src/contract/constants'
-import { projectTools } from '../../src/index'
+import { createProjectSpace } from '../../src/index'
 
 const PackageRoot = resolve(import.meta.dir, '../..')
 const SourceRoot = resolve(PackageRoot, 'src')
@@ -43,7 +42,7 @@ describe('Project Agent boundary', () => {
     expect(violations).toEqual([])
   })
 
-  test('tool context exposes only the ports used by the Project tool surface', () => {
+  test('宿主端口只留空间真会调的方法', () => {
     const source = readFileSync(resolve(SourceRoot, 'contract/requires.ts'), 'utf8')
     for (const field of [
       'getRootPath',
@@ -52,7 +51,7 @@ describe('Project Agent boundary', () => {
       'runCommand',
       'queryCode',
     ]) expect(source).toContain(field)
-    // 端口上只留工具真会调的方法：按目录执行、包审批上下文这两件事已经收回包内（cwd 经 runCommand.options，审批经 projectApprovalBridge）。
+    // 端口上只留空间真会调的方法：按目录执行、包审批上下文这两件事已经收回包内（cwd 经 runCommand.options，审批经 projectApprovalBridge）。
     for (const removedField of [
       'runInDirectory',
       'runWithApproval',
@@ -63,7 +62,14 @@ describe('Project Agent boundary', () => {
     ]) expect(source).not.toContain(removedField)
   })
 
-  test('publishes exactly the canonical Project tool surface', () => {
-    expect(Object.keys(projectTools)).toEqual(Object.values(ProjectToolNames))
+  test('项目空间的操作表只有五个命名空间，各自只有声明里的那几个操作', () => {
+    const { operations } = createProjectSpace({ resolveCall: () => { throw new Error('只看操作表，不调用') } })
+    expect(Object.fromEntries(Object.entries(operations).map(([namespace, table]) => [namespace, Object.keys(table)]))).toEqual({
+      project: ['read', 'list', 'search', 'edit', 'inspect', 'undo'],
+      code: ['query', 'analyze'],
+      shell: ['run', 'listTasks', 'refreshEnvironment'],
+      sandbox: ['create', 'run', 'diff', 'apply', 'discard'],
+      images: ['view'],
+    })
   })
 })

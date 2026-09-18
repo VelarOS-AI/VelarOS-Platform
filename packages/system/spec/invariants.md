@@ -17,9 +17,10 @@
 
 编号只增不重排，所以会有空号：
 - INV-7/8/9/13/14/29 是工具面的承诺，随工具面一起作废。INV-1 曾是「与 project 空间判定一致」，那是跨包约束，已移到仓库级 `tests/capabilities/command-danger-parity.test.ts`。
-- INV-2、INV-3、INV-18 随命令策略移到 `@velaros-ai/shell-command`。
-- `velar:system` 拆成跨空间的 `velar:files` 与 `velar:shell` 之后，操作本身的承诺随实现搬走：INV-4（危险命令的审批形状）、INV-15（`nativeCommand` 不进模型面）、INV-32（上限归能力自己钳）到 `@velaros-ai/shell-command` 的 INV-7、INV-9、INV-6；INV-21、INV-22、INV-33 到 `@velaros-ai/files` 的 INV-3、INV-4、INV-9。INV-17（输出窗口的 `endPreserved` 恒为真）随 `outputWindow` 字段一起删掉：回执只留末尾这件事由 INV-10 管，模型面的说明写在 `ShellCommandResult` 上。
-- 本包留下的是本机宿主的承诺（进程约束、输出、生命周期、shell 选择、演练沙箱引擎），以及系统空间的装配与端口（INV-19、INV-20、INV-31、INV-34、INV-35）。
+- INV-2、INV-3、INV-18 随命令策略移到 `@velaros-ai/velar/shell`。
+- `velar:system` 拆成跨空间的 `velar:files` 与 `velar:shell` 之后，操作本身的承诺随实现搬走：INV-4（危险命令的审批形状）、INV-15（`nativeCommand` 不进模型面）、INV-32（上限归能力自己钳）到 `@velaros-ai/velar/shell` 的 INV-7、INV-9、INV-6；INV-21、INV-22、INV-33 到 `@velaros-ai/velar/files` 的 INV-3、INV-4、INV-9。INV-17（输出窗口的 `endPreserved` 恒为真）随 `outputWindow` 字段一起删掉：回执只留末尾这件事由 INV-10 管，模型面的说明写在 `ShellCommandResult` 上。
+- 之后本机文件与项目文件分成两件能力（`velar:files` 只给系统空间，项目空间用 `velar:project`），看图拆成两个空间共用的 `velar:images`；能力单元合进 `@velaros-ai/velar` 一个包，承诺编号随各单元的 `spec/invariants.md` 重排。
+- 本包留下的是本机宿主的承诺（进程约束、输出、生命周期、shell 选择、演练沙箱引擎），以及系统空间的装配与端口（INV-19、INV-20、INV-31、INV-34、INV-35、INV-36）。
 
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
@@ -38,6 +39,7 @@
 | INV-27 | 落回只落用户确认过的那份差量：确认之后镜像又变过就整批不落（`SYSTEM_SANDBOX_CHANGED`，not-applied） | 测试 | `spec/acceptance.test.ts` |
 | INV-28 | 落回只写在源目录之内、要么全落要么报清落了哪些：上级路径是符号链接或文件（又不在这次删除之列）按冲突整批不落；内容先暂存，拷不全什么都不落；挪到位途中失败在 message 与 context.applied 里点名已落回的路径 | 测试 | `spec/acceptance.test.ts` |
 | INV-30 | 命令只在挑定的那个 shell 里跑：`shell` 给的种类本机没有就在起进程之前拒绝，报错点名可用的有哪些、哪个是默认，绝不换默认 shell 照跑；不给 `shell` 才用默认的那个 | 测试 | `spec/acceptance.test.ts` |
-| INV-31 | 系统空间的操作表正好是 `files`、`shell`、`sandbox` 三个命名空间，每个命名空间登记的名字与生成声明里的函数名逐个对上（一边有另一边没有都红）；表这一侧没有校验、没有给模型的字——入参合不合法由那件能力自己拦 | 测试 | `spec/acceptance.test.ts` |
-| INV-34 | 系统空间的缩图裁图在 macOS 上用系统自带的 `sips`，**裁与缩分两次调**（它不管参数顺序都先缩后裁），尺寸由 sips 自己报；超长边的图压到上限以内，裁出来的一块不被放大；别的平台不给这个口子 | 测试 | `spec/acceptance.test.ts` |
-| INV-35 | 系统空间是一条真路：模型写的程序照三份生成的声明过 typecheck，经真实的本地内核读写文件、跑命令、用演练沙箱；相对路径相对内核的工作目录，命令在本机跑，沙箱能镜像任意目录、镜像里的命令写不到外面、落回前按源目录问用户 | 测试 | `spec/acceptance.test.ts` |
+| INV-31 | 系统空间的操作表正好是 `files`、`images`、`shell`、`sandbox` 四个命名空间，每个命名空间登记的名字与生成声明里的函数名逐个对上（一边有另一边没有都红）；表这一侧没有校验、没有给模型的字——入参合不合法由那件能力自己拦 | 测试 | `spec/acceptance.test.ts` |
+| INV-34 | 系统空间给 `velar:images` 的缩图裁图在 macOS 上用系统自带的 `sips`，**裁与缩分两次调**（它不管参数顺序都先缩后裁），尺寸由 sips 自己报；超长边的图压到上限以内，裁出来的一块不被放大；别的平台不给这个口子 | 测试 | `spec/acceptance.test.ts` |
+| INV-35 | 系统空间是一条真路：模型写的程序照生成的声明过 typecheck，经真实的本地内核按行号读写文件、跑命令、用演练沙箱；相对路径相对内核的工作目录，命令在本机跑，沙箱能镜像任意目录、镜像里的命令写不到外面、落回前按源目录问用户 | 测试 | `spec/acceptance.test.ts` |
+| INV-36 | 系统空间的撤回写回改之前的字节、删掉那次新建的文件，删之前核对它还是那次写下的内容；那之后别人又改过就整个不撤（`FILES_UNDO_CONFLICT`）；整份写照原文件的换行风格存 | 测试 | `spec/acceptance.test.ts` |

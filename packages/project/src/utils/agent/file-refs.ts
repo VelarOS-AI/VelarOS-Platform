@@ -1,36 +1,37 @@
 /**
- * 项目文件引用：源码快照（source:）、可编辑视图（view:，即 fileRef）与续读页（read-page:）的签发与解析。引用是内容哈希，
- * 记录存在会话的上下文载荷里（没有载荷存储时退回进程内存），解析时核对作用域与工作区，编辑前再按当前授权与脱敏复核。
+ * 文件引用：源码快照（source:）、可编辑视图（view:，就是 fileRef）、续读页（read-page:）与回执（change:、list-page:）的签发与解析。
+ * 引用是记录的内容哈希。记录按会话存在进程内存里，每个会话有条数与字符数上限，最久没用的先出；进程重启后引用全部作废，重读就是。
+ * 解析时核对会话与项目根，编辑前再按当前的读取授权与脱敏复核一遍。
  */
 
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 
-import { fileContextRegistry } from '@velaros-ai/agent/tool-contract'
-import { isObject } from '@velaros-ai/core'
-
-import type { PageRecord, ProjectFileView, ProjectReferenceContext, ProjectVisibleCoverage, RefRecord,SourceRecord } from '../../types/file-refs.js'
+import type { AgentProjectKernelPort, ProjectCallContext } from '../../contract/requires.js'
+import type { PageRecord, ProjectFileView, ProjectVisibleCoverage, ReceiptRecord, RefRecord, RefSession, SourceRecord } from '../../types/file-refs.js'
 import { ProjectError } from '../errors.js'
+import { ProjectTuning } from '../tuning.js'
 
-const RefTool = '__project_file_reference__'
-const fallbackStores = new WeakMap<object, Map<string, RefRecord>>()
-const fallbackScopes = new WeakMap<object, string>()
+/** 每个会话一份记录；会话按最近使用排序，超了从最久没用的那个整份丢掉。 */
+const sessions = new Map<string, RefSession>()
 
-/** 进程内存兜底时引用归谁：文件上下文作用域、会话对象，都没有时是项目端口对象。 */
-function owner(context: ProjectReferenceContext): object {
-  const candidate = context.fileContextScope ?? context.codingSession
-  return candidate && isObject(candidate) ? candidate : context.project
-}
+/** 引用不可用时的下一步：模型只能原样用签发出来的引用，缺了就去读，不能自己拼。 */
+const ReadForReferenceNextAction =
+  'fileRef 只能从 read、search 的窗口或上一次 edit 回执的 files 里原样拿；手里没有这个文件的，先 read 一遍要改的那几行。'
 
-/** 当前引用作用域的标识：宿主给的、文件上下文协调器的，都没有时为引用的归属对象生成一个随机的。只有同一作用域签发的引用才能解析。 */
-export function projectFileRefScope(context: ProjectReferenceContext): string {
-  if (context.fileRefScopeId) return context.fileRefScopeId
-  const coordinator = fileContextRegistry.for(context)
-  if (coordinator) return coordinator.scopeId
-  const key = owner(context)
-  let scope = fallbackScopes.get(key)
-  if (!scope) fallbackScopes.set(key, (scope = randomUUID()))
-  return scope
+/** 当前调用的会话：没给会话号的调用共用一份。 */
+function sessionOf(ctx: ProjectCallContext): RefSession {
+  const key = ctx.sessionId ?? ''
+  const found = sessions.get(key)
+  if (found) {
+    sessions.delete(key)
+    sessions.set(key, found)
+    return found
+  }
+  const created: RefSession = { records: new Map(), chars: 0 }
+  sessions.set(key, created)
+  while (sessions.size > ProjectTuning.refs.sessions) sessions.delete(sessions.keys().next().value!)
+  return created
 }
 
 /** 正文的内容版本：UTF-8 正文的 SHA-256 十六进制串。 */
@@ -38,132 +39,153 @@ export function projectContentRevision(content: string): string {
   return createHash('sha256').update(content, 'utf8').digest('hex')
 }
 
-/** 存一条引用记录，返回「前缀 + 记录的内容哈希」形式的引用：有会话载荷存储就存进去，没有就存进进程内存。 */
-async function put(context: ProjectReferenceContext, value: RefRecord, prefix: string): Promise<string> {
-  const serializedResult = JSON.stringify(value)
-  const hash = projectContentRevision(serializedResult)
-  if (context.contextPayloadStore && context.sessionId) {
-    await context.contextPayloadStore.put({
-      sessionId: context.sessionId,
-      hash,
-      payloadRef: `ctx-payload:${encodeURIComponent(context.sessionId)}:${hash}`,
-      toolCallId: `${prefix}${hash}`,
-      toolName: RefTool,
-      serializedResult,
-      chars: serializedResult.length,
-      createdAt: Date.now(),
-    })
-  } else {
-    const key = owner(context)
-    let records = fallbackStores.get(key)
-    if (!records) fallbackStores.set(key, (records = new Map()))
-    records.set(hash, value)
+/** 存一条记录，返回「前缀 + 记录的内容哈希」形式的引用；同样的记录再存一次只是挪到最近。 */
+function put(ctx: ProjectCallContext, value: RefRecord, prefix: string): string {
+  const serialized = JSON.stringify(value)
+  const hash = projectContentRevision(serialized)
+  const session = sessionOf(ctx)
+  const existing = session.records.get(hash)
+  if (existing) {
+    session.records.delete(hash)
+    session.chars -= existing.chars
+  }
+  session.records.set(hash, { record: value, chars: serialized.length })
+  session.chars += serialized.length
+  while (session.records.size > 1
+    && (session.records.size > ProjectTuning.refs.recordsPerSession || session.chars > ProjectTuning.refs.charsPerSession)) {
+    const [oldest, entry] = session.records.entries().next().value!
+    session.records.delete(oldest)
+    session.chars -= entry.chars
   }
   return `${prefix}${hash}`
 }
 
-/** 引用不可用时的下一步：模型只能原样复制框架签发的引用，缺引用就去读，不能自己拼。 */
-const ReadForReferenceNextAction =
-  '引用只能从 [Current project files] 或读取、修改回执里原样复制；当前视图里没有这个文件时，先用 project:read 读一遍目标范围拿 fileRef。回执带 inputReuse 时，用 reuse + changes 只替换引用字段，正文不用重写。'
-
-/** 按引用取回记录：格式不对、找不到、不属于当前作用域或属于别的工作区时抛 INVALID_INPUT，并说明只能原样复制框架签发的引用。 */
-async function get(context: ProjectReferenceContext, ref: string): Promise<RefRecord> {
-  if (!/^(?:source|view|read-page):[a-f0-9]{64}$/.test(ref))
-    throw new ProjectError('INVALID_INPUT', `引用 ${JSON.stringify(ref.slice(0, 80))} 不是框架签发的值（view:… / read-page:… 加 64 位十六进制），不能手写或改写。`, { ref: ref.slice(0, 80) }, ReadForReferenceNextAction)
-  const hash = ref.slice(ref.indexOf(':') + 1)
-  let value: RefRecord | undefined
-  if (context.contextPayloadStore && context.sessionId) {
-    const record = await context.contextPayloadStore.findByHash(context.sessionId, hash)
-    if (record?.toolName === RefTool && projectContentRevision(record.serializedResult) === hash)
-      value = JSON.parse(record.serializedResult) as RefRecord
-  } else value = fallbackStores.get(owner(context))?.get(hash)
-  if (!value || value.version !== 1 || value.scope !== projectFileRefScope(context))
-    throw new ProjectError('INVALID_INPUT', '该引用不属于当前会话或执行分支（可能来自别的会话，或所在分支已回退）。', { ref }, ReadForReferenceNextAction)
-  if (value.kind === 'project-file-source' && value.workspace !== resolve(context.project.getRootPath()))
-    throw new ProjectError('INVALID_INPUT', '这个引用属于另一个项目。', { ref }, ReadForReferenceNextAction)
-  return value
+/** 按引用取回记录：格式不对、这个会话里没有（别的会话签发的，或者已经挤出去了）时抛 INVALID_INPUT。 */
+function get(ctx: ProjectCallContext, ref: string, prefixes: readonly string[]): RefRecord {
+  const prefix = prefixes.find((candidate) => ref.startsWith(candidate))
+  const hash = prefix ? ref.slice(prefix.length) : ''
+  if (!prefix || !/^[a-f0-9]{64}$/.test(hash)) {
+    throw new ProjectError('INVALID_INPUT', `${JSON.stringify(ref.slice(0, 80))} 不是签发出来的引用（${prefixes.join(' / ')} 加 64 位十六进制），不能手写或改写。`,
+      { ref: ref.slice(0, 80) }, ReadForReferenceNextAction)
+  }
+  const session = sessionOf(ctx)
+  const entry = session.records.get(hash)
+  if (!entry) {
+    throw new ProjectError('INVALID_INPUT', '这个引用不是本会话签发的，或者已经过期（进程重启过，或者本会话签发的引用太多、它被挤掉了）。',
+      { ref }, ReadForReferenceNextAction)
+  }
+  session.records.delete(hash)
+  session.records.set(hash, entry)
+  return entry.record
 }
 
-/** 存一份源码快照，返回 source: 引用。快照本身不带编辑权，只有最终呈现给模型时才据它签发 view: 视图。 */
-export async function saveProjectFileSource(
-  context: ProjectReferenceContext,
-  input: { path: string; revision: string; content: string }
-): Promise<string> {
-  return put(context, {
-    kind: 'project-file-source', version: 1,
-    workspace: resolve(context.project.getRootPath()),
-    scope: projectFileRefScope(context), ...input,
+/** 签发引用的项目必须就是当前项目：项目换了，引用就作废。交回当前项目的内核。 */
+async function kernelOf(ctx: ProjectCallContext, root: string, ref: string): Promise<AgentProjectKernelPort> {
+  if (root !== currentRoot(ctx)) throw new ProjectError('INVALID_INPUT', '这个引用属于另一个项目，在这里用不了。', { ref }, ReadForReferenceNextAction)
+  return ctx.project.kernel()
+}
+
+/** 当前项目根的绝对路径：引用记录里记的就是它。 */
+function currentRoot(ctx: ProjectCallContext): string {
+  return resolve(ctx.project.getRootPath())
+}
+
+/** 存一份源码快照，返回 source: 引用。快照本身不带编辑权，只有真正交给程序的窗口才据它签发 view: 视图。 */
+export function saveFileSource(ctx: ProjectCallContext, input: { path: string; revision: string; content: string }): string {
+  return put(ctx, {
+    kind: 'project-file-source', version: 1, root: currentRoot(ctx), ...input,
     contentRevision: projectContentRevision(input.content),
   }, 'source:')
 }
 
 /** 把 source:、view: 或 read-page: 引用解析到它背后的源码快照。 */
-export async function resolveProjectFileSource(context: ProjectReferenceContext, ref: string): Promise<SourceRecord> {
-  const record = await get(context, ref)
+export function resolveFileSource(ctx: ProjectCallContext, ref: string): SourceRecord {
+  const record = get(ctx, ref, ['source:', 'view:', 'read-page:'])
   if (record.kind === 'project-file-source') return record
-  if (record.kind === 'project-file-view' || record.kind === 'project-read-page')
-    return resolveProjectFileSource(context, record.source)
-  throw new ProjectError('INVALID_INPUT', '源码引用无效。')
+  if (record.kind === 'project-file-view' || record.kind === 'project-read-page') return resolveFileSource(ctx, record.source)
+  throw new ProjectError('INVALID_INPUT', '源码引用无效。', { ref }, ReadForReferenceNextAction)
 }
 
-/** 按实际显示给模型的可见范围签发可编辑视图，返回 view: 引用（即 fileRef）；传入的不是 source: 引用时先落一份源码快照。 */
-export async function saveProjectFileRef(
-  context: ProjectReferenceContext,
-  source: string,
-  coverage: ProjectVisibleCoverage[]
-): Promise<string> {
-  const record = await resolveProjectFileSource(context, source)
-  const sourceRef = source.startsWith('source:') ? source : await saveProjectFileSource(context, record)
-  return put(context, {
-    kind: 'project-file-view', version: 1, source: sourceRef,
-    scope: projectFileRefScope(context), coverage,
-  }, 'view:')
+/** 按实际交出去的可见范围签发可编辑视图，返回 view: 引用（就是 fileRef）；传入的不是 source: 引用时先落一份源码快照。 */
+export function saveFileRef(ctx: ProjectCallContext, source: string, coverage: ProjectVisibleCoverage[]): string {
+  const record = resolveFileSource(ctx, source)
+  const sourceRef = source.startsWith('source:') ? source : put(ctx, record, 'source:')
+  return put(ctx, { kind: 'project-file-view', version: 1, source: sourceRef, coverage }, 'view:')
 }
 
-/** 取回 fileRef 对应的视图（路径、版本、正文、可见范围）：只认 view: 引用，而且历史正文仍要过当前的授权与脱敏，被限制就拒绝编辑。 */
-export async function loadProjectFileView(context: ProjectReferenceContext, fileRef: string): Promise<ProjectFileView> {
-  const record = await get(context, fileRef)
-  if (record.kind !== 'project-file-view' || !fileRef.startsWith('view:'))
-    throw new ProjectError('INVALID_INPUT', '这不是可编辑的 fileRef：编辑只接受当前视图或读取结果里的 view:… 引用。', { ref: fileRef }, ReadForReferenceNextAction)
-  const source = await resolveProjectFileSource(context, record.source)
-  const kernel = await context.project.kernel()
-  if (!kernel.prepareContextSnapshot) throw new ProjectError('NOT_SUPPORTED', '当前宿主没有实现历史快照的授权检查，凭 fileRef 的改动都用不了。', undefined,
-    '这是宿主缺能力，不是入参问题：告诉用户这个宿主接的项目内核缺 prepareContextSnapshot。')
+/**
+ * 取回 fileRef 对应的视图（路径、版本、正文、可见范围）：只认 view: 引用，
+ * 而且历史正文要按当前的读取授权与脱敏再过一遍，现在不许读或会被遮住就不能凭它编辑。
+ */
+export async function loadFileView(ctx: ProjectCallContext, fileRef: string): Promise<ProjectFileView> {
+  const record = get(ctx, fileRef, ['view:', 'source:', 'read-page:'])
+  if (record.kind !== 'project-file-view') {
+    throw new ProjectError('INVALID_INPUT', '这不是可编辑的 fileRef：编辑只收窗口上的 view:… 引用。', { ref: fileRef }, ReadForReferenceNextAction)
+  }
+  const source = resolveFileSource(ctx, record.source)
+  const kernel = await kernelOf(ctx, source.root, fileRef)
   const authorized = await kernel.prepareContextSnapshot({ path: source.path, content: source.content })
-  if (authorized.redacted || authorized.content !== source.content)
-    throw new ProjectError('PERMISSION_DENIED', '当前项目策略限制了该引用对应的源码，不能用它编辑。', { path: source.path })
+  if (authorized.redacted || authorized.content !== source.content) {
+    throw new ProjectError('PERMISSION_DENIED', '这个文件现在的读取策略遮住了（或不许读）fileRef 背后的内容，不能凭它编辑。', { path: source.path })
+  }
   return { path: source.path, revision: source.revision, contentRevision: source.contentRevision, content: source.content, coverage: structuredClone(record.coverage) }
 }
 
 /**
- * 读取不可变原文并按正文复核当前文件。正文未变就沿用当前 revision：元数据型 revision 策略下只动 mtime
- * 不算过期，计划也以当前版本为基准提交；正文变了才按过期拒绝，由编辑恢复链给出新位置候选。
+ * 取回 fileRef 的视图并按正文复核当前文件。正文没变就沿用当前 revision（元数据型 revision 策略下只动了 mtime 不算过期），
+ * 正文变了按过期拒绝，由编辑恢复链给出新位置。
  */
-export async function resolveProjectFileRef(context: ProjectReferenceContext, fileRef: string): Promise<ProjectFileView> {
-  const source = await loadProjectFileView(context, fileRef)
-  const kernel = await context.project.kernel()
-  const current = await kernel.read({ path: source.path, maxChars: Math.max(source.content.length + 1, 1) })
-  if (current.redacted || current.truncated || current.hasMore || current.content !== source.content || !current.snapshot.revision)
-    throw new ProjectError('BASE_REVISION_MISMATCH', `${source.path} 在这个 fileRef 之后改过（当前版本 ${current.snapshot.revision ?? '未知'}）。`,
-      { path: source.path, expected: source.revision, actual: current.snapshot.revision },
-      '这可能就是你上一次的修改：用 [Current project files] 或上一次修改回执里这个文件的新 fileRef，按新行号重做；那里没有这个文件时再 project:read。回执带 inputReuse 时，用 reuse + changes 只替换 fileRef（有 range 的同时改行号），正文不用重写。')
-  return { ...source, revision: current.snapshot.revision }
+export async function resolveFileRef(ctx: ProjectCallContext, fileRef: string): Promise<ProjectFileView> {
+  const view = await loadFileView(ctx, fileRef)
+  const kernel = await ctx.project.kernel()
+  const current = await kernel.read({ path: view.path, maxChars: Math.max(view.content.length + 1, 1) })
+  if (current.redacted || current.truncated || current.hasMore || current.content !== view.content || !current.snapshot.revision) {
+    throw new ProjectError('BASE_REVISION_MISMATCH', `${view.path} 在这个 fileRef 之后改过（当前版本 ${current.snapshot.revision ?? '未知'}）。`,
+      { path: view.path, expected: view.revision, actual: current.snapshot.revision },
+      '可能就是你上一次改的：用上一次 edit 回执里这个文件的新 fileRef 按新行号重做；回执里没有这个文件的，重新 read 要改的那几行。')
+  }
+  return { ...view, revision: current.snapshot.revision }
 }
 
-/** 为读到一半的源码签发续读引用（read-page:），记下源码快照和下一页的范围。 */
-export async function saveProjectReadPage(
-  context: ProjectReferenceContext,
-  source: string,
-  range: PageRecord['range']
-): Promise<string> {
-  await resolveProjectFileSource(context, source)
-  return put(context, { kind: 'project-read-page', version: 1, source, scope: projectFileRefScope(context), range }, 'read-page:')
+/** 给读到一半的源码签发续读引用（read-page:），记下源码快照和下一页的范围。 */
+export function saveReadPage(ctx: ProjectCallContext, source: string, range: PageRecord['range']): string {
+  resolveFileSource(ctx, source)
+  return put(ctx, { kind: 'project-read-page', version: 1, source, range }, 'read-page:')
 }
 
-/** 解析续读引用，返回源码的路径、版本、正文和下一页的范围。 */
-export async function resolveProjectReadPage(context: ProjectReferenceContext, ref: string) {
-  const page = await get(context, ref)
-  if (page.kind !== 'project-read-page') throw new ProjectError('INVALID_INPUT', '续读引用无效。')
-  const source = await resolveProjectFileSource(context, page.source)
+/** 解析续读引用：交回源码的路径、版本、正文和下一页的范围。 */
+export async function resolveReadPage(ctx: ProjectCallContext, ref: string) {
+  const page = get(ctx, ref, ['read-page:'])
+  if (page.kind !== 'project-read-page') throw new ProjectError('INVALID_INPUT', '续读引用无效。', { ref }, '去掉 continuation，按原来的路径重新 read。')
+  const source = resolveFileSource(ctx, page.source)
+  await kernelOf(ctx, source.root, ref)
   return { path: source.path, revision: source.revision, content: source.content, range: page.range, source: page.source }
+}
+
+/** 每种回执引用的来历与下一步：引用只能原样用本会话签发的，坏了就照这句重来。 */
+const ReceiptNextActions: Readonly<Record<string, string>> = Object.freeze({
+  change: 'changeRef 只能原样用本会话 edit 回执里的值。',
+  'list-page': '去掉 cursor，按原来的条件重新 list，再用新回执里的 cursor 续页。',
+})
+
+/** 存一张回执，返回「kind: + 内容哈希」形式的不透明引用。 */
+export function saveReceipt(ctx: ProjectCallContext, kind: string, value: unknown): string {
+  return put(ctx, { kind: 'project-receipt', version: 1, receipt: kind, root: currentRoot(ctx), value }, `${kind}:`)
+}
+
+/** 凭引用取回回执内容：种类不对、会话里没有、或属于别的项目时按 INVALID_INPUT 拒绝，并说明怎么拿到有效的引用。 */
+export function readReceipt(ctx: ProjectCallContext, kind: string, ref: string): unknown {
+  const next = ReceiptNextActions[kind] ?? '引用只能原样用本会话回执里的值，不能手写或改写。'
+  let record: RefRecord
+  try {
+    record = get(ctx, ref, [`${kind}:`])
+  } catch (error) {
+    if (error instanceof ProjectError) throw new ProjectError(error.reason, error.message, error.details, next)
+    throw error
+  }
+  if (record.kind !== 'project-receipt' || record.receipt !== kind) {
+    throw new ProjectError('INVALID_INPUT', `${ref.slice(0, 80)} 不是本会话签发的 ${kind} 引用。`, { ref: ref.slice(0, 80) }, next)
+  }
+  if (record.root !== currentRoot(ctx)) throw new ProjectError('INVALID_INPUT', '这个引用属于另一个项目。', { ref: ref.slice(0, 80) }, next)
+  return (record as ReceiptRecord).value
 }

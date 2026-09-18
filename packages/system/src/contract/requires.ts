@@ -11,10 +11,10 @@
  */
 
 import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
-import type { FileAttachedImage } from '@velaros-ai/files'
-import type { RehearsalSandboxHostPort } from '@velaros-ai/rehearsal-sandbox'
-import type { SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
-import type { ShellProcessConfinementMode, ShellSpacePort } from '@velaros-ai/shell-command'
+import type { ImageAttachment } from '@velaros-ai/velar/images'
+import type { RehearsalSandboxHostPort } from '@velaros-ai/velar/sandbox'
+import type { SandboxRecord } from '@velaros-ai/velar/sandbox/contracts'
+import type { ShellProcessConfinementMode, ShellSpacePort } from '@velaros-ai/velar/shell'
 
 import type { SystemProcessConfinementRequest, SystemProcessConfinementResult } from '../types/commands.js'
 
@@ -22,7 +22,7 @@ import type { SystemProcessConfinementRequest, SystemProcessConfinementResult } 
 
 /**
  * 系统空间要宿主给的本机能力：解析路径、跑命令的三件事、演练沙箱的四件事，加上列出登记着的沙箱。
- * 系统空间拿它装出 `velar:files`、`velar:shell`、`velar:sandbox` 三个端口；本机实现是本地内核。
+ * 系统空间拿它装出 `velar:files`、`velar:shell`、`velar:sandbox`、`velar:images` 四个端口；本机实现是本地内核。
  */
 export interface SystemSpaceHost extends RehearsalSandboxHostPort, Pick<ShellSpacePort, 'runCommand' | 'listBackgroundTasks' | 'refreshShellEnvironment'> {
   /**
@@ -47,7 +47,7 @@ export interface SystemCallContext {
   /** 审批端口（来自 agent 包）：写敏感路径、碰凭证文件、跑危险命令、落回沙箱前经它向用户确认。 */
   approval: ApprovalPort
   /** 把一张图交给模型看；宿主收着，在这次结果后面按顺序放出来。不给就用不了 view。 */
-  attachImage?: (image: FileAttachedImage) => void
+  attachImage?: (image: ImageAttachment) => void
 }
 
 // ── 本地内核 ────────────────────────────────────────────────────

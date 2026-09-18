@@ -1,6 +1,6 @@
 /**
  * 本地内核给宿主界面的可移植数据：进程与端口、资源指标、终止后台任务与控制台的请求、系统范围搜索、运行平台与命令可用性。
- * 命令回执、后台任务、shell 描述这些 `velar:shell` 也用的数据在 `@velaros-ai/shell-command/contracts`；
+ * 命令回执、后台任务、shell 描述这些 `velar:shell` 也用的数据在 `@velaros-ai/velar/shell/contracts`；
  * 引用到它们的内核数据在 `types/host.ts`。
  * 只放类型、一个值都没有；常量表在 `contract/constants.ts`。不 import 任何东西、不用 Node 专属类型，整个文件随 `./contracts` 入口出包。
  */

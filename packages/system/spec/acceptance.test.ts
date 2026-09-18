@@ -3,7 +3,7 @@
  *
  * 改动或删除已有用例要在差量报告里点名并说明理由。
  * 这里只测对外承诺的行为，不测实现细节；实现细节的测试在 test/ 目录。
- * 能力本身（`velar:files`、`velar:shell`、`velar:sandbox` 的操作）在各自的包里验收；这里验收本机宿主，以及系统空间把它们装起来之后的样子。
+ * 能力本身（`velar:files`、`velar:images`、`velar:shell`、`velar:sandbox` 的操作）在各自的能力单元里验收；这里验收本机宿主，以及系统空间把它们装起来之后的样子。
  */
 
 import { existsSync, readFileSync } from 'node:fs'
@@ -45,7 +45,7 @@ function systemSpaceAt(cwd: string, answer?: (message: string) => void | Promise
   const port = createCapabilityPort(space.operations)
   const program = async (source: string) => {
     const session = createCodeSurfaceSession({ checker: codeProgramChecker, runner: nodeSubprocessCodeRunner, capabilities: port })
-    const granted = ['files', 'shell', 'sandbox'].map((namespace) => ({ namespace, declarations: readFileSync(join(BaselineDirectory, `${namespace}.d.ts`), 'utf8') }))
+    const granted = ['files', 'images', 'shell', 'sandbox'].map((namespace) => ({ namespace, declarations: readFileSync(join(BaselineDirectory, `${namespace}.d.ts`), 'utf8') }))
     const outcome = await session.submit({ program: { source }, granted, timeoutMs: 30_000 })
     if (!outcome.checked) throw new Error(`应当通过检查：${JSON.stringify(outcome)}`)
     return outcome
@@ -440,7 +440,7 @@ describe('演练沙箱', () => {
   })
 })
 
-describe('系统空间：三件能力配上本机端口', () => {
+describe('系统空间：四件能力配上本机端口', () => {
   test('INV-19 写系统敏感路径与凭证文件前按真实路径问用户，被拒整批不写；读凭证文件被拒只是那一项失败；临时目录不打扰用户', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-inv19-')))
     const system = systemSpaceAt(root, (message) => {
@@ -462,7 +462,7 @@ describe('系统空间：三件能力配上本机端口', () => {
       expect(await readFile(join(root, 'deploy.pem'), 'utf8')).toContain('PRIVATE KEY')
       // 读凭证文件同样要问，被拒只是那一项失败
       const read = await system.port.invoke({ namespace: 'files', operation: 'read', input: { files: [{ path: 'deploy.pem' }, { path: 'plain.txt' }] } })
-      expect(read.value).toMatchObject({ files: [{ error: { message: '用户没同意' } }, { content: 'beta\n' }] })
+      expect(read.value).toMatchObject({ files: [{ error: { message: '用户没同意' } }, { lines: [[1, 'beta']] }] })
     } finally {
       await system.dispose()
       await rm(root, { recursive: true, force: true })
@@ -494,11 +494,11 @@ describe('系统空间：三件能力配上本机端口', () => {
     }
   })
 
-  test('INV-31 操作表登记的名字与模型看到的三份声明逐个对上；入参不合法由操作方法自己拦', async () => {
+  test('INV-31 操作表登记的名字与模型看到的四份声明逐个对上；入参不合法由操作方法自己拦', async () => {
     const system = systemSpaceAt(tmpdir())
     try {
       const registered = system.port.listOperations()
-      expect(Object.keys(registered).sort()).toEqual(['files', 'sandbox', 'shell'])
+      expect(Object.keys(registered).sort()).toEqual(['files', 'images', 'sandbox', 'shell'])
       for (const [namespace, operations] of Object.entries(registered)) {
         const declarations = readFileSync(join(BaselineDirectory, `${namespace}.d.ts`), 'utf8')
         const declared = [...declarations.matchAll(/export function (\w+)/gu)].map((match) => match[1]).sort()
@@ -518,11 +518,11 @@ describe('系统空间：三件能力配上本机端口', () => {
     const system = systemSpaceAt(root)
     try {
       await writeFile(join(root, 'wide.png'), solidPng(3000, 2000))
-      const whole = await system.port.invoke({ namespace: 'files', operation: 'view', input: { files: [{ path: 'wide.png' }] } })
+      const whole = await system.port.invoke({ namespace: 'images', operation: 'view', input: { files: [{ path: 'wide.png' }] } })
       expect(whole.value).toMatchObject({ files: [{ width: 3000, height: 2000, sent: { width: 2000, height: 1333 } }] })
       expect(whole.attachments?.[0]?.mediaType).toBe('image/png')
       // 右半边（纯蓝）裁 1000×800：不超长边，不该被放大
-      const zoomed = await system.port.invoke({ namespace: 'files', operation: 'view', input: { files: [{ path: 'wide.png', region: { x: 2000, y: 0, width: 1000, height: 800 } }] } })
+      const zoomed = await system.port.invoke({ namespace: 'images', operation: 'view', input: { files: [{ path: 'wide.png', region: { x: 2000, y: 0, width: 1000, height: 800 } }] } })
       expect(zoomed.value).toMatchObject({ files: [{ sent: { width: 1000, height: 800 } }] })
     } finally {
       await system.dispose()
@@ -540,7 +540,8 @@ import { run } from 'velar:shell'
 
 const [file] = (await read({ files: [{ path: 'notes.txt' }] })).files
 if ('error' in file) throw new Error(file.error.message)
-await edit({ files: [{ path: 'notes.txt', newText: file.content.replace('TODO', 'DONE'), version: file.version }] })
+const [line, text] = file.lines[0]
+await edit({ files: [{ path: 'notes.txt', version: file.version, edits: [{ range: line, text: text.replace('TODO', 'DONE') }] }] })
 const listed = await run({ command: 'ls' })
 export default { path: file.path, listed: listed.stdout.includes('notes.txt'), cwd: listed.cwd }`)
       expect(outcome.result.failed).toBeUndefined()
@@ -551,6 +552,35 @@ export default { path: file.path, listed: listed.stdout.includes('notes.txt'), c
       await rm(root, { recursive: true, force: true })
     }
   }, 60_000)
+
+  test('INV-36 撤回一次改动：写回改之前的字节、删掉那次新建的；删之前核对它还是那次写下的内容', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-inv36-')))
+    const system = systemSpaceAt(root)
+    try {
+      await writeFile(join(root, 'kept.txt'), 'one\r\ntwo\r\n')
+      const edited = await system.port.invoke({ namespace: 'files', operation: 'edit', input: { files: [
+        { path: 'kept.txt', newText: 'uno\ndos\n' },
+        { path: 'fresh/new.txt', newText: 'hello\n' },
+      ] } })
+      expect(edited.error).toBeUndefined()
+      // 整份写照原文件的换行风格存：原来是 CRLF 的还是 CRLF
+      expect(await readFile(join(root, 'kept.txt'), 'utf8')).toBe('uno\r\ndos\r\n')
+      const changeId = (edited.value as { changeId: string }).changeId
+      const undone = await system.port.invoke({ namespace: 'files', operation: 'undo', input: { changeId } })
+      expect(undone.value).toMatchObject({ files: [{ action: 'restored' }, { action: 'deleted' }] })
+      expect(await readFile(join(root, 'kept.txt'), 'utf8')).toBe('one\r\ntwo\r\n')
+      expect(existsSync(join(root, 'fresh/new.txt'))).toBe(false)
+      // 改动之后别人又动过：整个不撤，一个文件都不动
+      const again = await system.port.invoke({ namespace: 'files', operation: 'edit', input: { files: [{ path: 'kept.txt', newText: 'tres\n' }] } })
+      await writeFile(join(root, 'kept.txt'), 'someone else\n')
+      const refused = await system.port.invoke({ namespace: 'files', operation: 'undo', input: { changeId: (again.value as { changeId: string }).changeId } })
+      expect(refused.error?.code).toBe('FILES_UNDO_CONFLICT')
+      expect(await readFile(join(root, 'kept.txt'), 'utf8')).toBe('someone else\n')
+    } finally {
+      await system.dispose()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 
   test.skipIf(!canConfine)('INV-35 系统空间的沙箱：镜像任意目录，镜像里的命令写不到外面，落回前按源目录问用户', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-inv35-sandbox-')))

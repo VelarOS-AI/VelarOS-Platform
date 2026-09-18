@@ -43,12 +43,10 @@
   "dependencies": {
     "@velaros-ai/code-surface": "workspace:*",
     "@velaros-ai/core": "workspace:*",
-    "@velaros-ai/files": "workspace:*",
     "@velaros-ai/path-rules": "workspace:*",
     "@velaros-ai/platform": "workspace:*",
-    "@velaros-ai/rehearsal-sandbox": "workspace:*",
-    "@velaros-ai/shell-command": "workspace:*",
     "@velaros-ai/text-files": "workspace:*",
+    "@velaros-ai/velar": "workspace:*",
     "diff": "^8.0.4"
   },
   "peerDependencies": {

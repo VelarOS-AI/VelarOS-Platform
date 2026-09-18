@@ -1,7 +1,8 @@
 import { isEmpty, isString, isUndefined } from '@velaros-ai/core'
 
-import { ProjectChangeLimits } from '../../contract/constants.js'
-import type { OffsetWindow, ProjectContentEdit, ProjectEditView, ProjectMatchCandidate, ProjectMatchElsewhere, ProjectResolvedMutation } from '../../types/editing.js'
+import { ProjectFileLimits } from '../../contract/constants.js'
+import type { OffsetWindow, ProjectEditView, ProjectMatchCandidate, ProjectMatchElsewhere, ProjectResolvedMutation } from '../../types/editing.js'
+import type { ProjectContentEdit } from '../../types/files.js'
 import { ProjectError } from '../errors.js'
 import { assertWellFormedProjectText } from '../text.js'
 import { ProjectTuning } from '../tuning.js'
@@ -12,7 +13,7 @@ import { exactMatchCandidates, matchesElsewhere, missingMatchCandidates } from '
 import { assertVisibleLines, intersectWindows, visibleWindows } from './selection-coverage.js'
 import { createProjectSourceCoordinates, logicalSourceOffset, normalizePhysicalNewlines, physicalSourceOffset, sourceNewlineAt } from './source.js'
 
-const CandidateNextAction = '请检查候选后用 reuse + changes 缩小 range 或修正 match；扩展 match 时，替换 text 也须保留候选 prefix/suffix。候选仅供确认，没有写入。'
+const CandidateNextAction = '核对候选后缩小 range 或修正 match 再提交；把 match 扩成更长的原文时，替换的 text 也要带上候选的 prefix/suffix。候选只供确认，什么都没写。'
 
 /** 零命中按原因给下一步：原文在 range 外、在未显示的行、有相近候选，或完全对不上。 */
 function missingMatchGuidance(candidates: readonly ProjectMatchCandidate[], elsewhere: readonly ProjectMatchElsewhere[]): { message: string; next: string } {
@@ -20,22 +21,22 @@ function missingMatchGuidance(candidates: readonly ProjectMatchCandidate[], else
     .map(({ range: [start, end] }) => start === end ? `${start}` : `${start}–${end}`).join('、')
   if (elsewhere.some((item) => item.visible)) return {
     message: `match 不在所选 range 内，它出现在第 ${lines(true)} 行。`,
-    next: '用 reuse + changes 把该项的 range 改成覆盖这段原文，或去掉 range 只用 match（须在可见区域中唯一）。',
+    next: '把这一处的 range 改成覆盖这段原文，或者去掉 range 只用 match（在读到的范围里必须唯一）。',
   }
   if (!isEmpty(elsewhere)) return {
     message: `match 在 fileRef 可见区域中没有匹配，原文在未显示的第 ${lines(false)} 行。`,
-    next: '先用 project:read 读取这些行获取新 fileRef，再用 reuse + changes 替换 fileRef（必要时同步 range），正文保持原样。',
+    next: '先 read 这些行拿新 fileRef，把这一步的 fileRef 换成它（有 range 的一起改），text 不用动。',
   }
-  if (!isEmpty(candidates)) return { message: 'match 在所选可见区域中没有精确匹配。', next: CandidateNextAction }
+  if (!isEmpty(candidates)) return { message: 'match 在读到的这段里没有精确匹配，下面是相近的原文。', next: CandidateNextAction }
   return {
-    message: 'match 在所选可见区域中没有精确匹配，也没有相近的原文。',
-    next: '重新读取目标行，按显示的原文逐字复制 match（空白、引号、反斜杠以 JSON 解码后的源码为准）；或改用 range 按整行定位。',
+    message: 'match 在读到的这段里没有精确匹配，也没有相近的原文。',
+    next: '照窗口 lines 里那几行的原文写 match（空白、引号、反斜杠都要一样）；或者去掉 match，只用 range 按整行改。',
   }
 }
 
 /** 把一个文件的 edits 按原始坐标逐项定位成拼接：range 按整行、match 在可见区域里唯一匹配；定位不了时抛出带候选与下一步的错误。 */
 export function selectProjectMutations(view: ProjectEditView, edits: readonly ProjectContentEdit[]): ProjectResolvedMutation[] {
-  if (isEmpty(edits) || edits.length > ProjectChangeLimits.editsPerFile) throw new ProjectError('INVALID_INPUT', `每个文件需要 1–${ProjectChangeLimits.editsPerFile} 项 edits。`)
+  if (isEmpty(edits) || edits.length > ProjectFileLimits.editsPerFile) throw new ProjectError('INVALID_INPUT', `每个文件需要 1–${ProjectFileLimits.editsPerFile} 项 edits。`)
   const source = createProjectSourceCoordinates(view.content)
   const allWindows = visibleWindows(view, source)
   return edits.map((edit, editIndex) => {
@@ -92,7 +93,7 @@ export function selectProjectMutations(view: ProjectEditView, edits: readonly Pr
           if (!isEmpty(elsewhere)) details.elsewhere = elsewhere
           const { message, next } = total === 0
             ? missingMatchGuidance(candidates, elsewhere)
-            : { message: `match 在所选可见区域中有 ${total} 个匹配。`, next: CandidateNextAction }
+            : { message: `match 在读到的这段里出现了 ${total} 次。`, next: CandidateNextAction }
           throw new ProjectError(total === 0 ? 'TARGET_NOT_FOUND' : 'AMBIGUOUS_TARGET', message, details, next)
         }
         start = matches[0].start

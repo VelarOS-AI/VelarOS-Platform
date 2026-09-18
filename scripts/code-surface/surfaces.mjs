@@ -6,31 +6,55 @@
 
 //
 // **命名空间按能力起名，不按空间起名。** 一件能力只有一份实现、一份声明、一份代码模版；
-// 每个空间注入自己的端口（作用域、策略、落盘），模型那边不必挑「这是哪个空间的读文件」。
-// 空间是一张装配表：给哪些能力、每件能力用哪个端口（例如 `@velaros-ai/system` 的 `createSystemSpace`）。
+// 每个空间注入自己的端口（作用域、策略、落盘），模型那边不必挑「这是哪个空间的看图」。
+// 真正是两件事的不硬合：本机文件（`files`，系统空间）与受项目治理的文件（`project`，项目空间）各是一件能力。
+// 空间是一张装配表：给哪些能力、每件能力用哪个端口（`@velaros-ai/system` 的 `createSystemSpace`、`@velaros-ai/project` 的 `createProjectSpace`）。
 
 export const CodeSurfaces = [
   {
     /** 模型在程序里写成 `import { read } from 'velar:files'` 的那个名字。 */
     namespace: 'files',
     /** 相对 packages/ 的目录。 */
-    directory: 'files',
+    directory: 'velar',
+    /** 能力单元的目录（能力按目录放在一个包里时填）；模版相对它找。 */
+    unit: 'files',
     /** 操作接口；方法带 `@AgentView` 的才进模型面。 */
     interfaces: ['FileOperationsApi'],
-    /** 代码模版：一整份能照抄的程序，import 只写一次；相对包目录。 */
-    templates: 'templates/files.js',
+    /** 代码模版：一整份能照抄的程序，import 只写一次；相对单元目录（没有单元就相对包目录）。 */
+    templates: 'template.js',
+  },
+  {
+    namespace: 'images',
+    directory: 'velar',
+    unit: 'images',
+    interfaces: ['ImageOperationsApi'],
+    templates: 'template.js',
   },
   {
     namespace: 'shell',
-    directory: 'shell-command',
+    directory: 'velar',
+    unit: 'shell',
     interfaces: ['ShellOperationsApi'],
-    templates: 'templates/shell.js',
+    templates: 'template.js',
   },
   {
     namespace: 'sandbox',
-    directory: 'rehearsal-sandbox',
+    directory: 'velar',
+    unit: 'sandbox',
     interfaces: ['SandboxOperationsApi'],
-    templates: 'templates/sandbox.js',
+    templates: 'template.js',
+  },
+  {
+    namespace: 'project',
+    directory: 'project',
+    interfaces: ['ProjectFileOperationsApi'],
+    templates: 'templates/project.js',
+  },
+  {
+    namespace: 'code',
+    directory: 'project',
+    interfaces: ['ProjectCodeOperationsApi'],
+    templates: 'templates/code.js',
   },
 ]
 
@@ -40,8 +64,10 @@ export const CodeSurfaces = [
  */
 export const HostContextTypes = new Set([
   'FileOperationContext',
+  'ImageOperationContext',
   'ShellOperationContext',
   'SandboxOperationContext',
+  'ProjectCallContext',
 ])
 
 /** 进模型可观测面的标记；打在操作方法与它引用到的每个**领域类型**上。 */

@@ -1,13 +1,11 @@
 /**
- * 事务结果的判定：一次提交到底有没有改动，宿主或用户拒绝写入时的失败回执。
+ * 事务结果的判定：一次提交到底有没有改动、哪些路径是新建出来的。
  */
 
 import { isString, isTrue } from '@velaros-ai/core'
 
 import type { PathEffect } from '../../types/agent.js'
 import type { AgentProjectPreparedPatch } from '../../types/agent-port.js'
-import type { ProjectAuthorizationDecision } from '../../types/project.js'
-import { ProjectError } from '../errors.js'
 
 /** 这个补丁是不是删掉文件（删除，或重命名留下的旧路径）。 */
 function deletes(patch: AgentProjectPreparedPatch): boolean {
@@ -54,10 +52,4 @@ export function projectCreatedPaths(patches: readonly AgentProjectPreparedPatch[
       created.add(patch.path)
   }
   return created
-}
-
-/** 宿主或用户拒绝写入：一个文件都没写，按拒绝失败回执；用户改主意后模型可用 inputReuse 原样重提。 */
-export function projectMutationDenied(authorization: ProjectAuthorizationDecision): ProjectError {
-  return new ProjectError('PERMISSION_DENIED', authorization.message, { executionOutcome: 'not-applied' },
-    '没有写入任何文件。除非用户明确改变主意，不要自行重试；用户同意后用回执的 inputReuse 原样重提。')
 }

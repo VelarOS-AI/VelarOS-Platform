@@ -4,7 +4,6 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { ProjectToolNames } from '../src/contract/constants'
 import { FileProjectChangeFeed } from '../src/impl/persistence/FileProjectChangeFeed.js'
 import type { EditOperation } from '../src/index'
 import { createProjectKernel } from '../src/index'
@@ -12,18 +11,6 @@ import { createProjectKernel } from '../src/index'
 import { ProjectEditOperationSchema } from './support/edit-intent-schema'
 
 describe('Project capability', () => {
-  test('publishes only canonical project tool ids', () => {
-    expect(Object.values(ProjectToolNames)).toEqual([
-      'project:read',
-      'project:list',
-      'project:search',
-      'project:edit',
-      'project:code',
-      'project:run',
-      'project:sandbox',
-    ])
-  })
-
   test('reads, edits, and rolls back inside the project root', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-project-'))
     try {

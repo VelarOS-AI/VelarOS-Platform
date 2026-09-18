@@ -8,7 +8,7 @@ declare module 'velar:sandbox' {
    */
 
   /**
-   * 代码模版（templates/sandbox.js）：
+   * 代码模版（template.js）：
    *
    * ```js
    * // velar:sandbox 的代码模版：挑一段照着改，import 只写一次。
@@ -145,32 +145,34 @@ declare module 'velar:sandbox' {
   }
 
   /**
-     * 把一个目录镜像到临时区，脚本先在镜像里跑：落回之前源目录一个字节都没变，镜像随便糟蹋，用完 discard。
-     * 回执里的 id 是后面四个操作要的那个；镜像里的命令写不出镜像根，所以脚本里算错的路径在这里只会报错。
-     * gitignore 忽略的目录缺省链接到真实目录（能读，写不进），要在镜像里重新构建就把 ignored 传成 copy。
-     */
-    export function create(input: SandboxCreateInput): Promise<SandboxRecord>
+   * 把一个目录镜像到临时区，脚本先在镜像里跑：落回之前源目录一个字节都没变，镜像随便糟蹋，用完 discard。
+   * 回执里的 id 是后面四个操作要的那个；镜像里的命令写不出镜像根，所以脚本里算错的路径在这里只会报错。
+   * gitignore 忽略的目录缺省链接到真实目录（能读，写不进），要在镜像里重新构建就把 ignored 传成 copy。
+   */
+  export function create(input: SandboxCreateInput): Promise<SandboxRecord>
 
   /**
-     * 在镜像里跑一条命令，工作目录钉在镜像根。命令自己失败（非零退出、超时）是正常回执、不抛错，照 success 判。
-     * 镜像里连不上网，除非建沙箱时把 network 开了。
-     */
-    export function run(input: SandboxRunInput): Promise<SandboxRunResult>
+   * 在镜像里跑一条命令，工作目录钉在镜像根。命令自己失败（非零退出、超时）是正常回执、不抛错，照 success 判。
+   * 危险命令（递归删除、丢未提交改动的 git 这类）照常先问用户，用户不点头就抛错、命令不跑。
+   * 镜像里连不上网，除非建沙箱时把 network 开了。
+   */
+  export function run(input: SandboxRunInput): Promise<SandboxRunResult>
 
   /**
-     * 看镜像相对建的时候变了什么：三列相对路径加有界的文本差量。删除列永远完整，另外两列被 maxFiles 截掉时 truncated 为真。
-     */
-    export function diff(input: SandboxDiffInput): Promise<SandboxDiff>
+   * 看镜像相对建的时候变了什么：三列相对路径加有界的文本差量。删除列永远完整，另外两列被 maxFiles 截掉时 truncated 为真。
+   */
+  export function diff(input: SandboxDiffInput): Promise<SandboxDiff>
 
   /**
-     * 把镜像里的变化落回源目录。落回前一定把删除与覆盖摆给用户确认，用户不点头就抛错、一个文件都不落；
-     * 确认之后镜像又被改过，宿主整批不落。`.git` 里的变化永远不落，要那部分就在源目录重放那几条 git 命令。
-     * 镜像里什么都没变时不问用户，三列都是空的。
-     */
-    export function apply(input: SandboxApplyInput): Promise<SandboxApplyResult>
+   * 把镜像里的变化落回源目录。落回前一定把删除与覆盖摆给用户确认，用户不点头就抛错、一个文件都不落；
+   * 当前空间还可能先核一遍这次要落的路径（项目空间核对项目许不许写），核不过同样一个文件都不落。
+   * 确认之后镜像又被改过，宿主整批不落。`.git` 里的变化永远不落，要那部分就在源目录重放那几条 git 命令。
+   * 镜像里什么都没变时不问用户，三列都是空的。
+   */
+  export function apply(input: SandboxApplyInput): Promise<SandboxApplyResult>
 
   /**
-     * 删掉镜像，源目录不受影响；沙箱本来就不在时 removed 为 false，不算错。
-     */
-    export function discard(input: SandboxDiscardInput): Promise<SandboxDiscardResult>
+   * 删掉镜像，源目录不受影响；沙箱本来就不在时 removed 为 false，不算错。
+   */
+  export function discard(input: SandboxDiscardInput): Promise<SandboxDiscardResult>
 }

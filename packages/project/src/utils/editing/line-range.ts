@@ -1,6 +1,6 @@
 import { isArray, isNumber, isUndefined } from '@velaros-ai/core'
 
-import type { ProjectLineRange } from '../../types/editing.js'
+import type { ProjectLineRange } from '../../types/files.js'
 import { ProjectError } from '../errors.js'
 
 /** 把行范围写法（51、[51]、[42,45]）核对后换成起止行，首尾行都包含在内；写法不合法时拒绝。 */
@@ -16,7 +16,7 @@ export function normalizeProjectLineRange(range: ProjectLineRange): readonly [nu
   return [values[0], values[1] ?? values[0]]
 }
 
-/** 把 project:read 的行范围写法（51、[51]、[42,45]）换成起止行；没给范围返回 undefined。 */
+/** 把 read 的行范围写法（51、[51]、[42,45]）换成起止行；没给范围返回 undefined。 */
 export function readLineRange(range?: ProjectLineRange): Optional<{ startLine: number; endLine: number }> {
   if (isUndefined(range)) return undefined
   const [startLine, endLine] = normalizeProjectLineRange(range)

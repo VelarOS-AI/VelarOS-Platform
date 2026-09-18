@@ -1,5 +1,5 @@
 import { AppError } from '@velaros-ai/core'
-import type { ProjectToolContext } from '@velaros-ai/project'
+import type { ProjectCallContext } from '@velaros-ai/project'
 import type { ProjectCodeQuery as ProjectCodeQueryInput } from '@velaros-ai/project/contracts'
 
 import { CodeQuerySources } from '../contract/constants.js'
@@ -20,14 +20,14 @@ export interface ProjectCodeQueryApi {
    * 语言服务类的七个动作交给内置语言服务；其余（代码图谱类）交给宿主后端，后端不可用时抛
    * code 为 `UNAVAILABLE` 的错误——project 据此把它写成降级说明，而不是当成查询失败。
    */
-  run(input: ProjectCodeQueryInput, context: ProjectToolContext): Promise<unknown>
+  run(input: ProjectCodeQueryInput, context: ProjectCallContext): Promise<unknown>
 }
 
 /** 代码查询的两路分派，见接口说明。 */
 class ProjectCodeQuery implements ProjectCodeQueryApi {
   public constructor(private readonly codeIndex: ProjectCodeIndexApi) {}
 
-  public async run(input: ProjectCodeQueryInput, context: ProjectToolContext): Promise<unknown> {
+  public async run(input: ProjectCodeQueryInput, context: ProjectCallContext): Promise<unknown> {
     if (isProjectCodeLanguageQuery(input)) return languageQueries.run(input, context)
     if (!this.codeIndex.isAvailable()) {
       throw new AppError(
@@ -43,11 +43,11 @@ class ProjectCodeQuery implements ProjectCodeQueryApi {
 /**
  * 造一份 project 注入面要的 `queryCode`：语言服务类动作走内置实现，代码图谱类动作交给宿主后端。
  *
- * 返回的是函数而不是对象，宿主照旧把它直接塞进 `ProjectToolApi.queryCode`。
+ * 返回的是函数而不是对象，宿主照旧把它直接塞进 `ProjectHostPort.queryCode`。
  */
 export function createProjectCodeQuery(
   codeIndex: ProjectCodeIndexApi
-): (input: ProjectCodeQueryInput, context: ProjectToolContext) => Promise<unknown> {
+): (input: ProjectCodeQueryInput, context: ProjectCallContext) => Promise<unknown> {
   const query = new ProjectCodeQuery(codeIndex)
   return (input, context) => query.run(input, context)
 }

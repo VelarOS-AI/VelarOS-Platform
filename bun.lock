@@ -38,12 +38,10 @@
         "@typescript-eslint/eslint-plugin": "^8.67.0",
         "@typescript-eslint/parser": "^8.67.0",
         "@velaros-ai/arch-guard": "github:VelarOS-AI/VelarOS-Arch-Guard#ce2b221d99c1b93736568f281a180ad3593f086f",
-        "@velaros-ai/files": "workspace:*",
         "@velaros-ai/path-rules": "workspace:*",
-        "@velaros-ai/rehearsal-sandbox": "workspace:*",
-        "@velaros-ai/shell-command": "workspace:*",
         "@velaros-ai/text-files": "workspace:*",
         "@velaros-ai/tool-contract": "workspace:*",
+        "@velaros-ai/velar": "workspace:*",
         "@vitejs/plugin-react": "^6.0.5",
         "brace-expansion": "1.1.18",
         "chrome-devtools-frontend": "1.0.1652307",
@@ -217,23 +215,6 @@
         "typescript": "^5.7.0",
       },
     },
-    "packages/files": {
-      "name": "@velaros-ai/files",
-      "version": "0.1.0",
-      "dependencies": {
-        "@velaros-ai/core": "workspace:*",
-        "@velaros-ai/platform": "workspace:*",
-        "@velaros-ai/text-files": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "@velaros-ai/code-surface": "workspace:*",
-        "typescript": "^5.7.0",
-      },
-      "peerDependencies": {
-        "@velaros-ai/agent": "workspace:^",
-      },
-    },
     "packages/html-artifacts": {
       "name": "@velaros-ai/html-artifacts",
       "version": "0.2.0",
@@ -376,18 +357,16 @@
       "name": "@velaros-ai/project",
       "version": "2.3.0",
       "dependencies": {
+        "@velaros-ai/code-surface": "workspace:*",
         "@velaros-ai/core": "workspace:*",
-        "@velaros-ai/kernel": "workspace:*",
         "@velaros-ai/path-rules": "workspace:*",
         "@velaros-ai/platform": "workspace:*",
-        "@velaros-ai/rehearsal-sandbox": "workspace:*",
-        "@velaros-ai/shell-command": "workspace:*",
         "@velaros-ai/text-files": "workspace:*",
         "@velaros-ai/tool-contract": "workspace:*",
+        "@velaros-ai/velar": "workspace:*",
         "diff": "^8.0.4",
         "execa": "^9.6.1",
         "typescript": "^5.0.0",
-        "zod": "^4.3.6",
       },
       "devDependencies": {
         "@eslint/js": "^9.39.4",
@@ -401,36 +380,7 @@
         "eslint-plugin-unicorn": "^64.0.0",
         "eslint-plugin-unused-imports": "^4.4.1",
         "globals": "^17.6.0",
-      },
-      "peerDependencies": {
-        "@velaros-ai/agent": "workspace:^",
-      },
-    },
-    "packages/rehearsal-sandbox": {
-      "name": "@velaros-ai/rehearsal-sandbox",
-      "version": "0.2.0",
-      "dependencies": {
-        "@velaros-ai/core": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "@velaros-ai/code-surface": "workspace:*",
-        "typescript": "^5.7.0",
-      },
-      "peerDependencies": {
-        "@velaros-ai/agent": "workspace:^",
-      },
-    },
-    "packages/shell-command": {
-      "name": "@velaros-ai/shell-command",
-      "version": "0.1.0",
-      "dependencies": {
-        "@velaros-ai/core": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "@velaros-ai/code-surface": "workspace:*",
-        "typescript": "^5.7.0",
+        "zod": "^4.3.6",
       },
       "peerDependencies": {
         "@velaros-ai/agent": "workspace:^",
@@ -453,12 +403,10 @@
       "dependencies": {
         "@velaros-ai/code-surface": "workspace:*",
         "@velaros-ai/core": "workspace:*",
-        "@velaros-ai/files": "workspace:*",
         "@velaros-ai/path-rules": "workspace:*",
         "@velaros-ai/platform": "workspace:*",
-        "@velaros-ai/rehearsal-sandbox": "workspace:*",
-        "@velaros-ai/shell-command": "workspace:*",
         "@velaros-ai/text-files": "workspace:*",
+        "@velaros-ai/velar": "workspace:*",
         "diff": "^8.0.4",
       },
       "devDependencies": {
@@ -528,6 +476,23 @@
       "peerDependencies": {
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
+      },
+    },
+    "packages/velar": {
+      "name": "@velaros-ai/velar",
+      "version": "0.1.0",
+      "dependencies": {
+        "@velaros-ai/core": "workspace:*",
+        "@velaros-ai/platform": "workspace:*",
+        "@velaros-ai/text-files": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "^22.19.17",
+        "@velaros-ai/code-surface": "workspace:*",
+        "typescript": "^5.7.0",
+      },
+      "peerDependencies": {
+        "@velaros-ai/agent": "workspace:^",
       },
     },
   },
@@ -1147,8 +1112,6 @@
 
     "@velaros-ai/document-renderer": ["@velaros-ai/document-renderer@workspace:packages/document-renderer"],
 
-    "@velaros-ai/files": ["@velaros-ai/files@workspace:packages/files"],
-
     "@velaros-ai/html-artifacts": ["@velaros-ai/html-artifacts@workspace:packages/html-artifacts"],
 
     "@velaros-ai/kernel": ["@velaros-ai/kernel@workspace:packages/kernel"],
@@ -1167,10 +1130,6 @@
 
     "@velaros-ai/project": ["@velaros-ai/project@workspace:packages/project"],
 
-    "@velaros-ai/rehearsal-sandbox": ["@velaros-ai/rehearsal-sandbox@workspace:packages/rehearsal-sandbox"],
-
-    "@velaros-ai/shell-command": ["@velaros-ai/shell-command@workspace:packages/shell-command"],
-
     "@velaros-ai/surface-protocol": ["@velaros-ai/surface-protocol@workspace:packages/surface-protocol"],
 
     "@velaros-ai/system": ["@velaros-ai/system@workspace:packages/system"],
@@ -1180,6 +1139,8 @@
     "@velaros-ai/tool-contract": ["@velaros-ai/tool-contract@workspace:packages/tool-contract"],
 
     "@velaros-ai/ui": ["@velaros-ai/ui@workspace:packages/ui"],
+
+    "@velaros-ai/velar": ["@velaros-ai/velar@workspace:packages/velar"],
 
     "@vercel/oidc": ["@vercel/oidc@3.2.0", "", {}, "sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug=="],
 

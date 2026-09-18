@@ -15,9 +15,9 @@ import { isEmpty, isFalse, isNull, isPresent, isUndefined } from '@velaros-ai/co
 import { AppError } from '@velaros-ai/core/error'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import { currentPlatform } from '@velaros-ai/platform'
-import type { SandboxApplyResult, SandboxDiff, SandboxIgnoredMode, SandboxTextDiff } from '@velaros-ai/rehearsal-sandbox/contracts'
-import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { textCodec, textFileIo } from '@velaros-ai/text-files'
+import type { SandboxApplyResult, SandboxDiff, SandboxIgnoredMode, SandboxTextDiff } from '@velaros-ai/velar/sandbox/contracts'
+import { RehearsalSandboxLimits } from '@velaros-ai/velar/sandbox/contracts'
 
 import { SystemErrorCodes } from '../contract/constants.js'
 import type { SystemProcessConfinementPolicy } from '../types/commands.js'

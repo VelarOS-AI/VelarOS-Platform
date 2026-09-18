@@ -1,7 +1,7 @@
 # @velaros-ai/system 模块卡片
 
 > 这一页是本模块的压缩表示：读完就知道它是什么、给了外面什么、骨干链路怎么走、靠什么、状态在哪、失败什么样、哪些承诺不能破。
-> 本包没有自己的模型面：模型看到的是三件跨空间能力的声明（`baselines/code-surface/files.d.ts`、`shell.d.ts`、`sandbox.d.ts`）。
+> 本包没有自己的模型面：模型看到的是四件能力的声明（`baselines/code-surface/files.d.ts`、`images.d.ts`、`shell.d.ts`、`sandbox.d.ts`）。
 > 代码这一侧最先看 `src/impl/SystemSpace.ts` 的装配表，其次是 `src/contract/` 的三个文件和各实现文件类上方的接口。代码怎么分层见最后一节「结构」。
 > 门禁：`bun run check:module-ownership`。
 
@@ -10,7 +10,7 @@
 系统空间：让 agent 在用户的整台机器上读写文件、跑命令、追踪后台任务、演练脚本，每一步都过宿主的审批边界。它由两件东西组成：
 
 - **本地内核**：本机能力的实现——命令与后台任务、交互式控制台、shell 选择与自检、进程约束、演练沙箱引擎，外加宿主自己的界面要的进程、端口、指标与全局搜索。
-- **系统空间的装配表**：一个空间就是一张表——给哪几件能力、每件能力用哪个端口。能力本身不在本包：`velar:files` 在 `@velaros-ai/files`，`velar:shell` 在 `@velaros-ai/shell-command`，`velar:sandbox` 在 `@velaros-ai/rehearsal-sandbox`，一件能力只有一份实现。本包只写系统空间和别的空间不一样的地方：路径可以是本机任意位置、`~` 展开到家目录，凭证文件与系统敏感路径先问用户，写是逐个原子替换，命令在本机任意目录跑，沙箱能镜像任意目录。
+- **系统空间的装配表**：一个空间就是一张表——给哪几件能力、每件能力用哪个端口。能力本身不在本包，是 `@velaros-ai/velar` 里的能力单元：`velar:files`（本机文件，系统空间专用；项目空间用的是 `velar:project`）、`velar:images`、`velar:shell`、`velar:sandbox`，一件能力只有一份实现。本包只写系统空间的端口：路径可以是本机任意位置、`~` 展开到家目录，凭证文件与系统敏感路径先问用户，写是逐个原子替换（撤回新建时核对后删掉），命令在本机任意目录跑，沙箱能镜像任意目录，看图能看本机任意位置的图。
 
 它不知道「项目」是什么，也不知道界面长什么样；项目空间是另一个包，两边互不引用。
 
@@ -35,7 +35,7 @@
 | `SystemProcessConfinementProvider` | 可选 | 放在本地内核配置里，没有内置约束后端的平台靠它 |
 | 环境变量，全部登记在 `SystemEnvironmentVariables` | 可选 | 三个输入变量由宿主设，三个标记变量由本包写给子进程 |
 
-**数据面**是 `types/`，只放类型；**常量表**是 `contract/constants.ts`，只放值。`./contracts` 入口就是常量表（错误码 `SystemErrorCodes`、环境变量表 `SystemEnvironmentVariables`）加可移植数据 `types/system.ts`（进程、端口、指标、控制台与终止的请求、全局搜索、运行平台）。引用到 shell 能力数据的内核数据（终止结果、控制台增量输出与控制结果、环境体检）在 `types/host.ts`，进程约束的请求与结果在 `types/commands.ts`，都从根入口导出。命令回执、后台任务、shell 描述这些 `velar:shell` 也用的数据在 `@velaros-ai/shell-command/contracts`，本地内核直接用它们；沙箱的数据形状在 `@velaros-ai/rehearsal-sandbox/contracts`。
+**数据面**是 `types/`，只放类型；**常量表**是 `contract/constants.ts`，只放值。`./contracts` 入口就是常量表（错误码 `SystemErrorCodes`、环境变量表 `SystemEnvironmentVariables`）加可移植数据 `types/system.ts`（进程、端口、指标、控制台与终止的请求、全局搜索、运行平台）。引用到 shell 能力数据的内核数据（终止结果、控制台增量输出与控制结果、环境体检）在 `types/host.ts`，进程约束的请求与结果在 `types/commands.ts`，都从根入口导出。命令回执、后台任务、shell 描述这些 `velar:shell` 也用的数据在 `@velaros-ai/velar/shell/contracts`，本地内核直接用它们；沙箱的数据形状在 `@velaros-ai/velar/sandbox/contracts`。
 
 两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
 
@@ -51,7 +51,8 @@
 | 链路 | 怎么走 |
 | --- | --- |
 | 系统空间的一次调用 | 模型的程序调 `read(...)` / `run(...)` / `create(...)` → 能力端口按命名空间找到装配表里那一格 → `resolveCall` 给出这一次调用的审批通道、取消信号、会话 → 装成那件能力要的上下文（端口在构造时装好一次，上下文每次现装）→ 交给 `fileOperations` / `shellOperations` / `sandboxOperations` |
-| `velar:files` 的系统端口 | `locate`：`host.resolvePath`（`~` 与相对路径）→ 解开符号链接得到真实目标；`reviewRead`：凭证文件要问；`reviewWrite`：系统敏感路径（临时目录豁免）与凭证文件各要问一次；`commit`：按顺序补建上级目录、原子替换（同目录临时文件写完 fsync 再改名，权限位原样保留，核对 expected），出错时在 context.applied 里点名已写的；`resizeImage`：只在 macOS 上给，sips 先裁后缩、分两次调 |
+| `velar:files` 的系统端口 | `locate`：`host.resolvePath`（`~` 与相对路径）→ 解开符号链接得到真实目标；`reviewRead`：凭证文件要问；`reviewWrite`：系统敏感路径（临时目录豁免）与凭证文件各要问一次；`commit`：按顺序写或删——写是补建上级目录后原子替换（同目录临时文件写完 fsync 再改名，权限位原样保留，核对 expected），删（撤回一次新建）是核对 expected 之后删掉；出错时在 context.applied 里点名已做的 |
+| `velar:images` 的系统端口 | `locate`：`host.resolvePath` → 解开符号链接得到真实目标；`resizeImage`：只在 macOS 上给，sips 先裁后缩、分两次调 |
 | `velar:shell` 的系统端口 | `resolveCwd`：`host.resolvePath`；`commandPolicy`：确认文案说在哪个目录（没给就是系统运行环境），风险分类 `system-command:dangerous`；跑命令的三件事直接交给本地内核 |
 | `velar:sandbox` 的系统端口 | 建、看差量、落回、丢弃直接交给本地内核；`resolveSource`：`host.resolvePath`；`runInSandbox`：按沙箱 id 找到镜像根，交给 `host.runCommand`（cwd 落在镜像根里，内核就换成钉死在镜像里的执行器）；`applyPolicy`：落回到源目录本身，敏感路径与凭证文件在确认里点名，风险分类 `system-sandbox:apply` |
 | 本地内核跑命令 | `runCommand` 解析 cwd → cwd 在某个沙箱根里就交给那个沙箱的执行器，否则交给主执行器 `SystemCommandRunner.run` → 选 shell（挑定的种类本机没有就以 `VALIDATION` 拒绝、一个进程都不起；宿主给了 nativeCommand 就走原生 argv）→ 进程约束 → 受管进程启动 → 采集解码 → 超时 / 取消收敛 → 验证摘要 → 后台登记。每一步见 `SystemCommandRunner.ts` 类上方的说明 |
@@ -61,7 +62,7 @@
 
 - `@velaros-ai/core`：类型守卫、缺席值、日志、`AppError`、真实路径解析。
 - `@velaros-ai/code-surface`：操作表的形状（`CapabilityOperationTable`）。
-- `@velaros-ai/files`、`@velaros-ai/shell-command`、`@velaros-ai/rehearsal-sandbox`：三件能力的操作与端口形状；shell-command 另给命令回执与后台任务的数据形状、命令判定，rehearsal-sandbox 另给沙箱的数据形状与公开上限。
+- `@velaros-ai/velar`：四件能力单元的操作与端口形状（`files`、`images`、`shell`、`sandbox`）；shell 单元另给命令回执与后台任务的数据形状、命令判定，sandbox 单元另给沙箱的数据形状与公开上限。
 - `@velaros-ai/agent` 的 `tool-contract` 子路径：审批端口类型、审批操作身份。
 - `@velaros-ai/path-rules`：.gitignore 的解析与判定、遍历时的忽略策略（全局搜索与沙箱镜像共用一份）。
 - `@velaros-ai/text-files`：原子替换写入（fsync、权限位精确保留、拒绝多硬链接、核对 expected）、读文件头、按编码解码（全局搜索用）。
@@ -74,7 +75,7 @@
 - **交互式任务的控制台缓冲**：和任务表一起归命令执行器，在内存里，每个控制台留最近 10 万字符，更早的输出被挤掉时读取方会拿到 `droppedChars`；随 `dispose()` 清空。
 - **演练沙箱登记表**：本地内核持有一份（`SystemSandboxes`），每个沙箱一条记录和一个约束到镜像根的专属执行器；镜像与清单在临时区 `velaros-sandbox/<id>/` 下，内核重启后按清单重新登记；`dispose()` 只停进程，不删镜像。
 - **受管子进程登记表**：整个进程一份（`systemProcessManager`），已结束的进程最多保留 512 条回执。
-- **文件版本历史**：不归本包，在 `@velaros-ai/files` 的文件操作里。
+- **能撤回的改动**：不归本包，在 `velar:files` 的文件操作里（`@velaros-ai/velar/files`）。
 - **shell 选择**：不缓存，每次运行前重新自检。本机可用的清单由 `inspectEnvironment().shells` 给出（第一个就是默认那个），宿主拿它写进每回合给模型的环境报告。
 - **审批记忆**：不归本模块。本模块只造确认请求，记不记、记多久由宿主的 `ApprovalPort` 决定。
 
@@ -91,14 +92,14 @@
 - **默认失败关闭。** 找不到可用 shell 抛 `SYSTEM_SHELL_UNAVAILABLE`；受约束模式没有后端抛 `SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE`，不退回裸进程。
 - **macOS 的约束只管得住文件写，证据如实报 `enforcement: partial`。** Seatbelt 拦住写到写根之外，也堵上了经 cfprefsd 代写偏好设置、发 Apple 事件这两条路；其余由系统服务代办的事拦不全。
 - **命令本身失败不是模块错误。** 退出码、超时、取消都如实进回执，`success` 为 false，`verification` 摘要输出末尾。
-- 文件的失败语义见 `@velaros-ai/files`；本包的端口只多两种：写的时候文件被别人改了（`VALIDATION`，说明里写明），没有写权限（`PERMISSION`）。
+- 文件与看图的失败语义见各自的能力单元；本包的端口只多两种：写或删的时候文件被别人改了（`VALIDATION`，说明里写明），没有写权限（`PERMISSION`）。
 - 演练沙箱：没有约束后端建不出；落回时源文件自建沙箱以来变过、或上级路径是符号链接整批不落（`SYSTEM_SANDBOX_CONFLICT`，冲突列在 message 与 context.conflicts 里）；确认之后镜像又变过整批不落（`SYSTEM_SANDBOX_CHANGED`）；暂存拷不全什么都不落，挪到位的途中失败不回滚、已落回的路径在 message 与 context.applied 里点名；镜像根里的命令遇到读不出来的清单拒绝执行；丢弃时 id 不合形状、这一项是符号链接、路径不在基目录下面一层就拒绝。
 - 完整错误码语义见 `src/contract/constants.ts` 里的 `SystemErrorCodes`；代码面把码与说明交给程序，外面按错误码判断，不按错误类。
 
 ## 不变量
 
-共 18 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排，空号的去向写在登记表开头。
-按检验方式：测试 17 条、门禁 1 条。未验证 0 条。
+共 19 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排，空号的去向写在登记表开头。
+按检验方式：测试 18 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 
@@ -131,7 +132,7 @@ test/           实现细节测试
 
 | 实现文件 | 接口 | 做什么 |
 | --- | --- | --- |
-| `SystemSpace.ts` | `SystemSpaceApi`（同文件，provides 登记） | 系统空间的装配表：三件能力配上系统空间的端口 |
+| `SystemSpace.ts` | `SystemSpaceApi`（同文件，provides 登记） | 系统空间的装配表：四件能力配上系统空间的端口 |
 | `LocalSystemKernel.ts` | `LocalSystemKernelApi`（同文件，provides 登记），扩展 `SystemSpaceHost`（requires） | 本机能力的实现，只做转接 |
 | `SystemSandboxes.ts` | `SystemSandboxesApi`（同文件） | 演练沙箱登记表：镜像、差量、落回、丢弃，每个沙箱一个约束到镜像根的执行器 |
 | `SystemCommandRunner.ts` | `SystemCommandRunnerApi`（同文件） | 跑命令：前台采集，后台登记成任务、可查可停；交互式任务另带控制台 |

@@ -5,12 +5,13 @@
 declare module 'velar:shell' {
   /**
    * 跑命令、看后台任务、刷新 shell 环境。
-   * 命令先按策略分类：危险命令每次都由用户亲自确认，长驻命令（开发服务器这类）要先问一声；被拒时一个进程都没起，调用抛错。
+   * 命令先按策略分类：危险命令每次都由用户亲自确认，长驻命令（开发服务器这类）要先问一声；
+   * 当前空间还可能要求别的授权（项目空间里会改项目的命令要先过一次）。任何一关被拒时一个进程都没起，调用抛错。
    * 判定认全部五种 shell 的语法，换个 shell 写照样问。
    */
 
   /**
-   * 代码模版（templates/shell.js）：
+   * 代码模版（template.js）：
    *
    * ```js
    * // velar:shell 的代码模版：挑一段照着改，import 只写一次。
@@ -271,20 +272,20 @@ declare module 'velar:shell' {
   type ShellConsoleChannel = 'pty' | 'pipe'
 
   /**
-     * 跑一条命令。background 或 interactive 的命令立刻返回，之后用 listTasks 看它跑到哪了；interactive 一定跑在后台，它要开着等用户在控制台里输入。
-     * 长驻命令不传 background 也会自动转后台，回执里 backgroundProcess.autoStarted 为真。
-     */
-    export function run(input: ShellRunInput): Promise<ShellRunResult>
+   * 跑一条命令。background 或 interactive 的命令立刻返回，之后用 listTasks 看它跑到哪了；interactive 一定跑在后台，它要开着等用户在控制台里输入。
+   * 长驻命令不传 background 也会自动转后台，回执里 backgroundProcess.autoStarted 为真。
+   */
+  export function run(input: ShellRunInput): Promise<ShellRunResult>
 
   /**
-     * 重新选定本机能用的 shell 并读一遍它的环境变量；Windows 上还会重读用户与系统环境变量写回本进程，没成功时结果的 reason 说明原因。
-     * 只改本进程的环境，不动用户的 shell 配置文件，也不装任何东西：刷过一次还缺的命令就是没装。
-     */
-    export function refreshEnvironment(): Promise<ShellEnvironmentRefreshResult>
+   * 重新选定本机能用的 shell 并读一遍它的环境变量；Windows 上还会重读用户与系统环境变量写回本进程，没成功时结果的 reason 说明原因。
+   * 只改本进程的环境，不动用户的 shell 配置文件，也不装任何东西：刷过一次还缺的命令就是没装。
+   */
+  export function refreshEnvironment(): Promise<ShellEnvironmentRefreshResult>
 
   /**
-     * 列出 run 起在后台的任务，最新的在前。宿主按会话隔离时只看得到本会话起的那些。
-     * 要停掉一条，用 run 执行它条目里的 terminateCommand 或 forceTerminateCommand，别自己拼 pid。
-     */
-    export function listTasks(input: ShellListTasksInput): Promise<ShellListTasksResult>
+   * 列出 run 起在后台的任务，最新的在前。宿主按会话隔离时只看得到本会话起的那些。
+   * 要停掉一条，用 run 执行它条目里的 terminateCommand 或 forceTerminateCommand，别自己拼 pid。
+   */
+  export function listTasks(input: ShellListTasksInput): Promise<ShellListTasksResult>
 }

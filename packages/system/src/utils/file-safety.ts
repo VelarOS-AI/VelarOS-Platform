@@ -8,9 +8,9 @@ import * as path from 'node:path'
 import { agentToolContracts } from '@velaros-ai/agent/tool-contract'
 import { isNotNull, isNull } from '@velaros-ai/core'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
-import type { FileConfirmation } from '@velaros-ai/files'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 import { createPlatform, currentPlatform } from '@velaros-ai/platform'
+import type { FileConfirmation } from '@velaros-ai/velar/files'
 
 import type { SensitiveSystemMutationPathOptions } from '../types/paths.js'
 

@@ -93,23 +93,20 @@
       "@velaros-ai/path-rules/*": [
         "./packages/path-rules/src/*"
       ],
-      "@velaros-ai/files": [
-        "./packages/files/src/index.ts"
+      "@velaros-ai/velar/files": [
+        "./packages/velar/files/index.ts"
       ],
-      "@velaros-ai/files/*": [
-        "./packages/files/src/*"
+      "@velaros-ai/velar/images": [
+        "./packages/velar/images/index.ts"
       ],
-      "@velaros-ai/rehearsal-sandbox": [
-        "./packages/rehearsal-sandbox/src/index.ts"
+      "@velaros-ai/velar/sandbox": [
+        "./packages/velar/sandbox/index.ts"
       ],
-      "@velaros-ai/rehearsal-sandbox/*": [
-        "./packages/rehearsal-sandbox/src/*"
+      "@velaros-ai/velar/shell": [
+        "./packages/velar/shell/index.ts"
       ],
-      "@velaros-ai/shell-command": [
-        "./packages/shell-command/src/index.ts"
-      ],
-      "@velaros-ai/shell-command/*": [
-        "./packages/shell-command/src/*"
+      "@velaros-ai/velar/*": [
+        "./packages/velar/*"
       ],
       "@velaros-ai/text-files": [
         "./packages/text-files/src/index.ts"

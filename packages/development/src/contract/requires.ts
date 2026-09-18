@@ -2,7 +2,7 @@
  * 注入面：宿主必须或可以塞进来的东西。
  * 本包不认宿主，只认这三个口子：一次语言查询的上下文、它借的只读内核端口，以及可选的代码图谱后端。
  */
-import type { AgentProjectKernelPort, ProjectToolContext } from '@velaros-ai/project'
+import type { AgentProjectKernelPort, ProjectCallContext } from '@velaros-ai/project'
 import type { ProjectCodeIndexQuery } from '@velaros-ai/project/contracts'
 
 /**
@@ -39,5 +39,5 @@ export interface ProjectCodeIndexApi {
   /** 图谱后端现在能不能用；为假时本包不调 `query`，直接抛 `UNAVAILABLE`。 */
   isAvailable(): boolean
   /** 执行一次代码图谱查询；返回值原样交给调用方，本包只给它加上 `source` 字段。 */
-  query(input: ProjectCodeIndexQuery, context: ProjectToolContext): Promise<unknown>
+  query(input: ProjectCodeIndexQuery, context: ProjectCallContext): Promise<unknown>
 }

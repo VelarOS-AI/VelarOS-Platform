@@ -1,34 +1,36 @@
 /**
  * 系统空间：`SystemSpace`，接口 `SystemSpaceApi` 在本文件的类上方，由 `createSystemSpace` 创建。
  *
- * 一个空间就是一张装配表：给哪几件能力、每件能力用哪个端口。能力本身不在这里——`velar:files`、`velar:shell`、
- * `velar:sandbox` 各有各的包，一件能力只有一份实现；这里只写系统空间和别的空间不一样的地方：
- * 路径可以是本机任意位置、`~` 展开到家目录，凭证文件与系统敏感路径先问用户，写是逐个原子替换，
- * 命令在本机任意目录跑，沙箱可以镜像任意目录。这个文件里没有一个字是给模型看的。
+ * 一个空间就是一张装配表：给哪几件能力、每件能力用哪个端口。能力本身不在这里——`velar:files`（本机文件）、`velar:shell`、
+ * `velar:sandbox`、`velar:images` 各有各的包，一件能力只有一份实现；这里只写系统空间的端口：
+ * 路径可以是本机任意位置、`~` 展开到家目录，凭证文件与系统敏感路径先问用户，写是逐个原子替换（撤回新建时是核对后删掉），
+ * 命令在本机任意目录跑，沙箱可以镜像任意目录，看图能看本机任意位置的图。这个文件里没有一个字是给模型看的。
  */
 
 import { mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 import type { CapabilityOperationContext, CapabilityOperationTable } from '@velaros-ai/code-surface/contracts'
-import { AppError, isNotNull } from '@velaros-ai/core'
+import { AppError, isNotNull, isNull } from '@velaros-ai/core'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
-import type { FileOperationContext, FileSpacePort } from '@velaros-ai/files'
-import { fileOperations } from '@velaros-ai/files'
-import type { SandboxOperationContext, SandboxSurfacePort } from '@velaros-ai/rehearsal-sandbox'
-import { sandboxOperations } from '@velaros-ai/rehearsal-sandbox'
-import type { ShellOperationContext, ShellSpacePort } from '@velaros-ai/shell-command'
-import { shellOperations } from '@velaros-ai/shell-command'
+import type { FileOperationContext, FileSpacePort } from '@velaros-ai/velar/files'
+import { fileOperations } from '@velaros-ai/velar/files'
+import type { ImageOperationContext, ImageSpacePort } from '@velaros-ai/velar/images'
+import { imageOperations } from '@velaros-ai/velar/images'
+import type { SandboxOperationContext, SandboxSurfacePort } from '@velaros-ai/velar/sandbox'
+import { sandboxOperations } from '@velaros-ai/velar/sandbox'
+import type { ShellOperationContext, ShellSpacePort } from '@velaros-ai/velar/shell'
+import { shellOperations } from '@velaros-ai/velar/shell'
 
 import type { SystemCallContext, SystemSpaceHost } from '../contract/requires.js'
 import { credentialConfirmation, isCredentialPath, isSensitiveSystemMutationPath, sensitiveMutationConfirmation } from '../utils/file-safety.js'
-import { writeSystemFileAtomically } from '../utils/fs.js'
+import { removeSystemFile, writeSystemFileAtomically } from '../utils/fs.js'
 import { resizeImageWithSips } from '../utils/image.js'
 
-/** 系统空间：代码面的一张操作表，三件跨空间的能力配上系统空间的端口。 */
+/** 系统空间：代码面的一张操作表，四件能力配上系统空间的端口。 */
 export interface SystemSpaceApi {
   /**
-   * 操作表：`files`、`shell`、`sandbox` 三个命名空间，交给 `createCapabilityPort` 接成能力端口。
+   * 操作表：`files`、`shell`、`sandbox`、`images` 四个命名空间，交给 `createCapabilityPort` 接成能力端口。
    * 每次调用都向宿主要一次调用上下文：审批通道、取消信号、会话是**这一次调用**的，不能缓存——
    * 缓存一份就等于把上一次调用的审批通道借给下一次用。
    */
@@ -41,6 +43,7 @@ class SystemSpace implements SystemSpaceApi {
   private readonly filePort: FileSpacePort
   private readonly shellPort: ShellSpacePort
   private readonly sandboxPort: SandboxSurfacePort
+  private readonly imagePort: ImageSpacePort
 
   public constructor(
     private readonly host: SystemSpaceHost,
@@ -49,13 +52,18 @@ class SystemSpace implements SystemSpaceApi {
     this.filePort = this.createFilePort()
     this.shellPort = this.createShellPort()
     this.sandboxPort = this.createSandboxPort()
+    this.imagePort = this.createImagePort()
   }
 
   public get operations(): CapabilityOperationTable {
     const files = async (context: CapabilityOperationContext): Promise<FileOperationContext> => {
       const call = await this.call(context)
+      return { abortSignal: call.abortSignal, approval: call.approval, files: this.filePort }
+    }
+    const images = async (context: CapabilityOperationContext): Promise<ImageOperationContext> => {
+      const call = await this.call(context)
       // 图不进返回值：交给代码面的图片通道，程序跑完之后跟在结果后面给模型看。宿主另给了通道就用宿主的。
-      return { abortSignal: call.abortSignal, approval: call.approval, files: this.filePort, attachImage: call.attachImage ?? ((image) => context.attach({ type: 'image-data', ...image })) }
+      return { abortSignal: call.abortSignal, images: this.imagePort, attachImage: call.attachImage ?? ((image) => context.attach({ type: 'image-data', ...image })) }
     }
     const shell = async (context: CapabilityOperationContext): Promise<ShellOperationContext> => {
       const call = await this.call(context)
@@ -70,8 +78,8 @@ class SystemSpace implements SystemSpaceApi {
     return {
       files: {
         read: async (input, context) => fileOperations.read(input, await files(context)),
-        view: async (input, context) => fileOperations.view(input, await files(context)),
         edit: async (input, context) => fileOperations.edit(input, await files(context)),
+        undo: async (input, context) => fileOperations.undo(input, await files(context)),
       },
       shell: {
         run: async (input, context) => shellOperations.run(input, await shell(context)),
@@ -85,6 +93,9 @@ class SystemSpace implements SystemSpaceApi {
         apply: async (input, context) => sandboxOperations.apply(input, await sandbox(context)),
         discard: async (input, context) => sandboxOperations.discard(input, await sandbox(context)),
       },
+      images: {
+        view: async (input, context) => imageOperations.view(input, await images(context)),
+      },
     }
   }
 
@@ -93,12 +104,9 @@ class SystemSpace implements SystemSpaceApi {
     return Promise.resolve(this.resolveCall(context.signal))
   }
 
-  /**
-   * `velar:files` 的系统空间端口：路径是本机任意位置，凭证文件与系统敏感路径先问用户，写是一个一个原子替换。
-   * macOS 上宿主用系统自带的 sips 缩图裁图；别的平台不给这个口子，view 遇到超限的图会明说。
-   */
+  /** `velar:files` 的系统空间端口：路径是本机任意位置，凭证文件与系统敏感路径先问用户，写是一个一个原子替换，撤回新建时核对后删掉。 */
   private createFilePort(): FileSpacePort {
-    const port: FileSpacePort = {
+    return {
       locate: async (path) => {
         const resolved = this.host.resolvePath(path)
         const target = await resolveRealPath(resolved)
@@ -110,14 +118,30 @@ class SystemSpace implements SystemSpaceApi {
         const applied: string[] = []
         for (const write of writes) {
           try {
-            await mkdir(dirname(write.target), { recursive: true })
-            await writeSystemFileAtomically(write.target, write.bytes, write.expected)
+            if (isNull(write.bytes)) await removeSystemFile(write.target, write.expected)
+            else {
+              await mkdir(dirname(write.target), { recursive: true })
+              await writeSystemFileAtomically(write.target, write.bytes, write.expected)
+            }
             applied.push(write.target)
           } catch (error) {
             const failure = AppError.from(error)
             throw new AppError(failure.code, failure.message, error, { applied })
           }
         }
+      },
+    }
+  }
+
+  /**
+   * `velar:images` 的系统空间端口：本机任意位置的图，`~` 展开到家目录，读它解开符号链接之后的那个文件。
+   * macOS 上用系统自带的 sips 缩图裁图；别的平台不给这个口子，view 遇到超限的图会明说。
+   */
+  private createImagePort(): ImageSpacePort {
+    const port: ImageSpacePort = {
+      locate: async (path) => {
+        const resolved = this.host.resolvePath(path)
+        return { target: await resolveRealPath(resolved), shown: resolved }
       },
     }
     if (process.platform === 'darwin') port.resizeImage = resizeImageWithSips

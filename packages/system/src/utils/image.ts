@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
-import type { FileImageResizeRequest, FileImageResizeResult } from '@velaros-ai/files'
+import type { ImageResizeRequest, ImageResizeResult } from '@velaros-ai/velar/images'
 
 import { runPlatformCommand } from './process.js'
 
@@ -33,7 +33,7 @@ async function sipsPixelSize(path: string): Promise<{ width: number; height: num
  * `-Z` 只在真超了长边时才给：它会把小图放大，放大了既费 token 又不会更清楚。
  * 中间文件放在自己建的临时目录里，用完连目录一起删——删的只是这里 mkdtemp 出来的那一个。
  */
-export async function resizeImageWithSips(request: FileImageResizeRequest): Promise<FileImageResizeResult> {
+export async function resizeImageWithSips(request: ImageResizeRequest): Promise<ImageResizeResult> {
   const output = sipsOutputOf(request.mediaType)
   const directory = await mkdtemp(join(tmpdir(), 'velaros-image-'))
   try {

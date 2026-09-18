@@ -20,7 +20,7 @@ function lineChange(
       'BASE_REVISION_MISMATCH',
       `replace_lines 的行号必须绑定当前磁盘 revision：${snapshot.path}`,
       { path: snapshot.path, expected: baseRevision, actual: snapshot.revision },
-      '请提交同文件的前序修改，再用 project:read 重读目标区域；使用返回的 snapshot.revision 和行号重新编辑。',
+      '先提交同一个文件前面的修改，再重新 read 目标区域，按新的版本与行号重做。',
     )
   }
   if (
@@ -35,7 +35,7 @@ function lineChange(
     )
   }
   const content = snapshot.content
-  // 与 project:read 一致：末尾换行之后的空行也有行号。
+  // 与 read 一致：末尾换行之后的空行也有行号。
   const totalLines = lineOffsets.length
   if (
     !Number.isInteger(startLine) ||
@@ -48,7 +48,7 @@ function lineChange(
       'INVALID_INPUT',
       `replace_lines 范围 ${startLine}–${endLine} 超出有效行号 1–${totalLines}：${snapshot.path}`,
       { path: snapshot.path, startLine, endLine, totalLines },
-      '请按 project:read 返回的行号选择范围；编辑范围不会自动钳制。',
+      '按 read 返回的行号选范围；编辑范围不会自动钳制。',
     )
   }
   if (

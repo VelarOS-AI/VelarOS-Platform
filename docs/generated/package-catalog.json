@@ -158,18 +158,6 @@
     },
     {
       "domain": "foundations",
-      "directory": "packages/files",
-      "name": "@velaros-ai/files",
-      "version": "0.1.0",
-      "description": "The file capability shared by every space: the velar:files operations (read whole text files, view images within provider limits, edit whole files in one batch with versions and restore) over a port each space injects for scope, policy and persistence.",
-      "exportSubpaths": [
-        ".",
-        "./contracts"
-      ],
-      "repositoryDirectory": "packages/files"
-    },
-    {
-      "domain": "foundations",
       "directory": "packages/path-rules",
       "name": "@velaros-ai/path-rules",
       "version": "0.1.0",
@@ -179,30 +167,6 @@
         "./contracts"
       ],
       "repositoryDirectory": "packages/path-rules"
-    },
-    {
-      "domain": "foundations",
-      "directory": "packages/rehearsal-sandbox",
-      "name": "@velaros-ai/rehearsal-sandbox",
-      "version": "0.2.0",
-      "description": "Shared contract and rules for the rehearsal sandbox: mirror, run, diff, apply data shapes, public limits, and the pre-apply check that confirms exactly what will be written back.",
-      "exportSubpaths": [
-        ".",
-        "./contracts"
-      ],
-      "repositoryDirectory": "packages/rehearsal-sandbox"
-    },
-    {
-      "domain": "foundations",
-      "directory": "packages/shell-command",
-      "name": "@velaros-ai/shell-command",
-      "version": "0.1.0",
-      "description": "The shell capability shared by every space: read-only and dangerous classification, long-running detection, concurrency safety, confirmation text, the dangerous-command approval request, and the velar:shell operations (run, listTasks, refreshEnvironment) over a port each space injects.",
-      "exportSubpaths": [
-        ".",
-        "./contracts"
-      ],
-      "repositoryDirectory": "packages/shell-command"
     },
     {
       "domain": "foundations",
@@ -227,6 +191,24 @@
         "./contracts"
       ],
       "repositoryDirectory": "packages/tool-contract"
+    },
+    {
+      "domain": "foundations",
+      "directory": "packages/velar",
+      "name": "@velaros-ai/velar",
+      "version": "0.1.0",
+      "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands) and sandbox (rehearse in a mirror, then apply). One plain directory per unit, one convention for all.",
+      "exportSubpaths": [
+        "./files",
+        "./files/contracts",
+        "./images",
+        "./images/contracts",
+        "./sandbox",
+        "./sandbox/contracts",
+        "./shell",
+        "./shell/contracts"
+      ],
+      "repositoryDirectory": "packages/velar"
     },
     {
       "domain": "html-artifacts",

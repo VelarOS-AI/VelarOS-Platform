@@ -5,12 +5,7 @@ import { dirname, join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
-
-import { ProjectToolNames } from '../src/contract/constants'
-import type { ProjectToolContext } from '../src/contract/requires'
 import { NodeCommandProvider } from '../src/impl/kernel/NodeCommandProvider'
-import { projectTools } from '../src/impl/ProjectTools'
 import { createProjectKernel, type ProjectKernel } from '../src/index'
 import type { CommandRunResult } from '../src/types/provider'
 
@@ -115,20 +110,11 @@ for (const engine of engines) {
   })
 }
 
-test('project:list 显式子目录不列出被根 .gitignore 忽略的构建产物', async () => {
+test('列子目录时不列出被根 .gitignore 忽略的构建产物', async () => {
   execFileSync('git', ['init', '-q'], { cwd: root })
-  const context = {
-    abortSignal: new AbortController().signal,
-    project: {
-      getRootPath: () => root,
-      kernel: async () => createProjectKernel({ root }),
-    },
-    approval: defaultDenyApprovalPort,
-  } as unknown as ProjectToolContext
-  const result = await projectTools[ProjectToolNames.list].execute({ path: 'pkg', depth: 'all' }, context) as {
-    entries: Array<{ path: string }>
-  }
+  const kernel = await createProjectKernel({ root })
+  const entries = await kernel.listFiles({ path: 'pkg', recursive: true, maxDepth: 10 })
 
-  expect(result.entries.map((entry) => entry.path)).not.toContain('pkg/dist/x.js')
-  expect(result.entries.map((entry) => entry.path)).toContain('pkg/src/y.ts')
+  expect(entries.map((entry) => entry.path)).not.toContain('pkg/dist/x.js')
+  expect(entries.map((entry) => entry.path)).toContain('pkg/src/y.ts')
 })

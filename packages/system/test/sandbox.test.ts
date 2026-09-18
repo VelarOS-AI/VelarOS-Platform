@@ -7,7 +7,7 @@ import { describe, expect, test } from 'bun:test'
 
 import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import { createCapabilityPort } from '@velaros-ai/code-surface'
-import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
+import { RehearsalSandboxLimits } from '@velaros-ai/velar/sandbox/contracts'
 
 import type { LocalSystemKernelApi } from '../src/index'
 import { createLocalSystemKernel, createSystemSpace } from '../src/index'

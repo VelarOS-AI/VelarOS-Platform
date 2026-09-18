@@ -3,6 +3,8 @@ import type * as ts from 'typescript'
 import type { TextEncoding } from '@velaros-ai/text-files/contracts'
 
 import type { EditIntent } from './edit.js'
+import type { ProjectVisibleCoverage } from './file-refs.js'
+import type { ProjectRecodeEncoding, ProjectRecodeNewline, ProjectRecodeReceipt, ProjectStepSource } from './files.js'
 
 export type TextMismatchCause =
   | 'line_ending'
@@ -137,14 +139,8 @@ export interface FileIdentity {
 
 export interface SourceSelection { identity: FileIdentity; view: ProjectEditView }
 
-/** 回执只报告模型可读的格式名；转换本身由事务字节计划按目标编码重写。 */
-export interface ProjectRecodeReceipt {
-  converted: Array<{ path: string; from: string; to: string }>
-  unchanged: string[]
-}
-
 /**
- * project:edit 的 apply 编译到一半的计划：每个路径在计划里的未来身份、引用绑定到的身份，以及已经排好的事务操作。
+ * `velar:project` 的 edit 编译到一半的计划：每个路径在计划里的未来身份、引用绑定到的身份，以及已经排好的事务操作。
  * 只在一次编译里用，由 utils/editing/file-planner.ts 的函数推进；不读写磁盘，读取都经过 resolver。
  */
 export interface ProjectFilePlanState {
@@ -162,31 +158,12 @@ export interface ProjectFilePlanState {
   readonly recode: ProjectRecodeReceipt
 }
 
-/** 行号或连续闭区间；坐标总是指向 resolver 提供的那份不可变原文。 */
-export type ProjectLineRange = number | readonly [number] | readonly [number, number]
-
-export interface ProjectVisibleCoverage {
-  startOffset: number
-  endOffset: number
-  startLine: number
-  endLine: number
-  completeLines: boolean
-}
-
 export interface ProjectEditView {
   path: string
   revision: string
   content: string
   coverage: readonly ProjectVisibleCoverage[]
 }
-
-export type ProjectContentEdit =
-  | { op: 'replace'; range?: ProjectLineRange; match?: string; text: string }
-  | { op: 'insert'; range?: ProjectLineRange; match?: string; side: 'before' | 'after'; text: string }
-  | { op: 'insert'; at: 'start' | 'end'; text: string }
-
-export type ProjectRecodeEncoding = 'utf-8' | 'utf-16le' | 'utf-16be' | 'gb18030'
-export type ProjectRecodeNewline = 'lf' | 'crlf'
 
 /** 批量改写磁盘编码、BOM 与物理换行；Unicode 正文不变，按路径而非 fileRef 指定。 */
 export interface ProjectRecodeAction {
@@ -197,28 +174,13 @@ export interface ProjectRecodeAction {
   newline?: ProjectRecodeNewline
 }
 
-/** sourceRef 跟随文件身份穿过此前的计划步骤；path 只指本计划新建的文件。 */
-export type ProjectPlanSource = { fileRef: string } | { sourceRef: string } | { path: string }
+/** 规划器内部的文件动作：模型的步骤按 op 改写，sourceRef 跟随文件身份穿过此前的步骤，path 只指本计划新建的文件。 */
 export type ProjectPlanFileAction =
   | { op: 'create'; path: string; text: string }
-  | ({ op: 'overwrite'; text: string } & ProjectPlanSource)
-  | ({ op: 'move'; to: string } & ProjectPlanSource)
-  | ({ op: 'delete' } & ProjectPlanSource)
+  | ({ op: 'overwrite'; text: string } & ProjectStepSource)
+  | ({ op: 'move'; to: string } & ProjectStepSource)
+  | ({ op: 'delete' } & ProjectStepSource)
   | ProjectRecodeAction
-
-/** 一次 apply 计划里的一步：一步一个目标。五个文件动作各自指一个文件，edit 是一个文件加它的几处编辑。 */
-export type ProjectEditStep =
-  | { action: 'create'; path: string; text: string }
-  | ({ action: 'overwrite'; text: string } & ProjectPlanSource)
-  | ({ action: 'move'; to: string } & ProjectPlanSource)
-  | ({ action: 'delete' } & ProjectPlanSource)
-  | (Omit<ProjectRecodeAction, 'op'> & { action: 'recode' })
-  | ({ action: 'edit'; edits: readonly ProjectContentEdit[] } & ProjectPlanSource)
-
-export interface ProjectEditApplyInput {
-  action: 'apply'
-  steps: readonly ProjectEditStep[]
-}
 
 /** readPath 观察目标路径存不存在，路径不存在时也返回一个 revision。 */
 export interface ProjectPlannerPath {

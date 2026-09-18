@@ -1,22 +1,21 @@
 /**
- * 代码查询的主体：把 project:code 与 project:code-analysis 的动作翻译成宿主的代码查询（语言服务、图后端），把符号换成可复用的 symbolRef，结果装进带来源与覆盖范围的信封。
+ * 代码查询的主体：把 `velar:code` 的每个 intent 翻译成宿主的代码查询（语言服务、图后端），结果装进带来源与覆盖范围的信封。
+ * 查到的符号每个都附一份 `{ path, symbol, container }`：那就是下一次查询能直接传回来的目标，不另发句柄——结果落在程序的变量里，程序自己拿着就行。
  */
 
 import { relative, resolve } from 'node:path'
 
-import { isArray, isEmpty, isNumber, isPlainObject, isString, isTrue, numberOrNull, optionalWhen, toOptional } from '@velaros-ai/core'
+import { isArray, isEmpty, isNumber, isPlainObject, isString, isTrue, isUndefined, numberOrNull, optionalWhen, toOptional } from '@velaros-ai/core'
 
 import { ProjectCodeLimits } from '../../contract/constants.js'
-import type { ProjectToolContext } from '../../contract/requires.js'
+import type { ProjectCallContext } from '../../contract/requires.js'
 import type { ProjectSymbol } from '../../types/adapter.js'
 import type { CodeSymbolTarget, RecordValue } from '../../types/agent.js'
+import type { CodeAnalysisInput, CodeQueryInput, CodeResult, CodeResultCoverage, CodeResultSource, CodeTarget } from '../../types/code.js'
 import type { ProjectCodeQuery, ProjectCodeScope } from '../../types/project.js'
-import type { ProjectCodeAnalysisInput, ProjectCodeInput, ProjectCodeTarget } from '../../types/tools.js'
 import { ProjectError } from '../errors.js'
 import { ProjectTuning } from '../tuning.js'
 
-import { readProjectSource } from './project-files.js'
-import { resolveCodeSymbolReference, sameCodePath, saveCodeSymbolReference } from './symbol-references.js'
 
 /** 把宿主返回的值当成普通对象用：本来就是普通对象原样返回，否则包成 { result }。 */
 function record(value: unknown): RecordValue {
@@ -26,6 +25,15 @@ function record(value: unknown): RecordValue {
 /** 取数组里的普通对象条目；不是数组时返回空数组。 */
 function rows(value: unknown): RecordValue[] {
   return isArray(value) ? value.filter((entry) => isPlainObject(entry)) : []
+}
+
+/** 宿主报的「这次结果出自哪个后端」：每条要有 backend，服务说明原样带着；认不出的条目丢掉。 */
+function resultSources(value: unknown): CodeResultSource[] {
+  return rows(value).filter((item) => isString(item.backend)).map((item) => {
+    const source: CodeResultSource = { backend: String(item.backend) }
+    if (!isUndefined(item.services)) source.services = item.services
+    return source
+  })
 }
 
 /** 取代码图谱结果里的条目（results、symbols 或 nodes）；编译器后端给的 0 起算位置换成 1 起算的 line、column。 */
@@ -60,7 +68,7 @@ function boundRelations(result: RecordValue, limit: number): RecordValue {
   return { ...bounded, truncated }
 }
 
-/** 从 project:code 的入参里取出交给语言服务的公共范围：语言、条数上限、扩展名与目录深度。 */
+/** 从 query 的入参里取出交给语言服务的公共范围：语言、条数上限、扩展名与目录深度。 */
 function scope(input: ProjectCodeScope): ProjectCodeScope {
   return { language: input.language, limit: input.limit, extensions: input.extensions, maxDepth: input.maxDepth }
 }
@@ -68,7 +76,7 @@ function scope(input: ProjectCodeScope): ProjectCodeScope {
 /** 代码能力目录：关系查询后端没启用时随降级回执一起给出，只列模型自己调得到的 intent。 */
 export const ProjectCodeCapabilityCatalogue = Object.freeze({
   intents: ['outline', 'definition', 'references', 'callers', 'callees', 'imports', 'importers', 'impact', 'diagnostics'],
-  extensions: [{ tool: 'project:code-analysis', intents: ['trace', 'cycles', 'deadcode', 'routing'], note: '宿主有代码图后端时才有' }],
+  extensions: [{ operation: 'analyze', intents: ['trace', 'cycles', 'deadcode', 'routing'], note: '宿主有代码图后端时才有' }],
 })
 
 /** 这个错误是不是「后端没启用」：code 为 UNAVAILABLE 或 reason 为 NOT_SUPPORTED；是的话调用方降级说明，不当成查询失败。 */
@@ -78,48 +86,49 @@ function unavailable(error: unknown): boolean {
 }
 
 /** 把宿主结果装进回执信封：标出 intent、来源后端、覆盖范围（路径、语言、扫描文件数、是否截断、条数上限、版本）和降级说明，extra 覆盖在最后。 */
-function envelope(input: { intent: string; path?: string; language?: string; limit?: number }, raw: unknown, extra: RecordValue = {}) {
+function envelope(input: { intent: string; path?: string; language?: string; limit?: number }, raw: unknown, extra: RecordValue = {}): CodeResult {
   const result = record(raw)
   const degradation = [result.degraded, result.note].filter((value): value is string => isString(value) && value.length > 0)
+  const backend = isString(result.source) ? result.source : 'host'
+  const coverage: CodeResultCoverage = {
+    path: input.path ?? '.',
+    language: input.language,
+    scannedFiles: result.scannedFiles,
+    truncated: isTrue(result.truncated),
+    limit: input.limit ?? ProjectCodeLimits.resultsDefault,
+    // 结果是不是绑在一个确定版本上：绑了才敢当依据，没绑就只是当前这一眼看到的位置。
+    versioned: isString(result.revision),
+    revisions: isString(result.revision) ? [{ revision: result.revision, scope: backend }] : [],
+    ...(record(result.coverage ?? {}) as Partial<CodeResultCoverage>),
+  }
   return {
     ...result,
     intent: input.intent,
-    sources: result.sources ?? [{ backend: result.source ?? 'host', services: result.services }],
-    coverage: {
-      path: input.path ?? '.',
-      language: input.language,
-      scannedFiles: result.scannedFiles,
-      truncated: isTrue(result.truncated),
-      limit: input.limit ?? ProjectCodeLimits.resultsDefault,
-      // 结果是不是绑在一个确定版本上：绑了才敢当依据，没绑就只是当前这一眼看到的位置。
-      versioned: !!result.revision,
-      revisions: result.revision ? [{ revision: result.revision, scope: result.source ?? 'host' }] : [],
-      ...record(result.coverage ?? {}),
-    },
+    sources: isArray(result.sources) ? resultSources(result.sources) : [{ backend, services: result.services }],
+    coverage,
     degraded: degradation,
     ...extra,
   }
 }
 
 /** 把一条代码查询交给宿主的 queryCode，先核对这次调用没被取消；结果按普通对象返回。 */
-async function query(input: ProjectCodeQuery, context: ProjectToolContext) {
+async function query(input: ProjectCodeQuery, context: ProjectCallContext) {
   context.abortSignal.throwIfAborted()
   return record(await context.project.queryCode(input, context))
 }
 
-/** 给每个带路径和名字的符号签发 symbolRef，并附上 {path, symbol, container} 形式的 target；后端的节点 id 收进引用，不直接交给模型。 */
-async function symbolRows(values: RecordValue[], context: ProjectToolContext) {
-  return Promise.all(values.map(async (value) => {
-    const { id, nodeId, ...item } = value
+/** 给每个带路径和名字的符号附上 `{ path, symbol, container }`：下一次查询把它原样当 target 传回来就行。后端自己的节点 id 不交出去。 */
+function symbolRows(values: RecordValue[]): RecordValue[] {
+  return values.map((value) => {
+    const { id: _id, nodeId: _nodeId, ...item } = value
     if (!isString(item.path) || !isString(item.name)) return item
-    const symbolRef = await saveCodeSymbolReference({
-      path: item.path, symbol: item.name,
-      container: optionalWhen(isString, item.container),
-      line: toOptional(numberOrNull(item.line)),
-      nodeId: isString(nodeId) ? nodeId : optionalWhen(isString, id),
-    }, context)
-    return { ...item, symbolRef: symbolRef || item.symbolRef, target: { path: item.path, symbol: item.name, container: optionalWhen(Boolean(item.container), item.container) } }
-  }))
+    return { ...item, target: { path: item.path, symbol: item.name, container: optionalWhen(Boolean(item.container), item.container) } }
+  })
+}
+
+/** 两个路径（相对 root 或绝对）是不是同一个文件。 */
+function sameCodePath(root: string, left: string, right: string): boolean {
+  return resolve(root, left) === resolve(root, right)
 }
 
 /** 候选里恰好一个就用它；多个报 AMBIGUOUS_TARGET，一个没有报 TARGET_NOT_FOUND。 */
@@ -127,19 +136,19 @@ function choose<T>(candidates: T[], target: CodeSymbolTarget): T {
   if (candidates.length === 1) return candidates[0]!
   throw new ProjectError(!isEmpty(candidates) ? 'AMBIGUOUS_TARGET' : 'TARGET_NOT_FOUND',
     !isEmpty(candidates) ? '同名符号仍有多个声明。' : '当前项目中未找到目标符号。',
-    { target, candidates }, '先用 intent=definition 只给 {symbol} 看候选，挑一个的 symbolRef 再查；必要时指定 container。')
+    { target, candidates }, '先用 intent=definition 只给 {symbol} 看候选，挑一个的 target 再查；必要时指定 container。')
 }
 
-/** 目标只给了名字（没有 symbolRef、也没有 path）时返回这个名字，否则返回 undefined。 */
-function nameOnlyTarget(target: ProjectCodeTarget): Optional<{ symbol: string; container?: string }> {
-  return 'symbolRef' in target || isString(target.path) ? undefined : target
+/** 目标只给了名字（没有 path）时返回这个名字，否则返回 undefined。 */
+function nameOnlyTarget(target: CodeTarget): Optional<{ symbol: string; container?: string }> {
+  return isString(target.path) ? undefined : target
 }
 
 /** 按名字在整个项目里找这个符号的声明：名字精确匹配，给了 container 再按 container 收窄。 */
 async function declarationsByName(
   scopeInput: ProjectCodeScope,
   target: { symbol: string; container?: string },
-  context: ProjectToolContext,
+  context: ProjectCallContext,
 ) {
   const result = await query({ action: 'find_symbols', ...scope(scopeInput), query: target.symbol, exact: true }, context)
   const items = rows(result.symbols).filter((item) =>
@@ -149,20 +158,19 @@ async function declarationsByName(
 
 /** 按名字找到的结果只是候选，回执里照实说。 */
 function nameMatchNote(symbol: string): string {
-  return `这些是按名字在整个项目里找到的 ${symbol} 声明候选，不是绑定证明；挑一个的 symbolRef 再查一次。`
+  return `这些是按名字在整个项目里找到的 ${symbol} 声明候选，不是绑定证明；挑一个的 target 再查一次。`
 }
 
 /**
- * 把 target 定到一个符号：symbolRef 与带 path 的写法直接还原；只给名字时按名字找声明，
+ * 把 target 定到一个符号：带 path 的原样用；只给名字时按名字找声明，
  * 恰好一处才定得下来，多处报 AMBIGUOUS_TARGET 并带上候选，一处没有报 TARGET_NOT_FOUND。
  */
 async function resolveCodeTarget(
-  target: ProjectCodeTarget,
+  target: CodeTarget,
   scopeInput: ProjectCodeScope,
-  context: ProjectToolContext,
+  context: ProjectCallContext,
 ): Promise<CodeSymbolTarget> {
-  if ('symbolRef' in target) return resolveCodeSymbolReference(target, context)
-  if (isString(target.path)) return resolveCodeSymbolReference({ ...target, path: target.path }, context)
+  if (isString(target.path)) return { ...target, path: target.path }
   const named = target
   const { items } = await declarationsByName(scopeInput, named, context)
   const found = choose(items.map((item) => ({
@@ -174,7 +182,7 @@ async function resolveCodeTarget(
 }
 
 /** 在目标文件的符号表里找到目标符号的声明（按名字、容器，有行号时优先同一行的那个）；找不到或不唯一时抛错。 */
-async function locate(target: CodeSymbolTarget, context: ProjectToolContext): Promise<ProjectSymbol> {
+async function locate(target: CodeSymbolTarget, context: ProjectCallContext): Promise<ProjectSymbol> {
   const kernel = await context.project.kernel()
   const symbols = (await kernel.listSymbols(target.path)).filter((item) =>
     item.name === target.symbol && (!target.container || item.container === target.container))
@@ -184,7 +192,7 @@ async function locate(target: CodeSymbolTarget, context: ProjectToolContext): Pr
 }
 
 /** 把已经定好的目标符号换成代码图谱里的节点：按名字搜候选，再按路径、容器、行号收窄到唯一一个；找不到或不唯一时抛错。 */
-async function graphTarget(target: CodeSymbolTarget, context: ProjectToolContext): Promise<CodeSymbolTarget & { nodeId: string }> {
+async function graphTarget(target: CodeSymbolTarget, context: ProjectCallContext): Promise<CodeSymbolTarget & { nodeId: string }> {
   const result = await query({ action: 'search_symbols', query: target.symbol, limit: ProjectTuning.codeQuery.graphCandidates }, context)
   const matches = graphRows(result).filter((item) =>
     item.name === target.symbol && isString(item.path) && sameCodePath(context.project.getRootPath(), item.path, target.path) &&
@@ -194,27 +202,28 @@ async function graphTarget(target: CodeSymbolTarget, context: ProjectToolContext
   return { ...target, nodeId: String(node.id ?? node.nodeId) }
 }
 
-/** outline：列出这个文件（或目录）里的符号，每个带可复用的 symbolRef。 */
-async function outline(input: Extract<ProjectCodeInput, { intent: 'outline' }>, context: ProjectToolContext) {
+/** outline：列出这个文件（或目录）里的符号，每个带可以直接当 target 传回来的 `{ path, symbol }`。 */
+async function outline(input: Extract<CodeQueryInput, { intent: 'outline' }>, context: ProjectCallContext) {
   const result = await query({ action: 'find_symbols', ...scope(input), path: input.path }, context)
-  return envelope(input, result, { symbols: await symbolRows(rows(result.symbols), context) })
+  return envelope(input, result, { symbols: symbolRows(rows(result.symbols)) })
 }
 
 /**
- * definition：给出这个符号的声明、body 范围和当前源码（中途文件变了就报版本冲突）。
+ * definition：给出这个符号的声明位置与 body 范围。正文不在这里给——模型手上有 `velar:project` 的 read，
+ * 要看那几行自己去读，省得同一段源码在两条路上各截一次。
  * 只给名字时按名字在整个项目里找：恰好一处就直接给详情，多处回候选列表；
  * 给了 path 但那个文件里没有这个声明时，同样退一步按名字找候选，回执说明这是候选不是定论。
  */
-async function definition(input: Extract<ProjectCodeInput, { intent: 'definition' }>, context: ProjectToolContext) {
+async function definition(input: Extract<CodeQueryInput, { intent: 'definition' }>, context: ProjectCallContext) {
   const named = nameOnlyTarget(input.target)
   if (named) {
     const { result, items } = await declarationsByName(input, named, context)
     if (isEmpty(items))
       throw new ProjectError('TARGET_NOT_FOUND', `整个项目里没有名叫 ${named.symbol} 的符号声明。`, { target: named },
-        '用 project:search 按文本找到它出现的地方，再对那个文件用 intent=outline。')
+        '用 `velar:project` 的 search 按文本找到它出现的地方，再对那个文件用 intent=outline。')
     // 多处同名：把候选连同各自的路径、种类一起给出去，让模型挑，而不是替它猜一个。
     if (items.length > 1)
-      return envelope(input, result, { symbols: await symbolRows(items, context), degraded: [nameMatchNote(named.symbol)] })
+      return envelope(input, result, { symbols: symbolRows(items), degraded: [nameMatchNote(named.symbol)] })
   }
   const target = await resolveCodeTarget(input.target, input, context)
   const before = await (await context.project.kernel()).read({ path: target.path, maxChars: 1 })
@@ -226,19 +235,16 @@ async function definition(input: Extract<ProjectCodeInput, { intent: 'definition
     // 模型常把「看到它的文件」当成「声明它的文件」：按名字在整个项目里找一遍，给候选而不是空手回去。
     const { result, items } = await declarationsByName(input, target, context)
     if (isEmpty(items)) throw error
-    return envelope(input, result, { symbols: await symbolRows(items, context),
+    return envelope(input, result, { symbols: symbolRows(items),
       degraded: [`${target.path} 里没有 ${target.symbol} 的声明。${nameMatchNote(target.symbol)}`] })
   }
   const detail = symbol as ProjectSymbol & { bodyRange?: ProjectSymbol['range']; statementRange?: ProjectSymbol['range'] }
-  const source = await readProjectSource({ files: [{ path: symbol.path, range: [symbol.range.startLine, symbol.range.endLine] }], maxChars: ProjectTuning.codeQuery.symbolSourceChars }, context)
-  if (source.files.some((file) => file.revision !== before.snapshot.revision))
-    throw new ProjectError('BASE_REVISION_MISMATCH', '符号解析期间文件发生变化，声明范围与源码不属于同一版本。', { path: target.path }, '重新查询该符号的 definition。')
-  return envelope(input, { source: symbol.adapterId, symbols: await symbolRows([{ ...symbol, line: symbol.range.startLine }], context) }, {
+  return envelope(input, { source: symbol.adapterId, symbols: symbolRows([{ ...symbol, line: symbol.range.startLine }]) }, {
     declaration: symbol.range,
     body: detail.bodyRange,
     statement: detail.statementRange,
-    source,
-    coverage: { path: symbol.path, versioned: true, range: symbol.range, truncated: source.files.some((file) => file.hasMore) },
+    // 声明位置绑在解析时看到的那个版本上：文件在这之后被改过，行号就只是候选了。
+    coverage: { path: symbol.path, versioned: true, range: symbol.range, revision: before.snapshot.revision },
   })
 }
 
@@ -246,7 +252,7 @@ async function definition(input: Extract<ProjectCodeInput, { intent: 'definition
  * callers / callees：从目标符号所在的图节点往一个方向展开调用关系并封顶；
  * 关系后端没启用时返回空关系加降级说明与能力目录，不拿文本命中冒充调用关系。
  */
-async function calls(input: Extract<ProjectCodeInput, { intent: 'callers' | 'callees' }>, context: ProjectToolContext) {
+async function calls(input: Extract<CodeQueryInput, { intent: 'callers' | 'callees' }>, context: ProjectCallContext) {
   // 层数在这里补：schema 的根是一个平对象，字段级 default 会落到所有 intent 上，那样反倒说不清哪个 intent 收哪些字段。
   const depth = ProjectCodeLimits.relationDepthDefault
   try {
@@ -260,7 +266,7 @@ async function calls(input: Extract<ProjectCodeInput, { intent: 'callers' | 'cal
 }
 
 /** imports / importers：一个文件引了谁、谁引了它；是文件时再补一份编译器给的模块邻接。 */
-async function dependencies(input: Extract<ProjectCodeInput, { intent: 'imports' | 'importers' }>, context: ProjectToolContext) {
+async function dependencies(input: Extract<CodeQueryInput, { intent: 'imports' | 'importers' }>, context: ProjectCallContext) {
   const result = await query(input.intent === 'imports'
     ? { action: 'find_imports', ...scope(input), path: input.path }
     : { action: 'find_importers', ...scope(input), targetPath: input.path }, context)
@@ -275,7 +281,7 @@ async function dependencies(input: Extract<ProjectCodeInput, { intent: 'imports'
 }
 
 /** 代码查询：九个 intent，路径一律相对项目根。结果统一装进带来源与覆盖范围的信封。 */
-export async function queryProjectCode(input: ProjectCodeInput, context: ProjectToolContext): Promise<RecordValue> {
+export async function queryProjectCode(input: CodeQueryInput, context: ProjectCallContext): Promise<CodeResult> {
   context.abortSignal.throwIfAborted()
   switch (input.intent) {
     case 'outline': return outline(input, context)
@@ -304,8 +310,9 @@ export async function queryProjectCode(input: ProjectCodeInput, context: Project
 }
 
 /** 代码图分析：trace、cycles、deadcode、routing，交给宿主的图后端，结果装进同样的信封。 */
-export async function analyzeProjectCode(input: ProjectCodeAnalysisInput, context: ProjectToolContext) {
+export async function analyzeProjectCode(input: CodeAnalysisInput, context: ProjectCallContext): Promise<CodeResult> {
   let request: ProjectCodeQuery
+  // 四个 intent 的分支穷尽了联合类型，switch 之后 request 一定有值。
   switch (input.intent) {
     case 'trace': {
       const from = await graphTarget(await resolveCodeTarget(input.from, {}, context), context)

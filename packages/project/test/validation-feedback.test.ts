@@ -16,8 +16,8 @@ test('failed candidate syntax shows both sides of the edit boundary in candidate
   expect(window.lines).toContainEqual([2, '  search() { return [] },'])
   expect(window.lines).toContainEqual([3, '  },'])
   expect(window.lines).toContainEqual([4, '  resolveTarget() { return 1 },'])
-  expect(failure.suggestedNextAction).toContain('原文 range')
-  expect(failure.suggestedNextAction).toContain('reuse + changes')
+  expect(failure.suggestedNextAction).toContain('不能直接当原文的 range 用')
+  expect(failure.suggestedNextAction).not.toContain('reuse')
   // Candidate source lives only in the transient recovery envelope, never in current file views.
   expect(JSON.stringify(failure.details.diagnostics)).not.toContain('search()')
   expect(failure.details.diagnostics[0].data.coordinateSpace).toBe('candidate')

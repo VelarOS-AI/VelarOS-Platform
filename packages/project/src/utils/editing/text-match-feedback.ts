@@ -393,7 +393,7 @@ export function textMatchMissNextAction(diagnosis: TextMatchMissDiagnosis): stri
   const target = mismatch
     ? `把 oldText 第 ${mismatch.oldTextLine} 行改成文件原文`
     : '按文件原文修正 oldText'
-  return `用 project:read 读取第 ${fromLine}–${focusLine + 3} 行，${target}后重试；也可缩短 oldText，只保留能唯一定位的 3–5 行。`
+  return `先 read 第 ${fromLine}–${focusLine + 3} 行，${target}后重试；也可以缩短要找的原文，只留能唯一定位的 3–5 行。`
 }
 
 /**

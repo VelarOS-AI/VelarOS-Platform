@@ -4,56 +4,9 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
-import { AppError } from '@velaros-ai/core/error'
-import type {
-  KernelModuleActivateContext,
-} from '@velaros-ai/kernel'
-import type {
-  CapabilityToken,
-} from '@velaros-ai/kernel/contracts'
-
-import type { ProjectToolContext } from '../src/contract/requires'
-import {
-  createProjectKernel,
-  createProjectKernelModule,
-  ProjectCapability,
-  type ProjectCapabilityService,
-} from '../src/index'
+import { createProjectKernel } from '../src/index'
 
 import { ProjectEditOperationSchema } from './support/edit-intent-schema'
-
-function captureService(
-  capture: (tokenId: string, service: object) => void,
-): KernelModuleActivateContext {
-  return {
-    registerService<TService extends object>(
-      token: CapabilityToken<TService>,
-      service: TService,
-    ) {
-      capture(token.id, service)
-      return { dispose() {} }
-    },
-  } as unknown as KernelModuleActivateContext
-}
-
-function projectContext(root: string, signal: AbortSignal): ProjectToolContext {
-  return {
-    abortSignal: signal,
-    project: {
-      getRootPath: () => root,
-      kernel: async () => createProjectKernel({ root }),
-      prepareMutation: async () => ({
-        approved: true,
-        message: 'approved',
-        authorizationScope: 'project',
-      }),
-      runCommand: async () => ({}) as never,
-      queryCode: async () => ({}),
-    },
-    approval: defaultDenyApprovalPort,
-  }
-}
 
 describe('Project stability contracts', () => {
   test('serializes duplicate apply commands for the same transaction', async () => {
@@ -224,47 +177,6 @@ describe('Project stability contracts', () => {
       await project.applyEdit({ transactionId: transaction.transactionId })
       expect(project.getTransaction(transaction.transactionId)?.status).toBe('applied')
       expect(await readFile(file, 'utf8')).toBe('after\namended\n')
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  test('projects a stable Project error envelope through the Kernel capability', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-project-kernel-error-'))
-    try {
-      let service: ProjectCapabilityService | undefined
-      const module = createProjectKernelModule({
-        resolveContext: (_scope, signal) => projectContext(root, signal),
-      })
-      await module.activate(captureService((tokenId, registered) => {
-        expect(tokenId).toBe(ProjectCapability.id)
-        service = registered as ProjectCapabilityService
-      }))
-
-      let failure: unknown
-      try {
-        await service?.invoke(
-          'project:edit',
-          undefined,
-          {
-            operations: [{
-              operation: {
-                type: 'remove_import',
-                path: 'src/a.ts',
-              },
-            }],
-          },
-          new AbortController().signal,
-        )
-      } catch (error) {
-        failure = error
-      }
-
-      // 线上入参不合法是内核边界的校验失败：和 system、office 一样报 VALIDATION，带出字段路径；项目领域错误（执行里抛的 ProjectError）才翻成带 projectError 的 AppError。
-      expect(failure).toBeInstanceOf(AppError)
-      expect(failure).toMatchObject({ code: 'VALIDATION' })
-      expect((failure as Error).message).toContain('项目能力的入参不合法')
-      expect((failure as Error).message).toContain('operations')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

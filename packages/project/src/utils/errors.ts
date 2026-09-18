@@ -19,11 +19,11 @@ export const RevisionMismatchSuggestedNextAction = '文件在读取后已被修�
 
 /** 命中 policy.generatedFiles 时的下一步：改生成器的输入再重新生成，而不是手改产物。 */
 export const GeneratedFileSuggestedNextAction =
-  '该路径匹配项目策略 generatedFiles：修改生成器的输入或配置，再用 project:run 执行生成命令；确需手工维护，请调整项目策略。'
+  '这个路径是生成的文件（项目策略 generatedFiles）：改生成器的输入或配置，再用命令跑生成（`velar:shell` 的 run）；确实要手工维护，就请用户调整项目策略。'
 
-/** 命中缺省写策略里的 `.git` 时的下一步：版本库内部不许写，要动版本库走 project:run。 */
+/** 命中缺省写策略里的 `.git` 时的下一步：版本库内部不许写，要动版本库就跑 git 命令。 */
 export const GitInternalWriteSuggestedNextAction =
-  '`.git` 是版本库自己的目录：改里面的 hooks 或 config 会让内核后续的 git 调用执行写进去的命令，所以缺省写策略一律不许写。要提交、切分支、改仓库配置，用 project:run 跑 git 命令。'
+  '`.git` 是版本库自己的目录：改里面的 hooks 或 config 会让内核后续的 git 调用执行写进去的命令，所以缺省写策略一律不许写。要提交、切分支、改仓库配置，用命令跑 git（`velar:shell` 的 run）。'
 
 /** 项目空间的领域错误：reason 是合同里的错误原因，details 是结构化详情，suggestedNextAction 是给模型的下一步。 */
 export class ProjectError extends Error {

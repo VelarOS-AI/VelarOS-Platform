@@ -13,7 +13,7 @@ import { describe, expect, test } from 'bun:test'
 import { createProjectKernel, type EditIntent, type ProjectKernel } from '../src/index'
 import type { CorePolicy } from '../src/types/policy'
 import type { FileFilterInput } from '../src/types/provider'
-import { resolveSourceInsideProject } from '../src/utils/agent/sandbox'
+import { insideProject } from '../src/utils/agent/ports'
 
 /** 盘区不区分大小写（macOS、Windows）：`.ENV` 和 `.env` 是同一个文件。 */
 const caseInsensitiveVolume = platform === 'darwin' || platform === 'win32'
@@ -149,12 +149,11 @@ describe('演练沙箱的源目录', () => {
       await withRoot(
         { 'src/a.ts': 'export const a = 1\n' },
         async (root) => {
-          await expect(resolveSourceInsideProject(root, 'link')).rejects.toMatchObject({
-            reason: 'PERMISSION_DENIED',
-          })
+          // 端口这一层说的是能力那边认的码：项目内的链接指到项目外，一律 PERMISSION。
+          await expect(insideProject(root, 'link', '沙箱的源目录')).rejects.toMatchObject({ code: 'PERMISSION' })
           // 项目之内的目录（含经链接指到项目内的）照常接受。
-          expect(await resolveSourceInsideProject(root, 'src')).toBe(join(root, 'src'))
-          expect(await resolveSourceInsideProject(root, 'inside')).toBe(join(root, 'inside'))
+          expect((await insideProject(root, 'src', '沙箱的源目录')).resolved).toBe(join(root, 'src'))
+          expect((await insideProject(root, 'inside', '沙箱的源目录')).resolved).toBe(join(root, 'inside'))
         },
         { link: outside, inside: 'src' },
       )
@@ -165,7 +164,7 @@ describe('演练沙箱的源目录', () => {
 })
 
 describe('版本库内部缺省不许写', () => {
-  test('改 .git 里的配置与钩子一律被拒，并说清楚该走 project:run', async () => {
+  test('改 .git 里的配置与钩子一律被拒，并说清楚该用命令跑 git（velar:shell 的 run）', async () => {
     await withRoot({ '.git/config': '[core]\n', 'pkg/.git/config': '[core]\n' }, async (root) => {
       const project = await createProjectKernel({ root })
       for (const path of ['.git/config', '.git/hooks/pre-commit', 'pkg/.git/config']) {
@@ -174,7 +173,7 @@ describe('版本库内部缺省不许写', () => {
         })
         await expect(project.applyEdit({ transactionId: transaction.transactionId })).rejects.toMatchObject({
           reason: 'PERMISSION_DENIED',
-          suggestedNextAction: expect.stringContaining('project:run'),
+          suggestedNextAction: expect.stringContaining('velar:shell'),
         })
       }
       expect(await readFile(join(root, '.git/config'), 'utf8')).toBe('[core]\n')

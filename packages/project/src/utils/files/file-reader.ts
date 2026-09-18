@@ -5,7 +5,7 @@ import { isEmpty, isUndefined, mapDefined, optionalWhen } from '@velaros-ai/core
 import { textCodec, textFileIo } from '@velaros-ai/text-files'
 import type { TextChunk, TextEncoding } from '@velaros-ai/text-files/contracts'
 
-import type { ByteLimitedContent, LineWindowReadResult, ReadCursor } from '../../types/files.js'
+import type { ByteLimitedContent, LineWindowReadResult, ReadCursor } from '../../types/file-store.js'
 import type { ReadInput, ReadResult } from '../../types/io.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
 import { ProjectError, projectErrorFromTextFile } from '../errors.js'

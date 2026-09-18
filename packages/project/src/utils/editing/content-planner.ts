@@ -1,4 +1,5 @@
-import type { ProjectContentEdit, ProjectEditView, ProjectResolvedMutation } from '../../types/editing.js'
+import type { ProjectEditView, ProjectResolvedMutation } from '../../types/editing.js'
+import type { ProjectContentEdit } from '../../types/files.js'
 import { ProjectError } from '../errors.js'
 
 import { selectProjectMutations } from './select.js'

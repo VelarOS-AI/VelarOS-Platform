@@ -1,6 +1,7 @@
 import { isUndefined } from '@velaros-ai/core'
 
-import type { ProjectContentEdit, ProjectEditView, ProjectRelocatedEdit } from '../../types/editing.js'
+import type { ProjectEditView, ProjectRelocatedEdit } from '../../types/editing.js'
+import type { ProjectContentEdit } from '../../types/files.js'
 
 import { normalizeProjectLineRange } from './line-range.js'
 import { selectProjectMutations } from './select.js'

@@ -1,13 +1,24 @@
+/**
+ * 项目空间里的 `velar:sandbox`：共用的沙箱操作配上项目端口——源目录钳在项目内、落回前先过项目的写授权与修改授权、
+ * 镜像里跑命令的输出过项目的脱敏。宿主的沙箱是假的（记下每次调用），内核是真的（写授权、脱敏都用它）。
+ */
+
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import type { SandboxDiff, SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
+import type { SandboxDiff, SandboxRecord } from '@velaros-ai/velar/sandbox/contracts'
 
-import type { ProjectSandboxPort, ProjectToolContext } from '../src/contract/requires'
-import { projectTools } from '../src/impl/ProjectTools'
+import type { ProjectSandboxPort } from '../src/contract/requires'
+import { createSecretRedactionProvider } from '../src/index'
 
-const root = '/projects/demo'
+import { failureOf, projectSpaceFixture } from './support/space'
+
+let root = ''
+beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-sandbox-')) })
+afterEach(async () => { await rm(root, { recursive: true, force: true }) })
 
 /** 记下每次调用的假沙箱端口：镜像根在临时区，差量固定三列。 */
 function fakePort(calls: Array<Record<string, unknown>>, overrides: Partial<SandboxDiff> = {}): ProjectSandboxPort {
@@ -21,155 +32,140 @@ function fakePort(calls: Array<Record<string, unknown>>, overrides: Partial<Sand
   }
   return {
     createSandbox: async (options) => { calls.push({ create: options }); return { ...record, source: options?.source ?? root, network: !!options?.network, ignored: options?.ignored ?? 'link' } },
-    runInSandbox: async (options) => { calls.push({ run: options }); return { command: options.command, cwd: record.root, exitCode: 0, signal: null, stdout: 'ran', stderr: '', durationMs: 1, timedOut: false, aborted: false, truncated: false, success: true, verification: { kind: 'unknown', status: 'passed', summary: '', exitCode: 0 } } as never },
+    runInSandbox: async (options) => { calls.push({ run: options }); return { command: options.command, cwd: record.root, exitCode: 0, signal: null, stdout: 'ran', stderr: '', durationMs: 1, timedOut: false, aborted: false, truncated: false, success: true } as never },
     diffSandbox: async (options) => { calls.push({ diff: options }); return diff },
     applySandbox: async (options) => { calls.push({ apply: options }); return { sandboxId: options.sandboxId, created: diff.created, modified: diff.modified, deleted: diff.deleted, skippedGit: false } },
     discardSandbox: async (sandboxId) => { calls.push({ discard: sandboxId }); return { sandboxId, removed: true } },
   }
 }
 
-/** 工具上下文：授权与确认按给定方式回答，宿主端口可有可无；内核只提供落回的写治理与命令输出脱敏两件事。 */
-function contextFor(options: { port?: ProjectSandboxPort; approved?: boolean; confirmed?: boolean; blockedPaths?: string[]; redact?: boolean }): ProjectToolContext {
-  const blocked = new Set(options.blockedPaths ?? [])
-  const project: Record<string, unknown> = {
-    getRootPath: () => root,
-    kernel: async () => ({
-      authorizeWrites: async (paths: readonly string[]) =>
-        paths.map((path) => (blocked.has(path) ? { path, allowed: false, reason: 'GENERATED_FILE', message: `${path} 是生成文件` } : { path, allowed: true })),
-      redactText: async ({ content }: { content: string }) => (options.redact ? { content: content.replace(/sk-[a-z0-9-]+/gi, '[REDACTED]'), redacted: true } : { content, redacted: false }),
-    }),
-    prepareMutation: async () => ({ approved: options.approved !== false, message: options.approved === false ? 'fixture rejected' : '已授权' }),
-    runCommand: async () => { throw new Error('not needed') },
-    queryCode: async () => ({}),
-  }
-  if (options.port) project.sandbox = options.port
-  return {
-    abortSignal: new AbortController().signal,
-    toolCallId: 'sandbox-1',
-    project,
-    approval: { awaitConfirmationDecision: async () => ({ approved: options.confirmed !== false, message: 'user said no' }) },
-  } as unknown as ProjectToolContext
-}
+/** 调到了宿主的哪几个动作。 */
+const actions = (calls: Array<Record<string, unknown>>) => calls.map((entry) => Object.keys(entry)[0])
 
-const tool = projectTools['project:sandbox']!
-const call = (input: Record<string, unknown>, context: ProjectToolContext): Promise<unknown> => tool.execute(tool.schema.parse(input), context)
-
-describe('project:sandbox', () => {
-  test('is hidden when the host has no sandbox port, and refuses to run without one', async () => {
-    expect(tool.hideWhenUnavailable).toBe(true)
-    expect(tool.isAvailable?.(contextFor({}))).toBe(false)
-    expect(tool.isAvailable?.(contextFor({ port: fakePort([]) }))).toBe(true)
-    await expect(call({ action: 'create' }, contextFor({}))).rejects.toMatchObject({ reason: 'NOT_SUPPORTED' })
+describe('项目空间的 velar:sandbox', () => {
+  test('宿主没接沙箱时每个操作都明说用不了，并指路改文件、跑脚本的能力', async () => {
+    const { call } = await projectSpaceFixture({ root })
+    for (const [operation, input] of [['create', {}], ['run', { id: 'sb', command: 'ls' }], ['diff', { id: 'sb' }], ['discard', { id: 'sb' }]] as const) {
+      const failure = await failureOf(call('sandbox', operation, input))
+      expect(failure.code, operation).toBe('UNAVAILABLE')
+      expect(failure.message, operation).toContain('velar:project')
+      expect(failure.message, operation).toContain('velar:shell')
+    }
   })
 
-  test('create mirrors the project or a directory inside it, never a path outside', async () => {
+  test('create 只镜像项目或项目里的目录，出了项目就拒', async () => {
     const calls: Array<Record<string, unknown>> = []
-    const context = contextFor({ port: fakePort(calls) })
-    const whole = await call({ action: 'create' }, context) as { source: string; root: string; note: string }
+    const { call } = await projectSpaceFixture({ root, sandbox: fakePort(calls) })
+    const whole = await call('sandbox', 'create')
     expect(whole.source).toBe(root)
-    // 回执里的说明只说下一步；镜像根是模型碰不到的绝对路径，不再抄给它。
-    expect(whole.note).toContain('接下来用 action=run')
-    expect(whole.note).not.toContain(whole.root)
-    const sub = await call({ action: 'create', source: 'packages/app', network: true, ignored: 'copy' }, context) as { source: string; network: boolean; ignored: string }
+    expect(calls[0]).toEqual({ create: { source: root } })
+    const sub = await call('sandbox', 'create', { source: 'packages/app', network: true, ignored: 'copy' })
     expect(sub).toMatchObject({ source: join(root, 'packages', 'app'), network: true, ignored: 'copy' })
-    // 源出了项目（含经符号链接指到项目外）按 PERMISSION_DENIED 拒绝；挂进内核后这个 reason 就是能力错误的码。
-    await expect(call({ action: 'create', source: '../elsewhere' }, context)).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
-    await expect(call({ action: 'create', source: '/etc' }, context)).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
+    // 源出了项目（含经符号链接指到项目外）一律拒，一个镜像都不建。
+    for (const source of ['../elsewhere', '/etc']) {
+      const outside = await failureOf(call('sandbox', 'create', { source }))
+      expect(outside.code, source).toBe('PERMISSION')
+      expect(outside.message, source).toContain('项目之内')
+    }
     // 名字以 .. 开头的目录在项目之内，照常接受。
-    const dotted = await call({ action: 'create', source: '..cache' }, context) as { source: string }
-    expect(dotted.source).toBe(join(root, '..cache'))
-    expect(calls.map((entry) => Object.keys(entry)[0])).toEqual(['create', 'create', 'create'])
+    expect((await call('sandbox', 'create', { source: '..cache' })).source).toBe(join(root, '..cache'))
+    expect(actions(calls)).toEqual(['create', 'create', 'create'])
   })
 
-  test('run needs the sandbox id and a command, hands both to the host, and asks before dangerous commands', async () => {
+  test('run 把沙箱 id 与命令原样交给宿主，回执只留模型面的字段', async () => {
     const calls: Array<Record<string, unknown>> = []
-    const context = contextFor({ port: fakePort(calls), confirmed: false })
-    // 缺字段由 schema 拦，不再等到执行阶段。
-    expect(tool.schema.safeParse({ action: 'run', command: 'ls' }).success).toBe(false)
-    expect(tool.schema.safeParse({ action: 'run', sandboxId: 'sb' }).success).toBe(false)
-    const ran = await call({ action: 'run', sandboxId: 'sb', command: 'bun scripts/migrate.ts', timeoutMs: 1000 }, context) as { stdout: string }
-    expect(ran.stdout).toBe('ran')
-    expect(calls[0]).toEqual({ run: { sandboxId: 'sb', command: 'bun scripts/migrate.ts', timeoutMs: 1000, maxOutputChars: undefined } })
-    const refused = await call({ action: 'run', sandboxId: 'sb', command: 'rm -rf build' }, context) as { skipped: boolean }
-    expect(refused.skipped).toBe(true)
-    expect(calls).toHaveLength(1)
+    const { call } = await projectSpaceFixture({ root, sandbox: fakePort(calls) })
+    const ran = await call('sandbox', 'run', { id: 'sb', command: 'bun scripts/migrate.ts', timeoutMs: 1000 })
+    expect(calls).toEqual([{ run: { sandboxId: 'sb', command: 'bun scripts/migrate.ts', timeoutMs: 1000 } }])
+    expect(ran).toEqual({ id: 'sb', command: 'bun scripts/migrate.ts', exitCode: 0, stdout: 'ran', stderr: '', durationMs: 1, timedOut: false, truncated: false, success: true })
   })
 
-  test('apply asks the project mutation gate and the user before writing back; either refusal writes nothing', async () => {
+  test('镜像里跑危险命令也先问用户，被拒就一个进程都不起', async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const { call, confirmations } = await projectSpaceFixture({ root, sandbox: fakePort(calls), approve: false })
+    const refused = await failureOf(call('sandbox', 'run', { id: 'sb', command: 'rm -rf build' }))
+    expect(refused.code).toBe('PERMISSION')
+    expect(confirmations).toHaveLength(1)
+    expect(calls).toEqual([])
+  })
+
+  test('apply 先过项目的修改授权再问用户；任何一关被拒都抛错，一个文件都不落', async () => {
     const declined: Array<Record<string, unknown>> = []
-    const notAuthorized = await call({ action: 'apply', sandboxId: 'sb' }, contextFor({ port: fakePort(declined), approved: false })) as { skipped: boolean }
-    expect(notAuthorized.skipped).toBe(true)
-    const notConfirmed = await call({ action: 'apply', sandboxId: 'sb' }, contextFor({ port: fakePort(declined), confirmed: false })) as { skipped: boolean; message: string }
-    expect(notConfirmed).toMatchObject({ skipped: true, message: 'user said no' })
-    expect(declined.some((entry) => 'apply' in entry)).toBe(false)
+    const notAuthorized = await projectSpaceFixture({ root, sandbox: fakePort(declined), prepareMutation: async () => ({ approved: false, message: '宿主不许落回' }) })
+    const unauthorized = await failureOf(notAuthorized.call('sandbox', 'apply', { id: 'sb' }))
+    expect(unauthorized).toEqual({ code: 'PERMISSION', message: '宿主不许落回' })
+    // 修改授权排在问用户之前：被它拒了就不打扰用户。
+    expect(notAuthorized.confirmations).toEqual([])
+    const notConfirmed = await projectSpaceFixture({ root, sandbox: fakePort(declined), approve: false })
+    expect((await failureOf(notConfirmed.call('sandbox', 'apply', { id: 'sb' }))).code).toBe('PERMISSION')
+    expect(notConfirmed.mutations).toEqual([{ operation: '把演练沙箱的改动落回项目', cwd: undefined, paths: undefined }])
+    expect(actions(declined)).not.toContain('apply')
 
     const calls: Array<Record<string, unknown>> = []
-    const applied = await call({ action: 'apply', sandboxId: 'sb', paths: ['src/a.ts'] }, contextFor({ port: fakePort(calls) })) as { modified: string[] }
+    const { call, confirmations } = await projectSpaceFixture({ root, sandbox: fakePort(calls) })
+    const applied = await call('sandbox', 'apply', { id: 'sb', paths: ['src/a.ts'] })
     expect(applied.modified).toEqual(['src/a.ts'])
     // 落回前要的是不截断、不附文本差量的完整差量；确认之后把差量指纹一起交给宿主。
     expect(calls.at(-2)).toEqual({ diff: { sandboxId: 'sb', maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false } })
     expect(calls.at(-1)).toEqual({ apply: { sandboxId: 'sb', paths: ['src/a.ts'], fingerprint: 'fp1' } })
-    await expect(call({ action: 'apply', sandboxId: 'sb', paths: ['nope.ts'] }, contextFor({ port: fakePort([]) }))).rejects.toMatchObject({ code: 'VALIDATION' })
+    // 确认卡片：落到当前项目，高风险、必须用户亲自点。
+    expect(confirmations).toHaveLength(1)
+    expect(confirmations[0]!.message).toContain('当前项目')
+    expect(confirmations[0]!.message).toContain('覆盖：src/a.ts')
+    expect(confirmations[0]!.options).toMatchObject({ approvalRisk: 'high', riskScope: 'project-sandbox:apply', requireManualApproval: true })
+    const unknown = await failureOf(call('sandbox', 'apply', { id: 'sb', paths: ['nope.ts'] }))
+    expect(unknown.code).toBe('VALIDATION')
+    expect(unknown.message).toContain('nope.ts')
   })
 
-  test('apply refuses a truncated diff before asking anyone, and confirms the full lists', async () => {
+  test('apply 遇到截断的差量在问任何人之前就拒；确认文案按完整的三列算', async () => {
     const calls: Array<Record<string, unknown>> = []
-    const asked: string[] = []
-    const context = contextFor({ port: fakePort(calls, { truncated: true }) })
-    const approval = context.approval as unknown as { awaitConfirmationDecision: (message: string) => Promise<unknown> }
-    const original = approval.awaitConfirmationDecision
-    approval.awaitConfirmationDecision = async (message: string) => { asked.push(message); return original(message) }
-    await expect(call({ action: 'apply', sandboxId: 'sb' }, context)).rejects.toMatchObject({ code: 'VALIDATION' })
-    expect(asked).toEqual([])
-    expect(calls.some((entry) => 'apply' in entry)).toBe(false)
+    const truncated = await projectSpaceFixture({ root, sandbox: fakePort(calls, { truncated: true }) })
+    expect((await failureOf(truncated.call('sandbox', 'apply', { id: 'sb' }))).code).toBe('VALIDATION')
+    expect(truncated.confirmations).toEqual([])
+    expect(truncated.mutations).toEqual([])
+    expect(actions(calls)).not.toContain('apply')
 
     const many = Array.from({ length: 2100 }, (_, index) => `gen/${index}.ts`)
-    const full: string[] = []
-    const fullContext = contextFor({ port: fakePort([], { created: many, modified: [], deleted: [] }) })
-    const fullApproval = fullContext.approval as unknown as { awaitConfirmationDecision: (message: string) => Promise<unknown> }
-    const fullOriginal = fullApproval.awaitConfirmationDecision
-    fullApproval.awaitConfirmationDecision = async (message: string) => { full.push(message); return fullOriginal(message) }
-    await call({ action: 'apply', sandboxId: 'sb' }, fullContext)
-    expect(full[0]).toContain('新增 2100 个')
+    const full = await projectSpaceFixture({ root, sandbox: fakePort([], { created: many, modified: [], deleted: [] }) })
+    await full.call('sandbox', 'apply', { id: 'sb' })
+    expect(full.confirmations[0]!.message).toContain('新增 2100 个')
   })
 
   test('落回前每条路径都过项目的写授权：有不许写的就在问用户之前整批拒绝', async () => {
     const calls: Array<Record<string, unknown>> = []
-    const asked: string[] = []
-    const context = contextFor({ port: fakePort(calls), blockedPaths: ['src/a.ts'] })
-    const approval = context.approval as unknown as { awaitConfirmationDecision: (message: string) => Promise<unknown> }
-    const original = approval.awaitConfirmationDecision
-    approval.awaitConfirmationDecision = async (message: string) => { asked.push(message); return original(message) }
-
-    const refusal = await call({ action: 'apply', sandboxId: 'sb' }, context).catch((error: { reason: string; message: string }) => error)
-    expect(refusal).toMatchObject({ reason: 'PERMISSION_DENIED' })
-    expect((refusal as { message: string }).message).toContain('src/a.ts（GENERATED_FILE）')
-    expect((refusal as { suggestedNextAction: string }).suggestedNextAction).toContain('用 paths 点名要落的文件')
-    // 问用户之前就拒绝，被拒的一个都不落。
-    expect(asked).toEqual([])
-    expect(calls.some((entry) => 'apply' in entry)).toBe(false)
-
+    const blocked = await projectSpaceFixture({ root, sandbox: fakePort(calls, { modified: ['src/api.generated.ts'] }) })
+    const refusal = await failureOf(blocked.call('sandbox', 'apply', { id: 'sb' }))
+    expect(refusal.code).toBe('PERMISSION')
+    expect(refusal.message).toContain('src/api.generated.ts（GENERATED_FILE）')
+    expect(refusal.message).toContain('用 paths 点名要落的文件')
+    // 问用户、问修改授权之前就拒绝，一个都不落。
+    expect(blocked.confirmations).toEqual([])
+    expect(blocked.mutations).toEqual([])
+    expect(actions(calls)).not.toContain('apply')
     // 把不许写的那条从 paths 里去掉，剩下的照常落回。
-    const allowed = await call({ action: 'apply', sandboxId: 'sb', paths: ['src/new.ts'] }, contextFor({ port: fakePort(calls), blockedPaths: ['src/a.ts'] })) as { created: string[] }
+    const allowed = await blocked.call('sandbox', 'apply', { id: 'sb', paths: ['src/new.ts'] })
     expect(allowed.created).toEqual(['src/new.ts'])
+    expect(calls.at(-1)).toEqual({ apply: { sandboxId: 'sb', paths: ['src/new.ts'], fingerprint: 'fp1' } })
   })
 
-  test('沙箱里跑命令的输出和 project:run 一样过脱敏', async () => {
-    const calls: Array<Record<string, unknown>> = []
-    const context = contextFor({ port: fakePort(calls, {}), redact: true })
-    const port = context.project.sandbox as unknown as { runInSandbox: (options: unknown) => Promise<unknown> }
-    port.runInSandbox = async () => ({ command: 'cat .env', cwd: '/tmp', exitCode: 0, stdout: 'TOKEN=sk-live-abcdefghijkl\n', stderr: 'sk-live-abcdefghijkl', success: true })
-    const ran = await call({ action: 'run', sandboxId: 'sb', command: 'cat .env' }, context) as { stdout: string; stderr: string }
-    expect(ran.stdout).toBe('TOKEN=[REDACTED]\n')
-    expect(ran.stderr).toBe('[REDACTED]')
+  test('镜像里跑命令的输出和 velar:shell 一样过项目的脱敏', async () => {
+    const secret = ['sk', 'live', '0123456789abcdefghij'].join('-')
+    const port = fakePort([])
+    port.runInSandbox = async () => ({ command: 'cat .env', cwd: '/tmp', exitCode: 0, stdout: `${secret}\n`, stderr: `api_key=${secret}`, durationMs: 1, timedOut: false, truncated: false, success: true }) as never
+    const { call } = await projectSpaceFixture({ root, sandbox: port, providers: { secretRedaction: createSecretRedactionProvider() } })
+    const ran = await call('sandbox', 'run', { id: 'sb', command: 'cat .env' })
+    expect(ran.stdout).toBe('[REDACTED]\n')
+    expect(ran.stderr).toContain('[REDACTED]')
+    expect(JSON.stringify(ran)).not.toContain(secret)
   })
 
-  test('diff and discard pass straight through', async () => {
+  test('diff 与 discard 原样转给宿主', async () => {
     const calls: Array<Record<string, unknown>> = []
-    const context = contextFor({ port: fakePort(calls) })
-    const changes = await call({ action: 'diff', sandboxId: 'sb', maxFiles: 5 }, context) as { deleted: string[] }
+    const { call } = await projectSpaceFixture({ root, sandbox: fakePort(calls) })
+    const changes = await call('sandbox', 'diff', { id: 'sb', maxFiles: 5 })
     expect(changes.deleted).toEqual(['old.txt'])
-    const discarded = await call({ action: 'discard', sandboxId: 'sb' }, context) as { removed: boolean }
+    const discarded = await call('sandbox', 'discard', { id: 'sb' })
     expect(discarded.removed).toBe(true)
     expect(calls).toEqual([{ diff: { sandboxId: 'sb', maxFiles: 5 } }, { discard: 'sb' }])
   })

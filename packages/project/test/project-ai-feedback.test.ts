@@ -4,9 +4,6 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
-
-import type { ProjectToolContext } from '../src/contract/requires'
 import type { AgentProjectKernelPort } from '../src/contract/requires.js'
 import { createProjectKernel, type EditOperation, typescriptPlugin } from '../src/index'
 import { executeAgentProjectRead, executeAgentProjectSearch } from '../src/utils/agent/kernel-port'
@@ -14,8 +11,7 @@ import { diagnoseTextMatchMiss, findLineWhitespaceTolerantMatches } from '../src
 import { includesLineEndingAware } from '../src/utils/text'
 
 import { ProjectEditOperationSchema } from './support/edit-intent-schema'
-import { LegacyProjectToolNames as ProjectToolNames } from './support/legacy-tools'
-import { legacyProjectTools as projectTools } from './support/legacy-tools'
+import { projectSpaceFixture } from './support/space'
 
 let root = ''
 
@@ -41,41 +37,19 @@ async function prepareFailure(operation: EditOperation): Promise<any> {
   throw new Error('prepareEdit 应当失败')
 }
 
-function toolContext(): ProjectToolContext {
-  return {
-    abortSignal: new AbortController().signal,
-    project: {
-      getRootPath: () => root,
-      kernel: async () => createProjectKernel({ root }),
-      prepareMutation: async () => ({
-        approved: true,
-        message: 'approved',
-        authorizationScope: 'project',
-      }),
-      runCommand: async () => ({}) as never,
-      queryCode: async () => ({}),
-    },
-    approval: defaultDenyApprovalPort,
-  }
-}
-
-describe('project:edit read-to-line-edit flow', () => {
+describe('velar:project read-to-line-edit flow', () => {
   test('uses a real read revision through the model-facing edit boundary', async () => {
     await writeFile(join(root, 'source.ts'), 'const a = 1\nconst b = 2\n')
-    const context = toolContext()
-    const read = await executeAgentProjectRead(await context.project.kernel(), { path: 'source.ts' }, { rootPath: root })
-    const tool = projectTools['project:edit']
-    const input = tool.schema.parse({ edits: [{
-      type: 'replace_lines', path: 'source.ts', baseRevision: read.files[0].snapshot.revision,
-      startLine: 2, endLine: 2, newLines: ['const b = 3'],
-    }] })
-    const result = await tool.execute(input, context)
-    expect(result).toMatchObject({ changed: true, changedFiles: ['source.ts'] })
+    const { call } = await projectSpaceFixture({ root })
+    const [file] = (await call('project', 'read', { files: [{ path: 'source.ts' }] })).files
+    // 读到的版本装在 fileRef 里：edit 凭它核对文件没变，再按行号改。
+    const result = await call('project', 'edit', { steps: [{ action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 2, text: 'const b = 3' }] }] })
+    expect(result).toMatchObject({ changed: true, changedFiles: ['source.ts'], oldRevisions: { 'source.ts': file.revision } })
     expect(await readFile(join(root, 'source.ts'), 'utf8')).toBe('const a = 1\nconst b = 3\n')
   })
 })
 
-describe('project:read range clamping', () => {
+describe('read range clamping', () => {
   test('a batch range beyond one short file keeps every other file and explains the short one', async () => {
     await writeFile(join(root, 'long.txt'), numberedLines(200))
     await writeFile(join(root, 'short.txt'), numberedLines(3))
@@ -182,12 +156,6 @@ describe('project:read range clamping', () => {
       message: expect.stringContaining('cols.txt'),
       details: { path: 'cols.txt', lineLength: 3 },
     })
-  })
-
-  test('describes per-file clamping in the read tool contract', () => {
-    const description = projectTools[ProjectToolNames.read].description
-    expect(description).toContain('range 对每个文件逐个应用')
-    expect(description).toContain('note')
   })
 })
 
@@ -482,21 +450,26 @@ describe('text anchor miss diagnostics', () => {
 describe('whitespace-tolerant text matching', () => {
   test('applies a unique match that differs only in trailing whitespace and says so', async () => {
     await writeFile(join(root, 'note.ts'), 'const a = 1   \nconst b = 2\n')
-    const result = await projectTools[ProjectToolNames.edit].execute({
-      edits: [{
+    const project = await createProjectKernel({ root })
+    const transaction = await project.prepareEdit({
+      operations: [{
+        operation: {
           type: 'replace_text',
           path: 'note.ts',
           oldText: 'const a = 1\nconst b = 2',
           newText: 'const a = 10\nconst b = 20',
           expectedMatches: 1,
+        },
       }],
-    }, toolContext())
+    })
+    // 宽容匹配的说明记在补丁的 matchNote 上。
+    expect(transaction.patches[0]?.metadata?.matchNote).toContain('行尾空白或换行符')
+    const applied = await project.applyEdit({ transactionId: transaction.transactionId })
 
     expect(await readFile(join(root, 'note.ts'), 'utf8')).toBe('const a = 10\nconst b = 20\n')
-    expect(result.notes).toEqual([expect.stringContaining('行尾空白或换行符')])
-    // 与内核 ApplyResult 同名：Agent 的读结果过期判断、界面「已编辑」统计与宿主改动摘要都读 newRevisions。
-    expect(result.newRevisions).toEqual({ 'note.ts': expect.any(String) })
-    expect(result).not.toHaveProperty('revisions')
+    // 代码面的 edit 回执、界面「已编辑」统计与宿主改动摘要都读 ApplyResult 的 newRevisions，不能改名。
+    expect(applied.newRevisions).toEqual({ 'note.ts': expect.any(String) })
+    expect(applied).not.toHaveProperty('revisions')
   })
 
   test('matches CRLF oldText against an LF file and keeps the file on LF', async () => {

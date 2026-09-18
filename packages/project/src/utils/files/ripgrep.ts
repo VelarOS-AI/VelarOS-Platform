@@ -1,6 +1,6 @@
 import { isEmpty, isFalse, isNumber, isTrue, optionalWhen } from '@velaros-ai/core'
 
-import type { RgMessage, RipgrepSearchContext, RipgrepSearchResult } from '../../types/files.js'
+import type { RgMessage, RipgrepSearchContext, RipgrepSearchResult } from '../../types/file-store.js'
 import type { SearchHit } from '../../types/io.js'
 import { matchesAny } from '../glob.js'
 import { ProjectTuning } from '../tuning.js'

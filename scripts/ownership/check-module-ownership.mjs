@@ -24,6 +24,8 @@
 //      package.json 的 exports 里有对应子路径）；依赖只许写在文件头，不许用内联 import 类型；
 //      动态 import 只放行登记表 lazyImports 里登记过的目标（谁加载、加载什么、为什么）。
 //      可执行入口放包根 bin/：package.json 的 bin 指 ./bin/<命令>.mjs，文件在、带 #!/usr/bin/env node、files 里有 bin。
+//      能力单元（登记了 unit 的模块，几个模块按目录放在一个包里）：源码根是包里的单元目录（不是 src/），入口是 ./<单元> 与 ./<单元>/…，
+//      编译到 dist/<单元>/；单元目录下另有 spec/ 与 test/，不算源码。登记的名字写成「包名/单元」。
 //  10. 模块卡片十节齐全；「提供什么」列出全部入口、导出的每个值和每个公开接口；「骨干链路」点到每个工具；「结构」写明目录树。
 //  11. 不变量登记表每行编号唯一、检验方式合法、检验器真的存在；卡片里的条数如实。包的 test 脚本跑验收测试。
 //  12. 常量分四处：对外承诺的在 contract/constants.ts，每个数字上限有中文说明；可调参数只在登记的 utils/<tuning>：导出的冻结表，只放数字，每项有说明、每项有人用；
@@ -283,9 +285,15 @@ for (const module of selectedModules) {
     continue
   }
   const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
-  if (manifest.name !== module.name) fail(`${label}: 包名与登记表不符（${manifest.name}）`)
+  // 能力单元登记的名字是「包名/单元」，引用时就这么写（@velaros-ai/velar/files）。
+  const packageName = module.unit ? module.name.slice(0, -(module.unit.length + 1)) : module.name
+  if (manifest.name !== packageName) fail(`${label}: 包名与登记表不符（${manifest.name}）`)
 
-  const srcRoot = join(packageRoot, 'src')
+  // 能力单元（一个包里按目录放的几个模块，例如 @velaros-ai/velar 的 files、shell）：源码根就是单元目录，
+  // 入口是 ./<单元> 与 ./<单元>/…，spec/ 与 test/ 跟着单元走、不算源码。普通模块的源码根是 src/。
+  const unit = module.unit ?? null
+  const unitSubpath = unit ? `./${unit}` : null
+  const srcRoot = unit ? join(packageRoot, unit) : join(packageRoot, 'src')
   const toolsFilePath = module.toolsFile ? join(packageRoot, module.toolsFile) : null
   // 端口可达性从「模型面的入口」出发。工具时代那个入口是工具文件，代码面时代是操作表。
   const surfaceFilePath = module.surfaceFile ? join(packageRoot, module.surfaceFile) : toolsFilePath
@@ -294,8 +302,13 @@ for (const module of selectedModules) {
   const implRoot = join(packageRoot, module.impl)
   const utilsRoot = join(packageRoot, module.utils)
   // 对外入口就是 src 根上的那几个 .ts；嵌套子路径（./protocol/message）的入口住在同名的入口目录里。
-  const subpathName = (subpath) => (subpath === '.' ? 'index' : subpath.replace(/^\.\//u, ''))
+  const subpathName = (subpath) => {
+    if (unit) return subpath === unitSubpath ? 'index' : subpath.slice(unitSubpath.length + 1)
+    return subpath === '.' ? 'index' : subpath.replace(/^\.\//u, '')
+  }
+  const subpathOfName = (name) => (name === 'index' ? (unitSubpath ?? '.') : `${unitSubpath ?? '.'}/${name}`)
   const manifestSubpaths = Object.keys(manifest.exports ?? {})
+    .filter((subpath) => !unit || subpath === unitSubpath || subpath.startsWith(`${unitSubpath}/`))
   const entryDirectories = new Set(
     manifestSubpaths.map(subpathName).filter((name) => name.includes('/')).map((name) => name.split('/')[0]),
   )
@@ -318,7 +331,8 @@ for (const module of selectedModules) {
       }
     }
   }
-  const sourceFiles = walkSources(srcRoot)
+  const UnitCompanions = ['spec', 'test']
+  const sourceFiles = walkSources(srcRoot).filter((file) => !unit || !UnitCompanions.includes(relative(srcRoot, file).split('/')[0]))
 
   const program = ts.createProgram(sourceFiles, {
     target: ts.ScriptTarget.ES2022,
@@ -878,7 +892,8 @@ for (const module of selectedModules) {
   for (const subpath of subpaths) {
     const target = manifest.exports[subpath]
     const name = subpathName(subpath)
-    const expected = { types: `./dist/${name}.d.ts`, import: `./dist/${name}.js` }
+    const built = unit ? `./dist/${unit}/${name}` : `./dist/${name}`
+    const expected = { types: `${built}.d.ts`, import: `${built}.js` }
     for (const key of ['types', 'import']) {
       if (target?.[key] !== expected[key]) fail(`${label}: package.json exports["${subpath}"].${key} 应当是 ${expected[key]}，现在是 ${target?.[key] ?? '(缺)'}`)
     }
@@ -886,12 +901,12 @@ for (const module of selectedModules) {
   }
   for (const file of exportFiles) {
     const name = entryNameOf(file)
-    const subpath = name === 'index' ? '.' : `./${name}`
+    const subpath = subpathOfName(name)
     if (!subpaths.includes(subpath)) {
       fail(`${label}: ${shortPath(file)} 在 package.json 的 exports 里没有对应的 ${subpath}；src 根上只放对外入口，实现放进 ${module.contract}、${module.types}、${module.impl} 或 ${module.utils}`)
     }
   }
-  const rootEntryPath = entryFileOfSubpath('.')
+  const rootEntryPath = entryFileOfSubpath(unitSubpath ?? '.')
   const exported = new Map() // 声明 → { name, isValue, entries }
   for (const file of exportFiles) {
     const sourceFile = program.getSourceFile(file)
@@ -1187,7 +1202,7 @@ for (const module of selectedModules) {
   }
   const governedDirectories = [module.contract, module.types, module.impl, module.utils].map((path) => basename(path))
   for (const directory of childDirectories(srcRoot)) {
-    if (governedDirectories.includes(directory) || entryDirectories.has(directory)) continue
+    if (governedDirectories.includes(directory) || entryDirectories.has(directory) || (unit && UnitCompanions.includes(directory))) continue
     fail(`${label}: src/${directory}/ 不是登记的目录；src 下只有 ${governedDirectories.join('、')} 四个目录，外加嵌套子路径入口自己的目录（package.json 的 exports 里有 ./${directory}/… 才算）`)
   }
 
@@ -1245,6 +1260,9 @@ for (const module of selectedModules) {
   // ── 11. 不变量登记表与验收测试 ─────────────────────────────────────────
   const invariantsPath = join(packageRoot, module.invariants)
   const acceptancePath = join(packageRoot, module.acceptance)
+  // 登记表里的检验器路径相对它自己的根写：普通模块是包根，能力单元是单元目录（单元是自成一体的目录，登记表就在里面）。
+  const verifierRoot = unit ? srcRoot : packageRoot
+  const acceptanceReference = relative(verifierRoot, acceptancePath)
   const acceptanceSource = existsSync(acceptancePath) ? readFileSync(acceptancePath, 'utf8') : ''
   if (!existsSync(acceptancePath)) fail(`${label}: 缺少验收测试 ${module.acceptance}`)
   const counts = Object.fromEntries(InvariantCheckKinds.map((kind) => [kind, 0]))
@@ -1266,15 +1284,15 @@ for (const module of selectedModules) {
       counts[kind] += 1
       const reference = (checkerReference ?? '').replace(/`/gu, '').trim()
       if (kind === '测试') {
-        if (reference !== module.acceptance) fail(`${label}: ${id} 是测试档，检验器必须写 ${module.acceptance}`)
+        if (reference !== acceptanceReference) fail(`${label}: ${id} 是测试档，检验器必须写 ${acceptanceReference}`)
         if (!new RegExp(`\\(\\s*['"\`]${id}\\s`, 'u').test(acceptanceSource)) {
           fail(`${label}: ${id} 标为测试档，但 ${module.acceptance} 里没有以「${id} 」开头的用例`)
         }
       } else if (kind === '类型') {
         const [file, typeName] = reference.split('::')
-        const filePath = join(packageRoot, file ?? '')
+        const filePath = join(verifierRoot, file ?? '')
         if (!file || !typeName || !existsSync(filePath)) {
-          fail(`${label}: ${id} 的类型检验器要写成 src/<文件路径>.ts::<类型名>，现在是「${reference}」`)
+          fail(`${label}: ${id} 的类型检验器要写成 ${unit ? '' : 'src/'}<文件路径>.ts::<类型名>，现在是「${reference}」`)
         } else if (!new RegExp(`\\bexport\\s+(?:interface|type)\\s+${typeName}\\b`, 'u').test(readFileSync(filePath, 'utf8'))) {
           fail(`${label}: ${id} 引用的类型 ${typeName} 不在 ${file} 里`)
         }
@@ -1283,7 +1301,7 @@ for (const module of selectedModules) {
           fail(`${label}: ${id} 引用的门 ${reference || '(空)'} 不是根 package.json 里的 check 脚本`)
         }
       } else if (kind === '运行时') {
-        if (!reference || !existsSync(join(packageRoot, reference))) fail(`${label}: ${id} 的运行时检验器 ${reference || '(空)'} 文件不存在`)
+        if (!reference || !existsSync(join(verifierRoot, reference))) fail(`${label}: ${id} 的运行时检验器 ${reference || '(空)'} 文件不存在`)
       } else if (kind === '文字' && reference) {
         fail(`${label}: ${id} 是文字档，检验器应留空`)
       }

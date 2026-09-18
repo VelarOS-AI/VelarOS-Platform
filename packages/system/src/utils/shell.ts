@@ -8,7 +8,7 @@ import { win32 } from 'node:path'
 import { isEmpty, Log } from '@velaros-ai/core'
 import { createPlatform, currentPlatform } from '@velaros-ai/platform'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
-import type { ShellCommandKind, ShellDescriptor, ShellRecommendation } from '@velaros-ai/shell-command/contracts'
+import type { ShellCommandKind, ShellDescriptor, ShellRecommendation } from '@velaros-ai/velar/shell/contracts'
 
 import { SystemEnvironmentVariables } from '../contract/constants.js'
 import type { ResolvedSystemShell, ResolveSystemShellOptions } from '../types/commands.js'

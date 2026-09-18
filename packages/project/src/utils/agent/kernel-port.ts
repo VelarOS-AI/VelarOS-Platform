@@ -81,19 +81,19 @@ function unreadableIssue(file: AgentProjectReadResult): Optional<AgentProjectRea
     path: file.snapshot.path,
     code: 'TARGET_NOT_FOUND',
     message: '这个路径不存在，什么都没读到。',
-    next: '先用 project:list 列出准确的路径再读，不要接着猜文件名。',
+    next: '先 list 出准确的路径再读，别接着猜文件名。',
   }
   if (file.snapshot.isDirectory) return {
     path: file.snapshot.path,
     code: 'NOT_SUPPORTED',
-    message: '这个路径是目录，project:read 不列目录内容。',
-    next: '用 project:list 列这个目录，再读里面的文件。',
+    message: '这个路径是目录，read 不列目录。',
+    next: '用 list 列这个目录，再读里面的文件。',
   }
   if (file.snapshot.isBinary) return {
     path: file.snapshot.path,
     code: 'NOT_SUPPORTED',
-    message: '这个路径是二进制文件，project:read 只读文本。',
-    next: '换一个能处理这种格式的工具，或者用 project:run 跑命令看它。',
+    message: '这个路径是二进制文件，read 只读文本。',
+    next: '图片用 view 看；别的格式用命令处理。',
   }
   return undefined
 }

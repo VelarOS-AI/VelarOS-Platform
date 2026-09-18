@@ -3,15 +3,20 @@ import {
   type AgentModelRetryPolicy,
   type AgentRunLifecycle,
 } from '@velaros-ai/agent'
-import { agentToolContracts, fileContextRegistry } from '@velaros-ai/agent/tool-contract'
+import { agentToolContracts } from '@velaros-ai/agent/tool-contract'
 import { createModelRequestClient } from '@velaros-ai/model'
 import { languageQueries, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/development'
 import { mountMemoryAdapter, type MountMemoryAdapterInput } from '@velaros-ai/memory'
 import { ComputerOperationMetadata, ComputerToolNames, type ComputerOperation } from '@velaros-ai/computer/contracts'
-import { projectFileContext, type ProjectFileContextCarrier } from '@velaros-ai/project'
+import { createCapabilityPort } from '@velaros-ai/code-surface'
+import { createProjectSpace, type ProjectCallContext } from '@velaros-ai/project'
+import { FileLimits } from '@velaros-ai/velar/files/contracts'
+import { shellCommandPolicy } from '@velaros-ai/velar/shell'
 
-declare const projectContext: ProjectFileContextCarrier
-if (projectFileContext.register(projectContext)) void fileContextRegistry.for(projectContext)?.currentViews()
+// 项目空间是一张操作表：宿主每次调用给一份上下文，接成代码面的能力端口；共用能力单元按 `@velaros-ai/velar/<单元>` 引。
+declare const projectCall: ProjectCallContext
+const projectCapabilities = createCapabilityPort(createProjectSpace({ resolveCall: () => projectCall }).operations)
+void [projectCapabilities.listOperations(), shellCommandPolicy.analyze('ls -la').isReadOnly, FileLimits.fileBytes]
 
 declare const source: LanguageReadPort
 const languageContext: LanguageToolContext = {

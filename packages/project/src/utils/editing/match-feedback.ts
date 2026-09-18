@@ -1,4 +1,4 @@
-// 域：project:edit 的 match 零命中或多处命中时给模型的候选。只在 fileRef 显示过的窗口里找，候选只供确认，不会被自动应用。
+// 域：edit 的 match 零命中或多处命中时给模型的候选。只在 fileRef 显示过的窗口里找，候选只供确认，不会被自动应用。
 import { isEmpty } from '@velaros-ai/core'
 
 import type { OffsetWindow, ProjectEditView, ProjectMatchCandidate, ProjectMatchElsewhere, ProjectSourceCoordinates } from '../../types/editing.js'

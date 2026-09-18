@@ -5,7 +5,7 @@
 
 import type { ShellCommandSpecOptions } from '@velaros-ai/platform'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
-import type { ShellDescriptor, ShellProcessConfinementEvidence, ShellProcessConfinementMode, ShellProcessOwnership } from '@velaros-ai/shell-command/contracts'
+import type { ShellDescriptor, ShellProcessConfinementEvidence, ShellProcessConfinementMode, ShellProcessOwnership } from '@velaros-ai/velar/shell/contracts'
 
 import type { SystemProcessConfinementProvider } from '../contract/requires.js'
 

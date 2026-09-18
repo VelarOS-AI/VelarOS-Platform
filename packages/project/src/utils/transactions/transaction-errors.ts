@@ -13,7 +13,7 @@ import { ProjectTuning } from '../tuning.js'
 
 /**
  * 写盘开始之前失败：原错误照旧抛出，只补上「没有写入」的结论。Agent 边界据此把失败记为 not-applied，
- * 允许模型用 reuse 修正后重提；写盘开始之后的失败不能这样标。
+ * 模型改好之后可以原样重提；写盘开始之后的失败不能这样标。
  */
 export function withNotAppliedOutcome(error: unknown): Error {
   if (error instanceof ProjectError)
@@ -37,15 +37,15 @@ export function revisionMismatch(message: string, details: any): ProjectError {
   )
 }
 
-/** 编辑失败后的回读建议：入参按 project:read 现在的形状给（files 里一项，range 是 [首行,末行]），知道出错行时只读附近几行。 */
+/** 编辑失败后的回读建议：按 `velar:project` 的 read 入参给（files 里一项，range 是 [首行,末行]），知道出错行时只读附近几行。 */
 export function recoveryRead(path: string, line: Optional<number>) {
   const maxChars = ProjectTuning.transactions.recoveryReadMaxChars
-  if (!line) return { tool: 'project:read', input: { files: [{ path }], maxChars } }
+  if (!line) return { read: { files: [{ path }], maxChars } }
   const range = [
     Math.max(1, line - ProjectTuning.transactions.recoveryReadLinesBefore),
     line + ProjectTuning.transactions.recoveryReadLinesAfter,
   ]
-  return { tool: 'project:read', input: { files: [{ path, range }], maxChars } }
+  return { read: { files: [{ path, range }], maxChars } }
 }
 
 /** 超过 maximum 个字符就截断并补一个省略号。 */
@@ -140,6 +140,6 @@ export function validationFailed(
     },
     isPresent(context.rebasedFiles)
       ? '准备事务后 rebasedFiles 被外部修改，rebase 后的内容未通过校验；请重新读取这些文件，基于最新内容重新准备事务。'
-      : `${!isEmpty(windows) ? '根据 diagnostics 与 recovery.windows 修正编辑；候选行号不能直接作为原文 range。' : '根据 diagnostics 修正编辑。'}回执带 inputReuse 时，用 reuse + changes 只修改错误字段，保留其余正文。`,
+      : !isEmpty(windows) ? '按诊断与改完之后的预览修正编辑再提交；预览里的行号属于改完的内容，不能直接当原文的 range 用。' : '按诊断修正编辑再提交。',
   )
 }

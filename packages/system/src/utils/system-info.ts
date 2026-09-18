@@ -5,7 +5,7 @@
 import { basename } from 'node:path'
 
 import { isNotNull, isNull, isPresent, toNullable } from '@velaros-ai/core'
-import type { ShellBackgroundTaskQueryOptions, ShellBackgroundTaskRecord } from '@velaros-ai/shell-command/contracts'
+import type { ShellBackgroundTaskQueryOptions, ShellBackgroundTaskRecord } from '@velaros-ai/velar/shell/contracts'
 
 import type { ByteStats, ParsedProcessRow, RawPortEntry } from '../types/processes.js'
 import type { SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions } from '../types/system.js'

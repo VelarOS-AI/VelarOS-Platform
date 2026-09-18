@@ -8,7 +8,7 @@ import { delimiter, isAbsolute, resolve } from 'node:path'
 import { isEmpty, isFalse, isTrue } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
-import type { ShellProcessConfinementBackend, ShellProcessConfinementEnforcement, ShellProcessConfinementEvidence, ShellProcessConfinementMode } from '@velaros-ai/shell-command/contracts'
+import type { ShellProcessConfinementBackend, ShellProcessConfinementEnforcement, ShellProcessConfinementEvidence, ShellProcessConfinementMode } from '@velaros-ai/velar/shell/contracts'
 
 import { SystemErrorCodes } from '../contract/constants.js'
 import type { SystemProcessConfinementBuildOptions, SystemProcessConfinementPolicy, SystemProcessConfinementRequest, SystemProcessConfinementResult } from '../types/commands.js'

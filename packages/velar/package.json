@@ -1,0 +1,88 @@
+{
+  "name": "@velaros-ai/velar",
+  "version": "0.1.0",
+  "velaros": {
+    "platform": "0.6"
+  },
+  "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands) and sandbox (rehearse in a mirror, then apply). One plain directory per unit, one convention for all.",
+  "license": "Apache-2.0",
+  "author": "VelarOS",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/velar#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform.git",
+    "directory": "packages/velar"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "exports": {
+    "./files": {
+      "types": "./dist/files/index.d.ts",
+      "import": "./dist/files/index.js"
+    },
+    "./files/contracts": {
+      "types": "./dist/files/contracts.d.ts",
+      "import": "./dist/files/contracts.js"
+    },
+    "./images": {
+      "types": "./dist/images/index.d.ts",
+      "import": "./dist/images/index.js"
+    },
+    "./images/contracts": {
+      "types": "./dist/images/contracts.d.ts",
+      "import": "./dist/images/contracts.js"
+    },
+    "./shell": {
+      "types": "./dist/shell/index.d.ts",
+      "import": "./dist/shell/index.js"
+    },
+    "./shell/contracts": {
+      "types": "./dist/shell/contracts.d.ts",
+      "import": "./dist/shell/contracts.js"
+    },
+    "./sandbox": {
+      "types": "./dist/sandbox/index.d.ts",
+      "import": "./dist/sandbox/index.js"
+    },
+    "./sandbox/contracts": {
+      "types": "./dist/sandbox/contracts.d.ts",
+      "import": "./dist/sandbox/contracts.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
+    "test": "bun run build && bun test files/spec/acceptance.test.ts files/test images/spec/acceptance.test.ts images/test shell/spec/acceptance.test.ts shell/test sandbox/spec/acceptance.test.ts sandbox/test",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/velar"
+  },
+  "dependencies": {
+    "@velaros-ai/core": "workspace:*",
+    "@velaros-ai/platform": "workspace:*",
+    "@velaros-ai/text-files": "workspace:*"
+  },
+  "peerDependencies": {
+    "@velaros-ai/agent": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "@velaros-ai/code-surface": "workspace:*",
+    "typescript": "^5.7.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

@@ -1,6 +1,6 @@
 /**
- * 第 1 版编辑协议的入参 schema：扁平的编辑操作（replace_lines、replace_text、add_import 等）与包在事务意图里的形状。
- * 现行的模型面工具不再用它，只有测试里的旧工具驱动器和协议测试还在引用。
+ * 内核编辑操作的形状（replace_lines、replace_text、add_import 等）写成 schema：内核测试用它核对自己构造的操作合法，
+ * 不是模型面的东西——模型面在 `velar:files` 的 edit（整份写入）与项目空间的端口里。
  */
 
 import { z } from 'zod'

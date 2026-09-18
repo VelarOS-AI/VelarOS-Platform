@@ -8,7 +8,7 @@ import { createIgnorePolicy } from '@velaros-ai/path-rules'
 
 import { ProjectFileLimits } from '../../contract/constants.js'
 import type { CommandProvider } from '../../contract/requires.js'
-import type { ListedDirectory, ListingDependencies, ListingDirectory, ListingNode } from '../../types/files.js'
+import type { ListedDirectory, ListingDependencies, ListingDirectory, ListingNode } from '../../types/file-store.js'
 import type { FileListEntry, ObserveInput } from '../../types/io.js'
 import { matchesAny } from '../glob.js'
 import { normalizeRel } from '../path.js'

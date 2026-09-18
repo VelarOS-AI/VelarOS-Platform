@@ -1,12 +1,9 @@
-import type { FileContextCarrier } from '@velaros-ai/agent/tool-contract'
+/**
+ * 文件引用的记录：源码快照、可编辑视图（fileRef）、续读页，以及变更、列表续页这类回执。
+ * 记录按会话存在进程内存里，引用是记录的内容哈希；只在包内用，模型只见到引用字符串。
+ */
 
-import type { ProjectToolApi } from '../contract/requires.js'
-
-export interface ProjectReferenceContext extends FileContextCarrier {
-  project: Pick<ProjectToolApi, 'getRootPath' | 'kernel'>
-  fileRefScopeId?: string
-}
-
+/** 一段可见范围：从哪个偏移到哪个偏移、第几行到第几行，是不是整行。 */
 export interface ProjectVisibleCoverage {
   startOffset: number
   endOffset: number
@@ -15,6 +12,7 @@ export interface ProjectVisibleCoverage {
   completeLines: boolean
 }
 
+/** fileRef 背后的视图：路径（相对引擎根）、版本、正文与可见范围。 */
 export interface ProjectFileView {
   path: string
   revision: string
@@ -23,31 +21,47 @@ export interface ProjectFileView {
   coverage: ProjectVisibleCoverage[]
 }
 
+/** 一份源码快照：签发它的引擎根、路径、版本与完整正文。快照本身不带编辑权。 */
 export interface SourceRecord {
   kind: 'project-file-source'
   version: 1
-  workspace: string
-  scope: string
+  root: string
   path: string
   revision: string
   contentRevision: string
   content: string
 }
 
+/** 一个可编辑视图：指向一份源码快照，带着实际显示过的范围。 */
 export interface ViewRecord {
   kind: 'project-file-view'
   version: 1
   source: string
-  scope: string
   coverage: ProjectVisibleCoverage[]
 }
 
+/** 一个续读页：指向一份源码快照，带着下一页从哪儿开始。 */
 export interface PageRecord {
   kind: 'project-read-page'
   version: 1
   source: string
-  scope: string
   range: { startLine: number; startColumn?: number; endLine?: number; endColumn?: number }
 }
 
-export type RefRecord = SourceRecord | ViewRecord | PageRecord
+/** 一张回执（变更、列表续页）：签发它的引擎根与内容。 */
+export interface ReceiptRecord {
+  kind: 'project-receipt'
+  version: 1
+  receipt: string
+  root: string
+  value: unknown
+}
+
+/** 引用背后的任何一种记录。 */
+export type RefRecord = SourceRecord | ViewRecord | PageRecord | ReceiptRecord
+
+/** 一个会话的引用记录：按最近使用排序，另记着总字符数（超了从最旧的删起）。 */
+export interface RefSession {
+  records: Map<string, { record: RefRecord; chars: number }>
+  chars: number
+}

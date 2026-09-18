@@ -1,91 +1,9 @@
 /**
- * 可移植数据：经过宿主端口（`ProjectToolApi`、`ProjectSandboxPort`）流动的数据形状，以及宿主实现代码查询要认的查询形状。
+ * 可移植数据：经过宿主端口（`ProjectHostPort`、`ProjectSandboxPort`）流动的数据形状，以及宿主实现代码查询要认的查询形状。
  * 不 import 任何东西（只从常量表 import type），不带函数，浏览器和渲染进程都能用；从 `@velaros-ai/project/contracts` 取。
  */
 
 import type { ProjectCodeLanguageActions } from '../contract/constants.js'
-
-// ── 命令 ──────────────────────────────────────────────────────────
-
-/**
- * 用哪个 shell 跑一条命令。可移植文件只许从本包常量表 import，所以这里是 `@velaros-ai/shell-command` 的 `ShellCommandKind` 的同形副本；
- * 两边的形状由 `project:run` 的 schema 与入参类型在编译期对上，谁改一边没同步另一边，typecheck 立刻红。
- */
-export type ProjectShellKind = 'git-bash' | 'pwsh' | 'powershell' | 'cmd' | 'posix'
-
-/**
- * 宿主 runCommand 的选项：工作目录（相对项目根，工具已核对过在项目之内）、用哪个 shell、超时、是否后台、输出上限。
- *
- * `shell` 不给就用宿主自己挑的默认 shell。宿主必须在挑定的那个里执行：本机没有它就在执行之前拒绝（报错里点名可用的有哪些、哪个是默认），
- * 不许忽略它换默认 shell 照跑——模型是按挑定的那个 shell 的语法写的命令，换一个跑出来的是错的结果而不是报错。
- */
-export interface ProjectRunCommandOptions {
-  cwd?: string
-  shell?: ProjectShellKind
-  timeoutMs?: number
-  background?: boolean
-  maxOutputChars?: number
-}
-
-/** 后台命令起来之后宿主报告的进程事实：任务号、进程号、日志、占用端口，以及结束它的命令。 */
-export interface ProjectBackgroundProcessInfo {
-  taskId: Nullable<string>
-  sessionId: Nullable<string>
-  pid: Nullable<number>
-  logPath: Nullable<string>
-  ports: number[]
-  reason: Nullable<string>
-  terminateCommand: Nullable<string>
-  forceTerminateCommand: Nullable<string>
-  fallbackTerminateCommand: Nullable<string>
-  requested: boolean
-  autoStarted: boolean
-}
-
-/** 项目宿主报告的输出采集事实，不依赖具体系统执行器。 */
-export interface ProjectCommandOutputCapture {
-  status: 'complete' | 'truncated' | 'failed'
-  encoding: 'utf-8'
-  totalBytes: number
-  storedBytes: number
-  omittedBytes: number
-  decodeErrors: number
-  error?: string
-}
-
-/** 一条命令跑完的结果：退出码与信号、输出、耗时、是否超时或中止、输出是否截断，以及按命令类型归纳的验证结论。 */
-export interface ProjectCommandResult {
-  command: string
-  cwd: string
-  exitCode: Nullable<number>
-  signal: Nullable<string>
-  stdout: string
-  stderr: string
-  logPath?: LooseOptional<string>
-  durationMs: number
-  timedOut: boolean
-  aborted: boolean
-  truncated: boolean
-  capture?: ProjectCommandOutputCapture
-  cleanupIncomplete?: boolean
-  ownership?: { backend: 'windows-job' | 'process-tree'; parentDeathCleanup: boolean; reason: string }
-  success: boolean
-  backgroundProcess?: LooseOptional<ProjectBackgroundProcessInfo>
-  verification: ProjectVerificationSummary
-}
-
-/** 命令属于哪类验证：构建、代码检查、测试、类型检查，认不出是 unknown。 */
-export type ProjectVerificationKind = 'build' | 'lint' | 'test' | 'typecheck' | 'unknown'
-
-/** 验证命令的结论：通过、失败、超时、中止，判断不了是 unknown。 */
-export type ProjectVerificationStatus = 'aborted' | 'failed' | 'passed' | 'timed-out' | 'unknown'
-
-/** 按命令类型从输出里归纳的验证结论与问题清单。 */
-export interface ProjectVerificationSummary {
-  kind: ProjectVerificationKind
-  status: ProjectVerificationStatus
-  issues: string[]
-}
 
 // ── 项目修改授权 ──────────────────────────────────────────────────
 
@@ -93,7 +11,7 @@ export interface ProjectVerificationSummary {
 export interface ProjectMutationAuthorizationInput {
   /** 给用户看的操作名，如「编辑项目源码」。 */
   operation: string
-  /** project:run 的工作目录（相对项目根，工具已核对过在项目之内）；文件改动不带。 */
+  /** 跑命令时的工作目录（相对项目根，空间已核对过在项目之内）；文件改动不带。 */
   cwd?: string
   /** 这次会写入的文件（相对项目根）：文件改动在规划之后、提交之前填，命令不填。 */
   paths?: string[]
@@ -119,44 +37,15 @@ export interface ProjectAuthorizationDecision {
   message: string
 }
 
-// ── 改动回执（模型与界面共用的那几个字段） ───────────────────────────
-
-/**
- * project:edit 的 apply 成功后的回执里，宿主界面可以依赖的字段：模型凭 changeRef 查看或撤销，
- * 界面按 changedFiles 与前后版本画改动摘要。回执里另有只给模型看的字段（files、diff、diffLines、notes、recode），
- * 它们跟着说明与上下文预算走，不进这份合同。
- */
-export interface ProjectChangeReceipt {
-  /** 凭它 inspect、undo；模型只用这个。 */
-  changeRef: string
-  /** 事务号，给界面当这次改动的标识。 */
-  transactionId: string
-  /** 真有改动时为 true；已是目标格式的 recode 这类没写任何字节的为 false。 */
-  changed: boolean
-  /** 改动涉及的文件，相对项目根。 */
-  changedFiles: string[]
-  /** 提交前每个文件的版本；这次新建的文件不在里面，界面据此认出新建。 */
-  oldRevisions: Record<string, string>
-  /** 提交后每个文件的版本；删掉的文件记为 'deleted'。 */
-  newRevisions: Record<string, string>
-}
-
-// ── 演练沙箱（数据形状在 @velaros-ai/rehearsal-sandbox，这里只有项目空间独有的镜像里跑命令） ──
-
-/** 在镜像里跑一条命令：宿主把它约束在镜像根之内。`shell` 与 `ProjectRunCommandOptions.shell` 同义、同一套规矩。 */
-export interface ProjectSandboxRunOptions {
-  sandboxId: string
-  command: string
-  shell?: ProjectShellKind
-  timeoutMs?: number
-  maxOutputChars?: number
-}
-
-// ── 宿主代码查询（ProjectToolApi.queryCode 收到的查询） ─────────────────
-// project:code 的入参由本包翻译成下面的查询交给宿主：语言服务类动作（find_symbols 等七个）由宿主的语言服务执行，
+// ── 宿主代码查询（ProjectHostPort.queryCode 收到的查询） ─────────────────
+// `velar:code` 的入参由本包翻译成下面的查询交给宿主：语言服务类动作（find_symbols 等七个）由宿主的语言服务执行，
 // 其余是代码索引类动作，宿主有代码图谱时执行。缺省值已经填好，数字已经钳在范围之内。
 
-/** 代码查询共用的范围：语言、条数上限（1–200）、扩展名（最多 20 个）、目录深度（0–16）。模型的 project:code 入参与宿主收到的语言服务查询共用它；路径一律相对项目根。 */
+/**
+ * @AgentView
+ * 代码查询共用的范围：language 只查这一种语言、limit 最多返回几条（1–200）、extensions 只扫这些扩展名（最多 20 个）、maxDepth 往下扫几层目录（0–16）。
+ * 模型的 `velar:code` 入参与宿主收到的语言服务查询共用它；路径一律相对项目根。
+ */
 export interface ProjectCodeScope {
   language?: string
   limit?: number

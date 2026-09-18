@@ -72,11 +72,22 @@ function workspaceSourceFiles(packageRoot) {
       const dependencyRoot = resolve(RepoRoot, `packages/${name.slice('@velaros-ai/'.length)}`)
       if (!ts.sys.fileExists(resolve(dependencyRoot, 'package.json'))) continue
       queue.push(dependencyRoot)
-      const sourceRoot = resolve(dependencyRoot, 'src')
-      if (ts.sys.directoryExists(sourceRoot)) files.push(...ts.sys.readDirectory(sourceRoot, ['.ts']))
+      files.push(...packageSourceFiles(dependencyRoot))
     }
   }
   return files
+}
+
+/**
+ * 一个包的源码文件：普通的包在 src/ 下；能力单元的包（`@velaros-ai/velar`）没有 src/，单元目录就在包根上，
+ * 每个单元的 spec/ 与 test/ 不算源码，构建产物与依赖也不算。
+ */
+function packageSourceFiles(packageRoot) {
+  const sourceRoot = resolve(packageRoot, 'src')
+  if (ts.sys.directoryExists(sourceRoot)) return ts.sys.readDirectory(sourceRoot, ['.ts'])
+  const skipped = new Set(['node_modules', 'dist', 'spec', 'test'])
+  return ts.sys.readDirectory(packageRoot, ['.ts'])
+    .filter((fileName) => !fileName.slice(packageRoot.length + 1).split('/').some((part) => skipped.has(part)))
 }
 
 /** 节点前面的 trivia（空行、分节注释、JSDoc 都在这里）。 */
@@ -264,8 +275,22 @@ function renderMethod(member, file, printer, wanted, wantedValues) {
 
   const printed = parameters.map((parameter) => printer.printNode(ts.EmitHint.Unspecified, parameter, file))
   const returns = printer.printNode(ts.EmitHint.Unspecified, member.type, file)
-  const doc = stripModelTag(afterModelTag(sliceWithDoc(member, file).split(`${member.name.text}(`)[0].trimEnd()))
-  return expandBannedAliases(`${doc}\n  ${member.name.text}(${printed.join(', ')}): ${returns}`)
+  const doc = alignDoc(stripModelTag(afterModelTag(sliceWithDoc(member, file).split(`${member.name.text}(`)[0].trimEnd())))
+  return expandBannedAliases(`${doc}\n${member.name.text}(${printed.join(', ')}): ${returns}`)
+}
+
+/**
+ * 方法说明是从接口里按原样切出来的：首行顶格，其余行还带着接口里的缩进。排成顶格的 `/**`、` * `、` *\/`，
+ * 和类型的说明一个样子——模块块统一再缩进一层，模型看到的每个方法和类型对得齐。
+ */
+function alignDoc(doc) {
+  return doc
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim()
+      return trimmed.startsWith('*') ? ` ${trimmed}` : trimmed
+    })
+    .join('\n')
 }
 
 /** 剥掉 `export`：模型读的是一份环境声明，带了 export 它就成了模块，`declare const` 也就不再是全局的了。 */
@@ -283,7 +308,10 @@ function stripExport(text) {
 function afterModelTag(doc) {
   const lines = doc.split('\n')
   const at = lines.findIndex((line) => new RegExp(`${AgentViewTag}\\b`, 'u').test(line))
-  return at < 0 ? doc : ['/**', ...lines.slice(at)].join('\n')
+  if (at < 0) return doc
+  // 标记就写在开头那一行（单行的 `/** @AgentView …… */`）：整段本来就是模型面，原样留着，不再补一个 `/**`。
+  if (lines[at].trimStart().startsWith('/**')) return lines.slice(at).join('\n')
+  return ['/**', ...lines.slice(at)].join('\n')
 }
 
 /** 标记是给维护的人看的，不进模型面——模型不需要知道我们内部怎么登记。 */
@@ -324,10 +352,11 @@ function generate(surface) {
 
   // 代码模版不能省：我们知道这些能力怎么组合，模型未必知道。一个命名空间一份模版文件，
   // import 只写一次，嵌进生成物的模块头，模型一打开这个模块就看得到；对不对由各包的验收整份做类型检查。
-  const templatePath = surface.templates ? resolve(RepoRoot, `packages/${surface.directory}`, surface.templates) : null
+  const templateHome = surface.unit ? `packages/${surface.directory}/${surface.unit}` : `packages/${surface.directory}`
+  const templatePath = surface.templates ? resolve(RepoRoot, templateHome, surface.templates) : null
   const template = templatePath && ts.sys.fileExists(templatePath) ? readFileSync(templatePath, 'utf8').trim() : ''
   if (template.length === 0) {
-    problems.push(`${surface.namespace} 没有代码模版：在 packages/${surface.directory}/templates/ 写一份能照抄的程序，并在 surfaces.mjs 登记`)
+    problems.push(`${surface.namespace} 没有代码模版：在 ${templateHome}/ 写一份能照抄的程序，并在 surfaces.mjs 登记`)
   } else if (template.includes('*/')) {
     problems.push(`${surface.templates} 里有「*/」：模版会被嵌进注释，它会把注释提前截断；模版里的注释一律用 //`)
   } else {
@@ -411,15 +440,15 @@ function findStrayTags(marked) {
   const stray = []
   const packagesRoot = resolve(RepoRoot, 'packages')
   for (const entry of ts.sys.getDirectories(packagesRoot)) {
-    const sourceRoot = resolve(packagesRoot, entry, 'src')
-    if (!ts.sys.directoryExists(sourceRoot)) continue
-    for (const fileName of ts.sys.readDirectory(sourceRoot, ['.ts'])) {
+    const packageRoot = resolve(packagesRoot, entry)
+    if (!ts.sys.fileExists(resolve(packageRoot, 'package.json'))) continue
+    for (const fileName of packageSourceFiles(packageRoot)) {
       const text = readFileSync(fileName, 'utf8')
       if (!text.includes(AgentViewTag)) continue
       const file = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true)
       for (const statement of file.statements) {
         const named = ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)
-        if (named && !marked.has(statement.name.text) && hasModelTag(statement, file)) stray.push(`packages/${entry}/src/${fileName.slice(sourceRoot.length + 1)} 的 ${statement.name.text}`)
+        if (named && !marked.has(statement.name.text) && hasModelTag(statement, file)) stray.push(`packages/${entry}/${fileName.slice(packageRoot.length + 1)} 的 ${statement.name.text}`)
       }
     }
   }

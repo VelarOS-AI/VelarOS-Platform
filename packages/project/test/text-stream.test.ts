@@ -7,8 +7,9 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { textCodec } from '@velaros-ai/text-files'
 
 import { createProjectKernel } from '../src/index'
-import { compileProjectEdit } from '../src/utils/editing/file-planner'
 import { detectBinaryByPrefix, hashFileAndDetectBinary, limitContent, readLimitedTextPrefix, readProjectTextFile, readTextLineWindow } from '../src/utils/files/file-reader'
+
+import { projectSpaceFixture } from './support/space'
 
 let root = ''
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-text-stream-')) })
@@ -75,15 +76,9 @@ test('long ASCII prefixes do not commit a legacy file to UTF-8 prematurely', asy
 })
 
 test('model file creation centralizes UTF-8 without BOM and LF while preserving source escapes', async () => {
-  const project = await createProjectKernel({ root })
-  const resolver = {
-    resolveFileRef: async () => { throw new Error('unexpected ref') },
-    readPath: async (path: string) => ({ ...(await project.read({ path })).snapshot, coverage: [] }),
-    readText: async () => { throw new Error('recode is not part of this fixture') },
-  }
-  const prepared = await compileProjectEdit({ action: 'apply', steps: [{ action: 'create', path: 'new.txt', text: '\uFEFF中文🙂\r\n\\n\\u1234\r\n' }] }, resolver as never)
-  const tx = await project.prepareEdit(prepared)
-  await project.applyEdit({ transactionId: tx.transactionId })
+  // 经项目空间写：新建文件一律是无 BOM 的 UTF-8、LF，正文里的 BOM 与 CRLF 在编辑规划这一层归一，转义原样保留。
+  const { call } = await projectSpaceFixture({ root })
+  await call('project', 'edit', { steps: [{ action: 'create', path: 'new.txt', text: '\uFEFF中文🙂\r\n\\n\\u1234\r\n' }] })
   expect(await readFile(join(root, 'new.txt'))).toEqual(Buffer.from('中文🙂\n\\n\\u1234\n'))
 })
 

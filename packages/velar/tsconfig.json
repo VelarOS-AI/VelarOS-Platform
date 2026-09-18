@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "baseUrl": "../..",
+    "paths": {
+      "@velaros-ai/velar/shell": [
+        "packages/velar/shell/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "velaros-globals.d.ts",
+    "files/**/*.ts",
+    "images/**/*.ts",
+    "shell/**/*.ts",
+    "sandbox/**/*.ts"
+  ],
+  "exclude": [
+    "*/spec/**",
+    "*/test/**",
+    "dist",
+    "node_modules"
+  ]
+}

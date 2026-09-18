@@ -1,11 +1,12 @@
-// 域：project:edit 的 apply 编译。计划是一份按步骤推进的「未来视图」：每个路径在计划里的文件身份、
+// 域：`velar:project` 的 edit 编译。计划是一份按步骤推进的「未来视图」：每个路径在计划里的文件身份、
 // fileRef / sourceRef 绑定到的身份，以及排好的事务操作。只生成计划，不读写磁盘，读取都经过 resolver。
 import { isEmpty, isUndefined, toOptional } from '@velaros-ai/core'
 import type { TextEncoding } from '@velaros-ai/text-files/contracts'
 
-import { ProjectChangeLimits, ProjectToolContract } from '../../contract/constants.js'
+import { ProjectFileLimits } from '../../contract/constants.js'
 import type { PrepareEditInput } from '../../types/edit.js'
-import type { FileIdentity, ProjectContentEdit, ProjectEditApplyInput, ProjectEditStep, ProjectFilePlanState, ProjectPlanFileAction, ProjectPlannerResolver, ProjectPlanSource, ProjectRecodeAction, ProjectRecodeNewline, SourceSelection } from '../../types/editing.js'
+import type { FileIdentity, ProjectFilePlanState, ProjectPlanFileAction, ProjectPlannerResolver, ProjectRecodeAction, SourceSelection } from '../../types/editing.js'
+import type { ProjectContentEdit, ProjectEditInput, ProjectEditStep, ProjectRecodeNewline, ProjectStepSource } from '../../types/files.js'
 import { ProjectError } from '../errors.js'
 import { normalizeProjectInputText } from '../text.js'
 
@@ -70,12 +71,12 @@ async function expandRecodePaths(plan: ProjectFilePlanState, paths: readonly str
     const matched = await plan.resolver.listPaths(raw)
     if (isEmpty(matched))
       throw new ProjectError('TARGET_NOT_FOUND', `${raw} 没有匹配到任何文件。`, { path: raw, pathIndex },
-        '用 project:list 按同一条 glob 看看能列出什么，再把路径或 glob 改对。')
+        '用 list 按同一条 glob 看看能列出什么，再把路径或 glob 改对。')
     expanded.push(...matched)
   }
-  if (expanded.length > ProjectChangeLimits.recodePaths)
-    throw new ProjectError('SCOPE_VIOLATION', `展开后有 ${expanded.length} 个文件，超过一次 ${ProjectChangeLimits.recodePaths} 个的上限。`,
-      { actual: expanded.length, maximum: ProjectChangeLimits.recodePaths },
+  if (expanded.length > ProjectFileLimits.recodePaths)
+    throw new ProjectError('SCOPE_VIOLATION', `展开后有 ${expanded.length} 个文件，超过一次 ${ProjectFileLimits.recodePaths} 个的上限。`,
+      { actual: expanded.length, maximum: ProjectFileLimits.recodePaths },
       '把 glob 收窄，或者按目录分几次调用。')
   return expanded
 }
@@ -126,13 +127,16 @@ async function planDestination(plan: ProjectFilePlanState, path: string): Promis
 }
 
 /** 解析一个文件来源（fileRef、sourceRef，或本计划创建的 path），返回它在计划里的身份与当前视图。 */
-async function planSource(plan: ProjectFilePlanState, selector: ProjectPlanSource): Promise<SourceSelection> {
+async function planSource(plan: ProjectFilePlanState, selector: ProjectStepSource): Promise<SourceSelection> {
   const supplied = ['fileRef', 'sourceRef', 'path'].filter((key) => key in selector)
   if (supplied.length !== 1) throw new ProjectError('INVALID_INPUT', '仅填写 fileRef、sourceRef、path 之一。')
   if ('path' in selector) {
     const observed = await plan.resolver.readPath(selector.path)
     const identity = plan.paths.get(observed.path)
-    if (!identity?.created || identity.deleted) throw new ProjectError('TARGET_NOT_FOUND', 'path 只能引用本计划创建且仍存在的文件。', { path: observed.path })
+    if (!identity?.created || identity.deleted) {
+      throw new ProjectError('TARGET_NOT_FOUND', `path 只指本次前面的步骤 create 出来、还在的文件，${observed.path} 不是。`, { path: observed.path },
+        '已有的文件用 read 或 search 给的 fileRef 指；被本次前面的步骤移动或改过的，用 sourceRef 填同一个原 fileRef。')
+    }
     return { identity, view: identity.view }
   }
   const follows = 'sourceRef' in selector
@@ -190,7 +194,7 @@ async function planFileAction(plan: ProjectFilePlanState, action: ProjectPlanFil
       // 整份替换会把没看过的行一起丢掉，所以要求 fileRef 覆盖全文；move、delete 不动正文，只核对版本。
       if (!coversWholeProjectFile(view))
         throw new ProjectError('SCOPE_VIOLATION', `${view.path} 只看过其中一段，不能整份替换。`, { path: view.path },
-          '整份替换前先用 project:read 把整个文件读完（不给 range 就是从头读），拿新的 fileRef 再 overwrite；只改其中几处用 project:edit。')
+          '整份替换前先 read 整个文件（不给 range 就是从头读，读不完就用 continuation 接着读），拿覆盖整个文件的 fileRef 再 overwrite；只改其中几处用 edit 步骤。')
       const source = createProjectSourceCoordinates(view.content)
       const text = normalizePhysicalNewlines(normalizeProjectInputText(action.text), sourceNewlineAt(source, 0, view.content.length))
       plan.operations.push({ operation: { type: 'replace_content', path: view.path, expectedContent: view.content, content: text, mode: 'overwrite' } })
@@ -222,7 +226,7 @@ async function planFileAction(plan: ProjectFilePlanState, action: ProjectPlanFil
 }
 
 /** 执行一步 edit：一步就是一个文件，先把这个文件的几处编辑全部定位、验证完，再推进计划里的文件视图。 */
-async function planEditStep(plan: ProjectFilePlanState, file: ProjectPlanSource & { edits: readonly ProjectContentEdit[] }): Promise<void> {
+async function planEditStep(plan: ProjectFilePlanState, file: ProjectStepSource & { edits: readonly ProjectContentEdit[] }): Promise<void> {
   const { identity, view } = await planSource(plan, file)
   const mutations = selectProjectMutations(view, file.edits)
   const content = applyProjectMutations(view, mutations)
@@ -241,16 +245,16 @@ function stepFileAction(step: Exclude<ProjectEditStep, { action: 'edit' }>): Pro
   return { op: action, ...rest } as ProjectPlanFileAction
 }
 
-/** 把计划收成 prepareEdit 的输入；metadata 记下契约版本、工具名，有 recode 时带上回执。 */
+/** 把计划收成 prepareEdit 的输入；metadata 记下来源，有 recode 时带上回执。 */
 function planResult(plan: ProjectFilePlanState): PrepareEditInput {
-  const metadata: Record<string, unknown> = { projectContract: ProjectToolContract.inputVersion, tool: 'project:edit' }
+  const metadata: Record<string, unknown> = { source: 'velar:project' }
   if (!isEmpty(plan.recode.converted) || !isEmpty(plan.recode.unchanged)) metadata.recode = plan.recode
   return { operations: plan.operations, baseRevisions: plan.baseRevisions, metadata }
 }
 
-/** 把 project:edit 的有序步骤编译成一个事务输入：后面的步骤可以用 sourceRef、path 跟随前面步骤的结果，出错时补上 stepIndex。 */
-export async function compileProjectEdit(input: ProjectEditApplyInput, resolver: ProjectPlannerResolver): Promise<PrepareEditInput> {
-  if (input.action !== 'apply' || isEmpty(input.steps) || input.steps.length > ProjectChangeLimits.steps) throw new ProjectError('INVALID_INPUT', `apply 需要 1–${ProjectChangeLimits.steps} 个有序步骤。`)
+/** 把 edit 的有序步骤编译成一个事务输入：后面的步骤可以用 sourceRef、path 跟随前面步骤的结果，出错时补上 stepIndex。 */
+export async function compileProjectEdit(input: ProjectEditInput, resolver: ProjectPlannerResolver): Promise<PrepareEditInput> {
+  if (isEmpty(input.steps) || input.steps.length > ProjectFileLimits.steps) throw new ProjectError('INVALID_INPUT', `edit 要 1–${ProjectFileLimits.steps} 个有序步骤。`)
   const plan = createFilePlan(resolver)
   for (const [stepIndex, step] of input.steps.entries()) {
     try {

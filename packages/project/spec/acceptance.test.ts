@@ -1,48 +1,71 @@
 /**
  * 项目空间的验收测试：每一条对应 spec/invariants.md 里的一个编号。
  * 改动或删除已有用例要在差量报告里点名并说明理由。这里只测对外承诺的行为，不测实现细节；实现细节的测试在 test/ 目录。
+ * 一律经代码面的能力端口调（和模型的程序是同一条路），断言程序看得到的 code 与 message。
  */
 
 import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { toolExamples } from '@velaros-ai/tool-contract'
+import { codeProgramChecker } from '@velaros-ai/code-surface'
 
 import { ProjectExecutionGate } from '../src/impl/operations/ProjectExecutionGate'
-import { ProjectToolNames, projectTools } from '../src/index'
+import { createSecretRedactionProvider } from '../src/index'
 
-import { createProjectHarness } from './support'
+import { createProjectHarness, failureOf, pngHeader } from './support'
 
 /** UTF-8 的 BOM。 */
 const Bom = String.fromCharCode(0xfeff)
+
+/** 生成的声明所在的目录。 */
+const Baselines = resolve(import.meta.dir, '../../../baselines/code-surface')
 
 let root = ''
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-acceptance-')) })
 afterEach(async () => { await rm(root, { recursive: true, force: true }) })
 
-describe('工具面', () => {
-  test('INV-1 只有七个工具，名字来自 ProjectToolNames，每个工具的 schema 拒收未知字段', () => {
-    expect(Object.keys(projectTools).sort()).toEqual(Object.values(ProjectToolNames).sort())
-    for (const tool of Object.values(projectTools)) {
-      const example = toolExamples.get(tool.name ?? '')?.[0]
-      expect({ tool: tool.name, example: !!example }).toEqual({ tool: tool.name, example: true })
-      expect(tool.schema.safeParse(example).success).toBe(true)
-      expect(tool.schema.safeParse({ ...example, unexpectedField: 1 }).success).toBe(false)
+describe('模型面', () => {
+  test('INV-1 项目空间挂五个命名空间；项目独有的是 velar:project 的六个操作与 velar:code 的两个，声明从源码生成、只放出这些', async () => {
+    const { space } = await createProjectHarness(root)
+    const table = space.operations
+    expect(Object.keys(table).sort()).toEqual(['code', 'images', 'project', 'sandbox', 'shell'])
+    expect(Object.keys(table.project!).sort()).toEqual(['edit', 'inspect', 'list', 'read', 'search', 'undo'])
+    expect(Object.keys(table.code!).sort()).toEqual(['analyze', 'query'])
+    const project = await readFile(join(Baselines, 'project.d.ts'), 'utf8')
+    const code = await readFile(join(Baselines, 'code.d.ts'), 'utf8')
+    const functions = (text: string) => [...text.matchAll(/export function (\w+)\(/g)].map((match) => match[1]).sort()
+    expect(functions(project)).toEqual(['edit', 'inspect', 'list', 'read', 'search', 'undo'])
+    expect(functions(code)).toEqual(['analyze', 'query'])
+    // 宿主管道不进模型面：调用上下文与宿主端口的名字一个都不出现在声明里。
+    for (const text of [project, code]) {
+      expect(text).not.toContain('ProjectCallContext')
+      expect(text).not.toContain('ProjectHostPort')
+    }
+  })
+
+  test('INV-22 两份代码模版整份照生成的声明过类型检查，声明里嵌的就是这两份文件', async () => {
+    for (const [namespace, file] of [['project', 'templates/project.js'], ['code', 'templates/code.js']] as const) {
+      const declarations = await readFile(join(Baselines, `${namespace}.d.ts`), 'utf8')
+      const template = await readFile(resolve(import.meta.dir, '..', file), 'utf8')
+      const checked = codeProgramChecker.check({ source: template, granted: [{ namespace, declarations }] })
+      expect({ namespace, diagnostics: checked.ok ? [] : checked.diagnostics }).toEqual({ namespace, diagnostics: [] })
+      for (const line of template.trim().split('\n').filter((text) => text.trim().length > 0)) expect(declarations).toContain(line)
     }
   })
 })
 
 describe('编辑的边界', () => {
-  test('INV-2 fileRef 只覆盖模型看到的那几行，range 越出去整批拒绝、文件不变', async () => {
+  test('INV-2 fileRef 只覆盖程序拿到的那几行，range 越出去整批拒绝、文件不变', async () => {
     await writeFile(join(root, 'a.txt'), 'first\nsecond\nthird\n')
     const { call, read } = await createProjectHarness(root)
     const view = await read('a.txt', 2)
     expect(view.fileRef).toStartWith('view:')
-    await expect(call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: view.fileRef, edits: [{ op: 'replace', range: 3, text: 'bad' }] }] }))
-      .rejects.toMatchObject({ reason: 'SCOPE_VIOLATION', details: { executionOutcome: 'not-applied' } })
+    expect(view.lines).toEqual([[2, 'second']])
+    const failure = await failureOf(call('project', 'edit', { steps: [{ action: 'edit', fileRef: view.fileRef, edits: [{ op: 'replace', range: 3, text: 'bad' }] }] }))
+    expect(failure.code).toBe('SCOPE_VIOLATION')
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('first\nsecond\nthird\n')
   })
 
@@ -51,34 +74,42 @@ describe('编辑的边界', () => {
     const { call, read } = await createProjectHarness(root)
     const view = await read('a.txt')
     await writeFile(join(root, 'a.txt'), 'one\nchanged outside\n')
-    await expect(call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: view.fileRef, edits: [{ op: 'replace', range: 2, text: 'mine' }] }] }))
-      .rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH', details: { executionOutcome: 'not-applied' } })
+    const failure = await failureOf(call('project', 'edit', { steps: [{ action: 'edit', fileRef: view.fileRef, edits: [{ op: 'replace', range: 2, text: 'mine' }] }] }))
+    expect(failure.code).toBe('BASE_REVISION_MISMATCH')
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('one\nchanged outside\n')
   })
 
-  test('INV-4 两个文件一起改，一处定不下来就全不改，回执标 not-applied', async () => {
+  test('INV-4 一次 edit 是一个事务：一处定不下来就全不改，message 点名是第几步第几处', async () => {
     await writeFile(join(root, 'a.txt'), 'alpha\n')
     await writeFile(join(root, 'b.txt'), 'beta\n')
     const { call, read } = await createProjectHarness(root)
     const a = await read('a.txt')
     const b = await read('b.txt')
-    await expect(call('project:edit', { action: 'apply', steps: [
+    const failure = await failureOf(call('project', 'edit', { steps: [
       { action: 'edit', fileRef: a.fileRef, edits: [{ op: 'replace', range: 1, text: 'ALPHA' }] },
       { action: 'edit', fileRef: b.fileRef, edits: [{ op: 'replace', match: 'not in the file', text: 'x' }] },
-    ] })).rejects.toMatchObject({ details: { executionOutcome: 'not-applied' } })
+    ] }))
+    expect(failure.code).toBe('TARGET_NOT_FOUND')
+    expect(failure.message).toContain('steps[1]')
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('alpha\n')
     expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('beta\n')
   })
 
-  test('INV-5 撤销遇到之后的外部修改拒绝覆盖', async () => {
+  test('INV-5 撤销遇到之后的外部修改拒绝覆盖；撤过的再撤一次是幂等成功', async () => {
     await writeFile(join(root, 'a.txt'), 'one\n')
     const { call, read } = await createProjectHarness(root)
-    const edited = await call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: (await read('a.txt')).fileRef, edits: [{ op: 'replace', range: 1, text: 'two' }] }] })
+    const edited = await call('project', 'edit', { steps: [{ action: 'edit', fileRef: (await read('a.txt')).fileRef, edits: [{ op: 'replace', range: 1, text: 'two' }] }] })
     expect(edited.changeRef).toStartWith('change:')
     await writeFile(join(root, 'a.txt'), 'three\n')
-    await expect(call('project:edit', { action: 'undo', changeRef: edited.changeRef }))
-      .rejects.toMatchObject({ reason: 'CONFLICT_WITH_EXTERNAL_EDIT', details: { executionOutcome: 'not-applied' } })
+    expect((await failureOf(call('project', 'undo', { changeRef: edited.changeRef }))).code).toBe('CONFLICT_WITH_EXTERNAL_EDIT')
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('three\n')
+
+    await writeFile(join(root, 'b.txt'), 'b1\n')
+    const second = await call('project', 'edit', { steps: [{ action: 'edit', fileRef: (await read('b.txt')).fileRef, edits: [{ op: 'replace', range: 1, text: 'b2' }] }] })
+    await call('project', 'undo', { changeRef: second.changeRef })
+    expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('b1\n')
+    expect(await call('project', 'undo', { changeRef: second.changeRef })).toMatchObject({ alreadyUndone: true })
+    expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('b1\n')
   })
 
   test('INV-6 越出项目的路径一律拒绝，包括经符号链接指到项目外', async () => {
@@ -87,9 +118,9 @@ describe('编辑的边界', () => {
       await writeFile(join(outside, 'secret.txt'), 'outside\n')
       await symlink(outside, join(root, 'link'))
       const { call } = await createProjectHarness(root)
-      await expect(call('project:read', { files: [{ path: '../secret.txt' }] })).rejects.toThrow()
-      await expect(call('project:read', { files: [{ path: 'link/secret.txt' }] })).rejects.toThrow()
-      await expect(call('project:edit', { action: 'apply', steps: [{ action: 'create', path: 'link/new.txt', text: 'x\n' }] })).rejects.toThrow()
+      expect((await failureOf(call('project', 'read', { files: [{ path: '../secret.txt' }] }))).code).toBe('PERMISSION_DENIED')
+      expect((await failureOf(call('project', 'read', { files: [{ path: 'link/secret.txt' }] }))).code).toBe('PERMISSION_DENIED')
+      expect((await failureOf(call('project', 'edit', { steps: [{ action: 'create', path: 'link/new.txt', text: 'x\n' }] }))).code).toBe('PERMISSION_DENIED')
       await expect(readFile(join(outside, 'new.txt'))).rejects.toThrow()
     } finally {
       await rm(outside, { recursive: true, force: true })
@@ -99,9 +130,9 @@ describe('编辑的边界', () => {
   test('INV-9 文本改动保留原来的 BOM 与换行，没改到的字节不动；新建文件是无 BOM 的 UTF-8、LF', async () => {
     await writeFile(join(root, 'crlf.txt'), Buffer.from(`${Bom}one\r\ntwo\r\nthree\r\n`, 'utf8'))
     const { call, read } = await createProjectHarness(root)
-    await call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: (await read('crlf.txt')).fileRef, edits: [{ op: 'replace', range: 2, text: 'TWO' }] }] })
+    await call('project', 'edit', { steps: [{ action: 'edit', fileRef: (await read('crlf.txt')).fileRef, edits: [{ op: 'replace', range: 2, text: 'TWO' }] }] })
     expect([...await readFile(join(root, 'crlf.txt'))]).toEqual([...Buffer.from(`${Bom}one\r\nTWO\r\nthree\r\n`, 'utf8')])
-    await call('project:edit', { action: 'apply', steps: [{ action: 'create', path: 'fresh.txt', text: 'a\nb\n' }] })
+    await call('project', 'edit', { steps: [{ action: 'create', path: 'fresh.txt', text: 'a\nb\n' }] })
     expect([...await readFile(join(root, 'fresh.txt'))]).toEqual([...Buffer.from('a\nb\n', 'utf8')])
   })
 
@@ -111,30 +142,36 @@ describe('编辑的边界', () => {
     const { call, read } = await createProjectHarness(root)
     const linkView = await read('link.txt')
     const realView = await read('real.txt')
-    await expect(call('project:edit', { action: 'apply', steps: [
+    const failure = await failureOf(call('project', 'edit', { steps: [
       { action: 'edit', fileRef: linkView.fileRef, edits: [{ op: 'replace', range: 1, text: 'A' }] },
       { action: 'edit', fileRef: realView.fileRef, edits: [{ op: 'replace', range: 2, text: 'B' }] },
-    ] })).rejects.toMatchObject({ reason: 'INVALID_INPUT', details: { executionOutcome: 'not-applied' } })
+    ] }))
+    expect(failure.code).toBe('INVALID_INPUT')
     expect(await readFile(join(root, 'real.txt'), 'utf8')).toBe('L1\nL2\n')
 
     await writeFile(join(root, '.env'), 'API_KEY=sk-live-SECRET\n')
     await symlink('.env', join(root, 'env.sample'))
     const denied = await createProjectHarness(root, { corePolicy: { readDeny: ['.env'] } })
-    await expect(denied.call('project:read', { files: [{ path: '.env' }] })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
-    await expect(denied.call('project:read', { files: [{ path: 'env.sample' }] })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
+    expect((await failureOf(denied.call('project', 'read', { files: [{ path: '.env' }] }))).code).toBe('PERMISSION_DENIED')
+    expect((await failureOf(denied.call('project', 'read', { files: [{ path: 'env.sample' }] }))).code).toBe('PERMISSION_DENIED')
   })
 
-  test('INV-14 版本库内部缺省不许写，报错说清楚该用 project:run', async () => {
+  test('INV-14 版本库内部缺省不许写，报错说清楚要用命令跑 git；沙箱的源目录出了项目就拒绝', async () => {
     const { call } = await createProjectHarness(root)
-    await expect(call('project:edit', { action: 'apply', steps: [{ action: 'create', path: '.git/hooks/pre-commit', text: '#!/bin/sh\n' }] }))
-      .rejects.toMatchObject({ reason: 'PERMISSION_DENIED', suggestedNextAction: expect.stringContaining('project:run') })
+    const failure = await failureOf(call('project', 'edit', { steps: [{ action: 'create', path: '.git/hooks/pre-commit', text: '#!/bin/sh\n' }] }))
+    expect(failure.code).toBe('PERMISSION_DENIED')
+    expect(failure.message).toContain('velar:shell')
     await expect(readFile(join(root, '.git/hooks/pre-commit'))).rejects.toThrow()
+
+    const sandboxed = await createProjectHarness(root, { sandbox: { createSandbox: async () => { throw new Error('不该建到这里') } } as never })
+    expect((await failureOf(sandboxed.call('sandbox', 'create', { source: '..' }))).code).toBe('PERMISSION')
   })
 
   test('INV-10 命中 generatedFiles 的文件不许手改，下一步是改生成器的输入再重新生成', async () => {
     const { call } = await createProjectHarness(root)
-    await expect(call('project:edit', { action: 'apply', steps: [{ action: 'create', path: 'src/api.generated.ts', text: 'export {}\n' }] }))
-      .rejects.toMatchObject({ reason: 'GENERATED_FILE', suggestedNextAction: expect.stringContaining('project:run') })
+    const failure = await failureOf(call('project', 'edit', { steps: [{ action: 'create', path: 'src/api.generated.ts', text: 'export {}\n' }] }))
+    expect(failure.code).toBe('GENERATED_FILE')
+    expect(failure.message).toContain('生成')
     await expect(readFile(join(root, 'src/api.generated.ts'))).rejects.toThrow()
   })
 
@@ -149,34 +186,70 @@ describe('编辑的边界', () => {
     }
     await writeFile(join(root, 'notes.txt'), 'notes\n')
     const { call, confirmations, mutations } = await createProjectHarness(root, { sandbox: sandbox as never, corePolicy: { writeDeny: ['deploy.key'] } })
-    await expect(call('project:sandbox', { action: 'apply', sandboxId: 'sb' })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
-    // 生成文件与 writeDeny 的路径都点名了；拒绝发生在修改授权与用户确认之前，宿主一个文件都没落。
+    const failure = await failureOf(call('sandbox', 'apply', { id: 'sb' }))
+    expect(failure.code).toBe('PERMISSION')
+    expect(failure.message).toContain('deploy.key')
+    // 拒绝发生在修改授权与用户确认之前，宿主一个文件都没落。
     expect(mutations).toEqual([])
     expect(confirmations).toEqual([])
     expect(applied).toEqual([])
-    // 去掉不许写的两条之后，剩下的照常落回。
-    await call('project:sandbox', { action: 'apply', sandboxId: 'sb', paths: ['notes.txt'] })
+    // 点名只落许写的那一个，照常落回。
+    await call('sandbox', 'apply', { id: 'sb', paths: ['notes.txt'] })
     expect(applied).toHaveLength(1)
+  })
+
+  test('INV-18 文件在读完之后被改过、原来要改的地方还唯一时，message 给出新行号与新 fileRef，换上它重提就成', async () => {
+    await writeFile(join(root, 'a.ts'), 'const a = 1\nconst b = 2\nconst c = 3\n')
+    const { call, read } = await createProjectHarness(root)
+    const view = await read('a.ts')
+    await writeFile(join(root, 'a.ts'), '// header\nconst a = 1\nconst b = 2\nconst c = 3\n')
+    const failure = await failureOf(call('project', 'edit', { steps: [{ action: 'edit', fileRef: view.fileRef, edits: [{ op: 'replace', range: 2, match: 'b = 2', text: 'b = 20' }] }] }))
+    expect(failure.code).toBe('BASE_REVISION_MISMATCH')
+    expect(failure.message).toContain('第 3 行')
+    const fresh = /view:[a-f0-9]{64}/.exec(failure.message)?.[0]
+    expect(fresh).toBeDefined()
+    await call('project', 'edit', { steps: [{ action: 'edit', fileRef: fresh, edits: [{ op: 'replace', range: 3, match: 'b = 2', text: 'b = 20' }] }] })
+    expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('// header\nconst a = 1\nconst b = 20\nconst c = 3\n')
+  })
+
+  test('INV-19 读出来被遮住的内容只能看不能改：窗口标 redacted、不给 fileRef', async () => {
+    // 假密钥拼出来写：源码里写成整串，公开前的扫描会把它当成真的 API key。
+    const fakeKey = ['sk', 'live', 'abcdefghijklmnopqrstuvwxyz0123456789'].join('-')
+    await writeFile(join(root, 'config.ts'), `export const key = "${fakeKey}"\n`)
+    const { read } = await createProjectHarness(root, { providers: { secretRedaction: createSecretRedactionProvider() } })
+    const view = await read('config.ts')
+    expect(view.redacted).toBe(true)
+    expect(view.fileRef).toBeUndefined()
+    expect(view.editable).toBe(false)
+    expect(JSON.stringify(view.lines)).not.toContain(fakeKey)
+  })
+
+  test('INV-20 程序看得到的只有 code 与 message：定位不唯一时 message 里有位置、候选与下一步', async () => {
+    await writeFile(join(root, 'dup.txt'), 'same\nother\nsame\n')
+    const { call, read } = await createProjectHarness(root)
+    const view = await read('dup.txt')
+    const failure = await failureOf(call('project', 'edit', { steps: [{ action: 'edit', fileRef: view.fileRef, edits: [{ op: 'replace', match: 'same', text: 'x' }] }] }))
+    expect(failure.code).toBe('AMBIGUOUS_TARGET')
+    expect(failure.message).toContain('steps[0].edits[0]')
+    expect(failure.message).toContain('候选')
+    expect(failure.message).toContain('下一步')
   })
 })
 
-describe('命令', () => {
-  test('INV-7 危险命令每次都由用户亲自确认；被拒不执行；会改项目的命令先过修改授权', async () => {
+describe('命令与看图', () => {
+  test('INV-7 危险命令每次都由用户亲自确认；被拒一个进程都不起；会改项目的命令先过修改授权', async () => {
     const denied = await createProjectHarness(root, { approve: false })
-    const result = await denied.call('project:run', { command: 'rm -rf ./dist' })
-    expect(result).toMatchObject({ approved: false, skipped: true })
+    expect((await failureOf(denied.call('shell', 'run', { command: 'rm -rf ./dist' }))).code).toBe('PERMISSION')
     expect(denied.commands).toEqual([])
     expect(denied.confirmations[0]?.options).toMatchObject({ approvalRisk: 'high', requireManualApproval: true, rememberRiskScope: false, riskScope: 'project-command:dangerous' })
-    expect(String((denied.confirmations[0]?.options?.operation as { key?: string } | undefined)?.key)).toStartWith('shell-command:')
 
     const unauthorized = await createProjectHarness(root, { authorizeMutation: false })
-    const skipped = await unauthorized.call('project:run', { command: 'touch created.txt' })
-    expect(skipped).toMatchObject({ approved: false, skipped: true })
+    expect((await failureOf(unauthorized.call('shell', 'run', { command: 'touch created.txt' }))).code).toBe('PERMISSION')
     expect(unauthorized.mutations).toHaveLength(1)
     expect(unauthorized.commands).toEqual([])
 
     const readOnly = await createProjectHarness(root, { authorizeMutation: false })
-    await readOnly.call('project:run', { command: 'ls' })
+    await readOnly.call('shell', 'run', { command: 'ls' })
     expect(readOnly.mutations).toEqual([])
     expect(readOnly.commands).toEqual(['ls'])
   })
@@ -185,16 +258,16 @@ describe('命令', () => {
     await writeFile(join(root, 'a.txt'), 'alpha\n')
     const harness = await createProjectHarness(root)
     const file = await harness.read('a.txt')
-    await harness.call('project:edit', { action: 'apply', steps: [
+    await harness.call('project', 'edit', { steps: [
       { action: 'create', path: 'created.txt', text: 'new\n' },
       { action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'ALPHA' }] },
     ] })
     // 先规划、再带着路径问授权：确认卡片列得出这次会写哪些文件。
-    expect(harness.mutations).toEqual(['变更项目文件'])
+    expect(harness.mutations).toEqual(['改项目文件'])
     expect([...harness.authorizedPaths[0]!].sort()).toEqual(['a.txt', 'created.txt'])
 
     const outside = await createProjectHarness(root)
-    await expect(outside.call('project:run', { command: 'ls', cwd: '..' })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
+    expect((await failureOf(outside.call('shell', 'run', { command: 'ls', cwd: '..' }))).code).toBe('PERMISSION')
     expect(outside.confirmations).toEqual([])
     expect(outside.mutations).toEqual([])
     expect(outside.commands).toEqual([])
@@ -204,7 +277,7 @@ describe('命令', () => {
     const gate = new ProjectExecutionGate()
     const order: string[] = []
     let releaseFirst!: () => void
-    const firstRead = gate.run('/repo', false, new AbortController().signal, () => new Promise<void>((resolve) => { order.push('read-1 start'); releaseFirst = resolve }))
+    const firstRead = gate.run('/repo', false, new AbortController().signal, () => new Promise<void>((done) => { order.push('read-1 start'); releaseFirst = done }))
     const secondRead = gate.run('/repo', false, new AbortController().signal, async () => { order.push('read-2') })
     await secondRead
     const writer = gate.run('/repo', true, new AbortController().signal, async () => { order.push('write') })
@@ -215,5 +288,23 @@ describe('命令', () => {
     releaseFirst()
     await Promise.all([firstRead, writer, lateRead, cancelled.catch(() => undefined)])
     expect(order).toEqual(['read-1 start', 'read-2', 'write', 'read-3'])
+  })
+
+  test('INV-21 项目空间里看图只看项目里、读取策略许看的图', async () => {
+    await writeFile(join(root, 'shot.png'), pngHeader(40, 30))
+    await writeFile(join(root, 'private.png'), pngHeader(10, 10))
+    const outside = await mkdtemp(join(tmpdir(), 'project-acceptance-image-'))
+    try {
+      await writeFile(join(outside, 'far.png'), pngHeader(10, 10))
+      const { call, attached } = await createProjectHarness(root, { corePolicy: { readDeny: ['private.png'] } })
+      const seen = await call('images', 'view', { files: [{ path: 'shot.png' }] })
+      expect(seen.files[0]).toMatchObject({ path: 'shot.png', width: 40, height: 30 })
+      expect(attached).toHaveLength(1)
+      expect((await failureOf(call('images', 'view', { files: [{ path: 'private.png' }] }))).code).toBe('PERMISSION')
+      expect((await failureOf(call('images', 'view', { files: [{ path: join(outside, 'far.png') }] }))).code).toBe('PERMISSION')
+      expect(attached).toHaveLength(1)
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
   })
 })

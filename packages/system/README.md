@@ -2,17 +2,19 @@
 
 > 模块卡片见 [MODULE.md](./MODULE.md)。本文是操作手册。
 
-系统空间：本机能力的实现（本地内核），加上把三件跨空间能力配上系统空间端口的那张装配表。
-能力本身各在各的包里，模型在程序里这样用它们：
+系统空间：本机能力的实现（本地内核），加上把四件能力配上系统空间端口的那张装配表。
+能力本身是 `@velaros-ai/velar` 里的能力单元，模型在程序里这样用它们：
 
 ```js
-import { edit, read, view } from 'velar:files'       // @velaros-ai/files
-import { listTasks, run } from 'velar:shell'         // @velaros-ai/shell-command
-import { apply, create, diff } from 'velar:sandbox'  // @velaros-ai/rehearsal-sandbox
+import { edit, read, undo } from 'velar:files'      // @velaros-ai/velar/files（本机文件，系统空间专用）
+import { view } from 'velar:images'                  // @velaros-ai/velar/images
+import { listTasks, run } from 'velar:shell'         // @velaros-ai/velar/shell
+import { apply, create, diff } from 'velar:sandbox'  // @velaros-ai/velar/sandbox
 ```
 
-系统空间的端口决定这三件能力在这台机器上怎么落地：路径可以是本机任意位置，`~` 展开到家目录、相对路径相对内核的工作目录；
-凭证文件与系统敏感路径先问用户；写是逐个原子替换；命令在本机任意目录跑；沙箱能镜像任意目录，镜像里的命令被进程约束钉在镜像内。
+系统空间的端口决定这四件能力在这台机器上怎么落地：路径可以是本机任意位置，`~` 展开到家目录、相对路径相对内核的工作目录；
+凭证文件与系统敏感路径先问用户；写是逐个原子替换，撤回新建的文件时核对后删掉；命令在本机任意目录跑；沙箱能镜像任意目录，镜像里的命令被进程约束钉在镜像内；
+看图能看本机任意位置的图，macOS 上用 sips 缩图裁图。
 
 ```ts
 import { createLocalSystemKernel, createSystemSpace } from '@velaros-ai/system'

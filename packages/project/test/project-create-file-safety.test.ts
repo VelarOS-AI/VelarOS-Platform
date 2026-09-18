@@ -4,14 +4,9 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
-
-import type { ProjectToolContext } from '../src/contract/requires'
 import { FileProjectTransactionStateStore } from '../src/impl/persistence/FileProjectTransactionStateStore'
 import { createProjectKernel, type EditIntent } from '../src/index'
 
-import { LegacyProjectToolNames as ProjectToolNames } from './support/legacy-tools'
-import { legacyProjectTools as projectTools } from './support/legacy-tools'
 
 const Precious = 'precious\n'
 
@@ -170,35 +165,5 @@ describe('create_file 不静默覆盖、回滚不丢原文', () => {
       FileProjectTransactionStateStore.prototype.commit = originalCommit
       await rm(directory, { recursive: true, force: true })
     }
-  })
-})
-
-describe('project:write 工具层', () => {
-  function toolContext(root: string): ProjectToolContext {
-    return {
-      abortSignal: new AbortController().signal,
-      project: {
-        getRootPath: () => root,
-        kernel: async () => createProjectKernel({ root }),
-        prepareMutation: async () => ({
-          approved: true,
-          message: 'approved',
-          authorizationScope: 'project',
-        }),
-        runCommand: async () => ({}) as never,
-        queryCode: async () => ({}),
-      },
-      approval: defaultDenyApprovalPort,
-    }
-  }
-
-  test('mode=create 对已存在文件返回失败，原文不变', async () => {
-    await withRoot({ 'keep.txt': Precious }, async (root) => {
-      await expect(projectTools[ProjectToolNames.write].execute(
-        { path: 'keep.txt', content: 'new\n', mode: 'create' },
-        toolContext(root),
-      )).rejects.toMatchObject({ reason: 'TARGET_EXISTS', details: { path: 'keep.txt' } })
-      expect(await readFile(join(root, 'keep.txt'), 'utf8')).toBe(Precious)
-    })
   })
 })

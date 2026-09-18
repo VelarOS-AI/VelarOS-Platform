@@ -548,7 +548,7 @@ requirePublicTypeContracts(
   "src/index.ts",
   "src/contracts.ts",
   "src/types/project.ts",
-  ["ProjectCommandResult", "ProjectCodeQuery"],
+  ["ProjectAuthorizationDecision", "ProjectCodeQuery"],
 );
 requirePublicTypeContracts(
   "office",
