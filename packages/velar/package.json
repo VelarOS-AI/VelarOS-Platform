@@ -4,7 +4,7 @@
   "velaros": {
     "platform": "0.6"
   },
-  "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), memory (long-term memory: one directory of Markdown files per host-given scope, plus the index a host puts at the start of each session) and office (Word, PowerPoint and Excel generation, PDF reading and editing, Word and LaTeX to PDF, document preview and Markdown conversion, with the document engines underneath and the narrow renderer primitives the Document Renderer uses). One plain directory per unit, one convention for all.",
+  "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), memory (long-term memory: one directory of Markdown files per host-given scope, plus the index a host puts at the start of each session), office (Word, PowerPoint and Excel generation, PDF reading and editing, Word and LaTeX to PDF, document preview and Markdown conversion, with the document engines underneath and the narrow renderer primitives the Document Renderer uses) and browser (velar:browser to drive and read pages, velar:devtools for console, network, storage, performance, recording, emulation and user scripts, with the CDP drivers, page engines, Electron session runtime and site workspace underneath). One plain directory per unit, one convention for all.",
   "license": "Apache-2.0",
   "author": "VelarOS",
   "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/velar#readme",
@@ -89,12 +89,32 @@
     "./office/renderer": {
       "types": "./dist/office/renderer.d.ts",
       "import": "./dist/office/renderer.js"
+    },
+    "./browser": {
+      "types": "./dist/browser/index.d.ts",
+      "import": "./dist/browser/index.js"
+    },
+    "./browser/contracts": {
+      "types": "./dist/browser/contracts.d.ts",
+      "import": "./dist/browser/contracts.js"
+    },
+    "./browser/renderer": {
+      "types": "./dist/browser/renderer.d.ts",
+      "import": "./dist/browser/renderer.js"
+    },
+    "./browser/electron": {
+      "types": "./dist/browser/electron.d.ts",
+      "import": "./dist/browser/electron.js"
     }
   },
   "imports": {
     "#pptxgenjs": {
       "types": "./office/vendor/pptxgenjs/pptxgen.es.d.ts",
       "default": "./office/vendor/pptxgenjs/pptxgen.es.js"
+    },
+    "#devtools-performance-engine": {
+      "types": "./browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.d.mts",
+      "default": "./browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs"
     }
   },
   "files": [
@@ -105,13 +125,14 @@
     "computer/runtime",
     "THIRD_PARTY_NOTICES.md",
     "third-party-licenses",
-    "office/vendor"
+    "office/vendor",
+    "browser/vendor"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
-    "test": "bun run build && bun test files/spec/acceptance.test.ts files/test images/spec/acceptance.test.ts images/test shell/spec/acceptance.test.ts shell/test sandbox/spec/acceptance.test.ts sandbox/test project/spec/acceptance.test.ts project/test computer/spec/acceptance.test.ts computer/test memory/spec/acceptance.test.ts memory/test office/spec/acceptance.test.ts office/test",
+    "test": "bun run build && bun test files/spec/acceptance.test.ts files/test images/spec/acceptance.test.ts images/test shell/spec/acceptance.test.ts shell/test sandbox/spec/acceptance.test.ts sandbox/test project/spec/acceptance.test.ts project/test computer/spec/acceptance.test.ts computer/test memory/spec/acceptance.test.ts memory/test office/spec/acceptance.test.ts office/test browser/spec/acceptance.test.ts browser/test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/velar"
   },
   "dependencies": {
@@ -127,6 +148,7 @@
     "docx": "^9.6.1",
     "exceljs": "^4.4.0",
     "execa": "^9.6.1",
+    "gifenc": "^1.0.3",
     "jszip": "^3.10.1",
     "mammoth": "^1.12.0",
     "parse5": "^7.3.0",
@@ -136,10 +158,26 @@
     "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "@velaros-ai/agent": "workspace:^"
+    "@types/react": "^19.0.0",
+    "@velaros-ai/agent": "workspace:^",
+    "electron": ">=41.0.0",
+    "react": "^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    },
+    "electron": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "@types/node": "^22.19.17"
+    "@types/node": "^22.19.17",
+    "@types/react": "^19.0.0",
+    "electron": "^41.10.2"
   },
   "publishConfig": {
     "access": "public",

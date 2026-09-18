@@ -62,7 +62,6 @@ const Domains = [
     name: 'capabilities',
     config: capabilitiesConfig,
     globs: [
-      'packages/browser/**',
       'packages/cli/**',
       'packages/code-surface/**',
       'packages/development/**',

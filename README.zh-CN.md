@@ -14,7 +14,7 @@ VelarOS Desktop 是首款真实产品、桌面 Shell 和 reference integration�
 
 ## 仓库结构
 
-VelarOS Platform 包含 20 个 package workspace，其中 19 个独立发布。公开包各自遵循 semver，
+VelarOS Platform 包含 19 个 package workspace，其中 18 个独立发布。公开包各自遵循 semver，
 并通过统一的 `velaros.platform` 代号声明跨包兼容性。
 
 | 领域 | 包 |
@@ -24,7 +24,7 @@ VelarOS Platform 包含 20 个 package workspace，其中 19 个独立发布。�
 | 共享原语 | `@velaros-ai/core`、`@velaros-ai/platform` |
 | 能力公共件 | `@velaros-ai/code-surface`、`@velaros-ai/velar`、`@velaros-ai/text-files`、`@velaros-ai/path-rules`、`@velaros-ai/tool-contract` |
 | 模型供应方 | `@velaros-ai/model` |
-| 能力 | `@velaros-ai/browser`、`@velaros-ai/cli`、`@velaros-ai/development`、`@velaros-ai/project`、`@velaros-ai/system` |
+| 能力 | `@velaros-ai/cli`、`@velaros-ai/development`、`@velaros-ai/project`、`@velaros-ai/system` |
 | UI | `@velaros-ai/ui` |
 | HTML 工件 | `@velaros-ai/html-artifacts` |
 | Surface 协议 | `@velaros-ai/surface-protocol` |

@@ -60,39 +60,6 @@ const forbiddenPublishedPathPatterns = [
 ]
 const portableContractsFixtures = new Map([
   [
-    '@velaros-ai/browser',
-    {
-      bundleName: 'browser-contracts',
-      source: `import { browserAddress, browserScreenshotPolicy } from '@velaros-ai/browser/renderer'
-import type {
-  BrowserAutomationMode,
-  BrowserElementSelection,
-  BrowserPageNavigationAction,
-  BrowserPagePreviewFrame,
-  BrowserViewportOptions,
-} from '@velaros-ai/browser/contracts'
-
-export interface BrowserContractsTypeFixture {
-  mode: BrowserAutomationMode
-  selection: BrowserElementSelection
-  navigation: BrowserPageNavigationAction
-  preview: BrowserPagePreviewFrame
-  viewport: BrowserViewportOptions
-}
-
-Object.assign(globalThis, { __velarosBrowserContractsBrowserGate: {
-  buildOptions: browserScreenshotPolicy.buildOptions,
-  siteHost: browserAddress.siteHost,
-  urlCandidate: browserAddress.urlCandidate,
-  isLocalUrl: browserAddress.isLocalUrl,
-  resolveNavigationInput: browserAddress.resolveNavigationInput,
-  searchFallbackUrl: browserAddress.searchFallbackUrl,
-  resolveSearchOrNavigationInput: browserAddress.resolveSearchOrNavigationInput,
-} })
-`,
-    },
-  ],
-  [
     '@velaros-ai/project',
     {
       bundleName: 'project-contracts',
@@ -707,7 +674,7 @@ async function createCombinedConflictConsumer(
   kernelPackages,
   consumersRoot,
 ) {
-  const targetName = '@velaros-ai/browser/runtime'
+  const targetName = '@velaros-ai/system'
   const targetRecord = packagesByName.get(targetName)
   const consumerRoot = await mkdtemp(path.join(consumersRoot, 'combined-conflict-'))
   const consumerNodeModules = path.join(consumerRoot, 'node_modules')
@@ -733,14 +700,14 @@ async function createCombinedConflictConsumer(
   await writeFile(
     path.join(consumerRoot, 'consumer.ts'),
     `import { AppError } from '@velaros-ai/core'
-import { BrowserSessionManager } from '${targetName}'
+import * as capability from '${targetName}'
 import {
   uiConflictProbe,
   type UiConflictProbe,
 } from '@velaros-ai/ui-conflict-probe'
 
 const probe: UiConflictProbe = { value: null, optional: undefined }
-void [AppError, BrowserSessionManager, probe, uiConflictProbe]
+void [AppError, capability, probe, uiConflictProbe]
 `,
   )
   await writeFile(
@@ -748,7 +715,6 @@ void [AppError, BrowserSessionManager, probe, uiConflictProbe]
     `await Promise.all([
   import('@velaros-ai/core'),
   import('@velaros-ai/kernel/contracts'),
-  import('@velaros-ai/browser/core'),
   import('${targetName}'),
   import('@velaros-ai/ui-conflict-probe'),
 ])

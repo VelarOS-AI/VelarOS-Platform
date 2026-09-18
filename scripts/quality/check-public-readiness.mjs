@@ -8,16 +8,13 @@ const packageRoot = join(repositoryRoot, 'packages')
 const officialRepository = 'https://github.com/VelarOS-AI/VelarOS-Platform.git'
 const canonicalIssues = 'https://github.com/VelarOS-AI/VelarOS-Platform/issues'
 const requiredPackageNoticeFiles = new Map([
-  ['browser', [
-    'THIRD_PARTY_NOTICES.md',
-    'vendor/devtools-performance-engine/LICENSE.chrome-devtools-frontend',
-    'vendor/devtools-performance-engine/LICENSE.chrome-devtools-mcp',
-    'vendor/devtools-performance-engine/NOTICE.md',
-  ]],
   ['velar', [
     'THIRD_PARTY_NOTICES.md',
     'third-party-licenses/pptxgenjs-MIT.txt',
     'office/vendor/pptxgenjs/README.md',
+    'browser/vendor/devtools-performance-engine/LICENSE.chrome-devtools-frontend',
+    'browser/vendor/devtools-performance-engine/LICENSE.chrome-devtools-mcp',
+    'browser/vendor/devtools-performance-engine/NOTICE.md',
   ]],
   ['ui', [
     'THIRD_PARTY_NOTICES.md',

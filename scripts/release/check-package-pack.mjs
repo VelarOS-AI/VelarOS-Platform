@@ -25,16 +25,14 @@ const packageDirectory = path.join(repositoryRoot, 'packages', directoryName)
 const manifest = JSON.parse(await readFile(path.join(packageDirectory, 'package.json'), 'utf8'))
 const destination = await mkdtemp(path.join(tmpdir(), 'velaros-package-pack-check-'))
 const requiredPackageFiles = new Map([
-  ['browser', [
-    'package/THIRD_PARTY_NOTICES.md',
-    'package/vendor/devtools-performance-engine/LICENSE.chrome-devtools-frontend',
-    'package/vendor/devtools-performance-engine/LICENSE.chrome-devtools-mcp',
-    'package/vendor/devtools-performance-engine/NOTICE.md',
-  ]],
   ['velar', [
     'package/THIRD_PARTY_NOTICES.md',
     'package/third-party-licenses/pptxgenjs-MIT.txt',
     'package/office/vendor/pptxgenjs/pptxgen.es.js',
+    'package/browser/vendor/devtools-performance-engine/LICENSE.chrome-devtools-frontend',
+    'package/browser/vendor/devtools-performance-engine/LICENSE.chrome-devtools-mcp',
+    'package/browser/vendor/devtools-performance-engine/NOTICE.md',
+    'package/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs',
   ]],
   ['ui', [
     'package/THIRD_PARTY_NOTICES.md',

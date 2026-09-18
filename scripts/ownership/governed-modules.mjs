@@ -371,6 +371,53 @@ export const GovernedModules = [
     acceptance: 'office/spec/acceptance.test.ts',
   },
   {
+    // 能力单元：浏览器（velar:browser 与 velar:devtools），整包并进来的：模型面的两件能力，连同底下的 CDP 驱动、交互 / 页面数据 / 截图 / 性能引擎、
+    // Electron 会话运行时、站点工作区、登录墙、用户脚本存储、动作策略与页面脚本；地址栏、偏好、截图策略与 React 合成给渲染进程
+    directory: 'velar',
+    unit: 'browser',
+    name: '@velaros-ai/velar/browser',
+    contract: 'browser/contract',
+    types: 'browser/types',
+    portable: 'browser.ts',
+    impl: 'browser/impl',
+    utils: 'browser/utils',
+    tuning: 'tuning.ts',
+    // 渲染进程会加载这两个：可移植数据与渲染进程要的那几件纯策略值
+    browserSafeEntries: ['contracts.ts', 'renderer.ts'],
+    // 空间端口：两件能力经 ctx.browser 调它（已经绑好会话与站点）；每个方法都必须有操作在调
+    hostPort: 'BrowserSpacePort',
+    hostPortField: 'browser',
+    surfaceFile: ['browser/impl/BrowserOperations.ts', 'browser/impl/DevtoolsOperations.ts'],
+    // 随包的 DevTools 性能引擎（约 2.5 MB 的生成产物），经包清单的子路径导入 #devtools-performance-engine 取用
+    assets: ['vendor'],
+    layers: [
+      // 代码面 browser、devtools 两个命名空间的操作：入参核对，交给端口或执行类
+      ['BrowserOperations.ts', 'DevtoolsOperations.ts'],
+      // 执行：结构化取内容（表格、列表、翻页、正文）
+      ['BrowserExtraction.ts'],
+      // 运行时装配：Electron 运行时
+      ['electron/'],
+      // 领域引擎：交互、页面数据、截图、性能
+      ['engines/'],
+      // 协议、会话状态、站点工作区，互不依赖
+      ['cdp/', 'session/', 'workspace/'],
+      // 纯策略门面与 React 合成
+      ['policies/', 'BrowserComposition.ts'],
+    ],
+    // 性能引擎是 2.5 MB 的 vendor 产物，静态 import 会让每个加载本单元的进程都付这笔钱；
+    // 它只在真跑 trace 时才用得到，所以登记成唯一一个懒加载目标。
+    lazyImports: [
+      {
+        specifier: '#devtools-performance-engine',
+        file: 'browser/impl/engines/BrowserPerformanceTraceEngine.ts',
+        reason: 'vendor DevTools 性能引擎约 2.5 MB，只在解析 trace 与出 insight 时才加载',
+      },
+    ],
+    card: 'browser/MODULE.md',
+    invariants: 'browser/spec/invariants.md',
+    acceptance: 'browser/spec/acceptance.test.ts',
+  },
+  {
     directory: 'code-surface',
     name: '@velaros-ai/code-surface',
     // 四个工具：script:exec 跑脚本、存脚本、重放，另外三个（history、show、diff）只读时间线。别的能力都在脚本里 import
@@ -625,48 +672,6 @@ export const GovernedModules = [
       ],
       // 通用轮询驱动：唯一一个内置驱动，认协议的驱动由宿主注册
       ['PollingDriver.ts'],
-    ],
-    card: 'MODULE.md',
-    invariants: 'spec/invariants.md',
-    acceptance: 'spec/acceptance.test.ts',
-  },
-  {
-    directory: 'browser',
-    name: '@velaros-ai/browser',
-    toolsFile: 'src/impl/BrowserTools.ts',
-    contract: 'src/contract',
-    types: 'src/types',
-    portable: 'browser.ts',
-    impl: 'src/impl',
-    utils: 'src/utils',
-    tuning: 'tuning.ts',
-    // 渲染进程会加载这两个：可移植数据与渲染进程要的那几件纯策略值
-    browserSafeEntries: ['contracts.ts', 'renderer.ts'],
-    hostPort: 'ToolBrowserApi',
-    hostPortField: 'browser',
-    layers: [
-      // 工具：32 个模型面工具的定义、分类、常驻集与随包 mod 清单
-      ['BrowserTools.ts'],
-      // 工具背后的执行：act / extract / recipe / files / user_scripts / performance 的动作分派
-      ['operations/'],
-      // 运行时装配：Electron 运行时
-      ['electron/'],
-      // 领域引擎：交互、页面数据、截图、性能
-      ['engines/'],
-      // 协议、会话状态、站点工作区，互不依赖
-      ['cdp/', 'session/', 'workspace/'],
-      // 纯策略门面与 React 合成
-      ['policies/', 'BrowserComposition.ts'],
-    ],
-    toolDefiner: 'defineBrowserTool',
-    // 性能引擎是 2.5 MB 的 vendor 产物，静态 import 会让每个加载本包的进程都付这笔钱；
-    // 它只在 browser:performance 真跑 trace 时才用得到，所以登记成唯一一个懒加载目标。
-    lazyImports: [
-      {
-        specifier: '../../../vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs',
-        file: 'src/impl/engines/BrowserPerformanceTraceEngine.ts',
-        reason: 'vendor DevTools 性能引擎约 2.5 MB，只在解析 trace 与出 insight 时才加载',
-      },
     ],
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',

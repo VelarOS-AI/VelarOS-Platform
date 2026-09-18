@@ -11,7 +11,7 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 | Core | `packages/core`, `packages/platform` |
 | Foundations | `packages/code-surface`, `packages/velar`, `packages/text-files`, `packages/path-rules`, `packages/tool-contract` |
 | Model | `packages/model` |
-| Capabilities | `packages/browser`, `packages/cli`, `packages/development`, `packages/project`, `packages/system` |
+| Capabilities | `packages/cli`, `packages/development`, `packages/project`, `packages/system` |
 | UI | `packages/ui` |
 | HTML artifacts | `packages/html-artifacts` |
 | Surface | `packages/surface-protocol` |
@@ -24,7 +24,8 @@ The repository is converging on three rules; packages move one at a time, each m
 1. **Tool packages move into `@velaros-ai/velar` whole.** Every capability the model imports is a unit there (`packages/velar/<unit>`,
    imported as `velar:<unit>`), and the package that carried it moves in with its implementation, not as a projection over a package
    left outside: the project kernel behind `velar:project` and `velar:code`, the helper sidecar behind `velar:computer`, the memory
-   store behind `velar:memory`. The old package is then deleted — there
+   store behind `velar:memory`, the document engines behind `velar:office`, and the CDP drivers, page engines and Electron session
+   runtime behind `velar:browser` and `velar:devtools`. The old package is then deleted — there
    is never a second copy. A package with no model face is not a tool and stays outside `velar`, grouped by responsibility:
    `development`, the language services a host plugs into `velar:code`, is one.
 2. **Core execution stays outside `velar`**: `kernel`, `agent`, `model`, `code-surface` (the program gate), `tool-contract`,
@@ -43,7 +44,7 @@ The repository is converging on three rules; packages move one at a time, each m
 | `knowledge` | deleted with its vector and full-text indexes ([ADR 0010](../decisions/0010-memory-slimming.md)): each space searches and reads its own files | done |
 | `memory` | `velar/memory` (`velar:memory`: one directory of Markdown per host-given scope, [ADR 0010](../decisions/0010-memory-slimming.md)); `packages/memory` deleted | done |
 | `office` | whole → `velar/office` (`velar:office`, with the document engines, converters and the renderer primitives underneath); `packages/office` deleted; `document-renderer` now builds on `@velaros-ai/velar/office/renderer` | done |
-| `browser` | whole → a `velar` unit with its engine; what cannot move (an execution loop, not a tool) stays a separate package | pending |
+| `browser` | whole → `velar/browser` (`velar:browser` to drive and read pages, `velar:devtools` for console, network, storage, performance, recording, emulation and user scripts; with the CDP drivers, page engines, Electron session runtime and site workspace underneath); recipes, the site artifact manager and the tool-era mod manifest dropped (ADR 0011); `packages/browser` deleted | done |
 | `ui`, `html-artifacts`, `cli`, `agent-lab` | grouped by responsibility after the moves above | pending |
 
 ## Shared infrastructure

@@ -80,6 +80,21 @@ export const CodeSurfaces = [
     interfaces: ['OfficeOperationsApi'],
     templates: 'template.js',
   },
+  {
+    namespace: 'browser',
+    directory: 'velar',
+    unit: 'browser',
+    interfaces: ['BrowserOperationsApi'],
+    templates: 'template.js',
+  },
+  {
+    // 排障与调页面的那一半：与 velar:browser 共用一个空间端口，住在同一个单元里；模版各一份
+    namespace: 'devtools',
+    directory: 'velar',
+    unit: 'browser',
+    interfaces: ['DevtoolsOperationsApi'],
+    templates: 'devtools-template.js',
+  },
 ]
 
 /**
@@ -95,6 +110,7 @@ export const HostContextTypes = new Set([
   'ComputerOperationContext',
   'MemoryOperationContext',
   'OfficeOperationContext',
+  'BrowserOperationContext',
 ])
 
 /** 进模型可观测面的标记；打在操作方法与它引用到的每个**领域类型**上。 */

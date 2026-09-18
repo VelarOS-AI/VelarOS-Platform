@@ -18,20 +18,6 @@
     },
     {
       "domain": "capabilities",
-      "directory": "packages/browser",
-      "name": "@velaros-ai/browser",
-      "version": "0.3.0",
-      "description": "Browser capability package: the agent tool collection, site-workspace artifacts and user scripts, recipe execution, address/preference/screenshot policies, and the Electron-backed session runtime, behind four entries.",
-      "exportSubpaths": [
-        ".",
-        "./contracts",
-        "./electron",
-        "./renderer"
-      ],
-      "repositoryDirectory": "packages/browser"
-    },
-    {
-      "domain": "capabilities",
       "directory": "packages/cli",
       "name": "@velaros-ai/cli",
       "version": "0.3.0",
@@ -172,8 +158,12 @@
       "directory": "packages/velar",
       "name": "@velaros-ai/velar",
       "version": "0.2.0",
-      "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), memory (long-term memory: one directory of Markdown files per host-given scope, plus the index a host puts at the start of each session) and office (Word, PowerPoint and Excel generation, PDF reading and editing, Word and LaTeX to PDF, document preview and Markdown conversion, with the document engines underneath and the narrow renderer primitives the Document Renderer uses). One plain directory per unit, one convention for all.",
+      "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), memory (long-term memory: one directory of Markdown files per host-given scope, plus the index a host puts at the start of each session), office (Word, PowerPoint and Excel generation, PDF reading and editing, Word and LaTeX to PDF, document preview and Markdown conversion, with the document engines underneath and the narrow renderer primitives the Document Renderer uses) and browser (velar:browser to drive and read pages, velar:devtools for console, network, storage, performance, recording, emulation and user scripts, with the CDP drivers, page engines, Electron session runtime and site workspace underneath). One plain directory per unit, one convention for all.",
       "exportSubpaths": [
+        "./browser",
+        "./browser/contracts",
+        "./browser/electron",
+        "./browser/renderer",
         "./computer",
         "./computer/contracts",
         "./files",

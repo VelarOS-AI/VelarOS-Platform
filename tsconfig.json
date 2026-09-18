@@ -18,18 +18,6 @@
       "@velaros-ai/agent/*": [
         "./packages/agent/src/*"
       ],
-      "@velaros-ai/browser": [
-        "./packages/browser/src/index.ts"
-      ],
-      "@velaros-ai/browser/contracts": [
-        "./packages/browser/src/contracts.ts"
-      ],
-      "@velaros-ai/browser/electron": [
-        "./packages/browser/src/electron.ts"
-      ],
-      "@velaros-ai/browser/renderer": [
-        "./packages/browser/src/renderer.ts"
-      ],
       "@velaros-ai/cli": [
         "./packages/cli/src/index.ts"
       ],

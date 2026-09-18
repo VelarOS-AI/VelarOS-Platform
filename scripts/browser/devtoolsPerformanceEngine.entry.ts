@@ -1,5 +1,5 @@
-// Narrow public surface used by @velaros-ai/browser. Keep this entry aligned with
-// packages/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.d.mts.
+// Narrow public surface used by @velaros-ai/velar/browser. Keep this entry aligned with
+// packages/velar/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.d.mts.
 import 'chrome-devtools-frontend/front_end/core/sdk/sdk-meta.js'
 import 'chrome-devtools-frontend/front_end/models/workspace/workspace-meta.js'
 

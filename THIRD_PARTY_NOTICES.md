@@ -7,7 +7,7 @@ that are copied into this repository or its distribution artifacts.
 
 ## Browser: Chrome DevTools code
 
-`packages/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs`
+`packages/velar/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs`
 is generated from:
 
 - `chrome-devtools-frontend` version `1.0.1652307`, licensed under
@@ -19,7 +19,8 @@ is generated from:
   Google LLC.
 
 The package-local notice and license texts are distributed beside the generated
-bundle in `packages/browser/vendor/devtools-performance-engine/`. The bundle
+bundle in `packages/velar/browser/vendor/devtools-performance-engine/`, and
+`packages/velar/THIRD_PARTY_NOTICES.md` points to them. The bundle
 must be regenerated from documented, pinned inputs. Do not edit the generated
 JavaScript directly or remove upstream attribution.
 

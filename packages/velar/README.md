@@ -1,9 +1,9 @@
 # @velaros-ai/velar
 
-模型在程序里 import 的能力单元：`velar:files`、`velar:images`、`velar:shell`、`velar:sandbox`、`velar:computer`、`velar:memory`、`velar:office`，以及项目的两件 `velar:project`、`velar:code`。
-带工具的包整个搬进来，实现一起：单元底下就是服务它的那套实现（项目内核、桌面控制的 helper 运行时、记忆库、办公文档的生成与转换），外面不留第二份。
+模型在程序里 import 的能力单元：`velar:files`、`velar:images`、`velar:shell`、`velar:sandbox`、`velar:computer`、`velar:memory`、`velar:office`，项目的两件 `velar:project`、`velar:code`，以及浏览器的两件 `velar:browser`、`velar:devtools`。
+带工具的包整个搬进来，实现一起：单元底下就是服务它的那套实现（项目内核、桌面控制的 helper 运行时、记忆库、办公文档的生成与转换、浏览器的驱动与会话运行时），外面不留第二份。
 没有模型面的东西（语言服务、本机宿主）不是工具，是各自的包，宿主拿它们实现单元的空间端口。
-一件能力一个目录，目录名就是模块名（`velar:files` ⇄ `files/`；问代码离不开项目内核，和 `velar:project` 同住 `project/`）；每个空间挂哪几件、给每件装什么端口，由空间的装配表决定
+一件能力一个目录，目录名就是模块名（`velar:files` ⇄ `files/`；问代码离不开项目内核，和 `velar:project` 同住 `project/`；`velar:devtools` 与 `velar:browser` 共用一个端口，同住 `browser/`）；每个空间挂哪几件、给每件装什么端口，由空间的装配表决定
 （系统空间在 `@velaros-ai/system`，项目空间在 `@velaros-ai/project`）。
 
 | 单元 | 模型写 | 做什么 | 谁挂 |
@@ -16,6 +16,7 @@
 | `computer/` | `import { screenshot, move, click, typeText, key } from 'velar:computer'` | 桌面控制：截主屏交给模型看，按截图坐标移动、点击，输入文字、按组合键；底下是管 Python helper 子进程的运行时与随包的 helper 脚本 | 宿主装了桌面控制插件时，挂在它的系统空间上 |
 | `memory/` | `import { list, save, remove } from 'velar:memory'` | 跨会话的长期记忆：一个作用域一个目录的 Markdown，列出全部、按 id 整条覆盖、真删；作用域由宿主给，会话开场的索引由宿主放进系统提示词 | 宿主开了长期记忆的空间 |
 | `office/` | `import { createWord, createPresentation, createSpreadsheet, readPdf, wordToPdf, latexToPdf, editPdf, preview, toMarkdown } from 'velar:office'` | 办公文档：生成 Word、PowerPoint、Excel，读 PDF 的文字、编辑 PDF，Word 与 LaTeX 转 PDF，预览文档、转 Markdown；底下是文档生成、解析与渲染的全部实现，随包审过的 PptxGenJS，以及给 Document Renderer 的窄渲染面（`./office/renderer`） | 宿主挂在要写文档的空间上，端口给工作区根与跑外部命令的那一份 |
+| `browser/` | `import { open, inspect, click, fill, screenshot, waitForSelector, table, content } from 'velar:browser'`、`import { diagnostics, request, startTrace } from 'velar:devtools'` | 浏览器：进站、看页面、按元素或坐标动手、等、取表格列表正文、下载与导出；排障时读控制台与网络、调页面条件、录 trace 与录屏、管用户脚本。底下是 CDP 驱动、页面引擎、Electron 会话运行时与站点工作区 | 宿主的浏览器空间；项目空间可以客居 |
 
 宿主按 `@velaros-ai/velar/<单元>` 引用（可移植数据在 `@velaros-ai/velar/<单元>/contracts`）。
 
@@ -37,7 +38,7 @@
   test/           实现细节测试；要原生依赖或真实计时的探针放 test/probes/（不进 bun test，由仓库脚本拉起）
 ```
 
-单元自带、随包发布的非代码资产（比如 `computer/runtime/` 的 Python helper、`office/vendor/` 的 PptxGenJS）登记在所有权门的 `assets` 里，并写进包清单的 `files`。
+单元自带、随包发布的非代码资产（比如 `computer/runtime/` 的 Python helper、`office/vendor/` 的 PptxGenJS、`browser/vendor/` 的 DevTools 性能引擎）登记在所有权门的 `assets` 里，并写进包清单的 `files`。
 
 模型看到的声明从源码生成（`baselines/code-surface/<单元>.d.ts`，`bun run generate:code-surface`），
 门禁：`bun run check:module-ownership`、`bun run check:code-surface`。
