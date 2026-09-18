@@ -191,6 +191,30 @@ function constantAsType(found) {
   return unwrapped.startsWith('[') ? `readonly ${unwrapped}` : unwrapped
 }
 
+/**
+ * 常量是一串字面量（`Object.freeze(['a', 'b'] as const)` 这种词表）时，交回它们写成的联合 `'a' | 'b'`；别的形状交回 null。
+ *
+ * `type K = (typeof Ks)[number]` 是源码里的写法：常量是运行时的唯一权威，类型从它推。模型那边拿不到这个常量，
+ * 照抄过去它就得从字段跳到类型、再跳到常量才知道能填什么——就地写成字面量联合，才是它一眼看得懂的原生形式。
+ */
+function literalUnion(found) {
+  let expression = found.node.initializer
+  if (expression && ts.isCallExpression(expression) && expression.getText(found.file).startsWith('Object.freeze(')) expression = expression.arguments[0]
+  if (expression && ts.isAsExpression(expression)) expression = expression.expression
+  if (!expression || !ts.isArrayLiteralExpression(expression)) return null
+  const literals = expression.elements.every((element) => ts.isStringLiteral(element) || ts.isNumericLiteral(element))
+  return literals && expression.elements.length > 0 ? expression.elements.map((element) => element.getText(found.file)).join(' | ') : null
+}
+
+/** 把 `(typeof X)[number]` 就地换成 X 的字面量联合；后面紧跟 `[` 的（数组）套一层括号，结合才不会读错。 */
+function inlineLiteralUnions(text, unions) {
+  let output = text
+  for (const [name, union] of unions) {
+    output = output.replace(new RegExp(`\\(typeof ${name}\\)\\[number\\](?=(\\[)?)`, 'gu'), (_match, array) => (array ? `(${union})` : union))
+  }
+  return output
+}
+
 /** 找一个 `as const` 常量的声明；`typeof X` 引用到的就是它。 */
 function findConstant(program, name) {
   for (const wantDeclaration of [false, true]) {
@@ -385,15 +409,25 @@ function generate(surface) {
     )
   }
 
-  const constants = []
+  // 字面量词表就地展开成联合；展开之后还有人用 `typeof` 指着的常量（不是字面量词表，或者用法不是取元素）才照抄过去。
+  const unions = new Map()
+  const found = new Map()
   for (const name of wantedValues) {
-    const found = findConstant(program, name)
-    if (!found) continue
-    const asType = constantAsType(found)
+    const constant = findConstant(program, name)
+    if (!constant) continue
+    found.set(name, constant)
+    const union = literalUnion(constant)
+    if (union) unions.set(name, union)
+  }
+  const declared = [...closure.values()].map(({ node, file }) => inlineLiteralUnions(expandBannedAliases(stripExport(stripModelTag(sliceWithDoc(node, file)))), unions))
+  for (let index = 0; index < methods.length; index += 1) methods[index] = inlineLiteralUnions(methods[index], unions)
+  const constants = []
+  for (const [name, constant] of found) {
+    if (![...declared, ...methods].some((text) => new RegExp(`\\btypeof ${name}\\b`, 'u').test(text))) continue
+    const asType = constantAsType(constant)
     // 块里已经是 ambient 上下文，再写 `declare` 是 TS1038。
     if (asType) constants.push(`const ${name}: ${asType}`)
   }
-  const declared = [...closure.values()].map(({ node, file }) => expandBannedAliases(stripExport(stripModelTag(sliceWithDoc(node, file)))))
   const types = [...constants, ...declared]
   const header = [
     '// 本文件由 scripts/code-surface/generate-declarations.mjs 从能力包源码生成，不要手改。',

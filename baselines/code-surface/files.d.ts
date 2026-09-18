@@ -95,8 +95,6 @@ declare module 'velar:files' {
    * ```
    */
 
-  const TextEncodings: readonly ['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-nobom', 'gb18030']
-
   /** 一批最多 20 个。一批里前面的文件用掉了预算时，读不下的那几个各自算失败条目——单独放进一次 `read` 就行。 */
   interface FileReadInput {
     files: FileReadItem[]
@@ -208,8 +206,8 @@ declare module 'velar:files' {
   /** 行号或连续闭区间：`12`、`[12]`、`[40, 60]`，从 1 起，末行不小于首行。 */
   type FileLineRange = number | [number] | [number, number]
 
-  /** 一种磁盘文本编码，取值见常量表 `TextEncodings`。 */
-  type TextEncoding = (typeof TextEncodings)[number]
+  /** 文件在磁盘上的文本编码。utf8-bom、utf16le、utf16be 带 BOM，-nobom 的不带；gb18030 也包括 GBK 与 GB2312 的文件。 */
+  type TextEncoding = 'utf8' | 'utf8-bom' | 'utf16le' | 'utf16be' | 'utf16le-nobom' | 'utf16be-nobom' | 'gb18030'
 
   /**
    * 按行号改一处。range 选中的整行换成 text（text 是空串就是删掉这几行）；after 在第几行后面插入 text（0 是插在最前面）。

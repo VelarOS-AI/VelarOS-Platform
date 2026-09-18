@@ -53,8 +53,6 @@ declare module 'velar:shell' {
    * ```
    */
 
-  const ShellCommandKinds: readonly ['git-bash', 'pwsh', 'powershell', 'cmd', 'posix']
-
   /**
    * 一条命令。cwd 不给就是当前空间的根目录，相对路径相对它；越出空间允许的范围在执行之前就拒绝。
    * shell 只能填本机有的那几个（环境报告里列着），不填用默认的那个，命令照挑定的 shell 的语法写。
@@ -103,7 +101,7 @@ declare module 'velar:shell' {
   }
 
   /** 一条命令可以挑的 shell 种类。Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的顺序挑默认的那个。 */
-  type ShellCommandKind = (typeof ShellCommandKinds)[number]
+  type ShellCommandKind = 'git-bash' | 'pwsh' | 'powershell' | 'cmd' | 'posix'
 
   /**
    * 一条命令的回执。`success` 只看退出码为 0 且没有超时、没有被取消：命令自己失败是正常回执、不抛错，照 success 判。
