@@ -2,3 +2,4 @@
 export { ComputerErrorCodes, ComputerInputLimits } from '@velaros-ai/velar/computer/contracts'
 export { KnowledgeSourceKinds, VelarKnowledgeModule } from '@velaros-ai/velar/knowledge/contracts'
 export { MemoryEvidenceCategories, VelarMemoryModule } from '@velaros-ai/velar/memory/contracts'
+export { OfficeErrorCodes, OfficeInputLimits, VelarOfficeModule } from '@velaros-ai/velar/office/contracts'

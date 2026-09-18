@@ -60,6 +60,15 @@
       ],
       "@velaros-ai/velar/memory/contracts": [
         "packages/velar/memory/contracts.ts"
+      ],
+      "@velaros-ai/velar/office": [
+        "packages/velar/office/index.ts"
+      ],
+      "@velaros-ai/velar/office/contracts": [
+        "packages/velar/office/contracts.ts"
+      ],
+      "@velaros-ai/velar/office/renderer": [
+        "packages/velar/office/renderer.ts"
       ]
     }
   },
@@ -72,7 +81,8 @@
     "project/**/*.ts",
     "computer/**/*.ts",
     "knowledge/**/*.ts",
-    "memory/**/*.ts"
+    "memory/**/*.ts",
+    "office/**/*.ts"
   ],
   "exclude": [
     "*/spec/**",

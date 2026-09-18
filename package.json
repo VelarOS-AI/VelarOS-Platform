@@ -42,7 +42,6 @@
       "capabilities": [
         "browser",
         "cli",
-        "office",
         "system",
         "project",
         "development"
@@ -191,7 +190,6 @@
     "@velaros-ai/html-artifacts": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
     "@velaros-ai/model": "workspace:*",
-    "@velaros-ai/office": "workspace:*",
     "@velaros-ai/platform": "workspace:*",
     "@velaros-ai/surface-protocol": "workspace:*",
     "@velaros-ai/system": "workspace:*",

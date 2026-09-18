@@ -24,8 +24,9 @@ const repoRoot = await realpath(resolve(dirname(fileURLToPath(import.meta.url)),
 const productRoot = join(repoRoot, 'products', 'document-renderer')
 const outputRoot = join(repoRoot, 'dist-document-renderer')
 const releaseRoot = join(repoRoot, 'release', 'document-renderer')
-const requireFromOffice = createRequire(
-  join(repoRoot, 'packages', 'office', 'package.json'),
+// 渲染原语在 velar 的 office 单元里，pdfjs 与 canvas 这两个原生依赖也装在 velar 名下。
+const requireFromVelar = createRequire(
+  join(repoRoot, 'packages', 'velar', 'package.json'),
 )
 const supportedTargets = new Map([
   ['darwin-arm64', {
@@ -170,7 +171,7 @@ async function stagePack(targetRoot, target, buildOutput, version, bunVersion) {
   await mkdir(appRoot, { recursive: true })
   await mkdir(runtimeRoot, { recursive: true })
   await copyFile(buildOutput.bundlePath, join(appRoot, 'renderer.js'))
-  const pdfjsRoot = dirname(requireFromOffice.resolve('pdfjs-dist/package.json'))
+  const pdfjsRoot = dirname(requireFromVelar.resolve('pdfjs-dist/package.json'))
   await copyFile(
     join(pdfjsRoot, 'legacy', 'build', 'pdf.worker.mjs'),
     join(appRoot, 'pdf.worker.mjs'),
@@ -180,7 +181,7 @@ async function stagePack(targetRoot, target, buildOutput, version, bunVersion) {
   await chmod(runtimePath, 0o755)
   const launcherPath = join(packRoot, executable)
   await writeFile(launcherPath, launcherScript(target), { mode: 0o755 })
-  const canvasRoot = dirname(requireFromOffice.resolve('@napi-rs/canvas/package.json'))
+  const canvasRoot = dirname(requireFromVelar.resolve('@napi-rs/canvas/package.json'))
   const canvasPlatformRoot = await realpath(join(
     canvasRoot,
     '..',

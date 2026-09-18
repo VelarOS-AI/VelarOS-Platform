@@ -80,6 +80,13 @@ export const CodeSurfaces = [
     interfaces: ['MemoryOperationsApi'],
     templates: 'template.js',
   },
+  {
+    namespace: 'office',
+    directory: 'velar',
+    unit: 'office',
+    interfaces: ['OfficeOperationsApi'],
+    templates: 'template.js',
+  },
 ]
 
 /**
@@ -95,6 +102,7 @@ export const HostContextTypes = new Set([
   'ComputerOperationContext',
   'KnowledgeOperationContext',
   'MemoryOperationContext',
+  'OfficeOperationContext',
 ])
 
 /** 进模型可观测面的标记；打在操作方法与它引用到的每个**领域类型**上。 */

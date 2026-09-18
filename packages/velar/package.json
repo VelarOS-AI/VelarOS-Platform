@@ -4,7 +4,7 @@
   "velaros": {
     "platform": "0.6"
   },
-  "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), knowledge (workspace knowledge search, with the knowledge base underneath: incremental ingestion, SQLite full-text plus LanceDB vector hybrid retrieval, embedding profile isolation, diagnostics and rebuild) and memory (evidence-grounded long-term memory, with the store underneath: tree, files and vector backends, the host adapter and turn recall). One plain directory per unit, one convention for all.",
+  "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), knowledge (workspace knowledge search, with the knowledge base underneath: incremental ingestion, SQLite full-text plus LanceDB vector hybrid retrieval, embedding profile isolation, diagnostics and rebuild) memory (evidence-grounded long-term memory, with the store underneath: tree, files and vector backends, the host adapter and turn recall) and office (Word, PowerPoint and Excel generation, PDF reading and editing, Word and LaTeX to PDF, document preview and Markdown conversion, with the document engines underneath and the narrow renderer primitives the Document Renderer uses). One plain directory per unit, one convention for all.",
   "license": "Apache-2.0",
   "author": "VelarOS",
   "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/velar#readme",
@@ -85,6 +85,24 @@
     "./memory/contracts": {
       "types": "./dist/memory/contracts.d.ts",
       "import": "./dist/memory/contracts.js"
+    },
+    "./office": {
+      "types": "./dist/office/index.d.ts",
+      "import": "./dist/office/index.js"
+    },
+    "./office/contracts": {
+      "types": "./dist/office/contracts.d.ts",
+      "import": "./dist/office/contracts.js"
+    },
+    "./office/renderer": {
+      "types": "./dist/office/renderer.d.ts",
+      "import": "./dist/office/renderer.js"
+    }
+  },
+  "imports": {
+    "#pptxgenjs": {
+      "types": "./office/vendor/pptxgenjs/pptxgen.es.d.ts",
+      "default": "./office/vendor/pptxgenjs/pptxgen.es.js"
     }
   },
   "files": [
@@ -92,16 +110,20 @@
     "README.md",
     "LICENSE",
     "NOTICE",
-    "computer/runtime"
+    "computer/runtime",
+    "THIRD_PARTY_NOTICES.md",
+    "third-party-licenses",
+    "office/vendor"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
-    "test": "bun run build && bun test files/spec/acceptance.test.ts files/test images/spec/acceptance.test.ts images/test shell/spec/acceptance.test.ts shell/test sandbox/spec/acceptance.test.ts sandbox/test project/spec/acceptance.test.ts project/test computer/spec/acceptance.test.ts computer/test knowledge/spec/acceptance.test.ts knowledge/test memory/spec/acceptance.test.ts memory/test",
+    "test": "bun run build && bun test files/spec/acceptance.test.ts files/test images/spec/acceptance.test.ts images/test shell/spec/acceptance.test.ts shell/test sandbox/spec/acceptance.test.ts sandbox/test project/spec/acceptance.test.ts project/test computer/spec/acceptance.test.ts computer/test knowledge/spec/acceptance.test.ts knowledge/test memory/spec/acceptance.test.ts memory/test office/spec/acceptance.test.ts office/test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/velar"
   },
   "dependencies": {
+    "@napi-rs/canvas": "1.0.8",
     "@types/better-sqlite3": "^7.6.13",
     "@velaros-ai/code-surface": "workspace:*",
     "@velaros-ai/core": "workspace:*",
@@ -112,8 +134,16 @@
     "@velaros-ai/tool-contract": "workspace:*",
     "better-sqlite3": "^13.0.3",
     "diff": "^8.0.4",
+    "docx": "^9.6.1",
+    "exceljs": "^4.4.0",
     "execa": "^9.6.1",
-    "typescript": "^5.7.0"
+    "jszip": "^3.10.1",
+    "mammoth": "^1.12.0",
+    "parse5": "^7.3.0",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "6.2.108",
+    "typescript": "^5.7.0",
+    "zod": "^4.3.6"
   },
   "peerDependencies": {
     "@lancedb/lancedb": "^0.27.2",
@@ -127,8 +157,7 @@
   "devDependencies": {
     "@lancedb/lancedb": "^0.27.2",
     "@types/node": "^22.19.17",
-    "apache-arrow": "^18.1.0",
-    "zod": "^4.3.6"
+    "apache-arrow": "^18.1.0"
   },
   "publishConfig": {
     "access": "public",

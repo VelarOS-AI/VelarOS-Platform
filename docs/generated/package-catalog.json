@@ -56,19 +56,6 @@
     },
     {
       "domain": "capabilities",
-      "directory": "packages/office",
-      "name": "@velaros-ai/office",
-      "version": "2.0.0",
-      "description": "Composable Office document, spreadsheet, presentation, and PDF semantics for VelarOS hosts.",
-      "exportSubpaths": [
-        ".",
-        "./contracts",
-        "./renderer"
-      ],
-      "repositoryDirectory": "packages/office"
-    },
-    {
-      "domain": "capabilities",
       "directory": "packages/project",
       "name": "@velaros-ai/project",
       "version": "3.0.0",
@@ -185,7 +172,7 @@
       "directory": "packages/velar",
       "name": "@velaros-ai/velar",
       "version": "0.2.0",
-      "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), knowledge (workspace knowledge search, with the knowledge base underneath: incremental ingestion, SQLite full-text plus LanceDB vector hybrid retrieval, embedding profile isolation, diagnostics and rebuild) and memory (evidence-grounded long-term memory, with the store underneath: tree, files and vector backends, the host adapter and turn recall). One plain directory per unit, one convention for all.",
+      "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), knowledge (workspace knowledge search, with the knowledge base underneath: incremental ingestion, SQLite full-text plus LanceDB vector hybrid retrieval, embedding profile isolation, diagnostics and rebuild) memory (evidence-grounded long-term memory, with the store underneath: tree, files and vector backends, the host adapter and turn recall) and office (Word, PowerPoint and Excel generation, PDF reading and editing, Word and LaTeX to PDF, document preview and Markdown conversion, with the document engines underneath and the narrow renderer primitives the Document Renderer uses). One plain directory per unit, one convention for all.",
       "exportSubpaths": [
         "./computer",
         "./computer/contracts",
@@ -197,6 +184,9 @@
         "./knowledge/contracts",
         "./memory",
         "./memory/contracts",
+        "./office",
+        "./office/contracts",
+        "./office/renderer",
         "./project",
         "./project/contracts",
         "./sandbox",

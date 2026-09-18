@@ -375,6 +375,39 @@ export const GovernedModules = [
     acceptance: 'memory/spec/acceptance.test.ts',
   },
   {
+    // 能力单元：办公文档（velar:office），整包并进来的：模型面的九个操作，连同底下的 Word、PowerPoint、Excel、PDF 引擎、
+    // 外部转换器（LibreOffice、LaTeX、MarkItDown）与给 Document Renderer 的窄渲染原语
+    directory: 'velar',
+    unit: 'office',
+    name: '@velaros-ai/velar/office',
+    contract: 'office/contract',
+    types: 'office/types',
+    portable: 'office.ts',
+    impl: 'office/impl',
+    utils: 'office/utils',
+    tuning: 'tuning.ts',
+    // 根入口要 docx / exceljs / pdfjs 与磁盘，渲染入口要 canvas 与 pdfjs，都只给 Node；渲染进程只能加载可移植数据
+    browserSafeEntries: ['contracts.ts'],
+    environmentTable: 'OfficeEnvironmentVariables',
+    // 空间端口：九个操作经 ctx.office 调它；每个方法都必须有操作在调
+    hostPort: 'OfficeSpacePort',
+    hostPortField: 'office',
+    surfaceFile: 'office/impl/OfficeOperations.ts',
+    // 随包审过的 PptxGenJS ESM 运行时（带本地安全补丁），经包清单的子路径导入 #pptxgenjs 取用
+    assets: ['vendor'],
+    layers: [
+      // 代码面 office 命名空间的九个操作：入参核对，交给执行类
+      ['OfficeOperations.ts'],
+      // 执行：Word、PowerPoint、Excel 生成，PDF，预览，Markdown，外部转换器，工作区路径门
+      ['operations/'],
+      // 运行时：pdfjs 装载、MarkItDown 定位、给 Document Renderer 的渲染面
+      ['runtime/'],
+    ],
+    card: 'office/MODULE.md',
+    invariants: 'office/spec/invariants.md',
+    acceptance: 'office/spec/acceptance.test.ts',
+  },
+  {
     directory: 'code-surface',
     name: '@velaros-ai/code-surface',
     // 四个工具：script:exec 跑脚本、存脚本、重放，另外三个（history、show、diff）只读时间线。别的能力都在脚本里 import
@@ -723,34 +756,6 @@ export const GovernedModules = [
       // provider 集合、静态目录、环境快照、script 注册表、Cloud 绑定、远端目录服务与缓存
       ['providers/'],
     ],
-    card: 'MODULE.md',
-    invariants: 'spec/invariants.md',
-    acceptance: 'spec/acceptance.test.ts',
-  },
-  {
-    directory: 'office',
-    name: '@velaros-ai/office',
-    toolsFile: 'src/impl/OfficeTools.ts',
-    contract: 'src/contract',
-    types: 'src/types',
-    portable: 'office.ts',
-    impl: 'src/impl',
-    utils: 'src/utils',
-    tuning: 'tuning.ts',
-    // 根入口要 docx / exceljs / pdfjs 与磁盘，只给 Node；渲染进程只能加载可移植数据
-    browserSafeEntries: ['contracts.ts'],
-    environmentTable: 'OfficeEnvironmentVariables',
-    hostPort: 'OfficeHostApi',
-    hostPortField: 'office',
-    layers: [
-      // 工具：十个 office 工具的定义、分组与挂载
-      ['OfficeTools.ts'],
-      // 工具执行：授权、写盘、跑外部命令，全经宿主端口 ctx.office
-      ['operations/'],
-      // 运行时：pdfjs 装载、MarkItDown 定位、给 Document Renderer 的渲染面
-      ['runtime/'],
-    ],
-    toolDefiner: 'defineOfficeTool',
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',

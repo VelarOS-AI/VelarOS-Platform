@@ -543,21 +543,22 @@ requirePublicTypeContracts(
   "src/types/browser.ts",
   ["BrowserActionPolicyConfig", "BrowserAutomationMode"],
 );
+// 办公文档整包并进了 velar 的 office 单元：可移植数据仍要从根入口转发，也仍不许用 NodeJS 的环境类型。
 requirePublicTypeContracts(
-  "office",
-  "src/index.ts",
-  "src/contracts.ts",
-  "src/types/office.ts",
+  "velar",
+  "office/index.ts",
+  "office/contracts.ts",
+  "office/types/office.ts",
   ["OfficeEnvironmentInspection"],
 );
 
 const officeContractsSource = readFileSync(
-  resolve(PackagesRoot, "office/src/types/office.ts"),
+  resolve(PackagesRoot, "velar/office/types/office.ts"),
   "utf8",
 );
 if (/\bNodeJS\./u.test(officeContractsSource)) {
   fail(
-    "office: public OfficeContracts must not depend on NodeJS ambient types",
+    "velar/office: public office contracts must not depend on NodeJS ambient types",
   );
 }
 

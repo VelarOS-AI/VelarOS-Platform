@@ -14,10 +14,10 @@ const requiredPackageNoticeFiles = new Map([
     'vendor/devtools-performance-engine/LICENSE.chrome-devtools-mcp',
     'vendor/devtools-performance-engine/NOTICE.md',
   ]],
-  ['office', [
+  ['velar', [
     'THIRD_PARTY_NOTICES.md',
     'third-party-licenses/pptxgenjs-MIT.txt',
-    'vendor/pptxgenjs/README.md',
+    'office/vendor/pptxgenjs/README.md',
   ]],
   ['ui', [
     'THIRD_PARTY_NOTICES.md',
@@ -153,7 +153,7 @@ function checkRootFiles() {
   }
 
   const pptxPatchRecord = readFileSync(
-    join(repositoryRoot, 'packages/office/vendor/pptxgenjs/README.md'),
+    join(repositoryRoot, 'packages/velar/office/vendor/pptxgenjs/README.md'),
     'utf8',
   )
   for (const marker of ['reviewed local security patches', "UUID helper's", 'relationship paths']) {
@@ -213,12 +213,12 @@ function checkPackageMetadata() {
     }
 
     for (const noticeFile of requiredPackageNoticeFiles.get(directory) ?? []) {
-      const topLevelEntry = noticeFile.split('/', 1)[0]
       if (!existsSync(join(directoryPath, noticeFile))) {
         fail(`${label}: required third-party notice file is missing (${noticeFile})`)
       }
-      if (!manifest.files?.includes(topLevelEntry)) {
-        fail(`${label}: package files do not ship ${topLevelEntry}`)
+      // files 里要有这个文件本身或它的某一级上级目录（能力单元的资产目录在单元目录下面一层）。
+      if (!manifest.files?.some((entry) => noticeFile === entry || noticeFile.startsWith(`${entry}/`))) {
+        fail(`${label}: package files do not ship ${noticeFile}`)
       }
     }
   }
@@ -289,7 +289,7 @@ function checkRuntimeDependencyOwnership() {
     for (const section of [...runtimeSections, 'peerDependencies']) {
       if (rendererManifest[section]?.[dependency]) {
         fail(
-          `@velaros-ai/document-renderer: ${dependency} belongs to @velaros-ai/office and must not be duplicated in ${section}`,
+          `@velaros-ai/document-renderer: ${dependency} belongs to @velaros-ai/velar (its office unit) and must not be duplicated in ${section}`,
         )
       }
     }

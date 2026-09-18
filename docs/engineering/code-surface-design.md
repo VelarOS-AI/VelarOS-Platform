@@ -164,6 +164,7 @@ edit 与 inspect 交回完整差量，`velar:code` 不按条数截，`velar:shel
 | `velar:computer` | screenshot / move / click / typeText / key | 宿主装了桌面控制插件时挂 | — | `@velaros-ai/velar` 的 `computer/` |
 | `velar:knowledge` | search / sync / diagnostics | 宿主开了知识库时挂 | 宿主开了知识库时挂 | `@velaros-ai/velar` 的 `knowledge/`（知识库本身也在这个单元里） |
 | `velar:memory` | save / search / get / archive | 宿主开了长期记忆时挂 | 宿主开了长期记忆时挂 | `@velaros-ai/velar` 的 `memory/`（记忆库本身也在这个单元里） |
+| `velar:office` | createWord / createPresentation / createSpreadsheet / readPdf / wordToPdf / latexToPdf / editPdf / preview / toMarkdown | ✓ | ✓ | `@velaros-ai/velar` 的 `office/`（文档生成、转换与解析的实现也在这个单元里） |
 
 **一件能力只有一份实现、一份声明、一份代码模版**，不认识任何空间。空间之间不一样的地方全落在**注入的端口**上：
 
@@ -176,6 +177,7 @@ edit 与 inspect 交回完整差量，`velar:code` 不按条数截，`velar:shel
 | `velar:computer` | `ComputerSpacePort` | 桌面控制交给哪份运行时：宿主把 `createComputerRuntime` 造的那份直接交进来（结构上满足端口）；没有桌面的宿主不挂这件能力 |
 | `velar:knowledge` | `KnowledgeSpacePort` | `resolveWorkspace`：这次落在哪个工作区（项目空间是项目根，没有默认工作区的空间要调用方给）；检索、同步、诊断转给宿主开的那份知识库（`createKnowledgeRuntime` 的领域门面） |
 | `velar:memory` | `MemorySpacePort` | 记忆落在哪个后端（与自动采集同一个）：端口就是后端的动词；这一次调用的作用域与会话装在调用上下文里。来源与信任级、去重、作用域可见性读门都在操作里，空间不裁决 |
+| `velar:office` | `OfficeSpacePort` | `getRootPath`：文档读写落在哪个根里（出了根一律拒绝）；`inspectEnvironment`、`runCommand`：本机有没有 LibreOffice、LaTeX 编译器，外部命令交给谁跑（只收原生 argv）；`locateMarkItDown`：按宿主自己的插件状态回答 MarkItDown 装没装、停没停用 |
 
 **真正是两件事的不硬合。** 本机文件与项目文件看上去都是「读写文件」，其实不是一件事：项目里的文件有项目那一套——
 校验器、带版本防护的事务、撤销账本、fileRef 只许改看到过的行；本机上的文件没有这些，

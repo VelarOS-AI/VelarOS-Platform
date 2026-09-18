@@ -152,22 +152,6 @@ void languageQueries.run({ action: 'find_symbols' }, languageContext)
 void BuiltinExternalLanguageServers.length
 `,
   ],
-  [
-    '@velaros-ai/office',
-    `import type {
-  OfficeEnvironmentInspection,
-  OfficeHostApi,
-} from '@velaros-ai/office/contracts'
-
-declare const inspectFromHost: (
-  commands?: string[]
-) => Promise<OfficeEnvironmentInspection>
-
-const inspectForOffice: OfficeHostApi['inspectEnvironment'] = inspectFromHost
-
-void inspectForOffice
-`,
-  ],
 ])
 
 function run(command, args, cwd = repositoryRoot, options = {}) {

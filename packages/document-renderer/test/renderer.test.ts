@@ -1,6 +1,6 @@
 /**
  * 实现测试：真的把文档渲染出来落盘。协议、路径准入、回执形状的承诺在 spec/acceptance.test.ts。
- * 夹具直接用 office 装好的 exceljs 与 pdf-lib，本包不重复声明这两个依赖。
+ * 夹具直接用 velar 装好的 exceljs 与 pdf-lib（office 单元的依赖），本包不重复声明这两个依赖。
  */
 
 import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises'
@@ -9,8 +9,8 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import ExcelJS from '../../office/node_modules/exceljs'
-import { PDFDocument, rgb } from '../../office/node_modules/pdf-lib'
+import ExcelJS from '../../velar/node_modules/exceljs'
+import { PDFDocument, rgb } from '../../velar/node_modules/pdf-lib'
 import { documentRenderer, DocumentRendererProtocol } from '../src/index'
 
 describe('独立渲染能力包', () => {

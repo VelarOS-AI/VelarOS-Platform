@@ -8,7 +8,7 @@
     "rootDir": "src",
     "sourceMap": true,
     "paths": {
-      "@velaros-ai/office/renderer": ["./packages/office/dist/renderer.d.ts"]
+      "@velaros-ai/velar/office/renderer": ["./packages/velar/dist/office/renderer.d.ts"]
     }
   },
   "include": ["src/**/*.ts"]

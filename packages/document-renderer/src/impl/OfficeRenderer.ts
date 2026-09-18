@@ -1,5 +1,5 @@
 /**
- * 真正干活的渲染：Office 文档预览与 PDF 单页位图，经 `@velaros-ai/office` 的渲染原语。
+ * 真正干活的渲染：Office 文档预览与 PDF 单页位图，经 `@velaros-ai/velar/office` 的渲染原语。
  * 两种操作都先过路径准入，再落盘；认不出的扩展名与渲染不出来的页都收成 UNSUPPORTED_FORMAT。
  */
 import { stat, writeFile } from 'node:fs/promises'
@@ -10,7 +10,7 @@ import {
   officeDocumentRenderer,
   OfficeErrorCodes,
   type OfficePreviewKind,
-} from '@velaros-ai/office/renderer'
+} from '@velaros-ai/velar/office/renderer'
 
 import {
   DocumentRendererErrorCodes,

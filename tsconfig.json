@@ -129,12 +129,6 @@
       "@velaros-ai/document-renderer/*": [
         "./packages/document-renderer/src/*"
       ],
-      "@velaros-ai/office": [
-        "./packages/office/src/index.ts"
-      ],
-      "@velaros-ai/office/*": [
-        "./packages/office/src/*"
-      ],
       "@velaros-ai/system": [
         "./packages/system/src/index.ts"
       ],

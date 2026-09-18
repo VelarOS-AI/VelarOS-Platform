@@ -55,20 +55,6 @@ export const CapabilityOwners = [
     ],
   },
   {
-    owner: 'office',
-    packages: [
-      {
-        directory: 'office',
-        name: '@velaros-ai/office',
-        entrySubpaths: ['.', './contracts', './renderer'],
-        sourceRoots: ['contract', 'types', 'impl', 'utils', 'exports'],
-        electronRoots: [],
-        schemaExports: ['officeTools'],
-        schemaEntry: 'dist/index.js',
-      },
-    ],
-  },
-  {
     owner: 'composition',
     packages: [
       {

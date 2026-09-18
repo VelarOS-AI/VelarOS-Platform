@@ -6,7 +6,8 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-const requireFromOffice = createRequire(join(repositoryRoot, 'packages/office/package.json'))
+// exceljs 这些办公文档依赖装在 velar 名下（office 单元整包并进来的）。
+const requireFromVelar = createRequire(join(repositoryRoot, 'packages/velar/package.json'))
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
@@ -17,18 +18,19 @@ function sha256(content) {
 }
 
 function assertVendoredPptxGenJs() {
-  const officePackagePath = join(repositoryRoot, 'packages/office/package.json')
+  // 审过的 PptxGenJS 运行时随 velar 的 office 单元发布（包清单子路径导入 #pptxgenjs 指到它）。
+  const velarPackagePath = join(repositoryRoot, 'packages/velar/package.json')
   const rootPackagePath = join(repositoryRoot, 'package.json')
-  const officePackage = JSON.parse(readFileSync(officePackagePath, 'utf8'))
+  const velarPackage = JSON.parse(readFileSync(velarPackagePath, 'utf8'))
   const rootPackage = JSON.parse(readFileSync(rootPackagePath, 'utf8'))
-  const runtimePath = join(repositoryRoot, 'packages/office/vendor/pptxgenjs/pptxgen.es.js')
-  const typesPath = join(repositoryRoot, 'packages/office/vendor/pptxgenjs/pptxgen.es.d.ts')
+  const runtimePath = join(repositoryRoot, 'packages/velar/office/vendor/pptxgenjs/pptxgen.es.js')
+  const typesPath = join(repositoryRoot, 'packages/velar/office/vendor/pptxgenjs/pptxgen.es.d.ts')
   const runtime = readFileSync(runtimePath)
   const types = readFileSync(typesPath)
   const runtimeText = runtime.toString('utf8')
   const typesText = types.toString('utf8')
 
-  assert(!officePackage.dependencies?.pptxgenjs, 'Office must use the audited vendored PptxGenJS runtime')
+  assert(!velarPackage.dependencies?.pptxgenjs, 'velar/office must use the audited vendored PptxGenJS runtime')
   assert(!rootPackage.patchedDependencies?.['image-size@1.2.1'], 'The obsolete image-size patch must stay removed')
   assert(runtimeText.startsWith('/* PptxGenJS 4.0.1 '), 'Vendored PptxGenJS runtime version changed')
   assert(typesText.startsWith('// Type definitions for pptxgenjs 4.0.1'), 'Vendored PptxGenJS types version changed')
@@ -58,7 +60,7 @@ function collectJavaScriptFiles(directory) {
 }
 
 function assertExcelJsUsesOnlyUuidV4() {
-  const excelJsRoot = dirname(requireFromOffice.resolve('exceljs/package.json'))
+  const excelJsRoot = dirname(requireFromVelar.resolve('exceljs/package.json'))
   const uuidImports = collectJavaScriptFiles(join(excelJsRoot, 'lib'))
     .map((filePath) => ({ filePath, content: readFileSync(filePath, 'utf8') }))
     .filter(({ content }) => /require\(['"]uuid['"]\)/.test(content))

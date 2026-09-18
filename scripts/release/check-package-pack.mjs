@@ -31,9 +31,10 @@ const requiredPackageFiles = new Map([
     'package/vendor/devtools-performance-engine/LICENSE.chrome-devtools-mcp',
     'package/vendor/devtools-performance-engine/NOTICE.md',
   ]],
-  ['office', [
+  ['velar', [
     'package/THIRD_PARTY_NOTICES.md',
     'package/third-party-licenses/pptxgenjs-MIT.txt',
+    'package/office/vendor/pptxgenjs/pptxgen.es.js',
   ]],
   ['ui', [
     'package/THIRD_PARTY_NOTICES.md',

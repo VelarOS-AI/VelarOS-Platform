@@ -7,7 +7,7 @@
 ## 这是什么
 
 独立安装的文档渲染能力包：把 Office 文档与 PDF 页渲染成预览页或位图。
-它不是 VelarOS Terminal 的模块，不进工具目录，有自己的原生依赖（`@napi-rs/canvas`、`pdfjs-dist`，都在 `@velaros-ai/office` 那边）与自己的发布节奏。
+它不是 VelarOS Terminal 的模块，不进工具目录，有自己的原生依赖（`@napi-rs/canvas`、`pdfjs-dist`，都在 `@velaros-ai/velar` 的 office 单元那边）与自己的发布节奏。
 宿主不 import 它，而是**按命令协议调用它**：`products/document-renderer` 把本包连同 Bun 运行时打成一个可执行文件，一个进程收一条 JSON 请求、回一条 JSON 回执。
 本包只负责协议那一面：校验请求、把三条路径关在 projectRoot 里、调 office 的渲染原语、把结果与失败都收成回执。
 
@@ -41,13 +41,13 @@
 | 能力 | 链路 |
 | --- | --- |
 | 执行一次请求 | `documentRenderer.execute(value)` → `utils/request.ts` 的 `checkDocumentRendererRequest`（zod 校验，失败收成一句中文说明）→ 按 `operation` 分派：describe 自己答，两种渲染交给 `OfficeRenderer` → 成功回执带结果，抛出来的 `AppError` 按 `code` 收成四个错误码之一 |
-| 渲染一个文档 | `OfficeRenderer.renderOffice/renderPdfPage` → `RendererPaths.resolve` 先判定三条路径、再建输出目录 → `@velaros-ai/office/renderer` 的 `parseOfficePreview` / `renderOfficePreviewPng` / `renderPdfPagePng` → 落盘后回落盘位置、字节数与尺寸 |
+| 渲染一个文档 | `OfficeRenderer.renderOffice/renderPdfPage` → `RendererPaths.resolve` 先判定三条路径、再建输出目录 → `@velaros-ai/velar/office/renderer` 的 `parseOfficePreview` / `renderOfficePreviewPng` / `renderPdfPagePng` → 落盘后回落盘位置、字节数与尺寸 |
 | 跑一次命令行 | `documentRenderer.runCli(argv, inputText?)` → `--request-json` 的值 / `describe` 子命令 / 标准输入三选一 → 解析不了 JSON 也回一条 INVALID_REQUEST 回执 → 给出 `{ exitCode, text }`，进程壳只管写 stdout、设退出码 |
 | 自报身份 | `documentRenderer.describe()` → 协议版本、产品名、`DocumentRendererProtocol.packageVersion`、`DocumentRendererFormats` 的两条操作 |
 
 ## 依赖什么
 
-- `@velaros-ai/office/renderer`：Office 预览解析与 PNG、PDF 单页渲染的原语（原生依赖都在那边）。
+- `@velaros-ai/velar/office/renderer`：Office 预览解析与 PNG、PDF 单页渲染的原语（原生依赖都在那边）。
 - `@velaros-ai/core`：`AppError`（错误码即控制流）、`resolveRealPath`、几个类型守卫与 `truncate`。
 - `@velaros-ai/platform`：`isPathTextInside`，路径包含判断的公共件。
 - `zod`：请求 schema。

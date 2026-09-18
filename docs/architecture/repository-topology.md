@@ -11,7 +11,7 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 | Core | `packages/core`, `packages/platform` |
 | Foundations | `packages/code-surface`, `packages/velar`, `packages/text-files`, `packages/path-rules`, `packages/tool-contract` |
 | Model | `packages/model` |
-| Capabilities | `packages/browser`, `packages/cli`, `packages/development`, `packages/office`, `packages/project`, `packages/system` |
+| Capabilities | `packages/browser`, `packages/cli`, `packages/development`, `packages/project`, `packages/system` |
 | UI | `packages/ui` |
 | HTML artifacts | `packages/html-artifacts` |
 | Surface | `packages/surface-protocol` |
@@ -42,7 +42,8 @@ The repository is converging on three rules; packages move one at a time, each m
 | `computer` | `velar/computer` (`velar:computer`, with the helper sidecar runtime and its bundled Python helpers) | done |
 | `knowledge` | whole → `velar/knowledge` (`velar:knowledge`, with the knowledge base underneath: ingestion, full-text and vector indexes, embeddings); `packages/knowledge` deleted | done |
 | `memory` | whole → `velar/memory` (`velar:memory`, with the memory store underneath: backends, host adapter, turn recall); `packages/memory` deleted | done |
-| `office` (+ `document-renderer`), `browser` | whole → `velar` units with their engines; what cannot move (an execution loop, not a tool) stays a separate package | pending |
+| `office` | whole → `velar/office` (`velar:office`, with the document engines, converters and the renderer primitives underneath); `packages/office` deleted; `document-renderer` now builds on `@velaros-ai/velar/office/renderer` | done |
+| `browser` | whole → a `velar` unit with its engine; what cannot move (an execution loop, not a tool) stays a separate package | pending |
 | `ui`, `html-artifacts`, `cli`, `agent-lab` | grouped by responsibility after the moves above | pending |
 
 ## Shared infrastructure
