@@ -11,7 +11,9 @@ const outputFile = join(buildDir, 'tree-store-v2-probe.mjs')
 const entryFile = join(
   repoRoot,
   'packages',
+  'velar',
   'memory',
+  'test',
   'probes',
   'tree-v2',
   'tree-store.probe.ts'

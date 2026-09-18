@@ -12,23 +12,31 @@ import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nod
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
-  KnowledgeIndexDiagnostics,
+  KnowledgeDiagnostics,
   KnowledgeOperationContext,
   KnowledgeSearchInput,
-  KnowledgeSearchRecord,
-  KnowledgeSearchRequest,
+  KnowledgeSearchOptions,
+  KnowledgeSearchResult,
   KnowledgeSpacePort,
-  KnowledgeSynced,
   KnowledgeSyncInput,
+  KnowledgeWorkspaceSyncResult,
 } from '../index'
 import { knowledgeOperations } from '../index'
 
 /** 空间自己的工作区。 */
 export const WorkspaceRoot = '/repo'
 
-/** 一份命中文档，外加引擎才有的几个字段（行身份、索引哈希、嵌入模型）：它们不许出现在交给模型的结果里。 */
-export function record(id: string, patch: Partial<KnowledgeSearchRecord> = {}): KnowledgeSearchRecord {
-  const engineOnly = { workspaceRoot: WorkspaceRoot, indexTextHash: 'hash-engine-only', embeddingModel: 'engine-only-model', chunkCount: 3 }
+/** 一份命中文档，带着知识库才有的字段（行身份、索引哈希、嵌入模型、分块数、访问时刻）：它们不许出现在交给模型的结果里。 */
+export function record(id: string, patch: Partial<KnowledgeSearchResult> = {}): KnowledgeSearchResult {
+  const engineOnly = {
+    workspaceRoot: WorkspaceRoot,
+    indexTextHash: 'hash-engine-only',
+    embeddingProvider: 'engine-only-provider',
+    embeddingModel: 'engine-only-model',
+    chunkCount: 3,
+    createdAt: 1_750_000_000_000,
+    lastAccessedAt: 1_760_000_000_000,
+  }
   return {
     id,
     path: `docs/${id}.md`,
@@ -49,7 +57,7 @@ export function record(id: string, patch: Partial<KnowledgeSearchRecord> = {}): 
 }
 
 /** 一份同步结果，只有点名的字段有值。 */
-export function synced(patch: Partial<KnowledgeSynced> = {}): KnowledgeSynced {
+export function synced(patch: Partial<KnowledgeWorkspaceSyncResult> = {}): KnowledgeWorkspaceSyncResult {
   return { workspaceRoot: WorkspaceRoot, scanned: 0, upserted: 0, reindexed: 0, reindexBlocked: 0, removed: 0, skipped: 0, forced: false, ...patch }
 }
 
@@ -70,19 +78,19 @@ export const Diagnostics = Object.freeze({
   fileIndex: { trackedFiles: 30, trackedBySourceKind: { markdown: 20, text: 0, json: 2, config: 3, code: 5 } },
   vectorStore: { path: '/data/lancedb', tableName: 'knowledge_chunks_v', rowCount: 36, dimensions: 1536, indices: [] },
   runtime: { provider: 'openai', model: 'text-embedding-3-small', indexRuntimeKey: 'knowledge-chunk-builder:v2' },
-}) satisfies KnowledgeIndexDiagnostics
+}) satisfies KnowledgeDiagnostics
 
 /**
  * 一座假知识库：检索按 pages 逐次交回；sync 给了就按它答同步（可以抛错）；defaultWorkspace 为 null 时空间没有默认工作区，
  * 调用又没给 workspaceRoot 就像真空间那样报 VALIDATION。
  */
 export function knowledgeDesk(options: {
-  pages?: KnowledgeSearchRecord[][]
-  sync?: () => Promise<KnowledgeSynced>
+  pages?: KnowledgeSearchResult[][]
+  sync?: () => Promise<KnowledgeWorkspaceSyncResult>
   defaultWorkspace?: Nullable<string>
 } = {}) {
   const pages = [...(options.pages ?? [])]
-  const searches: Array<{ query: string; options: KnowledgeSearchRequest }> = []
+  const searches: Array<{ query: string; options: KnowledgeSearchOptions }> = []
   const syncs: Array<{ workspaceRoot: string; options?: { force?: boolean } }> = []
   const resolved: Array<Optional<string>> = []
   let diagnosticsCalls = 0

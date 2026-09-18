@@ -61,9 +61,6 @@ const platformCodeStyle = definePlugin({
       'code-style/forbid-console': {
         allowFiles: [
           'packages/ui/src/conversation/internal/runtime.ts',
-          'packages/memory/src/files/memory-files-probe.ts',
-          'packages/memory/src/vector/memory-vector-probe.ts',
-          'packages/memory/src/memory-tree/v2/storage/storage-v2-probe.ts',
         ],
       },
     },

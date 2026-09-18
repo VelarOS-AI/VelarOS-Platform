@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 用途：锁定 @velaros-ai/memory 与 @velaros-ai/knowledge 两个包的职责与宿主无关边界。
+// 用途：锁定 velar:memory 与 velar:knowledge 两个能力单元（都在 @velaros-ai/velar 里）的职责与宿主无关边界。
 
 import {
   existsSync,
@@ -34,44 +34,53 @@ const ProductToolNames = [
   'workspace_add_root',
 ]
 
-// 「记忆与上下文永不合并」是域宪章级的判决。合包那一轮它靠切片源码层的方向矩阵守着；
-// 知识库拆成 @velaros-ai/knowledge 之后，这条接缝回到包边界上——两个包互不 import，
-// 各自保持宿主无关。方向与合包前逐条等价，不是放宽。
+// 单元旁边的验收与测试不算源码：它们要读构建产物（../../dist/…）与仓里的生成物，本来就在单元外面。
+const CompanionDirectories = new Set(['spec', 'test'])
+
+// 「记忆与上下文永不合并」是域宪章级的判决。合包那一轮它靠切片源码层的方向矩阵守着，拆包之后靠包边界；
+// 两边整包并进 @velaros-ai/velar 之后，这条接缝落在单元边界上——两个单元互不 import（包的子路径、代码面的模块名、
+// 相对路径都不行），各自保持宿主无关。方向与并包前逐条等价，不是放宽。
 const ProductRules = [
   {
-    label: 'Memory 包',
-    packageRoot: 'packages/memory',
-    sourceRoot: 'src',
+    label: 'velar:memory 单元',
+    packageRoot: 'packages/velar',
+    sourceRoot: 'memory',
     forbidden: [
-      '@velaros-ai/knowledge',
+      '@velaros-ai/velar/knowledge',
+      'velar:knowledge',
       '@lancedb/lancedb',
       'apache-arrow',
     ],
     message: '长期记忆不得包含或依赖 Knowledge/向量域。',
   },
   {
-    label: 'Knowledge 包',
-    packageRoot: 'packages/knowledge',
-    sourceRoot: 'src',
-    forbidden: ['@velaros-ai/memory'],
+    label: 'velar:knowledge 单元',
+    packageRoot: 'packages/velar',
+    sourceRoot: 'knowledge',
+    forbidden: ['@velaros-ai/velar/memory', 'velar:memory'],
     message: 'Knowledge 不得反向依赖长期记忆树或它的 Kernel 适配器。',
   },
 ]
 const PortableContractRules = [
   {
-    packageName: '@velaros-ai/memory',
-    packageRoot: 'packages/memory',
-    exportKey: './contracts',
-    contractsFile: 'src/contracts.ts',
+    packageName: '@velaros-ai/velar/memory',
+    packageRoot: 'packages/velar',
+    exportKey: './memory/contracts',
+    contractsFile: 'memory/contracts.ts',
     // 键是入口里 import 的原文（含 .js），不是磁盘路径：搬家时两者必须一起改，否则这道门必红。
-    // `valueExport` 的那一条是常量表：它随 ./contracts 出包，入口里写成 `export *`（不是 type-only）。
+    // `valueExport` 的是常量表与生成的模型面：它们随 ./memory/contracts 出包，入口里是值导出（不是 type-only）。
     sourceModules: new Map([
       ['./types/memory.js', {
-        path: 'src/types/memory.ts',
+        path: 'memory/types/memory.ts',
         allowedImports: new Set(['../contract/constants.js']),
       }],
       ['./contract/constants.js', {
-        path: 'src/contract/constants.ts',
+        path: 'memory/contract/constants.ts',
+        allowedImports: new Set(),
+        valueExport: true,
+      }],
+      ['./contract/surface.js', {
+        path: 'memory/contract/surface.ts',
         allowedImports: new Set(),
         valueExport: true,
       }],
@@ -82,15 +91,25 @@ const PortableContractRules = [
     ],
   },
   {
-    packageName: '@velaros-ai/knowledge',
-    packageRoot: 'packages/knowledge',
-    exportKey: './contracts',
-    contractsFile: 'src/contracts.ts',
+    packageName: '@velaros-ai/velar/knowledge',
+    packageRoot: 'packages/velar',
+    exportKey: './knowledge/contracts',
+    contractsFile: 'knowledge/contracts.ts',
     // 键是入口里 import 的原文（含 .js），不是磁盘路径：搬家时两者必须一起改，否则这道门必红。
     sourceModules: new Map([
       ['./types/knowledge.js', {
-        path: 'src/types/knowledge.ts',
+        path: 'knowledge/types/knowledge.ts',
         allowedImports: new Set(['../contract/constants.js']),
+      }],
+      ['./contract/constants.js', {
+        path: 'knowledge/contract/constants.ts',
+        allowedImports: new Set(),
+        valueExport: true,
+      }],
+      ['./contract/surface.js', {
+        path: 'knowledge/contract/surface.ts',
+        allowedImports: new Set(),
+        valueExport: true,
       }],
     ]),
     requiredTypes: [
@@ -117,13 +136,13 @@ export function collectProductBoundaryViolations(
     }
     const sliceRoot = resolve(packageRoot, rule.sourceRoot)
 
-    for (const file of walkFiles(sliceRoot)) {
+    for (const file of walkFiles(sliceRoot, CompanionDirectories)) {
       if (!SourceFilePattern.test(file)) continue
       const source = readFileSync(file, 'utf8')
       for (const toolName of ProductToolNames) {
         if (!source.includes(toolName)) continue
         violations.push(
-          `${relative(repoRoot, file)}：引用宿主工具 ${toolName} 违反边界；${rule.label} 包只能描述自己的输入端口。`,
+          `${relative(repoRoot, file)}：引用宿主工具 ${toolName} 违反边界；${rule.label}只能描述自己的输入端口。`,
         )
       }
       for (const specifier of extractModuleSpecifiers(source, file)) {
@@ -134,16 +153,16 @@ export function collectProductBoundaryViolations(
         }
         if (isHostSpecifier(specifier)) {
           violations.push(
-            `${relative(repoRoot, file)}：import ${specifier} 违反边界；${rule.label} 包必须保持宿主无关。`,
+            `${relative(repoRoot, file)}：import ${specifier} 违反边界；${rule.label}必须保持宿主无关。`,
           )
         }
         if (matchesAnySpecifier(specifier, KernelConcreteDomainSpecifiers)) {
           violations.push(
-            `${relative(repoRoot, file)}：import ${specifier} 违反边界；${rule.label} 必须自持领域 DTO，并通过宿主端口注入 Model/Workspace/Chat 语义。`,
+            `${relative(repoRoot, file)}：import ${specifier} 违反边界；${rule.label}必须自持领域 DTO，并通过宿主端口注入 Model/Workspace/Chat 语义。`,
           )
         }
         if (!specifier.startsWith('.')) continue
-        // 拆包之后，「逃不出自己的源码树」就是包边界本身：相对 import 不许跨包。
+        // 并包之后，「逃不出自己的单元目录」就是单元边界本身：相对 import 不许跨单元。
         const reached = resolve(dirname(file), specifier)
         if (!reached.startsWith(`${sliceRoot}${sep}`)) {
           violations.push(
@@ -334,13 +353,13 @@ function resolveScriptKind(fileName) {
   return ts.ScriptKind.TS
 }
 
-function walkFiles(root) {
+function walkFiles(root, skippedDirectories = new Set()) {
   if (!existsSync(root)) return []
   const files = []
   for (const entry of readdirSync(root)) {
     const path = resolve(root, entry)
     if (statSync(path).isDirectory()) {
-      files.push(...walkFiles(path))
+      if (!skippedDirectories.has(entry)) files.push(...walkFiles(path))
     } else {
       files.push(path)
     }
@@ -363,7 +382,7 @@ function run() {
     return
   }
 
-  process.stdout.write('Memory 产品边界检查通过：记忆与知识两个包的职责与宿主边界无漂移。\n')
+  process.stdout.write('Memory 产品边界检查通过：记忆与知识两个单元的职责与宿主边界无漂移。\n')
 }
 
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : undefined

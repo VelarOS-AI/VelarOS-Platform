@@ -9,7 +9,7 @@ import {
 } from '@velaros-ai/agent'
 import { AgentProtocolVersions, AgentToolNames } from '@velaros-ai/agent/contracts'
 import { logRuntime } from '@velaros-ai/core/logger'
-import { createMemoryFilesBackend, mountMemoryAdapter } from '@velaros-ai/memory'
+import { createMemoryFilesBackend, mountMemoryAdapter } from '@velaros-ai/velar/memory'
 
 /** 纯内存的文件端口：0.3 起包内的内存实现不出包，发版夹具自己写一份最小实现。 */
 function createFixtureMemoryFilesIo() {

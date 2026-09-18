@@ -54,6 +54,12 @@
       ],
       "@velaros-ai/velar/knowledge/contracts": [
         "packages/velar/knowledge/contracts.ts"
+      ],
+      "@velaros-ai/velar/memory": [
+        "packages/velar/memory/index.ts"
+      ],
+      "@velaros-ai/velar/memory/contracts": [
+        "packages/velar/memory/contracts.ts"
       ]
     }
   },
@@ -65,7 +71,8 @@
     "sandbox/**/*.ts",
     "project/**/*.ts",
     "computer/**/*.ts",
-    "knowledge/**/*.ts"
+    "knowledge/**/*.ts",
+    "memory/**/*.ts"
   ],
   "exclude": [
     "*/spec/**",

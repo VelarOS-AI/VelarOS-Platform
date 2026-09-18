@@ -2,7 +2,7 @@
 
 > 状态：**现行规范**。S1–S8 全部实施片以本文为准；本文与 [memory-tree-product-architecture.md](./memory-tree-product-architecture.md) 冲突时，以本文为准（本文只收窄、不推翻架构文档的产品裁决）。
 > 日期：2026-07-24。冻结档：F5（密码学 / 序列化核心）。
-> 参考实现：`packages/memory/src/utils/tree-v2/diff-chain.ts`。逐字节回归探针：`packages/memory/probes/tree-v2/treediff.probe.ts`（附录 A fixture + **46 断言**），由 `bun run check` 链的 `probe:memory` 链上的 `probe:treediff-v2`（`scripts/memory/checks/memoryTreeDiffV2Probe.mjs`）机械复跑——**代码 = 规范 = 探针**，三者任一失配即判退。此门替补已退役的 `check:schemas` 在记忆树冻结面的锁位，专拦 D1 类排序/canonical 漂移悄改哈希。附录 A.2 的锚点全字段 fixture 可**纯从本文档复算**。
+> 参考实现：`packages/velar/memory/utils/tree-v2/diff-chain.ts`。逐字节回归探针：`packages/velar/memory/test/probes/tree-v2/treediff.probe.ts`（附录 A fixture + **46 断言**），由 `bun run check` 链上的 `probe:memory`（其中的 `scripts/memory/checks/memoryTreeDiffV2Probe.mjs`）机械复跑——**代码 = 规范 = 探针**，三者任一失配即判退。此门替补已退役的 `check:schemas` 在记忆树冻结面的锁位，专拦 D1 类排序/canonical 漂移悄改哈希。附录 A.2 的锚点全字段 fixture 可**纯从本文档复算**。
 > 修改纪律：本文任何**冻结语义**（§1/§2 canonical 与哈希公式、§0 域字符串、§3–§5 构造配方）的变更 = 规范版本变更（`.v2` → `.v3` 域字符串整体推进 + 重灌级迁移），不存在"小改"。附录 A.2 锚点是这些语义的逐字节金标：改锚点值必须是语义变更的**结果**，不得反向为迁就代码漂移原地改常数。
 
 ## 冻结范围与编号映射
@@ -416,12 +416,12 @@ Desktop 权威切换或旧表 drop 动词。`QueryFacade.ts` 的同步 `recall` 
 - `<wrapped>` = base64(wrapping root 加密后的 32 字节密钥)。机密性全部来自 wrapping（信封由 OS 安全存储守护），容器选 JSON：文件小、整文件原子重写模型、可诊断；二进制格式在此没有换取任何安全收益。
 - **严格 parse**：未知顶层字段 = 拒绝加载。密钥文件的宽容解析是伪造注入面。
 - 擦除剔除协议、代际保留数、与 storage generation 的成对回滚约束沿架构文档（S1 实现细化），本骨架只冻结**文件形态与字段命名**，S1 不得另起格式。
-- **证明义务兑现（WS3-S1）**：`packages/memory/src/{impl,utils}/tree-v2/storage/` 已落地换代/剔除机制与 `probes/tree-v2/storage.probe.ts`。探针在写新代→fsync→原子改写 CURRENT→删旧代的 **10 个原子步骤**前逐点注入崩溃，验证 CURRENT 判定的生效代恢复无损、已擦 DEK 不在任一存活代际残留且二次重开不复活；连同五根布局、备份隔离、严格 parse、GCM 篡改、root 轮换与 crypto-shred 共 **136 条冻结断言**，由 `bun run check` 链的 `check:memory-storage` 机械复跑。
+- **证明义务兑现（WS3-S1）**：`packages/velar/memory/{impl,utils}/tree-v2/storage/` 已落地换代/剔除机制与 `test/probes/tree-v2/storage.probe.ts`。探针在写新代→fsync→原子改写 CURRENT→删旧代的 **10 个原子步骤**前逐点注入崩溃，验证 CURRENT 判定的生效代恢复无损、已擦 DEK 不在任一存活代际残留且二次重开不复活；连同五根布局、备份隔离、严格 parse、GCM 篡改、root 轮换与 crypto-shred 共 **136 条冻结断言**，由 `bun run check` 链的 `check:memory-storage` 机械复跑。
 - keyring 根整体**永不复制、永不入备份**（架构既定，重申为骨架约束）。
 
 ## §8 DiffChain v0 → 冻结版修订记录
 
-本次 S0 同批落地的代码修订（`packages/memory/src/utils/tree-v2/diff-chain.ts`），即 §1.4 差异表 D1–D4 的实现：
+本次 S0 同批落地的代码修订（`packages/velar/memory/utils/tree-v2/diff-chain.ts`），即 §1.4 差异表 D1–D4 的实现：
 
 1. `hashTreeStateV2` / `toSortedNodes` 排序改 `compareCodeUnit`（D1）。
 2. `sortValue` 值域收紧 + `isPlainRecord` 原型检查 + 数组内 `undefined` 显式拒绝（D2）。
@@ -430,7 +430,7 @@ Desktop 权威切换或旧表 drop 动词。`QueryFacade.ts` 的同步 `recall` 
 
 v2 层零接线、零落库数据，修订无迁移面。
 
-**回归门兑现物**（返修批 A：原冻结以现在时声称的探针不在库，此次补齐）：逐字节探针 `packages/memory/probes/tree-v2/treediff.probe.ts` 固化附录 A fixture + 双锚点，**46 断言基线**（§1.1 值域拒绝 12 + 错误可分类 1 + §1.2/§1.3 canonical 向量 9 + 量化 3 + 创世哨兵 2 + §2.1 tree_hash 5 + §2.2 event_hash 7 + §3/§8 正逆重放·redact 7）。由 `bun run check` 链的 `probe:memory` 链上的 `probe:treediff-v2`（`scripts/memory/checks/memoryTreeDiffV2Probe.mjs`）机械复跑，锚点/canonical 失配即判退——替补退役的 `check:schemas` 对本冻结面的锁位。附录 A.2 锚点为由本参考实现复算的当前金标（原冻结的 `9e1d…`/`da8f…` 是字段值未提交、不可复算的占位，已更正）。
+**回归门兑现物**（返修批 A：原冻结以现在时声称的探针不在库，此次补齐）：逐字节探针 `packages/velar/memory/test/probes/tree-v2/treediff.probe.ts` 固化附录 A fixture + 双锚点，**46 断言基线**（§1.1 值域拒绝 12 + 错误可分类 1 + §1.2/§1.3 canonical 向量 9 + 量化 3 + 创世哨兵 2 + §2.1 tree_hash 5 + §2.2 event_hash 7 + §3/§8 正逆重放·redact 7）。由 `bun run check` 链的 `probe:memory` 链上的 `probe:treediff-v2`（`scripts/memory/checks/memoryTreeDiffV2Probe.mjs`）机械复跑，锚点/canonical 失配即判退——替补退役的 `check:schemas` 对本冻结面的锁位。附录 A.2 锚点为由本参考实现复算的当前金标（原冻结的 `9e1d…`/`da8f…` 是字段值未提交、不可复算的占位，已更正）。
 
 ## 附录 A：跨版本 fixture（探针逐字节断言）
 

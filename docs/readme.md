@@ -57,6 +57,7 @@ Host products own their adapters, installation UI, and product-specific policies
 | Document | Purpose |
 | --- | --- |
 | [Memory backend contract](memory/memory-backends.md) | Backend ports, capability ownership, and integration boundaries |
+| [Memory host adapter](memory/adapter-kernel.md) | `mountMemoryAdapter`: evidence capture, turn recall, and Dream scheduling as the three host ports |
 | [Memory tree specification freeze](memory/memory-tree-spec-freeze.md) | Canonical serialization, hashing, domain strings, and TreeDiff construction |
 | [Memory tree architecture](memory/memory-tree-product-architecture.md) | Evidence, Dream, TreeDiff, erasure, encryption, and meaning-model design |
 | [Memory tree requirements](memory/memory-tree-product-requirements.md) | Product behavior and privacy requirements |

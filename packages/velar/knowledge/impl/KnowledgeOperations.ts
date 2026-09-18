@@ -6,7 +6,7 @@
 import { isEmpty } from '@velaros-ai/core'
 
 import type { KnowledgeOperationContext } from '../contract/requires.js'
-import type { KnowledgeFound, KnowledgeHealth, KnowledgeSearchInput, KnowledgeSynced, KnowledgeSyncInput } from '../types/knowledge.js'
+import type { KnowledgeFound, KnowledgeHealth, KnowledgeSearchInput, KnowledgeSyncInput,KnowledgeWorkspaceSyncResult } from '../types/knowledge.js'
 import { summarizeIndexIssues } from '../utils/index-issues.js'
 import { searchInput, syncInput } from '../utils/input.js'
 import { projectHealth, projectHit } from '../utils/mapper.js'
@@ -21,7 +21,7 @@ export interface KnowledgeOperationsApi {
   /** @AgentView 检索知识：交回按相关度排好的命中，每条带整份正文与命中处的片段。 */
   search(input: KnowledgeSearchInput, ctx: KnowledgeOperationContext): Promise<KnowledgeFound>
   /** @AgentView 把工作区的文档、配置与代码增量同步进索引：刚改过一批文件、想马上搜到时用。 */
-  sync(input: KnowledgeSyncInput, ctx: KnowledgeOperationContext): Promise<KnowledgeSynced>
+  sync(input: KnowledgeSyncInput, ctx: KnowledgeOperationContext): Promise<KnowledgeWorkspaceSyncResult>
   /** @AgentView 看索引健康：文档总数、各状态的数量、当前嵌入模型覆盖了多少、各工作区最近同步时刻。只读。 */
   diagnostics(ctx: KnowledgeOperationContext): Promise<KnowledgeHealth>
 }
@@ -38,7 +38,7 @@ export class KnowledgeOperations implements KnowledgeOperationsApi {
     const root = await ctx.knowledge.resolveWorkspace(workspaceRoot)
     const search = () => ctx.knowledge.searchKnowledge(query, { ...request, workspaceRoot: root })
     let records = await search()
-    let autoSync: Nullable<KnowledgeSynced> = null
+    let autoSync: Nullable<KnowledgeWorkspaceSyncResult> = null
     if (isEmpty(records)) {
       // 补索引是零命中时的补救步骤：它失败不改写搜索本身的成败，只是不出现 autoSync。
       // @arch-guard:suspend code-style/require-error-logging 理由：自动同步失败经返回值（没有 autoSync）如实交给程序，不改写检索的成败。
@@ -52,7 +52,7 @@ export class KnowledgeOperations implements KnowledgeOperationsApi {
     return found
   }
 
-  public async sync(input: KnowledgeSyncInput, ctx: KnowledgeOperationContext): Promise<KnowledgeSynced> {
+  public async sync(input: KnowledgeSyncInput, ctx: KnowledgeOperationContext): Promise<KnowledgeWorkspaceSyncResult> {
     ctx.abortSignal.throwIfAborted()
     const { workspaceRoot, force } = syncInput(input)
     const root = await ctx.knowledge.resolveWorkspace(workspaceRoot)

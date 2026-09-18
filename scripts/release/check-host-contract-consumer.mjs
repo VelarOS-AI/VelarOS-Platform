@@ -11,7 +11,7 @@ import { runGuardedCommand, safePackPackage } from './safe-package-pack.mjs'
 const root = path.resolve(import.meta.dirname, '../..')
 const fixtureDirectory = path.join(import.meta.dirname, 'fixtures', 'host-contract-consumer')
 // 宿主直接用的包；打包时再沿它们的运行、可选、peer 依赖把第一方包递归补齐，新增的公共件不用回来改这张表。
-const hostPackageDirectories = ['agent', 'model', 'memory', 'knowledge', 'development', 'velar', 'project', 'core', 'kernel']
+const hostPackageDirectories = ['agent', 'model', 'development', 'velar', 'project', 'core', 'kernel']
 const packageDirectories = await firstPartyClosure(hostPackageDirectories)
 const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
 const nodeTypesVersion = manifest.devDependencies?.['@types/node']
@@ -77,7 +77,7 @@ try {
   })
   await runGuardedCommand({
     command: 'bun', args: ['build', './browser.ts', '--target=browser', '--outdir=browser-dist'],
-    cwd: consumerDirectory, operation: 'Browser Computer contracts bundle', stdio: 'inherit',
+    cwd: consumerDirectory, operation: 'Browser capability contracts bundle', stdio: 'inherit',
   })
   await runGuardedCommand({
     command: process.execPath, args: ['runtime.mjs'], cwd: consumerDirectory,

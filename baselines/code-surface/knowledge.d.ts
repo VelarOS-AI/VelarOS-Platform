@@ -42,7 +42,7 @@ declare module 'velar:knowledge' {
    * 同步结果：扫了多少个文件，新建或更新了多少份文档（upserted），重建了多少份的索引（reindexed，reindexBlocked 是该重建却没能重建的），
    * 删掉了多少份已经不在的，跳过了多少个没变的；forced 说这次是不是强制重扫。
    */
-  interface KnowledgeSynced {
+  interface KnowledgeWorkspaceSyncResult {
     workspaceRoot: string
     scanned: number
     upserted: number
@@ -71,7 +71,7 @@ declare module 'velar:knowledge' {
     trackedFiles: number
     vectorRows: number
     embedding: { provider: string; model: string }
-    workspaces: KnowledgeWorkspaceSync[]
+    workspaces: KnowledgeWorkspaceSyncState[]
   }
 
   /** 知识来源类型：markdown、text（纯文本）、json、config（配置文件）、code（代码知识）。 */
@@ -112,7 +112,7 @@ declare module 'velar:knowledge' {
   }
 
   /** 一个工作区最近一次同步的时刻（毫秒时间戳）。 */
-  interface KnowledgeWorkspaceSync {
+  interface KnowledgeWorkspaceSyncState {
     workspaceRoot: string
     lastSyncedAt: number
   }
@@ -121,7 +121,7 @@ declare module 'velar:knowledge' {
   export function search(input: KnowledgeSearchInput): Promise<KnowledgeFound>
 
   /** 把工作区的文档、配置与代码增量同步进索引：刚改过一批文件、想马上搜到时用。 */
-  export function sync(input: KnowledgeSyncInput): Promise<KnowledgeSynced>
+  export function sync(input: KnowledgeSyncInput): Promise<KnowledgeWorkspaceSyncResult>
 
   /** 看索引健康：文档总数、各状态的数量、当前嵌入模型覆盖了多少、各工作区最近同步时刻。只读。 */
   export function diagnostics(): Promise<KnowledgeHealth>

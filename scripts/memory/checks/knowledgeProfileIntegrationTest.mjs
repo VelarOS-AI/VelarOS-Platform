@@ -13,9 +13,11 @@ const outputFile = join(buildDir, 'knowledge-profile-integration.test.mjs')
 const entryFile = join(
   repoRoot,
   'packages',
+  'velar',
   'knowledge',
   'test',
-  'KnowledgeVectorsProfileIntegration.test.ts'
+  'probes',
+  'vector-profiles.probe.ts'
 )
 const electronBinary = join(repoRoot, 'node_modules', '.bin', 'electron')
 

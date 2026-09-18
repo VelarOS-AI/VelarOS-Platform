@@ -13,7 +13,7 @@
 > [现行冻结规范](./memory-tree-spec-freeze.md) 为准；产品行为以
 > [记忆树产品需求](./memory-tree-product-requirements.md) 为准。历史评审记录只解释设计来源，
 > 不覆盖当前代码、测试或冻结规范。
-> 适用范围：`@velaros-ai/memory`、产品宿主适配层、记忆后台任务和相关产品界面。
+> 适用范围：长期记忆单元（`@velaros-ai/velar/memory`，模型面 `velar:memory`）、产品宿主适配层、记忆后台任务和相关产品界面。
 
 ## 一句话定义
 
@@ -1279,7 +1279,7 @@ Evidence（权威事实来源）
 | `packages/knowledge/src/shared/**`（HybridQuery / Indexing / VectorStats）                  | 已迁至 Knowledge       | 混合融合评分与索引复用判定属于工作区知识检索                                                                         |
 | `DeterministicCurator` 的确定性脱敏正则                                                     | 重构后复用             | 作为确定性隐私入口（secret redaction + privacy classification）的种子实现                                            |
 | `TurnRecallCoordinator` + `MemoryRelevanceSelector`（turn-context 第八源 `memory.recall`）  | 复用形态               | “同步零 LLM、异步严格选择注入”正是新召回性能契约的原型；数据源改为树路径 facade                                      |
-| `packages/knowledge/src/knowledge/**`（知识域）                                             | 已拆为独立包           | 树保存用户与任务上下文，Knowledge 保存权威资料                                                                       |
+| `packages/knowledge/src/knowledge/**`（知识域）                                             | 已拆出（现为 `velar:knowledge` 单元） | 树保存用户与任务上下文，Knowledge 保存权威资料                                                                       |
 | 测试版 v1 存储基线                                                                          | 已落地                 | 直接创建当前 authority schema；开发期旧数据不转换、不备份、不带入正式迁移链                                          |
 | Electron `safeStorage`（现有 CloudAccountTokenStore 用法）                                  | 只作 seed              | 适合保护单个 wrapping root，不等同于十万级 per-blob DEK 的完整 ContentKeyService                                     |
 | renderer 侧自动沉淀（`useChatMemoryBridge` 计划构建）                                       | 删除                   | 采集职责移到 main 侧 `MemoryEvidenceBridge`；renderer 不再决定“什么值得记”，浏览器与系统空间会话因此首次获得平等采集 |
@@ -1317,13 +1317,13 @@ product-host/memory-ui/
   detail/             # 按需详情界面
 ```
 
-`packages/memory` 继续拥有产品无关的数据治理与树投影算法；“树长什么样”和页面交互属于宿主产品。R-memory 后它只承载长期记忆域；knowledge、`shared/` 与 embedding 基础设施已经迁入兄弟包 `@velaros-ai/knowledge`，两域只在宿主工具上下文中组合，不互相 import。
+长期记忆单元（`packages/velar/memory`）继续拥有产品无关的数据治理与树投影算法；“树长什么样”和页面交互属于宿主产品。R-memory 后它只承载长期记忆域；knowledge、`shared/` 与 embedding 基础设施在兄弟单元 `packages/velar/knowledge`（`velar:knowledge`），两域只在宿主装配处组合，不互相 import。
 
 ## 相邻记忆机制边界
 
 现状代码存在四套彼此独立的“记忆”机制，重构必须明确各自去向，防止树变成第五套：
 
-1. **长期记忆（`packages/memory` + 产品宿主适配层）**：本文的重构对象，整体替换为统一意义模型。
+1. **长期记忆（`packages/velar/memory` + 产品宿主适配层）**：本文的重构对象，整体替换为统一意义模型。
 2. **编码会话记忆辅助器（`packages/agent/src/agent/memory/**`）**：读旧 MemoryRecord 拼 prompt 段；其唯一写入口的生产者已消失，整体删除，能力由树路径召回接管。
 3. **句柄召回体系（`context:recall` / `context:distill` / 折叠桩）**：会话内工作记忆，存储在聊天存档，与长期记忆不共享任何状态。**保持独立**——它管理的是单会话的注意力，不是跨会话的认知。两者唯一的正式交点是采集：达到显著性门槛的会话事件经 `MemoryEvidenceBridge` 进入证据层；蒸馏便签中沉没于存档的重要事实由此获得进入长期层的通道，而不是把句柄体系并入树。
 4. **回合自动召回注入（`TurnRecallCoordinator`，turn-context 第八源）**：形态保留（异步、零阻塞、每会话去重、chips 可划掉），数据源从旧混合检索切换到树路径 facade。

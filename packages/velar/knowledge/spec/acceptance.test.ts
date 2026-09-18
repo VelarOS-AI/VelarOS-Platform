@@ -4,11 +4,24 @@
  * 操作一律经代码面的能力端口调（和模型的程序是同一条路），断言程序看得到的 code、message 与返回值。
  */
 import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 
-import { describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
+// INV-3、INV-4、INV-6 盯的是嵌入 profile、工作区摄入与嵌入配置解析这三段单元内的行为，
+// 它们不出单元（要它们的能力走 createKnowledgeRuntime），所以这里按相对路径直接引实现。
+import { KnowledgeWorkspace } from '../impl/domain/KnowledgeWorkspace'
+import { KnowledgeEmbeddingClient as EmbeddingApi } from '../impl/storage/KnowledgeEmbeddingClient'
+import { KnowledgeEmbeddings as Embeddings } from '../impl/storage/KnowledgeEmbeddings'
 import { KnowledgeSearchLimits, KnowledgeSourceKinds, VelarKnowledgeModule } from '../index'
+import {
+  buildDocumentRevisionKey,
+  buildEmbeddingProfileIdentity,
+  buildIndexTextHash,
+  canReuseReadyContentIndex,
+} from '../utils/indexing'
 
 import { checkModelProgram, Diagnostics, failureOf, KnowledgeDeclarations, knowledgeDesk, record, runModelProgram, synced, WorkspaceRoot } from './support'
 
@@ -65,7 +78,7 @@ describe('检索', () => {
     expect(own.resolved).toEqual([undefined])
   })
 
-  test('INV-3 诊断只读：不同步、不检索', async () => {
+  test('INV-7 诊断只读：不同步、不检索', async () => {
     const desk = knowledgeDesk()
     const health = await desk.call('diagnostics')
     expect(desk.diagnosticsCalls()).toBe(1)
@@ -76,7 +89,7 @@ describe('检索', () => {
 })
 
 describe('入参与结果', () => {
-  test('INV-4 入参在做事之前核对：不合法当场 VALIDATION，端口一次都不调', async () => {
+  test('INV-8 入参在做事之前核对：不合法当场 VALIDATION，端口一次都不调', async () => {
     const desk = knowledgeDesk()
     for (const input of [
       {},
@@ -103,7 +116,7 @@ describe('入参与结果', () => {
     expect(await plain.call('sync')).toMatchObject({ workspaceRoot: WorkspaceRoot, forced: false })
   })
 
-  test('INV-5 交给模型的只有声明里的字段：引擎的行身份、索引哈希、嵌入模型、向量库路径都不往外带', async () => {
+  test('INV-9 交给模型的只有声明里的字段：引擎的行身份、索引哈希、嵌入模型、向量库路径都不往外带', async () => {
     const desk = knowledgeDesk({ pages: [[record('doc-1'), record('doc-2', { indexError: '401 Unauthorized: invalid_issuer' })]] })
     const found = await desk.call('search', { query: '认证流程' })
     expect(Object.keys(found.results[0]).sort()).toEqual(['content', 'id', 'indexStatus', 'matchType', 'path', 'score', 'snippet', 'sourceKind', 'summary', 'tags', 'title', 'updatedAt'])
@@ -117,7 +130,7 @@ describe('入参与结果', () => {
 })
 
 describe('模型面', () => {
-  test('INV-7 声明从源码生成、只放出三个操作；随包发布的与生成物同一份；模型写的程序照声明调到真实操作', async () => {
+  test('INV-11 声明从源码生成、只放出三个操作；随包发布的与生成物同一份；模型写的程序照声明调到真实操作', async () => {
     expect(VelarKnowledgeModule.specifier).toBe('velar:knowledge')
     expect(VelarKnowledgeModule.declarations).toBe(KnowledgeDeclarations)
     expect([...VelarKnowledgeModule.methods].sort()).toEqual(['diagnostics', 'search', 'sync'])
@@ -125,7 +138,7 @@ describe('模型面', () => {
     // 空间端口与调用上下文不进模型面。
     expect(KnowledgeDeclarations).not.toContain('KnowledgeSpacePort')
     expect(KnowledgeDeclarations).not.toContain('KnowledgeOperationContext')
-    expect(KnowledgeDeclarations).not.toContain('KnowledgeSearchRecord')
+    expect(KnowledgeDeclarations).not.toContain('KnowledgeSearchResult')
     const desk = knowledgeDesk({ pages: [[record('doc-1')]] })
     const result = await runModelProgram(desk, `import { search, sync } from 'velar:knowledge'
 const found = await search({ query: '认证流程', limit: 3 })
@@ -135,7 +148,7 @@ export const synced = await sync({ force: true })`)
     expect(result.value).toMatchObject({ paths: ['docs/doc-1.md'], synced: { workspaceRoot: WorkspaceRoot, forced: true } })
   }, 60_000)
 
-  test('INV-8 声明里写给模型的数字与取值就是常量表里的', () => {
+  test('INV-12 声明里写给模型的数字与取值就是常量表里的', () => {
     for (const phrase of [
       `默认 ${KnowledgeSearchLimits.defaultResults}，最多 ${KnowledgeSearchLimits.results}`,
       `各最多 ${KnowledgeSearchLimits.pathHints} 条`,
@@ -145,11 +158,135 @@ export const synced = await sync({ force: true })`)
     expect(KnowledgeDeclarations).toContain(`type KnowledgeSourceKind = ${KnowledgeSourceKinds.map((kind) => `'${kind}'`).join(' | ')}`)
   })
 
-  test('INV-9 代码模版整份照生成的声明过类型检查，import 只写一次；它不嵌进声明，随模型面发布的就是这份文件', () => {
+  test('INV-13 代码模版整份照生成的声明过类型检查，import 只写一次；它不嵌进声明，随模型面发布的就是这份文件', () => {
     const template = readFileSync(resolve(import.meta.dir, '../template.js'), 'utf8')
     expect(checkModelProgram(template)).toEqual([])
     expect(template.match(/^import /gmu)).toHaveLength(1)
     expect(VelarKnowledgeModule.template).toBe(template.trim())
     expect(KnowledgeDeclarations).not.toContain('的代码模版')
+  })
+})
+
+describe('工作区摄入', () => {
+  let root = ''
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'knowledge-acceptance-'))
+  })
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  /** 在临时根里写一个文件，缺的目录补上。 */
+  async function write(relativePath: string, content = 'content'): Promise<string> {
+    const absolute = join(root, relativePath)
+    await mkdir(join(absolute, '..'), { recursive: true })
+    await writeFile(absolute, content)
+    return absolute
+  }
+
+  test('INV-4 只列根内的文件', async () => {
+    await write('public/readme.md')
+    await write('docs/guide.md')
+    const outside = await mkdtemp(join(tmpdir(), 'knowledge-outside-'))
+    try {
+      await writeFile(join(outside, 'secret.md'), 'secret')
+      const workspace = new KnowledgeWorkspace()
+      const files = await workspace.listDocumentFiles(root)
+      expect(files.map((file) => file.path).sort()).toEqual(['docs/guide.md', 'public/readme.md'])
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  test('INV-4 根外的候选路径提示一律丢弃', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'knowledge-outside-'))
+    try {
+      await writeFile(join(outside, 'secret.ts'), 'export const secret = true')
+      const workspace = new KnowledgeWorkspace()
+      const candidates = await workspace.listCodeCandidates({
+        workspaceRoot: root,
+        pathHints: [join(outside, 'secret.ts')],
+        symbolHints: [],
+        limit: 5,
+      })
+      expect(candidates).toEqual([])
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('嵌入 profile', () => {
+  test('INV-3 provider、model、维度任一不同就是另一个向量空间', () => {
+    const base = buildEmbeddingProfileIdentity({ provider: 'openai', model: 'text-embedding-3-small' }, 1536)
+    const otherModel = buildEmbeddingProfileIdentity({ provider: 'openai', model: 'text-embedding-3-large' }, 1536)
+    const otherDimensions = buildEmbeddingProfileIdentity({ provider: 'openai', model: 'text-embedding-3-small' }, 3072)
+
+    expect(base.profileKey).not.toBe(otherModel.profileKey)
+    expect(base.profileKey).not.toBe(otherDimensions.profileKey)
+    expect(base.vectorTable).not.toBe(otherModel.vectorTable)
+    expect(base.vectorTable).not.toBe(otherDimensions.vectorTable)
+  })
+
+  test('INV-3 内容变了就换一份行身份，旧索引不再复用', () => {
+    const before = buildIndexTextHash('第一版正文')
+    const after = buildIndexTextHash('第二版正文')
+
+    expect(buildDocumentRevisionKey('doc-1', before)).not.toBe(buildDocumentRevisionKey('doc-1', after))
+    expect(
+      canReuseReadyContentIndex(
+        { indexStatus: 'ready', chunkCount: 3, indexTextHash: before },
+        after
+      )
+    ).toBe(false)
+    expect(
+      canReuseReadyContentIndex(
+        { indexStatus: 'ready', chunkCount: 3, indexTextHash: before },
+        before
+      )
+    ).toBe(true)
+  })
+})
+
+describe('嵌入配置', () => {
+  test('INV-6 每次嵌入都向宿主端口要 provider 与 model，本单元不挑也不读环境变量', async () => {
+    const requests: Array<{ provider: string; model: string }> = []
+    let current = { provider: 'host-first', model: 'model-a' }
+    const embeddings = new Embeddings(
+      new EmbeddingApi({
+        createEmbeddingRequest(config, model, texts) {
+          requests.push({ provider: String(config.provider), model })
+          return {
+            url: 'injected://embedding',
+            headers: {},
+            execute: async () => ({ embedding: texts.map(() => 0.5) }),
+          }
+        },
+      }),
+      {
+        resolveEmbeddingRuntime: () => ({
+          ...current,
+          apiKey: 'opaque',
+          baseURL: 'injected://provider',
+          configured: true,
+        }),
+        isManualEmbeddingAllowed: () => true,
+      },
+      {
+        postJson: async () => {
+          throw new Error('注入的请求不该走 HTTP 兜底')
+        },
+      }
+    )
+
+    await embeddings.embedText('第一次')
+    // 宿主换了模型：下一次嵌入必须用新答案，不许沿用上一次解析到的 profile。
+    current = { provider: 'host-second', model: 'model-b' }
+    await embeddings.embedText('第二次')
+
+    expect(requests).toEqual([
+      { provider: 'host-first', model: 'model-a' },
+      { provider: 'host-second', model: 'model-b' },
+    ])
   })
 })

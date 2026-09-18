@@ -9,7 +9,6 @@ const currentFile = fileURLToPath(import.meta.url)
 const allowedFiles = new Set([
   path.join(repositoryRoot, 'scripts', 'release', 'safe-package-pack.mjs'),
   path.join(repositoryRoot, 'scripts', 'release', 'safe-package-pack.test.mjs'),
-  path.join(repositoryRoot, 'scripts', 'memory', 'checks', 'packageConsumerRunner.test.mjs'),
   path.join(repositoryRoot, 'scripts', 'model', 'checks', 'packageConsumerRunner.test.mjs'),
 ])
 const ignoredDirectories = new Set([

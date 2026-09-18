@@ -309,7 +309,7 @@ export const GovernedModules = [
     acceptance: 'computer/spec/acceptance.test.ts',
   },
   {
-    // 能力单元：工作区知识检索（velar:knowledge），只是工具那一层；知识库本身在 @velaros-ai/knowledge，
+    // 能力单元：工作区知识库（velar:knowledge），整包并进来的：模型面的三个操作，连同底下的摄入、分块、全文与向量索引、嵌入；
     // 宿主拿它的领域门面实现空间端口的三个知识方法，工作区由空间自己定
     directory: 'velar',
     unit: 'knowledge',
@@ -319,17 +319,60 @@ export const GovernedModules = [
     portable: 'knowledge.ts',
     impl: 'knowledge/impl',
     utils: 'knowledge/utils',
+    tuning: 'tuning.ts',
+    // 根入口要 SQLite 与 LanceDB，只给 Node；渲染进程只能加载可移植数据
+    browserSafeEntries: ['contracts.ts'],
     // 空间端口：三个操作经 ctx.knowledge 调它；每个方法都必须有操作在调
     hostPort: 'KnowledgeSpacePort',
     hostPortField: 'knowledge',
     surfaceFile: 'knowledge/impl/KnowledgeOperations.ts',
     layers: [
-      // 代码面 knowledge 命名空间的三个操作：入参核对、定工作区、零命中补一次同步、结果投影
+      // 代码面 knowledge 命名空间的三个操作：入参核对、定工作区、零命中补一次同步、结果投影，只经端口碰知识库
       ['KnowledgeOperations.ts'],
+      // 运行时对象图
+      ['KnowledgeRuntime.ts'],
+      // 领域：门面、查询、写入、维护、摄入、工作区
+      ['domain/'],
+      // 存储：关系仓、向量表、嵌入客户端
+      ['storage/'],
     ],
     card: 'knowledge/MODULE.md',
     invariants: 'knowledge/spec/invariants.md',
     acceptance: 'knowledge/spec/acceptance.test.ts',
+  },
+  {
+    // 能力单元：长期记忆（velar:memory），整包并进来的：模型面的四个操作，连同底下的证据、三种后端（树、文件、向量）、
+    // 宿主适配器与回合召回；宿主把自己的记忆后端接成空间端口，这一次调用的作用域与会话装在调用上下文里
+    directory: 'velar',
+    unit: 'memory',
+    name: '@velaros-ai/velar/memory',
+    contract: 'memory/contract',
+    types: 'memory/types',
+    portable: 'memory.ts',
+    impl: 'memory/impl',
+    utils: 'memory/utils',
+    tuning: 'tuning.ts',
+    // 根入口要 SQLite 与文件 IO，只给 Node；渲染进程只能加载可移植数据
+    browserSafeEntries: ['contracts.ts'],
+    // 空间端口：四个操作经 ctx.memory 调它；每个方法都必须有操作在调
+    hostPort: 'MemorySpacePort',
+    hostPortField: 'memory',
+    surfaceFile: 'memory/impl/MemoryOperations.ts',
+    layers: [
+      // 代码面 memory 命名空间的四个操作：来源与信任级、去重键、作用域读门、结果投影，只经 ctx.memory 调宿主
+      ['MemoryOperations.ts'],
+      // 宿主胶水：装配、证据采集桥、回合召回、树治理门面、空闲整理调度、后端令牌族
+      ['host/'],
+      // 后端编排与规则：叠加体、树后端适配、动词与派生索引判定、作用域规则
+      ['backends/'],
+      // 三个互不相引的后端实现
+      ['files/', 'vector/', 'tree/'],
+      // 树 v2：独立子系统，除探针外没人引它，也不出单元
+      ['tree-v2/'],
+    ],
+    card: 'memory/MODULE.md',
+    invariants: 'memory/spec/invariants.md',
+    acceptance: 'memory/spec/acceptance.test.ts',
   },
   {
     directory: 'code-surface',
@@ -651,64 +694,6 @@ export const GovernedModules = [
       ['client/', 'updater/', 'remote-client/', 'remote-node/'],
       // 进程内内核：模块宿主、唯一调用路径、模块 SDK、mod 信封解析；不碰 Node 模块
       ['runtime/'],
-    ],
-    card: 'MODULE.md',
-    invariants: 'spec/invariants.md',
-    acceptance: 'spec/acceptance.test.ts',
-  },
-  {
-    directory: 'memory',
-    name: '@velaros-ai/memory',
-    toolsFile: 'src/impl/MemoryTools.ts',
-    contract: 'src/contract',
-    types: 'src/types',
-    portable: 'memory.ts',
-    impl: 'src/impl',
-    utils: 'src/utils',
-    tuning: 'tuning.ts',
-    // 根入口要 SQLite 与文件 IO，只给 Node；渲染进程只能加载可移植数据
-    browserSafeEntries: ['contracts.ts'],
-    hostPort: 'MemoryToolApi',
-    hostPortField: 'memory',
-    layers: [
-      // 工具：四个记忆工具的定义与挂载
-      ['MemoryTools.ts'],
-      // 工具执行：execute 交给的类，只经 ctx.memory 调宿主
-      ['MemoryToolOperations.ts'],
-      // 宿主胶水：装配、证据采集桥、回合召回、树治理门面、空闲整理调度、后端令牌族
-      ['host/'],
-      // 后端编排与规则：叠加体、树后端适配、动词与派生索引判定、作用域规则
-      ['backends/'],
-      // 三个互不相引的后端实现
-      ['files/', 'vector/', 'tree/'],
-      // 树 v2：独立子系统，除探针外没人引它，也不出包
-      ['tree-v2/'],
-    ],
-    toolDefiner: 'defineMemoryTool',
-    card: 'MODULE.md',
-    invariants: 'spec/invariants.md',
-    acceptance: 'spec/acceptance.test.ts',
-  },
-  {
-    directory: 'knowledge',
-    name: '@velaros-ai/knowledge',
-    // 知识库本身，不是工具：模型面是 velar:knowledge（@velaros-ai/velar/knowledge），宿主拿本包的领域门面实现那边的空间端口，
-    // 所以不登记 toolsFile、toolDefiner、hostPort
-    contract: 'src/contract',
-    types: 'src/types',
-    portable: 'knowledge.ts',
-    impl: 'src/impl',
-    utils: 'src/utils',
-    tuning: 'tuning.ts',
-    // 根入口要 SQLite 与 LanceDB，只给 Node；渲染进程只能加载可移植数据
-    browserSafeEntries: ['contracts.ts'],
-    layers: [
-      // 运行时对象图
-      ['KnowledgeRuntime.ts'],
-      // 领域：门面、查询、写入、维护、摄入、工作区
-      ['domain/'],
-      // 存储：关系仓、向量表、嵌入客户端
-      ['storage/'],
     ],
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',

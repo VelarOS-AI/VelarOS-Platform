@@ -26,7 +26,7 @@ const SourceExtensions = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs'])
 const ForbiddenHostImport =
   /(?:from\s+|import\s*\(|require\()\s*['"](?:electron(?:\/[^'"]*)?|@electron\/[^'"]*|@velaros\/ipc(?:\/[^'"]*)?|@(?:components|features|hooks|pages|styles|shared)\/[^'"]*|@\/[^'"]*|@preload|@main\/[^'"]*)['"]/
 const ForbiddenCapabilityImport =
-  /(?:from\s+|import\s*\(|require\()\s*['"]@velaros-ai\/(?:browser|memory|system|development|office|velar\/computer)(?:\/[^'"]*)?['"]/
+  /(?:from\s+|import\s*\(|require\()\s*['"]@velaros-ai\/(?:browser|system|development|office|velar\/(?:computer|knowledge|memory))(?:\/[^'"]*)?['"]/
 const ForbiddenKernelSemanticImport =
   /(?:from\s+|import\s*\(|require\()\s*['"](?:@velaros-ai\/agent|@velaros-ai\/core\/(?:constants\/(?:project[^'"]*|model[^'"]*|memory[^'"]*|knowledge[^'"]*)|spaces\/[^'"]*|utils\/Browser[^'"]*))['"]/
 const CoreTypesImport =

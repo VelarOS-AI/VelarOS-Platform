@@ -11,7 +11,9 @@ const outputFile = join(buildDir, 'erasure-saga-v2-probe.mjs')
 const entryFile = join(
   repoRoot,
   'packages',
+  'velar',
   'memory',
+  'test',
   'probes',
   'tree-v2',
   'erasure-saga.probe.ts'

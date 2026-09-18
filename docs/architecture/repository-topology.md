@@ -12,7 +12,6 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 | Foundations | `packages/code-surface`, `packages/velar`, `packages/text-files`, `packages/path-rules`, `packages/tool-contract` |
 | Model | `packages/model` |
 | Capabilities | `packages/browser`, `packages/cli`, `packages/development`, `packages/office`, `packages/project`, `packages/system` |
-| Memory | `packages/memory`, `packages/knowledge` |
 | UI | `packages/ui` |
 | HTML artifacts | `packages/html-artifacts` |
 | Surface | `packages/surface-protocol` |
@@ -22,10 +21,12 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 
 The repository is converging on three rules; packages move one at a time, each move keeping every gate green.
 
-1. **`@velaros-ai/velar` holds tools only.** Every capability the model imports is a unit there (`packages/velar/<unit>`,
-   imported as `velar:<unit>`), together with the implementation that exists only to serve it — the project kernel behind
-   `velar:project` and `velar:code`, the helper sidecar behind `velar:computer`. A package with no model face is not a tool and
-   stays outside `velar`, grouped by responsibility: `development`, the language services a host plugs into `velar:code`, is one.
+1. **Tool packages move into `@velaros-ai/velar` whole.** Every capability the model imports is a unit there (`packages/velar/<unit>`,
+   imported as `velar:<unit>`), and the package that carried it moves in with its implementation, not as a projection over a package
+   left outside: the project kernel behind `velar:project` and `velar:code`, the helper sidecar behind `velar:computer`, the knowledge
+   base behind `velar:knowledge`, the memory store and its host adapter behind `velar:memory`. The old package is then deleted — there
+   is never a second copy. A package with no model face is not a tool and stays outside `velar`, grouped by responsibility:
+   `development`, the language services a host plugs into `velar:code`, is one.
 2. **Core execution stays outside `velar`**: `kernel`, `agent`, `model`, `code-surface` (the program gate), `tool-contract`,
    `surface-protocol`, and the cross-domain foundations `core` and `platform`.
 3. **Product assembly is not in this repository.** A space (which capabilities are mounted, with which ports and policies)
@@ -39,8 +40,9 @@ The repository is converging on three rules; packages move one at a time, each m
 | `project` | space assembly and ports → products; verification policy → `velar/project` | pending |
 | `text-files`, `path-rules` | stay foundations: libraries the `velar` units build on, not tools | done |
 | `computer` | `velar/computer` (`velar:computer`, with the helper sidecar runtime and its bundled Python helpers) | done |
-| `knowledge` | tools → `velar/knowledge` (`velar:knowledge`); the knowledge index stays `packages/knowledge`, the engine behind the space port | done |
-| `office` (+ `document-renderer`), `memory`, `browser` | tool collections become `velar` modules; engines that are not tools stay separate packages | pending |
+| `knowledge` | whole → `velar/knowledge` (`velar:knowledge`, with the knowledge base underneath: ingestion, full-text and vector indexes, embeddings); `packages/knowledge` deleted | done |
+| `memory` | whole → `velar/memory` (`velar:memory`, with the memory store underneath: backends, host adapter, turn recall); `packages/memory` deleted | done |
+| `office` (+ `document-renderer`), `browser` | whole → `velar` units with their engines; what cannot move (an execution loop, not a tool) stays a separate package | pending |
 | `ui`, `html-artifacts`, `cli`, `agent-lab` | grouped by responsibility after the moves above | pending |
 
 ## Shared infrastructure

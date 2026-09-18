@@ -17,7 +17,6 @@ import capabilitiesConfig from './eslint/capabilities.config.mjs'
 import coreConfig from './eslint/core.config.mjs'
 import htmlArtifactsConfig from './eslint/html-artifacts.config.mjs'
 import kernelConfig from './eslint/kernel.config.mjs'
-import memoryConfig from './eslint/memory.config.mjs'
 import modelConfig from './eslint/model.config.mjs'
 import uiConfig from './eslint/ui.config.mjs'
 
@@ -77,15 +76,6 @@ const Domains = [
       'packages/path-rules/**',
       'packages/project/**',
       'tests/capabilities/**',
-    ],
-  },
-  {
-    name: 'memory',
-    config: memoryConfig,
-    globs: [
-      'packages/memory/**',
-      'packages/knowledge/**',
-      'tests/memory/**',
     ],
   },
   {

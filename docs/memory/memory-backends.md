@@ -37,7 +37,7 @@ already assembled layered storage can pass it directly as `backend`.
 
 ## Backend contract
 
-The implementation-neutral contract lives in `packages/memory/src/contract/requires.ts`.
+The implementation-neutral contract lives in `packages/velar/memory/contract/requires.ts`.
 
 An authority backend must provide:
 
@@ -58,7 +58,7 @@ velaros.memory.store.<backendId>
 
 ## File authority
 
-Public entry point: `@velaros-ai/memory/files`.
+Public entry point: `@velaros-ai/velar/memory` (`createMemoryFilesBackend`).
 
 ```ts
 const files = createMemoryFilesBackend({
@@ -88,7 +88,7 @@ The backend supports dynamic roots and read-only roots. Paths are provided by th
 
 ## Vector derived index
 
-Public entry point: `@velaros-ai/memory/vector`.
+Public entry point: `@velaros-ai/velar/memory` (`createMemoryVectorBackend`).
 
 ```ts
 const vector = createMemoryVectorBackend({
@@ -135,8 +135,8 @@ Changing authority is a data migration, not a configuration toggle. The host mus
 
 The maintained gates are:
 
-- `bun run check:memory-boundaries` for package direction rules;
+- `bun run check:memory-boundaries` for unit direction rules (memory and knowledge never import each other);
 - `bun run probe:memory` for file authority, vector indexing, layered composition, and capability resolution;
-- `bun run test:memory` for maintained integration tests.
+- the unit's own suites, `packages/velar/memory/spec` and `packages/velar/memory/test`, run by `bun run test`.
 
 Contract, implementation, tests, and this document must change together.

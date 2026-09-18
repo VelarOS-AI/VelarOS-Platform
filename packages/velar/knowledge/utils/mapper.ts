@@ -2,10 +2,10 @@
  * 端口交回的形状到模型面的边界映射：只带声明里有的字段，知识库引擎给得再多也不往外带。
  */
 
-import type { KnowledgeHealth, KnowledgeHit, KnowledgeIndexDiagnostics, KnowledgeSearchRecord } from '../types/knowledge.js'
+import type { KnowledgeDiagnostics, KnowledgeHealth, KnowledgeHit, KnowledgeSearchResult } from '../types/knowledge.js'
 
 /** 一份命中文档的模型面形状；索引错误只在真有的时候出现。 */
-export function projectHit(record: KnowledgeSearchRecord): KnowledgeHit {
+export function projectHit(record: KnowledgeSearchResult): KnowledgeHit {
   const hit: KnowledgeHit = {
     id: record.id,
     path: record.path,
@@ -26,7 +26,7 @@ export function projectHit(record: KnowledgeSearchRecord): KnowledgeHit {
 }
 
 /** 索引诊断的模型面形状：计数原样，文件索引、向量库与嵌入运行时各取模型用得上的那一项。 */
-export function projectHealth(diagnostics: KnowledgeIndexDiagnostics): KnowledgeHealth {
+export function projectHealth(diagnostics: KnowledgeDiagnostics): KnowledgeHealth {
   return {
     totalDocuments: diagnostics.totalDocuments,
     readyDocuments: diagnostics.readyDocuments,

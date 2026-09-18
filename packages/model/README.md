@@ -195,7 +195,7 @@ embedding 选择与 provider 可用性辅助函数**总是显式接收** composi
 | --- | --- |
 | `@velaros-ai/core` | 唯一仓内依赖:`AppError` / 类型守卫 / kernel abi |
 | `@velaros-ai/agent` | 主要消费方:拿 `AgentModelRuntime` 跑执行循环 |
-| `@velaros-ai/memory` | 消费 embedding 选择做向量检索 |
+| `@velaros-ai/velar`(`knowledge`、`memory` 单元) | 宿主用本包的 embedding 选择解析好嵌入模型,再经它们的端口注入做向量检索 |
 
 ## 门
 

@@ -1,13 +1,149 @@
 /**
- * 知识检索的可移植数据：模型面（`velar:knowledge` 的入参与回执，带 @AgentView 的那些）与经空间端口流过的形状。
- * 端口上的形状只写操作真会读的字段：知识库引擎（`@velaros-ai/knowledge`）交回的比这宽，结构上满足它们，操作按模型面的形状投影、多的不往外带。
- * 不 import、不带函数成员、不用 Node 专属类型，整个文件随 `./knowledge/contracts` 入口出单元。
+ * 知识库的可移植数据：知识库经宿主与空间端口流动的形状，以及模型面（`velar:knowledge` 的入参与回执，带 @AgentView 的那些）。
+ * 只从常量表 import 类型、不带函数成员、不用 Node 专属类型，整个文件随 `./knowledge/contracts` 入口出单元。
  */
 
-// ── 模型面：velar:knowledge 的入参与回执 ────────────────────────
+import type { KnowledgeIndexStatuses, KnowledgeMatchTypes } from '../contract/constants.js'
 
+/** 嵌入服务商的不透明身份，由宿主的嵌入适配层给出；本单元不认识模型目录。 */
+export type KnowledgeEmbeddingProviderId = string
+
+export type KnowledgeIndexStatus =
+  typeof KnowledgeIndexStatuses[keyof typeof KnowledgeIndexStatuses]
+export type KnowledgeMatchType =
+  typeof KnowledgeMatchTypes[keyof typeof KnowledgeMatchTypes]
 /** @AgentView 知识来源类型：markdown、text（纯文本）、json、config（配置文件）、code（代码知识）。 */
 export type KnowledgeSourceKind = 'markdown' | 'text' | 'json' | 'config' | 'code'
+
+export interface KnowledgeRecord {
+  id: string
+  workspaceRoot: string
+  path: string
+  title: string
+  summary: string
+  content: string
+  sourceKind: KnowledgeSourceKind
+  tags: string[]
+  indexStatus: KnowledgeIndexStatus
+  indexError: string
+  chunkCount: number
+  indexTextHash: string
+  embeddingProvider: KnowledgeEmbeddingProviderId | ''
+  embeddingModel: string
+  createdAt: number
+  updatedAt: number
+  lastAccessedAt: number
+}
+
+export interface KnowledgeSearchOptions {
+  workspaceRoot: string
+  limit?: number
+  sourceKinds?: KnowledgeSourceKind[]
+  pathHints?: string[]
+  symbolHints?: string[]
+  documentIds?: string[]
+}
+
+export interface KnowledgeSearchResult extends KnowledgeRecord {
+  score: number
+  matchType: KnowledgeMatchType
+  snippet: string
+}
+
+export interface KnowledgeWorkspaceSyncOptions {
+  force?: boolean
+}
+
+/**
+ * @AgentView
+ * 同步结果：扫了多少个文件，新建或更新了多少份文档（upserted），重建了多少份的索引（reindexed，reindexBlocked 是该重建却没能重建的），
+ * 删掉了多少份已经不在的，跳过了多少个没变的；forced 说这次是不是强制重扫。
+ */
+export interface KnowledgeWorkspaceSyncResult {
+  workspaceRoot: string
+  scanned: number
+  upserted: number
+  reindexed: number
+  reindexBlocked: number
+  removed: number
+  skipped: number
+  forced: boolean
+}
+
+export interface KnowledgeReindexOptions {
+  ids?: string[]
+  statuses?: KnowledgeIndexStatus[]
+  limit?: number
+  includeOutdated?: boolean
+  sourceKinds?: KnowledgeSourceKind[]
+  workspaceRoot?: string
+}
+
+export interface KnowledgeReindexFailure {
+  documentId: string
+  message: string
+}
+
+export interface KnowledgeReindexResult {
+  requested: number
+  succeeded: number
+  failed: number
+  failures: KnowledgeReindexFailure[]
+}
+
+export interface KnowledgeVectorIndexInfo {
+  name: string
+  type: string
+  columns: string[]
+}
+
+export type KnowledgeSourceKindCounts = Record<KnowledgeSourceKind, number>
+
+export interface KnowledgeFileIndexStats {
+  trackedFiles: number
+  trackedBySourceKind: KnowledgeSourceKindCounts
+}
+
+export interface KnowledgeVectorStoreStats {
+  path: string
+  tableName: string
+  rowCount: number
+  dimensions: Nullable<number>
+  indices: KnowledgeVectorIndexInfo[]
+}
+
+export interface KnowledgeIndexRuntime {
+  provider: KnowledgeEmbeddingProviderId
+  model: string
+  indexRuntimeKey: string
+}
+
+/** @AgentView 一个工作区最近一次同步的时刻（毫秒时间戳）。 */
+export interface KnowledgeWorkspaceSyncState {
+  workspaceRoot: string
+  lastSyncedAt: number
+}
+
+export interface KnowledgeDiagnostics {
+  /** 本次运行同步过的工作区；空 = 本次运行还没同步过任何工作区。 */
+  workspaceSyncs: readonly KnowledgeWorkspaceSyncState[]
+  totalDocuments: number
+  pendingDocuments: number
+  readyDocuments: number
+  partialDocuments: number
+  failedDocuments: number
+  outdatedDocuments: number
+  activeProfileIndexedDocuments: number
+  activeProfileMissingDocuments: number
+  preservedVectorIndexes: number
+  embeddingProfileCount: number
+  totalChunks: number
+  fileIndex: KnowledgeFileIndexStats
+  vectorStore: KnowledgeVectorStoreStats
+  runtime: KnowledgeIndexRuntime
+}
+
+// ── 模型面：velar:knowledge 的入参与回执 ────────────────────────
 
 /**
  * @AgentView
@@ -82,28 +218,6 @@ export interface KnowledgeSyncInput {
 
 /**
  * @AgentView
- * 同步结果：扫了多少个文件，新建或更新了多少份文档（upserted），重建了多少份的索引（reindexed，reindexBlocked 是该重建却没能重建的），
- * 删掉了多少份已经不在的，跳过了多少个没变的；forced 说这次是不是强制重扫。
- */
-export interface KnowledgeSynced {
-  workspaceRoot: string
-  scanned: number
-  upserted: number
-  reindexed: number
-  reindexBlocked: number
-  removed: number
-  skipped: number
-  forced: boolean
-}
-
-/** @AgentView 一个工作区最近一次同步的时刻（毫秒时间戳）。 */
-export interface KnowledgeWorkspaceSync {
-  workspaceRoot: string
-  lastSyncedAt: number
-}
-
-/**
- * @AgentView
  * 索引健康：文档总数与各索引状态的数量；outdated 是内容策略变了、该重新同步的。
  * activeProfile 两项是当前嵌入模型（embedding）已经覆盖、还没覆盖的文档数——没覆盖的只能走全文检索。
  * trackedFiles 是在跟踪的文件数，vectorRows 是向量行数；workspaces 是本次运行同步过的工作区。
@@ -121,51 +235,5 @@ export interface KnowledgeHealth {
   trackedFiles: number
   vectorRows: number
   embedding: { provider: string; model: string }
-  workspaces: KnowledgeWorkspaceSync[]
-}
-
-// ── 空间端口上流过的形状 ─────────────────────────────────────────
-
-/** 交给端口的一次检索：工作区已经定好，条数已经核对过。 */
-export interface KnowledgeSearchRequest {
-  workspaceRoot: string
-  limit: number
-  sourceKinds?: KnowledgeSourceKind[]
-  pathHints?: string[]
-  symbolHints?: string[]
-  documentIds?: string[]
-}
-
-/** 端口交回的一份命中文档：操作只读这些字段，引擎给得更多也只投影出模型面的那些。 */
-export interface KnowledgeSearchRecord {
-  id: string
-  path: string
-  title: string
-  summary: string
-  snippet: string
-  content: string
-  sourceKind: KnowledgeSourceKind
-  tags: string[]
-  score: number
-  matchType: 'vector' | 'text' | 'hybrid' | 'recent'
-  indexStatus: 'pending' | 'ready' | 'partial' | 'failed'
-  indexError: string
-  updatedAt: number
-}
-
-/** 端口交回的索引诊断：操作只读这些字段，投影成模型面的 KnowledgeHealth。 */
-export interface KnowledgeIndexDiagnostics {
-  workspaceSyncs: readonly KnowledgeWorkspaceSync[]
-  totalDocuments: number
-  pendingDocuments: number
-  readyDocuments: number
-  partialDocuments: number
-  failedDocuments: number
-  outdatedDocuments: number
-  activeProfileIndexedDocuments: number
-  activeProfileMissingDocuments: number
-  totalChunks: number
-  fileIndex: { trackedFiles: number }
-  vectorStore: { rowCount: number }
-  runtime: { provider: string; model: string }
+  workspaces: KnowledgeWorkspaceSyncState[]
 }

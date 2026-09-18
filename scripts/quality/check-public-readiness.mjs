@@ -260,24 +260,19 @@ function checkRuntimeDependencyOwnership() {
     }
   }
 
-  // 向量库住在知识包（记忆包拆分后不再碰 LanceDB），两边都要守：知识包按可选 peer 注入，记忆包一个也不许有。
-  const knowledgeManifest = readJson(join(packageRoot, 'knowledge', 'package.json'))
-  if (knowledgeManifest.peerDependencies?.['@lancedb/lancedb'] !== '^0.27.2') {
-    fail('@velaros-ai/knowledge: LanceDB must remain an injected peer runtime')
+  // 向量库只有知识库用：velar 按可选 peer 注入 LanceDB（装了才有 velar:knowledge 的向量通道），不许经运行时依赖装进来；
+  // 同包的记忆单元一行也不许引它，由 check:memory-boundaries 守着。
+  const velarManifest = readJson(join(packageRoot, 'velar', 'package.json'))
+  if (
+    velarManifest.peerDependencies?.['@lancedb/lancedb'] !== '^0.27.2'
+    || velarManifest.peerDependenciesMeta?.['@lancedb/lancedb']?.optional !== true
+  ) {
+    fail('@velaros-ai/velar: LanceDB must remain an optional injected peer runtime')
   }
-  const memoryManifest = readJson(join(packageRoot, 'memory', 'package.json'))
-  for (const [name, manifest] of [
-    ['@velaros-ai/knowledge', knowledgeManifest],
-    ['@velaros-ai/memory', memoryManifest],
-  ]) {
-    for (const section of runtimeSections) {
-      if (manifest[section]?.['@lancedb/lancedb']) {
-        fail(`${name}: LanceDB must not be installed through ${section}`)
-      }
+  for (const section of runtimeSections) {
+    if (velarManifest[section]?.['@lancedb/lancedb']) {
+      fail(`@velaros-ai/velar: LanceDB must not be installed through ${section}`)
     }
-  }
-  if (memoryManifest.peerDependencies?.['@lancedb/lancedb']) {
-    fail('@velaros-ai/memory: LanceDB 已经随知识库拆走，记忆包不该再声明它')
   }
 
   const cliManifest = readJson(join(packageRoot, 'cli', 'package.json'))
