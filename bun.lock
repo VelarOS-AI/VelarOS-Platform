@@ -9,7 +9,6 @@
         "@velaros-ai/agent-lab": "workspace:*",
         "@velaros-ai/browser": "workspace:*",
         "@velaros-ai/cli": "workspace:*",
-        "@velaros-ai/computer": "workspace:*",
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/html-artifacts": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
@@ -157,24 +156,6 @@
       },
       "devDependencies": {
         "@types/node": "^22.19.17",
-      },
-    },
-    "packages/computer": {
-      "name": "@velaros-ai/computer",
-      "version": "0.3.0",
-      "dependencies": {
-        "@velaros-ai/core": "workspace:*",
-        "@velaros-ai/kernel": "workspace:*",
-        "@velaros-ai/platform": "workspace:*",
-        "@velaros-ai/tool-contract": "workspace:*",
-        "zod": "^4.3.6",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "typescript": "^5.7.0",
-      },
-      "peerDependencies": {
-        "@velaros-ai/agent": "workspace:^",
       },
     },
     "packages/core": {
@@ -1079,8 +1060,6 @@
     "@velaros-ai/cli": ["@velaros-ai/cli@workspace:packages/cli"],
 
     "@velaros-ai/code-surface": ["@velaros-ai/code-surface@workspace:packages/code-surface"],
-
-    "@velaros-ai/computer": ["@velaros-ai/computer@workspace:packages/computer"],
 
     "@velaros-ai/core": ["@velaros-ai/core@workspace:packages/core"],
 

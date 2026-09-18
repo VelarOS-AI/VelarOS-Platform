@@ -88,7 +88,7 @@ images/
   utils/        image.ts（认格式、读宽高、有界读、区域、压进上限）、input.ts（入参核对）、tuning.ts（可调参数）；全是函数与常量，每个函数上方一句说明
   index.ts      `./images` 入口，只转发
   contracts.ts  `./images/contracts` 入口，只转发
-  template.js   代码模版，嵌进生成声明的模块头
+  template.js   代码模版：日常用法的示例程序，随模型面发布、按需读，不嵌进声明
   spec/         不变量登记、验收测试、共用的真磁盘空间端口
   test/         实现细节测试
 ```

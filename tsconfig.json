@@ -36,12 +36,6 @@
       "@velaros-ai/cli/*": [
         "./packages/cli/src/*"
       ],
-      "@velaros-ai/computer": [
-        "./packages/computer/src/index.ts"
-      ],
-      "@velaros-ai/computer/*": [
-        "./packages/computer/src/*"
-      ],
       "@velaros-ai/ui/conversation": [
         "./packages/ui/src/conversation/index.ts"
       ],

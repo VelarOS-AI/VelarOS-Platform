@@ -28,6 +28,8 @@
 //   hostPort            注入面里的端口接口名；端口只放真会被调的方法，门禁从模型面入口（surfaceFile，没有就是 toolsFile）出发沿 import 核对
 //   hostPortField       调端口时的字段名（ctx.<字段>.方法 或 this.<字段>.方法），缺省 system
 //   surfaceFile         模型面入口（相对包根）：代码面能力的操作类，或空间的装配表；端口可达性从这里出发。一个单元出几件能力、各有操作类时写成数组
+//   assets              单元里随包发布的非 TypeScript 资产目录（只有能力单元填，写单元目录下的目录名）：比如 helper 脚本。门禁不扫里面的文件，
+//                       但它必须真在、并且写进包清单的 files（`<单元>/<目录>`），不然装出来的包里没有它
 //   status              'migrating' 表示正在按标准改造：问题照查照报条数，不计入失败（改造完删掉这一项）
 //   lazyImports         允许动态 import() 的目标（不填的包一条都不许有）：每项 { specifier, file, reason }——
 //                       specifier 是 import() 里的字符串原文，file 是唯一允许加载它的源文件（相对包根），
@@ -303,6 +305,39 @@ export const GovernedModules = [
     card: 'development/MODULE.md',
     invariants: 'development/spec/invariants.md',
     acceptance: 'development/spec/acceptance.test.ts',
+  },
+  {
+    // 能力单元：桌面控制（velar:computer），连同底下管 Python helper 子进程的运行时与 helper 定位器；
+    // 宿主把运行时直接当空间端口交进来（结构上满足），界面要的就绪、屏幕几何、释放也在运行时上
+    directory: 'velar',
+    unit: 'computer',
+    name: '@velaros-ai/velar/computer',
+    contract: 'computer/contract',
+    types: 'computer/types',
+    portable: 'computer.ts',
+    impl: 'computer/impl',
+    utils: 'computer/utils',
+    tuning: 'tuning.ts',
+    // 根入口要 child_process 拉起 helper，只给 Node；渲染进程只能加载可移植数据
+    browserSafeEntries: ['contracts.ts'],
+    environmentTable: 'ComputerEnvironmentVariables',
+    // 空间端口：五个操作经 ctx.computer 调它；每个方法都必须有操作在调
+    hostPort: 'ComputerSpacePort',
+    hostPortField: 'computer',
+    surfaceFile: 'computer/impl/ComputerOperations.ts',
+    // 随包发布的 Python helper（mac、win、linux 三个平台脚本加共享模块），运行时按平台拉起其中一个
+    assets: ['runtime'],
+    layers: [
+      // 代码面 computer 命名空间的五个操作：入参核对、可用性门禁、结果投影，经空间端口 ctx.computer
+      ['ComputerOperations.ts'],
+      // 运行时：拉起 Python helper、JSON Lines 协议、按 id 关联请求
+      ['ComputerSidecarManager.ts'],
+      // helper 定位：按平台与资源根找脚本与自带 venv
+      ['ComputerHelperLocator.ts'],
+    ],
+    card: 'computer/MODULE.md',
+    invariants: 'computer/spec/invariants.md',
+    acceptance: 'computer/spec/acceptance.test.ts',
   },
   {
     directory: 'code-surface',
@@ -713,36 +748,6 @@ export const GovernedModules = [
       ['runtime/'],
     ],
     toolDefiner: 'defineOfficeTool',
-    card: 'MODULE.md',
-    invariants: 'spec/invariants.md',
-    acceptance: 'spec/acceptance.test.ts',
-  },
-  {
-    directory: 'computer',
-    name: '@velaros-ai/computer',
-    toolsFile: 'src/impl/ComputerTools.ts',
-    contract: 'src/contract',
-    types: 'src/types',
-    portable: 'computer.ts',
-    impl: 'src/impl',
-    utils: 'src/utils',
-    tuning: 'tuning.ts',
-    // 根入口要 child_process 拉起 helper，只给 Node；渲染进程只能加载可移植数据
-    browserSafeEntries: ['contracts.ts'],
-    environmentTable: 'ComputerEnvironmentVariables',
-    hostPort: 'ComputerToolComputerApi',
-    hostPortField: 'computer',
-    layers: [
-      // 工具：五个桌面控制工具的定义、分组与挂载
-      ['ComputerTools.ts'],
-      // 工具执行：可用性门禁、坐标解析、结果投影，经宿主端口 ctx.computer
-      ['ComputerInputOperations.ts'],
-      // 运行时：拉起 Python helper、JSON Lines 协议、按 id 关联请求
-      ['ComputerSidecarManager.ts'],
-      // helper 定位：按平台与资源根找脚本与自带 venv
-      ['ComputerHelperLocator.ts'],
-    ],
-    toolDefiner: 'defineComputerTool',
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',

@@ -1,1 +1,1 @@
-export { ComputerOperationMetadata, ComputerToolNames } from '@velaros-ai/computer/contracts'
+export { ComputerErrorCodes, ComputerInputLimits } from '@velaros-ai/velar/computer/contracts'

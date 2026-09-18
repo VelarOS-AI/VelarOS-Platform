@@ -44,18 +44,6 @@
     },
     {
       "domain": "capabilities",
-      "directory": "packages/computer",
-      "name": "@velaros-ai/computer",
-      "version": "0.3.0",
-      "description": "Computer-control capability package: the injectable OS-level sidecar runtime and the host-injected agent tool collection, each behind its own subpath.",
-      "exportSubpaths": [
-        ".",
-        "./contracts"
-      ],
-      "repositoryDirectory": "packages/computer"
-    },
-    {
-      "domain": "capabilities",
       "directory": "packages/office",
       "name": "@velaros-ai/office",
       "version": "2.0.0",
@@ -185,8 +173,10 @@
       "directory": "packages/velar",
       "name": "@velaros-ai/velar",
       "version": "0.2.0",
-      "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project) and development (the language services behind velar:code: JS/TS and Python navigation and diagnostics, external language servers). One plain directory per unit, one convention for all.",
+      "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath) and development (the language services behind velar:code: JS/TS and Python navigation and diagnostics, external language servers). One plain directory per unit, one convention for all.",
       "exportSubpaths": [
+        "./computer",
+        "./computer/contracts",
         "./development",
         "./development/contracts",
         "./files",

@@ -11,7 +11,7 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 | Core | `packages/core`, `packages/platform` |
 | Foundations | `packages/code-surface`, `packages/velar`, `packages/text-files`, `packages/path-rules`, `packages/tool-contract` |
 | Model | `packages/model` |
-| Capabilities | `packages/browser`, `packages/cli`, `packages/computer`, `packages/office`, `packages/project`, `packages/system` |
+| Capabilities | `packages/browser`, `packages/cli`, `packages/office`, `packages/project`, `packages/system` |
 | Memory | `packages/memory`, `packages/knowledge` |
 | UI | `packages/ui` |
 | HTML artifacts | `packages/html-artifacts` |
@@ -37,7 +37,8 @@ The repository is converging on three rules; packages move one at a time, each m
 | `system` | local machine host → `velar`; space assembly → products | pending |
 | `project` | space assembly and ports → products; verification policy → `velar/project` | pending |
 | `text-files`, `path-rules` | internal units of `velar` (only capabilities use them) | pending |
-| `computer`, `knowledge`, `office` (+ `document-renderer`), `memory`, `browser` | tool collections become `velar` modules; engines that are not tools stay separate packages | pending |
+| `computer` | `velar/computer` (`velar:computer`, with the helper sidecar runtime and its bundled Python helpers) | done |
+| `knowledge`, `office` (+ `document-renderer`), `memory`, `browser` | tool collections become `velar` modules; engines that are not tools stay separate packages | pending |
 | `ui`, `html-artifacts`, `cli`, `agent-lab` | grouped by responsibility after the moves above | pending |
 
 ## Shared infrastructure

@@ -7,7 +7,7 @@ import { agentToolContracts } from '@velaros-ai/agent/tool-contract'
 import { createModelRequestClient } from '@velaros-ai/model'
 import { languageQueries, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/velar/development'
 import { mountMemoryAdapter, type MountMemoryAdapterInput } from '@velaros-ai/memory'
-import { ComputerOperationMetadata, ComputerToolNames, type ComputerOperation } from '@velaros-ai/computer/contracts'
+import { ComputerInputLimits, type ComputerPoint } from '@velaros-ai/velar/computer/contracts'
 import { createCapabilityPort } from '@velaros-ai/code-surface'
 import { createProjectSpace, type ProjectCallContext } from '@velaros-ai/project'
 import { FileLimits } from '@velaros-ai/velar/files/contracts'
@@ -42,6 +42,6 @@ const lifecycle: AgentRunLifecycle<object> = {
  beforeTurn: async ({ abortSignal }: { abortSignal: AbortSignal }) => { abortSignal.throwIfAborted() },
  onTurnSettled: async ({ history }: { history: readonly unknown[] }) => (history.length ? 'stop' : 'continue'),
 }
-const operation: ComputerOperation = ComputerToolNames.screenshot
+const point: ComputerPoint = { x: 10, y: 20, coordinateSpace: 'global' }
 void [createAgentExecutionStack, createModelRequestClient, lifecycle, retry,
- agentToolContracts.discoveryDescriptors, agentToolContracts.readSchemaDiscoveryNames({names:['project:read']}), ComputerOperationMetadata[operation]]
+ agentToolContracts.discoveryDescriptors, agentToolContracts.readSchemaDiscoveryNames({names:['project:read']}), point, ComputerInputLimits.clickCount]

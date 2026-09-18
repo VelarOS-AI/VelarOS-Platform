@@ -335,7 +335,13 @@ for (const module of selectedModules) {
       }
     }
   }
-  const UnitCompanions = ['spec', 'test']
+  // 单元目录下不算源码的目录：验收与测试跟着单元走；登记的资产目录（helper 脚本这类）随包发布、不受源码规则约束。
+  const UnitCompanions = ['spec', 'test', ...(module.assets ?? [])]
+  for (const asset of module.assets ?? []) {
+    if (!unit) fail(`${label}: 只有能力单元登记 assets；普通模块的资产放包根，不在 src 里`)
+    else if (!existsSync(join(srcRoot, asset))) fail(`${label}: 登记的资产目录 ${unit}/${asset}/ 不存在`)
+    else if (!(manifest.files ?? []).includes(`${unit}/${asset}`)) fail(`${label}: 资产目录 ${unit}/${asset}/ 没写进 package.json 的 files；装出来的包里没有它`)
+  }
   const sourceFiles = walkSources(srcRoot).filter((file) => !unit || !UnitCompanions.includes(relative(srcRoot, file).split('/')[0]))
 
   const program = ts.createProgram(sourceFiles, {

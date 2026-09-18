@@ -54,7 +54,7 @@ const ApprovalVerbOnExecutionPattern =
   /(?<![A-Za-z0-9_$.])(?:this\.)?ctx\.execution(?![A-Za-z0-9_$])\s*[!?]?\s*\.\s*(awaitConfirmation(?:Decision)?)\b/
 
 const ConcreteCapabilityImportPattern =
-  /(?:from\s+|import\s*\(|require\()\s*['"]@velaros-ai\/(?:model|project|velar|computer|system|office|browser|memory|agent)(?:\/[^'"]*)?['"]/
+  /(?:from\s+|import\s*\(|require\()\s*['"]@velaros-ai\/(?:model|project|velar|system|office|browser|memory|agent)(?:\/[^'"]*)?['"]/
 
 function normalizeSeparators(pathText) {
   return pathText.split('\\').join('/')

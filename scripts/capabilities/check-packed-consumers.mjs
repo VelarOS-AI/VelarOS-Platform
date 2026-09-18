@@ -60,27 +60,6 @@ const forbiddenPublishedPathPatterns = [
 ]
 const portableContractsFixtures = new Map([
   [
-    '@velaros-ai/computer',
-    {
-      bundleName: 'computer-contracts',
-      source: `import {
-  ComputerOperationMetadata,
-  ComputerToolNames,
-  type ComputerOperation,
-} from '@velaros-ai/computer/contracts'
-
-export interface ComputerContractsTypeFixture {
-  operation: ComputerOperation
-}
-
-Object.assign(globalThis, { __velarosComputerContractsBrowserGate: {
-  ComputerOperationMetadata,
-  ComputerToolNames,
-} })
-`,
-    },
-  ],
-  [
     '@velaros-ai/browser',
     {
       bundleName: 'browser-contracts',

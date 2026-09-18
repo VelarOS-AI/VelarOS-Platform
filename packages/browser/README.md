@@ -81,7 +81,7 @@ renderer 只取 `@velaros-ai/browser/core/contracts`(纯类型 + 纯策略,进 b
   注册进 agent 运行时。
 - `src/impl/electron/kernel-module.ts` 提供可选的 Kernel 模块适配器。
 - `vendor/devtools-performance-engine` 是随包发布的性能分析引擎产物,由 `browser:performance` 消费。
-- 姐妹能力包:`@velaros-ai/computer`(OS 级桌面控制)、`@velaros-ai/project`(本地代码工作区)。
+- 姐妹能力:`@velaros-ai/velar/computer`(`velar:computer`,OS 级桌面控制)、`@velaros-ai/project`(本地代码工作区)。
 
 ## 兼容策略
 
