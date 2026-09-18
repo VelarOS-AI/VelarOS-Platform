@@ -45,8 +45,8 @@
 
 | 能力 | 链路 |
 | --- | --- |
-| 落回前核对与确认 | 调用方先向宿主要不截断、不附文本差量的完整差量 → `rehearsalSandboxRules.prepareApply(...)`：截断就拒绝 → 按点名路径筛三列，点名了没变化的就拒绝 → 什么都没变返回 null → 按完整三列算条数、预览、敏感路径，给出确认文案（结尾是空间自己的一句）与审批选项（高风险、手动、不可记忆，操作身份含沙箱 id、指纹、三列条数）→ 调用方交给自己的审批端口，确认后把同一个指纹交给宿主落回 |
-| 代码面 `sandbox` 命名空间 | 模型的程序调 `sandbox.<操作>` → `sandboxOperations`：核对取消信号 → 作用域交给 `ctx.sandbox.resolveSource`（system 收任意绝对路径，project 钳在项目内）→ 调注入进来的端口 → 整形回执。`apply` 多一段：先要不截断的完整差量，过 `prepareApply`，再经 `ctx.approval` 向用户确认，确认后把同一个指纹交给宿主落回。`run` 先过 `prepareRun`：`velar:shell` 的判定说是危险命令就经 `ctx.approval` 问（高风险、手动、不可记忆），被拒抛错、不调端口 |
+| 落回前核对与确认 | 调用方先向宿主要不附文本差量的差量（三列永远完整）→ `rehearsalSandboxRules.prepareApply(...)`：按点名路径筛三列，点名了没变化的就拒绝 → 什么都没变返回 null → 按完整三列算条数、预览、敏感路径，给出确认文案（结尾是空间自己的一句）与审批选项（高风险、手动、不可记忆，操作身份含沙箱 id、指纹、三列条数）→ 调用方交给自己的审批端口，确认后把同一个指纹交给宿主落回 |
+| 代码面 `sandbox` 命名空间 | 模型的程序调 `sandbox.<操作>` → `sandboxOperations`：核对取消信号 → 作用域交给 `ctx.sandbox.resolveSource`（system 收任意绝对路径，project 钳在项目内）→ 调注入进来的端口 → 整形回执。`diff` 三列不截、文本差量缺省全附（`paths` 只要几个），`run` 的输出只守内存上限。`apply` 多一段：先要完整的三列，过 `prepareApply`，再经 `ctx.approval` 向用户确认，确认后把同一个指纹交给宿主落回。`run` 先过 `prepareRun`：`velar:shell` 的判定说是危险命令就经 `ctx.approval` 问（高风险、手动、不可记忆），被拒抛错、不调端口 |
 
 ## 依赖什么
 
@@ -66,14 +66,14 @@
 
 ## 失败语义
 
-- 宿主给的差量被截断、点名了没有变化的路径：抛 `VALIDATION`，都发生在问用户之前，什么都没写。
+- 点名了没有变化的路径：抛 `VALIDATION`，发生在问用户之前，什么都没写。
 - 镜像在确认之后又变过、源目录里有冲突：由宿主的落回实现按空间自己的错误码报（system 是 `SYSTEM_SANDBOX_CHANGED`、`SYSTEM_SANDBOX_CONFLICT`）。
 - `sandbox` 命名空间上的失败一律是抛错：source 越出空间允许的范围由端口抛（`PERMISSION`），落回或镜像里的危险命令被用户拒绝由审批端口抛。代码面把它们变成模型程序里能 `try/catch` 的异常。
 
 ## 不变量
 
-共 7 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
-按检验方式：测试 6 条、门禁 1 条。未验证 0 条。
+共 8 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 7 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 

@@ -21,10 +21,10 @@ import type { SystemProcessConfinementRequest, SystemProcessConfinementResult } 
 // ── 系统空间 ────────────────────────────────────────────────────
 
 /**
- * 系统空间要宿主给的本机能力：解析路径、跑命令的三件事、演练沙箱的四件事，加上列出登记着的沙箱。
+ * 系统空间要宿主给的本机能力：解析路径、跑命令与管后台任务的四件事、演练沙箱的四件事，加上列出登记着的沙箱。
  * 系统空间拿它装出 `velar:files`、`velar:shell`、`velar:sandbox`、`velar:images` 四个端口；本机实现是本地内核。
  */
-export interface SystemSpaceHost extends RehearsalSandboxHostPort, Pick<ShellSpacePort, 'runCommand' | 'listBackgroundTasks' | 'refreshShellEnvironment'> {
+export interface SystemSpaceHost extends RehearsalSandboxHostPort, Pick<ShellSpacePort, 'runCommand' | 'listBackgroundTasks' | 'refreshShellEnvironment' | 'terminateBackgroundTask'> {
   /**
    * 把用户给的路径解析成绝对路径：`~` 与 `~/…` 展开到宿主的家目录，相对路径相对宿主的默认工作目录；不给路径就返回默认工作目录。
    * 文件的路径、命令的 cwd、沙箱的源目录都经它解析，审批看到的目标和实际操作的目标因此一致。

@@ -13,6 +13,7 @@ import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import type { CodeCapabilityPort } from '@velaros-ai/code-surface'
 import { codeProgramChecker, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/code-surface'
 import { AppError } from '@velaros-ai/core/error'
+import { ShellLimits } from '@velaros-ai/velar/shell/contracts'
 
 import { VelarSandboxModule } from '../contract/surface'
 import type {
@@ -22,13 +23,14 @@ import type {
   SandboxDiscardInput,
   SandboxOperationContext,
   SandboxRunInput,
+  SandboxRunOptions,
   SandboxSurfacePort,
 } from '../index'
 import { rehearsalSandboxRules, SandboxApplyOperationKind, type SandboxDiff, sandboxOperations } from '../index'
 import { RehearsalSandboxTuning } from '../utils/tuning'
 
 function diffOf(overrides: Partial<SandboxDiff> = {}): SandboxDiff {
-  return { sandboxId: 's1', source: '/repo', created: [], modified: [], deleted: [], truncated: false, gitChanged: false, textDiffs: [], omittedDiffs: 0, fingerprint: 'fp1', ...overrides }
+  return { sandboxId: 's1', source: '/repo', created: [], modified: [], deleted: [], gitChanged: false, textDiffs: [], omittedDiffs: 0, fingerprint: 'fp1', ...overrides }
 }
 
 const base = { targetLabel: '/repo', closingNote: '删除和覆盖无法撤销。', riskScope: 'system-sandbox:apply' }
@@ -42,6 +44,7 @@ const ModelFacingDeclarations = readFileSync(
 /** 一个空间的假宿主：作用域怎么钳由 clamp 决定（真 = project 那样钳在根内，假 = system 那样收任意绝对路径），端口收到的每一次调用都记下来。 */
 function fakeSpace(options: { root: string; clamp: boolean; approved?: boolean }) {
   const calls: Array<Record<string, unknown>> = []
+  const runs: SandboxRunOptions[] = []
   const confirmations: string[] = []
   const confirmationOptions: unknown[] = []
   const changes = diffOf({ sandboxId: 'sb-1', source: `${options.root}/src`, created: ['note.txt'], modified: ['main.ts'] })
@@ -62,10 +65,11 @@ function fakeSpace(options: { root: string; clamp: boolean; approved?: boolean }
     },
     runInSandbox: async (runOptions) => {
       calls.push({ runInSandbox: runOptions.command, inSandbox: runOptions.sandboxId })
+      runs.push(runOptions)
       return { exitCode: 0, stdout: '3 pass 0 fail', stderr: '', durationMs: 12, timedOut: false, truncated: false, success: true }
     },
     diffSandbox: async (diffOptions) => {
-      calls.push({ diffSandbox: diffOptions.sandboxId, maxFiles: diffOptions.maxFiles ?? null })
+      calls.push({ diffSandbox: diffOptions.sandboxId, paths: diffOptions.paths ?? null, textDiffs: diffOptions.textDiffs ?? null })
       return changes
     },
     applySandbox: async (applyOptions) => {
@@ -89,7 +93,7 @@ function fakeSpace(options: { root: string; clamp: boolean; approved?: boolean }
       return { approved: options.approved !== false }
     },
   }
-  return { calls, confirmations, confirmationOptions, context: { abortSignal: new AbortController().signal, sandbox: port, approval } satisfies SandboxOperationContext }
+  return { calls, runs, confirmations, confirmationOptions, context: { abortSignal: new AbortController().signal, sandbox: port, approval } satisfies SandboxOperationContext }
 }
 
 /** 把一次能力调用转给命名空间的五个操作；抛出来的错由代码面变成模型程序里能 try/catch 的异常。 */
@@ -138,8 +142,7 @@ export default !changes
   : touched.length > 20 ? await discard({ id: box.id }) : await apply({ id: box.id })`
 
 describe('落回前的核对与确认请求', () => {
-  test('INV-1 截断的差量直接拒绝；条数与敏感路径按完整三列算，操作身份带指纹与条数', () => {
-    expect(() => rehearsalSandboxRules.prepareApply({ ...base, diff: diffOf({ truncated: true, created: ['a'] }) })).toThrow('被截断')
+  test('INV-1 条数与敏感路径按完整三列算，操作身份带指纹与条数', () => {
     const created = Array.from({ length: RehearsalSandboxTuning.confirmation.previewItems + 2100 }, (_, index) => `new/${index}.txt`)
     const request = rehearsalSandboxRules.prepareApply({ ...base, diff: diffOf({ created, modified: ['.ssh/config'] }), isSensitive: (path) => path.startsWith('.ssh/') })
     expect(request?.message).toContain(`新增 ${created.length} 个`)
@@ -178,7 +181,7 @@ describe('代码面 sandbox 命名空间', () => {
     expect(space.calls[1]).toEqual({ createSandbox: '/repo/src' })
     expect(space.calls[2]).toEqual({ runInSandbox: 'bun test', inSandbox: 'sb-1' })
     // 落回前那次差量必须是不截断的完整差量，确认之后把同一个指纹交回宿主。
-    expect(space.calls.at(-2)).toEqual({ diffSandbox: 'sb-1', maxFiles: Number.MAX_SAFE_INTEGER })
+    expect(space.calls.at(-2)).toEqual({ diffSandbox: 'sb-1', paths: null, textDiffs: false })
     expect(space.calls.at(-1)).toEqual({ applySandbox: 'sb-1', fingerprint: 'fp1' })
     expect(space.confirmations).toHaveLength(1)
     expect(space.confirmations[0]).toContain('新增 1 个')
@@ -254,6 +257,17 @@ export default outcome`)
     await sandboxOperations.run({ id: 'sb-1', command: 'bun test' }, quiet.context)
     expect(quiet.confirmations).toEqual([])
   }, 30_000)
+})
+
+describe('不折叠', () => {
+  test('INV-8 diff 的三列永远完整、paths 只要其中几个的文本差量原样交给宿主；镜像里命令的输出只守内存的上限', async () => {
+    const space = fakeSpace({ root: '/repo', clamp: false })
+    await sandboxOperations.diff({ id: 'sb-1', paths: ['src/a.ts'] }, space.context)
+    expect(space.calls.at(-1)).toEqual({ diffSandbox: 'sb-1', paths: ['src/a.ts'], textDiffs: null })
+    await sandboxOperations.run({ id: 'sb-1', command: 'bun test' }, space.context)
+    expect(space.runs.at(-1)).toMatchObject({ command: 'bun test', maxOutputChars: ShellLimits.outputChars })
+    for (const hidden of ['maxFiles', 'maxOutputChars']) expect(VelarSandboxModule.declarations).not.toContain(hidden)
+  })
 })
 
 describe('代码模版', () => {

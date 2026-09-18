@@ -15,7 +15,7 @@ import { codeProgramChecker, createCodeSurfaceSession, nodeSubprocessCodeRunner 
 import { AppError } from '@velaros-ai/core/error'
 
 import { VelarShellModule } from '../contract/surface'
-import type { ShellCommandResult, ShellListTasksInput, ShellOperationContext, ShellRunCommandOptions, ShellRunInput, ShellSpacePort } from '../index'
+import type { ShellCommandResult, ShellListTasksInput, ShellOperationContext, ShellRunCommandOptions, ShellRunInput, ShellSpacePort, ShellStopInput, ShellTaskTerminateRequest } from '../index'
 import { shellCommandApproval, ShellCommandOperationKind, shellCommandPolicy, ShellLimits, shellOperations } from '../index'
 
 const UnitRoot = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
@@ -37,6 +37,7 @@ function fakeSpace(options: { root: string; clamp: boolean; approved?: boolean; 
   const calls: Array<{ command: string; options: ShellRunCommandOptions; allowDangerous: boolean }> = []
   const listed: unknown[] = []
   const confirmations: Array<{ message: string; riskScope?: string; manual?: boolean }> = []
+  const stopped: ShellTaskTerminateRequest[] = []
   const port: ShellSpacePort = {
     resolveCwd: async (cwd) => {
       if (!cwd) return options.root
@@ -65,6 +66,12 @@ function fakeSpace(options: { root: string; clamp: boolean; approved?: boolean; 
       }]
     },
     refreshShellEnvironment: async () => ({ shell: '/bin/zsh', variableCount: 12, refreshedAt: 3 }),
+    terminateBackgroundTask: async (request) => {
+      stopped.push(request)
+      return request.taskId === 'task-1'
+        ? { terminated: true, statusAfter: 'exited', message: '后台进程已发送终止信号。' }
+        : { terminated: false, statusAfter: 'exited', message: '后台进程已经不在运行。' }
+    },
   }
   const approval: ApprovalPort = {
     awaitConfirmation: async (message, _signal, confirmation) => {
@@ -74,7 +81,7 @@ function fakeSpace(options: { root: string; clamp: boolean; approved?: boolean; 
     awaitConfirmationDecision: async () => ({ approved: options.approved !== false, message: null, autoApproved: false }),
   }
   const context: ShellOperationContext = { abortSignal: new AbortController().signal, shell: port, approval, sessionId: 'session-1' }
-  return { calls, listed, confirmations, context }
+  return { calls, listed, confirmations, stopped, context }
 }
 
 /** 把一次能力调用转给命名空间的三个操作；抛出来的错由代码面变成模型程序里能 try/catch 的异常。 */
@@ -82,13 +89,14 @@ async function invokeOperation(operation: string, input: unknown, context: Shell
   if (operation === 'run') return shellOperations.run(input as ShellRunInput, context)
   if (operation === 'listTasks') return shellOperations.listTasks(input as ShellListTasksInput, context)
   if (operation === 'refreshEnvironment') return shellOperations.refreshEnvironment(context)
+  if (operation === 'stop') return shellOperations.stop(input as ShellStopInput, context)
   throw new AppError('VALIDATION', `没有 shell.${operation} 这个操作。`)
 }
 
 /** 让一段真程序照生成的声明过 typecheck，再在隔离里跑完，交出它 export default 的东西。 */
 async function runModelProgram(space: ReturnType<typeof fakeSpace>, source: string): Promise<unknown> {
   const capabilities: CodeCapabilityPort = {
-    listOperations: () => ({ shell: ['run', 'listTasks', 'refreshEnvironment'] }),
+    listOperations: () => ({ shell: ['run', 'listTasks', 'refreshEnvironment', 'stop'] }),
     invoke: async ({ operation, input }) => {
       try {
         return { value: await invokeOperation(operation, input, space.context) }
@@ -292,9 +300,9 @@ export default { passed: tests.success, cwd: tests.cwd, auto: server.backgroundP
       ['bun test', '/repo/packages/app', false],
       ['npm run dev', '/repo', true],
     ])
-    // 后台任务按会话登记、按会话查；精确查一条时不带 limit。
+    // 后台任务按会话登记、按会话查，不设条数：要看多少由程序定。
     expect(space.calls[1]?.options.sessionId).toBe('session-1')
-    expect(space.listed).toEqual([{ limit: undefined, onlyRunning: undefined, taskId: 'task-1', sessionId: 'session-1' }])
+    expect(space.listed).toEqual([{ onlyRunning: undefined, taskId: 'task-1', sessionId: 'session-1' }])
     // 长驻命令问过一声（低风险），不是危险命令的手动确认。
     expect(space.confirmations).toHaveLength(1)
     expect(space.confirmations[0]?.manual).toBeUndefined()
@@ -322,16 +330,38 @@ export default (await run({ command: 'ls', cwd: '/etc' })).cwd`)
     expect(ran).toBe('/etc')
   }, 30_000)
 
-  test('INV-6 上限归这件能力自己钳，超了按上限跑、不拒；声明里写的数字与上限表一致', async () => {
+  test('INV-6 上限归这件能力自己钳，超了按上限跑、不拒；输出不折叠，只守内存的上限；声明里写的数字与上限表一致', async () => {
     const space = fakeSpace({ root: '/repo', clamp: false })
-    await shellOperations.run({ command: 'ls', timeoutMs: 99_999_999, maxOutputChars: 99_999_999 }, space.context)
+    await shellOperations.run({ command: 'ls', timeoutMs: 99_999_999 }, space.context)
     expect(space.calls[0]?.options).toMatchObject({ timeoutMs: ShellLimits.timeoutMs, maxOutputChars: ShellLimits.outputChars })
     await shellOperations.run({ command: 'ls', timeoutMs: 0.5 }, space.context)
     expect(space.calls[1]?.options.timeoutMs).toBe(1)
-    await shellOperations.listTasks({ limit: 99_999 }, space.context)
-    expect(space.listed[0]).toMatchObject({ limit: ShellLimits.taskListItems })
+    await shellOperations.listTasks({}, space.context)
+    expect(space.listed[0]).not.toHaveProperty('limit')
     for (const limit of Object.values(ShellLimits)) expect(ModelFacingDeclarations).toContain(String(limit))
   })
+
+  test('INV-10 回执只留模型用得上的：全部输出、成败与后台任务；任务带着到现在的全部输出，stop 按会话停它', async () => {
+    const space = fakeSpace({ root: '/repo', clamp: false })
+    const value = await runModelProgram(space, `import { listTasks, run, stop } from 'velar:shell'
+
+const started = await run({ command: 'npm run dev' })
+const [task] = (await listTasks({})).tasks
+const first = await stop({ taskId: task.id })
+const again = await stop({ taskId: 'gone', force: true })
+export default { started: started.backgroundProcess, output: task.output, first, again }`)
+    expect(value).toEqual({
+      started: { taskId: 'task-1', ports: [], autoStarted: true },
+      output: 'ready on 3000',
+      first: { taskId: 'task-1', stopped: true, status: 'exited' },
+      again: { taskId: 'gone', stopped: false, status: 'exited', note: '后台进程已经不在运行。' },
+    })
+    expect(space.stopped).toEqual([{ taskId: 'task-1', sessionId: 'session-1', force: false }, { taskId: 'gone', sessionId: 'session-1', force: true }])
+    // 宿主自己用的那些（进程号、终止命令、捕获的账、验证摘要）不进模型的回执。
+    const result = await shellOperations.run({ command: 'ls' }, space.context)
+    expect(Object.keys(result).sort()).toEqual(['aborted', 'command', 'cwd', 'durationMs', 'exitCode', 'signal', 'stderr', 'stdout', 'success', 'timedOut', 'truncated'])
+    for (const hidden of ['terminateCommand', 'ShellProcessOwnership', 'ShellCommandOutputCapture', 'verification', 'recentOutput']) expect(ModelFacingDeclarations).not.toContain(hidden)
+  }, 30_000)
 
   test('INV-7 危险命令每次都要用户亲自点头，口径是空间给的；被拒时一个进程都不起，拒绝原样抛给程序', async () => {
     const space = fakeSpace({ root: '/repo', clamp: true, approved: false })

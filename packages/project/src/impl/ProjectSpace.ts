@@ -93,6 +93,7 @@ class ProjectSpace implements ProjectSpaceApi {
         run: async (input, context) => shellOperations.run(input, await shell(context)),
         listTasks: async (input, context) => shellOperations.listTasks(input, await shell(context)),
         refreshEnvironment: async (_input, context) => shellOperations.refreshEnvironment(await shell(context)),
+        stop: async (input, context) => shellOperations.stop(input, await shell(context)),
       },
       sandbox: {
         create: async (input, context) => sandboxOperations.create(input, await sandbox(context)),
@@ -139,6 +140,7 @@ class ProjectSpace implements ProjectSpaceApi {
       },
       listBackgroundTasks: (options) => ctx.project.listBackgroundTasks(options),
       refreshShellEnvironment: () => ctx.project.refreshShellEnvironment(),
+      terminateBackgroundTask: (request) => ctx.project.terminateBackgroundTask(request),
     }
   }
 

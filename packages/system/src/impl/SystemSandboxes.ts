@@ -160,15 +160,15 @@ export class SystemSandboxes implements SystemSandboxesApi {
     const entry = await this.resolveEntry(options.sandboxId)
     const manifest = await readSandboxManifest(entry.directory)
     const current = await scanTree(entry.record.root)
-    const changes = await diffMirror(manifest, current, { maxFiles: options.maxFiles ?? RehearsalSandboxLimits.diffFiles, textDiffs: options.textDiffs })
+    const changes = await diffMirror(manifest, current, { paths: options.paths, textDiffs: options.textDiffs })
     return { sandboxId: entry.record.id, source: entry.record.source, ...changes }
   }
 
   public async apply(options: SandboxApplyOptions): Promise<SandboxApplyResult> {
     const entry = await this.resolveEntry(options.sandboxId)
     const manifest = await readSandboxManifest(entry.directory)
-    // 落回永远按完整差量算，不截断、不附文本差量。
-    const changes = await diffMirror(manifest, await scanTree(entry.record.root), { maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false })
+    // 落回按完整的三列算，不附文本差量。
+    const changes = await diffMirror(manifest, await scanTree(entry.record.root), { textDiffs: false })
     // 用户确认时看到的差量和现在的对不上（确认之后镜像又被改过）：整批不落，让调用方重新 diff、重新确认。
     if (isPresent(options.fingerprint) && options.fingerprint !== changes.fingerprint) throw sandboxChangedSinceConfirmation()
     const selection = rehearsalSandboxRules.select(changes, options.paths)

@@ -8,7 +8,7 @@
 ## 这是什么
 
 agent 代跑一条 shell 命令的能力，所有空间共用一份：执行前判断它是不是只读、危不危险、是不是长驻服务、能不能和别的调用并发，
-给出确认文案，构造危险命令的审批请求；再往上是代码面的 `velar:shell` 命名空间（`run`、`listTasks`、`refreshEnvironment`）。
+给出确认文案，构造危险命令的审批请求；再往上是代码面的 `velar:shell` 命名空间（`run`、`listTasks`、`stop`、`refreshEnvironment`）。
 
 **能力不绑空间**：`velar:shell` 只有这一份实现，每个空间注入自己的 `ShellSpacePort`——工作目录相对谁、越界算不算、
 确认文案怎么写、谁真正起进程，都在端口里。模型那边因此只有一套说明，两个空间看到的是同一份声明与代码模版。
@@ -20,7 +20,7 @@ agent 代跑一条 shell 命令的能力，所有空间共用一份：执行前�
 
 | 值 | 接口 | 做什么 |
 | --- | --- | --- |
-| `shellOperations` | `ShellOperationsApi` | 代码面 `shell` 命名空间的三个操作：解析工作目录、分类、要确认的先问、钳上限、调空间端口、整形回执 |
+| `shellOperations` | `ShellOperationsApi` | 代码面 `shell` 命名空间的四个操作：解析工作目录、分类、要确认的先问、钳超时、调空间端口、把宿主的完整回执整成模型用得上的那几项 |
 | `shellCommandPolicy` | `ShellCommandPolicyApi` | 执行前分类（只读、危险、长驻、端口）、并发判定、确认文案 |
 | `shellCommandApproval` | `ShellCommandApprovalApi` | 危险命令的审批请求：文案加高风险手动确认选项，操作身份跨入口一致 |
 | `ShellCommandOperationKind` | 契约常量 | 危险命令审批的操作身份种类 |
@@ -50,7 +50,7 @@ agent 代跑一条 shell 命令的能力，所有空间共用一份：执行前�
 
 | 能力 | 链路 |
 | --- | --- |
-| 代码面 `shell` 命名空间 | 模型的程序调 `run(...)` → `shellOperations.run`：核对取消信号 → `ctx.shell.resolveCwd`（越界在确认之前拒绝）→ `shellCommandPolicy.analyze` → 要确认的按 `ctx.shell.commandPolicy` 的口径经 `ctx.approval` 问（危险命令走 `shellCommandApproval.dangerous` 的手动确认，长驻命令是低风险确认），被拒抛错、一个进程都不起 → 钳超时与输出上限 → `ctx.shell.runCommand` → 后台回执补上端口、理由、是否自动转后台；要了交互式却没拿到控制台时补一句 note。`listTasks` 钳条数后按会话查，`refreshEnvironment` 直接交给端口 |
+| 代码面 `shell` 命名空间 | 模型的程序调 `run(...)` → `shellOperations.run`：核对取消信号 → `ctx.shell.resolveCwd`（越界在确认之前拒绝）→ `shellCommandPolicy.analyze` → 要确认的按 `ctx.shell.commandPolicy` 的口径经 `ctx.approval` 问（危险命令走 `shellCommandApproval.dangerous` 的手动确认，长驻命令是低风险确认），被拒抛错、一个进程都不起 → 钳超时，输出只按内存上限收（不折叠）→ `ctx.shell.runCommand` → 回执只留模型用得上的那几项，后台的补上端口与是否自动转后台；要了交互式却没拿到控制台时补一句 note。`listTasks` 按会话查、不设条数，每条带到现在的全部输出；`stop` 按会话经 `ctx.shell.terminateBackgroundTask` 停；`refreshEnvironment` 交给端口后整成默认 shell、可用清单与一句说明 |
 | 选哪个 shell | 词表 `ShellCommandKinds` 只定取值，不做判定分叉：判定是这五种语法的并集（`rm -rf`、`rd /s`、`Remove-Item -Recurse` 同时认），模型挑哪一种都不会让判定变松；本机有哪几个由环境报告给出，宿主在执行之前核对 |
 | 执行前分类 | `shellCommandPolicy.analyze(command)`：去首尾空白 → 危险黑名单（递归删除、丢未提交改动的 git、提权、格式化磁盘等，给出理由）→ 长驻判定（开发服务器、监听）→ 只读判定（白名单命令，逐段看参数、前缀、环境变量赋值、git 全局选项与子命令、sed 整段脚本，出现重定向、子 shell、后台符、换行整条否决）→ 端口提取 |
 | 并发判定 | `shellCommandPolicy.isParallelSafe(input, { optIn })`：命令必须是字符串、不转后台、只读、无需确认；optIn（缺省）时还要求入参显式 `parallel: true` |
@@ -80,8 +80,8 @@ agent 代跑一条 shell 命令的能力，所有空间共用一份：执行前�
 
 ## 不变量
 
-共 9 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
-按检验方式：测试 8 条、门禁 1 条。未验证 0 条。
+共 10 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 9 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 
@@ -96,7 +96,7 @@ shell/
   contract/     对外合同：provides.ts 登记三件能力的 API，requires.ts 是空间端口与调用上下文，constants.ts 是操作身份、shell 词表与公开上限；surface.ts 是生成的模型面（随包发布的声明）
   types/        只放类型：shell-command.ts 是可移植数据，approval.ts 是审批请求的入参与结果，invocation.ts 是判定内部的工作类型
   impl/         一类一文件：ShellOperations（velar:shell）、ShellCommandPolicy（判定的唯一出口）、ShellCommandApproval（审批请求）
-  utils/        command-policy.ts 是判定本身，limits.ts 是钳上限；全是纯函数，每个函数上方一句说明
+  utils/        command-policy.ts 是判定本身，limits.ts 是钳上限，results.ts 把宿主的回执整成模型看的样子；全是纯函数，每个函数上方一句说明
   index.ts      `./shell` 入口，只转发
   contracts.ts  `./shell/contracts` 入口，只转发
   template.js   代码模版，嵌进生成声明的模块头
@@ -104,12 +104,12 @@ shell/
   test/         实现细节测试
 ```
 
-**分层。** 上层是 `ShellOperations.ts`（代码面的三个操作），下层是 `ShellCommandPolicy.ts` 与 `ShellCommandApproval.ts`（互不依赖）；上层调下层；演练沙箱的 `run` 也用下层判危险命令、构造审批请求。
+**分层。** 上层是 `ShellOperations.ts`（代码面的四个操作），下层是 `ShellCommandPolicy.ts` 与 `ShellCommandApproval.ts`（互不依赖）；上层调下层；演练沙箱的 `run` 也用下层判危险命令、构造审批请求。
 
 **类与接口。** 每个类实现一个接口，定义在类文件里、紧挨在类的上方并导出，在 `contract/provides.ts` 登记；类的公开方法只能是接口里的方法。整个进程只需要一份，文件末尾给出那一份，按公开接口标注类型。
 
 | 实现文件 | 接口 | 做什么 |
 | --- | --- | --- |
-| `ShellOperations.ts` | `ShellOperationsApi`（同文件，provides 登记） | 代码面 `shell` 命名空间的三个操作 |
+| `ShellOperations.ts` | `ShellOperationsApi`（同文件，provides 登记） | 代码面 `shell` 命名空间的四个操作 |
 | `ShellCommandPolicy.ts` | `ShellCommandPolicyApi`（同文件，provides 登记） | 执行前分类、并发判定、确认文案的唯一出口 |
 | `ShellCommandApproval.ts` | `ShellCommandApprovalApi`（同文件，provides 登记） | 危险命令的审批请求 |

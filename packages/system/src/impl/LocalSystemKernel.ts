@@ -232,7 +232,7 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
 
   public async listBackgroundTasks(options: ShellBackgroundTaskQueryOptions = {}): Promise<ShellBackgroundTaskRecord[]> {
     const tasks = [this.commands, ...this.sandboxes.runners()].flatMap((runner) => runner.listTasks(options))
-    return tasks.sort((a, b) => b.startedAt - a.startedAt).slice(0, options.limit ?? SystemTuning.command.taskListItems)
+    return tasks.sort((a, b) => b.startedAt - a.startedAt).slice(0, options.limit ?? Number.POSITIVE_INFINITY)
   }
 
   public terminateBackgroundTask(request: SystemBackgroundTaskTerminateRequest): Promise<SystemBackgroundTaskTerminateResult> {

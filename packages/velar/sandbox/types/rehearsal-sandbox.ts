@@ -31,33 +31,36 @@ export interface SandboxRecord {
   detachedGitLinks?: string[]
 }
 
-/** 看差量的选项：maxFiles 限制新增与修改各列最多列多少条，删除列不受限；textDiffs 为 false 时不附文本差量（落回前算完整差量用）。 */
+/** 看差量的选项：三列永远完整；paths 只给这些文件附文本差量（不给就给全部），textDiffs 为 false 时一个都不附（落回前算差量用）。 */
 export interface SandboxDiffOptions {
   sandboxId: string
-  maxFiles?: number
+  paths?: string[]
   textDiffs?: boolean
 }
 
-/** @AgentView 一个文本文件的统一差量；超过预算时 truncated 为真、diff 被截断。 */
+/** @AgentView 一个文本文件的统一差量；只有超过 5000000 字符时才截断，truncated 为真。 */
 export interface SandboxTextDiff {
   path: string
   diff: string
   truncated: boolean
 }
 
-/** @AgentView 镜像相对创建时的变化：三列相对路径（删除列永远完整，truncated 说明另外两列被截），文本差量有界，omittedDiffs 是没附差量的文件数；gitChanged 表示 .git 里有东西变了。 */
+/**
+ * @AgentView
+ * 镜像相对创建时的变化：三列相对路径永远完整；新增与修改的文本文件附统一差量，omittedDiffs 是没附差量的文件数（二进制、太大、源目录那份也变了没有基线），
+ * note 说为什么；gitChanged 表示 .git 里有东西变了。
+ */
 export interface SandboxDiff {
   sandboxId: string
   source: string
   created: string[]
   modified: string[]
   deleted: string[]
-  truncated: boolean
   gitChanged: boolean
   textDiffs: SandboxTextDiff[]
   omittedDiffs: number
   note?: string
-  /** 这份差量的指纹：三列的完整路径与镜像里对应文件的印记算出来的摘要，不受 maxFiles 截断影响；落回时交回来，镜像在确认之后又变过就整批不落。 */
+  /** 这份差量的指纹：三列的完整路径与镜像里对应文件的印记算出来的摘要；落回时交回来，镜像在确认之后又变过就整批不落。 */
   fingerprint?: string
 }
 
@@ -94,15 +97,14 @@ export interface SandboxCreateInput {
   ignored?: SandboxIgnoredMode
 }
 
-/** @AgentView 在镜像里跑一条命令：工作目录钉在镜像根，写到镜像外会失败；timeoutMs、maxOutputChars 不给用宿主的缺省，超过宿主上限会被钳下来。 */
+/** @AgentView 在镜像里跑一条命令：工作目录钉在镜像根，写到镜像外会失败；timeoutMs 不给用宿主的缺省，最多 600000，超了按上限跑。 */
 export interface SandboxRunInput {
   id: string
   command: string
   timeoutMs?: number
-  maxOutputChars?: number
 }
 
-/** @AgentView 一条命令跑完的回执：命令自己失败（非零退出、超时）也是正常回执，不抛错；exitCode 为 null 表示进程被信号打断，truncated 表示输出按上限截过。 */
+/** @AgentView 一条命令跑完的回执：命令自己失败（非零退出、超时）也是正常回执，不抛错；exitCode 为 null 表示进程被信号打断。stdout、stderr 是全部输出，只有超过 5000000 字符时才只留末尾，truncated 为真。 */
 export interface SandboxCommandOutcome {
   exitCode: Nullable<number>
   stdout: string
@@ -127,10 +129,10 @@ export interface SandboxRunOptions {
   maxOutputChars?: number
 }
 
-/** @AgentView 看差量：maxFiles 限制新增与修改各列最多列多少条，删除列不受限；不给用宿主的缺省。 */
+/** @AgentView 看差量：paths 只给这些文件附文本差量（相对路径，照三列里的写），不给就给全部。 */
 export interface SandboxDiffInput {
   id: string
-  maxFiles?: number
+  paths?: string[]
 }
 
 /** @AgentView 把镜像里的变化落回源目录：paths 只落这些相对路径，不给就全部；落回一定先向用户确认，被拒就抛错、什么都不落。 */

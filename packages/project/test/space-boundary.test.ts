@@ -14,7 +14,7 @@ describe('项目空间的边界', () => {
     expect(Object.fromEntries(Object.entries(operations).map(([namespace, table]) => [namespace, Object.keys(table)]))).toEqual({
       project: ['read', 'list', 'search', 'edit', 'inspect', 'undo'],
       code: ['query', 'analyze'],
-      shell: ['run', 'listTasks', 'refreshEnvironment'],
+      shell: ['run', 'listTasks', 'refreshEnvironment', 'stop'],
       sandbox: ['create', 'run', 'diff', 'apply', 'discard'],
       images: ['view'],
     })
@@ -24,6 +24,6 @@ describe('项目空间的边界', () => {
     const source = readFileSync(resolve(SourceRoot, 'contract/requires.ts'), 'utf8')
     const port = source.slice(source.indexOf('export interface ProjectHostPort'), source.indexOf('export interface ProjectSandboxPort'))
     expect(port).toContain('extends ProjectSpacePort')
-    for (const field of ['runCommand', 'listBackgroundTasks', 'refreshShellEnvironment', 'sandbox?', 'resizeImage?']) expect(port).toContain(`${field}:`)
+    for (const field of ['runCommand', 'listBackgroundTasks', 'refreshShellEnvironment', 'terminateBackgroundTask', 'sandbox?', 'resizeImage?']) expect(port).toContain(`${field}:`)
   })
 })

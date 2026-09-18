@@ -28,12 +28,11 @@ declare module 'velar:sandbox' {
     detachedGitLinks?: string[]
   }
 
-  /** 在镜像里跑一条命令：工作目录钉在镜像根，写到镜像外会失败；timeoutMs、maxOutputChars 不给用宿主的缺省，超过宿主上限会被钳下来。 */
+  /** 在镜像里跑一条命令：工作目录钉在镜像根，写到镜像外会失败；timeoutMs 不给用宿主的缺省，最多 600000，超了按上限跑。 */
   interface SandboxRunInput {
     id: string
     command: string
     timeoutMs?: number
-    maxOutputChars?: number
   }
 
   /** 在镜像里跑完一条命令：回执加上是哪个沙箱、跑的哪条命令。 */
@@ -42,25 +41,27 @@ declare module 'velar:sandbox' {
     command: string
   }
 
-  /** 看差量：maxFiles 限制新增与修改各列最多列多少条，删除列不受限；不给用宿主的缺省。 */
+  /** 看差量：paths 只给这些文件附文本差量（相对路径，照三列里的写），不给就给全部。 */
   interface SandboxDiffInput {
     id: string
-    maxFiles?: number
+    paths?: string[]
   }
 
-  /** 镜像相对创建时的变化：三列相对路径（删除列永远完整，truncated 说明另外两列被截），文本差量有界，omittedDiffs 是没附差量的文件数；gitChanged 表示 .git 里有东西变了。 */
+  /**
+   * 镜像相对创建时的变化：三列相对路径永远完整；新增与修改的文本文件附统一差量，omittedDiffs 是没附差量的文件数（二进制、太大、源目录那份也变了没有基线），
+   * note 说为什么；gitChanged 表示 .git 里有东西变了。
+   */
   interface SandboxDiff {
     sandboxId: string
     source: string
     created: string[]
     modified: string[]
     deleted: string[]
-    truncated: boolean
     gitChanged: boolean
     textDiffs: SandboxTextDiff[]
     omittedDiffs: number
     note?: string
-    /** 这份差量的指纹：三列的完整路径与镜像里对应文件的印记算出来的摘要，不受 maxFiles 截断影响；落回时交回来，镜像在确认之后又变过就整批不落。 */
+    /** 这份差量的指纹：三列的完整路径与镜像里对应文件的印记算出来的摘要；落回时交回来，镜像在确认之后又变过就整批不落。 */
     fingerprint?: string
   }
 
@@ -93,7 +94,7 @@ declare module 'velar:sandbox' {
   /** 镜像时 gitignore 忽略的目录怎么处理：link 链接到真实目录（能读、写不进），copy 复制过来，skip 不要。忽略的文件一律不复制。 */
   type SandboxIgnoredMode = 'link' | 'copy' | 'skip'
 
-  /** 一条命令跑完的回执：命令自己失败（非零退出、超时）也是正常回执，不抛错；exitCode 为 null 表示进程被信号打断，truncated 表示输出按上限截过。 */
+  /** 一条命令跑完的回执：命令自己失败（非零退出、超时）也是正常回执，不抛错；exitCode 为 null 表示进程被信号打断。stdout、stderr 是全部输出，只有超过 5000000 字符时才只留末尾，truncated 为真。 */
   interface SandboxCommandOutcome {
     exitCode: number | null
     stdout: string
@@ -104,7 +105,7 @@ declare module 'velar:sandbox' {
     success: boolean
   }
 
-  /** 一个文本文件的统一差量；超过预算时 truncated 为真、diff 被截断。 */
+  /** 一个文本文件的统一差量；只有超过 5000000 字符时才截断，truncated 为真。 */
   interface SandboxTextDiff {
     path: string
     diff: string
@@ -126,13 +127,13 @@ declare module 'velar:sandbox' {
   export function run(input: SandboxRunInput): Promise<SandboxRunResult>
 
   /**
-   * 看镜像相对建的时候变了什么：三列相对路径加有界的文本差量。删除列永远完整，另外两列被 maxFiles 截掉时 truncated 为真。
+   * 看镜像相对建的时候变了什么：三列相对路径（永远完整），加上新增与修改的文本文件的统一差量；只想看其中几个就传 paths。
    */
   export function diff(input: SandboxDiffInput): Promise<SandboxDiff>
 
   /**
    * 把镜像里的变化落回源目录。落回前一定把删除与覆盖摆给用户确认，用户不点头就抛错、一个文件都不落；
-   * 当前空间还可能先核一遍这次要落的路径（项目空间核对项目许不许写），核不过同样一个文件都不落。
+   * 当前空间还可能先核一遍这次要落的路径（比如核对这些路径许不许写），核不过同样一个文件都不落。
    * 确认之后镜像又被改过，宿主整批不落。`.git` 里的变化永远不落，要那部分就在源目录重放那几条 git 命令。
    * 镜像里什么都没变时不问用户，三列都是空的。
    */

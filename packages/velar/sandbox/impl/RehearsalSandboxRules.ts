@@ -44,7 +44,6 @@ export class RehearsalSandboxRules implements RehearsalSandboxRulesApi {
 
   public prepareApply(input: SandboxApplyPrepareInput): Nullable<SandboxApplyRequest> {
     const { diff } = input
-    if (diff.truncated) throw new AppError('VALIDATION', '宿主给的差量被截断了，没法对着完整的改动向用户确认，什么都没写。')
     const selection = selectSandboxChanges(diff, input.paths)
     if (!isEmpty(selection.unknown)) {
       throw new AppError('VALIDATION', `这些路径在沙箱里没有变化，什么都没写：${selection.unknown.slice(0, RehearsalSandboxLimits.reportedPaths).join('、')}`)

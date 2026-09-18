@@ -384,7 +384,7 @@ describe('演练沙箱', () => {
       await writeFile(join(record.root, 'b.txt'), 'beta\n')
       // 用户看确认卡的时候镜像里还有命令在写（这里直接写一个新文件）：确认的是一份，镜像里已经是另一份。
       // 确认用的那份差量算完之后，镜像又变了，落回时拿旧指纹去核对就必须整批不落。
-      const confirmed = await kernel.diffSandbox({ sandboxId, maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false })
+      const confirmed = await kernel.diffSandbox({ sandboxId, textDiffs: false })
       expect(confirmed.created).toEqual(['b.txt'])
       await writeFile(join(record.root, 'c.txt'), 'late\n')
 

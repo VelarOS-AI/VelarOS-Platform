@@ -70,6 +70,7 @@ export async function createProjectHarness(root: string, options: ProjectHarness
     },
     listBackgroundTasks: async () => [],
     refreshShellEnvironment: async () => ({ shell: '/bin/sh', variableCount: 0, refreshedAt: 0 }),
+    terminateBackgroundTask: async () => ({ terminated: false, statusAfter: 'unknown', message: '这个用例没接后台任务' }),
     queryCode: async () => ({}),
   }
   if (options.sandbox) project.sandbox = options.sandbox

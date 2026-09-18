@@ -7,7 +7,6 @@ import { describe, expect, test } from 'bun:test'
 
 import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import { createCapabilityPort } from '@velaros-ai/code-surface'
-import { RehearsalSandboxLimits } from '@velaros-ai/velar/sandbox/contracts'
 
 import type { LocalSystemKernelApi } from '../src/index'
 import { createLocalSystemKernel, createSystemSpace } from '../src/index'
@@ -242,14 +241,17 @@ describe('rehearsal sandbox', () => {
     }
   })
 
-  test.skipIf(!canConfine)('apply asks with the full change set: counts past the diff cap are shown, and paths that did not change are refused before asking', async () => {
+  test.skipIf(!canConfine)('diff lists every change and apply asks with the full change set; paths that did not change are refused before asking', async () => {
     const source = await makeSource()
     const kernel = createLocalSystemKernel({ cwd: source })
     const record = await kernel.createSandbox({})
     try {
-      const count = RehearsalSandboxLimits.diffFilesMax + 100
+      const count = 2_100
       await mkdir(join(record.root, 'many'))
       for (let index = 0; index < count; index += 1) await writeFile(join(record.root, 'many', `f${index}.txt`), 'x')
+      // 三列不截断：看多少由程序定。
+      const listed = await kernel.diffSandbox({ sandboxId: record.id, textDiffs: false })
+      expect(listed.created).toHaveLength(count)
       const messages: string[] = []
       const applied = await sandboxVia(kernel, (message) => { messages.push(message) })<{ created: string[] }>('apply', { id: record.id })
       expect(messages[0]).toContain(`新增 ${count} 个`)

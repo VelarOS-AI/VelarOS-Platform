@@ -13,6 +13,7 @@ import { isFalse, Log, optionalWhen, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 import type { ShellBackgroundProcessInfo, ShellBackgroundTaskQueryOptions, ShellBackgroundTaskRecord, ShellBackgroundTaskStatus, ShellCommandOutputCapture, ShellCommandResult, ShellConsoleSessionInfo, ShellProcessConfinementEvidence, ShellRunCommandOptions } from '@velaros-ai/velar/shell/contracts'
+import { ShellLimits } from '@velaros-ai/velar/shell/contracts'
 
 import type { SystemProcessConfinementProvider } from '../contract/requires.js'
 import type { PreparedSystemCommand, SystemConsoleOutputBuffer, SystemProcessConfinementPolicy } from '../types/commands.js'
@@ -53,7 +54,7 @@ export interface SystemCommandRunnerApi {
    * @param cwd 已经解析好的绝对工作目录
    */
   run(command: string, cwd: string, options: ShellRunCommandOptions, abortSignal?: AbortSignal): Promise<ShellCommandResult>
-  /** 列出后台任务：可按任务 id、会话、命令过滤词、只看运行中来筛，最多 limit 条（默认 50）；状态按受管进程此刻的情况给出。 */
+  /** 列出后台任务：可按任务 id、会话、命令过滤词、只看运行中来筛，给了 limit 就最多那么多条（不给全列）；状态按受管进程此刻的情况给出。 */
   listTasks(options?: ShellBackgroundTaskQueryOptions): ShellBackgroundTaskRecord[]
   /**
    * 终止一个后台任务，返回终止前后的状态。
@@ -362,7 +363,7 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     let recentOutput = ''
     const decoders = { stdout: new SystemOutputDecoder(), stderr: new SystemOutputDecoder() }
     const append = (text: string): void => {
-      recentOutput = appendBoundedOutput(recentOutput, text, SystemTuning.command.recentOutputChars)
+      recentOutput = appendBoundedOutput(recentOutput, text, ShellLimits.outputChars)
       this.appendConsoleOutput(taskId, text)
       const task = this.tasks.get(taskId)
       if (task) this.tasks.set(taskId, { ...task, recentOutput, updatedAt: Date.now() })

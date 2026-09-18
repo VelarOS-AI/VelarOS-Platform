@@ -42,13 +42,13 @@ export interface ShellCommandConcurrencyOptions {
   optIn?: boolean
 }
 
-// ── velar:shell 的入参与结果 ────────────────────────────────────
+// ── velar:shell 的入参与结果（模型看到的就是这些） ────────────────
 
 /**
  * @AgentView
  * 一条命令。cwd 不给就是当前空间的根目录，相对路径相对它；越出空间允许的范围在执行之前就拒绝。
  * shell 只能填本机有的那几个（环境报告里列着），不填用默认的那个，命令照挑定的 shell 的语法写。
- * timeoutMs 最多 600000，maxOutputChars 最多 50000，超了按上限跑。
+ * timeoutMs 最多 600000，超了按上限跑。
  */
 export interface ShellRunInput {
   command: string
@@ -57,33 +57,113 @@ export interface ShellRunInput {
   timeoutMs?: number
   background?: boolean
   interactive?: boolean
-  maxOutputChars?: number
 }
 
-/** @AgentView 要了 interactive 却没拿到控制台时，note 说明怎么把命令改成不用输入的写法。 */
-export interface ShellRunResult extends ShellCommandResult {
+/**
+ * @AgentView
+ * 一条命令的回执。success 只看退出码为 0 且没有超时、没有被取消：命令自己失败是正常回执、不抛错，照 success 判。
+ * stdout、stderr 是全部输出，看多少、筛什么在程序里定；只有超过 5000000 字符时才只留末尾，truncated 为真。
+ * 命令进了后台时立刻返回，backgroundProcess 是那条后台任务；要了 interactive 却没拿到控制台时，note 说明怎么改成不用输入的写法。
+ */
+export interface ShellRunResult {
+  command: string
+  cwd: string
+  success: boolean
+  exitCode: Nullable<number>
+  signal: Nullable<string>
+  timedOut: boolean
+  aborted: boolean
+  durationMs: number
+  stdout: string
+  stderr: string
+  truncated: boolean
+  backgroundProcess?: ShellBackgroundStart
   note?: string
 }
 
-/** @AgentView 给 taskId 就精确查那一条，limit 不再起作用；不传 limit 默认列 50 条，最多 100 条。 */
+/**
+ * @AgentView
+ * 命令进了后台：taskId 交给 listTasks 看它跑到哪、输出了什么，交给 stop 停掉。
+ * autoStarted 表示不是你要的后台，是按命令判出来自动转的（开发服务器这类长驻命令）；ports 是从命令里认出来的端口。
+ */
+export interface ShellBackgroundStart {
+  taskId: string
+  ports: number[]
+  autoStarted: boolean
+  /** 交互式任务的控制台：命令正在等用户输入，用户在控制台卡片里打字。不是交互式任务时缺席。 */
+  console?: ShellConsoleSessionInfo
+}
+
+/** @AgentView 给 taskId 就只查那一条；onlyRunning 为真只列还在跑的。 */
 export interface ShellListTasksInput {
-  limit?: number
   onlyRunning?: boolean
   taskId?: string
 }
 
-/** @AgentView 后台任务表：最新启动的在前，count 是这次列出了几条。 */
+/** @AgentView 后台任务，最新启动的在前。宿主按会话隔离时只看得到本会话起的那些。 */
 export interface ShellListTasksResult {
-  count: number
-  tasks: ShellBackgroundTaskRecord[]
+  tasks: ShellTask[]
+}
+
+/**
+ * @AgentView
+ * 一条后台任务：id 就是 run 回执里的 taskId。output 是它到现在的全部输出（超过 5000000 字符只留末尾）；
+ * exitCode、signal、finishedAt 在它结束之后才有。
+ */
+export interface ShellTask {
+  id: string
+  command: string
+  cwd: string
+  status: ShellBackgroundTaskStatus
+  exitCode?: LooseOptional<number>
+  signal?: LooseOptional<string>
+  ports: number[]
+  autoStarted: boolean
+  startedAt: number
+  finishedAt?: number
+  output: string
+  /** 交互式任务的控制台；不是交互式任务时缺席。 */
+  console?: ShellConsoleSessionInfo
+}
+
+/** @AgentView 停哪一条后台任务：缺省发普通的终止信号，force 为真直接强杀（普通终止停不下来时再用它）。 */
+export interface ShellStopInput {
+  taskId: string
+  force?: boolean
+}
+
+/** @AgentView 停的结果：任务本来就不在跑时 stopped 为 false，note 说明它现在的样子。 */
+export interface ShellStopResult {
+  taskId: string
+  stopped: boolean
+  status: ShellBackgroundTaskStatus
+  note?: string
+}
+
+/**
+ * @AgentView
+ * 刷新之后的 shell 环境：shell 是重新选定的默认 shell 的可执行文件路径，shells 是本机可用的全部（按挑选优先顺序，第一个就是默认的）。
+ * 刚装上的 shell 在这里就看得到，不必等下一个回合的环境报告；note 说明刷新没完全成功的地方，或者缺了推荐的 shell 该怎么装。
+ */
+export interface ShellEnvironment {
+  shell: string
+  shells: ShellInfo[]
+  note?: string
+}
+
+/** @AgentView 一个可用的 shell：ready 为 false 表示只找到了可执行文件，还没通过启动、版本与 UTF-8 自检。 */
+export interface ShellInfo {
+  kind: ShellCommandKind
+  path: string
+  version: Nullable<string>
+  ready: boolean
 }
 
 // ── 命令回执 ────────────────────────────────────────────────────
 
 /**
- * @AgentView
- * 一条命令的回执。`success` 只看退出码为 0 且没有超时、没有被取消：命令自己失败是正常回执、不抛错，照 success 判。
- * stdout、stderr 超过 maxOutputChars 时**只留末尾**（失败现场在尾部），truncated 为真；要全量就把输出重定向进文件再读。
+ * 宿主跑完一条命令交回的完整回执（界面与本地内核都用它）。`success` 只看退出码为 0 且没有超时、没有被取消：命令自己失败是正常回执、不抛错。
+ * stdout、stderr 超过 maxOutputChars 时**只留末尾**（失败现场在尾部），truncated 为真。模型看到的是从它整出来的 `ShellRunResult`。
  */
 export interface ShellCommandResult {
   command: string
@@ -107,7 +187,7 @@ export interface ShellCommandResult {
   verification: ShellVerificationSummary
 }
 
-/** @AgentView 输出捕获的账，各项字节数都按解码后的 UTF-8 文本算。 */
+/** 输出捕获的账，各项字节数都按解码后的 UTF-8 文本算。 */
 export interface ShellCommandOutputCapture {
   status: 'complete' | 'truncated' | 'failed'
   encoding: 'utf-8'
@@ -118,7 +198,7 @@ export interface ShellCommandOutputCapture {
   error?: string
 }
 
-/** @AgentView 失败、超时、取消时 issues 里是 stdout 与 stderr 的末尾；成功时为空。 */
+/** 失败、超时、取消时 issues 里是 stdout 与 stderr 的末尾；成功时为空。 */
 export interface ShellVerificationSummary {
   kind: 'build' | 'lint' | 'test' | 'typecheck' | 'unknown'
   status: 'aborted' | 'failed' | 'passed' | 'timed-out' | 'unknown'
@@ -126,10 +206,8 @@ export interface ShellVerificationSummary {
 }
 
 /**
- * @AgentView
- * 命令进了后台时的回执。拿 `taskId` 调 `listTasks` 看它跑到哪了；要停就用 `run` 执行 `terminateCommand`，
- * 不响应再用 `forceTerminateCommand`，最后是 `fallbackTerminateCommand`，别自己拼 pid。
- * `autoStarted` 表示不是你要的后台，是按命令本身判出来自动转的（开发服务器这类长驻命令）。
+ * 宿主登记后台任务之后交回的完整信息：`taskId`、进程号、端口、三档终止命令（界面上的停止按钮用）。
+ * `autoStarted` 表示不是调用方要的后台，是按命令本身判出来自动转的（开发服务器这类长驻命令）。模型看到的是从它整出来的 `ShellBackgroundStart`。
  */
 export interface ShellBackgroundProcessInfo {
   taskId: Nullable<string>
@@ -149,23 +227,23 @@ export interface ShellBackgroundProcessInfo {
 
 // ── 进程约束与归属 ──────────────────────────────────────────────
 
-/** @AgentView 命令在操作系统进程层实际采用的文件副作用边界。 */
+/** 命令在操作系统进程层实际采用的文件副作用边界。 */
 export type ShellProcessConfinementMode =
   | 'read-only'
   | 'workspace-write'
   | 'danger-full-access'
 
-/** @AgentView 约束强度；`partial` 不等于 `full`，别把它当成绝对边界。 */
+/** 约束强度；`partial` 不等于 `full`，别把它当成绝对边界。 */
 export type ShellProcessConfinementEnforcement = 'none' | 'partial' | 'full'
 
-/** @AgentView 实际承担约束的后端：macOS 是 Seatbelt，Linux 是 bubblewrap，`host` 表示宿主注入的实现。 */
+/** 实际承担约束的后端：macOS 是 Seatbelt，Linux 是 bubblewrap，`host` 表示宿主注入的实现。 */
 export type ShellProcessConfinementBackend =
   | 'none'
   | 'bubblewrap'
   | 'seatbelt'
   | 'host'
 
-/** @AgentView 这次进程启动真实生效的约束，不是请求的那个。审批事实与约束事实分开记，谁也不冒充谁。 */
+/** 这次进程启动真实生效的约束，不是请求的那个。审批事实与约束事实分开记，谁也不冒充谁。 */
 export interface ShellProcessConfinementEvidence {
   mode: ShellProcessConfinementMode
   enforcement: ShellProcessConfinementEnforcement
@@ -175,7 +253,7 @@ export interface ShellProcessConfinementEvidence {
   writableRoots: string[]
 }
 
-/** @AgentView 子进程树由谁负责在父进程退出时清理，以及实际能不能做到。 */
+/** 子进程树由谁负责在父进程退出时清理，以及实际能不能做到。 */
 export interface ShellProcessOwnership {
   backend: 'windows-job' | 'process-tree'
   parentDeathCleanup: boolean
@@ -188,9 +266,8 @@ export interface ShellProcessOwnership {
 export type ShellBackgroundTaskStatus = 'running' | 'exited' | 'unknown'
 
 /**
- * @AgentView
- * 一条后台任务：`id` 就是 run 返回的 `taskId`。
- * 终止命令三档（普通、强制、兜底）是给 run 直接执行的现成命令。
+ * 宿主任务表里的一条后台任务（界面也用它）：`id` 就是 run 返回的 `taskId`，终止命令三档（普通、强制、兜底）是现成的命令。
+ * 模型看到的是从它整出来的 `ShellTask`。
  */
 export interface ShellBackgroundTaskRecord {
   exitCode?: LooseOptional<number>
@@ -214,7 +291,7 @@ export interface ShellBackgroundTaskRecord {
   startedAt: number
   updatedAt: number
   status: ShellBackgroundTaskStatus
-  /** 这条任务输出的末尾 4000 字符。 */
+  /** 这条任务到现在的输出；超过 `ShellLimits.outputChars` 只留末尾。 */
   recentOutput: Nullable<string>
   /** 交互式任务的控制台；不是交互式任务时缺席。 */
   console?: ShellConsoleSessionInfo
@@ -237,14 +314,14 @@ export interface ShellConsoleSessionInfo {
 
 // ── shell 与环境 ────────────────────────────────────────────────
 
-/** @AgentView 当前机器缺少推荐的 shell 时给用户的安装建议。 */
+/** 当前机器缺少推荐的 shell 时给用户的安装建议。 */
 export interface ShellRecommendation {
   code: 'INSTALL_GIT_BASH'
   message: string
   url: string
 }
 
-/** @AgentView `readiness` 为 `detected` 表示只发现了可执行文件，`ready` 表示已通过启动、版本与 UTF-8 自检。 */
+/** `readiness` 为 `detected` 表示只发现了可执行文件，`ready` 表示已通过启动、版本与 UTF-8 自检。 */
 export interface ShellDescriptor {
   kind: ShellCommandKind
   name: string
@@ -255,7 +332,7 @@ export interface ShellDescriptor {
   recommendation: Nullable<ShellRecommendation>
 }
 
-/** @AgentView 刷新之后的 shell 环境：`shell` 是重新选定的那个默认 shell 的可执行文件路径，`runtime` 是它的完整描述。 */
+/** 刷新之后的 shell 环境：`shell` 是重新选定的那个默认 shell 的可执行文件路径，`runtime` 是它的完整描述。 */
 export interface ShellEnvironmentRefreshResult {
   shell: string
   variableCount: number
@@ -299,12 +376,26 @@ export interface ShellRunCommandOptions {
 export interface ShellBackgroundTaskQueryOptions {
   /** 对后台任务完整命令行做不区分大小写的包含匹配，在 limit 截断前过滤。 */
   filter?: string
-  /** 匹配结果数量上限；默认 50。 */
+  /** 匹配结果数量上限；不给就全列。 */
   limit?: number
   taskId?: string
   sessionId?: string
   sessionIds?: string[]
   onlyRunning?: boolean
+}
+
+/** 停一条后台任务的请求：宿主核对它属于这个会话；force 为真直接强杀，否则发普通的终止信号。 */
+export interface ShellTaskTerminateRequest {
+  taskId: string
+  sessionId?: string
+  force: boolean
+}
+
+/** 宿主终止后台任务的结果：`terminated` 为 false 时看 `message`（本来就不在跑）。本地内核的终止结果在结构上就满足它。 */
+export interface ShellTaskTerminateResult {
+  terminated: boolean
+  statusAfter: ShellBackgroundTaskStatus
+  message: string
 }
 
 /** 一个空间对命令的口径：确认文案里「在哪儿执行」那一段，与审批时的风险分类。 */

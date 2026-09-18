@@ -29,7 +29,7 @@
 
 | 注入点 | 必须 | 谁给、什么时候 |
 | --- | --- | --- |
-| `SystemSpaceHost` | 装系统空间时必须 | 系统空间要的本机能力：路径解析、跑命令的三件事、演练沙箱的四件事、列出登记着的沙箱。本机实现就是本地内核；它自己声明的两个方法（`resolvePath`、`listSandboxes`）都有装配表在调，门禁核对 |
+| `SystemSpaceHost` | 装系统空间时必须 | 系统空间要的本机能力：路径解析、跑命令与管后台任务的四件事、演练沙箱的四件事、列出登记着的沙箱。本机实现就是本地内核；它自己声明的两个方法（`resolvePath`、`listSandboxes`）都有装配表在调，门禁核对 |
 | `SystemCallContext` | 必须 | 宿主每次分发调用时给：取消信号、审批端口 `ApprovalPort`（来自 agent 包）、会话、可选的交图通道 |
 | `LocalSystemKernelOptions` | 用本地内核时必须 | 创建本地内核时给 |
 | `SystemProcessConfinementProvider` | 可选 | 放在本地内核配置里，没有内置约束后端的平台靠它 |
@@ -53,7 +53,7 @@
 | 系统空间的一次调用 | 模型的程序调 `read(...)` / `run(...)` / `create(...)` → 能力端口按命名空间找到装配表里那一格 → `resolveCall` 给出这一次调用的审批通道、取消信号、会话 → 装成那件能力要的上下文（端口在构造时装好一次，上下文每次现装）→ 交给 `fileOperations` / `shellOperations` / `sandboxOperations` |
 | `velar:files` 的系统端口 | `locate`：`host.resolvePath`（`~` 与相对路径）→ 解开符号链接得到真实目标；`reviewRead`：凭证文件要问；`reviewWrite`：系统敏感路径（临时目录豁免）与凭证文件各要问一次；`commit`：按顺序写或删——写是补建上级目录后原子替换（同目录临时文件写完 fsync 再改名，权限位原样保留，核对 expected），删（撤回一次新建）是核对 expected 之后删掉；出错时在 context.applied 里点名已做的 |
 | `velar:images` 的系统端口 | `locate`：`host.resolvePath` → 解开符号链接得到真实目标；`resizeImage`：只在 macOS 上给，sips 先裁后缩、分两次调 |
-| `velar:shell` 的系统端口 | `resolveCwd`：`host.resolvePath`；`commandPolicy`：确认文案说在哪个目录（没给就是系统运行环境），风险分类 `system-command:dangerous`；跑命令的三件事直接交给本地内核 |
+| `velar:shell` 的系统端口 | `resolveCwd`：`host.resolvePath`；`commandPolicy`：确认文案说在哪个目录（没给就是系统运行环境），风险分类 `system-command:dangerous`；跑命令、列后台任务、刷新环境、终止后台任务直接交给本地内核 |
 | `velar:sandbox` 的系统端口 | 建、看差量、落回、丢弃直接交给本地内核；`resolveSource`：`host.resolvePath`；`runInSandbox`：按沙箱 id 找到镜像根，交给 `host.runCommand`（cwd 落在镜像根里，内核就换成钉死在镜像里的执行器）；`applyPolicy`：落回到源目录本身，敏感路径与凭证文件在确认里点名，风险分类 `system-sandbox:apply` |
 | 本地内核跑命令 | `runCommand` 解析 cwd → cwd 在某个沙箱根里就交给那个沙箱的执行器，否则交给主执行器 `SystemCommandRunner.run` → 选 shell（挑定的种类本机没有就以 `VALIDATION` 拒绝、一个进程都不起；宿主给了 nativeCommand 就走原生 argv）→ 进程约束 → 受管进程启动 → 采集解码 → 超时 / 取消收敛 → 验证摘要 → 后台登记。每一步见 `SystemCommandRunner.ts` 类上方的说明 |
 | 本地内核的演练沙箱 | `SystemSandboxes`：镜像源目录（gitignore 忽略的目录按 ignored 处理，剪掉推送地址，指向源目录外的 `.git` 链接不进镜像）→ 清单落在沙箱目录旁 → 差量按清单算 → 落回先核对源目录、再暂存、再挪到位 → 丢弃只删基目录下正好一层 |
@@ -71,7 +71,7 @@
 
 ## 状态归谁
 
-- **后台任务表**：每个本地内核持有一个命令执行器，任务表归它私有，在内存里，随内核 `dispose()` 结束；每条任务只留最近 4000 字符的输出。已结束的任务只留最近 200 条。
+- **后台任务表**：每个本地内核持有一个命令执行器，任务表归它私有，在内存里，随内核 `dispose()` 结束；每条任务留到现在的全部输出，只守内存的上限（`ShellLimits.outputChars`，超出只留末尾）；列任务不设条数。已结束的任务只留最近 200 条。
 - **交互式任务的控制台缓冲**：和任务表一起归命令执行器，在内存里，每个控制台留最近 10 万字符，更早的输出被挤掉时读取方会拿到 `droppedChars`；随 `dispose()` 清空。
 - **演练沙箱登记表**：本地内核持有一份（`SystemSandboxes`），每个沙箱一条记录和一个约束到镜像根的专属执行器；镜像与清单在临时区 `velaros-sandbox/<id>/` 下，内核重启后按清单重新登记；`dispose()` 只停进程，不删镜像。
 - **受管子进程登记表**：整个进程一份（`systemProcessManager`），已结束的进程最多保留 512 条回执。

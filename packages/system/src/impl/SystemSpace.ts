@@ -105,6 +105,7 @@ class SystemSpace implements SystemSpaceApi {
         run: async (input, context) => shellOperations.run(input, await shell(context)),
         listTasks: async (input, context) => shellOperations.listTasks(input, await shell(context)),
         refreshEnvironment: async (_input, context) => shellOperations.refreshEnvironment(await shell(context)),
+        stop: async (input, context) => shellOperations.stop(input, await shell(context)),
       },
       sandbox: {
         create: async (input, context) => sandboxOperations.create(input, await sandbox(context)),
@@ -176,6 +177,7 @@ class SystemSpace implements SystemSpaceApi {
       runCommand: (command, options, allowDangerous, abortSignal) => this.host.runCommand(command, options, allowDangerous, abortSignal),
       listBackgroundTasks: (options) => this.host.listBackgroundTasks(options),
       refreshShellEnvironment: () => this.host.refreshShellEnvironment(),
+      terminateBackgroundTask: (request) => this.host.terminateBackgroundTask(request),
     }
   }
 

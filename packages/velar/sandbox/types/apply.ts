@@ -6,7 +6,7 @@ import type { SandboxDiff, SandboxSelection } from './rehearsal-sandbox.js'
 
 /** 给一次落回做核对、构造确认请求要的东西。 */
 export interface SandboxApplyPrepareInput {
-  /** 宿主给的不截断、不附文本差量的完整差量（`diffSandbox({ maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false })`）。 */
+  /** 宿主给的不附文本差量的差量（`diffSandbox({ textDiffs: false })`）；三列永远完整。 */
   diff: SandboxDiff
   /** 模型点名只落这些相对路径；不给就全部。 */
   paths?: readonly string[]

@@ -290,12 +290,14 @@ export function renderTextDiff(path: string, oldText: string, newText: string, m
 /**
  * 比较镜像现在的印记和创建时的清单，算出新增、修改、删除三列（.git 里的东西只汇总成 gitChanged）。
  * 大小和权限位相同、只是修改时间变了的文件，再和源目录里没变过的那份比内容，内容一样就不算修改。
- * 指纹按截断前的完整三列和镜像印记算，落回时拿它核对镜像在确认之后有没有再变。文本差量按预算附上（textDiffs 为 false 时不附），超出只列路径。
+ * 三列永远完整，指纹按它们和镜像印记算，落回时拿它核对镜像在确认之后有没有再变。
+ * 新增与修改的文本文件附统一差量（paths 只给这些文件附，textDiffs 为 false 时一个都不附）；只守内存的上限：
+ * 比单文件上限还大的、装不下总上限的、二进制的、源目录那份也变了没有基线的不附，note 里分别说。
  */
 export async function diffMirror(
   manifest: SystemSandboxManifest,
   current: SystemSandboxStampTable,
-  options: { maxFiles: number; textDiffs?: boolean }
+  options: { paths?: readonly string[]; textDiffs?: boolean }
 ): Promise<Omit<SandboxDiff, 'sandboxId' | 'source'>> {
   const { root, source } = manifest.record
   const created: string[] = []
@@ -330,17 +332,18 @@ export async function diffMirror(
     if (path in current) continue
     if (!noteGit(path)) deleted.push(path)
   }
-  const truncated = created.length > options.maxFiles || modified.length > options.maxFiles
   const fingerprint = createHash('sha256')
     .update(JSON.stringify({ created: created.map((path) => [path, current[path]]), modified: modified.map((path) => [path, current[path]]), deleted }))
     .digest('hex')
     .slice(0, 16)
   const textDiffs: SandboxTextDiff[] = []
   let omittedDiffs = 0
+  let overBudget = 0
   let budget = RehearsalSandboxLimits.diffTotalChars
-  const candidates = isFalse(options.textDiffs) ? [] : [...modified.slice(0, options.maxFiles), ...created.slice(0, options.maxFiles)]
+  const wanted = isUndefined(options.paths) ? null : new Set(options.paths)
+  const candidates = isFalse(options.textDiffs) ? [] : [...modified, ...created].filter((path) => isNull(wanted) || wanted.has(path))
   for (const path of candidates) {
-    if (budget <= 0 || textDiffs.length >= RehearsalSandboxLimits.textDiffs) { omittedDiffs += 1; continue }
+    if (budget <= 0) { omittedDiffs += 1; overBudget += 1; continue }
     const after = await readTextForDiff(join(root, path), RehearsalSandboxLimits.diffFileChars)
     if (isNull(after)) { omittedDiffs += 1; continue }
     let before = ''
@@ -358,16 +361,18 @@ export async function diffMirror(
     textDiffs.push(rendered)
   }
   const result: Omit<SandboxDiff, 'sandboxId' | 'source'> = {
-    created: created.slice(0, options.maxFiles),
-    modified: modified.slice(0, options.maxFiles),
+    created,
+    modified,
     deleted,
-    truncated,
     gitChanged,
     textDiffs,
     omittedDiffs,
     fingerprint,
   }
-  if (omittedDiffs > 0) result.note = `${omittedDiffs} 个文件没附差量（二进制、太大、超过预算，或源目录里那份也变了没有基线）；在镜像里 run 一条 cat 直接看。`
+  if (omittedDiffs > 0) {
+    const budgetNote = overBudget > 0 ? `其中 ${overBudget} 个是这次差量装不下了，用 paths 分几次看；` : ''
+    result.note = `${omittedDiffs} 个文件没附差量（二进制、比单文件上限还大，或源目录里那份也变了没有基线）；${budgetNote}要看内容就在镜像里 run 一条 cat。`
+  }
   return result
 }
 

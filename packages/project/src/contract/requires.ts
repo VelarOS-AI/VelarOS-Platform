@@ -2,7 +2,7 @@
  * 注入面：宿主每次分发调用时给的上下文 `ProjectCallContext`，里面是宿主端口 `ProjectHostPort`（写作 `ctx.project`）与审批端口 `ApprovalPort`。
  *
  * 宿主端口在项目工具的空间端口（`@velaros-ai/velar/project` 的 `ProjectSpacePort`：项目根、内核、修改授权、代码查询）之上，
- * 再给三件共用能力要的东西：跑命令、后台任务、刷新 shell 环境（`velar:shell`），可选的演练沙箱端口 `ProjectSandboxPort`（`velar:sandbox`）
+ * 再给三件共用能力要的东西：跑命令、列与停后台任务、刷新 shell 环境（`velar:shell`），可选的演练沙箱端口 `ProjectSandboxPort`（`velar:sandbox`）
  * 与裁图缩图（`velar:images`）。空间把同一份上下文交给两件项目工具，它在结构上满足工具要的 `ProjectOperationContext`。
  *
  * 这里的每个接口都必须从根入口导出。
@@ -12,7 +12,7 @@ import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import type { ImageAttachment, ImageResizeRequest, ImageResizeResult } from '@velaros-ai/velar/images'
 import type { ProjectSpacePort } from '@velaros-ai/velar/project'
 import type { RehearsalSandboxHostPort } from '@velaros-ai/velar/sandbox'
-import type { ShellBackgroundTaskQueryOptions, ShellBackgroundTaskRecord, ShellCommandResult, ShellEnvironmentRefreshResult, ShellRunCommandOptions } from '@velaros-ai/velar/shell/contracts'
+import type { ShellBackgroundTaskQueryOptions, ShellBackgroundTaskRecord, ShellCommandResult, ShellEnvironmentRefreshResult, ShellRunCommandOptions, ShellTaskTerminateRequest, ShellTaskTerminateResult } from '@velaros-ai/velar/shell/contracts'
 
 import type { ProjectSandboxRunOptions } from '../types/host.js'
 
@@ -37,6 +37,8 @@ export interface ProjectHostPort extends ProjectSpacePort {
   listBackgroundTasks: (options?: ShellBackgroundTaskQueryOptions) => Promise<ShellBackgroundTaskRecord[]>
   /** 重新选定能用的 shell 并读取它的环境变量；`velar:shell` 的 refreshEnvironment 经它答。 */
   refreshShellEnvironment: () => Promise<ShellEnvironmentRefreshResult>
+  /** 终止一条以后台方式启动的命令任务；`velar:shell` 的 stop 经它答。宿主核对它属于这个会话，force 为真直接强杀，本来就不在跑时不抛错。 */
+  terminateBackgroundTask: (request: ShellTaskTerminateRequest) => Promise<ShellTaskTerminateResult>
   /** 演练沙箱端口；宿主用系统能力实现（Desktop 用本地内核）。没接的宿主，项目空间里没有 `velar:sandbox`。 */
   sandbox?: ProjectSandboxPort
   /** 裁图缩图（可选）：`velar:images` 看超过上限的图、只看一块区域时用。宿主没有图像处理能力就不给，view 遇到这种图会明说做不了。 */

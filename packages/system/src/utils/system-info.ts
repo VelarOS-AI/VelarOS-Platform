@@ -26,7 +26,7 @@ export function selectBackgroundTasks(tasks: readonly ShellBackgroundTaskRecord[
       if (options.onlyRunning && task.status !== 'running') return false
       return true
     })
-    .slice(0, options.limit ?? SystemTuning.command.taskListItems)
+    .slice(0, options.limit ?? Number.POSITIVE_INFINITY)
 }
 
 /** 把进程行转成对外的进程信息，再按查询条件筛选：过滤词、pid、名字、命令行片段、用户、只看当前用户、CPU 与内存下限；最多 limit 条（默认 50）。 */

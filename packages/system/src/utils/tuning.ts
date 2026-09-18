@@ -22,10 +22,6 @@ export const SystemTuning = Object.freeze({
     consoleBufferChars: 100_000,
     /** 往控制台写输入最多等多少毫秒：进程到期还没读走就报「已排队」返回，不让调用方一直挂着。 */
     consoleWriteTimeoutMs: 2_000,
-    /** 列后台任务没给 limit 时返回多少条；上限是 ShellLimits.taskListItems。 */
-    taskListItems: 50,
-    /** 后台任务条目里的 recentOutput 保留输出末尾多少字符（`velar:shell` 的声明里写着这个数）。 */
-    recentOutputChars: 4_000,
     /** 验证摘要里从失败输出末尾摘多少字符。 */
     verificationIssueChars: 1_000,
   }),

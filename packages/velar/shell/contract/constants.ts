@@ -23,13 +23,14 @@ export type ShellCommandKind = (typeof ShellCommandKinds)[number]
 
 /**
  * `velar:shell` 对外承诺的上限。操作方法自己钳（超了按上限跑，钳而不拒），声明里的数字与这里一致由验收核对。
- * 宿主自己的缺省（不给超时用多久、不给条数列几条）不在这里，在宿主那一侧。
+ * 宿主自己的缺省（不给超时用多久）不在这里，在宿主那一侧。
  */
 export const ShellLimits = Object.freeze({
   /** run 的超时最多给多少毫秒。 */
   timeoutMs: 600_000,
-  /** run 的 stdout、stderr 各最多返回多少字符。 */
-  outputChars: 50_000,
-  /** listTasks 一次最多列多少条。 */
-  taskListItems: 100,
+  /**
+   * 一条命令的 stdout、stderr，与一条后台任务的输出，各最多留多少字符。**只为守住内存**：输出本来就不进模型的上下文，
+   * 看多少由程序定，所以这里不按「模型读得下」算，按「宿主与隔离进程装得下」算；超出只留末尾（失败现场在尾部）。
+   */
+  outputChars: 5_000_000,
 })

@@ -4,8 +4,9 @@
  * 建镜像、跑命令、算差量、落回全在宿主那一侧（本机是 `@velaros-ai/system` 的本地内核）。
  */
 
-import { isEmpty, isString } from '@velaros-ai/core'
+import { isArray, isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { ShellLimits } from '@velaros-ai/velar/shell/contracts'
 
 import type { SandboxOperationContext } from '../contract/requires.js'
 import type {
@@ -14,13 +15,14 @@ import type {
   SandboxCreateInput,
   SandboxDiff,
   SandboxDiffInput,
+  SandboxDiffOptions,
   SandboxDiscardInput,
   SandboxDiscardResult,
   SandboxRecord,
   SandboxRunInput,
   SandboxRunResult,
 } from '../types/rehearsal-sandbox.js'
-import { sandboxIdOf } from '../utils/input.js'
+import { sandboxIdOf, sandboxTimeoutOf } from '../utils/input.js'
 
 import type { RehearsalSandboxRulesApi } from './RehearsalSandboxRules.js'
 import { rehearsalSandboxRules } from './RehearsalSandboxRules.js'
@@ -50,13 +52,13 @@ export interface SandboxOperationsApi {
   run(input: SandboxRunInput, ctx: SandboxOperationContext): Promise<SandboxRunResult>
   /**
    * @AgentView
-   * 看镜像相对建的时候变了什么：三列相对路径加有界的文本差量。删除列永远完整，另外两列被 maxFiles 截掉时 truncated 为真。
+   * 看镜像相对建的时候变了什么：三列相对路径（永远完整），加上新增与修改的文本文件的统一差量；只想看其中几个就传 paths。
    */
   diff(input: SandboxDiffInput, ctx: SandboxOperationContext): Promise<SandboxDiff>
   /**
    * @AgentView
    * 把镜像里的变化落回源目录。落回前一定把删除与覆盖摆给用户确认，用户不点头就抛错、一个文件都不落；
-   * 当前空间还可能先核一遍这次要落的路径（项目空间核对项目许不许写），核不过同样一个文件都不落。
+   * 当前空间还可能先核一遍这次要落的路径（比如核对这些路径许不许写），核不过同样一个文件都不落。
    * 确认之后镜像又被改过，宿主整批不落。`.git` 里的变化永远不落，要那部分就在源目录重放那几条 git 命令。
    * 镜像里什么都没变时不问用户，三列都是空的。
    */
@@ -85,8 +87,9 @@ export class SandboxOperations implements SandboxOperationsApi {
     // 危险命令在镜像里照常先问（ADR 0006）：写不出镜像，但用户要看得到脚本在做什么；被拒就抛错，宿主一个进程都不起。
     const request = this.rules.prepareRun(id, input.command)
     if (request) await ctx.approval.awaitConfirmation(request.message, ctx.abortSignal, request.options)
+    // 输出不折叠：跟 velar:shell 同一个只守内存的上限。
     const outcome = await ctx.sandbox.runInSandbox(
-      { sandboxId: id, command: input.command, timeoutMs: input.timeoutMs, maxOutputChars: input.maxOutputChars },
+      { sandboxId: id, command: input.command, timeoutMs: sandboxTimeoutOf(input.timeoutMs), maxOutputChars: ShellLimits.outputChars },
       ctx.abortSignal
     )
     return { ...outcome, id, command: input.command }
@@ -94,14 +97,16 @@ export class SandboxOperations implements SandboxOperationsApi {
 
   public async diff(input: SandboxDiffInput, ctx: SandboxOperationContext): Promise<SandboxDiff> {
     ctx.abortSignal.throwIfAborted()
-    return ctx.sandbox.diffSandbox({ sandboxId: sandboxIdOf(input?.id), maxFiles: input.maxFiles })
+    const options: SandboxDiffOptions = { sandboxId: sandboxIdOf(input?.id) }
+    if (isArray(input.paths)) options.paths = input.paths
+    return ctx.sandbox.diffSandbox(options)
   }
 
   public async apply(input: SandboxApplyInput, ctx: SandboxOperationContext): Promise<SandboxApplyResult> {
     ctx.abortSignal.throwIfAborted()
     sandboxIdOf(input?.id)
-    // 「确认的就是要落的」：条数、预览、敏感路径都按不截断的完整差量算，确认之后把同一个指纹交给宿主。
-    const changes = await ctx.sandbox.diffSandbox({ sandboxId: input.id, maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false })
+    // 「确认的就是要落的」：条数、预览、敏感路径都按完整的三列算，确认之后把同一个指纹交给宿主。
+    const changes = await ctx.sandbox.diffSandbox({ sandboxId: input.id, textDiffs: false })
     const request = this.rules.prepareApply({ ...ctx.sandbox.applyPolicy(changes.source), diff: changes, paths: input.paths })
     if (!request) return { sandboxId: input.id, created: [], modified: [], deleted: [], skippedGit: changes.gitChanged }
     // 空间自己要核的那一关排在问用户之前：注定落不下去的东西不拿去打扰用户。

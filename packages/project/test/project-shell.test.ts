@@ -11,6 +11,8 @@ import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
+import { ShellLimits } from '@velaros-ai/velar/shell/contracts'
+
 import type { ProjectHostPort } from '../src/contract/requires'
 
 import { failureOf, projectSpaceFixture } from './support/space'
@@ -40,13 +42,14 @@ function realShell(runs: HostRun[]): ProjectHostPort['runCommand'] {
 }
 
 describe('项目空间的 velar:shell', () => {
-  test('前台命令真的跑起来，工作目录缺省是项目根，时间与输出上限交给宿主；宿主不许起后台就抛', async () => {
+  test('前台命令真的跑起来，工作目录缺省是项目根，时间与内存上限交给宿主；宿主不许起后台就抛', async () => {
     const runs: HostRun[] = []
     const { call } = await projectSpaceFixture({ root, runCommand: realShell(runs) })
-    const result = await call('shell', 'run', { command: 'printf project-tool-check', timeoutMs: 5000, maxOutputChars: 7 })
-    expect(result.stdout).toBe('project')
+    const result = await call('shell', 'run', { command: 'printf project-tool-check', timeoutMs: 5000 })
+    expect(result.stdout).toBe('project-tool-check')
     expect(result.exitCode).toBe(0)
-    expect(runs[0]).toMatchObject({ command: 'printf project-tool-check', options: { cwd: root, timeoutMs: 5000, maxOutputChars: 7, background: false }, allowDangerous: false })
+    // 输出不折叠：交给宿主的是只守内存的那个上限。
+    expect(runs[0]).toMatchObject({ command: 'printf project-tool-check', options: { cwd: root, timeoutMs: 5000, maxOutputChars: ShellLimits.outputChars, background: false }, allowDangerous: false })
     const background = await failureOf(call('shell', 'run', { command: 'printf background', background: true }))
     expect(background.message).toContain('后台')
   })
@@ -120,7 +123,7 @@ describe('项目空间的 velar:shell', () => {
     const { call, host, context } = await projectSpaceFixture({ root })
     const asked: unknown[] = []
     host.listBackgroundTasks = async (options) => { asked.push(options); return [] }
-    expect(await call('shell', 'listTasks', { onlyRunning: true })).toEqual({ count: 0, tasks: [] })
+    expect(await call('shell', 'listTasks', { onlyRunning: true })).toEqual({ tasks: [] })
     expect(asked[0]).toMatchObject({ onlyRunning: true, sessionId: context.sessionId })
   })
 })

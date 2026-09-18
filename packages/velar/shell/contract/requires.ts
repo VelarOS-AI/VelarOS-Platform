@@ -17,13 +17,15 @@ import type {
   ShellCommandSpacePolicy,
   ShellEnvironmentRefreshResult,
   ShellRunCommandOptions,
+  ShellTaskTerminateRequest,
+  ShellTaskTerminateResult,
 } from '../types/shell-command.js'
 
 /**
- * `velar:shell` 的空间端口：作用域与口径两件事，加上宿主真正跑命令的三件事。
+ * `velar:shell` 的空间端口：作用域与口径两件事，加上宿主真正跑命令、管后台任务的四件事。
  *
  * **空间之间的差别全落在这里**，模型那边因此只有一套说明：系统空间的 cwd 可以是本机任意目录，
- * 项目空间的钳在项目内、越界就拒绝；确认文案与风险分类也各给各的。执行那三件，本机实现是 `@velaros-ai/system` 的本地内核。
+ * 项目空间的钳在项目内、越界就拒绝；确认文案与风险分类也各给各的。执行那四件，本机实现是 `@velaros-ai/system` 的本地内核。
  */
 export interface ShellSpacePort {
   /** 把模型给的 cwd 解析成绝对工作目录：不给就是这个空间的根目录；越出这个空间允许的范围时拒绝（`PERMISSION`），不悄悄钳到根上。 */
@@ -50,6 +52,11 @@ export interface ShellSpacePort {
   listBackgroundTasks: (options?: ShellBackgroundTaskQueryOptions) => Promise<ShellBackgroundTaskRecord[]>
   /** 重新选定能用的 shell 并读取它的环境变量，返回刷新后的 shell 描述、本机可用的 shell 清单和变量个数。 */
   refreshShellEnvironment: () => Promise<ShellEnvironmentRefreshResult>
+  /**
+   * 终止一条后台任务：先核对它存在、属于请求里的会话（不在就抛错），force 为真直接强杀，否则发普通的终止信号；
+   * 本来就不在跑时不抛错，`terminated` 为 false。期限内没停下来时抛错，调用方可以再带 force 来一次。
+   */
+  terminateBackgroundTask: (request: ShellTaskTerminateRequest) => Promise<ShellTaskTerminateResult>
 }
 
 /** 每次调用 `velar:shell` 时宿主给的上下文。它不是模型能填的入参：宿主分发这次调用时按当前空间装好，生成声明时整个丢掉。 */

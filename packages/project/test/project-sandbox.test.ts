@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { createSecretRedactionProvider } from '@velaros-ai/velar/project'
 import type { SandboxDiff, SandboxRecord } from '@velaros-ai/velar/sandbox/contracts'
+import { ShellLimits } from '@velaros-ai/velar/shell/contracts'
 
 import type { ProjectSandboxPort } from '../src/contract/requires'
 
@@ -28,7 +29,7 @@ function fakePort(calls: Array<Record<string, unknown>>, overrides: Partial<Sand
   }
   const diff: SandboxDiff = {
     sandboxId: record.id, source: root, created: ['src/new.ts'], modified: ['src/a.ts'], deleted: ['old.txt'],
-    truncated: false, gitChanged: false, textDiffs: [], omittedDiffs: 0, fingerprint: 'fp1', ...overrides,
+    gitChanged: false, textDiffs: [], omittedDiffs: 0, fingerprint: 'fp1', ...overrides,
   }
   return {
     createSandbox: async (options) => { calls.push({ create: options }); return { ...record, source: options?.source ?? root, network: !!options?.network, ignored: options?.ignored ?? 'link' } },
@@ -76,7 +77,8 @@ describe('项目空间的 velar:sandbox', () => {
     const calls: Array<Record<string, unknown>> = []
     const { call } = await projectSpaceFixture({ root, sandbox: fakePort(calls) })
     const ran = await call('sandbox', 'run', { id: 'sb', command: 'bun scripts/migrate.ts', timeoutMs: 1000 })
-    expect(calls).toEqual([{ run: { sandboxId: 'sb', command: 'bun scripts/migrate.ts', timeoutMs: 1000 } }])
+    // 输出不折叠：交给宿主的是只守内存的那个上限。
+    expect(calls).toEqual([{ run: { sandboxId: 'sb', command: 'bun scripts/migrate.ts', timeoutMs: 1000, maxOutputChars: ShellLimits.outputChars } }])
     expect(ran).toEqual({ id: 'sb', command: 'bun scripts/migrate.ts', exitCode: 0, stdout: 'ran', stderr: '', durationMs: 1, timedOut: false, truncated: false, success: true })
   })
 
@@ -105,8 +107,8 @@ describe('项目空间的 velar:sandbox', () => {
     const { call, confirmations } = await projectSpaceFixture({ root, sandbox: fakePort(calls) })
     const applied = await call('sandbox', 'apply', { id: 'sb', paths: ['src/a.ts'] })
     expect(applied.modified).toEqual(['src/a.ts'])
-    // 落回前要的是不截断、不附文本差量的完整差量；确认之后把差量指纹一起交给宿主。
-    expect(calls.at(-2)).toEqual({ diff: { sandboxId: 'sb', maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false } })
+    // 落回前要的是不附文本差量的完整三列；确认之后把差量指纹一起交给宿主。
+    expect(calls.at(-2)).toEqual({ diff: { sandboxId: 'sb', textDiffs: false } })
     expect(calls.at(-1)).toEqual({ apply: { sandboxId: 'sb', paths: ['src/a.ts'], fingerprint: 'fp1' } })
     // 确认卡片：落到当前项目，高风险、必须用户亲自点。
     expect(confirmations).toHaveLength(1)
@@ -118,14 +120,7 @@ describe('项目空间的 velar:sandbox', () => {
     expect(unknown.message).toContain('nope.ts')
   })
 
-  test('apply 遇到截断的差量在问任何人之前就拒；确认文案按完整的三列算', async () => {
-    const calls: Array<Record<string, unknown>> = []
-    const truncated = await projectSpaceFixture({ root, sandbox: fakePort(calls, { truncated: true }) })
-    expect((await failureOf(truncated.call('sandbox', 'apply', { id: 'sb' }))).code).toBe('VALIDATION')
-    expect(truncated.confirmations).toEqual([])
-    expect(truncated.mutations).toEqual([])
-    expect(actions(calls)).not.toContain('apply')
-
+  test('确认文案按完整的三列算', async () => {
     const many = Array.from({ length: 2100 }, (_, index) => `gen/${index}.ts`)
     const full = await projectSpaceFixture({ root, sandbox: fakePort([], { created: many, modified: [], deleted: [] }) })
     await full.call('sandbox', 'apply', { id: 'sb' })
@@ -163,10 +158,10 @@ describe('项目空间的 velar:sandbox', () => {
   test('diff 与 discard 原样转给宿主', async () => {
     const calls: Array<Record<string, unknown>> = []
     const { call } = await projectSpaceFixture({ root, sandbox: fakePort(calls) })
-    const changes = await call('sandbox', 'diff', { id: 'sb', maxFiles: 5 })
+    const changes = await call('sandbox', 'diff', { id: 'sb', paths: ['src/a.ts'] })
     expect(changes.deleted).toEqual(['old.txt'])
     const discarded = await call('sandbox', 'discard', { id: 'sb' })
     expect(discarded.removed).toBe(true)
-    expect(calls).toEqual([{ diff: { sandboxId: 'sb', maxFiles: 5 } }, { discard: 'sb' }])
+    expect(calls).toEqual([{ diff: { sandboxId: 'sb', paths: ['src/a.ts'] } }, { discard: 'sb' }])
   })
 })

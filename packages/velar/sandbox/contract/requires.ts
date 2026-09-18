@@ -14,7 +14,7 @@ import type { SandboxApplyOptions, SandboxApplyResult, SandboxCommandOutcome, Sa
 export interface RehearsalSandboxHostPort {
   /** 建沙箱：镜像源目录（gitignore 忽略的目录按 ignored 处理），镜像里的仓库剪掉推送地址；超过上限（数量、文件数、字节）建不出。 */
   createSandbox: (options?: SandboxCreateOptions) => Promise<SandboxRecord>
-  /** 看差量：三列相对路径与有界的文本差量；maxFiles 截新增、修改两列，textDiffs 为 false 时不附文本差量。 */
+  /** 看差量：三列相对路径永远完整，外加新增与修改的文本文件的统一差量；paths 只给这些文件附差量，textDiffs 为 false 时一个都不附。 */
   diffSandbox: (options: SandboxDiffOptions) => Promise<SandboxDiff>
   /** 落回：只写源目录之内、要么全落要么报清落了哪些；给了 fingerprint 就先核对，镜像在确认之后又变过就整批不落；.git 的变化永远不落。 */
   applySandbox: (options: SandboxApplyOptions) => Promise<SandboxApplyResult>

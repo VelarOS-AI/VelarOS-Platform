@@ -11,16 +11,13 @@ export const RehearsalSandboxLimits = Object.freeze({
   files: 200_000,
   /** 源目录最多多少字节，再多建不出。 */
   bytes: 2 * 1024 * 1024 * 1024,
-  /** diff 新增与修改两列缺省各列多少条。 */
-  diffFiles: 200,
-  /** diff 新增与修改两列最多各列多少条（maxFiles 的上限）；apply 前向用户确认用的是不截断的完整差量，不受它限制。 */
-  diffFilesMax: 2000,
-  /** 一次 diff 最多附多少个文本差量。 */
-  textDiffs: 200,
-  /** 单个文本差量最多多少字符。 */
-  diffFileChars: 200_000,
-  /** 一次 diff 的文本差量总共最多多少字符。 */
-  diffTotalChars: 2_000_000,
+  /**
+   * 单个文本差量最多多少字符。**只为守住内存**：差量不进模型的上下文，看多少由程序定；比这还大的文件不附差量（note 里说），
+   * 渲染出来的差量超过它只留开头并标 truncated。
+   */
+  diffFileChars: 5_000_000,
+  /** 一次 diff 的文本差量总共最多多少字符，同样只为守住内存；装不下的文件不附差量，用 paths 分几次看。 */
+  diffTotalChars: 20_000_000,
   /** apply 一次最多点名多少个路径。 */
   applyPaths: 500,
   /** 沙箱 id 最长多少字符。 */

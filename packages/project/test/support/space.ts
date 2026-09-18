@@ -72,6 +72,7 @@ export async function projectSpaceFixture(options: {
     runCommand: options.runCommand ?? (async () => { throw new AppError('PLATFORM', '这个用例没接命令执行') }),
     listBackgroundTasks: async () => [],
     refreshShellEnvironment: async () => ({ shell: '/bin/sh', variableCount: 0, refreshedAt: 0 }),
+    terminateBackgroundTask: async () => ({ terminated: false, statusAfter: 'unknown', message: '这个用例没接后台任务' }),
     queryCode: async (input) => {
       queries.push(input)
       return options.queryCode ? options.queryCode(input) : {}
