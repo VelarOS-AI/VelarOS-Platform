@@ -1,4 +1,3 @@
-
 import { isArray, isBoolean, isEmpty, isNotNull,isPresent, Log, optionalWhen, stringifyPretty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 

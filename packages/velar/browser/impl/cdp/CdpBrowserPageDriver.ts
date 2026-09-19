@@ -45,13 +45,14 @@ import type { BrowserPageDriver, BrowserProtocolChannel } from '../../contract/r
 import type { BrowserFrameInfo, BrowserInsertTextOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserPageDiagnosticEntry, BrowserPageTargetInfo, BrowserSwitchPageTargetOptions, BrowserViewportOptions } from '../../types/browser.js'
 import type { CdpBrowserPageDriverTransport, CdpCaptureScreenshotResponse, CdpDomDocumentResponse, CdpDomQuerySelectorResponse, CdpDownloadProgressEvent, CdpDownloadWillBeginEvent, CdpFetchResourcePayload, CdpJavascriptDialogOpeningEvent, CdpLayoutMetricsResponse, CdpPageTargetDescription, CdpPrintToPdfResponse, CdpRuntimeConsoleAPICalledEvent, CdpRuntimeEvaluateResponse, CdpRuntimeExceptionDetails, CdpRuntimeExceptionThrownEvent, CdpRuntimeRemoteObject, CdpScreencastConsumerOptions, CdpScreencastStartOptions, CdpTargetListEntry, ScreencastCapturedFrame } from '../../types/cdp.js'
 import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadEvent, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverKeyEvent, BrowserPageDriverMouseEvent, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState } from '../../types/driver'
-import { buildFetchResourceScript, buildViewportRect, clampPageZoomFactor, clampPositiveInteger, readConsoleSource, readNodeId, readRuntimeEvaluateValue, resolveConsoleLevel, resolveConsoleTimestamp, resolveMouseButton, resolveTargetListEntryId } from '../../utils/cdp/driver'
+import { buildFetchResourceScript, buildViewportRect, readConsoleSource, readNodeId, readRuntimeEvaluateValue, resolveConsoleLevel, resolveConsoleTimestamp, resolveMouseButton, resolveTargetListEntryId } from '../../utils/cdp/driver'
 import { normalizePageTargetDescription, resolveConsoleMessage, resolveRegionScreenshotInput } from '../../utils/cdp/driver'
 import { resolveCdpTargetListUrl } from '../../utils/cdp/driver'
 import { resolveCdpTargetId } from '../../utils/cdp/driver.js'
 import { captureCdpHeapSnapshot } from '../../utils/cdp/tracing.js'
 import { openCdpWebSocket } from '../../utils/cdp/transport.js'
 import { clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
+import { clampPositiveInteger, clampZoomFactor } from '../../utils/numbers.js'
 import { BrowserTuning } from '../../utils/tuning'
 import { buildBrowserViewportDeviceMetrics } from '../../utils/viewport'
 
@@ -475,7 +476,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   public async setPageZoomFactor(zoomFactor: number): Promise<void> {
-    const normalizedZoomFactor = clampPageZoomFactor(zoomFactor)
+    const normalizedZoomFactor = clampZoomFactor(zoomFactor, 1)
     await this.options.transport.send('Emulation.setPageScaleFactor', {
       pageScaleFactor: normalizedZoomFactor,
     })

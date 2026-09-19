@@ -226,11 +226,3 @@ export function normalizeNetworkMockResponses(
 
   return normalizedResponses
 }
-
-/** 取成至少为 1 的整数（四舍五入）；不是有限数就按 fallback 取。 */
-export function clampPositiveInteger(value: unknown, fallback: number): number {
-  const numberValue = Number(value)
-  if (!Number.isFinite(numberValue)) return Math.max(1, Math.round(fallback))
-
-  return Math.max(1, Math.round(numberValue))
-}

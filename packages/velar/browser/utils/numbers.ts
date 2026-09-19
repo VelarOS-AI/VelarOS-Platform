@@ -46,6 +46,14 @@ export function clampInteger(
   return Math.min(Math.max(Math.round(value), min), max)
 }
 
+/** 用 `Number()` 换成数后取成至少为 1 的整数（四舍五入）；换不出有限数时按 fallback 取，fallback 同样至少为 1。 */
+export function clampPositiveInteger(value: unknown, fallback: number): number {
+  const numberValue = Number(value)
+  if (!isFiniteNumber(numberValue)) return Math.max(1, Math.round(fallback))
+
+  return Math.max(1, Math.round(numberValue))
+}
+
 /** 页面缩放因子归一化（0.25–3，两位小数）。 */
 export function clampZoomFactor(value: LooseOptional<number>, fallback: number): number {
   if (!isFiniteNumber(value)) return fallback

@@ -105,27 +105,11 @@ export function buildViewportRect(options: BrowserPageDriverScreenshotOptions): 
   }
 }
 
-/** 取正整数；不是有限数就用兜底值。 */
-export function clampPositiveInteger(value: unknown, fallback: number): number {
-  const numberValue = Number(value)
-  if (!Number.isFinite(numberValue)) return Math.max(1, Math.round(fallback))
-
-  return Math.max(1, Math.round(numberValue))
-}
-
 /** 从 CDP 回包里读出 DOM 节点 id。 */
 export function readNodeId(value: unknown): Nullable<number> {
   if (!isFiniteNumber(value)) return null
 
   return Math.round(value)
-}
-
-/** 页面缩放因子归一到合法区间。 */
-export function clampPageZoomFactor(value: unknown): number {
-  if (!isFiniteNumber(value)) return 1
-
-  const normalized = Math.round(value * 100) / 100
-  return Math.min(Math.max(normalized, 0.25), 3)
 }
 
 /** 拼一段在页面里带 cookie 抓资源的脚本。 */

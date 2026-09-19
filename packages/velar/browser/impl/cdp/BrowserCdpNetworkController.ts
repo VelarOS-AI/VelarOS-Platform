@@ -24,7 +24,7 @@ import type {
 } from '../../types/driver'
 import { assignNetworkBooleanDetail, assignNetworkStringDetail, buildMockResponseHeaders, cloneNetworkMockResponses, computeNetworkRequestDurationMs, matchesURLPattern, normalizeBlockedURLPatterns, normalizeExtraHTTPHeaders, normalizeHeadersRecord, normalizeNetworkStatus, normalizeNullableInteger, normalizeNullableNumber, resolveNetworkResponseDiagnosticLevel } from '../../utils/cdp/network'
 import { normalizeBlockedResourceTypes, normalizeNetworkMockResponses, normalizeNetworkResourceType } from '../../utils/cdp/network'
-import { clampPositiveInteger } from '../../utils/cdp/network'
+import { clampPositiveInteger } from '../../utils/numbers.js'
 import { BrowserTuning } from '../../utils/tuning'
 
 /** 网络控制器要的协作件：内嵌页面与外部 CDP 各自把自己的传输与诊断缓冲塞进来。 */
