@@ -136,12 +136,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE",
-    "NOTICE",
     "computer/runtime",
     "shell/native",
-    "THIRD_PARTY_NOTICES.md",
-    "third-party-licenses",
     "office/vendor",
     "browser/vendor"
   ],

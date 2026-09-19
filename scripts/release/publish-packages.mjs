@@ -233,12 +233,6 @@ for (const item of selected) {
     if (!tarballEntries.includes('package/package.json')) {
       throw new Error(`${item.manifest.name} tarball is missing package/package.json`)
     }
-    if (!tarballEntries.includes('package/LICENSE')) {
-      throw new Error(`${item.manifest.name} tarball is missing package/LICENSE`)
-    }
-    if (!tarballEntries.includes('package/NOTICE')) {
-      throw new Error(`${item.manifest.name} tarball is missing package/NOTICE`)
-    }
     // 工作树清单应继续用 workspace:* 保证单仓一致性；注册表清单则必须是普通版本号。
     // 这道门检查真正将要发布的 tarball，防止有人绕过 bun 的 workspace 重写或换回目录发布，
     // 造出 registry 接受、消费者却因 EUNSUPPORTEDPROTOCOL 无法安装的永久坏版本。

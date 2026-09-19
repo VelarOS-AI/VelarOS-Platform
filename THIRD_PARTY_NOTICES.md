@@ -19,8 +19,7 @@ is generated from:
   Google LLC.
 
 The package-local notice and license texts are distributed beside the generated
-bundle in `packages/velar/browser/vendor/devtools-performance-engine/`, and
-`packages/velar/THIRD_PARTY_NOTICES.md` points to them. The bundle
+bundle in `packages/velar/browser/vendor/devtools-performance-engine/`. The bundle
 must be regenerated from documented, pinned inputs. Do not edit the generated
 JavaScript directly or remove upstream attribution.
 
@@ -36,9 +35,9 @@ the MIT License, copyright Tailwind Labs, Inc. The complete license text is in
 
 The presentation runtime distributed in `packages/velar/office/vendor/pptxgenjs/`
 is derived from `pptxgenjs` version `4.0.1`, licensed under the MIT License,
-copyright 2015-2022 Brent Ely. The package-local notice and complete license
-text are distributed in `packages/velar/THIRD_PARTY_NOTICES.md` and
-`packages/velar/third-party-licenses/pptxgenjs-MIT.txt`.
+copyright 2015-2022 Brent Ely. The complete copyright and MIT permission notice
+ships inside the runtime itself: the upstream header of `pptxgen.ts` is kept
+verbatim in `packages/velar/office/vendor/pptxgenjs/pptxgen.es.js`.
 The distributed ESM runtime includes VelarOS security patches for cryptographic
 UUID generation and archive-safe media relationship path resolution; its public
 API and upstream TypeScript declarations remain unchanged.

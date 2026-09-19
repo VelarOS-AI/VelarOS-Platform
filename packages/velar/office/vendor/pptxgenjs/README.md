@@ -17,10 +17,12 @@ small source-level patches therefore have no source map to regenerate.
 The runtime still imports `jszip`, which remains a normal direct dependency of
 `@velaros-ai/velar`. The unit loads this runtime through the package's own
 `#pptxgenjs` subpath import, so the source tree and the built `dist/` resolve the
-same file. The PptxGenJS MIT license is distributed in
-`../../../third-party-licenses/pptxgenjs-MIT.txt`.
+same file. The PptxGenJS copyright and MIT permission notice ships inside the
+runtime itself: the upstream header of `pptxgen.ts` is kept verbatim in
+`pptxgen.es.js`.
 
 The repository dependency-security gate pins SHA-256 hashes for the patched
 runtime and unchanged declarations, and the public-readiness gate requires this
-patch record to ship. Any upgrade must review the upstream and local diffs,
-refresh the license notice, and update those hashes deliberately.
+patch record to ship and the runtime to keep carrying that notice. Any upgrade
+must review the upstream and local diffs, keep the notice, and update those
+hashes deliberately.

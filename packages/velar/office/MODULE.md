@@ -136,7 +136,7 @@ office/
   contracts.ts  `./office/contracts` 入口，只转发
   renderer.ts   `./office/renderer` 入口，只转发
   template.js   代码模版：日常用法的示例程序，随模型面发布、按需读，不嵌进声明
-  vendor/       随包审过的 PptxGenJS ESM 运行时（带本地安全补丁；许可证在包根的 third-party-licenses/）
+  vendor/       随包审过的 PptxGenJS ESM 运行时（带本地安全补丁；它的 MIT 声明原样留在运行时文件里）
   spec/         不变量登记、验收测试、共用的临时工作区与空间端口替身、模型程序跑法
   test/         实现细节测试：路径包含门、Word 追加、字体、表格格式、预览净化与截断、PptxGenJS 补丁、资源定位、命令描述串，以及代码模版实跑
 ```

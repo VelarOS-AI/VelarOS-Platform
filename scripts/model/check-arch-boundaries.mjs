@@ -35,9 +35,6 @@ if (manifest.repository?.url !== rootManifest.repository?.url) {
 if (manifest.license !== 'Apache-2.0') {
   failures.push('license must be Apache-2.0')
 }
-if (!manifest.files?.includes('LICENSE')) {
-  failures.push('files must include LICENSE')
-}
 if (manifest.publishConfig?.access !== 'public') {
   failures.push('publishConfig.access must be public')
 }

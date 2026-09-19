@@ -112,8 +112,6 @@ async function verifyPackage(packageDirectory) {
     for (const requiredFile of [
       "package/package.json",
       "package/README.md",
-      "package/LICENSE",
-      "package/NOTICE",
       "package/THIRD_PARTY_NOTICES.md",
       "package/third-party-licenses/tailwindcss-MIT.txt",
     ]) {

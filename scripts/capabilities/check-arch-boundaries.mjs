@@ -269,9 +269,6 @@ for (const expected of CapabilityPackages) {
       fail(`${expected.name}: package files must include ${requiredFile}`);
     }
   }
-  if (!manifest.files?.includes("LICENSE")) {
-    fail(`${expected.name}: package files must include LICENSE`);
-  }
   // 入口冻结:合包按切片子路径给入口(无根导出——切片运行面互斥),单入口包仍是 '.'。
   for (const entrySubpath of expected.entrySubpaths) {
     const entry = manifest.exports?.[entrySubpath];
@@ -302,7 +299,6 @@ for (const expected of CapabilityPackages) {
   }
 
   const readmePath = resolve(packageRoot, "README.md");
-  const licensePath = resolve(packageRoot, "LICENSE");
   if (!existsSync(readmePath)) {
     fail(`${expected.name}: missing README.md`);
   } else {
@@ -315,9 +311,6 @@ for (const expected of CapabilityPackages) {
         `${expected.name}: README.md is ${readme.length} characters — too thin to describe the package`,
       );
     }
-  }
-  if (!existsSync(licensePath)) {
-    fail(`${expected.name}: missing package LICENSE`);
   }
 
   for (const [section, dependencies] of dependencyEntries(manifest)) {

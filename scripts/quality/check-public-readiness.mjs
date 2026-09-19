@@ -7,10 +7,9 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const packageRoot = join(repositoryRoot, 'packages')
 const officialRepository = 'https://github.com/VelarOS-AI/VelarOS-Platform.git'
 const canonicalIssues = 'https://github.com/VelarOS-AI/VelarOS-Platform/issues'
+// 包自己不带许可证文件（仓根的 LICENSE 是唯一一份）；这里只管随包分发的第三方代码的声明。
 const requiredPackageNoticeFiles = new Map([
   ['velar', [
-    'THIRD_PARTY_NOTICES.md',
-    'third-party-licenses/pptxgenjs-MIT.txt',
     'office/vendor/pptxgenjs/README.md',
     'browser/vendor/devtools-performance-engine/LICENSE.chrome-devtools-frontend',
     'browser/vendor/devtools-performance-engine/LICENSE.chrome-devtools-mcp',
@@ -19,6 +18,15 @@ const requiredPackageNoticeFiles = new Map([
   ['ui', [
     'THIRD_PARTY_NOTICES.md',
     'third-party-licenses/tailwindcss-MIT.txt',
+  ]],
+])
+// 许可声明嵌在随包代码文件里的第三方代码：文件要在，声明要原样在（MIT 要求版权与许可声明随每一份副本走）。
+const requiredEmbeddedNotices = new Map([
+  ['velar', [
+    {
+      file: 'office/vendor/pptxgenjs/pptxgen.es.js',
+      text: ['PptxGenJS (C) 2015-present Brent Ely', 'Permission is hereby granted, free of charge'],
+    },
   ]],
 ])
 const ignoredDirectoryNames = new Set([
@@ -181,15 +189,12 @@ function checkPackageMetadata() {
   if (rootManifest.license !== 'Apache-2.0') fail('root license must be Apache-2.0')
   if (rootManifest.repository?.url !== officialRepository) fail('root repository URL is not canonical')
 
-  const rootLicense = readFileSync(join(repositoryRoot, 'LICENSE'), 'utf8')
   for (const directory of [...expectedDirectories].sort()) {
     const directoryPath = join(packageRoot, directory)
     const manifest = readJson(join(directoryPath, 'package.json'))
     const label = manifest.name ?? `packages/${directory}`
     const publishable = manifest.private !== true
     const expectedHomepage = `https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/${directory}#readme`
-    const licensePath = join(directoryPath, 'LICENSE')
-    const noticePath = join(directoryPath, 'NOTICE')
 
     if (manifest.name !== `@velaros-ai/${directory}`) fail(`${label}: package name does not match its directory`)
     if (manifest.license !== 'Apache-2.0') fail(`${label}: license must be Apache-2.0`)
@@ -199,15 +204,7 @@ function checkPackageMetadata() {
     if (manifest.repository?.directory !== `packages/${directory}`) fail(`${label}: repository directory is not canonical`)
     if (publishable && manifest.homepage !== expectedHomepage) fail(`${label}: homepage is not canonical`)
     if (publishable && manifest.bugs?.url !== canonicalIssues) fail(`${label}: issue tracker is not canonical`)
-    if (!manifest.files?.includes('LICENSE')) fail(`${label}: package files do not include LICENSE`)
-    if (!manifest.files?.includes('NOTICE')) fail(`${label}: package files do not include NOTICE`)
     if (!existsSync(join(directoryPath, 'README.md'))) fail(`${label}: README.md is missing`)
-    if (!existsSync(licensePath)) fail(`${label}: LICENSE is missing`)
-    else if (readFileSync(licensePath, 'utf8') !== rootLicense) fail(`${label}: LICENSE differs from the root license`)
-    if (!existsSync(noticePath)) fail(`${label}: NOTICE is missing`)
-    else if (!readFileSync(noticePath, 'utf8').includes('Copyright 2026 VelarOS-AI contributors')) {
-      fail(`${label}: NOTICE is missing the project attribution`)
-    }
 
     for (const noticeFile of requiredPackageNoticeFiles.get(directory) ?? []) {
       if (!existsSync(join(directoryPath, noticeFile))) {
@@ -216,6 +213,17 @@ function checkPackageMetadata() {
       // files 里要有这个文件本身或它的某一级上级目录（能力单元的资产目录在单元目录下面一层）。
       if (!manifest.files?.some((entry) => noticeFile === entry || noticeFile.startsWith(`${entry}/`))) {
         fail(`${label}: package files do not ship ${noticeFile}`)
+      }
+    }
+
+    for (const { file, text } of requiredEmbeddedNotices.get(directory) ?? []) {
+      const filePath = join(directoryPath, file)
+      const content = existsSync(filePath) ? readFileSync(filePath, 'utf8') : ''
+      for (const line of text) {
+        if (!content.includes(line)) fail(`${label}: ${file} no longer carries its third-party license notice (${line})`)
+      }
+      if (!manifest.files?.some((entry) => file === entry || file.startsWith(`${entry}/`))) {
+        fail(`${label}: package files do not ship ${file}`)
       }
     }
   }

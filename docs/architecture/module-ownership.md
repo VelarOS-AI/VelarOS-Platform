@@ -103,7 +103,7 @@ utils 放用不着关心内部的纯工具函数，按类别分文件；文件�
 
 ```text
 packages/velar/
-  package.json  README.md  LICENSE  NOTICE     整个包只有一份
+  package.json  README.md                     整个包只有一份（包里不带许可证文件，仓根的 LICENSE 是唯一一份）
   <单元>/
     MODULE.md       模块卡片
     index.ts        入口（./<单元> 子路径），只转发

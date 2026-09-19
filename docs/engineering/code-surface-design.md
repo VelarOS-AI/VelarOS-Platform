@@ -196,7 +196,7 @@ edit 与 inspect 交回完整差量，`velar:code` 不按条数截，`velar:shel
 
 **能力单元是普通的目录，按同一套规范放在一起。** 模型 import 的每一件都在 `packages/velar/` 下——跨空间注入的 files、images、shell、sandbox、memory，宿主装了插件才挂的 computer，
 和项目独有的 project、code——一件一个目录，目录名就是模块名（`velar:files` ⇄ `packages/velar/files/`）；它们合成一个包 `@velaros-ai/velar`，
-许可、说明、构建配置只有包根那一份，单元目录里不再各抄一遍。每个单元目录的样子一样：模块卡片 `MODULE.md`、入口 `index.ts` 与 `contracts.ts`、
+说明、构建配置只有包根那一份，单元目录里不再各抄一遍（包里不带许可证文件，仓根的 LICENSE 是唯一一份）。每个单元目录的样子一样：模块卡片 `MODULE.md`、入口 `index.ts` 与 `contracts.ts`、
 `contract/ types/ impl/ utils/` 四个目录、代码模版 `template.js`、`spec/`（不变量登记与验收）与 `test/`。宿主按 `@velaros-ai/velar/<单元>` 引用。
 项目独有的两件长在项目内核上：问代码要用内核的符号表与读取，所以 `velar:project` 与 `velar:code` 同住 `packages/velar/project/`，内核也在那里——
 它就是项目那套规矩（事务、校验、撤销）的实现。**装配不在仓库里，实现都在能力里**：端口的本机实现跟着它实现的那件能力走
