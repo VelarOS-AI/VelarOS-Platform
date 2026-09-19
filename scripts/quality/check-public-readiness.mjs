@@ -7,28 +7,12 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const packageRoot = join(repositoryRoot, 'packages')
 const officialRepository = 'https://github.com/VelarOS-AI/VelarOS-Platform.git'
 const canonicalIssues = 'https://github.com/VelarOS-AI/VelarOS-Platform/issues'
-// 包自己不带许可证文件（仓根的 LICENSE 是唯一一份）；这里只管随包分发的第三方代码的声明。
-const requiredPackageNoticeFiles = new Map([
-  ['velar', [
-    'office/vendor/pptxgenjs/README.md',
-    'browser/vendor/devtools-performance-engine/LICENSE.chrome-devtools-frontend',
-    'browser/vendor/devtools-performance-engine/LICENSE.chrome-devtools-mcp',
-    'browser/vendor/devtools-performance-engine/NOTICE.md',
-  ]],
-  ['ui', [
-    'THIRD_PARTY_NOTICES.md',
-    'third-party-licenses/tailwindcss-MIT.txt',
-  ]],
-])
-// 许可声明嵌在随包代码文件里的第三方代码：文件要在，声明要原样在（MIT 要求版权与许可声明随每一份副本走）。
-const requiredEmbeddedNotices = new Map([
-  ['velar', [
-    {
-      file: 'office/vendor/pptxgenjs/pptxgen.es.js',
-      text: ['PptxGenJS (C) 2015-present Brent Ely', 'Permission is hereby granted, free of charge'],
-    },
-  ]],
-])
+// 许可证只有仓根一份 LICENSE（用户裁决）：包、产品、vendor 目录里不放，仓根也不另放 NOTICE、第三方声明或
+// third-party-licenses/。checkLicenseFilesOnlyAtRoot 拦许可证样式的文件与目录。
+const rootLicenseFile = 'LICENSE'
+const licenseFileName = /^(?:licen[cs]e|notice|copying)(?:[._-].*)?$|^third[-_]party[-_]notices(?:\..*)?$/iu
+const licenseDirectoryName = /^third[-_]party[-_]licen[cs]es$/iu
+const codeFileExtension = /\.(?:[cm]?[jt]sx?)$/u
 const ignoredDirectoryNames = new Set([
   '.git',
   '.idea',
@@ -49,12 +33,10 @@ const requiredRootFiles = [
   'CONTRIBUTING.md',
   'GOVERNANCE.md',
   'LICENSE',
-  'NOTICE',
   'README.md',
   'README.zh-CN.md',
   'SECURITY.md',
   'SUPPORT.md',
-  'THIRD_PARTY_NOTICES.md',
 ]
 const forbiddenText = [
   {
@@ -205,36 +187,24 @@ function checkPackageMetadata() {
     if (publishable && manifest.homepage !== expectedHomepage) fail(`${label}: homepage is not canonical`)
     if (publishable && manifest.bugs?.url !== canonicalIssues) fail(`${label}: issue tracker is not canonical`)
     if (!existsSync(join(directoryPath, 'README.md'))) fail(`${label}: README.md is missing`)
-
-    for (const noticeFile of requiredPackageNoticeFiles.get(directory) ?? []) {
-      if (!existsSync(join(directoryPath, noticeFile))) {
-        fail(`${label}: required third-party notice file is missing (${noticeFile})`)
-      }
-      // files 里要有这个文件本身或它的某一级上级目录（能力单元的资产目录在单元目录下面一层）。
-      if (!manifest.files?.some((entry) => noticeFile === entry || noticeFile.startsWith(`${entry}/`))) {
-        fail(`${label}: package files do not ship ${noticeFile}`)
-      }
-    }
-
-    for (const { file, text } of requiredEmbeddedNotices.get(directory) ?? []) {
-      const filePath = join(directoryPath, file)
-      const content = existsSync(filePath) ? readFileSync(filePath, 'utf8') : ''
-      for (const line of text) {
-        if (!content.includes(line)) fail(`${label}: ${file} no longer carries its third-party license notice (${line})`)
-      }
-      if (!manifest.files?.some((entry) => file === entry || file.startsWith(`${entry}/`))) {
-        fail(`${label}: package files do not ship ${file}`)
-      }
-    }
   }
+}
 
-  for (const noticeFile of [
-    'third-party-licenses/buffers-0.1.1-MIT.txt',
-    'third-party-licenses/dependency-license-overrides.json',
-    'packages/ui/third-party-licenses/tailwindcss-MIT.txt',
-  ]) {
-    if (!existsSync(join(repositoryRoot, noticeFile))) {
-      fail(`missing third-party license text: ${noticeFile}`)
+/** 许可证只有仓根一份 LICENSE：别处（包括仓根的其余位置）出现许可证样式的文件（LICENSE*、NOTICE*、COPYING*、THIRD_PARTY_NOTICES*）或 third-party-licenses 目录就报。 */
+function checkLicenseFilesOnlyAtRoot(directory = repositoryRoot) {
+  const atRoot = directory === repositoryRoot
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = join(directory, entry.name)
+    if (atRoot && entry.name === rootLicenseFile) continue
+    if (entry.isDirectory()) {
+      if (ignoredDirectoryNames.has(entry.name) || (atRoot && ignoredRootDirectories.has(entry.name))) continue
+      if (licenseDirectoryName.test(entry.name)) {
+        fail(`license directory is not allowed: ${relative(repositoryRoot, entryPath)} (the root LICENSE is the only license file)`)
+        continue
+      }
+      checkLicenseFilesOnlyAtRoot(entryPath)
+    } else if (entry.isFile() && licenseFileName.test(entry.name) && !codeFileExtension.test(entry.name)) {
+      fail(`license file is not allowed: ${relative(repositoryRoot, entryPath)} (the root LICENSE is the only license file)`)
     }
   }
 }
@@ -339,6 +309,7 @@ function checkMarkdownLinks() {
 
 function run() {
   checkRootFiles()
+  checkLicenseFilesOnlyAtRoot()
   checkPackageMetadata()
   checkRuntimeDependencyOwnership()
   checkTextHygiene()

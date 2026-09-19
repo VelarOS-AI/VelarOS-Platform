@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Removed
+
+- 发布包不再随附 `LICENSE`、`NOTICE`、`THIRD_PARTY_NOTICES.md` 与 Tailwind CSS 第三方许可文本：许可证只有
+  仓库根目录一份 `LICENSE`。
+
 ### Fixed
 
 - 计划卡（顶部固定坞与对话里）的标题显示本地化的「计划 / Plan」，不再显示 plan:update 工具名。

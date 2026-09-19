@@ -10,7 +10,7 @@ VelarOS Desktop 是首款真实产品、桌面 Shell 和 reference integration�
 
 本仓库是 VelarOS Platform 的公开源码仓库。新增内容全部按公开源码标准维护：Platform 不得依赖私有产品假设、本机路径、凭据、仓外隐藏裁决或未记录的构建条件。
 
-第一方源码采用 [Apache License 2.0](LICENSE)。第三方软件继续遵循其原许可证，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+第一方源码采用 [Apache License 2.0](LICENSE)。
 
 ## 仓库结构
 

@@ -27,9 +27,7 @@
   },
   "files": [
     "dist",
-    "README.md",
-    "LICENSE",
-    "NOTICE"
+    "README.md"
   ],
   "scripts": {
     "clean": "rm -rf dist",

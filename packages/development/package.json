@@ -26,9 +26,7 @@
   },
   "files": [
     "dist",
-    "README.md",
-    "LICENSE",
-    "NOTICE"
+    "README.md"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",

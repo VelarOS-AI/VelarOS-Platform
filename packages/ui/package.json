@@ -463,11 +463,7 @@
     "dist",
     "README.md",
     "CHANGELOG.md",
-    "docs",
-    "LICENSE",
-    "NOTICE",
-    "THIRD_PARTY_NOTICES.md",
-    "third-party-licenses"
+    "docs"
   ],
   "publishConfig": {
     "access": "public",

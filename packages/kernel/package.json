@@ -42,9 +42,7 @@
     "bin",
     "dist",
     "README.md",
-    "docs",
-    "LICENSE",
-    "NOTICE"
+    "docs"
   ],
   "scripts": {
     "clean": "rm -rf dist",

@@ -10,7 +10,7 @@ VelarOS Desktop is the first shipping product, the desktop shell, and the refere
 
 This is the public source repository for VelarOS Platform. New work is held to public-source standards: no private product assumptions, machine-specific paths, credentials, undocumented authority, or hidden build requirements may enter the Platform.
 
-The source code is licensed under the [Apache License 2.0](LICENSE). Third-party software retains its original licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The source code is licensed under the [Apache License 2.0](LICENSE).
 
 ## Repository structure
 

@@ -37,9 +37,7 @@
   "files": [
     "bin",
     "dist",
-    "README.md",
-    "LICENSE",
-    "NOTICE"
+    "README.md"
   ],
   "sideEffects": false,
   "engines": {

@@ -30,9 +30,7 @@
     "bin",
     "dist",
     "README.md",
-    "CHANGELOG.md",
-    "LICENSE",
-    "NOTICE"
+    "CHANGELOG.md"
   ],
   "scripts": {
     "clean": "rm -rf dist",

@@ -17,8 +17,6 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
-import { stageThirdPartyLicenses } from './third-party-licenses.mjs'
-
 const execFileAsync = promisify(execFile)
 const repoRoot = await realpath(resolve(dirname(fileURLToPath(import.meta.url)), '../..'))
 const productRoot = join(repoRoot, 'products', 'document-renderer')
@@ -103,15 +101,6 @@ async function readVersion() {
   return manifest.version
 }
 
-async function readBunVersion() {
-  const manifest = JSON.parse(
-    await readFile(join(repoRoot, 'package.json'), 'utf8'),
-  )
-  const match = /^bun@(.+)$/u.exec(manifest.packageManager ?? '')
-  if (!match) throw new Error('package.json#packageManager must pin an exact Bun version')
-  return match[1]
-}
-
 async function resolveBunExecutable(target) {
   const locator = target === 'win32-x64' ? 'where.exe' : 'which'
   const { stdout } = await run(locator, ['bun'])
@@ -162,7 +151,7 @@ exec "$PACK_ROOT/runtime/bun" "$PACK_ROOT/app/renderer.js" "$@"
 `
 }
 
-async function stagePack(targetRoot, target, buildOutput, version, bunVersion) {
+async function stagePack(targetRoot, target, buildOutput, version) {
   const descriptor = supportedTargets.get(target)
   const executable = `velar-document-renderer${descriptor.launcherExtension}`
   const packRoot = join(targetRoot, 'Velar Document Renderer')
@@ -203,45 +192,17 @@ async function stagePack(targetRoot, target, buildOutput, version, bunVersion) {
     join(packRoot, 'pdfjs-standard-fonts'),
     { recursive: true },
   )
-  await copyFile(
-    join(repoRoot, 'packages', 'document-renderer', 'LICENSE'),
-    join(packRoot, 'LICENSE'),
-  )
-  await copyFile(
-    join(repoRoot, 'packages', 'document-renderer', 'NOTICE'),
-    join(packRoot, 'NOTICE'),
-  )
-  const thirdParty = await stageThirdPartyLicenses({
-    additionalPackages: [
-      { packageRoot: canvasRoot },
-      {
-        packageRoot: canvasPlatformRoot,
-        additionalLicenseFiles: [join(canvasRoot, 'LICENSE')],
-      },
-      {
-        packageRoot: pdfjsRoot,
-        additionalLicenseFiles: [
-          join(pdfjsRoot, 'standard_fonts', 'LICENSE_FOXIT'),
-          join(pdfjsRoot, 'standard_fonts', 'LICENSE_LIBERATION'),
-        ],
-      },
-    ],
-    bunVersion,
-    metafilePath: buildOutput.metafilePath,
-    packRoot,
-    productRoot,
-    repositoryRoot: repoRoot,
-  })
+  // 许可证只有仓根一份 LICENSE，打包时拷进安装包。
+  await copyFile(join(repoRoot, 'LICENSE'), join(packRoot, 'LICENSE'))
   await writeFile(
     join(packRoot, 'capability-pack.json'),
     `${JSON.stringify(capabilityPackManifest(version, target, executable), null, 2)}\n`,
   )
-  return { packRoot, launcherPath, runtimePath, canvasPath, thirdParty }
+  return { packRoot, launcherPath, runtimePath, canvasPath }
 }
 
 async function buildApplication(targetRoot) {
   const bundlePath = join(targetRoot, 'renderer.js')
-  const metafilePath = join(targetRoot, 'renderer-metafile.json')
   await mkdir(targetRoot, { recursive: true })
   await run('node', [
     'scripts/build/buildPackageTopology.mjs',
@@ -254,10 +215,9 @@ async function buildApplication(targetRoot) {
     '--target=bun',
     '--minify',
     '--external=@napi-rs/canvas',
-    `--metafile=${metafilePath}`,
     `--outfile=${bundlePath}`,
   ])
-  return { bundlePath, metafilePath }
+  return { bundlePath }
 }
 
 function macCodesignArguments(identity, adHoc) {
@@ -410,12 +370,11 @@ async function verifyStagedRuntime(staged, version) {
 async function build(options = {}) {
   const target = currentTarget(options.host)
   const version = await readVersion()
-  const bunVersion = await readBunVersion()
   const targetRoot = join(outputRoot, target)
   await rm(targetRoot, { recursive: true, force: true })
   await mkdir(targetRoot, { recursive: true })
   const buildOutput = await buildApplication(join(targetRoot, 'compiled'))
-  const staged = await stagePack(targetRoot, target, buildOutput, version, bunVersion)
+  const staged = await stagePack(targetRoot, target, buildOutput, version)
   await verifyStagedRuntime(staged, version)
   if (target === 'darwin-arm64') {
     await signMacFiles(staged.runtimePath, staged.canvasPath, options)
@@ -469,7 +428,6 @@ export {
   launcherScript,
   macCodesignArguments,
   parseArguments,
-  readBunVersion,
   readVersion,
   resolveMacCodesignIdentity,
 }

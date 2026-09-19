@@ -176,7 +176,7 @@ browser/
   template.js   velar:browser 的代码模版：日常用法的示例程序，随模型面发布、按需读，不嵌进声明
   devtools-template.js  velar:devtools 的代码模版
   cdp-template.js       velar:cdp 的代码模版
-  vendor/       随包的 DevTools 性能引擎（生成产物，许可证与重新生成说明在目录里）
+  vendor/       随包的 DevTools 性能引擎（生成产物，重新生成说明在目录里的 README.md）
   spec/         不变量登记、验收测试、共用的空间端口替身与模型程序跑法
   test/         实现细节测试：core/（纯策略、页面脚本求值、键位表、模型 CDP 会话的账、会话队列、站点工作区、用户脚本）、runtime/（诊断记录、视口、网络采集、内核模块、页面等待、导航策略）、
                 tools/（诊断窗口、宿主轮询的等待、登录墙、坐标恢复），以及三份代码模版的实跑
