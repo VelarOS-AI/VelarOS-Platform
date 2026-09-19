@@ -155,4 +155,37 @@ void describe('用户脚本的修改事务', () => {
       '2.0.0'
     )
   })
+
+  void test('界面与工具各拿一个 manager 并发修改，也不丢更新', async () => {
+    // 宿主按请求建 manager（Desktop 的用户脚本服务每次操作都 new 一个），队列挂在实例上就等于没有队列。
+    const { access } = createMemoryAccess()
+    const ui = new BrowserUserScriptManager(access as never)
+    const tool = new BrowserUserScriptManager(access as never)
+
+    const [first, second] = await Promise.all([
+      ui.createScript(
+        context,
+        { name: 'first', code: 'console.log(1)', match: ['https://example.test/*'] },
+        { source: 'user', enabled: false }
+      ),
+      tool.createScript(
+        context,
+        { name: 'second', code: 'console.log(2)', match: ['https://example.test/*'] },
+        { source: 'user', enabled: false }
+      ),
+    ])
+
+    await Promise.all([
+      ui.setScriptEnabled(context, first.script.id, true),
+      tool.updateScript(context, second.script.id, { version: '2.0.0' }, {}),
+    ])
+
+    const overview = await new BrowserUserScriptManager(access as never).getOverview(context)
+    assert.equal(overview.scripts.length, 2)
+    assert.equal(overview.scripts.find((script) => script.id === first.script.id)?.enabled, true)
+    assert.equal(
+      overview.scripts.find((script) => script.id === second.script.id)?.version,
+      '2.0.0'
+    )
+  })
 })

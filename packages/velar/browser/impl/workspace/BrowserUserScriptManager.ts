@@ -8,6 +8,8 @@ import type { BrowserUserScriptAccess, BrowserUserScriptStore } from '../../type
 import { browserUserScriptMatchesUrl, createScriptId, normalizeCode, normalizeDescription, normalizeName, normalizePatterns, scriptPath, sortScripts, validateUserScriptPatch } from '../../utils/user-scripts'
 import { requireScript, requireStoredScript } from '../../utils/user-scripts.js'
 
+import { browserUserScriptIndexQueue } from './BrowserUserScriptIndexQueue'
+
 const log = Log.tag('BrowserUserScriptManager')
 
 /**
@@ -62,26 +64,6 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
   private static readonly BrowserUserScriptIndexPath = 'scripts/index.json'
   private static readonly BrowserUserScriptStoreVersion = 1 as const
 
-  /**
-   * 索引的读改写回串行化队列。
-   *
-   * 索引是「整份读出 → 改一个字段 → 整份写回」，界面与工具又各自 new 一个 manager
-   * （宿主按请求建实例），锁只能挂在类上：两次修改交错时后写的那份会把先写的改动整份盖掉。
-   * 变更都是小文件读写、跑得极快，全站点共用一条队列足够，也不会把任何长操作圈进来。
-   */
-  /** 串行化索引写入：前一次结算之后才开始下一次，避免界面与工具同时改丢更新。 */
-  private indexMutations: Promise<unknown> = Promise.resolve()
-
-  /** 把一次「读索引 → 改 → 写回」排进队列，前一次结算后才开始。 */
-  private runIndexMutation<T>(mutate: () => Promise<T>): Promise<T> {
-    const next = this.indexMutations.then(mutate, mutate)
-    this.indexMutations = next.then(
-      () => undefined,
-      () => undefined
-    )
-    return next
-  }
-
   constructor(private readonly access: BrowserUserScriptAccess) {}
 
   public async getOverview(context: BrowserSiteContext): Promise<BrowserUserScriptOverview> {
@@ -123,7 +105,7 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
     draft: BrowserUserScriptDraft,
     defaults: { source: 'agent' | 'user' | 'user-import'; enabled: boolean }
   ) {
-    return this.runIndexMutation(async () => {
+    return browserUserScriptIndexQueue.run(async () => {
       const store = await this.loadStore()
       const now = Date.now()
       const name = normalizeName(draft.name)
@@ -176,7 +158,7 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
     patch: BrowserUserScriptPatch,
     options: { disableAfterExecutionChange?: boolean } = {}
   ) {
-    return this.runIndexMutation(async () => {
+    return browserUserScriptIndexQueue.run(async () => {
       const store = await this.loadStore()
       const script = requireScript(store, id)
       // ① 全部字段先校验成最终值：任何一条不合法都在这里抛错，此时盘上一个字节都没改。
@@ -218,7 +200,7 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
   }
 
   public async setScriptEnabled(context: BrowserSiteContext, id: string, enabled: boolean) {
-    return this.runIndexMutation(async () => {
+    return browserUserScriptIndexQueue.run(async () => {
       const store = await this.loadStore()
       const script = requireScript(store, id)
       script.enabled = enabled
@@ -229,7 +211,7 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
   }
 
   public async setGlobalEnabled(context: BrowserSiteContext, enabled: boolean) {
-    return this.runIndexMutation(async () => {
+    return browserUserScriptIndexQueue.run(async () => {
       const store = await this.loadStore()
       store.globalEnabled = enabled
       await this.saveStore(store)
@@ -242,7 +224,7 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
     id: string,
     direction: 'up' | 'down'
   ) {
-    return this.runIndexMutation(async () => {
+    return browserUserScriptIndexQueue.run(async () => {
       const store = await this.loadStore()
       const ordered = sortScripts(store.scripts)
       const script = requireScript(store, id)
@@ -264,7 +246,7 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
   }
 
   public async deleteScript(context: BrowserSiteContext, id: string) {
-    return this.runIndexMutation(async () => {
+    return browserUserScriptIndexQueue.run(async () => {
       const store = await this.loadStore()
       const script = requireScript(store, id)
       await this.access.deleteFile(script.relativePath)
@@ -288,7 +270,7 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
   }
 
   public async recordRun(id: string, run: BrowserUserScriptLastRun): Promise<void> {
-    await this.runIndexMutation(async () => {
+    await browserUserScriptIndexQueue.run(async () => {
       const store = await this.loadStore()
       const script = requireScript(store, id)
       script.lastRun = run
