@@ -200,10 +200,6 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     }
   }
 
-  public isTracing(): boolean {
-    return !!electronDebuggerHolds.getTrace(this.webContents)?.collector.isRunning()
-  }
-
   public async captureHeapSnapshot(
     sink: (chunk: string) => void
   ): Promise<{ chunks: number; bytes: number }> {

@@ -239,8 +239,6 @@ export interface BrowserPageDriver {
   startTracing?(): Promise<void>
   /** 停止录制并返回全部 trace 事件。 */
   stopTracing?(): Promise<unknown[]>
-  /** 现在是不是正在录 trace。 */
-  isTracing?(): boolean
   /** 采集 V8 堆快照，流式写入 sink。 */
   captureHeapSnapshot?(sink: (chunk: string) => void): Promise<{ chunks: number; bytes: number }>
   /** 开始页面录屏（CDP Page.startScreencast）。 */

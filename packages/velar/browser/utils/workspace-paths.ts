@@ -45,11 +45,6 @@ export function getRelativePathInsideRoot(
   return currentPlatform.relativePathTextInside(resolve(candidatePath), resolve(rootPath))
 }
 
-/** 把相对路径转成各级用 `/` 连接的可移植写法。 */
-export function toPortableRelativePath(relativePath: string): string {
-  return currentPlatform.toPortablePathText(relativePath)
-}
-
 /**
  * 站点工作区路径解析的**全包唯一实现**：engine 落盘（截图、录屏、堆快照、下载、PDF）、
  * 上传与站点工作区的文件访问 都走这里。

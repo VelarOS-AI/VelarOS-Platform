@@ -531,10 +531,6 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     }
   }
 
-  public isTracing(): boolean {
-    return !!this.traceCollector?.isRunning()
-  }
-
   /** 采集 V8 堆快照，流式写入 sink。 */
   public async captureHeapSnapshot(
     sink: (chunk: string) => void

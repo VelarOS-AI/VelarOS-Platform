@@ -7,11 +7,6 @@ import type {
   BrowserTurnContextSourcePeekInput,
   BrowserTurnContextSourcePeekResult,
   BrowserViewportOptions,
-  ProjectReadFileResult,
-  WorkspaceFileEntry,
-  WorkspaceListOptions,
-  WorkspaceWriteFileOptions,
-  WorkspaceWriteFileResult,
 } from './browser.js'
 import type { BrowserPageDriverState } from './driver.js'
 
@@ -22,25 +17,6 @@ export interface BrowserViewportDeviceMetrics {
   screenHeight: number
   deviceScaleFactor: number
   mobile: boolean
-}
-
-/**
- * 浏览器工作区文件访问（宿主按 member/site 注入数据根 browser 分区）。
- * 使用 Browser 领域自己的文件 DTO，与站点工作区文件访问（`createBrowserSiteWorkspaceFileAccess`）单源一致。
- */
-export interface CdpWorkspaceFileAccess {
-  listFiles(options?: WorkspaceListOptions): Promise<WorkspaceFileEntry[]>
-  readFile(
-    path: string,
-    startLine?: number,
-    endLine?: number,
-    maxChars?: number
-  ): Promise<ProjectReadFileResult>
-  writeFile(
-    path: string,
-    content: string,
-    options?: WorkspaceWriteFileOptions
-  ): Promise<WorkspaceWriteFileResult>
 }
 
 /** 诊断窗口上限的窄面（宿主的 BrowserDiagnosticsRecorder 结构满足它）。 */
