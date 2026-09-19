@@ -395,10 +395,6 @@ class BrowserPendingEventsBroker implements BrowserPendingEventsBrokerApi {
       this.log.debug(failureMessage, { error: AppError.from(error).message })
     }
   }
-
-  
-
-  
 }
 
 export { BrowserPendingEventsBroker }

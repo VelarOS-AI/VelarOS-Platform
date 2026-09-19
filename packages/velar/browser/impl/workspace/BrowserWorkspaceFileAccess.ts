@@ -87,10 +87,6 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     return [this.workspaceRoot, ...this.legacyWorkspaceRoots]
   }
 
-  
-
-  
-
   public async listFiles(
     options: WorkspaceListOptions = {},
   ): Promise<WorkspaceFileEntry[]> {
@@ -121,8 +117,6 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     return entries
   }
 
-  
-
   public async readFile(
     path: string,
     startLine?: number,
@@ -132,8 +126,6 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     const target = await this.resolveExistingPath(path)
     return readResolvedFile(target, path, startLine, endLine, maxChars)
   }
-
-  
 
   /** 同时接受相对路径和当前站点根内的绝对路径，供 Host 预览已有 browser artifact。 */
   public async readWorkspacePath(
@@ -303,8 +295,6 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     return this.resolveExistingPathAcrossRoots(path)
   }
 
-  
-
   private async resolveWritablePath(
     path: string,
   ): Promise<BrowserWorkspaceResolvedPath> {
@@ -334,8 +324,6 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
 
     return { path: target.path, root }
   }
-
-  
 }
 
 /** 按一个工作区根建文件访问器；历史根只读，写一律落在当前根。 */

@@ -625,8 +625,6 @@ export class BrowserInteractionEngine extends CdpInteractionEngine implements Br
     return this.animateVirtualPointer(session, [{ x, y }], pressed)
   }
 
-  
-
   public focusWebContents(session: BrowserSession): void {
     try {
       if (!session.webContents.isDestroyed()) {

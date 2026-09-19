@@ -214,8 +214,6 @@ class CdpWebSocketTransport implements CdpWebSocketTransportApi {
     this.rejectAll(new AppError('NETWORK', '浏览器 CDP 连接出错。'))
   }
 
-  
-
   private rejectAll(error: Error): void {
     for (const pending of this.pending.values()) {
       pending.timeout.cancel()
@@ -223,8 +221,6 @@ class CdpWebSocketTransport implements CdpWebSocketTransportApi {
     }
     this.pending.clear()
   }
-
-  
 }
 
 export { CdpWebSocketTransport }

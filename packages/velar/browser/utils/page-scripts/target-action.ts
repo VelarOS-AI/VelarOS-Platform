@@ -2,7 +2,6 @@ import type { BrowserTargetActionOptions } from '../../types/browser'
 import type { BrowserTargetActionScriptBuildOptions } from '../../types/operations.js'
 import type { BrowserTargetActionClickMode } from '../../types/runtime.js'
 
-
 /** 根据 target 的 css、属性、文本线索定位元素，做一步：click、hover、focus 或 select_all。 */
 export function buildTargetActionScript(
   options: BrowserTargetActionOptions,

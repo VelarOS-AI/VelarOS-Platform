@@ -233,7 +233,5 @@ export class BrowserPerformanceOrchestrator implements BrowserPerformanceOrchest
   public dispose(): void {
     this.traces.clear()
   }
-
-  
 }
 

@@ -4,8 +4,6 @@ import type { BrowserPageDiagnosticEntry, BrowserPageDiagnosticLevel } from '../
 import type { BrowserSession } from '../../types/electron'
 import { BrowserTuning } from '../../utils/tuning'
 
-/** 单个会话最多保留的诊断条数。 */
-
 /** 浏览器诊断记录器，负责追加和裁剪会话诊断日志。 */
 export interface BrowserDiagnosticsRecorderApi {
   /** 供查询接口约束 limit 使用。 */
@@ -14,12 +12,7 @@ export interface BrowserDiagnosticsRecorderApi {
   record(session: BrowserSession, entry: BrowserPageDiagnosticEntry): void
   /** 将 Electron console-message level 归一化为共享类型。 */
   normalizeConsoleLevel(level: unknown): BrowserPageDiagnosticLevel
-  /**
-   * Electron injects development-only security notices through its own `node:electron` source.
-   * They describe the host shell, not the inspected site, and therefore must not be projected as
-   * page diagnostics. Site-originated CSP and console messages remain untouched.
-   */
-  /** 这条 console 消息要不要记：内部桥接用的消息（用户活动回传）不进诊断。 */
+  /** 这条 console 消息要不要记：Electron 经 `node:electron/` 打的开发期安全警告说的是宿主壳、不是被检查的站点，不记；站点自己的 CSP 与 console 消息照记。 */
   shouldRecordConsoleMessage(message: string, sourceId: string): boolean
 }
 
@@ -61,11 +54,7 @@ class BrowserDiagnosticsRecorder implements BrowserDiagnosticsRecorderApi {
     }
   }
 
-  /**
-   * Electron injects development-only security notices through its own `node:electron` source.
-   * They describe the host shell, not the inspected site, and therefore must not be projected as
-   * page diagnostics. Site-originated CSP and console messages remain untouched.
-   */
+  /** 这条 console 消息要不要记：Electron 经 `node:electron/` 打的开发期安全警告说的是宿主壳、不是被检查的站点，不记；站点自己的 CSP 与 console 消息照记。 */
   public shouldRecordConsoleMessage(message: string, sourceId: string): boolean {
     const normalizedSource = sourceId.trim().toLowerCase()
     const normalizedMessage = message.trimStart()

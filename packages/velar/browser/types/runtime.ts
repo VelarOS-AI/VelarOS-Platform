@@ -1,4 +1,3 @@
-/** 外部浏览器页面会话；通过 CDP driver 接入，不依赖任何 host 的内嵌 WebContents。 */
 import type { BrowserPageDriver } from '../contract/requires.js'
 
 import type {
@@ -79,6 +78,7 @@ export interface BrowserPerformanceTraceState {
   recording?: LooseOptional<BrowserParsedTraceRecording>
 }
 
+/** 外部浏览器页面会话；通过 CDP driver 接入，不依赖任何 host 的内嵌 WebContents。 */
 export interface ExternalBrowserPageSession {
   driver: BrowserPageDriver
   visible: boolean

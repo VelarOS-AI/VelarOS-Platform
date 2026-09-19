@@ -11,21 +11,13 @@ import type {
   DevtoolsTraceModel,
 } from '#devtools-performance-engine'
 
-/**
- * 性能 trace 解析引擎（吸收自 chrome-devtools-mcp 的 trace-processing/parse.ts，Apache-2.0）。
- *
- * 背后是 vendor 的 DevTools 官方 trace 引擎：负责把 CDP Tracing 采到的原始事件
- * 解析成 insights，并格式化成模型可读的摘要/insight 文本。
- * 引擎 ~2MB，首次调用时动态 import，避免拖慢主进程启动。
- */
-
 type PerformanceEngineModule = typeof DevtoolsPerformanceEngineModule
 
 const log = Log.tag('BrowserPerformanceTraceEngine')
 
 /**
  * 性能 trace 解析引擎：把 CDP Tracing 采到的原始事件交给 vendor 的 DevTools 引擎，解析成 insights 并
- * 格式化成模型读得懂的摘要与单项分析。
+ * 格式化成模型读得懂的摘要与单项分析。吸收自 chrome-devtools-mcp 的 trace-processing/parse.ts（Apache-2.0）。
  *
  * DevTools 的模型是有状态的：每次解析都会重置它的 processor，所以一个运行时持有一个实例，并在这里把解析串行化，
  * 免得两个会话解析到一半互相把对方的 processor 重置掉。vendor 引擎约 2 MB，首次用到时才动态加载。

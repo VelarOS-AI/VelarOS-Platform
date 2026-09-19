@@ -1,7 +1,5 @@
 import { browserLoginDetectionScriptFragment } from './login-detection'
 
-/** 构造页面结构检查脚本。 */
-
 /** 提取页面标题、正文、标题、链接、动作和表单字段。 */
 export function buildInspectionScript(args: {
   includeHtml: boolean

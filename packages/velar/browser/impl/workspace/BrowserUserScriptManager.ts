@@ -10,8 +10,6 @@ import { requireScript, requireStoredScript } from '../../utils/user-scripts.js'
 
 const log = Log.tag('BrowserUserScriptManager')
 
-
-
 /**
  * 站点用户脚本的存储：索引与代码都落在站点工作区里，负责增删改查、启停、排序与执行记录。
  *
@@ -83,8 +81,6 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
     )
     return next
   }
-
-  
 
   constructor(private readonly access: BrowserUserScriptAccess) {}
 
@@ -338,8 +334,6 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
       log.debug('回滚删除用户脚本文件失败', { relativePath, error: String(error) })
     }
   }
-
-  
 
   private async readCode(script: BrowserUserScriptRecord): Promise<string> {
     const result = await this.access.readFile(

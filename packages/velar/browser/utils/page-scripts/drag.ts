@@ -1,7 +1,6 @@
 import type { BrowserDragOptions } from '../../types/browser'
 
 /** 构造拖拽 source/target 的坐标解析脚本。 */
-
 export function buildDragTargetScript(options: BrowserDragOptions): string {
   const payload = JSON.stringify({
     source: options.source,

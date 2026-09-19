@@ -699,10 +699,6 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     }
   }
 
-  
-
-  
-
   private buildCurrentPageTarget(): BrowserPageTargetInfo {
     return {
       id: this.options.activeTargetId?.trim() || 'current',
@@ -759,8 +755,6 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     disposable.dispose?.()
     this.options.onDispose?.()
   }
-
-  
 
   private subscribeToDiagnosticsEvents(): void {
     if (!this.options.transport.onEvent) return
@@ -1066,16 +1060,6 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     }
   }
 
-  
-
-  
-
-  
-
-  
-
-  
-
   private parseFrameOrigin(url: unknown): Nullable<string> {
     if (!isNonBlankString(url)) return null
 
@@ -1100,20 +1084,6 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       return null
     }
   }
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
 
   private updateCachedPageState(value: unknown): void {
     if (!isObject(value)) return
@@ -1207,30 +1177,6 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       },
     }
   }
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
 }
 
 export { CdpBrowserPageDriver }

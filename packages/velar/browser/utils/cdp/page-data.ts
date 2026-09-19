@@ -78,10 +78,6 @@ export async function resolveUploadFilePath(workspaceRoot: string, requestedPath
   return (await resolveWorkspaceFilePath(workspaceRoot, requestedPath, 'filePath')).path
 }
 
-/**
- * 媒体项尺寸归一：非有限值与 0 都记为缺席。0 宽/高的媒体项对调用方没有可用信息，
- * 保持与旧实现一致的「假值即 null」语义，避免把占位元素当成真实媒体。
- */
 /** 把一批诊断按级别、种类、来源、状态码和资源类型各聚合一份。 */
 export function summarizePageDiagnostics(
   entries: BrowserPageDiagnostics['entries']

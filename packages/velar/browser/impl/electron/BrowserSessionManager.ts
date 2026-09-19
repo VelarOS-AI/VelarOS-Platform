@@ -1313,12 +1313,6 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
     }
   }
 
-  
-
-  
-
-  
-
   /** 记录失败主框架导航。 */
   private rememberFailedMainFrameNavigation(sessionId: string, rawUrl: string): void {
     if (!rawUrl) return
@@ -1481,8 +1475,6 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
       })
     }
   }
-
-  
 }
 
 export { BrowserSessionManager }

@@ -165,12 +165,6 @@ export class BrowserTargetRefStore implements BrowserTargetRefStoreApi {
     return `@${withoutAt}`
   }
 
-  
-
-  
-
-  
-
   /**
    * Snapshot 是供模型阅读的紧凑文本，不应假定 ref 后面永远是逗号或右方括号。
    * 按 `ref=` 协议标记逐段扫描 token，使后续增加状态字段或改变分隔符时仍能正确换代。
@@ -201,12 +195,6 @@ export class BrowserTargetRefStore implements BrowserTargetRefStoreApi {
 
     return scopedLine
   }
-
-  
-
-  
-
-  
 
   public clear(sessionId: string): void {
     this.refsBySession.delete(sessionId)

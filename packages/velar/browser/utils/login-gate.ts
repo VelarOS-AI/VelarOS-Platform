@@ -1,6 +1,6 @@
-/** 每次门控询问的默认风险归组键；同一站点复用同一 riskScope，避免逐页重复弹卡。 */
 import type { BrowserLoginDetection, BrowserLoginGateRecord } from '../types/browser.js'
 
+/** 门控询问的默认风险归组键的前缀；键是「前缀:站点」，同一站点复用同一 riskScope，避免逐页重复弹卡。 */
 export const BrowserLoginGateRiskScopePrefix = 'browser-login-gate'
 
 /** URL → 站点身份键。与空间 `identityStrategy: 'origin'` 同口径。 */

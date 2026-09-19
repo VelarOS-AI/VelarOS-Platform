@@ -215,12 +215,6 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
     }
   }
 
-  
-
-  
-
-  
-
   private resolveExecutablePath(
     configuredPath: LooseOptional<string>,
     platform: NodeJS.Platform
@@ -238,8 +232,6 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
       '找不到可用的 Chrome/Chromium，可在外部浏览器配置中提供 executablePath。'
     )
   }
-
-  
 
   private async waitForDevToolsActivePort(
     child: CdpExternalBrowserChildProcess,
@@ -267,18 +259,6 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
 
     throw new AppError('TIMEOUT', '等待外部浏览器 DevToolsActivePort 超时。')
   }
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
 
   private async readDevToolsActivePort(path: string): Promise<Nullable<CdpDevToolsActivePort>> {
     try {
@@ -387,8 +367,6 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
       return null
     }
   }
-
-  
 
   private disposeLaunchedBrowser(
     child: CdpExternalBrowserChildProcess,

@@ -96,7 +96,6 @@ import type { BrowserLoginDetection, BrowserPageDiagnosticEntry, BrowserPageStat
 import type { CdpExternalBrowserLaunchOptions, CdpExternalBrowserSession, CdpScreencastConsumerOptions, CdpScreencastStartOptions, ScreencastCapturedFrame } from '../types/cdp.js'
 import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions,BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverKeyEvent, BrowserPageDriverKind, BrowserPageDriverMouseEvent, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkCaptureState, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState, BrowserSystemPointerMoveOptions } from '../types/driver.js'
 
-/** 启动/接入外部浏览器并返回 page-level CDP driver 的 host 无关 launcher 面。 */
 /**
  * 外部浏览器启动器：**接远程浏览器或容器的扩展点**。
  *
@@ -107,11 +106,6 @@ export interface BrowserExternalPageLauncher {
   launch(options?: CdpExternalBrowserLaunchOptions): Promise<CdpExternalBrowserSession>
 }
 
-/**
- * 宿主注入的系统指针能力。
- *
- * 返回 false 表示当前环境、权限或可见性不允许使用系统指针，浏览器运行时随即改画统一兜底箭头。
- */
 /**
  * 系统级指针：**接真实鼠标的扩展点**。
  *
@@ -441,7 +435,6 @@ export interface BrowserOperationContext {
   /** 把一张图交给模型看（screenshot 用它）；宿主收着，在这次结果后面按顺序放出来。不给时截图照样落盘，只是模型看不到图。 */
   attachImage?: (image: ImageAttachment) => void
 }
-
 
 /**
  * React 合成适配器：宿主用它把「受控浏览器页面」交给产品树。

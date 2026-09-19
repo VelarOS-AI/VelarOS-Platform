@@ -186,8 +186,6 @@ class BrowserActivityCoordinator implements BrowserActivityCoordinatorApi {
     return state
   }
 
-  
-
   private emitWaitState(
     sessionId: string,
     state: BrowserUserActivityWaitState,

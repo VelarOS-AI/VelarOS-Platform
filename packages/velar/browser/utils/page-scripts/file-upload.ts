@@ -1,7 +1,6 @@
 import type { BrowserElementTargetHint } from '../../types/browser'
 
 /** 构造定位 file input 元素的页面脚本。 */
-
 export function buildResolveFileInputScript(target: BrowserElementTargetHint): string {
   const payload = JSON.stringify({ target })
 

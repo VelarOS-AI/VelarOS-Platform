@@ -147,13 +147,7 @@ export async function readResolvedFile(
   }
 }
 
-/**
- * 列目录：主根与历史根**取并集**，同名相对路径以主根为准。
- *
- * 只列主根会让「换粒度」在界面上等价于「资产没了」——制品面板是用户确认自己东西还在的
- * 唯一入口。上限按合并后的总数算，不给历史根额外配额。
- */
-
+/** 是不是「文件或目录不存在」（ENOENT）的错误。 */
 export function isMissingFileError(error: unknown): boolean {
   return isObject(error) && (error as { code?: unknown }).code === 'ENOENT'
 }

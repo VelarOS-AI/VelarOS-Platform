@@ -69,16 +69,6 @@ export function buildExternalCurrentPageTarget(
   }
 }
 
-/** 把输入坐标锁定在当前浏览器 viewport 内。 */
-/** 外部 CDP 页面没有内嵌 viewport 可读时，仅清洗为合法 CSS 像素坐标。 */
-/** 读取页面可视 viewport 尺寸，失败时使用默认桌面尺寸。 */
-/** 计算新的页面缩放比例。 */
-/** 限制单次缩放步进。 */
-/** 页面内短暂显示缩放百分比，模拟浏览器触发缩放后的右上角提示。 */
-/** 构造页面缩放提示脚本。 */
-/** 生成从上一次位置到目标点的缓动路径，用于页面内光标平滑移动。 */
-/** Electron 输入事件：移动鼠标。 */
-/** Electron 输入事件：点击坐标。 */
 /** 等待一小段时间，便于用户看到按压反馈。 */
 export function delay(ms: number): Promise<void> {
   return TimerScope.sleep(ms, { label: 'ElectronBrowserRuntime.delay' })
@@ -110,8 +100,6 @@ export function isPlaceholderUrl(url: LooseOptional<string>): boolean {
   )
 }
 
-/** 尽力聚焦 WebContents。 */
-/** 解析截图保存路径，并限制在 browser workspace 内。 */
 /** 规范化用户输入 URL；本地地址默认 http，其它无协议地址默认 https。 */
 export function normalizeUrl(rawUrl: string): string {
   const value = rawUrl.trim()

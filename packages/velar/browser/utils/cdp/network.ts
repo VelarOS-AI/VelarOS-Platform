@@ -227,17 +227,7 @@ export function normalizeNetworkMockResponses(
   return normalizedResponses
 }
 
-/**
- * CDP 网络子系统的共享控制器。
- *
- * 外部 `CDP` 浏览器（`CdpBrowserPageDriver` 与 WebSocket 传输）和嵌入式网页视图
- * （`webContents.debugger`）共用网络事件记账、详情读取和 `Fetch` 拦截逻辑，只在传输与事件入口上
- * 不同。控制器持有网络请求记录、离线状态、请求头和拦截规则，并通过注入的 `send`、
- * `appendDiagnostic` 与 `getCurrentUrl` 和宿主解耦。
- */
-
-/** 网络请求记录表上限:超出按写入顺序淘汰最旧,防止长会话无界增长。 */
-
+/** 取成至少为 1 的整数（四舍五入）；不是有限数就按 fallback 取。 */
 export function clampPositiveInteger(value: unknown, fallback: number): number {
   const numberValue = Number(value)
   if (!Number.isFinite(numberValue)) return Math.max(1, Math.round(fallback))

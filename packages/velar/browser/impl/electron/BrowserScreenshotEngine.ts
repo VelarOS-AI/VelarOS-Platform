@@ -532,14 +532,6 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     }
   }
 
-  
-
-  
-
-  
-
-  
-
   private async captureBrowserScreenshotImage(
     session: BrowserSession,
     metadata: BrowserScreenshotMetadata,
@@ -567,10 +559,6 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       capture: buildViewportCaptureRegion(metadata, size.width, size.height),
     }
   }
-
-  
-
-  
 
   private async tryCaptureFullPageScreenshot(
     session: BrowserSession,
@@ -730,8 +718,6 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     }
   }
 
-  
-
   private async buildScreenshotModelImage(
     image: Electron.NativeImage,
     options: BrowserCaptureScreenshotOptions['includeModelImage'],
@@ -821,10 +807,6 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       }
     }
   }
-
-  
-
-  
 
   private async applyModelScreenshotViewportOverlay(
     image: Electron.NativeImage,
@@ -980,10 +962,6 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
         : {}),
     }
   }
-
-  
-
-  
 
   private async installScreenshotElementLabels(
     session: BrowserSession,
@@ -1144,24 +1122,4 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       login: normalizeLoginDetection(pageMetadata.login),
     }
   }
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
 }

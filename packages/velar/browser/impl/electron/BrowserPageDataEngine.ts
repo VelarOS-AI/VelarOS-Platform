@@ -50,7 +50,6 @@ type ElectronNetFetchOptions = Parameters<typeof electron.net.fetch>[1] & {
   session?: Electron.Session
 }
 
-
 /**
  * 页面数据域执行体（Electron 宿主）：embedded 分支（webContents 脚本执行、electron.net.fetch、
  * webContents.debugger 上传、诊断合并、PDF 打印）+ 委托 external 核（`CdpPageDataEngine`）。

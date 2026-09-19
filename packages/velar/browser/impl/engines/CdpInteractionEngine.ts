@@ -487,14 +487,6 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     return best.target
   }
 
-  
-
-  
-
-  
-
-  
-
   private isSameBrowserTargetSelector(
     staleTarget: BrowserElementTargetHint,
     freshTarget: BrowserElementTargetHint
@@ -526,18 +518,6 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
       return null
     }
   }
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
 
   protected async dispatchCoordinateTargetActionIfNeeded(input: {
     sessionId: string
@@ -626,10 +606,6 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
 
     return input.result
   }
-
-  
-
-  
 
   public async insertText(
     sessionId: string,
@@ -878,8 +854,6 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     await this.mouseWheelWithDriver(externalSession.driver, sessionId, input)
     return this.mouseSnapshot(sessionId, externalSession.driver.getURL() || context.url)
   }
-
-  
 
   protected createPreviewPointerListener(
     sessionId: string,

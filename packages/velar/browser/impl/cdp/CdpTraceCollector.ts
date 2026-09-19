@@ -5,7 +5,6 @@ import type { CdpIoReadResult, CdpTraceTransport, CdpTracingCompleteEvent } from
 import { parseTraceEvents } from '../../utils/cdp/tracing'
 import { BrowserTuning } from '../../utils/tuning'
 
-
 /**
  * 性能 trace 采集器：开 CDP Tracing、等 `Tracing.tracingComplete`、把数据流读回来。
  *
@@ -160,8 +159,6 @@ export class CdpTraceCollector implements CdpTraceCollectorApi {
     }
     return chunks.join('')
   }
-
-  
 
   private cleanup(): void {
     this.unsubscribe?.()

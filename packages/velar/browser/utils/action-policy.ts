@@ -4,7 +4,6 @@ import { isNotNull } from '@velaros-ai/core'
 import type { BrowserActionPolicyConfig } from '../types/browser'
 import type { BrowserActionPolicyDecision, BrowserActionPolicyRequest } from '../types/browser.js'
 
-
 /** 动作名归一：去空白、转小写；空的当没有。 */
 export function normalizePolicyAction(value: LooseOptional<string>): Nullable<string> {
   const normalized = value?.trim().toLowerCase()
@@ -52,14 +51,12 @@ export function findPolicyMatch(
 }
 
 /**
- * Resolves the host-agnostic policy decision for a browser action.
+ * 按宿主给的策略表裁决一次浏览器动作，只有放行与拒绝两档：命中拒绝表就拒绝；命中允许表，
+ * 或允许表是空的而 `default` 不是 `deny`，就放行；其余拒绝。没给策略表一律放行。
  *
- * Browser owns its action vocabulary and match precedence. The decision closed
- * set is `allow` / `deny` only — the `confirm` tier was removed (2026-08-06):
- * no product host ever populated `policy.confirm`, so it was a fully wired
- * dead configuration tier that never actually triggered.
+ * 动作名与匹配先后归浏览器自己定。`confirm`（要审批）这一档 2026-08-06 删了：没有哪个宿主填过
+ * `policy.confirm`，接线齐全却从来没触发过。
  */
-/** 按宿主给的策略表裁决一次浏览器动作：放行、要审批还是直接拒绝。 */
 export function checkBrowserActionPolicy(
   policy: LooseOptional<BrowserActionPolicyConfig>,
   request: BrowserActionPolicyRequest,

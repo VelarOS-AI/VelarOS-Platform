@@ -435,10 +435,6 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
     });
   }
 
-  
-
-  
-
   /**
    * 同一 WebContents 的同一原生事件只注册一个分发器。
    *
@@ -485,14 +481,6 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
       if (events!.size === 0) this.sharedEvents.delete(webContents);
     };
   }
-
-  
-
-  
-
-  
-
-  
 
   /** E1: network idle 等待 — SPA 渲染完成后再操作，避免报到旧 DOM
    * 在 idleMs 内没有新的网络请求，则认为 idle
@@ -595,8 +583,6 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
     });
   }
 
-  
-
   /** 等待 DOM 和主要布局连续多帧稳定，适合 SPA、骨架屏和短动画后的截图。 */
   public async waitForDomAndLayoutStable(
     webContents: WebContents,
@@ -640,12 +626,6 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
       return createUnavailableStabilityResult();
     }
   }
-
-  
-
-  
-
-  
 }
 
 export { BrowserPageWaiter };

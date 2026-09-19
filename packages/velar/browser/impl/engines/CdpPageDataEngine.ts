@@ -155,16 +155,6 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     return externalSession.driver.listFrames()
   }
 
-  
-
-  
-
-  
-
-  
-
-  
-
   public async fetchResource(
     sessionId: string,
     context: BrowserSiteContext,
@@ -229,22 +219,6 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     }
   }
 
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
   public async getPageDiagnostics(
     sessionId: string,
     context: BrowserSiteContext,
@@ -268,16 +242,6 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
       capturedAt: Date.now(),
     }
   }
-
-  
-
-  
-
-  
-
-  
-
-  
 
   public async uploadFile(
     sessionId: string,
@@ -325,8 +289,6 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
       capturedAt: Date.now(),
     }
   }
-
-  
 
   public async exportPagePdf(
     sessionId: string,

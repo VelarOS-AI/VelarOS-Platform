@@ -28,8 +28,6 @@ import { CdpTraceCollector } from '../cdp/CdpTraceCollector'
 import { electronDebuggerHolds } from './ElectronDebuggerHolds'
 import { ElectronProtocolChannel } from './ElectronProtocolChannel'
 
-/** 嵌入式网络诊断缓冲上限,与外部 CDP driver 的诊断窗口一致。 */
-
 const embeddedDriverLog = Log.tag('ElectronWebContentsBrowserPageDriver')
 
 class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {

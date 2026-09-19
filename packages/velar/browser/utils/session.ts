@@ -1,5 +1,3 @@
-
-
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
@@ -90,7 +88,20 @@ export async function awaitTurn(previous: Promise<unknown>, signal?: AbortSignal
   }
 }
 
-/** 跑一个动作，并给它在会话队列里的独占时间封顶；到点放行队伍，动作本身仍挂着。 */
+/**
+ * 跑一个动作，并给它在会话队列里的独占时间封顶；到点放行队伍，动作本身仍挂着。
+ *
+ * 封顶（`BrowserTuning.session.actionHoldCapMs`）是单个动作允许独占一条会话队列的上限 —— **最后一道网，不是主超时**。
+ * 判据取「任何一条合法动作都跑不到这么久」：队列里最长的合法动作是页内等待
+ * （`waitForPage` 钳到 60s）与 `presentPage` 那条「等导航稳定 30s + loadUrl 30s」的串联，
+ * 都在 65s 上下。150s 之外只可能是**死结**。
+ *
+ * 存在的理由是一次 brick 级事故（AGENT-12）：`webContents.executeJavaScript` 在渲染进程
+ * 被脚本卡死 / 页面正在导航走时**永不 settle**，它占住队头，后面所有动作——包括
+ * 后续的 `presentPage`、包括清理用的 `closeSession`——全都排在死结后面，
+ * 14 分钟不返回，abort 也救不回来（信号只在排队闭包**内部**被检查，闭包压根没被调度），
+ * 只有重启应用。**一个永不 settle 的 promise 不许换来一条永久瘫痪的会话。**
+ */
 export async function runWithHoldCap<T>(
   slot: BrowserSessionQueueSlot,
   action: () => Promise<T>,
@@ -139,20 +150,7 @@ export async function executeInTurn<T>(
   return runWithHoldCap(slot, action, options)
 }
 
-/**
- * 单个动作允许独占一条会话队列的上限 —— **最后一道网，不是主超时**。
- *
- * 判据取「任何一条合法动作都跑不到这么久」：队列里最长的合法动作是页内等待
- * （`waitForSelector` / `waitForPage` 各自钳到 60s）与 `presentPage` 那条
- * 「等导航稳定 30s + loadUrl 30s」的串联，都在 65s 上下。150s 之外只可能是**死结**。
- *
- * 存在的理由是一次 brick 级事故（AGENT-12）：`webContents.executeJavaScript` 在渲染进程
- * 被脚本卡死 / 页面正在导航走时**永不 settle**，它占住队头，后面所有动作——包括
- * 后续的 `presentPage`、包括清理用的 `closeSession`——全都排在死结后面，
- * 14 分钟不返回，abort 也救不回来（信号只在排队闭包**内部**被检查，闭包压根没被调度），
- * 只有重启应用。**一个永不 settle 的 promise 不许换来一条永久瘫痪的会话。**
- */
-
+/** 造一个排队名额：`release()` 放出名额，`released` 在放出时结算，后一个动作等的就是它。 */
 export function createQueueSlot(): BrowserSessionQueueSlot {
   let release: () => void = () => undefined
   const released = new Promise<void>((resolve) => {

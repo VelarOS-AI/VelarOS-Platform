@@ -600,22 +600,6 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
     }
   }
 
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
   private resolveNetworkEventUrl(
     url: unknown,
     request?: LooseOptional<CdpNetworkRequestRecord>
@@ -625,24 +609,6 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
 
     return this.deps.getCurrentUrl()
   }
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
 
   private async syncFetchInterception(): Promise<void> {
     const patterns = this.buildFetchInterceptionPatterns()
@@ -709,8 +675,4 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
       )
     )
   }
-
-  
-
-  
 }

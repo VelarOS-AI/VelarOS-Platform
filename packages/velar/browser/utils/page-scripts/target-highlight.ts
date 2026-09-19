@@ -4,7 +4,6 @@ import type { BrowserElementTargetHint } from '../../types/browser'
 import { BrowserTuning } from '../tuning'
 
 /** 构造短暂高亮目标元素的页面脚本（agent 操作反馈）。 */
-
 export function buildHighlightScript(input: {
   selector?: LooseOptional<string>
   label?: LooseOptional<string>

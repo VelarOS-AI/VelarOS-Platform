@@ -86,12 +86,6 @@ class BrowserSessionActionQueue implements BrowserSessionActionQueueApi {
   public clearAll(): void {
     this.writeQueues.clear()
   }
-
-  
-
-  
-
-  
 }
 
 export { BrowserSessionActionQueue }

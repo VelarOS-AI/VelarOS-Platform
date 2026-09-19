@@ -10,8 +10,6 @@ import type { BrowserUserScriptRecord } from '../types/browser.js'
 import type { BrowserUserScriptValidatedPatch } from '../types/workspace.js'
 import type { BrowserUserScriptStore } from '../types/workspace.js'
 
-
-
 /** 按 id 取一条用户脚本；没有就报找不到。 */
 export function requireScript(store: BrowserUserScriptStore, id: string): BrowserUserScriptRecord {
   const normalized = assertScriptId(id)

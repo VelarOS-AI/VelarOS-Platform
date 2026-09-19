@@ -1,5 +1,4 @@
 /** 构造轻量页面指纹脚本，用于判断浏览器动作后是否产生可观察变化。 */
-
 export function buildActionEffectSnapshotScript(): string {
   return `(() => {
     const __velarosActionEffectSnapshot = true

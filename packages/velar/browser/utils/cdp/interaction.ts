@@ -159,7 +159,6 @@ export function diffTargetActionTextSamples(
   }
 }
 
-
 /** 按缩放动作算出新的缩放比例，并夹进合法区间。 */
 export function resolvePageZoomFactor(
   options: BrowserPageZoomOptions,

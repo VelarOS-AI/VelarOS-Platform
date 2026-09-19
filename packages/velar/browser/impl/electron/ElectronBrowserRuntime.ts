@@ -955,10 +955,6 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     return session
   }
 
-  
-
-  
-
   private registerExternalDownloadEvents(
     sessionId: string,
     session: ExternalBrowserPageSession
@@ -1013,7 +1009,6 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     return pageSession.driver.refreshPageState()
   }
 
-  /** 检查页面结构。 */
   /** 截图并保存到浏览器工作区。 */
   public async captureScreenshot(
     sessionId: string,
@@ -1393,7 +1388,6 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     )
   }
 
-  /** 执行目标元素动作：点击或填充。 */
   /** 执行浏览器导航动作。 */
   public async navigatePage(
     sessionId: string,
@@ -1510,7 +1504,6 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     }
   }
 
-  /** 查询页面元素。 */
   /** 列出当前 session 待处理的 dialog/download/permission 事件。 */
   public async listPendingEvents(
     sessionId: string,
@@ -1679,8 +1672,6 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     )
   }
 
-  /** 读取页面 localStorage/sessionStorage/cookie。 */
-  /** 在页面上下文执行自定义脚本。 */
   /** 获取可用会话，并刷新 session.url。 */
   private async getLivePageSessionUnlocked(
     sessionId: string,
@@ -1809,8 +1800,6 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     return buildExternalNavigationResult(session, options.action, false)
   }
 
-  
-
   /** 确保会话已打开到指定 context.url。 */
   private async ensureContextPageUnlocked(
     sessionId: string,
@@ -1930,11 +1919,6 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     }
   }
 
-  
-
-  
-
-  /** 恢复 Electron navigation history。 */
   /** 尝试把历史快照恢复到占位 webContents；返回是否真的发起了恢复导航。 */
   private async restoreNavigationHistory(
     webContents: Electron.WebContents,
@@ -1984,11 +1968,6 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     }
   }
 
-  
-
-  /** 沿路径动画展示页面内 macOS 风格光标。 */
-  /** 在页面内渲染一个虚拟指针，用于截图可视化鼠标位置。 */
-  /** 构建虚拟指针脚本。 */
   /** 构造导航结果。 */
   private buildNavigationResult(
     session: BrowserSession,
@@ -2005,8 +1984,6 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       capturedAt: Date.now(),
     }
   }
-
-  
 
   /** 获取当前已加载页面 URL，排除 about:blank 等占位页。 */
   private getLoadedPageUrl(session: BrowserSession): Nullable<string> {
@@ -2113,12 +2090,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
   private resolveCurrentPageUrl(session: BrowserSession, fallbackUrl: string): string {
     return this.getLoadedPageUrl(session) ?? session.url ?? fallbackUrl
   }
-
-  
-
-  
 }
-
 
 /** 按宿主给的选项造一份 Electron 浏览器运行时；一个宿主进程一份。 */
 function createElectronBrowserRuntime(

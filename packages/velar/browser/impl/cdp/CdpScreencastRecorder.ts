@@ -6,14 +6,7 @@ import { AppError } from '@velaros-ai/core/error'
 import type { CdpScreencastConsumerOptions, CdpScreencastFrameEvent, CdpScreencastStartOptions, CdpTraceTransport, ScreencastCapturedFrame } from '../../types/cdp.js'
 import { BrowserTuning } from '../../utils/tuning'
 
-/**
- * 页面录屏（CDP Page.startScreencast）。
- *
- * 帧流按需产生（页面有变化才有帧），每帧必须 ack 才有下一帧；
- * 复用 CdpTraceTransport 会话面，webview 与外部 CDP 浏览器两条路径共用。
- * 产物合成走 GIF：聊天/文件系统里点开即播，不依赖播放器。
- */
-
+/** 录屏的缺省参数：帧的最大宽高、每隔几帧取一帧、最多攒多少帧。 */
 export const DefaultScreencastStartOptions: CdpScreencastStartOptions = {
   maxWidth: 800,
   maxHeight: 1200,
@@ -22,8 +15,9 @@ export const DefaultScreencastStartOptions: CdpScreencastStartOptions = {
 }
 
 /**
- * 录屏采集器：经 CDP `Page.startScreencast` 收帧，停录时把帧序列交出去合成 GIF。
+ * 录屏采集器：经 CDP `Page.startScreencast` 收帧，停录时把帧序列交出去合成 GIF（聊天与文件里点开即播，不依赖播放器）。
  *
+ * 帧按需产生（页面有变化才有帧），每帧 ack 了才有下一帧；只经 `CdpTraceTransport` 收发，内嵌页面与外部 CDP 浏览器两条路共用。
  * 一次录制一个实例；帧只在内存里攒，超过上限就停下来如实回报「帧数到顶了」，不悄悄丢中间的帧。
  */
 export interface CdpScreencastRecorderApi {

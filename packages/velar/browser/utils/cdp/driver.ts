@@ -159,7 +159,6 @@ return {
 })()`
 }
 
-/** CDP 的修饰键位掩码：协议规定的数，跟着用它的那个函数放。 */
 /** 把鼠标键名翻成 CDP 认的取值。 */
 export function resolveMouseButton(button: BrowserMouseButton): 'left' | 'middle' | 'right' {
   switch (button) {
