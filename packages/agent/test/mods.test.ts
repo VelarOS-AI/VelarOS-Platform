@@ -106,14 +106,7 @@ describe('agent mod loader', () => {
   test('装载随包内置 mod 后，工具与提示词段逐项等价于直接枚举（自食狗粮零变化）', () => {
     const loader = new AgentModLoader({ host: createHost() })
     const builtin = createBuiltinAgentModDefinition()
-    const contextRecallContribution = builtin.manifest.contributes?.tools?.find(
-      (tool) => tool.name === 'context:recall'
-    )
-    expect(contextRecallContribution).toMatchObject({
-      categoryId: 'context',
-      summary: '统一找回本会话之前见过的上下文。',
-      readOnly: true,
-    })
+    expect(builtin.manifest.contributes?.tools?.filter(tool=>tool.name.startsWith('context:'))).toEqual([])
     expect(
       builtin.manifest.contributes?.tools?.find((tool) => tool.name === 'tooling:map')
     ).toMatchObject({ readOnly: true })

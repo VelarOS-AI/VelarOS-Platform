@@ -191,6 +191,8 @@ export interface ProviderTurnUsage {
  * 定义住 kernel 层:请求事件/快照与观测域都以它为契约,agent 层编译器只是生产者。
  */
 export interface ProviderRequestFingerprint {
+  /** 结构化响应格式的完整指纹；普通聊天链路可省略。 */
+  responseFormatHash?: string
   id: string
   systemHash: string
   toolSurfaceHash: string

@@ -103,10 +103,6 @@ export interface RequestConfirmationToolContext {
   abortSignal: AbortSignal
 }
 
-export interface HandoffContextInput extends Record<string, unknown> {
-  reason: string
-}
-
 export interface AgentWorkflowToolCollection {
   readonly 'agent:run_workflow': VelaTool<RunAgentWorkflowInput>
 }

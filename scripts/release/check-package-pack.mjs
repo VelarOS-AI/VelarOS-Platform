@@ -26,7 +26,7 @@ const manifest = JSON.parse(await readFile(path.join(packageDirectory, 'package.
 const destination = await mkdtemp(path.join(tmpdir(), 'velaros-package-pack-check-'))
 // 运行时要用的 vendor 产物必须进包；许可证文件不进包（只有仓根一份 LICENSE）。
 const requiredPackageFiles = new Map([
-  ['velar', [
+  ['velaros', [
     'package/office/vendor/pptxgenjs/pptxgen.es.js',
     'package/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs',
   ]],

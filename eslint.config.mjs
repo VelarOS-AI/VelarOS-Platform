@@ -58,10 +58,11 @@ const Domains = [
     config: capabilitiesConfig,
     globs: [
       'packages/cli/**',
-      'packages/code-surface/**',
+      'packages/script/**',
+      'packages/context/**',
       'packages/development/**',
       'packages/document-renderer/**',
-      'packages/velar/**',
+      'packages/velaros/**',
       'tests/capabilities/**',
     ],
   },
@@ -149,8 +150,8 @@ export default [
       'packages/*/src/**/*.d.ts',
       // 代码模版：给模型照抄的范本，一个函数一种用法、彼此不调用；它对不对由各包验收照真实声明做类型检查守着。
       // 在里面塞 eslint-disable 会原样出现在模型面前，是噪音。
-      'packages/velar/*/template.js',
-      'packages/velar/*/*-template.js',
+      'packages/velaros/*/template.js',
+      'packages/velaros/*/*-template.js',
       path.basename(import.meta.filename),
     ],
   },

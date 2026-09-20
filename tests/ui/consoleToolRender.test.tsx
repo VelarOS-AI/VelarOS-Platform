@@ -217,17 +217,17 @@ void describe('控制台卡片', () => {
   void test('输入和中断都带着会话与任务 id 交给宿主；缺能力时什么都不做', async () => {
     const { capabilities, writes, interrupts } = fakeConsoleCapabilities()
 
-    const written = await submitConsoleInput(capabilities, 'session-1', 'task-console-1', 'velar')
+    const written = await submitConsoleInput(capabilities, 'session-1', 'task-console-1', 'velaros')
     assert.equal(written?.accepted, true)
-    assert.deepEqual(writes, [{ sessionId: 'session-1', taskId: 'task-console-1', text: 'velar' }])
+    assert.deepEqual(writes, [{ sessionId: 'session-1', taskId: 'task-console-1', text: 'velaros' }])
 
     const interrupted = await interruptConsoleSession(capabilities, 'session-1', 'task-console-1')
     assert.equal(interrupted?.accepted, true)
     assert.deepEqual(interrupts, [{ sessionId: 'session-1', taskId: 'task-console-1' }])
 
     // 没有会话身份、或宿主没注入能力时，卡片不该凭空造一次调用。
-    assert.equal(await submitConsoleInput(capabilities, null, 'task-console-1', 'velar'), null)
-    assert.equal(await submitConsoleInput({}, 'session-1', 'task-console-1', 'velar'), null)
+    assert.equal(await submitConsoleInput(capabilities, null, 'task-console-1', 'velaros'), null)
+    assert.equal(await submitConsoleInput({}, 'session-1', 'task-console-1', 'velaros'), null)
     assert.equal(await interruptConsoleSession({}, 'session-1', 'task-console-1'), null)
     assert.equal(writes.length, 1)
   })

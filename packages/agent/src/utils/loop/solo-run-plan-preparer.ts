@@ -63,8 +63,6 @@ const SkillGateAlwaysKeptToolNames = new Set<string>([
   'tooling:read',
   'interaction:ask_user',
   'interaction:show_action_cards',
-  'context:recall',
-  'context:handoff',
 ])
 
 /**

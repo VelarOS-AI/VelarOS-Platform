@@ -4,8 +4,8 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { createProjectKernel } from '@velaros-ai/velar/project'
-import { ProjectCodeLanguageActions } from '@velaros-ai/velar/project/contracts'
+import { createProjectKernel } from '@velaros-ai/velaros/project'
+import { ProjectCodeLanguageActions } from '@velaros-ai/velaros/project/contracts'
 
 import {
   createProjectCodeQuery,

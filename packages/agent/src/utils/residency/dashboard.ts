@@ -51,7 +51,7 @@ export function renderContextDashboardText(input: ContextDashboardInput): string
   const epochAttempt = renderLastEpochAttempt(input.lastEpochAttempt)
   if (epochAttempt) lines.push(epochAttempt)
   lines.push(
-    '完整请求超过可用输入容量时，上下文会被自动整理。没有内联的记录仍然可以用 context:recall 取回。'
+    '完整请求超过可用输入容量时，上下文会被自动整理。没有内联的记录保留原文引用，由宿主检索服务解析后进入视图。'
   )
 
   return lines.join('\n')

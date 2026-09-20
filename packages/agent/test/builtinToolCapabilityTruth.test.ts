@@ -5,8 +5,6 @@ import { agentWorkflowTools } from '../src/impl/AgentTools'
 import { backgroundJobTools } from '../src/impl/AgentTools'
 import { categoriesTools } from '../src/impl/AgentTools'
 import { confirmationTools } from '../src/impl/AgentTools'
-import { contextHandoffTools } from '../src/impl/AgentTools'
-import { contextRetrievalTools } from '../src/impl/AgentTools'
 import { dispatchAgentTools } from '../src/impl/AgentTools'
 import { goalTools } from '../src/impl/AgentTools'
 import { plansTools } from '../src/impl/AgentTools'
@@ -18,8 +16,6 @@ const tools = {
   ...agentWorkflowTools,
   ...backgroundJobTools,
   ...categoriesTools,
-  ...contextHandoffTools,
-  ...contextRetrievalTools,
   ...dispatchAgentTools,
   ...goalTools,
   ...plansTools,
@@ -29,8 +25,6 @@ const tools = {
 const expectedEffects = {
   'agent:dispatch': 'execute',
   'agent:run_workflow': 'execute',
-  'context:handoff': 'external',
-  'context:recall': 'read',
   'directive:archive': 'write',
   'directive:list': 'read',
   'directive:upsert': 'write',

@@ -111,3 +111,40 @@ export interface KernelEventSubscription {
   /** 关掉这条订阅；关过之后再关是空操作。 */
   dispose(): void | Promise<void>
 }
+
+import type { InvocationReceipt, InvocationRecord, ModuleBinding, ModuleDescription, ModulePage, ModuleQuery, OperationCall } from '../types/operations.js'
+
+/** 模块发现、租约与调用共用的运行时。 */
+export interface OperationRuntimeApi {
+  /** 宿主请求只读核对未知效果，未提供领域核对器时返回原记录。 */
+  reconcile(sessionId: string, id: string, signal?: AbortSignal): Promise<InvocationRecord | null>
+  /** 激活依赖和模块；重复调用复用同一启动。 */
+  start(): Promise<void>
+  /** 有界查询模块卡片。 */
+  list(query?: ModuleQuery): ModulePage
+  /** 精确读取模块说明和从 schema 生成的声明。 */
+  describe(moduleId: string): ModuleDescription
+  /** 获取本会话的实例租约；初次绑定不制造执行失败。 */
+  bind(sessionId: string, moduleId: string): ModuleBinding
+  /** 释放本会话租约，后续调用必须重新绑定。 */
+  release(sessionId: string, moduleId: string): void
+  /** 所有入口共用的调用链，返回已经可靠保存的回执。 */
+  invoke(call: OperationCall, signal?: AbortSignal): Promise<InvocationReceipt>
+  /** 停止新调用，取消在途操作，回收模块资源。 */
+  dispose(): Promise<void>
+}
+
+
+import type { ModelResponseFormat,ModelTurnRequest, ModelUserMessage } from '../types/model.js'
+
+/** 中立请求的实际文本编码口，供编译器与供应商适配器共用。 */
+export interface ModelRequestEncoderApi {
+  /** 校验并封存真实发送的结构化响应格式。 */
+  response(request: ModelTurnRequest): ModelResponseFormat
+  /** 从同一 schema 校验完整响应，返回不可变 JSON；不执行任何业务动作。 */
+  output(format: ModelResponseFormat, value: unknown): unknown
+  /** 编码来源标签与材料；已封存 prompt 保持逐字节一致。 */
+  encode(request: ModelTurnRequest): string
+  /** 生成编译审计与供应商实际发送共用的多模态消息。 */
+  messages(request: ModelTurnRequest): ModelUserMessage[]
+}

@@ -1,5 +1,7 @@
 # VelarOS Platform
 
+正式执行主干：[Platform 统一执行架构](docs/architecture/platform-runtime.md)。主模型与有界上下文规划共用任务状态；能力统一经 ScriptAct、Kernel 回执和 ModelView 推进。
+
 [简体中文](README.zh-CN.md)
 
 VelarOS is being built as a personal AI operating system and an ecosystem of AI applications. VelarOS Platform is the shared foundation for that ecosystem: it provides the Kernel and reusable packages for execution, capabilities, memory, permissions, context, state, models, and agent-facing APIs.
@@ -22,7 +24,7 @@ packages declare a shared `velaros.platform` generation for cross-package compat
 | Kernel | `@velaros-ai/kernel` |
 | Agent runtime | `@velaros-ai/agent` (with the tool contract at `@velaros-ai/agent/tool-contract`) |
 | Shared primitives | `@velaros-ai/core` (base primitives, plus the `platform`, `text-files` and `path-rules` units) |
-| Shared capability foundations | `@velaros-ai/code-surface`, `@velaros-ai/velar` |
+| Shared capability foundations | `@velaros-ai/script`, `@velaros-ai/velaros` |
 | Model providers | `@velaros-ai/model` |
 | Capabilities | `@velaros-ai/cli`, `@velaros-ai/development` |
 | UI | `@velaros-ai/ui` (components, conversation UI, and the `html-artifacts` unit) |

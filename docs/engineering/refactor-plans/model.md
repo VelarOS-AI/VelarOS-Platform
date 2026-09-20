@@ -30,7 +30,7 @@
 | 通用请求客户端 | `ModelRequestClient.ts`(121)、`ModelRequestTypes.ts`(122)、`AiSdkModelRequestTransport.ts`(62)、`ModelRequestService.ts`(8) | text / object / stream 客户端与可替换 transport |
 | 产品共用机制 | `ModelProfiles.ts`(78)、`ModelProviderRetry.ts`(201)、`ModelUsage.ts`(104)、`ModelPricing.ts`(21) | profile 凭据来源、瞬时错误重试计划、usage 归一（只有 Termel 在用） |
 | 环境 | `LocalModelEnvironment.ts`(140)、`NodeLocalModelEnvironment.ts`(21) | 不可变环境快照；Ollama 地址/模型/窗口 |
-| Velar Cloud | `VelarCloudModelRuntime.ts`(87) | `velar`、`velar-dev` 两个托管服务的连接绑定 |
+| Velar Cloud | `VelarCloudModelRuntime.ts`(87) | `velaros`、`velar-dev` 两个托管服务的连接绑定 |
 | 内核 | `kernel-module.ts`(125) | 把适配器注册表登记成内核能力 `velaros.model`，唯一的 wire 操作 `supports_provider` |
 | 契约与入口 | `ModelContracts.ts`(169)、`index.ts`、`contracts.ts`、`catalog.ts` | 公开数据类型；三个聚合入口 |
 
@@ -344,7 +344,7 @@ interface ModelUsageApi { normalizeRunUsage(value, pricing?); normalizePersisted
 | --- | --- | --- | --- |
 | M1 | `AgentModelResolver.ts:247-251`（`createThinkingDepthProviderOptions(..., input.thinkingDepth ?? 'balanced')`）、`OpenAIModelAdapter.ts:81,178`（OpenRouter 只传 `thinkingDepth`）、`AnthropicModelAdapter`/`GoogleModelAdapter`（只传 `thinkingDepth`） | `ModelAdapterConfig.reasoningLevel` 的注释说「存在时优先于 thinkingDepth 决定 reasoning 开关/力度/预算」，但只有 Velar 与 provider script 认它。选「关」时 Anthropic 仍发自适应思考、OpenAI 仍发 `reasoningEffort: medium`；`ultra` 对这几家也不抬预算 | `resolveRoleRuntime({provider:'anthropic', model:'claude-sonnet-4-6', reasoningLevel:'off'})` → `providerOptions = {"anthropic":{"sendReasoning":true,"thinking":{"type":"adaptive",…},"effort":"medium"}}`；`openai`/`gpt-5.5` → `{"openai":{"reasoningEffort":"medium","reasoningSummary":"auto"}}` |
 | M2 | `ProviderScriptRegistry.ts:230-248,436-440`（`configureHost / configureSources / reload` 都走 `resetLoadedState()` 清空 `scripts`） | `registerSource()` 注册的内存脚本（注释说是插件安装链的入口）在任何一次重配后静默消失，只能重装 | `registerSource(...)` → `supportsProvider = true`；`configureHost({})` → `false` |
-| M3 | `VelarModelAdapter.ts:85-107` | 聊天走宿主注入的带账户认证 `fetch`，embedding 却只返回 `{ url, headers: { Authorization: 'Bearer velar-managed' } }`、没有 `execute`；Desktop `plugins/lancedb/main/MemoryVectorBackend.ts:106-112` 于是用普通 HTTP 客户端发出去，不带账户认证 | 注册 `velar` 绑定（带计数的 fetch）后 `createEmbeddingRequest({provider:'velar'})` → `hasExecute=false`，认证 fetch 调用 0 次。修法：返回 `execute: () => runtime.fetch(url, …)` |
+| M3 | `VelarModelAdapter.ts:85-107` | 聊天走宿主注入的带账户认证 `fetch`，embedding 却只返回 `{ url, headers: { Authorization: 'Bearer velar-managed' } }`、没有 `execute`；Desktop `plugins/lancedb/main/MemoryVectorBackend.ts:106-112` 于是用普通 HTTP 客户端发出去，不带账户认证 | 注册 `velaros` 绑定（带计数的 fetch）后 `createEmbeddingRequest({provider:'velaros'})` → `hasExecute=false`，认证 fetch 调用 0 次。修法：返回 `execute: () => runtime.fetch(url, …)` |
 | M4 | `ProviderModelCatalogService.ts:414-437` | `normalizeModels` 每个模型都调一次 `getProviderPreset` → `listPresets()` 重建全部 21 个预设与目录；OpenRouter `/models` 约 350 条时是几十万次对象分配 | 代码走读；修法：循环外取一次 preset |
 | M5 | 产品侧装配（Desktop `main/model/Service.ts:66`、Workbench `main/index.ts:344`） | 产品各 `new` 一个目录服务，与组合对象里 `AgentModelResolver` 用的那份不共享缓存、归属信息与失效：设置页刷新目录不影响运行时，运行时的 `/models` 请求不带 Referer/Title | 代码走读；目标布局里目录服务只能从组合对象取 |
 | M6 | `ModelProviderCollection.ts:185-190` vs `VelarCloudModelRuntime.ts:41-44` | 前者只去掉一个末尾 `/`（`https://x//` → `https://x/`，再拼 `/embeddings` 成 `//embeddings`），后者去掉全部 | 小；统一用 platform 的 `trimTrailingPathTextSeparators` 同口径实现 |

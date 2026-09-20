@@ -78,23 +78,23 @@
       "@velaros-ai/kernel/remote": [
         "./packages/kernel/src/remote.ts"
       ],
-      "@velaros-ai/velar/files": [
-        "./packages/velar/files/index.ts"
+      "@velaros-ai/velaros/files": [
+        "./packages/velaros/files/index.ts"
       ],
-      "@velaros-ai/velar/images": [
-        "./packages/velar/images/index.ts"
+      "@velaros-ai/velaros/images": [
+        "./packages/velaros/images/index.ts"
       ],
-      "@velaros-ai/velar/sandbox": [
-        "./packages/velar/sandbox/index.ts"
+      "@velaros-ai/velaros/sandbox": [
+        "./packages/velaros/sandbox/index.ts"
       ],
-      "@velaros-ai/velar/shell": [
-        "./packages/velar/shell/index.ts"
+      "@velaros-ai/velaros/shell": [
+        "./packages/velaros/shell/index.ts"
       ],
-      "@velaros-ai/velar/project": [
-        "./packages/velar/project/index.ts"
+      "@velaros-ai/velaros/project": [
+        "./packages/velaros/project/index.ts"
       ],
-      "@velaros-ai/velar/*": [
-        "./packages/velar/*"
+      "@velaros-ai/velaros/*": [
+        "./packages/velaros/*"
       ],
       "@velaros-ai/document-renderer": [
         "./packages/document-renderer/src/index.ts"

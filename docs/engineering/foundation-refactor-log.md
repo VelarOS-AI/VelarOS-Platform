@@ -10,12 +10,12 @@
 
 （按时间追加。每条写：改了什么、为什么、影响谁。）
 
-- **浏览器能力改成四层、从哪层都能下手，新增 `velar:cdp`（09-19，ADR 0012，`44bebfb9` 与紧跟的删死代码一笔）。** 起因是你那句「必须给模型提供一些更加底层的能力」。
-  - 四层：协议（新模块 `velar:cdp`：`send` 任意 CDP 命令、`events` / `waitForEvent` 读事件、`reset` 撤掉自己做过的一切）→ 输入原子（`keyDown`、`keyUp`、`mouseMove`、`mouseDown`、`mouseUp`、`wheel`、`insertText`）→ 页面脚本（`evaluate` 整份取回、`frames` 含跨源 iframe）→ 常用组合（`open`、`inspect`、`click`、`fill`……）。
+- **浏览器能力改成四层、从哪层都能下手，新增 `velaros:cdp`（09-19，ADR 0012，`44bebfb9` 与紧跟的删死代码一笔）。** 起因是你那句「必须给模型提供一些更加底层的能力」。
+  - 四层：协议（新模块 `velaros:cdp`：`send` 任意 CDP 命令、`events` / `waitForEvent` 读事件、`reset` 撤掉自己做过的一切）→ 输入原子（`keyDown`、`keyUp`、`mouseMove`、`mouseDown`、`mouseUp`、`wheel`、`insertText`）→ 页面脚本（`evaluate` 整份取回、`frames` 含跨源 iframe）→ 常用组合（`open`、`inspect`、`click`、`fill`……）。
   - ADR 0011 否决「裸 CDP」的两条理由（坐标对不上、关掉 Network 把诊断弄断）现在靠**会话隔离**解掉，不设闸：模型的命令跑在它自己的一条 CDP 会话上（内嵌页面是 debugger 上的 flatten 子会话，外部 Chrome 是同一页面的第二条 WebSocket），它开关的域、设的仿真与拦截只算在这条上，`reset` 或离站时一并撤掉；被它拦下 30 秒没人放行的请求由宿主放行，并记一条事件。
   - 面：browser 48 → 34、devtools 22 → 18、cdp 4 个；删掉的是 evaluate 一行就能替的（extract、table、paginate、query、scroll、storage、emulate……）。声明 browser.d.ts 1170 → 873 行。
   - 顺手改掉的几处坑：evaluate 不再截 100 项 / 2 万字；`fill` 改成真实输入（以前 React 的受控输入认不到）；三个 wait 等不到就抛 `TIMEOUT`（以前回 `matched: false`，程序忘了查就带着没到位的页面往下走），也撑得过跳转。
-  - 真机：用仓库里的 Electron 跑真运行时，内嵌页面与外部 Chrome 各 24 项、48 项全过（探针 `packages/velar/browser/test/probes/electron-low-level.probe.mjs`）。**真机抓到一处**：外部 Chrome 里跨源 iframe 在 `frames()` 里整个看不见（它在另一个进程），已补；顺带把外部浏览器的子框架求值从隔离世界改到框架主世界，和内嵌页面同一口径。
+  - 真机：用仓库里的 Electron 跑真运行时，内嵌页面与外部 Chrome 各 24 项、48 项全过（探针 `packages/velaros/browser/test/probes/electron-low-level.probe.mjs`）。**真机抓到一处**：外部 Chrome 里跨源 iframe 在 `frames()` 里整个看不见（它在另一个进程），已补；顺带把外部浏览器的子框架求值从隔离世界改到框架主世界，和内嵌页面同一口径。
   - **影响 Desktop**：运行时删了七个只为旧工具存在的方法（`scrollPage`、`queryElements`、`readPageStorage`、`listMediaSources`、`listPageResources`、`configureEmulation`、`waitForSelector`）和随它们走的公开类型；Desktop 旧的 BrowserTools 端口在升级 Platform 时要换到代码面（本来就在 X 系列接线里）。`setViewport`、`runUserScript` 留着，Desktop 界面在用。
 
 - **全仓扫「工具说明指向不存在的东西」，确证五条（09-17 05:20，`3ca63703` 修掉四条；每条都在仓库里逐条核过才动手）。** 起因是 `shell` 那一轮抓到的同类缺陷——说明指着一个实际不存在的东西，模型照做就落空。
@@ -28,7 +28,7 @@
   - **故意留着一处**：`solo-run-plan-preparer.ts` 里还有三处同名字面量，但那是「预算裁剪不许砍」的保底名单，宿主没有这个工具时名字压根匹配不上、不产生任何模型面文字。现在就改成读声明，会在 Desktop 补上声明之前**先丢掉** plan 模式/首轮/技能门下对动作卡工具的保护——拿一个真实回归换当前无害的洁癖，不值。排在 Desktop 接线之后。
   - 一并核实**不算缺陷**的（免得重复查）：office 说明里的 `direct`/`expert` 是真实存在的 surface profile（只是模型自己切不了，由宿主定）；`system:run` 的 `statusContinuation` 存在，只是挂在 `backgroundProcess` 下；browser 说明里引用的 26 个工具名、`project:read` 的 `continuation`、`agent:dispatch` 的三个回执字段等全部对得上。
 
-- **【新方向】能力面升级成代码面：模型写 TypeScript，不再走 provider 的 tool-calling（09-17 09:00 你裁决，设计在 `docs/engineering/code-surface-design.md`）。** 你的原话是「模型能力在今天已经足够强，弱的模型也没人愿意用，以后只会越来越强，这个赌博是值得被押注的」。
+- **【新方向】能力面升级成代码面：模型写 TypeScript，不再走 provider 的 tool-calling（09-17 09:00 你裁决，设计在 `docs/engineering/script-design.md`）。** 你的原话是「模型能力在今天已经足够强，弱的模型也没人愿意用，以后只会越来越强，这个赌博是值得被押注的」。
   - **起点是你问的那句「为什么要这么麻烦」**：zod schema 的作用只是校验，TS 类型加注释模型天然读得懂，为什么还要另写一堆说明。这个疑问是对的——**说明是第二个真相源**，本轮四条缺陷全是它漂移出来的。最刺眼的一处：`system:read` 的结果类型里明明有 `hasMore: boolean` 直接回答「读没读完」，手写说明却教模型拿 `range.end` 自己推算，`hasMore`、`totalChars`、`encoding` 三个真实字段模型从来不知道存在。
   - **代码面同时解掉三套补丁**：工具空间分页（`tooling:map/read/replace`，browser 32 个工具 14,153 字每轮都在）→ 变成 `import`；批量字段（`files[]`、`steps[]` 与规矩 3）→ 变成 `for`；回执截断与句柄化 → 中间结果在程序里过滤掉、只交出要的。
   - **我纠正了你一半**：「自己定义一套规范」——规范自己定，**语法不要自己造**。模型能读懂代码面靠的就是它见过海量 TS，自造语言等于把唯一的依仗扔掉。要拥有的是 API 表面与调用约定，不是语法。
@@ -36,7 +36,7 @@
   - **旧工具面留着直到 agent-lab 上打平再删**。不是对赌注不放心，是没有对照就没法证明赌赢了；它今天已经存在，留着不花额外成本。
   - 顺序按风险排，不按工作量：**先打通最薄的端到端回路**（手写两三个声明），再做生成器，再接进执行模式，再对照，最后收口。
 
-- **接进 agent 之前的四条必修缺口全部补完（09-17，`4039e449`、`c0e87ad7`、`2833c645`、`a33c961d`；code-surface 不变量 15 → 20，42 条测试）。** 四条都是你点的，第 ② 条只到接口层。
+- **接进 agent 之前的四条必修缺口全部补完（09-17，`4039e449`、`c0e87ad7`、`2833c645`、`a33c961d`；script 不变量 15 → 20，42 条测试）。** 四条都是你点的，第 ② 条只到接口层。
   - **③ 没跑完就交账（INV-16）**：中止/超时/抛错时逐条回「已经落定的能力调用」，跑完了不给。这是**账**不是事务——跑过的命令回滚不了，它不承诺回滚、承诺**知道**。连着的同名同结果折成一条带 `times`：账上只记「调的是谁」不记参数，循环里那几笔本来就分不开，折起来反而让「读了 23 个文件之后停在这」一眼看得出来。
   - **⑤ 内存封顶（INV-17）**：子进程按 `--max-old-space-size=512` 起。超时管得住死循环，管不住一个循环里把整个仓库读进数组。踩到两处都记进设计文档了：**认 `close` 不认 `exit`**（exit 响的时候 stderr 里的现场还没读完）、**stderr 留头不留尾**（`FATAL ERROR` 后面跟着一长串 native stack，按尾巴截会把判据本身裁掉，第一版就栽在这里）；顺带补了个真 bug——stderr 配了 `pipe` 却没人读，管道填满会把子进程堵死。
   - **④ 等人的时间不计超时（INV-18）**：运行器把一把时钟闸递给分发回调。关键是**必须在等待开始时停**，不能等结束后补时间——补时间的写法里程序在用户点头之前就已经被我们杀了。验证不是看它绿：把停表关掉重跑，两条用例都挂（1.5 秒的审批把 1 秒预算的程序打死）。

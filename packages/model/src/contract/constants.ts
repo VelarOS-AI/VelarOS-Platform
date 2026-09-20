@@ -70,7 +70,7 @@ export const OpenRouterAutoModelId = 'openrouter/auto' as const
 export const OpenRouterFreeModelId = 'openrouter/free' as const
 
 /** Velar Cloud 的自动路由模型 id。 */
-export const VelarAutoModelId = 'velar/auto' as const
+export const VelarAutoModelId = 'velaros/auto' as const
 
 /** 走 OpenRouter 路由语义的 provider；注入 reasoning 与 auto-router 插件时按它判。 */
 export const OpenRouterCompatibleProviderIds = Object.freeze(['openrouter'] as const)
@@ -92,7 +92,7 @@ export const DirectOpenAICompatibleProviderIds = Object.freeze([
 
 /** 允许用户直接输入模型名的 provider：它们的目录只是建议，不是白名单。 */
 export const CustomModelProviderIds = Object.freeze([
-  'velar',
+  'velaros',
   'velar-dev',
   'openrouter',
   'openai',
@@ -104,12 +104,12 @@ export const CustomModelProviderIds = Object.freeze([
 ] as const)
 
 /** 由 VelarOS Cloud 托管的 provider：凭据在宿主的登录态里，本包只拿绑定。 */
-export const VelarCloudManagedProviderIds = Object.freeze(['velar', 'velar-dev'] as const)
+export const VelarCloudManagedProviderIds = Object.freeze(['velaros', 'velar-dev'] as const)
 
 /** 内置 provider 的运营清单：产品设置页、连通性校验与适配器装配都按它走。 */
 export const ModelProviderOperationalManifests = Object.freeze([
   {
-    id: 'velar',
+    id: 'velaros',
     label: 'VelarOS',
     defaultBaseURL: '',
     description: '由 VelarOS Cloud 提供 OpenRouter 精选模型与费用目录，无需配置密钥。',
@@ -319,7 +319,7 @@ export const DefaultProviderModels = Object.freeze({
   lmstudio: 'openai/gpt-oss-20b',
   'openai-compatible-gateway': '',
   custom: '',
-  velar: VelarAutoModelId,
+  velaros: VelarAutoModelId,
   'velar-dev': '',
 })
 

@@ -110,7 +110,7 @@ export class ContextGovernanceSessionRegistry implements ContextGovernanceSessio
     return toNullable(this.sessions.get(key))
   }
 
-  /** fault 记账入口：`context:recall` 每次取回后调用；未命中账本返回 false。 */
+  /** fault 记账入口：`历史检索服务` 每次取回后调用；未命中账本返回 false。 */
   public recordFault(sessionId: LooseOptional<string>, ref: string, at: number = Date.now()): boolean {
     return !!this.peek(sessionId)?.recordFault(ref, at)
   }

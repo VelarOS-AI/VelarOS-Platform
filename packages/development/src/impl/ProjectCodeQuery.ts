@@ -1,6 +1,6 @@
 import { AppError } from '@velaros-ai/core'
-import type { ProjectOperationContext } from '@velaros-ai/velar/project'
-import type { ProjectCodeQuery as ProjectCodeQueryInput } from '@velaros-ai/velar/project/contracts'
+import type { ProjectOperationContext } from '@velaros-ai/velaros/project'
+import type { ProjectCodeQuery as ProjectCodeQueryInput } from '@velaros-ai/velaros/project/contracts'
 
 import { CodeQuerySources } from '../contract/constants.js'
 import type { ProjectCodeIndexApi } from '../contract/requires.js'

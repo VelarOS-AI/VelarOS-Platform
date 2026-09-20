@@ -1,5 +1,5 @@
 import { isEmpty, isFunction, isTrue, optionalWhen } from '@velaros-ai/core'
-import type { ProjectCodeLanguageQuery } from '@velaros-ai/velar/project/contracts'
+import type { ProjectCodeLanguageQuery } from '@velaros-ai/velaros/project/contracts'
 
 import { CodeQuerySources } from '../contract/constants.js'
 import type { LanguageToolContext } from '../contract/requires.js'

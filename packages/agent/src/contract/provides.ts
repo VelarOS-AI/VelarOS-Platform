@@ -167,3 +167,5 @@ export type { ChatMessagesApi } from '../impl/chat/ChatMessages.js'
 export type { ChatStreamConsumerApi } from '../impl/chat/ChatStreamConsumer.js'
 export type { ChatStreamProtocolApi } from '../impl/chat/ChatStreamProtocol.js'
 export type { ChatStreamSessionLogApi } from '../impl/chat/ChatStreamSessionLog.js'
+
+export type { FoundationAgentApi } from '../impl/loop/FoundationAgent.js'

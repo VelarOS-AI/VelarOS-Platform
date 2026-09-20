@@ -9,7 +9,7 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 | Kernel | `packages/kernel` |
 | Agent | `packages/agent` (the tool contract is its `./tool-contract` entry) |
 | Core | `packages/core` (base primitives in `src/`, plus the `platform`, `text-files` and `path-rules` units) |
-| Foundations | `packages/code-surface`, `packages/velar` |
+| Foundations | `packages/script`, `packages/context`, `packages/velaros` |
 | Model | `packages/model` |
 | Capabilities | `packages/cli`, `packages/development` |
 | UI | `packages/ui` (components in `src/`, plus the `html-artifacts` unit) |
@@ -19,37 +19,41 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 
 The repository is converging on three rules; packages move one at a time, each move keeping every gate green.
 
-1. **Tool packages move into `@velaros-ai/velar` whole.** Every capability the model imports is a unit there (`packages/velar/<unit>`,
-   imported as `velar:<unit>`), and the package that carried it moves in with its implementation, not as a projection over a package
-   left outside: the project kernel behind `velar:project` and `velar:code`, the helper sidecar behind `velar:computer`, the memory
-   store behind `velar:memory`, the document engines behind `velar:office`, and the CDP drivers, page engines and Electron session
-   runtime behind `velar:browser` and `velar:devtools`, and the local machine host behind `velar:shell` and `velar:sandbox`. The old
-   package is then deleted — there is never a second copy. A package with no model face is not a tool and stays outside `velar`,
-   grouped by responsibility: `development`, the language services a host plugs into `velar:code`, is one.
-2. **Core execution stays outside `velar`**: `kernel`, `agent` (which also carries the tool contract), `model`, `code-surface` (the program gate),
+1. **Tool packages move into `@velaros-ai/velaros` whole.** Every capability the model imports is a unit there (`packages/velaros/<unit>`,
+   imported as `velaros:<unit>`), and the package that carried it moves in with its implementation, not as a projection over a package
+   left outside: the project kernel behind `velaros:project` and `velaros:code`, the helper sidecar behind `velaros:computer`, the memory
+   store behind `velaros:memory`, the document engines behind `velaros:office`, and the CDP drivers, page engines and Electron session
+   runtime behind `velaros:browser` and `velaros:devtools`, and the local machine host behind `velaros:shell` and `velaros:sandbox`. The old
+   package is then deleted — there is never a second copy. A package with no model face is not a tool and stays outside `velaros`,
+   grouped by responsibility: `development`, the language services a host plugs into `velaros:code`, is one.
+2. **Core execution stays outside `velaros`**: `kernel`, `agent` (which also carries the tool contract), `model`, `script` (the program gate),
    and the cross-domain foundation `core`. Low-level libraries with no domain runtime are units of `core`, below the kernel so the
    kernel can use them too; packages nobody in the repository uses are deleted, not moved ([ADR 0014](../decisions/0014-packages-by-responsibility.md)).
 3. **Product assembly is not in this repository.** A space (which capabilities are mounted, with which ports and policies)
    is assembled by each product (Desktop, Workbench, Termel). The implementations those products share are the capabilities'
    own and live with them: each unit's Node-only `./local` entry gives its port on this machine (the local shell host, the rehearsal
-   sandbox, machine files, machine images), and `velar/project` gives the ports the project hands to the shared capabilities
+   sandbox, machine files, machine images), and `velaros/project` gives the ports the project hands to the shared capabilities
    ([ADR 0013](../decisions/0013-spaces-leave-platform.md)). `tests/support/spaces.ts` shows how a product assembles the two spaces.
 
 | Package | Destination | Status |
 | --- | --- | --- |
-| `development` | stays `packages/development`: language services a host plugs into `velar:code`, not a tool | done |
-| `system` | space assembly → products; the local machine host → `velar/shell/local` (commands, background tasks, consoles, shell selection, process confinement, the Windows process host, plus the processes, ports, metrics and environment report a host UI shows) and `velar/sandbox/local` (the rehearsal sandbox); the machine file and image ports → `velar/files/local`, `velar/images/local`, the global search a host UI shows → `velar/files/local` (ADR 0013); `packages/system` deleted | done |
-| `project` | space assembly → products; the ports the project hands to shell, sandbox and images, and the verification policy → `velar/project` (ADR 0013); `packages/project` deleted | done |
+| `development` | stays `packages/development`: language services a host plugs into `velaros:code`, not a tool | done |
+| `system` | space assembly → products; the local machine host → `velaros/shell/local` (commands, background tasks, consoles, shell selection, process confinement, the Windows process host, plus the processes, ports, metrics and environment report a host UI shows) and `velaros/sandbox/local` (the rehearsal sandbox); the machine file and image ports → `velaros/files/local`, `velaros/images/local`, the global search a host UI shows → `velaros/files/local` (ADR 0013); `packages/system` deleted | done |
+| `project` | space assembly → products; the ports the project hands to shell, sandbox and images, and the verification policy → `velaros/project` (ADR 0013); `packages/project` deleted | done |
 | `platform`, `text-files`, `path-rules` | units of `core` (`@velaros-ai/core/platform`, `/text-files`, `/path-rules`): domain-free libraries below the kernel, not tools ([ADR 0014](../decisions/0014-packages-by-responsibility.md)); the three packages deleted | done |
 | `surface-protocol` | deleted: no package in the repository used it, and the external-agent wire format gets rewritten on the code surface (ADR 0014); products keep the published version until then | done |
 | `tool-contract` | into `agent`'s existing `./tool-contract` entry (ADR 0014): defining a tool, the description gates, mounting a tool set onto the kernel and the schema bundle move in with their implementation, the forwarding shims and the mirrored protocol types are gone, and what nobody used (the failure envelope, the example registry, the forgiving helpers and description concepts nobody called) is deleted; `packages/tool-contract` deleted | done |
-| `computer` | `velar/computer` (`velar:computer`, with the helper sidecar runtime and its bundled Python helpers) | done |
+| `computer` | `velaros/computer` (`velaros:computer`, with the helper sidecar runtime and its bundled Python helpers) | done |
 | `knowledge` | deleted with its vector and full-text indexes ([ADR 0010](../decisions/0010-memory-slimming.md)): each space searches and reads its own files | done |
-| `memory` | `velar/memory` (`velar:memory`: one directory of Markdown per host-given scope, [ADR 0010](../decisions/0010-memory-slimming.md)); `packages/memory` deleted | done |
-| `office` | whole → `velar/office` (`velar:office`, with the document engines, converters and the renderer primitives underneath); `packages/office` deleted; `document-renderer` now builds on `@velaros-ai/velar/office/renderer` | done |
-| `browser` | whole → `velar/browser` (`velar:browser` to drive and read pages, `velar:devtools` for console, network, storage, performance, recording, emulation and user scripts; with the CDP drivers, page engines, Electron session runtime and site workspace underneath); recipes, the site artifact manager and the tool-era mod manifest dropped (ADR 0011); `packages/browser` deleted | done |
+| `memory` | `velaros/memory` (`velaros:memory`: one directory of Markdown per host-given scope, [ADR 0010](../decisions/0010-memory-slimming.md)); `packages/memory` deleted | done |
+| `office` | whole → `velaros/office` (`velaros:office`, with the document engines, converters and the renderer primitives underneath); `packages/office` deleted; `document-renderer` now builds on `@velaros-ai/velaros/office/renderer` | done |
+| `browser` | whole → `velaros/browser` (`velaros:browser` to drive and read pages, `velaros:devtools` for console, network, storage, performance, recording, emulation and user scripts; with the CDP drivers, page engines, Electron session runtime and site workspace underneath); recipes, the site artifact manager and the tool-era mod manifest dropped (ADR 0011); `packages/browser` deleted | done |
 | `html-artifacts` | unit of `ui` (`@velaros-ai/ui/html-artifacts`, ADR 0014); its demo page and standalone package contract check dropped, the ui package contract covers its entries; `packages/html-artifacts` deleted | done |
 | `cli`, `agent-lab`, `document-renderer` | stay: distribution, evaluation and a product package | done |
+
+## Unified execution
+
+The formal runtime is documented in [Platform runtime architecture](platform-runtime.md) and [ADR 0015](../decisions/0015-scriptact-shared-task-runtime.md). It uses one task authority, generated capability contracts and the ScriptAct → evidence view → compiled model request loop.
 
 ## Shared infrastructure
 

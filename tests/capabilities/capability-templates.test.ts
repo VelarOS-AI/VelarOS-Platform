@@ -17,14 +17,14 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 
 import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 
-import type { CodeCapabilityPort, CodeGateReply, CodeSurfaceTimelinePort, MountedCapabilityModule } from '../../packages/code-surface/src/index'
-import { codeProgramChecker, CodeSurfaceErrorCodes, createCapabilityPort, createCodeProgramGate, nodeSubprocessCodeRunner } from '../../packages/code-surface/src/index'
+import type { CodeCapabilityPort, CodeGateReply, CodeSurfaceTimelinePort, MountedCapabilityModule } from '../../packages/script/src/index'
+import { codeProgramChecker, CodeSurfaceErrorCodes, createCapabilityPort, createCodeProgramGate, nodeSubprocessCodeRunner } from '../../packages/script/src/index'
 import { createProjectCodeQuery } from '../../packages/development/src/index'
-import { solidPng } from '../../packages/velar/images/spec/support'
-import type { ProjectHostPort } from '../../packages/velar/project/index'
-import { createProjectKernel, typescriptPlugin } from '../../packages/velar/project/index'
-import { createLocalSandboxHost } from '../../packages/velar/sandbox/local'
-import { createLocalShellHost } from '../../packages/velar/shell/local'
+import { solidPng } from '../../packages/velaros/images/spec/support'
+import type { ProjectHostPort } from '../../packages/velaros/project/index'
+import { createProjectKernel, typescriptPlugin } from '../../packages/velaros/project/index'
+import { createLocalSandboxHost } from '../../packages/velaros/sandbox/local'
+import { createLocalShellHost } from '../../packages/velaros/shell/local'
 import { projectSpace, systemSpace } from '../support/spaces'
 
 const RepoRoot = resolve(import.meta.dir, '../..')
@@ -33,7 +33,7 @@ const canConfine = (process.platform === 'darwin' && existsSync('/usr/bin/sandbo
 
 /** 一份模版的原文：程序就是它，后面接上这次要调的那几个函数。 */
 function template(file: string): string {
-  return readFileSync(resolve(RepoRoot, 'packages/velar', file), 'utf8')
+  return readFileSync(resolve(RepoRoot, 'packages/velaros', file), 'utf8')
 }
 
 /** 用户一律点头：这里验的是模版的写法，不是审批。 */
@@ -176,7 +176,7 @@ describe('系统空间里的模版', () => {
     if (root) await removeTemporary(root)
   })
 
-  test('velar:files：看、找、批量读、改一行、删几行、改 JSON、新建、几个文件一起改、撤回', async () => {
+  test('velaros:files：看、找、批量读、改一行、删几行、改 JSON、新建、几个文件一起改、撤回', async () => {
     const { values } = await runProgram(space, 'files', `${template('files/template.js')}
 export const shown = await showFile('.zshrc')
 export const grep = await grepFile('logs/app.log', /error/i, 2)
@@ -209,12 +209,12 @@ export const reverted = typeof replaced === 'string' ? replaced : await revert(r
     expect(await readFile(join(root, 'notes/b.md'), 'utf8')).toBe('nothing\noldName again, oldName\n')
   }, 180_000)
 
-  test('velar:shell：跑测试、筛错误、看 git、rg 找东西、起后台服务再停掉、刷新环境', async () => {
+  test('velaros:shell：跑测试、筛错误、看 git、rg 找东西、起后台服务再停掉、刷新环境', async () => {
     const { values } = await runProgram(space, 'shell', `${template('shell/template.js')}${shellCalls('repo')}`)
     expectShellResults(values)
   }, 180_000)
 
-  test.skipIf(!canConfine)('velar:sandbox：镜像里试命令、失败就丢、看差量、只落回一部分、镜像里重新构建、丢掉', async () => {
+  test.skipIf(!canConfine)('velaros:sandbox：镜像里试命令、失败就丢、看差量、只落回一部分、镜像里重新构建、丢掉', async () => {
     const { values } = await runProgram(space, 'sandbox', `${template('sandbox/template.js')}
 export const failedRun = await rehearse('node scripts/fail.js', 'site')
 export const tried = await rehearse('node scripts/fix.js', 'site')
@@ -237,7 +237,7 @@ export const thrown = 'id' in again ? await throwAway(again.id) : again
     expect(values.thrown).toMatchObject({ removed: true })
   }, 180_000)
 
-  test.skipIf(process.platform !== 'darwin')('velar:images：看一张、几张一起看（看不了的单独失败）、放大一块', async () => {
+  test.skipIf(process.platform !== 'darwin')('velaros:images：看一张、几张一起看（看不了的单独失败）、放大一块', async () => {
     const { values, reply } = await runProgram(space, 'images', `${template('images/template.js')}
 export const one = await look('small.png')
 export const both = await compare(['small.png', 'missing.png'])
@@ -308,7 +308,7 @@ describe('项目空间里的模版', () => {
     if (root) await removeTemporary(root)
   })
 
-  test('velar:code：大纲、定义与引用、按文件数引用、改之前的波及面、改完的报错、要图后端的分析', async () => {
+  test('velaros:code：大纲、定义与引用、按文件数引用、改之前的波及面、改完的报错、要图后端的分析', async () => {
     const { values } = await runProgram(space, 'code', `${template('project/code-template.js')}
 export const shape = await outline('src/user.ts')
 export const users = await whoUses('UserService')
@@ -329,7 +329,7 @@ export const cycles = await dependencyCycles()
     expect(values.cycles).toBe('没有代码图谱后端')
   }, 180_000)
 
-  test('velar:project：看文件与函数、批量读、目录与找文件、汇总用处、改几处、失败看原因、新建并引用、改名、全项目改名、看差量与撤销', async () => {
+  test('velaros:project：看文件与函数、批量读、目录与找文件、汇总用处、改几处、失败看原因、新建并引用、改名、全项目改名、看差量与撤销', async () => {
     const { values } = await runProgram(space, 'project', `${template('project/template.js')}
 export const file = await showFile('src/user.ts')
 export const fn = await showFunction('loadSettings', 'src')
@@ -376,7 +376,7 @@ export const reverted = typeof renamed === 'string' ? renamed : await revert(ren
     expect(await readFile(join(root, 'src/app.ts'), 'utf8')).toContain('return loadSettings()')
   }, 180_000)
 
-  test('velar:shell：同一份模版在项目里照样跑得通', async () => {
+  test('velaros:shell：同一份模版在项目里照样跑得通', async () => {
     const { values } = await runProgram(space, 'shell', `${template('shell/template.js')}${shellCalls('.')}`)
     expectShellResults(values)
   }, 180_000)

@@ -19,19 +19,23 @@ import type { ModelMessage } from 'ai'
 import { isEmpty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
+import { type ModelDriver, modelRequestEncoder, type ModelTurnRequest } from '@velaros-ai/kernel'
 
 import type { ContextUsageEstimate } from '../../types/agent.js'
 import type { CompiledProviderRequest, CompiledProviderSendRequest, CompileProviderRequestInput, CompileProviderSendRequestInput, ContextGovernanceRuler } from '../../types/context.js'
+import type { CompiledFoundationRequest } from '../../types/foundation.js'
 import type { SanitizeModelHistoryOptions, UserTextPayloadReference } from '../../types/history.js'
 import type { ContextGovernanceSessionApi, ContextGovernanceSessionRegistryContract, GovernanceEpochReport, GovernanceWindowDerivation } from '../../types/residency.js'
 import { estimateProviderRequestUsage, runBudgetStage } from '../../utils/context/budget-stage'
+import { shortHash } from '../../utils/context/content-hash.js'
 import { projectFileContext } from '../../utils/context/file-context-projection'
 import { assertProviderRequestInvariants, buildProviderRequestFingerprint } from '../../utils/context/floor'
 import { applyHistoryStructureRepair } from '../../utils/context/history-sanitize-stage'
 import { buildProviderHistoryRewriteFingerprint, createProviderRequestScratch, resolveSharedToolReferenceScan } from '../../utils/context/pipeline'
 import { applySendTransportDecorations, buildGovernanceRewriteSignals, buildProviderRequestTailBlocks, measureGovernanceRuler, partitionStablePrefix, rewriteProviderToolNames } from '../../utils/context/provider-request-compile'
-import { buildProviderRequestSnapshot } from '../../utils/context/provider-request-snapshot'
+import { assertProviderRequestSnapshotReconstructable, buildProviderRequestSnapshot } from '../../utils/context/provider-request-snapshot'
 import { buildRetainedContextRewriteSignals, withProviderVisibleRetainedContext } from '../../utils/context/retained-context-stage'
+import { encodeProviderRequestAuditValue } from '../../utils/context/serialization'
 import { sanitizeHistoryForProvider } from '../../utils/history/request'
 import { assertValidModelHistory } from '../../utils/history/validate'
 import { resolveProjectionBudget } from '../../utils/residency/governance-epoch'
@@ -70,6 +74,8 @@ interface ProviderMessageProjection {
  * 历史结构修不好（孤儿 tool-result 之类）会抛错终止本轮，绝不把半截历史发出去。
  */
 export interface ProviderRequestCompilerApi {
+  /** 物化视图直接进入最终发送门，复用结构校验与请求指纹，禁止二次选材。 */
+  compileModelTurn(request: ModelTurnRequest, driver: ModelDriver, reserveTokens: number): Promise<CompiledFoundationRequest>
   /** 编译一次供应商请求：吃会话历史与本轮入参，出可直接发送的 system / messages / 工具与预算快照。 */
   compile(input: CompileProviderRequestInput): CompiledProviderRequest
   /**
@@ -113,6 +119,30 @@ export class ProviderRequestCompiler implements ProviderRequestCompilerApi {
      */
     private readonly governanceSessions: ContextGovernanceSessionRegistryContract = new ContextGovernanceSessionRegistry()
   ) {}
+
+  public async compileModelTurn(input: ModelTurnRequest, driver: ModelDriver, reserveTokens: number): Promise<CompiledFoundationRequest> {
+    if (!Number.isSafeInteger(reserveTokens) || reserveTokens < 0) throw new Error('无效模型预留预算')
+    const request = structuredClone({ ...input, compiledPrompt: modelRequestEncoder.encode({ ...input, compiledPrompt: undefined }) })
+    const messages: ModelMessage[] = modelRequestEncoder.messages(request)
+    assertValidModelHistory(messages, { phase: 'compile', turn: null })
+    const responseFormat = modelRequestEncoder.response(request)
+    request.response = responseFormat
+    const compileInput: CompileProviderRequestInput = {
+      model: driver.id, systemPrompt: request.instructions, messages, availableToolNames: [],
+    }
+    const baseFingerprint = buildProviderRequestFingerprint(compileInput, messages, resolveSharedToolReferenceScan(createProviderRequestScratch(), messages))
+    const responseFormatHash = shortHash(JSON.stringify(encodeProviderRequestAuditValue(responseFormat)))
+    const fingerprint = {...baseFingerprint, responseFormatHash,
+      prefixHash: shortHash(JSON.stringify({prefix:baseFingerprint.prefixHash,responseFormatHash})),
+      id: shortHash(JSON.stringify({request:baseFingerprint.id,responseFormatHash}))}
+    assertProviderRequestInvariants(compileInput, fingerprint, 'compile')
+    const providerRequest = buildProviderRequestSnapshot({ model: driver.id, system: request.instructions, messages, responseFormat, requestFingerprint: fingerprint })
+    assertProviderRequestSnapshotReconstructable(providerRequest)
+    const estimate = await driver.estimate(request)
+    if (!Number.isSafeInteger(estimate.tokens) || estimate.tokens < 0) throw new Error('模型驱动返回了无效预算')
+    const okToSend = estimate.tokens <= driver.limits.inputTokens && estimate.tokens + request.outputTokens + reserveTokens <= driver.limits.contextTokens
+    return { request, estimate, okToSend, providerRequest }
+  }
 
   public compile(input: CompileProviderRequestInput): CompiledProviderRequest {
     return this.compileInternal(input)

@@ -4,7 +4,7 @@
  * 新记录进账本的一瞬间定初始驻留，之后轮与轮之间投影严格只追加 —— 这是 P1/P4 的地基：
  * 准入不改写任何既有记录，所以准入永远不会毁缓存。三条规则：
  *  ① 工具结果超 `admission.inlineMaxChars` → 直接 EXCERPT（头尾摘录 + 召回句柄，语义与今天的
- *     `tool-output-store` 句柄化逐字一致，`context:recall` 继续认）；
+ *     `tool-output-store` 句柄化逐字一致，`历史检索服务` 继续认）；
  *  ② 同工具同目标的旧快照类记录 → 标 **pending-EVICT**（只标记，真正逐出归 B1 的 epoch。
  *     依据：相似而过时的内容比无关内容更毒）；
  *  ③ 锚点规则抽取立刻做，落记录元数据（后续骨架与锚点验证共用同一份）。
@@ -194,7 +194,7 @@ export function buildToolPartExcerptEnvelope(
     originalLength: part.chars,
     reason: excerpt.reason,
     retrieval: {
-      tool: 'context:recall',
+      service: 'context-retrieval',
       args: { ref: excerpt.ref, refKind: excerpt.refKind, reason: excerpt.reason },
     },
     meta: { recordId: record.id },
@@ -258,7 +258,7 @@ export function buildExcerptEnvelope(record: ContextRecord): Nullable<ContextRef
     originalLength: record.bytes.full,
     reason: excerpt.reason,
     retrieval: {
-      tool: 'context:recall',
+      service: 'context-retrieval',
       args: { ref: excerpt.ref, refKind: excerpt.refKind, reason: excerpt.reason },
     },
     meta: { recordId: record.id },
@@ -294,7 +294,7 @@ function resolveOversizeKind(
  * 对应 `'payload-ref' / 'tool-payload' / 'context-handle'`），再按记录类型切正文。
  * user 记录切完还要拼一段"怎么取回全文"的提示（见 {@link buildUserTextSafetyValveText}），存的就是最终要贴进消息的文本；
  * 其余记录按 `maxChars` 做头尾对半切。`truncated` 只有真的短了才为 true。
- * 裁掉的部分一律能用 `context:recall(ref, refKind)` 原样取回——这里裁的是 prompt 占用，不是信息。
+ * 裁掉的部分一律能用 `历史检索服务(ref, refKind)` 原样取回——这里裁的是 prompt 占用，不是信息。
  */
 function buildRecordExcerpt(input: {
   id: string
@@ -348,7 +348,7 @@ function buildUserTextSafetyValveText(
   ref: string,
   refKind: ContextRecordExcerpt['refKind']
 ): string {
-  const guidance = `[用户正文只保留了一部分；原文长度 ${original.length}；这里可见的是开头加结尾；要精确的完整正文请用 context:recall(ref:"${ref}", refKind:"${refKind}", offset:0)。]`
+  const guidance = `[用户正文只保留了一部分；原文长度 ${original.length}；这里可见的是开头加结尾；宿主原文引用为 ${ref}，类型 ${refKind}；需要完整正文时报告材料缺口。]`
   const excerptBudget = Math.max(1, maxChars - guidance.length - 2)
   const excerpt = sliceHeadTailExcerpt(original, excerptBudget).trim()
   return [excerpt, '', guidance].join('\n')

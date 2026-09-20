@@ -72,7 +72,7 @@ export class ContextPayloadKernelToolOutputStore implements ContextPayloadKernel
       excerptTruncated: stored.chars > preview.length,
       originalLength: stored.chars,
       retrieval: {
-        tool: 'context:recall',
+        service: 'context-retrieval',
         args: {
           ref: payloadRef,
           refKind: 'payload-ref',

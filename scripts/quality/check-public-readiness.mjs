@@ -140,7 +140,7 @@ function checkRootFiles() {
   }
 
   const pptxPatchRecord = readFileSync(
-    join(repositoryRoot, 'packages/velar/office/vendor/pptxgenjs/README.md'),
+    join(repositoryRoot, 'packages/velaros/office/vendor/pptxgenjs/README.md'),
     'utf8',
   )
   for (const marker of ['reviewed local security patches', "UUID helper's", 'relationship paths']) {
@@ -249,7 +249,7 @@ function checkRuntimeDependencyOwnership() {
     for (const section of [...runtimeSections, 'peerDependencies']) {
       if (rendererManifest[section]?.[dependency]) {
         fail(
-          `@velaros-ai/document-renderer: ${dependency} belongs to @velaros-ai/velar (its office unit) and must not be duplicated in ${section}`,
+          `@velaros-ai/document-renderer: ${dependency} belongs to @velaros-ai/velaros (its office unit) and must not be duplicated in ${section}`,
         )
       }
     }

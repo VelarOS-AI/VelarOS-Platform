@@ -53,8 +53,9 @@
     "generate:schema-snapshot": "bun scripts/generate-schema-snapshot.mjs"
   },
   "dependencies": {
-    "@velaros-ai/core": "workspace:*",
     "@types/ws": "^8.18.1",
+    "@velaros-ai/core": "workspace:*",
+    "ajv": "8.20.0",
     "ws": "^8.18.3",
     "zod": "^4.3.6"
   },

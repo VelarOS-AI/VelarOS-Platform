@@ -117,6 +117,15 @@ export type {
 export type { VelarosModCapabilityRequirement, VelarosModCapabilityToken } from './types/wire'
 // wire 数据：与 `types/kernel.ts` 里同名的四个（ScopeRef、CapabilityToken、CapabilityRequirement、
 // ResourceRef）是 wire 坐标下的另一套形状，出包时一律带 `KernelWire` 前缀，两套坐标不混用。
+export type { OperationRuntimeApi } from './contract/provides.js'
+export type { ModelRequestEncoderApi } from './contract/provides.js'
+export type { InvocationJournal, OperationContext, OperationDefinition, OperationModuleDefinition, OperationRuntimeOptions } from './contract/requires.js'
+export type { ModelDriver } from './contract/requires.js'
+export { modelRequestEncoder } from './impl/runtime/ModelRequestEncoder.js'
+export { createOperationRuntime } from './impl/runtime/OperationRuntime.js'
+export type { ModelDriverLimits, ModelImage, ModelInputEstimate, ModelMaterial, ModelResponseFormat, ModelTurnDelta,ModelTurnRequest, ModelUserMessage } from './types/model.js'
+export type { InvocationReceipt, InvocationRecord, ModuleBinding, ModuleCard, ModuleDescription, ModulePage, ModuleQuery, OperationCall,OperationDescriptor, OperationSchema, OperationSurface, PreparedInvocation } from './types/operations.js'
+export type { InvocationReconciliation } from './types/operations.js'
 export type {
   CapabilityCallError,
   CapabilityCallFailure,

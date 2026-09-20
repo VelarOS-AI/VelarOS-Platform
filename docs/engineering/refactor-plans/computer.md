@@ -47,7 +47,7 @@
 | `tools/Context.ts:43-59` | 模型看得到的门禁文案写死了 Desktop 界面：「系统设置 → 隐私与安全性」「设置 → 插件市场」「以 blocking 的用户动作卡呈现该阻塞」、插件名 Computer Use |
 | `tools/Context.ts:19-21`、`ComputerHelperResolver.ts:13-19,77-86` | Desktop 构建脚本 `scripts/build/packageComputerUseResources.mjs`、Desktop 插件 id `computeruse`、目录 `computer-use`、Electron `process.resourcesPath` 与 `app.asar.unpacked`、`out/resources` |
 | `tools/Screen.tool.ts:13`、`tools/Input.tool.ts:167` | 「网页内容用 browser 工具」「网页内点击用 browser 工具」——工具说明提到别的空间（ADR 0004 定的是「工具描述里不提别的空间」，空间选择是宿主与提示词的事） |
-| `README.md` | 「每次实际操作都要过宿主确认流程……确认端口缺席时不得默认放行」，Termel 的 `velar computer install` |
+| `README.md` | 「每次实际操作都要过宿主确认流程……确认端口缺席时不得默认放行」，Termel 的 `velaros computer install` |
 
 ### 1.5 模块级可变状态
 

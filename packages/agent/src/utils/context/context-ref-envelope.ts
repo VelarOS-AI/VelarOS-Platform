@@ -102,7 +102,7 @@ export function normalizeLegacyFoldStub(value: unknown): Nullable<ContextRefEnve
       excerpt: readString('preview'),
       originalLength: isNumber(record.chars) ? (record.chars as number) : undefined,
       retrieval: {
-        tool: 'context:recall',
+        service: 'context-retrieval',
         args: { ref, refKind: payloadRef ? 'payload-ref' : 'tool-payload' },
       },
     })
@@ -119,7 +119,7 @@ export function normalizeLegacyFoldStub(value: unknown): Nullable<ContextRefEnve
       originalLength:
         isNumber(record.originalLength) ? (record.originalLength as number) : undefined,
       retrieval: {
-        tool: 'context:recall',
+        service: 'context-retrieval',
         args: { ref: toolCallId, refKind: 'tool-payload' },
       },
     })
@@ -134,7 +134,7 @@ export function normalizeLegacyFoldStub(value: unknown): Nullable<ContextRefEnve
       ref: blockId,
       excerpt: readString('summary'),
       retrieval: {
-        tool: 'context:recall',
+        service: 'context-retrieval',
         args: { ref: blockId, refKind: 'context-handle' },
       },
     })

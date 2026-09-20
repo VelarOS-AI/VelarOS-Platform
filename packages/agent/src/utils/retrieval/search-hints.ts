@@ -7,7 +7,7 @@ import { isEmpty } from '@velaros-ai/core'
  * 一条都没命中时，攒一组让模型换个搜法的提示；有命中（matchedCount > 0）时返回空数组。
  *
  * 三层：先申明「0 条不等于没发生」，再让它换更罕见的关键词；搜索空间本身为空时（totalCandidates <= 0）
- * 说清这个会话压根没有这类可搜内容；最后按 kind 提醒它这条搜索只覆盖哪一半，另一半该换哪个 `context:recall` 口径。
+ * 说清这个会话压根没有这类可搜内容；最后按 kind 提醒它这条搜索只覆盖哪一半，另一半该换哪个 `历史检索服务` 口径。
  */
 export function buildEmptySearchRetryHints(input: {
   kind: 'conversation-history' | 'terminal-output'
@@ -31,11 +31,11 @@ export function buildEmptySearchRetryHints(input: {
 
   if (input.kind === 'terminal-output') {
     hints.push(
-      'terminal 搜索只覆盖内部命令日志；如果要找对话结论、普通工具摘要或保存 payload，请用 context:recall kind=conversation/all 或按 ref 精确取回。',
+      'terminal 搜索只覆盖内部命令日志；如果要找对话结论、普通工具摘要或保存 payload，需要宿主在 conversation/all 范围搜索或按 ref 解析。',
     )
   } else {
     hints.push(
-      'conversation 搜索只覆盖已索引聊天记录；如果要找命令输出或测试日志，请用 context:recall kind=terminal/all。',
+      'conversation 搜索只覆盖已索引聊天记录；如果要找命令输出或测试日志，需要宿主在 terminal/all 范围搜索。',
     )
   }
 

@@ -12,7 +12,7 @@ import {
 } from '@velaros-ai/agent'
 import { AgentProtocolVersions, AgentToolNames } from '@velaros-ai/agent/contracts'
 import { logRuntime } from '@velaros-ai/core/logger'
-import { createMemoryStore, memoryOperations } from '@velaros-ai/velar/memory'
+import { createMemoryStore, memoryOperations } from '@velaros-ai/velaros/memory'
 
 const usage = {
   inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },

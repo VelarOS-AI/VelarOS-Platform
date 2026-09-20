@@ -2,11 +2,11 @@
 
 - Status: accepted
 - Date: 2026-09-18
-- Owners: `@velaros-ai/velar`（browser 单元）
+- Owners: `@velaros-ai/velaros`（browser 单元）
 
 ## Context
 
-ADR 0011 把 32 个工具换成了 `velar:browser`（48 个操作）与 `velar:devtools`（22 个），但操作的切法还是工具时代的：
+ADR 0011 把 32 个工具换成了 `velaros:browser`（48 个操作）与 `velaros:devtools`（22 个），但操作的切法还是工具时代的：
 一个意图一个操作，替模型把链路想好。用户的判断：「浏览器包里面定义的那一堆操作很多都可以干掉，只需要一个执行 js 的方法就能干掉一堆，
 和执行命令是一个道理，也更灵活」；随后又定下「必须给模型提供一些更加底层的能力」。
 
@@ -42,12 +42,12 @@ ADR 0011 否决过「再开裸 CDP」：模型绕过运行时改仿真会让坐�
 
 | 层 | 给模型什么 | 宿主只负责 |
 | --- | --- | --- |
-| 协议（新模块 `velar:cdp`） | `send` 任意 CDP 命令，`events` 读事件，`waitForEvent` 等事件，`reset` 撤掉自己做过的一切 | 开和收这条会话、缓存事件、兜住没人放行的拦截 |
-| 输入原子（`velar:browser`） | `mouseMove`、`mouseDown`、`mouseUp`、`wheel`、`keyDown`、`keyUp`、`insertText` | 键位表（key、code、keyCode、text）、按住的修饰键与鼠标键、虚拟指针；坐标和截图同一套视口 CSS 像素 |
-| 页面脚本（`velar:browser`） | `evaluate`（表达式或用 `args` 调的函数，整份 JSON 取回，出错就抛），`frames` 列出含跨源 iframe 的框架树 | 序列化、守内存的上限、在指定框架的主世界里跑（内嵌与外部浏览器同一口径） |
-| 常用组合（`velar:browser`、`velar:devtools`） | `open`、`inspect`、`screenshot`、`click`、`fill`、`press`、`drag`、`goto`、`waitFor…`、诊断、trace…… | 就是现在这些；下面三层随时能绕过去 |
+| 协议（新模块 `velaros:cdp`） | `send` 任意 CDP 命令，`events` 读事件，`waitForEvent` 等事件，`reset` 撤掉自己做过的一切 | 开和收这条会话、缓存事件、兜住没人放行的拦截 |
+| 输入原子（`velaros:browser`） | `mouseMove`、`mouseDown`、`mouseUp`、`wheel`、`keyDown`、`keyUp`、`insertText` | 键位表（key、code、keyCode、text）、按住的修饰键与鼠标键、虚拟指针；坐标和截图同一套视口 CSS 像素 |
+| 页面脚本（`velaros:browser`） | `evaluate`（表达式或用 `args` 调的函数，整份 JSON 取回，出错就抛），`frames` 列出含跨源 iframe 的框架树 | 序列化、守内存的上限、在指定框架的主世界里跑（内嵌与外部浏览器同一口径） |
+| 常用组合（`velaros:browser`、`velaros:devtools`） | `open`、`inspect`、`screenshot`、`click`、`fill`、`press`、`drag`、`goto`、`waitFor…`、诊断、trace…… | 就是现在这些；下面三层随时能绕过去 |
 
-### `velar:browser`：48 → 34
+### `velaros:browser`：48 → 34
 
 删掉 20 个：
 
@@ -79,14 +79,14 @@ ADR 0011 否决过「再开裸 CDP」：模型绕过运行时改仿真会让坐�
 新增：`frames`、`mouseDown`、`mouseUp`、`wheel`、`keyDown`、`keyUp`（`mouseMove` 留下，拖出任意路径靠它）。按住的修饰键与鼠标键记在会话上，
 带到之后的每个输入事件里：`keyDown Shift` 之后的 `click` 就是 Shift 点击，`mouseDown` 之后的 `mouseMove` 就是拖。
 
-### `velar:devtools`：22 → 18
+### `velaros:devtools`：22 → 18
 
 只转发一两条命令的删掉：`emulate`、`setViewport`（`Emulation.*` 一条命令）、`storage`（localStorage 与 sessionStorage 用 evaluate，
 cookie 含 HttpOnly 用 `Network.getCookies`）、`runUserScript`（「立刻跑一次」就是 evaluate）。留下的都是协议之外还要宿主干活的：
 诊断（程序开始之前就在录）、请求详情（宿主会话里的响应体）、`network` 规则（mock 要一个常驻的应答者）、`zoom`（Electron 的缩放不在 CDP 里）、
 trace 与 insight（DevTools 分析引擎）、堆快照、录屏（GIF 编码）、用户脚本（跨会话持久）。
 
-### `velar:cdp`：模型自己的一条 CDP 会话
+### `velaros:cdp`：模型自己的一条 CDP 会话
 
 - `send({ method, params?, session? })`：在模型的会话上发一条命令，交回结果；协议报错抛 `BROWSER_PROTOCOL_FAILED`，message 是协议的原话。
   跨源 iframe、worker 先发 `Target.setAutoAttach`（flatten），`Target.attachedToTarget` 给的 sessionId 填进 `session`；只认这条会话自己挂出来的子会话。
@@ -126,7 +126,7 @@ trace 与 insight（DevTools 分析引擎）、堆快照、录屏（GIF 编码�
 
 ## Compatibility and migration
 
-`velar:browser`、`velar:devtools` 的模型面按上表变；空间端口 `BrowserSpacePort` 删掉 `scrollPage`、`queryElements`、`waitForSelector`、`listMediaSources`、
+`velaros:browser`、`velaros:devtools` 的模型面按上表变；空间端口 `BrowserSpacePort` 删掉 `scrollPage`、`queryElements`、`waitForSelector`、`listMediaSources`、
 `readPageStorage`、`configureEmulation`、`setViewport`，改了 `evaluateScript` 的入参与回执，加了 `listFrames`、`keyDown`、`keyUp`、`mouseDown`、`mouseUp`、
 `mouseWheel` 与三个协议会话的方法；`moveMouse` 多了 `steps`，`performTargetAction` 的点击多了 `button`、`clickCount`。
 运行时 `ElectronBrowserRuntimeApi` 加上对应的方法，同时删掉只为被删操作存在的七个：`scrollPage`、`queryElements`、`readPageStorage`、
@@ -140,9 +140,9 @@ trace 与 insight（DevTools 分析引擎）、堆快照、录屏（GIF 编码�
 ## Validation
 
 - 单元验收：模型面、声明里的数字与常量表一致、没进站点不碰端口、入参先核对、evaluate 的整份取回与三种失败、fill 走真实输入、
-  等待跨跳转与超时抛错、state 带标签页与挂起事件、`velar:cdp` 的会话隔离与事件游标与拦截兜底。
+  等待跨跳转与超时抛错、state 带标签页与挂起事件、`velaros:cdp` 的会话隔离与事件游标与拦截兜底。
 - 三份代码模版照真实声明过类型检查，并经真的代码面会话逐个函数跑通。
-- 真机探针（`packages/velar/browser/test/probes/electron-low-level.probe.mjs`，不进 bun test）：用仓库里的 Electron 跑真的运行时，
+- 真机探针（`packages/velaros/browser/test/probes/electron-low-level.probe.mjs`，不进 bun test）：用仓库里的 Electron 跑真的运行时，
   内嵌页面与外部 Chrome（产品自带的启动器，临时配置目录、无头）各一轮、每轮 24 项：evaluate 取回上万项的数组、报错行列换算，
   三层框架（跨源 iframe、同源子框架、跨源里再套回主站的）都列得出、都在框架主世界里求值，模型经 CDP 子会话进跨源 iframe，
   fill 让 React 式受控输入认到改动、可编辑区替换、空值清空，Enter 提交表单、Shift 按住输入大写，鼠标原子拖出的是真事件、滚轮落在指针下、

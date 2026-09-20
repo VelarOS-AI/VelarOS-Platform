@@ -166,10 +166,9 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                   args.stableCutoff
                 )
                 const providerSystem = systemDelivery.system ?? ''
-                // 注意力路由内置常开，历史里随时可能出现 recall 句柄，context:recall 必须恒定可用。
                 const providerToolNamePlan = this.turnRequestHelper.resolveProviderToolNamePlan(
                   args.history,
-                  args.allowTools ? [...args.allowTools, 'context:recall'] : args.allowTools
+                  args.allowTools
                 )
                 const aiTools = toolRegistry.toAiTools(
                   args.toolContext,

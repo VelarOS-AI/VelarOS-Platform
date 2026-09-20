@@ -51,7 +51,7 @@ src/
 | 规则本身的数据：危险命令名单、敏感路径名单、搜索跳过的目录 | 跟着规则留在各自的 utils 文件里，改名单和改规则一起审 | 无 |
 | 算法与格式里的数字：哈希取几位、编码判定的比例、符号链接最多跳几次 | 就地写，旁边一句说明 | 无 |
 
-包内几处共用的值（列任务的缺省条数、判断二进制时看开头多少字节）只在可调参数表或合同表里写一次。跨包相同的逻辑与常量按下面「共用与重复怎么处理」抽成公共件（命令判定在 `@velaros-ai/velar/shell`，沙箱契约在 `@velaros-ai/velar/sandbox`），两边都引它；抽不出去的两边各持一份，由仓库层的一致性测试守着。
+包内几处共用的值（列任务的缺省条数、判断二进制时看开头多少字节）只在可调参数表或合同表里写一次。跨包相同的逻辑与常量按下面「共用与重复怎么处理」抽成公共件（命令判定在 `@velaros-ai/velaros/shell`，沙箱契约在 `@velaros-ai/velaros/sandbox`），两边都引它；抽不出去的两边各持一份，由仓库层的一致性测试守着。
 
 ## 对外入口由接口控制
 
@@ -98,11 +98,11 @@ utils 放用不着关心内部的纯工具函数，按类别分文件；文件�
 
 ## 能力单元：几件能力按目录放在一个包里
 
-模型在程序里 import 的小能力（`velar:files`、`velar:images`、`velar:shell`、`velar:sandbox`）各自不值得当一个发布单元：每个都背一份清单、许可、README，只是重复。
-它们放在同一个包 `@velaros-ai/velar` 里，一件能力一个目录，目录名就是模块名，每个目录是普通的文件目录、按同一套规范写：
+模型在程序里 import 的小能力（`velaros:files`、`velaros:images`、`velaros:shell`、`velaros:sandbox`）各自不值得当一个发布单元：每个都背一份清单、许可、README，只是重复。
+它们放在同一个包 `@velaros-ai/velaros` 里，一件能力一个目录，目录名就是模块名，每个目录是普通的文件目录、按同一套规范写：
 
 ```text
-packages/velar/
+packages/velaros/
   package.json  README.md                     整个包只有一份（包里不带许可证文件，仓根的 LICENSE 是唯一一份）
   <单元>/
     MODULE.md       模块卡片
@@ -114,8 +114,8 @@ packages/velar/
 ```
 
 - 单元目录就是源码根（没有 `src/`），编译到 `dist/<单元>/`；`package.json` 的 exports 每个单元两条：`./<单元>` 与 `./<单元>/contracts`。
-- 登记表一个单元一行：`directory: 'velar'`、`unit: '<单元>'`、名字写成 `@velaros-ai/velar/<单元>`，其余路径相对包根写（`files/contract`、`files/MODULE.md`）。门禁按单元逐个查，和普通模块同一套规矩。
-- 单元之间只经对方的入口引用（`@velaros-ai/velar/shell`），不伸进别的单元的目录。
+- 登记表一个单元一行：`directory: 'velaros'`、`unit: '<单元>'`、名字写成 `@velaros-ai/velaros/<单元>`，其余路径相对包根写（`files/contract`、`files/MODULE.md`）。门禁按单元逐个查，和普通模块同一套规矩。
+- 单元之间只经对方的入口引用（`@velaros-ai/velaros/shell`），不伸进别的单元的目录。
 - 空间（system、project）是装配表：挂哪几个单元、给每个单元装什么端口，由空间决定；单元自己不知道挂在哪个空间里。
 
 ## 可执行入口放包根 `bin/`

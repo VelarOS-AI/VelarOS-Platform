@@ -368,10 +368,10 @@ for (const expected of CapabilityPackages) {
     }
     if (
       expected.directory === "development" &&
-      importsRuntimeSpecifier(source, "@velaros-ai/velar/project")
+      importsRuntimeSpecifier(source, "@velaros-ai/velaros/project")
     ) {
       fail(
-        `${expected.name}: lightweight language reads must not load the project unit's root entry at runtime (types only; values from @velaros-ai/velar/project/contracts) in ${relative(packageRoot, path)}`,
+        `${expected.name}: lightweight language reads must not load the project unit's root entry at runtime (types only; values from @velaros-ai/velaros/project/contracts) in ${relative(packageRoot, path)}`,
       );
     }
     for (const match of source.matchAll(CoreTypesImport)) {
@@ -411,7 +411,7 @@ for (const expected of CapabilityPackages) {
   }
 }
 
-// 已经拆掉的包不许回来：工具并进了 velar 的能力单元，空间的装配归产品（ADR 0013），底层能力并进 core 做单元、没人用的协议删掉、
+// 已经拆掉的包不许回来：工具并进了 velaros 的能力单元，空间的装配归产品（ADR 0013），底层能力并进 core 做单元、没人用的协议删掉、
 // 工具契约并回 agent 的 `./tool-contract` 入口（ADR 0014）。
 for (const obsoleteDirectory of [
   "workspace",
@@ -432,9 +432,9 @@ for (const obsoleteDirectory of [
     );
 }
 
-// 浏览器整包并进了 velar 的 browser 单元（ADR 0011）：可移植数据仍要从根入口转发。
+// 浏览器整包并进了 velaros 的 browser 单元（ADR 0011）：可移植数据仍要从根入口转发。
 requirePublicTypeContracts(
-  "velar",
+  "velaros",
   "browser/index.ts",
   "browser/contracts.ts",
   "browser/types/browser.ts",
@@ -443,26 +443,26 @@ requirePublicTypeContracts(
 // 浏览器单元的宿主边界：Electron 只许在 impl/electron、utils/electron 与 types/electron.ts 里 import（值和类型都算），
 // 其余源码与宿主无关；不许引产品的宿主路径，也不许引 core 里按具体域命名的公共件。
 {
-  const unitRoot = resolve(PackagesRoot, "velar/browser");
+  const unitRoot = resolve(PackagesRoot, "velaros/browser");
   const electronAllowed = ["impl/electron", "utils/electron", "types/electron.ts"].map((slice) => resolve(unitRoot, slice));
   const skipped = ["spec", "test", "vendor"].map((slice) => resolve(unitRoot, slice));
   for (const path of walk(unitRoot)) {
     if (skipped.some((root) => path.startsWith(`${root}${sep}`))) continue;
     const source = readFileSync(path, "utf8");
     const shown = relative(PackagesRoot, path);
-    if (ForbiddenHostImport.test(source)) fail(`velar/browser: host import in ${shown}`);
-    if (ConcreteAgentRuntimeImport.test(source)) fail(`velar/browser: capability code must not import domain-named core helpers in ${shown}`);
+    if (ForbiddenHostImport.test(source)) fail(`velaros/browser: host import in ${shown}`);
+    if (ConcreteAgentRuntimeImport.test(source)) fail(`velaros/browser: capability code must not import domain-named core helpers in ${shown}`);
     for (const match of source.matchAll(CoreTypesImport)) {
-      if (ConcreteCoreTypeName.test(match[1])) fail(`velar/browser: concrete Core type import in ${shown}`);
+      if (ConcreteCoreTypeName.test(match[1])) fail(`velaros/browser: concrete Core type import in ${shown}`);
     }
     if (ElectronImport.test(source) && !electronAllowed.some((root) => path === root || path.startsWith(`${root}${sep}`))) {
-      fail(`velar/browser: only browser/impl/electron / browser/utils/electron / browser/types/electron.ts may import Electron (${shown})`);
+      fail(`velaros/browser: only browser/impl/electron / browser/utils/electron / browser/types/electron.ts may import Electron (${shown})`);
     }
   }
 }
-// 办公文档整包并进了 velar 的 office 单元：可移植数据仍要从根入口转发，也仍不许用 NodeJS 的环境类型。
+// 办公文档整包并进了 velaros 的 office 单元：可移植数据仍要从根入口转发，也仍不许用 NodeJS 的环境类型。
 requirePublicTypeContracts(
-  "velar",
+  "velaros",
   "office/index.ts",
   "office/contracts.ts",
   "office/types/office.ts",
@@ -470,12 +470,12 @@ requirePublicTypeContracts(
 );
 
 const officeContractsSource = readFileSync(
-  resolve(PackagesRoot, "velar/office/types/office.ts"),
+  resolve(PackagesRoot, "velaros/office/types/office.ts"),
   "utf8",
 );
 if (/\bNodeJS\./u.test(officeContractsSource)) {
   fail(
-    "velar/office: public office contracts must not depend on NodeJS ambient types",
+    "velaros/office: public office contracts must not depend on NodeJS ambient types",
   );
 }
 

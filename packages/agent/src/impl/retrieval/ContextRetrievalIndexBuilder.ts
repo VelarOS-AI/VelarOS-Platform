@@ -54,7 +54,7 @@ class ContextRetrievalIndexBuilder implements ContextRetrievalIndexBuilderApi {
    *
    * `evidence` 恒为空数组：喂它的那条 `sessionContextSnapshot.evidenceLedger` 端口已随
    * evidence 流协议链（2026-08-06）整体下线——从采集面到 renderer 账本全程零生产者，
-   * 索引里那份列表在实现史上从未非空过。快照字段本身保留（`context:recall`
+   * 索引里那份列表在实现史上从未非空过。快照字段本身保留（`历史检索服务`
    * `refKind: 'evidence'` 仍读它，行为与下线前逐字相同：恒 `found: false`），
    * 该 refKind 的去留是独立的模型面裁决，不由本次下线顺手决定。
    */

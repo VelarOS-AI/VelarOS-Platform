@@ -156,3 +156,20 @@ export interface CreateModelKernelModuleOptions {
   /** 产品持有的模型适配器注册表，通常取自 `createModelRuntimeComposition(...).modelAdapterRegistry`。 */
   registry: ModelAdapterRegistryApi
 }
+import type { ModelDriverLimits } from '../types/driver.js'
+import type { LanguageModel } from 'ai'
+
+/** 供应商模型实例与窗口参数；驱动复用同一编码、预算和流式转换。 */
+export interface AiSdkDriverOptions {
+  /** 已由宿主配置好凭据和连接的供应商模型。 */
+  readonly model: LanguageModel
+  /** 模型记录中的稳定身份。 */
+  readonly id: string
+  /** 来自模型配置的输入、输出与总窗口上限。 */
+  readonly limits: ModelDriverLimits
+}
+
+import type { ModelDriver as KernelModelDriver } from '@velaros-ai/kernel'
+
+/** Model 适配器实现 Kernel 的唯一模型协议。 */
+export interface ModelDriver extends KernelModelDriver {}

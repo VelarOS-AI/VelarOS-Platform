@@ -8,7 +8,7 @@
  */
 
 /**
- * 内置的二十个模型面工具的 canonical 名字，外加租约协议自恢复用的两个发现工具名。
+ * 内置模型面工具的 canonical 名字。
  *
  * 工具名是契约：宿主按它挂载、模型按它调用、账本按它归档，改名等于换一个工具。
  */
@@ -19,10 +19,6 @@ export const AgentToolNames = Object.freeze({
   toolingRead: 'tooling:read',
   /** 整体替换当前常驻的工具类别集合。 */
   toolingReplace: 'tooling:replace',
-  /** 按条件召回本会话已经产生过的上下文（工具结果、用户正文、终端输出）。 */
-  contextRecall: 'context:recall',
-  /** 把当前会话的上下文转交给一条新会话继续。 */
-  contextHandoff: 'context:handoff',
   /** 列出当前生效的长期指令。 */
   directiveList: 'directive:list',
   /** 新增或改写一条长期指令。 */
@@ -66,8 +62,6 @@ export const AgentToolCategoryByName = Object.freeze({
   [AgentToolNames.agentRunWorkflow]: 'agent-control',
   [AgentToolNames.jobReadOutput]: 'agent-control',
   [AgentToolNames.jobWait]: 'agent-control',
-  [AgentToolNames.contextRecall]: 'context',
-  [AgentToolNames.contextHandoff]: 'context',
   [AgentToolNames.directiveList]: 'context',
   [AgentToolNames.directiveUpsert]: 'context',
   [AgentToolNames.directiveArchive]: 'context',
@@ -381,18 +375,7 @@ export const AgentToolLimits = Object.freeze({
     /** 单个步骤目标说明的最大字符数。 */
     stepObjectiveChars: 300,
   }),
-  /** 上下文蒸馏与转交（`context:distill`、`context:handoff`）。 */
-  context: Object.freeze({
-    /** 单条蒸馏事实的最大字符数。 */
-    distilledFactChars: 240,
-    /** 一次蒸馏最多留多少条事实。 */
-    distilledFactCount: 20,
-    /** 蒸馏附言的最大字符数。 */
-    distillNoteChars: 300,
-    /** 转交理由的最大字符数。 */
-    handoffReasonChars: 400,
-  }),
-  /** 会话召回（`context:recall`）。 */
+  /** 会话历史检索。 */
   recall: Object.freeze({
     /** 没给 maxChars 时一次返回多少字符。 */
     defaultRetrieveChars: 8_000,

@@ -58,9 +58,13 @@ contracts -> runtime -> client or serve -> product adapter
 
 `client` does not import `runtime` or `serve`; `contracts` does not import implementation code; update and deployment code remains isolated from the in-process runtime.
 
+## Task and execution authority
+
+[The shared-task ScriptAct runtime](platform-runtime.md) owns the main execution path. Context owns task state and immutable evidence; Kernel owns operation contracts, invocation and receipts; Velaros owns capability implementations and assembly; Agent owns the loop and compiled request boundary. Model planning roles consume the same task frame and budget. Product hosts supply native resources and space policy.
+
 ## Memory
 
-Memory is one directory of Markdown files per scope under a root the host provides ([ADR 0010](../decisions/0010-memory-slimming.md)). The scope is an opaque string chosen by the product; the memory unit never interprets it, it only isolates by it. The product decides which scope a session uses and puts the session-start index into the system prompt; the entry format, the index, and the three model-facing operations belong to `packages/velar/memory`.
+Memory is one directory of Markdown files per scope under a root the host provides ([ADR 0010](../decisions/0010-memory-slimming.md)). The scope is an opaque string chosen by the product; the memory unit never interprets it, it only isolates by it. The product decides which scope a session uses and puts the session-start index into the system prompt; the entry format, the index, and the three model-facing operations belong to `packages/velaros/memory`.
 
 ## Mods and UI
 

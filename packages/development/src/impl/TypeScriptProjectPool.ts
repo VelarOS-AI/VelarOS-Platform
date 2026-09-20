@@ -64,7 +64,7 @@ export interface TypeScriptProjectPoolAccess {
 }
 
 /**
- * `velar:code` 内置基线背后的 `ts.LanguageService` 池。
+ * `velaros:code` 内置基线背后的 `ts.LanguageService` 池。
  *
  * ## 为什么要池化（而不是每次调用建一个 program）
  * `ts.createLanguageService` 本身很便宜，贵的是它第一次 `getSemanticDiagnostics` 时把整个程序

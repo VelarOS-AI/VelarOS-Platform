@@ -1,14 +1,14 @@
-# 0011: 浏览器整包并进 velar：32 个工具换成 velar:browser 与 velar:devtools
+# 0011: 浏览器整包并进 velaros：32 个工具换成 velaros:browser 与 velaros:devtools
 
 - Status: accepted
 - Date: 2026-09-18
-- Owners: `@velaros-ai/velar`（browser 单元）
+- Owners: `@velaros-ai/velaros`（browser 单元）
 
 ## Context
 
 `@velaros-ai/browser` 是最后一个带工具的包：32 个 `browser:*` 工具，背后是 CDP 驱动、交互 / 页面数据 / 截图 / 性能引擎、
-Electron 会话运行时、站点工作区、登录墙、用户脚本、recipe。按「有工具的包整包进 velar，原包删掉」的规则，它要并进
-`packages/velar/browser`，工具换成代码面的操作。
+Electron 会话运行时、站点工作区、登录墙、用户脚本、recipe。按「有工具的包整包进 velaros，原包删掉」的规则，它要并进
+`packages/velaros/browser`，工具换成代码面的操作。
 
 工具时代给它配了一整套装配机器，代码面之后都没有了用处：
 
@@ -26,18 +26,18 @@ Electron 会话运行时、站点工作区、登录墙、用户脚本、recipe�
 - **`read_page_data` 的预设**：`evaluate` 一行就能写出来；预设存在的理由是「不向模型开放 JavaScript」，ADR 0009 之后不成立。
 - **`list_page_resources`**：链接在 `inspect` 里，媒体有 `media`，iframe 一句 `evaluate`。
 - **`observe_actions`**：候选就是 `inspect` 结果里的 `actions` 与 `formFields` 过滤排序，程序自己筛。
-- **`browser:files` 与站点产物**（读写工作区文件、标准产物目录、清单 manifest、页面快照）：站点工作区里的文件该走 `velar:files`，
+- **`browser:files` 与站点产物**（读写工作区文件、标准产物目录、清单 manifest、页面快照）：站点工作区里的文件该走 `velaros:files`，
   一件能力一份实现；产物清单只为模型列产物而存在。
 
 ## Decision
 
 ### 一个单元，两件能力
 
-`packages/velar/browser` 整包收下实现（CDP、引擎、Electron 运行时、站点工作区、登录墙、用户脚本、动作策略、页面脚本、
-随包的 DevTools 性能引擎），对模型出两件能力，与 `project/` 出 `velar:project` 和 `velar:code` 同一个写法：
+`packages/velaros/browser` 整包收下实现（CDP、引擎、Electron 运行时、站点工作区、登录墙、用户脚本、动作策略、页面脚本、
+随包的 DevTools 性能引擎），对模型出两件能力，与 `project/` 出 `velaros:project` 和 `velaros:code` 同一个写法：
 
-- **`velar:browser`**：驱动与读页面——进站与标签页、看页面、按元素或坐标动手、等、挂起事件、取内容、下载与导出。
-- **`velar:devtools`**：页面内部与定制——控制台与网络诊断、请求详情、存储、视口与缩放、网络条件与环境仿真、性能 trace 与堆快照、
+- **`velaros:browser`**：驱动与读页面——进站与标签页、看页面、按元素或坐标动手、等、挂起事件、取内容、下载与导出。
+- **`velaros:devtools`**：页面内部与定制——控制台与网络诊断、请求详情、存储、视口与缩放、网络条件与环境仿真、性能 trace 与堆快照、
   录屏、用户脚本。排障、调页面时才 import，驱动页面的声明因此保持小。
 
 两件共用一个空间端口 `BrowserSpacePort`（原 `ToolBrowserApi`，已经绑好会话与站点）与调用上下文
@@ -45,7 +45,7 @@ Electron 会话运行时、站点工作区、登录墙、用户脚本、recipe�
 
 ### 操作
 
-`velar:browser`：
+`velaros:browser`：
 
 | 类 | 操作 |
 | --- | --- |
@@ -57,7 +57,7 @@ Electron 会话运行时、站点工作区、登录墙、用户脚本、recipe�
 | 挂起事件 | `events`、`waitForEvent`、`handleDialog`、`handleDownload`、`handlePermission` |
 | 取内容 | `table`、`list`、`paginate`、`content`、`download`、`savePdf` |
 
-`velar:devtools`：
+`velaros:devtools`：
 
 | 类 | 操作 |
 | --- | --- |
@@ -73,12 +73,12 @@ Electron 会话运行时、站点工作区、登录墙、用户脚本、recipe�
 ### 删掉的
 
 - 32 个工具、七个类别、常驻集、guided 面、随包 mod 清单与 `BrowserModId`、`BrowserSpaceId`、`BrowserResidentToolNames`，
-  `check:capabilities-schemas` 里的浏览器基线与 schema bundle 脚本。浏览器空间由产品按装配表挂 `velar:browser`、`velar:devtools`
-  与站点工作区上的 `velar:files`。
+  `check:capabilities-schemas` 里的浏览器基线与 schema bundle 脚本。浏览器空间由产品按装配表挂 `velaros:browser`、`velaros:devtools`
+  与站点工作区上的 `velaros:files`。
 - recipe 全套（骨架生成、干跑、执行、运行记录、`browserRecipes`、`types/recipes.ts`），由脚本库接替。
 - `read_page_data` 预设、`list_page_resources`、`observe_actions`、页面快照。
 - `browser:files` 与站点产物管理（`createBrowserWorkspaceArtifacts`、清单 manifest、产物目录表）。站点工作区的文件访问
-  （`createBrowserWorkspaceFileAccess`、`createBrowserSiteWorkspaceFileAccess`，写只写当前根、读可回退到历史根）留着，宿主拿它给浏览器空间做 `velar:files` 的端口。
+  （`createBrowserWorkspaceFileAccess`、`createBrowserSiteWorkspaceFileAccess`，写只写当前根、读可回退到历史根）留着，宿主拿它给浏览器空间做 `velaros:files` 的端口。
 - 端口上只剩操作真会调的方法；宿主每回合的上下文快照 `getTurnContextSnapshot` 只有产品用，改由产品直接向运行时要。
 
 ### 留着的

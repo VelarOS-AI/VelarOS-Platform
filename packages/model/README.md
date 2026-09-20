@@ -61,7 +61,7 @@
 - **`LocalModelEnvironment` / `ModelEnvironmentPort`** —— 不可变的显式环境快照与最小读取端口
   (Ollama 的 baseURL / model / 上下文窗口 / 可见模型都从这里解析)。
 - **`VelarCloudModelRuntime`** —— 托管模型连接绑定,**宿主独占**,属于 composition。
-  `velar` 与 `velar-dev` 各自注册、各自撤销，未注册的服务会直接报错，不会跨服务或向
+  `velaros` 与 `velar-dev` 各自注册、各自撤销，未注册的服务会直接报错，不会跨服务或向
   OpenRouter 回退。`velar-dev` 的模型目录由 Cloud 按账户授权动态下发；Platform 将其中的
   公共模型 ID 作为不透明字符串原样传给 Cloud，不维护静态副本。该服务当前只支持
   聊天模型，embedding 不会回退到原有 Velar 链路。
@@ -187,7 +187,7 @@ const accountId = await client.generateDecodedObject({
 不拥有聊天 UI、Desktop 配置持久化、IPC 或工具注册。
 宿主创建一个隔离的 composition,并把它面向 Agent 的不透明运行时注入下去。
 embedding 选择与 provider 可用性辅助函数**总是显式接收** composition 的
-`ModelProviderCollection`,不去找全局。AI SDK 的传输细节只许待在 `AiSdkModelRequestTransport` 里。
+`ModelProviderCollection`,不去找全局。AI SDK 的通用聊天传输由 `AiSdkModelRequestTransport` 实现；结构化 Agent 回合由 `AiSdkModelDriver` 实现，使用 `ModelTurnRequest.response` 和 `Output.object`，只交付完整校验后的 output。
 
 ## 相邻包
 

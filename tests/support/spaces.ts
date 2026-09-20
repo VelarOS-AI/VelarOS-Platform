@@ -2,30 +2,30 @@
  * 测试用的两份空间装配。仓库里已经没有空间的装配表了：装空间是产品的事（给哪几件能力、每件用哪个端口、哪几件常驻），
  * 仓库层的测试要在真的空间里跑，就在这里照产品会写的样子装一份。只给 tests/ 用，不是公共件。
  *
- * - 系统空间：本机文件与命令常驻，看图、演练沙箱按需；端口都用本机实现（`@velaros-ai/velar/<单元>/local`），路径按 shell 宿主的 `resolvePath` 解析。
+ * - 系统空间：本机文件与命令常驻，看图、演练沙箱按需；端口都用本机实现（`@velaros-ai/velaros/<单元>/local`），路径按 shell 宿主的 `resolvePath` 解析。
  * - 项目空间：项目文件与命令常驻，问代码、演练沙箱、看图按需；共用能力的项目端口取自 `projectCapabilityPorts`。
  */
 
 import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 
-import type { CapabilityOperationContext, CapabilityOperationTable, MountedCapabilityModule } from '../../packages/code-surface/src/index'
-import type { FileOperationContext } from '../../packages/velar/files/index'
-import { fileOperations } from '../../packages/velar/files/index'
-import { VelarFilesModule } from '../../packages/velar/files/contracts'
-import { createLocalFilePort } from '../../packages/velar/files/local'
-import type { ImageAttachment, ImageOperationContext, ImageSpacePort } from '../../packages/velar/images/index'
-import { imageOperations } from '../../packages/velar/images/index'
-import { VelarImagesModule } from '../../packages/velar/images/contracts'
-import { createLocalImagePort } from '../../packages/velar/images/local'
-import type { CodeAnalysisInput, CodeQueryInput, ProjectChangeInput, ProjectEditInput, ProjectHostPort, ProjectListInput, ProjectReadInput, ProjectSearchInput } from '../../packages/velar/project/index'
-import { projectCapabilityPorts, projectCodeOperations, projectFileOperations } from '../../packages/velar/project/index'
-import { VelarCodeModule, VelarProjectModule } from '../../packages/velar/project/contracts'
-import type { RehearsalSandboxHostPort, SandboxOperationContext, SandboxSurfacePort } from '../../packages/velar/sandbox/index'
-import { sandboxOperations } from '../../packages/velar/sandbox/index'
-import { VelarSandboxModule } from '../../packages/velar/sandbox/contracts'
-import type { ShellHostPort, ShellOperationContext, ShellSpacePort } from '../../packages/velar/shell/index'
-import { shellOperations } from '../../packages/velar/shell/index'
-import { VelarShellModule } from '../../packages/velar/shell/contracts'
+import type { CapabilityOperationContext, CapabilityOperationTable, MountedCapabilityModule } from '../../packages/script/src/index'
+import type { FileOperationContext } from '../../packages/velaros/files/index'
+import { fileOperations } from '../../packages/velaros/files/index'
+import { VelarFilesModule } from '../../packages/velaros/files/contracts'
+import { createLocalFilePort } from '../../packages/velaros/files/local'
+import type { ImageAttachment, ImageOperationContext, ImageSpacePort } from '../../packages/velaros/images/index'
+import { imageOperations } from '../../packages/velaros/images/index'
+import { VelarImagesModule } from '../../packages/velaros/images/contracts'
+import { createLocalImagePort } from '../../packages/velaros/images/local'
+import type { CodeAnalysisInput, CodeQueryInput, ProjectChangeInput, ProjectEditInput, ProjectHostPort, ProjectListInput, ProjectReadInput, ProjectSearchInput } from '../../packages/velaros/project/index'
+import { projectCapabilityPorts, projectCodeOperations, projectFileOperations } from '../../packages/velaros/project/index'
+import { VelarCodeModule, VelarProjectModule } from '../../packages/velaros/project/contracts'
+import type { RehearsalSandboxHostPort, SandboxOperationContext, SandboxSurfacePort } from '../../packages/velaros/sandbox/index'
+import { sandboxOperations } from '../../packages/velaros/sandbox/index'
+import { VelarSandboxModule } from '../../packages/velaros/sandbox/contracts'
+import type { ShellHostPort, ShellOperationContext, ShellSpacePort } from '../../packages/velaros/shell/index'
+import { shellOperations } from '../../packages/velaros/shell/index'
+import { VelarShellModule } from '../../packages/velaros/shell/contracts'
 
 /** 一个装好的空间：代码面的操作表，与挂了哪几件、哪几件常驻。 */
 export interface TestSpace {

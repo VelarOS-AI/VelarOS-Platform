@@ -140,7 +140,7 @@ export interface ChatContextRetrievalIndexSnapshot {
   /**
    * **结构性恒空**：喂它的 evidence 流协议链已于 2026-08-06 整体下线，
    * {@link ContextRetrievalIndexBuilder.build} 现在直接发 `[]`。字段保留是因为
-   * `context:recall({ refKind: 'evidence' })` 仍读它，而那份列表在实现史上从未非空过——
+   * `历史检索服务({ refKind: 'evidence' })` 仍读它，而那份列表在实现史上从未非空过——
    * 保留即维持逐字相同的行为，删掉才是一次模型面工具形状的改动。
    */
   evidence: ChatContextEvidenceRecord[]

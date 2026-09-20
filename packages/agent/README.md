@@ -173,7 +173,7 @@ const request = RunTurnRequestSchema.parse(payload) // 严格对象,未知字段
 ## 边界:本包不负责什么
 
 - **宿主拥有产品装配根**。宿主决定能力、策略与生命周期；默认执行栈工厂负责包内执行组件配对。
-- **不实现模型供应商**(去 `@velaros-ai/model`)、**不实现记忆存储**(去 `@velaros-ai/velar` 的 `memory` 单元)、
+- **不实现模型供应商**(去 `@velaros-ai/model`)、**不实现记忆存储**(去 `@velaros-ai/velaros` 的 `memory` 单元)、
   **不实现浏览器 / 工作区 / 办公 / 桌面控制**(去各能力包)、**不做 UI**(去 `@velaros-ai/ui`)。
 - **不拥有 Electron、产品 IPC、Desktop 配置、渲染进程代码、应用私有 manifest**。
 - **没有可变全局注册表**。一个应用运行时拥有自己的 registry / store / service / ID factory;
@@ -188,12 +188,12 @@ const request = RunTurnRequestSchema.parse(payload) // 严格对象,未知字段
         ↓
 @velaros-ai/agent           ← 本包:执行机制
         ↑ 经 AgentRuntimeCapabilityPorts 注入
-@velaros-ai/{velar,browser,project,development,office,system,cli}
+@velaros-ai/{velaros,browser,project,development,office,system,cli}
                               领域能力包:提供工具与领域解释,自己不认识 agent 循环
 ```
 
 - **能力包不许被本包 import**,方向恒为「能力包被注入」。
-- 与记忆(`@velaros-ai/velar/memory`)之间**没有端口**:记忆是代码面上的一件能力(`velar:memory`),会话开场的索引由宿主放进系统提示词;
+- 与记忆(`@velaros-ai/velaros/memory`)之间**没有端口**:记忆是代码面上的一件能力(`velaros:memory`),会话开场的索引由宿主放进系统提示词;
   本包持有**零个** memory import。
 - 宿主(VelarOS-Desktop)在自己的装配根组合本包 + 能力包 + 模型包。
 

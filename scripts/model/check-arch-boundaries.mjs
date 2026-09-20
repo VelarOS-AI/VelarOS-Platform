@@ -264,7 +264,7 @@ for (const helperName of [
   }
   if (
     helperSource.includes('@velaros-ai/desktop')
-    || helperSource.includes('@velaros-ai/velar')
+    || helperSource.includes('@velaros-ai/velaros')
   ) {
     failures.push(`${helperName} must remain independent of product capabilities`)
   }

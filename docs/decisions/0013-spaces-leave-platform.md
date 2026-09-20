@@ -1,8 +1,8 @@
-# 0013: 空间包移出 Platform：本机实现并进 velar 各单元，装配归产品
+# 0013: 空间包移出 Platform：本机实现并进 velaros 各单元，装配归产品
 
 - Status: accepted
 - Date: 2026-09-18
-- Owners: `@velaros-ai/velar`（shell、sandbox、files、images、project 单元）
+- Owners: `@velaros-ai/velaros`（shell、sandbox、files、images、project 单元）
 
 ## Context
 
@@ -25,19 +25,19 @@
 
 | 入口 | 给什么 | 来自 |
 | --- | --- | --- |
-| `@velaros-ai/velar/shell/local` | `createLocalShellHost`：`velar:shell` 的执行端口 `ShellHostPort`（跑命令、列任务、刷新环境、停任务）在本机的实现，外加宿主界面的路径解析、环境体检、指标、进程、端口、控制台三件事；`createConfinedShellRunner`：把命令钉在一个根目录里的受约束执行器 | system 的本地内核、命令执行器、shell 选择、受管子进程、进程约束、`native/` |
-| `@velaros-ai/velar/sandbox/local` | `createLocalSandboxHost`：宿主的演练沙箱 `RehearsalSandboxHostPort` 在本机的实现（镜像、清单、差量、落回、丢弃、在镜像里跑命令） | system 的沙箱登记表与镜像工具 |
-| `@velaros-ai/velar/files/local` | `createLocalFilePort`：`FileSpacePort` 的本机实现（任意位置、原子替换）；`createLocalFileSearch`：给宿主界面的全局搜索 | 系统空间的文件端口、全局搜索 |
-| `@velaros-ai/velar/images/local` | `createLocalImagePort`：`ImageSpacePort` 的本机实现（macOS 上用 sips 缩图） | 系统空间的看图端口 |
-| `@velaros-ai/velar/project` | `projectCapabilityPorts`：项目给 `velar:shell`、`velar:sandbox`、`velar:images` 装的端口；`projectVerificationPolicy`；宿主端口 `ProjectHostPort` | project 包的端口与验证判据 |
+| `@velaros-ai/velaros/shell/local` | `createLocalShellHost`：`velaros:shell` 的执行端口 `ShellHostPort`（跑命令、列任务、刷新环境、停任务）在本机的实现，外加宿主界面的路径解析、环境体检、指标、进程、端口、控制台三件事；`createConfinedShellRunner`：把命令钉在一个根目录里的受约束执行器 | system 的本地内核、命令执行器、shell 选择、受管子进程、进程约束、`native/` |
+| `@velaros-ai/velaros/sandbox/local` | `createLocalSandboxHost`：宿主的演练沙箱 `RehearsalSandboxHostPort` 在本机的实现（镜像、清单、差量、落回、丢弃、在镜像里跑命令） | system 的沙箱登记表与镜像工具 |
+| `@velaros-ai/velaros/files/local` | `createLocalFilePort`：`FileSpacePort` 的本机实现（任意位置、原子替换）；`createLocalFileSearch`：给宿主界面的全局搜索 | 系统空间的文件端口、全局搜索 |
+| `@velaros-ai/velaros/images/local` | `createLocalImagePort`：`ImageSpacePort` 的本机实现（macOS 上用 sips 缩图） | 系统空间的看图端口 |
+| `@velaros-ai/velaros/project` | `projectCapabilityPorts`：项目给 `velaros:shell`、`velaros:sandbox`、`velaros:images` 装的端口；`projectVerificationPolicy`；宿主端口 `ProjectHostPort` | project 包的端口与验证判据 |
 
 端口顺手拆清了一层：`ShellSpacePort` = 执行那四件 `ShellHostPort` + 空间的作用域与口径；`SandboxSurfacePort` = 宿主沙箱
 `RehearsalSandboxHostPort`（在镜像里跑命令并进了宿主这一侧）+ 空间的 `resolveSource`。空间只补作用域，执行原样接上。
 
 ### 沙箱的隔离由沙箱自己兑现
 
-原来本地内核把「cwd 落在镜像根里的普通命令」暗中转给沙箱专属的执行器。拆开之后这条暗路不要了：`velar:sandbox` 的 run 走沙箱自己
-持有的受约束执行器，隔离承诺不依赖产品怎么接线；普通 `velar:shell` 命令就是普通命令（系统空间本来就不设边界，ADR 0009）。
+原来本地内核把「cwd 落在镜像根里的普通命令」暗中转给沙箱专属的执行器。拆开之后这条暗路不要了：`velaros:sandbox` 的 run 走沙箱自己
+持有的受约束执行器，隔离承诺不依赖产品怎么接线；普通 `velaros:shell` 命令就是普通命令（系统空间本来就不设边界，ADR 0009）。
 错误码跟着改到各自的单元：`SHELL_UNAVAILABLE`、`SHELL_CONFINEMENT_UNAVAILABLE`、`SANDBOX_CONFLICT`、`SANDBOX_CHANGED`。
 
 ### 删掉的
@@ -55,6 +55,6 @@
 
 ## Alternatives
 
-- **本地内核整个留成一个非工具包**：它的每一块都是某件能力的实现，单独成包就是「工具在 velar、实现在外面」，正是用户否掉的投影做法。否决。
-- **装配表也并进 velar**：哪个空间挂哪几件是产品的取舍，放进能力包等于替产品做决定。否决。
+- **本地内核整个留成一个非工具包**：它的每一块都是某件能力的实现，单独成包就是「工具在 velaros、实现在外面」，正是用户否掉的投影做法。否决。
+- **装配表也并进 velaros**：哪个空间挂哪几件是产品的取舍，放进能力包等于替产品做决定。否决。
 - **保留 cwd 路由**：隔离要靠产品把沙箱的路由接对才成立，接错了就静默裸跑。否决。

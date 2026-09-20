@@ -57,7 +57,7 @@ Host products own their adapters, installation UI, and product-specific policies
 | Document | Purpose |
 | --- | --- |
 | [Memory slimming (ADR 0010)](decisions/0010-memory-slimming.md) | One directory of Markdown per host-given scope, the session-start index, and the three model-facing operations; why the memory tree, vector retrieval, and the knowledge base were removed |
-| [Memory module card](../packages/velar/memory/MODULE.md) | What `velar:memory` provides, its chains, failure semantics, and invariants |
+| [Memory module card](../packages/velaros/memory/MODULE.md) | What `velaros:memory` provides, its chains, failure semantics, and invariants |
 
 Historical review and revision documents remain evidence of prior decisions. They must be clearly labeled as historical and cannot override current schemas, tests, architecture documents, or accepted decision records.
 

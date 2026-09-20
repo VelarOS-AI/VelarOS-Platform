@@ -1,4 +1,4 @@
-// 域：Agent 自己的二十个模型面工具——定义、分组与挂载都在这一个文件里。
+// 域：Agent 模型面工具——定义、分组与挂载都在这一个文件里。
 //
 // 人读代码的第一站。每个工具的说明、参数、权限、能力声明都写在它自己的定义里；execute 只写
 // 简单的一两步，真正的实现交给 `impl/builtin/` 的执行类，这里一行委托过去。
@@ -21,9 +21,7 @@ import type {
   DispatchAgentInput,
   GoalConstraint,
   GoalStep,
-  HandoffContextInput,
   ReadBackgroundJobOutputInput,
-  RecallContextInput,
   RunAgentWorkflowInput,
   UpdatePlanInput,
   VelaTool,
@@ -32,8 +30,6 @@ import type {
 import type { AgentModBindings } from '../types/mods.js'
 import { readBackgroundJobOutputSchema, waitBackgroundJobsSchema } from '../utils/builtin/background-jobs'
 import { toExecutionModeContribution, toPromptSegmentContribution, toToolContribution } from '../utils/builtin/builtin-mod'
-import { recallContextSchema } from '../utils/builtin/context-retrieval'
-import { handoffContextSchema } from '../utils/builtin/context-tools'
 import { defineVelaTool } from '../utils/builtin/define-agent-tool'
 import { archiveActiveDirectives, directiveTypeSchema, listActiveDirectives, upsertActiveDirective } from '../utils/builtin/directives'
 import { buildSubAgentDispatchRequest, dispatchAgentSchema } from '../utils/builtin/dispatch-schemas'
@@ -57,7 +53,6 @@ import { AgentModManifestSchemaVersion } from '../utils/wire/mods'
 import type { AgentModHostAssemblerApi } from './assembly/AgentModHostAssembler'
 import { AgentModHostAssembler } from './assembly/AgentModHostAssembler'
 import { backgroundJobOperations } from './builtin/BackgroundJobOperations'
-import { contextOperations } from './builtin/ContextOperations'
 import { goalOperations } from './builtin/GoalOperations'
 import { planOperations } from './builtin/PlanOperations'
 
@@ -195,7 +190,7 @@ export const toolSpaceMap: VelaTool<z.input<typeof toolSpaceQueryMethodSchema>> 
   role: 'control',
   category: 'agent-control',
   // 工具地图就是模型当下要读的内容：禁止 page-out 成 payload 引用，否则模型还得
-  // context:recall 召回，白白多花轮次（见 debug：tooling:map→卸载→recall）。
+  // 分页召回，白白多花轮次（见 debug：tooling:map→卸载→recall）。
   outputInline: true,
   summary: '查找当前任务需要的工具及可用状态；已在当前工具列表中提供完整参数的工具可直接调用。',
   suitable: [
@@ -282,8 +277,8 @@ export const toolSpaceReplace: VelaTool<z.input<typeof toolSpaceReplaceMethodSch
     '从 tooling:map 结果复制精确页 id，传 pageIn/pageOut 和 reason；例子中的页也须以当前目录为准。',
   ],
   examples: [
-    { pageIn: ['tool:context:recall'], reason: '需要召回历史工具输出' },
-    { pageOut: ['tool:context:recall'], reason: '本阶段召回已完成' },
+    { pageIn: ['tool:job:read_output'], reason: '需要召回历史工具输出' },
+    { pageOut: ['tool:job:read_output'], reason: '本阶段召回已完成' },
   ],
   notes: ['replace 只调整工具页驻留/能力状态；实际工具调用发生在下一轮真实工具 schema 暴露之后。'],
   schema: toolSpaceReplaceMethodSchema,
@@ -292,75 +287,6 @@ export const toolSpaceReplace: VelaTool<z.input<typeof toolSpaceReplaceMethodSch
   isConcurrencySafe: () => false,
   execute: async (input, ctx) =>
     runToolSpace(ctx, toolSpaceSchema.parse({ op: 'replace', ...toolSpaceReplaceMethodSchema.parse(input) })),
-})
-
-// ── 上下文（context:recall / context:handoff / context:distill）─────────────
-
-export const recallContext: VelaTool<RecallContextInput> = defineVelaTool<RecallContextInput>({
-  name: AgentToolNames.contextRecall,
-  role: 'inspect',
-  category: 'context',
-  summary: '统一找回本会话之前见过的上下文。',
-  outputInline: true,
-  suitable: [
-    '需要找回较早对话、压缩上下文、pinned evidence、历史工具 payload 或终端日志。',
-    '看到动态上下文 handle、evidence id、tool call id 或 ctx-payload:* 引用后需要取回详情。',
-  ],
-  forbidden: [
-    '不要用它读取外部资源的当前内容；当前状态必须用对应的注入能力重新确认。',
-    '相同 ref、jsonPath 和 offset 已有足够结果时直接继续；需要剩余内容时按 nextOffset 续读。',
-    '折叠桩标注 excerptTruncated:false 时内容已完整可见，不要对它召回。',
-  ],
-  usage: [
-    '搜索未知内容时传 query，kind 默认 all，会同时查会话历史和终端日志。',
-    '精确取回时只需传 ref（refKind/reason 可省略，系统按 ref 形状自动判别）。',
-    '历史参数视图带 __historyInputOmissions 时，用其中 ref/jsonPath 取回省略字段；标注不是源码。失败回执带 inputReuse 时优先差量重试，无需重新输入正文。',
-    '工具结果里出现 {__truncatedItems,jsonPath,nextOffset} 标记时:传同一 ref + 该 jsonPath + offset=nextOffset 续读剩余条目,返回会告知新的 nextOffset 直到读完。',
-  ],
-  examples: [
-    { query: "BASE_REVISION_MISMATCH", kind: "all" },
-    { ref: "<evidenceRef>", refKind: "evidence", reason: "要取回置顶的那条证据" },
-    { ref: "<toolCallId>", refKind: "tool-payload", reason: "要完整的工具结果" },
-    { ref: "<toolCallId>", jsonPath: "$.entries", offset: 400, reason: "接着读被截断的数组" },
-  ],
-  notes: [
-    '返回的是历史上下文，不代表当前文件或终端状态。',
-    '示例中的 <...> 是占位符，必须替换为历史回执中的实际引用；主动召回的旧候选按普通资料预算处理。',
-  ],
-  schema: recallContextSchema,
-  permissions: [],
-  capabilities: AgentContextReadCapability,
-  isConcurrencySafe: () => true,
-  execute: async (input, ctx) => contextOperations.recall(input, ctx),
-})
-
-export const handoffContext: VelaTool<HandoffContextInput> = defineVelaTool<HandoffContextInput>({
-  name: AgentToolNames.contextHandoff,
-  role: 'control',
-  category: 'context',
-  summary: '请求用户批准把当前任务交接到新会话；只有显式调用才会显示批准/拒绝卡。',
-  outputInline: true,
-  suitable: [
-    '系统自动整理后，完整请求仍超出模型可用容量，当前会话无法继续时。',
-    '任务确实需要换到干净会话才能可靠继续，并且可以给出清晰续跑理由时。',
-  ],
-  forbidden: [
-    '不要仅因上下文占用升高就调用；需要恢复原始证据时使用 context:recall。',
-    '用户拒绝后不要在同一任务里反复调用。',
-    '不要把它当成自动交接：调用只展示卡片，批准或拒绝由用户决定。',
-  ],
-  usage: ['传入简洁 reason；调用后等待用户在交接卡上批准或拒绝。'],
-  examples: [
-    {
-      reason: '系统自动整理后，本会话仍无法容纳下一次请求；新会话应从当前验证失败继续修复。',
-    },
-  ],
-  notes: ['系统不会因压力信号自动调用或自动批准该工具。'],
-  schema: handoffContextSchema,
-  permissions: [],
-  capabilities: AgentUserInteractionCapability,
-  isConcurrencySafe: () => false,
-  execute: async (input, ctx) => contextOperations.handoff(input, ctx),
 })
 
 // ── 长期指令（directive:list / directive:upsert / directive:archive）────────
@@ -985,7 +911,7 @@ export const readBackgroundJobOutput: VelaTool<ReadBackgroundJobOutputInput> = d
     '需要非阻塞地轮询后台任务输出，而不是 sleep 或重复派发同一任务。',
   ],
   forbidden: [
-    '不要用它读 shell 命令的输出；后台命令在程序里用 velar:shell 的 listTasks 看。',
+    '不要用它读 shell 命令的输出；后台命令在程序里用 velaros:shell 的 listTasks 看。',
     '不要在没有 job_id 时猜测；先从 agent:dispatch 返回或后台通知中取得 job id。',
   ],
   usage: [
@@ -1002,7 +928,7 @@ export const readBackgroundJobOutput: VelaTool<ReadBackgroundJobOutputInput> = d
   ],
   notes: [
     '该工具只访问当前会话拥有的内核后台 job；跨会话或不存在的 job 会返回 not found。',
-    '它不等待任务完成；需要等待外部条件（端口/HTTP/文件）时在程序里用 velar:shell 的 run 轮询（如 curl/test -f 循环）。',
+    '它不等待任务完成；需要等待外部条件（端口/HTTP/文件）时在程序里用 velaros:shell 的 run 轮询（如 curl/test -f 循环）。',
   ],
   schema: readBackgroundJobOutputSchema,
   permissions: [],
@@ -1023,7 +949,7 @@ export const waitBackgroundJobs: VelaTool<WaitBackgroundJobsInput> = defineVelaT
     '需要一次性等待当前会话内所有已运行后台 job，可省略 job_ids。',
   ],
   forbidden: [
-    '不要用它等待普通命令；后台命令在程序里用 velar:shell 的 listTasks 看。',
+    '不要用它等待普通命令；后台命令在程序里用 velaros:shell 的 listTasks 看。',
     '不要把 thread_id 当 job_id；job_id 来自 agent:dispatch 返回或后台通知。',
   ],
   usage: [
@@ -1098,14 +1024,6 @@ export const categoriesTools: {
   [AgentToolNames.toolingReplace]: toolSpaceReplace,
 }
 
-export const contextRetrievalTools: { 'context:recall': VelaTool<RecallContextInput> } = {
-  [AgentToolNames.contextRecall]: recallContext,
-}
-
-export const contextHandoffTools: { 'context:handoff': VelaTool<HandoffContextInput> } = {
-  [AgentToolNames.contextHandoff]: handoffContext,
-}
-
 export const activeDirectiveTools: {
   'directive:list': typeof listActiveDirectivesTool
   'directive:upsert': typeof upsertActiveDirectiveTool
@@ -1164,8 +1082,6 @@ export const BuiltinAgentModToolCollections: ReadonlyArray<Readonly<
   backgroundJobTools,
   categoriesTools,
   confirmationTools,
-  contextHandoffTools,
-  contextRetrievalTools,
   dispatchAgentTools,
   goalTools,
   plansTools,
@@ -1224,7 +1140,6 @@ export function createBuiltinAgentModDefinition(
 /**
  * 本包全部内置工具按名索引的单源：宿主要挂工具、要查某个工具的定义，一律从这里取。
  *
- * 取代原先十一个各自导出的集合——宿主挑着挂就漏过工具（`context:handoff` 曾因此整轮缺席）。
  * 分组仍在 `BuiltinAgentModToolCollections` 里，那是给内置 mod 拼清单用的，不再出包。
  */
 export const agentTools: Readonly<Record<string, VelaTool<any>>> = Object.freeze(

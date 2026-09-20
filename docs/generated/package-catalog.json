@@ -6,7 +6,7 @@
       "domain": "agent",
       "directory": "packages/agent",
       "name": "@velaros-ai/agent",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "description": "Host-agnostic agent loop, prompt, orchestration, team, execution, and tool runtime for VelarOS-compatible hosts, plus the tool contract: define a tool once, police its model-facing description, mount a tool set onto the kernel, and bundle its schemas for the model.",
       "exportSubpaths": [
         ".",
@@ -77,29 +77,44 @@
     },
     {
       "domain": "foundations",
-      "directory": "packages/code-surface",
-      "name": "@velaros-ai/code-surface",
+      "directory": "packages/context",
+      "name": "@velaros-ai/context",
+      "version": "0.7.0",
+      "description": "Shared task state, immutable evidence and runtime materialization for ScriptAct.",
+      "exportSubpaths": [
+        ".",
+        "./contracts",
+        "./node"
+      ],
+      "repositoryDirectory": "packages/context"
+    },
+    {
+      "domain": "foundations",
+      "directory": "packages/script",
+      "name": "@velaros-ai/script",
       "version": "0.2.0",
       "description": "Code surface for capability spaces: the model writes a JavaScript ES module that imports generated capability declarations, the program is typechecked before it runs, and it executes in an isolated process whose only reachable capabilities are the host operations it calls back into.",
       "exportSubpaths": [
         ".",
         "./contracts"
       ],
-      "repositoryDirectory": "packages/code-surface"
+      "repositoryDirectory": "packages/script"
     },
     {
       "domain": "foundations",
-      "directory": "packages/velar",
-      "name": "@velaros-ai/velar",
+      "directory": "packages/velaros",
+      "name": "@velaros-ai/velaros",
       "version": "0.2.0",
-      "description": "The capability units the model imports as velar:* modules and every space mounts with its own port (products assemble the spaces; each unit's ./local entry gives its port on this machine): files (machine files, system space; with the machine file port and a global search for host UIs underneath), images (view pictures within provider limits; with the machine image port, sips on macOS), shell (run commands; with the local machine host underneath: background tasks, interactive consoles, shell selection, process confinement, the Windows process host, and the processes, ports and metrics a host UI shows), sandbox (rehearse in a mirror, then apply; with the local rehearsal sandbox underneath), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath, and the ports a project hands to shell, sandbox and images), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), memory (long-term memory: one directory of Markdown files per host-given scope, plus the index a host puts at the start of each session), office (Word, PowerPoint and Excel generation, PDF reading and editing, Word and LaTeX to PDF, document preview and Markdown conversion, with the document engines underneath and the narrow renderer primitives the Document Renderer uses) and browser (velar:browser to drive and read pages, velar:devtools for console, network, storage, performance, recording, emulation and user scripts, with the CDP drivers, page engines, Electron session runtime and site workspace underneath). One plain directory per unit, one convention for all.",
+      "description": "The capability units the model imports as velaros:* modules and every space mounts with its own port (products assemble the spaces; each unit's ./local entry gives its port on this machine): files (machine files, system space; with the machine file port and a global search for host UIs underneath), images (view pictures within provider limits; with the machine image port, sips on macOS), shell (run commands; with the local machine host underneath: background tasks, interactive consoles, shell selection, process confinement, the Windows process host, and the processes, ports and metrics a host UI shows), sandbox (rehearse in a mirror, then apply; with the local rehearsal sandbox underneath), project (governed project files and code questions: velaros:project and velaros:code, with the project kernel and its transactions underneath, and the ports a project hands to shell, sandbox and images), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), memory (long-term memory: one directory of Markdown files per host-given scope, plus the index a host puts at the start of each session), office (Word, PowerPoint and Excel generation, PDF reading and editing, Word and LaTeX to PDF, document preview and Markdown conversion, with the document engines underneath and the narrow renderer primitives the Document Renderer uses) and browser (velaros:browser to drive and read pages, velaros:devtools for console, network, storage, performance, recording, emulation and user scripts, with the CDP drivers, page engines, Electron session runtime and site workspace underneath). One plain directory per unit, one convention for all.",
       "exportSubpaths": [
+        ".",
         "./browser",
         "./browser/contracts",
         "./browser/electron",
         "./browser/renderer",
         "./computer",
         "./computer/contracts",
+        "./contracts",
         "./files",
         "./files/contracts",
         "./files/local",
@@ -116,11 +131,13 @@
         "./sandbox",
         "./sandbox/contracts",
         "./sandbox/local",
+        "./script",
+        "./script/contracts",
         "./shell",
         "./shell/contracts",
         "./shell/local"
       ],
-      "repositoryDirectory": "packages/velar"
+      "repositoryDirectory": "packages/velaros"
     },
     {
       "domain": "kernel",

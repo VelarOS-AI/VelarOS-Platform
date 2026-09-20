@@ -112,7 +112,7 @@ describe('model 不变量验收', () => {
     expect(second.providerScriptRegistry.supportsProvider(InjectedProviderId)).toBe(false)
     expect(first.providerCollection).not.toBe(second.providerCollection)
     expect(first.velarCloudRuntime).not.toBe(second.velarCloudRuntime)
-    expect(first.velarCloudRuntime.hasProvider('velar')).toBe(false)
+    expect(first.velarCloudRuntime.hasProvider('velaros')).toBe(false)
   })
 
   test('INV-3 未注册的 Cloud 服务直接报错，不回落别的 provider', () => {

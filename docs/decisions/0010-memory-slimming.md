@@ -2,19 +2,19 @@
 
 - Status: accepted
 - Date: 2026-09-18
-- Owners: `@velaros-ai/velar`（memory、knowledge 两个单元）
+- Owners: `@velaros-ai/velaros`（memory、knowledge 两个单元）
 
 ## Context
 
 用户原话：「知识库整个删掉，记忆系统放弃树，重构，作用域也需要进行重构，这是一次瘦身过程，做成简洁方便使用就好，不用承诺有多强……
 它不应该知道外部的工作区，本质上只需要一个作用域而已，这个作用域应该是产品层传入的，按照作用域进行隔离即可。」
 
-整包并进 velar 之后（`43573017`），两个单元的现状：
+整包并进 velaros 之后（`43573017`），两个单元的现状：
 
 | 单元 | 行数 | 里面有什么 | 实际在用的 |
 | --- | --- | --- | --- |
-| `velar/memory` | 30,771 | 树 v1（SQLite + Dream）、树 v2（加密外置、擦除编排、TreeDiff）、文件档、向量档、叠加体、后端令牌族、证据采集桥、回合召回、四个模型面操作 | 文件档是 Desktop 出厂的权威层；向量档要配了嵌入才挂上；树 v1 在 Desktop 里当兜底；树 v2 有 16,633 行，除了探针没有任何引用 |
-| `velar/knowledge` | 8,669 | 工作区摄入、分块、SQLite 全文加 LanceDB 向量、嵌入 profile 隔离 | 有了代码面，项目空间有 `velar:project` 的搜索和 `velar:code` 的符号，系统空间有 shell |
+| `velaros/memory` | 30,771 | 树 v1（SQLite + Dream）、树 v2（加密外置、擦除编排、TreeDiff）、文件档、向量档、叠加体、后端令牌族、证据采集桥、回合召回、四个模型面操作 | 文件档是 Desktop 出厂的权威层；向量档要配了嵌入才挂上；树 v1 在 Desktop 里当兜底；树 v2 有 16,633 行，除了探针没有任何引用 |
+| `velaros/knowledge` | 8,669 | 工作区摄入、分块、SQLite 全文加 LanceDB 向量、嵌入 profile 隔离 | 有了代码面，项目空间有 `velaros:project` 的搜索和 `velaros:code` 的符号，系统空间有 shell |
 
 记忆难用，根子不在检索方式，在存了什么。采集桥把每条用户消息原样写成 `conversation` 条目，还有工作区、执行、桌面控制三路观察。
 库里大半是原始记录，才需要向量去捞。文件档的代码注释里记着：聊天采集开着时，最近 24 条全是会话条目，画像召回一度稳定返回 0 条。
@@ -29,8 +29,8 @@
 
 ### 知识库整个删掉
 
-`velar:knowledge` 连同知识库引擎一起删，不留替代品。找资料用空间自己的能力：项目空间用 `velar:project` 的搜索和 `velar:code` 的符号，
-系统空间用 `velar:shell`。LanceDB、Arrow、嵌入 profile 跟着一起走。
+`velaros:knowledge` 连同知识库引擎一起删，不留替代品。找资料用空间自己的能力：项目空间用 `velaros:project` 的搜索和 `velaros:code` 的符号，
+系统空间用 `velaros:shell`。LanceDB、Arrow、嵌入 profile 跟着一起走。
 
 ### 记忆是一个作用域一个目录的 Markdown
 
@@ -124,7 +124,7 @@ updated: 2026-09-18T11:20:00.000Z
 ### 模型面：三个操作
 
 ```ts
-declare module 'velar:memory' {
+declare module 'velaros:memory' {
   /**
    * 长期记忆：跨会话记住以后还用得上的事。只在当前这一份记忆里读写，别的看不到。
    * 会话开头给过一份索引（id、标题、一句话描述，末尾是现有标签）。要看正文、找索引里没列出的，用 list()，在程序里自己筛。
@@ -245,10 +245,10 @@ interface MemoryOperationContext {
 
 | 在哪 | 删什么 |
 | --- | --- |
-| `velar/memory` | 树 v1、树 v2、向量档、叠加体、后端令牌族与优先序、证据与信任级、采集桥、回合召回、Dream 调度、治理门面、写入前脱敏、作用域前缀与可见性真值表、归档 |
-| `velar/knowledge` | 整个单元 |
-| `velar` 包清单 | `./knowledge`、`./knowledge/contracts` 两个入口；依赖 `better-sqlite3`、`@types/better-sqlite3`、`@lancedb/lancedb`、`apache-arrow`；对 `@velaros-ai/agent` 的 peer 依赖保留（shell、sandbox 两个单元在用） |
-| 仓库 | `scripts/memory/` 整个目录：边界门、十个探针、知识库 profile 检查，外加一个没人调用的本地软链脚本；`check:memory-boundaries`、`check:memory-knowledge-profile`、`probe:memory`，以及 `check:gates` 里引用它们的三处；根上的 `better-sqlite3`、`@electron/rebuild` 与只为重编 better-sqlite3 的 `postinstall`（核实过只有记忆与知识库在用）；`docs/engineering/refactor-plans/` 里记忆与知识库的三份旧迁移方案；`docs/memory/` 下的九份文档；`baselines/code-surface/knowledge.d.ts`；代码面登记表和模块所有权登记里的知识库条目；发版夹具里的知识库与旧记忆用法 |
+| `velaros/memory` | 树 v1、树 v2、向量档、叠加体、后端令牌族与优先序、证据与信任级、采集桥、回合召回、Dream 调度、治理门面、写入前脱敏、作用域前缀与可见性真值表、归档 |
+| `velaros/knowledge` | 整个单元 |
+| `velaros` 包清单 | `./knowledge`、`./knowledge/contracts` 两个入口；依赖 `better-sqlite3`、`@types/better-sqlite3`、`@lancedb/lancedb`、`apache-arrow`；对 `@velaros-ai/agent` 的 peer 依赖保留（shell、sandbox 两个单元在用） |
+| 仓库 | `scripts/memory/` 整个目录：边界门、十个探针、知识库 profile 检查，外加一个没人调用的本地软链脚本；`check:memory-boundaries`、`check:memory-knowledge-profile`、`probe:memory`，以及 `check:gates` 里引用它们的三处；根上的 `better-sqlite3`、`@electron/rebuild` 与只为重编 better-sqlite3 的 `postinstall`（核实过只有记忆与知识库在用）；`docs/engineering/refactor-plans/` 里记忆与知识库的三份旧迁移方案；`docs/memory/` 下的九份文档；`baselines/script/knowledge.d.ts`；代码面登记表和模块所有权登记里的知识库条目；发版夹具里的知识库与旧记忆用法 |
 
 ## Alternatives
 
@@ -271,7 +271,7 @@ interface MemoryOperationContext {
 
 ## Compatibility and migration
 
-这是破坏性改动，没有过渡期。`velar:memory` 的操作从 save、search、get、archive 变成 list、save、remove；宿主面整个换掉，
+这是破坏性改动，没有过渡期。`velaros:memory` 的操作从 save、search、get、archive 变成 list、save、remove；宿主面整个换掉，
 `mountMemoryAdapter`、`createMemoryRuntime`、各后端工厂和令牌族全部删除。
 
 产品层（Desktop，在另一个仓，本 ADR 不动它）要做的：
@@ -280,7 +280,7 @@ interface MemoryOperationContext {
 2. 定下每个会话的作用域字符串。怎么定记忆不管。一种自然的定法：项目空间用项目根（解开符号链接后的路径），浏览器空间用站点源，系统空间用一个固定名字。
    想让偏好跨场景生效，就把这些场景映射到同一个作用域。
 3. 会话开始时调 `renderIndex()`，结果放进系统提示词（Tier0 之后单独一段），存在会话上，整场不变。
-4. 挂了 `velar:memory` 的空间把它设成常驻：该记什么、不该记什么的规矩写在声明里，模型得一直看得到。
+4. 挂了 `velaros:memory` 的空间把它设成常驻：该记什么、不该记什么的规矩写在声明里，模型得一直看得到。
 5. 删掉这些：采集开关与采集桥的接线、`memory.recall` 回合上下文源、向量与嵌入设置、LanceDB 插件、知识库运行时、文件档的作用域根（`<项目>/.velaros/memory`）。
 6. 旧数据：旧文件档里的条目可以一次性导入新布局，`conversation` 条目不导。树的 SQLite 和旧目录原样留着，不读也不删；删用户数据要用户明确签字。
 
@@ -290,11 +290,11 @@ interface MemoryOperationContext {
   目录名与 `.scope`、`listScopes`；id 校验挡住路径穿越；整条覆盖与规整、原子写；真删；入参错误或已取消时不碰磁盘；
   人手改过的文件照样认；索引从条目现算（排序、条数与字数上限、标签行、空作用域）；代码面一条真路；声明与常量表一致；代码模版；分工门禁；改一条时标签的沿用。
 - 代码模版的四段在真实的临时目录里逐个跑通。
-- `check:module-ownership`、`check:code-surface`、全量 `bun run check`。
+- `check:module-ownership`、`check:script`、全量 `bun run check`。
 
 ## Consequences
 
-- 记忆与知识库两个单元删掉 196 个文件、40,331 行；新的记忆单元实现 718 行。velar 不再依赖任何原生模块或向量库，`bun.lock` 少了 125 行。
+- 记忆与知识库两个单元删掉 196 个文件、40,331 行；新的记忆单元实现 718 行。velaros 不再依赖任何原生模块或向量库，`bun.lock` 少了 125 行。
 - 记忆能做的事很窄：召回全靠开场那段索引加上模型自己读；条目多到放不下时，要靠合并和删除来收拾。
 - 模型包里的嵌入接口失去最后一个消费者，核实没有别的用处后，另开一步删掉。
 - 「把记忆库做成独立产品（AI 应用的数据库）」这个设想到此为止。

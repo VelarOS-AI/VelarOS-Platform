@@ -38,6 +38,7 @@ import { builtinModules } from 'node:module'
 import { basename, dirname, extname, join, relative, resolve } from 'node:path'
 
 import ts from 'typescript'
+import { checkInterfaceModule } from './check-interface-module.mjs'
 
 import {
   GovernedModules,
@@ -47,7 +48,7 @@ import {
 
 const RepoRoot = resolve(import.meta.dir, '../..')
 /** 生成的 contract/surface.ts 的第一行；手写的文件冒充不了。 */
-const GeneratedSurfaceHeader = '// 本文件由 scripts/code-surface/generate-declarations.mjs 从能力包源码生成，不要手改。'
+const GeneratedSurfaceHeader = '// 本文件由 scripts/script/generate-declarations.mjs 从能力包源码生成，不要手改。'
 const PackagesRoot = join(RepoRoot, 'packages')
 const RootManifest = JSON.parse(readFileSync(join(RepoRoot, 'package.json'), 'utf8'))
 /** 本仓自己定义的环境变量一律用这个前缀；别人定义的前缀由登记表的 environmentPrefixes 补充。 */
@@ -279,6 +280,7 @@ if (onlyDirectory && selectedModules.length === 0) {
 const migratingReports = []
 
 for (const module of selectedModules) {
+  if (module.layout === 'interface') { checkInterfaceModule(RepoRoot, module, fail); continue }
   const failuresBefore = failures.length
   const packageRoot = join(PackagesRoot, module.directory)
   const label = module.name
@@ -287,11 +289,11 @@ for (const module of selectedModules) {
     continue
   }
   const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
-  // 能力单元登记的名字是「包名/单元」，引用时就这么写（@velaros-ai/velar/files）。
+  // 能力单元登记的名字是「包名/单元」，引用时就这么写（@velaros-ai/velaros/files）。
   const packageName = module.unit ? module.name.slice(0, -(module.unit.length + 1)) : module.name
   if (manifest.name !== packageName) fail(`${label}: 包名与登记表不符（${manifest.name}）`)
 
-  // 能力单元（一个包里按目录放的几个模块，例如 @velaros-ai/velar 的 files、shell）：源码根就是单元目录，
+  // 能力单元（一个包里按目录放的几个模块，例如 @velaros-ai/velaros 的 files、shell）：源码根就是单元目录，
   // 入口是 ./<单元> 与 ./<单元>/…，spec/ 与 test/ 跟着单元走、不算源码。普通模块的源码根是 src/。
   const unit = module.unit ?? null
   const unitSubpath = unit ? `./${unit}` : null
@@ -471,7 +473,7 @@ for (const module of selectedModules) {
   for (const file of walkAll(contractRoot)) {
     if (!contractFileNames.has(basename(file))) fail(`${label}: ${shortPath(file)} 不是合同文件；${module.contract}/ 只有 provides.ts、requires.ts、constants.ts，代码面能力另有生成的 surface.ts`)
     else if (basename(file) === 'surface.ts' && !readFileSync(file, 'utf8').startsWith(GeneratedSurfaceHeader)) {
-      fail(`${label}: ${shortPath(file)} 不是生成器写的；模型面的声明只由 \`bun run generate:code-surface\` 生成，不手写`)
+      fail(`${label}: ${shortPath(file)} 不是生成器写的；模型面的声明只由 \`bun run generate:script\` 生成，不手写`)
     }
   }
   if (!existsSync(providesPath)) fail(`${label}: 缺少产品面文件 ${shortPath(providesPath)}`)

@@ -54,8 +54,7 @@ export function readVerbatimString(value: unknown): Nullable<string> {
  */
 export function isSerializedContextRefCandidateText(value: string): boolean {
   const trimmed = value.trim()
-  // B3:计数纳入旧键代际(先决已证:QueryTurn/StreamTurn 对一切显式 allowTools 强插
-  // context:recall,不变量不可能假阳性)。fingerprint.contextRefCount 语义自此变宽。
+  // 持久档案可能包含这些引用形态；发送前需要宿主解析成真实材料。
   if (
     !trimmed.includes('__contextRef') &&
     !trimmed.includes('__kernelRef') &&

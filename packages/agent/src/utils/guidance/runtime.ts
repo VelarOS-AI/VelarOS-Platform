@@ -52,7 +52,7 @@ function renderSubAgentDispatchCatalog(snapshot: RuntimePromptSnapshot): string[
 /**
  * 拼「工具执行链」那一段的正文：先是六条与具体工具无关的通用纪律（以本轮 schema 为准、先读真值再写、
  * 有数据依赖的调用必须分轮、遇截断按 continuation 补齐、失败重试只补要改的字段、上下文会被自动整理），
- * 再按本轮工具面**按需**追加三条——`tooling:map` / `context:recall` / `context:handoff` 各自在场时才提。
+ * 按当前可调用工具补充发现与使用指引。
  * 按需追加是关键：讲一个这轮根本调不到的工具，只会诱导模型去调一个不存在的名字。
  */
 function buildRuntimeToolCapabilityMap(
@@ -64,19 +64,11 @@ function buildRuntimeToolCapabilityMap(
     "存在数据依赖的工具调用必须分轮：先等待读取或运行结果，再据真实返回写入或提交；只并行互不依赖的调用。",
     "遇到截断或低置信结果时，按回执提供的 continuation、cursor 或 nextOffset 补齐当前任务所需证据。",
     "失败回执提供参数复用入口时，只补需要更正的字段；历史省略标注不能当作源码或完整参数重放。",
-    "系统在完整请求超出模型可用容量时自动整理上下文。",
+    "上下文材料受当前请求预算约束；缺口按实际回执处理。",
   ];
   if (hasRuntimeTool(snapshot, "tooling:map")) {
     lines.push(
       "缺少能力时先用 tooling:map 查看可装载能力，再按返回的 activation 信息处理。",
-    );
-  }
-  if (hasAnyRuntimeTool(snapshot, ["context:recall"])) {
-    lines.push("需要恢复已裁剪证据时调用 context:recall。");
-  }
-  if (hasAnyRuntimeTool(snapshot, ["context:handoff"])) {
-    lines.push(
-      "系统自动整理后当前会话仍无法继续时，调用 context:handoff 请求用户批准交接。",
     );
   }
   return lines.join("\n");

@@ -22,9 +22,9 @@ const repoRoot = await realpath(resolve(dirname(fileURLToPath(import.meta.url)),
 const productRoot = join(repoRoot, 'products', 'document-renderer')
 const outputRoot = join(repoRoot, 'dist-document-renderer')
 const releaseRoot = join(repoRoot, 'release', 'document-renderer')
-// 渲染原语在 velar 的 office 单元里，pdfjs 与 canvas 这两个原生依赖也装在 velar 名下。
+// 渲染原语在 velaros 的 office 单元里，pdfjs 与 canvas 这两个原生依赖也装在 velaros 名下。
 const requireFromVelar = createRequire(
-  join(repoRoot, 'packages', 'velar', 'package.json'),
+  join(repoRoot, 'packages', 'velaros', 'package.json'),
 )
 const supportedTargets = new Map([
   ['darwin-arm64', {

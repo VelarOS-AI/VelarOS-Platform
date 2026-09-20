@@ -18,6 +18,8 @@ VelarOS 的 Agent 运行时：一次「用户说话 → 模型跑 → 工具做�
 
 ## 提供什么
 
+- `createFoundationAgent`、`FoundationAgentApi`、`FoundationAgentOptions`、`FoundationActionPort`：由共享上下文、模型驱动和执行入口装配小循环，预留维护预算。
+
 四个入口。`./contracts`、`./chat`、`./tool-contract` 的引用链不碰 Node 内置模块（INV-16），
 渲染进程可以直接加载；根入口是 Node 宿主面。
 
@@ -133,7 +135,7 @@ VelarOS 的 Agent 运行时：一次「用户说话 → 模型跑 → 工具做�
 | 类别 | 工具 |
 | --- | --- |
 | agent-control | `tooling:map`、`tooling:read`、`tooling:replace`、`agent:dispatch`、`agent:run_workflow`、`job:read_output`、`job:wait` |
-| context | `context:recall`、`context:handoff`、`directive:list`、`directive:upsert`、`directive:archive` |
+| context | `directive:list`、`directive:upsert`、`directive:archive` |
 | planning | `goal:create`、`goal:update`、`plan:update` |
 | interaction | `interaction:confirm` |
 
@@ -148,9 +150,7 @@ VelarOS 的 Agent 运行时：一次「用户说话 → 模型跑 → 工具做�
 
 - `tooling:map` / `tooling:read` / `tooling:replace`：工具空间总览、读一条工具的完整说明、整体换入某几个类别；
   三条都经 `ToolRegistry` 的可见性投影，换入换出的最小单位是类别。
-- `context:recall`：`ContextOperations` → `ChatContextRetrievalService`（索引 → 打分 → 载荷读取），
   按句柄取回被折叠过的原文。
-- `context:handoff`：`ContextOperations` 的守卫 → 交出转交简报，由产品开新会话继续。
 - `directive:list` / `directive:upsert` / `directive:archive`：`directiveOperations` 读写活动上下文里的
   长期指令产物，条数上限在 `AgentToolLimits`。
 - `goal:create` / `goal:update`：`GoalOperations` 写目标产物并投影成界面的目标停靠区；
@@ -178,7 +178,7 @@ VelarOS 的 Agent 运行时：一次「用户说话 → 模型跑 → 工具做�
   挂进内核走 `toolKernelModules.define`，每次调用严格解析入参 → 解析上下文并换上内核的 abortSignal → 不可用报 `UNAVAILABLE` → 执行（INV-28）。
 - **工具执行**：唯一路径是 `ToolExecutor`。没注入审批端口时 `defaultDenyApprovalPort` 一律拒（INV-1）；
   无人值守宿主用 `createUnattendedSubAgentApprovalPort` 按显式策略升级（INV-2）。
-  投给模型的结果有硬上限，超限截断但原文可经 `context:recall` 取回（INV-10）。
+  投给模型的结果有硬上限，超限截断但原文由会话检索服务读取（INV-10）。
 - **子 Agent 与工作流**：工具 `agent:dispatch` → `SubAgentDispatcher`（并发闸、类型路由、模型路由、写租约）
   → `QueryLoop`；异步派发登记成后台任务，完成后经会话通道回灌。
   `agent:run_workflow` 走 `AgentWorkflowRuntime` 的声明式 IR。

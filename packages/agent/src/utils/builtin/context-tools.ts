@@ -1,31 +1,11 @@
-// 域：上下文三件套（`context:recall` / `context:handoff` / `context:distill`）的入参形状与结果投影。
-//
-// 只放 schema 与纯函数：真去召回、真去请交接在 impl/builtin/ContextOperations.ts。
-import { z } from 'zod'
+/** 会话历史检索的来源解析与结果投影。 */
 
 import { isPlainObject, isString, toNullable } from '@velaros-ai/core'
 
-import { AgentToolLimits } from '../../contract/constants.js'
-import type { HandoffContextInput, RecallContextInput } from '../../types/builtin.js'
+import type { RecallContextInput } from '../../types/builtin.js'
 import type { KernelToolContext } from '../../types/tool-context.js'
-import { renderParameterDescription as parameterDescription } from '../toolkit/tool-description'
 
 import { inferRecallRefKind } from './context-retrieval'
-
-/** 交接理由的长度上限模型直接看得见，值在 AgentToolLimits.context.handoffReasonChars。 */
-export const handoffContextSchema: z.ZodType<HandoffContextInput> = z.object({
-  reason: z
-    .string()
-    .trim()
-    .min(1)
-    .max(AgentToolLimits.context.handoffReasonChars)
-    .describe(
-      parameterDescription({
-        description: '为什么当前会话已经不适合继续，以及交接后应继续处理什么。',
-        notes: ['用户会看到交接批准卡；写清必要性，不要把普通进度更新当成交接理由。'],
-      })
-    ),
-})
 
 /** 模型读取统一逻辑正文，持久档案及其分页坐标保留原始文本。 */
 export function presentHistoricalFile(value: unknown): unknown {

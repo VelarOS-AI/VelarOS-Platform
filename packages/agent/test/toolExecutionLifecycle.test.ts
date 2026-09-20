@@ -330,7 +330,7 @@ describe('tool execution lifecycle', () => {
     expect(executions).toBe(0)
     expect(failure?.result).toMatchObject({
       error: 'history_input_preview_argument', details: { inputRef: 'input:original-write' },
-      nextActions: [expect.stringContaining('context:recall')],
+      nextActions: [expect.stringContaining('缺失字段需要宿主补充')],
     })
   })
 

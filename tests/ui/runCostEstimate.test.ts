@@ -296,8 +296,8 @@ void describe('run cost estimate', () => {
   void test('uses gateway-reported costs as-is', () => {
     const estimate = estimateRunCost({
       usage: sumUsage([telemetry({ costUsd: 1.25 }), telemetry({ turn: 2, costUsd: 0.75 })]),
-      provider: 'velar',
-      model: 'velar/auto',
+      provider: 'velaros',
+      model: 'velaros/auto',
       pricingCatalog: null,
     })
 

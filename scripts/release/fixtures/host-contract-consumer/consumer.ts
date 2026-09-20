@@ -14,22 +14,22 @@ import {
 } from '@velaros-ai/agent/tool-contract'
 import { createModelRequestClient } from '@velaros-ai/model'
 import { languageQueries, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/development'
-import { ComputerInputLimits, type ComputerPoint } from '@velaros-ai/velar/computer/contracts'
-import { createCapabilityPort } from '@velaros-ai/code-surface'
-import { FileLimits } from '@velaros-ai/velar/files/contracts'
-import { createLocalFilePort } from '@velaros-ai/velar/files/local'
-import { officeOperations, type OfficeOperationContext } from '@velaros-ai/velar/office'
-import type { OfficeEnvironmentInspection, OfficeWritten } from '@velaros-ai/velar/office/contracts'
+import { ComputerInputLimits, type ComputerPoint } from '@velaros-ai/velaros/computer/contracts'
+import { createCapabilityPort } from '@velaros-ai/script'
+import { FileLimits } from '@velaros-ai/velaros/files/contracts'
+import { createLocalFilePort } from '@velaros-ai/velaros/files/local'
+import { officeOperations, type OfficeOperationContext } from '@velaros-ai/velaros/office'
+import type { OfficeEnvironmentInspection, OfficeWritten } from '@velaros-ai/velaros/office/contracts'
 import {
   createMemoryStore,
   memoryOperations,
   type MemoryOperationContext,
   type MemoryScopeApi,
   type MemoryStoreApi,
-} from '@velaros-ai/velar/memory'
-import { projectCapabilityPorts, type ProjectHostPort } from '@velaros-ai/velar/project'
-import { type LocalShellHostApi, shellCommandPolicy, shellOperations } from '@velaros-ai/velar/shell'
-import { createLocalShellHost } from '@velaros-ai/velar/shell/local'
+} from '@velaros-ai/velaros/memory'
+import { projectCapabilityPorts, type ProjectHostPort } from '@velaros-ai/velaros/project'
+import { type LocalShellHostApi, shellCommandPolicy, shellOperations } from '@velaros-ai/velaros/shell'
+import { createLocalShellHost } from '@velaros-ai/velaros/shell/local'
 
 // 空间由宿主自己装：共用能力的项目端口从 projectCapabilityPorts 取，本机实现从各单元的 `./local` 入口取，再接成代码面的能力端口。
 declare const projectHost: ProjectHostPort
@@ -56,14 +56,14 @@ const languageContext: LanguageToolContext = {
 }
 void languageQueries.run({ action: 'find_symbols' }, languageContext)
 
-// 办公文档在 velar 的 office 单元里：宿主把环境探测接到空间端口上，操作交回声明好的回执。
+// 办公文档在 velaros 的 office 单元里：宿主把环境探测接到空间端口上，操作交回声明好的回执。
 declare const inspectFromHost: (commands?: string[]) => Promise<OfficeEnvironmentInspection>
 declare const officeContext: OfficeOperationContext
 const inspectForOffice: OfficeOperationContext['office']['inspectEnvironment'] = inspectFromHost
 const wordWritten: Promise<OfficeWritten> = officeOperations.createWord({ outputPath: 'report.docx', content: '# 周报' }, officeContext)
 void [inspectForOffice, wordWritten]
 
-// 记忆在 velar 的 memory 单元里：宿主给根目录造一个记忆库，按会话的作用域取一份、开场排一段索引；三个操作经调用上下文里的作用域端口读写。
+// 记忆在 velaros 的 memory 单元里：宿主给根目录造一个记忆库，按会话的作用域取一份、开场排一段索引；三个操作经调用上下文里的作用域端口读写。
 const memoryStore: MemoryStoreApi = createMemoryStore({ root: '/srv/velaros/memory' })
 const memoryScope: MemoryScopeApi = memoryStore.scope('project:/srv/project')
 const memoryContext: MemoryOperationContext = { abortSignal: new AbortController().signal, memory: memoryScope }

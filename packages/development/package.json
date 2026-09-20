@@ -40,7 +40,7 @@
   "dependencies": {
     "@codemirror/lang-python": "^6.2.1",
     "@velaros-ai/core": "workspace:*",
-    "@velaros-ai/velar": "workspace:*",
+    "@velaros-ai/velaros": "workspace:*",
     "typescript": "^5.7.0"
   },
   "peerDependencies": {

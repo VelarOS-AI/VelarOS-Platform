@@ -1163,7 +1163,7 @@ export class ToolExecutor implements ToolExecutorApi {
       effects: result.effects,
       notices: result.notices,
       // 发现/索引类工具（如 tooling:map）声明 outputInline：输出禁止 page-out，
-      // 否则模型拿到的是 __kernelRef 桩、还得 context:recall 召回，自我抵消。
+      // 否则模型拿到的是 __kernelRef 桩、还得 历史检索服务 召回，自我抵消。
       keepOutputInline: this.executionPolicy.isToolOutputInline(
         result.toolName,
       ),

@@ -34,14 +34,14 @@ export class VelarModelAdapter extends ModelAdapter implements ModelProviderAdap
       fetch: (input, init) =>
         runtime.fetch(
           input,
-          providerId === 'velar'
+          providerId === 'velaros'
             ? injectVelarThinkingRouting(init, config.thinkingDepth, config.reasoningLevel)
             : init
         ),
     })
     return (modelId) => {
-      if (providerId === 'velar' && isBlank(modelId))
-        return languageModelWrappers.withPromptCache(provider.chat('velar/auto'))
+      if (providerId === 'velaros' && isBlank(modelId))
+        return languageModelWrappers.withPromptCache(provider.chat('velaros/auto'))
       if (isBlank(modelId)) {
         throw new AppError(
           'VALIDATION',
@@ -67,11 +67,11 @@ export class VelarModelAdapter extends ModelAdapter implements ModelProviderAdap
       )
     }
 
-    const runtime = this.cloudRuntime.require('velar')
+    const runtime = this.cloudRuntime.require('velaros')
     const url = `${runtime.baseURL}/embeddings`
     const headers = { Authorization: 'Bearer velar-managed' }
     const body = {
-      model: 'velar/embedding',
+      model: 'velaros/embedding',
       input: texts,
     }
 

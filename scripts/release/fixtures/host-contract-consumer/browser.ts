@@ -1,4 +1,4 @@
 // 能力单元的 contracts 入口是浏览器与渲染进程加载的那一份：打成浏览器包必须不碰 Node。
-export { ComputerErrorCodes, ComputerInputLimits } from '@velaros-ai/velar/computer/contracts'
-export { MemoryLimits, MemoryTypes, VelarMemoryModule } from '@velaros-ai/velar/memory/contracts'
-export { OfficeErrorCodes, OfficeInputLimits, VelarOfficeModule } from '@velaros-ai/velar/office/contracts'
+export { ComputerErrorCodes, ComputerInputLimits } from '@velaros-ai/velaros/computer/contracts'
+export { MemoryLimits, MemoryTypes, VelarMemoryModule } from '@velaros-ai/velaros/memory/contracts'
+export { OfficeErrorCodes, OfficeInputLimits, VelarOfficeModule } from '@velaros-ai/velaros/office/contracts'

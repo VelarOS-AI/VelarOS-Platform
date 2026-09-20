@@ -21,7 +21,7 @@ describe('Velar thinking routing', () => {
     ['balanced', 'ultra', { effort: 'high', max_tokens: 16_000 }],
   ])('maps depth=%s level=%s', (depth, level, expected) => {
     const result = injectVelarThinkingRouting(
-      { method: 'POST', body: JSON.stringify({ model: 'velar/auto', messages: [] }) },
+      { method: 'POST', body: JSON.stringify({ model: 'velaros/auto', messages: [] }) },
       depth,
       level
     )

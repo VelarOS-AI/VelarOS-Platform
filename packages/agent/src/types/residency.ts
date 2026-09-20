@@ -60,7 +60,7 @@ export interface ContextGovernanceSessionApi {
   requestEpoch(input: GovernanceWindowInput & { at: number; charsPerToken?: LooseOptional<number>; source?: LooseOptional<GovernanceEpochSource> }): Nullable<GovernanceEpochReport>
   /** 等在飞的蒸馏落地（测试与 headless 实验用）。 */
   whenDistillSettled(): Promise<void>
-  /** 缺页记账：`context:recall` 命中账本记录时调用。 */
+  /** 缺页记账：`历史检索服务` 命中账本记录时调用。 */
   recordFault(ref: string, at: number): boolean
   /** 转交信号：连续 N 次低收益 epoch 且 post-epoch 占用仍高。 */
   handoffSignal(): ContextHandoffSignal
@@ -211,7 +211,7 @@ export interface ContextLedgerGenerationStamp {
   ledgerGeneration: number
 }
 
-/** 缺页（fault）事件：`context:recall` 命中非 INLINE 记录。 */
+/** 缺页（fault）事件：`历史检索服务` 命中非 INLINE 记录。 */
 export interface ContextFaultEvent extends ContextLedgerGenerationStamp {
   recordId: string
   residency: ContextResidency

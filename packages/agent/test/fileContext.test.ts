@@ -1,7 +1,7 @@
 import type { ModelMessage } from 'ai'
 import { describe, expect, test } from 'bun:test'
 
-import { contextRetrievalTools } from '../src/impl/AgentTools'
+import { contextOperations } from '../src/impl/builtin/ContextOperations'
 import {
   FileContextCoordinator,
   } from '../src/impl/context/FileContextCoordinator'
@@ -121,7 +121,7 @@ describe('file context provider and archive', () => {
     expect(sent.split('new unique source')).toHaveLength(2)
     expect(sent).not.toContain('old unique source')
     expect(JSON.stringify(history)).toBe(original)
-    const recalled = (await contextRetrievalTools['context:recall'].execute(
+    const recalled = (await contextOperations.recall(
       { path: 'a.ts', revision: 'A' },
       ctx as never
     )) as any
@@ -245,8 +245,8 @@ describe('file context provider and archive', () => {
     files.registerSource(source(() => snapshot('A', 'historical')))
     await files.observe([snapshot('A', 'historical')], files.beginObservation(), 'read-1')
     const ref = files.currentViews()[0]!.refs[0]!
-    const recall = contextRetrievalTools['context:recall']!
-    expect(((await recall.execute({ ref }, ctx as never)) as any).content).toBe('historical')
+    const recall = contextOperations.recall
+    expect(((await recall({ ref }, ctx as never)) as any).content).toBe('historical')
     files.registerSource({
       ...source(() => snapshot('A', 'historical')),
       validateArchive: async () => {
@@ -254,7 +254,7 @@ describe('file context provider and archive', () => {
       },
     })
     for (const refKind of [undefined, 'payload-ref', 'tool-payload'] as const) {
-      expect(((await recall.execute({ ref, refKind }, ctx as never)) as any).found).toBe(false)
+      expect(((await recall({ ref, refKind }, ctx as never)) as any).found).toBe(false)
     }
   })
 
@@ -460,7 +460,7 @@ test('source envelopes archive parseable old windows and retain retrieval for in
   const wrap = (excerpt: string) => ({
     ...originalPart, output: { type: 'json', value: {
       __contextRef: 'tool-output', ref: 'output:original', excerpt,
-      retrieval: { tool: 'context:recall', args: { ref: 'output:original' } },
+      retrieval: { service: 'context-retrieval', args: { ref: 'output:original' } },
     } },
   })
   const history: ModelMessage[] = [{ role: 'tool', content: [
@@ -532,11 +532,11 @@ test('model historical file recall displays Unicode LF once while archive and pa
   const original = '\uFEFFfirst\\n\r\n中文🙂\r\nlast'
   files.registerSource(source(() => snapshot('A', original)))
   await files.observe([snapshot('A', original)], files.beginObservation())
-  const recall = contextRetrievalTools['context:recall']!
+  const recall = contextOperations.recall
   const parts: string[] = []
   let offset = 0
   do {
-    const result = await recall.execute({ path: 'a.ts', revision: 'A', offset, maxChars: 9 }, ctx as never) as any
+    const result = await recall({ path: 'a.ts', revision: 'A', offset, maxChars: 9 }, ctx as never) as any
     expect(result.contentFormat).toBe('unicode-lf')
     expect(result.offsetUnit).toBe('archived-utf16')
     expect(result.content).not.toContain('\r\n')

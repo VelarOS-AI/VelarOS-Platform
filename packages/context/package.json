@@ -1,0 +1,57 @@
+{
+  "name": "@velaros-ai/context",
+  "version": "0.7.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "sideEffects": false,
+  "velaros": {
+    "platform": "0.6"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js"
+    }
+  },
+  "files": [
+    "dist",
+    "MODULE.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun run build && node --test test/context.test.mjs test/views.test.mjs",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/context"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "@velaros-ai/kernel": "workspace:*",
+    "@velaros-ai/core": "workspace:*"
+  },
+  "description": "Shared task state, immutable evidence and runtime materialization for ScriptAct.",
+  "author": "VelarOS",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform.git",
+    "directory": "packages/context"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

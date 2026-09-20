@@ -5,6 +5,8 @@
  * 不在这里，在 `contract/constants.ts`；类自己固定用的写成类内 `private static readonly`。
  */
 export const KernelTuning = Object.freeze({
+  /** 模块发现缺省每页条数。 */
+  modulePageSize: 20,
   /** 启动器：等守护进程发布端点的上限，毫秒。 */
   launcherStartTimeoutMs: 30_000,
   /** 启动器：轮询 descriptor 的间隔，毫秒。 */

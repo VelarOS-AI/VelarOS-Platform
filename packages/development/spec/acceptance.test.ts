@@ -8,7 +8,7 @@ import { join } from 'node:path'
 
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test'
 
-import { createProjectKernel } from '@velaros-ai/velar/project'
+import { createProjectKernel } from '@velaros-ai/velaros/project'
 
 import { typeScriptProjectPool } from '../src/impl/TypeScriptProjectPool'
 import {

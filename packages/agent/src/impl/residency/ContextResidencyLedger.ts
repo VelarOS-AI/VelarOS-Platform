@@ -62,7 +62,7 @@ export interface ContextResidencyLedgerApi extends ResidencyLedgerView {
   isStickyAfterFault(recordId: string): boolean
   /** epoch 排序阶段调用，把一条记录标进待逐出集；幂等，重复标不出错。记录不存在时抛 `INVARIANT`。 */
   markPendingEvict(recordId: string): void
-  /** 记一次缺页（`context:recall` 命中了非 INLINE 的记录）并返回这条记录累计的缺页次数：落一条 fault 事件、按次数指数延长升温租约（到配置上限封顶）、够次数就转粘滞，并且——只要它还没 EXPIRED——当场升回它的准入驻留态（超长内容只回到 EXCERPT，不会把几十万字正文突然塞回 prompt）。 */
+  /** 记一次缺页（`历史检索服务` 命中了非 INLINE 的记录）并返回这条记录累计的缺页次数：落一条 fault 事件、按次数指数延长升温租约（到配置上限封顶）、够次数就转粘滞，并且——只要它还没 EXPIRED——当场升回它的准入驻留态（超长内容只回到 EXCERPT，不会把几十万字正文突然塞回 prompt）。 */
   recordFault(recordId: string, at: number): number
 }
 
@@ -249,7 +249,7 @@ export class ContextResidencyLedger implements ContextResidencyLedgerApi {
   }
 
   /**
-   * 缺页（fault）记账：`context:recall` 命中非 INLINE 记录时调用。
+   * 缺页（fault）记账：`历史检索服务` 命中非 INLINE 记录时调用。
    * fault 率是策略好坏的核心信号，也替代 v1 断链的 outcome 回学。
    */
   public recordFault(recordId: string, at: number): number {

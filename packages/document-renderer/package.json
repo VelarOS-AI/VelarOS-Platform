@@ -38,7 +38,7 @@
   },
   "dependencies": {
     "@velaros-ai/core": "workspace:*",
-    "@velaros-ai/velar": "workspace:*",
+    "@velaros-ai/velaros": "workspace:*",
     "zod": "^4.3.6"
   },
   "devDependencies": {

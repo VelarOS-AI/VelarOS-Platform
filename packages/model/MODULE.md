@@ -14,6 +14,11 @@
 
 ## 提供什么
 
+`modelRequestEncoder` / `ModelRequestEncoderApi` 将中立请求编码为驱动实际发送的 prompt，ProviderRequestCompiler 共用此编码入口。
+
+
+- `createAiSdkModelDriver`、`AiSdkDriverOptions`、`ModelDriver`：提供统一流式驱动与编码预算口径。
+
 本包对外只有三个面，都由接口控制：导出的类型只能来自 `src/contract/`（provides 登记的接口、requires、constants）和 `src/types/` 的公开数据文件，导出的值必须标注成公开接口；类、工具函数和包内部的接口一律不出包。门禁机械核对，没写进这一节的值导不出去。
 
 **产品面**，登记在 `contract/provides.ts`：

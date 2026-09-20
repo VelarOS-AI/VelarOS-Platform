@@ -60,7 +60,7 @@ export class VelarCloudModelRuntime
     return this.bindings.has(providerId)
   }
 
-  public require(providerId: VelarCloudManagedProviderId = 'velar'): VelarCloudModelRuntimeBinding {
+  public require(providerId: VelarCloudManagedProviderId = 'velaros'): VelarCloudModelRuntimeBinding {
     const binding = this.bindings.get(providerId)
     if (!binding?.baseURL) {
       throw new AppError(

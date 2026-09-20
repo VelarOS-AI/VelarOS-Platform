@@ -14,7 +14,7 @@ export interface KernelToolResultMaterializerOptions {
  * 工具结果物化器：把一次执行的原始返回值分成「给界面看的」和「给模型看的」两份。
  *
  * 由 `ToolExecutor` 在构造时建一份长期持有。界面永远拿原文；模型那份在超预算时被换成
- * 「摘要 + 可召回句柄」，全文另存进 `outputStore` 并作为 `storedOutput` 一并返回，供后续 `context:recall`。
+ * 「摘要 + 可召回句柄」，全文另存进 `outputStore` 并作为 `storedOutput` 一并返回，供后续 `历史检索服务`。
  */
 export interface KernelToolResultMaterializerApi {
   /**

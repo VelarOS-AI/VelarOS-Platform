@@ -344,7 +344,7 @@ class ContextRetrievalPayloadReader implements ContextRetrievalPayloadReaderApi 
       const resolved = await this.resolveSingleToolPayload(sessionId, current)
       if (!resolved) return null
       if (isPrivateFileContextRecord(resolved.payload.toolName))
-        throw new AppError('VALIDATION', '读历史文件请改用 context:recall 并带上 path 与 revision：内部文件记录不是通用 payload，不能拿这个句柄直接取。')
+        throw new AppError('VALIDATION', '读历史文件请改用 历史检索服务 并带上 path 与 revision：内部文件记录不是通用 payload，不能拿这个句柄直接取。')
       const text = resolved.payload.serializedResult
       if (!text.includes('ctx-payload:')) return resolved
       let ref: string | undefined

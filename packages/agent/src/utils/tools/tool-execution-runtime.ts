@@ -158,7 +158,7 @@ export function buildHistoryPlaceholderArgsFailure(
         nextActions: [
           '这些参数来自压缩后的历史预览，缺少可执行的完整内容；恢复真实内容后重新调用。',
           '需要旧内容时先重新读取目标文件或片段，以读到的原文为准构造参数。',
-          '历史调用带有 __historyInputRef 时，用 context:recall 的 ref 与 jsonPath 找回原始参数；按返回的 nextOffset 续读。',
+          '历史调用的 __historyInputRef 是宿主原文引用；参数不完整时报告缺口，不能直接重发历史投影。',
         ],
       },
     ),
@@ -188,7 +188,7 @@ export function readProviderToolArgs(
         result: buildToolFailureResult('history_input_preview_argument', reason, toolName, {
           code: 'VALIDATION',
           details: { inputRef: optionalWhen(isString, record.__historyInputRef) },
-          nextActions: ['用 context:recall 的 ref 与 jsonPath 召回省略字段的完整原文，再构造符合当前 schema 的完整参数；历史视图元数据不属于执行参数。'],
+          nextActions: ['基于真实原文构造符合当前 schema 的完整参数；缺失字段需要宿主补充，历史投影不能当作执行参数。'],
         }),
       }
     }

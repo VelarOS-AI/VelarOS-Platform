@@ -6,6 +6,7 @@ import { AppError } from '@velaros-ai/core/error'
 import type { ProviderRequestSnapshot,ProviderToolDefinitionSnapshotInput } from '../../types/context.js'
 import type { ProviderRequestFingerprint } from '../../types/records.js'
 
+import { shortHash } from './content-hash'
 import { encodeProviderRequestAuditValue } from './serialization'
 
 /**
@@ -20,10 +21,12 @@ export function buildProviderRequestSnapshot(input: {
   messages: readonly ModelMessage[]
   tools?: readonly ProviderToolDefinitionSnapshotInput[]
   toolChoice?: unknown
+  responseFormat?: unknown
   requestFingerprint: ProviderRequestFingerprint
 }): ProviderRequestSnapshot {
   return {
     schemaVersion: 1,
+    ...(input.responseFormat === undefined ? {} : {responseFormat: encodeProviderRequestAuditValue(input.responseFormat)}),
     model: input.model,
     system: input.system,
     messages: encodeProviderRequestAuditValue(input.messages),
@@ -45,6 +48,9 @@ export function assertProviderRequestSnapshotReconstructable(
   const expectedNames = snapshot.requestFingerprint.availableToolNames
   const actualNames = snapshot.tools.map((tool) => tool.name)
   const issues: string[] = []
+  if (snapshot.responseFormat !== undefined || snapshot.requestFingerprint.responseFormatHash !== undefined) {
+    if (snapshot.responseFormat === undefined || shortHash(JSON.stringify(snapshot.responseFormat)) !== snapshot.requestFingerprint.responseFormatHash) issues.push('response format does not match sealed fingerprint')
+  }
   if (JSON.stringify(actualNames) !== JSON.stringify(expectedNames)) {
     issues.push(`tool definitions do not match visible tools: expected=${expectedNames.join(',')}; actual=${actualNames.join(',')}`)
   }

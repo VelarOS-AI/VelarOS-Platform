@@ -260,7 +260,7 @@ export interface CodingSessionTrackerOptions {
   }
   /**
    * 「改到这个文件之后要不要再跑一次验证」的判据，由做这次改动的空间给出（项目里是
-   * `@velaros-ai/velar/project` 的 `projectVerificationPolicy.isVerificationRelevantPath`）。
+   * `@velaros-ai/velaros/project` 的 `projectVerificationPolicy.isVerificationRelevantPath`）。
    *
    * Agent 只知道自己收集到了哪些改动路径，不知道哪些文件算代码，所以这条判据不在包内；
    * 不给就把每条改动路径都算成要验证的——看不见哪些改动无关紧要，不等于可以把验证告警吞掉。

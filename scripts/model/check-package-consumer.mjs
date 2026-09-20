@@ -523,7 +523,7 @@ assert.equal(typeof runtime.createModelRequestClient, 'function')
 assert.equal(typeof runtime.createModelRuntimeComposition, 'function')
 assert.equal(typeof runtime.createModelKernelModule, 'function')
 assert.equal(typeof runtime.modelUsage.summarize, 'function')
-assert.deepEqual(runtime.VelarCloudManagedProviderIds, ['velar', 'velar-dev'])
+assert.deepEqual(runtime.VelarCloudManagedProviderIds, ['velaros', 'velar-dev'])
 for (const name of [
   'DefaultModelRuntimeComposition',
   'LocalModelEnvironment',

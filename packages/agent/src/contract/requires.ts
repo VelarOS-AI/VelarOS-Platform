@@ -1,7 +1,7 @@
-
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { LanguageModel, ModelMessage } from 'ai'
 
+import type { ModelView } from '@velaros-ai/context'
 import type { ScopedLog } from '@velaros-ai/core/logger'
 import type {
   RemoteNodeClientCredentialStore,
@@ -298,7 +298,7 @@ export interface ToolConversationContextApi {
     input: ToolConversationHandoffRequest
   ) => Promise<ToolConversationHandoffResult>
   /**
-   * 按 handle 取回被折叠/归档的上下文正文（`context:recall` 的 handle 通道）。
+   * 按 handle 取回被折叠/归档的上下文正文（`历史检索服务` 的 handle 通道）。
    *
    * 一次回合可被模型调多次；分页参数（jsonPath / offset）必须原样带下去，漏传会让模型反复拿到第一页。
    * 句柄不存在时返回「未命中」结果而不是抛错，模型据此换个 ref 再试。
@@ -1499,4 +1499,44 @@ export interface SubAgentTypeProvider {
 export interface AgentTurnCapabilitySnapshotSource<TRegistry> {
   /** 冻结并返回本回合的工具面快照；每回合开头调一次。未实现此端口的 headless / 测试适配器会被直接当作快照使用，产品宿主必须实现。 */
   captureTurnCapabilitySnapshot(): AgentTurnCapabilitySnapshot<TRegistry>
+}
+import type { ContextCompletionPort,ContextRuntime, ContextViewApi } from '@velaros-ai/context'
+import type { ModelDriver, ModelImage,ModelResponseFormat, ModelTurnRequest } from '@velaros-ai/kernel'
+
+import type { FoundationRunLimits } from '../types/foundation.js'
+
+/** 核心循环对外部执行只持有一个入口，不解释领域操作。 */
+export interface FoundationActionPort {
+  /** 当前模型生成完整回合所用的响应契约。 */
+  readonly response:ModelResponseFormat
+  /** 解释已校验响应，分离用户消息与可选提交；核心循环不解释业务字段。 */
+  decode(value:unknown):{message:string;submission?:unknown}
+  /** 执行并记录回执；acceptedTurnId 由宿主绑定到已持久化的响应。 */
+  invoke(input:unknown,signal:AbortSignal,acceptedTurnId:string):Promise<void|boolean>
+  /** 每个新业务回合运行稳定观察。 */
+  prepare(signal:AbortSignal):Promise<void>
+  /** 本轮仍有可见租约的执行身份。 */
+  visibleExecutions():Promise<readonly string[]>
+  /** 根据观察输出、租约和必要事实装配下一轮上下文。 */
+  project(view:ModelView,signal:AbortSignal,maxChars:number):Promise<{body:string;images:readonly ModelImage[]}>
+  /** 成功接收完整模型响应后消费一次帧租约。 */
+  acknowledge(request:ModelTurnRequest,signal:AbortSignal):Promise<void>
+}
+/** 主干循环由 Velaros 统一装配。 */
+export interface FoundationAgentOptions {
+  /** 任务事实、未知效果与领域验收由现有视图维护。 */
+  readonly view: ContextViewApi
+  /** 领域的真实完成校验。 */
+  readonly completionVerifier?: ContextCompletionPort
+
+  /** 会话的唯一上下文权威。 */
+  readonly context: ContextRuntime
+  /** 中立模型驱动。 */
+  readonly model: ModelDriver
+  /** 已装配的统一调用入口。 */
+  readonly action: FoundationActionPort
+  /** 宿主固定的基础指令，不受模型工作集替换影响。 */
+  readonly instructions: string
+  /** 运行、输出与维护预算。 */
+  readonly limits: FoundationRunLimits
 }

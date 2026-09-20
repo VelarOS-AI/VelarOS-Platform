@@ -283,3 +283,10 @@ export type { AnyVelaTool, RuntimeToolIssue, ToolArgsValidationResult, ToolExecu
  ToolExecutionFailureInput, ToolExecutionFailureKind, ToolExecutionPrepared, ToolExecutionRequest,
  ToolExecutionSuccessInput, ToolFailureResult, ToolInputAdjustment, ToolSchemaIssueDetail,
  ToolSpaceRecoveryGuide } from './types/tools.js'
+
+export { createFoundationAgent } from './impl/loop/FoundationAgent.js'
+export type { FoundationAgentApi } from './contract/provides.js'
+export type { FoundationActionPort, FoundationAgentOptions } from './contract/requires.js'
+export type { FoundationRunEvent, FoundationRunStatus, FoundationRunLimits } from './types/foundation.js'
+
+export type { CompiledFoundationRequest } from './types/foundation.js'

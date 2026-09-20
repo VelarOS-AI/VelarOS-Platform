@@ -181,7 +181,7 @@ export interface BuildToolPayloadRefsForProviderMessagesInput {
   /**
    * 声明 outputInline 的工具（如 tooling:map / tooling:read）：其结果禁止被 page-out 成 payload
    * 引用。这里直接不为它们生成 ref，下游 dedupe/reclaim 因 `!payloadRef` 自然跳过，工具输出
-   * 始终原样内联给模型，避免「模型看到 __contextRef 又得 context:recall 召回」的多余轮次。
+   * 始终原样内联给模型，避免「模型看到 __contextRef 又得 历史检索服务 召回」的多余轮次。
    */
   isOutputInlineToolName?: (toolName: string) => boolean
 }
@@ -441,6 +441,8 @@ export interface ProviderToolDefinitionSnapshot
 
 /** 模型请求组装终点的可持久化事实；不含密钥、provider client 或执行函数。 */
 export interface ProviderRequestSnapshot {
+  /** 真实发送的结构化响应格式；与工具和消息分别封存。 */
+  responseFormat?: ProviderRequestAuditValue
   schemaVersion: 1
   model: string
   system: string
@@ -613,7 +615,7 @@ export type ContextRefKind =
   | 'history-budget-truncated'
 
 export interface ContextRefRetrieval {
-  tool: 'context:recall'
+  service: 'context-retrieval'
   args: {
     ref: string
     refKind: 'tool-payload' | 'payload-ref' | 'context-handle' | 'evidence'

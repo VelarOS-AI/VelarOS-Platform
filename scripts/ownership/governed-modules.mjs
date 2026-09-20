@@ -40,6 +40,8 @@
 //   invariants      不变量登记表
 //   acceptance      验收测试文件；每条「测试」档不变量都要在这里有以编号开头的用例
 export const GovernedModules = [
+  { directory: 'velaros', name: '@velaros-ai/velaros', layout: 'interface', entryPrefix: 'src/', browserSafeEntries: ['contracts.ts'], card: 'MODULE.md', invariants: 'spec/invariants.md', acceptance: 'test/runtime.test.mjs' },
+  { directory: 'context', name: '@velaros-ai/context', layout: 'interface', browserSafeEntries: ['index.ts', 'contracts.ts'], card: 'MODULE.md', invariants: 'spec/invariants.md', acceptance: 'test/context.test.mjs' },
   {
     directory: 'agent',
     name: '@velaros-ai/agent',
@@ -147,10 +149,10 @@ export const GovernedModules = [
     acceptance: 'path-rules/spec/acceptance.test.ts',
   },
   {
-    // 能力单元：@velaros-ai/velar 里按目录放的几件能力，布局一样，清单与许可只在包根一份
-    directory: 'velar',
+    // 能力单元：@velaros-ai/velaros 里按目录放的几件能力，布局一样，清单与许可只在包根一份
+    directory: 'velaros',
     unit: 'files',
-    name: '@velaros-ai/velar/files',
+    name: '@velaros-ai/velaros/files',
     contract: 'files/contract',
     types: 'files/types',
     portable: 'files.ts',
@@ -159,7 +161,7 @@ export const GovernedModules = [
     tuning: 'tuning.ts',
     // 根入口读磁盘，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
-    // 空间端口：velar:files 的操作经 ctx.files 调它；每个方法都必须有操作在调
+    // 空间端口：velaros:files 的操作经 ctx.files 调它；每个方法都必须有操作在调
     hostPort: 'FileSpacePort',
     hostPortField: 'files',
     surfaceFile: 'files/impl/FileOperations.ts',
@@ -174,9 +176,9 @@ export const GovernedModules = [
     acceptance: 'files/spec/acceptance.test.ts',
   },
   {
-    directory: 'velar',
+    directory: 'velaros',
     unit: 'images',
-    name: '@velaros-ai/velar/images',
+    name: '@velaros-ai/velaros/images',
     contract: 'images/contract',
     types: 'images/types',
     portable: 'images.ts',
@@ -185,7 +187,7 @@ export const GovernedModules = [
     tuning: 'tuning.ts',
     // 根入口读磁盘，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
-    // 空间端口：velar:images 的 view 经 ctx.images 调它；每个方法都必须有操作在调
+    // 空间端口：velaros:images 的 view 经 ctx.images 调它；每个方法都必须有操作在调
     hostPort: 'ImageSpacePort',
     hostPortField: 'images',
     surfaceFile: 'images/impl/ImageOperations.ts',
@@ -198,9 +200,9 @@ export const GovernedModules = [
     acceptance: 'images/spec/acceptance.test.ts',
   },
   {
-    directory: 'velar',
+    directory: 'velaros',
     unit: 'shell',
-    name: '@velaros-ai/velar/shell',
+    name: '@velaros-ai/velaros/shell',
     contract: 'shell/contract',
     types: 'shell/types',
     portable: 'shell-command.ts',
@@ -212,7 +214,7 @@ export const GovernedModules = [
     browserSafeEntries: ['index.ts', 'contracts.ts'],
     // 本机宿主读写的环境变量：代码里出现的每个 VELAROS_* 名字都要登记在这里
     environmentTable: 'ShellEnvironmentVariables',
-    // 空间端口：velar:shell 的操作经 ctx.shell 调它；每个方法都必须有操作在调
+    // 空间端口：velaros:shell 的操作经 ctx.shell 调它；每个方法都必须有操作在调
     hostPort: 'ShellSpacePort',
     hostPortField: 'shell',
     surfaceFile: 'shell/impl/ShellOperations.ts',
@@ -229,9 +231,9 @@ export const GovernedModules = [
     acceptance: 'shell/spec/acceptance.test.ts',
   },
   {
-    directory: 'velar',
+    directory: 'velaros',
     unit: 'sandbox',
-    name: '@velaros-ai/velar/sandbox',
+    name: '@velaros-ai/velaros/sandbox',
     contract: 'sandbox/contract',
     types: 'sandbox/types',
     portable: 'rehearsal-sandbox.ts',
@@ -240,7 +242,7 @@ export const GovernedModules = [
     tuning: 'tuning.ts',
     // 根入口与可移植数据渲染进程都能加载：本机沙箱只从根入口导出类型，值在只给 Node 的 local 入口
     browserSafeEntries: ['index.ts', 'contracts.ts'],
-    // 空间端口：velar:sandbox 的操作经 ctx.sandbox 调它；每个方法都必须有操作在调
+    // 空间端口：velaros:sandbox 的操作经 ctx.sandbox 调它；每个方法都必须有操作在调
     hostPort: 'SandboxSurfacePort',
     hostPortField: 'sandbox',
     surfaceFile: 'sandbox/impl/SandboxOperations.ts',
@@ -255,11 +257,11 @@ export const GovernedModules = [
     acceptance: 'sandbox/spec/acceptance.test.ts',
   },
   {
-    // 能力单元：项目受治理的文件（velar:project）与问代码（velar:code），连同它们底下的项目内核。问代码要用内核的符号表与读取，
+    // 能力单元：项目受治理的文件（velaros:project）与问代码（velaros:code），连同它们底下的项目内核。问代码要用内核的符号表与读取，
     // 离不开这个内核，所以两件放在同一个单元里；项目给共用能力装的端口也在这里，把它们装成项目空间是产品的事
-    directory: 'velar',
+    directory: 'velaros',
     unit: 'project',
-    name: '@velaros-ai/velar/project',
+    name: '@velaros-ai/velaros/project',
     contract: 'project/contract',
     types: 'project/types',
     portable: 'project.ts',
@@ -272,7 +274,7 @@ export const GovernedModules = [
     hostPortField: 'project',
     surfaceFile: ['project/impl/operations/ProjectFileOperations.ts', 'project/impl/operations/ProjectCodeOperations.ts'],
     layers: [
-      // velar:project、velar:code 的操作，项目资源门，项目给共用能力装的端口与验证判据
+      // velaros:project、velaros:code 的操作，项目资源门，项目给共用能力装的端口与验证判据
       ['operations/'],
       // 项目内核
       ['kernel/'],
@@ -284,11 +286,11 @@ export const GovernedModules = [
     acceptance: 'project/spec/acceptance.test.ts',
   },
   {
-    // 能力单元：桌面控制（velar:computer），连同底下管 Python helper 子进程的运行时与 helper 定位器；
+    // 能力单元：桌面控制（velaros:computer），连同底下管 Python helper 子进程的运行时与 helper 定位器；
     // 宿主把运行时直接当空间端口交进来（结构上满足），界面要的就绪、屏幕几何、释放也在运行时上
-    directory: 'velar',
+    directory: 'velaros',
     unit: 'computer',
-    name: '@velaros-ai/velar/computer',
+    name: '@velaros-ai/velaros/computer',
     contract: 'computer/contract',
     types: 'computer/types',
     portable: 'computer.ts',
@@ -317,10 +319,10 @@ export const GovernedModules = [
     acceptance: 'computer/spec/acceptance.test.ts',
   },
   {
-    // 能力单元：长期记忆（velar:memory）：一个作用域一个目录的 Markdown，模型面三个操作；作用域由宿主给，记忆不解释它，只按它隔离
-    directory: 'velar',
+    // 能力单元：长期记忆（velaros:memory）：一个作用域一个目录的 Markdown，模型面三个操作；作用域由宿主给，记忆不解释它，只按它隔离
+    directory: 'velaros',
     unit: 'memory',
-    name: '@velaros-ai/velar/memory',
+    name: '@velaros-ai/velaros/memory',
     contract: 'memory/contract',
     types: 'memory/types',
     portable: 'memory.ts',
@@ -346,11 +348,11 @@ export const GovernedModules = [
     acceptance: 'memory/spec/acceptance.test.ts',
   },
   {
-    // 能力单元：办公文档（velar:office），整包并进来的：模型面的九个操作，连同底下的 Word、PowerPoint、Excel、PDF 引擎、
+    // 能力单元：办公文档（velaros:office），整包并进来的：模型面的九个操作，连同底下的 Word、PowerPoint、Excel、PDF 引擎、
     // 外部转换器（LibreOffice、LaTeX、MarkItDown）与给 Document Renderer 的窄渲染原语
-    directory: 'velar',
+    directory: 'velaros',
     unit: 'office',
-    name: '@velaros-ai/velar/office',
+    name: '@velaros-ai/velaros/office',
     contract: 'office/contract',
     types: 'office/types',
     portable: 'office.ts',
@@ -379,11 +381,11 @@ export const GovernedModules = [
     acceptance: 'office/spec/acceptance.test.ts',
   },
   {
-    // 能力单元：浏览器（velar:browser、velar:devtools 与 velar:cdp），整包并进来的：模型面的三件能力，连同底下的 CDP 驱动、交互 / 页面数据 / 截图 / 性能引擎、
+    // 能力单元：浏览器（velaros:browser、velaros:devtools 与 velaros:cdp），整包并进来的：模型面的三件能力，连同底下的 CDP 驱动、交互 / 页面数据 / 截图 / 性能引擎、
     // Electron 会话运行时、站点工作区、登录墙、用户脚本存储、动作策略与页面脚本；地址栏、偏好、截图策略与 React 合成给渲染进程
-    directory: 'velar',
+    directory: 'velaros',
     unit: 'browser',
-    name: '@velaros-ai/velar/browser',
+    name: '@velaros-ai/velaros/browser',
     contract: 'browser/contract',
     types: 'browser/types',
     portable: 'browser.ts',
@@ -424,32 +426,25 @@ export const GovernedModules = [
     acceptance: 'browser/spec/acceptance.test.ts',
   },
   {
-    directory: 'code-surface',
-    name: '@velaros-ai/code-surface',
-    // 四个工具：script:exec 跑脚本、存脚本、重放，另外三个（history、show、diff）只读时间线。别的能力都在脚本里 import
-    toolsFile: 'src/impl/CodeSurfaceTools.ts',
-    toolDefiner: 'defineCodeSurfaceTool',
+    directory: 'script',
+    name: '@velaros-ai/script',
+    // Script 执行引擎：检查、精确编辑、隔离执行与 Kernel 能力桥；模型入口由 Velaros 装配
     contract: 'src/contract',
     types: 'src/types',
-    portable: 'code-surface.ts',
+    portable: 'script.ts',
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
     // 根入口起子进程、跑编译器，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
     layers: [
-      // 门在模型面上的四个工具，与把它们挂进内核的模块
-      ['CodeSurfaceTools.ts'],
-      // 模型写脚本的那扇门：按会话记导入，按空间开时间线，编给模型的说明
-      ['CodeProgramGate.ts'],
-      // 办一次 exec（按顺序做每一步、记进时间线），与读时间线给模型看（history、show、diff）
-      ['ScriptExecution.ts', 'ScriptTimelineViews.ts'],
-      // 办一段脚本：查体量、检查、执行、编结果；一个空间的时间线：日志、脚本库、标记
-      ['CodeSurfaceSession.ts', 'ScriptTimeline.ts'],
-      // 执行前的检查、隔离里的执行、给工作区打标记；三者互不相干
-      ['CodeProgramChecker.ts', 'NodeSubprocessCodeRunner.ts', 'WorkspaceMarkers.ts'],
-      // 能力那一侧：把空间交来的操作表接成端口，不认识任何一件具体能力；时间线落盘
-      ['CapabilityOperationPort.ts', 'TimelineStorage.ts'],
+      // Kernel 会话编排检查与一次执行
+      ['KernelScriptSession.ts'],
+      ['CodeSurfaceSession.ts'],
+      // 执行前的检查与隔离运行器
+      ['CodeProgramChecker.ts', 'NodeSubprocessCodeRunner.ts'],
+      // 能力转发：操作表与 Kernel 调用统一转换成脚本端口
+      ['CapabilityOperationPort.ts', 'KernelInvocationPort.ts'],
     ],
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',
@@ -531,8 +526,8 @@ export const GovernedModules = [
   {
     directory: 'development',
     name: '@velaros-ai/development',
-    // 没有模型面，不是工具，所以不在 velar 里：不登记 toolsFile、toolDefiner、hostPort。模型看到的 velar:code 归
-    // @velaros-ai/velar/project，本包只提供它背后的语言服务实现（宿主拿 createProjectCodeQuery 实现 ProjectSpacePort.queryCode）
+    // 没有模型面，不是工具，所以不在 velaros 里：不登记 toolsFile、toolDefiner、hostPort。模型看到的 velaros:code 归
+    // @velaros-ai/velaros/project，本包只提供它背后的语言服务实现（宿主拿 createProjectCodeQuery 实现 ProjectSpacePort.queryCode）
     contract: 'src/contract',
     types: 'src/types',
     portable: 'development.ts',

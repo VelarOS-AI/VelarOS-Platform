@@ -6,11 +6,11 @@
 
 ## 这是什么
 
-`velar:code` 背后的语言服务库。模型用的 `velar:code` 在 `@velaros-ai/velar/project` 里；宿主拿本包实现项目工具的空间端口 `ProjectSpacePort.queryCode`：
-`velar:code` 的 query、analyze 把模型的请求翻译成一条 `ProjectCodeQuery` 交过来，语言服务类的七个动作
+`velaros:code` 背后的语言服务库。模型用的 `velaros:code` 在 `@velaros-ai/velaros/project` 里；宿主拿本包实现项目工具的空间端口 `ProjectSpacePort.queryCode`：
+`velaros:code` 的 query、analyze 把模型的请求翻译成一条 `ProjectCodeQuery` 交过来，语言服务类的七个动作
 （找符号、列导出、列引入、找引用方、找引用、诊断、符号影响面）由本包回答，代码图谱类动作交给宿主自己的图后端。
 
-本包没有模型面，不是工具，所以不在 `@velaros-ai/velar` 里；它也不认宿主：只要给得起「列文件 / 读正文 / 列符号」三个读方法，Desktop、Workbench、Termel
+本包没有模型面，不是工具，所以不在 `@velaros-ai/velaros` 里；它也不认宿主：只要给得起「列文件 / 读正文 / 列符号」三个读方法，Desktop、Workbench、Termel
 都能直接用。另有一件独立能力：把用户本机装好的外部语言服务（basedpyright、gopls、rust-analyzer…）按 LSP 拉起来，
 给 JavaScript/TypeScript 与 Python 之外的语言补上诊断与跳转。
 
@@ -79,7 +79,7 @@ typeScriptProjects.release(projectRoot)
 
 `LanguageToolContext` 只有中止信号、项目根与只读内核端口（`listFiles` / `read` / `listSymbols`）：语言查询不消耗项目的修改、
 执行与审批能力，宿主给的内核就算带着写入口，本包也够不着。代码图谱后端（`ProjectCodeIndexApi`）是可选的，给一个永远不可用的
-空实现也合法：内置的七个语言动作照常可用，代码图谱类动作抛 code 为 `UNAVAILABLE` 的错误，由 `velar:code` 写成降级说明。
+空实现也合法：内置的七个语言动作照常可用，代码图谱类动作抛 code 为 `UNAVAILABLE` 的错误，由 `velaros:code` 写成降级说明。
 
 **标准库。** TypeScript 类型诊断依赖标准库声明（`lib.*.d.ts`），按这个顺序找：`typescript` 包自身所在目录；宿主调
 `typeScriptProjects.configureLibraryDirectory(absoluteDir)` 显式声明的目录；Electron 约定目录 `<process.resourcesPath>/typescript/lib`。
@@ -98,7 +98,7 @@ JSON-RPC framing、超时与取消，以及诊断与跳转结果的有界归一�
 
 - `@velaros-ai/core`：`AppError`、`Log`、类型守卫、`TimerScope`、`resolveRealPath`。
 - `@velaros-ai/core/platform`：路径文本包含判断（越界判定的唯一实现）。
-- `@velaros-ai/velar/project`：只取类型与 `./project/contracts` 的常量，**运行时不加载项目单元的根入口**（`check:capabilities-arch` 守着这条）；
+- `@velaros-ai/velaros/project`：只取类型与 `./project/contracts` 的常量，**运行时不加载项目单元的根入口**（`check:capabilities-arch` 守着这条）；
   反过来项目单元不许引本包（`check:project-arch` 守着）。
 - `typescript`：JS/TS 的语法树、tsconfig 解析与 `ts.LanguageService`，运行依赖；公开签名里不出现任何 `ts.*` 类型。
 - `@codemirror/lang-python`：Python 的 Lezer 语法树。

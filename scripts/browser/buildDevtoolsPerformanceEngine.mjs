@@ -19,7 +19,7 @@ const nodeHostRuntimePath = join(
 )
 const outputPath = join(
   repositoryRoot,
-  'packages/velar/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs',
+  'packages/velaros/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs',
 )
 const expectedUpstreamVersion = '1.0.1652307'
 const embeddedGoogleApiKey = /\bAIza[0-9A-Za-z_-]{35}\b/g
@@ -146,7 +146,7 @@ try {
     format: 'esm',
     // Syntax minification folds Root.Runtime's deliberately opaque `import(importPath)`
     // back into a template import. Desktop's esbuild pass then treats it as a glob and
-    // tries to parse every file in @velaros-ai/velar/browser. Keep identifiers/whitespace
+    // tries to parse every file in @velaros-ai/velaros/browser. Keep identifiers/whitespace
     // minified while preserving the opaque expression until the Node-only stub removes it.
     minify: { identifiers: true, syntax: false, whitespace: true },
     sourcemap: 'none',
@@ -191,7 +191,7 @@ try {
   } else {
     await writeFile(outputPath, output)
     console.log(
-      'Generated packages/velar/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs',
+      'Generated packages/velaros/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs',
     )
   }
 } finally {

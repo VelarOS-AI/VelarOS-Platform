@@ -57,6 +57,9 @@ export { createModelRequestClient } from './impl/requests/ModelRequestClient'
 export { modelUsage } from './impl/requests/ModelUsage'
 
 // ── 公开签名用到的数据 ──────────────────────────────────────────
+export type { ModelDriver } from './contract/requires.js'
+export type { AiSdkDriverOptions } from './contract/requires.js'
+export { createAiSdkModelDriver } from './impl/requests/AiSdkModelDriver.js'
 export type {
   AgentProvider,
   EmbeddingRequest,
@@ -65,6 +68,7 @@ export type {
   ModelResolutionTraceEntry,
   ResolvedAgentModelRuntime,
 } from './types/adapters'
+export type { ModelDriverLimits, ModelImage, ModelInputEstimate, ModelMaterial, ModelResponseFormat, ModelTurnDelta,ModelTurnRequest } from './types/driver.js'
 export type {
   ModelProviderAvailabilityOptions,
   ModelProviderConfiguredInput,
@@ -93,3 +97,5 @@ export type {
   ModelRequestTextOutput,
 } from './types/requests'
 export type { ProviderScriptRegistryPort } from './types/scripts'
+export type { ModelRequestEncoderApi } from '@velaros-ai/kernel'
+export { modelRequestEncoder } from '@velaros-ai/kernel'

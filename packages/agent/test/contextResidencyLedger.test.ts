@@ -169,7 +169,7 @@ void describe('context residency ledger · admission (§4A)', () => {
     })
     const envelope = JSON.parse(readToolResultValue(projected.messages[0]!)) as Record<string, unknown>
     assert.equal(envelope.__contextRef, 'tool-output')
-    assert.deepEqual((envelope.retrieval as Record<string, unknown>).tool, 'context:recall')
+    assert.deepEqual((envelope.retrieval as Record<string, unknown>).service, 'context-retrieval')
   })
 
   void test('small tool results stay INLINE', () => {

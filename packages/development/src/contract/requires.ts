@@ -2,8 +2,8 @@
  * 注入面：宿主必须或可以塞进来的东西。
  * 本包不认宿主，只认这三个口子：一次语言查询的上下文、它借的只读内核端口，以及可选的代码图谱后端。
  */
-import type { AgentProjectKernelPort, ProjectOperationContext } from '@velaros-ai/velar/project'
-import type { ProjectCodeIndexQuery } from '@velaros-ai/velar/project/contracts'
+import type { AgentProjectKernelPort, ProjectOperationContext } from '@velaros-ai/velaros/project'
+import type { ProjectCodeIndexQuery } from '@velaros-ai/velaros/project/contracts'
 
 /**
  * 语言查询借的只读内核端口：列文件、读正文、列符号，三件事而已。

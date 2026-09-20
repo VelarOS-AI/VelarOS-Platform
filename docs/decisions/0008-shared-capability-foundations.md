@@ -87,12 +87,12 @@ project 改用两个公共件：命令判定、危险命令审批请求走 `@vel
 - 工具协议类型（`ToolPermission`、`ToolCategoryId`、`ToolCapabilitySchema`、`ToolExposurePolicy`、`ToolContractRole`、`ToolSurfaceProfileId`、`ToolModelInputModality` 一族）在本包的可移植文件里是**同形副本**：agent 的可移植数据文件按标准一个 import 都不许有，两边只能各持一份，由仓库级一致性测试 `tests/tool-contract/protocol-mirror.test.ts` 守着（同 `SystemShellKind` 的先例）。agent 收口那一轮若放宽可移植文件的 import 规则，这份副本删掉、agent 改从本包取。
 - `tool-input-bounds`（有界读与递归深度的那几个 zod 帮手）留在 agent：它们的返回类型是 zod 推出来的形状，写成显式接口会把 zod 版本钉进合同；browser 继续从 `@velaros-ai/agent/tool-contract` 取。
 
-## Addendum（2026-09-18）：模型 import 的能力合进 `@velaros-ai/velar`
+## Addendum（2026-09-18）：模型 import 的能力合进 `@velaros-ai/velaros`
 
-能力面换成代码面之后（模型写程序、`import { run } from 'velar:shell'`），`@velaros-ai/shell-command`、`@velaros-ai/rehearsal-sandbox` 与新拆出来的 `@velaros-ai/files`（本机文件，只给系统空间）、`@velaros-ai/images`（看图）都是「空间挂上、注入端口」的同一种东西。四个包各背一份清单、许可、README，只是重复；它们合成一个包 `@velaros-ai/velar`，一件能力一个目录，目录名就是模块名（`files/`、`images/`、`shell/`、`sandbox/`），布局一样，许可与清单只在包根一份（规范见 `docs/architecture/module-ownership.md`「能力单元」）。
+能力面换成代码面之后（模型写程序、`import { run } from 'velaros:shell'`），`@velaros-ai/shell-command`、`@velaros-ai/rehearsal-sandbox` 与新拆出来的 `@velaros-ai/files`（本机文件，只给系统空间）、`@velaros-ai/images`（看图）都是「空间挂上、注入端口」的同一种东西。四个包各背一份清单、许可、README，只是重复；它们合成一个包 `@velaros-ai/velaros`，一件能力一个目录，目录名就是模块名（`files/`、`images/`、`shell/`、`sandbox/`），布局一样，许可与清单只在包根一份（规范见 `docs/architecture/module-ownership.md`「能力单元」）。
 
-- 宿主改引 `@velaros-ai/velar/<单元>` 与 `@velaros-ai/velar/<单元>/contracts`，导出的名字一个没改；旧的四个包名作废，不留转发。
-- `velar:sandbox` 的 run 补上危险命令确认（ADR 0006 定的「镜像里照常问」此前两个空间都漏了）：判定与审批请求用 `@velaros-ai/velar/shell` 的那一套，在共用的单元里做，两个空间一起补上。
+- 宿主改引 `@velaros-ai/velaros/<单元>` 与 `@velaros-ai/velaros/<单元>/contracts`，导出的名字一个没改；旧的四个包名作废，不留转发。
+- `velaros:sandbox` 的 run 补上危险命令确认（ADR 0006 定的「镜像里照常问」此前两个空间都漏了）：判定与审批请求用 `@velaros-ai/velaros/shell` 的那一套，在共用的单元里做，两个空间一起补上。
 - `@velaros-ai/text-files`、`@velaros-ai/path-rules`、`@velaros-ai/tool-contract` 不是模型 import 的模块，照旧各自成包。
   （同日被 [ADR 0014](0014-packages-by-responsibility.md) 推翻：前两个并进 `@velaros-ai/core` 做单元，tool-contract 回到 `@velaros-ai/agent/tool-contract`，
   上面 2026-09-16 补记里的 `toolFailures`、`toolExamples`、`toolIdentity`、`toolInputForgiveness` 与同形副本随之删掉。）

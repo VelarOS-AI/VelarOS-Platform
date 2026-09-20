@@ -10,7 +10,7 @@ const EmbeddingAdapterKinds = new Set<ModelProviderAdapterKind>([
 
 /** 各家默认的 embedding 模型；这是规则名单，改名单和改规则一起审。 */
 const DefaultEmbeddingModelsByProvider: Partial<Record<BuiltInChatProviderId, string>> = {
-  velar: 'velar/embedding',
+  velaros: 'velaros/embedding',
   openai: 'text-embedding-3-large',
   openrouter: 'openai/text-embedding-3-large',
   qwen: 'text-embedding-v4',

@@ -373,7 +373,7 @@ export class ContextGovernanceSession implements ContextGovernanceSessionApi {
   }
 
   /**
-   * 缺页记账：`context:recall` 命中账本记录时调用。
+   * 缺页记账：`历史检索服务` 命中账本记录时调用。
    *
    * `ref` 可以是记录 id、payloadRef 或 toolCallId —— 折叠信封给模型的指引就是这三种之一，
    * 这里全认，命中不了直接返回 false（其它折叠机制的引用不该记进本账本的 fault 率）。

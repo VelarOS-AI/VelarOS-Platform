@@ -292,7 +292,7 @@ function renderRecord(record: ContextRecord, residency: ContextResidency): Rende
  * 按 `record.kind` 走三条路：user 记录只替换正文文本、**角色不可改写**，且摘录只写进第一个 text part，其余附件原序保留；
  * tool-result 带 `toolParts` 时**每个 part 各拿各的信封**，一个 part 都没改动就返回 null，没有 per-part 素材时才退回
  * 记录级信封套用到全部 part；其余记录整条换成一条 assistant 角色的信封 JSON。
- * 信封里带 ref 与 `context:recall` 参数，所以裁掉的正文不是丢了，是随时能取回。
+ * 信封里带 ref 与 `历史检索服务` 参数，所以裁掉的正文不是丢了，是随时能取回。
  */
 function renderExcerptMessage(record: ContextRecord, message: ModelMessage): Nullable<ModelMessage> {
   // user 记录（48K 安全阀）：**角色不可改写**。把正文换成 v1 同形的"摘录 + 存储提示"纯文本，
@@ -396,7 +396,7 @@ function buildTombstoneText(
       reason,
       originalLength: part ? part.chars : record.bytes.full,
       retrieval: {
-        tool: 'context:recall',
+        service: 'context-retrieval',
         args: { ref, refKind: resolveTombstoneRefKind(record, part), reason },
       },
       meta: { recordId: record.id, anchors: toContextAnchorTexts([...record.anchors]) },
@@ -418,7 +418,7 @@ function resolveTombstoneRef(
 }
 
 /**
- * 标出 {@link resolveTombstoneRef} 给出的 ref 属于哪一类，好让 `context:recall` 知道去哪儿取：
+ * 标出 {@link resolveTombstoneRef} 给出的 ref 属于哪一类，好让 `历史检索服务` 知道去哪儿取：
  * 有 payloadRef 就是 `'payload-ref'`（落盘的完整 payload），否则凭 toolCallId 算 `'tool-payload'`，
  * 记录级两者都没有时只剩 `'context-handle'`（只能按账本记录召回）。
  * part 路径不会出 `'context-handle'`——每个 part 至少带得出 toolCallId。

@@ -4,3 +4,6 @@
 // 需要值（造内核、写模块、起守护进程）的从根入口 `@velaros-ai/kernel` 取。
 export * from './contract/constants'
 export type * from './types/kernel.js'
+export type { ModelDriverLimits, ModelImage, ModelInputEstimate, ModelMaterial, ModelResponseFormat, ModelTurnDelta,ModelTurnRequest, ModelUserMessage } from './types/model.js'
+export type { InvocationReceipt, InvocationRecord, ModuleBinding, ModuleCard, ModuleDescription, ModulePage, ModuleQuery, OperationCall,OperationDescriptor, OperationSchema, OperationSurface, PreparedInvocation } from './types/operations.js'
+export type { InvocationReconciliation } from './types/operations.js'

@@ -1,0 +1,120 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "baseUrl": "../..",
+    "paths": {
+      "@velaros-ai/velaros/files": [
+        "packages/velaros/files/index.ts"
+      ],
+      "@velaros-ai/velaros/files/contracts": [
+        "packages/velaros/files/contracts.ts"
+      ],
+      "@velaros-ai/velaros/files/local": [
+        "packages/velaros/files/local.ts"
+      ],
+      "@velaros-ai/velaros/images": [
+        "packages/velaros/images/index.ts"
+      ],
+      "@velaros-ai/velaros/images/contracts": [
+        "packages/velaros/images/contracts.ts"
+      ],
+      "@velaros-ai/velaros/images/local": [
+        "packages/velaros/images/local.ts"
+      ],
+      "@velaros-ai/velaros/sandbox": [
+        "packages/velaros/sandbox/index.ts"
+      ],
+      "@velaros-ai/velaros/sandbox/contracts": [
+        "packages/velaros/sandbox/contracts.ts"
+      ],
+      "@velaros-ai/velaros/sandbox/local": [
+        "packages/velaros/sandbox/local.ts"
+      ],
+      "@velaros-ai/velaros/shell": [
+        "packages/velaros/shell/index.ts"
+      ],
+      "@velaros-ai/velaros/shell/contracts": [
+        "packages/velaros/shell/contracts.ts"
+      ],
+      "@velaros-ai/velaros/shell/local": [
+        "packages/velaros/shell/local.ts"
+      ],
+      "@velaros-ai/velaros/project": [
+        "packages/velaros/project/index.ts"
+      ],
+      "@velaros-ai/velaros/project/contracts": [
+        "packages/velaros/project/contracts.ts"
+      ],
+      "@velaros-ai/velaros/computer": [
+        "packages/velaros/computer/index.ts"
+      ],
+      "@velaros-ai/velaros/computer/contracts": [
+        "packages/velaros/computer/contracts.ts"
+      ],
+      "@velaros-ai/velaros/memory": [
+        "packages/velaros/memory/index.ts"
+      ],
+      "@velaros-ai/velaros/memory/contracts": [
+        "packages/velaros/memory/contracts.ts"
+      ],
+      "@velaros-ai/velaros/office": [
+        "packages/velaros/office/index.ts"
+      ],
+      "@velaros-ai/velaros/office/contracts": [
+        "packages/velaros/office/contracts.ts"
+      ],
+      "@velaros-ai/velaros/office/renderer": [
+        "packages/velaros/office/renderer.ts"
+      ],
+      "@velaros-ai/velaros/browser": [
+        "packages/velaros/browser/index.ts"
+      ],
+      "@velaros-ai/velaros/browser/contracts": [
+        "packages/velaros/browser/contracts.ts"
+      ],
+      "@velaros-ai/velaros/browser/renderer": [
+        "packages/velaros/browser/renderer.ts"
+      ],
+      "@velaros-ai/velaros/browser/electron": [
+        "packages/velaros/browser/electron.ts"
+      ],
+      "react": [
+        "./node_modules/@types/react"
+      ],
+      "react/*": [
+        "./node_modules/@types/react/*"
+      ]
+    }
+  },
+  "include": [
+    "velaros-globals.d.ts",
+    "files/**/*.ts",
+    "images/**/*.ts",
+    "shell/**/*.ts",
+    "sandbox/**/*.ts",
+    "project/**/*.ts",
+    "computer/**/*.ts",
+    "memory/**/*.ts",
+    "office/**/*.ts",
+    "browser/**/*.ts",
+    "src/**/*.ts",
+    "script/**/*.ts",
+    "test/capability-contracts.types.ts"
+  ],
+  "exclude": [
+    "*/spec/**",
+    "*/test/**",
+    "dist",
+    "node_modules"
+  ]
+}

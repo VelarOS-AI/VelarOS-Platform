@@ -82,7 +82,7 @@ export function sliceTailOnCharacterBoundary(text: string, maxChars: number): st
 /**
  * 把已序列化的工具输出压进当轮投影预算：不超预算原样返回，超了就「头 + `...` + 尾」各留一半（头多尾少），两端都按字符边界切。
  * 预算 ≤ 0 返回空串；预算小到连省略号都放不下时只留头部。中段被裁掉的内容不在这里可召回——
- * 完整正文由调用方另行归档，模型要补全得走 context:recall 拿句柄。
+ * 完整正文由调用方另行归档，模型要补全得走 历史检索服务 拿句柄。
  */
 export function projectSerializedPreview(serialized: string, projectionChars: number): string {
   if (projectionChars <= 0) return ''

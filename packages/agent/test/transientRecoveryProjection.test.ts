@@ -63,7 +63,7 @@ describe('transient edit recovery context', () => {
 test.each(['json', 'error-json', 'text', 'error-text'] as const)('archives recovery through a %s ContextRef excerpt without changing its wrapper', (type) => {
   const original = failure() as Extract<ModelMessage, { role: 'tool' }>
   const part = original.content[0] as any
-  const envelope = { __contextRef: 'tool-output', ref: 'output:edit-1', excerpt: JSON.stringify(part.output.value), retrieval: { tool: 'context:recall', args: { ref: 'output:edit-1' } } }
+  const envelope = { __contextRef: 'tool-output', ref: 'output:edit-1', excerpt: JSON.stringify(part.output.value), retrieval: { service: 'context-retrieval', args: { ref: 'output:edit-1' } } }
   part.output = { type, value: type.endsWith('text') ? JSON.stringify(envelope) : envelope }
   const current: ModelMessage[] = [decision, original]
   expect(projectTransientRecoveryHistory(current)).toEqual(current)
@@ -99,7 +99,7 @@ test.each(['json', 'error-json', 'text', 'error-text'] as const)('candidate synt
       details: { executionOutcome: 'not-applied', diagnostics: [{ path: 'source.ts', line: 120 }], recovery },
       inputReuse: { reuse: 'attempt:edit-1' } }
     const envelope = { __contextRef: 'tool-output', ref: 'output:edit-1', excerpt: JSON.stringify(failure),
-      retrieval: { tool: 'context:recall', args: { ref: 'output:edit-1' } } }
+      retrieval: { service: 'context-retrieval', args: { ref: 'output:edit-1' } } }
     const value = wrapped ? envelope : failure
     const output = { type, value: type.endsWith('text') ? JSON.stringify(value) : value }
     const current: ModelMessage[] = [decision, { role: 'tool', content: [{
@@ -125,7 +125,7 @@ test.each([
   '{"error":"tool_execution_failed","details":{"recovery":{"kind":"project-edit-candidates","candidates":[...splice',
   '...splice... "window":{"lines":[[42,"candidate source tail"]]}}}',
 ])('unparseable failure excerpts retain recall without unusable candidate fragments: %s', (excerpt) => {
-  const envelope = { __contextRef: 'tool-output', ref: 'output:original', excerpt, retrieval: { tool: 'context:recall', args: { ref: 'output:original' } } }
+  const envelope = { __contextRef: 'tool-output', ref: 'output:original', excerpt, retrieval: { service: 'context-retrieval', args: { ref: 'output:original' } } }
   const history: ModelMessage[] = [decision, { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'edit-1', toolName: 'project:edit', output: { type: 'error-text', value: JSON.stringify(envelope) } }] }]
   const projected = projectTransientRecoveryHistory(history)
   const shown = JSON.parse((projected[1]!.content as any[])[0].output.value)

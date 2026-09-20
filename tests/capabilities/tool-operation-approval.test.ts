@@ -1,5 +1,5 @@
 /**
- * 跨空间的命令操作身份：系统空间与项目空间都挂 `velar:shell`，两边共用任务级审批端口；同一条危险命令换个空间也不能绕过用户的拒绝，
+ * 跨空间的命令操作身份：系统空间与项目空间都挂 `velaros:shell`，两边共用任务级审批端口；同一条危险命令换个空间也不能绕过用户的拒绝，
  * 批准也不会进任务记忆（危险命令每次都要人点头）。两个空间照产品的写法装在 `tests/support/spaces.ts`，这条约束属于仓库层，所以测试放在这里。
  */
 
@@ -12,9 +12,9 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import type { ApprovalPort } from '../../packages/agent/src/contract/requires.js'
 import { CodingSessionTracker } from '../../packages/agent/src/impl/session/CodingSessionTracker'
 import { agentToolContracts } from '../../packages/agent/src/impl/tools/AgentToolContracts'
-import { createCapabilityPort } from '../../packages/code-surface/src/index'
-import type { ProjectHostPort } from '../../packages/velar/project/index'
-import type { ShellHostPort } from '../../packages/velar/shell/index'
+import { createCapabilityPort } from '../../packages/script/src/index'
+import type { ProjectHostPort } from '../../packages/velaros/project/index'
+import type { ShellHostPort } from '../../packages/velaros/shell/index'
 import { projectSpace, systemSpace } from '../support/spaces'
 
 const roots: string[] = []

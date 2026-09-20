@@ -8,8 +8,8 @@ import { describe, expect, test } from 'bun:test'
 
 import { appendToolResultsToHistory } from '../../packages/agent/src/utils/history/turn'
 import { liftGenericModelContent } from '../../packages/agent/src/utils/tools/model-image-lift'
-import type { CodeGateReply, CodeProgramGateApi, CodeSurfaceToolContext } from '../../packages/code-surface/src/index'
-import { codeSurfaceTools } from '../../packages/code-surface/src/index'
+import type { CodeGateReply, CodeProgramGateApi } from '../../packages/script/src/index'
+import { codeSurfaceTools, type CodeSurfaceToolContext } from '../../packages/velaros/script/index'
 
 /** 一扇只回固定回执的门：这里测的是回执怎么到模型那里，不是门怎么办事。 */
 function gateReplying(reply: CodeGateReply, text: string): CodeProgramGateApi {

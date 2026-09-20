@@ -40,7 +40,7 @@ const ModelToolResultLimits: ToolResultCompactionLimits = {
 };
 
 /**
- * 持久化/召回用全保真档位：serializedResult 是 context:recall 的唯一数据源,写入时裁剪
+ * 持久化/召回用全保真档位：serializedResult 是 历史检索服务 的唯一数据源,写入时裁剪
  * 等于永久销毁数据（第 51 条之后任何路径都取不回,真机已复现）。此档只做防爆兜底,
  * 模型视图的预算收敛交给 serializeToolResultForModel / sanitize 的回放重裁。
  */
@@ -128,7 +128,7 @@ function applyToolSpaceResultLimits(
 
 /**
  * 往 jsonPath 上接一段对象键：合法标识符用点号（`$.foo`），否则用带引号的方括号（`$["a-b"]`）。
- * 这条路径会原样写进截断标记，模型拿它当 context:recall 的 jsonPath 续读，所以必须是可直接回填的合法表达式。
+ * 这条路径会原样写进截断标记，模型拿它当 历史检索服务 的 jsonPath 续读，所以必须是可直接回填的合法表达式。
  */
 function appendJsonPathKey(parent: string, key: string): string {
   if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)) return `${parent}.${key}`;
@@ -157,7 +157,7 @@ function describeTruncatedValueType(value: unknown): string {
 
 /**
  * 造一块替换掉「超过深度上限的子树」的占位标记：`__truncated/reason: 'depth-limit'/jsonPath/omittedType`，
- * 外加一段 `retrieval` 召回指引（context:recall + 该 jsonPath，ref 用 `<toolCallId>` 占位由模型代入本次调用 id）。
+ * 外加一段 `retrieval` 召回指引（历史检索服务 + 该 jsonPath，ref 用 `<toolCallId>` 占位由模型代入本次调用 id）。
  * 数组另记 `omittedLength`，纯对象另记前 12 个键名 `omittedKeys`（超过 12 个再补 `omittedKeyCount`），
  * 让模型不展开也能判断这块值不值得召回。裁掉的子树在完整 serializedResult 里仍在，沿 jsonPath 可原样取回。
  */
@@ -172,7 +172,7 @@ function buildDepthLimitMarker(
     omittedType: describeTruncatedValueType(value),
     // 统一召回 affordance 形(与折叠桩信封 retrieval 同构);<toolCallId> 由模型代入本次调用 id。
     retrieval: {
-      tool: "context:recall",
+      service: "context-retrieval",
       args: {
         ref: "<toolCallId>",
         refKind: "tool-payload",
@@ -198,7 +198,7 @@ function buildDepthLimitMarker(
 
 /**
  * 按限额递归深拷工具结果的结构：超过 `maxDepth` 的对象/数组换成可召回的深度截断标记（基础类型原样保留），
- * 数组只留前 `maxArrayItems` 项并在尾部追加 `{ __truncatedItems, jsonPath, nextOffset }`——模型照这个标记用 context:recall + jsonPath + nextOffset 就能续读后面的条目。
+ * 数组只留前 `maxArrayItems` 项并在尾部追加 `{ __truncatedItems, jsonPath, nextOffset }`——模型照这个标记用 历史检索服务 + jsonPath + nextOffset 就能续读后面的条目。
  * 遍历同时剥掉三个只给宿主 UI 用的副作用键（systemToolSuggestion / capabilityAutoApprovalNotice / userActionCards），它们不该占模型上下文。
  * 非纯对象（Date、类实例等）不拆解、原样传下去，交给后面的 JSON.stringify 处理。这一步只裁结构，字符串长度由 trimToolResultStrings 管。
  */
@@ -440,7 +440,7 @@ function stringifyToolResult(value: unknown): string {
  * 常规压缩仍然超预算时的最后一手：把整份已序列化文本换成 `{ __truncated, originalLength, preview, retrieval }` 存根，
  * preview 先按 `maxSerializedLength - 160` 取头部，序列化后仍超就按实际溢出量（每轮至少砍 128）缩短预览再试，直到装得下。
  * 预览缩到 0 还装不下就退成只有 `__truncated + originalLength`，再不行退成写死的 `{"__truncated":true}`（保证一定有返回，不会死循环）。
- * 存根里的 retrieval 指向 context:recall（ref 用 `<toolCallId>` 占位），完整正文仍在归档里可整份召回。
+ * 存根里的 retrieval 指向 历史检索服务（ref 用 `<toolCallId>` 占位），完整正文仍在归档里可整份召回。
  */
 function buildTruncatedToolResult(
   serialized: string,
@@ -458,7 +458,7 @@ function buildTruncatedToolResult(
           : serialized,
       // 此层不知 toolCallId:<toolCallId> 由模型代入本次工具调用 id(与深度截断标记同约定)。
       retrieval: {
-        tool: "context:recall",
+        service: "context-retrieval",
         args: { ref: "<toolCallId>", refKind: "tool-payload" },
       },
     };
@@ -495,7 +495,7 @@ function buildTruncatedToolResult(
  * ② 仍超预算就对同一份结构反复重裁字符串，长度每轮对半砍（下限 96）并关掉大内容豁免；
  * ③ 还超就整份换成 buildTruncatedToolResult 的可召回存根。
  * 全程任何异常都不外抛：记一条 debug 日志后改吐序列化失败说明（说明本身超预算也会被压成存根）。
- * 裁掉的内容在这一份视图里不可召回，但全保真档的 serializedResult 未被裁，模型可用 context:recall 取回。
+ * 裁掉的内容在这一份视图里不可召回，但全保真档的 serializedResult 未被裁，模型可用 历史检索服务 取回。
  */
 function compactToolResult(
   result: unknown,
@@ -696,7 +696,7 @@ function buildModelLimitsWithHints(
  * （内容被裁时同步把 truncated/hasMore/returnedChars/nextStartLine 改对，不让序列化层替工具撒谎），最后统一压缩。
  * 结果带源码窗口时走快路：窗口已按整行分好预算，只要整体装得下就直接 JSON.stringify——
  * 通用的字符串截断和数组裁剪会改动原文或留下对不上的续读位置，对源码来说比省下的字符更伤。
- * 装不下才回到 compactToolResult 的通用压缩，被裁部分仍可经 context:recall 从全保真归档取回。
+ * 装不下才回到 compactToolResult 的通用压缩，被裁部分仍可经 历史检索服务 从全保真归档取回。
  */
 export function serializeToolResultForModel(
   result: unknown,
@@ -719,7 +719,7 @@ export function serializeToolResultForModel(
 }
 
 /**
- * 全保真序列化：供 serializedResult 持久化（context:recall 的数据源）。
+ * 全保真序列化：供 serializedResult 持久化（历史检索服务 的数据源）。
  * 与模型档的区别:不为省上下文预裁——数据完整性优先,预算收敛在读取侧做。
  */
 export function serializeToolResultForRecall(result: unknown): string {
@@ -728,7 +728,7 @@ export function serializeToolResultForRecall(result: unknown): string {
 
 /**
  * 把一次工具调用的入参压成回放进模型历史的那一份，直接转交 `projectToolInputForHistory`。
- * 给了 `toolCallId` 时被摘掉的大字段会留下可 context:recall 的句柄，模型需要原参数时还能取回。
+ * 给了 `toolCallId` 时被摘掉的大字段会留下可 历史检索服务 的句柄，模型需要原参数时还能取回。
  */
 export function compactToolInputForModel(
   input: Record<string, unknown>,

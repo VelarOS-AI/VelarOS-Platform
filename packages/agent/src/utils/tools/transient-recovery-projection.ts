@@ -85,7 +85,7 @@ function latestDecisionIndex(messages: readonly ModelMessage[]): number {
 /**
  * 投影发给 provider 的历史：每次失败的恢复候选只让模型完整看见一轮——
  * 越过 assistant/user 决策边界之后，provider 历史里只留一条短回执（`status: 'archived'` 加一句召回提示）。
- * 只改这份出站投影；归档的工具输出一个字没动，模型需要细节时仍可 context:recall 取回完整回执。
+ * 只改这份出站投影；归档的工具输出一个字没动，模型需要细节时仍可 历史检索服务 取回完整回执。
  */
 export function projectTransientRecoveryHistory(messages: readonly ModelMessage[]): ModelMessage[] {
   const latestDecision = latestDecisionIndex(messages)

@@ -178,7 +178,7 @@ export function renderContextRecallLine(members: readonly ContextRecord[]): Null
   const refs: string[] = []
   const seen = new Set<string>()
   for (const member of members) {
-    // 每条账本记录都能由 context:recall 直接按 ctx-r... 读取；payload/tool ref 只是更稳定的跨重建别名。
+    // 每条账本记录都能由 历史检索服务 直接按 ctx-r... 读取；payload/tool ref 只是更稳定的跨重建别名。
     const ref = member.excerpt?.ref ?? member.payloadRef ?? member.toolCallId ?? member.id
     if (!ref || seen.has(ref)) continue
     seen.add(ref)
@@ -187,7 +187,7 @@ export function renderContextRecallLine(members: readonly ContextRecord[]): Null
   }
   if (isEmpty(refs)) return null
 
-  return `- 召回：${refs.join(' | ')}（context:recall）`
+  return `- 召回：${refs.join(' | ')}（历史检索服务）`
 }
 
 /**

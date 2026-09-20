@@ -84,11 +84,11 @@ const OpenRouterCompatibleModelCatalog: ProviderModelDefinition[] = [
 ]
 
 const VelarSharedProviderCatalog = {
-  provider: 'velar',
+  provider: 'velaros',
   defaultModel: VelarAutoModelId,
   models: [
     { id: VelarAutoModelId, contextWindow: 200_000 },
-    { id: 'velar/embedding', contextWindow: 8_192 },
+    { id: 'velaros/embedding', contextWindow: 8_192 },
   ],
 } satisfies SharedProviderCatalog
 

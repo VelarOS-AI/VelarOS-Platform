@@ -165,17 +165,7 @@ export function assertProviderRequestInvariants(
     issues.push(`toolChoice points to hidden tool: ${requestFingerprint.toolChoiceName}`)
   }
 
-  const explicitToolSurface =
-    Boolean(input.availableToolNames) || !isEmpty(Object.keys(input.toolSchemaChars ?? {}))
-  const recallProviderToolName =
-    input.toolNameAliases?.['context:recall']?.trim() || 'context:recall'
-  if (
-    explicitToolSurface &&
-    requestFingerprint.contextRefCount > 0 &&
-    !requestFingerprint.availableToolNames.includes(recallProviderToolName)
-  ) {
-    issues.push('provider-visible context handles require resident context:recall tool')
-  }
+  // 引用计数用于审计；真实读取由宿主物化路径完成，不以一个工具名代替来源验证。
 
   if (isEmpty(issues)) return
 

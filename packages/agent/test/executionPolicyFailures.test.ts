@@ -102,10 +102,10 @@ describe('tool execution failure projection', () => {
     expect(result.details).toMatchObject({ checks: ['a', 'b'] })
   })
 
-  test('array-truncation marker does not reuse the context:recall __truncatedItems protocol key', () => {
+  test('array-truncation marker does not reuse the 历史检索服务 __truncatedItems protocol key', () => {
     // 评审 minor：details 里的裁剪在持久化前就已发生，没有留存可续读的原始数据；
     // 若沿用 ContextRetrieval 工具的 __truncatedItems 协议标记，模型会尝试用
-    // context:recall + jsonPath + nextOffset 续读，白费一个回合。必须是不同的键名。
+    // 历史检索服务 + jsonPath + nextOffset 续读，白费一个回合。必须是不同的键名。
     const diagnostics = Array.from({ length: 20 }, (_, index) => ({ rule: `rule-${index}` }))
     const domainError = Object.assign(new Error('校验失败'), {
       reason: 'VALIDATION_FAILED',

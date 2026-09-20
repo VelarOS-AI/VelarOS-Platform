@@ -62,7 +62,7 @@ function extractNestedSuggestedNextAction(error: unknown): LooseOptional<string>
 // 裁掉的条目在当前边界内不可召回（截断发生在持久化之前，没有留存可续读的原始数据）；
 // 只做体积/深度兜底，不追求语义完整。标记键特意不用 __truncatedItems——那是
 // ContextRetrieval 工具（见 tool-library/builtin/ContextRetrieval.tool.ts）约定的
-// 续读协议标记，模型看到它会尝试用 context:recall + jsonPath + nextOffset 续读；
+// 续读协议标记，模型看到它会尝试用 历史检索服务 + jsonPath + nextOffset 续读；
 // 这里没有 jsonPath/nextOffset，续读只会白费一个回合，必须用不同的键名避免模型误判。
 
 /**
@@ -70,7 +70,7 @@ function extractNestedSuggestedNextAction(error: unknown): LooseOptional<string>
  * 数组只留前 AgentTuning.tools.failureDetailsArrayItems 项并追加 `__omittedItems` 计数、对象只留前 AgentTuning.tools.failureDetailsObjectKeys 个键并写 `__truncatedKeys`/`__originalKeyCount`、
  * 超过 AgentTuning.tools.failureDetailsDepth 换成占位串、循环引用换成 `[circular reference omitted]`。
  * 有 `toJSON` 的对象（Date/URL 等）先走 toJSON 再裁（toJSON 自己抛错则降级为不支持对象标记），非纯对象直接标记类名丢弃。
- * 裁掉的内容在这一层不可召回——截断发生在结果落盘之前，所以标记键刻意避开 `__truncatedItems`（那是 context:recall 的续读协议标记，模型看到会白跑一轮）。
+ * 裁掉的内容在这一层不可召回——截断发生在结果落盘之前，所以标记键刻意避开 `__truncatedItems`（那是 历史检索服务 的续读协议标记，模型看到会白跑一轮）。
  */
 function boundDetailsValue(value: unknown, depth: number, seen: WeakSet<object>): unknown {
   if (isString(value))

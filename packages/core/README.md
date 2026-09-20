@@ -1,6 +1,6 @@
 # @velaros-ai/core
 
-VelarOS 各领域都可复用的无领域语义基础包：`src/` 里是基础原语，另外三个底层单元按目录放在包里（布局与 `@velaros-ai/velar` 的能力单元一样，
+VelarOS 各领域都可复用的无领域语义基础包：`src/` 里是基础原语，另外三个底层单元按目录放在包里（布局与 `@velaros-ai/velaros` 的能力单元一样，
 每个单元有自己的模块卡片 `MODULE.md` 与不变量登记）。
 
 Core 只负责：
@@ -58,3 +58,5 @@ import { createIgnorePolicy, pathMatcher } from '@velaros-ai/core/path-rules'
 
 否则放回拥有该语义的模块。`check:core-semantic-vocabulary` 会阻止领域词重新进入 Core；
 包依赖方向由架构门禁检查。
+
+`unifiedLineDiff` 是通用、有编辑距离上限的 unified diff，供脚本时间线与证据进度共用；调用方可配置上下文行数与编辑距离预算。

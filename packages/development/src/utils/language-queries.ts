@@ -3,7 +3,7 @@ import {
   ProjectCodeLanguageActions,
   type ProjectCodeLanguageQuery,
   type ProjectCodeQuery,
-} from '@velaros-ai/velar/project/contracts'
+} from '@velaros-ai/velaros/project/contracts'
 
 import type { CodeQuerySource } from '../contract/constants.js'
 import type { LanguageToolContext } from '../contract/requires.js'

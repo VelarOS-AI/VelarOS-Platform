@@ -18,6 +18,9 @@ VelarOS 的库优先微内核。它只理解四件事：模块生命周期、能
 
 ## 提供什么
 
+`ModelDriver` 是宿主提供的中立模型端口；`modelRequestEncoder` / `ModelRequestEncoderApi` 定义最终材料的统一文本编码。Agent 依赖这个端口，Model 提供供应商适配。
+
+
 五个入口。`.` 与 `./contracts` 任何环境都能加载（渲染进程也能）；
 `./client`、`./serve`、`./remote` 是 Node 专用。
 
@@ -36,6 +39,8 @@ VelarOS 的库优先微内核。它只理解四件事：模块生命周期、能
 
 ### 公开接口
 
+- `OperationContext`、`OperationDefinition`、`OperationModuleDefinition`、`InvocationJournal`、`OperationRuntimeOptions`、`OperationRuntimeApi`：统一模块定义、发现、schema 校验、参数准备与持久调用回执。
+
 - `BootedKernelDaemonApi`、`CapabilitySessionApi`、`KernelApi`、`KernelArtifactExtractor`
 - `KernelArtifactSignatureVerifier`、`KernelCallableCapabilityOperation`、`KernelCallableCapabilityService`、`KernelCapabilityOperationContext`
 - `KernelCapabilityOperationMetadata`、`KernelCapabilityOperationReason`、`KernelClientAccessBroker`、`KernelClientApi`
@@ -53,6 +58,8 @@ VelarOS 的库优先微内核。它只理解四件事：模块生命周期、能
 - `RemoteNodeServerCredentialStore`、`RemoteNodeSocket`、`RemoteNodeSocketFactory`、`VelarosModEnvelopeApi`
 
 ### 导出的值
+
+- `createOperationRuntime`：使用已有 Kernel 模块生命周期和能力调用器，配合可靠日志创建调用主链。
 
 - `KernelCallErrorCodes`、`KernelClientErrorCodes`、`KernelEnvironmentVariables`、`KernelErrorCodes`
 - `KernelFileModes`、`KernelModuleIsolationValues`、`KernelModuleIsolations`、`KernelRpcLimits`
@@ -184,3 +191,9 @@ packages/kernel/
 
 线性分层表达不了的三条（client 不引 runtime / serve、remote 两侧互不引用、updater 只引根 utils），
 由 `check:kernel-arch` 按目录核（INV-12）。utils 在所有层之下，只引 utils、types 与合同。
+
+## ScriptAct 中立合同
+
+`OperationSurface` 承载领域生成的声明、schema、模板和版本，经 `OperationModuleDefinition.surface` 装配。注册时核对身份与操作合同，避免声明/执行漂移。schema 支持局部 definitions/$ref、递归和固定元组，外部引用拒绝。
+
+`OperationContext.attach` 以统一 `ModelImage` 合同收集图像，持久回执保存附件；`ModelTurnRequest.images` 与 `ModelUserMessage` 通过 `modelRequestEncoder.messages` 进入实际请求，编译器和供应商适配器使用同一编码。边界校验格式、数量和容量。

@@ -6,7 +6,7 @@
 
 ## Context
 
-工具并进 velar（ADR 0011）、空间包移出（ADR 0013）之后，`packages/` 下还平铺着一排小包：跨平台约定 `platform`（0.8k 行）、
+工具并进 velaros（ADR 0011）、空间包移出（ADR 0013）之后，`packages/` 下还平铺着一排小包：跨平台约定 `platform`（0.8k 行）、
 磁盘文本 `text-files`（0.9k）、路径规则 `path-rules`（0.6k）、工具契约 `tool-contract`（2.6k）、外部 Agent 桥的线格式 `surface-protocol`（0.5k），
 和只被 ui 用的 `html-artifacts`。产品仓除了 `surface-protocol` 一个都不直接引它们。`core` 自己的 `src/` 也是平铺的。
 
@@ -19,7 +19,7 @@
 
 ### 底层能力并进 core，做单元
 
-`platform`、`text-files`、`path-rules` 并进 `@velaros-ai/core`，布局与 velar 的能力单元一样（`core/<单元>/` 下 contract、types、impl、utils、
+`platform`、`text-files`、`path-rules` 并进 `@velaros-ai/core`，布局与 velaros 的能力单元一样（`core/<单元>/` 下 contract、types、impl、utils、
 入口、卡片、不变量），入口换成 `@velaros-ai/core/platform`、`/platform/contracts`、`/platform/shared-resources`、`/text-files`、
 `/text-files/contracts`、`/path-rules`、`/path-rules/contracts`，名字与行为不变，原包删掉。
 
@@ -33,7 +33,7 @@
 
 `tool-contract` 并进 `@velaros-ai/agent` 现有的 `./tool-contract` 入口。它依赖 kernel（把工具挂成内核模块），进 core 会成环；
 agent 本来就握着审批那一半，agent 里还有一排按原名转发它的垫片，两边的工具协议类型是靠测试盯着的同形副本——并进来只留一份。
-code-surface 原来依赖 tool-contract，现在对 agent 用同版本线的 peer 依赖（agent 不做任何包的运行时依赖，velar 也是这么接的）。
+script 原来依赖 tool-contract，现在对 agent 用同版本线的 peer 依赖（agent 不做任何包的运行时依赖，velaros 也是这么接的）。
 
 ### 没人用的删掉
 

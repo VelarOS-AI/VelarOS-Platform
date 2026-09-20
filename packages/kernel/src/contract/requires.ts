@@ -1,3 +1,70 @@
+import type { ModelImage } from '../types/model.js'
+import type { InvocationReceipt, InvocationRecord, InvocationReconciliation, ModuleBinding, OperationDescriptor, OperationSurface, PreparedInvocation } from '../types/operations.js'
+
+/** 具体调用的受控上下文；模块资源在挂载时闭包注入。 */
+export interface OperationContext {
+  /** 已固定的调用身份和参数。 */
+  readonly invocation: PreparedInvocation
+  /** 取消只要求停止后续工作，不表示撤销已发生的效果。 */
+  readonly signal: AbortSignal
+  /** 处理器在提交效果后更新事实，随最终回执保存。 */
+  recordEffect(effect: InvocationReceipt['effect']): void
+  /** 把真实图像交给模型；先验证再纳入持久回执。 */
+  attach(image: ModelImage): void
+}
+
+/** 操作定义；schema、文档与处理器只有这一个登记处。 */
+export interface OperationDefinition extends OperationDescriptor {
+  /** 观察模式专用的受限实现；写操作只有经此口才能用于观察，保护范围由实现报告。 */
+  observe?(input: unknown, context: OperationContext): unknown | Promise<unknown>
+  /** 按已固定身份只读核对外部效果；未知返回 null，不能重新执行该操作。 */
+  reconcile?(invocation: PreparedInvocation, signal: AbortSignal): Promise<Omit<InvocationReconciliation, 'checkedAt'> | null>
+  /** 显式准备一次输入；准备不得产生外部副作用。 */
+  prepare?(input: unknown): unknown | Promise<unknown>
+  /** 执行已经准备并校验过的参数。 */
+  run(input: unknown, context: OperationContext): unknown | Promise<unknown>
+}
+
+/** 模块作者提供的唯一运行时定义。 */
+export interface OperationModuleDefinition {
+  /** 与操作描述同源的生成合同；省略时从 schema 生成精确声明。 */
+  readonly surface?: OperationSurface
+  /** 稳定公开身份与挂载代际。 */
+  readonly binding: ModuleBinding
+  /** 模块的发现摘要。 */
+  readonly summary: string
+  /** 自有操作表，原型属性不会成为操作。 */
+  readonly operations: Readonly<Record<string, OperationDefinition>>
+  /** 激活当前挂载的资源。 */
+  activate?(): void | Promise<void>
+  /** 回收当前挂载的资源。 */
+  dispose?(): void | Promise<void>
+}
+
+/** 意图和回执的可靠日志；claim 必须跨进程原子去重。 */
+export interface InvocationJournal {
+  /** 追加已核对事实，不覆盖原回执；缺少此端口时不能持久化恢复结论。 */
+  recordReconciliation?(sessionId: string, id: string, result: InvocationReconciliation): Promise<void>
+  /** 原子写入意图；已有同号记录时返回它，新写入返回 null。 */
+  claim(prepared: PreparedInvocation): Promise<InvocationRecord | null>
+  /** 唯一占用者提交准备后的不可变参数；完成后才允许派发。 */
+  prepare(prepared: PreparedInvocation): Promise<void>
+  /** 保存最终结果；失败必须抛错，不能宣称已经持久化。 */
+  settle(receipt: InvocationReceipt): Promise<void>
+  /** 读取同一会话内的调用；缺少终态时效果待核对。 */
+  read(sessionId: string, id: string): Promise<InvocationRecord | null>
+}
+
+/** 操作运行时的依赖；所有入口共享这一个实例。 */
+export interface OperationRuntimeOptions {
+  /** 持久化派发前复核任务执行前提；抛错表示尚无外部效果。 */
+  beforeDispatch?(invocation: PreparedInvocation, descriptor: OperationDescriptor, signal: AbortSignal): Promise<void>
+  /** 完整挂载定义。 */
+  readonly modules: readonly OperationModuleDefinition[]
+  /** 副作用派发前必须写入的持久日志。 */
+  readonly journal: InvocationJournal
+}
+
 // 注入面：宿主与能力包必须或可以塞进内核的东西。
 //
 // 每个口子一个接口，写清谁给、什么时候给、必不必须。构造参数与回调这类「配套形状」跟着各自的
@@ -397,4 +464,18 @@ export interface RemoteNodeAuditSink {
 export interface RemoteNodeActivitySink {
   /** 记一条执行流事件;失败自行吞掉,不抛回调用路径。 */
   record(event: RemoteNodeActivityEvent): void
+}
+
+import type { ModelDriverLimits, ModelInputEstimate, ModelTurnDelta, ModelTurnRequest } from '../types/model.js'
+
+/** 主干依赖的中立模型驱动；供应商编码与使用量归驱动负责。 */
+export interface ModelDriver {
+  /** 请求所用的模型身份。 */
+  readonly id: string
+  /** 模型独立的输入、输出和总窗口限制。 */
+  readonly limits: ModelDriverLimits
+  /** 按最终编码估算输入，包括工具 schema 与协议开销。 */
+  estimate(request: ModelTurnRequest): Promise<ModelInputEstimate>
+  /** 发起一轮请求；工具参数完整到达后才能输出 call。 */
+  stream(request: ModelTurnRequest, signal: AbortSignal): AsyncIterable<ModelTurnDelta>
 }

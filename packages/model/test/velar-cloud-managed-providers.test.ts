@@ -85,7 +85,7 @@ describe('Velar Cloud managed providers', () => {
       model: VelarDevModelId,
       didFallback: false,
     })
-    expect(isVelarCloudManagedProvider('velar')).toBe(true)
+    expect(isVelarCloudManagedProvider('velaros')).toBe(true)
     expect(isVelarCloudManagedProvider('velar-dev')).toBe(true)
     expect(isVelarCloudManagedProvider('openrouter')).toBe(false)
   })
@@ -109,12 +109,12 @@ describe('Velar Cloud managed providers', () => {
     ).toThrow('Velar Dev 模型服务尚未连接，请先登录已授权账户。')
   })
 
-  test('keeps velar register/require bound to Velar and never crosses provider bindings', () => {
+  test('keeps velaros register/require bound to Velar and never crosses provider bindings', () => {
     const runtime = new VelarCloudModelRuntime()
     const velarFetch = createChatCompletionFetch([])
     const velarDevFetch = createChatCompletionFetch([])
 
-    runtime.registerProvider('velar', { baseURL: 'https://cloud.test/v1/model/', fetch: velarFetch })
+    runtime.registerProvider('velaros', { baseURL: 'https://cloud.test/v1/model/', fetch: velarFetch })
 
     expect(runtime.require()).toEqual({
       baseURL: 'https://cloud.test/v1/model',
@@ -129,17 +129,17 @@ describe('Velar Cloud managed providers', () => {
       fetch: velarDevFetch,
     })
 
-    expect(runtime.require('velar').fetch).toBe(velarFetch)
+    expect(runtime.require('velaros').fetch).toBe(velarFetch)
     expect(runtime.require('velar-dev')).toEqual({
       baseURL: 'https://cloud.test/v1/velar-dev',
       fetch: velarDevFetch,
     })
-    expect(runtime.hasProvider('velar')).toBe(true)
+    expect(runtime.hasProvider('velaros')).toBe(true)
     expect(runtime.hasProvider('velar-dev')).toBe(true)
 
     expect(runtime.unregisterProvider('velar-dev')).toBe(true)
     expect(runtime.hasProvider('velar-dev')).toBe(false)
-    expect(runtime.require('velar').fetch).toBe(velarFetch)
+    expect(runtime.require('velaros').fetch).toBe(velarFetch)
     expect(() => runtime.require('velar-dev')).toThrow(
       'Velar Dev 模型服务尚未连接，请先登录已授权账户。'
     )
@@ -149,9 +149,9 @@ describe('Velar Cloud managed providers', () => {
       baseURL: 'https://cloud.test/v1/velar-dev',
       fetch: velarDevFetch,
     })
-    expect(runtime.unregisterProvider('velar')).toBe(true)
+    expect(runtime.unregisterProvider('velaros')).toBe(true)
     expect(runtime.require('velar-dev').fetch).toBe(velarDevFetch)
-    expect(() => runtime.require('velar')).toThrow(
+    expect(() => runtime.require('velaros')).toThrow(
       'Velar 模型服务尚未连接，请先登录内部账户。'
     )
   })
@@ -174,7 +174,7 @@ describe('Velar Cloud managed providers', () => {
     const composition = createModelRuntimeComposition({
       providerScripts: { configPaths: [] },
     })
-    composition.velarCloudRuntime.registerProvider('velar', {
+    composition.velarCloudRuntime.registerProvider('velaros', {
       baseURL: 'https://cloud.test/v1/model',
       fetch: createChatCompletionFetch(velarRequests),
     })
@@ -201,20 +201,20 @@ describe('Velar Cloud managed providers', () => {
     expect(velarDevRequests[0]?.body.reasoning).toBeUndefined()
     expect(velarRequests).toHaveLength(0)
 
-    const velar = composition.agentModelRuntime.createAgentProvider({
-      provider: 'velar',
+    const velaros = composition.agentModelRuntime.createAgentProvider({
+      provider: 'velaros',
       apiKey: '',
       baseURL: '',
       thinkingDepth: 'deep',
       reasoningLevel: 'ultra',
     })
-    await velar('velar/auto').doGenerate(ChatCallOptions)
+    await velaros('velaros/auto').doGenerate(ChatCallOptions)
 
     expect(velarRequests).toEqual([
       {
         url: 'https://cloud.test/v1/model/chat/completions',
         body: expect.objectContaining({
-          model: 'velar/auto',
+          model: 'velaros/auto',
           // 这次调用没给 maxOutputTokens，请求体里也就没有 max_tokens，ultra 按 ultraFloor 发。
           reasoning: { effort: 'high', max_tokens: 16_000 },
         }),
@@ -247,12 +247,12 @@ describe('Velar Cloud managed providers', () => {
       )
     ).toThrow('Velar Dev 当前只提供聊天模型，不支持 embedding。')
 
-    composition.velarCloudRuntime.registerProvider('velar', {
+    composition.velarCloudRuntime.registerProvider('velaros', {
       baseURL: 'https://cloud.test/v1/model',
       fetch: createChatCompletionFetch([]),
     })
     const embeddingRequest = composition.modelAdapterRegistry.createEmbeddingRequest(
-      { provider: 'velar', apiKey: '', baseURL: '' },
+      { provider: 'velaros', apiKey: '', baseURL: '' },
       'ignored-model',
       ['hello']
     )
@@ -263,7 +263,7 @@ describe('Velar Cloud managed providers', () => {
     }).toEqual({
       url: 'https://cloud.test/v1/model/embeddings',
       headers: { Authorization: 'Bearer velar-managed' },
-      body: { model: 'velar/embedding', input: ['hello'] },
+      body: { model: 'velaros/embedding', input: ['hello'] },
     })
     expect(typeof embeddingRequest.execute).toBe('function')
   })
@@ -273,13 +273,13 @@ describe('Velar Cloud managed providers', () => {
     const composition = createModelRuntimeComposition({
       providerScripts: { configPaths: [] },
     })
-    composition.velarCloudRuntime.registerProvider('velar', {
+    composition.velarCloudRuntime.registerProvider('velaros', {
       baseURL: 'https://cloud.test/v1/model',
       fetch: createEmbeddingFetch(requests),
     })
 
     const request = composition.modelAdapterRegistry.createEmbeddingRequest(
-      { provider: 'velar', apiKey: '', baseURL: '' },
+      { provider: 'velaros', apiKey: '', baseURL: '' },
       'ignored-model',
       ['hello']
     )
@@ -288,7 +288,7 @@ describe('Velar Cloud managed providers', () => {
     expect(requests).toEqual([
       {
         url: 'https://cloud.test/v1/model/embeddings',
-        body: { model: 'velar/embedding', input: ['hello'] },
+        body: { model: 'velaros/embedding', input: ['hello'] },
       },
     ])
     expect(payload).toEqual({ data: [{ embedding: [0.5] }] })
@@ -298,14 +298,14 @@ describe('Velar Cloud managed providers', () => {
     const composition = createModelRuntimeComposition({
       providerScripts: { configPaths: [] },
     })
-    composition.velarCloudRuntime.registerProvider('velar', {
+    composition.velarCloudRuntime.registerProvider('velaros', {
       baseURL: 'https://cloud.test/v1/model',
       fetch: (async () =>
         new Response('{"error":"quota"}', { status: 402 })) as unknown as typeof fetch,
     })
 
     const request = composition.modelAdapterRegistry.createEmbeddingRequest(
-      { provider: 'velar', apiKey: '', baseURL: '' },
+      { provider: 'velaros', apiKey: '', baseURL: '' },
       'ignored-model',
       ['hello']
     )
@@ -319,14 +319,14 @@ describe('Velar Cloud managed providers', () => {
     const composition = createModelRuntimeComposition({
       providerScripts: { configPaths: [] },
     })
-    composition.velarCloudRuntime.registerProvider('velar', {
+    composition.velarCloudRuntime.registerProvider('velaros', {
       baseURL: 'https://cloud.test/v1/model//',
       fetch: createChatCompletionFetch([]),
     })
 
     expect(
       composition.modelAdapterRegistry.createEmbeddingRequest(
-        { provider: 'velar', apiKey: '', baseURL: '' },
+        { provider: 'velaros', apiKey: '', baseURL: '' },
         'ignored-model',
         ['hello']
       ).url

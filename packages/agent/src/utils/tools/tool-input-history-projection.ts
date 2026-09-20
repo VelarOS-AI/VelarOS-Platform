@@ -10,7 +10,7 @@ const MetadataKeys = new Set(['__historyInputOmissions', '__historyInputRef', '_
 const Omitted = Symbol('omitted historical input')
 /**
  * 把「键/下标」路径数组拼成从 `$` 起的 JSON 路径串：数字用 `[3]`，合法标识符用 `.key`，其余键用带引号的 `["a-b"]`。
- * 这串会写进省略记录的 `jsonPath`，模型拿它当 context:recall 的参数去取原值，所以必须是可直接回填的合法表达式。
+ * 这串会写进省略记录的 `jsonPath`，模型拿它当 历史检索服务 的参数去取原值，所以必须是可直接回填的合法表达式。
  */
 function jsonPath(path: Array<string | number>): string {
   return path.reduce<string>((result, key) => isNumber(key)
@@ -47,7 +47,6 @@ export function projectToolInputForHistory(input: Record<string, unknown>, toolC
     if (isString(value)) {
       if (HistoryPreviewPlaceholderHeaderPattern.test(value.trimStart())) return omit(path)
       if (field === 'widget_code' && value.length <= 8_000) return value
-      if (field === 'program' && value.length <= AgentTuning.tools.programHistoryChars) return value
       const largeField = isString(field) && LargeFields.has(field) && value.length > 240
       if (largeField || value.length > AgentTuning.tools.inputHistoryStringChars || value.startsWith('data:')) return omit(path, { chars: value.length })
       return value
@@ -83,7 +82,7 @@ export function projectToolInputForHistory(input: Record<string, unknown>, toolC
     const result: Record<string, unknown> = {
     __toolReceivedFullInput: true,
     __historyInputOmissions: omitted,
-    __historyInputRecall: 'Omitted fields are absent from this history view. Use context:recall with ref and jsonPath for their original values; this is not an executable input.',
+    __historyInputRecall: 'Omitted fields are absent from this history view. The host retrieval service can resolve ref and jsonPath; this view is not an executable input.',
     }
     if (ref) result.__historyInputRef = ref
     return result
