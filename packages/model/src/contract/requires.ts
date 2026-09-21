@@ -156,8 +156,9 @@ export interface CreateModelKernelModuleOptions {
   /** 产品持有的模型适配器注册表，通常取自 `createModelRuntimeComposition(...).modelAdapterRegistry`。 */
   registry: ModelAdapterRegistryApi
 }
-import type { ModelDriverLimits } from '../types/driver.js'
 import type { LanguageModel } from 'ai'
+
+import type { ModelDriverLimits } from '../types/driver.js'
 
 /** 供应商模型实例与窗口参数；驱动复用同一编码、预算和流式转换。 */
 export interface AiSdkDriverOptions {

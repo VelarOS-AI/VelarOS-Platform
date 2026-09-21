@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/context",
-  "version": "0.7.0",
+  "version": "0.9.0",
   "type": "module",
   "license": "Apache-2.0",
   "sideEffects": false,
@@ -29,9 +29,9 @@
     "MODULE.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node ../../scripts/build/normalize-package-declarations.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun run build && node --test test/context.test.mjs test/views.test.mjs",
+    "test": "bun run build && node --test test/context.test.mjs test/views.test.mjs test/storage-index.test.mjs test/store.test.mjs && bun test test/turnContextStateSource.test.ts",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/context"
   },
   "devDependencies": {
@@ -53,5 +53,9 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://npm.pkg.github.com"
+  },
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/context#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   }
 }

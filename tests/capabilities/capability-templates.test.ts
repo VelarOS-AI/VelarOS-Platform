@@ -6,25 +6,26 @@
  * 断言看的是每个函数交回的东西是不是它说的那个样子、磁盘上是不是真改了，不钉具体文字。
  * 模版横跨能力单元与两个空间，所以测试放在仓库层。
  */
-
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
+import {setTimeout as delay} from 'node:timers/promises'
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 
-import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
+import type { ApprovalPort } from '@velaros-ai/kernel'
 
-import type { CodeCapabilityPort, CodeGateReply, CodeSurfaceTimelinePort, MountedCapabilityModule } from '../../packages/script/src/index'
-import { codeProgramChecker, CodeSurfaceErrorCodes, createCapabilityPort, createCodeProgramGate, nodeSubprocessCodeRunner } from '../../packages/script/src/index'
 import { createProjectCodeQuery } from '../../packages/development/src/index'
+import type { CodeCapabilityPort, CodeSurfaceOutcome } from '../../packages/script/src/index'
+import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '../../packages/script/src/index'
 import { solidPng } from '../../packages/velaros/images/spec/support'
 import type { ProjectHostPort } from '../../packages/velaros/project/index'
 import { createProjectKernel, typescriptPlugin } from '../../packages/velaros/project/index'
 import { createLocalSandboxHost } from '../../packages/velaros/sandbox/local'
 import { createLocalShellHost } from '../../packages/velaros/shell/local'
+import type { MountedCapabilityModule } from '../support/spaces'
 import { projectSpace, systemSpace } from '../support/spaces'
 
 const RepoRoot = resolve(import.meta.dir, '../..')
@@ -46,22 +47,15 @@ const approval: ApprovalPort = {
 interface Space {
   modules: readonly MountedCapabilityModule[]
   port: CodeCapabilityPort
-  timeline: CodeSurfaceTimelinePort
+  timeline: {directory:string;workspace?:string}
 }
 
-const gate = createCodeProgramGate({ checker: codeProgramChecker, runner: nodeSubprocessCodeRunner })
-
-/**
- * 像模型那样经 script:exec 跑一段脚本：头一次 import 按需模块时那一步不执行、先交回声明，模型照着再交一次——这里也再交一次。
- * 检查没过或者脚本没跑完就把门的回执整段抛出来，一看就知道是哪一行。
- */
-async function runProgram(space: Space, sessionId: string, source: string): Promise<{ values: Record<string, any>; reply: CodeGateReply }> {
-  const submit = () => gate.exec({ sessionId, steps: [{ op: 'run', program: source }], space: { modules: space.modules, capabilities: space.port, timeline: space.timeline }, timeoutMs: 120_000 })
-  let reply = await submit()
-  if (reply.steps[0]?.error?.code === CodeSurfaceErrorCodes.modulesNeeded) reply = await submit()
-  const outcome = reply.steps[0]?.outcome
-  if (!reply.steps[0]?.ok || !outcome?.checked) throw new Error(reply.text)
-  return { values: outcome.result.value as Record<string, any>, reply }
+/** 每个模版使用正式 Script 检查器与隔离执行器；结果保持原始导出和图片附件。 */
+async function runProgram(space:Space,_sessionId:string,source:string):Promise<{values:Record<string,any>;reply:CodeSurfaceOutcome&{images:readonly unknown[]}}>{
+ const session=createCodeSurfaceSession({checker:codeProgramChecker,runner:nodeSubprocessCodeRunner,capabilities:space.port})
+ const outcome=await session.submit({program:{source},granted:space.modules.map(({surface})=>({namespace:surface.namespace,declarations:surface.declarations})),timeoutMs:120000})
+ if(!outcome.checked||outcome.result.failed)throw Error(JSON.stringify(outcome))
+ return {values:outcome.result.value as Record<string,any>,reply:{...outcome,images:outcome.attachments??[]}}
 }
 
 /** 删临时目录前先核对它确实在系统临时区里：删错目录的代价太大。 */
@@ -105,10 +99,28 @@ export const errors = await errorLines('node checks/build.js')
 export const git = await gitState('${gitDir}')
 export const todos = await findTodos('src')
 export const server = await startServer('node server.js')
-export const log = 'taskId' in server ? await taskOutput(server.taskId, 5) : server
-export const stopped = 'taskId' in server ? await stopTask(server.taskId) : server
 export const tool = await afterInstall('node --version')
 `
+}
+
+/** 后台启动只承诺任务句柄；后续脚本读取实际输出，再显式停止。 */
+async function runShellTemplate(space:Space,cwd:string):Promise<Record<string,any>> {
+  const {values}=await runProgram(space,'shell',`${template('shell/template.js')}${shellCalls(cwd)}`)
+  expect(values.server.taskId).toBeString()
+  const task=JSON.stringify(values.server.taskId)
+  try {
+    const deadline=Date.now()+5000
+    do {
+      const next=await runProgram(space,'shell',`${template('shell/template.js')}\nexport const log=await taskOutput(${task},5)`)
+      values.log=next.values.log
+      if(values.log.lastLines?.includes('listening on http://localhost:43210'))break
+      await delay(20)
+    }while(Date.now()<deadline)
+  }finally{
+    const last=await runProgram(space,'shell',`${template('shell/template.js')}\nexport const stopped=await stopTask(${task})`)
+    values.stopped=last.values.stopped
+  }
+  return values
 }
 
 /** shell 模版在任何一个空间里都该交回的样子。 */
@@ -126,7 +138,7 @@ function expectShellResults(values: Record<string, any>): void {
   expect(values.todos.first[0]).toMatchObject({ file: 'src/a.ts', line: 2, text: '// TODO: handle empty input' })
   expect(values.server.taskId).toBeString()
   expect(values.server.status).toBe('running')
-  expect(values.server.lastLines).toContain('listening on http://localhost:43210')
+  expect(values.server.lastLines).toBeArray()
   expect(values.log).toMatchObject({ status: 'running', lastLines: ['listening on http://localhost:43210'] })
   expect(values.stopped).toMatchObject({ taskId: values.server.taskId, stopped: true })
   expect(values.tool).toMatch(/^v\d+\.\d+\.\d+$/)
@@ -210,7 +222,7 @@ export const reverted = typeof replaced === 'string' ? replaced : await revert(r
   }, 180_000)
 
   test('velaros:shell：跑测试、筛错误、看 git、rg 找东西、起后台服务再停掉、刷新环境', async () => {
-    const { values } = await runProgram(space, 'shell', `${template('shell/template.js')}${shellCalls('repo')}`)
+    const values=await runShellTemplate(space,'repo')
     expectShellResults(values)
   }, 180_000)
 
@@ -377,7 +389,7 @@ export const reverted = typeof renamed === 'string' ? renamed : await revert(ren
   }, 180_000)
 
   test('velaros:shell：同一份模版在项目里照样跑得通', async () => {
-    const { values } = await runProgram(space, 'shell', `${template('shell/template.js')}${shellCalls('.')}`)
+    const values=await runShellTemplate(space,'.')
     expectShellResults(values)
   }, 180_000)
 })

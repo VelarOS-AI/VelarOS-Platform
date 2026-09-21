@@ -5,7 +5,6 @@ import { basename, dirname, extname, relative, resolve, sep } from 'node:path'
 
 import JSZip from 'jszip'
 
-import { parseAgentModManifest } from '../../packages/agent/src/utils/wire/mods.ts'
 import {
   parseVelarosModEnvelope,
   VelarosModManifestFileName,
@@ -61,13 +60,7 @@ function parseManifest(bytes, origin, { bundled = false } = {}) {
   if (!envelope.ok) {
     fail(envelope.diagnostics.map((item) => `${item.path}: ${item.message}`).join('; '))
   }
-  if (envelope.envelope.agent !== undefined) {
-    const agent = parseAgentModManifest(envelope.envelope.agent, { origin })
-    if (!agent.ok) fail(agent.diagnostics.map((item) => `${item.path}: ${item.message}`).join('; '))
-    if (!bundled && agent.manifest.trust === 'bundled-official') {
-      fail('外部分发包不能自报 bundled-official；只有官方宿主构建可使用 --bundled')
-    }
-  }
+  if (envelope.envelope.agent !== undefined) fail('此包包含旧 Agent seam；请将贡献注册为 Kernel 能力及 Context 来源后重新打包')
   return { raw, envelope: envelope.envelope }
 }
 

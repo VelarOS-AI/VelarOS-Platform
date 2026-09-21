@@ -93,6 +93,18 @@
       ],
       "react/*": [
         "./node_modules/@types/react/*"
+      ],
+      "@velaros-ai/velaros": [
+        "packages/velaros/act/runtime/index.ts"
+      ],
+      "@velaros-ai/velaros/act/system": [
+        "packages/velaros/act/system/index.ts"
+      ],
+      "@velaros-ai/velaros/act/search": [
+        "packages/velaros/act/search/index.ts"
+      ],
+      "@velaros-ai/velaros/act/agents": [
+        "packages/velaros/act/agents/index.ts"
       ]
     }
   },
@@ -107,13 +119,23 @@
     "memory/**/*.ts",
     "office/**/*.ts",
     "browser/**/*.ts",
-    "src/**/*.ts",
+    "act/**/*.ts",
     "script/**/*.ts",
-    "test/capability-contracts.types.ts"
+    "act/runtime/test/capability-contracts.types.ts"
   ],
   "exclude": [
-    "*/spec/**",
-    "*/test/**",
+    "**/spec/**",
+    "files/test",
+    "images/test",
+    "shell/test",
+    "sandbox/test",
+    "project/test",
+    "computer/test",
+    "memory/test",
+    "office/test",
+    "browser/test",
+    "act/runtime/test/provider.test.ts",
+    "act/runtime/test/McpClientConnection.test.ts",
     "dist",
     "node_modules"
   ]

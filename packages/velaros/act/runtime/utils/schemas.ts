@@ -1,0 +1,34 @@
+import {StoreLimits} from '@velaros-ai/context'
+import type { OperationSchema } from "@velaros-ai/kernel";
+
+import { contextContentSchema,contextRefSchema,objectSchema } from '../../system/utils/schemas.js'
+
+import { ActRuntimeTuning } from "./tuning.js";
+export { contextContentSchema,contextRecordSchema, contextRefSchema, emptyInputSchema, modulePageSchema, objectSchema, querySchema } from '../../system/utils/schemas.js'
+/** 子任务共享空间的有界授权，父范围由实际运行时校验。 */
+export const agentStoresSchema:OperationSchema={type:'array',maxItems:StoreLimits.stores,items:objectSchema({store:{type:'string',minLength:1,maxLength:StoreLimits.scopeChars},read:{type:'array',maxItems:StoreLimits.watchItems,items:{type:'string',maxLength:StoreLimits.keyChars}},write:{type:'array',maxItems:StoreLimits.watchItems,items:{type:'string',maxLength:StoreLimits.keyChars}}})}
+/** 精确源选择器由对应适配器执行。 */
+export const resourceTargetSchema:OperationSchema=objectSchema({kind:{const:'resource'},sourceId:{type:'string'},resourceId:{type:'string'},selector:{anyOf:[objectSchema({kind:{const:'whole'}}),objectSchema({kind:{const:'lines'},start:{type:'integer',minimum:1},end:{type:'integer',minimum:1}}),objectSchema({kind:{const:'symbol'},name:{type:'string'}})]}},['kind','sourceId','resourceId'])
+/** 搜索证据的来源版本事实。 */
+export const evidenceStampSchema:OperationSchema=objectSchema({sourceId:{type:'string'},resourceId:{type:'string'},revision:{anyOf:[{type:'string'},{type:'null'}]},contentHash:{type:'string'},observedAt:{type:'string'},consistency:{enum:['snapshot','revision-checkable','observed-only']}})
+/** 已读取证据只由 Runtime 构造。 */
+export const searchEvidenceSchema:OperationSchema=objectSchema({id:{type:'string'},target:resourceTargetSchema,ref:contextRefSchema,excerpt:{type:'string'},stamp:evidenceStampSchema,complete:{type:'boolean'}})
+/** 候选不是已读证据，身份与预览分开表达。 */
+export const searchCandidatesSchema:OperationSchema=objectSchema({candidates:{type:'array',items:objectSchema({id:{type:'string'},target:resourceTargetSchema,preview:{type:'string'},forms:{type:'array',items:{enum:['full','excerpt','definition','metadata','diff']}}})},empty:{type:'boolean'},source:{type:'string'},query:{type:'string'}})
+/** 各种模型工具共用的交付清单，领域结果仍保留各自严格 schema。 */
+export const modelToolDeliverySchema:OperationSchema=objectSchema({ref:contextRefSchema,schemaVersion:{const:1},kind:{type:'string'},sessionId:{type:'string'},parentTaskId:{type:'string'},status:{enum:['completed','partial','failed','needs-reconcile']},payload:contextRefSchema,omittedScripts:{type:'integer',minimum:0},artifacts:{type:'array',items:objectSchema({kind:{enum:['evidence','script','result']},ref:contextRefSchema,objectId:{type:'string'}})},continuation:objectSchema({operation:{type:'string'},input:{type:'object'}})},['ref','schemaVersion','kind','sessionId','status','payload','artifacts','omittedScripts'])
+/** 高级搜索返回值同时用于声明与运行时验证。 */
+export const searchResultSchema:OperationSchema=objectSchema({delivery:modelToolDeliverySchema,ref:contextRefSchema,searchId:{type:'string'},profile:{type:'string'},continuation:{enum:['available','closed']},status:{enum:['completed','partial','failed']},stopReason:{type:'string'},findings:{type:'array',items:objectSchema({text:{type:'string'},evidenceIds:{type:'array',items:{type:'string'}}})},evidence:{type:'array',items:searchEvidenceSchema},gaps:{type:'array',items:objectSchema({code:{type:'string'},detail:{type:'string'}})},nextSteps:{type:'array',items:{type:'string'}},coverage:objectSchema({sources:{type:'array',items:{type:'string'}},queries:{type:'array',items:{type:'string'}},limitsHit:{type:'array',items:{type:'string'}}}),usage:objectSchema({modelCalls:{type:'integer'},sourceQueries:{type:'integer'},reads:{type:'integer'},readBytes:{type:'integer'},elapsedMs:{type:'integer'},tokens:{anyOf:[{type:'null'},objectSchema({input:{type:'integer'},output:{type:'integer'}})]}})},['ref','searchId','profile','continuation','status','stopReason','findings','evidence','gaps','nextSteps','coverage','usage'])
+/** 命名档位与新建/续查两种参数共用真实属性定义。 */
+export function searchRequestSchema(profiles:readonly string[]):OperationSchema{
+  const properties={query:{type:'string',minLength:1,maxLength:16000},resume:contextRefSchema,profile:{type:'string',enum:profiles},sources:{type:'array',maxItems:ActRuntimeTuning.searchSources,items:{type:'string'}},context:{type:'string',maxLength:24000},anchors:{type:'array',maxItems:ActRuntimeTuning.searchAnchors,items:resourceTargetSchema}} as const
+  return {anyOf:[objectSchema(properties,['query']),objectSchema(properties,['resume'])]}
+}
+
+/** 子运行句柄使返回 id 可直接交给 wait、resume 和 status。 */
+export const agentJobSchema:OperationSchema=objectSchema({pending:{type:'array',items:objectSchema({id:{type:'string'},runId:{type:'string'},kind:{enum:['input','confirmation','capability']},message:{type:'string'},detail:{}},['id','runId','kind','message'])},stores:agentStoresSchema,delivery:modelToolDeliverySchema,id:{type:'string'},parentSessionId:{type:'string'},parentTaskId:{type:'string'},sessionId:{type:'string'},profile:{type:'string'},status:{enum:['running','waiting','completed','cancelled','failed','interrupted','needs_reconcile']},writes:{type:'array',items:{type:'string'}},result:contextRefSchema,error:{type:'string'}},['id','parentSessionId','sessionId','profile','status','writes'])
+
+/** 搜索快照与当前证据的结构化返回，生成声明与校验共用。 */
+export const searchReadSchema:OperationSchema={anyOf:[objectSchema({...contextContentSchema.properties,mode:{const:'snapshot'},stamp:evidenceStampSchema},['record','text','totalChars','offset','mode']),objectSchema({ref:contextRefSchema,mode:{const:'current'},modelCalled:{const:false},total:{type:'integer'},items:{type:'array',items:{anyOf:[objectSchema({ok:{const:true},id:{type:'string'},status:{const:'current'},target:resourceTargetSchema,text:{type:'string'},stamp:evidenceStampSchema,form:{enum:['full','excerpt','definition','metadata','diff']},complete:{type:'boolean'},mediaType:{type:'string'},dependencies:{type:'array',items:evidenceStampSchema}},['ok','id','status','target','text','stamp','form','complete','mediaType']),objectSchema({ok:{const:false},id:{type:'string'},status:{type:'string'}})]}}})]}
+/** 搜索档位参数与实际执行预算一致。 */
+export function searchProfileInfoSchema(profiles:readonly string[]):OperationSchema{return {type:'array',items:objectSchema({name:{type:'string',enum:profiles},default:{type:'boolean'},limits:objectSchema(Object.fromEntries(['modelCalls','modelTokens','finalizationTokens','timeoutMs','callTimeoutMs','finalizationMs','publicationMs','outputTokens','projectionChars','sourceQueries','candidates','reads','readBytes','noProgressRounds'].map(key=>[key,{type:'integer',minimum:1}])),['modelCalls','modelTokens','finalizationTokens','timeoutMs','callTimeoutMs','finalizationMs','outputTokens','projectionChars','sourceQueries','candidates','reads','readBytes'])})}}

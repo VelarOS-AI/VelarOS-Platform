@@ -4,9 +4,7 @@
     "status": "primary",
     "recommendedEntrypoints": [
       ".",
-      "./contracts",
-      "./chat",
-      "./tool-contract"
+      "./contracts"
     ],
     "earliestRemovalMajor": null
   },

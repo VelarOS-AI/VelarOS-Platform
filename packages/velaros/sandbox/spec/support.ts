@@ -9,9 +9,9 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 
-import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
-import { createCapabilityPort } from '@velaros-ai/script'
 import { AppError } from '@velaros-ai/core/error'
+import type { ApprovalPort } from '@velaros-ai/kernel'
+import { createCapabilityPort } from '@velaros-ai/script'
 
 import type { LocalSandboxHostApi, SandboxOperationContext, SandboxSurfacePort } from '../index'
 import { sandboxOperations } from '../index'

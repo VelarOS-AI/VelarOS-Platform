@@ -1,379 +1,219 @@
-/**
- * Agent 运行时的验收测试：每一条对应 spec/invariants.md 里的一个编号。
- *
- * 改动或删除已有用例要在差量报告里点名并说明理由。
- * 这里只测对外承诺的行为，不测实现细节；实现细节的测试在 test/ 目录。
- */
-import { describe, expect, test } from 'bun:test'
-import { z } from 'zod'
+import {expect,test} from 'bun:test'
 
-import {
-  AgentContextThresholds,
-  AgentToolCategoryByName,
-  AgentToolLimits,
-  AgentToolNames,
-} from '../src/contract/constants'
-import { AgentModLoader } from '../src/impl/mods/AgentModLoader'
-import {
-  agentChat,
-  agentModHost,
-  agentSessionKit,
-  agentTools,
-  createBuiltinAgentModDefinition,
-  createExecutionEventBus,
-  createNoopExecutionEventBus,
-  createTurnContextSessionLedgers,
-  toolTransportNames,
-} from '../src/index'
-import {
-  createUnattendedSubAgentApprovalPort,
-  defaultDenyApprovalPort,
-  defaultUnsupportedInteractionPort,
-  toolContracts,
-  toolDescriptions,
-  toolInputReuseStore,
-} from '../src/tool-contract'
-import type { AgentModDiagnostic, AgentModManifest } from '../src/types/agent'
-import type { AgentModHostProfile } from '../src/types/mods'
-import type { DefineToolRuntimeSpecInput } from '../src/types/toolkit'
-import { resolveAgentSessionLeaseClaim } from '../src/utils/product-session/lifecycle'
-import { createToolCallableOperations } from '../src/utils/toolkit/callable-operations'
-import { resolveToolReadOnly } from '../src/utils/toolkit/define-tool-contract'
-import {
-  isStructuredToolDescription,
-  parseStructuredToolDescription,
-  renderToolDescription,
-} from '../src/utils/toolkit/tool-description'
-import { AgentTuning } from '../src/utils/tuning'
+import type {ContextState} from '@velaros-ai/context'
+import type {ContextStorage} from '@velaros-ai/context'
+import {createContextRuntime,createContextView} from '@velaros-ai/context'
 
-function createModHost(): AgentModHostProfile {
-  return {
-    hostId: 'spec-host',
-    velarosVersion: '1.0.0',
-    agentApiVersion: '1.0.0',
-    supportedAxes: ['tools'],
-    allowedTrustLevels: ['bundled-official', 'local-dev'],
-  }
+import {createAgentSupervisor} from '../src/index.js'
+import {createActRunService} from '../src/index.js'
+import type {ActChildSession} from '../src/interface/requires.js'
+import type {ActRunServiceOptions} from '../src/interface/requires.js'
+import {boundedModelStream} from '../src/utils/model-stream.js'
+
+function runFixture(){
+ const store=storage(); const context=createContextRuntime({storage:store,sessionId:'fault'}); const view=createContextView({storage:store,sessionId:'fault',context,sources:[]})
+ const options:{-readonly [Key in keyof ActRunServiceOptions]:ActRunServiceOptions[Key]}={storage:store,context,view,sessionId:'fault',instructions:'fixture',limits:{turns:4,outputTokens:100,safetyTokens:10,projectionChars:10000,recoveryChars:1000,timeoutMs:2000},
+  model:{id:'fixture',limits:{contextTokens:10000,inputTokens:9000,outputTokens:100},estimate:async()=>({tokens:1,precision:'exact',basis:'fixture'}),async *stream(){yield {type:'text',text:'done'};yield {type:'finish',reason:'stop'}}},
+  protocol:{open:()=>({instructions:'fixture',reset(){},push(){return []},finish(){return {message:'done',done:true,events:[]}}})},
+  frames:{mode:'runtime-view',setPhase(){},async prepare(){},async visibleExecutions(){return []},async project(){return {body:'{}',images:[]}},async needsRefresh(){return false},async acknowledge(){}},
+  execution:{pending:()=>false,async wait(){},async invoke(){},async stop(){}}}
+ return {store,context,view,options}
 }
 
-function manifestOf(id: string, tools: readonly string[]): AgentModManifest {
-  return {
-    id,
-    version: '1.0.0',
-    publisher: 'spec',
-    displayName: id,
-    description: 'spec 用的最小 mod',
-    manifestSchemaVersion: 1,
-    engines: { velaros: '*', agent: '*' },
-    trust: 'local-dev',
-    contributes: {
-      tools: tools.map((name) => ({ name, category: 'agent-control', summary: name })),
-    },
-  } as unknown as AgentModManifest
+test('INV-34 cleanup failure still releases ownership and cannot report a completed run',async()=>{
+ const f=runFixture();let ended=0; let stop=true
+ f.options.execution.stop=async()=>{if(stop)throw Error('stop storage failure')}
+ f.options.frames.end=async()=>{ended++}
+ const service=createActRunService(f.options); const events=[]
+ await expect((async()=>{for await(const event of service.submit('first'))events.push(event)})()).rejects.toThrow()
+ expect(ended).toBe(1);expect((await f.view.inspect())?.lease).toBeNull()
+ expect(events.some(event=>event.type==='state'&&event.status==='completed')).toBe(false)
+ expect((await service.inspect()).status).toBe('failed')
+ stop=false;for await(const event of service.submit('retry after cleanup')){expect(typeof event.type).toBe('string')}
+ expect((await service.inspect()).status).toBe('completed');await service.close()
+})
+
+test('INV-35 accepted event persistence failure prevents execution and leaves a failed recoverable run',async()=>{
+ const f=runFixture();let executed=0; let fail=true
+ f.options.protocol={open:()=>({instructions:'fixture',reset(){},push(){return []},finish(){return {message:'execute',done:false,submission:{code:'work'},events:[]}}})}
+ f.options.execution.invoke=async()=>{executed++}
+ const put=f.store.put
+ f.store.put=async(id,body)=>{if(fail&&body.startsWith('{"type":"accepted"')){fail=false;throw Error('accepted journal unavailable')}return put(id,body)}
+ const service=createActRunService(f.options)
+ await expect((async()=>{for await(const event of service.submit('work')){expect(typeof event.type).toBe('string')}})()).rejects.toThrow('accepted journal unavailable')
+ expect(executed).toBe(0);expect((await f.view.inspect())?.lease).toBeNull();expect((await service.inspect()).status).toBe('failed')
+ const reopened=createActRunService(f.options);expect((await reopened.inspect()).status).toBe('failed');await service.close();await reopened.close()
+})
+
+test('closing a consumer during thinking releases the view without accepting late model output',async()=>{
+ const f=runFixture(); let stopped=0
+ f.options.model.stream=async function*(){yield {type:'text',text:'preview'};await new Promise(()=>{});yield {type:'finish',reason:'stop'}}
+ f.options.execution.stop=async()=>{stopped++}
+ const service=createActRunService(f.options)
+ for await(const event of service.submit('work'))if(event.type==='state'&&event.status==='thinking')break
+ expect(stopped).toBe(1);expect((await f.view.inspect())?.lease).toBeNull();expect((await service.inspect()).status).toBe('cancelled')
+ expect((await service.events()).some(item=>item.event.type==='accepted')).toBe(false);await service.close()
+})
+
+test('INV-36 a fault persisting a child result reaches wait even after the live slot has been released',async()=>{
+ const store=storage(); const put=store.put;let failed=false
+ store.put=async(id,body)=>{if(body.includes('"events"')){failed=true;throw Error('child result disk failure')}return put(id,body)}
+ const supervisor=createAgentSupervisor({storage:store,concurrency:1,maxChildren:1,async open(){return child()}}); const signal=new AbortController().signal
+ const job=await supervisor.start('p',{task:'work',profile:'read'},signal)
+ while(!failed)await new Promise(r=>setTimeout(r,1))
+ await expect(supervisor.wait('p',job.id,signal)).rejects.toThrow('child result disk failure')
+ await expect(supervisor.close()).rejects.toThrow('child result disk failure')
+})
+
+test('INV-37 steering invalidates a stale response before slow input persistence completes',async()=>{
+ const f=runFixture();let release!:()=>void; let received!:()=>void; let calls=0; let executed=0
+ const gate=new Promise<void>(r=>release=r); const arrived=new Promise<void>(r=>received=r)
+ const ingest=f.context.ingest.bind(f.context)
+ f.context.ingest=async(input,signal)=>{if(input.text==='new direction'){received();await gate}return ingest(input,signal)}
+ f.options.model.stream=async function*(){calls++;if(calls===1){yield {type:'text',text:'old'};await arrived;yield {type:'text',text:'stale code'};yield {type:'finish',reason:'stop'}}else{yield {type:'text',text:'done'};yield {type:'finish',reason:'stop'}}}
+ f.options.protocol={open:()=>({instructions:'fixture',reset(){},push(text){return [{type:'text',text}]},finish(){return calls===1?{message:'stale',done:false,submission:{code:'stale'},events:[]}:{message:'done',done:true,events:[]}}})}
+ f.options.execution.invoke=async()=>{executed++}
+ const service=createActRunService(f.options);let steering:Promise<void>|undefined
+ for await(const event of service.submit('original')){
+  if(event.type==='text'&&!steering){steering=service.steer('new direction');await arrived;setTimeout(release,15)}
+ }
+ await steering;expect(calls).toBe(2);expect(executed).toBe(0);expect((await f.view.inspect())?.goals.length).toBe(2);await service.close()
+})
+
+test('all cleanup stages are attempted when both execution and frame cleanup fail',async()=>{
+ const f=runFixture();let release=0
+ f.options.execution.stop=async()=>{throw Error('execution cleanup')}
+ f.options.frames.end=async()=>{throw Error('frame cleanup')}
+ const end=f.view.end.bind(f.view)
+ f.view.end=async(status)=>{release++;await end(status)}
+ const service=createActRunService(f.options)
+ let error:unknown
+ try{for await(const event of service.submit('work')){expect(typeof event.type).toBe('string')}}catch(value){error=value}
+ expect(error).toBeInstanceOf(AggregateError);expect((error as AggregateError).errors).toHaveLength(2)
+ expect(release).toBe(1);expect((await f.view.inspect())?.lease).toBeNull();await service.close()
+})
+
+test('steering during completion verification invalidates the old completion and delivers the new goal',async()=>{
+ const f=runFixture();let entered!:()=>void; let release!:()=>void; let checks=0
+ const checking=new Promise<void>(r=>entered=r); const gate=new Promise<void>(r=>release=r)
+ const service=createActRunService({...f.options,completionVerifier:{async verify(){if(++checks===1){entered();await gate}return {verified:true,reason:'fixture'}}}})
+ const events=[]
+ const running=(async()=>{for await(const event of service.submit('first'))events.push(event)})()
+ await checking;await service.steer('new goal during verification');release();await running
+ expect(checks).toBe(2);expect((await f.view.inspect())?.goals.length).toBe(2)
+ expect(events.filter(event=>event.type==='state'&&event.status==='completed')).toHaveLength(1)
+ expect(events.filter(event=>event.type==='turn')).toHaveLength(2);await service.close()
+})
+
+function storage():ContextStorage {
+ const states=new Map<string,ContextState>(); const objects=new Map<string,string>()
+ return {async load(id){return structuredClone(states.get(id)??null)},async compareAndSwap(id,version,next){if((states.get(id)?.version??0)!==version)return false;states.set(id,structuredClone(next));return true},async put(id,text){const key=crypto.randomUUID();objects.set(id+key,text);return key},async get(id,key){return objects.get(id+key)??null},async close(){}}
 }
+function child(block=false):ActChildSession{return {async *submit(_input,signal){yield {type:'state',runId:'child',status:'thinking'};if(block)await new Promise<void>(resolve=>{signal!.addEventListener('abort',()=>resolve(),{once:true});if(signal!.aborted)resolve()});yield {type:'state',runId:'child',status:signal?.aborted?'cancelled':'completed'}},async answer(){},async steer(){},cancel(){},async close(){}}}
 
-describe('INV-1 默认审批端口一律拒绝', () => {
-  test('INV-1 没注入审批端口时，要审批的工具拿不到放行', async () => {
-    await expect(defaultDenyApprovalPort.awaitConfirmation('要删掉这个目录吗？')).rejects.toThrow()
-  })
+test('INV-38 child delivery bounds embedded history and preserves the needs-reconcile state',async()=>{
+ const store=storage(); const signal=new AbortController().signal
+ const supervisor=createAgentSupervisor({storage:store,concurrency:1,maxChildren:1,async open(){return {...child(),async *submit(){
+  for(let i=0;i<1000;i++)yield {type:'accepted',runId:'child',turnId:String(i),text:'x'.repeat(5000),ref:{sessionId:'child',id:String(i)}}
+  yield {type:'state',runId:'child',status:'needs_reconcile'}
+ }}}})
+ const started=await supervisor.start('p',{task:'many turns',profile:'read'},signal)
+ const job=await supervisor.wait('p',started.id,signal);expect(job.status).toBe('needs_reconcile')
+ const context=createContextRuntime({sessionId:'p',storage:store});const record=await context.read(job.result!,{limit:1})
+ const raw=(await store.get('p',record.record.objectId))!; const result=JSON.parse(raw)
+ expect(raw.length).toBeLessThan(130000);expect(result.omittedEvents).toBeGreaterThan(970)
+ expect(result.events.length+result.omittedEvents).toBe(1001);expect(result.events.at(-1).status).toBe('needs_reconcile')
+ expect(result.eventSource.sessionId).toBe(job.sessionId);await supervisor.close()
 })
 
-describe('INV-2 无人值守审批只按显式升级钩子放行', () => {
-  test('INV-2 钩子缺席时无人值守端口原样转交给被拒的委托端口', async () => {
-    const port = createUnattendedSubAgentApprovalPort(defaultDenyApprovalPort)
-    await expect(port.awaitConfirmation('子 Agent 要写文件')).rejects.toThrow()
-  })
-
-  test('INV-2 显式说不升级时才自动放行，不去打扰父端口', async () => {
-    let asked = 0
-    const counting = {
-      awaitConfirmation: async () => {
-        asked += 1
-      },
-    } as never
-    const port = createUnattendedSubAgentApprovalPort(counting, undefined, () => false)
-    await port.awaitConfirmation('子 Agent 要写文件')
-    expect(asked).toBe(0)
-  })
+test('INV-29 a driver ignoring cancellation cannot publish late deltas',async()=>{
+ const model={id:'hung',limits:{contextTokens:100,inputTokens:90,outputTokens:10},estimate:async()=>({tokens:1,precision:'exact' as const,basis:'fixture'}),async *stream(){await new Promise(()=>{});yield {type:'finish' as const,reason:'stop' as const}}}
+ await expect((async()=>{for await(const _ of boundedModelStream(model,{instructions:'',materials:[],response:{type:'text'},mode:'work',outputTokens:10},AbortSignal.timeout(20)))throw Error('late')})()).rejects.toThrow()
+})
+test('INV-30 concurrent child dispatch reserves quota and conflicting write scopes before opening',async()=>{
+ let opened=0;const supervisor=createAgentSupervisor({storage:storage(),concurrency:2,maxChildren:5,async open(){opened++;return child(true)}}); const signal=new AbortController().signal
+ try{
+  const a=await supervisor.start('p',{task:'a',profile:'read',writes:['files']},signal)
+  await expect(supervisor.start('p',{task:'b',profile:'read',writes:['files']},signal)).rejects.toThrow('冲突')
+  const b=await supervisor.start('p',{task:'b',profile:'read',writes:['browser']},signal)
+  await expect(supervisor.start('p',{task:'c',profile:'read'},signal)).rejects.toThrow('额度')
+  expect(opened).toBe(2);await supervisor.cancel('p',a.id);await supervisor.cancel('p',b.id)
+ }finally{await supervisor.close()}
+})
+test('INV-31 child quota and parent identity survive reopen and resume does not create a new session',async()=>{
+ const store=storage(); const signal=new AbortController().signal; const ids:string[]=[]; const options={storage:store,concurrency:2,maxChildren:1,async open(job:{sessionId:string}){ids.push(job.sessionId);return child()}}
+ const first=createAgentSupervisor(options);const job=await first.start('p',{task:'a',profile:'read'},signal);await first.wait('p',job.id,signal);await first.close()
+ const next=createAgentSupervisor(options)
+ try{
+  await expect(next.status('other',job.id)).rejects.toThrow()
+  await expect(next.start('p',{task:'b',profile:'read'},signal)).rejects.toThrow('额度')
+  await next.resume('p',job.id,{input:'more'},signal)
+  const result=await next.wait('p',job.id,signal);expect(result.status).toBe('completed');expect(result.result?.sessionId).toBe('p');expect(ids).toEqual([job.sessionId,job.sessionId])
+ }finally{await next.close()}
+})
+test('INV-32 parent cancellation reaches children and leaves a readable partial result',async()=>{
+ const supervisor=createAgentSupervisor({storage:storage(),concurrency:2,maxChildren:3,async open(){return child(true)}}); const parent=new AbortController()
+ try{
+  const job=await supervisor.start('p',{task:'a',profile:'read'},parent.signal);parent.abort()
+  const done=await supervisor.wait('p',job.id,new AbortController().signal)
+  expect(done.status).toBe('cancelled');expect(done.result).toBeDefined();expect(supervisor.pending('p')).toBe(false)
+ }finally{await supervisor.close()}
+})
+test('INV-33 independent JS dispatch preserves completed children when one child fails',async()=>{
+ const supervisor=createAgentSupervisor({storage:storage(),concurrency:3,maxChildren:4,async open(job){if(job.profile==='fail')throw Error('fixture failure');return child()}}); const signal=new AbortController().signal
+ try{
+  const jobs=await Promise.all(['ok','fail'].map(profile=>supervisor.start('p',{task:profile,profile},signal)))
+  const states=await Promise.all(jobs.map(job=>supervisor.wait('p',job.id,signal)))
+  expect(states.map(x=>x.status)).toEqual(['completed','failed']);expect(states[1]?.error).toContain('fixture failure')
+ }finally{await supervisor.close()}
 })
 
-describe('INV-3 缺省交互端口只给空态', () => {
-  test('INV-3 没注入交互端口时计划与任务面恒空，不伪造会话状态', () => {
-    expect(defaultUnsupportedInteractionPort.executionId).toBe('')
-    expect(defaultUnsupportedInteractionPort.getCurrentPlan()).toEqual([])
-    expect(defaultUnsupportedInteractionPort.updateCurrentPlan({} as never)).toEqual([])
-    expect(defaultUnsupportedInteractionPort.getCurrentTask()).toBeNull()
-  })
+test('shutdown waits for an in-flight admission before cancelling the created child',async()=>{
+ const store=storage(); const put=store.put;let entered!:()=>void; let release!:()=>void
+ const started=new Promise<void>(r=>entered=r); const blocked=new Promise<void>(r=>release=r)
+ let first=true;store.put=async(id,text)=>{if(first){first=false;entered();await blocked}return put(id,text)}
+ const supervisor=createAgentSupervisor({storage:store,concurrency:1,maxChildren:1,async open(){return child(true)}})
+ const pending=supervisor.start('p',{task:'a',profile:'read'},new AbortController().signal)
+ await started;const closing=supervisor.close();release();const job=await pending;await closing
+ expect(supervisor.pending('p')).toBe(false);expect((await supervisor.status('p',job.id)).status).toBe('cancelled')
 })
 
-describe('INV-4 内置工具名是闭集', () => {
-  test('INV-4 每个内置工具都在常量表里，并且有唯一类别', () => {
-    const declared = new Set<string>(Object.values(AgentToolNames))
-    const categories = AgentToolCategoryByName as Record<string, string>
-    for (const name of Object.keys(agentTools)) {
-      expect(declared.has(name)).toBe(true)
-      expect(typeof categories[name]).toBe('string')
-    }
-    expect(Object.keys(agentTools).length).toBeGreaterThan(0)
-  })
+test('child request ownership, duplicate answers and interrupted recovery preserve the original run boundary',async()=>{
+ const store=storage(); const answered=Promise.withResolvers<void>(); const signal=new AbortController().signal
+ const request={id:'question',runId:'original-run',kind:'capability' as const,message:'Need write scope'}
+ let answers=0
+ const options={storage:store,concurrency:1,maxChildren:1,async open():Promise<ActChildSession>{return {
+  ...child(),async *submit(){yield {type:'interaction',runId:request.runId,request};await answered.promise;yield {type:'answer',runId:request.runId,id:request.id};yield {type:'state',runId:request.runId,status:'completed'}},
+  async answer(value){expect(value.runId).toBe(request.runId);expect(value.id).toBe(request.id);answers++;answered.resolve()},
+ }}}
+ const supervisor=createAgentSupervisor(options); const job=await supervisor.start('parent',{task:'inspect',profile:'read'},signal)
+ const waiting=await supervisor.wait('parent',job.id,signal)
+ expect(waiting.status).toBe('waiting');expect(waiting.pending?.[0]?.kind).toBe('capability')
+ await expect(supervisor.reply('other',job.id,request.id,true)).rejects.toThrow('不属于')
+ await expect(supervisor.reply('parent',job.id,'wrong',true)).rejects.toThrow('请求')
+ await expect(supervisor.resume('parent',job.id,{input:'replace while active'},signal)).rejects.toThrow()
+ const reopened=createAgentSupervisor(options)
+ expect((await reopened.status('parent',job.id)).status).toBe('interrupted')
+ await expect(reopened.reply('parent',job.id,request.id,true)).rejects.toThrow('请求')
+ await supervisor.reply('parent',job.id,request.id,{finishPhase:true})
+ expect((await supervisor.wait('parent',job.id,signal)).status).toBe('completed')
+ await expect(supervisor.reply('parent',job.id,request.id,true)).rejects.toThrow('请求')
+ expect(answers).toBe(1);await supervisor.close();await reopened.close()
 })
 
-describe('INV-5 内置 mod 的工具清单由单源派生', () => {
-  test('INV-5 内置 mod 的 bindings.tools 与 agentTools 逐项一致', () => {
-    const builtin = createBuiltinAgentModDefinition()
-    expect(Object.keys(builtin.bindings.tools ?? {}).sort()).toEqual(Object.keys(agentTools).sort())
-    const contributed = (builtin.manifest.contributes.tools ?? []).map((tool) => tool.name).sort()
-    expect(contributed).toEqual(Object.keys(agentTools).sort())
-  })
-})
 
-describe('INV-6 mod 贡献轴是闭集', () => {
-  test('INV-6 清单里出现集合外的轴一律拒载并留诊断', () => {
-    const diagnostics: AgentModDiagnostic[] = []
-    const loader = new AgentModLoader({ host: createModHost(), onDiagnostic: (d) => diagnostics.push(d) })
-    const manifest = manifestOf('spec.unknown-axis', [])
-    ;(manifest.contributes as Record<string, unknown>).notAnAxis = [{ id: 'x' }]
-    const report = loader.load([{ source: 'pack', origin: 'spec', manifest, bindings: {} } as never])
-    expect(report.diagnostics.length + diagnostics.length).toBeGreaterThan(0)
-  })
-})
-
-describe('INV-7 工具名冲突拒载', () => {
-  test('INV-7 两个 mod 挂同一个工具名时后者被拒并留诊断', () => {
-    const loader = new AgentModLoader({ host: createModHost() })
-    const first = { source: 'pack', origin: 'a', manifest: manifestOf('spec.a', ['probe:same']), bindings: { tools: { 'probe:same': { name: 'probe:same' } } } }
-    const second = { source: 'pack', origin: 'b', manifest: manifestOf('spec.b', ['probe:same']), bindings: { tools: { 'probe:same': { name: 'probe:same' } } } }
-    const report = loader.load([first, second] as never)
-    expect(report.diagnostics.length).toBeGreaterThan(0)
-  })
-})
-
-describe('INV-8 执行事件总线', () => {
-  test('INV-8 空总线不往外发；装了处理器的总线逐条送到', () => {
-    const seen: unknown[] = []
-    expect(() => createNoopExecutionEventBus().emitAgent({ type: 'spec' } as never)).not.toThrow()
-    const bus = createExecutionEventBus({ agent: (event) => seen.push(event) })
-    bus.emitAgent({ type: 'spec' } as never)
-    expect(seen).toHaveLength(1)
-  })
-})
-
-describe('INV-9 入参复用不跨上下文', () => {
-  test('INV-9 只有显式登记过复用信封的 schema 才允许复用', () => {
-    const plain = { type: 'object' }
-    expect(toolInputReuseStore.supportsReuse(plain)).toBe(false)
-    toolInputReuseStore.markReusable(plain)
-    expect(toolInputReuseStore.supportsReuse(plain)).toBe(true)
-    expect(toolInputReuseStore.supportsReuse({ type: 'object' })).toBe(false)
-  })
-})
-
-describe('INV-10 模型可见的工具结果有硬上限', () => {
-  test('INV-10 超限的结果被截断，但原文仍可按召回形态取回', () => {
-    const huge = { text: 'x'.repeat(AgentToolLimits.payload.modelToolResultChars * 2) }
-    const forModel = agentChat.serializeToolResultForModel(huge)
-    const forRecall = agentChat.serializeToolResultForRecall(huge)
-    expect(forModel.length).toBeLessThanOrEqual(AgentToolLimits.payload.modelToolResultChars + 4096)
-    expect(forRecall.length).toBeGreaterThan(forModel.length)
-  })
-})
-
-describe('INV-11 提醒线只提示、治理线才动手', () => {
-  test('INV-11 两条线的次序固定：提醒线严格低于治理线', () => {
-    expect(AgentContextThresholds.highWatermarkPercent).toBeLessThan(
-      AgentContextThresholds.compactionPercent
-    )
-  })
-})
-
-describe('INV-12 回合上下文账本换代不吞 delta', () => {
-  test('INV-12 消费方带着别的代次来 peek 时拿到整段替换而不是空结果', () => {
-    const ledgers = createTurnContextSessionLedgers('spec.source', { maxEntries: 8 })
-    ledgers.append('spec-session', { label: '变化', summaryText: '第一条' })
-    // 代次对不上：不回放旧 delta，只交出当前基底，消费方据此整段替换 cursor。
-    const stale = ledgers.peek('spec-session', { afterSeq: 0, generation: 'g_other' })
-    expect(stale.generation).not.toBe('g_other')
-    expect(stale.deltas.length).toBe(0)
-    expect(stale.tailSeq).toBe(1)
-    // 换回当前代次后，同一条 delta 仍然读得到，没有被吞掉。
-    const current = ledgers.peek('spec-session', { afterSeq: 0, generation: stale.generation })
-    expect(current.deltas.length).toBe(1)
-  })
-})
-
-describe('INV-13 工具传输名双向可还原', () => {
-  test('INV-13 同一批工具的传输名互不相撞，且能还原回 canonical 名', () => {
-    const plan = toolTransportNames.createPlan(['probe:read', 'probe:write', 'probe-two:read'])
-    const transportNames = Object.values(plan.canonicalToProvider)
-    expect(new Set(transportNames).size).toBe(transportNames.length)
-    const projection = toolTransportNames.createProjection(
-      ['probe:read', 'probe:write', 'probe-two:read'],
-      ['probe:read', 'probe:write', 'probe-two:read']
-    )
-    expect(projection.plan.providerToCanonical).toEqual(
-      Object.fromEntries(
-        Object.entries(plan.canonicalToProvider).map(([canonical, transport]) => [transport, canonical])
-      )
-    )
-  })
-})
-
-describe('INV-14 会话租约不抢活着的持有者', () => {
-  test('INV-14 持有者进程还活着时抢占被拒；进程已死才允许恢复', () => {
-    const current = { sessionId: 'spec', ownerId: 'owner-a', ownerPid: 42, acquiredAt: 1, heartbeatAt: 1 }
-    const claim = { sessionId: 'spec', ownerId: 'owner-b', ownerPid: 43 }
-    expect(() => resolveAgentSessionLeaseClaim(current, claim, () => true, 100)).toThrow(/正被另一个/u)
-    const recovered = resolveAgentSessionLeaseClaim(current, claim, () => false, 100)
-    expect(recovered.ownerId).toBe('owner-b')
-  })
-})
-
-describe('INV-15 归档信封版本不符即拒', () => {
-  test('INV-15 format 或 schemaVersion 不认识时拒绝解析，不做宽容降级', () => {
-    const envelope = agentSessionKit.createArchiveEnvelope({
-      productId: 'spec',
-      productSchemaVersion: 1,
-      exportedAt: new Date(0).toISOString(),
-      sanitized: true,
-      session: { id: 'spec' },
-      resources: [],
-      events: [],
-    })
-    expect(agentSessionKit.parseArchiveEnvelope(envelope)).toBeTruthy()
-    expect(() => agentSessionKit.parseArchiveEnvelope({ ...envelope, format: 'other' })).toThrow()
-    expect(() => agentSessionKit.parseArchiveEnvelope({ ...envelope, schemaVersion: 999 })).toThrow()
-  })
-})
-
-describe('mod 宿主组装面', () => {
-  test('INV-5 宿主不给 bundled 时组装器自己用随包内置 mod', async () => {
-    const assembly = await agentModHost.assembleAgentMods({ host: createModHost() })
-    expect(assembly.report.activated.some((entry) => entry.modId.includes('builtin'))).toBe(true)
-  })
-})
-
-// ── 工具契约：定义一条工具、说明的两道闸与分节语法、只读判据、挂进内核（INV-23 起，原 @velaros-ai/tool-contract 的 INV-1…INV-6）──
-
-interface ProbeToolContext {
-  abortSignal: AbortSignal
-  ready: boolean
-}
-
-/** 造一份能过全部校验的最小工具定义，调用方只覆盖要测的那几格。 */
-function probeToolInput(
-  overrides: Partial<DefineToolRuntimeSpecInput<{ text: string }, ProbeToolContext>> = {}
-): DefineToolRuntimeSpecInput<{ text: string }, ProbeToolContext> {
-  return {
-    name: 'probe:echo',
-    category: 'probe',
-    role: 'inspect',
-    summary: '把收到的文本原样回显。',
-    suitable: ['确认工具链路通不通'],
-    schema: z.strictObject({ text: z.string() }),
-    permissions: [],
-    execute: async (input) => input.text,
-    ...overrides,
-  }
-}
-
-/** 探针类别的定义函数：走对外的 `toolContracts.createDefiner`，与写工具的一方同一条路。 */
-const defineProbeTool = toolContracts.createDefiner<ProbeToolContext>({ categoryOf: () => 'probe' })
-
-describe('INV-23 工具名必须是 canonical 工具 id', () => {
-  test('INV-23 不合法的工具名在定义期就抛，进不了注册表', () => {
-    expect(() => defineProbeTool(probeToolInput())).not.toThrow()
-    expect(() => defineProbeTool(probeToolInput({ name: 'Probe:Echo' }))).toThrow(/canonical/u)
-    expect(() => defineProbeTool(probeToolInput({ name: 'probe' }))).toThrow(/canonical/u)
-  })
-})
-
-describe('INV-24 示例按模型会发的那份 JSON 校验', () => {
-  test('INV-24 示例过不了工具自己的 schema 就在定义期抛，报错点名工具', () => {
-    expect(() => defineProbeTool(probeToolInput({ examples: [{ text: '你好' }] }))).not.toThrow()
-    // undefined 只在内存里成立：序列化后整格消失，必填的 text 就缺了。
-    expect(() => defineProbeTool(probeToolInput({ examples: [{ text: undefined }] }))).toThrow(/probe:echo/u)
-    expect(() => defineProbeTool(probeToolInput({ examples: [{ text: 1 }] }))).toThrow(/示例/u)
-  })
-})
-
-describe('INV-25 说明的两道长度闸', () => {
-  test('INV-25 硬上限不可豁免，软预算只认两种理由且 note 不能空白', () => {
-    const long = (count: number): string => '啊'.repeat(count)
-    const { descriptionBudgetChars, descriptionMaxChars } = AgentTuning.toolkit
-    const waiver = { reason: 'safety-protocol', note: '整条流程就是护栏' } as const
-    expect(() => defineProbeTool(probeToolInput({ summary: long(descriptionMaxChars + 1) }))).toThrow(/硬上限/u)
-    expect(() =>
-      defineProbeTool(probeToolInput({ summary: long(descriptionMaxChars + 1), descriptionBudgetWaiver: waiver }))
-    ).toThrow(/硬上限/u)
-    expect(() => defineProbeTool(probeToolInput({ summary: long(descriptionBudgetChars + 1) }))).toThrow(/软预算/u)
-    expect(() =>
-      defineProbeTool(probeToolInput({ summary: long(descriptionBudgetChars + 1), descriptionBudgetWaiver: waiver }))
-    ).not.toThrow()
-    expect(() =>
-      defineProbeTool(probeToolInput({
-        summary: long(descriptionBudgetChars + 1),
-        descriptionBudgetWaiver: { reason: 'safety-protocol', note: '   ' },
-      }))
-    ).toThrow(/note/u)
-  })
-})
-
-describe('INV-26 说明的分节语法固定', () => {
-  test('INV-26 渲染出来的说明一定判为结构化，乱序、缺必填节或空节判非结构化', () => {
-    const rendered = renderToolDescription({
-      description: '把收到的文本原样回显。',
-      suitable: ['确认工具链路通不通'],
-      forbidden: ['当成日志工具用'],
-      notes: ['回显不改动内容'],
-    })
-    expect(isStructuredToolDescription(rendered)).toBe(true)
-    const parsed = parseStructuredToolDescription(rendered)
-    expect(parsed?.suitable).toEqual(['确认工具链路通不通'])
-    expect(parsed?.usage).toEqual([])
-    // 缺必填的「适合」、分节回头、以及只有标题的空节都判非结构化；对外的整类断言同样拦下。
-    expect(isStructuredToolDescription('描述：只有描述')).toBe(false)
-    expect(isStructuredToolDescription('描述：x\n\n禁止：\n- a\n\n适合：\n- b')).toBe(false)
-    expect(isStructuredToolDescription('描述：x\n\n适合：')).toBe(false)
-    expect(() => toolDescriptions.forCategory({ echo: { description: '描述：只有描述' } }, 'probe')).toThrow(/probe\/echo/u)
-  })
-})
-
-describe('INV-27 只读判据的顺序', () => {
-  test('INV-27 readOnly 的判据顺序是 effectKind → 显式 readOnly → role', () => {
-    expect(resolveToolReadOnly({ capabilities: { effectKind: 'read' }, readOnly: false, role: 'edit' })).toBe(true)
-    expect(resolveToolReadOnly({ capabilities: { effectKind: 'write' }, readOnly: true, role: 'inspect' })).toBe(false)
-    expect(resolveToolReadOnly({ readOnly: true, role: 'edit' })).toBe(true)
-    expect(resolveToolReadOnly({ role: 'inspect' })).toBe(true)
-    expect(resolveToolReadOnly({ role: 'edit' })).toBe(false)
-    // 定义出来的工具按同一套判据定出 readOnly。
-    expect(defineProbeTool(probeToolInput({ role: 'edit', capabilities: { effectKind: 'read' } })).readOnly).toBe(true)
-  })
-})
-
-describe('INV-28 内核可调用操作固定四步', () => {
-  test('INV-28 严格解析入参、换上内核的 abortSignal、不可用报 UNAVAILABLE；没给解析器一个都不登记', async () => {
-    const tool = defineProbeTool(probeToolInput({ execute: async (input, ctx) => `${input.text}:${ctx.ready}` }))
-    expect(createToolCallableOperations({ 'probe:echo': tool }, undefined, { label: '探针' })).toEqual({})
-
-    const operations = createToolCallableOperations<ProbeToolContext>(
-      { 'probe:echo': tool },
-      (_scope, signal) => ({ abortSignal: signal, ready: true }),
-      { label: '探针' }
-    )
-    const controller = new AbortController()
-    await expect(
-      operations['probe:echo']!.invoke(undefined, { text: '嗨', extra: 1 }, controller.signal)
-    ).rejects.toThrow(/入参不合法/u)
-    await expect(operations['probe:echo']!.invoke(undefined, '嗨', controller.signal)).rejects.toThrow(/必须是对象/u)
-    expect(await operations['probe:echo']!.invoke(undefined, { text: '嗨' }, controller.signal)).toBe('嗨:true')
-
-    const unavailable = createToolCallableOperations<ProbeToolContext>(
-      { 'probe:echo': { ...tool, isAvailable: () => false } },
-      (_scope, signal) => ({ abortSignal: signal, ready: true }),
-      { label: '探针' }
-    )
-    await expect(
-      unavailable['probe:echo']!.invoke(undefined, { text: '嗨' }, controller.signal)
-    ).rejects.toThrow(/不可用/u)
-  })
+test('child start, status and resume without optional grants produce strict JSON receipts',async()=>{
+ const store=storage();const signal=new AbortController().signal
+ const supervisor=createAgentSupervisor({storage:store,concurrency:1,maxChildren:1,async open(){return child()}})
+ try{
+  const first=await supervisor.start('p',{task:'inspect',profile:'read'},signal)
+  expect(first).toEqual(JSON.parse(JSON.stringify(first)))
+  expect(Object.hasOwn(first,'stores')).toBe(false)
+  const completed=await supervisor.wait('p',first.id,signal)
+  expect(completed).toEqual(JSON.parse(JSON.stringify(completed)))
+  const resumed=await supervisor.resume('p',first.id,{id:first.id,input:'continue'},signal)
+  expect(resumed).toEqual(JSON.parse(JSON.stringify(resumed)))
+  expect(Object.hasOwn(resumed,'stores')).toBe(false)
+  expect((await supervisor.wait('p',first.id,signal)).status).toBe('completed')
+ }finally{await supervisor.close()}
 })

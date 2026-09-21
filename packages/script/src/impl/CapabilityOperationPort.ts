@@ -1,10 +1,11 @@
 /** 脚本的操作表在 Kernel 登记，全部调用经过同一个能力调用器。 */
-import { createKernel, kernelModules, KernelVersionAxes } from '@velaros-ai/kernel'
+import { isEmpty } from '@velaros-ai/core'
 import type { KernelApi } from '@velaros-ai/kernel'
+import { createKernel, kernelModules, KernelVersionAxes } from '@velaros-ai/kernel'
 
 import type { CodeCapabilityCall, CodeCapabilityOutcome, CodeCapabilityPort } from '../contract/requires.js'
-import type { CodeAttachment } from '../types/outcome.js'
 import type { CapabilityOperationTable } from '../types/operations.js'
+import type { CodeAttachment } from '../types/outcome.js'
 import { shapeOperationFailure } from '../utils/capability-failure.js'
 
 class CapabilityOperationPort implements CodeCapabilityPort {
@@ -21,7 +22,7 @@ class CapabilityOperationPort implements CodeCapabilityPort {
         invoke: async (_scope, input, signal): Promise<CodeCapabilityOutcome> => {
           const attachments: CodeAttachment[] = []
           const value = await operation(input, { signal, attach: attachment => attachments.push(attachment) })
-          return attachments.length ? { value, attachments } : { value }
+          return !isEmpty(attachments) ? { value, attachments } : { value }
         },
       }])))
       this.kernel.registerModule(kernelModules.define({

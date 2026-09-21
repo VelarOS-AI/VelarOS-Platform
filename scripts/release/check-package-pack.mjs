@@ -28,6 +28,7 @@ const destination = await mkdtemp(path.join(tmpdir(), 'velaros-package-pack-chec
 const requiredPackageFiles = new Map([
   ['velaros', [
     'package/office/vendor/pptxgenjs/pptxgen.es.js',
+    ...['system/modules-template.js','system/programs-template.js','system/results-template.js','system/execution-template.js','system/template.js','system/context-template.js','system/context-materials-template.js','system/workspace-template.js','system/task-template.js','system/history-template.js','system/inputs-template.js','system/artifacts-template.js','search/template.js','search/evidence-template.js','agents/template.js','agents/interaction-template.js'].map(file => `package/dist/act/${file}`),
     'package/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs',
   ]],
 ])

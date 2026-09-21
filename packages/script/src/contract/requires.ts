@@ -7,12 +7,14 @@
 
 import type { OperationRuntimeApi } from '@velaros-ai/kernel'
 
-import type { CodeCallNotice } from '../types/script.js'
 import type { CodeAttachment } from '../types/outcome.js'
 import type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
+import type { CodeCallNotice, ScriptPackageDefinition } from '../types/script.js'
 
 /** 同一 Kernel 上的一次脚本会话配置。 */
 export interface KernelScriptSessionOptions {
+  /** 宿主装配的虚拟包，声明与运行对象使用同一投影。 */
+  readonly packages?: readonly ScriptPackageDefinition[]
   /** 由宿主设定，本次脚本不能通过参数改变执行权限。 */
   readonly mode?: 'execute' | 'observe'
   /** 持有统一注册、调用和日志的运行时。 */

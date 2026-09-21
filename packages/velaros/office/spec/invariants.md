@@ -35,4 +35,4 @@ INV-12（工具 schema 由源码生成）随工具面一起作废，模型面的
 | INV-14 | 入参在做事之前核对：形状、取值与上限不对当场 `VALIDATION`，message 点名字段；正文与结构化内容（content 与 blocks、slides、sheets）只给一样；不合法时空间端口一次都不调、一个文件都不写 | 测试 | `spec/acceptance.test.ts` |
 | INV-15 | 模型面是 `velaros:office`：声明从源码生成、只放出九个操作，随包发布的声明（`VelarOfficeModule`）与生成物是同一份；空间端口与调用上下文不进模型面；能由别的操作拼出来的不单做（PDF 转 Word 就是 readPdf 加 createWord）；模型写的程序照这份声明调到真实操作 | 测试 | `spec/acceptance.test.ts` |
 | INV-16 | 声明里写给模型的数字就是常量表里的：路径、标题、作者、正文、内容块、页、条目这些上限（`OfficeInputLimits`、`OfficePdfLimits`、`OfficeMarkdownLimits`、`OfficePreviewLimits`）与 MarkItDown 认的扩展名；改常量不改说明（或反过来）过不了验收 | 测试 | `spec/acceptance.test.ts` |
-| INV-17 | 代码模版（`template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它整份照生成的真实声明过类型检查，不嵌进声明，随模型面发布、按需读（`velaros:program` 的 template）；每个函数照写法跑通由 `test/template.test.ts` 核对 | 测试 | `spec/acceptance.test.ts` |
+| INV-17 | 代码模版（`template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它整份照生成的真实声明过类型检查，不嵌进声明，随模型面发布、按需读（`velaros:system` 的 modules.describe）；每个函数照写法跑通由 `test/template.test.ts` 核对 | 测试 | `spec/acceptance.test.ts` |

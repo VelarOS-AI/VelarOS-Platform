@@ -11,10 +11,10 @@ import { join, resolve } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { codeProgramChecker } from '@velaros-ai/script'
 import { AppError } from '@velaros-ai/core/error'
 import { textCodec } from '@velaros-ai/core/text-files'
 import type { TextEncoding } from '@velaros-ai/core/text-files/contracts'
+import { codeProgramChecker } from '@velaros-ai/script'
 
 import { VelarFilesModule } from '../contract/surface'
 import type { FileLineRange, FileOperationContext, FileReadItem, FileText } from '../index'

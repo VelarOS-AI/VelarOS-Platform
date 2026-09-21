@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { ShellLimits } from '@velaros-ai/velaros/shell/contracts'
 
 import type { ProjectHostPort } from '../contract/requires'
+import {projectCapabilityPorts} from '../impl/operations/ProjectCapabilityPorts'
 import { commandResult, createProjectPortsHarness, failureOf } from '../spec/support'
 
 const execute = promisify(execFile)
@@ -174,4 +175,21 @@ describe('项目里的 velaros:shell', () => {
     expect(environment).toEqual({ shell: '/bin/zsh', shells: [] })
     expect(refreshed).toBe(1)
   })
+})
+
+
+test('项目观察命令保留宿主受限入口、原始保护证据和项目路径边界',async()=>{
+  const {host,runs}=await createProjectPortsHarness(root)
+  const controller=new AbortController()
+  expect(projectCapabilityPorts.shell(host,controller.signal).runObservationCommand).toBeUndefined()
+  const invoked:unknown[]=[]
+  const result=commandResult('collect',root)
+  host.runObservationCommand=async function(command,options,signal){
+    expect(this).toBe(host);invoked.push({command,options,signal});return result
+  }
+  const port=projectCapabilityPorts.shell(host,controller.signal)
+  expect(await port.runObservationCommand!('collect',{cwd:'.'},controller.signal)).toBe(result)
+  expect(invoked).toEqual([{command:'collect',options:{cwd:root},signal:controller.signal}])
+  expect((await failureOf(port.runObservationCommand!('collect',{cwd:'..'}))).code).toBe('PERMISSION')
+  expect(invoked).toHaveLength(1);expect(runs).toHaveLength(0)
 })

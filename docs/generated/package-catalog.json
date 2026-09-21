@@ -6,13 +6,11 @@
       "domain": "agent",
       "directory": "packages/agent",
       "name": "@velaros-ai/agent",
-      "version": "1.5.0",
-      "description": "Host-agnostic agent loop, prompt, orchestration, team, execution, and tool runtime for VelarOS-compatible hosts, plus the tool contract: define a tool once, police its model-facing description, mount a tool set onto the kernel, and bundle its schemas for the model.",
+      "version": "6.1.0",
+      "description": "Act execution loop, durable run control and bounded child scheduling for VelarOS Platform.",
       "exportSubpaths": [
         ".",
-        "./chat",
-        "./contracts",
-        "./tool-contract"
+        "./contracts"
       ],
       "repositoryDirectory": "packages/agent"
     },
@@ -79,7 +77,7 @@
       "domain": "foundations",
       "directory": "packages/context",
       "name": "@velaros-ai/context",
-      "version": "0.7.0",
+      "version": "0.9.0",
       "description": "Shared task state, immutable evidence and runtime materialization for ScriptAct.",
       "exportSubpaths": [
         ".",
@@ -104,10 +102,13 @@
       "domain": "foundations",
       "directory": "packages/velaros",
       "name": "@velaros-ai/velaros",
-      "version": "0.2.0",
+      "version": "0.6.0",
       "description": "The capability units the model imports as velaros:* modules and every space mounts with its own port (products assemble the spaces; each unit's ./local entry gives its port on this machine): files (machine files, system space; with the machine file port and a global search for host UIs underneath), images (view pictures within provider limits; with the machine image port, sips on macOS), shell (run commands; with the local machine host underneath: background tasks, interactive consoles, shell selection, process confinement, the Windows process host, and the processes, ports and metrics a host UI shows), sandbox (rehearse in a mirror, then apply; with the local rehearsal sandbox underneath), project (governed project files and code questions: velaros:project and velaros:code, with the project kernel and its transactions underneath, and the ports a project hands to shell, sandbox and images), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), memory (long-term memory: one directory of Markdown files per host-given scope, plus the index a host puts at the start of each session), office (Word, PowerPoint and Excel generation, PDF reading and editing, Word and LaTeX to PDF, document preview and Markdown conversion, with the document engines underneath and the narrow renderer primitives the Document Renderer uses) and browser (velaros:browser to drive and read pages, velaros:devtools for console, network, storage, performance, recording, emulation and user scripts, with the CDP drivers, page engines, Electron session runtime and site workspace underneath). One plain directory per unit, one convention for all.",
       "exportSubpaths": [
         ".",
+        "./act/agents",
+        "./act/search",
+        "./act/system",
         "./browser",
         "./browser/contracts",
         "./browser/electron",
@@ -128,11 +129,10 @@
         "./office/renderer",
         "./project",
         "./project/contracts",
+        "./renderer",
         "./sandbox",
         "./sandbox/contracts",
         "./sandbox/local",
-        "./script",
-        "./script/contracts",
         "./shell",
         "./shell/contracts",
         "./shell/local"
@@ -143,7 +143,7 @@
       "domain": "kernel",
       "directory": "packages/kernel",
       "name": "@velaros-ai/kernel",
-      "version": "0.4.0",
+      "version": "0.6.0",
       "description": "VelarOS library-first microkernel: contracts, in-process runtime, thin client, and optional serve deployment.",
       "exportSubpaths": [
         ".",
@@ -158,7 +158,7 @@
       "domain": "model",
       "directory": "packages/model",
       "name": "@velaros-ai/model",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "description": "Model provider adapters, provider script integration, and runtime model resolution for VelarOS-compatible hosts.",
       "exportSubpaths": [
         ".",

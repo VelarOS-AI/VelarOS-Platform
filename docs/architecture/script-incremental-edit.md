@@ -51,8 +51,8 @@ script 返回 status、executed，以及本次涉及的 observe / execute 回执
 
 ## 验证入口
 
-- `packages/velaros/test/script-submission.test.mjs`：合并提交、隐含版本、全量预检、持久占位、并发重试和真实下一轮上下文。
-- `packages/velaros/test/incremental-edit.test.mjs`：版本、草稿、编辑、CAS 并发、身份重试和故障注入。
-- `packages/velaros/test/program-context.test.mjs`：观察、结果租约、未知效果、命令约束和投影预算。
-- `packages/velaros/test/provider.test.ts`：实际 Provider 编译和发送的唯一 script schema。
-- `packages/velaros/test/dual-core.test.mjs`：真实项目操作、重启、进程中断和保留的上下文助手。
+- `packages/velaros/act/runtime/test/script-submission.test.mjs`：合并提交、隐含版本、全量预检、持久占位、并发重试和真实下一轮上下文。
+- `packages/velaros/act/runtime/test/incremental-edit.test.mjs`：版本、草稿、编辑、CAS 并发、身份重试和故障注入。
+- `packages/velaros/act/runtime/test/program-context.test.mjs`：观察、结果租约、未知效果、命令约束和投影预算。
+- `packages/velaros/act/runtime/test/provider.test.ts`：实际 Provider 编译和发送的唯一 script schema。
+- `packages/velaros/act/runtime/test/dual-core.test.mjs`：真实项目操作、重启、进程中断和保留的上下文助手。

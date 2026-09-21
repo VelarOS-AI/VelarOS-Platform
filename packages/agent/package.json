@@ -1,10 +1,10 @@
 {
   "name": "@velaros-ai/agent",
-  "version": "1.5.0",
+  "version": "6.1.0",
   "velaros": {
     "platform": "0.6"
   },
-  "description": "Host-agnostic agent loop, prompt, orchestration, team, execution, and tool runtime for VelarOS-compatible hosts, plus the tool contract: define a tool once, police its model-facing description, mount a tool set onto the kernel, and bundle its schemas for the model.",
+  "description": "Act execution loop, durable run control and bounded child scheduling for VelarOS Platform.",
   "license": "Apache-2.0",
   "sideEffects": false,
   "engines": {
@@ -21,14 +21,6 @@
     "./contracts": {
       "types": "./dist/contracts.d.ts",
       "import": "./dist/contracts.js"
-    },
-    "./chat": {
-      "types": "./dist/chat.d.ts",
-      "import": "./dist/chat.js"
-    },
-    "./tool-contract": {
-      "types": "./dist/tool-contract.d.ts",
-      "import": "./dist/tool-contract.js"
     }
   },
   "files": [
@@ -46,23 +38,13 @@
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/agent"
   },
   "dependencies": {
-    "@types/json-schema": "7.0.15",
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
-    "gpt-tokenizer": "3.4.0",
-    "jszip": "^3.10.1",
-    "ai": "^6.0.168",
-    "execa": "^9.6.1",
-    "typescript": "^5.7.0",
-    "ws": "^8.18.3",
-    "zod": "^4.3.6",
-    "@velaros-ai/context": "workspace:*"
+    "@velaros-ai/context": "workspace:*",
+    "@velaros-ai/model": "workspace:*"
   },
   "devDependencies": {
-    "@ai-sdk/provider": "3.0.8",
-    "@types/node": "^22.19.17",
-    "@types/ws": "^8.18.1"
+    "@types/node": "^22.19.17"
   },
   "repository": {
     "type": "git",

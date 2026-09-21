@@ -66,3 +66,10 @@ describe('Model profiles and usage common layer', () => {
     })).toMatchObject({ kind: 'network', delayMs: 500 })
   })
 })
+
+
+test('provider retry reads native Error causes and respects permanent authorization failure',()=>{
+ const error=new Error('Cannot connect to API',{cause:Object.assign(new Error('read ECONNRESET'),{code:'ECONNRESET'})})
+ expect(modelProviderRetry.plan(error,{retryIndex:1})?.kind).toBe('network')
+ expect(modelProviderRetry.plan(Object.assign(new Error('request rejected'),{statusCode:401,cause:error}),{retryIndex:1})).toBeNull()
+})

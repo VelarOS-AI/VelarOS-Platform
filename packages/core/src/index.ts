@@ -11,5 +11,4 @@ export { toNullable, toOptional } from './utils/nullish'
 export { clamp } from './utils/number'
 export { optionalWhen, optionalWhenLazy } from './utils/optionalWhen'
 export { clampToCodePointBoundary, isBlank, takeTail, truncate } from './utils/string'
-
 export { unifiedLineDiff } from './utils/textDiff'

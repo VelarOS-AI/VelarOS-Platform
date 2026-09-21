@@ -49,7 +49,7 @@ export class ProjectCapabilityPorts implements ProjectCapabilityPortsApi {
 
   public shell(project: ProjectHostPort, abortSignal: AbortSignal): ShellSpacePort {
     const root = () => project.getRootPath()
-    return {
+    const port:ShellSpacePort={
       resolveCwd: (cwd) => insideProject(root(), cwd ?? '.', '工作目录'),
       commandPolicy: () => ({ scopeLabel: '当前项目', riskScope: 'project-command:dangerous' }),
       runCommand: async (command, options, allowDangerous, signal) => {
@@ -63,6 +63,12 @@ export class ProjectCapabilityPorts implements ProjectCapabilityPortsApi {
       refreshShellEnvironment: () => project.refreshShellEnvironment(),
       terminateBackgroundTask: (request) => project.terminateBackgroundTask(request),
     }
+    const observe=project.runObservationCommand?.bind(project)
+    if(observe)port.runObservationCommand=async(command,options,signal)=>{
+      const cwd=await insideProject(root(),options.cwd??'.','工作目录')
+      return this.gate.run(root(),!shellCommandPolicy.isReadOnly(command),signal??abortSignal,()=>observe(command,{...options,cwd},signal??abortSignal))
+    }
+    return port
   }
 
   public sandbox(project: ProjectHostPort, abortSignal: AbortSignal): SandboxSurfacePort {

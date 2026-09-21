@@ -1,5 +1,7 @@
 import { Ajv } from 'ajv'
 
+import { isArray } from '@velaros-ai/core'
+
 import type { ContextGap, ContextTarget, ContextTaskState, ContextViewLimits, RegisteredViewIntent } from '../contract/context.js'
 import { DefaultContextViewLimits } from '../contract/context.js'
 
@@ -39,7 +41,7 @@ export function resourceTarget(target: ContextTarget): Extract<ContextTarget, { 
 
 /** 恢复任务必须包含结构完整的状态，避免把损坏记录解释为新任务。 */
 export function assertContextTask(value: ContextTaskState): void {
-  if (!value || !Number.isSafeInteger(value.revision) || value.revision < 1 || !['ready', 'executing', 'context-pending', 'view-ready', 'needs-reconcile', 'context-blocked', 'completed', 'cancelled', 'failed'].includes(value.status) || !Array.isArray(value.goals) || !Array.isArray(value.intents) || !Array.isArray(value.mandatory) || !Array.isArray(value.artifacts) || !value.capsule || !value.usage) throw contextFailure('TASK_STATE', '任务检查点结构无效')
+  if (!value || !Number.isSafeInteger(value.revision) || value.revision < 1 || !['ready', 'executing', 'context-pending', 'view-ready', 'needs-reconcile', 'context-blocked', 'completed', 'cancelled', 'failed'].includes(value.status) || !isArray(value.goals) || !isArray(value.intents) || !isArray(value.mandatory) || !isArray(value.artifacts) || !value.capsule || !value.usage) throw contextFailure('TASK_STATE', '任务检查点结构无效')
   for (const count of Object.values(value.usage)) if (!Number.isSafeInteger(count) || count < 0) throw contextFailure('TASK_STATE', '任务用量无效')
 }
 

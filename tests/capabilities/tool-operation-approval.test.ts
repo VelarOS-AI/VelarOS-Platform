@@ -9,9 +9,8 @@ import { join, resolve } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import type { ApprovalPort } from '../../packages/agent/src/contract/requires.js'
-import { CodingSessionTracker } from '../../packages/agent/src/impl/session/CodingSessionTracker'
-import { agentToolContracts } from '../../packages/agent/src/impl/tools/AgentToolContracts'
+import {type ApprovalPort,createTaskApprovalState} from '@velaros-ai/kernel'
+
 import { createCapabilityPort } from '../../packages/script/src/index'
 import type { ProjectHostPort } from '../../packages/velaros/project/index'
 import type { ShellHostPort } from '../../packages/velaros/shell/index'
@@ -27,16 +26,26 @@ function spaces(approved: boolean) {
   // 项目空间按真实路径钳工作目录，系统空间原样解析：根先解开符号链接，两边的工作目录才是同一个字符串。
   const workspaceRoot = realpathSync(mkdtempSync(join(tmpdir(), 'velaros-operation-approval-')))
   roots.push(workspaceRoot)
-  const tracker = new CodingSessionTracker()
+  const tracker = createTaskApprovalState()
   let cards = 0
   let runs = 0
   const delegate: ApprovalPort = {
     awaitConfirmation: async () => { throw new Error('use shared decision channel') },
     awaitConfirmationDecision: async () => { cards++; return { approved, message: 'use a backup' } },
   }
-  const approval = agentToolContracts.createTaskApprovalPort(delegate, tracker, {
-    shouldAutoApprove: (options) => tracker.hasConfirmedRiskScope(options.riskScope ?? ''),
-  })
+  // 宿主决策用同一 Kernel 授权账本；两种能力端口必须发出同一操作 key。
+  const approval:ApprovalPort={
+   ...delegate,
+   async awaitConfirmation(message,signal,options){
+    const key=options?.operation?.key
+    if(!key)throw Error('operation identity missing')
+    const denial=tracker.denial(key)
+    if(denial)throw Object.assign(Error(denial),{code:'PERMISSION_DENIED'})
+    const decision=await delegate.awaitConfirmationDecision(message,signal,options)
+    if(!decision.approved){tracker.record(key,false,options??{},decision.message??undefined);throw Object.assign(Error('denied'),{code:'PERMISSION_DENIED'})}
+    expect(options?.requireManualApproval).toBe(true);expect(options?.rememberRiskScope).toBe(false)
+   },
+  }
   const run = async (command: string) => {
     runs++
     return { command, cwd: workspaceRoot, stdout: '', stderr: '', exitCode: 0, signal: null,
@@ -84,6 +93,6 @@ describe('shared command operation identity', () => {
     expect(h.cards()).toBe(2)
     expect(h.runs()).toBe(2)
     // 危险命令是人工审批：批准不进任务记忆，每次都由用户点头；拒绝仍跨空间共享（见上一条）。
-    expect(h.tracker.getTaskApprovalRecords()).toEqual([])
+    expect(h.tracker.list()).toEqual([])
   })
 })

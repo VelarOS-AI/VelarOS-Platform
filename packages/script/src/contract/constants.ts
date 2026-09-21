@@ -89,3 +89,21 @@ export const CodeProgramEditLimits = Object.freeze({
   /** 一次提交最多定位 32 处替换。 */
   edits:32,
 })
+
+/** 输出采集和展示的硬上限；原始值与模型展示分别计量。 */
+export const ScriptOutputLimits = Object.freeze({
+  /** 一次执行的输出块上限。 */
+  blocks:64,
+  /** 原始 JSON 输出合计上限，避免 IPC 和归档无限增长。 */
+  rawChars:1_000_000,
+  /** 单份声明或问题的字符上限。 */
+  metadataChars:4000,
+  /** 默认展示预算。 */
+  displayChars:16_000,
+  /** 允许申请的最大展示预算，实际分配仍由请求编译器决定。 */
+  maxDisplayChars:200_000,
+  /** 捕获问题最多保留条数。 */
+  issues:16,
+  /** JSON 值嵌套层数上限。 */
+  depth:64,
+})

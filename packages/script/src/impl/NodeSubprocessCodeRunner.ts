@@ -1,14 +1,16 @@
 /** 在独立进程的 QuickJS WASM 堆中执行程序，宿主仅通过 IPC 提供登记能力。 */
-
 import { fork } from 'node:child_process'
 
-import { isNull, isTrue } from '@velaros-ai/core'
+import {Log} from '@velaros-ai/core'
+import { isEmpty, isNull, isTrue } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import { CodeSurfaceErrorCodes } from '../contract/constants.js'
+import { CodeSurfaceErrorCodes, ScriptOutputLimits } from '../contract/constants.js'
 import type { CodeRunnerApi } from '../contract/requires.js'
+import type { ScriptOutputBlock, ScriptOutputCapture } from '../types/output.js'
 import type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
 import { resolveChildPath, resolveNodeExecutable } from '../utils/node-executable.js'
+import { validateOutputOptions } from '../utils/output-capture.js'
 import { describeChildExit, serveCapabilityCall } from '../utils/runner-bridge.js'
 import { CodeSurfaceTuning } from '../utils/tuning.js'
 
@@ -48,6 +50,8 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
     })
 
     const logs: string[] = []
+    const output:{config:ScriptOutputCapture['config'];blocks:ScriptOutputBlock[];issues:string[]}={config:{},blocks:[],issues:[]}
+    let outputChars=0
     return new Promise<CodeRunOutcome>((resolve) => {
       let settled = false
       // 超时挂在一个 scope 上，停下来时整批释放；到点必停是 INV-3。
@@ -58,7 +62,7 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
         timers.dispose()
         signal?.removeEventListener('abort', onAbort)
         child.kill('SIGKILL')
-        resolve(outcome)
+        resolve({...outcome,output: !isEmpty(output.blocks)||!isEmpty(output.issues)||!isEmpty(Object.keys(output.config)) ? output : undefined})
       }
       const fail = (code: string, message: string): void =>
         stop({ ok: false, logs, error: { code, message } })
@@ -118,8 +122,22 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
             blobs: request.blobs,
             input: request.input,
             operations: request.operations,
-            templates: request.templates,
+            packages: request.packages,
           })
+          return
+        }
+        if(message.type==='output'){
+          try{
+            const event=message.event as {config?:ScriptOutputCapture['config'];block?:ScriptOutputBlock;issue?:string}
+            if(event.config){validateOutputOptions(event.config,true);output.config=event.config}
+            if(event.issue&&output.issues.length<ScriptOutputLimits.issues)output.issues.push(String(event.issue).slice(0,ScriptOutputLimits.metadataChars))
+            if(event.block){
+              validateOutputOptions(event.block.options)
+              const chars=JSON.stringify(event.block.value).length
+              if(output.blocks.length>=ScriptOutputLimits.blocks||outputChars+chars>ScriptOutputLimits.rawChars||output.blocks.some(b=>b.key===event.block!.key))throw new Error('隔离输出超限或身份重复')
+              outputChars+=chars;output.blocks.push({...event.block,chars})
+            }
+          }catch(error){Log.tag('ActRuntime').debug('NodeSubprocessCodeRunner 已进入异常处理或降级分支');fail(CodeSurfaceErrorCodes.programError,String(error))}
           return
         }
         if (message.type === 'log') {
@@ -133,7 +151,7 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
           return
         }
         if (message.type === 'done') {
-          const error = message.error as { code?: string; message?: string; line?: number } | undefined
+          const error = message.error as Optional<{ code?: string; message?: string; line?: number }>
           stop({
             ok: isTrue(message.ok),
             value: message.value,
@@ -142,7 +160,7 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
               ? undefined
               : {
                   code: error?.code === CodeSurfaceErrorCodes.tooLarge ? CodeSurfaceErrorCodes.tooLarge : error?.code === CodeSurfaceErrorCodes.timeout ? CodeSurfaceErrorCodes.timeout : CodeSurfaceErrorCodes.programError,
-                  message: error?.code === CodeSurfaceErrorCodes.tooLarge ? '脚本堆内存已到上限，请分批读取并只保留需要的数据。' : error?.message ?? '脚本失败但没给出原因。',
+                  message: error?.code === CodeSurfaceErrorCodes.tooLarge&&error.message?.includes('out of memory') ? '脚本堆内存已到上限，请分批读取并只保留需要的数据。' : error?.message ?? '脚本失败但没给出原因。',
                   line: error?.line,
                 },
           })

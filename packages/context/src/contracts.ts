@@ -1,2 +1,5 @@
+export type { TurnContextAnchor,TurnContextDelta,TurnContextInspectHint,TurnContextLedgerAppendInput,TurnContextLedgerPeekResult,TurnContextSourceId,TurnContextSourcePeekInput,TurnContextSourcePeekResult } from './contract/activity.js'
+export type { ContextInputFile, ContextInputSummary,ContextUserInput } from './contract/context.js'
 export * from './contract/context.js'
+export * from './contract/store.js'
 export * from './contract/view-schema.js'

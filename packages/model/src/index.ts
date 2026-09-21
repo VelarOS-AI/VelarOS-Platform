@@ -57,9 +57,11 @@ export { createModelRequestClient } from './impl/requests/ModelRequestClient'
 export { modelUsage } from './impl/requests/ModelUsage'
 
 // ── 公开签名用到的数据 ──────────────────────────────────────────
+export type { ProviderRequestCompilerApi } from './contract/provides.js'
 export type { ModelDriver } from './contract/requires.js'
 export type { AiSdkDriverOptions } from './contract/requires.js'
 export { createAiSdkModelDriver } from './impl/requests/AiSdkModelDriver.js'
+export { createProviderRequestCompiler } from './impl/requests/ProviderRequestCompiler.js'
 export type {
   AgentProvider,
   EmbeddingRequest,
@@ -68,6 +70,7 @@ export type {
   ModelResolutionTraceEntry,
   ResolvedAgentModelRuntime,
 } from './types/adapters'
+export type { CompiledModelRequest,ProviderRequestAuditValue,ProviderRequestFingerprint,ProviderRequestSnapshot } from './types/compiler.js'
 export type { ModelDriverLimits, ModelImage, ModelInputEstimate, ModelMaterial, ModelResponseFormat, ModelTurnDelta,ModelTurnRequest } from './types/driver.js'
 export type {
   ModelProviderAvailabilityOptions,

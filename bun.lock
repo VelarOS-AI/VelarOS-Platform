@@ -51,25 +51,15 @@
     },
     "packages/agent": {
       "name": "@velaros-ai/agent",
-      "version": "1.5.0",
+      "version": "6.1.0",
       "dependencies": {
-        "@modelcontextprotocol/sdk": "^1.29.0",
-        "@types/json-schema": "7.0.15",
         "@velaros-ai/context": "workspace:*",
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
-        "ai": "^6.0.168",
-        "execa": "^9.6.1",
-        "gpt-tokenizer": "3.4.0",
-        "jszip": "^3.10.1",
-        "typescript": "^5.7.0",
-        "ws": "^8.18.3",
-        "zod": "^4.3.6",
+        "@velaros-ai/model": "workspace:*",
       },
       "devDependencies": {
-        "@ai-sdk/provider": "3.0.8",
         "@types/node": "^22.19.17",
-        "@types/ws": "^8.18.1",
       },
     },
     "packages/agent-lab": {
@@ -102,7 +92,7 @@
     },
     "packages/context": {
       "name": "@velaros-ai/context",
-      "version": "0.7.0",
+      "version": "0.9.0",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
@@ -159,7 +149,7 @@
     },
     "packages/kernel": {
       "name": "@velaros-ai/kernel",
-      "version": "0.4.0",
+      "version": "0.6.0",
       "bin": {
         "velaros-kernel-daemon": "./bin/velaros-kernel-daemon.mjs",
       },
@@ -178,7 +168,7 @@
     },
     "packages/model": {
       "name": "@velaros-ai/model",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "dependencies": {
         "@ai-sdk/anthropic": "^3.0.71",
         "@ai-sdk/google": "^3.0.64",
@@ -244,8 +234,9 @@
     },
     "packages/velaros": {
       "name": "@velaros-ai/velaros",
-      "version": "0.2.0",
+      "version": "0.6.0",
       "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.29.0",
         "@napi-rs/canvas": "1.0.8",
         "@velaros-ai/context": "workspace:*",
         "@velaros-ai/core": "workspace:*",
@@ -1230,8 +1221,6 @@
     "globals": ["globals@17.11.0", "", {}, "sha512-Z2I8hM+PbJDXQDq3Icgpzv+mPdwr68iZUU9d5WW4FuXfDUQfkZaZuvjMv42/5crNyw154+9+VWXbYrUgDXbxNw=="],
 
     "gopd": ["gopd@1.2.0", "", {}, "sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg=="],
-
-    "gpt-tokenizer": ["gpt-tokenizer@3.4.0", "", {}, "sha512-wxFLnhIXTDjYebd9A9pGl3e31ZpSypbpIJSOswbgop5jLte/AsZVDvjlbEuVFlsqZixVKqbcoNmRlFDf6pz/UQ=="],
 
     "graceful-fs": ["graceful-fs@4.2.11", "", {}, "sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ=="],
 

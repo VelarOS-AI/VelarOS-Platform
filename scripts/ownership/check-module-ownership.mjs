@@ -63,6 +63,7 @@ const fail = (message) => failures.push(message)
 /** 递归列出目录下的全部文件，不管扩展名。 */
 function walkAll(directory) {
   if (!existsSync(directory)) return []
+  if (statSync(directory).isFile()) return [directory]
   return readdirSync(directory).flatMap((entry) => {
     const path = join(directory, entry)
     return statSync(path).isDirectory() ? walkAll(path) : [path]
@@ -76,7 +77,7 @@ function walkSources(directory) {
 
 /** 列出目录下一级的子目录名。 */
 function childDirectories(directory) {
-  if (!existsSync(directory)) return []
+  if (!existsSync(directory) || !statSync(directory).isDirectory()) return []
   return readdirSync(directory).filter((entry) => statSync(join(directory, entry)).isDirectory())
 }
 
@@ -296,7 +297,7 @@ for (const module of selectedModules) {
   // 能力单元（一个包里按目录放的几个模块，例如 @velaros-ai/velaros 的 files、shell）：源码根就是单元目录，
   // 入口是 ./<单元> 与 ./<单元>/…，spec/ 与 test/ 跟着单元走、不算源码。普通模块的源码根是 src/。
   const unit = module.unit ?? null
-  const unitSubpath = unit ? `./${unit}` : null
+  const unitSubpath = unit && !module.packageEntry ? `./${unit}` : null
   const srcRoot = unit ? join(packageRoot, unit) : join(packageRoot, 'src')
   const toolsFilePath = module.toolsFile ? join(packageRoot, module.toolsFile) : null
   // 端口可达性从「模型面的入口」出发。工具时代那个入口是工具文件，代码面时代是操作表。
@@ -308,24 +309,26 @@ for (const module of selectedModules) {
   const utilsRoot = join(packageRoot, module.utils)
   // 对外入口就是 src 根上的那几个 .ts；嵌套子路径（./protocol/message）的入口住在同名的入口目录里。
   const subpathName = (subpath) => {
-    if (unit) return subpath === unitSubpath ? 'index' : subpath.slice(unitSubpath.length + 1)
+    if (unitSubpath) return subpath === unitSubpath ? 'index' : subpath.slice(unitSubpath.length + 1)
     return subpath === '.' ? 'index' : subpath.replace(/^\.\//u, '')
   }
   const subpathOfName = (name) => (name === 'index' ? (unitSubpath ?? '.') : `${unitSubpath ?? '.'}/${name}`)
   const manifestSubpaths = Object.keys(manifest.exports ?? {})
-    .filter((subpath) => !unit || subpath === unitSubpath || subpath.startsWith(`${unitSubpath}/`))
+    .filter((subpath) => module.packageEntry ? manifest.exports[subpath]?.import?.startsWith(`./dist/${unit}/`) : (!unit || subpath === unitSubpath || subpath.startsWith(`${unitSubpath}/`)))
   const entryDirectories = new Set(
     manifestSubpaths.map(subpathName).filter((name) => name.includes('/')).map((name) => name.split('/')[0]),
   )
   const entryNameOf = (file) => relative(srcRoot, file).replace(/\.ts$/u, '')
-  const isEntryFile = (file) => dirname(file) === srcRoot || entryDirectories.has(relative(srcRoot, file).split('/')[0])
+  const isEntryFile = (file) => file !== typesRoot && file !== utilsRoot && (dirname(file) === srcRoot || entryDirectories.has(relative(srcRoot, file).split('/')[0]))
   const providesPath = join(contractRoot, 'provides.ts')
   const requiresPath = join(contractRoot, 'requires.ts')
   const constantsPath = join(contractRoot, 'constants.ts')
   // 没有自己的可移植数据的包（比如只做装配的空间）不登记 portable：`./contracts` 只转发常量表。
   const portablePath = module.portable ? join(typesRoot, module.portable) : null
   const publicInterfacePaths = [providesPath, requiresPath].filter((path) => existsSync(path))
-  const inside = (file, root) => file.startsWith(`${root}/`)
+  const inside = (file, root) => file === root || file.startsWith(`${root}/`)
+  // 同一包内的已治理单元共用纯工具和数据，仍按目标的登记层验证。
+  const inPeerLayer = (file, layer) => GovernedModules.some(peer => peer.directory === module.directory && peer.unit && peer.unit !== module.unit && peer[layer] && inside(file, join(packageRoot, peer[layer])))
   const isPublicInterfaceFile = (file) => publicInterfacePaths.includes(file)
   const shortPath = (file) => relative(packageRoot, file)
   // 分包：types、impl、utils 可以按域开子目录，每个子目录至少直接放 MinFilesPerSubdirectory 个源文件。
@@ -462,7 +465,7 @@ for (const module of selectedModules) {
     }
     for (const { specifier } of relativeSpecifiers(sourceFile)) {
       const target = resolveRelativeImport(file, specifier)
-      if (target && !inside(target, typesRoot) && !inside(target, contractRoot)) fail(`${label}: 类型文件 ${shortPath(file)} 引用了 ${shortPath(target)}；types 只引 types 与合同`)
+      if (target && !inside(target, typesRoot) && !inside(target, contractRoot) && !inPeerLayer(target, 'types') && !inPeerLayer(target, 'contract')) fail(`${label}: 类型文件 ${shortPath(file)} 引用了 ${shortPath(target)}；types 只引 types 与合同`)
     }
   }
 
@@ -773,15 +776,15 @@ for (const module of selectedModules) {
     for (const { statement, specifier } of relativeSpecifiers(sourceFile)) {
       const target = resolveRelativeImport(file, specifier)
       if (!target) continue
-      if ((inside(target, typesRoot) || (inside(target, contractRoot) && target !== constantsPath)) && !isTypeOnlyStatement(statement)) fail(`${label}: ${shortPath(file)} 从 ${shortPath(target)} 做了值 import；类型与接口只能 import type，值只能来自常量表`)
-      if (!inside(target, utilsRoot) && !inside(target, contractRoot) && !inside(target, typesRoot)) {
+      if ((inside(target, typesRoot) || inPeerLayer(target, 'types') || ((inside(target, contractRoot) || inPeerLayer(target, 'contract')) && basename(target) !== 'constants.ts')) && !isTypeOnlyStatement(statement)) fail(`${label}: ${shortPath(file)} 从 ${shortPath(target)} 做了值 import；类型与接口只能 import type，值只能来自常量表`)
+      if (!inside(target, utilsRoot) && !inside(target, contractRoot) && !inside(target, typesRoot) && !inPeerLayer(target, 'utils') && !inPeerLayer(target, 'types') && !inPeerLayer(target, 'contract')) {
         fail(`${label}: ${shortPath(file)} 引用了 ${shortPath(target)}；utils 只引 utils、types 与合同，要用类就在参数里收接口`)
       }
     }
   }
 
   // ── 5b. 数字缺省值只在可调参数文件里 ─────────────────────────────────
-  const tuningPath = module.tuning ? join(utilsRoot, module.tuning) : null
+  const tuningPath = module.tuning ? (extname(utilsRoot) === '.ts' ? utilsRoot : join(utilsRoot, module.tuning)) : null
   const tuningHint = tuningPath ? shortPath(tuningPath) : `${module.utils}/ 的可调参数文件（在 governed-modules.mjs 登记 tuning）`
   for (const file of sourceFiles.filter((path) => (inside(path, implRoot) || inside(path, utilsRoot)) && path !== toolsFilePath && path !== tuningPath)) {
     const sourceFile = parse(file)
@@ -1030,7 +1033,7 @@ for (const module of selectedModules) {
           : ts.isTypeQueryNode(child) ? child.exprName : null
       if (nameNode) {
         const resolved = declarationOf(ts.isQualifiedName(nameNode) ? nameNode.left : nameNode)
-        if (resolved) {
+        if (resolved && !ts.isTypeParameterDeclaration(resolved.declaration)) {
           const top = topLevelOf(resolved.declaration)
           if (inside(resolved.file, implRoot) && registeredStatements.has(top)) {
             if (!visitedDeclarations.has(top)) {
@@ -1217,7 +1220,7 @@ for (const module of selectedModules) {
       fail(`${label}: 登记的懒加载目标 ${entry.specifier} 没有人加载；不用的删掉`)
     }
   }
-  const governedDirectories = [module.contract, module.types, module.impl, module.utils].map((path) => basename(path))
+  const governedDirectories = [module.contract, module.types, module.impl, module.utils].filter((path) => extname(path) !== '.ts' && existsSync(join(packageRoot, path))).map((path) => basename(path))
   for (const directory of childDirectories(srcRoot)) {
     if (governedDirectories.includes(directory) || entryDirectories.has(directory) || (unit && UnitCompanions.includes(directory))) continue
     fail(`${label}: src/${directory}/ 不是登记的目录；src 下只有 ${governedDirectories.join('、')} 四个目录，外加嵌套子路径入口自己的目录（package.json 的 exports 里有 ./${directory}/… 才算）`)
@@ -1279,8 +1282,6 @@ for (const module of selectedModules) {
   const acceptancePath = join(packageRoot, module.acceptance)
   // 登记表里的检验器路径相对它自己的根写：普通模块是包根，能力单元是单元目录（单元是自成一体的目录，登记表就在里面）。
   const verifierRoot = unit ? srcRoot : packageRoot
-  const acceptanceReference = relative(verifierRoot, acceptancePath)
-  const acceptanceSource = existsSync(acceptancePath) ? readFileSync(acceptancePath, 'utf8') : ''
   if (!existsSync(acceptancePath)) fail(`${label}: 缺少验收测试 ${module.acceptance}`)
   const counts = Object.fromEntries(InvariantCheckKinds.map((kind) => [kind, 0]))
   const seenIds = new Set()
@@ -1301,9 +1302,17 @@ for (const module of selectedModules) {
       counts[kind] += 1
       const reference = (checkerReference ?? '').replace(/`/gu, '').trim()
       if (kind === '测试') {
-        if (reference !== acceptanceReference) fail(`${label}: ${id} 是测试档，检验器必须写 ${acceptanceReference}`)
-        if (!new RegExp(`\\(\\s*['"\`]${id}\\s`, 'u').test(acceptanceSource)) {
-          fail(`${label}: ${id} 标为测试档，但 ${module.acceptance} 里没有以「${id} 」开头的用例`)
+        const references = reference.split('、')
+        const testSources = references.map((file) => {
+          const target = resolve(verifierRoot, file)
+          if (!inside(target, verifierRoot) || !existsSync(target) || !(manifest.scripts?.test ?? '').includes(relative(packageRoot, target))) {
+            fail(`${label}: ${id} 的测试 ${file} 必须存在于模块内并由 package.json test 执行`)
+            return ''
+          }
+          return readFileSync(target, 'utf8')
+        }).join('\n')
+        if (!new RegExp(`\\(\\s*['"\`]${id}\\s`, 'u').test(testSources)) {
+          fail(`${label}: ${id} 标为测试档，但 ${reference} 里没有以「${id} 」开头的用例`)
         }
       } else if (kind === '类型') {
         const [file, typeName] = reference.split('::')

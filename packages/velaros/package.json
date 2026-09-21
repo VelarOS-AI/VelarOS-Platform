@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/velaros",
-  "version": "0.2.0",
+  "version": "0.6.0",
   "velaros": {
     "platform": "0.6"
   },
@@ -123,12 +123,28 @@
       "import": "./dist/browser/electron.js"
     },
     ".": {
-      "types": "./dist/src/index.d.ts",
-      "import": "./dist/src/index.js"
+      "types": "./dist/act/runtime/index.d.ts",
+      "import": "./dist/act/runtime/index.js"
     },
     "./contracts": {
-      "types": "./dist/src/contracts.d.ts",
-      "import": "./dist/src/contracts.js"
+      "types": "./dist/act/runtime/contracts.d.ts",
+      "import": "./dist/act/runtime/contracts.js"
+    },
+    "./renderer": {
+      "types": "./dist/act/runtime/renderer.d.ts",
+      "import": "./dist/act/runtime/renderer.js"
+    },
+    "./act/search": {
+      "types": "./dist/act/search/index.d.ts",
+      "import": "./dist/act/search/index.js"
+    },
+    "./act/agents": {
+      "types": "./dist/act/agents/index.d.ts",
+      "import": "./dist/act/agents/index.js"
+    },
+    "./act/system": {
+      "types": "./dist/act/system/index.d.ts",
+      "import": "./dist/act/system/index.js"
     }
   },
   "imports": {
@@ -152,8 +168,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
-    "test": "bun run build && bun test files/spec/acceptance.test.ts files/test images/spec/acceptance.test.ts images/test shell/spec/acceptance.test.ts shell/test sandbox/spec/acceptance.test.ts sandbox/test project/spec/acceptance.test.ts project/test computer/spec/acceptance.test.ts computer/test memory/spec/acceptance.test.ts memory/test office/spec/acceptance.test.ts office/test browser/spec/acceptance.test.ts browser/test && node --test test/model-protocol.test.mjs test/script-submission.test.mjs test/incremental-edit.test.mjs test/program-context.test.mjs test/runtime.test.mjs test/dual-core.test.mjs test/platform.test.mjs && bun test test/provider.test.ts",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs && node ../../scripts/build/copy-act-templates.mjs",
+    "test": "bun run build && bun test files/spec/acceptance.test.ts files/test images/spec/acceptance.test.ts images/test shell/spec/acceptance.test.ts shell/test sandbox/spec/acceptance.test.ts sandbox/test project/spec/acceptance.test.ts project/test computer/spec/acceptance.test.ts computer/test memory/spec/acceptance.test.ts memory/test office/spec/acceptance.test.ts office/test browser/spec/acceptance.test.ts browser/test && node --test act/system/spec/acceptance.test.mjs act/system/spec/runtime.test.mjs act/system/spec/long-term-memory.test.mjs act/system/spec/store.test.mjs act/search/spec/acceptance.test.mjs act/agents/spec/acceptance.test.mjs act/runtime/test/system-modules.test.mjs act/runtime/test/model-tools.test.mjs act/runtime/test/context-maintenance.test.mjs act/runtime/test/output-context.test.mjs act/runtime/test/decision-basis.test.mjs act/runtime/test/completion-recovery.test.mjs act/runtime/test/task-lifecycle.test.mjs act/runtime/test/act-run.test.mjs act/runtime/test/act-children.test.mjs act/runtime/test/advanced-search.test.mjs act/runtime/test/context-management.test.mjs act/runtime/test/context-memory.test.mjs act/runtime/test/text-decoder.test.mjs act/runtime/test/text-runtime.test.mjs act/runtime/test/model-protocol.test.mjs act/runtime/test/script-submission.test.mjs act/runtime/test/incremental-edit.test.mjs act/runtime/test/program-context.test.mjs act/runtime/test/runtime.test.mjs act/runtime/test/dual-core.test.mjs act/runtime/test/platform.test.mjs && bun test act/runtime/test/provider.test.ts act/runtime/test/McpClientConnection.test.ts",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/velaros"
   },
   "dependencies": {
@@ -175,7 +191,8 @@
     "typescript": "^5.7.0",
     "zod": "^4.3.6",
     "@velaros-ai/context": "workspace:*",
-    "@velaros-ai/model": "workspace:*"
+    "@velaros-ai/model": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0"
   },
   "peerDependencies": {
     "@types/react": "^19.0.0",

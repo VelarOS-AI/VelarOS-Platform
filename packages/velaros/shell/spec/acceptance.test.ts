@@ -12,10 +12,10 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, test } from 'bun:test'
 
-import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
+import { AppError } from '@velaros-ai/core/error'
+import type { ApprovalPort } from '@velaros-ai/kernel'
 import type { CodeCapabilityPort } from '@velaros-ai/script'
 import { codeProgramChecker, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/script'
-import { AppError } from '@velaros-ai/core/error'
 
 import { VelarShellModule } from '../contract/surface'
 import { shellProcessManager } from '../impl/local/ShellProcessManager'

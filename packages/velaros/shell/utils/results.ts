@@ -15,8 +15,7 @@ import type {
 
 /** 宿主的完整回执里模型用得上的那几项：命令、目录、成败、退出码与信号、超时与取消、耗时、全部输出。 */
 export function runResult(result: ShellCommandResult): ShellRunResult {
-  return {
-    ...(result.confinement?{confinement:result.confinement}:{}),
+  const value:ShellRunResult={
     command: result.command,
     cwd: result.cwd,
     success: result.success,
@@ -29,6 +28,8 @@ export function runResult(result: ShellCommandResult): ShellRunResult {
     stderr: result.stderr,
     truncated: result.truncated,
   }
+  if(result.confinement)value.confinement=result.confinement
+  return value
 }
 
 /** 宿主任务表里的一条整成模型看的样子：去掉进程号、日志路径、终止命令这些宿主自己用的，输出改叫 output。 */

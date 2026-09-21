@@ -179,3 +179,8 @@ packages/velaros/
 5. 写卡片 `MODULE.md`：「提供什么」列出每个入口、每个导出的值和每个公开接口，「骨干链路」列出每个工具的链路，「结构」写明目录树、分层和每个类的接口。
 6. 登记表加一行：工具文件、每个实现文件（或子目录）的层、可调参数文件、会被渲染进程加载的入口、环境变量表。跑 `check:module-ownership` 到绿。
    改造一个大包时可以先登记、标 `status: 'migrating'`：门禁照查照报剩下多少条，不计入失败；`bun scripts/ownership/check-module-ownership.mjs --only <包目录>` 列出这个包的每一条。改造完删掉这一项。
+
+
+Act 按 runtime、system、search、agents 四个职责组组织，模型自管理操作集中在 system。类型或纯配置只有一份时，可登记为组内的 `types.ts`、`tuning.ts` 文件，仍接受相同的数据边界和配置检查；目录按实际内容建立。runtime 承载包根入口，其他三组提供各自的能力装配入口。
+
+同一 npm 包内的已治理单元可共享登记的 types、contract 和 utils 层。门禁根据目标单元的登记路径校验类型导入与纯工具依赖；utils 对实现类的依赖继续禁止。

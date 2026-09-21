@@ -117,3 +117,9 @@ memory/
 
 **分层**（登记在 `scripts/ownership/governed-modules.mjs`，上层可以引下层与同层，下层不许引上层）：
 `MemoryOperations.ts` → `MemoryStore.ts` → `MemoryScope.ts`；utils 在所有层下面。
+
+## Act 正式接入
+
+Act 宿主通过 `createRuntime({memory: sessionId => store.scope(hostScope), ...})` 复用本单元。`hostScope` 由宿主选择，端口在主会话打开时固定。模型使用 `import {memory} from 'velaros:system'`：recall 映射到现有 list 并做关键词过滤和分页；save/remove 调用原有操作与入参校验。数据继续存放在原来的 Markdown 作用域目录。
+
+Act 不自动注入完整记忆库。召回结果由脚本 output 选择，再进入已有材料、租约和窗口预算链。该链的 release 不删除这里的 Markdown。独立宿主端口和已有生成合同用于领域集成与兼容；Act 中的业务 modules 不能重复挂载 `velaros:memory`，应迁移到 Runtime 的 memory 注入口。

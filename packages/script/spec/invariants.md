@@ -17,7 +17,7 @@
 | INV-11 | `KernelScriptSession.edit` 按同一底稿精确替换：定位唯一、不重叠，主源码与附属模块全成或全不成；失败返回 SCRIPT_EDIT 和索引，原程序不变 | 测试 | `spec/acceptance.test.ts` |
 | INV-12 | 诊断必须带代码帧：出错那一行连同一个指向出错列的插字符一起给出。只回行列号等于让模型靠数行定位，而数行是它最不准的事之一 | 测试 | `spec/acceptance.test.ts` |
 | INV-13 | 宿主只提供本次授权能力的声明；程序引用未提供的能力时先拒绝执行并报告缺失命名空间；Kernel 会话按本次导入获取挂载声明，能力权限仍由 Kernel 校验 | 测试 | `spec/acceptance.test.ts` |
-| INV-15 | **我们发明的东西要导入，语言自带的不动**：`blobs` 与 `template` 走恒常可用的 `velaros:program` 模块，不做隐形全局——隐形全局是只有提示词告诉过模型才知道的暗知识；`console` 是 JavaScript 自带的，不动。`velaros:program` 由引擎提供 | 测试 | `spec/acceptance.test.ts` |
+| INV-15 | **我们发明的东西要导入，语言自带的不动**：`input` 与 `blobs` 走恒常可用的 `velaros:program` 模块，不做隐形全局——隐形全局是只有提示词告诉过模型才知道的暗知识；`console` 是 JavaScript 自带的，不动。`velaros:program` 由引擎提供 | 测试 | `spec/acceptance.test.ts` |
 | INV-16 | 没跑完就交账：程序中止、超时或抛错时，**已经落定的能力调用逐条回给模型**（连着的同名同结果折成一条带 `times`），跑完了不给。这是**账**不是事务——不承诺回滚（跑过的命令回滚不了），承诺**知道**：工具面里中断落在两次调用之间、天然干净，程序里落在执行中途，副作用是真的，只回一个 `ABORTED` 等于让模型对着三个字瞎猜 | 测试 | `spec/acceptance.test.ts` |
 | INV-17 | 内存也要封顶：隔离进程带 `--max-old-space-size` 起，堆爆时回 `TOO_LARGE` 并说清怎么改，不报成「意外退出」。超时管得住死循环，管不住一个循环里把整个仓库读进数组；子进程 stderr 必须有人收（没人收会把它堵死，而堆爆的现场只在那里） | 测试 | `spec/acceptance.test.ts` |
 | INV-18 | **能力调用的时间不计进程序超时**：每次调用一开始就停表、落定后按剩下的预算接着走——命令跑多久由它自己的时限管，等用户点头也在调用里。必须在调用**开始**时停而不是结束后补时间：用户去倒杯水回来，程序早被我们自己杀了，而他刚点了同意。停表只扣调用那段，程序自己的计算照样按预算掐断 | 测试 | `spec/acceptance.test.ts` |
@@ -26,5 +26,8 @@
 | INV-22 | 导出照 ES 模块的样子交出，`export default` 与具名导出都行：只有 `export default` 就交它；有具名导出就交 `{ default?, ...具名 }`（跟 `import * as m` 同形），什么都没导出就是 undefined。`export default` **不中断执行**，它后面的代码照样跑。改写不挪模型写的任何一行，运行时报错的行号仍是模型写的那一行（能力报的错没接住时，是发起那次调用的那一行）——行号偏移在隔离进程启动时**量出来**，不写死（写死过一次，包装改了两行、行号一直差 3，从没被测出来） | 测试 | `spec/acceptance.test.ts` |
 | INV-23 | 能力交给模型的图走**结果旁边**的通道，不进返回值：程序拿不到像素，文字结果里没有 base64，`resultChars` 只算文字。一次程序最多交 20 张、合计 20 MB——张数对齐 API「一个请求超过 20 张图，每张都不得超过 2000 px」那条线；超出的按顺序丢后面的，并在插手记录里说明 | 测试 | `spec/acceptance.test.ts` |
 | INV-26 | 程序停下时（跑完、失败、超时、被中止都算）还没落定的能力调用，会话触发这一轮的取消信号**叫停它们**，并按发出的顺序列进结果的 `unsettled`：发出去不等就交卷、或者死在一次调用中途，副作用都可能做了一半，模型得知道去核对哪几样 | 测试 | `spec/acceptance.test.ts` |
-| INV-27 | 模板随宿主提供的能力信息按需读取，脚本通过 velaros:program 的 template(module) 获取，导出后进入上下文；未知模块报错 | 测试 | `spec/acceptance.test.ts` |
+| INV-27 | 程序数据模块 velaros:program 只导出本次 input 与 blobs，声明和运行时一致；模块模板统一由 velaros:system 的 modules.describe 按授权提供 | 测试 | `spec/acceptance.test.ts` |
 | INV-33 | 附属模块来自提交的 modules，按相对路径解析并在单次运行中只初始化一次；类型诊断包含附属模块路径、行列与代码帧，运行错误可追踪 | 测试 | `spec/acceptance.test.ts` |
+| INV-34 | output 在调用时捕获无环 JSON 快照，原始归档与有界预览分离；失败和中止保留已捕获块，采集问题不能被 catch 隐藏 | 测试 | `test/output.test.ts` |
+| INV-35 | output 展示按类型保留结构和省略范围，正文与目录总量守展示预算；摘要同时匹配原值和任务代次 | 测试 | `test/output.test.ts` |
+| INV-36 | 受限输出编辑只接受真实导入的顶层字面量声明，保持采集和用途不变，不执行脚本 | 测试 | `test/output.test.ts` |

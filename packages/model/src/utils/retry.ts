@@ -3,7 +3,6 @@ import {
   isFiniteNumber,
   isFunction,
   isObject,
-  isPlainObject,
   isPresent,
   isString,
   isTrue,
@@ -50,7 +49,7 @@ export function planProviderRetry(
 ): Nullable<ModelProviderRetryDecision> {
   const facts = collectErrorFacts(error)
   const lower = facts.messages.join(' ').toLowerCase()
-  if (isPermanentFailure(lower) || facts.codes.has('ABORT_ERR')) return null
+  if (isPermanentFailure(lower) || facts.codes.has('ABORT_ERR') || [...facts.statuses].some(status=>status>=400&&status<500&&![408,409,425,429].includes(status))) return null
 
   const rateLimited = facts.statuses.has(429)
     || includesAny(lower, ['rate limit', 'too many requests', 'resource exhausted'])
@@ -114,19 +113,22 @@ function collectErrorFacts(root: unknown): ModelRetryErrorFacts {
       pushMessage(facts.messages, item.value)
       continue
     }
-    if (!isPlainObject(item.value)) continue
+    if (!isObject(item.value)) continue
     const record = item.value
     for (const key of ['status', 'statusCode']) {
-      const status = Number(record[key])
+      const status = Number(Reflect.get(record,key))
       if (Number.isInteger(status) && status >= 100 && status <= 599) facts.statuses.add(status)
     }
-    if (isString(record.code)) facts.codes.add(record.code.toUpperCase())
-    if (isTrue(record.isRetryable) || isTrue(record.retryable)) facts.retryable = true
-    if (isString(record.message)) pushMessage(facts.messages, record.message)
-    mergeHeaders(facts.headers, record.headers)
-    mergeHeaders(facts.headers, record.responseHeaders)
+    const code=Reflect.get(record,'code')
+    if (isString(code)) facts.codes.add(code.toUpperCase())
+    if (isTrue(Reflect.get(record,'isRetryable')) || isTrue(Reflect.get(record,'retryable'))) facts.retryable = true
+    const message=Reflect.get(record,'message')
+    if (isString(message)) pushMessage(facts.messages, message)
+    mergeHeaders(facts.headers, Reflect.get(record,'headers'))
+    mergeHeaders(facts.headers, Reflect.get(record,'responseHeaders'))
     for (const key of ['cause', 'data', 'error', 'lastError', 'response']) {
-      if (isPresent(record[key])) queue.push({ value: record[key], depth: item.depth + 1 })
+      const value=Reflect.get(record,key)
+      if (isPresent(value)) queue.push({ value, depth: item.depth + 1 })
     }
   }
   if (isEmpty(facts.messages)) pushMessage(facts.messages, String(root))

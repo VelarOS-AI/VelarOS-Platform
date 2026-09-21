@@ -116,15 +116,15 @@ API 按 **base64 之后**的大小限（直连 10 MB、Bedrock/Google Cloud 5 MB
 
 我们知道这些能力怎么组合，模型未必知道。每个命名空间一份模版文件（能力单元里是 `packages/velaros/<单元>/template.js`，一个单元出两件能力时另一件的叫 `<模块>-template.js`（`packages/velaros/project/code-template.js`）），
 **import 只写一次**，下面一段一个函数、一种日常最常用的写法（跑测试只交失败的尾巴、改一行配置、搜到就改、看过差量再落回……）。
-**模版只是示例**：模版头、门的规矩、`template()` 的说明里都写着按需要改写、不必照着写——它教的是能力怎么组合，不是程序必须长成这样。
+**模版只是示例**：模版头与能力使用说明里都写着按需要改写、不必照着写——它教的是能力怎么组合，不是程序必须长成这样。
 没有模版的命名空间生成器不给过。写错的模版会把错的写法原样教出去，所以有两道核对：各单元的验收把模版**整份照真实声明过类型检查**；
 仓库层的 `tests/capabilities/capability-templates.test.ts` 在真的系统空间与项目空间里（本机实现、真命令、真沙箱、真的项目内核与语言服务；两个空间照产品的写法装在 `tests/support/spaces.ts`）
 经真的门把**每个函数都跑一遍**，看它交回的是不是它说的样子、磁盘上是不是真改了——结果键取错一个、默认写法跑不通，类型检查看不出来，跑一遍就露出来。
 这一轮核对就抓到两处：类型检查挡下了一段再普通不过的 `.map((symbol) => …)`（于是给模型的程序放开了 `noImplicitAny`，见上），
 实跑发现项目的 list 把 `.git/` 里的东西全列了出来（现在列举跳过版本库内部）。
 
-**模版按需读、不常驻。** 它不嵌进声明、不进门的说明：随能力的模型面发布（`contract/surface.ts` 的 `template`），跟着程序送进隔离进程，
-模型拿不准怎么组合时在程序里读——`import { template } from 'velaros:program'`，`export default template('velaros:project')`——导出了才进上下文。
+**模版按需读、不常驻。** 它不嵌进声明、不进门的说明：随能力的模型面发布（`contract/surface.ts` 的 `template`），由当前会话的模块目录按授权提供。
+模型拿不准怎么组合时通过 `velaros:system` 的 `modules.describe({module: 'velaros:project'})` 读取返回的 `template` 字段，输出后才进入上下文。
 常驻模块的声明因此小了一半（`velaros:files` 8478 → 4402 字符，`velaros:project` 13252 → 8492）。
 模版里也不教导出这种基本操作：怎么交出结果写在门的规矩里，一处就够。
 
@@ -511,7 +511,7 @@ import { blame } from 'velaros:git' with { lease: 'done' }  // 用完了，退�
 有人会想把 `sandbox` 这类「通用能力」也塞进 `velaros:program`。**不行。**
 界线不是「通不通用」，是**有没有宿主端口、有没有审批、有没有副作用**：
 
-- `velaros:program` 里是**这次运行自带的数据**（`blobs` 是宿主随这次提交附上的字符串，`template()` 读的是挂在这个空间上的能力随包带的模版），
+- `velaros:program` 里是**这次运行自带的数据**（`input` 是本次参数，`blobs` 是宿主随这次提交附上的字符串），
   没有端口、没有审批、碰不到任何东西——所以它恒常授权、不占名额、不进租约账。
 - `sandbox` 是真能力：建镜像要写盘，`apply` 是高风险、每次都要用户亲自点头。
   塞进 `velaros:program` 等于让它恒常授权、绕过租约与授权账，**正好在最该拦的地方把闸拆了**。
@@ -546,7 +546,7 @@ import { blame } from 'velaros:git' with { lease: 'done' }  // 用完了，退�
 | 内容 | 放哪 | 为什么 |
 | --- | --- | --- |
 | 写脚本的规矩 + 四个工具怎么用 + `velaros:program` 的声明 + 常驻模块的完整声明 + 其余模块的方法名（`gate.describe(space.modules)`） | 系统提示词最前面那段（Tier0 `core`，`retention: 'protected'`，priority 小于 1000，不带 `when`） | 按空间恒定，命中第一个缓存断点；切空间时失效一次。工具说明有 6000 字硬上限，放不下，也不该按空间变 |
-| 代码模版 | 不放：脚本里 `template('velaros:x')` 读到才进上下文 | 不常驻，用到才付 |
+| 代码模版 | 不放：脚本里 `modules.describe({module:'velaros:x'})` 读取 template 并输出后进入上下文 | 不常驻，用到才付 |
 | 按需模块的完整声明 | exec 的回执（头一次 import 时交回），进历史、只追加 | 用到才付那一份的字数 |
 | 时间线（调用、步骤、脚本库） | 不放：模型用 history、show、diff 自己查 | 不常驻；回执里带着调用号、步骤号、版本号与这一步改了哪些文件，要复盘、复用时自己取 |
 | 入参怎么填 | 工具说明（静态、各不到 1800 字） | |

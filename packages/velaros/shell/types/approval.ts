@@ -1,6 +1,6 @@
 /** 危险命令审批请求的入参与结果。只放类型。 */
 
-import type { ToolConfirmationDecisionOptions } from '@velaros-ai/agent/contracts'
+import type { ToolConfirmationDecisionOptions } from '@velaros-ai/kernel/contracts'
 
 import type { ShellCommandPlan } from './shell-command.js'
 

@@ -9,9 +9,9 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { AppError } from '@velaros-ai/core/error'
 import type { CapabilityOperationContext } from '@velaros-ai/script'
 import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/script'
-import { AppError } from '@velaros-ai/core/error'
 
 import type { MemoryIdInput, MemoryOperationContext, MemorySaveInput, MemoryScopePort } from '../index'
 import { memoryOperations } from '../index'

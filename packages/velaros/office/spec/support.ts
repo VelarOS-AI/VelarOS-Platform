@@ -15,9 +15,9 @@ import { fileURLToPath } from 'node:url'
 import JSZip from 'jszip'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
 
+import { AppError } from '@velaros-ai/core/error'
 import type { CapabilityOperationContext } from '@velaros-ai/script'
 import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/script'
-import { AppError } from '@velaros-ai/core/error'
 
 import type { OfficeNativeCommand, OfficeOperationContext, OfficeSystemCommandResult } from '../index.js'
 import { officeOperations } from '../index.js'

@@ -1,3 +1,4 @@
+import type { ScriptOutputCapture } from './output.js'
 /**
  * 隔离运行器的形状。
  *
@@ -6,11 +7,12 @@
  * 正式发版前要换成 WASM 里的 QuickJS——那里没有任何环境能力，只有显式绑进去的。
  * 两种实现里模型写的程序、typecheck、宿主侧的能力分发三者完全相同，换的只是这一层。
  */
-
-import type { CodeCallNotice } from './script.js'
+import type { CodeCallNotice, ScriptPackageDefinition } from './script.js'
 
 /** 交给运行器的一次任务。 */
 export interface CodeRunRequest {
+  /** 只引用实际授权操作的虚拟包成员。 */
+  packages?: readonly ScriptPackageDefinition[]
   /** 程序正文（函数体）。 */
   source: string
   /** 程序 import 到的库里的脚本，已经改写成函数体：路径 → 正文。隔离里按路径加载，每个只跑一次。 */
@@ -21,8 +23,6 @@ export interface CodeRunRequest {
   input: unknown
   /** 可调用的能力清单：命名空间 → 操作名；运行器按它造 RPC 桩。 */
   operations: Readonly<Record<string, readonly string[]>>
-  /** 这个空间挂的各能力模块的代码模版：模块名（`velaros:files`）→ 模版正文。程序在 `velaros:program` 里用 `template()` 按名字读。 */
-  templates: Readonly<Record<string, string>>
   /** 墙钟上限（毫秒），到点终止。 */
   timeoutMs: number
 }
@@ -52,6 +52,8 @@ export type CodeRunDispatch = (
 
 /** 运行器跑完一次的产物；宿主再把它编成给模型看的结果。 */
 export interface CodeRunOutcome {
+  /** 即使程序失败，也保留调用时已采集的输出。 */
+  output?:ScriptOutputCapture
   /** 程序是否正常跑完。 */
   ok: boolean
   /** 程序 `return` 的值。 */
@@ -61,4 +63,3 @@ export interface CodeRunOutcome {
   /** 程序没跑完时的原因。 */
   error?: { code: string; message: string; line?: number }
 }
-

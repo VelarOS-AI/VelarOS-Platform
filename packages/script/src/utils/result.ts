@@ -4,13 +4,13 @@ import { isEmpty, isNotUndefined, isPlainObject, isUndefined } from '@velaros-ai
 
 import type { CodeSurfaceErrorCode } from '../contract/constants.js'
 import { CodeSurfaceLimits } from '../contract/constants.js'
+import type { CodeRunOutcome } from '../types/runner.js'
 import type {
   CodeCallNotice,
   CodeProgramFailure,
   CodeProgramResult,
   CompletedCall,
 } from '../types/script.js'
-import type { CodeRunOutcome } from '../types/runner.js'
 
 import { enforceResultBudget, fitFailureToBudget, fitJournalToBudget, fitLogsToBudget, fitNoticesToBudget, fitValueToBudget } from './budget.js'
 import { describeOversized } from './program.js'

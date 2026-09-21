@@ -112,12 +112,14 @@ export interface KernelEventSubscription {
   dispose(): void | Promise<void>
 }
 
-import type { InvocationReceipt, InvocationRecord, ModuleBinding, ModuleDescription, ModulePage, ModuleQuery, OperationCall } from '../types/operations.js'
+import type { InvocationReceipt, InvocationRecord, ModuleBinding, ModuleDescription, ModulePage, ModuleQuery, OperationCall,OperationReadStamp, OperationReadValidation } from '../types/operations.js'
 
 /** 模块发现、租约与调用共用的运行时。 */
 export interface OperationRuntimeApi {
+  /** 核验原始回执、当前授权和资源版本；不重跑原操作。 */
+  validateReads(sessionId: string, reads: readonly OperationReadStamp[], signal?: AbortSignal): Promise<OperationReadValidation>
   /** 宿主请求只读核对未知效果，未提供领域核对器时返回原记录。 */
-  reconcile(sessionId: string, id: string, signal?: AbortSignal): Promise<InvocationRecord | null>
+  reconcile(sessionId: string, id: string, signal?: AbortSignal): Promise<Nullable<InvocationRecord>>
   /** 激活依赖和模块；重复调用复用同一启动。 */
   start(): Promise<void>
   /** 有界查询模块卡片。 */
@@ -135,7 +137,7 @@ export interface OperationRuntimeApi {
 }
 
 
-import type { ModelResponseFormat,ModelTurnRequest, ModelUserMessage } from '../types/model.js'
+import type { ModelHistoryMessage,ModelResponseFormat,ModelTurnRequest } from '../types/model.js'
 
 /** 中立请求的实际文本编码口，供编译器与供应商适配器共用。 */
 export interface ModelRequestEncoderApi {
@@ -146,5 +148,8 @@ export interface ModelRequestEncoderApi {
   /** 编码来源标签与材料；已封存 prompt 保持逐字节一致。 */
   encode(request: ModelTurnRequest): string
   /** 生成编译审计与供应商实际发送共用的多模态消息。 */
-  messages(request: ModelTurnRequest): ModelUserMessage[]
+  messages(request: ModelTurnRequest): ModelHistoryMessage[]
 }
+
+export type { ApprovalContractsApi } from '../impl/runtime/ApprovalContracts.js'
+export type { TaskApprovalStateApi } from '../impl/runtime/TaskApprovalState.js'

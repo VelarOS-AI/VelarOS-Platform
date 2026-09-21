@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto'
 
 import type { ContextReadStamp,ContextSourceCapabilities, ContextSourceHit, ContextSourcePort, ContextSourceRead, ContextTarget, ContextTaskScope, ContextTime, ContextViewForm } from '@velaros-ai/context'
+import {Log} from '@velaros-ai/core'
+import {toOptional} from '@velaros-ai/core'
+import { isString } from '@velaros-ai/core'
 
 import type { ProjectContextSourceOptions } from '../../contract/requires.js'
 import type { Range } from '../../types/common.js'
@@ -19,17 +22,17 @@ export class ProjectContextSource implements ProjectContextSourceApi {
     signal.throwIfAborted()
     if (target.kind !== 'resource' || target.sourceId !== this.id || (this.options.sessionId && this.options.sessionId !== scope.sessionId)) return false
     try { await this.options.kernel.stat({ path: target.resourceId }); signal.throwIfAborted(); return true }
-    catch { signal.throwIfAborted(); return false }
+    catch {Log.tag('ActRuntime').debug('ProjectContextSource 已进入异常处理或降级分支'); signal.throwIfAborted(); return false }
   }
 
   public async search(scope: ContextTaskScope, query: string, limit: number, signal: AbortSignal): Promise<readonly ContextSourceHit[]> {
     signal.throwIfAborted()
     if (this.options.sessionId && this.options.sessionId !== scope.sessionId) throw Object.assign(new Error('会话不在此证据源范围内'), { code: 'DENIED' })
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 32) throw new Error('候选查询上限无效')
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('候选查询上限必须为 1–100')
     const result = await this.options.kernel.search({ query, maxResults: limit, regex: false })
     signal.throwIfAborted()
     return result.hits.slice(0, limit).map(hit => ({
-      target: { kind: 'resource', sourceId: this.id, resourceId: hit.path, ...(hit.range ? { selector: { kind: 'lines', start: hit.range.startLine, end: hit.range.endLine } as const } : {}) },
+      target: { kind: 'resource', sourceId: this.id, resourceId: hit.path, selector: hit.range ? { kind: 'lines', start: hit.range.startLine, end: hit.range.endLine } as const : undefined },
       preview: (hit.snippet ?? '').slice(0, 500), forms: ['excerpt', 'full'],
     }))
   }
@@ -40,7 +43,7 @@ export class ProjectContextSource implements ProjectContextSourceApi {
     const stat = await this.options.kernel.stat({ path: target.resourceId })
     if (!stat.exists || stat.kind !== 'file') throw Object.assign(new Error('文件不存在或不是文件'), { code: 'SOURCE_UNAVAILABLE' })
     if (!stat.readableText || stat.isBinary) throw Object.assign(new Error('此资源需要二进制或文档适配器'), { code: 'UNSUPPORTED_MEDIA' })
-    let range: Partial<Range> | undefined
+    let range: Optional<Partial<Range>>
     if (target.selector?.kind === 'lines') range = { startLine: target.selector.start, endLine: target.selector.end }
     if (target.selector?.kind === 'symbol') {
       const name = target.selector.name
@@ -48,9 +51,9 @@ export class ProjectContextSource implements ProjectContextSourceApi {
       if (symbols.length !== 1) throw Object.assign(new Error('符号不存在或不唯一，请提供精确范围'), { code: 'AMBIGUOUS_SYMBOL' })
       range = symbols[0]!.range
     }
-    const result = form === 'metadata' ? null : await this.options.kernel.read({ path: target.resourceId, baseRevision: stat.revision ?? undefined, range, maxBytes, maxChars: maxBytes })
+    const result = form === 'metadata' ? null : await this.options.kernel.read({ path: target.resourceId, baseRevision: toOptional(stat.revision), range, maxBytes, maxChars: maxBytes })
     signal.throwIfAborted()
-    if (result && typeof result.content !== 'string') throw Object.assign(new Error('源没有返回文本正文'), { code: 'UNSUPPORTED_MEDIA' })
+    if (result && !isString(result.content)) throw Object.assign(new Error('源没有返回文本正文'), { code: 'UNSUPPORTED_MEDIA' })
     const original = result?.content ?? JSON.stringify({ path: target.resourceId, revision: stat.revision, sizeBytes: stat.sizeBytes, textEncoding: stat.textEncoding, lineCount: stat.lineCount })
     let text = original
     if (Buffer.byteLength(text, 'utf8') > maxBytes) {

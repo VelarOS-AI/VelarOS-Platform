@@ -2,7 +2,7 @@
 
 当前全平台推进结果见 [平台验证报告](platform-validation.md)。下列内容记录双核初次接入的验收范围。
 
-日期：2026-09-19。仓库：`/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform`。Node 24.15.0，Bun 1.3.13。验收针对当前工作树的正式代码路径。
+日期：2026-09-19。仓库：`<repository>`。Node 24.15.0，Bun 1.3.13。验收针对当前工作树的正式代码路径。
 
 ## 实际完成阶段
 

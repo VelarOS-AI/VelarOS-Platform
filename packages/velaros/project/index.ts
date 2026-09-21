@@ -57,6 +57,9 @@ export type {
 } from './contract/requires.js'
 
 // ── 上面两面用到、又不在可移植文件里的数据 ───────────────────────
+export type { ProjectContextSourceOptions } from './contract/requires.js'
+export type { ProjectContextSourceApi } from './impl/operations/ProjectContextSource.js'
+export { createProjectContextSource } from './impl/operations/ProjectContextSource.js'
 export type { AdapterCapability, AdapterKind, AdapterPrepareEditInput, AdapterSearchHit, AdapterSearchInput, AdapterValidateInput, ParseInput, ParseResult, ProjectSymbol, SymbolInfo } from './types/adapter.js'
 export type { AgentProjectApplyResult, AgentProjectCommandToolRequirement, AgentProjectFileSnapshot, AgentProjectKernelReadResult, AgentProjectPreparedPatch, AgentProjectPreparedTransaction, AgentProjectReadResult, AgentProjectSearchHit, AgentProjectSearchResult, AgentProjectStoredTransaction } from './types/agent-port.js'
 export type { BatchConflict, BatchInput, BatchMetrics, BatchResult, BatchTask, BatchTaskOperation, BatchTaskResult } from './types/batch.js'
@@ -103,7 +106,3 @@ export type { FileAttributes, FileSnapshot, ProjectSnapshot } from './types/snap
 export type { ResolvedTarget,ResolveTargetInput, ResolveTargetResult } from './types/target.js'
 export type { ProjectTransactionInput, ProjectTransactionStatus, StoredTransaction } from './types/transaction.js'
 export type { Postcondition, ProjectValidationContext, ProjectValidationPolicy, ProjectValidationProviders, ProjectValidationTransaction, ReadonlyProvider, ValidateInput, ValidationCheckResult, ValidationResult } from './types/validation.js'
-
-export { createProjectContextSource } from './impl/operations/ProjectContextSource.js'
-export type { ProjectContextSourceApi } from './impl/operations/ProjectContextSource.js'
-export type { ProjectContextSourceOptions } from './contract/requires.js'

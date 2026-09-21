@@ -1,4 +1,7 @@
-import type { ContextAppend, ContextContent, ContextProjection, ContextQuery, ContextReadRange, ContextRecord, ContextRef, ContextSearchPage, ContextSnapshot, ContextState, NoteWrite, WorkingSetChange, WorkingSetCommit } from '../contract/context.js'
+import {isNull,isUndefined} from '@velaros-ai/core'
+import { isArray, isEmpty, isString } from '@velaros-ai/core'
+
+import type { ContextAppend, ContextContent, ContextInputSummary, ContextProjection, ContextQuery, ContextReadRange, ContextRecord, ContextRef, ContextSearchPage, ContextSnapshot, ContextState, ContextUserInput, NoteWrite, WorkingSetChange, WorkingSetCommit } from '../contract/context.js'
 import { ContextLimits } from '../contract/context.js'
 import type { ContextRuntime } from '../interface/provides.js'
 import type { ContextRuntimeOptions } from '../interface/requires.js'
@@ -26,7 +29,7 @@ export class SessionContext implements ContextRuntime {
   }
   public async append(input: ContextAppend, signal?: AbortSignal): Promise<ContextRecord> {
     signal?.throwIfAborted()
-    if (typeof input.body !== 'string' || input.body.length > ContextLimits.objectChars) throw contextFailure('OBJECT_TOO_LARGE', '正文必须在单对象上限以内。')
+    if (!isString(input.body) || input.body.length > ContextLimits.objectChars) throw contextFailure('OBJECT_TOO_LARGE', '正文必须在单对象上限以内。')
     const ref = { sessionId: this.options.sessionId, id: crypto.randomUUID() }
     const objectId = await this.options.storage.put(this.options.sessionId, input.body)
     for (;;) {
@@ -37,14 +40,79 @@ export class SessionContext implements ContextRuntime {
       if (await this.options.storage.compareAndSwap(this.options.sessionId, state.version, { ...state, version: state.version + 1, records: [...state.records, record] })) return record
     }
   }
+  public async ingest(input:ContextUserInput,signal?:AbortSignal):Promise<ContextRecord> {
+    if(!isUndefined(input.text)&&!isString(input.text))throw contextFailure('INPUT_SCHEMA','用户文字必须为字符串')
+    for(const file of input.files??[]){
+      this.record(await this.state(),file.ref)
+      if(!file.name||file.name.length>1000||!file.mediaType||!isUndefined(file.bytes)&&(!Number.isSafeInteger(file.bytes)||file.bytes<0))throw contextFailure('INPUT_SCHEMA','文件引用元数据无效')
+    }
+    const text=input.text??''
+    if(!input.files?.length&&text.length<=ContextLimits.objectChars)return this.append({kind:'user',body:text},signal)
+    const chunks:ContextRef[]=[]
+    for(let offset=0;offset<text.length;offset+=ContextLimits.objectChars)chunks.push((await this.append({kind:'audit',title:'user:text-chunk',body:text.slice(offset,offset+ContextLimits.objectChars)},signal)).ref)
+    return this.append({kind:'user',title:'user:manifest',body:JSON.stringify({chars:text.length,chunks,files:input.files??[]}),sources:[...chunks,...(input.files??[]).map(file=>file.ref)]},signal)
+  }
+
+  public async readInput(ref:ContextRef,range:ContextReadRange={}):Promise<ContextContent> {
+    const original=this.record(await this.state(),ref)
+    const raw=await this.read(ref,original.title==='user:manifest'?{limit:1}:range)
+    if(raw.record.kind!=='user'){
+      const state=await this.state()
+      let file=false
+      for(const manifest of state.records.filter(item=>item.kind==='user'&&item.title==='user:manifest')){
+        const input=JSON.parse((await this.options.storage.get(this.options.sessionId,manifest.objectId))!)
+        if(input.files.some((item:{ref:ContextRef})=>sameContextRef(item.ref,ref))){file=true;break}
+      }
+      if(!file)throw contextFailure('INPUT_REF','引用不是用户原始输入或其附件')
+      return raw
+    }
+    if(raw.record.title!=='user:manifest')return raw
+    const manifest=JSON.parse((await this.options.storage.get(this.options.sessionId,raw.record.objectId))!) as {chars:number;chunks:ContextRef[]}
+    const offset=boundedInteger(range.offset??0,manifest.chars); const limit=boundedInteger(range.limit??ContextLimits.readChars,ContextLimits.readChars)
+    let text=''
+    for(let cursor=offset;cursor<Math.min(manifest.chars,offset+limit);){
+      const chunk=manifest.chunks[Math.floor(cursor/ContextLimits.objectChars)]!
+      const content=await this.read(chunk,{offset:cursor%ContextLimits.objectChars,limit:Math.min(limit-text.length,ContextLimits.objectChars-cursor%ContextLimits.objectChars)})
+      if(isEmpty(content.text))throw contextFailure('OBJECT_MISSING','输入归档分块不完整')
+      text+=content.text;cursor+=content.text.length
+    }
+    return {...raw,text,offset,totalChars:manifest.chars}
+  }
+
+  public async summarizeInput(input:ContextInputSummary,signal?:AbortSignal):Promise<ContextRef> {
+    const state=await this.state(); const record=this.record(state,input.ref)
+    if(record.kind!=='user'||!input.summary.trim()||JSON.stringify(input).length>12000||!isArray(input.constraints)||!isArray(input.unresolved))throw contextFailure('INPUT_SUMMARY','输入摘要合同无效')
+    const current=state.inputSummaries?.find(item=>sameContextRef(item.input,input.ref))
+    if((current?.revision??0)!==input.baseRevision)throw contextFailure('CONTEXT_CONFLICT','输入摘要版本变化')
+    const summary=await this.append({kind:'note',title:'user:intent',body:JSON.stringify({summary:input.summary,constraints:input.constraints,unresolved:input.unresolved,origin:'model-interpretation',original:input.ref}),sources:[input.ref]},signal)
+    for(;;){
+      const latest=await this.state(); const prior=latest.inputSummaries?.find(item=>sameContextRef(item.input,input.ref))
+      if((prior?.revision??0)!==input.baseRevision)throw contextFailure('CONTEXT_CONFLICT','输入摘要版本变化')
+      signal?.throwIfAborted()
+      if(await this.options.storage.compareAndSwap(this.options.sessionId,latest.version,{...latest,version:latest.version+1,inputSummaries:[...(latest.inputSummaries??[]).filter(item=>!sameContextRef(item.input,input.ref)),{input:input.ref,summary:summary.ref,revision:input.baseRevision+1}]}))return summary.ref
+    }
+  }
+
+  public async projectInput(ref:ContextRef,maxChars:number):Promise<ContextContent> {
+    const raw=await this.readInput(ref,{limit:Math.max(1,Math.min(ContextLimits.readChars,maxChars))})
+    const state=await this.state(); const entry=state.inputSummaries?.find(item=>sameContextRef(item.input,ref))
+    const manifest=raw.record.title==='user:manifest'?JSON.parse((await this.options.storage.get(this.options.sessionId,raw.record.objectId))!):undefined
+    const summary=entry?await this.read(entry.summary,{limit:ContextLimits.readChars}):undefined
+    if(!summary&&!manifest&&raw.text.length===raw.totalChars)return raw
+    const card={ref,position:'user-input',totalChars:raw.totalChars,rangeUnit:'utf16',summaryRevision:entry?.revision??0,files:manifest?.files??[],representation:summary?'summary':raw.text.length<raw.totalChars?'excerpt':'full',bodyIncluded:!summary&&!isEmpty(raw.text),sentRanges:summary?[]:[{offset:raw.offset,limit:raw.text.length}],omittedChars:summary?raw.totalChars:raw.totalChars-raw.text.length,read:{module:'velaros:system',export:'memory',operation:'read',input:{ref}},...(summary?{summaryRef:entry!.summary,intent:JSON.parse(summary.text)}:{text:raw.text})}
+    return {...raw,text:JSON.stringify(card)}
+  }
+
   public write(note: NoteWrite, signal?: AbortSignal): Promise<ContextRecord> {
     if (note.kind !== 'note' && note.kind !== 'checkpoint') throw contextFailure('INVALID_NOTE_KIND', '模型材料只能是笔记或工作检查点。')
     return this.append(note, signal)
   }
   public async read(ref: ContextRef, range: ContextReadRange = {}): Promise<ContextContent> {
-    const record = this.record(await this.state(), ref)
+    if(ref.sessionId!==this.options.sessionId)throw contextFailure('SCOPE_MISMATCH','原文引用不属于当前会话。')
+    const record=this.options.storage.records?(await this.options.storage.records(this.options.sessionId,{refId:ref.id,limit:1})).items[0]:this.record(await this.state(),ref)
+    if(!record)throw contextFailure('REF_NOT_FOUND','上下文引用不存在。')
     const text = await this.options.storage.get(this.options.sessionId, record.objectId)
-    if (text === null) throw contextFailure('OBJECT_MISSING', '记录的原始正文不可用。')
+    if (isNull(text)) throw contextFailure('OBJECT_MISSING', '记录的原始正文不可用。')
     const offset = boundedInteger(range.offset ?? 0, text.length)
     const limit = boundedInteger(range.limit ?? ContextLimits.readChars, ContextLimits.readChars)
     return { record, text: text.slice(offset, offset + limit), offset, totalChars: text.length }
@@ -58,7 +126,7 @@ export class SessionContext implements ContextRuntime {
     const hits = []
     for (const record of state.records) {
       const body = await this.options.storage.get(this.options.sessionId, record.objectId)
-      if (body === null) throw contextFailure('OBJECT_MISSING', '检索材料的原文不可用。')
+      if (isNull(body)) throw contextFailure('OBJECT_MISSING', '检索材料的原文不可用。')
       const match = body.toLocaleLowerCase().indexOf(needle)
       if (match < 0 && !record.title.toLocaleLowerCase().includes(needle)) continue
       hits.push({ ref: record.ref, kind: record.kind, title: record.title, preview: body.slice(Math.max(0, match), Math.max(0, match) + ContextLimits.previewChars) })
@@ -91,7 +159,7 @@ export class SessionContext implements ContextRuntime {
     const records: ContextContent[] = []
     for (const record of selected) {
       const text = await this.options.storage.get(this.options.sessionId, record.objectId)
-      if (text === null) throw contextFailure('OBJECT_MISSING', '工作集引用的原文不可用。')
+      if (isNull(text)) throw contextFailure('OBJECT_MISSING', '工作集引用的原文不可用。')
       records.push({ record, text: text.slice(0, projectedSize(record)), offset: 0, totalChars: record.chars })
     }
     return { revision: state.workingSet.revision, cursor: state.records.length, records, chars }
@@ -106,7 +174,7 @@ export class SessionContext implements ContextRuntime {
     let remaining = maxChars
     for (const record of selected) {
       const body = await this.options.storage.get(this.options.sessionId, record.objectId)
-      if (body === null) throw contextFailure('OBJECT_MISSING', '恢复材料的原文不可用。')
+      if (isNull(body)) throw contextFailure('OBJECT_MISSING', '恢复材料的原文不可用。')
       const text = body.slice(0, remaining)
       remaining -= text.length
       records.push({ record, text, offset: 0, totalChars: body.length })

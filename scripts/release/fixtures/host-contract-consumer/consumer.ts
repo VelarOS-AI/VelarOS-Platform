@@ -1,17 +1,6 @@
-import {
-  createAgentExecutionStack,
-  type AgentModelRetryPolicy,
-  type AgentRunLifecycle,
-} from '@velaros-ai/agent'
-import {
-  agentToolContracts,
-  type ApprovalPort,
-  type ToolDefiner,
-  toolContracts,
-  toolDescriptions,
-  toolKernelModules,
-  toolSchemas,
-} from '@velaros-ai/agent/tool-contract'
+import { createActRunService, type ActRunEvent, type ActRunServiceOptions } from '@velaros-ai/agent'
+import type { ApprovalPort } from '@velaros-ai/kernel'
+import { createRuntime, type VelarosRuntimeOptions } from '@velaros-ai/velaros'
 import { createModelRequestClient } from '@velaros-ai/model'
 import { languageQueries, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/development'
 import { ComputerInputLimits, type ComputerPoint } from '@velaros-ai/velaros/computer/contracts'
@@ -69,19 +58,11 @@ const memoryScope: MemoryScopeApi = memoryStore.scope('project:/srv/project')
 const memoryContext: MemoryOperationContext = { abortSignal: new AbortController().signal, memory: memoryScope }
 void [memoryScope.renderIndex(), memoryStore.listScopes(), memoryOperations.list(memoryContext)]
 
-const retry: AgentModelRetryPolicy = {
- allowPartialContinuation: false,
- onFailure: () => null,
-}
-const lifecycle: AgentRunLifecycle<object> = {
- beforeTurn: async ({ abortSignal }: { abortSignal: AbortSignal }) => { abortSignal.throwIfAborted() },
- onTurnSettled: async ({ history }: { history: readonly unknown[] }) => (history.length ? 'stop' : 'continue'),
-}
-const point: ComputerPoint = { x: 10, y: 20, coordinateSpace: 'global' }
-
-// 写工具的契约在 agent 的 `./tool-contract` 入口：定义工具、整类说明的结构化断言、挂进内核、schema 包都从这里取。
-type HostToolContext = { abortSignal: AbortSignal }
-const defineHostTool: ToolDefiner<HostToolContext> = toolContracts.createDefiner<HostToolContext>({ categoryOf: () => 'host' })
-void [defineHostTool, toolDescriptions.forCategory, toolKernelModules.define, toolSchemas.bundle]
-void [createAgentExecutionStack, createModelRequestClient, lifecycle, retry,
- agentToolContracts.discoveryDescriptors, agentToolContracts.readSchemaDiscoveryNames({names:['project:read']}), point, ComputerInputLimits.clickCount]
+// 主循环与正式装配均从声明入口消费，业务能力沿 Kernel 调用。
+declare const loop:ActRunServiceOptions
+declare const runtimeOptions:VelarosRuntimeOptions
+const service=createActRunService(loop)
+const events:AsyncIterable<ActRunEvent>=service.submit('检查发布后的正式入口')
+const runtime=createRuntime(runtimeOptions)
+const point:ComputerPoint={x:10,y:20,coordinateSpace:'global'}
+void [events,runtime,createModelRequestClient,point,ComputerInputLimits.clickCount]

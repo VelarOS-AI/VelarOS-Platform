@@ -1,6 +1,6 @@
 # 脚本上下文与结果租约：实现与验证
 
-2026-09-20，实际仓库 `/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform`，分支 `main`。
+2026-09-20，实际仓库 `<repository>`，分支 `main`。
 
 ## 已完成
 

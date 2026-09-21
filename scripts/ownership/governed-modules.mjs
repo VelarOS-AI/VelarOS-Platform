@@ -5,6 +5,7 @@
 //   directory       相对 packages/ 的目录
 //   unit            能力单元的目录名（不填就是普通模块）：几件能力按目录放在同一个包里，共用一份清单与许可；
 //                   源码根是 packages/<directory>/<unit>/（不是 src/），其余路径字段仍相对包根写；name 写成「包名/单元」
+//   packageEntry    能力单元承载包的根入口；仍按该单元源码目录执行完整治理
 //   name            包名
 //   toolsFile       工具文件（相对包根，没有工具的包不填）：全部工具定义都在这一个文件里，外加它们的分组与挂载。人最先看的地方，改了要在差量报告里点名；
 //                   execute 只放简单的一两步，语句多了就交给 impl 里的类
@@ -40,40 +41,12 @@
 //   invariants      不变量登记表
 //   acceptance      验收测试文件；每条「测试」档不变量都要在这里有以编号开头的用例
 export const GovernedModules = [
-  { directory: 'velaros', name: '@velaros-ai/velaros', layout: 'interface', entryPrefix: 'src/', browserSafeEntries: ['contracts.ts'], card: 'MODULE.md', invariants: 'spec/invariants.md', acceptance: 'test/runtime.test.mjs' },
+  {"directory": "velaros", "unit": "act/runtime", "name": "@velaros-ai/velaros/act/runtime", "contract": "act/runtime/contract", "types": "act/runtime/types", "impl": "act/runtime/impl", "utils": "act/runtime/utils", "layers": [["ProgramContext.ts", "ActEventProjector.ts", "BudgetedModelDriver.ts", "ModelToolRuntime.ts", "ModelToolActivation.ts", "ContextMaintenance.ts", "ContextPatchStore.ts", "RuntimeSession.ts", "ContextMemory.ts", "ScriptTurnDecoder.ts", "McpClientConnection.ts", "RuntimeTrace.ts", "RecentContext.ts", "StandardModules.ts", "RuntimeBootstrap.ts", "ComposedRuntime.ts"]], "card": "act/runtime/MODULE.md", "invariants": "act/runtime/invariants.md", "acceptance": "act/runtime/test/runtime.test.mjs", "packageEntry": true, "browserSafeEntries": ["contracts.ts", "renderer.ts"], "tuning": "tuning.ts"},
+  {"directory": "velaros", "unit": "act/system", "name": "@velaros-ai/velaros/act/system", "contract": "act/system/contract", "types": "act/system/types", "impl": "act/system/impl", "utils": "act/system/utils", "layers": [["ModulesModule.ts", "MemoryModule.ts", "SystemModules.ts", "SystemCatalog.ts", "ContextMaintenanceState.ts", "ContextModule.ts", "StoreModule.ts", "StoreSession.ts"]], "card": "act/system/MODULE.md", "invariants": "act/system/spec/invariants.md", "acceptance": "act/system/spec/acceptance.test.mjs"},
+  {"directory": "velaros", "unit": "act/search", "name": "@velaros-ai/velaros/act/search", "contract": "act/search/contract", "types": "act/search/types.ts", "impl": "act/search/impl", "utils": "act/search/tuning.ts", "layers": [["SearchModule.ts", "AdvancedSearch.ts", "EvidenceModule.ts", "SearchActivation.ts"]], "card": "act/search/MODULE.md", "invariants": "act/search/spec/invariants.md", "acceptance": "act/search/spec/acceptance.test.mjs", "tuning": "tuning.ts"},
+  {"directory": "velaros", "unit": "act/agents", "name": "@velaros-ai/velaros/act/agents", "contract": "act/agents/contract", "types": "act/agents/types", "impl": "act/agents/impl", "utils": "act/agents/utils", "layers": [["AgentsModule.ts", "InteractionModule.ts"]], "card": "act/agents/MODULE.md", "invariants": "act/agents/spec/invariants.md", "acceptance": "act/agents/spec/acceptance.test.mjs"},
   { directory: 'context', name: '@velaros-ai/context', layout: 'interface', browserSafeEntries: ['index.ts', 'contracts.ts'], card: 'MODULE.md', invariants: 'spec/invariants.md', acceptance: 'test/context.test.mjs' },
-  {
-    directory: 'agent',
-    name: '@velaros-ai/agent',
-    toolsFile: 'src/impl/AgentTools.ts',
-    contract: 'src/contract',
-    types: 'src/types',
-    portable: 'agent.ts',
-    impl: 'src/impl',
-    utils: 'src/utils',
-    tuning: 'tuning.ts',
-    browserSafeEntries: ['contracts.ts', 'chat.ts', 'tool-contract.ts'],
-    environmentTable: 'AgentEnvironmentVariables',
-    layers: [
-      ['AgentTools.ts'],
-      ['builtin/'],
-      ['assembly/'],
-      ['execution/', 'product-session/'],
-      ['delegation/'],
-      ['runner/'],
-      ['loop/'],
-      ['session/', 'tools/'],
-      ['context/', 'residency/', 'retrieval/'],
-      ['guidance/', 'mods/', 'connectors/', 'chat/'],
-      ['records/'],
-      ['ledgers/'],
-      ['errors/'],
-    ],
-    toolDefiner: 'defineVelaTool',
-    card: 'MODULE.md',
-    invariants: 'spec/invariants.md',
-    acceptance: 'spec/acceptance.test.ts',
-  },
+  { directory: 'agent', name: '@velaros-ai/agent', layout: 'interface', browserSafeEntries: ['contracts.ts'], card: 'MODULE.md', invariants: 'spec/invariants.md', acceptance: 'spec/acceptance.test.ts' },
   {
     // 底层单元：@velaros-ai/core 里按目录放的底层能力（跨平台约定、磁盘文本、路径规则），布局与能力单元一样，清单与许可只在包根一份；
     // core 自己的基础原语在 src/，不在这张登记表里
@@ -439,7 +412,7 @@ export const GovernedModules = [
     browserSafeEntries: ['contracts.ts'],
     layers: [
       // Kernel 会话编排检查与一次执行
-      ['KernelScriptSession.ts'],
+      ['KernelScriptSession.ts', 'ScriptPackageCompiler.ts', 'ScriptOutputs.ts'],
       ['CodeSurfaceSession.ts'],
       // 执行前的检查与隔离运行器
       ['CodeProgramChecker.ts', 'NodeSubprocessCodeRunner.ts'],

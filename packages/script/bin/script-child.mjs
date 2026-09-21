@@ -1,6 +1,18 @@
 // 受信进程只负责 IPC；模型程序在独立的 QuickJS WASM 堆中运行。
 import { getQuickJS } from 'quickjs-emscripten'
 
+import {isEmpty,toNullable,toOptional,TypeGuards} from '@velaros-ai/core'
+
+import { ScriptOutputLimits } from '../dist/contract/constants.js'
+import { createOutputCollector, validateOutputOptions } from '../dist/utils/output-capture.js'
+
+// 隔离输出验证复用相同的纯函数实现，绑定仅位于采集器闭包，不开放宿主对象。
+const guards={...TypeGuards,isEmpty,toNullable,toOptional}
+const guardSource=Object.entries(guards).map(([name,guard])=>{
+ const body=guard.toString()
+ const source=/^(?:async\s+)?[\w$]+\s*\(/u.test(body)&&!body.startsWith('function ')?`function ${body}`:body
+ return `const ${name}=(${source});`
+}).join('\n')
 const QuickJS = await getQuickJS()
 const runtime = QuickJS.newRuntime()
 runtime.setMemoryLimit(128 * 1024 * 1024)
@@ -76,6 +88,7 @@ expose('__hostCall', (namespace, operation, input) => {
   process.send({ type: 'call', callId, namespace: vm.getString(namespace), operation: vm.getString(operation), input: JSON.parse(vm.getString(input)) })
   return promise.handle
 })
+expose('__hostOutput', (event) => { process.send({type:'output', event:JSON.parse(vm.getString(event))});return vm.undefined })
 expose('__hostLog', (text) => {
   const line = vm.getString(text).slice(0, 2000)
   if (logChars + line.length > 8000) return vm.undefined
@@ -89,7 +102,7 @@ function run(message) {
   if (!Number.isFinite(message.timeoutMs) || message.timeoutMs <= 0) throw new Error('缺少有限的执行预算')
   cpuRemaining = message.timeoutMs
   const bootstrap = `(() => {
-    const config = ${JSON.stringify({ operations: message.operations, input: message.input, blobs: message.blobs, templates: message.templates, modules: message.modules })};
+    const config = JSON.parse(${JSON.stringify(JSON.stringify({ operations: message.operations, packages: message.packages ?? [], input: message.input, blobs: message.blobs, modules: message.modules }))});
     const api = Object.create(null);
     for (const [namespace, operations] of Object.entries(config.operations)) {
       const methods = Object.create(null);
@@ -138,23 +151,31 @@ function run(message) {
       }
     };
     globalThis.console = Object.freeze({log: (...args) => __hostLog(args.map(value => typeof value === 'string' ? value : JSON.stringify(value)).join(' '))});
-    const program = Object.freeze({input: config.input, blobs: Object.freeze(config.blobs), template: name => {
-      if (!Object.hasOwn(config.templates, name)) throw new Error('没有模块模板 ' + name + '；可用模块：' + Object.keys(config.templates).join('、'));
-      return config.templates[name];
-    }});
-    const outputs = [];
-    const standard = Object.freeze({
-      modules: api['velaros:modules'] ?? api.modules,
-      execution: api['velaros:execution'] ?? api.execution,
-      programs: api['velaros:programs'] ?? api.programs,
-      results: api['velaros:results'] ?? api.results,
-      artifacts: api['velaros:artifacts'] ?? api.artifacts,
-      output: value => { outputs.push(value); },
-    });
-    globalThis.__readOutputs = () => outputs;
+    const freezeData = value => {
+      if (value && typeof value === 'object') { for (const item of Object.values(value)) freezeData(item); Object.freeze(value); }
+      return value;
+    };
+    const program = Object.freeze({input: freezeData(config.input), blobs: Object.freeze(config.blobs)});
+    const emitOutput=__hostOutput;
+    delete globalThis.__hostOutput;
+    const collector=(()=>{${guardSource} return (${createOutputCollector.toString()})(${JSON.stringify(ScriptOutputLimits)},(${validateOutputOptions.toString()}),event=>emitOutput(JSON.stringify(event)));})();
+    const packages = Object.create(null);
+    for (const pkg of config.packages) {
+      if (Object.hasOwn(packages,pkg.specifier) || Object.hasOwn(api,pkg.specifier) || pkg.specifier === 'velaros:program') throw new Error('脚本包冲突 ' + pkg.specifier);
+      const members = Object.create(null);
+      for (const [name,target] of Object.entries(pkg.exports)) {
+        if (!Object.hasOwn(api,target)) throw new Error('包成员未授权 ' + target);
+        members[name] = api[target];
+      }
+      if (pkg.specifier === 'velaros') members.output = collector.output;
+      packages[pkg.specifier] = Object.freeze(members);
+    }
+    const standard = packages.velaros ?? Object.freeze({output: collector.output});
+    globalThis.__readOutputs = () => collector.snapshot();
     globalThis.__velaros = name => {
       if (name === 'velaros') return standard;
       if (name === 'velaros:program') return program;
+      if (Object.hasOwn(packages, name)) return packages[name];
       if (Object.hasOwn(api, name)) return api[name];
       if (typeof name !== 'string' || !name.startsWith('velaros:')) throw new Error('未知模块 ' + name);
       const namespace = name.slice('velaros:'.length);
@@ -195,10 +216,13 @@ function run(message) {
     result.value.dispose()
     const explicit = withCpuBudget(() => vm.evalCode('__readOutputs()'))
     if (explicit.error) { const error = readValue(explicit.error); explicit.error.dispose(); fail(error); return }
-    const outputs = readValue(explicit.value)
+    const capture = readValue(explicit.value)
+    const outputs = capture.blocks.map(block=>block.value)
     explicit.value.dispose()
     if (outputs.length) value = { default: outputs.length === 1 ? outputs[0] : outputs }
-    finish({ type: 'done', ok: true, value, logs })
+    const rawText=JSON.stringify(value);
+    if(rawText&&rawText.length>ScriptOutputLimits.rawChars)finish({type:'done',ok:false,logs,error:{code:'TOO_LARGE',message:'程序返回值超过归档上限；未保存完整返回值'}});
+    else finish({ type: 'done', ok: true, value, logs })
   }).catch(fail)
   pump()
 }

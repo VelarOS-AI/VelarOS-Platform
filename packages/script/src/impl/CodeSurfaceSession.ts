@@ -1,17 +1,19 @@
+import {Log} from '@velaros-ai/core'
+import {isUndefined} from '@velaros-ai/core'
 /**
  * 会话层：把一次「模型交了段程序」办完。
  *
  * 顺序是硬的——**先 typecheck，不过就不执行**。这一关拦掉的是模型对回执形状的误解；
  * 让不合法的程序跑起来，等于用真实副作用去试错。
  */
+import { isEmpty, isObject, isString, isTrue } from '@velaros-ai/core'
+import { modelRequestEncoder } from '@velaros-ai/kernel'
 
-import { isEmpty, isString, isTrue } from '@velaros-ai/core'
-
-import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../contract/constants.js'
+import { CodeSurfaceErrorCodes, CodeSurfaceLimits, ScriptOutputLimits } from '../contract/constants.js'
 import type { CodeCapabilityPort, CodeRunnerApi, CodeSurfaceEventSink } from '../contract/requires.js'
-import type { CodeCallNotice, CodeProgramRequest, CompletedCall } from '../types/script.js'
 import type { CodeAttachment, CodeSurfaceOutcome } from '../types/outcome.js'
-import type { GrantedModule } from '../types/script.js'
+import type { CodeCallNotice, CodeProgramRequest, CompletedCall } from '../types/script.js'
+import type { GrantedModule, ScriptPackageDefinition } from '../types/script.js'
 import { fitAttachmentsToBudget } from '../utils/budget.js'
 import { foldCalls, settledCall } from '../utils/calls.js'
 import { isRefusal } from '../utils/capability-failure.js'
@@ -34,8 +36,8 @@ export interface CodeSurfaceSessionApi {
      * **只给授权的**：没授权的模块 `import` 不出来，这道闸是语言给的。
      */
     granted: readonly GrantedModule[]
-    /** 这个空间挂的各能力模块的代码模版（模块名 → 正文）：程序在 `velaros:program` 里用 `template()` 读。不给就是没有模版可读。 */
-    templates?: Readonly<Record<string, string>>
+    /** 宿主编译的包投影，与 granted 同源。 */
+    packages?: readonly ScriptPackageDefinition[]
     timeoutMs?: number
     signal?: AbortSignal
   }): Promise<CodeSurfaceOutcome>
@@ -52,7 +54,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
   public async submit(input: {
     program: CodeProgramRequest
     granted: readonly GrantedModule[]
-    templates?: Readonly<Record<string, string>>
+    packages?: readonly ScriptPackageDefinition[]
     timeoutMs?: number
     signal?: AbortSignal
   }): Promise<CodeSurfaceOutcome> {
@@ -94,6 +96,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     let calls = 0
     // 隔离里没有模块系统：import 改写成 __velaros(...) 与 __import(...)、导出改写成登记，行数一个不变。
     const modules = Object.fromEntries(Object.entries(program.modules ?? {}).map(([path, text]) => [path, rewriteModuleForIsolate(text, { importer: path, library: true })]))
+    const executionStartedAt=Date.now()
     const outcome = await this.runner.run(
       {
         source: rewriteModuleForIsolate(checked.transpiled ?? source, { importer: program.path }),
@@ -101,7 +104,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
         blobs: program.blobs ?? {},
         input: program.input,
         operations: this.capabilities.listOperations(),
-        templates: input.templates ?? {},
+        packages: input.packages,
         timeoutMs: Math.min(input.timeoutMs ?? CodeSurfaceTuning.defaultTimeoutMs, CodeSurfaceLimits.timeoutMs),
       },
       async (call, holdClock) => {
@@ -141,9 +144,28 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     if (!isEmpty(unsettled)) run.abort(new Error('脚本已经停了，这次调用没人等了'))
 
     // 图先收拢：它自己也会往插手记录里记一笔「丢了几张」，得赶在文字结果编好之前。
+    if(outcome.ok&&!isUndefined(outcome.value)){
+      try{if(JSON.stringify(outcome.value).length>ScriptOutputLimits.rawChars)throw new Error('程序返回值超过原始归档上限')}
+      catch(error){Log.tag('ActRuntime').debug('CodeSurfaceSession 已进入异常处理或降级分支');outcome.ok=false;outcome.error={code:'TOO_LARGE',message:String(error)}}
+    }
+    const outputAttachments:Array<{key:string;index:number}>=[]
+    for(const block of outcome.output?.blocks??[]){
+      if(block.options.type!=='image'||!block.value||!isObject(block.value) ||!('data' in block.value))continue
+      try{
+        const image={...(block.value as CodeAttachment),origin:'capability' as const}
+        modelRequestEncoder.messages({instructions:'',materials:[],images:[image],response:{type:'text'},mode:'work',outputTokens:1})
+        outputAttachments.push({key:block.key,index:attachments.length});attachments.push(image)
+      }catch(error){Log.tag('ActRuntime').debug('CodeSurfaceSession 已进入异常处理或降级分支');outcome.ok=false;outcome.error={code:'PROGRAM_ERROR',message:`输出图片无效：${String(error)}`}}
+    }
+    if(outcome.output?.issues.length){outcome.ok=false;outcome.error={code:'PROGRAM_ERROR',message:outcome.output.issues.join('; ')}}
     const shown = fitAttachmentsToBudget(attachments, notices)
-    const result = composeProgramResult(outcome, notices, completed, unsettled, hasNamedExports(checked.transpiled ?? source))
+    const preview=outcome.output?.blocks.some(block=>block.options.type==='image')?{...outcome,value:{default:outcome.output.blocks.length===1?{representation:'native-image',key:outcome.output.blocks[0]!.key}:outcome.output.blocks.map(block=>block.options.type==='image'?{representation:'native-image',key:block.key}:block.value)}}:outcome
+    const result = composeProgramResult(preview, notices, completed, unsettled, hasNamedExports(checked.transpiled ?? source))
     const settled: Extract<CodeSurfaceOutcome, { checked: true }> = { checked: true, result }
+    settled.metrics={durationMs:Date.now()-executionStartedAt,capabilityCalls:calls,rawOutputChars:outcome.output?.blocks.reduce((sum,block)=>sum+block.chars,0)??0}
+    if(outcome.output)settled.output=outcome.output
+    if(!isEmpty(outputAttachments))settled.outputAttachments=outputAttachments.filter(item=>item.index<shown.length)
+    if(outcome.ok&&!outcome.output?.blocks.length&&!isUndefined(outcome.value))settled.rawValue=outcome.value
     if (!isEmpty(shown)) settled.attachments = shown
     if (!isEmpty(completed)) settled.calls = foldCalls(completed)
     return settled

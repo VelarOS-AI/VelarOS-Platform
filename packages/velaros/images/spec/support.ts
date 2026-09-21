@@ -11,9 +11,9 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { fileURLToPath } from 'node:url'
 import { deflateSync } from 'node:zlib'
 
+import { AppError } from '@velaros-ai/core/error'
 import type { CapabilityOperationContext } from '@velaros-ai/script'
 import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/script'
-import { AppError } from '@velaros-ai/core/error'
 
 import type { ImageAttachment, ImageOperationContext, ImageResizeRequest, ImageResizeResult, ImageSpacePort } from '../index'
 import { ImageLimits, imageOperations } from '../index'

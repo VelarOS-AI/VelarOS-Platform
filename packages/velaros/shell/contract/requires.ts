@@ -11,7 +11,7 @@
  * 根入口导出空间端口与调用上下文；本机宿主的配置与约束后端从 `./local` 入口导出。
  */
 
-import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
+import type { ApprovalPort } from '@velaros-ai/kernel'
 
 import type { ShellProcessConfinementRequest, ShellProcessConfinementResult } from '../types/local.js'
 import type {

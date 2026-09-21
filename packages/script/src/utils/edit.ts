@@ -9,8 +9,8 @@
 
 import { isEmpty, isString } from '@velaros-ai/core'
 
-import type { CodeProgramEdit } from '../types/script.js'
 import type { ResolvedProgramEdit } from '../types/editing.js'
+import type { CodeProgramEdit } from '../types/script.js'
 
 /** 解一条编辑到字符区间；解不出来返回一句给模型看的话。 */
 function resolveEdit(source: string, edit: CodeProgramEdit): ResolvedProgramEdit | string {

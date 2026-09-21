@@ -1,5 +1,5 @@
 import type { ModelImage } from '../types/model.js'
-import type { InvocationReceipt, InvocationRecord, InvocationReconciliation, ModuleBinding, OperationDescriptor, OperationSurface, PreparedInvocation } from '../types/operations.js'
+import type { InvocationReceipt, InvocationReconciliation, InvocationRecord, ModuleBinding, OperationDescriptor, OperationResourceVersion, OperationSurface, PreparedInvocation } from '../types/operations.js'
 
 /** 具体调用的受控上下文；模块资源在挂载时闭包注入。 */
 export interface OperationContext {
@@ -7,18 +7,30 @@ export interface OperationContext {
   readonly invocation: PreparedInvocation
   /** 取消只要求停止后续工作，不表示撤销已发生的效果。 */
   readonly signal: AbortSignal
+  /** 观察适配器确认已正常收束；partial/none 不承诺无副作用。 */
+  recordObservation?(evidence:NonNullable<InvocationReceipt['observation']>):void
   /** 处理器在提交效果后更新事实，随最终回执保存。 */
   recordEffect(effect: InvocationReceipt['effect']): void
   /** 把真实图像交给模型；先验证再纳入持久回执。 */
   attach(image: ModelImage): void
 }
 
+/** 领域版本适配器；捕获与验证都不得产生外界写入。 */
+export interface OperationReadContract {
+  /** 从本次真实返回值提取资源版本；不能再次读取并冒充采集时的版本。 */
+  capture(input: unknown, value: unknown, context: OperationContext): readonly OperationResourceVersion[] | Promise<readonly OperationResourceVersion[]>
+  /** 在原授权作用域内比较当前版本，无法验证返回 null。 */
+  validate(version: OperationResourceVersion, context: OperationContext): Nullable<boolean | Promise<Nullable<boolean>>>
+}
+
 /** 操作定义；schema、文档与处理器只有这一个登记处。 */
 export interface OperationDefinition extends OperationDescriptor {
+  /** 真实资源版本采集与写前验证；未提供时不能承诺资源一致。 */
+  readonly reads?: OperationReadContract
   /** 观察模式专用的受限实现；写操作只有经此口才能用于观察，保护范围由实现报告。 */
   observe?(input: unknown, context: OperationContext): unknown | Promise<unknown>
   /** 按已固定身份只读核对外部效果；未知返回 null，不能重新执行该操作。 */
-  reconcile?(invocation: PreparedInvocation, signal: AbortSignal): Promise<Omit<InvocationReconciliation, 'checkedAt'> | null>
+  reconcile?(invocation: PreparedInvocation, signal: AbortSignal): Promise<Nullable<Omit<InvocationReconciliation, 'checkedAt'>>>
   /** 显式准备一次输入；准备不得产生外部副作用。 */
   prepare?(input: unknown): unknown | Promise<unknown>
   /** 执行已经准备并校验过的参数。 */
@@ -27,6 +39,8 @@ export interface OperationDefinition extends OperationDescriptor {
 
 /** 模块作者提供的唯一运行时定义。 */
 export interface OperationModuleDefinition {
+  /** 模块源码随包提供的用法模板；生成代码面可在 surface 中提供。 */
+  readonly template?: string
   /** 与操作描述同源的生成合同；省略时从 schema 生成精确声明。 */
   readonly surface?: OperationSurface
   /** 稳定公开身份与挂载代际。 */
@@ -46,17 +60,19 @@ export interface InvocationJournal {
   /** 追加已核对事实，不覆盖原回执；缺少此端口时不能持久化恢复结论。 */
   recordReconciliation?(sessionId: string, id: string, result: InvocationReconciliation): Promise<void>
   /** 原子写入意图；已有同号记录时返回它，新写入返回 null。 */
-  claim(prepared: PreparedInvocation): Promise<InvocationRecord | null>
+  claim(prepared: PreparedInvocation): Promise<Nullable<InvocationRecord>>
   /** 唯一占用者提交准备后的不可变参数；完成后才允许派发。 */
   prepare(prepared: PreparedInvocation): Promise<void>
   /** 保存最终结果；失败必须抛错，不能宣称已经持久化。 */
   settle(receipt: InvocationReceipt): Promise<void>
   /** 读取同一会话内的调用；缺少终态时效果待核对。 */
-  read(sessionId: string, id: string): Promise<InvocationRecord | null>
+  read(sessionId: string, id: string): Promise<Nullable<InvocationRecord>>
 }
 
 /** 操作运行时的依赖；所有入口共享这一个实例。 */
 export interface OperationRuntimeOptions {
+  /** 版本验证前重验原调用授权；与业务写入调度分开，不再次执行原操作。 */
+  beforeReadValidation?(invocation: PreparedInvocation, descriptor: OperationDescriptor, signal: AbortSignal): Promise<void>
   /** 持久化派发前复核任务执行前提；抛错表示尚无外部效果。 */
   beforeDispatch?(invocation: PreparedInvocation, descriptor: OperationDescriptor, signal: AbortSignal): Promise<void>
   /** 完整挂载定义。 */
@@ -213,7 +229,7 @@ export interface KernelCallableCapabilityService {
   /** 取一条操作的权限声明；没登记过就返回 undefined。 */
   getOperationMetadata(
     operation: string,
-  ): KernelCapabilityOperationMetadata | undefined
+  ): Optional<KernelCapabilityOperationMetadata>
   /** 执行一条已登记的操作；未知操作与已中止的调用都不进 provider 代码。 */
   invoke(
     operation: string,
@@ -478,4 +494,13 @@ export interface ModelDriver {
   estimate(request: ModelTurnRequest): Promise<ModelInputEstimate>
   /** 发起一轮请求；工具参数完整到达后才能输出 call。 */
   stream(request: ModelTurnRequest, signal: AbortSignal): AsyncIterable<ModelTurnDelta>
+}
+
+import type { ApprovalDecision,ToolConfirmationDecisionOptions } from '../types/approval.js'
+/** 操作审批端口；缺席必须默认拒绝。 */
+export interface ApprovalPort {
+ /** 被拒绝时终止当前操作。 */
+ awaitConfirmation(message:string,signal?:AbortSignal,options?:ToolConfirmationDecisionOptions):Promise<void>
+ /** 返回绑定当前操作的明确审批结论。 */
+ awaitConfirmationDecision(message:string,signal?:AbortSignal,options?:ToolConfirmationDecisionOptions):Promise<ApprovalDecision>
 }

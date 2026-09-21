@@ -162,7 +162,7 @@ function scanStatements(roots, test, build) {
         let statement = lines[index]
         let start = index
         // 折行的 `import type {\n … \n} from '…'`:一直并到出现 `from '…'` 为止。
-        if (/^\s*(?:import|export)\b/.test(statement) && statement.includes('{') && !statement.includes('}')) {
+        if (/^\s*(?:import\b|export\s+(?:type\s+)?\{)/.test(statement) && statement.includes('{') && !statement.includes('}')) {
           while (index + 1 < lines.length && !/\}\s*from\s*['"]/.test(lines[index])) {
             index += 1
             statement += ` ${lines[index].trim()}`

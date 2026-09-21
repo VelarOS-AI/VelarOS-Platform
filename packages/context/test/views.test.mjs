@@ -1,6 +1,7 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { test } from 'node:test'
+
 import { createContextRuntime, createContextView } from '../dist/index.js'
 import { localContextStorage } from '../dist/node.js'
 
@@ -266,8 +267,26 @@ test('weak sources cannot claim snapshot consistency and a hung verifier remains
   const view=await observe(f)
   assert.equal(view.evidence.length,0);assert.equal(view.gaps[0].code,'SOURCE_CONTRACT')
   const g=await fixture(t);await observe(g)
-  const signal=AbortSignal.timeout(20),hold=setTimeout(()=>{},200)
+  const signal=AbortSignal.timeout(20); const hold=setTimeout(()=>{},200)
   try { await assert.rejects(g.view.complete({verify:()=>new Promise(()=>{})},signal),{name:'TimeoutError'}) }
   finally { clearTimeout(hold) }
   assert.equal((await g.view.inspect()).status,'view-ready')
+})
+
+test('concurrent steps keep their own decision evidence and cannot finish each other',async t=>{
+ const f=await fixture(t)
+ const original=await observe(f)
+ await f.view.startStep('a',undefined,true,original)
+ f.data.text='version two';f.data.revision='v2'
+ const next=await f.view.build({maxChars:12000})
+ await f.view.startStep('b',undefined,true,next)
+ await assert.rejects(()=>f.view.assertCanWrite('a'),{code:'STALE_VIEW'})
+ await f.view.assertCanWrite('b')
+ await assert.rejects(()=>f.view.putArtifact('ambiguous'),{code:'LEASE_LOST'})
+ await f.view.settle([{id:'a',executionId:'a',operation:'read',outcome:'succeeded',effect:'none'}])
+ assert.deepEqual(Object.keys((await f.view.inspect()).activeExecutions),['b'])
+ assert.equal((await f.view.complete()).reason,'PENDING_EXECUTIONS')
+ await assert.rejects(()=>f.view.assertCanWrite('a'),{code:'LEASE_LOST'})
+ await f.view.settle([{id:'b',executionId:'b',operation:'read',outcome:'succeeded',effect:'none'}])
+ await f.view.build({maxChars:12000});assert.equal((await f.view.complete()).completed,true)
 })

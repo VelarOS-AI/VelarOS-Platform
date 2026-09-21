@@ -83,6 +83,7 @@ export class ShellOperations implements ShellOperationsApi {
       if(background||interactive||plan.shouldStartInBackground||plan.isDangerous)throw Object.assign(new Error('观察会自动重跑，危险操作与持久后台任务请通过一次性执行入口运行。'),{code:'OBSERVATION_EFFECT_DENIED'})
       if(!ctx.shell.runObservationCommand)throw Object.assign(new Error('宿主没有提供受限观察命令执行器；不能退回普通命令。'),{code:'OBSERVATION_SHELL_UNAVAILABLE'})
       const result=await ctx.shell.runObservationCommand(command,{cwd:commandCwd,shell,timeoutMs:clampPositive(timeoutMs,ShellLimits.timeoutMs),background:false,interactive:false,maxOutputChars:ShellLimits.outputChars,sessionId:ctx.sessionId},ctx.abortSignal)
+      if(result.cleanupIncomplete)throw Object.assign(new Error('观察命令进程尚未完全收束，必须核对后再继续'),{code:'OBSERVATION_UNSETTLED'})
       const shaped=runResult(result)
       if(!result.confinement||result.confinement.enforcement!=='full')shaped.note='当前命令约束不完整，不能保证所有外部影响都被阻止；请检查 confinement 的实际范围。'
       return shaped

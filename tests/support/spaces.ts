@@ -6,9 +6,9 @@
  * - 项目空间：项目文件与命令常驻，问代码、演练沙箱、看图按需；共用能力的项目端口取自 `projectCapabilityPorts`。
  */
 
-import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
+import type { ApprovalPort } from '@velaros-ai/kernel'
 
-import type { CapabilityOperationContext, CapabilityOperationTable, MountedCapabilityModule } from '../../packages/script/src/index'
+import type { CapabilityOperationContext, CapabilityOperationTable } from '../../packages/script/src/index'
 import type { FileOperationContext } from '../../packages/velaros/files/index'
 import { fileOperations } from '../../packages/velaros/files/index'
 import { VelarFilesModule } from '../../packages/velaros/files/contracts'
@@ -26,6 +26,9 @@ import { VelarSandboxModule } from '../../packages/velaros/sandbox/contracts'
 import type { ShellHostPort, ShellOperationContext, ShellSpacePort } from '../../packages/velaros/shell/index'
 import { shellOperations } from '../../packages/velaros/shell/index'
 import { VelarShellModule } from '../../packages/velaros/shell/contracts'
+
+/** 测试装配的公开能力说明。 */
+export interface MountedCapabilityModule { surface:{namespace:string;specifier:string;declarations:string}; resident:boolean }
 
 /** 一个装好的空间：代码面的操作表，与挂了哪几件、哪几件常驻。 */
 export interface TestSpace {

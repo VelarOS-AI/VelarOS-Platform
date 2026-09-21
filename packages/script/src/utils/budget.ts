@@ -3,8 +3,8 @@
 import { isString, isUndefined } from '@velaros-ai/core'
 
 import { CodeSurfaceLimits } from '../contract/constants.js'
-import type { CodeCallNotice, CodeProgramCheckFailure, CodeProgramDiagnostic, CodeProgramResult, CompletedCall } from '../types/script.js'
 import type { CodeAttachment } from '../types/outcome.js'
+import type { CodeCallNotice, CodeProgramCheckFailure, CodeProgramDiagnostic, CodeProgramResult, CompletedCall } from '../types/script.js'
 
 import { keepTail } from './program.js'
 import { CodeSurfaceTuning } from './tuning.js'

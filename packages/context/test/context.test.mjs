@@ -1,8 +1,9 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { test } from 'node:test'
+
 import { createContextRuntime } from '../dist/index.js'
 import { localContextStorage } from '../dist/node.js'
 

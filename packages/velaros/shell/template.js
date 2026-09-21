@@ -42,12 +42,11 @@ async function findTodos(path = '.') {
   return { total: hits.length, perFile, first: hits.slice(0, 20) }
 }
 
-// 起开发服务器：放后台跑，回执里有 taskId 和认出来的端口；等两秒再看它输出了什么。
+// 起开发服务器并返回当前快照；后续 execute 中用 taskOutput 查看新输出。
 async function startServer(command = 'npm run dev', cwd = '.') {
   const started = await run({ command, cwd, background: true })
   const taskId = started.backgroundProcess?.taskId
   if (!taskId) return { started: false, exitCode: started.exitCode, output: `${started.stdout}\n${started.stderr}`.trim().slice(-2000) }
-  await new Promise((resolve) => setTimeout(resolve, 2000))
   const [task] = (await listTasks({ taskId })).tasks
   return { taskId, ports: started.backgroundProcess?.ports, status: task?.status, lastLines: task?.output.trim().split('\n').slice(-20) }
 }

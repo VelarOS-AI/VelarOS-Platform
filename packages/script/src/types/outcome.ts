@@ -1,4 +1,6 @@
 import type { ModelImage } from '@velaros-ai/kernel'
+
+import type { ScriptExecutionMetrics,ScriptOutputCapture } from './output.js'
 import type { CodeProgramCheckFailure, CodeProgramResult, CompletedCall } from './script.js'
 
 /** 图像合同沿 Kernel、Script 与 Model 原样传递。 */
@@ -16,6 +18,14 @@ export type CodeSurfaceOutcome =
   | {
       checked: true
       result: CodeProgramResult
+      /** 展示裁剪之前的原始输出，受独立归档上限约束。 */
+      output?:ScriptOutputCapture
+      /** 命名图片块对应的原生附件序号。 */
+      outputAttachments?:ReadonlyArray<{readonly key:string;readonly index:number}>
+      /** 没有显式 output 时的完整程序返回值。 */
+      rawValue?:unknown
+      /** 宿主计量的执行成本。 */
+      metrics?:ScriptExecutionMetrics
       /**
        * 程序交给模型看的图，按交出的顺序。放在 `result` 旁边而不是里面：
        * `result` 是文字，受 `resultChars` 约束；图有自己的张数与体积上限，另算。

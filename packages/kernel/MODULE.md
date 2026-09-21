@@ -18,6 +18,10 @@ VelarOS 的库优先微内核。它只理解四件事：模块生命周期、能
 
 ## 提供什么
 
+`OperationReadContract`：能力返回值的资源版本捕获和只读验证。
+
+`approvalContracts`、`defaultDenyApprovalPort`、`createTaskApprovalState`：审批身份、默认拒绝及任务内批准/拒绝/撤销账本。接口：`ApprovalPort`、`ApprovalContractsApi`、`TaskApprovalStateApi`。
+
 `ModelDriver` 是宿主提供的中立模型端口；`modelRequestEncoder` / `ModelRequestEncoderApi` 定义最终材料的统一文本编码。Agent 依赖这个端口，Model 提供供应商适配。
 
 

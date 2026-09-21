@@ -8,6 +8,9 @@
 
 | 入口 | 责任 |
 | --- | --- |
+| `scriptOutputs` / `ScriptOutputsApi` | 提取声明、只编辑展示字段、按类型投影已归档输出并校验内容指纹 |
+| `ScriptOutputLimits` | 输出块数量、原始采集、展示和元数据的公开上限 |
+| `scriptPackageCompiler` / `ScriptPackageCompilerApi` | 根据授权模块生成虚拟包声明和冻结成员投影，返回 `ScriptPackageSurface` |
 | `createKernelScriptSession` / `KernelScriptSessionApi` | `edit` 生成候选，`check` 检查，`run` 在宿主签发的执行身份下运行一次 |
 | `codeProgramChecker` / `CodeProgramCheckerApi` | 在内存中检查主源码和附属模块；诊断携带源码位置和代码帧 |
 | `createCodeSurfaceSession` / `CodeSurfaceSessionApi` | 校验体量，检查后调用运行器，收集结果、图像和调用账 |
@@ -19,7 +22,7 @@
 
 公开入口 `.` 与 `./contracts`：前者包含全部宿主 API，后者提供数据与常量。`CodeSurfaceDiagnosticCodes` 是可识别诊断码，`CodeSurfaceErrorCodes` 是执行错误码，`NodeSubprocessRunnerIsReleaseReady` 是发布认证状态。
 
-注入面包括 `KernelScriptSessionOptions`（Kernel、运行器、会话、执行身份与模式）、`CodeCapabilityCall` / `CodeCapabilityOutcome`（能力调用及结果）、`CodeSurfaceEventSink`（调用起止及日志事件）和 `CodeRunnerApi`（隔离运行器）。
+注入面包括 `KernelScriptSessionOptions`（Kernel、运行器、会话、执行身份、模式与 `ScriptPackageDefinition` 包映射）、`CodeCapabilityCall` / `CodeCapabilityOutcome`（能力调用及结果）、`CodeSurfaceEventSink`（调用起止及日志事件）和 `CodeRunnerApi`（隔离运行器）。
 
 ## 骨干链路
 
@@ -55,7 +58,7 @@
 
 `impl/KernelScriptSession.ts` 编排，`CodeSurfaceSession.ts` 处理一次执行，`CodeProgramChecker.ts` 检查，`NodeSubprocessCodeRunner.ts` 隔离，`KernelInvocationPort.ts` 与 `CapabilityOperationPort.ts` 转发能力。`utils/` 提供编译、编辑、路径、诊断与预算纯函数，`bin/script-child.mjs` 实现隔离进程桥。
 
-共 24 条，测试 23 条、门禁 1 条，未验证 0 条。不变量见 `spec/invariants.md`。执行引擎验收在 `spec/acceptance.test.ts`；源码版本、草稿、CAS、租约和重启恢复在 `packages/velaros/test/incremental-edit.test.mjs` 与 `program-context.test.mjs`。所有权门禁为 `bun run check:module-ownership`。
+共 27 条，测试 26 条、门禁 1 条，未验证 0 条。不变量见 `spec/invariants.md`。执行引擎验收在 `spec/acceptance.test.ts`；源码版本、草稿、CAS、租约和重启恢复在 `packages/velaros/act/runtime/test/incremental-edit.test.mjs` 与 `program-context.test.mjs`。所有权门禁为 `bun run check:module-ownership`。
 
 ## 结构
 

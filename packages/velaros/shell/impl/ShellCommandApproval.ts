@@ -2,7 +2,7 @@
  * 危险命令的审批请求：`ShellCommandApproval` 与整个进程唯一的 `shellCommandApproval`。接口 `ShellCommandApprovalApi` 在本文件的类上方。
  */
 
-import { agentToolContracts } from '@velaros-ai/agent/tool-contract'
+import { approvalContracts } from '@velaros-ai/kernel'
 
 import { ShellCommandOperationKind } from '../contract/constants.js'
 import type { ShellCommandApprovalInput, ShellCommandApprovalRequest } from '../types/approval.js'
@@ -22,11 +22,11 @@ export class ShellCommandApproval implements ShellCommandApprovalApi {
   public dangerous(input: ShellCommandApprovalInput): ShellCommandApprovalRequest {
     return {
       message: buildDangerousCommandConfirmationMessage(input.command, input.plan, input.scopeLabel, input.background),
-      options: agentToolContracts.createManualApprovalOptions({
+      options: approvalContracts.createManualApprovalOptions({
         approvalRisk: 'high',
         riskScope: input.riskScope,
         operation: {
-          key: agentToolContracts.createApprovalOperationKey(ShellCommandOperationKind, { command: input.command.trim(), cwd: input.cwd, background: input.background }),
+          key: approvalContracts.createApprovalOperationKey(ShellCommandOperationKind, { command: input.command.trim(), cwd: input.cwd, background: input.background }),
           label: input.command,
           target: input.cwd,
         },

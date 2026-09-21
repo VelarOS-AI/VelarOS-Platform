@@ -119,12 +119,19 @@ export type { VelarosModCapabilityRequirement, VelarosModCapabilityToken } from 
 // ResourceRef）是 wire 坐标下的另一套形状，出包时一律带 `KernelWire` 前缀，两套坐标不混用。
 export type { OperationRuntimeApi } from './contract/provides.js'
 export type { ModelRequestEncoderApi } from './contract/provides.js'
-export type { InvocationJournal, OperationContext, OperationDefinition, OperationModuleDefinition, OperationRuntimeOptions } from './contract/requires.js'
+export type { ApprovalContractsApi } from './contract/provides.js'
+export type { InvocationJournal, OperationContext, OperationDefinition, OperationModuleDefinition, OperationReadContract, OperationRuntimeOptions } from './contract/requires.js'
 export type { ModelDriver } from './contract/requires.js'
+export type { ApprovalPort } from './contract/requires.js'
+export { approvalContracts } from './impl/runtime/ApprovalContracts.js'
+export { defaultDenyApprovalPort } from './impl/runtime/DefaultDenyApprovalPort.js'
 export { modelRequestEncoder } from './impl/runtime/ModelRequestEncoder.js'
 export { createOperationRuntime } from './impl/runtime/OperationRuntime.js'
-export type { ModelDriverLimits, ModelImage, ModelInputEstimate, ModelMaterial, ModelResponseFormat, ModelTurnDelta,ModelTurnRequest, ModelUserMessage } from './types/model.js'
-export type { InvocationReceipt, InvocationRecord, ModuleBinding, ModuleCard, ModuleDescription, ModulePage, ModuleQuery, OperationCall,OperationDescriptor, OperationSchema, OperationSurface, PreparedInvocation } from './types/operations.js'
+export type { TaskApprovalStateApi } from './impl/runtime/TaskApprovalState.js'
+export { createTaskApprovalState } from './impl/runtime/TaskApprovalState.js'
+export type { ApprovalDecision,ConfirmationRequestDetail,ManualApprovalOptions,TaskApprovalRecord,ToolApprovalRiskLevel,ToolConfirmationDecisionOptions,UserActionCard,UserActionCardAcknowledgeAction,UserActionCardAction,UserActionCardActionIcon,UserActionCardEnablePromptFeaturesAction,UserActionCardIcon,UserActionCardRejectAction,UserActionCardSubmitFormAction,UserActionCardSubmitInputAction,UserActionCardTextInput,UserActionCardTone,UserActionForm,UserActionFormField,UserActionFormFieldType,UserActionFormOption,UserActionFormValue } from './types/approval.js'
+export type { ModelContextStatus, ModelDriverLimits, ModelHistoryMessage, ModelImage, ModelInputEstimate, ModelMaterial, ModelResponseFormat, ModelTurnDelta,ModelTurnRequest, ModelUserMessage } from './types/model.js'
+export type { InvocationReceipt, InvocationRecord, ModuleBinding, ModuleCard, ModuleDescription, ModulePage, ModuleQuery, OperationCall,OperationDescriptor, OperationReadStamp, OperationReadValidation, OperationResourceVersion, OperationSchema, OperationSurface, PreparedInvocation } from './types/operations.js'
 export type { InvocationReconciliation } from './types/operations.js'
 export type {
   CapabilityCallError,

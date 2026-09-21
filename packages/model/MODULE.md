@@ -14,6 +14,8 @@
 
 ## 提供什么
 
+`createProviderRequestCompiler`、`ProviderRequestCompilerApi`：对已物化请求编码、计量和封存 v2 审计快照。
+
 `modelRequestEncoder` / `ModelRequestEncoderApi` 将中立请求编码为驱动实际发送的 prompt，ProviderRequestCompiler 共用此编码入口。
 
 

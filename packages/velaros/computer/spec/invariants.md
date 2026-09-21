@@ -32,4 +32,4 @@ INV-10（工具 schema 由源码生成）随工具面一起作废，编号不复
 | INV-12 | 截图经交图通道交给模型，返回值里只有几何与 `snapshotId`、没有图的字节；宿主没有交图通道时 screenshot 整个不可用，不去拉起 helper | 测试 | `spec/acceptance.test.ts` |
 | INV-13 | 桌面控制不可用时每个动作都在做事之前拒绝（`PERMISSION`）：message 按原因引导用户（系统权限、插件没装），并明说不要自己用 pip 或命令装依赖 | 测试 | `spec/acceptance.test.ts` |
 | INV-14 | 声明里写给模型的上限就是常量表 `ComputerInputLimits` 里的数：改常量不改说明（或反过来）过不了验收；超出上限的入参在做事之前拒绝 | 测试 | `spec/acceptance.test.ts` |
-| INV-15 | 代码模版（`template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它整份照生成的真实声明过类型检查，不嵌进声明，随模型面发布、按需读（`velaros:program` 的 template） | 测试 | `spec/acceptance.test.ts` |
+| INV-15 | 代码模版（`template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它整份照生成的真实声明过类型检查，不嵌进声明，随模型面发布、按需读（`velaros:system` 的 modules.describe） | 测试 | `spec/acceptance.test.ts` |

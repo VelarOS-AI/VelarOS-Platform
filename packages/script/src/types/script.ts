@@ -180,6 +180,22 @@ export interface GrantedModule {
   declarations: string
 }
 
+/** 宿主提供的虚拟包；成员只引用已注册模块，不携带代码。 */
+export interface ScriptPackageDefinition {
+  /** 脚本导入名，velaros 为原语包的兼容聚合。 */
+  readonly specifier: string
+  /** 导出成员名到真实 Kernel 模块身份。 */
+  readonly exports: Readonly<Record<string, string>>
+}
+
+/** 按当前授权编译的包和声明，检查器与执行器共用。 */
+export interface ScriptPackageSurface {
+  /** 已过滤不可用成员的包投影。 */
+  readonly packages: readonly ScriptPackageDefinition[]
+  /** 真实模块与聚合包的完整声明。 */
+  readonly granted: readonly GrantedModule[]
+}
+
 /** 精确编辑已保存程序中的主源码或一个既有附属模块。 */
 export interface CodeProgramTargetEdit extends CodeProgramEdit {
   /** 原程序 modules 中的精确键，省略时编辑主源码。 */

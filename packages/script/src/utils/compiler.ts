@@ -1,15 +1,14 @@
-import { renderDiagnosticFrame } from './diagnostics.js'
 /**
  * 编译器那一侧的活：内存文件系统、诊断换算、按 JavaScript 或 TypeScript 各查一遍、剥类型。
  * 全是纯函数，所以不放在类里；`CodeProgramChecker` 只负责按什么顺序用它们。
  */
-
 import ts from 'typescript'
 
 import { isUndefined } from '@velaros-ai/core'
 
 import type { CodeProgramDiagnostic } from '../types/script.js'
 
+import { renderDiagnosticFrame } from './diagnostics.js'
 import { programForCheck, ProgramModuleSpecifier } from './program.js'
 
 /** 生成出来的能力声明在内存文件系统里的名字。 */
@@ -22,9 +21,9 @@ export const LibraryRoot = '/scripts'
 export const AnonymousProgramFile = '.program.js'
 
 /**
- * 恒常可用的那个模块：这次运行本身——随程序交来的参数与大段文本，与各能力模块的代码模版。
+ * 恒常可用的程序数据模块：随这次运行交来的参数与大段文本。
  *
- * **我们发明的东西要导入，语言自带的不动**——`blobs`、`template` 是我们发明的，做成隐形全局等于让模型背一条只有提示词告诉过它的暗知识；
+ * **我们发明的东西要导入，语言自带的不动**——`input`、`blobs` 是我们发明的，做成隐形全局等于让模型背一条只有提示词告诉过它的暗知识；
  * `console` 是 JavaScript 自带的，让模型 `import { console }` 才是真的怪。这个模块永远在常驻档，不需要租约、不占授权名额。
  * 这一段也是给模型看的：门的说明里原样放着它（`describeGate`），检查器按它推类型——两边同一份。
  */
@@ -34,12 +33,6 @@ export const ProgramModuleDeclarations = `declare module '${ProgramModuleSpecifi
 
   /** 本次程序的 input 参数（任意 JSON 值），没给是 undefined。 */
   export const input: any
-
-  /**
-   * 一个能力模块的代码模版：日常最常用的几种写法，一段一个函数，展示这个模块的几件能力怎么组合。
-   * 只是示例，按你的需要改写，不必照着写。拿不准怎么写时先读它：\`export default template('velaros:shell')\`。模块名写错时抛错，并列出这个空间有哪些。
-   */
-  export function template(module: string): string
 }`
 
 /**

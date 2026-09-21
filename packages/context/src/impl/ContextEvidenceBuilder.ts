@@ -1,18 +1,26 @@
+import {Log, toOptional} from '@velaros-ai/core'
+import {isFalse} from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/core'
+
 import type { ContextCandidate, ContextEvidence, ContextGap, ContextPlan, ContextPlannerDecision, ContextSelection, ContextSourceRead, ContextTarget, ContextTaskScope, ContextTaskState, ContextTime, ContextViewForm, ModelView, RegisteredViewIntent } from '../contract/context.js'
 import { ContextLimits } from '../contract/context.js'
 import { ContextPlannerSchema } from '../contract/view-schema.js'
 import type { ContextEvidenceBuilderApi } from '../interface/internal.js'
 import type { ContextBuildOptions, ContextSourcePort, ContextViewOptions } from '../interface/requires.js'
-import { contextFailure, sameContextRef } from '../utils/state.js'
 import { contextProgress } from '../utils/progress.js'
+import { contextFailure, sameContextRef } from '../utils/state.js'
 import { assertViewSchema, awaitContextOperation, contextGap, contextHash, resolveViewLimits } from '../utils/view.js'
+
+import { createEvidenceAccess } from './EvidenceAccess.js'
 
 /** 只从已登记源读取事实，模型计划仅决定候选和表示。 */
 export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
   private readonly sources: ReadonlyMap<string, ContextSourcePort>
+  private readonly access
   private readonly limits
 
   public constructor(private readonly options: ContextViewOptions) {
+    this.access=createEvidenceAccess(options.sources)
     this.sources = new Map(options.sources.map(source => [source.id, source]))
     if (this.sources.size !== options.sources.length || options.sources.some(source => !source.id)) throw contextFailure('SOURCE_ID', '数据源身份重复或为空')
     this.limits = resolveViewLimits(options.limits)
@@ -25,23 +33,16 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
     const scope = { sessionId: this.options.sessionId, revision: task.revision }
     const goals = []
     for (const ref of task.goals) {
-      let content = await this.options.context.read(ref)
-      if (content.totalChars > options.maxChars) throw contextFailure('CONTEXT_BUDGET', '用户目标本身超过请求预算')
-      let text = content.text
-      while (text.length < content.totalChars) {
-        content = await this.options.context.read(ref, { offset: text.length, limit: ContextLimits.readChars })
-        text += content.text
-      }
-      goals.push({ ...content, offset: 0, text })
+      goals.push(await this.options.context.projectInput(ref,Math.max(1,Math.floor(options.maxChars/Math.max(4,task.goals.length*4)))))
     }
     const visible=options.visibleExecutionIds
-    const lastStep = options.executionDetails!==false && (!visible||visible.includes(task.executionId??'')) && task.lastStep ? {
-      ...(task.lastStep.attachments?.length ? {attachments:await Promise.all(task.lastStep.attachments.map(async ref=>({ref,hash:(await this.options.context.read(ref,{limit:1})).record.objectId})))} : {}),
+    const lastStep = !isFalse(options.executionDetails) && (!visible||visible.includes(task.executionId??'')) && task.lastStep ? {
+      attachments: task.lastStep.attachments?.length ? await Promise.all(task.lastStep.attachments.map(async ref=>({ref,hash:(await this.options.context.read(ref,{limit:1})).record.objectId}))) : undefined,
       source: await this.options.context.read(task.lastStep.source, { limit: Math.min(4000, Math.floor(options.maxChars / 8)) }),
       result: await this.options.context.read(task.lastStep.result, { limit: Math.min(4000, Math.floor(options.maxChars / 8)) }),
     } : undefined
     const gaps: ContextGap[] = []
-    const taskFrame = {goals,capsule:task.capsule,mandatory:options.executionDetails===false||visible?task.mandatory.filter(item=>item.effect==='unknown'||item.outcome==='unknown'||visible?.includes(item.executionId)):task.mandatory,...(lastStep ? {lastStep} : {})}
+    const taskFrame = {goals,capsule:task.capsule,mandatory:isFalse(options.executionDetails)||visible?task.mandatory.filter(item=>item.effect==='unknown'||item.outcome==='unknown'||visible?.includes(item.executionId)):task.mandatory,lastStep: toOptional(lastStep)}
     const candidates: ContextCandidate[] = []
     const direct: ContextSelection[] = []
     const degraded: string[] = []
@@ -56,7 +57,7 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
       if (candidates.length >= this.limits.candidates) throw contextFailure('CANDIDATE_LIMIT', '候选上限已到')
       await this.authorize(scope, target, task, signal)
       const allowedForms = forms.filter(form => !intent.request.forms || intent.request.forms.includes(form))
-      if (!allowedForms.length) throw contextFailure('UNSUPPORTED_FORM', '候选不能提供请求允许的表示')
+      if (isEmpty(allowedForms)) throw contextFailure('UNSUPPORTED_FORM', '候选不能提供请求允许的表示')
       const candidate = { id: crypto.randomUUID(), target, preview: preview.slice(0, 500), forms: allowedForms, intentIds: [intent.id] }
       candidates.push(candidate)
       return candidate
@@ -67,7 +68,7 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
       const hits = await awaitContextOperation(source.search(scope, query, Math.min(limit, this.limits.candidates - candidates.length), signal), signal)
       for (const hit of hits.slice(0, Math.max(0, this.limits.candidates - candidates.length))) {
         try { await register(intent, hit.target, hit.preview, hit.forms) }
-        catch { degraded.push('候选未通过当前数据源范围检查') }
+        catch {Log.tag('ActRuntime').debug('ContextEvidenceBuilder 已进入异常处理或降级分支'); degraded.push('候选未通过当前数据源范围检查') }
       }
     }
     for (const intent of task.intents) {
@@ -85,18 +86,18 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
             await search(intent, source, intent.request.objective, this.limits.candidates)
           }
         }
-      } catch (error) { gaps.push(contextGap(intent, (error as { code?: string }).code ?? 'SOURCE_UNAVAILABLE', '目标不可用或不满足当前范围')) }
+      } catch (error) {Log.tag('ActRuntime').debug('ContextEvidenceBuilder 已进入异常处理或降级分支'); gaps.push(contextGap(intent, (error as { code?: string }).code ?? 'SOURCE_UNAVAILABLE', '目标不可用或不满足当前范围')) }
     }
     let chosen: readonly ContextSelection[] = []
     const semantic = task.intents.filter(intent => intent.request.kind === 'semantic')
-    if (semantic.length) {
+    if (!isEmpty(semantic)) {
       if (options.planner) {
         for (let attempt = 0; attempt < this.limits.plannerCalls; attempt++) {
           signal.throwIfAborted()
           try {
             for (let index = candidates.length - 1; index >= 0; index--) {
               try { await this.authorize(scope, candidates[index]!.target, task, signal) }
-              catch { candidates.splice(index, 1); degraded.push('候选范围已变化，已移除其预览') }
+              catch {Log.tag('ActRuntime').debug('ContextEvidenceBuilder 已进入异常处理或降级分支'); candidates.splice(index, 1); degraded.push('候选范围已变化，已移除其预览') }
             }
             signal.throwIfAborted()
             budget.calls++
@@ -129,13 +130,13 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
                 candidates[index] = { ...candidate, preview: read.text.slice(0, 2000) }
               }
             }
-          } catch (error) {
+          } catch (error) {Log.tag('ActRuntime').debug('ContextEvidenceBuilder 已进入异常处理或降级分支');
             signal.throwIfAborted()
             degraded.push(`规划未被接受：${  (error as { code?: string }).code ?? 'PLANNER_FAILED'}`)
           }
         }
       }
-      if (!chosen.length) {
+      if (isEmpty(chosen)) {
         chosen = candidates.filter(candidate => semantic.some(intent => candidate.intentIds.includes(intent.id))).slice(0, 8).map(candidate => ({ candidateId: candidate.id, intentIds: candidate.intentIds, form: candidate.forms.find(form => form !== 'diff') ?? 'full' }))
         degraded.push('语义需求使用确定性候选回退，覆盖仍需判断')
         for (const intent of semantic) gaps.push(contextGap(intent, 'INSUFFICIENT_EVIDENCE', '确定性候选尚未证明语义需求已覆盖'))
@@ -151,7 +152,7 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
       try {
         const remaining = this.limits.evidenceChars - chars
         if (remaining <= 0) throw contextFailure('BUDGET_EXCEEDED', '证据区预算耗尽')
-        let read: ContextSourceRead | undefined
+        let read: Optional<ContextSourceRead>
         for (let retry = 0; retry <= this.limits.refreshes; retry++) {
           read = await readSource(candidate.target, selection.form, intent.request.time ?? { kind: 'after-step' }, Math.min(this.limits.inspectBytes, remaining * 4))
           if (intent.request.time?.kind === 'historical' || read.stamp.consistency !== 'revision-checkable') break
@@ -167,7 +168,7 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
           trust: candidate.target.kind === 'artifact' ? 'model-derived' : 'source-data', freshness: intent.request.time?.kind === 'historical' ? 'historical' : read.stamp.consistency === 'observed-only' ? 'observed-at' : 'validated-as-of', readSet: [read.stamp, ...(read.dependencies ?? [])], recovery: record.ref })
         chars += body.length
         if (!complete) for (const id of selection.intentIds) gaps.push(contextGap(task.intents.find(item => item.id === id)!, 'BUDGET_EXCEEDED', '当前只包含部分证据，请按引用继续读取'))
-      } catch (error) {
+      } catch (error) {Log.tag('ActRuntime').debug('ContextEvidenceBuilder 已进入异常处理或降级分支');
         for (const id of selection.intentIds) gaps.push(contextGap(task.intents.find(item => item.id === id)!, (error as { code?: string }).code ?? 'SOURCE_UNAVAILABLE', '所选证据未能物化；实际执行回执仍保留'))
       }
     }
@@ -176,7 +177,7 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
     metrics.durationMs = Date.now() - startedAt
     const view: ModelView = { ...taskFrame, progress:contextProgress(task,taskFrame,evidence), metrics, id: crypto.randomUUID(), scope, executionId: task.executionId, evidence, gaps, coverage, readSet: evidence.flatMap(block => block.readSet), plannerCalls: plan.plannerCalls, degraded, builtAt: new Date().toISOString() }
     if (JSON.stringify({ ...view, evidence: [], readSet: [] }).length > options.maxChars) throw contextFailure('CONTEXT_BUDGET', '用户约束、真实回执和缺口超过最小请求容量')
-    while (JSON.stringify({ ...view, readSet: evidence.flatMap(block => block.readSet) }).length > options.maxChars && evidence.length) {
+    while (JSON.stringify({ ...view, readSet: evidence.flatMap(block => block.readSet) }).length > options.maxChars && !isEmpty(evidence)) {
       const removed = evidence.pop()!
       for (const id of removed.intentIds) {
         const entry = coverage.find(item => item.intentId === id)!
@@ -230,14 +231,7 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
       }
       return { dependencies: provenance?.readSet ?? [], text: content.text, form: content.text.length === content.totalChars ? 'full' : 'excerpt', complete: content.text.length === content.totalChars && (provenance?.complete ?? true), mediaType: 'text/plain', stamp: { sourceId: 'artifact', resourceId: target.ref.id, revision: content.record.objectId, contentHash: await contextHash(content.text), observedAt: content.record.createdAt, consistency: 'snapshot' } }
     }
-    const source = this.source(target.sourceId)
-    if (time.kind === 'snapshot' && !source.capabilities.snapshot) throw contextFailure('UNSUPPORTED_TIME', '数据源不支持固定快照')
-    const result = await awaitContextOperation(source.read(scope, target, form, time, maxBytes, signal), signal)
-    if (typeof result.text !== 'string' || new TextEncoder().encode(result.text).byteLength > maxBytes || result.stamp.sourceId !== target.sourceId || result.stamp.resourceId !== target.resourceId || !result.mediaType.startsWith('text/')) throw contextFailure('SOURCE_CONTRACT', '源返回超限、身份不一致或非文本内容')
-    if (result.stamp.consistency === 'revision-checkable' && (!source.capabilities.revision || !result.stamp.revision)) throw contextFailure('SOURCE_CONTRACT', '源未提供可验证版本')
-    if (result.stamp.consistency === 'snapshot' && (!source.capabilities.snapshot || !result.stamp.revision)) throw contextFailure('SOURCE_CONTRACT', '源未提供受支持的快照身份')
-    if (result.form === 'diff' || !['full', 'excerpt', 'definition', 'metadata'].includes(result.form) || !['snapshot', 'revision-checkable', 'observed-only'].includes(result.stamp.consistency) || typeof result.complete !== 'boolean' || result.stamp.contentHash !== await contextHash(result.text)) throw contextFailure('SOURCE_CONTRACT', '源的表示、一致性或内容指纹无效')
-    return result
+    return this.access.read(scope,target,form,time,maxBytes,signal)
   }
 
   private checkSelections(selections: readonly ContextSelection[], candidates: readonly ContextCandidate[], intents: readonly RegisteredViewIntent[]): void {

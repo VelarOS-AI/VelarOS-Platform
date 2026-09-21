@@ -25,6 +25,7 @@ export interface ContextState {
   readonly records: readonly ContextRecord[]
   readonly workingSet: WorkingSet
   readonly task?: ContextTaskState
+  readonly inputSummaries?:ReadonlyArray<{readonly input:ContextRef;readonly summary:ContextRef;readonly revision:number}>
 }
 /** 记录正文与可信的来源元数据。 */
 export interface ContextContent { readonly record: ContextRecord; readonly text: string; readonly totalChars: number; readonly offset: number }
@@ -45,11 +46,15 @@ export interface ContextQuery { readonly query: string; readonly offset?: number
 /** 检索命中的元数据与有界预览。 */
 export interface ContextSearchHit { readonly ref: ContextRef; readonly kind: ContextRecordKind; readonly title: string; readonly preview: string }
 /** 可继续翻页的检索结果。 */
-export interface ContextSearchPage { readonly items: readonly ContextSearchHit[]; readonly nextOffset: number | null }
+export interface ContextSearchPage { readonly items: readonly ContextSearchHit[]; readonly nextOffset: Nullable<number> }
 /** 模型请求所用的不可变材料投影。 */
 export interface ContextProjection { readonly revision: number; readonly cursor: number; readonly records: readonly ContextContent[]; readonly chars: number }
 /** 上下文公共边界上限。 */
 export const ContextLimits = Object.freeze({
+  /** 索引目录单页条目上限。 */
+  recordPage:256,
+  /** 未发布对象至少保留一小时，供候选提交与故障诊断。 */
+  orphanGraceMs:3600000,
   /** 已整理输入保留可召回的有界原文锚点，避免超大输入使维护永远无效。 */
   inputAnchorChars: 1_000,
   /** 单次原文读取上限。 */
@@ -103,7 +108,7 @@ export interface ContextSourceCapabilities {
 export interface ContextReadStamp {
   readonly sourceId: string
   readonly resourceId: string
-  readonly revision: string | null
+  readonly revision: Nullable<string>
   readonly contentHash: string
   readonly observedAt: string
   readonly consistency: 'snapshot' | 'revision-checkable' | 'observed-only'
@@ -204,7 +209,7 @@ export interface ContextFeedback {
 /** 当前执行的原文引用始终能召回，下一轮仅内联有界片段。 */
 export interface ContextStepRecord { readonly source: ContextRef; readonly result: ContextRef; readonly attachments?: readonly ContextRef[] }
 /** 脚本变化和输出变化保持各自来源，不能把脚本当作已执行效果。 */
-export interface ContextStepView { readonly source: ContextContent; readonly result: ContextContent; readonly attachments?: readonly {readonly ref:ContextRef;readonly hash:string}[] }
+export interface ContextStepView { readonly source: ContextContent; readonly result: ContextContent; readonly attachments?: ReadonlyArray<{readonly ref:ContextRef;readonly hash:string}> }
 /** 物化阶段的可聚合计量，不携带正文或参数。 */
 export interface ContextViewMetrics {
   readonly sourceReads: number
@@ -216,8 +221,8 @@ export interface ContextViewMetrics {
 export interface ContextTaskMetrics extends ContextViewMetrics { readonly views: number }
 /** 仅描述变化的有界差量；完整证据以本次 view 为准。 */
 export interface ContextTextChange {
-  readonly from: ContextRef | null
-  readonly to: ContextRef | null
+  readonly from: Nullable<ContextRef>
+  readonly to: Nullable<ContextRef>
   readonly changed: boolean
   readonly patch: string
   readonly truncated: boolean
@@ -226,10 +231,10 @@ export interface ContextTextChange {
 export interface ContextProgress {
   readonly imagesChanged: boolean
   readonly step: number
-  readonly previousViewId: string | null
+  readonly previousViewId: Nullable<string>
   readonly script: ContextTextChange
   readonly result: ContextTextChange
-  readonly evidence: ReadonlyArray<{ readonly target: ContextTarget; readonly change: 'added' | 'updated' | 'removed'; readonly patch: string; readonly truncated: boolean; readonly before: string | null; readonly after: string | null }>
+  readonly evidence: ReadonlyArray<{ readonly target: ContextTarget; readonly change: 'added' | 'updated' | 'removed'; readonly patch: string; readonly truncated: boolean; readonly before: Nullable<string>; readonly after: Nullable<string> }>
   readonly unchangedEvidence: number
   readonly repeatedSteps: number
   readonly stalled: boolean
@@ -267,6 +272,16 @@ export interface ContextArtifactProvenance {
   readonly complete: boolean
 }
 export interface ContextTaskState {
+  /** 当前逻辑任务使用的持久 store ID；由 Runtime 维护，展示时重新核验权限。 */
+  readonly storeRefs?:readonly string[]
+  /** 已退出自动展示的授权空间；实际访问会重新激活。 */
+  readonly releasedStoreRefs?:readonly string[]
+  /** 逻辑任务身份，跨多次 submit 继续使用；旧存储在下次 begin 时补齐。 */
+  readonly id?:string
+  /** 当前任务的材料边界，原始会话记录仍可按引用归档读取。 */
+  readonly startedSequence?:number
+  /** 在同一任务存储内记录活动执行及其决策证据，不与模型帧共用单一身份。 */
+  readonly activeExecutions?: Readonly<Record<string,{readonly view:Nullable<ModelView>;readonly concurrent:boolean}>>
   readonly step?: number
   readonly provenance?: readonly ContextArtifactProvenance[]
   readonly metrics?: ContextTaskMetrics
@@ -275,12 +290,12 @@ export interface ContextTaskState {
   readonly status: ContextTaskStatus
   readonly goals: readonly ContextRef[]
   readonly capsule: TaskCapsule
-  readonly lease: { readonly id: string; readonly expiresAt: number } | null
+  readonly lease: Nullable<{ readonly id: string; readonly expiresAt: number }>
   readonly executionId: string
   readonly intents: readonly RegisteredViewIntent[]
   readonly mandatory: readonly ContextFeedback[]
   readonly artifacts: readonly ContextRef[]
-  readonly view: ModelView | null
+  readonly view: Nullable<ModelView>
   readonly usage: ContextTaskUsage
   readonly verification: 'unverified' | 'verified'
 }
@@ -300,3 +315,71 @@ export interface ContextViewLimits {
 }
 /** 有限默认值，适配器仍需限制单次 I/O。 */
 export const DefaultContextViewLimits: ContextViewLimits = Object.freeze({ intents: 16, candidates: 32, plannerCalls: 2, searchCalls: 6, inspectBytes: 65536, evidenceChars: 24000, refreshes: 2, modelCalls: 128, modelTokens: 500000, materializationMs: 30000, leaseMs: 360000 })
+
+/** 用户原始输入附件，由宿主先保存至当前会话。 */
+export interface ContextInputFile {
+  readonly ref:ContextRef
+  readonly name:string
+  readonly mediaType:string
+  readonly bytes?:number
+}
+/** 宿主输入；原文与附件保存在唯一对象存储。 */
+export interface ContextUserInput {
+  readonly text?:string
+  readonly files?:readonly ContextInputFile[]
+}
+/** 模型理解后的输入投影，不改变用户原始事实。 */
+export interface ContextInputSummary {
+  readonly ref:ContextRef
+  readonly summary:string
+  readonly constraints:readonly string[]
+  readonly unresolved:readonly string[]
+  readonly baseRevision:number
+}
+
+/** 完成验证的后续动作；由事实或领域验收器给出，不自动重跑脚本。 */
+export interface ContextCompletionResult {
+  /** 任务是否已正式完成。 */
+  readonly completed:boolean
+  /** 是否经过领域验收。 */
+  readonly verified:boolean
+  /** 可供下一轮或宿主处理的具体原因。 */
+  readonly reason:string
+  /** 未完成时应补读修复、刷新、核对、等待输入或处理容量。 */
+  readonly recovery?:'repair'|'refresh'|'reconcile'|'input'|'capacity'
+}
+
+/** 按索引分页查询原文目录，正文继续通过对象引用读取。 */
+export interface ContextRecordQuery {
+  /** 序号下界，不包含此项。 */
+  readonly after?:number
+  /** 每页条数，最多 recordPage 项。 */
+  readonly limit?:number
+  /** 精确记录标题过滤。 */
+  readonly title?:string
+  /** 精确原始引用身份过滤。 */
+  readonly refId?:string
+}
+/** 单调序号分页结果。 */
+export interface ContextRecordPage {
+  /** 本页目录记录。 */
+  readonly items:readonly ContextRecord[]
+  /** 仍有下一页时使用的序号。 */
+  readonly nextAfter:Nullable<number>
+}
+/** 回收只针对未被目录引用且超过宽限期的孤立对象。 */
+export interface ContextObjectCollection {
+  /** 宿主确认的会话版本，变化时整体拒绝回收。 */
+  readonly expectedVersion:number
+  /** 对象最后写入时间的上界，Unix 毫秒；不能进入存储宽限期。 */
+  readonly before:number
+  /** 默认只报告候选；false 才实际回收。 */
+  readonly dryRun?:boolean
+}
+/** 回收计数，持久记录和已引用正文始终保持。 */
+export interface ContextObjectCollectionResult {
+  /** 符合孤立及时间条件的对象数。 */
+  readonly candidates:number
+  /** 本次实际删除对象数。 */
+  readonly deleted:number
+}

@@ -35,7 +35,7 @@
 | INV-18 | 文件在读完之后被改过、而原来要改的地方（连同前后的行）仍然唯一时，失败的 message 给出每处编辑的新行号与一个签了新 fileRef 的确认窗口；换上它按新行号重提就成，正文不用重写 | 测试 | `spec/acceptance.test.ts` |
 | INV-19 | 读出来的就是原文：像密钥的片段不遮，读到的窗口照常签发 fileRef、能改；搜索片段取命中所在的行，行太长时以命中为中心收窄，命中一定在片段里 | 测试 | `spec/acceptance.test.ts` |
 | INV-20 | 程序看得到的只有 `error.code` 与 `error.message`：code 是 `ProjectErrorCodes` 的原因码，details 里的位置（第几步第几处）、候选、诊断、改完之后的预览与下一步都写进 message | 测试 | `spec/acceptance.test.ts` |
-| INV-22 | 两份代码模版（`template.js`、`code-template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它们整份照生成的真实声明过类型检查，不嵌进声明，随模型面发布、按需读（`velaros:program` 的 template）；在真的空间里把每个函数跑一遍、看交回的是不是它说的样子，由仓库层的 `tests/capabilities/capability-templates.test.ts` 核对 | 测试 | `spec/acceptance.test.ts` |
+| INV-22 | 两份代码模版（`template.js`、`code-template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它们整份照生成的真实声明过类型检查，不嵌进声明，随模型面发布、按需读（`velaros:system` 的 modules.describe）；在真的空间里把每个函数跑一遍、看交回的是不是它说的样子，由仓库层的 `tests/capabilities/capability-templates.test.ts` 核对 | 测试 | `spec/acceptance.test.ts` |
 | INV-23 | 行号照 `wc -l` 数，和 `velaros:files` 一样：结尾换行之后那个零宽的行不给模型看、不算进 totalLines（空文件是 0 行），越出行数的说明也照它数；它仍在可见范围里，在文件末尾插入照样成立；停在空行上的范围照样交出那一空行 | 测试 | `spec/acceptance.test.ts` |
 | INV-24 | 什么都不折叠，看多少由程序定：read 交回要的整段（不给 range 就是整个文件，没有续读），list 交回全部条目（不给 depth 就是整棵树，没有分页），search 交回全部命中、每个命中的文件一个带 fileRef 的窗口，edit 与 inspect 交回完整差量，`velaros:code` 不按条数截；只有守内存的上限（`ProjectFileLimits.readChars`、`listEntries`、`searchHits`，`ProjectCodeLimits.results`），超了明说（SCOPE_VIOLATION，或宿主标的 coverage.truncated），不交回一部分冒充全部 | 测试 | `spec/acceptance.test.ts` |
 | INV-25 | 声明里写给模型的上限就是常量表 `ProjectFileLimits`、`ProjectCodeLimits` 与缺省策略里的数：改常量不改说明（或反过来）过不了验收 | 测试 | `spec/acceptance.test.ts` |

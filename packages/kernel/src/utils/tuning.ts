@@ -5,6 +5,10 @@
  * 不在这里，在 `contract/constants.ts`；类自己固定用的写成类内 `private static readonly`。
  */
 export const KernelTuning = Object.freeze({
+  /** 单次能力回执最多登记的资源版本数量。 */
+  resourceReads: 256,
+  /** 资源身份及版本字符串的最大字符数。 */
+  resourceVersionChars: 4096,
   /** 模块发现缺省每页条数。 */
   modulePageSize: 20,
   /** 启动器：等守护进程发布端点的上限，毫秒。 */

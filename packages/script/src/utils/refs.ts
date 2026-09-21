@@ -1,6 +1,8 @@
 /** 程序附属模块的路径校验与相对 import 解析。 */
 import { posix } from 'node:path'
+
 import { isNull, isUndefined } from '@velaros-ai/core'
+
 import { CodeSurfaceLimits } from '../contract/constants.js'
 
 /** 相对模块路径的一段；禁止上溯和隐藏段。 */

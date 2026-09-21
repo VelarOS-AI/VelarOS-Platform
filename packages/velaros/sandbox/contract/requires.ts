@@ -4,7 +4,7 @@
  * 多出在镜像里跑命令与作用域两件事，每次调用的上下文是 `SandboxOperationContext`。这里的每个接口都必须从根入口导出。
  */
 
-import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
+import type { ApprovalPort } from '@velaros-ai/kernel'
 import type { ShellProcessConfinementProvider } from '@velaros-ai/velaros/shell'
 
 import type { SandboxApplyOptions, SandboxApplyResult, SandboxCommandOutcome, SandboxCreateOptions, SandboxDiff, SandboxDiffOptions, SandboxDiscardResult, SandboxRecord, SandboxRunOptions } from '../types/rehearsal-sandbox.js'

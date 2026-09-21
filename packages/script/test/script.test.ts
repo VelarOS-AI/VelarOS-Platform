@@ -2,11 +2,12 @@
 
 import { describe, expect, test } from 'bun:test'
 
+import { unifiedLineDiff } from '@velaros-ai/core/utils/textDiff'
+
 import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../src/contract/constants'
 import { enforceResultBudget, fitJournalToBudget, fitLogsToBudget, fitValueToBudget } from '../src/utils/budget'
 import { isTypeScriptOnlySyntax } from '../src/utils/compiler'
 import { applyProgramEdits } from '../src/utils/edit'
-import { unifiedLineDiff } from '@velaros-ai/core/utils/textDiff'
 import { readModuleSpecifiers, rewriteModuleForIsolate } from '../src/utils/module-form'
 import { keepTail, readCapabilityNamespace } from '../src/utils/program'
 import { checkScriptPath, resolveLibraryImport } from '../src/utils/refs'

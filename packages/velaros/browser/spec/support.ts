@@ -10,9 +10,9 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
+import { AppError } from '@velaros-ai/core/error'
 import type { CapabilityOperationContext } from '@velaros-ai/script'
 import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/script'
-import { AppError } from '@velaros-ai/core/error'
 import type { ImageAttachment } from '@velaros-ai/velaros/images'
 
 import type { BrowserMouseButton, BrowserOperationContext, BrowserProtocolEvent, BrowserScriptOutcome, BrowserSiteContext, BrowserSpacePort } from '../index.js'

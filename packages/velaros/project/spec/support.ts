@@ -7,10 +7,10 @@
  * 调用都走代码面的能力端口（createCapabilityPort），和模型的程序是同一条路：失败时程序只看得见 code 与 message。
  */
 
-import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
+import { AppError } from '@velaros-ai/core/error'
+import type { ApprovalPort } from '@velaros-ai/kernel'
 import type { CapabilityOperationContext, CodeAttachment } from '@velaros-ai/script'
 import { createCapabilityPort } from '@velaros-ai/script'
-import { AppError } from '@velaros-ai/core/error'
 import type { ImageAttachment, ImageOperationContext } from '@velaros-ai/velaros/images'
 import { imageOperations } from '@velaros-ai/velaros/images'
 import type { RehearsalSandboxHostPort, SandboxDiff, SandboxOperationContext, SandboxRecord } from '@velaros-ai/velaros/sandbox'

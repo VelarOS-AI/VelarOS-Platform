@@ -1,48 +1,15 @@
 #!/usr/bin/env bun
-
+// 宿主事件投影只发布完整接受的消息，预览和恢复拒绝不变成历史事实。
 import assert from 'node:assert/strict'
-
-import {
-  isConversationTurnInputMessage as isAgentTurnInput,
-  isRunGuidanceMessage as isAgentRunGuidance,
-  resolveChatMessageConversationKind as resolveAgentKind,
-} from '../../packages/agent/src/utils/wire/conversation-kind.ts'
-import {
-  isConversationTurnInputMessage as isUiTurnInput,
-  isRunGuidanceMessage as isUiRunGuidance,
-  resolveChatMessageConversationKind as resolveUiKind,
-} from '../../packages/ui/src/conversation/contracts/conversation.ts'
-
-// UI 刻意不依赖任何 VelarOS runtime 包，因此保留自己的 structural message contract。
-// 这张真值表是两侧唯一允许的重复 seam：任何新增 kind 或 legacy 推断变化必须同时更新。
-const cases = [
-  { name: 'new turn', message: { role: 'user', conversationKind: 'turn-input' } },
-  { name: 'run guidance', message: { role: 'user', conversationKind: 'run-guidance' } },
-  {
-    name: 'interaction reply',
-    message: { role: 'user', conversationKind: 'interaction-reply' },
-  },
-  { name: 'assistant output', message: { role: 'assistant' } },
-  { name: 'legacy user turn', message: { role: 'user' } },
-  { name: 'legacy guidance', message: { role: 'user', guidanceStatus: 'sent' } },
-  { name: 'unknown persisted role', message: { role: 'tool' } },
-  { name: 'missing persisted role', message: {} },
-]
-
-for (const fixture of cases) {
-  const agent = {
-    kind: resolveAgentKind(fixture.message),
-    turnInput: isAgentTurnInput(fixture.message),
-    runGuidance: isAgentRunGuidance(fixture.message),
-  }
-  const ui = {
-    kind: resolveUiKind(fixture.message),
-    turnInput: isUiTurnInput(fixture.message),
-    runGuidance: isUiRunGuidance(fixture.message),
-  }
-  assert.deepEqual(ui, agent, `${fixture.name}: Agent protocol and UI semantics drifted`)
-}
-
-assert.equal(isAgentTurnInput({ role: 'tool' }), false)
-assert.equal(isAgentTurnInput({}), false)
-console.log(`conversation semantics: ${cases.length} shared cases verified`)
+import {createActEventProjector} from '../../packages/velaros/dist/act/runtime/renderer.js'
+import {resolveChatMessageConversationKind} from '../../packages/ui/src/conversation/contracts/conversation.ts'
+const view=createActEventProjector()
+const push=(sequence,event)=>view.apply({sequence,sessionId:'s',runId:'r',event:{runId:'r',...event}})
+push(1,{type:'turn',turnId:'t'});push(2,{type:'text',text:'preview'})
+assert.equal(view.snapshot().runs.r.messages.length,0)
+push(3,{type:'rejected',turnId:'t',message:'cancelled'});assert.equal(view.snapshot().runs.r.preview,'')
+push(4,{type:'accepted',turnId:'t2',text:'accepted',ref:{sessionId:'s',id:'raw'}})
+assert.equal(view.snapshot().runs.r.messages.length,1)
+assert.equal(resolveChatMessageConversationKind({role:'user',conversationKind:'run-guidance'}),'run-guidance')
+assert.equal(resolveChatMessageConversationKind({role:'user',conversationKind:'turn-input'}),'turn-input')
+console.log('Act presentation and UI input semantics verified')

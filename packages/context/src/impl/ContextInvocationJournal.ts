@@ -1,3 +1,4 @@
+import {isNull} from '@velaros-ai/core'
 import type { InvocationReceipt, InvocationReconciliation, InvocationRecord, PreparedInvocation } from '@velaros-ai/kernel/contracts'
 
 import type { ContextState } from '../contract/context.js'
@@ -8,8 +9,8 @@ import { journalKey, journalState } from '../utils/journal.js'
 class ContextInvocationJournal implements ContextInvocationJournalApi {
   public constructor(private readonly storage: ContextStorage) {}
 
-  public async claim(prepared: PreparedInvocation): Promise<InvocationRecord | null> {
-    await this.index(prepared.sessionId, prepared.id)
+  public async claim(prepared: PreparedInvocation): Promise<Nullable<InvocationRecord>> {
+    await this.index(prepared.sessionId, prepared.id, prepared.executionId)
     const key = journalKey(prepared.sessionId, prepared.id)
     const record: InvocationRecord = { phase: 'reserved', prepared }
     const objectId = await this.storage.put(key, JSON.stringify(record))
@@ -43,7 +44,7 @@ class ContextInvocationJournal implements ContextInvocationJournalApi {
     if (!await this.storage.compareAndSwap(key, state.version, journalState(key, objectId, state.version + 1))) throw new Error('调用终态提交冲突')
   }
 
-  public async read(sessionId: string, id: string): Promise<InvocationRecord | null> {
+  public async read(sessionId: string, id: string): Promise<Nullable<InvocationRecord>> {
     const key = journalKey(sessionId, id)
     const state = await this.storage.load(key)
     return state ? this.decode(key, state) : null
@@ -61,21 +62,25 @@ class ContextInvocationJournal implements ContextInvocationJournalApi {
 
   public async list(sessionId: string, executionId?: string): Promise<readonly InvocationRecord[]> {
     const key = JSON.stringify(['kernel-invocation-index', sessionId])
-    const state = await this.storage.load(key)
+    const entries=[]
+    if(this.storage.records&&executionId){
+      // 新记录按 executionId 命中索引；旧空标题记录仍按原回执核对，迁移不中断。
+      for(const title of [executionId,'']){let after:Nullable<number>=0;do{const page=await this.storage.records(key,{title,after});entries.push(...page.items);after=page.nextAfter}while(!isNull(after))}
+    }else entries.push(...(await this.storage.load(key))?.records??[])
     const records: InvocationRecord[] = []
-    for (const entry of state?.records ?? []) {
+    for (const entry of entries) {
       const record = await this.read(sessionId, entry.ref.id)
       if (record && (!executionId || record.prepared.executionId === executionId)) records.push(record)
     }
     return records
   }
 
-  private async index(sessionId: string, id: string): Promise<void> {
+  private async index(sessionId: string, id: string, executionId:string): Promise<void> {
     const key = JSON.stringify(['kernel-invocation-index', sessionId])
     for (let retry = 0; retry < 32; retry++) {
       const state = await this.storage.load(key) ?? { version: 0, records: [], workingSet: { revision: 0, cursor: 0, items: [] } }
       if (state.records.some(record => record.ref.id === id)) return
-      const entry = { ref: { sessionId, id }, sequence: state.records.length + 1, kind: 'event' as const, title: '', objectId: '', chars: 0, sources: [], createdAt: new Date().toISOString() }
+      const entry = { ref: { sessionId, id }, sequence: state.records.length + 1, kind: 'event' as const, title: executionId, objectId: '', chars: 0, sources: [], createdAt: new Date().toISOString() }
       if (await this.storage.compareAndSwap(key, state.version, { ...state, version: state.version + 1, records: [...state.records, entry] })) return
     }
     throw new Error('调用索引提交竞争超过上限')
@@ -85,7 +90,7 @@ class ContextInvocationJournal implements ContextInvocationJournalApi {
     const ref = state.records[0]
     if (!ref) throw new Error('调用记录缺少正文引用')
     const text = await this.storage.get(key, ref.objectId)
-    if (text === null) throw new Error('调用记录的原文丢失')
+    if (isNull(text)) throw new Error('调用记录的原文丢失')
     return JSON.parse(text) as InvocationRecord
   }
 }

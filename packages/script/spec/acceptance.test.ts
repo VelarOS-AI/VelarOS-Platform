@@ -6,11 +6,11 @@ import { describe, expect, test } from 'bun:test'
 
 import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../src/contract/constants'
 import type { CodeCapabilityPort } from '../src/contract/requires'
+import type { KernelScriptSessionOptions } from '../src/contract/requires'
 import { createCapabilityPort } from '../src/impl/CapabilityOperationPort'
 import { codeProgramChecker } from '../src/impl/CodeProgramChecker'
-import { createKernelScriptSession } from '../src/impl/KernelScriptSession'
-import type { KernelScriptSessionOptions } from '../src/contract/requires'
 import { createCodeSurfaceSession } from '../src/impl/CodeSurfaceSession'
+import { createKernelScriptSession } from '../src/impl/KernelScriptSession'
 import {
   nodeSubprocessCodeRunner,
   NodeSubprocessRunnerIsReleaseReady,
@@ -469,7 +469,7 @@ export default 1`)
   })
 })
 
-describe('程序停下、模版与回执', () => {
+describe('程序停下、数据与回执', () => {
   test('INV-26 程序停下时还没落定的调用被叫停，并逐条列在 unsettled 里', async () => {
     // 发出去不等就交卷：程序跑完了，那次调用还挂着。
     const leftBehind = await submit("import { hang } from 'velaros:demo'\nvoid hang({ tag: 'left' })\nexport default 'done'")
@@ -488,16 +488,29 @@ describe('程序停下、模版与回执', () => {
     expect(hangAborted).toContain('stopped')
   }, 20_000)
 
-  test('INV-27 代码模版不常驻，程序里 template() 按模块名读；写错名字抛错并列出有哪些', async () => {
-    const templates = { 'velaros:demo': "// velaros:demo 的代码模版\nimport { read } from 'velaros:demo'" }
-    const read = await session.submit({ program: { source: "import { template } from 'velaros:program'\nexport default template('velaros:demo')" }, granted, templates, timeoutMs: 10_000 })
+  test('INV-27 程序数据模块只导出本次 input 与 blobs，保持原文与冻结边界', async () => {
+    const input = { key: 'progress', nested: { version: 2 } }
+    const blobs = { body: 'literal ` ${text} \\ 内容\nsecond line' }
+    const read = await session.submit({ program: {
+      source: "import * as program from 'velaros:program'\nexport default {keys:Object.keys(program).sort(),input:program.input,blobs:program.blobs,frozen:Object.isFrozen(program)&&Object.isFrozen(program.input.nested)&&Object.isFrozen(program.blobs)}",
+      input, blobs,
+    }, granted, timeoutMs: 10_000 })
     if (!read.checked) throw new Error('应当通过检查')
-    expect(read.result.value).toBe(templates['velaros:demo'])
-    const wrong = await session.submit({ program: { source: "import { template } from 'velaros:program'\nexport default template('velaros:nope')" }, granted, templates, timeoutMs: 10_000 })
-    if (!wrong.checked) throw new Error('应当通过检查')
-    expect(wrong.result.failed?.code).toBe(CodeSurfaceErrorCodes.programError)
-    expect(wrong.result.failed?.message).toContain('velaros:demo')
-  }, 20_000)
+    expect(read.result.failed).toBeUndefined()
+    expect(read.result.value).toEqual({ keys: ['blobs', 'input'], input, blobs, frozen: true })
+  })
+
+  test('INV-27 旧模板导入在检查阶段拒绝，运行器不会执行', async () => {
+    let ran = false
+    const guarded = createCodeSurfaceSession({ checker: codeProgramChecker, capabilities, runner: {
+      run: async () => { ran = true; throw new Error('检查失败不应运行') },
+    } })
+    const result = await guarded.submit({ program: { source: "import { template } from 'velaros:program'\nexport default template('velaros:demo')" }, granted })
+    expect(result.checked).toBe(false)
+    if (result.checked || !('check' in result)) throw new Error('应当返回检查诊断')
+    expect(result.check.diagnostics.some(item => item.code === 2305)).toBe(true)
+    expect(ran).toBe(false)
+  })
 })
 
 

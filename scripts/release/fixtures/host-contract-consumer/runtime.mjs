@@ -1,386 +1,40 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, realpath, rm } from 'node:fs/promises'
+import { mkdtemp, realpath, rm, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
-
-import {
-  createAgentExecutionStack,
-  createCodingSessionTracker,
-  createNoopExecutionEventBus,
-  createPrimaryAgentProfile,
-  createToolContractExecutionFacade,
-} from '@velaros-ai/agent'
-import { AgentProtocolVersions, AgentToolNames } from '@velaros-ai/agent/contracts'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { createRuntime } from '@velaros-ai/velaros'
 import { createMemoryStore, memoryOperations } from '@velaros-ai/velaros/memory'
 
-const usage = {
-  inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
-  outputTokens: { total: 3, text: 3, reasoning: 0 },
-}
-const doGenerateCalls = []
-const doStreamCalls = []
-let heldStreamStart = null
-const model = {
-  specificationVersion: 'v3',
-  provider: 'packed-fixture',
-  modelId: 'packed-fixture',
-  get supportedUrls() {
-    return Promise.resolve({})
-  },
-  async doGenerate(options) {
-    doGenerateCalls.push(options)
-    return {
-      content: [{ type: 'text', text: 'packed complete' }],
-      usage,
-      finishReason: { unified: 'stop', raw: 'stop' },
-      warnings: [],
-    }
-  },
-  async doStream(options) {
-    doStreamCalls.push(options)
-    if (heldStreamStart) {
-      const notifyStarted = heldStreamStart
-      heldStreamStart = null
-      return {
-        stream: new ReadableStream({
-          start(controller) {
-            const abortSignal = options.abortSignal
-            const abort = () => controller.error(
-              abortSignal?.reason ?? new Error('packed stream aborted'),
-            )
-            if (abortSignal?.aborted) abort()
-            else abortSignal?.addEventListener('abort', abort, { once: true })
-            notifyStarted()
-          },
-        }),
-      }
-    }
-    return {
-      stream: new ReadableStream({
-        start(controller) {
-          for (const chunk of [
-            { type: 'stream-start', warnings: [] },
-            { type: 'text-start', id: 'text' },
-            { type: 'text-delta', id: 'text', delta: 'packed complete' },
-            { type: 'text-end', id: 'text' },
-            {
-              type: 'finish',
-              finishReason: { unified: 'stop', raw: 'stop' },
-              usage,
-            },
-          ]) controller.enqueue(chunk)
-          controller.close()
-        },
-      }),
-    }
-  },
-}
-
-const provider = () => model
-const modelPort = {
-  createAgentProvider: () => provider,
-  resolveRoleRuntime: async () => ({
-    provider,
-    providerId: 'packed-fixture',
-    model: 'packed-fixture',
-    providerModel: 'packed-fixture',
-    contextWindow: 128_000,
-    supportedInputModalities: ['text'],
-    resolutionSource: 'packed-fixture',
-    resolutionTrace: [],
-  }),
-}
-const toolRegistry = {
-  names: [],
-  get: () => null,
-  getDescriptor: () => null,
-  listAvailable: () => [],
-  toAiTools: () => ({}),
-}
-const primaryAgentProfile = createPrimaryAgentProfile(
-  { getSkillMarkdownForRole: () => '', listSkillsForRole: () => [] },
-  { getToolCategoryId: () => 'packed-fixture' },
-)
-const resolution = primaryAgentProfile.resolve({
-  knownToolNames: [],
-  allowSubAgents: false,
-})
-const chatConfig = {
-  modelSelection: { hostModel: 'packed-fixture' },
-  systemPromptAppend: '',
-}
-const systemConfig = {
-  thinkingDepth: 'balanced',
-  disabledToolNames: [],
-  prompt: { segmentOverrides: [] },
-  advancedRuntime: {},
-  modelRuntimeContext: { host: 'packed-fixture' },
-}
-
-function createToolContext(sessionId, abortController = new AbortController()) {
-  let visibleToolNames = []
-  let modalities = ['text']
-  return {
-    sessionId,
-    locale: 'en-US',
-    abortSignal: abortController.signal,
-    log: logRuntime.tag('PackedHostContract'),
-    codingSession: createCodingSessionTracker([], []),
-    role: {
-      id: resolution.id,
-      label: resolution.label,
-      description: '',
-      nextAllowedRoles: [],
-    },
-    execution: null,
-    interaction: {
-      getCurrentPlan: () => [],
-      getCurrentExecutionAdvice: () => null,
-    },
-    activeContext: {
-      listActiveContextArtifacts: async () => [],
-      upsertActiveContextArtifact: async () => {
-        throw new Error('packed fixture has no goal artifacts')
-      },
-    },
-    listTools: () => [],
-    listToolCategories: () => [],
-    getEnabledToolCategories: () => [],
-    getCurrentVisibleToolSurfaceProfile: () => null,
-    getCurrentVisibleToolNames: () => visibleToolNames,
-    setCurrentVisibleToolNames: (names) => {
-      visibleToolNames = [...names]
-    },
-    getSupportedModelInputModalities: () => modalities,
-    setSupportedModelInputModalities: (next) => {
-      modalities = [...next]
-    },
-    query: async () => {
-      throw new Error('nested delegation is disabled in the packed fixture')
-    },
-  }
-}
-
-async function probeAgentExecution() {
-  const stack = createAgentExecutionStack({
-    model: modelPort,
-    toolRegistry,
-    query: {
-      roleEngine: { resolve: () => resolution },
-      getToolNamesForCategories: () => [],
-    },
-  })
-  const soloAbort = new AbortController()
-  const history = [{ role: 'user', content: 'finish the packed solo probe' }]
-  const solo = await stack.executeSolo({
-    history,
-    config: { sessionId: 'packed-solo', modelSelection: chatConfig.modelSelection },
-    chatConfig,
-    systemConfig,
-    abortController: soloAbort,
-    toolContext: createToolContext('packed-solo', soloAbort),
-    resolution,
-    events: createNoopExecutionEventBus(),
-  })
-  assert.equal(solo.status, 'completed')
-  assert.match(JSON.stringify(history), /packed complete/u)
-
-  const query = await stack.executeQuery({
-    task: 'finish the packed query probe',
-    opts: { contextEpochScope: 'packed-query' },
-    parentCtx: createToolContext('packed-query'),
-    chatConfig,
-    systemConfig,
-    collectCapabilityContext: async () => null,
-  })
-  assert.equal(query, 'packed complete')
-
-  const cancelledController = new AbortController()
-  const cancelledHistory = [{ role: 'user', content: 'cancel the active packed model stream' }]
-  const streamStarted = new Promise((resolve) => {
-    heldStreamStart = resolve
-  })
-  const cancellation = stack.executeSolo({
-    history: cancelledHistory,
-    config: { sessionId: 'packed-cancelled', modelSelection: chatConfig.modelSelection },
-    chatConfig,
-    systemConfig,
-    abortController: cancelledController,
-    toolContext: createToolContext('packed-cancelled', cancelledController),
-    resolution,
-    events: createNoopExecutionEventBus(),
-  })
-  await streamStarted
-  cancelledController.abort(new Error('packed cancellation'))
-  const cancelled = await cancellation
-  assert.equal(cancelled.status, 'aborted')
-  assert.equal(doStreamCalls.length, 3)
-  assert.equal(doGenerateCalls.length, 0)
-  assert.equal(cancelledHistory.some(({ role }) => role === 'assistant'), false)
-  stack.clearSession('packed-solo')
-}
-
-function createToolContractHarness() {
-  const toolName = 'fixture:echo'
-  let schemaVersion = 1
-  const executed = []
-  let visibleSignatures = {}
-  const tool = {
-    description: 'Echo a packed fixture value.',
-    role: 'inspect',
-    permissions: [],
-    schema: {
-      safeParse: (input) => ({ success: true, data: input }),
-    },
-    isConcurrencySafe: () => true,
-    execute: (input) => {
-      executed.push(input)
-      return { echo: input.value, schemaVersion }
-    },
-  }
-  const registry = {
-    get: (name) => name === toolName ? tool : null,
-    getRegistrationSignature: (name) =>
-      name === toolName ? `${toolName}@${schemaVersion}` : null,
-    getCurrentRegistrationSignature: (name) =>
-      name === toolName ? `${toolName}@${schemaVersion}` : null,
-    getDescriptor: (name) => name === toolName ? {
-      name: toolName,
-      description: tool.description,
-      role: tool.role,
-      permissions: [],
-      categoryId: 'project-files',
-      systemEnabled: true,
-    } : null,
-    listAvailable: () => [{
-      name: toolName,
-      description: tool.description,
-      role: tool.role,
-      permissions: [],
-      categoryId: 'project-files',
-      systemEnabled: true,
-    }],
-    describeToolInputSchema: (_context, name) => name === toolName ? {
-      profileId: 'base',
-      description: `Packed echo schema v${schemaVersion}.`,
-      schema: {
-        type: 'object',
-        properties: {
-          value: { type: 'string' },
-          schemaVersion: { const: schemaVersion },
-        },
-        required: ['value'],
-        additionalProperties: false,
-      },
-    } : null,
-  }
-  const codingSession = {
-    recordToolResult: () => undefined,
-    recordToolCallResult: () => undefined,
-    getRedundantToolCallMessage: () => null,
-    consumePendingAutoApprovalNotice: () => null,
-    hasSessionToolCategoryApproval: () => true,
-    getToolSurfaceProfile: () => 'full',
-    setToolSurfaceProfile: (profile) => profile,
-    getRunProfile: () => 'auto',
-    setRunProfile: (profile) => profile,
-    getActiveCapabilityScope: () => 'project',
-  }
-  const context = {
-    abortSignal: new AbortController().signal,
-    log: logRuntime.tag('PackedToolContract'),
-    role: { id: 'assistant' },
-    execution: null,
-    codingSession,
-    getCurrentVisibleToolSurfaceProfile: () => null,
-    getCurrentVisibleToolRegistrationSignature: (name) =>
-      visibleSignatures[name] ?? null,
-    setCurrentVisibleToolNames: () => undefined,
-    setCurrentVisibleToolRegistrationSignatures: (signatures) => {
-      visibleSignatures = { ...signatures }
-    },
-  }
-  const binding = {
-    toolContext: context,
-    allowedToolNames: [toolName],
-    hostProjection: {
-      hostId: 'packed-host',
-      includeCategories: null,
-      excludeToolNames: null,
-    },
-    projectDescriptor: (descriptor) => descriptor,
-    runInSessionScope: async (run) => run(),
-  }
-  return {
-    binding,
-    executed,
-    facade: createToolContractExecutionFacade(registry),
-    setSchemaVersion: (version) => {
-      schemaVersion = version
-    },
-    toolName,
-  }
-}
-
-function toolCall(catalogRevision, toolName, input = {}) {
-  return {
-    protocolVersion: AgentProtocolVersions.agent,
-    contractId: 'packed-contract',
-    catalogRevision,
-    toolCallId: 'packed-call',
-    toolName,
-    input,
-  }
-}
-
-async function probeToolContracts() {
-  const harness = createToolContractHarness()
-  const first = harness.facade.resolveCatalog(harness.binding, { readOnly: false })
-  assert.deepEqual(first.tools.slice(0, 2).map(({ name }) => name), [
-    AgentToolNames.toolingCatalog,
-    AgentToolNames.toolingSchema,
-  ])
-
-  harness.setSchemaVersion(2)
-  const second = harness.facade.resolveCatalog(harness.binding, { readOnly: false })
-  assert.notEqual(second.catalogRevision, first.catalogRevision)
-  const stale = await harness.facade.executeTool(
-    harness.binding,
-    toolCall(first.catalogRevision, harness.toolName, { value: 'stale' }),
-    { readOnly: false, onProgress: () => undefined },
-  )
-  assert.deepEqual(
-    { status: stale.status, reason: stale.reason },
-    { status: 'lease-denied', reason: 'stale-revision' },
-  )
-
-  const completed = await harness.facade.executeTool(
-    harness.binding,
-    toolCall(second.catalogRevision, harness.toolName, { value: 'paired' }),
-    { readOnly: false, onProgress: () => undefined },
-  )
-  assert.deepEqual(
-    {
-      protocolVersion: completed.protocolVersion,
-      contractId: completed.contractId,
-      catalogRevision: completed.catalogRevision,
-      toolCallId: completed.toolCallId,
-      toolName: completed.toolName,
-      status: completed.status,
-      output: completed.output,
-    },
-    {
-      protocolVersion: AgentProtocolVersions.agent,
-      contractId: 'packed-contract',
-      catalogRevision: second.catalogRevision,
-      toolCallId: 'packed-call',
-      toolName: harness.toolName,
-      status: 'success',
-      output: { echo: 'paired', schemaVersion: 2 },
-    },
-  )
-  assert.deepEqual(harness.executed, [{ value: 'paired' }])
+// 已发布产物要能完成真实脚本、状态持久化、模型循环、取消和重新打开。
+async function probeRuntime(){
+ const root=await mkdtemp(join(tmpdir(),'velaros-packed-act-'))
+ const workspace=join(root,'project');await mkdir(workspace)
+ let calls=0,hold=false,started
+ const model={id:'packed-model',limits:{contextTokens:128000,inputTokens:110000,outputTokens:4096},estimate:async()=>({tokens:1000,precision:'estimate',basis:'fixture'}),async *stream(request){
+  calls++
+  if(hold){started();await new Promise(()=>{})}
+  const marker=request.instructions.match(/当前帧标记：(\S+)。普通/u)[1]
+  yield {type:'text',text:`packed complete\n${marker} done`};yield {type:'finish',reason:'stop'}
+ }}
+ const runtime=await createRuntime({workspace,dataDir:join(root,'data'),model,agents:false,search:false})
+ try{
+  const session=await runtime.openSession('packed')
+  await session.context.append({kind:'user',body:'Probe durable state'})
+  const saved=await session.execute({source:"import {output} from 'velaros';import {store} from 'velaros:system';const space=await store.create({name:'packed',description:'Published package probe'});output(await store.set({store:space.id,key:'ready',baseRevision:0,value:true}));"})
+  assert.equal(saved.result.failed,undefined,JSON.stringify(saved));assert.equal(saved.result.value.default.value,true)
+  const events=[];for await(const event of session.submit('Verify packaged runtime'))events.push(event)
+  assert.equal(events.at(-1).status,'completed');assert.equal(calls,1)
+  const trace=await runtime.trace('packed');assert.equal(trace.turns.length,1);assert(trace.turns[0].response.body.includes('packed complete'))
+  hold=true
+  const sending=new Promise(resolve=>{started=resolve})
+  const cancelled=[]
+  const running=(async()=>{for await(const event of session.submit('cancel active stream'))cancelled.push(event)})()
+  await sending;session.cancel();await running
+  assert.equal(cancelled.at(-1).status,'cancelled')
+  await session.close()
+  const reopened=await runtime.openSession('packed');assert.notEqual(reopened,session)
+  assert((await runtime.trace('packed')).turns.length>=2)
+ }finally{await runtime.close();await rm(root,{recursive:true,force:true})}
 }
 
 /** 记忆库照发布的包接得上：宿主给根目录，按作用域取一份，三个操作经作用域端口读写，别的作用域看不见。 */
@@ -412,8 +66,7 @@ async function probeMemoryStore() {
   }
 }
 
-await probeAgentExecution()
-await probeToolContracts()
+await probeRuntime()
 await probeMemoryStore()
 
-console.info('✓ packed runtime contracts: Solo/Query, cancellation, tool pairing, schema refresh and the memory store')
+console.info('✓ packed runtime contracts: Act execution, persistent stores, cancellation, reopening, trace and the memory store')
