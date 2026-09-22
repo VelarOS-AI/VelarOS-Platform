@@ -7,12 +7,25 @@ import { labArchives } from '@velaros-ai/agent-lab'
 import { runActEvaluation } from './act-eval.mjs'
 import { configuredModel } from './run-act-eval.mjs'
 import { evaluationScenario } from './act-scenarios.mjs'
+import {runActEvaluationBatch} from './act-eval-batch.mjs'
 
 const limits={contextTokens:200000,inputTokens:180000,outputTokens:4096}
 const marker=request=>request.instructions.match(/当前帧标记：(\S+)。普通/u)[1]
 const block=(request,kind,source)=>`${marker(request)} ${kind}()\n${source}\n${marker(request)}`
 const model=stream=>({id:'controlled-model',limits,estimate:async()=>({tokens:1000,precision:'exact',basis:'controlled fixture, not provider tokens'}),stream})
 async function output(t){const directory=await mkdtemp(join(tmpdir(),'act-eval-test-'));t.after(()=>rm(directory,{recursive:true,force:true}));return directory}
+
+test('batch evaluation preserves failed attempts and unknown usage in repeat statistics',async t=>{
+ let calls=0
+ const report=await runActEvaluationBatch({output:await output(t),repeat:3,scenarios:['read-edit-observe']},async()=>{
+  if(++calls===2)throw Error('transport failed')
+  return {summary:{passed:true,wallClockMs:calls*10,totalUsage:{totalTokens:100}}}
+ })
+ assert.equal(calls,3);assert.equal(report.passed,false)
+ assert.deepEqual(report.groups,[{scenario:'read-edit-observe',attempts:3,successful:2,successRate:2/3,measuredDurations:2,p50Ms:10,p95Ms:30,totalTokens:null}])
+ assert.equal(JSON.parse(await readFile(join(report.output,'summary.json'),'utf8')).runs.length,3)
+ await assert.rejects(runActEvaluationBatch({output:report.output,repeat:0}),/重复/)
+})
 
 test('reconciliation restores host progress from acknowledged ordered revisions without rewriting inputs',async t=>{
  const root=await output(t),scenario=evaluationScenario('reconciliation'),events=[]
@@ -48,10 +61,14 @@ test('formal Runtime evaluation archives raw requests and independently verifies
  const result=await runActEvaluation({model:driver,output:await output(t)})
  assert.equal(result.summary.passed,true,JSON.stringify(result.archive));assert.equal(calls,3)
  assert.equal(result.summary.usage.totalTokens,360);assert.equal(result.summary.usage.costUsd,null)
+ assert(result.summary.wallClockMs>0)
+ assert(result.summary.metrics.some(metric=>metric.phase==='storage'&&metric.operation==='appendRecord'))
+ assert.equal(result.summary.requestRetries,0);assert.equal(result.summary.protocolRejections,0)
  assert.equal(result.archive.legs[0].criteria[0].outcome.evidence.successfulEdits,1)
  const traces=JSON.parse(await readFile(result.summary.tracePath,'utf8'))
  assert((await readFile(join(result.summary.directory,'events.ndjson'),'utf8')).includes('turn'))
  assert.equal(traces.length,3);assert(traces.every(trace=>trace.gaps.length===0))
+ assert(traces.every(trace=>Object.values(trace.timing).every(value=>typeof value==='number'&&value>=0)))
  assert(JSON.parse(traces[2].request.body).providerRequest)
  assert((await labArchives.readRunArchive(result.summary.archivePath)).archive)
 })

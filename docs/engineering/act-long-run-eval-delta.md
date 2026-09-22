@@ -1,5 +1,7 @@
 # Act 长任务与正式评测接入
 
+> 阶段差量记录：路径、API 和测试数字对应本次记录形成时的实现。当前接入请读 [模块规范](../architecture/module-ownership.md)、[Act 架构](../architecture/platform-runtime.md) 和 [能力目录](../../packages/velaros/act/README.md)。
+
 ## 实际变更
 
 1. `SearchContext.checkpoint` 与投影共同使用最新 `search:history-reset` 边界。重置后第一次整理使用 `baseThrough:0`；区间末尾必须是当前代次的脚本结果，保留最近两个响应，证据引用也必须位于当前代次。

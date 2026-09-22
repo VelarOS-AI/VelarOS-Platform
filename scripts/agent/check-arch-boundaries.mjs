@@ -18,7 +18,7 @@ for(const file of agent){
 for(const pkg of ['kernel','model','context','script'])for(const file of files(resolve(root,`packages/${pkg}/src`)))assert(!readFileSync(file,'utf8').includes("from '@velaros-ai/agent"),`${file}: lower layer depends on agent`)
 const required=[
  ['packages/velaros/act/runtime/impl/RuntimeSession.ts','createActRunService'],
- ['packages/agent/src/impl/ActRunService.ts','createActLoop'],
+ ['packages/agent/src/impl/ActRunService.ts','new ActLoop'],
  ['packages/agent/src/impl/ActLoop.ts','createProviderRequestCompiler'],
  ['packages/agent/src/impl/ActLoop.ts','boundedModelStream'],
  ['packages/agent/src/impl/ActLoop.ts','this.options.execution.invoke'],

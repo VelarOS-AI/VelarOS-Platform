@@ -2,6 +2,8 @@
 
 正式入口为 `@velaros-ai/velaros.createRuntime`。主模型输出带显式边界的 ScriptAct 文本；宿主通过 `session.submit` 驱动循环，通过 `session.script / observe / execute` 直接调用同一套程序检查、发布和运行机制。
 
+运行状态通过数据库无关的 `ContextStorage` / `StoreStorage` 注入。默认 SQLite 在实际创建适配器时加载，替换后端使用同一个 `createRuntime({ storage })` 入口；事务、连接生命周期和验收要求见 [存储适配规范](./storage.md)。
+
 ## 实际执行顺序
 
 1. `ActRunService.submit → ActLoop.submit` 校验文字/图片/文件引用，归档用户原始输入，取得并续期任务租约；模型通过 memory.read 召回原文，通过 memory.organize 声明整理意图，Runtime 校验并发布派生摘要。
@@ -100,7 +102,7 @@ for await (const event of session.submit({ text: '检查这张图片', images })
 
 队列、源码与结果共用既有存储。进程中断后通过 `session.reconcile()` 核对 journal 和保存结果：确认未派发的任务取消；已知结果恢复；未知效果继续阻塞。没有自动重放整段脚本的恢复路径。
 
-写闸门覆盖同一 Runtime 实例内登记为 write 的能力，包括受限观察命令；多个进程及外部程序之间仍依赖领域锁、权限和资源版本前提。异步读取可以并发。通用命令、网络与 UI 操作没有统一回滚或绝对无副作用保证。
+写闸门默认串行覆盖同一 Runtime 实例内登记为 write 的能力，包括受限观察命令。宿主可经 effectResources 声明完整的规范化冲突资源集合，让互不冲突的操作并行；未声明范围的操作仍与全部写操作互斥。多个进程及外部程序之间仍依赖领域锁、权限和资源版本前提。异步读取可以并发。通用命令、网络与 UI 操作没有统一回滚或绝对无副作用保证。
 
 主任务、高级搜索和业务子 Agent 通过同一 ContextMemory 和 ScriptAct 循环工作。宿主配置工作区份额、近期窗口和近期份额，搜索默认使用较大的近期窗口；执行预算与真实来源验证继续共用原链路。用户原始输入支持意图摘要和引用投影。完整策略见 `context-management.md` 和 `advanced-search.md`。
 

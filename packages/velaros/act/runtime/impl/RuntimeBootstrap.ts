@@ -5,7 +5,7 @@ import {isAbsolute,join,relative,sep} from 'node:path'
 import type {ActRunLimits} from '@velaros-ai/agent'
 import type {ContextStorage} from '@velaros-ai/context'
 import {localContextStorage} from '@velaros-ai/context/node'
-import {isFalse,isTrue,isUndefined} from '@velaros-ai/core'
+import {isFalse,isString,isTrue,isUndefined} from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 import type {OperationModuleDefinition} from '@velaros-ai/kernel'
 import type {ModelDriver} from '@velaros-ai/model'
@@ -50,12 +50,13 @@ export interface RuntimeBootstrapOptions extends Omit<VelarosRuntimeOptions,'sto
 class RuntimeBootstrap implements RuntimeBootstrapApi {
  public async prepare(options:VelarosRuntimeOptions):Promise<RuntimeBootstrapOptions>{
   const modules=[...options.modules??[]]; const sources=[...options.context?.sources??[]]
+  if(!isUndefined(options.instructions)&&!isString(options.instructions))throw new Error('instructions 必须是宿主提供的文本')
   let workspace:Optional<string>
   if(options.workspace){
    if(!isAbsolute(options.workspace))throw new Error('workspace 需要绝对路径')
    workspace=await realpath(options.workspace)
    if(!(await stat(workspace)).isDirectory())throw new Error('workspace 必须是已有目录')
-   if(modules.some(module=>module.binding.moduleId==='velaros:project')||sources.some(source=>source.id==='project'))throw new Error('workspace 已装配 project，不能重复挂载同一能力或来源')
+   if(!isFalse(options.project)&&(modules.some(module=>module.binding.moduleId==='velaros:project')||sources.some(source=>source.id==='project')))throw new Error('workspace 已装配 project，不能重复挂载同一能力或来源')
   }
   const dataDir=options.dataDir
   if(dataDir){
@@ -65,7 +66,7 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
    if(workspace){const path=relative(workspace,await realpath(dataDir));if(path!=='..'&&!path.startsWith(`..${sep}`)&&!isAbsolute(path))throw new Error('dataDir 的真实位置不能在业务工作区内')}
   }
   if(!options.storage&&!dataDir)throw new Error('需要 dataDir 保存运行状态，或注入 ContextStorage')
-  if(workspace){
+  if(workspace&&!isFalse(options.project)){
    const root=workspace
    const transactionStatePath=dataDir?join(dataDir,'projects',createHash('sha256').update(root).digest('hex'),'transactions.json'):undefined
    const kernel=await createProjectKernel({root,transactionStatePath})

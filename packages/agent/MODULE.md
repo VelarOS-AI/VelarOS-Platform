@@ -6,6 +6,8 @@ Act 执行核心。一次用户输入由 `ActRunService` 托管，以 `ActLoop` 
 
 ## 提供什么
 
+根入口 `.` 提供下列工厂与公开合同；`./contracts` 提供可移植数据。
+
 - `createActRunService` → `ActRunServiceApi`：submit、steer、request、answer、inspect、events、cancel、close。
 - `createAgentSupervisor` → `AgentSupervisorApi`：start、resume、status、wait、waitAny、send、cancel、cancelParent、pending、close。
 - 注入契约：`ActRunServiceOptions`、`ActLoopOptions`、`ActLoopControl`、`ActProtocolPort`、`ActTurnDecoder`、`ActContextPort`、`ActExecutionPort`、`AgentSupervisorOptions`、`ActChildSession`。
@@ -33,10 +35,33 @@ ContextStorage 保存运行事件、状态、输入和子任务记录；ContextV
 
 子任务交付正文最多内嵌 64 个事件和 128000 字符；omittedEvents 明确报告移出数量，eventSource 指向子会话完整事件记录。公开变更与版本 5.0 的迁移见 `docs/engineering/act-chain-closure.md`。
 
+## 输入回执
+
+`ActInput.inputId` 是宿主消息身份，回执原样带回，不承诺重复提交去重。`input` 在输入与运行权已持久接纳后发出，source 区分 submit 与 steer；`input-applied` 的 turnId 指向已归档的模型请求，表示输入进入该请求，并不证明 provider 已收到请求。`input-retained` 在运行收尾前报告尚未进入请求的输入；断进程没有收尾事件时，仍按持久 input 与 input-applied 的差集恢复。兼容已有 act:input-applied 审计记录。
+
+`ActLoopControl.applied` 在请求归档后确认本次准备包含的输入，后到输入保持独立身份。输入回执持久化失败不会继续派发模型。
+
 ## 不变量
 
-见 `spec/invariants.md`、`spec/acceptance.test.ts` 和 Velaros 的 act-run/act-children 集成验收。架构门、浏览器门与公开 API 基线共同约束可达链路。
+共 14 条，未验证 0 条。见 `spec/invariants.md`、`spec/acceptance.test.ts` 和 Velaros 的 act-run/act-children 集成验收。架构门、浏览器门与公开 API 基线共同约束可达链路。
 
 ## 结构
 
-`interface/`：产品、注入和内部接口。`contract/`：可移植数据。`impl/`：ActLoop、ActRunService、AgentSupervisor。`utils/model-stream.ts`：有界模型接收。
+```text
+src/
+  contract/ provides.ts requires.ts constants.ts
+  types/ act.ts delegation.ts runtime.ts
+  impl/ ActLoop.ts ActRunService.ts AgentSupervisor.ts
+  utils/ model-stream.ts delegation.ts tuning.ts
+  index.ts contracts.ts
+```
+
+公开类接口写在类上方，经 contract/provides.ts 登记；宿主端口在 contract/requires.ts。
+
+## 失败语义
+
+存储接纳失败时不派发模型；未知执行效果进入 needs_reconcile；取消会收束模型接收、脚本及所属子运行。Provider 重试与任务预算由注入端口和持久运行状态共同约束。
+
+## 非目标
+
+领域操作实现、Provider 适配、脚本文本协议与上下文投影策略由各自模块负责。

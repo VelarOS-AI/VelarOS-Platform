@@ -2,7 +2,7 @@ import type { ActInputFile, AgentJob, AgentStart, AgentSupervisorApi } from "@ve
 import { createAgentSupervisor } from "@velaros-ai/agent";
 import { createContextInvocationJournal, createEvidenceAccess } from "@velaros-ai/context";
 import {Log} from '@velaros-ai/core'
-import {isFalse,isNull} from '@velaros-ai/core'
+import {isFalse,isNull,isUndefined} from '@velaros-ai/core'
 import { isEmpty, isObject, isString } from '@velaros-ai/core'
 import type { ModuleDescription, ModulePage, ModuleQuery, OperationContext, OperationModuleDefinition, OperationRuntimeApi } from "@velaros-ai/kernel";
 import { createOperationRuntime } from "@velaros-ai/kernel";
@@ -13,7 +13,7 @@ import type {MemoryScopePort} from '@velaros-ai/velaros/memory';
 import type { AdvancedSearchApi } from "../../search/impl/AdvancedSearch.js";
 import { AdvancedSearch } from "../../search/impl/AdvancedSearch.js";
 import type { SearchDraft } from "../../search/types.js";
-import { ContextMaterialsModuleId, LocalMemoryModuleId, LocalSystemPackage, MemoryModuleId, PersistentMemoryModuleId, PersistentSystemPackage, StoreModuleId, StoreReadModuleId, StoreWriteModuleId,SystemPackage } from '../../system/contract/constants.js';
+import { GoalModuleId, ContextMaterialsModuleId, LocalMemoryModuleId, LocalSystemPackage, MemoryModuleId, PersistentMemoryModuleId, PersistentSystemPackage, StoreModuleId, StoreReadModuleId, StoreWriteModuleId,SystemPackage } from '../../system/contract/constants.js';
 import type {StoreSessionApi} from '../../system/impl/StoreSession.js'
 import {StoreSession} from '../../system/impl/StoreSession.js'
 import { systemModules } from '../../system/impl/SystemModules.js';
@@ -23,12 +23,15 @@ import type {ActTracePage,ActTraceQuery} from '../types/trace.js'
 
 import { BudgetedModelDriver } from "./BudgetedModelDriver.js";
 import { ContextMaintenance } from './ContextMaintenance.js';
+import {EffectScheduler} from './EffectScheduler.js'
 import { ModelToolRuntime } from "./ModelToolRuntime.js";
 import type {RuntimeBootstrapOptions} from './RuntimeBootstrap.js'
 import {runtimeBootstrap} from './RuntimeBootstrap.js'
+import {RuntimeDiagnostics} from './RuntimeDiagnostics.js'
 import type { RuntimeSessionAccess, VelarosSession } from "./RuntimeSession.js";
 import { RuntimeSession } from "./RuntimeSession.js";
 import {RuntimeTrace} from './RuntimeTrace.js'
+import {RuntimeWorkspaceBinding} from './RuntimeWorkspaceBinding.js'
 import { standardModules } from "./StandardModules.js";
 
 /** 一份由共享主干装配好的运行时。 */
@@ -37,7 +40,7 @@ export interface VelarosRuntime {
  trace(rootSessionId:string,input?:ActTraceQuery):Promise<ActTracePage>
  /** 宿主访问活动会话，包括子任务的交互回答；不存在时不创建。 */
  getSession(id:string):Optional<VelarosSession>
-  /** 打开或恢复持久会话，同一实例内相同 id 复用句柄。 */
+  /** 打开或恢复持久会话，先原子核对工作区绑定；同一实例内相同 id 复用句柄。 */
   openSession(id: string): Promise<VelarosSession>
   /** 查询实际挂载的模块目录。 */
   modules(query?: ModuleQuery): ModulePage
@@ -57,15 +60,19 @@ class ComposedRuntime implements VelarosRuntime {
   private readonly kernel:OperationRuntimeApi
   private readonly sessions=new Map<string,VelarosSession>()
   private closing?:Promise<void>
-  private effectTail:Promise<void>=Promise.resolve()
+  private readonly effects=new EffectScheduler()
+  private readonly diagnostics:RuntimeDiagnostics
   private readonly journal
   private readonly programAccess=new Map<string,RuntimeSessionAccess>()
   private readonly memories=new Map<string,MemoryScopePort>()
   private readonly stores=new Map<string,StoreSessionApi>()
   private readonly openings=new Map<string,Promise<VelarosSession>>()
 
-  public constructor(private readonly options:RuntimeBootstrapOptions) {
-    this.options = {...options,context:{sources:[],...options.context,limits:{...VelarosMainBudget,...options.context?.limits}}}
+  private readonly options:RuntimeBootstrapOptions
+  public constructor(input:RuntimeBootstrapOptions) {
+    this.diagnostics=new RuntimeDiagnostics(input.storage,input.onMetric)
+    this.options = {...input,storage:this.diagnostics.storage,context:{sources:[],...input.context,limits:{...VelarosMainBudget,...input.context?.limits}}}
+    const options=this.options
     if(options.modules.some(module=>[SystemPackage.specifier,'velaros:program',ContextMaterialsModuleId].includes(module.binding.moduleId)||systemModules.owns(module.binding.moduleId)))throw new Error('业务模块占用了系统保留身份')
     if(options.modules.some(module=>module.binding.moduleId==='velaros:memory'))throw new Error('长期记忆请通过 Runtime memory(sessionId) 装配到 velaros:system')
     const journal=this.journal=createContextInvocationJournal(options.storage)
@@ -119,6 +126,7 @@ class ComposedRuntime implements VelarosRuntime {
   private allows(id:string,module:string):boolean {
     const scope=this.scopes.get(id)
     if(!scope)return false
+    if(module===GoalModuleId)return scope.kind==='main'
     if(module===ContextMaterialsModuleId)return scope.kind==='context'&&Boolean(this.maintenance?.active(id))
     if(scope.kind==='context')return false
     if(module==='velaros:interaction')return scope.kind==='main'||scope.kind==='agent'
@@ -199,24 +207,24 @@ class ComposedRuntime implements VelarosRuntime {
   }
 
   private async withEffectGate(call:OperationContext,run:()=>unknown|Promise<unknown>):Promise<unknown> {
-    const previous=this.effectTail
     let release=():void=>{}
-    this.effectTail=previous.then(()=>new Promise<void>(resolve=>{release=resolve}))
-    // 先建立队列节点；取消者仍留在队列顺序中，但不进入处理器。
-    let released=false
-    const unlock=():void=>{released=true;release()}
-    const ready=previous.then(()=>{if(released)release()})
-    let cancel=():void=>{}
-    const aborted=new Promise<never>((_resolve,reject)=>{cancel=()=>reject(call.signal.reason??new Error('操作已取消'));call.signal.addEventListener('abort',cancel,{once:true})})
+    const queuedAt=performance.now();let started:Optional<number>;let succeeded=false
     try{
       try{
         call.signal.throwIfAborted()
-        await Promise.race([ready,aborted]);call.signal.throwIfAborted()
+        release=await this.effects.acquire(this.options.effectResources?.(call.invocation),call.signal)
+        call.signal.throwIfAborted()
+        started=performance.now()
+        this.diagnostics.record({phase:'effect-wait',sessionId:call.invocation.sessionId,executionId:call.invocation.executionId,operation:`${call.invocation.binding.moduleId}.${call.invocation.operation}`,durationMs:started-queuedAt,succeeded:true})
         if(call.invocation.mode!=='observe'&&!systemModules.owns(call.invocation.binding.moduleId))await this.sessions.get(call.invocation.sessionId)!.view.assertCanWrite(call.invocation.executionId,call.signal)
         if(call.invocation.mode!=='observe'&&!systemModules.owns(call.invocation.binding.moduleId)){this.assertWriteDelegation(call.invocation.sessionId,call.invocation.binding.moduleId);await this.programAccess.get(call.invocation.sessionId)!.validateDecision(call.invocation.executionId,call.signal)}
+        call.signal.throwIfAborted()
       }catch(error){call.recordEffect('none');throw error}
-      return await run()
-    }finally{call.signal.removeEventListener('abort',cancel);unlock()}
+      const value=await run();succeeded=true;return value
+    }finally{
+      const ended=performance.now();release()
+      this.diagnostics.record({phase:isUndefined(started)?'effect-wait':'effect-run',sessionId:call.invocation.sessionId,executionId:call.invocation.executionId,operation:`${call.invocation.binding.moduleId}.${call.invocation.operation}`,durationMs:ended-(started??queuedAt),succeeded})
+    }
   }
 
   public async openSession(id:string):Promise<VelarosSession> {
@@ -228,6 +236,8 @@ class ComposedRuntime implements VelarosRuntime {
 
   private async openMain(id:string):Promise<VelarosSession> {
     if(this.closing||!id||id.startsWith('search:')||id.startsWith('agent:')||id.startsWith('context:')||id.startsWith('store-material:'))throw new Error('运行时已关闭或会话身份无效')
+    await new RuntimeWorkspaceBinding(this.options.storage,this.options.workspace,this.options.dataDir).bind(id)
+    if(this.closing)throw new Error('运行时已关闭')
     await this.kernel.start()
     if(this.closing)throw new Error('运行时已关闭')
     let session=this.sessions.get(id)
@@ -240,7 +250,7 @@ class ComposedRuntime implements VelarosRuntime {
       this.scopes.set(id,{kind:'main'})
       this.tools.root(id)
       if(this.options.model)this.taskModels.set(id,this.options.model)
-      session=new RuntimeSession(id,{maintain:this.maintenance&&(this.options.model||this.options.context?.maintenance&&this.options.context.maintenance.model)?(input,signal)=>this.maintenance!.maintain(id,input,signal):undefined,stores:this.stores.get(id),packages:[this.systemPackage(id)],allowedModules:()=>this.allowedModuleIds(id),agents:this.agents,settleModelTools:executionId=>this.search?.settleExecution(id,executionId)??Promise.resolve(),protocol:this.options.protocol,inputs:this.options.inputs?()=>this.options.inputs!(id):undefined,journal:this.journal,contextOptions:this.options.context,kernel:this.kernel,runner:this.options.runner,storage:this.options.storage,model:this.options.model?this.tools.model(id,this.options.model):undefined,limits:this.options.limits??VelarosRunLimits,
+      session=new RuntimeSession(id,{instructions:this.options.instructions,maintain:this.maintenance&&(this.options.model||this.options.context?.maintenance&&this.options.context.maintenance.model)?(input,signal)=>this.maintenance!.maintain(id,input,signal):undefined,stores:this.stores.get(id),packages:[this.systemPackage(id)],allowedModules:()=>this.allowedModuleIds(id),agents:this.agents,settleModelTools:executionId=>this.search?.settleExecution(id,executionId)??Promise.resolve(),protocol:this.options.protocol,inputs:this.options.inputs?()=>this.options.inputs!(id):undefined,journal:this.journal,contextOptions:this.options.context,kernel:this.kernel,runner:this.options.runner,storage:this.options.storage,model:this.options.model?this.tools.model(id,this.options.model):undefined,limits:this.options.limits??VelarosRunLimits,
         closed:()=>{if(this.sessions.get(id)===session)this.releaseMain(id)},
         register:access=>{this.programAccess.set(id,access)}})
       this.sessions.set(id,session)

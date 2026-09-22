@@ -1,3 +1,5 @@
+/** 会话目标能力身份。 */
+export const GoalModuleId='velaros:system-goal' as const
 /** 可写已有对象、不能创建空间的合同投影。 */
 export const StoreWriteModuleId='velaros:system-store-write' as const
 /** 共享状态的写入合同身份。 */
@@ -31,16 +33,16 @@ export const ScriptLeaseLimits=Object.freeze({
 /** 自管理操作合同代际。 */
 export const SystemContract=Object.freeze({
  /** 对外合同版本。 */
- schemaRevision:'20',
+ schemaRevision:'21',
  /** 实例代次。 */
  generation:1
 })
 /** 主线和业务子任务的规范系统包。 */
-export const SystemPackage=Object.freeze({specifier:'velaros:system',exports:Object.freeze({modules:ModulesModuleId,memory:MemoryModuleId,store:StoreModuleId})})
+export const SystemPackage=Object.freeze({specifier:'velaros:system',exports:Object.freeze({modules:ModulesModuleId,goal:GoalModuleId,memory:MemoryModuleId,store:StoreModuleId})})
 /** 没有整理委托能力时的同一系统包投影。 */
-export const LocalSystemPackage=Object.freeze({specifier:'velaros:system',exports:Object.freeze({modules:ModulesModuleId,memory:LocalMemoryModuleId,store:StoreModuleId})})
+export const LocalSystemPackage=Object.freeze({specifier:'velaros:system',exports:Object.freeze({modules:ModulesModuleId,goal:GoalModuleId,memory:LocalMemoryModuleId,store:StoreModuleId})})
 /** 主线接入宿主长期记忆作用域后的系统包。 */
-export const PersistentSystemPackage=Object.freeze({specifier:'velaros:system',exports:Object.freeze({modules:ModulesModuleId,memory:PersistentMemoryModuleId,store:StoreModuleId})})
+export const PersistentSystemPackage=Object.freeze({specifier:'velaros:system',exports:Object.freeze({modules:ModulesModuleId,goal:GoalModuleId,memory:PersistentMemoryModuleId,store:StoreModuleId})})
 /** 系统能力目录的分页约定。 */
 export const SystemCatalogLimits=Object.freeze({
  /** 默认目录页大小。 */

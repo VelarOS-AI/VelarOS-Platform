@@ -2,7 +2,7 @@
 
 <!-- 由 scripts/script/act-catalog.mjs 从真实装配定义生成。 -->
 
-当前共 12 种底层合同投影、74 个投影操作、43 项去重后的用法；其中系统包包含 3 个成员、22 个基础自管理操作，装配长期记忆时额外提供 recall/save/remove。同一会话的 memory 和 store 各使用一份实际授权合同。实际可用项由宿主配置、会话作用域和当前授权决定。
+当前共 13 种底层合同投影、76 个投影操作、45 项去重后的用法；其中系统包包含 4 个成员、24 个基础自管理操作，装配长期记忆时额外提供 recall/save/remove。同一会话的 memory 和 store 各使用一份实际授权合同。实际可用项由宿主配置、会话作用域和当前授权决定。
 
 | 目录 | 模型操作 | 可用条件 | 使用模板 |
 | --- | --- | --- | --- |
@@ -10,6 +10,7 @@
 | [system/ — store-write](system/MODULE.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`publish`、`share`、`set`、`remove`、`watch` | 获配空间写入范围 | [store-write-template.js](system/store-write-template.js) |
 | [system/ — store-read](system/MODULE.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch` | 共享空间只读授权 | [store-read-template.js](system/store-read-template.js) |
 | [system/ — modules](system/MODULE.md) | `list`、`search`、`describe` | 默认装配 | [modules-template.js](system/modules-template.js) |
+| [system/ — system-goal](system/MODULE.md) | `get`、`update` | 默认装配 | [goal-template.js](system/goal-template.js) |
 | [system/ — memory-local](system/MODULE.md) | `list`、`read`、`update`、`retain`、`release` | 搜索或未启用整理的会话 | [memory-local-template.js](system/memory-local-template.js) |
 | [system/ — memory-long-term](system/MODULE.md) | `recall`、`save`、`remove`、`list`、`read`、`update`、`retain`、`release`、`organize` | 主线宿主配置 memory；整理按实际模型配置生成 | [memory-long-term-template.js](system/memory-long-term-template.js) |
 | [system/ — memory](system/MODULE.md) | `list`、`read`、`update`、`retain`、`release`、`organize` | 具备整理模型的主线或业务子任务 | [memory-template.js](system/memory-template.js) |
@@ -52,6 +53,8 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 | `system.modules.list` | `observe`、`execute` | `none` | 按当前授权与空间筛选后分页列出包 |
 | `system.modules.search` | `observe`、`execute` | `none` | 在当前授权包中按关键词和空间检索 |
 | `system.modules.describe` | `observe`、`execute` | `none` | 读取包合同；system 可按 export 指定成员 |
+| `system.goal.get` | `observe`、`execute` | `none` | 读取当前会话目标和 CAS 版本；删除后返回墓碑 |
+| `system.goal.update` | `execute` | `write` | 显式建立、暂停、恢复或结束目标；先读取版本，完成或受阻需要实际依据；停止回复不会完成目标 |
 | `system.memory.list` | `observe`、`execute` | `none` | 按种类和标题分页查找当前任务材料；只返回引用、位置、大小和笔记版本 |
 | `system.memory.read` | `observe`、`execute` | `none` | 统一分页读取输入、源码、结果、笔记和材料原文；读取不续租、不执行脚本 |
 | `system.memory.update` | `execute` | `write` | 维护自己的笔记或计划；笔记用 key/baseRevision，计划用 plan；只在 execute 中调用 |

@@ -8,12 +8,12 @@
 
 ## 这是什么
 
-项目的两件工具，连同它们底下的项目内核：
+项目的两件工具、项目内核与语言服务：
 
 - **`velaros:project`**：受项目治理的文件。读出来的是带行号与版本的源码窗口，窗口上的 fileRef 绑定路径、版本和实际交出去的那几行；
   一次 edit 的步骤（create、overwrite、move、delete、recode、edit）编成一个带版本防护的事务：全成或全不成、跑校验器、可以查看、可以撤销，撤销遇到外部修改拒绝覆盖。
   局部编辑只能改 fileRef 看得到的行，overwrite 要求看过全文，move、delete 只核对版本；文件在读完之后被改过时，按原意图给出新位置与新 fileRef。
-- **`velaros:code`**：问代码之间的关系（定义、引用、调用、依赖、影响面、诊断），查询交给宿主的语言服务与代码图谱；它要用内核的符号表与读取核对目标，所以和 `velaros:project` 住在同一个单元。
+- **`velaros:code`**：问代码之间的关系（定义、引用、调用、依赖、影响面、诊断），宿主用 `createProjectCodeQuery` 接入本单元的语言服务与自己的代码图谱；它要用内核的符号表与读取核对目标，所以和 `velaros:project` 住在同一个单元。
 - **项目内核**：校验器、带版本防护的事务、撤销账本、变更记录——路径只受根内约束，没有读写名单、不脱敏、不问人（ADR 0009）。宿主按项目根建一个，经空间端口交给两件工具。
 
 两件工具不认识任何空间：项目根、内核、代码查询都从空间端口 `ProjectSpacePort` 要。项目给共用的命令、沙箱、看图装的端口也在这里
@@ -23,6 +23,18 @@
 本机文件（`velaros:files`，系统空间）与这里的项目文件是两件能力：项目的读取治理、事务与校验器是项目的规则，不往系统空间套。
 
 ## 提供什么
+
+语言服务与项目工具共用 `@velaros-ai/velaros/project` 入口，语言数据共用 `@velaros-ai/velaros/project/contracts`。
+
+| 值 / 接口 | 职责 |
+| --- | --- |
+| `languageQueries` / `LanguageQueriesApi` | 只读语言查询：符号、导出、引入、引用方、引用、诊断与影响面 |
+| `createProjectCodeQuery` | 生成 `ProjectSpacePort.queryCode`：语言动作走内置服务，图谱动作走宿主后端 |
+| `createExternalLanguageService` / `ExternalLanguageServiceApi` | 外部 LSP 的诊断、跳转、状态与停止 |
+| `typeScriptProjects` / `TypeScriptProjectsApi` | TypeScript 项目池的标准库配置与释放 |
+| `LanguageServiceIds`、`CodeQuerySources`、`DevelopmentCodeLimits`、`BuiltinExternalLanguageServers` | 语言身份、结果来源、诊断预算与默认外部服务表 |
+
+语言注入面登记在 `contract/requires.ts`：`LanguageReadPort` 只借 `AgentProjectKernelPort` 的 listFiles、read、listSymbols；`LanguageToolContext` 提供中止信号、项目根与该端口；`ProjectCodeIndexApi` 提供可选代码图谱后端。外部语言服务的五种公开数据形状与 `LanguageServiceId`、`CodeQuerySource` 从 contracts 导出。
 
 `createProjectContextSource` 通过 `ProjectContextSourceOptions` 装配 `ProjectContextSourceApi`，复用项目内核为双核提供只读、版本可核对的证据。
 
@@ -50,6 +62,7 @@
 | 注入点 | 必须 | 谁给、什么时候 |
 | --- | --- | --- |
 | `ProjectOperationContext` / `ProjectSpacePort` | 是 | 空间每次分发调用时给：取消信号、会话，以及空间端口——项目根、领域内核端口 `AgentProjectKernelPort`、代码查询 `queryCode`。项目空间的宿主端口在它之上再加命令、沙箱与缩图，那是给共用能力用的 |
+| `ProjectShellHostPort` | 仅装配项目命令端口时 | 项目根与 `ShellHostPort`，命令目录复用真实路径范围核验和项目资源门；完整 `ProjectHostPort` 仍可传入 |
 | `ProjectHostPort` | 装共用能力的项目端口时 | 产品每次分发共用能力的调用时给：`ProjectSpacePort` 那三件，加上跑命令与管后台任务的四件（`velaros:shell` 的 `ShellHostPort`，本机实现是 `@velaros-ai/velaros/shell/local`）、可选的演练沙箱（`RehearsalSandboxHostPort`）与缩图 |
 | `CreateProjectKernelOptions` / `ProjectProviders` | 是 | 建内核时给：项目根、策略覆盖、事务状态文件、变更记录写端 `ProjectChangeFeedWriter`，以及可选的列举过滤、证据包、日志、命令、遥测、代码智能后端（`FileFilterProvider`、`ContextProvider`、`LoggerProvider`、`CommandProvider`、`TelemetryProvider`、`ProjectCodeIntelligenceHost`） |
 | `ProjectPlugin` / `ProjectPluginContext` | 否 | 插件扩展点：`FileAdapter`、`FileAdapterFactory`、`PatchStrategy`、`ProjectValidator`、`ProjectFixer`、`ProjectHook`、`PipelineStage` |
@@ -71,6 +84,8 @@
 
 ## 骨干链路
 
+语言查询：`createProjectCodeQuery` → `ProjectCodeQuery` → `LanguageQueries` → `LanguageServiceRegistry` → `JsTsLanguageService` / `PythonLanguageService`；JS/TS 诊断借 `TypeScriptProjectPool`，目录按 tsconfig 分组。图谱查询转交 `ProjectCodeIndexApi`。外部语言服务由 `ExternalLanguageService` 按规格选择 `ExternalLanguageServerClient`，按需启动 LSP 并归一结果。
+
 产品装的项目空间每次调用都交来一份这一次的上下文（`ProjectOperationContext`），两个操作类按它办：
 
 | 能力 | 链路 |
@@ -90,11 +105,14 @@
 - `@velaros-ai/core/path-rules`：glob 匹配（include/exclude 都经 `utils/glob.ts` 调它，大小写按盘的规矩）、.gitignore 判定与列举时的忽略策略（`git check-ignore` 的执行口由本包注入）。
 - `@velaros-ai/core/platform`：路径文本的包含判定与本平台的大小写规矩。
 - `@velaros-ai/core/text-files`：磁盘文本的编码识别、严格解码、按原编码无损写回（GB18030 下保留没改片段的原字节）、原子替换写入、有界读与流式读；它的失败在 `utils/errors.ts` 的 `projectErrorFromTextFile` 一处按错误码翻成 `ProjectError`。
-- `typescript`（JS/TS 解析）、`diff`（差量）、`execa`（子进程）。
+- `@codemirror/lang-python`：Python 的 Lezer 语法树。
+- `typescript`（JS/TS 解析与增量语言服务）、`diff`（差量）、`execa`（子进程）。
 - 同包的单元：`@velaros-ai/velaros/shell`（命令判定，决定前台命令走读门还是写门；执行端口的形状）、`@velaros-ai/velaros/sandbox` 与 `@velaros-ai/velaros/images`（端口形状），经它们的根入口引用。
 - 不读环境变量。
 
 ## 状态归谁
+
+语言状态由项目单元拥有：TypeScript 项目池以项目根与 tsconfig 为键；语言服务注册表构造后不变；外部语言服务实例持有该项目的 LSP 客户端、待决请求与文档状态。
 
 - **领域内核**：每个项目根一个 `LocalProjectKernel`，持有事务仓库（内存里保留最近的事务，可选落盘的事务状态文件）、路径锁、审计日志（内存，有上限）、解析过的目标与证据包（有上限）、插件与登记表。可撤销历史按条数和字节预算（`ProjectTuning.persistence.historyBytes`，内存与状态文件共用）双重淘汰，最旧先出；还没应用的事务与正在写盘的事务永远保留，所以历史再大也不会让提交失败。
 - **变更记录**：宿主给的写端（落盘的用 `createFileProjectChangeFeed`，放在宿主私有目录），不给就在内存里。
@@ -103,9 +121,13 @@
 
 ## 生命周期
 
+宿主关闭项目时调用 `typeScriptProjects.release(projectRoot)`，退出时调用 `release()`；外部语言服务实例用 `stop()` 关闭。`configureLibraryDirectory` 改变标准库目录时会重建池。标准库依次从 typescript 包、显式配置和 Electron 资源目录寻找，缺失则明确降级为语法诊断。
+
 内核随宿主创建、随宿主丢弃，没有要释放的句柄；落盘的变更记录要 `close()`。给了事务状态文件时，重启后内核逐个恢复中断的应用或回滚（并发的事务各有各的恢复点），只还原能证明属于该事务的内容。
 
 ## 失败语义
+
+语言查询保留原有承诺：图谱缺席报 `UNAVAILABLE`；越界或未知语言报 `VALIDATION`；未扫到文件、截断、超时及标准库缺席都写 note/degraded；提前停止的引用计数标记下限。路径按真实路径约束，取消在列举、读文件和逐文件诊断之间生效。
 
 - 错误原因只来自 `ProjectErrorCodes`，挂在 `ProjectError.reason`；交给程序时原因码就是 `error.code`，说明、位置、候选、诊断与下一步都在 `error.message` 里。
 - 改动类失败一个文件都没写（`details.executionOutcome = 'not-applied'`）；程序改好入参重提即可。
@@ -114,18 +136,21 @@
 
 ## 不变量
 
-共 25 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排：INV-15 作废；INV-7、INV-16、INV-21 当初随项目空间搬去 `@velaros-ai/project`，那个包拆掉之后（ADR 0013），项目给共用能力装端口的承诺以 INV-26～INV-29 回到这里，旧编号都不复用。
-按检验方式：测试 23 条、类型 1 条、门禁 1 条。未验证 0 条。
+共 36 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排：INV-15 作废；INV-7、INV-16、INV-21 当初随项目空间搬去 `@velaros-ai/project`，那个包拆掉之后（ADR 0013），项目给共用能力装端口的承诺以 INV-26～INV-29 回到这里，旧编号都不复用。
+语言服务承诺登记为 INV-30～INV-40，验收在 `spec/language-acceptance.test.ts`，对应原语言服务的 INV-1～INV-11。
+按检验方式：测试 32 条、类型 2 条、门禁 2 条。未验证 0 条。
 
 ## 非目标
 
 - 不管项目以外的文件和系统级操作：那是系统空间（`velaros:files`）；两件工具出不了项目根。
 - 不装空间：项目空间挂哪几件、哪几件常驻，是产品的事（ADR 0013）；这里只给端口。
 - 不做 Git 界面、项目根管理、文件树可见性这些产品功能：它们归产品壳。
-- 不自己跑语言服务和代码图谱：`velaros:code` 把查询交给宿主的语言服务与代码图谱后端。
+- 不自己跑语言服务和代码图谱：`velaros:code` 把宿主用 `createProjectCodeQuery` 接入本单元的语言服务与自己的代码图谱后端。
 - 不做「当前文件视图」这类自动进上下文的东西：代码面里只有程序的返回值与显式输出进上下文。
 
 ## 结构
+
+语言实现集中在 `impl/language/`（8 个类），纯工具在 `utils/language/`，可调参数集中在 `utils/tuning.ts`；工作类型合入扁平的 `types/`，公开数据合入 `types/project.ts`。层次从上到下是 ProjectCodeQuery / ExternalLanguageService → LanguageQueries / ExternalLanguageServerClient → LanguageServiceRegistry → JsTsLanguageService / PythonLanguageService → TypeScriptProjectPool；接口继续在各类上方声明，三个公开 API 在 provides 登记。
 
 ```text
 project/

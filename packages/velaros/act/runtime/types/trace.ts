@@ -1,5 +1,20 @@
 import type {ModelToolBinding} from './model-tools.js'
 
+/** 宿主诊断采样，不含正文、参数或资源路径；阶段可能嵌套，不能相加当作墙钟总耗时。 */
+export interface RuntimeMetric {
+ /** 会话身份。 */
+ readonly sessionId:string
+ /** 存储操作或效果等待阶段。 */
+ readonly phase:'storage'|'effect-wait'|'effect-run'
+ /** 存储方法名或能力操作名。 */
+ readonly operation:string
+ /** 单调时钟的毫秒差。 */
+ readonly durationMs:number
+ /** 阶段是否正常返回；不代表外部效果已提交。 */
+ readonly succeeded:boolean
+ /** 关联到脚本执行，存储采样不推断执行归属。 */
+ readonly executionId?:string
+}
 
 /** 会话内的原始记录，正文只按总字符预算截取，完整内容可经 context.read 召回。 */
 export interface ActTraceRecord {
@@ -12,6 +27,52 @@ export interface ActTraceRecord {
   readonly sources:ReadonlyArray<{readonly sessionId:string;readonly id:string}>
 }
 
+/** Kernel 调用事实的有界展示；原始回执与外部效果分别表达。 */
+export interface ActInvocationSummary {
+ /** 实际调用的模块。 */
+ readonly moduleId:string
+ /** 实际调用的操作。 */
+ readonly operation:string
+ /** 没有终态回执时保持 pending，不根据会话结束推断成功。 */
+ readonly status:'pending'|'succeeded'|'failed'|'cancelled'
+ /** 原始回执中的外部效果；无回执时未知。 */
+ readonly effect:'none'|'committed'|'partial'|'unknown'
+ /** 有界参数原文；正文预算不足时可能为空。 */
+ readonly input:string
+ /** 有界返回值或错误原文；无回执时为空。 */
+ readonly output:string
+ /** 参数是否被裁剪。 */
+ readonly inputTruncated:boolean
+ /** 返回值或错误是否被裁剪。 */
+ readonly outputTruncated:boolean
+}
+
+/** 封存请求的只读展示；不证明供应商已收到请求，图像数据只保留占位。 */
+export interface ActRequestSummary {
+ /** 编译器封存的模型身份。 */
+ readonly model:string
+ /** 原始完整请求的内容指纹，展示截断不改变它。 */
+ readonly fingerprint:string
+ /** 发送准入时的输入 token 计量，历史缺失为 null。 */
+ readonly inputTokens:Nullable<number>
+ /** 输入计量精度，历史缺失为 null。 */
+ readonly precision:Nullable<'exact'|'estimate'>
+ /** 输入计量依据，历史缺失为 null。 */
+ readonly basis:Nullable<string>
+ /** 为输出保留的 token 数。 */
+ readonly outputTokens:number
+ /** 有界系统指令。 */
+ readonly system:string
+ /** 有界消息 JSON 文本；截断后不保证可解析。 */
+ readonly messages:string
+ /** 系统指令是否被截断。 */
+ readonly systemTruncated:boolean
+ /** 消息文本是否被截断。 */
+ readonly messagesTruncated:boolean
+ /** 消息中的图像或字节数据是否以占位代替。 */
+ readonly mediaOmitted:boolean
+}
+
 /** 一次实际模型请求及其执行证据；缺失部分明确列入 gaps。 */
 export interface ActTurnTrace {
   readonly sessionId:string
@@ -19,8 +80,12 @@ export interface ActTurnTrace {
   readonly runId:string
   readonly turn:number
   readonly repair:number
+  /** 单调时钟测量；缺失保留 null。准备耗时仅记在首个尝试；模型耗时包含流消费者处理，不等于供应商服务时间。 */
+  readonly timing:{readonly observationMs:Nullable<number>;readonly contextMs:Nullable<number>;readonly modelMs:Nullable<number>;readonly firstTextMs:Nullable<number>}
   /** 请求审计包含 ProviderRequestCompiler 封存的消息与指纹。 */
   readonly request:ActTraceRecord
+  /** 从完整封存请求生成的有界展示；历史没有封存请求时为 null。 */
+  readonly requestSummary:Nullable<ActRequestSummary>
   /** 已接受或部分收到的模型原文。 */
   readonly response:Nullable<ActTraceRecord>
   /** 完整协议判定、解析结果或拒绝原因。 */
@@ -28,7 +93,7 @@ export interface ActTurnTrace {
   /** 调度身份及对应源码、控制回执、结果、租约变化。 */
   readonly records:readonly ActTraceRecord[]
   /** Kernel 权威调用记录的有界 JSON；空数组不证明世界没有发生效果。 */
-  readonly invocations:ReadonlyArray<{readonly id:string;readonly executionId:string;readonly chars:number;readonly body:string;readonly truncated:boolean}>
+  readonly invocations:ReadonlyArray<{readonly id:string;readonly executionId:string;readonly chars:number;readonly body:string;readonly truncated:boolean;readonly summary:ActInvocationSummary}>
   /** 同一 run 的下一请求，可继续查询其真实视图和差量。 */
   readonly nextTurnId:Nullable<string>
   /** 元数据快照版本；追踪期间执行可能仍在推进。 */

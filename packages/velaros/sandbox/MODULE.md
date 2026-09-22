@@ -60,7 +60,7 @@
 
 ## 依赖什么
 
-- 上游包：`@velaros-ai/core`（类型守卫、`AppError`）；`@velaros-ai/agent` 的 `tool-contract`（审批端口），peer 依赖。
+- 上游包：`@velaros-ai/core`（类型守卫、`AppError`）；`@velaros-ai/kernel` 的 `ApprovalPort`；`@velaros-ai/velaros/shell` 的进程约束端口。
 - 同包的单元：`@velaros-ai/velaros/shell`（命令判定与危险命令的审批请求，`run` 用；本机沙箱的受约束执行器，经 `./local` 入口），经它的入口引用。
 - 本机实现另用：`@velaros-ai/core/path-rules`（镜像时的忽略策略）、`@velaros-ai/core/text-files`（清单的原子写、按编码解码）、`@velaros-ai/core/platform`（路径文本判定）、`diff`（文本差量）。
 - 只在验收里用：`@velaros-ai/script`（dev 依赖），跑那条端到端的程序。

@@ -34,9 +34,9 @@
 | --- | --- | --- |
 | Kernel | `src/types/operations.ts`、`src/contract/requires.ts`、`src/contract/provides.ts`、`src/impl/runtime/OperationRuntime.ts` | 新增 OperationResourceVersion/OperationReadStamp/OperationReadValidation、OperationReadContract、validateReads、beforeReadValidation；读取戳验证原始回执、绑定代次、授权和当前版本。InvocationReceipt.observation 与 OperationContext.recordObservation 记录真实观察收束和防护范围。只读版本验证及效果核对服从取消。 |
 | Script | `src/types/output.ts`、`src/utils/output-capture.ts`、`output-render.ts`、`standard.ts` | 新增 required，显式稳定 key 必填；优先分配完整必需块。原值采集、预览及原生图像保持同一通路。 |
-| Context | `src/contract/context.ts`、`src/interface/provides.ts`、`requires.ts`、`src/impl/ContextViewSession.ts` | ContextTaskState.id/startedSequence、begin 的 continue/new、preview、完成 recovery；原始任务归档和任务总账共用存储。 |
+| Context | `src/types/context.ts`、`src/contract/provides.ts`、`requires.ts`、`src/impl/ContextViewSession.ts` | ContextTaskState.id/startedSequence、begin 的 continue/new、preview、完成 recovery；原始任务归档和任务总账共用存储。 |
 | Context Storage | `src/impl/LocalContextStorage.ts`、`ContextInvocationJournal.ts`、`SessionContext.ts` | records/collect 可选适配契约；SQLite 元数据与记录目录分表，索引分页；日志按 executionId 查询；CAS 防止引用不存在的对象。 |
-| Agent | `src/contract/act.ts`、`delegation.ts`、`src/interface/requires.ts`、`ActLoop.ts`、`ActRunService.ts`、`AgentSupervisor.ts` | ActInput.task、needs_reconcile、完成 recovery、ModelToolDelivery、AgentJob.parentTaskId/delivery、宿主交付回调。子交付最多 64 个内嵌事件、128000 字符，omittedEvents/eventSource 指向完整子历史。 |
+| Agent | `src/types/act.ts`、`delegation.ts`、`src/contract/requires.ts`、`ActLoop.ts`、`ActRunService.ts`、`AgentSupervisor.ts` | ActInput.task、needs_reconcile、完成 recovery、ModelToolDelivery、AgentJob.parentTaskId/delivery、宿主交付回调。子交付最多 64 个内嵌事件、128000 字符，omittedEvents/eventSource 指向完整子历史。 |
 | Runtime | `impl/RuntimeSession.ts`、`ProgramContext.ts`、`ContextMemory.ts`、`RecentContext.ts`、`ComposedRuntime.ts` | 决策依据、必需输出、任务边界、健康状态、共享效果闸门与父子核对。 |
 | 领域装配 | `impl/StandardModules.ts`、`contract/requires.ts`、`index.ts` | createProjectCapabilityModule / ProjectCapabilityModuleOptions 复用 ProjectSpacePort 和现有文件能力。文件版本来自 kernel.stat/真实 read/edit 回执；列表/查询对真实结果重新核验，排除生成句柄随机性。CapabilityModuleOptions.reads 用于宿主注入权威版本适配。 |
 | 整理 | `system/impl/ContextMaintenanceState.ts`、`system/contract/requires.ts`、`runtime/impl/ContextMaintenance.ts` | ContextCandidateValidator；候选发布前验证，保留既有用户约束。自动压力上限在当前业务轮后过期，显式边界策略在任务内保持。源码中的展示修改始终有可见版本。 |

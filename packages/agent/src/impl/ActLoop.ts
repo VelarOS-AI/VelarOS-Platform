@@ -1,4 +1,5 @@
 import type { ContextCompletionResult,ContextProjection } from '@velaros-ai/context'
+import {isNull} from '@velaros-ai/core'
 import {Log} from '@velaros-ai/core'
 import {isFalse,isUndefined} from '@velaros-ai/core'
 import { isEmpty, isObject, isString } from '@velaros-ai/core'
@@ -6,12 +7,19 @@ import {TimerScope} from '@velaros-ai/core/utils/TimerScope'
 import { modelRequestEncoder, type ModelTurnDelta, type ModelTurnRequest } from '@velaros-ai/kernel'
 import { type CompiledModelRequest,createProviderRequestCompiler,modelProviderRetry } from '@velaros-ai/model'
 
-import type { ActDecodedTurn, ActInput, ActRunEvent } from '../contract/act.js'
-import type { ActLoopApi } from '../interface/provides.js'
-import type { ActLoopOptions } from '../interface/requires.js'
+import type { ActLoopOptions } from '../contract/requires.js'
+import type { ActDecodedTurn, ActInput, ActRunEvent } from '../types/act.js'
 import { boundedModelOperation, boundedModelStream } from '../utils/model-stream.js'
 
-class ActLoop implements ActLoopApi {
+/** 唯一模型回合推进器，由运行服务持有。 */
+export interface ActLoopApi {
+ /** 推进一次输入，暂停或终止时返回。 */
+ submit(input:string|ActInput,signal?:AbortSignal):AsyncIterable<ActRunEvent>
+ /** 取消当前运行。 */
+ cancel():void
+}
+
+export class ActLoop implements ActLoopApi {
   private controller?: AbortController
   private completionFeedback?:ContextCompletionResult
   private readonly policy
@@ -53,6 +61,8 @@ class ActLoop implements ActLoopApi {
       const user = await this.options.context.ingest({text:inputValue.text??(inputValue.images?.length?'[用户图片输入]':''),files:inputValue.files},controller.signal)
       for(const image of images)await this.options.context.append({kind:'audit',title:'user:image',body:JSON.stringify(image),sources:[user.ref]},controller.signal)
       await this.options.view.begin(user.ref, controller.signal,inputValue.task??'continue'); ownsView = true
+      yield {type:'input',runId,ref:user.ref,inputId:inputValue.inputId,source:'submit'}
+      let inputApplied=false
       heartbeat=timers.every(Math.max(1,Math.floor(this.options.view.limits.leaseMs/3)),()=>{
         if(renewal||controller.signal.aborted)return
         renewal=this.options.view.renew(controller.signal).catch(error=>controller.abort(error)).finally(()=>{renewal=undefined})
@@ -60,7 +70,10 @@ class ActLoop implements ActLoopApi {
       turns: for (let turn = 0; turn < this.options.limits.turns; turn++) {
         controller.signal.throwIfAborted()
         await this.options.control?.beforeTurn(controller.signal)
+        const preparationStarted=performance.now()
         await this.options.frames.prepare(controller.signal)
+        const observationMs=performance.now()-preparationStarted
+        const projectionStarted=performance.now()
         const decoder = this.options.protocol.open()
         let frame:Awaited<ReturnType<ActLoop['frame']>>=null
         for(let refresh=0;refresh<3;refresh++)try{frame=await boundedModelOperation(this.frame(controller.signal,decoder.instructions),controller.signal);break}catch(error){if(!controller.signal.aborted&&this.options.control?.pending())continue turns;if((error as {code?:string}).code!=='STALE_VIEW'||refresh===2)throw error}
@@ -68,12 +81,15 @@ class ActLoop implements ActLoopApi {
           terminal = 'context-blocked'; yield {type:'state',runId,status:'context_blocked'}; return
         }
         let compiled:CompiledModelRequest=frame
+        const contextMs=performance.now()-projectionStarted
         let decoded:Optional<ActDecodedTurn>
         let acceptedTurnId=''
         for(let repair=0;repair<=Math.max(2,this.policy.recoveryAttempts);repair++) {
           decoder.reset()
           await this.options.view.reserveModel('main', compiled.estimate.tokens + compiled.request.outputTokens)
-          const audit = await this.options.context.append({kind:'audit',title:'model-request',body:JSON.stringify({runId,turn,repair,model:this.options.model.id,estimate:compiled.estimate,providerRequest:compiled.providerRequest,request:compiled.request})},controller.signal)
+          const audit = await this.options.context.append({kind:'audit',title:'model-request',body:JSON.stringify({runId,turn,repair,preparation:repair===0?{observationMs,contextMs}:undefined,model:this.options.model.id,estimate:compiled.estimate,providerRequest:compiled.providerRequest,request:compiled.request})},controller.signal)
+          await this.options.control?.applied?.(audit.ref.id,controller.signal)
+          if(!inputApplied){yield {type:'input-applied',runId,ref:user.ref,inputId:inputValue.inputId,turnId:audit.ref.id};inputApplied=true}
           yield {type:'turn',runId,turnId:audit.ref.id}
           yield {type:'state',runId,status:'thinking'}
           let finish:Optional<Extract<ModelTurnDelta,{type:'finish'}>>
@@ -84,6 +100,9 @@ class ActLoop implements ActLoopApi {
           const attemptController=new AbortController()
           const deadline=this.options.frames.deadline?.()
           const attemptSignal=AbortSignal.any([controller.signal,attemptController.signal,...(this.options.control?[this.options.control.turnSignal()]:[]),...(deadline?[AbortSignal.timeout(Math.max(1,deadline-Date.now()))]:[])])
+          const modelStarted=performance.now()
+          let firstTextMs:Nullable<number>=null
+          let modelMs:Nullable<number>=null
           try {
             for await(const delta of boundedModelStream(this.options.model,compiled.request,attemptSignal)) {
               controller.signal.throwIfAborted()
@@ -97,24 +116,27 @@ class ActLoop implements ActLoopApi {
                 yield {type:'usage',runId,inputTokens:delta.inputTokens,outputTokens:delta.outputTokens}
               }
               if(delta.type==='text') {
+                if(isNull(firstTextMs)&&!isEmpty(delta.text))firstTextMs=performance.now()-modelStarted
                 received+=delta.text
                                 for(const preview of decoder.push(delta.text))yield {...preview,runId}
               }
               if(delta.type==='finish')finish=delta
             }
+            modelMs=performance.now()-modelStarted
             if(!finish||finish.reason!=='stop'||!received)throw new Error('模型响应未完整结束，程序没有执行')
             decoded=decoder.finish()
             for(const preview of decoded.events)yield {...preview,runId}
             const accepted=await this.options.context.append({kind:'assistant',body:received,sources:[audit.ref]},controller.signal)
             responseRef=accepted.ref
-            await this.options.context.append({kind:'audit',title:'model-response',body:JSON.stringify({runId,turnId:audit.ref.id,status:'accepted',finish,usage,rawRef:responseRef,decoded:{message:decoded.message,done:decoded.done,submission:decoded.submission}}),sources:[audit.ref,responseRef]},controller.signal)
+            await this.options.context.append({kind:'audit',title:'model-response',body:JSON.stringify({runId,turnId:audit.ref.id,status:'accepted',timing:{modelMs,firstTextMs},finish,usage,rawRef:responseRef,decoded:{message:decoded.message,done:decoded.done,submission:decoded.submission}}),sources:[audit.ref,responseRef]},controller.signal)
             acceptedTurnId=`${audit.ref.id}:${accepted.ref.id}`
             yield {type:'accepted',runId,turnId:audit.ref.id,text:decoded.message,ref:accepted.ref}
             break
           } catch(error) {
+            modelMs??=performance.now()-modelStarted
             // 即使接收被取消，也保存已经收到的原始字节；这些内容不授权执行。
             if(!responseRef)responseRef=(await this.options.context.append({kind:'audit',title:'model-response-raw',body:received,sources:[audit.ref]})).ref
-            await this.options.context.append({kind:'audit',title:'model-response',body:JSON.stringify({runId,turnId:audit.ref.id,status:'rejected',finish,usage,rawRef:responseRef,error:{message:error instanceof Error?error.message:String(error),code:(error as {code?:string}).code}}),sources:[audit.ref,responseRef]})
+            await this.options.context.append({kind:'audit',title:'model-response',body:JSON.stringify({runId,turnId:audit.ref.id,status:'rejected',timing:{modelMs,firstTextMs},finish,usage,rawRef:responseRef,error:{message:error instanceof Error?error.message:String(error),code:(error as {code?:string}).code}}),sources:[audit.ref,responseRef]})
             yield {type:'rejected',runId,turnId:audit.ref.id,message:error instanceof Error?error.message:String(error)}
             if(!controller.signal.aborted&&this.options.control?.pending())continue turns
             const retryDelay=(error as {retryAfterMs?:number}).retryAfterMs
@@ -246,4 +268,3 @@ class ActLoop implements ActLoopApi {
 }
 
 /** 核心循环只依赖上下文、模型与统一执行口。 */
-export function createActLoop(options:ActLoopOptions):ActLoopApi {return new ActLoop(options)}

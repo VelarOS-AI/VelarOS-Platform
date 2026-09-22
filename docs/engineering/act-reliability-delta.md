@@ -1,5 +1,7 @@
 # Act 执行可靠性与原始追踪
 
+> 阶段差量记录：路径、API 和测试数字对应本次记录形成时的实现。当前接入请读 [模块规范](../architecture/module-ownership.md)、[Act 架构](../architecture/platform-runtime.md) 和 [能力目录](../../packages/velaros/act/README.md)。
+
 本轮范围是正式主干的故障恢复、行为覆盖核对和单轮原始数据追踪。执行由 RuntimeSession、ActRunService、ActLoop、KernelScriptSession、OperationRuntime 完成；证据保存在已有 ContextStorage 与调用 journal。
 
 ## 修正的行为

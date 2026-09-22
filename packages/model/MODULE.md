@@ -10,13 +10,13 @@
 
 它**没有模型面工具**：模型不直接调它。内核那一面只开一条可调用操作 `supports_provider`。
 
-它也不知道 agent 长什么样——agent 刻意不依赖本包，两边经宿主注入的不透明运行时对接。提示词缓存的三个标记键是两包之间的线协议：agent 写标记，本包出线前翻译成各家的线上字段，`velaros` 命名空间永不出线。
+Agent 通过本包的请求编译器与重试策略准备模型请求，本包通过 Kernel 契约接受请求并适配驱动，不依赖 Agent 实现。提示词缓存的三个标记键是两包之间的线协议：agent 写标记，本包出线前翻译成各家的线上字段，`velaros` 命名空间永不出线。
 
 ## 提供什么
 
 `createProviderRequestCompiler`、`ProviderRequestCompilerApi`：对已物化请求编码、计量和封存 v2 审计快照。
 
-`modelRequestEncoder` / `ModelRequestEncoderApi` 将中立请求编码为驱动实际发送的 prompt，ProviderRequestCompiler 共用此编码入口。
+`modelRequestEncoder` / `ModelRequestEncoderApi` 从 Kernel 转发，将中立请求编码为驱动实际发送的 prompt，ProviderRequestCompiler 共用该实现。
 
 
 - `createAiSdkModelDriver`、`AiSdkDriverOptions`、`ModelDriver`：提供统一流式驱动与编码预算口径。
@@ -82,7 +82,7 @@
 - `ai` 与 `@ai-sdk/{openai,anthropic,google,provider}`：各家服务商的语言模型与 embedding SDK。
 - Node 内置模块只出现在 provider script 注册表（fs、module、os、path、vm）与用户 JS 适配器（vm）里；`process.env` 只在 `NodeLocalModelEnvironment` 与 provider script 注册表读一次。
 
-**不依赖 `@velaros-ai/agent`**，agent 也不依赖本包（`packages/agent/test/model-boundary.test.ts` 盯着）。两边共享的只有三件线协议：提示词缓存标记的三个键、`reasoningLevel → thinkingDepth` 的映射、请求策略字段名。
+Agent 通过本包的 `ProviderRequestCompiler`、ModelDriver 与重试策略准备并发送请求；Model 通过 Kernel 的 ModelTurnRequest 处理输入。依赖方向由 `scripts/agent/check-arch-boundaries.mjs` 检查。
 
 ## 状态归谁
 

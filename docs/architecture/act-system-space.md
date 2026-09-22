@@ -6,7 +6,7 @@
 
 主模型维护 observe 代码、自己的笔记和计划，并声明下一阶段需要什么。整理模型读取固定父快照，提出派生展示补丁。Runtime 决定预算、调度、权限、版本检查和发布时机。宿主配置模型、资源档位、业务权限和生命周期。
 
-系统能力集中在 `packages/velaros/act/system/`。MemoryModule、ModulesModule、StoreModule 定义操作；SystemModules 负责可信身份；SystemCatalog 返回当前会话的真实包投影。RuntimeSession、ContextMemory、ProgramContext、RecentContext 继续承担执行、存储和组帧机制。StoreSession 固定共享对象的访问范围，持久对象与变更记录落在现有 ContextStorage 的 SQLite 连接内。
+系统能力集中在 `packages/velaros/act/system/`。MemoryModule、ModulesModule、StoreModule 定义操作；SystemModules 负责可信身份；SystemCatalog 返回当前会话的真实包投影。RuntimeSession、ContextMemory、ProgramContext、RecentContext 继续承担执行、存储和组帧机制。StoreSession 固定共享对象的访问范围，持久对象与变更记录通过同一 ContextStorage.stores 持久化；默认适配器使用 SQLite，替换约束见 [存储规范](storage.md)。
 
 | 会话 | 系统面 | 可委托模型工具 |
 | --- | --- | --- |
@@ -33,6 +33,9 @@
 | store.create / list | 创建独立空间，或分页发现获配空间和权限 |
 | store.keys / get | 按空间列出对象目录，或读取当前对象与版本 |
 | store.set / remove | 按 baseRevision 完整替换对象或写入删除墓碑 |
+| store.events / read | 按订阅读取消息目录，或读取获准的共享材料正文 |
+| store.subscribe / ack | 持久登记订阅，并按投递身份确认已处理消息 |
+| store.publish / share | 发布独立消息，或把会话材料保存为可共享引用 |
 | store.watch | 替换当前会话的持久关注集合；变化随下一模型帧交付 |
 
 list/read/recall 无写效果，可用于观察。update/retain/release/organize/save/remove 只在 execute 调用。结果 retain 的 turns 为 1–32 或 task；笔记保持驻留直到显式释放。驻留不等于全文必定装入窗口。
@@ -105,7 +108,7 @@ ContextMaintenanceState 在临时事务视图里组装完整候选五区及图�
 {"specifier":"velaros:system","exports":{"modules":"velaros:modules","memory":"velaros:system-memory","store":"velaros:system-store"}}
 ```
 
-本地合同的 memory 映射到 `velaros:system-memory-local`。主线装配长期记忆后映射到 `velaros:system-memory-persistent`。三种投影均由同一个 MemoryModule 实现，模型只使用 `velaros:system.memory`。搜索、整理和业务子任务不继承宿主的长期记忆端口。store 的可写投影为 `velaros:system-store-write`，只读投影为 `velaros:system-store-read`，实际分别提供六项和四项操作；声明、模板和发现共用这份投影。
+本地合同的 memory 映射到 `velaros:system-memory-local`。主线装配长期记忆后映射到 `velaros:system-memory-persistent`。三种投影均由同一个 MemoryModule 实现，模型只使用 `velaros:system.memory`。搜索、整理和业务子任务不继承宿主的长期记忆端口。store 的可写投影为 `velaros:system-store-write`，只读投影为 `velaros:system-store-read`，实际分别提供十二项和十项操作；声明、模板和发现共用这份投影。
 
 实际链路：ScriptAct 完整响应预检，KernelScriptSession 使用当前包投影检查脚本，隔离执行器调用 KernelInvocationPort，Kernel 校验 schema、模式、权限和绑定代次，MemoryModule 调用现有 ContextMemory、整理服务或长期 MemoryScopePort，调用回执持久化，下一请求由 Runtime 组帧。
 
@@ -113,7 +116,7 @@ output 在 `velaros`，input/blobs 在 `velaros:program`。绑定释放、权限
 
 ## 合同与验证
 
-当前系统合同代际为 17，Runtime 合同代际为 13。系统操作统一从 memory/modules/store 成员访问，持久原文通过 memory.read 读取。
+当前系统合同代际为 20，Runtime 合同代际为 16；实际值由各自 contract/constants.ts 维护。系统操作统一从 memory/modules/store 成员访问，持久原文通过 memory.read 读取。
 
 共享状态的具体文件、接口与验证见 [共享状态差量报告](../engineering/act-store-delta.md)。
 
@@ -142,14 +145,14 @@ store 是一组持久 JSON 对象、访问授权和变更订阅。Agent 可以�
 | 操作 | 输入 | 返回 |
 | --- | --- | --- |
 | create | `{name,description?}` | 空间描述及 access，包含稳定 id |
-| list | `{after?,limit?}` | 获配空间的 `{items,nextAfter}` |
+| list | `{active?,after?,limit?}` | 获配空间的 `{items,nextAfter}` |
 | keys | `{store,prefix?,after?,limit?}` | 对象元数据的 `{items,nextAfter}` |
 | get | `{store,key}` | 当前对象，或未创建时的 null |
-| set | `{store,key,baseRevision,value}` | 提交后的对象 |
+| set | `{store,key,baseRevision,value,event?}` | 提交后的对象 |
 | remove | `{store,key,baseRevision}` | 删除墓碑，保留递增版本 |
 | watch | `{store,keys?,prefixes?}` | 该空间订阅的 `{revision,after,keys,prefixes}` |
 
-get/list/keys 可用于 observe；create/set/remove/watch 只在 execute。set 是完整替换，创建新键的 baseRevision 为 0，后续更新使用 get 返回的 revision。写冲突需要重新读取判断，相同版本写入相同值不制造新变化。get 和写回回执按 `[storeId,key]` 校验依据，不会混淆不同空间的同名对象。
+get/list/keys/events/read 可用于 observe；create/set/remove/watch/subscribe/ack/publish/share 只在 execute。set 是完整替换，创建新键的 baseRevision 为 0，后续更新使用 get 返回的 revision。写冲突需要重新读取判断，相同版本写入相同值不制造新变化。get 和写回回执按 `[storeId,key]` 校验依据，不会混淆不同空间的同名对象。
 
 execute 示例：
 
@@ -194,7 +197,7 @@ scope 是宿主控制的租户或项目边界，store.id 是该边界内的具�
 
 ## 多空间通知与生命周期
 
-对象、空间序号、变化和提交回执复用现有 SQLite 事务。创建空间及其幂等回执也在同一事务内。提交后通过现有通知机制快速唤醒，跨连接读取持久序号补收。创建或写入成功但响应丢失时，Kernel reconcile 根据原调用身份核对，不重跑脚本。
+对象、空间序号、变化和提交回执经 StoreStorage 原子提交，默认由 SQLite 事务实现；可替换边界见 [存储适配规范](storage.md)。创建空间及其幂等回执也在同一事务内。提交后通过现有通知机制快速唤醒，跨连接读取持久序号补收。创建或写入成功但响应丢失时，Kernel reconcile 根据原调用身份核对，不重跑脚本。
 
 watch 为每个 Agent 在每个 store 中独立保存关注项及确认位置。相同声明保留位置，改变集合从当前提交序号开始，空集合取消。先 watch 再 get/keys 读取基线，避免注册前后的观察空隙。订阅跨任务保持到显式修改。
 

@@ -15,7 +15,7 @@ Core 不负责：
 - Kernel ABI、协议、运行时、客户端或进程装配；这些统一属于 `@velaros-ai/kernel`。
 - Agent 消息、会话、工具契约、上下文预算或执行语义；这些属于 `@velaros-ai/agent`。
 - 模型计价；它属于 `@velaros-ai/model`。
-- CLI 连接与路由；它属于 `@velaros-ai/cli`。
+- CLI 连接与路由；它属于 VelarOS-Termel 的 `@velaros-ai/cli`。
 - Desktop、Workbench、Electron 或任何具体能力实现。
 
 ## 公开入口

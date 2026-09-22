@@ -16,31 +16,19 @@ a declared provider from a service that was actually registered by the current g
 serve deployment remains governed by its versioned wire protocol and handshake; this local snapshot does
 not silently extend that remote protocol.
 
-## Agent requests: reconstruct before sending
+## Model requests: compile the actual next frame
 
-The Agent request compiler produces a keyless `ProviderRequestSnapshot` at the final provider boundary.
-It records the provider-visible model alias, rewritten system text, ordered messages, exact tool descriptions
-and schemas, tool choice, and the request fingerprint. The fingerprint binds the final system text, message
-content, visible tool names, and schema hashes; two transcripts with the same roles but different content
-therefore cannot share an identity.
+`ProviderRequestCompiler` in Model compiles the actual next request, including the five context partitions, ordered history, instructions and native image parts. It checks the complete request budget and produces an auditable provider projection. Raw accepted responses, scripts and invocation receipts remain traceable through `runtime.trace`.
 
-Immediately before a streaming or query request is sent, the runtime verifies that every visible tool can
-be reconstructed from the snapshot. A missing schema or mismatched tool surface fails closed as an invariant
-error. Keyless fixture tests cover this boundary without contacting a model provider.
+The main Act driver uses AI SDK ordinary text streaming. Model actions are explicit ScriptAct blocks; business operations are discovered through the script module contracts. General Model consumers may use structured or native tool requests through their own declared contracts. See [the actual runtime chain](platform-runtime.md) and [text protocol](scriptact-text-protocol.md).
 
-Prompt audit sidecars may store the exact snapshot for local debugging. They are not session authority and
-must never contain provider credentials or executable clients. They can contain user and model content, so
-hosts must apply their retention policy and redact them before export.
-
-`describeRunProfiles()` exposes the built-in compact, balanced, and expanded budgets plus automatic
-selection thresholds as a frozen catalog. It explains a runtime selection; it cannot override permission,
-tool-execution, or Kernel policy.
+Observability cannot alter authority. Debug snapshots and traces may contain user or model content; hosts control access, retention and export redaction. Credentials and executable clients are not trace payloads. Request fingerprints identify evidence and do not replace the underlying request or grant permission.
 
 ## System processes: approval is not confinement
 
-`@velaros-ai/system/execution` exposes one process-confinement contract for `read-only`,
+`@velaros-ai/velaros/shell/local` exposes one process-confinement contract for `read-only`,
 `workspace-write`, and `danger-full-access` execution. Every new execution result should carry
-`SystemProcessConfinementEvidence`, recording the requested mode, actual backend, enforcement strength,
+`ShellProcessConfinementEvidence`, recording the requested mode, actual backend, enforcement strength,
 reason, and effective writable roots.
 
 VelarOS currently provides a Seatbelt backend on macOS and a bubblewrap backend on Linux. Hosts may inject

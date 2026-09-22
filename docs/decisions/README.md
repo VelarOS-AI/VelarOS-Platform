@@ -23,3 +23,5 @@ Name records `NNNN-short-title.md` and use this structure:
 Accepted records are durable rationale, not a substitute for schemas or executable tests. Superseded records remain in Git and link to the replacing decision.
 
 - [0015: ScriptAct 共享任务主干与统一模块合同](0015-scriptact-shared-task-runtime.md)
+
+- [ADR 0016：项目语言服务与命令行归属](0016-project-language-and-cli-ownership.md)

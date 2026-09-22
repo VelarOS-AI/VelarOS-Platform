@@ -1,11 +1,23 @@
 import { isFalse, isUndefined } from '@velaros-ai/core'
 
-import type { TurnContextDelta, TurnContextSourceId, TurnContextSourcePeekInput } from '../contract/activity.js'
-import type { TurnContextLedgerAppendInput, TurnContextLedgerPeekResult } from '../contract/activity.js'
-import type { TurnContextSessionLedgersApi } from '../interface/provides.js'
-import type { TurnContextLedgerOptions } from '../interface/requires.js'
+import type { TurnContextLedgerOptions } from '../contract/requires.js'
+import type { TurnContextDelta, TurnContextSourceId, TurnContextSourcePeekInput } from '../types/activity.js'
+import type { TurnContextLedgerAppendInput, TurnContextLedgerPeekResult } from '../types/activity.js'
+import { ContextTuning } from '../utils/tuning.js'
 
 import { TurnContextLedger } from './TurnContextLedger.js'
+
+/** 会话活动记录的唯一访问接口。 */
+export interface TurnContextSessionLedgersApi {
+  /** 往这个会话的账本记一条 delta（没有就先建一本），并广播一次变更通知。返回落好的 delta。 */
+  append(sessionId: string, input: TurnContextLedgerAppendInput): TurnContextDelta
+  /** 状态型 source 的写入口：清空这个会话的账本只留这一条，同样广播变更——界面上的状态提示要立刻换成新的，而不是等下一次事件。 */
+  replaceLatest(sessionId: string, input: TurnContextLedgerAppendInput): TurnContextDelta
+  /** 读这个会话还没被消费的 delta。这个会话还没有账本时交出一份空基底（generation 为进程代次、headSeq 1、tailSeq 0），不会为一次只读 peek 建账本。 */
+  peek(sessionId: string, input: Pick<TurnContextSourcePeekInput, 'afterSeq' | 'generation'>): TurnContextLedgerPeekResult
+  /** 丢掉这个会话的账本；会话关闭或重置时调。下次再写会建一本新的、带新代次的。 */
+  clearSession(sessionId: string): void
+}
 
 /**
  * 一个 source 在各会话上的账本登记处：按 sessionId 惰性建 `TurnContextLedger`，会话数超上限时按插入序淘汰最旧的那本。
@@ -59,11 +71,11 @@ export class TurnContextSessionLedgers implements TurnContextSessionLedgersApi {
     this.ledgerInstanceSeq += 1
     const ledger = new TurnContextLedger(
       this.sourceId,
-      this.options.maxEntries ?? 100,
+      this.options.maxEntries ?? ContextTuning.ledgerItems,
       `${this.generation}.${this.ledgerInstanceSeq.toString(36)}`,
     )
     this.ledgers.set(sessionId, ledger)
-    while (this.ledgers.size > (this.options.maxSessions ?? 64)) {
+    while (this.ledgers.size > (this.options.maxSessions ?? ContextTuning.sessions)) {
       const oldest = this.ledgers.keys().next().value
       if (isUndefined(oldest)) break
       this.ledgers.delete(oldest)

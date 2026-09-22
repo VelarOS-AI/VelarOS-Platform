@@ -12,5 +12,11 @@ export type { ContextMaintenanceProfile,ModelToolBinding, ModelToolModelProfile,
 export type { ScriptRetention } from './types/results.js'
 export type { ObservationRegistration, ScriptControlOptions, ScriptControlReceipt, ScriptObservationEdit, ScriptReferenceProgram } from './types/runtime.js'
 export type { ScriptProtocolOptions } from './types/runtime.js'
-export type { ActTracePage, ActTraceQuery,ActTraceRecord, ActTurnTrace } from './types/trace.js'
+export type { ActRequestSummary, ActInvocationSummary, ActTracePage, ActTraceQuery,ActTraceRecord, ActTurnTrace } from './types/trace.js'
 export type { SearchDraft, SearchEvidence, SearchProfile, SearchRequest, SearchResult } from '@velaros-ai/velaros/act/search'
+export type { RuntimeMetric } from './types/trace.js'
+
+export type { WorkspaceEntry } from '../system/types/workspace.js'
+export type { RuntimeNoteRead, RuntimeNoteRetention, RuntimeNoteContent } from './types/memory.js'
+
+export type {GoalState,GoalStatus,GoalUpdate,GoalControl} from '../system/types/goal.js'

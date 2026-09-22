@@ -10,4 +10,6 @@ Act 执行核心：持久运行控制、单一模型循环、有界子运行调�
 
 子运行的请求保存在 `AgentJob.pending`；`wait/waitAny` 可因提问返回，`reply` 绑定原运行回答。`resume` 使用结构化 `AgentResume`，只在收束后更换 profile/writes/stores/materials，保持同一会话与预算。当前接口变更和验收见仓库的 `docs/engineering/act-cooperation-delta.md`。
 
-验证：`bun run build`、`bun test spec/acceptance.test.ts`、`bun run check:browser`。完整链路验收在 Velaros 的 `test/act-run.test.mjs` 与 `test/act-children.test.mjs`。
+验证：`bun run build`、`bun test spec/acceptance.test.ts`、`bun run check:browser`。完整链路验收在 Velaros 的 `act/runtime/test/act-run.test.mjs` 与 `act/runtime/test/act-children.test.mjs`。
+
+源码统一使用 `contract/types/impl/utils`：`contract/provides.ts` 登记公开类接口，`contract/requires.ts` 声明注入端口，`types/` 保存数据和内部工作类型，类接口与实现同文件。入口和运行环境边界见 MODULE.md。

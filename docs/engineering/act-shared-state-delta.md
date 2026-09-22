@@ -1,5 +1,7 @@
 # Act 持久共享状态差量
 
+> 阶段差量记录：路径、API 和测试数字对应本次记录形成时的实现。当前接入请读 [模块规范](../architecture/module-ownership.md)、[Act 架构](../architecture/platform-runtime.md) 和 [能力目录](../../packages/velaros/act/README.md)。
+
 日期：2026-09-21。实现位置：VelarOS-Platform。范围：持久 JSON 对象、版本前提、共享范围、恢复通知及现有 Act 主链装配。
 
 ## 完成行为

@@ -6,7 +6,7 @@
 //   ② manifest 版本必须等于 bun.lock 里该 workspace 的版本(lock 陈旧即红)。
 //   ③ 顺序 = 依赖拓扑,被依赖者先发。
 //   ④ **每个包声明的平台代必须与仓根一致**(velaros.platform)——见下「两根轴」。
-//   ⑤ 可发布包的命令名必须唯一，且品牌入口 `velaros` 只能由 `@velaros-ai/cli` 拥有。
+//   ⑤ 可发布包的命令名必须唯一，产品命令 `velaros` 由 Termel 仓库的 CLI 发行包拥有。
 //
 // Version model:
 //   · **包版本**各自独立走 semver。破坏性变更升自己的位(0.x 下是 minor,1.x 下是 major),
@@ -198,11 +198,8 @@ export async function collectReleasePackages(root) {
       throw new Error(`Published CLI command ${command} has multiple owners: ${owners.join(', ')}`)
     }
   }
-  const velarosOwners = commandOwners.get('velaros') ?? []
-  if (velarosOwners.length !== 1 || velarosOwners[0] !== '@velaros-ai/cli') {
-    throw new Error(
-      `The velaros command must be owned only by @velaros-ai/cli; got ${velarosOwners.join(', ') || 'no owner'}`,
-    )
+  if (commandOwners.has('velaros')) {
+    throw new Error('The velaros command belongs to VelarOS-Termel; Platform packages must not publish it')
   }
 
   for (const item of packages) {

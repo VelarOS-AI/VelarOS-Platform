@@ -1,5 +1,7 @@
 # ScriptAct 正式接入点
 
+> 历史设计与阶段验收记录。本文中的接口、路径和测试数字对应其记录阶段；当前实现请读 [Act 运行架构](../../architecture/platform-runtime.md)、[模块规范](../../architecture/module-ownership.md)、[系统能力](../../architecture/act-system-space.md) 与 [存储合同](../../architecture/storage.md)。原始输入规格保存在 reference-pack/。
+
 当前主干契约见 `docs/architecture/platform-runtime.md`。模型维护稳定观察程序与一次性执行程序；Runtime 依据真实结果构造上下文。这里记录实际代码接入点，设计参考包用于保留原始资料。
 
 | 职责 | 真实文件 | 接入方式 |

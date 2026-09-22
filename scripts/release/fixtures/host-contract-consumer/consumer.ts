@@ -2,7 +2,7 @@ import { createActRunService, type ActRunEvent, type ActRunServiceOptions } from
 import type { ApprovalPort } from '@velaros-ai/kernel'
 import { createRuntime, type VelarosRuntimeOptions } from '@velaros-ai/velaros'
 import { createModelRequestClient } from '@velaros-ai/model'
-import { languageQueries, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/development'
+import { languageQueries, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/velaros/project'
 import { ComputerInputLimits, type ComputerPoint } from '@velaros-ai/velaros/computer/contracts'
 import { createCapabilityPort } from '@velaros-ai/script'
 import { FileLimits } from '@velaros-ai/velaros/files/contracts'

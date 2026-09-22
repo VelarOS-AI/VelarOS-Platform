@@ -38,7 +38,6 @@ import { builtinModules } from 'node:module'
 import { basename, dirname, extname, join, relative, resolve } from 'node:path'
 
 import ts from 'typescript'
-import { checkInterfaceModule } from './check-interface-module.mjs'
 
 import {
   GovernedModules,
@@ -281,7 +280,6 @@ if (onlyDirectory && selectedModules.length === 0) {
 const migratingReports = []
 
 for (const module of selectedModules) {
-  if (module.layout === 'interface') { checkInterfaceModule(RepoRoot, module, fail); continue }
   const failuresBefore = failures.length
   const packageRoot = join(PackagesRoot, module.directory)
   const label = module.name
@@ -1364,4 +1362,4 @@ if (failures.length > 0) {
   for (const failure of failures) console.error(`- ${failure}`)
   process.exit(1)
 }
-console.info('✓ module ownership: single tool file, data-only contracts, documented interfaces, one-class-per-file impl, documented utils, interface-controlled exports, registered environment variables, browser-safe entries, cards, and invariant registries')
+console.info('✓ module ownership: unified contract/types/impl/utils, registered operation definitions, documented contracts and class APIs, implementation layers, controlled exports, registered environment variables, browser-safe entries, cards, and invariant registries')

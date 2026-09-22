@@ -1,11 +1,39 @@
 import {isNull,isUndefined} from '@velaros-ai/core'
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
 
-import type { ContextAppend, ContextContent, ContextInputSummary, ContextProjection, ContextQuery, ContextReadRange, ContextRecord, ContextRef, ContextSearchPage, ContextSnapshot, ContextState, ContextUserInput, NoteWrite, WorkingSetChange, WorkingSetCommit } from '../contract/context.js'
-import { ContextLimits } from '../contract/context.js'
-import type { ContextRuntime } from '../interface/provides.js'
-import type { ContextRuntimeOptions } from '../interface/requires.js'
+import { ContextLimits } from '../contract/constants.js'
+import type { ContextRuntimeOptions } from '../contract/requires.js'
+import type { ContextAppend, ContextContent, ContextInputSummary, ContextProjection, ContextQuery, ContextReadRange, ContextRecord, ContextRef, ContextSearchPage, ContextSnapshot, ContextState, ContextUserInput, NoteWrite, WorkingSetChange, WorkingSetCommit } from '../types/context.js'
 import { boundedInteger, contextFailure, emptyContextState, sameContextRef } from '../utils/state.js'
+
+/** 会话的上下文权威。 */
+export interface ContextRuntime {
+  /** 保存原始用户输入，超大文本分块归档，附件保留引用。 */
+  ingest(input:ContextUserInput,signal?:AbortSignal):Promise<ContextRecord>
+  /** 分页读取原始用户输入；不会读入同会话的其他审计记录。 */
+  readInput(ref:ContextRef,range?:ContextReadRange):Promise<ContextContent>
+  /** 按版本保存理解结果，原文始终保留，摘要是模型解释。 */
+  summarizeInput(input:ContextInputSummary,signal?:AbortSignal):Promise<ContextRef>
+  /** 为真实目标生成有界正文或摘要，保留可召回元数据。 */
+  projectInput(ref:ContextRef,maxChars:number):Promise<ContextContent>
+
+  /** 查看当前工作集和始终保留的最新用户输入。 */
+  inspect(): Promise<ContextSnapshot>
+  /** 检索当前会话的材料与原始记录。 */
+  search(query: ContextQuery): Promise<ContextSearchPage>
+  /** 有界读取原始正文，来源元数据不能被笔记改写。 */
+  read(ref: ContextRef, range?: ContextReadRange): Promise<ContextContent>
+  /** 模型写入带来源的工作材料。 */
+  write(note: NoteWrite, signal?: AbortSignal): Promise<ContextRecord>
+  /** 原子替换模型管理区；新事件总是保留。 */
+  replace(change: WorkingSetChange, signal?: AbortSignal): Promise<WorkingSetCommit>
+  /** 宿主追加原始事件，模型标准库不暴露此方法。 */
+  append(input: ContextAppend, signal?: AbortSignal): Promise<ContextRecord>
+  /** 冻结下一次请求的材料；超预算明确失败，不隐式压缩。 */
+  project(maxChars: number): Promise<ContextProjection>
+  /** 构建明确有界的恢复视图；原始正文通过引用分页读取。 */
+  recover(maxChars: number): Promise<ContextProjection>
+}
 
 /** 上下文的单一会话视图；并发提交由存储端口的 CAS 保证。 */
 export class SessionContext implements ContextRuntime {
@@ -22,6 +50,15 @@ export class SessionContext implements ContextRuntime {
     if (!record) throw contextFailure('REF_NOT_FOUND', '原始记录不存在。')
     return record
   }
+  private async reference(ref:ContextRef):Promise<ContextRecord> {
+    if(ref.sessionId!==this.options.sessionId)throw contextFailure('SCOPE_MISMATCH','引用不在本会话作用域内。')
+    const storage=this.options.storage
+    if(!storage.records&&!storage.selectSnapshot)return this.record(await this.state(),ref)
+    const records=storage.records?(await storage.records(this.options.sessionId,{refId:ref.id,limit:1})).items:(await storage.selectSnapshot!(this.options.sessionId,[{refId:ref.id}]))?.records??[]
+    const record=records.find(item=>sameContextRef(item.ref,ref))
+    if(!record)throw contextFailure('REF_NOT_FOUND','上下文引用不存在。')
+    return record
+  }
   public async inspect(): Promise<ContextSnapshot> {
     const state = await this.state()
     const latest = [...state.records].reverse().find(record => record.kind === 'user')
@@ -32,10 +69,13 @@ export class SessionContext implements ContextRuntime {
     if (!isString(input.body) || input.body.length > ContextLimits.objectChars) throw contextFailure('OBJECT_TOO_LARGE', '正文必须在单对象上限以内。')
     const ref = { sessionId: this.options.sessionId, id: crypto.randomUUID() }
     const objectId = await this.options.storage.put(this.options.sessionId, input.body)
+    const entry = { ref, kind: input.kind, title: input.title ?? '', objectId, chars: input.body.length, sources: input.sources ?? [], createdAt: new Date().toISOString() }
+    signal?.throwIfAborted()
+    if(this.options.storage.appendRecord)return this.options.storage.appendRecord(this.options.sessionId,entry)
     for (;;) {
       const state = await this.state()
       for (const source of input.sources ?? []) this.record(state, source)
-      const record: ContextRecord = { ref, sequence: state.records.length + 1, kind: input.kind, title: input.title ?? '', objectId, chars: input.body.length, sources: input.sources ?? [], createdAt: new Date().toISOString() }
+      const record: ContextRecord = { ...entry, sequence: (state.records.at(-1)?.sequence??0) + 1 }
       signal?.throwIfAborted()
       if (await this.options.storage.compareAndSwap(this.options.sessionId, state.version, { ...state, version: state.version + 1, records: [...state.records, record] })) return record
     }
@@ -43,7 +83,7 @@ export class SessionContext implements ContextRuntime {
   public async ingest(input:ContextUserInput,signal?:AbortSignal):Promise<ContextRecord> {
     if(!isUndefined(input.text)&&!isString(input.text))throw contextFailure('INPUT_SCHEMA','用户文字必须为字符串')
     for(const file of input.files??[]){
-      this.record(await this.state(),file.ref)
+      await this.reference(file.ref)
       if(!file.name||file.name.length>1000||!file.mediaType||!isUndefined(file.bytes)&&(!Number.isSafeInteger(file.bytes)||file.bytes<0))throw contextFailure('INPUT_SCHEMA','文件引用元数据无效')
     }
     const text=input.text??''
@@ -54,13 +94,16 @@ export class SessionContext implements ContextRuntime {
   }
 
   public async readInput(ref:ContextRef,range:ContextReadRange={}):Promise<ContextContent> {
-    const original=this.record(await this.state(),ref)
+    const original=await this.reference(ref)
     const raw=await this.read(ref,original.title==='user:manifest'?{limit:1}:range)
     if(raw.record.kind!=='user'){
-      const state=await this.state()
+      const storage=this.options.storage
+      const records=storage.selectSnapshot?(await storage.selectSnapshot(this.options.sessionId,[{kind:'user',title:'user:manifest'}]))?.records??[]:(await this.state()).records
       let file=false
-      for(const manifest of state.records.filter(item=>item.kind==='user'&&item.title==='user:manifest')){
-        const input=JSON.parse((await this.options.storage.get(this.options.sessionId,manifest.objectId))!)
+      for(const manifest of records.filter(item=>item.kind==='user'&&item.title==='user:manifest'&&item.sources.some(source=>sameContextRef(source,ref)))){
+        const body=await storage.get(this.options.sessionId,manifest.objectId)
+        if(isNull(body))throw contextFailure('OBJECT_MISSING','用户输入清单不可用。')
+        const input=JSON.parse(body)
         if(input.files.some((item:{ref:ContextRef})=>sameContextRef(item.ref,ref))){file=true;break}
       }
       if(!file)throw contextFailure('INPUT_REF','引用不是用户原始输入或其附件')
@@ -95,7 +138,9 @@ export class SessionContext implements ContextRuntime {
 
   public async projectInput(ref:ContextRef,maxChars:number):Promise<ContextContent> {
     const raw=await this.readInput(ref,{limit:Math.max(1,Math.min(ContextLimits.readChars,maxChars))})
-    const state=await this.state(); const entry=state.inputSummaries?.find(item=>sameContextRef(item.input,ref))
+    const storage=this.options.storage
+    const state=storage.loadMetadata?await storage.loadMetadata(this.options.sessionId):storage.selectSnapshot?(await storage.selectSnapshot(this.options.sessionId,[]))?.metadata:await this.state()
+    const entry=state?.inputSummaries?.find(item=>sameContextRef(item.input,ref))
     const manifest=raw.record.title==='user:manifest'?JSON.parse((await this.options.storage.get(this.options.sessionId,raw.record.objectId))!):undefined
     const summary=entry?await this.read(entry.summary,{limit:ContextLimits.readChars}):undefined
     if(!summary&&!manifest&&raw.text.length===raw.totalChars)return raw
@@ -108,9 +153,7 @@ export class SessionContext implements ContextRuntime {
     return this.append(note, signal)
   }
   public async read(ref: ContextRef, range: ContextReadRange = {}): Promise<ContextContent> {
-    if(ref.sessionId!==this.options.sessionId)throw contextFailure('SCOPE_MISMATCH','原文引用不属于当前会话。')
-    const record=this.options.storage.records?(await this.options.storage.records(this.options.sessionId,{refId:ref.id,limit:1})).items[0]:this.record(await this.state(),ref)
-    if(!record)throw contextFailure('REF_NOT_FOUND','上下文引用不存在。')
+    const record=await this.reference(ref)
     const text = await this.options.storage.get(this.options.sessionId, record.objectId)
     if (isNull(text)) throw contextFailure('OBJECT_MISSING', '记录的原始正文不可用。')
     const offset = boundedInteger(range.offset ?? 0, text.length)

@@ -1,6 +1,6 @@
-import type { ContextRuntime, ContextStorage } from "@velaros-ai/context";
+import type { ContextRuntime, ContextState, ContextStorage } from "@velaros-ai/context";
 import {Log} from '@velaros-ai/core'
-import {isUndefined,toNullable} from '@velaros-ai/core'
+import {isNull,isUndefined,toNullable} from '@velaros-ai/core'
 import type { ModelHistoryMessage, ModelImage } from "@velaros-ai/kernel";
 
 import type { HistoryCheckpoint, HistoryListRequest, HistoryPage } from "../../system/types/history.js";
@@ -18,13 +18,34 @@ export interface RecentContextApi {
 
 /** 近期分区只投影已落盘响应和回执，整理不会重放脚本。 */
 export class RecentContext implements RecentContextApi {
+  private readonly resultModes=new Map<string,boolean>()
+  private cacheReset=0
   public constructor(private readonly id:string,private readonly context:ContextRuntime,private readonly storage:ContextStorage) {}
+
+  private async snapshot(refIds:readonly string[]=[]):Promise<Nullable<ContextState>>{
+    if(!this.storage.selectSnapshot)return this.storage.load(this.id)
+    const selected=await this.storage.selectSnapshot(this.id,[{kind:'assistant'},{titlePrefix:'script:',titleSuffix:':result'},{title:'search:history-reset',latest:true},{title:'search:history-checkpoint',latest:true},{latest:true},...refIds.map(refId=>({refId}))])
+    return selected?{...selected.metadata,records:selected.records}:null
+  }
+
+  private async observation(objectId:string):Promise<boolean>{
+    const known=this.resultModes.get(objectId)
+    if(!isUndefined(known))return known
+    const raw=await this.storage.get(this.id,objectId)
+    // 正文缺失不缓存，后续恢复仍有机会读取；缓存只记不可变正文的分类。
+    if(isNull(raw))return false
+    let observation=false
+    if(raw)try{observation=JSON.parse(raw).mode==='observe'}catch{Log.tag('ActRuntime').debug('RecentContext 已进入异常处理或降级分支')}
+    // 保留最早的已分类历史，容量用尽后新条目直接读取，避免顺序扫描造成逐轮缓存抖动。
+    if(this.resultModes.size<ActRuntimeTuning.historyClassificationEntries)this.resultModes.set(objectId,observation)
+    return observation
+  }
 
   public async list(input:HistoryListRequest,signal:AbortSignal):Promise<HistoryPage> {
     signal.throwIfAborted()
     const {after=0,limit=32}=input
     if(!Number.isSafeInteger(after)||after<0||!Number.isSafeInteger(limit)||limit<1||limit>64||(!isUndefined(input.through)&&(!Number.isSafeInteger(input.through)||input.through<0)))throw new Error('历史目录范围无效')
-    const state=await this.storage.load(this.id)
+    const state=await this.snapshot()
     signal.throwIfAborted()
     const resetAfter=Math.max(state?.records.findLast(record=>record.title==='search:history-reset')?.sequence??0,state?.task?.startedSequence??0)
     const through=Math.min(input.through??Infinity,state?.records.at(-1)?.sequence??0)
@@ -35,7 +56,9 @@ export class RecentContext implements RecentContextApi {
 
   public async checkpoint(input:HistoryCheckpoint,signal:AbortSignal):Promise<unknown> {
     signal.throwIfAborted()
-    const state=await this.storage.load(this.id)
+    const incremental=Boolean(this.storage.selectSnapshot&&this.storage.compareAndSwapMetadata&&Number.isSafeInteger(input.through)&&input.through>0)
+    const selected=incremental?await this.storage.selectSnapshot!(this.id,[{title:'search:history-reset',latest:true},{title:'search:history-checkpoint',latest:true},{kind:'assistant',last:2},{sequence:input.through},...input.evidence.map(ref=>({refId:ref.id}))]):undefined
+    const state=incremental?(selected?{...selected.metadata,records:selected.records}:null):await this.storage.load(this.id)
     if(!state)throw new Error('近期记录尚未建立')
     const reset=Math.max(state.records.findLast(record=>record.title==='search:history-reset')?.sequence??0,state?.task?.startedSequence??0)
     const records=state.records.filter(record=>record.sequence>reset)
@@ -51,29 +74,36 @@ export class RecentContext implements RecentContextApi {
       await this.context.read(ref,{limit:1})
     }
     const body=JSON.stringify(input); const objectId=await this.storage.put(this.id,body)
-    const record={ref:{sessionId:this.id,id:crypto.randomUUID()},kind:'checkpoint' as const,title:'search:history-checkpoint',objectId,chars:body.length,sources:input.evidence,sequence:state.records.length+1,createdAt:new Date().toISOString()}
+    const record={ref:{sessionId:this.id,id:crypto.randomUUID()},kind:'checkpoint' as const,title:'search:history-checkpoint',objectId,chars:body.length,sources:input.evidence,createdAt:new Date().toISOString()}
     signal.throwIfAborted()
-    if(!await this.storage.compareAndSwap(this.id,state.version,{...state,version:state.version+1,records:[...state.records,record]}))throw Object.assign(new Error('整理期间历史已变化，请刷新后重试'),{code:'CONTEXT_CONFLICT'})
+    const {records:_records,...metadata}=state
+    const committed=incremental
+      ?await this.storage.compareAndSwapMetadata!(this.id,state.version,{...metadata,version:state.version+1},[record])
+      :await this.storage.compareAndSwap(this.id,state.version,{...state,version:state.version+1,records:[...state.records,{...record,sequence:(state.records.at(-1)?.sequence??0)+1}]})
+    if(!committed)throw Object.assign(new Error('整理期间历史已变化，请刷新后重试'),{code:'CONTEXT_CONFLICT'})
     return {ref:record.ref,through:input.through,representation:'model-summary',executed:false}
   }
 
   public async project(frame:{body:string;images:readonly ModelImage[];prompt:string},maxChars:number,signal:AbortSignal,limit:number=ActRuntimeTuning.historyPage) {
-    const state=await this.storage.load(this.id)
+    signal.throwIfAborted()
+    const material=JSON.parse(frame.body)
+    const state=await this.snapshot(material.results.map((item:{ref:string})=>item.ref))
+    signal.throwIfAborted()
     const reset=Math.max(state?.records.findLast(record=>record.title==='search:history-reset')?.sequence??0,state?.task?.startedSequence??0)
+    if(reset!==this.cacheReset){this.resultModes.clear();this.cacheReset=reset}
     const latest=state?.records.findLast(record=>record.title==='search:history-checkpoint'&&record.sequence>reset)
     const checkpoint=latest?JSON.parse((await this.storage.get(this.id,latest.objectId))!) as HistoryCheckpoint:undefined
-    const material=JSON.parse(frame.body)
     const history:ModelHistoryMessage[]=[]
     if(checkpoint){
       const full={origin:'model-checkpoint',ref:latest!.ref,...checkpoint}
       const content=JSON.stringify(full)
       history.push({role:'user',content:content.length<=Math.floor(maxChars/4)?content:JSON.stringify({origin:'model-checkpoint',ref:latest!.ref,through:checkpoint.through,representation:'reference',bodyIncluded:false,totalChars:latest!.chars,unresolved:checkpoint.unresolved.length,negativeAttempts:checkpoint.negativeAttempts.length,read:{module:'velaros:system',export:'memory',operation:'read',input:{ref:latest!.ref}}})})
     }
-    const candidates=(state?.records??[]).filter(record=>record.sequence>Math.max(reset,checkpoint?.through??0)&&(record.kind==='assistant'||/^script:[0-9a-f-]{36}:result$/u.test(record.title)))
+    const candidates=(limit?state?.records??[]:[]).filter(record=>record.sequence>Math.max(reset,checkpoint?.through??0)&&(record.kind==='assistant'||/^script:[0-9a-f-]{36}:result$/u.test(record.title)))
     const selected=[]
     for(const record of candidates){
       signal.throwIfAborted()
-      if(record.kind!=='assistant'){const raw=await this.storage.get(this.id,record.objectId);if(raw){try{if(JSON.parse(raw).mode==='observe')continue}catch{Log.tag('ActRuntime').debug('RecentContext 已进入异常处理或降级分支');/* 历史文本可以不是 JSON。 */}}}
+      if(record.kind!=='assistant'&&await this.observation(record.objectId))continue
       selected.push(record)
     }
     const budget=Math.max(0,maxChars); const capacity=Math.min(limit,Math.max(0,Math.floor(budget/512))); const tail=capacity?selected.slice(-capacity):[]

@@ -9,7 +9,7 @@ import type { RehearsalSandboxHostPort, SandboxSurfacePort } from '@velaros-ai/v
 import type { ShellSpacePort } from '@velaros-ai/velaros/shell'
 import { shellCommandPolicy } from '@velaros-ai/velaros/shell'
 
-import type { ProjectHostPort } from '../../contract/requires.js'
+import type { ProjectHostPort, ProjectShellHostPort } from '../../contract/requires.js'
 import { genericFailure, insideProject, projectRelativePath } from '../../utils/capability-ports.js'
 
 import type { ProjectExecutionGateApi } from './ProjectExecutionGate.js'
@@ -27,7 +27,7 @@ export interface ProjectCapabilityPortsApi {
    * 前台命令在项目资源门里排队（只读的走读门，其余走写门），后台命令直接交宿主；输出原样交回。
    * 确认文案说「当前项目」，风险分类 `project-command:dangerous`。`abortSignal` 是这次调用的，排队时一直核对。
    */
-  shell(project: ProjectHostPort, abortSignal: AbortSignal): ShellSpacePort
+  shell(project: ProjectShellHostPort, abortSignal: AbortSignal): ShellSpacePort
   /**
    * `velaros:sandbox` 的项目端口：源目录钳在项目内（不给就是项目根）；建、看差量、落回、丢弃、镜像里跑命令都交宿主的沙箱，
    * 落回不问人。宿主没给沙箱时，每个操作都明说这台机器上没有演练沙箱（UNAVAILABLE）。
@@ -47,7 +47,7 @@ export class ProjectCapabilityPorts implements ProjectCapabilityPortsApi {
     this.gate = gate
   }
 
-  public shell(project: ProjectHostPort, abortSignal: AbortSignal): ShellSpacePort {
+  public shell(project: ProjectShellHostPort, abortSignal: AbortSignal): ShellSpacePort {
     const root = () => project.getRootPath()
     const port:ShellSpacePort={
       resolveCwd: (cwd) => insideProject(root(), cwd ?? '.', '工作目录'),

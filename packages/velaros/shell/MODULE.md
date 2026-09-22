@@ -79,7 +79,7 @@ shell 选择与自检、进程约束、Windows 原生进程宿主，外加宿主
 
 ## 依赖什么
 
-- 上游包：`@velaros-ai/core`（类型守卫、缺席值、日志、`AppError`、计时器作用域）；`@velaros-ai/agent` 的 `tool-contract`（手动确认选项、操作身份、审批端口）与 `contracts`（确认选项类型），peer 依赖；
+- 上游包：`@velaros-ai/core`（类型守卫、缺席值、日志、`AppError`、计时器作用域）；`@velaros-ai/kernel` 的确认数据、操作身份与 `ApprovalPort`；
   `@velaros-ai/core/platform`（本机实现用：跨平台的路径、shell 参数、进程与指标命令）。
 - 只在验收里用：`@velaros-ai/script`（dev 依赖），跑那几条端到端的程序、给代码模版做类型检查。
 - 根入口与 `./contracts` 整条引用链不碰 Node 内置模块，门禁核对；`./local` 只给 Node。

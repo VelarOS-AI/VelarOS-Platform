@@ -1,5 +1,7 @@
 # Act 多 store 升级差量
 
+> 阶段差量记录：路径、API 和测试数字对应本次记录形成时的实现。当前接入请读 [模块规范](../architecture/module-ownership.md)、[Act 架构](../architecture/platform-runtime.md) 和 [能力目录](../../packages/velaros/act/README.md)。
+
 日期：2026-09-21。范围：持久空间创建与目录、显式共享、多空间订阅、显式初始化、唯一模型入口。
 
 ## 实际完成

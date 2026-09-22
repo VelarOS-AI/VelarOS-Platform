@@ -22,14 +22,9 @@ The full check builds every package, runs type checking, lint, tests, maintained
 | Agent | `check:agent-public-api` | Published entrypoints, declaration snapshots, and compatibility alias policy |
 | Agent | `check:agent-browser` | Browser-facing Agent contracts |
 | Agent | `check:conversation-semantics` | Conversation state semantics |
-| Capabilities | `check:capabilities-arch` | Ownership and dependency boundaries across capability packages |
-| Ownership | `check:module-ownership` | A single registered tool file holding every tool definition; data-only contracts with no function types and a dependency-free portable data file; documented interface files split into provides (product face), requires (injection points), and internal; a flat one-class-per-file impl whose classes implement documented interfaces (public members limited to the interface, no public statics, private methods must use instance state, module-level functions only as public factories), layered by a registered file list; flat documented `src/utils/`; interface-controlled exports (entries only re-export; exported types only from provides, requires, or contracts; exported values only contract constant tables or impl instances and factories annotated with public interfaces; no classes, utils functions, or internal interfaces leave the package; the exported data set equals the data referenced by public signatures; no orphan portable types; public interfaces never reference internal ones); registered environment variables; no inline import types or dynamic imports; browser-safe entries; `package.json` exports matching entry files; module cards; and invariant registries (see `docs/architecture/module-ownership.md`) |
+| Capabilities | `check:capabilities-arch` | Capability unit contracts, host boundaries, and retired package ownership |
+| Ownership | `check:module-ownership` | Unified contract/types/impl/utils for every registered module; product API registration and documented injection contracts; class APIs beside implementations; data-only types and portable boundaries; registered implementation layers and tuning; operation-definition locations and generated surfaces; interface-controlled exports; registered environment variables and bounded lazy imports; browser-safe value chains; package entry mapping, module cards and executable invariant registries. See [module ownership](architecture/module-ownership.md). |
 | Model | `check:model-arch` | Model package boundaries and publication metadata |
-| UI | `check:ui-form-closure` | Component-form closure |
-| UI | `check:ui-color-literal` | Design-token color policy |
-| UI | `check:ui-hook-deps` | React hook dependency regression gate |
-| UI | `check:ui-package-contracts` | Package export and metadata contracts |
-| UI | `check:ui-component-library` | Component API generation, documentation freshness, and isolation |
 | Project | `check:project-arch` | Package shape and host/capability boundaries |
 | Agent Lab | `check:agent-lab-package` | Evaluation package contract and tests |
 

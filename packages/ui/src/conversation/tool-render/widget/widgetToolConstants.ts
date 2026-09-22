@@ -1,3 +1,0 @@
-export const DEFAULT_WIDGET_HEIGHT = 400
-export const MIN_WIDGET_HEIGHT = 120
-export const MAX_WIDGET_HEIGHT = 900

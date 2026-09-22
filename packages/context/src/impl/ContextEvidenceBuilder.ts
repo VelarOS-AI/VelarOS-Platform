@@ -2,16 +2,24 @@ import {Log, toOptional} from '@velaros-ai/core'
 import {isFalse} from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 
-import type { ContextCandidate, ContextEvidence, ContextGap, ContextPlan, ContextPlannerDecision, ContextSelection, ContextSourceRead, ContextTarget, ContextTaskScope, ContextTaskState, ContextTime, ContextViewForm, ModelView, RegisteredViewIntent } from '../contract/context.js'
-import { ContextLimits } from '../contract/context.js'
-import { ContextPlannerSchema } from '../contract/view-schema.js'
-import type { ContextEvidenceBuilderApi } from '../interface/internal.js'
-import type { ContextBuildOptions, ContextSourcePort, ContextViewOptions } from '../interface/requires.js'
+import { ContextPlannerSchema } from '../contract/constants.js'
+import { ContextLimits } from '../contract/constants.js'
+import type { ContextBuildOptions, ContextSourcePort, ContextViewOptions } from '../contract/requires.js'
+import type { ContextCandidate, ContextEvidence, ContextGap, ContextPlan, ContextPlannerDecision, ContextSelection, ContextSourceRead, ContextTarget, ContextTaskScope, ContextTaskState, ContextTime, ContextViewForm, ModelView, RegisteredViewIntent } from '../types/context.js'
 import { contextProgress } from '../utils/progress.js'
 import { contextFailure, sameContextRef } from '../utils/state.js'
+import { checkContextSelections } from '../utils/view.js'
 import { assertViewSchema, awaitContextOperation, contextGap, contextHash, resolveViewLimits } from '../utils/view.js'
 
 import { createEvidenceAccess } from './EvidenceAccess.js'
+
+/** 物化器只读取固定任务快照，提交权由会话服务持有。 */
+export interface ContextEvidenceBuilderApi {
+  /** 解析需求、选择候选并从真实源生成证据。 */
+  build(task: ContextTaskState, options: ContextBuildOptions, signal: AbortSignal): Promise<ModelView>
+  /** 发送前验证源授权和版本。 */
+  validate(view: ModelView, signal: AbortSignal): Promise<boolean>
+}
 
 /** 只从已登记源读取事实，模型计划仅决定候选和表示。 */
 export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
@@ -104,7 +112,7 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
             const decision: ContextPlannerDecision = await awaitContextOperation(options.planner.decide({ scope, task:taskFrame, intents: semantic, candidates, sources: [...this.sources.keys()], remainingCalls: this.limits.plannerCalls - attempt, feedback: degraded.slice(-3) }, signal), signal)
             assertViewSchema(ContextPlannerSchema, decision)
             if (decision.kind === 'select') {
-              this.checkSelections(decision.selections, candidates, semantic)
+              checkContextSelections(decision.selections, candidates, semantic)
               chosen = decision.selections
               break
             }
@@ -234,12 +242,5 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
     return this.access.read(scope,target,form,time,maxBytes,signal)
   }
 
-  private checkSelections(selections: readonly ContextSelection[], candidates: readonly ContextCandidate[], intents: readonly RegisteredViewIntent[]): void {
-    const seen = new Set<string>()
-    for (const selection of selections) {
-      const candidate = candidates.find(item => item.id === selection.candidateId)
-      if (!candidate || seen.has(selection.candidateId) || !candidate.forms.includes(selection.form) || selection.form === 'diff' || selection.intentIds.some(id => !candidate.intentIds.includes(id) || !intents.some(intent => intent.id === id))) throw contextFailure('PLAN_SCOPE', '计划引用未知、重复候选或未允许的表示')
-      seen.add(selection.candidateId)
-    }
-  }
+
 }

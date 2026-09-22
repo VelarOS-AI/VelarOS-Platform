@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, realpath, rm, mkdir } from 'node:fs/promises'
+import { mkdtemp, realpath, rm, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { createRuntime } from '@velaros-ai/velaros'
 import { createMemoryStore, memoryOperations } from '@velaros-ai/velaros/memory'
+import { createProjectKernel, createProjectCodeQuery, createExternalLanguageService, languageQueries, typeScriptProjects } from '@velaros-ai/velaros/project'
 
 // 已发布产物要能完成真实脚本、状态持久化、模型循环、取消和重新打开。
 async function probeRuntime(){
@@ -70,3 +71,30 @@ await probeRuntime()
 await probeMemoryStore()
 
 console.info('✓ packed runtime contracts: Act execution, persistent stores, cancellation, reopening, trace and the memory store')
+
+/** 项目入口随包交付语言查询、诊断、项目池和外部服务，而不依赖源仓库的 development 包。 */
+async function probeProjectLanguage() {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-packed-language-')))
+  const external = createExternalLanguageService(root, [])
+  try {
+    await writeFile(join(root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, target: 'ES2022' } }))
+    await writeFile(join(root, 'broken.ts'), "export const count: number = 'broken'\n")
+    await writeFile(join(root, 'module.py'), 'def packed_function():\n    return 1\n')
+    const kernel = await createProjectKernel({ root, plugins: [] })
+    const context = { abortSignal: new AbortController().signal, project: { getRootPath: () => root, kernel: async () => kernel } }
+    const query = createProjectCodeQuery({ isAvailable: () => false, query: async () => assert.fail('Unavailable graph must not run') })
+    const result = await query({ action: 'language_diagnostics', path: 'broken.ts' }, context)
+    assert.equal(result.source, 'language-service')
+    assert.ok(result.diagnostics.some(item => item.code === 2322))
+    const symbols = await languageQueries.run({ action: 'find_symbols', query: 'packed_function', language: 'python', exact: true }, context)
+    assert.equal(symbols.symbolCount, 1)
+    await assert.rejects(query({ action: 'explore', nodeIds: ['missing'] }, context), { code: 'UNAVAILABLE' })
+    assert.equal(external.supports('module.py'), false)
+  } finally {
+    typeScriptProjects.release(root)
+    await external.stop()
+    await rm(root, { recursive: true, force: true })
+  }
+}
+await probeProjectLanguage()
+console.info('✓ packed project language: TypeScript diagnostics, Python syntax, graph fallback and public factories')

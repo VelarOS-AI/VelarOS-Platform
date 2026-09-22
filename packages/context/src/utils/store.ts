@@ -1,7 +1,7 @@
 import { isArray, isBoolean, isFiniteNumber, isNull, isObject, isString } from '@velaros-ai/core'
 
-import type {StoreValue} from '../contract/store.js'
-import {StoreLimits} from '../contract/store.js'
+import { StoreLimits } from '../contract/constants.js'
+import type {StoreValue} from '../types/store.js'
 
 /** 标记确定未提交的输入或并发错误。 */
 export function storeFailure(code:string,message:string):Error{return Object.assign(new Error(message),{code,effect:'none'})}

@@ -234,26 +234,6 @@ function checkRuntimeDependencyOwnership() {
       }
     }
   }
-
-  const cliManifest = readJson(join(packageRoot, 'cli', 'package.json'))
-  for (const dependency of ['@velaros-ai/remote-host', '@velaros-ai/serve-host']) {
-    for (const section of [...runtimeSections, 'peerDependencies']) {
-      if (cliManifest[section]?.[dependency]) {
-        fail(`@velaros-ai/cli: retired host ${dependency} must not return through ${section}`)
-      }
-    }
-  }
-
-  const rendererManifest = readJson(join(packageRoot, 'document-renderer', 'package.json'))
-  for (const dependency of ['@napi-rs/canvas', 'pdfjs-dist']) {
-    for (const section of [...runtimeSections, 'peerDependencies']) {
-      if (rendererManifest[section]?.[dependency]) {
-        fail(
-          `@velaros-ai/document-renderer: ${dependency} belongs to @velaros-ai/velaros (its office unit) and must not be duplicated in ${section}`,
-        )
-      }
-    }
-  }
 }
 
 /** 扫描 root 下的文本文件，返回禁用文本与原始控制字符的违规描述；测试用临时目录作 root。 */

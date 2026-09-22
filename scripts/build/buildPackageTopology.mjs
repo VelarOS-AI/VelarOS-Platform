@@ -318,7 +318,7 @@ function printHelp() {
   node scripts/build/buildPackageTopology.mjs --for <pkg>     # 只建某包的依赖闭包 + 自身
   node scripts/build/buildPackageTopology.mjs --list          # 打印拓扑序，不构建
 
-<pkg> 可用 @velaros 全名（@velaros-ai/cli）、后缀（cli）或目录名。
+<pkg> 可用 @velaros 全名（@velaros-ai/velaros）、后缀（velaros）或目录名。
 `)
 }
 

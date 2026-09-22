@@ -17,6 +17,7 @@ import type { ContextMemoryPolicy } from "../types/memory.js";
 import type { ModelToolPolicy } from "../types/model-tools.js";
 import type { ContextMaintenanceProfile } from "../types/model-tools.js";
 import type { ScriptProtocolOptions } from "../types/runtime.js";
+import type {RuntimeMetric} from '../types/trace.js'
 
 /** 从领域方法的最后一个参数推导宿主上下文，使装配参数在编译期受原接口约束。 */
 export type CapabilityContext<T extends object> = {
@@ -86,8 +87,12 @@ export interface ContextMaintenanceOptions {
 
 /** 正式 Runtime 的单一装配入口。 */
 export interface VelarosRuntimeOptions {
+ /** 宿主可信的主会话产品指令；追加到运行协议说明，参与真实请求预算，不传给专项模型工具。 */
+ readonly instructions?:string
  /** 常规本地工作区；框架装配已有 Project 内核与只读证据来源。 */
  readonly workspace?:string
+ /** 是否挂载工作区的默认 Project 与证据来源；false 保留工作区绑定但关闭这两项能力。 */
+ readonly project?:boolean
  /** 框架状态目录，放在业务工作区之外；未注入 storage 时必填。 */
  readonly dataDir?:string
  /** 固定主会话存储边界、创建权限和已授予空间；返回 undefined 关闭。 */
@@ -100,6 +105,10 @@ export interface VelarosRuntimeOptions {
  readonly agents?:boolean|VelarosAgentsOptions
  /** 每次派发前的宿主权限检查，拒绝时尚未执行。 */
  authorize?(invocation:PreparedInvocation,descriptor:OperationDescriptor,signal:AbortSignal):Promise<void>
+ /** 宿主证明写操作完整的冲突资源集合，使用规范化身份覆盖读写依赖及别名；省略返回值时与全部写操作互斥。仅优化实例内调度，不授予权限或跨进程锁。 */
+ effectResources?(invocation:PreparedInvocation):readonly string[]|undefined
+ /** 接收无正文的阶段计量；回调应快速返回，异常与异步拒绝不改变业务结果。宿主决定保留和聚合，不向模型授予能力。 */
+ onMetric?(metric:RuntimeMetric):void|Promise<void>
   /** 有界高级搜索的模型与预算；工作区预设默认开启，false 可关闭。 */
   readonly search?:boolean|VelarosSearchOptions
   /** 本运行时固定的文本协议配置，与主循环共用同一解析器。 */
@@ -108,7 +117,7 @@ export interface VelarosRuntimeOptions {
   inputs?(sessionId:string):Readonly<Record<string,unknown>>
   /** 任务事实与领域适配器；省略时使用用户目标、脚本观察和执行材料。 */
   readonly context?: VelarosContextOptions
-  /** 可靠存储；运行时关闭时释放，多个运行时使用独立连接。 */
+  /** 数据库无关的 ContextStorage；省略时由 dataDir 创建 SQLite。创建成功后 Runtime 持有并关闭此连接，多个实例使用各自的连接或池租约；初始化失败时注入连接仍由调用方持有。 */
   readonly storage?: ContextStorage
   /** 显式注入隔离执行器。 */
   readonly runner?: CodeRunnerApi
@@ -221,4 +230,12 @@ export interface RuntimeModelConfiguration extends Pick<ModelAdapterConfig,'prov
  readonly model:string
  /** 当前宿主采用的运行窗口预算，可按供应商实际容量覆盖。 */
  readonly limits?:Partial<ModelDriverLimits>
+}
+
+/** 有序事件交付的宿主端口；persist 必须按调用顺序分配持久身份并在真正写入后完成。 */
+export interface EventDeliveryOptions<Value,Receipt> {
+ /** 持久保存冻结的事件并返回交付回执；可并发等待以合批写入，失败应拒绝。 */
+ persist(value:Value):Promise<Receipt>
+ /** 将已持久化回执交给传输层；严格按 append 顺序调用，拒绝会封闭后续交付。 */
+ deliver(receipt:Receipt):void|Promise<void>
 }

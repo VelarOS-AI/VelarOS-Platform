@@ -1,5 +1,7 @@
 # 分区工作内存实现差量
 
+> 阶段差量记录：路径、API 和测试数字对应本次记录形成时的实现。当前接入请读 [模块规范](../architecture/module-ownership.md)、[Act 架构](../architecture/platform-runtime.md) 和 [能力目录](../../packages/velaros/act/README.md)。
+
 ## 本轮交付
 
 正式 `RuntimeSession → ContextMemory → ProviderRequestCompiler → ModelDriver` 链路按 task、workspace、observation、recent、runtime 五区组装请求。主任务、搜索和业务子 Agent 共用同一个组装器，以份额和近期窗口表达差异。模型可在 execute 中维护稳定键笔记，跨回合、跨运行和重启保留；驻留、预算裁剪和归档引用分别管理。

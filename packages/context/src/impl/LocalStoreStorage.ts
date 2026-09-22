@@ -5,9 +5,9 @@ import {isUndefined,toNullable} from '@velaros-ai/core'
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
 import {TimerScope} from '@velaros-ai/core/utils/TimerScope'
 
-import type {StoreChange,StoreChanges,StoreCreate,StoreDescriptor,StoreDirectory,StoreEvent,StoreEventAck,StoreEventPage,StoreMutation,StoreObject,StorePage,StorePublish,StoreSubscription,StoreWatch} from '../contract/store.js'
-import {StoreLimits} from '../contract/store.js'
-import type {StoreStorage} from '../interface/requires.js'
+import { StoreLimits } from '../contract/constants.js'
+import type {StoreStorage} from '../contract/requires.js'
+import type {StoreChange,StoreChanges,StoreCreate,StoreDescriptor,StoreDirectory,StoreEvent,StoreEventAck,StoreEventPage,StoreMutation,StoreObject,StorePage,StorePublish,StoreSubscription,StoreWatch} from '../types/store.js'
 import {storeFailure,storeJson,storeMatches,storeMessageJson,storeName,storeSelection} from '../utils/store.js'
 
 import {createTurnContextAppendHub} from './TurnContextAppendHub.js'
@@ -15,7 +15,7 @@ import {createTurnContextAppendHub} from './TurnContextAppendHub.js'
 /** 在已有 SQLite 连接内原子提交共享对象、变更记录、订阅与调用回执。 */
 export class LocalStoreStorage implements StoreStorage {
  private readonly hub=createTurnContextAppendHub()
- public constructor(private readonly db:DatabaseSync){
+ public constructor(private readonly db:DatabaseSync,private readonly lifetime:AbortSignal){
   db.exec(`CREATE TABLE IF NOT EXISTS store_event_heads(store TEXT PRIMARY KEY,head INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS store_events(store TEXT NOT NULL,sequence INTEGER NOT NULL,id TEXT NOT NULL,topic TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(store,sequence),UNIQUE(store,id));
 CREATE TABLE IF NOT EXISTS store_subscriptions(store TEXT NOT NULL,consumer TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(store,consumer));
@@ -162,7 +162,8 @@ CREATE TABLE IF NOT EXISTS store_creations(scope TEXT NOT NULL,owner TEXT NOT NU
    this.db.prepare('UPDATE store_consumers SET body=? WHERE store=? AND consumer=?').run(JSON.stringify({...watch,after:through}),store,consumer)
   })
  }
- public async wait(store:string,after:number,signal:AbortSignal):Promise<void>{
+ public async wait(store:string,after:number,callerSignal:AbortSignal):Promise<void>{
+  const signal=AbortSignal.any([callerSignal,this.lifetime])
   while(true){
    signal.throwIfAborted()
    if(this.head(store)>after)return
@@ -253,9 +254,11 @@ CREATE TABLE IF NOT EXISTS store_creations(scope TEXT NOT NULL,owner TEXT NOT NU
    const result={ids:selected};this.saveCommit(store,operationId,'event-ack',fingerprint,result);return result
   })
  }
- public async waitEvents(store:string,after:number,signal:AbortSignal):Promise<void>{
-  while(this.eventHead(store)<=after){
+ public async waitEvents(store:string,after:number,callerSignal:AbortSignal):Promise<void>{
+  const signal=AbortSignal.any([callerSignal,this.lifetime])
+  while(true){
    signal.throwIfAborted()
+   if(this.eventHead(store)>after)return
    await new Promise<void>((resolve,reject)=>{
     const timers=new TimerScope({name:"StoreWait"})
     const finish=(error?:unknown)=>{timers.dispose();unsubscribe();signal.removeEventListener('abort',abort);error?reject(error):resolve()}
@@ -265,7 +268,6 @@ CREATE TABLE IF NOT EXISTS store_creations(scope TEXT NOT NULL,owner TEXT NOT NU
     signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort()
    })
   }
-  signal.throwIfAborted()
  }
  private appendEvent(store:string,topic:string,value:string,actor:string):StoreEvent{
   const sequence=this.eventHead(store)+1; const next:StoreEvent={id:crypto.randomUUID(),sequence,topic,value:JSON.parse(value),actor,createdAt:new Date().toISOString()}

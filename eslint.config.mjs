@@ -15,10 +15,8 @@ import path from 'node:path'
 import agentConfig from './eslint/agent.config.mjs'
 import capabilitiesConfig from './eslint/capabilities.config.mjs'
 import coreConfig from './eslint/core.config.mjs'
-import htmlArtifactsConfig from './eslint/html-artifacts.config.mjs'
 import kernelConfig from './eslint/kernel.config.mjs'
 import modelConfig from './eslint/model.config.mjs'
-import uiConfig from './eslint/ui.config.mjs'
 
 const RepoRoot = import.meta.dirname
 
@@ -57,36 +55,13 @@ const Domains = [
     name: 'capabilities',
     config: capabilitiesConfig,
     globs: [
-      'packages/cli/**',
       'packages/script/**',
       'packages/context/**',
-      'packages/development/**',
-      'packages/document-renderer/**',
       'packages/velaros/**',
       'tests/capabilities/**',
     ],
   },
-  {
-    name: 'ui',
-    config: uiConfig,
-    // ui 自己的组件与测试；html-artifacts 单元用它自己那套规则（下一条），不叠 React 的这套
-    globs: [
-      'packages/ui/src/**',
-      'packages/ui/test/**',
-      'component-library/**',
-      'tests/ui/**',
-    ],
-  },
-  {
-    name: 'html-artifacts',
-    config: htmlArtifactsConfig,
-    globs: ['packages/ui/html-artifacts/**'],
-  },
-  {
-    name: 'document-renderer',
-    config: kernelConfig,
-    globs: ['products/document-renderer/**'],
-  },
+
 ]
 
 const toArray = (value) => (Array.isArray(value) ? value : [value])

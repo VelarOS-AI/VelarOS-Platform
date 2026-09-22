@@ -112,6 +112,29 @@ test('concurrent writes are serialized at the shared capability boundary',async 
  assertDone(await collect(f));assert.equal(f.writes.length,2);assert.equal(f.maxWrites,1)
 })
 
+test('cancellation after effect admission still prevents the handler from running',async t=>{
+ const controller=new AbortController()
+ const f=await fixture(t,async function*(request,f){if(f.calls===1){yield {type:'text',text:block(request,'execute',write)};yield finish}else yield* done(request)},
+  {onMetric:metric=>{if(metric.phase==='effect-wait'&&metric.operation==='test:ops.write')controller.abort()}})
+ const events=await collect(f,'cancel at admission',controller.signal)
+ assert.equal(events.at(-1).status,'cancelled');assert.deepEqual(f.writes,[])
+})
+
+test('host-declared disjoint effects overlap through the real runner and emit wait/run timings',async t=>{
+ const metrics=[];let active=0,maxActive=0,release
+ const both=new Promise(resolve=>{release=resolve})
+ const module={binding:{moduleId:'test:scoped',instanceId:'resources',generation:1,schemaRevision:'1'},summary:'independent resources',operations:{write:{summary:'write independent key',effects:'write',input:{type:'string'},output:{type:'null'},run:async()=>{active++;maxActive=Math.max(active,maxActive);if(active===2)release();await both;active--;return null}}}}
+ const f=await fixture(t,async function*(request,f){
+  if(f.calls===1)yield {type:'text',text:block(request,'execute({async:true})',"import {write} from 'test:scoped';await write('a');")+block(request,'execute({async:true})',"import {write} from 'test:scoped';await write('b');")}
+  else yield {type:'text',text:marker(request)+' done'}
+  yield finish
+ },{modules:[module],effectResources:invocation=>invocation.binding.moduleId==='test:scoped'?[String(invocation.input)]:undefined,onMetric:metric=>metrics.push(metric)})
+ const timeout=setTimeout(()=>release(),5000);t.after(()=>clearTimeout(timeout))
+ assertDone(await collect(f));assert.equal(maxActive,2)
+ assert.equal(metrics.filter(metric=>metric.phase==='effect-run'&&metric.operation==='test:scoped.write').length,2)
+ assert(metrics.some(metric=>metric.phase==='effect-wait'&&metric.succeeded))
+})
+
 test('a short ownership lease is renewed while a background task runs',async t=>{
  const f=await fixture(t,async function*(request,f){if(f.calls===1){yield {type:'text',text:block(request,'execute({async:true})',"import {wait} from 'test:ops';await wait(1);")};yield finish}else if(f.calls===2){await until(()=>f.started.length===1);await wait(4500);f.release();yield* done(request)}else yield* done(request)},{context:{sources:[],limits:{leaseMs:2000}}})
  assertDone(await collect(f));assert.equal((await f.session.view.inspect()).lease,null)

@@ -1,5 +1,7 @@
 # 声明式观察输出接入差量
 
+> 阶段差量记录：路径、API 和测试数字对应本次记录形成时的实现。当前接入请读 [模块规范](../architecture/module-ownership.md)、[Act 架构](../architecture/platform-runtime.md) 和 [能力目录](../../packages/velaros/act/README.md)。
+
 ## 问题和最终行为
 
 持续观察采用源码声明的分块输出。整理工具能调整展示范围和预算，将规则写回同一观察源码版本链，并在当前轮重新展示已归档结果。外部资源不因整理而重读，主线能看到采集版本、展示版本及原因。

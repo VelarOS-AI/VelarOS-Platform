@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { createContextRuntime } from '../dist/index.js'
 import { localContextStorage } from '../dist/node.js'
 
-test('工作集提交、原文召回、并发 CAS 和重启恢复共用一份状态', async () => {
+test('INV-1 工作集提交、原文召回、并发 CAS 和重启恢复共用一份状态', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'velaros-context-'))
   const path = join(dir, 'context.sqlite')
   let storage = localContextStorage({path})
@@ -38,7 +38,7 @@ test('工作集提交、原文召回、并发 CAS 和重启恢复共用一份状
   } finally { await storage.close(); await second.close(); await rm(dir,{recursive:true,force:true}) }
 })
 
-test('边界、预算、来源身份和超大原文必须明确处理', async () => {
+test('INV-2 边界、预算、来源身份和超大原文必须明确处理', async () => {
   const storage=localContextStorage({path:':memory:'})
   try {
     const c=createContextRuntime({sessionId:'a',storage})

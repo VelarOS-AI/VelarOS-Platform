@@ -1,5 +1,7 @@
 # Act 正式入口与完整链路审查差量
 
+> 阶段差量记录：路径、API 和测试数字对应本次记录形成时的实现。当前接入请读 [模块规范](../architecture/module-ownership.md)、[Act 架构](../architecture/platform-runtime.md) 和 [能力目录](../../packages/velaros/act/README.md)。
+
 本轮按 [推进方案](act-readiness-plan.md) 完成交付；最终验收与真实恢复结果见 [交付报告](act-readiness-report.md)。
 
 ## 正式入口和生命周期

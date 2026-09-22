@@ -5,6 +5,7 @@ import type {MemoryScopePort} from '@velaros-ai/velaros/memory'
 import type {StoreSessionApi} from '../impl/StoreSession.js'
 import type { MemoryOrganizeIntent, MemoryPage, MemoryQuery } from '../types/memory.js'
 import type { ScriptRetention } from '../types/results.js'
+import type {GoalState,GoalUpdate} from '../types/goal.js'
 import type { WorkspaceEntry, WorkspaceUpdate } from '../types/workspace.js'
 
 /** 模型记忆使用现有会话存储和任务控制面。 */
@@ -49,7 +50,7 @@ export interface ModulesHost {
  kernel():Pick<OperationRuntimeApi,'list'|'describe'>
 }
 /** 系统包共用宿主的两个窄端口。 */
-export interface SystemHost extends MemoryHost,ModulesHost {
+export interface SystemHost extends GoalHost,ModulesHost {
  /** 持久状态存储可用时装配的共享能力。 */
  readonly stores?:StoreHost
 }
@@ -70,4 +71,18 @@ export interface ContextMaintenanceHost {
 export interface ContextCandidateValidator {
  /** 验证五分区和原生附件，不运行脚本。 */
  validateCandidate(frame:{body:string;prompt:string;history:readonly ModelHistoryMessage[];images:readonly ModelImage[]},signal:AbortSignal):Promise<void>
+}
+
+/** 当前会话目标的注入边界。 */
+export interface GoalHost extends MemoryHost {
+ /** 实际调用会话的目标服务。 */
+ programs(sessionId:string):MemorySession & {
+  /** 与宿主读取相同的目标账本。 */
+  readonly goal:{
+   /** 当前版本，缺失返回空。 */
+   get(signal:AbortSignal):Promise<Nullable<GoalState>>
+   /** 只允许模型合同中的状态变化。 */
+   update(input:GoalUpdate,signal:AbortSignal):Promise<GoalState>
+  }
+ }
 }

@@ -1,5 +1,7 @@
 # 搜索续接与异常收尾加固
 
+> 阶段差量记录：路径、API 和测试数字对应本次记录形成时的实现。当前接入请读 [模块规范](../architecture/module-ownership.md)、[Act 架构](../architecture/platform-runtime.md) 和 [能力目录](../../packages/velaros/act/README.md)。
+
 ## 接入位置与结果
 
 本轮继续修改正式 `AdvancedSearch → RuntimeSession → ActLoop → SearchActivation` 链路。搜索与普通子 Agent 的预算仍由父任务的 ContextView 统一记账，实际模型调用仍走原 ModelDriver。

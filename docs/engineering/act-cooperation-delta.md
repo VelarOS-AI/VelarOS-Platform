@@ -1,5 +1,7 @@
 # Act 持久协作交付差量
 
+> 阶段差量记录：路径、API 和测试数字对应本次记录形成时的实现。当前接入请读 [模块规范](../architecture/module-ownership.md)、[Act 架构](../architecture/platform-runtime.md) 和 [能力目录](../../packages/velaros/act/README.md)。
+
 本轮以现有 ScriptAct → Kernel → ContextStorage 为唯一执行和存储链，补全共享事件、子任务交互、环境续跑、材料共享和任务引用整理。
 
 ## 实际入口

@@ -1,13 +1,34 @@
 import {Log} from '@velaros-ai/core'
 import { isEmpty, isString } from '@velaros-ai/core'
 
-import type { ActAnswer,ActEvent,ActInput,ActInteraction,ActRunEvent,ActRunSnapshot } from '../contract/act.js'
-import type { ActPendingInteraction } from '../interface/internal.js'
-import type { ActLoopApi,ActRunServiceApi } from '../interface/provides.js'
-import type { ActRunServiceOptions } from '../interface/requires.js'
+import type { ActRunServiceOptions } from '../contract/requires.js'
+import type { ActAnswer,ActEvent,ActInput,ActInteraction,ActRunEvent,ActRunSnapshot } from '../types/act.js'
+import type { ActPendingInteraction } from '../types/runtime.js'
 import { boundedModelOperation } from '../utils/model-stream.js'
+import { AgentTuning } from '../utils/tuning.js'
 
-import { createActLoop } from './ActLoop.js'
+import type { ActLoopApi } from './ActLoop.js'
+import { ActLoop } from './ActLoop.js'
+
+/** 持久运行管理，宿主不再自行维护平行状态机。 */
+export interface ActRunServiceApi {
+ /** 领运行权并推进输入；input 表示持久接纳，input-applied 绑定实际请求，input-retained 表示结束时仍未消费。消费方关闭迭代时收束执行。 */
+ submit(input:string|ActInput,signal?:AbortSignal):AsyncIterable<ActRunEvent>
+ /** 归档并在下一轮递交运行中补充，抢占尚未派发的模型响应。 */
+ steer(input:string|ActInput):Promise<void>
+ /** 创建可由宿主回答的交互，取消会拒绝等待。 */
+ request(kind:ActInteraction['kind'],message:string,signal:AbortSignal,detail?:unknown):Promise<unknown>
+ /** 只回答当前运行的一次交互，重复或陈旧回答拒绝。 */
+ answer(answer:ActAnswer):Promise<void>
+ /** 获取当前或重启恢复的运行状态。 */
+ inspect():Promise<ActRunSnapshot>
+ /** 按持久序号分页读取事件。 */
+ events(after?:number,limit?:number):Promise<readonly ActEvent[]>
+ /** 取消当前运行及其交互。 */
+ cancel():void
+ /** 取消并等待所有运行收束。 */
+ close():Promise<void>
+}
 
 /** 同一会话的运行、输入和交互使用现有上下文存储记录真实生命周期。 */
 class ActRunService implements ActRunServiceApi {
@@ -19,7 +40,9 @@ class ActRunService implements ActRunServiceApi {
  private status:ActRunSnapshot['status']='idle'
  private closed=false
  private readonly pending=new Map<string,ActPendingInteraction>()
- private readonly inputs:Array<{sessionId:string;id:string}>=[]
+ private readonly inputs:Array<Extract<ActRunEvent,{type:'input'}>>=[]
+ private prepared:Array<Extract<ActRunEvent,{type:'input'}>>=[]
+ private readonly unapplied=new Map<string,Extract<ActRunEvent,{type:'input'}>>()
  private readonly outbox:ActRunEvent[]=[]
  private readonly wake=new Set<()=>void>()
  private writes:Promise<void>=Promise.resolve()
@@ -29,23 +52,34 @@ class ActRunService implements ActRunServiceApi {
 
  public async *submit(input:string|ActInput,signal?:AbortSignal):AsyncIterable<ActRunEvent>{
   if(this.closed||this.active)throw new Error('会话已关闭或已有活动运行')
+  this.inputs.length=0;this.prepared=[];this.unapplied.clear()
   this.runId=crypto.randomUUID();this.status='idle';this.controller=new AbortController();this.turnController=new AbortController()
   const combined=AbortSignal.any([this.controller.signal,...(signal?[signal]:[])])
   let restored=false
-  this.loop=createActLoop({...this.options,control:{runId:this.runId,pending:()=>!isEmpty(this.inputs)||this.steering>0,turnSignal:()=>this.turnController.signal,beforeTurn:async turnSignal=>{
+  this.loop=new ActLoop({...this.options,control:{runId:this.runId,pending:()=>!isEmpty(this.inputs)||this.steering>0,turnSignal:()=>this.turnController.signal,beforeTurn:async turnSignal=>{
    await this.inputWrites
    turnSignal.throwIfAborted()
    if(!restored){
     const state=await this.options.storage.load(this.options.sessionId)
     const applied=new Set((state?.records??[]).filter(r=>r.title?.startsWith('act:input-applied:')).map(r=>r.title.slice('act:input-applied:'.length)))
+    const events:ActRunEvent[]=[]
     for(const record of state?.records??[])if(record.title==='act:event'){
      const event=JSON.parse((await this.options.storage.get(this.options.sessionId,record.objectId))!) as ActRunEvent
-     if(event.type==='input'&&!applied.has(event.ref.id)&&!this.inputs.some(ref=>ref.id===event.ref.id))this.inputs.push(event.ref)
+     events.push(event);if(event.type==='input-applied')applied.add(event.ref.id)
     }
+    for(const event of events)if(event.type==='input'&&!(event.source==='submit'&&event.runId===this.runId)&&!applied.has(event.ref.id)&&!this.inputs.some(item=>item.ref.id===event.ref.id)){this.inputs.push(event);this.unapplied.set(event.ref.id,event)}
     restored=true
    }
    this.turnController=new AbortController()
-   while(!isEmpty(this.inputs)){const ref=this.inputs[0]!;if(!(await this.options.view.inspect())?.goals.some(goal=>goal.id===ref.id&&goal.sessionId===ref.sessionId))await this.options.view.appendGoal(ref,turnSignal);await this.options.context.append({kind:'audit',title:`act:input-applied:${ref.id}`,body:JSON.stringify(ref)},turnSignal);this.inputs.shift()}
+   this.prepared=[...this.inputs]
+   for(const {ref} of this.prepared)if(!(await this.options.view.inspect())?.goals.some(goal=>goal.id===ref.id&&goal.sessionId===ref.sessionId))await this.options.view.appendGoal(ref,turnSignal)
+  },applied:async(turnId,turnSignal)=>{
+   turnSignal.throwIfAborted()
+   for(const input of this.prepared){
+    await this.emit({type:'input-applied',runId:this.runId,ref:input.ref,inputId:input.inputId,turnId})
+    const index=this.inputs.findIndex(item=>item.ref.id===input.ref.id);if(index>=0)this.inputs.splice(index,1)
+   }
+   this.prepared=[]
   }}})
   const run=this.loop;let finished=false
   this.active=(async()=>{
@@ -56,10 +90,11 @@ class ActRunService implements ActRunServiceApi {
      else await this.emit(event)
     }
     // 只有执行、租约和帧收尾全部完成后，才向消费者提交终态。
+    await this.retainInputs()
     if(terminal)await this.emit(terminal)
    }catch(error){
     this.status='failed'
-    try{await this.emit({type:'error',runId:this.runId,message:String(error)});await this.emit({type:'state',runId:this.runId,status:'failed'})}catch{Log.tag('ActRuntime').debug('ActRunService 已进入异常处理或降级分支');/* 存储故障不能掩盖最初的失败；仍由消费方收到异常。 */}
+    try{await this.retainInputs();await this.emit({type:'error',runId:this.runId,message:String(error)});await this.emit({type:'state',runId:this.runId,status:'failed'})}catch{Log.tag('ActRuntime').debug('ActRunService 已进入异常处理或降级分支');/* 存储故障不能掩盖最初的失败；仍由消费方收到异常。 */}
     throw error
    }
    finally{
@@ -96,8 +131,9 @@ class ActRunService implements ActRunServiceApi {
    for(const image of value.images??[])await this.options.context.append({kind:'audit',title:'user:image',body:JSON.stringify({...image,origin:'user'}),sources:[record.ref]},signal)
    // 输入在持久化接受之前使旧验收失效；与完成 CAS 竞争失败时明确拒绝本次引导。
    if(this.status!=='idle')await this.options.view.appendGoal(record.ref,signal)
-   await this.emit({type:'input',runId:this.runId,ref:record.ref})
-   this.inputs.push(record.ref)
+   const receipt:Extract<ActRunEvent,{type:'input'}>={type:'input',runId:this.runId,ref:record.ref,inputId:value.inputId,source:'steer'}
+   await this.emit(receipt)
+   this.inputs.push(receipt)
   })
   this.inputWrites=write.catch(error=>this.controller?.abort(error)).finally(()=>{this.steering--})
   await write
@@ -127,7 +163,7 @@ class ActRunService implements ActRunServiceApi {
   const value=JSON.parse((await this.options.storage.get(this.options.sessionId,record.objectId))!) as ActRunSnapshot
   return ['thinking','executing'].includes(value.status)||!isEmpty(value.pending)?{...value,status:'interrupted',pending:[]}:value
  }
- public async events(after=0,limit=100):Promise<readonly ActEvent[]>{
+ public async events(after=0,limit=AgentTuning.eventPage):Promise<readonly ActEvent[]>{
   if(!Number.isSafeInteger(after)||after<0||!Number.isSafeInteger(limit)||limit<1||limit>1000)throw new Error('事件分页范围无效')
   const records=((await this.options.storage.load(this.options.sessionId))?.records??[]).filter(item=>item.sequence>after&&item.title==='act:event').slice(0,limit)
   return Promise.all(records.map(async record=>{const event=JSON.parse((await this.options.storage.get(this.options.sessionId,record.objectId))!) as ActRunEvent;return {sequence:record.sequence,sessionId:this.options.sessionId,runId:event.runId,event}}))
@@ -136,9 +172,14 @@ class ActRunService implements ActRunServiceApi {
  public async close():Promise<void>{this.closed=true;this.cancel();await this.active?.catch(()=>{Log.tag('ActRuntime').debug('ActRunService 已进入异常处理或降级分支');});await this.writes}
  private snapshot():ActRunSnapshot{return {id:this.runId,sessionId:this.options.sessionId,status:this.status,pending:[...this.pending.values()].map(item=>item.request)}}
  private async saveState():Promise<void>{await this.options.context.append({kind:'audit',title:'act:state',body:JSON.stringify(this.snapshot())})}
+ /** 结束前等待输入落盘，并逐条交出仍可恢复的输入身份。 */
+ private async retainInputs():Promise<void>{
+  await this.inputWrites
+  for(const input of this.unapplied.values())await this.emit({type:'input-retained',runId:this.runId,ref:input.ref,inputId:input.inputId})
+ }
  private async emit(event:ActRunEvent):Promise<void>{
   if(event.type==='text'||event.type==='program'){this.outbox.push(event);this.notify();return}
-  const write=this.writes.then(async()=>{if(event.type==='state')this.status=event.status;if(event.type==='interaction')this.status='waiting';if(event.type==='answer')this.status='executing';await this.options.context.append({kind:'audit',title:'act:event',body:JSON.stringify(event)});await this.saveState();this.outbox.push(event);this.notify()})
+  const write=this.writes.then(async()=>{if(event.type==='state')this.status=event.status;if(event.type==='interaction')this.status='waiting';if(event.type==='answer')this.status='executing';await this.options.context.append({kind:'audit',title:'act:event',body:JSON.stringify(event)});if(event.type==='input')this.unapplied.set(event.ref.id,event);if(event.type==='input-applied')this.unapplied.delete(event.ref.id);await this.saveState();this.outbox.push(event);this.notify()})
   this.writes=write.catch(()=>{Log.tag('ActRuntime').debug('ActRunService 已进入异常处理或降级分支');});await write
  }
  private notify():void{for(const wake of this.wake)wake();this.wake.clear()}

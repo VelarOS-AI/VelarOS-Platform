@@ -1,5 +1,7 @@
 # 模板查询入口收敛差量
 
+> 阶段差量记录：路径、API 和测试数字对应本次记录形成时的实现。当前接入请读 [模块规范](../architecture/module-ownership.md)、[Act 架构](../architecture/platform-runtime.md) 和 [能力目录](../../packages/velaros/act/README.md)。
+
 ## 当前合同
 
 模型统一通过 `velaros:system` 的 `modules.describe({module, export?})` 读取模块 schema、声明与模板。系统成员用 `export` 选择，业务模块直接使用其模块名。查询经过已有 Kernel 操作、宿主授权和会话能力范围检查；返回的 `template` 是实际注册模块的示例源码。

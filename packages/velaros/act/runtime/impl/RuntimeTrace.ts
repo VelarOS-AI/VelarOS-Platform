@@ -1,4 +1,5 @@
-import type { ContextInvocationJournalApi, ContextRecord, ContextStorage } from "@velaros-ai/context";
+import {summarizeInvocation,summarizeModelRequest} from '../utils/tracePresentation.js'
+import type { ContextInvocationJournalApi, ContextRecord, ContextState, ContextStorage } from "@velaros-ai/context";
 import {isNull,isUndefined,toNullable} from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 
@@ -33,9 +34,9 @@ export class RuntimeTrace implements RuntimeTraceApi {
     let remaining=maxChars; let cursor=after
     for(const request of requests.slice(0,limit)){
       if(remaining<1)break
-      const value=await trace.read(request.ref.id,remaining)
+      const value=await trace.readSnapshot(request.ref.id,remaining,snapshot)
       turns.push(value);cursor=request.sequence
-      remaining-=[value.request,value.response,value.decision,...value.records,...value.invocations].reduce((sum,item)=>sum+(item?.body?.length??0),0)
+      remaining-=[value.request,value.response,value.decision,...value.records,...value.invocations].reduce((sum,item)=>sum+(item?.body?.length??0),0)+value.invocations.reduce((sum,item)=>sum+item.summary.input.length+item.summary.output.length,0)+(value.requestSummary?.system.length??0)+(value.requestSummary?.messages.length??0)
     }
     return {rootSessionId:this.sessionId,sessionId,branches:bindings.filter(item=>item.rootTaskId===root?.task?.id),turns,nextAfter:requests.some(record=>record.sequence>cursor)?cursor:null,snapshotVersion:toNullable(snapshot?.version)}
   }
@@ -43,7 +44,12 @@ export class RuntimeTrace implements RuntimeTraceApi {
   public async read(turnId:string,maxChars:number=ActRuntimeTuning.frameChars):Promise<ActTurnTrace>{
     if(!turnId||!Number.isSafeInteger(maxChars)||maxChars<1||maxChars>8_000_000)throw new Error('回合身份或追踪正文预算无效')
     const snapshot=await this.storage.load(this.sessionId)
+    return this.readSnapshot(turnId,maxChars,snapshot)
+  }
+
+  private async readSnapshot(turnId:string,maxChars:number,snapshot:Nullable<ContextState>):Promise<ActTurnTrace>{
     const records=snapshot?.records??[]
+    const recordById=new Map(records.map(record=>[record.ref.id,record]))
     const requestRecord=records.find(record=>record.ref.id===turnId&&record.title==='model-request')
     if(!requestRecord)throw new Error('当前会话没有这个模型回合')
     const cache=new Map<string,Nullable<string>>(); const gaps:string[]=[]
@@ -74,7 +80,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
     const selected=new Set<string>(); const executions=new Set<string>()
     const select=(record:Optional<ContextRecord>)=>{if(record)selected.add(record.ref.id)}
     const byRef=(id:Optional<string>)=>{
-      const record=records.find(record=>record.ref.id===id)
+      const record=id?recordById.get(id):undefined
       if(id&&!record)gaps.push(`引用记录缺失：${id}`)
       return record
     }
@@ -125,13 +131,11 @@ export class RuntimeTrace implements RuntimeTraceApi {
     }
     for(const record of records)if([...executions].some(id=>record.title===`script:${id}:result`))select(record)
     // 结果的来源链包含真实源码、图片和版本；仅在当前会话内解析。
-    let size=-1
-    while(size!==selected.size){
-      size=selected.size
-      for(const record of records)if(selected.has(record.ref.id))for(const ref of record.sources)if(ref.sessionId===this.sessionId)select(byRef(ref.id))
-    }
+    for(const id of selected)for(const ref of recordById.get(id)!.sources)if(ref.sessionId===this.sessionId)select(byRef(ref.id))
     for(const record of records)if(record.title.startsWith('script:version:')&&selected.has(record.title.slice('script:version:'.length)))select(record)
     let remaining=maxChars
+    const requestSummary=summarizeModelRequest(request,remaining)
+    remaining-=(requestSummary?.system.length??0)+(requestSummary?.messages.length??0)
     const project=async(record:ContextRecord):Promise<ActTraceRecord>=>{
       const body=await raw(record); const text=isNull(body)?null:body.slice(0,remaining)
       remaining-=text?.length??0
@@ -142,11 +146,13 @@ export class RuntimeTrace implements RuntimeTraceApi {
     const traceRecords:ActTraceRecord[]=[]
     for(const record of records)if(selected.has(record.ref.id))traceRecords.push(await project(record))
     const invocations:Array<ActTurnTrace['invocations'][number]>=[]
-    for(const invocation of await this.journal.list(this.sessionId))if(executions.has(invocation.prepared.executionId)){
+    for(const executionId of executions)for(const invocation of await this.journal.list(this.sessionId,executionId)){
+      const summary=summarizeInvocation(invocation,remaining)
+      remaining-=summary.input.length+summary.output.length
       const rawBody=JSON.stringify(invocation); const body=rawBody.slice(0,remaining)
       remaining-=body.length
-      invocations.push({id:invocation.prepared.id,executionId:invocation.prepared.executionId,chars:rawBody.length,body,truncated:body.length<rawBody.length})
+      invocations.push({id:invocation.prepared.id,executionId:invocation.prepared.executionId,chars:rawBody.length,body,truncated:body.length<rawBody.length,summary})
     }
-    return {sessionId:this.sessionId,turnId,runId:request.runId,turn:request.turn,repair:request.repair,request:requestTrace,response:responseTrace,decision:decisionTrace,records:traceRecords,invocations,nextTurnId:toNullable(next?.ref.id),snapshotVersion:snapshot!.version,gaps:[...new Set(gaps)]}
+    return {sessionId:this.sessionId,turnId,runId:request.runId,turn:request.turn,repair:request.repair,timing:{observationMs:toNullable(request.preparation?.observationMs),contextMs:toNullable(request.preparation?.contextMs),modelMs:toNullable(decoded?.timing?.modelMs),firstTextMs:toNullable(decoded?.timing?.firstTextMs)},request:requestTrace,requestSummary,response:responseTrace,decision:decisionTrace,records:traceRecords,invocations,nextTurnId:toNullable(next?.ref.id),snapshotVersion:snapshot!.version,gaps:[...new Set(gaps)]}
   }
 }

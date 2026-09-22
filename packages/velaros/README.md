@@ -50,7 +50,7 @@ try {
 
 ## 单元的规范
 
-每个单元目录长得一样，是普通的文件目录，不是单独的包：
+单元按 [模块所有权规范](../../docs/architecture/module-ownership.md) 登记，不单独发布包。通常使用以下布局；单份类型或参数可以直接登记成文件，Act 的具体目录见 [能力目录](act/README.md)：
 
 ```text
 <单元>/
@@ -58,11 +58,11 @@ try {
   index.ts        入口，只转发：操作、空间端口、它们用到的数据
   contracts.ts    可移植数据入口：常量表与不碰 Node 的类型
   local.ts        本机实现入口（有的单元才有）：空间端口在本机上的实现，只给 Node
-  contract/       provides.ts（操作的 API 登记）、requires.ts（空间端口与调用上下文）、constants.ts（错误码与公开上限）
+  contract/       provides.ts（API 登记）、requires.ts（宿主端口）、constants.ts（公开常量）、生成的 surface.ts
   types/          只放类型；领域代码面类型带 @AgentView
   impl/           一类一文件，接口写在类上方；领域能力使用 @AgentView，系统模块在这里声明 Kernel 操作定义
   utils/          纯函数与可调参数（tuning.ts）
-  template.js     代码模版：日常用法的示例程序，只是示例、不要求照着写（一个单元出两件能力时，另一件的模版叫 <模块>-template.js）
+  template.js     按需返回的代码模版：日常用法的示例程序，只是示例、不要求照着写（一个单元出两件能力时，另一件的模版叫 <模块>-template.js）
   spec/           不变量登记 invariants.md 与验收测试 acceptance.test.ts
   test/           实现细节测试；要原生依赖或真实计时的探针放 test/probes/（不进 bun test，由仓库脚本拉起）
 ```
@@ -94,3 +94,7 @@ const transactions = createProjectTransactionController(project)
 `transactionStatePath` 启用写前恢复计划：apply/rollback 在第一处项目文件写入前先提交计划，成功后再原子提交终态。
 重启发现中断操作时，只会还原「原状态」或能证明属于该事务的内容；遇到无法归属的外部编辑会以 `TRANSACTION_RECOVERY_CONFLICT` 拒绝覆盖并保留现场。
 变更记录是可重建的审计投影，不能领先或否定事务主状态。
+
+## 项目语言服务
+
+`@velaros-ai/velaros/project` 同时提供 `createProjectCodeQuery`、`languageQueries`、`createExternalLanguageService` 和 `typeScriptProjects`。宿主用 `createProjectCodeQuery(codeIndex)` 实现项目端口的 `queryCode`；语言服务只借 listFiles/read/listSymbols 三个只读方法，代码图谱仍由宿主提供。公开数据从 `@velaros-ai/velaros/project/contracts` 取。项目关闭时调用 `typeScriptProjects.release(projectRoot)`，外部语言服务实例调用 `stop()`。完整契约、失败语义与验收见 [项目模块卡片](project/MODULE.md)。

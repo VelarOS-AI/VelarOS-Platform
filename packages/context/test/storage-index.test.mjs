@@ -5,11 +5,56 @@ import {join} from 'node:path'
 import {DatabaseSync} from 'node:sqlite'
 import {test} from 'node:test'
 
-import {createContextInvocationJournal,createContextRuntime} from '../dist/index.js'
+import {createContextInvocationJournal,createContextRuntime,createContextView} from '../dist/index.js'
 import {localContextStorage} from '../dist/node.js'
 
 async function fixture(t){const dir=await mkdtemp(join(tmpdir(),'act-storage-'));t.after(()=>rm(dir,{recursive:true,force:true}));return join(dir,'context.sqlite')}
 const empty={version:0,records:[],workingSet:{revision:0,cursor:0,items:[]}}
+
+test('task accounting avoids full history and task replacement archives atomically',async t=>{
+ const path=await fixture(t),storage=localContextStorage({path});t.after(()=>storage.close())
+ const context=createContextRuntime({sessionId:'s',storage}),goal=await context.append({kind:'user',body:'goal'})
+ const view=createContextView({sessionId:'s',storage,context,sources:[]})
+ await view.begin(goal.ref)
+ const db=new DatabaseSync(path);t.after(()=>db.close())
+ db.exec("CREATE TRIGGER no_history_update BEFORE UPDATE ON context_records BEGIN SELECT RAISE(ABORT,'rewritten'); END; CREATE TRIGGER no_history_delete BEFORE DELETE ON context_records BEGIN SELECT RAISE(ABORT,'deleted'); END")
+ const load=t.mock.method(storage,'load',()=>{throw Error('full snapshot loaded')})
+ await view.renew();await view.reserveModel('main',10);await view.recordUsage(4,2)
+ assert.equal((await view.inspect()).usage.inputTokens,4);assert.equal(load.mock.callCount(),0)
+ await view.end('completed');const prior=await view.inspect()
+ const nextGoal=await context.append({kind:'user',body:'new goal'})
+ db.exec("CREATE TRIGGER fail_archive BEFORE INSERT ON context_records WHEN NEW.title LIKE 'task:archive:%' BEGIN SELECT RAISE(ABORT,'archive failed'); END")
+ await assert.rejects(view.begin(nextGoal.ref,undefined,'new'),/archive failed/)
+ assert.deepEqual(await view.inspect(),prior)
+ db.exec('DROP TRIGGER fail_archive')
+ await view.begin(nextGoal.ref,undefined,'new')
+ const archive=(await storage.records('s',{title:`task:archive:${prior.id}`})).items
+ assert.equal(archive.length,1);assert.deepEqual(JSON.parse(await storage.get('s',archive[0].objectId)),prior)
+ assert.notEqual((await view.inspect()).id,prior.id)
+})
+
+test('journal indexes use incremental transactions and simultaneous claims keep one owner',async t=>{
+ const path=await fixture(t),a=localContextStorage({path}),b=localContextStorage({path});t.after(async()=>{await a.close();await b.close()})
+ const key=JSON.stringify(['kernel-invocation-index','s'])
+ for(const storage of [a,b]){const load=storage.load.bind(storage);t.mock.method(storage,'load',id=>{assert.notEqual(id,key);return load(id)})}
+ const journals=[a,b].map(createContextInvocationJournal)
+ const prepared={id:'same',sessionId:'s',executionId:'execution',binding:{moduleId:'test:read',instanceId:'one',generation:1,schemaRevision:'1'},operation:'read',input:null,inputFingerprint:'null',requestFingerprint:'fingerprint'}
+ const claims=await Promise.all(journals.map(journal=>journal.claim(prepared)))
+ assert.equal(claims.filter(value=>value===null).length,1)
+ assert.equal((await a.records(key,{})).items.length,1)
+ assert.equal((await journals[0].list('s','execution')).length,1)
+})
+
+test('atomic append rolls back the record when metadata publication fails',async t=>{
+ const path=await fixture(t);const storage=localContextStorage({path});t.after(()=>storage.close())
+ const context=createContextRuntime({sessionId:'s',storage});await context.append({kind:'user',body:'goal'})
+ const before=await storage.load('s');const db=new DatabaseSync(path);t.after(()=>db.close())
+ db.exec("CREATE TRIGGER fail_publish BEFORE UPDATE ON sessions BEGIN SELECT RAISE(ABORT,'publish failed'); END")
+ await assert.rejects(context.append({kind:'event',body:'unpublished'}),/publish failed/)
+ assert.deepEqual(await storage.load('s'),before)
+ db.exec('DROP TRIGGER fail_publish')
+ assert.equal((await context.append({kind:'event',body:'next'})).sequence,2)
+})
 
 test('INV-7 索引记录保持原引用、分页和跨连接 CAS，元数据更新不重写历史',async t=>{
  const path=await fixture(t); const a=localContextStorage({path}); const b=localContextStorage({path});t.after(async()=>{await a.close();await b.close()})
@@ -59,4 +104,56 @@ test('journal execution lookup loads matching receipts rather than every session
  const journal=createContextInvocationJournal(counted)
  for(let i=0;i<80;i++)await journal.claim({id:`i${i}`,sessionId:'s',executionId:i%10?'other':'wanted',binding:{moduleId:'test:read',instanceId:'one',generation:1,schemaRevision:'1'},operation:'read',input:null,inputFingerprint:'null',requestFingerprint:String(i)})
  reads=0;assert.equal((await journal.list('s','wanted')).length,8);assert.equal(reads,8)
+})
+
+
+test('selected snapshots keep one version while another connection commits between queries',async t=>{
+ const path=await fixture(t),a=localContextStorage({path}),b=localContextStorage({path});t.after(async()=>{await a.close();await b.close()})
+ const context=createContextRuntime({sessionId:'s',storage:a})
+ const first=await context.append({kind:'audit',title:'state',body:'first'})
+ const old=await a.loadMetadata('s'),objectId=await b.put('s','second')
+ const prepare=DatabaseSync.prototype.prepare;let committing,intercepted=false
+ const hook=t.mock.method(DatabaseSync.prototype,'prepare',function(sql){
+  if(!intercepted&&sql.startsWith('SELECT body FROM context_records')){
+   intercepted=true
+   committing=b.compareAndSwapMetadata('s',old.version,{...old,version:old.version+1},[{...first,ref:{sessionId:'s',id:'second'},objectId}])
+  }
+  return prepare.call(this,sql)
+ })
+ const snapshot=await a.selectSnapshot('s',[{title:'state',latest:true},{refId:first.ref.id}])
+ hook.mock.restore();assert.equal(await committing,true)
+ assert.equal(snapshot.metadata.version,old.version);assert.deepEqual(snapshot.records,[first])
+ const current=await a.selectSnapshot('s',[{title:'state',latest:true}])
+ assert.equal(current.metadata.version,old.version+1);assert.equal(current.records[0].ref.id,'second')
+ assert.equal(await a.compareAndSwapMetadata('s',snapshot.metadata.version,{...snapshot.metadata,version:snapshot.metadata.version+1}),false)
+})
+
+for(const mode of ['indexed','selection-only','fallback'])test(`${mode}: input recall preserves attachment membership and chunk boundaries without unrelated bodies`,async t=>{
+ const storage=localContextStorage({path:await fixture(t)});t.after(()=>storage.close())
+ const port=mode==='indexed'?storage:{load:(...args)=>storage.load(...args),compareAndSwap:(...args)=>storage.compareAndSwap(...args),put:(...args)=>storage.put(...args),get:(...args)=>storage.get(...args),close:()=>storage.close(),...(mode==='selection-only'?{selectSnapshot:(...args)=>storage.selectSnapshot(...args)}:{})}
+ const context=createContextRuntime({sessionId:'s',storage:port})
+ const file=await context.append({kind:'audit',body:'attachment text'})
+ const unrelated=await context.append({kind:'audit',body:'private audit'})
+ const otherInput=await context.ingest({files:[{ref:unrelated.ref,name:'other',mediaType:'text/plain'}]})
+ const text=`${'a'.repeat(8000000)}中😀文`,input=await context.ingest({text,files:[{ref:file.ref,name:'file',mediaType:'text/plain'}]})
+ await context.summarizeInput({ref:input.ref,baseRevision:0,summary:'preserved intent',constraints:['keep original'],unresolved:[]})
+ const manifest=JSON.parse(await storage.get('s',input.objectId))
+ const forbidden=new Set([otherInput.objectId]),get=storage.get.bind(storage)
+ t.mock.method(storage,'get',(...args)=>{assert(!forbidden.has(args[1]),'unrelated manifest loaded');return get(...args)})
+ if(mode!=='fallback')t.mock.method(storage,'load',()=>{throw Error('full input history loaded')})
+ assert.equal((await context.readInput(file.ref,{offset:3,limit:7})).text,'achment')
+ const restored=await context.readInput(input.ref,{offset:7999996,limit:32});assert.equal(restored.text,text.slice(7999996))
+ const projected=JSON.parse((await context.projectInput(input.ref,100)).text)
+ assert.equal(projected.intent.summary,'preserved intent');assert.equal(projected.summaryRevision,1);assert.equal(projected.files[0].ref.id,file.ref.id)
+ await assert.rejects(context.readInput(manifest.chunks[0]),{code:'INPUT_REF'})
+ await assert.rejects(context.readInput({...file.ref,sessionId:'other'}),{code:'SCOPE_MISMATCH'})
+ await assert.rejects(context.readInput({sessionId:'s',id:'missing'}),{code:'REF_NOT_FOUND'})
+ if(mode==='indexed')await context.ingest({files:[{ref:file.ref,name:'again',mediaType:'text/plain'}]})
+ forbidden.clear()
+ const missing=t.mock.method(storage,'get',(...args)=>args[1]===input.objectId?null:get(...args))
+ await assert.rejects(context.readInput(input.ref),{code:'OBJECT_MISSING'})
+ missing.mock.restore()
+ const chunk=(await storage.records('s',{refId:manifest.chunks[1].id})).items[0]
+ t.mock.method(storage,'get',(...args)=>args[1]===chunk.objectId?null:get(...args))
+ await assert.rejects(context.readInput(input.ref,{offset:8000000,limit:32}),{code:'OBJECT_MISSING'})
 })

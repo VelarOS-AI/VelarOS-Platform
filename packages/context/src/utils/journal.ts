@@ -1,4 +1,4 @@
-import type { ContextState } from '../contract/context.js'
+import type { ContextState } from '../types/context.js'
 
 /** 调用日志采用独立、无歧义的内部键，正文仍由同一对象存储持有。 */
 export function journalKey(sessionId: string, id: string): string {

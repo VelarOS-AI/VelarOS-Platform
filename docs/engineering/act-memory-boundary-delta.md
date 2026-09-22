@@ -1,5 +1,7 @@
 # Act 工作记忆与整理职责收敛差量
 
+> 阶段差量记录：路径、API 和测试数字对应本次记录形成时的实现。当前接入请读 [模块规范](../architecture/module-ownership.md)、[Act 架构](../architecture/platform-runtime.md) 和 [能力目录](../../packages/velaros/act/README.md)。
+
 本轮已接入正式 Platform 主链。模型通过 `velaros:system` 的 `modules`、`memory` 工作；主模型拥有笔记、计划和工作意图，整理支线拥有派生展示任务，Runtime 负责生效、版本、预算与生命周期。
 
 当前合同和原始调用示例见 [系统空间](../architecture/act-system-space.md)；每个分区的处理见 [上下文管理](../architecture/context-management.md)；准确操作表从 [Act 清单](../../packages/velaros/act/README.md) 生成。

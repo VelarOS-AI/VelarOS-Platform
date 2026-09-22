@@ -36,16 +36,6 @@
       "model": [
         "model"
       ],
-      "capabilities": [
-        "cli",
-        "development"
-      ],
-      "ui": [
-        "ui"
-      ],
-      "products": [
-        "document-renderer"
-      ],
       "evaluation": [
         "agent-lab"
       ]
@@ -64,9 +54,9 @@
     "build:devtools-performance-engine": "bun scripts/browser/buildDevtoolsPerformanceEngine.mjs",
     "typecheck": "node scripts/run-workspace-script.mjs typecheck",
     "test": "node scripts/run-workspace-script.mjs test && bun run test:act-eval",
-    "test:act-eval": "node --test scripts/agent/act-eval.test.mjs",
+    "test:act-eval": "node --test scripts/agent/act-eval.test.mjs scripts/agent/evidence-checkpoints.test.mjs",
     "eval:act": "node scripts/agent/run-act-eval.mjs",
-    "//lint": "--quiet 只收 error:react-hooks/exhaustive-deps 刻意停在 warn(对 ref / 稳定函数假阳性有名,一刀 error 会逼人改坏代码),硬门由 check:ui-hook-deps 棘轮承担。该探针同时静态核对配置里没有未登记的 warn 规则,补回 --max-warnings=0 曾提供的「warn 不会被静默吞掉」保证。",
+    "//lint": "lint 只报告 error；各包使用所属域的规则。",
     "lint": "eslint . --quiet",
     "check:kernel-schemas": "bun scripts/kernel/check-schemas.mjs",
     "check:kernel-arch": "bun scripts/kernel/check-arch-boundaries.mjs",
@@ -81,14 +71,6 @@
     "check:lockfile-consistency": "bun scripts/capabilities/check-lockfile-consistency.mjs",
     "check:model-arch": "bun scripts/model/check-arch-boundaries.mjs",
     "test:capabilities": "bun test tests/capabilities",
-    "test:ui": "bun test tests/ui packages/ui/test",
-    "check:ui-popover-runtime": "node scripts/ui/check/popoverRuntime.mjs",
-    "check:ui-component-library": "node scripts/ui/component-library/generateComponentApi.mjs && node scripts/ui/checks/componentLibraryDocsFreshness.mjs && node scripts/ui/checks/componentLibraryIndependence.mjs",
-    "check:ui-package-contracts": "node scripts/ui/checks/packageContracts.mjs",
-    "check:ui-form-closure": "node scripts/ui/check/uiComponentFormClosure.mjs",
-    "check:ui-color-literal": "node scripts/ui/check/uiColorLiteralClosure.mjs",
-    "check:ui-hook-deps": "node scripts/ui/check/reactHookDeps.mjs",
-    "build:component-library": "vite build --config component-library/vite.config.ts",
     "//check:code-style": "语言级写法门使用固定提交的 @velaros-ai/arch-guard，并坚持零 baseline：错误必须在源码中修复。逐条查看用 check:code-style:report。",
     "check:code-style": "arch-guard verify",
     "check:code-style:report": "arch-guard run --no-baseline",
@@ -100,19 +82,14 @@
     "check:devtools-performance-engine": "bun scripts/browser/buildDevtoolsPerformanceEngine.mjs --check",
     "check:public-readiness": "node --test scripts/quality/check-public-readiness.test.mjs && node scripts/quality/check-public-readiness.mjs",
     "check:platform-generation": "node scripts/release/check-platform-generation.mjs",
-    "check:gates": "bun run check:host-contract-consumer && bun run check:release-source && bun run check:document-renderer-release && bun run check:package-pack-safety && bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:core-semantic-vocabulary && bun run check:agent-schemas && bun run check:agent-arch && bun run check:agent-public-api && bun run check:agent-browser && bun run check:conversation-semantics && bun run check:capabilities-arch && bun run check:module-ownership && bun run check:lockfile-consistency && bun run check:model-arch && bun run check:ui-form-closure && bun run check:ui-color-literal && bun run check:ui-hook-deps && bun run check:ui-package-contracts && bun run check:ui-component-library && bun run check:code-style && bun run check:project-arch && bun run check:agent-lab-package && bun run check:dependency-licenses && bun run check:dependency-security && bun run check:devtools-performance-engine && bun run check:public-readiness && bun run check:platform-generation && bun run check:script && bun run check:act-catalog && bun run check:package-catalog",
-    "//release": "发布只走本机维护入口。release:local <tag> 核验官方 origin 的远端 tag、HEAD 和干净工作树，冻结安装、完整 check、新构建后发布同一份已校验 tarball；release:document-renderer 在当前原生平台完成质量门、构建、签名/公证、stage 与带证明的 finalize/upload。GitHub workflows 仅保留静态跳过哨兵。release:dry-run 只模拟，不发布。",
+    "check:gates": "bun run check:host-contract-consumer && bun run check:release-source && bun run check:package-pack-safety && bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:core-semantic-vocabulary && bun run check:agent-schemas && bun run check:agent-arch && bun run check:agent-public-api && bun run check:agent-browser && bun run check:conversation-semantics && bun run check:capabilities-arch && bun run check:module-ownership && bun run check:lockfile-consistency && bun run check:model-arch && bun run check:code-style && bun run check:project-arch && bun run check:agent-lab-package && bun run check:dependency-licenses && bun run check:dependency-security && bun run check:devtools-performance-engine && bun run check:public-readiness && bun run check:platform-generation && bun run check:script && bun run check:act-catalog && bun run check:package-catalog",
+    "//release": "发布只走本机维护入口；release:local 核验源码身份、冻结安装、完整检查与 tarball。",
     "release:verify": "node scripts/release/verify-release-ref.mjs --local-tag",
     "release:dry-run": "node scripts/release/publish-packages.mjs --dry-run",
     "check": "bun run check:package-pack-boundary && bun run build && bun run typecheck && bun run lint && bun run test && bun run test:suites && bun run check:gates",
-    "test:suites": "bun run test:ui && bun run test:capabilities",
+    "test:suites": "bun run test:capabilities",
     "release:local": "node scripts/release/publish-packages.mjs --local-tag",
     "check:release-source": "node --test scripts/release/local-release-identity.test.mjs scripts/release/tar-entry-paths.test.mjs",
-    "check:document-renderer-release": "node --test scripts/document-renderer/*.test.mjs",
-    "release:document-renderer": "node scripts/document-renderer/release-product.mjs",
-    "release:document-renderer:mac": "node scripts/document-renderer/release-product.mjs --local-macos",
-    "release:document-renderer:win": "node scripts/document-renderer/release-product.mjs --local-windows",
-    "release:document-renderer:linux": "node scripts/document-renderer/release-product.mjs --local-linux",
     "check:host-contract-consumer": "node scripts/release/check-host-contract-consumer.mjs",
     "generate:script": "node scripts/script/generate-declarations.mjs --write",
     "check:script": "node --test scripts/script/operation-contracts.test.mjs && node scripts/script/generate-declarations.mjs",
@@ -121,19 +98,12 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
-    "@phosphor-icons/react": "^2.1.10",
-    "@tailwindcss/node": "^4.3.3",
-    "@tailwindcss/typography": "^0.5.20",
-    "@tailwindcss/vite": "^4.3.3",
     "@types/bun": "^1.3.14",
     "@types/node": "^22.20.1",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
     "@typescript-eslint/eslint-plugin": "^8.67.0",
     "@typescript-eslint/parser": "^8.67.0",
     "@velaros-ai/arch-guard": "github:VelarOS-AI/VelarOS-Arch-Guard#ce2b221d99c1b93736568f281a180ad3593f086f",
     "@velaros-ai/velaros": "workspace:*",
-    "@vitejs/plugin-react": "^6.0.5",
     "brace-expansion": "1.1.18",
     "chrome-devtools-frontend": "1.0.1652307",
     "electron": "^41.10.5",
@@ -147,12 +117,7 @@
     "globals": "^17.11.0",
     "jszip": "^3.10.1",
     "nanoid": "3.3.18",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "streamdown": "^2.5.0",
-    "tailwindcss": "^4.3.3",
-    "typescript": "^5.9.3",
-    "vite": "^8.2.1"
+    "typescript": "^5.9.3"
   },
   "overrides": {
     "@xmldom/xmldom": "0.8.15",
@@ -166,11 +131,9 @@
   "dependencies": {
     "@velaros-ai/agent-lab": "workspace:*",
     "@velaros-ai/agent": "workspace:*",
-    "@velaros-ai/cli": "workspace:*",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
-    "@velaros-ai/model": "workspace:*",
-    "@velaros-ai/ui": "workspace:*"
+    "@velaros-ai/model": "workspace:*"
   },
   "repository": {
     "type": "git",

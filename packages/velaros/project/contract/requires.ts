@@ -28,7 +28,7 @@ import type { FileStatInput, FileStatResult, ObserveInput, ReadInput, SearchInpu
 import type { PatchStrategyInput } from '../types/patch.js'
 import type { PipelineContext, PipelinePhase } from '../types/pipeline.js'
 import type { CorePolicy } from '../types/policy.js'
-import type { ProjectCodeQuery } from '../types/project.js'
+import type { ProjectCodeIndexQuery, ProjectCodeQuery } from '../types/project.js'
 import type { CommandRunInput, CommandRunResult,FileFilterInput, ProjectIntelligenceLocation, ProjectIntelligenceSymbol } from '../types/provider.js'
 import type { FileSnapshot } from '../types/snapshot.js'
 import type { ResolveTargetInput, ResolveTargetResult } from '../types/target.js'
@@ -361,7 +361,7 @@ export interface ProjectSpacePort {
   kernel: () => Promise<AgentProjectKernelPort>
   /**
    * 代码查询端口：`velaros:code` 的两个操作翻译成 `ProjectCodeQuery` 交过来，本单元自己不带实现
-   * （语言服务那一半可以用 `@velaros-ai/development` 的 `createProjectCodeQuery`，代码图谱那一半由宿主的图后端提供）。
+   * （语言服务那一半可以用 `@velaros-ai/velaros/project` 的 `createProjectCodeQuery`，代码图谱那一半由宿主的图后端提供）。
    * 语言服务类动作（`ProjectCodeLanguageActions` 里的七个）抛错时这次查询失败；代码图谱类动作没有后端时，抛 code 为 UNAVAILABLE
    * （或 reason 为 NOT_SUPPORTED）的错误：`query` 把它当降级写进回执，`analyze` 直接失败。
    * 返回普通对象，其中的 source、revision、truncated、degraded、note 会被装进回执。
@@ -381,13 +381,19 @@ export interface ProjectOperationContext {
   sessionId?: string
 }
 
+/** 项目命令端口只需要工作区根与宿主命令能力，不要求文件或代码查询能力。 */
+export interface ProjectShellHostPort extends ShellHostPort {
+  /** 当前宿主授权的项目根；命令分发按真实路径检查该范围。 */
+  getRootPath(): string
+}
+
 /**
  * 宿主端口：项目给三件共用能力（`velaros:shell`、`velaros:sandbox`、`velaros:images`）装端口时向宿主要的东西。宿主每次分发调用时给一份，绑定当前项目根与会话。
  * 项目根与内核来自空间端口 `ProjectSpacePort`；跑命令、管后台任务的四件来自 `velaros:shell` 的 `ShellHostPort`
  * （本机实现是 `@velaros-ai/velaros/shell/local` 的本机宿主，项目端口会把工作目录钳在项目内、前台命令排进项目资源门再交给它）；
  * 演练沙箱与缩图可选。
  */
-export interface ProjectHostPort extends ProjectSpacePort, ShellHostPort {
+export interface ProjectHostPort extends ProjectSpacePort, ProjectShellHostPort {
   /** 演练沙箱（本机实现是 `@velaros-ai/velaros/sandbox/local`）；没接的宿主，项目里的 `velaros:sandbox` 每个操作都明说做不了。 */
   sandbox?: RehearsalSandboxHostPort
   /** 裁图缩图（可选）：`velaros:images` 看超过上限的图、只看一块区域时用。宿主没有图像处理能力就不给，view 遇到这种图会明说做不了。 */
@@ -402,4 +408,46 @@ export interface ProjectContextSourceOptions {
   readonly kernel: AgentProjectKernelPort
   /** 可选的单会话发布范围。 */
   readonly sessionId?: string
+}
+
+/**
+ * 注入面：宿主必须或可以塞进来的东西。
+ * 本包不认宿主，只认这三个口子：一次语言查询的上下文、它借的只读内核端口，以及可选的代码图谱后端。
+ */
+
+/**
+ * 语言查询借的只读内核端口：列文件、读正文、列符号，三件事而已。
+ *
+ * 写成这个别名是要写死「语言查询不消耗项目的修改、执行与审批能力」——宿主给的内核就算带着写入口，
+ * 本包也够不着。谁给：宿主在 `LanguageToolContext.project.kernel()` 里给；每次查询都要。
+ */
+export type LanguageReadPort = Pick<AgentProjectKernelPort, 'listFiles' | 'read' | 'listSymbols'>
+
+/**
+ * 一次语言查询的上下文。谁给：宿主（Desktop / Workbench / Termel）在每次查询时给；必须。
+ *
+ * 路径一律相对项目根，没有「按目录执行」这回事：语言查询不改变任何进程状态。
+ */
+export interface LanguageToolContext {
+  /** 中止信号；本包在每次列目录、读文件与逐文件诊断之间检查它。 */
+  abortSignal: AbortSignal
+  /** 项目面：项目根与只读内核。 */
+  project: {
+    /** 项目根的绝对路径。 */
+    getRootPath(): string
+    /** 取只读内核端口；每次查询取一次，宿主可以在这里做懒装配。 */
+    kernel(): Promise<LanguageReadPort>
+  }
+}
+
+/**
+ * 宿主的代码图谱后端。谁给：宿主在 `createProjectCodeQuery` 建查询时给；可选——
+ * 给一个永远不可用的空实现也合法（Termel 就是），此时代码图谱类动作抛 `UNAVAILABLE`，
+ * 内置的七个语言动作照常可用。
+ */
+export interface ProjectCodeIndexApi {
+  /** 图谱后端现在能不能用；为假时本包不调 `query`，直接抛 `UNAVAILABLE`。 */
+  isAvailable(): boolean
+  /** 执行一次代码图谱查询；返回值原样交给调用方，本包只给它加上 `source` 字段。 */
+  query(input: ProjectCodeIndexQuery, context: ProjectOperationContext): Promise<unknown>
 }

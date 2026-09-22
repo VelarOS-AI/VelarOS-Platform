@@ -6,6 +6,12 @@
 2. Fail explicitly at security, permission, protocol, persistence, and execution boundaries.
 3. A change is complete only when its contract, implementation, tests, documentation, and distribution shape agree.
 
+## Module structure and model-facing contracts
+
+Use [the module ownership standard](../architecture/module-ownership.md) and `scripts/ownership/governed-modules.mjs`. All governed modules use contract/types/impl/utils. Capability units use their own directory as the source root. Class APIs, generated surfaces, templates, runtime assembly, and host exports must agree with that module’s registration.
+
+Report public contract and model-operation changes individually in the delivery delta. Run `check:module-ownership` and the affected schema, template and behavior checks. Do not copy a package’s layout rules to modules registered with a different layout.
+
 ## Public-source hygiene
 
 - Never commit credentials, customer data, internal-only endpoints, personal paths, private prompts, or unpublished product configuration.

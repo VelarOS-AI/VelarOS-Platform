@@ -10,14 +10,15 @@ VelarOS Desktop is the first shipping product, desktop shell, validation product
 
 | Owner | Responsibilities |
 | --- | --- |
-| VelarOS Platform | Kernel contracts and runtime, Agent runtime, model adapters, reusable capabilities, memory, host-neutral UI, surface protocols, and evaluation |
+| VelarOS Platform | Kernel contracts and runtime, Agent runtime, model adapters, reusable capabilities, memory, context planning, and evaluation |
+| VelarOS UI | Shared UI components, HTML artifacts and the component-library product |
 | Product hosts | Native process integration, product composition, user-facing policy, account/session adapters, packaging, and product-specific persistence roots |
 | Cloud services | Accounts, entitlements, organization policy, remote service state, and service-side enforcement |
 | Mods | Declared contributions behind the versioned mod envelope and the permissions granted by a host |
 
 Product hosts depend on Platform packages through published APIs. Platform packages do not import product source code, private product prompts, host UI, product configuration files, or product-only persistence.
 VelarOS Terminal is one such product host and owns its final Host composition. Host-neutral remote-node
-transport, Agent bridge, MCP, session, and model-profile mechanisms are Platform domain responsibilities;
+transport, MCP adaptation, Act sessions, and model profiles are Platform domain responsibilities;
 products supply native lifecycle, persistence, credentials, policy, and UI adapters. The complete owner
 decision and clean-break migration are recorded in
 [`0001-agent-product-common-kernel.md`](../decisions/0001-agent-product-common-kernel.md).
@@ -60,17 +61,17 @@ contracts -> runtime -> client or serve -> product adapter
 
 ## Task and execution authority
 
-[The shared-task ScriptAct runtime](platform-runtime.md) owns the main execution path. Context owns task state and immutable evidence; Kernel owns operation contracts, invocation and receipts; Velaros owns capability implementations and assembly; Agent owns the loop and compiled request boundary. Model planning roles consume the same task frame and budget. Product hosts supply native resources and space policy.
+[The shared-task ScriptAct runtime](platform-runtime.md) owns the main execution path. Context owns task state and immutable evidence; Kernel owns operation contracts, invocation and receipts; Velaros owns capability implementations and assembly; Agent owns the loop and durable run control; Model owns ProviderRequestCompiler and sending. Search and maintenance use bounded sessions with role-specific capability projections. Product hosts supply native resources and space policy.
 
 ## Memory
 
-Memory is one directory of Markdown files per scope under a root the host provides ([ADR 0010](../decisions/0010-memory-slimming.md)). The scope is an opaque string chosen by the product; the memory unit never interprets it, it only isolates by it. The product decides which scope a session uses and puts the session-start index into the system prompt; the entry format, the index, and the three model-facing operations belong to `packages/velaros/memory`.
+Long-term memory is a Markdown store scoped by the host, implemented by `packages/velaros/memory`. The host binds a scope through `createRuntime({ memory: sessionId => scope, ... })`; the main model uses `memory.recall/save/remove` from `velaros:system`. Working notes, input recall and result retention use the same system member, backed by ContextStorage. Shared structured objects and durable messages use `system.store`. See [system space](act-system-space.md) and [storage](storage.md).
 
 ## Mods and UI
 
-The public mod envelope, trust model, contribution axes, lifecycle, and diagnostics are owned by `docs/mod-dev/` and the corresponding schemas in Platform packages.
+Kernel owns the versioned Mod envelope and Kernel module loading. `module` is validated by Kernel; `agent` and `ui` are optional opaque sections requiring a domain or host owner. Act capabilities are explicitly supplied as OperationModuleDefinition instances through Runtime options. See [Mod integration](../mod-dev/README.md).
 
-Products own their installation experience and native shell adapters. A Platform UI contribution is a declared host-neutral contract; it must not embed a Desktop-only component, route, account flow, or prompt.
+Products own installation UX, UI extension contracts and native shell integration. VelarOS UI owns shared presentation components.
 
 ## Changing a boundary
 

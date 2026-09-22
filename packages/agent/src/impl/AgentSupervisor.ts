@@ -2,13 +2,38 @@ import { createContextRuntime } from '@velaros-ai/context'
 import {Log} from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 
-import type { ActInput,ActRunEvent } from '../contract/act.js'
-import type { AgentJob,AgentResume,AgentStart } from '../contract/delegation.js'
-import type { ActiveAgentJob } from '../interface/internal.js'
-import type { AgentSupervisorApi } from '../interface/provides.js'
-import type { AgentSupervisorOptions } from '../interface/requires.js'
+import type { AgentSupervisorOptions } from '../contract/requires.js'
+import type { ActInput,ActRunEvent } from '../types/act.js'
+import type { AgentJob,AgentResume,AgentStart } from '../types/delegation.js'
+import type { ActiveAgentJob } from '../types/runtime.js'
 import { appendChildEvent } from '../utils/delegation.js'
 import { boundedModelOperation } from '../utils/model-stream.js'
+
+/** 并发子运行的唯一调度面，父身份必须由宿主提供。 */
+export interface AgentSupervisorApi {
+ /** 父运行是否仍有活动子任务。 */
+ pending(parent:string):boolean
+ /** 等待新的子任务交互或收束，不调用模型轮询。 */
+ waitAny(parent:string,signal:AbortSignal):Promise<void>
+ /** 派发并立即返回句柄，输入及状态先持久化。 */
+ start(parent:string,input:AgentStart,signal:AbortSignal):Promise<AgentJob>
+ /** 续跑同一会话，沿用材料、授权配置和已计费预算。 */
+ resume(parent:string,id:string,input:AgentResume,signal:AbortSignal):Promise<AgentJob>
+ /** 读取子任务状态，重启后未完成的运行标为中断。 */
+ status(parent:string,id:string):Promise<AgentJob>
+ /** 等待子任务提问或真实终态；等待者取消只退出等待。 */
+ wait(parent:string,id:string,signal:AbortSignal):Promise<AgentJob>
+ /** 回答当前子运行的指定请求；陈旧、重复、跨父任务回答拒绝。 */
+ reply(parent:string,id:string,requestId:string,value:unknown):Promise<void>
+ /** 向活动子运行发送新输入。 */
+ send(parent:string,id:string,input:ActInput|string):Promise<void>
+ /** 取消指定子运行并等待收束。 */
+ cancel(parent:string,id:string):Promise<AgentJob>
+ /** 父运行取消或结束时收束其全部子运行。 */
+ cancelParent(parent:string):Promise<void>
+ /** 停机时收束全部运行。 */
+ close():Promise<void>
+}
 
 /** 同一工厂和存储上的子运行调度；资源冲突在实际启动之前拒绝。 */
 class AgentSupervisor implements AgentSupervisorApi {

@@ -1,5 +1,7 @@
 # 上下文、协议分离与搜索实现差量
 
+> 阶段差量记录：路径、API 和测试数字对应本次记录形成时的实现。当前接入请读 [模块规范](../architecture/module-ownership.md)、[Act 架构](../architecture/platform-runtime.md) 和 [能力目录](../../packages/velaros/act/README.md)。
+
 本轮在正式 Platform 内实现，设计入口为 `docs/architecture/context-management.md` 与 `advanced-search.md`。
 
 ## 接入与公开接口

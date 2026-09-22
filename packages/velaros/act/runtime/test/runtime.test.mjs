@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
+import {execFile} from 'node:child_process'
 import {createHash} from 'node:crypto'
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink,writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import {fileURLToPath} from 'node:url'
+import {promisify} from 'node:util'
 
 import { localContextStorage } from '@velaros-ai/context/node'
 import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
@@ -12,6 +15,12 @@ import { createRuntime } from '../../../dist/act/runtime/index.js'
 import {createProjectKernel} from '../../../dist/project/index.js'
 
 import { done, turn } from './support/model-turn.mjs'
+
+test('INV-37 injected storage runs the real runtime when SQLite is disabled',async()=>{
+ const fixture=fileURLToPath(new URL('./support/no-sqlite.fixture.mjs',import.meta.url))
+ const {stdout}=await promisify(execFile)(process.execPath,['--no-experimental-sqlite',fixture],{timeout:60000,maxBuffer:1024*1024})
+ assert.match(stdout,/SQLite disabled: real Act loop/)
+})
 
 test('INV-2 runtime exposes one script-context contract and preserves paged source retrieval',async()=>{
   const root=await mkdtemp(join(tmpdir(),'velaros-contract-')); const runtime=await createRuntime({storage:localContextStorage({path:join(root,'state.sqlite')}),runner:nodeSubprocessCodeRunner,modules:[]})
@@ -143,4 +152,59 @@ test('INV-32 长任务连续 80 次状态推进，观察和租约保持有界，
  assert(Math.max(...chars)<160000,JSON.stringify({max:Math.max(...chars),first:chars[0],last:chars.at(-1)}))
  await runtime.close()
  const storage=localContextStorage({path});try{assert.equal((await storage.stores.get(spaceId,'counter')).value,80)}finally{await storage.close()}
+})
+
+test('INV-39 durable session workspace binding survives reopen, aliases and pure-chat capability changes',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'runtime-workspace-binding-'));t.after(()=>rm(root,{recursive:true,force:true}))
+ const workspace=join(root,'one');const other=join(root,'two');const alias=join(root,'alias');const dataDir=join(root,'state')
+ await mkdir(workspace);await mkdir(other);await symlink(workspace,alias)
+ const first=await createRuntime({workspace,dataDir});await first.openSession('main');await first.close()
+ const pure=await createRuntime({workspace:alias,dataDir,project:false})
+ assert(!pure.modules().items.some(item=>item.binding.moduleId==='velaros:project'))
+ await pure.openSession('main');await pure.close()
+ await rm(alias);await symlink(other,alias)
+ for(const requested of [other,alias,undefined]){
+  const changed=await createRuntime({workspace:requested,dataDir,project:false})
+  try{await assert.rejects(changed.openSession('main'),{code:'WORKSPACE_BINDING_MISMATCH'})}finally{await changed.close()}
+ }
+ const restored=await createRuntime({workspace,dataDir});await restored.openSession('main');await restored.close()
+})
+
+test('competing runtime instances atomically bind a new session to only one workspace',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'runtime-workspace-race-'));t.after(()=>rm(root,{recursive:true,force:true}))
+ const one=join(root,'one');const two=join(root,'two');const dataDir=join(root,'state');await mkdir(one);await mkdir(two)
+ const runtimes=await Promise.all([one,two].map(workspace=>createRuntime({workspace,dataDir,project:false})))
+ try{
+  const results=await Promise.allSettled(runtimes.map(runtime=>runtime.openSession('main')))
+  assert.equal(results.filter(result=>result.status==='fulfilled').length,1)
+  const rejected=results.find(result=>result.status==='rejected');assert.equal(rejected.reason.code,'WORKSPACE_BINDING_MISMATCH')
+  const winner=results.findIndex(result=>result.status==='fulfilled')
+  await runtimes[winner].openSession('main')
+  // 不同产品会话仍可在同一存储中拥有自己的工作区。
+  await runtimes[1-winner].openSession('separate')
+ }finally{await Promise.all(runtimes.map(runtime=>runtime.close()))}
+})
+
+test('existing workspace.json bindings and corrupted bindings fail closed before session activation',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'runtime-workspace-legacy-'));t.after(()=>rm(root,{recursive:true,force:true}))
+ const workspace=join(root,'one');const other=join(root,'two');const dataDir=join(root,'state')
+ await mkdir(workspace);await mkdir(other);await mkdir(dataDir)
+ await writeFile(join(dataDir,'workspace.json'),JSON.stringify({workspace:await realpath(workspace)}))
+ const wrong=await createRuntime({workspace:other,dataDir,project:false})
+ try{await assert.rejects(wrong.openSession('main'),{code:'WORKSPACE_BINDING_MISMATCH'})}finally{await wrong.close()}
+ const correct=await createRuntime({workspace,dataDir,project:false});await correct.openSession('main');await correct.close()
+ await rm(join(dataDir,'workspace.json'))
+ const persisted=await createRuntime({workspace:other,dataDir,project:false})
+ try{await assert.rejects(persisted.openSession('main'),{code:'WORKSPACE_BINDING_MISMATCH'})}finally{await persisted.close()}
+ await writeFile(join(dataDir,'workspace.json'),'{broken')
+ const corrupt=await createRuntime({workspace,dataDir,project:false})
+ try{await assert.rejects(corrupt.openSession('new'))}finally{await corrupt.close()}
+})
+
+test('workspace-free sessions cannot acquire a workspace by reopening with a different capability scope',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'runtime-workspace-none-'));t.after(()=>rm(root,{recursive:true,force:true}))
+ const dataDir=join(root,'state');const workspace=join(root,'project');await mkdir(workspace)
+ const pure=await createRuntime({dataDir,project:false});await pure.openSession('main');await pure.close()
+ const withWorkspace=await createRuntime({workspace,dataDir})
+ try{await assert.rejects(withWorkspace.openSession('main'),{code:'WORKSPACE_BINDING_MISMATCH'})}finally{await withWorkspace.close()}
 })

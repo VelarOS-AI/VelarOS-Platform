@@ -5,18 +5,18 @@ import { standardModules } from '../../packages/velaros/dist/act/runtime/impl/St
 
 const modules = standardModules.create({ agentProfiles:()=>[], stores:{stores:()=>{throw new Error("目录生成不读取共享状态")}}, longTermMemory:{organize:true,scope:()=>{throw new Error("目录生成不读取长期记忆")}}, agents: {}, maintenance:{}, search: { profiles: () => ['host-profile'] } })
 const destination = fileURLToPath(new URL('../../packages/velaros/act/README.md', import.meta.url))
-const groups = { system: ['modules','memory','memory-local','memory-long-term','context-materials','store','store-write','store-read'], search: ['search','evidence'], agents: ['agents','interaction'] }
+const groups = { system: ['system-goal','modules','memory','memory-local','memory-long-term','context-materials','store','store-write','store-read'], search: ['search','evidence'], agents: ['agents','interaction'] }
 const defaults = { system: null, search: 'search', agents: 'agents' }
 const rows = modules.map(module => {
-  const name = module.binding.moduleId===StoreModuleId?'store':module.binding.moduleId===StoreWriteModuleId?'store-write':module.binding.moduleId===StoreReadModuleId?'store-read':module.binding.moduleId===PersistentMemoryModuleId?'memory-long-term':module.binding.moduleId===MemoryModuleId?'memory':module.binding.moduleId===LocalMemoryModuleId?'memory-local':module.binding.moduleId.split(':')[1]
+  const name = module.binding.moduleId==='velaros:system-goal'?'system-goal':module.binding.moduleId===StoreModuleId?'store':module.binding.moduleId===StoreWriteModuleId?'store-write':module.binding.moduleId===StoreReadModuleId?'store-read':module.binding.moduleId===PersistentMemoryModuleId?'memory-long-term':module.binding.moduleId===MemoryModuleId?'memory':module.binding.moduleId===LocalMemoryModuleId?'memory-local':module.binding.moduleId.split(':')[1]
   const group = Object.keys(groups).find(group => groups[group].includes(name))
-  const template = defaults[group] === name ? 'template.js' : `${name}-template.js`
+  const template = defaults[group] === name ? 'template.js' : `${name==='system-goal'?'goal':name}-template.js`
   const activation = name === 'store' ? '获配创建空间能力' : name === 'store-write' ? '获配空间写入范围' : name === 'store-read' ? '共享空间只读授权' : name === 'memory-long-term' ? '主线宿主配置 memory；整理按实际模型配置生成' : name === 'agents' ? '宿主配置 agents' : name === 'search' ? '宿主配置 search' : name === 'context-materials' ? '整理作用域' : name === 'memory' ? '具备整理模型的主线或业务子任务' : name === 'memory-local' ? '搜索或未启用整理的会话' : name === 'evidence' ? '搜索作用域' : '默认装配'
   return `| [${group}/ — ${name}](${group}/MODULE.md) | ${Object.keys(module.operations).map(op => `\`${op}\``).join('、')} | ${activation} | [${template}](${group}/${template}) |`
 })
 const projectedOperations = modules.flatMap(module => Object.entries(module.operations).map(([name, op]) => {
   const modes = op.allowedModes ?? (op.effects === 'none' ? ['observe', 'execute'] : ['execute'])
-  return `| \`${[...Object.values(SystemPackage.exports),LocalMemoryModuleId,PersistentMemoryModuleId,StoreReadModuleId,StoreWriteModuleId].includes(module.binding.moduleId)?'system.'+(module.binding.moduleId==='velaros:modules'?'modules':[StoreModuleId,StoreReadModuleId,StoreWriteModuleId].includes(module.binding.moduleId)?'store':'memory'):module.binding.moduleId}.${name}\` | ${modes.map(mode => `\`${mode}\``).join('、')} | \`${op.effects}\` | ${op.summary.replaceAll('|', '\\|')} |`
+  return `| \`${[...Object.values(SystemPackage.exports),LocalMemoryModuleId,PersistentMemoryModuleId,StoreReadModuleId,StoreWriteModuleId].includes(module.binding.moduleId)?'system.'+(module.binding.moduleId==='velaros:system-goal'?'goal':module.binding.moduleId==='velaros:modules'?'modules':[StoreModuleId,StoreReadModuleId,StoreWriteModuleId].includes(module.binding.moduleId)?'store':'memory'):module.binding.moduleId}.${name}\` | ${modes.map(mode => `\`${mode}\``).join('、')} | \`${op.effects}\` | ${op.summary.replaceAll('|', '\\|')} |`
 }))
 const operations=[...new Set(projectedOperations)]
 const body = `# Act 能力目录

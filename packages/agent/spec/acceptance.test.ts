@@ -4,10 +4,10 @@ import type {ContextState} from '@velaros-ai/context'
 import type {ContextStorage} from '@velaros-ai/context'
 import {createContextRuntime,createContextView} from '@velaros-ai/context'
 
+import type {ActChildSession} from '../src/contract/requires.js'
+import type {ActRunServiceOptions} from '../src/contract/requires.js'
 import {createAgentSupervisor} from '../src/index.js'
 import {createActRunService} from '../src/index.js'
-import type {ActChildSession} from '../src/interface/requires.js'
-import type {ActRunServiceOptions} from '../src/interface/requires.js'
 import {boundedModelStream} from '../src/utils/model-stream.js'
 
 function runFixture(){
@@ -216,4 +216,106 @@ test('child start, status and resume without optional grants produce strict JSON
   expect(Object.hasOwn(resumed,'stores')).toBe(false)
   expect((await supervisor.wait('p',first.id,signal)).status).toBe('completed')
  }finally{await supervisor.close()}
+})
+
+test('INV-39 input receipts bind host identity to durable admission and the exact model request',async()=>{
+ const f=runFixture();const service=createActRunService(f.options)
+ const events=[]
+ for await(const event of service.submit({text:'root',inputId:'host-root'}))events.push(event)
+ const accepted=events.find(event=>event.type==='input')!
+ const applied=events.find(event=>event.type==='input-applied')!
+ const turn=events.find(event=>event.type==='turn')!
+ expect(accepted).toMatchObject({source:'submit',inputId:'host-root'})
+ expect(applied).toMatchObject({inputId:'host-root',ref:accepted.type==='input'?accepted.ref:undefined,turnId:turn.type==='turn'?turn.turnId:undefined})
+ expect(events.indexOf(accepted)).toBeLessThan(events.indexOf(applied))
+ expect(events.indexOf(applied)).toBeLessThan(events.indexOf(turn))
+ const persisted=(await service.events()).map(item=>item.event)
+ expect(persisted).toContainEqual(accepted);expect(persisted).toContainEqual(applied)
+ expect(events.some(event=>event.type==='input-retained')).toBe(false)
+ await service.close()
+})
+
+test('cancellation before a model request retains the input and restart consumes it once',async()=>{
+ const f=runFixture();let release!:()=>void
+ const gate=new Promise<void>(resolve=>release=resolve)
+ f.options.frames.prepare=()=>gate
+ const service=createActRunService(f.options);const events=[]
+ for await(const event of service.submit({text:'first',inputId:'retained-root'})){
+  events.push(event)
+  if(event.type==='input'){service.cancel();release()}
+ }
+ expect(events.some(event=>event.type==='turn')).toBe(false)
+ expect(events.some(event=>event.type==='input-applied')).toBe(false)
+ expect(events.find(event=>event.type==='input-retained')).toMatchObject({inputId:'retained-root'})
+ await service.close()
+ f.options.frames.prepare=async()=>{}
+ const reopened=createActRunService(f.options);const resumed=[]
+ for await(const event of reopened.submit({text:'continue',inputId:'next-root'}))resumed.push(event)
+ expect(resumed.filter(event=>event.type==='input-applied'&&event.inputId==='retained-root')).toHaveLength(1)
+ const again=[];for await(const event of reopened.submit('one more'))again.push(event)
+ expect(again.some(event=>event.type==='input-applied'&&event.inputId==='retained-root')).toBe(false)
+ await reopened.close()
+})
+
+test('guidance cancellation reports exactly the accepted input left outside a model request',async()=>{
+ const f=runFixture();let started!:()=>void
+ const ready=new Promise<void>(resolve=>started=resolve)
+ f.options.model.stream=async function*(_request,signal){started();await new Promise<void>(resolve=>{signal.addEventListener('abort',()=>resolve(),{once:true});if(signal.aborted)resolve()});signal.throwIfAborted();yield {type:'finish',reason:'stop'}}
+ const service=createActRunService(f.options);const events=[]
+ const running=(async()=>{for await(const event of service.submit('original'))events.push(event)})()
+ await ready
+ await service.steer({text:'queued direction',inputId:'host-guide'})
+ service.cancel();await running
+ expect(events.filter(event=>event.type==='input'&&event.inputId==='host-guide')).toHaveLength(1)
+ const applied=events.filter(event=>event.type==='input-applied'&&event.inputId==='host-guide')
+ const retained=events.filter(event=>event.type==='input-retained'&&event.inputId==='host-guide')
+ expect(applied.length+retained.length).toBe(1)
+ const durable=(await service.events()).map(item=>item.event)
+ expect(durable).toContainEqual((applied[0]??retained[0])!)
+ await service.close()
+})
+
+test('failed input receipt persistence never acknowledges or dispatches the accepted input',async()=>{
+ const f=runFixture();const put=f.store.put;let calls=0
+ f.store.put=async(id,body)=>{if(body.startsWith('{"type":"input"'))throw Error('input receipt disk failure');return put(id,body)}
+ f.options.model.stream=async function*(){calls++;yield {type:'finish',reason:'stop'}}
+ const service=createActRunService(f.options);const events=[]
+ await expect((async()=>{for await(const event of service.submit({text:'work',inputId:'failed'}))events.push(event)})()).rejects.toThrow('input receipt disk failure')
+ expect(events.some(event=>event.type==='input')).toBe(false);expect(calls).toBe(0)
+ await service.close()
+})
+
+test('overlapping guidance receipts preserve identities and bind to their prepared requests',async()=>{
+ const f=runFixture();let started!:()=>void;let calls=0;let release!:()=>void;let preparing!:()=>void;let preparations=0
+ const ready=new Promise<void>(resolve=>started=resolve)
+ const gate=new Promise<void>(resolve=>release=resolve);const arrived=new Promise<void>(resolve=>preparing=resolve)
+ f.options.frames.prepare=async()=>{if(++preparations===2){preparing();await gate}}
+ f.options.model.stream=async function*(_request,signal){if(++calls===1){started();await new Promise<void>(resolve=>{signal.addEventListener('abort',()=>resolve(),{once:true});if(signal.aborted)resolve()});signal.throwIfAborted()}yield {type:'text',text:'done'};yield {type:'finish',reason:'stop'}}
+ const service=createActRunService(f.options);const events=[]
+ const running=(async()=>{for await(const event of service.submit('first'))events.push(event)})()
+ await ready
+ await service.steer({text:'guide one',inputId:'one'})
+ await arrived
+ await service.steer({text:'guide two',inputId:'two'})
+ release();await running
+ for(const id of ['one','two']){
+  expect(events.filter(event=>event.type==='input'&&event.inputId===id)).toHaveLength(1)
+  const applied=events.filter(event=>event.type==='input-applied'&&event.inputId===id)
+  expect(applied).toHaveLength(1)
+  expect(events.some(event=>event.type==='turn'&&event.turnId===applied[0]!.turnId)).toBe(true)
+ }
+ expect(events.some(event=>event.type==='input-retained')).toBe(false)
+ await service.close()
+})
+
+test('failed applied receipt persistence keeps admission truthful and prevents model dispatch',async()=>{
+ const f=runFixture();const put=f.store.put;let calls=0
+ f.store.put=async(id,body)=>{if(body.startsWith('{"type":"input-applied"'))throw Error('applied receipt disk failure');return put(id,body)}
+ f.options.model.stream=async function*(){calls++;yield {type:'finish',reason:'stop'}}
+ const service=createActRunService(f.options);const events=[]
+ await expect((async()=>{for await(const event of service.submit({text:'work',inputId:'unapplied'}))events.push(event)})()).rejects.toThrow('applied receipt disk failure')
+ expect(events.some(event=>event.type==='input'&&event.inputId==='unapplied')).toBe(true)
+ expect(events.some(event=>event.type==='input-applied')).toBe(false)
+ expect(events.find(event=>event.type==='input-retained')).toMatchObject({inputId:'unapplied'})
+ expect(calls).toBe(0);await service.close()
 })

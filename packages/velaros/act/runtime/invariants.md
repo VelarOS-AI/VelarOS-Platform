@@ -7,7 +7,7 @@
 | INV-3 | 基础契约超窗明确阻塞，截断响应不执行 | 测试 | test/runtime.test.mjs |
 | INV-4 | 12 个生成领域合同与 94 个操作复用同一注册、声明、schema 和调用链 | 测试 | test/platform.test.mjs |
 | INV-5 | 自动保存脚本可在重启后按当前会话引用执行，源码版本与执行身份分别记录 | 测试 | test/platform.test.mjs |
-| INV-6 | 当前投影包含有效观察、结果租约与分别记录的源码/输出变化 | 测试 | test/program-context.test.mjs |
+| INV-6 | 当前投影包含有效观察、结果租约与分别记录的源码/输出变化；程序状态索引与任务边界同版本，增量发布保持占位唯一和原子回滚 | 测试 | test/program-context.test.mjs、test/context-index.test.mjs |
 | INV-7 | 真实图像持久保存并以图像块经共享编译器发送 | 测试 | test/platform.test.mjs |
 | INV-8 | 精确编辑全成或全不成，检查失败保存可修复草稿，旧观察基线不得覆盖新版本 | 测试 | test/incremental-edit.test.mjs |
 | INV-9 | 同次提交全部候选先检查，源码、观察更新和执行占位原子提交；重试不重复执行，未决状态要求核对 | 测试 | test/incremental-edit.test.mjs |
@@ -16,11 +16,11 @@
 | INV-12 | 任意流分片和原文边界得到相同解析，未知声明或未闭合段不派发 | 测试 | test/text-decoder.test.mjs |
 | INV-13 | 多执行身份独立；异步按额度调度；done 等待结果；取消及恢复不盲重放 | 测试 | test/text-runtime.test.mjs |
 | INV-14 | 用户图片、冻结宿主参数与原文在真实 runner / provider 编码中保真 | 测试 | test/text-runtime.test.mjs |
-| INV-15 | 搜索检查点与历史目录遵守当前授权代次；容量省略仍可分页召回原文 | 测试 | test/context-management.test.mjs |
+| INV-15 | 搜索检查点与历史目录遵守当前授权代次；容量省略仍可分页召回原文；不可变结果分类缓存有界、重置换代清空、正文缺失不缓存；检查点增量提交保持最近响应、来源范围、冲突及回滚 | 测试 | test/context-management.test.mjs、test/context-index.test.mjs |
 | INV-16 | 长轮次 Runtime 视图不累积过期结果；释放租约仍可召回不可变原文 | 测试 | test/context-management.test.mjs |
 | INV-17 | 搜索关闭前保持 claim 和能力范围；清理逐项尝试，失败可见；父租约释放前等待搜索与子模型账务结算 | 测试 | test/advanced-search.test.mjs |
-| INV-18 | 所有正式会话使用同一五分区组装器；历史正文只发送一次，结果关联源码和原生图像保持可用 | 测试 | test/context-memory.test.mjs |
-| INV-19 | 笔记更新使用版本 CAS，观察不可修改；移出仅改变驻留，授权重置后旧引用不能绕回 | 测试 | test/context-memory.test.mjs |
+| INV-18 | 所有正式会话使用同一五分区组装器；历史正文只发送一次，结果关联源码和原生图像保持可用；各投影阶段可用一致索引快照且不改写历史 | 测试 | test/context-memory.test.mjs、test/context-index.test.mjs |
+| INV-19 | 笔记更新使用版本 CAS，观察不可修改；移出仅改变驻留，授权重置后旧引用不能绕回；索引快照与增量提交保持相同竞争和授权语义，目录按键取最新而旧笔记仍可按引用召回；单条材料召回不依赖无关笔记正文，目录分页保持重附授权与筛选尾页 | 测试 | test/context-memory.test.mjs、test/context-index.test.mjs |
 | INV-20 | 卡片与正文按恢复窗口裁剪；维护轮可整理笔记但不重放观察或业务；子任务拥有独立工作区 | 测试 | test/context-memory.test.mjs |
 | INV-21 | 容量省略不触发完成空转，新到达结果补投递；运行中续租仍保持新曝光次数 | 测试 | test/context-memory.test.mjs |
 | INV-22 | 输出整理修改源码中的声明式 view 与预算，按同一 CAS 发布；本轮复用原始结果，采集与展示版本分别可见，下一正常轮才刷新 | 测试 | `test/output-context.test.mjs` |
@@ -40,3 +40,24 @@
 | INV-34 | 整理输入原文直接进入有界事实区；只有响应接纳后确认的完整分页范围才能支持输入摘要，候选编译与隐藏读取不计入 | 测试 | `test/context-maintenance.test.mjs` |
 | INV-35 | 收尾请求按预留窗口编译；成功只读回执可在模型展示中按同类计数，完整决策数据和失败及外部效果保持可核验 | 测试 | `test/advanced-search.test.mjs`、`test/context-memory.test.mjs` |
 | INV-36 | 最近一次脚本失败的关键诊断在正文被引用化后仍进入有界状态区，后续成功执行清除旧错误，完整回执继续可召回 | 测试 | `test/context-memory.test.mjs` |
+| INV-37 | 注入 ContextStorage 时可在禁用 SQLite 的进程中完成正式模型回合、项目修改、下一轮观察、追踪和会话重开；不创建隐式 SQLite | 测试 | `test/runtime.test.mjs` |
+
+| INV-38 | 实时与持久事件共用正文投影；接纳按回合去重，拒绝、错误、终态及交付结束清除预览，迟到文本不能复活正文候选 | 测试 | `test/act-children.test.mjs` |
+
+| INV-39 | 会话工作区在 ContextStorage 中原子固定，重开与并发绑定核对真实路径；能力开关保持绑定，旧绑定损坏或范围变化拒绝激活 | 测试 | `test/runtime.test.mjs` |
+
+| INV-40 | 宿主事件先持久化再按序交付，写入可合批；收尾等待全部在途写入，失败停止后续交付并向调用者保留首个错误 | 测试 | `test/event-delivery.test.mjs` |
+| INV-41 | 默认效果串行；宿主声明的完整资源集合仅在互不冲突时并行，未知范围形成全局屏障；取消等待者不释放活动效果 | 测试 | `test/effect-scheduler.test.mjs`、`test/text-runtime.test.mjs` |
+| INV-42 | 诊断计量不含正文且不改变存储能力、错误或执行结果；观察者异常与异步拒绝被隔离，历史未计量回合返回 null | 测试 | `test/runtime-diagnostics.test.mjs`、`test/trace-index.test.mjs` |
+
+| INV-43 | 可信宿主产品指令进入主会话真实请求、协议修复与追踪，并参与发送前预算；重开使用当前设置，非法配置拒绝激活 | 测试 | `test/host-instructions.test.mjs` |
+
+| INV-44 | 实时与持久事件共用回合、状态和输入回执投影；回合身份去重，消费按归档引用区分，终态与断流不推断保留，协议拒绝不等于运行失败 | 测试 | `test/run-projection.test.mjs` |
+
+| INV-45 | 执行展示只来自 Kernel 原始调用与回执；缺失终态保持 pending，外部效果独立表达，参数和结果预览计入追踪总正文预算，身份不受正文截断影响 | 测试 | `test/execution-presentation.test.mjs` |
+
+| INV-46 | 封存请求展示来自完整审计，媒体正文省略且显式标记；缺失计量为 null，截断不改变身份，展示正文计入 trace 总预算，关闭后可无模型读取 | 测试 | `test/request-presentation.test.mjs` |
+
+| INV-47 | 宿主笔记读写与模型共用版本和上下文投影；移出与恢复只改驻留，冲突不覆盖正文，重开与分页读取不调用模型，关闭后拒绝访问 | 测试 | `test/host-notes.test.mjs` |
+
+| INV-48 | 目标跨运行与重启保留，暂停不会因新消息恢复；活动目标阻止提前完成，取消运行保持目标，旧版本不覆盖新目标，删除墓碑不会复活 | 测试 | `test/goals.test.mjs` |

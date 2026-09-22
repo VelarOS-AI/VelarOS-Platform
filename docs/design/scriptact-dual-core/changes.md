@@ -1,5 +1,7 @@
 # 本轮差量与契约复核
 
+> 历史设计与阶段验收记录。本文中的接口、路径和测试数字对应其记录阶段；当前实现请读 [Act 运行架构](../../architecture/platform-runtime.md)、[模块规范](../../architecture/module-ownership.md)、[系统能力](../../architecture/act-system-space.md) 与 [存储合同](../../architecture/storage.md)。原始输入规格保存在 reference-pack/。
+
 基线为 2026-09-19 开工时当前工作树。该工作树已有大规模包迁移与主干建设，本轮在其现状上扩展；下列范围是双核接入差量，不能以相对 HEAD 的全部删除/新增量作为本轮改动量。
 
 ## 实现文件

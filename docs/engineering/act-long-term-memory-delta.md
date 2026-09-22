@@ -1,5 +1,7 @@
 # 长期记忆并入系统入口：接入差量
 
+> 阶段差量记录：路径、API 和测试数字对应本次记录形成时的实现。当前接入请读 [模块规范](../architecture/module-ownership.md)、[Act 架构](../architecture/platform-runtime.md) 和 [能力目录](../../packages/velaros/act/README.md)。
+
 ## 完成范围
 
 现有 Markdown 长期记忆库通过 `VelarosRuntimeOptions.memory(sessionId)` 接入正式 Act Runtime。模型统一从 `velaros:system` 导入 `memory`。长期内容的目录、scope 算法、字段校验和原子文件写入复用 `packages/velaros/memory/`；任务材料、笔记、租约、上下文整理复用当前执行链。

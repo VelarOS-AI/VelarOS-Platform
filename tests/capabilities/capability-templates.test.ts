@@ -17,11 +17,11 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 
 import type { ApprovalPort } from '@velaros-ai/kernel'
 
-import { createProjectCodeQuery } from '../../packages/development/src/index'
 import type { CodeCapabilityPort, CodeSurfaceOutcome } from '../../packages/script/src/index'
 import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '../../packages/script/src/index'
 import { solidPng } from '../../packages/velaros/images/spec/support'
 import type { ProjectHostPort } from '../../packages/velaros/project/index'
+import { createProjectCodeQuery } from '../../packages/velaros/project/index'
 import { createProjectKernel, typescriptPlugin } from '../../packages/velaros/project/index'
 import { createLocalSandboxHost } from '../../packages/velaros/sandbox/local'
 import { createLocalShellHost } from '../../packages/velaros/shell/local'

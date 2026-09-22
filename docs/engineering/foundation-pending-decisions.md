@@ -1,5 +1,7 @@
 # 拍板记录（地基重构）
 
+> 历史决策快照，日期为 2026-09-16。当前目录、合同与装配以 [模块规范](../architecture/module-ownership.md)、[仓库拓扑](../architecture/repository-topology.md) 和各 MODULE.md 为准。
+
 **2026-09-16 17:20：用户把剩下的拍板项全权交给我，下面逐条是我的裁决。** 原来的论证、影响面与建议保留在各节表里，裁决写在这一段；执行顺序在最后一节。
 详细方案在 `refactor-plans/<包>.md`，流水账在 `foundation-refactor-log.md`。
 

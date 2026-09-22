@@ -72,7 +72,7 @@ function selectedWorkspaceManifests() {
     .filter(existsSync)
     .filter((manifestPath) => {
       const manifest = readJson(manifestPath)
-      return manifest.private !== true || manifest.name === '@velaros-ai/document-renderer'
+      return manifest.private !== true
     })
 }
 

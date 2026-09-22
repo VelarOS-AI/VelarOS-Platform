@@ -1,10 +1,25 @@
-import {isNull} from '@velaros-ai/core'
+import {isEmpty,isNull} from '@velaros-ai/core'
 import type { InvocationReceipt, InvocationReconciliation, InvocationRecord, PreparedInvocation } from '@velaros-ai/kernel/contracts'
 
-import type { ContextState } from '../contract/context.js'
-import type { ContextInvocationJournalApi } from '../interface/provides.js'
-import type { ContextStorage } from '../interface/requires.js'
+import type { ContextStorage } from '../contract/requires.js'
+import type { ContextState } from '../types/context.js'
 import { journalKey, journalState } from '../utils/journal.js'
+
+/** 用上下文对象存储兑现 Kernel 的持久化调用契约。 */
+export interface ContextInvocationJournalApi {
+  /** 持久保存领域核对结论，原始意图与回执不可覆盖。 */
+  recordReconciliation(sessionId: string, id: string, result: InvocationReconciliation): Promise<void>
+  /** 原子占用调用号，跨连接只会有一个派发者。 */
+  claim(prepared: PreparedInvocation): Promise<Nullable<InvocationRecord>>
+  /** 原子记录唯一准备结果，调用处理器之前必须完成。 */
+  prepare(prepared: PreparedInvocation): Promise<void>
+  /** 保存终态回执，IO 失败保持待核对的意图。 */
+  settle(receipt: InvocationReceipt): Promise<void>
+  /** 读取原始意图和已有终态。 */
+  read(sessionId: string, id: string): Promise<Nullable<InvocationRecord>>
+  /** 查询同会话的派发记录，供效果屏障和崩溃恢复使用。 */
+  list(sessionId: string, executionId?: string): Promise<readonly InvocationRecord[]>
+}
 
 class ContextInvocationJournal implements ContextInvocationJournalApi {
   public constructor(private readonly storage: ContextStorage) {}
@@ -78,6 +93,13 @@ class ContextInvocationJournal implements ContextInvocationJournalApi {
   private async index(sessionId: string, id: string, executionId:string): Promise<void> {
     const key = JSON.stringify(['kernel-invocation-index', sessionId])
     for (let retry = 0; retry < 32; retry++) {
+      if(this.storage.loadMetadata&&this.storage.compareAndSwapMetadata&&this.storage.records){
+        const state=await this.storage.loadMetadata(key)??{version:0,workingSet:{revision:0,cursor:0,items:[]}}
+        if(!isEmpty((await this.storage.records(key,{refId:id,limit:1})).items))return
+        const entry={ref:{sessionId,id},kind:'event' as const,title:executionId,objectId:'',chars:0,sources:[],createdAt:new Date().toISOString()}
+        if(await this.storage.compareAndSwapMetadata(key,state.version,{...state,version:state.version+1},[entry]))return
+        continue
+      }
       const state = await this.storage.load(key) ?? { version: 0, records: [], workingSet: { revision: 0, cursor: 0, items: [] } }
       if (state.records.some(record => record.ref.id === id)) return
       const entry = { ref: { sessionId, id }, sequence: state.records.length + 1, kind: 'event' as const, title: executionId, objectId: '', chars: 0, sources: [], createdAt: new Date().toISOString() }

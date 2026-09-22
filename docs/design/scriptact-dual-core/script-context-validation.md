@@ -1,5 +1,7 @@
 # 脚本上下文与结果租约：实现与验证
 
+> 历史设计与阶段验收记录。本文中的接口、路径和测试数字对应其记录阶段；当前实现请读 [Act 运行架构](../../architecture/platform-runtime.md)、[模块规范](../../architecture/module-ownership.md)、[系统能力](../../architecture/act-system-space.md) 与 [存储合同](../../architecture/storage.md)。原始输入规格保存在 reference-pack/。
+
 2026-09-20，实际仓库 `<repository>`，分支 `main`。
 
 ## 已完成

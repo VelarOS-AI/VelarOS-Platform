@@ -1,11 +1,24 @@
 import {Log} from '@velaros-ai/core'
 import { isBoolean, isString } from '@velaros-ai/core'
 
-import type { ContextReadStamp,ContextSourceRead,ContextTarget,ContextTaskScope,ContextTime,ContextViewForm } from '../contract/context.js'
-import type { EvidenceAccessApi } from '../interface/provides.js'
-import type { ContextSourcePort } from '../interface/requires.js'
+import type { ContextSourcePort } from '../contract/requires.js'
+import type { ContextReadStamp, ContextSourceCard, ContextSourceHit,ContextSourceRead, ContextTarget, ContextTaskScope, ContextTime, ContextViewForm } from '../types/context.js'
 import { contextFailure } from '../utils/state.js'
 import { awaitContextOperation,contextHash } from '../utils/view.js'
+
+/** 共用的真实来源访问器，不接收模型编造的正文。 */
+export interface EvidenceAccessApi {
+  /** 返回宿主装配源的真实目录。 */
+  sources():readonly ContextSourceCard[]
+  /** 检索并逐项授权返回候选。 */
+  search(scope:ContextTaskScope,sourceId:string,query:string,limit:number,signal:AbortSignal):Promise<readonly ContextSourceHit[]>
+  /** 校验指定来源的当前访问范围。 */
+  authorize(scope:ContextTaskScope,target:ContextTarget,signal:AbortSignal):Promise<void>
+  /** 真实读取、校验版本身份与内容指纹。 */
+  read(scope:ContextTaskScope,target:ContextTarget,form:ContextViewForm,time:ContextTime,maxBytes:number,signal:AbortSignal):Promise<ContextSourceRead>
+  /** 重验已保存证据的版本和权限。 */
+  validate(scope:ContextTaskScope,stamp:ContextReadStamp,signal:AbortSignal):Promise<'current'|'changed'|'unknown'>
+}
 
 /** 精确视图与高级搜索共享授权、物化和真实性检查。 */
 class EvidenceAccess implements EvidenceAccessApi {

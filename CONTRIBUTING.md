@@ -13,7 +13,7 @@ Security vulnerabilities must follow [SECURITY.md](SECURITY.md), not the public 
 
 ## Development setup
 
-VelarOS Platform uses Bun 1.3.13 and Node.js 20 or newer.
+VelarOS Platform uses Bun 1.3.13 and Node.js 22.13 or newer for the full workspace and default SQLite adapter.
 
 ```bash
 bun install --frozen-lockfile
@@ -21,6 +21,8 @@ bun run check
 ```
 
 Use narrower package or domain checks while iterating, but run `bun run check` before requesting review. If an unrelated baseline failure blocks the full gate, identify it explicitly and include evidence for the checks covering your changed chain.
+
+Start with [AGENTS.md](AGENTS.md), the [module ownership standard](docs/architecture/module-ownership.md), and the module’s actual registry entry. Layouts and model capability definitions are governed per module.
 
 ## Engineering expectations
 

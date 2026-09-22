@@ -1,3 +1,8 @@
+import type {GoalState,GoalUpdate,GoalControl} from '../../system/types/goal.js'
+import {SessionGoal} from './SessionGoal.js'
+import type {SessionGoalApi} from './SessionGoal.js'
+import type { WorkspaceEntry } from '../../system/types/workspace.js'
+import type { RuntimeNoteRead, RuntimeNoteRetention, RuntimeNoteContent } from '../types/memory.js'
 import type { ActAnswer, ActEvent, ActInput, ActInteraction, ActRunEvent, ActRunLimits, ActRunServiceApi, ActRunSnapshot, AgentJob, AgentSupervisorApi } from "@velaros-ai/agent";
 import { createActRunService } from "@velaros-ai/agent";
 import type { ContextFeedback, ContextInvocationJournalApi, ContextRef, ContextRuntime, ContextStorage, ContextViewApi, ModelView } from "@velaros-ai/context";
@@ -39,6 +44,8 @@ import { standardModules } from "./StandardModules.js";
 
 /** 标准模块持有的源码与结果访问端口。 */
 export interface RuntimeSessionAccess extends ContextCandidateValidator {
+ /** 模型与宿主共用的会话目标。 */
+ readonly goal:SessionGoalApi
  /** 写入闸门内核对本执行实际看到的资源依据。 */
  validateDecision(executionId:string,signal:AbortSignal):Promise<void>
  /** 父运行的取消权，独立于单次脚本调用。 */
@@ -78,6 +85,8 @@ export interface RuntimeSessionModelTool {
 
 /** 会话由运行时注入的共享实例。 */
 export interface RuntimeSessionDependencies {
+ /** 主会话的可信宿主产品指令；与运行协议一起编译和归档。 */
+ readonly instructions?:string
  /** 会话全部资源收束后撤回宿主持有的活动句柄。 */
  closed?():void
  /** 固定授权的持久状态及订阅交付。 */
@@ -121,6 +130,12 @@ export interface RuntimeSessionDependencies {
 
 /** 一个会话共享上下文，模型回合有序，执行任务按并发预算运行。 */
 export interface VelarosSession {
+ /** 读取目标生命周期；与执行状态独立。 */
+ getGoal():Promise<Nullable<GoalState>>
+ /** 已登记输入的会话中按版本创建或更新目标。 */
+ updateGoal(input:GoalUpdate):Promise<GoalState>
+ /** 用户侧目标控制，包括保留历史的删除。 */
+ controlGoal(input:GoalControl):Promise<GoalState>
   /** 双核任务检查点与视图，仅宿主可访问完整控制面。 */
   readonly view: ContextViewApi
   /** 会话的稳定身份。 */
@@ -145,6 +160,12 @@ export interface VelarosSession {
   cancel():void
   /** 由能力边界发起可等待的用户交互。 */
   request(kind:ActInteraction['kind'],message:string,signal:AbortSignal,detail?:unknown):Promise<unknown>
+  /** 列举当前任务的工作笔记，含已移出上下文的条目；不调用模型。 */
+  listNotes(input?:{after?:string;limit?:number}):Promise<{items:readonly WorkspaceEntry[];nextAfter:Nullable<string>}>
+  /** 按稳定键和版本读取笔记正文，不暴露内部存储封装。 */
+  readNote(input:RuntimeNoteRead):Promise<RuntimeNoteContent>
+  /** 按版本调整上下文驻留，保留正文、来源与不可变历史。 */
+  setNoteResident(input:RuntimeNoteRetention):Promise<WorkspaceEntry>
   /** 统一提交观察更新和本轮执行；先检查全部代码，再发布并执行。 */
   script(input:ScriptSubmission, signal?:AbortSignal, options?:ScriptControlOptions):Promise<ScriptSubmissionReceipt>
   /** 宿主观察便捷调用，转交 script({observe}) 并将拒绝回执转成错误。 */
@@ -165,6 +186,7 @@ export class RuntimeSession implements VelarosSession {
   private readonly active=new Map<string,{pending:Promise<CodeSurfaceOutcome>;controller:AbortController}>()
   private readonly jobs=new Map<string,Promise<unknown>>()
   private readonly batchControllers=new Set<AbortController>()
+  private readonly hostOperations=new Set<Promise<unknown>>()
   private readonly finalizers=new Set<Promise<unknown>>()
   private readonly waiters=new Set<()=>void>()
   private slots=0
@@ -180,6 +202,7 @@ export class RuntimeSession implements VelarosSession {
   private readonly agent?:ActRunServiceApi
   private readonly programs:ProgramContextApi
   private readonly history:RecentContextApi
+  private readonly goal:SessionGoalApi
   private readonly memory:ContextMemoryApi
   private readonly controls=new Map<string,{fingerprint:string;pending:Promise<ScriptSubmissionReceipt>}>()
   private controlController?:AbortController
@@ -188,13 +211,14 @@ export class RuntimeSession implements VelarosSession {
   private observationImages:readonly ModelImage[]=[]
 
   public constructor(public readonly id: string, private readonly dependencies: RuntimeSessionDependencies) {
+    this.goal=new SessionGoal(id,dependencies.storage)
     this.config=protocolConfig(dependencies.protocol)
     this.context=createContextRuntime({sessionId:id,storage:dependencies.storage})
     this.view=createContextView({sessionId:id,storage:dependencies.storage,context:this.context,sources:dependencies.contextOptions?.sources??[],limits:dependencies.contextOptions?.limits})
     this.programs=new ProgramContext(id,this.context,dependencies.storage)
     this.history=new RecentContext(id,this.context,dependencies.storage)
     this.memory=new ContextMemory(id,this.context,dependencies.storage,this.view,this.programs,this.history,dependencies.memory??dependencies.contextOptions?.memory)
-    const instructions=runtimeInstructions({modules:dependencies.allowedModules(),storeMode:dependencies.stores?.mode,maintain:Boolean(dependencies.maintain),observe:this.config.allowed.includes('observe')})
+    const instructions=runtimeInstructions({modules:dependencies.allowedModules(),storeMode:dependencies.stores?.mode,maintain:Boolean(dependencies.maintain),observe:this.config.allowed.includes('observe')})+(dependencies.instructions?.trim()?`\n宿主应用指令：\n${dependencies.instructions}`:'')
     dependencies.register({
       validateCandidate:async(frame,signal)=>{
         signal.throwIfAborted()
@@ -208,7 +232,7 @@ export class RuntimeSession implements VelarosSession {
       validateDecision:(executionId,signal)=>this.validateDecision(executionId,signal),
       context:this.context,
       runSignal:()=>{if(!this.runController)throw new Error('需要活动模型运行');return this.runController.signal},
-      memory:this.memory,
+      memory:this.memory,goal:this.goal,
       phase:()=>this.contextPhase,
       interact:(kind,message,signal,detail)=>this.request(kind,message,signal,detail),
       deadline:()=>this.runDeadline,
@@ -230,6 +254,7 @@ export class RuntimeSession implements VelarosSession {
         project:(view,signal,maxChars)=>this.project(view,signal,maxChars),
         acknowledge:(request,signal)=>this.acknowledge(request,signal),
         completion:async(request,signal)=>{
+          if(!dependencies.tool&&(await this.goal.get(signal))?.status==='active')return {completed:false,verified:false,reason:'GOAL_ACTIVE: 目标仍在推进，请继续执行；验收完成后用 goal.update 明确完成，确有阻碍则记录依据',recovery:'repair'}
           if(await this.childNeedsReconcile())return {completed:false,verified:false,reason:'CHILD_NEEDS_RECONCILE',recovery:'reconcile'}
           if((await this.view.inspect())?.mandatory.some(item=>item.effect==='unknown'||item.outcome==='unknown'))return {completed:false,verified:false,reason:'NEEDS_RECONCILE',recovery:'reconcile'}
           const basis=JSON.parse(request.materials.findLast(item=>item.origin==='runtime-view')!.text).partitions.runtime.decision as ScriptDecisionBasis
@@ -257,10 +282,13 @@ export class RuntimeSession implements VelarosSession {
     const stores=await this.dependencies.stores?.frame(Math.max(1,Math.min(8,Math.floor(maxChars/4000))),Math.min(StoreProjectionLimits.activeChars,Math.floor(maxChars/4)))
     signal.throwIfAborted()
     const tool=this.dependencies.tool?.material?.(Math.min(ActRuntimeTuning.modelToolContextChars,Math.floor(maxChars/4)))
-    const extra=(stores?JSON.stringify(stores).length:0)+(tool?JSON.stringify(tool).length:0)
+    const currentGoal=this.dependencies.tool?null:await this.goal.get(signal)
+    const goal=currentGoal?.status==='removed'?null:currentGoal
+    const extra=(goal?JSON.stringify(goal).length:0)+(stores?JSON.stringify(stores).length:0)+(tool?JSON.stringify(tool).length:0)
     const projected=await this.memory.project(view,this.observationResult,this.observationImages,signal,Math.max(1,maxChars-extra))
-    if(!stores&&!tool)return projected
+    if(!stores&&!tool&&!goal)return projected
     const frame=JSON.parse(projected.body)
+    if(goal)frame.partitions.runtime.goal=goal
     if(stores)frame.partitions.runtime.stores=stores
     if(tool)frame.partitions.runtime.modelTool=tool
     frame.memoryStatus.footprint.runtime=JSON.stringify(frame.partitions.runtime).length
@@ -290,6 +318,28 @@ export class RuntimeSession implements VelarosSession {
       this.runController.abort()
       try{await this.dependencies.agents?.cancelParent(this.id)}finally{this.modelRunning=false;this.runDeadline=undefined;this.runController=undefined}
     }
+  }
+
+  public async getGoal(){this.lifetime.signal.throwIfAborted();return this.trackHostOperation(this.goal.get(this.lifetime.signal))}
+  public async updateGoal(input:GoalUpdate){this.lifetime.signal.throwIfAborted();return this.trackHostOperation(this.goal.update(input,this.lifetime.signal))}
+  public async controlGoal(input:GoalControl){this.lifetime.signal.throwIfAborted();return this.trackHostOperation(this.goal.control(input,this.lifetime.signal))}
+
+  public async listNotes(input:{after?:string;limit?:number}={}){
+    this.lifetime.signal.throwIfAborted()
+    return this.trackHostOperation(this.memory.list(input,this.lifetime.signal))
+  }
+  public async readNote(input:RuntimeNoteRead){
+    this.lifetime.signal.throwIfAborted()
+    return this.trackHostOperation(this.memory.readNote(input,this.lifetime.signal))
+  }
+  public async setNoteResident(input:RuntimeNoteRetention){
+    this.lifetime.signal.throwIfAborted()
+    return this.trackHostOperation(this.memory.update({key:input.key,baseRevision:input.baseRevision,resident:input.resident},this.lifetime.signal))
+  }
+
+  private async trackHostOperation<T>(operation:Promise<T>):Promise<T>{
+    this.hostOperations.add(operation)
+    try{return await operation}finally{this.hostOperations.delete(operation)}
   }
 
   public async steer(input:string|ActInput){if(!this.agent)throw new Error('会话没有模型运行服务');return this.agent.steer(input)}
@@ -610,6 +660,8 @@ export class RuntimeSession implements VelarosSession {
     let result: Optional<CodeSurfaceOutcome>
     let failure: unknown
     let resultRef:Optional<string>
+    const scriptStarted=performance.now()
+    let durationMs=0
     try {
       const session=createKernelScriptSession({packages:this.dependencies.packages,allowedModules:this.dependencies.allowedModules(),runtime:this.dependencies.kernel,runner:this.dependencies.runner,sessionId:this.id,executionId,mode})
       result=await session.run(program,signal)
@@ -620,6 +672,7 @@ export class RuntimeSession implements VelarosSession {
       }
     } catch(error) { failure=error; if(mode!=='observe'||signal.aborted)throw error;return {checked:true,result:{failed:{code:'PROGRAM_ERROR',message:String(error)}}} }
     finally {
+      durationMs=performance.now()-scriptStarted
       await this.dependencies.settleModelTools?.(executionId)
       const attachments:ContextRef[]=[]
       if (result?.checked) for(const image of result.attachments ?? []) attachments.push((await this.context.append({kind:'audit',title:`image:${executionId}`,body:JSON.stringify(image),sources:[source.ref]})).ref)
@@ -628,7 +681,7 @@ export class RuntimeSession implements VelarosSession {
       const reads=dependencies.flatMap(record=>record.receipt?.outcome==='succeeded'?record.receipt.reads??[]:[])
       const unverified=dependencies.filter(record=>record.receipt?.outcome==='succeeded'&&!record.receipt.reads?.length&&!new Set<string>(Object.values(SystemPackage.exports)).has(record.prepared.binding.moduleId)&&!(record.prepared.binding.moduleId===PersistentMemoryModuleId&&record.prepared.operation!=='recall')).map(record=>({invocationId:record.prepared.id,moduleId:record.prepared.binding.moduleId,operation:record.prepared.operation}))
       const observationFeedback=mode==='observe'?(await this.dependencies.journal.list(this.id,executionId)).filter(record=>record.receipt?.effect!=='none'||record.receipt?.outcome!=='succeeded').map(record=>({id:record.prepared.id,operation:`${record.prepared.binding.moduleId}.${record.prepared.operation}`,effect:record.receipt?.effect??'unknown',outcome:record.receipt?.outcome??'unknown',...(record.receipt?.observation?{protection:record.receipt.observation.protection,completed:record.receipt.observation.completed}:{}),code: record.receipt?.error ? record.receipt.error.code : undefined})):undefined
-      const output=await this.context.append({kind:'audit',title:`script:${executionId}:result`,body:JSON.stringify({executionId,mode,dependencies:{reads,unverified},...(persisted??{error:String(failure)}),attachments: !isEmpty(attachments) ? attachments : undefined,observationFeedback: observationFeedback?.length ? observationFeedback : undefined}),sources:[source.ref]})
+      const output=await this.context.append({kind:'audit',title:`script:${executionId}:result`,body:JSON.stringify({executionId,mode,dependencies:{reads,unverified},...(persisted??{error:String(failure)}),timing:{durationMs},attachments: !isEmpty(attachments) ? attachments : undefined,observationFeedback: observationFeedback?.length ? observationFeedback : undefined}),sources:[source.ref]})
       resultRef=output.ref.id
       if(mode==='observe'){
         this.observationResult=output.ref;this.observationImages=result?.checked?result.attachments??[]:[]
@@ -730,6 +783,7 @@ export class RuntimeSession implements VelarosSession {
   private async shutdown(): Promise<void> {
     const wasRunning=Boolean(this.active.size||this.modelRunning||this.controls.size)
     this.closed=true;this.lifetime.abort(new Error('会话已关闭'))
+    await Promise.allSettled([...this.hostOperations])
     const failures:unknown[]=[]
     try{await this.agent?.close()}catch(error){Log.tag('ActRuntime').debug('RuntimeSession 已进入异常处理或降级分支');failures.push(error)}
     try{

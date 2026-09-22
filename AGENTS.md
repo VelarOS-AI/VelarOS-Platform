@@ -5,17 +5,18 @@
 - 打包目标必须是本次运行独占的临时子目录，不得直接使用 `/tmp`、`/private/tmp` 或系统临时目录根。
 - 新增打包流程必须复用 `scripts/release/safe-package-pack.mjs`，保留超时、进程组回收和路径边界校验。
 
-# 模块结构（interface / contract / impl / utils / exports）
+# 模块结构与所有权
 
-已治理的模块登记在 `scripts/ownership/governed-modules.mjs`，方案见 `docs/architecture/module-ownership.md`。对这些模块：
+以 `scripts/ownership/governed-modules.mjs` 的逐模块登记、包清单 exports 和实际检查器为准；完整规范见 `docs/architecture/module-ownership.md`。
 
-- 不拆碎文件：一个文件一个职责，内容多没关系；不要为了整齐造出一堆只放一两个文件的目录。
-- 全部工具定义在登记的工具文件里（`packages/system` 是 `src/impl/SystemTools.ts`），连同分组与挂载；定义工具的函数只在那里调用。工具改了要在差量报告里逐个点名理由与影响，人复核。
-- 接口在 `src/interface/`，只有三个文件：`provides.ts` 产品面、`requires.ts` 注入面、`internal.ts` 包内部类的接口。只放带中文说明的类型声明，每个成员都写说明。改 provides 或 requires 等于改对外契约，要在差量报告里点名。
-- 数据在 `src/contract/`：扁平，只放字段、类型、常量表，不许出现函数类型和方法，只引数据。可移植数据文件不 import 任何东西，整个就是 `./contracts` 入口。
-- 实现在 `src/impl/`，扁平：一个类一个文件，文件名就是类名。每个类 implements `interface/` 里的一个接口；类的公开成员只能是接口里的，没有公开静态成员；私有方法只放用得到实例状态、没法提出去的公共逻辑。模块级函数只许是对外入口要的工厂。每个实现文件在登记表的 layers 里有层，下层不许引上层。继承 Error 的错误类不写接口、不出包。
-- 纯工具函数在 `src/utils/`：扁平，按类别分文件；只放函数和常量，不放类、不导出类型、不存状态；每个函数上方一句中文说明写它做什么；只引 utils、数据与接口。
-- 对外入口是 `src` 根上的入口文件（`index.ts` 对应 `.`，`contracts.ts` 对应 `./contracts`，编译成 `dist/<名>.js`），只转发；多开一个入口的唯一理由是运行环境隔离（渲染进程那一支整条链不碰 Node 模块）。导出的类型只能来自 provides、requires 和 contract；导出的值只能是契约常量表或按公开接口标注类型的实例与工厂；类、utils 函数、内部接口不出包。公开签名用到的数据都导出，导出的数据都被公开签名用到。
-- 注入只从 requires.ts 的口子进来，别处不留钩子；环境变量全部登记在可移植数据文件的环境变量表里。依赖只写在文件头，不用内联 `import('…')` 类型和动态 `import()`。
-- 登记为渲染进程可加载的入口（`browserSafeEntries`），整条值引用链不许出现 Node 内置模块；`src` 下只有这五个目录。
-- 验收测试不能破，改已有验收用例要在差量报告里说明原来的承诺为什么不对。每轮结束交差量报告；`bun run check:module-ownership` 必须绿。
+- 不拆碎文件：一个文件一个职责，不为整齐创建只装一两个文件的目录。types/impl/utils 文件较多时可按域分组，每个子目录至少直接包含三个源文件；登记为单文件的 types/utils 保持单文件。
+- 所有治理模块统一使用 `contract/types/impl/utils`。普通包源码根为 `src/`；能力单元直接以登记的 `unit` 目录为源码根，Velaros 不额外套 src。
+- 合同与数据：`contract/provides.ts` 登记产品面，`requires.ts` 声明宿主注入面，`constants.ts` 放公开常量；代码面能力可有生成的 `surface.ts`。类的 API 写在类上方，公开 API 经 provides 登记。`types/` 只放类型，公开签名用到的类型从入口导出；可移植数据不得带行为或 Node 类型。
+- `impl/` 一类一文件，文件名与类名一致，公开成员由接口控制；私有方法用于实例相关逻辑，纯函数进 utils。实现文件必须登记 layers，下层不得依赖上层。utils 放有中文说明的纯函数与常量，不放类、类型声明或可变全局状态。
+- 模型能力按当前 ScriptAct 链路维护。领域操作在登记的 surfaceFile 及操作接口中定义，由 `scripts/script/surfaces.mjs` 和生成器生成声明/schema；Act 各职责组在 `impl/*Module.ts` 定义 Kernel 操作、效果与处理器，由 Runtime 装配。若模块登记 toolsFile/toolDefiner，则遵守该模块的集中定义检查。
+- 自管理能力集中在 `packages/velaros/act/system`，模型经 `velaros:system` 使用 modules/memory/store；运行装配在 act/runtime，搜索在 act/search，子任务与交互在 act/agents。业务能力在 files、project、browser 等同级能力单元。目录、宿主包子路径与模型 import 名称分别按实际映射说明。
+- 模型可调用操作必须有真实 schema、效果声明、发现内容和使用模板。领域模板在能力单元根，Act 模板在职责组根；生成物不能手改。相应修改运行 `generate:script` / `check:script`、`generate:act-catalog` / `check:act-catalog`，需要读取构建结果的命令先构建所属包。
+- 入口文件只转发，与 package.json 的 exports 及 dist 目标对应；普通包、能力单元和登记为 packageEntry 的根入口按各自映射处理。公开面由合同控制，实现类、内部接口和 utils 不作为公开 API。新增子路径必须有能力边界或运行环境边界依据，不增加同一职责的重复入口。
+- 注入集中在 requires.ts。环境变量按所属模块的常量表和 environmentPrefixes 登记。依赖优先使用文件头静态导入，不用内联 import 类型；源码动态 import 仅允许登记的 lazyImports 目标及加载文件，bin 启动壳按自己的运行边界处理。
+- browserSafeEntries 的完整值依赖链不得加载 Node 内置模块。能力单元的 spec/test 和登记的 assets 按各自用途管理；不要把非源码资产混进实现分层。
+- 验收承诺、MODULE.md、invariants、生成声明和模板必须一致。修改公开合同或模型操作时，在差量报告逐项说明理由与影响；改变已有验收承诺必须解释。每轮交付差量报告，`bun run check:module-ownership` 必须通过。

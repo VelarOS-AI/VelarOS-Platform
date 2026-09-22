@@ -1,6 +1,6 @@
 # VelarOS Platform
 
-正式执行主干：[Platform 统一执行架构](docs/architecture/platform-runtime.md)。主模型与有界上下文规划共用任务状态；能力统一经 ScriptAct、Kernel 回执和 ModelView 推进。
+正式执行主干：[Platform 统一执行架构](docs/architecture/platform-runtime.md)。主线与按需模型工具共用 Act 主干，能力经 ScriptAct、Kernel 回执和五分区上下文推进。
 
 [简体中文](README.zh-CN.md)
 
@@ -16,19 +16,19 @@ The source code is licensed under the [Apache License 2.0](LICENSE).
 
 ## Repository structure
 
-VelarOS Platform has 11 package workspaces, 10 of which are published independently. Published
+VelarOS Platform has 8 package workspaces, all published independently. Published
 packages declare a shared `velaros.platform` generation for cross-package compatibility.
 
 | Domain | Packages |
 | --- | --- |
 | Kernel | `@velaros-ai/kernel` |
-| Agent runtime | `@velaros-ai/agent` (with the tool contract at `@velaros-ai/agent/tool-contract`) |
+| Agent runtime | `@velaros-ai/agent` (Act loop, run lifecycle and child-task supervision) |
 | Shared primitives | `@velaros-ai/core` (base primitives, plus the `platform`, `text-files` and `path-rules` units) |
-| Shared capability foundations | `@velaros-ai/script`, `@velaros-ai/velaros` |
+| Shared capability foundations | `@velaros-ai/script`, `@velaros-ai/context`, `@velaros-ai/velaros` |
 | Model providers | `@velaros-ai/model` |
-| Capabilities | `@velaros-ai/cli`, `@velaros-ai/development` |
-| UI | `@velaros-ai/ui` (components, conversation UI, and the `html-artifacts` unit) |
 | Evaluation | `@velaros-ai/agent-lab` |
+
+Language services are part of `@velaros-ai/velaros/project`. The `velaros` CLI is maintained in VelarOS-Termel; UI and component-library in VelarOS-UI; document-renderer in VelarOS-Desktop.
 
 The package inventory in the root `package.json` is the machine-checked source of truth. The
 [generated package catalog](docs/generated/package-catalog.json) exposes the same inventory, package
@@ -39,8 +39,8 @@ decisions live in this repository's `docs/` tree.
 ## Requirements
 
 - [Bun](https://bun.sh/) 1.3.13
-- Node.js 20 or newer for Node-based scripts and consumers
-- Native build tools required by `better-sqlite3` and Electron rebuilds
+- Node.js 22.13 or newer for the full workspace and the default SQLite storage adapter
+- Individual consumers must also follow each package’s engines and host dependencies
 
 ## Development
 
@@ -55,8 +55,7 @@ bun run check
 `bun run check` is the merge gate. It builds all packages, type-checks, lints, runs tests, validates architectural boundaries, and checks public-release invariants.
 
 Start with the [documentation index](docs/readme.md) for architecture, package boundaries, and developer guides.
-The independently installable VelarOS Termel product owns its Host composition, remote-node
-transport, and native release lifecycle.
+The independently installable VelarOS Termel product owns its Host composition and native release lifecycle. Shared remote-node transport belongs to Kernel.
 
 ## Contributing and security
 
@@ -69,3 +68,5 @@ Do not report security vulnerabilities in public issues. Follow [SECURITY.md](SE
 Copyright 2026 VelarOS-AI contributors.
 
 Licensed under the [Apache License, Version 2.0](LICENSE).
+
+Shared UI and the component catalog are maintained in `VelarOS-UI`. The Document Renderer package and standalone product are maintained in `VelarOS-Desktop`.

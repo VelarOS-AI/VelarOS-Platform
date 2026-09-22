@@ -4,6 +4,7 @@ import { join, resolve,dirname } from 'node:path'
 
 import { createDetectorRegistry, createVerifierRegistry, journeyRunner, labArchives, labDrivers, ObservationFaces, UnlimitedBudget } from '@velaros-ai/agent-lab'
 import {evaluationScenario} from './act-scenarios.mjs'
+import {createEvidenceCheckpoints} from './evidence-checkpoints.mjs'
 import { createRuntime } from '@velaros-ai/velaros'
 
 const prompt='工作区 state.txt 当前第一行是 one。请用 observe 持续读取它（注释说明观察目的），先等待下一轮观察确实返回 one，再用后续 execute 将第一行改为 two，只修改一次；安装 observe 的同一份响应不要改写；在之后一轮的观察结果中确认 two 再完成。保留 protected.txt 原样。通过 velaros:project 的真实契约完成读写。'
@@ -46,15 +47,20 @@ export async function runActEvaluation({model,output,provider=null,configuration
  await writeFile(join(root,'state.txt'),'one\n')
  await writeFile(join(root,'protected.txt'),'keep this\n')
  for(const [name,body] of Object.entries(workload?.files??{})){await mkdir(dirname(join(root,name)),{recursive:true});await writeFile(join(root,name),body)}
- const runtime=await createRuntime({workspace:root,dataDir:join(directory,'state'),model,agents:workload?.modelTools??false,search:workload?.modelTools??false,
+ const metrics=new Map()
+ const onMetric=metric=>{
+  const key=`${metric.phase}:${metric.operation}`
+  const item=metrics.get(key)??{phase:metric.phase,operation:metric.operation,count:0,failures:0,totalMs:0,maxMs:0}
+  item.count++;item.failures+=metric.succeeded?0:1;item.totalMs+=metric.durationMs;item.maxMs=Math.max(item.maxMs,metric.durationMs);metrics.set(key,item)
+ }
+ const runtime=await createRuntime({onMetric,workspace:root,dataDir:join(directory,'state'),model,agents:workload?.modelTools??false,search:workload?.modelTools??false,
   context:{sources:[],limits:{modelCalls:turns*3,modelTokens:turns*3*model.limits.contextTokens}},
   limits:{turns,timeoutMs,outputTokens:model.limits.outputTokens,safetyTokens:1024}})
  let session,pending,running=false,failure=null,started=0,finished=0,traces=[],events=[],artifacts=[],branches=[]
  const directoryPath=directory
  const id='platform-act',runId=randomUUID()
  const identity={executorId:id,adapterVersion:'1',cliVersion:null,provider,model:model.id,modelRevision:null,contextWindow:model.limits.contextTokens,reasoningProfile:configuration.reasoningLevel??null,configuration:{...configuration,turns,timeoutMs,fixture:`${scenario}@1`}}
- let evidenceTail=Promise.resolve(),lastSaved=0
- const saveEvidence=()=>{const saving=evidenceTail.then(async()=>{
+ const checkpoints=createEvidenceCheckpoints(async()=>{
   traces=[]
   for(const event of events)if(event.type==='turn')traces.push(await session.trace(event.turnId,8_000_000))
   const directory=await runtime.trace(session.id,{limit:1,maxChars:1})
@@ -71,8 +77,7 @@ export async function runActEvaluation({model,output,provider=null,configuration
    const bytes=await readFile(path)
    return {id:path,kind:path.endsWith('.json')?'runtime-evidence':'file',path,sha256:createHash('sha256').update(bytes).digest('hex'),sizeBytes:bytes.length,provenance:path===join(root,'state.txt')?'agent':'driver'}
   }))
-  lastSaved=Date.now()
- });evidenceTail=saving.catch(error=>{failure=String(error)});return saving}
+ })
  const adapter={
   id,capabilities:async()=>capabilities,identity:async()=>identity,
   async openSession(){session=await runtime.openSession('evaluation');return {id:session.id,executorId:id,externalId:session.id,metadata:{workspaceRoot:root}}},
@@ -81,12 +86,12 @@ export async function runActEvaluation({model,output,provider=null,configuration
    if(running)throw new Error('同一验收会话仍在运行')
    running=true;started=Date.now()
    pending=(async()=>{
-    try{for await(const event of session.submit(leg.prompt)){events.push(event);await appendFile(join(directory,'events.ndjson'),JSON.stringify(event)+'\n');if(event.type==='turn')await saveEvidence();if(event.type==='interaction'&&workload?.answer){const value=await workload.answer({root,request:event.request});await session.answer({id:event.request.id,runId:event.request.runId,value})}}}catch(error){failure=String(error)}
-    finally{try{await saveEvidence()}catch(error){failure=String(error)}finished=Date.now();running=false}
+    try{for await(const event of session.submit(leg.prompt)){events.push(event);await appendFile(join(directory,'events.ndjson'),JSON.stringify(event)+'\n');if(event.type==='turn')await checkpoints.request();if(event.type==='interaction'&&workload?.answer){const value=await workload.answer({root,request:event.request});await session.answer({id:event.request.id,runId:event.request.runId,value})}}}catch(error){failure=String(error)}
+    finally{try{await checkpoints.flush()}catch(error){failure=String(error)}finished=Date.now();running=false}
    })()
   },
   async readState(){
-   if(running&&Date.now()-lastSaved>2000)await saveEvidence()
+   if(running)try{await checkpoints.request()}catch(error){failure=String(error)}
    const snapshot=await session.inspect()
    // 预设的修订交互由当前驱动回答；回答尚在落盘时仍在工作，不能当作等待外部用户而提前收束。
    return {running,awaitingConfirmation:snapshot.pending.some(item=>item.kind==='confirmation'),awaitingInput:snapshot.pending.some(item=>item.kind!=='input'||!workload?.answer)||(!running&&snapshot.status==='waiting'),revision:snapshot.id||null,usage:{toolCalls:running?null:observedCalls(traces).reduce((n,turn)=>n+turn.toolCalls.length,0),workingMs:null,wallClockMs:started?(finished||Date.now())-started:0,tokens:running?null:measuredUsage(traces).totalTokens,legs:started?1:0},unavailable:failure?{detail:failure}:null}
@@ -130,7 +135,7 @@ export async function runActEvaluation({model,output,provider=null,configuration
   archive=await journeyRunner.runJourney({jobId:runId,suiteId:'platform-act@1',trial:{id:runId,journeyId:journey.id,journeyVersion:1,executorId:id,arm:null,replicate:{groupId:runId,index:1,ofK:1,seed:1}},journey,driver:labDrivers.createPolling(adapter,{pollMs:50,settlePolls:1,confirmation:'wait'}),detectors:createDetectorRegistry(),verifiers,workspaceRoot:root,sourceCommit,consumerCommit,createRunId:()=>runId})
  }finally{await runtime.close()}
  const archivePath=await labArchives.writeRunArchive(directory,archive)
- const summary={schema:'platform-act-eval@1',scenario,failure,branches:branches.map(branch=>({sessionId:branch.sessionId,kind:branch.kind,status:branch.status,modelCalls:branch.turns.length})),directory,archivePath,tracePath,eventsPath,passed:archive.manifest.exitReason==='completed'&&archive.drops.length===0&&archive.legs.length===1&&archive.legs.every(leg=>leg.passed===true)&&!archive.findings.some(finding=>finding.severity==='fail'),exitReason:archive.manifest.exitReason,modelCalls:traces.length,totalModelCalls:traces.length+branches.reduce((n,branch)=>n+branch.turns.length,0),usageScope:'main',totalUsage:measuredUsage([...traces,...branches.flatMap(branch=>branch.turns)]),requestChars:traces.map(trace=>body(trace.request)?.request.materials.reduce((n,item)=>n+item.text.length,0)??null),usage:measuredUsage(traces),storageBytes:(await stat(join(directory,'state/context.sqlite'))).size}
+ const summary={schema:'platform-act-eval@1',scenario,failure,checkpoints:{...checkpoints.stats},wallClockMs:finished&&started?finished-started:null,metrics:[...metrics.values()],requestRetries:traces.filter(trace=>trace.repair>0).length,protocolRejections:traces.filter(trace=>body(trace.decision)?.error?.code==='SCRIPT_PROTOCOL').length,branches:branches.map(branch=>({sessionId:branch.sessionId,kind:branch.kind,status:branch.status,modelCalls:branch.turns.length})),directory,archivePath,tracePath,eventsPath,passed:archive.manifest.exitReason==='completed'&&archive.drops.length===0&&archive.legs.length===1&&archive.legs.every(leg=>leg.passed===true)&&!archive.findings.some(finding=>finding.severity==='fail'),exitReason:archive.manifest.exitReason,modelCalls:traces.length,totalModelCalls:traces.length+branches.reduce((n,branch)=>n+branch.turns.length,0),usageScope:'main',totalUsage:measuredUsage([...traces,...branches.flatMap(branch=>branch.turns)]),requestChars:traces.map(trace=>body(trace.request)?.request.materials.reduce((n,item)=>n+item.text.length,0)??null),usage:measuredUsage(traces),storageBytes:(await stat(join(directory,'state/context.sqlite'))).size}
  await writeFile(join(directory,'summary.json'),JSON.stringify(summary,null,2))
  return {summary,archive,traces,branches}
 }

@@ -47,6 +47,7 @@ export type {
   ProjectFixer,
   ProjectHook,
   ProjectHostPort,
+  ProjectShellHostPort,
   ProjectOperationContext,
   ProjectPlugin,
   ProjectPluginContext,
@@ -106,3 +107,21 @@ export type { FileAttributes, FileSnapshot, ProjectSnapshot } from './types/snap
 export type { ResolvedTarget,ResolveTargetInput, ResolveTargetResult } from './types/target.js'
 export type { ProjectTransactionInput, ProjectTransactionStatus, StoredTransaction } from './types/transaction.js'
 export type { Postcondition, ProjectValidationContext, ProjectValidationPolicy, ProjectValidationProviders, ProjectValidationTransaction, ReadonlyProvider, ValidateInput, ValidationCheckResult, ValidationResult } from './types/validation.js'
+
+// ── 注入面：宿主要塞进来的东西 ───────────────────────────────────
+export type { LanguageReadPort, LanguageToolContext, ProjectCodeIndexApi } from './contract/requires.js'
+
+// ── 产品面：语言查询 ─────────────────────────────────────────────
+export type { LanguageQueriesApi } from './impl/language/LanguageQueries.js'
+export { languageQueries } from './impl/language/LanguageQueries.js'
+
+// ── 产品面：project 的 queryCode ─────────────────────────────────
+export { createProjectCodeQuery } from './impl/language/ProjectCodeQuery.js'
+
+// ── 产品面：外部语言服务 ─────────────────────────────────────────
+export type { ExternalLanguageServiceApi } from './impl/language/ExternalLanguageService.js'
+export { createExternalLanguageService } from './impl/language/ExternalLanguageService.js'
+
+// ── 产品面：TypeScript 项目池 ────────────────────────────────────
+export type { TypeScriptProjectsApi } from './impl/language/TypeScriptProjectPool.js'
+export { typeScriptProjects } from './impl/language/TypeScriptProjectPool.js'

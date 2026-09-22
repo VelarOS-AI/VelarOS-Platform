@@ -1,6 +1,13 @@
-import type { TurnContextSourceId } from '../contract/activity.js'
-import type { TurnContextAppendHubApi } from '../interface/provides.js'
-import type { TurnContextAppendListener } from '../interface/requires.js'
+import type { TurnContextAppendListener } from '../contract/requires.js'
+import type { TurnContextSourceId } from '../types/activity.js'
+
+/** 会话活动记录的唯一访问接口。 */
+export interface TurnContextAppendHubApi {
+  /** 订阅任意 source 的 delta 写入通知；订阅时不补发历史，返回的函数用来退订。 */
+  subscribe(listener: TurnContextAppendListener): () => void
+  /** 广播一次「某会话的某个 source 刚写入」的通知；逐个监听器隔离异常，监听器抛错不影响其余监听器，也不回传给账本。 */
+  emit(sessionId: string, sourceId: string): void
+}
 
 /**
  * 环境 delta 写入的通知面：账本每写进一条可见 source 的 delta 就广播一次，订阅方（IPC 推送层）据此去重新 peek。

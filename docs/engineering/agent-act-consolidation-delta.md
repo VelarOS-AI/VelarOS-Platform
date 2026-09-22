@@ -1,5 +1,7 @@
 # Agent → Act 实施差量
 
+> 阶段差量记录：路径、API 和测试数字对应本次记录形成时的实现。当前接入请读 [模块规范](../architecture/module-ownership.md)、[Act 架构](../architecture/platform-runtime.md) 和 [能力目录](../../packages/velaros/act/README.md)。
+
 日期：2026-09-20。工作树交付，未提交 Git。实施基于进入本轮时已有的 ScriptAct、租约、输入归档和高级搜索代码。
 
 ## 完成范围

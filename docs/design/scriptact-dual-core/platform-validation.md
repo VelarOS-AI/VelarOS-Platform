@@ -1,5 +1,7 @@
 # Platform 统一主干验证报告
 
+> 历史设计与阶段验收记录。本文中的接口、路径和测试数字对应其记录阶段；当前实现请读 [Act 运行架构](../../architecture/platform-runtime.md)、[模块规范](../../architecture/module-ownership.md)、[系统能力](../../architecture/act-system-space.md) 与 [存储合同](../../architecture/storage.md)。原始输入规格保存在 reference-pack/。
+
 日期：2026-09-19。此次在当前工作树继续正式接入，没有提交或发布。既有包迁移与其他工作保留。
 
 ## 实际完成的阶段

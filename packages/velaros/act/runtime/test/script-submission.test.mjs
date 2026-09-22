@@ -99,10 +99,10 @@ test('combined retries return the original receipt across restart without advanc
 })
 
 test('a prepared composite submission cannot replay after lost publication acknowledgement',async t=>{
-  const f=await fixture(t); const original=f.storage.compareAndSwap.bind(f.storage);let injected=false
-  f.storage.compareAndSwap=async(id,version,state)=>{
-    const committed=await original(id,version,state)
-    if(committed&&!injected&&state.records.some(x=>x.title.startsWith('script:control:'))){injected=true;throw Error('lost after atomic preparation')}
+  const f=await fixture(t); const original=f.storage.compareAndSwapMetadata.bind(f.storage);let injected=false
+  f.storage.compareAndSwapMetadata=async(id,version,state,append=[])=>{
+    const committed=await original(id,version,state,append)
+    if(committed&&!injected&&append.some(x=>x.title.startsWith('script:control:'))){injected=true;throw Error('lost after atomic preparation')}
     return committed
   }
   const input={observe:{source:observe},execute:{source:execute}}; const options={callId:'prepared'}
@@ -112,11 +112,11 @@ test('a prepared composite submission cannot replay after lost publication ackno
 })
 
 test('in-flight duplicates share one execution and conflicting payloads cannot reuse its identity',async t=>{
-  const f=await fixture(t); const original=f.storage.compareAndSwap.bind(f.storage)
+  const f=await fixture(t); const original=f.storage.compareAndSwapMetadata.bind(f.storage)
   let release; let entered;const gate=new Promise(r=>release=r); const waiting=new Promise(r=>entered=r);let held=false
-  f.storage.compareAndSwap=async(id,version,state)=>{
-    if(!held&&state.records.some(x=>x.title.startsWith('script:control:'))){held=true;entered();await gate}
-    return original(id,version,state)
+  f.storage.compareAndSwapMetadata=async(id,version,state,append=[])=>{
+    if(!held&&append.some(x=>x.title.startsWith('script:control:'))){held=true;entered();await gate}
+    return original(id,version,state,append)
   }
   const input={observe:{source:observe},execute:{source:execute}}; const options={callId:'in-flight'}
   const first=f.session.script(input,undefined,options);await waiting
@@ -149,19 +149,19 @@ test('a stale displayed baseline rejects implicit edits and the accompanying exe
 })
 
 test('a concurrent prepared receipt discovered while publishing rejection still requires reconciliation',async t=>{
-  const f=await fixture(t); const original=f.storage.compareAndSwap.bind(f.storage);let raced=false
-  f.storage.compareAndSwap=async(id,version,state)=>{
-    const record=state.records.findLast(r=>r.title.startsWith('script:control:'))
+  const f=await fixture(t); const original=f.storage.compareAndSwapMetadata.bind(f.storage);let raced=false
+  f.storage.compareAndSwapMetadata=async(id,version,state,append=[])=>{
+    const record=append.findLast(r=>r.title.startsWith('script:control:'))
     if(!raced&&record){
       raced=true
       const data=JSON.parse(await f.storage.get(id,record.objectId))
       const body=JSON.stringify({...data,receipt:{status:'prepared',executed:false}})
       const replacement={...record,objectId:await f.storage.put(id,body),chars:body.length}
-      const committed=await original(id,version,{...state,records:state.records.map(r=>r===record?replacement:r)})
+      const committed=await original(id,version,state,append.map(r=>r===record?replacement:r))
       assert.equal(committed,true)
       return false
     }
-    return original(id,version,state)
+    return original(id,version,state,append)
   }
   await assert.rejects(f.session.script({observe:{source:'const = ;'},execute:{source:execute}},undefined,{callId:'raced'}),{code:'SCRIPT_UNRESOLVED'})
   assert.equal(f.world.writes,0)

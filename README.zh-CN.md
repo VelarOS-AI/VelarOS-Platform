@@ -14,18 +14,16 @@ VelarOS Desktop 是首款真实产品、桌面 Shell 和 reference integration�
 
 ## 仓库结构
 
-VelarOS Platform 包含 11 个 package workspace，其中 10 个独立发布。公开包各自遵循 semver，
+VelarOS Platform 包含 8 个 package workspace，均独立发布。公开包各自遵循 semver，
 并通过统一的 `velaros.platform` 代号声明跨包兼容性。
 
 | 领域 | 包 |
 | --- | --- |
 | Kernel | `@velaros-ai/kernel` |
-| Agent 运行时 | `@velaros-ai/agent`（写工具的契约在 `@velaros-ai/agent/tool-contract`） |
+| Agent 运行时 | `@velaros-ai/agent`（Act 循环、运行生命周期与子任务调度） |
 | 共享原语 | `@velaros-ai/core`（基础原语，外加 `platform`、`text-files`、`path-rules` 三个单元） |
-| 能力公共件 | `@velaros-ai/script`、`@velaros-ai/velaros` |
+| 能力公共件 | `@velaros-ai/script`、`@velaros-ai/context`、`@velaros-ai/velaros` |
 | 模型供应方 | `@velaros-ai/model` |
-| 能力 | `@velaros-ai/cli`、`@velaros-ai/development` |
-| UI | `@velaros-ai/ui`（组件、会话界面，外加 `html-artifacts` 单元） |
 | 评测 | `@velaros-ai/agent-lab` |
 
 根 `package.json` 中的包清单是机械核对的身份单源。公开 API 以包 manifest 和包 README 为准；架构与协议裁决归本仓 `docs/` 所有。
@@ -33,8 +31,8 @@ VelarOS Platform 包含 11 个 package workspace，其中 10 个独立发布。�
 ## 环境要求
 
 - [Bun](https://bun.sh/) 1.3.13
-- Node.js 20 或更高版本
-- `better-sqlite3` 与 Electron rebuild 所需的本机编译工具
+- Node.js 22.13 或更高版本，用于完整工作区检查和默认 SQLite 存储适配器
+- 单包消费者还需遵守各包 engines 及宿主依赖要求
 
 ## 开发
 
@@ -49,7 +47,7 @@ bun run check
 `bun run check` 是合入总门：构建全部包、类型检查、lint、测试、架构边界和公开发布不变量必须同时通过。
 
 架构、包边界与开发者指南从[文档索引](docs/readme.md)开始阅读。
-独立安装的 VelarOS Termel 产品负责自己的 Host 组合、远程节点传输与原生发布生命周期。
+独立安装的 VelarOS Termel 产品负责自己的 Host 组合与原生发布生命周期；共享远程节点传输归 Kernel。
 
 ## 贡献与安全
 
@@ -62,3 +60,7 @@ bun run check
 Copyright 2026 VelarOS-AI contributors.
 
 本项目采用 [Apache License 2.0](LICENSE)。
+
+共享 UI 与组件展示站由 `VelarOS-UI` 仓库维护；Document Renderer 包与独立产品由 `VelarOS-Desktop` 仓库维护。
+
+语言服务由 `@velaros-ai/velaros/project` 提供。`velaros` CLI 由 VelarOS-Termel 维护，UI 与 component-library 由 VelarOS-UI 维护，document-renderer 归 VelarOS-Desktop。

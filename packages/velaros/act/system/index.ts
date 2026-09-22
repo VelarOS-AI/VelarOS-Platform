@@ -10,3 +10,6 @@ export type {MemoryOrganizeIntent,MemoryPage,MemoryQuery} from './types/memory.j
 export type {ScriptRetention} from './types/results.js'
 export type {StoreConfiguration,StoreEntry,StoreFrame,StoreGrant} from './types/store.js'
 export type {WorkspaceEntry,WorkspaceUpdate} from './types/workspace.js'
+
+export type {GoalHost} from './contract/requires.js'
+export type {GoalState,GoalStatus,GoalUpdate} from './types/goal.js'

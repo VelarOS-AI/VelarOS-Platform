@@ -66,7 +66,7 @@ config 和每个 view 是完整替换；未列出的块保持原声明。补丁�
 
 ContextMaintenanceState 在既有 ContextPatchStore 中调用 ProgramContext.editObservation，连同笔记、输入摘要、历史检查点和结果释放在一次 CAS 发布。任何部分失败，源码与其余元数据都不发布。新输入、源码更新或结果变化会使快照版本失效。
 
-发布前实际组装候选五分区，校验必需正文和已确认输入约束，并调用父模型的 ProviderRequestCompiler 做预算预检；预检取消不等待迟到计量。最终请求在加入本轮状态、阶段及恢复说明后再次计量。压力触发的整体投影上限只作用于当前业务轮；显式 memory.organize 的处理结果设置任务内呈现策略，源码内的展示修改保持为可见版本。
+发布前实际组装候选五分区，校验必需正文和已确认输入约束，并调用父模型的 ProviderRequestCompiler 做预算预检；预检取消不等待迟到计量。最终请求在加入本轮状态、阶段及恢复说明后再次计量。压力触发的摘要和笔记呈现按成功业务轮过期，经验证的 maxChars 保持到同任务下一份策略或任务切换；每轮继续采集真实观察。显式 memory.organize 设置任务内呈现策略，源码内的展示修改保持为可见版本。
 
 补丁只发布新源码及元数据，不执行观察程序。当前帧从已归档结果重新展示：collectedSourceRef 指向原采集版本，presentationSourceRef 指向当前源码版本，adjustment 说明整理原因和 executed:false。下一正常业务轮才使用新源码刷新采集。
 

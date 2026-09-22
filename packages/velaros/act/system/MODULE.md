@@ -2,9 +2,11 @@
 
 ## 这是什么
 
-`velaros:system` 提供 `modules`、`memory` 和按存储能力装配的 `store`。主模型维护自己的笔记、计划和工作意图；整理模型处理派生展示；Runtime 负责版本、权限、预算与发布。业务能力使用自己的包空间。
+`velaros:system` 提供 `modules`、`memory`、主会话的 `goal` 和按存储能力装配的 `store`。主模型维护自己的笔记、计划和工作意图；整理模型处理派生展示；Runtime 负责版本、权限、预算与发布。业务能力使用自己的包空间。
 
 ## 提供什么
+
+- `GoalHost` 注入当前调用会话的版本化目标账本；`goal.get/update` 与宿主控制共享状态。
 
 入口 `./act/system`。
 
@@ -46,7 +48,7 @@ contract/requires.ts 注入现有会话、Kernel 和整理端口。任务原文�
 
 ## 不变量
 
-共 18 条，未验证 0 条。见 spec/invariants.md。
+共 19 条，未验证 0 条。见 spec/invariants.md。
 
 ## 非目标
 

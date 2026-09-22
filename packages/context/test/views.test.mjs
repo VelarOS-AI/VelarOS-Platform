@@ -31,7 +31,7 @@ async function fixture(t, limits) {
 }
 async function observe(f, intent = f.direct) { await f.view.startStep(crypto.randomUUID()); await f.view.request(intent); await f.view.settle([]); return f.view.build({ maxChars: 12000 }) }
 
-test('A04: edits materialize the latest revision and preserve protected goals', async t => {
+test('INV-3 A04: edits materialize the latest revision and preserve protected goals', async t => {
   const f = await fixture(t)
   const first = await observe(f)
   f.data.text = 'version two'; f.data.revision = 'v2'
@@ -55,7 +55,7 @@ test('A07: diff without a baseline becomes current text or an explicit gap', asy
   assert.equal(result.evidence[0].form, 'full')
 })
 
-test('A15: unknown effects block replay and survive omitted intents', async t => {
+test('INV-4 A15: unknown effects block replay and survive omitted intents', async t => {
   const f = await fixture(t)
   await f.view.startStep('step')
   await f.view.settle([{ id: 'write-1', executionId: 'step', operation: 'remote.send', outcome: 'unknown', effect: 'unknown' }])
@@ -80,7 +80,7 @@ test('A05/A17: stale versions and revoked scope cannot be published', async t =>
   assert.equal(result.gaps[0].code, 'DENIED')
 })
 
-test('A02/A08: semantic planner only selects registered candidates within a bound', async t => {
+test('INV-5 A02/A08: semantic planner only selects registered candidates within a bound', async t => {
   const f = await fixture(t)
   await f.view.startStep('semantic')
   await f.view.request({ kind: 'semantic', objective: 'find authentication logic', purpose: 'impact analysis' })
@@ -163,7 +163,7 @@ test('A12: required goals never silently truncate, acceptance is explicit', asyn
   assert.equal((await f.view.complete({ verify: async () => ({ verified: true, reason: 'test passed' }) })).verified, true)
 })
 
-test('A19: source changes invalidate derived artifacts instead of promoting a model summary', async t => {
+test('INV-6 A19: source changes invalidate derived artifacts instead of promoting a model summary', async t => {
   const f=await fixture(t)
   const first=await observe(f)
   await f.view.startStep('summarize')

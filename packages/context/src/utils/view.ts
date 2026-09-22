@@ -2,8 +2,9 @@ import { Ajv } from 'ajv'
 
 import { isArray } from '@velaros-ai/core'
 
-import type { ContextGap, ContextTarget, ContextTaskState, ContextViewLimits, RegisteredViewIntent } from '../contract/context.js'
-import { DefaultContextViewLimits } from '../contract/context.js'
+import { DefaultContextViewLimits } from '../contract/constants.js'
+import type { ContextCandidate, ContextSelection } from '../types/context.js'
+import type { ContextGap, ContextTarget, ContextTaskState, ContextViewLimits, RegisteredViewIntent } from '../types/context.js'
 
 import { contextFailure } from './state.js'
 
@@ -56,3 +57,13 @@ export async function awaitContextOperation<T>(pending: Promise<T>, signal: Abor
   try { return await Promise.race([pending, aborted]) }
   finally { signal.removeEventListener('abort', cancel) }
 }
+
+/** 校验规划只选择已登记、未重复且表示获准的候选。 */
+export function checkContextSelections(selections: readonly ContextSelection[], candidates: readonly ContextCandidate[], intents: readonly RegisteredViewIntent[]): void {
+    const seen = new Set<string>()
+    for (const selection of selections) {
+      const candidate = candidates.find(item => item.id === selection.candidateId)
+      if (!candidate || seen.has(selection.candidateId) || !candidate.forms.includes(selection.form) || selection.form === 'diff' || selection.intentIds.some(id => !candidate.intentIds.includes(id) || !intents.some(intent => intent.id === id))) throw contextFailure('PLAN_SCOPE', '计划引用未知、重复候选或未允许的表示')
+      seen.add(selection.candidateId)
+    }
+  }

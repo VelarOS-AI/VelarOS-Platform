@@ -65,7 +65,10 @@ test('INV-31 parent and child run the same ScriptAct loop and charge the shared 
  await assert.rejects(f.runtime.trace('other',{sessionId:first.branches[0].sessionId}),/不属于/)
  const small=await f.runtime.trace('root',{maxChars:64})
  assert.equal(small.turns[0].request.truncated,true)
- assert.equal(small.turns[0].request.body.length,64)
+ const bounded=small.turns[0]
+ const bodyChars=[bounded.request,bounded.response,bounded.decision,...bounded.records,...bounded.invocations].reduce((sum,item)=>sum+(item?.body?.length??0),0)
+ const summaryChars=(bounded.requestSummary?.system.length??0)+(bounded.requestSummary?.messages.length??0)+bounded.invocations.reduce((sum,item)=>sum+item.summary.input.length+item.summary.output.length,0)
+ assert.equal(bodyChars+summaryChars,64)
 
 })
 
@@ -179,4 +182,36 @@ test('same child resumes with newly granted writes and store access without rese
  const events=[];for await(const event of f.session.submit('read then implement'))events.push(event)
  assert.equal(events.at(-1).status,'completed',JSON.stringify(events));assert.equal(writes,1);assert.equal(childCalls,3)
  assert.equal((await f.session.view.inspect()).usage.contextCalls,3)
+})
+
+test('INV-38 live projection clears rejected, cancelled and interrupted previews while retaining accepted text',()=>{
+ for(const status of ['cancelled','failed','context_blocked','needs_reconcile','completed']){
+  const p=createActEventProjector()
+  p.applyLive({type:'turn',runId:'r',turnId:'first'})
+  p.applyLive({type:'accepted',runId:'r',turnId:'first',text:'kept',ref:{sessionId:'s',id:'one'}})
+  p.applyLive({type:'turn',runId:'r',turnId:'second'})
+  p.applyLive({type:'text',runId:'r',text:'partial'})
+  const state=p.applyLive({type:'state',runId:'r',status})
+  assert.equal(state.runs.r.preview,'');assert.equal(state.runs.r.messages[0].text,'kept')
+  assert.deepEqual(p.applyLive({type:'text',runId:'r',text:'late'}),state)
+ }
+ const p=createActEventProjector()
+ p.applyLive({type:'turn',runId:'r',turnId:'t'})
+ p.applyLive({type:'text',runId:'r',text:'partial'})
+ assert.equal(p.finish().runs.r.preview,'')
+ assert.equal(p.applyLive({type:'text',runId:'r',text:'late'}).runs.r.preview,'')
+})
+
+test('live and persisted projection share accepted identities without duplicate bodies or revived previews',()=>{
+ const p=createActEventProjector();const accepted={type:'accepted',runId:'r',turnId:'t',text:'answer',ref:{sessionId:'s',id:'ref'}}
+ p.applyLive({type:'turn',runId:'r',turnId:'t'});p.applyLive({type:'text',runId:'r',text:'candidate'})
+ p.applyLive(accepted)
+ const state=p.apply({sessionId:'s',runId:'r',sequence:10,event:accepted})
+ assert.equal(state.runs.r.messages.length,1);assert.equal(state.cursor,10)
+ assert.deepEqual(p.applyLive({type:'text',runId:'r',text:'late'}),state)
+ p.applyLive({type:'turn',runId:'r',turnId:'next'})
+ p.applyLive({type:'text',runId:'r',text:'invalid'})
+ p.applyLive({type:'error',runId:'r',message:'broken'})
+ assert.equal(p.applyLive({type:'text',runId:'r',text:'late'}).runs.r.preview,'')
+ assert.equal(p.snapshot().runs.r.messages[0].text,'answer')
 })

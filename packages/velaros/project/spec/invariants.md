@@ -43,3 +43,14 @@
 | INV-27 | 命令的工作目录与演练沙箱的源目录按解开符号链接后的真实路径钳在项目之内：出了项目在问用户之前就拒绝（`PERMISSION`），一个进程都不起、什么都不镜像；项目里的交给宿主时是解析好的绝对路径 | 测试 | `spec/acceptance.test.ts` |
 | INV-28 | 演练沙箱落回不问人、不按名单拦：点名的路径核过（点名了没变化的就拒绝，`VALIDATION`）就把同一份差量的指纹交给宿主落回；镜像里命令的输出原样交回 | 测试 | `spec/acceptance.test.ts` |
 | INV-29 | 项目里看图（共用的 `velaros:images`）只看项目里的图：出了项目（含经符号链接指到外面）的那一张看不了（`PERMISSION`），项目里的都照常交给模型 | 测试 | `spec/acceptance.test.ts` |
+| INV-30 | 语言查询只借读源码端口（`listFiles` / `read` / `listSymbols`）：不消耗项目的修改、执行与审批能力，宿主给的内核就算带着写入口本包也够不着 | 测试 | `spec/language-acceptance.test.ts` |
+| INV-31 | 代码图谱后端不可用时内置的七个语言动作照常可用，代码图谱类动作抛 code 为 `UNAVAILABLE` 的错误（project 据此降级，而不是当成查询失败） | 测试 | `spec/language-acceptance.test.ts` |
+| INV-32 | 空结果不伪装成「全部通过」：没扫到文件、文件数被截断、耗时超预算、标准库缺失，一律写进 `note` / `degraded` | 测试 | `spec/language-acceptance.test.ts` |
+| INV-33 | 目录诊断按文件所属的 tsconfig 分组，同一个文件在目录模式与单文件模式下得到一样的诊断 | 测试 | `spec/language-acceptance.test.ts` |
+| INV-34 | 外部语言服务只启动规格表里给的命令，只解析项目根以内的文件；命令没装时给不出诊断，但这次结果仍标为完整（是没有诊断能力，不是等到超时） | 测试 | `spec/language-acceptance.test.ts` |
+| INV-35 | 路径越界按**真实路径**判定：项目里名叫 `..xxx` 的目录照常查询，经符号链接指到项目外的路径一律拒 | 测试 | `spec/language-acceptance.test.ts` |
+| INV-36 | `find_references` 提前停扫时引用数是下限：`referenceCountIsLowerBound` 为真且 `note` 里写明，不把下限当总数交给模型 | 测试 | `spec/language-acceptance.test.ts` |
+| INV-37 | 认不出的 `language` 当场失败并列出可用值，不静默选中零个服务返回一份看似「没有结果」的空答复 | 测试 | `spec/language-acceptance.test.ts` |
+| INV-38 | TypeScript 语言服务池可以被宿主释放：`typeScriptProjects.release()` 之后旧凭据自报失效，调用方按 `isCurrent()` 重新取 | 测试 | `spec/language-acceptance.test.ts` |
+| INV-39 | `./project/contracts` 入口整条引用链不碰 Node 内置模块，渲染进程与浏览器都能加载；语言服务实现、工具函数与内部接口一律不出包 | 门禁 | `check:module-ownership` |
+| INV-40 | 语言查询的注入面只借内核的三个读方法，多一个都借不到：类型上就是对 `AgentProjectKernelPort` 取 `listFiles`、`read`、`listSymbols` 三键的 `Pick` | 类型 | `contract/requires.ts::LanguageReadPort` |

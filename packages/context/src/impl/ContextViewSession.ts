@@ -1,16 +1,63 @@
 import {isUndefined,toNullable,toOptional} from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 
-import type { ContextCompletionResult } from '../contract/context.js'
-import type { ContextContent, ContextFeedback, ContextReadRange, ContextRef, ContextSourceCard, ContextStepRecord, ContextTaskState, ContextTaskStatus, ContextViewLimits, ModelView, RegisteredViewIntent, TaskCapsule, ViewIntentInput } from '../contract/context.js'
-import { TaskCapsuleSchema, ViewIntentSchema } from '../contract/view-schema.js'
-import type { ContextTaskMutation } from '../interface/internal.js'
-import type { ContextViewApi } from '../interface/provides.js'
-import type { ContextBuildOptions, ContextCompletionPort, ContextViewOptions } from '../interface/requires.js'
+import { TaskCapsuleSchema, ViewIntentSchema } from '../contract/constants.js'
+import type { ContextBuildOptions, ContextCompletionPort, ContextViewOptions } from '../contract/requires.js'
+import type { ContextCompletionResult } from '../types/context.js'
+import type { ContextContent, ContextFeedback, ContextReadRange, ContextRecord, ContextRef, ContextSourceCard, ContextStepRecord, ContextTaskState, ContextTaskStatus, ContextViewLimits, ModelView, RegisteredViewIntent, TaskCapsule, ViewIntentInput } from '../types/context.js'
+import type { ContextTaskMutation } from '../types/runtime.js'
 import { contextFailure, emptyContextState, sameContextRef } from '../utils/state.js'
 import { assertContextTask, assertViewSchema, awaitContextOperation, resolveViewLimits } from '../utils/view.js'
 
 import { ContextEvidenceBuilder } from './ContextEvidenceBuilder.js'
+
+/** 绑定会话的双核任务与证据视图，不另持有工具、模型或数据库。 */
+export interface ContextViewApi {
+  /** 列出已装配的证据源与其真实一致性能力。 */
+  sources(): readonly ContextSourceCard[]
+  /** 生效预算供共享模型网关使用。 */
+  readonly limits: ContextViewLimits
+  /** 读取持久检查点，包含真实阶段和用量。 */
+  inspect(): Promise<Nullable<ContextTaskState>>
+  /** 追加用户目标并取得一个有限租约，返回租约身份。 */
+  begin(goal: ContextRef, signal?: AbortSignal, mode?:'continue'|'new'): Promise<string>
+  /** 活动运行接收已归档的用户补充，保留总预算并使旧视图失效。 */
+  appendGoal(goal:ContextRef,signal?:AbortSignal):Promise<void>
+  /** 只有持有当前租约的运行可以开始下一步。 */
+  startStep(executionId: string, signal?: AbortSignal, concurrent?:boolean, basis?:LooseOptional<ModelView>): Promise<void>
+  /** 通过当前执行登记下一轮观察需求。 */
+  request(intent: ViewIntentInput, signal?: AbortSignal, executionId?:string): Promise<RegisteredViewIntent>
+  /** 模型只更新非事实性任务胶囊。 */
+  updateCapsule(capsule: Partial<TaskCapsule>, signal?: AbortSignal, executionId?:string): Promise<TaskCapsule>
+  /** 保存中间材料到同一不可变对象存储，返回受会话范围保护的引用。 */
+  putArtifact(body: string, sources?: readonly ContextRef[], signal?: AbortSignal, executionId?:string): Promise<ContextRef>
+  /** 按范围读取当前任务登记的材料。 */
+  readArtifact(ref: ContextRef, range?: ContextReadRange): Promise<ContextContent>
+  /** 记录真实执行效果后进入物化屏障，取消终态不会被复活。 */
+  settle(feedback: readonly ContextFeedback[], signal?: AbortSignal, step?: ContextStepRecord): Promise<void>
+  /** 在同一存储上只读组装候选，不发布视图也不要求执行租约。 */
+  preview(options:ContextBuildOptions,signal?:AbortSignal):Promise<ModelView>
+  /** 精确解析或有界规划后发布当前证据；重做本阶段不执行世界操作。 */
+  build(options: ContextBuildOptions, signal?: AbortSignal): Promise<ModelView>
+  /** 发送前复核任务、范围和资源版本。 */
+  validate(view: ModelView, signal?: AbortSignal): Promise<boolean>
+  /** 世界写入前核对当前执行身份、未决效果与先前证据。 */
+  assertCanWrite(executionId: string, signal?: AbortSignal): Promise<void>
+  /** 在模型或后台任务等待时续期当前所有权，失去所有权则失败。 */
+  renew(signal?:AbortSignal):Promise<void>
+  /** 为两个模型预占调用与 token 预算。 */
+  reserveModel(role: 'main' | 'context', tokens: number): Promise<void>
+  /** 释放未实际发出的预留模型调用。 */
+  releaseModel(role:'main'|'context',tokens:number):Promise<void>
+  /** 保存供应商实际用量；缺少用量时保持未知计数。 */
+  recordUsage(inputTokens: number, outputTokens: number): Promise<void>
+  /** 依照未决效果、证据缺口、新鲜度和领域验收器判断交付。 */
+  complete(verifier?: ContextCompletionPort, signal?: AbortSignal): Promise<ContextCompletionResult>
+  /** 宿主将日志恢复或核对事实合入检查点；不复活取消终态。 */
+  recover(feedback: readonly ContextFeedback[]): Promise<void>
+  /** 宿主保存结束或暂停阶段，撤销当前租约。 */
+  end(status?: ContextTaskStatus): Promise<void>
+}
 
 /** 在既有存储的会话 CAS 上维护任务状态，世界效果以 Kernel 回执为准。 */
 export class ContextViewSession implements ContextViewApi {
@@ -27,7 +74,7 @@ export class ContextViewSession implements ContextViewApi {
   public sources(): readonly ContextSourceCard[] { return this.options.sources.map(source => ({id:source.id,capabilities:{...source.capabilities}})) }
 
   public async inspect(): Promise<Nullable<ContextTaskState>> {
-    const task = (await this.options.storage.load(this.options.sessionId))?.task
+    const task = (await (this.options.storage.loadMetadata?this.options.storage.loadMetadata(this.options.sessionId):this.options.storage.load(this.options.sessionId)))?.task
     if (task) assertContextTask(task)
     return toNullable(task)
   }
@@ -254,19 +301,28 @@ export class ContextViewSession implements ContextViewApi {
   }
 
   private async change(mutation: ContextTaskMutation, renew = true, signal?: AbortSignal): Promise<ContextTaskState> {
+    const {storage,sessionId}=this.options
+    const incremental=Boolean(storage.loadMetadata&&storage.compareAndSwapMetadata)
     for (let attempt = 0; attempt < 32; attempt++) {
       signal?.throwIfAborted()
-      const state = await this.options.storage.load(this.options.sessionId) ?? emptyContextState()
+      const full=incremental?undefined:await storage.load(sessionId)
+      const state = incremental?await storage.loadMetadata!(sessionId)??{version:0,workingSet:{revision:0,cursor:0,items:[]}}:full??emptyContextState()
       if (state.task) assertContextTask(state.task)
       let task = mutation.apply(state.task)
       if (renew && task.lease) task = { ...task, lease: { ...task.lease, expiresAt: Date.now() + this.limits.leaseMs } }
       signal?.throwIfAborted()
-      let records=state.records
+      const append:Array<Omit<ContextRecord,'sequence'>>=[]
       if(state.task&&task.id&&state.task.id!==task.id){
-        const body=JSON.stringify(state.task); const objectId=await this.options.storage.put(this.options.sessionId,body)
-        records=[...records,{ref:{sessionId:this.options.sessionId,id:crypto.randomUUID()},sequence:records.length+1,kind:'audit',title:`task:archive:${state.task.id??'legacy'}`,objectId,chars:body.length,sources:state.task.goals,createdAt:new Date().toISOString()}]
+        const body=JSON.stringify(state.task); const objectId=await storage.put(sessionId,body)
+        append.push({ref:{sessionId,id:crypto.randomUUID()},kind:'audit',title:`task:archive:${state.task.id??'legacy'}`,objectId,chars:body.length,sources:state.task.goals,createdAt:new Date().toISOString()})
       }
-      if (await this.options.storage.compareAndSwap(this.options.sessionId, state.version, { ...state, version: state.version + 1, records, task })) return task
+      signal?.throwIfAborted()
+      const next={...state,version:state.version+1,task}
+      if(incremental){if(await storage.compareAndSwapMetadata!(sessionId,state.version,next,append))return task}
+      else{
+        const records=full?.records??[]
+        if(await storage.compareAndSwap(sessionId,state.version,{...next,records:[...records,...append.map((record,index)=>({...record,sequence:(records.at(-1)?.sequence??0)+index+1}))]}))return task
+      }
     }
     throw contextFailure('TASK_CONFLICT', '任务提交竞争超过重试上限')
   }

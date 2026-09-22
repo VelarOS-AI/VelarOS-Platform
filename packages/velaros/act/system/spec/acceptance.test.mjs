@@ -13,3 +13,6 @@ test('INV-13 store 只读投影与模板一致',()=>verifyModule({create:host=>s
 test('INV-13 store 写入投影与模板一致',()=>verifyModule({create:host=>storeModule.create(host,'write')},new URL('../store-write-template.js',import.meta.url)))
 
 test('整理材料目录和正文使用精确类型，模板可直接通过脚本检查',()=>verifyModule({create:host=>contextModule.create(host)[0]},new URL('../context-materials-template.js',import.meta.url)))
+
+import {goalModule} from '../../../dist/act/system/impl/GoalModule.js'
+test('INV-19 goal 的实际 schema、声明和模板一致',()=>verifyModule(goalModule,new URL('../goal-template.js',import.meta.url)))

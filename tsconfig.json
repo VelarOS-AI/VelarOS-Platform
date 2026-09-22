@@ -3,9 +3,6 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@catalog/*": [
-        "./component-library/src/componentLibrary/*"
-      ],
       "@velaros-ai/agent-lab": [
         "./packages/agent-lab/src/index.ts"
       ],
@@ -18,26 +15,8 @@
       "@velaros-ai/agent/*": [
         "./packages/agent/src/*"
       ],
-      "@velaros-ai/cli": [
-        "./packages/cli/src/index.ts"
-      ],
-      "@velaros-ai/cli/*": [
-        "./packages/cli/src/*"
-      ],
-      "@velaros-ai/ui/conversation": [
-        "./packages/ui/src/conversation/index.ts"
-      ],
-      "@velaros-ai/ui/conversation/*": [
-        "./packages/ui/src/conversation/*"
-      ],
       "@velaros-ai/core": [
         "./packages/core/src/index.ts"
-      ],
-      "@velaros-ai/development": [
-        "./packages/development/src/index.ts"
-      ],
-      "@velaros-ai/development/*": [
-        "./packages/development/src/*"
       ],
       "@velaros-ai/core/platform": [
         "./packages/core/platform/index.ts"
@@ -95,24 +74,6 @@
       ],
       "@velaros-ai/velaros/*": [
         "./packages/velaros/*"
-      ],
-      "@velaros-ai/document-renderer": [
-        "./packages/document-renderer/src/index.ts"
-      ],
-      "@velaros-ai/document-renderer/*": [
-        "./packages/document-renderer/src/*"
-      ],
-      "@velaros-ai/ui": [
-        "./packages/ui/src/index.ts"
-      ],
-      "@velaros-ai/ui/html-artifacts": [
-        "./packages/ui/html-artifacts/index.ts"
-      ],
-      "@velaros-ai/ui/html-artifacts/contracts": [
-        "./packages/ui/html-artifacts/contracts.ts"
-      ],
-      "@velaros-ai/ui/*": [
-        "./packages/ui/src/*"
       ]
     }
   },

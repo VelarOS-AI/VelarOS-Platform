@@ -470,7 +470,6 @@ function scanReleaseIdentityBoundary() {
   const expectedWorkflowFiles = [
     'ci.yml',
     'codeql.yml',
-    'release-document-renderer.yml',
     'release-packages.yml',
   ]
   const actualWorkflowFiles = readdirSync(resolve(RepoRoot, '.github/workflows'), {
@@ -514,23 +513,6 @@ function scanReleaseIdentityBoundary() {
         'scripts/release/publish-packages.mjs',
         'secrets.',
         'packages: write',
-        'workflow_dispatch:',
-      ],
-    },
-    {
-      file: '.github/workflows/release-document-renderer.yml',
-      markers: [
-        'name: "[DISABLED] Release Document Renderer (local only)"',
-        'on: []',
-        'permissions: {}',
-        'if: ${{ false }}',
-        'bun run release:document-renderer',
-      ],
-      forbiddenMarkers: [
-        'actions/checkout',
-        'release-candidate.mjs',
-        'build-product.mjs',
-        'secrets.',
         'workflow_dispatch:',
       ],
     },
@@ -610,25 +592,6 @@ function scanReleaseIdentityBoundary() {
         '"release:local": "node scripts/release/publish-packages.mjs --local-tag"',
       ],
       forbiddenMarkers: ['GITHUB_EVENT_NAME', 'GITHUB_REF_NAME', 'GITHUB_SHA'],
-    },
-    {
-      file: 'scripts/document-renderer/release-candidate.mjs',
-      markers: [
-        'process.env.VELAROS_SOURCE_REPOSITORY',
-        'process.env.VELAROS_SOURCE_COMMIT',
-        'console.info(line.trim())',
-      ],
-      forbiddenMarkers: ['process.env.GITHUB_'],
-    },
-    {
-      file: 'products/document-renderer/README.md',
-      markers: ['matching native release host', 'local release Windows host', 'local release Linux host'],
-      forbiddenMarkers: ['built natively in GitHub Actions'],
-    },
-    {
-      file: 'packages/ui/README.md',
-      markers: ['personal access token', '进程环境或凭据管理器注入'],
-      forbiddenMarkers: ['GITHUB_TOKEN'],
     },
   ]
 

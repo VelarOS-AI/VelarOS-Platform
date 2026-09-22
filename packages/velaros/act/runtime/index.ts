@@ -30,6 +30,15 @@ export type { ObservationRegistration, ScriptControlOptions, ScriptControlReceip
 export type { ScriptProtocolOptions } from './types/runtime.js'
 export type { ScriptExecutionReceipt, ScriptSubmission, ScriptSubmissionReceipt } from './types/session.js'
 export type { ScriptSubmissionFields } from './types/session.js'
-export type { ActTracePage, ActTraceQuery,ActTraceRecord, ActTurnTrace } from './types/trace.js'
+export type { ActRequestSummary, ActInvocationSummary, ActTracePage, ActTraceQuery,ActTraceRecord, ActTurnTrace } from './types/trace.js'
 export type { VelarosSearchOptions } from '@velaros-ai/velaros/act/search'
 export type { SearchDraft, SearchEvidence, SearchProfile, SearchRequest, SearchResult } from '@velaros-ai/velaros/act/search'
+export type { EventDeliveryApi } from './contract/provides.js'
+export type { EventDeliveryOptions } from './contract/requires.js'
+export { createEventDelivery } from './impl/EventDelivery.js'
+export type { RuntimeMetric } from './types/trace.js'
+
+export type { WorkspaceEntry } from '../system/types/workspace.js'
+export type { RuntimeNoteRead, RuntimeNoteRetention, RuntimeNoteContent } from './types/memory.js'
+
+export type {GoalState,GoalStatus,GoalUpdate,GoalControl} from '../system/types/goal.js'

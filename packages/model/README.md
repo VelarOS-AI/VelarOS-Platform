@@ -187,14 +187,15 @@ const accountId = await client.generateDecodedObject({
 不拥有聊天 UI、Desktop 配置持久化、IPC 或工具注册。
 宿主创建一个隔离的 composition,并把它面向 Agent 的不透明运行时注入下去。
 embedding 选择与 provider 可用性辅助函数**总是显式接收** composition 的
-`ModelProviderCollection`,不去找全局。AI SDK 的通用聊天传输由 `AiSdkModelRequestTransport` 实现；结构化 Agent 回合由 `AiSdkModelDriver` 实现，使用 `ModelTurnRequest.response` 和 `Output.object`，只交付完整校验后的 output。
+`ModelProviderCollection`,不去找全局。AI SDK 的通用聊天传输由 `AiSdkModelRequestTransport` 实现；Act 使用 `AiSdkModelDriver` 的流式驱动。`ModelTurnRequest.response` 决定文本或 JSON 传输：正式 ScriptAct 使用文本帧，JSON 调用才配置 `Output.object`。`ProviderRequestCompiler` 统一封存文本、材料和真实图片并核对发送预算，ScriptTurnDecoder 在执行前完整校验 ScriptAct 帧。
 
 ## 相邻包
 
 | 包 | 关系 |
 | --- | --- |
-| `@velaros-ai/core` | 唯一仓内依赖:`AppError` / 类型守卫 / kernel abi |
-| `@velaros-ai/agent` | 主要消费方:拿 `AgentModelRuntime` 跑执行循环 |
+| `@velaros-ai/core` | `AppError`、类型守卫与基础原语 |
+| `@velaros-ai/kernel` | ModelTurnRequest、请求编码与模型驱动合同 |
+| `@velaros-ai/agent` | 通过编译器、驱动与重试策略推进模型回合 |
 
 ## 门
 

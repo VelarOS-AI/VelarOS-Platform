@@ -1,4 +1,4 @@
-import type { ContextContent, ContextRecord, ContextRef, ContextRuntime, ContextState, ContextStorage, ModelView } from "@velaros-ai/context";
+import type { ContextContent, ContextRecord, ContextRecordSelection, ContextRecordSnapshot, ContextRef, ContextRuntime, ContextStorage, ModelView } from "@velaros-ai/context";
 import { ContextLimits } from "@velaros-ai/context";
 import {isFalse,isNull,toNullable} from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
@@ -65,12 +65,20 @@ export class ProgramContext implements ProgramContextApi {
   }
 
   public async state():Promise<ProgramLeaseState> {
-    return this.readState(await this.storage.load(this.sessionId))
+    return this.readState(await this.snapshot([{title:'script:lease-state',kind:'audit',latest:true}]))
   }
 
-  private async readState(snapshot:Nullable<ContextState>):Promise<ProgramLeaseState> {
+  private async snapshot(selections:readonly ContextRecordSelection[],incremental=false):Promise<Nullable<ContextRecordSnapshot>>{
+    if(this.storage.selectSnapshot&&(!incremental||this.storage.compareAndSwapMetadata))return this.storage.selectSnapshot(this.sessionId,selections)
+    const state=await this.storage.load(this.sessionId)
+    if(!state)return null
+    const {records,...metadata}=state
+    return {metadata,records}
+  }
+
+  private async readState(snapshot:Nullable<ContextRecordSnapshot>):Promise<ProgramLeaseState> {
     const record=snapshot?.records.findLast(item=>item.kind==='audit'&&item.title==='script:lease-state')
-    if(!record||record.sequence<=(snapshot?.task?.startedSequence??0))return {completedTurns:0,leases:[]}
+    if(!record||record.sequence<=(snapshot?.metadata.task?.startedSequence??0))return {completedTurns:0,leases:[]}
     const body=await this.storage.get(this.sessionId,record.objectId)
     if(isNull(body))throw new Error('程序租约记录缺失')
     return JSON.parse(body) as ProgramLeaseState
@@ -79,7 +87,9 @@ export class ProgramContext implements ProgramContextApi {
   private async update(change:(state:ProgramLeaseState)=>ProgramLeaseState, additions:readonly ContextRecord[]=[], signal?:AbortSignal):Promise<void> {
     for(let attempt=0;attempt<64;attempt++){
       signal?.throwIfAborted()
-      const snapshot=await this.storage.load(this.sessionId)??{version:0,records:[],workingSet:{revision:0,cursor:0,items:[]}}
+      const incremental=Boolean(this.storage.selectSnapshot&&this.storage.compareAndSwapMetadata)
+      const refs=[...new Set(additions.flatMap(item=>[item.ref.id,...item.sources.map(ref=>ref.id)]))]
+      const snapshot=await this.snapshot([{title:'script:lease-state',kind:'audit',latest:true},...refs.map(refId=>({refId}))],true)??{metadata:{version:0,workingSet:{revision:0,cursor:0,items:[]}},records:[]}
       if(additions.some(item=>snapshot.records.some(old=>old.ref.id===item.ref.id)))throw Object.assign(new Error('控制调用已经提交'),{code:'SCRIPT_REPLAY'})
       const available=new Set([...snapshot.records,...additions].map(item=>item.ref.id))
       if(additions.some(item=>item.sources.some(ref=>ref.sessionId!==this.sessionId||!available.has(ref.id))))throw Object.assign(new Error('提交包含未知或跨会话来源'),{code:'SCRIPT_REF'})
@@ -88,9 +98,14 @@ export class ProgramContext implements ProgramContextApi {
       const identities=new Set(previous.leases.map(item=>item.ref))
       const state={...changed,resultsRevision:(previous.resultsRevision??0)+(changed.leases.some(item=>!identities.has(item.ref))?1:0)}
       const record=await this.record('script:lease-state',JSON.stringify(state))
-      const records=[...snapshot.records,...[...additions,record].map((item,index)=>({...item,sequence:snapshot.records.length+index+1}))]
+      const metadata={...snapshot.metadata,version:snapshot.metadata.version+1}
       signal?.throwIfAborted()
-      if(await this.storage.compareAndSwap(this.sessionId,snapshot.version,{...snapshot,version:snapshot.version+1,records}))return
+      if(incremental){
+        if(await this.storage.compareAndSwapMetadata!(this.sessionId,snapshot.metadata.version,metadata,[...additions,record]))return
+      }else{
+        const records=[...snapshot.records,...[...additions,record].map((item,index)=>({...item,sequence:(snapshot.records.at(-1)?.sequence??0)+index+1}))]
+        if(await this.storage.compareAndSwap(this.sessionId,snapshot.metadata.version,{...metadata,records}))return
+      }
     }
     throw Object.assign(new Error('上下文持续发生并发变化，请重新读取当前版本'),{code:'SCRIPT_BUSY'})
   }
@@ -102,7 +117,7 @@ export class ProgramContext implements ProgramContextApi {
   }
 
   public async version(ref:string):Promise<Optional<ScriptProgramVersion>> {
-    const record=(await this.storage.load(this.sessionId))?.records.findLast(item=>item.kind==='audit'&&item.title===`script:version:${ref}`)
+    const record=(await this.snapshot([{title:`script:version:${ref}`,kind:'audit',latest:true}]))?.records.findLast(item=>item.kind==='audit'&&item.title===`script:version:${ref}`)
     if(!record)return undefined
     const body=await this.storage.get(this.sessionId,record.objectId)
     if(isNull(body))throw new Error('程序版本记录缺失')
@@ -110,7 +125,7 @@ export class ProgramContext implements ProgramContextApi {
   }
 
   public async receipt(control:ScriptControlIdentity):Promise<Optional<ScriptSubmissionReceipt>> {
-    const record=(await this.storage.load(this.sessionId))?.records.findLast(item=>item.kind==='audit'&&item.title===`script:control:${control.id}`)
+    const record=(await this.snapshot([{title:`script:control:${control.id}`,kind:'audit',latest:true}]))?.records.findLast(item=>item.kind==='audit'&&item.title===`script:control:${control.id}`)
     if(!record)return undefined
     const body=await this.storage.get(this.sessionId,record.objectId)
     if(isNull(body))throw new Error('控制提交回执缺失')
@@ -205,13 +220,14 @@ export class ProgramContext implements ProgramContextApi {
   }
 
   public async project(view:ModelView, observation:Optional<ContextRef>, observationImages:readonly ModelImage[], signal:AbortSignal, maxChars:number=ActRuntimeTuning.frameChars):Promise<{body:string;images:readonly ModelImage[];prompt:string}> {
-    const state=await this.state()
+    const selected=await this.snapshot([{title:'script:lease-state',kind:'audit',latest:true},{title:'search:history-reset',latest:true},{title:'script:output-summaries',latest:true},{title:'user:image'},{titlePrefix:'act:child:'}])
+    const state=await this.readState(selected)
+    const snapshot=selected?{...selected.metadata,records:selected.records}:null
     const frameId=crypto.randomUUID()
     const allVisible=state.leases.filter(item=>(item.task||item.expiresAfter>state.completedTurns))
     const visible=allVisible.slice(-Math.max(1,Math.min(64,Math.floor(maxChars/768))))
     const excerptChars=Math.max(1,Math.min(ScriptLeaseLimits.resultChars,Math.floor(maxChars/(visible.length+4)/2)))
     const images:ModelImage[]=[]
-    const snapshot=await this.storage.load(this.sessionId)
     const reset=Math.max(snapshot?.records.findLast(record=>record.title==='search:history-reset')?.sequence??0,snapshot?.task?.startedSequence??0)
     const taskRevision=scriptOutputs.hash([snapshot?.task?.goals??[],reset])
     const summaryRecord=snapshot?.records.findLast(record=>record.title==='script:output-summaries'&&record.sequence>reset)

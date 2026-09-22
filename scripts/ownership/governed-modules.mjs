@@ -9,20 +9,20 @@
 //   name            包名
 //   toolsFile       工具文件（相对包根，没有工具的包不填）：全部工具定义都在这一个文件里，外加它们的分组与挂载。人最先看的地方，改了要在差量报告里点名；
 //                   execute 只放简单的一两步，语句多了就交给 impl 里的类
-//   contract        对外合同目录：只有三个文件——provides.ts 产品面（交出去的整件能力；类实现的 API 定义在类上方，这里 re-export 登记，
+//   contract        对外合同目录：provides/requires/constants（代码面能力另有生成的 surface.ts）——provides.ts 产品面（交出去的整件能力；类实现的 API 定义在类上方，这里 re-export 登记，
 //                   没有类的公开接口直接声明在这里）、requires.ts 注入面（宿主要塞进来的东西）、constants.ts 约定的常量表（工具身份、错误码、
 //                   环境变量表、公开上限）。改这三个文件等于改对外契约
-//   types           类型目录：扁平，只放类型、一个值都没有，按域分文件；哪些出包由合同的签名闭包决定。
+//   types           类型目录或单文件：只放类型、一个值都没有，按域分文件；哪些出包由合同的签名闭包决定。
 //                   可移植文件 = types/<portable> + contract/constants.ts：不 import（可移植类型文件只许从常量表 import type）、不用 Node 类型、不带函数成员
-//   portable        可移植数据类型文件（相对 types）；`./contracts` 入口 = 它 + contract/constants.ts。没有自己的可移植数据的包（只做装配的空间）不填，`./contracts` 只转发常量表
-//   impl            实现目录：扁平，不分子目录。一个类一个文件，文件名就是类名（工具文件除外，它不放类）；
+//   portable        单一可移植数据文件（相对 types，可选），供整文件导出与无行为检查；多份数据按职责留在 types，入口逐项 export type，公开数据必须属于签名闭包
+//   impl            实现目录：默认扁平，文件较多时按域分组，每个子目录至少直接放三个源文件。一个类一个文件，文件名就是类名（工具文件除外，它不放类）；
 //                   每个类实现一个接口（公开的定义在类上方并在 provides.ts 登记，注入面的在 requires.ts），公开成员不超出接口，私有方法必须用到实例状态
-//   utils           纯工具函数目录：扁平，按类别分文件；只放函数和常量，每个函数上方一句中文说明，只引 utils、types 与合同
+//   utils           纯工具函数目录或单文件：按类别组织，子目录至少直接放三个源文件；只放函数和常量，每个函数上方一句中文说明，只引 utils、types 与合同
 //   tuning          可调参数文件（相对 utils，没有可调参数的包不填）：超时、缓冲、保留条数、缺省条数、阈值集中在这一个冻结表里，每项一句说明、每项有人用；
 //                   数字缺省值不许散在 impl 与 utils。对外承诺的上限不在这里，在 contract/constants.ts
 //                   （对外入口不登记：入口文件就是 src 根上的那几个 .ts，与 package.json 的 exports 一一对应，
-//                   多入口只为运行环境隔离而留；它们编译成 dist/<名>.js 与 dist/<名>.d.ts）
-//   browserSafeEntries  会被渲染进程加载的入口（src 根上的入口文件名，嵌套子路径写成 protocol/message.ts）：整条引用链不许出现 Node 内置模块
+//                   入口按能力单元或运行环境边界登记；它们编译成 dist/<名>.js 与 dist/<名>.d.ts）
+//   browserSafeEntries  会被渲染进程加载的入口（模块源码根上的入口文件名，嵌套子路径写成 protocol/message.ts）：整条引用链不许出现 Node 内置模块
 //   environmentTable    常量表里登记环境变量的表名（不读环境变量的包不填；不填时代码里出现环境变量名就拦）
 //   environmentPrefixes 除 VELAROS_ 外还要扫的环境变量前缀（读别人定义、改不了的名字时才填）：只扩大扫描面，不是豁免，
 //                       登记的名字照样要有人用、代码里的名字照样要先登记；新起的变量名一律 VELAROS_
@@ -41,12 +41,12 @@
 //   invariants      不变量登记表
 //   acceptance      验收测试文件；每条「测试」档不变量都要在这里有以编号开头的用例
 export const GovernedModules = [
-  {"directory": "velaros", "unit": "act/runtime", "name": "@velaros-ai/velaros/act/runtime", "contract": "act/runtime/contract", "types": "act/runtime/types", "impl": "act/runtime/impl", "utils": "act/runtime/utils", "layers": [["ProgramContext.ts", "ActEventProjector.ts", "BudgetedModelDriver.ts", "ModelToolRuntime.ts", "ModelToolActivation.ts", "ContextMaintenance.ts", "ContextPatchStore.ts", "RuntimeSession.ts", "ContextMemory.ts", "ScriptTurnDecoder.ts", "McpClientConnection.ts", "RuntimeTrace.ts", "RecentContext.ts", "StandardModules.ts", "RuntimeBootstrap.ts", "ComposedRuntime.ts"]], "card": "act/runtime/MODULE.md", "invariants": "act/runtime/invariants.md", "acceptance": "act/runtime/test/runtime.test.mjs", "packageEntry": true, "browserSafeEntries": ["contracts.ts", "renderer.ts"], "tuning": "tuning.ts"},
-  {"directory": "velaros", "unit": "act/system", "name": "@velaros-ai/velaros/act/system", "contract": "act/system/contract", "types": "act/system/types", "impl": "act/system/impl", "utils": "act/system/utils", "layers": [["ModulesModule.ts", "MemoryModule.ts", "SystemModules.ts", "SystemCatalog.ts", "ContextMaintenanceState.ts", "ContextModule.ts", "StoreModule.ts", "StoreSession.ts"]], "card": "act/system/MODULE.md", "invariants": "act/system/spec/invariants.md", "acceptance": "act/system/spec/acceptance.test.mjs"},
+  {"directory": "velaros", "unit": "act/runtime", "name": "@velaros-ai/velaros/act/runtime", "contract": "act/runtime/contract", "types": "act/runtime/types", "impl": "act/runtime/impl", "utils": "act/runtime/utils", "layers": [["ProgramContext.ts", "ActEventProjector.ts", "BudgetedModelDriver.ts", "ModelToolRuntime.ts", "ModelToolActivation.ts", "ContextMaintenance.ts", "ContextPatchStore.ts", "SessionGoal.ts", "RuntimeSession.ts", "ContextMemory.ts", "ScriptTurnDecoder.ts", "McpClientConnection.ts", "RuntimeTrace.ts", "RecentContext.ts", "StandardModules.ts", "RuntimeBootstrap.ts", "RuntimeWorkspaceBinding.ts", "EventDelivery.ts", "EffectScheduler.ts", "RuntimeDiagnostics.ts", "ComposedRuntime.ts"]], "card": "act/runtime/MODULE.md", "invariants": "act/runtime/invariants.md", "acceptance": "act/runtime/test/runtime.test.mjs", "packageEntry": true, "browserSafeEntries": ["contracts.ts", "renderer.ts"], "tuning": "tuning.ts"},
+  {"directory": "velaros", "unit": "act/system", "name": "@velaros-ai/velaros/act/system", "contract": "act/system/contract", "types": "act/system/types", "impl": "act/system/impl", "utils": "act/system/utils", "layers": [["GoalModule.ts", "ModulesModule.ts", "MemoryModule.ts", "SystemModules.ts", "SystemCatalog.ts", "ContextMaintenanceState.ts", "ContextModule.ts", "StoreModule.ts", "StoreSession.ts"]], "card": "act/system/MODULE.md", "invariants": "act/system/spec/invariants.md", "acceptance": "act/system/spec/acceptance.test.mjs"},
   {"directory": "velaros", "unit": "act/search", "name": "@velaros-ai/velaros/act/search", "contract": "act/search/contract", "types": "act/search/types.ts", "impl": "act/search/impl", "utils": "act/search/tuning.ts", "layers": [["SearchModule.ts", "AdvancedSearch.ts", "EvidenceModule.ts", "SearchActivation.ts"]], "card": "act/search/MODULE.md", "invariants": "act/search/spec/invariants.md", "acceptance": "act/search/spec/acceptance.test.mjs", "tuning": "tuning.ts"},
   {"directory": "velaros", "unit": "act/agents", "name": "@velaros-ai/velaros/act/agents", "contract": "act/agents/contract", "types": "act/agents/types", "impl": "act/agents/impl", "utils": "act/agents/utils", "layers": [["AgentsModule.ts", "InteractionModule.ts"]], "card": "act/agents/MODULE.md", "invariants": "act/agents/spec/invariants.md", "acceptance": "act/agents/spec/acceptance.test.mjs"},
-  { directory: 'context', name: '@velaros-ai/context', layout: 'interface', browserSafeEntries: ['index.ts', 'contracts.ts'], card: 'MODULE.md', invariants: 'spec/invariants.md', acceptance: 'test/context.test.mjs' },
-  { directory: 'agent', name: '@velaros-ai/agent', layout: 'interface', browserSafeEntries: ['contracts.ts'], card: 'MODULE.md', invariants: 'spec/invariants.md', acceptance: 'spec/acceptance.test.ts' },
+  { directory: 'context', name: '@velaros-ai/context', contract: 'src/contract', types: 'src/types', impl: 'src/impl', utils: 'src/utils', tuning: 'tuning.ts', layers: [['ContextViewSession.ts', 'LocalContextStorage.ts', 'TurnContextSessionLedgers.ts'], ['ContextEvidenceBuilder.ts', 'SessionContext.ts', 'ContextInvocationJournal.ts', 'LocalStoreStorage.ts', 'TurnContextLedger.ts'], ['EvidenceAccess.ts', 'TurnContextAppendHub.ts']], browserSafeEntries: ['index.ts', 'contracts.ts'], card: 'MODULE.md', invariants: 'spec/invariants.md', acceptance: 'test/context.test.mjs' },
+  { directory: 'agent', name: '@velaros-ai/agent', contract: 'src/contract', types: 'src/types', impl: 'src/impl', utils: 'src/utils', tuning: 'tuning.ts', layers: [['AgentSupervisor.ts', 'ActRunService.ts'], ['ActLoop.ts']], browserSafeEntries: ['contracts.ts'], card: 'MODULE.md', invariants: 'spec/invariants.md', acceptance: 'spec/acceptance.test.ts' },
   {
     // 底层单元：@velaros-ai/core 里按目录放的底层能力（跨平台约定、磁盘文本、路径规则），布局与能力单元一样，清单与许可只在包根一份；
     // core 自己的基础原语在 src/，不在这张登记表里
@@ -253,6 +253,12 @@ export const GovernedModules = [
       ['kernel/'],
       ['plugins/'],
       ['transactions/', 'files/', 'strategies/', 'adapters/', 'registries/', 'persistence/'],
+      // 语言查询与外部语言服务；只借内核的类型与只读端口。
+      ['language/ProjectCodeQuery.ts', 'language/ExternalLanguageService.ts'],
+      ['language/LanguageQueries.ts', 'language/ExternalLanguageServerClient.ts'],
+      ['language/LanguageServiceRegistry.ts'],
+      ['language/JsTsLanguageService.ts', 'language/PythonLanguageService.ts'],
+      ['language/TypeScriptProjectPool.ts'],
     ],
     card: 'project/MODULE.md',
     invariants: 'project/spec/invariants.md',
@@ -418,109 +424,6 @@ export const GovernedModules = [
       ['CodeProgramChecker.ts', 'NodeSubprocessCodeRunner.ts'],
       // 能力转发：操作表与 Kernel 调用统一转换成脚本端口
       ['CapabilityOperationPort.ts', 'KernelInvocationPort.ts'],
-    ],
-    card: 'MODULE.md',
-    invariants: 'spec/invariants.md',
-    acceptance: 'spec/acceptance.test.ts',
-  },
-  {
-    // ui 的单元：HTML 工件（原独立包 @velaros-ai/html-artifacts，ADR 0014）；ui 自己的组件在 src/，不在这张登记表里
-    directory: 'ui',
-    unit: 'html-artifacts',
-    name: '@velaros-ai/ui/html-artifacts',
-    // 没有工具：这是一个浏览器库，不向模型交工具，不登记 toolsFile、toolDefiner、hostPort
-    contract: 'html-artifacts/contract',
-    types: 'html-artifacts/types',
-    portable: 'html-artifacts.ts',
-    impl: 'html-artifacts/impl',
-    utils: 'html-artifacts/utils',
-    tuning: 'tuning.ts',
-    // 零运行时依赖的浏览器库：两个入口渲染进程与浏览器扩展都能加载
-    browserSafeEntries: ['index.ts', 'contracts.ts'],
-    layers: [
-      // 浏览器宿主：一个 iframe 接一条流，整条生命周期归它
-      ['HtmlArtifactRuntime.ts'],
-      // 三件能力的出口，加上注入面的缺省 DOM 实现
-      ['HtmlArtifactProtocol.ts', 'HtmlArtifactDocuments.ts', 'DomHtmlArtifactEnvironment.ts'],
-      // 自己管状态的解析器，由 htmlArtifactProtocol.createParser() 给出
-      ['HtmlArtifactProtocolParser.ts'],
-    ],
-    card: 'html-artifacts/MODULE.md',
-    invariants: 'html-artifacts/spec/invariants.md',
-    acceptance: 'html-artifacts/spec/acceptance.test.ts',
-  },
-  {
-    directory: 'document-renderer',
-    name: '@velaros-ai/document-renderer',
-    // 没有工具：宿主不 import 它，只按命令协议调打包出来的可执行文件
-    contract: 'src/contract',
-    types: 'src/types',
-    portable: 'document-renderer.ts',
-    impl: 'src/impl',
-    utils: 'src/utils',
-    tuning: 'tuning.ts',
-    // 根入口要读写磁盘、要 office 的渲染原语，只给 Node；可移植数据那个入口谁都能加载
-    browserSafeEntries: ['contracts.ts'],
-    environmentTable: 'DocumentRendererEnvironmentVariables',
-    layers: [
-      // 命令协议的唯一出口：校验、分派、回执、命令行
-      ['DocumentRenderer.ts'],
-      // 两种渲染的执行与它们共用的路径准入
-      ['OfficeRenderer.ts', 'RendererPaths.ts'],
-    ],
-    card: 'MODULE.md',
-    invariants: 'spec/invariants.md',
-    acceptance: 'spec/acceptance.test.ts',
-  },
-  {
-    directory: 'cli',
-    name: '@velaros-ai/cli',
-    // 没有工具：不登记 toolsFile、toolDefiner、hostPort。可执行入口是包根的 bin/velaros.mjs
-    contract: 'src/contract',
-    types: 'src/types',
-    portable: 'cli.ts',
-    impl: 'src/impl',
-    utils: 'src/utils',
-    // 根入口要起子进程（node:child_process），只有可移植数据这一个入口渲染进程能加载
-    browserSafeEntries: ['contracts.ts'],
-    environmentTable: 'CliEnvironmentVariables',
-    layers: [
-      // 进程壳：可执行文件把 argv 与环境交给它
-      ['VelarosCliProcess.ts'],
-      // 路由器：命名空间集合与一次路由
-      ['VelarosCliRouter.ts'],
-      // 命名空间：velaros terminal
-      ['TerminalNamespace.ts'],
-    ],
-    card: 'MODULE.md',
-    invariants: 'spec/invariants.md',
-    acceptance: 'spec/acceptance.test.ts',
-  },
-  {
-    directory: 'development',
-    name: '@velaros-ai/development',
-    // 没有模型面，不是工具，所以不在 velaros 里：不登记 toolsFile、toolDefiner、hostPort。模型看到的 velaros:code 归
-    // @velaros-ai/velaros/project，本包只提供它背后的语言服务实现（宿主拿 createProjectCodeQuery 实现 ProjectSpacePort.queryCode）
-    contract: 'src/contract',
-    types: 'src/types',
-    portable: 'development.ts',
-    impl: 'src/impl',
-    utils: 'src/utils',
-    tuning: 'tuning.ts',
-    // 根入口要读磁盘、要拉语言服务子进程，只给 Node；渲染进程只能加载可移植数据
-    browserSafeEntries: ['contracts.ts'],
-    // 不读环境变量：标准库目录读的是 Electron 的 process.resourcesPath，不是环境变量
-    layers: [
-      // 代码查询的两路分派；外部语言服务集合（两者互不依赖）
-      ['ProjectCodeQuery.ts', 'ExternalLanguageService.ts'],
-      // 语言查询的分派与合并；一个外部语言服务进程的客户端
-      ['LanguageQueries.ts', 'ExternalLanguageServerClient.ts'],
-      // 内置语言服务的登记处：这次查询该由谁答
-      ['LanguageServiceRegistry.ts'],
-      // 两个内置语言服务
-      ['JsTsLanguageService.ts', 'PythonLanguageService.ts'],
-      // ts.LanguageService 池
-      ['TypeScriptProjectPool.ts'],
     ],
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',

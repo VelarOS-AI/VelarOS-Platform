@@ -1,5 +1,7 @@
 # Act 系统空间实施差量
 
+> 阶段差量记录：路径、API 和测试数字对应本次记录形成时的实现。当前接入请读 [模块规范](../architecture/module-ownership.md)、[Act 架构](../architecture/platform-runtime.md) 和 [能力目录](../../packages/velaros/act/README.md)。
+
 `velaros:system` 已接入正式 Runtime。模型使用一个包管理自己的上下文、源码、结果和能力；仍经现有 ScriptAct、Kernel、ContextStorage 和 ProviderRequestCompiler 执行。
 
 ## 完成范围

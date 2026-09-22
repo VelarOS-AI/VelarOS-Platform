@@ -1,5 +1,7 @@
 # Act 目录与模型用法整理
 
+> 阶段差量记录：路径、API 和测试数字对应本次记录形成时的实现。当前接入请读 [模块规范](../architecture/module-ownership.md)、[Act 架构](../architecture/platform-runtime.md) 和 [能力目录](../../packages/velaros/act/README.md)。
+
 系统能力集中在 `packages/velaros/act`，按四个职责组组织：
 
 - `runtime`：会话与协议、脚本版本和执行、结果租约、模块目录及回执。

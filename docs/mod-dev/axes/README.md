@@ -1,84 +1,17 @@
-# 贡献轴参考
+# 按职责选择接入点
 
-**贡献轴是封闭集合，由官方演进——mod 不能发明新轴。** manifest 里出现未登记的轴名 =
-未知字段 = `mod.manifest-invalid` 拒载（`AgentModContributesSchema` 是 `z.strictObject`）。
+每项扩展落到实际模块定义或 requires 注入端口。
 
-## 九根 agent 轴（住 `agent.contributes`）
-
-闭集常量 `AgentModContributionAxisNames`（`packages/agent/src/utils/wire/mods.ts`），
-**顺序即声明顺序**：
-
-| 轴 | 主键 | 运行态绑定 | Platform 投影 | 文档 |
-| --- | --- | --- | --- | --- |
-| `tools` | `name` | **必需** | ✅ 已接线 | [tools.md](./tools.md) |
-| `toolCategories` | `id` | 可选 | ✅ 已接线 | [tool-categories.md](./tool-categories.md) |
-| `promptSegments` | `id` | 可选（否则须带 `text`） | ✅ 已接线 | [prompt-segments.md](./prompt-segments.md) |
-| `skills` | `id` | 可选 | ✅ 已接线 | [skills.md](./skills.md) |
-| `spaces` | `id` | **禁止** | ✅ 已接线（只消费工具配方那几格） | [spaces.md](./spaces.md) |
-| `subAgentTypes` | `id` | 可选 | ✅ 已接线 | [sub-agent-types.md](./sub-agent-types.md) |
-| `turnContextSources` | `id` | **禁止** | ✅ 纯数据 | [turn-context-sources.md](./turn-context-sources.md) |
-| `executionModes` | `id` | 可选 | ✅ 已投影 | [execution-modes.md](./execution-modes.md) |
-| `hooks` | `id` | **必需** | ✅ 已接线（5/15 kind） | [hooks.md](./hooks.md) |
-
-Platform 为九轴提供 schema、注册表和纯函数投影；是否进入实际运行链由产品宿主的
-`AgentModHostProfile.supportedAxes` 决定。宿主不支持的轴进入 `absentAxes`，mod 以 `partial`
-状态激活；若该轴出现在 `requiredAxes`，则 fail closed 并拒载。作者必须查阅目标宿主的公开兼容表，
-不得根据某个私有实现猜测支持范围。
-
-`spaces` 中 `descriptor`、`iconId`、`surfaceProfileId`、`turnContextSourceIds` 和
-`promptSegmentIds` 只在宿主明确投影时生效。未投影的展示字段不得被文档描述为已生效功能。
-
-## 两族 ui 轴（住 `ui`，产品壳读）
-
-| 轴 | 内容 | 状态 | 文档 |
-| --- | --- | --- | --- |
-| `ui.settings` | 声明式设置分组 / 字段 DSL | 产品宿主协议 | [ui-settings.md](./ui-settings.md) |
-| `ui.dock` / `ui.actions` / `ui.sidePanels` | Dock、操作区和侧栏入口 | 产品宿主协议 | [ui-shell.md](./ui-shell.md) |
-| `pages` / `settingsRenderers` / `surfaces` / `tours` | 页面与产品界面扩展 | 产品宿主协议 | [ui-shell.md](./ui-shell.md) |
-
-**壳级 UI 轴不在 Agent 主干。** 在 `agent` 节里写 `pages` / `surfaces` / `tours` =
-未知贡献点 = 拒载。它们住 `ui` 节，Agent 侧读都不读。
-
-## 三条跨轴通则
-
-### ① 绑定规则
-
-```
-PayloadRequiredAxes = { 'tools', 'hooks' }               // 缺绑定 → mod.binding-missing
-DataOnlyAxes        = { 'spaces', 'turnContextSources' } // 带绑定 → mod.binding-not-allowed
-```
-
-`promptSegments` 特例：有 `text` 或有绑定，二选一，都缺即拒载。
-其余轴（`toolCategories` / `skills` / `subAgentTypes` / `executionModes`）绑定可选——
-没绑定就只是一条声明记录，`payload` 为 `null`。
-
-### ② 主键唯一性
-
-- **同一 mod 内**：轴内主键重复 → `mod.duplicate-contribution`（manifest 解析阶段）。
-- **跨 mod**：轴内主键**全宿主唯一**。撞了就拒载，
-  `tools` 轴给 `mod.tool-name-conflict`，其余轴给 `mod.contribution-conflict`。
-  **不做「后者覆盖前者」**——静默覆盖会让用户看到的行为取决于加载顺序，不可复现。
-
-主键取法（`readAgentModContributionKey`）：`tools` 用 `name`，**其余全部用 `id`**。
-
-### ③ 形态层宽容，语义层零宽容
-
-`tolerantArray` 只做一件事：**标量字符串 → 单元素数组**。
-`TrimmedIdSchema` 只做一件事：**trim 后非空**。
-除此之外——未知字段、非法枚举、重复主键、`requiredAxes` 越界——一律**拒载并给可读诊断**。
-
-## 消费面投影
-
-装配链不直接遍历注册表，读 `agent-mod-projection.ts` 的纯函数投影（同一快照恒得同一结果，
-且**保持载荷对象同一性**：装载不复制、不包装、不改写运行态载荷）：
-
-| 投影 | 返回 |
+| 职责 | 当前接入方式 |
 | --- | --- |
-| `projectAgentModTools(snapshot)` | `Record<string, VelaTool<any>>` |
-| `projectAgentModToolCategories(snapshot)` | `Record<string, ToolCategoryDefinition>` |
-| `projectAgentModPromptSegments(snapshot)` | `PromptSegmentDefinition[]` |
-| `projectAgentModSkills(snapshot)` | `AgentSkillDefinition[]` |
-| `projectAgentModSpaces(snapshot)` | `AgentModSpaceContribution[]`（纯声明） |
-| `projectAgentModSubAgentTypes(snapshot)` | `SubAgentTypeDescriptor[]` |
-| `projectAgentModTurnContextSources(snapshot)` | `AgentModTurnContextSourceContribution[]`（纯声明） |
-| `projectAgentModExecutionModes(snapshot)` | `ExecutionModeDescriptor[]` |
+| [模型操作](tools.md) | 操作使用 Kernel 的 OperationModuleDefinition，每个方法集中声明 summary、input、output、effects 和 run |
+| [能力发现与分组](tool-categories.md) | 模型目录由实际绑定和会话授权生成 |
+| [资源与工作区](spaces.md) | 宿主通过 workspace、领域端口和模块 instanceId/generation 绑定实际资源 |
+| [模型说明与请求材料](prompt-segments.md) | 主请求的固定说明、程序、材料和图片由 Runtime 与 ProviderRequestCompiler 组装 |
+| [上下文来源与活动差量](turn-context-sources.md) | 持久证据源实现 ContextSourcePort 的 authorize/search/read/validate |
+| [脚本执行与任务配置](execution-modes.md) | observe 是每轮运行的观察代码，execute 是显式的一次执行，结果可设置驻留租约 |
+| [子任务与模型工具](sub-agent-types.md) | AgentSupervisor 负责持久子任务状态与收束，Velaros agents 模块提供 profiles/start/resume/reply/status/wait/cancel/send |
+| [任务方法与模板](skills.md) | 可复用业务方法可以通过模块模板、共享脚本材料和任务输入提供 |
+| [生命周期注入](hooks.md) | 操作 prepare/run/observe/reconcile 和模块 activate/dispose 由各自生命周期调用 |
+| [产品壳扩展](ui-shell.md) | 产品拥有路由、视图、工作区布局和原生窗口生命周期；VelarOS UI 提供共享展示组件 |
+| [产品设置扩展](ui-settings.md) | 产品拥有设置字段、持久化、编辑界面和配置更新方式 |
