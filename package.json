@@ -88,7 +88,7 @@
     "//release": "发布只走本机维护入口；release:local 核验源码身份、冻结安装、完整检查与 tarball。",
     "release:verify": "node scripts/release/verify-release-ref.mjs --local-tag",
     "release:dry-run": "node scripts/release/publish-packages.mjs --dry-run",
-    "check": "bun run check:package-pack-boundary && bun run build && bun run typecheck && bun run lint && bun run test && bun run test:suites && bun run check:gates",
+    "check": "bun run check:package-pack-boundary && bun run build && bun run typecheck && bun run lint && bun run check:format && bun run test && bun run test:suites && bun run check:gates",
     "test:suites": "bun run test:capabilities",
     "release:local": "node scripts/release/publish-packages.mjs --local-tag",
     "check:release-source": "node --test scripts/release/local-release-identity.test.mjs scripts/release/tar-entry-paths.test.mjs",

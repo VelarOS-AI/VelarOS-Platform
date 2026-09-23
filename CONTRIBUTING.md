@@ -20,6 +20,8 @@ bun install --frozen-lockfile
 bun run check
 ```
 
+Format code with `bun run format` (Prettier, same configuration as Desktop); `bun run check` includes `check:format`. Pure formatting commits are listed in `.git-blame-ignore-revs`.
+
 Use narrower package or domain checks while iterating, but run `bun run check` before requesting review. If an unrelated baseline failure blocks the full gate, identify it explicitly and include evidence for the checks covering your changed chain.
 
 Start with [AGENTS.md](AGENTS.md), the [module ownership standard](docs/architecture/module-ownership.md), and the module’s actual registry entry. Layouts and model capability definitions are governed per module.

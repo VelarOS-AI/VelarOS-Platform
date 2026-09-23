@@ -5,6 +5,12 @@
 - 打包目标必须是本次运行独占的临时子目录，不得直接使用 `/tmp`、`/private/tmp` 或系统临时目录根。
 - 新增打包流程必须复用 `scripts/release/safe-package-pack.mjs`，保留超时、进程组回收和路径边界校验。
 
+# 代码格式
+
+- 代码格式由 Prettier 统一，配置与 Desktop 相同（`.prettierrc`）。改完代码运行 `bun run format`；`bun run check` 里的 `check:format` 会拦下没格式化的文件。
+- 生成物（`contract/surface.ts`、`baselines/`）、模型面代码模版、vendor、测试夹具、`docs/` 与 Markdown 不参与格式化，见 `.prettierignore`；生成物的版式由生成器决定。
+- 检查脚本与 lint 指令不能依赖源码排版：判断 import、类型等结构用语法树，`eslint-disable-next-line` 紧贴它要管的那一行。
+
 # 模块结构与所有权
 
 以 `scripts/ownership/governed-modules.mjs` 的逐模块登记、包清单 exports 和实际检查器为准；完整规范见 `docs/architecture/module-ownership.md`。
