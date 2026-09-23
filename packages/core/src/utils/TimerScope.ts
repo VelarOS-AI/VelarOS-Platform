@@ -1,4 +1,4 @@
-import { AppError } from '../error'
+import { AppError, createAbortError, createTimeoutError } from '../error'
 import { isFunction, isObject, isPresent } from '../typeGuards'
 
 type TimerScopeKind = 'animation-frame' | 'interval' | 'timeout'
@@ -111,26 +111,12 @@ function maybeUnref(handle: unknown, enabled?: boolean): void {
   timer.unref?.()
 }
 
-function createNamedError(message: string, name: string): Error {
-  const runtime = globalThis as typeof globalThis & {
-    DOMException?: new (message?: string, name?: string) => Error
-  }
-  if (runtime.DOMException) return new runtime.DOMException(message, name)
-
-  const error = new Error(message)
-  error.name = name
-  return error
+function timerAbortError(): Error {
+  return createAbortError('计时任务已被中止。')
 }
 
-function createAbortError(): Error {
-  return createNamedError('计时任务已被中止。', 'AbortError')
-}
-
-function createTimeoutError(timeoutMs: number, message?: string): Error {
-  return createNamedError(
-    message ?? `任务已超过 ${normalizeDelay(timeoutMs)}ms 超时。`,
-    'TimeoutError'
-  )
+function timerTimeoutError(timeoutMs: number, message?: string): Error {
+  return createTimeoutError(message ?? `任务已超过 ${normalizeDelay(timeoutMs)}ms 超时。`)
 }
 
 /** 按生命周期作用域托管延迟、重复任务、下一帧任务和超时控制。 */
@@ -239,7 +225,7 @@ class TimerScope {
   /** 返回一个跟随作用域释放或 AbortSignal 中止的延迟 Promise。 */
   public sleep(delayMs: number, options: TimerTaskOptions = {}): Promise<void> {
     this.assertActive()
-    if (options.signal?.aborted) return Promise.reject(createAbortError())
+    if (options.signal?.aborted) return Promise.reject(timerAbortError())
 
     return new Promise((resolve, reject) => {
       let settled = false
@@ -254,7 +240,7 @@ class TimerScope {
         settled = true
         lease?.cancel()
         cleanup()
-        reject(createAbortError())
+        reject(timerAbortError())
       }
 
       this.disposeController.signal.addEventListener('abort', abort, { once: true })
@@ -284,13 +270,13 @@ class TimerScope {
   ): Promise<T> {
     this.assertActive()
     if (options.signal?.aborted) {
-      throw createAbortError()
+      throw timerAbortError()
     }
 
     const controller = new AbortController()
     // 外部中止与作用域释放走同一条中止转发：两个来源、同一语义，不需要两份回调。
     const relayAbort = (): void => {
-      controller.abort(createAbortError())
+      controller.abort(timerAbortError())
     }
     options.signal?.addEventListener('abort', relayAbort, { once: true })
     this.disposeController.signal.addEventListener('abort', relayAbort, { once: true })
@@ -298,7 +284,7 @@ class TimerScope {
     const timeout = this.after(
       timeoutMs,
       () => {
-        controller.abort(createTimeoutError(timeoutMs, options.timeoutMessage))
+        controller.abort(timerTimeoutError(timeoutMs, options.timeoutMessage))
       },
       {
         ...options,
@@ -308,7 +294,7 @@ class TimerScope {
     const abortWaiter = new Promise<never>((_, reject) => {
       controller.signal.addEventListener(
         'abort',
-        () => reject(controller.signal.reason ?? createAbortError()),
+        () => reject(controller.signal.reason ?? timerAbortError()),
         { once: true }
       )
     })
@@ -386,7 +372,7 @@ class TimerScope {
     if (this.disposed) return
 
     this.disposed = true
-    this.disposeController.abort(createAbortError())
+    this.disposeController.abort(timerAbortError())
     for (const child of [...this.childScopes]) {
       child.dispose()
     }

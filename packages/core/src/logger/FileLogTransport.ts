@@ -1,6 +1,8 @@
 import { appendFile, mkdir } from 'node:fs/promises'
 import { dirname, extname } from 'node:path'
 
+import { AppError } from '../error'
+
 import type { LogLevel, LogRecord, LogTransport } from './types'
 
 /** Node 文件日志：宿主决定路径、级别与记录范围。 */
@@ -81,7 +83,7 @@ export function createFileLogTransport(options: FileLogTransportOptions): LogTra
     minLevel: options.minLevel,
     accepts: options.accepts,
     write(record): Promise<void> {
-      if (closed) return Promise.reject(new Error('File log transport is closed.'))
+      if (closed) return Promise.reject(new AppError('CLOSED', 'File log transport is closed.'))
       // 调用时固定内容，排队期间调用方修改上下文不会改变已经提交的日志。
       let write: () => Promise<void>
       try {

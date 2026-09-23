@@ -1,9 +1,11 @@
 /**
- * 统一错误类型
+ * 统一错误类型：产品代码里抛的错都从这里造，不直接 new Error（门禁 check:error-construction 核对）。
  *
  * 使用方式：
  *   throw new AppError('NETWORK', '请求超时')
+ *   throw AppError.withFields('STORE_INPUT', '键前缀太长', { effect: 'none' })
  *   throw AppError.from(error, 'IPC')
+ *   controller.abort(createAbortError('会话已关闭'))
  */
 
 import { isEmpty } from './utils/array.js'
@@ -25,13 +27,25 @@ export type ErrorCode =
   | 'IPC'
   | 'PERMISSION'
   | 'PLATFORM'
+  /** 入参、配置或数据不合法；调用方改了再来。 */
   | 'VALIDATION'
   | 'NOT_FOUND'
   | 'TIMEOUT'
   /** 能力当下不可用（后端没装、没就绪、被关掉）；调用方应当降级，而不是当成失败重试。 */
   | 'UNAVAILABLE'
   | 'ASSERTION'
+  /** 内部约定被破坏（状态、索引或合同对不上），不是调用方的错。 */
   | 'INVARIANT'
+  /** 操作被取消或中止。 */
+  | 'CANCELLED'
+  /** 与并发的另一次操作或已有状态冲突（版本已变、已有活动运行、已被占用），重新读取后再来。 */
+  | 'CONFLICT'
+  /** 资源已经关闭、回收或退出，不能再用。 */
+  | 'CLOSED'
+  /** 对端（模型供应商、子进程、远程节点、语言服务）违反了通信约定。 */
+  | 'PROTOCOL'
+  /** 超出数量、体量、预算或配额上限。 */
+  | 'LIMIT'
   | 'LOG_FAILURE'
   | 'LOG_ASSERTION'
   | (string & {})
@@ -67,6 +81,19 @@ export class AppError extends Error {
     this.code = code
     this.cause = cause
     this.context = context
+  }
+
+  /**
+   * 带附加字段的错误：fields 挂在错误对象顶层，调用方照旧直接读 `error.effect`、`error.currentRef`。
+   * 取代到处手写的 `Object.assign(new Error(message), { code, ...fields })`。
+   */
+  public static withFields<F extends ErrorContext>(
+    code: ErrorCode,
+    message: string,
+    fields: F,
+    cause?: unknown
+  ): AppError & Readonly<F> {
+    return Object.assign(new AppError(code, message, cause), fields)
   }
 
   /** 从未知 catch 值构造 AppError */
@@ -252,4 +279,27 @@ export interface SerializedError {
   code: ErrorCode
   message: string
   context?: ErrorContext
+}
+
+type NamedErrorName = 'AbortError' | 'TimeoutError'
+
+/** 标准具名错误：有 DOMException 就用它，和 AbortSignal 的取消原因同一形状；调用方按 `error.name` 判断。 */
+function createNamedError(message: string, name: NamedErrorName): Error {
+  const runtime = globalThis as typeof globalThis & {
+    DOMException?: new (message?: string, name?: string) => Error
+  }
+  if (runtime.DOMException) return new runtime.DOMException(message, name)
+  const error = new Error(message)
+  error.name = name
+  return error
+}
+
+/** 取消错误（name 为 AbortError），用作 `controller.abort(...)` 的原因或取消后抛出。 */
+export function createAbortError(message = '操作已取消。'): Error {
+  return createNamedError(message, 'AbortError')
+}
+
+/** 超时错误（name 为 TimeoutError）。 */
+export function createTimeoutError(message: string): Error {
+  return createNamedError(message, 'TimeoutError')
 }

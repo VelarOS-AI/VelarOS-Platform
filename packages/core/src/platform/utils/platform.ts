@@ -4,6 +4,7 @@
  */
 
 import { isEmpty, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { CommandSpec, RuntimePlatform, ShellKind } from '../types/platform.js'
 
@@ -172,7 +173,10 @@ export function quoteShellArgument(value: string, kind: ShellKind): string {
   if (kind === 'pwsh' || kind === 'powershell') return `'${value.replace(/'/g, "''")}'`
   if (kind === 'cmd') {
     if (/[\r\n\0%]/.test(value))
-      throw new Error('CMD 里这个参数只能用原生 file + argv 的方式执行，不能拼进命令行。')
+      throw new AppError(
+        'VALIDATION',
+        'CMD 里这个参数只能用原生 file + argv 的方式执行，不能拼进命令行。'
+      )
     return `"${value.replace(/"/g, '""')}"`
   }
   return quotePosixSingle(value)
