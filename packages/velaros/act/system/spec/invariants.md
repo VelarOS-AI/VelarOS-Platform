@@ -20,5 +20,5 @@
 | INV-16 | 多空间创建与授权独立，跨空间依据不混淆、通知共用预算且轮换，续跑保留授权，创建恢复不重放，新会话空目录与重启恢复一致 | 测试 | spec/store.test.mjs |
 | INV-17 | 当前任务的 store 引用独立于执行结果租约，跨轮与重启保留，新任务重建；每帧核验权限，超预算明确省略并可分页恢复，CAS 合并不丢引用 | 测试 | spec/store.test.mjs |
 | INV-18 | 独立消息只自动投递元数据，处理确认跨重启保存；主题授权与 observe 隔离生效，共享材料按键读取，宿主等待不自动调用模型 | 测试 | spec/store.test.mjs |
-
-| INV-19 | 主会话目标 get/update 使用真实 schema、声明、效果和模板，模型合同不提供删除 | 测试 | spec/acceptance.test.mjs |
+| INV-19 | 主会话目标 get/update 的合同由 TS 接口生成，声明、效果和模板一致，模型合同不提供删除 | 测试 | spec/acceptance.test.mjs |
+| INV-20 | 声明里写给模型的上限与常量表一致，入参核对引用同一份常量 | 测试 | spec/acceptance.test.mjs |

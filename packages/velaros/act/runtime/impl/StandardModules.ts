@@ -1,15 +1,11 @@
 import { createHash } from 'node:crypto';
 
-import type { ValidateFunction } from "ajv";
-import { Ajv } from "ajv";
-
 import type { AgentSupervisorApi } from "@velaros-ai/agent";
 import type { ContextViewApi } from "@velaros-ai/context";
-import {isPlainObject, toOptional} from '@velaros-ai/core'
+import {isPlainObject} from '@velaros-ai/core'
 import {isNull} from '@velaros-ai/core'
-import { isArray, isFunction, isString } from '@velaros-ai/core'
+import { isArray, isString } from '@velaros-ai/core'
 import type { InvocationJournal, OperationDefinition, OperationModuleDefinition, OperationRuntimeApi, OperationSchema } from "@velaros-ai/kernel";
-import { CodeProgramEditLimits } from "@velaros-ai/script/contracts";
 
 import { VelarProjectModule } from '../../../project/contract/surface.js';
 import { projectFileOperations } from '../../../project/impl/operations/ProjectFileOperations.js';
@@ -21,15 +17,15 @@ import type { AgentsHost } from "../../agents/contract/requires.js";
 import { agentsModule, interactionModule } from "../../agents/index.js";
 import type { AdvancedSearchApi } from "../../search/impl/AdvancedSearch.js";
 import { evidenceModule, searchModule } from "../../search/index.js";
-import { ScriptLeaseLimits } from "../../system/contract/constants.js";
 import type { ContextMaintenanceHost, LongTermMemoryHost, StoreHost } from "../../system/contract/requires.js";
 import { systemModules } from "../../system/index.js";
-import type { CapabilityModuleOptions, McpModuleOptions, ProjectCapabilityModuleOptions, ShellCapabilityModuleOptions } from "../contract/requires.js";
+import type { McpModuleOptions, ProjectCapabilityModuleOptions, ShellCapabilityModuleOptions } from "../contract/requires.js";
 import type { ScriptSubmission } from "../types/session.js";
 import { scriptInputCopy } from "../utils/program-context.js";
 import { normalizeCapabilityValue } from "../utils/results.js";
-import { objectSchema } from "../utils/schemas.js";
+import { checkScriptSubmission } from "../utils/script-submission.js";
 
+import { capabilityModules } from "./CapabilityModules.js";
 import type { RuntimeSessionAccess } from "./RuntimeSession.js";
 
 /** 标准模块的受控依赖。 */
@@ -61,31 +57,17 @@ export interface StandardModulesHost {
 
 /** 标准操作定义的唯一装配器。 */
 export interface StandardModuleFactory {
-  /** 使用同一 JSON Schema 校验并固定脚本提交参数。 */
+  /** 按脚本提交的类型逐项核对，并固定一份不可变参数。 */
   parseScript(input:unknown):ScriptSubmission
   /** 生成标准模块定义；处理器只转发到主干机制。 */
   create(host: StandardModulesHost): readonly OperationModuleDefinition[]
 }
 
 class StandardModules implements StandardModuleFactory {
-  private readonly validate:ValidateFunction
-
-  public constructor() {
-    const edits={type:'array',minItems:1,maxItems:CodeProgramEditLimits.edits,items:objectSchema({oldText:{type:'string',minLength:1},newText:{type:'string'},module:{type:'string'}},['oldText','newText'])} as const
-    const values={input:{},blobs:{type:'object',additionalProperties:{type:'string'}}} as const
-    const source={source:{type:'string',minLength:1},modules:{type:'object',additionalProperties:{type:'string'}},...values} as const
-    const reference={sourceRef:{type:'string',minLength:1,maxLength:128},edits,...values} as const
-    const lease={retainTurns:{anyOf:[{type:'integer',minimum:1,maximum:ScriptLeaseLimits.maxTurns},{const:'task'}]}} as const
-    const observe={anyOf:[objectSchema(source,['source']),objectSchema(reference,['sourceRef']),objectSchema({edits,...values},['edits'])]}
-    const execute={anyOf:[objectSchema({...source,...lease},['source']),objectSchema({...reference,...lease},['sourceRef'])]}
-    const inputSchema={...objectSchema({observe,execute},[]),minProperties:1}
-    this.validate=new Ajv({strict:true,allErrors:true,coerceTypes:false,useDefaults:false,removeAdditional:false}).compile(inputSchema)
-  }
-
   public parseScript(input:unknown):ScriptSubmission {
     const copy=scriptInputCopy(input)
-    if(!this.validate(copy))throw Object.assign(new Error(`输入不符合 script schema: ${JSON.stringify(this.validate.errors)}`),{code:'INPUT_SCHEMA',effect:'none'})
-    return copy as ScriptSubmission
+    checkScriptSubmission(copy)
+    return copy
   }
 
   public create(host:StandardModulesHost):readonly OperationModuleDefinition[]{return [
@@ -98,35 +80,6 @@ interactionModule.create(host),
 
 /** 标准工具装配保持单一入口，模型看见的说明和执行使用同一份定义。 */
 export const standardModules: StandardModuleFactory = new StandardModules()
-
-/** 领域合同只装配一次，所有模块复用同一校验、派发、效果与持久回执链。 */
-export function createCapabilityModule<T extends object>(options: CapabilityModuleOptions<T>): OperationModuleDefinition {
-  const {surface,implementation} = options
-  if (surface.methods.length !== Object.keys(surface.operations).length || new Set(surface.methods).size !== surface.methods.length) throw new Error('领域声明与操作表不一致')
-  const operations:Record<string,OperationDefinition> = Object.create(null)
-  for (const name of surface.methods) {
-    const operation = surface.operations[name]
-    const handler = Reflect.get(implementation,name)
-    if (!operation || !isFunction(handler)) throw new Error(`领域实现缺少 ${surface.specifier}.${name}`)
-    const {hasInput,...descriptor} = operation
-    const reconcile = options.reconcile?.[name as keyof T]
-    const observe=options.observation?.[name as keyof T]
-    operations[name] = {...descriptor,reads: options.reads?.[name as keyof T] ? options.reads[name as keyof T] : undefined,observe: toOptional(observe),reconcile: toOptional(reconcile),run:async(input,call)=>{
-      call.signal.throwIfAborted()
-      let effectRecorded = false
-      const context = await options.context({...call,recordEffect:effect=>{effectRecorded=true;call.recordEffect(effect)}})
-      call.signal.throwIfAborted()
-      const value:unknown = await Reflect.apply(handler,implementation,hasInput ? [input,context] : [context])
-      if (!effectRecorded) call.recordEffect(descriptor.effects === 'none' ? 'none' : 'committed')
-      return normalizeCapabilityValue(value)
-    }}
-  }
-  return {
-    binding:{moduleId:surface.specifier,instanceId:options.instanceId,generation:options.generation ?? 1,schemaRevision:surface.revision},
-    summary:options.summary ?? surface.specifier, surface,operations,
-    activate: options.activate ? ()=>options.activate!() : undefined,dispose: options.dispose ? ()=>options.dispose!() : undefined,
-  }
-}
 
 /** 用既有项目内核装配真实版本读取；不从模型输出推断文件版本。 */
 export function createProjectCapabilityModule(options:ProjectCapabilityModuleOptions):OperationModuleDefinition {
@@ -157,12 +110,12 @@ export function createProjectCapabilityModule(options:ProjectCapabilityModuleOpt
       call.signal.throwIfAborted();return hash(value)===stamp.version
     },
   })
-  return createCapabilityModule({surface:VelarProjectModule,implementation:projectFileOperations,instanceId:options.instanceId,generation:options.generation,context:call=>({project:options.project,sessionId:call.invocation.sessionId,abortSignal:call.signal}),reads:{read:files,list:query('list'),search:query('search'),edit:files,undo:files}})
+  return capabilityModules.create({surface:VelarProjectModule,implementation:projectFileOperations,instanceId:options.instanceId,generation:options.generation,context:call=>({project:options.project,sessionId:call.invocation.sessionId,abortSignal:call.signal}),reads:{read:files,list:query('list'),search:query('search'),edit:files,undo:files}})
 }
 
 /** Shell 观察保留任意命令表达力，调用同一领域实现的宿主受限执行口。 */
 export function createShellCapabilityModule(options:ShellCapabilityModuleOptions):OperationModuleDefinition {
-  return createCapabilityModule({surface:VelarShellModule,implementation:shellOperations,instanceId:options.instanceId,
+  return capabilityModules.create({surface:VelarShellModule,implementation:shellOperations,instanceId:options.instanceId,
     context:call=>({shell:options.shell,approval:options.approval,abortSignal:call.signal,sessionId:call.invocation.sessionId}),
     observation:{run:async(input,call)=>{
       let result

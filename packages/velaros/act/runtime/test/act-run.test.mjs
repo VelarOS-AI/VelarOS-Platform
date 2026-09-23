@@ -104,7 +104,8 @@ test('trace connects actual compiled requests, edited observer, write receipts, 
  assert.match(nextFrame.observation.text,/v2/);assert.match(nextFrame.observation.text,/after/)
  assert.equal(nextFrame.results[0].remainingTurns,1)
  const bounded=await f.session.trace(turns[0].turnId,31)
- assert.equal([bounded.request,bounded.response,bounded.decision,...bounded.records,...bounded.invocations].reduce((n,item)=>n+(item?.body?.length??0),0),31)
+ // 请求与调用的摘要和正文共用同一份预算（INV-45/46）：合计正好用满
+ assert.equal([bounded.request,bounded.response,bounded.decision,...bounded.records,...bounded.invocations].reduce((n,item)=>n+(item?.body?.length??0),0)+bounded.requestSummary.system.length+bounded.requestSummary.messages.length+bounded.invocations.reduce((n,item)=>n+item.summary.input.length+item.summary.output.length,0),31)
  assert(bounded.request.truncated)
  const other=await f.runtime.openSession('other');await assert.rejects(other.trace(first.turnId),/当前会话/)
  await f.runtime.close()

@@ -6,6 +6,7 @@ import type { ModelImage, OperationReadStamp } from "@velaros-ai/kernel";
 import { type CodeProgramRequest, type ScriptOutputCapture, type ScriptOutputEdit, scriptOutputs, type ScriptOutputSummary } from '@velaros-ai/script';
 
 import { ScriptLeaseLimits } from "../../system/contract/constants.js";
+import type { ResultReleased, ResultRetained } from "../../system/types/memory.js";
 import type { PreparedScript } from "../types/program.js";
 import type { ScriptRetention } from "../types/results.js";
 import type { ProgramLeaseState, ScriptControlIdentity, ScriptJob, ScriptProgramVersion } from "../types/runtime.js";
@@ -39,11 +40,11 @@ export interface ProgramContextApi {
   /** 明确读取原始结果，读取本身不延长自动展示。 */
   read(ref:string, offset?:number, limit?:number):Promise<ContextContent>
   /** 有限重设租期。 */
-  retain(ref:string, turns:ScriptRetention, signal?:AbortSignal):Promise<unknown>
+  retain(ref:string, turns:ScriptRetention, signal?:AbortSignal):Promise<ResultRetained>
   /** 装配观察结果、有效租约、最小事实；原始事实仍由现有视图管理。 */
   project(view:ModelView, observation:Optional<ContextRef>, images:readonly ModelImage[], signal:AbortSignal, maxChars?:number):Promise<{body:string;images:readonly ModelImage[];prompt:string}>
   /** 显式释放材料可见性，原始记录保持。 */
-  release(ref:string,signal?:AbortSignal):Promise<unknown>
+  release(ref:string,signal?:AbortSignal):Promise<ResultReleased>
   /** 结束逻辑任务的 task 期限。 */
   endTask():Promise<void>
   /** 历史投影进一步裁剪后，只确认实际携带正文的引用。 */
@@ -200,19 +201,19 @@ export class ProgramContext implements ProgramContextApi {
     return result
   }
 
-  public async retain(ref:string, turns:ScriptRetention, signal?:AbortSignal):Promise<unknown> {
+  public async retain(ref:string, turns:ScriptRetention, signal?:AbortSignal):Promise<ResultRetained> {
     signal?.throwIfAborted()
     const content=await this.read(ref)
     const source=content.record.sources[0]
     if (!source) throw new Error('执行结果缺少源码引用')
     await this.add(content.record.ref,source,content.record.title.slice(7,-7),turns)
-    return {ref,remainingTurns:turns,executed:false}
+    return {ref,remainingTurns:turns,executed:false as const}
   }
 
-  public async release(ref:string,signal?:AbortSignal):Promise<unknown> {
+  public async release(ref:string,signal?:AbortSignal):Promise<ResultReleased> {
     await this.read(ref)
     await this.update(state=>({...state,leases:state.leases.filter(item=>item.ref!==ref)}),[],signal)
-    return {ref,released:true,executed:false}
+    return {ref,released:true as const,executed:false as const}
   }
 
   public async endTask():Promise<void> {

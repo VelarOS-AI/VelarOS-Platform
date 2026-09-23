@@ -43,7 +43,7 @@ Core 的 `src/` 基础原语遵守其包级检查；Core 的 platform/text-files
 | 责任 | 当前接入位置 |
 | --- | --- |
 | 领域能力，如 files/project/browser | 单元的操作接口与实现；登记 `surfaceFile` 和 `hostPort`，生成配置在 `scripts/script/surfaces.mjs` |
-| Act 模型操作 | system/search/agents 的 `impl/*Module.ts` 定义 Kernel schema、效果和处理器，职责组根目录保存模板 |
+| Act 模型操作 | system/search/agents 的 `impl/*Operations.ts` 操作接口是模型面来源（生成 `contract/surface.ts`），`impl/*Module.ts` 只把生成的模型面与实现绑成 Kernel 模块；职责组根目录保存模板 |
 | 模型自管理空间 | `act/system`；模型从 `velaros:system` 导入 modules/memory/store |
 | 会话与主干装配 | `act/runtime` 的 RuntimeBootstrap、ComposedRuntime、StandardModules |
 | 宿主入口 | package.json exports；如 `@velaros-ai/velaros` 和 `@velaros-ai/velaros/act/system` |
@@ -51,7 +51,7 @@ Core 的 `src/` 基础原语遵守其包级检查；Core 的 platform/text-files
 
 能力定义、模板和发现必须对应同一份实际操作合同。模型使用 `modules.describe` 获取声明及 template；模板是按需使用的示例，不自动当作常驻上下文。
 
-领域能力声明和 schema 经 `generate:script` 生成并由 `check:script` 校验。Act 模型目录从构建后的模块定义生成，使用 `generate:act-catalog` / `check:act-catalog`，清单在 [Act 能力目录](../../packages/velaros/act/README.md)。修改实际操作定义后先构建所属包，再生成依赖该构建的目录。
+领域能力与 Act 的声明和派生 schema 都经 `generate:script` 从操作接口生成并由 `check:script` 校验。Act 模型目录由登记表与构建后的生成模型面写出，使用 `generate:act-catalog` / `check:act-catalog`，清单在 [Act 能力目录](../../packages/velaros/act/README.md)。修改实际操作定义后先构建所属包，再生成依赖该构建的目录。
 
 若登记项包含 toolsFile/toolDefiner，该模块的工具定义、分组和挂载集中在指定文件，定义函数只在那里调用，复杂处理委托实现类。这个检查只适用于有相应登记的模块；领域操作表与 Act 操作模块按各自正式定义位置维护。
 
@@ -72,7 +72,7 @@ Core 的 `src/` 基础原语遵守其包级检查；Core 的 platform/text-files
 | 类内固定文案、模式、名单 | 类的 private static readonly |
 | 规则名单、格式与算法常量 | 对应 utils；非显然的算法数字附说明 |
 
-同一参数由一处定义。说明、schema 与实现共享公开上限，避免模型看到的限制和执行限制不同。
+同一参数由一处定义。公开上限放在常量表，`@AgentView` 文档写的数字与入参核对都引它，验收核对两边一致，避免模型看到的限制和执行限制不同。
 
 ## 入口、运行环境与资产
 
@@ -92,4 +92,4 @@ MODULE.md 说明模块职责、公开面、链路、依赖、状态、生命周�
 
 修改 provides/requires、公开常量、模型操作或模板时，差量报告逐项写明理由、影响和验证。改变既有验收承诺必须解释，不能通过删测让门禁变绿。文档更新也应说明更新范围与仍待完成的行为。
 
-最低结构检查是 `bun run check:module-ownership`；根据修改范围补充 schema、生成声明、模板目录、类型、构建与行为测试。历史设计、差量报告和评测快照保留其当时的证据，当前接入以本规范、模块卡片、真实导出和可执行验收为准。
+最低结构检查是 `bun run check:module-ownership`；根据修改范围补充生成声明、模板目录、类型、构建与行为测试。历史设计、差量报告和评测快照保留其当时的证据，当前接入以本规范、模块卡片、真实导出和可执行验收为准。

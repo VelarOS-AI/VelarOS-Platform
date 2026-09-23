@@ -1,6 +1,11 @@
 import type { ContextRef } from "@velaros-ai/context";
 
-/** 旧历史区间的有来源摘要，近期执行单元由 Runtime 保留。 */
+/**
+ * 旧历史区间的有来源摘要，近期执行单元由 Runtime 保留。
+ * @AgentView
+ * 较早历史的一段摘要：baseThrough 到 through 是这一段的序号范围，through 必须是已完成脚本结果的 sequence，并留下最近两个响应不收进来；
+ * evidence 是它直接依据的原文引用，unresolved 是没解决的事项，negativeAttempts 是试过但没成功的做法。
+ */
 export interface HistoryCheckpoint {
     readonly baseThrough: number;
     readonly through: number;

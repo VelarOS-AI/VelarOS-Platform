@@ -7,12 +7,14 @@ import { isArray, isBoolean, isEmpty, isString } from '@velaros-ai/core'
 import type { ModelImage } from '@velaros-ai/kernel'
 import { type CodeProgramRequest,type ScriptOutputCapture, scriptOutputs, type ScriptOutputSummary } from '@velaros-ai/script'
 
+import { ContextMaintenanceReadLimits } from '../../runtime/contract/constants.js'
 import { ContextMemory } from '../../runtime/impl/ContextMemory.js'
 import { ContextPatchStore } from '../../runtime/impl/ContextPatchStore.js'
 import { ProgramContext } from '../../runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../runtime/impl/RecentContext.js'
 import {memoryReference} from '../../runtime/utils/context-memory.js'
 import { awaitModelPreparation } from '../../runtime/utils/model-budget.js'
+import { ContextPatchLimits } from '../contract/constants.js'
 import type { ContextCandidateValidator } from '../contract/requires.js'
 import type { ContextMaintenancePage, ContextMaintenanceSnapshot, ContextPatch, ContextProjectionPolicy } from '../types/maintenance.js'
 
@@ -119,7 +121,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
  }
 
  public async list(snapshot:ContextMaintenanceSnapshot,after:number,limit:number,signal:AbortSignal):Promise<ContextMaintenancePage>{
-  if(!Number.isSafeInteger(after)||after<0||!Number.isSafeInteger(limit)||limit<1||limit>64)throw new Error('整理目录每页 1–64 项')
+  if(!Number.isSafeInteger(after)||after<0||!Number.isSafeInteger(limit)||limit<1||limit>ContextMaintenanceReadLimits.maxPageItems)throw new Error(`整理目录每页 1–${ContextMaintenanceReadLimits.maxPageItems} 项`)
   const state=await this.current(snapshot,signal)
   const records=state.records.filter(record=>record.sequence>after&&record.sequence<=snapshot.through&&Boolean(memoryReference(state,record.ref))&&!/^(model-tool:|act:event$|act:state$|model-request$|model-response|context:frame:|context:delivered$|context-maintenance:)/u.test(record.title))
   const items=records.slice(0,limit)
@@ -142,13 +144,13 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
  public async apply(snapshot:ContextMaintenanceSnapshot,patch:ContextPatch,signal:AbortSignal,lifetime:'turn'|'task'='task'):Promise<ContextRef>{return this.prepare(snapshot,patch,signal,lifetime,true)}
 
  private async prepare(snapshot:ContextMaintenanceSnapshot,patch:ContextPatch,signal:AbortSignal,lifetime:'turn'|'task',publish:boolean):Promise<ContextRef>{
-  if(!patch||Object.keys(patch).some(key=>!['baseRevision','summary','unresolved','notes','inputs','history','releaseResults','releaseStoreRefs','observation','recentRecords'].includes(key))||patch.baseRevision!==snapshot.baseRevision||!isString(patch.summary)||!patch.summary.trim()||patch.summary.length>3000||!isArray(patch.unresolved)||patch.unresolved.length>32||patch.unresolved.some(item=>!isString(item)||item.length>1000)||JSON.stringify(patch).length>60000)throw new Error('上下文补丁格式、版本或大小无效')
-  if([patch.notes,patch.inputs,patch.releaseResults,patch.releaseStoreRefs].some(items=>!isUndefined(items)&&(!isArray(items)||items.length>64)))throw new Error('上下文补丁条目过多')
-  if(!isUndefined(patch.recentRecords)&&(!Number.isSafeInteger(patch.recentRecords)||patch.recentRecords<0||patch.recentRecords>64))throw new Error('近期记录窗口无效')
+  if(!patch||Object.keys(patch).some(key=>!['baseRevision','summary','unresolved','notes','inputs','history','releaseResults','releaseStoreRefs','observation','recentRecords'].includes(key))||patch.baseRevision!==snapshot.baseRevision||!isString(patch.summary)||!patch.summary.trim()||patch.summary.length>ContextPatchLimits.summaryChars||!isArray(patch.unresolved)||patch.unresolved.length>ContextPatchLimits.unresolved||patch.unresolved.some(item=>!isString(item)||item.length>ContextPatchLimits.unresolvedChars)||JSON.stringify(patch).length>ContextPatchLimits.patchChars)throw new Error('上下文补丁格式、版本或大小无效')
+  if([patch.notes,patch.inputs,patch.releaseResults,patch.releaseStoreRefs].some(items=>!isUndefined(items)&&(!isArray(items)||items.length>ContextPatchLimits.items)))throw new Error('上下文补丁条目过多')
+  if(!isUndefined(patch.recentRecords)&&(!Number.isSafeInteger(patch.recentRecords)||patch.recentRecords<0||patch.recentRecords>ContextPatchLimits.recentRecords))throw new Error('近期记录窗口无效')
   if(patch.observation&&(patch.observation.sourceRef!==snapshot.observationRef||Object.keys(patch.observation).some(key=>!['sourceRef','config','outputs','summaries'].includes(key))))throw new Error('观察展示补丁版本或字段无效')
-  if(patch.observation?.summaries&&(!isArray(patch.observation.summaries)||patch.observation.summaries.length>64))throw new Error('观察摘要数量无效')
+  if(patch.observation?.summaries&&(!isArray(patch.observation.summaries)||patch.observation.summaries.length>ContextPatchLimits.items))throw new Error('观察摘要数量无效')
   for(const summary of patch.observation?.summaries??[]){
-   if(!summary||!isString(summary.text)||!summary.text.trim()||summary.text.length>12000||summary.resultRef!==snapshot.observation?.resultRef||!snapshot.observation.blocks.some(block=>block.key===summary.key&&block.contentHash===summary.contentHash))throw new Error('摘要与当前观察原文不匹配')
+   if(!summary||!isString(summary.text)||!summary.text.trim()||summary.text.length>ContextPatchLimits.textChars||summary.resultRef!==snapshot.observation?.resultRef||!snapshot.observation.blocks.some(block=>block.key===summary.key&&block.contentHash===summary.contentHash))throw new Error('摘要与当前观察原文不匹配')
   }
   if(patch.releaseResults?.some(ref=>snapshot.protectedRefs.some(item=>item.id===ref)))throw new Error('不能释放未决操作的上下文')
   for(let attempt=0;attempt<4;attempt++){
@@ -163,12 +165,12 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     const previousRecord=state.records.findLast(record=>record.title==='context:projection-policy'&&record.sequence>(state.task?.startedSequence??0))
     const previousPolicy:Optional<ContextProjectionPolicy>=previousRecord?JSON.parse((await staged.get(this.id,previousRecord.objectId))!):undefined
     for(const note of patch.notes??[]){
-     if(!note||Object.keys(note).some(key=>!['ref','summary','resident'].includes(key))||!note.ref||note.ref.sessionId!==this.id||!isUndefined(note.summary)&&(!isString(note.summary)||!note.summary.trim()||note.summary.length>12000)||!isUndefined(note.resident)&&!isBoolean(note.resident)||isUndefined(note.summary)&&isUndefined(note.resident))throw new Error('笔记呈现补丁无效')
+     if(!note||Object.keys(note).some(key=>!['ref','summary','resident'].includes(key))||!note.ref||note.ref.sessionId!==this.id||!isUndefined(note.summary)&&(!isString(note.summary)||!note.summary.trim()||note.summary.length>ContextPatchLimits.textChars)||!isUndefined(note.resident)&&!isBoolean(note.resident)||isUndefined(note.summary)&&isUndefined(note.resident))throw new Error('笔记呈现补丁无效')
      const record=state.records.find(item=>item.ref.id===note.ref.id&&item.sequence>(state.task?.startedSequence??0)&&item.title.startsWith('workspace:note:'))
      if(!record||state.records.findLast(item=>item.title===record.title)?.ref.id!==note.ref.id)throw Object.assign(new Error('笔记呈现引用不是当前原文版本'),{code:'WORKSPACE_CONFLICT'})
      if(isFalse(note.resident)&&snapshot.protectedRefs.some(ref=>ref.id===note.ref.id))throw new Error('不能移出明确保留的笔记')
     }
-    const noteViews=[...(previousPolicy?.notes??[]).filter(old=>!patch.notes?.some(note=>note.ref.id===old.ref.id)),...patch.notes??[]].filter(note=>state.records.some(record=>record.ref.id===note.ref.id&&state.records.findLast(item=>item.title===record.title)?.ref.id===note.ref.id)).slice(-64)
+    const noteViews=[...(previousPolicy?.notes??[]).filter(old=>!patch.notes?.some(note=>note.ref.id===old.ref.id)),...patch.notes??[]].filter(note=>state.records.some(record=>record.ref.id===note.ref.id&&state.records.findLast(item=>item.title===record.title)?.ref.id===note.ref.id)).slice(-ContextPatchLimits.items)
     for(const input of patch.inputs??[]){
      const original=await context.readInput(input.ref,{limit:1})
      const visible=this.inputVisible.get(input.ref.id)
@@ -194,7 +196,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
      if(summaries?.length){
       const oldRecord=state.records.findLast(record=>record.title==='script:output-summaries')
       const prior:ScriptOutputSummary[]=oldRecord?JSON.parse((await this.storage.get(this.id,oldRecord.objectId))!):[]
-      const merged=[...prior.filter(old=>!summaries.some(item=>item.key===old.key)),...summaries.map(({resultRef:_resultRef,...item})=>({...item,taskRevision:snapshot.taskRevision}))].slice(-64)
+      const merged=[...prior.filter(old=>!summaries.some(item=>item.key===old.key)),...summaries.map(({resultRef:_resultRef,...item})=>({...item,taskRevision:snapshot.taskRevision}))].slice(-ContextPatchLimits.items)
       await context.append({kind:'audit',title:'script:output-summaries',body:JSON.stringify(merged),sources:summaries.map(item=>({sessionId:this.id,id:item.resultRef}))},signal)
      }
     }

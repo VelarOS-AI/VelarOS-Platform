@@ -12,14 +12,57 @@ export const MemoryModuleId='velaros:system-memory' as const
 export const LocalMemoryModuleId='velaros:system-memory-local' as const
 /** 主线装配长期记忆时的合同身份，工作记忆仍使用同一实现。 */
 export const PersistentMemoryModuleId='velaros:system-memory-persistent' as const
+/** 装配了长期记忆、却没有整理模型时的合同身份：少了 organize。 */
+export const PersistentLocalMemoryModuleId='velaros:system-memory-persistent-local' as const
+/** 带长期记忆（recall/save/remove）的两种合同身份。 */
+export const LongTermMemoryModuleIds:readonly string[]=Object.freeze([PersistentMemoryModuleId,PersistentLocalMemoryModuleId])
 /** 能力发现身份。 */
 export const ModulesModuleId='velaros:modules' as const
 /** 整理会话的固定快照只读能力。 */
 export const ContextMaterialsModuleId='velaros:context-materials' as const
-/** 笔记来源数量上限。 */
+/** 工作笔记与材料目录对外承诺的上限：memory 成员声明里写的就是这些数（两边一致由验收核对）。 */
 export const WorkspaceLimits=Object.freeze({
  /** 每份笔记的最大来源数。 */
- sources:64
+ sources:64,
+ /** 笔记 key 最多多少字符。 */
+ keyChars:96,
+ /** 笔记标题最多多少字符。 */
+ titleChars:200,
+ /** 笔记正文最多多少字符。 */
+ bodyChars:60_000,
+ /** 笔记与材料目录一页最多多少项。 */
+ maxPage:64
+})
+/** 会话目标对外承诺的上限：goal 成员声明里写的就是这些数（两边一致由验收核对）。 */
+export const GoalLimits=Object.freeze({
+ /** 目标描述最多多少字符。 */
+ objectiveChars:8000,
+ /** 状态变化的依据最多多少字符。 */
+ reasonChars:4000
+})
+/** 安排整理的上限：memory.organize 声明里写的就是这些数（两边一致由验收核对）。 */
+export const OrganizeLimits=Object.freeze({
+ /** focus 最多多少字符。 */
+ focusChars:3000,
+ /** 最多保留多少条原文引用。 */
+ preserve:64
+})
+/** 整理补丁的上限：velaros:context-materials 的 submit 声明里写的就是这些数（两边一致由验收核对）。 */
+export const ContextPatchLimits=Object.freeze({
+ /** 整理说明最多多少字符。 */
+ summaryChars:3000,
+ /** 未解决事项最多多少条。 */
+ unresolved:32,
+ /** 每条未解决事项最多多少字符。 */
+ unresolvedChars:1000,
+ /** notes、inputs、releaseResults、releaseStoreRefs 与观察摘要各最多多少项。 */
+ items:64,
+ /** 整份补丁的 JSON 最多多少字符。 */
+ patchChars:60_000,
+ /** 一段展示摘要（观察块或笔记）最多多少字符。 */
+ textChars:12_000,
+ /** 近期记录窗口最大多少条。 */
+ recentRecords:64
 })
 /** 执行结果可见租约。 */
 export const ScriptLeaseLimits=Object.freeze({
@@ -30,19 +73,23 @@ export const ScriptLeaseLimits=Object.freeze({
  /** 默认结果展示字符数。 */
  resultChars:12_000
 })
-/** 自管理操作合同代际。 */
+/** 自管理能力的挂载代际；合同版本由各自生成的模型面给出。 */
 export const SystemContract=Object.freeze({
- /** 对外合同版本。 */
- schemaRevision:'21',
  /** 实例代次。 */
  generation:1
 })
-/** 主线和业务子任务的规范系统包。 */
-export const SystemPackage=Object.freeze({specifier:'velaros:system',exports:Object.freeze({modules:ModulesModuleId,goal:GoalModuleId,memory:MemoryModuleId,store:StoreModuleId})})
-/** 没有整理委托能力时的同一系统包投影。 */
-export const LocalSystemPackage=Object.freeze({specifier:'velaros:system',exports:Object.freeze({modules:ModulesModuleId,goal:GoalModuleId,memory:LocalMemoryModuleId,store:StoreModuleId})})
-/** 主线接入宿主长期记忆作用域后的系统包。 */
-export const PersistentSystemPackage=Object.freeze({specifier:'velaros:system',exports:Object.freeze({modules:ModulesModuleId,goal:GoalModuleId,memory:PersistentMemoryModuleId,store:StoreModuleId})})
+/** 模型导入自管理能力用的系统包名。 */
+export const SystemPackageSpecifier='velaros:system' as const
+/**
+ * velaros:system 的成员，以及每个成员可能挂的模块身份。同一会话里一个成员只挂一个：按装配与会话授权取表里第一个可用的。
+ * 这些身份都不作为业务能力单独列出。
+ */
+export const SystemMembers:Readonly<Record<'modules'|'goal'|'memory'|'store',readonly string[]>>=Object.freeze({
+ modules:Object.freeze([ModulesModuleId]),
+ goal:Object.freeze([GoalModuleId]),
+ memory:Object.freeze([PersistentMemoryModuleId,PersistentLocalMemoryModuleId,MemoryModuleId,LocalMemoryModuleId]),
+ store:Object.freeze([StoreModuleId,StoreWriteModuleId,StoreReadModuleId]),
+})
 /** 系统能力目录的分页约定。 */
 export const SystemCatalogLimits=Object.freeze({
  /** 默认目录页大小。 */

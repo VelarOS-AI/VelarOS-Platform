@@ -12,21 +12,25 @@
 
 装配实例：`systemModules`、`memoryModule`、`modulesModule`、`storeModule`。
 
-接口：`SystemModulesApi`、`SystemHost`、`MemoryModuleApi`、`MemoryHost`、`LongTermMemoryHost`、`MemorySession`、`MemoryStore`、`ModulesModuleApi`、`ModulesHost`、`ContextMaintenanceHost`、`ContextCandidateValidator`、`StoreHost`、`StoreModuleApi`、`StoreSessionApi`。
+接口：`SystemModulesApi`、`SystemHost`、`MemoryModuleApi`、`MemoryHost`、`LongTermMemoryHost`、`MemorySession`、`MemoryStore`、`ModulesModuleApi`、`ModulesHost`、`ContextMaintenanceHost`、`ContextCandidateValidator`、`StoreHost`、`StoreModuleApi`、`StoreSessionApi`、`GoalLedger`。
 
-数据合同：`MemoryQuery`、`MemoryPage`、`MemoryOrganizeIntent`、`WorkspaceEntry`、`WorkspaceUpdate`、`ScriptRetention`、`StoreGrant`、`StoreEntry`、`StoreFrame`。
+各成员操作每次调用的宿主上下文（由本单元的装配从宿主端口按调用会话建出）：`GoalOperationContext`、`ModulesOperationContext` 与 `ModuleCatalogPort`、`StoreOperationContext`、`SystemMemoryOperationContext` 与 `MemoryOrganizerPort`、`ContextMaterialsOperationContext` 与 `ContextMaterialsPort`。
 
-`modules` 提供 list/search/describe。`memory` 提供 list/read/update/retain/release；主线和获准业务子任务额外具有 organize。主线装配 `RuntimeOptions.memory(sessionId)` 后额外提供 recall/save/remove，复用 `velaros/memory` 的长期记忆存储。搜索使用同一记忆实现的本地合同。整理会话只有 `velaros:context-materials` 的 list/read，并通过 ScriptAct output 提交补丁。
+数据合同：`MemoryQuery`、`MemoryPage`、`MemoryListItem`、`MemoryOrganizeIntent`、`MemoryOrganizeReceipt`、`MemoryRetention`、`ResultRetained`、`ResultReleased`、`WorkspaceEntry`、`WorkspaceUpdate`、`ScriptRetention`、`StoreGrant`、`StoreEntry`、`StoreFrame`、`SystemModuleQuery`、`SystemModulePage`、`SystemModuleCard`、`SystemModuleDescription`、`ContextMaterialsQuery`、`ContextMaterialsReadInput`、`ContextMaintenancePage`。
+
+`modules` 提供 list/search/describe。`memory` 提供 list/read/update/plan/retain/release（update 改笔记，plan 改任务计划）；主线和获准业务子任务额外具有 organize。主线装配 `RuntimeOptions.memory(sessionId)` 后额外提供 recall/save/remove，复用 `velaros/memory` 的长期记忆存储。搜索使用同一记忆实现的本地合同。整理会话只有 `velaros:context-materials` 的 list/read，并通过 ScriptAct output 提交补丁。
 
 操作清单与入口模式见 [Act 清单](../README.md)，系统示例见 [template.js](template.js)，记忆示例见 [memory-template.js](memory-template.js)。
 
-模型统一用 `modules.describe({module, export?})` 读取 schema、声明与模板。`template` 字段来自当前会话授权的实际模块；模板仅在显式读取并输出时进入上下文。通常先 `output(await modules.list())`，再查询对应包并 `output(api.template,{type:"code"})`；需要精确类型时输出 `api.declarations`。
+模型统一用 `modules.describe({module, export?})` 读取声明与模板（operations 里另附由声明派生的 schema）。`template` 字段来自当前会话授权的实际模块；模板仅在显式读取并输出时进入上下文。通常先 `output(await modules.list())`，再查询对应包并 `output(api.template,{type:"code"})`；需要精确类型时输出 `api.declarations`。
 
 `store` 提供 create/list/keys/get/set/remove/watch/publish/subscribe/events/ack/share/read；可写投影提供 list/keys/get/set/remove/watch/publish/subscribe/events/ack/share/read，只读投影提供 list/keys/get/watch/subscribe/events/ack/read。StoreGrant 固定空间 ID 和读写范围，StoreFrame 提供有界目录与变化。三份模板为 store-template.js、store-write-template.js、store-read-template.js，由 modules.describe 返回。
 
 ## 骨干链路
 
-SystemModules → Kernel 注册 → schema、模式、权限校验 → 当前会话端口 → 持久回执。ScriptPackageCompiler 为发现、类型检查和执行生成相同的包投影。
+`impl/*Operations.ts` 的操作接口（带 `@AgentView` 的方法、入参与回执类型及其注释）是模型面的唯一来源：`bun run generate:script` 由它写出 `contract/surface.ts`（给模型的声明、派生的 schema、效果与允许的入口）；按授权与装配分几种投影的成员（memory 四种、store 三种）各登记自己拿得到的几份接口，实现是同一个类。
+
+SystemModules → `impl/*Module.ts` 用 `capabilityModules` 把生成的模型面接到本会话端口 → Kernel 注册、结构校验、模式与权限检查 → 实现自己核对取值上限 → 持久回执。ScriptPackageCompiler 为发现、类型检查和执行生成相同的包投影。
 
 整理请求返回 requestId/scheduled。下一请求边界的整理服务读取固定父快照，提出带源版本的展示补丁。提交时先做完整预检，错误反馈给同一支线修正；完成后再经父请求编译、取消检查与 CAS 发布；结果随下一帧自动反馈。
 
@@ -48,7 +52,7 @@ contract/requires.ts 注入现有会话、Kernel 和整理端口。任务原文�
 
 ## 不变量
 
-共 19 条，未验证 0 条。见 spec/invariants.md。
+共 20 条，未验证 0 条。见 spec/invariants.md。
 
 ## 非目标
 
@@ -58,10 +62,10 @@ contract/requires.ts 注入现有会话、Kernel 和整理端口。任务原文�
 
 ```text
 system/
-  contract/ 接口和常量
+  contract/ 接口和常量；surface.ts 是生成的模型面
   types/ 数据
-  impl/ 能力与发布实现
-  utils/ 纯 schema 构造
+  impl/ 操作接口与实现、装配、发布实现
+  utils/ 成员身份解析与装配端口核对
   spec/ 验收
   index.ts
   template.js

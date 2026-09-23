@@ -10,7 +10,7 @@ import {createOperationRuntime} from '@velaros-ai/kernel'
 import {codeProgramChecker,createKernelScriptSession,nodeSubprocessCodeRunner,scriptPackageCompiler} from '@velaros-ai/script'
 
 import {createRuntime} from '../../../dist/act/runtime/index.js'
-import {SystemPackage} from '../../../dist/act/system/contract/constants.js'
+import {SystemMembers} from '../../../dist/act/system/contract/constants.js'
 import {ContextMaintenanceState} from '../../../dist/act/system/impl/ContextMaintenanceState.js'
 import {SystemCatalog} from '../../../dist/act/system/impl/SystemCatalog.js'
 import {done,turn} from '../../runtime/test/support/model-turn.mjs'
@@ -45,7 +45,7 @@ test('INV-3 目录集中展示系统包，成员合同和模板可直接检查�
  const f=await fixture(t)
  const listing=await execute(f.session,`${prelude}output(await system.modules.list({space:'system',limit:1}));`)
  assert.equal(listing.value.items.length,1);assert.equal(listing.value.nextOffset,null)
- assert.deepEqual(listing.value.items[0].exports,Object.keys(SystemPackage.exports));assert.equal(listing.value.items[0].operations.length,24)
+ assert.deepEqual(listing.value.items[0].exports,Object.keys(SystemMembers));assert.equal(listing.value.items[0].operations.length,25)
  assert.equal(listing.value.items[0].binding,undefined)
  const result=await execute(f.session,`${prelude}output(await system.modules.describe({module:'velaros:system',export:'memory'}));`)
  assert.equal(result.value.exports.memory.binding.moduleId,'velaros:system-memory')
@@ -207,7 +207,7 @@ test('memory note retention is versioned, idempotent when resident and plan upda
  assert.equal(released.value.revision,2);assert.equal(released.value.resident,false)
  const stale=await execute(f.session,`${prelude}try{await system.memory.retain({ref:${ref}})}catch(error){output(error.code)}`)
  assert.equal(stale.value,'WORKSPACE_CONFLICT')
- await execute(f.session,`${prelude}await system.memory.update({plan:{nextObjective:'Run tests',hypotheses:[],decisions:[],openQuestions:[]}});`)
+ await execute(f.session,`${prelude}await system.memory.plan({nextObjective:'Run tests',hypotheses:[],decisions:[],openQuestions:[]});`)
  assert.equal((await f.session.view.inspect()).capsule.nextObjective,'Run tests')
  await submit(f.session)
 })

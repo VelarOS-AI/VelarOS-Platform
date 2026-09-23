@@ -23,11 +23,11 @@ search 是 execute-only，由 Kernel 的 allowedModes 校验真实入口，别�
 
 搜索只获得 evidence、modules、programs、results、artifacts、inputs、history、workspace、execution 的作用域能力。模块发现和真实派发按同一允许范围检查。它通过 `evidence.query({source,query,limit?})` 获取候选，通过 `evidence.read({target,maxBytes?})` 获得证据 ID、原文引用与版本。Sources 复用 ContextSourcePort，EvidenceAccess 统一 authorize/read/hash/version 规则。
 
-搜索以 blobs/execute/done 维护和运行脚本，默认 retain:'task'。每次接受的响应和真实结果进入同一对象存储中的有序历史。交付使用：
+搜索以 blobs/execute/done 维护和运行脚本，默认 retain:'task'。每次接受的响应和真实结果进入同一对象存储中的有序历史。交付用 `velaros:evidence` 的 `report`：入参类型就是报告合同，交付前先过 typecheck，引用没读过的证据 ID 当场拒绝，最后一轮收尾时它仍然可用：
 
 ```js
-import {output} from 'velaros';
-output({
+import {report} from 'velaros:evidence';
+await report({
   findings:[{text:'已定位登录恢复入口',evidenceIds:[evidenceId]}],
   gaps:[{code:'UNRESOLVED',detail:'尚未确认缓存写入顺序'}],
   nextSteps:['继续读取持久缓存实现']

@@ -5,8 +5,9 @@ import { isArray, isBoolean, isString } from '@velaros-ai/core'
 import type { ModelHistoryMessage, ModelImage, OperationReadStamp } from "@velaros-ai/kernel";
 import type { WorkspaceEntry, WorkspaceUpdate } from "@velaros-ai/velaros/act/system";
 
+import { WorkspaceLimits } from '../../system/contract/constants.js'
 import type { ContextProjectionPolicy } from '../../system/types/maintenance.js'
-import type {MemoryPage,MemoryQuery} from '../../system/types/memory.js'
+import type {MemoryPage,MemoryQuery,MemoryRetention} from '../../system/types/memory.js'
 import type {ScriptRetention} from '../../system/types/results.js'
 import type { ContextMemoryPolicy, RuntimeNoteContent, RuntimeNoteRead, WorkspaceNote } from "../types/memory.js";
 import { memoryHistory,memoryPolicy, memoryPrompt, memoryReference,noteEntry } from "../utils/context-memory.js";
@@ -22,7 +23,7 @@ export interface ContextMemoryApi {
   /** 所有原文共用范围校验与既有读取器。 */
   readMaterial(ref:ContextRef|string,offset:Optional<number>,limit:Optional<number>,signal:AbortSignal):Promise<ContextContent>
   /** 调整笔记或执行结果驻留，原文不可变。 */
-  retainMaterial(ref:ContextRef|string,turns:Nullable<ScriptRetention>,signal:AbortSignal):Promise<unknown>
+  retainMaterial(ref:ContextRef|string,turns:Nullable<ScriptRetention>,signal:AbortSignal):Promise<MemoryRetention>
   /** 按稳定键及版本前提追加不可变笔记版本。 */
   update(input:WorkspaceUpdate,signal:AbortSignal):Promise<WorkspaceEntry>
   /** 当前授权代次内的笔记目录，包含已移出内存的条目。 */
@@ -66,8 +67,8 @@ export class ContextMemory implements ContextMemoryApi {
   }
 
   public async update(input:WorkspaceUpdate,signal:AbortSignal):Promise<WorkspaceEntry>{
-    if(!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}$/u.test(input.key)||!Number.isSafeInteger(input.baseRevision)||input.baseRevision<0)throw Object.assign(new Error('笔记键或版本无效'),{code:'MEMORY_INPUT'})
-    if(!isUndefined(input.body)&&(!isString(input.body)||input.body.length>60000)||!isUndefined(input.title)&&(!isString(input.title)||input.title.length>200)||!isUndefined(input.resident)&&!isBoolean(input.resident)||!isUndefined(input.sources)&&(!isArray(input.sources)||input.sources.length>64))throw Object.assign(new Error('笔记内容超限或类型无效'),{code:'MEMORY_INPUT'})
+    if(!isString(input.key)||!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/u.test(input.key)||input.key.length>WorkspaceLimits.keyChars||!Number.isSafeInteger(input.baseRevision)||input.baseRevision<0)throw Object.assign(new Error('笔记键或版本无效'),{code:'MEMORY_INPUT'})
+    if(!isUndefined(input.body)&&(!isString(input.body)||input.body.length>WorkspaceLimits.bodyChars)||!isUndefined(input.title)&&(!isString(input.title)||input.title.length>WorkspaceLimits.titleChars)||!isUndefined(input.resident)&&!isBoolean(input.resident)||!isUndefined(input.sources)&&(!isArray(input.sources)||input.sources.length>WorkspaceLimits.sources))throw Object.assign(new Error('笔记内容超限或类型无效'),{code:'MEMORY_INPUT'})
     if(['body','title','sources','resident'].every(key=>!Object.hasOwn(input,key)))throw Object.assign(new Error('笔记更新为空'),{code:'MEMORY_INPUT'})
     for(let attempt=0;attempt<32;attempt++){
       const incremental=Boolean(this.storage.selectSnapshot&&this.storage.compareAndSwapMetadata)
@@ -101,7 +102,7 @@ export class ContextMemory implements ContextMemoryApi {
 
   public async list(input:{after?:string;limit?:number},signal:AbortSignal){
     const limit=input.limit??ActRuntimeTuning.workspacePage
-    if(!Number.isSafeInteger(limit)||limit<1||limit>64)throw new Error('笔记目录每页 1–64 条')
+    if(!Number.isSafeInteger(limit)||limit<1||limit>WorkspaceLimits.maxPage)throw new Error(`笔记目录每页 1–${WorkspaceLimits.maxPage} 条`)
     const {notes}=await this.notes(signal,true)
     const items=notes.map(item=>noteEntry(item.note,item.record)).filter(item=>isUndefined(input.after)||item.key>input.after).sort((a,b)=>a.key<b.key?-1:a.key>b.key?1:0)
     const page=items.slice(0,limit)
@@ -127,7 +128,7 @@ export class ContextMemory implements ContextMemoryApi {
 
   public async catalog(input:MemoryQuery,signal:AbortSignal):Promise<MemoryPage>{
     const limit=input.limit??ActRuntimeTuning.workspacePage; const after=input.after??0
-    if(!Number.isSafeInteger(limit)||limit<1||limit>64||!Number.isSafeInteger(after)||after<0||!isUndefined(input.through)&&(!Number.isSafeInteger(input.through)||input.through<0))throw new Error('材料目录分页无效')
+    if(!Number.isSafeInteger(limit)||limit<1||limit>WorkspaceLimits.maxPage||!Number.isSafeInteger(after)||after<0||!isUndefined(input.through)&&(!Number.isSafeInteger(input.through)||input.through<0))throw new Error('材料目录分页无效')
     const {snapshot,reset,notes}=await this.notes(signal)
     const latest=new Map(notes.map(item=>[item.record.ref.id,item]))
     const reattached=new Set((snapshot?.records??[]).filter(record=>record.sequence>reset&&record.kind==='user').flatMap(record=>record.sources.map(ref=>JSON.stringify([ref.sessionId,ref.id]))))
@@ -154,7 +155,7 @@ export class ContextMemory implements ContextMemoryApi {
     return this.context.read(ref,{offset,limit})
   }
 
-  public async retainMaterial(value:ContextRef|string,turns:Nullable<ScriptRetention>,signal:AbortSignal):Promise<unknown>{
+  public async retainMaterial(value:ContextRef|string,turns:Nullable<ScriptRetention>,signal:AbortSignal):Promise<MemoryRetention>{
     const ref=isString(value)?{sessionId:this.id,id:value}:value
     const snapshot=await this.snapshot(signal,[{title:'search:history-reset',latest:true},{kind:'user'},{refId:ref.id}])
     const record=memoryReference(snapshot,ref)

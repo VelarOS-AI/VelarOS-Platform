@@ -1,3 +1,6 @@
+import {isString,isUndefined} from '@velaros-ai/core'
+
+import {GoalLimits} from '../../system/contract/constants.js'
 import type {GoalControl,GoalState,GoalUpdate} from '../../system/types/goal.js'
 
 /** 校验目标状态迁移和读取版本，再生成不共享可变数据的下一版。 */
@@ -7,10 +10,10 @@ export function goalChange(prior:Nullable<GoalState>,input:GoalUpdate|GoalContro
  const controls={resume:'active',pause:'paused',complete:'complete',block:'blocked',cancel:'cancelled',remove:'removed'} as const
  const control='action' in input
  if(control&&!Object.hasOwn(controls,input.action))throw Object.assign(new Error('目标操作无效'),{code:'GOAL_INPUT'})
- const objective=control?undefined:typeof input.objective==='string'?input.objective.trim():undefined
+ const objective=control?undefined:isString(input.objective)?input.objective.trim():undefined
  const reason=control?prior?.reason??'':input.reason??prior?.reason??''
  const status=control?controls[input.action]:input.status??(objective?'active':prior?.status??'active')
- if(!['active','paused','complete','blocked','cancelled',...(control?['removed']:[])].includes(status)||typeof reason!=='string'||reason.length>4000||!control&&input.objective!==undefined&&(typeof input.objective!=='string'||!objective||objective.length>8000))throw Object.assign(new Error('目标内容或状态无效'),{code:'GOAL_INPUT'})
+ if(!['active','paused','complete','blocked','cancelled',...(control?['removed']:[])].includes(status)||!isString(reason)||reason.length>GoalLimits.reasonChars||!control&&!isUndefined(input.objective)&&(!isString(input.objective)||!objective||objective.length>GoalLimits.objectiveChars))throw Object.assign(new Error('目标内容或状态无效'),{code:'GOAL_INPUT'})
  if(objective&&prior&&(prior.status==='active'||prior.status==='paused'))throw Object.assign(new Error('先结束当前目标，再建立新目标'),{code:'GOAL_INPUT'})
  const creating=!!objective
  if((!prior||prior.status==='removed')&&!creating)throw Object.assign(new Error('新目标需要内容和 active 状态'),{code:'GOAL_INPUT'})

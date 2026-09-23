@@ -28,19 +28,40 @@ export interface ContextMaintenanceSnapshot {
  readonly inputRevisions:ReadonlyArray<{readonly ref:ContextRef;readonly revision:number;readonly summaryRef?:ContextRef}>
 }
 
-/** 模型只提交元数据变更，最终发布由 Runtime 完成。 */
+/**
+ * 模型只提交元数据变更，最终发布由 Runtime 完成。
+ * @AgentView
+ * 整理补丁：只改父会话的展示，不改原文。最小的有效补丁只有 baseRevision（照抄 snapshot.baseRevision）、summary（有证据支持的整理说明，1 到 3000 个字符）与 unresolved（未解决事项，最多 32 条、每条最多 1000 个字符）；
+ * 其余字段只在确实需要、而且已经查明时才给，不要为了填满而改所有分区。notes、inputs、releaseResults、releaseStoreRefs 各最多 64 项，整份不超过 60000 个字符。
+ * 所有引用都用父快照里的真实引用，不能用本整理会话的输出引用；遵循 snapshot.intent 的 focus 与 preserve。
+ */
 export interface ContextPatch {
  readonly baseRevision:string
  readonly summary:string
  readonly unresolved:readonly string[]
+ /** 笔记的派生展示；主模型的笔记、计划与结论归主模型维护，这里只改展示。 */
  readonly notes?:readonly ContextNotePresentation[]
+ /** 输入摘要：只有完整原文已经进入本支线请求才可替换；只看到引用、片段或元数据时省略，并在 unresolved 里报告缺口。 */
  readonly inputs?:readonly ContextInputSummary[]
+ /** 较早历史的摘要区间；没有必要或确认不了边界时省略。 */
  readonly history?:HistoryCheckpoint
- /** 退出自动展示的空间引用，不删除对象、取消订阅或撤销权限。 */
+ /** 退出自动展示的空间引用，只能选 snapshot.storeRefs 里的；不删除对象、不取消订阅、不撤回权限。 */
  readonly releaseStoreRefs?:readonly string[]
+ /** 退出自动展示的执行结果引用；明确要求保留、或还有未决操作依赖的不能释放。 */
  readonly releaseResults?:readonly string[]
+ /**
+  * 观察的展示调整：sourceRef 照抄 snapshot.observationRef；按 snapshot.observation.manifest 里的静态 key 改 view，Runtime 写回观察源码并对已采集的结果重新展示，不重跑脚本。
+  * summaries 的 key、resultRef、contentHash 必须与 snapshot.observation.blocks 对上，text 1 到 12000 个字符；view 用 summary 模式时必须有对得上的摘要。不能改采集表达式、key、purpose、priority 或权限。
+  */
  readonly observation?:ScriptOutputEdit & {readonly sourceRef:string;readonly summaries?:ReadonlyArray<{readonly key:string;readonly resultRef:string;readonly contentHash:string;readonly text:string}>}
+ /** 近期记录窗口的大小：0 到 64 的整数，不是记录数组。 */
  readonly recentRecords?:number
+}
+
+/** @AgentView 补丁通过了校验、已被受理：之后声明完成，宿主在父会话的下一次请求前重新核验版本再发布。 */
+export interface ContextPatchReceipt {
+ readonly accepted:true
+ readonly baseRevision:string
 }
 
 /** 持续应用到后续新帧的呈现预算，原始数据和源码保持原有归属。 */
@@ -58,13 +79,34 @@ export interface ContextProjectionPolicy {
  readonly report:ContextRef
 }
 
-/** 整理材料目录只给出原始元数据。 */
+/**
+ * 整理材料目录只给出原始元数据。
+ * @AgentView
+ * 快照目录的一页：只有元数据，正文按 ref 用 read 读；nextAfter 不是 null 就把它当 after 接着翻。
+ */
 export interface ContextMaintenancePage {
  readonly items:readonly ContextRecord[]
  readonly nextAfter:Nullable<number>
 }
 
-/** 整理模型只能改变某一原始版本的展示。 */
+/** @AgentView 翻快照目录：after 是上一页的 nextAfter，从头翻不给；limit 每页最多 64 项。 */
+export interface ContextMaterialsQuery {
+ readonly after?:number
+ readonly limit?:number
+}
+
+/** @AgentView 按快照里的引用读一页父会话原文：offset、limit 按 UTF-16 字符算，一页最多 32000 个字符，还受本次整理剩下的读取额度限制。 */
+export interface ContextMaterialsReadInput {
+ readonly ref:ContextRef
+ readonly offset?:number
+ readonly limit?:number
+}
+
+/**
+ * 整理模型只能改变某一原始版本的展示。
+ * @AgentView
+ * 一份笔记的派生展示：ref 必须是这份笔记当前版本的引用；summary（1 到 12000 个字符）与 resident 至少给一个；明确要求保留的笔记不能移出自动展示。
+ */
 export interface ContextNotePresentation {
  /** 精确不可变笔记引用；主模型更新后自动失效。 */
  readonly ref:ContextRef

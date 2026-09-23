@@ -9,9 +9,11 @@ import type { VelarosSession } from "@velaros-ai/velaros";
 import type { ModelToolRuntimeApi, ModelToolRuntimeScope } from "../../runtime/impl/ModelToolRuntime.js";
 import { ActRuntimeTuning } from "../../runtime/utils/tuning.js";
 import { systemModules } from '../../system/impl/SystemModules.js';
+import { EvidenceModuleId, SearchLimits } from "../contract/constants.js";
 import type { VelarosSearchOptions } from "../contract/requires.js";
-import { SearchTuning } from "../tuning.js";
-import type { SearchProfile, SearchProfileInfo, SearchReadResult, SearchRequest, SearchResult, SearchState } from "../types.js";
+import type { SearchProfile, SearchProfileInfo, SearchReadInput, SearchReadResult, SearchRequest, SearchResult, SearchState } from "../types.js";
+import { checkSearchRequest } from "../utils/requests.js";
+import { SearchTuning } from "../utils/tuning.js";
 
 import type { SearchActivationApi } from "./SearchActivation.js";
 import { SearchActivation } from "./SearchActivation.js";
@@ -23,15 +25,13 @@ export interface AdvancedSearchApi {
   /** 主模型新建或恢复搜索，实际模式由 Kernel 检查。 */
   run(input:SearchRequest,call:OperationContext):Promise<SearchResult>
   /** 快照召回或重新读取已选目标，不调用模型。 */
-  read(input:{ref:ContextRef;mode?:'snapshot'|'current';evidenceId?:string;offset?:number;limit?:number},call:OperationContext):Promise<SearchReadResult>
+  read(input:SearchReadInput,call:OperationContext):Promise<SearchReadResult>
   /** 搜索作用域和上下文阶段的统一能力门。 */
   authorize(invocation:PreparedInvocation,descriptor:OperationDescriptor,signal:AbortSignal):Promise<void>
   /** 按当前调用身份取得搜索活动。 */
   activation(sessionId:string):SearchActivationApi
   /** 模块发现与实际调用共享作用域。 */
   allows(sessionId:string,module:string):boolean
-  /** 宿主开放的档位名称。 */
-  profiles():readonly string[]
   /** 返回实际档位资源上限。 */
   profileInfo():readonly SearchProfileInfo[]
 }
@@ -74,7 +74,6 @@ export class AdvancedSearch implements AdvancedSearchApi {
 
   public profileInfo():readonly SearchProfileInfo[]{return Object.entries(this.dependencies.options.profiles).map(([name,limits])=>({name,default:name===this.dependencies.options.defaultProfile,limits:structuredClone(limits)}))}
 
-  public profiles(){return Object.keys(this.dependencies.options.profiles)}
   public activation(id:string){const value=this.active.get(id);if(!value)throw Object.assign(new Error('当前不是活动搜索作用域'),{code:'SEARCH_SCOPE'});return value}
 
   public async authorize(invocation:PreparedInvocation,descriptor:OperationDescriptor,signal:AbortSignal):Promise<void>{
@@ -86,7 +85,8 @@ export class AdvancedSearch implements AdvancedSearchApi {
     const refs=[...(input?.ref?[isString(input.ref)?{sessionId:invocation.sessionId,id:input.ref}:input.ref]:[]),...(input?.evidence??[]),...(input?.sources??[])]
     for(const ref of refs)await activation.authorizeReference(ref,signal)
     if(!this.allows(invocation.sessionId,module))throw Object.assign(new Error('搜索作用域没有此能力'),{code:'SEARCH_CAPABILITY_DENIED'})
-    if(module==='velaros:evidence'&&!activation.canExplore())throw Object.assign(new Error('收尾阶段禁止新的来源读取'),{code:'SEARCH_FINALIZING'})
+    // 收尾阶段只挡新的检索与读取；交付结论（report）正是收尾时要做的
+    if(module===EvidenceModuleId&&invocation.operation!=='report'&&!activation.canExplore())throw Object.assign(new Error('收尾阶段禁止新的来源读取'),{code:'SEARCH_FINALIZING'})
     if(descriptor.effects==='write'&&!systemModules.owns(module))throw Object.assign(new Error('搜索作用域只允许读取外部来源'),{code:'SEARCH_CAPABILITY_DENIED'})
   }
 
@@ -140,6 +140,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
     const previous=input.resume?await this.savedReport(input.resume,call):undefined
     if(previous&&previous.state.report?.id!==input.resume!.id)throw Object.assign(new Error(`搜索检查点已更新：${previous.state.report?.id}`),{code:'CHECKPOINT_STALE'})
     if(!previous&&!input.query?.trim())throw new Error('新搜索需要 query')
+    checkSearchRequest(input)
     const profileName=input.profile??previous?.state.profile??this.dependencies.options.defaultProfile
     const profile=this.dependencies.options.profiles[profileName]
     if(!profile)throw Object.assign(new Error('搜索档位当前不可用'),{code:'SEARCH_PROFILE'})
@@ -221,7 +222,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
     return output!
   }
 
-  public async read(input:{ref:ContextRef;mode?:'snapshot'|'current';evidenceId?:string;offset?:number;limit?:number},call:OperationContext):Promise<SearchReadResult>{
+  public async read(input:SearchReadInput,call:OperationContext):Promise<SearchReadResult>{
     const {report}=await this.savedReport(input.ref,call)
     const scope={sessionId:call.invocation.sessionId,revision:(await this.dependencies.view(call.invocation.sessionId).inspect())!.revision}
     for(const evidence of report.evidence)await this.dependencies.evidence.authorize(scope,evidence.target,call.signal)
@@ -232,7 +233,9 @@ export class AdvancedSearch implements AdvancedSearchApi {
       return {...await this.dependencies.view(call.invocation.sessionId).readArtifact(input.ref,{offset:input.offset,limit:input.limit}),mode:'snapshot'}
     }
     const items:Array<Extract<SearchReadResult,{mode:'current'}>['items'][number]>=[]
-    for(const evidence of selected.slice(input.offset??0,(input.offset??0)+Math.min(input.limit??SearchTuning.refreshItems,16))){
+    // 证据按条分页，越界按边界钳制：负偏移从头开始，页大小落在 1 到上限之间
+    const offset=Math.max(0,Math.trunc(input.offset??0)); const limit=Math.min(Math.max(1,Math.trunc(input.limit??SearchTuning.refreshItems)),SearchLimits.refreshItems)
+    for(const evidence of selected.slice(offset,offset+limit)){
       try{
         const validity=await this.dependencies.evidence.validate(scope,evidence.stamp,call.signal)
         if(validity!=='current'&&evidence.target.kind==='resource'&&evidence.target.selector?.kind==='lines'){items.push({id:evidence.id,ok:false,status:'STALE_SELECTOR'});continue}

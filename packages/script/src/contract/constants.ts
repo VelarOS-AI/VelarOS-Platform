@@ -90,7 +90,10 @@ export const CodeProgramEditLimits = Object.freeze({
   edits:32,
 })
 
-/** 输出采集和展示的硬上限；原始值与模型展示分别计量。 */
+/**
+ * 输出采集和展示的硬上限；原始值与模型展示分别计量。
+ * 写进 output 声明的数与这里一致由验收核对；validateOutputOptions 要整段注入隔离堆、不能引用这张表，它的边界同样由验收对着这张表核对。
+ */
 export const ScriptOutputLimits = Object.freeze({
   /** 一次执行的输出块上限。 */
   blocks:64,
@@ -106,4 +109,12 @@ export const ScriptOutputLimits = Object.freeze({
   issues:16,
   /** JSON 值嵌套层数上限。 */
   depth:64,
+  /** 输出 key 最多多少字符。 */
+  keyChars:96,
+  /** 输出 purpose 最多多少字符。 */
+  purposeChars:1000,
+  /** 代码块的语言标签最多多少字符。 */
+  languageChars:80,
+  /** view.paths 最多几个 JSON Pointer。 */
+  paths:64,
 })

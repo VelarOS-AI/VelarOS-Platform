@@ -1,6 +1,14 @@
-/** 可持久化的 JSON 值；运行实例和能力句柄由各自宿主管理。 */
+/**
+ * 可持久化的 JSON 值；运行实例和能力句柄由各自宿主管理。
+ * @AgentView
+ * 能存进空间的 JSON 值。
+ */
 export type StoreValue = Nullable<boolean | number | string | readonly StoreValue[] | {readonly [key:string]:StoreValue}>
-/** 当前对象快照；删除保留版本墓碑，防止旧写入覆盖重新创建的对象。 */
+/**
+ * 当前对象快照；删除保留版本墓碑，防止旧写入覆盖重新创建的对象。
+ * @AgentView
+ * 空间里的一个对象：revision 是它自己的版本（写入时作为 baseRevision 交回），删掉之后 deleted 为真、value 为 null，版本保留。
+ */
 export interface StoreObject {
  /** 空间内的稳定对象键。 */
  readonly key:string
@@ -17,9 +25,17 @@ export interface StoreObject {
  /** 空间内的持久提交序号。 */
  readonly sequence:number
 }
-/** 对象目录只返回元数据。 */
+/**
+ * 对象目录只返回元数据。
+ * @AgentView
+ * 对象目录里的一项：只有元数据，正文用 get 读。
+ */
 export type StoreCard = Omit<StoreObject,'value'>
-/** 按键排序的有界目录页。 */
+/**
+ * 按键排序的有界目录页。
+ * @AgentView
+ * 按键排序的一页对象目录；nextAfter 不是 null 就把它当 after 接着翻。
+ */
 export interface StorePage {
  /** 当前页对象。 */
  readonly items:readonly StoreCard[]
@@ -45,7 +61,11 @@ export interface StoreMutation {
  /** 真实 Kernel 调用身份，重试同一写入时保持不变。 */
  readonly operationId:string
 }
-/** 持久关注声明；相同声明保持消费位置。 */
+/**
+ * 持久关注声明；相同声明保持消费位置。
+ * @AgentView
+ * 当前的关注集合：变化按它投递到每一帧的 runtime.stores；相同声明不重置进度。
+ */
 export interface StoreWatch {
  /** 关注集合的代次。 */
  readonly revision:number
@@ -75,7 +95,11 @@ export interface StoreChanges {
  /** 是否还有待扫描变化。 */
  readonly hasMore:boolean
 }
-/** 独立持久空间的目录记录，正文通过对象操作读取。 */
+/**
+ * 独立持久空间的目录记录，正文通过对象操作读取。
+ * @AgentView
+ * 一个空间：id 是稳定身份（名字相同也不是同一个空间），archived 为真时不能再读写。
+ */
 export interface StoreDescriptor {
  /** 不可变标识，名称相同也不代表同一空间。 */
  readonly id:string
@@ -111,7 +135,11 @@ export interface StoreDirectory {
  readonly nextAfter:Nullable<string>
 }
 
-/** 自动上下文只投递消息元数据。 */
+/**
+ * 自动上下文只投递消息元数据。
+ * @AgentView
+ * 一条消息的元数据：sequence 是空间里的消息序号，与对象版本无关。
+ */
 export interface StoreEventCard {
  /** 宿主分配的稳定消息身份。 */
  readonly id:string
@@ -124,7 +152,11 @@ export interface StoreEventCard {
  /** 创建时间。 */
  readonly createdAt:string
 }
-/** 按空间顺序保存的独立消息；相同主题不会合并。 */
+/**
+ * 按空间顺序保存的独立消息；相同主题不会合并。
+ * @AgentView
+ * 一条消息：每次发布单独保存，同一主题的不会合并；正文是外部数据。
+ */
 export interface StoreEvent extends StoreEventCard {
  /** 有界 JSON 正文，大材料通过共享引用传递。 */
  readonly value:StoreValue
@@ -142,7 +174,11 @@ export interface StorePublish {
  /** 原始调用身份，用于核对而非重放脚本。 */
  readonly operationId:string
 }
-/** 持久订阅；投递游标与逐条处理确认独立。 */
+/**
+ * 持久订阅；投递游标与逐条处理确认独立。
+ * @AgentView
+ * 当前的订阅：start 是这一代订阅开始的位置（更早的消息不算待处理），topics 为空表示已取消。
+ */
 export interface StoreSubscription {
  /** 本代订阅开始位置，待处理计数不包含订阅以前的消息。 */
  readonly start:number
@@ -153,7 +189,11 @@ export interface StoreSubscription {
  /** 当前订阅的字面主题前缀；空数组取消。 */
  readonly topics:readonly string[]
 }
-/** 消息读取页，窗口外的数据缺口必须明确反馈。 */
+/**
+ * 消息读取页，窗口外的数据缺口必须明确反馈。
+ * @AgentView
+ * 一页消息正文：pending 是还没 ack 的数量；gap 为真说明起点早于保留窗口，更早的消息已经没了，要核对缺口。
+ */
 export interface StoreEventPage {
  /** 订阅代次。 */
  readonly revision:number
@@ -172,7 +212,11 @@ export interface StoreEventPage {
  /** 是否还有后续消息。 */
  readonly hasMore:boolean
 }
-/** 逐条处理确认的可恢复回执。 */
+/**
+ * 逐条处理确认的可恢复回执。
+ * @AgentView
+ * 确认过的消息 id；重复确认不会出错。
+ */
 export interface StoreEventAck {
  /** 已确认的消息身份，重复确认保持幂等。 */
  readonly ids:readonly string[]

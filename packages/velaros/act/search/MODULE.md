@@ -8,16 +8,17 @@
 
 入口 `./act/search`。装配实例 `searchModule`, `evidenceModule`。
 接口：`EvidenceHost`, `EvidenceService`, `EvidenceActivation`, `SearchHost`, `SearchService`, `VelarosSearchOptions`, `SearchModuleApi`, `EvidenceModuleApi`。
+操作每次调用的宿主上下文：`SearchOperationContext`, `EvidenceOperationContext`。
 
 操作清单与入口模式见 [Act 清单](../README.md)，默认模板见 [template.js](template.js)，其他模块使用同目录的 `<模块>-template.js`。
 
 ## 骨干链路
 
-模块装配实例 → Kernel 注册 → schema、模式和权限检查 → 当前会话端口 → 持久回执。
+`impl/*Operations.ts` 的操作接口生成模型面（`contract/surface.ts`）→ `impl/*Module.ts` 用 `capabilityModules` 接到当前会话端口 → Kernel 注册、结构校验、模式和权限检查 → 搜索编排与证据访问核对档位、来源、预算与取值上限（`SearchLimits`）→ 持久回执。
 
 ## 依赖什么
 
-通过 contract/requires.ts 注入能力，复用 Kernel、Context 和 Script 的执行链。公共 schema 构造与会话装配在 runtime。
+通过 contract/requires.ts 注入能力，复用 Kernel、Context 和 Script 的执行链。生成模型面的接口在本组，装配器与会话装配在 runtime。
 
 ## 状态归谁
 
@@ -33,7 +34,7 @@
 
 ## 不变量
 
-共 1 条，未验证 0 条。见 spec/invariants.md。
+共 2 条，未验证 0 条。见 spec/invariants.md。
 
 ## 非目标
 
@@ -43,12 +44,12 @@
 
 ```text
 search/
-  contract/ 提供面、注入面、常量
-  impl/ 按模块命名的实现
+  contract/ 提供面、注入面、常量；surface.ts 是生成的模型面
+  impl/ 操作接口与实现、按模块命名的装配、搜索编排
+  utils/ 取值上限的核对与可调参数（tuning.ts）
   spec/ 验收测试与不变量
   index.ts
   template.js
   <模块>-template.js
   types.ts
-  tuning.ts
 ```

@@ -9,7 +9,7 @@ import { isUndefined } from '@velaros-ai/core'
 import type { CodeProgramDiagnostic } from '../types/script.js'
 
 import { renderDiagnosticFrame } from './diagnostics.js'
-import { programForCheck, ProgramModuleSpecifier } from './program.js'
+import { programForCheck } from './program.js'
 
 /** 生成出来的能力声明在内存文件系统里的名字。 */
 export const DeclarationFileName = '/velaros.d.ts'
@@ -21,28 +21,13 @@ export const LibraryRoot = '/scripts'
 export const AnonymousProgramFile = '.program.js'
 
 /**
- * 恒常可用的程序数据模块：随这次运行交来的参数与大段文本。
- *
- * **我们发明的东西要导入，语言自带的不动**——`input`、`blobs` 是我们发明的，做成隐形全局等于让模型背一条只有提示词告诉过它的暗知识；
- * `console` 是 JavaScript 自带的，让模型 `import { console }` 才是真的怪。这个模块永远在常驻档，不需要租约、不占授权名额。
- * 这一段也是给模型看的：门的说明里原样放着它（`describeGate`），检查器按它推类型——两边同一份。
- */
-export const ProgramModuleDeclarations = `declare module '${ProgramModuleSpecifier}' {
-  /** 随程序一起交来的大段文本，按名字取。文件正文、补丁放这里，不写进源码——写进源码要过好几层转义。 */
-  export const blobs: Record<string, string>
-
-  /** 本次程序的 input 参数（任意 JSON 值），没给是 undefined。 */
-  export const input: any
-}`
-
-/**
- * 把这一轮授权的几个命名空间拼成一份声明。
+ * 把恒常可用的程序数据模块与这一轮授权的几个命名空间拼成一份声明。
  *
  * **只拼授权的**——不授权的模块不进来，`import` 它就解析不出来（TS2307）。
  * 这道闸是语言给的，不用我们写判定；也正因为如此，检查器绝不能图省事加载全量。
  */
-export function joinGrantedDeclarations(granted: ReadonlyArray<{ declarations: string }>): string {
-  return [ProgramModuleDeclarations, ...granted.map((module) => module.declarations)].join('\n\n')
+export function joinGrantedDeclarations(program: string, granted: ReadonlyArray<{ declarations: string }>): string {
+  return [program, ...granted.map((module) => module.declarations)].join('\n\n')
 }
 
 /** 手滑写成 TypeScript 时剥类型用的那份文件名；换个后缀编译器才会按 TS 解析。 */

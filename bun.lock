@@ -68,7 +68,6 @@
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
-        "ajv": "8.20.0",
       },
       "devDependencies": {
         "@types/node": "^22.20.1",
@@ -152,7 +151,6 @@
         "@velaros-ai/kernel": "workspace:*",
         "@velaros-ai/model": "workspace:*",
         "@velaros-ai/script": "workspace:*",
-        "ajv": "8.20.0",
         "diff": "^8.0.4",
         "docx": "^9.6.1",
         "exceljs": "^4.4.0",

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import ts from 'typescript'
 import { Ajv } from '../../packages/kernel/node_modules/ajv/dist/ajv.js'
-import { operationSchema } from './operation-contracts.mjs'
+import { operationContract, operationSchema } from './operation-contracts.mjs'
 function schemas(text){
   const root=mkdtempSync(join(tmpdir(),'operation-contract-')),file=join(root,'types.ts')
   try{
@@ -23,4 +23,42 @@ test('recursive unions, optional tuples and dictionary fields retain strict JSON
 })
 test('unsupported non-JSON contracts fail generation',()=>{
   for(const definition of ['bigint','symbol','()=>void','[string,...number[]]'])assert.throws(()=>schemas(`type Bad=${definition};`))
+})
+function contracts(text){
+  const root=mkdtempSync(join(tmpdir(),'operation-contract-')),file=join(root,'api.ts')
+  try{
+    writeFileSync(file,text)
+    const program=ts.createProgram([file],{strict:true,target:ts.ScriptTarget.ES2022}),source=program.getSourceFile(file)
+    const api=source.statements.find(node=>ts.isInterfaceDeclaration(node)&&node.name.text==='Api')
+    return Object.fromEntries(api.members.map(member=>[member.name.text,()=>operationContract(program,member,source,new Set(['Ctx']))]))
+  }finally{rmSync(root,{recursive:true,force:true})}
+}
+const api=`interface Ctx{signal:AbortSignal}
+type Optional<T>=T|undefined
+type Query={limit?:number}
+interface Api{
+  /** @AgentView 分页列出。
+   * @OperationEffect none
+   */
+  list(input:Optional<Query>,ctx:Ctx):Promise<string[]>
+  /** @AgentView 改一份。
+   * 版本不对就冲突。
+   * @OperationEffect write
+   * @OperationModes execute
+   */
+  update(input:{key:string},ctx:Ctx):Promise<null>
+  /** @AgentView 错的入口。
+   * @OperationEffect none
+   * @OperationModes observe
+   */
+  wrong(ctx:Ctx):Promise<null>
+}`
+test('omittable inputs accept null; execute-only operations declare their entry; summaries keep only the model text',()=>{
+  const {list,update,wrong}=contracts(api)
+  const listed=list(),updated=update()
+  assert.deepEqual(listed.input.anyOf[0],{type:'null'});assert.equal(listed.input.definitions[listed.input.anyOf[1].$ref.split('/').at(-1)].type,'object');assert.equal(listed.allowedModes,undefined)
+  const ajv=new Ajv({strict:true}),validate=ajv.compile(listed.input);assert(validate(null));assert(validate({limit:2}));assert(!validate({other:1}))
+  assert.deepEqual(updated.allowedModes,['execute']);assert.equal(updated.effects,'write')
+  assert.equal(listed.summary,'分页列出。');assert.equal(updated.summary,'改一份。\n版本不对就冲突。')
+  assert.throws(()=>wrong(),/只接受 execute/)
 })

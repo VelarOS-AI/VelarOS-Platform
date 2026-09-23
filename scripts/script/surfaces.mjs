@@ -21,7 +21,7 @@ export const CodeSurfaces = [
     unit: 'files',
     /** 操作接口；方法带 `@AgentView` 的才进模型面。 */
     interfaces: ['FileOperationsApi'],
-    /** 代码模版：日常最常用写法的示例（只是示例，不要求照着写），import 只写一次；相对单元目录（没有单元就相对包目录）。 */
+    /** 代码模版：日常最常用写法的示例（只是示例，不要求照着写），import 只写一次；相对单元目录（没有单元就相对包目录）。能力按装配叠加时写成数组，按顺序接成一份。 */
     templates: 'template.js',
   },
   {
@@ -104,6 +104,124 @@ export const CodeSurfaces = [
     interfaces: ['CdpOperationsApi'],
     templates: 'cdp-template.js',
   },
+  // ── Act 自管理能力：模型从 velaros:system 导入 goal 成员（聚合包由 act/system 的目录编出），模块身份照旧是 velaros:system-goal
+  {
+    namespace: 'system-goal',
+    directory: 'velaros',
+    unit: 'act/system',
+    interfaces: ['GoalOperationsApi'],
+    templates: 'goal-template.js',
+  },
+  {
+    // 记忆：模型从 velaros:system 导入 memory 成员；按装配四选一挂上（有没有整理模型 × 有没有长期记忆），实现同一个
+    namespace: 'system-memory-local',
+    directory: 'velaros',
+    unit: 'act/system',
+    interfaces: ['SystemMemoryOperationsWorkingApi'],
+    templates: 'memory-local-template.js',
+  },
+  {
+    namespace: 'system-memory',
+    directory: 'velaros',
+    unit: 'act/system',
+    interfaces: ['SystemMemoryOperationsWorkingApi', 'SystemMemoryOperationsOrganizeApi'],
+    templates: 'memory-template.js',
+  },
+  {
+    namespace: 'system-memory-persistent-local',
+    directory: 'velaros',
+    unit: 'act/system',
+    interfaces: ['SystemMemoryOperationsLongTermApi', 'SystemMemoryOperationsWorkingApi'],
+    templates: ['memory-local-template.js', 'memory-long-term-template.js'],
+  },
+  {
+    namespace: 'system-memory-persistent',
+    directory: 'velaros',
+    unit: 'act/system',
+    interfaces: ['SystemMemoryOperationsLongTermApi', 'SystemMemoryOperationsWorkingApi', 'SystemMemoryOperationsOrganizeApi'],
+    templates: ['memory-template.js', 'memory-long-term-template.js'],
+  },
+  {
+    // 共享状态：模型从 velaros:system 导入 store 成员；按授权三选一挂上（能建空间 / 能写 / 只读），实现同一个
+    namespace: 'system-store',
+    directory: 'velaros',
+    unit: 'act/system',
+    interfaces: ['StoreOperationsReadApi', 'StoreOperationsWriteApi', 'StoreOperationsCreateApi'],
+    templates: 'store-template.js',
+  },
+  {
+    namespace: 'system-store-write',
+    directory: 'velaros',
+    unit: 'act/system',
+    interfaces: ['StoreOperationsReadApi', 'StoreOperationsWriteApi'],
+    templates: 'store-write-template.js',
+  },
+  {
+    namespace: 'system-store-read',
+    directory: 'velaros',
+    unit: 'act/system',
+    interfaces: ['StoreOperationsReadApi'],
+    templates: 'store-read-template.js',
+  },
+  {
+    // 能力发现：模型从 velaros:system 导入 modules 成员
+    namespace: 'modules',
+    directory: 'velaros',
+    unit: 'act/system',
+    interfaces: ['ModulesOperationsApi'],
+    templates: 'modules-template.js',
+  },
+  {
+    // 整理会话读父快照：只挂在整理支线上
+    namespace: 'context-materials',
+    directory: 'velaros',
+    unit: 'act/system',
+    interfaces: ['ContextMaterialsOperationsApi'],
+    templates: 'context-materials-template.js',
+  },
+  {
+    // 向用户或父任务要信息、确认与能力
+    namespace: 'interaction',
+    directory: 'velaros',
+    unit: 'act/agents',
+    interfaces: ['InteractionOperationsApi'],
+    templates: 'interaction-template.js',
+  },
+  {
+    // 同一运行时上的有界子任务
+    namespace: 'agents',
+    directory: 'velaros',
+    unit: 'act/agents',
+    interfaces: ['AgentsOperationsApi'],
+    templates: 'template.js',
+  },
+  {
+    // 有界高级搜索：另起只读的搜索模型
+    namespace: 'search',
+    directory: 'velaros',
+    unit: 'act/search',
+    interfaces: ['SearchOperationsApi'],
+    templates: 'template.js',
+  },
+  {
+    // 搜索会话里的来源检索与证据读取：只挂在搜索支线上
+    namespace: 'evidence',
+    directory: 'velaros',
+    unit: 'act/search',
+    interfaces: ['EvidenceOperationsApi'],
+    templates: 'evidence-template.js',
+  },
+]
+
+/**
+ * 不经 Kernel 的脚本标准模块：`velaros`（交出结果）与 `velaros:program`（这次程序随身带来的参数与大段文本）。
+ * 它们由脚本运行器在隔离进程里直接提供，没有操作回执，也就没有 schema；声明同样从源码里带 @AgentView 的接口生成——
+ * 接口的每个属性成为模块的一个 `export const`，注释照原样带上。生成物写进 `baselines/script/<namespace>.d.ts`
+ * 与所属包的 `contract/surface.ts`（常量名 `constant`），检查器、包编译器与运行时说明都用那一份。
+ */
+export const StandardSurfaces = [
+  { specifier: 'velaros', namespace: 'velaros', directory: 'script', interface: 'ScriptStandardLibrary', constant: 'VelarosStandardDeclarations' },
+  { specifier: 'velaros:program', namespace: 'program', directory: 'script', interface: 'ScriptProgramData', constant: 'ProgramModuleDeclarations' },
 ]
 
 /**
@@ -120,6 +238,15 @@ export const HostContextTypes = new Set([
   'MemoryOperationContext',
   'OfficeOperationContext',
   'BrowserOperationContext',
+  'GoalOperationContext',
+  'ModulesOperationContext',
+  'StoreOperationContext',
+  'SystemMemoryOperationContext',
+  'ContextMaterialsOperationContext',
+  'InteractionOperationContext',
+  'AgentsOperationContext',
+  'SearchOperationContext',
+  'EvidenceOperationContext',
 ])
 
 /** 进模型可观测面的标记；打在操作方法与它引用到的每个**领域类型**上。 */
@@ -142,3 +269,8 @@ export const BannedModelFacingAliases = Object.freeze({
 
 /** 能力模块的统一前缀；与 `@velaros-ai/script` 的 `CapabilityModulePrefix` 必须一致。 */
 export const CapabilityModulePrefix = 'velaros:'
+
+/** 能力模块在包里的常量名：`velaros:files` → `VelarFilesModule`，`velaros:system-goal` → `VelarSystemGoalModule`。 */
+export function surfaceConstantName(namespace) {
+  return `Velar${namespace.split('-').map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`).join('')}Module`
+}

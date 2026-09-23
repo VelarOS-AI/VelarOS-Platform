@@ -144,7 +144,7 @@ const execute=(request,source)=>({type:'text',text:`${request.instructions.match
 const snapshotOf=request=>JSON.parse(JSON.parse(request.materials[0].text).partitions.task.goals[0].text).snapshot
 async function* deliverPatch(request,extra={}){
  const snapshot=snapshotOf(request)
- const part=execute(request,`import {output} from 'velaros';output(${JSON.stringify(patch(snapshot,extra))});`)
+ const part=execute(request,`import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(patch(snapshot,extra))}));`)
  yield {...part,text:`${part.text}\n${request.instructions.match(/当前帧标记：(\S+)。普通/)[1]} done`}
  yield finish
 }
@@ -445,7 +445,8 @@ test('a maintenance patch error is corrected within the same leaf before publica
  let calls=0
  const maintenance=driver(async function*(request){
   calls++
-  if(calls===1){yield* deliverPatch(request,{recentRecords:[]})}
+  // 类型合法、取值越界：过得了类型检查，由补丁校验在同一支线里报出来
+  if(calls===1){yield* deliverPatch(request,{recentRecords:999})}
   else{assert.equal(calls,2);assert.match(JSON.stringify(request),/近期记录窗口无效/);yield* deliverPatch(request,{recentRecords:2})}
  })
  const f=await setupTool(t,driver(async function*(request){yield* done(request)}),maintenance)
@@ -539,7 +540,7 @@ test('an accepted maintenance candidate tells the leaf to finish before parent p
   calls++
   if(calls===1){
    const snapshot=JSON.parse(JSON.parse(request.materials[0].text).partitions.task.goals[0].text).snapshot
-   yield execute(request,`import {output} from 'velaros';output(${JSON.stringify(patch(snapshot))});`);yield finish
+   yield execute(request,`import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(patch(snapshot))}));`);yield finish
   }else{
    assert.equal(calls,2);assert.match(request.instructions,/当前候选补丁已通过校验并受理/)
    assert.match(request.instructions,/applied 回执只在本支线完成之后产生/)

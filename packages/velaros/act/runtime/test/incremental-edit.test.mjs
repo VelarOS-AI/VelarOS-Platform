@@ -122,14 +122,14 @@ test('incremental failure prevents the paired execution and includes the draft i
 test('CAS rejects a concurrent head change and preserves unrelated context appends',async t=>{
   const f=await fixture(t); const v1=await f.session.observe({source:observed}); const storage2=localContextStorage({path:f.path}); const context2=createContextRuntime({sessionId:'s',storage:storage2}); const other=new ProgramContext('s',context2,storage2)
   t.after(()=>storage2.close())
-  const original=f.storage.compareAndSwap.bind(f.storage);let raced=false
-  f.storage.compareAndSwap=async(id,expected,state)=>{
-    if(!raced&&state.records.some(r=>r.title.startsWith('script:version:')&&r.title!==`script:version:${v1.sourceRef}`)){
+  const original=f.storage.compareAndSwapMetadata.bind(f.storage);let raced=false
+  f.storage.compareAndSwapMetadata=async(id,expected,state,append=[])=>{
+    if(!raced&&append.some(r=>r.title.startsWith('script:version:')&&r.title!==`script:version:${v1.sourceRef}`)){
       raced=true;const control={id:crypto.randomUUID(),fingerprint:'other',expectedObservation:v1.sourceRef}; const sourceRef=crypto.randomUUID()
       await other.publish([{program:{source:observed.replace('count = 1','count = 9')},version:{sourceRef,parentRef:v1.sourceRef,baseObservation:v1.sourceRef,kind:'observation'},receipt:{status:'updated',sourceRef,executed:false}}],control,{status:'completed',executed:false,observe:{status:'updated',sourceRef,executed:false}},true,false,signal())
       await context2.append({kind:'event',title:'concurrent-event',body:'must survive'})
     }
-    return original(id,expected,state)
+    return original(id,expected,state,append)
   }
   const error=await rejection(f.session.observe({sourceRef:v1.sourceRef,edits:[{oldText:'count = 1',newText:'count = 2'}]}),'SCRIPT_CONFLICT')
   assert.match((await f.source(error.currentRef)).source,/count = 9/);assert.ok((await f.records()).some(r=>r.title==='concurrent-event'))
@@ -137,10 +137,10 @@ test('CAS rejects a concurrent head change and preserves unrelated context appen
 })
 
 test('publication retries an unrelated CAS change without dropping leases or the event',async t=>{
-  const f=await fixture(t); const v1=await f.session.observe({source:observed}); const original=f.storage.compareAndSwap.bind(f.storage);let injected=false
-  f.storage.compareAndSwap=async(id,expected,state)=>{
-    if(!injected&&state.records.some(r=>r.title.startsWith('script:version:')&&r.title!==`script:version:${v1.sourceRef}`)){injected=true;await f.session.context.append({kind:'event',title:'unrelated',body:'preserve'})}
-    return original(id,expected,state)
+  const f=await fixture(t); const v1=await f.session.observe({source:observed}); const original=f.storage.compareAndSwapMetadata.bind(f.storage);let injected=false
+  f.storage.compareAndSwapMetadata=async(id,expected,state,append=[])=>{
+    if(!injected&&append.some(r=>r.title.startsWith('script:version:')&&r.title!==`script:version:${v1.sourceRef}`)){injected=true;await f.session.context.append({kind:'event',title:'unrelated',body:'preserve'})}
+    return original(id,expected,state,append)
   }
   const v2=await f.session.observe({sourceRef:v1.sourceRef,edits:[{oldText:'count = 1',newText:'count = 2'}]});assert.equal((await f.state()).observation,v2.sourceRef);assert.ok((await f.records()).some(r=>r.title==='unrelated'))
 })
@@ -174,11 +174,11 @@ test('a stale model frame cannot replace an observation changed by another runti
 })
 
 test('object saved before failed publication cannot replace the active version',async t=>{
-  const f=await fixture(t); const v1=await f.session.observe({source:observed}); const original=f.storage.compareAndSwap.bind(f.storage)
+  const f=await fixture(t); const v1=await f.session.observe({source:observed}); const original=f.storage.compareAndSwapMetadata.bind(f.storage)
   let fail=true
-  f.storage.compareAndSwap=async(id,expected,state)=>{
-    if(fail&&id==='s'&&state.records.some(r=>r.title.startsWith('script:version:')&&r.title!==`script:version:${v1.sourceRef}`)){fail=false;throw Object.assign(new Error('injected publication failure'),{code:'STORAGE_TEST_FAILURE'})}
-    return original(id,expected,state)
+  f.storage.compareAndSwapMetadata=async(id,expected,state,append=[])=>{
+    if(fail&&id==='s'&&append.some(r=>r.title.startsWith('script:version:')&&r.title!==`script:version:${v1.sourceRef}`)){fail=false;throw Object.assign(new Error('injected publication failure'),{code:'STORAGE_TEST_FAILURE'})}
+    return original(id,expected,state,append)
   }
   await rejection(f.session.observe({sourceRef:v1.sourceRef,edits:[{oldText:'count = 1',newText:'count = 2'}]}),'STORAGE_TEST_FAILURE')
   assert.equal((await f.state()).observation,v1.sourceRef);assert.equal((await f.records()).filter(r=>r.title.startsWith('script:version:')).length,1)
@@ -186,10 +186,10 @@ test('object saved before failed publication cannot replace the active version',
 
 test('publication survives lost storage acknowledgement and recovers by stable call identity',async t=>{
   const f=await fixture(t); const v1=await f.session.observe({source:observed}); const input={sourceRef:v1.sourceRef,edits:[{oldText:'count = 1',newText:'count = 2'}]}
-  const original=f.storage.compareAndSwap.bind(f.storage);let lost=false
-  f.storage.compareAndSwap=async(id,expected,state)=>{
-    const committed=await original(id,expected,state)
-    if(committed&&!lost&&state.records.some(r=>r.title.startsWith('script:version:')&&r.title!==`script:version:${v1.sourceRef}`)){lost=true;throw Error('injected lost publication acknowledgement')}
+  const original=f.storage.compareAndSwapMetadata.bind(f.storage);let lost=false
+  f.storage.compareAndSwapMetadata=async(id,expected,state,append=[])=>{
+    const committed=await original(id,expected,state,append)
+    if(committed&&!lost&&append.some(r=>r.title.startsWith('script:version:')&&r.title!==`script:version:${v1.sourceRef}`)){lost=true;throw Error('injected lost publication acknowledgement')}
     return committed
   }
   await assert.rejects(f.session.observe(input,undefined,{callId:'lost-observe'}),/injected lost/)
@@ -198,10 +198,10 @@ test('publication survives lost storage acknowledgement and recovers by stable c
 })
 
 test('INV-9 uncertain submission recovery never reruns a script whose write already happened',async t=>{
-  const f=await fixture(t); const original=f.storage.compareAndSwap.bind(f.storage);let fail=true
-  f.storage.compareAndSwap=async(id,expected,state)=>{
-    if(fail&&state.records.some(r=>r.title.startsWith('script:control:')&&r.ref.id.endsWith(':completed'))){fail=false;throw Error('injected crash before completion receipt')}
-    return original(id,expected,state)
+  const f=await fixture(t); const original=f.storage.compareAndSwapMetadata.bind(f.storage);let fail=true
+  f.storage.compareAndSwapMetadata=async(id,expected,state,append=[])=>{
+    if(fail&&append.some(r=>r.title.startsWith('script:control:')&&r.ref.id.endsWith(':completed'))){fail=false;throw Error('injected crash before completion receipt')}
+    return original(id,expected,state,append)
   }
   await assert.rejects(f.session.execute({source:write},2,undefined,{callId:'lost-execute'}),/injected crash/)
   assert.equal(f.world.writes,1);await f.restart()

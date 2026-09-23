@@ -53,14 +53,14 @@ async function* researcher(request){
  assert.equal(request.contextStatus.mode,'partitioned')
  const evidence=findEvidence(request)
  if(!evidence){yield {type:'text',text:block(request,'execute()',`import {read} from 'velaros:evidence';import {output} from 'velaros';output(await read({target:${JSON.stringify(target)}}));`)};yield finish}
- else{yield {type:'text',text:`${block(request,'execute()',`import {output} from 'velaros';output(${JSON.stringify({findings:[{text:'logout located',evidenceIds:[evidence.id]}],gaps:[],nextSteps:[]})});`)}${marker(request)} done`};yield finish}
+ else{yield {type:'text',text:`${block(request,'execute()',`import {output} from 'velaros';import {report} from 'velaros:evidence';await report(${JSON.stringify({findings:[{text:'logout located',evidenceIds:[evidence.id]}],gaps:[],nextSteps:[]})});`)}${marker(request)} done`};yield finish}
 }
 
 test('typed history discovery recalls results through the same ScriptAct scope without replay',async t=>{
  const f=await fixture(t,async function*(request,f){
   if(f.calls===1){yield {type:'text',text:block(request,'execute()',"import {output} from 'velaros';output('recall-me');")};yield finish}
   else{
-   yield {type:'text',text:`${block(request,'execute()',"import {memory as memoryApi} from 'velaros:system';const {list,read}=memoryApi;import {output} from 'velaros';const page=await list({kind:'history',limit:32});const result=page.items.find(item=>item.title.endsWith(':result'));if(!result)throw new Error('missing history');const original=await read({ref:result.ref});if(!original.text.includes('recall-me'))throw new Error('wrong history');output({findings:[],gaps:[{code:'RECALLED',detail:String(result.sequence)}],nextSteps:[]});")}${marker(request)} done`};yield finish
+   yield {type:'text',text:`${block(request,'execute()',"import {memory as memoryApi} from 'velaros:system';const {list,read}=memoryApi;import {output} from 'velaros';import {report} from 'velaros:evidence';const page=await list({kind:'history',limit:32});const result=page.items.find(item=>item.title.endsWith(':result'));if(!result)throw new Error('missing history');const original=await read({ref:result.ref});if(!original.text.includes('recall-me'))throw new Error('wrong history');await report({findings:[],gaps:[{code:'RECALLED',detail:String(result.sequence)}],nextSteps:[]});")}${marker(request)} done`};yield finish
   }
  })
  const report=await search(f)
@@ -115,7 +115,7 @@ test('last reserved call closes softly and blocks fresh evidence reads',async t=
   if(f.calls===1){yield {type:'text',text:block(request,'execute()',"import {output} from 'velaros';output('work');")};yield finish}
   else{
    assert.equal(request.contextStatus.phase,'finalizing');assert.match(request.instructions,/最后的报告交付机会/)
-   yield {type:'text',text:`${block(request,'execute()',`import {read} from 'velaros:evidence';import {output} from 'velaros';try{await read({target:${JSON.stringify(target)}})}catch{}output({findings:[],gaps:[{code:'UNRESOLVED',detail:'budget ended'}],nextSteps:['continue']});`)}${marker(request)} done`};yield finish
+   yield {type:'text',text:`${block(request,'execute()',`import {read,report} from 'velaros:evidence';import {output} from 'velaros';try{await read({target:${JSON.stringify(target)}})}catch{}await report({findings:[],gaps:[{code:'UNRESOLVED',detail:'budget ended'}],nextSteps:['continue']});`)}${marker(request)} done`};yield finish
   }
  },{})
  await f.runtime.close()
@@ -124,7 +124,7 @@ test('last reserved call closes softly and blocks fresh evidence reads',async t=
 })
 
 test('runtime rejects invented evidence citations and returns saved partial state',async t=>{
- const f=await fixture(t,async function*(request){yield {type:'text',text:`${block(request,'execute()',"import {output} from 'velaros';output({findings:[{text:'invented',evidenceIds:['fake']}],gaps:[],nextSteps:[]});")}${marker(request)} done`};yield finish})
+ const f=await fixture(t,async function*(request){yield {type:'text',text:`${block(request,'execute()',"import {output} from 'velaros';import {report} from 'velaros:evidence';await report({findings:[{text:'invented',evidenceIds:['fake']}],gaps:[],nextSteps:[]});")}${marker(request)} done`};yield finish})
  const report=await search(f);assert.notEqual(report.status,'completed');assert.equal(report.findings.length,0);assert(f.calls<=profile.modelCalls)
 })
 
@@ -135,7 +135,7 @@ test('a work request that would consume the final token reserve is recompiled as
    assert.equal(request.contextStatus.phase,'finalizing')
    const frame=JSON.parse(request.materials.find(item=>item.origin==='runtime-view').text)
    const evidence=frame.partitions.runtime.modelTool.items[0]
-   yield {type:'text',text:`${block(request,'execute()',`import {output} from 'velaros';output(${JSON.stringify({findings:[{text:'verified logout',evidenceIds:[evidence.id]}],gaps:[],nextSteps:[]})});`)}${marker(request)} done`};yield finish
+   yield {type:'text',text:`${block(request,'execute()',`import {output} from 'velaros';import {report} from 'velaros:evidence';await report(${JSON.stringify({findings:[{text:'verified logout',evidenceIds:[evidence.id]}],gaps:[],nextSteps:[]})});`)}${marker(request)} done`};yield finish
   }
  })
  f.model.estimate=async request=>({tokens:request.instructions.includes('最后的报告交付机会')?1000:50000,precision:'exact',basis:'budget-boundary-fixture'})
@@ -154,7 +154,7 @@ test('final search delivery preserves verified evidence when a prior required pr
    assert.equal(request.contextStatus.phase,'finalizing')
    const frame=JSON.parse(request.materials.find(item=>item.origin==='runtime-view').text);assert(frame.partitions.runtime.decision.missing.length)
    const evidence=frame.partitions.runtime.modelTool.items[0]
-   yield {type:'text',text:`${block(request,'execute()',`import {output} from 'velaros';output(${JSON.stringify({findings:[{text:'verified logout',evidenceIds:[evidence.id]}],gaps:[{code:'CONTEXT_PARTIAL',detail:'prior preview unavailable'}],nextSteps:[]})});`)}${marker(request)} done`};yield finish
+   yield {type:'text',text:`${block(request,'execute()',`import {output} from 'velaros';import {report} from 'velaros:evidence';await report(${JSON.stringify({findings:[{text:'verified logout',evidenceIds:[evidence.id]}],gaps:[{code:'CONTEXT_PARTIAL',detail:'prior preview unavailable'}],nextSteps:[]})});`)}${marker(request)} done`};yield finish
   }
  })
  await f.runtime.close()
@@ -175,7 +175,7 @@ test('INV-35 finalization compiles against its reserved window after a batch of 
    assert.equal(frame.partitions.runtime.mandatory.filter(item=>item.operation==='velaros:evidence.read').length,60)
    assert.match(request.compiledPrompt,/grouped-receipts/)
    const estimate=await f.model.estimate(request);assert(estimate.tokens+request.outputTokens+1024<=20000)
-   yield {type:'text',text:`${block(request,'execute()',`import {output} from 'velaros';output(${JSON.stringify({findings:[{text:'verified batch',evidenceIds:[evidence.id]}],gaps:[],nextSteps:[]})});`)}${marker(request)} done`};yield finish
+   yield {type:'text',text:`${block(request,'execute()',`import {output} from 'velaros';import {report} from 'velaros:evidence';await report(${JSON.stringify({findings:[{text:'verified batch',evidenceIds:[evidence.id]}],gaps:[],nextSteps:[]})});`)}${marker(request)} done`};yield finish
   }
  })
  f.model.estimate=async request=>({tokens:modelRequestEncoder.messages(request).reduce((sum,item)=>sum+(typeof item.content==='string'?item.content:JSON.stringify(item.content)).length,0),precision:'estimate',basis:'actual-message-character-bound'})
@@ -195,7 +195,7 @@ test('search cannot discover or execute unrelated world modules and cannot enabl
  const f=await fixture(t,async function*(request,f){
   if(f.calls===1){yield {type:'text',text:block(request,'observe()',"import {output} from 'velaros';output('not allowed');")};yield finish}
   else if(f.calls===2){yield {type:'text',text:block(request,'execute()',"import {write} from 'test:world';await write();")};yield finish}
-  else{yield {type:'text',text:`${block(request,'execute()',"import {output} from 'velaros';import {modules} from 'velaros:system';const list=await modules.list({});if(list.items.some(item=>item.specifier==='test:world'))throw new Error('scope leaked');output({findings:[],gaps:[{code:'DENIED',detail:'no world capability'}],nextSteps:[]});")}${marker(request)} done`};yield finish}
+  else{yield {type:'text',text:`${block(request,'execute()',"import {output} from 'velaros';import {report} from 'velaros:evidence';import {modules} from 'velaros:system';const list=await modules.list({});if(list.items.some(item=>item.specifier==='test:world'))throw new Error('scope leaked');await report({findings:[],gaps:[{code:'DENIED',detail:'no world capability'}],nextSteps:[]});")}${marker(request)} done`};yield finish}
  },{modules:[world]})
  const report=await search(f);assert.equal(writes,0);assert.equal(report.status,'partial');assert(f.calls<=4)
 })
@@ -203,7 +203,7 @@ test('search cannot discover or execute unrelated world modules and cannot enabl
 test('parallel reads reserve source byte capacity before dispatch',async t=>{
  const f=await fixture(t,async function*(request,f){
   if(f.calls===1){yield {type:'text',text:block(request,'execute()',`import {read} from 'velaros:evidence';import {output} from 'velaros';output(await Promise.allSettled([read({target:${JSON.stringify(target)},maxBytes:9}),read({target:${JSON.stringify(target)},maxBytes:9})]));`)};yield finish}
-  else{yield {type:'text',text:`${block(request,'execute()',"import {output} from 'velaros';output({findings:[],gaps:[{code:'LIMIT',detail:'read capacity'}],nextSteps:[]});")}${marker(request)} done`};yield finish}
+  else{yield {type:'text',text:`${block(request,'execute()',"import {output} from 'velaros';import {report} from 'velaros:evidence';await report({findings:[],gaps:[{code:'LIMIT',detail:'read capacity'}],nextSteps:[]});")}${marker(request)} done`};yield finish}
  })
  await f.runtime.close()
  const runtime=await createRuntime({...f.config,storage:localContextStorage({path:f.path}),search:{model:f.model,defaultProfile:'standard',profiles:{standard:{...profile,readBytes:9}}}})
@@ -222,7 +222,7 @@ test('revoked sources are absent from resumed history and snapshots are denied',
 })
 
 test('two concurrent searches share the parent budget and independent finalization reservations',async t=>{
- const f=await fixture(t,async function*(request){yield {type:'text',text:`${block(request,'execute()',"import {output} from 'velaros';output({findings:[],gaps:[{code:'NO_EVIDENCE',detail:'limited scope'}],nextSteps:[]});")}${marker(request)} done`};yield finish})
+ const f=await fixture(t,async function*(request){yield {type:'text',text:`${block(request,'execute()',"import {output} from 'velaros';import {report} from 'velaros:evidence';await report({findings:[],gaps:[{code:'NO_EVIDENCE',detail:'limited scope'}],nextSteps:[]});")}${marker(request)} done`};yield finish})
  const outcome=await f.session.execute({source:"import {search} from 'velaros:search';import {output} from 'velaros';output(await Promise.all([search({query:'a'}),search({query:'b'})]));"})
  assert(!outcome.result.failed,JSON.stringify(outcome));assert.equal(outcome.result.value.default.length,2);assert.equal(f.calls,2)
  assert.equal((await f.session.view.inspect()).usage.contextCalls,2)
@@ -378,7 +378,7 @@ test('replacing the source set with the same cardinality removes old candidates 
   if(f.calls===1){yield {type:'text',text:block(request,'execute()',"import {query} from 'velaros:evidence';import {output} from 'velaros';output(await query({source:'project',query:'auth'}));")};yield finish}
   else{
    if(f.calls>2)assert(!JSON.stringify(request).includes(secret))
-   yield {type:'text',text:`${block(request,'execute()',"import {output} from 'velaros';output({findings:[],gaps:[{code:'UNRESOLVED',detail:'read more'}],nextSteps:[]});")}${marker(request)} done`};yield finish
+   yield {type:'text',text:`${block(request,'execute()',"import {output} from 'velaros';import {report} from 'velaros:evidence';await report({findings:[],gaps:[{code:'UNRESOLVED',detail:'read more'}],nextSteps:[]});")}${marker(request)} done`};yield finish
   }
  })
  await f.runtime.close()
@@ -545,7 +545,7 @@ test('INV-33 search keeps runtime evidence after execution output expires and fi
   assert.equal(material.items[0].excerptTruncated,false)
   assert.equal(findEvidence(request),undefined,'结果租约已经退出，可见证据来自 Runtime 事实目录')
   assert(request.compiledPrompt.includes(material.items[0].id),'原始模型请求包含同一事实目录')
-  yield {type:'text',text:`${block(request,'execute()',`import {output} from 'velaros';output(${JSON.stringify({findings:[{text:'logout located after output expiry',evidenceIds:[material.items[0].id]}],gaps:[],nextSteps:[]})});`)}${marker(request)} done`};yield finish
+  yield {type:'text',text:`${block(request,'execute()',`import {output} from 'velaros';import {report} from 'velaros:evidence';await report(${JSON.stringify({findings:[{text:'logout located after output expiry',evidenceIds:[material.items[0].id]}],gaps:[],nextSteps:[]})});`)}${marker(request)} done`};yield finish
  })
  const result=await search(f)
  assert.equal(result.status,'completed',JSON.stringify(result));assert.equal(f.reads,1);assert.equal(f.calls,3)
@@ -578,7 +578,7 @@ test('INV-33 exhausted query allowance still permits reading previously found ca
    yield {type:'text',text:block(request,'execute()',`import {read} from 'velaros:evidence';import {output} from 'velaros';output(await read({target:${JSON.stringify(catalog.candidates[0].target)}}));`)};yield finish;return
   }
   assert.equal(request.contextStatus.phase,'finalizing');assert.equal(catalog.candidates.length,0);assert.equal(catalog.items.length,1)
-  yield {type:'text',text:`${block(request,'execute()',`import {output} from 'velaros';output(${JSON.stringify({findings:[{text:'Read after query limit',evidenceIds:[catalog.items[0].id]}],gaps:[],nextSteps:[]})});`)}${marker(request)} done`};yield finish
+  yield {type:'text',text:`${block(request,'execute()',`import {output} from 'velaros';import {report} from 'velaros:evidence';await report(${JSON.stringify({findings:[{text:'Read after query limit',evidenceIds:[catalog.items[0].id]}],gaps:[],nextSteps:[]})});`)}${marker(request)} done`};yield finish
  })
  // 使用同一正式装配，仅收紧查询档位；其余额度仍可供后续读取。
  await f.runtime.close()
@@ -593,9 +593,10 @@ test('a malformed gap receives its exact contract and can be corrected without a
   else{
    const evidence=JSON.parse(request.materials.find(item=>item.origin==='runtime-view').text).partitions.runtime.modelTool.items[0]
    assert(evidence)
-   if(f.calls===3)assert.match(modelText(request),/code:string,detail:string/)
+   // 写错形状的结论在执行前就被类型检查拦下，诊断里直接给出 gaps 的类型
+   if(f.calls===3)assert.match(modelText(request),/readonly code: string/)
    const gaps=f.calls===2?['Not all related paths have been verified']:[{code:'UNRESOLVED',detail:'Not all related paths have been verified'}]
-   yield {type:'text',text:`${block(request,'execute()',`import {output} from 'velaros';output(${JSON.stringify({findings:[{text:'Real logout evidence',evidenceIds:[evidence.id]}],gaps,nextSteps:[]})});`)}${marker(request)} done`}
+   yield {type:'text',text:`${block(request,'execute()',`import {output} from 'velaros';import {report} from 'velaros:evidence';await report(${JSON.stringify({findings:[{text:'Real logout evidence',evidenceIds:[evidence.id]}],gaps,nextSteps:[]})});`)}${marker(request)} done`}
   }
   yield finish
  })

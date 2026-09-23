@@ -31,3 +31,4 @@
 | INV-34 | output 在调用时捕获无环 JSON 快照，原始归档与有界预览分离；失败和中止保留已捕获块，采集问题不能被 catch 隐藏 | 测试 | `test/output.test.ts` |
 | INV-35 | output 展示按类型保留结构和省略范围，正文与目录总量守展示预算；摘要同时匹配原值和任务代次 | 测试 | `test/output.test.ts` |
 | INV-36 | 受限输出编辑只接受真实导入的顶层字面量声明，保持采集和用途不变，不执行脚本 | 测试 | `test/output.test.ts` |
+| INV-37 | output 声明里写的上限与 ScriptOutputLimits 一致，输出校验恰好在这些边界上放行与拒绝 | 测试 | `test/output.test.ts` |

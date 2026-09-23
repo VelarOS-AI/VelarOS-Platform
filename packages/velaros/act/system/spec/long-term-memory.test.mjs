@@ -9,7 +9,7 @@ import {localContextStorage} from '@velaros-ai/context/node'
 import {codeProgramChecker,nodeSubprocessCodeRunner} from '@velaros-ai/script'
 
 import {createRuntime} from '../../../dist/act/runtime/index.js'
-import {PersistentMemoryModuleId} from '../../../dist/act/system/contract/constants.js'
+import {LongTermMemoryModuleIds,PersistentLocalMemoryModuleId,PersistentMemoryModuleId} from '../../../dist/act/system/contract/constants.js'
 import {createMemoryStore} from '../../../dist/memory/index.js'
 import {done,marker,modelText,turn} from '../../runtime/test/support/model-turn.mjs'
 
@@ -39,9 +39,8 @@ test('INV-12 主线长期记忆统一包合同、模板、发现和真实存储�
  const f=await fixture(t)
  const description=(await execute(f.session,"output(await modules.describe({module:'velaros:system',export:'memory'}));")).value
  const operations=description.exports.memory.operations
- assert.equal(description.exports.memory.binding.moduleId,PersistentMemoryModuleId)
- assert.match(description.exports.memory.binding.schemaRevision,/:local$/)
- assert.deepEqual(Object.keys(operations).sort(),['list','read','update','retain','release','recall','save','remove'].sort())
+ assert.equal(description.exports.memory.binding.moduleId,PersistentLocalMemoryModuleId)
+ assert.deepEqual(Object.keys(operations).sort(),['list','read','update','plan','retain','release','recall','save','remove'].sort())
  assert.equal(operations.organize,undefined)
  assert.equal(codeProgramChecker.check({source:description.template,granted:[{namespace:'velaros:system',declarations:description.declarations}]}).ok,true)
  await f.session.execute({source:description.template})
@@ -120,7 +119,7 @@ test('INV-12 observe 每帧可召回最新记忆，但 save/remove 均在派发�
 
 test('INV-12 宿主授权和既有输入验证保护长期写入，失败回执记录无副作用',async t=>{
  let denied=false
- const f=await fixture(t,{authorize:async invocation=>{if(denied&&invocation.binding.moduleId===PersistentMemoryModuleId)throw Object.assign(new Error('Denied by host'),{code:'HOST_DENIED'})}})
+ const f=await fixture(t,{authorize:async invocation=>{if(denied&&LongTermMemoryModuleIds.includes(invocation.binding.moduleId))throw Object.assign(new Error('Denied by host'),{code:'HOST_DENIED'})}})
  denied=true
  assert.equal((await execute(f.session,`try{await memory.save(${JSON.stringify(entry('blocked'))});}catch(error){output(error.code);}`)).value,'HOST_DENIED')
  denied=false
@@ -144,7 +143,7 @@ test('INV-12 业务子任务和搜索在发现、声明与导入执行层均没�
  const source=`${prelude}output({keys:Object.keys(memory),catalog:await modules.list({space:'system'})});`
  const searchModel=model(async function*(request){
   if(++searchCalls===1){yield turn(request,{execute:{source}});yield {type:'finish',reason:'stop'}}
-  else{assert(!request.instructions.includes('memory.recall'));assert(!modelText(request).includes('system-memory-persistent'));assert(!modelText(request).includes('memory.save'));yield {type:'text',text:`${turn(request,{execute:{source:"import {output} from 'velaros';output({findings:[],gaps:[],nextSteps:[]});"}}).text}\n${marker(request)} done`};yield {type:'finish',reason:'stop'}}
+  else{assert(!request.instructions.includes('memory.recall'));assert(!modelText(request).includes('system-memory-persistent'));assert(!modelText(request).includes('memory.save'));yield {type:'text',text:`${turn(request,{execute:{source:"import {output} from 'velaros';import {report} from 'velaros:evidence';await report({findings:[],gaps:[],nextSteps:[]});"}}).text}\n${marker(request)} done`};yield {type:'finish',reason:'stop'}}
  })
  const child=model(async function*(request){
   if(++childCalls===1){yield turn(request,{execute:{source}});yield {type:'finish',reason:'stop'}}
@@ -169,7 +168,7 @@ test('INV-12 长期记忆与整理共享主入口，整理模型只读固定材�
   assert.match(request.instructions,/velaros:context-materials/)
   const snapshot=JSON.parse(JSON.parse(request.materials[0].text).partitions.task.goals[0].text).snapshot
   const patch={baseRevision:snapshot.baseRevision,summary:'Keep required progress',unresolved:[]}
-  yield {type:'text',text:`${turn(request,{execute:{source:`import {output} from 'velaros';output(${JSON.stringify(patch)});`}}).text}\n${marker(request)} done`}
+  yield {type:'text',text:`${turn(request,{execute:{source:`import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(patch)}));`}}).text}\n${marker(request)} done`}
   yield {type:'finish',reason:'stop'}
  })
  const main=model(async function*(request){
@@ -179,8 +178,8 @@ test('INV-12 长期记忆与整理共享主入口，整理模型只读固定材�
  })
  const f=await fixture(t,{model:main,context:{sources:[],maintenance:{model:organizer}}})
  const description=(await execute(f.session,'output(await modules.describe({module:"velaros:system",export:"memory"}));')).value
- assert.equal(Object.keys(description.exports.memory.operations).length,9)
- assert.match(description.exports.memory.binding.schemaRevision,/:organize$/)
+ assert.equal(Object.keys(description.exports.memory.operations).length,10)
+ assert.equal(description.exports.memory.binding.moduleId,PersistentMemoryModuleId)
  assert.equal(codeProgramChecker.check({source:description.template,granted:[{namespace:'velaros:system',declarations:description.declarations}]}).ok,true)
  await f.store.scope('project:shared').save(entry('durable','Keep across cleanup'))
  await submit(f.session)

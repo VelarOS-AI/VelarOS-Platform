@@ -46,7 +46,7 @@ test('long user text is archived, summarized after intent extraction, and recove
    yield {type:'finish',reason:'stop'};return
   }
   const patch={baseRevision:snapshot.baseRevision,summary:'理解用户意图',unresolved:[],inputs:[{ref:snapshot.goals[0],summary:'调查环境',constraints:['保留图片','只调查，不改文件'],unresolved:[],baseRevision:0}]}
-  yield {type:'text',text:`${block(request,`import {output} from 'velaros';output(${JSON.stringify(patch)});`)}\n${marker(request)} done`};yield {type:'finish',reason:'stop'}
+  yield {type:'text',text:`${block(request,`import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(patch)}));`)}\n${marker(request)} done`};yield {type:'finish',reason:'stop'}
  }}
  const f=await fixture(t,async function*(request,f){
   const frame=runtimeFrame(request.materials.at(-1).text); const goal=frame.goals[0]

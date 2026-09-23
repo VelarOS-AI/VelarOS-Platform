@@ -1,37 +1,39 @@
-/** 目标跨执行保留；removed 是宿主删除后的墓碑。 */
-export type GoalStatus='active'|'paused'|'complete'|'blocked'|'cancelled'|'removed'
-/** 当前会话的目标快照，版本同时覆盖目标替换与状态变化。 */
+/**
+ * @AgentView
+ * 目标状态：active 推进中、paused 暂停、complete 完成、blocked 受阻、cancelled 取消；removed 是用户删掉目标后留下的墓碑，模型不能设成它。
+ */
+export type GoalStatus = 'active' | 'paused' | 'complete' | 'blocked' | 'cancelled' | 'removed'
+
+/** @AgentView 当前会话的目标。revision 是版本号，改的时候作为 baseRevision 交回；删掉之后也不归零。createdAt、updatedAt 是毫秒时间戳。 */
 export interface GoalState {
- /** 生命周期身份；新目标使用新身份。 */
- readonly id:string
- /** CAS 版本，删除后也不归零。 */
- readonly revision:number
- /** 用户要完成的事项。 */
- readonly objective:string
- /** 与单轮执行结算独立的状态。 */
- readonly status:GoalStatus
- /** 完成依据、阻碍或最近进度。 */
- readonly reason:string
- /** 生命周期建立时间。 */
- readonly createdAt:number
- /** 最近更新的时间。 */
- readonly updatedAt:number
+  /** 这一个目标的身份；建立新目标就换一个。 */
+  readonly id: string
+  readonly revision: number
+  /** 用户要完成的事。 */
+  readonly objective: string
+  readonly status: GoalStatus
+  /** 完成依据、受阻原因或最近的进展。 */
+  readonly reason: string
+  readonly createdAt: number
+  readonly updatedAt: number
 }
-/** 模型和宿主共用的版本化更新；模型不能删除目标。 */
+
+/**
+ * @AgentView
+ * 改目标：baseRevision 是刚读到的 revision，从未建立过时为 0。
+ * objective 最多 8000 个字符，只在建立新目标时给（当前目标还在 active 或 paused 时不能换）；reason 最多 4000 个字符，status 为 complete 或 blocked 时必须写实际依据。
+ */
 export interface GoalUpdate {
- /** 必须先读取的当前版本；不存在时为零。 */
- readonly baseRevision:number
- /** 新建或替换终态目标时提供，活动目标不能被覆盖。 */
- readonly objective?:string
- /** 明确的目标状态；结束回复不会自动修改它。 */
- readonly status?:Exclude<GoalStatus,'removed'>
- /** 更新依据，完成或受阻时必须提供。 */
- readonly reason?:string
+  readonly baseRevision: number
+  readonly objective?: string
+  readonly status?: 'active' | 'paused' | 'complete' | 'blocked' | 'cancelled'
+  readonly reason?: string
 }
-/** 宿主专属生命周期控制。 */
+
+/** 宿主专属的生命周期控制：用户在界面上暂停、恢复、结束或删除目标。 */
 export interface GoalControl {
- /** 用户操作所针对的目标版本。 */
- readonly baseRevision:number
- /** 删除只产生墓碑，保留审计历史。 */
- readonly action:'resume'|'pause'|'complete'|'block'|'cancel'|'remove'
+  /** 用户操作所针对的目标版本。 */
+  readonly baseRevision: number
+  /** 删除只产生墓碑，保留审计历史。 */
+  readonly action: 'resume' | 'pause' | 'complete' | 'block' | 'cancel' | 'remove'
 }

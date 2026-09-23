@@ -1,8 +1,22 @@
-/** 上下文原始记录的来源与用途。 */
+import type { ContextViewForms } from '../contract/constants.js'
+
+/**
+ * 上下文原始记录的来源与用途。
+ * @AgentView
+ * 原文的来源：user 用户输入、assistant 模型回复、tool 能力回执、event 运行事件、note 笔记、checkpoint 检查点、audit 审计记录。
+ */
 export type ContextRecordKind = 'user' | 'assistant' | 'tool' | 'event' | 'note' | 'checkpoint' | 'audit'
-/** 内容引用在所属会话中解析。 */
+/**
+ * 内容引用在所属会话中解析。
+ * @AgentView
+ * 原文引用：sessionId 与 id 一起定位一份不可变原文；只能在授权给你的会话范围里读。
+ */
 export interface ContextRef { readonly sessionId: string; readonly id: string }
-/** 不可变原始记录；正文由对象存储保存。 */
+/**
+ * 不可变原始记录；正文由对象存储保存。
+ * @AgentView
+ * 一份原文的元数据：sequence 是它在会话里的序号，chars 是正文字符数，sources 是它引用的原文，createdAt 是 ISO 时间；正文按 ref 另读。
+ */
 export interface ContextRecord {
   readonly ref: ContextRef
   readonly sequence: number
@@ -29,7 +43,11 @@ export interface ContextState {
 }
 /** 不含历史记录目录的状态；版本与完整快照共享同一 CAS 序列。 */
 export type ContextMetadata = Omit<ContextState,'records'>
-/** 记录正文与可信的来源元数据。 */
+/**
+ * 记录正文与可信的来源元数据。
+ * @AgentView
+ * 读到的一页原文：text 从第 offset 个字符开始（按 UTF-16 算），totalChars 是整份正文的字符数，没读完就从 offset + text.length 接着读。
+ */
 export interface ContextContent { readonly record: ContextRecord; readonly text: string; readonly totalChars: number; readonly offset: number }
 /** 工作集检查结果；事件游标包括提交期间追加的新事实。 */
 export interface ContextSnapshot { readonly revision: number; readonly cursor: number; readonly items: readonly ContextRef[]; readonly protected: readonly ContextRef[] }
@@ -53,24 +71,39 @@ export interface ContextSearchPage { readonly items: readonly ContextSearchHit[]
 export interface ContextProjection { readonly revision: number; readonly cursor: number; readonly records: readonly ContextContent[]; readonly chars: number }
 /** 宿主绑定的任务作用域；模型不能指定调用身份。 */
 export interface ContextTaskScope { readonly sessionId: string; readonly revision: number }
-/** 精确选择器由数据源解释，核心不理解文件和 AST。 */
+/**
+ * 精确选择器由数据源解释，核心不理解文件和 AST。
+ * @AgentView
+ * 读资源的哪一部分：whole 整份，lines 按行（start、end 从 1 数，含两端），symbol 按名字取一个符号。
+ */
 export type ContextSelector = { readonly kind: 'whole' } | { readonly kind: 'lines'; readonly start: number; readonly end: number } | { readonly kind: 'symbol'; readonly name: string }
+/**
+ * 来源里的一个资源；检索候选与证据都指向它。
+ * @AgentView
+ * 来源里的一个资源：sourceId 是来源，resourceId 是来源里的资源身份，selector 选读哪一部分，不给就是整份。
+ */
+export interface ContextResourceTarget { readonly kind: 'resource'; readonly sourceId: string; readonly resourceId: string; readonly selector?: ContextSelector }
 /** 资源身份和不可变记录引用采用已有会话命名空间。 */
 export type ContextTarget =
-  | { readonly kind: 'resource'; readonly sourceId: string; readonly resourceId: string; readonly selector?: ContextSelector }
+  | ContextResourceTarget
   | { readonly kind: 'artifact'; readonly ref: ContextRef }
 /** 本次观察的时间要求。 */
 export type ContextTime = { readonly kind: 'after-step' } | { readonly kind: 'historical' } | { readonly kind: 'snapshot'; readonly snapshotId: string }
-/** 可由真实源产生的有限表示。 */
-export type ContextViewForm = 'full' | 'excerpt' | 'definition' | 'metadata' | 'diff'
-/** 模型请求观察，不直接写入最终消息或授权。 */
+/**
+ * 可由真实源产生的有限表示。
+ * @AgentView
+ * 能读成的形式：full 全文、excerpt 片段、definition 定义、metadata 元数据、diff 差异。
+ */
+export type ContextViewForm = (typeof ContextViewForms)[number]
+/** 模型请求观察，不直接写入最终消息或授权；上限见 `ViewIntentLimits`。 */
 export type ViewIntentInput = {
+  readonly purpose?: string
   readonly importance?: 'required' | 'preferred'
   readonly time?: ContextTime
   readonly forms?: readonly ContextViewForm[]
   readonly maxTokensHint?: number
 } & (
-  | { readonly kind: 'direct'; readonly target: ContextTarget; readonly purpose?: string }
+  | { readonly kind: 'direct'; readonly target: ContextTarget }
   | { readonly kind: 'semantic'; readonly objective: string; readonly anchors?: readonly ContextTarget[] }
 )
 /** 主机签发的观察身份。 */
@@ -86,7 +119,12 @@ export interface ContextSourceCapabilities {
   readonly revision: boolean
   readonly conditionalWrite: 'atomic' | 'best-effort' | 'unsupported'
 }
-/** 资源读取事实，时间不能冒充强版本。 */
+/**
+ * 资源读取事实，时间不能冒充强版本。
+ * @AgentView
+ * 读到的是哪个版本：revision 是来源给的版本（没有就是 null），contentHash 是正文指纹，observedAt 是读取时间；
+ * consistency 说明能不能核对：snapshot 快照、revision-checkable 可按版本核对、observed-only 只知道读的时候是这样。
+ */
 export interface ContextReadStamp {
   readonly sourceId: string
   readonly resourceId: string
@@ -95,7 +133,11 @@ export interface ContextReadStamp {
   readonly observedAt: string
   readonly consistency: 'snapshot' | 'revision-checkable' | 'observed-only'
 }
-/** 适配器返回的正文；complete 明确范围是否完整。 */
+/**
+ * 适配器返回的正文；complete 明确范围是否完整。
+ * @AgentView
+ * 从来源读到的正文：complete 为假说明只读了一部分；dependencies 是这份正文依赖的其他资源版本。
+ */
 export interface ContextSourceRead {
   readonly dependencies?: readonly ContextReadStamp[]
   readonly text: string
@@ -170,7 +212,12 @@ export interface ContextEvidence {
   readonly readSet: readonly ContextReadStamp[]
   readonly recovery: ContextRef
 }
-/** 模型可以更新的显式任务记忆，与真实回执分开。 */
+/**
+ * 模型可以更新的显式任务记忆，与真实回执分开；上限见 `TaskCapsuleLimits`。
+ * @AgentView
+ * 自己维护的任务计划：nextObjective 是下一步目标（最多 2000 个字符）；hypotheses 假设、decisions 已做的决定、openQuestions 待解的问题，各最多 16 条、每条最多 1000 个字符。
+ * 计划是你自己的解释，不能代替真实回执。
+ */
 export interface TaskCapsule {
   readonly nextObjective: string
   readonly hypotheses: readonly string[]
@@ -307,7 +354,12 @@ export interface ContextUserInput {
   readonly text?:string
   readonly files?:readonly ContextInputFile[]
 }
-/** 模型理解后的输入投影，不改变用户原始事实。 */
+/**
+ * 模型理解后的输入投影，不改变用户原始事实。
+ * @AgentView
+ * 一份用户输入的理解摘要：ref 是输入原文，baseRevision 取 snapshot.inputRevisions 里对应条目的 revision；summary 必须保留用户的实际任务、顺序、验收条件与约束，
+ * constraints 逐条列出约束（已有摘要时先读它，逐字保留原有约束再追加），unresolved 是没解决的事项。
+ */
 export interface ContextInputSummary {
   readonly ref:ContextRef
   readonly summary:string

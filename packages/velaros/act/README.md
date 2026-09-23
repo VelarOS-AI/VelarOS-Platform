@@ -1,28 +1,29 @@
 # Act 能力目录
 
-<!-- 由 scripts/script/act-catalog.mjs 从真实装配定义生成。 -->
+<!-- 由 scripts/script/act-catalog.mjs 从 surfaces.mjs 的登记与生成的模型面写出，不要手改。 -->
 
-当前共 13 种底层合同投影、76 个投影操作、45 项去重后的用法；其中系统包包含 4 个成员、24 个基础自管理操作，装配长期记忆时额外提供 recall/save/remove。同一会话的 memory 和 store 各使用一份实际授权合同。实际可用项由宿主配置、会话作用域和当前授权决定。
+当前共 14 种合同投影、90 个投影操作、48 项去重后的用法。系统包 `velaros:system` 有 4 个成员（modules、goal、memory、store），每个成员按宿主装配与会话授权挂上其中一种投影；实际可用项由宿主配置、会话作用域和当前授权决定。
 
 | 目录 | 模型操作 | 可用条件 | 使用模板 |
 | --- | --- | --- | --- |
-| [system/ — store](system/MODULE.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`publish`、`share`、`set`、`remove`、`watch`、`create` | 获配创建空间能力 | [store-template.js](system/store-template.js) |
-| [system/ — store-write](system/MODULE.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`publish`、`share`、`set`、`remove`、`watch` | 获配空间写入范围 | [store-write-template.js](system/store-write-template.js) |
-| [system/ — store-read](system/MODULE.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch` | 共享空间只读授权 | [store-read-template.js](system/store-read-template.js) |
+| [system/ — system-goal](system/MODULE.md) | `get`、`update` | 主会话 | [goal-template.js](system/goal-template.js) |
+| [system/ — system-memory-local](system/MODULE.md) | `list`、`read`、`update`、`plan`、`retain`、`release` | 搜索或未启用整理的会话 | [memory-local-template.js](system/memory-local-template.js) |
+| [system/ — system-memory](system/MODULE.md) | `list`、`read`、`update`、`plan`、`retain`、`release`、`organize` | 具备整理模型的主线或业务子任务 | [memory-template.js](system/memory-template.js) |
+| [system/ — system-memory-persistent-local](system/MODULE.md) | `recall`、`save`、`remove`、`list`、`read`、`update`、`plan`、`retain`、`release` | 主线宿主配置 memory，没有整理模型 | [memory-local-template.js](system/memory-local-template.js) + [memory-long-term-template.js](system/memory-long-term-template.js) |
+| [system/ — system-memory-persistent](system/MODULE.md) | `recall`、`save`、`remove`、`list`、`read`、`update`、`plan`、`retain`、`release`、`organize` | 主线宿主配置 memory，且具备整理模型 | [memory-template.js](system/memory-template.js) + [memory-long-term-template.js](system/memory-long-term-template.js) |
+| [system/ — system-store](system/MODULE.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch`、`publish`、`share`、`set`、`remove`、`create` | 获配创建空间能力 | [store-template.js](system/store-template.js) |
+| [system/ — system-store-write](system/MODULE.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch`、`publish`、`share`、`set`、`remove` | 获配空间写入范围 | [store-write-template.js](system/store-write-template.js) |
+| [system/ — system-store-read](system/MODULE.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch` | 共享空间只读授权 | [store-read-template.js](system/store-read-template.js) |
 | [system/ — modules](system/MODULE.md) | `list`、`search`、`describe` | 默认装配 | [modules-template.js](system/modules-template.js) |
-| [system/ — system-goal](system/MODULE.md) | `get`、`update` | 默认装配 | [goal-template.js](system/goal-template.js) |
-| [system/ — memory-local](system/MODULE.md) | `list`、`read`、`update`、`retain`、`release` | 搜索或未启用整理的会话 | [memory-local-template.js](system/memory-local-template.js) |
-| [system/ — memory-long-term](system/MODULE.md) | `recall`、`save`、`remove`、`list`、`read`、`update`、`retain`、`release`、`organize` | 主线宿主配置 memory；整理按实际模型配置生成 | [memory-long-term-template.js](system/memory-long-term-template.js) |
-| [system/ — memory](system/MODULE.md) | `list`、`read`、`update`、`retain`、`release`、`organize` | 具备整理模型的主线或业务子任务 | [memory-template.js](system/memory-template.js) |
-| [system/ — context-materials](system/MODULE.md) | `list`、`read` | 整理作用域 | [context-materials-template.js](system/context-materials-template.js) |
+| [system/ — context-materials](system/MODULE.md) | `list`、`read`、`submit` | 整理作用域 | [context-materials-template.js](system/context-materials-template.js) |
 | [agents/ — interaction](agents/MODULE.md) | `ask`、`capability`、`confirm` | 默认装配 | [interaction-template.js](agents/interaction-template.js) |
 | [agents/ — agents](agents/MODULE.md) | `profiles`、`start`、`resume`、`reply`、`status`、`wait`、`cancel`、`send` | 宿主配置 agents | [template.js](agents/template.js) |
 | [search/ — search](search/MODULE.md) | `profiles`、`search`、`read` | 宿主配置 search | [template.js](search/template.js) |
-| [search/ — evidence](search/MODULE.md) | `query`、`read` | 搜索作用域 | [evidence-template.js](search/evidence-template.js) |
+| [search/ — evidence](search/MODULE.md) | `query`、`read`、`report` | 搜索作用域 | [evidence-template.js](search/evidence-template.js) |
 
 共享会话、协议解析、程序版本、结果租约与五分区组装位于 [runtime/](runtime/MODULE.md)。搜索执行与预算在 [search/](search/MODULE.md)。
 
-每个职责组统一管理契约、类型和实现。`impl/*Module.ts` 定义实际 schema、效果和处理器；对应模板位于组目录。单份类型或配置直接放成文件，多份内容才分目录。
+模型面只有一个来源：各组 `impl/*Operations.ts` 里的操作接口——方法上的 `@AgentView` 说明、`@OperationEffect` 效果与 `@OperationModes` 入口，加上入参与回执类型及其注释。`bun run generate:script` 由它写出各组的 `contract/surface.ts`（给模型的声明、由类型派生的 schema）与 `baselines/script/` 下的同一份声明；`impl/*Module.ts` 只把生成的模型面接到会话端口上，取值上限由实现自己核对。模板位于组目录。
 
 模型使用示例：
 
@@ -37,50 +38,53 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 
 | 操作 | 允许入口 | 声明效果 | 用途 |
 | --- | --- | --- | --- |
-| `system.store.list` | `observe`、`execute` | `none` | 分页发现获配空间；active=true 只列出当前任务使用的空间引用 |
-| `system.store.keys` | `observe`、`execute` | `none` | 分页列出指定空间授权前缀内的对象元数据；正文用 get 获取 |
-| `system.store.get` | `observe`、`execute` | `none` | 按空间和键读取当前 JSON 对象及版本；未创建返回 null，删除返回墓碑 |
-| `system.store.events` | `observe`、`execute` | `none` | 读取订阅内逐条消息正文；默认 pending=true 只读未处理消息，窗口缺口用 gap 明确返回 |
-| `system.store.read` | `observe`、`execute` | `none` | 分页读取 share 发布的真实材料，不能通过任意会话引用越权读取 |
-| `system.store.subscribe` | `execute` | `write` | 订阅主题前缀；省略 after 从当前消息头开始，相同声明保留进度，空 topics 取消订阅 |
-| `system.store.ack` | `execute` | `write` | 业务处理完成后逐条确认消息；已投递不等于已处理，身份必须在当前订阅权限内 |
-| `system.store.publish` | `execute` | `write` | 发布独立消息，保留每次调用；主题按空间写前缀授权，正文最多 16 KiB |
-| `system.store.share` | `execute` | `write` | 把本会话原文复制为键绑定的共享材料；接收者用 read 分页读取，不获得源会话访问权 |
-| `system.store.set` | `execute` | `write` | 按 baseRevision 创建或完整替换对象；冲突后重读，0 只用于新键；event 可与对象同一事务发布 |
-| `system.store.remove` | `execute` | `write` | 按版本删除对象，保留墓碑；对象删除不影响空间本身 |
-| `system.store.watch` | `execute` | `write` | 替换指定空间的持久关注集合；空集合取消，相同声明不重置进度；先 watch 再读取基线 |
-| `system.store.create` | `execute` | `write` | 创建独立持久空间，返回稳定 id；名称不是授权，重启后通过 list 发现 |
-| `system.modules.list` | `observe`、`execute` | `none` | 按当前授权与空间筛选后分页列出包 |
-| `system.modules.search` | `observe`、`execute` | `none` | 在当前授权包中按关键词和空间检索 |
-| `system.modules.describe` | `observe`、`execute` | `none` | 读取包合同；system 可按 export 指定成员 |
-| `system.goal.get` | `observe`、`execute` | `none` | 读取当前会话目标和 CAS 版本；删除后返回墓碑 |
-| `system.goal.update` | `execute` | `write` | 显式建立、暂停、恢复或结束目标；先读取版本，完成或受阻需要实际依据；停止回复不会完成目标 |
-| `system.memory.list` | `observe`、`execute` | `none` | 按种类和标题分页查找当前任务材料；只返回引用、位置、大小和笔记版本 |
-| `system.memory.read` | `observe`、`execute` | `none` | 统一分页读取输入、源码、结果、笔记和材料原文；读取不续租、不执行脚本 |
-| `system.memory.update` | `execute` | `write` | 维护自己的笔记或计划；笔记用 key/baseRevision，计划用 plan；只在 execute 中调用 |
-| `system.memory.retain` | `execute` | `write` | 保留当前笔记或执行结果；结果 turns 为成功业务回合数或 task，笔记驻留到主动释放；不重跑脚本 |
-| `system.memory.release` | `execute` | `write` | 释放笔记或执行结果的自动展示，原文仍可召回 |
-| `system.memory.recall` | `observe`、`execute` | `none` | 分页召回宿主作用域中的长期记忆，含正文；id 精确读取，query 按标题、描述、标签和正文匹配；历史记忆使用前应核实 |
-| `system.memory.save` | `execute` | `write` | 将值得跨会话保存的用户偏好、反馈、工作决定或资源位置写入长期记忆；同 id 整条覆盖，tags 省略沿用；只在 execute 中调用 |
-| `system.memory.remove` | `execute` | `write` | 显式删除一条长期记忆；与 release 当前任务驻留不同，本操作删除磁盘原文 |
-| `system.memory.organize` | `execute` | `write` | 声明下一阶段 focus 和需保留引用 preserve，安排下一请求前整理；返回 scheduled 和 requestId，实际结果自动进入下一帧 |
-| `velaros:context-materials.list` | `execute` | `none` | 列举快照材料的元数据，不隐式读取正文 |
-| `velaros:context-materials.read` | `execute` | `none` | 按快照中的引用读取父会话原文页 |
-| `velaros:interaction.ask` | `execute` | `none` | 向用户请求信息，等待指定交互的回答 |
-| `velaros:interaction.capability` | `execute` | `none` | 向宿主或父任务说明缺少的能力；回答不授予权限，可先交付当前进度，再由父任务更新环境续跑。 |
-| `velaros:interaction.confirm` | `execute` | `none` | 向用户请求确认，交互答案不代替具体操作的权限校验 |
-| `velaros:agents.profiles` | `observe`、`execute` | `none` | 列出实际可选配置的名称、能力范围和预算；start/resume 使用 name。 |
-| `velaros:agents.start` | `execute` | `none` | 派发子任务；stores 显式共享空间及读写前缀，每项 write 必须是该项 read 的子范围，materials 复制原文，writes 是外部模块写锁。 |
-| `velaros:agents.resume` | `execute` | `none` | 在子任务收束后续跑同一会话，保留已用预算；profile/writes/stores 可替换工作环境，materials 追加材料。 |
-| `velaros:agents.reply` | `execute` | `none` | 回答指定子任务请求；请求出现在 job.pending 中。回答不改变权限，环境更新需收束后 resume。 |
-| `velaros:agents.status` | `observe`、`execute` | `none` | 读取子任务状态和结果引用。 |
-| `velaros:agents.wait` | `execute` | `none` | 等待子任务提问或结束，不额外调用模型；pending 中的请求需要 reply。 |
-| `velaros:agents.cancel` | `execute` | `none` | 取消并等待子任务收束。 |
-| `velaros:agents.send` | `execute` | `none` | 向活动子任务发送引导，新输入抢占尚未接受的模型响应。 |
-| `velaros:search.profiles` | `observe`、`execute` | `none` | 查看可选搜索档位、默认项和实际资源上限。 |
-| `velaros:search.search` | `execute` | `none` | 新建或续查有界搜索；profile 来自宿主，resume 使用上一报告引用。 |
-| `velaros:search.read` | `observe`、`execute` | `none` | snapshot 按 UTF-16 字符读取历史报告；current 按证据项 offset/limit 刷新已选目标，不调用模型。 |
-| `velaros:evidence.query` | `execute` | `none` | 按来源和字面查询检索已授权候选；内部查询独立计费。 |
-| `velaros:evidence.read` | `execute` | `none` | 读取真实目标并登记不可变证据 ID、原文引用和版本。 |
+| `system.goal.get` | `observe`、`execute` | `none` | 读当前目标：从未建立过时是 null，用户删掉的目标以 removed 状态的墓碑返回。 |
+| `system.goal.update` | `execute` | `write` | 建立、暂停、恢复或结束目标；先 get 拿到 revision，版本变了就重新读取再改。 |
+| `system.memory.list` | `observe`、`execute` | `none` | 按种类与标题分页查当前任务的材料：只有引用、位置、大小与笔记版本。 |
+| `system.memory.read` | `observe`、`execute` | `none` | 按引用分页读原文：输入、源码、结果、笔记与材料都用它。 |
+| `system.memory.update` | `execute` | `write` | 改自己的一份笔记，交回它的新版本。 |
+| `system.memory.plan` | `execute` | `write` | 改自己的任务计划：只给要改的字段，其余保留，交回整份计划。 |
+| `system.memory.retain` | `execute` | `write` | 保留一份笔记或执行结果的自动展示；不重跑脚本。 |
+| `system.memory.release` | `execute` | `write` | 释放一份笔记或执行结果的自动展示，原文仍可召回。 |
+| `system.memory.organize` | `execute` | `write` | 声明下一阶段的 focus 与必须保留的引用，安排在下一次模型请求之前整理上下文；只是排队，结果出现在下一帧的 memoryStatus.maintenance。 |
+| `system.memory.recall` | `observe`、`execute` | `none` | 分页召回长期记忆，含正文。 |
+| `system.memory.save` | `execute` | `write` | 写一条长期记忆：同一个 id 整条覆盖，tags 不给就沿用原来的。 |
+| `system.memory.remove` | `execute` | `write` | 删掉一条长期记忆的原文；与 release 只释放当前任务的展示不同。 |
+| `system.store.list` | `observe`、`execute` | `none` | 分页列出能访问的空间。 |
+| `system.store.keys` | `observe`、`execute` | `none` | 分页列出一个空间里自己能读的对象元数据；正文用 get 读。 |
+| `system.store.get` | `observe`、`execute` | `none` | 读一个对象与它的版本：没建过是 null，删掉的是墓碑。 |
+| `system.store.events` | `observe`、`execute` | `none` | 读订阅里的消息正文；没订阅过是 null。 |
+| `system.store.read` | `observe`、`execute` | `none` | 分页读别人 share 过来的共享材料正文。 |
+| `system.store.subscribe` | `execute` | `write` | 订阅主题前缀；相同的声明保留进度。 |
+| `system.store.ack` | `execute` | `write` | 业务处理完之后逐条确认消息；只能确认自己订阅范围里的。 |
+| `system.store.watch` | `execute` | `write` | 替换一个空间的关注集合；相同的声明不重置进度。 |
+| `system.store.publish` | `execute` | `write` | 发布一条独立消息，每次调用都单独保存。 |
+| `system.store.share` | `execute` | `write` | 把本会话的原文复制成绑定在键上的共享材料；接收者用 read 读，拿不到源会话的访问权。 |
+| `system.store.set` | `execute` | `write` | 按版本创建或整份替换一个对象，可以同一事务发布一条消息。 |
+| `system.store.remove` | `execute` | `write` | 按版本删除一个对象，保留墓碑。 |
+| `system.store.create` | `execute` | `write` | 创建一个独立的持久空间，返回稳定 id；重启之后用 list 找回来。 |
+| `system.modules.list` | `observe`、`execute` | `none` | 分页列出模块，可按 space 只看系统成员或业务能力。 |
+| `system.modules.search` | `observe`、`execute` | `none` | 按关键词找模块：匹配模块名、简介与操作名。 |
+| `system.modules.describe` | `observe`、`execute` | `none` | 读一个模块的合同：完整声明、用法示例与每个操作的说明。 |
+| `velaros:context-materials.list` | `execute` | `none` | 列快照里的原文元数据，不读正文。 |
+| `velaros:context-materials.read` | `execute` | `none` | 按快照里的引用读一页父会话原文，正文在 text。 |
+| `velaros:context-materials.submit` | `execute` | `none` | 交来整理补丁：先整份校验，不合格就报错（修正后再交），合格就受理；受理之后声明完成。 |
+| `velaros:interaction.ask` | `execute` | `none` | 要信息，返回对方的回答。 |
+| `velaros:interaction.capability` | `execute` | `none` | 说明缺少的能力；可以先交付当前进度，由父任务更新环境后续跑。 |
+| `velaros:interaction.confirm` | `execute` | `none` | 要确认，返回对方的答复；它不代替具体操作的权限校验。 |
+| `velaros:agents.profiles` | `observe`、`execute` | `none` | 列出能选的配置：名称、能力范围与预算；start/resume 用 name。 |
+| `velaros:agents.start` | `execute` | `none` | 派发子任务，返回它的 job。 |
+| `velaros:agents.resume` | `execute` | `none` | 子任务收束后接着跑同一个会话，已用预算保留；可以换配置、写入范围与共享空间，追加材料。 |
+| `velaros:agents.reply` | `execute` | `none` | 回答子任务在 job.pending 里的请求；回答不改变它的权限，要换环境得等它收束后 resume。 |
+| `velaros:agents.status` | `observe`、`execute` | `none` | 读子任务的状态与结果引用。 |
+| `velaros:agents.wait` | `execute` | `none` | 等到子任务提问或结束；status 为 waiting 时 pending 里的请求要 reply。 |
+| `velaros:agents.cancel` | `execute` | `none` | 取消子任务并等它收束。 |
+| `velaros:agents.send` | `execute` | `none` | 给正在跑的子任务发引导。 |
+| `velaros:search.profiles` | `observe`、`execute` | `none` | 列出能选的搜索档位、默认的那个与它们的全部资源上限。 |
+| `velaros:search.search` | `execute` | `none` | 新建或续查一项有界搜索，返回报告。 |
+| `velaros:search.read` | `observe`、`execute` | `none` | 读已发布的报告：snapshot 读当时的原文，current 重读选中证据的现状。 |
+| `velaros:evidence.query` | `execute` | `none` | 在一个来源里按字面检索候选；source 用本轮实际授权的来源。 |
+| `velaros:evidence.read` | `execute` | `none` | 读一个资源并登记成证据：返回证据 id、原文引用与读到的版本。 |
+| `velaros:evidence.report` | `execute` | `none` | 交付这次搜索的结论；受理之后声明完成。结论不合约定时报错，修正后再交。 |
 
-修改后先构建 Velaros，再运行 `bun run generate:act-catalog` 更新本清单；`bun run check:act-catalog` 检查漂移。模板由模块装配并经 Kernel 的 `describe` 返回，构建时一同复制到发布目录。
+修改后先构建 Velaros、运行 `bun run generate:script`，再运行 `bun run generate:act-catalog` 更新本清单；`bun run check:act-catalog` 检查漂移。模板随生成的模型面经 Kernel 的 `describe` 返回，构建时一同复制到发布目录。

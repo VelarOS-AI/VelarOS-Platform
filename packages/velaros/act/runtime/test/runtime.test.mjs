@@ -26,7 +26,7 @@ test('INV-2 runtime exposes one script-context contract and preserves paged sour
   const root=await mkdtemp(join(tmpdir(),'velaros-contract-')); const runtime=await createRuntime({storage:localContextStorage({path:join(root,'state.sqlite')}),runner:nodeSubprocessCodeRunner,modules:[]})
   try{
     const names=runtime.modules().items.map(item=>item.binding.moduleId)
-    assert.deepEqual(names,['velaros:interaction','velaros:modules','velaros:system-memory-local','velaros:system-store','velaros:system-store-read','velaros:system-store-write'])
+    assert.deepEqual(names,['velaros:interaction','velaros:modules','velaros:system-goal','velaros:system-memory-local','velaros:system-store','velaros:system-store-read','velaros:system-store-write'])
     assert.throws(()=>runtime.describe('velaros:script'),/未挂载模块/)
     const s=await runtime.openSession('s');assert.equal('run' in s,false);await s.context.append({kind:'user',body:'Read the saved script'})
     const source=`// source to recall\nimport {output} from 'velaros';output(1);`; const saved=await s.observe({source})
@@ -98,7 +98,8 @@ test('工作区预设的搜索与 worker 可发现；profile 来自实际配置�
  await session.context.append({kind:'user',body:'Inspect available profiles'})
  const response=await session.execute({source:"import {profiles} from 'velaros:agents';import {output} from 'velaros';const p=await profiles();output(p);if(p[0]?.name!=='worker'||!p[0].modules.includes('velaros:project'))throw Error('invalid profile');"})
  assert.equal(response.result.failed,undefined,JSON.stringify(response))
- assert.match(runtime.describe('velaros:search').declarations,/standard/)
+ const search=await session.execute({source:"import {profiles} from 'velaros:search';import {output} from 'velaros';const p=await profiles();output(p);if(!p.some(item=>item.name==='standard'&&item.default))throw Error('missing standard profile');"})
+ assert.equal(search.result.failed,undefined,JSON.stringify(search))
  assert.throws(()=>limited.describe('velaros:agents'),/未挂载/)
  assert.throws(()=>limited.describe('velaros:search'),/未挂载/)
 })

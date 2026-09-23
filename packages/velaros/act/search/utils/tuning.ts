@@ -1,13 +1,5 @@
 
 
-/** 搜索证据读取缺省额度。 */
-export const EvidenceTuning = Object.freeze({
-    /** 单次默认候选数量。 */
-    candidates: 16,
-    /** 单次默认读取字节数。 */
-    readBytes: 8000
-});
-
 /** 搜索活动的缺省调节参数。 */
 export const SearchTuning = Object.freeze({
     /** 每个已读证据在常驻目录内显示的最大摘录字符数。 */

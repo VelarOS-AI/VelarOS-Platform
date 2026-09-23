@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
+import { TaskCapsuleLimits } from '../dist/contract/constants.js'
 import { createContextRuntime, createContextView } from '../dist/index.js'
 import { localContextStorage } from '../dist/node.js'
+import { checkTaskCapsule } from '../dist/utils/view-input.js'
 
 const hash = text => createHash('sha256').update(text).digest('hex')
 async function fixture(t, limits) {
@@ -289,4 +292,17 @@ test('concurrent steps keep their own decision evidence and cannot finish each o
  await assert.rejects(()=>f.view.assertCanWrite('a'),{code:'LEASE_LOST'})
  await f.view.settle([{id:'b',executionId:'b',operation:'read',outcome:'succeeded',effect:'none'}])
  await f.view.build({maxChars:12000});assert.equal((await f.view.complete()).completed,true)
+})
+
+test('INV-13 TaskCapsule 写给模型的上限与 TaskCapsuleLimits 一致，核对恰好在这些边界上放行与拒绝', () => {
+  const source = readFileSync(new URL('../src/types/context.ts', import.meta.url), 'utf8')
+  const end = source.indexOf('export interface TaskCapsule {')
+  const doc = source.slice(source.lastIndexOf('/**', end), end)
+  for (const fragment of [`nextObjective 是下一步目标（最多 ${TaskCapsuleLimits.objectiveChars} 个字符）`, `各最多 ${TaskCapsuleLimits.items} 条、每条最多 ${TaskCapsuleLimits.itemChars} 个字符`]) assert.ok(doc.includes(fragment), `TaskCapsule 的文档里没有「${fragment}」`)
+  const boundary = (at, over) => { assert.doesNotThrow(() => checkTaskCapsule(at)); assert.throws(() => checkTaskCapsule(over)) }
+  boundary({ nextObjective: 'o'.repeat(TaskCapsuleLimits.objectiveChars) }, { nextObjective: 'o'.repeat(TaskCapsuleLimits.objectiveChars + 1) })
+  for (const key of ['hypotheses', 'decisions', 'openQuestions']) {
+    boundary({ [key]: Array.from({ length: TaskCapsuleLimits.items }, () => 'x') }, { [key]: Array.from({ length: TaskCapsuleLimits.items + 1 }, () => 'x') })
+    boundary({ [key]: ['i'.repeat(TaskCapsuleLimits.itemChars)] }, { [key]: ['i'.repeat(TaskCapsuleLimits.itemChars + 1)] })
+  }
 })

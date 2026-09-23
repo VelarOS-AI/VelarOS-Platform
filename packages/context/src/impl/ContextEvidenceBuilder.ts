@@ -2,14 +2,14 @@ import {Log, toOptional} from '@velaros-ai/core'
 import {isFalse} from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 
-import { ContextPlannerSchema } from '../contract/constants.js'
 import { ContextLimits } from '../contract/constants.js'
 import type { ContextBuildOptions, ContextSourcePort, ContextViewOptions } from '../contract/requires.js'
 import type { ContextCandidate, ContextEvidence, ContextGap, ContextPlan, ContextPlannerDecision, ContextSelection, ContextSourceRead, ContextTarget, ContextTaskScope, ContextTaskState, ContextTime, ContextViewForm, ModelView, RegisteredViewIntent } from '../types/context.js'
 import { contextProgress } from '../utils/progress.js'
 import { contextFailure, sameContextRef } from '../utils/state.js'
 import { checkContextSelections } from '../utils/view.js'
-import { assertViewSchema, awaitContextOperation, contextGap, contextHash, resolveViewLimits } from '../utils/view.js'
+import { awaitContextOperation, contextGap, contextHash, resolveViewLimits } from '../utils/view.js'
+import { checkPlannerDecision } from '../utils/view-input.js'
 
 import { createEvidenceAccess } from './EvidenceAccess.js'
 
@@ -110,7 +110,7 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
             signal.throwIfAborted()
             budget.calls++
             const decision: ContextPlannerDecision = await awaitContextOperation(options.planner.decide({ scope, task:taskFrame, intents: semantic, candidates, sources: [...this.sources.keys()], remainingCalls: this.limits.plannerCalls - attempt, feedback: degraded.slice(-3) }, signal), signal)
-            assertViewSchema(ContextPlannerSchema, decision)
+            checkPlannerDecision(decision)
             if (decision.kind === 'select') {
               checkContextSelections(decision.selections, candidates, semantic)
               chosen = decision.selections

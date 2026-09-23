@@ -1,5 +1,6 @@
 import {expect,test} from 'bun:test'
 
+import {VelarosStandardDeclarations} from '../src/contract/surface.js'
 import {codeProgramChecker,createCodeSurfaceSession,nodeSubprocessCodeRunner,ScriptOutputLimits,scriptOutputs,scriptPackageCompiler} from '../src/index.js'
 import {createOutputCollector,validateOutputOptions} from '../src/utils/output-capture.js'
 
@@ -153,4 +154,19 @@ test('optional fields and sparse arrays preserve canonical JSON in the isolated 
  const collector=createOutputCollector(ScriptOutputLimits,validateOutputOptions,()=>{})
  collector.output(Array.from({length:3}));expect(collector.snapshot().blocks[0]?.value).toEqual([null,null,null])
  expect(()=>collector.output({value:Infinity})).toThrow('/value')
+})
+
+test('INV-37 output 声明里写的上限与 ScriptOutputLimits 一致，校验恰好在这些边界上放行与拒绝',()=>{
+ const limits=ScriptOutputLimits
+ for(const fragment of [`一次执行最多 ${limits.blocks} 块`,`最多 ${limits.keyChars} 个字符），整理工具凭它调整展示`,`purpose 说明持续观察它的原因（最多 ${limits.purposeChars} 个字符）`,`代码的语言标签，最多 ${limits.languageChars} 个字符`,`maxChars 包括输出目录与省略说明（最多 ${limits.maxDisplayChars}）`,`maxChars 本块最多展示多少字符（最多 ${limits.maxDisplayChars}）`,`JSON Pointer 数组（最多 ${limits.paths} 个）`])expect(VelarosStandardDeclarations).toContain(fragment)
+ const boundary=(at:unknown,over:unknown,config=false)=>{expect(()=>validateOutputOptions(at,config)).not.toThrow();expect(()=>validateOutputOptions(over,config)).toThrow()}
+ boundary({key:'k'.repeat(limits.keyChars)},{key:'k'.repeat(limits.keyChars+1)})
+ boundary({purpose:'p'.repeat(limits.purposeChars)},{purpose:'p'.repeat(limits.purposeChars+1)})
+ boundary({language:'l'.repeat(limits.languageChars)},{language:'l'.repeat(limits.languageChars+1)})
+ boundary({view:{paths:Array.from({length:limits.paths},()=>'/a')}},{view:{paths:Array.from({length:limits.paths+1},()=>'/a')}})
+ boundary({view:{maxChars:limits.maxDisplayChars}},{view:{maxChars:limits.maxDisplayChars+1}})
+ boundary({maxChars:limits.maxDisplayChars},{maxChars:limits.maxDisplayChars+1},true)
+ const collector=createOutputCollector(limits,validateOutputOptions,()=>{})
+ for(let index=0;index<limits.blocks;index++)collector.output(index)
+ expect(()=>collector.output(limits.blocks)).toThrow()
 })

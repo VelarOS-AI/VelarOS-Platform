@@ -12,9 +12,6 @@ import { CodeSurfaceLimits } from '../contract/constants.js'
 /** 内存里那份程序的文件名；诊断按它过滤。后缀是 `.js`——模型写的就是 JavaScript，靠 `checkJs` 查。 */
 export const ProgramFileName = '/program.js'
 
-/** 这次运行本身的环境模块：`import { blobs } from 'velaros:program'`。恒常授权，不占名额。 */
-export const ProgramModuleSpecifier = 'velaros:program'
-
 /** 能力模块的统一前缀：`import { read } from 'velaros:files'`。 */
 export const CapabilityModulePrefix = 'velaros:'
 

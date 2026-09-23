@@ -1,5 +1,5 @@
+import { VelarosStandardDeclarations } from '../contract/surface.js'
 import type { GrantedModule, ScriptPackageDefinition, ScriptPackageSurface } from '../types/script.js'
-import { VelarosStandardDeclarations } from '../utils/standard.js'
 
 /** 虚拟包的唯一声明与可执行投影编译入口。 */
 export interface ScriptPackageCompilerApi {

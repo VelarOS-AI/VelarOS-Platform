@@ -26,7 +26,7 @@ async function fixture(t,options){
 const searchProfile={modelCalls:8,modelTokens:200000,finalizationTokens:16000,timeoutMs:30000,callTimeoutMs:3000,finalizationMs:4000,outputTokens:1024,projectionChars:32000,sourceQueries:16,candidates:64,reads:16,readBytes:128000}
 const lookup="import {search} from 'velaros:search';import {output} from 'velaros';output(await search({query:'investigate'}));"
 const searchOptions=stream=>({model:model(stream),defaultProfile:'standard',profiles:{standard:searchProfile}})
-async function* report(request){const value=execute(request,"import {output} from 'velaros';output({findings:[],gaps:[],nextSteps:[]});");yield {...value,text:`${value.text}\n${marker(request)} done`};yield finish}
+async function* report(request){const value=execute(request,"import {output} from 'velaros';import {report} from 'velaros:evidence';await report({findings:[],gaps:[],nextSteps:[]});");yield {...value,text:`${value.text}\n${marker(request)} done`};yield finish}
 
 test('main, business child and search progress with one model slot and charge every ancestor exactly once',async t=>{
  let main=0; let childCalls=0; let searchCalls=0

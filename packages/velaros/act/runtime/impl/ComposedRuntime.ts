@@ -3,20 +3,21 @@ import { createAgentSupervisor } from "@velaros-ai/agent";
 import { createContextInvocationJournal, createEvidenceAccess } from "@velaros-ai/context";
 import {Log} from '@velaros-ai/core'
 import {isFalse,isNull,isUndefined} from '@velaros-ai/core'
-import { isEmpty, isObject, isString } from '@velaros-ai/core'
+import { isEmpty, isString } from '@velaros-ai/core'
 import type { ModuleDescription, ModulePage, ModuleQuery, OperationContext, OperationModuleDefinition, OperationRuntimeApi } from "@velaros-ai/kernel";
 import { createOperationRuntime } from "@velaros-ai/kernel";
 import type {ModelDriver} from '@velaros-ai/model';
 import type {ScriptPackageDefinition} from '@velaros-ai/script'
 import type {MemoryScopePort} from '@velaros-ai/velaros/memory';
 
+import { EvidenceModuleId } from "../../search/contract/constants.js";
 import type { AdvancedSearchApi } from "../../search/impl/AdvancedSearch.js";
 import { AdvancedSearch } from "../../search/impl/AdvancedSearch.js";
-import type { SearchDraft } from "../../search/types.js";
-import { GoalModuleId, ContextMaterialsModuleId, LocalMemoryModuleId, LocalSystemPackage, MemoryModuleId, PersistentMemoryModuleId, PersistentSystemPackage, StoreModuleId, StoreReadModuleId, StoreWriteModuleId,SystemPackage } from '../../system/contract/constants.js';
+import { ContextMaterialsModuleId, GoalModuleId, LocalMemoryModuleId, LongTermMemoryModuleIds, MemoryModuleId, PersistentMemoryModuleId, StoreModuleId, StoreReadModuleId, StoreWriteModuleId, SystemPackageSpecifier } from '../../system/contract/constants.js';
 import type {StoreSessionApi} from '../../system/impl/StoreSession.js'
 import {StoreSession} from '../../system/impl/StoreSession.js'
 import { systemModules } from '../../system/impl/SystemModules.js';
+import { systemMembers } from '../../system/utils/members.js';
 import { ModelToolLimits,VelarosAgentBudget, VelarosAgentRunLimits, VelarosMainBudget, VelarosRunLimits } from "../contract/constants.js";
 import type { VelarosRuntimeOptions } from "../contract/requires.js";
 import type {ActTracePage,ActTraceQuery} from '../types/trace.js'
@@ -73,7 +74,7 @@ class ComposedRuntime implements VelarosRuntime {
     this.diagnostics=new RuntimeDiagnostics(input.storage,input.onMetric)
     this.options = {...input,storage:this.diagnostics.storage,context:{sources:[],...input.context,limits:{...VelarosMainBudget,...input.context?.limits}}}
     const options=this.options
-    if(options.modules.some(module=>[SystemPackage.specifier,'velaros:program',ContextMaterialsModuleId].includes(module.binding.moduleId)||systemModules.owns(module.binding.moduleId)))throw new Error('业务模块占用了系统保留身份')
+    if(options.modules.some(module=>[SystemPackageSpecifier,'velaros:program',ContextMaterialsModuleId].includes(module.binding.moduleId)||systemModules.owns(module.binding.moduleId)))throw new Error('业务模块占用了系统保留身份')
     if(options.modules.some(module=>module.binding.moduleId==='velaros:memory'))throw new Error('长期记忆请通过 Runtime memory(sessionId) 装配到 velaros:system')
     const journal=this.journal=createContextInvocationJournal(options.storage)
     this.tools=new ModelToolRuntime({storage:options.storage,policy:options.modelTools,view:id=>{const view=this.sessions.get(id)?.view;if(!view)throw new Error('模型工具预算会话不可用');return view},deadline:id=>this.programAccess.get(id)?.deadline()})
@@ -87,7 +88,8 @@ class ComposedRuntime implements VelarosRuntime {
     if(options.agents)this.agents=createAgentSupervisor({deliver:(job,payload)=>this.tools.deliver(job.parentSessionId,job.sessionId,'agent',payload,job.status==='completed'?'completed':job.status==='waiting'?'partial':job.status==='needs_reconcile'?'needs-reconcile':'failed',[],{operation:'agents.resume',input:{id:job.id,input:'继续核对交付中未完成的事项。'}}),storage:options.storage,concurrency:options.agents.concurrency,maxChildren:options.agents.maxChildren,open:(job,input,signal)=>this.openChild(job,input,signal)})
     if(options.search)this.search=new AdvancedSearch({tools:this.tools,storage:options.storage,evidence:createEvidenceAccess(options.context?.sources??[]),parentDeadline:id=>this.programAccess.get(id)?.deadline(),options:{...options.search,profiles:structuredClone(options.search.profiles)},view:id=>{const view=this.sessions.get(id)?.view;if(!view)throw new Error('父任务尚未打开');return view},open:async(id,activation,profile)=>{
       this.scopes.set(id,{kind:'search'})
-      const session=new RuntimeSession(id,{packages:[this.systemPackage(id)],allowedModules:()=>this.allowedModuleIds(id),tool:{pressure:()=>activation.pressure(),deadline:()=>activation.deadline(),phase:()=>activation.phase(),material:maxChars=>activation.material(maxChars),refresh:signal=>activation.refresh(signal),authorizeReference:(ref,signal)=>activation.authorizeReference(ref,signal),report:async(value,signal)=>{if(value&&isObject(value)&&'findings' in value)await activation.report(value as SearchDraft,signal)}},memory:{recentRecords:64,recentShare:0.4,...options.search?.memory},protocol:{...options.protocol,allowed:['blobs','execute','done'],defaultRetain:'task'},journal:this.journal,contextOptions:{sources:[],policy:options.search?.contextPolicy,limits:{modelCalls:profile.modelCalls,modelTokens:profile.modelTokens}},kernel:this.kernel,runner:options.runner,storage:options.storage,model:this.tools.model(id,activation),limits:{...options.limits??VelarosRunLimits,turns:profile.modelCalls,timeoutMs:profile.timeoutMs,outputTokens:profile.outputTokens,projectionChars:profile.projectionChars},register:access=>this.programAccess.set(id,access)})
+      const evidence=this.kernel.describe(EvidenceModuleId)
+      const session=new RuntimeSession(id,{packages:[this.systemPackage(id)],allowedModules:()=>this.allowedModuleIds(id),tool:{pressure:()=>activation.pressure(),deadline:()=>activation.deadline(),phase:()=>{const phase=activation.phase();return {...phase,instructions:`${phase.instructions}\n本会话证据合同：\n${evidence.declarations}`}},material:maxChars=>activation.material(maxChars),refresh:signal=>activation.refresh(signal),authorizeReference:(ref,signal)=>activation.authorizeReference(ref,signal)},memory:{recentRecords:64,recentShare:0.4,...options.search?.memory},protocol:{...options.protocol,allowed:['blobs','execute','done'],defaultRetain:'task'},journal:this.journal,contextOptions:{sources:[],policy:options.search?.contextPolicy,limits:{modelCalls:profile.modelCalls,modelTokens:profile.modelTokens}},kernel:this.kernel,runner:options.runner,storage:options.storage,model:this.tools.model(id,activation),limits:{...options.limits??VelarosRunLimits,turns:profile.modelCalls,timeoutMs:profile.timeoutMs,outputTokens:profile.outputTokens,projectionChars:profile.projectionChars},register:access=>this.programAccess.set(id,access)})
       this.sessions.set(id,session);return session
     },close:async id=>{try{await this.sessions.get(id)?.close()}finally{this.sessions.delete(id);this.programAccess.delete(id);this.scopes.delete(id)}}})
     this.kernel=createOperationRuntime({journal,beforeReadValidation:async(invocation,descriptor,signal)=>{
@@ -113,8 +115,8 @@ class ComposedRuntime implements VelarosRuntime {
   }
 
   private systemPackage(id:string):ScriptPackageDefinition {
-    const base=this.allows(id,PersistentMemoryModuleId)?PersistentSystemPackage:this.allows(id,MemoryModuleId)?SystemPackage:LocalSystemPackage
-    return {...base,exports:{...base.exports,store:this.allows(id,StoreReadModuleId)?StoreReadModuleId:this.allows(id,StoreWriteModuleId)?StoreWriteModuleId:StoreModuleId}}
+    const allowed=new Set(this.allowedModuleIds(id))
+    return {specifier:SystemPackageSpecifier,exports:Object.fromEntries(systemMembers(module=>allowed.has(module)))}
   }
 
   private allowedModuleIds(id:string):readonly string[]{
@@ -131,7 +133,7 @@ class ComposedRuntime implements VelarosRuntime {
     if(scope.kind==='context')return false
     if(module==='velaros:interaction')return scope.kind==='main'||scope.kind==='agent'
     if(module===StoreModuleId||module===StoreWriteModuleId||module===StoreReadModuleId){const stores=this.stores.get(id);return Boolean(stores&&module===(stores.mode==='create'?StoreModuleId:stores.mode==='write'?StoreWriteModuleId:StoreReadModuleId))}
-    if(module===PersistentMemoryModuleId)return scope.kind==='main'&&Boolean(this.options.memory)
+    if(LongTermMemoryModuleIds.includes(module))return scope.kind==='main'&&Boolean(this.options.memory)
     if(module===LocalMemoryModuleId)return scope.kind==='search'||!this.allows(id,MemoryModuleId)&&!this.allows(id,PersistentMemoryModuleId)
     if(scope.kind==='search')return module!==MemoryModuleId&&(!!this.search?.allows(id,module))
     if(scope.kind!=='main'&&module==='velaros:agents')return false

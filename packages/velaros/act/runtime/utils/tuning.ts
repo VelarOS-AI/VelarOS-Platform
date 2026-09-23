@@ -24,10 +24,6 @@ historyClassificationEntries:4096,
 historyDefaultPage:32,
 /** 协议增量替换条目上限。 */
 edits:128,
-/** 搜索允许提交的来源标识上限。 */
-searchSources:64,
-/** 搜索初始锚点上限。 */
-searchAnchors:32,
 /** 协议修复默认次数。 */
 protocolRepairs:2,
 })

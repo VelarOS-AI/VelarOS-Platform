@@ -14,7 +14,7 @@ export interface McpToolAnnotations {
 export interface McpToolDescriptor {
   name: string
   description: Nullable<string>
-  /** JSON Schema（MCP inputSchema，type:'object'）；翻译层经 z.fromJSONSchema 转 zod。 */
+  /** JSON Schema（MCP inputSchema，type:'object'）。外部服务器只给 schema、没有 TS 源码，原样作为 Kernel 操作的入参 schema，模型看到的声明由 Kernel 从它合成。 */
   inputSchema: Record<string, unknown>
   annotations: McpToolAnnotations
 }

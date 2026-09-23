@@ -54,6 +54,8 @@ export interface CapabilityModuleOptions<T extends object> {
   readonly observation?: Readonly<Partial<Record<keyof T, OperationDefinition['run']>>>
   /** 接入已有领域的真实版本读写契约，供当前决策在写入前验证。 */
   readonly reads?: Readonly<Partial<Record<keyof T, OperationDefinition['reads']>>>
+  /** 认出发生在任何写入之前的失败（入参不对、版本冲突、没有授权），回执记成没有效果；省略时写操作失败一律是效果未知。 */
+  withoutEffect?(error: unknown): boolean
   /** 挂载资源的激活。 */
   activate?(): void | Promise<void>
   /** 挂载资源的释放。 */

@@ -1,31 +1,94 @@
 import type { ContextRecord, ContextRef } from '@velaros-ai/context'
+import type { MemoryEntry } from '@velaros-ai/velaros/memory'
 
+import type { ScriptRetention } from './results.js'
 import type { WorkspaceEntry } from './workspace.js'
 
-/** 当前任务归档的有界查询，正文由 read 显式读取。 */
+/**
+ * 当前任务归档的有界查询，正文由 read 显式读取。
+ * @AgentView
+ * 查当前任务的材料目录：kind 按种类筛（notes 笔记、inputs 用户输入、programs 脚本、results 执行结果、history 回复与结果、artifacts 交付物），默认全部；
+ * query 按标题关键词筛；after 是上一页的 nextAfter，through 固定目录快照的结束序号；limit 每页最多 64 项。
+ */
 export interface MemoryQuery {
- /** 材料种类，默认全部。 */
- readonly kind?:'all'|'notes'|'inputs'|'programs'|'results'|'history'|'artifacts'
- /** 标题或笔记键关键词。 */
- readonly query?:string
- /** 上一页的记录序号。 */
- readonly after?:number
- /** 固定目录快照的结束序号。 */
- readonly through?:number
- /** 每页最多 64 项。 */
- readonly limit?:number
+  readonly kind?: 'all' | 'notes' | 'inputs' | 'programs' | 'results' | 'history' | 'artifacts'
+  readonly query?: string
+  readonly after?: number
+  readonly through?: number
+  readonly limit?: number
 }
-/** 目录返回真实原文位置及笔记版本。 */
+/** @AgentView 目录里的一份材料：原文元数据；是笔记时还带着 key、revision（改它时作为 baseRevision 交回）与 resident。 */
+export interface MemoryListItem extends ContextRecord {
+  readonly key?: string
+  readonly revision?: number
+  readonly resident?: boolean
+}
+/**
+ * 目录返回真实原文位置及笔记版本。
+ * @AgentView
+ * 材料目录的一页；nextAfter 不是 null 就把它当 after 接着翻。
+ */
 export interface MemoryPage {
- /** 已授权的原始记录元数据。 */
- readonly items:ReadonlyArray<ContextRecord & Partial<WorkspaceEntry>>
- /** 下一页游标，结束时为空。 */
- readonly nextAfter:Nullable<number>
+  readonly items: readonly MemoryListItem[]
+  readonly nextAfter: Nullable<number>
 }
-/** 主模型声明工作意图，窗口预算由宿主决定。 */
+/** @AgentView 按引用读一页原文：ref 是目录里的引用（或它的 id），offset、limit 按 UTF-16 字符算，一页最多 60000 个字符。读取不续租、不重跑脚本。 */
+export interface MemoryReadInput {
+  readonly ref: string | ContextRef
+  readonly offset?: number
+  readonly limit?: number
+}
+/** @AgentView 保留一份笔记或执行结果的自动展示：结果按 turns 续租（不给是 task），笔记一直驻留到主动 release。 */
+export interface MemoryRetainInput {
+  readonly ref: string | ContextRef
+  readonly turns?: ScriptRetention
+}
+/** @AgentView 释放一份笔记或执行结果的自动展示；原文仍然可以 read。 */
+export interface MemoryReleaseInput {
+  readonly ref: string | ContextRef
+}
+/** @AgentView 执行结果续租了：remainingTurns 是还会自动展示多少个成功回合（task 表示到任务结束）；executed 为假，脚本没有重跑。 */
+export interface ResultRetained {
+  readonly ref: string
+  readonly remainingTurns: ScriptRetention
+  readonly executed: false
+}
+/** @AgentView 执行结果不再自动展示；executed 为假，脚本没有重跑。 */
+export interface ResultReleased {
+  readonly ref: string
+  readonly released: true
+  readonly executed: false
+}
+/** @AgentView 调整驻留的结果：笔记交回它的当前版本，执行结果交回租约。 */
+export type MemoryRetention = WorkspaceEntry | ResultRetained | ResultReleased
+/**
+ * 主模型声明工作意图，窗口预算由宿主决定。
+ * @AgentView
+ * 安排一次整理：focus 是接下来要推进的工作（1 到 3000 个字符），preserve 是这次整理必须保持可召回、不能释放的原文引用（最多 64 条）。
+ */
 export interface MemoryOrganizeIntent {
- /** 接下来需要推进的工作。 */
- readonly focus?:string
- /** 本次整理必须保持可召回且不能释放租约的材料。 */
- readonly preserve?:readonly ContextRef[]
+  readonly focus?: string
+  readonly preserve?: readonly ContextRef[]
+}
+/** @AgentView 整理已经排上队：在下一次模型请求之前进行，结果出现在下一帧的 memoryStatus.maintenance。 */
+export interface MemoryOrganizeReceipt {
+  readonly requestId: string
+  readonly taskId: string
+  readonly status: 'scheduled'
+  readonly focus: string
+  readonly preserve: readonly ContextRef[]
+  readonly boundary: 'next-model-request'
+}
+/** @AgentView 召回长期记忆：id 精确取一条；query 按 id、标题、描述、标签与正文匹配关键词；按 offset 翻页，limit 默认 8、最多 32。 */
+export interface LongTermMemoryQuery {
+  readonly id?: string
+  readonly query?: string
+  readonly offset?: number
+  readonly limit?: number
+}
+/** @AgentView 召回到的长期记忆，含正文；total 是全部匹配的条数，nextOffset 不是 null 就接着翻。 */
+export interface LongTermMemoryPage {
+  readonly items: readonly MemoryEntry[]
+  readonly total: number
+  readonly nextOffset: Nullable<number>
 }

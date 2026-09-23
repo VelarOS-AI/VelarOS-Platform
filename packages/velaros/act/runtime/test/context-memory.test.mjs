@@ -180,7 +180,7 @@ test('INV-20 independent capacity maintenance derives parent note presentation w
   toolCalls++
   const snapshot=JSON.parse(JSON.parse(request.materials[0].text).partitions.task.goals[0].text).snapshot
   const patch={baseRevision:snapshot.baseRevision,summary:'Preserved progress',unresolved:[],notes:[{ref:note.ref,summary:'Maintenance preserved progress'}]}
-  const part=turn(request,{execute:{source:`import {output} from 'velaros';output(${JSON.stringify(patch)});`}})
+  const part=turn(request,{execute:{source:`import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(patch)}));`}})
   yield {...part,text:`${part.text}\n${marker(request)} done`};yield {type:'finish',reason:'stop'}
  }}
  const f=await fixture(t,async function*(request,call){

@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto'
 
 import type {ContextRef,ContextStorage,StoreChanges,StoreDescriptor,StoreEvent,StoreEventAck,StoreEventPage,StoreObject,StorePage,StorePublish,StoreStorage,StoreSubscription,StoreValue,StoreWatch} from '@velaros-ai/context'
 import {createContextRuntime,StoreLimits} from '@velaros-ai/context'
-import {isFalse,isNull,toNullable,toOptional} from '@velaros-ai/core'
+import {isFalse,isNull,isUndefined,toNullable,toOptional} from '@velaros-ai/core'
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
 
 import {StoreProjectionLimits} from '../contract/constants.js'
@@ -111,7 +111,10 @@ export class StoreSession implements StoreSessionApi {
   return {...page,items:page.items.map(item=>({...item,access:this.rights(item)}))}
  }
  public async get(store:string,key:string):Promise<Nullable<StoreObject>>{const access=await this.access(store);assertStoreKey(access,key,false);await this.remember([store]);return this.storage.get(store,key)}
- public async keys(store:string,query:{prefix?:string;after?:string;limit?:number}):Promise<StorePage>{const access=await this.access(store);await this.remember([store]);return this.storage.list(store,{...query,read:access.read})}
+ public async keys(store:string,query:{prefix?:string;after?:string;limit?:number}):Promise<StorePage>{
+  if((query.prefix?.length??0)>StoreLimits.keyChars)throw Object.assign(new Error(`键前缀最多 ${StoreLimits.keyChars} 个字符`),{code:'STORE_INPUT',effect:'none'})
+  const access=await this.access(store);await this.remember([store]);return this.storage.list(store,{...query,read:access.read})
+ }
  public async set(input:{store:string;key:string;baseRevision:number;value:StoreValue;event?:{topic:string;value:StoreValue}},operationId:string):Promise<StoreObject>{
   const access=await this.access(input.store);assertStoreKey(access,input.key,true);if(input.event)assertStoreKey(access,input.event.topic,true);await this.remember([input.store]);return this.storage.commit({...input,actor:this.id,operationId})
  }
@@ -130,6 +133,7 @@ export class StoreSession implements StoreSessionApi {
   return this.storage.publish({...input,actor:this.id,operationId})
  }
  public async subscribe(input:{store:string;topics:readonly string[];after?:number},operationId:string):Promise<StoreSubscription>{
+  if(!isUndefined(input.after)&&(!Number.isSafeInteger(input.after)||input.after<0))throw Object.assign(new Error('订阅起点 after 必须是非负整数'),{code:'STORE_INPUT',effect:'none'})
   const access=await this.access(input.store)
   for(const prefix of input.topics)if(!access.read.some(read=>prefix.startsWith(read)))throw storeDenied('消息订阅范围超出读取权限')
   await this.remember([input.store]);return this.storage.subscribe(input.store,this.consumer(access),input.topics,operationId,input.after)

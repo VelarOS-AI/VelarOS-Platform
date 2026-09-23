@@ -102,12 +102,16 @@ export const ContextMaintenanceLimits=Object.freeze({
  reads:256,
 })
 
-/** 整理材料分页的缺省容量。 */
+/** 整理材料分页的缺省容量与单页上限（上限写在 velaros:context-materials 的声明里）。 */
 export const ContextMaintenanceReadLimits=Object.freeze({
  /** 默认正文页字符数。 */
  pageChars:12_000,
+ /** 单页正文字符上限。 */
+ maxPageChars:32_000,
  /** 默认元数据页条目数。 */
  pageItems:32,
+ /** 单页元数据条目上限。 */
+ maxPageItems:64,
 })
 
 /** 声明式入口的缺省运行窗口预算，宿主可按真实模型覆盖。 */

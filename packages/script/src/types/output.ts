@@ -1,41 +1,58 @@
-/** 输出的内容类型；省略时字符串为文本、数组为列表、其余为 JSON。 */
+/**
+ * 输出的内容类型；省略时字符串为文本、数组为列表、其余为 JSON。
+ * @AgentView
+ * 内容类型：不给时字符串按 text、数组按 list、其余按 json 展示；code 可再配 language。它不改变来源的可信度。
+ */
 export type ScriptOutputType = 'text' | 'code' | 'json' | 'list' | 'image' | 'file'
-/** 只影响展示的声明式规则，不能执行函数或改变采集。 */
+/**
+ * 只影响展示的声明式规则，不能执行函数或改变采集。
+ * @AgentView
+ * 怎么展示（只影响你下一轮看到多少，原值照样完整保存，可以按引用召回）：
+ * mode 默认 auto，按展示预算挑内容；full 要求整个值放得下，放不下就只给引用；reference 只给引用；summary 只展示整理服务已生成、版本匹配的摘要，没有就给引用。
+ * maxChars 本块最多展示多少字符（最多 200000）；lines 是一基闭区间 [起, 止]；maxItems 列表最多展示几项；edge 从头部或尾部选片段；paths 是 JSON Pointer 数组（最多 64 个），只展示这些字段。
+ */
 export interface ScriptOutputView {
-  /** 默认 auto；full 放不下时明确返回引用，summary 需要匹配原文的已有摘要。 */
   readonly mode?: 'auto' | 'full' | 'reference' | 'summary'
-  /** 本块正文最多展示多少 UTF-16 字符。 */
   readonly maxChars?: number
-  /** 代码或文本的一基闭区间。 */
   readonly lines?: readonly [number, number]
-  /** 列表最多展示的条数。 */
   readonly maxItems?: number
-  /** 片段从头部或尾部选择。 */
   readonly edge?: 'head' | 'tail'
-  /** JSON Pointer 字段选择，未命中路径显式返回缺口。 */
   readonly paths?: readonly string[]
 }
-/** 模型声明的输出用途与展示方式。 */
+/**
+ * 模型声明的输出用途与展示方式。
+ * @AgentView
+ * 这一块输出的用途与展示：key 是本次执行里唯一的稳定名字（字母或数字开头，只用字母、数字与 _ . -，最多 96 个字符），整理工具凭它调整展示；
+ * purpose 说明持续观察它的原因（最多 1000 个字符）；priority 是 high、normal 或 low，只影响预算分配；
+ * required 为 true 表示这块原值是做决定必需的，必须带 key，放不下时报告缺口并挡住外部写入，只用于少量关键事实。
+ */
 export interface ScriptOutputOptions {
-  /** 本次执行唯一的稳定名字。 */
   readonly key?: string
-  /** 持续观察的原因，属于模型解释。 */
   readonly purpose?: string
-  /** 内容类型，不提升来源可信度。 */
   readonly type?: ScriptOutputType
-  /** 代码语言标签。 */
+  /** 代码的语言标签，最多 80 个字符。 */
   readonly language?: string
-  /** 预算分配优先级，不保证突破宿主窗口。 */
   readonly priority?: 'high' | 'normal' | 'low'
-  /** 本块完整原值是决策必需内容；未完整投递时报告缺口并阻止外部写入。 */
   readonly required?: boolean
-  /** 可由整理工具修改的纯数据规则。 */
   readonly view?: ScriptOutputView
 }
-/** 整份输出的文字展示预算，图片仍由模型请求预算管理。 */
+/**
+ * 整份输出的文字展示预算，图片仍由模型请求预算管理。
+ * @AgentView
+ * 整份输出的展示预算：maxChars 包括输出目录与省略说明（最多 200000），实际分配仍由宿主决定。
+ */
 export interface ScriptOutputConfig {
-  /** 包括输出目录与省略说明，不包括观察源码和其他分区。 */
   readonly maxChars?: number
+}
+/**
+ * `velaros` 里的 output：调用它交出一个值，configure 设整份输出的展示预算。
+ * @AgentView
+ * 交出一个值给下一轮看：按 JSON 保存，对象里值为 undefined 的字段省略，数组里的空位或 undefined 变成 null，只有交出 undefined 本身会报错；一次执行最多 64 块。
+ * configure 要在第一次 output 之前调用。
+ */
+export interface ScriptOutput {
+  (value: unknown, options?: ScriptOutputOptions): void
+  configure(config: ScriptOutputConfig): void
 }
 /** 隔离运行器在 output 调用时捕获的不可变值。 */
 export interface ScriptOutputBlock {
@@ -64,7 +81,11 @@ export interface ScriptOutputManifest {
   /** 直接导入的 output 调用及其静态 options。 */
   readonly outputs: readonly ScriptOutputOptions[]
 }
-/** 只修改声明式展示数据的源码补丁。 */
+/**
+ * 只修改声明式展示数据的源码补丁。
+ * @AgentView
+ * 展示的调整：config 替换整份输出的展示预算，outputs 按稳定 key 整个替换那一块的 view；其余观察意图保持不变。
+ */
 export interface ScriptOutputEdit {
   /** 替换整体展示配置；不填表示保持原样。 */
   readonly config?: ScriptOutputConfig

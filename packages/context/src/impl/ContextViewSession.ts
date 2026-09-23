@@ -1,13 +1,13 @@
 import {isUndefined,toNullable,toOptional} from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 
-import { TaskCapsuleSchema, ViewIntentSchema } from '../contract/constants.js'
 import type { ContextBuildOptions, ContextCompletionPort, ContextViewOptions } from '../contract/requires.js'
 import type { ContextCompletionResult } from '../types/context.js'
 import type { ContextContent, ContextFeedback, ContextReadRange, ContextRecord, ContextRef, ContextSourceCard, ContextStepRecord, ContextTaskState, ContextTaskStatus, ContextViewLimits, ModelView, RegisteredViewIntent, TaskCapsule, ViewIntentInput } from '../types/context.js'
 import type { ContextTaskMutation } from '../types/runtime.js'
 import { contextFailure, emptyContextState, sameContextRef } from '../utils/state.js'
-import { assertContextTask, assertViewSchema, awaitContextOperation, resolveViewLimits } from '../utils/view.js'
+import { assertContextTask, awaitContextOperation, resolveViewLimits } from '../utils/view.js'
+import { checkTaskCapsule, checkViewIntent } from '../utils/view-input.js'
 
 import { ContextEvidenceBuilder } from './ContextEvidenceBuilder.js'
 
@@ -118,7 +118,7 @@ export class ContextViewSession implements ContextViewApi {
   }
 
   public async request(intent: ViewIntentInput, signal?: AbortSignal, executionId?:string): Promise<RegisteredViewIntent> {
-    assertViewSchema(ViewIntentSchema, intent)
+    checkViewIntent(intent)
     if (intent.kind === 'direct' && intent.target.kind === 'resource' && intent.target.selector?.kind === 'lines' && intent.target.selector.end < intent.target.selector.start) throw contextFailure('VIEW_SCHEMA', '行范围终点不能早于起点')
     const id = crypto.randomUUID()
     const task = await this.change({ apply: current => {
@@ -132,7 +132,7 @@ export class ContextViewSession implements ContextViewApi {
   }
 
   public async updateCapsule(capsule: Partial<TaskCapsule>, signal?: AbortSignal, executionId?:string): Promise<TaskCapsule> {
-    assertViewSchema(TaskCapsuleSchema, capsule)
+    checkTaskCapsule(capsule)
     return (await this.change({ apply: current => {
       const task = this.executing(current,executionId)
       return { ...task, revision: task.revision + 1, capsule: { ...task.capsule, ...structuredClone(capsule) } }

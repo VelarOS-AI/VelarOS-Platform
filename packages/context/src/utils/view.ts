@@ -1,5 +1,3 @@
-import { Ajv } from 'ajv'
-
 import { isArray } from '@velaros-ai/core'
 
 import { DefaultContextViewLimits } from '../contract/constants.js'
@@ -7,12 +5,6 @@ import type { ContextCandidate, ContextSelection } from '../types/context.js'
 import type { ContextGap, ContextTarget, ContextTaskState, ContextViewLimits, RegisteredViewIntent } from '../types/context.js'
 
 import { contextFailure } from './state.js'
-
-/** 严格校验边界 JSON，不默认填充或转换模型输入。 */
-export function assertViewSchema(schema: object, value: unknown): void {
-  const validate = new Ajv({ strict: true, strictRequired: false, allErrors: true }).compile(schema)
-  if (!validate(value)) throw contextFailure('VIEW_SCHEMA', `观察协议不合法：${  JSON.stringify(validate.errors).slice(0, 1200)}`)
-}
 
 /** 合并有限预算，零只允许用于关闭规划和重取。 */
 export function resolveViewLimits(input: Partial<ContextViewLimits> = {}): ContextViewLimits {

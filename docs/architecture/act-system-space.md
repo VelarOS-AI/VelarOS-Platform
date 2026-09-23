@@ -1,6 +1,6 @@
 # Act 模型自管理空间
 
-正式入口为 `velaros:system`，按当前会话授权导出 `modules`、`memory` 和 `store`。实际操作、schema 和模板见 [Act 目录](../../packages/velaros/act/README.md)。
+正式入口为 `velaros:system`，按当前会话授权导出 `modules`、`goal`、`memory` 和 `store`。实际操作、声明和模板见 [Act 目录](../../packages/velaros/act/README.md)。
 
 ## 职责与装配
 
@@ -13,7 +13,7 @@
 | 主线 | modules；memory 五个本地操作，按配置增加 organize 和 recall/save/remove；store 按授权装配 | 按宿主配置搜索、整理、业务子任务 |
 | 业务子任务 | modules；memory 六个操作；store 通过派发显式获配 | 按宿主配置搜索、整理 |
 | 搜索 | modules；memory 五个本地操作 | 完成搜索职责 |
-| 整理 | context-materials.list/read；ScriptAct output | 完成展示补丁交付 |
+| 整理 | context-materials.list/read/submit | 用 submit 交付展示补丁 |
 
 未启用整理的主线或业务子任务也使用五操作的本地合同。没有获配的能力同时不进入发现、模板、类型声明和执行绑定。主线与本地记忆使用同一个 MemoryModule 实现，仅合同投影不同。
 
@@ -22,10 +22,12 @@
 | 操作 | 作用 |
 | --- | --- |
 | modules.list / search | 按 space 和关键词查询真实包目录，授权过滤后分页 |
-| modules.describe | 查看指定包或 system 成员的 schema、声明和模板 |
+| modules.describe | 查看指定包或 system 成员的声明、模板与各操作说明 |
+| goal.get / update | 读当前目标；按 baseRevision 建立目标或改变状态，complete/blocked 要写依据 |
 | memory.list | 以 kind/query/after/through/limit 发现归档；kind 为 all、notes、inputs、programs、results、history、artifacts |
 | memory.read | 按 ref/offset/limit 读取原文；ref 支持当前会话短 ID 或完整 ContextRef |
-| memory.update | 以 key/baseRevision 更新自己的笔记；以 plan 更新当前任务认识 |
+| memory.update | 以 key/baseRevision 更新自己的笔记 |
+| memory.plan | 只给要改的字段，修改自己维护的任务计划 |
 | memory.retain / release | 控制当前笔记或执行结果的自动展示；原文可召回 |
 | memory.recall | 主线按 id 或 query 召回长期记忆正文，offset/limit 分页；作用域由宿主固定 |
 | memory.save / remove | 主线显式保存或删除跨会话长期记忆；save 同 id 整条覆盖，tags 省略沿用 |
@@ -38,7 +40,7 @@
 | store.publish / share | 发布独立消息，或把会话材料保存为可共享引用 |
 | store.watch | 替换当前会话的持久关注集合；变化随下一模型帧交付 |
 
-list/read/recall 无写效果，可用于观察。update/retain/release/organize/save/remove 只在 execute 调用。结果 retain 的 turns 为 1–32 或 task；笔记保持驻留直到显式释放。驻留不等于全文必定装入窗口。
+list/read/recall 无写效果，可用于观察。update/plan/retain/release/organize/save/remove 只在 execute 调用。结果 retain 的 turns 为 1–32 或 task；笔记保持驻留直到显式释放。驻留不等于全文必定装入窗口。
 
 所有材料读取保持当前会话、逻辑任务及搜索授权代次边界。用户输入通过已有分块 readInput 读取；任务 artifact 使用原 readArtifact 权限检查；源码、结果、笔记及诊断引用使用同一存储的有界读取。调用不重跑原脚本。
 
@@ -94,7 +96,7 @@ organize 的输入合同是 `{focus?:string,preserve?:ContextRef[]}`；窗口大
 
 ## 整理发布
 
-整理支线用 context-materials.list/read 读取固定父快照，通过 execute 中的 output(patch) 交付结构化补丁。notes 项只允许 `{ref,summary?,resident?}`。ref 绑定当前不可变笔记版本；派生摘要标注 model-interpretation，主模型改写原笔记后该摘要自动失效。
+整理支线用 context-materials.list/read 读取固定父快照，通过 execute 中的 `submit(patch)` 交付结构化补丁，补丁的类型就是生成合同里的 `ContextPatch`，交付前先过 typecheck。notes 项只允许 `{ref,summary?,resident?}`。ref 绑定当前不可变笔记版本；派生摘要标注 model-interpretation，主模型改写原笔记后该摘要自动失效。
 
 输入摘要保留已确认约束；历史检查点保留来源和未解事项；观察补丁只修改已认可的输出展示 AST 元数据并重投影已有结果。主模型的笔记正文、任务计划以及原始用户输入保持各自归属。
 

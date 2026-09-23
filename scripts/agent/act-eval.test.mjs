@@ -117,7 +117,7 @@ test('cooperation workload verifies the persisted child write, exact message ack
   let code
   if(request.instructions.includes('你是上下文整理工具')){
    const snapshot=JSON.parse(frame(request).partitions.task.goals[0].text).snapshot
-   code=`import {output} from 'velaros';output(${JSON.stringify({baseRevision:snapshot.baseRevision,summary:'Keep the verified total and task goal',unresolved:[],recentRecords:2})});`
+   code=`import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify({baseRevision:snapshot.baseRevision,summary:'Keep the verified total and task goal',unresolved:[],recentRecords:2})}));`
    yield {type:'text',text:block(request,'execute',code)+'\n'+marker(request)+' done'}
   }else if(!request.instructions.includes('velaros:agents')){
    if(++child===1){const id=frame(request).partitions.runtime.stores.active.items[0].id;code=`import {store} from 'velaros:system';import {read} from 'velaros:project';import {output} from 'velaros';const f=(await read({files:[{path:'orders.json'}]})).files[0];const numbers=JSON.parse(f.lines.map(x=>x[1]).join('\\n'));output(await store.set({store:${JSON.stringify(id)},key:'result/summary',baseRevision:0,value:{total:numbers.reduce((a,b)=>a+b,0),count:numbers.length},event:{topic:'result/ready',value:{ready:true}}}));`;yield {type:'text',text:block(request,'execute',code)}}
@@ -145,7 +145,7 @@ test('semantic search workload retains real branch evidence and verifies the fix
  const driver=model(async function*(request){
   if(request.instructions.includes('你正在执行有界搜索')){
    if(++search===1)yield {type:'text',text:block(request,'execute',"import {read} from 'velaros:evidence';import {output} from 'velaros';output(await read({target:{kind:'resource',sourceId:'project',resourceId:'src/session.mjs'}}));")}
-   else{const evidence=latestOutput(request);assert(evidence?.id);yield {type:'text',text:block(request,'execute',`import {output} from 'velaros';output({findings:[{text:'Expiry boundary uses an inclusive comparison',evidenceIds:[${JSON.stringify(evidence.id)}]}],gaps:[],nextSteps:['Use exclusive expiry']});`)+'\n'+marker(request)+' done'}}
+   else{const evidence=latestOutput(request);assert(evidence?.id);yield {type:'text',text:block(request,'execute',`import {output} from 'velaros';import {report} from 'velaros:evidence';await report({findings:[{text:'Expiry boundary uses an inclusive comparison',evidenceIds:[${JSON.stringify(evidence.id)}]}],gaps:[],nextSteps:['Use exclusive expiry']});`)+'\n'+marker(request)+' done'}}
   }else{
    main++
    if(main===1)yield {type:'text',text:block(request,'execute',"import {search} from 'velaros:search';import {output} from 'velaros';output(await search({query:'session expiry'}));")}
@@ -173,7 +173,7 @@ test('reconciliation advances four actual source versions through the same child
   const view=frame(request)
   if(request.instructions.includes('你是上下文整理工具')){
    const snapshot=JSON.parse(view.partitions.task.goals[0].text).snapshot
-   yield {type:'text',text:block(request,'execute',`import {output} from 'velaros';output(${JSON.stringify({baseRevision:snapshot.baseRevision,summary:'Preserve stage progress and store reference',unresolved:[],recentRecords:2})});`)+'\n'+marker(request)+' done'}
+   yield {type:'text',text:block(request,'execute',`import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify({baseRevision:snapshot.baseRevision,summary:'Preserve stage progress and store reference',unresolved:[],recentRecords:2})}));`)+'\n'+marker(request)+' done'}
   }else if(!request.instructions.includes('velaros:agents')){
    child++
    const goal=view.partitions.task.goals.at(-1).record.ref.id

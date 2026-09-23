@@ -1,35 +1,53 @@
 import type { ModuleBinding } from '@velaros-ai/kernel'
 
-/** 模型层模块发现查询。 */
+/**
+ * @AgentView
+ * 找模块：query 按模块名、简介与操作名匹配关键词；space 只看 system（velaros:system 的成员）或 capability（业务能力），默认全部。
+ * 按 offset 翻页，limit 默认 20、最多 64。
+ */
 export interface SystemModuleQuery {
- /** 关键词。 */
- readonly query?:string
- /** 先授权过滤再分页的偏移。 */
- readonly offset?:number
- /** 当前页大小。 */
- readonly limit?:number
- /** 查询系统包、任务能力或全部。 */
- readonly space?:'system'|'capability'|'all'
+  readonly query?: string
+  readonly offset?: number
+  readonly limit?: number
+  readonly space?: 'system' | 'capability' | 'all'
 }
-/** 可导入包卡片；聚合包的真实身份由成员描述提供。 */
+
+/** @AgentView 一个能 import 的模块。operations 是能调的操作名，velaros:system 写成「成员.操作」；exports 是 velaros:system 当前能用的成员。 */
 export interface SystemModuleCard {
- /** 模型导入名。 */
- readonly specifier:string
- /** 所属空间。 */
- readonly space:'system'|'capability'
- /** 简介。 */
- readonly summary:string
- /** 可调用操作，聚合包使用成员点操作名。 */
- readonly operations:readonly string[]
- /** 业务模块的真实绑定。 */
- readonly binding?:ModuleBinding
- /** 聚合包可见成员。 */
- readonly exports?:readonly string[]
+  readonly specifier: string
+  readonly space: 'system' | 'capability'
+  readonly summary: string
+  readonly operations: readonly string[]
+  readonly binding?: ModuleBinding
+  readonly exports?: readonly string[]
 }
-/** 当前授权目录的一页。 */
+
+/** @AgentView 模块目录的一页；nextOffset 不是 null 就还有下一页。 */
 export interface SystemModulePage {
- /** 可见卡片。 */
- readonly items:readonly SystemModuleCard[]
- /** 后续偏移，没有更多时为 null。 */
- readonly nextOffset:Nullable<number>
+  readonly items: readonly SystemModuleCard[]
+  readonly nextOffset: Nullable<number>
+}
+
+/** @AgentView 要读哪个模块的合同：module 是 import 用的名字；读 velaros:system 时可以用 export 只要一个成员（goal、memory、store、modules）。 */
+export interface SystemModuleDescribeInput {
+  readonly module: string
+  readonly export?: string
+}
+
+/**
+ * @AgentView
+ * 模块的合同：declarations 是完整的 TypeScript 声明，template 是用法示例（只是示例，按需要改写；外部接入的模块没有示例时是空字符串），两者都要 output 之后才看得到。
+ * operations 按操作名给出摘要、入参与回执的 schema、效果与允许的入口；读整个 velaros:system 时 exports 按成员给出各自的这些内容。
+ */
+export interface SystemModuleDescription {
+  readonly specifier: string
+  readonly space: 'system' | 'capability'
+  /** 读的是 velaros:system 的哪个成员。 */
+  readonly export?: string
+  readonly summary?: string
+  readonly binding?: ModuleBinding
+  readonly operations?: Readonly<Record<string, unknown>>
+  readonly exports?: Readonly<Record<string, unknown>>
+  readonly declarations: string
+  readonly template: string
 }

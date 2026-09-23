@@ -133,7 +133,7 @@ test('the actual independent maintenance tool publishes output policy before the
  const maintenance={id:'maintenance',limits,estimate,async *stream(request){
   toolCalls++;const snap=JSON.parse(JSON.parse(request.materials[0].text).partitions.task.goals[0].text).snapshot
   const proposed=patch(snap,{sourceRef:snap.observationRef,config:{maxChars:1500},outputs:[{key:'state',view:{maxChars:500}}]})
-  const response=turn(request,{execute:{source:`import {output} from 'velaros';output(${JSON.stringify(proposed)});`}})
+  const response=turn(request,{execute:{source:`import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(proposed)}));`}})
   yield {...response,text:`${response.text}\n${marker(request)} done`};yield {type:'finish',reason:'stop'}
  }}
  const storage=localContextStorage({path:':memory:'})

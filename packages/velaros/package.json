@@ -173,7 +173,6 @@
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/velaros"
   },
   "dependencies": {
-    "ajv": "8.20.0",
     "@napi-rs/canvas": "1.0.8",
     "@velaros-ai/script": "workspace:*",
     "@velaros-ai/core": "workspace:*",

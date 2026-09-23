@@ -22,6 +22,8 @@ import {
   CapabilityModulePrefix,
   CodeSurfaces,
   HostContextTypes,
+  StandardSurfaces,
+  surfaceConstantName,
 } from './surfaces.mjs'
 
 const Here = dirname(fileURLToPath(import.meta.url))
@@ -132,6 +134,11 @@ function sliceWithDoc(node, file) {
   return `${docComment(node, file)}${file.text.slice(node.getStart(file), node.getEnd())}`.trimStart()
 }
 
+/** 同上，但说明只留标记之后的那段：标记之前是写给维护者的话（类型在别的包里怎么用），不进模型面。 */
+function sliceWithModelDoc(node, file) {
+  return `${afterModelTag(docComment(node, file))}${file.text.slice(node.getStart(file), node.getEnd())}`.trimStart()
+}
+
 /**
  * 这个节点自己的 JSDoc 里有没有那个标记。
  *
@@ -178,18 +185,48 @@ function expandBannedAliases(text) {
 }
 
 /**
- * 收集一个类型节点里引用到的名字。
+ * 收集一个类型节点里引用到的类型（交回引用处的标识符，之后按符号解析到它真正指的那个声明）。
  *
  * 三种都要收，少一种产物就编不过（实测三种都栽过）：普通类型引用、**继承子句**
  * （`interface A extends B`，它是 ExpressionWithTypeArguments 不是 TypeReference）、
  * 以及 `typeof X` 这种指向**值**的引用（`type E = (typeof Es)[number]`）。
  */
-function collectTypeNames(node, out, values) {
+function collectTypeReferences(node, out, values) {
   if (!node) return
-  if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName)) out.add(node.typeName.text)
-  if (ts.isExpressionWithTypeArguments(node) && ts.isIdentifier(node.expression)) out.add(node.expression.text)
+  if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName)) out.add(node.typeName)
+  if (ts.isExpressionWithTypeArguments(node) && ts.isIdentifier(node.expression)) out.add(node.expression)
   if (ts.isTypeQueryNode(node) && ts.isIdentifier(node.exprName)) values?.add(node.exprName.text)
-  node.forEachChild((child) => collectTypeNames(child, out, values))
+  node.forEachChild((child) => collectTypeReferences(child, out, values))
+}
+
+/**
+ * 引用处的标识符真正指的那个具名类型声明；内置类型、类型参数与依赖包里的类型交回 null。
+ *
+ * **按符号解析，不按名字找**：不同单元各有一个 `SearchResult` 是常态，按名字找会拿到先遇到的那个，
+ * 把别家的类型悄悄塞进模型面（实测撞过：act/search 的报告被解析成了 project 的检索结果）。
+ * 跨包的类型在这个 program 里经包清单解析到 `dist/*.d.ts`，再按「同一个包、同一个名字」映回源码：注释以源码为准，加了标记不必先重建那个包。
+ */
+function resolveDeclaration(program, identifier) {
+  const checker = program.getTypeChecker()
+  let symbol = checker.getSymbolAtLocation(identifier)
+  if (symbol && symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol)
+  // 依赖包刚加的类型还没进它的 dist，符号解析不到：按名字在源码里找，只认唯一的那个
+  if (!symbol?.declarations?.length) return uniqueSourceDeclaration(program, identifier.text)
+  const node = symbol.declarations?.find((declaration) => ts.isInterfaceDeclaration(declaration) || ts.isTypeAliasDeclaration(declaration))
+  if (!node) return null
+  const file = node.getSourceFile()
+  if (!file.fileName.includes('/packages/') || file.fileName.includes('/node_modules/')) return null
+  if (!file.isDeclarationFile) return { node, file }
+  const home = file.fileName.match(/^(.*\/packages\/[^/]+\/)dist\//u)?.[1]
+  if (!home) return { node, file }
+  for (const source of program.getSourceFiles()) {
+    if (source.isDeclarationFile || !source.fileName.startsWith(home) || source.fileName.includes('/node_modules/')) continue
+    for (const statement of source.statements) {
+      const named = ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)
+      if (named && statement.name.text === node.name.text) return { node: statement, file: source }
+    }
+  }
+  return { node, file }
 }
 
 /**
@@ -253,22 +290,28 @@ function findConstant(program, name) {
   return null
 }
 
+/** 全部包的源码里唯一叫这个名字的具名类型；没有或不止一个都交回 null（同名时生成物编不过，会当场报出来）。 */
+function uniqueSourceDeclaration(program, name) {
+  const found = []
+  for (const file of program.getSourceFiles()) {
+    if (file.isDeclarationFile || !file.fileName.includes('/packages/') || file.fileName.includes('/node_modules/')) continue
+    for (const statement of file.statements) {
+      const named = ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)
+      if (named && statement.name.text === name) found.push({ node: statement, file })
+    }
+  }
+  return found.length === 1 ? found[0] : null
+}
+
 /**
- * 在 program 里找一个具名类型的声明；找不到返回 null（内置类型走这条）。
- *
- * **先找源码，再回落到我们自己包的 `.d.ts`**：跨包类型（kernel、shell-command 这些）在这个 program 里
- * 只以 `.d.ts` 形式存在，一刀切掉 `.d.ts` 会让它们静默缺席——而缺席的类型会变成 `any`，
- * 正好丢掉这套东西要的检查。node_modules 与 lib 不找。
+ * 在登记的能力目录里找操作接口的声明；找不到返回 null。
+ * 只在这件能力自己的源码目录里找：别的单元有同名接口也不会被错拿（签名引用到的类型另按符号解析，见 `resolveDeclaration`）。
  */
-function findDeclaration(program, name) {
-  const ours = (file) => file.fileName.includes('/packages/') && !file.fileName.includes('/node_modules/')
-  for (const wantDeclaration of [false, true]) {
-    for (const file of program.getSourceFiles()) {
-      if (file.isDeclarationFile !== wantDeclaration || !ours(file)) continue
-      for (const statement of file.statements) {
-        const named = ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)
-        if (named && statement.name.text === name) return { node: statement, file }
-      }
+function findOperationInterface(program, name, home) {
+  for (const file of program.getSourceFiles()) {
+    if (file.isDeclarationFile || !file.fileName.startsWith(home) || file.fileName.includes('/node_modules/')) continue
+    for (const statement of file.statements) {
+      if (ts.isInterfaceDeclaration(statement) && statement.name.text === name) return { node: statement, file }
     }
   }
   return null
@@ -313,13 +356,26 @@ function renderMethod(member, file, printer, wanted, wantedValues) {
     if (!parameter.type || !ts.isTypeReferenceNode(parameter.type)) return true
     return !ts.isIdentifier(parameter.type.typeName) || !HostContextTypes.has(parameter.type.typeName.text)
   })
-  for (const parameter of parameters) collectTypeNames(parameter.type, wanted, wantedValues)
-  collectTypeNames(member.type, wanted, wantedValues)
+  for (const parameter of parameters) collectTypeReferences(parameter.type, wanted, wantedValues)
+  collectTypeReferences(member.type, wanted, wantedValues)
 
-  const printed = parameters.map((parameter) => printer.printNode(ts.EmitHint.Unspecified, parameter, file))
+  const printed = parameters.map((parameter) => printParameter(parameter, file, printer))
   const returns = printer.printNode(ts.EmitHint.Unspecified, member.type, file)
   const doc = alignDoc(stripModelTag(afterModelTag(sliceWithDoc(member, file).split(`${member.name.text}(`)[0].trimEnd())))
   return expandBannedAliases(`${doc}\n${member.name.text}(${printed.join(', ')}): ${returns}`)
+}
+
+/**
+ * 入参在接口里写成 `input: Optional<X>`（宿主上下文参数排在它后面，TS 不许它写成 `input?`）时，印成模型天天见的 `input?: X`：
+ * 这个操作不给参数也能调（`modules.list()`），派生的 schema 同时收 null。手写的 `X | undefined` 同样认。
+ */
+function printParameter(parameter, file, printer) {
+  const type = parameter.type
+  const print = (node) => printer.printNode(ts.EmitHint.Unspecified, node, file)
+  if (type && ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName) && type.typeName.text === 'Optional' && type.typeArguments?.length === 1) return `${parameter.name.getText(file)}?: ${print(type.typeArguments[0])}`
+  if (!type || !ts.isUnionTypeNode(type) || !type.types.some((member) => member.kind === ts.SyntaxKind.UndefinedKeyword)) return print(parameter)
+  const rest = type.types.filter((member) => member.kind !== ts.SyntaxKind.UndefinedKeyword).map(print)
+  return `${parameter.name.getText(file)}?: ${rest.join(' | ')}`
 }
 
 /**
@@ -361,9 +417,78 @@ function afterModelTag(doc) {
 function stripModelTag(text) {
   return text
     .split('\n')
-    .map((line) => line.replace(new RegExp(`\\s*${AgentViewTag}\\b`, 'u'), '').replace(/\s*@OperationEffect\s+(none|write)\b/u, ''))
+    .map((line) => line.replace(new RegExp(`\\s*${AgentViewTag}\\b`, 'u'), '').replace(/\s*@OperationEffect\s+(none|write)\b/u, '').replace(/\s*@OperationModes\s+execute\b/u, ''))
     .filter((line) => line.trim() !== '*')
     .join('\n')
+}
+
+/**
+ * 一个模块块的全部声明：导出项引用到的类型闭包（按符号解析，双向守标记），字面量词表就地展开，最后证明它自己编得过。
+ * 能力模块（导出操作）与脚本标准模块（导出常量）共用这一套；问题追加进 problems，不在这里抛。
+ */
+function declarationModule(program, specifier, headers, exports, wanted, wantedValues, problems) {
+  // 闭包：签名引用到的类型，以及它们自己引用到的。按名字登记：同一个模块块里两个类型同名是编不过的，当场报出来
+  const closure = new Map()
+  const queue = [...wanted]
+  while (queue.length > 0) {
+    const identifier = queue.shift()
+    if (BuiltinTypeNames.has(identifier.text) || identifier.text in BannedModelFacingAliases) continue
+    const found = resolveDeclaration(program, identifier)
+    if (!found) continue
+    const name = found.node.name.text
+    const existing = closure.get(name)
+    if (existing) {
+      if (existing.node !== found.node) problems.push(`模型面上有两个同名类型 ${name}：${existing.file.fileName.slice(RepoRoot.length + 1)} 与 ${found.file.fileName.slice(RepoRoot.length + 1)}，改掉其中一个的名字`)
+      continue
+    }
+    closure.set(name, found)
+    const nested = new Set()
+    collectTypeReferences(found.node, nested, wantedValues)
+    for (const next of nested) queue.push(next)
+  }
+
+  // 双向守标记
+  const unmarked = [...closure.entries()].filter(([, found]) => !hasModelTag(found.node, found.file)).map(([name]) => name)
+  if (unmarked.length > 0) {
+    problems.push(
+      `这些类型进了模型可观测面却没标 ${AgentViewTag}，在它们的 JSDoc 里加上（顺便想清楚模型看见它合不合适）：\n    ${unmarked.join('\n    ')}`
+    )
+  }
+
+  // 字面量词表就地展开成联合；展开之后还有人用 `typeof` 指着的常量（不是字面量词表，或者用法不是取元素）才照抄过去。
+  const unions = new Map()
+  const found = new Map()
+  for (const name of wantedValues) {
+    const constant = findConstant(program, name)
+    if (!constant) continue
+    found.set(name, constant)
+    const union = literalUnion(constant)
+    if (union) unions.set(name, union)
+  }
+  const declared = [...closure.values()].map(({ node, file }) => inlineLiteralUnions(expandBannedAliases(stripExport(stripModelTag(sliceWithModelDoc(node, file)))), unions))
+  const exported = exports.map((text) => inlineLiteralUnions(text, unions))
+  const constants = []
+  for (const [name, constant] of found) {
+    if (![...declared, ...exported].some((text) => new RegExp(`\\btypeof ${name}\\b`, 'u').test(text))) continue
+    const asType = constantAsType(constant)
+    // 块里已经是 ambient 上下文，再写 `declare` 是 TS1038。
+    if (asType) constants.push(`const ${name}: ${asType}`)
+  }
+  const types = [...constants, ...declared]
+
+  // 类型与导出项都放进 `declare module` 块里：模型写 `import { read } from 'velaros:files'`，
+  // 而且类型因此有了作用域——两件能力可以各有一个同名类型而不撞，平铺声明做不到。
+  const indented = (text) => text.split('\n').map((line) => (line.length > 0 ? `  ${line}` : line)).join('\n')
+  const body = [...headers.map(indented), ...types.map(indented), ...exported.map(indented)].join('\n\n')
+  // 这份文字就是模型看到的全部：维护者要的说明（谁生成的、怎么重算）写在随包发布的 surface.ts 与这个脚本里，不进来。
+  const text = `declare module '${specifier}' {\n${body}\n}\n`
+  if (problems.length === 0) {
+    const broken = verifyDeclarations(text)
+    if (broken.length > 0) {
+      problems.push(`生成出来的声明自己编不过（前几条）：\n    ${broken.slice(0, 6).join('\n    ')}`)
+    }
+  }
+  return { text, typeCount: types.length, closure }
 }
 
 function generate(surface) {
@@ -378,8 +503,8 @@ function generate(surface) {
   const problems = []
 
   for (const interfaceName of surface.interfaces) {
-    const found = findDeclaration(program, interfaceName)
-    if (!found || !ts.isInterfaceDeclaration(found.node)) {
+    const found = findOperationInterface(program, interfaceName, `${resolve(RepoRoot, 'packages', surface.directory, surface.unit ?? '')}/`)
+    if (!found) {
       problems.push(`找不到接口 ${interfaceName}（登记在 scripts/script/surfaces.mjs）`)
       continue
     }
@@ -401,68 +526,16 @@ function generate(surface) {
   // 代码模版不能省：我们知道这些能力怎么组合，模型未必知道。一个命名空间一份模版文件，import 只写一次、一段一个函数一种日常用法——只是示例，模型按需要改写。
   // 它**不嵌进声明、不常驻**：随包发布在模型面的 template 字段里，模型拿不准怎么组合时通过 modules.describe({module:'velaros:x'}) 的 template 字段读；
   // 对不对有两道：各单元的验收照真实声明整份做类型检查，仓库层的测试在真的空间里把每个函数跑一遍。
+  // 登记成数组时按顺序接成一份：能力按装配叠加时（工作记忆之上再挂长期记忆），每段用法只写一处。
   const templateHome = surface.unit ? `packages/${surface.directory}/${surface.unit}` : `packages/${surface.directory}`
-  const templatePath = surface.templates ? resolve(RepoRoot, templateHome, surface.templates) : null
-  const template = templatePath && ts.sys.fileExists(templatePath) ? readFileSync(templatePath, 'utf8').trim() : ''
+  const templatePaths = [surface.templates ?? []].flat().map((name) => resolve(RepoRoot, templateHome, name))
+  const templateParts = templatePaths.map((path) => (ts.sys.fileExists(path) ? readFileSync(path, 'utf8').trim() : ''))
+  const template = templateParts.includes('') ? '' : templateParts.join('\n')
   if (template.length === 0) {
     problems.push(`${surface.namespace} 没有代码模版：在 ${templateHome}/ 写一份日常用法的示例程序，并在 surfaces.mjs 登记`)
   }
 
-  // 闭包：签名引用到的类型，以及它们自己引用到的
-  const closure = new Map()
-  const queue = [...wanted]
-  while (queue.length > 0) {
-    const name = queue.shift()
-    if (closure.has(name) || BuiltinTypeNames.has(name) || name in BannedModelFacingAliases) continue
-    const found = findDeclaration(program, name)
-    if (!found) continue
-    closure.set(name, found)
-    const nested = new Set()
-    collectTypeNames(found.node, nested, wantedValues)
-    for (const next of nested) if (!closure.has(next)) queue.push(next)
-  }
-
-  // 双向守标记
-  const unmarked = [...closure.entries()].filter(([, found]) => !hasModelTag(found.node, found.file)).map(([name]) => name)
-  if (unmarked.length > 0) {
-    problems.push(
-      `这些类型进了模型可观测面却没标 ${AgentViewTag}，在它们的 JSDoc 里加上（顺便想清楚模型看见它合不合适）：\n    ${unmarked.join('\n    ')}`
-    )
-  }
-
-  // 字面量词表就地展开成联合；展开之后还有人用 `typeof` 指着的常量（不是字面量词表，或者用法不是取元素）才照抄过去。
-  const unions = new Map()
-  const found = new Map()
-  for (const name of wantedValues) {
-    const constant = findConstant(program, name)
-    if (!constant) continue
-    found.set(name, constant)
-    const union = literalUnion(constant)
-    if (union) unions.set(name, union)
-  }
-  const declared = [...closure.values()].map(({ node, file }) => inlineLiteralUnions(expandBannedAliases(stripExport(stripModelTag(sliceWithDoc(node, file)))), unions))
-  for (let index = 0; index < methods.length; index += 1) methods[index] = inlineLiteralUnions(methods[index], unions)
-  const constants = []
-  for (const [name, constant] of found) {
-    if (![...declared, ...methods].some((text) => new RegExp(`\\btypeof ${name}\\b`, 'u').test(text))) continue
-    const asType = constantAsType(constant)
-    // 块里已经是 ambient 上下文，再写 `declare` 是 TS1038。
-    if (asType) constants.push(`const ${name}: ${asType}`)
-  }
-  const types = [...constants, ...declared]
-
-  // 类型与方法都放进 `declare module` 块里：模型写 `import { read } from 'velaros:files'`，
-  // 而且类型因此有了作用域——两件能力可以各有一个同名类型而不撞，平铺声明做不到。
-  const indented = (text) => text.split('\n').map((line) => (line.length > 0 ? `  ${line}` : line)).join('\n')
-  const body = [...headers.map(indented), ...types.map(indented), ...methods.map((method) => indented(exportedMethod(method)))].join('\n\n')
-  // 这份文字就是模型看到的全部：维护者要的说明（谁生成的、怎么重算）写在随包发布的 surface.ts 与这个脚本里，不进来。
-  const text = `declare module '${CapabilityModulePrefix}${surface.namespace}' {\n${body}\n}\n`
-  if (problems.length === 0) {
-    const broken = verifyDeclarations(text)
-    if (broken.length > 0) {
-      problems.push(`生成出来的声明自己编不过（前几条）：\n    ${broken.slice(0, 6).join('\n    ')}`)
-    }
-  }
+  const { text, typeCount, closure } = declarationModule(program, `${CapabilityModulePrefix}${surface.namespace}`, headers, methods.map(exportedMethod), wanted, wantedValues, problems)
 
   return {
     text,
@@ -471,14 +544,37 @@ function generate(surface) {
     problems,
     methodNames,
     methodCount: methods.length,
-    typeCount: types.length,
+    typeCount,
     marked: new Set([...closure.keys(), ...surface.interfaces]),
   }
 }
 
-/** 能力模块在包里的常量名：`velaros:files` → `VelarFilesModule`。 */
-function surfaceConstantName(namespace) {
-  return `Velar${namespace.charAt(0).toUpperCase()}${namespace.slice(1)}Module`
+/**
+ * 脚本标准模块的声明：登记的接口在所属包的 src 里找，它的每个属性成为一个 `export const`，属性上的注释照原样带上。
+ * 没有操作，也就没有 schema 与效果；类型闭包、标记与自证编译和能力模块同一套。
+ */
+function generateStandard(entry) {
+  const program = createProgram(entry.directory)
+  const printer = ts.createPrinter({ removeComments: true })
+  const problems = []
+  const wanted = new Set()
+  const wantedValues = new Set()
+  const found = findOperationInterface(program, entry.interface, `${resolve(RepoRoot, 'packages', entry.directory, 'src')}/`)
+  if (!found) return { problems: [`找不到接口 ${entry.interface}（登记在 scripts/script/surfaces.mjs 的 StandardSurfaces）`], marked: new Set([entry.interface]) }
+  if (!hasModelTag(found.node, found.file)) problems.push(`${entry.interface} 缺 ${AgentViewTag}：标记之后写这个模块给模型看的说明`)
+  const headers = [stripModelTag(afterModelTag(docComment(found.node, found.file))).trim()].filter(Boolean)
+  const exports = []
+  for (const member of found.node.members) {
+    if (!ts.isPropertySignature(member) || !ts.isIdentifier(member.name) || !member.type) {
+      problems.push(`${entry.interface} 只能放属性：每个属性成为 ${entry.specifier} 的一个导出`)
+      continue
+    }
+    collectTypeReferences(member.type, wanted, wantedValues)
+    const doc = alignDoc(docComment(member, found.file).trim())
+    exports.push(`${doc ? `${doc}\n` : ''}export const ${member.name.text}: ${expandBannedAliases(printer.printNode(ts.EmitHint.Unspecified, member.type, found.file))}`)
+  }
+  const { text, typeCount, closure } = declarationModule(program, entry.specifier, headers, exports, wanted, wantedValues, problems)
+  return { text, problems, exportCount: exports.length, typeCount, marked: new Set([...closure.keys(), entry.interface]) }
 }
 
 /**
@@ -494,7 +590,7 @@ function surfaceModules() {
     const path = resolve(RepoRoot, home, 'contract', 'surface.ts')
     const specifier = `${CapabilityModulePrefix}${surface.namespace}`
     const block = [
-      `/** \`${specifier}\` 的模型面：模型 import 的模块名、放出去的方法、生成的完整声明（与 baselines/script/${surface.namespace}.d.ts 是同一份）、代码模版（${surface.templates}）。 */`,
+      `/** \`${specifier}\` 的模型面：模型 import 的模块名、放出去的方法、生成的完整声明（与 baselines/script/${surface.namespace}.d.ts 是同一份）、代码模版（${[surface.templates].flat().join(' + ')}）。 */`,
       `export const ${surfaceConstantName(surface.namespace)} = Object.freeze({`,
       `  specifier: '${specifier}',`,
       `  namespace: '${surface.namespace}',`,
@@ -504,6 +600,16 @@ function surfaceModules() {
       `  revision: '${createHash('sha256').update(JSON.stringify(result.operations)).digest('hex')}',`,
       `  operations: ${JSON.stringify(result.operations)} as const,`,
       '})',
+    ].join('\n')
+    files.set(path, [...(files.get(path) ?? []), block])
+  }
+  for (const entry of StandardSurfaces) {
+    const result = generatedStandard.get(entry.namespace)
+    if (!result || result.problems.length > 0) continue
+    const path = resolve(RepoRoot, 'packages', entry.directory, 'src', 'contract', 'surface.ts')
+    const block = [
+      `/** \`${entry.specifier}\` 的模型面：生成的完整声明（与 baselines/script/${entry.namespace}.d.ts 是同一份），检查器、包编译器与运行时说明都用它。 */`,
+      `export const ${entry.constant} = ${JSON.stringify(result.text)}`,
     ].join('\n')
     files.set(path, [...(files.get(path) ?? []), block])
   }
@@ -575,6 +681,32 @@ for (const surface of CodeSurfaces) {
   )
 }
 
+const generatedStandard = new Map()
+for (const entry of StandardSurfaces) {
+  const result = generateStandard(entry)
+  generatedStandard.set(entry.namespace, result)
+  for (const name of result.marked) marked.add(name)
+  const outputPath = resolve(OutputDirectory, `${entry.namespace}.d.ts`)
+  if (result.problems.length > 0) {
+    failed = true
+    process.stdout.write(`✗ ${entry.specifier}:\n  - ${result.problems.join('\n  - ')}\n`)
+    continue
+  }
+  if (ShouldWrite) {
+    mkdirSync(OutputDirectory, { recursive: true })
+    writeFileSync(outputPath, result.text)
+    process.stdout.write(`✓ ${entry.specifier}: ${result.exportCount} 个导出、${result.typeCount} 个类型，${result.text.length} 字符\n`)
+    continue
+  }
+  const current = ts.sys.fileExists(outputPath) ? readFileSync(outputPath, 'utf8') : null
+  if (current === result.text) {
+    process.stdout.write(`✓ ${entry.specifier}: ${result.exportCount} 个导出、${result.typeCount} 个类型，与源码一致\n`)
+    continue
+  }
+  failed = true
+  process.stdout.write(`✗ ${entry.specifier}: 生成物与源码不一致。你改的是模型可观测面——先看清楚改了什么，再 \`bun run generate:script\` 重算并提交。\n`)
+}
+
 // 声明随包发布：每件能力在自己包的 contract/surface.ts 里带一份（模块名、放出去的方法、完整声明），
 // 空间挂它时交给代码面的门；和上面那份 baselines 是同一份。写到别的目录（--out）时不碰包里的文件。
 if (!OutputOption) {
@@ -598,7 +730,7 @@ if (stray.length > 0) {
 }
 
 // 登记表里没有的命名空间，产物也不该留着：模型会读到一件已经不存在的能力。
-const expected = new Set(CodeSurfaces.map((surface) => `${surface.namespace}.d.ts`))
+const expected = new Set([...CodeSurfaces, ...StandardSurfaces].map((surface) => `${surface.namespace}.d.ts`))
 const leftovers = ts.sys.directoryExists(OutputDirectory)
   ? ts.sys.readDirectory(OutputDirectory, ['.d.ts']).map((path) => path.slice(OutputDirectory.length + 1)).filter((name) => !expected.has(name))
   : []

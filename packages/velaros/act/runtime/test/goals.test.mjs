@@ -3,7 +3,9 @@ import {mkdtemp,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {test} from 'node:test'
+
 import {createRuntime} from '../../../dist/act/runtime/index.js'
+
 import {done,turn} from './support/model-turn.mjs'
 
 async function fixture(t,model){
@@ -49,7 +51,7 @@ test('active goal prevents premature done; model operation explicitly completes 
  const frames=[]
  const model={id:'goal-test',limits:{contextTokens:100000,inputTokens:90000,outputTokens:4096},estimate:async()=>({tokens:1000,precision:'exact'}),async *stream(request){
   frames.push(request)
-  if(frames.length===2){yield turn(request,{execute:{source:`import {goal} from 'velaros:system';const current=await goal.get({});if(!current)throw new Error('missing');await goal.update({baseRevision:current.revision,status:'complete',reason:'已执行测试并确认结果'});`}});yield {type:'finish',reason:'stop'}}
+  if(frames.length===2){yield turn(request,{execute:{source:`import {goal} from 'velaros:system';const current=await goal.get();if(!current)throw new Error('missing');await goal.update({baseRevision:current.revision,status:'complete',reason:'已执行测试并确认结果'});`}});yield {type:'finish',reason:'stop'}}
   else yield* done(request)
  }}
  const {session}=await fixture(t,model)
@@ -72,10 +74,10 @@ test('paused goals survive normal submissions and cancellation never completes a
  const {session}=await fixture(t,model)
  await session.updateGoal({baseRevision:0,objective:'暂停后保留'})
  await session.controlGoal({baseRevision:1,action:'pause'})
- for await(const _event of session.submit('普通问题')){}
+ await Array.fromAsync(session.submit('普通问题'))
  assert.equal((await session.getGoal()).status,'paused')
  await session.controlGoal({baseRevision:2,action:'resume'})
- const running=(async()=>{for await(const _event of session.submit('继续')){}})()
+ const running=Array.fromAsync(session.submit('继续'))
  await ready;session.cancel();await running
  assert.equal((await session.getGoal()).status,'active')
  await assert.rejects(session.execute({source:`import {goal} from 'velaros:system';await goal.update({baseRevision:3,status:'removed'});`}),/代码检查失败/)

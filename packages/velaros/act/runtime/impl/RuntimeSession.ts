@@ -1,30 +1,29 @@
-import type {GoalState,GoalUpdate,GoalControl} from '../../system/types/goal.js'
-import {SessionGoal} from './SessionGoal.js'
-import type {SessionGoalApi} from './SessionGoal.js'
-import type { WorkspaceEntry } from '../../system/types/workspace.js'
-import type { RuntimeNoteRead, RuntimeNoteRetention, RuntimeNoteContent } from '../types/memory.js'
 import type { ActAnswer, ActEvent, ActInput, ActInteraction, ActRunEvent, ActRunLimits, ActRunServiceApi, ActRunSnapshot, AgentJob, AgentSupervisorApi } from "@velaros-ai/agent";
 import { createActRunService } from "@velaros-ai/agent";
 import type { ContextFeedback, ContextInvocationJournalApi, ContextRef, ContextRuntime, ContextStorage, ContextViewApi, ModelView } from "@velaros-ai/context";
 import { createContextRuntime, createContextView } from "@velaros-ai/context";
 import {Log} from '@velaros-ai/core'
 import {isNull,isUndefined,toNullable,toOptional} from '@velaros-ai/core'
-import { isEmpty, isObject, isString } from '@velaros-ai/core'
+import { isEmpty, isString } from '@velaros-ai/core'
 import type { ModelImage, ModelTurnRequest, OperationRuntimeApi } from "@velaros-ai/kernel";
 import type { ModelDriver } from "@velaros-ai/model";
 import { createProviderRequestCompiler } from "@velaros-ai/model";
 import type { CodeProgramRequest, CodeRunnerApi, CodeSurfaceOutcome, ScriptPackageDefinition } from "@velaros-ai/script";
 import { createKernelScriptSession } from "@velaros-ai/script";
 
-import { PersistentMemoryModuleId,ScriptLeaseLimits, StoreProjectionLimits, SystemPackage } from "../../system/contract/constants.js";
+import { LongTermMemoryModuleIds, ScriptLeaseLimits, StoreProjectionLimits } from "../../system/contract/constants.js";
 import type { ContextCandidateValidator } from "../../system/contract/requires.js";
 import type {StoreSessionApi} from '../../system/impl/StoreSession.js'
+import type {GoalControl,GoalState,GoalUpdate} from '../../system/types/goal.js'
+import type { WorkspaceEntry } from '../../system/types/workspace.js'
+import { isSystemMember } from "../../system/utils/members.js";
 import type { VelarosContextOptions } from "../contract/requires.js";
+import type { RuntimeNoteContent,RuntimeNoteRead, RuntimeNoteRetention } from '../types/memory.js'
 import type { ContextMemoryPolicy } from "../types/memory.js";
 import type { PreparedScript, ScriptProtocolSubmission } from "../types/program.js";
 import type { ScriptRetention } from "../types/results.js";
 import type { ObservationRegistration, ScriptControlIdentity, ScriptControlOptions, ScriptControlReceipt, ScriptDecisionBasis, ScriptObservationEdit, ScriptProgramVersion, ScriptProtocolOptions, ScriptReferenceProgram } from "../types/runtime.js";
-import type { ScriptExecutionReceipt, ScriptSubmission, ScriptSubmissionReceipt } from "../types/session.js";
+import type { ScriptExecutionReceipt, ScriptSourceProgram, ScriptSubmission, ScriptSubmissionReceipt } from "../types/session.js";
 import type { ActTurnTrace } from "../types/trace.js";
 import {memoryPrompt} from '../utils/context-memory.js'
 import {runtimeInstructions} from '../utils/model-instructions.js'
@@ -40,6 +39,8 @@ import type { RecentContextApi } from "./RecentContext.js";
 import { RecentContext } from "./RecentContext.js";
 import { RuntimeTrace } from "./RuntimeTrace.js";
 import { ScriptTurnDecoder } from "./ScriptTurnDecoder.js";
+import type {SessionGoalApi} from './SessionGoal.js'
+import {SessionGoal} from './SessionGoal.js'
 import { standardModules } from "./StandardModules.js";
 
 /** 标准模块持有的源码与结果访问端口。 */
@@ -79,8 +80,6 @@ export interface RuntimeSessionModelTool {
  refresh(signal:AbortSignal):Promise<void>
  /** 读取保存脚本时仍遵守当前授权代次。 */
  authorizeReference(ref:ContextRef,signal:AbortSignal):Promise<void>
- /** 接收脚本输出，具体工具验证自己的交付合同。 */
- report(value:unknown,signal:AbortSignal):Promise<void>
 }
 
 /** 会话由运行时注入的共享实例。 */
@@ -169,9 +168,9 @@ export interface VelarosSession {
   /** 统一提交观察更新和本轮执行；先检查全部代码，再发布并执行。 */
   script(input:ScriptSubmission, signal?:AbortSignal, options?:ScriptControlOptions):Promise<ScriptSubmissionReceipt>
   /** 宿主观察便捷调用，转交 script({observe}) 并将拒绝回执转成错误。 */
-  observe(program:CodeProgramRequest | ScriptReferenceProgram, signal?:AbortSignal, options?:ScriptControlOptions):Promise<ObservationRegistration>
+  observe(program:ScriptSourceProgram | ScriptReferenceProgram, signal?:AbortSignal, options?:ScriptControlOptions):Promise<ObservationRegistration>
   /** 宿主执行便捷调用，转交 script({execute}) 并将拒绝回执转成错误。 */
-  execute(program:CodeProgramRequest | ScriptReferenceProgram, turns?:ScriptRetention, signal?:AbortSignal, options?:ScriptControlOptions):Promise<ScriptExecutionReceipt>
+  execute(program:ScriptSourceProgram | ScriptReferenceProgram, turns?:ScriptRetention, signal?:AbortSignal, options?:ScriptControlOptions):Promise<ScriptExecutionReceipt>
   /** 由宿主调用领域核对器恢复中断任务；不会重新运行脚本。 */
   reconcile(signal?: AbortSignal): Promise<void>
   /** 取消在途程序并释放会话绑定。 */
@@ -359,13 +358,13 @@ export class RuntimeSession implements VelarosSession {
     return this.control(input,signal,options,toNullable((await this.programs.state()).observation),true)
   }
 
-  public async observe(program:CodeProgramRequest | ScriptReferenceProgram,signal?:AbortSignal,options?:ScriptControlOptions):Promise<ObservationRegistration> {
+  public async observe(program:ScriptSourceProgram | ScriptReferenceProgram,signal?:AbortSignal,options?:ScriptControlOptions):Promise<ObservationRegistration> {
     const result=await this.script({observe:program},signal,options)
     if(result.status==='rejected')throw Object.assign(new Error(result.observe?.message),result.observe)
     return result.observe as ObservationRegistration
   }
 
-  public async execute(program:CodeProgramRequest | ScriptReferenceProgram,turns:ScriptRetention=ScriptLeaseLimits.defaultTurns,signal?:AbortSignal,options?:ScriptControlOptions):Promise<ScriptExecutionReceipt> {
+  public async execute(program:ScriptSourceProgram | ScriptReferenceProgram,turns:ScriptRetention=ScriptLeaseLimits.defaultTurns,signal?:AbortSignal,options?:ScriptControlOptions):Promise<ScriptExecutionReceipt> {
     const result=await this.script({execute:{...program,retainTurns:turns}},signal,options)
     if(result.status==='rejected')throw Object.assign(new Error((result.execute as ScriptControlReceipt)?.message),result.execute)
     return result.execute as ScriptExecutionReceipt
@@ -665,11 +664,6 @@ export class RuntimeSession implements VelarosSession {
     try {
       const session=createKernelScriptSession({packages:this.dependencies.packages,allowedModules:this.dependencies.allowedModules(),runtime:this.dependencies.kernel,runner:this.dependencies.runner,sessionId:this.id,executionId,mode})
       result=await session.run(program,signal)
-      if(this.dependencies.tool&&result.checked&&!result.result.failed&&!result.output?.issues.length){
-        const raw=result.rawValue??result.result.value
-        const value=result.output?.blocks.length?(result.output.blocks.length===1?result.output.blocks[0]!.value:result.output.blocks.map(block=>block.value)):raw&&isObject(raw)&&'default' in raw?raw.default:raw
-        await this.dependencies.tool.report(value,signal)
-      }
     } catch(error) { failure=error; if(mode!=='observe'||signal.aborted)throw error;return {checked:true,result:{failed:{code:'PROGRAM_ERROR',message:String(error)}}} }
     finally {
       durationMs=performance.now()-scriptStarted
@@ -679,7 +673,7 @@ export class RuntimeSession implements VelarosSession {
       const persisted=result?.checked ? {...result,attachments:undefined} : result
       const dependencies=await this.dependencies.journal.list(this.id,executionId)
       const reads=dependencies.flatMap(record=>record.receipt?.outcome==='succeeded'?record.receipt.reads??[]:[])
-      const unverified=dependencies.filter(record=>record.receipt?.outcome==='succeeded'&&!record.receipt.reads?.length&&!new Set<string>(Object.values(SystemPackage.exports)).has(record.prepared.binding.moduleId)&&!(record.prepared.binding.moduleId===PersistentMemoryModuleId&&record.prepared.operation!=='recall')).map(record=>({invocationId:record.prepared.id,moduleId:record.prepared.binding.moduleId,operation:record.prepared.operation}))
+      const unverified=dependencies.filter(record=>record.receipt?.outcome==='succeeded'&&!record.receipt.reads?.length&&(!isSystemMember(record.prepared.binding.moduleId)||LongTermMemoryModuleIds.includes(record.prepared.binding.moduleId)&&record.prepared.operation==='recall')).map(record=>({invocationId:record.prepared.id,moduleId:record.prepared.binding.moduleId,operation:record.prepared.operation}))
       const observationFeedback=mode==='observe'?(await this.dependencies.journal.list(this.id,executionId)).filter(record=>record.receipt?.effect!=='none'||record.receipt?.outcome!=='succeeded').map(record=>({id:record.prepared.id,operation:`${record.prepared.binding.moduleId}.${record.prepared.operation}`,effect:record.receipt?.effect??'unknown',outcome:record.receipt?.outcome??'unknown',...(record.receipt?.observation?{protection:record.receipt.observation.protection,completed:record.receipt.observation.completed}:{}),code: record.receipt?.error ? record.receipt.error.code : undefined})):undefined
       const output=await this.context.append({kind:'audit',title:`script:${executionId}:result`,body:JSON.stringify({executionId,mode,dependencies:{reads,unverified},...(persisted??{error:String(failure)}),timing:{durationMs},attachments: !isEmpty(attachments) ? attachments : undefined,observationFeedback: observationFeedback?.length ? observationFeedback : undefined}),sources:[source.ref]})
       resultRef=output.ref.id

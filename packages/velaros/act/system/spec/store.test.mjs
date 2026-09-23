@@ -208,7 +208,7 @@ test('INV-15 搜索模型的发现与声明保持叶子能力，不注入共享�
   assert.equal(runtimeFrame(request.materials[0].text).stores,undefined)
   assert(!request.instructions.includes('store.set'))
   if(searchCalls===1){yield turn(request,{execute:{source:"import {output} from 'velaros';import {modules} from 'velaros:system';output(await modules.list({space:'system'}));"}});yield {type:'finish',reason:'stop'}}
-  else{assert(!modelText(request).includes('system-store'));yield {type:'text',text:`${turn(request,{execute:{source:"import {output} from 'velaros';output({findings:[],gaps:[],nextSteps:[]});"}}).text}\n${marker(request)} done`};yield {type:'finish',reason:'stop'}}
+  else{assert(!modelText(request).includes('system-store'));yield {type:'text',text:`${turn(request,{execute:{source:"import {output} from 'velaros';import {report} from 'velaros:evidence';await report({findings:[],gaps:[],nextSteps:[]});"}}).text}\n${marker(request)} done`};yield {type:'finish',reason:'stop'}}
  })
  const root=model(async function*(request){if(mainCalls++===0){yield turn(request,{execute:{source:"import {search} from 'velaros:search';await search({query:'inspect'});"}});yield {type:'finish',reason:'stop'}}else yield* done(request)})
  const f=await fixture(t,{model:root,search:{model:search,defaultProfile:'standard',profiles:{standard:{modelCalls:8,modelTokens:200000,finalizationTokens:16000,timeoutMs:30000,callTimeoutMs:3000,finalizationMs:4000,outputTokens:1024,projectionChars:32000,sourceQueries:16,candidates:64,reads:16,readBytes:128000}}}})
@@ -369,7 +369,7 @@ test('INV-17 六个空间在结果租约到期后持续进入真实请求，重�
  assert.equal(frame.stores.active.taskId,taskId)
  assert.deepEqual(frame.results,[])
  assert(!JSON.stringify(frame.stores).includes('body-only-on-read'))
- assert(f.requests.at(-1).instructions.includes('list({active:true})'))
+ assert(f.requests.at(-1).instructions.includes('store.list 的 active 选项分页'))
  await f.restart();await submit(f.session)
  assert.equal(frames(f.requests).at(-1).stores.active.total,6)
  await submit(f.session,{text:'另一个任务',task:'new'})

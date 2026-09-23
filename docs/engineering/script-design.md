@@ -89,6 +89,24 @@
 模型拿不到它，照抄过去只会让它从字段跳到类型、再跳到常量才知道能填什么。所以词表常量不用打标记，标记打在类型别名上就够了；
 源码里常量仍是运行时的唯一权威（宿主据它校验），类型照旧从它推。
 
+### Act 与标准模块走同一条路（2026-09-23）
+
+`velaros:system`（goal、modules、memory、store）、`velaros:context-materials`、`velaros:search`/`velaros:evidence`、`velaros:agents`/`velaros:interaction`
+原先手写 JSON Schema，声明再由 Kernel 从 schema 合成，模型看到的是 schema 的投影，出参与说明都对不上源码。现在和领域能力一样：
+
+- **合同在操作接口上。** 各职责组的 `impl/*Operations.ts` 写接口（`@AgentView` 模型文档、`@OperationEffect` 效果、`@OperationModes execute` 只能在 execute 里用的写操作），
+  `scripts/script/surfaces.mjs` 登记，生成器写出 `contract/surface.ts`；`impl/*Module.ts` 只把生成的模型面与实现绑成 Kernel 模块（宿主上下文、读取登记、效果核对、写入前拒绝的错误标成无效果）。
+- **一份实现、几种投影。** 同一个实现类按装配挂不同的接口组合：store 的创建/读写/只读三种，memory 按有没有长期记忆、有没有整理模型分四种，一种投影一份生成的合同，一共 14 种（`packages/velaros/act/README.md` 的目录由生成器从合同写出）。
+- **生成器补的三件事。** 入参写成 `input: Optional<X>` 就是可以不传（宿主上下文排在后面，TS 不许写 `input?`；声明里印成 `input?: X`，派生 schema 是 `null | X`）；`@OperationModes execute` 生成 `allowedModes`；
+  类型按符号解析，dist 里的 `.d.ts` 映射回同包源码，一个闭包里出现两个同名类型直接报错——早先按名字找曾把 project 的 `SearchResult` 当成搜索的那个。
+- **标准模块也生成。** `velaros`（output）与 `velaros:program`（input、blobs）的声明由 script 包 `types/standard.ts` 的接口生成（`StandardSurfaces`），不再手写声明字符串。
+- **支线交付是普通操作。** 搜索子会话用 `velaros:evidence` 的 `report` 交报告，整理子会话用 `velaros:context-materials` 的 `submit` 交补丁，都过 typecheck；无类型的 `tool.report(output)` 钩子删了。
+- **上限写在文档里，数字只有一份。** 派生 schema 只管形状；数值上限写进 `@AgentView` 文档，数字来自所属单元的常量表，入参核对引用同一份常量，
+  验收逐条核对声明文字与常量（先例是 files 的 INV-10；act system INV-20、search/agents INV-2、context INV-13、script INV-37）。
+  script 的 `validateOutputOptions` 要整段注入隔离堆、不能引用常量表，它的边界由 INV-37 在常量上放行、常量加一拒绝。
+- **还留着 schema 的只有两处。** MCP 工具：外部服务器只给 JSON Schema、没有 TS 源码可生成，声明由 Kernel 从它合成——这是唯一从 schema 出声明的地方；
+  browser/office 的 zod：是操作自己的入参核对的写法（上限同样引常量表），模型看到的仍是 TS 接口生成的声明，zod 不进模型面。
+
 ## 能力怎么设计：组合交给模型，工具只做必要的与绕不开的
 
 这是代码面上设计每一件能力的判据（你定的）：**尽量把组合和操作交给模型，工具只提供必要的能力，

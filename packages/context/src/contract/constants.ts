@@ -71,134 +71,42 @@ export const ContextLimits = Object.freeze({
   /** 模型一次选入的材料上限。 */
   workingSetItems: 2000,
 })
-/** 模型和脚本共用的观察协议定义。 */
-export const ContextTargetSchema = Object.freeze({
-  anyOf: [
-      { type: 'object', properties: { kind: { const: 'artifact' }, ref: { type: 'object', properties: { sessionId: { type: 'string',
-  /** 字段最少字符数。 */
-                          minLength: 1 }, id: { type: 'string',
-  /** 字段最少字符数。 */
-                          minLength: 1 } }, required: ['sessionId', 'id'], additionalProperties: false } }, required: ['kind', 'ref'], additionalProperties: false },
-      { type: 'object', properties: { kind: { const: 'resource' }, sourceId: { type: 'string',
-  /** 字段最少字符数。 */
-                  minLength: 1 }, resourceId: { type: 'string',
-  /** 字段最少字符数。 */
-                  minLength: 1 }, selector: { anyOf: [
-                      { type: 'object', properties: { kind: { const: 'whole' } }, required: ['kind'], additionalProperties: false },
-                      { type: 'object', properties: { kind: { const: 'lines' }, start: { type: 'integer',
-  /** 字段整数下界。 */
-                                  minimum: 1 }, end: { type: 'integer',
-  /** 字段整数下界。 */
-                                  minimum: 1 } }, required: ['kind', 'start', 'end'], additionalProperties: false },
-                      { type: 'object', properties: { kind: { const: 'symbol' }, name: { type: 'string',
-  /** 字段最少字符数。 */
-                                  minLength: 1 } }, required: ['kind', 'name'], additionalProperties: false },
-                  ] } }, required: ['kind', 'sourceId', 'resourceId'], additionalProperties: false },
-  ],
-} as const)
-/** 时间语义不由资源版本推测。 */
-export const ContextTimeSchema = Object.freeze({ anyOf: [
-      { type: 'object', properties: { kind: { enum: ['after-step', 'historical'] } }, required: ['kind'], additionalProperties: false },
-      { type: 'object', properties: { kind: { const: 'snapshot' }, snapshotId: { type: 'string',
-  /** 字段最少字符数。 */
-                  minLength: 1 } }, required: ['kind', 'snapshotId'], additionalProperties: false },
-  ] } as const)
-/** 精确与语义需求各自拥有完整的 JSON Schema 与同源脚本声明。 */
-export const ViewIntentSchema = Object.freeze({ anyOf: [
-      { type: 'object', properties: { ...({
-                  purpose: { type: 'string',
-  /** 字段最多字符数。 */
-                      maxLength: 2000 },
-                  importance: { enum: ['required', 'preferred'] }, time: ContextTimeSchema,
-                  forms: { type: 'array', items: { enum: ['full', 'excerpt', 'definition', 'metadata', 'diff'] },
-  /** 数组最少条目数。 */
-                      minItems: 1,
-  /** 数组最多条目数。 */
-                      maxItems: 5 },
-                  maxTokensHint: { type: 'integer',
-  /** 字段整数下界。 */
-                      minimum: 1,
-  /** 字段整数上界。 */
-                      maximum: 100000 },
-              } as const), kind: { const: 'direct' }, target: ContextTargetSchema }, required: ['kind', 'target'], additionalProperties: false },
-      { type: 'object', properties: { ...({
-                  purpose: { type: 'string',
-  /** 字段最多字符数。 */
-                      maxLength: 2000 },
-                  importance: { enum: ['required', 'preferred'] }, time: ContextTimeSchema,
-                  forms: { type: 'array', items: { enum: ['full', 'excerpt', 'definition', 'metadata', 'diff'] },
-  /** 数组最少条目数。 */
-                      minItems: 1,
-  /** 数组最多条目数。 */
-                      maxItems: 5 },
-                  maxTokensHint: { type: 'integer',
-  /** 字段整数下界。 */
-                      minimum: 1,
-  /** 字段整数上界。 */
-                      maximum: 100000 },
-              } as const), kind: { const: 'semantic' }, objective: { type: 'string',
-  /** 字段最少字符数。 */
-                  minLength: 1,
-  /** 字段最多字符数。 */
-                  maxLength: 2000 }, anchors: { type: 'array', items: ContextTargetSchema,
-  /** 数组最多条目数。 */
-                  maxItems: 8 } }, required: ['kind', 'objective'], additionalProperties: false },
-  ] } as const)
-/** Context 模型只输出候选计划和只读检索请求。 */
-export const ContextPlannerSchema = Object.freeze({
-  anyOf: [
-      { type: 'object', properties: { kind: { const: 'select' }, selections: { type: 'array',
-  /** 数组最多条目数。 */
-                  maxItems: 32, items: { type: 'object', properties: { candidateId: { type: 'string' }, intentIds: { type: 'array', items: { type: 'string' },
-  /** 数组最少条目数。 */
-                              minItems: 1,
-  /** 数组最多条目数。 */
-                              maxItems: 16 }, form: { enum: ['full', 'excerpt', 'definition', 'metadata', 'diff'] } }, required: ['candidateId', 'intentIds', 'form'], additionalProperties: false } } }, required: ['kind', 'selections'], additionalProperties: false },
-      { type: 'object', properties: { kind: { const: 'search' }, intentId: { type: 'string' }, sourceId: { type: 'string' }, query: { type: 'string',
-  /** 字段最少字符数。 */
-                  minLength: 1,
-  /** 字段最多字符数。 */
-                  maxLength: 2000 }, limit: { type: 'integer',
-  /** 字段整数下界。 */
-                  minimum: 1,
-  /** 字段整数上界。 */
-                  maximum: 32 } }, required: ['kind', 'intentId', 'sourceId', 'query', 'limit'], additionalProperties: false },
-      { type: 'object', properties: { kind: { const: 'inspect' }, candidateIds: { type: 'array', items: { type: 'string' },
-  /** 数组最少条目数。 */
-                  minItems: 1,
-  /** 数组最多条目数。 */
-                  maxItems: 8 } }, required: ['kind', 'candidateIds'], additionalProperties: false },
-      { type: 'object', properties: { kind: { const: 'insufficient' }, intentIds: { type: 'array', items: { type: 'string' },
-  /** 数组最少条目数。 */
-                  minItems: 1,
-  /** 数组最多条目数。 */
-                  maxItems: 16 }, reason: { type: 'string',
-  /** 字段最少字符数。 */
-                  minLength: 1,
-  /** 字段最多字符数。 */
-                  maxLength: 2000 } }, required: ['kind', 'intentIds', 'reason'], additionalProperties: false },
-  ],
-} as const)
-/** 模型陈述不接受验证事实或用户目标字段。 */
-export const TaskCapsuleSchema = Object.freeze({
-  type: 'object', properties: {
-      nextObjective: { type: 'string',
-  /** 字段最多字符数。 */
-          maxLength: 2000 },
-      hypotheses: { type: 'array',
-  /** 数组最多条目数。 */
-          maxItems: 16, items: { type: 'string',
-  /** 字段最多字符数。 */
-              maxLength: 1000 } },
-      decisions: { type: 'array',
-  /** 数组最多条目数。 */
-          maxItems: 16, items: { type: 'string',
-  /** 字段最多字符数。 */
-              maxLength: 1000 } },
-      openQuestions: { type: 'array',
-  /** 数组最多条目数。 */
-          maxItems: 16, items: { type: 'string',
-  /** 字段最多字符数。 */
-              maxLength: 1000 } },
-  }, additionalProperties: false,
-} as const)
+/** 观察需求能要求的表示形式。 */
+export const ContextViewForms = Object.freeze(['full', 'excerpt', 'definition', 'metadata', 'diff'] as const)
+/** 观察需求对外约定的上限。 */
+export const ViewIntentLimits = Object.freeze({
+  /** 用途说明最多多少字符。 */
+  purposeChars: 2000,
+  /** 语义需求的目标最多多少字符。 */
+  objectiveChars: 2000,
+  /** 一个需求最多要几种表示形式。 */
+  forms: 5,
+  /** 期望正文量提示的上限（token）。 */
+  maxTokensHint: 100000,
+  /** 语义需求最多带几个锚点。 */
+  anchors: 8,
+})
+/** 上下文规划器一次决定对外约定的上限。 */
+export const ContextPlannerLimits = Object.freeze({
+  /** 一次最多选入的候选数。 */
+  selections: 32,
+  /** 一项选择或缺口最多对应的需求数。 */
+  intentIds: 16,
+  /** 检索语句最多多少字符。 */
+  queryChars: 2000,
+  /** 一次检索最多要多少个候选。 */
+  searchLimit: 32,
+  /** 一次最多细看的候选数。 */
+  candidateIds: 8,
+  /** 缺口说明最多多少字符。 */
+  reasonChars: 2000,
+})
+/** 任务计划对外约定的上限。 */
+export const TaskCapsuleLimits = Object.freeze({
+  /** 下一步目标最多多少字符。 */
+  objectiveChars: 2000,
+  /** 假设、决定、待解问题各最多多少条。 */
+  items: 16,
+  /** 每一条最多多少字符。 */
+  itemChars: 1000,
+})

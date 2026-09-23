@@ -8,16 +8,17 @@
 
 入口 `./act/agents`。装配实例 `agentsModule`, `interactionModule`。
 接口：`AgentsHost`, `AgentsSession`, `InteractionHost`, `InteractionSession`, `AgentsModuleApi`, `InteractionModuleApi`。
+操作每次调用的宿主上下文：`AgentsOperationContext`, `InteractionOperationContext`。数据合同：`AgentProfileInfo`。
 
 操作清单与入口模式见 [Act 清单](../README.md)，默认模板见 [template.js](template.js)，其他模块使用同目录的 `<模块>-template.js`。
 
 ## 骨干链路
 
-模块装配实例 → Kernel 注册 → schema、模式和权限检查 → 当前会话端口 → 持久回执。
+`impl/*Operations.ts` 的操作接口生成模型面（`contract/surface.ts`）→ `impl/*Module.ts` 用 `capabilityModules` 接到当前会话端口 → Kernel 注册、结构校验、模式和权限检查 → 实现核对取值上限 → 持久回执。
 
 ## 依赖什么
 
-通过 contract/requires.ts 注入能力，复用 Kernel、Context 和 Script 的执行链。公共 schema 构造与会话装配在 runtime。
+通过 contract/requires.ts 注入能力，复用 Kernel、Context 和 Script 的执行链。生成模型面的接口在本组，装配器与会话装配在 runtime。
 
 ## 状态归谁
 
@@ -33,7 +34,7 @@
 
 ## 不变量
 
-共 1 条，未验证 0 条。见 spec/invariants.md。
+共 2 条，未验证 0 条。见 spec/invariants.md。
 
 ## 非目标
 
@@ -43,8 +44,10 @@
 
 ```text
 agents/
-  contract/ 提供面、注入面、常量
-  impl/ 按模块命名的实现
+  contract/ 提供面、注入面、常量；surface.ts 是生成的模型面
+  types/ 模型面的入参与回执
+  impl/ 操作接口与实现、按模块命名的装配
+  utils/ 取值上限的核对
   spec/ 验收测试与不变量
   index.ts
   template.js

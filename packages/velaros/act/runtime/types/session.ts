@@ -3,15 +3,18 @@ import type { CodeProgramRequest, CodeSurfaceOutcome } from "@velaros-ai/script"
 import type { ScriptRetention } from "./results.js";
 import type { ScriptControlReceipt, ScriptObservationEdit, ScriptReferenceProgram } from "./runtime.js";
 
+/** 交来的一段程序正文；存档路径只属于脚本库，提交里没有。 */
+export type ScriptSourceProgram = Omit<CodeProgramRequest, 'path'>
+
 /** 一次脚本提交；至少包含观察更新或本轮执行。 */
 export type ScriptSubmissionFields = {
   /** 更新持续观察代码；省略时继续使用当前版本。 */
-  readonly observe?:CodeProgramRequest | ScriptReferenceProgram | ScriptObservationEdit
+  readonly observe?:ScriptSourceProgram | ScriptReferenceProgram | ScriptObservationEdit
   /** 本轮只运行一次的代码及其结果可见租约。 */
-  readonly execute?:(CodeProgramRequest | ScriptReferenceProgram) & {readonly retainTurns?:ScriptRetention}
+  readonly execute?:(ScriptSourceProgram | ScriptReferenceProgram) & {readonly retainTurns?:ScriptRetention}
 }
 
-/** 同一提交至少指定 observe 或 execute；运行时使用同源 schema 校验。 */
+/** 同一提交至少指定 observe 或 execute；运行时按这个类型逐项核对（`checkScriptSubmission`）。 */
 export type ScriptSubmission = ScriptSubmissionFields & ({readonly observe:NonNullable<ScriptSubmissionFields['observe']>} | {readonly execute:NonNullable<ScriptSubmissionFields['execute']>})
 
 /** 持久化的提交回执；prepared 表示执行已占位，重试必须核对。 */

@@ -58,7 +58,7 @@
 
 `impl/KernelScriptSession.ts` 编排，`CodeSurfaceSession.ts` 处理一次执行，`CodeProgramChecker.ts` 检查，`NodeSubprocessCodeRunner.ts` 隔离，`KernelInvocationPort.ts` 与 `CapabilityOperationPort.ts` 转发能力。`utils/` 提供编译、编辑、路径、诊断与预算纯函数，`bin/script-child.mjs` 实现隔离进程桥。
 
-共 27 条，测试 26 条、门禁 1 条，未验证 0 条。不变量见 `spec/invariants.md`。执行引擎验收在 `spec/acceptance.test.ts`；源码版本、草稿、CAS、租约和重启恢复在 `packages/velaros/act/runtime/test/incremental-edit.test.mjs` 与 `program-context.test.mjs`。所有权门禁为 `bun run check:module-ownership`。
+共 28 条，测试 27 条、门禁 1 条，未验证 0 条。不变量见 `spec/invariants.md`。执行引擎验收在 `spec/acceptance.test.ts`；源码版本、草稿、CAS、租约和重启恢复在 `packages/velaros/act/runtime/test/incremental-edit.test.mjs` 与 `program-context.test.mjs`。所有权门禁为 `bun run check:module-ownership`。
 
 ## 结构
 

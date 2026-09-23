@@ -34,7 +34,11 @@ export interface OperationSurface {
   readonly operations: Readonly<Record<string, OperationDescriptor & { readonly hasInput: boolean }>>
 }
 
-/** 挂载实例的不可变身份；作用域由宿主选定。 */
+/**
+ * 挂载实例的不可变身份；作用域由宿主选定。
+ * @AgentView
+ * 模块这一次挂载的身份：moduleId 就是 import 用的模块名，instanceId 与 generation 标识实例，schemaRevision 是合同版本。
+ */
 export interface ModuleBinding {
   readonly moduleId: string
   readonly instanceId: string

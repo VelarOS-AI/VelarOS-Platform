@@ -11,6 +11,7 @@
 import { isNotNull } from '@velaros-ai/core'
 
 import { CodeSurfaceDiagnosticCodes } from '../contract/constants.js'
+import { ProgramModuleDeclarations } from '../contract/surface.js'
 import type { CodeProgramCheckResult } from '../types/script.js'
 import type { GrantedModule } from '../types/script.js'
 import { rejectWithDiagnostics } from '../utils/budget.js'
@@ -44,7 +45,7 @@ export interface CodeProgramCheckerApi {
 
 class CodeProgramChecker implements CodeProgramCheckerApi {
   public check(input: { source: string; granted: readonly GrantedModule[]; path?: string; modules?: Readonly<Record<string, string>> }): CodeProgramCheckResult {
-    const declarations = joinGrantedDeclarations(input.granted)
+    const declarations = joinGrantedDeclarations(ProgramModuleDeclarations, input.granted)
     const diagnostics = diagnoseProgram({ source: input.source, declarations, modules: input.modules }, checkedProgramFile(input.path, false), JavaScriptCheckOptions)
     if (diagnostics.length === 0) return { ok: true }
 
@@ -62,7 +63,7 @@ class CodeProgramChecker implements CodeProgramCheckerApi {
   }
 
   public missingModules(input: { source: string; granted: readonly GrantedModule[]; path?: string; modules?: Readonly<Record<string, string>> }): string[] {
-    const declarations = joinGrantedDeclarations(input.granted)
+    const declarations = joinGrantedDeclarations(ProgramModuleDeclarations, input.granted)
     const diagnostics = diagnoseProgram({ source: input.source, declarations, modules: input.modules }, checkedProgramFile(input.path, false), JavaScriptCheckOptions)
     const missing: string[] = []
     for (const diagnostic of diagnostics) {

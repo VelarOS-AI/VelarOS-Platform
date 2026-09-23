@@ -59,7 +59,7 @@ runtime/
   contract/ provides.ts、requires.ts、constants.ts
   types/ 运行、协议、分区投影与追踪数据
   impl/ 会话装配、协议解析、分区和执行协调
-  utils/ 纯计算、schema 共用构造与调节参数
+  utils/ 纯计算、脚本提交核对与调节参数
   invariants.md
   test/ 主干集成验收、Provider 与 MCP
   index.ts

@@ -16,3 +16,8 @@ export function normalizeCapabilityValue(value: unknown): unknown {
   }
   return copy(value,true)
 }
+
+/** 失败带着这些错误码之一；用来认出发生在任何写入之前、可以记成没有效果的拒绝。 */
+export function hasErrorCode(error: unknown, codes: readonly string[]): boolean {
+  return codes.includes((error as {code?:string})?.code ?? '')
+}

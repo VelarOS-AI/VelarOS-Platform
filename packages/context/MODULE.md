@@ -19,7 +19,7 @@ ContextTaskState.storeRefs 保存当前任务使用的 store ID；由装配层�
 
 公开日志工厂 `createContextInvocationJournal` 返回 `ContextInvocationJournalApi`；来源访问工厂 `createEvidenceAccess` 返回 `EvidenceAccessApi`。`TurnContextAppendListener` 是活动通知回调。
 
-公开常量：`ContextLimits`、`DefaultContextViewLimits`、`StoreLimits`；JSON Schema：`ContextTargetSchema`、`ContextTimeSchema`、`ViewIntentSchema`、`ContextPlannerSchema`、`TaskCapsuleSchema`。
+公开常量：`ContextLimits`、`DefaultContextViewLimits`、`StoreLimits`，以及观察协议的取值上限 `ViewIntentLimits`、`ContextPlannerLimits`、`TaskCapsuleLimits` 与表示形式词表 `ContextViewForms`。观察需求、规划决定与任务计划的形状只有 `ViewIntentInput`、`ContextPlannerDecision`、`TaskCapsule` 这几个类型一份定义，入口处按它们与上限表逐项核对（不合约定时报 `VIEW_SCHEMA`），不另外维护 JSON Schema。
 
 ## 骨干链路
 先写对象，再提交元数据与工作集。单条归档优先使用可选的 ContextStorage.appendRecord，在同一事务内验证正文、来源与身份，递增记录序号和状态版本；未提供时使用完整 CAS。任务续租、预算与用量优先通过可选 loadMetadata/compareAndSwapMetadata 读写 ContextMetadata 小快照；任务切换把旧任务归档目录与新元数据原子提交。调用索引按 refId 查重后增量追加。扩展缺失时继续完整 CAS，所有路径共享版本。存储 API 由装配层使用，模型能力经 StandardModules 和 ScriptAct 进入。
@@ -32,7 +32,7 @@ ContextStorage 保存唯一事实，ContextRuntime 是绑定会话的无缓存�
 ## 失败语义
 CONTEXT_CONFLICT 要求重新 inspect；SCOPE_MISMATCH 拒绝跨会话引用；OBJECT_MISSING 明确报告原文缺失；CONTEXT_BUDGET 请求整理材料。
 ## 不变量
-共 12 条，未验证 0 条，见 spec/invariants.md。存储替换边界及适配器验收见 `docs/architecture/storage.md`。
+共 13 条，未验证 0 条，见 spec/invariants.md。存储替换边界及适配器验收见 `docs/architecture/storage.md`。
 ## 非目标
 供应商 token 编码、模型循环与领域文件版本属于其各自负责人。
 ## 结构

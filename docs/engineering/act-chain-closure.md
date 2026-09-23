@@ -40,7 +40,7 @@
 | Runtime | `impl/RuntimeSession.ts`、`ProgramContext.ts`、`ContextMemory.ts`、`RecentContext.ts`、`ComposedRuntime.ts` | 决策依据、必需输出、任务边界、健康状态、共享效果闸门与父子核对。 |
 | 领域装配 | `impl/StandardModules.ts`、`contract/requires.ts`、`index.ts` | createProjectCapabilityModule / ProjectCapabilityModuleOptions 复用 ProjectSpacePort 和现有文件能力。文件版本来自 kernel.stat/真实 read/edit 回执；列表/查询对真实结果重新核验，排除生成句柄随机性。CapabilityModuleOptions.reads 用于宿主注入权威版本适配。 |
 | 整理 | `system/impl/ContextMaintenanceState.ts`、`system/contract/requires.ts`、`runtime/impl/ContextMaintenance.ts` | ContextCandidateValidator；候选发布前验证，保留既有用户约束。自动压力上限在当前业务轮后过期，显式边界策略在任务内保持。源码中的展示修改始终有可见版本。 |
-| 支线交付 | `runtime/impl/ModelToolRuntime.ts`、`search/impl/AdvancedSearch.ts`、`search/types.ts`、`runtime/utils/schemas.ts` | 搜索/子任务/整理报告均有统一清单。证据和最多 16 份源码作为快照复制到父会话，并附来源及对象指纹；较早源码数量明确报告。共享源码需调用者读取、提交并通过自身校验。 |
+| 支线交付 | `runtime/impl/ModelToolRuntime.ts`、`search/impl/AdvancedSearch.ts`、`search/impl/EvidenceOperations.ts`、`system/impl/ContextMaterialsOperations.ts` | 搜索/子任务/整理报告均有统一清单；搜索报告经 `velaros:evidence` 的 `report`、整理补丁经 `velaros:context-materials` 的 `submit` 交付，都是生成合同里的普通操作。证据和最多 16 份源码作为快照复制到父会话，并附来源及对象指纹；较早源码数量明确报告。共享源码需调用者读取、提交并通过自身校验。 |
 | Shell | `shell/impl/ShellOperations.ts`、Runtime 标准装配 | 清理未收束时报告 OBSERVATION_UNSETTLED；已完成的部分防护观察仍报告 protection，未知效果不能由“只读命令”名称推断为无副作用。 |
 | 验证入口 | `scripts/agent/act-eval.mjs`、包测试脚本、MODULE.md/invariants.md | 正式评测装配使用权威 Project 版本；新测试注册进入正常包测试入口。 |
 
