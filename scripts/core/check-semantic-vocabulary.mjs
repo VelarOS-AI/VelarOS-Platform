@@ -66,7 +66,8 @@ const SenseExemptions = [
     reason: "内存 transport 的默认 id 字面量 'memory',同上",
   },
   {
-    pattern: /\|\s*'browser'|return\s+'browser'/u,
+    // 联合类型里的成员：前面或后面带竖线都算，排成一行或多行都认得出
+    pattern: /\|\s*'browser'|'browser'\s*\||return\s+'browser'/u,
     reason: 'browser=JS 运行环境标签(window/document 存在与否),不是 VelarOS 浏览器能力域',
   },
   {
