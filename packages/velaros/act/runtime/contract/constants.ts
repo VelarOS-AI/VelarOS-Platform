@@ -42,12 +42,14 @@ export const VelarosRunLimits = Object.freeze({
   timeoutMs: 86_400_000,
 })
 
-/** 主线总额度是任务上限，按真实调用逐次预留，不改变模型窗口。 */
+/** 主线不设总额，只限每小时用量，好让会话一直跑下去；宿主可以另设用户总上限。按真实调用逐次预留，不改变模型窗口。 */
 export const VelarosMainBudget = Object.freeze({
-  /** 一个逻辑任务中主线与支线累计调用上限。 */
-  modelCalls: 100_000,
-  /** 一个逻辑任务累计预留和实际 token 上限。 */
-  modelTokens: 100_000_000,
+  /** 一个逻辑任务中主线与支线累计调用上限；缺省不限。 */
+  modelCalls: Number.MAX_SAFE_INTEGER,
+  /** 一个逻辑任务累计预留和实际 token 上限；缺省不限。 */
+  modelTokens: Number.MAX_SAFE_INTEGER,
+  /** 主线及其业务子任务、模型工具每小时的 token 上限（滚动一小时）。 */
+  modelTokensPerHour: 30_000_000,
 })
 
 /** 业务子任务保留足够的独立工作空间，同时受祖先的剩余额度约束。 */

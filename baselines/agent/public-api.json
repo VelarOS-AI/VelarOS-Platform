@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageName": "@velaros-ai/agent",
-  "acceptedPackageVersion": "7.0.0",
+  "acceptedPackageVersion": "7.1.0",
   "entries": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -10,7 +10,7 @@
         "ActAnswer\ttype\t8b9caf74f5ea3e22bc179d99305f3d8e5713e48ee6cf06b186e33b2b214da8b1",
         "ActChildSession\ttype\td87f890645f88721c1e73eb05f2511f21cad0d58b5877054a4d6e91035bb901d",
         "ActContextPolicy\ttype\t000738397acec929f377aa874a2b2654786bfadfb13d46a0140bd3ae6ca2ecaa",
-        "ActContextPort\ttype\t090cc5cbe0aea32f82c8dfbd56532b301ede1a9ba3cd4f2a65edb0899526a594",
+        "ActContextPort\ttype\td2aed9206ec28a1530ef71e28cc9daecf00947358374f43dcb822f7a07e5e210",
         "ActDecodedTurn\ttype\t1230fe763071c879eca408dfeb6b5c8e614f803a45153986abf1d100573be7c6",
         "ActEvent\ttype\tdedef3fb4e136d1bc43837336fe4aa109473be8c2f1f89b39115b4ca9042a46d",
         "ActExecutionPort\ttype\t82e0e5e0717e0d7612b5542938a98186e943ed044f3536297212628f496b0b0e",
@@ -23,7 +23,7 @@
         "ActLoopOptions\ttype\t8676d7e3cf1859f3aa09a1258ef130e67cdf999df31b8756492cfe5e7f664e40",
         "ActPreview\ttype\tddf475660c3cb83113ea5b120b210d0aeeff61c1ff73737982994ba6abf0162d",
         "ActProtocolPort\ttype\te92a6ff36edca8c43edf7f9aa85da9a2d35fc979a9744ae9f4f7a352cb7b1b5c",
-        "ActRunEvent\ttype\t1746fef585a58bea25e0c4358b23bf2fc75b956c8e939adbb011be82cea60ad5",
+        "ActRunEvent\ttype\t6e3f776c64b799e30fb13902a154600515035a53abf3b0961c81b5aa3b12c6cf",
         "ActRunLimits\ttype\t21c764fcfd3a4e720d3a590307714b2d944065e1aa853a1c80d1b2c12fc3751b",
         "ActRunServiceApi\ttype\tddcbc20b1c19bd6d55d489c2aaddffad8f619b0354b994ea9a8b7a348a85f014",
         "ActRunServiceOptions\ttype\te64a01d79a68a086c2d61b9e329c62e529ee3929b7c770f9535d11abce2d1453",
@@ -55,7 +55,7 @@
         "ActInputFile\ttype\t979a7cd520d1282c394c7d79c9836cd6b0073f0a63f6a98664fb76fc2f66ac8e",
         "ActInteraction\ttype\tf14783be2ff760eb296bd955de41d3ebc434758052475e38a042c5bfd9a685a6",
         "ActPreview\ttype\tddf475660c3cb83113ea5b120b210d0aeeff61c1ff73737982994ba6abf0162d",
-        "ActRunEvent\ttype\t1746fef585a58bea25e0c4358b23bf2fc75b956c8e939adbb011be82cea60ad5",
+        "ActRunEvent\ttype\t6e3f776c64b799e30fb13902a154600515035a53abf3b0961c81b5aa3b12c6cf",
         "ActRunLimits\ttype\t21c764fcfd3a4e720d3a590307714b2d944065e1aa853a1c80d1b2c12fc3751b",
         "ActRunSnapshot\ttype\tf14f420c2249c43b9cf30a64d08bc9122925ed0c67fbc416041e9ce4b792c20d",
         "ActRunStatus\ttype\t956fd535f57f61dd0a15e71a675137b65523909918de769bcd3cb31769e963a2",

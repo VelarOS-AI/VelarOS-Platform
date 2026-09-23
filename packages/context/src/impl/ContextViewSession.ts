@@ -1,5 +1,6 @@
 import { isUndefined, toNullable, toOptional } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type {
   ContextBuildOptions,
@@ -25,6 +26,7 @@ import type {
 } from '../types/context.js'
 import type { ContextTaskMutation } from '../types/runtime.js'
 import { contextFailure, emptyContextState, sameContextRef } from '../utils/state.js'
+import { hourlyRetryMs, recentHourlyTokens, rolledHourly } from '../utils/usage.js'
 import { assertContextTask, awaitContextOperation, resolveViewLimits } from '../utils/view.js'
 import { checkTaskCapsule, checkViewIntent } from '../utils/view-input.js'
 
@@ -530,6 +532,9 @@ export class ContextViewSession implements ContextViewApi {
   public async reserveModel(role: 'main' | 'context', tokens: number): Promise<void> {
     if (!Number.isSafeInteger(tokens) || tokens < 1)
       throw contextFailure('MODEL_BUDGET', '模型预算无效')
+    // 单次请求就超过每小时上限，等多久都放不进去
+    if (tokens > this.limits.modelTokensPerHour)
+      throw contextFailure('MODEL_BUDGET', '单次模型请求超过任务每小时用量上限')
     await this.change({
       apply: (current) => {
         const task = this.owned(current)
@@ -540,6 +545,12 @@ export class ContextViewSession implements ContextViewApi {
             this.limits.modelTokens
         )
           throw contextFailure('MODEL_BUDGET', '任务共享模型预算耗尽')
+        const now = Date.now()
+        const hourly = rolledHourly(usage.hourly, now)
+        if (recentHourlyTokens(hourly, now) + tokens > this.limits.modelTokensPerHour)
+          throw AppError.withFields('MODEL_RATE', '任务每小时的模型用量已到上限，稍后继续', {
+            retryAfterMs: hourlyRetryMs(hourly, tokens, this.limits.modelTokensPerHour, now),
+          })
         return {
           ...task,
           usage: {
@@ -548,6 +559,7 @@ export class ContextViewSession implements ContextViewApi {
               usage[role === 'main' ? 'mainCalls' : 'contextCalls'] + 1,
             reservedTokens: usage.reservedTokens + tokens,
             unmeasuredCalls: usage.unmeasuredCalls + 1,
+            hourly: { ...hourly, tokens: hourly.tokens + tokens },
           },
         }
       },
@@ -569,6 +581,10 @@ export class ContextViewSession implements ContextViewApi {
             [key]: Math.max(0, usage[key] - 1),
             reservedTokens: Math.max(0, usage.reservedTokens - tokens),
             unmeasuredCalls: Math.max(0, usage.unmeasuredCalls - 1),
+            // 没派发的预留从当前桶退回；跨了桶的部分随桶自然淡出
+            hourly: usage.hourly
+              ? { ...usage.hourly, tokens: Math.max(0, usage.hourly.tokens - tokens) }
+              : undefined,
           },
         }
       },

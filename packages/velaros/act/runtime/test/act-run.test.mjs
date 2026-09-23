@@ -440,3 +440,101 @@ test('a reopened host can inspect a durable pending interaction but cannot answe
     await otherRuntime.close()
   }
 })
+
+test('INV-51 the main run renews at its turn limit and keeps going instead of failing', async (t) => {
+  let calls = 0
+  const f = await setup(
+    t,
+    async function* (request) {
+      calls++
+      if (calls < 8) {
+        yield {
+          type: 'text',
+          text: block(request, `import {output} from 'velaros';output(${calls});`),
+        }
+        yield finish
+      } else yield* done(request)
+    },
+    {
+      limits: {
+        turns: 3,
+        outputTokens: 2048,
+        safetyTokens: 1024,
+        projectionChars: 200000,
+        recoveryChars: 6000,
+        timeoutMs: 60000,
+      },
+    }
+  )
+  const events = []
+  for await (const event of f.session.submit('keep going')) events.push(event)
+  assert.equal(
+    events.at(-1).status,
+    'completed',
+    JSON.stringify(events.filter((event) => !['text', 'program'].includes(event.type)))
+  )
+  assert.equal(calls, 8)
+  assert.deepEqual(
+    events.filter((event) => event.type === 'renewed').map((event) => event.cause),
+    ['turns', 'turns']
+  )
+})
+
+test('INV-51 a renewing main run still cancels a turn stuck for a second clock period', async (t) => {
+  const f = await setup(
+    t,
+    async function* (_request, signal) {
+      await new Promise((resolve) => {
+        signal.addEventListener('abort', resolve, { once: true })
+        if (signal.aborted) resolve()
+      })
+    },
+    {
+      limits: {
+        turns: 3,
+        outputTokens: 2048,
+        safetyTokens: 1024,
+        projectionChars: 200000,
+        recoveryChars: 6000,
+        timeoutMs: 100,
+      },
+    }
+  )
+  const events = []
+  for await (const event of f.session.submit('stuck')) events.push(event)
+  assert.equal(events.at(-1).status, 'cancelled')
+  assert(!events.some((event) => event.type === 'renewed'))
+})
+
+test('INV-51 a run without progress reflects, then pauses for the user, and the next input gets a fresh allowance', async (t) => {
+  let calls = 0
+  let reflected = false
+  const stalls = []
+  const f = await setup(t, async function* (request) {
+    calls++
+    stalls.push(request.contextStatus.stall?.repeatedSteps ?? 0)
+    if (request.compiledPrompt.includes('反思轮')) reflected = true
+    // 安全阀：暂停失效时让测试失败而不是一直跑
+    if (calls > 40) {
+      yield* done(request)
+      return
+    }
+    yield { type: 'text', text: block(request, "import {output} from 'velaros';output('same');") }
+    yield finish
+  })
+  const events = []
+  for await (const event of f.session.submit('loop forever')) events.push(event)
+  const stalled = events.find((event) => event.type === 'stalled')
+  assert(
+    stalled,
+    JSON.stringify(events.filter((event) => !['text', 'program'].includes(event.type)))
+  )
+  assert(stalled.repeatedSteps >= 9)
+  assert.equal(events.at(-1).status, 'waiting')
+  assert(reflected)
+  assert(stalls.some((count) => count >= 3 && count < 9))
+  const before = calls
+  for await (const event of f.session.submit('try another way')) void event
+  // 新的输入重新起算：先有模型调用，而不是一进来就暂停
+  assert(calls > before + 1)
+})

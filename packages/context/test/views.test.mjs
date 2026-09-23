@@ -221,6 +221,41 @@ test('shared model budget: two roles consume one durable model budget, missing u
   assert.equal(usage.inputTokens, 10)
 })
 
+test('INV-14 hourly model budget rolls by the hour, says when to retry and refuses a request larger than an hour', async (t) => {
+  const f = await fixture(t, { modelTokensPerHour: 100 })
+  t.mock.timers.enable({ apis: ['Date'], now: 0 })
+  // 运行中心跳会续租；这里按五分钟一步拨表并续租
+  const advance = async (ms) => {
+    for (let left = ms; left > 0; left -= 300_000) {
+      t.mock.timers.tick(Math.min(300_000, left))
+      await f.view.renew()
+    }
+  }
+  await f.view.reserveModel('main', 60)
+  await f.view.reserveModel('main', 30)
+  // 当前一小时已经不够：等到下一小时
+  await assert.rejects(
+    f.view.reserveModel('main', 20),
+    (error) => error.code === 'MODEL_RATE' && error.retryAfterMs === 3_600_000
+  )
+  // 单次就超过每小时上限，等多久都不行
+  await assert.rejects(f.view.reserveModel('main', 101), { code: 'MODEL_BUDGET' })
+  // 下一小时刚开始，上一小时的 90 还全额算着，要等它淡出到够用
+  await advance(3_600_000)
+  await assert.rejects(
+    f.view.reserveModel('main', 20),
+    (error) =>
+      error.code === 'MODEL_RATE' && error.retryAfterMs > 0 && error.retryAfterMs < 3_600_000
+  )
+  await advance(1_800_000)
+  await f.view.reserveModel('main', 50)
+  await f.view.releaseModel('main', 50)
+  await f.view.reserveModel('main', 50)
+  const usage = (await createContextView(f.options).inspect()).usage
+  assert.equal(usage.hourly.tokens, 50)
+  assert.equal(usage.hourly.previous, 90)
+})
+
 test('A16/A17: competing leases, stale build publication and cancellation fail closed', async (t) => {
   const f = await fixture(t)
   await assert.rejects(createContextView(f.options).begin(f.user.ref), { code: 'TASK_BUSY' })

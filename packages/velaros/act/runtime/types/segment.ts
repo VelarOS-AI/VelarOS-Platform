@@ -16,7 +16,7 @@ export interface SegmentEntry {
 
 /** 为什么开始新的一段或重建底座。 */
 export type SegmentReason =
-  'start' | 'runway' | 'boundary' | 'organize' | 'provider' | 'overflow' | 'rebase'
+  'start' | 'runway' | 'boundary' | 'organize' | 'provider' | 'overflow' | 'renew' | 'rebase'
 
 /** 当前段：底座、延续的结果与冻结条目；封段时整体换新，重建底座只换底座。 */
 export interface ContextSegment {

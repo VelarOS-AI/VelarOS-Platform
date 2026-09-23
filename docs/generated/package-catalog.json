@@ -6,7 +6,7 @@
       "domain": "agent",
       "directory": "packages/agent",
       "name": "@velaros-ai/agent",
-      "version": "7.0.0",
+      "version": "7.1.0",
       "description": "Act execution loop, durable run control and bounded child scheduling for VelarOS Platform.",
       "exportSubpaths": [
         ".",

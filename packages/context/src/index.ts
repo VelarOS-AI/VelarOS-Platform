@@ -50,6 +50,7 @@ export type {
   ContextEvidence,
   ContextFeedback,
   ContextGap,
+  ContextHourlyUsage,
   ContextObjectCollection,
   ContextObjectCollectionResult,
   ContextPlannerDecision,

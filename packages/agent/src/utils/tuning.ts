@@ -2,6 +2,8 @@
 export const AgentTuning = Object.freeze({
   /** 持久事件默认分页条数。 */
   eventPage: 100,
+  /** 限速错误没带等待时长时，等这么久再预留。 */
+  rateRetryMs: 60_000,
 })
 /** 上下文规划的缺省值；宿主经 frames.policy 覆盖前四项。 */
 export const ContextPlanTuning = Object.freeze({
@@ -25,4 +27,10 @@ export const ContextPlanTuning = Object.freeze({
   growthSeed: 0.04,
   /** 字符密度取最近多少帧。 */
   densitySamples: 8,
+  /** 本次运行连续没有进展这么多步，ContextStatus 给出停滞提示。 */
+  stallNotice: 3,
+  /** 连续没有进展这么多步，本帧尾加反思说明。 */
+  stallReflect: 6,
+  /** 连续没有进展这么多步，暂停运行等用户。 */
+  stallPause: 9,
 })

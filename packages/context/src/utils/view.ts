@@ -69,7 +69,9 @@ export function assertContextTask(value: ContextTaskState): void {
     !value.usage
   )
     throw contextFailure('TASK_STATE', '任务检查点结构无效')
-  for (const count of Object.values(value.usage))
+  // 计数都是非负整数；每小时分桶的起点与两桶用量同样是非负整数
+  const { hourly, ...counts } = value.usage
+  for (const count of [...Object.values(counts), ...Object.values(hourly ?? {})])
     if (!Number.isSafeInteger(count) || count < 0)
       throw contextFailure('TASK_STATE', '任务用量无效')
 }

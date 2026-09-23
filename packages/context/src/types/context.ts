@@ -412,6 +412,14 @@ export interface ContextTaskUsage {
   readonly inputTokens: number
   readonly outputTokens: number
   readonly unmeasuredCalls: number
+  /** 用来限每小时用量。 */
+  readonly hourly?: ContextHourlyUsage
+}
+/** 按小时分桶的预留量：当前桶起点、当前桶与上一桶的 token。 */
+export interface ContextHourlyUsage {
+  readonly start: number
+  readonly tokens: number
+  readonly previous: number
 }
 /** 与原始记录同一次 CAS 提交的任务检查点。 */
 /** 模型材料携带其引用证据的版本，源失效会沿依赖传播。 */
@@ -461,6 +469,8 @@ export interface ContextViewLimits {
   readonly refreshes: number
   readonly modelCalls: number
   readonly modelTokens: number
+  /** 滚动一小时的模型 token 上限。 */
+  readonly modelTokensPerHour: number
   readonly materializationMs: number
   readonly leaseMs: number
 }

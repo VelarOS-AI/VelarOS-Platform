@@ -47,6 +47,8 @@ export const DefaultContextViewLimits = Object.freeze({
   modelCalls: 128,
   /** 任务模型 token 总数上限。 */
   modelTokens: 500000,
+  /** 任务每小时的模型 token 上限（滚动一小时）；缺省不限。 */
+  modelTokensPerHour: Number.MAX_SAFE_INTEGER,
   /** 单次物化时限毫秒。 */
   materializationMs: 30000,
   /** 任务租约时长毫秒。 */
@@ -58,6 +60,8 @@ export const ContextLimits = Object.freeze({
   recordPage: 256,
   /** 未发布对象至少保留一小时，供候选提交与故障诊断。 */
   orphanGraceMs: 3600000,
+  /** 每小时模型用量的滚动窗口，按两个整小时的桶近似。 */
+  hourlyWindowMs: 3600000,
   /** 已整理输入保留可召回的有界原文锚点，避免超大输入使维护永远无效。 */
   inputAnchorChars: 1000,
   /** 单次原文读取上限。 */

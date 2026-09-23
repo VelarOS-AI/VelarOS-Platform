@@ -20,6 +20,8 @@ export const ActRuntimeTuning = Object.freeze({
   edits: 128,
   /** 协议修复默认次数。 */
   protocolRepairs: 2,
+  /** 限速错误没带等待时长时，等这么久再预留。 */
+  rateRetryMs: 60_000,
   /** 段内一条新历史第一次交付的字符上限；之后同段逐字复用。 */
   segmentEntryChars: 24_000,
   /** 一卷规则骨架的字符上限，超出保留首尾。 */

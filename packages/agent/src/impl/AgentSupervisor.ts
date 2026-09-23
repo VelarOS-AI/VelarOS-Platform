@@ -278,6 +278,7 @@ class AgentSupervisor implements AgentSupervisorApi {
             event.type === 'accepted' ||
             event.type === 'verification' ||
             event.type === 'error' ||
+            event.type === 'stalled' ||
             event.type === 'state'
           )
             omittedEvents += appendChildEvent(events, event)

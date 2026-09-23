@@ -795,6 +795,7 @@ class ComposedRuntime implements VelarosRuntime {
           storage: this.options.storage,
           model: this.options.model ? this.tools.model(id, this.options.model) : undefined,
           limits: this.options.limits ?? VelarosRunLimits,
+          renewRuns: true,
           closed: () => {
             if (this.sessions.get(id) === session) this.releaseMain(id)
           },

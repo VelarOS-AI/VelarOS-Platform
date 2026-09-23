@@ -1,8 +1,11 @@
 import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelTurnDelta } from '@velaros-ai/kernel'
+import { modelProviderRetry } from '@velaros-ai/model'
 
 import type { ModelBudgetPort } from '../types/model-budget.js'
+
+import { ActRuntimeTuning } from './tuning.js'
 
 /** 只读模型准备可立即取消；迟到结果不会进入后续发布流程。 */
 export async function awaitModelPreparation<T>(
@@ -43,7 +46,18 @@ export async function* reservedModelStream(
   })
   let reserved = false
   try {
-    await parent.reserveModel('context', tokens)
+    // 父任务到了每小时用量上限就等窗口释放后再预留，不算失败
+    for (;;)
+      try {
+        await parent.reserveModel('context', tokens)
+        break
+      } catch (error) {
+        if ((error as { code?: string }).code !== 'MODEL_RATE') throw error
+        await modelProviderRetry.wait(
+          (error as { retryAfterMs?: number }).retryAfterMs ?? ActRuntimeTuning.rateRetryMs,
+          signal
+        )
+      }
     reserved = true
     signal.throwIfAborted()
   } catch (error) {

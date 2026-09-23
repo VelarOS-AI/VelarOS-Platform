@@ -38,7 +38,7 @@
     },
     "packages/agent": {
       "name": "@velaros-ai/agent",
-      "version": "7.0.0",
+      "version": "7.1.0",
       "dependencies": {
         "@velaros-ai/context": "workspace:*",
         "@velaros-ai/core": "workspace:*",

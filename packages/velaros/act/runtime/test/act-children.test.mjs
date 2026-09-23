@@ -349,8 +349,8 @@ test('child reservations cannot exceed the root model budget', async (t) => {
   for await (const e of f.session.submit('bounded')) events.push(e)
   assert.equal(main, 1)
   assert.equal(childCalls, 1)
-  assert.equal(events.at(-1).status, 'failed')
-  assert.match(events.findLast((e) => e.type === 'error').message, /预算/)
+  assert.equal(events.at(-1).status, 'waiting')
+  assert.match(events.findLast((e) => e.type === 'error').message, /用量已到上限/)
 })
 
 test('renderer distinguishes preview, rejected generation and accepted body; replay is idempotent', () => {

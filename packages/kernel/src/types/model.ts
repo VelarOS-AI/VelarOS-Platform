@@ -47,6 +47,8 @@ export interface ModelContextStatus {
   readonly cache?: { readonly readTokens: number; readonly writeTokens: number }
   /** 工作集本身快装不下时的说明；由模型下一轮用代码收紧。 */
   readonly overload?: string
+  /** 本次运行连续没有进展的步数与建议；达到暂停阈值时运行暂停等用户。 */
+  readonly stall?: { readonly repeatedSteps: number; readonly advice: string }
 }
 /** 模型驱动的真实请求边界。 */
 export interface ModelDriverLimits {

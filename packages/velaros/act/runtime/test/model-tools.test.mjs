@@ -165,8 +165,8 @@ test('search inside a business child cannot escape the root ledger', async (t) =
   assert.equal(main, 1)
   assert.equal(searchCalls, 0)
   assert.equal((await f.session.view.inspect()).usage.contextCalls, 1)
-  assert.equal(events.at(-1).status, 'failed')
-  assert.match(events.findLast((event) => event.type === 'error').message, /预算/)
+  assert.equal(events.at(-1).status, 'waiting')
+  assert.match(events.findLast((event) => event.type === 'error').message, /用量已到上限/)
 })
 
 test('a stricter host depth cap omits child search from executable declarations', async (t) => {
@@ -448,19 +448,21 @@ test('the coordinator rejects agent-to-agent delegation independently of module 
   await parent.close()
 })
 
-test('main defaults are large task ceilings while explicit host budgets remain authoritative', async (t) => {
+test('main defaults limit only the hourly rate while explicit host budgets remain authoritative', async (t) => {
   const f = await fixture(t, {
     model: model(async function* (request) {
       yield* done(request)
     }),
   })
-  assert.equal(f.session.view.limits.modelCalls, 100000)
-  assert.equal(f.session.view.limits.modelTokens, 100000000)
+  assert.equal(f.session.view.limits.modelCalls, Number.MAX_SAFE_INTEGER)
+  assert.equal(f.session.view.limits.modelTokens, Number.MAX_SAFE_INTEGER)
+  assert.equal(f.session.view.limits.modelTokensPerHour, 30_000_000)
   const limited = await fixture(t, {
     context: { sources: [], limits: { modelCalls: 7, modelTokens: 10000 } },
   })
   assert.equal(limited.session.view.limits.modelCalls, 7)
   assert.equal(limited.session.view.limits.modelTokens, 10000)
+  assert.equal(limited.session.view.limits.modelTokensPerHour, 30_000_000)
 })
 
 test('search only discovers its evidence and local system members, including in the aggregate template', async (t) => {

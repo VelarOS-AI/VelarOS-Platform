@@ -144,6 +144,8 @@ export interface RuntimeSessionDependencies {
   closed?(): void
   /** 固定授权的持久状态及订阅交付。 */
   readonly stores?: StoreSessionApi
+  /** 主线：回合与墙钟上限到点时封段续跑，而不是结束运行。 */
+  readonly renewRuns?: boolean
   /** 在请求边界调用独立上下文工具。 */
   maintain?(
     input: { reason: 'boundary' | 'pressure' | 'provider'; targetChars: number },
@@ -426,6 +428,12 @@ export class RuntimeSession implements VelarosSession {
               }
             : undefined,
           fold: (reason, maxChars, signal) => this.memory.fold(reason, maxChars, signal),
+          renew: dependencies.renewRuns
+            ? async (maxChars, signal) => {
+                this.runDeadline = Date.now() + dependencies.limits.timeoutMs
+                await this.memory.fold('renew', maxChars, signal)
+              }
+            : undefined,
           boundary: (signal) => this.memory.boundary(signal),
           pressure: dependencies.tool ? () => dependencies.tool!.pressure() : undefined,
           policy: dependencies.contextOptions?.policy,

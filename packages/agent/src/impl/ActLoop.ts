@@ -16,7 +16,7 @@ import type { ActLoopOptions } from '../contract/requires.js'
 import type { ActComposedFrame, ActDecodedTurn, ActInput, ActRunEvent } from '../types/act.js'
 import { framedRequest, requestChars } from '../utils/frame-prompt.js'
 import { boundedModelOperation, boundedModelStream } from '../utils/model-stream.js'
-import { ContextPlanTuning } from '../utils/tuning.js'
+import { AgentTuning, ContextPlanTuning } from '../utils/tuning.js'
 
 import { ContextPlanner } from './ContextPlanner.js'
 
@@ -35,6 +35,7 @@ export class ActLoop implements ActLoopApi {
   private readonly compiler = createProviderRequestCompiler()
   private readonly planner
   private cache?: { readonly readTokens: number; readonly writeTokens: number }
+  private stallBase?: number
 
   public constructor(private readonly options: ActLoopOptions) {
     this.policy = {
@@ -82,7 +83,19 @@ export class ActLoop implements ActLoopApi {
     signal?.addEventListener('abort', cancel, { once: true })
     if (signal?.aborted) cancel()
     const timers = new TimerScope({ name: 'ActLoop' })
-    timers.after(this.options.limits.timeoutMs, cancel)
+    // 主线续跑：墙钟上限第一次到点只标记，下一轮边界封段续跑；再过一个周期仍没走到轮边界，
+    // 说明这一轮卡住了（估算、工具或交互不返回），照旧取消。其余运行到点即取消
+    let renewDue = false
+    let clock: ReturnType<TimerScope['after']>
+    const armClock = () =>
+      timers.after(this.options.limits.timeoutMs, () => {
+        if (!this.options.frames.renew || renewDue) cancel()
+        else {
+          renewDue = true
+          clock = armClock()
+        }
+      })
+    clock = armClock()
     const runId = this.options.control?.runId ?? crypto.randomUUID()
     this.completionFeedback = undefined
     let completionAttempts = 0
@@ -143,8 +156,24 @@ export class ActLoop implements ActLoopApi {
             })
         }
       )
-      turns: for (let turn = 0; turn < this.options.limits.turns; turn++) {
+      let sinceRenewal = 0
+      this.stallBase = undefined
+      turns: for (
+        let turn = 0;
+        this.options.frames.renew || turn < this.options.limits.turns;
+        turn++
+      ) {
         controller.signal.throwIfAborted()
+        if (this.options.frames.renew && (renewDue || sinceRenewal >= this.options.limits.turns)) {
+          const cause = renewDue ? ('clock' as const) : ('turns' as const)
+          renewDue = false
+          sinceRenewal = 0
+          await this.options.frames.renew(this.capacity().budget, controller.signal)
+          clock.cancel()
+          clock = armClock()
+          yield { type: 'renewed', runId, cause }
+        }
+        sinceRenewal++
         await this.options.control?.beforeTurn(controller.signal)
         const preparationStarted = performance.now()
         await this.options.frames.prepare(controller.signal)
@@ -168,16 +197,50 @@ export class ActLoop implements ActLoopApi {
           yield { type: 'state', runId, status: 'context_blocked' }
           return
         }
+        // 暂停而不是结束：任务保留，用户的下一条输入继续同一个任务
+        if (frame.repeatedSteps >= ContextPlanTuning.stallPause) {
+          yield {
+            type: 'stalled',
+            runId,
+            repeatedSteps: frame.repeatedSteps,
+            message: `连续 ${frame.repeatedSteps} 步没有进展（程序、输出、证据和计划都没变），已暂停。回复任意内容即可让它换个办法继续。`,
+          }
+          yielded = true
+          yield { type: 'state', runId, status: 'waiting' }
+          return
+        }
         let compiled: CompiledModelRequest = frame
         const contextMs = performance.now() - projectionStarted
         let decoded: Optional<ActDecodedTurn>
         let acceptedTurnId = ''
         for (let repair = 0; repair <= Math.max(2, this.policy.recoveryAttempts); repair++) {
           decoder.reset()
-          await this.options.view.reserveModel(
-            'main',
-            compiled.estimate.tokens + compiled.request.outputTokens
-          )
+          // 每小时用量到上限：等窗口释放后继续；用户总上限到了：暂停等用户，不算失败
+          for (;;)
+            try {
+              await this.options.view.reserveModel(
+                'main',
+                compiled.estimate.tokens + compiled.request.outputTokens
+              )
+              break
+            } catch (error) {
+              const code = (error as { code?: string }).code
+              if (code === 'MODEL_BUDGET') {
+                yield {
+                  type: 'error',
+                  runId,
+                  message: '任务的模型用量已到上限，已暂停；调高上限后发送任意内容即可继续。',
+                }
+                yielded = true
+                yield { type: 'state', runId, status: 'waiting' }
+                return
+              }
+              if (code !== 'MODEL_RATE') throw error
+              const retryAfterMs =
+                (error as { retryAfterMs?: number }).retryAfterMs ?? AgentTuning.rateRetryMs
+              yield { type: 'throttled', runId, retryAfterMs }
+              await modelProviderRetry.wait(retryAfterMs, controller.signal)
+            }
           const audit = await this.options.context.append(
             {
               kind: 'audit',
@@ -588,13 +651,7 @@ export class ActLoop implements ActLoopApi {
       signal,
       ...(this.options.control ? [this.options.control.turnSignal()] : []),
     ])
-    const outputTokens = Math.min(limits.outputTokens, model.limits.outputTokens)
-    const window = Math.min(
-      model.limits.inputTokens,
-      model.limits.contextTokens - outputTokens - limits.safetyTokens,
-      this.policy.windowTokens
-    )
-    const budget = this.planner.chars(window, limits.projectionChars)
+    const { outputTokens, window, budget } = this.capacity()
     // 显式整理请求在请求边界处理：Runtime 先封段，再运行整理支线
     if (attempt === 0)
       await frames.maintain?.({ reason: 'boundary', targetChars: budget }, maintenanceSignal)
@@ -605,6 +662,14 @@ export class ActLoop implements ActLoopApi {
     const recovery = this.completionFeedback
       ? `\n上次完成检查尚未通过：${JSON.stringify(this.completionFeedback)}。先处理原因；修复或补充证据，不要自动重放存在未知效果的脚本。`
       : ''
+    // 本次运行里连续没有进展的步数：从运行开始时的计数起算，用户新的输入之后重新给机会
+    const repeated = evidence.progress.repeatedSteps
+    if (isUndefined(this.stallBase) || repeated < this.stallBase) this.stallBase = repeated
+    const repeatedSteps = repeated - this.stallBase
+    const reflection =
+      repeatedSteps >= ContextPlanTuning.stallReflect
+        ? `\n反思轮：本次运行已连续 ${repeatedSteps} 步没有进展（程序、输出、证据和计划都没变，也没有写效果）。这一轮不要再跑同样的程序：先用 memory.plan 写下换什么办法，把试过没用的做法记进笔记，再继续。`
+        : ''
     const compose = async (maxChars: number) => {
       const projected = await frames.project(evidence, signal, maxChars)
       const phase = frames.phase?.() ?? { phase: 'work' as const, instructions: '' }
@@ -626,7 +691,7 @@ export class ActLoop implements ActLoopApi {
           mode: phase.phase === 'maintenance' ? 'maintenance' : 'work',
           outputTokens,
         },
-        `${protocolInstructions}\n${phase.instructions}${recovery}`
+        `${protocolInstructions}\n${phase.instructions}${recovery}${reflection}`
       )
       const compiled = await this.compiler.compileModelTurn(
         request,
@@ -743,6 +808,14 @@ export class ActLoop implements ActLoopApi {
           : undefined,
         cache: this.cache,
         overload,
+        stall:
+          repeatedSteps >= ContextPlanTuning.stallNotice
+            ? {
+                repeatedSteps,
+                advice:
+                  '连续几步没有进展：先换办法，别重复同样的程序；试过没用的做法记进笔记或计划。',
+              }
+            : undefined,
       }
     }
     let compiled = current.compiled
@@ -768,13 +841,26 @@ export class ActLoop implements ActLoopApi {
         chars: current.request.materials[0]!.text.length,
       },
       segment: current.segment,
+      repeatedSteps,
       ...compiled,
     }
   }
 
+  /** 本帧的输出预留、工作窗口与投影字符预算。 */
+  private capacity() {
+    const { model, limits } = this.options
+    const outputTokens = Math.min(limits.outputTokens, model.limits.outputTokens)
+    const window = Math.min(
+      model.limits.inputTokens,
+      model.limits.contextTokens - outputTokens - limits.safetyTokens,
+      this.policy.windowTokens
+    )
+    return { outputTokens, window, budget: this.planner.chars(window, limits.projectionChars) }
+  }
+
   /** 让 Runtime 封段；因容量封段时记进规划器，用来判断抖动。 */
   private async fold(
-    reason: 'runway' | 'boundary' | 'overflow' | 'provider',
+    reason: 'runway' | 'boundary' | 'overflow' | 'provider' | 'renew',
     maxChars: number,
     signal: AbortSignal
   ): Promise<boolean> {

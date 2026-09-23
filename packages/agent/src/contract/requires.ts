@@ -55,10 +55,12 @@ export interface ActContextPort {
   pressure?(): void
   /** 把段内较早的历史封成一卷、开始新的一段，不调用模型；能封的不足一个响应时返回 false。 */
   fold?(
-    reason: 'runway' | 'boundary' | 'overflow' | 'provider',
+    reason: 'runway' | 'boundary' | 'overflow' | 'provider' | 'renew',
     maxChars: number,
     signal: AbortSignal
   ): Promise<boolean>
+  /** 主线续跑：到达回合或墙钟上限时封段并延长运行截止时间；缺省时上限到了就结束运行。 */
+  renew?(maxChars: number, signal: AbortSignal): Promise<void>
   /** 是否处在章节边界：有待处理的整理请求、段内来了新的用户输入，或计划的下一目标变了。 */
   boundary?(signal: AbortSignal): Promise<boolean>
   /** 实际上下文生成模式。 */

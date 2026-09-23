@@ -142,6 +142,41 @@ test('INV-35 accepted event persistence failure prevents execution and leaves a 
   await reopened.close()
 })
 
+test('INV-41 a run waits out the hourly model limit and continues; the total cap pauses it for the user', async () => {
+  const f = runFixture()
+  let refusals = 1
+  let exhausted = false
+  f.options.view = new Proxy(f.view, {
+    get(target, key) {
+      if (key === 'reserveModel')
+        return async (role: 'main' | 'context', tokens: number) => {
+          if (exhausted) throw Object.assign(Error('budget'), { code: 'MODEL_BUDGET' })
+          if (refusals-- > 0)
+            throw Object.assign(Error('rate'), { code: 'MODEL_RATE', retryAfterMs: 5 })
+          return target.reserveModel(role, tokens)
+        }
+      const value = Reflect.get(target, key)
+      return typeof value === 'function' ? value.bind(target) : value
+    },
+  })
+  const service = createActRunService(f.options)
+  const events = []
+  for await (const event of service.submit('work')) events.push(event)
+  expect(events).toContainEqual(expect.objectContaining({ type: 'throttled', retryAfterMs: 5 }))
+  expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+  exhausted = true
+  const paused = []
+  for await (const event of service.submit('more')) paused.push(event)
+  // 请求还没发出，输入保留给下一次运行；运行本身停在等待
+  expect(paused.some((event) => event.type === 'error')).toBe(true)
+  expect(paused.filter((event) => event.type === 'state').at(-1)).toMatchObject({
+    status: 'waiting',
+  })
+  expect(paused.at(-1)).toMatchObject({ type: 'input-retained' })
+  expect((await service.inspect()).status).toBe('waiting')
+  await service.close()
+})
+
 test('closing a consumer during thinking releases the view without accepting late model output', async () => {
   const f = runFixture()
   let stopped = 0
