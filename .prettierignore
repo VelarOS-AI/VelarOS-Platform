@@ -1,0 +1,23 @@
+# Prettier also reads .gitignore (node_modules, dist, .velaros-workspace, ...).
+
+# Generated output: generators and their checks compare these byte for byte.
+baselines/
+**/contract/surface.ts
+
+# Model-facing code templates: their layout is the example the model reads and is
+# embedded verbatim in the generated surfaces.
+packages/velaros/**/template.js
+packages/velaros/**/*-template.js
+
+# Third-party distributions and test fixtures stay byte-identical.
+packages/velaros/*/vendor/
+**/fixtures/
+
+# Documentation keeps its authored layout: prose, generated catalogs, captured
+# evaluation records and design reference packs. Module cards and invariant tables
+# are parsed line by line by the ownership gate.
+docs/
+*.md
+
+# CI workflows and repository templates are not part of the code format pass.
+.github/

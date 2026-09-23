@@ -58,6 +58,8 @@
     "eval:act": "node scripts/agent/run-act-eval.mjs",
     "//lint": "lint 只报告 error；各包使用所属域的规则。",
     "lint": "eslint . --quiet",
+    "format": "prettier --write .",
+    "check:format": "prettier --check .",
     "check:kernel-schemas": "bun scripts/kernel/check-schemas.mjs",
     "check:kernel-arch": "bun scripts/kernel/check-arch-boundaries.mjs",
     "check:core-semantic-vocabulary": "bun scripts/core/check-semantic-vocabulary.mjs",
@@ -117,6 +119,7 @@
     "globals": "^17.11.0",
     "jszip": "^3.10.1",
     "nanoid": "3.3.18",
+    "prettier": "^3.9.6",
     "typescript": "^5.9.3"
   },
   "overrides": {
