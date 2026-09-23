@@ -20,4 +20,4 @@ export type {
 
 // ── 值：模型面的操作与 MarkItDown 定位器 ────────────────────────
 export { officeOperations } from './impl/OfficeOperations.js'
-export { createMarkItDownLocator, markItDownBinaryResolver } from './impl/runtime/MarkItDownLocator.js'
+export { createMarkItDownLocator } from './impl/runtime/MarkItDownLocator.js'

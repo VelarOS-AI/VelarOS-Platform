@@ -26,7 +26,7 @@
 | 值 | 接口 | 做什么 |
 | --- | --- | --- |
 | `officeOperations` | `OfficeOperationsApi` | 代码面 `office` 命名空间的九个操作：查取消、核对入参，交给执行类，经空间端口 `ctx.office` |
-| `createMarkItDownLocator` / `markItDownBinaryResolver` | `MarkItDownLocatorApi` | 只查磁盘地回答 MarkItDown runtime 装没装、在哪；后者是宿主不注入资源端口时的缺省那一份 |
+| `createMarkItDownLocator` | `MarkItDownLocatorApi` | 按注入的资源目录与停用状态回答 MarkItDown runtime 装没装、在哪 |
 | `officeDocumentRenderer`（`./office/renderer`） | `OfficeDocumentRendererApi` | 给 Document Renderer 的窄渲染面：解析 Office 预览、渲染预览 PNG 与 PDF 单页位图 |
 | `VelarOfficeModule` | 生成的合同（`contract/surface.ts`） | `velaros:office` 随包发布的模型面：模块名、放出去的方法、生成的完整声明（与 `baselines/script/office.d.ts` 同一份）与代码模版；空间挂这件能力时交给代码面的门 |
 
@@ -87,7 +87,7 @@ word、presentation、spreadsheet、pdf、preview 各放本域的内部形状（
 
 - **没有跨调用的可变状态。** 九个操作、执行类（`OfficeWorkspace`、`OfficeConverters` 与四个操作类）都是无状态的单例，每次调用要什么都从 `ctx.office` 现拿。
 - **pdfjs 运行时**：整个进程一份（`pdfjsRuntime`），只缓存「已经补好 Node 图形全局的 pdfjs 模块」，不留文档句柄——每次提取都自己 `destroy()`。
-- **MarkItDown 定位结果**：不缓存。宿主给了 `locateMarkItDown` 就每次问宿主，用户在设置里停用立刻生效；没给才回落到按平台约定推导的 `markItDownBinaryResolver`。
+- **MarkItDown 定位结果**：不缓存。宿主给了 `locateMarkItDown` 就每次问宿主，用户在设置里停用立刻生效；返回 null 直接拒绝转换；没给才使用操作内部由 `createMarkItDownLocator()` 创建的默认定位器。
 - **临时目录**：`.doc` 归一化、Word 转 PDF、LaTeX 编译与 MarkItDown 输出各建一个临时目录，用完即删，失败时也删。
 
 ## 生命周期

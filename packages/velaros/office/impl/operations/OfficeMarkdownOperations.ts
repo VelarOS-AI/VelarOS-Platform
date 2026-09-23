@@ -17,7 +17,7 @@ import { truncateMarkdown } from '../../utils/markdown.js'
 import { writeOfficeFile } from '../../utils/paths.js'
 import { OfficeTuning } from '../../utils/tuning.js'
 import type { MarkItDownLocatorApi } from '../runtime/MarkItDownLocator.js'
-import { markItDownBinaryResolver } from '../runtime/MarkItDownLocator.js'
+import { createMarkItDownLocator } from '../runtime/MarkItDownLocator.js'
 
 import type { OfficeWorkspaceApi } from './OfficeWorkspace.js'
 import { officeWorkspace } from './OfficeWorkspace.js'
@@ -53,7 +53,9 @@ export class OfficeMarkdownOperations implements OfficeMarkdownOperationsApi {
 
   /** 宿主的插件状态优先；宿主没实现这个端口方法时回落到只按平台约定推导资源根的缺省定位器。 */
   private locateMarkItDown(ctx: OfficeOperationContext): Nullable<MarkItDownLaunchSpec> {
-    return ctx.office.locateMarkItDown?.() ?? this.locator.resolve()
+    return ctx.office.locateMarkItDown
+      ? ctx.office.locateMarkItDown()
+      : this.locator.resolve()
   }
 
   /** 让 MarkItDown 把结果打到 stdout，再按 maxChars 截断交回。 */
@@ -119,5 +121,5 @@ export class OfficeMarkdownOperations implements OfficeMarkdownOperationsApi {
 /** 整个进程共用的 Markdown 转换操作。 */
 export const officeMarkdownOperations: OfficeMarkdownOperationsApi = new OfficeMarkdownOperations(
   officeWorkspace,
-  markItDownBinaryResolver
+  createMarkItDownLocator()
 )

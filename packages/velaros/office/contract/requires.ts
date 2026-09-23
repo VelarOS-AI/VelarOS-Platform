@@ -34,7 +34,7 @@ export interface OfficeSpacePort {
     options: OfficeCommandOptions
   ) => Promise<OfficeSystemCommandResult>
   /**
-   * 按宿主自己的插件状态回答 MarkItDown 装没装、在哪。
+   * 按宿主自己的插件状态回答 MarkItDown 装没装、在哪；返回 null 即不可用，操作直接拒绝。
    * 宿主没实现时本单元回落到只按平台约定推导资源根的缺省定位器，用户的停用开关就到不了本单元。
    */
   locateMarkItDown?: () => Nullable<MarkItDownLaunchSpec>

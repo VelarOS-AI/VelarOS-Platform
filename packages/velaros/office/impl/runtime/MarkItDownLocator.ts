@@ -78,11 +78,3 @@ export function createMarkItDownLocator(
 ): MarkItDownLocatorApi {
   return new MarkItDownLocator(options)
 }
-
-/**
- * 只按平台约定推导资源根的缺省定位器。
- *
- * @deprecated 宿主应当自己 `createMarkItDownLocator({ resources })` 并把插件登记表接进来，
- * 否则用户在设置里的停用开关到不了本包。这个缺省实例只为兼容旧的导入名保留。
- */
-export const markItDownBinaryResolver: MarkItDownLocatorApi = createMarkItDownLocator()

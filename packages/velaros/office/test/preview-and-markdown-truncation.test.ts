@@ -105,6 +105,23 @@ describe('预览页数与 Markdown 截断的如实上报', () => {
     expect(result.markdown).toContain('outputPath')
   })
 
+  test('宿主停用 MarkItDown 时，即使默认目录已安装也不执行命令', async () => {
+    const root = await createRoot()
+    await installFakeMarkItDown()
+    await writeFile(join(root, 'short.md'), '原始文档', 'utf8')
+    const context = createContext(root)
+    let commands = 0
+    context.office.locateMarkItDown = () => null
+    context.office.runCommand = async () => {
+      commands += 1
+      throw new Error('disabled converter must not run')
+    }
+
+    await expect(officeOperations.toMarkdown({ inputPath: 'short.md' }, context))
+      .rejects.toMatchObject({ code: 'OFFICE_MARKITDOWN_UNAVAILABLE' })
+    expect(commands).toBe(0)
+  })
+
   test('输出没有被截断时不虚报', async () => {
     const root = await createRoot()
     await installFakeMarkItDown()
