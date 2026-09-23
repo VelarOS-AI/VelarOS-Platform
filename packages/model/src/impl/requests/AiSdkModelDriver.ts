@@ -12,7 +12,9 @@ import type {
   ModelTurnDelta,
   ModelTurnRequest,
 } from '../../types/driver.js'
+import { estimateRequestInput } from '../../utils/request-estimate.js'
 import { planProviderRetry } from '../../utils/retry.js'
+import { markPromptCacheBreakpoints, withPromptCacheKey } from '../../utils/wire/prompt-cache.js'
 
 class AiSdkModelDriver implements ModelDriver {
   public readonly id: string
@@ -24,18 +26,7 @@ class AiSdkModelDriver implements ModelDriver {
   }
 
   public async estimate(request: ModelTurnRequest): Promise<ModelInputEstimate> {
-    const format = modelRequestEncoder.response(request)
-    const encoded = JSON.stringify({
-      system: request.instructions,
-      messages: modelRequestEncoder.messages(request),
-      responseFormat: format.type === 'json' ? format : undefined,
-    })
-    return {
-      tokens: new TextEncoder().encode(encoded).byteLength,
-      precision: 'estimate',
-      basis:
-        '实际发送的文本、图像与响应契约按 UTF-8 字节保守估算；协议误差使用 Agent 的独立余量，非精确 token 计数',
-    }
+    return estimateRequestInput(request)
   }
 
   public async *stream(
@@ -47,12 +38,14 @@ class AiSdkModelDriver implements ModelDriver {
       const result = streamText({
         model: this.options.model,
         system: request.instructions,
-        messages: modelRequestEncoder.messages(request),
+        messages: markPromptCacheBreakpoints(modelRequestEncoder.messages(request)),
         maxOutputTokens: request.outputTokens,
         maxRetries: 0,
         // 完整 JSON Schema 允许可选字段和动态 input；本地校验是接收门。
-        providerOptions:
+        providerOptions: withPromptCacheKey(
           format.type === 'json' ? { openai: { strictJsonSchema: false } } : undefined,
+          request.cacheKey
+        ),
         abortSignal: signal,
         output:
           format.type === 'json'
@@ -118,6 +111,8 @@ class AiSdkModelDriver implements ModelDriver {
               type: 'usage',
               inputTokens: part.totalUsage.inputTokens,
               outputTokens: part.totalUsage.outputTokens,
+              cacheReadTokens: part.totalUsage.inputTokenDetails.cacheReadTokens,
+              cacheWriteTokens: part.totalUsage.inputTokenDetails.cacheWriteTokens,
             }
           if (!['stop', 'length'].includes(part.finishReason))
             throw new AppError('PROTOCOL', `供应商响应未成功结束：${part.finishReason}`)

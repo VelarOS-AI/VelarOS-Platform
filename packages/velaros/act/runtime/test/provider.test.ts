@@ -111,7 +111,13 @@ test('actual AI SDK sends sealed responseFormat, returns a complete object and h
   expect(sent.toolChoice).toBeUndefined()
   expect(sent.providerOptions.openai.strictJsonSchema).toBe(false)
   expect(events).toEqual([
-    { type: 'usage', inputTokens: 123, outputTokens: 7 },
+    {
+      type: 'usage',
+      inputTokens: 123,
+      outputTokens: 7,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    },
     { type: 'output', value: reply },
     { type: 'finish', reason: 'stop' },
   ])

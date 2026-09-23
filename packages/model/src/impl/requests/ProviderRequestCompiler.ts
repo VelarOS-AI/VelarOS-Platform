@@ -3,17 +3,22 @@ import { AppError } from '@velaros-ai/core/error'
 import type { ModelDriver, ModelTurnRequest } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 
-import type { CompiledModelRequest, ProviderRequestSnapshot } from '../../types/compiler.js'
+import type {
+  CompiledModelRequest,
+  ModelEstimateCalibration,
+  ProviderRequestSnapshot,
+} from '../../types/compiler.js'
 import { encodeProviderRequestAuditValue } from '../../utils/provider-audit.js'
 import { requestFingerprint } from '../../utils/provider-fingerprint.js'
 
 /** 最终发送门只编译物化结果，不持有会话或上下文治理状态。 */
 export interface ProviderRequestCompilerApi {
-  /** 编码、封存并计量实际发送请求，超预算时保留原文并拒绝发送。 */
+  /** 编码、封存并计量实际发送请求，超预算时保留原文并拒绝发送；给了校准就按校准后的估算准入。 */
   compileModelTurn(
     request: ModelTurnRequest,
     driver: ModelDriver,
-    reserveTokens: number
+    reserveTokens: number,
+    calibration?: ModelEstimateCalibration
   ): Promise<CompiledModelRequest>
   /** 核对保存的消息、模型、响应格式和输出预算未被改写。 */
   verify(snapshot: ProviderRequestSnapshot): Promise<void>
@@ -22,10 +27,13 @@ class ProviderRequestCompiler implements ProviderRequestCompilerApi {
   public async compileModelTurn(
     input: ModelTurnRequest,
     driver: ModelDriver,
-    reserveTokens: number
+    reserveTokens: number,
+    calibration?: ModelEstimateCalibration
   ): Promise<CompiledModelRequest> {
     if (!Number.isSafeInteger(reserveTokens) || reserveTokens < 0)
       throw new AppError('VALIDATION', '无效模型预留预算')
+    if (calibration && !(calibration.textRatio > 0 && calibration.textRatio <= 1))
+      throw new AppError('VALIDATION', '估算校准比必须在 0 到 1 之间')
     const request = structuredClone({ ...input, compiledPrompt: modelRequestEncoder.encode(input) })
     request.response = modelRequestEncoder.response(request)
     const messages = encodeProviderRequestAuditValue(modelRequestEncoder.messages(request))
@@ -47,13 +55,30 @@ class ProviderRequestCompiler implements ProviderRequestCompilerApi {
       requestFingerprint: await requestFingerprint(data),
     }
     await this.verify(providerRequest)
-    const estimate = await driver.estimate(request)
-    if (!Number.isSafeInteger(estimate.tokens) || estimate.tokens < 0)
+    const raw = await driver.estimate(request)
+    const images = raw.images?.tokens ?? 0
+    if (
+      !Number.isSafeInteger(raw.tokens) ||
+      raw.tokens < 0 ||
+      !Number.isSafeInteger(images) ||
+      images < 0 ||
+      images > raw.tokens
+    )
       throw new AppError('VALIDATION', '模型驱动返回了无效预算')
+    const measured = { text: raw.tokens - images, images }
+    // 精确计数不需要校准；校准只缩小文本部分，图片仍按驱动给的数
+    const estimate =
+      calibration && calibration.textRatio < 1 && raw.precision === 'estimate'
+        ? {
+            ...raw,
+            tokens: Math.ceil(measured.text * calibration.textRatio) + images,
+            basis: `${raw.basis}；文本部分按实测用量校准 ×${calibration.textRatio.toFixed(3)}`,
+          }
+        : raw
     const okToSend =
       estimate.tokens <= driver.limits.inputTokens &&
       estimate.tokens + request.outputTokens + reserveTokens <= driver.limits.contextTokens
-    return { request, estimate, okToSend, providerRequest }
+    return { request, estimate, measured, okToSend, providerRequest }
   }
   public async verify(snapshot: ProviderRequestSnapshot): Promise<void> {
     if (

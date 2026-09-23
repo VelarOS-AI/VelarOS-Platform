@@ -26,10 +26,18 @@ export interface ProviderRequestSnapshot {
   readonly outputTokens: number
   readonly requestFingerprint: ProviderRequestFingerprint
 }
+/** 用供应商实测用量得到的估算校准；图片部分不参与。 */
+export interface ModelEstimateCalibration {
+  /** 实测输入 token 与文本估算之比，取 (0, 1]；1 等于不校准。 */
+  readonly textRatio: number
+}
 /** 已物化视图经编译后的最终请求及发送准入。 */
 export interface CompiledModelRequest {
   readonly request: ModelTurnRequest
+  /** 发送准入用的估算；给了校准时是校准后的数。 */
   readonly estimate: ModelInputEstimate
+  /** 驱动原始估算里的文本与图片部分，调用方用它和实测用量求校准比。 */
+  readonly measured: { readonly text: number; readonly images: number }
   readonly okToSend: boolean
   readonly providerRequest: ProviderRequestSnapshot
 }

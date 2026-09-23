@@ -72,6 +72,7 @@ export type {
 } from './types/adapters'
 export type {
   CompiledModelRequest,
+  ModelEstimateCalibration,
   ProviderRequestAuditValue,
   ProviderRequestFingerprint,
   ProviderRequestSnapshot,

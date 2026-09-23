@@ -54,6 +54,11 @@ export const ModelTuning = Object.freeze({
     /** ultra 档相对 maxOutputTokens 的预算系数。 */
     ultraRatio: 0.6,
   }),
+  /** 请求输入的保守估算。 */
+  estimate: Object.freeze({
+    /** 每张图片按多少 token 计：主流供应商把图片缩到一两千 token 以内，取上沿；base64 字节数与真实开销无关。 */
+    imageTokens: 2_000,
+  }),
   /** 瞬时故障重试。 */
   retry: Object.freeze({
     /** 第一次重试的退避基数，毫秒；之后按指数翻倍。 */

@@ -13,9 +13,18 @@ export interface ModelUserMessage {
   content:
     | string
     | Array<{ type: 'text'; text: string } | { type: 'image'; image: string; mediaType: string }>
+  /** 供应商缓存到这条消息为止的前缀；需要显式断点的供应商使用，其余忽略。 */
+  cacheBreakpoint?: boolean
 }
 /** 有序历史消息；脚本响应仍是普通 assistant 文本。 */
-export type ModelHistoryMessage = ModelUserMessage | { role: 'assistant'; content: string }
+export type ModelHistoryMessage =
+  | ModelUserMessage
+  | {
+      role: 'assistant'
+      content: string
+      /** 供应商缓存到这条消息为止的前缀；需要显式断点的供应商使用，其余忽略。 */
+      cacheBreakpoint?: boolean
+    }
 /** Runtime 生成的容量报告，正文来源不能覆盖。 */
 export interface ModelContextStatus {
   readonly mode: 'partitioned' | 'runtime-view' | 'incremental-history'
@@ -76,18 +85,30 @@ export interface ModelTurnRequest {
   readonly response: ModelResponseFormat
   readonly mode: 'work' | 'maintenance'
   readonly outputTokens: number
+  /** 会话级的前缀缓存键；驱动按供应商翻译，不支持的供应商忽略。 */
+  readonly cacheKey?: string
 }
 /** 编码后预算；估算必须说明口径。 */
 export interface ModelInputEstimate {
   readonly tokens: number
   readonly precision: 'exact' | 'estimate'
   readonly basis: string
+  /** tokens 中按每张固定数计入的图片部分；按实测用量校准时只校准其余的文本部分。 */
+  readonly images?: { readonly count: number; readonly tokens: number }
 }
 /** 流式响应仅传递模型事实；控制状态由 Agent 决定。 */
 export type ModelTurnDelta =
   | { readonly type: 'text'; readonly text: string }
   | { readonly type: 'output'; readonly value: unknown }
-  | { readonly type: 'usage'; readonly inputTokens: number; readonly outputTokens: number }
+  | {
+      readonly type: 'usage'
+      readonly inputTokens: number
+      readonly outputTokens: number
+      /** 输入里读自供应商前缀缓存的 token；供应商不报告时缺省。 */
+      readonly cacheReadTokens?: number
+      /** 输入里本次写进供应商前缀缓存的 token；供应商不报告时缺省。 */
+      readonly cacheWriteTokens?: number
+    }
   | {
       readonly type: 'error'
       readonly code: 'context-limit' | 'provider'

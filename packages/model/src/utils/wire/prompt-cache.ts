@@ -1,6 +1,8 @@
-import type { LanguageModelV3CallOptions } from '@ai-sdk/provider'
+import type { LanguageModelV3CallOptions, SharedV3ProviderOptions } from '@ai-sdk/provider'
+import type { ModelMessage } from 'ai'
 
 import { isArray, isEmpty, isPlainObject, isPresent, isString } from '@velaros-ai/core'
+import type { ModelHistoryMessage } from '@velaros-ai/kernel'
 
 /**
  * 提示词缓存断点的**内部协议**与出线翻译。
@@ -25,6 +27,29 @@ const PromptCacheKeyField = 'promptCacheKey'
 const AnthropicProviderKey = 'anthropic'
 const OpenAiProviderKey = 'openai'
 const CacheControlField = 'cacheControl'
+
+/** 中立消息上的缓存断点写成内部标记，出线前由 `applyPromptCacheCallOptions` 翻译。 */
+export function markPromptCacheBreakpoints(
+  messages: readonly ModelHistoryMessage[]
+): ModelMessage[] {
+  return messages.map(({ cacheBreakpoint, ...message }) =>
+    cacheBreakpoint
+      ? {
+          ...message,
+          providerOptions: { [VelarosProviderOptionsKey]: { [PromptCacheBreakpointKey]: true } },
+        }
+      : message
+  )
+}
+
+/** 中立请求的会话缓存键写成内部标记，并入调用方已有的供应商选项。 */
+export function withPromptCacheKey(
+  providerOptions: Optional<SharedV3ProviderOptions>,
+  cacheKey: Optional<string>
+): Optional<SharedV3ProviderOptions> {
+  if (!cacheKey) return providerOptions
+  return { ...providerOptions, [VelarosProviderOptionsKey]: { [PromptCacheKeyField]: cacheKey } }
+}
 
 /** 出线前把内部缓存标记整体翻译成各家的线上字段。 */
 export function applyPromptCacheCallOptions(
