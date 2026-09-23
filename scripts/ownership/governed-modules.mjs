@@ -422,6 +422,7 @@ export const GovernedModules = [
       ['CodeSurfaceSession.ts'],
       // 执行前的检查与隔离运行器
       ['CodeProgramChecker.ts', 'NodeSubprocessCodeRunner.ts'],
+      ['SubprocessCodeRunner.ts', 'ScriptWorker.ts', 'NodeScriptProcess.ts'],
       // 能力转发：操作表与 Kernel 调用统一转换成脚本端口
       ['CapabilityOperationPort.ts', 'KernelInvocationPort.ts'],
     ],

@@ -1,10 +1,4 @@
-/**
- * 找一个**真的 node** 来起隔离进程。
- *
- * 为什么不能直接用 `process.execPath`：`child_process.fork` 缺省就拿它起子进程，而宿主跑在 bun 下时
- * 它是 bun 的可执行文件。`--permission` 是 node 的旗标，bun 直接忽略——命令行看着完全正常，隔离却一点没生效。
- * 这一条实测栽过：程序在 bun 起的子进程里把 `/etc/hosts` 整个读了出来。
- */
+/** Node 宿主查找受信 worker 所需的执行文件与包内入口。 */
 
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -22,6 +16,7 @@ function runningOnNode(): boolean {
  * 找不到返回 null——找不到就该拒绝执行，而不是退回一个不认旗标的运行时接着跑。
  */
 export function resolveNodeExecutable(): Nullable<string> {
+  if (!isUndefined((process.versions as Record<string, string | undefined>).electron)) return null
   if (runningOnNode()) return process.execPath
   const name = process.platform === 'win32' ? 'node.exe' : 'node'
   for (const directory of (process.env.PATH ?? '').split(delimiter)) {
@@ -32,7 +27,7 @@ export function resolveNodeExecutable(): Nullable<string> {
   return null
 }
 
-/** 隔离进程引导脚本的绝对路径；除它之外不放开任何文件读取，程序源码走 IPC 不落盘。 */
+/** 解析包内受信 worker 的入口路径；程序正文只走 IPC。 */
 export function resolveChildPath(): string {
   return createRequire(import.meta.url).resolve('../../bin/script-child.mjs')
 }

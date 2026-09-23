@@ -15,14 +15,16 @@
 | `codeProgramChecker` / `CodeProgramCheckerApi` | 在内存中检查主源码和附属模块；诊断携带源码位置和代码帧 |
 | `createCodeSurfaceSession` / `CodeSurfaceSessionApi` | 校验体量，检查后调用运行器，收集结果、图像和调用账 |
 | `createCapabilityPort` / `CodeCapabilityPort` | 将宿主操作表转换成能力调用端口 |
-| `nodeSubprocessCodeRunner` / `CodeRunnerApi` | 子进程中的 QuickJS WASM；通过显式 IPC 能力桥调用宿主 |
+| `nodeSubprocessCodeRunner` / `CodeRunnerApi` | Node 宿主使用共享运行器与独立 QuickJS worker |
+| `createSubprocessCodeRunner` | 注入宿主进程创建，复用计时、能力桥、输出采集与回收 |
+| `./worker` / `startScriptWorker` | 受信子进程的独立环境入口，建立 QuickJS 堆与消息处理 |
 | `CodeSurfaceLimits` / `CodeProgramEditLimits` | 源码、参数、输出、诊断、调用数和编辑数的公开上限 |
 
 `contract/provides.ts` 登记产品接口，`contract/requires.ts` 定义宿主注入。根入口用于 Node 宿主，`./contracts` 只导出数据与常量。`NodeSubprocessRunnerIsReleaseReady` 为 `false`，部署隔离仍需宿主验收。
 
-公开入口 `.` 与 `./contracts`：前者包含全部宿主 API，后者提供数据与常量。`CodeSurfaceDiagnosticCodes` 是可识别诊断码，`CodeSurfaceErrorCodes` 是执行错误码，`NodeSubprocessRunnerIsReleaseReady` 是发布认证状态。
+公开入口 `.` 提供父进程宿主 API，`./contracts` 提供数据与常量；`./worker` 只加载受信 worker 内核，不引入编译器或父进程启动器。`CodeSurfaceDiagnosticCodes` 是可识别诊断码，`CodeSurfaceErrorCodes` 是执行错误码，`NodeSubprocessRunnerIsReleaseReady` 是发布认证状态。
 
-注入面包括 `KernelScriptSessionOptions`（Kernel、运行器、会话、执行身份、模式与 `ScriptPackageDefinition` 包映射）、`CodeCapabilityCall` / `CodeCapabilityOutcome`（能力调用及结果）、`CodeSurfaceEventSink`（调用起止及日志事件）和 `CodeRunnerApi`（隔离运行器）。
+注入面包括 `KernelScriptSessionOptions`（Kernel、运行器、会话、执行身份、模式与 `ScriptPackageDefinition` 包映射）、`CodeCapabilityCall` / `CodeCapabilityOutcome`（能力调用及结果）、`CodeSurfaceEventSink`（调用起止及日志事件）和 `CodeRunnerApi`（隔离运行器）。`SubprocessCodeRunnerOptions` 注入进程创建，`ScriptProcessEvents` 与 `ScriptProcess` 约定进程事件、消息和终止回执，`ScriptWorkerOptions` 提供 worker 通信与故障退出。
 
 ## 骨干链路
 
@@ -48,7 +50,7 @@
 
 ## 生命周期
 
-宿主创建执行身份，检查通过后运行一次；程序结束后释放隔离进程。取消信号与调用时钟由会话统一维护，持久记录由 ContextStorage 的宿主生命周期管理。
+宿主创建执行身份，检查通过后运行一次；程序结束后父进程终止并等待进程退出，再交付运行结果。worker 正常完成只发送终态，初始化或通信失败才由宿主退出；完成后的能力回执不会再次发送。取消信号与调用时钟由会话统一维护，持久记录由 ContextStorage 的宿主生命周期管理。
 
 ## 非目标
 
@@ -56,9 +58,9 @@
 
 ## 不变量
 
-`impl/KernelScriptSession.ts` 编排，`CodeSurfaceSession.ts` 处理一次执行，`CodeProgramChecker.ts` 检查，`NodeSubprocessCodeRunner.ts` 隔离，`KernelInvocationPort.ts` 与 `CapabilityOperationPort.ts` 转发能力。`utils/` 提供编译、编辑、路径、诊断与预算纯函数，`bin/script-child.mjs` 实现隔离进程桥。
+`impl/KernelScriptSession.ts` 编排，`CodeSurfaceSession.ts` 处理一次执行，`CodeProgramChecker.ts` 检查，`SubprocessCodeRunner.ts` 统一父端生命周期，`NodeSubprocessCodeRunner.ts` 与 `NodeScriptProcess.ts` 装配 Node 进程，`ScriptWorker.ts` 维护 QuickJS 堆，`KernelInvocationPort.ts` 与 `CapabilityOperationPort.ts` 转发能力。`utils/` 提供编译、编辑、路径、诊断与预算纯函数，`bin/script-child.mjs` 实现隔离进程桥。
 
-共 28 条，测试 27 条、门禁 1 条，未验证 0 条。不变量见 `spec/invariants.md`。执行引擎验收在 `spec/acceptance.test.ts`；源码版本、草稿、CAS、租约和重启恢复在 `packages/velaros/act/runtime/test/incremental-edit.test.mjs` 与 `program-context.test.mjs`。所有权门禁为 `bun run check:module-ownership`。
+共 29 条，测试 28 条、门禁 1 条，未验证 0 条。不变量见 `spec/invariants.md`。执行引擎验收在 `spec/acceptance.test.ts`；源码版本、草稿、CAS、租约和重启恢复在 `packages/velaros/act/runtime/test/incremental-edit.test.mjs` 与 `program-context.test.mjs`。所有权门禁为 `bun run check:module-ownership`。
 
 ## 结构
 

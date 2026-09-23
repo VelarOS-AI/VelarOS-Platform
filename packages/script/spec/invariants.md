@@ -12,7 +12,7 @@
 | INV-6 | 大字符串走 `blobs` 不进源码：含反引号、`${`、反斜杠、引号的内容原样送达程序，只过一层转义 | 测试 | `spec/acceptance.test.ts` |
 | INV-7 | 超预算不静默：返回值与日志超过上限时按**结尾**保留（失败现场在尾部），并在 `notices` 里说清省略了多少 | 测试 | `spec/acceptance.test.ts` |
 | INV-8 | 程序源码与 blobs 超过体量上限一律拒，不截断后照跑——半截程序跑出来的结果比不跑更坏 | 测试 | `spec/acceptance.test.ts` |
-| INV-9 | 隔离必须**自证**才接活：子进程启动后先真去做一次该被拒绝的动作，证不出被关住就不把程序发进去（fail closed）。只相信命令行旗标不算数——`fork` 缺省用 `process.execPath`，宿主跑在 bun 下时那是 bun，它忽略 `--permission`，看着正常而隔离一点没生效 | 测试 | `spec/acceptance.test.ts` |
+| INV-9 | 隔离必须自证才接活：QuickJS guest 中的 process、require、fetch 与 WebSocket 均不可达；Node 默认运行器不会把 Electron 误作 Node，Electron 须注入其宿主进程 | 测试 | `spec/acceptance.test.ts` |
 | INV-10 | 手滑写了 TypeScript 不废掉一整轮：整份诊断都落在「这个语法只能在 TypeScript 文件里用」那一族时，按 TypeScript 再查一遍（真类型错照样拦），剥掉类型照跑，并在 `notices` 里告诉模型下次直接写 JavaScript | 测试 | `spec/acceptance.test.ts` |
 | INV-11 | `KernelScriptSession.edit` 按同一底稿精确替换：定位唯一、不重叠，主源码与附属模块全成或全不成；失败返回 SCRIPT_EDIT 和索引，原程序不变 | 测试 | `spec/acceptance.test.ts` |
 | INV-12 | 诊断必须带代码帧：出错那一行连同一个指向出错列的插字符一起给出。只回行列号等于让模型靠数行定位，而数行是它最不准的事之一 | 测试 | `spec/acceptance.test.ts` |
@@ -32,3 +32,5 @@
 | INV-35 | output 展示按类型保留结构和省略范围，正文与目录总量守展示预算；摘要同时匹配原值和任务代次 | 测试 | `test/output.test.ts` |
 | INV-36 | 受限输出编辑只接受真实导入的顶层字面量声明，保持采集和用途不变，不执行脚本 | 测试 | `test/output.test.ts` |
 | INV-37 | output 声明里写的上限与 ScriptOutputLimits 一致，输出校验恰好在这些边界上放行与拒绝 | 测试 | `test/output.test.ts` |
+
+| INV-28 | 宿主进程注入只改变启动与消息运输；共享父端在预取消、启动/发送故障、终态和中断时回收一次并等待退出，完成后不发送迟到能力回执 | 测试 | `test/subprocess.test.ts` |

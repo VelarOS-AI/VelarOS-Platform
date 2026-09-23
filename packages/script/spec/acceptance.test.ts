@@ -198,6 +198,17 @@ export default outcome` }, granted, timeoutMs: 10_000 })
     }
   })
 
+  test('INV-9 Electron 宿主必须显式注入自己的进程运行器', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(process.versions, 'electron')
+    try {
+      Object.defineProperty(process.versions, 'electron', { value: '44.0.0', configurable: true })
+      expect(resolveNodeExecutable()).toBeNull()
+    } finally {
+      if (descriptor) Object.defineProperty(process.versions, 'electron', descriptor)
+      else Reflect.deleteProperty(process.versions, 'electron')
+    }
+  })
+
   test('INV-5 这个运行器不许发版', () => {
     expect(NodeSubprocessRunnerIsReleaseReady).toBe(false)
   })
@@ -480,8 +491,19 @@ describe('程序停下、数据与回执', () => {
 
     // 外面停下这一轮：死在一次调用中途，模型要知道哪件事可能做了一半。
     const stop = new AbortController()
-    setTimeout(() => stop.abort(), 300)
-    const stopped = await session.submit({ program: { source: "import { hang } from 'velaros:demo'\nawait hang({ tag: 'stopped' })\nexport default 1" }, granted, timeoutMs: 10_000, signal: stop.signal })
+    const interrupted = createCodeSurfaceSession({
+      checker: codeProgramChecker,
+      runner: nodeSubprocessCodeRunner,
+      capabilities: {
+        ...capabilities,
+        invoke: (call, signal) => {
+          const pending = capabilities.invoke(call, signal)
+          queueMicrotask(() => stop.abort())
+          return pending
+        },
+      },
+    })
+    const stopped = await interrupted.submit({ program: { source: "import { hang } from 'velaros:demo'\nawait hang({ tag: 'stopped' })\nexport default 1" }, granted, timeoutMs: 10_000, signal: stop.signal })
     if (!stopped.checked) throw new Error('应当通过检查')
     expect(stopped.result.failed?.code).toBe(CodeSurfaceErrorCodes.aborted)
     expect(stopped.result.unsettled).toEqual(['demo.hang'])

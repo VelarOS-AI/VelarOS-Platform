@@ -10,6 +10,45 @@ import type { OperationRuntimeApi } from '@velaros-ai/kernel'
 import type { CodeAttachment } from '../types/outcome.js'
 import type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
 import type { CodeCallNotice, ScriptPackageDefinition } from '../types/script.js'
+import type { ScriptWorkerCommand, ScriptWorkerEvent } from '../types/worker.js'
+
+/** 宿主创建一次受信隔离进程时接收的事件端口。 */
+export interface ScriptProcessEvents {
+  /** 受信进程的 V8 堆上限，单位 MB；guest 另有 QuickJS 堆限额。 */
+  readonly heapMb: number
+  /** 收到 worker 的一条完整消息。 */
+  onMessage(message: unknown): void
+  /** 启动、IPC 或进程运行失败。 */
+  onError(error: unknown): void
+  /** 宿主确认进程已退出，并已交付收取的 stderr；空值表示被信号终止。 */
+  onExit(code: Nullable<number>): void
+  /** 有界错误诊断的原始文本片段。 */
+  onStderr(text: string): void
+}
+
+/** 宿主独占的单次执行进程；不得在多次程序之间复用。 */
+export interface ScriptProcess {
+  /** 投递消息；失败须抛出或拒绝，不能静默丢弃。 */
+  send(message: ScriptWorkerCommand): void | Promise<void>
+  /** 终止进程、解绑宿主监听并等待退出；重复调用返回同一回执。 */
+  terminate(): void | Promise<void>
+}
+
+/** 共享运行器只注入宿主进程创建，不承担 Electron 或 Node 环境判断。 */
+export interface SubprocessCodeRunnerOptions {
+  /** 同步建立进程与监听；返回前到达的消息由运行器保留。 */
+  launch(events: ScriptProcessEvents): ScriptProcess
+}
+
+/** 受信 worker 的宿主通信口；模型程序无法取得这些对象。 */
+export interface ScriptWorkerOptions {
+  /** 投递一条事件；失败须抛出或拒绝。 */
+  send(message: ScriptWorkerEvent): void | Promise<void>
+  /** 订阅父进程命令，返回解除订阅函数。 */
+  onMessage(listener: (message: ScriptWorkerCommand) => void): () => void
+  /** 初始化或通信故障时立即退出；正常完成由父进程统一回收。 */
+  exit(code: number): void
+}
 
 /** 同一 Kernel 上的一次脚本会话配置。 */
 export interface KernelScriptSessionOptions {

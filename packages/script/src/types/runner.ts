@@ -1,12 +1,5 @@
 import type { ScriptOutputCapture } from './output.js'
-/**
- * 隔离运行器的形状。
- *
- * 抽成接口是因为隔离方案会换：今天这个 `node --permission` 子进程**挡得住文件系统与起子进程，
- * 挡不住网络**（Node 的权限模型不覆盖 socket），所以它只能开发期用。
- * 正式发版前要换成 WASM 里的 QuickJS——那里没有任何环境能力，只有显式绑进去的。
- * 两种实现里模型写的程序、typecheck、宿主侧的能力分发三者完全相同，换的只是这一层。
- */
+/** 隔离进程中的 QuickJS 执行请求、回执与能力调用约定。 */
 import type { CodeCallNotice, ScriptPackageDefinition } from './script.js'
 
 /** 交给运行器的一次任务。 */
@@ -52,6 +45,8 @@ export type CodeRunDispatch = (
 
 /** 运行器跑完一次的产物；宿主再把它编成给模型看的结果。 */
 export interface CodeRunOutcome {
+  /** 程序停止瞬间仍在等待能力回执的调用编号；回收期间的迟到回执不改变此快照。 */
+  pendingCalls?: readonly number[]
   /** 即使程序失败，也保留调用时已采集的输出。 */
   output?:ScriptOutputCapture
   /** 程序是否正常跑完。 */

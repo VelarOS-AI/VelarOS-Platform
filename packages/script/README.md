@@ -10,7 +10,9 @@ JavaScript 脚本的检查、精确编辑与隔离执行引擎。正式装配通
 
 脚本使用标准 ES 模块语法：`import` 获取能力，顶层 `await` 执行，`export` 或 `output` 交出结果。参数走 `input`，大字符串走 `blobs`，附属模块以 `modules` 随程序提交。模板统一通过 `velaros:system` 的 `modules.describe({module, export?})` 按需读取，能力声明由宿主当前注册表提供。
 
-`nodeSubprocessCodeRunner` 在子进程内使用 QuickJS WASM，guest 只通过显式能力桥访问外部。`NodeSubprocessRunnerIsReleaseReady` 仍为 `false`；宿主须完成部署隔离认证。执行前检查、取消、超时、结果预算和权限拒绝均有自动化验收。
+`createSubprocessCodeRunner({launch})` 统一父进程的执行计时、能力桥、输出采集和回收；宿主只注入 `ScriptProcess` 消息与终止合同。受信子进程从 `@velaros-ai/script/worker` 调用 `startScriptWorker({send, onMessage, exit})`，使用共享 QuickJS WASM 内核，guest 只通过显式能力桥访问外部。
+
+`nodeSubprocessCodeRunner` 是同一运行器的 Node 装配。Electron 宿主显式提供自己的进程端口；正常完成由父端终止并等待进程退出后交付结果。`NodeSubprocessRunnerIsReleaseReady` 仍为 `false`；宿主须完成部署隔离认证。执行前检查、取消、超时、结果预算和权限拒绝均有自动化验收。
 
 详细责任、公开面与测试见 [模块卡片](MODULE.md) 和 [不变量](spec/invariants.md)。
 

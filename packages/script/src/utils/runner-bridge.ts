@@ -1,11 +1,10 @@
 /** 隔离进程与宿主之间的转发：把程序发出的一次能力调用送出去，再把结果送回来。不碰实例状态，所以不放在类里。 */
 
-import type { ChildProcess } from 'node:child_process'
-
 import { isEmpty, isNull } from '@velaros-ai/core'
 
 import { CodeSurfaceErrorCodes } from '../contract/constants.js'
 import type { CodeRunDispatch, HoldProgramClock } from '../types/runner.js'
+import type { ScriptWorkerCommand } from '../types/worker.js'
 
 import { CodeSurfaceTuning } from './tuning.js'
 
@@ -16,11 +15,10 @@ import { CodeSurfaceTuning } from './tuning.js'
  * 只能等超时把整个程序杀掉——那会把一次可恢复的失败变成一次白跑。
  */
 export async function serveCapabilityCall(
-  child: ChildProcess,
   message: Record<string, unknown>,
   dispatch: CodeRunDispatch,
   holdClock: HoldProgramClock
-): Promise<void> {
+): Promise<ScriptWorkerCommand> {
   const callId = Number(message.callId)
   try {
     const outcome = await dispatch(
@@ -32,10 +30,10 @@ export async function serveCapabilityCall(
       },
       holdClock
     )
-    if (outcome.error) child.send({ type: 'result', callId, ok: false, error: outcome.error })
-    else child.send({ type: 'result', callId, ok: true, value: outcome.value })
+    if (outcome.error) return { type: 'result', callId, ok: false, error: outcome.error }
+    return { type: 'result', callId, ok: true, value: outcome.value }
   } catch (cause) {
-    child.send({
+    return {
       type: 'result',
       callId,
       ok: false,
@@ -43,7 +41,7 @@ export async function serveCapabilityCall(
         code: CodeSurfaceErrorCodes.runnerCrashed,
         message: cause instanceof Error ? cause.message : String(cause),
       },
-    })
+    }
   }
 }
 

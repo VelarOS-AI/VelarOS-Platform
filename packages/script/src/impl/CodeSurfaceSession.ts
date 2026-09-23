@@ -10,7 +10,7 @@ import { isEmpty, isObject, isString, isTrue } from '@velaros-ai/core'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 
 import { CodeSurfaceErrorCodes, CodeSurfaceLimits, ScriptOutputLimits } from '../contract/constants.js'
-import type { CodeCapabilityPort, CodeRunnerApi, CodeSurfaceEventSink } from '../contract/requires.js'
+import type { CodeCapabilityOutcome, CodeCapabilityPort, CodeRunnerApi, CodeSurfaceEventSink } from '../contract/requires.js'
 import type { CodeAttachment, CodeSurfaceOutcome } from '../types/outcome.js'
 import type { CodeCallNotice, CodeProgramRequest, CompletedCall } from '../types/script.js'
 import type { GrantedModule, ScriptPackageDefinition } from '../types/script.js'
@@ -87,6 +87,8 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     const completed: CompletedCall[] = []
     // 还没落定的调用：程序停下时它们没人等了，一律叫停并列给模型——副作用可能做了一半。
     const inFlight = new Map<number, string>()
+    // 保留发出身份，程序停止后的进程回收可能晚于能力自己的取消回执。
+    const issued = new Map<number, string>()
     // 这一轮自己的取消信号：外面停这一轮时跟着停；程序停下时用它叫停还在飞的调用。
     const run = new AbortController()
     const stopRun = (): void => run.abort(input.signal?.reason)
@@ -119,14 +121,19 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
         this.events.callStarted?.({ ...call })
         const startedAt = Date.now()
         inFlight.set(call.callId, name)
+        issued.set(call.callId, name)
         // 调用的时间不是程序的时间：命令跑多久由它自己的时限管，等用户点头也在调用里。开始就停表，落定再接着走。
         const release = holdClock()
-        const result = await this.capabilities
-          .invoke({ namespace: call.namespace, operation: call.operation, input: call.input }, run.signal)
-          .finally(() => {
-            release()
-            inFlight.delete(call.callId)
-          })
+        let result: CodeCapabilityOutcome
+        try {
+          result = await this.capabilities.invoke(
+            { namespace: call.namespace, operation: call.operation, input: call.input },
+            run.signal
+          )
+        } finally {
+          release()
+          inFlight.delete(call.callId)
+        }
         this.events.callSettled?.({ callId: call.callId, ok: !result.error, elapsedMs: Date.now() - startedAt })
         completed.push(settledCall(name, result))
         if (result.notices) notices.push(...result.notices)
@@ -140,7 +147,9 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
       input.signal
     )
     input.signal?.removeEventListener('abort', stopRun)
-    const unsettled = [...inFlight.values()]
+    const unsettled = outcome.pendingCalls
+      ? outcome.pendingCalls.map((id) => issued.get(id)).filter(isString)
+      : [...inFlight.values()]
     if (!isEmpty(unsettled)) run.abort(new Error('脚本已经停了，这次调用没人等了'))
 
     // 图先收拢：它自己也会往插手记录里记一笔「丢了几张」，得赶在文字结果编好之前。

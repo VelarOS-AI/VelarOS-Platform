@@ -14,6 +14,12 @@ export type {
   CodeSurfaceEventSink,
 } from './contract/requires.js'
 export type { KernelScriptSessionOptions } from './contract/requires.js'
+export type {
+  ScriptProcess,
+  ScriptProcessEvents,
+  ScriptWorkerOptions,
+  SubprocessCodeRunnerOptions,
+} from './contract/requires.js'
 export { createCapabilityPort } from './impl/CapabilityOperationPort.js'
 export type { CodeProgramCheckerApi } from './impl/CodeProgramChecker.js'
 export { codeProgramChecker } from './impl/CodeProgramChecker.js'
@@ -24,6 +30,7 @@ export { nodeSubprocessCodeRunner,NodeSubprocessRunnerIsReleaseReady } from './i
 export type { ScriptOutputsApi } from './impl/ScriptOutputs.js'
 export { scriptOutputs } from './impl/ScriptOutputs.js'
 export { scriptPackageCompiler } from './impl/ScriptPackageCompiler.js'
+export { createSubprocessCodeRunner } from './impl/SubprocessCodeRunner.js'
 export type {
   CapabilityNamespaceOperations,
   CapabilityOperation,
@@ -35,3 +42,4 @@ export type { ScriptExecutionMetrics, ScriptOutputBlock, ScriptOutputCapture, Sc
 export type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest, HoldProgramClock } from './types/runner.js'
 export type { CodeCallNotice, CodeProgramCheckFailure, CodeProgramCheckResult, CodeProgramCheckSuccess, CodeProgramDiagnostic, CodeProgramEdit, CodeProgramEditResult, CodeProgramFailure, CodeProgramRequest, CodeProgramResult, CodeProgramTargetEdit, CompletedCall, GrantedModule } from './types/script.js'
 export type { ScriptPackageDefinition, ScriptPackageSurface } from './types/script.js'
+export type { ScriptWorkerCommand, ScriptWorkerEvent } from './types/worker.js'
