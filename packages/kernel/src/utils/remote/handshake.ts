@@ -7,6 +7,7 @@
 // 私钥出现在本文件的唯一形式是「进 signChallenge 产出一段签名」;新生成的密钥对随
 // `pair` 决定一起交还调用方,由调用方在 `paired` 到达后才落盘——配对没成就该被丢掉。
 import { isNonBlankString, isNumber, isPresent, isRecord, Log } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { RemoteNodeClientErrorCodes } from '../../contract/constants'
 import type { RemoteNodeHandshakeInput, RemoteNodeHandshakeStep } from '../../types/remote'
@@ -84,7 +85,7 @@ export function resolveRemoteNodeHostPlatform(): RemoteNodePlatform {
 export function resolveRemoteNodePlatform(): RemoteNodePlatform {
   const parsed = RemoteNodePlatformSchema.safeParse(process.platform)
   if (!parsed.success) {
-    throw new Error(`远程节点不支持 ${process.platform} 这个平台`)
+    throw new AppError('PLATFORM', `远程节点不支持 ${process.platform} 这个平台`)
   }
   return parsed.data
 }

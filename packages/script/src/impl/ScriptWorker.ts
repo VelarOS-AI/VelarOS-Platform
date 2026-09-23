@@ -8,6 +8,7 @@ import type {
 import { getQuickJS } from 'quickjs-emscripten'
 
 import { isEmpty, isObject, isTrue, isUndefined, Log, optionalWhen } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { ScriptOutputLimits } from '../contract/constants.js'
 import type { ScriptWorkerOptions } from '../contract/requires.js'
@@ -116,7 +117,7 @@ class ScriptWorker implements ScriptWorkerApi {
   }
 
   private withCpuBudget<T>(action: () => T): T {
-    if (this.cpuRemaining <= 0) throw Object.assign(new Error('脚本执行超时'), { code: 'TIMEOUT' })
+    if (this.cpuRemaining <= 0) throw new AppError('TIMEOUT', '脚本执行超时')
     const started = performance.now()
     const outerDeadline = this.cpuDeadline
     this.cpuDeadline = Math.min(outerDeadline, started + this.cpuRemaining)
@@ -177,10 +178,10 @@ class ScriptWorker implements ScriptWorkerApi {
   }
 
   private run(message: CodeRunRequest): void {
-    if (this.started) throw new Error('一个隔离进程只能执行一次程序。')
+    if (this.started) throw new AppError('CONFLICT', '一个隔离进程只能执行一次程序。')
     this.started = true
     if (!Number.isFinite(message.timeoutMs) || message.timeoutMs <= 0)
-      throw new Error('缺少有限的执行预算')
+      throw new AppError('VALIDATION', '缺少有限的执行预算')
     this.cpuRemaining = message.timeoutMs
     const setup = this.withCpuBudget(() =>
       this.vm.evalCode(createWorkerBootstrap(message), 'bootstrap.js')

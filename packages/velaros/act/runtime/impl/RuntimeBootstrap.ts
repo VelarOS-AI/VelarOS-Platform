@@ -7,6 +7,7 @@ import type { ContextStorage } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
 import { isFalse, isString, isTrue, isUndefined } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { OperationModuleDefinition } from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
 import { createAiSdkModelDriver, createModelRuntimeComposition } from '@velaros-ai/model'
@@ -60,36 +61,40 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
     const modules = [...(options.modules ?? [])]
     const sources = [...(options.context?.sources ?? [])]
     if (!isUndefined(options.instructions) && !isString(options.instructions))
-      throw new Error('instructions 必须是宿主提供的文本')
+      throw new AppError('VALIDATION', 'instructions 必须是宿主提供的文本')
     let workspace: Optional<string>
     if (options.workspace) {
-      if (!isAbsolute(options.workspace)) throw new Error('workspace 需要绝对路径')
+      if (!isAbsolute(options.workspace)) throw new AppError('VALIDATION', 'workspace 需要绝对路径')
       workspace = await realpath(options.workspace)
-      if (!(await stat(workspace)).isDirectory()) throw new Error('workspace 必须是已有目录')
+      if (!(await stat(workspace)).isDirectory())
+        throw new AppError('VALIDATION', 'workspace 必须是已有目录')
       if (
         !isFalse(options.project) &&
         (modules.some((module) => module.binding.moduleId === 'velaros:project') ||
           sources.some((source) => source.id === 'project'))
       )
-        throw new Error('workspace 已装配 project，不能重复挂载同一能力或来源')
+        throw new AppError('VALIDATION', 'workspace 已装配 project，不能重复挂载同一能力或来源')
     }
     const dataDir = options.dataDir
     if (dataDir) {
-      if (!isAbsolute(dataDir)) throw new Error('dataDir 需要绝对路径')
+      if (!isAbsolute(dataDir)) throw new AppError('VALIDATION', 'dataDir 需要绝对路径')
       if (workspace) {
         const path = relative(workspace, dataDir)
         if (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path))
-          throw new Error('dataDir 应位于业务工作区之外，避免被项目能力当作任务文件处理')
+          throw new AppError(
+            'VALIDATION',
+            'dataDir 应位于业务工作区之外，避免被项目能力当作任务文件处理'
+          )
       }
       await mkdir(dataDir, { recursive: true })
       if (workspace) {
         const path = relative(workspace, await realpath(dataDir))
         if (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path))
-          throw new Error('dataDir 的真实位置不能在业务工作区内')
+          throw new AppError('VALIDATION', 'dataDir 的真实位置不能在业务工作区内')
       }
     }
     if (!options.storage && !dataDir)
-      throw new Error('需要 dataDir 保存运行状态，或注入 ContextStorage')
+      throw new AppError('VALIDATION', '需要 dataDir 保存运行状态，或注入 ContextStorage')
     if (workspace && !isFalse(options.project)) {
       const root = workspace
       const transactionStatePath = dataDir
@@ -108,7 +113,7 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
             getRootPath: () => root,
             kernel: async () => kernel,
             queryCode: async () => {
-              throw Object.assign(new Error('此项目没有装配代码智能端口'), { code: 'UNAVAILABLE' })
+              throw new AppError('UNAVAILABLE', '此项目没有装配代码智能端口')
             },
           },
         })
@@ -121,7 +126,7 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
       const config = options.model
       const limits = { ...RuntimeModelLimits, ...config.limits }
       if (!config.model?.trim() || !config.apiKey?.trim())
-        throw new Error('模型配置需要 model 和 apiKey')
+        throw new AppError('VALIDATION', '模型配置需要 model 和 apiKey')
       const url = new URL(config.baseURL)
       if (
         !['http:', 'https:'].includes(url.protocol) ||
@@ -130,13 +135,13 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
         url.search ||
         url.hash
       )
-        throw new Error('模型 baseURL 需要不含凭据或查询参数的 HTTP(S) 地址')
+        throw new AppError('VALIDATION', '模型 baseURL 需要不含凭据或查询参数的 HTTP(S) 地址')
       if (
         Object.values(limits).some((value) => !Number.isSafeInteger(value) || value < 1) ||
         limits.inputTokens + limits.outputTokens + VelarosRunLimits.safetyTokens >
           limits.contextTokens
       )
-        throw new Error('模型窗口预算需要覆盖输入、输出和安全余量')
+        throw new AppError('VALIDATION', '模型窗口预算需要覆盖输入、输出和安全余量')
       const providers = createModelRuntimeComposition({
         environment: {},
         providerScripts: { configPaths: [] },
@@ -168,7 +173,8 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
               defaultProfile: 'standard',
             }
           : undefined
-    if (isTrue(options.search) && !search) throw new Error('启用搜索需要模型和真实证据来源')
+    if (isTrue(options.search) && !search)
+      throw new AppError('VALIDATION', '启用搜索需要模型和真实证据来源')
     const agents = isFalse(options.agents)
       ? undefined
       : options.agents && !isTrue(options.agents)
@@ -188,7 +194,7 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
               maxChildren: ModelToolLimits.maxChildren,
             }
           : undefined
-    if (isTrue(options.agents) && !agents) throw new Error('启用子任务需要模型')
+    if (isTrue(options.agents) && !agents) throw new AppError('VALIDATION', '启用子任务需要模型')
     const scope = createHash('sha256')
       .update(workspace ?? dataDir ?? 'injected')
       .digest('hex')

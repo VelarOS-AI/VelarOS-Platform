@@ -119,7 +119,7 @@ export function execBounded(
       child.stdout?.destroy()
       child.stderr?.destroy()
       child.unref()
-      finish(new Error('进程控制命令超过期限'))
+      finish(new AppError('TIMEOUT', '进程控制命令超过期限'))
     })
   })
 }
@@ -196,7 +196,7 @@ export function waitForProcessSpawn(
     }
     timers.after(timeoutMs, () => {
       cleanup()
-      reject(new Error('等子进程启动的确认超时'))
+      reject(new AppError('TIMEOUT', '等子进程启动的确认超时'))
     })
     child.once('spawn', onSpawn)
     child.once('error', onError)

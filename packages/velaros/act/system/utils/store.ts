@@ -1,9 +1,10 @@
 import { isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { StoreGrant } from '../types/store.js'
 /** 标记共享空间授权拒绝，明确尚未产生效果。 */
 export function storeDenied(message: string): Error {
-  return Object.assign(new Error(message), { code: 'STORE_DENIED', effect: 'none' })
+  return AppError.withFields('STORE_DENIED', message, { effect: 'none' })
 }
 
 /** 校验对象键位于当前授权的字面前缀内。 */

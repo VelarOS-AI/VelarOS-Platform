@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto'
 import { win32 } from 'node:path'
 
 import { isPlainObject, isString, Log, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { currentPlatform } from '@velaros-ai/core/platform'
 import type { CommandSpec } from '@velaros-ai/core/platform/contracts'
 
@@ -192,7 +193,7 @@ class ShellResolver implements ShellResolverApi {
             user: Record<string, string>
           }
           if (!isPlainObject(source.machine) || !isPlainObject(source.user))
-            throw new Error('读到的 Windows 环境变量快照格式不对。')
+            throw new AppError('VALIDATION', '读到的 Windows 环境变量快照格式不对。')
           const merged = { ...source.machine, ...source.user }
           const machinePath = readWindowsEnv(source.machine, 'PATH') ?? ''
           const userPath = readWindowsEnv(source.user, 'PATH') ?? ''

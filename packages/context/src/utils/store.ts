@@ -1,11 +1,12 @@
 import { isArray, isBoolean, isFiniteNumber, isNull, isObject, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { StoreLimits } from '../contract/constants.js'
 import type { StoreValue } from '../types/store.js'
 
 /** 标记确定未提交的输入或并发错误。 */
 export function storeFailure(code: string, message: string): Error {
-  return Object.assign(new Error(message), { code, effect: 'none' })
+  return AppError.withFields(code, message, { effect: 'none' })
 }
 /** 检查非空的宿主身份或对象键。 */
 export function storeName(value: string, max: number): void {

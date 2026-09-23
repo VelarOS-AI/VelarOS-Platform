@@ -6,6 +6,7 @@ import type { WebSocket } from 'ws'
 import { WebSocketServer } from 'ws'
 
 import { isNull, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { RemoteNodeSocketPath } from '../../contract/constants'
 import type { RemoteNodeListener, RemoteNodeListenerOptions } from '../../types/remote'
@@ -23,7 +24,7 @@ function listenServer(server: Server, host: string, port: number): Promise<numbe
       server.off('error', onError)
       const address = server.address()
       if (isNull(address) || isString(address)) {
-        reject(new Error('远程节点服务端没有绑上 TCP 端口'))
+        reject(new AppError('UNAVAILABLE', '远程节点服务端没有绑上 TCP 端口'))
         return
       }
       resolve(address.port)
@@ -40,7 +41,7 @@ export async function listenRemoteNode(
 ): Promise<RemoteNodeListener> {
   const { bindHost, portStart, portEnd } = options
   if (!Number.isInteger(portStart) || !Number.isInteger(portEnd) || portStart > portEnd) {
-    throw new Error('远程节点的端口区间不合法')
+    throw new AppError('VALIDATION', '远程节点的端口区间不合法')
   }
   for (let port = portStart; port <= portEnd; port += 1) {
     const webSocketServer = new WebSocketServer({
@@ -80,5 +81,5 @@ export async function listenRemoteNode(
       if (!isNodeError(error, 'EADDRINUSE')) throw error
     }
   }
-  throw new Error(`${portStart}-${portEnd} 区间里没有可用的远程节点端口`)
+  throw new AppError('UNAVAILABLE', `${portStart}-${portEnd} 区间里没有可用的远程节点端口`)
 }

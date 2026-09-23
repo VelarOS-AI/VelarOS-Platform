@@ -1,5 +1,6 @@
 import type { ContextRecord, ContextStorage } from '@velaros-ai/context'
 import { isNull } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { GoalControl, GoalState, GoalUpdate } from '../../system/types/goal.js'
 import { goalChange } from '../utils/goal.js'
@@ -32,7 +33,7 @@ export class SessionGoal implements SessionGoalApi {
     const record = state?.records.findLast((item) => item.title === 'session:goal')
     const body = record ? await this.storage.get(this.id, record.objectId) : null
     signal.throwIfAborted()
-    if (record && isNull(body)) throw new Error('目标原文缺失')
+    if (record && isNull(body)) throw new AppError('NOT_FOUND', '目标原文缺失')
     return { state, goal: isNull(body) ? null : (JSON.parse(body) as GoalState) }
   }
   public async get(signal: AbortSignal) {
@@ -47,8 +48,7 @@ export class SessionGoal implements SessionGoalApi {
   private async commit(input: GoalUpdate | GoalControl, signal: AbortSignal): Promise<GoalState> {
     for (let attempt = 0; attempt < 32; attempt++) {
       const { state, goal } = await this.snapshot(signal)
-      if (!state)
-        throw Object.assign(new Error('先登记用户输入，再建立目标'), { code: 'GOAL_INPUT' })
+      if (!state) throw new AppError('GOAL_INPUT', '先登记用户输入，再建立目标')
       const next = goalChange(goal, input, Date.now(), crypto.randomUUID())
       const body = JSON.stringify(next)
       const objectId = await this.storage.put(this.id, body)
@@ -91,6 +91,6 @@ export class SessionGoal implements SessionGoalApi {
           return next
       }
     }
-    throw Object.assign(new Error('目标正在变化，请重新读取后重试'), { code: 'GOAL_BUSY' })
+    throw new AppError('GOAL_BUSY', '目标正在变化，请重新读取后重试')
   }
 }

@@ -3,6 +3,7 @@ import { isNull } from '@velaros-ai/core'
 import { Log } from '@velaros-ai/core'
 import { isFalse, isUndefined } from '@velaros-ai/core'
 import { isEmpty, isObject, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import { modelRequestEncoder, type ModelTurnDelta, type ModelTurnRequest } from '@velaros-ai/kernel'
 import {
@@ -50,11 +51,13 @@ export class ActLoop implements ActLoopApi {
       this.policy.recoveryAttempts < 1 ||
       this.policy.recoveryAttempts > 4
     )
-      throw new Error('上下文容量策略无效')
+      throw new AppError('VALIDATION', '上下文容量策略无效')
     for (const value of Object.values(options.limits))
-      if (!Number.isSafeInteger(value) || value < 1) throw new Error('运行预算必须是正整数')
+      if (!Number.isSafeInteger(value) || value < 1)
+        throw new AppError('VALIDATION', '运行预算必须是正整数')
     for (const value of Object.values(options.model.limits))
-      if (!Number.isSafeInteger(value) || value < 1) throw new Error('模型必须声明有效窗口限制')
+      if (!Number.isSafeInteger(value) || value < 1)
+        throw new AppError('VALIDATION', '模型必须声明有效窗口限制')
   }
 
   public cancel(): void {
@@ -62,7 +65,7 @@ export class ActLoop implements ActLoopApi {
   }
 
   public async *submit(input: string | ActInput, signal?: AbortSignal): AsyncIterable<ActRunEvent> {
-    if (this.controller) throw new Error('这个会话已有活动运行')
+    if (this.controller) throw new AppError('CONFLICT', '这个会话已有活动运行')
     const controller = new AbortController()
     this.controller = controller
     const cancel = (): void => controller.abort(signal?.reason)
@@ -89,9 +92,9 @@ export class ActLoop implements ActLoopApi {
         (!isUndefined(inputValue.text) && !isString(inputValue.text)) ||
         (!inputValue.text && !inputValue.images?.length && !inputValue.files?.length)
       )
-        throw new Error('输入需要文字、文件引用或图片')
+        throw new AppError('VALIDATION', '输入需要文字、文件引用或图片')
       if (!isUndefined(inputValue.task) && !['continue', 'new'].includes(inputValue.task))
-        throw new Error('任务模式无效')
+        throw new AppError('VALIDATION', '任务模式无效')
       const images =
         inputValue.images?.map((image) => ({ ...image, origin: 'user' as const })) ?? []
       modelRequestEncoder.messages({
@@ -218,14 +221,15 @@ export class ActLoop implements ActLoopApi {
               attemptSignal
             )) {
               controller.signal.throwIfAborted()
-              if (finish) throw new Error('模型在结束响应后继续发送内容')
+              if (finish) throw new AppError('PROTOCOL', '模型在结束响应后继续发送内容')
               if (delta.type === 'error')
-                throw Object.assign(new Error(delta.message), {
-                  code: delta.code === 'context-limit' ? 'CONTEXT_BUDGET' : 'MODEL_PROVIDER',
-                  retryAfterMs: delta.retryAfterMs,
-                })
+                throw AppError.withFields(
+                  delta.code === 'context-limit' ? 'CONTEXT_BUDGET' : 'MODEL_PROVIDER',
+                  delta.message,
+                  { retryAfterMs: delta.retryAfterMs }
+                )
               if (delta.type === 'usage') {
-                if (measured) throw new Error('模型重复返回用量')
+                if (measured) throw new AppError('PROTOCOL', '模型重复返回用量')
                 measured = true
                 usage = { inputTokens: delta.inputTokens, outputTokens: delta.outputTokens }
                 await this.options.view.recordUsage(delta.inputTokens, delta.outputTokens)
@@ -246,7 +250,7 @@ export class ActLoop implements ActLoopApi {
             }
             modelMs = performance.now() - modelStarted
             if (!finish || finish.reason !== 'stop' || !received)
-              throw new Error('模型响应未完整结束，程序没有执行')
+              throw new AppError('PROTOCOL', '模型响应未完整结束，程序没有执行')
             decoded = decoder.finish()
             for (const preview of decoded.events) yield { ...preview, runId }
             const accepted = await this.options.context.append(
@@ -393,15 +397,13 @@ export class ActLoop implements ActLoopApi {
               controller.signal
             )
             if (!compiled.okToSend)
-              throw Object.assign(new Error('协议修复请求超过上下文预算'), {
-                code: 'CONTEXT_BUDGET',
-              })
+              throw new AppError('CONTEXT_BUDGET', '协议修复请求超过上下文预算')
           } finally {
             attemptController.abort()
           }
         }
         if (this.options.control?.pending()) continue
-        if (!decoded) throw new Error('没有可接受的完整响应')
+        if (!decoded) throw new AppError('PROTOCOL', '没有可接受的完整响应')
         await this.options.frames.acknowledge(compiled.request, controller.signal)
         if (!isUndefined(decoded.submission)) {
           yield { type: 'state', runId, status: 'executing' }
@@ -494,7 +496,7 @@ export class ActLoop implements ActLoopApi {
         yield { type: 'state', runId, status: 'completed' }
         return
       }
-      throw new Error('运行达到回合上限，已保存当前上下文')
+      throw new AppError('LIMIT', '运行达到回合上限，已保存当前上下文')
     } catch (error) {
       Log.tag('ActRuntime').debug('ActLoop 已进入异常处理或降级分支')
       terminal = controller.signal.aborted
@@ -686,7 +688,7 @@ export class ActLoop implements ActLoopApi {
     }
     if (!compiled.okToSend) return null
     if (!(await view.validate(evidence, signal)))
-      throw Object.assign(new Error('发送前证据版本发生变化'), { code: 'STALE_VIEW' })
+      throw new AppError('STALE_VIEW', '发送前证据版本发生变化')
     return {
       projection: { revision: evidence.scope.revision, cursor: 0, records: [], chars: body.length },
       ...compiled,

@@ -1,4 +1,5 @@
 import { isNull, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { ModuleBinding, OperationRuntimeApi } from '@velaros-ai/kernel'
 
 import type {
@@ -49,7 +50,7 @@ export class KernelInvocationPort implements CodeCapabilityPort {
   ): Promise<CodeCapabilityOutcome> {
     try {
       const binding = this.bindings.get(call.namespace)
-      if (!binding) throw new Error(`本次程序没有模块绑定 ${call.namespace}`)
+      if (!binding) throw new AppError('NOT_FOUND', `本次程序没有模块绑定 ${call.namespace}`)
       const receipt = await this.runtime.invoke(
         {
           mode: this.mode,

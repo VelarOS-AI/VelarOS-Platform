@@ -1,4 +1,5 @@
 import { isUndefined } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { KernelRegistration } from '../../contract/provides'
 import type { KernelEventSubscription } from '../../contract/provides'
@@ -167,9 +168,7 @@ export class InProcessKernelTransport implements InProcessKernelTransportApi {
   ): Promise<ModsInstallFromDirectoryResponse> {
     const result = await this.service.installModFromDirectory?.(request.directory)
     if (isUndefined(result)) {
-      throw Object.assign(new Error('本 Kernel 没有接 ModStore'), {
-        code: 'MODS_UNAVAILABLE',
-      })
+      throw new AppError('MODS_UNAVAILABLE', '本 Kernel 没有接 ModStore')
     }
     return {
       protocolVersion: KernelProtocolVersion,

@@ -6,6 +6,7 @@ import type {
 } from '@velaros-ai/context'
 import { isNull, isUndefined, toNullable } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { ModelToolBinding } from '../types/model-tools.js'
 import type { ScriptSubmissionReceipt } from '../types/session.js'
@@ -46,7 +47,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
       maxChars < 1 ||
       maxChars > 8_000_000
     )
-      throw new Error('追踪分页或正文预算无效')
+      throw new AppError('VALIDATION', '追踪分页或正文预算无效')
     const root = await this.storage.load(this.sessionId)
     const nodes = [
       ...new Map(
@@ -58,7 +59,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
     const bindings: ModelToolBinding[] = []
     for (const record of nodes) {
       const body = await this.storage.get(this.sessionId, record.objectId)
-      if (isNull(body)) throw new Error('模型工具归属记录原文缺失')
+      if (isNull(body)) throw new AppError('NOT_FOUND', '模型工具归属记录原文缺失')
       bindings.push(JSON.parse(body))
     }
     if (
@@ -67,7 +68,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
         (item) => item.sessionId === sessionId && item.rootSessionId === this.sessionId
       )
     )
-      throw new Error('支线不属于指定根会话')
+      throw new AppError('PERMISSION', '支线不属于指定根会话')
     const snapshot = sessionId === this.sessionId ? root : await this.storage.load(sessionId)
     const requests = (snapshot?.records ?? []).filter(
       (record) => record.title === 'model-request' && record.sequence > after
@@ -111,7 +112,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
     maxChars: number = ActRuntimeTuning.frameChars
   ): Promise<ActTurnTrace> {
     if (!turnId || !Number.isSafeInteger(maxChars) || maxChars < 1 || maxChars > 8_000_000)
-      throw new Error('回合身份或追踪正文预算无效')
+      throw new AppError('VALIDATION', '回合身份或追踪正文预算无效')
     const snapshot = await this.storage.load(this.sessionId)
     return this.readSnapshot(turnId, maxChars, snapshot)
   }
@@ -126,7 +127,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
     const requestRecord = records.find(
       (record) => record.ref.id === turnId && record.title === 'model-request'
     )
-    if (!requestRecord) throw new Error('当前会话没有这个模型回合')
+    if (!requestRecord) throw new AppError('NOT_FOUND', '当前会话没有这个模型回合')
     const cache = new Map<string, Nullable<string>>()
     const gaps: string[] = []
     const raw = async (record: ContextRecord): Promise<Nullable<string>> => {
@@ -138,7 +139,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
       return cache.get(record.ref.id)!
     }
     const requestBody = await raw(requestRecord)
-    if (isNull(requestBody)) throw new Error('模型请求原文缺失，不能重建回合身份')
+    if (isNull(requestBody)) throw new AppError('NOT_FOUND', '模型请求原文缺失，不能重建回合身份')
     const request = JSON.parse(requestBody)
     let next: Optional<ContextRecord>
     let boundary =

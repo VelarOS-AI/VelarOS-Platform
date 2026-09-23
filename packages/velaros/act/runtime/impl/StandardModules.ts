@@ -5,6 +5,7 @@ import type { ContextViewApi } from '@velaros-ai/context'
 import { isPlainObject } from '@velaros-ai/core'
 import { isNull } from '@velaros-ai/core'
 import { isArray, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type {
   InvocationJournal,
   OperationDefinition,
@@ -226,7 +227,7 @@ export function createMcpModule(options: McpModuleOptions): OperationModuleDefin
   const readOnly = new Set(options.readOnly ?? [])
   const operations: Record<string, OperationDefinition> = Object.create(null)
   for (const tool of options.tools) {
-    if (Object.hasOwn(operations, tool.name)) throw new Error('MCP 工具名重复')
+    if (Object.hasOwn(operations, tool.name)) throw new AppError('CONFLICT', 'MCP 工具名重复')
     const trusted = readOnly.has(tool.name)
     operations[tool.name] = {
       summary: tool.description ?? tool.name,
@@ -237,7 +238,7 @@ export function createMcpModule(options: McpModuleOptions): OperationModuleDefin
       run: async (input, call) => {
         if (!trusted) {
           try {
-            if (!options.authorize) throw new Error('MCP 写操作需要宿主授权')
+            if (!options.authorize) throw new AppError('PERMISSION', 'MCP 写操作需要宿主授权')
             await options.authorize(call, tool)
             call.signal.throwIfAborted()
           } catch (error) {
@@ -268,8 +269,7 @@ export function createMcpModule(options: McpModuleOptions): OperationModuleDefin
                 mediaType: block.mimeType,
                 data: block.data,
               })
-        if (raw.isError)
-          throw Object.assign(new Error(JSON.stringify(raw)), { code: 'MCP_RESULT_ERROR' })
+        if (raw.isError) throw new AppError('MCP_RESULT_ERROR', JSON.stringify(raw))
         return normalizeCapabilityValue(raw)
       },
     }

@@ -1,4 +1,5 @@
 import { isNotUndefined, isUndefined, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import {
   type KernelCallErrorCode,
@@ -164,7 +165,7 @@ export function fromKernelRpcError(rpcError: {
 
 /** 不是 Error 的抛出物包成 Error，保住堆栈与 message 的最低约定。 */
 export function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error))
+  return error instanceof Error ? error : new AppError('UNKNOWN', String(error), error)
 }
 
 /**

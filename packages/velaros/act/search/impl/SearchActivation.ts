@@ -8,6 +8,7 @@ import type {
 } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type {
   ModelDriverLimits,
   ModelInputEstimate,
@@ -233,9 +234,7 @@ export class SearchActivation implements SearchActivationApi {
   private available(signal: AbortSignal): AbortSignal {
     signal.throwIfAborted()
     if (!this.canExplore())
-      throw Object.assign(new Error('搜索已进入收尾，只可交付现有证据'), {
-        code: 'SEARCH_FINALIZING',
-      })
+      throw new AppError('SEARCH_FINALIZING', '搜索已进入收尾，只可交付现有证据')
     return AbortSignal.any([
       signal,
       this.control.signal,
@@ -260,16 +259,16 @@ export class SearchActivation implements SearchActivationApi {
     const bounded = this.available(signal)
     const profile = this.dependencies.profile
     if (!query || query.length > SearchLimits.evidenceQueryChars)
-      throw Object.assign(new Error(`query 需要 1 到 ${SearchLimits.evidenceQueryChars} 个字符`), {
-        code: 'SEARCH_INPUT',
-      })
-    if (!this.state.sources.includes(source))
-      throw Object.assign(new Error('来源未授权'), { code: 'DENIED' })
+      throw new AppError(
+        'SEARCH_INPUT',
+        `query 需要 1 到 ${SearchLimits.evidenceQueryChars} 个字符`
+      )
+    if (!this.state.sources.includes(source)) throw new AppError('DENIED', '来源未授权')
     if (
       this.queries >= profile.sourceQueries ||
       this.candidates + this.pendingCandidates >= profile.candidates
     )
-      throw Object.assign(new Error('候选或查询预算耗尽'), { code: 'SOURCE_LIMIT' })
+      throw new AppError('SOURCE_LIMIT', '候选或查询预算耗尽')
     this.queries++
     // 页大小越界按边界钳制，再受本次搜索剩余的候选额度限制
     const capacity = Math.min(
@@ -316,9 +315,9 @@ export class SearchActivation implements SearchActivationApi {
     const profile = this.dependencies.profile
     checkResourceTarget(target)
     if (target.kind !== 'resource' || !this.state.sources.includes(target.sourceId))
-      throw Object.assign(new Error('来源未授权'), { code: 'DENIED' })
+      throw new AppError('DENIED', '来源未授权')
     if (this.reads >= profile.reads || this.bytes + this.pendingBytes >= profile.readBytes)
-      throw Object.assign(new Error('读取预算耗尽'), { code: 'SOURCE_LIMIT' })
+      throw new AppError('SOURCE_LIMIT', '读取预算耗尽')
     this.reads++
     // 读取量越界按边界钳制，再受本次搜索剩余的读取额度限制
     const capacity = Math.min(
@@ -374,7 +373,7 @@ export class SearchActivation implements SearchActivationApi {
       !isArray(draft.nextSteps) ||
       JSON.stringify(draft).length > SearchLimits.reportChars
     )
-      throw new Error('搜索报告格式或大小无效')
+      throw new AppError('VALIDATION', '搜索报告格式或大小无效')
     for (const finding of draft.findings)
       if (
         !isString(finding.text) ||
@@ -384,12 +383,13 @@ export class SearchActivation implements SearchActivationApi {
           (id: string) => !this.state.evidence.some((evidence) => evidence.id === id)
         )
       )
-        throw new Error('结论必须引用已真实读取的证据 ID')
+        throw new AppError('VALIDATION', '结论必须引用已真实读取的证据 ID')
     if (
       draft.gaps.some((gap) => !isString(gap.code) || !isString(gap.detail)) ||
       draft.nextSteps.some((step) => !isString(step))
     )
-      throw new Error(
+      throw new AppError(
+        'VALIDATION',
         '报告缺口与后续步骤无效：gaps 每项必须是 {code:string,detail:string}，nextSteps 每项必须是字符串；允许保留未查清的缺口'
       )
     this.draft = structuredClone(draft)
@@ -434,8 +434,7 @@ export class SearchActivation implements SearchActivationApi {
 
   public async authorizeReference(ref: ContextRef, signal: AbortSignal): Promise<void> {
     signal.throwIfAborted()
-    if (ref.sessionId !== this.state.sessionId)
-      throw Object.assign(new Error('搜索引用越界'), { code: 'SCOPE_MISMATCH' })
+    if (ref.sessionId !== this.state.sessionId) throw new AppError('SCOPE_MISMATCH', '搜索引用越界')
     const snapshot = await this.dependencies.storage.load(this.state.sessionId)
     const reset = Math.max(
       snapshot?.records.findLast((record) => record.title === 'search:history-reset')?.sequence ??
@@ -444,7 +443,7 @@ export class SearchActivation implements SearchActivationApi {
     )
     const record = snapshot?.records.find((item) => item.ref.id === ref.id)
     if (!record || record.sequence <= reset)
-      throw Object.assign(new Error('旧材料需要在当前授权范围内重新获取'), { code: 'DENIED' })
+      throw new AppError('DENIED', '旧材料需要在当前授权范围内重新获取')
   }
 
   public snapshot() {

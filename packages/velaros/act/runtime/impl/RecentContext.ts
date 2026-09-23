@@ -1,6 +1,7 @@
 import type { ContextRuntime, ContextState, ContextStorage } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
 import { isNull, isUndefined, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { ModelHistoryMessage, ModelImage } from '@velaros-ai/kernel'
 
 import type {
@@ -83,7 +84,7 @@ export class RecentContext implements RecentContextApi {
       limit > 64 ||
       (!isUndefined(input.through) && (!Number.isSafeInteger(input.through) || input.through < 0))
     )
-      throw new Error('历史目录范围无效')
+      throw new AppError('VALIDATION', '历史目录范围无效')
     const state = await this.snapshot()
     signal.throwIfAborted()
     const resetAfter = Math.max(
@@ -133,7 +134,7 @@ export class RecentContext implements RecentContextApi {
         ? { ...selected.metadata, records: selected.records }
         : null
       : await this.storage.load(this.id)
-    if (!state) throw new Error('近期记录尚未建立')
+    if (!state) throw new AppError('UNAVAILABLE', '近期记录尚未建立')
     const reset = Math.max(
       state.records.findLast((record) => record.title === 'search:history-reset')?.sequence ?? 0,
       state?.task?.startedSequence ?? 0
@@ -148,7 +149,7 @@ export class RecentContext implements RecentContextApi {
       !Number.isSafeInteger(input.through) ||
       input.through <= previous.through
     )
-      throw Object.assign(new Error('历史检查点版本不匹配'), { code: 'CONTEXT_CONFLICT' })
+      throw new AppError('CONTEXT_CONFLICT', '历史检查点版本不匹配')
     const responses = records.filter((record) => record.kind === 'assistant')
     const tail = responses.at(-2)?.sequence ?? 0
     if (
@@ -158,12 +159,12 @@ export class RecentContext implements RecentContextApi {
           record.sequence === input.through && /^script:[0-9a-f-]{36}:result$/u.test(record.title)
       )
     )
-      throw new Error('检查点必须结束于已完成结果，且保留最近两个响应')
+      throw new AppError('VALIDATION', '检查点必须结束于已完成结果，且保留最近两个响应')
     if (!input.summary.trim() || JSON.stringify(input).length > 12000)
-      throw new Error('检查点摘要无效或超限')
+      throw new AppError('VALIDATION', '检查点摘要无效或超限')
     for (const ref of input.evidence) {
       if (ref.sessionId !== this.id || !records.some((record) => record.ref.id === ref.id))
-        throw new Error('旧材料需要在当前授权范围内重新获取')
+        throw new AppError('PERMISSION', '旧材料需要在当前授权范围内重新获取')
       await this.context.read(ref, { limit: 1 })
     }
     const body = JSON.stringify(input)
@@ -194,10 +195,7 @@ export class RecentContext implements RecentContextApi {
             { ...record, sequence: (state.records.at(-1)?.sequence ?? 0) + 1 },
           ],
         })
-    if (!committed)
-      throw Object.assign(new Error('整理期间历史已变化，请刷新后重试'), {
-        code: 'CONTEXT_CONFLICT',
-      })
+    if (!committed) throw new AppError('CONTEXT_CONFLICT', '整理期间历史已变化，请刷新后重试')
     return {
       ref: record.ref,
       through: input.through,

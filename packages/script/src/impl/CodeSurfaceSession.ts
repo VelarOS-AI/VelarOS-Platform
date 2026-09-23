@@ -7,6 +7,7 @@ import { isUndefined } from '@velaros-ai/core'
  * 让不合法的程序跑起来，等于用真实副作用去试错。
  */
 import { isEmpty, isObject, isString, isTrue } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 
 import {
@@ -173,13 +174,13 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     const unsettled = outcome.pendingCalls
       ? outcome.pendingCalls.map((id) => issued.get(id)).filter(isString)
       : [...inFlight.values()]
-    if (!isEmpty(unsettled)) run.abort(new Error('脚本已经停了，这次调用没人等了'))
+    if (!isEmpty(unsettled)) run.abort(new AppError('CANCELLED', '脚本已经停了，这次调用没人等了'))
 
     // 图先收拢：它自己也会往插手记录里记一笔「丢了几张」，得赶在文字结果编好之前。
     if (outcome.ok && !isUndefined(outcome.value)) {
       try {
         if (JSON.stringify(outcome.value).length > ScriptOutputLimits.rawChars)
-          throw new Error('程序返回值超过原始归档上限')
+          throw new AppError('LIMIT', '程序返回值超过原始归档上限')
       } catch (error) {
         Log.tag('ActRuntime').debug('CodeSurfaceSession 已进入异常处理或降级分支')
         outcome.ok = false

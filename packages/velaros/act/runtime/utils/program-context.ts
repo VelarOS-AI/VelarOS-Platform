@@ -14,6 +14,7 @@ import {
   optionalWhen,
   stringifyPretty,
 } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { unifiedLineDiff } from '@velaros-ai/core/utils/textDiff'
 
 import type { ScriptControlIdentity } from '../types/runtime.js'
@@ -157,10 +158,7 @@ export function scriptInputCopy<T>(input: T): T {
       seen.has(value) ||
       (!isArray(value) && ![Object.prototype, null].includes(Object.getPrototypeOf(value)))
     )
-      throw Object.assign(new Error('脚本参数必须是无环 JSON 值'), {
-        code: 'INPUT_SCHEMA',
-        effect: 'none',
-      })
+      throw AppError.withFields('INPUT_SCHEMA', '脚本参数必须是无环 JSON 值', { effect: 'none' })
     seen.add(value)
     const result = isArray(value)
       ? value.map(copy)
@@ -177,8 +175,7 @@ export function recoverScriptSubmission(
   control: ScriptControlIdentity
 ): ScriptSubmissionReceipt {
   if (receipt.status === 'prepared')
-    throw Object.assign(new Error('原提交已占位但缺少最终回执，需要核对执行效果'), {
-      code: 'SCRIPT_UNRESOLVED',
+    throw AppError.withFields('SCRIPT_UNRESOLVED', '原提交已占位但缺少最终回执，需要核对执行效果', {
       invocationId: control.id,
       effect: 'unknown',
     })

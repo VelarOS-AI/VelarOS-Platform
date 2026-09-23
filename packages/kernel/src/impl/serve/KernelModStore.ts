@@ -10,6 +10,7 @@ import {
   isUndefined,
   toOptional,
 } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { KernelModuleDefinition } from '../../contract/requires'
 import type {
@@ -108,7 +109,7 @@ export class KernelModStore implements KernelModStoreApi {
 
   public register(pack: KernelModPackRecord): void {
     if (isBlank(pack.id.trim())) {
-      throw new Error('mod pack 的 id 不能为空')
+      throw new AppError('VALIDATION', 'mod pack 的 id 不能为空')
     }
     this.packs.set(pack.id, Object.freeze({ ...pack, provides: [...pack.provides] }))
     // 重新注册（重装或路径更新）的 pack 从干净状态开始。

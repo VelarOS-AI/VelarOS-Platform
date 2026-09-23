@@ -1,4 +1,5 @@
 import { isFunction, toOptional } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { OperationDefinition, OperationModuleDefinition } from '@velaros-ai/kernel'
 
 import type { CapabilityModuleOptions } from '../contract/requires.js'
@@ -20,13 +21,13 @@ class CapabilityModules implements CapabilityModulesApi {
       surface.methods.length !== Object.keys(surface.operations).length ||
       new Set(surface.methods).size !== surface.methods.length
     )
-      throw new Error('领域声明与操作表不一致')
+      throw new AppError('INVARIANT', '领域声明与操作表不一致')
     const operations: Record<string, OperationDefinition> = Object.create(null)
     for (const name of surface.methods) {
       const operation = surface.operations[name]
       const handler = Reflect.get(implementation, name)
       if (!operation || !isFunction(handler))
-        throw new Error(`领域实现缺少 ${surface.specifier}.${name}`)
+        throw new AppError('INVARIANT', `领域实现缺少 ${surface.specifier}.${name}`)
       const { hasInput, ...descriptor } = operation
       const reconcile = options.reconcile?.[name as keyof T]
       const observe = options.observation?.[name as keyof T]

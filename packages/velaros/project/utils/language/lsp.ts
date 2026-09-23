@@ -9,6 +9,7 @@ import {
   Log,
   trimmedStringOrEmpty,
 } from '@velaros-ai/core'
+import { createAbortError } from '@velaros-ai/core/error'
 
 import type { ExternalLanguageDiagnostic, ExternalLanguageLocation } from '../../types/project.js'
 
@@ -119,7 +120,7 @@ export function filePathFromUri(uri: string, server: string): Nullable<string> {
 
 /** 中止用的错误：`name` 必须是 `AbortError`，调用方按它识别取消。 */
 export function abortError(): Error {
-  return Object.assign(new Error('语言服务请求已中止。'), { name: 'AbortError' })
+  return createAbortError('语言服务请求已中止。')
 }
 
 /** 任何异常取一句可读的说明。 */

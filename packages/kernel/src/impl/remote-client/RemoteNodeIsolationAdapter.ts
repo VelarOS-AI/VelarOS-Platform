@@ -12,6 +12,7 @@
 // 有 epoch 判死。所以这里不做 `allowOfflineFallback` 那种"注册会抛的桩":远端不可达是常态,
 // 由 client 排队与重连吸收,而不是把一张假的能力面留在 Kernel 里。
 import { isNonBlankString, isNull, isPresent, Log } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { RemoteNodeProgressEventType } from '../../contract/constants'
 import type { KernelModuleActivateContext, KernelRegistration } from '../../contract/provides'
@@ -63,7 +64,7 @@ export class RemoteNodeIsolationAdapter implements KernelModuleIsolationAdapter 
       const binding = this.options.resolveBinding(token.id)
       if (!isPresent(binding)) {
         // 投影与注册面对不上:继续下去只会注册一张调不通的能力面,不如当场停。
-        throw new Error(`当前的节点投影里没有远程能力 "${token.id}" 的绑定`)
+        throw new AppError('NOT_FOUND', `当前的节点投影里没有远程能力 "${token.id}" 的绑定`)
       }
       registrations.push(
         context.registerService(

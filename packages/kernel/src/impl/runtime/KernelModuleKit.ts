@@ -1,4 +1,5 @@
 import { isBlank, isUndefined } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type {
   KernelCallableCapabilityOperation,
@@ -38,10 +39,10 @@ export class KernelModuleKit implements KernelModuleKitApi {
     version: string = KernelModuleKit.defaultCapabilityVersion
   ): CapabilityToken<TService> {
     if (isBlank(id.trim())) {
-      throw new Error('能力令牌的 id 不能为空')
+      throw new AppError('VALIDATION', '能力令牌的 id 不能为空')
     }
     if (isBlank(version.trim())) {
-      throw new Error('能力令牌的 version 不能为空')
+      throw new AppError('VALIDATION', '能力令牌的 version 不能为空')
     }
     return Object.freeze({ id, version })
   }

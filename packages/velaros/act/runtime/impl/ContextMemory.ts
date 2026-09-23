@@ -11,6 +11,7 @@ import type {
 import { isEmpty } from '@velaros-ai/core'
 import { isFalse, isNull, isUndefined, toNullable } from '@velaros-ai/core'
 import { isArray, isBoolean, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { ModelHistoryMessage, ModelImage, OperationReadStamp } from '@velaros-ai/kernel'
 import type { WorkspaceEntry, WorkspaceUpdate } from '@velaros-ai/velaros/act/system'
 
@@ -149,7 +150,7 @@ export class ContextMemory implements ContextMemoryApi {
     for (const record of records) {
       signal.throwIfAborted()
       const body = await this.storage.get(this.id, record.objectId)
-      if (isNull(body)) throw new Error('工作笔记原文缺失')
+      if (isNull(body)) throw new AppError('NOT_FOUND', '工作笔记原文缺失')
       notes.push({ record, note: JSON.parse(body) as WorkspaceNote })
     }
     return { snapshot, reset, notes }
@@ -163,7 +164,7 @@ export class ContextMemory implements ContextMemoryApi {
       !Number.isSafeInteger(input.baseRevision) ||
       input.baseRevision < 0
     )
-      throw Object.assign(new Error('笔记键或版本无效'), { code: 'MEMORY_INPUT' })
+      throw new AppError('MEMORY_INPUT', '笔记键或版本无效')
     if (
       (!isUndefined(input.body) &&
         (!isString(input.body) || input.body.length > WorkspaceLimits.bodyChars)) ||
@@ -173,27 +174,23 @@ export class ContextMemory implements ContextMemoryApi {
       (!isUndefined(input.sources) &&
         (!isArray(input.sources) || input.sources.length > WorkspaceLimits.sources))
     )
-      throw Object.assign(new Error('笔记内容超限或类型无效'), { code: 'MEMORY_INPUT' })
+      throw new AppError('MEMORY_INPUT', '笔记内容超限或类型无效')
     if (['body', 'title', 'sources', 'resident'].every((key) => !Object.hasOwn(input, key)))
-      throw Object.assign(new Error('笔记更新为空'), { code: 'MEMORY_INPUT' })
+      throw new AppError('MEMORY_INPUT', '笔记更新为空')
     for (let attempt = 0; attempt < 32; attempt++) {
       const incremental = Boolean(
         this.storage.selectSnapshot && this.storage.compareAndSwapMetadata
       )
       const { snapshot, notes } = await this.notes(signal, incremental)
-      if (!snapshot) throw new Error('会话尚未建立')
+      if (!snapshot) throw new AppError('UNAVAILABLE', '会话尚未建立')
       const prior = notes.find((item) => item.note.key === input.key)
       if ((prior?.note.revision ?? 0) !== input.baseRevision)
-        throw Object.assign(new Error('笔记版本已变化，请按当前 revision 修改'), {
-          code: 'WORKSPACE_CONFLICT',
+        throw AppError.withFields('WORKSPACE_CONFLICT', '笔记版本已变化，请按当前 revision 修改', {
           currentRevision: prior?.note.revision ?? 0,
         })
-      if (!prior && isUndefined(input.body))
-        throw Object.assign(new Error('新笔记需要正文'), { code: 'MEMORY_INPUT' })
+      if (!prior && isUndefined(input.body)) throw new AppError('MEMORY_INPUT', '新笔记需要正文')
       if (!prior && notes.length >= 256)
-        throw Object.assign(new Error('工作区笔记目录已满，请复用已有键'), {
-          code: 'WORKSPACE_LIMIT',
-        })
+        throw new AppError('WORKSPACE_LIMIT', '工作区笔记目录已满，请复用已有键')
       const sources = input.sources ?? prior?.note.sources ?? []
       let authorization = snapshot
       if (incremental && !isEmpty(sources)) {
@@ -206,7 +203,7 @@ export class ContextMemory implements ContextMemoryApi {
         authorization = { ...selected.metadata, records: selected.records }
       }
       if (sources.some((ref) => ref.sessionId !== this.id || !memoryReference(authorization, ref)))
-        throw Object.assign(new Error('笔记来源不在当前授权范围'), { code: 'SCOPE_MISMATCH' })
+        throw new AppError('SCOPE_MISMATCH', '笔记来源不在当前授权范围')
       const task = await this.view.inspect()
       const stamps = sources.flatMap(
         (ref) =>
@@ -257,13 +254,13 @@ export class ContextMemory implements ContextMemoryApi {
       )
         return noteEntry(note, record)
     }
-    throw Object.assign(new Error('工作区持续发生并发变化'), { code: 'WORKSPACE_BUSY' })
+    throw new AppError('WORKSPACE_BUSY', '工作区持续发生并发变化')
   }
 
   public async list(input: { after?: string; limit?: number }, signal: AbortSignal) {
     const limit = input.limit ?? ActRuntimeTuning.workspacePage
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > WorkspaceLimits.maxPage)
-      throw new Error(`笔记目录每页 1–${WorkspaceLimits.maxPage} 条`)
+      throw new AppError('VALIDATION', `笔记目录每页 1–${WorkspaceLimits.maxPage} 条`)
     const { notes } = await this.notes(signal, true)
     const items = notes
       .map((item) => noteEntry(item.note, item.record))
@@ -283,12 +280,12 @@ export class ContextMemory implements ContextMemoryApi {
       limit < 1 ||
       limit > ActRuntimeTuning.noteReadChars
     )
-      throw new Error('笔记正文分页无效')
+      throw new AppError('VALIDATION', '笔记正文分页无效')
     const { notes } = await this.notes(signal, true)
     const entry = notes.find((item) => item.note.key === input.key)
-    if (!entry) throw Object.assign(new Error('工作笔记不存在'), { code: 'MEMORY_NOT_FOUND' })
+    if (!entry) throw new AppError('MEMORY_NOT_FOUND', '工作笔记不存在')
     if (entry.note.revision !== input.revision)
-      throw Object.assign(new Error('笔记版本已变化，请刷新目录'), { code: 'WORKSPACE_CONFLICT' })
+      throw new AppError('WORKSPACE_CONFLICT', '笔记版本已变化，请刷新目录')
     return {
       entry: noteEntry(entry.note, entry.record),
       text: entry.note.body.slice(offset, offset + limit),
@@ -321,7 +318,7 @@ export class ContextMemory implements ContextMemoryApi {
           record.title.startsWith('workspace:note:')
       )
     )
-      throw Object.assign(new Error('笔记引用不在当前授权范围'), { code: 'SCOPE_MISMATCH' })
+      throw new AppError('SCOPE_MISMATCH', '笔记引用不在当前授权范围')
     return this.context.read(ref, { offset, limit })
   }
 
@@ -336,7 +333,7 @@ export class ContextMemory implements ContextMemoryApi {
       after < 0 ||
       (!isUndefined(input.through) && (!Number.isSafeInteger(input.through) || input.through < 0))
     )
-      throw new Error('材料目录分页无效')
+      throw new AppError('VALIDATION', '材料目录分页无效')
     const { snapshot, reset, notes } = await this.notes(signal)
     const latest = new Map(notes.map((item) => [item.record.ref.id, item]))
     const reattached = new Set(
@@ -401,7 +398,7 @@ export class ContextMemory implements ContextMemoryApi {
     ])
     const record = memoryReference(snapshot, ref)
     if (ref.sessionId !== this.id || !record)
-      throw Object.assign(new Error('材料引用不在当前任务授权范围'), { code: 'SCOPE_MISMATCH' })
+      throw new AppError('SCOPE_MISMATCH', '材料引用不在当前任务授权范围')
     if (record.kind === 'user') return this.context.readInput(ref, { offset, limit })
     if (record.title === 'task:artifact') return this.view.readArtifact(ref, { offset, limit })
     return this.context.read(ref, { offset, limit })
@@ -420,14 +417,11 @@ export class ContextMemory implements ContextMemoryApi {
     ])
     const record = memoryReference(snapshot, ref)
     if (ref.sessionId !== this.id || !record)
-      throw Object.assign(new Error('材料引用不在当前任务授权范围'), { code: 'SCOPE_MISMATCH' })
+      throw new AppError('SCOPE_MISMATCH', '材料引用不在当前任务授权范围')
     if (record.title.startsWith('workspace:note:')) {
       const { notes } = await this.notes(signal, true)
       const note = notes.find((item) => item.record.ref.id === ref.id)
-      if (!note)
-        throw Object.assign(new Error('笔记版本已变化，请使用当前引用调整驻留'), {
-          code: 'WORKSPACE_CONFLICT',
-        })
+      if (!note) throw new AppError('WORKSPACE_CONFLICT', '笔记版本已变化，请使用当前引用调整驻留')
       return note.note.resident === !isNull(turns)
         ? noteEntry(note.note, note.record)
         : this.update(
@@ -436,9 +430,7 @@ export class ContextMemory implements ContextMemoryApi {
           )
     }
     if (!/^script:.*:result$/u.test(record.title))
-      throw Object.assign(new Error('只有当前笔记或执行结果具有可调整的驻留租约'), {
-        code: 'MEMORY_REFERENCE_KIND',
-      })
+      throw new AppError('MEMORY_REFERENCE_KIND', '只有当前笔记或执行结果具有可调整的驻留租约')
     return isNull(turns)
       ? this.programs.release(ref.id, signal)
       : this.programs.retain(ref.id, turns, signal)
@@ -769,7 +761,7 @@ export class ContextMemory implements ContextMemoryApi {
     const frame = snapshot?.records.findLast(
       (record) => record.title === `context:frame:${frameId}`
     )
-    if (!frame) throw new Error('上下文帧尚未登记')
+    if (!frame) throw new AppError('NOT_FOUND', '上下文帧尚未登记')
     const previous = snapshot?.records.findLast((record) => record.title === 'context:delivered')
     if (
       previous &&

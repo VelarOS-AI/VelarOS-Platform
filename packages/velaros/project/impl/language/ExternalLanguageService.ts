@@ -1,6 +1,7 @@
 import { extname } from 'node:path'
 
 import { isEmpty, Log, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { BuiltinExternalLanguageServers } from '../../contract/constants.js'
 import type {
@@ -174,8 +175,11 @@ class ExternalLanguageService implements ExternalLanguageServiceApi {
     if (client) return client
     const extension = extname(file).toLowerCase()
     if (!this.supports(file))
-      throw new Error(`没有为 ${extension || '这种文件类型'} 登记语言服务适配器。`)
-    throw new Error(`本机没有装可用于 ${extension} 的语言服务。`)
+      throw new AppError(
+        'UNAVAILABLE',
+        `没有为 ${extension || '这种文件类型'} 登记语言服务适配器。`
+      )
+    throw new AppError('UNAVAILABLE', `本机没有装可用于 ${extension} 的语言服务。`)
   }
 
   /** 按扩展名挑规格，逐个尝试拉起；启动失败的规格记进不可用表，本实例内不再重试。 */

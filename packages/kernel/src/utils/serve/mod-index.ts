@@ -12,6 +12,7 @@ import {
   optionalWhen,
   stringifyPretty,
 } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { KernelModuleDefinition } from '../../contract/requires.js'
 import type {
@@ -101,13 +102,16 @@ export function parseModPackDirectoryManifest(
   try {
     parsed = JSON.parse(raw) as unknown
   } catch (error) {
-    throw new Error(`${manifestPath} 上的 ${VelarosModManifestFileName} 不是合法 JSON`, {
-      cause: error,
-    })
+    throw new AppError(
+      'VALIDATION',
+      `${manifestPath} 上的 ${VelarosModManifestFileName} 不是合法 JSON`,
+      error
+    )
   }
   const envelope = parseVelarosModEnvelope(parsed, { origin: manifestPath })
   if (!envelope.ok) {
-    throw new Error(
+    throw new AppError(
+      'VALIDATION',
       envelope.diagnostics
         .map((diagnostic) => `${diagnostic.path ?? '<root>'}: ${diagnostic.message}`)
         .join('; ')
@@ -120,7 +124,7 @@ export function parseModPackDirectoryManifest(
 export function parseKernelSystemModPacks(json: string): readonly KernelSystemModPackInput[] {
   const parsed = JSON.parse(json) as unknown
   if (!isArray(parsed)) {
-    throw new Error('VELAROS_KERNEL_SYSTEM_PACKS 必须是一个 JSON 数组')
+    throw new AppError('VALIDATION', 'VELAROS_KERNEL_SYSTEM_PACKS 必须是一个 JSON 数组')
   }
   return parsed as readonly KernelSystemModPackInput[]
 }

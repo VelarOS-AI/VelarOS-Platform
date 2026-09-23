@@ -3,6 +3,7 @@ import { createContextRuntime } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
 import { isUndefined, toNullable } from '@velaros-ai/core'
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { ModelDriver } from '@velaros-ai/model'
 
 import { OrganizeLimits } from '../../system/contract/constants.js'
@@ -95,7 +96,7 @@ export class ContextMaintenance implements ContextMaintenanceApi {
       this.profile.timeoutMs <= this.profile.callTimeoutMs + this.profile.finalizationMs ||
       this.profile.finalizationTokens <= this.profile.outputTokens
     )
-      throw new Error('上下文整理资源档位无效')
+      throw new AppError('VALIDATION', '上下文整理资源档位无效')
   }
   public active(id: string): boolean {
     return this.activities.has(id)
@@ -115,11 +116,11 @@ export class ContextMaintenance implements ContextMaintenanceApi {
       (!isUndefined(intent.preserve) &&
         (!isArray(intent.preserve) || intent.preserve.length > OrganizeLimits.preserve))
     )
-      throw Object.assign(new Error('整理意图格式无效'), { code: 'MEMORY_INPUT' })
+      throw new AppError('MEMORY_INPUT', '整理意图格式无效')
     for (let attempt = 0; attempt < 16; attempt++) {
       signal.throwIfAborted()
       const state = await this.dependencies.storage.load(id)
-      if (!state?.task?.id) throw new Error('整理需要已有任务')
+      if (!state?.task?.id) throw new AppError('UNAVAILABLE', '整理需要已有任务')
       const reset = state.task.startedSequence ?? 0
       const record = state.records.findLast(
         (item) => item.title === 'context-maintenance:request' && item.sequence > reset
@@ -140,9 +141,7 @@ export class ContextMaintenance implements ContextMaintenanceApi {
         preserve.length > OrganizeLimits.preserve ||
         preserve.some((ref) => !ref || ref.sessionId !== id || !memoryReference(state, ref))
       )
-        throw Object.assign(new Error('保留引用不在当前任务授权范围或数量超限'), {
-          code: 'SCOPE_MISMATCH',
-        })
+        throw new AppError('SCOPE_MISMATCH', '保留引用不在当前任务授权范围或数量超限')
       const requestId = pending?.requestId ?? crypto.randomUUID()
       const request = {
         requestId,
@@ -173,9 +172,7 @@ export class ContextMaintenance implements ContextMaintenanceApi {
       )
         return { ...request, boundary: 'next-model-request' as const }
     }
-    throw Object.assign(new Error('整理请求并发冲突，请按下一帧状态重试'), {
-      code: 'CONTEXT_CONFLICT',
-    })
+    throw new AppError('CONTEXT_CONFLICT', '整理请求并发冲突，请按下一帧状态重试')
   }
   public async status(id: string, signal: AbortSignal): Promise<unknown> {
     signal.throwIfAborted()
@@ -231,7 +228,7 @@ export class ContextMaintenance implements ContextMaintenanceApi {
       )
         return request
     }
-    throw Object.assign(new Error('整理请求认领发生并发冲突'), { code: 'CONTEXT_CONFLICT' })
+    throw new AppError('CONTEXT_CONFLICT', '整理请求认领发生并发冲突')
   }
   public async listMaterials(
     id: string,
@@ -276,7 +273,7 @@ export class ContextMaintenance implements ContextMaintenanceApi {
   ): Promise<ContextPatchReceipt> {
     signal.throwIfAborted()
     const activity = this.activities.get(id)
-    if (!activity) throw new Error('整理材料会话不存在')
+    if (!activity) throw new AppError('NOT_FOUND', '整理材料会话不存在')
     // 新交来的补丁先顶掉旧的受理：校验没过就是没有可发布的补丁；连续几次都不合格就让这次整理失败
     activity.patch = undefined
     const candidate = structuredClone(patch)
@@ -303,12 +300,13 @@ export class ContextMaintenance implements ContextMaintenanceApi {
   ): Promise<T> {
     signal.throwIfAborted()
     const activity = this.activities.get(id)
-    if (!activity) throw new Error('整理材料会话不存在')
+    if (!activity) throw new AppError('NOT_FOUND', '整理材料会话不存在')
     if (activity.failure) throw activity.failure
-    if (!activity.control.canExplore()) throw new Error('已进入收尾，请直接提交现有补丁及未解事项')
+    if (!activity.control.canExplore())
+      throw new AppError('LIMIT', '已进入收尾，请直接提交现有补丁及未解事项')
     if (activity.reads >= this.profile.reads || activity.chars >= this.profile.readChars) {
       activity.control.finalize('材料访问预算')
-      throw new Error('材料访问额度已用完，请交付已有结论')
+      throw new AppError('LIMIT', '材料访问额度已用完，请交付已有结论')
     }
     activity.reads++
     let value
@@ -325,7 +323,7 @@ export class ContextMaintenance implements ContextMaintenanceApi {
     const chars = JSON.stringify(value).length
     if (activity.chars + chars > this.profile.readChars) {
       activity.control.finalize('材料访问预算')
-      throw new Error('本页超过剩余材料预算，请交付已有结论')
+      throw new AppError('LIMIT', '本页超过剩余材料预算，请交付已有结论')
     }
     activity.chars += chars
     if (activity.reads >= this.profile.reads || activity.chars >= this.profile.readChars)
@@ -416,7 +414,7 @@ export class ContextMaintenance implements ContextMaintenanceApi {
         },
         authorizeReference: async (ref, check) => {
           check.throwIfAborted()
-          if (ref.sessionId !== id) throw new Error('脚本引用越界')
+          if (ref.sessionId !== id) throw new AppError('VALIDATION', '脚本引用越界')
         },
       }
       const session = await this.dependencies.open(id, current, tool, this.profile)
@@ -431,12 +429,13 @@ export class ContextMaintenance implements ContextMaintenanceApi {
         activity.signal
       )) {
         if (event.type === 'state' && event.status === 'completed') completed = true
-        if (event.type === 'error') failure = new Error(event.message)
+        if (event.type === 'error') failure = new AppError('CONTEXT_MAINTENANCE', event.message)
       }
       activity.signal.throwIfAborted()
       if (this.activities.get(id)?.failure) throw this.activities.get(id)!.failure
       const patch = this.activities.get(id)?.patch
-      if (!completed || !patch) throw failure ?? new Error('整理工具没有完成有效补丁')
+      if (!completed || !patch)
+        throw failure ?? new AppError('CONTEXT_MAINTENANCE', '整理工具没有完成有效补丁')
       await this.dependencies.close(id)
       opened = false
       await current.close()
@@ -532,7 +531,7 @@ export class ContextMaintenance implements ContextMaintenanceApi {
     signal.throwIfAborted()
     if (cleanupFailed) throw failure
     if ((failure as { code?: string })?.code === 'CONTEXT_CONFLICT')
-      throw Object.assign(new Error('整理材料变化，重新编译当前任务'), { code: 'STALE_VIEW' })
+      throw new AppError('STALE_VIEW', '整理材料变化，重新编译当前任务')
     return Boolean(report)
   }
 }

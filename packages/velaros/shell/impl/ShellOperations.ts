@@ -5,6 +5,7 @@
  */
 
 import { isNull, isTrue } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { ShellLimits } from '../contract/constants.js'
 import type { ShellOperationContext } from '../contract/requires.js'
@@ -84,14 +85,15 @@ export class ShellOperations implements ShellOperationsApi {
 
     if (ctx.observation) {
       if (background || interactive || plan.shouldStartInBackground || plan.isDangerous)
-        throw Object.assign(
-          new Error('观察会自动重跑，危险操作与持久后台任务请通过一次性执行入口运行。'),
-          { code: 'OBSERVATION_EFFECT_DENIED' }
+        throw new AppError(
+          'OBSERVATION_EFFECT_DENIED',
+          '观察会自动重跑，危险操作与持久后台任务请通过一次性执行入口运行。'
         )
       if (!ctx.shell.runObservationCommand)
-        throw Object.assign(new Error('宿主没有提供受限观察命令执行器；不能退回普通命令。'), {
-          code: 'OBSERVATION_SHELL_UNAVAILABLE',
-        })
+        throw new AppError(
+          'OBSERVATION_SHELL_UNAVAILABLE',
+          '宿主没有提供受限观察命令执行器；不能退回普通命令。'
+        )
       const result = await ctx.shell.runObservationCommand(
         command,
         {
@@ -106,9 +108,7 @@ export class ShellOperations implements ShellOperationsApi {
         ctx.abortSignal
       )
       if (result.cleanupIncomplete)
-        throw Object.assign(new Error('观察命令进程尚未完全收束，必须核对后再继续'), {
-          code: 'OBSERVATION_UNSETTLED',
-        })
+        throw new AppError('OBSERVATION_UNSETTLED', '观察命令进程尚未完全收束，必须核对后再继续')
       const shaped = runResult(result)
       if (!result.confinement || result.confinement.enforcement !== 'full')
         shaped.note =

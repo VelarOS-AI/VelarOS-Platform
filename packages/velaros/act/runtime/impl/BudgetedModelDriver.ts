@@ -1,4 +1,5 @@
 import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type {
   ModelDriverLimits,
   ModelInputEstimate,
@@ -74,7 +75,7 @@ export class BudgetedModelDriver implements BudgetedModelDriverApi {
     for await (const event of this.options.model.stream(request, combined)) {
       combined.throwIfAborted()
       if (event.type === 'usage') {
-        if (measured) throw new Error('子模型重复用量')
+        if (measured) throw new AppError('PROTOCOL', '子模型重复用量')
         measured = true
         const recorded = this.options.parent.recordUsage(event.inputTokens, event.outputTokens)
         this.accounting.add(recorded)

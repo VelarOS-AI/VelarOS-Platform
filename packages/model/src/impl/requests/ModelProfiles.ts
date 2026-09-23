@@ -1,3 +1,4 @@
+import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { ModelProfileCredentialSource } from '../../types/model'
@@ -68,7 +69,9 @@ export class ModelProfiles implements ModelProfilesApi {
     const forwardAbort = (): void => controller.abort(signal?.reason)
     signal?.addEventListener('abort', forwardAbort, { once: true })
     if (signal?.aborted) forwardAbort()
-    const timeout = timers.after(timeoutMs, () => controller.abort(new Error('连接检查超时。')))
+    const timeout = timers.after(timeoutMs, () =>
+      controller.abort(new AppError('TIMEOUT', '连接检查超时。'))
+    )
     try {
       return await operation(controller.signal)
     } finally {

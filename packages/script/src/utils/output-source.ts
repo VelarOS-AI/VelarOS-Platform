@@ -3,6 +3,7 @@ import ts from 'typescript'
 import { Log } from '@velaros-ai/core'
 import { isUndefined } from '@velaros-ai/core'
 import { isArray, isObject } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { ScriptOutputLimits } from '../contract/constants.js'
 import type {
@@ -31,14 +32,14 @@ function literal(node: ts.Expression): unknown {
         !ts.isPropertyAssignment(prop) ||
         (!ts.isIdentifier(prop.name) && !ts.isStringLiteral(prop.name))
       )
-        throw new Error('展示声明必须为字面量对象')
+        throw new AppError('VALIDATION', '展示声明必须为字面量对象')
       const key = prop.name.text
-      if (Object.hasOwn(value, key)) throw new Error('展示声明存在重复键')
+      if (Object.hasOwn(value, key)) throw new AppError('VALIDATION', '展示声明存在重复键')
       value[key] = literal(prop.initializer)
     }
     return value
   }
-  throw new Error('展示声明含有动态表达式，不能自动编辑')
+  throw new AppError('VALIDATION', '展示声明含有动态表达式，不能自动编辑')
 }
 
 /** 按真实导入符号识别顶层声明；同名局部函数不会被误判。 */
@@ -104,10 +105,10 @@ function declarations(source: string) {
       ts.isIdentifier(expr.expression) &&
       symbols.has(checker.getSymbolAtLocation(expr.expression)!)
     ) {
-      if (config) throw new Error('output.configure 重复声明')
+      if (config) throw new AppError('VALIDATION', 'output.configure 重复声明')
       config = call
       try {
-        if (call.arguments.length !== 1) throw new Error('配置参数无效')
+        if (call.arguments.length !== 1) throw new AppError('VALIDATION', '配置参数无效')
         configData = literal(call.arguments[0]!) as ScriptOutputConfig
         validateOutputOptions(configData, true)
       } catch {
@@ -117,7 +118,7 @@ function declarations(source: string) {
     }
   }
   if (new Set(calls.map((c) => c.data.key)).size !== calls.length)
-    throw new Error('源码存在重复 output key')
+    throw new AppError('VALIDATION', '源码存在重复 output key')
   return { file, calls, config, configData, dynamicConfig, outputName }
 }
 
@@ -150,12 +151,12 @@ export function editOutputSource(
     Object.keys(edit).some((k) => !['config', 'outputs'].includes(k)) ||
     (!edit.config && !edit.outputs?.length)
   )
-    throw new Error('输出补丁为空或含越权字段')
+    throw new AppError('VALIDATION', '输出补丁为空或含越权字段')
   const parsed = declarations(program.source)
   const changes: Array<{ start: number; end: number; text: string }> = []
   if (edit.config) {
     validateOutputOptions(edit.config, true)
-    if (parsed.dynamicConfig) throw new Error('动态 configure 不能自动改写')
+    if (parsed.dynamicConfig) throw new AppError('VALIDATION', '动态 configure 不能自动改写')
     if (parsed.config)
       changes.push({
         start: parsed.config.arguments[0]!.getStart(parsed.file),
@@ -163,7 +164,7 @@ export function editOutputSource(
         text: JSON.stringify(edit.config),
       })
     else {
-      if (!parsed.outputName) throw new Error('缺少直接导入的 output')
+      if (!parsed.outputName) throw new AppError('VALIDATION', '缺少直接导入的 output')
       const imports = parsed.file.statements.filter(ts.isImportDeclaration)
       const offset = imports.at(-1)?.end ?? 0
       changes.push({
@@ -174,15 +175,15 @@ export function editOutputSource(
     }
   }
   if (!isUndefined(edit.outputs) && (!isArray(edit.outputs) || edit.outputs.length > 64))
-    throw new Error('输出编辑数量无效')
+    throw new AppError('VALIDATION', '输出编辑数量无效')
   const seen = new Set<string>()
   for (const item of edit.outputs ?? []) {
     if (!item || Object.keys(item).some((k) => !['key', 'view'].includes(k)) || seen.has(item.key))
-      throw new Error('输出编辑身份重复或包含越权字段')
+      throw new AppError('VALIDATION', '输出编辑身份重复或包含越权字段')
     seen.add(item.key)
     validateOutputView(item.view)
     const target = parsed.calls.find((c) => c.data.key === item.key)
-    if (!target) throw new Error(`输出 ${item.key} 不存在可管理的静态声明`)
+    if (!target) throw new AppError('NOT_FOUND', `输出 ${item.key} 不存在可管理的静态声明`)
     const property = target.options.properties.find(
       (p) =>
         ts.isPropertyAssignment(p) &&
@@ -207,6 +208,6 @@ export function editOutputSource(
   let source = program.source
   for (const change of changes.sort((a, b) => b.start - a.start))
     source = source.slice(0, change.start) + change.text + source.slice(change.end)
-  if (source.length > 60000) throw new Error('编辑后的观察源码超限')
+  if (source.length > 60000) throw new AppError('LIMIT', '编辑后的观察源码超限')
   return { ...program, source }
 }

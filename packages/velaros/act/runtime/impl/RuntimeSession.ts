@@ -24,6 +24,7 @@ import { createContextRuntime, createContextView } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
 import { isNull, isUndefined, toNullable, toOptional } from '@velaros-ai/core'
 import { isEmpty, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { ModelImage, ModelTurnRequest, OperationRuntimeApi } from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
 import { createProviderRequestCompiler } from '@velaros-ai/model'
@@ -359,14 +360,12 @@ export class RuntimeSession implements VelarosSession {
         )
         signal.throwIfAborted()
         if (!checked.okToSend)
-          throw Object.assign(new Error('整理候选仍超过实际模型窗口，补丁未发布'), {
-            code: 'CONTEXT_BUDGET',
-          })
+          throw new AppError('CONTEXT_BUDGET', '整理候选仍超过实际模型窗口，补丁未发布')
       },
       validateDecision: (executionId, signal) => this.validateDecision(executionId, signal),
       context: this.context,
       runSignal: () => {
-        if (!this.runController) throw new Error('需要活动模型运行')
+        if (!this.runController) throw new AppError('UNAVAILABLE', '需要活动模型运行')
         return this.runController.signal
       },
       memory: this.memory,
@@ -564,15 +563,13 @@ export class RuntimeSession implements VelarosSession {
 
   public async *submit(input: string | ActInput, signal?: AbortSignal): AsyncIterable<ActRunEvent> {
     if (this.closed || this.active.size || this.controls.size)
-      throw new Error('会话已关闭或已有活动程序')
-    if (!this.agent) throw new Error('运行时尚未配置模型驱动')
-    if (this.modelRunning) throw new Error('会话已有活动模型运行')
+      throw new AppError('CLOSED', '会话已关闭或已有活动程序')
+    if (!this.agent) throw new AppError('UNAVAILABLE', '运行时尚未配置模型驱动')
+    if (this.modelRunning) throw new AppError('CONFLICT', '会话已有活动模型运行')
     if (!isString(input) && input.task === 'new' && this.dependencies.agents?.pending(this.id))
-      throw new Error('子任务仍在运行，不能切换逻辑任务')
+      throw new AppError('CONFLICT', '子任务仍在运行，不能切换逻辑任务')
     if (!isString(input) && input.task === 'new' && (await this.childNeedsReconcile()))
-      throw Object.assign(new Error('子任务未知效果需要先核对，不能切换任务'), {
-        code: 'NEEDS_RECONCILE',
-      })
+      throw new AppError('NEEDS_RECONCILE', '子任务未知效果需要先核对，不能切换任务')
     this.decision = undefined
     this.modelRunning = true
     this.runDeadline = Date.now() + this.dependencies.limits.timeoutMs
@@ -635,23 +632,24 @@ export class RuntimeSession implements VelarosSession {
   }
 
   public async steer(input: string | ActInput) {
-    if (!this.agent) throw new Error('会话没有模型运行服务')
+    if (!this.agent) throw new AppError('UNAVAILABLE', '会话没有模型运行服务')
     return this.agent.steer(input)
   }
   public async answer(answer: ActAnswer) {
-    if (!this.agent) throw new Error('会话没有模型运行服务')
+    if (!this.agent) throw new AppError('UNAVAILABLE', '会话没有模型运行服务')
     return this.agent.answer(answer)
   }
   public async inspect() {
-    if (!this.agent) throw new Error('会话没有模型运行服务')
+    if (!this.agent) throw new AppError('UNAVAILABLE', '会话没有模型运行服务')
     return this.agent.inspect()
   }
   public async waitForChanges(signal: AbortSignal): Promise<void> {
-    if (this.closed || !this.dependencies.stores) throw new Error('会话已关闭或没有获配 store')
+    if (this.closed || !this.dependencies.stores)
+      throw new AppError('CLOSED', '会话已关闭或没有获配 store')
     return this.dependencies.stores.wait(AbortSignal.any([signal, this.lifetime.signal]))
   }
   public async events(after?: number, limit?: number) {
-    if (!this.agent) throw new Error('会话没有模型运行服务')
+    if (!this.agent) throw new AppError('UNAVAILABLE', '会话没有模型运行服务')
     return this.agent.events(after, limit)
   }
   public async trace(turnId: string, maxChars?: number) {
@@ -671,7 +669,7 @@ export class RuntimeSession implements VelarosSession {
     signal: AbortSignal,
     detail?: unknown
   ) {
-    if (!this.agent) throw new Error('会话没有模型运行服务')
+    if (!this.agent) throw new AppError('UNAVAILABLE', '会话没有模型运行服务')
     return this.agent.request(kind, message, signal, detail)
   }
 
@@ -680,7 +678,7 @@ export class RuntimeSession implements VelarosSession {
     signal: AbortSignal = new AbortController().signal,
     options?: ScriptControlOptions
   ): Promise<ScriptSubmissionReceipt> {
-    if (this.closed || this.modelRunning) throw new Error('会话已关闭或正在运行模型')
+    if (this.closed || this.modelRunning) throw new AppError('CLOSED', '会话已关闭或正在运行模型')
     return this.control(
       input,
       signal,
@@ -696,8 +694,10 @@ export class RuntimeSession implements VelarosSession {
     options?: ScriptControlOptions
   ): Promise<ObservationRegistration> {
     const result = await this.script({ observe: program }, signal, options)
-    if (result.status === 'rejected')
-      throw Object.assign(new Error(result.observe?.message), result.observe)
+    if (result.status === 'rejected') {
+      const { code, message, ...fields } = result.observe ?? {}
+      throw AppError.withFields(code ?? 'VALIDATION', message ?? '', fields)
+    }
     return result.observe as ObservationRegistration
   }
 
@@ -712,11 +712,10 @@ export class RuntimeSession implements VelarosSession {
       signal,
       options
     )
-    if (result.status === 'rejected')
-      throw Object.assign(
-        new Error((result.execute as ScriptControlReceipt)?.message),
-        result.execute
-      )
+    if (result.status === 'rejected') {
+      const { code, message, ...fields } = (result.execute as ScriptControlReceipt) ?? {}
+      throw AppError.withFields(code ?? 'VALIDATION', message ?? '', fields)
+    }
     return result.execute as ScriptExecutionReceipt
   }
 
@@ -730,7 +729,7 @@ export class RuntimeSession implements VelarosSession {
     signal.throwIfAborted()
     const request = standardModules.parseScript(input)
     if (options && (!options.callId || options.callId.length > 2048))
-      throw new Error('调用身份长度无效')
+      throw new AppError('VALIDATION', '调用身份长度无效')
     const control = scriptControlIdentity(
       this.id,
       options?.callId ?? crypto.randomUUID(),
@@ -741,13 +740,11 @@ export class RuntimeSession implements VelarosSession {
     const running = this.controls.get(control.id)
     if (running) {
       if (running.fingerprint !== control.fingerprint)
-        throw Object.assign(new Error('同一调用身份不能用于另一份输入'), {
-          code: 'SCRIPT_CALL_CONFLICT',
-        })
+        throw new AppError('SCRIPT_CALL_CONFLICT', '同一调用身份不能用于另一份输入')
       return running.pending
     }
     if (this.closed || this.active.size || this.controls.size)
-      throw Object.assign(new Error('会话已关闭或已有活动脚本提交'), { code: 'SCRIPT_BUSY' })
+      throw new AppError('SCRIPT_BUSY', '会话已关闭或已有活动脚本提交')
     const controller = new AbortController()
     const cancel = (): void => controller.abort(signal.reason)
     this.controlController = controller
@@ -885,7 +882,7 @@ export class RuntimeSession implements VelarosSession {
   private async ensureView(signal?: AbortSignal): Promise<void> {
     if (this.view && !(await this.view.inspect())?.lease) {
       const goal = (await this.context.inspect()).protected[0]
-      if (!goal) throw new Error('先登记用户目标')
+      if (!goal) throw new AppError('VALIDATION', '先登记用户目标')
       await this.view.begin(goal, signal)
     }
   }
@@ -909,24 +906,20 @@ export class RuntimeSession implements VelarosSession {
     try {
       if (!('source' in program) && !('sourceRef' in program)) {
         if (execute || !control.expectedObservation)
-          throw Object.assign(new Error('当前没有可增量编辑的观察版本，请先提供 source'), {
-            code: 'SCRIPT_REF',
-          })
+          throw new AppError('SCRIPT_REF', '当前没有可增量编辑的观察版本，请先提供 source')
         program = { ...program, sourceRef: control.expectedObservation }
       }
       candidate = await this.resolveProgram(program, signal)
       if (!execute) {
         if (active !== control.expectedObservation)
-          throw Object.assign(new Error('模型看到的观察版本已经变化'), {
-            code: 'SCRIPT_CONFLICT',
+          throw AppError.withFields('SCRIPT_CONFLICT', '模型看到的观察版本已经变化', {
             currentRef: active,
           })
         if ('sourceRef' in program) {
           const base = await this.programs.version(program.sourceRef)
           const expected = base?.kind === 'draft' ? base.baseObservation : program.sourceRef
           if ((program.edits || base?.kind === 'draft') && expected !== active)
-            throw Object.assign(new Error('编辑底稿已不是当前观察版本'), {
-              code: 'SCRIPT_CONFLICT',
+            throw AppError.withFields('SCRIPT_CONFLICT', '编辑底稿已不是当前观察版本', {
               currentRef: active,
             })
         }
@@ -942,7 +935,10 @@ export class RuntimeSession implements VelarosSession {
       })
       if ('sourceRef' in program && program.edits) {
         const edited = script.edit(candidate, program.edits)
-        if (!edited.ok) throw Object.assign(new Error(edited.message), edited)
+        if (!edited.ok) {
+          const { code, message, ...fields } = edited
+          throw AppError.withFields(code, message, fields)
+        }
         candidate = edited.program
       }
       const check = script.check(candidate)
@@ -1048,16 +1044,15 @@ export class RuntimeSession implements VelarosSession {
 
   private async validateDecision(executionId: string, signal: AbortSignal): Promise<void> {
     if (await this.childNeedsReconcile())
-      throw Object.assign(new Error('子任务仍有未知效果，宿主需先调用 reconcile 核对'), {
-        code: 'NEEDS_RECONCILE',
-      })
+      throw new AppError('NEEDS_RECONCILE', '子任务仍有未知效果，宿主需先调用 reconcile 核对')
     const basis = this.decisions.get(executionId)
     if (!basis) return
     if (basis.missing?.length)
-      throw Object.assign(new Error('决策必需的观察正文尚未完整投递，请先修复输出范围或预算'), {
-        code: 'CONTEXT_REQUIRED',
-        effect: 'none',
-      })
+      throw AppError.withFields(
+        'CONTEXT_REQUIRED',
+        '决策必需的观察正文尚未完整投递，请先修复输出范围或预算',
+        { effect: 'none' }
+      )
     let reads = [...basis.reads]
     // 同一程序显式重新读取或自己的写回版本可以推进该资源的前提。
     for (const record of await this.dependencies.journal.list(this.id, executionId))
@@ -1072,15 +1067,17 @@ export class RuntimeSession implements VelarosSession {
         }
     const validation = await this.dependencies.kernel.validateReads(this.id, reads, signal)
     if (validation.status === 'stale')
-      throw Object.assign(
-        new Error('本次行动依据的观察资源已经变化，当前写入尚未派发；请重新观察'),
-        { code: 'STALE_OBSERVATION', effect: 'none' }
+      throw AppError.withFields(
+        'STALE_OBSERVATION',
+        '本次行动依据的观察资源已经变化，当前写入尚未派发；请重新观察',
+        { effect: 'none' }
       )
     if (validation.status === 'unverified')
-      throw Object.assign(new Error('原本可验证的观察资源现在无法核验，当前写入尚未派发'), {
-        code: 'OBSERVATION_UNVERIFIABLE',
-        effect: 'none',
-      })
+      throw AppError.withFields(
+        'OBSERVATION_UNVERIFIABLE',
+        '原本可验证的观察资源现在无法核验，当前写入尚未派发',
+        { effect: 'none' }
+      )
   }
 
   private async prepareObservation(signal: AbortSignal): Promise<void> {
@@ -1124,7 +1121,7 @@ export class RuntimeSession implements VelarosSession {
     decision: Optional<ScriptDecisionBasis> = this.decision
   ): Promise<CodeSurfaceOutcome> {
     if (this.closed || this.active.has(executionId))
-      return Promise.reject(new Error('会话已关闭或执行身份已占用'))
+      return Promise.reject(new AppError('CLOSED', '会话已关闭或执行身份已占用'))
     const controller = new AbortController()
     const cancel = (): void => controller.abort(signal?.reason)
     signal?.addEventListener('abort', cancel, { once: true })
@@ -1160,7 +1157,7 @@ export class RuntimeSession implements VelarosSession {
     if (isEmpty(pending)) return
     let cancel = (): void => {}
     const aborted = new Promise<never>((_resolve, reject) => {
-      cancel = () => reject(signal.reason ?? new Error('任务已取消'))
+      cancel = () => reject(signal.reason ?? new AppError('CANCELLED', '任务已取消'))
       signal.addEventListener('abort', cancel, { once: true })
     })
     try {
@@ -1193,7 +1190,7 @@ export class RuntimeSession implements VelarosSession {
         const cancel = (): void => {
           this.waiters.delete(wake)
           signal.removeEventListener('abort', cancel)
-          reject(signal.reason ?? new Error('任务已取消'))
+          reject(signal.reason ?? new AppError('CANCELLED', '任务已取消'))
         }
         this.waiters.add(wake)
         signal.addEventListener('abort', cancel, { once: true })
@@ -1231,9 +1228,7 @@ export class RuntimeSession implements VelarosSession {
         signal
       )
       if (this.jobs.size + input.executions.length > this.config.maxBlocks)
-        throw Object.assign(new Error('后台队列已达到本会话上限，先等待已有任务'), {
-          code: 'SCRIPT_QUEUE_LIMIT',
-        })
+        throw new AppError('SCRIPT_QUEUE_LIMIT', '后台队列已达到本会话上限，先等待已有任务')
       const saved = await this.programs.receipt(control)
       if (saved) {
         recoverScriptSubmission(saved, control)
@@ -1331,7 +1326,7 @@ export class RuntimeSession implements VelarosSession {
             })
             if (!ok) {
               failed = true
-              controller.abort(new Error('本批程序失败'))
+              controller.abort(new AppError('CANCELLED', '本批程序失败'))
             }
           } catch (error) {
             Log.tag('ActRuntime').debug('RuntimeSession 已进入异常处理或降级分支')
@@ -1475,7 +1470,7 @@ export class RuntimeSession implements VelarosSession {
     basis?: LooseOptional<ModelView>,
     decision?: ScriptDecisionBasis
   ): Promise<CodeSurfaceOutcome> {
-    if (signal.aborted) throw new Error('程序已取消')
+    if (signal.aborted) throw new AppError('CANCELLED', '程序已取消')
     const executionId = identity ?? crypto.randomUUID()
     const source = savedSource
       ? { ref: savedSource }
@@ -1732,7 +1727,7 @@ export class RuntimeSession implements VelarosSession {
       this.controls.size ||
       this.dependencies.agents?.pending(this.id)
     )
-      throw new Error('活动任务不能同时核对')
+      throw new AppError('CONFLICT', '活动任务不能同时核对')
     for (const job of await this.currentChildren()) {
       await this.reconcileStored(job.sessionId, signal)
       const task = (await this.dependencies.storage.load(job.sessionId))?.task
@@ -1905,7 +1900,7 @@ export class RuntimeSession implements VelarosSession {
   private async shutdown(): Promise<void> {
     const wasRunning = Boolean(this.active.size || this.modelRunning || this.controls.size)
     this.closed = true
-    this.lifetime.abort(new Error('会话已关闭'))
+    this.lifetime.abort(new AppError('CLOSED', '会话已关闭'))
     await Promise.allSettled([...this.hostOperations])
     const failures: unknown[] = []
     try {

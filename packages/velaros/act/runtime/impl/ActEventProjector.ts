@@ -1,4 +1,5 @@
 import type { ActEvent, ActRunEvent } from '@velaros-ai/agent'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { ActPresentation, ActRunPresentation } from '../types/presentation.js'
 
@@ -30,8 +31,9 @@ class ActEventProjector implements ActEventProjectorApi {
   >()
   public apply(record: ActEvent): ActPresentation {
     if (this.sessionId && this.sessionId !== record.sessionId)
-      throw new Error('事件投影不能混用会话')
-    if (record.runId !== record.event.runId) throw new Error('事件信封与运行身份不一致')
+      throw new AppError('VALIDATION', '事件投影不能混用会话')
+    if (record.runId !== record.event.runId)
+      throw new AppError('INVARIANT', '事件信封与运行身份不一致')
     this.sessionId = record.sessionId
     if (record.sequence <= this.state.cursor) return this.snapshot()
     this.applyLive(record.event)

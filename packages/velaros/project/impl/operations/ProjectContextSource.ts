@@ -14,6 +14,7 @@ import type {
 import { Log } from '@velaros-ai/core'
 import { toOptional } from '@velaros-ai/core'
 import { isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { ProjectContextSourceOptions } from '../../contract/requires.js'
 import type { Range } from '../../types/common.js'
@@ -65,9 +66,9 @@ export class ProjectContextSource implements ProjectContextSourceApi {
   ): Promise<readonly ContextSourceHit[]> {
     signal.throwIfAborted()
     if (this.options.sessionId && this.options.sessionId !== scope.sessionId)
-      throw Object.assign(new Error('会话不在此证据源范围内'), { code: 'DENIED' })
+      throw new AppError('DENIED', '会话不在此证据源范围内')
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
-      throw new Error('候选查询上限必须为 1–100')
+      throw new AppError('VALIDATION', '候选查询上限必须为 1–100')
     const result = await this.options.kernel.search({ query, maxResults: limit, regex: false })
     signal.throwIfAborted()
     return result.hits.slice(0, limit).map((hit) => ({
@@ -93,16 +94,14 @@ export class ProjectContextSource implements ProjectContextSourceApi {
     signal: AbortSignal
   ): Promise<ContextSourceRead> {
     if (!(await this.authorize(scope, target, signal)) || target.kind !== 'resource')
-      throw Object.assign(new Error('目标不在项目范围内'), { code: 'DENIED' })
+      throw new AppError('DENIED', '目标不在项目范围内')
     if (time.kind !== 'after-step')
-      throw Object.assign(new Error('项目源提供当前版本；历史正文需使用已归档的材料引用'), {
-        code: 'UNSUPPORTED_TIME',
-      })
+      throw new AppError('UNSUPPORTED_TIME', '项目源提供当前版本；历史正文需使用已归档的材料引用')
     const stat = await this.options.kernel.stat({ path: target.resourceId })
     if (!stat.exists || stat.kind !== 'file')
-      throw Object.assign(new Error('文件不存在或不是文件'), { code: 'SOURCE_UNAVAILABLE' })
+      throw new AppError('SOURCE_UNAVAILABLE', '文件不存在或不是文件')
     if (!stat.readableText || stat.isBinary)
-      throw Object.assign(new Error('此资源需要二进制或文档适配器'), { code: 'UNSUPPORTED_MEDIA' })
+      throw new AppError('UNSUPPORTED_MEDIA', '此资源需要二进制或文档适配器')
     let range: Optional<Partial<Range>>
     if (target.selector?.kind === 'lines')
       range = { startLine: target.selector.start, endLine: target.selector.end }
@@ -112,9 +111,7 @@ export class ProjectContextSource implements ProjectContextSourceApi {
         (symbol) => symbol.name === name
       )
       if (symbols.length !== 1)
-        throw Object.assign(new Error('符号不存在或不唯一，请提供精确范围'), {
-          code: 'AMBIGUOUS_SYMBOL',
-        })
+        throw new AppError('AMBIGUOUS_SYMBOL', '符号不存在或不唯一，请提供精确范围')
       range = symbols[0]!.range
     }
     const result =
@@ -129,7 +126,7 @@ export class ProjectContextSource implements ProjectContextSourceApi {
           })
     signal.throwIfAborted()
     if (result && !isString(result.content))
-      throw Object.assign(new Error('源没有返回文本正文'), { code: 'UNSUPPORTED_MEDIA' })
+      throw new AppError('UNSUPPORTED_MEDIA', '源没有返回文本正文')
     const original =
       result?.content ??
       JSON.stringify({

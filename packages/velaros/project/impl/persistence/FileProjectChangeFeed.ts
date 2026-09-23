@@ -14,6 +14,8 @@ import {
 } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
+import { AppError } from '@velaros-ai/core/error'
+
 import type { ProjectChangeFeedWriter } from '../../contract/requires.js'
 import type { FileProjectChangeFeedOptions, ProjectChangeRecord } from '../../types/change-feed.js'
 import { isProjectChangeRecord } from '../../utils/transactions/change-records.js'
@@ -75,7 +77,7 @@ export class FileProjectChangeFeed
       try {
         const change: unknown = JSON.parse(line)
         if (!isProjectChangeRecord(change))
-          throw new Error('变更记录文件里有一行不是合法的变更记录。')
+          throw new AppError('VALIDATION', '变更记录文件里有一行不是合法的变更记录。')
         this.hydrate(change)
       } catch (error) {
         const isLastPartialLine = index === lines.length - 1 && !source.endsWith('\n')
@@ -85,7 +87,7 @@ export class FileProjectChangeFeed
   }
 
   protected persist(change: ProjectChangeRecord): void {
-    if (this.closed) throw new Error('变更记录已经关闭，不能再记录。')
+    if (this.closed) throw new AppError('CLOSED', '变更记录已经关闭，不能再记录。')
     appendFileSync(this.descriptor, `${JSON.stringify(change)}\n`, 'utf8')
     fsyncSync(this.descriptor)
   }

@@ -3,6 +3,7 @@ import { join } from 'node:path'
 
 import type { ContextRecord, ContextStorage } from '@velaros-ai/context'
 import { isEmpty, isObject, isUndefined, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 /** 会话范围绑定只通过已有 ContextStorage 的原子提交维护。 */
 export interface RuntimeWorkspaceBindingApi {
@@ -33,9 +34,9 @@ export class RuntimeWorkspaceBinding implements RuntimeWorkspaceBindingApi {
           !('workspace' in binding) ||
           binding.workspace !== (this.workspace ?? '')
         )
-          throw Object.assign(
-            new Error('会话工作区已经变化或旧绑定损坏，请为新的工作区建立会话。'),
-            { code: 'WORKSPACE_BINDING_MISMATCH' }
+          throw new AppError(
+            'WORKSPACE_BINDING_MISMATCH',
+            '会话工作区已经变化或旧绑定损坏，请为新的工作区建立会话。'
           )
       }
     }
@@ -53,9 +54,10 @@ export class RuntimeWorkspaceBinding implements RuntimeWorkspaceBindingApi {
           records.length !== 1 ||
           (await this.storage.get(sessionId, records[0]!.objectId)) !== body
         )
-          throw Object.assign(new Error('会话工作区已经变化或绑定损坏，请为新的工作区建立会话。'), {
-            code: 'WORKSPACE_BINDING_MISMATCH',
-          })
+          throw new AppError(
+            'WORKSPACE_BINDING_MISMATCH',
+            '会话工作区已经变化或绑定损坏，请为新的工作区建立会话。'
+          )
         return
       }
       objectId ??= await this.storage.put(sessionId, body)

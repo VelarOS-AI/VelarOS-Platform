@@ -2,6 +2,7 @@ import { chmod, unlink } from 'node:fs/promises'
 import { createServer, type Server, type Socket } from 'node:net'
 
 import { isBlank, isNotUndefined, isUndefined, Log } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { KernelRpcLimits } from '../../contract/constants'
 import type { KernelRegistration } from '../../contract/provides'
@@ -101,17 +102,18 @@ export class KernelLocalRpcServer implements KernelLocalRpcServerApi {
 
   public constructor(private readonly options: KernelLocalRpcServerOptions) {
     if (options.authToken.length < KernelLocalRpcServer.MinimumAuthTokenLength) {
-      throw new Error(
+      throw new AppError(
+        'VALIDATION',
         `Kernel RPC 的认证令牌至少要 ${KernelLocalRpcServer.MinimumAuthTokenLength} 个字符`
       )
     }
     this.maxFrameBytes = options.maxFrameBytes ?? KernelRpcLimits.maxFrameBytes
     if (!Number.isInteger(this.maxFrameBytes) || this.maxFrameBytes <= 0) {
-      throw new Error('maxFrameBytes 必须是正整数')
+      throw new AppError('VALIDATION', 'maxFrameBytes 必须是正整数')
     }
     this.requestedEndpoint = options.endpoint ?? createDefaultKernelRpcEndpoint()
     if (this.requestedEndpoint.kind === 'tcp' && this.requestedEndpoint.host !== '127.0.0.1') {
-      throw new Error('Kernel 的 TCP RPC 端点只能绑回环地址')
+      throw new AppError('VALIDATION', 'Kernel 的 TCP RPC 端点只能绑回环地址')
     }
     this.server = createServer((socket) => this.accept(socket))
   }
@@ -119,7 +121,7 @@ export class KernelLocalRpcServer implements KernelLocalRpcServerApi {
   public async start(): Promise<KernelRpcEndpoint> {
     switch (this.state) {
       case 'disposed':
-        throw new Error('已回收的 Kernel RPC 服务端不能再启动')
+        throw new AppError('CLOSED', '已回收的 Kernel RPC 服务端不能再启动')
       case 'listening':
         return this.getEndpoint()
       case 'idle':
@@ -150,7 +152,7 @@ export class KernelLocalRpcServer implements KernelLocalRpcServerApi {
 
   public getEndpoint(): KernelRpcEndpoint {
     if (isUndefined(this.resolvedEndpoint)) {
-      throw new Error('Kernel RPC 服务端还没启动')
+      throw new AppError('UNAVAILABLE', 'Kernel RPC 服务端还没启动')
     }
     return this.resolvedEndpoint
   }

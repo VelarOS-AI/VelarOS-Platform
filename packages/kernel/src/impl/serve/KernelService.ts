@@ -1,4 +1,5 @@
 import { isBlank, isNotUndefined, isUndefined, Log } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { KernelCallErrorCodes, KernelErrorCodes } from '../../contract/constants'
 import type { KernelRegistration } from '../../contract/provides'
@@ -101,7 +102,7 @@ export class KernelService implements KernelServiceApi {
 
   public constructor(private readonly options: KernelServiceOptions) {
     if (isBlank(options.kernelVersion.trim())) {
-      throw new Error('内核版本号不能为空')
+      throw new AppError('VALIDATION', '内核版本号不能为空')
     }
     this.clientAccessBroker = options.clientAccessBroker ?? new DenyAllKernelClientAccessBroker()
     this.capabilityInvoker = new KernelCapabilityInvoker(options.host)
@@ -114,7 +115,7 @@ export class KernelService implements KernelServiceApi {
   public start(): Promise<void> {
     switch (this.status) {
       case 'disposed':
-        return Promise.reject(new Error('已回收的 Kernel service 不能再启动'))
+        return Promise.reject(new AppError('CLOSED', '已回收的 Kernel service 不能再启动'))
       case 'failed':
         return Promise.reject(startFailedFailure(this.startFailure))
       case 'started':
@@ -368,7 +369,7 @@ export class KernelService implements KernelServiceApi {
   ): KernelRegistration {
     this.assertStarted()
     if (isBlank(type.trim())) {
-      throw new Error('内核事件类型不能为空')
+      throw new AppError('VALIDATION', '内核事件类型不能为空')
     }
     return this.options.host.subscribe(type, handler)
   }

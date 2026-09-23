@@ -4,6 +4,7 @@
  */
 
 import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { Gate, Waiter } from '../../types/agent.js'
 
@@ -59,7 +60,7 @@ export class ProjectExecutionGate implements ProjectExecutionGateApi {
           if (index < 0) return
           current.queue.splice(index, 1)
           signal.removeEventListener('abort', waiter.cancel)
-          reject(signal.reason ?? new Error('等待项目资源门时操作被取消'))
+          reject(signal.reason ?? new AppError('CANCELLED', '等待项目资源门时操作被取消'))
           this.drain(root, current)
         },
       }

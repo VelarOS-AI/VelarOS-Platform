@@ -11,6 +11,12 @@
 - 生成物（`contract/surface.ts`、`baselines/`）、模型面代码模版、vendor、测试夹具、`docs/` 与 Markdown 不参与格式化，见 `.prettierignore`；生成物的版式由生成器决定。
 - 检查脚本与 lint 指令不能依赖源码排版：判断 import、类型等结构用语法树，`eslint-disable-next-line` 紧贴它要管的那一行。
 
+# 错误
+
+- 产品代码里抛的错都从 core 造（`@velaros-ai/core/error`）：`new AppError(code, message)`；要挂 `effect` 这类调用方直接读的字段用 `AppError.withFields(code, message, fields)`；取消与超时用 `createAbortError` / `createTimeoutError`。不直接 `new Error`，`check:error-construction` 按语法树核对。
+- 错误码先用通用码（VALIDATION、NOT_FOUND、CONFLICT、CLOSED、UNAVAILABLE、CANCELLED、TIMEOUT、LIMIT、PROTOCOL、PERMISSION、INVARIANT），领域要让程序分支时再给专属码。
+- 例外只有检查脚本里登记的几处（core 的错误模块、不依赖 core 的 agent-lab、整段注入 QuickJS 隔离堆的 output-capture），每条写明理由。
+
 # 模块结构与所有权
 
 以 `scripts/ownership/governed-modules.mjs` 的逐模块登记、包清单 exports 和实际检查器为准；完整规范见 `docs/architecture/module-ownership.md`。

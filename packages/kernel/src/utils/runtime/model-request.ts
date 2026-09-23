@@ -1,5 +1,6 @@
 import { isUndefined } from '@velaros-ai/core'
 import { isEmpty, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type {
   ModelHistoryMessage,
@@ -20,7 +21,7 @@ export function validateModelImages(images: readonly ModelImage[]): void {
     images.length > 20 ||
     images.reduce((bytes, image) => bytes + image.data.length, 0) > 20 * 1024 * 1024
   )
-    throw new Error('图像附件超过单次容量')
+    throw new AppError('LIMIT', '图像附件超过单次容量')
   for (const image of images)
     if (
       image.type !== 'image-data' ||
@@ -34,7 +35,7 @@ export function validateModelImages(images: readonly ModelImage[]): void {
       image.data.length % 4 !== 0 ||
       !/^[A-Za-z0-9+/]*={0,2}$/u.test(image.data)
     )
-      throw new Error('图像附件格式或容量无效')
+      throw new AppError('VALIDATION', '图像附件格式或容量无效')
 }
 /** 图片作为图像块发送，标签仍是普通材料，不能变成指令。 */
 export function driverModelMessages(request: ModelTurnRequest): ModelHistoryMessage[] {
@@ -44,18 +45,19 @@ export function driverModelMessages(request: ModelTurnRequest): ModelHistoryMess
   const allImages = [...images]
   for (const message of history) {
     if (message.role === 'assistant') {
-      if (!isString(message.content)) throw new Error('assistant 历史只能包含文本')
+      if (!isString(message.content)) throw new AppError('VALIDATION', 'assistant 历史只能包含文本')
       continue
     }
-    if (message.role !== 'user') throw new Error('历史角色必须为 user 或 assistant')
+    if (message.role !== 'user')
+      throw new AppError('VALIDATION', '历史角色必须为 user 或 assistant')
     if (isString(message.content)) continue
     for (const part of message.content) {
       if (part.type === 'text') {
-        if (!isString(part.text)) throw new Error('历史文本无效')
+        if (!isString(part.text)) throw new AppError('VALIDATION', '历史文本无效')
         continue
       }
       if (part.type !== 'image' || !part.image.startsWith(`data:${part.mediaType};base64,`))
-        throw new Error('历史图像必须是已归档的直接数据')
+        throw new AppError('VALIDATION', '历史图像必须是已归档的直接数据')
       allImages.push({
         type: 'image-data',
         label: 'history',

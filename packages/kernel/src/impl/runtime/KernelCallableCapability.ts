@@ -1,4 +1,5 @@
 import { isBlank, isUndefined } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type {
   KernelCallableCapabilityOperation,
@@ -27,7 +28,7 @@ export class KernelCallableCapability implements KernelCallableCapabilityService
   public constructor(operations: Readonly<Record<string, KernelCallableCapabilityOperation>>) {
     for (const [operation, definition] of Object.entries(operations)) {
       if (isBlank(operation.trim())) {
-        throw new Error('可调用能力的操作名不能为空')
+        throw new AppError('VALIDATION', '可调用能力的操作名不能为空')
       }
       this.operations.set(
         operation,

@@ -10,6 +10,7 @@
 // wire 上永远走 Node 侧原名(remote-node 契约已判决)。因此每条投影都带着 remote 原名,
 // `invoke` 时按 binding 换回去。丢掉这层映射就等于把调用发到一个 Node 不认识的能力上。
 import { isPresent, isUndefined } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { KernelVersionAxes } from '../../contract/constants'
 import type { KernelModuleDefinition } from '../../contract/requires'
@@ -187,7 +188,10 @@ export class RemoteNodeProjection implements RemoteNodeProjectionApi {
           // `isolation: 'remote'` 的模块由宿主注入的 adapter 激活,本函数永远不会被 Kernel 调到;
           // 真被调到说明装配漏了 adapter,此时炸掉比静默注册一张空能力面安全。
           activate: () => {
-            throw new Error(`远程模块 "${localModuleId}" 必须由远程隔离适配器来激活`)
+            throw new AppError(
+              'VALIDATION',
+              `远程模块 "${localModuleId}" 必须由远程隔离适配器来激活`
+            )
           },
         }) satisfies KernelModuleDefinition
     )

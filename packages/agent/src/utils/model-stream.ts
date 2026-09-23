@@ -1,5 +1,6 @@
 import { Log } from '@velaros-ai/core'
 import { isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { ModelDriver, ModelTurnDelta, ModelTurnRequest } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 
@@ -10,7 +11,7 @@ export async function boundedModelOperation<T>(
 ): Promise<T> {
   let cancel: () => void = () => {}
   const aborted = new Promise<never>((_resolve, reject) => {
-    cancel = () => reject(signal.reason ?? new Error('模型准备已取消'))
+    cancel = () => reject(signal.reason ?? new AppError('CANCELLED', '模型准备已取消'))
     signal.addEventListener('abort', cancel, { once: true })
     if (signal.aborted) cancel()
   })
@@ -33,7 +34,7 @@ export async function* boundedModelStream(
       signal.throwIfAborted()
       let cancel: () => void = () => {}
       const aborted = new Promise<never>((_resolve, reject) => {
-        cancel = () => reject(signal.reason ?? new Error('模型调用已取消'))
+        cancel = () => reject(signal.reason ?? new AppError('CANCELLED', '模型调用已取消'))
         signal.addEventListener('abort', cancel, { once: true })
       })
       let result: IteratorResult<ModelTurnDelta>
@@ -46,13 +47,13 @@ export async function* boundedModelStream(
       if (result.done) return
       const delta = result.value
       if (!delta || !['output', 'text', 'usage', 'error', 'finish'].includes(delta.type))
-        throw new Error('模型响应包含契约之外的事件')
+        throw new AppError('PROTOCOL', '模型响应包含契约之外的事件')
       if (delta.type === 'text' && (request.response.type !== 'text' || !isString(delta.text)))
-        throw new Error('模型文本增量不符合响应模式')
+        throw new AppError('PROTOCOL', '模型文本增量不符合响应模式')
       if (delta.type === 'output' && request.response.type !== 'json')
-        throw new Error('文本模式不能返回结构化响应事件')
+        throw new AppError('PROTOCOL', '文本模式不能返回结构化响应事件')
       if (delta.type === 'finish' && !['stop', 'length'].includes(delta.reason))
-        throw new Error('模型响应结束原因不符合契约')
+        throw new AppError('PROTOCOL', '模型响应结束原因不符合契约')
       yield delta.type === 'output'
         ? { type: 'output', value: modelRequestEncoder.output(request.response, delta.value) }
         : delta

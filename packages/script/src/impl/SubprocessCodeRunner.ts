@@ -1,4 +1,5 @@
 import { isEmpty, isObject, isTrue, Log } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { CodeSurfaceErrorCodes, ScriptOutputLimits } from '../contract/constants.js'
@@ -163,7 +164,7 @@ class SubprocessCodeRunner implements CodeRunnerApi {
               message.callId <= 0 ||
               pendingCalls.has(message.callId)
             )
-              throw new Error('隔离调用身份无效。')
+              throw new AppError('PROTOCOL', '隔离调用身份无效。')
             pendingCalls.add(message.callId)
             void serveCapabilityCall(message, dispatch, holdClock).then(
               (result) => {
@@ -193,7 +194,7 @@ class SubprocessCodeRunner implements CodeRunnerApi {
                 outputChars + chars > ScriptOutputLimits.rawChars ||
                 output.blocks.some((block) => block.key === event.block!.key)
               )
-                throw new Error('隔离输出超限或身份重复')
+                throw new AppError('LIMIT', '隔离输出超限或身份重复')
               outputChars += chars
               output.blocks.push({ ...event.block, chars })
             }

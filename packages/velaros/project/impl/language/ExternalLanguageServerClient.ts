@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import { isArray, isNull, isNumber, isPlainObject, isString, Log } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type {
@@ -122,7 +123,10 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
       if (this.child !== child) return
       this.child = null
       this.fail(
-        new Error(`语言服务 ${this.spec.id} 已退出（${code ?? exitSignal ?? '原因未知'}）。`)
+        new AppError(
+          'CLOSED',
+          `语言服务 ${this.spec.id} 已退出（${code ?? exitSignal ?? '原因未知'}）。`
+        )
       )
     })
     const rootUri = pathToFileURL(resolve(this.projectRoot)).href
@@ -289,7 +293,8 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
   /** 发一条请求；进程没起来就直接拒。 */
   private request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
     const child = this.child
-    if (!child) return Promise.reject(new Error(`语言服务 ${this.spec.id} 没有在运行。`))
+    if (!child)
+      return Promise.reject(new AppError('UNAVAILABLE', `语言服务 ${this.spec.id} 没有在运行。`))
     return this.requestWithChild(child, method, params, signal)
   }
 
@@ -321,7 +326,11 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
         reject: (error) => finish(undefined, error),
         timer: this.timers.after(
           timeoutMs,
-          () => finish(undefined, new Error(`语言服务 ${this.spec.id} 的 ${method} 请求超时。`)),
+          () =>
+            finish(
+              undefined,
+              new AppError('TIMEOUT', `语言服务 ${this.spec.id} 的 ${method} 请求超时。`)
+            ),
           { label: `${this.spec.id}.${method}` }
         ),
         removeAbort: () => signal?.removeEventListener('abort', onAbort),
@@ -332,7 +341,7 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
   /** 发一条通知（不等回执）；进程没起来就抛。 */
   private notify(method: string, params: unknown): void {
     const child = this.child
-    if (!child) throw new Error(`语言服务 ${this.spec.id} 没有在运行。`)
+    if (!child) throw new AppError('UNAVAILABLE', `语言服务 ${this.spec.id} 没有在运行。`)
     notifyLanguageServer(child, method, params)
   }
 
@@ -370,7 +379,10 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
       if (!pending) return
       if (isPlainObject(value.error)) {
         pending.reject(
-          new Error(isString(value.error.message) ? value.error.message : '语言服务请求失败。')
+          new AppError(
+            'UNAVAILABLE',
+            isString(value.error.message) ? value.error.message : '语言服务请求失败。'
+          )
         )
       } else {
         pending.resolve(value.result)

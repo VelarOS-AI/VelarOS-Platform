@@ -1,3 +1,5 @@
+import { AppError } from '@velaros-ai/core/error'
+
 import type { KernelClientTransport } from '../../contract/requires'
 import type {
   CapabilityCallRequest,
@@ -65,7 +67,7 @@ export class CapabilitySession implements CapabilitySessionApi {
 
   private assertOpen(): void {
     if (this.disposed) {
-      throw new Error(`能力会话 "${this.sessionId}" 已经关掉了，重新开一条再调`)
+      throw new AppError('CLOSED', `能力会话 "${this.sessionId}" 已经关掉了，重新开一条再调`)
     }
   }
 }

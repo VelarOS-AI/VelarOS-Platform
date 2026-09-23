@@ -1,4 +1,5 @@
 import type { ContextState, ContextStorage } from '@velaros-ai/context'
+import { AppError } from '@velaros-ai/core/error'
 
 /** 当前会话元数据的短暂提交缓冲，原文沿用原对象存储。 */
 export interface ContextPatchStoreApi extends ContextStorage {
@@ -28,7 +29,8 @@ export class ContextPatchStore implements ContextPatchStoreApi {
     this.state = structuredClone(base)
   }
   private check(sessionId: string): void {
-    if (this.closed || sessionId !== this.id) throw new Error('上下文提交缓冲已关闭或引用越界')
+    if (this.closed || sessionId !== this.id)
+      throw new AppError('CLOSED', '上下文提交缓冲已关闭或引用越界')
   }
   public async load(sessionId: string) {
     this.check(sessionId)

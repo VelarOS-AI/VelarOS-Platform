@@ -3,6 +3,8 @@
  * 内存里按事务号保存每个事务的最新一条记录、按序号排序、通知订阅者；落不落盘由子类的 persist 决定。
  */
 
+import { AppError } from '@velaros-ai/core/error'
+
 import { ProjectTransactionLimits } from '../../contract/constants.js'
 import type { ProjectChangeFeedWriter } from '../../contract/requires.js'
 import type {
@@ -21,7 +23,7 @@ export abstract class BaseProjectChangeFeed implements ProjectChangeFeedWriter {
   /** 收下一条已经落好的记录：序号必须严格递增，同一事务只留最新一条。 */
   protected hydrate(change: ProjectChangeRecord): void {
     if (change.sequence <= this.lastSequence) {
-      throw new Error('变更记录的序号必须严格递增。')
+      throw new AppError('VALIDATION', '变更记录的序号必须严格递增。')
     }
     this.lastSequence = change.sequence
     this.changes.set(change.transactionId, cloneChange(change))

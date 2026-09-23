@@ -1,6 +1,7 @@
 import { createContextRuntime } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { AgentSupervisorOptions } from '../contract/requires.js'
 import type { ActInput, ActRunEvent } from '../types/act.js'
@@ -46,7 +47,8 @@ class AgentSupervisor implements AgentSupervisorApi {
   private closed = false
   public constructor(private readonly options: AgentSupervisorOptions) {
     for (const v of [options.concurrency, options.maxChildren])
-      if (!Number.isSafeInteger(v) || v < 1) throw new Error('子任务配额必须为正整数')
+      if (!Number.isSafeInteger(v) || v < 1)
+        throw new AppError('VALIDATION', '子任务配额必须为正整数')
   }
   public pending(parent: string): boolean {
     return (
@@ -67,7 +69,8 @@ class AgentSupervisor implements AgentSupervisorApi {
   public async start(parent: string, input: AgentStart, signal: AbortSignal): Promise<AgentJob> {
     return this.lock(async () => {
       signal.throwIfAborted()
-      if (!input.task?.trim() || !input.profile?.trim()) throw new Error('子任务需要目标与宿主配置')
+      if (!input.task?.trim() || !input.profile?.trim())
+        throw new AppError('VALIDATION', '子任务需要目标与宿主配置')
       const snapshot = await this.options.storage.load(parent)
       const count = new Set(
         snapshot?.records
@@ -78,7 +81,7 @@ class AgentSupervisor implements AgentSupervisorApi {
           )
           .map((r) => r.title)
       ).size
-      if (count >= this.options.maxChildren) throw new Error('父任务子会话额度耗尽')
+      if (count >= this.options.maxChildren) throw new AppError('LIMIT', '父任务子会话额度耗尽')
       const id = crypto.randomUUID()
       const job: AgentJob = {
         id,
@@ -104,10 +107,10 @@ class AgentSupervisor implements AgentSupervisorApi {
   ): Promise<AgentJob> {
     return this.lock(async () => {
       signal.throwIfAborted()
-      if (!input.input?.trim()) throw new Error('续跑需要输入')
+      if (!input.input?.trim()) throw new AppError('VALIDATION', '续跑需要输入')
       const prior = await this.status(parent, id)
       if (prior.parentTaskId !== (await this.options.storage.load(parent))?.task?.id)
-        throw new Error('子任务属于先前逻辑任务，不能隐式续跑')
+        throw new AppError('CONFLICT', '子任务属于先前逻辑任务，不能隐式续跑')
       const {
         error: _error,
         result: _result,
@@ -144,12 +147,13 @@ class AgentSupervisor implements AgentSupervisorApi {
   public async status(parent: string, id: string): Promise<AgentJob> {
     const live = this.active.get(id)
     if (live) {
-      if (live.job.parentSessionId !== parent) throw new Error('子运行不属于当前父任务')
+      if (live.job.parentSessionId !== parent)
+        throw new AppError('PERMISSION', '子运行不属于当前父任务')
       return structuredClone(live.job)
     }
     const snapshot = await this.options.storage.load(parent)
     const record = snapshot?.records.findLast((r) => r.title === `act:child:${id}`)
-    if (!record) throw new Error('子运行不存在或不在当前范围')
+    if (!record) throw new AppError('NOT_FOUND', '子运行不存在或不在当前范围')
     const job = JSON.parse((await this.options.storage.get(parent, record.objectId))!) as AgentJob
     return job.status === 'running' || job.status === 'waiting'
       ? { ...job, status: 'interrupted' }
@@ -173,7 +177,8 @@ class AgentSupervisor implements AgentSupervisorApi {
     await this.status(parent, id)
     const live = this.active.get(id)
     const request = live?.job.pending?.find((item) => item.id === requestId)
-    if (!live?.session || !request) throw new Error('子运行请求已结束、被回答或需要中断恢复')
+    if (!live?.session || !request)
+      throw new AppError('CONFLICT', '子运行请求已结束、被回答或需要中断恢复')
     await live.session.answer({ id: request.id, runId: request.runId, value })
     // 等到原事件流把回答持久化到父任务，随后 wait 不会再次返回同一请求。
     while (this.active.has(id) && live.job.pending?.some((item) => item.id === requestId))
@@ -182,7 +187,7 @@ class AgentSupervisor implements AgentSupervisorApi {
   public async send(parent: string, id: string, input: ActInput | string): Promise<void> {
     await this.status(parent, id)
     const live = this.active.get(id)
-    if (!live?.session) throw new Error('子运行尚未就绪或已经结束')
+    if (!live?.session) throw new AppError('UNAVAILABLE', '子运行尚未就绪或已经结束')
     await live.session.steer(input)
   }
   public async cancel(parent: string, id: string): Promise<AgentJob> {
@@ -219,14 +224,14 @@ class AgentSupervisor implements AgentSupervisorApi {
   }
   private assertAvailable(job: AgentJob): void {
     if (this.closed || this.active.size >= this.options.concurrency || this.active.has(job.id))
-      throw new Error('子运行并发额度耗尽或重复激活')
+      throw new AppError('CONFLICT', '子运行并发额度耗尽或重复激活')
     for (const current of this.active.values())
       if (
         job.writes.some((a) =>
           current.job.writes.some((b) => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`))
         )
       )
-        throw new Error('活动子任务写入范围冲突')
+        throw new AppError('CONFLICT', '活动子任务写入范围冲突')
   }
   private launch(
     job: AgentJob,

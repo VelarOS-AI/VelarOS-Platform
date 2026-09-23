@@ -9,6 +9,7 @@ import {
   isPlainObject,
   isString,
 } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { OperationSchema } from '../../types/operations.js'
 
@@ -19,13 +20,13 @@ export function immutableOperationJson<T>(value: T): T {
     if (isNull(item) || isString(item) || isBoolean(item)) return item
     if (isFiniteNumber(item)) return item
     if ((!isObject(item) && !isNull(item)) || seen.has(item))
-      throw new Error('操作数据必须是无环 JSON 值')
+      throw new AppError('VALIDATION', '操作数据必须是无环 JSON 值')
     if (
       Object.getPrototypeOf(item) !== Object.prototype &&
       !isNull(Object.getPrototypeOf(item)) &&
       !isArray(item)
     )
-      throw new Error('操作数据必须是普通 JSON 对象')
+      throw new AppError('VALIDATION', '操作数据必须是普通 JSON 对象')
     seen.add(item)
     const result = isArray(item)
       ? item.map(copy)
@@ -132,13 +133,13 @@ export function validateOperationSchema(
     'maxItems',
   ])
   for (const key of Object.keys(schema))
-    if (!keywords.has(key)) throw new Error(`不支持的 schema 关键字 ${key}`)
+    if (!keywords.has(key)) throw new AppError('VALIDATION', `不支持的 schema 关键字 ${key}`)
   if (
     schema.$ref &&
     (!/^#\/definitions\/[A-Za-z0-9_]+$/u.test(schema.$ref) ||
       !Object.hasOwn(definitions, schema.$ref.slice('#/definitions/'.length)))
   )
-    throw new Error('schema 引用必须指向当前合同定义')
+    throw new AppError('VALIDATION', 'schema 引用必须指向当前合同定义')
   for (const field of Object.values(schema.properties ?? {})) visit(field)
   if (isArray(schema.items)) (schema.items as readonly OperationSchema[]).forEach(visit)
   else if (schema.items) visit(schema.items as OperationSchema)
@@ -153,7 +154,7 @@ export async function awaitOperationRead<T>(pending: Promise<T>, signal: AbortSi
   signal.throwIfAborted()
   let cancel: () => void = () => {}
   const aborted = new Promise<never>((_resolve, reject) => {
-    cancel = () => reject(signal.reason ?? new Error('版本检查已取消'))
+    cancel = () => reject(signal.reason ?? new AppError('CANCELLED', '版本检查已取消'))
     signal.addEventListener('abort', cancel, { once: true })
     if (signal.aborted) cancel()
   })

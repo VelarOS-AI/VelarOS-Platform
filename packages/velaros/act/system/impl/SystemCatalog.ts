@@ -1,4 +1,5 @@
 import { isEmpty, isNull, isUndefined } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { ModuleCard } from '@velaros-ai/kernel'
 import { scriptPackageCompiler } from '@velaros-ai/script'
 
@@ -71,10 +72,9 @@ export class SystemCatalog implements SystemCatalogApi {
     const available = this.available(sessionId)
     const members = systemMembers((id) => available.some((item) => item.binding.moduleId === id))
     if (module !== SystemPackageSpecifier) {
-      if (!isUndefined(member))
-        throw Object.assign(new Error('成员查询只适用于聚合包'), { code: 'MODULE_EXPORT' })
+      if (!isUndefined(member)) throw new AppError('MODULE_EXPORT', '成员查询只适用于聚合包')
       if (!this.host.allows(sessionId, module))
-        throw Object.assign(new Error('当前会话没有此能力'), { code: 'CAPABILITY_DENIED' })
+        throw new AppError('CAPABILITY_DENIED', '当前会话没有此能力')
       const description = this.host.kernel().describe(module)
       const entry = members.find(([, id]) => id === module)
       // 外部接入的模块（MCP）没有用法示例，交回空字符串，模型不必为它另写分支
@@ -90,8 +90,7 @@ export class SystemCatalog implements SystemCatalogApi {
         : { ...description, template, specifier: module, space: 'capability' }
     }
     const selected = members.filter(([name]) => isUndefined(member) || member === name)
-    if (isEmpty(selected))
-      throw Object.assign(new Error('系统成员不存在或未授权'), { code: 'CAPABILITY_DENIED' })
+    if (isEmpty(selected)) throw new AppError('CAPABILITY_DENIED', '系统成员不存在或未授权')
     const descriptions = Object.fromEntries(
       selected.map(([name, id]) => [name, this.host.kernel().describe(id)])
     )

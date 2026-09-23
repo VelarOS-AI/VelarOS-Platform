@@ -14,6 +14,7 @@ import type { Socket } from 'node:net'
 import { type RawData, WebSocket, type WebSocketServer } from 'ws'
 
 import { isNotNull, isNull, isPresent, Log, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { RemoteNodeLimits } from '../../contract/constants'
@@ -144,7 +145,7 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
 
   /** 开一次配对窗口,返回给宿主展示的六位码。 */
   public startPairing(): RemoteNodeServerStatus {
-    if (!isPresent(this.endpoint)) throw new Error('远程节点服务端还没启动')
+    if (!isPresent(this.endpoint)) throw new AppError('UNAVAILABLE', '远程节点服务端还没启动')
     this.pairing.open()
     return this.getStatus()
   }
@@ -161,7 +162,7 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
   }
 
   public getStatus(): RemoteNodeServerStatus {
-    if (!isPresent(this.endpoint)) throw new Error('远程节点服务端还没启动')
+    if (!isPresent(this.endpoint)) throw new AppError('UNAVAILABLE', '远程节点服务端还没启动')
     return {
       endpoint: this.endpoint,
       node: this.node,

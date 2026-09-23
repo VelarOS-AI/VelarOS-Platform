@@ -4,6 +4,7 @@
  */
 
 import type { AgentJob, AgentStart } from '@velaros-ai/agent'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { AgentsOperationContext } from '../contract/requires.js'
 import type {
@@ -103,8 +104,7 @@ export class AgentsOperations implements AgentsOperationsApi {
 
   public async send(input: AgentSendInput, ctx: AgentsOperationContext): Promise<null> {
     ctx.abortSignal.throwIfAborted()
-    if (!input.input.trim())
-      throw Object.assign(new Error('引导内容不能为空'), { code: 'VALIDATION' })
+    if (!input.input.trim()) throw new AppError('VALIDATION', '引导内容不能为空')
     await ctx.agents.send(ctx.sessionId, input.id, input.input)
     return null
   }

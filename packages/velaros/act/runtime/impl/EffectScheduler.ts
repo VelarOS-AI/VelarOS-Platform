@@ -1,4 +1,5 @@
 import { isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 /** 实例内效果调度；资源身份由宿主声明，缺失范围与所有写操作冲突。 */
 export interface EffectSchedulerApi {
@@ -18,7 +19,7 @@ export class EffectScheduler implements EffectSchedulerApi {
       resources &&
       (!resources.length || resources.some((resource) => !isString(resource) || !resource.trim()))
     )
-      throw new Error('效果范围需要非空的宿主资源身份')
+      throw new AppError('VALIDATION', '效果范围需要非空的宿主资源身份')
     const scope = resources ? [...new Set(resources)] : undefined
     const predecessors = [...this.pending]
       .filter(([, prior]) => !scope || !prior || scope.some((resource) => prior.includes(resource)))
@@ -34,7 +35,7 @@ export class EffectScheduler implements EffectSchedulerApi {
     }
     let cancel = (): void => {}
     const aborted = new Promise<never>((_resolve, reject) => {
-      cancel = () => reject(signal.reason ?? new Error('操作已取消'))
+      cancel = () => reject(signal.reason ?? new AppError('CANCELLED', '操作已取消'))
       signal.addEventListener('abort', cancel, { once: true })
     })
     try {

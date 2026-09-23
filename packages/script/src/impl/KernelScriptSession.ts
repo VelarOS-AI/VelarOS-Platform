@@ -1,5 +1,6 @@
 import { isUndefined } from '@velaros-ai/core'
 import { isArray, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { CodeProgramEditLimits, CodeSurfaceErrorCodes } from '../contract/constants.js'
 import type { KernelScriptSessionOptions } from '../contract/requires.js'
@@ -104,8 +105,7 @@ class KernelScriptSession implements KernelScriptSessionApi {
 
   public check(program: CodeProgramRequest): CodeProgramCheckResult {
     const oversized = describeProgramOversize(program.source, program.blobs, program.input)
-    if (oversized)
-      throw Object.assign(new Error(oversized), { code: CodeSurfaceErrorCodes.tooLarge })
+    if (oversized) throw new AppError(CodeSurfaceErrorCodes.tooLarge, oversized)
     const imported = new Set(
       [program.source, ...Object.values(program.modules ?? {})].flatMap(readModuleSpecifiers)
     )
@@ -125,7 +125,9 @@ class KernelScriptSession implements KernelScriptSessionApi {
 
   public run(program: CodeProgramRequest, signal?: AbortSignal): Promise<CodeSurfaceOutcome> {
     if (this.used)
-      return Promise.reject(new Error('同一脚本执行身份不能再次运行；继续工作请创建新的执行'))
+      return Promise.reject(
+        new AppError('CONFLICT', '同一脚本执行身份不能再次运行；继续工作请创建新的执行')
+      )
     this.used = true
     const imported = new Set(
       [program.source, ...Object.values(program.modules ?? {})].flatMap(readModuleSpecifiers)

@@ -1,4 +1,5 @@
 import { Log } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { ModelTurnDelta } from '@velaros-ai/kernel'
 
 import type { ModelBudgetPort } from '../types/model-budget.js'
@@ -10,7 +11,7 @@ export async function awaitModelPreparation<T>(
 ): Promise<T> {
   let cancel!: () => void
   const aborted = new Promise<never>((_resolve, reject) => {
-    cancel = () => reject(signal.reason ?? new Error('模型准备已取消'))
+    cancel = () => reject(signal.reason ?? new AppError('CANCELLED', '模型准备已取消'))
     signal.addEventListener('abort', cancel, { once: true })
     if (signal.aborted) cancel()
   })

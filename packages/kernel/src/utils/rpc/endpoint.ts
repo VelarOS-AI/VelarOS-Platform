@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { isNull, isUndefined, Log } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { KernelRpcEndpoint } from '../../types/kernel.js'
 import type { KernelRpcServerFrame } from '../../types/wire.js'
@@ -43,7 +44,7 @@ export function resolveBoundKernelRpcEndpoint(
 ): KernelRpcEndpoint {
   if (requested.kind === 'unix') return requested
   const address = server.address() as Nullable<AddressInfo>
-  if (isNull(address)) throw new Error('Kernel RPC 服务端没有地址')
+  if (isNull(address)) throw new AppError('UNAVAILABLE', 'Kernel RPC 服务端没有地址')
   return {
     kind: 'tcp',
     host: '127.0.0.1',
@@ -67,7 +68,7 @@ export async function removeStaleKernelRpcSocket(path: string): Promise<void> {
   try {
     const stats = await lstat(path)
     if (!stats.isSocket()) {
-      throw new Error(`Kernel RPC 路径 "${path}" 不是 socket，拒绝覆盖`)
+      throw new AppError('CONFLICT', `Kernel RPC 路径 "${path}" 不是 socket，拒绝覆盖`)
     }
     await unlink(path)
   } catch (error) {

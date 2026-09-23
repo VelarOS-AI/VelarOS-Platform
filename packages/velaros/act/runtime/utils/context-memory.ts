@@ -1,6 +1,7 @@
 import type { ContextRef, ContextState } from '@velaros-ai/context'
 import type { ContextRecord } from '@velaros-ai/context'
 import { isString, stringifyPretty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { ModelHistoryMessage } from '@velaros-ai/kernel'
 import type { WorkspaceEntry } from '@velaros-ai/velaros/act/system'
 
@@ -21,7 +22,7 @@ export function memoryPolicy(input: ContextMemoryPolicy = {}): Required<ContextM
     result.recentShare > 0.5 ||
     result.workspaceShare + result.recentShare > 0.8
   )
-    throw new Error('上下文分区配置无效')
+    throw new AppError('VALIDATION', '上下文分区配置无效')
   return Object.freeze(result)
 }
 

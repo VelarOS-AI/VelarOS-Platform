@@ -4,6 +4,7 @@ import { createContextInvocationJournal, createEvidenceAccess } from '@velaros-a
 import { Log } from '@velaros-ai/core'
 import { isFalse, isNull, isUndefined } from '@velaros-ai/core'
 import { isEmpty, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type {
   ModuleDescription,
   ModulePage,
@@ -121,16 +122,19 @@ class ComposedRuntime implements VelarosRuntime {
           ) || systemModules.owns(module.binding.moduleId)
       )
     )
-      throw new Error('业务模块占用了系统保留身份')
+      throw new AppError('VALIDATION', '业务模块占用了系统保留身份')
     if (options.modules.some((module) => module.binding.moduleId === 'velaros:memory'))
-      throw new Error('长期记忆请通过 Runtime memory(sessionId) 装配到 velaros:system')
+      throw new AppError(
+        'VALIDATION',
+        '长期记忆请通过 Runtime memory(sessionId) 装配到 velaros:system'
+      )
     const journal = (this.journal = createContextInvocationJournal(options.storage))
     this.tools = new ModelToolRuntime({
       storage: options.storage,
       policy: options.modelTools,
       view: (id) => {
         const view = this.sessions.get(id)?.view
-        if (!view) throw new Error('模型工具预算会话不可用')
+        if (!view) throw new AppError('UNAVAILABLE', '模型工具预算会话不可用')
         return view
       },
       deadline: (id) => this.programAccess.get(id)?.deadline(),
@@ -142,7 +146,7 @@ class ComposedRuntime implements VelarosRuntime {
       this.maintenance = new ContextMaintenance({
         preview: (id) => {
           const access = this.programAccess.get(id)
-          if (!access) throw new Error('父会话不可用')
+          if (!access) throw new AppError('UNAVAILABLE', '父会话不可用')
           return access
         },
         storage: options.storage,
@@ -238,7 +242,7 @@ class ComposedRuntime implements VelarosRuntime {
         options: { ...options.search, profiles: structuredClone(options.search.profiles) },
         view: (id) => {
           const view = this.sessions.get(id)?.view
-          if (!view) throw new Error('父任务尚未打开')
+          if (!view) throw new AppError('UNAVAILABLE', '父任务尚未打开')
           return view
         },
         open: async (id, activation, profile) => {
@@ -303,12 +307,12 @@ class ComposedRuntime implements VelarosRuntime {
       journal,
       beforeReadValidation: async (invocation, descriptor, signal) => {
         if (!this.allows(invocation.sessionId, invocation.binding.moduleId))
-          throw Object.assign(new Error('观察资源授权已撤回'), { code: 'CAPABILITY_DENIED' })
+          throw new AppError('CAPABILITY_DENIED', '观察资源授权已撤回')
         await this.options.authorize?.(invocation, descriptor, signal)
       },
       beforeDispatch: async (invocation, descriptor, signal) => {
         if (!this.allows(invocation.sessionId, invocation.binding.moduleId))
-          throw Object.assign(new Error('当前会话没有此模块能力'), { code: 'CAPABILITY_DENIED' })
+          throw new AppError('CAPABILITY_DENIED', '当前会话没有此模块能力')
         const scope = this.scopes.get(invocation.sessionId)!
         if (
           scope.kind === 'agent' &&
@@ -316,7 +320,7 @@ class ComposedRuntime implements VelarosRuntime {
           !systemModules.owns(invocation.binding.moduleId) &&
           !scope.writes?.includes(invocation.binding.moduleId)
         )
-          throw new Error('子任务没有占用该模块的写入范围')
+          throw new AppError('PERMISSION', '子任务没有占用该模块的写入范围')
         if (descriptor.effects === 'write' && !systemModules.owns(invocation.binding.moduleId))
           this.assertWriteDelegation(invocation.sessionId, invocation.binding.moduleId)
         await this.options.authorize?.(invocation, descriptor, signal)
@@ -324,9 +328,7 @@ class ComposedRuntime implements VelarosRuntime {
           this.programAccess.get(invocation.sessionId)?.phase() === 'maintenance' &&
           !systemModules.owns(invocation.binding.moduleId)
         )
-          throw Object.assign(new Error('上下文维护轮不派发业务能力'), {
-            code: 'CONTEXT_MAINTENANCE',
-          })
+          throw new AppError('CONTEXT_MAINTENANCE', '上下文维护轮不派发业务能力')
         await this.search?.authorize(invocation, descriptor, signal)
         if (
           invocation.mode === 'observe' ||
@@ -335,7 +337,7 @@ class ComposedRuntime implements VelarosRuntime {
         )
           return
         const view = this.sessions.get(invocation.sessionId)?.view
-        if (!view) throw new Error('任务视图不可用')
+        if (!view) throw new AppError('UNAVAILABLE', '任务视图不可用')
         await view.assertCanWrite(invocation.executionId, signal)
       },
       modules: [
@@ -356,8 +358,7 @@ class ComposedRuntime implements VelarosRuntime {
                 stores: (id) => {
                   const state = this.stores.get(id)
                   if (!state)
-                    throw Object.assign(new Error('当前会话未获配共享状态'), {
-                      code: 'STORE_DENIED',
+                    throw AppError.withFields('STORE_DENIED', '当前会话未获配共享状态', {
                       effect: 'none',
                     })
                   return state
@@ -373,7 +374,7 @@ class ComposedRuntime implements VelarosRuntime {
                 ),
                 scope: (id) => {
                   const memory = this.memories.get(id)
-                  if (!memory) throw new Error('主会话长期记忆未装配')
+                  if (!memory) throw new AppError('UNAVAILABLE', '主会话长期记忆未装配')
                   return memory
                 },
               }
@@ -386,13 +387,12 @@ class ComposedRuntime implements VelarosRuntime {
           kernel: () => this.kernel,
           programs: (id) => {
             const access = this.programAccess.get(id)
-            if (!access) throw new Error('会话尚未打开')
+            if (!access) throw new AppError('UNAVAILABLE', '会话尚未打开')
             return access
           },
           view: (id) => {
             const view = this.sessions.get(id)?.view
-            if (!view)
-              throw Object.assign(new Error('当前会话尚未打开'), { code: 'SESSION_NOT_OPEN' })
+            if (!view) throw new AppError('SESSION_NOT_OPEN', '当前会话尚未打开')
             return view
           },
         }),
@@ -477,9 +477,9 @@ class ComposedRuntime implements VelarosRuntime {
   private async openChild(job: AgentJob, input: Optional<AgentStart>, signal: AbortSignal) {
     const profile = this.options.agents?.profiles[job.profile]
     const parent = this.sessions.get(job.parentSessionId)
-    if (!profile || !parent) throw new Error('子任务配置或父任务不可用')
+    if (!profile || !parent) throw new AppError('UNAVAILABLE', '子任务配置或父任务不可用')
     if (this.scopes.get(job.parentSessionId)?.kind !== 'main')
-      throw new Error('只有主线可以派发业务子任务')
+      throw new AppError('PERMISSION', '只有主线可以派发业务子任务')
     const childLimits = {
       ...VelarosAgentRunLimits,
       outputTokens: profile.model.limits.outputTokens,
@@ -487,13 +487,15 @@ class ComposedRuntime implements VelarosRuntime {
     }
     const modules = profile.modules.filter((module) => module !== 'velaros:agents')
     for (const module of modules)
-      if (!this.allows(job.parentSessionId, module)) throw new Error('子任务能力不能超过父任务')
+      if (!this.allows(job.parentSessionId, module))
+        throw new AppError('VALIDATION', '子任务能力不能超过父任务')
     if (job.writes.some((module) => !modules.includes(module)))
-      throw new Error('子任务写入范围超出能力配置')
+      throw new AppError('PERMISSION', '子任务写入范围超出能力配置')
     let childStores: Optional<StoreSessionApi>
     const parentStores = this.stores.get(job.parentSessionId)
     if (job.stores?.length) {
-      if (!parentStores || isFalse(profile.stores)) throw new Error('子任务没有共享空间能力')
+      if (!parentStores || isFalse(profile.stores))
+        throw new AppError('PERMISSION', '子任务没有共享空间能力')
       const grants = await parentStores.delegate(job.stores)
       childStores = new StoreSession(
         job.sessionId,
@@ -560,13 +562,14 @@ class ComposedRuntime implements VelarosRuntime {
     const files: ActInputFile[] = []
     try {
       for (const ref of input?.materials ?? []) {
-        if (ref.sessionId !== job.parentSessionId) throw new Error('只能分享父任务已经持有的原文')
+        if (ref.sessionId !== job.parentSessionId)
+          throw new AppError('VALIDATION', '只能分享父任务已经持有的原文')
         const source = (await this.options.storage.load(ref.sessionId))?.records.find(
           (r) => r.ref.id === ref.id
         )
-        if (!source) throw new Error('共享材料不存在')
+        if (!source) throw new AppError('NOT_FOUND', '共享材料不存在')
         const body = await this.options.storage.get(ref.sessionId, source.objectId)
-        if (isNull(body)) throw new Error('共享原文缺失')
+        if (isNull(body)) throw new AppError('NOT_FOUND', '共享原文缺失')
         signal.throwIfAborted()
         const copied = await session.context.append({
           kind: 'note',
@@ -642,9 +645,7 @@ class ComposedRuntime implements VelarosRuntime {
         ) &&
         this.tools.descends(child, id)
       )
-        throw Object.assign(new Error('写入范围正在由后代任务使用，请等待子任务结束'), {
-          code: 'WRITE_DELEGATED',
-        })
+        throw new AppError('WRITE_DELEGATED', '写入范围正在由后代任务使用，请等待子任务结束')
   }
 
   private scheduleEffects(module: OperationModuleDefinition): OperationModuleDefinition {
@@ -752,15 +753,15 @@ class ComposedRuntime implements VelarosRuntime {
       id.startsWith('context:') ||
       id.startsWith('store-material:')
     )
-      throw new Error('运行时已关闭或会话身份无效')
+      throw new AppError('CLOSED', '运行时已关闭或会话身份无效')
     await new RuntimeWorkspaceBinding(
       this.options.storage,
       this.options.workspace,
       this.options.dataDir
     ).bind(id)
-    if (this.closing) throw new Error('运行时已关闭')
+    if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
     await this.kernel.start()
-    if (this.closing) throw new Error('运行时已关闭')
+    if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
     let session = this.sessions.get(id)
     if (!session) {
       try {
@@ -770,10 +771,11 @@ class ComposedRuntime implements VelarosRuntime {
             ? { scope: `session:${id}` }
             : undefined
         if (configuration) {
-          if (!this.options.storage.stores) throw new Error('当前 ContextStorage 未实现持久 store')
+          if (!this.options.storage.stores)
+            throw new AppError('UNAVAILABLE', '当前 ContextStorage 未实现持久 store')
           const stores = new StoreSession(id, this.options.storage, configuration)
           await stores.initialize()
-          if (this.closing) throw new Error('运行时已关闭')
+          if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
           this.stores.set(id, stores)
         }
         const memory = this.options.memory?.(id)
@@ -831,7 +833,7 @@ class ComposedRuntime implements VelarosRuntime {
   }
 
   public async trace(rootSessionId: string, input?: ActTraceQuery): Promise<ActTracePage> {
-    if (this.closing) throw new Error('运行时已关闭')
+    if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
     return new RuntimeTrace(rootSessionId, this.options.storage, this.journal).page(input)
   }
 

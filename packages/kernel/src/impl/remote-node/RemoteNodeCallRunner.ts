@@ -4,6 +4,7 @@
 // 刻意不认识连接:终态从哪条 socket 出去是 Server 的判断(断线期间产生的结果要留在缓存里等重连
 // 来取),runner 只负责执行、计时、去重与审计。
 import { isNotNull, isUndefined, Log, optionalWhen, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type {
@@ -131,7 +132,7 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
     call.deadline = this.options.timers.after(
       frame.deadlineMs,
       () => {
-        call.controller.abort(new Error('远程节点调用超过截止时间'))
+        call.controller.abort(new AppError('TIMEOUT', '远程节点调用超过截止时间'))
         this.settle(call, 'error', undefined, {
           code: 'DEADLINE_EXCEEDED',
           message: `调用超过了 ${frame.deadlineMs}ms 的截止时长`,
@@ -177,7 +178,7 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
     const call = this.calls.get(frame.callId)
     // 未知或已终态的 callId 一律静默:一个 callId 只有一帧终态,这里补发就破了那条不变量。
     if (isUndefined(call)) return
-    call.controller.abort(new Error(`远程节点调用被取消：${frame.reason}`))
+    call.controller.abort(new AppError('CANCELLED', `远程节点调用被取消：${frame.reason}`))
     // best-effort abort 之后**立刻**回终态,不等能力实现自己收敛——契约承诺的是「取消后仍有
     // 一帧终态」,不是「取消后等实现愿意停」。实现晚到的结果会被 `settled` 挡掉。
     this.settle(call, 'error', undefined, {
@@ -195,7 +196,7 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
     for (const call of this.calls.values()) {
       call.settled = true
       call.deadline?.cancel()
-      call.controller.abort(new Error(reason))
+      call.controller.abort(new AppError('CANCELLED', reason))
       this.recordActivity({
         type: 'finished',
         at: this.options.now(),

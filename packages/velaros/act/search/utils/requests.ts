@@ -1,4 +1,5 @@
 import type { ContextResourceTarget } from '@velaros-ai/context'
+import { AppError } from '@velaros-ai/core/error'
 
 import { SearchLimits } from '../contract/constants.js'
 import type { SearchRequest } from '../types.js'
@@ -28,5 +29,5 @@ export function checkResourceTarget(target: ContextResourceTarget): void {
 
 /** 搜索入参不合约定时的错误：发生在任何来源读取之前。 */
 function searchInput(message: string): Error {
-  return Object.assign(new Error(message), { code: 'SEARCH_INPUT' })
+  return new AppError('SEARCH_INPUT', message)
 }

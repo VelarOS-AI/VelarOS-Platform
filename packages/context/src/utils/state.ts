@@ -1,3 +1,5 @@
+import { AppError } from '@velaros-ai/core/error'
+
 import type { ContextRef, ContextState } from '../types/context.js'
 /** 创建尚未有记录的会话。 */
 export function emptyContextState(): ContextState {
@@ -9,7 +11,7 @@ export function sameContextRef(a: ContextRef, b: ContextRef): boolean {
 }
 /** 生成带稳定错误码的异常。 */
 export function contextFailure(code: string, message: string): Error & { code: string } {
-  return Object.assign(new Error(message), { code })
+  return new AppError(code, message)
 }
 /** 核对非负整数范围，拒绝 NaN 与负数。 */
 export function boundedInteger(value: number, max: number): number {

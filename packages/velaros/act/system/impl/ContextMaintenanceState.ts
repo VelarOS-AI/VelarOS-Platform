@@ -4,6 +4,7 @@ import type { ContextContent, ContextRef, ContextState, ContextStorage } from '@
 import { createContextRuntime, createContextView } from '@velaros-ai/context'
 import { isFalse, isUndefined, toNullable } from '@velaros-ai/core'
 import { isArray, isBoolean, isEmpty, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { ModelImage } from '@velaros-ai/kernel'
 import {
   type CodeProgramRequest,
@@ -114,9 +115,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     signal.throwIfAborted()
     const state = await this.storage.load(this.id)
     if (!state || (await this.version(state)) !== snapshot.baseRevision)
-      throw Object.assign(new Error('整理期间任务材料已变化，补丁尚未发布'), {
-        code: 'CONTEXT_CONFLICT',
-      })
+      throw new AppError('CONTEXT_CONFLICT', '整理期间任务材料已变化，补丁尚未发布')
     return state
   }
 
@@ -125,9 +124,10 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     signal: AbortSignal
   ): Promise<ContextMaintenanceSnapshot> {
     signal.throwIfAborted()
-    if (!Number.isSafeInteger(targetChars) || targetChars < 512) throw new Error('整理目标预算无效')
+    if (!Number.isSafeInteger(targetChars) || targetChars < 512)
+      throw new AppError('VALIDATION', '整理目标预算无效')
     const state = await this.storage.load(this.id)
-    if (!state?.task) throw new Error('整理需要已有任务')
+    if (!state?.task) throw new AppError('UNAVAILABLE', '整理需要已有任务')
     const context = createContextRuntime({ sessionId: this.id, storage: this.storage })
     const programs = await new ProgramContext(this.id, context, this.storage).state()
     const protectedRefs = [
@@ -280,7 +280,10 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
       limit < 1 ||
       limit > ContextMaintenanceReadLimits.maxPageItems
     )
-      throw new Error(`整理目录每页 1–${ContextMaintenanceReadLimits.maxPageItems} 项`)
+      throw new AppError(
+        'VALIDATION',
+        `整理目录每页 1–${ContextMaintenanceReadLimits.maxPageItems} 项`
+      )
     const state = await this.current(snapshot, signal)
     const records = state.records.filter(
       (record) =>
@@ -306,7 +309,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     const candidate = memoryReference(state, ref)
     const record = candidate && candidate.sequence <= snapshot.through ? candidate : undefined
     if (ref.sessionId !== this.id || !record)
-      throw Object.assign(new Error('引用不在整理快照授权范围'), { code: 'SCOPE_MISMATCH' })
+      throw new AppError('SCOPE_MISMATCH', '引用不在整理快照授权范围')
     const context = createContextRuntime({ sessionId: this.id, storage: this.storage })
     const page = await (record.kind === 'user'
       ? context.readInput(ref, { offset, limit })
@@ -367,21 +370,21 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
       ) ||
       JSON.stringify(patch).length > ContextPatchLimits.patchChars
     )
-      throw new Error('上下文补丁格式、版本或大小无效')
+      throw new AppError('VALIDATION', '上下文补丁格式、版本或大小无效')
     if (
       [patch.notes, patch.inputs, patch.releaseResults, patch.releaseStoreRefs].some(
         (items) =>
           !isUndefined(items) && (!isArray(items) || items.length > ContextPatchLimits.items)
       )
     )
-      throw new Error('上下文补丁条目过多')
+      throw new AppError('LIMIT', '上下文补丁条目过多')
     if (
       !isUndefined(patch.recentRecords) &&
       (!Number.isSafeInteger(patch.recentRecords) ||
         patch.recentRecords < 0 ||
         patch.recentRecords > ContextPatchLimits.recentRecords)
     )
-      throw new Error('近期记录窗口无效')
+      throw new AppError('VALIDATION', '近期记录窗口无效')
     if (
       patch.observation &&
       (patch.observation.sourceRef !== snapshot.observationRef ||
@@ -389,13 +392,13 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
           (key) => !['sourceRef', 'config', 'outputs', 'summaries'].includes(key)
         ))
     )
-      throw new Error('观察展示补丁版本或字段无效')
+      throw new AppError('VALIDATION', '观察展示补丁版本或字段无效')
     if (
       patch.observation?.summaries &&
       (!isArray(patch.observation.summaries) ||
         patch.observation.summaries.length > ContextPatchLimits.items)
     )
-      throw new Error('观察摘要数量无效')
+      throw new AppError('VALIDATION', '观察摘要数量无效')
     for (const summary of patch.observation?.summaries ?? []) {
       if (
         !summary ||
@@ -407,10 +410,10 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
           (block) => block.key === summary.key && block.contentHash === summary.contentHash
         )
       )
-        throw new Error('摘要与当前观察原文不匹配')
+        throw new AppError('CONFLICT', '摘要与当前观察原文不匹配')
     }
     if (patch.releaseResults?.some((ref) => snapshot.protectedRefs.some((item) => item.id === ref)))
-      throw new Error('不能释放未决操作的上下文')
+      throw new AppError('CONFLICT', '不能释放未决操作的上下文')
     for (let attempt = 0; attempt < 4; attempt++) {
       const state = await this.current(snapshot, signal)
       const staged = new ContextPatchStore(this.id, this.storage, state)
@@ -441,7 +444,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
             (!isUndefined(note.resident) && !isBoolean(note.resident)) ||
             (isUndefined(note.summary) && isUndefined(note.resident))
           )
-            throw new Error('笔记呈现补丁无效')
+            throw new AppError('VALIDATION', '笔记呈现补丁无效')
           const record = state.records.find(
             (item) =>
               item.ref.id === note.ref.id &&
@@ -452,14 +455,12 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
             !record ||
             state.records.findLast((item) => item.title === record.title)?.ref.id !== note.ref.id
           )
-            throw Object.assign(new Error('笔记呈现引用不是当前原文版本'), {
-              code: 'WORKSPACE_CONFLICT',
-            })
+            throw new AppError('WORKSPACE_CONFLICT', '笔记呈现引用不是当前原文版本')
           if (
             isFalse(note.resident) &&
             snapshot.protectedRefs.some((ref) => ref.id === note.ref.id)
           )
-            throw new Error('不能移出明确保留的笔记')
+            throw new AppError('VALIDATION', '不能移出明确保留的笔记')
         }
         const noteViews = [
           ...(previousPolicy?.notes ?? []).filter(
@@ -483,11 +484,9 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
             this.inputRevision !== snapshot.baseRevision ||
             !visible?.some((range) => range.start === 0 && range.end >= original.totalChars)
           )
-            throw Object.assign(
-              new Error(
-                '输入原文尚未完整进入整理模型上下文；请分页读取并在下一轮查看 runtime.modelTool.inputs，或省略该 inputs 修改'
-              ),
-              { code: 'CONTEXT_INPUT_UNSEEN' }
+            throw new AppError(
+              'CONTEXT_INPUT_UNSEEN',
+              '输入原文尚未完整进入整理模型上下文；请分页读取并在下一轮查看 runtime.modelTool.inputs，或省略该 inputs 修改'
             )
           const prior = state.inputSummaries?.find(
             (entry) =>
@@ -501,11 +500,9 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
                 (constraint: string) => !input.constraints.includes(constraint)
               )
             )
-              throw Object.assign(
-                new Error(
-                  `整理不能移除已确认的用户约束；用 context-materials.read 读取 ${JSON.stringify(prior.summary)}，逐字保留其中 constraints 后补充新约束，或省略该 inputs 修改`
-                ),
-                { code: 'CONTEXT_CONSTRAINT' }
+              throw new AppError(
+                'CONTEXT_CONSTRAINT',
+                `整理不能移除已确认的用户约束；用 context-materials.read 读取 ${JSON.stringify(prior.summary)}，逐字保留其中 constraints 后补充新约束，或省略该 inputs 修改`
               )
           }
           await context.summarizeInput(input, signal)
@@ -514,7 +511,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
           if (
             patch.releaseStoreRefs.some((id) => !isString(id) || !snapshot.storeRefs?.includes(id))
           )
-            throw new Error('只能释放快照中的当前任务空间引用')
+            throw new AppError('VALIDATION', '只能释放快照中的当前任务空间引用')
           const current = (await staged.load(this.id))!
           await staged.compareAndSwap(this.id, current.version, {
             ...current,
@@ -654,12 +651,10 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
         )
         const frame = JSON.parse(candidate.body)
         if (!isEmpty(frame.partitions.runtime.decision.missing))
-          throw Object.assign(new Error('整理候选缺失必需观察正文，补丁未发布'), {
-            code: 'CONTEXT_REQUIRED',
-          })
+          throw new AppError('CONTEXT_REQUIRED', '整理候选缺失必需观察正文，补丁未发布')
         for (const ref of snapshot.intent?.preserve ?? [])
           if (ref.sessionId !== this.id || !memoryReference(state, ref))
-            throw new Error('明确保留材料已不在当前授权范围')
+            throw new AppError('PERMISSION', '明确保留材料已不在当前授权范围')
         if (
           snapshot.goals.some(
             (ref) =>
@@ -668,7 +663,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
               )
           )
         )
-          throw new Error('整理候选丢失任务目标')
+          throw new AppError('NOT_FOUND', '整理候选丢失任务目标')
         if (this.preview)
           await awaitModelPreparation(this.preview.validateCandidate(candidate, signal), signal)
         if (!publish) {
@@ -680,6 +675,6 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
         await staged.close()
       }
     }
-    throw Object.assign(new Error('上下文补丁发布持续冲突'), { code: 'CONTEXT_CONFLICT' })
+    throw new AppError('CONTEXT_CONFLICT', '上下文补丁发布持续冲突')
   }
 }

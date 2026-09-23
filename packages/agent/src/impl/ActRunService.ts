@@ -1,5 +1,6 @@
 import { Log } from '@velaros-ai/core'
 import { isEmpty, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { ActRunServiceOptions } from '../contract/requires.js'
 import type {
@@ -63,7 +64,7 @@ class ActRunService implements ActRunServiceApi {
   public constructor(private readonly options: ActRunServiceOptions) {}
 
   public async *submit(input: string | ActInput, signal?: AbortSignal): AsyncIterable<ActRunEvent> {
-    if (this.closed || this.active) throw new Error('会话已关闭或已有活动运行')
+    if (this.closed || this.active) throw new AppError('CLOSED', '会话已关闭或已有活动运行')
     this.inputs.length = 0
     this.prepared = []
     this.unapplied.clear()
@@ -170,7 +171,8 @@ class ActRunService implements ActRunServiceApi {
         throw error
       } finally {
         await this.inputWrites
-        for (const item of this.pending.values()) item.reject(new Error('运行已经结束'))
+        for (const item of this.pending.values())
+          item.reject(new AppError('CLOSED', '运行已经结束'))
         this.pending.clear()
         finished = true
         this.notify()
@@ -210,13 +212,13 @@ class ActRunService implements ActRunServiceApi {
         this.status
       )
     )
-      throw new Error('没有可接收引导的活动运行')
+      throw new AppError('UNAVAILABLE', '没有可接收引导的活动运行')
     const signal = this.controller.signal
     const value = isString(input) ? { text: input } : input
     if (!value.text && !value.files?.length && !value.images?.length)
-      throw new Error('输入不能为空')
+      throw new AppError('VALIDATION', '输入不能为空')
     this.steering++
-    this.turnController.abort(new Error('新的用户输入已到达'))
+    this.turnController.abort(new AppError('CANCELLED', '新的用户输入已到达'))
     const write = this.inputWrites.then(async () => {
       signal.throwIfAborted()
       const record = await this.options.context.ingest(
@@ -259,7 +261,7 @@ class ActRunService implements ActRunServiceApi {
     detail?: unknown
   ): Promise<unknown> {
     if (!this.active || !this.controller || this.controller.signal.aborted)
-      throw new Error('交互需要活动运行')
+      throw new AppError('UNAVAILABLE', '交互需要活动运行')
     signal.throwIfAborted()
     const request: ActInteraction = {
       id: crypto.randomUUID(),
@@ -295,7 +297,7 @@ class ActRunService implements ActRunServiceApi {
       item.request.runId !== answer.runId ||
       this.controller?.signal.aborted
     )
-      throw new Error('交互回答已过期或不属于当前运行')
+      throw new AppError('CONFLICT', '交互回答已过期或不属于当前运行')
     this.pending.delete(answer.id)
     try {
       await this.emit({ type: 'answer', runId: this.runId, id: answer.id })
@@ -325,7 +327,7 @@ class ActRunService implements ActRunServiceApi {
       limit < 1 ||
       limit > 1000
     )
-      throw new Error('事件分页范围无效')
+      throw new AppError('VALIDATION', '事件分页范围无效')
     const records = ((await this.options.storage.load(this.options.sessionId))?.records ?? [])
       .filter((item) => item.sequence > after && item.title === 'act:event')
       .slice(0, limit)
@@ -346,7 +348,7 @@ class ActRunService implements ActRunServiceApi {
   public cancel(): void {
     this.controller?.abort()
     this.loop?.cancel()
-    for (const item of this.pending.values()) item.reject(new Error('运行已取消'))
+    for (const item of this.pending.values()) item.reject(new AppError('CANCELLED', '运行已取消'))
     this.notify()
   }
   public async close(): Promise<void> {

@@ -11,6 +11,7 @@ import type {
 import { ContextLimits } from '@velaros-ai/context'
 import { isFalse, isNull, toNullable } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { ModelImage, OperationReadStamp } from '@velaros-ai/kernel'
 import {
   type CodeProgramRequest,
@@ -169,7 +170,7 @@ export class ProgramContext implements ProgramContextApi {
     if (!record || record.sequence <= (snapshot?.metadata.task?.startedSequence ?? 0))
       return { completedTurns: 0, leases: [] }
     const body = await this.storage.get(this.sessionId, record.objectId)
-    if (isNull(body)) throw new Error('程序租约记录缺失')
+    if (isNull(body)) throw new AppError('NOT_FOUND', '程序租约记录缺失')
     return JSON.parse(body) as ProgramLeaseState
   }
 
@@ -199,14 +200,14 @@ export class ProgramContext implements ProgramContextApi {
         records: [],
       }
       if (additions.some((item) => snapshot.records.some((old) => old.ref.id === item.ref.id)))
-        throw Object.assign(new Error('控制调用已经提交'), { code: 'SCRIPT_REPLAY' })
+        throw new AppError('SCRIPT_REPLAY', '控制调用已经提交')
       const available = new Set([...snapshot.records, ...additions].map((item) => item.ref.id))
       if (
         additions.some((item) =>
           item.sources.some((ref) => ref.sessionId !== this.sessionId || !available.has(ref.id))
         )
       )
-        throw Object.assign(new Error('提交包含未知或跨会话来源'), { code: 'SCRIPT_REF' })
+        throw new AppError('SCRIPT_REF', '提交包含未知或跨会话来源')
       const previous = await this.readState(snapshot)
       const changed = change(previous)
       const identities = new Set(previous.leases.map((item) => item.ref))
@@ -246,9 +247,7 @@ export class ProgramContext implements ProgramContextApi {
           return
       }
     }
-    throw Object.assign(new Error('上下文持续发生并发变化，请重新读取当前版本'), {
-      code: 'SCRIPT_BUSY',
-    })
+    throw new AppError('SCRIPT_BUSY', '上下文持续发生并发变化，请重新读取当前版本')
   }
 
   private async record(
@@ -258,7 +257,7 @@ export class ProgramContext implements ProgramContextApi {
     sources: readonly ContextRef[] = []
   ): Promise<ContextRecord> {
     if (body.length > ContextLimits.objectChars)
-      throw Object.assign(new Error('程序记录超过上下文对象限制'), { code: 'TOO_LARGE' })
+      throw new AppError('TOO_LARGE', '程序记录超过上下文对象限制')
     const objectId = await this.storage.put(this.sessionId, body)
     return {
       ref: { sessionId: this.sessionId, id },
@@ -278,7 +277,7 @@ export class ProgramContext implements ProgramContextApi {
     )?.records.findLast((item) => item.kind === 'audit' && item.title === `script:version:${ref}`)
     if (!record) return undefined
     const body = await this.storage.get(this.sessionId, record.objectId)
-    if (isNull(body)) throw new Error('程序版本记录缺失')
+    if (isNull(body)) throw new AppError('NOT_FOUND', '程序版本记录缺失')
     return JSON.parse(body) as ScriptProgramVersion
   }
 
@@ -290,12 +289,10 @@ export class ProgramContext implements ProgramContextApi {
     )
     if (!record) return undefined
     const body = await this.storage.get(this.sessionId, record.objectId)
-    if (isNull(body)) throw new Error('控制提交回执缺失')
+    if (isNull(body)) throw new AppError('NOT_FOUND', '控制提交回执缺失')
     const saved = JSON.parse(body) as { fingerprint: string; receipt: ScriptSubmissionReceipt }
     if (saved.fingerprint !== control.fingerprint)
-      throw Object.assign(new Error('同一调用身份不能用于另一份输入'), {
-        code: 'SCRIPT_CALL_CONFLICT',
-      })
+      throw new AppError('SCRIPT_CALL_CONFLICT', '同一调用身份不能用于另一份输入')
     return saved.receipt
   }
 
@@ -358,10 +355,11 @@ export class ProgramContext implements ProgramContextApi {
       await this.update(
         (state) => {
           if (activate && toNullable(state.observation) !== control.expectedObservation)
-            throw Object.assign(new Error('观察版本已经变化，请基于 currentRef 继续编辑'), {
-              code: 'SCRIPT_CONFLICT',
-              currentRef: toNullable(state.observation),
-            })
+            throw AppError.withFields(
+              'SCRIPT_CONFLICT',
+              '观察版本已经变化，请基于 currentRef 继续编辑',
+              { currentRef: toNullable(state.observation) }
+            )
           const jobs = (receipt.status === 'prepared' ? (receipt.executions ?? []) : [])
             .filter((item) => item.executionId && item.sourceRef)
             .map((item) => ({
@@ -456,7 +454,7 @@ export class ProgramContext implements ProgramContextApi {
   ): Promise<ScriptSubmissionReceipt> {
     const receipt = JSON.parse(JSON.stringify(input)) as ScriptSubmissionReceipt
     const prior = await this.receipt(control)
-    if (!prior) throw new Error('脚本提交尚未占位')
+    if (!prior) throw new AppError('INVARIANT', '脚本提交尚未占位')
     if (prior.status !== 'prepared') return prior
     const record = await this.record(
       `script:control:${control.id}`,
@@ -483,7 +481,7 @@ export class ProgramContext implements ProgramContextApi {
       turns !== 'task' &&
       (!Number.isSafeInteger(turns) || turns < 1 || turns > ScriptLeaseLimits.maxTurns)
     )
-      throw new Error('结果租约超出范围')
+      throw new AppError('VALIDATION', '结果租约超出范围')
     await this.update((state) => ({
       ...state,
       leases: [
@@ -519,7 +517,7 @@ export class ProgramContext implements ProgramContextApi {
       { offset, limit }
     )
     if (result.record.kind !== 'audit' || !/^script:[0-9a-f-]{36}$/u.test(result.record.title))
-      throw Object.assign(new Error('引用不是当前会话保存的脚本版本'), { code: 'SCRIPT_REF' })
+      throw new AppError('SCRIPT_REF', '引用不是当前会话保存的脚本版本')
     return result
   }
 
@@ -536,7 +534,7 @@ export class ProgramContext implements ProgramContextApi {
       result.record.kind !== 'audit' ||
       !/^script:[0-9a-f-]{36}:result$/u.test(result.record.title)
     )
-      throw Object.assign(new Error('引用不是当前会话的执行结果'), { code: 'RESULT_REF' })
+      throw new AppError('RESULT_REF', '引用不是当前会话的执行结果')
     return result
   }
 
@@ -548,7 +546,7 @@ export class ProgramContext implements ProgramContextApi {
     signal?.throwIfAborted()
     const content = await this.read(ref)
     const source = content.record.sources[0]
-    if (!source) throw new Error('执行结果缺少源码引用')
+    if (!source) throw new AppError('INVARIANT', '执行结果缺少源码引用')
     await this.add(content.record.ref, source, content.record.title.slice(7, -7), turns)
     return { ref, remainingTurns: turns, executed: false as const }
   }
@@ -620,7 +618,7 @@ export class ProgramContext implements ProgramContextApi {
         )
       ) {
         const data = await this.storage.get(this.sessionId, record.objectId)
-        if (isNull(data)) throw new Error('用户图片记录缺失')
+        if (isNull(data)) throw new AppError('NOT_FOUND', '用户图片记录缺失')
         images.push(JSON.parse(data) as ModelImage)
         imageReferences.push({
           ref: record.ref,
@@ -681,7 +679,7 @@ export class ProgramContext implements ProgramContextApi {
       )
       const sourceText = programContentText(source, true)
       const full = await this.storage.get(this.sessionId, result.record.objectId)
-      if (isNull(full)) throw new Error('结果归档正文缺失')
+      if (isNull(full)) throw new AppError('NOT_FOUND', '结果归档正文缺失')
       const archived = JSON.parse(full)
       const failure = programFailure(archived)
       feedback = failure ? { ref: lease.ref, sourceRef: lease.sourceRef, failure } : undefined
@@ -796,7 +794,7 @@ export class ProgramContext implements ProgramContextApi {
       for (const ref of (saved.attachments ?? []).filter((_ref, index) => attached(index))) {
         const record = await this.context.read(ref, { limit: 1 })
         const image = await this.storage.get(this.sessionId, record.record.objectId)
-        if (isNull(image)) throw new Error('结果图像缺失')
+        if (isNull(image)) throw new AppError('NOT_FOUND', '结果图像缺失')
         images.push(JSON.parse(image) as ModelImage)
       }
     }
@@ -1177,7 +1175,7 @@ export class ProgramContext implements ProgramContextApi {
   ): Promise<void> {
     await this.update(
       (state) => {
-        if (state.pendingFrame !== frameId) throw new Error('材料确认帧已失效')
+        if (state.pendingFrame !== frameId) throw new AppError('CONFLICT', '材料确认帧已失效')
         return {
           ...state,
           pendingDelivered: state.pendingDelivered?.filter((item) => refs.includes(item.ref)),
@@ -1192,7 +1190,7 @@ export class ProgramContext implements ProgramContextApi {
     await this.update(
       (state) => {
         if (!state.pendingFrame) return state
-        if (state.pendingFrame !== frameId) throw new Error('租约回合身份已经失效')
+        if (state.pendingFrame !== frameId) throw new AppError('CONFLICT', '租约回合身份已经失效')
         const completedTurns = state.completedTurns + 1
         const leases = state.leases
           .map((item) => ({

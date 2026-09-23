@@ -1,6 +1,7 @@
 import { ErrorCode } from '@modelcontextprotocol/sdk/types.js'
 
 import { isBoolean, isRecord, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 import type { McpToolDescriptor } from '../types/mcp.js'
@@ -48,9 +49,8 @@ export function isMcpTimeoutError(error: unknown): boolean {
 
 /** 返回可由宿主继续 OAuth 的标准错误，不触发产品交互。 */
 export function mcpAuthorizationRequired(authorizationUrl: Nullable<string>): Error {
-  return Object.assign(new Error('MCP 服务器要求先完成 OAuth 授权'), {
+  return AppError.withFields('MCP_AUTHORIZATION_REQUIRED', 'MCP 服务器要求先完成 OAuth 授权', {
     name: 'McpAuthorizationRequiredError',
-    code: 'MCP_AUTHORIZATION_REQUIRED',
     authorizationUrl,
   })
 }

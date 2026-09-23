@@ -1,4 +1,5 @@
 import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { ModelDriver, ModelTurnRequest } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 
@@ -24,7 +25,7 @@ class ProviderRequestCompiler implements ProviderRequestCompilerApi {
     reserveTokens: number
   ): Promise<CompiledModelRequest> {
     if (!Number.isSafeInteger(reserveTokens) || reserveTokens < 0)
-      throw new Error('无效模型预留预算')
+      throw new AppError('VALIDATION', '无效模型预留预算')
     const request = structuredClone({ ...input, compiledPrompt: modelRequestEncoder.encode(input) })
     request.response = modelRequestEncoder.response(request)
     const messages = encodeProviderRequestAuditValue(modelRequestEncoder.messages(request))
@@ -48,7 +49,7 @@ class ProviderRequestCompiler implements ProviderRequestCompilerApi {
     await this.verify(providerRequest)
     const estimate = await driver.estimate(request)
     if (!Number.isSafeInteger(estimate.tokens) || estimate.tokens < 0)
-      throw new Error('模型驱动返回了无效预算')
+      throw new AppError('VALIDATION', '模型驱动返回了无效预算')
     const okToSend =
       estimate.tokens <= driver.limits.inputTokens &&
       estimate.tokens + request.outputTokens + reserveTokens <= driver.limits.contextTokens
@@ -63,7 +64,7 @@ class ProviderRequestCompiler implements ProviderRequestCompilerApi {
       JSON.stringify(snapshot.requestFingerprint) !==
         JSON.stringify(await requestFingerprint(snapshot))
     )
-      throw new Error('模型请求快照与实际内容指纹不一致')
+      throw new AppError('INVARIANT', '模型请求快照与实际内容指纹不一致')
   }
 }
 /** 创建无会话状态的统一请求编译器。 */

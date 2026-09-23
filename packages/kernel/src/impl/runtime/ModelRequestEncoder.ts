@@ -1,6 +1,7 @@
 import { Ajv, type ValidateFunction } from 'ajv'
 
 import { isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { ModelRequestEncoderApi } from '../../contract/provides.js'
 import type {
@@ -25,13 +26,13 @@ class ModelRequestEncoder implements ModelRequestEncoderApi {
       !isString(response.description) ||
       response.schema?.type !== 'object'
     )
-      throw new Error('模型响应格式必须是 text 或命名的 JSON 对象契约')
+      throw new AppError('VALIDATION', '模型响应格式必须是 text 或命名的 JSON 对象契约')
     return immutableOperationJson(response)
   }
 
   public output(format: ModelResponseFormat, value: unknown): unknown {
     if (format.type === 'text') {
-      if (!isString(value)) throw new Error('文本响应必须是字符串')
+      if (!isString(value)) throw new AppError('VALIDATION', '文本响应必须是字符串')
       return value
     }
     let validate = this.validators.get(format.schema)
@@ -47,9 +48,9 @@ class ModelRequestEncoder implements ModelRequestEncoderApi {
     }
     const copy = immutableOperationJson(value)
     if (!validate(copy))
-      throw Object.assign(
-        new Error(`模型响应不符合 ${format.name} schema: ${JSON.stringify(validate.errors)}`),
-        { code: 'MODEL_RESPONSE_SCHEMA' }
+      throw new AppError(
+        'MODEL_RESPONSE_SCHEMA',
+        `模型响应不符合 ${format.name} schema: ${JSON.stringify(validate.errors)}`
       )
     return copy
   }

@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite'
 
 import { isUndefined, toNullable } from '@velaros-ai/core'
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { StoreLimits } from '../contract/constants.js'
@@ -375,7 +376,7 @@ CREATE TABLE IF NOT EXISTS store_creations(scope TEXT NOT NULL,owner TEXT NOT NU
           signal.removeEventListener('abort', abort)
           error ? reject(error) : resolve()
         }
-        const abort = () => finish(signal.reason ?? new Error('状态等待已取消'))
+        const abort = () => finish(signal.reason ?? new AppError('CANCELLED', '状态等待已取消'))
         const unsubscribe = this.hub.subscribe((changed) => {
           if (changed === store) finish()
         })
@@ -575,7 +576,7 @@ CREATE TABLE IF NOT EXISTS store_creations(scope TEXT NOT NULL,owner TEXT NOT NU
           signal.removeEventListener('abort', abort)
           error ? reject(error) : resolve()
         }
-        const abort = () => finish(signal.reason ?? new Error('消息等待已取消'))
+        const abort = () => finish(signal.reason ?? new AppError('CANCELLED', '消息等待已取消'))
         const unsubscribe = this.hub.subscribe((changed) => {
           if (changed === store) finish()
         })

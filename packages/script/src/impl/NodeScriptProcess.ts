@@ -1,6 +1,8 @@
 import type { ChildProcess } from 'node:child_process'
 import { fork } from 'node:child_process'
 
+import { AppError } from '@velaros-ai/core/error'
+
 import type { ScriptProcess, ScriptProcessEvents } from '../contract/requires.js'
 import type { ScriptWorkerCommand } from '../types/worker.js'
 import { resolveChildPath, resolveNodeExecutable } from '../utils/node-executable.js'
@@ -15,7 +17,8 @@ export class NodeScriptProcess implements ScriptProcess {
   public constructor(events: ScriptProcessEvents) {
     const node = resolveNodeExecutable()
     if (!node)
-      throw new Error(
+      throw new AppError(
+        'UNAVAILABLE',
         '本机找不到可用的 Node，隔离脚本没有执行；Electron 宿主须注入自己的进程运行器。'
       )
     const child = fork(resolveChildPath(), [], {
@@ -43,7 +46,7 @@ export class NodeScriptProcess implements ScriptProcess {
   public send(message: ScriptWorkerCommand): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       if (this.closed || !this.child.connected) {
-        reject(new Error('隔离进程通信已关闭。'))
+        reject(new AppError('CLOSED', '隔离进程通信已关闭。'))
         return
       }
       this.child.send(message, (error: Nullable<Error>) => (error ? reject(error) : resolve()))

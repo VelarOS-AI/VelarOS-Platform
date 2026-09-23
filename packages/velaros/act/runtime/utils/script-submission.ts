@@ -1,4 +1,5 @@
 import { isArray, isPlainObject, isString, isUndefined } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { CodeProgramEditLimits } from '@velaros-ai/script/contracts'
 
 import { ScriptLeaseLimits } from '../../system/contract/constants.js'
@@ -6,8 +7,7 @@ import type { ScriptSubmission } from '../types/session.js'
 
 /** 提交不合约定：在任何检查、存档与执行之前拒绝。 */
 function submissionInput(message: string): Error {
-  return Object.assign(new Error(`输入不符合脚本提交约定：${message}`), {
-    code: 'INPUT_SCHEMA',
+  return AppError.withFields('INPUT_SCHEMA', `输入不符合脚本提交约定：${message}`, {
     effect: 'none',
   })
 }

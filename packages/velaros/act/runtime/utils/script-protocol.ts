@@ -2,6 +2,7 @@ import ts from 'typescript'
 
 import { isUndefined } from '@velaros-ai/core'
 import { isEmpty, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { ScriptProtocolLimits } from '../contract/constants.js'
 import type { ScriptDeclaration, ScriptProtocolOptions } from '../types/runtime.js'
@@ -11,10 +12,11 @@ import { ActRuntimeTuning } from './tuning.js'
 
 /** 生成可修复的协议错误，不包含整段业务原文。 */
 export function protocolFailure(message: string, line?: number): Error {
-  return Object.assign(new Error(`${isUndefined(line) ? '' : `第 ${line} 行：`}${message}`), {
-    code: 'SCRIPT_PROTOCOL',
-    line,
-  })
+  return AppError.withFields(
+    'SCRIPT_PROTOCOL',
+    `${isUndefined(line) ? '' : `第 ${line} 行：`}${message}`,
+    { line }
+  )
 }
 
 /** 读取受限字面量 AST，不执行访问器、调用、变量或对象展开。 */

@@ -1,4 +1,5 @@
 import { isUndefined } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { KernelVersionAxes } from '../../contract/constants'
 import type { KernelRegistration } from '../../contract/provides'
@@ -111,21 +112,21 @@ export class Kernel implements KernelApi {
 
   public registerModule(definition: KernelModuleDefinition): void {
     if (this.status !== 'idle') {
-      throw new Error('内核模块必须在启动之前注册')
+      throw new AppError('VALIDATION', '内核模块必须在启动之前注册')
     }
     this.host.registerModule(definition)
   }
 
   public registerModules(definitions: Iterable<KernelModuleDefinition>): void {
     if (this.status !== 'idle') {
-      throw new Error('内核模块必须在启动之前注册')
+      throw new AppError('VALIDATION', '内核模块必须在启动之前注册')
     }
     this.host.registerModules(definitions)
   }
 
   public start(): Promise<void> {
     if (this.status === 'disposed' || this.status === 'disposing')
-      return Promise.reject(new Error('已回收的内核不能再启动'))
+      return Promise.reject(new AppError('CLOSED', '已回收的内核不能再启动'))
     this.startPromise ??= this.startOnce()
     return this.startPromise
   }

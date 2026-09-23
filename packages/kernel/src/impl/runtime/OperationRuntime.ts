@@ -3,6 +3,7 @@ import { Ajv, type ValidateFunction } from 'ajv'
 import { Log } from '@velaros-ai/core'
 import { isFalse, isTrue, isUndefined } from '@velaros-ai/core'
 import { isArray, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { KernelVersionAxes } from '../../contract/constants.js'
 import type { OperationRuntimeApi } from '../../contract/provides.js'
@@ -74,16 +75,16 @@ class OperationRuntime implements OperationRuntimeApi {
     for (const definition of options.modules) {
       const binding = immutableOperationJson(definition.binding)
       if (!/^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$/u.test(binding.moduleId))
-        throw new Error(`模块身份无效 ${binding.moduleId}`)
+        throw new AppError('VALIDATION', `模块身份无效 ${binding.moduleId}`)
       if (this.descriptions.has(binding.moduleId))
-        throw new Error(`模块挂载歧义 ${binding.moduleId}`)
+        throw new AppError('CONFLICT', `模块挂载歧义 ${binding.moduleId}`)
       if (
         !binding.instanceId ||
         !Number.isSafeInteger(binding.generation) ||
         binding.generation < 1 ||
         !binding.schemaRevision
       )
-        throw new Error('模块实例身份不完整')
+        throw new AppError('VALIDATION', '模块实例身份不完整')
       if (
         definition.surface &&
         (definition.surface.specifier !== binding.moduleId ||
@@ -91,7 +92,7 @@ class OperationRuntime implements OperationRuntimeApi {
           [...definition.surface.methods].sort().join(',') !==
             Object.keys(definition.operations).sort().join(','))
       )
-        throw new Error('生成合同与模块挂载不一致')
+        throw new AppError('INVARIANT', '生成合同与模块挂载不一致')
       const descriptors: Record<string, OperationDescriptor> = Object.create(null)
       const handlers: Record<string, KernelCallableCapabilityOperation> = Object.create(null)
       for (const [name, operation] of Object.entries(definition.operations)) {
@@ -99,7 +100,7 @@ class OperationRuntime implements OperationRuntimeApi {
           !/^[A-Za-z_$][\w$]*$/u.test(name) ||
           ['constructor', 'prototype', '__proto__'].includes(name)
         )
-          throw new Error(`操作名无效 ${name}`)
+          throw new AppError('VALIDATION', `操作名无效 ${name}`)
         const descriptorFields: OperationDescriptor = {
           summary: operation.summary,
           input: operation.input,
@@ -125,7 +126,7 @@ class OperationRuntime implements OperationRuntimeApi {
                 effects: descriptor.effects,
               }))
         )
-          throw new Error('生成合同与运行时操作不一致')
+          throw new AppError('INVARIANT', '生成合同与运行时操作不一致')
         validateOperationSchema(descriptor.input)
         validateOperationSchema(descriptor.output)
         descriptors[name] = descriptor
@@ -165,7 +166,7 @@ class OperationRuntime implements OperationRuntimeApi {
                     !isTrue(evidence.completed) ||
                     !['full', 'partial', 'none'].includes(evidence.protection)
                   )
-                    throw new Error('观察收束证据无效')
+                    throw new AppError('VALIDATION', '观察收束证据无效')
                   observation = immutableOperationJson(evidence)
                 },
                 attach: (image: ModelImage) => {
@@ -204,7 +205,7 @@ class OperationRuntime implements OperationRuntimeApi {
                       item.version.length > KernelTuning.resourceVersionChars
                   ))
               )
-                throw new Error('能力资源版本无效或超限')
+                throw new AppError('VALIDATION', '能力资源版本无效或超限')
               return {
                 value,
                 effect,
@@ -294,7 +295,7 @@ class OperationRuntime implements OperationRuntimeApi {
   private readonly preparers = new Map<string, (input: unknown) => unknown | Promise<unknown>>()
 
   public start(): Promise<void> {
-    if (this.closing) return Promise.reject(new Error('运行时已经关闭'))
+    if (this.closing) return Promise.reject(new AppError('CLOSED', '运行时已经关闭'))
     this.started ??= this.kernel.start()
     return this.started
   }
@@ -309,7 +310,7 @@ class OperationRuntime implements OperationRuntimeApi {
       limit < 1 ||
       limit > 100
     )
-      throw new Error('模块分页范围无效')
+      throw new AppError('VALIDATION', '模块分页范围无效')
     const needle = (query.query ?? '').toLocaleLowerCase()
     const all = [...this.descriptions.values()]
       .filter((item) =>
@@ -330,12 +331,13 @@ class OperationRuntime implements OperationRuntimeApi {
 
   public describe(moduleId: string): ModuleDescription {
     const description = this.descriptions.get(moduleId)
-    if (!description) throw new Error(`未挂载模块 ${moduleId}，请先查询 modules.list`)
+    if (!description)
+      throw new AppError('NOT_FOUND', `未挂载模块 ${moduleId}，请先查询 modules.list`)
     return description
   }
 
   public bind(sessionId: string, moduleId: string): ModuleBinding {
-    if (this.closing || !sessionId) throw new Error('会话已经关闭或身份无效')
+    if (this.closing || !sessionId) throw new AppError('CLOSED', '会话已经关闭或身份无效')
     const binding = this.describe(moduleId).binding
     const leases = this.leases.get(sessionId) ?? new Set<string>()
     leases.add(moduleId)
@@ -355,9 +357,7 @@ class OperationRuntime implements OperationRuntimeApi {
     if (existing)
       return existing.key === key
         ? existing.promise
-        : Promise.reject(
-            Object.assign(new Error('同一调用号已经绑定其他请求'), { code: 'IDEMPOTENCY_CONFLICT' })
-          )
+        : Promise.reject(new AppError('IDEMPOTENCY_CONFLICT', '同一调用号已经绑定其他请求'))
     const pending = this.dispatch(frozen, signal)
     this.dispatches.set(id, { key, promise: pending })
     this.pending.add(pending)
@@ -374,32 +374,32 @@ class OperationRuntime implements OperationRuntimeApi {
 
   private async dispatch(call: OperationCall, signal?: AbortSignal): Promise<InvocationReceipt> {
     await this.start()
-    if (signal?.aborted || this.closing) throw new Error('调用已取消')
+    if (signal?.aborted || this.closing) throw new AppError('CANCELLED', '调用已取消')
     const description = this.describe(call.binding.moduleId)
     if (
       canonicalOperationJson(description.binding) !== canonicalOperationJson(call.binding) ||
       !this.leases.get(call.sessionId)?.has(call.binding.moduleId)
     )
-      throw new Error('模块绑定已经失效')
-    if (!call.id || !call.sessionId || !call.executionId) throw new Error('调用身份不完整')
+      throw new AppError('CONFLICT', '模块绑定已经失效')
+    if (!call.id || !call.sessionId || !call.executionId)
+      throw new AppError('VALIDATION', '调用身份不完整')
     const key = `${call.binding.moduleId}/${call.operation}`
     const validators = this.validators.get(key)
-    if (!validators) throw new Error(`未知操作 ${call.operation}`)
+    if (!validators) throw new AppError('NOT_FOUND', `未知操作 ${call.operation}`)
     const original = immutableOperationJson(call.input)
     if (!validators.input(original))
-      throw Object.assign(
-        new Error(`输入不符合 schema: ${JSON.stringify(validators.input.errors)}`),
-        { code: 'INPUT_SCHEMA', effect: 'none' }
+      throw AppError.withFields(
+        'INPUT_SCHEMA',
+        `输入不符合 schema: ${JSON.stringify(validators.input.errors)}`,
+        { effect: 'none' }
       )
     const requestFingerprint = await operationFingerprint({ ...call, input: original })
     const prior = await this.journal.read(call.sessionId, call.id)
     if (prior) {
       if (prior.prepared.requestFingerprint !== requestFingerprint)
-        throw Object.assign(new Error('同一调用号已经绑定其他请求'), {
-          code: 'IDEMPOTENCY_CONFLICT',
-        })
+        throw new AppError('IDEMPOTENCY_CONFLICT', '同一调用号已经绑定其他请求')
       if (prior.receipt) return immutableOperationJson(prior.receipt)
-      throw new Error('调用已派发或需要恢复核对，不能自动重放')
+      throw new AppError('CONFLICT', '调用已派发或需要恢复核对，不能自动重放')
     }
     let prepared = immutableOperationJson({
       ...call,
@@ -410,11 +410,9 @@ class OperationRuntime implements OperationRuntimeApi {
     const existing = await this.journal.claim(prepared)
     if (existing) {
       if (existing.prepared.requestFingerprint !== prepared.requestFingerprint)
-        throw Object.assign(new Error('同一调用号已经绑定其他请求'), {
-          code: 'IDEMPOTENCY_CONFLICT',
-        })
+        throw new AppError('IDEMPOTENCY_CONFLICT', '同一调用号已经绑定其他请求')
       if (existing.receipt) return immutableOperationJson(existing.receipt)
-      throw new Error('调用已派发或需要恢复核对，不能自动重放')
+      throw new AppError('CONFLICT', '调用已派发或需要恢复核对，不能自动重放')
     }
     const reserved = prepared
     try {
@@ -423,23 +421,24 @@ class OperationRuntime implements OperationRuntimeApi {
         description.operations[call.operation]!.allowedModes &&
         !description.operations[call.operation]!.allowedModes!.includes(call.mode ?? 'execute')
       )
-        throw Object.assign(new Error('当前脚本入口不允许调用此能力'), {
-          code: 'OPERATION_MODE_DENIED',
-        })
+        throw new AppError('OPERATION_MODE_DENIED', '当前脚本入口不允许调用此能力')
       if (
         call.mode === 'observe' &&
         description.operations[call.operation]!.effects !== 'none' &&
         !this.observable.has(key)
       ) {
-        throw Object.assign(
-          new Error(`观察脚本会每轮重跑，禁止调用 ${key}；请在一次性执行入口操作。`),
-          { code: 'OBSERVATION_EFFECT_DENIED' }
+        throw new AppError(
+          'OBSERVATION_EFFECT_DENIED',
+          `观察脚本会每轮重跑，禁止调用 ${key}；请在一次性执行入口操作。`
         )
       }
       const prepare = this.preparers.get(key)
       const input = prepare ? immutableOperationJson(await prepare(original)) : original
       if (!validators.input(input))
-        throw new Error(`准备后的参数不符合 schema: ${JSON.stringify(validators.input.errors)}`)
+        throw new AppError(
+          'VALIDATION',
+          `准备后的参数不符合 schema: ${JSON.stringify(validators.input.errors)}`
+        )
       prepared = immutableOperationJson({
         ...reserved,
         input,
@@ -555,9 +554,7 @@ class OperationRuntime implements OperationRuntimeApi {
           (saved) => canonicalOperationJson(saved) === canonicalOperationJson(stamp)
         )
       )
-        throw Object.assign(new Error('资源版本不属于当前会话的真实回执'), {
-          code: 'READ_STAMP_INVALID',
-        })
+        throw new AppError('READ_STAMP_INVALID', '资源版本不属于当前会话的真实回执')
       const description = this.descriptions.get(stamp.binding.moduleId)
       if (
         !description ||
@@ -567,7 +564,7 @@ class OperationRuntime implements OperationRuntimeApi {
         continue
       }
       if (!this.leases.get(sessionId)?.has(stamp.binding.moduleId))
-        throw Object.assign(new Error('资源读取授权已经撤回'), { code: 'CAPABILITY_DENIED' })
+        throw new AppError('CAPABILITY_DENIED', '资源读取授权已经撤回')
       await awaitOperationRead(
         Promise.resolve(
           this.options.beforeReadValidation?.(
@@ -593,10 +590,10 @@ class OperationRuntime implements OperationRuntimeApi {
               invocation: record.prepared,
               signal,
               recordEffect: () => {
-                throw new Error('版本验证不能记录写效果')
+                throw new AppError('INVARIANT', '版本验证不能记录写效果')
               },
               attach: () => {
-                throw new Error('版本验证不能产生模型附件')
+                throw new AppError('INVARIANT', '版本验证不能产生模型附件')
               },
             }
           )
@@ -626,7 +623,7 @@ class OperationRuntime implements OperationRuntimeApi {
   ): Promise<Nullable<InvocationRecord>> {
     signal.throwIfAborted()
     if (this.dispatches.has(JSON.stringify([sessionId, id])))
-      throw new Error('仍在执行的操作不能核对')
+      throw new AppError('CONFLICT', '仍在执行的操作不能核对')
     const record = await this.journal.read(sessionId, id)
     if (!record || record.reconciliation || (record.receipt && record.receipt.effect !== 'unknown'))
       return record
@@ -635,7 +632,7 @@ class OperationRuntime implements OperationRuntimeApi {
       canonicalOperationJson(this.describe(binding.moduleId).binding) !==
       canonicalOperationJson(binding)
     )
-      throw new Error('原模块实例已变化，不能用新实例核对旧操作')
+      throw new AppError('CONFLICT', '原模块实例已变化，不能用新实例核对旧操作')
     const reconcile = this.reconcilers.get(`${binding.moduleId}/${operation}`)
     if (!reconcile || !this.journal.recordReconciliation) return record
     const result = await awaitOperationRead(reconcile(record.prepared, signal), signal)
@@ -648,7 +645,7 @@ class OperationRuntime implements OperationRuntimeApi {
       !result.evidence.trim() ||
       result.evidence.length > 16000
     )
-      throw new Error('领域核对结果无效')
+      throw new AppError('INVARIANT', '领域核对结果无效')
     await this.journal.recordReconciliation(sessionId, id, {
       ...immutableOperationJson(result),
       checkedAt: new Date().toISOString(),

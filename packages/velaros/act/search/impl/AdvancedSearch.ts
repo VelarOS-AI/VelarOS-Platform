@@ -8,6 +8,7 @@ import { createContextRuntime } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
 import { toNullable } from '@velaros-ai/core'
 import { isEmpty, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { OperationContext, OperationDescriptor, PreparedInvocation } from '@velaros-ai/kernel'
 import type { VelarosSession } from '@velaros-ai/velaros'
 
@@ -90,7 +91,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
       !Object.hasOwn(options.profiles, options.defaultProfile) ||
       isEmpty(Object.keys(options.profiles))
     )
-      throw new Error('搜索默认档位未登记')
+      throw new AppError('VALIDATION', '搜索默认档位未登记')
     for (const profile of Object.values(options.profiles)) {
       const required = [
         profile.modelCalls,
@@ -116,7 +117,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
         profile.finalizationTokens >= profile.modelTokens ||
         profile.finalizationTokens <= profile.outputTokens
       )
-        throw new Error('搜索预算必须有限且预留收尾容量')
+        throw new AppError('VALIDATION', '搜索预算必须有限且预留收尾容量')
     }
   }
 
@@ -136,7 +137,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
 
   public activation(id: string) {
     const value = this.active.get(id)
-    if (!value) throw Object.assign(new Error('当前不是活动搜索作用域'), { code: 'SEARCH_SCOPE' })
+    if (!value) throw new AppError('SEARCH_SCOPE', '当前不是活动搜索作用域')
     return value
   }
 
@@ -163,18 +164,16 @@ export class AdvancedSearch implements AdvancedSearchApi {
     ]
     for (const ref of refs) await activation.authorizeReference(ref, signal)
     if (!this.allows(invocation.sessionId, module))
-      throw Object.assign(new Error('搜索作用域没有此能力'), { code: 'SEARCH_CAPABILITY_DENIED' })
+      throw new AppError('SEARCH_CAPABILITY_DENIED', '搜索作用域没有此能力')
     // 收尾阶段只挡新的检索与读取；交付结论（report）正是收尾时要做的
     if (
       module === EvidenceModuleId &&
       invocation.operation !== 'report' &&
       !activation.canExplore()
     )
-      throw Object.assign(new Error('收尾阶段禁止新的来源读取'), { code: 'SEARCH_FINALIZING' })
+      throw new AppError('SEARCH_FINALIZING', '收尾阶段禁止新的来源读取')
     if (descriptor.effects === 'write' && !systemModules.owns(module))
-      throw Object.assign(new Error('搜索作用域只允许读取外部来源'), {
-        code: 'SEARCH_CAPABILITY_DENIED',
-      })
+      throw new AppError('SEARCH_CAPABILITY_DENIED', '搜索作用域只允许读取外部来源')
   }
 
   private async load(id: string): Promise<Optional<SearchState>> {
@@ -201,7 +200,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
         JSON.parse((await this.dependencies.storage.get(state.sessionId, latest.objectId))!)
           .activation !== activation
       )
-        throw Object.assign(new Error('搜索激活已被新的状态替代'), { code: 'SEARCH_STALE' })
+        throw new AppError('SEARCH_STALE', '搜索激活已被新的状态替代')
       const record = {
         ref: { sessionId: state.sessionId, id: crypto.randomUUID() },
         sequence: snapshot.records.length + 1,
@@ -221,7 +220,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
       )
         return
     }
-    throw Object.assign(new Error('搜索状态持续发生并发变化'), { code: 'SEARCH_BUSY' })
+    throw new AppError('SEARCH_BUSY', '搜索状态持续发生并发变化')
   }
 
   private async savedReport(
@@ -229,7 +228,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
     call: OperationContext
   ): Promise<{ report: SearchResult; state: SearchState }> {
     if (ref.sessionId !== call.invocation.sessionId)
-      throw Object.assign(new Error('搜索报告不在当前会话'), { code: 'SCOPE_MISMATCH' })
+      throw new AppError('SCOPE_MISMATCH', '搜索报告不在当前会话')
     const context = createContextRuntime({
       sessionId: ref.sessionId,
       storage: this.dependencies.storage,
@@ -244,13 +243,12 @@ export class AdvancedSearch implements AdvancedSearchApi {
     const report = JSON.parse(text) as SearchResult
     const state = await this.load(`search:${ref.sessionId}:${report.searchId}`)
     if (!state || state.parentSessionId !== ref.sessionId)
-      throw Object.assign(new Error('搜索检查点不存在'), { code: 'CHECKPOINT_EXPIRED' })
+      throw new AppError('CHECKPOINT_EXPIRED', '搜索检查点不存在')
     // 报告必须是本搜索发布的记录，不接受模型自行拼接的任意 artifact。
     const provenance = (await this.dependencies.storage.load(state.sessionId))?.records.some(
       (record) => record.title === `search:published:${ref.id}`
     )
-    if (!provenance)
-      throw Object.assign(new Error('引用不是 Runtime 发布的搜索报告'), { code: 'SEARCH_REF' })
+    if (!provenance) throw new AppError('SEARCH_REF', '引用不是 Runtime 发布的搜索报告')
     return { report, state }
   }
 
@@ -280,15 +278,13 @@ export class AdvancedSearch implements AdvancedSearchApi {
     call.signal.throwIfAborted()
     const previous = input.resume ? await this.savedReport(input.resume, call) : undefined
     if (previous && previous.state.report?.id !== input.resume!.id)
-      throw Object.assign(new Error(`搜索检查点已更新：${previous.state.report?.id}`), {
-        code: 'CHECKPOINT_STALE',
-      })
-    if (!previous && !input.query?.trim()) throw new Error('新搜索需要 query')
+      throw new AppError('CHECKPOINT_STALE', `搜索检查点已更新：${previous.state.report?.id}`)
+    if (!previous && !input.query?.trim()) throw new AppError('VALIDATION', '新搜索需要 query')
     checkSearchRequest(input)
     const profileName =
       input.profile ?? previous?.state.profile ?? this.dependencies.options.defaultProfile
     const profile = this.dependencies.options.profiles[profileName]
-    if (!profile) throw Object.assign(new Error('搜索档位当前不可用'), { code: 'SEARCH_PROFILE' })
+    if (!profile) throw new AppError('SEARCH_PROFILE', '搜索档位当前不可用')
     const sources =
       input.sources ??
       previous?.state.sources ??
@@ -296,10 +292,10 @@ export class AdvancedSearch implements AdvancedSearchApi {
     if (
       sources.some((id) => !this.dependencies.evidence.sources().some((source) => source.id === id))
     )
-      throw Object.assign(new Error('搜索来源当前不可用'), { code: 'DENIED' })
+      throw new AppError('DENIED', '搜索来源当前不可用')
     const parent = this.dependencies.view(call.invocation.sessionId)
     const task = await parent.inspect()
-    if (!task) throw new Error('搜索需要父任务')
+    if (!task) throw new AppError('UNAVAILABLE', '搜索需要父任务')
     const searchId = previous?.state.id ?? crypto.randomUUID()
     const sessionId = `search:${call.invocation.sessionId}:${searchId}`
     const context = createContextRuntime({ sessionId, storage: this.dependencies.storage })
@@ -366,9 +362,9 @@ export class AdvancedSearch implements AdvancedSearchApi {
       this.active.has(sessionId) ||
       (current?.activation && (current.expiresAt ?? 0) > Date.now())
     )
-      throw Object.assign(new Error('同一搜索已有活动续查'), { code: 'SEARCH_BUSY' })
+      throw new AppError('SEARCH_BUSY', '同一搜索已有活动续查')
     if (previous && current?.report?.id !== input.resume!.id)
-      throw Object.assign(new Error('搜索检查点已经变化'), { code: 'CHECKPOINT_STALE' })
+      throw new AppError('CHECKPOINT_STALE', '搜索检查点已经变化')
     const objectId = await this.dependencies.storage.put(sessionId, JSON.stringify(state))
     const claim = {
       ref: { sessionId, id: crypto.randomUUID() },
@@ -387,7 +383,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
         records: [...snapshot.records, claim],
       }))
     )
-      throw Object.assign(new Error('并发搜索占位失败'), { code: 'SEARCH_BUSY' })
+      throw new AppError('SEARCH_BUSY', '并发搜索占位失败')
     let reserved = false
     let activity: Optional<ModelToolRuntimeScope>
     let activation: Optional<SearchActivation>
@@ -405,8 +401,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
       await activity.budget.reserveModel('context', profile.finalizationTokens)
       reserved = true
       call.signal.throwIfAborted()
-      if (Date.now() >= deadline)
-        throw Object.assign(new Error('搜索启动时已达到期限'), { code: 'SEARCH_LIMIT' })
+      if (Date.now() >= deadline) throw new AppError('SEARCH_LIMIT', '搜索启动时已达到期限')
       const publishReserve = Math.min(
         profile.publicationMs ?? SearchTuning.publicationMs,
         Math.max(1, Math.floor((deadline - Date.now()) / 4))
@@ -590,8 +585,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
     const selected = input.evidenceId
       ? report.evidence.filter((evidence) => evidence.id === input.evidenceId)
       : report.evidence
-    if (input.evidenceId && !selected.length)
-      throw Object.assign(new Error('证据不属于该报告'), { code: 'SEARCH_REF' })
+    if (input.evidenceId && !selected.length) throw new AppError('SEARCH_REF', '证据不属于该报告')
     if (input.mode !== 'current') {
       if (input.evidenceId) {
         const evidence = selected[0]!

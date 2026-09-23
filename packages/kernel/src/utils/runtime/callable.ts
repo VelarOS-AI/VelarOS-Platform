@@ -2,6 +2,7 @@
 //
 // 这三件都用不到实例状态，所以不放在类里：宿主、服务面、隔离适配器都要用同一份口径。
 import { isBlank, isFunction, isObject } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type {
   KernelCallableCapabilityService,
@@ -15,10 +16,10 @@ export function normalizeKernelOperationMetadata(
 ): KernelCapabilityOperationMetadata {
   const permissions = [...metadata.permissions]
   if (permissions.some((permission) => isBlank(permission.trim()))) {
-    throw new Error(`可调用能力的操作 "${operation}" 声明了空的权限名`)
+    throw new AppError('VALIDATION', `可调用能力的操作 "${operation}" 声明了空的权限名`)
   }
   if (new Set(permissions).size !== permissions.length) {
-    throw new Error(`可调用能力的操作 "${operation}" 声明了重复的权限名`)
+    throw new AppError('VALIDATION', `可调用能力的操作 "${operation}" 声明了重复的权限名`)
   }
 
   return Object.freeze({

@@ -1,3 +1,4 @@
+import { AppError } from '@velaros-ai/core/error'
 import type { OperationModuleDefinition } from '@velaros-ai/kernel'
 
 import { capabilityModules } from '../../runtime/impl/CapabilityModules.js'
@@ -22,7 +23,8 @@ export interface MemoryModuleApi {
 
 class MemoryModule implements MemoryModuleApi {
   public create(host: MemoryHost, organize = true, persistent = false): OperationModuleDefinition {
-    if (persistent && !host.longTermMemory) throw new Error('长期记忆合同需要宿主作用域端口')
+    if (persistent && !host.longTermMemory)
+      throw new AppError('VALIDATION', '长期记忆合同需要宿主作用域端口')
     const surface = persistent
       ? organize
         ? VelarSystemMemoryPersistentModule

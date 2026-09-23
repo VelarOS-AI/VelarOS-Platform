@@ -1,3 +1,5 @@
+import { AppError } from '@velaros-ai/core/error'
+
 import { VelarosStandardDeclarations } from '../contract/surface.js'
 import type {
   GrantedModule,
@@ -30,7 +32,7 @@ class ScriptPackageCompiler implements ScriptPackageCompilerApi {
         ids.has(pkg.specifier) ||
         names.has(pkg.specifier)
       )
-        throw new Error(`脚本包名冲突或无效：${pkg.specifier}`)
+        throw new AppError('CONFLICT', `脚本包名冲突或无效：${pkg.specifier}`)
       names.add(pkg.specifier)
       const exports: Record<string, string> = Object.create(null)
       for (const [name, target] of Object.entries(pkg.exports)) {
@@ -39,7 +41,7 @@ class ScriptPackageCompiler implements ScriptPackageCompilerApi {
           ['__proto__', 'prototype', 'constructor', 'default', 'output'].includes(name) ||
           !/^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$/u.test(target)
         )
-          throw new Error(`脚本包成员无效：${pkg.specifier}.${name}`)
+          throw new AppError('VALIDATION', `脚本包成员无效：${pkg.specifier}.${name}`)
         if (ids.has(target)) exports[name] = target
       }
       const members = Object.entries(exports)

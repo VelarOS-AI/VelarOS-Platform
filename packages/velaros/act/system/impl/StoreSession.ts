@@ -19,6 +19,7 @@ import type {
 import { createContextRuntime, StoreLimits } from '@velaros-ai/context'
 import { isFalse, isNull, isUndefined, toNullable, toOptional } from '@velaros-ai/core'
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { StoreProjectionLimits } from '../contract/constants.js'
 import type { StoreConfiguration, StoreEntry, StoreFrame, StoreGrant } from '../types/store.js'
@@ -130,7 +131,7 @@ export class StoreSession implements StoreSessionApi {
     configuration: StoreConfiguration,
     private readonly owned = true
   ) {
-    if (!context.stores) throw new Error('当前存储没有 store 端口')
+    if (!context.stores) throw new AppError('UNAVAILABLE', '当前存储没有 store 端口')
     this.storage = context.stores
     this.configuration = Object.freeze(structuredClone(configuration))
     this.scope = configuration.scope
@@ -245,8 +246,7 @@ export class StoreSession implements StoreSessionApi {
     query: { prefix?: string; after?: string; limit?: number }
   ): Promise<StorePage> {
     if ((query.prefix?.length ?? 0) > StoreLimits.keyChars)
-      throw Object.assign(new Error(`键前缀最多 ${StoreLimits.keyChars} 个字符`), {
-        code: 'STORE_INPUT',
+      throw AppError.withFields('STORE_INPUT', `键前缀最多 ${StoreLimits.keyChars} 个字符`, {
         effect: 'none',
       })
     const access = await this.access(store)
@@ -308,10 +308,7 @@ export class StoreSession implements StoreSessionApi {
     operationId: string
   ): Promise<StoreSubscription> {
     if (!isUndefined(input.after) && (!Number.isSafeInteger(input.after) || input.after < 0))
-      throw Object.assign(new Error('订阅起点 after 必须是非负整数'), {
-        code: 'STORE_INPUT',
-        effect: 'none',
-      })
+      throw AppError.withFields('STORE_INPUT', '订阅起点 after 必须是非负整数', { effect: 'none' })
     const access = await this.access(input.store)
     for (const prefix of input.topics)
       if (!access.read.some((read) => prefix.startsWith(read)))
@@ -632,7 +629,7 @@ export class StoreSession implements StoreSessionApi {
       )
         return
     }
-    throw new Error('任务 store 引用并发更新失败')
+    throw new AppError('CONFLICT', '任务 store 引用并发更新失败')
   }
   private async all(): Promise<StoreEntry[]> {
     const entries: StoreEntry[] = []

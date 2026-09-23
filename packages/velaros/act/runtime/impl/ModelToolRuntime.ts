@@ -4,6 +4,7 @@ import { createContextRuntime } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
 import { isNull } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { ModelTurnRequest } from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
 
@@ -82,18 +83,18 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
       payload.sessionId !== parent ||
       !caller?.records.some((record) => record.ref.id === payload.id)
     )
-      throw new Error('交付报告不属于调用者')
+      throw new AppError('PERMISSION', '交付报告不属于调用者')
     const producer = await this.options.storage.load(sessionId)
     const context = createContextRuntime({ sessionId: parent, storage: this.options.storage })
     const artifacts: Array<ModelToolDelivery['artifacts'][number]> = []
     for (const ref of evidence) {
       if (ref.sessionId !== sessionId && ref.sessionId !== parent)
-        throw new Error('证据不属于生产者或调用者')
+        throw new AppError('PERMISSION', '证据不属于生产者或调用者')
       const state = ref.sessionId === sessionId ? producer : caller
       const record = state?.records.find((item) => item.ref.id === ref.id)
-      if (!record) throw new Error('交付证据不存在')
+      if (!record) throw new AppError('NOT_FOUND', '交付证据不存在')
       const body = await this.options.storage.get(ref.sessionId, record.objectId)
-      if (isNull(body)) throw new Error('共享证据原文缺失')
+      if (isNull(body)) throw new AppError('NOT_FOUND', '共享证据原文缺失')
       const copy =
         ref.sessionId === parent
           ? record
@@ -125,7 +126,7 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
       const record = producer?.records.find((item) => item.ref.id === id)
       if (!record) continue
       const body = await this.options.storage.get(sessionId, record.objectId)
-      if (isNull(body)) throw new Error('共享脚本原文缺失')
+      if (isNull(body)) throw new AppError('NOT_FOUND', '共享脚本原文缺失')
       // 共享只是不可变源码材料；调用者显式读取并经自身 ScriptAct 校验后才可运行。
       const copy = await context.append({ kind: 'note', title: 'shared:script', body })
       await context.append({
@@ -175,11 +176,11 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
   public constructor(private readonly options: ModelToolRuntimeOptions) {
     this.policy = { ...ModelToolLimits, ...options.policy }
     if (Object.values(this.policy).some((value) => !Number.isSafeInteger(value) || value < 1))
-      throw new Error('模型工具调度上限必须为正整数')
+      throw new AppError('VALIDATION', '模型工具调度上限必须为正整数')
   }
 
   public root(sessionId: string): void {
-    if (this.active.has(sessionId)) throw new Error('子会话不能注册为根')
+    if (this.active.has(sessionId)) throw new AppError('VALIDATION', '子会话不能注册为根')
     this.roots.add(sessionId)
   }
 
@@ -205,25 +206,23 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
   ): Promise<ModelToolRuntimeScope> {
     signal.throwIfAborted()
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1)
-      throw new Error('模型工具必须声明有限时限')
+      throw new AppError('VALIDATION', '模型工具必须声明有限时限')
     if (!sessionId || sessionId === parentSessionId || this.roots.has(sessionId))
-      throw Object.assign(new Error('模型工具身份与父会话冲突'), { code: 'MODEL_TOOL_SCOPE' })
-    if (this.active.has(sessionId))
-      throw Object.assign(new Error('模型工具已有活动调用'), { code: 'MODEL_TOOL_BUSY' })
+      throw new AppError('MODEL_TOOL_SCOPE', '模型工具身份与父会话冲突')
+    if (this.active.has(sessionId)) throw new AppError('MODEL_TOOL_BUSY', '模型工具已有活动调用')
     const parent = this.active.get(parentSessionId)
     if (!parent && !this.roots.has(parentSessionId))
-      throw Object.assign(new Error('模型工具父会话不可用'), { code: 'MODEL_TOOL_SCOPE' })
+      throw new AppError('MODEL_TOOL_SCOPE', '模型工具父会话不可用')
     if (parent && parent.binding.kind !== 'agent')
-      throw Object.assign(new Error('单一职责模型工具是叶子调用，不能派发其他模型工具或子任务'), {
-        code: 'MODEL_TOOL_LEAF',
-      })
+      throw new AppError(
+        'MODEL_TOOL_LEAF',
+        '单一职责模型工具是叶子调用，不能派发其他模型工具或子任务'
+      )
     if (parent && kind === 'agent')
-      throw Object.assign(new Error('只有主线可以派发业务子任务'), {
-        code: 'MODEL_TOOL_DELEGATION',
-      })
+      throw new AppError('MODEL_TOOL_DELEGATION', '只有主线可以派发业务子任务')
     const depth = (parent?.binding.depth ?? 0) + 1
     if (depth > this.policy.maxDepth)
-      throw Object.assign(new Error('模型工具调用深度已达上限'), { code: 'MODEL_TOOL_DEPTH' })
+      throw new AppError('MODEL_TOOL_DEPTH', '模型工具调用深度已达上限')
     const rootSessionId = parent?.binding.rootSessionId ?? parentSessionId
     const deadline = Math.min(
       Date.now() + timeoutMs,
@@ -334,7 +333,7 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
   ) {
     const scope = this.active.get(sessionId)
     if (!scope && !this.roots.has(sessionId))
-      throw Object.assign(new Error('模型工具活动已结束'), { code: 'MODEL_TOOL_CLOSED' })
+      throw new AppError('MODEL_TOOL_CLOSED', '模型工具活动已结束')
     const combined = scope ? AbortSignal.any([signal, scope.signal]) : signal
     await this.acquire(combined)
     try {
@@ -374,7 +373,7 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
     for (let attempt = 0; attempt < 32; attempt++) {
       signal.throwIfAborted()
       const snapshot = await this.options.storage.load(binding.rootSessionId)
-      if (!snapshot) throw new Error('模型工具根会话尚未建立')
+      if (!snapshot) throw new AppError('UNAVAILABLE', '模型工具根会话尚未建立')
       const records = [
         ...new Map(
           snapshot.records
@@ -394,11 +393,11 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
           prior.kind !== binding.kind ||
           prior.rootTaskId !== binding.rootTaskId)
       )
-        throw Object.assign(new Error('模型工具恢复归属不匹配'), { code: 'MODEL_TOOL_SCOPE' })
+        throw new AppError('MODEL_TOOL_SCOPE', '模型工具恢复归属不匹配')
       if (prior?.status === 'active' && prior.deadline > Date.now())
-        throw Object.assign(new Error('模型工具已有活动调用'), { code: 'MODEL_TOOL_BUSY' })
+        throw new AppError('MODEL_TOOL_BUSY', '模型工具已有活动调用')
       if (snapshot.task?.id !== binding.rootTaskId)
-        throw Object.assign(new Error('根任务已变化'), { code: 'MODEL_TOOL_SCOPE' })
+        throw new AppError('MODEL_TOOL_SCOPE', '根任务已变化')
       const current = bindings.filter((node) => node.rootTaskId === binding.rootTaskId)
       // 整理是各会话的保留叶子槽，不消耗业务派发次数；调用成本仍受祖先总账约束。
       if (
@@ -409,7 +408,7 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
             (node) => node.kind !== 'context' && node.parentSessionId === binding.parentSessionId
           ).length >= this.policy.maxChildren)
       )
-        throw Object.assign(new Error('模型工具会话配额耗尽'), { code: 'MODEL_TOOL_QUOTA' })
+        throw new AppError('MODEL_TOOL_QUOTA', '模型工具会话配额耗尽')
       const body = JSON.stringify(binding)
       const objectId = await this.options.storage.put(binding.rootSessionId, body)
       const record = {
@@ -432,7 +431,7 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
       )
         return
     }
-    throw Object.assign(new Error('模型工具占位持续冲突'), { code: 'MODEL_TOOL_BUSY' })
+    throw new AppError('MODEL_TOOL_BUSY', '模型工具占位持续冲突')
   }
 
   private async release(binding: ModelToolBinding): Promise<void> {
@@ -440,7 +439,7 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
     for (let attempt = 0; attempt < 32; attempt++) {
       const snapshot = await this.options.storage.load(binding.rootSessionId)
       const previous = snapshot?.records.findLast((record) => record.title === title)
-      if (!snapshot || !previous) throw new Error('模型工具活动记录丢失')
+      if (!snapshot || !previous) throw new AppError('NOT_FOUND', '模型工具活动记录丢失')
       const prior = JSON.parse(
         (await this.options.storage.get(binding.rootSessionId, previous.objectId))!
       ) as ModelToolBinding
@@ -464,6 +463,6 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
       )
         return
     }
-    throw Object.assign(new Error('模型工具关闭占位持续冲突'), { code: 'MODEL_TOOL_BUSY' })
+    throw new AppError('MODEL_TOOL_BUSY', '模型工具关闭占位持续冲突')
   }
 }

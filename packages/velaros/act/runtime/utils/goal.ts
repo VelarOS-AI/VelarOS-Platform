@@ -1,4 +1,5 @@
 import { isString, isUndefined } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { GoalLimits } from '../../system/contract/constants.js'
 import type { GoalControl, GoalState, GoalUpdate } from '../../system/types/goal.js'
@@ -11,9 +12,9 @@ export function goalChange(
   id: string
 ): GoalState {
   if (!Number.isSafeInteger(input.baseRevision) || input.baseRevision < 0)
-    throw Object.assign(new Error('目标版本无效'), { code: 'GOAL_INPUT' })
+    throw new AppError('GOAL_INPUT', '目标版本无效')
   if (input.baseRevision !== (prior?.revision ?? 0))
-    throw Object.assign(new Error('目标版本已变化，请重新读取'), { code: 'GOAL_CONFLICT' })
+    throw new AppError('GOAL_CONFLICT', '目标版本已变化，请重新读取')
   const controls = {
     resume: 'active',
     pause: 'paused',
@@ -24,7 +25,7 @@ export function goalChange(
   } as const
   const control = 'action' in input
   if (control && !Object.hasOwn(controls, input.action))
-    throw Object.assign(new Error('目标操作无效'), { code: 'GOAL_INPUT' })
+    throw new AppError('GOAL_INPUT', '目标操作无效')
   const objective = control
     ? undefined
     : isString(input.objective)
@@ -49,21 +50,21 @@ export function goalChange(
       !isUndefined(input.objective) &&
       (!isString(input.objective) || !objective || objective.length > GoalLimits.objectiveChars))
   )
-    throw Object.assign(new Error('目标内容或状态无效'), { code: 'GOAL_INPUT' })
+    throw new AppError('GOAL_INPUT', '目标内容或状态无效')
   if (objective && prior && (prior.status === 'active' || prior.status === 'paused'))
-    throw Object.assign(new Error('先结束当前目标，再建立新目标'), { code: 'GOAL_INPUT' })
+    throw new AppError('GOAL_INPUT', '先结束当前目标，再建立新目标')
   const creating = !!objective
   if ((!prior || prior.status === 'removed') && !creating)
-    throw Object.assign(new Error('新目标需要内容和 active 状态'), { code: 'GOAL_INPUT' })
+    throw new AppError('GOAL_INPUT', '新目标需要内容和 active 状态')
   if (
     !creating &&
     prior &&
     ['complete', 'cancelled'].includes(prior.status) &&
     status !== 'removed'
   )
-    throw Object.assign(new Error('目标已结束，请明确建立新目标'), { code: 'GOAL_INPUT' })
+    throw new AppError('GOAL_INPUT', '目标已结束，请明确建立新目标')
   if (!control && (status === 'complete' || status === 'blocked') && !input.reason?.trim())
-    throw Object.assign(new Error('完成或受阻需要说明实际依据'), { code: 'GOAL_INPUT' })
+    throw new AppError('GOAL_INPUT', '完成或受阻需要说明实际依据')
   return {
     id: creating ? id : prior!.id,
     revision: input.baseRevision + 1,

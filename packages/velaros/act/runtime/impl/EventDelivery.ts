@@ -1,3 +1,5 @@
+import { AppError } from '@velaros-ai/core/error'
+
 import type { EventDeliveryOptions } from '../contract/requires.js'
 
 /** 单个有序流的交付屏障；落盘与传输由宿主注入。 */
@@ -17,7 +19,7 @@ class EventDelivery<Value, Receipt> implements EventDeliveryApi<Value> {
   private closed = false
   public constructor(private readonly options: EventDeliveryOptions<Value, Receipt>) {}
   public append(value: Value): Promise<void> {
-    if (this.closed) return Promise.reject(new Error('事件交付已经关闭'))
+    if (this.closed) return Promise.reject(new AppError('CLOSED', '事件交付已经关闭'))
     if (this.failure) return Promise.reject(this.failure.error)
     // 在返回调用方之前冻结输入，避免排队期间宿主修改原对象。
     let snapshot: Promise<Value>

@@ -1,5 +1,6 @@
 import { isUndefined } from '@velaros-ai/core'
 import { isArray, isBoolean, isFiniteNumber, isNull, isObject, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 /** 领域可选字段省略 undefined，void 转 null；非 JSON 值明确拒绝而不是悄悄变形。 */
 export function normalizeCapabilityValue(value: unknown): unknown {
@@ -13,7 +14,7 @@ export function normalizeCapabilityValue(value: unknown): unknown {
       seen.has(item) ||
       (!isArray(item) && ![Object.prototype, null].includes(Object.getPrototypeOf(item)))
     )
-      throw Object.assign(new Error('领域结果必须是无环 JSON 数据'), { code: 'OUTPUT_ENCODING' })
+      throw new AppError('OUTPUT_ENCODING', '领域结果必须是无环 JSON 数据')
     seen.add(item)
     const next = isArray(item)
       ? item.map((child) => copy(child, true))

@@ -1,6 +1,7 @@
 import { Log } from '@velaros-ai/core'
 import { toNullable } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type {
   ModelDriverLimits,
   ModelInputEstimate,
@@ -141,22 +142,20 @@ export class ModelToolActivation implements ModelToolActivationApi {
     ])
     combined.throwIfAborted()
     if (this.finalUsed || this.calls >= profile.modelCalls || Date.now() >= deadline)
-      throw Object.assign(new Error('模型工具已达到硬上限'), { code: 'MODEL_TOOL_LIMIT' })
+      throw new AppError('MODEL_TOOL_LIMIT', '模型工具已达到硬上限')
     const finalizing = this.finalizing()
     const estimate = await this.estimate(request)
     const tokens = estimate.tokens + request.outputTokens
     combined.throwIfAborted()
     if (!finalizing && this.reserved + tokens + profile.finalizationTokens > profile.modelTokens) {
       this.finalize('token-budget')
-      throw Object.assign(new Error('普通请求将占用收尾额度，请重新编译最后交付轮'), {
-        code: 'CONTEXT_BUDGET',
-      })
+      throw new AppError('CONTEXT_BUDGET', '普通请求将占用收尾额度，请重新编译最后交付轮')
     }
     if (
       this.reserved + tokens > profile.modelTokens ||
       (finalizing && tokens > profile.finalizationTokens)
     )
-      throw Object.assign(new Error('本次模型工具 token 预算不足'), { code: 'CONTEXT_BUDGET' })
+      throw new AppError('CONTEXT_BUDGET', '本次模型工具 token 预算不足')
     if (!finalizing) {
       yield* reservedModelStream(
         parent,
@@ -195,7 +194,7 @@ export class ModelToolActivation implements ModelToolActivationApi {
     for await (const event of this.options.model.stream(request, bounded)) {
       bounded.throwIfAborted()
       if (event.type === 'usage') {
-        if (measured) throw new Error('模型工具重复返回用量')
+        if (measured) throw new AppError('PROTOCOL', '模型工具重复返回用量')
         measured = true
         this.measured++
         this.input += event.inputTokens
