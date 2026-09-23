@@ -241,3 +241,23 @@ describe('model 不变量验收', () => {
     ).toBeNull()
   })
 })
+
+test('INV-12 凭据探测使用供应商鉴权端点，缺密钥不发请求', async () => {
+  const urls: string[] = []
+  const runtime = createModelRuntimeComposition({
+    environment: {},
+    providerScripts: { configPaths: [] },
+    providerCatalog: {
+      fetch: async (input) => {
+        urls.push(String(input))
+        return Response.json({ error: { message: 'invalid api key' } }, { status: 401 })
+      },
+    },
+  })
+  const service = runtime.providerModelCatalogService
+  expect(await service.validateProviderRuntime({ provider: 'openai', apiKey: '', baseURL: '' }))
+    .toEqual({ ok: false, message: null })
+  expect(urls).toEqual([])
+  expect((await service.validateProviderRuntime({ provider: 'openrouter', apiKey: 'fixture', baseURL: '' })).ok).toBe(false)
+  expect(urls).toEqual(['https://openrouter.ai/api/v1/key'])
+})

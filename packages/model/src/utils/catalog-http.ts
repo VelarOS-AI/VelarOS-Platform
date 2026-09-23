@@ -95,6 +95,23 @@ export function createProviderModelListRequest(
   }
 }
 
+/** 验证凭据沿用目录协议；OpenRouter 必须探测鉴权端点，公共目录成功不能证明密钥有效。 */
+export function createProviderValidationRequest(
+  request: { readonly apiKey: string },
+  baseURL: string,
+  validationKind: ModelProviderValidationKind,
+  attribution: { readonly referer?: string; readonly title?: string }
+): ProviderModelListRequest {
+  const probe = createProviderModelListRequest(request, baseURL, validationKind, attribution)
+  if (validationKind === 'openrouter-key') return { ...probe, url: appendPath(baseURL, 'key') }
+  if (validationKind === 'google-models') {
+    const url = new URL(probe.url)
+    url.searchParams.delete('pageSize')
+    return { ...probe, url: url.toString() }
+  }
+  return probe
+}
+
 /** 这个值是不是本包认的输入形态。 */
 function isModelInputModality(value: unknown): value is ModelInputModality {
   return value === 'text' || value === 'image' || value === 'audio'

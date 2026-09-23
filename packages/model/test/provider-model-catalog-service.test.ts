@@ -199,3 +199,99 @@ describe('ProviderModelCatalogService', () => {
     expect(catalog.error).toBe('ChatGPT API Key 不可用')
   })
 })
+
+describe('provider credential validation', () => {
+  test('managed and source-adapter runtimes do not get an unrelated HTTP probe', async () => {
+    let calls = 0
+    const service = createService(async () => {
+      calls++
+      return Response.json({ data: [] })
+    })
+    for (const provider of ['velaros', 'velar-dev', 'custom'] as const) {
+      const result = await service.validateProviderRuntime({ provider, apiKey: '', baseURL: '' })
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('专用运行时')
+    }
+    expect(calls).toBe(0)
+  })
+
+  test('validation and discovery resolve injected environment credentials consistently', async () => {
+    const credentials: Array<string | null> = []
+    const service = createService(async (_input, init) => {
+      credentials.push(new Headers(init?.headers).get('Authorization'))
+      return Response.json({ data: [] })
+    }, { environment: { OPENAI_API_KEY: 'environment-secret' } })
+    const request = { provider: 'openai' as const, apiKey: '', baseURL: '' }
+    expect((await service.validateProviderRuntime(request)).ok).toBe(true)
+    await service.listProviderModels(request)
+    expect(credentials).toEqual(['Bearer environment-secret', 'Bearer environment-secret'])
+  })
+
+  test('probes authenticated provider endpoints with the correct credential placement', async () => {
+    for (const provider of ['openai', 'openrouter', 'anthropic', 'google'] as const) {
+      let url = new URL('https://unused.invalid')
+      let headers = new Headers()
+      const service = createService(async (input, init) => {
+        url = new URL(String(input))
+        headers = new Headers(init?.headers)
+        return Response.json({ data: [] })
+      }, { referer: 'https://desktop.example', title: 'Desktop' })
+      expect(await service.validateProviderRuntime({ provider, apiKey: 'fixture-key', baseURL: 'https://provider.example/v1' }))
+        .toEqual({ ok: true, message: null })
+      expect(url.pathname).toBe(provider === 'openrouter' ? '/v1/key' : '/v1/models')
+      if (provider === 'google') {
+        expect(url.searchParams.get('key')).toBe('fixture-key')
+        expect(headers.has('Authorization')).toBe(false)
+      } else if (provider === 'anthropic') {
+        expect(headers.get('x-api-key')).toBe('fixture-key')
+        expect(headers.get('anthropic-version')).toBe('2023-06-01')
+      } else expect(headers.get('Authorization')).toBe('Bearer fixture-key')
+      if (provider === 'openrouter') {
+        expect(headers.get('HTTP-Referer')).toBe('https://desktop.example')
+        expect(headers.get('X-Title')).toBe('Desktop')
+      }
+    }
+  })
+
+  test('missing required credentials never send a request, while local providers can omit Bearer', async () => {
+    let calls = 0
+    const service = createService(async (_input, init) => {
+      calls++
+      expect(new Headers(init?.headers).has('Authorization')).toBe(false)
+      return new Response(null, { status: 200 })
+    })
+    expect(await service.validateProviderRuntime({ provider: 'openai', apiKey: '', baseURL: '' }))
+      .toEqual({ ok: false, message: null })
+    expect(calls).toBe(0)
+    expect((await service.validateProviderRuntime({ provider: 'ollama', apiKey: '', baseURL: '' })).ok).toBe(true)
+    expect(calls).toBe(1)
+  })
+
+  test('public OpenRouter listing cannot make an invalid key pass validation', async () => {
+    const service = createService(async (input) => String(input).endsWith('/key')
+      ? Response.json({ error: { message: 'invalid api key' } }, { status: 401 })
+      : Response.json({ data: [{ id: 'provider/model' }] }))
+    expect((await service.listProviderModels({ provider: 'openrouter', apiKey: 'invalid', baseURL: '' })).models).toHaveLength(1)
+    const result = await service.validateProviderRuntime({ provider: 'openrouter', apiKey: 'invalid', baseURL: '' })
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('API Key 不可用')
+  })
+
+  test('timeout covers error-body reads and aborts the transport', async () => {
+    let signal: AbortSignal | undefined
+    const service = new ProviderModelCatalogService({
+      providerCollection: new ModelProviderCollection(EmptyProviderScripts),
+      timeoutMs: 10,
+      fetch: async (_input, init) => {
+        signal = init?.signal ?? undefined
+        return new Response(new ReadableStream({
+          start(controller) { signal?.addEventListener('abort', () => controller.error(signal?.reason), { once: true }) },
+        }), { status: 500 })
+      },
+    })
+    const result = await service.validateProviderRuntime({ provider: 'openai', apiKey: 'fixture', baseURL: '' })
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('超时')
+    expect(signal?.aborted).toBe(true)
+  })
+})

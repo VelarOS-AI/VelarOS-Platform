@@ -6,7 +6,7 @@
 
 ## 这是什么
 
-模型域唯一的包：把宿主的一次「用哪家、哪个模型、多深的思考」解析成 agent 能直接发出去的语言模型工厂，并且管着 21 个内置 provider 的清单与静态目录、各家 SDK 的适配、受信 provider script、用户上传的自定义 JS 适配器、Velar Cloud 的连接绑定，以及远端 `/models` 目录的抓取与缓存。
+模型域唯一的包：把宿主的一次「用哪家、哪个模型、多深的思考」解析成 agent 能直接发出去的语言模型工厂，并且管着 21 个内置 provider 的清单与静态目录、各家 SDK 的适配、受信 provider script、用户上传的自定义 JS 适配器、Velar Cloud 的连接绑定，以及供应商连接与凭据验证、远端 `/models` 目录的抓取与缓存。
 
 它**没有模型面工具**：模型不直接调它。内核那一面只开一条可调用操作 `supports_provider`。
 
@@ -113,8 +113,10 @@ Agent 通过本包的 `ProviderRequestCompiler`、ModelDriver 与重试策略准
 
 ## 不变量
 
-共 11 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
-按检验方式：测试 9 条、门禁 2 条。未验证 0 条。
+INV-12：`ProviderModelCatalogApi.validateProviderRuntime` 与目录查询共用供应商协议和宿主 transport；OpenRouter 通过 `/key` 验证密钥，缺凭据不发请求，超时覆盖错误正文读取。验收见 `spec/acceptance.test.ts`，协议细节回归见 `test/provider-model-catalog-service.test.ts`。
+
+共 12 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 10 条、门禁 2 条。未验证 0 条。
 
 ## 非目标
 

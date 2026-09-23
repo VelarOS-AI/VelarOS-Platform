@@ -10,6 +10,7 @@ import type {
   ModelProviderValidationKind,
   ProviderModelCatalog,
   ProviderModelCatalogEntry,
+  ValidateProviderRuntimeRequest,
 } from '../../types/model'
 import type { RemoteProviderModelEntry } from '../../types/providers'
 import type { ProviderScriptRegistryPort } from '../../types/scripts'
@@ -19,6 +20,7 @@ import {
   canListRemoteProviderModels,
   createEmptyRemoteCatalog,
   createProviderModelListRequest,
+  createProviderValidationRequest,
   normalizeProviderErrorMessage,
   readRemoteModelEntries,
 } from '../../utils/catalog-http'
@@ -35,7 +37,7 @@ export interface ProviderModelCatalogServiceOptions {
   readonly providerScriptRegistry?: ProviderScriptRegistryPort
   /** 宿主注入的 transport，让测试与非浏览器运行时都显式。 */
   readonly fetch?: typeof globalThis.fetch
-  /** 一次目录请求的硬超时，毫秒。 */
+  /** 一次目录或凭据探测的硬超时，毫秒，包含响应正文读取。 */
   readonly timeoutMs?: number
   /** OpenRouter 的请求归属信息。 */
   readonly attribution?: ProviderModelCatalogAttribution
@@ -49,6 +51,10 @@ export interface ProviderModelCatalogServiceOptions {
  * 一个装配只有一份，缓存、归属与失效都跟着这一份走。
  */
 export interface ProviderModelCatalogApi {
+  /** 按远端协议或供应商脚本验证凭据；缺密钥不请求网络，专用运行时返回不支持直接探测。 */
+  validateProviderRuntime(
+    request: ValidateProviderRuntimeRequest
+  ): Promise<{ ok: boolean; message: Nullable<string> }>
   /** 列出这个鉴权作用域下的模型；每次调用都强制刷新一次快照。 */
   listProviderModels(
     request: ListProviderModelsRequest,
@@ -81,6 +87,51 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
     this.fetch = options.fetch ?? globalThis.fetch.bind(globalThis)
     this.timeoutMs = Math.max(1, options.timeoutMs ?? ModelTuning.catalog.requestTimeoutMs)
     this.attribution = options.attribution ?? {}
+  }
+
+  public async validateProviderRuntime(
+    request: ValidateProviderRuntimeRequest
+  ): Promise<{ ok: boolean; message: Nullable<string> }> {
+    const preset = this.getProviderPreset(request.provider)
+    if (!canListRemoteProviderModels(preset.validationKind) && preset.validationKind !== 'provider-script')
+      return { ok: false, message: `${preset.label} 由专用运行时管理，请通过对应服务验证连接。` }
+    const resolvedRequest = { ...request, apiKey: this.providerCollection.resolveApiKey(request) }
+    if (isBlank(resolvedRequest.apiKey) && !preset.apiKeyOptional) return { ok: false, message: null }
+    const baseURL = this.providerCollection.resolveBaseURL(request)
+    const timers = new TimerScope({ name: 'ProviderRuntimeValidation' })
+    try {
+      return await timers.withTimeout(
+        this.timeoutMs,
+        async (signal) => {
+          if (preset.validationKind === 'provider-script') {
+            if (!this.providerScriptRegistry)
+              return { ok: false, message: `${preset.label} provider script 未注入。` }
+            return this.providerScriptRegistry.validateProviderRuntime({ ...resolvedRequest, baseURL })
+          }
+          const probe = createProviderValidationRequest(
+            resolvedRequest, baseURL, preset.validationKind, this.attribution
+          )
+          const response = await this.fetch(probe.url, {
+            method: 'GET', headers: [...probe.headers], signal,
+          })
+          if (response.ok) {
+            await response.body?.cancel()
+            return { ok: true, message: null }
+          }
+          return {
+            ok: false,
+            message: normalizeProviderErrorMessage(preset.label, response.status, await response.text()),
+          }
+        },
+        { label: `model.provider.validate:${request.provider}` }
+      )
+    } catch (error) {
+      if (error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError'))
+        return { ok: false, message: `${preset.label} 校验请求超时` }
+      throw error
+    } finally {
+      timers.dispose()
+    }
   }
 
   public async listProviderModels(
