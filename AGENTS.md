@@ -16,7 +16,7 @@
 以 `scripts/ownership/governed-modules.mjs` 的逐模块登记、包清单 exports 和实际检查器为准；完整规范见 `docs/architecture/module-ownership.md`。
 
 - 不拆碎文件：一个文件一个职责，不为整齐创建只装一两个文件的目录。types/impl/utils 文件较多时可按域分组，每个子目录至少直接包含三个源文件；登记为单文件的 types/utils 保持单文件。
-- 所有治理模块统一使用 `contract/types/impl/utils`。普通包源码根为 `src/`；能力单元直接以登记的 `unit` 目录为源码根，Velaros 不额外套 src。
+- 所有治理模块统一使用 `contract/types/impl/utils`。普通包源码根为 `src/`；能力单元直接以登记的 `unit` 目录为源码根，Velaros 不额外套 src；core 的底层单元住在 `src/<单元>/`，登记 `root` 指明源码根。
 - 合同与数据：`contract/provides.ts` 登记产品面，`requires.ts` 声明宿主注入面，`constants.ts` 放公开常量；代码面能力可有生成的 `surface.ts`。类的 API 写在类上方，公开 API 经 provides 登记。`types/` 只放类型，公开签名用到的类型从入口导出；可移植数据不得带行为或 Node 类型。
 - `impl/` 一类一文件，文件名与类名一致，公开成员由接口控制；私有方法用于实例相关逻辑，纯函数进 utils。实现文件必须登记 layers，下层不得依赖上层。utils 放有中文说明的纯函数与常量，不放类、类型声明或可变全局状态。
 - 模型能力按当前 ScriptAct 链路维护。给模型的合同一律由 TS 操作接口生成，不手写 schema：领域能力与 Act 各职责组都在登记的 surfaceFile（操作接口所在的 `impl/*Operations.ts`）上用 `@AgentView` 写模型文档、`@OperationEffect` 写效果、`@OperationModes execute` 标只能在 execute 里用的写操作，由 `scripts/script/surfaces.mjs` 和生成器写出 `contract/surface.ts`（声明、派生 schema、版本号与模板）；`impl/*Module.ts` 只把生成的模型面与实现绑成 Kernel 模块（宿主上下文、读取登记、效果核对），由 Runtime 装配。标准模块 `velaros`、`velaros:program` 同样由 script 包的 TS 接口生成。若模块登记 toolsFile/toolDefiner，则遵守该模块的集中定义检查。

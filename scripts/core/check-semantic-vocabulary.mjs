@@ -18,7 +18,7 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const RepoRoot = resolve(HERE, '../..')
 const CoreRoot = resolve(RepoRoot, 'packages/core')
 /** 要扫的源码目录:基础原语,与三个底层单元。 */
-const CoreSourceDirectories = ['src', 'platform', 'text-files', 'path-rules']
+const CoreSourceDirectories = ['src']
 /** 源码目录里不算源码的:单元的验收与测试。 */
 const NonSourceDirectories = new Set(['node_modules', 'dist', 'spec', 'test'])
 

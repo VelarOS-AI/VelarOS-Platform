@@ -24,7 +24,7 @@
 //      package.json 的 exports 里有对应子路径）；依赖只许写在文件头，不许用内联 import 类型；
 //      动态 import 只放行登记表 lazyImports 里登记过的目标（谁加载、加载什么、为什么）。
 //      可执行入口放包根 bin/：package.json 的 bin 指 ./bin/<命令>.mjs，文件在、带 #!/usr/bin/env node、files 里有 bin。
-//      能力单元（登记了 unit 的模块，几个模块按目录放在一个包里）：源码根是包里的单元目录（不是 src/），入口是 ./<单元> 与 ./<单元>/…，
+//      能力单元（登记了 unit 的模块，几个模块按目录放在一个包里）：源码根是包里的单元目录（登记了 root 时是 root，比如 core 的 src/<单元>），入口是 ./<单元> 与 ./<单元>/…，
 //      编译到 dist/<单元>/；单元目录下另有 spec/ 与 test/，不算源码。登记的名字写成「包名/单元」。
 //  10. 模块卡片十节齐全；「提供什么」列出全部入口、导出的每个值和每个公开接口；「骨干链路」点到每个工具；「结构」写明目录树。
 //  11. 不变量登记表每行编号唯一、检验方式合法、检验器真的存在；卡片里的条数如实。包的 test 脚本跑验收测试。
@@ -345,7 +345,9 @@ for (const module of selectedModules) {
   // 入口是 ./<单元> 与 ./<单元>/…，spec/ 与 test/ 跟着单元走、不算源码。普通模块的源码根是 src/。
   const unit = module.unit ?? null
   const unitSubpath = unit && !module.packageEntry ? `./${unit}` : null
-  const srcRoot = unit ? join(packageRoot, unit) : join(packageRoot, 'src')
+  // 单元目录一般在包根（velaros 的能力单元）；core 的底层单元住在 src/ 下，登记 root 指明源码根
+  const unitRoot = unit ? (module.root ?? unit) : null
+  const srcRoot = unitRoot ? join(packageRoot, unitRoot) : join(packageRoot, 'src')
   const toolsFilePath = module.toolsFile ? join(packageRoot, module.toolsFile) : null
   // 端口可达性从「模型面的入口」出发。工具时代那个入口是工具文件，代码面时代是操作表。
   // 模型面入口可以是几个文件（一个单元出两件能力、各有自己的操作类时）；没登记就是工具文件。
@@ -415,9 +417,11 @@ for (const module of selectedModules) {
   for (const asset of module.assets ?? []) {
     if (!unit) fail(`${label}: 只有能力单元登记 assets；普通模块的资产放包根，不在 src 里`)
     else if (!existsSync(join(srcRoot, asset)))
-      fail(`${label}: 登记的资产目录 ${unit}/${asset}/ 不存在`)
-    else if (!(manifest.files ?? []).includes(`${unit}/${asset}`))
-      fail(`${label}: 资产目录 ${unit}/${asset}/ 没写进 package.json 的 files；装出来的包里没有它`)
+      fail(`${label}: 登记的资产目录 ${unitRoot}/${asset}/ 不存在`)
+    else if (!(manifest.files ?? []).includes(`${unitRoot}/${asset}`))
+      fail(
+        `${label}: 资产目录 ${unitRoot}/${asset}/ 没写进 package.json 的 files；装出来的包里没有它`
+      )
   }
   const sourceFiles = walkSources(srcRoot).filter(
     (file) => !unit || !UnitCompanions.includes(relative(srcRoot, file).split('/')[0])

@@ -7,10 +7,11 @@
 | 模块 | 源码根 | 布局 |
 | --- | --- | --- |
 | 普通治理包，如 Agent、Context、Kernel、Model、Script、Agent Lab | `packages/<包>/src/` | contract / types / impl / utils |
-| Core 底层单元、Velaros 能力单元 | `packages/<包>/<unit>/` | contract / types / impl / utils |
+| Velaros 能力单元 | `packages/<包>/<unit>/` | contract / types / impl / utils |
+| Core 底层单元 | `packages/core/src/<unit>/`（登记 `root`） | contract / types / impl / utils |
 | Act 主干与职责组 | `packages/velaros/act/{runtime,system,search,agents}/` | contract / types / impl / utils |
 
-Core 的 `src/` 基础原语遵守其包级检查；Core 的 platform/text-files/path-rules 按单元登记。不要把某个治理单元的目录限制套到整个包。
+Core 的 `src/` 基础原语遵守其包级检查；Core 的 platform/text-files/path-rules 住在 `src/` 下，按单元登记。不要把某个治理单元的目录限制套到整个包。
 
 **一个文件一个职责。** 默认保持扁平。types/impl/utils 文件多时可按域分组，每个子目录至少直接包含三个源文件，不增加只包子目录的空层。登记的 types/utils 也可直接指向文件，例如 Act search 的 `types.ts` 和 `tuning.ts`。contract 保持扁平。
 
@@ -79,7 +80,7 @@ Core 的 `src/` 基础原语遵守其包级检查；Core 的 platform/text-files
 入口只转发。导出范围由产品面、注入面及其数据闭包决定；实现类、utils 函数及内部接口不作为公开 API。值导出来自常量表或显式标注公开接口的实例/工厂。公开签名使用的数据必须导出，导出的数据也必须有公开用途。
 
 - 普通包：`src/index.ts` 对应 `.`，`src/<名>.ts` 对应 `./<名>`，输出为 dist 下的同名文件。
-- 能力单元：源码根直接为 unit，子路径一般为 `./<unit>` 及其运行环境入口，输出到 `dist/<unit>/`。
+- 能力单元：源码根为 unit（登记了 `root` 时为 root，如 Core 的 `src/<unit>`），子路径一般为 `./<unit>` 及其运行环境入口，输出到 `dist/<unit>/`。
 - `packageEntry: true`：单元承载包根入口；当前 Velaros 的 `.` 映射到 `dist/act/runtime/index.js`。以清单中的完整映射为准。
 - 新增子路径必须由独立能力单元或运行环境边界支撑，不能为同一职责堆叠入口。可移植数据与 Node 本机适配器分别在 contracts/local/node/renderer 等已声明入口发布。
 - browserSafeEntries 的整条值依赖链不能加载 Node 内置模块；名字叫 contracts 或 renderer 并不自动证明可在浏览器运行。

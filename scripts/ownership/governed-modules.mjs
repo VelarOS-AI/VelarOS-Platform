@@ -199,36 +199,38 @@ export const GovernedModules = [
   },
   {
     // 底层单元：@velaros-ai/core 里按目录放的底层能力（跨平台约定、磁盘文本、路径规则），布局与能力单元一样，清单与许可只在包根一份；
-    // core 自己的基础原语在 src/，不在这张登记表里
+    // 单元目录住在 src/ 下（root 登记源码根），与 core 自己的基础原语同在 src；基础原语不在这张登记表里
     directory: 'core',
     unit: 'platform',
+    root: 'src/platform',
     name: '@velaros-ai/core/platform',
     // 没有工具：不登记 toolsFile、toolDefiner、hostPort
-    contract: 'platform/contract',
-    types: 'platform/types',
+    contract: 'src/platform/contract',
+    types: 'src/platform/types',
     portable: 'platform.ts',
-    impl: 'platform/impl',
-    utils: 'platform/utils',
+    impl: 'src/platform/impl',
+    utils: 'src/platform/utils',
     browserSafeEntries: ['index.ts', 'contracts.ts'],
     environmentTable: 'PlatformEnvironmentVariables',
     layers: [
       // 兼容层与共享资源目录互不依赖
       ['PlatformCompatibility.ts', 'VelarOSSharedResources.ts'],
     ],
-    card: 'platform/MODULE.md',
-    invariants: 'platform/spec/invariants.md',
-    acceptance: 'platform/spec/acceptance.test.ts',
+    card: 'src/platform/MODULE.md',
+    invariants: 'src/platform/spec/invariants.md',
+    acceptance: 'src/platform/spec/acceptance.test.ts',
   },
   {
     directory: 'core',
     unit: 'text-files',
+    root: 'src/text-files',
     name: '@velaros-ai/core/text-files',
     // 没有工具：不登记 toolsFile、toolDefiner、hostPort
-    contract: 'text-files/contract',
-    types: 'text-files/types',
+    contract: 'src/text-files/contract',
+    types: 'src/text-files/types',
     portable: 'text-files.ts',
-    impl: 'text-files/impl',
-    utils: 'text-files/utils',
+    impl: 'src/text-files/impl',
+    utils: 'src/text-files/utils',
     tuning: 'tuning.ts',
     // 根入口读写磁盘，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
@@ -242,20 +244,21 @@ export const GovernedModules = [
       // 按块严格解码一段字节流
       ['TextStreamDecoder.ts'],
     ],
-    card: 'text-files/MODULE.md',
-    invariants: 'text-files/spec/invariants.md',
-    acceptance: 'text-files/spec/acceptance.test.ts',
+    card: 'src/text-files/MODULE.md',
+    invariants: 'src/text-files/spec/invariants.md',
+    acceptance: 'src/text-files/spec/acceptance.test.ts',
   },
   {
     directory: 'core',
     unit: 'path-rules',
+    root: 'src/path-rules',
     name: '@velaros-ai/core/path-rules',
     // 没有工具：不登记 toolsFile、toolDefiner、hostPort
-    contract: 'path-rules/contract',
-    types: 'path-rules/types',
+    contract: 'src/path-rules/contract',
+    types: 'src/path-rules/types',
     portable: 'path-rules.ts',
-    impl: 'path-rules/impl',
-    utils: 'path-rules/utils',
+    impl: 'src/path-rules/impl',
+    utils: 'src/path-rules/utils',
     tuning: 'tuning.ts',
     // 遍历要读 .gitignore，根入口只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
@@ -267,9 +270,9 @@ export const GovernedModules = [
       // glob 匹配
       ['PathMatcher.ts'],
     ],
-    card: 'path-rules/MODULE.md',
-    invariants: 'path-rules/spec/invariants.md',
-    acceptance: 'path-rules/spec/acceptance.test.ts',
+    card: 'src/path-rules/MODULE.md',
+    invariants: 'src/path-rules/spec/invariants.md',
+    acceptance: 'src/path-rules/spec/acceptance.test.ts',
   },
   {
     // 能力单元：@velaros-ai/velaros 里按目录放的几件能力，布局一样，清单与许可只在包根一份

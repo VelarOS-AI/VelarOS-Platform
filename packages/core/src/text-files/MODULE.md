@@ -88,7 +88,7 @@ system 空间（`system:read`、`system:edit`、沙箱差量）与 project 空�
 ## 结构
 
 ```text
-text-files/
+src/text-files/
   contract/     对外合同：provides.ts 登记三件能力的 API（定义在各自类上方，这里 re-export），constants.ts 是编码名表与错误码；没有注入面
   types/        只放类型：text-files.ts 是可移植数据
   impl/         一类一文件：TextFileIo（文件读写的唯一出口）→ TextCodec（编解码的唯一出口）→ TextEncodingProbe（一次流式识别）→ TextStreamDecoder（按块严格解码）

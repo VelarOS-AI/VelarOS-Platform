@@ -10,23 +10,16 @@
     "baseUrl": ".",
     "paths": {
       "@velaros-ai/core": ["./src/index.ts"],
-      "@velaros-ai/core/platform": ["./platform/index.ts"],
-      "@velaros-ai/core/platform/contracts": ["./platform/contracts.ts"],
-      "@velaros-ai/core/platform/shared-resources": ["./platform/shared-resources.ts"],
-      "@velaros-ai/core/text-files": ["./text-files/index.ts"],
-      "@velaros-ai/core/text-files/contracts": ["./text-files/contracts.ts"],
-      "@velaros-ai/core/path-rules": ["./path-rules/index.ts"],
-      "@velaros-ai/core/path-rules/contracts": ["./path-rules/contracts.ts"],
+      "@velaros-ai/core/platform": ["./src/platform/index.ts"],
+      "@velaros-ai/core/platform/contracts": ["./src/platform/contracts.ts"],
+      "@velaros-ai/core/platform/shared-resources": ["./src/platform/shared-resources.ts"],
+      "@velaros-ai/core/text-files": ["./src/text-files/index.ts"],
+      "@velaros-ai/core/text-files/contracts": ["./src/text-files/contracts.ts"],
+      "@velaros-ai/core/path-rules": ["./src/path-rules/index.ts"],
+      "@velaros-ai/core/path-rules/contracts": ["./src/path-rules/contracts.ts"],
       "@velaros-ai/core/*": ["./src/*"]
     }
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.d.ts",
-    "test/**/*.ts",
-    "platform/**/*.ts",
-    "text-files/**/*.ts",
-    "path-rules/**/*.ts"
-  ],
-  "exclude": ["*/spec/**", "*/test/**"]
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "test/**/*.ts"],
+  "exclude": ["src/*/spec/**", "src/*/test/**"]
 }

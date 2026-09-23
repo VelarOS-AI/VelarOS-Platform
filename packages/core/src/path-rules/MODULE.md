@@ -80,7 +80,7 @@ system 空间（全局搜索、沙箱镜像）与 project 空间（列目录、�
 ## 结构
 
 ```text
-path-rules/
+src/path-rules/
   contract/     对外合同：provides.ts 登记三件能力的 API（定义在各自类上方，这里 re-export），requires.ts 是问 git 的执行口，constants.ts 是默认跳过的目录名表
   types/        只放类型：path-rules.ts 是可移植数据，options.ts 是带注入口的选项
   impl/         一类一文件：IgnorePolicy（一次遍历的忽略判定）→ GitignoreRules（.gitignore 的解析与判定）→ PathMatcher（glob 匹配）

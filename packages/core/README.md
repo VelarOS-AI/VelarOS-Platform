@@ -52,7 +52,7 @@ import { textCodec, textFileIo } from '@velaros-ai/core/text-files'
 import { createIgnorePolicy, pathMatcher } from '@velaros-ai/core/path-rules'
 ```
 
-三个单元各自的说明、骨干链路与不变量见 `platform/MODULE.md`、`text-files/MODULE.md`、`path-rules/MODULE.md`。
+三个单元住在 `src/` 下，各自的说明、骨干链路与不变量见 `src/platform/MODULE.md`、`src/text-files/MODULE.md`、`src/path-rules/MODULE.md`。
 它们以前是三个独立的包（`@velaros-ai/platform`、`@velaros-ai/text-files`、`@velaros-ai/path-rules`），并进来后入口换成上表的子路径，名字不变（ADR 0014）。
 
 ## Node 文件日志

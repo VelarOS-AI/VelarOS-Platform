@@ -77,9 +77,9 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && tsc -p tsconfig.units.build.json && node ../../scripts/core/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/core/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test test platform/spec/acceptance.test.ts platform/test text-files/spec/acceptance.test.ts text-files/test path-rules/spec/acceptance.test.ts path-rules/test",
+    "test": "bun test test src/platform/spec/acceptance.test.ts src/platform/test src/text-files/spec/acceptance.test.ts src/text-files/test src/path-rules/spec/acceptance.test.ts src/path-rules/test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/core"
   },
   "dependencies": {

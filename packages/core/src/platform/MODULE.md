@@ -77,7 +77,7 @@ VelarOS 各产品在不同操作系统上共用的约定：路径文本怎么比
 ## 结构
 
 ```text
-platform/
+src/platform/
   contract/     对外合同：provides.ts 登记两件能力的 API（定义在各自类上方，这里 re-export），constants.ts 是环境变量表；没有注入面
   types/        只放类型：platform.ts 是可移植数据文件，options.ts 放带 Node 类型的选项
   impl/         一个类一个文件：PlatformCompatibility.ts、VelarOSSharedResources.ts
