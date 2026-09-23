@@ -98,7 +98,13 @@ export interface ProgramContextApi {
     images: readonly ModelImage[],
     signal: AbortSignal,
     maxChars?: number
-  ): Promise<{ body: string; images: readonly ModelImage[]; prompt: string }>
+  ): Promise<{
+    body: string
+    images: readonly ModelImage[]
+    prompt: string
+    /** 租约有效、但因本帧容量放不下而没有列出的结果。 */
+    squeezed: readonly string[]
+  }>
   /** 显式释放材料可见性，原始记录保持。 */
   release(ref: string, signal?: AbortSignal): Promise<ResultReleased>
   /** 结束逻辑任务的 task 期限。 */
@@ -571,7 +577,12 @@ export class ProgramContext implements ProgramContextApi {
     observationImages: readonly ModelImage[],
     signal: AbortSignal,
     maxChars: number = ActRuntimeTuning.frameChars
-  ): Promise<{ body: string; images: readonly ModelImage[]; prompt: string }> {
+  ): Promise<{
+    body: string
+    images: readonly ModelImage[]
+    prompt: string
+    squeezed: readonly string[]
+  }> {
     const selected = await this.snapshot([
       { title: 'script:lease-state', kind: 'audit', latest: true },
       { title: 'search:history-reset', latest: true },
@@ -1165,7 +1176,14 @@ export class ProgramContext implements ProgramContextApi {
       [],
       signal
     )
-    return { body, images, prompt: '' }
+    return {
+      body,
+      images,
+      prompt: '',
+      squeezed: allVisible
+        .filter((item) => !visible.some((current) => current.ref === item.ref))
+        .map((item) => item.ref),
+    }
   }
 
   public async delivered(

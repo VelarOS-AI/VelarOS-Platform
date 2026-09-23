@@ -745,10 +745,15 @@ export class ActLoop implements ActLoopApi {
         runway = this.planner.runway(current.compiled.estimate.tokens, window)
       }
     }
-    // 结构性超载：放不下，或封不了段时剩余不足 foldTurns 轮、封段后剩余仍不足 minTurns 轮。
+    // 结构性超载：放不下，或封不了段时剩余不足 foldTurns 轮、封段后剩余仍不足 minTurns 轮，
+    // 或本段缺页持续偏高（笔记和结果本身挤不下）。
     // 主线交给整理支线一次；放不下时叶子工具直接进入交付阶段
     const short = runway < (folded ? this.policy.minTurns : this.policy.foldTurns)
-    if ((!fits(current) || short) && current.phase.phase !== 'finalizing') {
+    const faults = current.segment?.faults ?? 0
+    const faulting =
+      faults >= ContextPlanTuning.faultCount &&
+      faults * ContextPlanTuning.faultTurns >= (current.segment?.turns ?? 0)
+    if ((!fits(current) || short || faulting) && current.phase.phase !== 'finalizing') {
       // 同一段只整理一次：整理过仍不够，就不再每轮重复，等下次封段
       const segment = current.segment?.id
       if (attempt > 0 && segment) this.planner.exhaust(segment)
@@ -767,12 +772,15 @@ export class ActLoop implements ActLoopApi {
     if (!current.compiled.okToSend) return null
     runway = this.planner.runway(current.compiled.estimate.tokens, window)
     frames.setPhase(current.phase.phase)
-    const overload =
-      (folded ||
-        this.planner.thrashing() ||
-        Boolean(current.segment && this.planner.exhausted(current.segment.id))) &&
-      runway < this.policy.minTurns
-        ? '工作集本身快装不下了：按 memoryStatus.footprint 找占用最大的分区，收紧 observe 的 view，释放不再需要的 task 租约，合并或移出笔记，或把独立的子目标交给子 agent。'
+    const tighten =
+      '按 memoryStatus.footprint 找占用最大的分区，收紧 observe 的 view，释放不再需要的 task 租约，合并或移出笔记，或把独立的子目标交给子 agent。'
+    const overload = faulting
+      ? `本段已经 ${faults} 次读回上一帧因容量不够只给了引用的材料，工作集本身装不下：${tighten}`
+      : (folded ||
+            this.planner.thrashing() ||
+            Boolean(current.segment && this.planner.exhausted(current.segment.id))) &&
+          runway < this.policy.minTurns
+        ? `工作集本身快装不下了：${tighten}`
         : undefined
     const status = (tokens: number) => {
       const turns = this.planner.runway(tokens, window)

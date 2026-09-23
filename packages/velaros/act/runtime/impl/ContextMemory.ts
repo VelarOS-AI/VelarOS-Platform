@@ -27,7 +27,13 @@ import type {
   WorkspaceNote,
 } from '../types/memory.js'
 import type { ContextSegment, FoldedGoals, SegmentReason, SegmentStatus } from '../types/segment.js'
-import { memoryPolicy, memoryPrompt, memoryReference, noteEntry } from '../utils/context-memory.js'
+import {
+  adjustedWorkspaceShare,
+  memoryPolicy,
+  memoryPrompt,
+  memoryReference,
+  noteEntry,
+} from '../utils/context-memory.js'
 import { archivedJson, segmentBase, segmentLedgers, skeletonLine } from '../utils/segment.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
@@ -94,6 +100,9 @@ export interface ContextMemoryApi {
 /** 同一可靠存储上的工作内存，分区只改变组装与驻留，不改变事实和权限。 */
 export class ContextMemory implements ContextMemoryApi {
   private readonly policy: Required<ContextMemoryPolicy>
+  /** 已记过缺页的材料，只针对最近送达的那一帧。 */
+  private readonly faulted = new Set<string>()
+  private faultFrame = ''
 
   public constructor(
     private readonly id: string,
@@ -403,9 +412,38 @@ export class ContextMemory implements ContextMemoryApi {
     const record = memoryReference(snapshot, ref)
     if (ref.sessionId !== this.id || !record)
       throw new AppError('SCOPE_MISMATCH', '材料引用不在当前任务授权范围')
+    await this.fault(ref, signal)
     if (record.kind === 'user') return this.context.readInput(ref, { offset, limit })
     if (record.title === 'task:artifact') return this.view.readArtifact(ref, { offset, limit })
     return this.context.read(ref, { offset, limit })
+  }
+
+  /** 读回的材料在最近送达的一帧里因容量不够只给了引用：按分区记一次缺页，同一帧同一份只记一次。 */
+  private async fault(ref: ContextRef, signal: AbortSignal): Promise<void> {
+    const snapshot = await this.snapshot(signal, [{ title: 'context:delivered', latest: true }])
+    const record = snapshot?.records.findLast((item) => item.title === 'context:delivered')
+    if (!record) return
+    const frame = JSON.parse((await this.storage.get(this.id, record.objectId))!) as {
+      frameId: string
+      segment?: { id: string }
+      squeezed?: ReadonlyArray<{ ref: string; partition: 'workspace' | 'results' }>
+    }
+    if (frame.frameId !== this.faultFrame) {
+      this.faultFrame = frame.frameId
+      this.faulted.clear()
+    }
+    const squeezed = frame.squeezed?.find((item) => item.ref === ref.id)
+    if (!squeezed || !frame.segment || this.faulted.has(ref.id)) return
+    this.faulted.add(ref.id)
+    await this.context.append(
+      {
+        kind: 'audit',
+        title: `context:fault:${frame.segment.id}:${squeezed.partition}`,
+        body: JSON.stringify({ ref, partition: squeezed.partition, frameId: frame.frameId }),
+        sources: [ref],
+      },
+      signal
+    )
   }
 
   public async retainMaterial(
@@ -492,8 +530,11 @@ export class ContextMemory implements ContextMemoryApi {
     const residents = notes
       .filter((item) => item.note.resident)
       .sort((a, b) => b.record.sequence - a.record.sequence)
-    const workspaceBudget = Math.max(0, Math.floor(maxChars * this.policy.workspaceShare))
-    const segment = await this.current(residents, presentation, workspaceBudget, maxChars, signal)
+    const segment = await this.current(residents, presentation, maxChars, signal)
+    const workspaceBudget = Math.max(
+      0,
+      Math.floor(maxChars * (segment.workspaceShare ?? this.policy.workspaceShare))
+    )
     // 底座里是段起点的笔记快照；本帧尾只放段内改过或新驻留的笔记
     const snapshotNotes = new Map(segment.notes.map((item) => [item.key, item]))
     const changed = residents.filter(
@@ -632,6 +673,32 @@ export class ContextMemory implements ContextMemoryApi {
           ]
         : []),
     ]
+    // 因容量只给了引用的笔记和没排进本帧的租约结果；派生展示主动移出自动展示的笔记不算
+    const hidden = new Set(
+      presentation.active
+        ? (presentation.policy?.notes ?? [])
+            .filter((item) => isFalse(item.resident))
+            .map((item) => item.ref.id)
+        : []
+    )
+    const squeezed = [
+      ...entries
+        .filter(
+          (item) => item.key.startsWith('workspace:') && !item.bodyIncluded && !hidden.has(item.ref)
+        )
+        .map((item) => ({ ref: item.ref, partition: 'workspace' as const })),
+      ...frame.squeezed.map((ref) => ({ ref, partition: 'results' as const })),
+    ]
+    const faultPrefix = `context:fault:${segment.id}:`
+    const faults =
+      (await this.snapshot(signal, [{ titlePrefix: faultPrefix }]))?.records.filter((record) =>
+        record.title.startsWith(faultPrefix)
+      ) ?? []
+    const recentFaults = []
+    for (const record of faults.slice(-ActRuntimeTuning.recentFaults)) {
+      const { ref, partition } = JSON.parse((await this.storage.get(this.id, record.objectId))!)
+      recentFaults.push({ ref, partition })
+    }
     const last = snapshot?.records.findLast(
       (record) => record.title === 'context:delivered' && record.sequence > reset
     )
@@ -681,6 +748,7 @@ export class ContextMemory implements ContextMemoryApi {
       revision: segment.revision,
       volumes: segment.volumes,
       turns: history.items.filter((item) => item.role === 'assistant').length,
+      faults: faults.length,
     }
     const partitions = {
       task: {
@@ -749,7 +817,20 @@ export class ContextMemory implements ContextMemoryApi {
       memoryStatus: {
         unit: 'utf16',
         footprint: { base: base.length, ...footprint },
-        segment: { ...status, from: segment.from, reason: segment.reason },
+        segment: {
+          ...status,
+          from: segment.from,
+          reason: segment.reason,
+          workspaceShare: segment.workspaceShare ?? this.policy.workspaceShare,
+        },
+        faults: isEmpty(faults)
+          ? undefined
+          : {
+              count: faults.length,
+              recent: recentFaults,
+              advice:
+                '这些材料上一帧因容量不够只给了引用、随后又被读回。常用的内容记进笔记，或收紧观察和结果的展示；封段时会按缺页调整笔记份额。',
+            },
         changes,
         policy: this.policy,
         maintenance:
@@ -776,6 +857,7 @@ export class ContextMemory implements ContextMemoryApi {
           frameId: material.programFrame.id,
           entries,
           segment: { id: segment.id, revision: segment.revision, fresh: history.fresh },
+          squeezed,
         }),
         sources: [],
       },
@@ -828,8 +910,27 @@ export class ContextMemory implements ContextMemoryApi {
       (selected?.task?.capsule?.nextObjective ?? '') === segment.objective
         ? sealed
         : null
+    // 按上一段的缺页调整新段的笔记份额
+    const prefix = `context:fault:${segment.id}:`
+    const faults = (await this.snapshot(signal, [{ titlePrefix: prefix }]))?.records ?? []
+    const count = (partition: string) =>
+      faults.filter((record) => record.title === `${prefix}${partition}`).length
+    const workspaceShare = adjustedWorkspaceShare(
+      segment.workspaceShare ?? this.policy.workspaceShare,
+      { workspace: count('workspace'), results: count('results') },
+      this.policy
+    )
     await this.start(
-      { index: segment.index + 1, revision: 0, from: cut, carried, entries: [], reason, narrate },
+      {
+        index: segment.index + 1,
+        revision: 0,
+        from: cut,
+        carried,
+        entries: [],
+        reason,
+        narrate,
+        workspaceShare,
+      },
       maxChars,
       signal
     )
@@ -934,7 +1035,6 @@ export class ContextMemory implements ContextMemoryApi {
   private async current(
     residents: ReadonlyArray<{ note: WorkspaceNote; record: ContextRecord }>,
     presentation: { id: Nullable<string> },
-    workspaceBudget: number,
     maxChars: number,
     signal: AbortSignal
   ): Promise<ContextSegment> {
@@ -958,7 +1058,7 @@ export class ContextMemory implements ContextMemoryApi {
     if (
       segment.notes.some((item) => !current.has(item.key)) ||
       segment.policy !== presentation.id ||
-      drift > workspaceBudget / 4
+      drift > (maxChars * (segment.workspaceShare ?? this.policy.workspaceShare)) / 4
     )
       return this.start(
         { ...segment, revision: segment.revision + 1, reason: 'rebase' },
@@ -971,7 +1071,7 @@ export class ContextMemory implements ContextMemoryApi {
   /** 渲染并登记一段的底座；重建底座时沿用段号、起点、条目和章节基准。 */
   private async start(
     input: Pick<ContextSegment, 'index' | 'revision' | 'from' | 'carried' | 'entries' | 'reason'> &
-      Partial<Pick<ContextSegment, 'id' | 'objective' | 'goals' | 'narrate'>>,
+      Partial<Pick<ContextSegment, 'id' | 'objective' | 'goals' | 'narrate' | 'workspaceShare'>>,
     maxChars: number,
     signal: AbortSignal
   ): Promise<ContextSegment> {
@@ -984,9 +1084,10 @@ export class ContextMemory implements ContextMemoryApi {
       .filter((item) => item.note.resident)
       .sort((a, b) => b.record.sequence - a.record.sequence)
     const volumes = await this.recent.volumes(signal)
+    const workspaceShare = input.workspaceShare ?? this.policy.workspaceShare
     const cards = this.noteCards(
       residents,
-      Math.max(0, Math.floor(maxChars * this.policy.workspaceShare)),
+      Math.max(0, Math.floor(maxChars * workspaceShare)),
       presentation
     )
     // 输入摘要里的约束进长期单；段起点之前提出的目标只在底座列第一行，最新的在前
@@ -1059,6 +1160,7 @@ export class ContextMemory implements ContextMemoryApi {
       volumes: volumes.length,
       reason: input.reason,
       narrate: toNullable(input.narrate),
+      workspaceShare,
     }
     await this.recent.commit(segment, signal)
     return segment

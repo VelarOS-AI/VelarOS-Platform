@@ -33,4 +33,8 @@ export const ContextPlanTuning = Object.freeze({
   stallReflect: 6,
   /** 连续没有进展这么多步，暂停运行等用户。 */
   stallPause: 9,
+  /** 一段里缺页至少这么多次、且平均不到 faultTurns 轮一次，按结构性超载处理。 */
+  faultCount: 3,
+  /** 缺页频率的判断：每这么多轮至少一次。 */
+  faultTurns: 4,
 })

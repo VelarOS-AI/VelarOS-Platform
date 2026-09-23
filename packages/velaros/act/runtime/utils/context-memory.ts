@@ -6,6 +6,8 @@ import type { WorkspaceEntry } from '@velaros-ai/velaros/act/system'
 
 import type { ContextMemoryPolicy, WorkspaceNote } from '../types/memory.js'
 
+import { ActRuntimeTuning } from './tuning.js'
+
 /** 固定宿主分区配置并验证所有配额，防止 NaN 或超额正文绕过预算。 */
 export function memoryPolicy(input: ContextMemoryPolicy = {}): Required<ContextMemoryPolicy> {
   const result = { recentRecords: 8, workspaceShare: 0.2, recentShare: 0.2, ...input }
@@ -23,6 +25,30 @@ export function memoryPolicy(input: ContextMemoryPolicy = {}): Required<ContextM
   )
     throw new AppError('VALIDATION', '上下文分区配置无效')
   return Object.freeze(result)
+}
+
+/**
+ * 封段时按上一段的缺页调整笔记份额：笔记缺页多就提高，执行结果缺页多而笔记没有就降低，
+ * 两边都没有缺页就向宿主配置回落一步；始终在分区配置的合法范围内。
+ */
+export function adjustedWorkspaceShare(
+  share: number,
+  faults: { readonly workspace: number; readonly results: number },
+  policy: Required<ContextMemoryPolicy>
+): number {
+  const step = ActRuntimeTuning.shareStep
+  const next =
+    faults.workspace >= ActRuntimeTuning.shareFaults && faults.workspace >= faults.results
+      ? share + step
+      : faults.results >= ActRuntimeTuning.shareFaults && faults.workspace === 0
+        ? share - step
+        : faults.workspace + faults.results === 0
+          ? share +
+            Math.sign(policy.workspaceShare - share) *
+              Math.min(step, Math.abs(policy.workspaceShare - share))
+          : share
+  const ceiling = Math.min(0.5, 0.8 - policy.recentShare)
+  return Math.round(Math.min(ceiling, Math.max(0.05, next)) * 100) / 100
 }
 
 /** 目录仅携带稳定键、版本与原文位置，正文按引用独立召回。 */

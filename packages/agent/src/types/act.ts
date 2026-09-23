@@ -166,6 +166,8 @@ export interface ActFrameSegment {
   readonly volumes: number
   /** 段内已有的模型响应数。 */
   readonly turns: number
+  /** 本段读回上一帧因容量不够只给了引用的材料的次数；不提供时按 0。 */
+  readonly faults?: number
 }
 
 /** 可恢复运行快照；waiting 的原因通过 pending 交互或后续输入判定。 */

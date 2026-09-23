@@ -39,7 +39,7 @@
 
 - 段、卷、底座都是新增的审计记录，旧会话打开时从第 1 段开始。已有的最新 `search:history-checkpoint` 转为第 1 卷。
 - 整理补丁的 `history` 字段改为 `volume`，删除 `recentRecords`，由 velaros:context-materials 的生成声明同步。
-- ContextStatus 新增 `runway`、`segment`、`costs`、`cache` 等字段，保留原有字段。
+- ContextStatus 新增 `runway`、`segment`、`cache`、`overload`、`stall` 等字段，保留原有字段；缺页明细和各分区占用在运行时的 memoryStatus 里（见设计文档「实现时的修正」）。
 
 ## Validation
 

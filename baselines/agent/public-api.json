@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageName": "@velaros-ai/agent",
-  "acceptedPackageVersion": "7.1.0",
+  "acceptedPackageVersion": "7.2.0",
   "entries": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -14,7 +14,7 @@
         "ActDecodedTurn\ttype\t1230fe763071c879eca408dfeb6b5c8e614f803a45153986abf1d100573be7c6",
         "ActEvent\ttype\tdedef3fb4e136d1bc43837336fe4aa109473be8c2f1f89b39115b4ca9042a46d",
         "ActExecutionPort\ttype\t82e0e5e0717e0d7612b5542938a98186e943ed044f3536297212628f496b0b0e",
-        "ActFrameSegment\ttype\t4d318c8b5a0e243a8d1baf6a7540387c05b4357aa0115fc03fe808802ee805e5",
+        "ActFrameSegment\ttype\t515aaed0596d1f20c73f129dc87cf8c322dcc8e38dc75b798f5a2cba50a0fb5f",
         "ActImage\ttype\taacd72338064c5a6dcb93423ff4f6357efaa8ca94de825ba458e51a97f13178d",
         "ActInput\ttype\t0df87bfe8387be69a1fcb2564770929dcf74af688d1c64e662b3b38af52ff8de",
         "ActInputFile\ttype\t979a7cd520d1282c394c7d79c9836cd6b0073f0a63f6a98664fb76fc2f66ac8e",
@@ -49,7 +49,7 @@
         "ActContextPolicy\ttype\t000738397acec929f377aa874a2b2654786bfadfb13d46a0140bd3ae6ca2ecaa",
         "ActDecodedTurn\ttype\t1230fe763071c879eca408dfeb6b5c8e614f803a45153986abf1d100573be7c6",
         "ActEvent\ttype\tdedef3fb4e136d1bc43837336fe4aa109473be8c2f1f89b39115b4ca9042a46d",
-        "ActFrameSegment\ttype\t4d318c8b5a0e243a8d1baf6a7540387c05b4357aa0115fc03fe808802ee805e5",
+        "ActFrameSegment\ttype\t515aaed0596d1f20c73f129dc87cf8c322dcc8e38dc75b798f5a2cba50a0fb5f",
         "ActImage\ttype\taacd72338064c5a6dcb93423ff4f6357efaa8ca94de825ba458e51a97f13178d",
         "ActInput\ttype\t0df87bfe8387be69a1fcb2564770929dcf74af688d1c64e662b3b38af52ff8de",
         "ActInputFile\ttype\t979a7cd520d1282c394c7d79c9836cd6b0073f0a63f6a98664fb76fc2f66ac8e",

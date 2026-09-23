@@ -51,6 +51,8 @@ export interface ContextSegment {
   readonly reason: SegmentReason
   /** 自动封成、只有骨架的上一卷：那一段做了很多事却没改笔记和计划，等整理支线在下一个请求边界补写叙事。 */
   readonly narrate: Nullable<ContextRef>
+  /** 本段笔记的份额上限，封段时按上一段的缺页调整；旧的段记录没有这一项，按宿主配置。 */
+  readonly workspaceShare?: number
 }
 
 /** 主循环看到的段状态：据此判断增长是否可比、封段是否发生。 */
@@ -61,6 +63,8 @@ export interface SegmentStatus {
   readonly volumes: number
   /** 段内已有的模型响应数。 */
   readonly turns: number
+  /** 本段读回上一帧因容量不够只给了引用的材料的次数。 */
+  readonly faults: number
 }
 
 /** 封成的一卷：历史区间的规则骨架，写入后不再修改；叙事另行记录。 */

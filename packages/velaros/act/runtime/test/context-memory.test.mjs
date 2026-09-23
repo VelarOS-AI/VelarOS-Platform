@@ -730,6 +730,74 @@ test('INV-52 the segment base keeps ledgers across volumes and earlier goals whi
   assert.match(next, /未解问题[^\n]*：\["U2","U3"\]\n/)
 })
 
+test('INV-54 rereading material squeezed to a reference in the last frame is a fault, and folding adjusts the note share by faults', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const recent = new RecentContext('s', f.session.context, f.storage)
+  const memory = new ContextMemory(
+    's',
+    f.session.context,
+    f.storage,
+    f.session.view,
+    programs,
+    recent
+  )
+  // 三份笔记都比笔记份额大，底座里只给引用
+  const notes = []
+  for (const key of ['alpha', 'beta', 'gamma'])
+    notes.push(await memory.update({ key, baseRevision: 0, body: `${key} `.repeat(1500) }, signal))
+  const view = {
+    id: 'frame',
+    scope: { sessionId: 's', revision: 0 },
+    goals: [],
+    capsule: {},
+    mandatory: [],
+    evidence: [],
+    gaps: [],
+    readSet: [],
+    progress: { step: 0, repeatedSteps: 0, stalled: false, evidence: [] },
+  }
+  const deliver = async () => {
+    const frame = await memory.project(view, undefined, [], signal, 24000)
+    await memory.acknowledge(JSON.parse(frame.body).frameId, signal)
+    return frame
+  }
+  const steps = async (count) => {
+    for (let index = 0; index < count; index++) {
+      await f.session.context.append({
+        kind: 'assistant',
+        body: `step ${index} done\n@@sX execute()\noutput(1)\n@@sX`,
+      })
+      await archiveResult(f, programs, `result-${index}`)
+    }
+  }
+  const faults = async () =>
+    (await f.storage.load('s')).records.filter((record) =>
+      record.title.startsWith('context:fault:')
+    )
+  await deliver()
+  await memory.readMaterial(notes[0].ref, 0, 100, signal)
+  await memory.readMaterial(notes[0].ref, 0, 100, signal)
+  assert.equal((await faults()).length, 1)
+  assert.match((await faults())[0].title, /:workspace$/)
+  // 正文本来就在请求里的材料读回来不算缺页
+  const [input] = (await f.storage.load('s')).records.filter((record) => record.kind === 'user')
+  await memory.readMaterial(input.ref, 0, 100, signal)
+  assert.equal((await faults()).length, 1)
+  await memory.readMaterial(notes[1].ref, 0, 100, signal)
+  const reported = await deliver()
+  assert.equal(reported.segment.faults, 2)
+  assert.equal(JSON.parse(reported.body).memoryStatus.faults.count, 2)
+  // 笔记缺页多：下一段的笔记份额提高一步；之后安静的一段回落到宿主配置
+  await steps(6)
+  assert(await memory.fold('runway', 24000, signal))
+  assert.equal((await recent.segment(signal)).workspaceShare, 0.25)
+  await deliver()
+  await steps(6)
+  assert(await memory.fold('runway', 24000, signal))
+  assert.equal((await recent.segment(signal)).workspaceShare, 0.2)
+})
+
 async function archiveResult(f, programs, label) {
   const id = crypto.randomUUID()
   const source = await f.session.context.append({

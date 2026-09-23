@@ -177,6 +177,32 @@ test('INV-41 a run waits out the hourly model limit and continues; the total cap
   await service.close()
 })
 
+test('INV-42 persistent faults in a segment run pressure maintenance once and ask the model to tighten its working set', async () => {
+  const f = runFixture()
+  const reasons: string[] = []
+  const overloads: Array<string | undefined> = []
+  f.options.frames.project = async () => ({
+    body: '{}',
+    images: [],
+    segment: { id: 'segment', index: 1, revision: 0, volumes: 0, turns: 4, faults: 3 },
+  })
+  f.options.frames.maintain = async (input) => {
+    reasons.push(input.reason)
+    return input.reason === 'pressure'
+  }
+  f.options.model.stream = async function* (request) {
+    overloads.push(request.contextStatus?.overload)
+    yield { type: 'text', text: 'done' }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  const service = createActRunService(f.options)
+  for await (const event of service.submit('work')) expect(typeof event.type).toBe('string')
+  // 同一段只整理一次，之后照常给出收紧建议
+  expect(reasons.filter((reason) => reason === 'pressure')).toEqual(['pressure'])
+  expect(overloads.at(-1)).toMatch(/3 次读回/)
+  await service.close()
+})
+
 test('closing a consumer during thinking releases the view without accepting late model output', async () => {
   const f = runFixture()
   let stopped = 0

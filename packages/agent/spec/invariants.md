@@ -22,3 +22,4 @@
 
 | INV-40 | 容量规划按供应商实测用量校准估算（带图请求不取样、超窗拒绝后回到原始估算），按同段同底座的正向增长估计剩余轮数；两次封段过近记为抖动，同一段的整理只跑一次 | 测试 | `test/context-planner.test.ts` |
 | INV-41 | 每小时模型用量到上限时发 throttled 并等待后继续；用户总上限到了以 waiting 暂停，输入保留给下一次运行 | 测试 | `spec/acceptance.test.ts` |
+| INV-42 | 一段里缺页持续偏高按结构性超载处理：同一段只跑一次压力整理，ContextStatus 给出收紧工作集的建议 | 测试 | `spec/acceptance.test.ts` |
