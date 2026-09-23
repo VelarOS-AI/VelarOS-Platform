@@ -2,6 +2,8 @@
 
 状态：正式 Platform 实现。主任务、搜索与业务子 Agent 使用同一个 ContextMemory 组装器、ContextStorage、ScriptAct、Agent Loop 和 ProviderRequestCompiler。宿主通过分区配额和近期窗口配置上下文，模型通过代码维护工作笔记与材料可见性。
 
+长程运行的请求布局、段与封段、按剩余轮数触发整理见 [长程上下文](long-running-context.md)（分阶段实施中）；它落地后取代本文的近期窗口、历史检查点与压力整理三部分。
+
 ## 五个分区
 
 每个请求的 runtime-view 材料是一份不可变快照：

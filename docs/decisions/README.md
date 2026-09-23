@@ -25,3 +25,5 @@ Accepted records are durable rationale, not a substitute for schemas or executab
 - [0015: ScriptAct 共享任务主干与统一模块合同](0015-scriptact-shared-task-runtime.md)
 
 - [ADR 0016：项目语言服务与命令行归属](0016-project-language-and-cli-ownership.md)
+
+- [0017: 长程上下文按段追加、按剩余轮数封段](0017-long-running-context.md)
