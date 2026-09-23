@@ -21,7 +21,7 @@ import { AdvancedSearch } from '../../../dist/act/search/impl/AdvancedSearch.js'
 import { SearchActivation } from '../../../dist/act/search/impl/SearchActivation.js'
 
 import { modelText } from './support/model-turn.mjs'
-import { runtimeFrame } from './support/model-turn.mjs'
+import { historyEntries, runtimeFrame } from './support/model-turn.mjs'
 import { done, marker } from './support/model-turn.mjs'
 
 const block = (request, head, source) =>
@@ -128,11 +128,7 @@ async function search(f, input = { query: 'Find logout' }) {
   return result.result.value.default
 }
 function findEvidence(request) {
-  for (const message of [...(request.history ?? [])].reverse()) {
-    if (message.role !== 'user' || typeof message.content !== 'string') continue
-    const split = message.content.indexOf('\n')
-    const item = JSON.parse(split < 0 ? message.content : message.content.slice(0, split))
-    if (split >= 0) item.text = message.content.slice(split + 1)
+  for (const item of historyEntries(request).reverse()) {
     if (item.origin === 'runtime-execution' && item.text) {
       const result = JSON.parse(item.text)
       if (result.result?.value?.default?.id && result.result.value.default.stamp)
@@ -1211,7 +1207,7 @@ test('formal ScriptAct reports cleanup failure and retains the published report 
       )
     )
     assert.match(JSON.stringify(result), /injected final reserve failure/)
-    const searchSessionId = runtimeFrame(f.frames[0].materials[0].text).scope.sessionId
+    const searchSessionId = runtimeFrame(f.frames[0]).scope.sessionId
     const snapshot = await f.storage.load(searchSessionId)
     const record = snapshot.records.findLast((item) => item.title === 'search:state')
     const state = JSON.parse(await f.storage.get(searchSessionId, record.objectId))
@@ -1248,7 +1244,7 @@ test(
       controller.signal
     )
     const request = await entered.promise
-    const id = runtimeFrame(request.materials[0].text).scope.sessionId
+    const id = runtimeFrame(request).scope.sessionId
     const child = f.runtime.getSession(id)
     const closing = Promise.withResolvers()
     const release = Promise.withResolvers()
@@ -1331,7 +1327,7 @@ test(
     const request = await entered.promise
     controller.abort()
     await pending
-    const id = runtimeFrame(request.materials[0].text).scope.sessionId
+    const id = runtimeFrame(request).scope.sessionId
     assert.equal(events.at(-1).status, 'cancelled', JSON.stringify(events))
     assert.equal(f.runtime.getSession(id), undefined)
     const state = await f.session.view.inspect()

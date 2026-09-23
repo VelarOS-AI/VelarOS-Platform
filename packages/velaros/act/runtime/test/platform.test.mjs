@@ -362,7 +362,7 @@ test('INV-7 real image capability persists attachments and sends them as images 
       }
       assert.equal(request.images.length, 1)
       assert.equal(request.images[0].data, data)
-      const view = runtimeFrame(request.materials.at(-1).text)
+      const view = runtimeFrame(request)
       assert.equal(view.results.length, 1)
       assert.equal(view.results[0].remainingTurns, 2)
       assert(!modelText(request).includes(data))

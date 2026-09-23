@@ -6,7 +6,7 @@ import { test } from 'node:test'
 
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 
-import { done } from './support/model-turn.mjs'
+import { baseNotes, done } from './support/model-turn.mjs'
 
 async function fixture(t) {
   const dataDir = await mkdtemp(join(tmpdir(), 'host-notes-'))
@@ -58,9 +58,9 @@ test('INV-47 host archive/restore uses the model note version and changes the ne
     'HOST-NOTE-CONTENT-UNIQUE'
   )
   await run(f.session)
-  const notes = JSON.parse(f.frames.at(-1).materials.find((m) => m.origin === 'runtime-view').text)
-    .partitions.workspace.notes
-  assert(notes.some((note) => note.key === 'plan' && note.text === 'HOST-NOTE-CONTENT-UNIQUE'))
+  // 段起点的驻留笔记在段底座里
+  assert(baseNotes(f.frames.at(-1)).some((note) => note.key === 'plan' && note.bodyIncluded))
+  assert.match(f.frames.at(-1).history[0].content, /HOST-NOTE-CONTENT-UNIQUE/)
   const archived = await f.session.setNoteResident({
     key: 'plan',
     baseRevision: 1,
@@ -78,9 +78,9 @@ test('INV-47 host archive/restore uses the model note version and changes the ne
     { code: 'WORKSPACE_CONFLICT' }
   )
   await run(f.session)
-  const after = JSON.parse(f.frames.at(-1).materials.find((m) => m.origin === 'runtime-view').text)
-    .partitions.workspace.notes
-  assert(!after.some((note) => note.key === 'plan' && note.bodyIncluded))
+  // 移出驻留后下一帧重建底座，笔记不再出现
+  assert.doesNotMatch(f.frames.at(-1).history[0].content, /HOST-NOTE-CONTENT-UNIQUE/)
+  assert(!baseNotes(f.frames.at(-1)).some((note) => note.key === 'plan'))
   await f.runtime.close()
   const runtime = await createRuntime(f.options)
   try {

@@ -33,7 +33,7 @@ async function fixture(
     estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
     async *stream(request) {
       assert.equal(request.response.type, 'text')
-      frames.push(runtimeFrame(request.materials.at(-1).text))
+      frames.push(runtimeFrame(request))
       yield* stream(request, frames)
     },
   }

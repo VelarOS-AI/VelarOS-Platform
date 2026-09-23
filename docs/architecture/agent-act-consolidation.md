@@ -78,7 +78,7 @@ AdvancedSearch 创建相同 RuntimeSession，使用相同 ActRunService、ActLoo
 | task | inspect 与 update；模型的下一步、假设、决定、未解问题 |
 | interaction | ask / confirm；答案不代替具体操作授权 |
 | agents | 通用子任务 |
-| search / evidence / history | 有界搜索、真实来源、增量检查点 |
+| search / evidence / history | 有界搜索、真实来源、段内历史与卷 |
 
 长期模型指导、计划和进度集中在 task capsule，用户原文和宿主固定指令保持各自来源。修改 capsule 不会改写用户目标或授权。
 

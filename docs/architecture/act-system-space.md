@@ -98,7 +98,7 @@ organize 的输入合同是 `{focus?:string,preserve?:ContextRef[]}`；窗口大
 
 整理支线用 context-materials.list/read 读取固定父快照，通过 execute 中的 `submit(patch)` 交付结构化补丁，补丁的类型就是生成合同里的 `ContextPatch`，交付前先过 typecheck。notes 项只允许 `{ref,summary?,resident?}`。ref 绑定当前不可变笔记版本；派生摘要标注 model-interpretation，主模型改写原笔记后该摘要自动失效。
 
-输入摘要保留已确认约束；历史检查点保留来源和未解事项；观察补丁只修改已认可的输出展示 AST 元数据并重投影已有结果。主模型的笔记正文、任务计划以及原始用户输入保持各自归属。
+输入摘要保留已确认约束；卷叙事保留来源、未解事项和否定尝试；观察补丁只修改已认可的输出展示 AST 元数据并重投影已有结果。主模型的笔记正文、任务计划以及原始用户输入保持各自归属。
 
 ContextMaintenanceState 在临时事务视图里组装完整候选五区及图片，检查必需内容、保护引用和版本，并使用父 ProviderRequestCompiler 计量；最后 CAS 一次发布。取消、冲突或预算失败不发布候选。Runtime 回传失败和缺口，再按现有策略降级或阻塞。
 

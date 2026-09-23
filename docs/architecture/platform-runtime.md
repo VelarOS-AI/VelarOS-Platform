@@ -8,9 +8,9 @@
 
 1. `ActRunService.submit → ActLoop.submit` 校验文字/图片/文件引用，归档用户原始输入，取得并续期任务租约；模型通过 memory.read 召回原文，通过 memory.organize 声明整理意图，Runtime 校验并发布派生摘要。
 2. `RuntimeSession.prepareObservation` 运行当前稳定观察版本，保留其实际结果、附件和观察安全反馈。
-3. `ContextMemory.project` 统一组装 task/workspace/observation/recent/runtime 五区。`ProgramContext` 提供当前源码、观察输出、有效结果租约和 diff；`RecentContext` 提供近期记录与检查点。组装器加入版本化工作笔记、分区占用和材料进出报告，生成可读 prompt 与内部结构化帧，固定投递与租约身份。
-4. `ScriptTurnDecoder` 固定随机帧标记、协议配置和宿主输入快照。`ProviderRequestCompiler` 封存本轮说明、材料与真实图片并检查最终发送预算。材料缩减仍不够时返回 `context_blocked`。
-5. `AiSdkModelDriver` 使用 AI SDK `streamText` 的普通文本模式。实际供应商请求没有业务工具表或 JSON responseFormat；图片仍作为独立多模态部分发送。驱动报告原文增量、用量和真实结束原因。
+3. `ContextMemory.project` 统一组装 task/workspace/observation/recent/runtime 五区。`ProgramContext` 提供当前源码、观察输出、有效结果租约和 diff；`RecentContext` 提供段内历史、卷与目录。组装器加入版本化工作笔记、分区占用和材料进出报告，生成可读 prompt 与内部结构化帧，固定投递与租约身份。
+4. `ScriptTurnDecoder` 固定随机帧标记、协议配置和宿主输入快照；本帧协议与标记放在最后一条消息末尾，系统提示在会话内不变。`ActLoop` 按供应商实测用量校准估算，按剩余轮数决定是否封段。`ProviderRequestCompiler` 封存本轮说明、材料与真实图片并检查最终发送预算。材料缩减仍不够时返回 `context_blocked`。
+5. `AiSdkModelDriver` 使用 AI SDK `streamText` 的普通文本模式。实际供应商请求没有业务工具表或 JSON responseFormat；图片仍作为独立多模态部分发送。驱动报告原文增量、用量（含缓存读写）和真实结束原因，并把会话缓存键与缓存断点翻译成各家字段。
 6. `ScriptTurnDecoder.push` 将正文流和程序预览分开。只有正常 stop、流完整结束、全部段闭合且声明合法，才接受响应、保存原文并确认帧。确认只扣除该帧实际包含且租约身份相同的结果。
 7. `RuntimeSession.invokeBatch` 先检查全部观察及执行候选；任何一个失败都不会派发本批代码。全部通过后，经 ContextStorage CAS 发布版本与执行占位；每个 execute 块有独立 executionId，即使源码相同。
 8. 默认逐块等待；`async:true` 交给会话持有的有界后台队列。脚本仍通过 `KernelScriptSession`、原隔离 runner 和唯一 Kernel 调用能力。能力 schema、权限、版本前提、journal、结果规范化保持同一条链路。
@@ -68,7 +68,7 @@ output({ label: input.label, source: blobs.payload });
 | `velaros/act/runtime/impl/RuntimeSession.ts` | 全批预检、执行身份、后台队列、观察和恢复 |
 | `velaros/act/runtime/impl/ProgramContext.ts` | 源码版本、CAS 发布、投递清单和曝光租约 |
 | `velaros/act/runtime/impl/ContextMemory.ts` | 五区组装、工作笔记与版本 CAS、材料进出基线 |
-| `velaros/act/runtime/impl/RecentContext.ts` | 近期有序记录、检查点与按引用召回 |
+| `velaros/act/runtime/impl/RecentContext.ts` | 段内历史（只追加、冻结渲染）、封卷、卷目录与按引用召回 |
 | `script/src/impl/ScriptPackageCompiler.ts` | 从当前授权和同一包映射生成声明与运行代理 |
 | `velaros/act/system/impl/SystemCatalog.ts` | 系统包发现、成员合同及授权后分页 |
 | `velaros/act/runtime/impl/ComposedRuntime.ts` | 单一 Kernel 装配；实例内写操作串行闸门 |
@@ -104,7 +104,7 @@ for await (const event of session.submit({ text: '检查这张图片', images })
 
 写闸门默认串行覆盖同一 Runtime 实例内登记为 write 的能力，包括受限观察命令。宿主可经 effectResources 声明完整的规范化冲突资源集合，让互不冲突的操作并行；未声明范围的操作仍与全部写操作互斥。多个进程及外部程序之间仍依赖领域锁、权限和资源版本前提。异步读取可以并发。通用命令、网络与 UI 操作没有统一回滚或绝对无副作用保证。
 
-主任务、高级搜索和业务子 Agent 通过同一 ContextMemory 和 ScriptAct 循环工作。宿主配置工作区份额、近期窗口和近期份额，搜索默认使用较大的近期窗口；执行预算与真实来源验证继续共用原链路。用户原始输入支持意图摘要和引用投影。完整策略见 `context-management.md` 和 `advanced-search.md`。
+主任务、高级搜索和业务子 Agent 通过同一 ContextMemory 和 ScriptAct 循环工作。宿主配置笔记份额、单条新历史份额和封段时保留的近期记录数，搜索默认保留更多近期记录；上下文按剩余轮数封段（见 `long-running-context.md`）；执行预算与真实来源验证继续共用原链路。用户原始输入支持意图摘要和引用投影。完整策略见 `context-management.md` 和 `advanced-search.md`。
 
 详见 [文本协议](scriptact-text-protocol.md)、[结果租约](script-context-leases.md)、[精确编辑](script-incremental-edit.md) 和 [实现差量](../engineering/scriptact-text-protocol-delta.md)。
 

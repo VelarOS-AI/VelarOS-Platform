@@ -14,14 +14,22 @@ export const ActRuntimeTuning = Object.freeze({
   readChars: 60000,
   /** 工作笔记默认分页条目数。 */
   workspacePage: 32,
-  /** 近期记录默认最大页长度。 */
-  historyPage: 64,
   /** 每个会话最多缓存的不可变结果分类数；只含正文身份与观察标记。 */
   historyClassificationEntries: 4096,
-  /** 历史目录默认单页条目数。 */
-  historyDefaultPage: 32,
   /** 协议增量替换条目上限。 */
   edits: 128,
   /** 协议修复默认次数。 */
   protocolRepairs: 2,
+  /** 段内一条新历史第一次交付的字符上限；之后同段逐字复用。 */
+  segmentEntryChars: 24_000,
+  /** 一卷规则骨架的字符上限，超出保留首尾。 */
+  volumeSkeletonChars: 6_000,
+  /** 骨架里每条说明文字的字符上限。 */
+  volumeLineChars: 160,
+  /** 一卷最多记下多少个改过的笔记键。 */
+  volumeNotes: 16,
+  /** 目录里同一级的卷超过这么多就合并最老的一批。 */
+  volumeIndex: 24,
+  /** 一次合并多少卷。 */
+  volumeMerge: 12,
 })

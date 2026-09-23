@@ -6,7 +6,7 @@ import type {
 } from '@velaros-ai/context'
 import type { ScriptOutputEdit, ScriptOutputManifest } from '@velaros-ai/script'
 
-import type { HistoryCheckpoint } from './history.js'
+import type { VolumeNarrative } from './history.js'
 import type { MemoryOrganizeIntent } from './memory.js'
 
 /** 整理支线看到的只读快照说明；正文按本快照授权的引用读取。 */
@@ -34,6 +34,13 @@ export interface ContextMaintenanceSnapshot {
       readonly chars: number
     }>
   }
+  /** 最近封成的一卷：补丁的 volume 给它写叙事；本任务还没有卷时缺省。 */
+  readonly volume?: {
+    readonly ref: ContextRef
+    readonly from: number
+    readonly through: number
+    readonly skeleton: string
+  }
   /** 用户目标代次，用于使旧摘要失效。 */
   readonly taskRevision: string
   readonly protectedRefs: readonly ContextRef[]
@@ -60,8 +67,8 @@ export interface ContextPatch {
   readonly notes?: readonly ContextNotePresentation[]
   /** 输入摘要：只有完整原文已经进入本支线请求才可替换；只看到引用、片段或元数据时省略，并在 unresolved 里报告缺口。 */
   readonly inputs?: readonly ContextInputSummary[]
-  /** 较早历史的摘要区间；没有必要或确认不了边界时省略。 */
-  readonly history?: HistoryCheckpoint
+  /** 最近一卷（snapshot.volume）的叙事；快照里没有卷、或还没读清楚那一段时省略。 */
+  readonly volume?: VolumeNarrative
   /** 退出自动展示的空间引用，只能选 snapshot.storeRefs 里的；不删除对象、不取消订阅、不撤回权限。 */
   readonly releaseStoreRefs?: readonly string[]
   /** 退出自动展示的执行结果引用；明确要求保留、或还有未决操作依赖的不能释放。 */
@@ -79,8 +86,6 @@ export interface ContextPatch {
       readonly text: string
     }>
   }
-  /** 近期记录窗口的大小：0 到 64 的整数，不是记录数组。 */
-  readonly recentRecords?: number
 }
 
 /** @AgentView 补丁通过了校验、已被受理：之后声明完成，宿主在父会话的下一次请求前重新核验版本再发布。 */
@@ -93,12 +98,11 @@ export interface ContextPatchReceipt {
 export interface ContextProjectionPolicy {
   /** 与不可变笔记版本绑定的派生展示，不写回主模型笔记。 */
   readonly notes?: readonly ContextNotePresentation[]
-  /** 自动整理的派生正文只在本次成功业务轮内生效；显式设置可以持续到任务结束。 */
+  /** 改造前的压力整理只在一轮内生效；现在的策略都保留到下一份策略或任务切换。 */
   readonly expiresAfterTurn?: number
   readonly origin: 'model-interpretation'
-  /** 经编译验证的容量持续到下一策略或任务切换，不随临时正文过期。 */
+  /** 整理时的目标容量，只作记录；每帧的容量由剩余轮数规划。 */
   readonly maxChars: number
-  readonly recentRecords?: number
   readonly summary: string
   readonly unresolved: readonly string[]
   readonly report: ContextRef

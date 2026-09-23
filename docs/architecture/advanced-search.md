@@ -54,7 +54,7 @@ await report({
 
 来源范围按身份比较；等量替换也会重置旧来源的候选和自由历史。只增加来源且原证据仍有效时保留既有历史。
 
-`history.list({after,through,limit})` 在当前授权代次内分页返回响应与执行结果引用，包括检查点已经概括的记录。返回的 through 用作下一页的固定上界，nextAfter 为下一页下界。投影因 64 条容量上限省略历史时，附带可直接调用的目录范围；拿到 ref 后使用 history.read。历史重置后的首个 checkpoint 使用 baseThrough:0，不能引用重置前的自由材料。
+`history.list({after,through,limit})` 在当前授权代次内分页返回响应与执行结果引用，包括已经封进卷的记录。返回的 through 用作下一页的固定上界，nextAfter 为下一页下界。封段后较早的历史只在卷目录里列出范围与骨架；拿到 ref 后使用 history.read。历史重置后从新的一段开始，卷叙事不能引用重置前的自由材料。
 
 ## 接入文件与验收
 

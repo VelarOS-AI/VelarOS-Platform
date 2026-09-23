@@ -28,7 +28,7 @@ export { modulesModule } from './impl/ModulesModule.js'
 export { storeModule } from './impl/StoreModule.js'
 export { systemModules } from './impl/SystemModules.js'
 export type { GoalState, GoalStatus, GoalUpdate } from './types/goal.js'
-export type { HistoryCheckpoint } from './types/history.js'
+export type { VolumeNarrative } from './types/history.js'
 export type {
   ContextMaintenancePage,
   ContextMaterialsQuery,

@@ -16,7 +16,7 @@
 | INV-12 | 任意流分片和原文边界得到相同解析，未知声明或未闭合段不派发 | 测试 | test/text-decoder.test.mjs |
 | INV-13 | 多执行身份独立；异步按额度调度；done 等待结果；取消及恢复不盲重放 | 测试 | test/text-runtime.test.mjs |
 | INV-14 | 用户图片、冻结宿主参数与原文在真实 runner / provider 编码中保真 | 测试 | test/text-runtime.test.mjs |
-| INV-15 | 搜索检查点与历史目录遵守当前授权代次；容量省略仍可分页召回原文；不可变结果分类缓存有界、重置换代清空、正文缺失不缓存；检查点增量提交保持最近响应、来源范围、冲突及回滚 | 测试 | test/context-management.test.mjs、test/context-index.test.mjs |
+| INV-15 | 段、卷与历史目录遵守当前授权代次；封卷留下最近响应，被封的原文仍可分页召回；卷写入后不再修改，目录逐级合并且条数有界；不可变结果分类缓存有界、重置换代清空、正文缺失不缓存；旧检查点只迁移一次 | 测试 | test/context-management.test.mjs、test/context-index.test.mjs |
 | INV-16 | 长轮次 Runtime 视图不累积过期结果；释放租约仍可召回不可变原文 | 测试 | test/context-management.test.mjs |
 | INV-17 | 搜索关闭前保持 claim 和能力范围；清理逐项尝试，失败可见；父租约释放前等待搜索与子模型账务结算 | 测试 | test/advanced-search.test.mjs |
 | INV-18 | 所有正式会话使用同一五分区组装器；历史正文只发送一次，结果关联源码和原生图像保持可用；各投影阶段可用一致索引快照且不改写历史 | 测试 | test/context-memory.test.mjs、test/context-index.test.mjs |
@@ -26,7 +26,7 @@
 | INV-22 | 输出整理修改源码中的声明式 view 与预算，按同一 CAS 发布；本轮复用原始结果，采集与展示版本分别可见，下一正常轮才刷新 | 测试 | `test/output-context.test.mjs` |
 | INV-23 | 原始块、失效摘要、缺失输出和原生图片有独立状态；源码或用户变化拒绝旧补丁，失败补丁不留下部分元数据 | 测试 | `test/output-context.test.mjs` |
 | INV-24 | 实际投递材料的权威读取版本进入写门和完成检查；伪造、撤权、外界变化不能绕过，同执行写回执推进自身版本 | 测试 | `test/decision-basis.test.mjs` |
-| INV-25 | required 输出必须完整可见；整理候选先校验再 CAS，取消阻止迟到发布；自动派生正文按轮过期，已验证容量在同任务内保持 | 测试 | `test/decision-basis.test.mjs`、`test/context-maintenance.test.mjs`、`test/output-context.test.mjs` |
+| INV-25 | required 输出必须完整可见；整理候选先校验再 CAS，取消阻止迟到发布；派生展示在任务内保留，策略变化重建段底座；整理没解决的超载同段不再重复 | 测试 | `test/decision-basis.test.mjs`、`test/context-maintenance.test.mjs`、`test/output-context.test.mjs` |
 | INV-26 | continue 累计任务身份和配额；new 归档并切换驻留状态，未决效果阻止切换 | 测试 | `test/task-lifecycle.test.mjs`、`test/model-tools.test.mjs` |
 | INV-27 | 观察健康状态持久化，重复失败或未知效果暂停自动重跑；源码修复后才能恢复 | 测试 | `test/task-lifecycle.test.mjs` |
 | INV-28 | 完成拒绝按恢复类别有界推进；子任务未知效果向父写入、完成与任务切换传播，宿主核对不重跑脚本 | 测试 | `test/completion-recovery.test.mjs`、`test/act-children.test.mjs` |
@@ -61,3 +61,6 @@
 | INV-47 | 宿主笔记读写与模型共用版本和上下文投影；移出与恢复只改驻留，冲突不覆盖正文，重开与分页读取不调用模型，关闭后拒绝访问 | 测试 | `test/host-notes.test.mjs` |
 
 | INV-48 | 目标跨运行与重启保留，暂停不会因新消息恢复；活动目标阻止提前完成，取消运行保持目标，旧版本不覆盖新目标，删除墓碑不会复活 | 测试 | `test/goals.test.mjs` |
+
+| INV-49 | 同一段内，除结果租约到期、显式释放和底座重建外，连续两帧的段底座与段内历史逐字相同；段内历史第一次随已接受的帧送达后冻结；本帧尾不随段内轮数变长 | 测试 | `test/context-index.test.mjs` |
+| INV-50 | 封段不调用模型：切点之前封成卷，最近记录与仍有租约的结果留给新段重新交付；按剩余轮数触发，长跑中每帧都在窗口内，观察结果跨段保持正确 | 测试 | `test/context-memory.test.mjs`、`test/context-management.test.mjs` |

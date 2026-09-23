@@ -180,7 +180,7 @@ test('v1 to v2: stable observation refreshes after a real write and SQLite resta
   const frames = []
   const f = await fixture(t, {
     model: driver(async function* (request) {
-      frames.push(runtimeFrame(request.materials.at(-1).text))
+      frames.push(runtimeFrame(request))
       yield* done(request)
     }),
   })
@@ -230,7 +230,7 @@ test('Phase 2: main model receives the compiled v2 view with independent verific
       yield { type: 'finish', reason: 'stop' }
       return
     }
-    const view = runtimeFrame(request.materials.at(-1).text)
+    const view = runtimeFrame(request)
     assert.match(view.observation.text, /version two/)
     yield* done(request, 'Changed; no independent verifier configured.')
   })

@@ -417,7 +417,16 @@ export class RuntimeSession implements VelarosSession {
             this.invokeBatch(input as ScriptProtocolSubmission, signal, acceptedTurnId),
         },
         frames: {
-          maintain: dependencies.maintain,
+          maintain: dependencies.maintain
+            ? async (input, signal) => {
+                // 显式整理先把段内较早的历史封成一卷，整理支线再给这一卷写叙事
+                if (input.reason === 'boundary' && (await this.organizePending()))
+                  await this.memory.fold('organize', input.targetChars, signal)
+                return dependencies.maintain!(input, signal)
+              }
+            : undefined,
+          fold: (reason, maxChars, signal) => this.memory.fold(reason, maxChars, signal),
+          boundary: (signal) => this.memory.boundary(signal),
           pressure: dependencies.tool ? () => dependencies.tool!.pressure() : undefined,
           policy: dependencies.contextOptions?.policy,
           setPhase: (phase) => {
@@ -497,16 +506,7 @@ export class RuntimeSession implements VelarosSession {
             const frame = JSON.parse(
               request.materials.findLast((item) => item.origin === 'runtime-view')!.text
             )
-            const current = await dependencies.storage.load(id)
-            const latest = current?.records.findLast(
-              (record) =>
-                record.title === 'context-maintenance:request' &&
-                record.sequence > (current.task?.startedSequence ?? 0)
-            )
-            const requestState = latest
-              ? JSON.parse((await dependencies.storage.get(id, latest.objectId))!)
-              : undefined
-            if (requestState?.status === 'scheduled') return true
+            if (await this.organizePending()) return true
             const state = await this.programs.state()
             return (
               (state.resultsRevision ?? 0) !==
@@ -516,6 +516,20 @@ export class RuntimeSession implements VelarosSession {
           },
         },
       })
+  }
+
+  /** 本任务是否有等待处理的整理请求。 */
+  private async organizePending(): Promise<boolean> {
+    const current = await this.dependencies.storage.load(this.id)
+    const latest = current?.records.findLast(
+      (record) =>
+        record.title === 'context-maintenance:request' &&
+        record.sequence > (current.task?.startedSequence ?? 0)
+    )
+    return latest
+      ? JSON.parse((await this.dependencies.storage.get(this.id, latest.objectId))!).status ===
+          'scheduled'
+      : false
   }
 
   private async project(view: ModelView, signal: AbortSignal, maxChars: number) {

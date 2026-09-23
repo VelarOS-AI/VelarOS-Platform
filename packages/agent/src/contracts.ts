@@ -3,6 +3,7 @@ export type {
   ActContextPolicy,
   ActDecodedTurn,
   ActEvent,
+  ActFrameSegment,
   ActImage,
   ActInput,
   ActInputFile,

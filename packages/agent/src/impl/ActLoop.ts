@@ -1,11 +1,11 @@
-import type { ContextCompletionResult, ContextProjection } from '@velaros-ai/context'
+import type { ContextCompletionResult } from '@velaros-ai/context'
 import { isNull } from '@velaros-ai/core'
 import { Log } from '@velaros-ai/core'
 import { isFalse, isUndefined } from '@velaros-ai/core'
 import { isEmpty, isObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
-import { modelRequestEncoder, type ModelTurnDelta, type ModelTurnRequest } from '@velaros-ai/kernel'
+import { modelRequestEncoder, type ModelTurnDelta } from '@velaros-ai/kernel'
 import {
   type CompiledModelRequest,
   createProviderRequestCompiler,
@@ -13,9 +13,12 @@ import {
 } from '@velaros-ai/model'
 
 import type { ActLoopOptions } from '../contract/requires.js'
-import type { ActDecodedTurn, ActInput, ActRunEvent } from '../types/act.js'
-import { framedRequest } from '../utils/frame-prompt.js'
+import type { ActComposedFrame, ActDecodedTurn, ActInput, ActRunEvent } from '../types/act.js'
+import { framedRequest, requestChars } from '../utils/frame-prompt.js'
 import { boundedModelOperation, boundedModelStream } from '../utils/model-stream.js'
+import { ContextPlanTuning } from '../utils/tuning.js'
+
+import { ContextPlanner } from './ContextPlanner.js'
 
 /** 唯一模型回合推进器，由运行服务持有。 */
 export interface ActLoopApi {
@@ -30,29 +33,35 @@ export class ActLoop implements ActLoopApi {
   private completionFeedback?: ContextCompletionResult
   private readonly policy
   private readonly compiler = createProviderRequestCompiler()
+  private readonly planner
+  private cache?: { readonly readTokens: number; readonly writeTokens: number }
 
   public constructor(private readonly options: ActLoopOptions) {
     this.policy = {
-      warningRatio: 0.75,
-      maintenanceRatio: 0.8,
-      maxMaintenanceTurns: 3,
-      recoveryAttempts: 2,
+      foldTurns: ContextPlanTuning.foldTurns,
+      boundaryTurns: ContextPlanTuning.boundaryTurns,
+      minTurns: ContextPlanTuning.minTurns,
+      windowTokens: ContextPlanTuning.windowTokens,
+      recoveryAttempts: ContextPlanTuning.recoveryAttempts,
       ...options.frames.policy,
     }
+    const { foldTurns, boundaryTurns, minTurns, windowTokens, recoveryAttempts } = this.policy
     if (
-      !(
-        this.policy.warningRatio > 0 &&
-        this.policy.warningRatio < this.policy.maintenanceRatio &&
-        this.policy.maintenanceRatio < 1
+      ![foldTurns, boundaryTurns, minTurns, windowTokens, recoveryAttempts].every((value) =>
+        Number.isSafeInteger(value)
       ) ||
-      !Number.isSafeInteger(this.policy.maxMaintenanceTurns) ||
-      this.policy.maxMaintenanceTurns < 1 ||
-      this.policy.maxMaintenanceTurns > 16 ||
-      !Number.isSafeInteger(this.policy.recoveryAttempts) ||
-      this.policy.recoveryAttempts < 1 ||
-      this.policy.recoveryAttempts > 4
+      !(
+        foldTurns >= 1 &&
+        foldTurns < minTurns &&
+        minTurns <= boundaryTurns &&
+        boundaryTurns <= 64
+      ) ||
+      windowTokens < 1024 ||
+      recoveryAttempts < 1 ||
+      recoveryAttempts > 4
     )
       throw new AppError('VALIDATION', '上下文容量策略无效')
+    this.planner = new ContextPlanner({ foldTurns, minTurns })
     for (const value of Object.values(options.limits))
       if (!Number.isSafeInteger(value) || value < 1)
         throw new AppError('VALIDATION', '运行预算必须是正整数')
@@ -142,7 +151,7 @@ export class ActLoop implements ActLoopApi {
         const observationMs = performance.now() - preparationStarted
         const projectionStarted = performance.now()
         const decoder = this.options.protocol.open()
-        let frame: Awaited<ReturnType<ActLoop['frame']>> = null
+        let frame: Nullable<ActComposedFrame> = null
         for (let refresh = 0; refresh < 3; refresh++)
           try {
             frame = await boundedModelOperation(
@@ -233,6 +242,12 @@ export class ActLoop implements ActLoopApi {
                 if (measured) throw new AppError('PROTOCOL', '模型重复返回用量')
                 measured = true
                 usage = { inputTokens: delta.inputTokens, outputTokens: delta.outputTokens }
+                this.planner.measure(compiled.measured, delta.inputTokens)
+                if (!isUndefined(delta.cacheReadTokens) || !isUndefined(delta.cacheWriteTokens))
+                  this.cache = {
+                    readTokens: delta.cacheReadTokens ?? 0,
+                    writeTokens: delta.cacheWriteTokens ?? 0,
+                  }
                 await this.options.view.recordUsage(delta.inputTokens, delta.outputTokens)
                 yield {
                   type: 'usage',
@@ -360,13 +375,14 @@ export class ActLoop implements ActLoopApi {
               (error as { code?: string }).code === 'CONTEXT_BUDGET' &&
               repair < this.policy.recoveryAttempts
             ) {
-              const repaired = await this.frame(
-                controller.signal,
-                decoder.instructions,
-                Math.max(512, Math.floor(this.options.limits.recoveryChars / (repair + 1))),
-                'provider'
-              )
+              // 实际超窗说明校准偏小：回到原始估算、封段后重组，再不行就用恢复窗口
+              this.planner.rejected()
+              const repaired = await this.frame(controller.signal, decoder.instructions, {
+                provider: true,
+                recovery: repair > 0,
+              })
               if (!repaired) throw error
+              frame = repaired
               compiled = repaired
               continue
             }
@@ -406,6 +422,7 @@ export class ActLoop implements ActLoopApi {
         if (this.options.control?.pending()) continue
         if (!decoded) throw new AppError('PROTOCOL', '没有可接受的完整响应')
         await this.options.frames.acknowledge(compiled.request, controller.signal)
+        this.planner.accept(compiled.estimate.tokens, frame.segment)
         if (!isUndefined(decoded.submission)) {
           yield { type: 'state', runId, status: 'executing' }
           const success = await this.options.execution.invoke(
@@ -563,142 +580,207 @@ export class ActLoop implements ActLoopApi {
   private async frame(
     signal: AbortSignal,
     protocolInstructions: string,
-    targetChars?: number,
-    reason: 'boundary' | 'pressure' | 'provider' = 'boundary',
+    repair: { provider: boolean; recovery: boolean } = { provider: false, recovery: false },
     attempt = 0
-  ): Promise<Nullable<{ projection: ContextProjection } & CompiledModelRequest>> {
+  ): Promise<Nullable<ActComposedFrame>> {
     const { model, limits, frames, view } = this.options
     const maintenanceSignal = AbortSignal.any([
       signal,
       ...(this.options.control ? [this.options.control.turnSignal()] : []),
     ])
+    const outputTokens = Math.min(limits.outputTokens, model.limits.outputTokens)
+    const window = Math.min(
+      model.limits.inputTokens,
+      model.limits.contextTokens - outputTokens - limits.safetyTokens,
+      this.policy.windowTokens
+    )
+    const budget = this.planner.chars(window, limits.projectionChars)
+    // 显式整理请求在请求边界处理：Runtime 先封段，再运行整理支线
     if (attempt === 0)
-      await frames.maintain?.(
-        { reason, targetChars: targetChars ?? limits.projectionChars },
-        maintenanceSignal
-      )
+      await frames.maintain?.({ reason: 'boundary', targetChars: budget }, maintenanceSignal)
     const evidence = await view.build(
       { maxChars: limits.projectionChars, visibleExecutionIds: await frames.visibleExecutions() },
       signal
     )
-    let projected = await frames.project(evidence, signal, targetChars ?? limits.projectionChars)
-    let body = projected.body
-    let phase = frames.phase?.() ?? { phase: 'work' as const, instructions: '' }
     const recovery = this.completionFeedback
       ? `\n上次完成检查尚未通过：${JSON.stringify(this.completionFeedback)}。先处理原因；修复或补充证据，不要自动重放存在未知效果的脚本。`
       : ''
-    let request: ModelTurnRequest = framedRequest(
-      {
-        history: projected.history,
-        instructions: this.options.instructions,
-        images: projected.images,
-        compiledPrompt: projected.prompt,
-        materials: [
-          { ref: evidence.id, origin: 'runtime-view', text: body, totalChars: body.length },
-        ],
-        response: { type: 'text' },
-        mode: phase.phase === 'maintenance' ? 'maintenance' : 'work',
-        outputTokens: Math.min(limits.outputTokens, model.limits.outputTokens),
-      },
-      `${protocolInstructions}\n${phase.instructions}${recovery}`
-    )
-    let compiled = await this.compiler.compileModelTurn(request, model, limits.safetyTokens)
-    let inputLimit = Math.min(
-      model.limits.inputTokens,
-      model.limits.contextTokens - request.outputTokens - limits.safetyTokens
-    )
-    const pressure =
-      !compiled.okToSend || compiled.estimate.tokens > inputLimit * this.policy.maintenanceRatio
-    if (pressure && phase.phase !== 'finalizing') {
-      const smallerTarget = Math.max(
-        512,
-        Math.min(
-          targetChars ?? limits.projectionChars,
-          Math.floor((body.length * inputLimit * 0.6) / Math.max(1, compiled.estimate.tokens))
-        )
-      )
-      if (
-        attempt < this.policy.maxMaintenanceTurns &&
-        (await frames.maintain?.(
-          { reason: 'pressure', targetChars: smallerTarget },
-          maintenanceSignal
-        ))
-      )
-        return this.frame(signal, protocolInstructions, smallerTarget, 'pressure', attempt + 1)
-      frames.pressure?.()
-      phase = frames.phase?.() ?? phase
-    }
-    if (pressure || reason === 'provider') {
-      // 阶段切换可能缩小模型工具的有效窗口；重投影只能缩小本次材料预算。
-      inputLimit = Math.min(
-        model.limits.inputTokens,
-        model.limits.contextTokens - request.outputTokens - limits.safetyTokens
-      )
-      projected = await frames.project(
-        evidence,
-        signal,
-        Math.min(targetChars ?? limits.projectionChars, limits.recoveryChars)
-      )
-      body = projected.body
-      request = framedRequest(
+    const compose = async (maxChars: number) => {
+      const projected = await frames.project(evidence, signal, maxChars)
+      const phase = frames.phase?.() ?? { phase: 'work' as const, instructions: '' }
+      const request = framedRequest(
         {
-          ...request,
-          compiledPrompt: projected.prompt,
-          images: projected.images,
           history: projected.history,
+          instructions: this.options.instructions,
+          images: projected.images,
+          compiledPrompt: projected.prompt,
           materials: [
-            { ref: evidence.id, origin: 'runtime-view', text: body, totalChars: body.length },
+            {
+              ref: evidence.id,
+              origin: 'runtime-view',
+              text: projected.body,
+              totalChars: projected.body.length,
+            },
           ],
+          response: { type: 'text' },
+          mode: phase.phase === 'maintenance' ? 'maintenance' : 'work',
+          outputTokens,
         },
         `${protocolInstructions}\n${phase.instructions}${recovery}`
       )
-      compiled = await this.compiler.compileModelTurn(request, model, limits.safetyTokens)
+      const compiled = await this.compiler.compileModelTurn(
+        request,
+        model,
+        limits.safetyTokens,
+        this.planner.calibration()
+      )
+      this.planner.density(requestChars(request), compiled.estimate.tokens)
+      return { segment: projected.segment, phase, request, compiled }
     }
-    if (!compiled.okToSend) return null
-    frames.setPhase(phase.phase)
-    const status = {
-      mode: frames.mode,
-      phase: phase.phase,
-      frameId: evidence.id,
-      pressure:
-        compiled.estimate.tokens / inputLimit > 0.9
-          ? ('critical' as const)
-          : compiled.estimate.tokens / inputLimit > this.policy.warningRatio
-            ? ('warning' as const)
-            : ('normal' as const),
-      inputTokens: compiled.estimate.tokens,
-      precision: compiled.estimate.precision,
-      basis: compiled.estimate.basis,
-      inputLimit,
-      outputReserve: request.outputTokens,
-      safetyReserve: limits.safetyTokens,
-      remainingTokens: Math.max(0, inputLimit - compiled.estimate.tokens),
-      advice:
-        '原文按引用归档。工作笔记是模型解释；引用不代表已读正文。容量调整由轮边界的上下文服务处理。',
+    const fits = (current: Awaited<ReturnType<typeof compose>>) =>
+      current.compiled.okToSend && current.compiled.estimate.tokens <= window
+    // 整理支线的目标：给结构性超载留出 minTurns 轮的增长
+    const target = Math.max(
+      512,
+      this.planner.chars(
+        Math.max(1, window - this.policy.minTurns * this.planner.growth(window)),
+        limits.projectionChars
+      )
+    )
+    let folded = false
+    if (repair.provider) {
+      folded = await this.fold('provider', budget, signal)
+      // 供应商说放不下、又没有可封的历史：交给整理支线收紧展示
+      if (
+        !folded &&
+        attempt === 0 &&
+        (await frames.maintain?.({ reason: 'provider', targetChars: target }, maintenanceSignal))
+      )
+        return this.frame(
+          signal,
+          protocolInstructions,
+          { provider: false, recovery: repair.recovery },
+          attempt + 1
+        )
     }
+    let current = await compose(repair.recovery ? Math.min(budget, limits.recoveryChars) : budget)
+    let runway = this.planner.runway(current.compiled.estimate.tokens, window)
+    // 放不下或剩余轮数不足就封段；剩余不多时遇到章节边界也封段。抖动说明工作集本身装不下，再封也没用
+    if (!folded && !repair.provider && !this.planner.thrashing()) {
+      const reason = !fits(current)
+        ? ('overflow' as const)
+        : runway < this.policy.foldTurns
+          ? ('runway' as const)
+          : runway < this.policy.boundaryTurns && (await frames.boundary?.(signal))
+            ? ('boundary' as const)
+            : undefined
+      if (reason && (await this.fold(reason, budget, signal))) {
+        folded = true
+        current = await compose(budget)
+        runway = this.planner.runway(current.compiled.estimate.tokens, window)
+      }
+    }
+    // 结构性超载：放不下，或封不了段时剩余不足 foldTurns 轮、封段后剩余仍不足 minTurns 轮。
+    // 主线交给整理支线一次；放不下时叶子工具直接进入交付阶段
+    const short = runway < (folded ? this.policy.minTurns : this.policy.foldTurns)
+    if ((!fits(current) || short) && current.phase.phase !== 'finalizing') {
+      // 同一段只整理一次：整理过仍不够，就不再每轮重复，等下次封段
+      const segment = current.segment?.id
+      if (attempt > 0 && segment) this.planner.exhaust(segment)
+      if (attempt === 0 && !(segment && this.planner.exhausted(segment)) && frames.maintain) {
+        if (await frames.maintain({ reason: 'pressure', targetChars: target }, maintenanceSignal))
+          return this.frame(signal, protocolInstructions, repair, attempt + 1)
+        if (segment) this.planner.exhaust(segment)
+      }
+      if (!fits(current)) {
+        frames.pressure?.()
+        current = await compose(budget)
+      }
+    }
+    // 仍放不下只剩恢复窗口：基础目标、当前图片和必要运行状态必须装得下
+    if (!fits(current)) current = await compose(Math.min(budget, limits.recoveryChars))
+    if (!current.compiled.okToSend) return null
+    runway = this.planner.runway(current.compiled.estimate.tokens, window)
+    frames.setPhase(current.phase.phase)
+    const overload =
+      (folded ||
+        this.planner.thrashing() ||
+        Boolean(current.segment && this.planner.exhausted(current.segment.id))) &&
+      runway < this.policy.minTurns
+        ? '工作集本身快装不下了：按 memoryStatus.footprint 找占用最大的分区，收紧 observe 的 view，释放不再需要的 task 租约，合并或移出笔记，或把独立的子目标交给子 agent。'
+        : undefined
+    const status = (tokens: number) => {
+      const turns = this.planner.runway(tokens, window)
+      return {
+        mode: frames.mode,
+        phase: current.phase.phase,
+        frameId: evidence.id,
+        pressure:
+          turns < this.policy.foldTurns
+            ? ('critical' as const)
+            : turns < this.policy.boundaryTurns
+              ? ('warning' as const)
+              : ('normal' as const),
+        inputTokens: tokens,
+        precision: current.compiled.estimate.precision,
+        basis: current.compiled.estimate.basis,
+        inputLimit: window,
+        outputReserve: outputTokens,
+        safetyReserve: limits.safetyTokens,
+        remainingTokens: Math.max(0, window - tokens),
+        advice:
+          '原文按引用归档；工作笔记是模型解释，引用不代表已读正文。上下文按剩余轮数自动封段，封进卷的历史仍可按引用召回。',
+        runway: {
+          turns: Math.max(0, Math.floor(turns)),
+          growthPerTurn: this.planner.growth(window),
+        },
+        segment: current.segment
+          ? {
+              index: current.segment.index,
+              turns: current.segment.turns,
+              volumes: current.segment.volumes,
+            }
+          : undefined,
+        cache: this.cache,
+        overload,
+      }
+    }
+    let compiled = current.compiled
+    let tokens = compiled.estimate.tokens
     for (let count = 0; count < 3; count++) {
       compiled = await this.compiler.compileModelTurn(
-        { ...request, contextStatus: status },
+        { ...current.request, contextStatus: status(tokens) },
         model,
-        limits.safetyTokens
+        limits.safetyTokens,
+        this.planner.calibration()
       )
-      if (compiled.estimate.tokens === status.inputTokens) break
-      status.inputTokens = compiled.estimate.tokens
-      status.pressure =
-        status.inputTokens / inputLimit > 0.9
-          ? 'critical'
-          : status.inputTokens / inputLimit > this.policy.warningRatio
-            ? 'warning'
-            : 'normal'
-      status.remainingTokens = Math.max(0, inputLimit - status.inputTokens)
+      if (compiled.estimate.tokens === tokens) break
+      tokens = compiled.estimate.tokens
     }
     if (!compiled.okToSend) return null
     if (!(await view.validate(evidence, signal)))
       throw new AppError('STALE_VIEW', '发送前证据版本发生变化')
     return {
-      projection: { revision: evidence.scope.revision, cursor: 0, records: [], chars: body.length },
+      projection: {
+        revision: evidence.scope.revision,
+        cursor: 0,
+        records: [],
+        chars: current.request.materials[0]!.text.length,
+      },
+      segment: current.segment,
       ...compiled,
     }
+  }
+
+  /** 让 Runtime 封段；因容量封段时记进规划器，用来判断抖动。 */
+  private async fold(
+    reason: 'runway' | 'boundary' | 'overflow' | 'provider',
+    maxChars: number,
+    signal: AbortSignal
+  ): Promise<boolean> {
+    const folded = !!(await this.options.frames.fold?.(reason, maxChars, signal))
+    if (folded) this.planner.folded()
+    return folded
   }
 }
 

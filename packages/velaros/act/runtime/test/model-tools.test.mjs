@@ -218,7 +218,7 @@ test('business child discovery and script declarations omit delegation even if t
       )
       yield finish
     } else if (calls === 2) {
-      const frame = runtimeFrame(request.materials[0].text)
+      const frame = runtimeFrame(request)
       const result = frame.results
         .map((item) => {
           try {

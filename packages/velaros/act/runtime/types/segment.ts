@@ -1,0 +1,111 @@
+import type { ContextRef } from '@velaros-ai/context'
+import type { ModelHistoryMessage } from '@velaros-ai/kernel'
+
+import type { VolumeNarrative } from '../../system/types/history.js'
+
+/** 段内一条冻结的历史：第一次随已接受的帧送达时实际发送的正文，同一段后续帧逐字复用。 */
+export interface SegmentEntry {
+  /** 原始记录的引用 id。 */
+  readonly ref: string
+  readonly sequence: number
+  readonly role: 'user' | 'assistant'
+  /** 冻结正文所在的存储对象。 */
+  readonly objectId: string
+  readonly chars: number
+}
+
+/** 为什么开始新的一段或重建底座。 */
+export type SegmentReason =
+  'start' | 'runway' | 'boundary' | 'organize' | 'provider' | 'overflow' | 'rebase'
+
+/** 当前段：底座、延续的结果与冻结条目；封段时整体换新，重建底座只换底座。 */
+export interface ContextSegment {
+  readonly id: string
+  /** 段号，每个授权代次从 1 开始。 */
+  readonly index: number
+  /** 底座重建次数；变化时请求前缀从底座起失效。 */
+  readonly revision: number
+  /** 序号大于它的记录属于本段历史。 */
+  readonly from: number
+  /** 渲染好的底座正文。 */
+  readonly base: { readonly objectId: string; readonly chars: number }
+  /** 切点之前产生、租约仍有效的结果，作为本段最前面的历史条目。 */
+  readonly carried: readonly string[]
+  /** 底座笔记快照：段起点的全部驻留笔记；shown 表示底座列了卡片，bodyIncluded 表示卡片带正文。 */
+  readonly notes: ReadonlyArray<{
+    readonly key: string
+    readonly revision: number
+    readonly ref: string
+    readonly shown: boolean
+    readonly bodyIncluded: boolean
+  }>
+  readonly entries: readonly SegmentEntry[]
+  /** 段起点时计划里的下一目标，用于判断章节边界。 */
+  readonly objective: string
+  /** 段起点时已有的任务目标数，用于判断段内是否来了新的用户输入。 */
+  readonly goals: number
+  /** 渲染底座时生效的投影策略记录；策略换了就重建底座。 */
+  readonly policy: Nullable<string>
+  /** 底座目录里的卷数。 */
+  readonly volumes: number
+  readonly reason: SegmentReason
+}
+
+/** 主循环看到的段状态：据此判断增长是否可比、封段是否发生。 */
+export interface SegmentStatus {
+  readonly id: string
+  readonly index: number
+  readonly revision: number
+  readonly volumes: number
+  /** 段内已有的模型响应数。 */
+  readonly turns: number
+}
+
+/** 封成的一卷：历史区间的规则骨架，写入后不再修改；叙事另行记录。 */
+export interface ContextVolume {
+  /** 1 是一次封段的卷，更高的级别由同级旧卷合并而成。 */
+  readonly level: number
+  readonly from: number
+  readonly through: number
+  readonly turns: number
+  readonly results: number
+  readonly failures: number
+  /** 有写效果（已提交、部分或未知）的能力调用数。 */
+  readonly effects: number
+  /** 改过的笔记，形如 key@revision。 */
+  readonly notes: readonly string[]
+  readonly inputs: number
+  /** 逐轮一行的规则骨架；合并卷为空。 */
+  readonly skeleton: string
+  /** 合并卷的组成卷。 */
+  readonly parts?: readonly ContextRef[]
+}
+
+/** 当前授权代次内仍在目录里的一卷及其最新叙事。 */
+export interface VolumeView {
+  readonly ref: ContextRef
+  readonly volume: ContextVolume
+  readonly narrative?: VolumeNarrative
+}
+
+/** 段内历史的一次投影：消息正文与送达情况，以及本帧新渲染、待接受后冻结的条目。 */
+export interface SegmentHistory {
+  readonly messages: readonly ModelHistoryMessage[]
+  readonly items: ReadonlyArray<{
+    readonly ref: string
+    readonly sequence: number
+    readonly role: 'user' | 'assistant'
+    readonly bodyIncluded: boolean
+    readonly representation: 'full' | 'excerpt' | 'reference'
+  }>
+  readonly fresh: readonly SegmentEntry[]
+}
+
+/** 段内历史要渲染的结果：ProgramContext 渲染好的当前租约正文。 */
+export interface SegmentLeasedResult {
+  readonly ref: string
+  readonly sourceRef?: string
+  readonly text?: string
+  readonly source?: string
+  readonly structuredOutput?: boolean
+}

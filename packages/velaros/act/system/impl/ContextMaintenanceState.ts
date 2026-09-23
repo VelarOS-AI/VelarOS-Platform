@@ -58,12 +58,11 @@ export interface ContextMaintenanceStateApi {
     patch: ContextPatch,
     signal: AbortSignal
   ): Promise<void>
-  /** 复用原操作校验；整组元数据经过一次 CAS 才进入父会话。 */
+  /** 复用原操作校验；整组元数据经过一次 CAS 才进入父会话，派生展示保留到下一份策略或任务切换。 */
   apply(
     snapshot: ContextMaintenanceSnapshot,
     patch: ContextPatch,
-    signal: AbortSignal,
-    lifetime?: 'turn' | 'task'
+    signal: AbortSignal
   ): Promise<ContextRef>
 }
 
@@ -176,6 +175,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
         })),
       }
     }
+    const latest = (await new RecentContext(this.id, context, this.storage).volumes(signal)).at(-1)
     const baseRevision = await this.version(state)
     if (this.inputRevision !== baseRevision) {
       this.inputRevision = baseRevision
@@ -193,6 +193,14 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     return {
       storeRefs: state.task.storeRefs ?? [],
       taskRevision: scriptOutputs.hash([state.task.goals, reset]),
+      volume: latest
+        ? {
+            ref: latest.ref,
+            from: latest.volume.from,
+            through: latest.volume.through,
+            skeleton: latest.volume.skeleton,
+          }
+        : undefined,
       observation,
       baseRevision,
       targetChars,
@@ -323,23 +331,21 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     patch: ContextPatch,
     signal: AbortSignal
   ): Promise<void> {
-    await this.prepare(snapshot, patch, signal, 'task', false)
+    await this.prepare(snapshot, patch, signal, false)
   }
 
   public async apply(
     snapshot: ContextMaintenanceSnapshot,
     patch: ContextPatch,
-    signal: AbortSignal,
-    lifetime: 'turn' | 'task' = 'task'
+    signal: AbortSignal
   ): Promise<ContextRef> {
-    return this.prepare(snapshot, patch, signal, lifetime, true)
+    return this.prepare(snapshot, patch, signal, true)
   }
 
   private async prepare(
     snapshot: ContextMaintenanceSnapshot,
     patch: ContextPatch,
     signal: AbortSignal,
-    lifetime: 'turn' | 'task',
     publish: boolean
   ): Promise<ContextRef> {
     if (
@@ -352,11 +358,10 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
             'unresolved',
             'notes',
             'inputs',
-            'history',
+            'volume',
             'releaseResults',
             'releaseStoreRefs',
             'observation',
-            'recentRecords',
           ].includes(key)
       ) ||
       patch.baseRevision !== snapshot.baseRevision ||
@@ -378,13 +383,8 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
       )
     )
       throw new AppError('LIMIT', '上下文补丁条目过多')
-    if (
-      !isUndefined(patch.recentRecords) &&
-      (!Number.isSafeInteger(patch.recentRecords) ||
-        patch.recentRecords < 0 ||
-        patch.recentRecords > ContextPatchLimits.recentRecords)
-    )
-      throw new AppError('VALIDATION', '近期记录窗口无效')
+    if (patch.volume && !snapshot.volume)
+      throw new AppError('VALIDATION', '快照里还没有卷，不能写卷叙事')
     if (
       patch.observation &&
       (patch.observation.sourceRef !== snapshot.observationRef ||
@@ -527,7 +527,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
             },
           })
         }
-        if (patch.history) await recent.checkpoint(patch.history, signal)
+        if (patch.volume) await recent.narrate(snapshot.volume!.ref, patch.volume, signal)
         for (const ref of patch.releaseResults ?? []) await programs.release(ref, signal)
         let observationSourceRef = snapshot.observationRef
         if (patch.observation) {
@@ -584,7 +584,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
                         : 'full',
                   })) ?? [],
                 inputs: patch.inputs?.map((input) => input.ref) ?? [],
-                historyThrough: toNullable(patch.history?.through),
+                volume: patch.volume ? snapshot.volume!.ref : null,
                 released: patch.releaseResults ?? [],
                 observation: patch.observation
                   ? {
@@ -600,12 +600,9 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
           signal
         )
         const policy: ContextProjectionPolicy = {
-          expiresAfterTurn:
-            lifetime === 'turn' ? (await programs.state()).completedTurns + 1 : undefined,
           notes: noteViews,
           origin: 'model-interpretation',
           maxChars: snapshot.targetChars,
-          recentRecords: patch.recentRecords,
           summary: patch.summary,
           unresolved: patch.unresolved,
           report: report.ref,

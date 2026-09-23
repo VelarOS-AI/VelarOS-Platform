@@ -439,12 +439,7 @@ export class ContextMaintenance implements ContextMaintenanceApi {
       await this.dependencies.close(id)
       opened = false
       await current.close()
-      report = await state.apply(
-        snapshot,
-        patch,
-        activity.signal,
-        input.reason === 'boundary' ? 'task' : 'turn'
-      )
+      report = await state.apply(snapshot, patch, activity.signal)
     } catch (error) {
       Log.tag('ActRuntime').debug('ContextMaintenance 已进入异常处理或降级分支')
       failure = error

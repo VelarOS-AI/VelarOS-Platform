@@ -187,7 +187,7 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    layers: [['AgentSupervisor.ts', 'ActRunService.ts'], ['ActLoop.ts']],
+    layers: [['AgentSupervisor.ts', 'ActRunService.ts'], ['ActLoop.ts'], ['ContextPlanner.ts']],
     browserSafeEntries: ['contracts.ts'],
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',

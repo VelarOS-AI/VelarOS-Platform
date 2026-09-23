@@ -13,7 +13,13 @@ import type {
   ModelTurnRequest,
 } from '@velaros-ai/kernel'
 
-import type { ActContextPolicy, ActDecodedTurn, ActPreview, ActRunLimits } from '../types/act.js'
+import type {
+  ActContextPolicy,
+  ActDecodedTurn,
+  ActFrameSegment,
+  ActPreview,
+  ActRunLimits,
+} from '../types/act.js'
 
 /** 一帧固定协议的增量接收器，校验失败时不授权执行。 */
 export interface ActTurnDecoder {
@@ -47,6 +53,14 @@ export interface ActContextPort {
   ): Promise<boolean>
   /** 叶子模型工具进入直接交付阶段，不再创建整理支线。 */
   pressure?(): void
+  /** 把段内较早的历史封成一卷、开始新的一段，不调用模型；能封的不足一个响应时返回 false。 */
+  fold?(
+    reason: 'runway' | 'boundary' | 'overflow' | 'provider',
+    maxChars: number,
+    signal: AbortSignal
+  ): Promise<boolean>
+  /** 是否处在章节边界：有待处理的整理请求、段内来了新的用户输入，或计划的下一目标变了。 */
+  boundary?(signal: AbortSignal): Promise<boolean>
   /** 实际上下文生成模式。 */
   readonly mode: 'partitioned' | 'runtime-view' | 'incremental-history'
   /** 当前模式的容量管理策略。 */
@@ -73,6 +87,8 @@ export interface ActContextPort {
     images: readonly ModelImage[]
     prompt?: string
     history?: readonly ModelHistoryMessage[]
+    /** 分段投影时的段状态。 */
+    segment?: ActFrameSegment
   }>
   /** 完成前检查实际送达的运行时材料；返回拒绝原因时进入相应恢复路径。 */
   completion?(

@@ -14,7 +14,7 @@ import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { memoryPrompt } from '../../../dist/act/runtime/utils/context-memory.js'
 
-import { done, marker, turn } from './support/model-turn.mjs'
+import { baseNotes, done, historyEntries, marker, turn } from './support/model-turn.mjs'
 
 const signal = new AbortController().signal
 
@@ -308,7 +308,8 @@ test('oversized notes become honest reference cards and can be recalled without 
   const original = 'long-note-'.repeat(6000)
   const entry = await f.memory.update({ key: 'large', baseRevision: 0, body: original }, signal)
   await run(f)
-  const note = JSON.parse(f.requests[0].materials[0].text).partitions.workspace.notes[0]
+  // 段起点的驻留笔记在段底座里；放不下正文的只给引用卡
+  const note = baseNotes(f.requests[0]).find((item) => item.key === 'large')
   assert.equal(note.representation, 'reference')
   assert.equal(note.bodyIncluded, false)
   assert.equal(note.chars, original.length)
@@ -378,13 +379,13 @@ test('one result body is sent once across partition rendering and chronological 
   const frame = JSON.parse(request.materials[0].text)
   assert(frame.partitions.recent.results[0].bodyInHistory)
   assert.equal(frame.partitions.recent.results[0].text, undefined)
-  assert(frame.partitions.recent.history.some((item) => item.role === 'assistant'))
+  const entries = historyEntries(request)
+  assert(entries.some((item) => item.origin === 'assistant-script'))
   assert.equal(
-    frame.partitions.recent.history.filter(
-      (item) => JSON.parse(item.content).origin === 'runtime-execution'
-    ).length,
+    entries.filter((item) => item.origin === 'runtime-execution' && item.bodyIncluded).length,
     1
   )
+  assert.equal(frame.partitions.recent.historyState.records, entries.length)
 })
 
 test('zero history window still sends leased results and notes through the same five partitions', async (t) => {
@@ -396,9 +397,11 @@ test('zero history window still sends leased results and notes through the same 
   )
   await run(f)
   const frame = JSON.parse(f.requests[0].materials[0].text)
-  assert.equal(frame.partitions.recent.history.length, 0)
+  assert.equal(frame.partitions.recent.historyState.records, 0)
   assert.match(frame.partitions.recent.results[0].text, /leased result/)
-  assert.equal(frame.partitions.workspace.notes.length, 1)
+  // 不发送有序历史时，段底座仍是第一条消息，笔记快照在里面
+  assert.equal(f.requests[0].history.length, 1)
+  assert.match(f.requests[0].history[0].content, /persistent reasoning summary/)
 })
 
 test('host memory policy rejects invalid capacities before a model request', async () => {
@@ -473,10 +476,9 @@ test('INV-20 independent capacity maintenance derives parent note presentation w
   )
   assert.equal(f.requests.length, 2)
   assert.equal(toolCalls, 1)
-  assert.equal(
-    JSON.parse(f.requests[1].materials[0].text).partitions.workspace.notes[0].text,
-    'Maintenance preserved progress'
-  )
+  // 派生展示换了投影策略，下一帧重建底座，笔记快照换成整理后的展示
+  assert.match(f.requests[1].history[0].content, /Maintenance preserved progress/)
+  assert.doesNotMatch(f.requests[1].history[0].content, /Original main-model progress/)
   const state = await f.storage.load('s')
   const results = await Promise.all(
     state.records
@@ -549,8 +551,13 @@ test('workspace directory and recovery cards stay bounded even when many notes a
     )
   await run(f)
   const frame = JSON.parse(f.requests[0].materials[0].text)
-  assert.equal(frame.partitions.workspace.notes.length, 4)
-  assert.equal(frame.partitions.workspace.omitted, 16)
+  assert.equal(baseNotes(f.requests[0]).length, 4)
+  assert.match(f.requests[0].history[0].content, /另有 16 份驻留笔记没有列出/)
+  assert.deepEqual(
+    { ...frame.partitions.workspace.snapshot, sourcesChanged: undefined },
+    { notes: 20, shown: 4, omitted: 16, sourcesChanged: undefined }
+  )
+  assert.deepEqual(frame.partitions.workspace.notes, [])
   const found = []
   let after
   do {
@@ -562,43 +569,63 @@ test('workspace directory and recovery cards stay bounded even when many notes a
   assert(found.every((item) => item.ref.id && !Object.hasOwn(item, 'body')))
 })
 
-test('oversized recent checkpoints become discoverable references during recovery', async (t) => {
+test('INV-50 folding seals older history into a listed volume and the next segment re-delivers kept records and leased results', async (t) => {
   const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
   const recent = new RecentContext('s', f.session.context, f.storage)
-  const results = []
-  for (let index = 0; index < 4; index++) {
-    await f.session.context.append({ kind: 'assistant', body: `step ${index}` })
-    results.push(
+  const memory = new ContextMemory(
+    's',
+    f.session.context,
+    f.storage,
+    f.session.view,
+    programs,
+    recent
+  )
+  const view = {
+    id: 'frame',
+    scope: { sessionId: 's', revision: 0 },
+    goals: [],
+    capsule: {},
+    mandatory: [],
+    evidence: [],
+    gaps: [],
+    readSet: [],
+    progress: { step: 0, repeatedSteps: 0, stalled: false, evidence: [] },
+  }
+  const leased = await archiveResult(f, programs, 'kept for the task')
+  const responses = []
+  for (let index = 0; index < 6; index++) {
+    // 响应里写着源码，保留下来的结果就不再重复附上
+    responses.push(
       await f.session.context.append({
-        kind: 'audit',
-        title: `script:${crypto.randomUUID()}:result`,
-        body: 'result',
+        kind: 'assistant',
+        body: `step ${index} done\n@@sX execute()\noutput(1)\n@@sX`,
       })
     )
+    await archiveResult(f, programs, `result-${index}`)
   }
-  const checkpoint = await recent.checkpoint(
-    {
-      baseThrough: 0,
-      through: results[0].sequence,
-      summary: 'summary'.repeat(800),
-      evidence: [],
-      unresolved: ['verify'],
-      negativeAttempts: ['missed query'],
-    },
-    signal
+  const first = await memory.project(view, undefined, [], signal, 24000)
+  assert.equal(first.segment.index, 1)
+  assert(await memory.fold('runway', 24000, signal))
+  const [volume] = await recent.volumes(signal)
+  assert.equal(volume.volume.turns, 2)
+  const next = await memory.project(view, undefined, [], signal, 24000)
+  assert.equal(next.segment.index, 2)
+  assert.match(next.history[0].content, /卷目录/)
+  assert.match(next.history[0].content, /step 0 done/)
+  const entries = historyEntries(next)
+  // 切点之前、租约仍有效的结果排在新段最前面；最近两个响应及其结果原样重新交付
+  assert.equal(entries[0].ref.id, leased.id)
+  assert.match(entries[0].text, /kept for the task/)
+  assert.deepEqual(
+    entries.filter((item) => item.origin === 'assistant-script').map((item) => item.ref.id),
+    responses.slice(2).map((record) => record.ref.id)
   )
-  const projected = await recent.project(
-    { body: JSON.stringify({ results: [], goals: [] }), images: [], prompt: '' },
-    1000,
-    signal
-  )
-  const card = JSON.parse(projected.history[0].content)
-  assert.equal(card.representation, 'reference')
-  assert.equal(card.bodyIncluded, false)
-  assert.deepEqual(card.ref, checkpoint.ref)
-  assert.equal(card.unresolved, 1)
-  assert(projected.history[0].content.length < 1000)
-  assert.match((await f.session.context.read(card.ref)).text, /missed query/)
+  // 延续结果附当次源码：产生它的那条响应已经封进卷；其余结果的源码就在前一条响应里
+  assert.match(next.history[1].content, /当次源码/)
+  assert.doesNotMatch(next.history.at(-1).content, /当次源码/)
+  assert.equal(next.history.at(-1).cacheBreakpoint, true)
+  assert.equal(await memory.fold('runway', 24000, signal), false)
 })
 
 async function archiveResult(f, programs, label) {
@@ -641,7 +668,7 @@ test('results added while a frame is in flight force a fresh frame before done',
   const second = JSON.parse(f.requests[1].materials[0].text)
   assert.equal(first.partitions.runtime.programFrame.resultsRevision, 0)
   assert.equal(second.partitions.runtime.programFrame.resultsRevision, 1)
-  assert.match(JSON.stringify(second.partitions.recent), /late result/)
+  assert.match(JSON.stringify(f.requests[1].history), /late result/)
 })
 
 test('model history renders selected code literally while retaining the structured audit frame', async (t) => {
@@ -670,12 +697,13 @@ test('model history renders selected code literally while retaining the structur
   assert.equal(header.origin, 'runtime-execution')
   assert(header.ref.id)
   assert(visible.content.includes('"representation":"full"'))
-  const frame = JSON.parse(request.materials[0].text)
-  const archived = frame.partitions.recent.history
-    .map((message) => JSON.parse(message.content))
-    .find((item) => item.ref?.id === header.ref.id)
-  assert.equal(JSON.parse(archived.text).blocks[0].text, template)
-  assert(visible.content.length < JSON.stringify(archived).length)
+  // 结构化原值留在结果归档里，模型看到的是逐字代码
+  const archived = JSON.parse((await f.session.context.read(header.ref)).text)
+  assert.equal(archived.output.blocks[0].value, template)
+  // 模型看到的输出是逐字代码，没有再包一层字符串转义
+  const output = visible.content.slice(visible.content.indexOf('当次输出：'))
+  assert(output.includes(template))
+  assert(!output.includes(JSON.stringify(template).slice(1, -1)))
 })
 
 test('zero-history results and current observation render code without extra string escaping', async (t) => {
@@ -693,7 +721,8 @@ test('zero-history results and current observation render code without extra str
   const request = f.requests[0]
   assert(request.compiledPrompt.includes(observed))
   assert(request.compiledPrompt.includes(result))
-  assert.equal(request.history.length, 0)
+  assert.equal(request.history.length, 1)
+  assert.match(request.history[0].content, /runtime-segment-base/)
   const frame = JSON.parse(request.materials[0].text)
   assert.equal(JSON.parse(frame.partitions.observation.text).blocks[0].text, observed)
   assert(frame.partitions.runtime.decision.sources.includes(frame.partitions.observation.resultRef))

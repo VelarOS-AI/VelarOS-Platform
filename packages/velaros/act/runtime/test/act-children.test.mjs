@@ -223,7 +223,7 @@ test('shared material is copied with provenance and caller cannot forge another 
   let childCalls = 0
   const child = model(async function* (request) {
     if (++childCalls === 1) {
-      const frame = runtimeFrame(request.materials.at(-1).text)
+      const frame = runtimeFrame(request)
       const file = JSON.parse(frame.goals[0].text).files[0]
       yield task(
         request,
@@ -436,7 +436,7 @@ test('an incremental child uses history through the same runtime without configu
   const child = model(async function* (request) {
     assert(Array.isArray(request.history))
     if (++childCalls === 1) {
-      const ref = runtimeFrame(request.materials.at(-1).text).goals[0].record.ref
+      const ref = runtimeFrame(request).goals[0].record.ref
       yield task(
         request,
         `import {memory as memoryApi} from 'velaros:system';const {read}=memoryApi;import {output} from 'velaros';output(await read({ref:${JSON.stringify(ref)}}));`
@@ -461,7 +461,7 @@ test('an incremental child uses history through the same runtime without configu
         )
         yield { type: 'finish', reason: 'stop' }
       } else {
-        const frame = runtimeFrame(request.materials.at(-1).text)
+        const frame = runtimeFrame(request)
         assert.equal(frame.children[0].status, 'completed')
         yield* done(request)
       }
@@ -552,7 +552,7 @@ test(
           )
           yield { type: 'finish', reason: 'stop' }
         } else if (main === 2) {
-          const job = runtimeFrame(request.materials.at(-1).text).children[0]
+          const job = runtimeFrame(request).children[0]
           assert.equal(job.status, 'waiting')
           assert.equal(job.pending[0].message, 'Which environment?')
           yield task(
@@ -625,7 +625,7 @@ test(
           )
           yield { type: 'finish', reason: 'stop' }
         } else if (main === 2) {
-          const job = runtimeFrame(request.materials.at(-1).text).children[0]
+          const job = runtimeFrame(request).children[0]
           childId = job.sessionId
           yield task(
             request,
@@ -633,7 +633,7 @@ test(
           )
           yield { type: 'finish', reason: 'stop' }
         } else {
-          const job = runtimeFrame(request.materials.at(-1).text).children[0]
+          const job = runtimeFrame(request).children[0]
           assert.equal(job.sessionId, childId)
           assert.equal(job.status, 'completed')
           yield* done(request)

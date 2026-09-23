@@ -362,7 +362,7 @@ test('INV-15 子 Agent 共享父空间，只写获配前缀且不能派发子任
   let calls = 0
   let started = false
   const child = model(async function* (request) {
-    const frame = runtimeFrame(request.materials[0].text)
+    const frame = runtimeFrame(request)
     assert.equal(frame.stores.items[0].access.write.length, 1)
     if (calls++ === 0) {
       const own = frame.stores.items[0].access.write[0]
@@ -433,7 +433,7 @@ test('INV-15 当前状态版本参加 Kernel 读依赖验证，外部写入前�
   const f = await fixture(t, {
     modules: [business],
     model: model(async function* (request) {
-      const frame = runtimeFrame(request.materials[0].text)
+      const frame = runtimeFrame(request)
       assert(
         frame.decision.reads.some(
           (x) =>
@@ -601,7 +601,7 @@ test(
         yield { type: 'finish', reason: 'stop' }
         return
       }
-      const frame = runtimeFrame(request.materials[0].text)
+      const frame = runtimeFrame(request)
       jobId ??= frame.children[0]?.id
       if (frame.stores.changes.some((x) => x.events.some((event) => event.key === 'signal'))) {
         assert.equal(frame.children[0].status, 'running')
@@ -653,7 +653,7 @@ test('INV-15 搜索模型的发现与声明保持叶子能力，不注入共享�
   let searchCalls = 0
   const search = model(async function* (request) {
     searchCalls++
-    assert.equal(runtimeFrame(request.materials[0].text).stores, undefined)
+    assert.equal(runtimeFrame(request).stores, undefined)
     assert(!request.instructions.includes('store.set'))
     if (searchCalls === 1) {
       yield turn(request, {
@@ -934,7 +934,7 @@ test('INV-16 子任务续跑复用持久授权，不能创建空间；未共享�
   let jobId
   const child = model(async function* (request) {
     childCalls++
-    const frame = runtimeFrame(request.materials[0].text)
+    const frame = runtimeFrame(request)
     if (childCalls === 3) {
       assert.equal(frame.stores, undefined)
       assert(!request.instructions.includes('导入 store'))
@@ -956,7 +956,7 @@ test('INV-16 子任务续跑复用持久授权，不能创建空间；未共享�
       })
       yield { type: 'finish', reason: 'stop' }
     } else if (rootCalls === 2) {
-      jobId = runtimeFrame(request.materials[0].text).children[0].id
+      jobId = runtimeFrame(request).children[0].id
       yield turn(request, {
         execute: {
           source: `import {resume,wait} from 'velaros:agents';await resume({id:${JSON.stringify(jobId)},input:'continue'});await wait({id:${JSON.stringify(jobId)}});`,
@@ -1213,7 +1213,7 @@ test('INV-17 模型只创建而不 output 的空间，后续多轮仍由 Runtime
         yield { type: 'finish', reason: 'stop' }
         return
       }
-      const active = runtimeFrame(request.materials[0].text).stores.active
+      const active = runtimeFrame(request).stores.active
       assert.equal(active.total, 1)
       assert.equal(active.items[0].name, 'model-work')
       id ??= active.items[0].id

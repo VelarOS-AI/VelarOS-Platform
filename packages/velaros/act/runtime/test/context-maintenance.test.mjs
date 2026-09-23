@@ -91,7 +91,7 @@ test('cancelling a stalled candidate validator returns promptly and a late resul
   assert.equal((await state.snapshot(8000, signal)).baseRevision, snapshot.baseRevision)
 })
 
-test('automatic derived content expires while verified capacity and explicit task policy persist', async (t) => {
+test('derived note presentations persist for the task through a rebuilt base and a new task starts clean', async (t) => {
   const f = await fixture(t)
   const note = await f.memory.update(
     { key: 'capacity', baseRevision: 0, body: 'x'.repeat(2400) },
@@ -106,46 +106,40 @@ test('automatic derived content expires while verified capacity and explicit tas
     new RecentContext('root', f.session.context, f.storage)
   )
   const view = await f.session.view.preview({ maxChars: 16000 }, signal)
-  let snapshot = await f.state.snapshot(8000, signal)
+  const before = await memory.project(view, undefined, [], signal, 16000)
+  assert.match(before.history[0].content, /x{2400}/)
+  const snapshot = await f.state.snapshot(8000, signal)
   await f.state.apply(
     snapshot,
     patch(snapshot, { notes: [{ ref: note.ref, summary: 'Temporary summary' }] }),
-    signal,
-    'turn'
+    signal
   )
   const first = await memory.project(view, undefined, [], signal, 16000)
-  assert.equal(JSON.parse(first.body).memoryStatus.maintenance.active, true)
-  assert.equal(JSON.parse(first.body).partitions.workspace.notes[0].text, 'Temporary summary')
-  await f.programs.consume(JSON.parse(first.body).frameId, signal)
-  const expired = JSON.parse((await memory.project(view, undefined, [], signal, 16000)).body)
-  assert.equal(expired.memoryStatus.maintenance.active, false)
-  assert.equal(expired.partitions.workspace.notes[0].bodyIncluded, false)
-  assert.equal(expired.partitions.workspace.notes[0].text, '')
-  snapshot = await f.state.snapshot(8000, signal)
-  await f.state.apply(snapshot, patch(snapshot), signal, 'task')
-  const next = await memory.project(view, undefined, [], signal, 16000)
-  await f.programs.consume(JSON.parse(next.body).frameId, signal)
-  assert.equal(
-    JSON.parse((await memory.project(view, undefined, [], signal, 16000)).body).memoryStatus
-      .maintenance.active,
-    true
-  )
+  const frame = JSON.parse(first.body)
+  assert.equal(frame.memoryStatus.maintenance.active, true)
+  // 策略换了就重建底座：同一段、底座版本加一，笔记快照换成派生展示
+  assert.equal(first.segment.index, before.segment.index)
+  assert.equal(first.segment.revision, before.segment.revision + 1)
+  assert.match(first.history[0].content, /Temporary summary/)
+  assert.doesNotMatch(first.history[0].content, /x{2400}/)
+  await f.programs.consume(frame.frameId, signal)
+  const later = await memory.project(view, undefined, [], signal, 16000)
+  assert.equal(JSON.parse(later.body).memoryStatus.maintenance.active, true)
+  assert.equal(later.history[0].content, first.history[0].content)
   const input = await f.session.context.append({ kind: 'user', body: 'Independent task' })
   await f.session.view.end('completed')
   await f.session.view.begin(input.ref, signal, 'new')
   await f.memory.update({ key: 'capacity', baseRevision: 0, body: 'y'.repeat(2400) }, signal)
-  const fresh = JSON.parse(
-    (
-      await memory.project(
-        await f.session.view.preview({ maxChars: 16000 }, signal),
-        undefined,
-        [],
-        signal,
-        16000
-      )
-    ).body
+  const fresh = await memory.project(
+    await f.session.view.preview({ maxChars: 16000 }, signal),
+    undefined,
+    [],
+    signal,
+    16000
   )
-  assert.equal(fresh.partitions.workspace.notes[0].text, 'y'.repeat(2400))
+  assert.equal(fresh.segment.index, 1)
+  assert.match(fresh.history[0].content, /y{2400}/)
+  assert.equal(JSON.parse(fresh.body).memoryStatus.maintenance, undefined)
 })
 
 test('context patches publish all validated changes together and preserve original inputs', async (t) => {
@@ -276,7 +270,6 @@ test('observation display policy applies to fresh results each turn and reports 
     snapshot,
     patch(snapshot, {
       observation: { sourceRef: observe.sourceRef, config: { maxChars: 100 } },
-      recentRecords: 2,
     }),
     signal
   )
@@ -372,7 +365,7 @@ test('explicit context request runs a separate leaf at a safe boundary; scripts 
     toolCalls++
     assert.match(request.compiledPrompt, /上下文整理工具/)
     yield { type: 'usage', inputTokens: 11, outputTokens: 7 }
-    yield* deliverPatch(request, { recentRecords: 2 })
+    yield* deliverPatch(request)
   })
   const f = await setupTool(t, main, maintenance, { modelTools: { concurrency: 1 } })
   await f.session.observe({ source: "import {output} from 'velaros';output('fresh observation');" })
@@ -393,7 +386,7 @@ test('explicit context request runs a separate leaf at a safe boundary; scripts 
   assert.equal(JSON.parse(await f.storage.get('root', binding.objectId)).status, 'closed')
 })
 
-test('pressure delegates before the first business request and preserves native user images', async (t) => {
+test('a frame about to overflow delegates to maintenance before the first business request and preserves native user images', async (t) => {
   let mainCalls = 0
   let toolCalls = 0
   const main = driver(
@@ -409,8 +402,9 @@ test('pressure delegates before the first business request and preserves native 
       )
       yield* done(request)
     },
+    // 窗口 90000：89000 剩余不足两轮，又没有可封的历史，交给整理支线
     async (request) => ({
-      tokens: JSON.stringify(request).includes('model-interpretation') ? 1000 : 74000,
+      tokens: JSON.stringify(request).includes('model-interpretation') ? 1000 : 89000,
       precision: 'exact',
       basis: 'fixture',
     })
@@ -420,7 +414,7 @@ test('pressure delegates before the first business request and preserves native 
     main,
     driver(async function* (request) {
       toolCalls++
-      yield* deliverPatch(request, { recentRecords: 2 })
+      yield* deliverPatch(request)
     })
   )
   const pixel =
@@ -444,8 +438,9 @@ test('verified pressure capacity avoids repeated maintenance across successful b
         yield finish
       } else yield* done(request)
     },
+    // 笔记在段底座里：看整个请求有没有带这份大笔记的正文
     async (request) => ({
-      tokens: request.materials[0].text.includes('x'.repeat(2400)) ? 85000 : 1000,
+      tokens: JSON.stringify(request).includes('x'.repeat(2400)) ? 85000 : 1000,
       precision: 'exact',
       basis: 'visible capacity fixture',
     })
@@ -655,7 +650,7 @@ test('failed maintenance falls back to reference projection and is not retried o
         mainCalls++
         yield* done(request)
       },
-      async () => ({ tokens: 74000, precision: 'exact', basis: 'fixture' })
+      async () => ({ tokens: 89000, precision: 'exact', basis: 'fixture' })
     ),
     driver(async function* (request) {
       toolCalls++
@@ -830,9 +825,13 @@ test('derived note display preserves the primary version and expires when the pr
     signal
   )
   const view = await f.session.view.preview({ maxChars: 16000 }, signal)
-  let frame = JSON.parse((await f.memory.project(view, undefined, [], signal, 16000)).body)
-  assert.equal(frame.partitions.workspace.notes[0].text, 'Short derived presentation')
-  assert.equal(frame.partitions.workspace.notes[0].representation, 'summary')
+  let projected = await f.memory.project(view, undefined, [], signal, 16000)
+  let frame = JSON.parse(projected.body)
+  const card = projected.history[0].content
+    .split('\n')
+    .find((line) => line.includes('"key":"progress"'))
+  assert.equal(JSON.parse(card).representation, 'summary')
+  assert.match(projected.history[0].content, /Short derived presentation/)
   assert.equal(frame.memoryStatus.maintenance.notes, undefined)
   assert.equal(
     JSON.parse((await f.memory.readMaterial(note.ref, 0, 60000, signal)).text).body,
@@ -842,9 +841,12 @@ test('derived note display preserves the primary version and expires when the pr
     { key: 'progress', baseRevision: 1, body: 'Primary model revised the conclusion' },
     signal
   )
-  frame = JSON.parse((await f.memory.project(view, undefined, [], signal, 16000)).body)
+  // 主模型改了笔记：新版本出现在本帧尾，注明取代底座里的旧 revision
+  projected = await f.memory.project(view, undefined, [], signal, 16000)
+  frame = JSON.parse(projected.body)
   assert.equal(frame.partitions.workspace.notes[0].text, 'Primary model revised the conclusion')
   assert.equal(frame.partitions.workspace.notes[0].representation, 'full')
+  assert.equal(frame.partitions.workspace.notes[0].supersedes, 1)
   const fresh = await f.state.snapshot(8000, signal)
   await assert.rejects(
     f.state.apply(
@@ -1080,8 +1082,14 @@ test('maintenance preflight checks the complete candidate without publishing par
   )
   assert.deepEqual(await f.storage.load('root'), before)
   await assert.rejects(
-    f.state.validate(snapshot, patch(snapshot, { recentRecords: [] }), signal),
-    /近期记录窗口无效/
+    f.state.validate(
+      snapshot,
+      patch(snapshot, {
+        volume: { summary: 'nothing sealed', evidence: [], unresolved: [], negativeAttempts: [] },
+      }),
+      signal
+    ),
+    /快照里还没有卷/
   )
   assert.deepEqual(await f.storage.load('root'), before)
   await f.state.apply(
@@ -1100,13 +1108,15 @@ test('a maintenance patch error is corrected within the same leaf before publica
   let calls = 0
   const maintenance = driver(async function* (request) {
     calls++
-    // 类型合法、取值越界：过得了类型检查，由补丁校验在同一支线里报出来
+    // 类型合法、状态不符：过得了类型检查，由补丁校验在同一支线里报出来
     if (calls === 1) {
-      yield* deliverPatch(request, { recentRecords: 999 })
+      yield* deliverPatch(request, {
+        volume: { summary: 'nothing sealed', evidence: [], unresolved: [], negativeAttempts: [] },
+      })
     } else {
       assert.equal(calls, 2)
-      assert.match(JSON.stringify(request), /近期记录窗口无效/)
-      yield* deliverPatch(request, { recentRecords: 2 })
+      assert.match(JSON.stringify(request), /快照里还没有卷/)
+      yield* deliverPatch(request)
     }
   })
   const f = await setupTool(

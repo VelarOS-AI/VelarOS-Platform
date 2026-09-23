@@ -1,8 +1,8 @@
 # ScriptAct 分区工作内存
 
-状态：正式 Platform 实现。主任务、搜索与业务子 Agent 使用同一个 ContextMemory 组装器、ContextStorage、ScriptAct、Agent Loop 和 ProviderRequestCompiler。宿主通过分区配额和近期窗口配置上下文，模型通过代码维护工作笔记与材料可见性。
+状态：正式 Platform 实现。主任务、搜索与业务子 Agent 使用同一个 ContextMemory 组装器、ContextStorage、ScriptAct、Agent Loop 和 ProviderRequestCompiler。宿主通过分区配额和封段保留的近期记录数配置上下文，模型通过代码维护工作笔记与材料可见性。
 
-长程运行的请求布局、段与封段、按剩余轮数触发整理见 [长程上下文](long-running-context.md)（分阶段实施中）；它落地后取代本文的近期窗口、历史检查点与压力整理三部分。
+长程运行的请求布局、段与封段、按剩余轮数触发整理见 [长程上下文](long-running-context.md)。本文的近期材料、容量与整理几节按它的第一、二阶段实现描述。
 
 ## 五个分区
 
@@ -13,14 +13,14 @@ schemaVersion / id / frameId
 partitions.task          用户目标、输入意图、文件引用
 partitions.workspace     任务 capsule、当前驻留笔记及目录入口
 partitions.observation   观察源码、本轮输出、版本与采集时间
-partitions.recent        有效租约结果、有序响应/结果、检查点和目录
+partitions.recent        有效租约结果的状态与段内历史计数（正文在有序消息里）
 partitions.runtime       作用域、回执、作业、证据、进度与变化
 memoryStatus             分区占用、材料进出、配额和整理建议
 ```
 
-编译器另外加入宿主指令、ScriptAct 协议、当前阶段和 ContextStatus。内部 JSON 用于审计和投递确认；ContextMemory 的唯一文本渲染器将笔记、观察代码和输出排成可读正文。近期响应与结果使用有序 user/assistant 消息，正文在历史与当前文本之间只发送一份。结果对应的源码仍保留，失败编辑的完整候选不能只靠上轮的 edits 还原。图片沿用原生图像块、存储引用与最终附件容量校验。
+请求按变化频率排列：系统提示（运行说明与宿主指令，会话内不变）→ 段底座（卷目录、最近一卷、段起点的驻留笔记快照）→ 段内历史（有序 user/assistant 消息，只往后加）→ 最后一条消息（本帧五分区、本帧协议与随机标记、阶段说明、完成反馈、ContextStatus）。内部 JSON 用于审计和投递确认；ContextMemory 的唯一文本渲染器将笔记、观察代码和输出排成可读正文。结果正文在段内历史与当前文本之间只发送一份；模型看不到产生它的源码时（延续结果、edits 或 sourceRef 产生的程序、失败编辑的草稿），结果条目附上当次源码。图片沿用原生图像块、存储引用与最终附件容量校验。
 
-每轮都重新组装需要发送的内容。增量记录保存在磁盘上，驻留的模型笔记在新帧中继续可见；observe 每个正常业务轮刷新。历史脚本的出现和引用读取均不触发重跑。
+每轮都重新组装最后一条消息；段底座与段内历史第一次送达后冻结，同段后续帧逐字复用。驻留的模型笔记在底座快照里，段内的新 revision 出现在最后一条消息里并注明取代的旧版本；observe 每个正常业务轮刷新。历史脚本的出现和引用读取均不触发重跑。
 
 ## 工作区操作
 
@@ -56,7 +56,7 @@ memory 的笔记属于各 Agent 自己的工作区。业务子 Agent 即使没�
 
 sources 只能引用当前会话已有、当前授权代次内的记录。笔记保存可获得的来源版本戳；本轮 readSet 对同一资源出现不同版本或内容哈希时，笔记标为 changed。没有本轮核验依据时标为 unverified；它不承诺语义结论正确，也不自动扫描任意笔记正文中的文件名。模型应按引用核查并更新认识。
 
-搜索的来源/权限变化触发历史重置时，旧笔记、旧检查点和旧自由历史一起退出活动投影；旧笔记引用不能通过 memory.read 绕回。重新获取授权证据后可以建立新笔记。持久对象保留和当前读取权限分别管理。
+搜索的来源/权限变化触发历史重置时，旧笔记、旧卷与段和旧自由历史一起退出活动投影；旧笔记引用不能通过 memory.read 绕回。重新获取授权证据后可以建立新笔记。持久对象保留和当前读取权限分别管理。
 
 ## 用户输入与文件
 
@@ -70,9 +70,9 @@ ProgramContext 继续负责不可变源码版本、观察指针和结果租约�
 
 `execute({retain:2})` 为有限业务曝光次数；retain:'task' 到逻辑任务结束或显式释放。主任务默认 2，搜索默认 task。memory.retain 重设期限，memory.release 移出自动投影，memory.read 只读归档。只有成功业务响应所对应帧中实际包含正文的相同租约才消费一次；引用帧、失败、修复和维护轮不消费。后台晚到结果和新续租不能被旧帧消费。
 
-RecentContext 是同一组装器的近期材料组件。它按 sequence 选择有序响应和结果，自动投影排除新格式的 observe 结果。memory.list/read 可以发现和召回原文，整理服务通过 RecentContext.checkpoint 将已完成的旧区间整理为摘要、证据引用、未解问题和否定尝试；仍保留最近两个响应的执行关系。目录与检查点均使用现有 CAS 和授权边界。
+RecentContext 是同一组装器的段内历史组件。它按 sequence 选择段起点之后的响应和结果（排除 observe 结果），加上从上一段延续、租约仍有效的结果；已冻结的条目逐字复用，新条目按单条上限渲染一次，结果租约到期或释放后那一条换成确定的引用卡。memory.list/read 可以发现和召回原文。
 
-超出近期窗口的部分附目录范围；较大响应可以退为引用。过大的检查点在恢复投影中也使用引用卡片，保留原文位置和未解项数量。近期窗口为 0 时有效租约结果仍直接进入 recent 分区，已有检查点仍可作为摘要或引用展示。
+封段把段起点到切点之间的记录封成一卷（`context:volume`，写入后不再修改）：逐轮一行的规则骨架，不调用模型；最近 `recentRecords` 条记录（至少最近两个响应及其结果）和切点之前仍有租约的结果留给新段重新交付。整理支线可以给最新一卷写叙事（摘要、证据、未解项、否定尝试）。底座列出全部卷，同级超过上限时把最老的一批合并成上一级卷，目录条数有界。改造前的历史检查点在旧会话第一次投影时转成第 1 卷。卷、叙事与段状态都遵守当前授权代次，原文仍按引用召回。`recentRecords` 为 0 时不发送有序历史，有效租约结果直接进入 recent 分区，底座仍照常发送。
 
 ## 容量、变化与冻结
 
@@ -85,21 +85,21 @@ context: {
 }
 ```
 
-搜索在 search.memory 配置，缺省 recentRecords:64、recentShare:0.4；业务子任务在 profile.memory 配置。workspaceShare 范围 0.05–0.5，recentShare 范围 0–0.5，总和最多 0.8，近期窗口为 0–64。
+搜索在 search.memory 配置，缺省 recentRecords:64、recentShare:0.4；业务子任务在 profile.memory 配置。workspaceShare 是底座笔记快照与本段改动笔记的预算份额（0.05–0.5）；recentShare 决定一条新历史第一次交付的上限（整帧剩余预算的 recentShare 的一半，最多 24000 字符，范围 0–0.5）；两者之和最多 0.8。recentRecords 是封段时留给新段重新交付的最近记录数（0–64）。
 
-份额约束可裁剪正文，空闲工作区容量会留给其他材料；卡片数量也随恢复窗口缩小。必要回执、用户目标和运行状态仍保留，最终消息及全部图片由 ProviderRequestCompiler 做总预算检查，分区字符计量不能代替最终 token 计量。
+份额约束可裁剪正文，放不下的笔记给引用卡，超出卡片数的给省略计数；卡片数量也随恢复窗口缩小。必要回执、用户目标和运行状态仍保留，最终消息及全部图片由 ProviderRequestCompiler 做总预算检查，分区字符计量不能代替最终 token 计量。
 
 memoryStatus 报告各区 UTF-16 序列化占用，以及材料新增、版本更新、退出、仅引用。源码和观察正文的实质差异仍在 runtime.progress 中。变化基线只在本轮响应完整成功后推进，容量重编译不会消费租约。已发出的帧不因之后的笔记更新被改写。
 
 programFrame.resultsRevision 固定组帧时的新结果代次。完成检查用它识别请求发出后新进入租约集合的结果并补投递；同一帧中因预算省略的旧结果不会触发无限刷新。已有结果续租仍由 leaseId 保护曝光次数，不额外触发一轮消费。
 
-ContextStatus 每轮报告 mode:partitioned、阶段、总输入估计、估计依据、窗口、输出/安全预留、剩余额度和整理建议。默认预警 0.75、维护 0.8，单次组帧最多 3 次独立整理尝试，Provider 容量修复最多 2 次。
+ContextStatus 每轮报告 mode:partitioned、阶段、总输入估计与依据、窗口、输出/安全预留、剩余额度，以及剩余轮数与每轮增长、段号与卷数、上一请求的缓存读写；工作集本身快装不下时给出 overload 说明。估计按供应商实测用量校准。不设固定比例：剩余不足 2 轮或放不下时封段，剩余不足 8 轮且处在章节边界时封段；封不了段又不足 2 轮、封段后仍不足 4 轮或放不下，算结构性超载，主线每段最多运行一次整理支线。Provider 容量修复最多 2 次。
 
-主线与业务子任务在安全轮边界调用独立 ContextMaintenance 模型工具。它持有固定父快照和分页材料读取能力，通过同一个 ScriptAct/RuntimeSession 提交 ContextPatch。Runtime 校验版本、保护引用和输入基线，复用既有机制，最后一次 CAS 发布全部元数据。笔记展示使用 ref/summary/resident，绑定不可变主笔记版本；整理不会改写主笔记正文或计划。补丁还支持用户意图、历史检查点、结果展示租约和观察输出呈现量。observe 源码由业务模型维护，下一业务轮照常运行新观察。
+主线与业务子任务在安全轮边界调用独立 ContextMaintenance 模型工具。它持有固定父快照和分页材料读取能力，通过同一个 ScriptAct/RuntimeSession 提交 ContextPatch。Runtime 校验版本、保护引用和输入基线，复用既有机制，最后一次 CAS 发布全部元数据。笔记展示使用 ref/summary/resident，绑定不可变主笔记版本；整理不会改写主笔记正文或计划。补丁还支持用户意图、最新一卷的叙事（volume）、结果展示租约和观察输出呈现量。observe 源码由业务模型维护，下一业务轮照常运行新观察。
 
-整理期间新输入或业务结果改变快照时，旧补丁不能发布；预算记账和租约心跳不会制造材料冲突。每次整理预留最后交付轮，收尾要求输出已有信息及未查明事项。搜索与整理本身是叶子工具：容量压力触发引用降级和最后交付阶段。
+整理期间新输入或业务结果改变快照时，旧补丁不能发布；预算记账和租约心跳不会制造材料冲突。整理产生的派生展示保留到下一份策略或任务切换，策略变化时下一帧重建段底座。每次整理预留最后交付轮，收尾要求输出已有信息及未查明事项。搜索与整理本身是叶子工具：放不下时引用降级并进入最后交付阶段。
 
-`memory.organize({focus?,preserve?})` 返回 scheduled 和持久 requestId，下一请求边界由 Runtime 处理。实际结果在下一帧 memoryStatus.maintenance.lastAttempt 自动反馈，包括变更、保留引用、未解项和错误。总预算由 Runtime 决定。该操作只进入具备整理能力的主线和业务子任务合同。`velaros:context-materials.list/read` 只注入活动整理会话。
+`memory.organize({focus?,preserve?})` 返回 scheduled 和持久 requestId，下一请求边界由 Runtime 先封段、再运行整理支线。实际结果在下一帧 memoryStatus.maintenance.lastAttempt 自动反馈，包括变更、保留引用、未解项和错误。总预算由 Runtime 决定。该操作只进入具备整理能力的主线和业务子任务合同。`velaros:context-materials.list/read` 只注入活动整理会话。
 
 整理结束后重新执行 ProviderRequestCompiler，主线以 work 请求继续。此过程不运行业务脚本、不额外运行 observe、不消费父业务租约。失败时报告整理结果并确定性退为引用；基础目标、当前用户图片及必要运行状态仍必须通过最终窗口校验，否则 context_blocked。观察或执行图片若因展示预算退出，其原文引用、是否发送及召回方法随帧报告。
 
@@ -109,7 +109,7 @@ ContextStatus 每轮报告 mode:partitioned、阶段、总输入估计、估计�
 
 - ContextMemory：工作笔记、版本 CAS、分区组装、投递变化基线。
 - ProgramContext：源码与结果租约、实际观察内容和 diff。
-- RecentContext：近期有序记录、检查点、权限代次和目录。
+- RecentContext：段内历史（只追加、冻结渲染）、封卷、卷目录与合并、权限代次和历史目录。
 - RuntimeSession：同一组装入口、观察准备、执行和投递确认。
 - ContextMaintenance / ContextMaintenanceState：独立整理活动、固定快照、原子补丁与结果回执。
 - Context / Kernel / ProviderRequestCompiler：可靠存储、用户原文、事实与权限、预算和最终消息。

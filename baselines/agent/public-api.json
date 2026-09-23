@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageName": "@velaros-ai/agent",
-  "acceptedPackageVersion": "6.2.0",
+  "acceptedPackageVersion": "7.0.0",
   "entries": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -9,11 +9,12 @@
       "symbols": [
         "ActAnswer\ttype\t8b9caf74f5ea3e22bc179d99305f3d8e5713e48ee6cf06b186e33b2b214da8b1",
         "ActChildSession\ttype\td87f890645f88721c1e73eb05f2511f21cad0d58b5877054a4d6e91035bb901d",
-        "ActContextPolicy\ttype\t11c05cef3464e30f49f1f1b58036f01b96053ea600c5a31f76c75619fab95e79",
-        "ActContextPort\ttype\t9530da7f52d29900e4829b8166a534796cc22b71b1907001ccd73c6cc6ad0c7b",
+        "ActContextPolicy\ttype\t000738397acec929f377aa874a2b2654786bfadfb13d46a0140bd3ae6ca2ecaa",
+        "ActContextPort\ttype\t090cc5cbe0aea32f82c8dfbd56532b301ede1a9ba3cd4f2a65edb0899526a594",
         "ActDecodedTurn\ttype\t1230fe763071c879eca408dfeb6b5c8e614f803a45153986abf1d100573be7c6",
         "ActEvent\ttype\tdedef3fb4e136d1bc43837336fe4aa109473be8c2f1f89b39115b4ca9042a46d",
         "ActExecutionPort\ttype\t82e0e5e0717e0d7612b5542938a98186e943ed044f3536297212628f496b0b0e",
+        "ActFrameSegment\ttype\t4d318c8b5a0e243a8d1baf6a7540387c05b4357aa0115fc03fe808802ee805e5",
         "ActImage\ttype\taacd72338064c5a6dcb93423ff4f6357efaa8ca94de825ba458e51a97f13178d",
         "ActInput\ttype\t0df87bfe8387be69a1fcb2564770929dcf74af688d1c64e662b3b38af52ff8de",
         "ActInputFile\ttype\t979a7cd520d1282c394c7d79c9836cd6b0073f0a63f6a98664fb76fc2f66ac8e",
@@ -45,9 +46,10 @@
       "import": "./dist/contracts.js",
       "symbols": [
         "ActAnswer\ttype\t8b9caf74f5ea3e22bc179d99305f3d8e5713e48ee6cf06b186e33b2b214da8b1",
-        "ActContextPolicy\ttype\t11c05cef3464e30f49f1f1b58036f01b96053ea600c5a31f76c75619fab95e79",
+        "ActContextPolicy\ttype\t000738397acec929f377aa874a2b2654786bfadfb13d46a0140bd3ae6ca2ecaa",
         "ActDecodedTurn\ttype\t1230fe763071c879eca408dfeb6b5c8e614f803a45153986abf1d100573be7c6",
         "ActEvent\ttype\tdedef3fb4e136d1bc43837336fe4aa109473be8c2f1f89b39115b4ca9042a46d",
+        "ActFrameSegment\ttype\t4d318c8b5a0e243a8d1baf6a7540387c05b4357aa0115fc03fe808802ee805e5",
         "ActImage\ttype\taacd72338064c5a6dcb93423ff4f6357efaa8ca94de825ba458e51a97f13178d",
         "ActInput\ttype\t0df87bfe8387be69a1fcb2564770929dcf74af688d1c64e662b3b38af52ff8de",
         "ActInputFile\ttype\t979a7cd520d1282c394c7d79c9836cd6b0073f0a63f6a98664fb76fc2f66ac8e",

@@ -64,8 +64,6 @@ export const ContextPatchLimits = Object.freeze({
   patchChars: 60_000,
   /** 一段展示摘要（观察块或笔记）最多多少字符。 */
   textChars: 12_000,
-  /** 近期记录窗口最大多少条。 */
-  recentRecords: 64,
 })
 /** 执行结果可见租约。 */
 export const ScriptLeaseLimits = Object.freeze({

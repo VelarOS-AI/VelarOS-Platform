@@ -14,11 +14,30 @@ import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { modelText } from './support/model-turn.mjs'
-import { runtimeFrame } from './support/model-turn.mjs'
+import { historyEntries, runtimeFrame } from './support/model-turn.mjs'
 import { done, marker } from './support/model-turn.mjs'
 
+/** 段状态的最小形态：第 1 段，还没有冻结条目。 */
+function segment(overrides = {}) {
+  return {
+    id: 'segment-1',
+    index: 1,
+    revision: 0,
+    from: 0,
+    base: { objectId: 'base', chars: 0 },
+    carried: [],
+    notes: [],
+    entries: [],
+    objective: '',
+    goals: 0,
+    policy: null,
+    volumes: 0,
+    reason: 'start',
+    ...overrides,
+  }
+}
 const block = (request, source) => `${marker(request)} execute()\n${source}\n${marker(request)}`
-async function fixture(t, handler, extra = {}) {
+async function fixture(t, handler, extra = {}, driver = {}) {
   const root = await mkdtemp(join(tmpdir(), 'context-management-'))
   const storage = localContextStorage({ path: join(root, 'state.sqlite') })
   const f = { storage, frames: [], calls: 0 }
@@ -26,6 +45,7 @@ async function fixture(t, handler, extra = {}) {
     id: 'context-test',
     limits: { contextTokens: 200000, inputTokens: 180000, outputTokens: 4000 },
     estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+    ...driver,
     async *stream(request) {
       f.frames.push(request)
       f.calls++
@@ -112,7 +132,7 @@ test('long user text is archived, summarized after intent extraction, and recove
   const f = await fixture(
     t,
     async function* (request, f) {
-      const frame = runtimeFrame(request.materials.at(-1).text)
+      const frame = runtimeFrame(request)
       const goal = frame.goals[0]
       assert(request.contextStatus)
       assert.equal(request.contextStatus.mode, 'partitioned')
@@ -194,7 +214,7 @@ test('large output fields become honest references without changing the live JS 
       }
       yield { type: 'finish', reason: 'stop' }
     } else {
-      const frame = runtimeFrame(request.materials[0].text)
+      const frame = runtimeFrame(request)
       assert(frame.results[0].truncated)
       assert.equal(frame.results[0].representation, 'excerpt')
       assert(frame.results[0].omitted.length)
@@ -256,12 +276,13 @@ test('provider capacity rejection repairs only the request, does not replay an o
   assert.equal(records.length, 1)
 })
 
-test('incremental checkpoint keeps recent action-result units, rejects stale edits and allows original history recall', async (t) => {
+test('folding keeps recent action-result units for the next segment, seals the rest and allows original history recall', async (t) => {
   const f = await fixture(t, async function* (request) {
     yield* done(request)
   })
   const context = createContextRuntime({ sessionId: 'search:test', storage: f.storage })
   const history = new RecentContext('search:test', context, f.storage)
+  const signal = new AbortController().signal
   const pairs = []
   for (let n = 0; n < 4; n++) {
     await context.append({ kind: 'assistant', body: `script ${n}` })
@@ -273,30 +294,25 @@ test('incremental checkpoint keeps recent action-result units, rejects stale edi
       })
     )
   }
-  const input = {
-    baseThrough: 0,
-    through: pairs[0].sequence,
-    summary: 'step 0 completed',
-    evidence: [pairs[0].ref],
-    unresolved: ['verify final'],
-    negativeAttempts: ['first query missed'],
-  }
-  await history.checkpoint(input, new AbortController().signal)
-  await assert.rejects(history.checkpoint(input, new AbortController().signal), /版本/)
-  await assert.rejects(
-    history.checkpoint(
-      { ...input, baseThrough: input.through, through: pairs[3].sequence },
-      new AbortController().signal
-    ),
-    /最近/
+  const through = await history.cut(segment(), 2, signal)
+  assert.equal(through, pairs[1].sequence)
+  const volume = await history.seal(0, through, signal)
+  await history.narrate(
+    volume,
+    {
+      summary: 'steps 0 and 1 completed',
+      evidence: [pairs[0].ref],
+      unresolved: ['verify final'],
+      negativeAttempts: ['first query missed'],
+    },
+    signal
   )
-  const frame = await history.project(
-    { body: JSON.stringify({ results: [], goals: [] }), images: [], prompt: '' },
-    20000,
-    new AbortController().signal
-  )
-  assert.match(frame.history[0].content, /verify final/)
-  assert(!frame.history.slice(1).some((message) => message.content.includes('script 0')))
+  const [sealed] = await history.volumes(signal)
+  assert.deepEqual(sealed.narrative.unresolved, ['verify final'])
+  assert.match(sealed.volume.skeleton, /script 0/)
+  const next = await history.project(segment({ from: through }), [], 20000, signal)
+  assert(!next.messages.some((message) => message.content.includes('script 0')))
+  assert(next.messages.some((message) => message.content.includes('script 2')))
   assert.equal((await context.read(pairs[0].ref)).text, '{"n":0}')
 })
 
@@ -339,7 +355,7 @@ test('ordered history preserves native images and enforces combined attachment l
   )
 })
 
-test('history reset starts a new checkpoint generation and excludes revoked history from discovery', async (t) => {
+test('history reset starts a new volume generation and excludes revoked history from discovery', async (t) => {
   const f = await fixture(t, async function* (request) {
     yield* done(request)
   })
@@ -358,15 +374,10 @@ test('history reset starts a new checkpoint generation and excludes revoked hist
       })
     )
   }
-  await history.checkpoint(
-    {
-      baseThrough: 0,
-      through: pairs[0].sequence,
-      summary: 'old summary',
-      evidence: [pairs[0].ref],
-      unresolved: [],
-      negativeAttempts: [],
-    },
+  const old = await history.seal(0, pairs[0].sequence, signal)
+  await history.narrate(
+    old,
+    { summary: 'old summary', evidence: [pairs[0].ref], unresolved: [], negativeAttempts: [] },
     signal
   )
   const reset = await context.append({
@@ -385,34 +396,31 @@ test('history reset starts a new checkpoint generation and excludes revoked hist
       })
     )
   }
-  const input = {
-    baseThrough: 0,
-    through: fresh[0].sequence,
+  assert.deepEqual(await history.volumes(signal), [])
+  const volume = await history.seal(0, fresh[0].sequence, signal)
+  const narrative = {
     summary: 'fresh summary',
     evidence: [fresh[0].ref],
     unresolved: [],
     negativeAttempts: [],
   }
-  await assert.rejects(history.checkpoint({ ...input, evidence: [pairs[0].ref] }, signal), /旧材料/)
   await assert.rejects(
-    history.checkpoint({ ...input, through: pairs[0].sequence, evidence: [] }, signal),
-    /结果/
+    history.narrate(volume, { ...narrative, evidence: [pairs[0].ref] }, signal),
+    /旧材料/
   )
-  await history.checkpoint(input, signal)
-  const frame = await history.project(
-    { body: JSON.stringify({ results: [], goals: [] }), images: [], prompt: '' },
-    20000,
-    signal
-  )
-  assert.match(frame.history[0].content, /fresh summary/)
-  assert(!JSON.stringify(frame).includes('old summary'))
+  await history.narrate(volume, narrative, signal)
+  const [current] = await history.volumes(signal)
+  assert.equal(current.narrative.summary, 'fresh summary')
+  assert.doesNotMatch(current.volume.skeleton, /old script/)
+  const projected = await history.project(segment({ from: fresh[0].sequence }), [], 20000, signal)
+  assert(!JSON.stringify(projected).includes('old script'))
   const page = await history.list({ after: 0 }, signal)
   assert.equal(page.resetAfter, reset.sequence)
   assert.equal(page.items.length, 8)
   assert(page.items.every((item) => item.sequence > reset.sequence))
 })
 
-test('INV-15 history capacity omission is discoverable in bounded stable pages and originals remain readable', async (t) => {
+test('INV-15 sealed history stays discoverable in bounded stable pages and originals remain readable', async (t) => {
   const f = await fixture(t, async function* (request) {
     yield* done(request)
   })
@@ -431,19 +439,12 @@ test('INV-15 history capacity omission is discoverable in bounded stable pages a
       })
     )
   }
-  const frame = await history.project(
-    { body: JSON.stringify({ results: [], goals: [] }), images: [], prompt: '' },
-    40000,
-    signal
-  )
-  const omitted = JSON.parse(frame.history[0].content)
-  assert.equal(omitted.omittedRecords, 16)
-  assert.deepEqual(omitted.recall, {
-    module: 'velaros:system',
-    export: 'memory',
-    operation: 'list',
-    input: { kind: 'history', after: 0, through: records[15].sequence, limit: 32 },
-  })
+  const through = await history.cut(segment(), 8, signal)
+  assert.equal(through, records[71].sequence)
+  await history.seal(0, through, signal)
+  const [sealed] = await history.volumes(signal)
+  assert.equal(sealed.volume.turns, 36)
+  assert(sealed.volume.skeleton.length <= 6000)
   const first = await history.list({ after: 0, limit: 5 }, signal)
   await context.append({ kind: 'assistant', body: 'concurrent new response' })
   const found = [...first.items]
@@ -473,7 +474,7 @@ test('INV-16 forty business rounds keep runtime context bounded while leases exp
   const f = await fixture(
     t,
     async function* (request, f) {
-      const frame = runtimeFrame(request.materials[0].text)
+      const frame = runtimeFrame(request)
       samples.push({
         round: f.calls,
         chars: request.materials[0].text.length,
@@ -481,7 +482,11 @@ test('INV-16 forty business rounds keep runtime context bounded while leases exp
         completedTurns: frame.programFrame.completedTurns,
       })
       assert.equal(request.contextStatus.mode, 'partitioned')
-      assert(request.history.length <= 9)
+      // 段内历史只往后加；过期的结果只剩引用卡，带正文的只有仍在租约里的
+      assert(
+        historyEntries(request).filter((item) => item.text.length > 1000).length <= 3,
+        JSON.stringify(samples.at(-1))
+      )
       assert(frame.results.length <= 3, JSON.stringify(samples.at(-1)))
       assert.match(frame.observation.text, /persistent-observation/)
       if (f.calls > 4) {
@@ -548,4 +553,69 @@ test('INV-16 forty business rounds keep runtime context bounded while leases exp
       retainedLeases: leases.leases.length,
     })
   )
+})
+
+/** 请求里实际发送的文字字符数。 */
+function requestSize(request) {
+  return (
+    request.instructions.length +
+    (request.compiledPrompt ?? '').length +
+    (request.history ?? []).reduce(
+      (sum, message) =>
+        sum +
+        (typeof message.content === 'string'
+          ? message.content.length
+          : JSON.stringify(message.content).length),
+      0
+    )
+  )
+}
+/** 每轮净增长约 240 token，这个窗口大约在第 19 轮封一次段。 */
+const WINDOW = 9000
+test('INV-50 a long run folds by remaining turns: every request fits the window and old history is sealed into volumes', async (t) => {
+  const statuses = []
+  const f = await fixture(
+    t,
+    async function* (request, f) {
+      statuses.push(request.contextStatus)
+      if (f.calls === 36) {
+        yield* done(request)
+        return
+      }
+      yield {
+        type: 'text',
+        text: `step ${f.calls}\n${marker(request)} execute()\nimport {output} from 'velaros';output({step:${f.calls},detail:'y'.repeat(3000)});\n${marker(request)}`,
+      }
+      yield { type: 'finish', reason: 'stop' }
+    },
+    {
+      limits: {
+        turns: 40,
+        outputTokens: 2048,
+        safetyTokens: 1024,
+        projectionChars: 1000000,
+        recoveryChars: 6000,
+        timeoutMs: 120000,
+      },
+    },
+    // 估算与请求大小成正比、窗口较小，让封段在几十轮内发生
+    {
+      limits: { contextTokens: WINDOW + 4000, inputTokens: WINDOW, outputTokens: 2048 },
+      estimate: async (request) => ({
+        tokens: Math.ceil(requestSize(request) / 4),
+        precision: 'estimate',
+        basis: 'chars/4',
+      }),
+    }
+  )
+  await run(f, 'Keep working in small steps')
+  assert.equal(f.calls, 36)
+  const window = statuses[0].inputLimit
+  assert(statuses.every((status) => status.inputTokens <= window))
+  const segments = new Set(statuses.map((status) => status.segment.index))
+  assert(segments.size > 1, JSON.stringify(statuses.map((status) => status.segment)))
+  assert(statuses.at(-1).segment.volumes >= 1)
+  // 封段之间段号只增不减，段内轮数在新段重新计数
+  for (let index = 1; index < statuses.length; index++)
+    assert(statuses[index].segment.index >= statuses[index - 1].segment.index)
 })

@@ -107,7 +107,7 @@ test('INV-20 声明里写给模型的上限与常量表一致', () => {
     `summary（有证据支持的整理说明，1 到 ${ContextPatchLimits.summaryChars} 个字符）与 unresolved（未解决事项，最多 ${ContextPatchLimits.unresolved} 条、每条最多 ${ContextPatchLimits.unresolvedChars} 个字符）`,
     `releaseStoreRefs 各最多 ${ContextPatchLimits.items} 项，整份不超过 ${ContextPatchLimits.patchChars} 个字符`,
     `text 1 到 ${ContextPatchLimits.textChars} 个字符`,
-    `0 到 ${ContextPatchLimits.recentRecords} 的整数`,
+    `summary 写这一段做了什么、查明了什么（1 到 ${ContextPatchLimits.summaryChars} 个字符）`,
     `summary（1 到 ${ContextPatchLimits.textChars} 个字符）与 resident`,
   ])
 })

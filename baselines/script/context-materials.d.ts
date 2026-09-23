@@ -48,8 +48,8 @@ declare module 'velaros:context-materials' {
     readonly notes?: readonly ContextNotePresentation[]
     /** 输入摘要：只有完整原文已经进入本支线请求才可替换；只看到引用、片段或元数据时省略，并在 unresolved 里报告缺口。 */
     readonly inputs?: readonly ContextInputSummary[]
-    /** 较早历史的摘要区间；没有必要或确认不了边界时省略。 */
-    readonly history?: HistoryCheckpoint
+    /** 最近一卷（snapshot.volume）的叙事；快照里没有卷、或还没读清楚那一段时省略。 */
+    readonly volume?: VolumeNarrative
     /** 退出自动展示的空间引用，只能选 snapshot.storeRefs 里的；不删除对象、不取消订阅、不撤回权限。 */
     readonly releaseStoreRefs?: readonly string[]
     /** 退出自动展示的执行结果引用；明确要求保留、或还有未决操作依赖的不能释放。 */
@@ -67,8 +67,6 @@ declare module 'velaros:context-materials' {
         readonly text: string
       }>
     }
-    /** 近期记录窗口的大小：0 到 64 的整数，不是记录数组。 */
-    readonly recentRecords?: number
   }
 
   /** 补丁通过了校验、已被受理：之后声明完成，宿主在父会话的下一次请求前重新核验版本再发布。 */
@@ -124,12 +122,10 @@ declare module 'velaros:context-materials' {
   }
 
   /**
-   * 较早历史的一段摘要：baseThrough 到 through 是这一段的序号范围，through 必须是已完成脚本结果的 sequence，并留下最近两个响应不收进来；
-   * evidence 是它直接依据的原文引用，unresolved 是没解决的事项，negativeAttempts 是试过但没成功的做法。
+   * 最新一卷（snapshot.volume）的叙事：summary 写这一段做了什么、查明了什么（1 到 3000 个字符）；evidence 是它直接依据的原文引用；
+   * unresolved 是还没解决的事项；negativeAttempts 是试过但没成功的做法，以后别再重复。
    */
-  interface HistoryCheckpoint {
-    readonly baseThrough: number
-    readonly through: number
+  interface VolumeNarrative {
     readonly summary: string
     readonly evidence: readonly ContextRef[]
     readonly unresolved: readonly string[]

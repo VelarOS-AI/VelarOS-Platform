@@ -1,11 +1,6 @@
 import type { ContextRef } from '@velaros-ai/context'
 
-/**
- * 旧历史区间的有来源摘要，近期执行单元由 Runtime 保留。
- * @AgentView
- * 较早历史的一段摘要：baseThrough 到 through 是这一段的序号范围，through 必须是已完成脚本结果的 sequence，并留下最近两个响应不收进来；
- * evidence 是它直接依据的原文引用，unresolved 是没解决的事项，negativeAttempts 是试过但没成功的做法。
- */
+/** 改造前的单一历史检查点；只在旧会话迁移时读取，内容转成第 1 卷的叙事。 */
 export interface HistoryCheckpoint {
   readonly baseThrough: number
   readonly through: number
@@ -31,4 +26,16 @@ export interface HistoryPage {
   readonly resetAfter: number
   readonly through: number
   readonly nextAfter: Nullable<number>
+}
+/**
+ * 一卷历史的叙事，由整理支线读过原文后写成。
+ * @AgentView
+ * 最新一卷（snapshot.volume）的叙事：summary 写这一段做了什么、查明了什么（1 到 3000 个字符）；evidence 是它直接依据的原文引用；
+ * unresolved 是还没解决的事项；negativeAttempts 是试过但没成功的做法，以后别再重复。
+ */
+export interface VolumeNarrative {
+  readonly summary: string
+  readonly evidence: readonly ContextRef[]
+  readonly unresolved: readonly string[]
+  readonly negativeAttempts: readonly string[]
 }

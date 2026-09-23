@@ -47,7 +47,7 @@ async function fixture(t, stream, extra = {}) {
     limits: { contextTokens: 200000, inputTokens: 180000, outputTokens: 4000 },
     estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
     async *stream(request) {
-      f.frames.push(runtimeFrame(request.materials.at(-1).text))
+      f.frames.push(runtimeFrame(request))
       f.calls++
       yield* stream(request, f)
     },

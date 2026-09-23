@@ -196,13 +196,27 @@ test('note source authorization retries when a reset lands between selected snap
   assert.deepEqual((await f.memory.list({}, signal())).items, [])
 })
 
-const historyFrame = {
-  body: JSON.stringify({ results: [], goals: [] }),
-  images: [{ marker: 'image' }],
-  prompt: '',
+/** 段状态的最小形态：第 1 段，还没有冻结条目。 */
+function segment(overrides = {}) {
+  return {
+    id: 'segment-1',
+    index: 1,
+    revision: 0,
+    from: 0,
+    base: { objectId: 'base', chars: 0 },
+    carried: [],
+    notes: [],
+    entries: [],
+    objective: '',
+    goals: 0,
+    policy: null,
+    volumes: 0,
+    reason: 'start',
+    ...overrides,
+  }
 }
 
-test('history projection caches immutable result classification, preserves discovery and honors reset', async (t) => {
+test('INV-49 segment history caches immutable result classification, reuses frozen entries and honors reset', async (t) => {
   const f = await fixture(t)
   const recent = new RecentContext('s', f.context, f.storage)
   const records = []
@@ -214,6 +228,10 @@ test('history projection caches immutable result classification, preserves disco
         body: JSON.stringify({ mode, n: records.length }),
       })
     )
+  const leased = [records[0], records[2]].map((record) => ({
+    ref: record.ref.id,
+    text: `output ${record.sequence}`,
+  }))
   const get = f.storage.get.bind(f.storage)
   let reads = 0
   t.mock.method(f.storage, 'get', async (...args) => {
@@ -223,27 +241,33 @@ test('history projection caches immutable result classification, preserves disco
   t.mock.method(f.storage, 'load', () => {
     throw Error('full history snapshot')
   })
-  const first = await recent.project(historyFrame, 4096, signal(), 1)
+  const first = await recent.project(segment(), leased, 4096, signal())
   assert.equal(reads, 3)
-  const summaries = first.history.map((message) => JSON.parse(message.content))
-  assert.equal(summaries[0].omittedRecords, 1)
-  assert.equal(summaries[0].through, records[0].sequence)
-  assert.equal(summaries[1].ref.id, records[2].ref.id)
+  assert.deepEqual(
+    first.items.map((item) => item.ref),
+    [records[0].ref.id, records[2].ref.id]
+  )
+  assert(first.items.every((item) => item.bodyIncluded))
+  assert.equal(first.fresh.length, 2)
+  assert.equal(first.messages.at(-1).cacheBreakpoint, true)
   reads = 0
-  assert.deepEqual(await recent.project(historyFrame, 4096, signal(), 1), first)
+  assert.deepEqual(await recent.project(segment(), leased, 4096, signal()), first)
   assert.equal(reads, 0)
+  // 冻结的条目逐字复用；租约没了的结果改成引用卡，不再重新渲染
+  const frozen = await recent.project(
+    segment({ entries: first.fresh }),
+    leased.slice(1),
+    4096,
+    signal()
+  )
+  assert.equal(frozen.messages[1].content, first.messages[1].content)
+  assert.equal(frozen.items[0].bodyIncluded, false)
+  assert.match(frozen.messages[0].content, /lease-expired-or-released/)
+  assert.deepEqual(frozen.fresh, [])
   const directory = await recent.list({}, signal())
   assert.equal(directory.items.length, 3)
   const tail = await f.context.append({ kind: 'event', title: 'unrelated', body: 'latest event' })
   assert.equal((await recent.list({}, signal())).through, tail.sequence)
-  const zero = await new RecentContext('s', f.context, f.storage).project(
-    historyFrame,
-    0,
-    signal(),
-    0
-  )
-  assert.equal(reads, 0)
-  assert.deepEqual(zero.history, [])
   const reset = await f.context.append({
     kind: 'audit',
     title: 'search:history-reset',
@@ -255,11 +279,15 @@ test('history projection caches immutable result classification, preserves disco
     body: JSON.stringify({ mode: 'execute', n: 0 }),
   })
   reads = 0
-  const next = await recent.project(historyFrame, 4096, signal(), 2)
+  const next = await recent.project(
+    segment(),
+    [{ ref: fresh.ref.id, text: 'fresh output' }],
+    4096,
+    signal()
+  )
   assert.equal(reads, 1)
-  assert.deepEqual(next.images, [])
   assert.deepEqual(
-    next.history.map((message) => JSON.parse(message.content).ref.id),
+    next.items.map((item) => item.ref),
     [fresh.ref.id]
   )
   const page = await recent.list({}, signal())
@@ -295,15 +323,15 @@ test('history classification cache is bounded and a missing body is re-read', as
     },
   }
   const recent = new RecentContext('s', f.context, storage)
-  await recent.project(historyFrame, 4096, signal(), 1)
+  await recent.project(segment(), [], 4096, signal())
   assert.equal(reads, count)
   reads = 0
-  await recent.project(historyFrame, 4096, signal(), 1)
+  await recent.project(segment(), [], 4096, signal())
   assert.equal(reads, 2)
   const cancelled = new AbortController()
   cancelled.abort()
   reads = 0
-  await assert.rejects(recent.project(historyFrame, 4096, cancelled.signal, 1), {
+  await assert.rejects(recent.project(segment(), [], 4096, cancelled.signal), {
     name: 'AbortError',
   })
   assert.equal(reads, 0)
@@ -331,7 +359,10 @@ test('all projection stages avoid full snapshots and preserve immutable history'
   }
   const result = await memory.project(view, undefined, [], signal(), 20000)
   const frame = JSON.parse(result.body)
-  assert.equal(frame.partitions.workspace.notes[0].text, 'preserved note')
+  // 段起点的驻留笔记在底座里，本帧尾只放段内改过的
+  assert.match(result.history[0].content, /preserved note/)
+  assert.equal(result.history[0].cacheBreakpoint, true)
+  assert.deepEqual(frame.partitions.workspace.notes, [])
   for (const record of original.records)
     assert.deepEqual((await f.storage.records('s', { refId: record.ref.id })).items, [record])
   assert(
@@ -340,63 +371,55 @@ test('all projection stages avoid full snapshots and preserve immutable history'
 })
 
 for (const mode of ['indexed', 'fallback', 'read-only-index', 'legacy-selector'])
-  test(`${mode}: checkpoint commits preserve recent responses, version conflicts, recovery and reset scope`, async (t) => {
+  test(`${mode}: volumes seal rule skeletons, leave the last responses to the next segment, take narratives and follow reset`, async (t) => {
     const f = await fixture(t, mode)
     const recent = new RecentContext('s', f.context, f.port)
     const pairs = []
     for (let i = 0; i < 5; i++) {
-      await f.context.append({ kind: 'assistant', body: `response ${i}` })
+      await f.context.append({
+        kind: 'assistant',
+        body: `step ${i} explanation\n@@sX execute()\ncode\n@@sX`,
+      })
       pairs.push(
         await f.context.append({
           kind: 'audit',
           title: `script:${crypto.randomUUID()}:result`,
-          body: JSON.stringify({ mode: 'execute', i }),
+          body: JSON.stringify({ mode: 'execute', i, output: { blocks: [{ key: `k${i}` }] } }),
         })
       )
     }
-    if (mode === 'indexed') {
+    if (mode === 'indexed')
       t.mock.method(f.storage, 'load', () => {
-        throw Error('full checkpoint snapshot')
+        throw Error('full volume snapshot')
       })
-      t.mock.method(f.storage, 'compareAndSwap', () => {
-        throw Error('full checkpoint CAS')
-      })
-    }
-    const input = {
-      baseThrough: 0,
-      through: pairs[0].sequence,
-      summary: 'completed first result',
+    // 最近两个响应及其结果留给新段，之前的封成一卷
+    const through = await recent.cut(segment(), 2, signal())
+    assert.equal(through, pairs[2].sequence)
+    assert.equal(await recent.cut(segment({ from: through }), 2, signal()), undefined)
+    const ref = await recent.seal(0, through, signal())
+    const [sealed] = await recent.volumes(signal())
+    assert.deepEqual(sealed.ref, ref)
+    assert.equal(sealed.volume.turns, 3)
+    assert.equal(sealed.volume.results, 3)
+    assert.match(sealed.volume.skeleton, /step 0 explanation/)
+    assert.doesNotMatch(sealed.volume.skeleton, /@@sX/)
+    assert.match(sealed.volume.skeleton, /输出 k2/)
+    await assert.rejects(recent.seal(through, through, signal()), { code: 'VALIDATION' })
+    const narrative = {
+      summary: 'three steps done',
       evidence: [pairs[0].ref],
-      unresolved: [],
+      unresolved: ['step 3'],
       negativeAttempts: [],
     }
-    const writes = await Promise.allSettled([
-      recent.checkpoint(input, signal()),
-      recent.checkpoint({ ...input, summary: 'competing checkpoint' }, signal()),
-    ])
-    assert.equal(writes.filter((item) => item.status === 'fulfilled').length, 1)
-    assert.equal(writes.find((item) => item.status === 'rejected').reason.code, 'CONTEXT_CONFLICT')
-    await assert.rejects(recent.checkpoint(input, signal()), { code: 'CONTEXT_CONFLICT' })
-    await assert.rejects(
-      recent.checkpoint(
-        { ...input, baseThrough: input.through, through: pairs.at(-1).sequence },
-        signal()
-      ),
-      /最近两个响应/
-    )
-    const saved = (await f.storage.records('s', { title: 'search:history-checkpoint' })).items
-    assert.equal(saved.length, 1)
-    const reopened = localContextStorage({ path: f.path })
-    try {
-      assert.equal(JSON.parse(await reopened.get('s', saved[0].objectId)).through, input.through)
-    } finally {
-      await reopened.close()
-    }
+    await recent.narrate(ref, narrative, signal())
+    assert.equal((await recent.volumes(signal()))[0].narrative.summary, 'three steps done')
     await f.context.append({
       kind: 'audit',
       title: 'search:history-reset',
       body: 'new authorization',
     })
+    assert.deepEqual(await recent.volumes(signal()), [])
+    await assert.rejects(recent.narrate(ref, narrative, signal()), { code: 'NOT_FOUND' })
     const next = []
     for (let i = 0; i < 4; i++) {
       await f.context.append({ kind: 'assistant', body: `next ${i}` })
@@ -408,23 +431,18 @@ for (const mode of ['indexed', 'fallback', 'read-only-index', 'legacy-selector']
         })
       )
     }
-    await assert.rejects(
-      recent.checkpoint({ ...input, through: next[0].sequence }, signal()),
-      /当前授权/
-    )
-    await recent.checkpoint(
-      { ...input, through: next[0].sequence, evidence: [next[0].ref] },
-      signal()
-    )
-    const projection = await recent.project(historyFrame, 4096, signal(), 2)
-    assert.equal(JSON.parse(projection.body).historyState.baseThrough, next[0].sequence)
+    const fresh = await recent.seal(0, next[0].sequence, signal())
+    const [current] = await recent.volumes(signal())
+    assert.equal(current.volume.turns, 1)
+    await assert.rejects(recent.narrate(fresh, narrative, signal()), /当前授权/)
+    await recent.narrate(fresh, { ...narrative, evidence: [next[0].ref] }, signal())
   })
 
-test('checkpoint transaction failure preserves the old state and concurrent changes fail CAS', async (t) => {
+test('an old history checkpoint becomes the first volume once and the first segment starts after it', async (t) => {
   const f = await fixture(t)
   const recent = new RecentContext('s', f.context, f.storage)
   const pairs = []
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 3; i++) {
     await f.context.append({ kind: 'assistant', body: `response ${i}` })
     pairs.push(
       await f.context.append({
@@ -434,43 +452,53 @@ test('checkpoint transaction failure preserves the old state and concurrent chan
       })
     )
   }
-  const input = {
-    baseThrough: 0,
-    through: pairs[0].sequence,
-    summary: 'checkpoint',
-    evidence: [pairs[0].ref],
-    unresolved: [],
-    negativeAttempts: [],
-  }
-  const before = await f.storage.load('s')
-  const db = new DatabaseSync(f.path)
-  t.after(() => db.close())
-  db.exec(
-    "CREATE TRIGGER fail_checkpoint BEFORE INSERT ON context_records WHEN NEW.title='search:history-checkpoint' BEGIN SELECT RAISE(ABORT,'checkpoint failed'); END"
-  )
-  await assert.rejects(recent.checkpoint(input, signal()), /checkpoint failed/)
-  assert.deepEqual(await f.storage.load('s'), before)
-  db.exec('DROP TRIGGER fail_checkpoint')
-  const cas = f.storage.compareAndSwapMetadata.bind(f.storage)
-  let raced = false
-  const hook = t.mock.method(f.storage, 'compareAndSwapMetadata', async (...args) => {
-    if (!raced) {
-      raced = true
-      await f.context.append({ kind: 'event', body: 'changed while checkpointing' })
-    }
-    return cas(...args)
+  assert.equal(await recent.migrate(signal()), 0)
+  await f.context.append({
+    kind: 'checkpoint',
+    title: 'search:history-checkpoint',
+    body: JSON.stringify({
+      baseThrough: 0,
+      through: pairs[0].sequence,
+      summary: 'old summary',
+      evidence: [pairs[0].ref],
+      unresolved: ['open'],
+      negativeAttempts: ['tried'],
+    }),
   })
-  await assert.rejects(recent.checkpoint(input, signal()), { code: 'CONTEXT_CONFLICT' })
-  assert.equal(
-    (await f.storage.records('s', { title: 'search:history-checkpoint' })).items.length,
-    0
+  assert.equal(await recent.migrate(signal()), pairs[0].sequence)
+  assert.equal(await recent.migrate(signal()), pairs[0].sequence)
+  const volumes = await recent.volumes(signal())
+  assert.equal(volumes.length, 1)
+  assert.equal(volumes[0].volume.through, pairs[0].sequence)
+  assert.equal(volumes[0].volume.skeleton, '')
+  assert.deepEqual(volumes[0].narrative.negativeAttempts, ['tried'])
+})
+
+test('the volume directory merges the oldest volumes a level up and stays bounded', async (t) => {
+  const f = await fixture(t)
+  const recent = new RecentContext('s', f.context, f.storage)
+  let from = 0
+  for (let i = 0; i <= ActRuntimeTuning.volumeIndex; i++) {
+    await f.context.append({ kind: 'assistant', body: `turn ${i}` })
+    const result = await f.context.append({
+      kind: 'audit',
+      title: `script:${crypto.randomUUID()}:result`,
+      body: '{}',
+    })
+    await recent.seal(from, result.sequence, signal())
+    from = result.sequence
+  }
+  const volumes = await recent.volumes(signal())
+  assert.equal(volumes.length, ActRuntimeTuning.volumeIndex + 2 - ActRuntimeTuning.volumeMerge)
+  assert.equal(volumes[0].volume.level, 2)
+  assert.equal(volumes[0].volume.parts.length, ActRuntimeTuning.volumeMerge)
+  assert.equal(volumes[0].volume.turns, ActRuntimeTuning.volumeMerge)
+  assert(volumes.slice(1).every((item) => item.volume.level === 1))
+  assert.deepEqual(
+    volumes.map((item) => item.volume.from),
+    volumes.map((item) => item.volume.from).toSorted((a, b) => a - b)
   )
-  hook.mock.restore()
-  await recent.checkpoint(input, signal())
-  assert.equal(
-    (await f.storage.records('s', { title: 'search:history-checkpoint' })).items.length,
-    1
-  )
+  assert.equal(volumes.at(-1).volume.through, from)
 })
 
 test('note head queries keep old versions readable and narrow script history without changing discovery', async (t) => {

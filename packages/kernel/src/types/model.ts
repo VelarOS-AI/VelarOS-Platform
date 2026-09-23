@@ -39,6 +39,14 @@ export interface ModelContextStatus {
   readonly safetyReserve: number
   readonly remainingTokens: number
   readonly advice: string
+  /** 按每轮增长估计还能再跑几轮；不足时主循环封段。 */
+  readonly runway?: { readonly turns: number; readonly growthPerTurn: number }
+  /** 当前段：段号、段内响应数、底座里的卷数。 */
+  readonly segment?: { readonly index: number; readonly turns: number; readonly volumes: number }
+  /** 上一次请求供应商报告的缓存读取与写入 token。 */
+  readonly cache?: { readonly readTokens: number; readonly writeTokens: number }
+  /** 工作集本身快装不下时的说明；由模型下一轮用代码收紧。 */
+  readonly overload?: string
 }
 /** 模型驱动的真实请求边界。 */
 export interface ModelDriverLimits {

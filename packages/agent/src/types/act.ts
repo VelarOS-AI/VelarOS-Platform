@@ -1,3 +1,6 @@
+import type { ContextProjection } from '@velaros-ai/context'
+import type { CompiledModelRequest } from '@velaros-ai/model'
+
 /** 用户文件的不可变归档引用。 */
 export interface ActInputFile {
   readonly ref: { readonly sessionId: string; readonly id: string }
@@ -128,12 +131,30 @@ export interface ActRunLimits {
   readonly timeoutMs: number
 }
 
-/** 按上下文模式配置的预警和有界恢复策略。 */
+/** 按剩余轮数规划上下文：什么时候封段、什么时候算结构性超载，以及有界恢复。 */
 export interface ActContextPolicy {
-  readonly warningRatio?: number
-  readonly maintenanceRatio?: number
-  readonly maxMaintenanceTurns?: number
+  /** 剩余不足这么多轮就封段，默认 2。 */
+  readonly foldTurns?: number
+  /** 剩余不足这么多轮、又处在章节边界时封段，默认 8。 */
+  readonly boundaryTurns?: number
+  /** 封段后剩余仍不足这么多轮，算结构性超载，默认 4。 */
+  readonly minTurns?: number
+  /** 工作窗口上限（token），与模型输入上限取较小值，默认 200000。 */
+  readonly windowTokens?: number
+  /** 供应商超窗拒绝与完成检查的修复次数，默认 2。 */
   readonly recoveryAttempts?: number
+}
+
+/** 上下文投影所在的段：主循环据此判断增长是否可比、封段是否发生。 */
+export interface ActFrameSegment {
+  readonly id: string
+  readonly index: number
+  /** 底座重建次数。 */
+  readonly revision: number
+  /** 底座里的卷数。 */
+  readonly volumes: number
+  /** 段内已有的模型响应数。 */
+  readonly turns: number
 }
 
 /** 可恢复运行快照；waiting 的原因通过 pending 交互或后续输入判定。 */
@@ -164,3 +185,9 @@ export interface ActEvent {
   readonly runId: string
   readonly event: ActRunEvent
 }
+
+/** 一帧编译好的请求，连同它的投影与段状态。 */
+export type ActComposedFrame = {
+  readonly projection: ContextProjection
+  readonly segment?: ActFrameSegment
+} & CompiledModelRequest

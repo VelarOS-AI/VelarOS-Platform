@@ -465,7 +465,7 @@ test('the parent model budget validator rejects a fully staged candidate before 
   const state = new ContextMaintenanceState('root', f.storage, {
     validateCandidate: async (candidate) => {
       previews++
-      assert.equal(JSON.parse(candidate.body).partitions.workspace.notes[0].text, 'candidate')
+      assert.match(candidate.history[0].content, /candidate/)
       throw Object.assign(Error('input budget'), { code: 'CONTEXT_BUDGET' })
     },
   })

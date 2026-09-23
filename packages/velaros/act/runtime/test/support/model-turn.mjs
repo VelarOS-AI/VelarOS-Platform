@@ -24,19 +24,71 @@ export async function* done(request, message = '') {
   yield { type: 'finish', reason: 'stop' }
 }
 
-/** 旧行为回归按新分区读取同一语义字段；生产请求仅包含分区格式。 */
-export function runtimeFrame(text) {
+/** 段底座（请求的第一条历史消息）里的笔记卡片元数据；正文在卡片的下一行。 */
+export function baseNotes(request) {
+  const base = request.history?.[0]?.content
+  if (typeof base !== 'string') return []
+  return base.split('\n').flatMap((line) => {
+    if (!line.startsWith('{"key":')) return []
+    try {
+      return [JSON.parse(line)]
+    } catch {
+      return []
+    }
+  })
+}
+
+/**
+ * 请求里的段内历史条目：首行是元数据的消息解析成对象，结果正文取「当次输出」之后的部分；段底座这类非条目消息跳过。
+ */
+export function historyEntries(request) {
+  const entries = []
+  for (const message of request.history ?? []) {
+    if (typeof message.content !== 'string' || !message.content.startsWith('{')) continue
+    const newline = message.content.indexOf('\n')
+    let meta
+    try {
+      meta = JSON.parse(newline < 0 ? message.content : message.content.slice(0, newline))
+    } catch {
+      continue
+    }
+    const body = newline < 0 ? '' : message.content.slice(newline + 1)
+    const marker = '当次输出：\n'
+    const sourceMarker = '当次源码：\n'
+    const output = body.indexOf(marker)
+    entries.push({
+      role: message.role,
+      ...meta,
+      source: body.startsWith(sourceMarker)
+        ? body.slice(sourceMarker.length, output < 0 ? undefined : output - 1)
+        : undefined,
+      text: output < 0 ? body : body.slice(output + marker.length),
+    })
+  }
+  return entries
+}
+
+/**
+ * 旧行为回归按新分区读取同一语义字段；生产请求仅包含分区格式。
+ * 传整个请求时，段内历史里的结果正文按引用并回 results[].text。
+ */
+export function runtimeFrame(input) {
+  const request = typeof input === 'string' ? undefined : input
+  const text = request
+    ? request.materials.findLast((item) => item.origin === 'runtime-view').text
+    : input
   const frame = JSON.parse(text)
   if (!frame.partitions) return frame
   const p = frame.partitions
+  const bodies = new Map(
+    (request ? historyEntries(request) : [])
+      .filter((item) => item.origin === 'runtime-execution' && item.bodyIncluded)
+      .map((item) => [item.ref.id, item])
+  )
   const results = p.recent.results.map((result) => {
-    const raw = p.recent.history
-      .map((message) => JSON.parse(message.content))
-      .find(
-        (item) =>
-          item.origin === 'runtime-execution' && item.ref.id === result.ref && item.bodyIncluded
-      )
-    return { ...result, ...(raw ? { text: raw.text } : {}) }
+    const entry = bodies.get(result.ref)
+    if (!entry) return result
+    return { ...result, text: entry.text, source: entry.source ?? result.source }
   })
   return {
     id: frame.id,
