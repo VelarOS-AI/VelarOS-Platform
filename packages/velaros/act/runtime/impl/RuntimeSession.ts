@@ -118,6 +118,8 @@ export interface RuntimeSessionAccess extends ContextCandidateValidator {
 
 /** 单一职责模型工具复用普通会话，只注入专项阶段、材料边界与结果校验。 */
 export interface RuntimeSessionModelTool {
+  /** 专项的固定说明（如能力合同），会话内不变，进入系统提示。 */
+  readonly instructions?: string
   /** 叶子会话容量预警时直接进入交付阶段。 */
   pressure(): void
   /** 当前模型请求的截止时间。 */
@@ -323,6 +325,7 @@ export class RuntimeSession implements VelarosSession {
         maintain: Boolean(dependencies.maintain),
         observe: this.config.allowed.includes('observe'),
       }) +
+      (dependencies.tool?.instructions ? `\n${dependencies.tool.instructions}` : '') +
       (dependencies.instructions?.trim() ? `\n宿主应用指令：\n${dependencies.instructions}` : '')
     dependencies.register({
       validateCandidate: async (frame, signal) => {
@@ -333,8 +336,9 @@ export class RuntimeSession implements VelarosSession {
           this.config,
           dependencies.inputs?.() ?? {}
         )
+        // 与主循环同一布局：协议说明在最后一条消息末尾，系统提示只有运行说明
         const request: ModelTurnRequest = {
-          instructions: `${instructions}\n${decoder.instructions}`,
+          instructions,
           materials: [
             {
               ref: JSON.parse(frame.body).id,
@@ -343,7 +347,7 @@ export class RuntimeSession implements VelarosSession {
               totalChars: frame.body.length,
             },
           ],
-          compiledPrompt: frame.prompt,
+          compiledPrompt: `${frame.prompt}\n\n${decoder.instructions}`,
           history: frame.history,
           images: frame.images,
           response: { type: 'text' },

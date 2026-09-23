@@ -41,7 +41,7 @@ test('INV-43 trusted host instructions reach actual requests and traces; reopen 
   const events = []
   for await (const event of f.session.submit('user-text-only')) events.push(event)
   assert.match(frames[0].instructions, /host-language-first/)
-  assert.match(frames[0].instructions, /当前帧标记/)
+  assert.match(frames[0].compiledPrompt, /当前帧标记/)
   const turn = events.find((event) => event.type === 'turn')
   const trace = await f.session.trace(turn.turnId)
   assert.match(trace.request.body, /host-language-first/)

@@ -14,6 +14,7 @@ import {
 
 import type { ActLoopOptions } from '../contract/requires.js'
 import type { ActDecodedTurn, ActInput, ActRunEvent } from '../types/act.js'
+import { framedRequest } from '../utils/frame-prompt.js'
 import { boundedModelOperation, boundedModelStream } from '../utils/model-stream.js'
 
 /** 唯一模型回合推进器，由运行服务持有。 */
@@ -389,7 +390,7 @@ export class ActLoop implements ActLoopApi {
               this.compiler.compileModelTurn(
                 {
                   ...frame.request,
-                  instructions: `${frame.request.instructions}\n本帧上次响应未通过校验，任何程序都没有执行。请重新输出完整响应并修复：${message.slice(0, 4000)}`,
+                  compiledPrompt: `${frame.request.compiledPrompt}\n本帧上次响应未通过校验，任何程序都没有执行。请重新输出完整响应并修复：${message.slice(0, 4000)}`,
                 },
                 this.options.model,
                 this.options.limits.safetyTokens
@@ -586,18 +587,21 @@ export class ActLoop implements ActLoopApi {
     const recovery = this.completionFeedback
       ? `\n上次完成检查尚未通过：${JSON.stringify(this.completionFeedback)}。先处理原因；修复或补充证据，不要自动重放存在未知效果的脚本。`
       : ''
-    let request: ModelTurnRequest = {
-      history: projected.history,
-      instructions: `${this.options.instructions}\n${protocolInstructions}\n${phase.instructions}${recovery}`,
-      images: projected.images,
-      compiledPrompt: projected.prompt,
-      materials: [
-        { ref: evidence.id, origin: 'runtime-view', text: body, totalChars: body.length },
-      ],
-      response: { type: 'text' },
-      mode: phase.phase === 'maintenance' ? 'maintenance' : 'work',
-      outputTokens: Math.min(limits.outputTokens, model.limits.outputTokens),
-    }
+    let request: ModelTurnRequest = framedRequest(
+      {
+        history: projected.history,
+        instructions: this.options.instructions,
+        images: projected.images,
+        compiledPrompt: projected.prompt,
+        materials: [
+          { ref: evidence.id, origin: 'runtime-view', text: body, totalChars: body.length },
+        ],
+        response: { type: 'text' },
+        mode: phase.phase === 'maintenance' ? 'maintenance' : 'work',
+        outputTokens: Math.min(limits.outputTokens, model.limits.outputTokens),
+      },
+      `${protocolInstructions}\n${phase.instructions}${recovery}`
+    )
     let compiled = await this.compiler.compileModelTurn(request, model, limits.safetyTokens)
     let inputLimit = Math.min(
       model.limits.inputTokens,
@@ -636,16 +640,18 @@ export class ActLoop implements ActLoopApi {
         Math.min(targetChars ?? limits.projectionChars, limits.recoveryChars)
       )
       body = projected.body
-      request = {
-        ...request,
-        instructions: `${this.options.instructions}\n${protocolInstructions}\n${phase.instructions}${recovery}`,
-        compiledPrompt: projected.prompt,
-        images: projected.images,
-        history: projected.history,
-        materials: [
-          { ref: evidence.id, origin: 'runtime-view', text: body, totalChars: body.length },
-        ],
-      }
+      request = framedRequest(
+        {
+          ...request,
+          compiledPrompt: projected.prompt,
+          images: projected.images,
+          history: projected.history,
+          materials: [
+            { ref: evidence.id, origin: 'runtime-view', text: body, totalChars: body.length },
+          ],
+        },
+        `${protocolInstructions}\n${phase.instructions}${recovery}`
+      )
       compiled = await this.compiler.compileModelTurn(request, model, limits.safetyTokens)
     }
     if (!compiled.okToSend) return null

@@ -1,6 +1,10 @@
+/** 本帧会变的协议、阶段与恢复说明在最后一条消息末尾（系统提示在会话内不变）。 */
+export function frameText(request) {
+  return request.compiledPrompt ?? ''
+}
 /** 从真实请求读取本帧标记，测试不跨帧复用控制文本。 */
 export function marker(request) {
-  const value = request.instructions.match(/当前帧标记：(\S+)。普通/)
+  const value = frameText(request).match(/当前帧标记：(\S+)。普通/)
   if (!value) throw Error('missing frame marker')
   return value[1]
 }

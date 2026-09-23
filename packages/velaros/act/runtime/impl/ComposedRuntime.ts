@@ -158,13 +158,7 @@ class ComposedRuntime implements VelarosRuntime {
           const materials = this.kernel.describe(ContextMaterialsModuleId)
           const contextTool = {
             ...tool,
-            phase: () => {
-              const phase = tool.phase()
-              return {
-                ...phase,
-                instructions: `${phase.instructions}\n本会话材料读取合同：\n${materials.declarations}\n${materials.template ?? ''}`,
-              }
-            },
+            instructions: `本会话材料读取合同：\n${materials.declarations}\n${materials.template ?? ''}`,
           }
           const session = new RuntimeSession(id, {
             packages: [this.systemPackage(id)],
@@ -252,15 +246,10 @@ class ComposedRuntime implements VelarosRuntime {
             packages: [this.systemPackage(id)],
             allowedModules: () => this.allowedModuleIds(id),
             tool: {
+              instructions: `本会话证据合同：\n${evidence.declarations}`,
               pressure: () => activation.pressure(),
               deadline: () => activation.deadline(),
-              phase: () => {
-                const phase = activation.phase()
-                return {
-                  ...phase,
-                  instructions: `${phase.instructions}\n本会话证据合同：\n${evidence.declarations}`,
-                }
-              },
+              phase: () => activation.phase(),
               material: (maxChars) => activation.material(maxChars),
               refresh: (signal) => activation.refresh(signal),
               authorizeReference: (ref, signal) => activation.authorizeReference(ref, signal),

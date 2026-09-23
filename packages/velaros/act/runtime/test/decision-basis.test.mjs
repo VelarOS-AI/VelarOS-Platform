@@ -182,7 +182,7 @@ test('a refreshed execution supersedes old visible history and still detects a l
         yield* done(request)
         return
       }
-      if (calls === 4) assert.match(request.instructions, /STALE_OBSERVATION/)
+      if (calls === 4) assert.match(request.compiledPrompt, /STALE_OBSERVATION/)
       if (calls < 5) {
         yield turn(request, {
           execute: {
@@ -473,7 +473,7 @@ test('completion rejects stale observations and refreshes before accepting done'
     if (++calls === 1) {
       world.value = 2
       world.revision++
-    } else assert.match(request.instructions, /STALE_OBSERVATION/)
+    } else assert.match(request.compiledPrompt, /STALE_OBSERVATION/)
     yield* done(request)
   })
   assert.equal(await submit(f.session), 'completed')

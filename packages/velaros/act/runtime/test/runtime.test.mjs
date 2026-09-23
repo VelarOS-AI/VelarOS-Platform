@@ -325,7 +325,7 @@ test('INV-32 长任务连续 80 次状态推进，观察和租约保持有界，
     async *stream(request) {
       calls++
       const frame = JSON.parse(request.materials[0].text)
-      const tag = request.instructions.match(/当前帧标记：(\S+)。普通/)[1]
+      const tag = request.compiledPrompt.match(/当前帧标记：(\S+)。普通/)[1]
       chars.push(JSON.stringify(request).length)
       const block = (name, source) => `${tag} ${name}()\n${source}\n${tag}\n`
       if (calls === 1) {

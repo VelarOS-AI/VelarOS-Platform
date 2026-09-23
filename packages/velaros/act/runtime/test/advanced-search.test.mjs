@@ -299,7 +299,7 @@ test('last reserved call closes softly and blocks fresh evidence reads', async (
         yield finish
       } else {
         assert.equal(request.contextStatus.phase, 'finalizing')
-        assert.match(request.instructions, /最后的报告交付机会/)
+        assert.match(request.compiledPrompt, /最后的报告交付机会/)
         yield {
           type: 'text',
           text: `${block(request, 'execute()', `import {read,report} from 'velaros:evidence';import {output} from 'velaros';try{await read({target:${JSON.stringify(target)}})}catch{}await report({findings:[],gaps:[{code:'UNRESOLVED',detail:'budget ended'}],nextSteps:['continue']});`)}${marker(request)} done`,
@@ -372,7 +372,7 @@ test('a work request that would consume the final token reserve is recompiled as
     }
   })
   f.model.estimate = async (request) => ({
-    tokens: request.instructions.includes('最后的报告交付机会') ? 1000 : 50000,
+    tokens: request.compiledPrompt.includes('最后的报告交付机会') ? 1000 : 50000,
     precision: 'exact',
     basis: 'budget-boundary-fixture',
   })

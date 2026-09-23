@@ -41,7 +41,7 @@ test('INV-28 domain rejection is returned to the next round and a verified repai
           : { verified: true, reason: 'Tests pass' },
     },
     async function* (request) {
-      if (++calls === 2) assert.match(request.instructions, /Test assertion still fails/)
+      if (++calls === 2) assert.match(request.compiledPrompt, /Test assertion still fails/)
       yield* done(request)
     }
   )

@@ -313,7 +313,7 @@ const driver = (
 const finish = { type: 'finish', reason: 'stop' }
 const execute = (request, source) => ({
   type: 'text',
-  text: `${request.instructions.match(/当前帧标记：(\S+)。普通/)[1]} execute()\n${source}\n${request.instructions.match(/当前帧标记：(\S+)。普通/)[1]}`,
+  text: `${request.compiledPrompt.match(/当前帧标记：(\S+)。普通/)[1]} execute()\n${source}\n${request.compiledPrompt.match(/当前帧标记：(\S+)。普通/)[1]}`,
 })
 const snapshotOf = (request) =>
   JSON.parse(JSON.parse(request.materials[0].text).partitions.task.goals[0].text).snapshot
@@ -325,7 +325,7 @@ async function* deliverPatch(request, extra = {}) {
   )
   yield {
     ...part,
-    text: `${part.text}\n${request.instructions.match(/当前帧标记：(\S+)。普通/)[1]} done`,
+    text: `${part.text}\n${request.compiledPrompt.match(/当前帧标记：(\S+)。普通/)[1]} done`,
   }
   yield finish
 }
@@ -370,7 +370,7 @@ test('explicit context request runs a separate leaf at a safe boundary; scripts 
   })
   const maintenance = driver(async function* (request) {
     toolCalls++
-    assert.match(request.instructions, /上下文整理工具/)
+    assert.match(request.compiledPrompt, /上下文整理工具/)
     yield { type: 'usage', inputTokens: 11, outputTokens: 7 }
     yield* deliverPatch(request, { recentRecords: 2 })
   })
@@ -516,7 +516,7 @@ test('last maintenance call directly delivers a partial patch with gaps and no r
       )
       yield finish
     } else {
-      assert.match(request.instructions, /最后交付轮/)
+      assert.match(request.compiledPrompt, /最后交付轮/)
       assert.equal(request.contextStatus.phase, 'finalizing')
       yield* deliverPatch(request, { unresolved: ['Need more evidence'] })
     }
@@ -875,7 +875,7 @@ test('organize plus done delivers the actual outcome in another main request bef
       if (++calls === 1) {
         yield {
           type: 'text',
-          text: `${execute(request, "import {memory} from 'velaros:system';await memory.organize({focus:'Verify next steps'});").text}\n${request.instructions.match(/当前帧标记：(\S+)。普通/)[1]} done`,
+          text: `${execute(request, "import {memory} from 'velaros:system';await memory.organize({focus:'Verify next steps'});").text}\n${request.compiledPrompt.match(/当前帧标记：(\S+)。普通/)[1]} done`,
         }
         yield finish
       } else {
@@ -1295,8 +1295,8 @@ test('an accepted maintenance candidate tells the leaf to finish before parent p
       yield finish
     } else {
       assert.equal(calls, 2)
-      assert.match(request.instructions, /当前候选补丁已通过校验并受理/)
-      assert.match(request.instructions, /applied 回执只在本支线完成之后产生/)
+      assert.match(request.compiledPrompt, /当前候选补丁已通过校验并受理/)
+      assert.match(request.compiledPrompt, /applied 回执只在本支线完成之后产生/)
       yield* done(request)
     }
   })
