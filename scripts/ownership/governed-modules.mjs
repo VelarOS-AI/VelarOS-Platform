@@ -29,6 +29,7 @@
 //   hostPort            注入面里的端口接口名；端口只放真会被调的方法，门禁从模型面入口（surfaceFile，没有就是 toolsFile）出发沿 import 核对
 //   hostPortField       调端口时的字段名（ctx.<字段>.方法 或 this.<字段>.方法）；登记了 hostPort 就必须写
 //   surfaceFile         模型面入口（相对包根）：代码面能力的操作类，或空间的装配表；端口可达性从这里出发。一个单元出几件能力、各有操作类时写成数组
+//   root                单元源码根（相对包根），单元目录不在包根时才填，比如 core 的 src/<单元>
 //   assets              单元里随包发布的非 TypeScript 资产目录（只有能力单元填，写单元目录下的目录名）：比如 helper 脚本。门禁不扫里面的文件，
 //                       但它必须真在、并且写进包清单的 files（`<单元>/<目录>`），不然装出来的包里没有它
 //   status              'migrating' 表示正在按标准改造：问题照查照报条数，不计入失败（改造完删掉这一项）
@@ -37,7 +38,7 @@
 //                       reason 一句话写清为什么必须懒加载。登记过的目标必须真有人加载，没人用的要删
 //   layers          实现文件的分层（文件名），从上到下；上层可以引下层与同层，下层不许引上层；每个实现文件都要登记在某一层
 //   toolDefiner     定义工具的函数名；它只许在工具文件里被调用，保证工具定义一个不漏都在那里
-//   card            模块卡片（相对包根）
+//   （模块说明不用登记：就是模块根目录的 README.md，见 docs/architecture/module-readme.md）
 //   invariants      不变量登记表
 //   acceptance      验收测试文件；每条「测试」档不变量都要在这里有以编号开头的用例
 export const GovernedModules = [
@@ -75,7 +76,6 @@ export const GovernedModules = [
         'ComposedRuntime.ts',
       ],
     ],
-    card: 'act/runtime/MODULE.md',
     invariants: 'act/runtime/invariants.md',
     acceptance: 'act/runtime/test/runtime.test.mjs',
     packageEntry: true,
@@ -117,7 +117,6 @@ export const GovernedModules = [
         'StoreSession.ts',
       ],
     ],
-    card: 'act/system/MODULE.md',
     invariants: 'act/system/spec/invariants.md',
     acceptance: 'act/system/spec/acceptance.test.mjs',
   },
@@ -134,7 +133,6 @@ export const GovernedModules = [
       ['SearchModule.ts', 'EvidenceModule.ts', 'AdvancedSearch.ts'],
       ['SearchOperations.ts', 'EvidenceOperations.ts', 'SearchActivation.ts'],
     ],
-    card: 'act/search/MODULE.md',
     invariants: 'act/search/spec/invariants.md',
     acceptance: 'act/search/spec/acceptance.test.mjs',
     tuning: 'tuning.ts',
@@ -155,7 +153,6 @@ export const GovernedModules = [
       ['AgentsModule.ts', 'InteractionModule.ts'],
       ['AgentsOperations.ts', 'InteractionOperations.ts'],
     ],
-    card: 'act/agents/MODULE.md',
     invariants: 'act/agents/spec/invariants.md',
     acceptance: 'act/agents/spec/acceptance.test.mjs',
   },
@@ -179,7 +176,6 @@ export const GovernedModules = [
       ['EvidenceAccess.ts', 'TurnContextAppendHub.ts'],
     ],
     browserSafeEntries: ['index.ts', 'contracts.ts'],
-    card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'test/context.test.mjs',
   },
@@ -193,7 +189,6 @@ export const GovernedModules = [
     tuning: 'tuning.ts',
     layers: [['AgentSupervisor.ts', 'ActRunService.ts'], ['ActLoop.ts']],
     browserSafeEntries: ['contracts.ts'],
-    card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
   },
@@ -216,7 +211,6 @@ export const GovernedModules = [
       // 兼容层与共享资源目录互不依赖
       ['PlatformCompatibility.ts', 'VelarOSSharedResources.ts'],
     ],
-    card: 'src/platform/MODULE.md',
     invariants: 'src/platform/spec/invariants.md',
     acceptance: 'src/platform/spec/acceptance.test.ts',
   },
@@ -244,7 +238,6 @@ export const GovernedModules = [
       // 按块严格解码一段字节流
       ['TextStreamDecoder.ts'],
     ],
-    card: 'src/text-files/MODULE.md',
     invariants: 'src/text-files/spec/invariants.md',
     acceptance: 'src/text-files/spec/acceptance.test.ts',
   },
@@ -270,7 +263,6 @@ export const GovernedModules = [
       // glob 匹配
       ['PathMatcher.ts'],
     ],
-    card: 'src/path-rules/MODULE.md',
     invariants: 'src/path-rules/spec/invariants.md',
     acceptance: 'src/path-rules/spec/acceptance.test.ts',
   },
@@ -297,7 +289,6 @@ export const GovernedModules = [
       // 留着能撤回的改动
       ['FileChanges.ts'],
     ],
-    card: 'files/MODULE.md',
     invariants: 'files/spec/invariants.md',
     acceptance: 'files/spec/acceptance.test.ts',
   },
@@ -321,7 +312,6 @@ export const GovernedModules = [
       // 代码面 images 命名空间的 view，与本机看图端口，互不依赖
       ['ImageOperations.ts', 'LocalImagePort.ts'],
     ],
-    card: 'images/MODULE.md',
     invariants: 'images/spec/invariants.md',
     acceptance: 'images/spec/acceptance.test.ts',
   },
@@ -352,7 +342,6 @@ export const GovernedModules = [
       // 命令策略与审批请求互不依赖，上面那一层与演练沙箱共用
       ['ShellCommandPolicy.ts', 'ShellCommandApproval.ts'],
     ],
-    card: 'shell/MODULE.md',
     invariants: 'shell/spec/invariants.md',
     acceptance: 'shell/spec/acceptance.test.ts',
   },
@@ -378,7 +367,6 @@ export const GovernedModules = [
       // 落回前的核对、镜像里危险命令的确认请求
       ['RehearsalSandboxRules.ts'],
     ],
-    card: 'sandbox/MODULE.md',
     invariants: 'sandbox/spec/invariants.md',
     acceptance: 'sandbox/spec/acceptance.test.ts',
   },
@@ -416,7 +404,6 @@ export const GovernedModules = [
       ['language/JsTsLanguageService.ts', 'language/PythonLanguageService.ts'],
       ['language/TypeScriptProjectPool.ts'],
     ],
-    card: 'project/MODULE.md',
     invariants: 'project/spec/invariants.md',
     acceptance: 'project/spec/acceptance.test.ts',
   },
@@ -449,7 +436,6 @@ export const GovernedModules = [
       // helper 定位：按平台与资源根找脚本与自带 venv
       ['ComputerHelperLocator.ts'],
     ],
-    card: 'computer/MODULE.md',
     invariants: 'computer/spec/invariants.md',
     acceptance: 'computer/spec/acceptance.test.ts',
   },
@@ -478,7 +464,6 @@ export const GovernedModules = [
       // 一个作用域：读写目录里的条目，排会话开场的索引
       ['MemoryScope.ts'],
     ],
-    card: 'memory/MODULE.md',
     invariants: 'memory/spec/invariants.md',
     acceptance: 'memory/spec/acceptance.test.ts',
   },
@@ -511,7 +496,6 @@ export const GovernedModules = [
       // 运行时：pdfjs 装载、MarkItDown 定位、给 Document Renderer 的渲染面
       ['runtime/'],
     ],
-    card: 'office/MODULE.md',
     invariants: 'office/spec/invariants.md',
     acceptance: 'office/spec/acceptance.test.ts',
   },
@@ -560,7 +544,6 @@ export const GovernedModules = [
         reason: 'vendor DevTools 性能引擎约 2.5 MB，只在解析 trace 与出 insight 时才加载',
       },
     ],
-    card: 'browser/MODULE.md',
     invariants: 'browser/spec/invariants.md',
     acceptance: 'browser/spec/acceptance.test.ts',
   },
@@ -586,7 +569,6 @@ export const GovernedModules = [
       // 能力转发：操作表与 Kernel 调用统一转换成脚本端口
       ['CapabilityOperationPort.ts', 'KernelInvocationPort.ts'],
     ],
-    card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
   },
@@ -624,7 +606,6 @@ export const GovernedModules = [
       // 通用轮询驱动：唯一一个内置驱动，认协议的驱动由宿主注册
       ['PollingDriver.ts'],
     ],
-    card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
   },
@@ -649,7 +630,6 @@ export const GovernedModules = [
       // 进程内内核：模块宿主、唯一调用路径、模块 SDK、mod 信封解析；不碰 Node 模块
       ['runtime/'],
     ],
-    card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
   },
@@ -675,25 +655,17 @@ export const GovernedModules = [
       // provider 集合、静态目录、环境快照、script 注册表、Cloud 绑定、远端目录服务与缓存
       ['providers/'],
     ],
-    card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
   },
 ]
 
 /** 模块卡片必须有的十节标题，顺序不限。 */
-export const RequiredCardSections = [
-  '这是什么',
-  '提供什么',
-  '骨干链路',
-  '依赖什么',
-  '状态归谁',
-  '生命周期',
-  '失败语义',
-  '不变量',
-  '非目标',
-  '结构',
-]
+/** 模块说明 README.md 的小节：必有用法与入口，约定可选，别的不写（规范见 docs/architecture/module-readme.md）。 */
+export const ReadmeSections = { required: ['用法', '入口'], allowed: ['用法', '入口', '约定'] }
+
+/** 一份模块 README 的行数上限：写长了多半是在复述代码或讲历史。 */
+export const ReadmeMaxLines = 160
 
 /** 不变量的五档检验方式。「文字」档没有检验器，在卡片里必须计入「未验证」。 */
 export const InvariantCheckKinds = ['测试', '类型', '门禁', '运行时', '文字']

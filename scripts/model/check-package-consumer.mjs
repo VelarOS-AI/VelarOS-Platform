@@ -56,7 +56,6 @@ const SupportPackageSpecifications = [
 const RequiredPublishedFiles = [
   'package.json',
   'README.md',
-  'examples/minimal.ts',
   'dist/catalog.js',
   'dist/catalog.d.ts',
   'dist/contracts.js',
@@ -64,6 +63,12 @@ const RequiredPublishedFiles = [
   'dist/index.js',
   'dist/index.d.ts',
 ]
+
+/** 取出 README「## 用法」一节里的 ts 代码块（与 check:readme-examples 同一口径）。 */
+function readmeUsageExamples(markdown) {
+  const section = markdown.split(/^## /mu).find((chunk) => chunk.startsWith('用法\n')) ?? ''
+  return [...section.matchAll(/^```(?:ts|typescript)\n([\s\S]*?)^```/gmu)].map((match) => match[1])
+}
 
 export class SynchronousCommandRunner {
   #maxAttempts
@@ -429,11 +434,17 @@ async function writeConsumerProject(consumerDirectory) {
     resolve(RepositoryRoot, 'tests/model/consumer/package-api.ts'),
     join(consumerDirectory, 'package-api.ts')
   )
+  // 装好的包里 README「用法」的示例就是给外部照抄的那份：按真实安装的包、NodeNext 编译一遍
   await mkdir(join(consumerDirectory, 'examples'))
-  await copyFile(
-    join(consumerDirectory, 'node_modules/@velaros-ai/model/examples/minimal.ts'),
-    join(consumerDirectory, 'examples/model.ts')
+  const examples = readmeUsageExamples(
+    await readFile(join(consumerDirectory, 'node_modules/@velaros-ai/model/README.md'), 'utf8')
   )
+  assert.ok(examples.length > 0, '@velaros-ai/model 的 README 缺少「用法」示例')
+  for (const [index, source] of examples.entries())
+    await writeFile(
+      join(consumerDirectory, `examples/readme-${index + 1}.ts`),
+      `${source}\nexport {}\n`
+    )
   await writeFile(
     join(consumerDirectory, 'runtime-import.mjs'),
     `import assert from 'node:assert/strict'

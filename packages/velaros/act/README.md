@@ -6,22 +6,22 @@
 
 | 目录 | 模型操作 | 可用条件 | 使用模板 |
 | --- | --- | --- | --- |
-| [system/ — system-goal](system/MODULE.md) | `get`、`update` | 主会话 | [goal-template.js](system/goal-template.js) |
-| [system/ — system-memory-local](system/MODULE.md) | `list`、`read`、`update`、`plan`、`retain`、`release` | 搜索或未启用整理的会话 | [memory-local-template.js](system/memory-local-template.js) |
-| [system/ — system-memory](system/MODULE.md) | `list`、`read`、`update`、`plan`、`retain`、`release`、`organize` | 具备整理模型的主线或业务子任务 | [memory-template.js](system/memory-template.js) |
-| [system/ — system-memory-persistent-local](system/MODULE.md) | `recall`、`save`、`remove`、`list`、`read`、`update`、`plan`、`retain`、`release` | 主线宿主配置 memory，没有整理模型 | [memory-local-template.js](system/memory-local-template.js) + [memory-long-term-template.js](system/memory-long-term-template.js) |
-| [system/ — system-memory-persistent](system/MODULE.md) | `recall`、`save`、`remove`、`list`、`read`、`update`、`plan`、`retain`、`release`、`organize` | 主线宿主配置 memory，且具备整理模型 | [memory-template.js](system/memory-template.js) + [memory-long-term-template.js](system/memory-long-term-template.js) |
-| [system/ — system-store](system/MODULE.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch`、`publish`、`share`、`set`、`remove`、`create` | 获配创建空间能力 | [store-template.js](system/store-template.js) |
-| [system/ — system-store-write](system/MODULE.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch`、`publish`、`share`、`set`、`remove` | 获配空间写入范围 | [store-write-template.js](system/store-write-template.js) |
-| [system/ — system-store-read](system/MODULE.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch` | 共享空间只读授权 | [store-read-template.js](system/store-read-template.js) |
-| [system/ — modules](system/MODULE.md) | `list`、`search`、`describe` | 默认装配 | [modules-template.js](system/modules-template.js) |
-| [system/ — context-materials](system/MODULE.md) | `list`、`read`、`submit` | 整理作用域 | [context-materials-template.js](system/context-materials-template.js) |
-| [agents/ — interaction](agents/MODULE.md) | `ask`、`capability`、`confirm` | 默认装配 | [interaction-template.js](agents/interaction-template.js) |
-| [agents/ — agents](agents/MODULE.md) | `profiles`、`start`、`resume`、`reply`、`status`、`wait`、`cancel`、`send` | 宿主配置 agents | [template.js](agents/template.js) |
-| [search/ — search](search/MODULE.md) | `profiles`、`search`、`read` | 宿主配置 search | [template.js](search/template.js) |
-| [search/ — evidence](search/MODULE.md) | `query`、`read`、`report` | 搜索作用域 | [evidence-template.js](search/evidence-template.js) |
+| [system/ — system-goal](system/README.md) | `get`、`update` | 主会话 | [goal-template.js](system/goal-template.js) |
+| [system/ — system-memory-local](system/README.md) | `list`、`read`、`update`、`plan`、`retain`、`release` | 搜索或未启用整理的会话 | [memory-local-template.js](system/memory-local-template.js) |
+| [system/ — system-memory](system/README.md) | `list`、`read`、`update`、`plan`、`retain`、`release`、`organize` | 具备整理模型的主线或业务子任务 | [memory-template.js](system/memory-template.js) |
+| [system/ — system-memory-persistent-local](system/README.md) | `recall`、`save`、`remove`、`list`、`read`、`update`、`plan`、`retain`、`release` | 主线宿主配置 memory，没有整理模型 | [memory-local-template.js](system/memory-local-template.js) + [memory-long-term-template.js](system/memory-long-term-template.js) |
+| [system/ — system-memory-persistent](system/README.md) | `recall`、`save`、`remove`、`list`、`read`、`update`、`plan`、`retain`、`release`、`organize` | 主线宿主配置 memory，且具备整理模型 | [memory-template.js](system/memory-template.js) + [memory-long-term-template.js](system/memory-long-term-template.js) |
+| [system/ — system-store](system/README.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch`、`publish`、`share`、`set`、`remove`、`create` | 获配创建空间能力 | [store-template.js](system/store-template.js) |
+| [system/ — system-store-write](system/README.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch`、`publish`、`share`、`set`、`remove` | 获配空间写入范围 | [store-write-template.js](system/store-write-template.js) |
+| [system/ — system-store-read](system/README.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch` | 共享空间只读授权 | [store-read-template.js](system/store-read-template.js) |
+| [system/ — modules](system/README.md) | `list`、`search`、`describe` | 默认装配 | [modules-template.js](system/modules-template.js) |
+| [system/ — context-materials](system/README.md) | `list`、`read`、`submit` | 整理作用域 | [context-materials-template.js](system/context-materials-template.js) |
+| [agents/ — interaction](agents/README.md) | `ask`、`capability`、`confirm` | 默认装配 | [interaction-template.js](agents/interaction-template.js) |
+| [agents/ — agents](agents/README.md) | `profiles`、`start`、`resume`、`reply`、`status`、`wait`、`cancel`、`send` | 宿主配置 agents | [template.js](agents/template.js) |
+| [search/ — search](search/README.md) | `profiles`、`search`、`read` | 宿主配置 search | [template.js](search/template.js) |
+| [search/ — evidence](search/README.md) | `query`、`read`、`report` | 搜索作用域 | [evidence-template.js](search/evidence-template.js) |
 
-共享会话、协议解析、程序版本、结果租约与五分区组装位于 [runtime/](runtime/MODULE.md)。搜索执行与预算在 [search/](search/MODULE.md)。
+共享会话、协议解析、程序版本、结果租约与五分区组装位于 [runtime/](runtime/README.md)。搜索执行与预算在 [search/](search/README.md)。
 
 模型面只有一个来源：各组 `impl/*Operations.ts` 里的操作接口——方法上的 `@AgentView` 说明、`@OperationEffect` 效果与 `@OperationModes` 入口，加上入参与回执类型及其注释。`bun run generate:script` 由它写出各组的 `contract/surface.ts`（给模型的声明、由类型派生的 schema）与 `baselines/script/` 下的同一份声明；`impl/*Module.ts` 只把生成的模型面接到会话端口上，取值上限由实现自己核对。模板位于组目录。
 

@@ -1,202 +1,96 @@
 # @velaros-ai/model
 
-**模型域的唯一包**(model 域,住 `packages/model`)。它回答一件事:
-**「宿主选了 provider + model,怎么变成一个能真正发请求的运行时?」**
+模型域的唯一包：把宿主选的「哪一家、哪个模型、多深的思考」解析成能发请求的语言模型，再包成 `@velaros-ai/agent` 用的 `ModelDriver`，内置 provider 的清单与目录、各家 SDK 适配、受信 provider script、用户自定义 JS 适配器、Velar Cloud 连接绑定与远端模型目录都归它。Node 宿主（Desktop、Workbench、Termel 的主进程）用根入口装配，渲染进程只从 `./catalog` 拿目录与数据。
 
-它拥有 provider id 与清单、模型目录、鉴权与显式环境解析、OpenRouter 路由、
-上下文窗口元数据、provider adapter、provider script 契约、运行时模型解析、
-请求选项、embedding 模型选择、provider 运行时可用性,以及通用模型请求客户端。
-
-依赖只有 `@velaros-ai/core` 与外部模型 SDK(AI SDK 6 系)。
-**不依赖** Agent 执行、Workspace、Computer、System、Office、Browser、Memory 或 Desktop。
-
-## 分区
-
-包按**运行面**切,不按功能切——决定你该进哪个入口的是「你跑在哪」:
-
-| 入口 | 跑在哪 | 内容 |
-| --- | --- | --- |
-| `@velaros-ai/model/contracts` | 任何地方 | 纯类型契约,编译后 JavaScript 为空。UI、配置层、跨进程协议优先从这里拿类型 |
-| `@velaros-ai/model/catalog` | 任何地方 | 纯数据 + 纯函数:`ModelCatalog`、`ProviderManifest`、`LocalModelEnvironment` |
-| `@velaros-ai/model` | browser-safe | 可移植公共 API:契约、catalog、policy、adapter、请求客户端、依赖注入端口 |
-| `@velaros-ai/model/profiles` | 任何地方 | profile 凭据来源解析与脱敏投影，不读取宿主全局环境 |
-| `@velaros-ai/model/provider-retry` | 任何地方 | provider 无关的瞬时错误分类、退避计划与可取消等待 |
-| `@velaros-ai/model/usage` | 任何地方 | usage 归一、注入式定价与聚合原语 |
-| `@velaros-ai/model/node` | Node ≥ 20 | Node 宿主装配:默认 composition、adapter registry、文件系统 provider-script registry、VM adapter、`NodeLocalModelEnvironment` |
-| `@velaros-ai/model/provider-scripts/node` | Node ≥ 20 | 只要 provider-script loader 时的窄入口(自己装 composition 的宿主用) |
-| `@velaros-ai/model/ProviderScriptContextWindow` | 任何地方 | 稳定的上下文窗口兼容入口 |
-
-**不要深挖 `dist/`。**
-
-### 为什么根入口必须 browser-safe
-
-根入口与 `/catalog` **永不读 `process.env`**(也不读 `globalThis.process` 或浏览器全局)。
-浏览器、Worker、测试、远程宿主自己 `new LocalModelEnvironment({...})`,
-只放它愿意暴露的值;或者实现 `ModelEnvironmentPort`,
-作为 `new LocalModelEnvironment({}, port)` 的第二个参数传进去。
-**唯一**把 `process.env` 适配到这个端口的地方是 `/node` 的 `NodeLocalModelEnvironment`
-与默认 composition。这不是洁癖:密钥读取路径一旦有进程级兜底,
-就没法保证某个 composition 看不到另一个 composition 的凭据。
-
-## 核心概念
-
-- **`ModelRuntimeComposition`(`/node`)** —— 对象图。一个应用 / 租户 / 隔离执行环境
-  **各建一个**,里面是 `providerScriptRegistry` / `localModelEnvironment` /
-  `providerCollection` / `velarCloudRuntime` / `modelAdapterRegistry` /
-  `agentModelResolver` / `agentModelRuntime` 七件。
-  它是接口,宿主可以自己实现;`DefaultModelRuntimeComposition` 是包提供的默认实现,
-  `createModelRuntimeComposition()` 是工厂。
-- **`ModelProviderCollection`** —— 清单、catalog、凭据与 runtime config 的统一所有者。
-  可变的 provider-script 状态归**这一个实例**,不从进程全局兜底读。
-- **`ProviderModelCatalogApi`** —— `validateProviderRuntime` 验证连接与凭据，目录查询共用同一供应商协议、宿主 fetch 与请求归属；验证超时覆盖正文读取。动态模型目录统一构造
-  OpenAI-compatible / OpenRouter / Anthropic / Google 的模型列表请求并归一响应。
-  产品仍负责凭据存储、调用时机、IPC 与 UI 投影，并显式注入自己的 composition 与网络传输。
-- **`ModelAdapter`** —— 新增 provider 的抽象基类。内置
-  OpenAI / OpenAI-compatible / Anthropic / Google / DeepSeek / Velar 云
-  以及两个动态形态:`ProviderScriptModelAdapter`(受信脚本)与 `UserJsModelAdapter`(用户 JS)。
-- **`AgentModelResolver` / `AgentModelRuntime`** —— 把宿主的选择解析成 Agent 能直接用的运行时。
-- **`ModelRequestClient` + `ModelRequestTransport`** —— transport 无关的
-  text / object / stream 通用客户端。`AiSdkModelRequestTransport` 是基于 AI SDK 的默认实现;
-  远程网关、测试替身、别家 SDK 各实现一份 transport 即可。
-- **`LocalModelEnvironment` / `ModelEnvironmentPort`** —— 不可变的显式环境快照与最小读取端口
-  (Ollama 的 baseURL / model / 上下文窗口 / 可见模型都从这里解析)。
-- **`VelarCloudModelRuntime`** —— 托管模型连接绑定,**宿主独占**,属于 composition。
-  `velaros` 与 `velar-dev` 各自注册、各自撤销，未注册的服务会直接报错，不会跨服务或向
-  OpenRouter 回退。`velar-dev` 的模型目录由 Cloud 按账户授权动态下发；Platform 将其中的
-  公共模型 ID 作为不透明字符串原样传给 Cloud，不维护静态副本。该服务当前只支持
-  聊天模型，embedding 不会回退到原有 Velar 链路。
-- **横切选项族** —— `PromptCacheModelOptions`(前缀缓存断点)、
-  `ThinkingDepthModelOptions`(推理力度 / OpenRouter reasoning 合并)、
-  `ModelRequestPolicy`、`ProviderRuntimeAvailability`、`EmbeddingModelSelection`。
-- **产品共用连接机制** —— `ModelProfiles` 通过显式配置、凭据库和环境快照解析 profile，
-  `ModelProviderRetry` 提供 provider 无关的瞬时错误分类与可取消退避，`ModelUsage` 统一 usage
-  归一和注入式价格计算。配置文件布局、安全存储、fallback 顺序与使用量展示仍由产品决定。
-- **`createModelKernelModule()`** —— 把 provider 解析做成 Kernel callable capability
-  (`velaros.model`)。**Kernel 从不自己创建或发现 registry**,必须由产品注入。
-
-`ModelRequestService` 是 **deprecated** 的 `ModelRequestClient` 构造与类型兼容别名。
-所有请求使用通用的 `generateText`、`generateObject`、`generateDecodedObject`、`streamText`
-或 `collectTextStream`。`generateObject` 的返回类型由 AI SDK `FlexibleSchema` 推导；需要把
-schema 输出转换成领域值时使用 `generateDecodedObject({ decodeOutput })`，decoder 的输入类型
-仍由 schema 决定。旧 `mapOutput` 仅保留同类型归一化兼容入口。
-场景的提示词、endpoint、输出 schema、超时与回退由产品的场景 owner 组合：Desktop 的聊天
-辅助任务、引导 relay、调度规则、Git 提交标题，以及 Workbench 的行内补全各自维护请求语义。
-Model 统一负责 transport、请求策略和通用输出读取；新增场景不扩展本包的方法清单。
-
-## 典型用法
-
-Node 宿主装配 + 解析一个角色运行时:
+## 用法
 
 ```ts
-import { createModelKernelModule } from '@velaros-ai/model'
-import { createModelRuntimeComposition } from '@velaros-ai/model/node'
+import {
+  createAiSdkModelDriver,
+  createModelRequestClient,
+  createModelRuntimeComposition,
+  ModelErrorCodes,
+  type ModelDriver,
+  type ModelRuntimeContext,
+  type ModelSelection,
+} from '@velaros-ai/model'
 
-const models = createModelRuntimeComposition()
-const modelModule = createModelKernelModule({ registry: models.modelAdapterRegistry })
+// 一个宿主（或租户、隔离环境）一份对象图；环境快照与 provider script 来源都显式给
+const models = createModelRuntimeComposition({
+  environment: {},
+  providerScripts: { configPaths: [] },
+})
 
-await models.agentModelRuntime.resolveRoleRuntime(
-  { provider: 'openai', model: 'gpt-5.5', apiKey: openAiKey, baseURL: '' },
-  {
-    providerRuntimeConfigs: [
-      { provider: 'openai', enabled: true, apiKey: '', baseURL: '', defaultModel: 'gpt-5.5' },
-    ],
-    openRouter: { useFreeModelsForDebug: false },
-  },
+/** 每轮按最新设置解析一次，造出交给 @velaros-ai/agent 的模型驱动。 */
+async function createDriver(
+  selection: ModelSelection,
+  settings: ModelRuntimeContext,
+  signal: AbortSignal
+): Promise<ModelDriver> {
+  const resolved = await models.agentModelRuntime.resolveRoleRuntime(selection, settings, signal)
+  const contextTokens = resolved.contextWindow ?? 128_000
+  const outputTokens = Math.min(12_000, Math.floor(contextTokens / 4))
+  return createAiSdkModelDriver({
+    id: `${resolved.providerId}/${resolved.model}`,
+    model: resolved.provider(resolved.model, resolved.modelRequestOptions),
+    limits: { contextTokens, outputTokens, inputTokens: contextTokens - outputTokens - 4_096 },
+  })
+}
+
+// 产品设置给出的选择，与各 provider 的运行配置
+declare const selection: ModelSelection
+declare const settings: ModelRuntimeContext
+const driver = await createDriver(selection, settings, AbortSignal.timeout(30_000)).catch(
+  (error: unknown) => {
+    // 选中的 provider 没启用或缺配置：引导用户去设置页，本包不会换一家顶上
+    if ((error as { code?: string }).code === ModelErrorCodes.providerUnavailable) return null
+    throw error
+  }
 )
-```
 
-Cloud 授权模型必须按服务绑定；宿主只注入带账户认证的 Cloud `fetch`，不能把上游密钥交给
-Model Runtime。`velar-dev` 的默认 enabled 只表示绑定完成后运行配置可用；账户可见性与授权
-仍由宿主下发的 managed model 列表和 Cloud 服务端决定，未绑定时请求会直接失败：
-
-```ts
-models.velarCloudRuntime.registerProvider('velar-dev', {
-  baseURL: `${cloudBaseURL}/v1/velar-dev`,
-  fetch: authenticatedCloudFetch,
-})
-
-// 退出账户或 Cloud 撤权后立刻移除这一条绑定，不影响原有 Velar。
-models.velarCloudRuntime.unregisterProvider('velar-dev')
-```
-
-可移植宿主显式注入环境(不读进程全局):
-
-```ts
-import { LocalModelEnvironment, OllamaEnvNames } from '@velaros-ai/model/catalog'
-
-const environment = new LocalModelEnvironment({
-  [OllamaEnvNames.baseURL]: settings.ollamaBaseURL,
-  [OllamaEnvNames.chatModel]: settings.ollamaModel,
-})
-const baseURL = environment.resolveOllamaBaseURL('http://localhost:11434')
-```
-
-自带 transport:
-
-```ts
-import { ModelRequestClient } from '@velaros-ai/model'
-
-const client = new ModelRequestClient({ transport })
-const text = await client.generateText({ endpoint: 'my-app.summary', model, prompt })
-```
-
-类型化结构化输出与领域转换：
-
-```ts
-const account = await client.generateObject({
-  endpoint: 'my-app.account',
-  model,
-  system: 'Extract one account.',
-  messages,
-  schema: accountSchema,
-  schemaName: 'Account',
-  schemaDescription: 'One validated account.',
-})
-
-const accountId = await client.generateDecodedObject({
-  endpoint: 'my-app.account-id',
-  model,
-  system: 'Extract one account.',
-  messages,
-  schema: accountSchema,
-  schemaName: 'Account',
-  schemaDescription: 'One validated account.',
-  decodeOutput: (output) => output.id,
+// 辅助任务直接用通用请求客户端；endpoint 是调用方自定的观测标签
+const client = createModelRequestClient()
+const title = await client.generateText({
+  endpoint: 'my-app.commit-title',
+  model: models.agentModelRuntime.createAgentProvider(selection)(selection.model),
+  prompt: '给这段改动写一行提交标题：…',
 })
 ```
 
-`examples/minimal.ts` 随包发布,并在发布门禁里以 NodeNext + `skipLibCheck: false` 编译——
-它是「第三方能不能独立消费本包」的可执行证据,别让它腐烂。
+渲染进程只从 `./catalog` 取目录：
 
-## 生命周期与并发
+```ts
+import { ModelEnvironmentVariables, modelCatalog } from '@velaros-ai/model/catalog'
 
-每个应用 / 租户 / 隔离执行环境**一个 composition**。
-**不要跨安全边界共享 `ProviderScriptRegistry`**:注册或重载 provider script 后,
-只有该实例内的后续解析看得见新状态,其他 composition 不受影响。
-内置 catalog 是不可变模块数据;注入的 provider script 只在注册它的 composition 内可见。
-流式请求的取消由调用方给 `AbortSignal`。
+const suggestions = modelCatalog.suggestedModels('anthropic')
+const model = modelCatalog.resolveModel('anthropic', suggestions[0])
+const contextWindow = modelCatalog.contextWindow('anthropic', model) ?? 128_000
 
-## 错误模型
+// 可移植面不读 process.env：Ollama 地址这类环境值由调用方经端口给
+declare const ollamaBaseURLSetting: string | undefined
+const ollamaBaseURL = modelCatalog.resolveOllamaBaseURL('http://localhost:11434', {
+  read: (name) =>
+    name === ModelEnvironmentVariables.ollamaBaseURL.name ? ollamaBaseURLSetting : undefined,
+})
+```
 
-未知 provider、缺凭据、无适配器、无效 provider script 一律 `AppError`,
-调用方按稳定的 `code` 分支。模型供应商的网络 / 协议错误由 transport 保留 cause 后上抛。
-**provider 可用性检查返回布尔值**,不用异常表达「尚未配置」。
+## 入口
 
-## 边界:本包不负责什么
+| 入口 | 运行环境 | 内容 |
+| --- | --- | --- |
+| `@velaros-ai/model` | Node | 运行时对象图 `createModelRuntimeComposition`、模型驱动 `createAiSdkModelDriver` 与请求编译器 `createProviderRequestCompiler`、通用请求客户端 `createModelRequestClient`、内核模块 `createModelKernelModule`、无状态的 `modelCatalog`、`modelProfiles`、`modelProviderRetry`、`modelUsage`，以及 `./contracts` 的全部内容 |
+| `@velaros-ai/model/catalog` | 任何进程（含渲染进程） | 可移植数据加一份 `modelCatalog`：内置 provider 清单与静态目录、同 provider 内选型、上下文窗口、本机 Ollama 解析 |
+| `@velaros-ai/model/contracts` | 任何进程 | 常量表（provider 清单、错误码 `ModelErrorCodes`、环境变量表）与可移植数据类型 |
 
-不拥有聊天 UI、Desktop 配置持久化、IPC 或工具注册。
-宿主创建一个隔离的 composition,并把它面向 Agent 的不透明运行时注入下去。
-embedding 选择与 provider 可用性辅助函数**总是显式接收** composition 的
-`ModelProviderCollection`,不去找全局。AI SDK 的通用聊天传输由 `AiSdkModelRequestTransport` 实现；Act 使用 `AiSdkModelDriver` 的流式驱动。`ModelTurnRequest.response` 决定文本或 JSON 传输：正式 ScriptAct 使用文本帧，JSON 调用才配置 `Output.object`。`ProviderRequestCompiler` 统一封存文本、材料和真实图片并核对发送预算，ScriptTurnDecoder 在执行前完整校验 ScriptAct 帧。
+## 约定
 
-## 相邻包
-
-| 包 | 关系 |
-| --- | --- |
-| `@velaros-ai/core` | `AppError`、类型守卫与基础原语 |
-| `@velaros-ai/kernel` | ModelTurnRequest、请求编码与模型驱动合同 |
-| `@velaros-ai/agent` | 通过编译器、驱动与重试策略推进模型回合 |
-
-## 门
-
-`check:model-arch`(依赖方向 + 包集合冻结,比对仓根 `velaros.domainVersions.model`)。
+- 绝不换 provider：选中的 provider 没启用、缺凭据或没有适配器时 `resolveRoleRuntime` 抛 `ModelErrorCodes.providerUnavailable`；只在同一 provider 内回退模型，原因写在结果的 `fallbackReason` 与 `resolutionTrace`。
+- 失败按 `error.code` 分支：本域的码在 `ModelErrorCodes`（缺凭据 `credentialMissing`、Cloud 未连接 `cloudNotConnected` 等），入参形状不对是 `VALIDATION`；文案只给人看。
+- 一个宿主、租户或隔离执行环境各建一份对象图：没有模块级单例，provider script、Cloud 绑定与目录缓存都不跨对象图；对象图没有 `dispose`，随宿主进程存活。
+- 不给 `environment` 时装配读一次 `process.env` 快照（各家 API Key 的变量名是清单里的 `defaultApiKeyEnv`）；不给 `providerScripts.configPaths` 时去工作目录与家目录的 `.velaros/dev.json` 找 provider script。
+- 受信 provider script 与宿主同权执行，只从 `.velaros/dev.json` 或 `providerScriptRegistry.registerSource` 登记，来源鉴权归调用方；用户上传的 JS 适配器跑在 VM 沙箱里。
+- Cloud 托管的 `velaros`、`velar-dev` 要在登录后各自 `velarCloudRuntime.registerProvider(id, { baseURL, fetch })`，退出或撤权时 `unregisterProvider`；宿主只注入带账户认证的 `fetch`，未注册就抛 `cloudNotConnected`，不回落 OpenRouter，两者也不互相顶替。
+- `agentModelRuntime` 的两个方法收 `unknown` 并当场收窄，不做业务回退；`resolveRoleRuntime` 的第二个参数签名上可选，实际必须给（各 provider 的运行配置与 OpenRouter 开关）。
+- `./catalog` 与 `./contracts` 不碰 Node 模块、从不读 `process.env`；根入口带 `node:vm` 与 `node:fs`，渲染进程不能加载。
+- 挂进内核用 `createModelKernelModule({ registry: models.modelAdapterRegistry })`：能力 `velaros.model` 只开 `supports_provider` 一条操作，注册表必须由产品显式交进来。
+- 场景的提示词、schema、超时与回退由产品里的场景 owner 组合，本包只负责 transport、请求策略与输出读取，不为新场景加方法。

@@ -53,7 +53,7 @@ const rows = surfaces.map(({ entry, surface }) => {
     .flat()
     .map((name) => `[${name}](${group}/${name})`)
     .join(' + ')
-  return `| [${group}/ — ${entry.namespace}](${group}/MODULE.md) | ${surface.methods.map((name) => `\`${name}\``).join('、')} | ${Activation[entry.namespace]} | ${templates} |`
+  return `| [${group}/ — ${entry.namespace}](${group}/README.md) | ${surface.methods.map((name) => `\`${name}\``).join('、')} | ${Activation[entry.namespace]} | ${templates} |`
 })
 const operations = [
   ...new Set(
@@ -81,7 +81,7 @@ const body = `# Act 能力目录
 | --- | --- | --- | --- |
 ${rows.join('\n')}
 
-共享会话、协议解析、程序版本、结果租约与五分区组装位于 [runtime/](runtime/MODULE.md)。搜索执行与预算在 [search/](search/MODULE.md)。
+共享会话、协议解析、程序版本、结果租约与五分区组装位于 [runtime/](runtime/README.md)。搜索执行与预算在 [search/](search/README.md)。
 
 模型面只有一个来源：各组 \`impl/*Operations.ts\` 里的操作接口——方法上的 \`@AgentView\` 说明、\`@OperationEffect\` 效果与 \`@OperationModes\` 入口，加上入参与回执类型及其注释。\`bun run generate:script\` 由它写出各组的 \`contract/surface.ts\`（给模型的声明、由类型派生的 schema）与 \`baselines/script/\` 下的同一份声明；\`impl/*Module.ts\` 只把生成的模型面接到会话端口上，取值上限由实现自己核对。模板位于组目录。
 

@@ -1,15 +1,81 @@
 # @velaros-ai/agent
 
-Act 执行核心：持久运行控制、单一模型循环、有界子运行调度。
+Act 执行核心：一个会话的持久运行控制（`createActRunService`）、单一模型循环，以及有界的子任务调度（`createAgentSupervisor`）。正式宿主经 `@velaros-ai/velaros` 的 `createRuntime` 使用它，那里已装好 ScriptAct 协议、上下文帧策略、执行入口与预算；自己装配的宿主按下面的端口接入，界面只要数据时用 `./contracts`。
 
-正式宿主从 `@velaros-ai/velaros.createRuntime` 装配存储、模型、Script runner 与领域模块，再通过 session 的 `submit / steer / answer / inspect / events / cancel / close` 工作。需要自定义宿主时，根入口提供 `createActRunService` 和 `createAgentSupervisor`；纯数据使用 `@velaros-ai/agent/contracts`。
+## 用法
 
-主任务与高级搜索共享同一个循环和 ScriptAct 执行链。上下文使用 task/workspace/observation/recent/runtime 五分区，通过驻留材料和近期窗口策略控制各类任务的可见内容；模型调用由 Model 编译发送；世界操作由 Kernel 校验、派发和记录回执。
+```ts
+import {
+  createActRunService,
+  type ActContextPort,
+  type ActExecutionPort,
+  type ActInteraction,
+  type ActProtocolPort,
+} from '@velaros-ai/agent'
+import { createContextRuntime, createContextView, type ContextStorage } from '@velaros-ai/context'
+import type { ModelDriver } from '@velaros-ai/kernel'
 
-`submit({text,task:'continue'})` 沿用逻辑任务与总预算，`task:'new'` 创建新任务。`needs_reconcile` 必须通过宿主核对真实效果后推进。
+// 宿主提供：存储、模型驱动（@velaros-ai/model 造）、ScriptAct 协议、上下文帧策略、统一执行入口
+declare const storage: ContextStorage
+declare const model: ModelDriver
+declare const protocol: ActProtocolPort
+declare const frames: ActContextPort
+declare const execution: ActExecutionPort
+declare function askUser(request: ActInteraction): Promise<unknown>
 
-子运行的请求保存在 `AgentJob.pending`；`wait/waitAny` 可因提问返回，`reply` 绑定原运行回答。`resume` 使用结构化 `AgentResume`，只在收束后更换 profile/writes/stores/materials，保持同一会话与预算。当前接口变更和验收见仓库的 `docs/engineering/act-cooperation-delta.md`。
+const sessionId = 'session-1'
+const context = createContextRuntime({ sessionId, storage })
+const view = createContextView({ sessionId, storage, context, sources: [] })
+const session = createActRunService({
+  sessionId,
+  storage,
+  context,
+  view,
+  model,
+  protocol,
+  frames,
+  execution,
+  instructions: '你是这个项目里的执行助手。',
+  limits: {
+    turns: 200,
+    outputTokens: 4_096,
+    safetyTokens: 1_024,
+    projectionChars: 400_000,
+    recoveryChars: 6_000,
+    timeoutMs: 3_600_000,
+  },
+})
 
-验证：`bun run build`、`bun test spec/acceptance.test.ts`、`bun run check:browser`。完整链路验收在 Velaros 的 `act/runtime/test/act-run.test.mjs` 与 `act/runtime/test/act-children.test.mjs`。
+for await (const event of session.submit({ text: '修好 README 里的错别字', task: 'new' })) {
+  if (event.type === 'text') console.log(event.text)
+  else if (event.type === 'interaction')
+    await session.answer({
+      id: event.request.id,
+      runId: event.runId,
+      value: await askUser(event.request),
+    })
+  else if (event.type === 'state' && event.status === 'needs_reconcile')
+    console.warn('有操作的真实效果未知，核对之后才能继续')
+}
+await session.close()
+```
 
-源码统一使用 `contract/types/impl/utils`：`contract/provides.ts` 登记公开类接口，`contract/requires.ts` 声明注入端口，`types/` 保存数据和内部工作类型，类接口与实现同文件。入口和运行环境边界见 MODULE.md。
+## 入口
+
+| 入口 | 运行环境 | 内容 |
+| --- | --- | --- |
+| `@velaros-ai/agent` | Node | 运行服务 `createActRunService`、子任务调度 `createAgentSupervisor`、宿主要实现的端口，以及 `./contracts` 的全部数据 |
+| `@velaros-ai/agent/contracts` | 任何进程 | 输入、事件、运行快照、交互、预算与子任务句柄等可移植数据 |
+
+## 约定
+
+- 一个会话同一时刻只有一个运行：运行中再 `submit` 抛 `CLOSED`；运行中的补充用 `steer`，它从到达起抢占还没被接受的模型响应，在轮边界递交，没有活动运行时抛 `UNAVAILABLE`。
+- 提前退出 `submit` 的迭代就是取消这次运行；终态的 `state` 事件要等执行、租约与帧的收尾全部完成才发出。
+- 执行端口要问用户时调 `request(kind, message, signal)`，它发出 `interaction` 事件并等 `answer`；回答只认当前运行的那一次交互，重复或过期抛 `CONFLICT`，运行结束时没回答的一律拒绝。
+- `needs_reconcile` 表示有操作的真实效果未知，宿主核对之后才能推进；子任务同样停在这个状态，不会算作完成。
+- `task: 'new'` 开新的逻辑任务与总预算（旧任务归档保留），缺省 `continue` 沿用原任务。
+- `inputId` 只是宿主的消息身份，原样回到 `input`、`input-applied`、`input-retained` 回执里，不做重复提交去重；`input-applied` 只说明输入进了某次已归档的模型请求，不证明供应商已经收到。
+- 输入或已接受的响应落不了盘时，不派发模型也不执行脚本：`submit` 的迭代抛出原错误，运行记为可恢复的 `failed`。
+- 运行事件与状态都在 `ContextStorage` 里：`events(after)` 按持久序号重放，重启后 `inspect()` 给出恢复的状态；运行服务自己只持有本进程的取消权与待回答的交互。
+- `createAgentSupervisor` 在启动子任务前就核对额度：累计超过 `maxChildren` 抛 `LIMIT`（跨重启与继续不重置，显式新任务才重新计数），并发已满或 `writes` 与活动子任务重叠抛 `CONFLICT`；父运行结束或取消时由宿主调 `cancelParent` 收束它的子任务。
+- 子任务的 `job.result` 指向父会话里的一条结果摘要：只内嵌有界的事件尾部并报告略去条数（`omittedEvents`），完整事件在子会话里。

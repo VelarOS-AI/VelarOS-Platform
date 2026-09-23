@@ -26,7 +26,7 @@
   },
   "files": [
     "dist",
-    "MODULE.md"
+    "README.md"
   ],
   "scripts": {
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/normalize-package-declarations.mjs",

@@ -1,79 +1,92 @@
-# `@velaros-ai/agent-lab`
+# @velaros-ai/agent-lab
 
-VelarOS Agent Lab 是 host 无关的真实任务评测基础设施。默认输入不是预写题库，而是产品已经执行过的普通任务：
-宿主把任务身份、执行 span、独立验收、产物和用户反馈归一成 `RealTaskRecord`；包内用纯函数重算任务结果、
-执行健康、问题发现和本地报告，不调用模型。
+可复现的 agent 评测：让被测执行体在同一个会话里依次走完一条旅程的每一段，落成不可变归档，再出报告、算统计、做认证；另一条线审计产品里一次普通运行留下的真实任务记录，值得长期复现的再固化成复跑用例。给评测套件、产品宿主与第三方执行体用，命令行是 `velaros-agent-lab`。
 
-只有值得长期复现的问题，才被人工审阅并固化成 `RealTaskCase`。原有 Journey / Driver / runner 继续提供
-隔离单案例复跑和明确批准的研究矩阵，不再意味着每次改动都应跑固定产品电池。
-
-## 公开入口
-
-只有两个入口，里面的东西由合同控制（`src/contract/provides.ts` 与 `requires.ts`）：
-
-| 入口 | 给谁用 | 里面有什么 |
-| --- | --- | --- |
-| `@velaros-ai/agent-lab` | Node 进程（评测套件、CLI 壳） | 九件能力的实例、两个注册处的工厂、注入面与全部数据类型 |
-| `@velaros-ai/agent-lab/contracts` | 任何进程，含渲染进程与第三方工具链 | 常量表与可移植数据，不碰 Node |
-
-九件能力：`labWire`（线格式校验）、`journeyRunner`（跑旅程与 job）、`labDrivers`（驱动装配与登记）、
-`labArchives`（归档读写）、`labReports`（报告）、`labStatistics`（统计）、`labCertification`（认证）、
-`realTaskWorkload`（真实任务）、`adaptiveCampaign`（自适应战役），外加 `agentLabCli` 与两个注册处工厂
-`createDetectorRegistry` / `createVerifierRegistry`。
-
-## 本包不认宿主
-
-本包不认识任何具体执行体，也不读任何环境变量、凭据文件或宿主数据目录。宿主要塞进来的东西全部在
-`contract/requires.ts`：`LabDriver`（执行体驱动）、`PollingDriverAdapter`（轮询适配器）、`LabDriverProvider`
-（宿主自带驱动的注册点）、`Verifier` / `Detector`、`AgentLabRuntime` 与 `AgentLabRuntimeLoader`。
+## 用法
 
 ```ts
-import { labDrivers, createDetectorRegistry } from "@velaros-ai/agent-lab";
+import {
+  createDetectorRegistry,
+  createVerifierRegistry,
+  journeyRunner,
+  labArchives,
+  labDrivers,
+  labReports,
+  type PollingDriverAdapter,
+  type TrialSpec,
+} from '@velaros-ai/agent-lab'
 
-// 宿主把认自己协议的驱动登记进来（例如 Desktop 的 Velar Hooks 驱动）
-labDrivers.register({ id: "velar-hooks", create: (parameters) => createMyHooksDriver(parameters) });
+// 宿主提供：会开会话、发提示词、报原生执行态的适配器；旅程定义（JSON）与这次试验的身份
+declare const adapter: PollingDriverAdapter
+declare const journey: unknown
+declare const trial: TrialSpec
+declare function testsPass(workspaceRoot: string): Promise<boolean>
 
-// 要按工具名判的两类，由宿主给名单；不给就不出对应判词
-const detectors = createDetectorRegistry();
-detectors.registerBuiltins({
-  catalogToolNames: ["tooling:map"],
-  interactiveToolNames: ["interaction:ask_user"],
-});
+// 结果只由验证器定：判据里的 verifierId 都要注册；判不了回 void，不算过也不算没过
+const verifiers = createVerifierRegistry()
+verifiers.register('tests-pass', async ({ workspaceRoot }) => {
+  if (!workspaceRoot) return { kind: 'void', cause: 'verifier-unavailable', detail: '没有工作区', evidence: {} }
+  return (await testsPass(workspaceRoot))
+    ? { kind: 'pass', credit: 1, evidence: {} }
+    : { kind: 'fail', credit: 0, failureClass: 'execution-alignment', reason: '测试没过', evidence: {} }
+})
+
+// 内置探测器；要按工具名判的两类由宿主给名单，不给就不出对应判词
+const detectors = createDetectorRegistry()
+detectors.registerBuiltins({ interactiveToolNames: ['ask_user'] })
+
+const archive = await journeyRunner.runJourney({
+  jobId: 'nightly',
+  suiteId: 'my-product',
+  trial,
+  journey,
+  driver: labDrivers.createPolling(adapter, { confirmation: 'reject' }),
+  detectors,
+  verifiers,
+  workspaceRoot: '/tmp/agent-lab/workspace',
+  sourceCommit: null,
+  consumerCommit: null,
+})
+// passed 为 null 是判不了；环境原因的丢弃在 drops 里，不进分子也不进分母
+console.log(archive.legs.map((leg) => [leg.legId, leg.passed]), archive.drops)
+await labArchives.writeRunArchive('./runs', archive)
+const html = labReports.renderRunReportHtml([labReports.createRunReportModel(archive)])
+await labArchives.writeReportFile('./runs/report.html', html)
 ```
-
-## 真实任务审计
 
 ```ts
-import { labArchives, labWire, realTaskWorkload } from "@velaros-ai/agent-lab";
+import { labArchives, labWire, realTaskWorkload } from '@velaros-ai/agent-lab'
 
-const record = labWire.parseRealTaskRecord(hostCapturedTask);
-const assessment = realTaskWorkload.audit(record);
-await labArchives.writeRealTaskBundle("./artifacts/task-1", record, assessment);
+// 宿主把产品里一次普通运行归一成真实任务记录：任务身份、执行跨度、验收、产物与用户反馈
+declare const captured: unknown
+
+const record = labWire.parseRealTaskRecord(captured)
+const assessment = realTaskWorkload.audit(record)
+// outcome 只看验收断言与用户反馈，health 只看执行过程，verdict 是两者合起来的一句话
+console.log(assessment.outcome, assessment.health, assessment.verdict, assessment.findings.length)
+await labArchives.writeRealTaskBundle('./audit/task-1', record, assessment)
 ```
-
-`outcome` 只由独立验收或用户确认决定；`health` 只描述执行过程。结果正确但工具出错、顺序重试或存在
-未验收副作用时会得到 `verified-pass-with-issues`，不会被一个总分掩盖。没有验收就是 `unknown`。
-
-`labReports.renderRealTaskReportHtml` 不嵌入 prompt、回答、绝对路径或产物正文。宿主决定是否在本地记录中保留这些
-内容；固化案例必须显式审阅 prompt、隔离快照引用和至少一条确定性验收契约。
-
-## CLI
 
 ```bash
-velaros-agent-lab validate real-task record.json
-velaros-agent-lab validate case case.json
 velaros-agent-lab audit-record record.json --output ./audit
-
-# 以下只用于显式案例/研究矩阵
-velaros-agent-lab validate journey journey.json
 velaros-agent-lab run --job job.json --runtime ./agent-lab.runtime.mjs
 velaros-agent-lab report runs/ --output report.html
 velaros-agent-lab compare runs/ --a internal --b codex
+velaros-agent-lab certify runs/ --policy policy.json --subject subject.json --executor internal
 ```
 
-装出来的命令是 `velaros-agent-lab`，可执行文件在包根 `bin/velaros-agent-lab.mjs`：它只是壳，把
-`process.argv` 与一个动态 import 的运行时加载器交给 `agentLabCli.run(argv, options)`，再把返回的两段文字
-写出去、设置退出码；`src` 下没有副作用。
+## 入口
 
-核心包不依赖 Desktop、Electron、供应商 SDK 或其他 VelarOS 包（只依赖 `zod`）。真实存储采集、命令/文件/browser
-验收、隔离快照和用户反馈入口由产品宿主实现。设计与接入细节见 Platform `docs/agent-lab/`。
+| 入口 | 运行环境 | 内容 |
+| --- | --- | --- |
+| `@velaros-ai/agent-lab` | Node | 跑旅程 `journeyRunner`、驱动 `labDrivers`、归档 `labArchives`、报告 `labReports`、统计 `labStatistics`、认证 `labCertification`、真实任务 `realTaskWorkload`、自适应战役 `adaptiveCampaign`、线格式校验 `labWire`、命令行 `agentLabCli`，两个注册处的工厂，注入面（驱动、轮询适配器、验证器、探测器、套件运行时） |
+| `@velaros-ai/agent-lab/contracts` | 任何进程 | 线格式的常量表（schema 身份、枚举、上限 `AgentLabLimits`、缺省阈值）与全部载荷的数据类型 |
+
+## 约定
+
+- 不认宿主：包里只有通用轮询驱动（预算、审批策略、稳定空闲判定都在它里面，适配器只报原生状态）；认自己协议的驱动由宿主实现，`labDrivers.register` 登记、`labDrivers.create(id)` 取。不读环境变量，只依赖 `zod`。
+- 判据引用的验证器、旅程声明的门探测器没注册，或试验的旅程 id、版本和定义对不上，`runJourney` 当场抛错；驱动报不出能力或身份、开会话或准备工作区失败、验证器回 `void`，都记进 `drops`，不抛。
+- 段内抛错折成 `unavailable` 收敛结局，旅程停在那一段、照样出归档；会话不论走到哪一步都关一次，关失败记成一条判词。`runJob` 一个试验失败就停止派发、等在飞的收尾，再抛第一个错。
+- 线格式不合法、run id 不能当目录名、评估不属于这条记录、复跑用例缺复核过的提示词、隔离工作区或验收门时当场抛错；判结果看结构（`drops`、`settleOutcome.kind`、`verdict`、退出码），不看文字。
+- 真实任务的 `outcome` 只由验收断言与用户反馈定：用户拒绝或有断言失败是 `fail`，断言全过才是 `pass`，一条断言都没有是 `unknown`；结果过了但执行不健康是 `verified-pass-with-issues`。`renderRealTaskReportHtml` 不嵌入提示词、回答、绝对路径与产物正文。
+- 命令行不抛错，问题都折成 stderr 与退出码（0 正常、1 失败、2 判不了）；`run --runtime <模块>` 要求模块导出 `createAgentLabRuntime` 或默认工厂，返回 `AgentLabRuntime`。宿主接入见 [接入手册](../../docs/agent-lab/integration.md)。

@@ -31,4 +31,5 @@
 - 入口文件只转发，与 package.json 的 exports 及 dist 目标对应；普通包、能力单元和登记为 packageEntry 的根入口按各自映射处理。公开面由合同控制，实现类、内部接口和 utils 不作为公开 API。新增子路径必须有能力边界或运行环境边界依据，不增加同一职责的重复入口。
 - 注入集中在 requires.ts。环境变量按所属模块的常量表和 environmentPrefixes 登记。依赖优先使用文件头静态导入，不用内联 import 类型；源码动态 import 仅允许登记的 lazyImports 目标及加载文件，bin 启动壳按自己的运行边界处理。
 - browserSafeEntries 的完整值依赖链不得加载 Node 内置模块。能力单元的 spec/test 和登记的 assets 按各自用途管理；不要把非源码资产混进实现分层。
-- 验收承诺、MODULE.md、invariants、生成声明和模板必须一致。修改公开合同或模型操作时，在差量报告逐项说明理由与影响；改变已有验收承诺必须解释。每轮交付差量报告，`bun run check:module-ownership` 必须通过。
+- 每个模块只有模块根目录的一份 README.md（规范见 `docs/architecture/module-readme.md`）：标题下一两句、`## 用法`（能照抄的最小示例，`check:readme-examples` 按真实类型检查）、`## 入口`（列全公开子路径）、可选 `## 约定`；导出清单、目录结构、依赖、不变量条数不写进文档。
+- 验收承诺、README、invariants、生成声明和模板必须一致。修改公开合同或模型操作时，在差量报告逐项说明理由与影响；改变已有验收承诺必须解释。每轮交付差量报告，`bun run check:module-ownership` 必须通过。

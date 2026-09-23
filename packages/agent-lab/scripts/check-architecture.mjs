@@ -111,7 +111,6 @@ for (const root of PureRoots) {
 const requiredFiles = [
   'README.md',
   'CHANGELOG.md',
-  'MODULE.md',
   `bin/${BinaryCommand}.mjs`,
   'src/index.ts',
   'src/contracts.ts',

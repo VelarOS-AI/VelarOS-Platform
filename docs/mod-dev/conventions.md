@@ -6,4 +6,4 @@
 
 状态按拥有者管理：Context 保存原文、检查点和调用记录；StoreStorage 保存共享对象和消息；领域端口管理真实外界资源；宿主负责连接、身份和范围。日志或派生摘要不能覆盖原始事实。
 
-修改公开合同、模型操作或验收承诺时提交逐项差量报告。使用 [模块规范](../architecture/module-ownership.md)、[工程规范](../engineering/code-standard.md) 和实际 MODULE.md，运行相应类型、行为、生成与所有权检查。
+修改公开合同、模型操作或验收承诺时提交逐项差量报告。使用 [模块规范](../architecture/module-ownership.md)、[工程规范](../engineering/code-standard.md)、[模块说明规范](../architecture/module-readme.md) 和模块根目录的 README.md，运行相应类型、行为、生成与所有权检查。

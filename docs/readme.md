@@ -76,7 +76,7 @@ Host products own their adapters, installation UI, and product-specific policies
 | Document | Purpose |
 | --- | --- |
 | [Memory slimming (ADR 0010)](decisions/0010-memory-slimming.md) | Historical decision establishing host-scoped Markdown memory |
-| [Memory module card](../packages/velaros/memory/MODULE.md) | The host memory store used by system.memory.recall/save/remove |
+| [Memory module README](../packages/velaros/memory/README.md) | The host memory store used by system.memory.recall/save/remove |
 
 Historical review and revision documents remain evidence of prior decisions. They must be clearly labeled as historical and cannot override current schemas, tests, architecture documents, or accepted decision records.
 

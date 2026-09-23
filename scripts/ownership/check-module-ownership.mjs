@@ -26,8 +26,9 @@
 //      可执行入口放包根 bin/：package.json 的 bin 指 ./bin/<命令>.mjs，文件在、带 #!/usr/bin/env node、files 里有 bin。
 //      能力单元（登记了 unit 的模块，几个模块按目录放在一个包里）：源码根是包里的单元目录（登记了 root 时是 root，比如 core 的 src/<单元>），入口是 ./<单元> 与 ./<单元>/…，
 //      编译到 dist/<单元>/；单元目录下另有 spec/ 与 test/，不算源码。登记的名字写成「包名/单元」。
-//  10. 模块卡片十节齐全；「提供什么」列出全部入口、导出的每个值和每个公开接口；「骨干链路」点到每个工具；「结构」写明目录树。
-//  11. 不变量登记表每行编号唯一、检验方式合法、检验器真的存在；卡片里的条数如实。包的 test 脚本跑验收测试。
+//  10. 模块说明：模块根目录只有一份 README.md（MODULE.md 已取消，子目录不放说明），必有「用法」示例与列全公开子路径的「入口」，
+//      只许用法、入口、约定三节，不超过 ReadmeMaxLines 行（规范见 docs/architecture/module-readme.md）。
+//  11. 不变量登记表每行编号唯一、检验方式合法、检验器真的存在。包的 test 脚本跑验收测试。
 //  12. 常量分四处：对外承诺的在 contract/constants.ts，每个数字上限有中文说明；可调参数只在登记的 utils/<tuning>：导出的冻结表，只放数字，每项有说明、每项有人用；
 //      impl 的模块级只放日志与导出的实例，类里固定用的写成 private static readonly；impl 与 utils 里不许散写数字缺省值
 //      （模块级数字常量、`?? 数字`、参数缺省写数字、名字像超时/上限/缓冲的属性写数字；0 与 1 除外）；
@@ -39,7 +40,12 @@ import { basename, dirname, extname, join, relative, resolve } from 'node:path'
 
 import ts from 'typescript'
 
-import { GovernedModules, InvariantCheckKinds, RequiredCardSections } from './governed-modules.mjs'
+import {
+  GovernedModules,
+  InvariantCheckKinds,
+  ReadmeMaxLines,
+  ReadmeSections,
+} from './governed-modules.mjs'
 
 const RepoRoot = resolve(import.meta.dir, '../..')
 /** 生成的 contract/surface.ts 的第一行；手写的文件冒充不了。 */
@@ -189,7 +195,24 @@ function countNested(node) {
   return count
 }
 
-/** 按「## 标题」把卡片切成小节。 */
+/** 模块目录里的 Markdown 文件；构建产物、依赖、vendor 与登记的资产目录不算。 */
+function walkDocuments(root, assets) {
+  const found = []
+  const visit = (directory, depth) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const full = join(directory, entry.name)
+      if (entry.isDirectory()) {
+        if (['node_modules', 'dist', 'vendor'].includes(entry.name)) continue
+        if (depth === 0 && assets.includes(entry.name)) continue
+        visit(full, depth + 1)
+      } else if (/\.md$/iu.test(entry.name)) found.push(full)
+    }
+  }
+  if (existsSync(root)) visit(root, 0)
+  return found
+}
+
+/** 按「## 标题」把说明文档切成小节。 */
 function sectionsOf(markdown) {
   const sections = new Map()
   for (const chunk of markdown.split(/^## /mu).slice(1)) {
@@ -1805,43 +1828,54 @@ for (const module of selectedModules) {
     )
   }
 
-  // ── 10. 模块卡片 ───────────────────────────────────────────────────────
-  const cardPath = join(packageRoot, module.card)
-  let sections = new Map()
-  if (!existsSync(cardPath)) {
-    fail(`${label}: 缺少模块卡片 ${module.card}`)
+  // ── 10. 模块说明 ───────────────────────────────────────────────────────
+  // 规范在 docs/architecture/module-readme.md：模块根目录只有一份 README.md，「用法」给最小示例、「入口」列全公开子路径，
+  // 导出清单、目录结构、依赖与不变量条数都有唯一出处，不在文档里重复；示例代码的类型由 check:readme-examples 核对。
+  const moduleRoot = unit ? srcRoot : packageRoot
+  const readmePath = join(moduleRoot, 'README.md')
+  // 模块目录里的 Markdown 只许三份：根目录的 README.md、登记的不变量表、根目录的 CHANGELOG.md
+  const allowedDocuments = [
+    readmePath,
+    join(packageRoot, module.invariants),
+    join(moduleRoot, 'CHANGELOG.md'),
+  ]
+  for (const document of walkDocuments(moduleRoot, module.assets ?? [])) {
+    if (!allowedDocuments.includes(document))
+      fail(
+        `${label}: ${shortPath(document)} 不该有；模块说明只写模块根目录的 README.md（MODULE.md 已取消，子目录不放说明文档）`
+      )
+  }
+  if (!existsSync(readmePath)) {
+    fail(`${label}: 缺少模块说明 ${shortPath(readmePath)}`)
   } else {
-    sections = sectionsOf(readFileSync(cardPath, 'utf8'))
-    for (const title of RequiredCardSections) {
-      if (!sections.has(title)) fail(`${label}: 卡片缺少「## ${title}」一节`)
+    const readme = readFileSync(readmePath, 'utf8')
+    const sections = sectionsOf(readme)
+    const firstSection = readme.search(/^## /mu)
+    if (!/^# \S/u.test(readme)) fail(`${label}: ${shortPath(readmePath)} 第一行要是「# 模块名」`)
+    if (!readme.slice(readme.indexOf('\n') + 1, firstSection < 0 ? undefined : firstSection).trim())
+      fail(`${label}: ${shortPath(readmePath)} 标题下要有一两句：它做什么、给谁用`)
+    for (const title of ReadmeSections.required) {
+      if (!sections.has(title)) fail(`${label}: ${shortPath(readmePath)} 缺少「## ${title}」`)
     }
-    const provides = sections.get('提供什么') ?? ''
+    for (const title of sections.keys()) {
+      if (!ReadmeSections.allowed.includes(title))
+        fail(
+          `${label}: ${shortPath(readmePath)} 不写「## ${title}」；只有${ReadmeSections.allowed.join('、')}三节，设计细节放进 docs/architecture 再链接`
+        )
+    }
+    if (!/^```(?:ts|typescript)\n/mu.test(sections.get('用法') ?? ''))
+      fail(`${label}: ${shortPath(readmePath)} 的「用法」要有至少一段 ts 示例`)
+    const entries = sections.get('入口') ?? ''
     for (const subpath of subpaths) {
-      if (!provides.includes(`\`${subpath}\``))
-        fail(`${label}: 卡片「提供什么」没有列出入口 \`${subpath}\``)
+      const specifier = subpath === '.' ? packageName : `${packageName}/${subpath.slice(2)}`
+      if (!entries.includes(`\`${specifier}\``))
+        fail(`${label}: ${shortPath(readmePath)} 的「入口」没有列出 \`${specifier}\``)
     }
-    for (const record of exported.values()) {
-      if (record.isValue && !provides.includes(`\`${record.name}\``))
-        fail(`${label}: 卡片「提供什么」没有列出导出的 \`${record.name}\``)
-    }
-    for (const statement of publicDeclarations) {
-      if (!provides.includes(`\`${statement.name.text}\``))
-        fail(`${label}: 卡片「提供什么」没有列出公开接口 \`${statement.name.text}\``)
-    }
-    const chains = sections.get('骨干链路') ?? ''
-    if (module.toolsFile && !chains.includes(basename(module.toolsFile)))
-      fail(`${label}: 卡片「骨干链路」没有点到工具文件 ${basename(module.toolsFile)}`)
-    for (const toolName of toolNames) {
-      if (!chains.includes(`\`${toolName}\``))
-        fail(`${label}: 卡片「骨干链路」没有写工具 ${toolName} 的链路`)
-    }
-    const structure = sections.get('结构') ?? ''
-    if (module.toolsFile && !structure.includes(basename(module.toolsFile)))
-      fail(`${label}: 卡片「结构」没有写明工具文件 ${basename(module.toolsFile)}`)
-    for (const directory of governedDirectories) {
-      if (!new RegExp(`^\\s+${directory}/\\s`, 'mu').test(structure))
-        fail(`${label}: 卡片「结构」的目录树里没有列出 ${directory}/`)
-    }
+    const lineCount = readme.trimEnd().split('\n').length
+    if (lineCount > ReadmeMaxLines)
+      fail(
+        `${label}: ${shortPath(readmePath)} 有 ${lineCount} 行，超过 ${ReadmeMaxLines} 行；先看是不是在复述代码或者在讲历史`
+      )
   }
 
   // ── 11. 不变量登记表与验收测试 ─────────────────────────────────────────
@@ -1918,13 +1952,6 @@ for (const module of selectedModules) {
       } else if (kind === '文字' && reference) {
         fail(`${label}: ${id} 是文字档，检验器应留空`)
       }
-    }
-    const invariantSection = sections.get('不变量') ?? ''
-    if (sections.size > 0 && !invariantSection.includes(`共 ${seenIds.size} 条`)) {
-      fail(`${label}: 卡片「不变量」要写「共 ${seenIds.size} 条」`)
-    }
-    if (sections.size > 0 && !invariantSection.includes(`未验证 ${counts['文字']} 条`)) {
-      fail(`${label}: 卡片「不变量」要如实写「未验证 ${counts['文字']} 条」`)
     }
   }
   if (!(manifest.scripts?.test ?? '').includes(module.acceptance))

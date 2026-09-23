@@ -1,6 +1,6 @@
 # 模块结构与所有权
 
-模块登记在 `scripts/ownership/governed-modules.mjs`。该表决定源码根、布局、模型能力入口、实现层级、运行环境、资产和验收位置；包清单决定真实宿主导出。`check-module-ownership.mjs` 对全部登记模块执行同一套结构、分层与合同检查。新增或修改模块时，先读该模块登记与 MODULE.md，再修改其责任范围。
+模块登记在 `scripts/ownership/governed-modules.mjs`。该表决定源码根、布局、模型能力入口、实现层级、运行环境、资产和验收位置；包清单决定真实宿主导出。`check-module-ownership.mjs` 对全部登记模块执行同一套结构、分层与合同检查。新增或修改模块时，先读该模块登记与 README.md，再修改其责任范围。
 
 ## 源码根与统一布局
 
@@ -84,13 +84,13 @@ Core 的 `src/` 基础原语遵守其包级检查；Core 的 platform/text-files
 - `packageEntry: true`：单元承载包根入口；当前 Velaros 的 `.` 映射到 `dist/act/runtime/index.js`。以清单中的完整映射为准。
 - 新增子路径必须由独立能力单元或运行环境边界支撑，不能为同一职责堆叠入口。可移植数据与 Node 本机适配器分别在 contracts/local/node/renderer 等已声明入口发布。
 - browserSafeEntries 的整条值依赖链不能加载 Node 内置模块；名字叫 contracts 或 renderer 并不自动证明可在浏览器运行。
-- 单元旁的 MODULE.md、模板、spec/test 和登记的 assets 属于说明、验收或分发资产；资产须进入 package.json files，不能混入源码层级。
+- 单元根目录的 README.md、模板、spec/test 和登记的 assets 属于说明、验收或分发资产；资产须进入 package.json files，不能混入源码层级。
 - 可执行入口在包根 bin，清单登记目标、shebang 和分发文件。启动壳只转交进程参数及环境，业务行为由包内能力承担。
 
 ## 验收与差量报告
 
-MODULE.md 说明模块职责、公开面、链路、依赖、状态、生命周期、失败、不变量及结构；invariants 为承诺指定真实检验器。包的 test 脚本必须执行登记的验收，文档条数与实际登记一致。
+模块根目录的 README.md 按 [模块说明规范](module-readme.md) 写：用法示例、入口与必要的约定，不复述导出、结构、依赖与不变量；invariants 为承诺指定真实检验器。包的 test 脚本必须执行登记的验收。
 
 修改 provides/requires、公开常量、模型操作或模板时，差量报告逐项写明理由、影响和验证。改变既有验收承诺必须解释，不能通过删测让门禁变绿。文档更新也应说明更新范围与仍待完成的行为。
 
-最低结构检查是 `bun run check:module-ownership`；根据修改范围补充生成声明、模板目录、类型、构建与行为测试。历史设计、差量报告和评测快照保留其当时的证据，当前接入以本规范、模块卡片、真实导出和可执行验收为准。
+最低结构检查是 `bun run check:module-ownership`；根据修改范围补充生成声明、模板目录、类型、构建与行为测试。历史设计、差量报告和评测快照保留其当时的证据，当前接入以本规范、模块 README、真实导出和可执行验收为准。

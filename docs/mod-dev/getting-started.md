@@ -36,4 +36,4 @@ output(await greet('世界'));
 
 需要 `.velarmod` 分发时，另按 [包格式](package-format-v1.md) 提供 Kernel 模块定义及清单。Kernel 装载合同与上述脚本操作定义分别由其调用方消费，宿主负责把加载结果接到 Runtime。
 
-验证包括 schema 合法性、发现内容、权限拒绝、observe/execute 效果、取消收束和回执恢复。正式模块的验收登记在 MODULE.md 与 invariants，运行 `bun run check:module-ownership`。
+验证包括 schema 合法性、发现内容、权限拒绝、observe/execute 效果、取消收束和回执恢复。正式模块的说明在模块根目录的 README.md，验收登记在 spec/invariants.md，运行 `bun run check:module-ownership`。

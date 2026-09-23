@@ -1,37 +1,93 @@
 # @velaros-ai/script
 
-JavaScript 脚本的检查、精确编辑与隔离执行引擎。正式装配通过 `createKernelScriptSession` 接入同一 Kernel：生成声明用于类型检查，能力调用经过 Kernel 权限、效果分类与持久回执。
+模型写的 JavaScript 程序在这里检查、精确编辑和隔离运行：先按当前能力声明过类型检查，没过一行不执行；过了就在 QuickJS 子进程里跑，每次能力调用都经同一个 Kernel 的权限、效果分类与回执。给装配会话的宿主用；模型面的 `script` 入口、源码版本与结果租约由 `@velaros-ai/velaros` 装配。
 
-- `edit(program, edits)` 在同一底稿上原子替换主源码或附属模块，返回完整候选，保留 `input` 与 `blobs`。
-- `check(program)` 校验源码、附属模块与当前能力声明，诊断包含行列和有界代码帧。
-- `run(program, signal)` 按该次执行身份运行一次；调用期间暂停计算时钟，停止时报告已完成及未落定调用。
+## 用法
 
-模型通过 Velaros 的统一 `script({observe?, execute?})` 入口 使用引擎。不可变源码版本、结果租约与下一轮投影由 Velaros 在 ContextStorage 中维护；模型请求由 Agent 的 ProviderRequestCompiler 编译。
+```ts
+import type { OperationRuntimeApi } from '@velaros-ai/kernel'
+import { createKernelScriptSession, nodeSubprocessCodeRunner, type CodeProgramRequest } from '@velaros-ai/script'
 
-脚本使用标准 ES 模块语法：`import` 获取能力，顶层 `await` 执行，`export` 或 `output` 交出结果。参数走 `input`，大字符串走 `blobs`，附属模块以 `modules` 随程序提交。模板统一通过 `velaros:system` 的 `modules.describe({module, export?})` 按需读取，能力声明由宿主当前注册表提供。
+// 宿主持有的 Kernel：模块注册、权限、效果分类与调用回执都在它那里
+declare const kernel: OperationRuntimeApi
 
-`createSubprocessCodeRunner({launch})` 统一父进程的执行计时、能力桥、输出采集和回收；宿主只注入 `ScriptProcess` 消息与终止合同。受信子进程从 `@velaros-ai/script/worker` 调用 `startScriptWorker({send, onMessage, exit})`，使用共享 QuickJS WASM 内核，guest 只通过显式能力桥访问外部。
+// 一次执行一个身份：建一个会话对象，run 一次
+const script = createKernelScriptSession({
+  runtime: kernel,
+  runner: nodeSubprocessCodeRunner,
+  sessionId: 'session-1',
+  executionId: crypto.randomUUID(),
+})
 
-`nodeSubprocessCodeRunner` 是同一运行器的 Node 装配。Electron 宿主显式提供自己的进程端口；正常完成由父端终止并等待进程退出后交付结果。`NodeSubprocessRunnerIsReleaseReady` 仍为 `false`；宿主须完成部署隔离认证。执行前检查、取消、超时、结果预算和权限拒绝均有自动化验收。
+// 程序是 ES 模块：import 拿能力；参数与大段文本走 velaros:program，不写进源码；output 交出结果
+const draft: CodeProgramRequest = {
+  source: `import { output } from 'velaros'
+import { input, blobs } from 'velaros:program'
+output({ title: input.title, chars: blobs.notes.length }, { key: 'summary' })`,
+  input: { title: '周报' },
+  blobs: { notes: '很长的正文……' },
+}
 
-详细责任、公开面与测试见 [模块卡片](MODULE.md) 和 [不变量](spec/invariants.md)。
+// 精确编辑只生成候选：oldText 在底稿里必须唯一，一组全成或全不成
+const edited = script.edit(draft, [{ oldText: "key: 'summary'", newText: "key: 'report'" }])
+if (!edited.ok) console.warn(edited.code, edited.editIndex, edited.message)
+const program = edited.ok ? edited.program : draft
 
-## 声明式输出
+// 只检查、不执行
+const checked = script.check(program)
+if (!checked.ok) console.warn(checked.diagnostics.map((item) => `${item.line}:${item.column} ${item.message}`))
 
-`output(value, {key?, purpose?, type?, language?, priority?, view?})` 在调用时捕获 JSON 值快照。对象的 undefined 可选字段省略，数组空位和 undefined 保存为 null；循环引用、getter、非有限数和其他不可表示的值明确拒绝。`output.configure({maxChars})` 在第一次输出前调用一次，设置整份输出的文字展示上限。`view` 支持 `mode`（auto/full/reference/summary）、`maxChars`、`lines`、`maxItems`、`edge` 与 JSON Pointer `paths`。
-
-```js
-import {output} from 'velaros';
-output.configure({maxChars:16000});
-const current = {status:'ready', count:3};
-output(current, {
-  key:'state', purpose:'持续检查当前状态', type:'json', priority:'high',
-  view:{paths:['/status','/count'], maxChars:2000}
-});
+const stop = new AbortController() // 用户点停止时 stop.abort()
+const outcome = await script.run(program, stop.signal)
+if (!outcome.checked) {
+  // 一行都没执行：import 了没授权的模块，或者类型检查没过
+  console.warn('needsModules' in outcome ? outcome.needsModules : outcome.check.diagnostics)
+} else if (outcome.result.failed) {
+  // 没跑完：已落定与没落定的调用都列出来，副作用按它们核对
+  console.warn(outcome.result.failed.code, outcome.result.completed, outcome.result.unsettled)
+} else {
+  // 结构化结果读原值；result.value 只是给模型看的有界预览
+  for (const block of outcome.output?.blocks ?? []) console.log(block.key, block.value)
+}
 ```
 
-原始输出 `CodeSurfaceOutcome.output` 与有界预览 `result` 分开；无显式输出的完整返回值为 `rawValue`。业务消费者必须使用原始值解析结构化交付，预览只用于展示。每次执行最多捕获 64 块、合计 1000000 个 JSON 字符；采集失败明确反馈，已捕获块在异常、中止后仍保留。展示上限不减少生成第一个参数的采集成本。
+Electron 里默认运行器不起进程：宿主自己起受信子进程，父端交给共享运行器，子进程里跑 `./worker`。
 
-宿主使用 `scriptOutputs.describe/edit/project/hash` 解析源码规则、生成受限编辑、重新展示和验证摘要。只直接管理主源码顶层、真实导入符号绑定、稳定 key 和字面量 options；任意计算、循环和动态声明仍可运行，自动整理只调整可静态验证的展示数据。`summary` 使用外部整理工具提供的版本绑定摘要，不在 output 中调用模型。
+```ts
+import { createSubprocessCodeRunner, type ScriptProcess, type ScriptProcessEvents } from '@velaros-ai/script'
 
-图片值使用 Kernel 的 `{type:'image-data',mediaType,data,label}`，原生附件单独传递；文件或已有图片可输出带 `ref` 的元信息对象。引用的访问权限仍由原读取入口校验。完整说明见仓库 `docs/architecture/script-output-observation.md`。
+// 比如 utilityProcess.fork(worker 入口, [], { execArgv: [`--max-old-space-size=${events.heapMb}`] })：
+// 消息、错误、退出码与 stderr 接到 events 上；terminate 杀掉进程并等它真的退出
+declare function forkScriptWorker(events: ScriptProcessEvents): ScriptProcess
+
+// 计时、能力桥、输出采集与回收都在共享运行器里；把它当 runner 交给 createKernelScriptSession
+export const runner = createSubprocessCodeRunner({ launch: forkScriptWorker })
+```
+
+```ts
+// worker 入口：单独打包，在子进程里跑，只把宿主的消息口交进来
+import { startScriptWorker, type ScriptWorkerCommand, type ScriptWorkerEvent } from '@velaros-ai/script/worker'
+
+declare function postToParent(message: ScriptWorkerEvent): void // utilityProcess 里是 process.parentPort.postMessage
+declare function onParentMessage(listener: (message: ScriptWorkerCommand) => void): () => void
+
+await startScriptWorker({ send: postToParent, onMessage: onParentMessage, exit: (code) => process.exit(code) })
+```
+
+## 入口
+
+| 入口 | 运行环境 | 内容 |
+| --- | --- | --- |
+| `@velaros-ai/script` | Node | Kernel 脚本会话 `createKernelScriptSession`，运行器 `nodeSubprocessCodeRunner` 与 `createSubprocessCodeRunner`，输出整理 `scriptOutputs`，以及不经 Kernel 自己装配时用的检查器、单次执行会话与能力端口 |
+| `@velaros-ai/script/contracts` | 任何进程 | 上限 `CodeSurfaceLimits`、`CodeProgramEditLimits`、`ScriptOutputLimits`，错误码 `CodeSurfaceErrorCodes`，程序、诊断、结果与输出的数据 |
+| `@velaros-ai/script/worker` | 受信子进程 | `startScriptWorker`：建 QuickJS 堆、接父进程消息；不带编译器与父端运行器 |
+
+## 约定
+
+- 一个会话对象只能 `run` 一次，再调拒绝 `CONFLICT`，下一次执行换新的 `executionId` 重建；`edit`、`check` 不执行代码，可以反复调。
+- 程序只拿得到它 import 了（直接或经宿主 `packages` 聚合）、Kernel 里挂着、又在 `allowedModules` 之内的模块，`velaros`（`output`）与 `velaros:program`（`input`、`blobs`）总在；`mode` 原样带进每次 Kernel 调用，程序改不了。
+- 能力调用失败在程序里是能 `try/catch` 的异常；码里带 `DENIED`、`PERMISSION` 的拒绝另记进 `result.notices`，程序吞了异常模型也看得见。
+- 能力调用期间停表，时限只算程序自己的计算；超时回 `TIMEOUT`，`signal` 触发回 `ABORTED`，停下时没落定的调用会被叫停。引擎只记账不回滚。
+- 源码、`blobs`、`input` 超过 `CodeSurfaceLimits` 直接拒（`check` 抛 `TOO_LARGE`，`run` 回 `failed.code` 为 `TOO_LARGE`），不截断照跑；返回值与日志超预算保留结尾，并在 `result.notices` 里说明。
+- `output` 调用时拍 JSON 快照，原值在 `outcome.output`，没调 `output` 时完整返回值在 `outcome.rawValue`；按 key 调展示、重新投影用 `scriptOutputs`，规则见 [脚本输出观察](../../docs/architecture/script-output-observation.md)。
+- `nodeSubprocessCodeRunner` 要找得到 Node 可执行文件，在 Electron 里不执行、回 `RUNNER_CRASHED`；`NodeSubprocessRunnerIsReleaseReady` 恒为 `false`，部署环境的隔离边界由宿主验收。
