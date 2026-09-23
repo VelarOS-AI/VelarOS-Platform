@@ -3,7 +3,9 @@ import {mkdtemp,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {test} from 'node:test'
+
 import {createRuntime} from '../../../dist/act/runtime/index.js'
+
 import {done} from './support/model-turn.mjs'
 
 async function fixture(t){
@@ -52,7 +54,7 @@ test('host note pages are bounded, revisions conflict, and empty sessions are re
  const f=await fixture(t)
  assert.deepEqual(await f.session.listNotes(),{items:[],nextAfter:null})
  await f.session.context.ingest({text:'notes'})
- await write(f.session,'a','x'.repeat(5000)+'tail')
+ await write(f.session,'a',`${'x'.repeat(5000)}tail`)
  await write(f.session,'b','other')
  const page=await f.session.listNotes({limit:1})
  assert.equal(page.nextAfter,'a');assert.equal((await f.session.listNotes({after:page.nextAfter})).items[0].key,'b')

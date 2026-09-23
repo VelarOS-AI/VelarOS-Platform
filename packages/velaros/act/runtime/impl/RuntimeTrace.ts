@@ -1,4 +1,3 @@
-import {summarizeInvocation,summarizeModelRequest} from '../utils/tracePresentation.js'
 import type { ContextInvocationJournalApi, ContextRecord, ContextState, ContextStorage } from "@velaros-ai/context";
 import {isNull,isUndefined,toNullable} from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
@@ -6,6 +5,7 @@ import { isEmpty } from '@velaros-ai/core'
 import type {ModelToolBinding} from '../types/model-tools.js'
 import type { ScriptSubmissionReceipt } from "../types/session.js";
 import type { ActTracePage,ActTraceQuery,ActTraceRecord, ActTurnTrace } from "../types/trace.js";
+import {summarizeInvocation,summarizeModelRequest} from '../utils/tracePresentation.js'
 import { ActRuntimeTuning } from "../utils/tuning.js";
 
 /** 只读连接既有记录，不执行代码或生成事实正文。 */

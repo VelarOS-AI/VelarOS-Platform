@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import {test} from 'node:test'
+
 import {createContextRuntime} from '@velaros-ai/context'
 import {localContextStorage} from '@velaros-ai/context/node'
+
 import {RuntimeTrace} from '../../../dist/act/runtime/impl/RuntimeTrace.js'
 import {summarizeInvocation} from '../../../dist/act/runtime/utils/tracePresentation.js'
 
@@ -31,7 +33,7 @@ test('presentation keeps typed identity even when JSON previews are truncated',(
 })
 test('trace and paginated trace share the total body budget including execution previews',async t=>{
  const storage=localContextStorage({path:':memory:'});t.after(()=>storage.close())
- const context=createContextRuntime({sessionId:'s',storage}),executionId=crypto.randomUUID()
+ const context=createContextRuntime({sessionId:'s',storage}); const executionId=crypto.randomUUID()
  const source=await context.append({kind:'audit',title:'source',body:'source'})
  const result=await context.append({kind:'audit',title:`script:${executionId}:result`,body:'{}',sources:[source.ref]})
  for(let turn=0;turn<2;turn++){

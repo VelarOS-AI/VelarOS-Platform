@@ -1,4 +1,6 @@
 import type {ContextRecord,ContextStorage} from '@velaros-ai/context'
+import {isNull} from '@velaros-ai/core'
+
 import type {GoalControl,GoalState,GoalUpdate} from '../../system/types/goal.js'
 import {goalChange} from '../utils/goal.js'
 
@@ -21,8 +23,8 @@ export class SessionGoal implements SessionGoalApi {
   const record=state?.records.findLast(item=>item.title==='session:goal')
   const body=record?await this.storage.get(this.id,record.objectId):null
   signal.throwIfAborted()
-  if(record&&body===null)throw new Error('目标原文缺失')
-  return {state,goal:body===null?null:JSON.parse(body) as GoalState}
+  if(record&&isNull(body))throw new Error('目标原文缺失')
+  return {state,goal:isNull(body)?null:JSON.parse(body) as GoalState}
  }
  public async get(signal:AbortSignal){return (await this.snapshot(signal)).goal}
  public update(input:GoalUpdate,signal:AbortSignal){return this.commit(input,signal)}

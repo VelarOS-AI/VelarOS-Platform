@@ -33,9 +33,9 @@ export function volatileStorageBackend(){
 // 新适配器传入相同数据库的独立连接工厂，复用这些与 SQL 无关的验收。
 export function storageContract(name,fixture){
  test(`${name}: grouped snapshots return filtered title heads, literal suffixes and bounded tails`,async t=>{
-  const {open}=await fixture(t),storage=await open();t.after(()=>storage.close())
+  const {open}=await fixture(t); const storage=await open();t.after(()=>storage.close())
   if(!storage.selectSnapshot){t.skip('optional selected snapshot');return}
-  const context=createContextRuntime({sessionId:'s',storage}),records=[]
+  const context=createContextRuntime({sessionId:'s',storage}); const records=[]
   for(const [title,kind] of [['note:a','note'],['note:b','note'],['note:a','note'],['note:a','event'],['literal:_百分%','note'],['literal:X百分Y','note']])records.push(await context.append({kind,title,body:`v${records.length}`}))
   const select=async selections=>(await storage.selectSnapshot('s',selections)).records
   assert.deepEqual(await select([{titlePrefix:'note:',kind:'note',latestPerTitle:true}]),[records[1],records[2]])
@@ -53,7 +53,7 @@ export function storageContract(name,fixture){
   assert.deepEqual(await select([{titlePrefix:'literal:\u0000尾'}]),[nul])
  })
  test(`${name}: selected snapshots filter, deduplicate and detach records at one version`,async t=>{
-  const {open}=await fixture(t),storage=await open();t.after(()=>storage.close())
+  const {open}=await fixture(t); const storage=await open();t.after(()=>storage.close())
   if(!storage.selectSnapshot){t.skip('optional selected snapshot');return}
   assert.equal(await storage.selectSnapshot('absent',[]),null)
   const context=createContextRuntime({sessionId:'s',storage})
@@ -70,13 +70,13 @@ export function storageContract(name,fixture){
   assert.deepEqual(await storage.load('s'),full)
  })
  test(`${name}: metadata CAS shares versions with full CAS and appends without replacing history`,async t=>{
-  const {open}=await fixture(t),a=await open(),b=await open();t.after(async()=>{await a.close();await b.close()})
+  const {open}=await fixture(t); const a=await open(); const b=await open();t.after(async()=>{await a.close();await b.close()})
   if(!a.loadMetadata||!a.compareAndSwapMetadata)return t.skip('adapter uses complete state CAS')
   assert.equal(await a.loadMetadata('s'),null)
-  const c=createContextRuntime({sessionId:'s',storage:a}),first=await c.append({kind:'user',body:'goal'})
-  const before=await a.load('s'),head=await b.loadMetadata('s')
+  const c=createContextRuntime({sessionId:'s',storage:a}); const first=await c.append({kind:'user',body:'goal'})
+  const before=await a.load('s'); const head=await b.loadMetadata('s')
   assert.equal(Object.hasOwn(head,'records'),false)
-  const objectId=await a.put('s','archive'),entry={...first,ref:{sessionId:'s',id:'archive'},objectId,title:'archive'};delete entry.sequence
+  const objectId=await a.put('s','archive'); const entry={...first,ref:{sessionId:'s',id:'archive'},objectId,title:'archive'};delete entry.sequence
   const next={...head,version:head.version+1,workingSet:{revision:1,cursor:1,items:[first.ref]}}
   const commits=await Promise.all([a.compareAndSwapMetadata('s',head.version,next,[entry]),b.compareAndSwap('s',head.version,{...before,version:head.version+1})])
   assert.equal(commits.filter(Boolean).length,1);assert.equal(commits[0],true)
@@ -85,7 +85,7 @@ export function storageContract(name,fixture){
   const latest=await a.loadMetadata('s')
   await c.append({kind:'event',body:'concurrent'})
   assert.equal(await b.compareAndSwapMetadata('s',latest.version,{...latest,version:latest.version+1}),false)
-  const now=await a.loadMetadata('s'),intact=await b.load('s')
+  const now=await a.loadMetadata('s'); const intact=await b.load('s')
   await assert.rejects(a.compareAndSwapMetadata('s',now.version,{...now,version:now.version+1},[{...entry,ref:{sessionId:'s',id:'valid'}},{...entry,ref:{sessionId:'s',id:'missing'},objectId:'absent'}]),{code:'OBJECT_MISSING'})
   await assert.rejects(a.compareAndSwapMetadata('s',now.version,{...now,version:now.version+1},[entry]),{code:'INVALID_RECORDS'})
   await assert.rejects(a.compareAndSwapMetadata('s',now.version,{...now,version:now.version+1,records:[]}),{code:'INVALID_RECORDS'})

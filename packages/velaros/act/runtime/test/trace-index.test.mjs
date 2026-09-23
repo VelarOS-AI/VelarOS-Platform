@@ -3,11 +3,12 @@ import {test} from 'node:test'
 
 import {createContextRuntime} from '@velaros-ai/context'
 import {localContextStorage} from '@velaros-ai/context/node'
+
 import {RuntimeTrace} from '../../../dist/act/runtime/impl/RuntimeTrace.js'
 
 test('trace pages use one metadata snapshot and query only associated execution journals',async t=>{
  const storage=localContextStorage({path:':memory:'});t.after(()=>storage.close())
- const context=createContextRuntime({sessionId:'s',storage}),executionId=crypto.randomUUID()
+ const context=createContextRuntime({sessionId:'s',storage}); const executionId=crypto.randomUUID()
  const source=await context.append({kind:'audit',title:'source',body:'source'})
  const result=await context.append({kind:'audit',title:`script:${executionId}:result`,body:'{}',sources:[source.ref]})
  const requests=[]

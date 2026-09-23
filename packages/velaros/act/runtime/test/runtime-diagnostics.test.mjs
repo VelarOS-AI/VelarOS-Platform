@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict'
 import {test} from 'node:test'
 
-import {localContextStorage} from '@velaros-ai/context/node'
 import {createContextRuntime} from '@velaros-ai/context'
+import {localContextStorage} from '@velaros-ai/context/node'
+
 import {RuntimeDiagnostics} from '../../../dist/act/runtime/impl/RuntimeDiagnostics.js'
 
 test('INV-42 storage diagnostics preserve optional methods, detached results and original failures',async t=>{
  const underlying=localContextStorage({path:':memory:'});t.after(()=>underlying.close())
- const metrics=[],diagnostics=new RuntimeDiagnostics(underlying,metric=>metrics.push(metric))
+ const metrics=[]; const diagnostics=new RuntimeDiagnostics(underlying,metric=>metrics.push(metric))
  const context=createContextRuntime({sessionId:'s',storage:diagnostics.storage})
  const record=await context.append({kind:'user',body:'private input'})
  assert.equal((await context.read(record.ref)).text,'private input')
@@ -23,7 +24,7 @@ test('INV-42 storage diagnostics preserve optional methods, detached results and
  assert.equal((await underlying.load('s')).records.length,1)
  assert(metrics.every(metric=>metric.durationMs>=0&&metric.succeeded&&Object.isFrozen(metric)))
  assert(!JSON.stringify(metrics).includes('private input'))
- const error=Error('storage failed'),broken=new RuntimeDiagnostics({...diagnostics.storage,load:async()=>{throw error}},metric=>metrics.push(metric))
+ const error=Error('storage failed'); const broken=new RuntimeDiagnostics({...diagnostics.storage,load:async()=>{throw error}},metric=>metrics.push(metric))
  await assert.rejects(broken.storage.load('s'),value=>value===error)
  assert.equal(metrics.at(-1).succeeded,false)
 })

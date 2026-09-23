@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+
 import { createEventDelivery } from '../../../dist/act/runtime/index.js'
 
-function deferred(){let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no});return {promise,resolve,reject}}
+function deferred(){let resolve; let reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no});return {promise,resolve,reject}}
 const tick=()=>new Promise(resolve=>setImmediate(resolve))
 
 test('INV-40 delivery waits for persistence, preserves order and allows writes to batch',async()=>{

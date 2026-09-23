@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
-import {test} from 'node:test'
 import {mkdtemp,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {summarizeModelRequest} from '../../../dist/act/runtime/utils/tracePresentation.js'
+import {test} from 'node:test'
+
 import {createRuntime} from '../../../dist/act/runtime/index.js'
+import {summarizeModelRequest} from '../../../dist/act/runtime/utils/tracePresentation.js'
+
 import {done} from './support/model-turn.mjs'
 
 const audit={providerRequest:{schemaVersion:2,model:'model',system:'system instructions',messages:[{role:'user',content:[{type:'text',text:'user input'},{type:'image',image:'data:image/png;base64,PRIVATE_BINARY',mediaType:'image/png'},{data:{$velarosType:'bytes',value:'PRIVATE_BYTES'}}]}],outputTokens:4096,requestFingerprint:{id:'fp'}},estimate:{tokens:1200,precision:'estimate',basis:'driver'}}

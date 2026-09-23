@@ -12,8 +12,8 @@ async function fixture(t){const dir=await mkdtemp(join(tmpdir(),'act-storage-'))
 const empty={version:0,records:[],workingSet:{revision:0,cursor:0,items:[]}}
 
 test('task accounting avoids full history and task replacement archives atomically',async t=>{
- const path=await fixture(t),storage=localContextStorage({path});t.after(()=>storage.close())
- const context=createContextRuntime({sessionId:'s',storage}),goal=await context.append({kind:'user',body:'goal'})
+ const path=await fixture(t); const storage=localContextStorage({path});t.after(()=>storage.close())
+ const context=createContextRuntime({sessionId:'s',storage}); const goal=await context.append({kind:'user',body:'goal'})
  const view=createContextView({sessionId:'s',storage,context,sources:[]})
  await view.begin(goal.ref)
  const db=new DatabaseSync(path);t.after(()=>db.close())
@@ -34,7 +34,7 @@ test('task accounting avoids full history and task replacement archives atomical
 })
 
 test('journal indexes use incremental transactions and simultaneous claims keep one owner',async t=>{
- const path=await fixture(t),a=localContextStorage({path}),b=localContextStorage({path});t.after(async()=>{await a.close();await b.close()})
+ const path=await fixture(t); const a=localContextStorage({path}); const b=localContextStorage({path});t.after(async()=>{await a.close();await b.close()})
  const key=JSON.stringify(['kernel-invocation-index','s'])
  for(const storage of [a,b]){const load=storage.load.bind(storage);t.mock.method(storage,'load',id=>{assert.notEqual(id,key);return load(id)})}
  const journals=[a,b].map(createContextInvocationJournal)
@@ -108,11 +108,11 @@ test('journal execution lookup loads matching receipts rather than every session
 
 
 test('selected snapshots keep one version while another connection commits between queries',async t=>{
- const path=await fixture(t),a=localContextStorage({path}),b=localContextStorage({path});t.after(async()=>{await a.close();await b.close()})
+ const path=await fixture(t); const a=localContextStorage({path}); const b=localContextStorage({path});t.after(async()=>{await a.close();await b.close()})
  const context=createContextRuntime({sessionId:'s',storage:a})
  const first=await context.append({kind:'audit',title:'state',body:'first'})
- const old=await a.loadMetadata('s'),objectId=await b.put('s','second')
- const prepare=DatabaseSync.prototype.prepare;let committing,intercepted=false
+ const old=await a.loadMetadata('s'); const objectId=await b.put('s','second')
+ const prepare=DatabaseSync.prototype.prepare;let committing; let intercepted=false
  const hook=t.mock.method(DatabaseSync.prototype,'prepare',function(sql){
   if(!intercepted&&sql.startsWith('SELECT body FROM context_records')){
    intercepted=true
@@ -135,10 +135,10 @@ for(const mode of ['indexed','selection-only','fallback'])test(`${mode}: input r
  const file=await context.append({kind:'audit',body:'attachment text'})
  const unrelated=await context.append({kind:'audit',body:'private audit'})
  const otherInput=await context.ingest({files:[{ref:unrelated.ref,name:'other',mediaType:'text/plain'}]})
- const text=`${'a'.repeat(8000000)}中😀文`,input=await context.ingest({text,files:[{ref:file.ref,name:'file',mediaType:'text/plain'}]})
+ const text=`${'a'.repeat(8000000)}中😀文`; const input=await context.ingest({text,files:[{ref:file.ref,name:'file',mediaType:'text/plain'}]})
  await context.summarizeInput({ref:input.ref,baseRevision:0,summary:'preserved intent',constraints:['keep original'],unresolved:[]})
  const manifest=JSON.parse(await storage.get('s',input.objectId))
- const forbidden=new Set([otherInput.objectId]),get=storage.get.bind(storage)
+ const forbidden=new Set([otherInput.objectId]); const get=storage.get.bind(storage)
  t.mock.method(storage,'get',(...args)=>{assert(!forbidden.has(args[1]),'unrelated manifest loaded');return get(...args)})
  if(mode!=='fallback')t.mock.method(storage,'load',()=>{throw Error('full input history loaded')})
  assert.equal((await context.readInput(file.ref,{offset:3,limit:7})).text,'achment')

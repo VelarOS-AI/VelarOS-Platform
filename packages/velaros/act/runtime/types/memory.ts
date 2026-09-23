@@ -1,5 +1,6 @@
-import type { WorkspaceEntry } from '../../system/types/workspace.js'
 import type { ContextReadStamp,ContextRef } from "@velaros-ai/context";
+
+import type { WorkspaceEntry } from '../../system/types/workspace.js'
 
 /** 各分区共享总窗口；份额只控制可裁剪正文，最终请求仍由编译器计量。 */
 export interface ContextMemoryPolicy {

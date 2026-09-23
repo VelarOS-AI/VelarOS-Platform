@@ -121,12 +121,12 @@ test('cancellation after effect admission still prevents the handler from runnin
 })
 
 test('host-declared disjoint effects overlap through the real runner and emit wait/run timings',async t=>{
- const metrics=[];let active=0,maxActive=0,release
+ const metrics=[];let active=0; let maxActive=0; let release
  const both=new Promise(resolve=>{release=resolve})
  const module={binding:{moduleId:'test:scoped',instanceId:'resources',generation:1,schemaRevision:'1'},summary:'independent resources',operations:{write:{summary:'write independent key',effects:'write',input:{type:'string'},output:{type:'null'},run:async()=>{active++;maxActive=Math.max(active,maxActive);if(active===2)release();await both;active--;return null}}}}
  const f=await fixture(t,async function*(request,f){
   if(f.calls===1)yield {type:'text',text:block(request,'execute({async:true})',"import {write} from 'test:scoped';await write('a');")+block(request,'execute({async:true})',"import {write} from 'test:scoped';await write('b');")}
-  else yield {type:'text',text:marker(request)+' done'}
+  else yield {type:'text',text:`${marker(request)} done`}
   yield finish
  },{modules:[module],effectResources:invocation=>invocation.binding.moduleId==='test:scoped'?[String(invocation.input)]:undefined,onMetric:metric=>metrics.push(metric)})
  const timeout=setTimeout(()=>release(),5000);t.after(()=>clearTimeout(timeout))

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+
 import { createActEventProjector } from '../../../dist/act/runtime/renderer.js'
 
 const ref=id=>({sessionId:'session',id})
@@ -8,7 +9,7 @@ const receipt=(type,id,inputId=id)=>({type,runId:'run',ref:ref(id),inputId,...(t
 
 test('INV-44 live and durable run projections agree on turns, queued inputs and explicit retained receipts',()=>{
  const events=[input('root','submit'),input('guide'),{type:'turn',runId:'run',turnId:'turn-one'},receipt('input-applied','root'),receipt('input-applied','guide'),input('next'),receipt('input-retained','next'),{type:'state',runId:'run',status:'cancelled'}]
- const live=createActEventProjector(),replay=createActEventProjector()
+ const live=createActEventProjector(); const replay=createActEventProjector()
  events.forEach((event,index)=>{live.applyLive(event);replay.apply({sessionId:'session',runId:'run',sequence:index*3+2,event})})
  assert.deepEqual(live.snapshot().runs,replay.snapshot().runs)
  const state=live.snapshot().runs.run
