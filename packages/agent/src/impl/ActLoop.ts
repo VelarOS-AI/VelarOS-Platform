@@ -218,8 +218,10 @@ export class ActLoop implements ActLoopApi {
         this.controller=undefined
       }
       // 主错误已通过事件送达；提前 return 也必须向宿主暴露收尾失败。
-      // eslint-disable-next-line no-unsafe-finally -- 主错误已作为事件送达，收尾错误必须独立报告
-      if(!isEmpty(failures))throw new AggregateError(failures,'运行收尾失败，必须检查持久状态和操作回执')
+      if(!isEmpty(failures)){
+        // eslint-disable-next-line no-unsafe-finally -- 主错误已作为事件送达，收尾错误必须独立报告
+        throw new AggregateError(failures,'运行收尾失败，必须检查持久状态和操作回执')
+      }
     }
   }
 

@@ -438,10 +438,13 @@ for (const module of selectedModules) {
       continue
     }
     const source = readFileSync(path, 'utf8')
-    for (const line of source.split('\n')) {
-      if (!/^\s*import\s/u.test(line)) continue
-      if (path === portablePath && /^import type \{[^}]*\} from '\.\.\/contract\/constants\.js'$/u.test(line.trim())) continue
-      fail(`${label}: 可移植文件 ${shortPath(path)} 不许 import（可移植类型文件只许从常量表 import type）：${line.trim().slice(0, 60)}`)
+    // 按语法树判断而不是逐行匹配：格式化把长 import 拆成多行后照样认得出来
+    const portableSource = parse(path)
+    for (const statement of portableSource.statements) {
+      if (!ts.isImportDeclaration(statement) && !ts.isImportEqualsDeclaration(statement)) continue
+      const clause = ts.isImportDeclaration(statement) ? statement.importClause : undefined
+      if (path === portablePath && clause?.isTypeOnly && clause.namedBindings && ts.isNamedImports(clause.namedBindings) && ts.isStringLiteral(statement.moduleSpecifier) && statement.moduleSpecifier.text === '../contract/constants.js') continue
+      fail(`${label}: 可移植文件 ${shortPath(path)} 不许 import（可移植类型文件只许从常量表 import type）：${statement.getText(portableSource).split('\n')[0].trim().slice(0, 60)}`)
     }
     if (/\bNodeJS\.|\bBuffer\b|\bChildProcess\b/u.test(source)) fail(`${label}: 可移植文件 ${shortPath(path)} 用了 Node 专属类型`)
   }
