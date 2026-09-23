@@ -44,6 +44,10 @@ export const ShellTuning = Object.freeze({
   }),
   /** shell 选择与自检：ShellResolver。 */
   shell: Object.freeze({
+    /** POSIX 登录交互 shell 读取环境的最长毫秒数。 */
+    environmentCaptureTimeoutMs: 10_000,
+    /** 登录环境输出的字节上限，包括启动脚本的输出。 */
+    environmentOutputBytes: 2 * 1024 * 1024,
     /** shell 自检、查某个命令在不在的超时毫秒数。 */
     probeTimeoutMs: 2_500,
     /** Windows 上重读用户与系统环境变量的超时毫秒数。 */

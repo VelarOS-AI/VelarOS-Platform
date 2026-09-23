@@ -12,3 +12,4 @@ export type { ShellOperationsApi } from '../impl/ShellOperations.js'
 // ── 本机实现：工厂在 `./local` 入口 ─────────────────────────────
 export type { ConfinedShellRunnerApi } from '../impl/local/ConfinedShellRunner.js'
 export type { LocalShellHostApi } from '../impl/local/LocalShellHost.js'
+export type { ShellEnvironmentApi } from '../impl/local/ShellEnvironment.js'

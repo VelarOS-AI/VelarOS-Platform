@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 
-import { isFalse, Log, optionalWhen, toNullable } from '@velaros-ai/core'
+import { isFalse, isUndefined, Log, optionalWhen, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/core/platform'
 
@@ -27,6 +27,7 @@ import { buildNativeCommandSpec, describeNativeCommand, describeUnavailableShell
 import { selectBackgroundTasks } from '../../utils/system-info.js'
 import { ShellTuning } from '../../utils/tuning.js'
 
+import type { ShellEnvironmentApi } from './ShellEnvironment.js'
 import type { ManagedShellProcess } from './ShellManagedProcess.js'
 import { ShellOutputDecoder } from './ShellOutputDecoder.js'
 import type { ShellProcessManagerApi } from './ShellProcessManager.js'
@@ -80,6 +81,8 @@ export interface ShellCommandRunnerApi {
 
 /** 命令执行器的构造参数，由本机宿主或受约束执行器给。 */
 export interface ShellCommandRunnerOptions {
+  /** 借用宿主的登录环境，命令启动前读取当前代次。 */
+  environment?: ShellEnvironmentApi
   /** 命令跑在哪个平台上。 */
   platform: NodeJS.Platform
   /** 按这个平台算 shell 参数、终止命令、要不要独立进程组。 */
@@ -119,11 +122,13 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
   ): Promise<ShellCommandResult> {
     abortSignal?.throwIfAborted()
     // 工作目录不存在时 spawn 会报成找不到 shell，先核对一次，报错才指向真正的原因。
+    if (options.background && !isUndefined(options.stdin))
+      throw new AppError('VALIDATION', '前台标准输入不能与后台命令一起使用。')
     const directory = await stat(cwd).catch(() => null)
     if (!directory?.isDirectory()) throw new AppError('NOT_FOUND', `工作目录不存在或不是目录：${cwd}`)
     const command = options.nativeCommand ? describeNativeCommand(options.nativeCommand) : commandInput
     const startedAt = Date.now()
-    const prepared = await this.prepare(command, options)
+    const prepared = await this.prepare(command, options, abortSignal)
     abortSignal?.throwIfAborted()
     if (options.background) {
       const backgroundProcess = await this.startInBackground(command, cwd, prepared, options, startedAt, abortSignal)
@@ -135,6 +140,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     const result = await this.runInForeground(prepared, cwd, {
       timeoutMs: options.timeoutMs ?? ShellTuning.command.timeoutMs,
       maxOutputChars: options.maxOutputChars ?? ShellTuning.command.outputChars,
+      stdin: options.stdin,
       abortSignal,
     })
     return buildShellCommandResult(command, cwd, startedAt, { ...result, ownership: prepared.ownership, shell: prepared.shell })
@@ -258,13 +264,16 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
    */
   private async prepare(
     command: string,
-    { shell: kind, nativeCommand }: ShellRunCommandOptions
+    { shell: kind, nativeCommand }: ShellRunCommandOptions,
+    signal?: AbortSignal
   ): Promise<PreparedShellCommand> {
     const { platform, platformTools, confinement, confinementProvider, confinementTempDir, extraEnv, shells } = this.options
-    const candidates = detectAvailableShells({ platform, env: process.env })
+    const environment = this.options.environment ? await this.options.environment.getEnvironment(signal) : process.env
+    signal?.throwIfAborted()
+    const candidates = detectAvailableShells({ platform, env: environment })
     if (kind && !candidates.some((candidate) => candidate.kind === kind))
       throw new AppError('VALIDATION', describeUnavailableShellKind(kind, candidates.map(toShellDescriptor)))
-    const shell = await shells.resolveReady({ platform, env: process.env, kind })
+    const shell = await shells.resolveReady({ platform, env: environment, kind, signal })
     const commandSpec = nativeCommand ? buildNativeCommandSpec(nativeCommand, shell)
       : { ...platformTools.getShellCommandSpec(command, shell), env: shell.env }
     const env = { ...commandSpec.env, ...extraEnv }
@@ -286,7 +295,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
   private runInForeground(
     prepared: PreparedShellCommand,
     cwd: string,
-    options: { timeoutMs: number; maxOutputChars: number; abortSignal?: AbortSignal }
+    options: { timeoutMs: number; maxOutputChars: number; stdin?: string; abortSignal?: AbortSignal }
   ): Promise<{
     exitCode: Nullable<number>
     signal: Nullable<string>
@@ -302,7 +311,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     options.abortSignal?.throwIfAborted()
     const child = spawn(prepared.spec.file, prepared.spec.args, {
       cwd, detached: this.options.platformTools.shouldUseDetachedProcessGroup(), env: prepared.env,
-      stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
       windowsVerbatimArguments: prepared.spec.windowsVerbatimArguments,
     })
     const owned = this.options.processes.manage(child, {
@@ -321,6 +330,8 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       output[stream] = appendBoundedOutput(output[stream], text, maxChars)
     }
     for (const stream of ['stdout', 'stderr'] as const) child[stream].on('data', (chunk: Buffer) => append(stream, decoders[stream].write(chunk)))
+    child.stdin.on('error', (error) => log.debug('前台命令输入管道已关闭', { error }))
+    child.stdin.end(options.stdin, 'utf8')
     return owned.completion.then((result) => {
       for (const stream of ['stdout', 'stderr'] as const) append(stream, decoders[stream].end())
       if (result.spawnError) throw result.spawnError

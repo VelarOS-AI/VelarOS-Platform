@@ -32,6 +32,7 @@ shell 选择与自检、进程约束、Windows 原生进程宿主，外加宿主
 | `ShellCommandKinds` | 契约常量 | 模型能为一条命令挑的 shell 种类封闭词表，所有 `shell` 字段都取它；派生类型 `ShellCommandKind` |
 | `ShellLimits` | 契约常量 | `velaros:shell` 的公开上限：超时、输出字符、任务条数 |
 | `VelarShellModule` | 生成的合同（`contract/surface.ts`） | `velaros:shell` 随包发布的模型面：模块名、放出去的方法、生成的完整声明（与 `baselines/script/shell.d.ts` 同一份）；空间挂这件能力时交给代码面的门 |
+| `createShellEnvironment` | `ShellEnvironmentApi`（`./local` 入口） | 登录环境缓存、并发读取合并、按代次刷新、自检与有界关闭；`ShellEnvironmentOptions` 注入环境来源、平台和读取预算 |
 | `createLocalShellHost` | `LocalShellHostApi`（`./local` 入口） | 本机 shell 宿主：`ShellHostPort` 的四件事在本机上的实现，外加宿主界面要的路径解析、环境体检、指标、进程、端口、带完整记录的终止、控制台三件事与释放 |
 | `createConfinedShellRunner` | `ConfinedShellRunnerApi`（`./local` 入口） | 受约束执行器：命令钉在一个根目录里跑（只许写根与它自己的临时目录，网络按建时的选择），建的时候先探测约束后端 |
 | `ShellErrorCodes` | 契约常量 | 本机宿主的专属错误码：`SHELL_UNAVAILABLE`（找不到能用的 shell）、`SHELL_CONFINEMENT_UNAVAILABLE`（要约束却没有后端） |
@@ -42,7 +43,7 @@ shell 选择与自检、进程约束、Windows 原生进程宿主，外加宿主
 本机宿主给宿主界面的数据：进程 `SystemProcessInfo`、端口 `SystemOpenPortInfo`、资源快照 `SystemMetricsSnapshot`、控制台的请求与增量输出、
 带完整记录的终止结果 `ShellTaskTerminateReport`、环境体检 `ShellEnvironmentInspection`），
 `types/approval.ts` 是审批请求的入参与结果（引用 agent 的确认选项类型，从根入口导出），`types/invocation.ts` 是判定内部的工作类型，
-`types/local.ts` 是本机实现的工作类型（进程约束的策略、请求与结果从根入口导出），`types/processes.ts` 是平台命令的解析结果。
+`types/local.ts` 是本机实现的工作类型（进程约束的策略、请求、结果与登录环境用的 `ResolvedShell` 从根入口导出），`types/processes.ts` 是平台命令的解析结果。
 
 三个入口对应包清单 `exports` 里的 `./shell`、`./shell/contracts` 与 `./shell/local`，源文件是单元目录上的 `index.ts`、`contracts.ts` 与 `local.ts`，只有转发语句：
 
@@ -50,7 +51,7 @@ shell 选择与自检、进程约束、Windows 原生进程宿主，外加宿主
 | --- | --- | --- |
 | `./shell` | Node 宿主与渲染进程 | 操作、命令策略、审批请求，空间端口，本机实现的接口与配置，它们用到的数据 |
 | `./shell/contracts` | 任何进程，含浏览器 | 常量表与可移植数据 |
-| `./shell/local` | Node 宿主 | 本机实现的两个工厂：`createLocalShellHost`、`createConfinedShellRunner` |
+| `./shell/local` | Node 宿主 | 本机宿主 `createLocalShellHost`、受约束执行器 `createConfinedShellRunner` 和登录环境 `createShellEnvironment` |
 
 **注入面**在 `contract/requires.ts`：
 
@@ -59,7 +60,8 @@ shell 选择与自检、进程约束、Windows 原生进程宿主，外加宿主
 | `ShellSpacePort` | 每个挂 `velaros:shell` 的空间一份：`resolveCwd`（作用域）、`commandPolicy`（确认文案与风险分类的口径），加上执行那四件（`ShellHostPort`） |
 | `ShellHostPort` | `ShellSpacePort` 的执行那一半：`runCommand`、`listBackgroundTasks`、`refreshShellEnvironment`、`terminateBackgroundTask`；本机实现是 `createLocalShellHost`，项目端口在它外面再套一道项目资源门 |
 | `ShellOperationContext` | 宿主每次分发 `shell` 命名空间的调用时装好：取消信号、上面那个端口、审批端口、会话 |
-| `LocalShellHostOptions` | 用本机宿主时必须，创建时给：工作目录、家目录、平台、普通命令的进程约束策略、约束后端 |
+| `LocalShellHostOptions` | 用本机宿主时必须，创建时给：工作目录、家目录、平台、普通命令的进程约束策略、约束后端；可借用宿主持有的 `environment` |
+| `ShellEnvironmentOptions` | 创建应用登录环境时可给：原始环境来源、平台与读取超时预算 |
 | `ConfinedShellRunnerOptions` | 建受约束执行器时必须：根目录、临时目录、网络开关、平台、约束后端 |
 | `ShellProcessConfinementProvider` | 可选，放在上面两份配置里：没有内置约束后端的平台（Windows）靠它，缺了就在受约束模式下、以及建受约束执行器时失败关闭 |
 | 环境变量，全部登记在 `ShellEnvironmentVariables` | 可选：三个输入变量由宿主设，三个标记变量由本单元写给子进程 |
@@ -92,6 +94,7 @@ shell 选择与自检、进程约束、Windows 原生进程宿主，外加宿主
 - **后台任务表**：每个本机宿主持有一个命令执行器，任务表归它私有，在内存里，随 `dispose()` 结束；每条任务留到现在的全部输出，只守内存的上限（`ShellLimits.outputChars`，超出只留末尾）；已结束的任务只留最近 200 条。
 - **交互式任务的控制台缓冲**：和任务表一起归命令执行器，每个控制台留最近 10 万字符，更早的被挤掉时读取方拿到 `droppedChars`。
 - **受管子进程登记表**：整个进程一份（`shellProcessManager`），已结束的进程最多保留 512 条回执。
+- **登录环境**：由宿主创建 `ShellEnvironment`，并向需要的本机宿主注入；环境读取、自检缓存及刷新订阅随该实例存在。工作区只借用，应用关闭时 `dispose()` 中止读取并等待收尾。
 - **shell 选择**：不缓存，每次运行前重新自检；本机可用的清单由 `inspectEnvironment().shells` 给出（第一个就是默认那个）。
 - **受约束执行器**：谁建谁持有（演练沙箱每个镜像根一个），`dispose()` 停掉它起的进程。
 
@@ -113,8 +116,8 @@ shell 选择与自检、进程约束、Windows 原生进程宿主，外加宿主
 
 ## 不变量
 
-共 16 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。INV-11～INV-16 是本机宿主的承诺（进程约束、输出、生命周期、shell 选择），随实现从 `@velaros-ai/system` 搬来（原 INV-5、6、10、11、12、30，ADR 0013）。
-按检验方式：测试 15 条、门禁 1 条。未验证 0 条。
+共 18 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。INV-11～INV-16 是本机宿主的承诺（进程约束、输出、生命周期、shell 选择），随实现从 `@velaros-ai/system` 搬来（原 INV-5、6、10、11、12、30，ADR 0013）。
+按检验方式：测试 17 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 
@@ -154,8 +157,13 @@ shell/
 | `local/LocalShellHost.ts` | `LocalShellHostApi`（同文件，provides 登记），扩展 `ShellHostPort`（requires） | 本机 shell 宿主，只做转接 |
 | `local/ConfinedShellRunner.ts` | `ConfinedShellRunnerApi`（同文件，provides 登记） | 受约束执行器：命令钉在一个根目录里跑 |
 | `local/ShellCommandRunner.ts` | `ShellCommandRunnerApi`（同文件） | 跑命令：前台采集，后台登记成任务、可查可停；交互式任务另带控制台 |
+| `local/ShellEnvironment.ts` | `ShellEnvironmentApi`（同文件，provides 登记） | 登录环境加载、缓存、代次刷新与读取进程关闭 |
 | `local/ShellResolver.ts` | `ShellResolverApi`（同文件） | 找 shell、自检、判断命令在不在、刷新 Windows 环境变量 |
 | `local/ShellProcessManager.ts` | `ShellProcessManagerApi`（同文件） | 受管子进程登记表 |
 | `local/ShellManagedProcess.ts` | `ManagedShellProcess`（同文件） | 单个受管子进程的超时、取消、有界终止与收尾 |
 | `local/ShellOutputDecoder.ts` | `ShellOutputDecoderApi`（同文件） | 子进程输出的 UTF-8 解码 |
 | `local/ShellUnavailableError.ts` | 错误类，不写接口 | 找不到能用的 shell |
+
+## 宿主前台输入
+
+`ShellRunCommandOptions.stdin` 只供宿主使用：前台按 UTF-8 写入后发送 EOF，空串同样发送 EOF；与 background 同传在启动前以 VALIDATION 拒绝。输入端提前关闭会记录调试信息，命令仍由统一受管进程返回退出、超时或取消回执。`nativeCommand.env` 中的 undefined 删除本次进程的环境键，其他覆盖只影响该次调用。验收 INV-18 覆盖真实进程、早退、超时和环境快照隔离。

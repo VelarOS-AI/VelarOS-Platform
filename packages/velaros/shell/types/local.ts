@@ -1,6 +1,6 @@
 /**
  * 命令数据：进程约束的策略与请求结果（宿主注入约束后端时要用，从根入口导出），以及命令执行、shell 选择、进程约束实现自己的工作类型
- * （受管进程的收尾结果、选中的 shell 与自检结果、刷新后的环境、准备好的命令、控制台缓冲、带回调的选项）。只放类型；后一部分只在包内用，不出包。
+ * （受管进程的收尾结果、自检结果、刷新后的环境、准备好的命令、控制台缓冲、带回调的选项）。只放类型；ResolvedShell 随登录环境 API 导出，其余工作类型在包内使用。
  */
 
 import type { ShellCommandSpecOptions } from '@velaros-ai/core/platform'
@@ -33,7 +33,7 @@ export interface ShellProcessConfinementResult {
   profile?: string
 }
 
-// ── 实现自己的工作类型，不出包 ─────────────────────────────────────
+// ── 本机环境数据与实现工作类型 ─────────────────────────────────────
 
 export interface ShellProcessCompletion {
   exitCode: Nullable<number>
@@ -46,6 +46,12 @@ export interface ShellProcessCompletion {
 
 export interface ResolvedShell extends ShellDescriptor {
   env: NodeJS.ProcessEnv
+}
+
+/** 同一加载代次的环境与可选的已自检 Shell，只在本机环境缓存内使用。 */
+export interface ShellEnvironmentSnapshot {
+  env: NodeJS.ProcessEnv
+  shell?: ResolvedShell
 }
 
 export interface ShellProbeResult {
@@ -78,6 +84,8 @@ export interface ShellConsoleBuffer {
 
 /** 选 shell 时的选项；平台、环境变量、指定的 shell 路径与种类见继承的 `ShellCommandSpecOptions`。 */
 export interface ResolveShellOptions extends ShellCommandSpecOptions {
+  /** 取消 shell 自检时中止对应进程。 */
+  signal?: AbortSignal
   /** 判断文件存在的方式；缺省用真实文件系统，测试时可以换成假的。 */
   isFile?: (path: string) => boolean
   /** 每个候选试跑的超时毫秒数，默认 2500。 */

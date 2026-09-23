@@ -44,7 +44,7 @@ export interface ShellResolverApi {
    * 其他平台原样返回；读取失败时 refreshed 为 false 并给出原因。返回的环境里去掉了本包自己写的 VELAROS_SHELL_* 标记；
    * 宿主设的 VELAROS_SHELL_PATH 也不在其中，写回宿主进程时由 replaceEnvironment 照留。
    */
-  refreshWindowsEnvironment(env?: NodeJS.ProcessEnv, platform?: NodeJS.Platform): Promise<RefreshedWindowsEnvironment>
+  refreshWindowsEnvironment(env?: NodeJS.ProcessEnv, platform?: NodeJS.Platform, signal?: AbortSignal): Promise<RefreshedWindowsEnvironment>
 }
 
 class ShellResolver implements ShellResolverApi {
@@ -64,14 +64,17 @@ class ShellResolver implements ShellResolverApi {
   }
 
   public async resolveReady(options: ResolveShellOptions = {}): Promise<ResolvedShell> {
+    options.signal?.throwIfAborted()
     const failures: string[] = []
     for (const shell of detectAvailableShells(options)) {
       let health: ShellProbeResult
-      try { health = await (options.probe ?? ((candidate, timeoutMs) => this.probe(candidate, timeoutMs)))(shell, options.timeoutMs ?? ShellTuning.shell.probeTimeoutMs) }
+      try { health = await (options.probe ?? ((candidate, timeoutMs) => this.probe(candidate, timeoutMs, options.signal)))(shell, options.timeoutMs ?? ShellTuning.shell.probeTimeoutMs) }
       catch (error) {
+        options.signal?.throwIfAborted()
         log.debug('shell readiness probe failed', { shell: shell.shellPath, error })
         health = { ready: false, reason: error instanceof Error ? error.message : 'shell 启动失败。' }
       }
+      options.signal?.throwIfAborted()
       if (!health.ready) { failures.push(`${shell.name}: ${health.reason || 'unavailable'}`); continue }
       return {
         ...shell, readiness: 'ready', version: toNullable(health.version),
@@ -102,8 +105,10 @@ class ShellResolver implements ShellResolverApi {
 
   public async refreshWindowsEnvironment(
     env: NodeJS.ProcessEnv = process.env,
-    platform: NodeJS.Platform = process.platform
+    platform: NodeJS.Platform = process.platform,
+    signal?: AbortSignal
   ): Promise<RefreshedWindowsEnvironment> {
+    signal?.throwIfAborted()
     const result = { ...env }
     for (const key of Object.keys(result)) {
       if (key.toUpperCase().startsWith('VELAROS_SHELL_')) delete result[key]
@@ -118,7 +123,8 @@ class ShellResolver implements ShellResolverApi {
       const captured = await this.capture({
         file: win32.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
         args: ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
-      }, env, ShellTuning.shell.environmentRefreshTimeoutMs)
+      }, env, ShellTuning.shell.environmentRefreshTimeoutMs, signal)
+      signal?.throwIfAborted()
       if (captured.exitCode === 0) {
         try {
           const source = JSON.parse(captured.stdout) as { machine: Record<string, string>; user: Record<string, string> }
@@ -159,13 +165,13 @@ class ShellResolver implements ShellResolverApi {
   }
 
   /** 默认的就绪自检：让 shell 打印一个带中文的标记和自己的版本，标记原样回来才算能用。 */
-  private async probe(shell: ResolvedShell, timeoutMs: number): Promise<ShellProbeResult> {
+  private async probe(shell: ResolvedShell, timeoutMs: number, signal?: AbortSignal): Promise<ShellProbeResult> {
     const marker = 'VelarOS-shell-ready-中文'
     const command = shell.kind === 'cmd' ? `echo ${marker} & ver`
       : shell.kind === 'pwsh' || shell.kind === 'powershell'
         ? `Write-Output '${marker}'; Write-Output $PSVersionTable.PSVersion.ToString()`
         : `printf '${marker}\\n%s\\n' "\${BASH_VERSION:-posix}"`
-    const result = await this.capture(currentPlatform.getShellCommandSpec(command, { shellPath: shell.shellPath, kind: shell.kind }), shell.env, timeoutMs)
+    const result = await this.capture(currentPlatform.getShellCommandSpec(command, { shellPath: shell.shellPath, kind: shell.kind }), shell.env, timeoutMs, signal)
     const ready = result.exitCode === 0 && result.stdout.includes(marker) && !result.timedOut
     if (ready) return {
       ready,
@@ -178,9 +184,10 @@ class ShellResolver implements ShellResolverApi {
   }
 
   /** 以受管子进程跑一条短命令，限时采集输出（stdout 最多 64K、stderr 最多 8K 字符）；清理没做完时退出码按未知处理。 */
-  private async capture(spec: CommandSpec, env: NodeJS.ProcessEnv, timeoutMs: number): Promise<{
+  private async capture(spec: CommandSpec, env: NodeJS.ProcessEnv, timeoutMs: number, signal?: AbortSignal): Promise<{
     exitCode: Nullable<number>; stdout: string; stderr: string; timedOut: boolean
   }> {
+    signal?.throwIfAborted()
     const ownedSpec = buildOwnedProcessSpec(spec, { env })
     const child = spawn(ownedSpec.spec.file, ownedSpec.spec.args, {
       env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
@@ -189,6 +196,7 @@ class ShellResolver implements ShellResolverApi {
     })
     const managed = this.processes.manage(child, {
       timeoutMs,
+      abortSignal: signal,
       drainTimeoutMs: ShellTuning.shell.captureDrainTimeoutMs,
       terminateGraceMs: ShellTuning.shell.captureTerminateGraceMs,
       terminationDeadlineMs: ShellTuning.shell.captureTerminationDeadlineMs,

@@ -5,7 +5,7 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs'
-import { mkdtemp, realpath, rm } from 'node:fs/promises'
+import { chmod, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -21,7 +21,7 @@ import { VelarShellModule } from '../contract/surface'
 import { shellProcessManager } from '../impl/local/ShellProcessManager'
 import type { ShellCommandResult, ShellListTasksInput, ShellOperationContext, ShellProcessConfinementEvidence, ShellRunCommandOptions, ShellRunInput, ShellSpacePort, ShellStopInput, ShellTaskTerminateRequest } from '../index'
 import { shellCommandApproval, ShellCommandOperationKind, shellCommandPolicy, ShellErrorCodes, ShellLimits, shellOperations } from '../index'
-import { createConfinedShellRunner, createLocalShellHost } from '../local'
+import { createConfinedShellRunner, createLocalShellHost, createShellEnvironment } from '../local'
 import { buildConfinedSpawnSpec } from '../utils/confinement'
 
 import { canConfine, fakeChild } from './support'
@@ -601,4 +601,91 @@ describe('本机宿主：shell 的选择', () => {
       await host.dispose()
     }
   })
+})
+
+// 宿主环境只经本机 API 注入；不会成为模型输入或修改整个进程的环境。
+test.skipIf(process.platform === 'win32')('INV-17 共享登录环境用于原生命令和体检，刷新生效且借用者释放不关闭环境', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'shell-environment-owner-'))
+  const script = join(directory, 'login-shell')
+  await writeFile(script, '#!/bin/sh\nprintf "startup banner=ignored\\n"\nexec /bin/sh "$@"\n')
+  await chmod(script, 0o700)
+  let value = 'first'
+  const environment = createShellEnvironment({ env: () => ({ ...process.env, SHELL: script, SHARED_ENV_VALUE: value }) })
+  const host = createLocalShellHost({ cwd: directory, environment })
+  try {
+    const first = await environment.getEnvironment()
+    expect(first.SHARED_ENV_VALUE).toBe('first')
+    expect(first['startup banner']).toBeUndefined()
+    first.SHARED_ENV_VALUE = 'caller mutation'
+    const run = () => host.runCommand('read environment', {
+      nativeCommand: { file: process.execPath, args: ['-e', 'process.stdout.write(process.env.SHARED_ENV_VALUE)'] },
+    })
+    expect((await run()).stdout).toBe('first')
+    const inspection = await host.inspectEnvironment()
+    expect(inspection.shell.path).toBe(script)
+    value = 'second'
+    const refreshed = await host.refreshShellEnvironment()
+    expect(refreshed.revision).toBe('1')
+    expect((await run()).stdout).toBe('second')
+    await host.dispose()
+    expect((await environment.getEnvironment()).SHARED_ENV_VALUE).toBe('second')
+  } finally {
+    await host.dispose()
+    await environment.dispose()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+for (const stdin of ['', '中文🙂\nsecond line\n']) {
+  test(`INV-18 foreground stdin preserves UTF-8 and sends EOF (${stdin.length} chars)`, async () => {
+    const host = createLocalShellHost({ cwd: process.cwd() })
+    try {
+      const result = await host.runCommand('stdin fixture', {
+        nativeCommand: { file: process.execPath, args: ['-e', "process.stdin.setEncoding('utf8');let text='';process.stdin.on('data',chunk=>text+=chunk);process.stdin.on('end',()=>{process.stdout.write(text);process.exitCode=7})"] },
+        stdin,
+        timeoutMs: 5_000,
+      })
+      expect(result.stdout).toBe(stdin)
+      expect(result.exitCode).toBe(7)
+      expect(result.cleanupIncomplete).toBe(false)
+      expect(result.capture?.decodeErrors).toBe(0)
+    } finally { await host.dispose() }
+  })
+}
+
+test('INV-18 native environment deletion is per-command and leaves the borrowed snapshot intact', async () => {
+  const environment = createShellEnvironment({ env: () => ({ ...process.env, CLI_KEEP: 'initial', CLI_REMOVE: 'remove-me' }) })
+  const host = createLocalShellHost({ cwd: process.cwd(), environment })
+  try {
+    const result = await host.runCommand('environment fixture', {
+      nativeCommand: {
+        file: process.execPath,
+        args: ['-e', "process.stdout.write(JSON.stringify({keep:process.env.CLI_KEEP,removed:Object.hasOwn(process.env,'CLI_REMOVE')}))"],
+        env: { CLI_KEEP: 'updated', CLI_REMOVE: undefined },
+      },
+    })
+    expect(JSON.parse(result.stdout)).toEqual({ keep: 'updated', removed: false })
+    expect((await environment.getEnvironment()).CLI_REMOVE).toBe('remove-me')
+    expect((await environment.getEnvironment()).CLI_KEEP).toBe('initial')
+    await expect(host.runCommand('must not spawn', { background: true, stdin: '' })).rejects.toMatchObject({ code: 'VALIDATION' })
+    expect(await host.listBackgroundTasks()).toEqual([])
+  } finally { await host.dispose(); await environment.dispose() }
+})
+
+test('INV-18 a child closing stdin early and an unread input timeout both settle through process ownership', async () => {
+  const host = createLocalShellHost({ cwd: process.cwd() })
+  try {
+    const early = await host.runCommand('early exit', {
+      nativeCommand: { file: process.execPath, args: ['-e', 'process.exit(0)'] },
+      stdin: 'x'.repeat(2_000_000), timeoutMs: 5_000,
+    })
+    expect(early.exitCode).toBe(0)
+    expect(early.cleanupIncomplete).toBe(false)
+    const timeout = await host.runCommand('unread input', {
+      nativeCommand: { file: process.execPath, args: ['-e', 'setInterval(()=>{},1000)'] },
+      stdin: 'x'.repeat(2_000_000), timeoutMs: 50,
+    })
+    expect(timeout.timedOut).toBe(true)
+    expect(timeout.cleanupIncomplete).toBe(false)
+  } finally { await host.dispose() }
 })

@@ -5,7 +5,7 @@
 import { statSync } from 'node:fs'
 import { win32 } from 'node:path'
 
-import { isEmpty, Log } from '@velaros-ai/core'
+import { isEmpty, isUndefined, Log } from '@velaros-ai/core'
 import { createPlatform, currentPlatform } from '@velaros-ai/core/platform'
 import type { CommandSpec } from '@velaros-ai/core/platform/contracts'
 
@@ -255,7 +255,7 @@ export function detectAvailableShells(options: ResolveShellOptions): ResolvedShe
 /**
  * 把原生调用（可执行文件加参数数组）变成启动规格，参数原样到达，不经过 shell 解析。
  * 绕开 MSYS 的路径改写；.cmd 与 .bat 显式交给 cmd.exe 并逐个转义参数；PowerShell 下的 .ps1 交给 PowerShell；Git Bash 下的脚本交给 bash。
- * 环境变量叠加在 shell 的环境上，Windows 上按不区分大小写覆盖。
+ * 环境变量叠加在 shell 的环境上，undefined 删除该键；Windows 上按不区分大小写覆盖。
  */
 export function buildNativeCommandSpec(
   input: { file: string; args: string[]; env?: NodeJS.ProcessEnv },
@@ -266,7 +266,8 @@ export function buildNativeCommandSpec(
     if (shell.kind !== 'posix') for (const previous of Object.keys(env)) {
       if (previous.toUpperCase() === key.toUpperCase()) delete env[previous]
     }
-    env[key] = value
+    if (isUndefined(value)) delete env[key]
+    else env[key] = value
   }
   const file = shell.kind !== 'posix' && !win32.extname(input.file) && isRegularFile(`${input.file}.cmd`)
     ? `${input.file}.cmd` : input.file

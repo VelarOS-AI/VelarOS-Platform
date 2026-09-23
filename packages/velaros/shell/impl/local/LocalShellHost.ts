@@ -51,6 +51,7 @@ import { ShellTuning } from '../../utils/tuning.js'
 
 import type { ShellCommandRunnerApi } from './ShellCommandRunner.js'
 import { ShellCommandRunner } from './ShellCommandRunner.js'
+import type { ShellEnvironmentApi } from './ShellEnvironment.js'
 import { shellProcessManager } from './ShellProcessManager.js'
 import type { ShellResolverApi } from './ShellResolver.js'
 import { shellResolver } from './ShellResolver.js'
@@ -108,6 +109,7 @@ export interface LocalShellHostApi extends ShellHostPort {
 }
 
 export class LocalShellHost implements LocalShellHostApi {
+  private readonly environment?: ShellEnvironmentApi
   private readonly homeDir: string
   private readonly hostPlatform: NodeJS.Platform
   private readonly platformTools: PlatformCompatibilityApi
@@ -117,6 +119,7 @@ export class LocalShellHost implements LocalShellHostApi {
   private readonly observationCommands: ShellCommandRunnerApi
 
   constructor(options: LocalShellHostOptions) {
+    this.environment = options.environment
     const root = resolve(options.cwd)
     this.homeDir = options.homeDir ?? homedir()
     this.hostPlatform = options.platform ?? platform()
@@ -124,10 +127,11 @@ export class LocalShellHost implements LocalShellHostApi {
     this.workingDirectory = root
     const confinement: NonNullable<LocalShellHostOptions['processConfinement']> =
       options.processConfinement ?? { mode: 'danger-full-access', workspaceRoot: root }
-    this.observationCommands=new ShellCommandRunner({platform:this.hostPlatform,platformTools:this.platformTools,
+    this.observationCommands=new ShellCommandRunner({environment:options.environment,platform:this.hostPlatform,platformTools:this.platformTools,
       confinement:{mode:'read-only',workspaceRoot:root,network:false},confinementProvider:options.confinementProvider,
       shells:this.shells,processes:shellProcessManager})
     this.commands = new ShellCommandRunner({
+      environment: options.environment,
       platform: this.hostPlatform,
       platformTools: this.platformTools,
       confinement: {
@@ -153,7 +157,7 @@ export class LocalShellHost implements LocalShellHostApi {
         release: release(),
         homeDir: homedir(),
       },
-      shells: this.detectShells(),
+      shells: this.detectShells(shell.env),
       shell: {
         path: shell.shellPath,
         kind: shell.kind, name: shell.name, readiness: shell.readiness,
@@ -250,20 +254,27 @@ export class LocalShellHost implements LocalShellHostApi {
   }
 
   public async refreshShellEnvironment(): Promise<ShellEnvironmentRefreshResult> {
-    // Windows 上重读用户与系统环境变量并写回本进程，之后起的子进程才看得到新装的命令；其他平台每条命令都经登录 shell 重读配置，这里只重新选 shell。
-    const refreshed = await this.shells.refreshWindowsEnvironment(process.env, this.hostPlatform)
-    // 写回时宿主设的输入变量（VELAROS_SHELL_PATH 等）照留：刷新结果不带它们，直接按结果覆盖会把宿主指定的 shell 弄丢。
-    if (this.hostPlatform === 'win32' && refreshed.refreshed) replaceEnvironment(process.env, refreshed.env)
+    let revision: string
+    let reason: string | undefined
+    if (this.environment) {
+      await this.environment.refresh()
+      revision = String(this.environment.getRevision())
+    } else {
+      const refreshed = await this.shells.refreshWindowsEnvironment(process.env, this.hostPlatform)
+      if (this.hostPlatform === 'win32' && refreshed.refreshed) replaceEnvironment(process.env, refreshed.env)
+      revision = refreshed.revision
+      reason = refreshed.reason
+    }
     const shell = await this.resolveShell()
     const result: ShellEnvironmentRefreshResult = {
       shell: shell.shellPath,
       runtime: toShellDescriptor(shell),
-      shells: this.detectShells(),
+      shells: this.detectShells(shell.env),
       variableCount: Object.keys(shell.env).length,
       refreshedAt: Date.now(),
-      revision: refreshed.revision,
+      revision,
     }
-    if (refreshed.reason) result.reason = refreshed.reason
+    if (reason) result.reason = reason
     return result
   }
 
@@ -292,12 +303,12 @@ export class LocalShellHost implements LocalShellHostApi {
 
   /** 选出本机经过自检、真能工作的 shell。 */
   private resolveShell(): Promise<ResolvedShell> {
-    return this.shells.resolveReady({ platform: this.hostPlatform, env: process.env })
+    return this.environment?.resolveShell() ?? this.shells.resolveReady({ platform: this.hostPlatform, env: process.env })
   }
 
   /** 本机可用的 shell 清单，按挑选优先顺序，第一个就是默认的那个；只查文件不试跑，所以每回合报告都付得起。 */
-  private detectShells(): ShellDescriptor[] {
-    return detectAvailableShells({ platform: this.hostPlatform, env: process.env }).map(toShellDescriptor)
+  private detectShells(env: NodeJS.ProcessEnv): ShellDescriptor[] {
+    return detectAvailableShells({ platform: this.hostPlatform, env }).map(toShellDescriptor)
   }
 
   /** 跑一条读指标的平台命令并解析；平台不支持或读失败时返回 null，指标里对应项留空。 */

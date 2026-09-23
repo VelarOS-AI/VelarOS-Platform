@@ -13,6 +13,7 @@
 
 import type { ApprovalPort } from '@velaros-ai/kernel'
 
+import type { ShellEnvironmentApi } from '../impl/local/ShellEnvironment.js'
 import type { ShellProcessConfinementRequest, ShellProcessConfinementResult } from '../types/local.js'
 import type {
   ShellBackgroundTaskQueryOptions,
@@ -84,8 +85,20 @@ export interface ShellOperationContext {
 
 // ── 本机宿主 ────────────────────────────────────────────────────
 
-/** 创建本机宿主时宿主给的配置。 */
+/** 登录环境的宿主来源和读取预算；状态与读取进程归环境实例持有。 */
+export interface ShellEnvironmentOptions {
+  /** 每次加载读取一次，缺省为当前进程环境；库不会修改该对象。 */
+  env?: () => NodeJS.ProcessEnv
+  /** 宿主平台，缺省为当前进程的平台。 */
+  platform?: NodeJS.Platform
+  /** 每个 POSIX 登录 shell 的读取超时，缺省 10 秒。 */
+  captureTimeoutMs?: number
+}
+
+/** 创建本机宿主时注入的工作目录、共享环境与进程约束。 */
 export interface LocalShellHostOptions {
+  /** 借用宿主共享的登录环境；由创建它的宿主负责刷新和关闭。 */
+  environment?: ShellEnvironmentApi
   /** 工作目录：命令的默认 cwd，相对路径都相对它。 */
   cwd: string
   /** 家目录，`~` 展开到这里；缺省用当前用户的家目录。 */

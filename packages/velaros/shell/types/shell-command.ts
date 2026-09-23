@@ -362,6 +362,8 @@ export interface ShellRunCommandOptions {
    */
   interactive?: boolean
   maxOutputChars?: number
+  /** 宿主提供的前台标准输入，按 UTF-8 写入后发送 EOF；后台命令不接受此字段。 */
+  stdin?: string
   /** 发起这条命令的会话；宿主按它登记后台任务的归属。 */
   sessionId?: string
   /**
@@ -369,8 +371,8 @@ export interface ShellRunCommandOptions {
    * （`VALIDATION`，报错里点名可用的有哪些），不许换一个 shell 照跑——命令是按这个 shell 的语法写的，换一个跑出来的是错的结果而不是报错。
    */
   shell?: ShellCommandKind
-  /** 宿主自己组合出来的可执行调用；永远不进模型面。 */
-  nativeCommand?: { file: string; args: string[]; env?: Record<string, string> }
+  /** 宿主自己组合出来的可执行调用；env 覆盖本次环境，undefined 删除该键；永远不进模型面。 */
+  nativeCommand?: { file: string; args: string[]; env?: Record<string, string | undefined> }
 }
 
 /** 查询后台任务的过滤条件；给了 `taskId` 就精确匹配那一条。 */

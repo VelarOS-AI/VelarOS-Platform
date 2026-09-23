@@ -30,3 +30,6 @@ system 原来的 INV-23（沙箱里的命令一律受约束）搬去了 `@velaro
 | INV-14 | 管道分块不会打碎 UTF-8 字符，子进程退出码原样透传，shell 描述符里不带 `env` | 测试 | `spec/acceptance.test.ts` |
 | INV-15 | 超时或取消后进程管理最终收敛：终止信号无人响应、close 永不到达时也在期限内结束，并如实标记清理未完成 | 测试 | `spec/acceptance.test.ts` |
 | INV-16 | 命令只在挑定的那个 shell 里跑：`shell` 给的种类本机没有就在起进程之前拒绝（`VALIDATION`），报错点名可用的有哪些、哪个是默认，绝不换默认 shell 照跑；不给 `shell` 才用默认的那个 | 测试 | `spec/acceptance.test.ts` |
+
+| INV-17 | 宿主共享的登录环境支持合并并发读取、按代次刷新、返回独立副本；旧刷新不覆盖新快照。注入同一环境的本机宿主在原生命令与环境体检中使用该快照，工作区释放不关闭借用的环境；环境 owner 释放时中止读取并等待收尾 | 测试 | `spec/acceptance.test.ts` |
+| INV-18 | 宿主前台命令按 UTF-8 写入标准输入并发送 EOF（包括空串）；输入端提前关闭不产生未处理异常，超时继续按受管进程收尾。后台与一次性 stdin 同传时在启动前拒绝。原生命令 env 的 undefined 删除该键，覆盖仅影响本次命令，不修改借用环境快照 | 测试 | `spec/acceptance.test.ts` |
