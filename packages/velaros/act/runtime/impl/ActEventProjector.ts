@@ -57,8 +57,17 @@ class ActEventProjector implements ActEventProjectorApi {
       if (turns.has(event.turnId)) return this.snapshot()
       turns.add(event.turnId)
       this.turns.set(event.runId, turns)
-      run = { ...run, turn: turns.size, turnId: event.turnId, preview: '' }
+      const { notice: _notice, ...rest } = run
+      run = { ...rest, turn: turns.size, turnId: event.turnId, preview: '' }
     }
+    // 限速等待与无进展暂停只给提示，状态仍以 state 事件为准
+    if (event.type === 'throttled')
+      run = { ...run, notice: { kind: 'throttled', retryAfterMs: event.retryAfterMs } }
+    if (event.type === 'stalled')
+      run = {
+        ...run,
+        notice: { kind: 'stalled', repeatedSteps: event.repeatedSteps, message: event.message },
+      }
     if (
       event.type === 'input' ||
       event.type === 'input-applied' ||
@@ -153,7 +162,12 @@ class ActEventProjector implements ActEventProjectorApi {
         'needs_reconcile',
       ].includes(event.status)
       if (terminal) this.ended.add(event.runId)
-      run = { ...run, status: event.status, preview: terminal ? '' : run.preview }
+      const { notice: _notice, ...rest } = run
+      run = {
+        ...(terminal ? rest : run),
+        status: event.status,
+        preview: terminal ? '' : run.preview,
+      }
     }
     this.state = { ...this.state, runs: { ...this.state.runs, [event.runId]: run } }
     return this.snapshot()

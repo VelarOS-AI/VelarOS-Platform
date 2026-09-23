@@ -46,6 +46,28 @@ test('INV-44 live and durable run projections agree on turns, queued inputs and 
   assert.equal(replay.snapshot().cursor, 23)
 })
 
+test('throttle and stall notices show while they apply and clear on the next turn or a terminal state', () => {
+  const p = createActEventProjector()
+  p.applyLive({ type: 'turn', runId: 'run', turnId: 'turn-one' })
+  p.applyLive({ type: 'throttled', runId: 'run', retryAfterMs: 1200 })
+  assert.deepEqual(p.snapshot().runs.run.notice, { kind: 'throttled', retryAfterMs: 1200 })
+  p.applyLive({ type: 'turn', runId: 'run', turnId: 'turn-two' })
+  assert.equal('notice' in p.snapshot().runs.run, false)
+  const stall = { type: 'stalled', runId: 'run', repeatedSteps: 9, message: 'paused' }
+  p.applyLive(stall)
+  p.applyLive({ type: 'state', runId: 'run', status: 'waiting' })
+  // 暂停等用户时提示保留；运行结束才清除
+  assert.deepEqual(p.snapshot().runs.run.notice, {
+    kind: 'stalled',
+    repeatedSteps: 9,
+    message: 'paused',
+  })
+  const other = createActEventProjector()
+  other.applyLive({ type: 'throttled', runId: 'run', retryAfterMs: 5 })
+  other.applyLive({ type: 'state', runId: 'run', status: 'cancelled' })
+  assert.equal('notice' in other.snapshot().runs.run, false)
+})
+
 test('duplicate turns cannot count twice or rewind the active preview', () => {
   const projector = createActEventProjector()
   projector.applyLive({ type: 'turn', runId: 'run', turnId: 'one' })
