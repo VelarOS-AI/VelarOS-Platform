@@ -1,8 +1,14 @@
-import type { ContextRecord } from '@velaros-ai/context'
+import type { ContextRecord, ContextRef } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
 import { isEmpty, isPlainObject } from '@velaros-ai/core'
 
-import type { VolumeView } from '../types/segment.js'
+import type {
+  FoldedGoals,
+  LedgerList,
+  SegmentLedgers,
+  VolumeNarrativeRecord,
+  VolumeView,
+} from '../types/segment.js'
 
 import { ActRuntimeTuning } from './tuning.js'
 
@@ -56,11 +62,67 @@ export function archivedJson(raw: Nullable<string>): Record<string, unknown> {
   }
 }
 
+/** 截到 limit 个字符，截掉的部分用省略号标出。 */
+export function clipped(text: string, limit: number): string {
+  return text.length > limit ? `${text.slice(0, limit)}…` : text
+}
+
 /** 截到骨架每行的上限。 */
 export function skeletonLine(text: string): string {
-  return text.length > ActRuntimeTuning.volumeLineChars
-    ? `${text.slice(0, ActRuntimeTuning.volumeLineChars)}…`
-    : text
+  return clipped(text, ActRuntimeTuning.volumeLineChars)
+}
+
+/** 底座里的长期单：否定尝试跨卷累积，未解问题取最新写下的叙事，用户约束取输入摘要；各自去重，最新的在前。 */
+export function segmentLedgers(
+  narratives: readonly VolumeNarrativeRecord[],
+  constraints: ReadonlyArray<{ readonly ref: ContextRef; readonly items: readonly string[] }>
+): SegmentLedgers {
+  const latest = narratives.at(-1)
+  return {
+    negativeAttempts: ledgerList(
+      [...narratives]
+        .reverse()
+        .map((item) => ({ ref: item.ref, items: item.narrative.negativeAttempts }))
+    ),
+    unresolved: ledgerList(latest ? [{ ref: latest.ref, items: latest.narrative.unresolved }] : []),
+    constraints: ledgerList(constraints),
+  }
+}
+
+/** 按出处顺序去重并截短；超出条数上限的只计数，保留它们出处的引用。 */
+function ledgerList(
+  groups: ReadonlyArray<{ readonly ref: ContextRef; readonly items: readonly string[] }>
+): LedgerList {
+  const seen = new Set<string>()
+  const items: string[] = []
+  const sources: ContextRef[] = []
+  let omitted = 0
+  for (const group of groups)
+    for (const item of group.items) {
+      const text = item.trim()
+      if (!text || seen.has(text)) continue
+      seen.add(text)
+      if (items.length < ActRuntimeTuning.ledgerItems) {
+        items.push(clipped(text, ActRuntimeTuning.ledgerItemChars))
+        continue
+      }
+      omitted++
+      if (
+        sources.length < ActRuntimeTuning.ledgerSources &&
+        !sources.some((ref) => ref.id === group.ref.id)
+      )
+        sources.push(group.ref)
+    }
+  return { items, omitted, sources }
+}
+
+/** 一张长期单在底座里的一行；空单不占行。 */
+function ledgerLine(label: string, list: LedgerList): string[] {
+  if (isEmpty(list.items)) return []
+  const omitted = list.omitted
+    ? `；另有 ${list.omitted} 条没有列出，出处 ${JSON.stringify(list.sources)}`
+    : ''
+  return [`${label}：${JSON.stringify(list.items)}${omitted}`]
 }
 
 /** 超出骨架上限时保留开头约三分之一和结尾，中间只记省略的行数。 */
@@ -89,13 +151,15 @@ export function boundedSkeleton(lines: readonly string[]): string {
 }
 
 /**
- * 段底座正文：卷目录、最近一卷的骨架与叙事、段起点的笔记快照。
+ * 段底座正文：卷目录、最近一卷的骨架与叙事、长期单、段起点之前的任务目标、段起点的笔记快照。
  * 整段请求里它逐字不变，笔记的新版本出现在最后一条消息里。
  */
 export function segmentBase(input: {
   readonly index: number
   readonly from: number
   readonly volumes: readonly VolumeView[]
+  readonly ledgers: SegmentLedgers
+  readonly goals: FoldedGoals
   readonly notes: ReadonlyArray<{ readonly text: string } & Record<string, unknown>>
   /** 超出卡片数的驻留笔记数。 */
   readonly omitted: number
@@ -124,6 +188,22 @@ export function segmentBase(input: {
           latest!.volume.skeleton || '（只有叙事）',
           ...(latest!.narrative
             ? ['这一卷的叙事（整理支线写的模型解释）：', JSON.stringify(latest!.narrative)]
+            : []),
+        ]
+      : []),
+    ...ledgerLine('否定尝试（各卷叙事里试过没用的做法，别再重复）', input.ledgers.negativeAttempts),
+    ...ledgerLine('未解问题（最新叙事里仍未解决的事项）', input.ledgers.unresolved),
+    ...ledgerLine('用户约束（输入摘要里的约束）', input.ledgers.constraints),
+    ...(!isEmpty(input.goals.items)
+      ? [
+          '更早的任务目标（段起点之前提出，只列第一行；最新的目标和段内新提的目标在最后一条消息里）：',
+          ...input.goals.items.map(
+            ({ line, ...metadata }) => `${JSON.stringify(metadata)} ${line}`
+          ),
+          ...(input.goals.omitted
+            ? [
+                `另有 ${input.goals.omitted} 条更早的目标没有列出，用 memory.list({kind:'inputs'}) 分页查看。`,
+              ]
             : []),
         ]
       : []),

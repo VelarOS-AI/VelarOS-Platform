@@ -20,6 +20,7 @@ import { ProgramContext } from '../../runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../runtime/impl/RecentContext.js'
 import { memoryReference } from '../../runtime/utils/context-memory.js'
 import { awaitModelPreparation } from '../../runtime/utils/model-budget.js'
+import { segmentLedgers } from '../../runtime/utils/segment.js'
 import { ContextPatchLimits } from '../contract/constants.js'
 import type { ContextCandidateValidator } from '../contract/requires.js'
 import type {
@@ -175,7 +176,9 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
         })),
       }
     }
-    const latest = (await new RecentContext(this.id, context, this.storage).volumes(signal)).at(-1)
+    const recent = new RecentContext(this.id, context, this.storage)
+    const latest = (await recent.volumes(signal)).at(-1)
+    const narratives = await recent.narratives(signal)
     const baseRevision = await this.version(state)
     if (this.inputRevision !== baseRevision) {
       this.inputRevision = baseRevision
@@ -201,6 +204,11 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
             skeleton: latest.volume.skeleton,
           }
         : undefined,
+      // 最新叙事里的未解事项原样给出，写新叙事时照抄还没解决的；否定尝试只供参照，按卷累积
+      ledgers: {
+        negativeAttempts: segmentLedgers(narratives, []).negativeAttempts.items,
+        unresolved: narratives.at(-1)?.narrative.unresolved ?? [],
+      },
       observation,
       baseRevision,
       targetChars,
@@ -652,12 +660,16 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
         for (const ref of snapshot.intent?.preserve ?? [])
           if (ref.sessionId !== this.id || !memoryReference(state, ref))
             throw new AppError('PERMISSION', '明确保留材料已不在当前授权范围')
+        // 段起点之前提出的目标折叠在段底座里，其余的必须出现在本帧尾
+        const task = frame.partitions.task as {
+          goals: ReadonlyArray<{ record: { ref: ContextRef } }>
+          folded: { through: number }
+        }
         if (
-          snapshot.goals.some(
-            (ref) =>
-              !frame.partitions.task.goals.some(
-                (goal: { record: { ref: ContextRef } }) => goal.record.ref.id === ref.id
-              )
+          goals.some(
+            (goal) =>
+              goal.record.sequence > task.folded.through &&
+              !task.goals.some((item) => item.record.ref.id === goal.record.ref.id)
           )
         )
           throw new AppError('NOT_FOUND', '整理候选丢失任务目标')

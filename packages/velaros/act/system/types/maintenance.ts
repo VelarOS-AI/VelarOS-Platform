@@ -41,6 +41,14 @@ export interface ContextMaintenanceSnapshot {
     readonly through: number
     readonly skeleton: string
   }
+  /**
+   * 已有的长期单：negativeAttempts 是各卷叙事累积下来试过没用的做法（最新的在前），unresolved 是最新叙事里仍未解决的事项；
+   * 给最新一卷写叙事时，unresolved 里还没解决的要照抄保留，解决了的去掉。
+   */
+  readonly ledgers: {
+    readonly negativeAttempts: readonly string[]
+    readonly unresolved: readonly string[]
+  }
   /** 用户目标代次，用于使旧摘要失效。 */
   readonly taskRevision: string
   readonly protectedRefs: readonly ContextRef[]

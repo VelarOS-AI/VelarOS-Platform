@@ -628,6 +628,108 @@ test('INV-50 folding seals older history into a listed volume and the next segme
   assert.equal(await memory.fold('runway', 24000, signal), false)
 })
 
+test('INV-52 the segment base keeps ledgers across volumes and earlier goals while the tail keeps the latest and in-segment goals', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const recent = new RecentContext('s', f.session.context, f.storage)
+  const memory = new ContextMemory(
+    's',
+    f.session.context,
+    f.storage,
+    f.session.view,
+    programs,
+    recent
+  )
+  const first = await f.session.context.append({
+    kind: 'user',
+    body: 'Build the parser\nwith every detail spelled out',
+  })
+  await f.session.view.begin(first.ref)
+  await f.session.context.summarizeInput({
+    ref: first.ref,
+    summary: 'Build the parser',
+    constraints: ['只用标准库', 'keep the API stable'],
+    unresolved: [],
+    baseRevision: 0,
+  })
+  const second = await f.session.context.append({ kind: 'user', body: 'Add tests for the parser' })
+  await f.session.view.appendGoal(second.ref)
+  const goals = [first, second]
+  const view = async () => ({
+    id: 'frame',
+    scope: { sessionId: 's', revision: 0 },
+    goals: await Promise.all(goals.map((goal) => f.session.context.projectInput(goal.ref, 2000))),
+    capsule: {},
+    mandatory: [],
+    evidence: [],
+    gaps: [],
+    readSet: [],
+    progress: { step: 0, repeatedSteps: 0, stalled: false, evidence: [] },
+  })
+  const steps = async (count) => {
+    for (let index = 0; index < count; index++) {
+      await f.session.context.append({
+        kind: 'assistant',
+        body: `step ${index} done\n@@sX execute()\noutput(1)\n@@sX`,
+      })
+      await archiveResult(f, programs, `result-${index}`)
+    }
+  }
+  await steps(6)
+  const start = await memory.project(await view(), undefined, [], signal, 24000)
+  assert.equal(JSON.parse(start.body).partitions.task.goals.length, 2)
+  assert.equal(JSON.parse(start.body).partitions.task.folded.count, 0)
+  assert(await memory.fold('runway', 24000, signal))
+  const [older] = await recent.volumes(signal)
+  await recent.narrate(
+    older.ref,
+    { summary: 'First volume', evidence: [], unresolved: ['U1', 'U2'], negativeAttempts: ['N1'] },
+    signal
+  )
+  await steps(6)
+  assert(await memory.fold('runway', 24000, signal))
+  const third = await f.session.context.append({ kind: 'user', body: 'Now also support comments' })
+  await f.session.view.appendGoal(third.ref)
+  goals.push(third)
+  const frame = await memory.project(await view(), undefined, [], signal, 24000)
+  const base = frame.history[0].content
+  assert.match(base, /否定尝试[^\n]*："?\["N1"\]/)
+  assert.match(base, /未解问题[^\n]*：\["U1","U2"\]/)
+  assert.match(base, /用户约束[^\n]*：\["只用标准库","keep the API stable"\]/)
+  // 段起点之前的两个目标只在底座列第一行，最新的在前；段内新提的目标只在本帧尾
+  assert.match(base, /Add tests for the parser[\s\S]*Build the parser/)
+  assert.doesNotMatch(base, /every detail spelled out|support comments/)
+  const task = JSON.parse(frame.body).partitions.task
+  assert.deepEqual(
+    task.goals.map((goal) => goal.record.ref.id),
+    [third.ref.id]
+  )
+  assert.equal(task.folded.count, 2)
+  // 未解问题只取最新的叙事；否定尝试跨卷累积、去重，超出条数的只计数并保留出处
+  const [, newer] = await recent.volumes(signal)
+  const attempts = Array.from({ length: 18 }, (_, index) => `X${index}`)
+  await recent.narrate(
+    newer.ref,
+    {
+      summary: 'Second volume',
+      evidence: [],
+      unresolved: ['U2', 'U3'],
+      negativeAttempts: ['N2', 'N1', ...attempts],
+    },
+    signal
+  )
+  await steps(6)
+  assert(await memory.fold('runway', 24000, signal))
+  const next = (await memory.project(await view(), undefined, [], signal, 24000)).history[0].content
+  const narrative = (await recent.narratives(signal)).at(-1)
+  assert(
+    next.includes(
+      `：${JSON.stringify(['N2', 'N1', ...attempts.slice(0, 14)])}；另有 4 条没有列出，出处 ${JSON.stringify([narrative.ref])}`
+    )
+  )
+  assert.match(next, /未解问题[^\n]*：\["U2","U3"\]\n/)
+})
+
 async function archiveResult(f, programs, label) {
   const id = crypto.randomUUID()
   const source = await f.session.context.append({

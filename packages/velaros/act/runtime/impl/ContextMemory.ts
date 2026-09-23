@@ -8,6 +8,7 @@ import type {
   ContextViewApi,
   ModelView,
 } from '@velaros-ai/context'
+import { ContextLimits } from '@velaros-ai/context'
 import { isEmpty } from '@velaros-ai/core'
 import { isFalse, isNull, isUndefined, toNullable } from '@velaros-ai/core'
 import { isArray, isBoolean, isString } from '@velaros-ai/core'
@@ -25,9 +26,9 @@ import type {
   RuntimeNoteRead,
   WorkspaceNote,
 } from '../types/memory.js'
-import type { ContextSegment, SegmentReason, SegmentStatus } from '../types/segment.js'
+import type { ContextSegment, FoldedGoals, SegmentReason, SegmentStatus } from '../types/segment.js'
 import { memoryPolicy, memoryPrompt, memoryReference, noteEntry } from '../utils/context-memory.js'
-import { segmentBase } from '../utils/segment.js'
+import { archivedJson, segmentBase, segmentLedgers, skeletonLine } from '../utils/segment.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
 import type { ProgramContextApi } from './ProgramContext.js'
@@ -86,6 +87,8 @@ export interface ContextMemoryApi {
   fold(reason: SegmentReason, maxChars: number, signal: AbortSignal): Promise<boolean>
   /** 是否处在章节边界：有待处理的整理请求、段内来了新的用户输入，或计划的下一目标变了。 */
   boundary(signal: AbortSignal): Promise<boolean>
+  /** 取走自动封段留下的补写叙事标记，只取一次；没有时返回 null。 */
+  narration(signal: AbortSignal): Promise<Nullable<ContextRef>>
 }
 
 /** 同一可靠存储上的工作内存，分区只改变组装与驻留，不改变事实和权限。 */
@@ -654,6 +657,24 @@ export class ContextMemory implements ContextMemoryApi {
           record.sequence > (snapshot.task?.startedSequence ?? 0)
       )
     )
+    // 段起点之前提出的目标已列在底座；本帧尾只放最新的目标和段内新提的目标，并按剩下的条数重新分配篇幅
+    const recentGoals = material.goals.filter(
+      (goal: ContextContent) => goal.record.sequence > segment.from
+    )
+    const shownGoals: ContextContent[] = isEmpty(recentGoals)
+      ? material.goals.slice(-1)
+      : recentGoals
+    const goals =
+      shownGoals.length < material.goals.length
+        ? await Promise.all(
+            shownGoals.map((goal) =>
+              this.context.projectInput(
+                goal.record.ref,
+                Math.max(1, Math.floor(maxChars / Math.max(4, shownGoals.length * 4)))
+              )
+            )
+          )
+        : material.goals
     const status: SegmentStatus = {
       id: segment.id,
       index: segment.index,
@@ -662,7 +683,10 @@ export class ContextMemory implements ContextMemoryApi {
       turns: history.items.filter((item) => item.role === 'assistant').length,
     }
     const partitions = {
-      task: { goals: material.goals },
+      task: {
+        goals,
+        folded: { count: material.goals.length - goals.length, through: segment.from },
+      },
       workspace: {
         capsule: resetAfterStart ? null : material.capsule,
         notes: workspace,
@@ -778,7 +802,7 @@ export class ContextMemory implements ContextMemoryApi {
     if (!segment) return false
     const cut = await this.recent.cut(segment, this.policy.recentRecords, signal)
     if (isUndefined(cut)) return false
-    await this.recent.seal(segment.from, cut, signal)
+    const sealed = await this.recent.seal(segment.from, cut, signal)
     // 切点之前产生、租约仍有效的结果留在新段最前面，按原顺序重新交付一次
     const leases = await this.programs.state()
     const visible = leases.leases
@@ -792,12 +816,31 @@ export class ContextMemory implements ContextMemoryApi {
     const carried = visible
       .filter((ref) => (sequence.get(ref) ?? Infinity) <= cut)
       .sort((a, b) => sequence.get(a)! - sequence.get(b)!)
+    // 自动封的一卷只有规则骨架；那一段做了很多事却没改笔记和计划时，留给整理支线补写叙事
+    const volume = (await this.recent.volumes(signal)).find(
+      (item) => item.ref.id === sealed.id
+    )?.volume
+    const narrate =
+      reason !== 'organize' &&
+      volume &&
+      volume.turns >= ActRuntimeTuning.narrateTurns &&
+      isEmpty(volume.notes) &&
+      (selected?.task?.capsule?.nextObjective ?? '') === segment.objective
+        ? sealed
+        : null
     await this.start(
-      { index: segment.index + 1, revision: 0, from: cut, carried, entries: [], reason },
+      { index: segment.index + 1, revision: 0, from: cut, carried, entries: [], reason, narrate },
       maxChars,
       signal
     )
     return true
+  }
+
+  public async narration(signal: AbortSignal): Promise<Nullable<ContextRef>> {
+    const segment = await this.recent.segment(signal)
+    if (!segment?.narrate) return null
+    await this.recent.commit({ ...segment, narrate: null }, signal)
+    return segment.narrate
   }
 
   public async boundary(signal: AbortSignal): Promise<boolean> {
@@ -928,12 +971,13 @@ export class ContextMemory implements ContextMemoryApi {
   /** 渲染并登记一段的底座；重建底座时沿用段号、起点、条目和章节基准。 */
   private async start(
     input: Pick<ContextSegment, 'index' | 'revision' | 'from' | 'carried' | 'entries' | 'reason'> &
-      Partial<Pick<ContextSegment, 'id' | 'objective' | 'goals'>>,
+      Partial<Pick<ContextSegment, 'id' | 'objective' | 'goals' | 'narrate'>>,
     maxChars: number,
     signal: AbortSignal
   ): Promise<ContextSegment> {
     const { snapshot, reset, notes } = await this.notes(signal, true, [
       { title: 'context:projection-policy', latest: true },
+      { kind: 'user' },
     ])
     const presentation = await this.presentation(snapshot, reset)
     const residents = notes
@@ -945,10 +989,49 @@ export class ContextMemory implements ContextMemoryApi {
       Math.max(0, Math.floor(maxChars * this.policy.workspaceShare)),
       presentation
     )
+    // 输入摘要里的约束进长期单；段起点之前提出的目标只在底座列第一行，最新的在前
+    const sequences = new Map(
+      snapshot?.records
+        .filter((record) => record.kind === 'user')
+        .map((record) => [record.ref.id, record.sequence])
+    )
+    const taskGoals = (snapshot?.task?.goals ?? [])
+      .filter((ref) => (sequences.get(ref.id) ?? 0) > reset)
+      .reverse()
+    const summaries = new Map(
+      snapshot?.inputSummaries?.map((item) => [item.input.id, item.summary])
+    )
+    const constraints = []
+    for (const ref of taskGoals) {
+      const summary = summaries.get(ref.id)
+      if (!summary) continue
+      const intent = archivedJson(
+        (await this.context.read(summary, { limit: ContextLimits.readChars })).text
+      )
+      constraints.push({
+        ref: summary,
+        items: isArray(intent.constraints) ? intent.constraints.filter(isString) : [],
+      })
+    }
+    const earlier = taskGoals.filter((ref) => sequences.get(ref.id)! <= input.from)
+    const listed: Array<FoldedGoals['items'][number]> = []
+    for (const ref of earlier.slice(0, ActRuntimeTuning.foldedGoals)) {
+      const content = await this.context.readInput(ref, {
+        limit: ActRuntimeTuning.volumeLineChars,
+      })
+      listed.push({
+        ref,
+        sequence: content.record.sequence,
+        line: skeletonLine(content.text.split('\n')[0] ?? ''),
+        summaryRef: toNullable(summaries.get(ref.id)),
+      })
+    }
     const text = segmentBase({
       index: input.index,
       from: input.from,
       volumes,
+      ledgers: segmentLedgers(await this.recent.narratives(signal), constraints),
+      goals: { items: listed, omitted: earlier.length - listed.length },
       notes: cards.cards,
       omitted: cards.omitted,
     })
@@ -975,6 +1058,7 @@ export class ContextMemory implements ContextMemoryApi {
       policy: presentation.id,
       volumes: volumes.length,
       reason: input.reason,
+      narrate: toNullable(input.narrate),
     }
     await this.recent.commit(segment, signal)
     return segment

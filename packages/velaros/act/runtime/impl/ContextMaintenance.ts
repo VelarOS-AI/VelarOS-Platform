@@ -57,10 +57,10 @@ export interface ContextMaintenanceDependencies {
 
 /** 固定快照的模型工具及安全轮边界入口。 */
 export interface ContextMaintenanceApi extends ContextMaintenanceHost {
-  /** 消费显式请求或按容量预警运行一次整理；没有业务脚本重放。 */
+  /** 消费显式请求、按容量预警或给自动封的上一卷补写叙事，运行一次整理；没有业务脚本重放。 */
   maintain(
     id: string,
-    input: { reason: 'boundary' | 'pressure' | 'provider'; targetChars: number },
+    input: { reason: 'boundary' | 'pressure' | 'provider' | 'narrate'; targetChars: number },
     signal: AbortSignal
   ): Promise<boolean>
   /** 宿主读取持久请求与结果，不作为模型操作暴露。 */
@@ -333,7 +333,7 @@ export class ContextMaintenance implements ContextMaintenanceApi {
 
   public async maintain(
     parentId: string,
-    input: { reason: 'boundary' | 'pressure' | 'provider'; targetChars: number },
+    input: { reason: 'boundary' | 'pressure' | 'provider' | 'narrate'; targetChars: number },
     signal: AbortSignal
   ): Promise<boolean> {
     const status = (await this.status(parentId, signal)) as {
@@ -344,7 +344,8 @@ export class ContextMaintenance implements ContextMaintenanceApi {
     if ((input.reason === 'boundary' && !status.pending) || this.running.has(parentId)) return false
     const model = this.dependencies.options?.model ?? this.dependencies.model(parentId)
     if (!model) return false
-    const requested = await this.consume(parentId, signal)
+    // 补写叙事不认领显式整理请求：那种请求要先封段，由请求边界另行处理
+    const requested = input.reason === 'narrate' ? undefined : await this.consume(parentId, signal)
     if (input.reason === 'boundary' && !requested) return false
     const state = new ContextMaintenanceState(
       parentId,
@@ -353,8 +354,12 @@ export class ContextMaintenance implements ContextMaintenanceApi {
     )
     const targetChars = input.targetChars
     const base = await state.snapshot(targetChars, signal)
+    if (input.reason === 'narrate' && !base.volume) return false
     const intent: MemoryOrganizeIntent = {
-      focus: requested?.focus || base.capsule.nextObjective || '',
+      focus:
+        input.reason === 'narrate'
+          ? '给最新一卷（snapshot.volume）补写叙事：按区间读原文，写清这一段做了什么、查明了什么、试过没用的做法和仍未解决的事项；其余分区没有必要就不改。'
+          : requested?.focus || base.capsule.nextObjective || '',
       preserve: requested?.preserve ?? [],
     }
     const snapshot: ContextMaintenanceSnapshot = {

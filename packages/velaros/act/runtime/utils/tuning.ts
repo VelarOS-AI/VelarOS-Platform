@@ -34,4 +34,14 @@ export const ActRuntimeTuning = Object.freeze({
   volumeIndex: 24,
   /** 一次合并多少卷。 */
   volumeMerge: 12,
+  /** 底座每张长期单最多列几条。 */
+  ledgerItems: 16,
+  /** 长期单每条最多显示的字符数；原文按出处召回。 */
+  ledgerItemChars: 400,
+  /** 长期单超出条数时最多保留几个出处引用。 */
+  ledgerSources: 8,
+  /** 底座最多列几条段起点之前的任务目标。 */
+  foldedGoals: 16,
+  /** 自动封的一卷至少这么多轮、期间又没改笔记和计划，就让整理支线补写叙事。 */
+  narrateTurns: 6,
 })

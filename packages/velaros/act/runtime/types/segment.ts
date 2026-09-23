@@ -49,6 +49,8 @@ export interface ContextSegment {
   /** 底座目录里的卷数。 */
   readonly volumes: number
   readonly reason: SegmentReason
+  /** 自动封成、只有骨架的上一卷：那一段做了很多事却没改笔记和计划，等整理支线在下一个请求边界补写叙事。 */
+  readonly narrate: Nullable<ContextRef>
 }
 
 /** 主循环看到的段状态：据此判断增长是否可比、封段是否发生。 */
@@ -79,6 +81,38 @@ export interface ContextVolume {
   readonly skeleton: string
   /** 合并卷的组成卷。 */
   readonly parts?: readonly ContextRef[]
+}
+
+/** 一条卷叙事记录：记录引用、写给哪一卷、叙事内容。 */
+export interface VolumeNarrativeRecord {
+  readonly ref: ContextRef
+  readonly volume: ContextRef
+  readonly narrative: VolumeNarrative
+}
+
+/** 底座里的一张长期单：最新的在前；超出条数上限的只计数，并保留它们出处的引用。 */
+export interface LedgerList {
+  readonly items: readonly string[]
+  readonly omitted: number
+  readonly sources: readonly ContextRef[]
+}
+
+/** 底座里的长期单：跨卷累积的否定尝试、最新叙事里的未解问题、输入摘要里的用户约束。 */
+export interface SegmentLedgers {
+  readonly negativeAttempts: LedgerList
+  readonly unresolved: LedgerList
+  readonly constraints: LedgerList
+}
+
+/** 段起点之前提出的任务目标：底座只列第一行、引用和输入摘要引用，最新的在前。 */
+export interface FoldedGoals {
+  readonly items: ReadonlyArray<{
+    readonly ref: ContextRef
+    readonly sequence: number
+    readonly line: string
+    readonly summaryRef: Nullable<ContextRef>
+  }>
+  readonly omitted: number
 }
 
 /** 当前授权代次内仍在目录里的一卷及其最新叙事。 */

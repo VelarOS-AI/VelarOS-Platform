@@ -24,6 +24,7 @@ import type {
   SegmentEntry,
   SegmentHistory,
   SegmentLeasedResult,
+  VolumeNarrativeRecord,
   VolumeView,
 } from '../types/segment.js'
 import { memoryOutput } from '../utils/context-memory.js'
@@ -46,6 +47,8 @@ export interface RecentContextApi {
   segment(signal: AbortSignal): Promise<Nullable<ContextSegment>>
   /** 目录里的卷（已被合并的不再单列）及各自最新的叙事，按区间排序。 */
   volumes(signal: AbortSignal): Promise<readonly VolumeView[]>
+  /** 当前授权代次的全部卷叙事，含已并进上一级的卷，按写入顺序。 */
+  narratives(signal: AbortSignal): Promise<readonly VolumeNarrativeRecord[]>
   /** 段内历史：已冻结的逐字复用，新记录按 entryChars 渲染一次，租约失效的结果改成引用卡。 */
   project(
     segment: ContextSegment,
@@ -170,32 +173,41 @@ export class RecentContext implements RecentContextApi {
 
   public async volumes(signal: AbortSignal): Promise<readonly VolumeView[]> {
     signal.throwIfAborted()
-    const state = await this.snapshot([
-      { title: 'context:volume' },
-      { title: 'context:volume-narrative' },
-    ])
+    const state = await this.snapshot([{ title: 'context:volume' }])
     const reset = this.reset(state)
-    const records = (state?.records ?? []).filter((record) => record.sequence > reset)
     const volumes: Array<{ ref: ContextRef; volume: ContextVolume }> = []
-    for (const record of records.filter((item) => item.title === 'context:volume'))
-      volumes.push({
-        ref: record.ref,
-        volume: JSON.parse((await this.storage.get(this.id, record.objectId))!) as ContextVolume,
-      })
+    for (const record of state?.records ?? [])
+      if (record.title === 'context:volume' && record.sequence > reset)
+        volumes.push({
+          ref: record.ref,
+          volume: JSON.parse((await this.storage.get(this.id, record.objectId))!) as ContextVolume,
+        })
     const merged = new Set(volumes.flatMap((item) => item.volume.parts?.map((ref) => ref.id) ?? []))
-    const narratives = new Map<string, VolumeNarrative>()
-    for (const record of records.filter((item) => item.title === 'context:volume-narrative')) {
-      const { volume, ...narrative } = JSON.parse(
-        (await this.storage.get(this.id, record.objectId))!
-      ) as VolumeNarrative & { volume: ContextRef }
-      narratives.set(volume.id, narrative)
-    }
+    // 同一卷写过几次叙事时以最后一次为准
+    const narratives = new Map(
+      (await this.narratives(signal)).map((item) => [item.volume.id, item.narrative])
+    )
     return volumes
       .filter((item) => !merged.has(item.ref.id))
       .sort((a, b) => a.volume.from - b.volume.from)
       .map((item) =>
         narratives.has(item.ref.id) ? { ...item, narrative: narratives.get(item.ref.id) } : item
       )
+  }
+
+  public async narratives(signal: AbortSignal): Promise<readonly VolumeNarrativeRecord[]> {
+    signal.throwIfAborted()
+    const state = await this.snapshot([{ title: 'context:volume-narrative' }])
+    const reset = this.reset(state)
+    const narratives: VolumeNarrativeRecord[] = []
+    for (const record of state?.records ?? [])
+      if (record.title === 'context:volume-narrative' && record.sequence > reset) {
+        const { volume, ...narrative } = JSON.parse(
+          (await this.storage.get(this.id, record.objectId))!
+        ) as VolumeNarrative & { volume: ContextRef }
+        narratives.push({ ref: record.ref, volume, narrative })
+      }
+    return narratives
   }
 
   public async project(

@@ -15,7 +15,7 @@ import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { modelText } from './support/model-turn.mjs'
 import { historyEntries, runtimeFrame } from './support/model-turn.mjs'
-import { done, marker } from './support/model-turn.mjs'
+import { done, marker, turn } from './support/model-turn.mjs'
 
 /** 段状态的最小形态：第 1 段，还没有冻结条目。 */
 function segment(overrides = {}) {
@@ -33,6 +33,7 @@ function segment(overrides = {}) {
     policy: null,
     volumes: 0,
     reason: 'start',
+    narrate: null,
     ...overrides,
   }
 }
@@ -597,6 +598,8 @@ test('INV-50 a long run folds by remaining turns: every request fits the window 
         recoveryChars: 6000,
         timeoutMs: 120000,
       },
+      // 只测按剩余轮数封段；自动封段后的补写叙事另有用例
+      context: { sources: [], maintenance: false },
     },
     // 估算与请求大小成正比、窗口较小，让封段在几十轮内发生
     {
@@ -618,4 +621,94 @@ test('INV-50 a long run folds by remaining turns: every request fits the window 
   // 封段之间段号只增不减，段内轮数在新段重新计数
   for (let index = 1; index < statuses.length; index++)
     assert(statuses[index].segment.index >= statuses[index - 1].segment.index)
+})
+
+test('INV-53 an automatic fold of a busy segment without note or plan changes is narrated once at the next request boundary', async (t) => {
+  const narrated = []
+  const maintenance = {
+    id: 'narrator',
+    limits: { contextTokens: 200000, inputTokens: 180000, outputTokens: 4000 },
+    estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+    async *stream(request) {
+      const snapshot = JSON.parse(
+        JSON.parse(request.materials[0].text).partitions.task.goals[0].text
+      ).snapshot
+      narrated.push(snapshot.volume.ref.id)
+      const patch = {
+        baseRevision: snapshot.baseRevision,
+        summary: 'Narrated the sealed volume',
+        unresolved: [],
+        volume: {
+          summary: `Volume ${snapshot.volume.from + 1}-${snapshot.volume.through} printed step outputs`,
+          evidence: [],
+          unresolved: ['decide the final format'],
+          negativeAttempts: [`printing again after ${snapshot.volume.through}`],
+        },
+      }
+      const part = turn(request, {
+        execute: {
+          source: `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify(patch)}));`,
+        },
+      })
+      yield { ...part, text: `${part.text}\n${marker(request)} done` }
+      yield { type: 'finish', reason: 'stop' }
+    },
+  }
+  const bases = []
+  const statuses = []
+  const f = await fixture(
+    t,
+    async function* (request, f) {
+      bases.push(request.history[0].content)
+      statuses.push(request.contextStatus)
+      // 这个窗口下第一次封段在三十轮左右，那一卷有二十多轮
+      if (f.calls === 44) {
+        yield* done(request)
+        return
+      }
+      yield {
+        type: 'text',
+        text: `step ${f.calls}\n${marker(request)} execute()\nimport {output} from 'velaros';output({step:${f.calls},detail:'y'.repeat(3000)});\n${marker(request)}`,
+      }
+      yield { type: 'finish', reason: 'stop' }
+    },
+    {
+      limits: {
+        turns: 60,
+        outputTokens: 2048,
+        safetyTokens: 1024,
+        projectionChars: 1000000,
+        recoveryChars: 6000,
+        timeoutMs: 120000,
+      },
+      context: { sources: [], maintenance: { model: maintenance } },
+    },
+    {
+      limits: { contextTokens: WINDOW + 4000, inputTokens: WINDOW, outputTokens: 2048 },
+      estimate: async (request) => ({
+        tokens: Math.ceil(requestSize(request) / 4),
+        precision: 'estimate',
+        basis: 'chars/4',
+      }),
+    }
+  )
+  await run(f, 'Keep working in small steps')
+  assert(statuses.every((status) => status.inputTokens <= statuses[0].inputLimit))
+  // 每卷最多补写一次叙事，补写发生在自动封段之后的下一个请求边界
+  assert(narrated.length >= 1)
+  assert.equal(new Set(narrated).size, narrated.length)
+  const state = await f.storage.load('s')
+  const outcomes = await Promise.all(
+    state.records
+      .filter((record) => record.title === 'context-maintenance:outcome')
+      .map(async (record) => JSON.parse(await f.storage.get('s', record.objectId)))
+  )
+  assert.equal(outcomes.length, narrated.length)
+  assert(outcomes.every((item) => item.reason === 'narrate' && item.status === 'applied'))
+  // 叙事和长期单随下一次底座重建进入主线请求
+  const narrated_base = bases.find((base) => base.includes('这一卷的叙事'))
+  assert(narrated_base)
+  assert.match(narrated_base, /printed step outputs/)
+  assert.match(narrated_base, /未解问题[^\n]*：\["decide the final format"\]/)
+  assert.match(narrated_base, /否定尝试[^\n]*：\["printing again after \d+"/)
 })

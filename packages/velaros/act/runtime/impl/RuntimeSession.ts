@@ -148,7 +148,7 @@ export interface RuntimeSessionDependencies {
   readonly renewRuns?: boolean
   /** 在请求边界调用独立上下文工具。 */
   maintain?(
-    input: { reason: 'boundary' | 'pressure' | 'provider'; targetChars: number },
+    input: { reason: 'boundary' | 'pressure' | 'provider' | 'narrate'; targetChars: number },
     signal: AbortSignal
   ): Promise<boolean>
   /** 当前装配的虚拟包，由声明与运行器共同使用。 */
@@ -421,9 +421,17 @@ export class RuntimeSession implements VelarosSession {
         frames: {
           maintain: dependencies.maintain
             ? async (input, signal) => {
-                // 显式整理先把段内较早的历史封成一卷，整理支线再给这一卷写叙事
-                if (input.reason === 'boundary' && (await this.organizePending()))
-                  await this.memory.fold('organize', input.targetChars, signal)
+                if (input.reason === 'boundary') {
+                  // 显式整理先把段内较早的历史封成一卷，整理支线再给这一卷写叙事
+                  if (await this.organizePending())
+                    await this.memory.fold('organize', input.targetChars, signal)
+                  // 自动封的上一卷只有骨架、那一段又没改笔记和计划：整理支线给它补写叙事
+                  else if (await this.memory.narration(signal))
+                    return dependencies.maintain!(
+                      { reason: 'narrate', targetChars: input.targetChars },
+                      signal
+                    )
+                }
                 return dependencies.maintain!(input, signal)
               }
             : undefined,
