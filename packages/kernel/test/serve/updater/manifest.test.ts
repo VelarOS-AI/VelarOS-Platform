@@ -13,12 +13,7 @@ import {
   selectKernelManifestVersion,
 } from '../../../src/utils/updater/manifest'
 
-import {
-  artifactOf,
-  createFakeFetch,
-  createTemporaryDirectories,
-  manifestOf,
-} from './support'
+import { artifactOf, createFakeFetch, createTemporaryDirectories, manifestOf } from './support'
 
 const directories = createTemporaryDirectories('manifest')
 
@@ -61,8 +56,7 @@ describe('Kernel update manifest', () => {
     const manifest = parseKernelUpdateManifest(validManifest())
 
     expect(manifest.channel).toBe('stable')
-    expect(manifest.versions.map((entry) => entry.version))
-      .toEqual(['1.0.0', '1.1.0', '2.0.0'])
+    expect(manifest.versions.map((entry) => entry.version)).toEqual(['1.0.0', '1.1.0', '2.0.0'])
     expect(manifest.versions[0]?.artifacts['darwin-arm64']).toMatchObject({
       url: darwinArtifact.descriptor.url,
       size: darwinArtifact.descriptor.size,
@@ -82,9 +76,7 @@ describe('Kernel update manifest', () => {
       { schemaVersion: 2, versions: [] },
       manifestOf([]),
       manifestOf([{ version: 'latest', artifacts: {} }]),
-      manifestOf([
-        { version: '1.0.0', artifacts: { 'solaris-x64': darwinArtifact.descriptor } },
-      ]),
+      manifestOf([{ version: '1.0.0', artifacts: { 'solaris-x64': darwinArtifact.descriptor } }]),
       manifestOf([
         {
           version: '1.0.0',
@@ -136,8 +128,7 @@ describe('Kernel update manifest', () => {
       ['freebsd', 'x64'],
       ['linux', 'riscv64'],
     ]) {
-      const error = captureError(() =>
-        resolveKernelArtifactTarget(platform, architecture))
+      const error = captureError(() => resolveKernelArtifactTarget(platform, architecture))
       expect(error).toMatchObject({
         code: 'UNSUPPORTED_TARGET',
         details: { target: `${platform}-${architecture}` },
@@ -153,50 +144,50 @@ describe('Kernel update manifest', () => {
       target: 'darwin-arm64',
       artifact: { url: darwinArtifact.descriptor.url },
     })
-    expect(selectKernelArtifact(manifest, '1.0.0', 'linux-x64').artifact.url)
-      .toBe(linuxArtifact.descriptor.url)
+    expect(selectKernelArtifact(manifest, '1.0.0', 'linux-x64').artifact.url).toBe(
+      linuxArtifact.descriptor.url
+    )
   })
 
   test('fails with ARTIFACT_NOT_FOUND when no artifact matches the target', () => {
     const manifest = parseKernelUpdateManifest(validManifest())
 
-    expect(captureError(() => selectKernelArtifact(manifest, '1.1.0', 'darwin-arm64')))
-      .toMatchObject({
-        code: 'ARTIFACT_NOT_FOUND',
-        details: { version: '1.1.0', target: 'darwin-arm64' },
-      })
-    expect(captureError(() => selectKernelArtifact(manifest, '9.9.9', 'linux-x64')))
-      .toMatchObject({ code: 'VERSION_UNAVAILABLE', details: { version: '9.9.9' } })
+    expect(
+      captureError(() => selectKernelArtifact(manifest, '1.1.0', 'darwin-arm64'))
+    ).toMatchObject({
+      code: 'ARTIFACT_NOT_FOUND',
+      details: { version: '1.1.0', target: 'darwin-arm64' },
+    })
+    expect(captureError(() => selectKernelArtifact(manifest, '9.9.9', 'linux-x64'))).toMatchObject({
+      code: 'VERSION_UNAVAILABLE',
+      details: { version: '9.9.9' },
+    })
   })
 
   test('filters candidate versions by range, target, and yanked state', () => {
     const manifest = parseKernelUpdateManifest(validManifest())
 
     expect(
-      listKernelManifestVersions(manifest, { target: 'linux-x64' })
-        .map((entry) => entry.version),
+      listKernelManifestVersions(manifest, { target: 'linux-x64' }).map((entry) => entry.version)
     ).toEqual(['1.0.0', '1.1.0'])
     expect(
-      listKernelManifestVersions(manifest, { target: 'darwin-arm64' })
-        .map((entry) => entry.version),
+      listKernelManifestVersions(manifest, { target: 'darwin-arm64' }).map((entry) => entry.version)
     ).toEqual(['1.0.0'])
     expect(
-      selectKernelManifestVersion(manifest, { range: '^1.0.0', target: 'linux-x64' })
-        ?.version,
+      selectKernelManifestVersion(manifest, { range: '^1.0.0', target: 'linux-x64' })?.version
     ).toBe('1.1.0')
     expect(
-      selectKernelManifestVersion(manifest, { range: '~1.0.0', target: 'linux-x64' })
-        ?.version,
+      selectKernelManifestVersion(manifest, { range: '~1.0.0', target: 'linux-x64' })?.version
     ).toBe('1.0.0')
     expect(
-      selectKernelManifestVersion(manifest, { range: '^2.0.0', target: 'linux-x64' }),
+      selectKernelManifestVersion(manifest, { range: '^2.0.0', target: 'linux-x64' })
     ).toBeUndefined()
     expect(
       selectKernelManifestVersion(manifest, {
         range: '^2.0.0',
         target: 'linux-x64',
         includeYanked: true,
-      })?.version,
+      })?.version
     ).toBe('2.0.0')
   })
 
@@ -211,8 +202,7 @@ describe('Kernel update manifest', () => {
     const manifest = await loadKernelUpdateManifest(remote, {
       fetch: createFakeFetch({ [remote]: JSON.stringify(validManifest()) }),
     })
-    expect(manifest.versions.map((entry) => entry.version))
-      .toEqual(['1.0.0', '1.1.0', '2.0.0'])
+    expect(manifest.versions.map((entry) => entry.version)).toEqual(['1.0.0', '1.1.0', '2.0.0'])
   })
 
   test('reports unreachable and non-JSON manifests distinctly', async () => {

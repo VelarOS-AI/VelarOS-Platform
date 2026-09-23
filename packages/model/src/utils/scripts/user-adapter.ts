@@ -5,7 +5,15 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 import type { LanguageModel } from 'ai'
 
-import { isBlank, isFunction, isPlainObject, isPresent, isString, isUndefined, Log } from '@velaros-ai/core'
+import {
+  isBlank,
+  isFunction,
+  isPlainObject,
+  isPresent,
+  isString,
+  isUndefined,
+  Log,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -377,7 +385,10 @@ function formatUserAdapterConsoleMessage(
   method: UserAdapterConsoleMethod,
   args: unknown[]
 ): string {
-  const message = args.map(formatUserAdapterConsoleArg).filter((arg) => !isBlank(arg)).join(' ')
+  const message = args
+    .map(formatUserAdapterConsoleArg)
+    .filter((arg) => !isBlank(arg))
+    .join(' ')
   if (isBlank(message)) return `用户 JS adapter console.${method}`
 
   return `用户 JS adapter console.${method}: ${message}`
@@ -392,7 +403,10 @@ function formatUserAdapterConsoleArg(value: unknown): string {
     const serialized = JSON.stringify(value)
     if (isString(serialized)) return serialized
   } catch (error) {
-    Log.tag('UserJsModelAdapter').warn('用户 adapter console 实参 JSON.stringify 失败，改用 String 兜底', { error })
+    Log.tag('UserJsModelAdapter').warn(
+      '用户 adapter console 实参 JSON.stringify 失败，改用 String 兜底',
+      { error }
+    )
   }
 
   return String(value)
@@ -400,8 +414,7 @@ function formatUserAdapterConsoleArg(value: unknown): string {
 
 /** 包一层再硬化：暴露进沙箱的函数不能让脚本经 `constructor` 走回宿主 realm。 */
 function createSafeCallable<T>(fn: T): T {
-  const safeFn = ((...args: unknown[]) =>
-    (fn as (...args: unknown[]) => unknown)(...args)) as T
+  const safeFn = ((...args: unknown[]) => (fn as (...args: unknown[]) => unknown)(...args)) as T
   hardenExposedFunction(safeFn)
   return safeFn
 }

@@ -114,7 +114,10 @@ describe('Velar Cloud managed providers', () => {
     const velarFetch = createChatCompletionFetch([])
     const velarDevFetch = createChatCompletionFetch([])
 
-    runtime.registerProvider('velaros', { baseURL: 'https://cloud.test/v1/model/', fetch: velarFetch })
+    runtime.registerProvider('velaros', {
+      baseURL: 'https://cloud.test/v1/model/',
+      fetch: velarFetch,
+    })
 
     expect(runtime.require()).toEqual({
       baseURL: 'https://cloud.test/v1/model',
@@ -151,9 +154,7 @@ describe('Velar Cloud managed providers', () => {
     })
     expect(runtime.unregisterProvider('velaros')).toBe(true)
     expect(runtime.require('velar-dev').fetch).toBe(velarDevFetch)
-    expect(() => runtime.require('velaros')).toThrow(
-      'Velar 模型服务尚未连接，请先登录内部账户。'
-    )
+    expect(() => runtime.require('velaros')).toThrow('Velar 模型服务尚未连接，请先登录内部账户。')
   })
 
   test('rejects empty bindings instead of silently creating a cross-provider fallback', () => {

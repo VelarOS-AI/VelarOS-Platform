@@ -42,7 +42,7 @@ export class TransactionCoordinator implements TransactionCoordinatorApi {
           activeTransactionId: activeCommand.transactionId,
           requestedTransactionId: transactionId,
         },
-        '请让当前 hook 返回；如需后续事务，请在外层命令完成后再发起。',
+        '请让当前 hook 返回；如需后续事务，请在外层命令完成后再发起。'
       )
     }
     const predecessor = this.tails.get(transactionId) ?? Promise.resolve()

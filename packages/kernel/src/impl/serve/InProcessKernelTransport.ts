@@ -32,28 +32,22 @@ export interface InProcessKernelTransportService {
   /** 回整机健康；服务面没启动时也答得出（`stopped`）。 */
   health(): Promise<KernelServiceHealth>
   /** 按目录与准入策略判一次「打开会话」：判过了回原请求，判不过回失败信封。本方法不记账。 */
-  evaluateCapabilitySessionOpen(request: unknown): Promise<
+  evaluateCapabilitySessionOpen(
+    request: unknown
+  ): Promise<
     | { readonly status: 'ok'; readonly request: CapabilitySessionOpenRequest }
     | Extract<CapabilitySessionOpenResponse, { status: 'error' }>
   >
   /** 执行一次能力调用；失败一律折成带码的失败信封回来，不抛。 */
-  handleCapabilityCall(
-    request: unknown,
-    signal?: AbortSignal,
-  ): Promise<CapabilityCallResponse>
+  handleCapabilityCall(request: unknown, signal?: AbortSignal): Promise<CapabilityCallResponse>
   /** 订阅一类内核事件，返回退订句柄；服务面没启动时抛错。 */
   subscribe(type: string, handler: KernelClientEventHandler): KernelRegistration
   /** 列出 mod pack；没接 ModStore 的 Kernel 不提供这个方法。 */
   listMods?(): ReadonlyArray<ModsListResponse['packs'][number]>
   /** 开关一个 mod pack；没接 ModStore 的 Kernel 不提供这个方法。 */
-  setModEnabled?(
-    id: string,
-    enabled: boolean,
-  ): Promise<{ ok: boolean; reloadRequired: boolean }>
+  setModEnabled?(id: string, enabled: boolean): Promise<{ ok: boolean; reloadRequired: boolean }>
   /** 从目录装一个 mod pack；没接 ModStore 的 Kernel 不提供这个方法。 */
-  installModFromDirectory?(
-    directory: string,
-  ): Promise<{
+  installModFromDirectory?(directory: string): Promise<{
     pack: ModsListResponse['packs'][number]
     reloadRequired: boolean
   }>
@@ -73,30 +67,24 @@ export interface InProcessKernelTransportApi extends KernelClientTransport {
   health(): Promise<KernelServiceHealth>
   /** 打开一条能力会话：先让服务端判准入，判过了才在本地账本里记一条。 */
   openCapabilitySession(
-    request: CapabilitySessionOpenRequest,
+    request: CapabilitySessionOpenRequest
   ): Promise<CapabilitySessionOpenResponse>
   /** 关掉一条能力会话；回它本来在不在账本里。 */
   closeCapabilitySession(
-    request: CapabilitySessionCloseRequest,
+    request: CapabilitySessionCloseRequest
   ): Promise<CapabilitySessionCloseResponse>
   /** 发一次能力调用；没绑在会话上的调用当场回 `CAPABILITY_NOT_GRANTED`，不进服务端。 */
-  call(
-    request: CapabilityCallRequest,
-    signal?: AbortSignal,
-  ): Promise<CapabilityCallResponse>
+  call(request: CapabilityCallRequest, signal?: AbortSignal): Promise<CapabilityCallResponse>
   /** 列出 mod pack；服务端没接 ModStore 时回空表。 */
   listMods(request: ModsListRequest): Promise<ModsListResponse>
   /** 开关一个 mod pack；服务端没接 ModStore 时回 `ok: false`。 */
   setModEnabled(request: ModsSetEnabledRequest): Promise<ModsSetEnabledResponse>
   /** 从目录装一个 mod pack；服务端没接 ModStore 时抛 `MODS_UNAVAILABLE`。 */
   installModFromDirectory(
-    request: ModsInstallFromDirectoryRequest,
+    request: ModsInstallFromDirectoryRequest
   ): Promise<ModsInstallFromDirectoryResponse>
   /** 订阅一类内核事件，返回退订句柄。 */
-  subscribe(
-    eventType: string,
-    handler: KernelClientEventHandler,
-  ): Promise<KernelEventSubscription>
+  subscribe(eventType: string, handler: KernelClientEventHandler): Promise<KernelEventSubscription>
   /** 回收这条传输：清掉本连接上的全部会话。 */
   dispose(): void
 }
@@ -105,9 +93,7 @@ export interface InProcessKernelTransportApi extends KernelClientTransport {
 export class InProcessKernelTransport implements InProcessKernelTransportApi {
   private readonly sessions = new CapabilitySessionLedger()
 
-  public constructor(
-    private readonly service: InProcessKernelTransportService,
-  ) {}
+  public constructor(private readonly service: InProcessKernelTransportService) {}
 
   public handshake(): Promise<KernelHandshake> {
     return Promise.resolve(this.service.handshake())
@@ -118,7 +104,7 @@ export class InProcessKernelTransport implements InProcessKernelTransportApi {
   }
 
   public async openCapabilitySession(
-    request: CapabilitySessionOpenRequest,
+    request: CapabilitySessionOpenRequest
   ): Promise<CapabilitySessionOpenResponse> {
     const evaluated = await this.service.evaluateCapabilitySessionOpen(request)
     if (evaluated.status === 'error') return evaluated
@@ -132,7 +118,7 @@ export class InProcessKernelTransport implements InProcessKernelTransportApi {
   }
 
   public closeCapabilitySession(
-    request: CapabilitySessionCloseRequest,
+    request: CapabilitySessionCloseRequest
   ): Promise<CapabilitySessionCloseResponse> {
     return Promise.resolve({
       protocolVersion: KernelProtocolVersion,
@@ -142,16 +128,16 @@ export class InProcessKernelTransport implements InProcessKernelTransportApi {
 
   public async call(
     request: CapabilityCallRequest,
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ): Promise<CapabilityCallResponse> {
-    if (!this.sessions.covers(request)) return {
+    if (!this.sessions.covers(request))
+      return {
         protocolVersion: KernelProtocolVersion,
         callId: request.callId,
         status: 'error',
         error: {
           code: 'CAPABILITY_NOT_GRANTED',
-          message:
-            `能力 "${request.capabilityId}" 没有绑定在会话 "${request.sessionId}" 上`,
+          message: `能力 "${request.capabilityId}" 没有绑定在会话 "${request.sessionId}" 上`,
           retryable: false,
           details: null,
         },
@@ -167,13 +153,8 @@ export class InProcessKernelTransport implements InProcessKernelTransportApi {
     }
   }
 
-  public async setModEnabled(
-    request: ModsSetEnabledRequest,
-  ): Promise<ModsSetEnabledResponse> {
-    const result = await this.service.setModEnabled?.(
-      request.id,
-      request.enabled,
-    )
+  public async setModEnabled(request: ModsSetEnabledRequest): Promise<ModsSetEnabledResponse> {
+    const result = await this.service.setModEnabled?.(request.id, request.enabled)
     return {
       protocolVersion: KernelProtocolVersion,
       ok: !!result?.ok,
@@ -182,7 +163,7 @@ export class InProcessKernelTransport implements InProcessKernelTransportApi {
   }
 
   public async installModFromDirectory(
-    request: ModsInstallFromDirectoryRequest,
+    request: ModsInstallFromDirectoryRequest
   ): Promise<ModsInstallFromDirectoryResponse> {
     const result = await this.service.installModFromDirectory?.(request.directory)
     if (isUndefined(result)) {
@@ -199,7 +180,7 @@ export class InProcessKernelTransport implements InProcessKernelTransportApi {
 
   public subscribe(
     eventType: string,
-    handler: KernelClientEventHandler,
+    handler: KernelClientEventHandler
   ): Promise<KernelEventSubscription> {
     return Promise.resolve(this.service.subscribe(eventType, handler))
   }

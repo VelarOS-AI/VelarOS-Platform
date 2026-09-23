@@ -1,10 +1,8 @@
-
+/** 模块稳定身份。 */
+export const EvidenceModuleId = 'velaros:evidence' as const
 
 /** 模块稳定身份。 */
-export const EvidenceModuleId = 'velaros:evidence' as const;
-
-/** 模块稳定身份。 */
-export const SearchModuleId = 'velaros:search' as const;
+export const SearchModuleId = 'velaros:search' as const
 
 /** 搜索与证据读取对外约定的上限；都写在 velaros:search、velaros:evidence 的声明里。 */
 export const SearchLimits = Object.freeze({

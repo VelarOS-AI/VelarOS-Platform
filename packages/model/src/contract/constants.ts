@@ -46,13 +46,7 @@ export const ModelProviderValidationKinds = Object.freeze([
 export const ThinkingDepths = Object.freeze(['fast', 'balanced', 'deep'] as const)
 
 /** 思考力度五档：存在时优先于 thinkingDepth 决定 reasoning 的开关、力度与预算。 */
-export const ReasoningLevels = Object.freeze([
-  'off',
-  'low',
-  'medium',
-  'high',
-  'ultra',
-] as const)
+export const ReasoningLevels = Object.freeze(['off', 'low', 'medium', 'high', 'ultra'] as const)
 
 /** 具体模型接受的输入形态；缺席表示未知，不表示不支持。 */
 export const ModelInputModalities = Object.freeze(['text', 'image', 'audio'] as const)

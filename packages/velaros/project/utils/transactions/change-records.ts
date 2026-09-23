@@ -35,7 +35,7 @@ export function isProjectChangeRecord(value: unknown): value is ProjectChangeRec
 
 /** 从事务的补丁里取变更记录要的字段：补丁号、策略、路径、基准版本、差量、改动行数、风险和编辑动作名。 */
 export function projectChangePatches(
-  patches: readonly PreparedPatch[],
+  patches: readonly PreparedPatch[]
 ): readonly ProjectChangePatch[] {
   return patches.map((patch) => ({
     patchId: patch.patchId,
@@ -62,7 +62,7 @@ function boundedIntentText(value: string, maximum: number): string {
  */
 export function boundedChangeIntents(
   intents: readonly EditIntent[],
-  maximum: number = ProjectTuning.persistence.changeIntentContentChars,
+  maximum: number = ProjectTuning.persistence.changeIntentContentChars
 ): readonly EditIntent[] {
   return intents.map((intent) => {
     const bounded = boundedOperation(intent.operation, maximum)
@@ -89,8 +89,14 @@ function boundedOperation(operation: unknown, maximum: number): Nullable<unknown
 
 /** 规整外面传进来的事务号：必须是非空、不超过上限字节数的字符串，去掉首尾空白后返回；不合规抛 INVALID_INPUT。 */
 export function normalizeTransactionId(value: unknown): string {
-  if (!isString(value) || new TextEncoder().encode(value).byteLength > ProjectTransactionLimits.transactionIdBytes) {
-    throw new ProjectError('INVALID_INPUT', `transactionId 必须是不超过 ${ProjectTransactionLimits.transactionIdBytes} 字节的非空字符串。`)
+  if (
+    !isString(value) ||
+    new TextEncoder().encode(value).byteLength > ProjectTransactionLimits.transactionIdBytes
+  ) {
+    throw new ProjectError(
+      'INVALID_INPUT',
+      `transactionId 必须是不超过 ${ProjectTransactionLimits.transactionIdBytes} 字节的非空字符串。`
+    )
   }
   const normalized = value.trim()
   if (!normalized) throw new ProjectError('INVALID_INPUT', 'transactionId 不能为空。')

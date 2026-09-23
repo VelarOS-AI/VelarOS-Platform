@@ -36,14 +36,14 @@ export interface DetectorRegistryApi {
   watchdogBaseline: (
     observation: Observation,
     findings: readonly Finding[],
-    activeDetectorIds: ReadonlySet<string>,
+    activeDetectorIds: ReadonlySet<string>
   ) => WatchdogBaseline
   /** 看这一刻要不要掐断；不用掐就是 `null`。 */
   watchdogAbort: (
     observation: Observation,
     findings: readonly Finding[],
     baseline: WatchdogBaseline,
-    activeDetectorIds: ReadonlySet<string>,
+    activeDetectorIds: ReadonlySet<string>
   ) => WatchdogAbort | null
 }
 
@@ -78,7 +78,7 @@ class DetectorRegistry implements DetectorRegistryApi {
 
   public list(): readonly RegisteredDetector[] {
     return [...this.detectors.values()].sort((left, right) =>
-      left.definition.id.localeCompare(right.definition.id),
+      left.definition.id.localeCompare(right.definition.id)
     )
   }
 
@@ -96,7 +96,7 @@ class DetectorRegistry implements DetectorRegistryApi {
   public watchdogBaseline(
     observation: Observation,
     findings: readonly Finding[],
-    activeDetectorIds: ReadonlySet<string>,
+    activeDetectorIds: ReadonlySet<string>
   ): WatchdogBaseline {
     return createWatchdogBaseline(observation, findings, activeDetectorIds, this.settings)
   }
@@ -105,7 +105,7 @@ class DetectorRegistry implements DetectorRegistryApi {
     observation: Observation,
     findings: readonly Finding[],
     baseline: WatchdogBaseline,
-    activeDetectorIds: ReadonlySet<string>,
+    activeDetectorIds: ReadonlySet<string>
   ): WatchdogAbort | null {
     return selectAbortCandidate(observation, findings, baseline, activeDetectorIds, this.settings)
   }

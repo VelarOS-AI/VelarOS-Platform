@@ -76,23 +76,36 @@ export interface SandboxOperationsApi {
 export class SandboxOperations implements SandboxOperationsApi {
   constructor(private readonly rules: RehearsalSandboxRulesApi) {}
 
-  public async create(input: SandboxCreateInput, ctx: SandboxOperationContext): Promise<SandboxRecord> {
+  public async create(
+    input: SandboxCreateInput,
+    ctx: SandboxOperationContext
+  ): Promise<SandboxRecord> {
     ctx.abortSignal.throwIfAborted()
     // 作用域在端口里：系统空间的实现收任意路径，项目空间的实现钳在项目内、越界就拒绝。
     const source = await ctx.sandbox.resolveSource(input.source)
     return ctx.sandbox.createSandbox({ source, network: input.network, ignored: input.ignored })
   }
 
-  public async run(input: SandboxRunInput, ctx: SandboxOperationContext): Promise<SandboxRunResult> {
+  public async run(
+    input: SandboxRunInput,
+    ctx: SandboxOperationContext
+  ): Promise<SandboxRunResult> {
     ctx.abortSignal.throwIfAborted()
     const id = sandboxIdOf(input?.id)
-    if (!isString(input.command) || isEmpty(input.command.trim())) throw new AppError('VALIDATION', 'run 要一条命令（command）')
+    if (!isString(input.command) || isEmpty(input.command.trim()))
+      throw new AppError('VALIDATION', 'run 要一条命令（command）')
     // 危险命令在镜像里照常先问（ADR 0006）：写不出镜像，但用户要看得到脚本在做什么；被拒就抛错，宿主一个进程都不起。
     const request = this.rules.prepareRun(id, input.command)
-    if (request) await ctx.approval.awaitConfirmation(request.message, ctx.abortSignal, request.options)
+    if (request)
+      await ctx.approval.awaitConfirmation(request.message, ctx.abortSignal, request.options)
     // 输出不折叠：跟 velaros:shell 同一个只守内存的上限。
     const outcome = await ctx.sandbox.runInSandbox(
-      { sandboxId: id, command: input.command, timeoutMs: sandboxTimeoutOf(input.timeoutMs), maxOutputChars: ShellLimits.outputChars },
+      {
+        sandboxId: id,
+        command: input.command,
+        timeoutMs: sandboxTimeoutOf(input.timeoutMs),
+        maxOutputChars: ShellLimits.outputChars,
+      },
       ctx.abortSignal
     )
     return { ...outcome, id, command: input.command }
@@ -105,16 +118,33 @@ export class SandboxOperations implements SandboxOperationsApi {
     return ctx.sandbox.diffSandbox(options)
   }
 
-  public async apply(input: SandboxApplyInput, ctx: SandboxOperationContext): Promise<SandboxApplyResult> {
+  public async apply(
+    input: SandboxApplyInput,
+    ctx: SandboxOperationContext
+  ): Promise<SandboxApplyResult> {
     ctx.abortSignal.throwIfAborted()
     sandboxIdOf(input?.id)
     // 「核对过的就是要落的」：点名的路径按完整的三列核，再把同一个指纹交给宿主，镜像在这之后又变过就整批不落。
     const changes = await ctx.sandbox.diffSandbox({ sandboxId: input.id, textDiffs: false })
-    if (!this.rules.prepareApply({ diff: changes, paths: input.paths })) return { sandboxId: input.id, created: [], modified: [], deleted: [], skippedGit: changes.gitChanged }
-    return ctx.sandbox.applySandbox({ sandboxId: input.id, paths: input.paths, fingerprint: changes.fingerprint })
+    if (!this.rules.prepareApply({ diff: changes, paths: input.paths }))
+      return {
+        sandboxId: input.id,
+        created: [],
+        modified: [],
+        deleted: [],
+        skippedGit: changes.gitChanged,
+      }
+    return ctx.sandbox.applySandbox({
+      sandboxId: input.id,
+      paths: input.paths,
+      fingerprint: changes.fingerprint,
+    })
   }
 
-  public async discard(input: SandboxDiscardInput, ctx: SandboxOperationContext): Promise<SandboxDiscardResult> {
+  public async discard(
+    input: SandboxDiscardInput,
+    ctx: SandboxOperationContext
+  ): Promise<SandboxDiscardResult> {
     ctx.abortSignal.throwIfAborted()
     return ctx.sandbox.discardSandbox(sandboxIdOf(input?.id))
   }

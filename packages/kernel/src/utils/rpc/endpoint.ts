@@ -15,7 +15,7 @@ const log = Log.tag('KernelRpcEndpoint')
 /** 让服务端在指定端点上开始监听；监听成功或失败都只结算一次。 */
 export function listenOnKernelRpcEndpoint(
   server: Server,
-  endpoint: KernelRpcEndpoint,
+  endpoint: KernelRpcEndpoint
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const onError = (error: Error) => {
@@ -39,7 +39,7 @@ export function listenOnKernelRpcEndpoint(
 /** 监听起来之后回真正绑上的端点：unix 就是请求的那个，tcp 要把内核分配的端口填回去。 */
 export function resolveBoundKernelRpcEndpoint(
   server: Server,
-  requested: KernelRpcEndpoint,
+  requested: KernelRpcEndpoint
 ): KernelRpcEndpoint {
   if (requested.kind === 'unix') return requested
   const address = server.address() as Nullable<AddressInfo>
@@ -88,10 +88,7 @@ export function kernelRpcTokensMatch(left: string, right: string): boolean {
 }
 
 /** 往连接上写一帧换行分隔的 JSON；序列化不了或写不出去时记一条日志并回 false。 */
-export function sendKernelRpcFrame(
-  socket: Socket,
-  frame: KernelRpcServerFrame,
-): boolean {
+export function sendKernelRpcFrame(socket: Socket, frame: KernelRpcServerFrame): boolean {
   try {
     socket.write(`${JSON.stringify(frame)}\n`)
     return true
@@ -102,9 +99,7 @@ export function sendKernelRpcFrame(
 }
 
 /** 按平台折一个缺省的本机 RPC 端点：Windows 走回环 TCP，其余走临时目录下的 unix socket。 */
-export function createDefaultKernelRpcEndpoint(
-  name: string = 'velaros-kernel',
-): KernelRpcEndpoint {
+export function createDefaultKernelRpcEndpoint(name: string = 'velaros-kernel'): KernelRpcEndpoint {
   if (process.platform === 'win32') return { kind: 'tcp', host: '127.0.0.1', port: 0 }
   const safeName = name.replaceAll(/[^a-zA-Z0-9._-]/g, '-')
   return {

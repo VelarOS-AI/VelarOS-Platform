@@ -10,7 +10,11 @@ import type { FileSearchOptions } from '../types/files.js'
 import type { FileSearchProtectedDirectoryInput } from '../types/search.js'
 
 /** 按搜索词生成逐行匹配函数，返回一行里每处命中的列号（从 1 开始），支持正则与区分大小写；正则写错时抛 VALIDATION，空的字面搜索词匹配不到任何东西。 */
-export function buildLineMatcher(input: { pattern: string; regex?: boolean; caseSensitive?: boolean }): (line: string) => Iterable<number> {
+export function buildLineMatcher(input: {
+  pattern: string
+  regex?: boolean
+  caseSensitive?: boolean
+}): (line: string) => Iterable<number> {
   if (input.regex) {
     const flags = input.caseSensitive ? 'g' : 'gi'
     let expression: RegExp
@@ -67,7 +71,7 @@ export function shouldSkipSearchEntry(
   name: string,
   isDirectory: boolean,
   includeHidden: boolean,
-  unrestricted = false,
+  unrestricted = false
 ): boolean {
   if (unrestricted) return false
   if (!includeHidden && name.startsWith('.')) return true
@@ -76,7 +80,7 @@ export function shouldSkipSearchEntry(
 
 /** 判断是否跳过 macOS 上受隐私保护的主目录子目录（音乐、图片、影片、资源库），避免触发系统授权弹窗。 */
 export function shouldSkipProtectedSearchDirectory(
-  input: FileSearchProtectedDirectoryInput,
+  input: FileSearchProtectedDirectoryInput
 ): boolean {
   if (input.platform !== 'darwin') return false
 
@@ -86,7 +90,7 @@ export function shouldSkipProtectedSearchDirectory(
 
   const homeDir = normalizePolicyPath(input.homeDir)
   return MacosTccProtectedSearchDirectoryNames.some(
-    (name) => candidatePath === normalizePolicyPath(`${homeDir}/${name}`),
+    (name) => candidatePath === normalizePolicyPath(`${homeDir}/${name}`)
   )
 }
 
@@ -97,7 +101,11 @@ function normalizePolicyPath(path: string): string {
 }
 
 /** 按匹配方式判断相对路径是否命中搜索词：exact 要求完全相同；fuzzy 要求搜索词的字符按顺序出现；默认 contains 为包含，后两者不区分大小写。 */
-export function matchesSearchPath(path: string, query: string, mode: FileSearchOptions['pathMatchMode']): boolean {
+export function matchesSearchPath(
+  path: string,
+  query: string,
+  mode: FileSearchOptions['pathMatchMode']
+): boolean {
   if (mode === 'exact') return path === query
   if (mode === 'fuzzy') {
     let index = 0

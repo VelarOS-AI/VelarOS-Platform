@@ -1,4 +1,11 @@
-import { isFalse, isFunction, isNotUndefined, isNull, isObject,isUndefined } from '@velaros-ai/core';
+import {
+  isFalse,
+  isFunction,
+  isNotUndefined,
+  isNull,
+  isObject,
+  isUndefined,
+} from '@velaros-ai/core'
 
 import { KernelErrorCodes } from '../../contract/constants'
 import type { KernelRegistration, KernelServiceHandle } from '../../contract/provides'
@@ -23,19 +30,17 @@ export interface KernelServiceStoreApi {
   get<TService extends object>(token: CapabilityToken<TService>): TService
   /** 取服务句柄；句柄绑死在取的那一代，换代之后再用就抛。 */
   getHandle<TService extends object>(
-    token: CapabilityToken<TService>,
+    token: CapabilityToken<TService>
   ): KernelServiceHandle<TService>
   /** 取服务，没有就返回 undefined，不抛错。 */
-  getOptional<TService extends object>(
-    token: CapabilityToken<TService>,
-  ): TService | undefined
+  getOptional<TService extends object>(token: CapabilityToken<TService>): TService | undefined
   /** 登记一条服务；`activate` 为 false 时先暂存不可见（替换模块时用）。 */
   register<TService extends object>(
     ownerModuleId: string,
     generation: number,
     token: CapabilityToken<TService>,
     service: TService,
-    options?: { readonly activate?: boolean },
+    options?: { readonly activate?: boolean }
   ): KernelRegistration
   /** 把某个模块某一代暂存的服务一次性切成可见；旧句柄在下次访问时失效。 */
   activateOwner(ownerModuleId: string, generation: number): void
@@ -65,23 +70,23 @@ export class KernelServiceStore implements KernelServiceStoreApi {
   /** 只读、稳定排序的活动服务目录；不暴露实现对象或可调用句柄。 */
   public listActiveServices(): readonly KernelActiveServiceSnapshot[] {
     return [...this.activeEntries.entries()]
-      .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
-      .map(([capabilityId, entry]) => Object.freeze({
-        capabilityId,
-        capabilityVersion: entry.capabilityVersion,
-        ownerModuleId: entry.ownerModuleId,
-        generation: entry.generation,
-      }))
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([capabilityId, entry]) =>
+        Object.freeze({
+          capabilityId,
+          capabilityVersion: entry.capabilityVersion,
+          ownerModuleId: entry.ownerModuleId,
+          generation: entry.generation,
+        })
+      )
   }
 
-  public get<TService extends object>(
-    token: CapabilityToken<TService>,
-  ): TService {
+  public get<TService extends object>(token: CapabilityToken<TService>): TService {
     return this.getHandle(token).get()
   }
 
   public getHandle<TService extends object>(
-    token: CapabilityToken<TService>,
+    token: CapabilityToken<TService>
   ): KernelServiceHandle<TService> {
     const entry = this.requireEntry(token)
     let proxy: TService | undefined
@@ -93,7 +98,7 @@ export class KernelServiceStore implements KernelServiceStoreApi {
         {
           moduleId: entry.ownerModuleId,
           capabilityId: token.id,
-        },
+        }
       )
     }
 
@@ -108,11 +113,7 @@ export class KernelServiceStore implements KernelServiceStoreApi {
         proxy ??= new Proxy(Object.create(null) as object, {
           get: (_target, property) => {
             assertActive()
-            const value = Reflect.get(
-              entry.service,
-              property,
-              entry.service,
-            ) as unknown
+            const value = Reflect.get(entry.service, property, entry.service) as unknown
             if (!isFunction(value)) return value
             return (...arguments_: unknown[]) => {
               assertActive()
@@ -121,12 +122,7 @@ export class KernelServiceStore implements KernelServiceStoreApi {
           },
           set: (_target, property, value) => {
             assertActive()
-            return Reflect.set(
-              entry.service,
-              property,
-              value,
-              entry.service,
-            )
+            return Reflect.set(entry.service, property, value, entry.service)
           },
         }) as TService
         return proxy
@@ -135,7 +131,7 @@ export class KernelServiceStore implements KernelServiceStoreApi {
   }
 
   public getOptional<TService extends object>(
-    token: CapabilityToken<TService>,
+    token: CapabilityToken<TService>
   ): TService | undefined {
     return this.has(token) ? this.get(token) : undefined
   }
@@ -145,29 +141,24 @@ export class KernelServiceStore implements KernelServiceStoreApi {
     generation: number,
     token: CapabilityToken<TService>,
     service: TService,
-    options: { readonly activate?: boolean } = {},
+    options: { readonly activate?: boolean } = {}
   ): KernelRegistration {
     const entries = this.entries.get(token.id) ?? new Set<ServiceEntry>()
     const duplicate = [...entries].find(
-      (entry) =>
-        entry.ownerModuleId !== ownerModuleId
-        || entry.generation === generation,
+      (entry) => entry.ownerModuleId !== ownerModuleId || entry.generation === generation
     )
     if (isNotUndefined(duplicate)) {
       throw new KernelError(
         KernelErrorCodes.duplicateService,
         `能力 "${token.id}" 已经注册过服务了`,
-        { moduleId: ownerModuleId, capabilityId: token.id },
+        { moduleId: ownerModuleId, capabilityId: token.id }
       )
     }
-    if (
-      isNull(service)
-      || (!isObject(service) && !isNull(service) && !isFunction(service))
-    ) {
+    if (isNull(service) || (!isObject(service) && !isNull(service) && !isFunction(service))) {
       throw new KernelError(
         KernelErrorCodes.invalidService,
         `能力 "${token.id}" 的服务必须是一个对象`,
-        { moduleId: ownerModuleId, capabilityId: token.id },
+        { moduleId: ownerModuleId, capabilityId: token.id }
       )
     }
 
@@ -186,7 +177,7 @@ export class KernelServiceStore implements KernelServiceStoreApi {
         throw new KernelError(
           KernelErrorCodes.duplicateService,
           `能力 "${token.id}" 已经有一个活动服务了`,
-          { moduleId: ownerModuleId, capabilityId: token.id },
+          { moduleId: ownerModuleId, capabilityId: token.id }
         )
       }
       this.activeEntries.set(token.id, entry)
@@ -219,8 +210,7 @@ export class KernelServiceStore implements KernelServiceStoreApi {
     for (const [capabilityId, entries] of this.entries) {
       const entry = [...entries].find(
         (candidate) =>
-          candidate.ownerModuleId === ownerModuleId
-          && candidate.generation === generation,
+          candidate.ownerModuleId === ownerModuleId && candidate.generation === generation
       )
       if (isNotUndefined(entry)) replacements.push({ capabilityId, entry })
     }
@@ -232,10 +222,7 @@ export class KernelServiceStore implements KernelServiceStoreApi {
   public removeOwner(ownerModuleId: string, generation: number): void {
     for (const [capabilityId, entries] of this.entries) {
       for (const entry of entries) {
-        if (
-          entry.ownerModuleId === ownerModuleId
-          && entry.generation === generation
-        ) {
+        if (entry.ownerModuleId === ownerModuleId && entry.generation === generation) {
           entries.delete(entry)
           if (this.activeEntries.get(capabilityId) === entry) {
             this.activeEntries.delete(capabilityId)
@@ -252,7 +239,7 @@ export class KernelServiceStore implements KernelServiceStoreApi {
       throw new KernelError(
         KernelErrorCodes.missingService,
         `能力 "${token.id}" 没有注册任何服务`,
-        { capabilityId: token.id },
+        { capabilityId: token.id }
       )
     }
     if (entry.capabilityVersion === token.version) return entry
@@ -262,7 +249,7 @@ export class KernelServiceStore implements KernelServiceStoreApi {
       {
         moduleId: entry.ownerModuleId,
         capabilityId: token.id,
-      },
+      }
     )
   }
 }

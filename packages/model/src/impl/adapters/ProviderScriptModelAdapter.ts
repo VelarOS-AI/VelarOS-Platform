@@ -5,7 +5,11 @@ import { AppError } from '@velaros-ai/core/error'
 
 import { ModelErrorCodes } from '../../contract/constants.js'
 import type { ModelProviderAdapter } from '../../contract/requires'
-import type { EmbeddingRequest, LanguageModelFactory, ModelAdapterConfig } from '../../types/adapters'
+import type {
+  EmbeddingRequest,
+  LanguageModelFactory,
+  ModelAdapterConfig,
+} from '../../types/adapters'
 import type { ChatProviderId } from '../../types/model'
 import type { ProviderScriptRegistryPort } from '../../types/scripts'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'

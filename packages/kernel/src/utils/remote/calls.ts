@@ -20,14 +20,13 @@ export function describeRemoteNodeCall(request: RemoteNodeInvokeRequest): string
 /** 本次调用的截止时长:调用方没给、给了非数或非正数时回落到缺省值。 */
 export function resolveRemoteNodeDeadlineMs(request: RemoteNodeInvokeRequest): number {
   const requested = request.deadlineMs
-  if (isUndefined(requested) || !Number.isFinite(requested) || requested <= 0) return KernelTuning.remoteClientDefaultDeadlineMs
+  if (isUndefined(requested) || !Number.isFinite(requested) || requested <= 0)
+    return KernelTuning.remoteClientDefaultDeadlineMs
   return Math.round(requested)
 }
 
 /** ABI 的 `kind?: string` 与 wire 的 `kind: string | null` 在此对齐,只此一处。 */
-export function toRemoteNodeWireScope(
-  scope: LooseOptional<ScopeRef>,
-): RemoteNodeInvoke['scope'] {
+export function toRemoteNodeWireScope(scope: LooseOptional<ScopeRef>): RemoteNodeInvoke['scope'] {
   if (!isPresent(scope)) return null
   return {
     id: scope.id,
@@ -39,7 +38,7 @@ export function toRemoteNodeWireScope(
 /** 把 Node 回的失败信封拼成一句可读文案;没有信封时只给兜底那句。 */
 export function describeRemoteNodeError(
   error: Nullable<RemoteNodeError>,
-  fallback: string,
+  fallback: string
 ): string {
   if (isNull(error)) return fallback
   return `${fallback}: ${error.message} (${error.code})`
@@ -55,7 +54,7 @@ export function describeRemoteNodeError(
 export function toRemoteNodeKernelError(
   binding: RemoteNodeCapabilityBinding,
   operation: string,
-  error: unknown,
+  error: unknown
 ): unknown {
   if (!(error instanceof RemoteNodeClientError)) return error
   if (error.code !== RemoteNodeClientErrorCodes.CallDenied) return error

@@ -48,8 +48,8 @@ export class ProviderModelCatalogCache implements ProviderModelCatalogCacheApi {
             current.catalog = structuredClone(catalog)
             // 不支持目录的 provider 短期回落，避免每轮重复等待同一个失败端点。
             current.expiresAt =
-              Date.now()
-              + (catalog.error ? ModelTuning.catalog.errorCacheTtlMs : ModelTuning.catalog.cacheTtlMs)
+              Date.now() +
+              (catalog.error ? ModelTuning.catalog.errorCacheTtlMs : ModelTuning.catalog.cacheTtlMs)
           }
           return catalog
         },

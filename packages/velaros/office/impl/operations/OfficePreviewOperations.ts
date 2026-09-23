@@ -12,7 +12,12 @@ import { AppError } from '@velaros-ai/core/error'
 
 import { OfficeErrorCodes } from '../../contract/constants.js'
 import type { OfficeOperationContext } from '../../contract/requires.js'
-import type { NormalizedWordInput, OfficePreview, OfficePreviewInput, OfficePreviewWritten } from '../../types/office.js'
+import type {
+  NormalizedWordInput,
+  OfficePreview,
+  OfficePreviewInput,
+  OfficePreviewWritten,
+} from '../../types/office.js'
 import type { OfficePreviewKind, ParsedOfficePreview } from '../../types/preview.js'
 import { converterMissingError } from '../../utils/errors.js'
 import { writtenReceipt } from '../../utils/paths.js'
@@ -44,13 +49,24 @@ export class OfficePreviewOperations implements OfficePreviewOperationsApi {
     private readonly renderer: OfficeDocumentRendererApi
   ) {}
 
-  public async preview(input: OfficePreviewInput, ctx: OfficeOperationContext): Promise<OfficePreview> {
+  public async preview(
+    input: OfficePreviewInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficePreview> {
     ctx.abortSignal.throwIfAborted()
-    const inputPath = await this.workspace.resolveInput(ctx, input.inputPath, OfficePreviewOperations.InputExtensions)
+    const inputPath = await this.workspace.resolveInput(
+      ctx,
+      input.inputPath,
+      OfficePreviewOperations.InputExtensions
+    )
     const normalized = await this.normalizeInput(ctx, inputPath)
 
     try {
-      const parsed = await this.renderer.parsePreview(normalized.path, normalized.kind, input.maxItems ?? OfficeTuning.preview.items)
+      const parsed = await this.renderer.parsePreview(
+        normalized.path,
+        normalized.kind,
+        input.maxItems ?? OfficeTuning.preview.items
+      )
       const html = this.renderer.buildPreviewHtml({
         parsed,
         inputPath,
@@ -69,10 +85,18 @@ export class OfficePreviewOperations implements OfficePreviewOperationsApi {
         contentHtml: parsed.htmlBody.slice(0, OfficeTuning.preview.contentHtmlChars),
         contentTruncated: parsed.htmlBody.length > OfficeTuning.preview.contentHtmlChars,
       }
-      if (input.outputPath) preview.written = await this.writePreview(ctx, input.outputPath, html, parsed, input.overwrite)
+      if (input.outputPath)
+        preview.written = await this.writePreview(
+          ctx,
+          input.outputPath,
+          html,
+          parsed,
+          input.overwrite
+        )
       return preview
     } finally {
-      if (normalized.wordInput) await this.converters.cleanupNormalizedWordInput(normalized.wordInput)
+      if (normalized.wordInput)
+        await this.converters.cleanupNormalizedWordInput(normalized.wordInput)
     }
   }
 
@@ -91,12 +115,22 @@ export class OfficePreviewOperations implements OfficePreviewOperationsApi {
         return {
           path: inputPath,
           kind: 'docx',
-          wordInput: { path: inputPath, originalPath: inputPath, sourceExtension: '.docx', convertedFromLegacyDoc: false, tempDir: null },
+          wordInput: {
+            path: inputPath,
+            originalPath: inputPath,
+            sourceExtension: '.docx',
+            convertedFromLegacyDoc: false,
+            tempDir: null,
+          },
         }
     }
 
     const libreOffice = await this.converters.findLibreOffice(ctx)
-    if (!libreOffice) throw converterMissingError('LibreOffice（soffice）', OfficePreviewOperations.LibreOfficePurpose)
+    if (!libreOffice)
+      throw converterMissingError(
+        'LibreOffice（soffice）',
+        OfficePreviewOperations.LibreOfficePurpose
+      )
     // 转换失败时转换器自己清掉临时目录再抛错。
     const wordInput = await this.converters.normalizeWordInput({
       ctx,
@@ -117,7 +151,10 @@ export class OfficePreviewOperations implements OfficePreviewOperationsApi {
   ): Promise<OfficePreviewWritten> {
     const extension = extname(outputPath).toLowerCase() || '.html'
     if (extension !== '.html' && extension !== '.png') {
-      throw new AppError(OfficeErrorCodes.invalidExtension, `预览文件的扩展名要是 .html 或 .png：${outputPath}`)
+      throw new AppError(
+        OfficeErrorCodes.invalidExtension,
+        `预览文件的扩展名要是 .html 或 .png：${outputPath}`
+      )
     }
     const prepared = await this.workspace.prepareOutput(ctx, outputPath, extension, overwrite)
     if (extension === '.html') {

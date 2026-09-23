@@ -20,13 +20,23 @@ export function moveOptionsFromInput(point: ComputerPoint): ComputerMoveOptions 
 
 /** 把点击翻成运行时的点击选项：按截图的坐标连同截图绑定原样交下去，按键与连击次数照带。 */
 export function clickOptionsFromInput(input: ComputerClickInput): ComputerClickOptions {
-  if (input.coordinateSpace === 'global') return { button: input.button, count: input.count, coordinateSpace: 'global' }
-  return { button: input.button, count: input.count, coordinateSpace: 'primary-display', snapshotId: input.snapshotId }
+  if (input.coordinateSpace === 'global')
+    return { button: input.button, count: input.count, coordinateSpace: 'global' }
+  return {
+    button: input.button,
+    count: input.count,
+    coordinateSpace: 'primary-display',
+    snapshotId: input.snapshotId,
+  }
 }
 
 /** 动作回执里的坐标：局部坐标取模型传进来的那组，全局坐标取运行时真正落下去的那组。 */
-export function actionPointFromResult(point: ComputerPoint, result: ComputerClickResult | ComputerMoveResult): ResolvedComputerPoint {
-  if (point.coordinateSpace === 'global') return { x: result.x, y: result.y, localX: point.x, localY: point.y, coordinateSpace: 'global' }
+export function actionPointFromResult(
+  point: ComputerPoint,
+  result: ComputerClickResult | ComputerMoveResult
+): ResolvedComputerPoint {
+  if (point.coordinateSpace === 'global')
+    return { x: result.x, y: result.y, localX: point.x, localY: point.y, coordinateSpace: 'global' }
   return {
     x: result.x,
     y: result.y,
@@ -39,7 +49,10 @@ export function actionPointFromResult(point: ComputerPoint, result: ComputerClic
 }
 
 /** 把运行时回执投影成模型看到的形状：x、y 回到模型传进来的那套坐标，全局坐标另列两格。 */
-export function projectComputerPointResult<TResult extends object>(result: TResult, point: ResolvedComputerPoint) {
+export function projectComputerPointResult<TResult extends object>(
+  result: TResult,
+  point: ResolvedComputerPoint
+) {
   return {
     ...result,
     x: point.localX,

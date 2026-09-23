@@ -47,7 +47,10 @@ export async function assertOfficePathInsideProject(
   originalPath: string
 ): Promise<void> {
   if (!(await isOfficePathInsideProject(rootPath, resolvedPath))) {
-    throw new AppError(OfficeErrorCodes.pathOutsideProject, `路径出了工作区根（按解开符号链接后的真实路径算）：${originalPath}`)
+    throw new AppError(
+      OfficeErrorCodes.pathOutsideProject,
+      `路径出了工作区根（按解开符号链接后的真实路径算）：${originalPath}`
+    )
   }
 }
 
@@ -66,7 +69,10 @@ export async function normalizeExtensionPath(
 
   // 用户显式给了错误扩展名时直接拒绝，避免生成文件类型和路径不一致。
   if (currentExtension && currentExtension !== extension) {
-    throw new AppError(OfficeErrorCodes.invalidExtension, `输出文件的扩展名要是 ${extension}（不写扩展名会自动补上）：${outputPath}`)
+    throw new AppError(
+      OfficeErrorCodes.invalidExtension,
+      `输出文件的扩展名要是 ${extension}（不写扩展名会自动补上）：${outputPath}`
+    )
   }
 
   const resolvedPath = currentExtension ? basePath : `${basePath}${extension}`
@@ -91,7 +97,10 @@ export async function prepareOfficeOutputPath(
   }
   // 覆盖必须显式声明。
   if (existing && !overwrite) {
-    throw new AppError(OfficeErrorCodes.outputExists, `文件已经在了，要覆盖就传 overwrite: true：${outputPath}`)
+    throw new AppError(
+      OfficeErrorCodes.outputExists,
+      `文件已经在了，要覆盖就传 overwrite: true：${outputPath}`
+    )
   }
   // 父目录不存在时自动创建。
   await mkdir(dirname(resolvedPath), { recursive: true })
@@ -111,7 +120,10 @@ export async function prepareWordDocumentOutputPath(
   // appendMode 只在目标文件已存在时生效。
   if (input.appendMode && existing) return { path: resolvedPath, created: false, append: true }
   if (existing && !input.overwrite)
-    throw new AppError(OfficeErrorCodes.outputExists, `文件已经在了，要覆盖就传 overwrite: true，要接在后面就传 appendMode: true：${input.outputPath}`)
+    throw new AppError(
+      OfficeErrorCodes.outputExists,
+      `文件已经在了，要覆盖就传 overwrite: true，要接在后面就传 appendMode: true：${input.outputPath}`
+    )
   return { path: resolvedPath, created: !existing, append: false }
 }
 
@@ -125,11 +137,16 @@ export async function resolveInputPathWithExtensions(
   if (!trimmedPath) throw new AppError('VALIDATION', '输入路径不能为空。')
 
   // 输入文件同样必须在工作区内。
-  const resolvedPath = isAbsolute(trimmedPath) ? resolve(trimmedPath) : resolve(rootPath, trimmedPath)
+  const resolvedPath = isAbsolute(trimmedPath)
+    ? resolve(trimmedPath)
+    : resolve(rootPath, trimmedPath)
   const currentExtension = extname(resolvedPath).toLowerCase()
   // 多扩展名用于 PDF/Word 等转换场景。
   if (!extensions.includes(currentExtension)) {
-    throw new AppError(OfficeErrorCodes.invalidExtension, `输入文件的扩展名要是 ${extensions.join('、')} 之一：${inputPath}`)
+    throw new AppError(
+      OfficeErrorCodes.invalidExtension,
+      `输入文件的扩展名要是 ${extensions.join('、')} 之一：${inputPath}`
+    )
   }
 
   await assertOfficePathInsideProject(rootPath, resolvedPath, inputPath)
@@ -174,7 +191,10 @@ export async function copyOfficeOutput(
 }
 
 /** 刚写下的文件的回执：路径、字节数、是不是新建的。 */
-export async function writtenReceipt(prepared: { path: string; created: boolean }): Promise<OfficeWritten> {
+export async function writtenReceipt(prepared: {
+  path: string
+  created: boolean
+}): Promise<OfficeWritten> {
   const fileStats = await stat(prepared.path)
   return { path: prepared.path, bytes: fileStats.size, created: prepared.created }
 }
@@ -199,7 +219,9 @@ export async function findGeneratedOfficeFile(
   if (expectedStats?.isFile()) return expectedPath
 
   // 有些外部工具会改变输出文件名，兜底找目录里的第一个同类产物。
-  const entries = await readdir(tempDir).catch(() => [] /* arch-guard:silent-catch-ok 临时目录不可读等价于没有产物，由调用方按 null 处理 */)
+  const entries = await readdir(tempDir).catch(
+    () => [] /* arch-guard:silent-catch-ok 临时目录不可读等价于没有产物，由调用方按 null 处理 */
+  )
   const generatedEntry = entries.find(
     (entry) => extname(entry).toLowerCase() === normalizedExtension
   )

@@ -6,7 +6,7 @@ import { describe, expect, test } from 'bun:test'
 /** 项目单元的源码根：单元目录本身，spec/ 与 test/ 不算源码。 */
 const SourceRoot = resolve(import.meta.dir, '../..')
 const PackageManifest = JSON.parse(
-  readFileSync(resolve(SourceRoot, '../package.json'), 'utf8'),
+  readFileSync(resolve(SourceRoot, '../package.json'), 'utf8')
 ) as Record<string, Record<string, string> | undefined>
 const ForbiddenHostImport =
   /(?:from\s+|import\s*\()\s*['"](?:electron(?:\/[^'"]*)?|@electron\/[^'"]*|@velaros\/ipc(?:\/[^'"]*)?|@(?:components|features|hooks|pages|styles|shared)\/[^'"]*|@\/[^'"]*|@preload|@main\/[^'"]*)['"]/
@@ -16,7 +16,10 @@ const ForbiddenCapabilityImport =
 function listTypeScriptFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = resolve(directory, entry.name)
-    if (entry.isDirectory()) return directory === SourceRoot && ['spec', 'test'].includes(entry.name) ? [] : listTypeScriptFiles(path)
+    if (entry.isDirectory())
+      return directory === SourceRoot && ['spec', 'test'].includes(entry.name)
+        ? []
+        : listTypeScriptFiles(path)
     return entry.name.endsWith('.ts') ? [path] : []
   })
 }
@@ -42,10 +45,25 @@ describe('项目工具的边界', () => {
 
   test('空间端口只留两件工具真会调的方法', () => {
     const source = readFileSync(resolve(SourceRoot, 'contract/requires.ts'), 'utf8')
-    const port = source.slice(source.indexOf('export interface ProjectSpacePort'), source.indexOf('export interface ProjectOperationContext'))
+    const port = source.slice(
+      source.indexOf('export interface ProjectSpacePort'),
+      source.indexOf('export interface ProjectOperationContext')
+    )
     for (const field of ['getRootPath', 'kernel', 'queryCode']) expect(port).toContain(`${field}:`)
     // 命令、沙箱、缩图是空间给共用能力装端口时才要的，在 @velaros-ai/project 的宿主端口上，工具这边不留。
-    for (const removedField of ['prepareMutation', 'runCommand', 'listBackgroundTasks', 'refreshShellEnvironment', 'sandbox', 'resizeImage', 'runInDirectory', 'runWithApproval', 'codingSession', 'listRoots', 'kernelForRoot']) {
+    for (const removedField of [
+      'prepareMutation',
+      'runCommand',
+      'listBackgroundTasks',
+      'refreshShellEnvironment',
+      'sandbox',
+      'resizeImage',
+      'runInDirectory',
+      'runWithApproval',
+      'codingSession',
+      'listRoots',
+      'kernelForRoot',
+    ]) {
       expect(port).not.toContain(`${removedField}:`)
     }
   })

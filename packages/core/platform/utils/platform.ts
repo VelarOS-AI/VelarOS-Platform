@@ -51,16 +51,29 @@ export function isWindowsAbsolutePathText(path: string): boolean {
  * `\\?\` 长路径前缀；其他平台只认 `/`——反斜杠在 POSIX 上是文件名里的普通字符，不能当分隔符，否则 `/etc\..\root` 会被误算成 `/root`。
  * 不是完整的绝对路径（相对路径、win32 上的 `C:foo` 与只有 `\foo` 的根相对写法）返回 null。
  */
-export function splitAbsolutePathText(path: string, platform: RuntimePlatform): Nullable<{ root: string; segments: string[] }> {
-  if (platform !== 'win32') return path.startsWith('/') ? { root: '/', segments: collapsePathTextSegments(path.split('/')) } : null
+export function splitAbsolutePathText(
+  path: string,
+  platform: RuntimePlatform
+): Nullable<{ root: string; segments: string[] }> {
+  if (platform !== 'win32')
+    return path.startsWith('/')
+      ? { root: '/', segments: collapsePathTextSegments(path.split('/')) }
+      : null
   let text = path.replace(/\\/g, '/')
   if (text.startsWith('//?/') || text.startsWith('//./')) text = text.slice(4)
   if (/^unc\//iu.test(text)) text = `//${text.slice(4)}`
   const drive = /^([A-Za-z]):(?:\/|$)/u.exec(text)
-  if (drive) return { root: `${drive[1]}:/`, segments: collapsePathTextSegments(text.slice(drive[0].length).split('/')) }
+  if (drive)
+    return {
+      root: `${drive[1]}:/`,
+      segments: collapsePathTextSegments(text.slice(drive[0].length).split('/')),
+    }
   const share = /^\/\/([^/]+)\/([^/]+)(?:\/|$)/u.exec(text)
   if (!share) return null
-  return { root: `//${share[1]}/${share[2]}/`, segments: collapsePathTextSegments(text.slice(share[0].length).split('/')) }
+  return {
+    root: `//${share[1]}/${share[2]}/`,
+    segments: collapsePathTextSegments(text.slice(share[0].length).split('/')),
+  }
 }
 
 /** 折叠路径的各级名字：丢掉空段与 `.`，`..` 退回上一级，退到根就停在根。 */
@@ -89,7 +102,10 @@ export function readPathEnvironmentValue(env: NodeJS.ProcessEnv): string {
 }
 
 /** 按 PATHEXT 列出一个命令名在 Windows 上可能对应的文件名；命令名已经带可执行后缀时只返回它自己。 */
-export function buildWindowsExecutableCandidates(commandName: string, pathExtValue?: string): string[] {
+export function buildWindowsExecutableCandidates(
+  commandName: string,
+  pathExtValue?: string
+): string[] {
   const pathExts = (pathExtValue?.trim() || DefaultWindowsExecutableExtensions.join(';'))
     .split(';')
     .map((value) => value.trim())
@@ -104,8 +120,12 @@ export function buildWindowsExecutableCandidates(commandName: string, pathExtVal
 export function buildWindowsPowerShellCommandSpec(command: string): CommandSpec {
   return {
     file: 'powershell.exe',
-    args: ['-NoProfile', '-NonInteractive', '-Command',
-      `[Console]::OutputEncoding = $OutputEncoding = [System.Text.UTF8Encoding]::new($false); ${command}`],
+    args: [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      `[Console]::OutputEncoding = $OutputEncoding = [System.Text.UTF8Encoding]::new($false); ${command}`,
+    ],
   }
 }
 
@@ -121,27 +141,38 @@ export function preferredPosixShellPath(platform: RuntimePlatform, env: NodeJS.P
 
 /** 生成「用某个 shell 执行一段命令」的启动规格：按 shell 种类拼参数，统一 UTF-8 输出；PowerShell 里命令失败时如实返回非零退出码。 */
 export function buildShellCommandSpec(command: string, file: string, kind: ShellKind): CommandSpec {
-  if (kind === 'pwsh' || kind === 'powershell') return {
+  if (kind === 'pwsh' || kind === 'powershell')
+    return {
+      file,
+      args: [
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        `[Console]::InputEncoding = [Console]::OutputEncoding = $OutputEncoding = [System.Text.UTF8Encoding]::new($false); ` +
+          `$ErrorActionPreference = 'Stop'; $global:LASTEXITCODE = 0; & { ${command}\n }; ` +
+          `if (-not $?) { if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; exit 1 }; exit $LASTEXITCODE`,
+      ],
+    }
+  if (kind === 'cmd')
+    return {
+      file,
+      // /c 后面的字符串由 CMD 自己解析，按 CRT 规则转义会弄坏里面的引号。
+      args: ['/d', '/s', '/v:off', '/c', `"chcp 65001 >nul & ${command}"`],
+      windowsVerbatimArguments: true,
+    }
+  return {
     file,
-    args: ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
-      `[Console]::InputEncoding = [Console]::OutputEncoding = $OutputEncoding = [System.Text.UTF8Encoding]::new($false); ` +
-      `$ErrorActionPreference = 'Stop'; $global:LASTEXITCODE = 0; & { ${command}\n }; ` +
-      `if (-not $?) { if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; exit 1 }; exit $LASTEXITCODE`],
+    args: kind === 'git-bash' ? ['--noprofile', '--norc', '-c', command] : ['-lc', command],
   }
-  if (kind === 'cmd') return {
-    file,
-    // /c 后面的字符串由 CMD 自己解析，按 CRT 规则转义会弄坏里面的引号。
-    args: ['/d', '/s', '/v:off', '/c', `"chcp 65001 >nul & ${command}"`],
-    windowsVerbatimArguments: true,
-  }
-  return { file, args: kind === 'git-bash' ? ['--noprofile', '--norc', '-c', command] : ['-lc', command] }
 }
 
 /** 按 shell 种类给一个参数加引号；CMD 下带换行、NUL、`%` 这类无法安全转义的字符时抛错，要求改用原生 argv 执行。 */
 export function quoteShellArgument(value: string, kind: ShellKind): string {
   if (kind === 'pwsh' || kind === 'powershell') return `'${value.replace(/'/g, "''")}'`
   if (kind === 'cmd') {
-    if (/[\r\n\0%]/.test(value)) throw new Error('CMD 里这个参数只能用原生 file + argv 的方式执行，不能拼进命令行。')
+    if (/[\r\n\0%]/.test(value))
+      throw new Error('CMD 里这个参数只能用原生 file + argv 的方式执行，不能拼进命令行。')
     return `"${value.replace(/"/g, '""')}"`
   }
   return quotePosixSingle(value)

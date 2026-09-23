@@ -11,7 +11,16 @@ export type { ImageOperationsApi } from './impl/ImageOperations.js'
 export { imageOperations } from './impl/ImageOperations.js'
 
 // ── 注入面：空间要给的东西 ──────────────────────────────────────
-export type { ImageOperationContext, ImageSpacePort, LocalImagePortOptions } from './contract/requires.js'
+export type {
+  ImageOperationContext,
+  ImageSpacePort,
+  LocalImagePortOptions,
+} from './contract/requires.js'
 
 // ── 上面用到、又不在可移植文件里的数据 ───────────────────────────
-export type { ImageAttachment, ImageLocation, ImageResizeRequest, ImageResizeResult } from './types/space.js'
+export type {
+  ImageAttachment,
+  ImageLocation,
+  ImageResizeRequest,
+  ImageResizeResult,
+} from './types/space.js'

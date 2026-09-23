@@ -4,7 +4,18 @@ import type { OperationContext } from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
 import type { ContextMemoryPolicy } from '@velaros-ai/velaros'
 
-import type { EvidenceCandidates, SearchDraft, SearchEvidence, SearchProfile, SearchProfileInfo, SearchReadInput, SearchReadResult, SearchReportReceipt, SearchRequest, SearchResult } from '../types.js'
+import type {
+  EvidenceCandidates,
+  SearchDraft,
+  SearchEvidence,
+  SearchProfile,
+  SearchProfileInfo,
+  SearchReadInput,
+  SearchReadResult,
+  SearchReportReceipt,
+  SearchRequest,
+  SearchResult,
+} from '../types.js'
 
 /** 仅搜索作用域可用的真实来源检索和读取所需的窄宿主端口。 */
 export interface EvidenceHost {
@@ -19,9 +30,18 @@ export interface EvidenceService {
 /** 有预算的真实证据访问。 */
 export interface EvidenceActivation {
   /** 查询候选。 */
-  query(source: string, query: string, limit: number, signal: AbortSignal): Promise<EvidenceCandidates>
+  query(
+    source: string,
+    query: string,
+    limit: number,
+    signal: AbortSignal
+  ): Promise<EvidenceCandidates>
   /** 读取并登记证据。 */
-  inspect(target: ContextResourceTarget, maxBytes: number, signal: AbortSignal): Promise<SearchEvidence>
+  inspect(
+    target: ContextResourceTarget,
+    maxBytes: number,
+    signal: AbortSignal
+  ): Promise<SearchEvidence>
   /** 核对并受理这次搜索的结论。 */
   report(draft: SearchDraft, signal: AbortSignal): Promise<SearchReportReceipt>
 }

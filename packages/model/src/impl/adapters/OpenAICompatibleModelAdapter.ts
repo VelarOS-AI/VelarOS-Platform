@@ -70,11 +70,14 @@ class OpenAICompatibleModelAdapter extends ModelAdapter implements ModelProvider
   }
 
   /** 本地 OpenAI-compatible provider 需要在 SDK 请求前做少量 body/header 兼容。 */
-  private createCompatibleFetch(provider: ChatProviderId, apiKey: string): OpenAIModelFetch | undefined {
+  private createCompatibleFetch(
+    provider: ChatProviderId,
+    apiKey: string
+  ): OpenAIModelFetch | undefined {
     const shouldStripBlankAuth = isBlank(apiKey)
     const shouldInjectOllamaContext =
-      provider === OllamaProviderId
-      && Boolean(this.localModelEnvironment.resolveOllamaContextWindow())
+      provider === OllamaProviderId &&
+      Boolean(this.localModelEnvironment.resolveOllamaContextWindow())
 
     if (!shouldStripBlankAuth && !shouldInjectOllamaContext) return undefined
 

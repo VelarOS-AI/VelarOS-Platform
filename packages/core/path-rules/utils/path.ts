@@ -38,15 +38,22 @@ export function samePathText(target: string, value: string, caseSensitive: boole
 }
 
 /** 目标是不是落在某个目录之下（目录自己不算）：按大小写规则比。 */
-export function isUnderPathText(target: string, directory: string, caseSensitive: boolean): boolean {
+export function isUnderPathText(
+  target: string,
+  directory: string,
+  caseSensitive: boolean
+): boolean {
   const prefix = `${directory}/`
-  return caseSensitive ? target.startsWith(prefix) : target.toLowerCase().startsWith(prefix.toLowerCase())
+  return caseSensitive
+    ? target.startsWith(prefix)
+    : target.toLowerCase().startsWith(prefix.toLowerCase())
 }
 
 /** 一条相对路径的各级上级目录，由深到浅（不含它自己）：`a/b/c` 给出 `a/b`、`a`。 */
 export function ancestorRelativePaths(relativePath: string): string[] {
   const segments = toComparableRelativePath(relativePath).split('/').filter(Boolean)
   const ancestors: string[] = []
-  for (let depth = segments.length - 1; depth > 0; depth -= 1) ancestors.push(segments.slice(0, depth).join('/'))
+  for (let depth = segments.length - 1; depth > 0; depth -= 1)
+    ancestors.push(segments.slice(0, depth).join('/'))
   return ancestors
 }

@@ -12,7 +12,11 @@ export const ScopeRecordFileName = '.scope'
  * 前缀只给人看，身份靠哈希；整个名字都是小写，大小写不敏感的文件系统上两个作用域也落不进同一个目录。
  */
 export function scopeDirectoryName(scope: string): string {
-  const readable = scope.toLowerCase().replace(/[^a-z0-9]+/gu, '-').slice(0, 48).replace(/^-+|-+$/gu, '')
+  const readable = scope
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .slice(0, 48)
+    .replace(/^-+|-+$/gu, '')
   const hash = createHash('sha256').update(scope, 'utf8').digest('hex').slice(0, 16)
   return readable ? `${readable}-${hash}` : hash
 }

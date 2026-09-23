@@ -8,7 +8,7 @@ export function buildTargetActionScript(
   buildOptions: BrowserTargetActionScriptBuildOptions = {}
 ): string {
   const clickMode: BrowserTargetActionClickMode =
-    options.action === 'click' ? buildOptions.clickMode ?? 'dom' : 'dom'
+    options.action === 'click' ? (buildOptions.clickMode ?? 'dom') : 'dom'
   const payload = JSON.stringify({
     action: options.action,
     clickMode,

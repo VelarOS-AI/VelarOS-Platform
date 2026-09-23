@@ -14,12 +14,19 @@ test('flags raw NUL and every other C0 control character except tab, LF and CR',
   const joined = `const key = [a, b].join("${control(0)}")`
   assert.deepEqual(findRawControlCharacter(joined), { index: joined.indexOf(control(0)), code: 0 })
   for (const code of [0x01, 0x08, 0x0b, 0x0c, 0x0e, 0x1b, 0x1f]) {
-    assert.deepEqual(findRawControlCharacter(`x${control(code)}`), { index: 1, code }, `U+${code.toString(16)}`)
+    assert.deepEqual(
+      findRawControlCharacter(`x${control(code)}`),
+      { index: 1, code },
+      `U+${code.toString(16)}`
+    )
   }
 })
 
 test('escape sequences written as text are not control characters', () => {
-  assert.equal(findRawControlCharacter(String.raw`const sep = "\0"; const esc = "\x1b[0m"`), undefined)
+  assert.equal(
+    findRawControlCharacter(String.raw`const sep = "\0"; const esc = "\x1b[0m"`),
+    undefined
+  )
 })
 
 test('reports control characters in scanned text files, skipping binary assets and ignored directories', () => {

@@ -155,19 +155,14 @@ describe('KernelLauncher', () => {
       child.exitCode = 1
       child.emit('exit', 1, null)
     }, 10)
-    const failure = await launcher.ensureRunning().catch(
-      (error: unknown) => error,
-    )
+    const failure = await launcher.ensureRunning().catch((error: unknown) => error)
     expect(failure).toMatchObject({ code: 'KERNEL_START_FAILED' })
     await launcher.dispose()
   })
 
   test('ignores an unreadable descriptor and treats the Kernel as stopped', async () => {
     const directory = await temporaryDirectory()
-    const paths: KernelDaemonPaths = createDefaultKernelDaemonPaths(
-      'launcher-kernel',
-      directory,
-    )
+    const paths: KernelDaemonPaths = createDefaultKernelDaemonPaths('launcher-kernel', directory)
     await writeFile(paths.descriptorPath, 'not json\n', 'utf8')
 
     const launcher = new KernelLauncher({
@@ -194,7 +189,7 @@ describe('KernelLauncher', () => {
         startedAt: 1,
         endpoint: { kind: 'tcp', host: '127.0.0.1', port: 1 },
       })}\n`,
-      'utf8',
+      'utf8'
     )
 
     const child = new FakeChildProcess()
@@ -230,7 +225,7 @@ describe('KernelLauncher', () => {
         startedAt: 1,
         endpoint: { kind: 'tcp', host: '127.0.0.1', port: 1 },
       })}\n`,
-      'utf8',
+      'utf8'
     )
 
     // 版本不合在拨号之前就判定：端点根本没人听，若先 handshake 只会拿到连接错误。

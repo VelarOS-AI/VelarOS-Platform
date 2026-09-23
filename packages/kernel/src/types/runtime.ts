@@ -75,10 +75,7 @@ export interface KernelCapabilityCall {
   /** 取消信号。 */
   readonly signal: AbortSignal
   /** 宿主认定的可信事实，原样转给权限判定做策略与审计。 */
-  readonly permissionContext?: Omit<
-    KernelModulePermissionRequest,
-    'permission' | 'scope'
-  >
+  readonly permissionContext?: Omit<KernelModulePermissionRequest, 'permission' | 'scope'>
   /**
    * 调用方归属：这次调用是「代谁」发起的，只有宿主给得出。
    *

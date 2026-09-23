@@ -6,7 +6,10 @@ import { describe, expect, test } from 'bun:test'
 
 import type { ProjectChangeFeedWriter } from '../contract/requires'
 import { createProjectKernel } from '../impl/kernel/LocalProjectKernel'
-import { createProjectTransactionController, type ProjectTransactionControllerApi } from '../impl/kernel/ProjectTransactionController'
+import {
+  createProjectTransactionController,
+  type ProjectTransactionControllerApi,
+} from '../impl/kernel/ProjectTransactionController'
 import { FileProjectChangeFeed } from '../impl/persistence/FileProjectChangeFeed.js'
 import { FileProjectTransactionStateStore } from '../impl/persistence/FileProjectTransactionStateStore'
 import { MemoryProjectChangeFeed } from '../impl/persistence/MemoryProjectChangeFeed.js'
@@ -19,7 +22,7 @@ interface DurableHarness {
 async function openDurableHarness(
   root: string,
   statePath: string,
-  feedPath: string,
+  feedPath: string
 ): Promise<DurableHarness> {
   const feed = new FileProjectChangeFeed({ path: feedPath })
   const project = await createProjectKernel({
@@ -36,7 +39,7 @@ async function openDurableHarness(
 async function prepareReplace(
   root: string,
   statePath: string,
-  feed: ProjectChangeFeedWriter,
+  feed: ProjectChangeFeedWriter
 ): Promise<{ transactionId: string; after: string }> {
   const project = await createProjectKernel({
     root,
@@ -44,15 +47,17 @@ async function prepareReplace(
     transactionStatePath: statePath,
   })
   const transaction = await project.prepareEdit({
-    operations: [{
-      reason: 'exercise durable transaction ownership',
-      operation: {
-        type: 'replace_text',
-        path: 'note.txt',
-        oldText: 'before',
-        newText: 'after',
+    operations: [
+      {
+        reason: 'exercise durable transaction ownership',
+        operation: {
+          type: 'replace_text',
+          path: 'note.txt',
+          oldText: 'before',
+          newText: 'after',
+        },
       },
-    }],
+    ],
   })
   const validation = await project.validate({ transactionId: transaction.transactionId })
   expect(validation.ok).toBe(true)
@@ -79,14 +84,16 @@ describe('durable project transaction controller', () => {
         transactionStatePath: statePath,
       })
       const transaction = await project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'replace_text',
-            path: 'note.txt',
-            oldText: 'before',
-            newText: 'after',
+        operations: [
+          {
+            operation: {
+              type: 'replace_text',
+              path: 'note.txt',
+              oldText: 'before',
+              newText: 'after',
+            },
           },
-        }],
+        ],
       })
       feed.close()
 
@@ -94,13 +101,11 @@ describe('durable project transaction controller', () => {
       feed = reopened.feed
       // 有限事务面：实例上没有可枚举的状态（拿不到内核），能调的只有这五个方法。
       expect(Object.keys(reopened.controller)).toEqual([])
-      expect(Object.getOwnPropertyNames(Object.getPrototypeOf(reopened.controller)).filter((name) => name !== 'constructor').sort()).toEqual([
-        'apply',
-        'get',
-        'list',
-        'rollback',
-        'subscribe',
-      ])
+      expect(
+        Object.getOwnPropertyNames(Object.getPrototypeOf(reopened.controller))
+          .filter((name) => name !== 'constructor')
+          .sort()
+      ).toEqual(['apply', 'get', 'list', 'rollback', 'subscribe'])
       expect(reopened.controller.get(transaction.transactionId)?.lifecycle).toBe('prepared')
       await reopened.controller.apply({ transactionId: transaction.transactionId })
       expect(await readFile(join(root, 'note.txt'), 'utf8')).toBe('after\n')
@@ -112,9 +117,9 @@ describe('durable project transaction controller', () => {
       await reopened.controller.rollback({ transactionId: transaction.transactionId })
       expect(await readFile(join(root, 'note.txt'), 'utf8')).toBe('before\n')
       expect(reopened.controller.list()).toHaveLength(1)
-      await expect(reopened.controller.rollback({ transactionId: transaction.transactionId })).rejects.toThrow(
-        '只能回滚已应用的事务',
-      )
+      await expect(
+        reopened.controller.rollback({ transactionId: transaction.transactionId })
+      ).rejects.toThrow('只能回滚已应用的事务')
       await reopened.controller.apply({ transactionId: transaction.transactionId })
       expect(await readFile(join(root, 'note.txt'), 'utf8')).toBe('after\n')
     } finally {
@@ -140,24 +145,30 @@ describe('durable project transaction controller', () => {
       store.commit({
         transactions: snapshot.transactions,
         projections: snapshot.projections,
-        pendings: [{
-          kind: 'apply',
-          transactionId: prepared.transactionId,
-          previousStatus: 'validated',
-          restore: [{
-            path: 'note.txt',
-            exists: true,
-            content: 'before\n',
-            ownedStates: [{ exists: true, content: prepared.after }],
-          }],
-        }],
+        pendings: [
+          {
+            kind: 'apply',
+            transactionId: prepared.transactionId,
+            previousStatus: 'validated',
+            restore: [
+              {
+                path: 'note.txt',
+                exists: true,
+                content: 'before\n',
+                ownedStates: [{ exists: true, content: prepared.after }],
+              },
+            ],
+          },
+        ],
       })
       await writeFile(join(root, 'note.txt'), prepared.after)
 
       const reopened = await openDurableHarness(root, statePath, feedPath)
       feed = reopened.feed
       expect(await readFile(join(root, 'note.txt'), 'utf8')).toBe('before\n')
-      expect(new FileProjectTransactionStateStore({ path: statePath, root }).snapshot().pendings).toBeUndefined()
+      expect(
+        new FileProjectTransactionStateStore({ path: statePath, root }).snapshot().pendings
+      ).toBeUndefined()
       expect(reopened.controller.get(prepared.transactionId)?.lifecycle).toBe('validated')
       await reopened.controller.apply({ transactionId: prepared.transactionId })
       expect(await readFile(join(root, 'note.txt'), 'utf8')).toBe('after\n')
@@ -179,7 +190,7 @@ describe('durable project transaction controller', () => {
     try {
       const prepared = await prepareReplace(root, statePath, feed)
       const firstController = createProjectTransactionController(
-        await createProjectKernel({ root, changeFeed: feed, transactionStatePath: statePath }),
+        await createProjectKernel({ root, changeFeed: feed, transactionStatePath: statePath })
       )
       await firstController.apply({ transactionId: prepared.transactionId })
       feed.close()
@@ -189,17 +200,21 @@ describe('durable project transaction controller', () => {
       store.commit({
         transactions: snapshot.transactions,
         projections: snapshot.projections,
-        pendings: [{
-          kind: 'rollback',
-          transactionId: prepared.transactionId,
-          previousStatus: 'applied',
-          restore: [{
-            path: 'note.txt',
-            exists: true,
-            content: prepared.after,
-            ownedStates: [{ exists: true, content: 'before\n' }],
-          }],
-        }],
+        pendings: [
+          {
+            kind: 'rollback',
+            transactionId: prepared.transactionId,
+            previousStatus: 'applied',
+            restore: [
+              {
+                path: 'note.txt',
+                exists: true,
+                content: prepared.after,
+                ownedStates: [{ exists: true, content: 'before\n' }],
+              },
+            ],
+          },
+        ],
       })
       await writeFile(join(root, 'note.txt'), 'before\n')
 
@@ -232,28 +247,36 @@ describe('durable project transaction controller', () => {
       store.commit({
         transactions: snapshot.transactions,
         projections: snapshot.projections,
-        pendings: [{
-          kind: 'apply',
-          transactionId: prepared.transactionId,
-          previousStatus: 'validated',
-          restore: [{
-            path: 'note.txt',
-            exists: true,
-            content: 'before\n',
-            ownedStates: [{ exists: true, content: prepared.after }],
-          }],
-        }],
+        pendings: [
+          {
+            kind: 'apply',
+            transactionId: prepared.transactionId,
+            previousStatus: 'validated',
+            restore: [
+              {
+                path: 'note.txt',
+                exists: true,
+                content: 'before\n',
+                ownedStates: [{ exists: true, content: prepared.after }],
+              },
+            ],
+          },
+        ],
       })
       await writeFile(join(root, 'note.txt'), 'external\n')
 
       feed = new FileProjectChangeFeed({ path: feedPath })
-      await expect(createProjectKernel({
-        root,
-        changeFeed: feed,
-        transactionStatePath: statePath,
-      })).rejects.toMatchObject({ reason: 'TRANSACTION_RECOVERY_CONFLICT' })
+      await expect(
+        createProjectKernel({
+          root,
+          changeFeed: feed,
+          transactionStatePath: statePath,
+        })
+      ).rejects.toMatchObject({ reason: 'TRANSACTION_RECOVERY_CONFLICT' })
       expect(await readFile(join(root, 'note.txt'), 'utf8')).toBe('external\n')
-      expect(new FileProjectTransactionStateStore({ path: statePath, root }).snapshot().pendings).toBeDefined()
+      expect(
+        new FileProjectTransactionStateStore({ path: statePath, root }).snapshot().pendings
+      ).toBeDefined()
     } finally {
       feed.close()
       await rm(directory, { recursive: true, force: true })

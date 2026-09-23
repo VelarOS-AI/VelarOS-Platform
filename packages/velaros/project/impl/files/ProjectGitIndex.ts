@@ -64,7 +64,10 @@ export class ProjectGitIndex implements ProjectGitIndexApi {
   private async isInsideGitWorkTree(): Promise<boolean> {
     // 工作区根目录的 git 仓库归属在会话内是恒定的；缓存结果避免每次 apply/rollback 都新起 git 子进程。
     if (isPresent(this.gitWorkTreeCache)) return this.gitWorkTreeCache
-    const result = await this.runGit(['rev-parse', '--is-inside-work-tree'], ProjectTuning.files.gitProbeTimeoutMs)
+    const result = await this.runGit(
+      ['rev-parse', '--is-inside-work-tree'],
+      ProjectTuning.files.gitProbeTimeoutMs
+    )
     this.gitWorkTreeCache = result.exitCode === 0 && result.stdout.trim() === 'true'
     return this.gitWorkTreeCache
   }
@@ -105,7 +108,7 @@ export class ProjectGitIndex implements ProjectGitIndexApi {
     if (isEmpty(intentToAddFiles)) return []
     const result = await this.runGitOnPaths(
       ['rm', '--cached', '--ignore-unmatch'],
-      intentToAddFiles,
+      intentToAddFiles
     )
     if (result.exitCode === 0) return intentToAddFiles
     this.dependencies.providers.logger?.warn?.('project.git.untrackDeletedIntentToAdd.failed', {
@@ -130,8 +133,14 @@ export class ProjectGitIndex implements ProjectGitIndexApi {
    */
   private async listIntentToAddFiles(files: readonly string[]): Promise<string[]> {
     const [visible, invisible] = await Promise.all([
-      this.runGitOnPaths([...ProjectGitIndex.IntentToAddProbeArgs, '--ita-visible-in-index'], files),
-      this.runGitOnPaths([...ProjectGitIndex.IntentToAddProbeArgs, '--ita-invisible-in-index'], files),
+      this.runGitOnPaths(
+        [...ProjectGitIndex.IntentToAddProbeArgs, '--ita-visible-in-index'],
+        files
+      ),
+      this.runGitOnPaths(
+        [...ProjectGitIndex.IntentToAddProbeArgs, '--ita-invisible-in-index'],
+        files
+      ),
     ])
     if (visible.exitCode !== 0 || invisible.exitCode !== 0) {
       this.dependencies.providers.logger?.warn?.('project.git.listIntentToAdd.failed', {

@@ -9,7 +9,9 @@ class KeyedSerialQueue implements KeyedSerialQueueApi {
   public async run<T>(key: string, operation: () => T | Promise<T>): Promise<T> {
     const previous = this.tails.get(key)
     let release!: () => void
-    const current = new Promise<void>((resolve) => { release = resolve })
+    const current = new Promise<void>((resolve) => {
+      release = resolve
+    })
     this.tails.set(key, current)
     // 队列只等待完成信号；业务异常单独返回给该次调用者。
     await previous

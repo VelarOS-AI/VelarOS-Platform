@@ -4,23 +4,45 @@ import { z } from 'zod'
 
 import { isNotUndefined, isUndefined } from '@velaros-ai/core'
 
-import type { KernelArchitecture, KernelArtifact, KernelArtifactFormat, KernelArtifactSelection, KernelArtifactTarget, KernelManifestLoadOptions, KernelManifestQuery, KernelManifestVersion, KernelPlatform, KernelUpdateManifest } from '../../types/updater'
+import type {
+  KernelArchitecture,
+  KernelArtifact,
+  KernelArtifactFormat,
+  KernelArtifactSelection,
+  KernelArtifactTarget,
+  KernelManifestLoadOptions,
+  KernelManifestQuery,
+  KernelManifestVersion,
+  KernelPlatform,
+  KernelUpdateManifest,
+} from '../../types/updater'
 import { KernelUpdaterError } from '../errors'
 
-import {
-  fetchKernelText,
-  nodeKernelFetch,
-} from './transport'
-import {
-  compareKernelVersions,
-  KernelVersionPattern,
-  satisfiesKernelVersionRange,
-} from './version'
+import { fetchKernelText, nodeKernelFetch } from './transport'
+import { compareKernelVersions, KernelVersionPattern, satisfiesKernelVersionRange } from './version'
 
-export type { KernelArchitecture, KernelArtifact, KernelArtifactFormat, KernelArtifactSelection, KernelArtifactTarget, KernelManifestLoadOptions, KernelManifestQuery, KernelManifestVersion, KernelPlatform, KernelUpdateManifest } from '../../types/updater'
-export const KernelPlatformSchema = z.enum(['darwin', 'linux', 'win32']) satisfies z.ZodType<KernelPlatform>
+export type {
+  KernelArchitecture,
+  KernelArtifact,
+  KernelArtifactFormat,
+  KernelArtifactSelection,
+  KernelArtifactTarget,
+  KernelManifestLoadOptions,
+  KernelManifestQuery,
+  KernelManifestVersion,
+  KernelPlatform,
+  KernelUpdateManifest,
+} from '../../types/updater'
+export const KernelPlatformSchema = z.enum([
+  'darwin',
+  'linux',
+  'win32',
+]) satisfies z.ZodType<KernelPlatform>
 
-export const KernelArchitectureSchema = z.enum(['arm64', 'x64']) satisfies z.ZodType<KernelArchitecture>
+export const KernelArchitectureSchema = z.enum([
+  'arm64',
+  'x64',
+]) satisfies z.ZodType<KernelArchitecture>
 
 export const KernelArtifactTargets = [
   'darwin-arm64',
@@ -31,7 +53,9 @@ export const KernelArtifactTargets = [
   'win32-x64',
 ] as const
 
-export const KernelArtifactTargetSchema = z.enum(KernelArtifactTargets) satisfies z.ZodType<KernelArtifactTarget>
+export const KernelArtifactTargetSchema = z.enum(
+  KernelArtifactTargets
+) satisfies z.ZodType<KernelArtifactTarget>
 
 export const KernelArtifactFormatSchema = z.enum([
   'raw',
@@ -40,10 +64,9 @@ export const KernelArtifactFormatSchema = z.enum([
   'zip',
 ]) satisfies z.ZodType<KernelArtifactFormat>
 
-export const KernelVersionSchema = z.string().regex(
-  KernelVersionPattern,
-  'must be a semantic version',
-)
+export const KernelVersionSchema = z
+  .string()
+  .regex(KernelVersionPattern, 'must be a semantic version')
 
 export const KernelArtifactSchema = z.strictObject({
   url: z.string().min(1),
@@ -75,7 +98,7 @@ export function parseKernelUpdateManifest(input: unknown): KernelUpdateManifest 
       'INVALID_MANIFEST',
       `内核更新清单不合法：${formatIssues(result.error)}`,
       {},
-      { cause: result.error },
+      { cause: result.error }
     )
   }
 
@@ -85,7 +108,7 @@ export function parseKernelUpdateManifest(input: unknown): KernelUpdateManifest 
       throw new KernelUpdaterError(
         'INVALID_MANIFEST',
         `内核更新清单里版本 "${entry.version}" 声明了两次`,
-        { version: entry.version },
+        { version: entry.version }
       )
     }
     seen.add(entry.version)
@@ -96,13 +119,9 @@ export function parseKernelUpdateManifest(input: unknown): KernelUpdateManifest 
 /** 从一个来源取回并校验更新清单；`http(s)` URL、`file:` URL 与绝对路径都认，取不到抛 MANIFEST_UNREACHABLE。 */
 export async function loadKernelUpdateManifest(
   source: string,
-  options: KernelManifestLoadOptions = {},
+  options: KernelManifestLoadOptions = {}
 ): Promise<KernelUpdateManifest> {
-  const text = await fetchKernelText(
-    options.fetch ?? nodeKernelFetch,
-    source,
-    options.signal,
-  )
+  const text = await fetchKernelText(options.fetch ?? nodeKernelFetch, source, options.signal)
   let input: unknown
   try {
     input = JSON.parse(text) as unknown
@@ -111,7 +130,7 @@ export async function loadKernelUpdateManifest(
       'INVALID_MANIFEST',
       `"${source}" 处的内核更新清单不是合法 JSON`,
       { url: source },
-      { cause: error },
+      { cause: error }
     )
   }
   return parseKernelUpdateManifest(input)
@@ -120,20 +139,19 @@ export async function loadKernelUpdateManifest(
 /** 把平台与架构折成制品目标；缺省用本进程的，内核不发这个组合时抛 UNSUPPORTED_TARGET。 */
 export function resolveKernelArtifactTarget(
   platform: string = process.platform,
-  architecture: string = process.arch,
+  architecture: string = process.arch
 ): KernelArtifactTarget {
   const parsedPlatform = KernelPlatformSchema.safeParse(platform)
   const parsedArchitecture = KernelArchitectureSchema.safeParse(architecture)
-  const target = parsedPlatform.success && parsedArchitecture.success
-    ? KernelArtifactTargetSchema.safeParse(
-      `${parsedPlatform.data}-${parsedArchitecture.data}`,
-    )
-    : undefined
+  const target =
+    parsedPlatform.success && parsedArchitecture.success
+      ? KernelArtifactTargetSchema.safeParse(`${parsedPlatform.data}-${parsedArchitecture.data}`)
+      : undefined
   if (isUndefined(target) || !target.success) {
     throw new KernelUpdaterError(
       'UNSUPPORTED_TARGET',
       `内核制品没有 ${platform}/${architecture} 这个目标`,
-      { target: `${platform}-${architecture}` },
+      { target: `${platform}-${architecture}` }
     )
   }
   return target.data
@@ -142,15 +160,13 @@ export function resolveKernelArtifactTarget(
 /** 在清单里找出某个版本的条目；清单里没发布这个版本就抛 VERSION_UNAVAILABLE。 */
 export function findKernelManifestVersion(
   manifest: KernelUpdateManifest,
-  version: string,
+  version: string
 ): KernelManifestVersion {
   const entry = manifest.versions.find((candidate) => candidate.version === version)
   if (isUndefined(entry)) {
-    throw new KernelUpdaterError(
-      'VERSION_UNAVAILABLE',
-      `更新清单里没有发布内核版本 "${version}"`,
-      { version },
-    )
+    throw new KernelUpdaterError('VERSION_UNAVAILABLE', `更新清单里没有发布内核版本 "${version}"`, {
+      version,
+    })
   }
   return entry
 }
@@ -159,7 +175,7 @@ export function findKernelManifestVersion(
 export function selectKernelArtifact(
   manifest: KernelUpdateManifest,
   version: string,
-  target: KernelArtifactTarget,
+  target: KernelArtifactTarget
 ): KernelArtifactSelection {
   const entry = findKernelManifestVersion(manifest, version)
   const artifact = entry.artifacts[target]
@@ -167,7 +183,7 @@ export function selectKernelArtifact(
     throw new KernelUpdaterError(
       'ARTIFACT_NOT_FOUND',
       `内核版本 "${version}" 没有为 ${target} 发布制品`,
-      { version, target },
+      { version, target }
     )
   }
   return { version, target, artifact }
@@ -176,21 +192,20 @@ export function selectKernelArtifact(
 /** 按条件筛出清单里可用的版本，版本升序排；最新的那个合格版本在最后一条。 */
 export function listKernelManifestVersions(
   manifest: KernelUpdateManifest,
-  query: KernelManifestQuery = {},
+  query: KernelManifestQuery = {}
 ): readonly KernelManifestVersion[] {
   const matches = manifest.versions.filter((entry) => {
     if (!query.includeYanked && entry.yanked) return false
     if (!satisfiesKernelVersionRange(entry.version, query.range)) return false
     return isUndefined(query.target) || isNotUndefined(entry.artifacts[query.target])
   })
-  return matches.sort((left, right) =>
-    compareKernelVersions(left.version, right.version))
+  return matches.sort((left, right) => compareKernelVersions(left.version, right.version))
 }
 
 /** 挑出最新的那个合格版本；一个都不合格时是 undefined。 */
 export function selectKernelManifestVersion(
   manifest: KernelUpdateManifest,
-  query: KernelManifestQuery = {},
+  query: KernelManifestQuery = {}
 ): KernelManifestVersion | undefined {
   return listKernelManifestVersions(manifest, query).at(-1)
 }
@@ -210,9 +225,8 @@ function formatIssues(error: z.ZodError): string {
 export function kernelArtifactFileName(artifact: KernelArtifact): string {
   const pathname = URL.canParse(artifact.url)
     ? new URL(artifact.url).pathname
-    : artifact.url.split(/[?#]/)[0] ?? ''
-  const candidate = basename(pathname)
-    .replaceAll(/[^A-Za-z0-9._-]/g, '-')
+    : (artifact.url.split(/[?#]/)[0] ?? '')
+  const candidate = basename(pathname).replaceAll(/[^A-Za-z0-9._-]/g, '-')
   return candidate.length > 0 && candidate !== '.' && candidate !== '..'
     ? candidate
     : 'kernel-payload'

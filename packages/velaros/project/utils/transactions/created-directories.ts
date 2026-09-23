@@ -21,10 +21,11 @@ export function ancestorDirectories(relativePath: string): string[] {
  */
 export async function missingAncestorDirectories(
   paths: readonly string[],
-  exists: (directory: string) => Promise<boolean>,
+  exists: (directory: string) => Promise<boolean>
 ): Promise<string[]> {
   const candidates = new Set<string>()
-  for (const path of paths) for (const directory of ancestorDirectories(path)) candidates.add(directory)
+  for (const path of paths)
+    for (const directory of ancestorDirectories(path)) candidates.add(directory)
   const missing: string[] = []
   for (const directory of [...candidates].sort((left, right) => left.length - right.length)) {
     if (!(await exists(directory))) missing.push(directory)
@@ -38,7 +39,7 @@ export async function missingAncestorDirectories(
  */
 export async function removeEmptyDirectories(
   directories: readonly string[],
-  resolve: (directory: string) => Promise<string>,
+  resolve: (directory: string) => Promise<string>
 ): Promise<string[]> {
   const removed: string[] = []
   for (const directory of [...directories].sort((left, right) => right.length - left.length)) {

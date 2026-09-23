@@ -69,7 +69,7 @@ const declaredPackageDirectories = (rootManifest) => {
   const domainNames = Object.keys(domains ?? {})
   if (domainNames.length === 0) {
     throw new Error(
-      'Root manifest is missing velaros.domainPackages; release contents must be declared, not discovered',
+      'Root manifest is missing velaros.domainPackages; release contents must be declared, not discovered'
     )
   }
   const declared = new Set()
@@ -123,7 +123,9 @@ export async function collectReleasePackages(root) {
   const rootManifest = await readJson(path.join(root, 'package.json'))
   const platformGeneration = rootManifest.velaros?.platform
   if (!platformGeneration) {
-    throw new Error('Root manifest is missing velaros.platform; the release generation must be declared')
+    throw new Error(
+      'Root manifest is missing velaros.platform; the release generation must be declared'
+    )
   }
   const declared = declaredPackageDirectories(rootManifest)
   const lockfile = await readJsonc(path.join(root, 'bun.lock'))
@@ -153,24 +155,24 @@ export async function collectReleasePackages(root) {
     }
     if (!AllowedAccess.has(manifest.publishConfig?.access)) {
       throw new Error(
-        `${manifest.name} must declare publishConfig.access as one of ${[...AllowedAccess].join(' / ')}`,
+        `${manifest.name} must declare publishConfig.access as one of ${[...AllowedAccess].join(' / ')}`
       )
     }
     if (!declared.has(directoryName)) {
       throw new Error(
-        `packages/${directoryName} is publishable but not registered in velaros.domainPackages; register it or mark the package private`,
+        `packages/${directoryName} is publishable but not registered in velaros.domainPackages; register it or mark the package private`
       )
     }
     // 不变量 ④:代必须写明且与仓根一致。缺失单独报,因为新包漏写是最常见的一种——
     // 错误文案要直接给出该写什么,而不是丢一句「不一致」让人回来翻仓根。
     if (!manifest.velaros?.platform) {
       throw new Error(
-        `${manifest.name} must declare velaros.platform (expected "${platformGeneration}"); it ships with the package so consumers can read which generation they installed`,
+        `${manifest.name} must declare velaros.platform (expected "${platformGeneration}"); it ships with the package so consumers can read which generation they installed`
       )
     }
     if (manifest.velaros.platform !== platformGeneration) {
       throw new Error(
-        `${manifest.name} declares platform generation ${manifest.velaros.platform}, but the repo root declares ${platformGeneration}; a release train is one generation`,
+        `${manifest.name} declares platform generation ${manifest.velaros.platform}, but the repo root declares ${platformGeneration}; a release train is one generation`
       )
     }
     packages.push({ directoryName, directory, manifest })
@@ -181,7 +183,7 @@ export async function collectReleasePackages(root) {
     if (publishable.has(directoryName)) continue
     if (privateDirectories.has(directoryName)) continue
     throw new Error(
-      `velaros.domainPackages registers packages/${directoryName}, but it is not a publishable package on disk`,
+      `velaros.domainPackages registers packages/${directoryName}, but it is not a publishable package on disk`
     )
   }
 
@@ -199,7 +201,9 @@ export async function collectReleasePackages(root) {
     }
   }
   if (commandOwners.has('velaros')) {
-    throw new Error('The velaros command belongs to VelarOS-Termel; Platform packages must not publish it')
+    throw new Error(
+      'The velaros command belongs to VelarOS-Termel; Platform packages must not publish it'
+    )
   }
 
   for (const item of packages) {
@@ -207,12 +211,12 @@ export async function collectReleasePackages(root) {
     const lockedWorkspace = lockfile.workspaces?.[workspacePath]
     if (!lockedWorkspace) {
       throw new Error(
-        `${item.manifest.name} is missing from bun.lock workspaces; run bun install before publishing`,
+        `${item.manifest.name} is missing from bun.lock workspaces; run bun install before publishing`
       )
     }
     if (lockedWorkspace.version !== item.manifest.version) {
       throw new Error(
-        `${item.manifest.name} manifest version ${item.manifest.version} does not match bun.lock workspace version ${lockedWorkspace.version}; run bun install before publishing`,
+        `${item.manifest.name} manifest version ${item.manifest.version} does not match bun.lock workspace version ${lockedWorkspace.version}; run bun install before publishing`
       )
     }
   }
@@ -242,7 +246,7 @@ export function resolveReleaseSelection(rootManifest, ordered, refName) {
     const identifier = refName.slice(0, separator)
     const version = refName.slice(separator + 1)
     const match = ordered.find(
-      (item) => item.manifest.name === identifier || item.directoryName === identifier,
+      (item) => item.manifest.name === identifier || item.directoryName === identifier
     )
     if (match && match.manifest.version === version) {
       return { kind: 'package', tag: refName, packages: [match] }
@@ -282,7 +286,7 @@ export function selectReleasedPackages(rootManifest, ordered, refName, selectors
   if (selection.kind === 'package') {
     if (selectors.length > 0) {
       throw new Error(
-        `--only cannot narrow a single-package tag (${selection.tag}); the tag already names what ships`,
+        `--only cannot narrow a single-package tag (${selection.tag}); the tag already names what ships`
       )
     }
     return { selection, packages: selection.packages }
@@ -293,7 +297,7 @@ export function selectReleasedPackages(rootManifest, ordered, refName, selectors
   const chosen = new Set()
   for (const selector of selectors) {
     const match = ordered.find(
-      (item) => item.manifest.name === selector || item.directoryName === selector,
+      (item) => item.manifest.name === selector || item.directoryName === selector
     )
     if (!match) {
       const known = ordered.map((item) => item.manifest.name).join(', ')

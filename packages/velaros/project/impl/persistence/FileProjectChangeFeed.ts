@@ -2,7 +2,16 @@
  * 落盘的变更记录：`FileProjectChangeFeed` 与工厂 `createFileProjectChangeFeed`。接口 `FileProjectChangeFeedApi` 在本文件的类上方。
  */
 
-import { appendFileSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, truncateSync } from 'node:fs'
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  truncateSync,
+} from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
 import type { ProjectChangeFeedWriter } from '../../contract/requires.js'
@@ -22,7 +31,10 @@ export interface FileProjectChangeFeedApi extends ProjectChangeFeedWriter {
   close(): void
 }
 
-export class FileProjectChangeFeed extends BaseProjectChangeFeed implements FileProjectChangeFeedApi {
+export class FileProjectChangeFeed
+  extends BaseProjectChangeFeed
+  implements FileProjectChangeFeedApi
+{
   public readonly path: string
   private static readonly DirectoryMode = 0o700
   private static readonly FileMode = 0o600
@@ -48,7 +60,10 @@ export class FileProjectChangeFeed extends BaseProjectChangeFeed implements File
   private truncateTornTail(source: string): void {
     if (!source || source.endsWith('\n')) return
     const lastNewline = source.lastIndexOf('\n')
-    truncateSync(this.path, lastNewline === -1 ? 0 : Buffer.byteLength(source.slice(0, lastNewline + 1), 'utf8'))
+    truncateSync(
+      this.path,
+      lastNewline === -1 ? 0 : Buffer.byteLength(source.slice(0, lastNewline + 1), 'utf8')
+    )
   }
 
   /** 读回已有的记录文件：每行一条，只有最后一行没写完（没有换行结尾）时允许坏掉。 */
@@ -59,7 +74,8 @@ export class FileProjectChangeFeed extends BaseProjectChangeFeed implements File
       if (!line) continue
       try {
         const change: unknown = JSON.parse(line)
-        if (!isProjectChangeRecord(change)) throw new Error('变更记录文件里有一行不是合法的变更记录。')
+        if (!isProjectChangeRecord(change))
+          throw new Error('变更记录文件里有一行不是合法的变更记录。')
         this.hydrate(change)
       } catch (error) {
         const isLastPartialLine = index === lines.length - 1 && !source.endsWith('\n')
@@ -82,6 +98,8 @@ export class FileProjectChangeFeed extends BaseProjectChangeFeed implements File
 }
 
 /** 创建落盘的变更记录，交给 createProjectKernel 的 changeFeed；用完调 close。 */
-export function createFileProjectChangeFeed(options: FileProjectChangeFeedOptions): FileProjectChangeFeedApi {
+export function createFileProjectChangeFeed(
+  options: FileProjectChangeFeedOptions
+): FileProjectChangeFeedApi {
   return new FileProjectChangeFeed(options)
 }

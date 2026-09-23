@@ -29,7 +29,15 @@
 import electron from 'electron'
 
 import type { TurnContextAppendBus } from '@velaros-ai/context'
-import { isEmpty, isNonBlankString, isPlainObject, isPresent, isString, optionalWhen, toNullable } from '@velaros-ai/core'
+import {
+  isEmpty,
+  isNonBlankString,
+  isPlainObject,
+  isPresent,
+  isString,
+  optionalWhen,
+  toNullable,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 import type { KernelModuleDefinition } from '@velaros-ai/kernel'
@@ -126,16 +134,29 @@ import type {
 } from '../../types/browser'
 import type { CdpExternalBrowserLaunchOptions } from '../../types/cdp.js'
 import type { BrowserPageDriverState } from '../../types/driver'
-import {
-  type BrowserSession,
-  type ElectronBrowserRuntimeOptions,
-} from '../../types/electron'
-import type { BrowserPageDriverFactory,BrowserPagePresentationTarget, BrowserRuntimeKernel, BrowserRuntimePageDriverSession } from '../../types/electron.js'
-import type { BrowserTurnContextDeltaSource,ExternalBrowserPageSession } from '../../types/runtime.js'
+import { type BrowserSession, type ElectronBrowserRuntimeOptions } from '../../types/electron'
+import type {
+  BrowserPageDriverFactory,
+  BrowserPagePresentationTarget,
+  BrowserRuntimeKernel,
+  BrowserRuntimePageDriverSession,
+} from '../../types/electron.js'
+import type {
+  BrowserTurnContextDeltaSource,
+  ExternalBrowserPageSession,
+} from '../../types/runtime.js'
 import type { BrowserUserActivityWaitState } from '../../types/session.js'
 import { resolveBrowserSearchFallbackUrl } from '../../utils/address'
 import { parseEmptyInput, parseSessionInput } from '../../utils/electron/kernel-input.js'
-import { applyExternalPageState, buildExternalCurrentPageTarget, buildExternalNavigationResult, buildExternalWindowState, delay, isPlaceholderUrl, normalizeUrl } from '../../utils/electron/runtime'
+import {
+  applyExternalPageState,
+  buildExternalCurrentPageTarget,
+  buildExternalNavigationResult,
+  buildExternalWindowState,
+  delay,
+  isPlaceholderUrl,
+  normalizeUrl,
+} from '../../utils/electron/runtime'
 import { disposeExternalPageSession } from '../../utils/electron/runtime'
 import { buildBrowserUserScriptExecutionSource } from '../../utils/electron/runtime'
 import { clampInteger } from '../../utils/numbers.js'
@@ -166,13 +187,21 @@ export interface ElectronBrowserRuntimeApi {
   /** 更新运行时回调。 */
   setOptions(options: ElectronBrowserRuntimeOptions): void
   /** 等待用户停止操作当前浏览器页面。 */
-  waitForUserActivityIdle(sessionId: string, abortSignal?: AbortSignal, onWaitStateChange?: (sessionId: string, state: BrowserUserActivityWaitState) => void): Promise<{ waited: boolean; waitedMs: number }>
+  waitForUserActivityIdle(
+    sessionId: string,
+    abortSignal?: AbortSignal,
+    onWaitStateChange?: (sessionId: string, state: BrowserUserActivityWaitState) => void
+  ): Promise<{ waited: boolean; waitedMs: number }>
   /** 标记模型浏览器动作租约，避免把模型自身动作记录成用户活动。 */
   withModelAction<T>(sessionId: string, action: () => Promise<T>): Promise<T>
   /** 环境回合上下文：用户浏览器活动 source adapter（browser.manual-activity）。 */
   createUserActivityTurnContextSource(): BrowserTurnContextDeltaSource
   /** 读当前页的轻量状态：地址、标题、加载状态、视口与最近一次导航错误。 */
-  getPageState(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<{
+  getPageState(
+    sessionId: string,
+    context: BrowserSiteContext,
+    abortSignal?: AbortSignal
+  ): Promise<{
     url: string
     title: string
     loadState: 'loaded' | 'error' | 'unknown'
@@ -192,22 +221,50 @@ export interface ElectronBrowserRuntimeApi {
    */
   getTurnContextSnapshot(sessionId: string): Nullable<BrowserTurnContextSnapshot>
   /** 枚举当前受控页面 target。WebView 暴露单页 synthetic target，外部 CDP 读取真实 target list。 */
-  listPageTargets(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserPageTargetsResult>
+  listPageTargets(
+    sessionId: string,
+    context: BrowserSiteContext,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPageTargetsResult>
   /** 切换当前受控的外部 CDP page target。 */
-  switchPageTarget(sessionId: string, context: BrowserSiteContext, options: BrowserSwitchPageTargetOptions, abortSignal?: AbortSignal): Promise<BrowserSwitchPageTargetResult>
+  switchPageTarget(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserSwitchPageTargetOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserSwitchPageTargetResult>
   /** 确保浏览器会话打开到 context.url。 */
   openPage(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<void>
   /** 展示浏览器页面并聚焦 WebContents。 */
-  showPage(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserPageWindowState>
+  showPage(
+    sessionId: string,
+    context: BrowserSiteContext,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPageWindowState>
   /** 接管 renderer webContents，并恢复历史记录后打开目标页面。 */
-  presentPage(sessionId: string, context: BrowserSiteContext, webContentsId: number, navigationHistory?: BrowserNavigationHistoryRestore, abortSignal?: AbortSignal): Promise<BrowserPageWindowState>
+  presentPage(
+    sessionId: string,
+    context: BrowserSiteContext,
+    webContentsId: number,
+    navigationHistory?: BrowserNavigationHistoryRestore,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPageWindowState>
   /** 启动外部 CDP 浏览器窗口并挂接为当前 session 的页面 driver。 */
-  launchExternalBrowserPage(sessionId: string, context: BrowserSiteContext, options?: CdpExternalBrowserLaunchOptions, abortSignal?: AbortSignal): Promise<BrowserPageWindowState>
+  launchExternalBrowserPage(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options?: CdpExternalBrowserLaunchOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPageWindowState>
   /** 接入外部浏览器页面 driver，用于 CDP/远程浏览器路径复用同一页面协议。 */
-  attachExternalPageDriver(sessionId: string, driver: BrowserPageDriver, options: {
+  attachExternalPageDriver(
+    sessionId: string,
+    driver: BrowserPageDriver,
+    options: {
       disposeHost?: LooseOptional<() => void>
       disposePreviousHost?: LooseOptional<boolean>
-    }): ExternalBrowserPageSession
+    }
+  ): ExternalBrowserPageSession
   /** 隐藏会话但不销毁 WebContents。 */
   hideSession(sessionId: string): Promise<BrowserPageWindowState>
   /**
@@ -224,101 +281,308 @@ export interface ElectronBrowserRuntimeApi {
   /** 主进程退出时永久释放浏览器 runtime。 */
   dispose(): void
   /** 截图并保存到浏览器工作区。 */
-  captureScreenshot(sessionId: string, context: BrowserSiteContext, options?: BrowserCaptureScreenshotOptions, abortSignal?: AbortSignal): Promise<BrowserScreenshotArtifact>
+  captureScreenshot(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options?: BrowserCaptureScreenshotOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserScreenshotArtifact>
   /** 捕获不落盘的轻量页面预览帧，供宿主侧观察后台 browser lane。 */
-  capturePreviewFrame(sessionId: string, context: BrowserSiteContext, options: { maxWidth?: number; quality?: number }, abortSignal?: AbortSignal): Promise<BrowserPagePreviewFrame>
+  capturePreviewFrame(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: { maxWidth?: number; quality?: number },
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPagePreviewFrame>
   /** 启动画中画的 CDP 持续帧流，不占用浏览器 actionQueue。 */
-  startPreviewFrameStream(sessionId: string, context: BrowserSiteContext, options: { maxWidth?: number; quality?: number }, onEvent: (event: BrowserPagePreviewStreamEvent) => void, abortSignal?: AbortSignal): Promise<void>
+  startPreviewFrameStream(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: { maxWidth?: number; quality?: number },
+    onEvent: (event: BrowserPagePreviewStreamEvent) => void,
+    abortSignal?: AbortSignal
+  ): Promise<void>
   /** 停止画中画实时帧流。 */
   stopPreviewFrameStream(sessionId: string): Promise<void>
   /** 按目标元素描述做一步（点击、悬停、聚焦、全选），比坐标点击稳。 */
-  performTargetAction(sessionId: string, context: BrowserSiteContext, options: BrowserTargetActionOptions, abortSignal?: AbortSignal): Promise<BrowserTargetActionResult>
+  performTargetAction(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserTargetActionOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserTargetActionResult>
   /** 往当前焦点或指定目标输入文本。 */
-  insertText(sessionId: string, context: BrowserSiteContext, options: BrowserInsertTextOptions, abortSignal?: AbortSignal): Promise<BrowserInsertTextResult>
+  insertText(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserInsertTextOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserInsertTextResult>
   /** 发一次键盘按键。 */
-  pressKey(sessionId: string, context: BrowserSiteContext, options: BrowserPressKeyOptions, abortSignal?: AbortSignal): Promise<BrowserPressKeyResult>
+  pressKey(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserPressKeyOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPressKeyResult>
   /** 在视口坐标上点一下，作为目标点击失败后的兜底。 */
-  clickCoordinates(sessionId: string, context: BrowserSiteContext, options: BrowserClickCoordinatesOptions, abortSignal?: AbortSignal): Promise<BrowserClickCoordinatesResult>
+  clickCoordinates(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserClickCoordinatesOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserClickCoordinatesResult>
   /** 把一个目标拖到另一个目标上。 */
-  dragTargets(sessionId: string, context: BrowserSiteContext, options: BrowserDragOptions, abortSignal?: AbortSignal): Promise<BrowserDragResult>
+  dragTargets(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserDragOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserDragResult>
   /** 把鼠标移到某个位置（用于 hover）。 */
-  moveMouse(sessionId: string, context: BrowserSiteContext, options: BrowserMoveMouseOptions, abortSignal?: AbortSignal): Promise<BrowserMouseResult>
+  moveMouse(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserMoveMouseOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult>
   /** 按下一个键并记在会话上，直到 keyUp；按住的修饰键带到之后的输入事件上。 */
-  keyDown(sessionId: string, context: BrowserSiteContext, input: BrowserKeyInput, abortSignal?: AbortSignal): Promise<BrowserKeyResult>
+  keyDown(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserKeyInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserKeyResult>
   /** 抬起一个按着的键。 */
-  keyUp(sessionId: string, context: BrowserSiteContext, input: BrowserKeyInput, abortSignal?: AbortSignal): Promise<BrowserKeyResult>
+  keyUp(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserKeyInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserKeyResult>
   /** 在指针现在的位置按下一个鼠标键。 */
-  mouseDown(sessionId: string, context: BrowserSiteContext, input: BrowserMouseButtonInput, abortSignal?: AbortSignal): Promise<BrowserMouseResult>
+  mouseDown(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserMouseButtonInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult>
   /** 在指针现在的位置松开一个鼠标键。 */
-  mouseUp(sessionId: string, context: BrowserSiteContext, input: BrowserMouseButtonInput, abortSignal?: AbortSignal): Promise<BrowserMouseResult>
+  mouseUp(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserMouseButtonInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult>
   /** 在指针现在的位置滚一下滚轮。 */
-  mouseWheel(sessionId: string, context: BrowserSiteContext, input: BrowserWheelInput, abortSignal?: AbortSignal): Promise<BrowserMouseResult>
+  mouseWheel(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserWheelInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult>
   /** 改受控页面的视口尺寸与设备像素比。 */
-  setViewport(sessionId: string, context: BrowserSiteContext, options: BrowserViewportOptions, abortSignal?: AbortSignal): Promise<BrowserViewportResult>
+  setViewport(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserViewportOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserViewportResult>
   /** 改页面缩放比例。 */
-  setPageZoom(sessionId: string, context: BrowserSiteContext, options: BrowserPageZoomOptions, abortSignal?: AbortSignal): Promise<BrowserPageZoomResult>
+  setPageZoom(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserPageZoomOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPageZoomResult>
   /** 读页面：正文、标题结构、链接、可交互元素与它们的 ref。 */
-  inspectPage(sessionId: string, context: BrowserSiteContext, options?: BrowserInspectPageOptions, abortSignal?: AbortSignal): Promise<BrowserPageInspection>
+  inspectPage(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options?: BrowserInspectPageOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPageInspection>
   /** 在页面上下文里跑一段受控脚本并取回结果。 */
-  evaluateScript(sessionId: string, context: BrowserSiteContext, options: BrowserEvaluateScriptOptions, abortSignal?: AbortSignal): Promise<BrowserScriptOutcome>
+  evaluateScript(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserEvaluateScriptOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserScriptOutcome>
   /** 列出页面的框架树（顶层页面与各层 iframe，含跨源的）。 */
-  listFrames(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserFrameInfo[]>
+  listFrames(
+    sessionId: string,
+    context: BrowserSiteContext,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserFrameInfo[]>
   /** 在模型自己的那条 CDP 会话上发一条命令；会话第一次用到时经页面驱动连上，之后跨调用保留。 */
-  sendProtocolCommand(sessionId: string, context: BrowserSiteContext, command: CdpSendInput, abortSignal?: AbortSignal): Promise<unknown>
+  sendProtocolCommand(
+    sessionId: string,
+    context: BrowserSiteContext,
+    command: CdpSendInput,
+    abortSignal?: AbortSignal
+  ): Promise<unknown>
   /** 读模型那条 CDP 会话收到的事件。 */
-  readProtocolEvents(sessionId: string, context: BrowserSiteContext, query: CdpEventsInput, abortSignal?: AbortSignal): Promise<BrowserProtocolEvents>
+  readProtocolEvents(
+    sessionId: string,
+    context: BrowserSiteContext,
+    query: CdpEventsInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserProtocolEvents>
   /** 断开模型那条 CDP 会话：它开过的域、设过的仿真与拦截、缓冲的事件一并撤掉。站点的 leave 也该调它。 */
-  resetProtocolSession(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<void>
+  resetProtocolSession(
+    sessionId: string,
+    context: BrowserSiteContext,
+    abortSignal?: AbortSignal
+  ): Promise<void>
   /**
    * 在当前嵌入式页面执行一个持久用户脚本。
    *
    * v1 明确不伪装能力：external CDP 和真正的 document-start 需要 driver 级
    * evaluate-on-new-document 注册，当前返回 unsupported，由 UI/工具展示。
    */
-  runUserScript(sessionId: string, context: BrowserSiteContext, input: { script: BrowserUserScriptRecord; code: string; force?: boolean }, abortSignal?: AbortSignal): Promise<BrowserUserScriptLastRun>
+  runUserScript(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: { script: BrowserUserScriptRecord; code: string; force?: boolean },
+    abortSignal?: AbortSignal
+  ): Promise<BrowserUserScriptLastRun>
   /** 带页面会话的 cookie 下载一个 http(s) 资源到站点工作区。 */
-  fetchResource(sessionId: string, context: BrowserSiteContext, options: BrowserFetchResourceOptions, abortSignal?: AbortSignal): Promise<BrowserFetchResourceResult>
+  fetchResource(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserFetchResourceOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserFetchResourceResult>
   /** 读最近的 console、加载错误与网络诊断，并给一份汇总。 */
-  getPageDiagnostics(sessionId: string, context: BrowserSiteContext, options?: BrowserPageDiagnosticsOptions, abortSignal?: AbortSignal): Promise<BrowserPageDiagnostics>
+  getPageDiagnostics(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options?: BrowserPageDiagnosticsOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPageDiagnostics>
   /** 把站点工作区里的文件放进页面的 file input。 */
-  uploadFile(sessionId: string, context: BrowserSiteContext, options: BrowserUploadFileOptions, abortSignal?: AbortSignal): Promise<BrowserUploadFileResult>
+  uploadFile(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserUploadFileOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserUploadFileResult>
   /** 把当前页面导出成 PDF 存进站点工作区。 */
-  exportPagePdf(sessionId: string, context: BrowserSiteContext, options?: BrowserExportPagePdfOptions, abortSignal?: AbortSignal): Promise<BrowserExportPagePdfResult>
+  exportPagePdf(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options?: BrowserExportPagePdfOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserExportPagePdfResult>
   /** 配置页面网络：离线、请求头、拦截与 mock。 */
-  configureNetwork(sessionId: string, context: BrowserSiteContext, options: BrowserNetworkControlOptions, abortSignal?: AbortSignal): Promise<BrowserNetworkControlResult>
+  configureNetwork(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserNetworkControlOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserNetworkControlResult>
   /** 按 requestId 读响应体；不在缓存里就如实回报读不到。 */
-  readNetworkResponseBody(sessionId: string, context: BrowserSiteContext, options: BrowserNetworkResponseBodyOptions, abortSignal?: AbortSignal): Promise<BrowserNetworkResponseBodyResult>
+  readNetworkResponseBody(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserNetworkResponseBodyOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserNetworkResponseBodyResult>
   /** 按 requestId 读请求、响应与 timing 详情。 */
-  readNetworkRequestDetails(sessionId: string, context: BrowserSiteContext, options: BrowserNetworkRequestDetailsOptions, abortSignal?: AbortSignal): Promise<BrowserNetworkRequestDetailsResult>
+  readNetworkRequestDetails(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserNetworkRequestDetailsOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserNetworkRequestDetailsResult>
   /** 等页面加载状态稳定，或等一小段时间。 */
-  waitForPage(sessionId: string, context: BrowserSiteContext, options: BrowserPageWaitOptions, abortSignal?: AbortSignal): Promise<BrowserPageWaitResult>
+  waitForPage(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserPageWaitOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPageWaitResult>
   /** 执行浏览器导航动作。 */
-  navigatePage(sessionId: string, context: BrowserSiteContext, options: BrowserPageNavigationOptions, abortSignal?: AbortSignal): Promise<BrowserPageNavigationResult>
+  navigatePage(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserPageNavigationOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPageNavigationResult>
   /** 列出当前 session 待处理的 dialog/download/permission 事件。 */
-  listPendingEvents(sessionId: string, _context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserPendingEventsResult>
+  listPendingEvents(
+    sessionId: string,
+    _context: BrowserSiteContext,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPendingEventsResult>
   /** 处理待处理的 JS 弹窗。 */
-  handleDialog(sessionId: string, _context: BrowserSiteContext, options: BrowserHandleDialogOptions, abortSignal?: AbortSignal): Promise<BrowserHandleDialogResult>
+  handleDialog(
+    sessionId: string,
+    _context: BrowserSiteContext,
+    options: BrowserHandleDialogOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserHandleDialogResult>
   /** 接受或取消待处理下载。 */
-  handleDownload(sessionId: string, context: BrowserSiteContext, options: BrowserHandleDownloadOptions, abortSignal?: AbortSignal): Promise<BrowserHandleDownloadResult>
+  handleDownload(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserHandleDownloadOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserHandleDownloadResult>
   /** 允许或拒绝待处理权限请求。 */
-  handlePermission(sessionId: string, _context: BrowserSiteContext, options: BrowserHandlePermissionOptions, abortSignal?: AbortSignal): Promise<BrowserHandlePermissionResult>
+  handlePermission(
+    sessionId: string,
+    _context: BrowserSiteContext,
+    options: BrowserHandlePermissionOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserHandlePermissionResult>
   /**
    * 开始录制性能 trace（吸收自 chrome-devtools-mcp 的 performance_start_trace 流程）。
    *
    * reload=true 时先跳 about:blank 清场再回跳原 URL，录出完整加载过程；
    * autoStopMs > 0 时在录制窗口结束后原地停止并直接返回分析结果。
    */
-  startPerformanceTrace(sessionId: string, context: BrowserSiteContext, options?: BrowserPerformanceTraceStartOptions, abortSignal?: AbortSignal): Promise<BrowserPerformanceTraceStartResult>
+  startPerformanceTrace(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options?: BrowserPerformanceTraceStartOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPerformanceTraceStartResult>
   /** 停止性能 trace 录制，解析并返回摘要。 */
-  stopPerformanceTrace(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserPerformanceTraceStopResult>
+  stopPerformanceTrace(
+    sessionId: string,
+    context: BrowserSiteContext,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPerformanceTraceStopResult>
   /** 对最近一次 trace 的指定 insight 输出详细分析（纯内存读，不进队列）。 */
-  analyzePerformanceInsight(sessionId: string, context: BrowserSiteContext, options: BrowserPerformanceInsightOptions, abortSignal?: AbortSignal): Promise<BrowserPerformanceInsightResult>
+  analyzePerformanceInsight(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserPerformanceInsightOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPerformanceInsightResult>
   /** 采集 V8 堆快照并落盘（memory-leak 排查工作流；分析建议交给 memlab 等外部工具）。 */
-  captureHeapSnapshot(sessionId: string, context: BrowserSiteContext, options?: BrowserHeapSnapshotOptions, abortSignal?: AbortSignal): Promise<BrowserHeapSnapshotResult>
+  captureHeapSnapshot(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options?: BrowserHeapSnapshotOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserHeapSnapshotResult>
   /** 开始页面录屏（GIF 产物）。 */
-  startScreencast(sessionId: string, context: BrowserSiteContext, options?: BrowserScreencastStartOptions, abortSignal?: AbortSignal): Promise<BrowserScreencastStartResult>
+  startScreencast(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options?: BrowserScreencastStartOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserScreencastStartResult>
   /** 停止录屏，合成 GIF 并落盘。 */
-  stopScreencast(sessionId: string, context: BrowserSiteContext, options?: BrowserScreencastStopOptions, abortSignal?: AbortSignal): Promise<BrowserScreencastStopResult>
+  stopScreencast(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options?: BrowserScreencastStopOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserScreencastStopResult>
 }
 
 class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
@@ -405,8 +669,9 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     // 可见活动写入广播总线由宿主装配注入（每宿主一个实例）；不并入 options 回调袋，
     // 避免经 setOptions/setCallbacks 反复重放这个构造期单例依赖。
     this.activityCoordinator = new BrowserActivityCoordinator({ turnContextAppendHub })
-    this.createPageDriver = options.createPageDriver
-      ?? (({ webContents }) => new ElectronWebContentsBrowserPageDriver(webContents))
+    this.createPageDriver =
+      options.createPageDriver ??
+      (({ webContents }) => new ElectronWebContentsBrowserPageDriver(webContents))
     this.externalBrowserLauncher =
       options.externalBrowserLauncher ?? new CdpExternalBrowserLauncher()
     this.interaction.setSystemPointerDriver(options.systemPointerDriver)
@@ -548,7 +813,8 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       pendingEvents,
       recentErrorCount: session.diagnostics.filter(
         (entry) =>
-          entry.level === 'error' && entry.capturedAt >= Date.now() - BrowserTuning.session.recentErrorWindowMs
+          entry.level === 'error' &&
+          entry.capturedAt >= Date.now() - BrowserTuning.session.recentErrorWindowMs
       ).length,
       capturedAt: Date.now(),
     }
@@ -1079,24 +1345,59 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     )
   }
 
-  public async keyDown(sessionId: string, context: BrowserSiteContext, input: BrowserKeyInput, abortSignal?: AbortSignal): Promise<BrowserKeyResult> {
-    return this.actionQueue.run(sessionId, () => this.interaction.keyDown(sessionId, context, input, abortSignal))
+  public async keyDown(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserKeyInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserKeyResult> {
+    return this.actionQueue.run(sessionId, () =>
+      this.interaction.keyDown(sessionId, context, input, abortSignal)
+    )
   }
 
-  public async keyUp(sessionId: string, context: BrowserSiteContext, input: BrowserKeyInput, abortSignal?: AbortSignal): Promise<BrowserKeyResult> {
-    return this.actionQueue.run(sessionId, () => this.interaction.keyUp(sessionId, context, input, abortSignal))
+  public async keyUp(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserKeyInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserKeyResult> {
+    return this.actionQueue.run(sessionId, () =>
+      this.interaction.keyUp(sessionId, context, input, abortSignal)
+    )
   }
 
-  public async mouseDown(sessionId: string, context: BrowserSiteContext, input: BrowserMouseButtonInput, abortSignal?: AbortSignal): Promise<BrowserMouseResult> {
-    return this.actionQueue.run(sessionId, () => this.interaction.mouseDown(sessionId, context, input, abortSignal))
+  public async mouseDown(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserMouseButtonInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult> {
+    return this.actionQueue.run(sessionId, () =>
+      this.interaction.mouseDown(sessionId, context, input, abortSignal)
+    )
   }
 
-  public async mouseUp(sessionId: string, context: BrowserSiteContext, input: BrowserMouseButtonInput, abortSignal?: AbortSignal): Promise<BrowserMouseResult> {
-    return this.actionQueue.run(sessionId, () => this.interaction.mouseUp(sessionId, context, input, abortSignal))
+  public async mouseUp(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserMouseButtonInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult> {
+    return this.actionQueue.run(sessionId, () =>
+      this.interaction.mouseUp(sessionId, context, input, abortSignal)
+    )
   }
 
-  public async mouseWheel(sessionId: string, context: BrowserSiteContext, input: BrowserWheelInput, abortSignal?: AbortSignal): Promise<BrowserMouseResult> {
-    return this.actionQueue.run(sessionId, () => this.interaction.mouseWheel(sessionId, context, input, abortSignal))
+  public async mouseWheel(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserWheelInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult> {
+    return this.actionQueue.run(sessionId, () =>
+      this.interaction.mouseWheel(sessionId, context, input, abortSignal)
+    )
   }
 
   public async pressKey(
@@ -1204,32 +1505,68 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     )
   }
 
-  public async listFrames(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserFrameInfo[]> {
-    return this.actionQueue.runReadOnly(sessionId, () => this.pageData.listFrames(sessionId, context, abortSignal))
+  public async listFrames(
+    sessionId: string,
+    context: BrowserSiteContext,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserFrameInfo[]> {
+    return this.actionQueue.runReadOnly(sessionId, () =>
+      this.pageData.listFrames(sessionId, context, abortSignal)
+    )
   }
 
-  public async sendProtocolCommand(sessionId: string, _context: BrowserSiteContext, command: CdpSendInput, abortSignal?: AbortSignal): Promise<unknown> {
+  public async sendProtocolCommand(
+    sessionId: string,
+    _context: BrowserSiteContext,
+    command: CdpSendInput,
+    abortSignal?: AbortSignal
+  ): Promise<unknown> {
     return this.actionQueue.run(
       sessionId,
-      () => this.protocolSessions.send(sessionId, () => this.openProtocolChannel(sessionId, abortSignal), command),
+      () =>
+        this.protocolSessions.send(
+          sessionId,
+          () => this.openProtocolChannel(sessionId, abortSignal),
+          command
+        ),
       { signal: abortSignal, label: `cdp ${command.method}` }
     )
   }
 
-  public async readProtocolEvents(sessionId: string, _context: BrowserSiteContext, query: CdpEventsInput, abortSignal?: AbortSignal): Promise<BrowserProtocolEvents> {
+  public async readProtocolEvents(
+    sessionId: string,
+    _context: BrowserSiteContext,
+    query: CdpEventsInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserProtocolEvents> {
     return this.actionQueue.runReadOnly(sessionId, () =>
-      this.protocolSessions.read(sessionId, () => this.openProtocolChannel(sessionId, abortSignal), query)
+      this.protocolSessions.read(
+        sessionId,
+        () => this.openProtocolChannel(sessionId, abortSignal),
+        query
+      )
     )
   }
 
-  public async resetProtocolSession(sessionId: string, _context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<void> {
-    return this.actionQueue.run(sessionId, () => this.protocolSessions.close(sessionId), { signal: abortSignal, label: 'resetProtocolSession' })
+  public async resetProtocolSession(
+    sessionId: string,
+    _context: BrowserSiteContext,
+    abortSignal?: AbortSignal
+  ): Promise<void> {
+    return this.actionQueue.run(sessionId, () => this.protocolSessions.close(sessionId), {
+      signal: abortSignal,
+      label: 'resetProtocolSession',
+    })
   }
 
   /** 经这个会话的页面驱动给模型单开一条 CDP 会话。 */
-  private async openProtocolChannel(sessionId: string, abortSignal?: AbortSignal): Promise<BrowserProtocolChannel> {
+  private async openProtocolChannel(
+    sessionId: string,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserProtocolChannel> {
     const pageSession = await this.getLivePageDriverSessionUnlocked(sessionId, abortSignal)
-    if (!pageSession.driver.openProtocolChannel) throw new AppError('VALIDATION', '当前浏览器 driver 不支持单独的 CDP 会话。')
+    if (!pageSession.driver.openProtocolChannel)
+      throw new AppError('VALIDATION', '当前浏览器 driver 不支持单独的 CDP 会话。')
     return pageSession.driver.openProtocolChannel()
   }
 
@@ -1563,7 +1900,8 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
 
       const savePath =
         options.action === 'accept' && options.savePath
-          ? (await resolveWorkspaceFilePath(context.workspaceRoot, options.savePath, 'savePath')).path
+          ? (await resolveWorkspaceFilePath(context.workspaceRoot, options.savePath, 'savePath'))
+              .path
           : options.savePath
 
       return this.sessionManager.getPendingEventsBroker().resolveDownload({
@@ -2112,7 +2450,7 @@ export const BrowserRuntimeCapability: CapabilityToken<BrowserRuntimeCapabilityS
  * operation schemas are frozen; Kernel never learns WebContents semantics.
  */
 function createBrowserKernelModule(
-  options: CreateBrowserKernelModuleOptions,
+  options: CreateBrowserKernelModuleOptions
 ): KernelModuleDefinition {
   return kernelModules.define({
     manifest: {

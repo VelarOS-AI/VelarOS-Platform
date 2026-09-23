@@ -62,7 +62,10 @@ async function createContext(projectRoot = root): Promise<LanguageToolContext> {
 }
 
 async function run(input: Record<string, unknown>, projectRoot = root): Promise<PlainObject> {
-  return (await languageQueries.run(input as never, await createContext(projectRoot))) as PlainObject
+  return (await languageQueries.run(
+    input as never,
+    await createContext(projectRoot)
+  )) as PlainObject
 }
 
 beforeAll(async () => {

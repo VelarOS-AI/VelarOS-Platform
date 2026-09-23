@@ -30,7 +30,8 @@ export function changeProjectionBytes(projection: ProjectChangeRecordInput): num
   for (const patch of projection.patches) bytes += stringBytes(patch.diff)
   for (const intent of projection.intents) {
     if (!isRecord(intent.operation)) continue
-    for (const value of Object.values(intent.operation)) if (isString(value)) bytes += stringBytes(value)
+    for (const value of Object.values(intent.operation))
+      if (isString(value)) bytes += stringBytes(value)
   }
   return bytes
 }

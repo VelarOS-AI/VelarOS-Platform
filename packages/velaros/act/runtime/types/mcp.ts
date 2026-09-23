@@ -1,5 +1,3 @@
-
-
 export type McpTransportKind = 'stdio' | 'http' | 'sse' | 'auto'
 
 /** MCP 工具行为提示（annotations），用于推断 riskClass/角色/并发安全。 */

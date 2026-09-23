@@ -2,10 +2,12 @@ import { isBlank, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import { OllamaProviderId, OpenRouterAutoModelId, OpenRouterFreeModelId } from '../../contract/constants.js'
-import type {
-  ResolvedAgentModelRuntime,
-} from '../../types/adapters'
+import {
+  OllamaProviderId,
+  OpenRouterAutoModelId,
+  OpenRouterFreeModelId,
+} from '../../contract/constants.js'
+import type { ResolvedAgentModelRuntime } from '../../types/adapters'
 import type {
   AgentProviderAdapterConfig,
   ChatProviderId,
@@ -165,22 +167,26 @@ class AgentModelResolver implements AgentModelResolverApi {
       signal: input.signal,
     })
     const runtimeModel =
-      providerScriptMetadata?.providerModel
-      ?? providerScriptMetadata?.model
-      ?? resolvedModel.model
+      providerScriptMetadata?.providerModel ?? providerScriptMetadata?.model ?? resolvedModel.model
     const externalModel = providerScriptMetadata?.model ?? resolvedModel.model
     // 已有完整的具体模型能力时直接执行，避免仅为静态兜底再等待目录服务。
-    const needsModelDiscovery = !providerScriptMetadata?.inputModalities
-      || !resolveProviderScriptMetadataContextWindow(providerScriptMetadata)
-    const discoveredModel = needsModelDiscovery ? await this.modelCatalog?.resolveModelCapabilities({
-      provider: input.providerId,
-      apiKey: input.apiKey,
-      baseURL: input.baseURL,
-      adapter: input.adapter,
-      defaultModel: resolvedModel.model,
-      model: runtimeModel,
-      purpose: 'chat',
-    }, input.signal) : undefined
+    const needsModelDiscovery =
+      !providerScriptMetadata?.inputModalities ||
+      !resolveProviderScriptMetadataContextWindow(providerScriptMetadata)
+    const discoveredModel = needsModelDiscovery
+      ? await this.modelCatalog?.resolveModelCapabilities(
+          {
+            provider: input.providerId,
+            apiKey: input.apiKey,
+            baseURL: input.baseURL,
+            adapter: input.adapter,
+            defaultModel: resolvedModel.model,
+            model: runtimeModel,
+            purpose: 'chat',
+          },
+          input.signal
+        )
+      : undefined
     input.signal?.throwIfAborted()
     const catalogInputModalities = this.providers
       .requireCatalog(input.providerId)
@@ -193,9 +199,7 @@ class AgentModelResolver implements AgentModelResolverApi {
     })
     const contextWindow =
       input.providerId === OllamaProviderId
-        ? toOptional(
-          this.localModelEnvironment.resolveOllamaContextWindow(catalogContextWindow)
-        )
+        ? toOptional(this.localModelEnvironment.resolveOllamaContextWindow(catalogContextWindow))
         : catalogContextWindow
     const modelRequestOptions = mergeModelRequestOptions(
       mergeModelRequestOptionLayers(
@@ -244,9 +248,7 @@ class AgentModelResolver implements AgentModelResolverApi {
       modelRequestOptions,
       resolutionSource: 'provider-collection',
       resolutionTrace: runtimeTrace,
-      fallbackReason: toOptional(
-        mergeFallbackReason(input.fallbackReason, metadataFallbackReason)
-      ),
+      fallbackReason: toOptional(mergeFallbackReason(input.fallbackReason, metadataFallbackReason)),
     }
   }
 
@@ -255,21 +257,22 @@ class AgentModelResolver implements AgentModelResolverApi {
     model: string,
     openRouterConfig: OpenRouterRoutingConfig
   ): { model: string; requestOptions?: ModelRequestOptions } {
-    if (!isOpenRouterCompatibleProvider(providerId)) return { model: this.providers.resolveModel(providerId, model) }
+    if (!isOpenRouterCompatibleProvider(providerId))
+      return { model: this.providers.resolveModel(providerId, model) }
 
     const requestedModel = model.trim()
     if (
-      requestedModel === OpenRouterFreeModelId
-      || (
-        openRouterConfig.useFreeModelsForDebug
-        && (isBlank(requestedModel) || requestedModel === OpenRouterAutoModelId)
-      )
-    ) return {
+      requestedModel === OpenRouterFreeModelId ||
+      (openRouterConfig.useFreeModelsForDebug &&
+        (isBlank(requestedModel) || requestedModel === OpenRouterAutoModelId))
+    )
+      return {
         model: OpenRouterFreeModelId,
         requestOptions: { openRouter: { useFreeModelsForDebug: true } },
       }
 
-    if (isBlank(requestedModel) || requestedModel === OpenRouterAutoModelId) return {
+    if (isBlank(requestedModel) || requestedModel === OpenRouterAutoModelId)
+      return {
         model: OpenRouterAutoModelId,
         requestOptions: { openRouter: { allowedModels: [] } },
       }
@@ -305,8 +308,7 @@ class AgentModelResolver implements AgentModelResolverApi {
       )
     } catch (error) {
       if (input.signal?.aborted) throw input.signal.reason ?? error
-      const fallbackReason =
-        `${manifest.label} 的 provider script 元数据不可用：${AppError.getMessage(error)}`
+      const fallbackReason = `${manifest.label} 的 provider script 元数据不可用：${AppError.getMessage(error)}`
       this.log.warn('provider script model context fallback', {
         provider: input.providerId,
         error: AppError.getMessage(error),

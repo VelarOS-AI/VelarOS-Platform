@@ -24,7 +24,11 @@ import {
 import { readRunArchiveView } from '../utils/measure/archive-view.js'
 import { renderRealTaskReportHtml } from '../utils/render/real-task-report.js'
 import { runArchiveSchema } from '../utils/wire/journey.js'
-import { realTaskAssessmentSchema, realTaskCaseSchema, realTaskRecordSchema } from '../utils/wire/workload.js'
+import {
+  realTaskAssessmentSchema,
+  realTaskCaseSchema,
+  realTaskRecordSchema,
+} from '../utils/wire/workload.js'
 
 /**
  * 归档的读写口。写一律是原子的（先写同目录临时文件再改名），写之前一律先严格校验；
@@ -43,7 +47,7 @@ export interface LabArchivesApi {
   writeRealTaskBundle: (
     directory: string,
     record: RealTaskRecord,
-    assessment: RealTaskAssessment,
+    assessment: RealTaskAssessment
   ) => Promise<{ readonly record: string; readonly assessment: string; readonly report: string }>
   /** 读一条真实任务记录，读出来先校验。 */
   readRealTaskRecord: (path: string) => Promise<RealTaskRecord>
@@ -99,7 +103,7 @@ class LabArchives implements LabArchivesApi {
     let skippedDirectories = 0
     for (const directory of directories) {
       const candidates = await Promise.all(
-        LabArchives.CandidateFiles.map((name) => fileExists(join(directory, name))),
+        LabArchives.CandidateFiles.map((name) => fileExists(join(directory, name)))
       )
       if (!candidates.some(Boolean)) {
         skippedDirectories += 1
@@ -115,7 +119,7 @@ class LabArchives implements LabArchivesApi {
   public async writeRealTaskBundle(
     directory: string,
     recordInput: RealTaskRecord,
-    assessmentInput: RealTaskAssessment,
+    assessmentInput: RealTaskAssessment
   ): Promise<{ readonly record: string; readonly assessment: string; readonly report: string }> {
     const record = realTaskRecordSchema.parse(recordInput)
     const assessment = realTaskAssessmentSchema.parse(assessmentInput)

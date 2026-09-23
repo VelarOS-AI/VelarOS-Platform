@@ -25,10 +25,8 @@ const log = Log.tag('RemoteNodeCrypto')
 export function generateRemoteNodeKeyPair(): RemoteNodeKeyPair {
   const pair = generateKeyPairSync('ed25519')
   return {
-    publicKey: pair.publicKey.export({ format: 'der', type: 'spki' })
-      .toString('base64'),
-    privateKey: pair.privateKey.export({ format: 'der', type: 'pkcs8' })
-      .toString('base64'),
+    publicKey: pair.publicKey.export({ format: 'der', type: 'spki' }).toString('base64'),
+    privateKey: pair.privateKey.export({ format: 'der', type: 'pkcs8' }).toString('base64'),
   }
 }
 
@@ -46,22 +44,17 @@ export function createPairingCode(): string {
 export function remoteNodeCodesEqual(left: string, right: string): boolean {
   const leftBytes = Buffer.from(left)
   const rightBytes = Buffer.from(right)
-  return leftBytes.length === rightBytes.length
-    && timingSafeEqual(leftBytes, rightBytes)
+  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
 }
 
 /** 用私钥给一枚 challenge 签名,返回 base64 签名串;私钥不进日志也不进返回值。 */
-export function signChallenge(
-  privateKey: string,
-  challenge: string,
-): string {
+export function signChallenge(privateKey: string, challenge: string): string {
   const key = createPrivateKey({
     key: Buffer.from(privateKey, 'base64'),
     format: 'der',
     type: 'pkcs8',
   })
-  return signBytes(null, Buffer.from(challenge, 'utf8'), key)
-    .toString('base64')
+  return signBytes(null, Buffer.from(challenge, 'utf8'), key).toString('base64')
 }
 
 /**
@@ -71,7 +64,7 @@ export function signChallenge(
 export function verifyChallengeSignature(
   publicKey: string,
   challenge: string,
-  signature: string,
+  signature: string
 ): boolean {
   try {
     const key = createPublicKey({
@@ -79,12 +72,7 @@ export function verifyChallengeSignature(
       format: 'der',
       type: 'spki',
     })
-    return verifyBytes(
-      null,
-      Buffer.from(challenge, 'utf8'),
-      key,
-      Buffer.from(signature, 'base64'),
-    )
+    return verifyBytes(null, Buffer.from(challenge, 'utf8'), key, Buffer.from(signature, 'base64'))
   } catch (error) {
     // 只记调试级:验签失败在正常运行里就是"未授权的人来敲门",按告警级记会让日志被扫描噪音淹没。
     // 注意别把 error 之外的任何东西带进日志——公钥与签名都是对端可控输入。

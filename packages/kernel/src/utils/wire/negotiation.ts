@@ -19,14 +19,16 @@ export function negotiateKernelProtocol(
   localVersion: number = KernelProtocolVersion
 ): KernelProtocolNegotiation {
   const peerVersion = handshake.protocolVersion
-  if (peerVersion < localVersion) return {
+  if (peerVersion < localVersion)
+    return {
       status: 'rejected',
       reason: 'peer-too-old',
       localVersion,
       peerVersion,
       guidance: `对端协议 v${peerVersion} 低于本端 v${localVersion}，请对端升级。`,
     }
-  if (peerVersion > localVersion) return {
+  if (peerVersion > localVersion)
+    return {
       status: 'rejected',
       reason: 'peer-too-new',
       localVersion,

@@ -38,7 +38,12 @@ export interface InteractionHost {
 /** 绑定运行身份的用户交互。 */
 export interface InteractionSession {
   /** 请求并等待当前交互答案。 */
-  interact(kind: 'input' | 'confirmation' | 'capability', message: string, signal: AbortSignal, detail?: unknown): Promise<unknown>
+  interact(
+    kind: 'input' | 'confirmation' | 'capability',
+    message: string,
+    signal: AbortSignal,
+    detail?: unknown
+  ): Promise<unknown>
 }
 /** `velaros:interaction` 每次调用的宿主上下文：本会话的交互端口与取消信号。 */
 export interface InteractionOperationContext {

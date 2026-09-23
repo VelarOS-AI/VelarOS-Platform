@@ -37,7 +37,8 @@ export const localStylePlugin = {
               node.kind !== 'method' ||
               node.accessibility ||
               node.key?.type === 'PrivateIdentifier'
-            ) return
+            )
+              return
 
             context.report({
               node,
@@ -48,9 +49,7 @@ export const localStylePlugin = {
                   ? sourceCode.getTokenAfter(decorators.at(-1))
                   : sourceCode.getFirstToken(node)
 
-                return insertBefore
-                  ? fixer.insertTextBefore(insertBefore, 'public ')
-                  : null
+                return insertBefore ? fixer.insertTextBefore(insertBefore, 'public ') : null
               },
             })
           },
@@ -102,15 +101,12 @@ export const commonPlugins = {
 export const commonRules = {
   'array-callback-return': 'error',
   'arrow-body-style': ['error', 'as-needed'],
-  'curly': ['error', 'multi-line', 'consistent'],
+  curly: ['error', 'multi-line', 'consistent'],
   'default-case-last': 'error',
   'dot-notation': 'off',
-  'eqeqeq': ['error', 'smart'],
+  eqeqeq: ['error', 'smart'],
   'eslint-comments/no-unused-disable': 'error',
-  'eslint-comments/require-description': [
-    'error',
-    { ignore: ['eslint-enable'] },
-  ],
+  'eslint-comments/require-description': ['error', { ignore: ['eslint-enable'] }],
   'no-array-constructor': 'error',
   'no-console': ['error', { allow: ['warn', 'error', 'info'] }],
   'no-else-return': ['error', { allowElseIf: false }],
@@ -144,7 +140,16 @@ export const commonRules = {
         ['^node:'],
         ['^react$', '^react-dom', '^@?\\w'],
         ['^@velaros-ai/'],
-        ['^@shared/', '^@components/', '^@features/', '^@hooks/', '^@pages/', '^@styles/', '^@utils/', '^@/'],
+        [
+          '^@shared/',
+          '^@components/',
+          '^@features/',
+          '^@hooks/',
+          '^@pages/',
+          '^@styles/',
+          '^@utils/',
+          '^@/',
+        ],
         ['^\\.\\.(?!/?$)', '^\\.\\./?$'],
         ['^\\./(?=.*/)(?!/?$)', '^\\.(?!/?$)', '^\\./?$'],
         ['^.+\\.s?css$'],
@@ -198,15 +203,9 @@ export const commonTypescriptRules = {
   '@typescript-eslint/no-array-constructor': 'error',
   '@typescript-eslint/no-confusing-non-null-assertion': 'error',
   '@typescript-eslint/no-duplicate-enum-values': 'error',
-  '@typescript-eslint/no-empty-object-type': [
-    'error',
-    { allowInterfaces: 'with-single-extends' },
-  ],
+  '@typescript-eslint/no-empty-object-type': ['error', { allowInterfaces: 'with-single-extends' }],
   '@typescript-eslint/no-explicit-any': 'off',
-  '@typescript-eslint/no-floating-promises': [
-    'error',
-    { ignoreIIFE: true, ignoreVoid: true },
-  ],
+  '@typescript-eslint/no-floating-promises': ['error', { ignoreIIFE: true, ignoreVoid: true }],
   '@typescript-eslint/no-implied-eval': 'error',
   '@typescript-eslint/no-inferrable-types': 'off',
   '@typescript-eslint/no-misused-promises': 'off',

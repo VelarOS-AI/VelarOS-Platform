@@ -1,9 +1,4 @@
-import {
-  mkdir,
-  readFile,
-  stat,
-  writeFile,
-} from 'node:fs/promises'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
@@ -17,9 +12,7 @@ import { createTemporaryDirectories } from './support'
 const directories = createTemporaryDirectories('lock')
 
 /** 建一把锁并当场拿下它；拿不到就把失败原样抛给用例。 */
-async function acquireLock(
-  options: KernelUpdateLockOptions,
-): Promise<KernelUpdateLock> {
+async function acquireLock(options: KernelUpdateLockOptions): Promise<KernelUpdateLock> {
   const lock = new KernelUpdateLock(options)
   await lock.acquire()
   return lock
@@ -53,8 +46,7 @@ describe('Kernel update lock', () => {
         pid: process.pid,
         acquiredAt: 1700000000000,
       })
-      if (process.platform !== 'win32')
-        expect((await stat(path)).mode & 0o777).toBe(0o600)
+      if (process.platform !== 'win32') expect((await stat(path)).mode & 0o777).toBe(0o600)
     } finally {
       await lock.release()
     }
@@ -77,8 +69,7 @@ describe('Kernel update lock', () => {
         code: 'UPDATE_LOCK_HELD',
         details: { path, ownerPid: process.pid },
       })
-      expect(JSON.parse(await readFile(path, 'utf8')))
-        .toMatchObject({ holderId: 'product-a' })
+      expect(JSON.parse(await readFile(path, 'utf8'))).toMatchObject({ holderId: 'product-a' })
     } finally {
       await first.release()
     }
@@ -101,8 +92,7 @@ describe('Kernel update lock', () => {
 
     try {
       expect(reclaimed.record?.holderId).toBe('product-b')
-      expect(JSON.parse(await readFile(path, 'utf8')))
-        .toMatchObject({ holderId: 'product-b' })
+      expect(JSON.parse(await readFile(path, 'utf8'))).toMatchObject({ holderId: 'product-b' })
     } finally {
       await reclaimed.release()
     }
@@ -147,7 +137,7 @@ describe('Kernel update lock', () => {
           await writeFile(
             path,
             JSON.stringify({ holderId: 'product-a', pid: 424242, acquiredAt: 1 }),
-            'utf8',
+            'utf8'
           )
         }
       },

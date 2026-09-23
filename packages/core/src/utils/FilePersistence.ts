@@ -142,10 +142,7 @@ function writeTextFileAtomicallySync(
   writeFileAtomicallySync(filePath, content, options)
 }
 
-function serializeJsonFileContent<T>(
-  payload: T,
-  options: AtomicJsonFileWriteOptions = {}
-): string {
+function serializeJsonFileContent<T>(payload: T, options: AtomicJsonFileWriteOptions = {}): string {
   const content = JSON.stringify(payload, null, options.space)
   return options.trailingNewline ? `${content}\n` : content
 }

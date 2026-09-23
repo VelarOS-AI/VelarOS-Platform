@@ -1,8 +1,15 @@
 import { isFalse, isUndefined } from '@velaros-ai/core'
 
 import type { TurnContextLedgerOptions } from '../contract/requires.js'
-import type { TurnContextDelta, TurnContextSourceId, TurnContextSourcePeekInput } from '../types/activity.js'
-import type { TurnContextLedgerAppendInput, TurnContextLedgerPeekResult } from '../types/activity.js'
+import type {
+  TurnContextDelta,
+  TurnContextSourceId,
+  TurnContextSourcePeekInput,
+} from '../types/activity.js'
+import type {
+  TurnContextLedgerAppendInput,
+  TurnContextLedgerPeekResult,
+} from '../types/activity.js'
 import { ContextTuning } from '../utils/tuning.js'
 
 import { TurnContextLedger } from './TurnContextLedger.js'
@@ -14,7 +21,10 @@ export interface TurnContextSessionLedgersApi {
   /** 状态型 source 的写入口：清空这个会话的账本只留这一条，同样广播变更——界面上的状态提示要立刻换成新的，而不是等下一次事件。 */
   replaceLatest(sessionId: string, input: TurnContextLedgerAppendInput): TurnContextDelta
   /** 读这个会话还没被消费的 delta。这个会话还没有账本时交出一份空基底（generation 为进程代次、headSeq 1、tailSeq 0），不会为一次只读 peek 建账本。 */
-  peek(sessionId: string, input: Pick<TurnContextSourcePeekInput, 'afterSeq' | 'generation'>): TurnContextLedgerPeekResult
+  peek(
+    sessionId: string,
+    input: Pick<TurnContextSourcePeekInput, 'afterSeq' | 'generation'>
+  ): TurnContextLedgerPeekResult
   /** 丢掉这个会话的账本；会话关闭或重置时调。下次再写会建一本新的、带新代次的。 */
   clearSession(sessionId: string): void
 }
@@ -42,13 +52,14 @@ export class TurnContextSessionLedgers implements TurnContextSessionLedgersApi {
 
   constructor(
     private readonly sourceId: TurnContextSourceId,
-    private readonly options:TurnContextLedgerOptions = {},
+    private readonly options: TurnContextLedgerOptions = {}
   ) {}
 
   /** 唯一写入口：定稿 delta 并广播变更通知（供 pre-send chips 实时刷新）。 */
   public append(sessionId: string, input: TurnContextLedgerAppendInput): TurnContextDelta {
     const delta = this.for(sessionId).append(input)
-    if (!isFalse(this.options.notifyRenderer)) this.options.appendHub?.emit(sessionId, this.sourceId)
+    if (!isFalse(this.options.notifyRenderer))
+      this.options.appendHub?.emit(sessionId, this.sourceId)
     return delta
   }
 
@@ -59,7 +70,8 @@ export class TurnContextSessionLedgers implements TurnContextSessionLedgersApi {
    */
   public replaceLatest(sessionId: string, input: TurnContextLedgerAppendInput): TurnContextDelta {
     const delta = this.for(sessionId).replaceLatest(input)
-    if (!isFalse(this.options.notifyRenderer)) this.options.appendHub?.emit(sessionId, this.sourceId)
+    if (!isFalse(this.options.notifyRenderer))
+      this.options.appendHub?.emit(sessionId, this.sourceId)
     return delta
   }
 
@@ -72,7 +84,7 @@ export class TurnContextSessionLedgers implements TurnContextSessionLedgersApi {
     const ledger = new TurnContextLedger(
       this.sourceId,
       this.options.maxEntries ?? ContextTuning.ledgerItems,
-      `${this.generation}.${this.ledgerInstanceSeq.toString(36)}`,
+      `${this.generation}.${this.ledgerInstanceSeq.toString(36)}`
     )
     this.ledgers.set(sessionId, ledger)
     while (this.ledgers.size > (this.options.maxSessions ?? ContextTuning.sessions)) {
@@ -85,7 +97,7 @@ export class TurnContextSessionLedgers implements TurnContextSessionLedgersApi {
 
   public peek(
     sessionId: string,
-    input: Pick<TurnContextSourcePeekInput, 'afterSeq' | 'generation'>,
+    input: Pick<TurnContextSourcePeekInput, 'afterSeq' | 'generation'>
   ): TurnContextLedgerPeekResult {
     const existing = this.ledgers.get(sessionId)
     if (existing) return existing.peek(input)
@@ -105,6 +117,9 @@ export class TurnContextSessionLedgers implements TurnContextSessionLedgersApi {
 }
 
 /** 给一个来源建按会话分档的回合上下文账本。 */
-export function createTurnContextSessionLedgers(sourceId: TurnContextSourceId, options:TurnContextLedgerOptions = {}): TurnContextSessionLedgersApi {
+export function createTurnContextSessionLedgers(
+  sourceId: TurnContextSourceId,
+  options: TurnContextLedgerOptions = {}
+): TurnContextSessionLedgersApi {
   return new TurnContextSessionLedgers(sourceId, options)
 }

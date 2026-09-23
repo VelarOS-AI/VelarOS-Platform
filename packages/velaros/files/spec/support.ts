@@ -12,7 +12,12 @@ import { textFileIo } from '@velaros-ai/core/text-files'
 import type { ExpectedBytes } from '@velaros-ai/core/text-files/contracts'
 import { TextFileErrorCodes } from '@velaros-ai/core/text-files/contracts'
 import type { CodeProgramResult, CodeSurfaceOutcome } from '@velaros-ai/script'
-import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import {
+  codeProgramChecker,
+  createCapabilityPort,
+  createCodeSurfaceSession,
+  nodeSubprocessCodeRunner,
+} from '@velaros-ai/script'
 
 import type { FileOperationContext, FileSpacePort, FileWrite } from '../index'
 import { fileOperations } from '../index'
@@ -22,7 +27,10 @@ import { createLocalFilePort } from '../local'
 export const UnitRoot = resolve(import.meta.dir, '..')
 
 /** 生成的模型面：`velaros:files` 的声明，模型看到的全部。 */
-export const Declarations = readFileSync(resolve(UnitRoot, '../../../baselines/script/files.d.ts'), 'utf8')
+export const Declarations = readFileSync(
+  resolve(UnitRoot, '../../../baselines/script/files.d.ts'),
+  'utf8'
+)
 
 /** 解开符号链接后的真实路径；文件还不存在时解开它的上级目录。 */
 async function realTarget(path: string): Promise<string> {
@@ -71,9 +79,14 @@ export function diskSpace(options: {
       const target = await realTarget(absolute)
       if (options.clamp) {
         const inside = relative(await realpath(options.root), target)
-        if (inside.startsWith('..') || isAbsolute(inside)) throw new AppError('PERMISSION', `${path} 在这个空间之外`)
+        if (inside.startsWith('..') || isAbsolute(inside))
+          throw new AppError('PERMISSION', `${path} 在这个空间之外`)
       }
-      return { path: options.clamp ? relative(options.root, absolute) : absolute, target, linked: target !== absolute }
+      return {
+        path: options.clamp ? relative(options.root, absolute) : absolute,
+        target,
+        linked: target !== absolute,
+      }
     },
     commit: async (writes) => {
       commits.push([...writes])
@@ -86,8 +99,11 @@ export function diskSpace(options: {
           applied.push(write.target)
         } catch (error) {
           const failure = AppError.from(error)
-          const code = failure.code === TextFileErrorCodes.externalEdit ? 'VALIDATION' : failure.code
-          throw new AppError(code, `写 ${write.target} 失败：${failure.message}`, error, { applied })
+          const code =
+            failure.code === TextFileErrorCodes.externalEdit ? 'VALIDATION' : failure.code
+          throw new AppError(code, `写 ${write.target} 失败：${failure.message}`, error, {
+            applied,
+          })
         }
       }
     },
@@ -100,7 +116,11 @@ export function diskSpace(options: {
  * 本机文件端口（`./local` 入口）接成系统空间那样的上下文：`~` 展开到 `home`（缺省就是 cwd），相对路径相对 `cwd`，绝对路径原样。
  * `onResolve` 在端口每次解析模型给的路径时先被叫到（同步），测试借它在「定改法」与「落盘」之间插一手。
  */
-export function localFileSpace(options: { cwd: string; home?: string; onResolve?: (path: string) => void }) {
+export function localFileSpace(options: {
+  cwd: string
+  home?: string
+  onResolve?: (path: string) => void
+}) {
   const home = options.home ?? options.cwd
   const port = createLocalFilePort({
     resolvePath: (path) => {
@@ -115,7 +135,9 @@ export function localFileSpace(options: { cwd: string; home?: string; onResolve?
 }
 
 /** 等一个调用失败，交出它的码、说明与上下文。 */
-export async function failureOf(call: Promise<unknown>): Promise<{ code: string; message: string; context: Record<string, unknown> }> {
+export async function failureOf(
+  call: Promise<unknown>
+): Promise<{ code: string; message: string; context: Record<string, unknown> }> {
   try {
     await call
   } catch (error) {
@@ -126,7 +148,11 @@ export async function failureOf(call: Promise<unknown>): Promise<{ code: string;
 }
 
 /** 把一段模型程序交给代码面会话：先照生成的声明 typecheck，过了才在隔离里跑，能力调用经操作表转到这个空间。 */
-export async function submitModelProgram(space: ReturnType<typeof diskSpace>, source: string, timeoutMs = 20_000): Promise<CodeSurfaceOutcome> {
+export async function submitModelProgram(
+  space: ReturnType<typeof diskSpace>,
+  source: string,
+  timeoutMs = 20_000
+): Promise<CodeSurfaceOutcome> {
   // 和系统空间一样的接法：一张操作表，每次调用把这个空间的上下文塞进去。
   const capabilities = createCapabilityPort({
     files: {
@@ -135,15 +161,30 @@ export async function submitModelProgram(space: ReturnType<typeof diskSpace>, so
       undo: (input) => fileOperations.undo(input, space.context),
     },
   })
-  const session = createCodeSurfaceSession({ checker: codeProgramChecker, runner: nodeSubprocessCodeRunner, capabilities })
-  return session.submit({ program: { source }, granted: [{ namespace: 'files', declarations: Declarations }], timeoutMs })
+  const session = createCodeSurfaceSession({
+    checker: codeProgramChecker,
+    runner: nodeSubprocessCodeRunner,
+    capabilities,
+  })
+  return session.submit({
+    program: { source },
+    granted: [{ namespace: 'files', declarations: Declarations }],
+    timeoutMs,
+  })
 }
 
 /** 让一段真程序照生成的声明过 typecheck，再在隔离里跑完，交出整个结果；没过检查直接抛。 */
-export async function runModelProgram(space: ReturnType<typeof diskSpace>, source: string, timeoutMs = 20_000): Promise<CodeProgramResult> {
+export async function runModelProgram(
+  space: ReturnType<typeof diskSpace>,
+  source: string,
+  timeoutMs = 20_000
+): Promise<CodeProgramResult> {
   const outcome = await submitModelProgram(space, source, timeoutMs)
   if (!outcome.checked) {
-    const why = 'needsModules' in outcome ? `要先补模块 ${outcome.needsModules.join(', ')}` : JSON.stringify(outcome.check.diagnostics)
+    const why =
+      'needsModules' in outcome
+        ? `要先补模块 ${outcome.needsModules.join(', ')}`
+        : JSON.stringify(outcome.check.diagnostics)
     throw new Error(`程序没过 typecheck：${why}`)
   }
   return outcome.result

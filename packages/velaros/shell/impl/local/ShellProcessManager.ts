@@ -9,7 +9,10 @@ import { win32 } from 'node:path'
 import { execBounded } from '../../utils/process.js'
 import { ShellTuning } from '../../utils/tuning.js'
 
-import type { ManagedShellProcess, ShellManagedProcessLifecycleOptions } from './ShellManagedProcess.js'
+import type {
+  ManagedShellProcess,
+  ShellManagedProcessLifecycleOptions,
+} from './ShellManagedProcess.js'
 import { ShellManagedProcess } from './ShellManagedProcess.js'
 
 /**
@@ -40,7 +43,11 @@ export interface ShellProcessManagerApi {
    *
    * 身份对得上且没退出为 running；身份变了或已退出为 exited；没有身份、或根进程已退出而收尾回执还没到，一律 unknown，不猜。
    */
-  resolveStatus(pid: number, expectedIdentity: Nullable<string>, platform?: NodeJS.Platform): Promise<'running' | 'exited' | 'unknown'>
+  resolveStatus(
+    pid: number,
+    expectedIdentity: Nullable<string>,
+    platform?: NodeJS.Platform
+  ): Promise<'running' | 'exited' | 'unknown'>
   /** 应用退出前调用：给所有还没结束的受管进程发 SIGKILL 并等它们收尾。父进程崩溃时的兜底由 Windows 原生宿主另外保证。 */
   stopAll(): Promise<void>
 }
@@ -48,7 +55,10 @@ export interface ShellProcessManagerApi {
 class ShellProcessManager implements ShellProcessManagerApi {
   private readonly processes = new Map<number, ManagedShellProcess>()
 
-  public manage(child: ChildProcess, options: ShellManagedProcessLifecycleOptions = {}): ManagedShellProcess {
+  public manage(
+    child: ChildProcess,
+    options: ShellManagedProcessLifecycleOptions = {}
+  ): ManagedShellProcess {
     return new ShellManagedProcess(child, options, {
       track: (managed) => {
         if (managed.child.pid) this.processes.set(managed.child.pid, managed)
@@ -61,7 +71,10 @@ class ShellProcessManager implements ShellProcessManagerApi {
     return this.processes.get(pid)
   }
 
-  public async captureIdentity(pid: number, platform: NodeJS.Platform = process.platform): Promise<Nullable<string>> {
+  public async captureIdentity(
+    pid: number,
+    platform: NodeJS.Platform = process.platform
+  ): Promise<Nullable<string>> {
     const owned = this.processes.get(pid)
     if (owned) return owned.identity
     if (!Number.isInteger(pid) || pid <= 0) return null
@@ -69,7 +82,13 @@ class ShellProcessManager implements ShellProcessManagerApi {
       const output =
         platform === 'win32'
           ? await execBounded(
-              win32.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+              win32.join(
+                process.env.SystemRoot || 'C:\\Windows',
+                'System32',
+                'WindowsPowerShell',
+                'v1.0',
+                'powershell.exe'
+              ),
               [
                 '-NoProfile',
                 '-NonInteractive',

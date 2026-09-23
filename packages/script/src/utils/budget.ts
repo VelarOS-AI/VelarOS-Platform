@@ -4,7 +4,13 @@ import { isString, isUndefined } from '@velaros-ai/core'
 
 import { CodeSurfaceLimits } from '../contract/constants.js'
 import type { CodeAttachment } from '../types/outcome.js'
-import type { CodeCallNotice, CodeProgramCheckFailure, CodeProgramDiagnostic, CodeProgramResult, CompletedCall } from '../types/script.js'
+import type {
+  CodeCallNotice,
+  CodeProgramCheckFailure,
+  CodeProgramDiagnostic,
+  CodeProgramResult,
+  CompletedCall,
+} from '../types/script.js'
 
 import { keepTail } from './program.js'
 import { CodeSurfaceTuning } from './tuning.js'
@@ -12,7 +18,9 @@ import { CodeSurfaceTuning } from './tuning.js'
 /** 日志按预算保留结尾，与 `velaros:shell` 的 run 回执同口径：失败现场在尾部。单行太长的先各自截一刀，免得一行顶掉整份预算。 */
 export function fitLogsToBudget(logs: readonly string[], notices: CodeCallNotice[]): string[] {
   const clipped = logs.map((line) =>
-    line.length > CodeSurfaceTuning.logLineChars ? `${line.slice(0, CodeSurfaceTuning.logLineChars)}…` : line
+    line.length > CodeSurfaceTuning.logLineChars
+      ? `${line.slice(0, CodeSurfaceTuning.logLineChars)}…`
+      : line
   )
   const { text, dropped } = keepTail(clipped.join('\n'), CodeSurfaceLimits.logChars)
   if (dropped > 0) {
@@ -60,7 +68,7 @@ export function fitJournalToBudget(
  */
 export function fitValueToBudget(value: unknown, notices: CodeCallNotice[]): unknown {
   if (isUndefined(value)) return undefined
-  const text = isString(value) ? value : JSON.stringify(value) ?? 'null'
+  const text = isString(value) ? value : (JSON.stringify(value) ?? 'null')
   if (text.length <= CodeSurfaceLimits.valueChars) return value
   const kept = keepTail(text, CodeSurfaceLimits.valueChars)
   notices.push({
@@ -90,11 +98,18 @@ export function fitFailureToBudget(message: string): string {
 export function fitNoticesToBudget(notices: readonly CodeCallNotice[]): CodeCallNotice[] {
   const folded: Array<CodeCallNotice & { repeated: number }> = []
   for (const notice of notices) {
-    const detail = notice.detail.length > CodeSurfaceTuning.noticeDetailChars
-      ? `${notice.detail.slice(0, CodeSurfaceTuning.noticeDetailChars)}…`
-      : notice.detail
+    const detail =
+      notice.detail.length > CodeSurfaceTuning.noticeDetailChars
+        ? `${notice.detail.slice(0, CodeSurfaceTuning.noticeDetailChars)}…`
+        : notice.detail
     const last = folded.at(-1)
-    if (last && last.call === notice.call && last.action === notice.action && last.field === notice.field && last.detail === detail) {
+    if (
+      last &&
+      last.call === notice.call &&
+      last.action === notice.action &&
+      last.field === notice.field &&
+      last.detail === detail
+    ) {
       last.repeated += 1
       continue
     }
@@ -104,10 +119,15 @@ export function fitNoticesToBudget(notices: readonly CodeCallNotice[]): CodeCall
   const kept: CodeCallNotice[] = []
   let used = 0
   for (const [index, { repeated, ...notice }] of folded.entries()) {
-    const shaped = repeated > 1 ? { ...notice, detail: `${notice.detail}（连着 ${repeated} 次）` } : notice
+    const shaped =
+      repeated > 1 ? { ...notice, detail: `${notice.detail}（连着 ${repeated} 次）` } : notice
     const cost = JSON.stringify(shaped).length
     if (used + cost > CodeSurfaceLimits.noticeChars) {
-      kept.push({ call: 'program', action: 'truncated', detail: `还有 ${folded.length - index} 条插手记录省略。` })
+      kept.push({
+        call: 'program',
+        action: 'truncated',
+        detail: `还有 ${folded.length - index} 条插手记录省略。`,
+      })
       break
     }
     kept.push(shaped)
@@ -124,9 +144,10 @@ export function fitDiagnosticsToBudget(diagnostics: readonly CodeProgramDiagnost
   const kept: CodeProgramDiagnostic[] = []
   let used = 0
   for (const diagnostic of diagnostics.slice(0, CodeSurfaceLimits.diagnostics)) {
-    const message = diagnostic.message.length > CodeSurfaceTuning.diagnosticMessageChars
-      ? `${diagnostic.message.slice(0, CodeSurfaceTuning.diagnosticMessageChars)}…`
-      : diagnostic.message
+    const message =
+      diagnostic.message.length > CodeSurfaceTuning.diagnosticMessageChars
+        ? `${diagnostic.message.slice(0, CodeSurfaceTuning.diagnosticMessageChars)}…`
+        : diagnostic.message
     const shaped = { ...diagnostic, message }
     const cost = JSON.stringify(shaped).length
     if (used + cost > CodeSurfaceLimits.diagnosticChars) break
@@ -142,11 +163,18 @@ export function fitDiagnosticsToBudget(diagnostics: readonly CodeProgramDiagnost
  * 张数上限对齐 API「一个请求超过 20 张，每张都得 ≤ 2000 px」那条线；体积上限给请求体里的历史留地方。
  * 丢后面的而不是前面的：程序是按它想看的顺序交的，前面的通常是它最想看的。
  */
-export function fitAttachmentsToBudget(attachments: readonly CodeAttachment[], notices: CodeCallNotice[]): CodeAttachment[] {
+export function fitAttachmentsToBudget(
+  attachments: readonly CodeAttachment[],
+  notices: CodeCallNotice[]
+): CodeAttachment[] {
   const kept: CodeAttachment[] = []
   let used = 0
   for (const attachment of attachments) {
-    if (kept.length >= CodeSurfaceLimits.images || used + attachment.data.length > CodeSurfaceLimits.imageChars) break
+    if (
+      kept.length >= CodeSurfaceLimits.images ||
+      used + attachment.data.length > CodeSurfaceLimits.imageChars
+    )
+      break
     kept.push(attachment)
     used += attachment.data.length
   }
@@ -161,7 +189,9 @@ export function fitAttachmentsToBudget(attachments: readonly CodeAttachment[], n
 }
 
 /** 检查没过时回给模型的那份：诊断收拢到预算里，省了几条就说几条。 */
-export function rejectWithDiagnostics(all: readonly CodeProgramDiagnostic[]): CodeProgramCheckFailure {
+export function rejectWithDiagnostics(
+  all: readonly CodeProgramDiagnostic[]
+): CodeProgramCheckFailure {
   const { diagnostics, omitted } = fitDiagnosticsToBudget(all)
   const failure: CodeProgramCheckFailure = { ok: false, diagnostics }
   if (omitted > 0) failure.omitted = omitted
@@ -175,13 +205,16 @@ export function rejectWithDiagnostics(all: readonly CodeProgramDiagnostic[]): Co
  * 哪条通道加了新东西、忘了设上限，回到模型那里的仍然不超过这个数。
  */
 export function enforceResultBudget(result: CodeProgramResult): CodeProgramResult {
-  const fits = (candidate: CodeProgramResult): boolean => JSON.stringify(candidate).length <= CodeSurfaceLimits.resultChars
+  const fits = (candidate: CodeProgramResult): boolean =>
+    JSON.stringify(candidate).length <= CodeSurfaceLimits.resultChars
   if (fits(result)) return result
-  const dropped = (what: string): CodeCallNotice[] => [{
-    call: 'program',
-    action: 'truncated',
-    detail: `结果超过 ${CodeSurfaceLimits.resultChars} 字符的总上限，${what}已省略。`,
-  }]
+  const dropped = (what: string): CodeCallNotice[] => [
+    {
+      call: 'program',
+      action: 'truncated',
+      detail: `结果超过 ${CodeSurfaceLimits.resultChars} 字符的总上限，${what}已省略。`,
+    },
+  ]
 
   // 让的顺序：执行账 → 日志 → 插手记录 → 返回值。失败说明与失败码永远留着：没有它模型连发生了什么都不知道。
   const withoutJournal: CodeProgramResult = { ...result, notices: dropped('执行账') }
@@ -192,7 +225,13 @@ export function enforceResultBudget(result: CodeProgramResult): CodeProgramResul
   withoutLogs.logs = undefined
   if (fits(withoutLogs)) return withoutLogs
 
-  const shrunk: CodeProgramResult = { ...withoutLogs, notices: dropped('执行账、日志与大半个返回值') }
-  shrunk.value = keepTail(JSON.stringify(result.value) ?? 'null', CodeSurfaceLimits.valueChars / 2).text
+  const shrunk: CodeProgramResult = {
+    ...withoutLogs,
+    notices: dropped('执行账、日志与大半个返回值'),
+  }
+  shrunk.value = keepTail(
+    JSON.stringify(result.value) ?? 'null',
+    CodeSurfaceLimits.valueChars / 2
+  ).text
   return shrunk
 }

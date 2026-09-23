@@ -24,14 +24,18 @@ export async function fetchWithTimeout<T>(
     throw new RangeError('Fetch timeout must be a finite non-negative number')
   const timers = new TimerScope({ name: 'fetchWithTimeout' })
   try {
-    return await timers.withTimeout(options.timeoutMs, async (signal) => {
-      const response = await (options.fetch ?? fetch)(url, { ...init, signal })
-      signal.throwIfAborted()
-      return consume(response)
-    }, {
-      signal: toOptional(init.signal),
-      timeoutMessage: options.timeoutMessage,
-    })
+    return await timers.withTimeout(
+      options.timeoutMs,
+      async (signal) => {
+        const response = await (options.fetch ?? fetch)(url, { ...init, signal })
+        signal.throwIfAborted()
+        return consume(response)
+      },
+      {
+        signal: toOptional(init.signal),
+        timeoutMessage: options.timeoutMessage,
+      }
+    )
   } finally {
     timers.dispose()
   }

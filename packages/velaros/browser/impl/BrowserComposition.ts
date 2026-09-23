@@ -39,9 +39,14 @@ export class BrowserComposition implements BrowserCompositionApi {
   public useControlledSurface(input: ControlledBrowserSurfaceInput): ControlledBrowserSurface {
     const adapter = useContext(this.context)
     if (!adapter) {
-      throw new AppError('VALIDATION', '当前界面没有装浏览器合成 Provider，拿不到受控页面。', undefined, {
-        reason: BrowserErrorCodes.compositionNotInstalled,
-      })
+      throw new AppError(
+        'VALIDATION',
+        '当前界面没有装浏览器合成 Provider，拿不到受控页面。',
+        undefined,
+        {
+          reason: BrowserErrorCodes.compositionNotInstalled,
+        }
+      )
     }
     // 适配器在应用生命周期内固定，因此这里的宿主 hook 拓扑不会变化。
     return adapter.useControlledSurface(input)

@@ -16,13 +16,15 @@ describe('Project stability contracts', () => {
       await writeFile(file, 'before\n')
       const project = await createProjectKernel({ root })
       const transaction = await project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'append_text',
-            path: 'note.txt',
-            text: 'after\n',
+        operations: [
+          {
+            operation: {
+              type: 'append_text',
+              path: 'note.txt',
+              text: 'after\n',
+            },
           },
-        }],
+        ],
       })
 
       const results = await Promise.allSettled([
@@ -46,19 +48,23 @@ describe('Project stability contracts', () => {
       await writeFile(file, 'before\n')
       const project = await createProjectKernel({ root })
       const transaction = await project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'replace_text',
-            path: 'note.txt',
-            oldText: 'before',
-            newText: 'after',
+        operations: [
+          {
+            operation: {
+              type: 'replace_text',
+              path: 'note.txt',
+              oldText: 'before',
+              newText: 'after',
+            },
           },
-        }],
+        ],
       })
       await project.applyEdit({ transactionId: transaction.transactionId })
       await writeFile(file, 'external\n')
 
-      await expect(project.rollback({ transactionId: transaction.transactionId })).rejects.toMatchObject({
+      await expect(
+        project.rollback({ transactionId: transaction.transactionId })
+      ).rejects.toMatchObject({
         reason: 'CONFLICT_WITH_EXTERNAL_EDIT',
         details: { path: 'note.txt' },
       })
@@ -77,17 +83,21 @@ describe('Project stability contracts', () => {
       const read = await project.read({ path: 'note.txt' })
       await writeFile(file, 'external\n')
 
-      await expect(project.prepareEdit({
-        baseRevisions: { 'note.txt': read.snapshot.revision! },
-        operations: [{
-          operation: {
-            type: 'replace_text',
-            path: 'note.txt',
-            oldText: 'external',
-            newText: 'agent',
-          },
-        }],
-      })).rejects.toMatchObject({
+      await expect(
+        project.prepareEdit({
+          baseRevisions: { 'note.txt': read.snapshot.revision! },
+          operations: [
+            {
+              operation: {
+                type: 'replace_text',
+                path: 'note.txt',
+                oldText: 'external',
+                newText: 'agent',
+              },
+            },
+          ],
+        })
+      ).rejects.toMatchObject({
         reason: 'BASE_REVISION_MISMATCH',
         details: { path: 'note.txt', expected: read.snapshot.revision },
       })
@@ -98,39 +108,51 @@ describe('Project stability contracts', () => {
   })
 
   test('rejects ambiguous import mutations while keeping valid forms', () => {
-    expect(ProjectEditOperationSchema.safeParse({
-      type: 'add_import',
-      path: 'src/a.ts',
-    }).success).toBe(false)
-    expect(ProjectEditOperationSchema.safeParse({
-      type: 'add_import',
-      path: 'src/a.ts',
-      importStatement: "import { join } from 'node:path'",
-      module: 'node:path',
-    }).success).toBe(false)
-    expect(ProjectEditOperationSchema.safeParse({
-      type: 'add_import',
-      path: 'src/a.ts',
-      module: 'node:path',
-      namespaceImport: 'path',
-      named: ['join'],
-    }).success).toBe(false)
-    expect(ProjectEditOperationSchema.safeParse({
-      type: 'remove_import',
-      path: 'src/a.ts',
-    }).success).toBe(false)
-    expect(ProjectEditOperationSchema.safeParse({
-      type: 'add_import',
-      path: 'src/a.ts',
-      module: 'node:path',
-      named: ['join'],
-    }).success).toBe(true)
-    expect(ProjectEditOperationSchema.safeParse({
-      type: 'remove_import',
-      path: 'src/a.ts',
-      module: 'node:path',
-      name: 'join',
-    }).success).toBe(true)
+    expect(
+      ProjectEditOperationSchema.safeParse({
+        type: 'add_import',
+        path: 'src/a.ts',
+      }).success
+    ).toBe(false)
+    expect(
+      ProjectEditOperationSchema.safeParse({
+        type: 'add_import',
+        path: 'src/a.ts',
+        importStatement: "import { join } from 'node:path'",
+        module: 'node:path',
+      }).success
+    ).toBe(false)
+    expect(
+      ProjectEditOperationSchema.safeParse({
+        type: 'add_import',
+        path: 'src/a.ts',
+        module: 'node:path',
+        namespaceImport: 'path',
+        named: ['join'],
+      }).success
+    ).toBe(false)
+    expect(
+      ProjectEditOperationSchema.safeParse({
+        type: 'remove_import',
+        path: 'src/a.ts',
+      }).success
+    ).toBe(false)
+    expect(
+      ProjectEditOperationSchema.safeParse({
+        type: 'add_import',
+        path: 'src/a.ts',
+        module: 'node:path',
+        named: ['join'],
+      }).success
+    ).toBe(true)
+    expect(
+      ProjectEditOperationSchema.safeParse({
+        type: 'remove_import',
+        path: 'src/a.ts',
+        module: 'node:path',
+        name: 'join',
+      }).success
+    ).toBe(true)
   })
 
   test('keeps validate, amend, apply, rollback, and re-apply lifecycle states consistent', async () => {
@@ -140,14 +162,16 @@ describe('Project stability contracts', () => {
       await writeFile(file, 'before\n')
       const project = await createProjectKernel({ root })
       const transaction = await project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'replace_text',
-            path: 'note.txt',
-            oldText: 'before',
-            newText: 'after',
+        operations: [
+          {
+            operation: {
+              type: 'replace_text',
+              path: 'note.txt',
+              oldText: 'before',
+              newText: 'after',
+            },
           },
-        }],
+        ],
       })
 
       expect(project.getTransaction(transaction.transactionId)?.status).toBe('prepared')
@@ -156,13 +180,15 @@ describe('Project stability contracts', () => {
 
       await project.amendEdit({
         transactionId: transaction.transactionId,
-        operations: [{
-          operation: {
-            type: 'append_text',
-            path: 'note.txt',
-            text: 'amended\n',
+        operations: [
+          {
+            operation: {
+              type: 'append_text',
+              path: 'note.txt',
+              text: 'amended\n',
+            },
           },
-        }],
+        ],
       })
       expect(project.getTransaction(transaction.transactionId)?.status).toBe('prepared')
 

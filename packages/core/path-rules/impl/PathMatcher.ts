@@ -32,7 +32,11 @@ export class PathMatcher implements PathMatcherApi {
   /** 按 pattern 与大小写敏感与否缓存编译好的 picomatch 匹配器，容量见 `PathRulesTuning.glob.matcherCacheEntries`。 */
   private readonly matchers = new Map<string, (input: string) => boolean>()
 
-  public matchesAny(path: string, patterns: readonly string[] = [], options?: PathMatchOptions): boolean {
+  public matchesAny(
+    path: string,
+    patterns: readonly string[] = [],
+    options?: PathMatchOptions
+  ): boolean {
     if (patterns.length === 0) return false
     const target = normalizeRelativePath(path)
     return patterns.some((pattern) => this.matchesNormalized(target, pattern, options))
@@ -46,10 +50,19 @@ export class PathMatcher implements PathMatcherApi {
   private matchesNormalized(target: string, pattern: string, options?: PathMatchOptions): boolean {
     const normalized = normalizeRelativePath(pattern)
     const caseSensitive = options?.caseSensitive ?? true
-    if (normalized.endsWith('/')) return isUnderPathText(target, normalized.slice(0, -1), caseSensitive)
+    if (normalized.endsWith('/'))
+      return isUnderPathText(target, normalized.slice(0, -1), caseSensitive)
     const directoryBase = directoryGlobBase(normalized)
-    if (directoryBase) return samePathText(target, directoryBase, caseSensitive) || isUnderPathText(target, directoryBase, caseSensitive)
-    if (!hasGlobMagic(normalized)) return samePathText(target, normalized, caseSensitive) || isUnderPathText(target, normalized, caseSensitive)
+    if (directoryBase)
+      return (
+        samePathText(target, directoryBase, caseSensitive) ||
+        isUnderPathText(target, directoryBase, caseSensitive)
+      )
+    if (!hasGlobMagic(normalized))
+      return (
+        samePathText(target, normalized, caseSensitive) ||
+        isUnderPathText(target, normalized, caseSensitive)
+      )
     return this.matcherFor(normalized, caseSensitive)(target)
   }
 

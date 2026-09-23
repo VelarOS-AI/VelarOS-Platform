@@ -36,13 +36,15 @@ export function encodeScreencastFramesToGif(
     }
 
     const nextTimestamp = frames[index + 1]?.timestamp
-    const delayMs =
-      isPresent(nextTimestamp)
-        ? Math.min(
-            BrowserTuning.screencast.maxFrameDelayMs,
-            Math.max(BrowserTuning.screencast.minFrameDelayMs, Math.round((nextTimestamp - frame.timestamp) * 1000))
+    const delayMs = isPresent(nextTimestamp)
+      ? Math.min(
+          BrowserTuning.screencast.maxFrameDelayMs,
+          Math.max(
+            BrowserTuning.screencast.minFrameDelayMs,
+            Math.round((nextTimestamp - frame.timestamp) * 1000)
           )
-        : BrowserTuning.screencast.lastFrameDelayMs
+        )
+      : BrowserTuning.screencast.lastFrameDelayMs
 
     const rgba = new Uint8ClampedArray(
       decoded.rgba.buffer,

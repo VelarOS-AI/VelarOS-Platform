@@ -6,7 +6,11 @@ import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import type { BrowserPageDriverDownloadItem } from '../../contract/requires.js'
 import type { BrowserPendingEventSummary } from '../../types/browser.js'
 import type { BrowserJavaScriptDialogDetails } from '../../types/electron'
-import type { PendingDialogEntry, PendingDownloadEntry, PendingPermissionEntry } from '../../types/session.js'
+import type {
+  PendingDialogEntry,
+  PendingDownloadEntry,
+  PendingPermissionEntry,
+} from '../../types/session.js'
 import { defaultDialogResponse, findPendingEntry } from '../../utils/session'
 import { BrowserTuning } from '../../utils/tuning'
 

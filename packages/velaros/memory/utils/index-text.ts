@@ -36,7 +36,10 @@ export function renderMemoryIndex(entries: readonly MemoryEntry[]): string {
   const tags = tagLine(entries)
   if (tags) lines.push(tags)
   const omitted = entries.length - listed.length
-  if (omitted > 0) lines.push(`另有 ${omitted} 条没列出，用 list() 看全部。条目太多了，合适的时候合并重复的、删掉过时的。`)
+  if (omitted > 0)
+    lines.push(
+      `另有 ${omitted} 条没列出，用 list() 看全部。条目太多了，合适的时候合并重复的、删掉过时的。`
+    )
   return lines.join('\n')
 }
 
@@ -46,7 +49,11 @@ function pickListed(ordered: readonly MemoryEntry[]): MemoryEntry[] {
   let chars = 0
   for (const entry of ordered) {
     const length = indexLine(entry).length + 1
-    if (listed.length >= MemoryTuning.index.maxEntries || chars + length > MemoryTuning.index.maxChars) break
+    if (
+      listed.length >= MemoryTuning.index.maxEntries ||
+      chars + length > MemoryTuning.index.maxChars
+    )
+      break
     listed.push(entry)
     chars += length
   }
@@ -61,9 +68,13 @@ function indexLine(entry: MemoryEntry): string {
 /** 现有标签那一行：数全部条目里每个标签用了几次，从多到少取前面几个；一个标签都没有时是空串。 */
 function tagLine(entries: readonly MemoryEntry[]): string {
   const counts = new Map<string, number>()
-  for (const tag of entries.flatMap((entry) => entry.tags)) counts.set(tag, (counts.get(tag) ?? 0) + 1)
+  for (const tag of entries.flatMap((entry) => entry.tags))
+    counts.set(tag, (counts.get(tag) ?? 0) + 1)
   const top = [...counts]
-    .sort(([leftTag, leftCount], [rightTag, rightCount]) => rightCount - leftCount || (leftTag < rightTag ? -1 : 1))
+    .sort(
+      ([leftTag, leftCount], [rightTag, rightCount]) =>
+        rightCount - leftCount || (leftTag < rightTag ? -1 : 1)
+    )
     .slice(0, MemoryTuning.index.maxTags)
   return isEmpty(top) ? '' : `现有标签：${top.map(([tag, count]) => `${tag} ${count}`).join(' · ')}`
 }

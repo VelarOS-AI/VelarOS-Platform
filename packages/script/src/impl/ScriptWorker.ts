@@ -143,10 +143,9 @@ class ScriptWorker implements ScriptWorkerApi {
   }
 
   private fail(error: unknown): void {
-    const detail =
-      isObject(error)
-        ? (error as { message?: unknown; stack?: unknown; code?: unknown })
-        : undefined
+    const detail = isObject(error)
+      ? (error as { message?: unknown; stack?: unknown; code?: unknown })
+      : undefined
     let message = String(detail?.message ?? error)
     const library = /(?:at .*?\()?((?:lib\/)[A-Za-z0-9_./-]+\.js):(\d+)/u.exec(
       String(detail?.stack)

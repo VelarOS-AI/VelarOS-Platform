@@ -1,7 +1,18 @@
 /** 站点用户脚本的纯计算：id 校验、按 id 取记录、匹配判定。 */
 import { randomUUID } from 'node:crypto'
 
-import { isArray, isBoolean, isEmpty, isFiniteNumber, isNonBlankString, isNotNull, isPlainObject, isPresent, isString, toOptional } from '@velaros-ai/core'
+import {
+  isArray,
+  isBoolean,
+  isEmpty,
+  isFiniteNumber,
+  isNonBlankString,
+  isNotNull,
+  isPlainObject,
+  isPresent,
+  isString,
+  toOptional,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { BrowserUserScriptLimits } from '../contract/constants'
@@ -55,7 +66,10 @@ export function normalizeDescription(description: LooseOptional<string>): LooseO
 export function normalizePatterns(patterns: LooseOptional<string[]>, field: string): string[] {
   if (!patterns) return []
   if (patterns.length > BrowserUserScriptLimits.matchRules) {
-    throw new AppError('VALIDATION', `${field} 最多允许 ${BrowserUserScriptLimits.matchRules} 条规则。`)
+    throw new AppError(
+      'VALIDATION',
+      `${field} 最多允许 ${BrowserUserScriptLimits.matchRules} 条规则。`
+    )
   }
   const normalized = [...new Set(patterns.map((item) => item.trim()).filter(Boolean))]
   normalized.forEach((pattern) => validateUrlPattern(pattern, field))
@@ -67,13 +81,20 @@ export function validateUrlPattern(pattern: string, field: string): void {
   if (pattern.length > 500) throw new AppError('VALIDATION', `${field} 规则过长。`)
   if (pattern === '<all_urls>') return
   if (!pattern.includes('://')) {
-    throw new AppError('VALIDATION', `${field} 必须是浏览器 match pattern。`, undefined, { pattern })
+    throw new AppError('VALIDATION', `${field} 必须是浏览器 match pattern。`, undefined, {
+      pattern,
+    })
   }
   const [scheme, rest] = pattern.split('://', 2)
   if (!['http', 'https', '*'].includes(scheme ?? '') || !rest?.includes('/')) {
-    throw new AppError('VALIDATION', `${field} 只支持 http/https 浏览器 match pattern。`, undefined, {
-      pattern,
-    })
+    throw new AppError(
+      'VALIDATION',
+      `${field} 只支持 http/https 浏览器 match pattern。`,
+      undefined,
+      {
+        pattern,
+      }
+    )
   }
   const host = rest.slice(0, rest.indexOf('/'))
   if (!host || (host.includes('*') && host !== '*' && !host.startsWith('*.'))) {
@@ -108,11 +129,12 @@ export function scriptPath(id: string): string {
 
 /** 按脚本名生成一个稳定可读的 id。 */
 export function createScriptId(name: string): string {
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40) || 'script'
+  const slug =
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40) || 'script'
   return `${slug}-${randomUUID().slice(0, 8)}`
 }
 
@@ -125,7 +147,11 @@ export function requireStoredInteger(value: unknown, field: string, minimum: num
 }
 
 /** 从落盘的索引里读一组匹配规则；形状不对就报错。 */
-export function requireStoredPatterns(value: unknown, field: string, optional: boolean): LooseOptional<string[]> {
+export function requireStoredPatterns(
+  value: unknown,
+  field: string,
+  optional: boolean
+): LooseOptional<string[]> {
   if (!isPresent(value)) {
     if (optional) return undefined
     throw new AppError('VALIDATION', `浏览器用户脚本索引缺少字段 ${field}。`)
@@ -184,11 +210,7 @@ export function requireStoredScript(value: unknown): BrowserUserScriptRecord {
   if (!isBoolean(stored.enabled)) {
     throw new AppError('VALIDATION', `浏览器用户脚本 ${id} 的 enabled 无效。`)
   }
-  if (
-    stored.source !== 'agent' &&
-    stored.source !== 'user' &&
-    stored.source !== 'user-import'
-  ) {
+  if (stored.source !== 'agent' && stored.source !== 'user' && stored.source !== 'user-import') {
     throw new AppError('VALIDATION', `浏览器用户脚本 ${id} 的 source 无效。`)
   }
   if (
@@ -232,7 +254,9 @@ export function requireStoredScript(value: unknown): BrowserUserScriptRecord {
  * 这一步不碰磁盘：任何一条不合法都在写任何文件之前抛错，用户脚本不会停在「代码已换、
  * 索引没动」的半截状态上。
  */
-export function validateUserScriptPatch(patch: BrowserUserScriptPatch): BrowserUserScriptValidatedPatch {
+export function validateUserScriptPatch(
+  patch: BrowserUserScriptPatch
+): BrowserUserScriptValidatedPatch {
   const match = isPresent(patch.match) ? normalizePatterns(patch.match, 'match') : null
   if (isNotNull(match) && isEmpty(match)) {
     throw new AppError('VALIDATION', '脚本至少需要一个 match 规则。')

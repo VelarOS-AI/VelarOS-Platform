@@ -26,9 +26,16 @@ export function stampOf(stats: Nullable<Stats>): Nullable<FileStamp> {
 }
 
 /** 写之前能不能只凭印记断定文件没变：两边印记相同，且文件大到重读不划算；小文件和不存在的文件都回答不能，让调用方重读核版本。 */
-export function stampProvesUnchanged(before: Nullable<FileStamp>, now: Nullable<FileStamp>): boolean {
+export function stampProvesUnchanged(
+  before: Nullable<FileStamp>,
+  now: Nullable<FileStamp>
+): boolean {
   if (!before || !now) return false
-  return before.mtimeMs === now.mtimeMs && before.size === now.size && before.size > FileTuning.io.alwaysRehashBytes
+  return (
+    before.mtimeMs === now.mtimeMs &&
+    before.size === now.size &&
+    before.size > FileTuning.io.alwaysRehashBytes
+  )
 }
 
 /** 算出一份文件内容的版本号：字节的 SHA-1 前 12 位，内容一样版本号就一样。 */
@@ -67,23 +74,33 @@ export function decodeText(buffer: Buffer, shown: string): DecodedText {
 
 /** 认不出是文本时的报错：二进制文件读不了，图片用 `velaros:images` 看。 */
 function binaryTextError(shown: string): AppError {
-  return new AppError('VALIDATION', `文件是二进制的，不能当文本读：${shown}（图片用 velaros:images 的 view 看，其他二进制文件用命令处理）`)
+  return new AppError(
+    'VALIDATION',
+    `文件是二进制的，不能当文本读：${shown}（图片用 velaros:images 的 view 看，其他二进制文件用命令处理）`
+  )
 }
 
 /** 按文件头的魔数认出图片（PNG、JPEG、GIF、WebP）和 PDF；都不是返回 null。 */
 export function detectMediaType(buffer: Buffer): Nullable<FileMediaType> {
   const startsWith = (bytes: number[], at = 0): boolean =>
     buffer.length >= at + bytes.length && bytes.every((byte, index) => buffer[at + index] === byte)
-  if (startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return { kind: 'image', mediaType: 'image/png' }
+  if (startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    return { kind: 'image', mediaType: 'image/png' }
   if (startsWith([0xff, 0xd8, 0xff])) return { kind: 'image', mediaType: 'image/jpeg' }
   if (startsWith([0x47, 0x49, 0x46, 0x38])) return { kind: 'image', mediaType: 'image/gif' }
-  if (startsWith([0x52, 0x49, 0x46, 0x46]) && startsWith([0x57, 0x45, 0x42, 0x50], 8)) return { kind: 'image', mediaType: 'image/webp' }
-  if (startsWith([0x25, 0x50, 0x44, 0x46, 0x2d])) return { kind: 'document', mediaType: 'application/pdf' }
+  if (startsWith([0x52, 0x49, 0x46, 0x46]) && startsWith([0x57, 0x45, 0x42, 0x50], 8))
+    return { kind: 'image', mediaType: 'image/webp' }
+  if (startsWith([0x25, 0x50, 0x44, 0x46, 0x2d]))
+    return { kind: 'document', mediaType: 'application/pdf' }
   return null
 }
 
 /** 确认路径是普通文件，再在同一个句柄上有界读进来（读的途中变长了报外部修改）；超过 maxBytes 报错，指向用命令取片段。 */
-export async function readBoundedFile(target: string, shown: string, maxBytes: number): Promise<Buffer> {
+export async function readBoundedFile(
+  target: string,
+  shown: string,
+  maxBytes: number
+): Promise<Buffer> {
   const metadata = await stat(target).catch((err: unknown) => {
     throw normalizeReadError(err, shown)
   })
@@ -91,7 +108,10 @@ export async function readBoundedFile(target: string, shown: string, maxBytes: n
   if (!metadata.isFile()) throw new AppError('VALIDATION', `路径不是普通文件：${shown}`)
   const buffer = await textFileIo.readBounded(target, maxBytes).catch((err: unknown) => {
     if (err instanceof AppError && err.code === TextFileErrorCodes.tooLarge) {
-      throw new AppError('VALIDATION', `文件太大，不能读进来：${String(err.context.size)} 字节，上限 ${maxBytes} 字节；用 run 取片段（tail -n、grep、sed -n 'a,bp'）`)
+      throw new AppError(
+        'VALIDATION',
+        `文件太大，不能读进来：${String(err.context.size)} 字节，上限 ${maxBytes} 字节；用 run 取片段（tail -n、grep、sed -n 'a,bp'）`
+      )
     }
     throw normalizeReadError(err, shown)
   })

@@ -56,9 +56,9 @@ describe('model runtime composition', () => {
     expect(first.providerCollection.requireOperationalManifest(IsolatedProviderId).id).toBe(
       IsolatedProviderId
     )
-    expect(() =>
-      second.providerCollection.requireOperationalManifest(IsolatedProviderId)
-    ).toThrow(`未知模型 provider：${IsolatedProviderId}`)
+    expect(() => second.providerCollection.requireOperationalManifest(IsolatedProviderId)).toThrow(
+      `未知模型 provider：${IsolatedProviderId}`
+    )
     expect(first.modelAdapterRegistry.supportsProvider(IsolatedProviderId)).toBe(true)
     expect(second.modelAdapterRegistry.supportsProvider(IsolatedProviderId)).toBe(false)
 

@@ -93,7 +93,11 @@ export function extractKeyMetricsFromSummary(summary: string): string {
       const comma = value.indexOf(',', suffixCursor)
       if (comma < 0) break
       const suffix = value.slice(comma + 1).trimStart()
-      if (suffix.startsWith('event:') || suffix.startsWith('nodeId:') || suffix.startsWith('bounds:')) {
+      if (
+        suffix.startsWith('event:') ||
+        suffix.startsWith('nodeId:') ||
+        suffix.startsWith('bounds:')
+      ) {
         value = value.slice(0, comma).trimEnd()
         break
       }

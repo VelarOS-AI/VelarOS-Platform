@@ -16,7 +16,7 @@ let touchedImports = 0
 
 walk(distDir)
 console.info(
-  `fix-esm-extensions: rewrote ${touchedImports} imports in ${touchedFiles} files under ${distDir}.`,
+  `fix-esm-extensions: rewrote ${touchedImports} imports in ${touchedFiles} files under ${distDir}.`
 )
 
 function walk(dir) {
@@ -43,7 +43,7 @@ function fixFile(file) {
       if (!rewritten) return match
       updatedImports += 1
       return `${prefix}${rewritten}${suffix}`
-    },
+    }
   )
 
   if (updatedImports > 0) {

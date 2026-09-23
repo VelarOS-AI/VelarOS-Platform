@@ -1,17 +1,8 @@
 import { isNull, isUndefined } from '@velaros-ai/core'
 
-import type {
-  BoundCapabilityRequirement,
-  CapabilitySessionRecord,
-} from '../../types/serve'
-import {
-  capabilityOperationsCover,
-  capabilityScopesCover,
-} from '../../utils/serve/service'
-import type {
-  CapabilityCallRequest,
-  CapabilityRequireItem,
-} from '../../utils/wire/capability'
+import type { BoundCapabilityRequirement, CapabilitySessionRecord } from '../../types/serve'
+import { capabilityOperationsCover, capabilityScopesCover } from '../../utils/serve/service'
+import type { CapabilityCallRequest, CapabilityRequireItem } from '../../utils/wire/capability'
 
 /**
  * 一条连接上的能力会话账本；实例归那条连接（RPC 连接或进程内传输各持一份）。
@@ -35,18 +26,14 @@ export interface CapabilitySessionLedgerApi {
 export class CapabilitySessionLedger implements CapabilitySessionLedgerApi {
   private readonly sessions = new Map<string, CapabilitySessionRecord>()
 
-  public open(
-    requires: readonly CapabilityRequireItem[],
-  ): CapabilitySessionRecord {
+  public open(requires: readonly CapabilityRequireItem[]): CapabilitySessionRecord {
     // 会话 id 只要在本进程内不撞；用平台自带的 UUID，免得根入口的引用链上多一个 node:crypto。
     const sessionId = globalThis.crypto.randomUUID()
     const record: CapabilitySessionRecord = {
       sessionId,
       requires: requires.map((item): BoundCapabilityRequirement => ({
         capabilityId: item.capabilityId,
-        operations: isNull(item.operations)
-          ? null
-          : new Set(item.operations),
+        operations: isNull(item.operations) ? null : new Set(item.operations),
         scope: item.scope,
       })),
     }

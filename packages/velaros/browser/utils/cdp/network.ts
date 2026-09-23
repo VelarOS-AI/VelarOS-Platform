@@ -1,6 +1,13 @@
 /** CDP 网络控制器里用不着实例状态的那部分：请求耗时、请求头与状态的归一、诊断级别判定。 */
 
-import { isBoolean, isFiniteNumber, isNonBlankString, isNotNull, isObject, isString } from '@velaros-ai/core'
+import {
+  isBoolean,
+  isFiniteNumber,
+  isNonBlankString,
+  isNotNull,
+  isObject,
+  isString,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserNetworkMockResponse, BrowserPageDiagnosticLevel } from '../../types/browser.js'
@@ -81,7 +88,10 @@ const CdpNetworkResourceTypeByKey: Record<string, string> = {
 
 /** 把宽松写法的资源类型翻成 CDP 的标准写法。 */
 export function normalizeNetworkResourceTypeValue(resourceType: string): string {
-  const normalizedKey = resourceType.trim().replace(/[-_\s]/g, '').toLowerCase()
+  const normalizedKey = resourceType
+    .trim()
+    .replace(/[-_\s]/g, '')
+    .toLowerCase()
   return CdpNetworkResourceTypeByKey[normalizedKey] ?? resourceType
 }
 
@@ -126,7 +136,10 @@ export function normalizeBlockedURLPatterns(patterns: string[]): string[] {
 
 /** 资源类型过滤条件归一成 CDP 的标准写法。 */
 export function normalizeNetworkResourceTypeFilter(resourceType: string): string {
-  const normalizedKey = resourceType.trim().replace(/[-_\s]/g, '').toLowerCase()
+  const normalizedKey = resourceType
+    .trim()
+    .replace(/[-_\s]/g, '')
+    .toLowerCase()
   if (!isNonBlankString(normalizedKey)) return ''
 
   const normalizedResourceType = CdpNetworkResourceTypeByKey[normalizedKey]

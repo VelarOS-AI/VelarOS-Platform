@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { CommandProvider, FileAdapter,ProjectProviders } from '../contract/requires.js'
+import type { CommandProvider, FileAdapter, ProjectProviders } from '../contract/requires.js'
 import { TransactionValidation } from '../impl/transactions/TransactionValidation'
 import type { Diagnostic } from '../types/common'
 import type { FileSnapshot } from '../types/snapshot'
@@ -38,10 +38,12 @@ function transaction(changedFiles: string[]): StoredTransaction {
   }
 }
 
-function validationResult(options: {
-  diagnostics?: Diagnostic[]
-  checks?: ValidationResult['checks']
-} = {}): ValidationResult {
+function validationResult(
+  options: {
+    diagnostics?: Diagnostic[]
+    checks?: ValidationResult['checks']
+  } = {}
+): ValidationResult {
   return {
     ok: true,
     diagnostics: [...(options.diagnostics ?? [])],
@@ -79,7 +81,7 @@ describe('TransactionValidation', () => {
       root: '/workspace',
       policy,
       providers,
-      getTransaction: (transactionId) => transactionId === tx.transactionId ? tx : undefined,
+      getTransaction: (transactionId) => (transactionId === tx.transactionId ? tx : undefined),
       buildOverlay: async () => ({
         contentByPath: new Map([['staged.ts', 'future content']]),
         diagnostics: [],
@@ -172,11 +174,13 @@ describe('TransactionValidation', () => {
         expect(context.providers.codeIntelligence?.isProjectEnabled('/workspace')).toBe(true)
         expect(Reflect.set(context.providers.codeIntelligence!, 'available', false)).toBe(false)
         await context.providers.command.run({ command: 'probe' })
-        expect(Reflect.set(context.providers.command, 'run', async () => ({
-          exitCode: 1,
-          stdout: '',
-          stderr: 'mutated',
-        }))).toBe(false)
+        expect(
+          Reflect.set(context.providers.command, 'run', async () => ({
+            exitCode: 1,
+            stdout: '',
+            stderr: 'mutated',
+          }))
+        ).toBe(false)
         expect(Reflect.set(transactionView, 'changedLines', 999)).toBe(false)
         expect(Reflect.set(transactionView.changedFiles, '0', 'changed.ts')).toBe(false)
         return validationResult()
@@ -212,11 +216,13 @@ describe('TransactionValidation', () => {
       validateRegistered: async () => validationResult(),
       createAdapters: async (value) => {
         adapterPaths.push(value.path)
-        return [{
-          id: 'no-validation',
-          kind: 'text',
-          capabilities: ['read'],
-        }]
+        return [
+          {
+            id: 'no-validation',
+            kind: 'text',
+            capabilities: ['read'],
+          },
+        ]
       },
       snapshotStaged: async (path, content) => snapshot(path, content),
       snapshotWorkspace: async (path) => {
@@ -259,15 +265,18 @@ describe('TransactionValidation', () => {
         ...validationResult({ checks: [{ id: 'registered', ok: true }] }),
         toolRequirements: [{ kind: 'missing-command', command: 'tsc', reason: 'typecheck' }],
       }),
-      createAdapters: async () => [{
-        id: 'warning-adapter',
-        kind: 'code',
-        capabilities: ['validate'],
-        validate: async () => validationResult({
-          diagnostics: [adapterDiagnostic],
-          checks: [{ id: 'adapter', ok: true }],
-        }),
-      }],
+      createAdapters: async () => [
+        {
+          id: 'warning-adapter',
+          kind: 'code',
+          capabilities: ['validate'],
+          validate: async () =>
+            validationResult({
+              diagnostics: [adapterDiagnostic],
+              checks: [{ id: 'adapter', ok: true }],
+            }),
+        },
+      ],
       snapshotStaged: async (path, content) => snapshot(path, content),
       snapshotWorkspace: async (path) => snapshot(path, 'workspace'),
     })
@@ -361,15 +370,17 @@ describe('TransactionValidation', () => {
           if (failingStage === 'registered') throw failure
           return validationResult()
         },
-        createAdapters: async () => [{
-          id: 'throwing-adapter',
-          kind: 'code',
-          capabilities: ['validate'],
-          validate: async () => {
-            if (failingStage === 'adapter') throw failure
-            return validationResult()
+        createAdapters: async () => [
+          {
+            id: 'throwing-adapter',
+            kind: 'code',
+            capabilities: ['validate'],
+            validate: async () => {
+              if (failingStage === 'adapter') throw failure
+              return validationResult()
+            },
           },
-        }],
+        ],
         snapshotStaged: async (path, content) => snapshot(path, content),
         snapshotWorkspace: async (path) => {
           if (failingStage === 'snapshot') throw failure
@@ -395,15 +406,18 @@ describe('TransactionValidation', () => {
       buildOverlay: async () => ({ contentByPath: new Map(), diagnostics: [] }),
       createReader: () => async () => undefined,
       validateRegistered: async () => validationResult(),
-      createAdapters: async () => [{
-        id: 'error-adapter',
-        kind: 'code',
-        capabilities: ['validate'],
-        validate: async () => validationResult({
-          diagnostics: [{ severity: 'error', path: 'file.ts', message: 'invalid' }],
-          checks: [{ id: 'adapter', ok: false }],
-        }),
-      }],
+      createAdapters: async () => [
+        {
+          id: 'error-adapter',
+          kind: 'code',
+          capabilities: ['validate'],
+          validate: async () =>
+            validationResult({
+              diagnostics: [{ severity: 'error', path: 'file.ts', message: 'invalid' }],
+              checks: [{ id: 'adapter', ok: false }],
+            }),
+        },
+      ],
       snapshotStaged: async (path, content) => snapshot(path, content),
       snapshotWorkspace: async (path) => snapshot(path, 'workspace'),
     })
@@ -411,23 +425,36 @@ describe('TransactionValidation', () => {
     const result = await validation.run({ paths: ['file.ts'] })
 
     expect(result.ok).toBe(false)
-    expect(result.diagnostics).toEqual([
-      { severity: 'error', path: 'file.ts', message: 'invalid' },
-    ])
+    expect(result.diagnostics).toEqual([{ severity: 'error', path: 'file.ts', message: 'invalid' }])
   })
 })
 
 test('adapter and registered validator failures remain failures without error diagnostics', async () => {
   for (const source of ['adapter', 'registered', 'nested-check']) {
     const validation = new TransactionValidation({
-      root: '/workspace', policy, providers,
+      root: '/workspace',
+      policy,
+      providers,
       getTransaction: () => undefined,
       buildOverlay: async () => ({ contentByPath: new Map(), diagnostics: [] }),
       createReader: () => async () => 'source',
-      validateRegistered: async () => ({ ok: source !== 'registered', diagnostics: [], checks: [] }),
-      createAdapters: async () => [{ id: 'test', kind: 'code', capabilities: ['validate'], validate: async () => ({
-        ok: source !== 'adapter', diagnostics: [], checks: source === 'nested-check' ? [{ id: 'failed', ok: false }] : [],
-      }) }],
+      validateRegistered: async () => ({
+        ok: source !== 'registered',
+        diagnostics: [],
+        checks: [],
+      }),
+      createAdapters: async () => [
+        {
+          id: 'test',
+          kind: 'code',
+          capabilities: ['validate'],
+          validate: async () => ({
+            ok: source !== 'adapter',
+            diagnostics: [],
+            checks: source === 'nested-check' ? [{ id: 'failed', ok: false }] : [],
+          }),
+        },
+      ],
       snapshotStaged: async (path, content) => snapshot(path, content),
       snapshotWorkspace: async (path) => snapshot(path, 'source'),
     })

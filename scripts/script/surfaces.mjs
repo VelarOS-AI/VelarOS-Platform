@@ -138,7 +138,11 @@ export const CodeSurfaces = [
     namespace: 'system-memory-persistent',
     directory: 'velaros',
     unit: 'act/system',
-    interfaces: ['SystemMemoryOperationsLongTermApi', 'SystemMemoryOperationsWorkingApi', 'SystemMemoryOperationsOrganizeApi'],
+    interfaces: [
+      'SystemMemoryOperationsLongTermApi',
+      'SystemMemoryOperationsWorkingApi',
+      'SystemMemoryOperationsOrganizeApi',
+    ],
     templates: ['memory-template.js', 'memory-long-term-template.js'],
   },
   {
@@ -220,8 +224,20 @@ export const CodeSurfaces = [
  * 与所属包的 `contract/surface.ts`（常量名 `constant`），检查器、包编译器与运行时说明都用那一份。
  */
 export const StandardSurfaces = [
-  { specifier: 'velaros', namespace: 'velaros', directory: 'script', interface: 'ScriptStandardLibrary', constant: 'VelarosStandardDeclarations' },
-  { specifier: 'velaros:program', namespace: 'program', directory: 'script', interface: 'ScriptProgramData', constant: 'ProgramModuleDeclarations' },
+  {
+    specifier: 'velaros',
+    namespace: 'velaros',
+    directory: 'script',
+    interface: 'ScriptStandardLibrary',
+    constant: 'VelarosStandardDeclarations',
+  },
+  {
+    specifier: 'velaros:program',
+    namespace: 'program',
+    directory: 'script',
+    interface: 'ScriptProgramData',
+    constant: 'ProgramModuleDeclarations',
+  },
 ]
 
 /**
@@ -272,5 +288,8 @@ export const CapabilityModulePrefix = 'velaros:'
 
 /** 能力模块在包里的常量名：`velaros:files` → `VelarFilesModule`，`velaros:system-goal` → `VelarSystemGoalModule`。 */
 export function surfaceConstantName(namespace) {
-  return `Velar${namespace.split('-').map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`).join('')}Module`
+  return `Velar${namespace
+    .split('-')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join('')}Module`
 }

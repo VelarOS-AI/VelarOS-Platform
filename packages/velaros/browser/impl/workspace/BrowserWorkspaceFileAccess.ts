@@ -1,11 +1,4 @@
-import {
-  lstat,
-  mkdir,
-  readFile,
-  realpath,
-  unlink,
-  writeFile,
-} from 'node:fs/promises'
+import { lstat, mkdir, readFile, realpath, unlink, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, resolve } from 'node:path'
 
 import { isEmpty, isNotNull, isNull } from '@velaros-ai/core'
@@ -24,7 +17,7 @@ import type { BrowserWorkspaceResolvedPath } from '../../types/workspace.js'
 import { clampInteger } from '../../utils/numbers.js'
 import { BrowserTuning } from '../../utils/tuning'
 import { readResolvedFile } from '../../utils/workspace-paths'
-import {  } from '../../utils/workspace-paths'
+import {} from '../../utils/workspace-paths'
 import { isMissingFileError } from '../../utils/workspace-paths'
 import { ensureRoot } from '../../utils/workspace-paths'
 import { resolveExistingPathInRoot } from '../../utils/workspace-paths'
@@ -50,13 +43,31 @@ export interface BrowserWorkspaceFileAccessApi {
    */
   listFiles(options?: WorkspaceListOptions): Promise<WorkspaceFileEntry[]>
   /** 读站点工作区里的一个文件；不给上限时最多读到约定的字符上限。 */
-  readFile(path: string, startLine?: number, endLine?: number, maxChars?: number): Promise<ProjectReadFileResult>
+  readFile(
+    path: string,
+    startLine?: number,
+    endLine?: number,
+    maxChars?: number
+  ): Promise<ProjectReadFileResult>
   /** 同时接受相对路径和当前站点根内的绝对路径，供 Host 预览已有 browser artifact。 */
-  readWorkspacePath(path: string, startLine?: number, endLine?: number, maxChars?: number): Promise<ProjectReadFileResult>
+  readWorkspacePath(
+    path: string,
+    startLine?: number,
+    endLine?: number,
+    maxChars?: number
+  ): Promise<ProjectReadFileResult>
   /** 往站点工作区写一个二进制文件。 */
-  writeBinaryFile(path: string, content: Buffer, options?: WorkspaceWriteFileOptions): Promise<WorkspaceWriteFileResult>
+  writeBinaryFile(
+    path: string,
+    content: Buffer,
+    options?: WorkspaceWriteFileOptions
+  ): Promise<WorkspaceWriteFileResult>
   /** 往站点工作区写一个文本文件。 */
-  writeFile(path: string, content: string, options?: WorkspaceWriteFileOptions): Promise<WorkspaceWriteFileResult>
+  writeFile(
+    path: string,
+    content: string,
+    options?: WorkspaceWriteFileOptions
+  ): Promise<WorkspaceWriteFileResult>
   /** 删除工作区内的普通文件；拒绝目录、符号链接与越界路径。 */
   deleteFile(path: string): Promise<{ path: string; deleted: boolean }>
 }
@@ -72,14 +83,9 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
    */
   private readonly legacyWorkspaceRoots: readonly string[]
 
-  constructor(
-    workspaceRoot: string,
-    legacyWorkspaceRoots: readonly string[] = [],
-  ) {
+  constructor(workspaceRoot: string, legacyWorkspaceRoots: readonly string[] = []) {
     this.workspaceRoot = resolve(workspaceRoot)
-    this.legacyWorkspaceRoots = legacyWorkspaceRoots.map((root) =>
-      resolve(root),
-    )
+    this.legacyWorkspaceRoots = legacyWorkspaceRoots.map((root) => resolve(root))
   }
 
   /** 主根 + 历史根，读路径按此顺序探测。 */
@@ -87,16 +93,19 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     return [this.workspaceRoot, ...this.legacyWorkspaceRoots]
   }
 
-  public async listFiles(
-    options: WorkspaceListOptions = {},
-  ): Promise<WorkspaceFileEntry[]> {
+  public async listFiles(options: WorkspaceListOptions = {}): Promise<WorkspaceFileEntry[]> {
     const recursive = !!options.recursive
-    const limit = clampInteger(options.limit, 1, BrowserFileLimits.listItems, BrowserTuning.lists.workspaceFiles)
+    const limit = clampInteger(
+      options.limit,
+      1,
+      BrowserFileLimits.listItems,
+      BrowserTuning.lists.workspaceFiles
+    )
     const maxDepth = clampInteger(
       options.maxDepth,
       0,
       BrowserFileLimits.listDepth,
-      recursive ? BrowserTuning.lists.workspaceDepth : 1,
+      recursive ? BrowserTuning.lists.workspaceDepth : 1
     )
     const entries: WorkspaceFileEntry[] = []
     const seenRelativePaths = new Set<string>()
@@ -121,7 +130,7 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     path: string,
     startLine?: number,
     endLine?: number,
-    maxChars?: number,
+    maxChars?: number
   ): Promise<ProjectReadFileResult> {
     const target = await this.resolveExistingPath(path)
     return readResolvedFile(target, path, startLine, endLine, maxChars)
@@ -132,25 +141,17 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     path: string,
     startLine?: number,
     endLine?: number,
-    maxChars?: number,
+    maxChars?: number
   ): Promise<ProjectReadFileResult> {
-    if (!isAbsolute(path))
-      return this.readFile(path, startLine, endLine, maxChars)
+    if (!isAbsolute(path)) return this.readFile(path, startLine, endLine, maxChars)
 
     // 历史根也算「当前网站工作区」：制品面板列出来的旧资产带的是旧绝对路径，
     // 只认主根会让用户点开自己昨天存的快照时被判越权。
-    const owningRoot = this.readRoots.find((root) =>
-      getRelativePathInsideRoot(root, resolve(path)),
-    )
+    const owningRoot = this.readRoots.find((root) => getRelativePathInsideRoot(root, resolve(path)))
     if (!owningRoot) {
-      throw new AppError(
-        'PERMISSION',
-        '只能预览当前网站浏览器工作区内的文件。',
-        undefined,
-        {
-          path,
-        },
-      )
+      throw new AppError('PERMISSION', '只能预览当前网站浏览器工作区内的文件。', undefined, {
+        path,
+      })
     }
     const root = await ensureRoot(owningRoot)
     const existing = await realpath(path).catch((error: any) => {
@@ -163,28 +164,17 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     })
     const relativePath = getRelativePathInsideRoot(root, existing)
     if (!relativePath) {
-      throw new AppError(
-        'PERMISSION',
-        '只能读取当前网站浏览器工作区内的文件。',
-        undefined,
-        {
-          path,
-        },
-      )
+      throw new AppError('PERMISSION', '只能读取当前网站浏览器工作区内的文件。', undefined, {
+        path,
+      })
     }
-    return readResolvedFile(
-      { path: existing, root },
-      path,
-      startLine,
-      endLine,
-      maxChars,
-    )
+    return readResolvedFile({ path: existing, root }, path, startLine, endLine, maxChars)
   }
 
   public async writeBinaryFile(
     path: string,
     content: Buffer,
-    options?: WorkspaceWriteFileOptions,
+    options?: WorkspaceWriteFileOptions
   ): Promise<WorkspaceWriteFileResult> {
     const target = await this.resolveWritablePath(path)
     const existing = await lstat(target.path).catch((error: any) => {
@@ -211,7 +201,7 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
   public async writeFile(
     path: string,
     content: string,
-    options?: WorkspaceWriteFileOptions,
+    options?: WorkspaceWriteFileOptions
   ): Promise<WorkspaceWriteFileResult> {
     const target = await this.resolveWritablePath(path)
     const existing = await readFile(target.path, 'utf8').catch((error: any) => {
@@ -236,26 +226,16 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
   }
 
   /** 删除工作区内的普通文件；拒绝目录、符号链接与越界路径。 */
-  public async deleteFile(
-    path: string,
-  ): Promise<{ path: string; deleted: boolean }> {
+  public async deleteFile(path: string): Promise<{ path: string; deleted: boolean }> {
     // 历史根是只读兼容层；删除只允许命中主根，绝不能沿读回退删除旧资产。
-    const target = await resolveExistingPathInRoot(
-      this.workspaceRoot,
-      path,
-    )
+    const target = await resolveExistingPathInRoot(this.workspaceRoot, path)
     const existing = await lstat(target.path).catch((error: any) => {
       if (isMissingFileError(error)) return null
       throw error
     })
     if (!existing) return { path: target.path, deleted: false }
     if (!existing.isFile() || existing.isSymbolicLink()) {
-      throw new AppError(
-        'VALIDATION',
-        '浏览器工作区只能删除普通文件。',
-        undefined,
-        { path },
-      )
+      throw new AppError('VALIDATION', '浏览器工作区只能删除普通文件。', undefined, { path })
     }
 
     await unlink(target.path)
@@ -268,12 +248,10 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
    * 只有读路径走这里。写路径永远只认主根：回退读是为了不丢旧资产，不是为了让写入分叉。
    */
   private async resolveExistingPathAcrossRoots(
-    path: string,
+    path: string
   ): Promise<BrowserWorkspaceResolvedPath> {
     for (const root of this.legacyWorkspaceRoots) {
-      const candidate = await resolveExistingPathInRoot(root, path).catch(
-        () => null,
-      )
+      const candidate = await resolveExistingPathInRoot(root, path).catch(() => null)
       if (!candidate) continue
       const stats = await lstat(candidate.path).catch(() => null)
       if (stats) return candidate
@@ -282,44 +260,28 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     return resolveExistingPathInRoot(this.workspaceRoot, path)
   }
 
-  private async resolveExistingPath(
-    path: string,
-  ): Promise<BrowserWorkspaceResolvedPath> {
-    const primary = await resolveExistingPathInRoot(
-      this.workspaceRoot,
-      path,
-    )
+  private async resolveExistingPath(path: string): Promise<BrowserWorkspaceResolvedPath> {
+    const primary = await resolveExistingPathInRoot(this.workspaceRoot, path)
     const primaryStats = await lstat(primary.path).catch(() => null)
     if (primaryStats || isEmpty(this.legacyWorkspaceRoots)) return primary
 
     return this.resolveExistingPathAcrossRoots(path)
   }
 
-  private async resolveWritablePath(
-    path: string,
-  ): Promise<BrowserWorkspaceResolvedPath> {
+  private async resolveWritablePath(path: string): Promise<BrowserWorkspaceResolvedPath> {
     const root = await ensureRoot(this.workspaceRoot)
     const relativePath = normalizeRelativePath(path)
     // 先建目录再判定：路径还不存在时 resolveRealPath 解到最近一个存在的祖先，
     // 建完目录判出来的才是「写进去真正会落到哪」。
     await mkdir(dirname(resolve(root, relativePath)), { recursive: true })
-    const target = await resolveBrowserWorkspacePath(
-      root,
-      relativePath,
-      '浏览器工作区写入路径',
-    )
+    const target = await resolveBrowserWorkspacePath(root, relativePath, '浏览器工作区写入路径')
 
     const existingStats = await lstat(target.literalPath).catch((error: any) => {
       if (isMissingFileError(error)) return null
       throw error
     })
     if (existingStats?.isSymbolicLink()) {
-      throw new AppError(
-        'PERMISSION',
-        '浏览器工作区不能写入符号链接。',
-        undefined,
-        { path },
-      )
+      throw new AppError('PERMISSION', '浏览器工作区不能写入符号链接。', undefined, { path })
     }
 
     return { path: target.path, root }
@@ -329,22 +291,16 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
 /** 按一个工作区根建文件访问器；历史根只读，写一律落在当前根。 */
 function createBrowserWorkspaceFileAccess(
   workspaceRoot: string,
-  legacyWorkspaceRoots: readonly string[] = [],
+  legacyWorkspaceRoots: readonly string[] = []
 ): BrowserWorkspaceFileAccessApi {
   return new BrowserWorkspaceFileAccess(workspaceRoot, legacyWorkspaceRoots)
 }
 
 /** 直接按站点上下文建文件访问器；历史根的挂接口径只有这一处，免得每个调用点各记一遍。 */
 function createBrowserSiteWorkspaceFileAccess(
-  context: Pick<BrowserSiteContext, 'workspaceRoot' | 'legacyWorkspaceRoots'>,
+  context: Pick<BrowserSiteContext, 'workspaceRoot' | 'legacyWorkspaceRoots'>
 ): BrowserWorkspaceFileAccessApi {
-  return new BrowserWorkspaceFileAccess(
-    context.workspaceRoot,
-    context.legacyWorkspaceRoots ?? [],
-  )
+  return new BrowserWorkspaceFileAccess(context.workspaceRoot, context.legacyWorkspaceRoots ?? [])
 }
 
-export {
-  createBrowserSiteWorkspaceFileAccess,
-  createBrowserWorkspaceFileAccess,
-}
+export { createBrowserSiteWorkspaceFileAccess, createBrowserWorkspaceFileAccess }

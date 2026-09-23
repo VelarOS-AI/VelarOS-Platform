@@ -4,11 +4,7 @@
  */
 import type { BudgetLimit } from '../contract/constants.js'
 import { BudgetLimits } from '../contract/constants.js'
-import type {
-  Budget,
-  BudgetUsage,
-  PartialBudget,
-} from '../types/agent-lab.js'
+import type { Budget, BudgetUsage, PartialBudget } from '../types/agent-lab.js'
 
 /** 段预算覆盖整程预算：只覆盖段里明确写了的那几维（写 `null` 也算写了，表示这一维不设限）。 */
 export function resolveBudget(base: Budget, override: PartialBudget | null): Budget {

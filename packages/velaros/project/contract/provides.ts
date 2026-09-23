@@ -4,7 +4,11 @@
  * 没有类的公开接口（变更记录的只读视图）直接声明在这里。这里的每个接口都必须从根入口导出。
  */
 
-import type { ProjectChangeListener, ProjectChangeListOptions, ProjectChangeRecord } from '../types/change-feed.js'
+import type {
+  ProjectChangeListener,
+  ProjectChangeListOptions,
+  ProjectChangeRecord,
+} from '../types/change-feed.js'
 
 // ── 类实现的产品面接口：定义在类上方，这里登记 ────────────────
 export type { ProjectKernel } from '../impl/kernel/LocalProjectKernel.js'

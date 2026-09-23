@@ -13,7 +13,7 @@ import { isNonBlankString } from '@velaros-ai/core'
  */
 export function defaultRemoteNodeCredentialsPath(
   hostSlug: string,
-  home: string = homedir(),
+  home: string = homedir()
 ): string {
   const root = isNonBlankString(home) ? home.trim() : homedir()
   return join(root, '.velaros', 'remote-nodes', `${hostSlug}.json`)

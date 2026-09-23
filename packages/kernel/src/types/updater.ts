@@ -21,12 +21,7 @@ export type KernelArchitecture = 'arm64' | 'x64'
 
 /** 一份制品面向的「操作系统-架构」组合，发布清单按它分发。 */
 export type KernelArtifactTarget =
-  | 'darwin-arm64'
-  | 'darwin-x64'
-  | 'linux-arm64'
-  | 'linux-x64'
-  | 'win32-arm64'
-  | 'win32-x64'
+  'darwin-arm64' | 'darwin-x64' | 'linux-arm64' | 'linux-x64' | 'win32-arm64' | 'win32-x64'
 
 /** 制品的打包格式；`raw` 是单个不透明文件，其余要靠注入的解包器展开。 */
 export type KernelArtifactFormat = 'raw' | 'tar.gz' | 'tar.zst' | 'zip'
@@ -115,7 +110,6 @@ export interface KernelFetchResponse {
   /** 回应体，按块异步产出，从不整份留在内存里。 */
   readonly body: AsyncIterable<Uint8Array>
 }
-
 
 /** 下载一份制品时的入参。 */
 export interface KernelArtifactDownloadOptions {
@@ -264,7 +258,6 @@ export interface KernelHealthCheckContext {
   readonly previousVersion: Nullable<string>
 }
 
-
 /** 激活一个版本时的可选项。 */
 export interface KernelActivationOptions {
   /** 切换后跑一遍的健康检查；没过就回滚指针并报失败。缺席表示切了就算数。 */
@@ -373,7 +366,6 @@ export interface KernelArtifactExtractionContext {
   readonly destinationDirectory: string
 }
 
-
 /** 签名校验器看到的现场：装的是哪个版本、制品在哪、实际摘要是什么。 */
 export interface KernelArtifactSignatureContext {
   /** 正在安装的版本号。 */
@@ -397,4 +389,3 @@ export interface KernelArtifactSignatureResult {
   /** 没通过的原因；通过时可以缺席。 */
   readonly reason?: string
 }
-

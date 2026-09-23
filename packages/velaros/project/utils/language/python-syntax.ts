@@ -99,7 +99,13 @@ function parseAllNames(content: string): Nullable<Set<string>> {
 /** 解析一个文件里的顶层类、函数、方法与变量；导出与否按 `__all__`，没有就按下划线约定。 */
 export function parsePythonSymbols(
   content: string,
-  push: (node: PythonSyntaxNode, name: string, kind: string, exported: boolean, container?: string) => void
+  push: (
+    node: PythonSyntaxNode,
+    name: string,
+    kind: string,
+    exported: boolean,
+    container?: string
+  ) => void
 ): void {
   const allNames = parseAllNames(content)
   const root = parsePythonSource(content)
@@ -263,7 +269,9 @@ function pythonBaseCandidates(importerPath: string, specifier: string): string[]
   for (let index = 1; index < dots; index += 1) {
     baseDir = nodePath.posix.dirname(baseDir)
   }
-  const base = rest ? normalizeSourcePath(nodePath.posix.join(baseDir, rest)) : normalizeSourcePath(baseDir)
+  const base = rest
+    ? normalizeSourcePath(nodePath.posix.join(baseDir, rest))
+    : normalizeSourcePath(baseDir)
   return [base, `${base}.py`, `${base}.pyi`, `${base}/__init__.py`, `${base}/__init__.pyi`]
 }
 
@@ -275,7 +283,9 @@ export function pythonImportTargetCandidates(record: LanguageImportRecord): stri
       ? record.importedNames.flatMap((name) =>
           baseCandidates.flatMap((base) => [
             normalizeSourcePath(nodePath.posix.join(stripPythonExtension(base), `${name}.py`)),
-            normalizeSourcePath(nodePath.posix.join(stripPythonExtension(base), name, '__init__.py')),
+            normalizeSourcePath(
+              nodePath.posix.join(stripPythonExtension(base), name, '__init__.py')
+            ),
           ])
         )
       : []

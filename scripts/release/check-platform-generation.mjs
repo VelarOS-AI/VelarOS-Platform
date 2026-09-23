@@ -11,7 +11,9 @@ import { resolve } from 'node:path'
 import { collectReleasePackages } from './releaseTopology.mjs'
 
 const { platformGeneration, ordered } = await collectReleasePackages(
-  resolve(import.meta.dirname, '../..'),
+  resolve(import.meta.dirname, '../..')
 )
 
-console.info(`[platform-generation] 通过。${ordered.length} 个已声明发布包同属平台代 ${platformGeneration}。`)
+console.info(
+  `[platform-generation] 通过。${ordered.length} 个已声明发布包同属平台代 ${platformGeneration}。`
+)

@@ -46,10 +46,14 @@ void test('aborting while queued rejects at once and does not hold the line', as
 
   await assert.rejects(abortable)
   // 中止者退出排队后，队伍照常往下走（holder 由上限放行）。
-  const next = queue.run('s2', async () => {
-    startedAfterAbort = true
-    return 'ok'
-  }, { holdCapMs: 1_000 })
+  const next = queue.run(
+    's2',
+    async () => {
+      startedAfterAbort = true
+      return 'ok'
+    },
+    { holdCapMs: 1_000 }
+  )
 
   await assert.rejects(holder)
   assert.equal(await next, 'ok')

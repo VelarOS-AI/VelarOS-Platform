@@ -45,7 +45,7 @@ function domainWordPattern(word) {
   const screaming = word.toUpperCase()
   return new RegExp(
     `(?:(?<![A-Za-z])(?:${word}|${capitalized}|${screaming})|(?<=[a-z0-9])${capitalized})(?![a-z])`,
-    'u',
+    'u'
   )
 }
 
@@ -133,7 +133,7 @@ function main() {
       if (hits.length === 0) continue
       for (const hit of hits) {
         violations.push(
-          `packages/core/${relativeFile}:${hit.line}: core 出现领域词「${hit.word}」:${hit.text}`,
+          `packages/core/${relativeFile}:${hit.line}: core 出现领域词「${hit.word}」:${hit.text}`
         )
       }
     }
@@ -142,15 +142,11 @@ function main() {
   if (violations.length > 0) {
     console.error(`[core-semantic-vocabulary] 失败:${violations.length} 条违规:`)
     for (const message of violations) console.error(`  ${message}`)
-    console.error(
-      '\n判据:只有无领域语义、能被任意包复用的 primitive 才能留在 Core。',
-    )
+    console.error('\n判据:只有无领域语义、能被任意包复用的 primitive 才能留在 Core。')
     process.exit(1)
   }
 
-  console.log(
-    '[core-semantic-vocabulary] 通过。Core 源码零产品领域语义。',
-  )
+  console.log('[core-semantic-vocabulary] 通过。Core 源码零产品领域语义。')
 }
 
 main()

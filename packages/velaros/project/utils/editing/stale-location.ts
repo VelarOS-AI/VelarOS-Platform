@@ -18,19 +18,24 @@ function uniqueIndex(content: string, text: string): number {
 export function suggestProjectEditLocations(
   previous: ProjectEditView,
   edits: readonly ProjectContentEdit[],
-  current: string,
+  current: string
 ): ProjectRelocatedEdit[] | undefined {
   const oldSource = createProjectSourceCoordinates(previous.content)
   const newSource = createProjectSourceCoordinates(current)
   const candidates: ProjectRelocatedEdit[] = []
   for (const [editIndex, edit] of edits.entries()) {
-    const selector = edit.op === 'insert' && !('at' in edit)
-      ? { op: 'replace' as const, range: edit.range, match: edit.match, text: '' }
-      : edit
+    const selector =
+      edit.op === 'insert' && !('at' in edit)
+        ? { op: 'replace' as const, range: edit.range, match: edit.match, text: '' }
+        : edit
     const target = selectProjectMutations(previous, [selector])[0]
-    const [startLine, endLine] = !('at' in edit) && !isUndefined(edit.range)
-      ? normalizeProjectLineRange(edit.range)
-      : [sourceLineAt(oldSource, target.start), sourceLineAt(oldSource, Math.max(target.start, target.end - 1))]
+    const [startLine, endLine] =
+      !('at' in edit) && !isUndefined(edit.range)
+        ? normalizeProjectLineRange(edit.range)
+        : [
+            sourceLineAt(oldSource, target.start),
+            sourceLineAt(oldSource, Math.max(target.start, target.end - 1)),
+          ]
     const contextStart = oldSource.lines[Math.max(0, startLine - 2)].start
     const contextEnd = oldSource.lines[Math.min(oldSource.lines.length - 1, endLine)].end
     const original = previous.content.slice(contextStart, contextEnd)

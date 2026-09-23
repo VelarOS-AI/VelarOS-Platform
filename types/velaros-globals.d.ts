@@ -17,8 +17,7 @@ type Optional<T> = T | undefined
 type Nullable<T> = T | null
 type PlainObject = Record<string, unknown>
 type JsonStringifyReplacerValue =
-  | ((this: any, key: string, value: any) => any)
-  | Array<string | number>
+  ((this: any, key: string, value: any) => any) | Array<string | number>
 type JsonStringifyReplacer = Nullable<JsonStringifyReplacerValue>
 
 type LooseOptional<T> = T | Nullish

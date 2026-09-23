@@ -12,19 +12,29 @@ import type {
   CompletedCall,
 } from '../types/script.js'
 
-import { enforceResultBudget, fitFailureToBudget, fitJournalToBudget, fitLogsToBudget, fitNoticesToBudget, fitValueToBudget } from './budget.js'
+import {
+  enforceResultBudget,
+  fitFailureToBudget,
+  fitJournalToBudget,
+  fitLogsToBudget,
+  fitNoticesToBudget,
+  fitValueToBudget,
+} from './budget.js'
 import { describeOversized } from './program.js'
 
 /** 体量超限一律拒，不截断后照跑——半截程序跑出来的结果比不跑更坏。blobs 与 input（按 JSON 算）合在一起算。没超返回 null。 */
 export function describeProgramOversize(
   source: string,
   blobs: Optional<Readonly<Record<string, string>>>,
-  input?: unknown,
+  input?: unknown
 ): Nullable<string> {
-  if (source.length > CodeSurfaceLimits.sourceChars) return describeOversized('source', source.length)
+  if (source.length > CodeSurfaceLimits.sourceChars)
+    return describeOversized('source', source.length)
   const blobChars = Object.values(blobs ?? {}).reduce((sum, value) => sum + value.length, 0)
   const inputChars = isUndefined(input) ? 0 : (JSON.stringify(input) ?? '').length
-  return blobChars + inputChars > CodeSurfaceLimits.blobChars ? describeOversized('blobs', blobChars + inputChars) : null
+  return blobChars + inputChars > CodeSurfaceLimits.blobChars
+    ? describeOversized('blobs', blobChars + inputChars)
+    : null
 }
 
 /**
@@ -58,7 +68,9 @@ export function composeProgramResult(
     if (isNotUndefined(outcome.error.line)) failed.line = outcome.error.line
     result.failed = failed
     // 程序正是死在这次拒绝上的：failed 已经说了，notices 里同一句不再重复。
-    const repeated = notices.findIndex((notice) => notice.action === 'denied' && notice.detail === outcome.error!.message)
+    const repeated = notices.findIndex(
+      (notice) => notice.action === 'denied' && notice.detail === outcome.error!.message
+    )
     if (repeated >= 0) notices.splice(repeated, 1)
     // 账只在没跑完时给：跑完了模型自己知道调了什么，没跑完时它对着一个 ABORTED 什么都不知道。
     const journal = fitJournalToBudget(completed, notices)

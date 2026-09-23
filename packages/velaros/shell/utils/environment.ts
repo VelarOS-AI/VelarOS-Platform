@@ -7,8 +7,12 @@ export function parseLoginEnvironment(source: string, marker: string): NodeJS.Pr
   if (offset < 0 || !source.endsWith('\0'))
     throw new AppError('PLATFORM', '登录 shell 返回的环境不完整。')
   const entries = source.slice(offset + boundary.length).split('\0')
-  return Object.fromEntries(entries.filter((entry) => entry.indexOf('=') > 0).map((entry) => {
-    const separator = entry.indexOf('=')
-    return [entry.slice(0, separator), entry.slice(separator + 1)]
-  }))
+  return Object.fromEntries(
+    entries
+      .filter((entry) => entry.indexOf('=') > 0)
+      .map((entry) => {
+        const separator = entry.indexOf('=')
+        return [entry.slice(0, separator), entry.slice(separator + 1)]
+      })
+  )
 }

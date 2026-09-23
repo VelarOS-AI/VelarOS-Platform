@@ -1,10 +1,36 @@
-import { isArray, isBoolean, isEmpty, isNotNull,isPresent, Log, optionalWhen, stringifyPretty } from '@velaros-ai/core'
+import {
+  isArray,
+  isBoolean,
+  isEmpty,
+  isNotNull,
+  isPresent,
+  Log,
+  optionalWhen,
+  stringifyPretty,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { BrowserUserScriptLimits } from '../../contract/constants'
-import type { BrowserSiteContext, BrowserUserScriptDraft, BrowserUserScriptLastRun, BrowserUserScriptOverview, BrowserUserScriptPatch, BrowserUserScriptRecord } from '../../types/browser.js'
+import type {
+  BrowserSiteContext,
+  BrowserUserScriptDraft,
+  BrowserUserScriptLastRun,
+  BrowserUserScriptOverview,
+  BrowserUserScriptPatch,
+  BrowserUserScriptRecord,
+} from '../../types/browser.js'
 import type { BrowserUserScriptAccess, BrowserUserScriptStore } from '../../types/workspace.js'
-import { browserUserScriptMatchesUrl, createScriptId, normalizeCode, normalizeDescription, normalizeName, normalizePatterns, scriptPath, sortScripts, validateUserScriptPatch } from '../../utils/user-scripts'
+import {
+  browserUserScriptMatchesUrl,
+  createScriptId,
+  normalizeCode,
+  normalizeDescription,
+  normalizeName,
+  normalizePatterns,
+  scriptPath,
+  sortScripts,
+  validateUserScriptPatch,
+} from '../../utils/user-scripts'
 import { requireScript, requireStoredScript } from '../../utils/user-scripts.js'
 
 import { browserUserScriptIndexQueue } from './BrowserUserScriptIndexQueue'
@@ -25,13 +51,20 @@ export interface BrowserUserScriptManagerApi {
   /** 读这个站点的用户脚本总览：全局开关与每个脚本的状态。 */
   getOverview(context: BrowserSiteContext): Promise<BrowserUserScriptOverview>
   /** 读一个用户脚本的代码与元信息。 */
-  readScript(context: BrowserSiteContext, id: string): Promise<{
+  readScript(
+    context: BrowserSiteContext,
+    id: string
+  ): Promise<{
     overview: BrowserUserScriptOverview
     script: BrowserUserScriptRecord
     code: string
   }>
   /** 新建一个用户脚本；agent 建的一律先停用，要用户确认后才启用。 */
-  createScript(context: BrowserSiteContext, draft: BrowserUserScriptDraft, defaults: { source: 'agent' | 'user' | 'user-import'; enabled: boolean }): Promise<{ overview: BrowserUserScriptOverview; script: BrowserUserScriptRecord; }>
+  createScript(
+    context: BrowserSiteContext,
+    draft: BrowserUserScriptDraft,
+    defaults: { source: 'agent' | 'user' | 'user-import'; enabled: boolean }
+  ): Promise<{ overview: BrowserUserScriptOverview; script: BrowserUserScriptRecord }>
   /**
    * 修改用户脚本：**先把全部字段校验成最终值，再写代码，最后写索引**。
    *
@@ -40,15 +73,46 @@ export interface BrowserUserScriptManagerApi {
    * 就跑这份没经用户确认的代码，绕开了「改代码或执行范围后自动停用、重新确认才能启用」。
    * 现在校验失败时盘上什么都没动；索引写失败时把代码回滚回去，不留半截状态。
    */
-  updateScript(context: BrowserSiteContext, id: string, patch: BrowserUserScriptPatch, options: { disableAfterExecutionChange?: boolean }): Promise<{ overview: BrowserUserScriptOverview; script: BrowserUserScriptRecord; refreshRequired: boolean; }>
+  updateScript(
+    context: BrowserSiteContext,
+    id: string,
+    patch: BrowserUserScriptPatch,
+    options: { disableAfterExecutionChange?: boolean }
+  ): Promise<{
+    overview: BrowserUserScriptOverview
+    script: BrowserUserScriptRecord
+    refreshRequired: boolean
+  }>
   /** 启用或停用一个用户脚本。 */
-  setScriptEnabled(context: BrowserSiteContext, id: string, enabled: boolean): Promise<{ overview: BrowserUserScriptOverview; script: BrowserUserScriptRecord; refreshRequired: boolean; }>
+  setScriptEnabled(
+    context: BrowserSiteContext,
+    id: string,
+    enabled: boolean
+  ): Promise<{
+    overview: BrowserUserScriptOverview
+    script: BrowserUserScriptRecord
+    refreshRequired: boolean
+  }>
   /** 打开或关掉这个站点的用户脚本总开关。 */
-  setGlobalEnabled(context: BrowserSiteContext, enabled: boolean): Promise<{ overview: BrowserUserScriptOverview; refreshRequired: boolean; }>
+  setGlobalEnabled(
+    context: BrowserSiteContext,
+    enabled: boolean
+  ): Promise<{ overview: BrowserUserScriptOverview; refreshRequired: boolean }>
   /** 调整一个用户脚本的注入顺序。 */
-  moveScript(context: BrowserSiteContext, id: string, direction: 'up' | 'down'): Promise<{ overview: BrowserUserScriptOverview; script: BrowserUserScriptRecord; }>
+  moveScript(
+    context: BrowserSiteContext,
+    id: string,
+    direction: 'up' | 'down'
+  ): Promise<{ overview: BrowserUserScriptOverview; script: BrowserUserScriptRecord }>
   /** 删掉一个用户脚本，连同它的代码文件。 */
-  deleteScript(context: BrowserSiteContext, id: string): Promise<{ overview: BrowserUserScriptOverview; script: BrowserUserScriptRecord; refreshRequired: boolean; }>
+  deleteScript(
+    context: BrowserSiteContext,
+    id: string
+  ): Promise<{
+    overview: BrowserUserScriptOverview
+    script: BrowserUserScriptRecord
+    refreshRequired: boolean
+  }>
   /** 按 URL 挑出这一页该注入的脚本，连同代码一起给出。 */
   listRunnable(url: string): Promise<Array<{ script: BrowserUserScriptRecord; code: string }>>
   /** 记一次脚本执行的结果，供总览里显示「上次跑得怎么样」。 */
@@ -77,7 +141,10 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
     }
   }
 
-  public async readScript(context: BrowserSiteContext, id: string): Promise<{
+  public async readScript(
+    context: BrowserSiteContext,
+    id: string
+  ): Promise<{
     overview: BrowserUserScriptOverview
     script: BrowserUserScriptRecord
     code: string
@@ -119,9 +186,13 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
         version: draft.version?.trim() || '1.0.0',
         revision: 1,
         position:
-          store.scripts.reduce((maximum, candidate) => Math.max(maximum, candidate.position), -1) + 1,
+          store.scripts.reduce((maximum, candidate) => Math.max(maximum, candidate.position), -1) +
+          1,
         match,
-        excludeMatch: optionalWhen(!!draft.excludeMatch, normalizePatterns(draft.excludeMatch, 'excludeMatch')),
+        excludeMatch: optionalWhen(
+          !!draft.excludeMatch,
+          normalizePatterns(draft.excludeMatch, 'excludeMatch')
+        ),
         runAt: draft.runAt ?? 'document-end',
         world: draft.world ?? 'isolated',
         enabled: defaults.enabled,
@@ -170,8 +241,11 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
       }
 
       // ③ 索引：执行面（代码、match、excludeMatch、runAt、world）变了就换代并按宿主策略停用。
-      const executionChanged = isNotNull(validated.code) || ['match', 'excludeMatch', 'runAt', 'world']
-        .some((key) => Object.prototype.hasOwnProperty.call(patch, key))
+      const executionChanged =
+        isNotNull(validated.code) ||
+        ['match', 'excludeMatch', 'runAt', 'world'].some((key) =>
+          Object.prototype.hasOwnProperty.call(patch, key)
+        )
       if (isNotNull(validated.name)) script.name = validated.name
       if (isNotNull(validated.description)) script.description = validated.description.value
       if (isNotNull(validated.match)) script.match = validated.match
@@ -194,7 +268,11 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
         throw error
       }
 
-      return { overview: await this.getOverview(context), script, refreshRequired: executionChanged }
+      return {
+        overview: await this.getOverview(context),
+        script,
+        refreshRequired: executionChanged,
+      }
     })
   }
 
@@ -218,11 +296,7 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
     })
   }
 
-  public async moveScript(
-    context: BrowserSiteContext,
-    id: string,
-    direction: 'up' | 'down'
-  ) {
+  public async moveScript(context: BrowserSiteContext, id: string, direction: 'up' | 'down') {
     return browserUserScriptIndexQueue.run(async () => {
       const store = await this.loadStore()
       const ordered = sortScripts(store.scripts)
@@ -255,16 +329,20 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
     })
   }
 
-  public async listRunnable(url: string): Promise<Array<{ script: BrowserUserScriptRecord; code: string }>> {
+  public async listRunnable(
+    url: string
+  ): Promise<Array<{ script: BrowserUserScriptRecord; code: string }>> {
     const store = await this.loadStore()
     if (!store.globalEnabled) return []
     const matching = sortScripts(store.scripts).filter(
       (script) => script.enabled && browserUserScriptMatchesUrl(script, url)
     )
-    const results = await Promise.all(matching.map(async (script) => ({
-      script,
-      code: await this.readCode(script),
-    })))
+    const results = await Promise.all(
+      matching.map(async (script) => ({
+        script,
+        code: await this.readCode(script),
+      }))
+    )
     return results
   }
 
@@ -323,7 +401,10 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
       undefined,
       BrowserUserScriptLimits.codeBytes + 1
     )
-    if (result.truncated || Buffer.byteLength(result.content, 'utf8') > BrowserUserScriptLimits.codeBytes) {
+    if (
+      result.truncated ||
+      Buffer.byteLength(result.content, 'utf8') > BrowserUserScriptLimits.codeBytes
+    ) {
       throw new AppError('VALIDATION', '用户脚本文件超过 1 MB，已拒绝执行。', undefined, {
         scriptId: script.id,
       })
@@ -333,13 +414,21 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
 
   private async loadStore(): Promise<BrowserUserScriptStore> {
     try {
-      const result = await this.access.readFile(BrowserUserScriptManager.BrowserUserScriptIndexPath, 1, undefined, 2_000_000)
+      const result = await this.access.readFile(
+        BrowserUserScriptManager.BrowserUserScriptIndexPath,
+        1,
+        undefined,
+        2_000_000
+      )
       const parsed = JSON.parse(result.content) as {
         version?: number
         globalEnabled?: boolean
         scripts?: unknown
       }
-      if (parsed.version !== BrowserUserScriptManager.BrowserUserScriptStoreVersion || !isArray(parsed.scripts)) {
+      if (
+        parsed.version !== BrowserUserScriptManager.BrowserUserScriptStoreVersion ||
+        !isArray(parsed.scripts)
+      ) {
         throw new AppError('VALIDATION', '浏览器用户脚本索引版本无效。')
       }
       if (!isBoolean(parsed.globalEnabled)) {
@@ -353,14 +442,22 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
       }
     } catch (error) {
       if (AppError.from(error).code !== 'NOT_FOUND') throw error
-      return { version: BrowserUserScriptManager.BrowserUserScriptStoreVersion, globalEnabled: true, scripts: [] }
+      return {
+        version: BrowserUserScriptManager.BrowserUserScriptStoreVersion,
+        globalEnabled: true,
+        scripts: [],
+      }
     }
   }
 
   private async saveStore(store: BrowserUserScriptStore): Promise<void> {
-    await this.access.writeFile(BrowserUserScriptManager.BrowserUserScriptIndexPath, `${stringifyPretty(store)}\n`, {
-      overwrite: true,
-    })
+    await this.access.writeFile(
+      BrowserUserScriptManager.BrowserUserScriptIndexPath,
+      `${stringifyPretty(store)}\n`,
+      {
+        overwrite: true,
+      }
+    )
   }
 }
 

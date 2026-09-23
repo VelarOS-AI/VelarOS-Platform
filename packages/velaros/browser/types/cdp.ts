@@ -45,8 +45,14 @@ export interface CdpTraceTransport {
 export interface WebContentsDebuggerLike {
   debugger: {
     sendCommand(method: string, params?: Record<string, unknown>): Promise<unknown>
-    on(event: 'message', listener: (event: unknown, method: string, params: unknown, sessionId?: string) => void): void
-    off(event: 'message', listener: (event: unknown, method: string, params: unknown, sessionId?: string) => void): void
+    on(
+      event: 'message',
+      listener: (event: unknown, method: string, params: unknown, sessionId?: string) => void
+    ): void
+    off(
+      event: 'message',
+      listener: (event: unknown, method: string, params: unknown, sessionId?: string) => void
+    ): void
   }
 }
 
@@ -182,11 +188,17 @@ export type CdpExternalBrowserLaunchEnv = Record<string, string | undefined>
 /** CDP 传输：驱动只经它收发命令与事件，不关心底下是 WebSocket 还是 Electron 的 debugger。 */
 export interface CdpBrowserPageDriverTransport {
   /** 下发一条 CDP 命令并等回包；sessionId 给 flatten 模式下的子会话。 */
-  send<T = unknown>(method: string, params?: Record<string, unknown>, sessionId?: string): Promise<T>
+  send<T = unknown>(
+    method: string,
+    params?: Record<string, unknown>,
+    sessionId?: string
+  ): Promise<T>
   /** 订阅一类 CDP 事件；返回取消订阅的函数。传输不支持事件时可以不实现。 */
   onEvent?<T = unknown>(method: string, listener: (params: T) => void): () => void
   /** 订阅全部 CDP 事件，含 flatten 子会话上的（sessionId 标出是哪条，这条连接自己的是 undefined）；传输不支持时可以不实现。 */
-  onAnyEvent?(listener: (method: string, params: unknown, sessionId: Optional<string>) => void): () => void
+  onAnyEvent?(
+    listener: (method: string, params: unknown, sessionId: Optional<string>) => void
+  ): () => void
   /** 订阅传输关闭；返回取消订阅的函数。 */
   onClose?(listener: () => void): () => void
 }

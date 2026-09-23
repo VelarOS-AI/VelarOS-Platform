@@ -34,7 +34,10 @@ export async function parseOfficePreview(
 }
 
 /** 解析 .docx：正文转 HTML 并净化，另外数一遍标题、段落、表格与图片。 */
-export async function parseDocxPreview(inputPath: string, maxItems: number): Promise<ParsedOfficePreview> {
+export async function parseDocxPreview(
+  inputPath: string,
+  maxItems: number
+): Promise<ParsedOfficePreview> {
   const conversion = await mammoth.convertToHtml(
     { path: inputPath },
     {
@@ -71,7 +74,10 @@ export async function parseDocxPreview(inputPath: string, maxItems: number): Pro
 }
 
 /** 解析 .pptx：先数全量幻灯片，再按 maxItems 取前几页的标题与要点。 */
-export async function parsePptxPreview(inputPath: string, maxItems: number): Promise<ParsedOfficePreview> {
+export async function parsePptxPreview(
+  inputPath: string,
+  maxItems: number
+): Promise<ParsedOfficePreview> {
   const zip = await JSZip.loadAsync(await readFile(inputPath))
   // 先数全量再截取：summary 报的是文档事实（共几页），previewedSlides 才是本次预览了几页。
   // 两者合一的话，maxItems 一小，模型看到的「共 2 页」就是假的（xlsx 一直是分开报的）。
@@ -114,7 +120,10 @@ export async function parsePptxPreview(inputPath: string, maxItems: number): Pro
 }
 
 /** 解析 .xlsx：按 maxItems 取前几张表，每张抽样前若干行列。 */
-export async function parseXlsxPreview(inputPath: string, maxItems: number): Promise<ParsedOfficePreview> {
+export async function parseXlsxPreview(
+  inputPath: string,
+  maxItems: number
+): Promise<ParsedOfficePreview> {
   const workbook = new ExcelJS.Workbook()
   await workbook.xlsx.readFile(inputPath)
   const sheets: PreviewSheet[] = []
@@ -183,7 +192,9 @@ export function cellValueToText(value: CellValue): string {
   if (isPresent(value.result)) return cellValueToText(value.result as CellValue)
   if (isString(value.formula)) return `=${value.formula}`
   if (isArray(value.richText))
-    return value.richText.map((part) => (isPlainObject(part) ? String(part.text ?? '') : '')).join('')
+    return value.richText
+      .map((part) => (isPlainObject(part) ? String(part.text ?? '') : ''))
+      .join('')
   return JSON.stringify(value)
 }
 

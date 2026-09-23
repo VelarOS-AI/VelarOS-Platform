@@ -144,13 +144,7 @@ export interface UserActionFormField {
 }
 
 export type UserActionFormFieldType =
-  | 'text'
-  | 'textarea'
-  | 'number'
-  | 'select'
-  | 'radio'
-  | 'checkbox'
-  | 'checkboxes'
+  'text' | 'textarea' | 'number' | 'select' | 'radio' | 'checkbox' | 'checkboxes'
 
 export interface UserActionFormOption {
   value: string
@@ -175,7 +169,12 @@ export type UserActionFormValue = string | number | boolean | string[]
  * 只加生产者不加分支 = 自动回落散文（安全，但结构信息白丢）。
  */
 export type ConfirmationRequestDetail = {
-  authorization?: { label: string; target?: string; requester?: string; scope: 'call' | 'task-operation' }
+  authorization?: {
+    label: string
+    target?: string
+    requester?: string
+    scope: 'call' | 'task-operation'
+  }
 } & (
   | { kind: 'operation-authorization' }
   | {

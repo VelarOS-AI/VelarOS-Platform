@@ -36,12 +36,7 @@ const IgnoredInputDirectoryNames = new Set([
   'node_modules',
   'out',
 ])
-const RootBuildInputPaths = [
-  'bun.lock',
-  'bunfig.toml',
-  'package.json',
-  'tsconfig.json',
-]
+const RootBuildInputPaths = ['bun.lock', 'bunfig.toml', 'package.json', 'tsconfig.json']
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, 'utf8'))
@@ -60,8 +55,9 @@ function updateHashWithTree(hash, root, displayRoot = relative(ROOT_DIR, root)) 
   }
 
   const visit = (directory) => {
-    const entries = readdirSync(directory, { withFileTypes: true })
-      .sort((left, right) => left.name.localeCompare(right.name))
+    const entries = readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
+      left.name.localeCompare(right.name)
+    )
     for (const entry of entries) {
       if (entry.isDirectory() && IgnoredInputDirectoryNames.has(entry.name)) continue
       const absolutePath = resolve(directory, entry.name)
@@ -116,8 +112,9 @@ function computePackageInputFingerprint(node, dependencyFingerprints) {
   for (const scriptPath of collectReferencedBuildScripts(node)) {
     updateHashWithFile(hash, scriptPath, relative(ROOT_DIR, scriptPath))
   }
-  for (const [name, fingerprint] of [...dependencyFingerprints.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))) {
+  for (const [name, fingerprint] of [...dependencyFingerprints.entries()].sort(([left], [right]) =>
+    left.localeCompare(right)
+  )) {
     hash.update(`dependency\0${name}\0${fingerprint}\0`)
   }
   return hash.digest('hex')
@@ -133,7 +130,8 @@ function computeBuildOutputFingerprint(node) {
 }
 
 function readBuildCache() {
-  if (!existsSync(BUILD_CACHE_PATH)) return { schemaVersion: BUILD_CACHE_SCHEMA_VERSION, packages: {} }
+  if (!existsSync(BUILD_CACHE_PATH))
+    return { schemaVersion: BUILD_CACHE_SCHEMA_VERSION, packages: {} }
   try {
     const parsed = readJson(BUILD_CACHE_PATH)
     if (parsed.schemaVersion !== BUILD_CACHE_SCHEMA_VERSION || typeof parsed.packages !== 'object')
@@ -399,14 +397,12 @@ function main() {
       )
       const inputFingerprint = computePackageInputFingerprint(node, dependencyFingerprints)
       const cached = cache.packages[node.name]
-      const outputFingerprint = options.incremental
-        ? computeBuildOutputFingerprint(node)
-        : null
+      const outputFingerprint = options.incremental ? computeBuildOutputFingerprint(node) : null
       if (
-        options.incremental
-        && cached?.inputFingerprint === inputFingerprint
-        && cached.outputFingerprint
-        && outputFingerprint === cached.outputFingerprint
+        options.incremental &&
+        cached?.inputFingerprint === inputFingerprint &&
+        cached.outputFingerprint &&
+        outputFingerprint === cached.outputFingerprint
       ) {
         console.log(`· 跳过 ${node.name}（输入与 dist 均未变化）`)
         resolvedFingerprints.set(node.name, inputFingerprint)

@@ -15,7 +15,9 @@ import { isInsideRoot } from '../path.js'
 
 /** 一条已经解开符号链接的路径相对真实根的写法（`/` 分隔，根本身是 `.`）；不在根里返回 null。真实路径是盘上的写法，按字面比。 */
 export function relativeInsideRealRoot(realRoot: string, realPath: string): Nullable<string> {
-  const relative = currentPlatform.relativePathTextInside(realPath, realRoot, { caseSensitive: true })
+  const relative = currentPlatform.relativePathTextInside(realPath, realRoot, {
+    caseSensitive: true,
+  })
   return isNull(relative) || relative === '.' ? null : relative
 }
 
@@ -26,13 +28,17 @@ export function relativeInsideRealRoot(realRoot: string, realPath: string): Null
  */
 export async function resolveInsideProject(
   rootPath: string,
-  requested: string,
+  requested: string
 ): Promise<{ resolved: string; realPath: string; inside: boolean }> {
   const resolved = resolvePath(rootPath, requested)
   const realRoot = await resolveRealPath(rootPath)
   const realPath = await resolveRealPath(resolved)
   // 真实路径已经解开，按字面比（realpath 给出的就是盘上的写法）。
-  return { resolved, realPath, inside: currentPlatform.isPathTextInside(realPath, realRoot, { caseSensitive: true }) }
+  return {
+    resolved,
+    realPath,
+    inside: currentPlatform.isPathTextInside(realPath, realRoot, { caseSensitive: true }),
+  }
 }
 
 /**
@@ -42,7 +48,7 @@ export async function resolveInsideProject(
 export async function resolveConfinedRealPath(
   realRoot: string,
   abs: string,
-  inputPath: string,
+  inputPath: string
 ): Promise<string> {
   const realTarget = await resolveRealPath(abs)
   if (isInsideRoot(realRoot, realTarget)) return realTarget
@@ -50,6 +56,6 @@ export async function resolveConfinedRealPath(
     'PERMISSION_DENIED',
     `路径经符号链接指到了项目外：${inputPath}`,
     { inputPath },
-    '这个路径或它的某一层父目录经符号链接指到项目外，读不了：只看项目里的源码，或者请用户换到那个项目；不要改搜它的父目录。',
+    '这个路径或它的某一层父目录经符号链接指到项目外，读不了：只看项目里的源码，或者请用户换到那个项目；不要改搜它的父目录。'
   )
 }

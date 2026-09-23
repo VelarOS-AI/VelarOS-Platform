@@ -4,7 +4,10 @@ import { CodeQuerySources } from '../../contract/constants.js'
 import type { ProjectOperationContext } from '../../contract/requires.js'
 import type { ProjectCodeIndexApi } from '../../contract/requires.js'
 import type { ProjectCodeQuery as ProjectCodeQueryInput } from '../../types/project.js'
-import { isProjectCodeLanguageQuery, withCodeQuerySource } from '../../utils/language/language-queries.js'
+import {
+  isProjectCodeLanguageQuery,
+  withCodeQuerySource,
+} from '../../utils/language/language-queries.js'
 
 import { languageQueries } from './LanguageQueries.js'
 
@@ -27,7 +30,10 @@ export interface ProjectCodeQueryApi {
 class ProjectCodeQuery implements ProjectCodeQueryApi {
   public constructor(private readonly codeIndex: ProjectCodeIndexApi) {}
 
-  public async run(input: ProjectCodeQueryInput, context: ProjectOperationContext): Promise<unknown> {
+  public async run(
+    input: ProjectCodeQueryInput,
+    context: ProjectOperationContext
+  ): Promise<unknown> {
     if (isProjectCodeLanguageQuery(input)) return languageQueries.run(input, context)
     if (!this.codeIndex.isAvailable()) {
       throw new AppError(

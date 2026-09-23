@@ -12,16 +12,18 @@ import { RemoteNodeClientErrorCodes } from '../../contract/constants'
 import type { RemoteNodeCloseAction } from '../../types/remote'
 import { RemoteNodeClientError } from '../errors'
 import { KernelTuning } from '../tuning'
-import {
-  RemoteNodeCloseCode,
-  type RemoteNodeCloseCodeValue,
-} from '../wire/remote-node'
+import { RemoteNodeCloseCode, type RemoteNodeCloseCodeValue } from '../wire/remote-node'
 
-const StopTable: Readonly<Record<number, {
-  readonly code: RemoteNodeClientError['code']
-  readonly message: string
-  readonly clearCredentials: boolean
-}>> = {
+const StopTable: Readonly<
+  Record<
+    number,
+    {
+      readonly code: RemoteNodeClientError['code']
+      readonly message: string
+      readonly clearCredentials: boolean
+    }
+  >
+> = {
   [RemoteNodeCloseCode.ProtocolMismatch]: {
     clearCredentials: false,
     code: RemoteNodeClientErrorCodes.ProtocolMismatch,
@@ -42,7 +44,7 @@ const StopTable: Readonly<Record<number, {
 
 /** 按关闭码判「还试不试」:表里有的停手(带因由与要不要清凭据),表外一律重连。 */
 export function planRemoteNodeCloseAction(
-  code: number | RemoteNodeCloseCodeValue,
+  code: number | RemoteNodeCloseCodeValue
 ): RemoteNodeCloseAction {
   const entry = StopTable[code]
   if (isUndefined(entry)) return { kind: 'reconnect' }
@@ -61,12 +63,12 @@ export function planRemoteNodeCloseAction(
 /** 指数退避 + 抖动:多台 Client 同时掉线时不要在同一毫秒一起回来砸 Node。 */
 export function computeReconnectDelayMs(attempt: number): number {
   const base = Math.min(
-    KernelTuning.remoteClientReconnectInitialDelayMs
-      * 2 ** Math.min(Math.max(attempt, 0), KernelTuning.remoteClientReconnectMaxExponent),
+    KernelTuning.remoteClientReconnectInitialDelayMs *
+      2 ** Math.min(Math.max(attempt, 0), KernelTuning.remoteClientReconnectMaxExponent)
   )
   const jitter = base * KernelTuning.remoteClientReconnectJitterRatio * (Math.random() * 2 - 1)
   return Math.min(
     KernelTuning.remoteClientReconnectMaxDelayMs,
-    Math.max(KernelTuning.remoteClientReconnectInitialDelayMs, Math.round(base + jitter)),
+    Math.max(KernelTuning.remoteClientReconnectInitialDelayMs, Math.round(base + jitter))
   )
 }

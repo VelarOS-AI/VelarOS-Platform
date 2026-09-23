@@ -40,7 +40,8 @@ export function decodeComputerResponse<TResult = unknown>(
   line: string
 ): ComputerHelperResponse<TResult> {
   const trimmed = line.trim()
-  if (!trimmed) throw new AppError(ComputerErrorCodes.protocolInvalid, '桌面控制 helper 的应答是空行。')
+  if (!trimmed)
+    throw new AppError(ComputerErrorCodes.protocolInvalid, '桌面控制 helper 的应答是空行。')
 
   let parsed: unknown
   try {
@@ -67,7 +68,9 @@ export function decodeComputerResponse<TResult = unknown>(
       ok: false,
       error: {
         code: isString(error.code) ? error.code : 'helper_error',
-        message: isString(error.message) ? error.message : '桌面控制 helper 报了一个没有说明的错误。',
+        message: isString(error.message)
+          ? error.message
+          : '桌面控制 helper 报了一个没有说明的错误。',
       },
     }
   }

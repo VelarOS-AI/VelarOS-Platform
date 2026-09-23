@@ -175,10 +175,10 @@ export const CapabilitySessionOpenFailureSchema = z.strictObject({
   error: CapabilityCallErrorSchema,
 }) satisfies z.ZodType<CapabilitySessionOpenFailure>
 
-export const CapabilitySessionOpenResponseSchema = z.discriminatedUnion(
-  'status',
-  [CapabilitySessionOpenSuccessSchema, CapabilitySessionOpenFailureSchema],
-) satisfies z.ZodType<CapabilitySessionOpenResponse>
+export const CapabilitySessionOpenResponseSchema = z.discriminatedUnion('status', [
+  CapabilitySessionOpenSuccessSchema,
+  CapabilitySessionOpenFailureSchema,
+]) satisfies z.ZodType<CapabilitySessionOpenResponse>
 
 export const CapabilitySessionCloseRequestSchema = z.strictObject({
   protocolVersion: z.literal(KernelProtocolVersion),

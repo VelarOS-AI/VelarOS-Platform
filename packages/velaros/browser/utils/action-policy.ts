@@ -11,9 +11,7 @@ export function normalizePolicyAction(value: LooseOptional<string>): Nullable<st
 }
 
 /** 把一组动作名归一成集合，顺带去掉空的。 */
-export function normalizeActionSet(
-  values: LooseOptional<readonly string[]>,
-): Set<string> {
+export function normalizeActionSet(values: LooseOptional<readonly string[]>): Set<string> {
   const normalized = (values ?? [])
     .map(normalizePolicyAction)
     .filter((value): value is string => isNotNull(value))
@@ -21,9 +19,7 @@ export function normalizeActionSet(
 }
 
 /** 把一次请求里的动作名（含别名）归一成一组。 */
-export function normalizeRequestActions(
-  request: BrowserActionPolicyRequest,
-): string[] {
+export function normalizeRequestActions(request: BrowserActionPolicyRequest): string[] {
   const seen = new Set<string>()
   const actions = [
     normalizePolicyAction(request.action),
@@ -40,7 +36,7 @@ export function normalizeRequestActions(
 /** 在策略表里找第一条命中这次请求的规则。 */
 export function findPolicyMatch(
   policyActions: Set<string>,
-  requestActions: readonly string[],
+  requestActions: readonly string[]
 ): Nullable<string> {
   for (const action of requestActions) {
     if (policyActions.has(action)) return action
@@ -59,12 +55,11 @@ export function findPolicyMatch(
  */
 export function checkBrowserActionPolicy(
   policy: LooseOptional<BrowserActionPolicyConfig>,
-  request: BrowserActionPolicyRequest,
+  request: BrowserActionPolicyRequest
 ): BrowserActionPolicyDecision {
   const requestActions = normalizeRequestActions(request)
   const action = requestActions[0] ?? 'unknown'
-  if (!policy)
-    return { kind: 'allow', action, matchedAction: null, reason: null }
+  if (!policy) return { kind: 'allow', action, matchedAction: null, reason: null }
 
   const deny = normalizeActionSet(policy.deny)
   const deniedAction = findPolicyMatch(deny, requestActions)

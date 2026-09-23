@@ -50,20 +50,12 @@ export interface ComputerSpacePort {
    * 移动指针，不点击。与点击同一套坐标契约：主屏坐标必须带上给出这组坐标的那次截图的
    * snapshotId，运行时在真正移动之前再校验一次绑定，布局变了就拒绝。
    */
-  mouseMove: (
-    x: number,
-    y: number,
-    options?: ComputerMoveOptions
-  ) => Promise<ComputerMoveResult>
+  mouseMove: (x: number, y: number, options?: ComputerMoveOptions) => Promise<ComputerMoveResult>
   /**
    * 在指定坐标空间点击。主屏坐标必须带上给出这组坐标的那次截图的 snapshotId，
    * 运行时在真正按下之前再校验一次绑定，布局变了就拒绝。
    */
-  click: (
-    x: number,
-    y: number,
-    options?: ComputerClickOptions
-  ) => Promise<ComputerClickResult>
+  click: (x: number, y: number, options?: ComputerClickOptions) => Promise<ComputerClickResult>
   /** 在当前焦点处原样输入文本。 */
   typeText: (text: string) => Promise<ComputerTypeResult>
   /** 按下一个键或组合键（例如 `cmd+a`、`enter`）。 */
@@ -106,9 +98,7 @@ export interface ComputerSidecarProcess {
 }
 
 /** 子进程启动器：按解析出来的 helper 规格拉起一个 sidecar 进程。 */
-export type ComputerSidecarSpawner = (
-  spec: ComputerHelperLaunchSpec
-) => ComputerSidecarProcess
+export type ComputerSidecarSpawner = (spec: ComputerHelperLaunchSpec) => ComputerSidecarProcess
 
 /** 创建 sidecar 运行时时可以塞进来的东西，一个都不给就用随包默认值。 */
 export interface ComputerSidecarManagerOptions {

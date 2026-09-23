@@ -5,7 +5,15 @@
  * 每个操作只查取消，再交给调用上下文里本会话的空间端口；授权前缀、版本、上限都由端口与存储核对，写操作带上 Kernel 调用号供核对与幂等。
  */
 
-import type { StoreEvent, StoreEventAck, StoreEventPage, StoreObject, StorePage, StoreSubscription, StoreWatch } from '@velaros-ai/context'
+import type {
+  StoreEvent,
+  StoreEventAck,
+  StoreEventPage,
+  StoreObject,
+  StorePage,
+  StoreSubscription,
+  StoreWatch,
+} from '@velaros-ai/context'
 
 import type { StoreOperationContext } from '../contract/requires.js'
 import type {
@@ -109,7 +117,8 @@ export interface StoreOperationsCreateApi {
 }
 
 /** 三份合在一起的完整能力；实现类只有这一份。 */
-export interface StoreOperationsApi extends StoreOperationsReadApi, StoreOperationsWriteApi, StoreOperationsCreateApi {}
+export interface StoreOperationsApi
+  extends StoreOperationsReadApi, StoreOperationsWriteApi, StoreOperationsCreateApi {}
 
 export class StoreOperations implements StoreOperationsApi {
   public async list(input: StoreListInput, ctx: StoreOperationContext): Promise<StoreEntryPage> {
@@ -123,22 +132,34 @@ export class StoreOperations implements StoreOperationsApi {
     return ctx.store.keys(store, query)
   }
 
-  public async get(input: StoreKeyInput, ctx: StoreOperationContext): Promise<Nullable<StoreObject>> {
+  public async get(
+    input: StoreKeyInput,
+    ctx: StoreOperationContext
+  ): Promise<Nullable<StoreObject>> {
     ctx.abortSignal.throwIfAborted()
     return ctx.store.get(input.store, input.key)
   }
 
-  public async events(input: StoreEventsInput, ctx: StoreOperationContext): Promise<Nullable<StoreEventPage>> {
+  public async events(
+    input: StoreEventsInput,
+    ctx: StoreOperationContext
+  ): Promise<Nullable<StoreEventPage>> {
     ctx.abortSignal.throwIfAborted()
     return ctx.store.events(input)
   }
 
-  public async read(input: StoreMaterialInput, ctx: StoreOperationContext): Promise<StoreMaterialPage> {
+  public async read(
+    input: StoreMaterialInput,
+    ctx: StoreOperationContext
+  ): Promise<StoreMaterialPage> {
     ctx.abortSignal.throwIfAborted()
     return ctx.store.read(input)
   }
 
-  public async subscribe(input: StoreSubscribeInput, ctx: StoreOperationContext): Promise<StoreSubscription> {
+  public async subscribe(
+    input: StoreSubscribeInput,
+    ctx: StoreOperationContext
+  ): Promise<StoreSubscription> {
     ctx.abortSignal.throwIfAborted()
     return ctx.store.subscribe(input, ctx.invocationId)
   }

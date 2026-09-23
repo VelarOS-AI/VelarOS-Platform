@@ -31,21 +31,18 @@ const manifestRecords = await Promise.all(
     directory: path.dirname(manifestPath),
     manifest: await readJson(manifestPath),
     manifestPath,
-  })),
+  }))
 )
 const workspacePackageNames = new Set(
   manifestRecords
     .filter(({ manifestPath }) => manifestPath !== rootManifestPath)
-    .map(({ manifest }) => manifest.name),
+    .map(({ manifest }) => manifest.name)
 )
 const protectedManifestPaths = manifestRecords.map(({ manifestPath }) => manifestPath)
 const manifestSnapshots = new Map(
   await Promise.all(
-    protectedManifestPaths.map(async (manifestPath) => [
-      manifestPath,
-      await readFile(manifestPath),
-    ]),
-  ),
+    protectedManifestPaths.map(async (manifestPath) => [manifestPath, await readFile(manifestPath)])
+  )
 )
 
 const updates = manifestRecords.flatMap(({ directory, manifest, manifestPath }) => {
@@ -53,14 +50,11 @@ const updates = manifestRecords.flatMap(({ directory, manifest, manifestPath }) 
     ...new Set(
       dependencyNames(manifest).filter(
         (packageName) =>
-          packageName.startsWith('@velaros-ai/')
-          && !workspacePackageNames.has(packageName),
-      ),
+          packageName.startsWith('@velaros-ai/') && !workspacePackageNames.has(packageName)
+      )
     ),
   ].sort()
-  return packageNames.length > 0
-    ? [{ directory, manifest, manifestPath, packageNames }]
-    : []
+  return packageNames.length > 0 ? [{ directory, manifest, manifestPath, packageNames }] : []
 })
 if (updates.length === 0) {
   throw new Error('No external @velaros-ai/* dependencies were found in package manifests')
@@ -68,22 +62,15 @@ if (updates.length === 0) {
 
 let commandFailure
 for (const update of updates) {
-  console.info(
-    `Updating ${update.manifest.name}: ${update.packageNames.join(', ')}`,
-  )
+  console.info(`Updating ${update.manifest.name}: ${update.packageNames.join(', ')}`)
   const result = spawnSync(
     'bun',
-    [
-      'update',
-      ...update.packageNames,
-      '--lockfile-only',
-      '--ignore-scripts',
-    ],
+    ['update', ...update.packageNames, '--lockfile-only', '--ignore-scripts'],
     {
       cwd: update.directory,
       env: process.env,
       stdio: 'inherit',
-    },
+    }
   )
   if (result.error || result.status !== 0) {
     commandFailure = {
@@ -113,7 +100,7 @@ for (const [manifestPath, before] of manifestSnapshots) {
 }
 if (semanticMutations.length > 0) {
   throw new Error(
-    `bun update semantically modified protected package manifests: ${semanticMutations.join(', ')}`,
+    `bun update semantically modified protected package manifests: ${semanticMutations.join(', ')}`
   )
 }
 const remainingByteMutations = []
@@ -124,17 +111,15 @@ for (const [manifestPath, before] of manifestSnapshots) {
 }
 if (remainingByteMutations.length > 0) {
   throw new Error(
-    `Unable to restore protected package manifests byte-for-byte: ${remainingByteMutations.join(', ')}`,
+    `Unable to restore protected package manifests byte-for-byte: ${remainingByteMutations.join(', ')}`
   )
 }
 if (restoredFormatting.length > 0) {
-  console.info(
-    `Restored formatting-only manifest changes: ${restoredFormatting.join(', ')}`,
-  )
+  console.info(`Restored formatting-only manifest changes: ${restoredFormatting.join(', ')}`)
 }
 if (commandFailure?.error) throw commandFailure.error
 if (commandFailure) {
   throw new Error(
-    `bun update failed for ${path.relative(repositoryRoot, commandFailure.manifestPath)} with exit code ${commandFailure.exitCode}`,
+    `bun update failed for ${path.relative(repositoryRoot, commandFailure.manifestPath)} with exit code ${commandFailure.exitCode}`
   )
 }

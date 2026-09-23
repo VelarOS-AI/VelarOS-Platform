@@ -37,7 +37,7 @@ export interface LabStatisticsApi {
     archives: readonly RunArchive[],
     executorA: string,
     executorB: string,
-    options?: PairedComparisonOptions,
+    options?: PairedComparisonOptions
   ) => PairedComparison
 }
 
@@ -62,7 +62,7 @@ class LabStatistics implements LabStatisticsApi {
     archives: readonly RunArchive[],
     executorA: string,
     executorB: string,
-    options: PairedComparisonOptions = {},
+    options: PairedComparisonOptions = {}
   ): PairedComparison {
     return compareExecutors(archives, executorA, executorB, options)
   }

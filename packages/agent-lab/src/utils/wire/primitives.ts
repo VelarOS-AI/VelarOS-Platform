@@ -16,11 +16,14 @@ export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
     z.null(),
     z.array(jsonValueSchema),
     z.record(z.string(), jsonValueSchema),
-  ]),
+  ])
 )
 
 /** 一个 JSON 对象：证据、参数、元数据都用它。 */
-export const jsonObjectSchema = z.record(z.string(), jsonValueSchema) satisfies z.ZodType<JsonObject>
+export const jsonObjectSchema = z.record(
+  z.string(),
+  jsonValueSchema
+) satisfies z.ZodType<JsonObject>
 
 /** 标识符：去掉两头空白后非空，长度按常量表的上限卡。 */
 export const identifierSchema = z.string().trim().min(1).max(AgentLabLimits.identifierChars)

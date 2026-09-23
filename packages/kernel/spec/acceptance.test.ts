@@ -28,10 +28,7 @@ import { InProcessKernelTransport } from '../src/impl/serve/InProcessKernelTrans
 import { KernelLocalDaemon } from '../src/impl/serve/KernelLocalDaemon'
 import { KernelService } from '../src/impl/serve/KernelService'
 import { KernelUpdater } from '../src/impl/updater/KernelUpdater'
-import {
-  createKernel,
-  kernelModules,
-} from '../src/index'
+import { createKernel, kernelModules } from '../src/index'
 import type { KernelModulePermissionRequest } from '../src/types/kernel'
 import { createDefaultKernelDaemonPaths } from '../src/utils/rpc/descriptor'
 import { negotiateKernelProtocol } from '../src/utils/wire/negotiation'
@@ -55,27 +52,35 @@ async function temporaryRuntimeDirectory(): Promise<string> {
 /** 装一个带两件能力的服务面：会话只绑其中一件，另一件用来验证越界调用会被拒。 */
 function serviceWithTwoCapabilities(): KernelService {
   const host = new KernelModuleHost({ apiVersion: 1 })
-  host.registerModule(kernelModules.define({
-    manifest: {
-      id: 'spec.session.module',
-      version: '1.0.0',
-      apiVersion: 1,
-      provides: [ProbeCapability, OtherCapability],
-      requires: [],
-      optionalRequires: [],
-      permissions: [],
-      isolation: 'in-process' as const,
-    },
-    activate(context) {
-      context.registerService(ProbeCapability, kernelModules.callable({
-        read: { metadata: { permissions: [] }, invoke: () => 'probe' },
-      }))
-      context.registerService(OtherCapability, kernelModules.callable({
-        read: { metadata: { permissions: [] }, invoke: () => 'other' },
-      }))
-      return {}
-    },
-  }))
+  host.registerModule(
+    kernelModules.define({
+      manifest: {
+        id: 'spec.session.module',
+        version: '1.0.0',
+        apiVersion: 1,
+        provides: [ProbeCapability, OtherCapability],
+        requires: [],
+        optionalRequires: [],
+        permissions: [],
+        isolation: 'in-process' as const,
+      },
+      activate(context) {
+        context.registerService(
+          ProbeCapability,
+          kernelModules.callable({
+            read: { metadata: { permissions: [] }, invoke: () => 'probe' },
+          })
+        )
+        context.registerService(
+          OtherCapability,
+          kernelModules.callable({
+            read: { metadata: { permissions: [] }, invoke: () => 'other' },
+          })
+        )
+        return {}
+      },
+    })
+  )
   return new KernelService({
     host,
     kernelVersion: '0.0.0-spec',
@@ -87,11 +92,13 @@ const ProbeCapability = kernelModules.token('spec.probe', '1.0.0')
 const OtherCapability = kernelModules.token('spec.other', '1.0.0')
 
 /** 造一个提供 `spec.probe` 的模块；`onInvoke` 用来看 provider 代码有没有真的跑到。 */
-function probeModule(options: {
-  readonly onInvoke?: () => void
-  readonly permissions?: readonly string[]
-  readonly requires?: ReadonlyArray<{ readonly id: string }>
-} = {}) {
+function probeModule(
+  options: {
+    readonly onInvoke?: () => void
+    readonly permissions?: readonly string[]
+    readonly requires?: ReadonlyArray<{ readonly id: string }>
+  } = {}
+) {
   const permissions = options.permissions ?? ['spec:read']
   return kernelModules.define({
     manifest: {
@@ -115,7 +122,7 @@ function probeModule(options: {
               return 'probe'
             },
           },
-        }),
+        })
       )
       return {}
     },
@@ -138,7 +145,13 @@ describe('权限与调用路径', () => {
   test('INV-1 没注入权限策略时，任何声明了权限的操作一律拒绝', async () => {
     const kernel = createKernel()
     let invoked = false
-    kernel.registerModule(probeModule({ onInvoke: () => { invoked = true } }))
+    kernel.registerModule(
+      probeModule({
+        onInvoke: () => {
+          invoked = true
+        },
+      })
+    )
     await kernel.start()
 
     const failure = await kernel
@@ -179,10 +192,14 @@ describe('权限与调用路径', () => {
     const seen: string[] = []
     let invoked = false
     const kernel = createKernel({ permissionBroker: brokerAllowing(['spec:read'], seen) })
-    kernel.registerModule(probeModule({
-      permissions: ['spec:read', 'spec:write'],
-      onInvoke: () => { invoked = true },
-    }))
+    kernel.registerModule(
+      probeModule({
+        permissions: ['spec:read', 'spec:write'],
+        onInvoke: () => {
+          invoked = true
+        },
+      })
+    )
     await kernel.start()
 
     const failure = await kernel
@@ -209,26 +226,32 @@ describe('权限与调用路径', () => {
       },
     }
     const kernel = createKernel({ permissionBroker: broker })
-    kernel.registerModule(kernelModules.define({
-      manifest: {
-        id: 'spec.forger',
-        version: '1.0.0',
-        apiVersion: 1,
-        provides: [],
-        requires: [],
-        optionalRequires: [],
-        permissions: ['spec:read'],
-        isolation: 'in-process' as const,
-      },
-      activate(context) {
-        void context.permissions.request({
-          permission: 'spec:read',
-          // 模块多塞的键不会透传给宿主：宿主拿到的 moduleId / generation 只由内核填。
-          ...({ moduleId: 'spec.victim', generation: 99, callerModuleId: 'spec.victim' } as object),
-        })
-        return {}
-      },
-    }))
+    kernel.registerModule(
+      kernelModules.define({
+        manifest: {
+          id: 'spec.forger',
+          version: '1.0.0',
+          apiVersion: 1,
+          provides: [],
+          requires: [],
+          optionalRequires: [],
+          permissions: ['spec:read'],
+          isolation: 'in-process' as const,
+        },
+        activate(context) {
+          void context.permissions.request({
+            permission: 'spec:read',
+            // 模块多塞的键不会透传给宿主：宿主拿到的 moduleId / generation 只由内核填。
+            ...({
+              moduleId: 'spec.victim',
+              generation: 99,
+              callerModuleId: 'spec.victim',
+            } as object),
+          })
+          return {}
+        },
+      })
+    )
     await kernel.start()
     await Promise.resolve()
 
@@ -244,27 +267,29 @@ describe('模块图与快照', () => {
     let failure: unknown
     const kernel = createKernel()
     kernel.registerModule(probeModule())
-    kernel.registerModule(kernelModules.define({
-      manifest: {
-        id: 'spec.peeker',
-        version: '1.0.0',
-        apiVersion: 1,
-        provides: [OtherCapability],
-        requires: [],
-        optionalRequires: [],
-        permissions: [],
-        isolation: 'in-process' as const,
-      },
-      activate(context) {
-        context.registerService(OtherCapability, { peek: () => 'ok' })
-        try {
-          context.services.getOptional(ProbeCapability)
-        } catch (error) {
-          failure = error
-        }
-        return {}
-      },
-    }))
+    kernel.registerModule(
+      kernelModules.define({
+        manifest: {
+          id: 'spec.peeker',
+          version: '1.0.0',
+          apiVersion: 1,
+          provides: [OtherCapability],
+          requires: [],
+          optionalRequires: [],
+          permissions: [],
+          isolation: 'in-process' as const,
+        },
+        activate(context) {
+          context.registerService(OtherCapability, { peek: () => 'ok' })
+          try {
+            context.services.getOptional(ProbeCapability)
+          } catch (error) {
+            failure = error
+          }
+          return {}
+        },
+      })
+    )
     await kernel.start()
 
     expect((failure as { code?: string }).code).toBe(KernelErrorCodes.undeclaredCapabilityAccess)
@@ -273,19 +298,21 @@ describe('模块图与快照', () => {
 
   test('INV-8 组合快照只读、确定、冻结，依赖图解析不了也给得出', async () => {
     const kernel = createKernel({ lifecycleFailureMode: 'degrade' })
-    kernel.registerModule(kernelModules.define({
-      manifest: {
-        id: 'spec.needs-missing',
-        version: '1.0.0',
-        apiVersion: 1,
-        provides: [],
-        requires: [{ id: 'spec.absent' }],
-        optionalRequires: [],
-        permissions: [],
-        isolation: 'in-process' as const,
-      },
-      activate: () => ({}),
-    }))
+    kernel.registerModule(
+      kernelModules.define({
+        manifest: {
+          id: 'spec.needs-missing',
+          version: '1.0.0',
+          apiVersion: 1,
+          provides: [],
+          requires: [{ id: 'spec.absent' }],
+          optionalRequires: [],
+          permissions: [],
+          isolation: 'in-process' as const,
+        },
+        activate: () => ({}),
+      })
+    )
     await kernel.start()
 
     const snapshot = kernel.describeComposition()
@@ -308,7 +335,36 @@ describe('替换与事件隔离', () => {
 
     // 新代 ready 阶段抛错：整次替换回滚，现有代继续提供服务。
     const failure = await host
-      .replaceModule(kernelModules.define({
+      .replaceModule(
+        kernelModules.define({
+          manifest: {
+            id: 'spec.probe.module',
+            version: '2.0.0',
+            apiVersion: 1,
+            provides: [ProbeCapability],
+            requires: [],
+            optionalRequires: [],
+            permissions: ['spec:read'],
+            isolation: 'in-process' as const,
+          },
+          activate(context) {
+            context.registerService(ProbeCapability, kernelModules.callable({}))
+            return {
+              ready: () => {
+                throw new Error('新代就绪失败')
+              },
+            }
+          },
+        })
+      )
+      .catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(Error)
+    expect(before.isActive()).toBeTrue()
+    expect(host.getModule('spec.probe.module')?.generation).toBe(1)
+
+    // 替换成功：旧句柄立刻失效，新一代接管。
+    await host.replaceModule(
+      kernelModules.define({
         manifest: {
           id: 'spec.probe.module',
           version: '2.0.0',
@@ -321,31 +377,10 @@ describe('替换与事件隔离', () => {
         },
         activate(context) {
           context.registerService(ProbeCapability, kernelModules.callable({}))
-          return { ready: () => { throw new Error('新代就绪失败') } }
+          return {}
         },
-      }))
-      .catch((error: unknown) => error)
-    expect(failure).toBeInstanceOf(Error)
-    expect(before.isActive()).toBeTrue()
-    expect(host.getModule('spec.probe.module')?.generation).toBe(1)
-
-    // 替换成功：旧句柄立刻失效，新一代接管。
-    await host.replaceModule(kernelModules.define({
-      manifest: {
-        id: 'spec.probe.module',
-        version: '2.0.0',
-        apiVersion: 1,
-        provides: [ProbeCapability],
-        requires: [],
-        optionalRequires: [],
-        permissions: ['spec:read'],
-        isolation: 'in-process' as const,
-      },
-      activate(context) {
-        context.registerService(ProbeCapability, kernelModules.callable({}))
-        return {}
-      },
-    }))
+      })
+    )
     expect(before.isActive()).toBeFalse()
     expect(host.getModule('spec.probe.module')?.generation).toBe(2)
     await host.dispose()
@@ -354,28 +389,34 @@ describe('替换与事件隔离', () => {
   test('INV-7 一个事件订阅者失败不影响其他订阅者与发布方', async () => {
     const kernel = createKernel()
     const delivered: string[] = []
-    kernel.registerModule(kernelModules.define({
-      manifest: {
-        id: 'spec.publisher',
-        version: '1.0.0',
-        apiVersion: 1,
-        provides: [],
-        requires: [],
-        optionalRequires: [],
-        permissions: [],
-        isolation: 'in-process' as const,
-      },
-      activate(context) {
-        context.events.subscribe('spec.ping', () => { throw new Error('订阅者自己炸了') })
-        context.events.subscribe('spec.ping', () => { delivered.push('second') })
-        return {
-          async ready() {
-            await context.events.publish('spec.ping', { at: 1 })
-            delivered.push('publisher-survived')
-          },
-        }
-      },
-    }))
+    kernel.registerModule(
+      kernelModules.define({
+        manifest: {
+          id: 'spec.publisher',
+          version: '1.0.0',
+          apiVersion: 1,
+          provides: [],
+          requires: [],
+          optionalRequires: [],
+          permissions: [],
+          isolation: 'in-process' as const,
+        },
+        activate(context) {
+          context.events.subscribe('spec.ping', () => {
+            throw new Error('订阅者自己炸了')
+          })
+          context.events.subscribe('spec.ping', () => {
+            delivered.push('second')
+          })
+          return {
+            async ready() {
+              await context.events.publish('spec.ping', { at: 1 })
+              delivered.push('publisher-survived')
+            },
+          }
+        },
+      })
+    )
     await kernel.start()
 
     expect(delivered).toEqual(['second', 'publisher-survived'])
@@ -532,8 +573,9 @@ describe('配对与更新器', () => {
 
     const rejected = await updater.ensureInstalled('1.1.0').catch((error: unknown) => error)
     expect((rejected as { code?: string }).code).toBe(KernelUpdaterErrorCodes.digestMismatch)
-    expect((await updater.listInstalledVersions()).filter((entry) => entry.complete))
-      .toHaveLength(1)
+    expect((await updater.listInstalledVersions()).filter((entry) => entry.complete)).toHaveLength(
+      1
+    )
 
     // 健康检查不过：指针恢复成切换前那一个。
     await updater.ensureInstalled('1.0.0')

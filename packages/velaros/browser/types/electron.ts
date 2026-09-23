@@ -1,10 +1,19 @@
 import type electron from 'electron'
 
-import type { BrowserExternalPageLauncher,BrowserPageDriver, BrowserSystemPointerDriver } from '../contract/requires.js'
+import type {
+  BrowserExternalPageLauncher,
+  BrowserPageDriver,
+  BrowserSystemPointerDriver,
+} from '../contract/requires.js'
 
-import type { BrowserNavigationHistoryRestore, BrowserPageDiagnosticEntry, BrowserUserActivityEvent, BrowserViewportOptions } from './browser'
+import type {
+  BrowserNavigationHistoryRestore,
+  BrowserPageDiagnosticEntry,
+  BrowserUserActivityEvent,
+  BrowserViewportOptions,
+} from './browser'
 import type { BrowserScreenshotCaptureRegion, BrowserSiteContext } from './browser.js'
-import type { BrowserPageDriverKernel,BrowserPageDriverSession } from './runtime.js'
+import type { BrowserPageDriverKernel, BrowserPageDriverSession } from './runtime.js'
 import type { BrowserUserActivitySummary } from './session'
 
 /** 在内嵌页面里求值时的期限参数。 */
@@ -51,11 +60,11 @@ export interface BrowserScreenshotImageCapture {
   capture: BrowserScreenshotCaptureRegion
 }
 
-export type WebContentsListener = (...args: any[]) => void;
+export type WebContentsListener = (...args: any[]) => void
 
 export interface SharedWebContentsEvent {
-  readonly dispatch: WebContentsListener;
-  readonly subscribers: Set<WebContentsListener>;
+  readonly dispatch: WebContentsListener
+  readonly subscribers: Set<WebContentsListener>
 }
 
 export interface BrowserJavaScriptDialogDetails {
@@ -82,9 +91,7 @@ export type BrowserPopupNavigationResolution =
   | { kind: 'deny'; reason: string }
 
 export type BrowserPopupUrlResolution =
-  | { kind: 'route'; url: string }
-  | { kind: 'bootstrap' }
-  | { kind: 'deny'; reason: string }
+  { kind: 'route'; url: string } | { kind: 'bootstrap' } | { kind: 'deny'; reason: string }
 
 /** 统一的页面 driver 会话：webview 与外部 CDP 二选一，driver 面向多态调用。 */
 export interface BrowserRuntimePageDriverSession extends BrowserPageDriverSession {
@@ -156,8 +163,9 @@ export interface BrowserUnmanagedPermissionRequest {
   embeddingOrigin: Nullable<string>
 }
 
-export type BrowserPermissionRequestHandler =
-  NonNullable<Parameters<electron.Session['setPermissionRequestHandler']>[0]>
+export type BrowserPermissionRequestHandler = NonNullable<
+  Parameters<electron.Session['setPermissionRequestHandler']>[0]
+>
 
 export type BrowserPermissionRequestHandlerRegistration = (
   electronSession: electron.Session,

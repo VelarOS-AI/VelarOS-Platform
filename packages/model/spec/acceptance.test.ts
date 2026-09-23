@@ -58,7 +58,7 @@ async function activate(registry: ModelAdapterRegistryApi) {
   const context = {
     registerService<TService extends object>(
       token: CapabilityToken<TService>,
-      registered: TService,
+      registered: TService
     ) {
       expect(token.id).toBe(ModelCapability.id)
       service = registered as unknown as ModelRuntimeCapabilityService
@@ -79,10 +79,10 @@ describe('model 不变量验收', () => {
         if (ownModels.includes(foreignModel)) continue
         const resolution = modelCatalog.resolveModelSelection(manifest.id, foreignModel)
         const keptRequested = resolution.model === foreignModel && !resolution.didFallback
-        const fellBackWithinProvider = ownModels.includes(resolution.model)
-          || resolution.model === foreignModel
+        const fellBackWithinProvider =
+          ownModels.includes(resolution.model) || resolution.model === foreignModel
         expect(`${manifest.id}/${foreignModel}:${keptRequested || fellBackWithinProvider}`).toBe(
-          `${manifest.id}/${foreignModel}:true`,
+          `${manifest.id}/${foreignModel}:true`
         )
       }
     }
@@ -186,8 +186,9 @@ describe('model 不变量验收', () => {
     ).toBe(true)
     // wire 面只有这一条：注册表的另外两个方法只给同进程持有服务的宿主直调，不进内核操作表。
     expect(await invokeFailureCode('create_language_model', {})).toBe('OPERATION_NOT_FOUND')
-    expect(await invokeFailureCode('supports_provider', { provider: 'openai', extra: 1 }))
-      .toBe('VALIDATION')
+    expect(await invokeFailureCode('supports_provider', { provider: 'openai', extra: 1 })).toBe(
+      'VALIDATION'
+    )
     expect(await invokeFailureCode('supports_provider', {})).toBe('VALIDATION')
   })
 
@@ -255,9 +256,18 @@ test('INV-12 凭据探测使用供应商鉴权端点，缺密钥不发请求', a
     },
   })
   const service = runtime.providerModelCatalogService
-  expect(await service.validateProviderRuntime({ provider: 'openai', apiKey: '', baseURL: '' }))
-    .toEqual({ ok: false, message: null })
+  expect(
+    await service.validateProviderRuntime({ provider: 'openai', apiKey: '', baseURL: '' })
+  ).toEqual({ ok: false, message: null })
   expect(urls).toEqual([])
-  expect((await service.validateProviderRuntime({ provider: 'openrouter', apiKey: 'fixture', baseURL: '' })).ok).toBe(false)
+  expect(
+    (
+      await service.validateProviderRuntime({
+        provider: 'openrouter',
+        apiKey: 'fixture',
+        baseURL: '',
+      })
+    ).ok
+  ).toBe(false)
   expect(urls).toEqual(['https://openrouter.ai/api/v1/key'])
 })

@@ -102,7 +102,7 @@ export interface KernelModuleActivateContext {
   /** 注册一件自己清单里声明提供的能力；没声明过的令牌当场拒绝。 */
   registerService<TService extends object>(
     token: CapabilityToken<TService>,
-    service: TService,
+    service: TService
   ): KernelRegistration
 }
 
@@ -112,14 +112,32 @@ export interface KernelEventSubscription {
   dispose(): void | Promise<void>
 }
 
-import type { InvocationReceipt, InvocationRecord, ModuleBinding, ModuleDescription, ModulePage, ModuleQuery, OperationCall,OperationReadStamp, OperationReadValidation } from '../types/operations.js'
+import type {
+  InvocationReceipt,
+  InvocationRecord,
+  ModuleBinding,
+  ModuleDescription,
+  ModulePage,
+  ModuleQuery,
+  OperationCall,
+  OperationReadStamp,
+  OperationReadValidation,
+} from '../types/operations.js'
 
 /** 模块发现、租约与调用共用的运行时。 */
 export interface OperationRuntimeApi {
   /** 核验原始回执、当前授权和资源版本；不重跑原操作。 */
-  validateReads(sessionId: string, reads: readonly OperationReadStamp[], signal?: AbortSignal): Promise<OperationReadValidation>
+  validateReads(
+    sessionId: string,
+    reads: readonly OperationReadStamp[],
+    signal?: AbortSignal
+  ): Promise<OperationReadValidation>
   /** 宿主请求只读核对未知效果，未提供领域核对器时返回原记录。 */
-  reconcile(sessionId: string, id: string, signal?: AbortSignal): Promise<Nullable<InvocationRecord>>
+  reconcile(
+    sessionId: string,
+    id: string,
+    signal?: AbortSignal
+  ): Promise<Nullable<InvocationRecord>>
   /** 激活依赖和模块；重复调用复用同一启动。 */
   start(): Promise<void>
   /** 有界查询模块卡片。 */
@@ -136,8 +154,7 @@ export interface OperationRuntimeApi {
   dispose(): Promise<void>
 }
 
-
-import type { ModelHistoryMessage,ModelResponseFormat,ModelTurnRequest } from '../types/model.js'
+import type { ModelHistoryMessage, ModelResponseFormat, ModelTurnRequest } from '../types/model.js'
 
 /** 中立请求的实际文本编码口，供编译器与供应商适配器共用。 */
 export interface ModelRequestEncoderApi {

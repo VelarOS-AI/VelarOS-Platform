@@ -184,7 +184,13 @@ declare module 'velaros:project' {
     | ({ action: 'overwrite'; text: string } & ProjectStepSource)
     | ({ action: 'move'; to: string } & ProjectStepSource)
     | ({ action: 'delete' } & ProjectStepSource)
-    | { action: 'recode'; paths: string[]; encoding?: ProjectRecodeEncoding; bom?: boolean; newline?: ProjectRecodeNewline }
+    | {
+        action: 'recode'
+        paths: string[]
+        encoding?: ProjectRecodeEncoding
+        bom?: boolean
+        newline?: ProjectRecodeNewline
+      }
     | ({ action: 'edit'; edits: ProjectContentEdit[] } & ProjectStepSource)
 
   /** recode 的结果：哪些文件从什么格式转成了什么格式，哪些本来就是目标格式、没动。 */
@@ -227,7 +233,13 @@ declare module 'velaros:project' {
    */
   type ProjectContentEdit =
     | { op: 'replace'; range?: ProjectLineRange; match?: string; text: string }
-    | { op: 'insert'; range?: ProjectLineRange; match?: string; side: 'before' | 'after'; text: string }
+    | {
+        op: 'insert'
+        range?: ProjectLineRange
+        match?: string
+        side: 'before' | 'after'
+        text: string
+      }
     | { op: 'insert'; at: 'start' | 'end'; text: string }
 
   /** 读项目里的文本文件：交回带行号的窗口，每个窗口带 fileRef。看图用 `velaros:images`，目录用 list。

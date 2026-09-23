@@ -18,7 +18,10 @@ export function buildMarkItDownCommand(input: {
   inputPath: string
   outputPath?: string
 }): OfficeNativeCommand {
-  return { file: input.launch.command, args: [input.inputPath, ...(input.outputPath ? ['-o', input.outputPath] : [])] }
+  return {
+    file: input.launch.command,
+    args: [input.inputPath, ...(input.outputPath ? ['-o', input.outputPath] : [])],
+  }
 }
 
 /** LibreOffice 的候选命令名，按优先级排列；最后一个是 macOS 上 App 包里的可执行文件。 */

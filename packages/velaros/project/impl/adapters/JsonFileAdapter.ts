@@ -6,7 +6,13 @@
 import { AppError } from '@velaros-ai/core/error'
 
 import type { FileAdapter } from '../../contract/requires.js'
-import type { AdapterCapability, AdapterKind, AdapterValidateInput, ParseInput, ParseResult } from '../../types/adapter.js'
+import type {
+  AdapterCapability,
+  AdapterKind,
+  AdapterValidateInput,
+  ParseInput,
+  ParseResult,
+} from '../../types/adapter.js'
 import type { ValidationResult } from '../../types/validation.js'
 
 export class JsonFileAdapter implements FileAdapter {
@@ -23,7 +29,14 @@ export class JsonFileAdapter implements FileAdapter {
     } catch (error) {
       return {
         ok: false,
-        diagnostics: [{ severity: 'error', message: `JSON 解析失败：${AppError.getMessage(error)}`, path: snapshot.path, source: this.id }],
+        diagnostics: [
+          {
+            severity: 'error',
+            message: `JSON 解析失败：${AppError.getMessage(error)}`,
+            path: snapshot.path,
+            source: this.id,
+          },
+        ],
       }
     }
   }
@@ -36,7 +49,14 @@ export class JsonFileAdapter implements FileAdapter {
     } catch (error) {
       return {
         ok: false,
-        diagnostics: [{ severity: 'error', message: `JSON 校验失败：${AppError.getMessage(error)}`, path: snapshot.path, source: this.id }],
+        diagnostics: [
+          {
+            severity: 'error',
+            message: `JSON 校验失败：${AppError.getMessage(error)}`,
+            path: snapshot.path,
+            source: this.id,
+          },
+        ],
         checks: [{ id: this.id, ok: false }],
       }
     }

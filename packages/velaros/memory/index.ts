@@ -12,4 +12,8 @@ export { memoryOperations } from './impl/MemoryOperations.js'
 export { createMemoryStore } from './impl/MemoryStore.js'
 
 // ── 注入面：宿主要给的东西 ──────────────────────────────────────
-export type { MemoryOperationContext, MemoryScopePort, MemoryStoreOptions } from './contract/requires.js'
+export type {
+  MemoryOperationContext,
+  MemoryScopePort,
+  MemoryStoreOptions,
+} from './contract/requires.js'

@@ -3,7 +3,11 @@
  */
 
 import type { ProjectChangeFeed } from '../../contract/provides.js'
-import type { ProjectChangeListener, ProjectChangeListOptions, ProjectChangeRecord } from '../../types/change-feed.js'
+import type {
+  ProjectChangeListener,
+  ProjectChangeListOptions,
+  ProjectChangeRecord,
+} from '../../types/change-feed.js'
 import type { ApplyResult, RollbackResult } from '../../types/edit.js'
 import type { ProjectTransactionInput } from '../../types/transaction.js'
 import { normalizeTransactionId } from '../../utils/transactions/change-records.js'
@@ -50,6 +54,8 @@ export class ProjectTransactionController implements ProjectTransactionControlle
 }
 
 /** 把有限事务面绑到生产者用的同一个内核实例上，交给界面那一侧。 */
-export function createProjectTransactionController(project: Pick<ProjectKernel, 'applyEdit' | 'changeFeed' | 'rollback'>): ProjectTransactionControllerApi {
+export function createProjectTransactionController(
+  project: Pick<ProjectKernel, 'applyEdit' | 'changeFeed' | 'rollback'>
+): ProjectTransactionControllerApi {
   return new ProjectTransactionController(project)
 }

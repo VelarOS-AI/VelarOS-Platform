@@ -25,4 +25,5 @@ export class ProjectVerificationPolicy implements ProjectVerificationPolicyApi {
 }
 
 /** 整个进程唯一的一份验证判据。 */
-export const projectVerificationPolicy: ProjectVerificationPolicyApi = new ProjectVerificationPolicy()
+export const projectVerificationPolicy: ProjectVerificationPolicyApi =
+  new ProjectVerificationPolicy()

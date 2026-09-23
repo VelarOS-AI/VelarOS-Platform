@@ -32,13 +32,18 @@ const RepoRoot = resolve(import.meta.dir, '../..')
 const Steps = ['imports', 'entries', 'barrels', 'all']
 const [packageArg, stepArg, ...flags] = process.argv.slice(2)
 if (!packageArg || !Steps.includes(stepArg)) {
-  console.error('用法：bun scripts/ownership/debarrel.mjs <包目录> <imports|entries|barrels|all> [--dry-run] [--no-sort]')
+  console.error(
+    '用法：bun scripts/ownership/debarrel.mjs <包目录> <imports|entries|barrels|all> [--dry-run] [--no-sort]'
+  )
   process.exit(2)
 }
 const dryRun = flags.includes('--dry-run')
 const sortAfterWrite = !flags.includes('--no-sort')
 const packageRoot = resolve(RepoRoot, packageArg)
-if (!packageRoot.startsWith(`${RepoRoot}${sep}packages${sep}`) || !existsSync(join(packageRoot, 'package.json'))) {
+if (
+  !packageRoot.startsWith(`${RepoRoot}${sep}packages${sep}`) ||
+  !existsSync(join(packageRoot, 'package.json'))
+) {
   console.error(`包目录必须是 packages/ 下带 package.json 的目录：${packageRoot}`)
   process.exit(2)
 }
@@ -67,7 +72,10 @@ function walk(directory) {
 function loadCompilerOptions() {
   const configPath = join(packageRoot, 'tsconfig.json')
   const { config, error } = ts.readConfigFile(configPath, ts.sys.readFile)
-  if (error) throw new Error(`读不了 ${configPath}：${ts.flattenDiagnosticMessageText(error.messageText, '\n')}`)
+  if (error)
+    throw new Error(
+      `读不了 ${configPath}：${ts.flattenDiagnosticMessageText(error.messageText, '\n')}`
+    )
   const parsed = ts.parseJsonConfigFileContent(config, ts.sys, packageRoot)
   return { ...parsed.options, noEmit: true }
 }
@@ -77,9 +85,15 @@ const compilerOptions = loadCompilerOptions()
 function entryFiles() {
   const entries = new Map()
   for (const [subpath, definition] of Object.entries(manifest.exports ?? {})) {
-    const target = typeof definition === 'string' ? definition : definition?.import ?? definition?.default ?? definition?.types
+    const target =
+      typeof definition === 'string'
+        ? definition
+        : (definition?.import ?? definition?.default ?? definition?.types)
     if (typeof target !== 'string' || !target.startsWith('./dist/')) continue
-    const source = resolve(packageRoot, target.replace(/^\.\/dist\//u, 'src/').replace(/\.d\.ts$|\.js$/u, '.ts'))
+    const source = resolve(
+      packageRoot,
+      target.replace(/^\.\/dist\//u, 'src/').replace(/\.d\.ts$|\.js$/u, '.ts')
+    )
     if (!existsSync(source)) throw new Error(`入口 ${subpath} 找不到源文件 ${show(source)}`)
     entries.set(source, subpath)
   }
@@ -91,7 +105,9 @@ const entries = entryFiles()
 function detectSpecifierStyle(files) {
   const counts = { js: 0, ts: 0, none: 0 }
   for (const file of files) {
-    for (const match of readFileSync(file, 'utf8').matchAll(/\bfrom\s+['"](\.{1,2}\/[^'"]*)['"]/gu)) {
+    for (const match of readFileSync(file, 'utf8').matchAll(
+      /\bfrom\s+['"](\.{1,2}\/[^'"]*)['"]/gu
+    )) {
       if (/\.js$/u.test(match[1])) counts.js += 1
       else if (/\.tsx?$/u.test(match[1])) counts.ts += 1
       else if (!/\.[cm]?[jt]sx?$|\.json$/u.test(match[1])) counts.none += 1
@@ -105,9 +121,15 @@ function createProgram(overlay = new Map()) {
   const host = ts.createCompilerHost(compilerOptions, true)
   const readFile = host.readFile.bind(host)
   const fileExists = host.fileExists.bind(host)
-  host.readFile = (fileName) => (overlay.has(resolve(fileName)) ? overlay.get(resolve(fileName)) ?? undefined : readFile(fileName))
-  host.fileExists = (fileName) => (overlay.has(resolve(fileName)) ? overlay.get(resolve(fileName)) !== null : fileExists(fileName))
-  const rootNames = ScannedDirectories.flatMap((directory) => walk(join(packageRoot, directory))).filter((file) => overlay.get(file) !== null)
+  host.readFile = (fileName) =>
+    overlay.has(resolve(fileName))
+      ? (overlay.get(resolve(fileName)) ?? undefined)
+      : readFile(fileName)
+  host.fileExists = (fileName) =>
+    overlay.has(resolve(fileName)) ? overlay.get(resolve(fileName)) !== null : fileExists(fileName)
+  const rootNames = ScannedDirectories.flatMap((directory) =>
+    walk(join(packageRoot, directory))
+  ).filter((file) => overlay.get(file) !== null)
   const program = ts.createProgram({ rootNames, options: compilerOptions, host })
   return { program, checker: program.getTypeChecker(), cache: new Map() }
 }
@@ -115,7 +137,8 @@ function createProgram(overlay = new Map()) {
 /** 文件在不在包的 src 里（.d.ts 不算：它们不是 import 的目标）。 */
 const isPackageSource = (file) => file.startsWith(`${sourceRoot}${sep}`) && !file.endsWith('.d.ts')
 /** 模块路径是不是包名自引用。 */
-const isSelfReference = (specifier) => specifier === packageName || specifier.startsWith(`${packageName}/`)
+const isSelfReference = (specifier) =>
+  specifier === packageName || specifier.startsWith(`${packageName}/`)
 
 /** 模块路径被类型检查器解析到的源文件；解析不到或是环境模块声明时返回 null。 */
 function moduleFileOf(context, moduleSpecifier) {
@@ -125,28 +148,47 @@ function moduleFileOf(context, moduleSpecifier) {
 }
 
 /** 语句是不是带模块路径的 import / export from。 */
-const isModuleStatement = (statement) => (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)
+const isModuleStatement = (statement) =>
+  (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) &&
+  statement.moduleSpecifier &&
+  ts.isStringLiteral(statement.moduleSpecifier)
 
 /** 文件里是不是只有转发语句（export … from），也就是 barrel 或纯转发入口。 */
 function isForwardingOnly(sourceFile) {
-  return sourceFile.statements.length > 0 && sourceFile.statements.every((statement) => ts.isExportDeclaration(statement) && statement.moduleSpecifier)
+  return (
+    sourceFile.statements.length > 0 &&
+    sourceFile.statements.every(
+      (statement) => ts.isExportDeclaration(statement) && statement.moduleSpecifier
+    )
+  )
 }
 
 /** 绑定模式里声明的全部名字（`export const { a, b } = …`）。 */
 function bindingNames(name) {
   if (ts.isIdentifier(name)) return [name.text]
-  return name.elements.flatMap((element) => (ts.isOmittedExpression(element) ? [] : bindingNames(element.name)))
+  return name.elements.flatMap((element) =>
+    ts.isOmittedExpression(element) ? [] : bindingNames(element.name)
+  )
 }
 
 /** 顶层语句自己声明并导出的名字。 */
 function exportedDeclarationNames(statement) {
   if (ts.isExportAssignment(statement)) return statement.isExportEquals ? [] : ['default']
-  const modifiers = ts.canHaveModifiers(statement) ? ts.getModifiers(statement) ?? [] : []
+  const modifiers = ts.canHaveModifiers(statement) ? (ts.getModifiers(statement) ?? []) : []
   if (!modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) return []
-  if (modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)) return ['default']
-  if (ts.isVariableStatement(statement)) return statement.declarationList.declarations.flatMap((declaration) => bindingNames(declaration.name))
-  const named = ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isInterfaceDeclaration(statement)
-    || ts.isTypeAliasDeclaration(statement) || ts.isEnumDeclaration(statement) || ts.isModuleDeclaration(statement)
+  if (modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword))
+    return ['default']
+  if (ts.isVariableStatement(statement))
+    return statement.declarationList.declarations.flatMap((declaration) =>
+      bindingNames(declaration.name)
+    )
+  const named =
+    ts.isFunctionDeclaration(statement) ||
+    ts.isClassDeclaration(statement) ||
+    ts.isInterfaceDeclaration(statement) ||
+    ts.isTypeAliasDeclaration(statement) ||
+    ts.isEnumDeclaration(statement) ||
+    ts.isModuleDeclaration(statement)
   return named && statement.name && ts.isIdentifier(statement.name) ? [statement.name.text] : []
 }
 
@@ -155,12 +197,19 @@ function importBinding(sourceFile, localName) {
   for (const statement of sourceFile.statements) {
     if (!ts.isImportDeclaration(statement) || !statement.importClause) continue
     const clause = statement.importClause
-    if (clause.name?.text === localName) return { statement, imported: 'default', typeOnly: clause.isTypeOnly }
+    if (clause.name?.text === localName)
+      return { statement, imported: 'default', typeOnly: clause.isTypeOnly }
     const bindings = clause.namedBindings
-    if (bindings && ts.isNamespaceImport(bindings) && bindings.name.text === localName) return { statement, imported: '*', typeOnly: clause.isTypeOnly }
+    if (bindings && ts.isNamespaceImport(bindings) && bindings.name.text === localName)
+      return { statement, imported: '*', typeOnly: clause.isTypeOnly }
     if (bindings && ts.isNamedImports(bindings)) {
       for (const element of bindings.elements) {
-        if (element.name.text === localName) return { statement, imported: (element.propertyName ?? element.name).text, typeOnly: clause.isTypeOnly || element.isTypeOnly }
+        if (element.name.text === localName)
+          return {
+            statement,
+            imported: (element.propertyName ?? element.name).text,
+            typeOnly: clause.isTypeOnly || element.isTypeOnly,
+          }
       }
     }
   }
@@ -185,7 +234,10 @@ function attachedComments(sourceFile, statement) {
 /** 外部模块（不在包的 src 里）有没有导出这个名字。 */
 function externalModuleExports(context, moduleSpecifier, name) {
   const symbol = context.checker.getSymbolAtLocation(moduleSpecifier)
-  return !!symbol && context.checker.getExportsOfModule(symbol).some((exported) => exported.name === name)
+  return (
+    !!symbol &&
+    context.checker.getExportsOfModule(symbol).some((exported) => exported.name === name)
+  )
 }
 
 /**
@@ -209,43 +261,85 @@ function traceExport(context, file, name, seen = new Set()) {
 function traceExportUncached(context, file, name, seen) {
   const sourceFile = context.program.getSourceFile(file)
   if (!sourceFile) return null
-  if (sourceFile.statements.some((statement) => exportedDeclarationNames(statement).includes(name))) {
+  if (
+    sourceFile.statements.some((statement) => exportedDeclarationNames(statement).includes(name))
+  ) {
     return { file, name, typeOnly: false, hops: [{ file, name, explicit: false, comments: [] }] }
   }
   for (const statement of sourceFile.statements) {
     if (!ts.isExportDeclaration(statement) || !statement.exportClause) continue
     const here = { file, name, explicit: true, comments: attachedComments(sourceFile, statement) }
     if (ts.isNamespaceExport(statement.exportClause)) {
-      if (statement.exportClause.name.text === name) return { namespace: statement.moduleSpecifier.text, typeOnly: statement.isTypeOnly, hops: [here] }
+      if (statement.exportClause.name.text === name)
+        return {
+          namespace: statement.moduleSpecifier.text,
+          typeOnly: statement.isTypeOnly,
+          hops: [here],
+        }
       continue
     }
-    const element = statement.exportClause.elements.find((candidate) => candidate.name.text === name)
+    const element = statement.exportClause.elements.find(
+      (candidate) => candidate.name.text === name
+    )
     if (!element) continue
     const inner = (element.propertyName ?? element.name).text
-    let next = { moduleSpecifier: statement.moduleSpecifier, imported: inner, typeOnly: statement.isTypeOnly || element.isTypeOnly }
+    let next = {
+      moduleSpecifier: statement.moduleSpecifier,
+      imported: inner,
+      typeOnly: statement.isTypeOnly || element.isTypeOnly,
+    }
     if (!statement.moduleSpecifier) {
       const binding = importBinding(sourceFile, inner)
       // 本文件自己的声明，只是换了个名字导出：声明文件就是这里，导出名是 name。
       if (!binding) return { file, name, typeOnly: next.typeOnly, hops: [here] }
-      if (binding.imported === '*') return { namespace: binding.statement.moduleSpecifier.text, typeOnly: next.typeOnly || binding.typeOnly, hops: [here] }
-      next = { moduleSpecifier: binding.statement.moduleSpecifier, imported: binding.imported, typeOnly: next.typeOnly || binding.typeOnly }
+      if (binding.imported === '*')
+        return {
+          namespace: binding.statement.moduleSpecifier.text,
+          typeOnly: next.typeOnly || binding.typeOnly,
+          hops: [here],
+        }
+      next = {
+        moduleSpecifier: binding.statement.moduleSpecifier,
+        imported: binding.imported,
+        typeOnly: next.typeOnly || binding.typeOnly,
+      }
     }
     const target = moduleFileOf(context, next.moduleSpecifier)
-    if (!target || !isPackageSource(target)) return { external: next.moduleSpecifier.text, name: next.imported, typeOnly: next.typeOnly, hops: [here] }
+    if (!target || !isPackageSource(target))
+      return {
+        external: next.moduleSpecifier.text,
+        name: next.imported,
+        typeOnly: next.typeOnly,
+        hops: [here],
+      }
     const found = traceExport(context, target, next.imported, seen)
-    return found && { ...found, typeOnly: found.typeOnly || next.typeOnly, hops: [here, ...found.hops] }
+    return (
+      found && { ...found, typeOnly: found.typeOnly || next.typeOnly, hops: [here, ...found.hops] }
+    )
   }
   const candidates = []
   for (const statement of sourceFile.statements) {
-    if (!ts.isExportDeclaration(statement) || statement.exportClause || !statement.moduleSpecifier) continue
+    if (!ts.isExportDeclaration(statement) || statement.exportClause || !statement.moduleSpecifier)
+      continue
     const here = { file, name, explicit: false, comments: [] }
     const target = moduleFileOf(context, statement.moduleSpecifier)
     if (!target || !isPackageSource(target)) {
-      if (externalModuleExports(context, statement.moduleSpecifier, name)) candidates.push({ external: statement.moduleSpecifier.text, name, typeOnly: statement.isTypeOnly, hops: [here] })
+      if (externalModuleExports(context, statement.moduleSpecifier, name))
+        candidates.push({
+          external: statement.moduleSpecifier.text,
+          name,
+          typeOnly: statement.isTypeOnly,
+          hops: [here],
+        })
       continue
     }
     const found = traceExport(context, target, name, new Set(seen))
-    if (found) candidates.push({ ...found, typeOnly: found.typeOnly || statement.isTypeOnly, hops: [here, ...found.hops] })
+    if (found)
+      candidates.push({
+        ...found,
+        typeOnly: found.typeOnly || statement.isTypeOnly,
+        hops: [here, ...found.hops],
+      })
   }
   if (candidates.length === 0) return null
   // 同一个名字经几条 export * 到达：只要有一条不是只转发类型，它就不是只有类型。
@@ -267,13 +361,21 @@ function unwrapAlias(checker, symbol) {
 function exportedSymbol(context, file, name) {
   const sourceFile = context.program.getSourceFile(file)
   const moduleSymbol = sourceFile && context.checker.getSymbolAtLocation(sourceFile)
-  const symbol = moduleSymbol && context.checker.getExportsOfModule(moduleSymbol).find((candidate) => candidate.name === name)
+  const symbol =
+    moduleSymbol &&
+    context.checker.getExportsOfModule(moduleSymbol).find((candidate) => candidate.name === name)
   return symbol ? unwrapAlias(context.checker, symbol) : null
 }
 
 /** 声明的身份：声明所在文件（包内相对）加符号名，跨两次建程序可比。 */
 function identityOf(symbol) {
-  const files = [...new Set((symbol?.declarations ?? []).map((declaration) => relative(RepoRoot, resolve(declaration.getSourceFile().fileName))))].sort()
+  const files = [
+    ...new Set(
+      (symbol?.declarations ?? []).map((declaration) =>
+        relative(RepoRoot, resolve(declaration.getSourceFile().fileName))
+      )
+    ),
+  ].sort()
   return symbol ? `${files.join('+')}::${symbol.escapedName}` : '<无法解析>'
 }
 
@@ -295,7 +397,8 @@ function specifierFor(fromFile, targetFile, style) {
 /** 渲染一条命名的 import / export from。record：{ kind, typeOnly, specifier, quote, semicolon, multiline, elements }。 */
 function renderStatement(record) {
   const names = record.elements.map((element) => {
-    const text = element.imported === element.local ? element.local : `${element.imported} as ${element.local}`
+    const text =
+      element.imported === element.local ? element.local : `${element.imported} as ${element.local}`
     return element.typeOnly && !record.typeOnly ? `type ${text}` : text
   })
   const head = `${record.kind} ${record.typeOnly ? 'type ' : ''}`
@@ -317,13 +420,19 @@ function recordOf(statement, sourceFile) {
     quote: statement.moduleSpecifier.getText(sourceFile)[0],
     semicolon: statement.getText(sourceFile).trimEnd().endsWith(';'),
     multiline: bindings.getText(sourceFile).includes('\n'),
-    elements: bindings.elements.map((element) => ({ imported: (element.propertyName ?? element.name).text, local: element.name.text, typeOnly: typeOnly || element.isTypeOnly })),
+    elements: bindings.elements.map((element) => ({
+      imported: (element.propertyName ?? element.name).text,
+      local: element.name.text,
+      typeOnly: typeOnly || element.isTypeOnly,
+    })),
   }
 }
 
 /** 花括号里夹着注释的语句：重新渲染会丢注释，不往里并名字，要改它时停下来人工处理。 */
 function hasInnerComments(statement, sourceFile) {
-  const bindings = ts.isImportDeclaration(statement) ? statement.importClause?.namedBindings : statement.exportClause
+  const bindings = ts.isImportDeclaration(statement)
+    ? statement.importClause?.namedBindings
+    : statement.exportClause
   return !!bindings && /\/\/|\/\*/u.test(bindings.getText(sourceFile))
 }
 
@@ -331,7 +440,9 @@ function hasInnerComments(statement, sourceFile) {
 function isNamedOnly(statement) {
   if (ts.isImportDeclaration(statement)) {
     const clause = statement.importClause
-    return !!clause && !clause.name && !!clause.namedBindings && ts.isNamedImports(clause.namedBindings)
+    return (
+      !!clause && !clause.name && !!clause.namedBindings && ts.isNamedImports(clause.namedBindings)
+    )
   }
   return !!statement.exportClause && ts.isNamedExports(statement.exportClause)
 }
@@ -360,30 +471,57 @@ function rewriteImports(context, file, style) {
     const where = `${show(file)}:${sourceFile.getLineAndCharacterOfPosition(statement.getStart(sourceFile)).line + 1}`
     if (self) selfReferences += 1
     if (self && (!target || !isPackageSource(target))) {
-      leftovers.push(`${where} ${specifier}：包名没有被 tsconfig paths 映射到 src，解析不到，原样留下`)
+      leftovers.push(
+        `${where} ${specifier}：包名没有被 tsconfig paths 映射到 src，解析不到，原样留下`
+      )
       continue
     }
     const relativeTarget = specifierFor(file, target, style)
     if (!isNamedOnly(statement)) {
-      const form = ts.isImportDeclaration(statement) ? (statement.importClause ? '默认或命名空间导入' : '副作用导入') : 'export *'
+      const form = ts.isImportDeclaration(statement)
+        ? statement.importClause
+          ? '默认或命名空间导入'
+          : '副作用导入'
+        : 'export *'
       if (self) records.push({ statement, record: null, replaceSpecifier: relativeTarget })
-      if (self || isForwardingOnly(context.program.getSourceFile(target))) leftovers.push(`${where} ${form}（${specifier}）拆不了，原样留下${self ? '，只把包名改成相对路径' : ''}`)
+      if (self || isForwardingOnly(context.program.getSourceFile(target)))
+        leftovers.push(
+          `${where} ${form}（${specifier}）拆不了，原样留下${self ? '，只把包名改成相对路径' : ''}`
+        )
       continue
     }
     const record = recordOf(statement, sourceFile)
     const kept = []
-    const elements = ts.isImportDeclaration(statement) ? statement.importClause.namedBindings.elements : statement.exportClause.elements
+    const elements = ts.isImportDeclaration(statement)
+      ? statement.importClause.namedBindings.elements
+      : statement.exportClause.elements
     elements.forEach((element, index) => {
       const entry = record.elements[index]
       const found = traceExport(context, target, entry.imported)
-      const checkerTarget = unwrapAlias(context.checker, context.checker.getSymbolAtLocation(element.name))
+      const checkerTarget = unwrapAlias(
+        context.checker,
+        context.checker.getSymbolAtLocation(element.name)
+      )
       if (!found || found.namespace) {
         kept.push(entry)
-        leftovers.push(`${where} ${entry.imported}：${found?.namespace ? '经命名空间转发' : '顺着转发链找不到声明'}，原样留下`)
+        leftovers.push(
+          `${where} ${entry.imported}：${found?.namespace ? '经命名空间转发' : '顺着转发链找不到声明'}，原样留下`
+        )
         return
       }
       if (found.external) {
-        pushGroup(groups, record.kind, `external:${found.external}`, { specifier: found.external, target: null }, { imported: found.name, local: entry.local, typeOnly: entry.typeOnly || (record.kind === 'export' && found.typeOnly) }, statement)
+        pushGroup(
+          groups,
+          record.kind,
+          `external:${found.external}`,
+          { specifier: found.external, target: null },
+          {
+            imported: found.name,
+            local: entry.local,
+            typeOnly: entry.typeOnly || (record.kind === 'export' && found.typeOnly),
+          },
+          statement
+        )
         moved += 1
         return
       }
@@ -402,31 +540,61 @@ function rewriteImports(context, file, style) {
         kept.push(entry)
         return
       }
-      pushGroup(groups, record.kind, found.file, { specifier: specifierFor(file, found.file, style), target: found.file }, { imported: found.name, local: entry.local, typeOnly: entry.typeOnly || (record.kind === 'export' && found.typeOnly) }, statement)
+      pushGroup(
+        groups,
+        record.kind,
+        found.file,
+        { specifier: specifierFor(file, found.file, style), target: found.file },
+        {
+          imported: found.name,
+          local: entry.local,
+          typeOnly: entry.typeOnly || (record.kind === 'export' && found.typeOnly),
+        },
+        statement
+      )
       moved += 1
     })
     const changed = kept.length !== record.elements.length || self
-    if (changed && kept.length > 0 && hasInnerComments(statement, sourceFile)) throw new Error(`${where}：花括号里有注释，改写会丢注释，请先手工处理`)
-    if (changed && attachedComments(sourceFile, statement).length > 0) notes.push(`${where}：语句上方贴着注释，改写后请复核注释的位置`)
-    records.push({ statement, record: changed ? { ...record, elements: kept, specifier: relativeTarget } : record, changed, target })
+    if (changed && kept.length > 0 && hasInnerComments(statement, sourceFile))
+      throw new Error(`${where}：花括号里有注释，改写会丢注释，请先手工处理`)
+    if (changed && attachedComments(sourceFile, statement).length > 0)
+      notes.push(`${where}：语句上方贴着注释，改写后请复核注释的位置`)
+    records.push({
+      statement,
+      record: changed ? { ...record, elements: kept, specifier: relativeTarget } : record,
+      changed,
+      target,
+    })
   }
-  if (groups.size === 0 && !records.some((entry) => entry.changed || entry.replaceSpecifier)) return null
+  if (groups.size === 0 && !records.some((entry) => entry.changed || entry.replaceSpecifier))
+    return null
 
   // 并进同一文件里已有的、指向同一目标的同类命名语句；并不进去的，在第一条来源语句的位置新起语句。
   const inserted = new Map()
   for (const group of groups.values()) {
     const rest = []
     for (const element of group.elements) {
-      const host = records.find((entry) => entry.record && entry.record.kind === group.kind && entry.target && entry.target === group.target
-        && entry.record.elements.length > 0 && isNamedOnly(entry.statement) && !hasInnerComments(entry.statement, sourceFile)
-        && (!entry.record.typeOnly || element.typeOnly))
+      const host = records.find(
+        (entry) =>
+          entry.record &&
+          entry.record.kind === group.kind &&
+          entry.target &&
+          entry.target === group.target &&
+          entry.record.elements.length > 0 &&
+          isNamedOnly(entry.statement) &&
+          !hasInnerComments(entry.statement, sourceFile) &&
+          (!entry.record.typeOnly || element.typeOnly)
+      )
       if (host) {
         host.record.elements.push(element)
         host.changed = true
       } else rest.push(element)
     }
     if (rest.length === 0) continue
-    const quoteSource = records.find((entry) => entry.statement === group.anchor)?.record ?? { quote: "'", semicolon: false }
+    const quoteSource = records.find((entry) => entry.statement === group.anchor)?.record ?? {
+      quote: "'",
+      semicolon: false,
+    }
     const created = {
       kind: group.kind,
       typeOnly: rest.every((element) => element.typeOnly),
@@ -445,26 +613,47 @@ function rewriteImports(context, file, style) {
     const additions = (inserted.get(statement) ?? []).map(renderStatement)
     if (entry.replaceSpecifier) {
       const literal = statement.moduleSpecifier
-      edits.push({ start: literal.getStart(sourceFile) + 1, end: literal.getEnd() - 1, text: entry.replaceSpecifier })
-      if (additions.length > 0) edits.push({ start: statement.getEnd(), end: statement.getEnd(), text: `\n${additions.join('\n')}` })
+      edits.push({
+        start: literal.getStart(sourceFile) + 1,
+        end: literal.getEnd() - 1,
+        text: entry.replaceSpecifier,
+      })
+      if (additions.length > 0)
+        edits.push({
+          start: statement.getEnd(),
+          end: statement.getEnd(),
+          text: `\n${additions.join('\n')}`,
+        })
       continue
     }
     if (!entry.changed && additions.length === 0) continue
-    const own = entry.changed ? (entry.record.elements.length > 0 ? [renderStatement(entry.record)] : []) : [statement.getText(sourceFile)]
+    const own = entry.changed
+      ? entry.record.elements.length > 0
+        ? [renderStatement(entry.record)]
+        : []
+      : [statement.getText(sourceFile)]
     const replacement = [...own, ...additions].join('\n')
     let end = statement.getEnd()
     if (replacement === '' && text[end] === '\n') end += 1
     edits.push({ start: statement.getStart(sourceFile), end, text: replacement })
   }
   let output = text
-  for (const edit of edits.sort((left, right) => right.start - left.start)) output = output.slice(0, edit.start) + edit.text + output.slice(edit.end)
+  for (const edit of edits.sort((left, right) => right.start - left.start))
+    output = output.slice(0, edit.start) + edit.text + output.slice(edit.end)
   return { text: output, moved, selfReferences, leftovers, notes }
 }
 
 /** 按（种类，目标）把挪走的名字归组；anchor 是第一条来源语句，新语句放在它的位置。 */
 function pushGroup(groups, kind, targetKey, where, element, statement) {
   const key = `${kind}\0${targetKey}`
-  if (!groups.has(key)) groups.set(key, { kind, specifier: where.specifier, target: where.target, anchor: statement, elements: [] })
+  if (!groups.has(key))
+    groups.set(key, {
+      kind,
+      specifier: where.specifier,
+      target: where.target,
+      anchor: statement,
+      elements: [],
+    })
   groups.get(key).elements.push(element)
 }
 
@@ -475,8 +664,15 @@ function importedIdentities(context, file) {
   for (const statement of sourceFile.statements.filter(isModuleStatement)) {
     if (!isNamedOnly(statement)) continue
     const kind = ts.isImportDeclaration(statement) ? 'import' : 'export'
-    const elements = kind === 'import' ? statement.importClause.namedBindings.elements : statement.exportClause.elements
-    for (const element of elements) identities.set(`${kind}:${element.name.text}`, identityOf(unwrapAlias(context.checker, context.checker.getSymbolAtLocation(element.name))))
+    const elements =
+      kind === 'import'
+        ? statement.importClause.namedBindings.elements
+        : statement.exportClause.elements
+    for (const element of elements)
+      identities.set(
+        `${kind}:${element.name.text}`,
+        identityOf(unwrapAlias(context.checker, context.checker.getSymbolAtLocation(element.name)))
+      )
   }
   return identities
 }
@@ -485,7 +681,9 @@ function importedIdentities(context, file) {
 
 /** 导出符号是不是 `export { 甲 as 乙 }` 形式的别名，是就返回甲（与 check:agent-public-api 的判定一致）。 */
 function aliasOf(symbol) {
-  const specifier = (symbol.declarations ?? []).find((declaration) => ts.isExportSpecifier(declaration) && declaration.propertyName)
+  const specifier = (symbol.declarations ?? []).find(
+    (declaration) => ts.isExportSpecifier(declaration) && declaration.propertyName
+  )
   return specifier?.propertyName.text
 }
 
@@ -515,7 +713,10 @@ function entrySurface(context, file) {
     const typeOnly = !!traced?.typeOnly || (target.flags & ts.SymbolFlags.Value) === 0
     const alias = aliasOf(symbol)
     const deprecated = alias ? (hasDeprecatedTag(symbol) ? ' deprecated' : '') : ''
-    surface.set(symbol.name, `${identityOf(target)} ${typeOnly ? 'type' : 'value'} alias=${alias ?? '-'}${deprecated}`)
+    surface.set(
+      symbol.name,
+      `${identityOf(target)} ${typeOnly ? 'type' : 'value'} alias=${alias ?? '-'}${deprecated}`
+    )
   }
   return surface
 }
@@ -532,7 +733,9 @@ function rewriteEntry(context, file, style) {
     const target = unwrapAlias(context.checker, symbol)
     const found = traceExport(context, file, name)
     if (!found || found.namespace) {
-      problems.push(`${show(file)} ${name}：${found ? '命名空间转发拆不了' : '顺着转发链找不到声明'}`)
+      problems.push(
+        `${show(file)} ${name}：${found ? '命名空间转发拆不了' : '顺着转发链找不到声明'}`
+      )
       continue
     }
     const hops = found.hops
@@ -542,43 +745,80 @@ function rewriteEntry(context, file, style) {
       // 改名发生在中间的非转发文件里时（例如 `import type { X }` 之后 `export type { X as Y }`），从链上最深、仍以甲导出它的非转发文件转发。
       const wanted = aliasOf(symbol) ?? name
       let index = hops.length - 1
-      while (index > 0 && !(hops[index].name === wanted && (index === hops.length - 1 || !isForwardingOnlyFile(context, hops[index].file)))) index -= 1
+      while (
+        index > 0 &&
+        !(
+          hops[index].name === wanted &&
+          (index === hops.length - 1 || !isForwardingOnlyFile(context, hops[index].file))
+        )
+      )
+        index -= 1
       if (index === 0) index = hops.length - 1
       if (exportedSymbol(context, hops[index].file, hops[index].name) !== target) {
         problems.push(`${show(file)} ${name}：转发链与类型检查器解析的声明不一致`)
         continue
       }
-      source = { specifier: specifierFor(file, hops[index].file, style), name: hops[index].name, index }
+      source = {
+        specifier: specifierFor(file, hops[index].file, style),
+        name: hops[index].name,
+        index,
+      }
     }
     // 带过来的注释：要删掉或重写的转发文件里贴在转发语句上方的，加上入口原来最近那一环具名转发上方的（@deprecated 判定看它）。
     const firstExplicit = hops.findIndex((hop) => hop.explicit)
-    const comments = hops.slice(0, source.index + 1)
-      .filter((hop, position) => hop.comments.length > 0 && (position === firstExplicit || isForwardingOnlyFile(context, hop.file)))
+    const comments = hops
+      .slice(0, source.index + 1)
+      .filter(
+        (hop, position) =>
+          hop.comments.length > 0 &&
+          (position === firstExplicit || isForwardingOnlyFile(context, hop.file))
+      )
       .flatMap((hop) => hop.comments)
     const typeOnly = found.typeOnly || (target.flags & ts.SymbolFlags.Value) === 0
     const comment = [...new Set(comments)].join('\n')
     if (comment) carried.push(`${name} ← ${comment.replace(/\s+/gu, ' ').slice(0, 80)}`)
     const key = `${source.specifier}\0${typeOnly}\0${comment}`
-    if (!groups.has(key)) groups.set(key, { specifier: source.specifier, typeOnly, comment, elements: [] })
+    if (!groups.has(key))
+      groups.set(key, { specifier: source.specifier, typeOnly, comment, elements: [] })
     groups.get(key).elements.push({ imported: source.name, local: name, typeOnly })
   }
   const first = sourceFile.statements[0]
   const header = first ? sourceFile.text.slice(0, first.getStart(sourceFile)) : ''
   const statements = [...groups.values()]
-    .sort((left, right) => left.specifier.localeCompare(right.specifier) || Number(right.typeOnly) - Number(left.typeOnly) || left.comment.localeCompare(right.comment))
+    .sort(
+      (left, right) =>
+        left.specifier.localeCompare(right.specifier) ||
+        Number(right.typeOnly) - Number(left.typeOnly) ||
+        left.comment.localeCompare(right.comment)
+    )
     .map((group) => {
       const elements = group.elements.sort((left, right) => left.local.localeCompare(right.local))
-      const statement = renderStatement({ kind: 'export', typeOnly: group.typeOnly, specifier: group.specifier, quote: "'", semicolon: false, multiline: false, elements })
+      const statement = renderStatement({
+        kind: 'export',
+        typeOnly: group.typeOnly,
+        specifier: group.specifier,
+        quote: "'",
+        semicolon: false,
+        multiline: false,
+        elements,
+      })
       return group.comment ? `${group.comment}\n${statement}` : statement
     })
-  return { text: `${header}${statements.join('\n')}\n`, count: [...groups.values()].reduce((sum, group) => sum + group.elements.length, 0), carried, problems }
+  return {
+    text: `${header}${statements.join('\n')}\n`,
+    count: [...groups.values()].reduce((sum, group) => sum + group.elements.length, 0),
+    carried,
+    problems,
+  }
 }
 
 // —— barrels：删掉没人引用的中间转发文件 ——
 
 /** 全仓（packages、tests、scripts、products、component-library）引用这些文件的地方：相对路径、包名子路径、写死的路径字符串。 */
 function repositoryReferences(targets) {
-  const roots = ['packages', 'tests', 'scripts', 'products', 'component-library'].map((directory) => join(RepoRoot, directory))
+  const roots = ['packages', 'tests', 'scripts', 'products', 'component-library'].map((directory) =>
+    join(RepoRoot, directory)
+  )
   const files = roots.flatMap(function list(directory) {
     if (!existsSync(directory)) return []
     return readdirSync(directory).flatMap((entry) => {
@@ -590,21 +830,29 @@ function repositoryReferences(targets) {
   })
   const candidates = (base) => {
     const list = [base, base.replace(/\.[cm]?js$/u, '.ts')]
-    for (const extension of ['.ts', '.tsx', '.mts', '.d.ts', '.js', '.mjs']) list.push(`${base}${extension}`, join(base, `index${extension}`))
+    for (const extension of ['.ts', '.tsx', '.mts', '.d.ts', '.js', '.mjs'])
+      list.push(`${base}${extension}`, join(base, `index${extension}`))
     return list
   }
-  const byPath = new Map([...targets].map((target) => [relative(RepoRoot, target).split(sep).join('/'), target]))
+  const byPath = new Map(
+    [...targets].map((target) => [relative(RepoRoot, target).split(sep).join('/'), target])
+  )
   const references = new Map([...targets].map((target) => [target, []]))
   for (const file of files) {
     if (targets.has(file)) continue
     const text = readFileSync(file, 'utf8')
-    for (const [path, target] of byPath) if (text.includes(path)) references.get(target).push(`${relative(RepoRoot, file)}（写死的路径）`)
+    for (const [path, target] of byPath)
+      if (text.includes(path))
+        references.get(target).push(`${relative(RepoRoot, file)}（写死的路径）`)
     if (file.endsWith('.json')) continue
-    for (const match of text.matchAll(/(?:from|import|require|export\s*\*\s*from)\s*\(?\s*['"]([^'"\n]+)['"]/gu)) {
+    for (const match of text.matchAll(
+      /(?:from|import|require|export\s*\*\s*from)\s*\(?\s*['"]([^'"\n]+)['"]/gu
+    )) {
       const specifier = match[1]
       let base = null
       if (specifier.startsWith('.')) base = resolve(dirname(file), specifier)
-      else if (isSelfReference(specifier) && specifier !== packageName) base = join(sourceRoot, specifier.slice(packageName.length + 1))
+      else if (isSelfReference(specifier) && specifier !== packageName)
+        base = join(sourceRoot, specifier.slice(packageName.length + 1))
       if (!base) continue
       const hit = candidates(base).find((candidate) => targets.has(candidate))
       if (hit) references.get(hit).push(`${relative(RepoRoot, file)}（${specifier}）`)
@@ -620,7 +868,8 @@ function diagnosticsOf(context) {
   const counts = new Map()
   for (const diagnostic of ts.getPreEmitDiagnostics(context.program)) {
     const file = diagnostic.file ? relative(RepoRoot, resolve(diagnostic.file.fileName)) : '<全局>'
-    if (diagnostic.file && !resolve(diagnostic.file.fileName).startsWith(`${packageRoot}${sep}`)) continue
+    if (diagnostic.file && !resolve(diagnostic.file.fileName).startsWith(`${packageRoot}${sep}`))
+      continue
     const key = `${file} TS${diagnostic.code}`
     counts.set(key, (counts.get(key) ?? 0) + 1)
   }
@@ -649,7 +898,12 @@ async function sortModuleStatements(files) {
   })
   const results = await eslint.lintFiles(files)
   await ESLint.outputFixes(results)
-  const remaining = results.flatMap((result) => result.messages.map((message) => `${relative(RepoRoot, result.filePath)}:${message.line} ${message.ruleId ?? '解析'} ${message.message}`))
+  const remaining = results.flatMap((result) =>
+    result.messages.map(
+      (message) =>
+        `${relative(RepoRoot, result.filePath)}:${message.line} ${message.ruleId ?? '解析'} ${message.message}`
+    )
+  )
   if (remaining.length > 0) console.info(`重排之后仍有问题：\n  ${remaining.join('\n  ')}`)
 }
 
@@ -659,7 +913,9 @@ function printList(title, lines) {
 }
 
 async function stepImports() {
-  const files = ScannedDirectories.flatMap((directory) => walk(join(packageRoot, directory))).filter((file) => !file.endsWith('.d.ts'))
+  const files = ScannedDirectories.flatMap((directory) =>
+    walk(join(packageRoot, directory))
+  ).filter((file) => !file.endsWith('.d.ts'))
   const style = detectSpecifierStyle(files)
   const before = createProgram()
   const overlay = new Map()
@@ -686,11 +942,16 @@ async function stepImports() {
   const mismatches = []
   for (const [file, identities] of expected) {
     const now = importedIdentities(after, file)
-    for (const [name, identity] of identities) if (now.get(name) !== identity) mismatches.push(`${show(file)} ${name}：原来 ${identity}，现在 ${now.get(name) ?? '缺失'}`)
-    for (const name of now.keys()) if (!identities.has(name)) mismatches.push(`${show(file)} ${name}：改写后多出来的名字`)
+    for (const [name, identity] of identities)
+      if (now.get(name) !== identity)
+        mismatches.push(`${show(file)} ${name}：原来 ${identity}，现在 ${now.get(name) ?? '缺失'}`)
+    for (const name of now.keys())
+      if (!identities.has(name)) mismatches.push(`${show(file)} ${name}：改写后多出来的名字`)
   }
   const added = newDiagnostics(diagnosticsOf(before), diagnosticsOf(after))
-  console.info(`imports：改写 ${overlay.size} 个文件，按名字挪到声明文件 ${moved} 处，包名自引用语句 ${selfReferences} 条；相对路径写法：${style === 'none' ? '不带扩展名' : `带 .${style}`}`)
+  console.info(
+    `imports：改写 ${overlay.size} 个文件，按名字挪到声明文件 ${moved} 处，包名自引用语句 ${selfReferences} 条；相对路径写法：${style === 'none' ? '不带扩展名' : `带 .${style}`}`
+  )
   printList('拆不了而原样留下的', leftovers)
   printList('要复核的', notes)
   if (mismatches.length > 0 || added.length > 0) {
@@ -702,7 +963,9 @@ async function stepImports() {
 }
 
 async function stepEntries() {
-  const files = ScannedDirectories.flatMap((directory) => walk(join(packageRoot, directory))).filter((file) => !file.endsWith('.d.ts'))
+  const files = ScannedDirectories.flatMap((directory) =>
+    walk(join(packageRoot, directory))
+  ).filter((file) => !file.endsWith('.d.ts'))
   const style = detectSpecifierStyle(files)
   const before = createProgram()
   const overlay = new Map()
@@ -725,8 +988,11 @@ async function stepEntries() {
   const mismatches = []
   for (const [file, surface] of surfaces) {
     const now = entrySurface(after, file)
-    for (const [name, line] of surface) if (now.get(name) !== line) mismatches.push(`${show(file)} ${name}：原来 ${line}，现在 ${now.get(name) ?? '缺失'}`)
-    for (const name of now.keys()) if (!surface.has(name)) mismatches.push(`${show(file)} ${name}：改写后多出来的名字`)
+    for (const [name, line] of surface)
+      if (now.get(name) !== line)
+        mismatches.push(`${show(file)} ${name}：原来 ${line}，现在 ${now.get(name) ?? '缺失'}`)
+    for (const name of now.keys())
+      if (!surface.has(name)) mismatches.push(`${show(file)} ${name}：改写后多出来的名字`)
   }
   const added = newDiagnostics(diagnosticsOf(before), diagnosticsOf(after))
   if (problems.length > 0 || mismatches.length > 0 || added.length > 0) {
@@ -740,7 +1006,14 @@ async function stepEntries() {
 
 async function stepBarrels() {
   const context = createProgram()
-  const barrels = new Set(walk(sourceRoot).filter((file) => !file.endsWith('.d.ts') && !entries.has(file) && isForwardingOnly(context.program.getSourceFile(file))))
+  const barrels = new Set(
+    walk(sourceRoot).filter(
+      (file) =>
+        !file.endsWith('.d.ts') &&
+        !entries.has(file) &&
+        isForwardingOnly(context.program.getSourceFile(file))
+    )
+  )
   const references = repositoryReferences(barrels)
   const deletable = [...barrels].filter((file) => references.get(file).length === 0).sort()
   const kept = [...barrels].filter((file) => references.get(file).length > 0).sort()
@@ -748,7 +1021,10 @@ async function stepBarrels() {
   const added = newDiagnostics(diagnosticsOf(context), diagnosticsOf(createProgram(overlay)))
   console.info(`barrels：只有转发语句的非入口文件 ${barrels.size} 个，可删 ${deletable.length} 个`)
   printList('可删', deletable.map(show))
-  printList('仍被引用、留下的', kept.map((file) => `${show(file)} ← ${references.get(file).join('；')}`))
+  printList(
+    '仍被引用、留下的',
+    kept.map((file) => `${show(file)} ← ${references.get(file).join('；')}`)
+  )
   if (added.length > 0) {
     printList('删掉后新增的类型诊断', added)
     throw new Error('barrels 核对不通过，一个都不删')
@@ -762,7 +1038,10 @@ async function apply(overlay) {
   for (const [file, text] of overlay) {
     if (text === null) {
       try {
-        execFileSync('git', ['ls-files', '--error-unmatch', '--', file], { cwd: RepoRoot, stdio: ['ignore', 'pipe', 'ignore'] })
+        execFileSync('git', ['ls-files', '--error-unmatch', '--', file], {
+          cwd: RepoRoot,
+          stdio: ['ignore', 'pipe', 'ignore'],
+        })
       } catch {
         throw new Error(`没纳入 git 的文件不删：${show(file)}`)
       }
@@ -777,10 +1056,17 @@ async function apply(overlay) {
 
 const plan = stepArg === 'all' ? ['imports', 'entries', 'barrels'] : [stepArg]
 for (const step of plan) {
-  const overlay = step === 'imports' ? await stepImports() : step === 'entries' ? await stepEntries() : await stepBarrels()
+  const overlay =
+    step === 'imports'
+      ? await stepImports()
+      : step === 'entries'
+        ? await stepEntries()
+        : await stepBarrels()
   if (dryRun) {
     // 后一步要按前一步落盘后的文件分析，演练 all 只演第一步。
-    console.info(`（演练，${step} 不落盘${plan.length > 1 ? '；后面的步骤要等这一步落盘才能分析，演练到此为止' : ''}）`)
+    console.info(
+      `（演练，${step} 不落盘${plan.length > 1 ? '；后面的步骤要等这一步落盘才能分析，演练到此为止' : ''}）`
+    )
     break
   }
   await apply(overlay)

@@ -17,18 +17,21 @@ import type {
  */
 export function computeManifestRevision(
   capabilities: readonly RemoteNodeCapabilityDescriptor[],
-  tools: readonly RemoteNodeToolDescriptor[],
+  tools: readonly RemoteNodeToolDescriptor[]
 ): string {
-  const canonical = JSON.stringify(canonicalize({
-    capabilities: [...capabilities]
-      .map((capability) => ({
-        ...capability,
-        operations: [...capability.operations]
-          .sort((left, right) => left.name.localeCompare(right.name)),
-      }))
-      .sort((left, right) => left.capabilityId.localeCompare(right.capabilityId)),
-    tools: [...tools].sort((left, right) => left.name.localeCompare(right.name)),
-  }))
+  const canonical = JSON.stringify(
+    canonicalize({
+      capabilities: [...capabilities]
+        .map((capability) => ({
+          ...capability,
+          operations: [...capability.operations].sort((left, right) =>
+            left.name.localeCompare(right.name)
+          ),
+        }))
+        .sort((left, right) => left.capabilityId.localeCompare(right.capabilityId)),
+      tools: [...tools].sort((left, right) => left.name.localeCompare(right.name)),
+    })
+  )
   return createHash('sha256').update(canonical).digest('hex').slice(0, 32)
 }
 
@@ -51,7 +54,7 @@ function canonicalize(value: unknown): unknown {
 /** 把能力表与工具表装成一份清单,`revision` 由内容算出来,调用方不自己填。 */
 export function createManifest(
   capabilities: readonly RemoteNodeCapabilityDescriptor[],
-  tools: readonly RemoteNodeToolDescriptor[],
+  tools: readonly RemoteNodeToolDescriptor[]
 ): RemoteNodeManifest {
   return {
     revision: computeManifestRevision(capabilities, tools),

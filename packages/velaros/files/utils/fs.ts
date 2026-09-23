@@ -44,10 +44,16 @@ export async function writeFileAtomically(
       throw new AppError('PERMISSION', `没有权限写这个文件：${resolvedPath}`)
     }
     if (err instanceof AppError && err.code === TextFileErrorCodes.externalEdit) {
-      throw new AppError('VALIDATION', `写的时候 ${resolvedPath} 被别人改了，这个文件什么都没写；重新 read 一遍再改`)
+      throw new AppError(
+        'VALIDATION',
+        `写的时候 ${resolvedPath} 被别人改了，这个文件什么都没写；重新 read 一遍再改`
+      )
     }
     if (err instanceof AppError && err.code === TextFileErrorCodes.notRegular) {
-      throw new AppError('VALIDATION', `不能原子替换这个文件：${resolvedPath}。它有多个硬链接（替换后会和其余链接分家）或不是普通文件；确实要改就用 run`)
+      throw new AppError(
+        'VALIDATION',
+        `不能原子替换这个文件：${resolvedPath}。它有多个硬链接（替换后会和其余链接分家）或不是普通文件；确实要改就用 run`
+      )
     }
     throw err
   }
@@ -57,16 +63,23 @@ export async function writeFileAtomically(
  * 删掉一个文件（撤回一次新建时用）：给了 expected 就先核对磁盘上还是那份字节，对不上（含文件已经不在）就不删、报 VALIDATION——
  * 核对完到删之间有人改了也不会误删他的内容，只剩一个极短的窗口；没给 expected 时文件已经不在算做完。没有权限时报权限错误。
  */
-export async function removeFileChecked(resolvedPath: string, expected?: ExpectedBytes): Promise<void> {
+export async function removeFileChecked(
+  resolvedPath: string,
+  expected?: ExpectedBytes
+): Promise<void> {
   try {
     if (expected) await textFileIo.assertUnchanged(resolvedPath, expected)
     await unlink(resolvedPath)
   } catch (err) {
     const code = readErrnoCode(err)
     if (code === 'ENOENT') return
-    if (code === 'EACCES' || code === 'EPERM') throw new AppError('PERMISSION', `没有权限删这个文件：${resolvedPath}`)
+    if (code === 'EACCES' || code === 'EPERM')
+      throw new AppError('PERMISSION', `没有权限删这个文件：${resolvedPath}`)
     if (err instanceof AppError && err.code === TextFileErrorCodes.externalEdit) {
-      throw new AppError('VALIDATION', `删的时候 ${resolvedPath} 被别人改了，没删；重新 read 一遍再决定`)
+      throw new AppError(
+        'VALIDATION',
+        `删的时候 ${resolvedPath} 被别人改了，没删；重新 read 一遍再决定`
+      )
     }
     throw err
   }

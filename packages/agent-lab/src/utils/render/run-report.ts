@@ -3,12 +3,16 @@
  * 未知一律显示破折号，不借 0 表达。纯渲染：不碰 Node 模块、不发请求。
  */
 import type { VerdictLevel } from '../../contract/constants.js'
-import type {
-  ReportRenderOptions,
-  RunReportModel,
-} from '../../types/agent-lab.js'
+import type { ReportRenderOptions, RunReportModel } from '../../types/agent-lab.js'
 
-import { assertSelfContainedHtml, duration, percent, timestampCell, valueCell, visibleText } from './html.js'
+import {
+  assertSelfContainedHtml,
+  duration,
+  percent,
+  timestampCell,
+  valueCell,
+  visibleText,
+} from './html.js'
 
 /** 判词分量对应的样式名。 */
 function verdictClass(level: VerdictLevel): string {
@@ -31,14 +35,14 @@ function renderRun(model: RunReportModel): string {
   ]
     .map(
       ([label, value, suffix = '']) =>
-        `<div class="metric"><span>${visibleText(label)}</span><strong>${value}${suffix}</strong></div>`,
+        `<div class="metric"><span>${visibleText(label)}</span><strong>${value}${suffix}</strong></div>`
     )
     .join('')
 
   const verdicts = model.verdicts
     .map(
       (verdict) =>
-        `<article class="verdict ${verdictClass(verdict.level)}"><strong>${visibleText(verdict.title)}</strong><p>${visibleText(verdict.detail)}</p><code>${visibleText(verdict.id)}</code></article>`,
+        `<article class="verdict ${verdictClass(verdict.level)}"><strong>${visibleText(verdict.title)}</strong><p>${visibleText(verdict.detail)}</p><code>${visibleText(verdict.id)}</code></article>`
     )
     .join('')
 
@@ -53,14 +57,17 @@ function renderRun(model: RunReportModel): string {
 
   const failures = Object.entries(model.failureCounts)
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([name, count]) => `<li><span>${visibleText(name)}</span><strong>${visibleText(count)}</strong></li>`)
+    .map(
+      ([name, count]) =>
+        `<li><span>${visibleText(name)}</span><strong>${visibleText(count)}</strong></li>`
+    )
     .join('')
 
   const gaps = model.gaps.length
     ? model.gaps
         .map(
           (gap) =>
-            `<article class="gap"><strong>${visibleText(gap.title)}</strong><p>${visibleText(gap.effect)}</p><code>${visibleText(gap.face)}</code></article>`,
+            `<article class="gap"><strong>${visibleText(gap.title)}</strong><p>${visibleText(gap.effect)}</p><code>${visibleText(gap.face)}</code></article>`
         )
         .join('')
     : '<p class="muted">本次驱动器声明的观测面均为 full。</p>'
@@ -71,7 +78,7 @@ function renderRun(model: RunReportModel): string {
 /** 把一批运行报告模型渲染成一份自包含 HTML；渲染完当场核对它确实自包含。 */
 export function renderReportHtml(
   models: readonly RunReportModel[],
-  options: ReportRenderOptions = {},
+  options: ReportRenderOptions = {}
 ): string {
   const title = options.title ?? 'VelarOS Agent Lab'
   const generatedAt = options.generatedAt ?? null

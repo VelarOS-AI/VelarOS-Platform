@@ -2,7 +2,12 @@ import { isArray, isBlank, isEmpty, isNumber, isPlainObject, optionalWhen } from
 
 import { OpenRouterAutoModelId, OpenRouterFreeModelId } from '../../contract/constants.js'
 import type { OpenAIModelFetch, OpenAIModelFetchInit } from '../../types/adapters'
-import type { ModelRequestOptions, OpenRouterProviderRoutingPreferences, ReasoningLevel, ThinkingDepth } from '../../types/model'
+import type {
+  ModelRequestOptions,
+  OpenRouterProviderRoutingPreferences,
+  ReasoningLevel,
+  ThinkingDepth,
+} from '../../types/model'
 import type { OpenRouterRequestRouting } from '../../types/providers'
 
 import { mergeJsonRequestBody } from './fetch-shims'
@@ -36,7 +41,8 @@ export function normalizeOpenRouterAllowedModels(models: string[]): string[] {
       trimmed === OpenRouterAutoModelId ||
       trimmed === OpenRouterFreeModelId ||
       seen.has(trimmed)
-    ) return
+    )
+      return
 
     seen.add(trimmed)
     normalized.push(trimmed)
@@ -96,7 +102,8 @@ export function normalizeOpenRouterRouting(
   const routing = options?.openRouter
   const useFreeModelsForDebug = !!routing?.useFreeModelsForDebug
 
-  if (useFreeModelsForDebug) return {
+  if (useFreeModelsForDebug)
+    return {
       model: OpenRouterFreeModelId,
       allowedModels: [],
       useFreeModelsForDebug,
@@ -124,7 +131,8 @@ export function shouldInjectOpenRouterReasoning(routing: OpenRouterRequestRoutin
   if (routing.useFreeModelsForDebug) return false
   if (!routing.thinkingDepth && !isReasoningDisabledByLevel(routing.reasoningLevel)) return false
 
-  if (routing.model === OpenRouterAutoModelId) return (
+  if (routing.model === OpenRouterAutoModelId)
+    return (
       isEmpty(routing.allowedModels) ||
       routing.allowedModels.some((model) => matchesOpenRouterReasoningModel(model))
     )

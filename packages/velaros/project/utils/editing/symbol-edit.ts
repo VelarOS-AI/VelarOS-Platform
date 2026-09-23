@@ -34,7 +34,7 @@ export function symbolSplice(located: LocatedSymbol, operation: SymbolOperation)
       if (!located.body) {
         throw new ProjectError(
           'TARGET_NOT_FOUND',
-          'replace_symbol mode=body 需要可替换的 body（函数/方法的块体或箭头表达式体，类、interface、enum、namespace 的花括号体）；该目标没有，请改用 mode=whole',
+          'replace_symbol mode=body 需要可替换的 body（函数/方法的块体或箭头表达式体，类、interface、enum、namespace 的花括号体）；该目标没有，请改用 mode=whole'
         )
       }
       return {
@@ -72,7 +72,7 @@ export function locateSymbol(
   input: PatchStrategyInput,
   snapshot: FileSnapshot,
   content: string,
-  operation: SymbolOperation,
+  operation: SymbolOperation
 ): LocatedSymbol {
   const range = input.target?.range
   if (isPresent(range?.startOffset) && isPresent(range.endOffset)) {
@@ -80,7 +80,7 @@ export function locateSymbol(
       ? parseJsTs(snapshot.path, content).symbols.find(
           (symbol) =>
             symbol.range.startOffset === range.startOffset &&
-            symbol.range.endOffset === range.endOffset,
+            symbol.range.endOffset === range.endOffset
         )
       : undefined
     if (aligned) return locatedFrom(aligned)
@@ -93,12 +93,12 @@ export function locateSymbol(
   if (!query)
     throw new ProjectError(
       'TARGET_NOT_FOUND',
-      `${operation.type} 需要 targetId 或 operation.symbol`,
+      `${operation.type} 需要 targetId 或 operation.symbol`
     )
   if (!isJsTsPath(snapshot.path))
     throw new ProjectError(
       'NOT_SUPPORTED',
-      `${operation.type} 按 symbol 定位只支持 JS/TS 文件：${snapshot.path}`,
+      `${operation.type} 按 symbol 定位只支持 JS/TS 文件：${snapshot.path}`
     )
   const matches = selectJsTsSymbols(parseJsTs(snapshot.path, content).symbols, query)
   const label = `${query.container ? `${query.container}.` : ''}${query.name}`
@@ -109,7 +109,7 @@ export function locateSymbol(
       'AMBIGUOUS_TARGET',
       `${operation.type} 找到 ${matches.length} 个名为 ${label} 的符号：${matches.slice(0, ProjectTuning.editing.symbolCandidates).map(describeSymbol).join('；')}`,
       { candidates: matches.map(describeSymbol) },
-      '请补充 symbol.kind（成对访问器可写 getter / setter）或 symbol.container，使其只匹配一个符号。',
+      '请补充 symbol.kind（成对访问器可写 getter / setter）或 symbol.container，使其只匹配一个符号。'
     )
   }
   return locatedFrom(matches[0])

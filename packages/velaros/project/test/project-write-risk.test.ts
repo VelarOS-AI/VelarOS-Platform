@@ -7,13 +7,20 @@ import { describe, expect, test } from 'bun:test'
 import { textCodec } from '@velaros-ai/core/text-files'
 
 import { FileProjectTransactionStateStore } from '../impl/persistence/FileProjectTransactionStateStore'
-import { createProjectKernel, type EditIntent, type ProjectKernel, type ProjectPlugin } from '../index'
+import {
+  createProjectKernel,
+  type EditIntent,
+  type ProjectKernel,
+  type ProjectPlugin,
+} from '../index'
 import type { ProjectTransactionPendingOperation } from '../types/transaction.js'
 
 // 风险按「能否恢复」划线：能完整回滚的覆盖、删除、重命名是 low/medium；回滚恢复不了原文的写入（二进制、超限文件、删符号链接）是 high。
 // 风险只记进事务给界面、审计看，哪一档都照常写盘，不问人。
 const Original = 'original\n'
-const PngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d])
+const PngBytes = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+])
 
 async function withRoot(run: (root: string) => Promise<void>): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), 'velaros-project-write-risk-'))
@@ -25,19 +32,32 @@ async function withRoot(run: (root: string) => Promise<void>): Promise<void> {
 }
 
 /** 建内核：读取上限与插件按用例给。 */
-async function kernelAt(root: string, options: { maxFileSizeToReadBytes?: number, plugins?: ProjectPlugin[] } = {}): Promise<ProjectKernel> {
-  const corePolicy = options.maxFileSizeToReadBytes ? { maxFileSizeToReadBytes: options.maxFileSizeToReadBytes } : undefined
+async function kernelAt(
+  root: string,
+  options: { maxFileSizeToReadBytes?: number; plugins?: ProjectPlugin[] } = {}
+): Promise<ProjectKernel> {
+  const corePolicy = options.maxFileSizeToReadBytes
+    ? { maxFileSizeToReadBytes: options.maxFileSizeToReadBytes }
+    : undefined
   return createProjectKernel({ root, corePolicy, plugins: options.plugins })
 }
 
-async function applyOperations(project: ProjectKernel, ...operations: Array<EditIntent['operation']>) {
-  const transaction = await project.prepareEdit({ operations: operations.map((operation) => ({ operation })) })
+async function applyOperations(
+  project: ProjectKernel,
+  ...operations: Array<EditIntent['operation']>
+) {
+  const transaction = await project.prepareEdit({
+    operations: operations.map((operation) => ({ operation })),
+  })
   await project.applyEdit({ transactionId: transaction.transactionId })
   return transaction
 }
 
 async function exists(path: string): Promise<boolean> {
-  return readFile(path).then(() => true, () => false)
+  return readFile(path).then(
+    () => true,
+    () => false
+  )
 }
 
 describe('可完整回滚的写入是 low/medium', () => {
@@ -46,7 +66,12 @@ describe('可完整回滚的写入是 low/medium', () => {
       await writeFile(join(root, 'notes.md'), Original)
       const project = await kernelAt(root)
 
-      const transaction = await applyOperations(project, { type: 'create_file', path: 'notes.md', content: 'new\n', overwrite: true })
+      const transaction = await applyOperations(project, {
+        type: 'create_file',
+        path: 'notes.md',
+        content: 'new\n',
+        overwrite: true,
+      })
 
       expect(transaction.risk).toBe('medium')
       await project.rollback({ transactionId: transaction.transactionId })
@@ -59,7 +84,10 @@ describe('可完整回滚的写入是 low/medium', () => {
       await writeFile(join(root, 'obsolete.ts'), Original)
       const project = await kernelAt(root)
 
-      const transaction = await applyOperations(project, { type: 'delete_file', path: 'obsolete.ts' })
+      const transaction = await applyOperations(project, {
+        type: 'delete_file',
+        path: 'obsolete.ts',
+      })
 
       expect(transaction.risk).toBe('low')
       expect(await exists(join(root, 'obsolete.ts'))).toBe(false)
@@ -73,7 +101,11 @@ describe('可完整回滚的写入是 low/medium', () => {
       await writeFile(join(root, 'draft.md'), Original)
       const project = await kernelAt(root)
 
-      const transaction = await applyOperations(project, { type: 'rename_file', from: 'draft.md', to: 'final.md' })
+      const transaction = await applyOperations(project, {
+        type: 'rename_file',
+        from: 'draft.md',
+        to: 'final.md',
+      })
 
       expect(transaction.risk).toBe('low')
       expect(await readFile(join(root, 'final.md'), 'utf8')).toBe(Original)
@@ -90,7 +122,16 @@ describe('回滚恢复不了原文的写入仍是高风险', () => {
       await writeFile(join(root, 'logo.png'), PngBytes)
       const project = await kernelAt(root)
       const transaction = await project.prepareEdit({
-        operations: [{ operation: { type: 'create_file', path: 'logo.png', content: 'text\n', overwrite: true } }],
+        operations: [
+          {
+            operation: {
+              type: 'create_file',
+              path: 'logo.png',
+              content: 'text\n',
+              overwrite: true,
+            },
+          },
+        ],
       })
 
       expect(transaction.risk).toBe('high')
@@ -110,7 +151,9 @@ describe('回滚恢复不了原文的写入仍是高风险', () => {
       expect(transaction.risk).toBe('high')
       expect(transaction.patches[0]?.oldContent).toBeUndefined()
       expect(await exists(join(root, 'logo.png'))).toBe(false)
-      await expect(project.rollback({ transactionId: transaction.transactionId })).rejects.toMatchObject({
+      await expect(
+        project.rollback({ transactionId: transaction.transactionId })
+      ).rejects.toMatchObject({
         reason: 'PATCH_APPLY_ERROR',
       })
       expect(await exists(join(root, 'logo.png'))).toBe(false)
@@ -123,7 +166,12 @@ describe('回滚恢复不了原文的写入仍是高风险', () => {
       await writeFile(join(root, 'huge.log'), 'y'.repeat(64))
       const project = await kernelAt(root, { maxFileSizeToReadBytes: 16 })
 
-      const overwritten = await applyOperations(project, { type: 'create_file', path: 'big.log', content: 'small\n', overwrite: true })
+      const overwritten = await applyOperations(project, {
+        type: 'create_file',
+        path: 'big.log',
+        content: 'small\n',
+        overwrite: true,
+      })
       const deleted = await applyOperations(project, { type: 'delete_file', path: 'huge.log' })
 
       expect([overwritten.risk, deleted.risk]).toEqual(['high', 'high'])
@@ -139,7 +187,7 @@ describe('回滚恢复不了原文的写入仍是高风险', () => {
       const transaction = await applyOperations(
         project,
         { type: 'delete_file', path: 'notes.md' },
-        { type: 'delete_file', path: 'logo.png' },
+        { type: 'delete_file', path: 'logo.png' }
       )
 
       expect(transaction.risk).toBe('high')
@@ -153,9 +201,14 @@ describe('text patch 不做会丢数据的删除与重命名', () => {
       await writeFile(join(root, 'logo.png'), PngBytes)
       const project = await kernelAt(root)
 
-      await expect(project.prepareEdit({
-        operations: [{ operation: { type: 'rename_file', from: 'logo.png', to: 'brand.png' } }],
-      })).rejects.toMatchObject({ reason: 'NOT_SUPPORTED', details: { path: 'logo.png', to: 'brand.png' } })
+      await expect(
+        project.prepareEdit({
+          operations: [{ operation: { type: 'rename_file', from: 'logo.png', to: 'brand.png' } }],
+        })
+      ).rejects.toMatchObject({
+        reason: 'NOT_SUPPORTED',
+        details: { path: 'logo.png', to: 'brand.png' },
+      })
       expect(await readFile(join(root, 'logo.png'))).toEqual(PngBytes)
       expect(await exists(join(root, 'brand.png'))).toBe(false)
     })
@@ -167,9 +220,11 @@ describe('text patch 不做会丢数据的删除与重命名', () => {
       await writeFile(join(root, 'dist', 'bundle.js'), Original)
       const project = await kernelAt(root)
 
-      await expect(project.prepareEdit({
-        operations: [{ operation: { type: 'delete_file', path: 'dist' } }],
-      })).rejects.toMatchObject({ reason: 'NOT_SUPPORTED', details: { path: 'dist' } })
+      await expect(
+        project.prepareEdit({
+          operations: [{ operation: { type: 'delete_file', path: 'dist' } }],
+        })
+      ).rejects.toMatchObject({ reason: 'NOT_SUPPORTED', details: { path: 'dist' } })
       expect(await readFile(join(root, 'dist', 'bundle.js'), 'utf8')).toBe(Original)
     })
   })
@@ -204,29 +259,37 @@ describe('读不到正文的文件上不做局部编辑', () => {
       const blindAppend: ProjectPlugin = {
         name: 'blind-append',
         version: '0.0.0',
-        setup: (context) => context.registerPatchStrategy({
-          id: 'test.blind-append',
-          priority: 100,
-          canHandle: (input) => input.intent.operation.type === 'append_text',
-          prepare: (input) => [{
-            patchId: 'blind',
-            strategyId: 'test.blind-append',
-            path: input.snapshot!.path,
-            baseRevision: input.snapshot!.revision,
-            oldContent: '',
-            newContent: 'tail\n',
-            diff: '',
-            changedLines: 1,
-            risk: 'low',
-            metadata: { op: 'append_text' },
-          }],
-        }),
+        setup: (context) =>
+          context.registerPatchStrategy({
+            id: 'test.blind-append',
+            priority: 100,
+            canHandle: (input) => input.intent.operation.type === 'append_text',
+            prepare: (input) => [
+              {
+                patchId: 'blind',
+                strategyId: 'test.blind-append',
+                path: input.snapshot!.path,
+                baseRevision: input.snapshot!.revision,
+                oldContent: '',
+                newContent: 'tail\n',
+                diff: '',
+                changedLines: 1,
+                risk: 'low',
+                metadata: { op: 'append_text' },
+              },
+            ],
+          }),
       }
       const project = await kernelAt(root, { maxFileSizeToReadBytes: 16, plugins: [blindAppend] })
 
-      await expect(project.prepareEdit({
-        operations: [{ operation: { type: 'append_text', path: 'big.log', text: 'tail\n' } }],
-      })).rejects.toMatchObject({ reason: 'NOT_SUPPORTED', details: { path: 'big.log', strategyId: 'test.blind-append' } })
+      await expect(
+        project.prepareEdit({
+          operations: [{ operation: { type: 'append_text', path: 'big.log', text: 'tail\n' } }],
+        })
+      ).rejects.toMatchObject({
+        reason: 'NOT_SUPPORTED',
+        details: { path: 'big.log', strategyId: 'test.blind-append' },
+      })
       expect(await readFile(join(root, 'big.log'), 'utf8')).toBe(original)
     })
   })
@@ -241,7 +304,10 @@ describe('删除与重命名按原样重建文件', () => {
       await writeFile(join(root, 'legacy.txt'), Utf16Bytes)
       const project = await kernelAt(root)
 
-      const transaction = await applyOperations(project, { type: 'delete_file', path: 'legacy.txt' })
+      const transaction = await applyOperations(project, {
+        type: 'delete_file',
+        path: 'legacy.txt',
+      })
       expect(transaction.risk).toBe('low')
       await project.rollback({ transactionId: transaction.transactionId })
 
@@ -258,7 +324,7 @@ describe('删除与重命名按原样重建文件', () => {
       const transaction = await applyOperations(
         project,
         { type: 'rename_file', from: 'gbk.c', to: 'src/gbk.c' },
-        { type: 'rename_file', from: 'wide.txt', to: 'wide-renamed.txt' },
+        { type: 'rename_file', from: 'wide.txt', to: 'wide-renamed.txt' }
       )
       expect(await readFile(join(root, 'src', 'gbk.c'))).toEqual(Gb18030Bytes)
       expect(await readFile(join(root, 'wide-renamed.txt'))).toEqual(Utf16Bytes)
@@ -285,7 +351,9 @@ describe('删除与重命名按原样重建文件', () => {
       const project = await createProjectKernel({ root, transactionStatePath: statePath })
       await applyOperations(project, { type: 'delete_file', path: 'legacy.txt' })
       const applyPlan = plans.find((plan) => plan.kind === 'apply')
-      expect(applyPlan?.restore).toMatchObject([{ path: 'legacy.txt', exists: true, encoding: 'utf16le' }])
+      expect(applyPlan?.restore).toMatchObject([
+        { path: 'legacy.txt', exists: true, encoding: 'utf16le' },
+      ])
 
       // 磁盘上文件已删、事务状态仍停在 apply 的待恢复计划：下一次 owner 启动必须把文件原样还回来。
       // apply 落定前持久化的是 apply 之前的状态，那时还没有 appliedAt。
@@ -313,14 +381,21 @@ describe('删除与重命名按原样重建文件', () => {
       await symlink('target.md', join(root, 'link.md'))
       const project = await kernelAt(root)
 
-      await expect(project.prepareEdit({
-        operations: [{ operation: { type: 'rename_file', from: 'link.md', to: 'moved.md' } }],
-      })).rejects.toMatchObject({ reason: 'NOT_SUPPORTED', details: { path: 'link.md', isSymbolicLink: true } })
+      await expect(
+        project.prepareEdit({
+          operations: [{ operation: { type: 'rename_file', from: 'link.md', to: 'moved.md' } }],
+        })
+      ).rejects.toMatchObject({
+        reason: 'NOT_SUPPORTED',
+        details: { path: 'link.md', isSymbolicLink: true },
+      })
 
       const transaction = await applyOperations(project, { type: 'delete_file', path: 'link.md' })
       expect(transaction.risk).toBe('high')
       expect(await exists(join(root, 'link.md'))).toBe(false)
-      await expect(project.rollback({ transactionId: transaction.transactionId })).rejects.toMatchObject({
+      await expect(
+        project.rollback({ transactionId: transaction.transactionId })
+      ).rejects.toMatchObject({
         reason: 'PATCH_APPLY_ERROR',
       })
       expect(await readFile(join(root, 'target.md'), 'utf8')).toBe(Original)
@@ -333,7 +408,12 @@ describe('删除与重命名按原样重建文件', () => {
       await symlink('target.md', join(root, 'link.md'))
       const project = await kernelAt(root)
 
-      const transaction = await applyOperations(project, { type: 'create_file', path: 'link.md', content: 'new\n', overwrite: true })
+      const transaction = await applyOperations(project, {
+        type: 'create_file',
+        path: 'link.md',
+        content: 'new\n',
+        overwrite: true,
+      })
       expect(transaction.risk).toBe('medium')
       await project.rollback({ transactionId: transaction.transactionId })
 

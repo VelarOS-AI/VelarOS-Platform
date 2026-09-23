@@ -8,15 +8,63 @@ import { OfficeTuning } from '../tuning.js'
 
 /** 允许留在预览 HTML 里的标签。 */
 const PreviewAllowedTags = new Set([
-  'a', 'b', 'blockquote', 'br', 'code', 'del', 'div', 'em', 'h1', 'h2', 'h3',
-  'h4', 'h5', 'h6', 'hr', 'i', 'img', 'li', 'ol', 'p', 'pre', 's', 'section',
-  'span', 'strong', 'sub', 'sup', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead',
-  'tr', 'u', 'ul',
+  'a',
+  'b',
+  'blockquote',
+  'br',
+  'code',
+  'del',
+  'div',
+  'em',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'hr',
+  'i',
+  'img',
+  'li',
+  'ol',
+  'p',
+  'pre',
+  's',
+  'section',
+  'span',
+  'strong',
+  'sub',
+  'sup',
+  'table',
+  'tbody',
+  'td',
+  'tfoot',
+  'th',
+  'thead',
+  'tr',
+  'u',
+  'ul',
 ])
 /** 连内容一起丢掉的标签：留下它们等于把脚本、外链和外部资源带进预览页。 */
 const PreviewDropWithContentTags = new Set([
-  'applet', 'audio', 'base', 'embed', 'form', 'frame', 'frameset', 'iframe', 'input',
-  'link', 'math', 'meta', 'noscript', 'object', 'script', 'style', 'svg', 'template',
+  'applet',
+  'audio',
+  'base',
+  'embed',
+  'form',
+  'frame',
+  'frameset',
+  'iframe',
+  'input',
+  'link',
+  'math',
+  'meta',
+  'noscript',
+  'object',
+  'script',
+  'style',
+  'svg',
+  'template',
   'video',
 ])
 /** 允许保留的 class 名，只有预览样式表认得的这两个。 */
@@ -41,11 +89,12 @@ function isSafePreviewRasterDataUrl(value: string): boolean {
   const padding = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0
   for (let index = 0; index < payload.length - padding; index += 1) {
     const code = payload.charCodeAt(index)
-    const isBase64Character = (code >= 48 && code <= 57)
-      || (code >= 65 && code <= 90)
-      || (code >= 97 && code <= 122)
-      || code === 43
-      || code === 47
+    const isBase64Character =
+      (code >= 48 && code <= 57) ||
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      code === 43 ||
+      code === 47
     if (!isBase64Character) return false
   }
   for (let index = payload.length - padding; index < payload.length; index += 1) {
@@ -74,7 +123,9 @@ function isSafePreviewHref(value: string): boolean {
   if (normalized.startsWith('#')) return true
   if (!URL.canParse(normalized)) return false
   const parsed = new URL(normalized)
-  return parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'mailto:'
+  return (
+    parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'mailto:'
+  )
 }
 
 /** 递归净化一个节点的子树：丢危险标签、拆未知标签、按标签过滤属性。 */
@@ -160,7 +211,12 @@ export function htmlToText(html: string): string {
 /** 解 HTML/XML 实体：命名实体、十进制与十六进制数字实体；解不出来的原样留 &。 */
 export function decodeHtmlText(text: string): string {
   const namedEntities: Record<string, string> = {
-    amp: '&', apos: "'", gt: '>', lt: '<', nbsp: ' ', quot: '"',
+    amp: '&',
+    apos: "'",
+    gt: '>',
+    lt: '<',
+    nbsp: ' ',
+    quot: '"',
   }
   let decoded = ''
   for (let index = 0; index < text.length;) {
@@ -185,9 +241,10 @@ export function decodeHtmlText(text: string): string {
       const validDigits = hexadecimal ? /^[0-9a-f]+$/iu.test(digits) : /^\d+$/u.test(digits)
       if (validDigits) {
         const codePoint = Number.parseInt(digits, hexadecimal ? 16 : 10)
-        replacement = codePoint > 0 && codePoint <= 0x10ffff && !(codePoint >= 0xd800 && codePoint <= 0xdfff)
-          ? String.fromCodePoint(codePoint)
-          : '�'
+        replacement =
+          codePoint > 0 && codePoint <= 0x10ffff && !(codePoint >= 0xd800 && codePoint <= 0xdfff)
+            ? String.fromCodePoint(codePoint)
+            : '�'
       }
     }
 

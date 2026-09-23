@@ -23,8 +23,20 @@ import { dirname, resolve } from 'node:path'
 import { isUndefined, toOptional } from '@velaros-ai/core'
 
 import type { ProjectChangeRecordInput } from '../../types/change-feed.js'
-import type { ProjectTransactionPendingOperation, ProjectTransactionStateSnapshot, StoredTransaction, TransactionBytePlan } from '../../types/transaction.js'
-import { assertTransactionStateSize, assertTransactionStateSnapshot, cloneTransactionState, invalidTransactionState, normalizeTransactionState, TransactionStateFormatVersions } from '../../utils/transactions/transaction-state.js'
+import type {
+  ProjectTransactionPendingOperation,
+  ProjectTransactionStateSnapshot,
+  StoredTransaction,
+  TransactionBytePlan,
+} from '../../types/transaction.js'
+import {
+  assertTransactionStateSize,
+  assertTransactionStateSnapshot,
+  cloneTransactionState,
+  invalidTransactionState,
+  normalizeTransactionState,
+  TransactionStateFormatVersions,
+} from '../../utils/transactions/transaction-state.js'
 
 /** 事务状态文件的构造参数。 */
 export interface FileProjectTransactionStateStoreOptions {
@@ -73,7 +85,10 @@ export class FileProjectTransactionStateStore implements FileProjectTransactionS
   public constructor(options: FileProjectTransactionStateStoreOptions) {
     this.path = resolve(options.path)
     this.root = resolve(options.root)
-    mkdirSync(dirname(this.path), { recursive: true, mode: FileProjectTransactionStateStore.DirectoryMode })
+    mkdirSync(dirname(this.path), {
+      recursive: true,
+      mode: FileProjectTransactionStateStore.DirectoryMode,
+    })
     this.current = this.load()
   }
 
@@ -90,7 +105,8 @@ export class FileProjectTransactionStateStore implements FileProjectTransactionS
   private load(): ProjectTransactionStateSnapshot {
     if (!existsSync(this.path)) return this.empty()
     const metadata = lstatSync(this.path)
-    if (!metadata.isFile() || metadata.isSymbolicLink()) invalidTransactionState('state path must be a regular file')
+    if (!metadata.isFile() || metadata.isSymbolicLink())
+      invalidTransactionState('state path must be a regular file')
     assertTransactionStateSize(statSync(this.path).size)
     const parsed: unknown = JSON.parse(readFileSync(this.path, 'utf8'))
     assertTransactionStateSnapshot(parsed, this.root)
@@ -134,7 +150,7 @@ export class FileProjectTransactionStateStore implements FileProjectTransactionS
       descriptor = openSync(
         temporaryPath,
         constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0),
-        FileProjectTransactionStateStore.FileMode,
+        FileProjectTransactionStateStore.FileMode
       )
       writeFileSync(descriptor, source, 'utf8')
       fsyncSync(descriptor)

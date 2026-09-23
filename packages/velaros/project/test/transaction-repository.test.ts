@@ -1,14 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
 import { TransactionRepository } from '../impl/transactions/TransactionRepository'
-import type {
-  ProjectTransactionStatus,
-  StoredTransaction,
-} from '../types/transaction'
+import type { ProjectTransactionStatus, StoredTransaction } from '../types/transaction'
 
 function transaction(
   transactionId: string,
-  status: ProjectTransactionStatus = 'prepared',
+  status: ProjectTransactionStatus = 'prepared'
 ): StoredTransaction {
   return {
     transactionId,
@@ -25,7 +22,7 @@ function transaction(
 }
 
 function repository(
-  options: { maxTransactions?: number; maxTerminalTransactions?: number } = {},
+  options: { maxTransactions?: number; maxTerminalTransactions?: number } = {}
 ): TransactionRepository {
   return new TransactionRepository({
     maxTransactions: options.maxTransactions ?? 100,
@@ -84,7 +81,7 @@ describe('TransactionRepository', () => {
 
     transactions.hydrate(
       [first, second],
-      (value) => value.status === 'applied' || value.status === 'rolled_back',
+      (value) => value.status === 'applied' || value.status === 'rolled_back'
     )
 
     expect([...transactions.values()]).toEqual([first, second])
@@ -100,7 +97,7 @@ describe('TransactionRepository', () => {
     const third = transaction('tx_third', 'applied')
     transactions.hydrate(
       [first, second, third],
-      (value) => value.status === 'applied' || value.status === 'rolled_back',
+      (value) => value.status === 'applied' || value.status === 'rolled_back'
     )
 
     expect(transactions.retainTerminal(first.transactionId)).toEqual(['tx_second'])

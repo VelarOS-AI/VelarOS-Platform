@@ -41,14 +41,18 @@ export type CodeRunDispatch = (
     input: unknown
   },
   holdClock: HoldProgramClock
-) => Promise<{ value?: unknown; error?: { code: string; message: string }; notices?: readonly CodeCallNotice[] }>
+) => Promise<{
+  value?: unknown
+  error?: { code: string; message: string }
+  notices?: readonly CodeCallNotice[]
+}>
 
 /** 运行器跑完一次的产物；宿主再把它编成给模型看的结果。 */
 export interface CodeRunOutcome {
   /** 程序停止瞬间仍在等待能力回执的调用编号；回收期间的迟到回执不改变此快照。 */
   pendingCalls?: readonly number[]
   /** 即使程序失败，也保留调用时已采集的输出。 */
-  output?:ScriptOutputCapture
+  output?: ScriptOutputCapture
   /** 程序是否正常跑完。 */
   ok: boolean
   /** 程序 `return` 的值。 */

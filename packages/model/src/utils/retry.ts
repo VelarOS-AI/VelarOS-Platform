@@ -45,16 +45,25 @@ const PermanentFailureMarkers = [
 /** 只把能安全当成瞬时传输/服务端故障的失败判成可重试；判不出来就返回 null，交给调用方失败。 */
 export function planProviderRetry(
   error: unknown,
-  options: ModelProviderRetryOptions,
+  options: ModelProviderRetryOptions
 ): Nullable<ModelProviderRetryDecision> {
   const facts = collectErrorFacts(error)
   const lower = facts.messages.join(' ').toLowerCase()
-  if (isPermanentFailure(lower) || facts.codes.has('ABORT_ERR') || [...facts.statuses].some(status=>status>=400&&status<500&&![408,409,425,429].includes(status))) return null
+  if (
+    isPermanentFailure(lower) ||
+    facts.codes.has('ABORT_ERR') ||
+    [...facts.statuses].some(
+      (status) => status >= 400 && status < 500 && ![408, 409, 425, 429].includes(status)
+    )
+  )
+    return null
 
-  const rateLimited = facts.statuses.has(429)
-    || includesAny(lower, ['rate limit', 'too many requests', 'resource exhausted'])
-  const network = [...facts.codes].some((code) => NetworkErrorCodes.has(code))
-    || includesAny(lower, [
+  const rateLimited =
+    facts.statuses.has(429) ||
+    includesAny(lower, ['rate limit', 'too many requests', 'resource exhausted'])
+  const network =
+    [...facts.codes].some((code) => NetworkErrorCodes.has(code)) ||
+    includesAny(lower, [
       'connection reset',
       'connection closed',
       'connection refused',
@@ -65,10 +74,12 @@ export function planProviderRetry(
       'timeout',
       'unexpected eof',
     ])
-  const provider = [...facts.statuses].some((status) => (
-    status === 408 || status === 409 || status === 425 || status >= 500
-  )) || facts.retryable
-    || includesAny(lower, ['overloaded', 'provider unavailable', 'service unavailable'])
+  const provider =
+    [...facts.statuses].some(
+      (status) => status === 408 || status === 409 || status === 425 || status >= 500
+    ) ||
+    facts.retryable ||
+    includesAny(lower, ['overloaded', 'provider unavailable', 'service unavailable'])
   if (!rateLimited && !network && !provider) return null
 
   const initialDelayMs = positive(options.initialDelayMs, ModelTuning.retry.initialDelayMs)
@@ -77,7 +88,7 @@ export function planProviderRetry(
     positive(options.maxDelayMs, ModelTuning.retry.maxDelayMs)
   )
   const retryAfterMs = retryAfter(facts.headers, options.now ?? Date.now())
-  const exponential = initialDelayMs * (2 ** Math.max(0, options.retryIndex - 1))
+  const exponential = initialDelayMs * 2 ** Math.max(0, options.retryIndex - 1)
   const delayMs = Math.min(maxDelayMs, Math.max(0, retryAfterMs ?? exponential))
   const kind = rateLimited ? 'rate-limit' : network ? 'network' : 'provider'
   return {
@@ -102,7 +113,9 @@ function collectErrorFacts(root: unknown): ModelRetryErrorFacts {
     headers: {},
     retryable: false,
   }
-  const queue: Array<{ readonly value: unknown; readonly depth: number }> = [{ value: root, depth: 0 }]
+  const queue: Array<{ readonly value: unknown; readonly depth: number }> = [
+    { value: root, depth: 0 },
+  ]
   const seen = new Set<unknown>()
   while (!isEmpty(queue)) {
     const item = queue.shift()!
@@ -116,18 +129,19 @@ function collectErrorFacts(root: unknown): ModelRetryErrorFacts {
     if (!isObject(item.value)) continue
     const record = item.value
     for (const key of ['status', 'statusCode']) {
-      const status = Number(Reflect.get(record,key))
+      const status = Number(Reflect.get(record, key))
       if (Number.isInteger(status) && status >= 100 && status <= 599) facts.statuses.add(status)
     }
-    const code=Reflect.get(record,'code')
+    const code = Reflect.get(record, 'code')
     if (isString(code)) facts.codes.add(code.toUpperCase())
-    if (isTrue(Reflect.get(record,'isRetryable')) || isTrue(Reflect.get(record,'retryable'))) facts.retryable = true
-    const message=Reflect.get(record,'message')
+    if (isTrue(Reflect.get(record, 'isRetryable')) || isTrue(Reflect.get(record, 'retryable')))
+      facts.retryable = true
+    const message = Reflect.get(record, 'message')
     if (isString(message)) pushMessage(facts.messages, message)
-    mergeHeaders(facts.headers, Reflect.get(record,'headers'))
-    mergeHeaders(facts.headers, Reflect.get(record,'responseHeaders'))
+    mergeHeaders(facts.headers, Reflect.get(record, 'headers'))
+    mergeHeaders(facts.headers, Reflect.get(record, 'responseHeaders'))
     for (const key of ['cause', 'data', 'error', 'lastError', 'response']) {
-      const value=Reflect.get(record,key)
+      const value = Reflect.get(record, key)
       if (isPresent(value)) queue.push({ value, depth: item.depth + 1 })
     }
   }

@@ -61,19 +61,24 @@ describe('ProviderModelCatalogService', () => {
 
   test('loads the public OpenRouter catalog without requiring a key', async () => {
     let capturedHeaders = new Headers()
-    const service = createService(async (_input, init) => {
-      capturedHeaders = new Headers(init?.headers)
-      return Response.json({
-        data: [{
-          id: 'vendor/model-next',
-          name: 'Model Next',
-          architecture: { input_modalities: ['text', 'image', 'unknown'] },
-        }],
-      })
-    }, {
-      referer: 'https://velaros.ai',
-      title: 'VelarOS Workbench',
-    })
+    const service = createService(
+      async (_input, init) => {
+        capturedHeaders = new Headers(init?.headers)
+        return Response.json({
+          data: [
+            {
+              id: 'vendor/model-next',
+              name: 'Model Next',
+              architecture: { input_modalities: ['text', 'image', 'unknown'] },
+            },
+          ],
+        })
+      },
+      {
+        referer: 'https://velaros.ai',
+        title: 'VelarOS Workbench',
+      }
+    )
 
     const catalog = await service.listProviderModels({
       provider: 'openrouter',
@@ -84,11 +89,13 @@ describe('ProviderModelCatalogService', () => {
     expect(capturedHeaders.get('Authorization')).toBeNull()
     expect(capturedHeaders.get('HTTP-Referer')).toBe('https://velaros.ai')
     expect(capturedHeaders.get('X-Title')).toBe('VelarOS Workbench')
-    expect(catalog.models).toMatchObject([{
-      id: 'vendor/model-next',
-      label: 'Model Next',
-      inputModalities: ['text', 'image'],
-    }])
+    expect(catalog.models).toMatchObject([
+      {
+        id: 'vendor/model-next',
+        label: 'Model Next',
+        inputModalities: ['text', 'image'],
+      },
+    ])
   })
 
   test('归一化远端目录的开销不随模型条数增长', async () => {
@@ -128,7 +135,9 @@ describe('ProviderModelCatalogService', () => {
     const service = createService(async (input) => {
       capturedUrl = String(input)
       return Response.json({
-        models: [{ name: 'models/gemini-next', displayName: 'Gemini Next', inputTokenLimit: 65536 }],
+        models: [
+          { name: 'models/gemini-next', displayName: 'Gemini Next', inputTokenLimit: 65536 },
+        ],
       })
     })
 
@@ -166,12 +175,15 @@ describe('ProviderModelCatalogService', () => {
 
   test('uses the composition environment without exposing it to the product renderer', async () => {
     let capturedAuthorization = ''
-    const service = createService(async (_input, init) => {
-      capturedAuthorization = new Headers(init?.headers).get('Authorization') ?? ''
-      return Response.json({ data: [{ id: 'gpt-env' }] })
-    }, {
-      environment: { OPENAI_API_KEY: 'environment-secret' },
-    })
+    const service = createService(
+      async (_input, init) => {
+        capturedAuthorization = new Headers(init?.headers).get('Authorization') ?? ''
+        return Response.json({ data: [{ id: 'gpt-env' }] })
+      },
+      {
+        environment: { OPENAI_API_KEY: 'environment-secret' },
+      }
+    )
 
     const catalog = await service.listProviderModels({
       provider: 'openai',
@@ -184,10 +196,12 @@ describe('ProviderModelCatalogService', () => {
   })
 
   test('returns a bounded provider error instead of rejecting the product IPC', async () => {
-    const service = createService(async () =>
-      new Response(JSON.stringify({ error: { message: 'invalid api key with details' } }), {
-        status: 401,
-      }))
+    const service = createService(
+      async () =>
+        new Response(JSON.stringify({ error: { message: 'invalid api key with details' } }), {
+          status: 401,
+        })
+    )
 
     const catalog = await service.listProviderModels({
       provider: 'openai',
@@ -217,10 +231,13 @@ describe('provider credential validation', () => {
 
   test('validation and discovery resolve injected environment credentials consistently', async () => {
     const credentials: Array<string | null> = []
-    const service = createService(async (_input, init) => {
-      credentials.push(new Headers(init?.headers).get('Authorization'))
-      return Response.json({ data: [] })
-    }, { environment: { OPENAI_API_KEY: 'environment-secret' } })
+    const service = createService(
+      async (_input, init) => {
+        credentials.push(new Headers(init?.headers).get('Authorization'))
+        return Response.json({ data: [] })
+      },
+      { environment: { OPENAI_API_KEY: 'environment-secret' } }
+    )
     const request = { provider: 'openai' as const, apiKey: '', baseURL: '' }
     expect((await service.validateProviderRuntime(request)).ok).toBe(true)
     await service.listProviderModels(request)
@@ -231,13 +248,21 @@ describe('provider credential validation', () => {
     for (const provider of ['openai', 'openrouter', 'anthropic', 'google'] as const) {
       let url = new URL('https://unused.invalid')
       let headers = new Headers()
-      const service = createService(async (input, init) => {
-        url = new URL(String(input))
-        headers = new Headers(init?.headers)
-        return Response.json({ data: [] })
-      }, { referer: 'https://desktop.example', title: 'Desktop' })
-      expect(await service.validateProviderRuntime({ provider, apiKey: 'fixture-key', baseURL: 'https://provider.example/v1' }))
-        .toEqual({ ok: true, message: null })
+      const service = createService(
+        async (input, init) => {
+          url = new URL(String(input))
+          headers = new Headers(init?.headers)
+          return Response.json({ data: [] })
+        },
+        { referer: 'https://desktop.example', title: 'Desktop' }
+      )
+      expect(
+        await service.validateProviderRuntime({
+          provider,
+          apiKey: 'fixture-key',
+          baseURL: 'https://provider.example/v1',
+        })
+      ).toEqual({ ok: true, message: null })
       expect(url.pathname).toBe(provider === 'openrouter' ? '/v1/key' : '/v1/models')
       if (provider === 'google') {
         expect(url.searchParams.get('key')).toBe('fixture-key')
@@ -260,19 +285,31 @@ describe('provider credential validation', () => {
       expect(new Headers(init?.headers).has('Authorization')).toBe(false)
       return new Response(null, { status: 200 })
     })
-    expect(await service.validateProviderRuntime({ provider: 'openai', apiKey: '', baseURL: '' }))
-      .toEqual({ ok: false, message: null })
+    expect(
+      await service.validateProviderRuntime({ provider: 'openai', apiKey: '', baseURL: '' })
+    ).toEqual({ ok: false, message: null })
     expect(calls).toBe(0)
-    expect((await service.validateProviderRuntime({ provider: 'ollama', apiKey: '', baseURL: '' })).ok).toBe(true)
+    expect(
+      (await service.validateProviderRuntime({ provider: 'ollama', apiKey: '', baseURL: '' })).ok
+    ).toBe(true)
     expect(calls).toBe(1)
   })
 
   test('public OpenRouter listing cannot make an invalid key pass validation', async () => {
-    const service = createService(async (input) => String(input).endsWith('/key')
-      ? Response.json({ error: { message: 'invalid api key' } }, { status: 401 })
-      : Response.json({ data: [{ id: 'provider/model' }] }))
-    expect((await service.listProviderModels({ provider: 'openrouter', apiKey: 'invalid', baseURL: '' })).models).toHaveLength(1)
-    const result = await service.validateProviderRuntime({ provider: 'openrouter', apiKey: 'invalid', baseURL: '' })
+    const service = createService(async (input) =>
+      String(input).endsWith('/key')
+        ? Response.json({ error: { message: 'invalid api key' } }, { status: 401 })
+        : Response.json({ data: [{ id: 'provider/model' }] })
+    )
+    expect(
+      (await service.listProviderModels({ provider: 'openrouter', apiKey: 'invalid', baseURL: '' }))
+        .models
+    ).toHaveLength(1)
+    const result = await service.validateProviderRuntime({
+      provider: 'openrouter',
+      apiKey: 'invalid',
+      baseURL: '',
+    })
     expect(result.ok).toBe(false)
     expect(result.message).toContain('API Key 不可用')
   })
@@ -284,12 +321,23 @@ describe('provider credential validation', () => {
       timeoutMs: 10,
       fetch: async (_input, init) => {
         signal = init?.signal ?? undefined
-        return new Response(new ReadableStream({
-          start(controller) { signal?.addEventListener('abort', () => controller.error(signal?.reason), { once: true }) },
-        }), { status: 500 })
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              signal?.addEventListener('abort', () => controller.error(signal?.reason), {
+                once: true,
+              })
+            },
+          }),
+          { status: 500 }
+        )
       },
     })
-    const result = await service.validateProviderRuntime({ provider: 'openai', apiKey: 'fixture', baseURL: '' })
+    const result = await service.validateProviderRuntime({
+      provider: 'openai',
+      apiKey: 'fixture',
+      baseURL: '',
+    })
     expect(result.ok).toBe(false)
     expect(result.message).toContain('超时')
     expect(signal?.aborted).toBe(true)

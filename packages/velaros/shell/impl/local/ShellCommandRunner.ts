@@ -15,15 +15,49 @@ import type { PlatformCompatibilityApi } from '@velaros-ai/core/platform'
 
 import { ShellLimits } from '../../contract/constants.js'
 import type { ShellProcessConfinementProvider } from '../../contract/requires.js'
-import type { PreparedShellCommand, ShellConsoleBuffer, ShellProcessConfinementPolicy } from '../../types/local.js'
-import type { ShellBackgroundProcessInfo, ShellBackgroundTaskQueryOptions, ShellBackgroundTaskRecord, ShellBackgroundTaskStatus, ShellCommandOutputCapture, ShellCommandResult, ShellConsoleSessionInfo, ShellProcessConfinementEvidence, ShellRunCommandOptions } from '../../types/shell-command.js'
-import type { ShellConsoleControlResult, ShellConsoleOutputChunk,ShellTaskTerminateReport } from '../../types/shell-command.js'
-import type { ShellConsoleInputRequest, ShellConsoleInterruptRequest, ShellConsoleOutputRequest,ShellTaskTerminateRequest } from '../../types/shell-command.js'
+import type {
+  PreparedShellCommand,
+  ShellConsoleBuffer,
+  ShellProcessConfinementPolicy,
+} from '../../types/local.js'
+import type {
+  ShellBackgroundProcessInfo,
+  ShellBackgroundTaskQueryOptions,
+  ShellBackgroundTaskRecord,
+  ShellBackgroundTaskStatus,
+  ShellCommandOutputCapture,
+  ShellCommandResult,
+  ShellConsoleSessionInfo,
+  ShellProcessConfinementEvidence,
+  ShellRunCommandOptions,
+} from '../../types/shell-command.js'
+import type {
+  ShellConsoleControlResult,
+  ShellConsoleOutputChunk,
+  ShellTaskTerminateReport,
+} from '../../types/shell-command.js'
+import type {
+  ShellConsoleInputRequest,
+  ShellConsoleInterruptRequest,
+  ShellConsoleOutputRequest,
+  ShellTaskTerminateRequest,
+} from '../../types/shell-command.js'
 import { buildShellCommandResult } from '../../utils/command-result.js'
 import { buildConfinedSpawnSpec } from '../../utils/confinement.js'
 import { appendBoundedOutput, readBoundedOutputSince } from '../../utils/output.js'
-import { buildOwnedProcessSpec, terminateProcessTree, waitForProcessSpawn, writeToChildInput } from '../../utils/process.js'
-import { buildNativeCommandSpec, describeNativeCommand, describeUnavailableShellKind, detectAvailableShells, toShellDescriptor } from '../../utils/shells.js'
+import {
+  buildOwnedProcessSpec,
+  terminateProcessTree,
+  waitForProcessSpawn,
+  writeToChildInput,
+} from '../../utils/process.js'
+import {
+  buildNativeCommandSpec,
+  describeNativeCommand,
+  describeUnavailableShellKind,
+  detectAvailableShells,
+  toShellDescriptor,
+} from '../../utils/shells.js'
 import { selectBackgroundTasks } from '../../utils/system-info.js'
 import { ShellTuning } from '../../utils/tuning.js'
 
@@ -54,7 +88,12 @@ export interface ShellCommandRunnerApi {
    * @param command 命令文本；给了 options.nativeCommand 时只用来展示
    * @param cwd 已经解析好的绝对工作目录
    */
-  run(command: string, cwd: string, options: ShellRunCommandOptions, abortSignal?: AbortSignal): Promise<ShellCommandResult>
+  run(
+    command: string,
+    cwd: string,
+    options: ShellRunCommandOptions,
+    abortSignal?: AbortSignal
+  ): Promise<ShellCommandResult>
   /** 列出后台任务：可按任务 id、会话、命令过滤词、只看运行中来筛，给了 limit 就最多那么多条（不给全列）；状态按受管进程此刻的情况给出。 */
   listTasks(options?: ShellBackgroundTaskQueryOptions): ShellBackgroundTaskRecord[]
   /**
@@ -103,7 +142,8 @@ export interface ShellCommandRunnerOptions {
 
 export class ShellCommandRunner implements ShellCommandRunnerApi {
   /** 交互式任务启动后给模型的一句话：别在这次工具调用里等输出。 */
-  private static readonly ConsoleStartedNote = '命令在控制台里跑，正在等用户输入；用户在聊天里的控制台卡片中打字，本次调用不再有输出。'
+  private static readonly ConsoleStartedNote =
+    '命令在控制台里跑，正在等用户输入；用户在聊天里的控制台卡片中打字，本次调用不再有输出。'
 
   private readonly tasks = new Map<string, ShellBackgroundTaskRecord>()
   private readonly executions = new Map<string, ManagedShellProcess>()
@@ -125,16 +165,34 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     if (options.background && !isUndefined(options.stdin))
       throw new AppError('VALIDATION', '前台标准输入不能与后台命令一起使用。')
     const directory = await stat(cwd).catch(() => null)
-    if (!directory?.isDirectory()) throw new AppError('NOT_FOUND', `工作目录不存在或不是目录：${cwd}`)
-    const command = options.nativeCommand ? describeNativeCommand(options.nativeCommand) : commandInput
+    if (!directory?.isDirectory())
+      throw new AppError('NOT_FOUND', `工作目录不存在或不是目录：${cwd}`)
+    const command = options.nativeCommand
+      ? describeNativeCommand(options.nativeCommand)
+      : commandInput
     const startedAt = Date.now()
     const prepared = await this.prepare(command, options, abortSignal)
     abortSignal?.throwIfAborted()
     if (options.background) {
-      const backgroundProcess = await this.startInBackground(command, cwd, prepared, options, startedAt, abortSignal)
+      const backgroundProcess = await this.startInBackground(
+        command,
+        cwd,
+        prepared,
+        options,
+        startedAt,
+        abortSignal
+      )
       return buildShellCommandResult(command, cwd, startedAt, {
-        exitCode: null, signal: null, stdout: '', stderr: '', timedOut: false, aborted: false,
-        backgroundProcess, confinement: prepared.evidence, ownership: prepared.ownership, shell: prepared.shell,
+        exitCode: null,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        timedOut: false,
+        aborted: false,
+        backgroundProcess,
+        confinement: prepared.evidence,
+        ownership: prepared.ownership,
+        shell: prepared.shell,
       })
     }
     const result = await this.runInForeground(prepared, cwd, {
@@ -143,7 +201,11 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       stdin: options.stdin,
       abortSignal,
     })
-    return buildShellCommandResult(command, cwd, startedAt, { ...result, ownership: prepared.ownership, shell: prepared.shell })
+    return buildShellCommandResult(command, cwd, startedAt, {
+      ...result,
+      ownership: prepared.ownership,
+      shell: prepared.shell,
+    })
   }
 
   public listTasks(options: ShellBackgroundTaskQueryOptions = {}): ShellBackgroundTaskRecord[] {
@@ -155,7 +217,9 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     return selectBackgroundTasks(tasks, options)
   }
 
-  public async terminateTask(request: ShellTaskTerminateRequest): Promise<ShellTaskTerminateReport> {
+  public async terminateTask(
+    request: ShellTaskTerminateRequest
+  ): Promise<ShellTaskTerminateReport> {
     const task = this.requireTask(request.taskId, request.sessionId)
     const taskId = task.id
     const signal = request.force ? 'SIGKILL' : 'SIGTERM'
@@ -166,14 +230,20 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     if (statusBefore === 'running') {
       try {
         const owned = this.executions.get(taskId)
-        if (!owned || owned.child.pid !== task.pid) throw new AppError('PERMISSION', '无法确认后台进程的受管身份。')
+        if (!owned || owned.child.pid !== task.pid)
+          throw new AppError('PERMISSION', '无法确认后台进程的受管身份。')
         terminated = await owned.stop(signal)
-        if (!terminated && !owned.exited) throw new AppError('PLATFORM', '后台进程未在期限内确认退出。')
+        if (!terminated && !owned.exited)
+          throw new AppError('PLATFORM', '后台进程未在期限内确认退出。')
       } catch (error) {
         if (!this.options.platformTools.isProcessMissingError(error)) {
           // 身份核对失败（PERMISSION）和期限内没退出（PLATFORM）各有自己的错误码，原样抛出，调用方才分得开。
           if (error instanceof AppError) throw error
-          throw new AppError('PLATFORM', '终止后台进程失败。', error, { taskId, pid: task.pid, signal })
+          throw new AppError('PLATFORM', '终止后台进程失败。', error, {
+            taskId,
+            pid: task.pid,
+            signal,
+          })
         }
         message = '后台进程已经退出。'
       }
@@ -198,51 +268,99 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     }
   }
 
-  public async writeConsoleInput(request: ShellConsoleInputRequest): Promise<ShellConsoleControlResult> {
+  public async writeConsoleInput(
+    request: ShellConsoleInputRequest
+  ): Promise<ShellConsoleControlResult> {
     const task = this.requireTask(request.taskId, request.sessionId)
     const status = this.resolveTaskStatus(task)
-    if (!task.console) return { taskId: task.id, accepted: false, status, message: '这条后台任务不是交互式的，没有可以写的控制台。' }
+    if (!task.console)
+      return {
+        taskId: task.id,
+        accepted: false,
+        status,
+        message: '这条后台任务不是交互式的，没有可以写的控制台。',
+      }
 
     const stdin = this.executions.get(task.id)?.child.stdin
-    if (status !== 'running' || !stdin?.writable) return { taskId: task.id, accepted: false, status, message: '控制台已经关闭：进程不在运行，或输入通道已经断开。' }
+    if (status !== 'running' || !stdin?.writable)
+      return {
+        taskId: task.id,
+        accepted: false,
+        status,
+        message: '控制台已经关闭：进程不在运行，或输入通道已经断开。',
+      }
     // 上一笔输入还压在管道里没被读走：进程多半没在读输入，再写只会越积越多。
-    if (stdin.writableNeedDrain) return { taskId: task.id, accepted: false, status, message: '进程还没读走之前写进去的输入（它可能没在读输入），这次没有写；等它读完再写。' }
+    if (stdin.writableNeedDrain)
+      return {
+        taskId: task.id,
+        accepted: false,
+        status,
+        message: '进程还没读走之前写进去的输入（它可能没在读输入），这次没有写；等它读完再写。',
+      }
 
     // 缺省补一个换行，相当于用户按回车；只想写半行（例如单个按键）时传 submit: false。
     const payload = isFalse(request.submit) ? request.text : `${request.text}\n`
-    const outcome = await writeToChildInput(stdin, payload, ShellTuning.command.consoleWriteTimeoutMs)
+    const outcome = await writeToChildInput(
+      stdin,
+      payload,
+      ShellTuning.command.consoleWriteTimeoutMs
+    )
     const failed = outcome instanceof Error
     return {
       taskId: task.id,
       accepted: !failed,
       status: this.resolveTaskStatus(task),
-      message: failed ? `写入控制台失败：${outcome.message}` : outcome === 'written' ? '输入已写进控制台。' : '输入已经排进控制台，进程还没读走。',
+      message: failed
+        ? `写入控制台失败：${outcome.message}`
+        : outcome === 'written'
+          ? '输入已写进控制台。'
+          : '输入已经排进控制台，进程还没读走。',
     }
   }
 
-  public async readConsoleOutput(request: ShellConsoleOutputRequest): Promise<ShellConsoleOutputChunk> {
+  public async readConsoleOutput(
+    request: ShellConsoleOutputRequest
+  ): Promise<ShellConsoleOutputChunk> {
     const task = this.requireTask(request.taskId, request.sessionId)
     const status = this.resolveTaskStatus(task)
     const acceptsInput = !!task.console?.acceptsInput && status === 'running'
     const buffered = this.consoles.get(task.id)
-    if (!buffered) return { taskId: task.id, text: '', cursor: 0, droppedChars: 0, status, acceptsInput }
+    if (!buffered)
+      return { taskId: task.id, text: '', cursor: 0, droppedChars: 0, status, acceptsInput }
 
     const since = readBoundedOutputSince(buffered.buffer, buffered.produced, request.cursor ?? 0)
     return { taskId: task.id, ...since, status, acceptsInput }
   }
 
-  public async interruptConsole(request: ShellConsoleInterruptRequest): Promise<ShellConsoleControlResult> {
+  public async interruptConsole(
+    request: ShellConsoleInterruptRequest
+  ): Promise<ShellConsoleControlResult> {
     const task = this.requireTask(request.taskId, request.sessionId)
     const status = this.resolveTaskStatus(task)
-    if (!task.console) return { taskId: task.id, accepted: false, status, message: '这条后台任务不是交互式的，没有可以中断的控制台。' }
-    if (status !== 'running') return { taskId: task.id, accepted: false, status, message: '进程已经不在运行，不用再中断。' }
+    if (!task.console)
+      return {
+        taskId: task.id,
+        accepted: false,
+        status,
+        message: '这条后台任务不是交互式的，没有可以中断的控制台。',
+      }
+    if (status !== 'running')
+      return { taskId: task.id, accepted: false, status, message: '进程已经不在运行，不用再中断。' }
 
     // 只中断自己启动的那个进程：pid 可能已经被系统复用，身份对不上就什么都不发。
     const owned = this.executions.get(task.id)
-    if (owned?.child.pid !== task.pid) return { taskId: task.id, accepted: false, status, message: '无法确认后台进程的受管身份，没有发送中断。' }
+    if (owned?.child.pid !== task.pid)
+      return {
+        taskId: task.id,
+        accepted: false,
+        status,
+        message: '无法确认后台进程的受管身份，没有发送中断。',
+      }
 
     // POSIX 向整个进程组发 SIGINT；Windows 没有 SIGINT，退回按进程树终止。
-    const delivered = await terminateProcessTree(task.pid, 'SIGINT', { platform: this.options.platform })
+    const delivered = await terminateProcessTree(task.pid, 'SIGINT', {
+      platform: this.options.platform,
+    })
     return {
       taskId: task.id,
       accepted: delivered,
@@ -252,7 +370,11 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
   }
 
   public async dispose(): Promise<void> {
-    await Promise.allSettled([...this.executions.values()].filter((entry) => !entry.exited).map((entry) => entry.stop('SIGKILL')))
+    await Promise.allSettled(
+      [...this.executions.values()]
+        .filter((entry) => !entry.exited)
+        .map((entry) => entry.stop('SIGKILL'))
+    )
     this.tasks.clear()
     this.executions.clear()
     this.consoles.clear()
@@ -267,14 +389,28 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     { shell: kind, nativeCommand }: ShellRunCommandOptions,
     signal?: AbortSignal
   ): Promise<PreparedShellCommand> {
-    const { platform, platformTools, confinement, confinementProvider, confinementTempDir, extraEnv, shells } = this.options
-    const environment = this.options.environment ? await this.options.environment.getEnvironment(signal) : process.env
+    const {
+      platform,
+      platformTools,
+      confinement,
+      confinementProvider,
+      confinementTempDir,
+      extraEnv,
+      shells,
+    } = this.options
+    const environment = this.options.environment
+      ? await this.options.environment.getEnvironment(signal)
+      : process.env
     signal?.throwIfAborted()
     const candidates = detectAvailableShells({ platform, env: environment })
     if (kind && !candidates.some((candidate) => candidate.kind === kind))
-      throw new AppError('VALIDATION', describeUnavailableShellKind(kind, candidates.map(toShellDescriptor)))
+      throw new AppError(
+        'VALIDATION',
+        describeUnavailableShellKind(kind, candidates.map(toShellDescriptor))
+      )
     const shell = await shells.resolveReady({ platform, env: environment, kind, signal })
-    const commandSpec = nativeCommand ? buildNativeCommandSpec(nativeCommand, shell)
+    const commandSpec = nativeCommand
+      ? buildNativeCommandSpec(nativeCommand, shell)
       : { ...platformTools.getShellCommandSpec(command, shell), env: shell.env }
     const env = { ...commandSpec.env, ...extraEnv }
     const confined = buildConfinedSpawnSpec(
@@ -295,7 +431,12 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
   private runInForeground(
     prepared: PreparedShellCommand,
     cwd: string,
-    options: { timeoutMs: number; maxOutputChars: number; stdin?: string; abortSignal?: AbortSignal }
+    options: {
+      timeoutMs: number
+      maxOutputChars: number
+      stdin?: string
+      abortSignal?: AbortSignal
+    }
   ): Promise<{
     exitCode: Nullable<number>
     signal: Nullable<string>
@@ -310,8 +451,11 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
   }> {
     options.abortSignal?.throwIfAborted()
     const child = spawn(prepared.spec.file, prepared.spec.args, {
-      cwd, detached: this.options.platformTools.shouldUseDetachedProcessGroup(), env: prepared.env,
-      stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
+      cwd,
+      detached: this.options.platformTools.shouldUseDetachedProcessGroup(),
+      env: prepared.env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
       windowsVerbatimArguments: prepared.spec.windowsVerbatimArguments,
     })
     const owned = this.options.processes.manage(child, {
@@ -329,7 +473,8 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       if (output[stream].length + text.length > maxChars) truncated = true
       output[stream] = appendBoundedOutput(output[stream], text, maxChars)
     }
-    for (const stream of ['stdout', 'stderr'] as const) child[stream].on('data', (chunk: Buffer) => append(stream, decoders[stream].write(chunk)))
+    for (const stream of ['stdout', 'stderr'] as const)
+      child[stream].on('data', (chunk: Buffer) => append(stream, decoders[stream].write(chunk)))
     child.stdin.on('error', (error) => log.debug('前台命令输入管道已关闭', { error }))
     child.stdin.end(options.stdin, 'utf8')
     return owned.completion.then((result) => {
@@ -338,7 +483,10 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       const storedBytes = Buffer.byteLength(output.stdout) + Buffer.byteLength(output.stderr)
       const capture: ShellCommandOutputCapture = {
         status: result.cleanupIncomplete ? 'failed' : truncated ? 'truncated' : 'complete',
-        encoding: 'utf-8', totalBytes, storedBytes, omittedBytes: Math.max(0, totalBytes - storedBytes),
+        encoding: 'utf-8',
+        totalBytes,
+        storedBytes,
+        omittedBytes: Math.max(0, totalBytes - storedBytes),
         decodeErrors: decoders.stdout.decodeErrors + decoders.stderr.decodeErrors,
         error: optionalWhen(result.cleanupIncomplete, '到期限时进程的输出还没收完'),
       }
@@ -362,8 +510,11 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     const { sessionId, interactive } = options
     const taskId = randomUUID()
     const child = spawn(prepared.spec.file, prepared.spec.args, {
-      cwd, detached: platformTools.shouldUseDetachedProcessGroup(),
-      stdio: [interactive ? 'pipe' : 'ignore', 'pipe', 'pipe'], env: prepared.env, windowsHide: true,
+      cwd,
+      detached: platformTools.shouldUseDetachedProcessGroup(),
+      stdio: [interactive ? 'pipe' : 'ignore', 'pipe', 'pipe'],
+      env: prepared.env,
+      windowsHide: true,
       windowsVerbatimArguments: prepared.spec.windowsVerbatimArguments,
     })
     // stdin 管道断开（进程关了输入、写到一半进程退出）时流上会报 error；不接住就成了宿主进程的未捕获异常。写入结果由写的一方从回调里拿，这里只记日志。
@@ -380,8 +531,12 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       if (task) this.tasks.set(taskId, { ...task, recentOutput, updatedAt: Date.now() })
     }
     // 交互式任务的 stdin 是管道，非交互式是 ignore，所以这里的输出管道按可空处理。
-    for (const stream of ['stdout', 'stderr'] as const) child[stream]?.on('data', (chunk: Buffer) => append(decoders[stream].write(chunk)))
-    try { await waitForProcessSpawn(child); abortSignal?.throwIfAborted() } catch (error) {
+    for (const stream of ['stdout', 'stderr'] as const)
+      child[stream]?.on('data', (chunk: Buffer) => append(decoders[stream].write(chunk)))
+    try {
+      await waitForProcessSpawn(child)
+      abortSignal?.throwIfAborted()
+    } catch (error) {
       this.consoles.delete(taskId)
       await owned.stop('SIGKILL')
       throw error
@@ -389,36 +544,69 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     const pid = child.pid!
     // 本机只有管道，没有 PTY：真正的终端由宿主在自己的端口实现里提供，那时 channel 报成 pty。
     const consoleSession: Optional<ShellConsoleSessionInfo> = optionalWhen(interactive, {
-      taskId, channel: 'pipe' as const, acceptsInput: true, note: ShellCommandRunner.ConsoleStartedNote,
+      taskId,
+      channel: 'pipe' as const,
+      acceptsInput: true,
+      note: ShellCommandRunner.ConsoleStartedNote,
     })
     // 进程收尾后控制台还留在任务上，只是不再接受输入。
     const closedConsole: Optional<ShellConsoleSessionInfo> = consoleSession
       ? { ...consoleSession, acceptsInput: false }
       : undefined
     const backgroundProcess: ShellBackgroundProcessInfo = {
-      taskId, sessionId: toNullable(sessionId), pid, logPath: null, ports: [],
-      reason: null, terminateCommand: platformTools.getTerminateCommand(pid, false, prepared.shell),
-      forceTerminateCommand: platformTools.getTerminateCommand(pid, true, prepared.shell), fallbackTerminateCommand: null,
-      requested: true, autoStarted: false, console: consoleSession,
+      taskId,
+      sessionId: toNullable(sessionId),
+      pid,
+      logPath: null,
+      ports: [],
+      reason: null,
+      terminateCommand: platformTools.getTerminateCommand(pid, false, prepared.shell),
+      forceTerminateCommand: platformTools.getTerminateCommand(pid, true, prepared.shell),
+      fallbackTerminateCommand: null,
+      requested: true,
+      autoStarted: false,
+      console: consoleSession,
     }
     const task: ShellBackgroundTaskRecord = {
-      id: taskId, runId: taskId, sessionId: toNullable(sessionId), command,
-      cwd, pid, logPath: null, ports: [], reason: null,
+      id: taskId,
+      runId: taskId,
+      sessionId: toNullable(sessionId),
+      command,
+      cwd,
+      pid,
+      logPath: null,
+      ports: [],
+      reason: null,
       terminateCommand: backgroundProcess.terminateCommand,
-      forceTerminateCommand: backgroundProcess.forceTerminateCommand, fallbackTerminateCommand: null,
-      requested: true, autoStarted: false, startedAt, updatedAt: startedAt,
-      status: 'running', recentOutput: recentOutput || null, console: consoleSession,
+      forceTerminateCommand: backgroundProcess.forceTerminateCommand,
+      fallbackTerminateCommand: null,
+      requested: true,
+      autoStarted: false,
+      startedAt,
+      updatedAt: startedAt,
+      status: 'running',
+      recentOutput: recentOutput || null,
+      console: consoleSession,
     }
     this.tasks.set(taskId, task)
     this.executions.set(taskId, owned)
-    void owned.completion.then((result) => {
-      for (const stream of ['stdout', 'stderr'] as const) append(decoders[stream].end())
-      this.tasks.set(taskId, { ...task, status: result.cleanupIncomplete ? 'unknown' : 'exited',
-        recentOutput, exitCode: result.exitCode, signal: result.signal,
-        cleanupIncomplete: result.cleanupIncomplete, finishedAt: Date.now(), updatedAt: Date.now(),
-        console: closedConsole })
-      this.pruneFinishedTasks()
-    }).catch((error) => log.warn('后台进程完成记录失败', { taskId, error }))
+    void owned.completion
+      .then((result) => {
+        for (const stream of ['stdout', 'stderr'] as const) append(decoders[stream].end())
+        this.tasks.set(taskId, {
+          ...task,
+          status: result.cleanupIncomplete ? 'unknown' : 'exited',
+          recentOutput,
+          exitCode: result.exitCode,
+          signal: result.signal,
+          cleanupIncomplete: result.cleanupIncomplete,
+          finishedAt: Date.now(),
+          updatedAt: Date.now(),
+          console: closedConsole,
+        })
+        this.pruneFinishedTasks()
+      })
+      .catch((error) => log.warn('后台进程完成记录失败', { taskId, error }))
     return backgroundProcess
   }
 
@@ -427,7 +615,10 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     const finished = [...this.tasks.values()]
       .filter((task) => task.status !== 'running')
       .sort((a, b) => (a.finishedAt ?? a.updatedAt) - (b.finishedAt ?? b.updatedAt))
-    for (const task of finished.slice(0, Math.max(0, finished.length - ShellTuning.command.finishedTasks))) {
+    for (const task of finished.slice(
+      0,
+      Math.max(0, finished.length - ShellTuning.command.finishedTasks)
+    )) {
       this.tasks.delete(task.id)
       this.executions.delete(task.id)
       this.consoles.delete(task.id)
@@ -445,7 +636,10 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
   }
 
   /** 取出一条任务并核对会话归属：任务不存在、不属于请求里的会话时抛错。 */
-  private requireTask(requestedTaskId: string, sessionId: LooseOptional<string>): ShellBackgroundTaskRecord {
+  private requireTask(
+    requestedTaskId: string,
+    sessionId: LooseOptional<string>
+  ): ShellBackgroundTaskRecord {
     const taskId = requestedTaskId.trim()
     if (!taskId) throw new AppError('VALIDATION', '后台任务 id 不能为空。')
 

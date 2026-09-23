@@ -16,7 +16,7 @@ export interface ReceivedRequest {
 
 export type RequestResponder = (
   request: ReceivedRequest,
-  connection: FakeKernelConnection,
+  connection: FakeKernelConnection
 ) => void | Promise<void>
 
 export interface FakeKernelConnection {
@@ -108,9 +108,7 @@ export class FakeKernelEndpoint {
   }
 }
 
-export async function temporaryRuntimeDirectory(
-  registry: string[],
-): Promise<string> {
+export async function temporaryRuntimeDirectory(registry: string[]): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'velaros-kernel-test-'))
   registry.push(directory)
   return directory
@@ -118,18 +116,17 @@ export async function temporaryRuntimeDirectory(
 
 export async function writeDescriptorFile(
   paths: KernelDaemonPaths,
-  descriptor: unknown,
+  descriptor: unknown
 ): Promise<void> {
-  await writeFile(
-    paths.descriptorPath,
-    `${JSON.stringify(descriptor)}\n`,
-    { encoding: 'utf8', mode: 0o600 },
-  )
+  await writeFile(paths.descriptorPath, `${JSON.stringify(descriptor)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  })
 }
 
 export function descriptorFor(
   endpoint: KernelRpcEndpoint,
-  overrides: Partial<KernelDaemonEndpointDescriptor> = {},
+  overrides: Partial<KernelDaemonEndpointDescriptor> = {}
 ): KernelDaemonEndpointDescriptor {
   return {
     authToken: 'fake-auth-token-0123456789-abcdefgh',

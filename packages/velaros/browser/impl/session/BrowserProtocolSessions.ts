@@ -6,7 +6,10 @@ import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import { BrowserProtocolLimits } from '../../contract/constants.js'
 import type { BrowserProtocolChannel } from '../../contract/requires.js'
 import type { BrowserProtocolEvents, CdpEventsInput, CdpSendInput } from '../../types/browser.js'
-import type { BrowserProtocolPausedRequest, BrowserProtocolSessionState } from '../../types/session.js'
+import type {
+  BrowserProtocolPausedRequest,
+  BrowserProtocolSessionState,
+} from '../../types/session.js'
 import { pausedRequestUrl, protocolMethodMatches } from '../../utils/cdp/protocol.js'
 import { BrowserTuning } from '../../utils/tuning'
 
@@ -21,9 +24,17 @@ import { BrowserTuning } from '../../utils/tuning'
  */
 export interface BrowserProtocolSessionsApi {
   /** 在这个浏览器会话的模型 CDP 会话上发一条命令；还没有会话（或已经断了）就先经 open 连一条。 */
-  send(sessionId: string, open: () => Promise<BrowserProtocolChannel>, command: CdpSendInput): Promise<unknown>
+  send(
+    sessionId: string,
+    open: () => Promise<BrowserProtocolChannel>,
+    command: CdpSendInput
+  ): Promise<unknown>
   /** 读模型 CDP 会话收到的事件：after 之后、匹配 method 的；还没有会话就先连一条（事件从连上起记）。 */
-  read(sessionId: string, open: () => Promise<BrowserProtocolChannel>, query: CdpEventsInput): Promise<BrowserProtocolEvents>
+  read(
+    sessionId: string,
+    open: () => Promise<BrowserProtocolChannel>,
+    query: CdpEventsInput
+  ): Promise<BrowserProtocolEvents>
   /** 断开这个浏览器会话的模型 CDP 会话；没有就什么都不做。 */
   close(sessionId: string): Promise<void>
   /** 断开全部会话、停掉兜底的计时器。 */
@@ -48,23 +59,35 @@ export class BrowserProtocolSessions implements BrowserProtocolSessionsApi {
   /** 全进程最后一个事件的序号。 */
   private lastSeq = 0
 
-  public async send(sessionId: string, open: () => Promise<BrowserProtocolChannel>, command: CdpSendInput): Promise<unknown> {
+  public async send(
+    sessionId: string,
+    open: () => Promise<BrowserProtocolChannel>,
+    command: CdpSendInput
+  ): Promise<unknown> {
     const state = await this.ensure(sessionId, open)
     const result = await state.channel.send(command.method, command.params, command.session)
     const requestId = command.params?.requestId
-    if (BrowserProtocolSessions.ReleasingFetchMethods.has(command.method) && isString(requestId)) state.paused.delete(requestId)
+    if (BrowserProtocolSessions.ReleasingFetchMethods.has(command.method) && isString(requestId))
+      state.paused.delete(requestId)
     // 关掉 Fetch 时 Chromium 把这条会话拦着的请求一并放行：账上这一会话的都销掉。
     if (command.method === 'Fetch.disable') {
-      for (const [id, paused] of state.paused) if (paused.session === command.session) state.paused.delete(id)
+      for (const [id, paused] of state.paused)
+        if (paused.session === command.session) state.paused.delete(id)
     }
     return result
   }
 
-  public async read(sessionId: string, open: () => Promise<BrowserProtocolChannel>, query: CdpEventsInput): Promise<BrowserProtocolEvents> {
+  public async read(
+    sessionId: string,
+    open: () => Promise<BrowserProtocolChannel>,
+    query: CdpEventsInput
+  ): Promise<BrowserProtocolEvents> {
     const state = await this.ensure(sessionId, open)
     const after = query.after ?? 0
     return {
-      events: state.events.filter((event) => event.seq > after && protocolMethodMatches(event.method, query.method)),
+      events: state.events.filter(
+        (event) => event.seq > after && protocolMethodMatches(event.method, query.method)
+      ),
       last: this.lastSeq,
       dropped: state.dropped,
     }
@@ -84,7 +107,10 @@ export class BrowserProtocolSessions implements BrowserProtocolSessionsApi {
   }
 
   /** 这个浏览器会话的记账；没有就连一条（同一时刻只连一次）。 */
-  private async ensure(sessionId: string, open: () => Promise<BrowserProtocolChannel>): Promise<BrowserProtocolSessionState> {
+  private async ensure(
+    sessionId: string,
+    open: () => Promise<BrowserProtocolChannel>
+  ): Promise<BrowserProtocolSessionState> {
     const existing = this.sessions.get(sessionId)
     if (existing) return existing
     const pending = this.opening.get(sessionId)
@@ -96,21 +122,41 @@ export class BrowserProtocolSessions implements BrowserProtocolSessionsApi {
     return opened
   }
 
-  private async open(sessionId: string, open: () => Promise<BrowserProtocolChannel>): Promise<BrowserProtocolSessionState> {
+  private async open(
+    sessionId: string,
+    open: () => Promise<BrowserProtocolChannel>
+  ): Promise<BrowserProtocolSessionState> {
     const channel = await open()
-    const state: BrowserProtocolSessionState = { channel, events: [], dropped: 0, paused: new Map(), unsubscribe: [] }
-    state.unsubscribe.push(channel.onEvent((method, params, session) => this.record(state, method, params, session)))
+    const state: BrowserProtocolSessionState = {
+      channel,
+      events: [],
+      dropped: 0,
+      paused: new Map(),
+      unsubscribe: [],
+    }
+    state.unsubscribe.push(
+      channel.onEvent((method, params, session) => this.record(state, method, params, session))
+    )
     state.unsubscribe.push(channel.onClose(() => this.forget(sessionId, state)))
     this.sessions.set(sessionId, state)
-    this.sweeper ??= this.timers.every(BrowserTuning.protocol.pausedRequestSweepMs, () => this.sweep(), {
-      label: 'browser.protocol.autoContinue',
-      unref: true,
-    })
+    this.sweeper ??= this.timers.every(
+      BrowserTuning.protocol.pausedRequestSweepMs,
+      () => this.sweep(),
+      {
+        label: 'browser.protocol.autoContinue',
+        unref: true,
+      }
+    )
     return state
   }
 
   /** 记一条事件：挤掉超出上限的最早那条；被 Fetch 拦下的请求记进账。 */
-  private record(state: BrowserProtocolSessionState, method: string, params: unknown, session: Optional<string>): void {
+  private record(
+    state: BrowserProtocolSessionState,
+    method: string,
+    params: unknown,
+    session: Optional<string>
+  ): void {
     this.lastSeq += 1
     state.events.push({ seq: this.lastSeq, method, params, session: toNullable(session) })
     if (state.events.length > BrowserProtocolLimits.bufferedEvents) {
@@ -118,7 +164,11 @@ export class BrowserProtocolSessions implements BrowserProtocolSessionsApi {
       state.dropped += 1
     }
     if (method === 'Fetch.requestPaused' && isPlainObject(params) && isString(params.requestId)) {
-      state.paused.set(params.requestId, { session, pausedAt: Date.now(), url: pausedRequestUrl(params) })
+      state.paused.set(params.requestId, {
+        session,
+        pausedAt: Date.now(),
+        url: pausedRequestUrl(params),
+      })
     }
   }
 
@@ -134,13 +184,26 @@ export class BrowserProtocolSessions implements BrowserProtocolSessionsApi {
     }
   }
 
-  private async autoContinue(state: BrowserProtocolSessionState, requestId: string, paused: BrowserProtocolPausedRequest, now: number): Promise<void> {
+  private async autoContinue(
+    state: BrowserProtocolSessionState,
+    requestId: string,
+    paused: BrowserProtocolPausedRequest,
+    now: number
+  ): Promise<void> {
     try {
       await state.channel.send('Fetch.continueRequest', { requestId }, paused.session)
-      this.record(state, 'Velar.requestAutoContinued', { requestId, url: paused.url, pausedMs: now - paused.pausedAt }, paused.session)
+      this.record(
+        state,
+        'Velar.requestAutoContinued',
+        { requestId, url: paused.url, pausedMs: now - paused.pausedAt },
+        paused.session
+      )
     } catch (error) {
       // 请求多半已经跟着页面没了：没有什么可放行的，记一笔日志就够。
-      this.log.debug('替模型放行被拦下的请求没成', { requestId, error: AppError.from(error).message })
+      this.log.debug('替模型放行被拦下的请求没成', {
+        requestId,
+        error: AppError.from(error).message,
+      })
     }
   }
 

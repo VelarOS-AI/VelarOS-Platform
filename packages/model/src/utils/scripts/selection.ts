@@ -1,4 +1,11 @@
-import { isArray, isBoolean, isNonBlankString, isPlainObject, isPresent, isString } from '@velaros-ai/core'
+import {
+  isArray,
+  isBoolean,
+  isNonBlankString,
+  isPlainObject,
+  isPresent,
+  isString,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -61,10 +68,7 @@ export function parseModelSelection(value: unknown): ModelSelection {
 export function parseModelRuntimeContext(value: unknown): ModelRuntimeContext {
   const record = requireRecord(value, 'Model Runtime context 必须显式提供。')
   if (!isArray(record.providerRuntimeConfigs)) {
-    throw new AppError(
-      'VALIDATION',
-      'Model Runtime context.providerRuntimeConfigs 必须是数组。'
-    )
+    throw new AppError('VALIDATION', 'Model Runtime context.providerRuntimeConfigs 必须是数组。')
   }
   const openRouter = requireRecord(
     record.openRouter,
@@ -135,16 +139,16 @@ function isProviderScriptManifestShape(value: unknown): value is ProviderScriptM
   if (!isPlainObject(value)) return false
 
   return (
-    isString(value.id)
-    && isString(value.label)
-    && isString(value.description)
-    && isString(value.defaultBaseURL)
-    && isString(value.defaultApiKey)
-    && isString(value.defaultModel)
-    && isBoolean(value.apiKeyOptional)
-    && isBoolean(value.baseURLConfigurable)
-    && isBoolean(value.enabledByDefault)
-    && isArray(value.models)
+    isString(value.id) &&
+    isString(value.label) &&
+    isString(value.description) &&
+    isString(value.defaultBaseURL) &&
+    isString(value.defaultApiKey) &&
+    isString(value.defaultModel) &&
+    isBoolean(value.apiKeyOptional) &&
+    isBoolean(value.baseURLConfigurable) &&
+    isBoolean(value.enabledByDefault) &&
+    isArray(value.models)
   )
 }
 
@@ -175,11 +179,12 @@ function parseThinkingDepth(value: unknown): ThinkingDepth | undefined {
 function parseReasoningLevel(value: unknown): ReasoningLevel | undefined {
   if (!isPresent(value)) return undefined
   if (
-    value === 'off'
-    || value === 'low'
-    || value === 'medium'
-    || value === 'high'
-    || value === 'ultra'
-  ) return value
+    value === 'off' ||
+    value === 'low' ||
+    value === 'medium' ||
+    value === 'high' ||
+    value === 'ultra'
+  )
+    return value
   throw new AppError('VALIDATION', 'reasoningLevel 必须是 off、low、medium、high 或 ultra。')
 }

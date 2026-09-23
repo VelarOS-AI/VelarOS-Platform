@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { approvalContracts } from '../src/index'
-const {createManualApprovalOptions}=approvalContracts
+const { createManualApprovalOptions } = approvalContracts
 
 describe('manual approval contract', () => {
   test('pins explicit user interaction and disables decision reuse', () => {

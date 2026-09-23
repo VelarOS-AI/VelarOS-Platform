@@ -3,14 +3,18 @@ import { open, rm } from 'node:fs/promises'
 
 import { Log } from '@velaros-ai/core'
 
-import type { KernelArtifactDownloadOptions, KernelArtifactDownloadResult } from '../../types/updater'
-import {
-  KernelUpdaterError,
-} from '../errors'
+import type {
+  KernelArtifactDownloadOptions,
+  KernelArtifactDownloadResult,
+} from '../../types/updater'
+import { KernelUpdaterError } from '../errors'
 
 import { nodeKernelFetch } from './transport'
 
-export type { KernelArtifactDownloadOptions, KernelArtifactDownloadResult } from '../../types/updater'
+export type {
+  KernelArtifactDownloadOptions,
+  KernelArtifactDownloadResult,
+} from '../../types/updater'
 const log = Log.tag('KernelArtifactDownload')
 
 /**
@@ -20,7 +24,7 @@ const log = Log.tag('KernelArtifactDownload')
  * ARTIFACT_SIZE_MISMATCH，摘要对不上抛 DIGEST_MISMATCH，取不到抛 DOWNLOAD_FAILED。
  */
 export async function downloadKernelArtifact(
-  options: KernelArtifactDownloadOptions,
+  options: KernelArtifactDownloadOptions
 ): Promise<KernelArtifactDownloadResult> {
   const { artifact, destination } = options
   const fetchImplementation = options.fetch ?? nodeKernelFetch
@@ -37,17 +41,16 @@ export async function downloadKernelArtifact(
       throw new KernelUpdaterError(
         'DOWNLOAD_FAILED',
         `取内核制品失败，HTTP 状态 ${response.status}`,
-        { url: artifact.url, actual: String(response.status) },
+        { url: artifact.url, actual: String(response.status) }
       )
     }
     for await (const chunk of response.body) {
       size += chunk.byteLength
       if (size > artifact.size) {
-        throw new KernelUpdaterError(
-          'ARTIFACT_SIZE_MISMATCH',
-          '内核制品比清单声明的还大',
-          { url: artifact.url, expected: String(artifact.size) },
-        )
+        throw new KernelUpdaterError('ARTIFACT_SIZE_MISMATCH', '内核制品比清单声明的还大', {
+          url: artifact.url,
+          expected: String(artifact.size),
+        })
       }
       hash.update(chunk)
       await handle.write(chunk)
@@ -66,7 +69,7 @@ export async function downloadKernelArtifact(
       'DOWNLOAD_FAILED',
       `从 "${artifact.url}" 下载内核制品失败`,
       { url: artifact.url },
-      { cause: error },
+      { cause: error }
     )
   }
 
@@ -79,18 +82,18 @@ export async function downloadKernelArtifact(
         url: artifact.url,
         expected: String(artifact.size),
         actual: String(size),
-      },
+      }
     )
   }
 
   const digest = hash.digest('hex')
   if (digest !== artifact.sha256) {
     await rm(destination, { force: true })
-    throw new KernelUpdaterError(
-      'DIGEST_MISMATCH',
-      '内核制品的 SHA-256 与清单声明的不一致',
-      { url: artifact.url, expected: artifact.sha256, actual: digest },
-    )
+    throw new KernelUpdaterError('DIGEST_MISMATCH', '内核制品的 SHA-256 与清单声明的不一致', {
+      url: artifact.url,
+      expected: artifact.sha256,
+      actual: digest,
+    })
   }
 
   return { path: destination, size, sha256: digest }

@@ -6,8 +6,15 @@ import { isPresent } from '@velaros-ai/core'
 import { isEmpty, isNonBlankString, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { CdpExternalBrowserChildProcess, CdpExternalBrowserLaunchOptions } from '../../types/cdp.js'
-import type { CdpChromeStderrDiagnostics, CdpExternalBrowserLaunchEnv, CdpTargetDescription } from '../../types/cdp.js'
+import type {
+  CdpExternalBrowserChildProcess,
+  CdpExternalBrowserLaunchOptions,
+} from '../../types/cdp.js'
+import type {
+  CdpChromeStderrDiagnostics,
+  CdpExternalBrowserLaunchEnv,
+  CdpTargetDescription,
+} from '../../types/cdp.js'
 import { BrowserTuning } from '../tuning'
 
 /** 判断这次拉起浏览器的失败值不值得再试一次。 */
@@ -74,10 +81,7 @@ export function getExecutablePathCandidates(platform: NodeJS.Platform): string[]
 }
 
 /** 收一行 Chrome 的 stderr，保留最近的若干行备用。 */
-export function pushChromeStderrLine(
-  diagnostics: CdpChromeStderrDiagnostics,
-  line: string
-): void {
+export function pushChromeStderrLine(diagnostics: CdpChromeStderrDiagnostics, line: string): void {
   const trimmed = line.trim()
   if (!trimmed) return
 
@@ -206,15 +210,19 @@ export function formatChromeEarlyExitMessage(
   const hint = hasSandboxStderr(lines)
     ? '\nHint: Linux/CI/容器环境可尝试在外部浏览器 args 中加入 --no-sandbox。'
     : ''
-  return [
-    `外部浏览器启动失败，进程在写入 DevToolsActivePort 前退出：${status}`,
-    'Chrome stderr:',
-    ...lines.map((line) => `  ${line}`),
-  ].join('\n') + hint
+  return (
+    [
+      `外部浏览器启动失败，进程在写入 DevToolsActivePort 前退出：${status}`,
+      'Chrome stderr:',
+      ...lines.map((line) => `  ${line}`),
+    ].join('\n') + hint
+  )
 }
 
 /** 接上子进程的 stderr，边跑边留最近的若干行备用。 */
-export function captureChromeStderr(child: CdpExternalBrowserChildProcess): CdpChromeStderrDiagnostics {
+export function captureChromeStderr(
+  child: CdpExternalBrowserChildProcess
+): CdpChromeStderrDiagnostics {
   const diagnostics: CdpChromeStderrDiagnostics = { lines: [], pending: '' }
   const stderr = child.stderr
   if (!stderr) return diagnostics

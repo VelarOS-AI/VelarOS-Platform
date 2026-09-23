@@ -5,9 +5,29 @@ import { basename, dirname, resolve } from 'node:path'
 import electron from 'electron'
 
 import { isString, isTrue } from '@velaros-ai/core'
-import { isArray, isFalse, isObject, isPlainObject, isPresent, optionalWhenLazy } from '@velaros-ai/core'
+import {
+  isArray,
+  isFalse,
+  isObject,
+  isPlainObject,
+  isPresent,
+  optionalWhenLazy,
+} from '@velaros-ai/core'
 
-import type { BrowserCaptureScreenshotOptions, BrowserDomStabilityOptions, BrowserElementTargetHint, BrowserLoginDetection, BrowserScreenshotCaptureRegion, BrowserScreenshotElementLabel, BrowserScreenshotElementLabelOptions, BrowserScreenshotElementLegendItem, BrowserScreenshotMetadata, BrowserScreenshotModelImage, BrowserScreenshotModelImageOptions, BrowserScreenshotRegionOptions } from '../../types/browser'
+import type {
+  BrowserCaptureScreenshotOptions,
+  BrowserDomStabilityOptions,
+  BrowserElementTargetHint,
+  BrowserLoginDetection,
+  BrowserScreenshotCaptureRegion,
+  BrowserScreenshotElementLabel,
+  BrowserScreenshotElementLabelOptions,
+  BrowserScreenshotElementLegendItem,
+  BrowserScreenshotMetadata,
+  BrowserScreenshotModelImage,
+  BrowserScreenshotModelImageOptions,
+  BrowserScreenshotRegionOptions,
+} from '../../types/browser'
 import type { ScreencastFrameDecoder } from '../../types/cdp.js'
 import type { BrowserPageDriverScreenshotOptions } from '../../types/driver'
 import type { BrowserSession } from '../../types/electron'
@@ -60,7 +80,12 @@ export function resolveScreenshotFullPageOptions(
 
   const rawOptions = isObject(options) ? options : {}
   return {
-    maxWidth: clampInteger(rawOptions.maxWidth, 320, 32_000, BrowserTuning.screenshot.fullPageMaxWidth),
+    maxWidth: clampInteger(
+      rawOptions.maxWidth,
+      320,
+      32_000,
+      BrowserTuning.screenshot.fullPageMaxWidth
+    ),
     maxHeight: clampInteger(
       rawOptions.maxHeight,
       240,
@@ -78,7 +103,12 @@ export function resolveScreenshotModelImageOptions(
 
   const rawOptions = isObject(options) ? options : {}
   return {
-    maxWidth: clampInteger(rawOptions.maxWidth, 320, 3840, BrowserTuning.screenshot.modelImageMaxWidth),
+    maxWidth: clampInteger(
+      rawOptions.maxWidth,
+      320,
+      3840,
+      BrowserTuning.screenshot.modelImageMaxWidth
+    ),
     maxHeight: clampInteger(
       rawOptions.maxHeight,
       240,
@@ -199,12 +229,7 @@ export function buildScreenshotModelCoordinateMap(
 ): NonNullable<BrowserScreenshotModelImage['coordinateMap']> {
   const pageToImageScaleX = imageWidth / Math.max(1, capture.width)
   const pageToImageScaleY = imageHeight / Math.max(1, capture.height)
-  const viewportX = clampNumber(
-    capture.viewport.x,
-    capture.x,
-    capture.x + capture.width,
-    capture.x
-  )
+  const viewportX = clampNumber(capture.viewport.x, capture.x, capture.x + capture.width, capture.x)
   const viewportY = clampNumber(
     capture.viewport.y,
     capture.y,
@@ -215,10 +240,7 @@ export function buildScreenshotModelCoordinateMap(
     x: viewportX,
     y: viewportY,
     width: Math.max(1, Math.min(capture.viewport.width, capture.x + capture.width - viewportX)),
-    height: Math.max(
-      1,
-      Math.min(capture.viewport.height, capture.y + capture.height - viewportY)
-    ),
+    height: Math.max(1, Math.min(capture.viewport.height, capture.y + capture.height - viewportY)),
   }
   const viewportRectInImage = {
     x: Math.round((viewport.x - capture.x) * pageToImageScaleX),
@@ -282,8 +304,7 @@ export function compareScreenshotDiffSamples(
   return {
     changedPixels,
     totalPixels,
-    changedRatio:
-      totalPixels > 0 ? Math.round((changedPixels / totalPixels) * 10_000) / 10_000 : 0,
+    changedRatio: totalPixels > 0 ? Math.round((changedPixels / totalPixels) * 10_000) / 10_000 : 0,
   }
 }
 

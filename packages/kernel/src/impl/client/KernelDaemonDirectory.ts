@@ -1,10 +1,7 @@
 import { readFile } from 'node:fs/promises'
 
 import { KernelClientErrorCodes } from '../../contract/constants'
-import type {
-  KernelDaemonEndpointDescriptor,
-  KernelDaemonPaths,
-} from '../../types/kernel'
+import type { KernelDaemonEndpointDescriptor, KernelDaemonPaths } from '../../types/kernel'
 import type { KernelHandshake } from '../../types/wire'
 import { KernelClientError } from '../../utils/errors'
 import { isNodeError } from '../../utils/fs'
@@ -15,7 +12,7 @@ import {
 import { negotiateKernelProtocol } from '../../utils/wire/negotiation'
 import { KernelProtocolVersion } from '../../utils/wire/version'
 
-import { KernelClient,type KernelClientApi } from './KernelClient'
+import { KernelClient, type KernelClientApi } from './KernelClient'
 import { SocketKernelTransport } from './SocketKernelTransport'
 
 /** 连上共享守护进程之后交出来的三件套：能用的客户端、它的 descriptor 与那次握手。 */
@@ -52,13 +49,11 @@ export class KernelDaemonDirectory implements KernelDaemonDirectoryApi {
   }
 
   public async discover(
-    paths: KernelDaemonPaths = this.defaultPaths(),
+    paths: KernelDaemonPaths = this.defaultPaths()
   ): Promise<KernelDaemonEndpointDescriptor> {
     let input: unknown
     try {
-      input = JSON.parse(
-        await readFile(paths.descriptorPath, 'utf8'),
-      ) as unknown
+      input = JSON.parse(await readFile(paths.descriptorPath, 'utf8')) as unknown
     } catch (error) {
       if (isNodeError(error, 'ENOENT')) {
         throw new KernelClientError({
@@ -79,7 +74,7 @@ export class KernelDaemonDirectory implements KernelDaemonDirectoryApi {
   }
 
   public async connect(
-    paths: KernelDaemonPaths = this.defaultPaths(),
+    paths: KernelDaemonPaths = this.defaultPaths()
   ): Promise<KernelDaemonDirectoryConnection> {
     const descriptor = await this.discover(paths)
     // 认证令牌发出去之前先核 descriptor 的协议版本：本来的顺序是先 handshake（令牌已经写上
@@ -89,7 +84,7 @@ export class KernelDaemonDirectory implements KernelDaemonDirectoryApi {
       new SocketKernelTransport({
         authToken: descriptor.authToken,
         endpoint: descriptor.endpoint,
-      }),
+      })
     )
     try {
       const handshake = await client.handshake()

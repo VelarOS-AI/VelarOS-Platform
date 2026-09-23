@@ -15,14 +15,11 @@ import type { RemoteNodeSocket, RemoteNodeSocketFactory } from '../../contract/r
  * `maxPayload`:截图类输出本就按图片体量走同一条连接,socket 层提前砍会把可诊断的协议
  * 拒绝退化成无来由的断链。
  */
-export const createRemoteNodeWebSocket: RemoteNodeSocketFactory = (
-  url: string,
-): RemoteNodeSocket => new WebSocket(url)
+export const createRemoteNodeWebSocket: RemoteNodeSocketFactory = (url: string): RemoteNodeSocket =>
+  new WebSocket(url)
 
 /** 摘掉一条 socket 上的全部监听;换连接前必须先摘,否则旧 socket 的 close 会干扰新连接。 */
-export function detachRemoteNodeSocket(
-  socket: LooseOptional<RemoteNodeSocket>,
-): void {
+export function detachRemoteNodeSocket(socket: LooseOptional<RemoteNodeSocket>): void {
   if (!isPresent(socket)) return
   socket.removeAllListeners()
 }

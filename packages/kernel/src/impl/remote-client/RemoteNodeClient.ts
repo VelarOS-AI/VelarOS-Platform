@@ -13,35 +13,34 @@
 //  - **判活靠静默时长,不靠 close 事件**:网络层消失时 close 可能永远不来,卡在握手上的连接
 //    更是一声不吭。心跳定时器从 socket 打开就跑,ping 则等到就绪后才发。
 //  - **私钥只在内存与凭据存储之间流动**:不进日志、不进帧、不进诊断导出。
-import {
-  isNull,
-  isPresent,
-  isTrue,
-  Log,
-  toNullable,
-} from '@velaros-ai/core'
+import { isNull, isPresent, isTrue, Log, toNullable } from '@velaros-ai/core'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { RemoteNodeClientErrorCodes } from '../../contract/constants'
 import type { RemoteNodeSocket, RemoteNodeSocketFactory } from '../../contract/requires'
 import type { RemoteNodeKeyPair, RemoteNodeReadyWaiter } from '../../types/remote'
-import { type RemoteNodeClientFailure, type RemoteNodeClientOptions, type RemoteNodeConnectionState, type RemoteNodeCredentials, type RemoteNodeInvokeRequest, type RemoteNodeManifestListener, type RemoteNodeSession, type RemoteNodeStateListener, type RemoteNodeStopListener, type RemoteNodeUnsubscribe } from '../../types/remote-client'
+import {
+  type RemoteNodeClientFailure,
+  type RemoteNodeClientOptions,
+  type RemoteNodeConnectionState,
+  type RemoteNodeCredentials,
+  type RemoteNodeInvokeRequest,
+  type RemoteNodeManifestListener,
+  type RemoteNodeSession,
+  type RemoteNodeStateListener,
+  type RemoteNodeStopListener,
+  type RemoteNodeUnsubscribe,
+} from '../../types/remote-client'
 import { RemoteNodeClientError } from '../../utils/errors'
 import { createAbortError, remoteNodeDisposedError } from '../../utils/remote/calls'
-import {
-  computeReconnectDelayMs,
-  planRemoteNodeCloseAction,
-} from '../../utils/remote/close-policy'
+import { computeReconnectDelayMs, planRemoteNodeCloseAction } from '../../utils/remote/close-policy'
 import { createClientId } from '../../utils/remote/crypto'
 import { decodeServerFrame, sendFrame } from '../../utils/remote/frames'
 import {
   planRemoteNodeHandshake,
   resolveRemoteNodeHostPlatform,
 } from '../../utils/remote/handshake'
-import {
-  createRemoteNodeWebSocket,
-  detachRemoteNodeSocket,
-} from '../../utils/remote/ws-socket'
+import { createRemoteNodeWebSocket, detachRemoteNodeSocket } from '../../utils/remote/ws-socket'
 import {
   type RemoteNodeCancel,
   type RemoteNodeChallenge,
@@ -76,10 +75,7 @@ export interface RemoteNodeClientApi {
   /** 点火并等首次 `ready`,兑现本次会话;凭据读不出或对端判决停手时拒绝。 */
   connect(): Promise<RemoteNodeSession>
   /** 发起一次远端能力调用,兑现能力输出;失败一律是 `RemoteNodeClientError`,带 `resultUnknown`。 */
-  invoke(
-    request: RemoteNodeInvokeRequest,
-    signal?: LooseOptional<AbortSignal>,
-  ): Promise<unknown>
+  invoke(request: RemoteNodeInvokeRequest, signal?: LooseOptional<AbortSignal>): Promise<unknown>
   /** 订阅清单变更(含重连后发现 revision 已变);返回退订函数。 */
   onManifestChanged(listener: RemoteNodeManifestListener): RemoteNodeUnsubscribe
   /** 订阅连接态变化;返回退订函数。 */
@@ -126,9 +122,8 @@ export class RemoteNodeClient implements RemoteNodeClientApi {
     this.calls = new RemoteNodePendingCalls(this.timers, {
       send: (frame) => this.write(frame),
       // 只有就绪时才交出摘要;其余状态返回 null,调用留在簿里排队。
-      currentRevision: () => this.state === 'ready'
-        ? toNullable(this.session?.manifest.revision)
-        : null,
+      currentRevision: () =>
+        this.state === 'ready' ? toNullable(this.session?.manifest.revision) : null,
     })
   }
 
@@ -191,7 +186,7 @@ export class RemoteNodeClient implements RemoteNodeClientApi {
   /** 发起一次远端能力调用;`capabilityId` 用 Node 侧原名。 */
   public async invoke(
     request: RemoteNodeInvokeRequest,
-    signal?: LooseOptional<AbortSignal>,
+    signal?: LooseOptional<AbortSignal>
   ): Promise<unknown> {
     if (this.disposed) throw remoteNodeDisposedError()
     if (isPresent(this.stopError)) throw this.stopError
@@ -200,16 +195,12 @@ export class RemoteNodeClient implements RemoteNodeClientApi {
   }
 
   /** 清单变更(含重连后发现 revision 已变);Agent 主干据此重注册工具面。 */
-  public onManifestChanged(
-    listener: RemoteNodeManifestListener,
-  ): RemoteNodeUnsubscribe {
+  public onManifestChanged(listener: RemoteNodeManifestListener): RemoteNodeUnsubscribe {
     this.manifestListeners.add(listener)
     return () => this.manifestListeners.delete(listener)
   }
 
-  public onStateChanged(
-    listener: RemoteNodeStateListener,
-  ): RemoteNodeUnsubscribe {
+  public onStateChanged(listener: RemoteNodeStateListener): RemoteNodeUnsubscribe {
     this.stateListeners.add(listener)
     return () => this.stateListeners.delete(listener)
   }
@@ -379,10 +370,7 @@ export class RemoteNodeClient implements RemoteNodeClientApi {
     }
     this.setState('ready')
     this.resolveReadyWaiters(this.session)
-    if (
-      isPresent(previous)
-      && previous.manifest.revision !== frame.manifest.revision
-    ) {
+    if (isPresent(previous) && previous.manifest.revision !== frame.manifest.revision) {
       // 断线期间对端开关被改过;首次 ready 的清单由 connect() 兑现,这里只播"变更"。
       this.emitManifest(frame.manifest)
     }
@@ -427,7 +415,7 @@ export class RemoteNodeClient implements RemoteNodeClientApi {
     this.heartbeat = this.timers.every(
       RemoteNodeHeartbeatIntervalMs,
       () => this.onHeartbeatTick(),
-      { label: 'remote-node.heartbeat', unref: true },
+      { label: 'remote-node.heartbeat', unref: true }
     )
   }
 
@@ -470,7 +458,7 @@ export class RemoteNodeClient implements RemoteNodeClientApi {
         this.reconnect = null
         this.openSocket()
       },
-      { label: 'remote-node.reconnect', unref: true },
+      { label: 'remote-node.reconnect', unref: true }
     )
   }
 
@@ -530,8 +518,6 @@ export class RemoteNodeClient implements RemoteNodeClientApi {
 }
 
 /** 建一个远程节点客户端;实例归装配方,一台远端主机一个,连上之前不产生任何网络动作。 */
-export function createRemoteNodeClient(
-  options: RemoteNodeClientOptions,
-): RemoteNodeClientApi {
+export function createRemoteNodeClient(options: RemoteNodeClientOptions): RemoteNodeClientApi {
   return new RemoteNodeClient(options)
 }

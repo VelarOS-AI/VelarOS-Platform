@@ -78,7 +78,11 @@ import type {
 } from '../../contract/requires.js'
 import type { ProjectSymbol } from '../../types/adapter.js'
 import type { BatchInput, BatchMetrics, BatchResult } from '../../types/batch.js'
-import type { ProjectChangeLifecycle, ProjectChangeRecordInput, ProjectChangeRevision } from '../../types/change-feed.js'
+import type {
+  ProjectChangeLifecycle,
+  ProjectChangeRecordInput,
+  ProjectChangeRevision,
+} from '../../types/change-feed.js'
 import type { DiffResult, ProjectStatus } from '../../types/common.js'
 import type { BuildEvidencePackInput, EvidencePack } from '../../types/context.js'
 import type {
@@ -107,23 +111,51 @@ import type { CorePolicy } from '../../types/policy.js'
 import type { ProjectRuntimeProviders } from '../../types/provider.js'
 import type { FileAttributes, FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
 import type { ResolveTargetInput, ResolveTargetResult } from '../../types/target.js'
-import type { ApplyRestoreState, ProjectTransactionPendingOperation, StagedFileContent,StoredTransaction } from '../../types/transaction.js'
+import type {
+  ApplyRestoreState,
+  ProjectTransactionPendingOperation,
+  StagedFileContent,
+  StoredTransaction,
+} from '../../types/transaction.js'
 import type { ValidateInput, ValidationResult } from '../../types/validation.js'
 import { combineDiffs } from '../../utils/diff.js'
 import { ProjectError } from '../../utils/errors.js'
 import { metadataPaths } from '../../utils/files/git-index.js'
 import { runBatch } from '../../utils/kernel/batch.js'
 import { createCorePolicy } from '../../utils/kernel/policy.js'
-import { boundedChangeIntents, projectChangePatches } from '../../utils/transactions/change-records.js'
-import { missingAncestorDirectories, removeEmptyDirectories } from '../../utils/transactions/created-directories.js'
-import { changeProjectionBytes, storedTransactionBytes, transactionBytePlanBytes } from '../../utils/transactions/history-budget.js'
-import { patchFileAttributes, withPatchFileAttributes } from '../../utils/transactions/patch-attributes.js'
-import { isCreatePatch, isDeletePatch, stagedContentAfter } from '../../utils/transactions/patch-chain.js'
+import {
+  boundedChangeIntents,
+  projectChangePatches,
+} from '../../utils/transactions/change-records.js'
+import {
+  missingAncestorDirectories,
+  removeEmptyDirectories,
+} from '../../utils/transactions/created-directories.js'
+import {
+  changeProjectionBytes,
+  storedTransactionBytes,
+  transactionBytePlanBytes,
+} from '../../utils/transactions/history-budget.js'
+import {
+  patchFileAttributes,
+  withPatchFileAttributes,
+} from '../../utils/transactions/patch-attributes.js'
+import {
+  isCreatePatch,
+  isDeletePatch,
+  stagedContentAfter,
+} from '../../utils/transactions/patch-chain.js'
 import {
   canRevertToOriginal,
   createsMissingFile,
 } from '../../utils/transactions/patch-ownership.js'
-import { diagnosticsEnvelope, rethrowNotApplied, revisionMismatch, validationFailed, withNotAppliedOutcome } from '../../utils/transactions/transaction-errors.js'
+import {
+  diagnosticsEnvelope,
+  rethrowNotApplied,
+  revisionMismatch,
+  validationFailed,
+  withNotAppliedOutcome,
+} from '../../utils/transactions/transaction-errors.js'
 import { ProjectTuning } from '../../utils/tuning.js'
 import { FileStore } from '../files/FileStore.js'
 import { ProjectGitIndex } from '../files/ProjectGitIndex.js'
@@ -142,7 +174,10 @@ import { ValidatorRegistry } from '../registries/ValidatorRegistry.js'
 import { LockManager } from '../transactions/LockManager.js'
 import { TransactionCoordinator } from '../transactions/TransactionCoordinator.js'
 import { TransactionOverlay } from '../transactions/TransactionOverlay.js'
-import { TransactionPlanner, type TransactionPlannerPrepareOptions } from '../transactions/TransactionPlanner.js'
+import {
+  TransactionPlanner,
+  type TransactionPlannerPrepareOptions,
+} from '../transactions/TransactionPlanner.js'
 import { TransactionProjectionRepository } from '../transactions/TransactionProjectionRepository.js'
 import { TransactionRecovery } from '../transactions/TransactionRecovery.js'
 import { TransactionRepository } from '../transactions/TransactionRepository.js'
@@ -268,7 +303,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
       this.root,
       this.policy,
       this.providers.fileFilter,
-      this.providers.command,
+      this.providers.command
     )
     this.gitIndex = new ProjectGitIndex({ root: this.root, providers: this.providers })
     this.transactionRecovery = new TransactionRecovery({ store: this.store })
@@ -298,7 +333,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
       rebasePatchAgainstContent: async (patchValue, stagedContent) =>
         this.planner.tryRebasePatch(
           patchValue,
-          await this.planner.snapshotWithContent(patchValue.path, stagedContent),
+          await this.planner.snapshotWithContent(patchValue.path, stagedContent)
         ),
       readWorkspaceFile: async (pathValue) => (await this.read({ path: pathValue })).content,
     })
@@ -323,11 +358,12 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
       const durable = this.transactionState.snapshot()
       this.transactionRecovery.hydrateBytePlans(durable.bytePlans ?? [])
       this.transactionRepository.hydrate(durable.transactions, (transaction) =>
-        this.transactionStateMachine.isTerminal(transaction.status),
+        this.transactionStateMachine.isTerminal(transaction.status)
       )
       this.transactionProjectionRepository.hydrate(durable.projections)
       // 恢复期间每处理完一个未完成操作都会重写状态；先把全部装进内存，还没恢复的那些才不会被写没了。
-      for (const pending of durable.pendings ?? []) this.durablePending.set(pending.transactionId, pending)
+      for (const pending of durable.pendings ?? [])
+        this.durablePending.set(pending.transactionId, pending)
     }
   }
 
@@ -353,7 +389,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
 
   private retainTerminalTransaction(transactionId: string): void {
     this.deleteEvictedTransactionProjections(
-      this.transactionRepository.retainTerminal(transactionId),
+      this.transactionRepository.retainTerminal(transactionId)
     )
   }
 
@@ -365,7 +401,8 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     const bytePlans = this.transactionRecovery.captureBytePlans()
     const retained = new Set(this.durablePending.keys())
     for (const transaction of this.transactionRepository.values()) {
-      if (!this.transactionStateMachine.isTerminal(transaction.status)) retained.add(transaction.transactionId)
+      if (!this.transactionStateMachine.isTerminal(transaction.status))
+        retained.add(transaction.transactionId)
     }
     const evicted = this.transactionRepository.capBytes(
       (transaction) => {
@@ -378,7 +415,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
         )
       },
       ProjectTuning.persistence.historyBytes,
-      retained,
+      retained
     )
     this.deleteEvictedTransactionProjections(evicted)
   }
@@ -413,7 +450,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     tx: StoredTransaction,
     lifecycle: ProjectChangeLifecycle,
     newIntents: readonly EditIntent[] = [],
-    revisions?: readonly ProjectChangeRevision[],
+    revisions?: readonly ProjectChangeRevision[]
   ): ProjectChangeRecordInput {
     const previous =
       this.transactionProjectionRepository.get(tx.transactionId) ??
@@ -452,7 +489,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     lifecycle: ProjectChangeLifecycle,
     newIntents: readonly EditIntent[] = [],
     revisions?: readonly ProjectChangeRevision[],
-    removeTransaction = false,
+    removeTransaction = false
   ): void {
     const projection = this.transactionChangeProjection(tx, lifecycle, newIntents, revisions)
     const transactionSnapshot = this.transactionRepository.snapshot()
@@ -464,7 +501,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
       this.transactionRecovery.deleteBytePlan(tx.transactionId)
     }
     this.transactionProjectionRepository.cap((transactionId) =>
-      this.transactionRepository.has(transactionId),
+      this.transactionRepository.has(transactionId)
     )
     try {
       this.persistTransactionState()
@@ -548,7 +585,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     return { ...snapshot, adapterIds: adapters.map((a) => a.id) }
   }
   private async restoreDurableOperation(
-    pending: ProjectTransactionPendingOperation,
+    pending: ProjectTransactionPendingOperation
   ): Promise<void> {
     const tx = this.transactionRepository.get(pending.transactionId)
     if (!tx)
@@ -564,7 +601,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
   private beginDurableOperation(
     tx: StoredTransaction,
     kind: ProjectTransactionPendingOperation['kind'],
-    restoreByPath: Map<string, ApplyRestoreState>,
+    restoreByPath: Map<string, ApplyRestoreState>
   ): ProjectTransactionPendingOperation | undefined {
     if (!this.transactionState) return undefined
     const pending: ProjectTransactionPendingOperation = {
@@ -590,7 +627,8 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
 
   public async initializeTransactionState(): Promise<void> {
     // 逐个恢复：单槽位时代只能恢复最后一个，并发的另一个事务的半写就永远留在磁盘上了。
-    for (const pending of [...this.durablePending.values()]) await this.restoreDurableOperation(pending)
+    for (const pending of [...this.durablePending.values()])
+      await this.restoreDurableOperation(pending)
     this.reconcileDurableChangeFeed()
   }
 
@@ -602,7 +640,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
 
   private async prepareTransaction(
     input: PrepareEditInput,
-    options: TransactionPlannerPrepareOptions & { store?: boolean } = {},
+    options: TransactionPlannerPrepareOptions & { store?: boolean } = {}
   ): Promise<PreparedTransaction> {
     const transaction = await this.planner.prepareTransaction(input, options)
     if (options.store ?? true) this.addTransaction(transaction)
@@ -641,7 +679,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
 
   private async runTransactionCommand<T>(
     transactionId: string,
-    action: () => Promise<T>,
+    action: () => Promise<T>
   ): Promise<T> {
     return this.transactionCoordinator.run(transactionId, action)
   }
@@ -657,7 +695,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
         'INVALID_INPUT',
         `事务正在执行，不能丢弃：${transactionId}`,
         { transactionId },
-        '请等待当前事务操作完成后，再根据最新事务状态决定是否丢弃。',
+        '请等待当前事务操作完成后，再根据最新事务状态决定是否丢弃。'
       )
     }
     const tx = this.transactionRepository.get(transactionId)
@@ -685,7 +723,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
       throw new ProjectError(
         'INVALID_INPUT',
         `无法 amend 该事务：当前暂存补丁不能干净重放：${envelope.headline}`,
-        { transactionId: input.transactionId, ...envelope.details },
+        { transactionId: input.transactionId, ...envelope.details }
       )
     }
 
@@ -699,7 +737,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
         contentOverlay: overlay.contentByPath,
         attributeOverlay: overlay.attributesByPath,
         store: false,
-      },
+      }
     )
 
     const transactionBeforeAmend = structuredClone(tx)
@@ -712,7 +750,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
             ...(patchValue.metadata ?? {}),
             amendedFromTransactionId: preparedTx.transactionId,
           },
-        })),
+        }))
       )
       preparedTx.baseSnapshots.push(...amendment.baseSnapshots)
       preparedTx.metadata = {
@@ -745,7 +783,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
   /** 在事务暂存内容上运行修复器，并把修复转成事务修订。 */
   public async fixTransaction(input: FixInput): Promise<FixResult> {
     return this.runTransactionCommand(input.transactionId, () =>
-      this.fixTransactionSerialized(input),
+      this.fixTransactionSerialized(input)
     )
   }
 
@@ -795,7 +833,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
         diagnostics: [...result.diagnostics, ...passResult.diagnostics],
         toolRequirements: optionalWhen(
           [...(result.toolRequirements ?? []), ...(passResult.toolRequirements ?? [])].length,
-          [...(result.toolRequirements ?? []), ...(passResult.toolRequirements ?? [])],
+          [...(result.toolRequirements ?? []), ...(passResult.toolRequirements ?? [])]
         ),
       }
       if (!passResult.changed) break
@@ -904,7 +942,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
                   actual: oldRevisions[patch.path],
                   patchId: patch.patchId,
                   operation: patch.metadata?.op,
-                },
+                }
               )
             }
             patch = chained
@@ -918,7 +956,9 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
               current.content === patch.oldContent
             if (
               (current.revision !== patch.baseRevision ||
-                (current.exists && isString(patch.oldContent) && current.content !== patch.oldContent)) &&
+                (current.exists &&
+                  isString(patch.oldContent) &&
+                  current.content !== patch.oldContent)) &&
               !canReplayRolledBackPatch
             ) {
               const rebased = await this.planner.tryRebasePatch(patch, current)
@@ -961,8 +1001,9 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
         // 注意：这里只读不写，不改变下面补丁的顺序写入与 rebase 语义。
         restoreByPath = await this.transactionRecovery.captureApplyRestoreState(tx.changedFiles)
         // 写盘时 mkdir --recursive 会把缺的父目录一并建出来；这里先记下缺哪几级，撤销时才知道哪些空目录是本事务留下的。
-        createdDirectories = await missingAncestorDirectories(tx.changedFiles, async (directory) =>
-          (await this.store.snapshot(directory, false)).exists,
+        createdDirectories = await missingAncestorDirectories(
+          tx.changedFiles,
+          async (directory) => (await this.store.snapshot(directory, false)).exists
         )
         this.transactionRecovery.prepareBytePlan(tx, restoreByPath)
         pending = this.beginDurableOperation(tx, 'apply', restoreByPath)
@@ -996,7 +1037,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
             writtenOrder,
             restoreByPath,
             tx,
-            'apply',
+            'apply'
           )
         throw writeError
       }
@@ -1023,7 +1064,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
             writtenOrder,
             restoreByPath,
             tx,
-            'apply',
+            'apply'
           )
         throw stateError
       }
@@ -1032,10 +1073,10 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
       // 仍在的新建文件挂上 intent-to-add（同一事务里建了又删的不挂——git add 遇到不存在的路径会整批
       // 失败）；最终被删的路径撤掉残留的 intent-to-add 条目（rename_file 的旧路径同样走这里）。
       const gitTrackedFiles = await this.gitIndex.trackCreatedFilesInGit(
-        createdFiles.filter((pathValue) => newRevisions[pathValue] !== 'deleted'),
+        createdFiles.filter((pathValue) => newRevisions[pathValue] !== 'deleted')
       )
       const gitUntrackedFiles = await this.gitIndex.untrackDeletedIntentToAddFromGit(
-        tx.changedFiles.filter((pathValue) => newRevisions[pathValue] === 'deleted'),
+        tx.changedFiles.filter((pathValue) => newRevisions[pathValue] === 'deleted')
       )
       if (gitTrackedFiles.length > 0) tx.metadata = { ...(tx.metadata ?? {}), gitTrackedFiles }
       // rollback 恢复这些文件时据此把 intent-to-add 挂回去。
@@ -1132,13 +1173,14 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
    */
   private rejectUnknownRollbackTarget(transactionId: string): never {
     const recorded =
-      this.transactionProjectionRepository.get(transactionId) ?? this.changeFeedWriter.get(transactionId)
+      this.transactionProjectionRepository.get(transactionId) ??
+      this.changeFeedWriter.get(transactionId)
     if (!recorded) throw new ProjectError('INVALID_INPUT', `未知事务：${transactionId}`)
     throw new ProjectError(
       'NOT_SUPPORTED',
       `这次改动没有留下撤销记录，撤销不了：${transactionId}`,
       { transactionId, changedFiles: [...recorded.changedFiles] },
-      '改动本身还在变更记录里可以查看 diff；要回到改动前，请按 diff 手工改回，或用版本控制恢复这些文件。',
+      '改动本身还在变更记录里可以查看 diff；要回到改动前，请按 diff 手工改回，或用版本控制恢复这些文件。'
     )
   }
 
@@ -1160,14 +1202,14 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
       []
     for (const pathValue of tx.changedFiles) {
       const expectedRevision = appliedRevisions.find(
-        (revision) => revision.path === pathValue,
+        (revision) => revision.path === pathValue
       )?.after
       if (!expectedRevision) {
         throw new ProjectError(
           'CONFLICT_WITH_EXTERNAL_EDIT',
           `无法安全回滚事务 ${tx.transactionId}：缺少 apply 后 revision（${pathValue}）`,
           { transactionId: tx.transactionId, path: pathValue },
-          '请重新读取冲突文件并人工确认恢复内容；不要强制覆盖当前工作区。',
+          '请重新读取冲突文件并人工确认恢复内容；不要强制覆盖当前工作区。'
         )
       }
       const current = await this.store.snapshot(pathValue, true)
@@ -1194,7 +1236,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
             expectedRevision,
             actualRevision: current.exists ? current.revision : 'deleted',
           },
-          '请重新读取冲突文件并人工合并；不要重试会覆盖当前内容的回滚。',
+          '请重新读取冲突文件并人工合并；不要重试会覆盖当前内容的回滚。'
         )
       }
     }
@@ -1205,7 +1247,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
         throw new ProjectError(
           'PATCH_APPLY_ERROR',
           `无法回滚事务 ${tx.transactionId}：补丁缺少可还原的旧正文（${patch.path}）`,
-          { path: patch.path, op: patch.metadata?.op },
+          { path: patch.path, op: patch.metadata?.op }
         )
       }
     }
@@ -1239,7 +1281,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
             writtenOrder,
             restoreByPath,
             tx,
-            'rollback',
+            'rollback'
           )
         throw rollbackError
       }
@@ -1264,21 +1306,22 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
             writtenOrder,
             restoreByPath,
             tx,
-            'rollback',
+            'rollback'
           )
         throw stateError
       }
 
       const gitUntrackedFiles = await this.gitIndex.untrackCreatedFilesFromGit(
-        metadataPaths(tx.metadata?.gitTrackedFiles),
+        metadataPaths(tx.metadata?.gitTrackedFiles)
       )
       // apply 为被删路径撤掉的 intent-to-add 随文件恢复挂回去，git 视野回到 apply 之前。
       const gitTrackedFiles = await this.gitIndex.trackCreatedFilesInGit(
-        metadataPaths(tx.metadata?.gitUntrackedFiles),
+        metadataPaths(tx.metadata?.gitUntrackedFiles)
       )
       // 文件回到 apply 之前了，本事务顺带建出来的目录也要回去：从深到浅删掉仍然空着的那几级。
-      await removeEmptyDirectories(metadataPaths(tx.metadata?.createdDirectories), async (directory) =>
-        (await this.store.authorize(directory)).abs,
+      await removeEmptyDirectories(
+        metadataPaths(tx.metadata?.createdDirectories),
+        async (directory) => (await this.store.authorize(directory)).abs
       )
       this.retainTerminalTransaction(tx.transactionId)
       this.persistCommittedTransactionState(tx.transactionId, 'git metadata or terminal retention')
@@ -1395,7 +1438,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
 
 /** 创建项目内核，并安装 core plugin 与调用方传入的插件。 */
 export async function createProjectKernel(
-  options: CreateProjectKernelOptions,
+  options: CreateProjectKernelOptions
 ): Promise<ProjectKernel> {
   const project = new LocalProjectKernel(options)
   await project.initializeTransactionState()

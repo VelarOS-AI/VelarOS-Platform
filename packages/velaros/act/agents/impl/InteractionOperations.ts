@@ -37,13 +37,19 @@ export class InteractionOperations implements InteractionOperationsApi {
     return ctx.interaction.interact('input', input.message, ctx.abortSignal)
   }
 
-  public async capability(input: CapabilityRequest, ctx: InteractionOperationContext): Promise<unknown> {
+  public async capability(
+    input: CapabilityRequest,
+    ctx: InteractionOperationContext
+  ): Promise<unknown> {
     ctx.abortSignal.throwIfAborted()
     checkInteractionMessage(input.message)
     return ctx.interaction.interact('capability', input.message, ctx.abortSignal, input.detail)
   }
 
-  public async confirm(input: InteractionRequest, ctx: InteractionOperationContext): Promise<unknown> {
+  public async confirm(
+    input: InteractionRequest,
+    ctx: InteractionOperationContext
+  ): Promise<unknown> {
     ctx.abortSignal.throwIfAborted()
     checkInteractionMessage(input.message)
     return ctx.interaction.interact('confirmation', input.message, ctx.abortSignal)

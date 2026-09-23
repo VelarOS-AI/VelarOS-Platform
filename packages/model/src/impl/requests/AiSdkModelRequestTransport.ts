@@ -1,9 +1,4 @@
-import {
-  generateText,
-  Output as AiOutput,
-  streamText,
-  type ToolSet,
-} from 'ai'
+import { generateText, Output as AiOutput, streamText, type ToolSet } from 'ai'
 
 import type { ModelRequestTransport } from '../../contract/requires'
 import type {

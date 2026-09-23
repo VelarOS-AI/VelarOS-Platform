@@ -40,14 +40,32 @@ export type ProjectCodeIndexQuery =
  * 宿主自己发的查询不给时由语言服务用它的缺省。
  */
 export type ProjectCodeLanguageQuery = ProjectCodeScope & { limit?: number } & (
-  | { action: 'find_symbols'; query?: string; path?: string; kinds?: string[]; exact?: boolean }
-  | { action: 'list_exports'; path?: string; query?: string; includeReExports?: boolean }
-  | { action: 'find_imports'; path?: string; specifier?: string; kind?: string; includeExternal?: boolean }
-  | { action: 'find_importers'; targetPath?: string; specifier?: string; path?: string; includeReExports?: boolean }
-  | { action: 'find_references'; symbol: string; path?: string; exactWord?: boolean }
-  | { action: 'language_diagnostics'; path: string }
-  | { action: 'analyze_symbol_impact'; symbol: string; path?: string; declarationPath?: string; kinds?: string[] }
-)
+    | { action: 'find_symbols'; query?: string; path?: string; kinds?: string[]; exact?: boolean }
+    | { action: 'list_exports'; path?: string; query?: string; includeReExports?: boolean }
+    | {
+        action: 'find_imports'
+        path?: string
+        specifier?: string
+        kind?: string
+        includeExternal?: boolean
+      }
+    | {
+        action: 'find_importers'
+        targetPath?: string
+        specifier?: string
+        path?: string
+        includeReExports?: boolean
+      }
+    | { action: 'find_references'; symbol: string; path?: string; exactWord?: boolean }
+    | { action: 'language_diagnostics'; path: string }
+    | {
+        action: 'analyze_symbol_impact'
+        symbol: string
+        path?: string
+        declarationPath?: string
+        kinds?: string[]
+      }
+  )
 
 /** 语言服务类动作的名字，和常量表 `ProjectCodeLanguageActions` 一一对应。 */
 export type ProjectCodeLanguageAction = (typeof ProjectCodeLanguageActions)[number]

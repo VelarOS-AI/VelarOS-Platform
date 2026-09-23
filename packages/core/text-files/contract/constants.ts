@@ -6,7 +6,15 @@
  * 本包能无损读回、原样写出的七种磁盘文本编码。`utf8-bom`、`utf16le`、`utf16be` 写出时带 BOM；带 `-nobom` 的是没有 BOM 的 UTF-16，字节序靠 NUL 字节的奇偶分布认出；
  * `gb18030` 同时覆盖 GBK 与 GB2312 的文件。持久化的编码名读回来时用 `textCodec.isEncoding` 核对。
  */
-export const TextEncodings = Object.freeze(['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-nobom', 'gb18030'] as const)
+export const TextEncodings = Object.freeze([
+  'utf8',
+  'utf8-bom',
+  'utf16le',
+  'utf16be',
+  'utf16le-nobom',
+  'utf16be-nobom',
+  'gb18030',
+] as const)
 
 /**
  * 本包的错误码。失败一律抛 `AppError`，`code` 就是这里的码，`context` 带 path 与出错的细节（文字里不拼路径，调用方按自己的写法加）；调用方按码翻成自己的错误。

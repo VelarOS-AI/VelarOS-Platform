@@ -3,18 +3,37 @@
  * 这里不设预算、不截断：没读全、没搜全都如实交出去或直接失败，由调用方决定怎么办。参数结构与校验留在项目领域内。
  */
 
-import { isEmpty, isNull, isPresent, isString, isTrue, isUndefined, mapDefined, toOptional } from '@velaros-ai/core'
+import {
+  isEmpty,
+  isNull,
+  isPresent,
+  isString,
+  isTrue,
+  isUndefined,
+  mapDefined,
+  toOptional,
+} from '@velaros-ai/core'
 
 import { ProjectFileLimits } from '../../contract/constants.js'
 import type { AgentProjectKernelPort } from '../../contract/requires.js'
-import type { AgentProjectErrorLike, AgentProjectKernelReadResult, AgentProjectReadRequest, AgentProjectReadResult, AgentProjectSearchHit, AgentProjectSearchRequest } from '../../types/agent-port.js'
+import type {
+  AgentProjectErrorLike,
+  AgentProjectKernelReadResult,
+  AgentProjectReadRequest,
+  AgentProjectReadResult,
+  AgentProjectSearchHit,
+  AgentProjectSearchRequest,
+} from '../../types/agent-port.js'
 import { ProjectError } from '../errors.js'
 
 /**
  * Project Kernel 的读取结果还带着绝对路径、内容哈希、适配器元数据与续读位置。Agent 边界必须显式投影，
  * 免得结构类型允许的额外字段在运行时穿透。
  */
-export function projectAgentReadResult(filePath: string, result: AgentProjectKernelReadResult): AgentProjectReadResult {
+export function projectAgentReadResult(
+  filePath: string,
+  result: AgentProjectKernelReadResult
+): AgentProjectReadResult {
   return {
     snapshot: {
       path: result.snapshot.path || filePath,
@@ -34,9 +53,27 @@ export function projectAgentReadResult(filePath: string, result: AgentProjectKer
 /** 读到的不是可读文本（不存在、是目录、是二进制）时的错误，带码和下一步；读到了正文返回 undefined。 */
 function unreadable(file: AgentProjectReadResult): Optional<ProjectError> {
   const path = file.snapshot.path
-  if (!file.snapshot.exists) return new ProjectError('TARGET_NOT_FOUND', `${path}：这个路径不存在，什么都没读到。`, { path }, '先 list 出准确的路径再读，别接着猜文件名。')
-  if (file.snapshot.isDirectory) return new ProjectError('NOT_SUPPORTED', `${path}：这个路径是目录，read 不列目录。`, { path }, '用 list 列这个目录，再读里面的文件。')
-  if (file.snapshot.isBinary) return new ProjectError('NOT_SUPPORTED', `${path}：这个路径是二进制文件，read 只读文本。`, { path }, '图片用 `velaros:images` 的 view 看；别的格式用命令处理。')
+  if (!file.snapshot.exists)
+    return new ProjectError(
+      'TARGET_NOT_FOUND',
+      `${path}：这个路径不存在，什么都没读到。`,
+      { path },
+      '先 list 出准确的路径再读，别接着猜文件名。'
+    )
+  if (file.snapshot.isDirectory)
+    return new ProjectError(
+      'NOT_SUPPORTED',
+      `${path}：这个路径是目录，read 不列目录。`,
+      { path },
+      '用 list 列这个目录，再读里面的文件。'
+    )
+  if (file.snapshot.isBinary)
+    return new ProjectError(
+      'NOT_SUPPORTED',
+      `${path}：这个路径是二进制文件，read 只读文本。`,
+      { path },
+      '图片用 `velaros:images` 的 view 看；别的格式用命令处理。'
+    )
   return undefined
 }
 
@@ -44,7 +81,10 @@ function unreadable(file: AgentProjectReadResult): Optional<ProjectError> {
  * 经内核读一个文件，投影成 Agent 边界上的结果。读不到可读文本时抛带码与下一步的项目错误；
  * 读到了但字符上限装不下要的那一段时不抛，由结果的 truncated 说。
  */
-export async function readAgentFile(project: AgentProjectKernelPort, input: AgentProjectReadRequest): Promise<AgentProjectReadResult> {
+export async function readAgentFile(
+  project: AgentProjectKernelPort,
+  input: AgentProjectReadRequest
+): Promise<AgentProjectReadResult> {
   const file = projectAgentReadResult(input.path, await project.read(input))
   const failure = unreadable(file)
   if (failure) throw failure
@@ -98,11 +138,19 @@ export async function executeAgentProjectSearch(
     maxResults: ProjectFileLimits.searchHits + 1,
   })
   if (isTrue(result.truncated) || result.hits.length > ProjectFileLimits.searchHits) {
-    const why = isEmpty(result.diagnostics ?? []) ? `命中超过 ${ProjectFileLimits.searchHits} 处（这个上限只为守住内存）` : result.diagnostics!.join(' ')
-    throw new ProjectError('SCOPE_VIOLATION', `搜索没能收全命中，这次什么都没交回：${why}。`, { query: input.query }, '收窄 query、path 或 include 再搜。')
+    const why = isEmpty(result.diagnostics ?? [])
+      ? `命中超过 ${ProjectFileLimits.searchHits} 处（这个上限只为守住内存）`
+      : result.diagnostics!.join(' ')
+    throw new ProjectError(
+      'SCOPE_VIOLATION',
+      `搜索没能收全命中，这次什么都没交回：${why}。`,
+      { query: input.query },
+      '收窄 query、path 或 include 再搜。'
+    )
   }
   const hits = result.hits.map(projectAgentSearchHit)
-  const nextAction = isEmpty(hits) && !isTrue(input.regex) ? literalQueryRegexHint(input.query) : undefined
+  const nextAction =
+    isEmpty(hits) && !isTrue(input.regex) ? literalQueryRegexHint(input.query) : undefined
   return isUndefined(nextAction) ? { hits } : { hits, nextAction }
 }
 
@@ -121,25 +169,27 @@ export function isAgentProjectError(
 }
 
 /** 把任意抛出的值整理成 JSON 安全的错误对象：项目领域错误带上 reason、details 与 suggestedNextAction，其余只留名字和文字。 */
-export function toAgentProjectErrorObject(
-  error: unknown
-): Record<string, unknown> {
-  if (isAgentProjectError(error)) return {
+export function toAgentProjectErrorObject(error: unknown): Record<string, unknown> {
+  if (isAgentProjectError(error))
+    return {
       name: error.name,
       reason: error.reason,
       message: error.message,
       details: error.details,
       suggestedNextAction: error.suggestedNextAction,
     }
-  if (error instanceof Error) return {
+  if (error instanceof Error)
+    return {
       name: error.name,
       message: error.message,
     }
-  if (isNull(error)) return {
+  if (isNull(error))
+    return {
       name: 'NullError',
       message: '预期错误对象，但收到或抛出了 null。',
     }
-  if (isUndefined(error)) return {
+  if (isUndefined(error))
+    return {
       name: 'UndefinedError',
       message: '预期错误对象，但收到或抛出了 undefined。',
     }

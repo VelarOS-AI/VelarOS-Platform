@@ -16,11 +16,14 @@ import { ImageTuning } from './tuning.js'
 export function detectMediaType(buffer: Buffer): Nullable<ImageMediaType> {
   const startsWith = (bytes: number[], at = 0): boolean =>
     buffer.length >= at + bytes.length && bytes.every((byte, index) => buffer[at + index] === byte)
-  if (startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return { kind: 'image', mediaType: 'image/png' }
+  if (startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    return { kind: 'image', mediaType: 'image/png' }
   if (startsWith([0xff, 0xd8, 0xff])) return { kind: 'image', mediaType: 'image/jpeg' }
   if (startsWith([0x47, 0x49, 0x46, 0x38])) return { kind: 'image', mediaType: 'image/gif' }
-  if (startsWith([0x52, 0x49, 0x46, 0x46]) && startsWith([0x57, 0x45, 0x42, 0x50], 8)) return { kind: 'image', mediaType: 'image/webp' }
-  if (startsWith([0x25, 0x50, 0x44, 0x46, 0x2d])) return { kind: 'document', mediaType: 'application/pdf' }
+  if (startsWith([0x52, 0x49, 0x46, 0x46]) && startsWith([0x57, 0x45, 0x42, 0x50], 8))
+    return { kind: 'image', mediaType: 'image/webp' }
+  if (startsWith([0x25, 0x50, 0x44, 0x46, 0x2d]))
+    return { kind: 'document', mediaType: 'application/pdf' }
   return null
 }
 
@@ -35,8 +38,13 @@ function errnoOf(error: unknown): Nullable<string> {
  */
 function readFailure(error: unknown, shown: string): AppError {
   if (error instanceof AppError) {
-    if (error.code === TextFileErrorCodes.tooLarge) return new AppError('VALIDATION', `图片文件在读的时候变大了，超过上限：${shown}；先用命令缩小再看`)
-    if (error.code === TextFileErrorCodes.notRegular) return new AppError('VALIDATION', `路径不是普通文件：${shown}`)
+    if (error.code === TextFileErrorCodes.tooLarge)
+      return new AppError(
+        'VALIDATION',
+        `图片文件在读的时候变大了，超过上限：${shown}；先用命令缩小再看`
+      )
+    if (error.code === TextFileErrorCodes.notRegular)
+      return new AppError('VALIDATION', `路径不是普通文件：${shown}`)
     return error
   }
   switch (errnoOf(error)) {
@@ -55,13 +63,21 @@ function readFailure(error: unknown, shown: string): AppError {
 }
 
 /** 确认路径是普通文件，再有界地读进来；超过 maxBytes 报错，指向先用命令缩小。 */
-export async function readImageFile(target: string, shown: string, maxBytes: number): Promise<Buffer> {
+export async function readImageFile(
+  target: string,
+  shown: string,
+  maxBytes: number
+): Promise<Buffer> {
   const metadata = await stat(target).catch((error: unknown) => {
     throw readFailure(error, shown)
   })
   if (metadata.isDirectory()) throw new AppError('VALIDATION', `路径是目录，不是图片：${shown}`)
   if (!metadata.isFile()) throw new AppError('VALIDATION', `路径不是普通文件：${shown}`)
-  if (metadata.size > maxBytes) throw new AppError('VALIDATION', `图片文件太大：${metadata.size} 字节，上限 ${maxBytes} 字节；先用命令缩小再看`)
+  if (metadata.size > maxBytes)
+    throw new AppError(
+      'VALIDATION',
+      `图片文件太大：${metadata.size} 字节，上限 ${maxBytes} 字节；先用命令缩小再看`
+    )
   const buffer = await textFileIo.readBounded(target, maxBytes).catch((error: unknown) => {
     throw readFailure(error, shown)
   })
@@ -75,15 +91,23 @@ export async function readImageFile(target: string, shown: string, maxBytes: num
  * 只读头：宽高就写在每种格式最前面那几个字节里（PNG 的 IHDR、GIF 的逻辑屏幕、
  * WebP 的 VP8/VP8L/VP8X 头、JPEG 的 SOF 段），用不着把像素解出来。
  */
-export function readImageSize(buffer: Buffer, mediaType: string): Nullable<{ width: number; height: number }> {
+export function readImageSize(
+  buffer: Buffer,
+  mediaType: string
+): Nullable<{ width: number; height: number }> {
   const size = headerSize(buffer, mediaType)
   return size && size.width > 0 && size.height > 0 ? size : null
 }
 
 /** 按格式从文件头里取宽高，不管是不是 0。 */
-function headerSize(buffer: Buffer, mediaType: string): Nullable<{ width: number; height: number }> {
-  if (mediaType === 'image/png' && buffer.length >= 24) return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) }
-  if (mediaType === 'image/gif' && buffer.length >= 10) return { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) }
+function headerSize(
+  buffer: Buffer,
+  mediaType: string
+): Nullable<{ width: number; height: number }> {
+  if (mediaType === 'image/png' && buffer.length >= 24)
+    return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) }
+  if (mediaType === 'image/gif' && buffer.length >= 10)
+    return { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) }
   if (mediaType === 'image/webp' && buffer.length >= 30) return readWebpSize(buffer)
   if (mediaType === 'image/jpeg') return readJpegSize(buffer)
   return null
@@ -92,12 +116,14 @@ function headerSize(buffer: Buffer, mediaType: string): Nullable<{ width: number
 /** WebP 三种头：有损 VP8、无损 VP8L、扩展 VP8X，宽高各在不同位置。 */
 function readWebpSize(buffer: Buffer): Nullable<{ width: number; height: number }> {
   const chunk = buffer.toString('ascii', 12, 16)
-  if (chunk === 'VP8 ') return { width: buffer.readUInt16LE(26) & 0x3fff, height: buffer.readUInt16LE(28) & 0x3fff }
+  if (chunk === 'VP8 ')
+    return { width: buffer.readUInt16LE(26) & 0x3fff, height: buffer.readUInt16LE(28) & 0x3fff }
   if (chunk === 'VP8L') {
     const bits = buffer.readUInt32LE(21)
     return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 }
   }
-  if (chunk === 'VP8X') return { width: buffer.readUIntLE(24, 3) + 1, height: buffer.readUIntLE(27, 3) + 1 }
+  if (chunk === 'VP8X')
+    return { width: buffer.readUIntLE(24, 3) + 1, height: buffer.readUIntLE(27, 3) + 1 }
   return null
 }
 
@@ -109,20 +135,27 @@ function readJpegSize(buffer: Buffer): Nullable<{ width: number; height: number 
     // 标记前允许有任意个 0xFF 填充字节：跳到真正的标记上。
     while (buffer[offset + 1] === 0xff && offset + 9 < buffer.length) offset += 1
     const marker = buffer[offset + 1] ?? 0
-    const isFrame = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc
-    if (isFrame) return { height: buffer.readUInt16BE(offset + 5), width: buffer.readUInt16BE(offset + 7) }
+    const isFrame =
+      marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc
+    if (isFrame)
+      return { height: buffer.readUInt16BE(offset + 5), width: buffer.readUInt16BE(offset + 7) }
     offset += 2 + buffer.readUInt16BE(offset + 2)
   }
   return null
 }
 
 /** 把要看的那一块收进图里：取它和整张图的交集（四边一样收）；交集是空的就返回 null（整块都在图外）。 */
-export function clampImageRegion(region: ImageRegion, size: { width: number; height: number }): Nullable<ImageRegion> {
+export function clampImageRegion(
+  region: ImageRegion,
+  size: { width: number; height: number }
+): Nullable<ImageRegion> {
   const left = Math.max(0, Math.floor(region.x))
   const top = Math.max(0, Math.floor(region.y))
   const right = Math.min(size.width, Math.floor(region.x) + Math.floor(region.width))
   const bottom = Math.min(size.height, Math.floor(region.y) + Math.floor(region.height))
-  return right > left && bottom > top ? { x: left, y: top, width: right - left, height: bottom - top } : null
+  return right > left && bottom > top
+    ? { x: left, y: top, width: right - left, height: bottom - top }
+    : null
 }
 
 /** base64 之后有多长：每 3 字节变 4 个字符，不足 3 字节的补齐。API 的图片上限按这个算。 */
@@ -148,5 +181,8 @@ export async function shrinkImageToLimits(
     if (base64Length(resized.data.byteLength) <= limits.base64Bytes) return resized
     longEdge = Math.floor(longEdge * ImageTuning.shrinkFactor)
   }
-  throw new AppError('VALIDATION', `这张图压到长边 ${tried} px 仍超过 ${limits.base64Bytes} 字节；换一块更小的 region 再看`)
+  throw new AppError(
+    'VALIDATION',
+    `这张图压到长边 ${tried} px 仍超过 ${limits.base64Bytes} 字节；换一块更小的 region 再看`
+  )
 }

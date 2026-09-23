@@ -1,10 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { TransactionStateMachine } from '../impl/transactions/TransactionStateMachine'
-import type {
-  ProjectTransactionStatus,
-  StoredTransaction,
-} from '../types/transaction'
+import type { ProjectTransactionStatus, StoredTransaction } from '../types/transaction'
 import type { ProjectTransactionCommand } from '../types/transaction.js'
 import { ProjectError } from '../utils/errors'
 import { ProjectTransactionCommandTable } from '../utils/transactions/transaction-lifecycle.js'
@@ -18,7 +15,7 @@ const StableStatuses = [
 
 function transaction(
   status: ProjectTransactionStatus,
-  options: { appliedAt?: number } = {},
+  options: { appliedAt?: number } = {}
 ): StoredTransaction {
   return {
     transactionId: `tx_${status}`,
@@ -37,7 +34,7 @@ function transaction(
 function invoke(
   machine: TransactionStateMachine,
   command: ProjectTransactionCommand,
-  value: StoredTransaction,
+  value: StoredTransaction
 ): unknown {
   switch (command) {
     case 'amend':
@@ -57,14 +54,15 @@ describe('TransactionStateMachine', () => {
   test('declares and enforces the complete command-by-stable-state table', () => {
     const machine = new TransactionStateMachine()
 
-    for (const command of Object.keys(ProjectTransactionCommandTable) as ProjectTransactionCommand[]) {
+    for (const command of Object.keys(
+      ProjectTransactionCommandTable
+    ) as ProjectTransactionCommand[]) {
       for (const status of StableStatuses) {
         const value = transaction(
           status,
-          status === 'applied' || status === 'rolled_back' ? { appliedAt: 2 } : {},
+          status === 'applied' || status === 'rolled_back' ? { appliedAt: 2 } : {}
         )
-        const allowed = ProjectTransactionCommandTable[command]
-          .includes(status as never)
+        const allowed = ProjectTransactionCommandTable[command].includes(status as never)
 
         if (allowed) {
           expect(() => invoke(machine, command, value)).not.toThrow()
@@ -94,7 +92,9 @@ describe('TransactionStateMachine', () => {
     expect(machine.validationSucceeded(transaction('prepared'))).toBe('validated')
     expect(machine.validationSucceeded(transaction('validated'))).toBe('validated')
     expect(machine.validationSucceeded(transaction('applied', { appliedAt: 2 }))).toBe('applied')
-    expect(machine.validationSucceeded(transaction('rolled_back', { appliedAt: 2 }))).toBe('rolled_back')
+    expect(machine.validationSucceeded(transaction('rolled_back', { appliedAt: 2 }))).toBe(
+      'rolled_back'
+    )
   })
 
   test('amend invalidates validation and rejects inconsistent appliedAt state', () => {
@@ -109,10 +109,9 @@ describe('TransactionStateMachine', () => {
     const machine = new TransactionStateMachine()
 
     for (const status of ['prepared', 'validated', 'rolled_back'] as const) {
-      const execution = machine.beginApply(transaction(
-        status,
-        status === 'rolled_back' ? { appliedAt: 2 } : {},
-      ))
+      const execution = machine.beginApply(
+        transaction(status, status === 'rolled_back' ? { appliedAt: 2 } : {})
+      )
       expect(execution).toEqual({ command: 'apply', from: status, status: 'applying' })
       expect(machine.executionStatus(execution)).toBe('applying')
       expect(machine.commit(execution)).toBe('applied')
@@ -140,7 +139,9 @@ describe('TransactionStateMachine', () => {
     ]
 
     for (const value of inconsistent) {
-      for (const command of Object.keys(ProjectTransactionCommandTable) as ProjectTransactionCommand[]) {
+      for (const command of Object.keys(
+        ProjectTransactionCommandTable
+      ) as ProjectTransactionCommand[]) {
         expect(() => invoke(machine, command, value)).toThrow('事务状态与 appliedAt 不一致')
       }
     }

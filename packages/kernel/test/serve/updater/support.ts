@@ -1,8 +1,5 @@
 import { createHash } from 'node:crypto'
-import {
-  mkdtemp,
-  rm,
-} from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -54,7 +51,7 @@ export interface FakeFetchOptions {
 
 export function createFakeFetch(
   resources: Readonly<Record<string, Uint8Array | string>>,
-  options: FakeFetchOptions = {},
+  options: FakeFetchOptions = {}
 ): KernelFetch {
   const chunkSize = options.chunkSize ?? 8
   return (request) => {
@@ -64,13 +61,10 @@ export function createFakeFetch(
     const available = status === 200 ? resource : undefined
     return Promise.resolve({
       status,
-      body: available === undefined
-        ? emptyBody()
-        : chunkedBody(
-          toBytes(available),
-          chunkSize,
-          interruptionFor(request.url, options),
-        ),
+      body:
+        available === undefined
+          ? emptyBody()
+          : chunkedBody(toBytes(available), chunkSize, interruptionFor(request.url, options)),
     })
   }
 }
@@ -82,9 +76,7 @@ export function createTemporaryDirectories(prefix: string): {
   const created: string[] = []
   return {
     async create() {
-      const directory = await mkdtemp(
-        join(tmpdir(), `velaros-kernel-updater-${prefix}-`),
-      )
+      const directory = await mkdtemp(join(tmpdir(), `velaros-kernel-updater-${prefix}-`))
       created.push(directory)
       return directory
     },
@@ -100,20 +92,15 @@ function toBytes(resource: Uint8Array | string): Uint8Array {
   return typeof resource === 'string' ? encode(resource) : resource
 }
 
-function interruptionFor(
-  url: string,
-  options: FakeFetchOptions,
-): number | undefined {
+function interruptionFor(url: string, options: FakeFetchOptions): number | undefined {
   if (options.interruptUrls === undefined) return options.interruptAfterBytes
-  return options.interruptUrls.includes(url)
-    ? options.interruptAfterBytes
-    : undefined
+  return options.interruptUrls.includes(url) ? options.interruptAfterBytes : undefined
 }
 
 async function* chunkedBody(
   bytes: Uint8Array,
   chunkSize: number,
-  interruptAfterBytes?: number,
+  interruptAfterBytes?: number
 ): AsyncGenerator<Uint8Array> {
   let sent = 0
   for (let offset = 0; offset < bytes.byteLength; offset += chunkSize) {

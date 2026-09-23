@@ -1,22 +1,7 @@
 import type { ChildProcess } from 'node:child_process'
-import {
-  type FileHandle,
-  open,
-  readFile,
-  rename,
-  stat,
-  unlink,
-  writeFile,
-} from 'node:fs/promises'
+import { type FileHandle, open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
 
-import {
-  isFunction,
-  isNotNull,
-  isNotUndefined,
-  isNull,
-  isObject,
-  Log,
-} from '@velaros-ai/core'
+import { isFunction, isNotNull, isNotUndefined, isNull, isObject, Log } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { KernelClientErrorCodes } from '../../contract/constants'
@@ -36,9 +21,7 @@ const log = Log.tag('KernelDaemonProcess')
  *
  * Windows 没有 POSIX 属主与模式位（`process.getuid` 不存在），跳过。
  */
-export async function assertKernelRuntimeDirectoryIsPrivate(
-  directory: string,
-): Promise<void> {
+export async function assertKernelRuntimeDirectoryIsPrivate(directory: string): Promise<void> {
   if (!isFunction(process.getuid)) return
   const stats = await stat(directory)
   const uid = process.getuid()
@@ -70,16 +53,12 @@ export function isKernelDaemonProcessAlive(pid: number): boolean {
 }
 
 /** 读锁文件里记的属主 pid；读不出来（文件刚建还没写、内容坏了）就回 undefined，不抛。 */
-export async function readKernelDaemonLockOwnerPid(
-  path: string,
-): Promise<number | undefined> {
+export async function readKernelDaemonLockOwnerPid(path: string): Promise<number | undefined> {
   try {
     const input = JSON.parse(await readFile(path, 'utf8')) as unknown
     if (!isObject(input) || isNull(input)) return undefined
     const pid = Reflect.get(input, 'pid')
-    return Number.isInteger(pid) && (pid as number) > 0
-      ? pid as number
-      : undefined
+    return Number.isInteger(pid) && (pid as number) > 0 ? (pid as number) : undefined
   } catch (error) {
     log.debug('Kernel 守护进程锁读不出属主', { error, path })
     return undefined
@@ -88,7 +67,7 @@ export async function readKernelDaemonLockOwnerPid(
 
 /** 按可调参数里的次数与间隔重读属主 pid：对方可能刚 `open` 还没写完 pid，别把成型中的锁当死锁。 */
 export async function readKernelDaemonLockOwnerPidWithRetry(
-  path: string,
+  path: string
 ): Promise<number | undefined> {
   for (let attempt = 0; attempt <= KernelTuning.lockOwnerReadRetries; attempt += 1) {
     const pid = await readKernelDaemonLockOwnerPid(path)
@@ -109,16 +88,13 @@ export async function readKernelDaemonLockOwnerPidWithRetry(
  */
 export async function acquireKernelDaemonLock(
   lockPath: string,
-  instanceId: string,
+  instanceId: string
 ): Promise<FileHandle> {
   // 最多两轮：第一轮抢，属主死了删锁，第二轮再抢；再抢不到就是真有人在跑。
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const handle = await open(lockPath, 'wx', 0o600)
-      await handle.writeFile(
-        JSON.stringify({ instanceId, pid: process.pid }),
-        'utf8',
-      )
+      await handle.writeFile(JSON.stringify({ instanceId, pid: process.pid }), 'utf8')
       return handle
     } catch (error) {
       if (!isNodeError(error, 'EEXIST')) throw error
@@ -148,14 +124,13 @@ export async function acquireKernelDaemonLock(
 /** 把端点 descriptor 写成只有属主可读的文件；先写同目录临时文件再改名，读的人永远看不到半份。 */
 export async function writeKernelDaemonDescriptor(
   path: string,
-  descriptor: KernelDaemonEndpointDescriptor,
+  descriptor: KernelDaemonEndpointDescriptor
 ): Promise<void> {
   const temporaryPath = `${path}.${descriptor.instanceId}.tmp`
-  await writeFile(
-    temporaryPath,
-    `${JSON.stringify(descriptor)}\n`,
-    { encoding: 'utf8', mode: 0o600 },
-  )
+  await writeFile(temporaryPath, `${JSON.stringify(descriptor)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  })
   await rename(temporaryPath, path)
 }
 
@@ -172,23 +147,23 @@ export function hasChildProcessExited(child: ChildProcess): boolean {
  */
 export function meansKernelDaemonIsNotRunning(error: unknown): boolean {
   if (!(error instanceof KernelClientError)) return false
-  return error.code === KernelClientErrorCodes.daemonNotRunning
-    || error.code === KernelClientErrorCodes.daemonDescriptorInvalid
-    || error.code === KernelClientErrorCodes.transportConnectFailed
-    || error.code === KernelClientErrorCodes.transportDisconnected
+  return (
+    error.code === KernelClientErrorCodes.daemonNotRunning ||
+    error.code === KernelClientErrorCodes.daemonDescriptorInvalid ||
+    error.code === KernelClientErrorCodes.transportConnectFailed ||
+    error.code === KernelClientErrorCodes.transportDisconnected
+  )
 }
 
 /** 在常见的终止信号上挂停机动作，停成了退 0、停砸了退 1；返回一个摘掉这些监听器的函数。 */
-export function installKernelShutdownSignalHandlers(
-  stop: () => Promise<void>,
-): () => void {
+export function installKernelShutdownSignalHandlers(stop: () => Promise<void>): () => void {
   let stopping = false
   const onSignal = (): void => {
     if (stopping) return
     stopping = true
     void stop().then(
       () => process.exit(0),
-      () => process.exit(1),
+      () => process.exit(1)
     )
   }
   const signals: readonly NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGHUP']

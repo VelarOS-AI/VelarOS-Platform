@@ -1,14 +1,6 @@
 import assert from 'node:assert/strict'
 import { realpathSync } from 'node:fs'
-import {
-  copyFile,
-  mkdtemp,
-  mkdir,
-  readFile,
-  readdir,
-  rm,
-  writeFile,
-} from 'node:fs/promises'
+import { copyFile, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -20,11 +12,9 @@ import { safePackPackage } from '../release/safe-package-pack.mjs'
 const ScriptDirectory = dirname(fileURLToPath(import.meta.url))
 const RepositoryRoot = resolve(ScriptDirectory, '..')
 const TypeScriptCli =
-  process.env.VELAROS_TYPESCRIPT_CLI
-  ?? resolve(RepositoryRoot, 'node_modules/typescript/bin/tsc')
+  process.env.VELAROS_TYPESCRIPT_CLI ?? resolve(RepositoryRoot, 'node_modules/typescript/bin/tsc')
 const ViteCli =
-  process.env.VELAROS_VITE_CLI
-  ?? resolve(RepositoryRoot, 'node_modules/vite/bin/vite.js')
+  process.env.VELAROS_VITE_CLI ?? resolve(RepositoryRoot, 'node_modules/vite/bin/vite.js')
 const SkipLockfileAudit = process.argv.includes('--skip-lockfile-audit')
 const UtilityTypeNames = [
   'JsonStringifyReplacer',
@@ -103,9 +93,7 @@ export class SynchronousCommandRunner {
     for (let attempt = 1; attempt <= this.#maxAttempts; attempt += 1) {
       const result = this.#spawnCommand(command, args, options)
       const transientFailure =
-        Boolean(result.error)
-        || Boolean(result.signal)
-        || result.status === null
+        Boolean(result.error) || Boolean(result.signal) || result.status === null
 
       if (transientFailure && attempt < this.#maxAttempts) {
         const delayMs = this.#retryDelayMs * attempt
@@ -121,13 +109,7 @@ export class SynchronousCommandRunner {
         continue
       }
       if (result.status !== 0) {
-        throw createCommandFailure(
-          command,
-          args,
-          result,
-          attempt,
-          this.#maxAttempts,
-        )
+        throw createCommandFailure(command, args, result, attempt, this.#maxAttempts)
       }
       return normalizeCommandOutput(result.stdout)
     }
@@ -172,7 +154,7 @@ function createCommandFailure(command, args, result, attempt, maxAttempts) {
     ]
       .filter(Boolean)
       .join('\n'),
-    result.error ? { cause: result.error } : undefined,
+    result.error ? { cause: result.error } : undefined
   )
 }
 
@@ -186,14 +168,7 @@ function waitSynchronously(delayMs) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs)
 }
 
-function writeRetryWarning({
-  args,
-  attempt,
-  command,
-  delayMs,
-  maxAttempts,
-  result,
-}) {
+function writeRetryWarning({ args, attempt, command, delayMs, maxAttempts, result }) {
   const reason = [
     result.error?.message,
     result.signal ? `signal ${result.signal}` : '',
@@ -202,7 +177,7 @@ function writeRetryWarning({
     .filter(Boolean)
     .join(', ')
   process.stderr.write(
-    `Transient spawn failure for ${command} ${args.join(' ')} (${reason || 'unknown'}); retrying after ${delayMs}ms [${attempt}/${maxAttempts}].\n`,
+    `Transient spawn failure for ${command} ${args.join(' ')} (${reason || 'unknown'}); retrying after ${delayMs}ms [${attempt}/${maxAttempts}].\n`
   )
 }
 
@@ -267,13 +242,9 @@ async function collectFiles(directory, predicate) {
   return nestedFiles.flat()
 }
 
-async function assertPublishedDeclarations(
-  packageRoot,
-  { enforceUtilityImports = false } = {}
-) {
-  const declarations = await collectFiles(
-    join(packageRoot, 'dist'),
-    (filePath) => filePath.endsWith('.d.ts')
+async function assertPublishedDeclarations(packageRoot, { enforceUtilityImports = false } = {}) {
+  const declarations = await collectFiles(join(packageRoot, 'dist'), (filePath) =>
+    filePath.endsWith('.d.ts')
   )
 
   for (const declaration of declarations) {
@@ -288,9 +259,7 @@ async function assertPublishedDeclarations(
     if (declaration.endsWith('/internal/utility-types.d.ts')) continue
 
     const importLine =
-      sourceText
-        .split('\n')
-        .find((line) => line.includes('internal/utility-types.js')) ?? ''
+      sourceText.split('\n').find((line) => line.includes('internal/utility-types.js')) ?? ''
     const declarationBody = sourceText.replace(importLine, '')
     for (const typeName of UtilityTypeNames) {
       if (new RegExp(`\\b${typeName}\\b`, 'u').test(declarationBody)) {
@@ -314,11 +283,7 @@ async function packPackage(specification, archiveDirectory) {
   return archivePath
 }
 
-async function auditPackageRoot(
-  specification,
-  packageRoot,
-  { repositoryOwned, rootVersion }
-) {
+async function auditPackageRoot(specification, packageRoot, { repositoryOwned, rootVersion }) {
   const manifest = await readJson(join(packageRoot, 'package.json'))
 
   assert.equal(manifest.name, specification.name)
@@ -347,19 +312,11 @@ async function auditPackageRoot(
     for (const relativePath of RequiredPublishedFiles) {
       await readFile(join(packageRoot, relativePath))
     }
-    const contractsRuntime = await readFile(
-      join(packageRoot, 'dist/contracts.js'),
-      'utf8'
-    )
+    const contractsRuntime = await readFile(join(packageRoot, 'dist/contracts.js'), 'utf8')
     assert.doesNotMatch(contractsRuntime, /\b(?:import|from)\b/u)
-    assert.doesNotMatch(
-      contractsRuntime,
-      /\bexport\s+(?:class|const|function|let|var)\b/u
-    )
+    assert.doesNotMatch(contractsRuntime, /\bexport\s+(?:class|const|function|let|var)\b/u)
     assert.doesNotMatch(contractsRuntime, /export\s*\{[^}]*\S[^}]*\}/u)
-    for (const [name, version] of Object.entries(
-      specification.expectedDependencies ?? {}
-    )) {
+    for (const [name, version] of Object.entries(specification.expectedDependencies ?? {})) {
       assert.equal(manifest.dependencies?.[name], version)
     }
   }
@@ -388,16 +345,8 @@ async function auditPackageRoot(
   }
 }
 
-async function auditPublishedPackage(
-  specification,
-  archivePath,
-  auditDirectory,
-  rootVersion
-) {
-  const extractionDirectory = join(
-    auditDirectory,
-    basename(archivePath, '.tgz')
-  )
+async function auditPublishedPackage(specification, archivePath, auditDirectory, rootVersion) {
+  const extractionDirectory = join(auditDirectory, basename(archivePath, '.tgz'))
   await mkdir(extractionDirectory, { recursive: true })
   run('tar', ['-xzf', archivePath, '-C', extractionDirectory])
 
@@ -424,18 +373,12 @@ async function writeRegistryConfiguration(consumerDirectory) {
 }
 
 function supportPackageArguments({ includeCombined }) {
-  return SupportPackageSpecifications
-    .filter((specification) => includeCombined || !specification.combinedOnly)
-    .map(
-      (specification) =>
-        `${specification.name}@${specification.expectedVersion}`
-    )
+  return SupportPackageSpecifications.filter(
+    (specification) => includeCombined || !specification.combinedOnly
+  ).map((specification) => `${specification.name}@${specification.expectedVersion}`)
 }
 
-async function auditInstalledSupportPackages(
-  consumerDirectory,
-  { includeCombined, rootVersion }
-) {
+async function auditInstalledSupportPackages(consumerDirectory, { includeCombined, rootVersion }) {
   for (const specification of SupportPackageSpecifications) {
     if (specification.combinedOnly && !includeCombined) continue
     await auditPackageRoot(
@@ -476,11 +419,7 @@ async function writeConsumerProject(consumerDirectory) {
           skipLibCheck: false,
           types: ['node'],
         },
-        include: [
-          'package-api.ts',
-          'examples/**/*.ts',
-          'combined-consumer.ts',
-        ],
+        include: ['package-api.ts', 'examples/**/*.ts', 'combined-consumer.ts'],
       },
       null,
       2
@@ -492,10 +431,7 @@ async function writeConsumerProject(consumerDirectory) {
   )
   await mkdir(join(consumerDirectory, 'examples'))
   await copyFile(
-    join(
-      consumerDirectory,
-      'node_modules/@velaros-ai/model/examples/minimal.ts'
-    ),
+    join(consumerDirectory, 'node_modules/@velaros-ai/model/examples/minimal.ts'),
     join(consumerDirectory, 'examples/model.ts')
   )
   await writeFile(
@@ -661,12 +597,7 @@ async function main() {
     const archives = []
     for (const specification of PackageSpecifications) {
       const archivePath = await packPackage(specification, archiveDirectory)
-      await auditPublishedPackage(
-        specification,
-        archivePath,
-        auditDirectory,
-        rootManifest.version
-      )
+      await auditPublishedPackage(specification, archivePath, auditDirectory, rootManifest.version)
       archives.push(archivePath)
     }
 
@@ -747,8 +678,6 @@ async function main() {
   }
 }
 
-const invokedPath = process.argv[1]
-  ? realpathSync(resolve(process.argv[1]))
-  : undefined
+const invokedPath = process.argv[1] ? realpathSync(resolve(process.argv[1])) : undefined
 const modulePath = realpathSync(fileURLToPath(import.meta.url))
 if (invokedPath === modulePath) await main()

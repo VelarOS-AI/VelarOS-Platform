@@ -22,12 +22,9 @@ describe('callable capability contract', () => {
     })
     expect(Object.isFrozen(metadata)).toBe(true)
     expect(Object.isFrozen(metadata?.permissions)).toBe(true)
-    expect(await service.invoke(
-      'read',
-      undefined,
-      { path: 'a.ts' },
-      new AbortController().signal,
-    )).toEqual({ input: { path: 'a.ts' } })
+    expect(
+      await service.invoke('read', undefined, { path: 'a.ts' }, new AbortController().signal)
+    ).toEqual({ input: { path: 'a.ts' } })
   })
 
   test('fails closed for unknown and aborted operations', async () => {
@@ -39,22 +36,15 @@ describe('callable capability contract', () => {
     })
 
     expect(service.getOperationMetadata('toString')).toBeUndefined()
-    expect(() =>
-      service.invoke(
-        'missing',
-        undefined,
-        {},
-        new AbortController().signal,
-      )).toThrow(
-      expect.objectContaining({ code: KernelCallErrorCodes.operationNotFound }),
+    expect(() => service.invoke('missing', undefined, {}, new AbortController().signal)).toThrow(
+      expect.objectContaining({ code: KernelCallErrorCodes.operationNotFound })
     )
 
     const controller = new AbortController()
     controller.abort()
-    expect(() =>
-      service.invoke('ping', undefined, {}, controller.signal)).toThrow(
-        '能力调用已被中止',
-      )
+    expect(() => service.invoke('ping', undefined, {}, controller.signal)).toThrow(
+      '能力调用已被中止'
+    )
   })
 
   test('rejects empty and duplicate permission declarations', () => {
@@ -64,7 +54,8 @@ describe('callable capability contract', () => {
           metadata: { permissions: ['fs:read', 'fs:read'] },
           invoke: () => undefined,
         },
-      })).toThrow('重复的权限名')
+      })
+    ).toThrow('重复的权限名')
 
     expect(() =>
       kernelModules.callable({
@@ -72,6 +63,7 @@ describe('callable capability contract', () => {
           metadata: { permissions: [''] },
           invoke: () => undefined,
         },
-      })).toThrow('空的权限名')
+      })
+    ).toThrow('空的权限名')
   })
 })

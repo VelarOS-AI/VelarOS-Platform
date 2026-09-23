@@ -1,4 +1,12 @@
-import type { ModelInputModalities, ModelProviderAdapterKinds, ModelProviderOperationalManifests, ModelProviderValidationKinds, ReasoningLevels, ThinkingDepths, VelarCloudManagedProviderIds } from '../contract/constants.js'
+import type {
+  ModelInputModalities,
+  ModelProviderAdapterKinds,
+  ModelProviderOperationalManifests,
+  ModelProviderValidationKinds,
+  ReasoningLevels,
+  ThinkingDepths,
+  VelarCloudManagedProviderIds,
+} from '../contract/constants.js'
 
 /** 由 VelarOS Cloud 托管的 provider id。 */
 export type VelarCloudManagedProviderId = (typeof VelarCloudManagedProviderIds)[number]

@@ -3,8 +3,18 @@
  * 规则表与判定在 `utils/transactions/transaction-lifecycle.ts`；这里按规则回答每个命令，内核改事务状态一律经它。
  */
 
-import type { ProjectTransactionExecution, ProjectTransactionExecutionStatus, ProjectTransactionStatus, StoredTransaction } from '../../types/transaction.js'
-import { assertConsistentStableState, commandAllowedFrom, invalidTransition, ValidationSuccessTable } from '../../utils/transactions/transaction-lifecycle.js'
+import type {
+  ProjectTransactionExecution,
+  ProjectTransactionExecutionStatus,
+  ProjectTransactionStatus,
+  StoredTransaction,
+} from '../../types/transaction.js'
+import {
+  assertConsistentStableState,
+  commandAllowedFrom,
+  invalidTransition,
+  ValidationSuccessTable,
+} from '../../utils/transactions/transaction-lifecycle.js'
 
 /**
  * Project 事务的纯生命周期规则：给出每个命令之后的稳定状态，不合规就抛 INVALID_INPUT（details 带事务号、命令和当前状态）。
@@ -23,9 +33,13 @@ export interface TransactionStateMachineApi {
   /** 核对事务能被应用：prepared、validated、rolled_back 能应用，已应用的抛出。 */
   assertApplicable(transaction: StoredTransaction): void
   /** 开始应用：核对能应用后返回这次命令用的执行记号（applying，from 是开始前的状态）。 */
-  beginApply(transaction: StoredTransaction): Extract<ProjectTransactionExecution, { command: 'apply' }>
+  beginApply(
+    transaction: StoredTransaction
+  ): Extract<ProjectTransactionExecution, { command: 'apply' }>
   /** 开始回滚：只有 applied 能回滚，返回这次命令用的执行记号（rolling_back，from 是 applied）。 */
-  beginRollback(transaction: StoredTransaction): Extract<ProjectTransactionExecution, { command: 'rollback' }>
+  beginRollback(
+    transaction: StoredTransaction
+  ): Extract<ProjectTransactionExecution, { command: 'rollback' }>
   /** 命令成功后的稳定状态：应用得 applied，回滚得 rolled_back。 */
   commit(execution: ProjectTransactionExecution): 'applied' | 'rolled_back'
   /** 命令失败后退回的状态：执行记号里记的开始前状态。 */
@@ -68,7 +82,7 @@ export class TransactionStateMachine implements TransactionStateMachineApi {
   }
 
   public beginApply(
-    transaction: StoredTransaction,
+    transaction: StoredTransaction
   ): Extract<ProjectTransactionExecution, { command: 'apply' }> {
     this.assertApplicable(transaction)
     return {
@@ -79,7 +93,7 @@ export class TransactionStateMachine implements TransactionStateMachineApi {
   }
 
   public beginRollback(
-    transaction: StoredTransaction,
+    transaction: StoredTransaction
   ): Extract<ProjectTransactionExecution, { command: 'rollback' }> {
     assertConsistentStableState(transaction, 'rollback')
     if (!commandAllowedFrom('rollback', transaction.status))
@@ -108,7 +122,7 @@ export class TransactionStateMachine implements TransactionStateMachineApi {
   }
 
   public executionStatus(
-    execution: ProjectTransactionExecution,
+    execution: ProjectTransactionExecution
   ): ProjectTransactionExecutionStatus {
     return execution.status
   }

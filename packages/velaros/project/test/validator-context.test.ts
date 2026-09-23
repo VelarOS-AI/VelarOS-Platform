@@ -9,7 +9,9 @@ import { ValidatorRegistry } from '../impl/registries/ValidatorRegistry'
 import type { ProjectValidationContext, ProjectValidationTransaction } from '../types/validation'
 import { createCorePolicy } from '../utils/kernel/policy'
 
-function transaction(overrides: Partial<ProjectValidationTransaction> = {}): ProjectValidationTransaction {
+function transaction(
+  overrides: Partial<ProjectValidationTransaction> = {}
+): ProjectValidationTransaction {
   return {
     transactionId: 'tx_context',
     changedFiles: ['source.ts'],
@@ -18,11 +20,13 @@ function transaction(overrides: Partial<ProjectValidationTransaction> = {}): Pro
   }
 }
 
-function context(options: {
-  transaction?: ProjectValidationTransaction
-  providers?: ProjectProviders
-  readFile?: (path: string) => Promise<string | undefined>
-} = {}): ProjectValidationContext {
+function context(
+  options: {
+    transaction?: ProjectValidationTransaction
+    providers?: ProjectProviders
+    readFile?: (path: string) => Promise<string | undefined>
+  } = {}
+): ProjectValidationContext {
   const command = options.providers?.command ?? {
     run: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
   }
@@ -79,14 +83,14 @@ describe('ProjectValidationContext', () => {
 
     const scope = await new ScopeValidator().validate(
       { transactionId: tx.transactionId },
-      validationContext,
+      validationContext
     )
     const postcondition = await new PostconditionValidator().validate(
       {
         transactionId: tx.transactionId,
         postconditions: [{ type: 'must_contain', value: 'future content' }],
       },
-      validationContext,
+      validationContext
     )
 
     expect(scope.ok).toBe(false)
@@ -109,7 +113,7 @@ describe('ProjectValidationContext', () => {
 
     const result = await new TypeScriptSyntaxValidator().validate(
       { transactionId: tx.transactionId },
-      validationContext,
+      validationContext
     )
 
     expect(result.ok).toBe(true)
@@ -134,16 +138,18 @@ describe('ProjectValidationContext', () => {
             reads.push(path)
             return 'export const value = 1\n'
           },
-        }),
+        })
       )
 
       expect(reads).toEqual(['valid.ts'])
-      expect(result.checks).toEqual([{
-        id: 'velaros.typescript.syntax-validator',
-        metadata: { evidenceKey: expect.any(String), reused: false },
-        ok: true,
-        diagnostics: [],
-      }])
+      expect(result.checks).toEqual([
+        {
+          id: 'velaros.typescript.syntax-validator',
+          metadata: { evidenceKey: expect.any(String), reused: false },
+          ok: true,
+          diagnostics: [],
+        },
+      ])
     }
 
     const emptyChecksReads: string[] = []
@@ -156,7 +162,7 @@ describe('ProjectValidationContext', () => {
           emptyChecksReads.push(path)
           return 'export const value = 1\n'
         },
-      }),
+      })
     )
     expect(emptyChecksReads).toEqual(['valid.ts'])
     expect(emptyChecksResult.checks).toHaveLength(1)
@@ -165,7 +171,7 @@ describe('ProjectValidationContext', () => {
     registry.register(new TypeScriptSyntaxValidator())
     const skipped = await registry.validate(
       { paths: ['valid.ts'], checks: ['unrelated'] },
-      context(),
+      context()
     )
     expect(skipped.checks).toEqual([])
   })

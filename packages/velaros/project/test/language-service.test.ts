@@ -7,11 +7,7 @@ import { describe, expect, test } from 'bun:test'
 import { createProjectKernel } from '@velaros-ai/velaros/project'
 import { ProjectCodeLanguageActions } from '@velaros-ai/velaros/project/contracts'
 
-import {
-  createProjectCodeQuery,
-  languageQueries,
-  type LanguageToolContext,
-} from '../index'
+import { createProjectCodeQuery, languageQueries, type LanguageToolContext } from '../index'
 
 describe('@velaros-ai/velaros/project', () => {
   test('routes CodeGraph actions through the optional Project index overlay', async () => {
@@ -24,9 +20,10 @@ describe('@velaros-ai/velaros/project', () => {
       },
     })
 
-    await expect(
-      queryCode({ action: 'explore', nodeIds: ['n1'] }, {} as never)
-    ).resolves.toEqual({ source: 'codegraph', action: 'explore' })
+    await expect(queryCode({ action: 'explore', nodeIds: ['n1'] }, {} as never)).resolves.toEqual({
+      source: 'codegraph',
+      action: 'explore',
+    })
     expect(calls).toEqual(['explore'])
     expect(ProjectCodeLanguageActions).toContain('find_symbols')
     expect(ProjectCodeLanguageActions).not.toContain('build_index' as never)
@@ -94,9 +91,9 @@ describe('@velaros-ai/velaros/project', () => {
         }),
       },
     }
-    await expect(
-      languageQueries.run({ action: 'find_symbols' }, context)
-    ).rejects.toThrow('language query cancelled')
+    await expect(languageQueries.run({ action: 'find_symbols' }, context)).rejects.toThrow(
+      'language query cancelled'
+    )
     expect(reads).toBe(0)
   })
 })

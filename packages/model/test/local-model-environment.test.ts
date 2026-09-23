@@ -47,18 +47,17 @@ describe('LocalModelEnvironment', () => {
     )
     expect(environment.resolveOllamaChatModel('fallback-model')).toBe('qwen3:8b')
     expect(environment.resolveOllamaContextWindow()).toBe(32768)
-    expect(
-      environment.resolveOllamaVisibleChatModels('fallback-model', 'qwen3:8b')
-    ).toEqual(['qwen3:8b'])
+    expect(environment.resolveOllamaVisibleChatModels('fallback-model', 'qwen3:8b')).toEqual([
+      'qwen3:8b',
+    ])
   })
 
   test('accepts a custom environment port without copying host state', () => {
     const environment = new LocalModelEnvironment(
       {},
       {
-        read: (name) =>
-          name === OllamaEnvNames.contextWindow ? '16384' : undefined,
-      },
+        read: (name) => (name === OllamaEnvNames.contextWindow ? '16384' : undefined),
+      }
     )
 
     expect(environment.resolveOllamaContextWindow()).toBe(16384)

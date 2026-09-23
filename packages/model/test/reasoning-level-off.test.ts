@@ -117,26 +117,27 @@ describe('reasoningLevel=off', () => {
     expect(
       createThinkingDepthProviderOptions('openai', OpenAiModelId, 'balanced', 'off')
     ).toBeNull()
-    expect(
-      createThinkingDepthProviderOptions('google', GoogleModelId, 'deep', 'off')
-    ).toBeNull()
+    expect(createThinkingDepthProviderOptions('google', GoogleModelId, 'deep', 'off')).toBeNull()
   })
 
   test('缺 thinkingDepth 时 off 一样生效，其它档仍按 thinkingDepth 走', () => {
-    expect(createThinkingDepthProviderOptions('anthropic', AnthropicModelId, undefined, 'off'))
-      .toEqual({ anthropic: { thinking: { type: 'disabled' } } })
+    expect(
+      createThinkingDepthProviderOptions('anthropic', AnthropicModelId, undefined, 'off')
+    ).toEqual({ anthropic: { thinking: { type: 'disabled' } } })
     // 只有 off 与 thinkingDepth 无关：没有 thinkingDepth 的其它档仍然什么都不发。
-    expect(createThinkingDepthProviderOptions('anthropic', AnthropicModelId, undefined, 'ultra'))
-      .toBeNull()
+    expect(
+      createThinkingDepthProviderOptions('anthropic', AnthropicModelId, undefined, 'ultra')
+    ).toBeNull()
     // 有 thinkingDepth 时 level 是用户的显式选择，力度按 level 走而不是按 depth 走。
-    expect(createThinkingDepthProviderOptions('anthropic', AnthropicModelId, 'balanced', 'ultra'))
-      .toEqual({
-        anthropic: {
-          sendReasoning: true,
-          thinking: { type: 'adaptive', display: 'summarized' },
-          effort: 'high',
-        },
-      })
+    expect(
+      createThinkingDepthProviderOptions('anthropic', AnthropicModelId, 'balanced', 'ultra')
+    ).toEqual({
+      anthropic: {
+        sendReasoning: true,
+        thinking: { type: 'adaptive', display: 'summarized' },
+        effort: 'high',
+      },
+    })
   })
 
   test('适配器包装层把关闭写法合进本次调用', async () => {

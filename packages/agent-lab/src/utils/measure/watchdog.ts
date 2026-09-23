@@ -2,14 +2,22 @@
  * 看门狗：在一次等待窗口里只看增量——进窗口前记一次基线，之后每采样一次就比一次，
  * 够阈值就给出中止候选。上一段攒下的次数不算到这一段头上。纯测量：不碰 Node 模块、不发请求。
  */
-import type { Finding, Observation, WatchdogAbort, WatchdogBaseline } from '../../types/agent-lab.js'
+import type {
+  Finding,
+  Observation,
+  WatchdogAbort,
+  WatchdogBaseline,
+} from '../../types/agent-lab.js'
 import type { ResolvedDetectorSettings, WatchdogSignal } from '../../types/internal.js'
 import { canonicalJson } from '../canonical-json.js'
 
 import { collectToolCalls, normalizeObservation } from './normalize.js'
 
 /** 数出这一刻的三类打转信号：同一工具连续重复、同一目录页重复读、单轮工具调用密度。 */
-function signalCounts(observation: Observation, settings: ResolvedDetectorSettings): readonly WatchdogSignal[] {
+function signalCounts(
+  observation: Observation,
+  settings: ResolvedDetectorSettings
+): readonly WatchdogSignal[] {
   const { thresholds } = settings
   const catalogToolNames = new Set(settings.catalogToolNames)
   const calls = collectToolCalls(observation)
@@ -23,7 +31,8 @@ function signalCounts(observation: Observation, settings: ResolvedDetectorSettin
     consecutiveRetryCount = retryKey === previousRetryKey ? consecutiveRetryCount + 1 : 1
     repeatCounts.set(retryKey, Math.max(repeatCounts.get(retryKey) ?? 0, consecutiveRetryCount))
     previousRetryKey = retryKey
-    if (catalogToolNames.has(call.name)) catalogCounts.set(input, (catalogCounts.get(input) ?? 0) + 1)
+    if (catalogToolNames.has(call.name))
+      catalogCounts.set(input, (catalogCounts.get(input) ?? 0) + 1)
   }
 
   const signals: WatchdogSignal[] = []
@@ -67,15 +76,17 @@ export function createWatchdogBaseline(
   observation: Observation,
   findings: readonly Finding[],
   activeDetectorIds: ReadonlySet<string>,
-  settings: ResolvedDetectorSettings,
+  settings: ResolvedDetectorSettings
 ): WatchdogBaseline {
   return {
     counts: Object.fromEntries(
       signalCounts(observation, settings)
         .filter((signal) => activeDetectorIds.has(signal.detectorId))
-        .map((signal) => [signal.key, signal.count]),
+        .map((signal) => [signal.key, signal.count])
     ),
-    findingKeys: findings.filter((finding) => activeDetectorIds.has(finding.detectorId)).map(findingKey),
+    findingKeys: findings
+      .filter((finding) => activeDetectorIds.has(finding.detectorId))
+      .map(findingKey),
   }
 }
 
@@ -88,16 +99,20 @@ export function selectAbortCandidate(
   findings: readonly Finding[],
   baseline: WatchdogBaseline,
   activeDetectorIds: ReadonlySet<string>,
-  settings: ResolvedDetectorSettings,
+  settings: ResolvedDetectorSettings
 ): WatchdogAbort | null {
-  for (const signal of signalCounts(observation, settings).filter((item) => activeDetectorIds.has(item.detectorId))) {
+  for (const signal of signalCounts(observation, settings).filter((item) =>
+    activeDetectorIds.has(item.detectorId)
+  )) {
     const delta = signal.count - (baseline.counts[signal.key] ?? 0)
     if (delta >= signal.abortAt) return { detectorId: signal.detectorId, reason: signal.reason }
   }
   const baselineFindings = new Set(baseline.findingKeys)
   const fatal = findings.find(
     (item) =>
-      activeDetectorIds.has(item.detectorId) && item.severity === 'fail' && !baselineFindings.has(findingKey(item)),
+      activeDetectorIds.has(item.detectorId) &&
+      item.severity === 'fail' &&
+      !baselineFindings.has(findingKey(item))
   )
   return fatal ? { detectorId: fatal.detectorId, reason: fatal.summary } : null
 }

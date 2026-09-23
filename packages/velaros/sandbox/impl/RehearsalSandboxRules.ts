@@ -18,7 +18,14 @@ import { selectSandboxChanges } from '../utils/apply.js'
  */
 export interface RehearsalSandboxRulesApi {
   /** 按点名的相对路径筛三列；不点名就全部。点名了、三列里都没有的路径放进 unknown。路径里的反斜杠当 /，开头的 ./ 去掉。 */
-  select(changes: { created: readonly string[]; modified: readonly string[]; deleted: readonly string[] }, paths: LooseOptional<readonly string[]>): SandboxSelection
+  select(
+    changes: {
+      created: readonly string[]
+      modified: readonly string[]
+      deleted: readonly string[]
+    },
+    paths: LooseOptional<readonly string[]>
+  ): SandboxSelection
   /**
    * 落回前的核对：点名了没有变化的路径就拒绝，什么都没写（VALIDATION）；镜像里什么都没变返回 null（调用方回「什么都没落」），
    * 否则交回这次要落的三列（完整的，不截断）。落回不问用户。
@@ -36,16 +43,27 @@ export class RehearsalSandboxRules implements RehearsalSandboxRulesApi {
   /** 镜像里危险命令的风险分类；宿主靠 `:dangerous` 后缀认出这是每次都要人点的硬门。 */
   private static readonly CommandRiskScope = 'sandbox-command:dangerous'
 
-  public select(changes: { created: readonly string[]; modified: readonly string[]; deleted: readonly string[] }, paths: LooseOptional<readonly string[]>): SandboxSelection {
+  public select(
+    changes: {
+      created: readonly string[]
+      modified: readonly string[]
+      deleted: readonly string[]
+    },
+    paths: LooseOptional<readonly string[]>
+  ): SandboxSelection {
     return selectSandboxChanges(changes, paths)
   }
 
   public prepareApply(input: SandboxApplyPrepareInput): Nullable<SandboxSelection> {
     const selection = selectSandboxChanges(input.diff, input.paths)
     if (!isEmpty(selection.unknown)) {
-      throw new AppError('VALIDATION', `这些路径在沙箱里没有变化，什么都没写：${selection.unknown.slice(0, RehearsalSandboxLimits.reportedPaths).join('、')}`)
+      throw new AppError(
+        'VALIDATION',
+        `这些路径在沙箱里没有变化，什么都没写：${selection.unknown.slice(0, RehearsalSandboxLimits.reportedPaths).join('、')}`
+      )
     }
-    if (isEmpty(selection.created) && isEmpty(selection.modified) && isEmpty(selection.deleted)) return null
+    if (isEmpty(selection.created) && isEmpty(selection.modified) && isEmpty(selection.deleted))
+      return null
     return selection
   }
 
@@ -53,7 +71,14 @@ export class RehearsalSandboxRules implements RehearsalSandboxRulesApi {
     const plan = shellCommandPolicy.analyze(command)
     if (!plan.isDangerous) return null
     const mirror = `演练沙箱 ${sandboxId}`
-    return shellCommandApproval.dangerous({ command, plan, cwd: mirror, background: false, scopeLabel: `${mirror} 的镜像里`, riskScope: RehearsalSandboxRules.CommandRiskScope })
+    return shellCommandApproval.dangerous({
+      command,
+      plan,
+      cwd: mirror,
+      background: false,
+      scopeLabel: `${mirror} 的镜像里`,
+      riskScope: RehearsalSandboxRules.CommandRiskScope,
+    })
   }
 }
 

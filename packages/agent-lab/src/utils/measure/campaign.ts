@@ -16,13 +16,14 @@ import type {
 import { AgentLabTuning } from '../tuning.js'
 
 /** 失败账允许的状态流转；不在表里的一律拒绝。 */
-const FailureTransitions: Readonly<Record<CampaignFailureState, readonly CampaignFailureState[]>> = {
-  open: ['diagnosed'],
-  diagnosed: ['fixed'],
-  fixed: ['fixed', 'proving'],
-  proving: ['fixed', 'closed'],
-  closed: ['open'],
-}
+const FailureTransitions: Readonly<Record<CampaignFailureState, readonly CampaignFailureState[]>> =
+  {
+    open: ['diagnosed'],
+    diagnosed: ['fixed'],
+    fixed: ['fixed', 'proving'],
+    proving: ['fixed', 'closed'],
+    closed: ['open'],
+  }
 
 /** 去重并保持顺序。 */
 function unique(values: readonly string[]): string[] {
@@ -63,7 +64,7 @@ export function realTaskSemanticSignature(task: RealTaskCase): string {
 /** 取每条用例在当前修订版下的最新证据；修订版对不上的证据不算数。 */
 function currentEvidenceByTask(
   evidence: readonly CampaignEvidence[],
-  revisions: ReadonlyMap<string, string>,
+  revisions: ReadonlyMap<string, string>
 ): Map<string, CampaignEvidence> {
   const result = new Map<string, CampaignEvidence>()
   for (const entry of evidence) {
@@ -78,7 +79,9 @@ function currentEvidenceByTask(
  * 选出最小有用的下一批。open / diagnosed 的失败会挡住一切新采样；
  * 修完之后证明任务排最前面；当前已经通过的证据直接复用，语义重复的用例去掉而不是当成额外信心。
  */
-export function selectAdaptiveCampaignTasks(input: AdaptiveCampaignInput): AdaptiveCampaignSelection {
+export function selectAdaptiveCampaignTasks(
+  input: AdaptiveCampaignInput
+): AdaptiveCampaignSelection {
   const revisions = new Map(input.revisions.map((entry) => [entry.taskId, entry.revision]))
   if (revisions.size !== input.cases.length) throw new Error('每条战役用例必须且只能有一个修订版')
   const ids = new Set(input.cases.map((task) => task.id))
@@ -91,7 +94,8 @@ export function selectAdaptiveCampaignTasks(input: AdaptiveCampaignInput): Adapt
     .filter((failure) => failure.state === 'open' || failure.state === 'diagnosed')
     .map((failure) => failure.key)
     .sort()
-  if (blockedFailureKeys.length > 0) return { selected: [], reusedTaskIds: [], duplicateTaskIds: [], blockedFailureKeys, scores: {} }
+  if (blockedFailureKeys.length > 0)
+    return { selected: [], reusedTaskIds: [], duplicateTaskIds: [], blockedFailureKeys, scores: {} }
 
   const current = currentEvidenceByTask(input.evidence, revisions)
   const reusedTaskIds = [...current.values()]
@@ -99,14 +103,14 @@ export function selectAdaptiveCampaignTasks(input: AdaptiveCampaignInput): Adapt
     .map((entry) => entry.taskId)
     .sort()
   const coveredDimensions = new Set(
-    input.cases.filter((task) => current.get(task.id)?.outcome === 'pass').flatMap(dimensionKeys),
+    input.cases.filter((task) => current.get(task.id)?.outcome === 'pass').flatMap(dimensionKeys)
   )
   const provingTaskIds = new Set(
     input.failures
       .filter((failure) => failure.state === 'fixed' || failure.state === 'proving')
       .flatMap((failure) =>
-        failure.proofTaskIds.filter((taskId) => !failure.passedProofTaskIds.includes(taskId)),
-      ),
+        failure.proofTaskIds.filter((taskId) => !failure.passedProofTaskIds.includes(taskId))
+      )
   )
 
   const duplicateTaskIds: string[] = []
@@ -136,7 +140,7 @@ export function selectAdaptiveCampaignTasks(input: AdaptiveCampaignInput): Adapt
     for (const task of candidates) {
       const previous = current.get(task.id)
       const novelDimensions = dimensionKeys(task).filter(
-        (dimension) => !selectionDimensions.has(dimension),
+        (dimension) => !selectionDimensions.has(dimension)
       ).length
       scores[task.id] =
         (provingTaskIds.has(task.id) ? scoring.provingScore : 0) +
@@ -147,10 +151,13 @@ export function selectAdaptiveCampaignTasks(input: AdaptiveCampaignInput): Adapt
             : scoring.freshScore) +
         novelDimensions * scoring.novelDimensionScore +
         task.coverage.dailyWeight * scoring.dailyWeightScore +
-        (task.coverage.path === 'boundary' || task.coverage.path === 'failure-recovery' ? scoring.hardPathScore : 0)
+        (task.coverage.path === 'boundary' || task.coverage.path === 'failure-recovery'
+          ? scoring.hardPathScore
+          : 0)
     }
     candidates.sort(
-      (left, right) => (scores[right.id] ?? 0) - (scores[left.id] ?? 0) || left.id.localeCompare(right.id),
+      (left, right) =>
+        (scores[right.id] ?? 0) - (scores[left.id] ?? 0) || left.id.localeCompare(right.id)
     )
     const next = candidates.shift()
     if (!next) break
@@ -158,7 +165,13 @@ export function selectAdaptiveCampaignTasks(input: AdaptiveCampaignInput): Adapt
     dimensionKeys(next).forEach((dimension) => selectionDimensions.add(dimension))
   }
 
-  return { selected, reusedTaskIds, duplicateTaskIds: duplicateTaskIds.sort(), blockedFailureKeys, scores }
+  return {
+    selected,
+    reusedTaskIds,
+    duplicateTaskIds: duplicateTaskIds.sort(),
+    blockedFailureKeys,
+    scores,
+  }
 }
 
 /** 一条修完的失败要几个证明任务通过才关；模型与运行时这类容易反复的要更多。 */
@@ -196,22 +209,28 @@ export function recordCampaignFailure(input: RecordCampaignFailureInput): Campai
         rootCause: null,
         fixReference: null,
       }
-  return [...input.failures.filter((failure) => failure.key !== input.key), next].sort((left, right) =>
-    left.key.localeCompare(right.key),
+  return [...input.failures.filter((failure) => failure.key !== input.key), next].sort(
+    (left, right) => left.key.localeCompare(right.key)
   )
 }
 
 /** 让一条失败账换状态：状态机不许的流转、没写根因的诊断、没写修复引用或证明任务不够的修复，一律当场报错。 */
-export function transitionCampaignFailure(input: TransitionCampaignFailureInput): CampaignFailureRecord {
+export function transitionCampaignFailure(
+  input: TransitionCampaignFailureInput
+): CampaignFailureRecord {
   if (!FailureTransitions[input.failure.state].includes(input.state)) {
     throw new Error(`失败账不允许这样流转: ${input.failure.state} -> ${input.state}`)
   }
-  if (input.state === 'diagnosed' && !input.rootCause?.trim()) throw new Error('标为已诊断必须写清根因')
-  if (input.state === 'fixed' && !input.fixReference?.trim()) throw new Error('标为已修复必须给出修复引用')
+  if (input.state === 'diagnosed' && !input.rootCause?.trim())
+    throw new Error('标为已诊断必须写清根因')
+  if (input.state === 'fixed' && !input.fixReference?.trim())
+    throw new Error('标为已修复必须给出修复引用')
   const classification = input.classification ?? input.failure.classification
   const proofTaskIds = unique(input.proofTaskIds ?? input.failure.proofTaskIds)
   if (input.state === 'fixed' && proofTaskIds.length < requiredProofCount(classification)) {
-    throw new Error(`${classification} 类失败标为已修复，至少要 ${requiredProofCount(classification)} 个互不相同的证明任务`)
+    throw new Error(
+      `${classification} 类失败标为已修复，至少要 ${requiredProofCount(classification)} 个互不相同的证明任务`
+    )
   }
   return {
     ...input.failure,
@@ -225,7 +244,10 @@ export function transitionCampaignFailure(input: TransitionCampaignFailureInput)
 }
 
 /** 记一个证明任务通过；数够了就关账。 */
-export function recordCampaignProof(failure: CampaignFailureRecord, taskId: string): CampaignFailureRecord {
+export function recordCampaignProof(
+  failure: CampaignFailureRecord,
+  taskId: string
+): CampaignFailureRecord {
   if (failure.state !== 'fixed' && failure.state !== 'proving') return failure
   if (!failure.proofTaskIds.includes(taskId)) return failure
   const passedProofTaskIds = unique([...failure.passedProofTaskIds, taskId])
@@ -239,10 +261,15 @@ export function recordCampaignProof(failure: CampaignFailureRecord, taskId: stri
  */
 export function reconcileCampaignProof(
   failure: CampaignFailureRecord,
-  currentPassingTaskIds: ReadonlySet<string>,
+  currentPassingTaskIds: ReadonlySet<string>
 ): CampaignFailureRecord {
-  if (failure.state === 'open' || failure.state === 'diagnosed') return failure.passedProofTaskIds.length === 0 ? failure : { ...failure, passedProofTaskIds: [] }
-  const passedProofTaskIds = failure.proofTaskIds.filter((taskId) => currentPassingTaskIds.has(taskId))
+  if (failure.state === 'open' || failure.state === 'diagnosed')
+    return failure.passedProofTaskIds.length === 0
+      ? failure
+      : { ...failure, passedProofTaskIds: [] }
+  const passedProofTaskIds = failure.proofTaskIds.filter((taskId) =>
+    currentPassingTaskIds.has(taskId)
+  )
   const enough = passedProofTaskIds.length >= requiredProofCount(failure.classification)
   return {
     ...failure,

@@ -42,16 +42,84 @@ import { AppError } from '@velaros-ai/core/error'
 
 import { BrowserErrorCodes } from '../../contract/constants.js'
 import type { BrowserPageDriver, BrowserProtocolChannel } from '../../contract/requires.js'
-import type { BrowserFrameInfo, BrowserInsertTextOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserPageDiagnosticEntry, BrowserPageTargetInfo, BrowserSwitchPageTargetOptions, BrowserViewportOptions } from '../../types/browser.js'
-import type { CdpBrowserPageDriverTransport, CdpCaptureScreenshotResponse, CdpDomDocumentResponse, CdpDomQuerySelectorResponse, CdpDownloadProgressEvent, CdpDownloadWillBeginEvent, CdpFetchResourcePayload, CdpJavascriptDialogOpeningEvent, CdpLayoutMetricsResponse, CdpPageTargetDescription, CdpPrintToPdfResponse, CdpRuntimeConsoleAPICalledEvent, CdpRuntimeEvaluateResponse, CdpRuntimeExceptionDetails, CdpRuntimeExceptionThrownEvent, CdpRuntimeRemoteObject, CdpScreencastConsumerOptions, CdpScreencastStartOptions, CdpTargetListEntry, ScreencastCapturedFrame } from '../../types/cdp.js'
-import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadEvent, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverKeyEvent, BrowserPageDriverMouseEvent, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState } from '../../types/driver'
-import { buildFetchResourceScript, buildViewportRect, readConsoleSource, readNodeId, readRuntimeEvaluateValue, resolveConsoleLevel, resolveConsoleTimestamp, resolveMouseButton, resolveTargetListEntryId } from '../../utils/cdp/driver'
-import { normalizePageTargetDescription, resolveConsoleMessage, resolveRegionScreenshotInput } from '../../utils/cdp/driver'
+import type {
+  BrowserFrameInfo,
+  BrowserInsertTextOptions,
+  BrowserNetworkControlOptions,
+  BrowserNetworkRequestDetailsOptions,
+  BrowserNetworkResponseBodyOptions,
+  BrowserPageDiagnosticEntry,
+  BrowserPageTargetInfo,
+  BrowserSwitchPageTargetOptions,
+  BrowserViewportOptions,
+} from '../../types/browser.js'
+import type {
+  CdpBrowserPageDriverTransport,
+  CdpCaptureScreenshotResponse,
+  CdpDomDocumentResponse,
+  CdpDomQuerySelectorResponse,
+  CdpDownloadProgressEvent,
+  CdpDownloadWillBeginEvent,
+  CdpFetchResourcePayload,
+  CdpJavascriptDialogOpeningEvent,
+  CdpLayoutMetricsResponse,
+  CdpPageTargetDescription,
+  CdpPrintToPdfResponse,
+  CdpRuntimeConsoleAPICalledEvent,
+  CdpRuntimeEvaluateResponse,
+  CdpRuntimeExceptionDetails,
+  CdpRuntimeExceptionThrownEvent,
+  CdpRuntimeRemoteObject,
+  CdpScreencastConsumerOptions,
+  CdpScreencastStartOptions,
+  CdpTargetListEntry,
+  ScreencastCapturedFrame,
+} from '../../types/cdp.js'
+import type {
+  BrowserPageDriverClickCoordinatesOptions,
+  BrowserPageDriverDiagnosticsOptions,
+  BrowserPageDriverDownloadEvent,
+  BrowserPageDriverDownloadListener,
+  BrowserPageDriverDragCoordinatesOptions,
+  BrowserPageDriverFetchResourceOptions,
+  BrowserPageDriverFetchResourceResult,
+  BrowserPageDriverFileInputOptions,
+  BrowserPageDriverKeyEvent,
+  BrowserPageDriverMouseEvent,
+  BrowserPageDriverMoveMouseOptions,
+  BrowserPageDriverNetworkControlState,
+  BrowserPageDriverNetworkIdleOptions,
+  BrowserPageDriverNetworkRequestDetailsResult,
+  BrowserPageDriverNetworkResponseBodyResult,
+  BrowserPageDriverPdfOptions,
+  BrowserPageDriverScreenshot,
+  BrowserPageDriverScreenshotOptions,
+  BrowserPageDriverState,
+} from '../../types/driver'
+import {
+  buildFetchResourceScript,
+  buildViewportRect,
+  readConsoleSource,
+  readNodeId,
+  readRuntimeEvaluateValue,
+  resolveConsoleLevel,
+  resolveConsoleTimestamp,
+  resolveMouseButton,
+  resolveTargetListEntryId,
+} from '../../utils/cdp/driver'
+import {
+  normalizePageTargetDescription,
+  resolveConsoleMessage,
+  resolveRegionScreenshotInput,
+} from '../../utils/cdp/driver'
 import { resolveCdpTargetListUrl } from '../../utils/cdp/driver'
 import { resolveCdpTargetId } from '../../utils/cdp/driver.js'
 import { captureCdpHeapSnapshot } from '../../utils/cdp/tracing.js'
 import { openCdpWebSocket } from '../../utils/cdp/transport.js'
-import { clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
+import {
+  clearBrowserDiagnosticEntries,
+  takeBrowserDiagnosticWindow,
+} from '../../utils/diagnostics.js'
 import { clampPositiveInteger, clampZoomFactor } from '../../utils/numbers.js'
 import { BrowserTuning } from '../../utils/tuning'
 import { buildBrowserViewportDeviceMetrics } from '../../utils/viewport'
@@ -290,9 +358,19 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   /**
    * 在一个框架里跑脚本，框架自己的主世界（与内嵌页面同一口径）：顶层页面就是 executeJavaScript；子框架与跨进程的 iframe 交给 {@link CdpFrameSessions}。
    */
-  public async executeJavaScriptInFrame<T = unknown>(frameId: string, script: string, userGesture?: boolean): Promise<T> {
-    const frame = (await this.frameSessions.listFrames()).find((candidate) => candidate.info.id === frameId)
-    if (!frame) throw new AppError(BrowserErrorCodes.frameNotFound, `框架 ${frameId} 不在当前页面的框架树里（页面跳转之后旧 id 作废）：重新 frames()。`)
+  public async executeJavaScriptInFrame<T = unknown>(
+    frameId: string,
+    script: string,
+    userGesture?: boolean
+  ): Promise<T> {
+    const frame = (await this.frameSessions.listFrames()).find(
+      (candidate) => candidate.info.id === frameId
+    )
+    if (!frame)
+      throw new AppError(
+        BrowserErrorCodes.frameNotFound,
+        `框架 ${frameId} 不在当前页面的框架树里（页面跳转之后旧 id 作废）：重新 frames()。`
+      )
     if (!frame.info.parentId) return this.executeJavaScript<T>(script, userGesture)
     return (await this.frameSessions.evaluateInFrame(frame, script, !!userGesture)) as T
   }
@@ -300,10 +378,16 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   /** 给模型单开一条 CDP 会话：连同一个页面的第二条 WebSocket（调试地址从 target 列表里取）。 */
   public async openProtocolChannel(): Promise<BrowserProtocolChannel> {
     const activeTargetId = this.options.activeTargetId?.trim()
-    if (!activeTargetId) throw new AppError('VALIDATION', '这个外部浏览器驱动不知道自己是哪个 target，开不了单独的 CDP 会话。')
+    if (!activeTargetId)
+      throw new AppError(
+        'VALIDATION',
+        '这个外部浏览器驱动不知道自己是哪个 target，开不了单独的 CDP 会话。'
+      )
     const target = await this.findPageTargetDescription(activeTargetId)
     const socket = await openCdpWebSocket(target.webSocketDebuggerUrl, {})
-    return new CdpProtocolChannel(new CdpWebSocketTransport({ socket, timeoutMs: BrowserTuning.protocol.commandTimeoutMs }))
+    return new CdpProtocolChannel(
+      new CdpWebSocketTransport({ socket, timeoutMs: BrowserTuning.protocol.commandTimeoutMs })
+    )
   }
 
   public async moveMouse(options: BrowserPageDriverMoveMouseOptions): Promise<void> {
@@ -319,9 +403,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     options.onPointerEvent?.({ x, y, phase: 'move' })
   }
 
-  public async clickCoordinates(
-    options: BrowserPageDriverClickCoordinatesOptions
-  ): Promise<void> {
+  public async clickCoordinates(options: BrowserPageDriverClickCoordinatesOptions): Promise<void> {
     const x = Math.round(options.x)
     const y = Math.round(options.y)
     const button = resolveMouseButton(options.button ?? 'left')
@@ -348,9 +430,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     options.onPointerEvent?.({ x, y, phase: 'up', button: options.button ?? 'left' })
   }
 
-  public async dragCoordinates(
-    options: BrowserPageDriverDragCoordinatesOptions
-  ): Promise<void> {
+  public async dragCoordinates(options: BrowserPageDriverDragCoordinatesOptions): Promise<void> {
     const startX = Math.round(options.startX)
     const startY = Math.round(options.startY)
     const endX = Math.round(options.endX)
@@ -588,7 +668,9 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     return !!this.screencastRecorder?.isRunning()
   }
 
-  public readDiagnostics(options: BrowserPageDriverDiagnosticsOptions): BrowserPageDiagnosticEntry[] {
+  public readDiagnostics(
+    options: BrowserPageDriverDiagnosticsOptions
+  ): BrowserPageDiagnosticEntry[] {
     const limit = Math.min(
       BrowserTuning.cdp.diagnosticEntries,
       clampPositiveInteger(options.limit, 100)
@@ -641,20 +723,24 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   private normalizeTargetListPayload(payload: unknown): BrowserPageTargetInfo[] {
     if (!isArray(payload)) return []
 
-    return payload
-      .map((entry) => this.normalizeTargetListEntry(entry))
-      .filter(isNotNull)
+    return payload.map((entry) => this.normalizeTargetListEntry(entry)).filter(isNotNull)
   }
 
   private async findPageTargetDescription(targetId: string): Promise<CdpPageTargetDescription> {
     const targetListUrl = this.options.targetListUrl?.trim()
     if (!targetListUrl) {
-      throw new AppError('VALIDATION', '当前 CDP driver 没有 target list URL，无法切换 page target。')
+      throw new AppError(
+        'VALIDATION',
+        '当前 CDP driver 没有 target list URL，无法切换 page target。'
+      )
     }
 
     const targetFetch = this.options.fetch ?? globalThis.fetch
     if (!targetFetch) {
-      throw new AppError('EXECUTION_FAILED', '当前运行时没有 fetch 能力，无法读取 CDP target list。')
+      throw new AppError(
+        'EXECUTION_FAILED',
+        '当前运行时没有 fetch 能力，无法读取 CDP target list。'
+      )
     }
 
     const response = await targetFetch(targetListUrl)
@@ -799,13 +885,11 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
         'Browser.downloadProgress',
         (event) => this.recordDownloadProgress(event)
       ),
-      this.options.transport.onEvent<CdpDownloadWillBeginEvent>(
-        'Page.downloadWillBegin',
-        (event) => this.recordDownloadWillBegin(event)
+      this.options.transport.onEvent<CdpDownloadWillBeginEvent>('Page.downloadWillBegin', (event) =>
+        this.recordDownloadWillBegin(event)
       ),
-      this.options.transport.onEvent<CdpDownloadProgressEvent>(
-        'Page.downloadProgress',
-        (event) => this.recordDownloadProgress(event)
+      this.options.transport.onEvent<CdpDownloadProgressEvent>('Page.downloadProgress', (event) =>
+        this.recordDownloadProgress(event)
       )
     )
 
@@ -839,11 +923,26 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     const routeToController = (method: string) => (event: unknown) =>
       this.networkController.handleCdpEvent(method, event)
     this.eventUnsubscribers.push(
-      this.options.transport.onEvent('Network.requestWillBeSent', routeToController('Network.requestWillBeSent')),
-      this.options.transport.onEvent('Network.responseReceived', routeToController('Network.responseReceived')),
-      this.options.transport.onEvent('Network.loadingFinished', routeToController('Network.loadingFinished')),
-      this.options.transport.onEvent('Network.loadingFailed', routeToController('Network.loadingFailed')),
-      this.options.transport.onEvent('Fetch.requestPaused', routeToController('Fetch.requestPaused'))
+      this.options.transport.onEvent(
+        'Network.requestWillBeSent',
+        routeToController('Network.requestWillBeSent')
+      ),
+      this.options.transport.onEvent(
+        'Network.responseReceived',
+        routeToController('Network.responseReceived')
+      ),
+      this.options.transport.onEvent(
+        'Network.loadingFinished',
+        routeToController('Network.loadingFinished')
+      ),
+      this.options.transport.onEvent(
+        'Network.loadingFailed',
+        routeToController('Network.loadingFailed')
+      ),
+      this.options.transport.onEvent(
+        'Fetch.requestPaused',
+        routeToController('Fetch.requestPaused')
+      )
     )
 
     void this.networkController.enableNetworkCapture().catch((error) => {
@@ -1098,9 +1197,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     }
   }
 
-  private async resolveScreenshotInput(
-    options: BrowserPageDriverScreenshotOptions
-  ): Promise<{
+  private async resolveScreenshotInput(options: BrowserPageDriverScreenshotOptions): Promise<{
     params: Record<string, unknown>
     capture: BrowserPageDriverScreenshot['capture']
   }> {
@@ -1133,15 +1230,11 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     params: Record<string, unknown>
     capture: BrowserPageDriverScreenshot['capture']
   }> {
-    const metrics = await this.options.transport.send<CdpLayoutMetricsResponse>(
-      'Page.getLayoutMetrics'
-    )
+    const metrics =
+      await this.options.transport.send<CdpLayoutMetricsResponse>('Page.getLayoutMetrics')
     const content = metrics.cssContentSize ?? metrics.contentSize
     const documentWidth = clampPositiveInteger(content?.width, options.metadata.documentWidth)
-    const documentHeight = clampPositiveInteger(
-      content?.height,
-      options.metadata.documentHeight
-    )
+    const documentHeight = clampPositiveInteger(content?.height, options.metadata.documentHeight)
     const captureWidth = Math.min(
       documentWidth,
       clampPositiveInteger(options.maxWidth, documentWidth)

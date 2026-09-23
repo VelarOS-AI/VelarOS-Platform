@@ -165,15 +165,12 @@ test('collection closes the source as soon as the caller stop condition is satis
 
 test('the factory exposes the whole generic request surface', () => {
   const client = createModelRequestClient({ transport: {} })
-  assert.deepEqual(
-    Object.getOwnPropertyNames(Object.getPrototypeOf(client)).sort(),
-    [
-      'collectTextStream',
-      'constructor',
-      'generateDecodedObject',
-      'generateObject',
-      'generateText',
-      'streamText',
-    ]
-  )
+  assert.deepEqual(Object.getOwnPropertyNames(Object.getPrototypeOf(client)).sort(), [
+    'collectTextStream',
+    'constructor',
+    'generateDecodedObject',
+    'generateObject',
+    'generateText',
+    'streamText',
+  ])
 })

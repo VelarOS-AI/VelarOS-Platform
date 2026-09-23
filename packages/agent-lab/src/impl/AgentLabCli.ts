@@ -67,10 +67,20 @@ class AgentLabCli implements AgentLabCliApi {
 
   private readonly runner = journeyRunner
 
-  public async run(argv: readonly string[], options: AgentLabCliOptions): Promise<AgentLabCliResult> {
+  public async run(
+    argv: readonly string[],
+    options: AgentLabCliOptions
+  ): Promise<AgentLabCliResult> {
     const parsed = parseArguments(argv)
     const command = parsed.command
-    if (!command || command === 'help' || command === '--help' || command === '-h' || parsed.flags.help) return { exitCode: AgentLabCli.ExitCodes.ok, stdout: AgentLabCli.Help, stderr: '' }
+    if (
+      !command ||
+      command === 'help' ||
+      command === '--help' ||
+      command === '-h' ||
+      parsed.flags.help
+    )
+      return { exitCode: AgentLabCli.ExitCodes.ok, stdout: AgentLabCli.Help, stderr: '' }
     try {
       if (command === 'validate') return await this.validate(parsed)
       if (command === 'audit-record') return await this.auditRecord(parsed)
@@ -94,12 +104,15 @@ class AgentLabCli implements AgentLabCliApi {
     for (const path of paths) {
       const absolute = resolve(path)
       const details = await stat(absolute)
-      if (details.isFile()) views.push(this.archives.readRunArchiveView(await readJsonFile(absolute)))
+      if (details.isFile())
+        views.push(this.archives.readRunArchiveView(await readJsonFile(absolute)))
       else if (details.isDirectory()) {
         const discovery = await this.archives.discoverRunArchives(absolute)
         views.push(...discovery.archives.map((entry) => entry.view))
         if (discovery.unreadableDirectories.length > 0) {
-          throw new Error(`这些运行目录里的归档读不出来: ${discovery.unreadableDirectories.join(', ')}`)
+          throw new Error(
+            `这些运行目录里的归档读不出来: ${discovery.unreadableDirectories.join(', ')}`
+          )
         }
       }
     }
@@ -110,7 +123,9 @@ class AgentLabCli implements AgentLabCliApi {
   private async validate(parsed: ParsedArguments): Promise<AgentLabCliResult> {
     const [kind, path] = parsed.positionals
     if (!kind || !path) {
-      throw new Error(`用法: velaros-agent-lab validate <${AgentLabCli.ValidationKinds.join('|')}> <文件>`)
+      throw new Error(
+        `用法: velaros-agent-lab validate <${AgentLabCli.ValidationKinds.join('|')}> <文件>`
+      )
     }
     const value = await readJsonFile(path)
     if (kind === 'journey') this.wire.parseJourney(value)
@@ -119,7 +134,11 @@ class AgentLabCli implements AgentLabCliApi {
     else if (kind === 'real-task') this.wire.parseRealTaskRecord(value)
     else if (kind === 'case') this.wire.parseRealTaskCase(value)
     else throw new Error(`不认识这种校验对象: ${kind}`)
-    return { exitCode: AgentLabCli.ExitCodes.ok, stdout: `valid ${kind}: ${resolve(path)}\n`, stderr: '' }
+    return {
+      exitCode: AgentLabCli.ExitCodes.ok,
+      stdout: `valid ${kind}: ${resolve(path)}\n`,
+      stderr: '',
+    }
   }
 
   /** `audit-record`：审计一条真实任务记录，写出记录、评估与 HTML 三件套。 */
@@ -128,17 +147,31 @@ class AgentLabCli implements AgentLabCliApi {
     if (!path) throw new Error('用法: velaros-agent-lab audit-record <record.json> --output <目录>')
     const record = await this.archives.readRealTaskRecord(path)
     const assessment = this.workload.audit(record)
-    const written = await this.archives.writeRealTaskBundle(requiredFlag(parsed, 'output'), record, assessment)
-    const payload = { verdict: assessment.verdict, findings: assessment.findings.length, ...written }
+    const written = await this.archives.writeRealTaskBundle(
+      requiredFlag(parsed, 'output'),
+      record,
+      assessment
+    )
+    const payload = {
+      verdict: assessment.verdict,
+      findings: assessment.findings.length,
+      ...written,
+    }
     return {
-      exitCode: assessment.verdict === 'verified-fail' ? AgentLabCli.ExitCodes.failed : AgentLabCli.ExitCodes.ok,
+      exitCode:
+        assessment.verdict === 'verified-fail'
+          ? AgentLabCli.ExitCodes.failed
+          : AgentLabCli.ExitCodes.ok,
       stdout: `${JSON.stringify(payload, null, 2)}\n`,
       stderr: '',
     }
   }
 
   /** `run`：加载套件运行时，跑完一个 job 的全部试验，每出一份归档就写盘。 */
-  private async runJob(parsed: ParsedArguments, options: AgentLabCliOptions): Promise<AgentLabCliResult> {
+  private async runJob(
+    parsed: ParsedArguments,
+    options: AgentLabCliOptions
+  ): Promise<AgentLabCliResult> {
     const job = this.wire.parseJob(await readJsonFile(requiredFlag(parsed, 'job')))
     const runtime = await options.loadRuntime.load(requiredFlag(parsed, 'runtime'))
     const archives = await this.runner.runJob(job, {
@@ -161,11 +194,18 @@ class AgentLabCli implements AgentLabCliApi {
       },
     })
     const payload = { runs: archives.length, archiveDirectory: resolve(job.archiveDirectory) }
-    return { exitCode: AgentLabCli.ExitCodes.ok, stdout: `${JSON.stringify(payload, null, 2)}\n`, stderr: '' }
+    return {
+      exitCode: AgentLabCli.ExitCodes.ok,
+      stdout: `${JSON.stringify(payload, null, 2)}\n`,
+      stderr: '',
+    }
   }
 
   /** `report`：全是 v3 归档就出运行报告，混了历史归档就出历史归档报告。 */
-  private async report(parsed: ParsedArguments, options: AgentLabCliOptions): Promise<AgentLabCliResult> {
+  private async report(
+    parsed: ParsedArguments,
+    options: AgentLabCliOptions
+  ): Promise<AgentLabCliResult> {
     if (parsed.positionals.length === 0) throw new Error('report 至少要给一个文件或目录')
     const output = resolve(requiredFlag(parsed, 'output'))
     const loaded = await this.loadArchives(parsed.positionals)
@@ -190,7 +230,10 @@ class AgentLabCli implements AgentLabCliApi {
       seed: numberFlag(parsed, 'seed', 1),
     })
     return {
-      exitCode: result.decision === 'not-comparable' ? AgentLabCli.ExitCodes.inconclusive : AgentLabCli.ExitCodes.ok,
+      exitCode:
+        result.decision === 'not-comparable'
+          ? AgentLabCli.ExitCodes.inconclusive
+          : AgentLabCli.ExitCodes.ok,
       stdout: `${JSON.stringify(result, null, 2)}\n`,
       stderr: '',
     }
@@ -198,11 +241,16 @@ class AgentLabCli implements AgentLabCliApi {
 
   /** `certify`：按策略认证一个对象；被拒退出码 1，判不了退出码 2。 */
   private async certify(parsed: ParsedArguments): Promise<AgentLabCliResult> {
-    const policy = this.wire.parseCertificationPolicy(await readJsonFile(requiredFlag(parsed, 'policy')))
-    const subject = this.wire.parseCertificationSubject(await readJsonFile(requiredFlag(parsed, 'subject')))
+    const policy = this.wire.parseCertificationPolicy(
+      await readJsonFile(requiredFlag(parsed, 'policy'))
+    )
+    const subject = this.wire.parseCertificationSubject(
+      await readJsonFile(requiredFlag(parsed, 'subject'))
+    )
     const loaded = await this.loadArchives(parsed.positionals)
     const baselinePath = optionalFlag(parsed, 'baseline')
-    const baseline = baselinePath === null ? { archives: [] } : await this.loadArchives([baselinePath])
+    const baseline =
+      baselinePath === null ? { archives: [] } : await this.loadArchives([baselinePath])
     const baselineExecutorId = optionalFlag(parsed, 'baseline-executor')
     const base = {
       policy,
@@ -211,7 +259,8 @@ class AgentLabCli implements AgentLabCliApi {
       baselineArchives: baseline.archives,
       subjectExecutorId: requiredFlag(parsed, 'executor'),
     }
-    const input: CertificationInput = baselineExecutorId === null ? base : { ...base, baselineExecutorId }
+    const input: CertificationInput =
+      baselineExecutorId === null ? base : { ...base, baselineExecutorId }
     const result = this.certification.certify(input)
     const exitCode =
       result.status === 'rejected'

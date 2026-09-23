@@ -5,7 +5,11 @@
 import { isEmpty, isUndefined, optionalWhen } from '@velaros-ai/core'
 
 import type { ProjectValidator } from '../../contract/requires.js'
-import type { ProjectValidationContext, ValidateInput, ValidationResult } from '../../types/validation.js'
+import type {
+  ProjectValidationContext,
+  ValidateInput,
+  ValidationResult,
+} from '../../types/validation.js'
 import { isSelectedValidator } from '../../utils/checks.js'
 import { ProjectTuning } from '../../utils/tuning.js'
 
@@ -62,8 +66,9 @@ export class ValidatorRegistry implements ValidatorRegistryApi {
               },
             })
         const dependencyKey = await validator.cacheKey?.(input, view)
-        const cacheKey =
-          isUndefined(dependencyKey) ? undefined : JSON.stringify([context.root, dependencyKey])
+        const cacheKey = isUndefined(dependencyKey)
+          ? undefined
+          : JSON.stringify([context.root, dependencyKey])
         let entries = this.cache.get(validator)
         if (!entries) {
           entries = new Map()
@@ -80,13 +85,17 @@ export class ValidatorRegistry implements ValidatorRegistryApi {
           JSON.stringify(result).length <= ProjectTuning.transactions.validationCacheResultChars
         ) {
           entries.set(cacheKey, structuredClone(result))
-          while (entries.size > ProjectTuning.transactions.validationCacheEntries) entries.delete(entries.keys().next().value!)
+          while (entries.size > ProjectTuning.transactions.validationCacheEntries)
+            entries.delete(entries.keys().next().value!)
         }
         checks.push({
           id: validator.id,
           ok: result.ok && result.checks.every((check) => check.ok),
           diagnostics: result.diagnostics,
-          metadata: optionalWhen(!isUndefined(cacheKey), { evidenceKey: dependencyKey, reused: !!saved }),
+          metadata: optionalWhen(!isUndefined(cacheKey), {
+            evidenceKey: dependencyKey,
+            reused: !!saved,
+          }),
         })
         diagnostics.push(...result.diagnostics)
         if (result.toolRequirements && !isEmpty(result.toolRequirements)) {

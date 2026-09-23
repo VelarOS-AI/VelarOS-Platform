@@ -53,7 +53,7 @@ export class JsTsPatchStrategy implements PatchStrategy {
       if (!isJsTsPath(snapshot.path))
         throw new ProjectError(
           'NOT_SUPPORTED',
-          `${operation.type} 只支持 JS/TS 文件：${snapshot.path}`,
+          `${operation.type} 只支持 JS/TS 文件：${snapshot.path}`
         )
       const splice =
         operation.type === 'add_import'
@@ -62,14 +62,24 @@ export class JsTsPatchStrategy implements PatchStrategy {
       // 去重命中也产出显式 noop 补丁，而不是空数组——空数组会让该操作从事务里凭空消失。
       if (!splice)
         return [
-          createTextPatch(snapshot.path, snapshot.revision, content, content, this.id, { op: operation.type, noop: true }),
+          createTextPatch(snapshot.path, snapshot.revision, content, content, this.id, {
+            op: operation.type,
+            noop: true,
+          }),
         ]
       return [
-        createTextPatch(snapshot.path, snapshot.revision, content, applySourceSplice(content, splice), this.id, {
-          op: operation.type,
-          startOffset: splice.start,
-          endOffset: splice.end,
-        }),
+        createTextPatch(
+          snapshot.path,
+          snapshot.revision,
+          content,
+          applySourceSplice(content, splice),
+          this.id,
+          {
+            op: operation.type,
+            startOffset: splice.start,
+            endOffset: splice.end,
+          }
+        ),
       ]
     }
     if (!isSymbolOperation(operation))
@@ -78,13 +88,20 @@ export class JsTsPatchStrategy implements PatchStrategy {
     const located = locateSymbol(input, snapshot, content, operation)
     const splice = symbolSplice(located, operation)
     return [
-      createTextPatch(snapshot.path, snapshot.revision, content, applySourceSplice(content, splice), this.id, {
-        op: operation.type,
-        mode: operation.type === 'replace_symbol' ? (operation.mode ?? 'whole') : undefined,
-        targetId,
-        startOffset: splice.start,
-        endOffset: splice.end,
-      }),
+      createTextPatch(
+        snapshot.path,
+        snapshot.revision,
+        content,
+        applySourceSplice(content, splice),
+        this.id,
+        {
+          op: operation.type,
+          mode: operation.type === 'replace_symbol' ? (operation.mode ?? 'whole') : undefined,
+          targetId,
+          startOffset: splice.start,
+          endOffset: splice.end,
+        }
+      ),
     ]
   }
 }

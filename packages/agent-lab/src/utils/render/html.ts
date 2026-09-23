@@ -16,7 +16,10 @@ export function escapeHtml(value: unknown): string {
 
 /** 转义之后再给协议头插一个软换行点，长链接不会把表格撑破。 */
 export function visibleText(value: unknown): string {
-  return escapeHtml(value).replace(/https?:\/\//gi, (match) => `${match.slice(0, 4)}<wbr>${match.slice(4)}`)
+  return escapeHtml(value).replace(
+    /https?:\/\//gi,
+    (match) => `${match.slice(0, 4)}<wbr>${match.slice(4)}`
+  )
 }
 
 /** 未知值渲染成破折号，并在 `data-value` 上标明它是 null——核对时据此判断有没有拿 0 冒充未知。 */
@@ -25,7 +28,10 @@ export function unknownCell(): string {
 }
 
 /** 把一个可能未知的值渲染成一格；给了格式化函数就按它显示，原值仍写在 `data-value` 上。 */
-export function valueCell(value: number | string | null, formatter?: (value: number) => string): string {
+export function valueCell(
+  value: number | string | null,
+  formatter?: (value: number) => string
+): string {
   if (value === null) return unknownCell()
   const display = typeof value === 'number' && formatter ? formatter(value) : String(value)
   return `<span data-value="${visibleText(value)}">${visibleText(display)}</span>`
@@ -52,11 +58,13 @@ export function duration(value: number): string {
 export function findExternalResourceViolations(html: string): readonly string[] {
   const violations: string[] = []
   if (/https?:\/\//i.test(html)) violations.push('external-url')
-  if (/<(?:img|script|source|video|audio|iframe)\b[^>]*\bsrc\s*=/i.test(html)) violations.push('external-src-attribute')
+  if (/<(?:img|script|source|video|audio|iframe)\b[^>]*\bsrc\s*=/i.test(html))
+    violations.push('external-src-attribute')
   if (/<link\b/i.test(html)) violations.push('link-tag')
   if (/<a\b[^>]*\bhref\s*=\s*["'](?!#)/i.test(html)) violations.push('external-href')
   if (/@import\b|url\s*\(|@font-face\b/i.test(html)) violations.push('external-css-resource')
-  if (/\bfetch\s*\(|\bXMLHttpRequest\b|\bimport\s*\(/i.test(html)) violations.push('external-script-request')
+  if (/\bfetch\s*\(|\bXMLHttpRequest\b|\bimport\s*\(/i.test(html))
+    violations.push('external-script-request')
   return violations
 }
 
@@ -65,5 +73,6 @@ export function assertSelfContainedHtml(html: string): void {
   const violations = findExternalResourceViolations(html)
   if (violations.length > 0) throw new Error(`报告不是自包含的: ${violations.join(', ')}`)
   if (/\b(?:NaN|undefined)\b/.test(html)) throw new Error('报告里出现了 NaN 或 undefined')
-  if (/data-value="null">(?:0|0\.0|false)</i.test(html)) throw new Error('报告把未知值渲染成了一个具体值')
+  if (/data-value="null">(?:0|0\.0|false)</i.test(html))
+    throw new Error('报告把未知值渲染成了一个具体值')
 }

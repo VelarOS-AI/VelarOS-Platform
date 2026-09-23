@@ -32,7 +32,8 @@ class FileSecretBox implements FileSecretBoxApi {
   private readonly prefix: Buffer
 
   public constructor(private readonly options: FileSecretBoxOptions) {
-    if (options.prefix.byteLength === 0) throw new AppError('VALIDATION', 'Secret payload prefix is required')
+    if (options.prefix.byteLength === 0)
+      throw new AppError('VALIDATION', 'Secret payload prefix is required')
     this.prefix = Buffer.from(options.prefix)
   }
 
@@ -51,12 +52,24 @@ class FileSecretBox implements FileSecretBoxApi {
   public decrypt(payload: Uint8Array): string {
     const buffer = Buffer.from(payload)
     const offset = this.prefix.length
-    if (buffer.length < offset + IvBytes + TagBytes || !buffer.subarray(0, offset).equals(this.prefix))
-      throw new AppError('SECURITY', 'Invalid encrypted payload', undefined, { reason: 'payload-format' })
-    const decipher = createDecipheriv('aes-256-gcm', this.loadKey(), buffer.subarray(offset, offset + IvBytes))
+    if (
+      buffer.length < offset + IvBytes + TagBytes ||
+      !buffer.subarray(0, offset).equals(this.prefix)
+    )
+      throw new AppError('SECURITY', 'Invalid encrypted payload', undefined, {
+        reason: 'payload-format',
+      })
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      this.loadKey(),
+      buffer.subarray(offset, offset + IvBytes)
+    )
     decipher.setAAD(this.prefix)
     decipher.setAuthTag(buffer.subarray(offset + IvBytes, offset + IvBytes + TagBytes))
-    return Buffer.concat([decipher.update(buffer.subarray(offset + IvBytes + TagBytes)), decipher.final()]).toString('utf8')
+    return Buffer.concat([
+      decipher.update(buffer.subarray(offset + IvBytes + TagBytes)),
+      decipher.final(),
+    ]).toString('utf8')
   }
 
   private loadKey(): Buffer {
@@ -72,7 +85,9 @@ class FileSecretBox implements FileSecretBoxApi {
       key = readFileSync(path)
     }
     if (key.length !== KeyBytes)
-      throw new AppError('SECURITY', 'Invalid local secret key', undefined, { reason: 'key-format' })
+      throw new AppError('SECURITY', 'Invalid local secret key', undefined, {
+        reason: 'key-format',
+      })
     this.key = key
     return key
   }

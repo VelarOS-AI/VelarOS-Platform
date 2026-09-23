@@ -39,7 +39,10 @@ export interface AdaptiveCampaignApi {
   /** 记一个证明任务通过；数够了就关账。 */
   recordProof: (failure: CampaignFailureRecord, taskId: string) => CampaignFailureRecord
   /** 按当前真正通过的任务集校准缓存的证明；证明可以被撤销，但不假装那次修复没发生过。 */
-  reconcileProof: (failure: CampaignFailureRecord, currentPassingTaskIds: ReadonlySet<string>) => CampaignFailureRecord
+  reconcileProof: (
+    failure: CampaignFailureRecord,
+    currentPassingTaskIds: ReadonlySet<string>
+  ) => CampaignFailureRecord
 }
 
 class AdaptiveCampaign implements AdaptiveCampaignApi {
@@ -69,7 +72,7 @@ class AdaptiveCampaign implements AdaptiveCampaignApi {
 
   public reconcileProof(
     failure: CampaignFailureRecord,
-    currentPassingTaskIds: ReadonlySet<string>,
+    currentPassingTaskIds: ReadonlySet<string>
   ): CampaignFailureRecord {
     return reconcileCampaignProof(failure, currentPassingTaskIds)
   }

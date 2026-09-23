@@ -20,12 +20,22 @@ export interface SystemModulesApi {
 class SystemModules implements SystemModulesApi {
   public create(host: SystemHost): readonly OperationModuleDefinition[] {
     return [
-      ...(host.stores ? [storeModule.create(host.stores), storeModule.create(host.stores, 'write'), storeModule.create(host.stores, 'read')] : []),
+      ...(host.stores
+        ? [
+            storeModule.create(host.stores),
+            storeModule.create(host.stores, 'write'),
+            storeModule.create(host.stores, 'read'),
+          ]
+        : []),
       modulesModule.create(host),
       goalModule.create(host),
       memoryModule.create(host, false),
-      ...(host.longTermMemory ? [memoryModule.create(host, host.longTermMemory.organize, true)] : []),
-      ...(host.maintenance ? [memoryModule.create(host), ...contextModule.create(host.maintenance)] : []),
+      ...(host.longTermMemory
+        ? [memoryModule.create(host, host.longTermMemory.organize, true)]
+        : []),
+      ...(host.maintenance
+        ? [memoryModule.create(host), ...contextModule.create(host.maintenance)]
+        : []),
     ]
   }
 

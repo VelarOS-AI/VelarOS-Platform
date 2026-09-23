@@ -63,17 +63,24 @@ export class TaskApprovalState implements TaskApprovalStateApi {
   private readonly records = new Map<string, TaskApprovalRecord>()
   private readonly listeners = new Set<() => void>()
 
-  public getRevision(): number { return this.revision }
+  public getRevision(): number {
+    return this.revision
+  }
   public subscribe(listener: () => void): () => void {
     if (this.disposed) return () => undefined
     this.listeners.add(listener)
-    return () => { this.listeners.delete(listener) }
+    return () => {
+      this.listeners.delete(listener)
+    }
   }
   private changed(): void {
     this.revision++
     this.listeners.forEach((listener) => {
-      try { listener() }
-      catch (error) { Log.tag('TaskApprovalState').warn('approval view notification failed', { error }) }
+      try {
+        listener()
+      } catch (error) {
+        Log.tag('TaskApprovalState').warn('approval view notification failed', { error })
+      }
     })
   }
 
@@ -84,11 +91,15 @@ export class TaskApprovalState implements TaskApprovalStateApi {
 
   public scopes(): string[] {
     this.assertActive()
-    return [...this.records.entries()].filter(([, record]) => record.status === 'approved').map(([key]) => key)
+    return [...this.records.entries()]
+      .filter(([, record]) => record.status === 'approved')
+      .map(([key]) => key)
   }
 
   public getApprovedToolCategories(): string[] {
-    return this.scopes().filter((key) => key.startsWith('tool-category:')).map((key) => key.slice('tool-category:'.length))
+    return this.scopes()
+      .filter((key) => key.startsWith('tool-category:'))
+      .map((key) => key.slice('tool-category:'.length))
   }
 
   public list(): TaskApprovalRecord[] {
@@ -99,7 +110,12 @@ export class TaskApprovalState implements TaskApprovalStateApi {
     }))
   }
 
-  public record(key: string, approved: boolean, options: ToolConfirmationDecisionOptions, message?: LooseOptional<string>): void {
+  public record(
+    key: string,
+    approved: boolean,
+    options: ToolConfirmationDecisionOptions,
+    message?: LooseOptional<string>
+  ): void {
     this.assertActive()
     const previous = this.records.get(key)
     this.records.set(key, {
@@ -118,7 +134,8 @@ export class TaskApprovalState implements TaskApprovalStateApi {
     this.assertActive()
     const record = this.records.get(key)
     return record?.status === 'denied'
-      ? record.reason ?? '用户已拒绝本次操作。请选择其他方案，或等待用户修订授权。' : null
+      ? (record.reason ?? '用户已拒绝本次操作。请选择其他方案，或等待用户修订授权。')
+      : null
   }
 
   public status(key: string): TaskApprovalRecord['status'] | undefined {
@@ -151,4 +168,6 @@ export class TaskApprovalState implements TaskApprovalStateApi {
 }
 
 /** 创建一份任务范围的审批账本。 */
-export function createTaskApprovalState():TaskApprovalStateApi{return new TaskApprovalState()}
+export function createTaskApprovalState(): TaskApprovalStateApi {
+  return new TaskApprovalState()
+}

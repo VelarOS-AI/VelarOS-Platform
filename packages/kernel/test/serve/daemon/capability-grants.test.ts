@@ -1,9 +1,4 @@
-import {
-  mkdir,
-  mkdtemp,
-  rm,
-  writeFile,
-} from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -25,7 +20,8 @@ import { KernelProtocolVersion } from '../../../src/utils/wire/version'
 const Token = kernelModules.token('test.grants')
 const AuthToken = 'grant-auth-token-0123456789-abcdefgh'
 /** 测试里的模块导入函数；生产里由 `bin/velaros-kernel-daemon.mjs` 注入。 */
-const importModule = (url: string): Promise<Record<string, unknown>> => import(url) as Promise<Record<string, unknown>>
+const importModule = (url: string): Promise<Record<string, unknown>> =>
+  import(url) as Promise<Record<string, unknown>>
 
 const temporaryDirectories: string[] = []
 
@@ -60,7 +56,7 @@ function createService(): KernelService {
             metadata: { permissions: [] },
             invoke: () => 'write-output',
           },
-        }),
+        })
       )
     },
   }
@@ -97,30 +93,32 @@ describe('capability session bind', () => {
     })
 
     const session = await client.openCapabilitySession({
-      requires: [
-        { capabilityId: Token.id, operations: ['read'], scope: null },
-      ],
+      requires: [{ capabilityId: Token.id, operations: ['read'], scope: null }],
     })
 
-    expect(await session.call({
-      protocolVersion: KernelProtocolVersion,
-      callId: 'call-read',
-      capabilityId: Token.id,
-      operation: 'read',
-      scope: null,
-      input: null,
-    })).toMatchObject({
+    expect(
+      await session.call({
+        protocolVersion: KernelProtocolVersion,
+        callId: 'call-read',
+        capabilityId: Token.id,
+        operation: 'read',
+        scope: null,
+        input: null,
+      })
+    ).toMatchObject({
       status: 'ok',
       output: 'granted-output',
     })
-    expect(await session.call({
-      protocolVersion: KernelProtocolVersion,
-      callId: 'call-write',
-      capabilityId: Token.id,
-      operation: 'write',
-      scope: null,
-      input: null,
-    })).toMatchObject({
+    expect(
+      await session.call({
+        protocolVersion: KernelProtocolVersion,
+        callId: 'call-write',
+        capabilityId: Token.id,
+        operation: 'write',
+        scope: null,
+        input: null,
+      })
+    ).toMatchObject({
       status: 'error',
       error: { code: 'CAPABILITY_NOT_GRANTED' },
     })
@@ -149,43 +147,49 @@ describe('capability session bind', () => {
     })
     const endpoint = await server.start()
 
-    const first = new KernelClient(new SocketKernelTransport({
-      authToken: AuthToken,
-      endpoint,
-    }))
-    const second = new KernelClient(new SocketKernelTransport({
-      authToken: AuthToken,
-      endpoint,
-    }))
+    const first = new KernelClient(
+      new SocketKernelTransport({
+        authToken: AuthToken,
+        endpoint,
+      })
+    )
+    const second = new KernelClient(
+      new SocketKernelTransport({
+        authToken: AuthToken,
+        endpoint,
+      })
+    )
 
     try {
       const firstSession = await first.openCapabilitySession({
-        requires: [
-          { capabilityId: Token.id, operations: null, scope: null },
-        ],
+        requires: [{ capabilityId: Token.id, operations: null, scope: null }],
       })
-      expect(await firstSession.call({
-        protocolVersion: KernelProtocolVersion,
-        callId: 'a',
-        capabilityId: Token.id,
-        operation: 'read',
-        scope: null,
-        input: null,
-      })).toMatchObject({ status: 'ok', output: 'granted-output' })
-
-      await expect(
-        second.openCapabilitySession({
-          requires: [
-            { capabilityId: Token.id, operations: null, scope: null },
-          ],
-        }).then(async (session) => session.call({
+      expect(
+        await firstSession.call({
           protocolVersion: KernelProtocolVersion,
-          callId: 'b',
+          callId: 'a',
           capabilityId: Token.id,
           operation: 'read',
           scope: null,
           input: null,
-        })),
+        })
+      ).toMatchObject({ status: 'ok', output: 'granted-output' })
+
+      await expect(
+        second
+          .openCapabilitySession({
+            requires: [{ capabilityId: Token.id, operations: null, scope: null }],
+          })
+          .then(async (session) =>
+            session.call({
+              protocolVersion: KernelProtocolVersion,
+              callId: 'b',
+              capabilityId: Token.id,
+              operation: 'read',
+              scope: null,
+              input: null,
+            })
+          )
       ).resolves.toMatchObject({ status: 'ok', output: 'granted-output' })
     } finally {
       await first.dispose()
@@ -215,7 +219,7 @@ describe('capability session bind', () => {
               metadata: { permissions: [] },
               invoke: () => 'nope',
             },
-          }),
+          })
         )
       },
     })
@@ -225,10 +229,8 @@ describe('capability session bind', () => {
 
     await expect(
       client.openCapabilitySession({
-        requires: [
-          { capabilityId: Token.id, operations: null, scope: null },
-        ],
-      }),
+        requires: [{ capabilityId: Token.id, operations: null, scope: null }],
+      })
     ).rejects.toMatchObject({ code: 'CAPABILITY_BIND_DENIED' })
 
     await service.dispose()
@@ -255,7 +257,7 @@ export default {
   },
   activate() {},
 }
-`,
+`
     )
     // Sectioned single-file manifest: the Kernel reads `module` and nothing else.
     await writeFile(
@@ -269,7 +271,7 @@ export default {
           provides: [{ id: 'test.user.echo', version: '1.0.0' }],
         },
         agent: { id: 'user.echo', manifestSchemaVersion: 1 },
-      }),
+      })
     )
 
     const store = new KernelModStore(directory)

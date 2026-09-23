@@ -19,7 +19,10 @@ import type { CodeAttachment } from './outcome.js'
  * 入参标成 `any` 是诚实的：它刚从隔离进程过来，还没有人验过。
  * 方法自己的签名是有类型的（模型读的声明就从那个签名生成），由它自己把 `any` 收成那个类型。
  */
-export type CapabilityOperation = (input: any, context: CapabilityOperationContext) => Promise<unknown>
+export type CapabilityOperation = (
+  input: any,
+  context: CapabilityOperationContext
+) => Promise<unknown>
 
 /** 一次操作能用到的东西：取消信号，与把图交给模型的口子。 */
 export interface CapabilityOperationContext {

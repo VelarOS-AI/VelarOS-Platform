@@ -1,18 +1,8 @@
 import { AppError } from '@velaros-ai/core/error'
-import type {
-  KernelCallableCapabilityService,
-  KernelModuleDefinition,
-} from '@velaros-ai/kernel'
-import {
-  kernelModules,
-} from '@velaros-ai/kernel'
-import type {
-  CapabilityToken,
-  ScopeRef,
-} from '@velaros-ai/kernel/contracts'
-import {
-  KernelVersionAxes,
-} from '@velaros-ai/kernel/contracts'
+import type { KernelCallableCapabilityService, KernelModuleDefinition } from '@velaros-ai/kernel'
+import { kernelModules } from '@velaros-ai/kernel'
+import type { CapabilityToken, ScopeRef } from '@velaros-ai/kernel/contracts'
+import { KernelVersionAxes } from '@velaros-ai/kernel/contracts'
 
 import {
   ModelCapabilityId,
@@ -101,7 +91,7 @@ class ModelKernelCapability implements ModelRuntimeCapabilityService {
  * wire 可调用面刻意只暴露可序列化、不含密钥的 provider 探查；模型执行走注入的端口。
  */
 export function createModelKernelModule(
-  options: CreateModelKernelModuleOptions,
+  options: CreateModelKernelModuleOptions
 ): KernelModuleDefinition {
   if (!options?.registry) {
     throw new AppError('VALIDATION', '模型内核模块必须显式注入适配器注册表。')

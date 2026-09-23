@@ -8,7 +8,11 @@ import { isFunction } from '@velaros-ai/core'
 import type { CommandProvider, ProjectProviders } from '../../contract/requires.js'
 import type { CorePolicy } from '../../types/policy.js'
 import type { StoredTransaction } from '../../types/transaction.js'
-import type { ProjectValidationPolicy, ProjectValidationProviders, ProjectValidationTransaction } from '../../types/validation.js'
+import type {
+  ProjectValidationPolicy,
+  ProjectValidationProviders,
+  ProjectValidationTransaction,
+} from '../../types/validation.js'
 
 /** 复制并冻结一份策略给校验器，改不到内核的策略。 */
 export function validationPolicyView(policy: CorePolicy): ProjectValidationPolicy {

@@ -55,10 +55,15 @@ export class PdfjsRuntime implements PdfjsRuntimeApi {
           { length: Math.min(pageCount, options.maxPages ?? pageCount) },
           (_, index) => index + 1
         )
-    const invalidPage = requestedPages.find((pageNumber) => pageNumber < 1 || pageNumber > pageCount)
+    const invalidPage = requestedPages.find(
+      (pageNumber) => pageNumber < 1 || pageNumber > pageCount
+    )
     if (!isUndefined(invalidPage)) {
       await loadingTask.destroy()
-      throw new AppError(OfficeErrorCodes.pdfPageOutOfRange, `这份 PDF 只有 ${pageCount} 页，页码 ${invalidPage} 超出范围。`)
+      throw new AppError(
+        OfficeErrorCodes.pdfPageOutOfRange,
+        `这份 PDF 只有 ${pageCount} 页，页码 ${invalidPage} 超出范围。`
+      )
     }
     const pages: OfficePdfPage[] = []
     try {

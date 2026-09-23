@@ -59,7 +59,8 @@ export function unavailableMessage(availability: ComputerAvailability): string {
  * 不归本单元管，所以关键字保持英文。
  */
 export function classifyStartError(error: unknown): ComputerAvailability['reason'] {
-  if (error instanceof AppError && error.code === ComputerErrorCodes.helperMissing) return 'helper-missing'
+  if (error instanceof AppError && error.code === ComputerErrorCodes.helperMissing)
+    return 'helper-missing'
 
   const message = AppError.getMessage(error).toLowerCase()
   if (message.includes('enoent') || message.includes('not found')) return 'python-missing'
@@ -70,7 +71,8 @@ export function classifyStartError(error: unknown): ComputerAvailability['reason
 
 /** 权限没给全时给出的说明：Linux 缺的是图形会话，macOS/Windows 缺的是辅助功能与屏幕录制。 */
 export function permissionMissingDetail(permissions: ComputerPermissionStatus): string {
-  if (permissions.platform === 'linux') return 'Linux 上的桌面控制需要一个能截图、能注入输入的图形会话。'
+  if (permissions.platform === 'linux')
+    return 'Linux 上的桌面控制需要一个能截图、能注入输入的图形会话。'
 
   return '桌面控制需要「辅助功能」和「屏幕录制」两项系统权限。'
 }

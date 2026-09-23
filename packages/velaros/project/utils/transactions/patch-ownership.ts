@@ -41,18 +41,18 @@ export function canRevertToOriginal(patchValue: PreparedPatch): boolean {
  */
 export function assertEditsReadOriginal(
   patches: readonly PreparedPatch[],
-  snapshot: FileSnapshot,
+  snapshot: FileSnapshot
 ): void {
   if (!snapshot.exists || snapshot.isDirectory || isString(snapshot.content)) return
   const blind = patches.find(
     (patchValue) =>
-      patchValue.path === snapshot.path && !isCreatePatch(patchValue) && !isDeletePatch(patchValue),
+      patchValue.path === snapshot.path && !isCreatePatch(patchValue) && !isDeletePatch(patchValue)
   )
   if (!blind) return
   throw new ProjectError(
     'NOT_SUPPORTED',
     `无法读取 ${snapshot.path} 的完整正文（二进制或超出读取上限），不能在它上面做局部编辑。`,
     { path: snapshot.path, op: blind.metadata?.op, strategyId: blind.strategyId },
-    '整文件替换请用 overwrite；其余修改请用项目命令处理该文件。',
+    '整文件替换请用 overwrite；其余修改请用项目命令处理该文件。'
   )
 }

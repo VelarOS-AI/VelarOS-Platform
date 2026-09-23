@@ -35,22 +35,18 @@ class FakeProcess implements ComputerSidecarProcess {
   }
 
   public constructor(
-    private readonly respond: (
-      request: ComputerHelperRequest,
-    ) => ComputerHelperResponse,
+    private readonly respond: (request: ComputerHelperRequest) => ComputerHelperResponse
   ) {}
 
   public on(
     _event: 'error' | 'exit',
-    _listener: ((error: Error) => void) | ((code: Nullable<number>) => void),
+    _listener: ((error: Error) => void) | ((code: Nullable<number>) => void)
   ): void {}
 
   public kill(_signal?: NodeJS.Signals): void {}
 }
 
-function createManager(
-  respond: (request: ComputerHelperRequest) => ComputerHelperResponse,
-) {
+function createManager(respond: (request: ComputerHelperRequest) => ComputerHelperResponse) {
   let process: FakeProcess | undefined
   const manager = createComputerRuntime({
     resolveHelper: () => ({
@@ -63,9 +59,7 @@ function createManager(
     }),
     spawnProcess: () => {
       process = new FakeProcess(respond)
-      queueMicrotask(() =>
-        process?.stdout.emit('{"id":0,"ok":true,"result":{"ready":true}}\n')
-      )
+      queueMicrotask(() => process?.stdout.emit('{"id":0,"ok":true,"result":{"ready":true}}\n'))
       return process
     },
   })
@@ -94,16 +88,18 @@ describe('computer sidecar screenshot binding', () => {
         snapshotId: 'screen_test_snapshot_01',
       })
 
-      expect(harness.readProcess()?.requests).toEqual([{
-        id: 1,
-        command: 'left_click',
-        payload: {
-          x: 120,
-          y: 40,
-          coordinateSpace: 'primary-display',
-          snapshotId: 'screen_test_snapshot_01',
+      expect(harness.readProcess()?.requests).toEqual([
+        {
+          id: 1,
+          command: 'left_click',
+          payload: {
+            x: 120,
+            y: 40,
+            coordinateSpace: 'primary-display',
+            snapshotId: 'screen_test_snapshot_01',
+          },
         },
-      }])
+      ])
     } finally {
       harness.manager.dispose()
     }

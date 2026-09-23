@@ -1,4 +1,12 @@
-import { isArray,isBoolean,isNull,isNumber,isObject,isString,isUndefined } from '@velaros-ai/core'
+import {
+  isArray,
+  isBoolean,
+  isNull,
+  isNumber,
+  isObject,
+  isString,
+  isUndefined,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 /**
  * 给一次操作算出稳定的审批身份：`<kind>:<编码后的参数>`。保留完整值和确定顺序（对象键排序、数组按位），
@@ -15,13 +23,18 @@ export function createApprovalOperationKey(kind: string, value: unknown): string
       throw new AppError('VALIDATION', '审批参数必须是可序列化的数据。')
     }
     visited.add(input)
-    const keys = isArray(input) ? Array.from({ length: input.length }, (_, index) => String(index)) : Object.keys(input).sort()
-    const entries = keys.map((key) => {
-      const descriptor = Object.getOwnPropertyDescriptor(input, key)
-      if (descriptor && !('value' in descriptor)) throw new AppError('VALIDATION', '审批参数不能包含访问器。')
-      const encoded = encode(descriptor?.value)
-      return isArray(input) ? encoded : `${JSON.stringify(key)}:${encoded}`
-    }).join(',')
+    const keys = isArray(input)
+      ? Array.from({ length: input.length }, (_, index) => String(index))
+      : Object.keys(input).sort()
+    const entries = keys
+      .map((key) => {
+        const descriptor = Object.getOwnPropertyDescriptor(input, key)
+        if (descriptor && !('value' in descriptor))
+          throw new AppError('VALIDATION', '审批参数不能包含访问器。')
+        const encoded = encode(descriptor?.value)
+        return isArray(input) ? encoded : `${JSON.stringify(key)}:${encoded}`
+      })
+      .join(',')
     visited.delete(input)
     return isArray(input) ? `[${entries}]` : `{${entries}}`
   }

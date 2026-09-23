@@ -1,7 +1,4 @@
-import type {
-  AgentProvider,
-  ResolvedAgentModelRuntime,
-} from '../../types/adapters'
+import type { AgentProvider, ResolvedAgentModelRuntime } from '../../types/adapters'
 import {
   parseModelRuntimeContext,
   parseModelSelection,

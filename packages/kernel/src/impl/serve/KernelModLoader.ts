@@ -26,7 +26,7 @@ export interface KernelModLoaderApi {
 export class KernelModLoader implements KernelModLoaderApi {
   public constructor(
     private readonly store: KernelModStoreApi,
-    private readonly importModule?: KernelModuleImporter,
+    private readonly importModule?: KernelModuleImporter
   ) {}
 
   /**
@@ -56,14 +56,14 @@ export class KernelModLoader implements KernelModLoaderApi {
             // 孤儿：持久化的索引里还记着一个本次构建已不再编入的 pack。它的身份 URI 不能导入，
             // 直接说明原因，不要让它落进无意义的文件路径导入。
             throw new Error(
-              `mod pack "${pack.id}" 是随包编译进来的，但这次构建里已经没有它了（"${pack.specifier}"）`,
+              `mod pack "${pack.id}" 是随包编译进来的，但这次构建里已经没有它了（"${pack.specifier}"）`
             )
           }
           // 「按运行期才知道的路径加载代码」静态依赖图表达不了，所以包内不留动态 `import()`：
           // 导入函数是注入面（`KernelModuleImporter`），由 `bin/` 下的可执行文件交进来。
           if (isUndefined(this.importModule)) {
             throw new Error(
-              `mod pack "${pack.id}" 要按路径导入，但本次装配没有注入模块导入函数（bootKernelDaemon 的 importModule）`,
+              `mod pack "${pack.id}" 要按路径导入，但本次装配没有注入模块导入函数（bootKernelDaemon 的 importModule）`
             )
           }
           const importUrl = toModPackImportUrl(pack.specifier)
@@ -72,7 +72,7 @@ export class KernelModLoader implements KernelModLoaderApi {
           definition = toKernelModuleDefinition(exported[exportName])
           if (isUndefined(definition)) {
             throw new Error(
-              `mod pack "${pack.id}" 在 "${importUrl}" 上的导出 "${exportName}" 不是一个 KernelModuleDefinition`,
+              `mod pack "${pack.id}" 在 "${importUrl}" 上的导出 "${exportName}" 不是一个 KernelModuleDefinition`
             )
           }
         }

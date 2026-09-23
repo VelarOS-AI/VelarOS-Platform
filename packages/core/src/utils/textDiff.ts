@@ -9,7 +9,11 @@
 type LineEdit = ['=' | '+' | '-', string]
 
 /** 按 Myers 算法算中间那段的编辑脚本；编辑距离超过上限时交回 null。 */
-function myersEdits(before: readonly string[], after: readonly string[], limit: number): Nullable<LineEdit[]> {
+function myersEdits(
+  before: readonly string[],
+  after: readonly string[],
+  limit: number
+): Nullable<LineEdit[]> {
   const n = before.length
   const m = after.length
   const max = Math.min(n + m, limit)
@@ -19,8 +23,9 @@ function myersEdits(before: readonly string[], after: readonly string[], limit: 
   for (let d = 0; d <= max; d += 1) {
     trace.push(frontier.slice())
     for (let k = -d; k <= d; k += 2) {
-      const down = k === -d || (k !== d && (frontier[offset + k - 1] ?? 0) < (frontier[offset + k + 1] ?? 0))
-      let x = down ? frontier[offset + k + 1] ?? 0 : (frontier[offset + k - 1] ?? 0) + 1
+      const down =
+        k === -d || (k !== d && (frontier[offset + k - 1] ?? 0) < (frontier[offset + k + 1] ?? 0))
+      let x = down ? (frontier[offset + k + 1] ?? 0) : (frontier[offset + k - 1] ?? 0) + 1
       let y = x - k
       while (x < n && y < m && before[x] === after[y]) {
         x += 1
@@ -34,14 +39,21 @@ function myersEdits(before: readonly string[], after: readonly string[], limit: 
 }
 
 /** 从 Myers 的每一轮前沿倒着走回起点，交回编辑脚本。 */
-function backtrack(trace: readonly Int32Array[], before: readonly string[], after: readonly string[], last: number, offset: number): LineEdit[] {
+function backtrack(
+  trace: readonly Int32Array[],
+  before: readonly string[],
+  after: readonly string[],
+  last: number,
+  offset: number
+): LineEdit[] {
   const edits: LineEdit[] = []
   let x = before.length
   let y = after.length
   for (let d = last; d > 0; d -= 1) {
     const frontier = trace[d] ?? new Int32Array(0)
     const k = x - y
-    const down = k === -d || (k !== d && (frontier[offset + k - 1] ?? 0) < (frontier[offset + k + 1] ?? 0))
+    const down =
+      k === -d || (k !== d && (frontier[offset + k - 1] ?? 0) < (frontier[offset + k + 1] ?? 0))
     const previousK = down ? k + 1 : k - 1
     const previousX = frontier[offset + previousK] ?? 0
     const previousY = previousX - previousK
@@ -71,11 +83,18 @@ function lineEdits(before: readonly string[], after: readonly string[], limit: n
   let head = 0
   while (head < before.length && head < after.length && before[head] === after[head]) head += 1
   let tail = 0
-  while (tail < before.length - head && tail < after.length - head && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail += 1
+  while (
+    tail < before.length - head &&
+    tail < after.length - head &&
+    before[before.length - 1 - tail] === after[after.length - 1 - tail]
+  )
+    tail += 1
   const middleBefore = before.slice(head, before.length - tail)
   const middleAfter = after.slice(head, after.length - tail)
-  const middle = myersEdits(middleBefore, middleAfter, limit)
-    ?? [...middleBefore.map((line): LineEdit => ['-', line]), ...middleAfter.map((line): LineEdit => ['+', line])]
+  const middle = myersEdits(middleBefore, middleAfter, limit) ?? [
+    ...middleBefore.map((line): LineEdit => ['-', line]),
+    ...middleAfter.map((line): LineEdit => ['+', line]),
+  ]
   return [
     ...before.slice(0, head).map((line): LineEdit => ['=', line]),
     ...middle,
@@ -87,7 +106,11 @@ function lineEdits(before: readonly string[], after: readonly string[], limit: n
  * 两份文本逐行比，交回 unified 差量：头两行是 `--- 旧` 与 `+++ 新`，每处改动一个 `@@` 块，前后带几行上下文。
  * 两份一样时交回空串。
  */
-export function unifiedLineDiff(before: string, after: string, labels: { from: string; to: string; editLimit?: number; contextLines?: number }): string {
+export function unifiedLineDiff(
+  before: string,
+  after: string,
+  labels: { from: string; to: string; editLimit?: number; contextLines?: number }
+): string {
   if (before === after) return ''
   const edits = lineEdits(before.split('\n'), after.split('\n'), labels.editLimit ?? 2000)
   const context = labels.contextLines ?? 3
@@ -122,8 +145,8 @@ export function unifiedLineDiff(before: string, after: string, labels: { from: s
     const oldCount = hunk.filter(({ edit }) => edit[0] !== '+').length
     const newCount = hunk.filter(({ edit }) => edit[0] !== '-').length
     const first = hunk[0]
-    const oldStart = oldCount === 0 ? (first?.oldLine ?? 1) - 1 : first?.oldLine ?? 1
-    const newStart = newCount === 0 ? (first?.newLine ?? 1) - 1 : first?.newLine ?? 1
+    const oldStart = oldCount === 0 ? (first?.oldLine ?? 1) - 1 : (first?.oldLine ?? 1)
+    const newStart = newCount === 0 ? (first?.newLine ?? 1) - 1 : (first?.newLine ?? 1)
     lines.push(`@@ -${oldStart},${oldCount} +${newStart},${newCount} @@`)
     for (const { edit } of hunk) lines.push(`${edit[0] === '=' ? ' ' : edit[0]}${edit[1]}`)
     index = end

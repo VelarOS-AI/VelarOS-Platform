@@ -6,7 +6,11 @@ import { isEmpty, isPlainObject, optionalWhen } from '@velaros-ai/core'
 
 import type { ProjectOperationContext } from '../../contract/requires.js'
 import type { PrepareEditInput } from '../../types/edit.js'
-import type { ProjectEditInput, ProjectEditResult, ProjectRecodeReceipt } from '../../types/files.js'
+import type {
+  ProjectEditInput,
+  ProjectEditResult,
+  ProjectRecodeReceipt,
+} from '../../types/files.js'
 import { compileProjectEdit } from '../editing/planner-index.js'
 import { rethrowNotApplied } from '../transactions/transaction-errors.js'
 
@@ -22,14 +26,28 @@ import { projectCreatedPaths, projectTransactionHasChanges } from './transaction
  * 计划没有写入（全是已经是目标格式的 recode）时不开事务。
  * 提交失败时丢掉事务，一个文件都没写。
  */
-export async function commitProjectEdit(steps: ProjectEditInput['steps'], ctx: ProjectOperationContext): Promise<ProjectEditResult> {
-  const plan = await withEditRecovery(steps, ctx, () => compileProjectEdit({ steps }, projectPlannerResolver(ctx)))
-    .catch(rethrowNotApplied) as PrepareEditInput
-  const recode = optionalWhen(isPlainObject, plan.metadata?.recode) as Optional<ProjectRecodeReceipt>
+export async function commitProjectEdit(
+  steps: ProjectEditInput['steps'],
+  ctx: ProjectOperationContext
+): Promise<ProjectEditResult> {
+  const plan = (await withEditRecovery(steps, ctx, () =>
+    compileProjectEdit({ steps }, projectPlannerResolver(ctx))
+  ).catch(rethrowNotApplied)) as PrepareEditInput
+  const recode = optionalWhen(
+    isPlainObject,
+    plan.metadata?.recode
+  ) as Optional<ProjectRecodeReceipt>
   if (isEmpty(plan.operations)) {
     const unchanged: ProjectEditResult = {
-      changeRef: '', transactionId: '', changed: false, changedFiles: [], oldRevisions: {}, newRevisions: {},
-      files: [], diff: '', diffLines: 0,
+      changeRef: '',
+      transactionId: '',
+      changed: false,
+      changedFiles: [],
+      oldRevisions: {},
+      newRevisions: {},
+      files: [],
+      diff: '',
+      diffLines: 0,
       notes: ['没有需要写入的文件，什么都没改（changeRef 为空）。'],
     }
     if (recode) unchanged.recode = recode
@@ -43,12 +61,18 @@ export async function commitProjectEdit(steps: ProjectEditInput['steps'], ctx: P
     const final = kernel.getTransaction(prepared.transactionId) ?? prepared
     const created = projectCreatedPaths(final.patches)
     const receipt: ProjectEditResult = {
-      changeRef: saveReceipt(ctx, 'change', { transactionId: prepared.transactionId, oldRevisions: applied.oldRevisions, newRevisions: applied.newRevisions }),
+      changeRef: saveReceipt(ctx, 'change', {
+        transactionId: prepared.transactionId,
+        oldRevisions: applied.oldRevisions,
+        newRevisions: applied.newRevisions,
+      }),
       transactionId: prepared.transactionId,
       changed: projectTransactionHasChanges(final.patches),
       changedFiles: applied.changedFiles,
       // 界面按「不在 oldRevisions 里」认出新建的文件；内核对不存在的路径也给 revision，所以新建的要剔掉。
-      oldRevisions: Object.fromEntries(Object.entries(applied.oldRevisions).filter(([path]) => !created.has(path))),
+      oldRevisions: Object.fromEntries(
+        Object.entries(applied.oldRevisions).filter(([path]) => !created.has(path))
+      ),
       newRevisions: applied.newRevisions,
       files: await changeWindows(ctx, final.patches, applied.newRevisions, previous),
       diff: final.diff,

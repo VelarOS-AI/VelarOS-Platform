@@ -31,7 +31,10 @@ export function createDefaultSocket(url: string): CdpWebSocketLike {
  */
 export function openCdpWebSocket(
   url: string,
-  options: { createSocket?: LooseOptional<(url: string) => CdpWebSocketLike>; timeoutMs?: LooseOptional<number> } = {}
+  options: {
+    createSocket?: LooseOptional<(url: string) => CdpWebSocketLike>
+    timeoutMs?: LooseOptional<number>
+  } = {}
 ): Promise<CdpWebSocketLike> {
   const createSocket = options.createSocket ?? createDefaultSocket
   const socket = createSocket(url)
@@ -58,10 +61,14 @@ export function openCdpWebSocket(
       cleanup()
       reject(new AppError('NETWORK', `浏览器 CDP WebSocket 连接已关闭：${url}`))
     }
-    const timeout = timers.after(timeoutMs, () => {
-      cleanup()
-      reject(new AppError('TIMEOUT', `连接浏览器 CDP WebSocket 超时：${url}`))
-    }, { label: 'openCdpWebSocket' })
+    const timeout = timers.after(
+      timeoutMs,
+      () => {
+        cleanup()
+        reject(new AppError('TIMEOUT', `连接浏览器 CDP WebSocket 超时：${url}`))
+      },
+      { label: 'openCdpWebSocket' }
+    )
 
     socket.addEventListener('open', handleOpen)
     socket.addEventListener('error', handleError)

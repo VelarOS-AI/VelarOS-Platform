@@ -32,7 +32,12 @@ export function createWebContentsCdpTraceTransport(
     send: <T = unknown>(method: string, params?: Record<string, unknown>) =>
       webContents.debugger.sendCommand(method, params) as Promise<T>,
     onEvent: <T = unknown>(method: string, listener: (params: T) => void) => {
-      const handler = (_event: unknown, eventMethod: string, params: unknown, sessionId?: string): void => {
+      const handler = (
+        _event: unknown,
+        eventMethod: string,
+        params: unknown,
+        sessionId?: string
+      ): void => {
         // 子会话（模型自己的那条 CDP 会话与它挂出来的）的事件不是宿主这条的，别混进来。
         if (sessionId) return
         if (eventMethod === method) listener(params as T)

@@ -5,7 +5,14 @@
 import { isEmpty, isString } from '@velaros-ai/core'
 
 import type { FileSnapshot } from '../../types/snapshot.js'
-import type { ApplyRestoreState, ProjectTransactionFileState, ProjectTransactionPendingOperation, ProjectTransactionRestoreEntry,StoredTransaction, TransactionBytePlan } from '../../types/transaction.js'
+import type {
+  ApplyRestoreState,
+  ProjectTransactionFileState,
+  ProjectTransactionPendingOperation,
+  ProjectTransactionRestoreEntry,
+  StoredTransaction,
+  TransactionBytePlan,
+} from '../../types/transaction.js'
 import { ProjectError } from '../errors.js'
 
 import { bytePatchFor } from './byte-plan.js'
@@ -17,7 +24,7 @@ export function transactionOwnedStates(
   tx: StoredTransaction,
   kind: ProjectTransactionPendingOperation['kind'],
   pathValue: string,
-  bytePlan?: TransactionBytePlan,
+  bytePlan?: TransactionBytePlan
 ): ProjectTransactionFileState[] {
   const patches = kind === 'apply' ? tx.patches : [...tx.patches].reverse()
   const states: ProjectTransactionFileState[] = []
@@ -29,10 +36,13 @@ export function transactionOwnedStates(
         ? { exists: false }
         : {
             exists: true,
-            bytes: kind === 'apply' ? bytePatchFor(bytePlan, patchValue)?.after : bytePatchFor(bytePlan, patchValue)?.before,
+            bytes:
+              kind === 'apply'
+                ? bytePatchFor(bytePlan, patchValue)?.after
+                : bytePatchFor(bytePlan, patchValue)?.before,
             content:
               kind === 'apply' ? (patchValue.newContent ?? '') : (patchValue.oldContent ?? ''),
-          },
+          }
     )
   }
   return states
@@ -46,7 +56,7 @@ export function durableRestorePlan(
   tx: StoredTransaction,
   kind: ProjectTransactionPendingOperation['kind'],
   restoreByPath: Map<string, ApplyRestoreState>,
-  bytePlan?: TransactionBytePlan,
+  bytePlan?: TransactionBytePlan
 ): ProjectTransactionRestoreEntry[] {
   const plan: ProjectTransactionRestoreEntry[] = []
   for (const pathValue of tx.changedFiles) {
@@ -56,7 +66,7 @@ export function durableRestorePlan(
         'PATCH_APPLY_ERROR',
         `事务 ${tx.transactionId} 无法建立可恢复写盘计划：${pathValue}`,
         { transactionId: tx.transactionId, path: pathValue, operation: kind },
-        '请把二进制或超限文件拆出该事务；可恢复事务只写入能够完整捕获旧正文的文件。',
+        '请把二进制或超限文件拆出该事务；可恢复事务只写入能够完整捕获旧正文的文件。'
       )
     }
     const ownedStates = transactionOwnedStates(tx, kind, pathValue, bytePlan)
@@ -64,14 +74,19 @@ export function durableRestorePlan(
       throw new ProjectError(
         'PATCH_APPLY_ERROR',
         `事务 ${tx.transactionId} 的路径缺少可验证写盘状态：${pathValue}`,
-        { transactionId: tx.transactionId, path: pathValue, operation: kind },
+        { transactionId: tx.transactionId, path: pathValue, operation: kind }
       )
     }
     plan.push({
       path: pathValue,
       exists: restore.existedBefore,
       ...(restore.existedBefore
-        ? { content: restore.oldContent!, bytes: restore.bytes, encoding: restore.encoding, mode: restore.mode }
+        ? {
+            content: restore.oldContent!,
+            bytes: restore.bytes,
+            encoding: restore.encoding,
+            mode: restore.mode,
+          }
         : {}),
       ownedStates,
     })
@@ -82,7 +97,7 @@ export function durableRestorePlan(
 /** 快照是不是这个状态：都不存在算对上；存在的要是非目录、非二进制且正文完全相同。 */
 export function fileStateMatches(
   snapshot: FileSnapshot,
-  state: ProjectTransactionFileState,
+  state: ProjectTransactionFileState
 ): boolean {
   if (!state.exists) return !snapshot.exists
   return (
@@ -96,7 +111,7 @@ export function fileStateMatches(
 /** 恢复写入会生成新的 revision；仅刷新已验证恢复成功的路径首个补丁。 */
 export function refreshRecoveredBaseRevisions(
   transaction: StoredTransaction,
-  recovered: ReadonlyMap<string, FileSnapshot>,
+  recovered: ReadonlyMap<string, FileSnapshot>
 ): void {
   const seen = new Set<string>()
   transaction.patches = transaction.patches.map((patch) => {
@@ -105,5 +120,7 @@ export function refreshRecoveredBaseRevisions(
     seen.add(patch.path)
     return { ...patch, baseRevision: snapshot.revision }
   })
-  transaction.baseSnapshots = transaction.baseSnapshots.map((snapshot) => recovered.get(snapshot.path) ?? snapshot)
+  transaction.baseSnapshots = transaction.baseSnapshots.map(
+    (snapshot) => recovered.get(snapshot.path) ?? snapshot
+  )
 }

@@ -107,15 +107,17 @@ describe('readErrnoCode', () => {
 describe('stableStringify', () => {
   test('excludes explicit object fields recursively without reordering arrays', () => {
     const value = { z: [{ runtime: 'private', b: 2, a: 1 }, 3], runtime: 'private', a: undefined }
-    expect(stableStringify(value, { omitKeys: ['runtime'], rejectCircular: true }))
-      .toBe('{"z":[{"a":1,"b":2},3]}')
+    expect(stableStringify(value, { omitKeys: ['runtime'], rejectCircular: true })).toBe(
+      '{"z":[{"a":1,"b":2},3]}'
+    )
     expect(value.runtime).toBe('private')
   })
 
   test('keeps own prototype keys in the serialized bytes', () => {
     const value = JSON.parse('{"z":1,"__proto__":{"x":2},"constructor":3}')
-    expect(stableStringify(value, { rejectCircular: true }))
-      .toBe('{"__proto__":{"x":2},"constructor":3,"z":1}')
+    expect(stableStringify(value, { rejectCircular: true })).toBe(
+      '{"__proto__":{"x":2},"constructor":3,"z":1}'
+    )
   })
 
   test('strict projection rejects cycles but accepts repeated references', () => {
@@ -140,7 +142,7 @@ describe('stableStringify', () => {
   test('undefined 字段略去、Date 取 ISO 文本、遇环写占位', () => {
     expect(stableStringify({ a: undefined, b: 1 })).toBe('{"b":1}')
     expect(stableStringify({ at: new Date('2026-09-16T00:00:00.000Z') })).toBe(
-      '{"at":"2026-09-16T00:00:00.000Z"}',
+      '{"at":"2026-09-16T00:00:00.000Z"}'
     )
 
     const cyclic: Record<string, unknown> = { name: 'root' }

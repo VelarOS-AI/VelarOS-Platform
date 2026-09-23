@@ -78,7 +78,7 @@ export interface KernelModStoreApi {
    */
   installFromDirectory(
     packDirectory: string,
-    kind?: KernelModPackKind,
+    kind?: KernelModPackKind
   ): Promise<KernelModPackRecord>
   /** 把落盘的索引读回内存；索引文件不存在时什么也不做，坏掉的条目逐条跳过。 */
   loadPersistedIndex(): Promise<void>
@@ -179,17 +179,17 @@ export class KernelModStore implements KernelModStoreApi {
    * 刻意不传 `enabled`：随包默认是「开」，但用户经 `mods.setEnabled` 停用过的 pack（持久化在
    * mod index 里、本调用之前已载入 store）必须跨重启保持关闭。返回登记后的现值。
    */
-  public registerBundled(
-    packs: readonly KernelBundledPack[],
-  ): readonly KernelModPackRecord[] {
+  public registerBundled(packs: readonly KernelBundledPack[]): readonly KernelModPackRecord[] {
     const records = toBundledPackRecords(packs)
-    this.registerSystem(records.map((record) => ({
-      id: record.id,
-      version: record.version,
-      specifier: record.specifier,
-      provides: record.provides,
-      module: record.module as KernelModuleDefinition,
-    })))
+    this.registerSystem(
+      records.map((record) => ({
+        id: record.id,
+        version: record.version,
+        specifier: record.specifier,
+        provides: record.provides,
+        module: record.module as KernelModuleDefinition,
+      }))
+    )
     return records.map((record) => this.packs.get(record.id) ?? record)
   }
 
@@ -205,7 +205,7 @@ export class KernelModStore implements KernelModStoreApi {
    */
   public async installFromDirectory(
     packDirectory: string,
-    kind: KernelModPackKind = 'user',
+    kind: KernelModPackKind = 'user'
   ): Promise<KernelModPackRecord> {
     const absolute = isAbsolute(packDirectory)
       ? packDirectory
@@ -213,7 +213,7 @@ export class KernelModStore implements KernelModStoreApi {
     const manifestPath = join(absolute, VelarosModManifestFileName)
     const moduleSection = parseModPackDirectoryManifest(
       await readFile(manifestPath, 'utf8'),
-      manifestPath,
+      manifestPath
     )
     const relativeSpecifier = moduleSection.entry ?? './index.js'
     const pack: KernelModPackRecord = {
@@ -262,7 +262,7 @@ export class KernelModStore implements KernelModStoreApi {
       indexPath,
       toModPackIndexFileContent(this.list()),
       // 索引里有本机的 pack 路径：只给属主读写。
-      { encoding: 'utf8', mode: 0o600 },
+      { encoding: 'utf8', mode: 0o600 }
     )
   }
 

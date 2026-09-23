@@ -83,17 +83,10 @@ export interface KernelModuleManifest {
 }
 
 /** 非进程内的隔离形态；这几种要宿主注入对应的适配器才激活得了。 */
-export type ExternalKernelModuleIsolation = Exclude<
-  KernelModuleIsolation,
-  'in-process'
->
+export type ExternalKernelModuleIsolation = Exclude<KernelModuleIsolation, 'in-process'>
 
 /** 模块健康度的四态；`unknown` 表示还没问过。 */
-export type KernelModuleHealthStatus =
-  | 'unknown'
-  | 'healthy'
-  | 'degraded'
-  | 'unhealthy'
+export type KernelModuleHealthStatus = 'unknown' | 'healthy' | 'degraded' | 'unhealthy'
 
 /**
  * 宿主状态机持有的模块生命周期状态。
@@ -265,15 +258,8 @@ export interface KernelCompositionSnapshot {
   readonly resolutionError: Nullable<string>
 }
 
-
 /** 内核门面的生命周期状态。 */
-export type KernelStatus =
-  | 'idle'
-  | 'starting'
-  | 'ready'
-  | 'degraded'
-  | 'disposing'
-  | 'disposed'
+export type KernelStatus = 'idle' | 'starting' | 'ready' | 'degraded' | 'disposing' | 'disposed'
 
 /** 本机 RPC 端点：Unix 域套接字。 */
 export interface UnixKernelRpcEndpoint {
@@ -294,9 +280,7 @@ export interface TcpKernelRpcEndpoint {
 }
 
 /** 本机 Kernel RPC 的端点地址；缺省 Unix 域套接字，Windows 上退回回环 TCP。 */
-export type KernelRpcEndpoint =
-  | UnixKernelRpcEndpoint
-  | TcpKernelRpcEndpoint
+export type KernelRpcEndpoint = UnixKernelRpcEndpoint | TcpKernelRpcEndpoint
 
 /** 单实例守护进程在盘上的三个位置。 */
 export interface KernelDaemonPaths {

@@ -1,4 +1,11 @@
-import { isFiniteNumber, isNumber, isPlainObject, isString, Log, optionalWhen } from '@velaros-ai/core'
+import {
+  isFiniteNumber,
+  isNumber,
+  isPlainObject,
+  isString,
+  Log,
+  optionalWhen,
+} from '@velaros-ai/core'
 
 import type { ReasoningEffort } from '../../types/adapters'
 import type { ChatProviderId, ReasoningLevel, ThinkingDepth } from '../../types/model'
@@ -17,9 +24,7 @@ function hasUsableOutputBudget(maxOutputTokens?: number): maxOutputTokens is num
 
 /** 把任意输入收窄成三档思考深度，认不出来的按 balanced。 */
 export function requireThinkingDepth(depth?: LooseOptional<ThinkingDepth>): ThinkingDepth {
-  return depth === 'fast' || depth === 'balanced' || depth === 'deep'
-    ? depth
-    : 'balanced'
+  return depth === 'fast' || depth === 'balanced' || depth === 'deep' ? depth : 'balanced'
 }
 
 /** 五档思考力度落到三档思考深度上。 */
@@ -126,11 +131,16 @@ export function resolveThinkingBudget(
         ? ModelTuning.reasoning.deepMultiplier
         : 1
   const maxBudget =
-    normalizedDepth === 'deep' ? ModelTuning.reasoning.budgetMaxDeep : ModelTuning.reasoning.budgetMax
+    normalizedDepth === 'deep'
+      ? ModelTuning.reasoning.budgetMaxDeep
+      : ModelTuning.reasoning.budgetMax
 
   return Math.max(
     ModelTuning.reasoning.budgetMin,
-    Math.min(maxBudget, Math.floor(maxOutputTokens * ModelTuning.reasoning.budgetRatio * multiplier))
+    Math.min(
+      maxBudget,
+      Math.floor(maxOutputTokens * ModelTuning.reasoning.budgetRatio * multiplier)
+    )
   )
 }
 
@@ -221,7 +231,8 @@ export function createThinkingDepthProviderOptions(
   maxOutputTokens?: number
 ): Nullable<Record<string, unknown>> {
   // off 先判：这一档与 thinkingDepth 无关，缺 depth 时也要生效。
-  if (isReasoningDisabledByLevel(level)) return createReasoningDisabledProviderOptions(provider, model)
+  if (isReasoningDisabledByLevel(level))
+    return createReasoningDisabledProviderOptions(provider, model)
   if (!depth) return null
 
   switch (provider) {
@@ -288,7 +299,8 @@ function createAnthropicThinkingOptions(
   level?: LooseOptional<ReasoningLevel>,
   maxOutputTokens?: number
 ): Record<string, unknown> {
-  if (matchesAdaptiveClaudeThinkingModel(model)) return {
+  if (matchesAdaptiveClaudeThinkingModel(model))
+    return {
       sendReasoning: true,
       thinking: {
         type: 'adaptive',

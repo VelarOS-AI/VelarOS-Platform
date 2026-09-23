@@ -93,10 +93,14 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
     request: ValidateProviderRuntimeRequest
   ): Promise<{ ok: boolean; message: Nullable<string> }> {
     const preset = this.getProviderPreset(request.provider)
-    if (!canListRemoteProviderModels(preset.validationKind) && preset.validationKind !== 'provider-script')
+    if (
+      !canListRemoteProviderModels(preset.validationKind) &&
+      preset.validationKind !== 'provider-script'
+    )
       return { ok: false, message: `${preset.label} 由专用运行时管理，请通过对应服务验证连接。` }
     const resolvedRequest = { ...request, apiKey: this.providerCollection.resolveApiKey(request) }
-    if (isBlank(resolvedRequest.apiKey) && !preset.apiKeyOptional) return { ok: false, message: null }
+    if (isBlank(resolvedRequest.apiKey) && !preset.apiKeyOptional)
+      return { ok: false, message: null }
     const baseURL = this.providerCollection.resolveBaseURL(request)
     const timers = new TimerScope({ name: 'ProviderRuntimeValidation' })
     try {
@@ -106,13 +110,21 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
           if (preset.validationKind === 'provider-script') {
             if (!this.providerScriptRegistry)
               return { ok: false, message: `${preset.label} provider script 未注入。` }
-            return this.providerScriptRegistry.validateProviderRuntime({ ...resolvedRequest, baseURL })
+            return this.providerScriptRegistry.validateProviderRuntime({
+              ...resolvedRequest,
+              baseURL,
+            })
           }
           const probe = createProviderValidationRequest(
-            resolvedRequest, baseURL, preset.validationKind, this.attribution
+            resolvedRequest,
+            baseURL,
+            preset.validationKind,
+            this.attribution
           )
           const response = await this.fetch(probe.url, {
-            method: 'GET', headers: [...probe.headers], signal,
+            method: 'GET',
+            headers: [...probe.headers],
+            signal,
           })
           if (response.ok) {
             await response.body?.cancel()
@@ -120,13 +132,20 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
           }
           return {
             ok: false,
-            message: normalizeProviderErrorMessage(preset.label, response.status, await response.text()),
+            message: normalizeProviderErrorMessage(
+              preset.label,
+              response.status,
+              await response.text()
+            ),
           }
         },
         { label: `model.provider.validate:${request.provider}` }
       )
     } catch (error) {
-      if (error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError'))
+      if (
+        error instanceof DOMException &&
+        (error.name === 'AbortError' || error.name === 'TimeoutError')
+      )
         return { ok: false, message: `${preset.label} 校验请求超时` }
       throw error
     } finally {
@@ -180,21 +199,25 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
     refresh: boolean,
     signal?: AbortSignal
   ): Promise<ProviderModelCatalog> {
-    return this.snapshots.load(this.createSnapshotKey(request), async (operationSignal) => {
-      const timers = new TimerScope({ name: 'ProviderModelCatalogSnapshot' })
-      try {
-        return await timers.withTimeout(
-          this.timeoutMs,
-          (timeoutSignal) => this.fetchProviderModels(request, timeoutSignal),
-          { signal: operationSignal }
-        )
-      } catch (error) {
-        operationSignal.throwIfAborted()
-        return createEmptyRemoteCatalog(request.provider, Date.now(), AppError.getMessage(error))
-      } finally {
-        timers.dispose()
-      }
-    }, { refresh, signal })
+    return this.snapshots.load(
+      this.createSnapshotKey(request),
+      async (operationSignal) => {
+        const timers = new TimerScope({ name: 'ProviderModelCatalogSnapshot' })
+        try {
+          return await timers.withTimeout(
+            this.timeoutMs,
+            (timeoutSignal) => this.fetchProviderModels(request, timeoutSignal),
+            { signal: operationSignal }
+          )
+        } catch (error) {
+          operationSignal.throwIfAborted()
+          return createEmptyRemoteCatalog(request.provider, Date.now(), AppError.getMessage(error))
+        } finally {
+          timers.dispose()
+        }
+      },
+      { refresh, signal }
+    )
   }
 
   private async fetchProviderModels(
@@ -215,9 +238,9 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
       return this.createPresetCatalog(request.provider, fetchedAt, request.purpose)
 
     if (
-      isBlank(resolvedRequest.apiKey)
-      && !preset.apiKeyOptional
-      && preset.validationKind !== 'openrouter-key'
+      isBlank(resolvedRequest.apiKey) &&
+      !preset.apiKeyOptional &&
+      preset.validationKind !== 'openrouter-key'
     )
       return createEmptyRemoteCatalog(
         request.provider,
@@ -244,11 +267,7 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
         fetchedAt,
       }
     } catch (error) {
-      return createEmptyRemoteCatalog(
-        request.provider,
-        fetchedAt,
-        AppError.getMessage(error)
-      )
+      return createEmptyRemoteCatalog(request.provider, fetchedAt, AppError.getMessage(error))
     }
   }
 
@@ -292,11 +311,7 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
         fetchedAt,
       }
     } catch (error) {
-      return createEmptyRemoteCatalog(
-        request.provider,
-        fetchedAt,
-        AppError.getMessage(error)
-      )
+      return createEmptyRemoteCatalog(request.provider, fetchedAt, AppError.getMessage(error))
     }
   }
 
@@ -358,9 +373,9 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
         id,
         label: value.label?.trim() || presetModel?.label || id,
         contextWindow: toOptional(
-          value.contextWindow
-          ?? presetModel?.contextWindow
-          ?? resolveProviderModelContextWindow(provider, id)
+          value.contextWindow ??
+            presetModel?.contextWindow ??
+            resolveProviderModelContextWindow(provider, id)
         ),
         inputModalities: [value.inputModalities, presetModel?.inputModalities].find(
           (modalities) => !isEmpty(modalities ?? [])
@@ -377,18 +392,19 @@ export class ProviderModelCatalogService implements ProviderModelCatalogApi {
     purpose: ListProviderModelsRequest['purpose'] = 'chat'
   ): ProviderModelCatalog {
     const preset = this.getProviderPreset(provider)
-    const values = purpose === 'embedding'
-      ? [
-          this.providerCollection.defaultEmbeddingModel(provider),
-          ...preset.modelSuggestions,
-        ]
-      : preset.modelSuggestions
+    const values =
+      purpose === 'embedding'
+        ? [this.providerCollection.defaultEmbeddingModel(provider), ...preset.modelSuggestions]
+        : preset.modelSuggestions
     return {
       provider,
       source: 'preset',
       models: filterModelsForPurpose(
         purpose,
-        this.normalizeModels(provider, values.map((id) => ({ id })))
+        this.normalizeModels(
+          provider,
+          values.map((id) => ({ id }))
+        )
       ),
       fetchedAt,
     }

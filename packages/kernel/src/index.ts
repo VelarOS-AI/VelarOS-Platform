@@ -77,16 +77,48 @@ export type * from './types/kernel.js'
 export type { RemoteNodeCapabilityBinding } from './types/remote'
 export type { RemoteNodeBindingResolver, RemoteNodeFileAuditLogOptions } from './types/remote'
 export type { RemoteNodeProjectionInput, RemoteNodeToolProjection } from './types/remote'
-export type { RemoteNodeClientCredentialStoreOptions, RemoteNodeClientOptions, RemoteNodeCredentials } from './types/remote-client'
-export type { RemoteNodeClientFailure, RemoteNodeInvokeRequest, RemoteNodeSession } from './types/remote-client'
-export type { RemoteNodeConnectionState, RemoteNodeManifestListener, RemoteNodeProgressListener } from './types/remote-client'
-export type { RemoteNodeStateListener, RemoteNodeStopListener, RemoteNodeUnsubscribe } from './types/remote-client'
-export type { RemoteNodeActivityEvent, RemoteNodeAuditEntry, RemoteNodePairedCredential } from './types/remote-node'
-export type { RemoteNodeCapabilityInvokeRequest, RemoteNodeCapabilityInvokeResult } from './types/remote-node'
+export type {
+  RemoteNodeClientCredentialStoreOptions,
+  RemoteNodeClientOptions,
+  RemoteNodeCredentials,
+} from './types/remote-client'
+export type {
+  RemoteNodeClientFailure,
+  RemoteNodeInvokeRequest,
+  RemoteNodeSession,
+} from './types/remote-client'
+export type {
+  RemoteNodeConnectionState,
+  RemoteNodeManifestListener,
+  RemoteNodeProgressListener,
+} from './types/remote-client'
+export type {
+  RemoteNodeStateListener,
+  RemoteNodeStopListener,
+  RemoteNodeUnsubscribe,
+} from './types/remote-client'
+export type {
+  RemoteNodeActivityEvent,
+  RemoteNodeAuditEntry,
+  RemoteNodePairedCredential,
+} from './types/remote-node'
+export type {
+  RemoteNodeCapabilityInvokeRequest,
+  RemoteNodeCapabilityInvokeResult,
+} from './types/remote-node'
 export type { RemoteNodeServerOptions, RemoteNodeServerStatus } from './types/remote-node'
 export type { KernelCapabilityCall, KernelLifecycleFailure } from './types/runtime'
-export type { KernelBundledPack, KernelModCatalog, KernelModPackLoadFailure, KernelModPackRecord } from './types/serve'
-export type { KernelClientAccessDecision, KernelClientCapabilityBindRequest, KernelModStorePaths } from './types/serve'
+export type {
+  KernelBundledPack,
+  KernelModCatalog,
+  KernelModPackLoadFailure,
+  KernelModPackRecord,
+} from './types/serve'
+export type {
+  KernelClientAccessDecision,
+  KernelClientCapabilityBindRequest,
+  KernelModStorePaths,
+} from './types/serve'
 export type { KernelServiceStatus, KernelSystemModPackInput } from './types/serve'
 export type { KernelVersionResolver, KernelVersionTarget } from './types/serve'
 export type {
@@ -120,7 +152,14 @@ export type { VelarosModCapabilityRequirement, VelarosModCapabilityToken } from 
 export type { OperationRuntimeApi } from './contract/provides.js'
 export type { ModelRequestEncoderApi } from './contract/provides.js'
 export type { ApprovalContractsApi } from './contract/provides.js'
-export type { InvocationJournal, OperationContext, OperationDefinition, OperationModuleDefinition, OperationReadContract, OperationRuntimeOptions } from './contract/requires.js'
+export type {
+  InvocationJournal,
+  OperationContext,
+  OperationDefinition,
+  OperationModuleDefinition,
+  OperationReadContract,
+  OperationRuntimeOptions,
+} from './contract/requires.js'
 export type { ModelDriver } from './contract/requires.js'
 export type { ApprovalPort } from './contract/requires.js'
 export { approvalContracts } from './impl/runtime/ApprovalContracts.js'
@@ -129,9 +168,59 @@ export { modelRequestEncoder } from './impl/runtime/ModelRequestEncoder.js'
 export { createOperationRuntime } from './impl/runtime/OperationRuntime.js'
 export type { TaskApprovalStateApi } from './impl/runtime/TaskApprovalState.js'
 export { createTaskApprovalState } from './impl/runtime/TaskApprovalState.js'
-export type { ApprovalDecision,ConfirmationRequestDetail,ManualApprovalOptions,TaskApprovalRecord,ToolApprovalRiskLevel,ToolConfirmationDecisionOptions,UserActionCard,UserActionCardAcknowledgeAction,UserActionCardAction,UserActionCardActionIcon,UserActionCardEnablePromptFeaturesAction,UserActionCardIcon,UserActionCardRejectAction,UserActionCardSubmitFormAction,UserActionCardSubmitInputAction,UserActionCardTextInput,UserActionCardTone,UserActionForm,UserActionFormField,UserActionFormFieldType,UserActionFormOption,UserActionFormValue } from './types/approval.js'
-export type { ModelContextStatus, ModelDriverLimits, ModelHistoryMessage, ModelImage, ModelInputEstimate, ModelMaterial, ModelResponseFormat, ModelTurnDelta,ModelTurnRequest, ModelUserMessage } from './types/model.js'
-export type { InvocationReceipt, InvocationRecord, ModuleBinding, ModuleCard, ModuleDescription, ModulePage, ModuleQuery, OperationCall,OperationDescriptor, OperationReadStamp, OperationReadValidation, OperationResourceVersion, OperationSchema, OperationSurface, PreparedInvocation } from './types/operations.js'
+export type {
+  ApprovalDecision,
+  ConfirmationRequestDetail,
+  ManualApprovalOptions,
+  TaskApprovalRecord,
+  ToolApprovalRiskLevel,
+  ToolConfirmationDecisionOptions,
+  UserActionCard,
+  UserActionCardAcknowledgeAction,
+  UserActionCardAction,
+  UserActionCardActionIcon,
+  UserActionCardEnablePromptFeaturesAction,
+  UserActionCardIcon,
+  UserActionCardRejectAction,
+  UserActionCardSubmitFormAction,
+  UserActionCardSubmitInputAction,
+  UserActionCardTextInput,
+  UserActionCardTone,
+  UserActionForm,
+  UserActionFormField,
+  UserActionFormFieldType,
+  UserActionFormOption,
+  UserActionFormValue,
+} from './types/approval.js'
+export type {
+  ModelContextStatus,
+  ModelDriverLimits,
+  ModelHistoryMessage,
+  ModelImage,
+  ModelInputEstimate,
+  ModelMaterial,
+  ModelResponseFormat,
+  ModelTurnDelta,
+  ModelTurnRequest,
+  ModelUserMessage,
+} from './types/model.js'
+export type {
+  InvocationReceipt,
+  InvocationRecord,
+  ModuleBinding,
+  ModuleCard,
+  ModuleDescription,
+  ModulePage,
+  ModuleQuery,
+  OperationCall,
+  OperationDescriptor,
+  OperationReadStamp,
+  OperationReadValidation,
+  OperationResourceVersion,
+  OperationSchema,
+  OperationSurface,
+  PreparedInvocation,
+} from './types/operations.js'
 export type { InvocationReconciliation } from './types/operations.js'
 export type {
   CapabilityCallError,

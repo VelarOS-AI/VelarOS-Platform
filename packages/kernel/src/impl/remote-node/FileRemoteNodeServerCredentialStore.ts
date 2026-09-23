@@ -87,8 +87,6 @@ export class FileRemoteNodeServerCredentialStore implements RemoteNodeCredential
 }
 
 /** 建一个 Node 侧文件凭据存储;读不出或校验不过一律当未配对。 */
-export function createRemoteNodeServerCredentialStore(
-  path: string,
-): RemoteNodeCredentialStore {
+export function createRemoteNodeServerCredentialStore(path: string): RemoteNodeCredentialStore {
   return new FileRemoteNodeServerCredentialStore(path)
 }

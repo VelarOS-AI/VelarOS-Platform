@@ -9,7 +9,14 @@ describe('exclusive SQLite lock lifecycle', () => {
     const statements: string[] = []
     const lock = createExclusiveSqliteLock(() => {
       opens++
-      return { exec: (sql) => { statements.push(sql) }, close: () => { closes++ } }
+      return {
+        exec: (sql) => {
+          statements.push(sql)
+        },
+        close: () => {
+          closes++
+        },
+      }
     })
     expect(lock.acquire()).toBe(true)
     expect(lock.acquire()).toBe(true)
@@ -28,8 +35,12 @@ describe('exclusive SQLite lock lifecycle', () => {
       let closes = 0
       const error = Object.assign(new Error(code), { code })
       const lock = createExclusiveSqliteLock(() => ({
-        exec() { throw error },
-        close() { closes++ },
+        exec() {
+          throw error
+        },
+        close() {
+          closes++
+        },
       }))
       if (code === 'SQLITE_CORRUPT') expect(() => lock.acquire()).toThrow(error)
       else expect(lock.acquire()).toBe(false)
@@ -43,8 +54,12 @@ describe('exclusive SQLite lock lifecycle', () => {
     const lock = createExclusiveSqliteLock(() => {
       opens++
       return {
-        exec() { if (opens === 1) throw Object.assign(new Error('busy'), { code: 'SQLITE_BUSY' }) },
-        close() { if (++closes === 1) throw new Error('close failed') },
+        exec() {
+          if (opens === 1) throw Object.assign(new Error('busy'), { code: 'SQLITE_BUSY' })
+        },
+        close() {
+          if (++closes === 1) throw new Error('close failed')
+        },
       }
     })
     expect(() => lock.acquire()).toThrow(AggregateError)
@@ -57,7 +72,9 @@ describe('exclusive SQLite lock lifecycle', () => {
   test('Node builtin SQLite numeric primary and extended busy codes deny ownership', () => {
     for (const errcode of [5, 6, 261, 262]) {
       const lock = createExclusiveSqliteLock(() => ({
-        exec() { throw Object.assign(new Error('busy'), { code: 'ERR_SQLITE_ERROR', errcode }) },
+        exec() {
+          throw Object.assign(new Error('busy'), { code: 'ERR_SQLITE_ERROR', errcode })
+        },
         close() {},
       }))
       expect(lock.acquire()).toBe(false)
@@ -69,7 +86,12 @@ describe('exclusive SQLite lock lifecycle', () => {
     let closes = 0
     const lock = createExclusiveSqliteLock(() => {
       opens++
-      return { exec() {}, close() { if (++closes === 1) throw new Error('close failed') } }
+      return {
+        exec() {},
+        close() {
+          if (++closes === 1) throw new Error('close failed')
+        },
+      }
     })
     expect(lock.acquire()).toBe(true)
     expect(() => lock.release()).toThrow('close failed')

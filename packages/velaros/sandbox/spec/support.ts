@@ -17,8 +17,10 @@ import type { LocalSandboxHostApi, SandboxOperationContext, SandboxSurfacePort }
 import { sandboxOperations } from '../index'
 
 /** 本机有没有进程约束后端：macOS 的 sandbox-exec 或 Linux 的 bubblewrap；没有就建不出沙箱，要真建沙箱的用例跳过。 */
-export const canConfine = (process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'))
-  || (process.platform === 'linux' && ['/usr/bin/bwrap', '/usr/local/bin/bwrap'].some((path) => existsSync(path)))
+export const canConfine =
+  (process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec')) ||
+  (process.platform === 'linux' &&
+    ['/usr/bin/bwrap', '/usr/local/bin/bwrap'].some((path) => existsSync(path)))
 
 // ── 临时目录 ────────────────────────────────────────────────────
 
@@ -43,7 +45,10 @@ export async function removeScratch(directory: string): Promise<void> {
 export async function makeSource(): Promise<string> {
   const source = await makeScratch('source')
   await mkdir(join(source, '.git'))
-  await writeFile(join(source, '.git', 'config'), '[remote "origin"]\n\turl = git@github.com:example/demo.git\n')
+  await writeFile(
+    join(source, '.git', 'config'),
+    '[remote "origin"]\n\turl = git@github.com:example/demo.git\n'
+  )
   await writeFile(join(source, 'a.txt'), 'alpha\n')
   return source
 }
@@ -57,7 +62,9 @@ export async function discardAll(host: LocalSandboxHostApi): Promise<void> {
 }
 
 /** 等一个调用失败，交出它的码、说明与上下文（宿主的拒绝把冲突清单、落没落写在上下文里）。 */
-export async function failureOf(call: Promise<unknown>): Promise<{ code: string; message: string; context: Record<string, unknown> }> {
+export async function failureOf(
+  call: Promise<unknown>
+): Promise<{ code: string; message: string; context: Record<string, unknown> }> {
   try {
     await call
   } catch (error) {
@@ -79,7 +86,10 @@ export interface ProgramFailure extends Error {
  * 相对路径相对 `cwd`，不给就是 `cwd`。审批端口把每次确认的文案记进 `asked`，`approve` 为 false 时拒绝（缺省放行）。
  * `call` 像模型的程序那样经代码面的能力端口调一次：成功交回返回值，失败抛带 code 的错误（程序看得到的就这两样）。
  */
-export function systemSandboxSpace(host: LocalSandboxHostApi, options: { cwd: string; approve?: boolean }) {
+export function systemSandboxSpace(
+  host: LocalSandboxHostApi,
+  options: { cwd: string; approve?: boolean }
+) {
   const asked: string[] = []
   const port: SandboxSurfacePort = {
     createSandbox: (create) => host.createSandbox(create),
@@ -99,7 +109,11 @@ export function systemSandboxSpace(host: LocalSandboxHostApi, options: { cwd: st
       return { approved: options.approve !== false, message: null, autoApproved: false }
     },
   }
-  const context: SandboxOperationContext = { abortSignal: new AbortController().signal, sandbox: port, approval }
+  const context: SandboxOperationContext = {
+    abortSignal: new AbortController().signal,
+    sandbox: port,
+    approval,
+  }
   const capabilities = createCapabilityPort({
     sandbox: {
       create: (input) => sandboxOperations.create(input, context),
@@ -109,9 +123,15 @@ export function systemSandboxSpace(host: LocalSandboxHostApi, options: { cwd: st
       discard: (input) => sandboxOperations.discard(input, context),
     },
   })
-  const call = async <T = Record<string, unknown>>(operation: string, input: Record<string, unknown> = {}): Promise<T> => {
+  const call = async <T = Record<string, unknown>>(
+    operation: string,
+    input: Record<string, unknown> = {}
+  ): Promise<T> => {
     const outcome = await capabilities.invoke({ namespace: 'sandbox', operation, input })
-    if (outcome.error) throw Object.assign(new Error(outcome.error.message), { code: outcome.error.code }) as ProgramFailure
+    if (outcome.error)
+      throw Object.assign(new Error(outcome.error.message), {
+        code: outcome.error.code,
+      }) as ProgramFailure
     return outcome.value as T
   }
   return { port, context, asked, call }

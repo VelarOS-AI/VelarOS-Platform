@@ -1,10 +1,5 @@
 import assert from 'node:assert/strict'
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -24,7 +19,7 @@ test('accepts manifest-aligned workspaces and exact private resolutions', () => 
     new LockfileConsistencyValidator({
       repositoryRoot,
     }).listExternalVelarosDependencyNames(),
-    ['@velaros-ai/core', '@velaros-ai/kernel'],
+    ['@velaros-ai/core', '@velaros-ai/kernel']
   )
   assert.deepEqual(
     new LockfileConsistencyValidator({
@@ -41,7 +36,7 @@ test('accepts manifest-aligned workspaces and exact private resolutions', () => 
         manifestPath: 'packages/example/package.json',
         packageNames: ['@velaros-ai/core'],
       },
-    ],
+    ]
   )
 })
 
@@ -52,7 +47,7 @@ test('rejects a stale workspace version', () => {
 
   assert.throws(
     () => new LockfileConsistencyValidator({ repositoryRoot }).validate(),
-    /packages\/example version=1\.2\.3/,
+    /packages\/example version=1\.2\.3/
   )
 })
 
@@ -63,7 +58,7 @@ test('rejects a stale private registry resolution', () => {
 
   assert.throws(
     () => new LockfileConsistencyValidator({ repositoryRoot }).validate(),
-    /解析 @velaros-ai\/core@0\.2\.1，不满足 package\.json 的 \^0\.4\.0/,
+    /解析 @velaros-ai\/core@0\.2\.1，不满足 package\.json 的 \^0\.4\.0/
   )
 })
 
@@ -74,7 +69,7 @@ test('checks the resolved version against every manifest range', () => {
 
   assert.throws(
     () => new LockfileConsistencyValidator({ repositoryRoot }).validate(),
-    /不满足 packages\/example\/package\.json 的 \^0\.5\.0/,
+    /不满足 packages\/example\/package\.json 的 \^0\.5\.0/
   )
 })
 
@@ -104,7 +99,7 @@ test('runs each manifest update from its own directory', () => {
         manifestPath: 'packages/example/package.json',
         packageNames: ['@velaros-ai/core'],
       },
-    ],
+    ]
   )
 })
 
@@ -117,11 +112,9 @@ test('restores formatting-only manifest changes and continues', () => {
     repositoryRoot,
     runUpdate: () => {
       const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-      const reorderedManifest = Object.fromEntries(
-        Object.entries(manifest).reverse(),
-      )
+      const reorderedManifest = Object.fromEntries(Object.entries(manifest).reverse())
       reorderedManifest.dependencies = Object.fromEntries(
-        Object.entries(manifest.dependencies).reverse(),
+        Object.entries(manifest.dependencies).reverse()
       )
       writeFileSync(manifestPath, JSON.stringify(reorderedManifest))
     },
@@ -146,7 +139,7 @@ test('restores exact bytes and fails on dependency semantic changes', () => {
           writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
         },
       }).refresh(),
-    /manifest semantics; original bytes restored: packages\/example\/package\.json/,
+    /manifest semantics; original bytes restored: packages\/example\/package\.json/
   )
   assert.ok(readFileSync(manifestPath).equals(originalSource))
 })
@@ -202,7 +195,7 @@ function createFixture({
     "@velaros-ai/kernel": ["@velaros-ai/kernel@0.1.0", "https://npm.pkg.github.com/download/@velaros-ai/kernel/0.1.0/fixture"],
   },
 }
-`,
+`
   )
   return repositoryRoot
 }

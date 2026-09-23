@@ -6,11 +6,36 @@ import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 
 import { BrowserFetchLimits } from '../../contract/constants'
-import type { BrowserEvaluateScriptOptions, BrowserExportPagePdfOptions, BrowserExportPagePdfResult, BrowserFetchResourceOptions, BrowserFetchResourceResult, BrowserFrameInfo, BrowserInspectPageOptions, BrowserNetworkControlOptions, BrowserNetworkControlResult, BrowserNetworkRequestDetailsOptions, BrowserNetworkRequestDetailsResult, BrowserNetworkResponseBodyOptions, BrowserNetworkResponseBodyResult, BrowserPageDiagnostics, BrowserPageDiagnosticsOptions, BrowserPageInspection, BrowserPageWaitOptions, BrowserPageWaitResult, BrowserScriptOutcome, BrowserSiteContext, BrowserUploadFileOptions, BrowserUploadFileResult } from '../../types/browser.js'
 import type {
-  BrowserPageDriverState,
-} from '../../types/driver'
-import type { BrowserDiagnosticsLimits,BrowserPageDriverKernel, ExternalBrowserPageSession } from '../../types/runtime.js'
+  BrowserEvaluateScriptOptions,
+  BrowserExportPagePdfOptions,
+  BrowserExportPagePdfResult,
+  BrowserFetchResourceOptions,
+  BrowserFetchResourceResult,
+  BrowserFrameInfo,
+  BrowserInspectPageOptions,
+  BrowserNetworkControlOptions,
+  BrowserNetworkControlResult,
+  BrowserNetworkRequestDetailsOptions,
+  BrowserNetworkRequestDetailsResult,
+  BrowserNetworkResponseBodyOptions,
+  BrowserNetworkResponseBodyResult,
+  BrowserPageDiagnostics,
+  BrowserPageDiagnosticsOptions,
+  BrowserPageInspection,
+  BrowserPageWaitOptions,
+  BrowserPageWaitResult,
+  BrowserScriptOutcome,
+  BrowserSiteContext,
+  BrowserUploadFileOptions,
+  BrowserUploadFileResult,
+} from '../../types/browser.js'
+import type { BrowserPageDriverState } from '../../types/driver'
+import type {
+  BrowserDiagnosticsLimits,
+  BrowserPageDriverKernel,
+  ExternalBrowserPageSession,
+} from '../../types/runtime.js'
 import { normalizeFetchResourceUrl, resolveUploadFilePath } from '../../utils/cdp/page-data'
 import { summarizePageDiagnostics } from '../../utils/cdp/page-data'
 import { clampInteger } from '../../utils/numbers.js'
@@ -33,27 +58,81 @@ import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
  */
 export interface CdpPageDataEngineApi {
   /** 读页面：正文、标题结构、链接、可交互元素与它们的 ref。 */
-  inspectPage(sessionId: string, _context: BrowserSiteContext, options?: BrowserInspectPageOptions, _abortSignal?: AbortSignal): Promise<BrowserPageInspection>
+  inspectPage(
+    sessionId: string,
+    _context: BrowserSiteContext,
+    options?: BrowserInspectPageOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserPageInspection>
   /** 在页面上下文里跑一段受控脚本并取回结果。 */
-  evaluateScript(sessionId: string, context: BrowserSiteContext, options: BrowserEvaluateScriptOptions, _abortSignal?: AbortSignal): Promise<BrowserScriptOutcome>
+  evaluateScript(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserEvaluateScriptOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserScriptOutcome>
   /** 列出页面的框架树（顶层页面与各层 iframe）。 */
-  listFrames(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserFrameInfo[]>
+  listFrames(
+    sessionId: string,
+    context: BrowserSiteContext,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserFrameInfo[]>
   /** 带页面会话的 cookie 下载一个 http(s) 资源到站点工作区。 */
-  fetchResource(sessionId: string, context: BrowserSiteContext, options: BrowserFetchResourceOptions, _abortSignal?: AbortSignal): Promise<BrowserFetchResourceResult>
+  fetchResource(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserFetchResourceOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserFetchResourceResult>
   /** 读最近的 console、加载错误与网络诊断，并给一份汇总。 */
-  getPageDiagnostics(sessionId: string, context: BrowserSiteContext, options?: BrowserPageDiagnosticsOptions, _abortSignal?: AbortSignal): Promise<BrowserPageDiagnostics>
+  getPageDiagnostics(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options?: BrowserPageDiagnosticsOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserPageDiagnostics>
   /** 把站点工作区里的文件放进页面的 file input。 */
-  uploadFile(sessionId: string, context: BrowserSiteContext, options: BrowserUploadFileOptions, _abortSignal?: AbortSignal): Promise<BrowserUploadFileResult>
+  uploadFile(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserUploadFileOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserUploadFileResult>
   /** 把当前页面导出成 PDF 存进站点工作区。 */
-  exportPagePdf(sessionId: string, context: BrowserSiteContext, options?: BrowserExportPagePdfOptions, _abortSignal?: AbortSignal): Promise<BrowserExportPagePdfResult>
+  exportPagePdf(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options?: BrowserExportPagePdfOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserExportPagePdfResult>
   /** 配置页面网络：离线、请求头、拦截与 mock。 */
-  configureNetwork(sessionId: string, context: BrowserSiteContext, options: BrowserNetworkControlOptions, abortSignal?: AbortSignal): Promise<BrowserNetworkControlResult>
+  configureNetwork(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserNetworkControlOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserNetworkControlResult>
   /** 按 requestId 读响应体；不在缓存里就如实回报读不到。 */
-  readNetworkResponseBody(sessionId: string, context: BrowserSiteContext, options: BrowserNetworkResponseBodyOptions, abortSignal?: AbortSignal): Promise<BrowserNetworkResponseBodyResult>
+  readNetworkResponseBody(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserNetworkResponseBodyOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserNetworkResponseBodyResult>
   /** 按 requestId 读请求、响应与 timing 详情。 */
-  readNetworkRequestDetails(sessionId: string, context: BrowserSiteContext, options: BrowserNetworkRequestDetailsOptions, abortSignal?: AbortSignal): Promise<BrowserNetworkRequestDetailsResult>
+  readNetworkRequestDetails(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserNetworkRequestDetailsOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserNetworkRequestDetailsResult>
   /** 等页面加载状态稳定，或等一小段时间。 */
-  waitForPage(sessionId: string, context: BrowserSiteContext, options: BrowserPageWaitOptions, _abortSignal?: AbortSignal): Promise<BrowserPageWaitResult>
+  waitForPage(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserPageWaitOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserPageWaitResult>
 }
 
 export class CdpPageDataEngine implements CdpPageDataEngineApi {
@@ -140,7 +219,8 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     const script = buildEvaluateScript(options)
     const driver = externalSession.driver
     if (options.frame) {
-      if (!driver.executeJavaScriptInFrame) throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持在指定框架里跑脚本。')
+      if (!driver.executeJavaScriptInFrame)
+        throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持在指定框架里跑脚本。')
       return driver.executeJavaScriptInFrame<BrowserScriptOutcome>(options.frame, script, true)
     }
     const result = await driver.executeJavaScript<BrowserScriptOutcome>(script, true)
@@ -148,10 +228,15 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     return result
   }
 
-  public async listFrames(sessionId: string, _context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserFrameInfo[]> {
+  public async listFrames(
+    sessionId: string,
+    _context: BrowserSiteContext,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserFrameInfo[]> {
     abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
-    if (!externalSession.driver.listFrames) throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持列框架树。')
+    if (!externalSession.driver.listFrames)
+      throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持列框架树。')
     return externalSession.driver.listFrames()
   }
 
@@ -172,8 +257,7 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     if (!externalSession.driver.fetchResource) {
       throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持资源抓取。')
     }
-    const referer =
-      options.referer?.trim() || resolveExternalPageUrl(externalSession, context.url)
+    const referer = options.referer?.trim() || resolveExternalPageUrl(externalSession, context.url)
     const response = await externalSession.driver.fetchResource({
       url: targetUrl,
       referer,
@@ -228,11 +312,12 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const limit = clampInteger(options.limit, 1, this.diagnosticsLimits.maxEntries, 100)
-    const entries = externalSession.driver.readDiagnostics?.({
-      limit,
-      kinds: options.kinds,
-      clear: options.clear,
-    }) ?? []
+    const entries =
+      externalSession.driver.readDiagnostics?.({
+        limit,
+        kinds: options.kinds,
+        clear: options.clear,
+      }) ?? []
     const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
     return {
       url: state.url || context.url,
@@ -338,7 +423,11 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     }
 
     const networkState = await pageSession.driver.configureNetwork(options)
-    const state = await this.kernel.refreshPageDriverSessionState(sessionId, pageSession, context.url)
+    const state = await this.kernel.refreshPageDriverSessionState(
+      sessionId,
+      pageSession,
+      context.url
+    )
     return {
       url: state.url || context.url,
       offline: networkState.offline,
@@ -363,7 +452,11 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     }
 
     const body = await pageSession.driver.readNetworkResponseBody(options)
-    const state = await this.kernel.refreshPageDriverSessionState(sessionId, pageSession, context.url)
+    const state = await this.kernel.refreshPageDriverSessionState(
+      sessionId,
+      pageSession,
+      context.url
+    )
     return {
       url: state.url || context.url,
       requestId: body.requestId,
@@ -389,7 +482,11 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     }
 
     const details = await pageSession.driver.readNetworkRequestDetails(options)
-    const state = await this.kernel.refreshPageDriverSessionState(sessionId, pageSession, context.url)
+    const state = await this.kernel.refreshPageDriverSessionState(
+      sessionId,
+      pageSession,
+      context.url
+    )
     return {
       url: state.url || context.url,
       requestId: details.requestId,
@@ -429,4 +526,3 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     return networkIdle ? result : { ...result, matched: false, timedOut: true }
   }
 }
-

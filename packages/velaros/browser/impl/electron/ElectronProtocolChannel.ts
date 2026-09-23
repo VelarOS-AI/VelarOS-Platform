@@ -21,7 +21,9 @@ import { electronDebuggerHolds } from './ElectronDebuggerHolds'
  * 开着的时候在 debugger 占用登记里记一笔，临时操作收尾时不会把 debugger 连同子会话一起 detach。
  */
 export class ElectronProtocolChannel implements BrowserProtocolChannel {
-  private readonly eventListeners = new Set<(method: string, params: unknown, sessionId: Optional<string>) => void>()
+  private readonly eventListeners = new Set<
+    (method: string, params: unknown, sessionId: Optional<string>) => void
+  >()
   private readonly closeListeners = new Set<() => void>()
   /** 这条会话挂出来的子会话（flatten）。 */
   private readonly children = new Set<string>()
@@ -37,27 +39,49 @@ export class ElectronProtocolChannel implements BrowserProtocolChannel {
     electronDebuggerHolds.setProtocol(webContents, { sessionId: rootSessionId })
   }
 
-  public async send(method: string, params: Optional<Record<string, unknown>>, sessionId?: string): Promise<unknown> {
-    if (this.closed) throw new AppError(BrowserErrorCodes.protocolFailed, `${method}：CDP 会话已经断开，再发一条会重新连。`)
+  public async send(
+    method: string,
+    params: Optional<Record<string, unknown>>,
+    sessionId?: string
+  ): Promise<unknown> {
+    if (this.closed)
+      throw new AppError(
+        BrowserErrorCodes.protocolFailed,
+        `${method}：CDP 会话已经断开，再发一条会重新连。`
+      )
     if (sessionId && !this.children.has(sessionId)) {
-      throw new AppError(BrowserErrorCodes.protocolFailed, `${method}：${sessionId} 不是这条会话挂出来的子会话（先 Target.setAutoAttach，从 Target.attachedToTarget 事件里取）。`)
+      throw new AppError(
+        BrowserErrorCodes.protocolFailed,
+        `${method}：${sessionId} 不是这条会话挂出来的子会话（先 Target.setAutoAttach，从 Target.attachedToTarget 事件里取）。`
+      )
     }
     const timers = new TimerScope({ name: 'ElectronProtocolChannel' })
     try {
       return await timers.withTimeout(
         BrowserTuning.protocol.commandTimeoutMs,
-        () => this.webContents.debugger.sendCommand(method, params ?? {}, sessionId ?? this.rootSessionId),
-        { label: method, timeoutMessage: `${method} 超过 ${BrowserTuning.protocol.commandTimeoutMs} 毫秒没有回话。` }
+        () =>
+          this.webContents.debugger.sendCommand(
+            method,
+            params ?? {},
+            sessionId ?? this.rootSessionId
+          ),
+        {
+          label: method,
+          timeoutMessage: `${method} 超过 ${BrowserTuning.protocol.commandTimeoutMs} 毫秒没有回话。`,
+        }
       )
     } catch (error) {
-      if (error instanceof Error && error.name === 'TimeoutError') throw new AppError('TIMEOUT', error.message, error)
+      if (error instanceof Error && error.name === 'TimeoutError')
+        throw new AppError('TIMEOUT', error.message, error)
       throw protocolFailure(method, error)
     } finally {
       timers.dispose()
     }
   }
 
-  public onEvent(listener: (method: string, params: unknown, sessionId: Optional<string>) => void): () => void {
+  public onEvent(
+    listener: (method: string, params: unknown, sessionId: Optional<string>) => void
+  ): () => void {
     this.eventListeners.add(listener)
     return () => {
       this.eventListeners.delete(listener)
@@ -76,16 +100,28 @@ export class ElectronProtocolChannel implements BrowserProtocolChannel {
     this.markClosed()
     if (this.webContents.isDestroyed() || !this.webContents.debugger.isAttached()) return
     try {
-      await this.webContents.debugger.sendCommand('Target.detachFromTarget', { sessionId: this.rootSessionId })
+      await this.webContents.debugger.sendCommand('Target.detachFromTarget', {
+        sessionId: this.rootSessionId,
+      })
     } catch {
       // arch-guard:silent-catch-ok 子会话可能已经跟着页面没了：断开本来就是要的结果，没有调用方能再做什么。
     }
   }
 
-  private readonly handleMessage = (_event: electron.Event, method: string, params: unknown, sessionId?: string): void => {
+  private readonly handleMessage = (
+    _event: electron.Event,
+    method: string,
+    params: unknown,
+    sessionId?: string
+  ): void => {
     if (!sessionId) {
       // 宿主那条会话上报的「子会话断了」：页面关了、崩了，这条会话跟着没了。
-      if (method === 'Target.detachedFromTarget' && isPlainObject(params) && params.sessionId === this.rootSessionId) this.markClosed()
+      if (
+        method === 'Target.detachedFromTarget' &&
+        isPlainObject(params) &&
+        params.sessionId === this.rootSessionId
+      )
+        this.markClosed()
       return
     }
     const own = sessionId === this.rootSessionId
@@ -94,7 +130,8 @@ export class ElectronProtocolChannel implements BrowserProtocolChannel {
       if (method === 'Target.attachedToTarget') this.children.add(params.sessionId)
       if (method === 'Target.detachedFromTarget') this.children.delete(params.sessionId)
     }
-    for (const listener of [...this.eventListeners]) listener(method, params, own ? undefined : sessionId)
+    for (const listener of [...this.eventListeners])
+      listener(method, params, own ? undefined : sessionId)
   }
 
   private readonly handleDetach = (): void => {

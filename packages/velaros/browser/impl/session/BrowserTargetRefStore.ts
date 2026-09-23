@@ -1,8 +1,19 @@
 import { isPresent } from '@velaros-ai/core'
 
-import type { BrowserDragOptions, BrowserElementTargetHint, BrowserPageInspection, BrowserScreenshotElementLegendItem, BrowserTargetActionOptions } from '../../types/browser.js'
+import type {
+  BrowserDragOptions,
+  BrowserElementTargetHint,
+  BrowserPageInspection,
+  BrowserScreenshotElementLegendItem,
+  BrowserTargetActionOptions,
+} from '../../types/browser.js'
 import type { BrowserTargetRefSession, StoredBrowserTargetRefs } from '../../types/session.js'
-import { invalidRefError, isRefTokenCharacter, readBaseRef, staleRefError } from '../../utils/target-refs'
+import {
+  invalidRefError,
+  isRefTokenCharacter,
+  readBaseRef,
+  staleRefError,
+} from '../../utils/target-refs'
 import { scopeRef } from '../../utils/target-refs'
 import { resolveStoredRef } from '../../utils/target-refs'
 
@@ -19,7 +30,10 @@ export interface BrowserTargetRefStoreApi {
   /** 记录标注截图产出的元素图例定位线索。 */
   storeScreenshotLegend(sessionId: string, legend: BrowserScreenshotElementLegendItem[]): void
   /** 把这次观察产出的目标登记成新一代 ref；旧 ref 随之失效。 */
-  storeTargets(sessionId: string, targets: Array<Nullable<BrowserElementTargetHint>>): StoredBrowserTargetRefs
+  storeTargets(
+    sessionId: string,
+    targets: Array<Nullable<BrowserElementTargetHint>>
+  ): StoredBrowserTargetRefs
   /** 用存储的 ref 线索补全 target action 的定位字段。 */
   hydrate(sessionId: string, options: BrowserTargetActionOptions): BrowserTargetActionOptions
   /** 用同一份 ref 解析规则补全拖拽起点与终点。 */
@@ -30,7 +44,11 @@ export interface BrowserTargetRefStoreApi {
    * 显式 ref 必须命中当前 observation，且命中后以存储的 target 为唯一权威来源。
    * 独立 selector/text/attributes 定位必须省略 ref，避免失效 ref 被附带字段绕过。
    */
-  hydrateTarget(sessionId: string, target: BrowserElementTargetHint, field?: 'source' | 'target'): BrowserElementTargetHint
+  hydrateTarget(
+    sessionId: string,
+    target: BrowserElementTargetHint,
+    field?: 'source' | 'target'
+  ): BrowserElementTargetHint
   /** 归一化 ref 写法（e1 / @e1 / ref=e1:g2 → @e1 / @e1:g2）；非法 ref 返回 null。 */
   normalizeRef(ref: LooseOptional<string>): Nullable<string>
   /** 清掉这条会话的状态。 */
@@ -106,7 +124,10 @@ export class BrowserTargetRefStore implements BrowserTargetRefStoreApi {
   }
 
   /** 用存储的 ref 线索补全 target action 的定位字段。 */
-  public hydrate(sessionId: string, options: BrowserTargetActionOptions): BrowserTargetActionOptions {
+  public hydrate(
+    sessionId: string,
+    options: BrowserTargetActionOptions
+  ): BrowserTargetActionOptions {
     return {
       ...options,
       target: this.hydrateTarget(sessionId, options.target, 'target'),
@@ -140,9 +161,7 @@ export class BrowserTargetRefStore implements BrowserTargetRefStoreApi {
     if (!normalizedRef) throw invalidRefError(sessionId, requestedRef, field)
 
     const session = this.refsBySession.get(sessionId)
-    const resolvedRef = session
-      ? resolveStoredRef(normalizedRef, session)
-      : null
+    const resolvedRef = session ? resolveStoredRef(normalizedRef, session) : null
     const storedTarget = resolvedRef ? session?.refs.get(resolvedRef) : null
     if (!storedTarget) {
       throw staleRefError(sessionId, normalizedRef, field, session?.generation)

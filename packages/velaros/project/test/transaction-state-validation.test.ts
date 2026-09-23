@@ -16,28 +16,33 @@ async function writeSnapshot(
   directory: string,
   root: string,
   name: string,
-  transaction: TransactionFixture,
+  transaction: TransactionFixture
 ): Promise<string> {
   const statePath = join(directory, 'state', `${name}.json`)
   await mkdir(join(directory, 'state'), { recursive: true })
-  await writeFile(statePath, JSON.stringify({
-    formatVersion: 1,
-    revision: 1,
-    root,
-    transactions: [{
-      transactionId: `tx_${name}`,
-      status: transaction.status,
-      patches: [],
-      changedFiles: [],
-      diff: '',
-      changedLines: 0,
-      risk: 'low',
-      createdAt: 1,
-      ...(transaction.appliedAt === undefined ? {} : { appliedAt: transaction.appliedAt }),
-      baseSnapshots: [],
-    }],
-    projections: [],
-  }))
+  await writeFile(
+    statePath,
+    JSON.stringify({
+      formatVersion: 1,
+      revision: 1,
+      root,
+      transactions: [
+        {
+          transactionId: `tx_${name}`,
+          status: transaction.status,
+          patches: [],
+          changedFiles: [],
+          diff: '',
+          changedLines: 0,
+          risk: 'low',
+          createdAt: 1,
+          ...(transaction.appliedAt === undefined ? {} : { appliedAt: transaction.appliedAt }),
+          baseSnapshots: [],
+        },
+      ],
+      projections: [],
+    })
+  )
   return statePath
 }
 
@@ -58,7 +63,7 @@ describe('FileProjectTransactionStateStore lifecycle validation', () => {
       for (const fixture of invalid) {
         const statePath = await writeSnapshot(directory, root, fixture.name, fixture)
         expect(() => new FileProjectTransactionStateStore({ path: statePath, root })).toThrow(
-          'transaction status/appliedAt mismatch',
+          'transaction status/appliedAt mismatch'
         )
         try {
           new FileProjectTransactionStateStore({ path: statePath, root })

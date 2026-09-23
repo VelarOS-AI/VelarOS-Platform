@@ -8,7 +8,11 @@
 export * from './contracts.js'
 
 // ── 产品面：velaros:computer、运行时、helper 定位器 ────────────────
-export type { ComputerHelperLocatorApi, ComputerOperationsApi, ComputerRuntimeApi } from './contract/provides.js'
+export type {
+  ComputerHelperLocatorApi,
+  ComputerOperationsApi,
+  ComputerRuntimeApi,
+} from './contract/provides.js'
 export { createComputerHelperLocator } from './impl/ComputerHelperLocator.js'
 export { computerOperations } from './impl/ComputerOperations.js'
 export { createComputerRuntime } from './impl/ComputerSidecarManager.js'

@@ -64,7 +64,7 @@ function dataGaps(archive: RunArchive): readonly ReportDataGap[] {
 function verdicts(
   archive: RunArchive,
   failures: Readonly<Partial<Record<FailureClass, number>>>,
-  gaps: readonly ReportDataGap[],
+  gaps: readonly ReportDataGap[]
 ): readonly ReportVerdict[] {
   const output: ReportVerdict[] = []
   if (archive.drops.length > 0) {
@@ -191,7 +191,8 @@ export function createRunReportModel(archive: RunArchive): RunReportModel {
     executorLabel: archive.manifest.executor.model ?? archive.manifest.executor.executorId,
     startedAt: archive.manifest.startedAt,
     durationMs: archive.manifest.finishedAt - archive.manifest.startedAt,
-    passedLegs: knownLegs.length === 0 ? null : knownLegs.filter((leg) => leg.passed === true).length,
+    passedLegs:
+      knownLegs.length === 0 ? null : knownLegs.filter((leg) => leg.passed === true).length,
     totalLegs: archive.legs.length,
     completion: completion(archive),
     toolCalls: archive.manifest.usage.toolCalls,

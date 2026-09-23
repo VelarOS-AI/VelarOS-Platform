@@ -6,7 +6,11 @@
 import { isNotNull, isUndefined, Log, optionalWhen, toNullable } from '@velaros-ai/core'
 import type { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { RemoteNodeActivitySink, RemoteNodeAuditSink, RemoteNodeCapabilityInvoker } from '../../contract/requires'
+import type {
+  RemoteNodeActivitySink,
+  RemoteNodeAuditSink,
+  RemoteNodeCapabilityInvoker,
+} from '../../contract/requires'
 import type { RemoteNodeInFlightCall } from '../../types/remote'
 import type { RemoteNodeActivityEvent } from '../../types/remote-node'
 import type {
@@ -57,7 +61,7 @@ export interface RemoteNodeCallRunnerApi {
     frame: RemoteNodeInvoke,
     clientId: string,
     clientName: string,
-    manifestRevision: string,
+    manifestRevision: string
   ): void
   /** 收一帧 cancel:best-effort 中止后立刻回终态;未知或已终态的 callId 静默。 */
   cancel(frame: RemoteNodeCancel): void
@@ -84,7 +88,7 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
     frame: RemoteNodeInvoke,
     clientId: string,
     clientName: string,
-    manifestRevision: string,
+    manifestRevision: string
   ): void {
     const replay = this.completed.get(frame.callId)
     if (isNotNull(replay)) {
@@ -124,25 +128,32 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
     this.calls.set(call.callId, call)
     // deadline 从**收帧**起算而不是从开始执行起算:Client 那头的等待是从发出去就开始的,
     // 把排队时间藏起来只会让两端对同一次调用的耐心不一致。
-    call.deadline = this.options.timers.after(frame.deadlineMs, () => {
-      call.controller.abort(new Error('远程节点调用超过截止时间'))
-      this.settle(call, 'error', undefined, {
-        code: 'DEADLINE_EXCEEDED',
-        message: `调用超过了 ${frame.deadlineMs}ms 的截止时长`,
-        retryable: true,
-      })
-    }, { label: 'remote-node-deadline', unref: true })
+    call.deadline = this.options.timers.after(
+      frame.deadlineMs,
+      () => {
+        call.controller.abort(new Error('远程节点调用超过截止时间'))
+        this.settle(call, 'error', undefined, {
+          code: 'DEADLINE_EXCEEDED',
+          message: `调用超过了 ${frame.deadlineMs}ms 的截止时长`,
+          retryable: true,
+        })
+      },
+      { label: 'remote-node-deadline', unref: true }
+    )
 
     void this.pool
       .run(async () => {
         // 排队期间可能已被取消或超时;此时不该再打扰能力实现。
         if (call.settled) return
-        const outcome = await this.options.invoker.invoke({
-          capabilityId: frame.capabilityId,
-          operation: frame.operation,
-          scope: frame.scope,
-          input: frame.input,
-        }, call.controller.signal)
+        const outcome = await this.options.invoker.invoke(
+          {
+            capabilityId: frame.capabilityId,
+            operation: frame.operation,
+            scope: frame.scope,
+            input: frame.input,
+          },
+          call.controller.signal
+        )
         if (outcome.status === 'denied') {
           this.settle(call, 'denied', undefined, {
             code: outcome.error?.code ?? 'DENIED',
@@ -214,7 +225,7 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
     frame: RemoteNodeInvoke,
     clientId: string,
     clientName: string,
-    startedAt: number,
+    startedAt: number
   ): void {
     const result: RemoteNodeResult = {
       type: 'result',
@@ -258,16 +269,17 @@ export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
     call: RemoteNodeInFlightCall,
     status: RemoteNodeResult['status'],
     output: unknown,
-    error: Nullable<RemoteNodeError>,
+    error: Nullable<RemoteNodeError>
   ): void {
     if (call.settled) return
     call.settled = true
     call.deadline?.cancel()
     call.deadline = null
     this.calls.delete(call.callId)
-    const result: RemoteNodeResult = status === 'success'
-      ? { type: 'result', callId: call.callId, status, output, error: null }
-      : { type: 'result', callId: call.callId, status, error }
+    const result: RemoteNodeResult =
+      status === 'success'
+        ? { type: 'result', callId: call.callId, status, output, error: null }
+        : { type: 'result', callId: call.callId, status, error }
     this.completed.set(call.callId, result)
     // 审计只记元数据:input / output 一律不进这条线,跨机链路上流过的可能是 PIN 或 token。
     this.options.audit.record({

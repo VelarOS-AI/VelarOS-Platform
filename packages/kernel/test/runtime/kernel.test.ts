@@ -6,10 +6,12 @@ import { Kernel } from '../../src/impl/runtime/Kernel'
 import { kernelModules } from '../../src/impl/runtime/KernelModuleKit'
 const ValueCapability = kernelModules.token('test.value', '2.4.0')
 
-function valueModule(options: {
-  readonly onInvoke?: () => void
-  readonly failReady?: boolean
-} = {}) {
+function valueModule(
+  options: {
+    readonly onInvoke?: () => void
+    readonly failReady?: boolean
+  } = {}
+) {
   return kernelModules.define({
     manifest: {
       id: 'test.value.module',
@@ -35,7 +37,7 @@ function valueModule(options: {
               return 'value'
             },
           },
-        }),
+        })
       )
       return {
         ready() {
@@ -70,18 +72,14 @@ describe('Kernel', () => {
     await kernel.dispose()
     expect(kernel.hasCapability(ValueCapability.id)).toBeFalse()
     expect(kernel.resolveCallableCapability(ValueCapability.id)).toBeNull()
-    expect(() => kernel.registerModule(valueModule())).toThrow(
-      '内核模块必须在启动之前注册',
-    )
-    await expect(kernel.start()).rejects.toThrow(
-      '已回收的内核不能再启动',
-    )
+    expect(() => kernel.registerModule(valueModule())).toThrow('内核模块必须在启动之前注册')
+    await expect(kernel.start()).rejects.toThrow('已回收的内核不能再启动')
   })
 
   test('checks every operation permission before provider code runs', async () => {
     let invoked = 0
     const kernel = new Kernel()
-    kernel.registerModule(valueModule({ onInvoke: () => invoked += 1 }))
+    kernel.registerModule(valueModule({ onInvoke: () => (invoked += 1) }))
     await kernel.start()
 
     await expect(
@@ -90,7 +88,7 @@ describe('Kernel', () => {
         operation: 'read',
         input: {},
         signal: new AbortController().signal,
-      }),
+      })
     ).rejects.toMatchObject({ code: KernelCallErrorCodes.permissionDenied })
     expect(invoked).toBe(0)
   })
@@ -100,7 +98,7 @@ describe('Kernel', () => {
     const permissionBroker: KernelPermissionBroker = {
       request: (request) => {
         observed.push(
-          `${request.moduleId}:${request.generation}:${request.permission}:${request.scope?.id ?? 'no-scope'}`,
+          `${request.moduleId}:${request.generation}:${request.permission}:${request.scope?.id ?? 'no-scope'}`
         )
         return Promise.resolve({ status: 'granted', grantId: 'probe-grant' })
       },
@@ -122,7 +120,7 @@ describe('Kernel', () => {
             ownerModuleId: 'forged-owner',
           },
         } as never,
-      }),
+      })
     ).resolves.toBe('value')
     expect(observed).toEqual(['test.value.module:1:test:read:no-scope'])
     await expect(
@@ -131,7 +129,7 @@ describe('Kernel', () => {
         operation: 'read',
         input: {},
         signal: new AbortController().signal,
-      }),
+      })
     ).rejects.toMatchObject({ code: KernelCallErrorCodes.capabilityNotFound })
   })
 

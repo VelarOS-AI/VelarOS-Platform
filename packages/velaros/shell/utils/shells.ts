@@ -14,10 +14,12 @@ import { ShellEnvironmentVariables } from '../contract/constants.js'
 import type { ResolvedShell, ResolveShellOptions } from '../types/local.js'
 import type { ShellDescriptor, ShellRecommendation } from '../types/shell-command.js'
 
-
 const shellNames: Record<ShellCommandKind, string> = {
-  'git-bash': 'Git Bash', pwsh: 'PowerShell 7', powershell: 'Windows PowerShell',
-  cmd: 'CMD', posix: 'POSIX shell',
+  'git-bash': 'Git Bash',
+  pwsh: 'PowerShell 7',
+  powershell: 'Windows PowerShell',
+  cmd: 'CMD',
+  posix: 'POSIX shell',
 }
 
 const gitRecommendation: ShellRecommendation = {
@@ -27,14 +29,19 @@ const gitRecommendation: ShellRecommendation = {
 }
 
 /** 宿主设给本包的输入环境变量（登记表里 direction 为 input 的名字，大写）：刷新环境写回宿主进程时不能删。 */
-const HostInputVariableNames: ReadonlySet<string> = new Set(Object.values(ShellEnvironmentVariables).filter((variable) => variable.direction === 'input').map((variable) => variable.name))
+const HostInputVariableNames: ReadonlySet<string> = new Set(
+  Object.values(ShellEnvironmentVariables)
+    .filter((variable) => variable.direction === 'input')
+    .map((variable) => variable.name)
+)
 
 /**
  * 把刷新后的环境写回宿主进程的环境：不在新环境里的键删掉，但宿主设给本包的输入变量（VELAROS_SHELL_PATH 这类，不在注册表里、
  * 刷新结果里也不带）照留，否则刷新一次宿主指定的 shell 就丢了。Windows 的环境变量名不分大小写，按大写比。
  */
 export function replaceEnvironment(target: NodeJS.ProcessEnv, next: NodeJS.ProcessEnv): void {
-  for (const key of Object.keys(target)) if (!(key in next) && !HostInputVariableNames.has(key.toUpperCase())) delete target[key]
+  for (const key of Object.keys(target))
+    if (!(key in next) && !HostInputVariableNames.has(key.toUpperCase())) delete target[key]
   Object.assign(target, next)
 }
 
@@ -76,7 +83,9 @@ export function normalizeWindowsPath(path: string): string {
 export function uniquePaths(paths: string[]): string[] {
   const seen = new Set<string>()
   return paths.filter((path) => {
-    const key = normalizeWindowsPath(path).replace(/[\\/]+$/, '').toLowerCase()
+    const key = normalizeWindowsPath(path)
+      .replace(/[\\/]+$/, '')
+      .toLowerCase()
     if (seen.has(key)) return false
     seen.add(key)
     return true
@@ -84,21 +93,28 @@ export function uniquePaths(paths: string[]): string[] {
 }
 
 /** 确认一个 bash.exe 属于完整的 Git for Windows 安装，返回安装根目录；不是则返回 undefined。 */
-export function gitRootForBash(shellPath: string, isFile: (path: string) => boolean): LooseOptional<string> {
+export function gitRootForBash(
+  shellPath: string,
+  isFile: (path: string) => boolean
+): LooseOptional<string> {
   if (!isAbsoluteWindowsPath(shellPath) || win32.basename(shellPath).toLowerCase() !== 'bash.exe')
     return undefined
   const binDir = win32.dirname(shellPath)
   if (win32.basename(binDir).toLowerCase() !== 'bin') return undefined
   const parent = win32.dirname(binDir)
-  const roots = win32.basename(parent).toLowerCase() === 'usr'
-    ? [parent, win32.dirname(parent)] : [parent]
+  const roots =
+    win32.basename(parent).toLowerCase() === 'usr' ? [parent, win32.dirname(parent)] : [parent]
   // Git for Windows 安装目录应同时包含启动器与 MSYS 运行时。
   // 由此排除 Windows 的 WSL bash.exe 和无关的独立 Bash 安装。
   if (!isFile(shellPath)) return undefined
-  return roots.find((root) => isFile(win32.join(root, 'git-bash.exe')) &&
-    isFile(win32.join(root, 'usr', 'bin', 'msys-2.0.dll')) &&
-    ['cmd', 'bin', 'mingw64\\bin', 'mingw32\\bin']
-      .some((directory) => isFile(win32.join(root, directory, 'git.exe'))))
+  return roots.find(
+    (root) =>
+      isFile(win32.join(root, 'git-bash.exe')) &&
+      isFile(win32.join(root, 'usr', 'bin', 'msys-2.0.dll')) &&
+      ['cmd', 'bin', 'mingw64\\bin', 'mingw32\\bin'].some((directory) =>
+        isFile(win32.join(root, directory, 'git.exe'))
+      )
+  )
 }
 
 /** 列出 Windows 上 Git Bash 可能在的位置：Program Files、用户目录，以及 PATH 里 git 所在目录的附近。 */
@@ -139,16 +155,26 @@ function gitBashEnvironment(
 ): NodeJS.ProcessEnv {
   const result = { ...env }
   const replacedKeys = new Set([
-    'PATH', 'LANG', 'LC_ALL', 'SHELL', 'VELAROS_GIT_BASH', 'BASH_ENV', 'ENV',
-    'PYTHONIOENCODING', 'PYTHONUTF8',
-    'MSYS_NO_PATHCONV', 'MSYS2_ARG_CONV_EXCL', 'MSYS2_ENV_CONV_EXCL',
+    'PATH',
+    'LANG',
+    'LC_ALL',
+    'SHELL',
+    'VELAROS_GIT_BASH',
+    'BASH_ENV',
+    'ENV',
+    'PYTHONIOENCODING',
+    'PYTHONUTF8',
+    'MSYS_NO_PATHCONV',
+    'MSYS2_ARG_CONV_EXCL',
+    'MSYS2_ENV_CONV_EXCL',
   ])
   for (const key of Object.keys(result)) {
     if (replacedKeys.has(key.toUpperCase())) delete result[key]
   }
   const gitPath = [win32.join(root, 'usr', 'bin')]
   for (const arch of ['mingw64', 'mingw32']) {
-    if (isFile(win32.join(root, arch, 'bin', 'git.exe'))) gitPath.push(win32.join(root, arch, 'bin'))
+    if (isFile(win32.join(root, arch, 'bin', 'git.exe')))
+      gitPath.push(win32.join(root, arch, 'bin'))
   }
   gitPath.push(win32.join(root, 'bin'), win32.join(root, 'cmd'))
   return {
@@ -163,7 +189,10 @@ function gitBashEnvironment(
 }
 
 /** 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的优先顺序列出 Windows 上的 shell 候选。 */
-export function windowsCandidates(env: NodeJS.ProcessEnv, isFile: (path: string) => boolean): string[] {
+export function windowsCandidates(
+  env: NodeJS.ProcessEnv,
+  isFile: (path: string) => boolean
+): string[] {
   const configuredGit = readWindowsEnv(env, 'VELAROS_GIT_BASH')?.trim()
   const candidates = [
     ...(configuredGit ? [normalizeWindowsPath(configuredGit)] : []),
@@ -174,14 +203,21 @@ export function windowsCandidates(env: NodeJS.ProcessEnv, isFile: (path: string)
   for (const entry of pathEntries(env)) {
     if (isAbsoluteWindowsPath(entry)) candidates.push(win32.join(entry, 'pwsh.exe'))
   }
-  const windowsRoot = readWindowsEnv(env, 'SystemRoot') || readWindowsEnv(env, 'WINDIR') || 'C:\\Windows'
-  candidates.push(win32.join(windowsRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'))
+  const windowsRoot =
+    readWindowsEnv(env, 'SystemRoot') || readWindowsEnv(env, 'WINDIR') || 'C:\\Windows'
+  candidates.push(
+    win32.join(windowsRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+  )
   candidates.push(win32.join(windowsRoot, 'System32', 'cmd.exe'))
   return uniquePaths(candidates)
 }
 
 /** 为一个 shell 生成完整描述：种类、名称、启动参数、运行环境与安装建议。 */
-export function describeShell(shellPath: string, env: NodeJS.ProcessEnv, isFile: (path: string) => boolean): ResolvedShell {
+export function describeShell(
+  shellPath: string,
+  env: NodeJS.ProcessEnv,
+  isFile: (path: string) => boolean
+): ResolvedShell {
   const kind = currentPlatform.getShellKind(shellPath)
   const gitRoot = kind === 'git-bash' ? gitRootForBash(shellPath, isFile) : undefined
   const shellEnv = gitRoot ? gitBashEnvironment(env, shellPath, gitRoot, isFile) : { ...env }
@@ -194,19 +230,37 @@ export function describeShell(shellPath: string, env: NodeJS.ProcessEnv, isFile:
   }
   // Windows 环境变量键不区分大小写，每个受管键只发布一种拼写。
   for (const key of Object.keys(shellEnv)) {
-    if (['VELAROS_SHELL_KIND', 'VELAROS_SHELL_PATH', 'VELAROS_SHELL_READINESS', 'VELAROS_SHELL_VERSION']
-      .includes(key.toUpperCase())) delete shellEnv[key]
+    if (
+      [
+        'VELAROS_SHELL_KIND',
+        'VELAROS_SHELL_PATH',
+        'VELAROS_SHELL_READINESS',
+        'VELAROS_SHELL_VERSION',
+      ].includes(key.toUpperCase())
+    )
+      delete shellEnv[key]
   }
   shellEnv.VELAROS_SHELL_KIND = kind
   shellEnv.VELAROS_SHELL_PATH = shellPath
   shellEnv.VELAROS_SHELL_READINESS = 'detected'
-  const args = kind === 'cmd' ? ['/d', '/s', '/v:off', '/c']
-    : kind === 'git-bash' ? ['--noprofile', '--norc', '-c']
-      : kind === 'posix' ? ['-lc']
-        : ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command']
+  const args =
+    kind === 'cmd'
+      ? ['/d', '/s', '/v:off', '/c']
+      : kind === 'git-bash'
+        ? ['--noprofile', '--norc', '-c']
+        : kind === 'posix'
+          ? ['-lc']
+          : ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command']
   return {
-    kind, name: shellNames[kind], shellPath, args, env: shellEnv, readiness: 'detected', version: null,
-    recommendation: kind === 'cmd' || kind === 'pwsh' || kind === 'powershell' ? { ...gitRecommendation } : null,
+    kind,
+    name: shellNames[kind],
+    shellPath,
+    args,
+    env: shellEnv,
+    readiness: 'detected',
+    version: null,
+    recommendation:
+      kind === 'cmd' || kind === 'pwsh' || kind === 'powershell' ? { ...gitRecommendation } : null,
   }
 }
 
@@ -236,7 +290,11 @@ export function detectAvailableShells(options: ResolveShellOptions): ResolvedShe
   const platform = options.platform ?? process.platform
   const isFile = options.isFile ?? isRegularFile
   if (platform !== 'win32') {
-    const shell = describeShell(options.shellPath || createPlatform({ platform, env }).getPreferredShellPath(env), env, isFile)
+    const shell = describeShell(
+      options.shellPath || createPlatform({ platform, env }).getPreferredShellPath(env),
+      env,
+      isFile
+    )
     return options.kind && shell.kind !== options.kind ? [] : [shell]
   }
   const selected = options.shellPath || readWindowsEnv(env, 'VELAROS_SHELL_PATH')
@@ -263,33 +321,47 @@ export function buildNativeCommandSpec(
 ): CommandSpec & { env: NodeJS.ProcessEnv } {
   const env = { ...shell.env }
   for (const [key, value] of Object.entries(input.env ?? {})) {
-    if (shell.kind !== 'posix') for (const previous of Object.keys(env)) {
-      if (previous.toUpperCase() === key.toUpperCase()) delete env[previous]
-    }
+    if (shell.kind !== 'posix')
+      for (const previous of Object.keys(env)) {
+        if (previous.toUpperCase() === key.toUpperCase()) delete env[previous]
+      }
     if (isUndefined(value)) delete env[key]
     else env[key] = value
   }
-  const file = shell.kind !== 'posix' && !win32.extname(input.file) && isRegularFile(`${input.file}.cmd`)
-    ? `${input.file}.cmd` : input.file
+  const file =
+    shell.kind !== 'posix' && !win32.extname(input.file) && isRegularFile(`${input.file}.cmd`)
+      ? `${input.file}.cmd`
+      : input.file
   if (/\.(?:bat|cmd)$/i.test(file) && shell.kind !== 'posix') {
     const root = readWindowsEnv(env, 'SystemRoot') || 'C:\\Windows'
     const doubleEscape = /node_modules[\\/]\.bin[\\/][^\\/]+\.cmd$/i.test(file)
-    const command = [win32.normalize(file).replace(cmdMetaCharacters, '^$1'),
-      ...input.args.map((value) => escapeCmdArgument(value, doubleEscape))].join(' ')
+    const command = [
+      win32.normalize(file).replace(cmdMetaCharacters, '^$1'),
+      ...input.args.map((value) => escapeCmdArgument(value, doubleEscape)),
+    ].join(' ')
     return {
       file: win32.join(root, 'System32', 'cmd.exe'),
       args: ['/d', '/s', '/v:off', '/c', `"chcp 65001 >nul & ${command}"`],
-      env, windowsVerbatimArguments: true,
+      env,
+      windowsVerbatimArguments: true,
     }
   }
   if (/\.ps1$/i.test(file) && (shell.kind === 'pwsh' || shell.kind === 'powershell')) {
     const command = `& ${[file, ...input.args].map((arg) => currentPlatform.quoteShellArg(arg, { kind: shell.kind })).join(' ')}`
-    return { ...currentPlatform.getShellCommandSpec(command, { shellPath: shell.shellPath, kind: shell.kind }), env }
+    return {
+      ...currentPlatform.getShellCommandSpec(command, {
+        shellPath: shell.shellPath,
+        kind: shell.kind,
+      }),
+      env,
+    }
   }
-  if (shell.kind === 'git-bash' && isRegularFile(file) && !/\.(?:exe|com)$/i.test(file)) return {
-    file: shell.shellPath, args: ['--noprofile', '--norc', file.replace(/\\/g, '/'), ...input.args],
-    env: { ...env, MSYS2_ARG_CONV_EXCL: '*' },
-  }
+  if (shell.kind === 'git-bash' && isRegularFile(file) && !/\.(?:exe|com)$/i.test(file))
+    return {
+      file: shell.shellPath,
+      args: ['--noprofile', '--norc', file.replace(/\\/g, '/'), ...input.args],
+      env: { ...env, MSYS2_ARG_CONV_EXCL: '*' },
+    }
   return { file, args: [...input.args], env }
 }
 
@@ -297,16 +369,29 @@ export function buildNativeCommandSpec(
  * 挑定的 shell 本机没有时给模型的报错：点名可用的是哪几个、哪个是默认，并说下一步怎么改。
  * 候选表按挑选优先顺序，第一个就是默认的那个；一个候选都没有时说清楚本机一个 shell 也没找到。
  */
-export function describeUnavailableShellKind(kind: ShellCommandKind, candidates: readonly ShellDescriptor[]): string {
-  if (isEmpty(candidates)) return `本机没有 ${kind}，而且一个可用的 shell 都没找到。先让用户装一个 shell，再重试这条命令。`
-  const available = candidates.map((candidate, index) => index === 0 ? `${candidate.kind}（默认）` : candidate.kind).join('、')
+export function describeUnavailableShellKind(
+  kind: ShellCommandKind,
+  candidates: readonly ShellDescriptor[]
+): string {
+  if (isEmpty(candidates))
+    return `本机没有 ${kind}，而且一个可用的 shell 都没找到。先让用户装一个 shell，再重试这条命令。`
+  const available = candidates
+    .map((candidate, index) => (index === 0 ? `${candidate.kind}（默认）` : candidate.kind))
+    .join('、')
   return `本机没有 ${kind}，可用：${available}。不填 shell 就用默认的那个，要挑别的就从这几个里挑一个，按它的语法重写命令再调一次。`
 }
 
 /** 把解析出的 shell 缩成命令结果里展示的描述：种类、名称、路径、参数、就绪状态、版本、安装建议，不带环境变量。 */
 export function toShellDescriptor(shell: ShellDescriptor): ShellDescriptor {
-  return { kind: shell.kind, name: shell.name, shellPath: shell.shellPath, args: shell.args,
-    readiness: shell.readiness, version: shell.version, recommendation: shell.recommendation }
+  return {
+    kind: shell.kind,
+    name: shell.name,
+    shellPath: shell.shellPath,
+    args: shell.args,
+    readiness: shell.readiness,
+    version: shell.version,
+    recommendation: shell.recommendation,
+  }
 }
 
 const log = Log.tag('ShellResolver')

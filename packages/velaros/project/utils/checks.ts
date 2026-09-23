@@ -10,7 +10,10 @@ import type { FixResult } from '../types/fix.js'
 import { toErrorObject } from './errors.js'
 
 /** validator 有没有被本次 checks 选中：没给 checks 时全选；给了就按 validator 的 id 和 checkIds 别名匹配。 */
-export function isSelectedValidator(validator: ProjectValidator, checks?: readonly string[]): boolean {
+export function isSelectedValidator(
+  validator: ProjectValidator,
+  checks?: readonly string[]
+): boolean {
   if (!checks || isEmpty(checks)) return true
   return [validator.id, ...(validator.checkIds ?? [])].some((id) => checks.includes(id))
 }
@@ -35,10 +38,9 @@ export function fixerErrorResult(
   error: any
 ): FixResult {
   const errorObject = toErrorObject(error)
-  const message =
-    isNonBlankString(errorObject.message)
-      ? errorObject.message
-      : `Fixer ${fixerId} 在 ${phase} 阶段失败。`
+  const message = isNonBlankString(errorObject.message)
+    ? errorObject.message
+    : `Fixer ${fixerId} 在 ${phase} 阶段失败。`
   return {
     ok: false,
     changed: false,
@@ -57,7 +59,11 @@ export function fixerErrorResult(
 }
 
 /** 合并两次修复结果：都通过才通过，有一次改动就算改动，改动文件去重，修复、诊断与工具需求依次拼接。 */
-export function mergeFixResults(current: FixResult, next: FixResult, transactionId: string): FixResult {
+export function mergeFixResults(
+  current: FixResult,
+  next: FixResult,
+  transactionId: string
+): FixResult {
   return {
     ok: current.ok && next.ok,
     changed: current.changed || next.changed,
@@ -65,6 +71,9 @@ export function mergeFixResults(current: FixResult, next: FixResult, transaction
     changedFiles: [...new Set([...current.changedFiles, ...next.changedFiles])],
     fixes: [...current.fixes, ...next.fixes],
     diagnostics: [...current.diagnostics, ...next.diagnostics],
-    toolRequirements: optionalWhen([...(current.toolRequirements ?? []), ...(next.toolRequirements ?? [])].length, ([...(current.toolRequirements ?? []), ...(next.toolRequirements ?? [])])),
+    toolRequirements: optionalWhen(
+      [...(current.toolRequirements ?? []), ...(next.toolRequirements ?? [])].length,
+      [...(current.toolRequirements ?? []), ...(next.toolRequirements ?? [])]
+    ),
   }
 }

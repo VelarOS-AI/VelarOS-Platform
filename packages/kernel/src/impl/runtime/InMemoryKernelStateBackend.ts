@@ -24,11 +24,7 @@ export class InMemoryKernelStateBackend implements KernelStateBackend {
     return this.namespaces.get(namespace)?.get(key)
   }
 
-  public async set(
-    namespace: string,
-    key: string,
-    value: unknown,
-  ): Promise<void> {
+  public async set(namespace: string, key: string, value: unknown): Promise<void> {
     const state = this.namespaces.get(namespace) ?? new Map()
     if (!this.namespaces.has(namespace)) this.namespaces.set(namespace, state)
     state.set(key, value)
@@ -38,13 +34,8 @@ export class InMemoryKernelStateBackend implements KernelStateBackend {
     return !!this.namespaces.get(namespace)?.delete(key)
   }
 
-  public async list(
-    namespace: string,
-    prefix?: string,
-  ): Promise<readonly string[]> {
+  public async list(namespace: string, prefix?: string): Promise<readonly string[]> {
     const keys = [...(this.namespaces.get(namespace)?.keys() ?? [])]
-    return keys
-      .filter((key) => isUndefined(prefix) || key.startsWith(prefix))
-      .sort()
+    return keys.filter((key) => isUndefined(prefix) || key.startsWith(prefix)).sort()
   }
 }

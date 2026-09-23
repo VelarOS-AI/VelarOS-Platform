@@ -8,7 +8,14 @@ import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 
 import type { ProjectOperationContext } from '../../contract/requires.js'
-import type { ProjectFileView, ProjectVisibleCoverage, ReceiptRecord, RefRecord, RefSession, SourceRecord } from '../../types/file-refs.js'
+import type {
+  ProjectFileView,
+  ProjectVisibleCoverage,
+  ReceiptRecord,
+  RefRecord,
+  RefSession,
+  SourceRecord,
+} from '../../types/file-refs.js'
 import { ProjectError } from '../errors.js'
 import { ProjectTuning } from '../tuning.js'
 
@@ -51,8 +58,11 @@ function put(ctx: ProjectOperationContext, value: RefRecord, prefix: string): st
   }
   session.records.set(hash, { record: value, chars: serialized.length })
   session.chars += serialized.length
-  while (session.records.size > 1
-    && (session.records.size > ProjectTuning.refs.recordsPerSession || session.chars > ProjectTuning.refs.charsPerSession)) {
+  while (
+    session.records.size > 1 &&
+    (session.records.size > ProjectTuning.refs.recordsPerSession ||
+      session.chars > ProjectTuning.refs.charsPerSession)
+  ) {
     const [oldest, entry] = session.records.entries().next().value!
     session.records.delete(oldest)
     session.chars -= entry.chars
@@ -65,14 +75,22 @@ function get(ctx: ProjectOperationContext, ref: string, prefixes: readonly strin
   const prefix = prefixes.find((candidate) => ref.startsWith(candidate))
   const hash = prefix ? ref.slice(prefix.length) : ''
   if (!prefix || !/^[a-f0-9]{64}$/.test(hash)) {
-    throw new ProjectError('INVALID_INPUT', `${JSON.stringify(ref.slice(0, 80))} 不是签发出来的引用（${prefixes.join(' / ')} 加 64 位十六进制），不能手写或改写。`,
-      { ref: ref.slice(0, 80) }, ReadForReferenceNextAction)
+    throw new ProjectError(
+      'INVALID_INPUT',
+      `${JSON.stringify(ref.slice(0, 80))} 不是签发出来的引用（${prefixes.join(' / ')} 加 64 位十六进制），不能手写或改写。`,
+      { ref: ref.slice(0, 80) },
+      ReadForReferenceNextAction
+    )
   }
   const session = sessionOf(ctx)
   const entry = session.records.get(hash)
   if (!entry) {
-    throw new ProjectError('INVALID_INPUT', '这个引用不是本会话签发的，或者已经过期（进程重启过，或者本会话签发的引用太多、它被挤掉了）。',
-      { ref }, ReadForReferenceNextAction)
+    throw new ProjectError(
+      'INVALID_INPUT',
+      '这个引用不是本会话签发的，或者已经过期（进程重启过，或者本会话签发的引用太多、它被挤掉了）。',
+      { ref },
+      ReadForReferenceNextAction
+    )
   }
   session.records.delete(hash)
   session.records.set(hash, entry)
@@ -81,7 +99,13 @@ function get(ctx: ProjectOperationContext, ref: string, prefixes: readonly strin
 
 /** 签发引用的项目必须就是当前项目：项目换了，引用就作废。 */
 function assertCurrentProject(ctx: ProjectOperationContext, root: string, ref: string): void {
-  if (root !== currentRoot(ctx)) throw new ProjectError('INVALID_INPUT', '这个引用属于另一个项目，在这里用不了。', { ref }, ReadForReferenceNextAction)
+  if (root !== currentRoot(ctx))
+    throw new ProjectError(
+      'INVALID_INPUT',
+      '这个引用属于另一个项目，在这里用不了。',
+      { ref },
+      ReadForReferenceNextAction
+    )
 }
 
 /** 当前项目根的绝对路径：引用记录里记的就是它。 */
@@ -90,11 +114,21 @@ function currentRoot(ctx: ProjectOperationContext): string {
 }
 
 /** 存一份源码快照，返回 source: 引用。快照本身不带编辑权，只有真正交给程序的窗口才据它签发 view: 视图。 */
-export function saveFileSource(ctx: ProjectOperationContext, input: { path: string; revision: string; content: string }): string {
-  return put(ctx, {
-    kind: 'project-file-source', version: 1, root: currentRoot(ctx), ...input,
-    contentRevision: projectContentRevision(input.content),
-  }, 'source:')
+export function saveFileSource(
+  ctx: ProjectOperationContext,
+  input: { path: string; revision: string; content: string }
+): string {
+  return put(
+    ctx,
+    {
+      kind: 'project-file-source',
+      version: 1,
+      root: currentRoot(ctx),
+      ...input,
+      contentRevision: projectContentRevision(input.content),
+    },
+    'source:'
+  )
 }
 
 /** 把 source: 或 view: 引用解析到它背后的源码快照。 */
@@ -106,35 +140,67 @@ export function resolveFileSource(ctx: ProjectOperationContext, ref: string): So
 }
 
 /** 按实际交出去的可见范围签发可编辑视图，返回 view: 引用（就是 fileRef）；传入的不是 source: 引用时先落一份源码快照。 */
-export function saveFileRef(ctx: ProjectOperationContext, source: string, coverage: ProjectVisibleCoverage[]): string {
+export function saveFileRef(
+  ctx: ProjectOperationContext,
+  source: string,
+  coverage: ProjectVisibleCoverage[]
+): string {
   const record = resolveFileSource(ctx, source)
   const sourceRef = source.startsWith('source:') ? source : put(ctx, record, 'source:')
   return put(ctx, { kind: 'project-file-view', version: 1, source: sourceRef, coverage }, 'view:')
 }
 
 /** 取回 fileRef 对应的视图（路径、版本、正文、可见范围）：只认 view: 引用，而且要是当前项目签发的。 */
-export async function loadFileView(ctx: ProjectOperationContext, fileRef: string): Promise<ProjectFileView> {
+export async function loadFileView(
+  ctx: ProjectOperationContext,
+  fileRef: string
+): Promise<ProjectFileView> {
   const record = get(ctx, fileRef, ['view:', 'source:'])
   if (record.kind !== 'project-file-view') {
-    throw new ProjectError('INVALID_INPUT', '这不是可编辑的 fileRef：编辑只收窗口上的 view:… 引用。', { ref: fileRef }, ReadForReferenceNextAction)
+    throw new ProjectError(
+      'INVALID_INPUT',
+      '这不是可编辑的 fileRef：编辑只收窗口上的 view:… 引用。',
+      { ref: fileRef },
+      ReadForReferenceNextAction
+    )
   }
   const source = resolveFileSource(ctx, record.source)
   assertCurrentProject(ctx, source.root, fileRef)
-  return { path: source.path, revision: source.revision, contentRevision: source.contentRevision, content: source.content, coverage: structuredClone(record.coverage) }
+  return {
+    path: source.path,
+    revision: source.revision,
+    contentRevision: source.contentRevision,
+    content: source.content,
+    coverage: structuredClone(record.coverage),
+  }
 }
 
 /**
  * 取回 fileRef 的视图并按正文复核当前文件。正文没变就沿用当前 revision（元数据型 revision 策略下只动了 mtime 不算过期），
  * 正文变了按过期拒绝，由编辑恢复链给出新位置。
  */
-export async function resolveFileRef(ctx: ProjectOperationContext, fileRef: string): Promise<ProjectFileView> {
+export async function resolveFileRef(
+  ctx: ProjectOperationContext,
+  fileRef: string
+): Promise<ProjectFileView> {
   const view = await loadFileView(ctx, fileRef)
   const kernel = await ctx.project.kernel()
-  const current = await kernel.read({ path: view.path, maxChars: Math.max(view.content.length + 1, 1) })
-  if (current.truncated || current.hasMore || current.content !== view.content || !current.snapshot.revision) {
-    throw new ProjectError('BASE_REVISION_MISMATCH', `${view.path} 在这个 fileRef 之后改过（当前版本 ${current.snapshot.revision ?? '未知'}）。`,
+  const current = await kernel.read({
+    path: view.path,
+    maxChars: Math.max(view.content.length + 1, 1),
+  })
+  if (
+    current.truncated ||
+    current.hasMore ||
+    current.content !== view.content ||
+    !current.snapshot.revision
+  ) {
+    throw new ProjectError(
+      'BASE_REVISION_MISMATCH',
+      `${view.path} 在这个 fileRef 之后改过（当前版本 ${current.snapshot.revision ?? '未知'}）。`,
       { path: view.path, expected: view.revision, actual: current.snapshot.revision },
-      '可能就是你上一次改的：用上一次 edit 回执里这个文件的新 fileRef 按新行号重做；回执里没有这个文件的，重新 read 要改的那几行。')
+      '可能就是你上一次改的：用上一次 edit 回执里这个文件的新 fileRef 按新行号重做；回执里没有这个文件的，重新 read 要改的那几行。'
+    )
   }
   return { ...view, revision: current.snapshot.revision }
 }
@@ -146,7 +212,11 @@ const ReceiptNextActions: Readonly<Record<string, string>> = Object.freeze({
 
 /** 存一张回执，返回「kind: + 内容哈希」形式的不透明引用。 */
 export function saveReceipt(ctx: ProjectOperationContext, kind: string, value: unknown): string {
-  return put(ctx, { kind: 'project-receipt', version: 1, receipt: kind, root: currentRoot(ctx), value }, `${kind}:`)
+  return put(
+    ctx,
+    { kind: 'project-receipt', version: 1, receipt: kind, root: currentRoot(ctx), value },
+    `${kind}:`
+  )
 }
 
 /** 凭引用取回回执内容：种类不对、会话里没有、或属于别的项目时按 INVALID_INPUT 拒绝，并说明怎么拿到有效的引用。 */
@@ -156,12 +226,24 @@ export function readReceipt(ctx: ProjectOperationContext, kind: string, ref: str
   try {
     record = get(ctx, ref, [`${kind}:`])
   } catch (error) {
-    if (error instanceof ProjectError) throw new ProjectError(error.reason, error.message, error.details, next)
+    if (error instanceof ProjectError)
+      throw new ProjectError(error.reason, error.message, error.details, next)
     throw error
   }
   if (record.kind !== 'project-receipt' || record.receipt !== kind) {
-    throw new ProjectError('INVALID_INPUT', `${ref.slice(0, 80)} 不是本会话签发的 ${kind} 引用。`, { ref: ref.slice(0, 80) }, next)
+    throw new ProjectError(
+      'INVALID_INPUT',
+      `${ref.slice(0, 80)} 不是本会话签发的 ${kind} 引用。`,
+      { ref: ref.slice(0, 80) },
+      next
+    )
   }
-  if (record.root !== currentRoot(ctx)) throw new ProjectError('INVALID_INPUT', '这个引用属于另一个项目。', { ref: ref.slice(0, 80) }, next)
+  if (record.root !== currentRoot(ctx))
+    throw new ProjectError(
+      'INVALID_INPUT',
+      '这个引用属于另一个项目。',
+      { ref: ref.slice(0, 80) },
+      next
+    )
   return (record as ReceiptRecord).value
 }

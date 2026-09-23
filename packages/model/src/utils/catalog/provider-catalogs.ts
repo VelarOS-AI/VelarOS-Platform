@@ -1,6 +1,10 @@
 import { isNumber } from '@velaros-ai/core'
 
-import { OpenRouterAutoModelId, OpenRouterFreeModelId, VelarAutoModelId } from '../../contract/constants.js'
+import {
+  OpenRouterAutoModelId,
+  OpenRouterFreeModelId,
+  VelarAutoModelId,
+} from '../../contract/constants.js'
 import type { ChatProviderId } from '../../types/model'
 import type { ProviderModelDefinition, SharedProviderCatalog } from '../../types/providers'
 

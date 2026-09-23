@@ -1,7 +1,5 @@
 /** 模块形态里不出包的那几个形状；可移植的（租约、import、授权模块）在 `script.ts`。 */
 
-
-
 /** 改写模块时一处要按文本替换的区间；包内用。 */
 export interface ProgramRewrite {
   /** 起点，从 0 起。 */

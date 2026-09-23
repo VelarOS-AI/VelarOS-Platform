@@ -4,7 +4,13 @@
  */
 
 import type { SearchOperationContext } from '../contract/requires.js'
-import type { SearchProfileInfo, SearchReadInput, SearchReadResult, SearchRequest, SearchResult } from '../types.js'
+import type {
+  SearchProfileInfo,
+  SearchReadInput,
+  SearchReadResult,
+  SearchRequest,
+  SearchResult,
+} from '../types.js'
 
 /**
  * @AgentView
@@ -38,7 +44,10 @@ export class SearchOperations implements SearchOperationsApi {
     return ctx.search.run(input, ctx.call)
   }
 
-  public async read(input: SearchReadInput, ctx: SearchOperationContext): Promise<SearchReadResult> {
+  public async read(
+    input: SearchReadInput,
+    ctx: SearchOperationContext
+  ): Promise<SearchReadResult> {
     ctx.call.signal.throwIfAborted()
     return ctx.search.read(input, ctx.call)
   }

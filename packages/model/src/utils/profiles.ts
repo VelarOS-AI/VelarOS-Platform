@@ -8,7 +8,8 @@ export function resolveCredentialSource(input: {
   readonly credentialOptional: boolean
 }): ModelProfileCredentialSource {
   if (input.configuredCredential.trim()) return 'config'
-  if (input.environmentName && input.environment[input.environmentName]?.trim()) return 'environment'
+  if (input.environmentName && input.environment[input.environmentName]?.trim())
+    return 'environment'
   return input.credentialOptional ? 'not-required' : 'missing'
 }
 
@@ -18,14 +19,16 @@ export function resolveCredential(input: {
   readonly environmentName: Nullable<string>
   readonly environment: Readonly<Record<string, string | undefined>>
 }): string {
-  return input.configuredCredential.trim()
-    || (input.environmentName ? input.environment[input.environmentName]?.trim() ?? '' : '')
+  return (
+    input.configuredCredential.trim() ||
+    (input.environmentName ? (input.environment[input.environmentName]?.trim() ?? '') : '')
+  )
 }
 
 /** 去掉 profile 上的密钥字段，剩下的才是能进日志与界面的部分。 */
-export function omitCredential<
-  TProfile extends Record<string, unknown> & { apiKey: unknown },
->(profile: TProfile): Omit<TProfile, 'apiKey'> {
+export function omitCredential<TProfile extends Record<string, unknown> & { apiKey: unknown }>(
+  profile: TProfile
+): Omit<TProfile, 'apiKey'> {
   const { apiKey: _apiKey, ...visible } = profile
   return visible
 }

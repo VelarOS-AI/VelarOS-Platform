@@ -27,12 +27,12 @@ afterEach(async () => {
 async function startEndpoint(
   respond: (
     request: ReceivedRequest,
-    connection: { send(frame: unknown): void; sendRaw(line: string): void; destroy(): void },
-  ) => void | Promise<void>,
+    connection: { send(frame: unknown): void; sendRaw(line: string): void; destroy(): void }
+  ) => void | Promise<void>
 ): Promise<FakeKernelEndpoint> {
   const directory = await temporaryRuntimeDirectory(directories)
   const endpoint = new FakeKernelEndpoint(
-    respond as ConstructorParameters<typeof FakeKernelEndpoint>[0],
+    respond as ConstructorParameters<typeof FakeKernelEndpoint>[0]
   )
   endpoints.push(endpoint)
   await endpoint.start(join(directory, 'kernel.sock'))
@@ -95,12 +95,12 @@ describe('kernel client socket transport', () => {
             operation: 'echo',
             scope: null,
             input: callId,
-          })),
+          })
+        )
       )
       expect(results.map((response) => response.callId)).toEqual(['a', 'b', 'c'])
       expect(
-        results.map((response) =>
-          response.status === 'ok' ? response.output : undefined),
+        results.map((response) => (response.status === 'ok' ? response.output : undefined))
       ).toEqual(['a', 'b', 'c'])
     } finally {
       await transport.dispose()
@@ -116,7 +116,7 @@ describe('kernel client socket transport', () => {
             protocolVersion: KernelProtocolVersion,
             kernelVersion: '0.3.0',
             modules: [],
-          }),
+          })
         )
       }
     })
@@ -136,15 +136,13 @@ describe('kernel client socket transport', () => {
           operation: 'echo',
           scope: null,
           input: null,
-        }))
+        })
+      )
       const settled = Promise.allSettled(stranded)
       await Bun.sleep(20)
       endpoint.dropConnections()
       const outcomes = await settled
-      expect(outcomes.map((outcome) => outcome.status)).toEqual([
-        'rejected',
-        'rejected',
-      ])
+      expect(outcomes.map((outcome) => outcome.status)).toEqual(['rejected', 'rejected'])
       for (const outcome of outcomes) {
         expect((outcome as PromiseRejectedResult).reason).toMatchObject({
           rpcError: { code: 'TRANSPORT_DISCONNECTED', retryable: true },
@@ -176,20 +174,16 @@ describe('kernel client socket transport', () => {
           scope: null,
           input: null,
         },
-        controller.signal,
+        controller.signal
       )
       await Bun.sleep(20)
       controller.abort()
       await expect(call).rejects.toMatchObject({ name: 'AbortError' })
 
       await Bun.sleep(20)
-      const cancel = endpoint.received.find(
-        (request) => request.method === 'capability.cancel',
-      )
+      const cancel = endpoint.received.find((request) => request.method === 'capability.cancel')
       expect(cancel).toBeDefined()
-      const target = endpoint.received.find(
-        (request) => request.method === 'capability.call',
-      )
+      const target = endpoint.received.find((request) => request.method === 'capability.call')
       expect(cancel?.params).toEqual({ requestId: target?.requestId })
     } finally {
       await transport.dispose()
@@ -214,8 +208,8 @@ describe('kernel client socket transport', () => {
             scope: null,
             input: null,
           },
-          AbortSignal.abort(),
-        ),
+          AbortSignal.abort()
+        )
       ).rejects.toMatchObject({ name: 'AbortError' })
       expect(endpoint.received).toHaveLength(0)
     } finally {
@@ -228,9 +222,7 @@ describe('kernel client socket transport', () => {
     const endpoint = await startEndpoint((request, connection) => {
       live = connection
       if (request.method === 'events.subscribe') {
-        connection.send(
-          okResponse(request.requestId, { subscriptionId: 'sub-1' }),
-        )
+        connection.send(okResponse(request.requestId, { subscriptionId: 'sub-1' }))
         return
       }
       if (request.method === 'events.unsubscribe') {
@@ -296,7 +288,7 @@ describe('kernel client socket transport', () => {
         connection.send(
           okResponse(request.requestId, {
             subscriptionId: `sub-${subscriptionSequence}`,
-          }),
+          })
         )
         if (subscriptionSequence === 2) onResubscribed()
         return
@@ -337,9 +329,7 @@ describe('kernel client socket transport', () => {
     const endpoint = await startEndpoint((request, connection) => {
       if (request.method === 'handshake') {
         // Missing kernelVersion and modules: schema validation must catch it.
-        connection.send(
-          okResponse(request.requestId, { protocolVersion: KernelProtocolVersion }),
-        )
+        connection.send(okResponse(request.requestId, { protocolVersion: KernelProtocolVersion }))
         return
       }
       if (request.method === 'capability.call') {
@@ -362,7 +352,7 @@ describe('kernel client socket transport', () => {
           operation: 'echo',
           scope: null,
           input: null,
-        }),
+        })
       ).rejects.toThrow()
     } finally {
       await transport.dispose()

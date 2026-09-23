@@ -26,7 +26,7 @@ declare module 'velaros:shell' {
    */
   interface ShellRunResult {
     /** 宿主实际采用的约束；partial 不是无副作用保证。 */
-    confinement?:ShellProcessConfinementEvidence
+    confinement?: ShellProcessConfinementEvidence
     command: string
     cwd: string
     success: boolean
@@ -134,20 +134,13 @@ declare module 'velaros:shell' {
   type ShellBackgroundTaskStatus = 'running' | 'exited' | 'unknown'
 
   /** 命令在操作系统进程层实际采用的文件副作用边界。 */
-  type ShellProcessConfinementMode =
-    | 'read-only'
-    | 'workspace-write'
-    | 'danger-full-access'
+  type ShellProcessConfinementMode = 'read-only' | 'workspace-write' | 'danger-full-access'
 
   /** 约束强度；`partial` 不等于 `full`，别把它当成绝对边界。 */
   type ShellProcessConfinementEnforcement = 'none' | 'partial' | 'full'
 
   /** 实际承担约束的后端：macOS 是 Seatbelt，Linux 是 bubblewrap，`host` 表示宿主注入的实现。 */
-  type ShellProcessConfinementBackend =
-    | 'none'
-    | 'bubblewrap'
-    | 'seatbelt'
-    | 'host'
+  type ShellProcessConfinementBackend = 'none' | 'bubblewrap' | 'seatbelt' | 'host'
 
   /** 一个交互式任务的控制台。 */
   interface ShellConsoleSessionInfo {

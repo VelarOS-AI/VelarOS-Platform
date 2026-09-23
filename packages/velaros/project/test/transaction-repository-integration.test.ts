@@ -18,24 +18,28 @@ describe('ProjectKernel transaction repository integration', () => {
     try {
       const project = await createProjectKernel({ root, transactionStatePath: statePath })
       const first = await project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'replace_text',
-            path: 'note.txt',
-            oldText: 'one',
-            newText: 'ONE',
+        operations: [
+          {
+            operation: {
+              type: 'replace_text',
+              path: 'note.txt',
+              oldText: 'one',
+              newText: 'ONE',
+            },
           },
-        }],
+        ],
       })
       const second = await project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'replace_text',
-            path: 'note.txt',
-            oldText: 'two',
-            newText: 'TWO',
+        operations: [
+          {
+            operation: {
+              type: 'replace_text',
+              path: 'note.txt',
+              oldText: 'two',
+              newText: 'TWO',
+            },
           },
-        }],
+        ],
       })
       const before = await project.diff()
 

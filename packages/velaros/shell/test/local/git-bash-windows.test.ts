@@ -15,7 +15,11 @@ import { buildNativeCommandSpec } from '../../utils/shells.js'
 
 function hasGitBash(): boolean {
   if (process.platform !== 'win32') return false
-  try { return shellResolver.resolve().kind === 'git-bash' } catch { return false }
+  try {
+    return shellResolver.resolve().kind === 'git-bash'
+  } catch {
+    return false
+  }
 }
 
 test.skipIf(!hasGitBash())(
@@ -70,48 +74,77 @@ test.skipIf(process.platform !== 'win32')(
   async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'VelarOS argv 中文 '))
     try {
-      const args = ['/container/path', '--value=/a:/b', '中文🙂 %PATH% !literal! "double" & value', 'C:\\trailing\\']
+      const args = [
+        '/container/path',
+        '--value=/a:/b',
+        '中文🙂 %PATH% !literal! "double" & value',
+        'C:\\trailing\\',
+      ]
       const script = join(cwd, 'argv.cjs')
-      writeFileSync(script, 'process.stdout.write(JSON.stringify(process.argv.slice(2)));process.stderr.write("错误🙂");process.exitCode=17;', 'utf8')
+      writeFileSync(
+        script,
+        'process.stdout.write(JSON.stringify(process.argv.slice(2)));process.stderr.write("错误🙂");process.exitCode=17;',
+        'utf8'
+      )
       const shimDir = join(cwd, 'node_modules', '.bin')
       mkdirSync(shimDir, { recursive: true })
       const shim = join(shimDir, '中文 tool.cmd')
       writeFileSync(shim, '@echo off\r\nnode "%~dp0..\\..\\argv.cjs" %*\r\n', 'utf8')
       const windowsRoot = process.env.SystemRoot || 'C:\\Windows'
       const selected = await shellResolver.resolveReady()
-      const candidates = [...new Set([
-        selected.shellPath,
-        join(windowsRoot, 'System32', 'cmd.exe'),
-        join(windowsRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
-        join(process.env.ProgramFiles || 'C:\\Program Files', 'PowerShell', '7', 'pwsh.exe'),
-      ])].filter(existsSync)
-      const shells = await Promise.all(candidates.map((shellPath) => shellResolver.resolveReady({ shellPath })))
+      const candidates = [
+        ...new Set([
+          selected.shellPath,
+          join(windowsRoot, 'System32', 'cmd.exe'),
+          join(windowsRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+          join(process.env.ProgramFiles || 'C:\\Program Files', 'PowerShell', '7', 'pwsh.exe'),
+        ]),
+      ].filter(existsSync)
+      const shells = await Promise.all(
+        candidates.map((shellPath) => shellResolver.resolveReady({ shellPath }))
+      )
       for (const shell of shells) {
         const platform = createPlatform()
-        const shellSpec = platform.getShellCommandSpec(`node.exe ${platform.quoteShellArg(script, shell)}`, shell)
+        const shellSpec = platform.getShellCommandSpec(
+          `node.exe ${platform.quoteShellArg(script, shell)}`,
+          shell
+        )
         const ownedShell = buildOwnedProcessSpec(shellSpec, { env: shell.env })
         expect(ownedShell.ownership.backend).toBe('windows-job')
         const shellResult = spawnSync(ownedShell.spec.file, ownedShell.spec.args, {
-          env: shell.env, cwd, encoding: 'utf8', windowsHide: true, timeout: 8_000,
+          env: shell.env,
+          cwd,
+          encoding: 'utf8',
+          windowsHide: true,
+          timeout: 8_000,
           windowsVerbatimArguments: ownedShell.spec.windowsVerbatimArguments,
         })
         expect(shellResult.status).toBe(17)
         expect(shellResult.stderr).toBe('错误🙂')
         expect(JSON.parse(shellResult.stdout)).toEqual([])
-        for (const input of [{ file: 'node.exe', args: [script, ...args] }, { file: shim, args }]) {
+        for (const input of [
+          { file: 'node.exe', args: [script, ...args] },
+          { file: shim, args },
+        ]) {
           const plan = buildNativeCommandSpec(input, shell)
           const owned = buildOwnedProcessSpec(plan, { env: plan.env })
           expect(owned.ownership.backend).toBe('windows-job')
           const result = spawnSync(owned.spec.file, owned.spec.args, {
-            env: plan.env, cwd, encoding: 'utf8', windowsHide: true,
-            windowsVerbatimArguments: owned.spec.windowsVerbatimArguments, timeout: 8_000,
+            env: plan.env,
+            cwd,
+            encoding: 'utf8',
+            windowsHide: true,
+            windowsVerbatimArguments: owned.spec.windowsVerbatimArguments,
+            timeout: 8_000,
           })
           expect(result.status).toBe(17)
           expect(result.stderr).toBe('错误🙂')
           expect(JSON.parse(result.stdout)).toEqual(args)
         }
       }
-    } finally { rmSync(cwd, { recursive: true, force: true }) }
+    } finally {
+      rmSync(cwd, { recursive: true, force: true })
+    }
   },
   25_000
 )

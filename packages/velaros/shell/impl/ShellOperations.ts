@@ -68,10 +68,13 @@ export interface ShellOperationsApi {
 export class ShellOperations implements ShellOperationsApi {
   constructor(
     private readonly policy: ShellCommandPolicyApi,
-    private readonly approvals: ShellCommandApprovalApi,
+    private readonly approvals: ShellCommandApprovalApi
   ) {}
 
-  public async run({ command, cwd, shell, timeoutMs, background, interactive }: ShellRunInput, ctx: ShellOperationContext): Promise<ShellRunResult> {
+  public async run(
+    { command, cwd, shell, timeoutMs, background, interactive }: ShellRunInput,
+    ctx: ShellOperationContext
+  ): Promise<ShellRunResult> {
     ctx.abortSignal.throwIfAborted()
     // 工作目录先由空间解析：越界的排在确认之前拒绝，用户不会被问一条注定跑不了的命令。
     const commandCwd = await ctx.shell.resolveCwd(cwd)
@@ -79,20 +82,51 @@ export class ShellOperations implements ShellOperationsApi {
     // 交互式命令一定跑在后台：它要一直开着等用户在控制台里输入。
     const inBackground = !!interactive || (background ?? plan.shouldStartInBackground)
 
-    if(ctx.observation){
-      if(background||interactive||plan.shouldStartInBackground||plan.isDangerous)throw Object.assign(new Error('观察会自动重跑，危险操作与持久后台任务请通过一次性执行入口运行。'),{code:'OBSERVATION_EFFECT_DENIED'})
-      if(!ctx.shell.runObservationCommand)throw Object.assign(new Error('宿主没有提供受限观察命令执行器；不能退回普通命令。'),{code:'OBSERVATION_SHELL_UNAVAILABLE'})
-      const result=await ctx.shell.runObservationCommand(command,{cwd:commandCwd,shell,timeoutMs:clampPositive(timeoutMs,ShellLimits.timeoutMs),background:false,interactive:false,maxOutputChars:ShellLimits.outputChars,sessionId:ctx.sessionId},ctx.abortSignal)
-      if(result.cleanupIncomplete)throw Object.assign(new Error('观察命令进程尚未完全收束，必须核对后再继续'),{code:'OBSERVATION_UNSETTLED'})
-      const shaped=runResult(result)
-      if(!result.confinement||result.confinement.enforcement!=='full')shaped.note='当前命令约束不完整，不能保证所有外部影响都被阻止；请检查 confinement 的实际范围。'
+    if (ctx.observation) {
+      if (background || interactive || plan.shouldStartInBackground || plan.isDangerous)
+        throw Object.assign(
+          new Error('观察会自动重跑，危险操作与持久后台任务请通过一次性执行入口运行。'),
+          { code: 'OBSERVATION_EFFECT_DENIED' }
+        )
+      if (!ctx.shell.runObservationCommand)
+        throw Object.assign(new Error('宿主没有提供受限观察命令执行器；不能退回普通命令。'), {
+          code: 'OBSERVATION_SHELL_UNAVAILABLE',
+        })
+      const result = await ctx.shell.runObservationCommand(
+        command,
+        {
+          cwd: commandCwd,
+          shell,
+          timeoutMs: clampPositive(timeoutMs, ShellLimits.timeoutMs),
+          background: false,
+          interactive: false,
+          maxOutputChars: ShellLimits.outputChars,
+          sessionId: ctx.sessionId,
+        },
+        ctx.abortSignal
+      )
+      if (result.cleanupIncomplete)
+        throw Object.assign(new Error('观察命令进程尚未完全收束，必须核对后再继续'), {
+          code: 'OBSERVATION_UNSETTLED',
+        })
+      const shaped = runResult(result)
+      if (!result.confinement || result.confinement.enforcement !== 'full')
+        shaped.note =
+          '当前命令约束不完整，不能保证所有外部影响都被阻止；请检查 confinement 的实际范围。'
       return shaped
     }
 
     // 危险命令必须每次由用户亲自裁决：审批端口会用操作身份覆盖 riskScope，只有手动确认选项能让宿主在任何档位都弹卡。
     if (plan.isDangerous) {
       const { scopeLabel, riskScope } = ctx.shell.commandPolicy(cwd)
-      const request = this.approvals.dangerous({ command, plan, cwd: commandCwd, background: inBackground, scopeLabel, riskScope })
+      const request = this.approvals.dangerous({
+        command,
+        plan,
+        cwd: commandCwd,
+        background: inBackground,
+        scopeLabel,
+        riskScope,
+      })
       await ctx.approval.awaitConfirmation(request.message, ctx.abortSignal, request.options)
     }
 
@@ -123,7 +157,8 @@ export class ShellOperations implements ShellOperationsApi {
     }
     // 要了控制台却没拿到，说明这个宿主跑不了交互式命令：直说，别让模型干等用户输入。
     if (interactive && !result.backgroundProcess?.console) {
-      shaped.note = '当前宿主没有把它跑成控制台任务，用户无法输入：改成不需要输入的写法（答案用管道喂进去、加 --yes 这类参数），并用 stop 停掉可能已经起来的任务。'
+      shaped.note =
+        '当前宿主没有把它跑成控制台任务，用户无法输入：改成不需要输入的写法（答案用管道喂进去、加 --yes 这类参数），并用 stop 停掉可能已经起来的任务。'
     }
     return shaped
   }
@@ -133,20 +168,41 @@ export class ShellOperations implements ShellOperationsApi {
     return environmentOf(await ctx.shell.refreshShellEnvironment())
   }
 
-  public async listTasks({ onlyRunning, taskId }: ShellListTasksInput, ctx: ShellOperationContext): Promise<ShellListTasksResult> {
+  public async listTasks(
+    { onlyRunning, taskId }: ShellListTasksInput,
+    ctx: ShellOperationContext
+  ): Promise<ShellListTasksResult> {
     ctx.abortSignal.throwIfAborted()
-    const tasks = await ctx.shell.listBackgroundTasks({ onlyRunning, taskId, sessionId: ctx.sessionId })
+    const tasks = await ctx.shell.listBackgroundTasks({
+      onlyRunning,
+      taskId,
+      sessionId: ctx.sessionId,
+    })
     return { tasks: tasks.map(taskOf) }
   }
 
-  public async stop({ taskId, force }: ShellStopInput, ctx: ShellOperationContext): Promise<ShellStopResult> {
+  public async stop(
+    { taskId, force }: ShellStopInput,
+    ctx: ShellOperationContext
+  ): Promise<ShellStopResult> {
     ctx.abortSignal.throwIfAborted()
-    const outcome = await ctx.shell.terminateBackgroundTask({ taskId, sessionId: ctx.sessionId, force: isTrue(force) })
-    const result: ShellStopResult = { taskId, stopped: outcome.terminated, status: outcome.statusAfter }
+    const outcome = await ctx.shell.terminateBackgroundTask({
+      taskId,
+      sessionId: ctx.sessionId,
+      force: isTrue(force),
+    })
+    const result: ShellStopResult = {
+      taskId,
+      stopped: outcome.terminated,
+      status: outcome.statusAfter,
+    }
     if (!outcome.terminated) result.note = outcome.message
     return result
   }
 }
 
 /** 整个进程只有一份的 shell 操作；宿主把它挂在代码面的 `shell` 命名空间上，每次调用时把自己空间的端口塞进 ctx。 */
-export const shellOperations: ShellOperationsApi = new ShellOperations(shellCommandPolicy, shellCommandApproval)
+export const shellOperations: ShellOperationsApi = new ShellOperations(
+  shellCommandPolicy,
+  shellCommandApproval
+)

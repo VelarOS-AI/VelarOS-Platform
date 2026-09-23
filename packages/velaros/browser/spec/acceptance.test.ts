@@ -65,10 +65,16 @@ function siteContext(): BrowserSiteContext {
 
 describe('浏览器单元的对外承诺', () => {
   test('INV-5 地址栏判据只有一份', () => {
-    expect(browserAddress.resolveNavigationInput('example.com/docs')).toBe('https://example.com/docs')
+    expect(browserAddress.resolveNavigationInput('example.com/docs')).toBe(
+      'https://example.com/docs'
+    )
     expect(browserAddress.resolveNavigationInput('怎么写 zod schema')).toBeUndefined()
-    expect(browserAddress.resolveSearchOrNavigationInput('怎么写 zod schema')).toContain('https://www.google.com/search')
-    expect(browserAddress.resolveSearchOrNavigationInput('怎么写 zod schema', 'bing')).toContain('https://www.bing.com/search')
+    expect(browserAddress.resolveSearchOrNavigationInput('怎么写 zod schema')).toContain(
+      'https://www.google.com/search'
+    )
+    expect(browserAddress.resolveSearchOrNavigationInput('怎么写 zod schema', 'bing')).toContain(
+      'https://www.bing.com/search'
+    )
     expect(browserAddress.siteHost('www.example.co.uk')).toBe('example.co.uk')
     expect(browserAddress.isLocalUrl(new URL('http://localhost:3000/'))).toBe(true)
   })
@@ -83,10 +89,15 @@ describe('浏览器单元的对外承诺', () => {
 
   test('INV-7 动作策略按词表判定，没有策略表就是放行', () => {
     expect(browserActionPolicy.check(undefined, { action: 'mouse.click' }).kind).toBe('allow')
-    const denied = browserActionPolicy.check({ deny: ['network.configure'] }, { action: 'network.configure' })
+    const denied = browserActionPolicy.check(
+      { deny: ['network.configure'] },
+      { action: 'network.configure' }
+    )
     expect(denied.kind).toBe('deny')
     expect(denied.matchedAction).toBe('network.configure')
-    expect(browserActionPolicy.check({ deny: ['network.configure'] }, { action: 'mouse.click' }).kind).toBe('allow')
+    expect(
+      browserActionPolicy.check({ deny: ['network.configure'] }, { action: 'mouse.click' }).kind
+    ).toBe('allow')
   })
 
   test('INV-8 站点工作区是硬边界', async () => {
@@ -101,13 +112,19 @@ describe('浏览器单元的对外承诺', () => {
   test('INV-10 用户脚本的命中规则只有一份，程序建的一律先停用', async () => {
     const access = createBrowserWorkspaceFileAccess(root)
     const store = createBrowserUserScriptStore({
-      readFile: (path, startLine, endLine, maxChars) => access.readFile(path, startLine, endLine, maxChars),
+      readFile: (path, startLine, endLine, maxChars) =>
+        access.readFile(path, startLine, endLine, maxChars),
       writeFile: (path, content, options) => access.writeFile(path, content, options),
       listFiles: (options) => access.listFiles(options),
     } as unknown as BrowserUserScriptAccess)
     const created = await store.createScript(
       siteContext(),
-      { name: '只在文档页跑', code: 'console.info(1)', match: ['https://example.com/docs/*'], excludeMatch: ['https://example.com/docs/private/*'] },
+      {
+        name: '只在文档页跑',
+        code: 'console.info(1)',
+        match: ['https://example.com/docs/*'],
+        excludeMatch: ['https://example.com/docs/private/*'],
+      },
       { source: 'agent', enabled: false }
     )
     expect(created.script.enabled).toBe(false)
@@ -117,21 +134,38 @@ describe('浏览器单元的对外承诺', () => {
 
     // 模型面上建的脚本同样先停用：createUserScript 交给端口的 enabled 恒为 false。
     const harness = createHarness()
-    await browserSpace(harness).call('devtools', 'createUserScript', { name: '试试', code: 'console.info(1)', match: ['https://example.com/*'] })
-    const request = harness.calls.find((call) => call.method === 'manageUserScripts')!.args[0] as { script: { enabled: boolean } }
+    await browserSpace(harness).call('devtools', 'createUserScript', {
+      name: '试试',
+      code: 'console.info(1)',
+      match: ['https://example.com/*'],
+    })
+    const request = harness.calls.find((call) => call.method === 'manageUserScripts')!.args[0] as {
+      script: { enabled: boolean }
+    }
     expect(request.script.enabled).toBe(false)
   })
 
   test('INV-11 登录墙每个站点每会话最多问一次', async () => {
     let asked = 0
-    const detection = { requiresLogin: true, confidence: 0.9, reason: '页面停在登录页。', signals: ['login-form'] } as BrowserLoginDetection
+    const detection = {
+      requiresLogin: true,
+      confidence: 0.9,
+      reason: '页面停在登录页。',
+      signals: ['login-form'],
+    } as BrowserLoginDetection
     const gate = createBrowserLoginGate({
       requestLoginCompletion: async () => {
         asked += 1
         return { approved: false, message: '用户拒绝登录。' }
       },
     })
-    const port = { inspectPage: async () => ({ url: 'https://example.com/login', text: '登录', login: detection }) } as unknown as BrowserSpacePort
+    const port = {
+      inspectPage: async () => ({
+        url: 'https://example.com/login',
+        text: '登录',
+        login: detection,
+      }),
+    } as unknown as BrowserSpacePort
 
     expect(gate.shouldPrompt('https://example.com', detection)).toBe(true)
     await gate.wrap(port).inspectPage({})
@@ -150,21 +184,61 @@ describe('浏览器单元的对外承诺', () => {
     expect(VelarBrowserModule.declarations).toBe(BrowserDeclarations)
     expect(VelarDevtoolsModule.declarations).toBe(DevtoolsDeclarations)
     expect(VelarCdpModule.declarations).toBe(CdpDeclarations)
-    expect(VelarBrowserModule.methods).toEqual(expect.arrayContaining(['open', 'evaluate', 'frames', 'click', 'fill', 'keyDown', 'mouseDown', 'wheel', 'waitForFunction']))
+    expect(VelarBrowserModule.methods).toEqual(
+      expect.arrayContaining([
+        'open',
+        'evaluate',
+        'frames',
+        'click',
+        'fill',
+        'keyDown',
+        'mouseDown',
+        'wheel',
+        'waitForFunction',
+      ])
+    )
     expect(VelarCdpModule.methods).toEqual(['send', 'events', 'waitForEvent', 'reset'])
     // ADR 0012 删掉的操作不在模型面上：页面脚本做得到的、重复的入口。
-    for (const removed of ['query', 'media', 'table', 'list', 'paginate', 'content', 'select', 'check', 'scroll', 'clickAt', 'waitForSelector', 'waitForText', 'waitForUrl', 'tabs', 'events', 'type']) {
+    for (const removed of [
+      'query',
+      'media',
+      'table',
+      'list',
+      'paginate',
+      'content',
+      'select',
+      'check',
+      'scroll',
+      'clickAt',
+      'waitForSelector',
+      'waitForText',
+      'waitForUrl',
+      'tabs',
+      'events',
+      'type',
+    ]) {
       expect(VelarBrowserModule.methods).not.toContain(removed)
     }
-    for (const removed of ['storage', 'setViewport', 'emulate', 'runUserScript']) expect(VelarDevtoolsModule.methods).not.toContain(removed)
+    for (const removed of ['storage', 'setViewport', 'emulate', 'runUserScript'])
+      expect(VelarDevtoolsModule.methods).not.toContain(removed)
     for (const declarations of [BrowserDeclarations, DevtoolsDeclarations, CdpDeclarations]) {
-      for (const hidden of ['BrowserOperationContext', 'BrowserSpacePort', 'browser:', 'recipe', 'Recipe', 'enterSite', 'sendProtocolCommand']) {
+      for (const hidden of [
+        'BrowserOperationContext',
+        'BrowserSpacePort',
+        'browser:',
+        'recipe',
+        'Recipe',
+        'enterSite',
+        'sendProtocolCommand',
+      ]) {
         expect(declarations).not.toContain(hidden)
       }
     }
 
     const harness = createHarness({ open: false })
-    const result = await runModelProgram(browserSpace(harness), `import { open, inspect, click, evaluate } from 'velaros:browser'
+    const result = await runModelProgram(
+      browserSpace(harness),
+      `import { open, inspect, click, evaluate } from 'velaros:browser'
 import { diagnostics } from 'velaros:devtools'
 import { send } from 'velaros:cdp'
 const site = await open({ url: 'https://example.com' })
@@ -180,10 +254,26 @@ export const matched = clicked?.matched
 export const firstRow = rows[0]
 export const errorCount = errors.entries.length
 export const cookieCount = cookies.length
-`)
+`
+    )
     expect(result.failed).toBeUndefined()
-    expect(result.value).toMatchObject({ title: 'Example Domain', matched: true, firstRow: ['华北', '1200'], errorCount: 1, cookieCount: 1 })
-    expect(harness.methods()).toEqual(expect.arrayContaining(['enterSite', 'inspectPage', 'performTargetAction', 'evaluateScript', 'getPageDiagnostics', 'sendProtocolCommand']))
+    expect(result.value).toMatchObject({
+      title: 'Example Domain',
+      matched: true,
+      firstRow: ['华北', '1200'],
+      errorCount: 1,
+      cookieCount: 1,
+    })
+    expect(harness.methods()).toEqual(
+      expect.arrayContaining([
+        'enterSite',
+        'inspectPage',
+        'performTargetAction',
+        'evaluateScript',
+        'getPageDiagnostics',
+        'sendProtocolCommand',
+      ])
+    )
   }, 120_000)
 
   test('INV-18 声明里写给模型的数字就是常量表里的', () => {
@@ -298,22 +388,48 @@ export const cookieCount = cookies.length
     const extra = await failureOf(space.call('browser', 'inspect', { cwd: '/tmp' }))
     expect(extra.code).toBe('VALIDATION')
     expect(extra.message).toContain('inspect')
-    const tooLong = await failureOf(space.call('browser', 'goto', { url: `https://example.com/${'x'.repeat(BrowserActionLimits.urlChars)}` }))
+    const tooLong = await failureOf(
+      space.call('browser', 'goto', {
+        url: `https://example.com/${'x'.repeat(BrowserActionLimits.urlChars)}`,
+      })
+    )
     expect(tooLong.code).toBe('VALIDATION')
     expect(tooLong.message).toContain('url')
-    expect((await failureOf(space.call('browser', 'click', { target: {} }))).code).toBe('VALIDATION')
-    expect((await failureOf(space.call('browser', 'click', { target: '#go', x: 1, y: 1 }))).code).toBe('VALIDATION')
+    expect((await failureOf(space.call('browser', 'click', { target: {} }))).code).toBe(
+      'VALIDATION'
+    )
+    expect(
+      (await failureOf(space.call('browser', 'click', { target: '#go', x: 1, y: 1 }))).code
+    ).toBe('VALIDATION')
     expect((await failureOf(space.call('browser', 'click', { x: 1 }))).code).toBe('VALIDATION')
-    expect((await failureOf(space.call('browser', 'evaluate', { script: 'document.title', mode: 'expression' }))).code).toBe('VALIDATION')
-    expect((await failureOf(space.call('browser', 'keyDown', { key: 'Hyper' }))).code).toBe('VALIDATION')
-    expect((await failureOf(space.call('browser', 'keyDown', { key: 'Control+a' }))).code).toBe('VALIDATION')
+    expect(
+      (
+        await failureOf(
+          space.call('browser', 'evaluate', { script: 'document.title', mode: 'expression' })
+        )
+      ).code
+    ).toBe('VALIDATION')
+    expect((await failureOf(space.call('browser', 'keyDown', { key: 'Hyper' }))).code).toBe(
+      'VALIDATION'
+    )
+    expect((await failureOf(space.call('browser', 'keyDown', { key: 'Control+a' }))).code).toBe(
+      'VALIDATION'
+    )
     expect((await failureOf(space.call('browser', 'wheel', {}))).code).toBe('VALIDATION')
     expect((await failureOf(space.call('browser', 'handleDownload', {}))).code).toBe('VALIDATION')
-    expect((await failureOf(space.call('devtools', 'zoom', { action: 'set' }))).code).toBe('VALIDATION')
+    expect((await failureOf(space.call('devtools', 'zoom', { action: 'set' }))).code).toBe(
+      'VALIDATION'
+    )
     expect((await failureOf(space.call('devtools', 'network', {}))).code).toBe('VALIDATION')
-    expect((await failureOf(space.call('devtools', 'updateUserScript', { id: 'script-1' }))).code).toBe('VALIDATION')
-    expect((await failureOf(space.call('cdp', 'send', { method: 'getDocument' }))).code).toBe('VALIDATION')
-    expect((await failureOf(space.call('cdp', 'events', { method: 'network' }))).code).toBe('VALIDATION')
+    expect(
+      (await failureOf(space.call('devtools', 'updateUserScript', { id: 'script-1' }))).code
+    ).toBe('VALIDATION')
+    expect((await failureOf(space.call('cdp', 'send', { method: 'getDocument' }))).code).toBe(
+      'VALIDATION'
+    )
+    expect((await failureOf(space.call('cdp', 'events', { method: 'network' }))).code).toBe(
+      'VALIDATION'
+    )
     expect(harness.calls).toEqual([])
   })
 
@@ -323,7 +439,10 @@ export const cookieCount = cookies.length
     expect(harness.attached).toHaveLength(1)
     expect(harness.attached[0]!.mediaType).toBe('image/jpeg')
     expect(JSON.stringify(shot)).not.toContain('aW1hZ2U=')
-    expect(shot).toMatchObject({ relativePath: 'screenshots/shot.png', image: { width: 640, height: 400, scale: 0.5 } })
+    expect(shot).toMatchObject({
+      relativePath: 'screenshots/shot.png',
+      image: { width: 640, height: 400, scale: 0.5 },
+    })
     expect(shot.legend[0].target.css).toBe('button.login')
 
     // 没有交图通道时照样截图落盘，只是不要压缩图。
@@ -341,74 +460,152 @@ export const cookieCount = cookies.length
     await space.call('browser', 'evaluate', { script: 'document.title' })
     await space.call('devtools', 'diagnostics', {})
     await space.call('devtools', 'request', { requestId: 'req-1', includeResponseBody: true })
-    const argsOf = (method: string) => harness.calls.find((call) => call.method === method)!.args[0] as Record<string, unknown>
-    expect(argsOf('inspectPage')).toMatchObject({ maxTextChars: BrowserInspectLimits.textChars, maxHtmlChars: BrowserInspectLimits.htmlChars, maxElements: BrowserInspectLimits.elements })
-    expect(argsOf('evaluateScript')).toMatchObject({ maxResultChars: BrowserEvaluateLimits.resultChars, timeoutMs: BrowserEvaluateLimits.defaultTimeoutMs })
+    const argsOf = (method: string) =>
+      harness.calls.find((call) => call.method === method)!.args[0] as Record<string, unknown>
+    expect(argsOf('inspectPage')).toMatchObject({
+      maxTextChars: BrowserInspectLimits.textChars,
+      maxHtmlChars: BrowserInspectLimits.htmlChars,
+      maxElements: BrowserInspectLimits.elements,
+    })
+    expect(argsOf('evaluateScript')).toMatchObject({
+      maxResultChars: BrowserEvaluateLimits.resultChars,
+      timeoutMs: BrowserEvaluateLimits.defaultTimeoutMs,
+    })
     expect(argsOf('getPageDiagnostics')).toMatchObject({ limit: BrowserDiagnosticsLimits.entries })
-    expect(argsOf('readNetworkRequestDetails')).toMatchObject({ maxBodyChars: BrowserDiagnosticsLimits.responseBodyChars })
+    expect(argsOf('readNetworkRequestDetails')).toMatchObject({
+      maxBodyChars: BrowserDiagnosticsLimits.responseBodyChars,
+    })
   })
 
   test('INV-24 页面脚本的结果整份交回，参数经 args 进页面，抛错与超限各有专属码', async () => {
     const harness = createHarness()
     const space = browserSpace(harness)
-    expect(await space.call('browser', 'evaluate', { script: "(value) => { const select = document.querySelector('select[name=country]'); return value }", args: ['CN'] })).toBe('CN')
-    const sent = harness.calls.find((call) => call.method === 'evaluateScript')!.args[0] as { script: string; args: unknown[] }
+    expect(
+      await space.call('browser', 'evaluate', {
+        script:
+          "(value) => { const select = document.querySelector('select[name=country]'); return value }",
+        args: ['CN'],
+      })
+    ).toBe('CN')
+    const sent = harness.calls.find((call) => call.method === 'evaluateScript')!.args[0] as {
+      script: string
+      args: unknown[]
+    }
     expect(sent.args).toEqual(['CN'])
     expect(sent.script).not.toContain("'CN'")
 
-    const thrown = await failureOf(space.call('browser', 'evaluate', { script: '() => document.querySelector("#missing").innerText /* __throws__ */' }))
+    const thrown = await failureOf(
+      space.call('browser', 'evaluate', {
+        script: '() => document.querySelector("#missing").innerText /* __throws__ */',
+      })
+    )
     expect(thrown.code).toBe(BrowserErrorCodes.scriptFailed)
     expect(thrown.message).toContain('TypeError')
     expect(thrown.message).toContain('第 2 行第 7 列')
     const huge = await failureOf(space.call('browser', 'evaluate', { script: '"__huge__"' }))
     expect(huge.code).toBe(BrowserErrorCodes.resultTooLarge)
     // 等待也是页面脚本：抛错同一个码，不空等到超时。
-    const waited = await failureOf(space.call('browser', 'waitForFunction', { script: '__throws__', timeoutMs: 5000 }))
+    const waited = await failureOf(
+      space.call('browser', 'waitForFunction', { script: '__throws__', timeoutMs: 5000 })
+    )
     expect(waited.code).toBe(BrowserErrorCodes.scriptFailed)
   })
 
   test('INV-25 fill 是真实输入：全选、插入、再读状态，不在页面里直接改 value', async () => {
     const harness = createHarness()
     const space = browserSpace(harness)
-    const filled = await space.call('browser', 'fill', { target: 'input[name=email]', value: 'user@example.com' })
+    const filled = await space.call('browser', 'fill', {
+      target: 'input[name=email]',
+      value: 'user@example.com',
+    })
     expect(filled.action).toBe('fill')
     expect(filled.effect).toBeUndefined()
     expect(harness.methods()).toEqual(['performTargetAction', 'insertText', 'performTargetAction'])
-    const actions = harness.calls.filter((call) => call.method === 'performTargetAction').map((call) => (call.args[0] as { action: string }).action)
+    const actions = harness.calls
+      .filter((call) => call.method === 'performTargetAction')
+      .map((call) => (call.args[0] as { action: string }).action)
     expect(actions).toEqual(['select_all', 'focus'])
     expect(harness.calls[1]!.args[0]).toEqual({ text: 'user@example.com' })
 
     // 清空就是全选之后按退格。
     const clearing = createHarness()
     await browserSpace(clearing).call('browser', 'fill', { target: 'input[name=email]', value: '' })
-    expect(clearing.calls.find((call) => call.method === 'pressKey')!.args[0]).toEqual({ key: 'Backspace' })
+    expect(clearing.calls.find((call) => call.method === 'pressKey')!.args[0]).toEqual({
+      key: 'Backspace',
+    })
     expect(clearing.methods()).not.toContain('insertText')
   })
 
   test('INV-26 等待等到了交回值，等不到抛 TIMEOUT', async () => {
     const harness = createHarness()
     const space = browserSpace(harness)
-    expect(await space.call('browser', 'waitForFunction', { script: "document.querySelectorAll('.result').length > 0" })).toBe(true)
-    expect(await space.call('browser', 'waitForLoad', {})).toMatchObject({ url: 'https://example.com/', title: 'Example Domain' })
-    expect(await space.call('browser', 'waitForEvent', { kind: 'download' })).toMatchObject({ id: 'download-1', kind: 'download' })
+    expect(
+      await space.call('browser', 'waitForFunction', {
+        script: "document.querySelectorAll('.result').length > 0",
+      })
+    ).toBe(true)
+    expect(await space.call('browser', 'waitForLoad', {})).toMatchObject({
+      url: 'https://example.com/',
+      title: 'Example Domain',
+    })
+    expect(await space.call('browser', 'waitForEvent', { kind: 'download' })).toMatchObject({
+      id: 'download-1',
+      kind: 'download',
+    })
 
     const stuck = createHarness()
     stuck.port.waitForPage = async (options) => ({
-      url: 'https://example.com/', loadState: 'loading', requestedLoadState: options.loadState ?? null, urlPattern: null, functionExpression: null,
-      functionResult: null, text: null, matched: false, durationMs: 0, timeoutMs: options.timeoutMs ?? 0, elapsedMs: options.timeoutMs ?? 0, timedOut: true, capturedAt: 1,
+      url: 'https://example.com/',
+      loadState: 'loading',
+      requestedLoadState: options.loadState ?? null,
+      urlPattern: null,
+      functionExpression: null,
+      functionResult: null,
+      text: null,
+      matched: false,
+      durationMs: 0,
+      timeoutMs: options.timeoutMs ?? 0,
+      elapsedMs: options.timeoutMs ?? 0,
+      timedOut: true,
+      capturedAt: 1,
     })
     const stuckSpace = browserSpace(stuck)
-    expect((await failureOf(stuckSpace.call('browser', 'waitForLoad', { state: 'networkidle', timeoutMs: 100 }))).code).toBe('TIMEOUT')
-    expect((await failureOf(stuckSpace.call('browser', 'waitForEvent', { kind: 'dialog', timeoutMs: 100 }))).code).toBe('TIMEOUT')
+    expect(
+      (
+        await failureOf(
+          stuckSpace.call('browser', 'waitForLoad', { state: 'networkidle', timeoutMs: 100 })
+        )
+      ).code
+    ).toBe('TIMEOUT')
+    expect(
+      (
+        await failureOf(
+          stuckSpace.call('browser', 'waitForEvent', { kind: 'dialog', timeoutMs: 100 })
+        )
+      ).code
+    ).toBe('TIMEOUT')
     // 替身里「有没有下一页」恒为假：判定式一直不成立。
-    expect((await failureOf(stuckSpace.call('browser', 'waitForFunction', { script: "!!document.querySelector('a[rel=next]')", timeoutMs: 150 }))).code).toBe('TIMEOUT')
+    expect(
+      (
+        await failureOf(
+          stuckSpace.call('browser', 'waitForFunction', {
+            script: "!!document.querySelector('a[rel=next]')",
+            timeoutMs: 150,
+          })
+        )
+      ).code
+    ).toBe('TIMEOUT')
   })
 
   test('INV-27 state 带标签页与挂起事件；离站先断开模型的 CDP 会话', async () => {
     const harness = createHarness()
     const space = browserSpace(harness)
     const state = await space.call('browser', 'state')
-    expect(state).toMatchObject({ active: true, tabs: [{ id: 'page-1', active: true }], pending: [{ id: 'download-1', kind: 'download' }] })
+    expect(state).toMatchObject({
+      active: true,
+      tabs: [{ id: 'page-1', active: true }],
+      pending: [{ id: 'download-1', kind: 'download' }],
+    })
     await space.call('browser', 'leave')
     const methods = harness.methods()
     expect(methods.indexOf('resetProtocolSession')).toBeGreaterThanOrEqual(0)

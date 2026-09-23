@@ -38,7 +38,7 @@ function defaultImplicitSearchExcludeGlobs(root?: string): string[] {
 /** 证据包对准的目标范围：存过的目标用它自己的范围，否则用入参给的范围（起止行都给了才算）。 */
 export function resolveEvidenceTargetRange(
   storedTarget?: ResolvedTarget,
-  inputRange?: Partial<Range>,
+  inputRange?: Partial<Range>
 ): Range | undefined {
   if (storedTarget?.range) return storedTarget.range
   if (!inputRange || !isPresent(inputRange.startLine) || !isPresent(inputRange.endLine))

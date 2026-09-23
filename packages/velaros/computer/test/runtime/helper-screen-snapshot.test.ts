@@ -3,8 +3,8 @@ import { resolve } from 'node:path'
 
 import { expect, test } from 'bun:test'
 
-const PythonCommand = ['python3', 'python'].find((command) =>
-  spawnSync(command, ['--version'], { stdio: 'ignore' }).status === 0
+const PythonCommand = ['python3', 'python'].find(
+  (command) => spawnSync(command, ['--version'], { stdio: 'ignore' }).status === 0
 )
 const pythonTest = PythonCommand ? test : test.skip
 

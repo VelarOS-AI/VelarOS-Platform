@@ -38,7 +38,7 @@ function selectMissingTextMatch(
   replacementText: Optional<string>,
   operationName: string,
   expected: Optional<number>,
-  occurrence: Optional<number>,
+  occurrence: Optional<number>
 ): SelectedTextMatches {
   const tolerant = findLineWhitespaceTolerantMatches(content, needle, 2)
   if (tolerant.length === 1 && (expected ?? 1) === 1 && (occurrence ?? 1) === 1) {
@@ -55,7 +55,7 @@ function selectMissingTextMatch(
   const diagnosis = diagnoseTextMatchMiss(content, needle)
   const tolerantLocations = locateTextMatches(
     content,
-    tolerant.map((match) => match.index),
+    tolerant.map((match) => match.index)
   )
   const tolerantClue = isEmpty(tolerant)
     ? ''
@@ -72,7 +72,7 @@ function selectMissingTextMatch(
       ...diagnosis,
       whitespaceTolerantMatches: optionalWhen(!isEmpty(tolerant), tolerantLocations),
     },
-    textMatchMissNextAction(diagnosis),
+    textMatchMissNextAction(diagnosis)
   )
 }
 
@@ -86,14 +86,14 @@ export function selectTextMatches(
   content: string,
   needle: string,
   replacementText: Optional<string>,
-  operationName: string,
+  operationName: string
 ): SelectedTextMatches {
   if (isPresent(operation.occurrence) && isTrue(operation.replaceAll)) {
     throw new ProjectError(
       'INVALID_INPUT',
       `${operationName} 的 occurrence 与 replaceAll 不能同时使用`,
       { occurrence: operation.occurrence, replaceAll: operation.replaceAll },
-      '请只选择一个匹配位置，或明确修改全部匹配。',
+      '请只选择一个匹配位置，或明确修改全部匹配。'
     )
   }
 
@@ -109,7 +109,7 @@ export function selectTextMatches(
       replacementText,
       operationName,
       expected,
-      operation.occurrence,
+      operation.occurrence
     )
 
   const indices = allMatchIndices(content, found.matchedText)
@@ -124,7 +124,7 @@ export function selectTextMatches(
       'AMBIGUOUS_TARGET',
       `${operationName} 断言 ${expected} 个匹配，实际找到 ${found.count} 个（${lines}）`,
       { expected, actual: found.count, matches },
-      `expectedMatches 只断言文件中的匹配总数，不选择位置。只改其中一处：把 expectedMatches 改为 ${found.count}（或省略）并用 occurrence（1–${found.count}，按上述行号顺序）选择；全部修改：replaceAll=true；也可加长文本使其唯一。`,
+      `expectedMatches 只断言文件中的匹配总数，不选择位置。只改其中一处：把 expectedMatches 改为 ${found.count}（或省略）并用 occurrence（1–${found.count}，按上述行号顺序）选择；全部修改：replaceAll=true；也可加长文本使其唯一。`
     )
   }
   if (isPresent(operation.occurrence)) {
@@ -138,7 +138,7 @@ export function selectTextMatches(
         'TARGET_NOT_FOUND',
         `${operationName} 的 occurrence=${operation.occurrence} 超出 ${indices.length} 个匹配（${lines}）`,
         { occurrence: operation.occurrence, actual: indices.length, matches },
-        `occurrence 按文件中出现顺序从 1 计数，请在 1–${indices.length} 之间选择。`,
+        `occurrence 按文件中出现顺序从 1 计数，请在 1–${indices.length} 之间选择。`
       )
     }
     return {
@@ -161,7 +161,7 @@ export function selectTextMatches(
       'AMBIGUOUS_TARGET',
       `${operationName} 找到 ${found.count} 个匹配（${lines}），但未指定 occurrence 或 replaceAll`,
       { expected: expected ?? 1, actual: found.count, matches },
-      `请用 occurrence（1–${found.count}，按上述行号顺序）选择一个匹配，或传 replaceAll=true 修改全部匹配。`,
+      `请用 occurrence（1–${found.count}，按上述行号顺序）选择一个匹配，或传 replaceAll=true 修改全部匹配。`
     )
   }
   return {
@@ -185,7 +185,7 @@ export function replaceSelectedMatches(
   content: string,
   indices: readonly number[],
   matchedText: string,
-  replacementText: string,
+  replacementText: string
 ): string {
   let next = content
   for (const index of [...indices].reverse()) {

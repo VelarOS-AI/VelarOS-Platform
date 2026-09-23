@@ -2,15 +2,23 @@ export { ScriptLeaseLimits } from '../system/contract/constants.js'
 export type { ModulesModuleApi } from '../system/index.js'
 export type { ModulesHost } from '../system/index.js'
 export { modulesModule } from '../system/index.js'
-export type {GoalControl,GoalState,GoalStatus,GoalUpdate} from '../system/types/goal.js'
-export type {StoreConfiguration,StoreGrant} from '../system/types/store.js'
+export type { GoalControl, GoalState, GoalStatus, GoalUpdate } from '../system/types/goal.js'
+export type { StoreConfiguration, StoreGrant } from '../system/types/store.js'
 export type { WorkspaceEntry } from '../system/types/workspace.js'
 export type { ActEventProjectorApi } from './contract/provides.js'
 export type { EventDeliveryApi } from './contract/provides.js'
-export type { RuntimeModelConfiguration,VelarosContextOptions, VelarosRuntimeOptions } from './contract/requires.js'
+export type {
+  RuntimeModelConfiguration,
+  VelarosContextOptions,
+  VelarosRuntimeOptions,
+} from './contract/requires.js'
 export type { CapabilityModuleOptions } from './contract/requires.js'
 export type { ShellCapabilityModuleOptions } from './contract/requires.js'
-export type { McpAuthorizationProvider, McpConnectionOptions, McpConnectionSpec } from './contract/requires.js'
+export type {
+  McpAuthorizationProvider,
+  McpConnectionOptions,
+  McpConnectionSpec,
+} from './contract/requires.js'
 export type { AgentProfile, VelarosAgentsOptions } from './contract/requires.js'
 export type { McpModuleOptions } from './contract/requires.js'
 export type { CapabilityContext } from './contract/requires.js'
@@ -27,16 +35,51 @@ export type { VelarosSession } from './impl/RuntimeSession.js'
 export { createProjectCapabilityModule } from './impl/StandardModules.js'
 export { createShellCapabilityModule } from './impl/StandardModules.js'
 export { createMcpModule } from './impl/StandardModules.js'
-export type { McpRawCallResult, McpResourceContent, McpResourceDescriptor, McpToolAnnotations, McpToolDescriptor, McpTransportKind } from './types/mcp.js'
+export type {
+  McpRawCallResult,
+  McpResourceContent,
+  McpResourceDescriptor,
+  McpToolAnnotations,
+  McpToolDescriptor,
+  McpTransportKind,
+} from './types/mcp.js'
 export type { ContextMemoryPolicy } from './types/memory.js'
-export type { RuntimeNoteContent,RuntimeNoteRead, RuntimeNoteRetention } from './types/memory.js'
-export type { ContextMaintenanceProfile,ModelToolBinding, ModelToolModelProfile,ModelToolPolicy } from './types/model-tools.js'
+export type { RuntimeNoteContent, RuntimeNoteRead, RuntimeNoteRetention } from './types/memory.js'
+export type {
+  ContextMaintenanceProfile,
+  ModelToolBinding,
+  ModelToolModelProfile,
+  ModelToolPolicy,
+} from './types/model-tools.js'
 export type { ScriptRetention } from './types/results.js'
-export type { ObservationRegistration, ScriptControlOptions, ScriptControlReceipt, ScriptObservationEdit, ScriptReferenceProgram } from './types/runtime.js'
+export type {
+  ObservationRegistration,
+  ScriptControlOptions,
+  ScriptControlReceipt,
+  ScriptObservationEdit,
+  ScriptReferenceProgram,
+} from './types/runtime.js'
 export type { ScriptProtocolOptions } from './types/runtime.js'
-export type { ScriptExecutionReceipt, ScriptSubmission, ScriptSubmissionReceipt } from './types/session.js'
+export type {
+  ScriptExecutionReceipt,
+  ScriptSubmission,
+  ScriptSubmissionReceipt,
+} from './types/session.js'
 export type { ScriptSourceProgram, ScriptSubmissionFields } from './types/session.js'
-export type { ActInvocationSummary, ActRequestSummary, ActTracePage, ActTraceQuery,ActTraceRecord, ActTurnTrace } from './types/trace.js'
+export type {
+  ActInvocationSummary,
+  ActRequestSummary,
+  ActTracePage,
+  ActTraceQuery,
+  ActTraceRecord,
+  ActTurnTrace,
+} from './types/trace.js'
 export type { RuntimeMetric } from './types/trace.js'
 export type { VelarosSearchOptions } from '@velaros-ai/velaros/act/search'
-export type { SearchDraft, SearchEvidence, SearchProfile, SearchRequest, SearchResult } from '@velaros-ai/velaros/act/search'
+export type {
+  SearchDraft,
+  SearchEvidence,
+  SearchProfile,
+  SearchRequest,
+  SearchResult,
+} from '@velaros-ai/velaros/act/search'

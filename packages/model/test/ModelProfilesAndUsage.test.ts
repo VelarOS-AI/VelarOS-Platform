@@ -6,24 +6,31 @@ describe('Model profiles and usage common layer', () => {
   test('resolves credentials without exposing them in public profiles', () => {
     const profile = { id: 'p1', apiKey: 'secret', model: 'm1' }
     expect(modelProfiles.omitCredential(profile)).toEqual({ id: 'p1', model: 'm1' })
-    expect(modelProfiles.credential({
-      configuredCredential: '',
-      environmentName: 'TEST_KEY',
-      environment: { TEST_KEY: 'env-secret' },
-    })).toBe('env-secret')
-    expect(modelProfiles.credentialSource({
-      configuredCredential: '',
-      environmentName: null,
-      environment: {},
-      credentialOptional: false,
-    })).toBe('missing')
+    expect(
+      modelProfiles.credential({
+        configuredCredential: '',
+        environmentName: 'TEST_KEY',
+        environment: { TEST_KEY: 'env-secret' },
+      })
+    ).toBe('env-secret')
+    expect(
+      modelProfiles.credentialSource({
+        configuredCredential: '',
+        environmentName: null,
+        environment: {},
+        credentialOptional: false,
+      })
+    ).toBe('missing')
   })
 
   test('normalizes provider usage and calculates configured price', () => {
-    const usage = modelUsage.normalizeRunUsage({
-      inputTokens: { total: 1_000, cacheRead: 200 },
-      outputTokens: { total: 500, reasoning: 100 },
-    }, { inputPerMillion: 2, outputPerMillion: 4 })
+    const usage = modelUsage.normalizeRunUsage(
+      {
+        inputTokens: { total: 1_000, cacheRead: 200 },
+        outputTokens: { total: 500, reasoning: 100 },
+      },
+      { inputPerMillion: 2, outputPerMillion: 4 }
+    )
     expect(usage).toEqual({
       inputTokens: 1_000,
       outputTokens: 500,
@@ -51,25 +58,46 @@ describe('Model profiles and usage common layer', () => {
   })
 
   test('owns provider-neutral transient retry classification and bounds', () => {
-    expect(modelProviderRetry.plan({ status: 429, headers: { 'retry-after': '3' } }, {
-      retryIndex: 1,
-      initialDelayMs: 100,
-      maxDelayMs: 5_000,
-    })).toMatchObject({ kind: 'rate-limit', delayMs: 3_000 })
-    expect(modelProviderRetry.plan({ status: 401, message: 'Unauthorized' }, {
-      retryIndex: 1,
-    })).toBeNull()
-    expect(modelProviderRetry.plan({ code: 'ECONNRESET' }, {
-      retryIndex: 9,
-      initialDelayMs: 100,
-      maxDelayMs: 500,
-    })).toMatchObject({ kind: 'network', delayMs: 500 })
+    expect(
+      modelProviderRetry.plan(
+        { status: 429, headers: { 'retry-after': '3' } },
+        {
+          retryIndex: 1,
+          initialDelayMs: 100,
+          maxDelayMs: 5_000,
+        }
+      )
+    ).toMatchObject({ kind: 'rate-limit', delayMs: 3_000 })
+    expect(
+      modelProviderRetry.plan(
+        { status: 401, message: 'Unauthorized' },
+        {
+          retryIndex: 1,
+        }
+      )
+    ).toBeNull()
+    expect(
+      modelProviderRetry.plan(
+        { code: 'ECONNRESET' },
+        {
+          retryIndex: 9,
+          initialDelayMs: 100,
+          maxDelayMs: 500,
+        }
+      )
+    ).toMatchObject({ kind: 'network', delayMs: 500 })
   })
 })
 
-
-test('provider retry reads native Error causes and respects permanent authorization failure',()=>{
- const error=new Error('Cannot connect to API',{cause:Object.assign(new Error('read ECONNRESET'),{code:'ECONNRESET'})})
- expect(modelProviderRetry.plan(error,{retryIndex:1})?.kind).toBe('network')
- expect(modelProviderRetry.plan(Object.assign(new Error('request rejected'),{statusCode:401,cause:error}),{retryIndex:1})).toBeNull()
+test('provider retry reads native Error causes and respects permanent authorization failure', () => {
+  const error = new Error('Cannot connect to API', {
+    cause: Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }),
+  })
+  expect(modelProviderRetry.plan(error, { retryIndex: 1 })?.kind).toBe('network')
+  expect(
+    modelProviderRetry.plan(
+      Object.assign(new Error('request rejected'), { statusCode: 401, cause: error }),
+      { retryIndex: 1 }
+    )
+  ).toBeNull()
 })

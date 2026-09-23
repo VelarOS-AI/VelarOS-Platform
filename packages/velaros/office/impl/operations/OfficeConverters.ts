@@ -37,7 +37,9 @@ export interface OfficeConvertersApi {
     commands: string[]
   ): Promise<Nullable<OfficeEnvironmentCommandAvailability>>
   /** 找本机可用的 LibreOffice（soffice / libreoffice / macOS App 内的可执行文件）。 */
-  findLibreOffice(ctx: OfficeOperationContext): Promise<Nullable<OfficeEnvironmentCommandAvailability>>
+  findLibreOffice(
+    ctx: OfficeOperationContext
+  ): Promise<Nullable<OfficeEnvironmentCommandAvailability>>
   /** 按用户选择或 auto 策略找本机可用的 LaTeX 编译器。 */
   findLatexCompiler(
     ctx: OfficeOperationContext,
@@ -129,7 +131,11 @@ export class OfficeConverters implements OfficeConvertersApi {
     const cacheDir = join(runtimeDir, 'cache')
     const configPath = join(runtimeDir, 'fonts.conf')
     await mkdir(cacheDir, { recursive: true })
-    await writeFile(configPath, buildMacLibreOfficeFontConfig({ homeDir: homedir(), cacheDir }), 'utf8')
+    await writeFile(
+      configPath,
+      buildMacLibreOfficeFontConfig({ homeDir: homedir(), cacheDir }),
+      'utf8'
+    )
     const configured: OfficeNativeCommand = {
       ...command,
       env: { ...command.env, FONTCONFIG_FILE: configPath },
@@ -137,7 +143,9 @@ export class OfficeConverters implements OfficeConvertersApi {
     try {
       return await this.runCommand(ctx, configured, cwd, timeoutMs)
     } finally {
-      await rm(runtimeDir, { recursive: true, force: true }).catch(() => undefined /* arch-guard:silent-catch-ok 临时字体缓存尽力清理 */)
+      await rm(runtimeDir, { recursive: true, force: true }).catch(
+        () => undefined /* arch-guard:silent-catch-ok 临时字体缓存尽力清理 */
+      )
     }
   }
 
@@ -167,16 +175,20 @@ export class OfficeConverters implements OfficeConvertersApi {
     timeoutMs?: number
   }): Promise<NormalizedWordInput> {
     const sourceExtension = extname(input.inputPath).toLowerCase()
-    if (sourceExtension === '.docx') return {
-      path: input.inputPath,
-      originalPath: input.inputPath,
-      sourceExtension,
-      convertedFromLegacyDoc: false,
-      tempDir: null,
-    }
+    if (sourceExtension === '.docx')
+      return {
+        path: input.inputPath,
+        originalPath: input.inputPath,
+        sourceExtension,
+        convertedFromLegacyDoc: false,
+        tempDir: null,
+      }
 
     if (sourceExtension !== '.doc') {
-      throw new AppError(OfficeErrorCodes.invalidExtension, `Word 输入文件的扩展名要是 .docx 或 .doc：${input.inputPath}`)
+      throw new AppError(
+        OfficeErrorCodes.invalidExtension,
+        `Word 输入文件的扩展名要是 .docx 或 .doc：${input.inputPath}`
+      )
     }
 
     const tempDir = await mkdtemp(join(tmpdir(), 'velaros-office-docx-normalize-'))
@@ -191,7 +203,9 @@ export class OfficeConverters implements OfficeConvertersApi {
       input.timeoutMs ?? OfficeTuning.command.libreOfficeTimeoutMs
     )
     if (!commandResult.success) {
-      await rm(tempDir, { recursive: true, force: true }).catch(() => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */)
+      await rm(tempDir, { recursive: true, force: true }).catch(
+        () => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */
+      )
       throw conversionFailedError('把旧版 .doc 转成 .docx ', commandResult)
     }
 
@@ -202,7 +216,9 @@ export class OfficeConverters implements OfficeConvertersApi {
     )
     if (!generatedDocx) {
       // 抛出去就没人认领这个临时目录了，先清掉，免得每失败一次就在系统临时目录留一个 velaros-office-docx-normalize-*。
-      await rm(tempDir, { recursive: true, force: true }).catch(() => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */)
+      await rm(tempDir, { recursive: true, force: true }).catch(
+        () => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */
+      )
       throw missingOutputError('把旧版 .doc 转成 .docx ', 'DOCX')
     }
 
@@ -219,7 +235,9 @@ export class OfficeConverters implements OfficeConvertersApi {
 
   public async cleanupNormalizedWordInput(input: NormalizedWordInput): Promise<void> {
     if (!input.tempDir) return
-    await rm(input.tempDir, { recursive: true, force: true }).catch(() => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */)
+    await rm(input.tempDir, { recursive: true, force: true }).catch(
+      () => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */
+    )
   }
 }
 

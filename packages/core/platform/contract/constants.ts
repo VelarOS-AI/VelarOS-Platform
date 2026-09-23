@@ -8,7 +8,8 @@ export const PlatformEnvironmentVariables = Object.freeze({
   shellPath: {
     name: 'VELAROS_SHELL_PATH',
     direction: 'input',
-    description: 'Windows 上指定用哪个 shell 的完整路径；子进程环境里也会写上实际使用的 shell 路径。',
+    description:
+      'Windows 上指定用哪个 shell 的完整路径；子进程环境里也会写上实际使用的 shell 路径。',
   },
   gitBash: {
     name: 'VELAROS_GIT_BASH',
@@ -23,4 +24,5 @@ export const PlatformEnvironmentVariables = Object.freeze({
 } as const)
 
 /** 环境变量表里的一项。 */
-export type PlatformEnvironmentVariable = (typeof PlatformEnvironmentVariables)[keyof typeof PlatformEnvironmentVariables]
+export type PlatformEnvironmentVariable =
+  (typeof PlatformEnvironmentVariables)[keyof typeof PlatformEnvironmentVariables]

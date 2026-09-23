@@ -124,8 +124,8 @@ export class ProviderScriptRegistry
     this.hostBridge = options.hostBridge ?? {}
     this.clearRequireCache = options.clearRequireCache ?? true
     this.runtimeMetadataTimeoutMs =
-      toPositiveInteger(options.runtimeMetadataTimeoutMs)
-      ?? ModelTuning.scripts.runtimeMetadataTimeoutMs
+      toPositiveInteger(options.runtimeMetadataTimeoutMs) ??
+      ModelTuning.scripts.runtimeMetadataTimeoutMs
   }
 
   public configureHost(hostBridge: Partial<ProviderScriptHostBridge>): void {

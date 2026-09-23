@@ -7,7 +7,11 @@ import { isEmpty } from '@velaros-ai/core'
 
 import type { GitignoreRule } from '../types/path-rules.js'
 import { readGitignoreContent } from '../utils/discovery.js'
-import { buildGitignorePatterns, trimGitignoreLine, unescapeGitignoreLine } from '../utils/gitignore.js'
+import {
+  buildGitignorePatterns,
+  trimGitignoreLine,
+  unescapeGitignoreLine,
+} from '../utils/gitignore.js'
 import { ancestorRelativePaths, toComparableRelativePath } from '../utils/path.js'
 
 import type { PathMatcherApi } from './PathMatcher.js'
@@ -39,7 +43,10 @@ export class GitignoreRules implements GitignoreRulesApi {
 
   public parse(content: string, baseRelativePath = ''): GitignoreRule[] {
     const rules: GitignoreRule[] = []
-    const base = toComparableRelativePath(baseRelativePath) === '.' ? '' : toComparableRelativePath(baseRelativePath)
+    const base =
+      toComparableRelativePath(baseRelativePath) === '.'
+        ? ''
+        : toComparableRelativePath(baseRelativePath)
 
     for (const rawLine of content.split('\n')) {
       let line = trimGitignoreLine(rawLine)
@@ -65,13 +72,19 @@ export class GitignoreRules implements GitignoreRulesApi {
     return rules
   }
 
-  public async readRules(rootPath: string, directoryRelativePath: string): Promise<GitignoreRule[]> {
+  public async readRules(
+    rootPath: string,
+    directoryRelativePath: string
+  ): Promise<GitignoreRule[]> {
     const normalized = toComparableRelativePath(directoryRelativePath)
     const base = normalized === '.' ? '' : normalized
     return this.parse(await readGitignoreContent(rootPath, base), base)
   }
 
-  public async readAncestorRules(rootPath: string, directoryRelativePath: string): Promise<GitignoreRule[]> {
+  public async readAncestorRules(
+    rootPath: string,
+    directoryRelativePath: string
+  ): Promise<GitignoreRule[]> {
     const segments = toComparableRelativePath(directoryRelativePath)
       .split('/')
       .filter((segment) => segment && segment !== '.')
@@ -82,7 +95,11 @@ export class GitignoreRules implements GitignoreRulesApi {
     return rules
   }
 
-  public isIgnored(relativePath: string, rules: readonly GitignoreRule[], isDirectory: boolean): boolean {
+  public isIgnored(
+    relativePath: string,
+    rules: readonly GitignoreRule[],
+    isDirectory: boolean
+  ): boolean {
     const target = toComparableRelativePath(relativePath)
     if (!target || target === '.') return false
     // 各级上级目录只算一次：「目录被忽略则里面的一切跟着被忽略」要拿它们逐条比。
@@ -101,9 +118,10 @@ export class GitignoreRules implements GitignoreRulesApi {
     rule: GitignoreRule,
     target: string,
     ancestors: readonly string[],
-    isDirectory: boolean,
+    isDirectory: boolean
   ): boolean {
-    if ((!rule.directoryOnly || isDirectory) && this.matcher.matchesAny(target, rule.patterns)) return true
+    if ((!rule.directoryOnly || isDirectory) && this.matcher.matchesAny(target, rule.patterns))
+      return true
     return ancestors.some((ancestor) => this.matcher.matchesAny(ancestor, rule.patterns))
   }
 }

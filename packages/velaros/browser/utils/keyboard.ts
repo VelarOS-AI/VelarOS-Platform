@@ -17,7 +17,12 @@ const KeyModifierAliases = new Map<string, BrowserKeyModifier>([
 const KeyModifierOrder: BrowserKeyModifier[] = ['shift', 'control', 'alt', 'meta']
 
 /** 修饰键的 DOM key 值与它在 CDP 位掩码里的位（Alt 1、Control 2、Meta 4、Shift 8）。 */
-const ModifierBits: Readonly<Record<string, number>> = Object.freeze({ Alt: 1, Control: 2, Meta: 4, Shift: 8 })
+const ModifierBits: Readonly<Record<string, number>> = Object.freeze({
+  Alt: 1,
+  Control: 2,
+  Meta: 4,
+  Shift: 8,
+})
 
 /** 修饰键在 press 的 modifiers 里的写法 → DOM key 值。 */
 const ModifierKeyNames: Readonly<Record<BrowserKeyModifier, string>> = Object.freeze({
@@ -88,41 +93,43 @@ const KeyNameAliases: Readonly<Record<string, string>> = Object.freeze({
 })
 
 /** 标点：字符 → [code, keyCode, 这是按着 Shift 打出来的]。 */
-const PunctuationKeys: Readonly<Record<string, readonly [string, number, boolean]>> = Object.freeze({
-  ' ': ['Space', 32, false],
-  '-': ['Minus', 189, false],
-  _: ['Minus', 189, true],
-  '=': ['Equal', 187, false],
-  '+': ['Equal', 187, true],
-  '[': ['BracketLeft', 219, false],
-  '{': ['BracketLeft', 219, true],
-  ']': ['BracketRight', 221, false],
-  '}': ['BracketRight', 221, true],
-  '\\': ['Backslash', 220, false],
-  '|': ['Backslash', 220, true],
-  ';': ['Semicolon', 186, false],
-  ':': ['Semicolon', 186, true],
-  "'": ['Quote', 222, false],
-  '"': ['Quote', 222, true],
-  ',': ['Comma', 188, false],
-  '<': ['Comma', 188, true],
-  '.': ['Period', 190, false],
-  '>': ['Period', 190, true],
-  '/': ['Slash', 191, false],
-  '?': ['Slash', 191, true],
-  '`': ['Backquote', 192, false],
-  '~': ['Backquote', 192, true],
-  '!': ['Digit1', 49, true],
-  '@': ['Digit2', 50, true],
-  '#': ['Digit3', 51, true],
-  $: ['Digit4', 52, true],
-  '%': ['Digit5', 53, true],
-  '^': ['Digit6', 54, true],
-  '&': ['Digit7', 55, true],
-  '*': ['Digit8', 56, true],
-  '(': ['Digit9', 57, true],
-  ')': ['Digit0', 48, true],
-})
+const PunctuationKeys: Readonly<Record<string, readonly [string, number, boolean]>> = Object.freeze(
+  {
+    ' ': ['Space', 32, false],
+    '-': ['Minus', 189, false],
+    _: ['Minus', 189, true],
+    '=': ['Equal', 187, false],
+    '+': ['Equal', 187, true],
+    '[': ['BracketLeft', 219, false],
+    '{': ['BracketLeft', 219, true],
+    ']': ['BracketRight', 221, false],
+    '}': ['BracketRight', 221, true],
+    '\\': ['Backslash', 220, false],
+    '|': ['Backslash', 220, true],
+    ';': ['Semicolon', 186, false],
+    ':': ['Semicolon', 186, true],
+    "'": ['Quote', 222, false],
+    '"': ['Quote', 222, true],
+    ',': ['Comma', 188, false],
+    '<': ['Comma', 188, true],
+    '.': ['Period', 190, false],
+    '>': ['Period', 190, true],
+    '/': ['Slash', 191, false],
+    '?': ['Slash', 191, true],
+    '`': ['Backquote', 192, false],
+    '~': ['Backquote', 192, true],
+    '!': ['Digit1', 49, true],
+    '@': ['Digit2', 50, true],
+    '#': ['Digit3', 51, true],
+    $: ['Digit4', 52, true],
+    '%': ['Digit5', 53, true],
+    '^': ['Digit6', 54, true],
+    '&': ['Digit7', 55, true],
+    '*': ['Digit8', 56, true],
+    '(': ['Digit9', 57, true],
+    ')': ['Digit0', 48, true],
+  }
+)
 
 /** macOS 上 Meta 加这些键带的编辑命令：那里的快捷键不经页面，要靠命令名生效。 */
 const MacEditingCommands: Readonly<Record<string, string>> = Object.freeze({
@@ -170,7 +177,9 @@ export function resolveKeyDefinition(name: string): Nullable<BrowserKeyDefinitio
   const alias = KeyNameAliases[name.toLowerCase()]
   const key = alias ?? name
   if ([...key].length === 1) return resolveCharacterKey(key)
-  const named = Object.keys(NamedKeys).find((candidate) => candidate.toLowerCase() === key.toLowerCase())
+  const named = Object.keys(NamedKeys).find(
+    (candidate) => candidate.toLowerCase() === key.toLowerCase()
+  )
   if (!named) return null
   const [code, keyCode] = NamedKeys[named]!
   const definition: BrowserKeyDefinition = { key: named, code, keyCode }
@@ -183,9 +192,21 @@ export function resolveKeyDefinition(name: string): Nullable<BrowserKeyDefinitio
 function resolveCharacterKey(character: string): BrowserKeyDefinition {
   if (/^[a-z]$/iu.test(character)) {
     const upper = character.toUpperCase()
-    return { key: character, code: `Key${upper}`, keyCode: upper.charCodeAt(0), text: character, shifted: upper }
+    return {
+      key: character,
+      code: `Key${upper}`,
+      keyCode: upper.charCodeAt(0),
+      text: character,
+      shifted: upper,
+    }
   }
-  if (/^[0-9]$/u.test(character)) return { key: character, code: `Digit${character}`, keyCode: character.charCodeAt(0), text: character }
+  if (/^[0-9]$/u.test(character))
+    return {
+      key: character,
+      code: `Digit${character}`,
+      keyCode: character.charCodeAt(0),
+      text: character,
+    }
   const punctuation = PunctuationKeys[character]
   if (punctuation) {
     const [code, keyCode] = punctuation
@@ -221,7 +242,11 @@ export function buildKeyDownEvent(
   const shift = held.has('Shift')
   const key = shift && definition.shifted ? definition.shifted : definition.key
   const typing = !held.has('Control') && !held.has('Alt') && !held.has('Meta')
-  const text = typing ? (shift && definition.shifted ? definition.shifted : definition.text) : undefined
+  const text = typing
+    ? shift && definition.shifted
+      ? definition.shifted
+      : definition.text
+    : undefined
   const event: BrowserPageDriverKeyEvent = {
     type: text ? 'keyDown' : 'rawKeyDown',
     key,
@@ -240,7 +265,10 @@ export function buildKeyDownEvent(
 }
 
 /** 抬起一个键的 CDP 事件。 */
-export function buildKeyUpEvent(definition: BrowserKeyDefinition, held: ReadonlySet<string>): BrowserPageDriverKeyEvent {
+export function buildKeyUpEvent(
+  definition: BrowserKeyDefinition,
+  held: ReadonlySet<string>
+): BrowserPageDriverKeyEvent {
   const event: BrowserPageDriverKeyEvent = {
     type: 'keyUp',
     key: held.has('Shift') && definition.shifted ? definition.shifted : definition.key,

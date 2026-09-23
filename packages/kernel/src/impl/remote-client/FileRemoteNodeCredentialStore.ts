@@ -77,9 +77,12 @@ export class FileRemoteNodeCredentialStore implements RemoteNodeCredentialStore 
 
     const result = FileRemoteNodeCredentialStore.Schema.safeParse(parsed)
     if (!result.success) {
-      log.warn('Remote node credentials do not match the expected shape; treating the host as unpaired', {
-        path: this.filePath,
-      })
+      log.warn(
+        'Remote node credentials do not match the expected shape; treating the host as unpaired',
+        {
+          path: this.filePath,
+        }
+      )
       return null
     }
     return {
@@ -109,7 +112,7 @@ export class FileRemoteNodeCredentialStore implements RemoteNodeCredentialStore 
         mode: KernelFileModes.privateFile,
         space: 2,
         trailingNewline: true,
-      },
+      }
     )
     log.info('Remote node credentials stored', {
       clientId: credentials.clientId,
@@ -129,9 +132,9 @@ export class FileRemoteNodeCredentialStore implements RemoteNodeCredentialStore 
  * 换实现（Electron `safeStorage` 密封版）时只换这个工厂，调用方一行不改。
  */
 export function createRemoteNodeClientCredentialStore(
-  options: RemoteNodeClientCredentialStoreOptions,
+  options: RemoteNodeClientCredentialStoreOptions
 ): RemoteNodeCredentialStore {
   return new FileRemoteNodeCredentialStore(
-    options.path ?? defaultRemoteNodeCredentialsPath(options.hostSlug, options.home),
+    options.path ?? defaultRemoteNodeCredentialsPath(options.hostSlug, options.home)
   )
 }

@@ -18,12 +18,10 @@ export interface KernelServiceResolver {
   get<TService extends object>(token: CapabilityToken<TService>): TService
   /** 取服务句柄；句柄绑死在取的那一代，换代之后失效。 */
   getHandle<TService extends object>(
-    token: CapabilityToken<TService>,
+    token: CapabilityToken<TService>
   ): KernelServiceHandle<TService>
   /** 取服务，没有就返回 undefined，不抛错；没声明过这件能力仍然抛。 */
-  getOptional<TService extends object>(
-    token: CapabilityToken<TService>,
-  ): TService | undefined
+  getOptional<TService extends object>(token: CapabilityToken<TService>): TService | undefined
 }
 
 export class ScopedKernelServiceResolver implements KernelServiceResolver {
@@ -33,7 +31,7 @@ export class ScopedKernelServiceResolver implements KernelServiceResolver {
     private readonly moduleId: string,
     allowedCapabilityIds: Iterable<string>,
     private readonly store: KernelServiceStore,
-    private readonly assertActive: () => void,
+    private readonly assertActive: () => void
   ) {
     this.allowedCapabilityIds = new Set(allowedCapabilityIds)
   }
@@ -44,16 +42,14 @@ export class ScopedKernelServiceResolver implements KernelServiceResolver {
     return this.store.has(token)
   }
 
-  public get<TService extends object>(
-    token: CapabilityToken<TService>,
-  ): TService {
+  public get<TService extends object>(token: CapabilityToken<TService>): TService {
     this.assertActive()
     this.assertDeclared(token.id)
     return this.store.get(token)
   }
 
   public getHandle<TService extends object>(
-    token: CapabilityToken<TService>,
+    token: CapabilityToken<TService>
   ): KernelServiceHandle<TService> {
     this.assertActive()
     this.assertDeclared(token.id)
@@ -61,7 +57,7 @@ export class ScopedKernelServiceResolver implements KernelServiceResolver {
   }
 
   public getOptional<TService extends object>(
-    token: CapabilityToken<TService>,
+    token: CapabilityToken<TService>
   ): TService | undefined {
     this.assertActive()
     this.assertDeclared(token.id)
@@ -74,7 +70,7 @@ export class ScopedKernelServiceResolver implements KernelServiceResolver {
     throw new KernelError(
       KernelErrorCodes.undeclaredCapabilityAccess,
       `模块 "${this.moduleId}" 访问了自己没声明的能力 "${capabilityId}"`,
-      { moduleId: this.moduleId, capabilityId },
+      { moduleId: this.moduleId, capabilityId }
     )
   }
 }

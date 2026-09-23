@@ -64,7 +64,7 @@ async function collectManifestPaths(directory) {
       return entry.isFile() && entry.name === 'package.json'
         ? [path.join(directory, entry.name)]
         : []
-    }),
+    })
   )
   return nested.flat().sort()
 }
@@ -86,9 +86,8 @@ function manifestPathsFromLockfile(consumerRoot, lockfile) {
   const manifestPaths = workspaceKeys.map((workspaceKey) => {
     const segments = workspaceKey === '' ? [] : workspaceKey.split('/')
     if (
-      segments.some(
-        (segment) => !segment || segment === '.' || segment === '..'
-      ) || workspaceKey.includes('\\')
+      segments.some((segment) => !segment || segment === '.' || segment === '..') ||
+      workspaceKey.includes('\\')
     ) {
       throw new Error(`bun.lock contains an invalid workspace key: ${workspaceKey}`)
     }
@@ -126,13 +125,13 @@ async function readManifests(consumerRoot, { lockfile } = {}) {
           .split(path.sep)
           .join('/'),
       }
-    }),
+    })
   )
 }
 
 function collectRequirements(manifests, platformPackageNames) {
   const ownPackageNames = new Set(
-    manifests.map(({ manifest }) => manifest.name).filter((name) => typeof name === 'string'),
+    manifests.map(({ manifest }) => manifest.name).filter((name) => typeof name === 'string')
   )
   const requirements = []
   for (const item of manifests) {
@@ -168,9 +167,9 @@ function assertCloudSpecifications(requirements) {
     `External Platform packages must use cloud versions, not local links:\n${local
       .map(
         ({ manifestPath, packageName, specification }) =>
-          `  ${manifestPath}: ${packageName}=${specification}`,
+          `  ${manifestPath}: ${packageName}=${specification}`
       )
-      .join('\n')}`,
+      .join('\n')}`
   )
 }
 
@@ -184,7 +183,7 @@ async function assertRegistryVersions(packages) {
       const result = spawnSync(
         'bun',
         ['pm', 'view', identity, 'version', '--registry', ReleaseRegistry],
-        { encoding: 'utf8', env: process.env },
+        { encoding: 'utf8', env: process.env }
       )
       const versions = (result.stdout ?? '')
         .split(/\r?\n/u)
@@ -198,7 +197,7 @@ async function assertRegistryVersions(packages) {
     }
     if (!readable) {
       throw new Error(
-        `${identity} is not readable from ${ReleaseRegistry} after 6 attempts; consumer manifests were not changed`,
+        `${identity} is not readable from ${ReleaseRegistry} after 6 attempts; consumer manifests were not changed`
       )
     }
   }
@@ -208,7 +207,7 @@ function selectedPackagesFromSelectors(ordered, selectors) {
   const selected = []
   for (const selector of selectors) {
     const match = ordered.find(
-      (item) => item.manifest.name === selector || item.directoryName === selector,
+      (item) => item.manifest.name === selector || item.directoryName === selector
     )
     if (!match) throw new Error(`Unknown Platform package selector: ${selector}`)
     if (!selected.includes(match)) selected.push(match)
@@ -267,12 +266,12 @@ async function validateLockfile(
   requirements,
   ownPackageNames,
   selectedByName,
-  platformPackageNames,
+  platformPackageNames
 ) {
   const lockfilePath = path.join(consumerRoot, 'bun.lock')
   if (!existsSync(lockfilePath)) {
     console.warn(
-      `! ${consumerRoot} has no bun.lock; cloud registry and manifest versions were checked`,
+      `! ${consumerRoot} has no bun.lock; cloud registry and manifest versions were checked`
     )
     return
   }
@@ -284,7 +283,7 @@ async function validateLockfile(
       ]
     if (lockedSpecification !== requirement.specification) {
       throw new Error(
-        `${requirement.packageName} lock requirement is ${lockedSpecification ?? '(missing)'}, expected ${requirement.specification}`,
+        `${requirement.packageName} lock requirement is ${lockedSpecification ?? '(missing)'}, expected ${requirement.specification}`
       )
     }
     const entry = lockfile.packages?.[requirement.packageName]
@@ -294,7 +293,7 @@ async function validateLockfile(
     const selected = selectedByName.get(requirement.packageName)
     if (selected && entry[0] !== `${requirement.packageName}@${selected.manifest.version}`) {
       throw new Error(
-        `${requirement.packageName} resolved as ${entry[0]}, expected ${selected.manifest.version}`,
+        `${requirement.packageName} resolved as ${entry[0]}, expected ${selected.manifest.version}`
       )
     }
     if (typeof entry[1] !== 'string' || !entry[1].startsWith(CloudDownloadPrefix)) {
@@ -330,7 +329,7 @@ function runLockUpdate(consumerRoot, packageIdentities) {
   const result = spawnSync(
     'bun',
     ['update', ...packageIdentities, '--lockfile-only', '--ignore-scripts'],
-    { cwd: consumerRoot, env: process.env, stdio: 'inherit' },
+    { cwd: consumerRoot, env: process.env, stdio: 'inherit' }
   )
   if (result.error) throw result.error
   if (result.status !== 0) {
@@ -347,7 +346,7 @@ function normalizeLockRequirements(consumerRoot) {
   if (result.error) throw result.error
   if (result.status !== 0) {
     throw new Error(
-      `bun install --lockfile-only failed with exit code ${result.status ?? 'unknown'}`,
+      `bun install --lockfile-only failed with exit code ${result.status ?? 'unknown'}`
     )
   }
 }
@@ -372,17 +371,16 @@ async function main() {
     lockfile: originalLockfile,
   })
   const originalSnapshots = new Map(
-    originalManifests.map(({ manifestPath, source }) => [manifestPath, source]),
+    originalManifests.map(({ manifestPath, source }) => [manifestPath, source])
   )
-  if (hasLockfile)
-    originalSnapshots.set(lockfilePath, await readFile(lockfilePath, 'utf8'))
+  if (hasLockfile) originalSnapshots.set(lockfilePath, await readFile(lockfilePath, 'utf8'))
 
   const initial = collectRequirements(originalManifests, platformPackageNames)
   const selectedRequirements = initial.requirements.filter(({ packageName }) =>
-    selectedByName.has(packageName),
+    selectedByName.has(packageName)
   )
   const referencedPackages = selected.filter((item) =>
-    selectedRequirements.some(({ packageName }) => packageName === item.manifest.name),
+    selectedRequirements.some(({ packageName }) => packageName === item.manifest.name)
   )
   await assertRegistryVersions(referencedPackages)
 
@@ -392,7 +390,7 @@ async function main() {
       for (const requirement of selectedRequirements) {
         const desired = desiredSpecification(
           requirement.specification,
-          selectedByName.get(requirement.packageName).manifest.version,
+          selectedByName.get(requirement.packageName).manifest.version
         )
         if (desired === requirement.specification) continue
         const currentSource = updatedSources.get(requirement.manifestPath)
@@ -402,8 +400,8 @@ async function main() {
             currentSource,
             requirement.packageName,
             requirement.specification,
-            desired,
-          ),
+            desired
+          )
         )
       }
       for (const { manifestPath } of originalManifests) {
@@ -416,12 +414,12 @@ async function main() {
         originalManifests.map(({ manifestPath }) => [
           manifestPath,
           updatedSources.get(manifestPath),
-        ]),
+        ])
       )
       if (hasLockfile && referencedPackages.length > 0) {
         runLockUpdate(
           arguments_.consumerRoot,
-          referencedPackages.map((item) => `${item.manifest.name}@${item.manifest.version}`),
+          referencedPackages.map((item) => `${item.manifest.name}@${item.manifest.version}`)
         )
         await restoreExpectedManifestSources(expectedManifestSources)
         normalizeLockRequirements(arguments_.consumerRoot)
@@ -439,11 +437,11 @@ async function main() {
       if (!selectedPackage) continue
       const expected = desiredSpecification(
         requirement.specification,
-        selectedPackage.manifest.version,
+        selectedPackage.manifest.version
       )
       if (requirement.specification !== expected) {
         throw new Error(
-          `${requirement.packageName} remains at ${requirement.specification}; expected ${expected}`,
+          `${requirement.packageName} remains at ${requirement.specification}; expected ${expected}`
         )
       }
     }
@@ -452,7 +450,7 @@ async function main() {
       final.requirements,
       final.ownPackageNames,
       selectedByName,
-      platformPackageNames,
+      platformPackageNames
     )
   } catch (error) {
     if (!arguments_.validateOnly) await restoreFiles(originalSnapshots)
@@ -460,7 +458,7 @@ async function main() {
   }
 
   console.info(
-    `✓ ${path.basename(arguments_.consumerRoot)} checked ${referencedPackages.length} released Platform package(s) from ${ReleaseRegistry}`,
+    `✓ ${path.basename(arguments_.consumerRoot)} checked ${referencedPackages.length} released Platform package(s) from ${ReleaseRegistry}`
   )
 }
 

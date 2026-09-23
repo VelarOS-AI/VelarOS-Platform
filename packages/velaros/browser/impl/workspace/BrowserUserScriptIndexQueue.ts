@@ -27,4 +27,5 @@ export class BrowserUserScriptIndexQueue implements BrowserUserScriptIndexQueueA
 }
 
 /** 进程唯一的一份：界面与工具的 manager 各是各的实例，排的是同一条队。 */
-export const browserUserScriptIndexQueue: BrowserUserScriptIndexQueueApi = new BrowserUserScriptIndexQueue()
+export const browserUserScriptIndexQueue: BrowserUserScriptIndexQueueApi =
+  new BrowserUserScriptIndexQueue()

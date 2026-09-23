@@ -9,8 +9,10 @@ import { existsSync } from 'node:fs'
 import { PassThrough } from 'node:stream'
 
 /** 本机有没有进程约束后端：macOS 的 sandbox-exec 或 Linux 的 bubblewrap；没有就跳过要真跑受约束命令的用例。 */
-export const canConfine = (process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'))
-  || (process.platform === 'linux' && ['/usr/bin/bwrap', '/usr/local/bin/bwrap'].some((path) => existsSync(path)))
+export const canConfine =
+  (process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec')) ||
+  (process.platform === 'linux' &&
+    ['/usr/bin/bwrap', '/usr/local/bin/bwrap'].some((path) => existsSync(path)))
 
 /** 一个什么都不做的假子进程：有三根管道和事件，没有 pid。受管子进程的期限、信号与收尾拿它来测，不起真进程。 */
 export function fakeChild(): ChildProcess {

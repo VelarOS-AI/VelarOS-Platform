@@ -63,13 +63,9 @@ export interface RemoteNodeProjectionApi {
   /** 交给 Agent 主干注册的工具面,名字已带主机前缀。 */
   readonly tools: readonly RemoteNodeToolProjection[]
   /** 按本机能力 id 找绑定;清单里没有这条能力时返回 undefined。 */
-  readonly resolveBinding: (
-    localCapabilityId: string,
-  ) => LooseOptional<RemoteNodeCapabilityBinding>
+  readonly resolveBinding: (localCapabilityId: string) => LooseOptional<RemoteNodeCapabilityBinding>
   /** 按工具名找投影;不在本次清单里时返回 undefined。 */
-  readonly resolveTool: (
-    toolName: string,
-  ) => LooseOptional<RemoteNodeToolProjection>
+  readonly resolveTool: (toolName: string) => LooseOptional<RemoteNodeToolProjection>
 }
 
 /**
@@ -96,7 +92,7 @@ export class RemoteNodeProjection implements RemoteNodeProjectionApi {
     this.revision = input.manifest.revision
     this.capabilities = this.buildBindings(input.manifest)
     this.byLocalCapability = new Map(
-      this.capabilities.map((binding) => [binding.localCapabilityId, binding]),
+      this.capabilities.map((binding) => [binding.localCapabilityId, binding])
     )
     this.tools = this.buildTools(input.manifest)
     this.byToolName = new Map(this.tools.map((tool) => [tool.name, tool]))
@@ -104,49 +100,48 @@ export class RemoteNodeProjection implements RemoteNodeProjectionApi {
   }
 
   public readonly resolveBinding = (
-    localCapabilityId: string,
-  ): LooseOptional<RemoteNodeCapabilityBinding> =>
-    this.byLocalCapability.get(localCapabilityId)
+    localCapabilityId: string
+  ): LooseOptional<RemoteNodeCapabilityBinding> => this.byLocalCapability.get(localCapabilityId)
 
-  public readonly resolveTool = (
-    toolName: string,
-  ): LooseOptional<RemoteNodeToolProjection> => this.byToolName.get(toolName)
+  public readonly resolveTool = (toolName: string): LooseOptional<RemoteNodeToolProjection> =>
+    this.byToolName.get(toolName)
 
   /** 清单里的每条能力换成一条本地 ↔ 远端绑定;操作表原样带过来,权限位由它承载。 */
-  private buildBindings(
-    manifest: RemoteNodeManifest,
-  ): readonly RemoteNodeCapabilityBinding[] {
-    return manifest.capabilities.map((capability) => ({
-      localCapabilityId: namespaceRemoteId(this.hostSlug, capability.capabilityId),
-      localModuleId: namespaceRemoteId(this.hostSlug, capability.moduleId),
-      operations: capability.operations,
-      remoteCapabilityId: capability.capabilityId,
-      remoteModuleId: capability.moduleId,
-      version: capability.version,
-    } satisfies RemoteNodeCapabilityBinding))
+  private buildBindings(manifest: RemoteNodeManifest): readonly RemoteNodeCapabilityBinding[] {
+    return manifest.capabilities.map(
+      (capability) =>
+        ({
+          localCapabilityId: namespaceRemoteId(this.hostSlug, capability.capabilityId),
+          localModuleId: namespaceRemoteId(this.hostSlug, capability.moduleId),
+          operations: capability.operations,
+          remoteCapabilityId: capability.capabilityId,
+          remoteModuleId: capability.moduleId,
+          version: capability.version,
+        }) satisfies RemoteNodeCapabilityBinding
+    )
   }
 
   /** 工具面按能力绑定过滤:清单里挂在未知能力上的工具直接丢掉,不做一张调不通的目录。 */
-  private buildTools(
-    manifest: RemoteNodeManifest,
-  ): readonly RemoteNodeToolProjection[] {
+  private buildTools(manifest: RemoteNodeManifest): readonly RemoteNodeToolProjection[] {
     const byRemoteCapability = new Map(
-      this.capabilities.map((binding) => [binding.remoteCapabilityId, binding]),
+      this.capabilities.map((binding) => [binding.remoteCapabilityId, binding])
     )
     return manifest.tools.flatMap((tool) => {
       const binding = byRemoteCapability.get(tool.capabilityId)
       if (isUndefined(binding)) return []
-      return [{
-        capabilityId: binding.localCapabilityId,
-        category: tool.category,
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-        name: namespaceRemoteToolName(this.hostSlug, tool.name),
-        operation: tool.operation,
-        readOnly: tool.readOnly,
-        remoteCapabilityId: binding.remoteCapabilityId,
-        remoteName: tool.name,
-      } satisfies RemoteNodeToolProjection]
+      return [
+        {
+          capabilityId: binding.localCapabilityId,
+          category: tool.category,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          name: namespaceRemoteToolName(this.hostSlug, tool.name),
+          operation: tool.operation,
+          readOnly: tool.readOnly,
+          remoteCapabilityId: binding.remoteCapabilityId,
+          remoteName: tool.name,
+        } satisfies RemoteNodeToolProjection,
+      ]
     })
   }
 
@@ -167,30 +162,35 @@ export class RemoteNodeProjection implements RemoteNodeProjectionApi {
       grouped.set(binding.localModuleId, [binding])
     }
 
-    return [...grouped].map(([localModuleId, members]) => ({
-      manifest: {
-        apiVersion: RemoteNodeModuleApiVersion,
-        id: localModuleId,
-        isolation: 'remote' as const,
-        optionalRequires: [],
-        // 模块级权限 = 其全部操作声明的并集,供 Kernel 做静态审计;逐次调用的判定仍走操作元数据。
-        permissions: [...new Set(
-          members.flatMap((binding) =>
-            binding.operations.flatMap((operation) => operation.permissions)),
-        )],
-        provides: members.map((binding) =>
-          kernelModules.token(binding.localCapabilityId, binding.version)),
-        requires: [],
-        version: RemoteNodeModuleVersion,
-      },
-      // `isolation: 'remote'` 的模块由宿主注入的 adapter 激活,本函数永远不会被 Kernel 调到;
-      // 真被调到说明装配漏了 adapter,此时炸掉比静默注册一张空能力面安全。
-      activate: () => {
-        throw new Error(
-          `远程模块 "${localModuleId}" 必须由远程隔离适配器来激活`,
-        )
-      },
-    } satisfies KernelModuleDefinition))
+    return [...grouped].map(
+      ([localModuleId, members]) =>
+        ({
+          manifest: {
+            apiVersion: RemoteNodeModuleApiVersion,
+            id: localModuleId,
+            isolation: 'remote' as const,
+            optionalRequires: [],
+            // 模块级权限 = 其全部操作声明的并集,供 Kernel 做静态审计;逐次调用的判定仍走操作元数据。
+            permissions: [
+              ...new Set(
+                members.flatMap((binding) =>
+                  binding.operations.flatMap((operation) => operation.permissions)
+                )
+              ),
+            ],
+            provides: members.map((binding) =>
+              kernelModules.token(binding.localCapabilityId, binding.version)
+            ),
+            requires: [],
+            version: RemoteNodeModuleVersion,
+          },
+          // `isolation: 'remote'` 的模块由宿主注入的 adapter 激活,本函数永远不会被 Kernel 调到;
+          // 真被调到说明装配漏了 adapter,此时炸掉比静默注册一张空能力面安全。
+          activate: () => {
+            throw new Error(`远程模块 "${localModuleId}" 必须由远程隔离适配器来激活`)
+          },
+        }) satisfies KernelModuleDefinition
+    )
   }
 }
 
@@ -201,7 +201,7 @@ export class RemoteNodeProjection implements RemoteNodeProjectionApi {
  * 就地改不了——这也是我们要的,能力面变化必须走一次显式的注册周期。
  */
 export function createRemoteNodeProjection(
-  input: RemoteNodeProjectionInput,
+  input: RemoteNodeProjectionInput
 ): RemoteNodeProjectionApi {
   return new RemoteNodeProjection(input)
 }

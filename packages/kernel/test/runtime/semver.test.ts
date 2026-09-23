@@ -1,9 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import {
-  assertSemanticVersion,
-  satisfiesVersionRange,
-} from '../../src/utils/runtime/version'
+import { assertSemanticVersion, satisfiesVersionRange } from '../../src/utils/runtime/version'
 import {
   compareKernelVersions,
   isKernelVersion,
@@ -51,16 +48,16 @@ describe('语义化版本口径', () => {
 
   test('非法版本号在两条路径上都按各自的领域错误抛出', () => {
     expect(() => assertSemanticVersion('1.0')).toThrow(
-      expect.objectContaining({ name: 'KernelError', code: 'INVALID_VERSION' }),
+      expect.objectContaining({ name: 'KernelError', code: 'INVALID_VERSION' })
     )
     expect(() => satisfiesVersionRange('1.0.0', '>=')).toThrow(
-      expect.objectContaining({ code: 'INVALID_VERSION_RANGE' }),
+      expect.objectContaining({ code: 'INVALID_VERSION_RANGE' })
     )
     expect(() => parseKernelVersion('1.0')).toThrow(
       expect.objectContaining({
         name: 'KernelUpdaterError',
         code: 'INVALID_VERSION',
-      }),
+      })
     )
   })
 })

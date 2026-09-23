@@ -6,21 +6,39 @@
 import { isEmpty, isString, isTrue } from '@velaros-ai/core'
 
 import type { FileAdapter } from '../../contract/requires.js'
-import type { AdapterCapability, AdapterKind, AdapterSearchHit, AdapterSearchInput, AdapterValidateInput } from '../../types/adapter.js'
+import type {
+  AdapterCapability,
+  AdapterKind,
+  AdapterSearchHit,
+  AdapterSearchInput,
+  AdapterValidateInput,
+} from '../../types/adapter.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
 import type { ResolvedTarget, ResolveTargetInput, ResolveTargetResult } from '../../types/target.js'
 import type { ValidationResult } from '../../types/validation.js'
 import { execGuardedRegex } from '../../utils/regex-guard.js'
 import { snippetWindow } from '../../utils/search-snippet.js'
 import { textRangeTarget } from '../../utils/targets.js'
-import { createLowercaseOffsetMapper, includesLineEndingAware, lineToOffset, rangeFromOffsets, resolveLineEndingAwareTextMatch } from '../../utils/text.js'
+import {
+  createLowercaseOffsetMapper,
+  includesLineEndingAware,
+  lineToOffset,
+  rangeFromOffsets,
+  resolveLineEndingAwareTextMatch,
+} from '../../utils/text.js'
 import { ProjectTuning } from '../../utils/tuning.js'
 
 export class TextFileAdapter implements FileAdapter {
   public readonly id = 'core.text'
   public readonly kind: AdapterKind = 'text'
   public readonly priority = 0
-  public readonly capabilities: AdapterCapability[] = ['read', 'search', 'resolve', 'prepare_edit', 'validate']
+  public readonly capabilities: AdapterCapability[] = [
+    'read',
+    'search',
+    'resolve',
+    'prepare_edit',
+    'validate',
+  ]
 
   public search(input: AdapterSearchInput): AdapterSearchHit[] {
     const content = input.snapshot.content ?? ''
@@ -43,7 +61,12 @@ export class TextFileAdapter implements FileAdapter {
     if (input.regex || isEmpty(input.query)) {
       // 保持既有 JS 正则语法；仅显式正则（或空字面查询）创建 RegExp。
       // 整次扫描交给带时限的护栏跑：模型给的正则可能灾难回溯，直接 exec 会卡死整个进程。
-      for (const match of execGuardedRegex(input.query, caseInsensitive ? 'gi' : 'g', content, limit)) {
+      for (const match of execGuardedRegex(
+        input.query,
+        caseInsensitive ? 'gi' : 'g',
+        content,
+        limit
+      )) {
         addHit(match.index, match.index + match.length)
       }
       return hits
@@ -51,9 +74,10 @@ export class TextFileAdapter implements FileAdapter {
     const haystack = caseInsensitive ? content.toLowerCase() : content
     const needle = caseInsensitive ? input.query.toLowerCase() : input.query
     // 整串转换保留 Greek final sigma 等上下文规则；展开时再按顺序映射回原文。
-    const mapOffset = haystack.length === content.length
-      ? (offset: number): number => offset
-      : createLowercaseOffsetMapper(content)
+    const mapOffset =
+      haystack.length === content.length
+        ? (offset: number): number => offset
+        : createLowercaseOffsetMapper(content)
     let from = 0
     while (hits.length < limit) {
       const index = haystack.indexOf(needle, from)
@@ -64,35 +88,64 @@ export class TextFileAdapter implements FileAdapter {
     return hits
   }
 
-  public resolveTarget(input: ResolveTargetInput & { snapshot: FileSnapshot }): ResolveTargetResult {
+  public resolveTarget(
+    input: ResolveTargetInput & { snapshot: FileSnapshot }
+  ): ResolveTargetResult {
     const content = input.snapshot.content ?? ''
-    if (input.baseRevision && input.baseRevision !== input.snapshot.revision) return { status: 'not_found', reason: `baseRevision 不匹配：${input.baseRevision} != ${input.snapshot.revision}` }
+    if (input.baseRevision && input.baseRevision !== input.snapshot.revision)
+      return {
+        status: 'not_found',
+        reason: `baseRevision 不匹配：${input.baseRevision} != ${input.snapshot.revision}`,
+      }
     const exact = input.target?.exactSnippet
     if (exact) {
       const found = resolveLineEndingAwareTextMatch(content, exact)
       const expected = input.expectedMatches ?? 1
-      if (found.count === 1 && expected === 1) return { status: 'resolved', target: textRangeTarget(input.snapshot, { startOffset: found.index, endOffset: found.index + found.matchedText.length }, input, 0.99, this.id) }
+      if (found.count === 1 && expected === 1)
+        return {
+          status: 'resolved',
+          target: textRangeTarget(
+            input.snapshot,
+            { startOffset: found.index, endOffset: found.index + found.matchedText.length },
+            input,
+            0.99,
+            this.id
+          ),
+        }
       if (found.count > 0) {
         const candidates: ResolvedTarget[] = []
         let from = 0
         while (true) {
           const idx = content.indexOf(found.matchedText, from)
           if (idx === -1) break
-          candidates.push(textRangeTarget(input.snapshot, { startOffset: idx, endOffset: idx + found.matchedText.length }, input, 0.75, this.id))
+          candidates.push(
+            textRangeTarget(
+              input.snapshot,
+              { startOffset: idx, endOffset: idx + found.matchedText.length },
+              input,
+              0.75,
+              this.id
+            )
+          )
           from = idx + found.matchedText.length
         }
         return {
           status: 'ambiguous',
           candidates,
-          reason: found.count === expected
-            ? `匹配总数断言通过，但 ${found.count} 个候选仍需明确选择`
-            : `预期 ${expected} 个匹配，实际找到 ${found.count} 个`,
+          reason:
+            found.count === expected
+              ? `匹配总数断言通过，但 ${found.count} 个候选仍需明确选择`
+              : `预期 ${expected} 个匹配，实际找到 ${found.count} 个`,
         }
       }
       return { status: 'not_found', reason: '未找到精确片段' }
     }
     const anchors = input.target?.anchors
-    if (anchors?.before || anchors?.after || (!!anchors?.mustContain && !isEmpty(anchors.mustContain))) {
+    if (
+      anchors?.before ||
+      anchors?.after ||
+      (!!anchors?.mustContain && !isEmpty(anchors.mustContain))
+    ) {
       // 锚点目标先选中 before/after 之间的文本，再校验 mustContain 提示。
       let start = 0
       let end = content.length
@@ -108,16 +161,35 @@ export class TextFileAdapter implements FileAdapter {
       }
       const slice = content.slice(start, end)
       for (const must of anchors.mustContain ?? []) {
-        if (!includesLineEndingAware(slice, must)) return { status: 'not_found', reason: `范围内未找到 mustContain 锚点：${must}` }
+        if (!includesLineEndingAware(slice, must))
+          return { status: 'not_found', reason: `范围内未找到 mustContain 锚点：${must}` }
       }
-      return { status: 'resolved', target: textRangeTarget(input.snapshot, { startOffset: start, endOffset: end }, input, 0.85, this.id) }
+      return {
+        status: 'resolved',
+        target: textRangeTarget(
+          input.snapshot,
+          { startOffset: start, endOffset: end },
+          input,
+          0.85,
+          this.id
+        ),
+      }
     }
     const hint = input.target?.lineHint
     if (hint) {
       // 行号提示会随文件变化漂移，因此故意给较低置信度。
       const start = lineToOffset(content, hint.startLine)
       const end = lineToOffset(content, hint.endLine + 1)
-      return { status: 'resolved', target: textRangeTarget(input.snapshot, { startOffset: start, endOffset: end }, input, 0.55, this.id) }
+      return {
+        status: 'resolved',
+        target: textRangeTarget(
+          input.snapshot,
+          { startOffset: start, endOffset: end },
+          input,
+          0.55,
+          this.id
+        ),
+      }
     }
     return { status: 'not_found', reason: '未提供 exactSnippet、anchors 或 lineHint' }
   }

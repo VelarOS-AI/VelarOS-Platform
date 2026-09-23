@@ -24,7 +24,11 @@ export type {
   ModsSetEnabledResponse,
 } from '../../types/wire'
 
-export const KernelModPackKindSchema = z.enum(['system', 'user', 'contrib']) satisfies z.ZodType<KernelModPackKind>
+export const KernelModPackKindSchema = z.enum([
+  'system',
+  'user',
+  'contrib',
+]) satisfies z.ZodType<KernelModPackKind>
 
 export const KernelModPackDescriptorSchema = z.strictObject({
   id: z.string().min(1),

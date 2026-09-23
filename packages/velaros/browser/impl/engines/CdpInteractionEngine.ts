@@ -3,13 +3,61 @@ import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 
 import type { BrowserPageDriver, BrowserSystemPointerDriver } from '../../contract/requires.js'
-import type { BrowserClickCoordinatesOptions, BrowserClickCoordinatesResult, BrowserDragOptions, BrowserDragResult, BrowserElementTargetHint, BrowserInsertTextOptions, BrowserInsertTextResult, BrowserKeyInput, BrowserKeyResult, BrowserMouseButton, BrowserMouseButtonInput, BrowserMouseResult, BrowserMoveMouseOptions, BrowserPageInspection, BrowserPagePreviewPointerEvent, BrowserPageZoomOptions, BrowserPageZoomResult, BrowserPressKeyOptions, BrowserPressKeyResult, BrowserSiteContext, BrowserTargetActionOptions, BrowserTargetActionResult, BrowserViewportOptions, BrowserViewportResult, BrowserWheelInput } from '../../types/browser.js'
+import type {
+  BrowserClickCoordinatesOptions,
+  BrowserClickCoordinatesResult,
+  BrowserDragOptions,
+  BrowserDragResult,
+  BrowserElementTargetHint,
+  BrowserInsertTextOptions,
+  BrowserInsertTextResult,
+  BrowserKeyInput,
+  BrowserKeyResult,
+  BrowserMouseButton,
+  BrowserMouseButtonInput,
+  BrowserMouseResult,
+  BrowserMoveMouseOptions,
+  BrowserPageInspection,
+  BrowserPagePreviewPointerEvent,
+  BrowserPageZoomOptions,
+  BrowserPageZoomResult,
+  BrowserPressKeyOptions,
+  BrowserPressKeyResult,
+  BrowserSiteContext,
+  BrowserTargetActionOptions,
+  BrowserTargetActionResult,
+  BrowserViewportOptions,
+  BrowserViewportResult,
+  BrowserWheelInput,
+} from '../../types/browser.js'
 import type { BrowserPageDriverPointerListener, BrowserPageDriverState } from '../../types/driver'
-import type { BrowserInputState, BrowserPageDriverKernel, BrowserPageDriverSession, BrowserPointerPoint, BrowserTargetActionClickMode, BrowserTargetActionInternalEffectSnapshot, BrowserViewportScreenMetrics, ExternalBrowserPageSession } from '../../types/runtime.js'
-import { clampExternalViewportPoint, normalizeTargetActionEffectSnapshot, normalizeTargetIdentityValue, readBrowserPointerPoint, resolveTargetActionClickMode } from '../../utils/cdp/interaction'
+import type {
+  BrowserInputState,
+  BrowserPageDriverKernel,
+  BrowserPageDriverSession,
+  BrowserPointerPoint,
+  BrowserTargetActionClickMode,
+  BrowserTargetActionInternalEffectSnapshot,
+  BrowserViewportScreenMetrics,
+  ExternalBrowserPageSession,
+} from '../../types/runtime.js'
+import {
+  clampExternalViewportPoint,
+  normalizeTargetActionEffectSnapshot,
+  normalizeTargetIdentityValue,
+  readBrowserPointerPoint,
+  resolveTargetActionClickMode,
+} from '../../utils/cdp/interaction'
 import { resolvePageZoomFactor } from '../../utils/cdp/interaction'
 import { buildTargetActionEffect, scoreSelfHealingTarget } from '../../utils/cdp/interaction'
-import { buildKeyDownEvent, buildKeyUpEvent, modifierKeyName, modifiersMask, normalizeBrowserPressKeyOptions, resolveKeyDefinition } from '../../utils/keyboard'
+import {
+  buildKeyDownEvent,
+  buildKeyUpEvent,
+  modifierKeyName,
+  modifiersMask,
+  normalizeBrowserPressKeyOptions,
+  resolveKeyDefinition,
+} from '../../utils/keyboard'
 import { clampInteger, clampZoomFactor } from '../../utils/numbers.js'
 import { buildActionEffectSnapshotScript } from '../../utils/page-scripts/action-effect'
 import { buildDragTargetScript } from '../../utils/page-scripts/drag'
@@ -34,39 +82,103 @@ export interface CdpInteractionEngineApi {
   /** 宿主可在装配完成或运行期设置变化后替换系统指针驱动。 */
   setSystemPointerDriver(driver: LooseOptional<BrowserSystemPointerDriver>): void
   /** 按目标元素描述做一步（点击、悬停、聚焦、全选），比坐标点击稳。 */
-  performTargetAction(sessionId: string, context: BrowserSiteContext, options: BrowserTargetActionOptions, abortSignal?: AbortSignal): Promise<BrowserTargetActionResult>
+  performTargetAction(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserTargetActionOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserTargetActionResult>
   /** 在当前焦点处插入文字（像输入法上屏，不发按键事件）。 */
-  insertText(sessionId: string, context: BrowserSiteContext, options: BrowserInsertTextOptions, _abortSignal?: AbortSignal): Promise<BrowserInsertTextResult>
+  insertText(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserInsertTextOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserInsertTextResult>
   /** 按一个键（按下再抬起），可连按、可带修饰键；按住的修饰键照样带上。 */
-  pressKey(sessionId: string, context: BrowserSiteContext, options: BrowserPressKeyOptions, _abortSignal?: AbortSignal): Promise<BrowserPressKeyResult>
+  pressKey(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserPressKeyOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserPressKeyResult>
   /** 按下一个键并记在会话上，直到 keyUp。 */
-  keyDown(sessionId: string, context: BrowserSiteContext, input: BrowserKeyInput, abortSignal?: AbortSignal): Promise<BrowserKeyResult>
+  keyDown(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserKeyInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserKeyResult>
   /** 抬起一个按着的键。 */
-  keyUp(sessionId: string, context: BrowserSiteContext, input: BrowserKeyInput, abortSignal?: AbortSignal): Promise<BrowserKeyResult>
+  keyUp(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserKeyInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserKeyResult>
   /** 在指针现在的位置按下一个鼠标键。 */
-  mouseDown(sessionId: string, context: BrowserSiteContext, input: BrowserMouseButtonInput, abortSignal?: AbortSignal): Promise<BrowserMouseResult>
+  mouseDown(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserMouseButtonInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult>
   /** 在指针现在的位置松开一个鼠标键。 */
-  mouseUp(sessionId: string, context: BrowserSiteContext, input: BrowserMouseButtonInput, abortSignal?: AbortSignal): Promise<BrowserMouseResult>
+  mouseUp(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserMouseButtonInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult>
   /** 在指针现在的位置滚一下滚轮。 */
-  mouseWheel(sessionId: string, context: BrowserSiteContext, input: BrowserWheelInput, abortSignal?: AbortSignal): Promise<BrowserMouseResult>
+  mouseWheel(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserWheelInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult>
   /** 会话关闭时丢掉它的输入状态（按着的键、鼠标键与指针位置）。 */
   clearInputState(sessionId: string): void
   /** 运行时销毁或全部会话关闭时清空全部输入状态。 */
   dispose(): void
   /** 在视口坐标上点一下，作为目标点击失败后的兜底。 */
-  clickCoordinates(sessionId: string, context: BrowserSiteContext, options: BrowserClickCoordinatesOptions, _abortSignal?: AbortSignal): Promise<BrowserClickCoordinatesResult>
+  clickCoordinates(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserClickCoordinatesOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserClickCoordinatesResult>
   /** 把一个目标拖到另一个目标上。 */
-  dragTargets(sessionId: string, context: BrowserSiteContext, options: BrowserDragOptions, _abortSignal?: AbortSignal): Promise<BrowserDragResult>
+  dragTargets(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserDragOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserDragResult>
   /** 把鼠标移到某个位置，可拆成几步；按着鼠标键时就是拖。 */
-  moveMouse(sessionId: string, context: BrowserSiteContext, options: BrowserMoveMouseOptions, _abortSignal?: AbortSignal): Promise<BrowserMouseResult>
+  moveMouse(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserMoveMouseOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult>
   /** 改受控页面的视口尺寸与设备像素比。 */
-  setViewport(sessionId: string, context: BrowserSiteContext, options: BrowserViewportOptions, abortSignal?: AbortSignal): Promise<BrowserViewportResult>
+  setViewport(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserViewportOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserViewportResult>
   /** 改页面缩放比例。 */
-  setPageZoom(sessionId: string, context: BrowserSiteContext, options: BrowserPageZoomOptions, abortSignal?: AbortSignal): Promise<BrowserPageZoomResult>
+  setPageZoom(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserPageZoomOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPageZoomResult>
 }
 
 export class CdpInteractionEngine implements CdpInteractionEngineApi {
-
   protected readonly log = Log.tag('BrowserInteractionEngine')
   private systemPointerDriver: Nullable<BrowserSystemPointerDriver> = null
   /** 每个会话的输入状态：按着的键、鼠标键与指针位置；会话关闭时由运行时清掉。 */
@@ -75,10 +187,9 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
   constructor(
     protected readonly kernel: BrowserPageDriverKernel,
     protected readonly targetRefs: BrowserTargetRefStore,
-    protected readonly onPreviewPointer?: LooseOptional<(
-      sessionId: string,
-      pointer: BrowserPagePreviewPointerEvent
-    ) => void>
+    protected readonly onPreviewPointer?: LooseOptional<
+      (sessionId: string, pointer: BrowserPagePreviewPointerEvent) => void
+    >
   ) {}
 
   /** 宿主可在装配完成或运行期设置变化后替换系统指针驱动。 */
@@ -126,21 +237,33 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
   }
 
   /** 按下一个键：照键位表拼 CDP 事件发出去，记进按着的键里；交回现在还按着的键。 */
-  protected async keyDownWithDriver(driver: BrowserPageDriver, sessionId: string, key: string): Promise<string[]> {
+  protected async keyDownWithDriver(
+    driver: BrowserPageDriver,
+    sessionId: string,
+    key: string
+  ): Promise<string[]> {
     const definition = resolveKeyDefinition(key)
     if (!definition) throw new AppError('VALIDATION', `不认识这个键：${key}`)
-    if (!driver.dispatchKeyEvent) throw new AppError('VALIDATION', '当前浏览器 driver 不支持键盘事件。')
+    if (!driver.dispatchKeyEvent)
+      throw new AppError('VALIDATION', '当前浏览器 driver 不支持键盘事件。')
     const state = this.inputState(sessionId)
-    await driver.dispatchKeyEvent(buildKeyDownEvent(definition, state.held, process.platform === 'darwin'))
+    await driver.dispatchKeyEvent(
+      buildKeyDownEvent(definition, state.held, process.platform === 'darwin')
+    )
     state.held.add(definition.key)
     return [...state.held]
   }
 
   /** 抬起一个键：从按着的键里拿掉，再发 CDP 事件；交回现在还按着的键。 */
-  protected async keyUpWithDriver(driver: BrowserPageDriver, sessionId: string, key: string): Promise<string[]> {
+  protected async keyUpWithDriver(
+    driver: BrowserPageDriver,
+    sessionId: string,
+    key: string
+  ): Promise<string[]> {
     const definition = resolveKeyDefinition(key)
     if (!definition) throw new AppError('VALIDATION', `不认识这个键：${key}`)
-    if (!driver.dispatchKeyEvent) throw new AppError('VALIDATION', '当前浏览器 driver 不支持键盘事件。')
+    if (!driver.dispatchKeyEvent)
+      throw new AppError('VALIDATION', '当前浏览器 driver 不支持键盘事件。')
     const state = this.inputState(sessionId)
     state.held.delete(definition.key)
     await driver.dispatchKeyEvent(buildKeyUpEvent(definition, state.held))
@@ -148,11 +271,17 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
   }
 
   /** 按一个键：入参里的修饰键这一次按下、按完抬起（已经按着的不动），主键按下再抬起 repeat 次；交回实际按了几次。 */
-  protected async pressWithDriver(driver: BrowserPageDriver, sessionId: string, options: BrowserPressKeyOptions): Promise<number> {
+  protected async pressWithDriver(
+    driver: BrowserPageDriver,
+    sessionId: string,
+    options: BrowserPressKeyOptions
+  ): Promise<number> {
     const normalized = normalizeBrowserPressKeyOptions(options)
     const repeat = clampInteger(normalized.repeat, 1, 50, 1)
     const state = this.inputState(sessionId)
-    const modifiers = (normalized.modifiers ?? []).map(modifierKeyName).filter((name) => !state.held.has(name))
+    const modifiers = (normalized.modifiers ?? [])
+      .map(modifierKeyName)
+      .filter((name) => !state.held.has(name))
     for (const modifier of modifiers) await this.keyDownWithDriver(driver, sessionId, modifier)
     try {
       for (let index = 0; index < repeat; index += 1) {
@@ -160,14 +289,21 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
         await this.keyUpWithDriver(driver, sessionId, normalized.key)
       }
     } finally {
-      for (const modifier of modifiers.reverse()) await this.keyUpWithDriver(driver, sessionId, modifier)
+      for (const modifier of modifiers.reverse())
+        await this.keyUpWithDriver(driver, sessionId, modifier)
     }
     return repeat
   }
 
   /** 把指针从现在的位置分 steps 步移到 (x, y)，按着的鼠标键与修饰键都带上（按着键时就是拖）。 */
-  protected async mouseMoveWithDriver(driver: BrowserPageDriver, sessionId: string, point: BrowserPointerPoint, steps: number): Promise<void> {
-    if (!driver.dispatchMouseEvent) throw new AppError('VALIDATION', '当前浏览器 driver 不支持鼠标事件。')
+  protected async mouseMoveWithDriver(
+    driver: BrowserPageDriver,
+    sessionId: string,
+    point: BrowserPointerPoint,
+    steps: number
+  ): Promise<void> {
+    if (!driver.dispatchMouseEvent)
+      throw new AppError('VALIDATION', '当前浏览器 driver 不支持鼠标事件。')
     const state = this.inputState(sessionId)
     const from = { x: state.x, y: state.y }
     const button = [...state.buttons].at(0) ?? 'none'
@@ -192,7 +328,8 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     type: 'mousePressed' | 'mouseReleased',
     input: BrowserMouseButtonInput
   ): Promise<void> {
-    if (!driver.dispatchMouseEvent) throw new AppError('VALIDATION', '当前浏览器 driver 不支持鼠标事件。')
+    if (!driver.dispatchMouseEvent)
+      throw new AppError('VALIDATION', '当前浏览器 driver 不支持鼠标事件。')
     const state = this.inputState(sessionId)
     const button: BrowserMouseButton = input.button ?? 'left'
     if (type === 'mousePressed') state.buttons.add(button)
@@ -209,8 +346,13 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
   }
 
   /** 在指针现在的位置滚一下滚轮。 */
-  protected async mouseWheelWithDriver(driver: BrowserPageDriver, sessionId: string, input: BrowserWheelInput): Promise<void> {
-    if (!driver.dispatchMouseEvent) throw new AppError('VALIDATION', '当前浏览器 driver 不支持鼠标事件。')
+  protected async mouseWheelWithDriver(
+    driver: BrowserPageDriver,
+    sessionId: string,
+    input: BrowserWheelInput
+  ): Promise<void> {
+    if (!driver.dispatchMouseEvent)
+      throw new AppError('VALIDATION', '当前浏览器 driver 不支持鼠标事件。')
     const state = this.inputState(sessionId)
     await driver.dispatchMouseEvent({
       type: 'mouseWheel',
@@ -304,14 +446,15 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
         !isFiniteNumber(metrics.outerHeight) ||
         !isFiniteNumber(metrics.innerWidth) ||
         !isFiniteNumber(metrics.innerHeight)
-      ) return false
+      )
+        return false
 
-      const horizontalInset = driver.kind === 'external'
-        ? Math.max(0, (metrics.outerWidth - metrics.innerWidth) / 2)
-        : 0
-      const verticalInset = driver.kind === 'external'
-        ? Math.max(0, metrics.outerHeight - metrics.innerHeight - horizontalInset)
-        : 0
+      const horizontalInset =
+        driver.kind === 'external' ? Math.max(0, (metrics.outerWidth - metrics.innerWidth) / 2) : 0
+      const verticalInset =
+        driver.kind === 'external'
+          ? Math.max(0, metrics.outerHeight - metrics.innerHeight - horizontalInset)
+          : 0
 
       // 必须 await：不 await 就是把 promise 原样返回，异步拒绝会绕过下面的 catch，
       // 「系统指针不可用 → 改用浏览器兜底指针」这条降级根本不会执行。
@@ -378,10 +521,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     const afterEffectSnapshot = actionResult.matched
       ? await this.captureTargetActionEffectSnapshot(externalSession.driver)
       : null
-    const effect = buildTargetActionEffect(
-      beforeEffectSnapshot,
-      afterEffectSnapshot
-    )
+    const effect = buildTargetActionEffect(beforeEffectSnapshot, afterEffectSnapshot)
     if (actionResult.matched && options.action === 'click') {
       this.targetRefs.clear(sessionId)
     }
@@ -436,12 +576,15 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     if (!healedTarget) return input.result
 
     return input.driver.executeJavaScript<BrowserTargetActionResult>(
-      buildTargetActionScript({
-        ...input.options,
-        target: healedTarget,
-      }, {
-        clickMode: input.clickMode,
-      }),
+      buildTargetActionScript(
+        {
+          ...input.options,
+          target: healedTarget,
+        },
+        {
+          clickMode: input.clickMode,
+        }
+      ),
       true
     )
   }
@@ -478,10 +621,13 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
 
     // 相同强度的身份信号命中多个不同元素时，页面类别或出现顺序都不能替 agent
     // 猜目标。重复出现在 links/actions 的同一 selector 不算歧义。
-    const ambiguous = ranked.slice(1).some((candidate) =>
-      candidate.totalScore === best.totalScore &&
-      !this.isSameBrowserTargetSelector(best.target, candidate.target)
-    )
+    const ambiguous = ranked
+      .slice(1)
+      .some(
+        (candidate) =>
+          candidate.totalScore === best.totalScore &&
+          !this.isSameBrowserTargetSelector(best.target, candidate.target)
+      )
     if (ambiguous) return null
 
     return best.target
@@ -506,9 +652,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     driver: BrowserPageDriver
   ): Promise<Nullable<BrowserTargetActionInternalEffectSnapshot>> {
     try {
-      const value = await driver.executeJavaScript<unknown>(
-        buildActionEffectSnapshotScript()
-      )
+      const value = await driver.executeJavaScript<unknown>(buildActionEffectSnapshotScript())
 
       return normalizeTargetActionEffectSnapshot(value)
     } catch (error) {
@@ -531,7 +675,8 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     if (!input.result.matched || input.result.clickMethod !== 'coordinate') return input.result
 
     const clickPoint = readBrowserPointerPoint(input.result.clickPoint)
-    if (!clickPoint || !input.driver.clickCoordinates) return {
+    if (!clickPoint || !input.driver.clickCoordinates)
+      return {
         ...input.result,
         matched: false,
         failureReason: 'not-interactable',
@@ -581,19 +726,15 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     if (!input.result.matched || input.result.clickMethod !== 'coordinate') return input.result
 
     const hoverPoint = readBrowserPointerPoint(input.result.clickPoint)
-    if (!hoverPoint || !input.driver.moveMouse) return {
+    if (!hoverPoint || !input.driver.moveMouse)
+      return {
         ...input.result,
         matched: false,
         failureReason: 'not-interactable',
       }
 
     if (input.externalSession) {
-      await this.tryMoveSystemPointer(
-        input.driver,
-        hoverPoint,
-        input.externalSession.visible,
-        220
-      )
+      await this.tryMoveSystemPointer(input.driver, hoverPoint, input.externalSession.visible, 220)
     }
     await input.driver.moveMouse({
       x: hoverPoint.x,
@@ -659,12 +800,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     const point = clampExternalViewportPoint(options.x, options.y)
     const button = options.button ?? 'left'
     const clickCount = clampInteger(options.clickCount, 1, 5, 1)
-    await this.tryMoveSystemPointer(
-      externalSession.driver,
-      point,
-      externalSession.visible,
-      220
-    )
+    await this.tryMoveSystemPointer(externalSession.driver, point, externalSession.visible, 220)
     await externalSession.driver.clickCoordinates({
       ...options,
       x: point.x,
@@ -672,11 +808,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
       button,
       clickCount,
       modifiers: this.heldModifiers(sessionId),
-      onPointerEvent: this.createPreviewPointerListener(
-        sessionId,
-        externalSession,
-        'click'
-      ),
+      onPointerEvent: this.createPreviewPointerListener(sessionId, externalSession, 'click'),
     })
     this.rememberPointer(sessionId, point)
     const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
@@ -726,7 +858,8 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
       buildDragTargetScript(input.options),
       true
     )
-    if (!resolved.matched) return {
+    if (!resolved.matched)
+      return {
         ...resolved,
         steps: input.steps,
         capturedAt: Date.now(),
@@ -734,7 +867,8 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
 
     const sourcePoint = readBrowserPointerPoint(resolved.source.point)
     const targetPoint = readBrowserPointerPoint(resolved.target.point)
-    if (!sourcePoint || !targetPoint) return {
+    if (!sourcePoint || !targetPoint)
+      return {
         ...resolved,
         matched: false,
         startX: toNullable(sourcePoint?.x),
@@ -763,7 +897,11 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
         endY: target.y,
         steps: input.steps,
         modifiers: this.heldModifiers(input.sessionId),
-        onPointerEvent: this.createPreviewPointerListener(input.sessionId, input.externalSession, 'drag'),
+        onPointerEvent: this.createPreviewPointerListener(
+          input.sessionId,
+          input.externalSession,
+          'drag'
+        ),
       }),
       usesSystemPointer
         ? this.tryMoveSystemPointer(
@@ -805,19 +943,28 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const point = clampExternalViewportPoint(options.x, options.y)
-    await this.tryMoveSystemPointer(
+    await this.tryMoveSystemPointer(externalSession.driver, point, externalSession.visible, 220)
+    await this.mouseMoveWithDriver(
       externalSession.driver,
+      sessionId,
       point,
-      externalSession.visible,
-      220
+      clampInteger(options.steps, 1, 60, 1)
     )
-    await this.mouseMoveWithDriver(externalSession.driver, sessionId, point, clampInteger(options.steps, 1, 60, 1))
-    this.createPreviewPointerListener(sessionId, externalSession, 'move')({ x: point.x, y: point.y, phase: 'move' })
+    this.createPreviewPointerListener(
+      sessionId,
+      externalSession,
+      'move'
+    )({ x: point.x, y: point.y, phase: 'move' })
     const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
     return this.mouseSnapshot(sessionId, state.url || context.url)
   }
 
-  public async keyDown(sessionId: string, context: BrowserSiteContext, input: BrowserKeyInput, abortSignal?: AbortSignal): Promise<BrowserKeyResult> {
+  public async keyDown(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserKeyInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserKeyResult> {
     abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const held = await this.keyDownWithDriver(externalSession.driver, sessionId, input.key)
@@ -825,7 +972,12 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     return { url: state.url || context.url, key: input.key, held }
   }
 
-  public async keyUp(sessionId: string, context: BrowserSiteContext, input: BrowserKeyInput, abortSignal?: AbortSignal): Promise<BrowserKeyResult> {
+  public async keyUp(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserKeyInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserKeyResult> {
     abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const held = await this.keyUpWithDriver(externalSession.driver, sessionId, input.key)
@@ -833,14 +985,24 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     return { url: state.url || context.url, key: input.key, held }
   }
 
-  public async mouseDown(sessionId: string, context: BrowserSiteContext, input: BrowserMouseButtonInput, abortSignal?: AbortSignal): Promise<BrowserMouseResult> {
+  public async mouseDown(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserMouseButtonInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult> {
     abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     await this.mouseButtonWithDriver(externalSession.driver, sessionId, 'mousePressed', input)
     return this.mouseSnapshot(sessionId, externalSession.driver.getURL() || context.url)
   }
 
-  public async mouseUp(sessionId: string, context: BrowserSiteContext, input: BrowserMouseButtonInput, abortSignal?: AbortSignal): Promise<BrowserMouseResult> {
+  public async mouseUp(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserMouseButtonInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult> {
     abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     await this.mouseButtonWithDriver(externalSession.driver, sessionId, 'mouseReleased', input)
@@ -848,7 +1010,12 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     return this.mouseSnapshot(sessionId, state.url || context.url)
   }
 
-  public async mouseWheel(sessionId: string, context: BrowserSiteContext, input: BrowserWheelInput, abortSignal?: AbortSignal): Promise<BrowserMouseResult> {
+  public async mouseWheel(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserWheelInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult> {
     abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     await this.mouseWheelWithDriver(externalSession.driver, sessionId, input)

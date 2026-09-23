@@ -4,7 +4,14 @@ import { dirname, resolve } from 'node:path'
 
 import * as ts from 'typescript'
 
-import { isEmpty, isNonBlankString, isPlainObject, isPresent, isTrue, toNullable } from '@velaros-ai/core'
+import {
+  isEmpty,
+  isNonBlankString,
+  isPlainObject,
+  isPresent,
+  isTrue,
+  toNullable,
+} from '@velaros-ai/core'
 
 import type {
   ParseTypeScriptConfig,
@@ -17,7 +24,14 @@ import { isPathTextInsideRoot } from './project-paths.js'
 
 /** 能进 TypeScript 程序的扩展名（带点、小写）。 */
 export const TypeScriptExtensions = new Set([
-  '.ts', '.tsx', '.js', '.jsx', '.cts', '.mts', '.cjs', '.mjs',
+  '.ts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.cts',
+  '.mts',
+  '.cjs',
+  '.mjs',
 ])
 
 /** 其中属于 JavaScript 的那几个：命中时强制 `allowJs`，并优先找 jsconfig。 */
@@ -497,7 +511,10 @@ function electronResourcesLibraryDirectory(): Nullable<string> {
 }
 
 /** 这个目录是否提供了整套标准库（含 `/// <reference lib>` 传递引用到的文件）。 */
-function hasCompleteLibraryClosure(directory: string, rootLibFileNames: readonly string[]): boolean {
+function hasCompleteLibraryClosure(
+  directory: string,
+  rootLibFileNames: readonly string[]
+): boolean {
   const pending = [...rootLibFileNames]
   const visited = new Set<string>()
   for (let libFileName = pending.pop(); isPresent(libFileName); libFileName = pending.pop()) {

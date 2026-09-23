@@ -12,7 +12,7 @@ export function snippetWindow(
   content: string,
   start: number,
   end: number,
-  maxChars: number = ProjectTuning.queries.snippetChars,
+  maxChars: number = ProjectTuning.queries.snippetChars
 ): string {
   const from = Math.max(0, Math.min(start, content.length))
   const to = Math.max(from, Math.min(end, content.length))
@@ -25,6 +25,9 @@ export function snippetWindow(
 }
 
 /** 截到展示长度，截断处补省略号说明还有后文；适配器交来的片段一律过它，没有片段就原样返回。 */
-export function clampSnippet(snippet: Optional<string>, maxChars: number = ProjectTuning.queries.snippetChars): Optional<string> {
+export function clampSnippet(
+  snippet: Optional<string>,
+  maxChars: number = ProjectTuning.queries.snippetChars
+): Optional<string> {
   return !snippet || snippet.length <= maxChars ? snippet : `${snippet.slice(0, maxChars)}…`
 }

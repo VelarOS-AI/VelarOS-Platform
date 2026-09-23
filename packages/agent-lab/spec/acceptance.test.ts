@@ -37,7 +37,12 @@ import { FullCapabilities, journey, observation, trial } from './support.js'
 
 /** 一个总是收敛的假驱动；时钟按段推进，用来把「本段用时」与「整程用时」分开。 */
 function fakeDriver(clock: { value: number }, legMs: number): LabDriver {
-  const session: SessionHandle = { id: 'session', executorId: 'executor-a', externalId: 'native', metadata: {} }
+  const session: SessionHandle = {
+    id: 'session',
+    executorId: 'executor-a',
+    externalId: 'native',
+    metadata: {},
+  }
   return {
     id: 'fake',
     capabilities: async () => FullCapabilities,
@@ -61,7 +66,8 @@ function fakeDriver(clock: { value: number }, legMs: number): LabDriver {
         observation: observation('running'),
         usage: { toolCalls: 0, workingMs: legMs, wallClockMs: legMs, tokens: 1, legs: 0 },
       })
-      if (decision.kind === 'abort') return { kind: 'aborted', detectorId: decision.detectorId, reason: decision.reason }
+      if (decision.kind === 'abort')
+        return { kind: 'aborted', detectorId: decision.detectorId, reason: decision.reason }
       return { kind: 'settled' }
     },
     collect: async (_session, phase) => observation(phase),
@@ -90,7 +96,12 @@ function sensitiveRecord(): RealTaskRecord {
       terminalStatus: 'ok',
     },
     executor: { executorId: 'executor-a', provider: null, model: null, reasoningProfile: null },
-    privacy: { classification: 'local-only', containsPrompt: true, containsAnswer: true, containsPaths: true },
+    privacy: {
+      classification: 'local-only',
+      containsPrompt: true,
+      containsAnswer: true,
+      containsPaths: true,
+    },
     evidence: {
       spans: [],
       assertions: [
@@ -122,7 +133,10 @@ function sensitiveRecord(): RealTaskRecord {
 
 /** 造一次带 n 条工具调用的观测；同一个 id 重复出现时测量口径要去重。 */
 function withCalls(calls: readonly ToolCallRecord[]): Observation {
-  return { ...observation(), turns: [{ id: 'turn-1', index: 1, toolCalls: calls, finishReasons: [] }] }
+  return {
+    ...observation(),
+    turns: [{ id: 'turn-1', index: 1, toolCalls: calls, finishReasons: [] }],
+  }
 }
 
 describe('结果只由独立验证决定', () => {
@@ -162,7 +176,9 @@ describe('一个试验失败不影响其它试验', () => {
       suiteId: 'suite',
       concurrency: 1,
       archiveDirectory: '/archives',
-      trials: Array.from({ length: 5 }, (_, index) => trial('executor-a', 'journey-a', 'group-a', index + 1)),
+      trials: Array.from({ length: 5 }, (_, index) =>
+        trial('executor-a', 'journey-a', 'group-a', index + 1)
+      ),
     }
     const started: string[] = []
     await expect(
@@ -174,7 +190,7 @@ describe('一个试验失败不影响其它试验', () => {
         },
         runTrial: async (candidate) =>
           ({ manifest: { trial: { id: candidate.id } } }) as unknown as RunArchive,
-      }),
+      })
     ).rejects.toThrow('driver unavailable')
     expect(started).toHaveLength(2)
   })
@@ -267,7 +283,9 @@ describe('harness 身份', () => {
       sourceCommit: null,
       consumerCommit: null,
     })
-    const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as {
+    const manifest = JSON.parse(
+      await readFile(new URL('../package.json', import.meta.url), 'utf8')
+    ) as {
       version: string
     }
 
@@ -320,19 +338,23 @@ describe('本包不认宿主', () => {
         isError: null,
         startedAt: null,
         finishedAt: null,
-      })),
+      }))
     )
 
     const withoutNames = createDetectorRegistry()
     withoutNames.registerBuiltins()
     expect(
-      withoutNames.detect(catalogReads, context).some((finding) => finding.detectorId === 'toolmap-read-loop'),
+      withoutNames
+        .detect(catalogReads, context)
+        .some((finding) => finding.detectorId === 'toolmap-read-loop')
     ).toBe(false)
 
     const withNames = createDetectorRegistry()
     withNames.registerBuiltins({ catalogToolNames: ['tooling:map'] })
     expect(
-      withNames.detect(catalogReads, context).some((finding) => finding.detectorId === 'toolmap-read-loop'),
+      withNames
+        .detect(catalogReads, context)
+        .some((finding) => finding.detectorId === 'toolmap-read-loop')
     ).toBe(true)
 
     const hostDriver = fakeDriver({ value: 0 }, 1)

@@ -24,7 +24,9 @@ async function resolveExistingDirectory(value, label, { rejectSymbolicLink = fal
     try {
       lexicalDetails = await lstat(absolutePath)
     } catch (error) {
-      throw new Error(`${label} must be an existing directory: ${absolutePath} (${errorMessage(error)})`)
+      throw new Error(
+        `${label} must be an existing directory: ${absolutePath} (${errorMessage(error)})`
+      )
     }
     if (lexicalDetails.isSymbolicLink()) {
       throw new Error(`${label} must not be a symbolic link: ${absolutePath}`)
@@ -35,7 +37,9 @@ async function resolveExistingDirectory(value, label, { rejectSymbolicLink = fal
   try {
     resolvedPath = await realpath(absolutePath)
   } catch (error) {
-    throw new Error(`${label} must be an existing directory: ${absolutePath} (${errorMessage(error)})`)
+    throw new Error(
+      `${label} must be an existing directory: ${absolutePath} (${errorMessage(error)})`
+    )
   }
 
   const details = await stat(resolvedPath)
@@ -48,12 +52,10 @@ async function resolveExistingDirectory(value, label, { rejectSymbolicLink = fal
 function containsPath(parentPath, candidatePath) {
   const relativePath = path.relative(parentPath, candidatePath)
   return (
-    relativePath === ''
-    || (
-      relativePath !== '..'
-      && !relativePath.startsWith(`..${path.sep}`)
-      && !path.isAbsolute(relativePath)
-    )
+    relativePath === '' ||
+    (relativePath !== '..' &&
+      !relativePath.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relativePath))
   )
 }
 
@@ -73,23 +75,23 @@ async function assertSafeOutputDirectory(packageDirectory, outputDirectory, labe
   const temporaryRoots = await resolveTemporaryRoots()
   if (temporaryRoots.has(outputDirectory)) {
     throw new Error(
-      `${label} must not be a shared temporary root (${outputDirectory}); create a dedicated subdirectory`,
+      `${label} must not be a shared temporary root (${outputDirectory}); create a dedicated subdirectory`
     )
   }
 
   const systemTemporaryRoot = await realpath(path.resolve(tmpdir()))
   if (!containsPath(systemTemporaryRoot, outputDirectory)) {
     throw new Error(
-      `${label} must be inside a dedicated system temporary subdirectory: ${outputDirectory}`,
+      `${label} must be inside a dedicated system temporary subdirectory: ${outputDirectory}`
     )
   }
 
   if (
-    containsPath(packageDirectory, outputDirectory)
-    || containsPath(outputDirectory, packageDirectory)
+    containsPath(packageDirectory, outputDirectory) ||
+    containsPath(outputDirectory, packageDirectory)
   ) {
     throw new Error(
-      `${label} must not overlap package source ${packageDirectory}: ${outputDirectory}`,
+      `${label} must not overlap package source ${packageDirectory}: ${outputDirectory}`
     )
   }
 }
@@ -100,7 +102,9 @@ async function readLeafPackageManifest(packageDirectory) {
   try {
     resolvedManifestPath = await realpath(manifestPath)
   } catch (error) {
-    throw new Error(`packageDirectory must contain package.json: ${manifestPath} (${errorMessage(error)})`)
+    throw new Error(
+      `packageDirectory must contain package.json: ${manifestPath} (${errorMessage(error)})`
+    )
   }
 
   if (!containsPath(packageDirectory, resolvedManifestPath)) {
@@ -111,7 +115,9 @@ async function readLeafPackageManifest(packageDirectory) {
   try {
     manifest = JSON.parse(await readFile(resolvedManifestPath, 'utf8'))
   } catch (error) {
-    throw new Error(`package.json must contain valid JSON: ${resolvedManifestPath} (${errorMessage(error)})`)
+    throw new Error(
+      `package.json must contain valid JSON: ${resolvedManifestPath} (${errorMessage(error)})`
+    )
   }
 
   if (!manifest || Array.isArray(manifest) || typeof manifest !== 'object') {
@@ -119,7 +125,7 @@ async function readLeafPackageManifest(packageDirectory) {
   }
   if (Object.hasOwn(manifest, 'workspaces')) {
     throw new Error(
-      `packageDirectory must be a leaf package; workspace roots cannot be packed: ${packageDirectory}`,
+      `packageDirectory must be a leaf package; workspace roots cannot be packed: ${packageDirectory}`
     )
   }
   if (typeof manifest.name !== 'string' || manifest.name.trim() === '') {
@@ -139,11 +145,9 @@ async function validateOutputTarget({ destination, filename, packageDirectory })
   }
 
   if (hasDestination) {
-    const resolvedDestination = await resolveExistingDirectory(
-      destination,
-      'destination',
-      { rejectSymbolicLink: true },
-    )
+    const resolvedDestination = await resolveExistingDirectory(destination, 'destination', {
+      rejectSymbolicLink: true,
+    })
     await assertSafeOutputDirectory(packageDirectory, resolvedDestination, 'destination')
     return { option: '--destination', value: resolvedDestination }
   }
@@ -159,7 +163,7 @@ async function validateOutputTarget({ destination, filename, packageDirectory })
   const filenameParent = await resolveExistingDirectory(
     path.dirname(absoluteFilename),
     'filename parent',
-    { rejectSymbolicLink: true },
+    { rejectSymbolicLink: true }
   )
   await assertSafeOutputDirectory(packageDirectory, filenameParent, 'filename parent')
   const resolvedFilename = path.join(filenameParent, path.basename(absoluteFilename))
@@ -204,7 +208,7 @@ export function windowsTaskkillArguments(pid, { force = false } = {}) {
 
 function taskkillFailureMessage(result) {
   const diagnostic = [result.stderr, result.stdout]
-    .map((value) => typeof value === 'string' ? value.trim() : '')
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
     .find(Boolean)
   if (diagnostic) return diagnostic
   if (result.error) return errorMessage(result.error)
@@ -216,16 +220,12 @@ function signalProcessGroup(child, signal) {
   try {
     if (process.platform === 'win32') {
       const force = signal === 'SIGKILL'
-      const result = spawnSync(
-        'taskkill.exe',
-        windowsTaskkillArguments(child.pid, { force }),
-        {
-          encoding: 'utf8',
-          stdio: ['ignore', 'pipe', 'pipe'],
-          timeout: windowsTaskkillTimeoutMs,
-          windowsHide: true,
-        },
-      )
+      const result = spawnSync('taskkill.exe', windowsTaskkillArguments(child.pid, { force }), {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: windowsTaskkillTimeoutMs,
+        windowsHide: true,
+      })
       if (result.status === 0) return true
       if (!processGroupExists(child)) return false
       if (!force && !result.error) {
@@ -234,7 +234,7 @@ function signalProcessGroup(child, signal) {
         return true
       }
       throw new Error(
-        `taskkill.exe could not stop Bun process tree ${child.pid}: ${taskkillFailureMessage(result)}`,
+        `taskkill.exe could not stop Bun process tree ${child.pid}: ${taskkillFailureMessage(result)}`
       )
     }
     process.kill(-child.pid, signal)
@@ -244,7 +244,7 @@ function signalProcessGroup(child, signal) {
     throw new Error(
       process.platform === 'win32'
         ? `Failed to stop Windows Bun process tree ${child.pid}: ${errorMessage(error)}`
-        : `Failed to send ${signal} to Bun process group ${child.pid}: ${errorMessage(error)}`,
+        : `Failed to send ${signal} to Bun process group ${child.pid}: ${errorMessage(error)}`
     )
   }
 }
@@ -277,10 +277,9 @@ function outputText(chunks) {
 function commandFailureMessage({ operation, code, signal, stdout, stderr }) {
   const status = signal ? `signal ${signal}` : `exit code ${code}`
   const diagnostic = stderr.trim() || stdout.trim()
-  return [
-    `${operation} failed with ${status}`,
-    diagnostic ? `Command output:\n${diagnostic}` : '',
-  ].filter(Boolean).join('\n')
+  return [`${operation} failed with ${status}`, diagnostic ? `Command output:\n${diagnostic}` : '']
+    .filter(Boolean)
+    .join('\n')
 }
 
 function terminationDescription(forced) {
@@ -289,9 +288,7 @@ function terminationDescription(forced) {
       ? `taskkill /T followed by taskkill /T /F after ${terminationGraceMs} ms`
       : 'taskkill /T'
   }
-  return forced
-    ? `SIGTERM followed by SIGKILL after ${terminationGraceMs} ms`
-    : 'SIGTERM'
+  return forced ? `SIGTERM followed by SIGKILL after ${terminationGraceMs} ms` : 'SIGTERM'
 }
 
 function processCollectionLabel() {
@@ -334,9 +331,7 @@ export async function runGuardedCommand({
       stdio,
     })
   } catch (error) {
-    throw new Error(
-      `Failed to start ${operation}: ${errorMessage(error)}`,
-    )
+    throw new Error(`Failed to start ${operation}: ${errorMessage(error)}`)
   }
 
   return await new Promise((resolve, reject) => {
@@ -386,18 +381,17 @@ export async function runGuardedCommand({
             finish(
               reject,
               new Error(
-                `Failed to restore parent ${signal} after cleaning ${operation}'s ${processCollectionLabel()}: ${errorMessage(error)}`,
-              ),
+                `Failed to restore parent ${signal} after cleaning ${operation}'s ${processCollectionLabel()}: ${errorMessage(error)}`
+              )
             )
             return
           }
           setImmediate(() => {
-            const cleanupDetails = cleanupError instanceof Error
-              ? ` Cleanup error: ${cleanupError.message}`
-              : ''
+            const cleanupDetails =
+              cleanupError instanceof Error ? ` Cleanup error: ${cleanupError.message}` : ''
             finish(
               reject,
-              new Error(`${operation} was interrupted by parent ${signal}.${cleanupDetails}`),
+              new Error(`${operation} was interrupted by parent ${signal}.${cleanupDetails}`)
             )
           })
         })
@@ -422,12 +416,7 @@ export async function runGuardedCommand({
     process.once('exit', onExit)
 
     child.once('error', (error) => {
-      finish(
-        reject,
-        new Error(
-          `Failed to start ${operation}: ${errorMessage(error)}`,
-        ),
-      )
+      finish(reject, new Error(`Failed to start ${operation}: ${errorMessage(error)}`))
     })
 
     child.once('close', (code, signal) => {
@@ -441,8 +430,8 @@ export async function runGuardedCommand({
           finish(
             reject,
             new Error(
-              `${operation} exited, but its remaining ${processCollectionLabel()} could not be stopped: ${errorMessage(error)}`,
-            ),
+              `${operation} exited, but its remaining ${processCollectionLabel()} could not be stopped: ${errorMessage(error)}`
+            )
           )
           return
         }
@@ -464,8 +453,8 @@ export async function runGuardedCommand({
               signal,
               stdout,
               stderr,
-            }),
-          ),
+            })
+          )
         )
       })()
     })
@@ -477,16 +466,16 @@ export async function runGuardedCommand({
           finish(
             reject,
             new Error(
-              `${operation} timed out after ${timeoutMs} ms; ${processCollectionLabel()} ${child.pid ?? 'unknown'} was stopped with ${terminationDescription(forced)}`,
-            ),
+              `${operation} timed out after ${timeoutMs} ms; ${processCollectionLabel()} ${child.pid ?? 'unknown'} was stopped with ${terminationDescription(forced)}`
+            )
           )
         })
         .catch((error) => {
           finish(
             reject,
             new Error(
-              `${operation} timed out after ${timeoutMs} ms, and cleanup failed: ${errorMessage(error)}`,
-            ),
+              `${operation} timed out after ${timeoutMs} ms, and cleanup failed: ${errorMessage(error)}`
+            )
           )
         })
     }, timeoutMs)
@@ -504,7 +493,7 @@ export async function safePackPackage({
 } = {}) {
   const resolvedPackageDirectory = await resolveExistingDirectory(
     packageDirectory,
-    'packageDirectory',
+    'packageDirectory'
   )
   await readLeafPackageManifest(resolvedPackageDirectory)
   const outputTarget = await validateOutputTarget({

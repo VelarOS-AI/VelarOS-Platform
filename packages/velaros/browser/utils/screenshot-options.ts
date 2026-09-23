@@ -81,8 +81,15 @@ export function buildBrowserScreenshotOptions(
  * 把模型给的截图入参换成端口的截图选项：缺省截当前视口（整页要 fullPage），给模型看时要一张压缩过的图；
  * 标注、视口尺寸、等待与比较照入参，没给的走缺省（会等一小会儿网络空闲与页面稳定）。
  */
-export function buildModelScreenshotOptions(input: BrowserScreenshotInput, modelFacing: boolean): BrowserCaptureScreenshotOptions {
-  const options: BrowserScreenshotPolicyOptions = { modelFacing, fullPage: !!input.fullPage, annotateElements: !!input.annotate }
+export function buildModelScreenshotOptions(
+  input: BrowserScreenshotInput,
+  modelFacing: boolean
+): BrowserCaptureScreenshotOptions {
+  const options: BrowserScreenshotPolicyOptions = {
+    modelFacing,
+    fullPage: !!input.fullPage,
+    annotateElements: !!input.annotate,
+  }
   if (isPresent(input.path)) options.path = input.path
   if (isPresent(input.region)) options.region = input.region
   if (isPresent(input.width)) options.width = input.width
@@ -104,7 +111,11 @@ export function projectScreenshot(artifact: BrowserScreenshotArtifact): BrowserS
   }
   if (artifact.capture) shot.capture = artifact.capture
   if (artifact.modelImage) {
-    const image: BrowserScreenshot['image'] = { width: artifact.modelImage.width, height: artifact.modelImage.height, scale: artifact.modelImage.scale }
+    const image: BrowserScreenshot['image'] = {
+      width: artifact.modelImage.width,
+      height: artifact.modelImage.height,
+      scale: artifact.modelImage.scale,
+    }
     if (artifact.modelImage.coordinateMap) image.coordinateMap = artifact.modelImage.coordinateMap
     shot.image = image
   }

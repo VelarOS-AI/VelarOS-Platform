@@ -28,8 +28,16 @@ import type {
 } from '../../types/browser'
 import type { BrowserSession } from '../../types/electron'
 import type { BrowserRuntimeKernel } from '../../types/electron.js'
-import { normalizeFetchResourceUrl, resolveUploadFilePath, summarizePageDiagnostics } from '../../utils/cdp/page-data.js'
-import { buildBrowserNetworkCaptureNotice, clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
+import {
+  normalizeFetchResourceUrl,
+  resolveUploadFilePath,
+  summarizePageDiagnostics,
+} from '../../utils/cdp/page-data.js'
+import {
+  buildBrowserNetworkCaptureNotice,
+  clearBrowserDiagnosticEntries,
+  takeBrowserDiagnosticWindow,
+} from '../../utils/diagnostics.js'
 import { evaluateInFrame, evaluateInWebContents } from '../../utils/electron/evaluate'
 import { listWebContentsFrames } from '../../utils/electron/webcontents'
 import { clampInteger } from '../../utils/numbers.js'
@@ -59,21 +67,60 @@ type ElectronNetFetchOptions = Parameters<typeof electron.net.fetch>[1] & {
  */
 export interface BrowserPageDataEngineApi {
   /** 读页面：正文、标题结构、链接、可交互元素与它们的 ref。 */
-  inspectPage(sessionId: string, context: BrowserSiteContext, options?: BrowserInspectPageOptions, abortSignal?: AbortSignal): Promise<BrowserPageInspection>
+  inspectPage(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options?: BrowserInspectPageOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPageInspection>
   /** 在页面上下文里跑一段受控脚本并取回结果。 */
-  evaluateScript(sessionId: string, context: BrowserSiteContext, options: BrowserEvaluateScriptOptions, abortSignal?: AbortSignal): Promise<BrowserScriptOutcome>
+  evaluateScript(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserEvaluateScriptOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserScriptOutcome>
   /** 列出页面的框架树（顶层页面与各层 iframe，含跨源的）。 */
-  listFrames(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserFrameInfo[]>
+  listFrames(
+    sessionId: string,
+    context: BrowserSiteContext,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserFrameInfo[]>
   /** 带页面会话的 cookie 下载一个 http(s) 资源到站点工作区。 */
-  fetchResource(sessionId: string, context: BrowserSiteContext, options: BrowserFetchResourceOptions, abortSignal?: AbortSignal): Promise<BrowserFetchResourceResult>
+  fetchResource(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserFetchResourceOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserFetchResourceResult>
   /** 读最近的 console、加载错误与网络诊断，并给一份汇总。 */
-  getPageDiagnostics(sessionId: string, context: BrowserSiteContext, options?: BrowserPageDiagnosticsOptions, abortSignal?: AbortSignal): Promise<BrowserPageDiagnostics>
+  getPageDiagnostics(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options?: BrowserPageDiagnosticsOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPageDiagnostics>
   /** 把站点工作区里的文件放进页面的 file input。 */
-  uploadFile(sessionId: string, context: BrowserSiteContext, options: BrowserUploadFileOptions, abortSignal?: AbortSignal): Promise<BrowserUploadFileResult>
+  uploadFile(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserUploadFileOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserUploadFileResult>
   /** 把当前页面导出成 PDF 存进站点工作区。 */
-  exportPagePdf(sessionId: string, context: BrowserSiteContext, options?: BrowserExportPagePdfOptions, abortSignal?: AbortSignal): Promise<BrowserExportPagePdfResult>
+  exportPagePdf(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options?: BrowserExportPagePdfOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserExportPagePdfResult>
   /** 等页面加载状态稳定，或等一小段时间。 */
-  waitForPage(sessionId: string, context: BrowserSiteContext, options: BrowserPageWaitOptions, abortSignal?: AbortSignal): Promise<BrowserPageWaitResult>
+  waitForPage(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserPageWaitOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPageWaitResult>
 }
 
 export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserPageDataEngineApi {
@@ -156,15 +203,29 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     // 主进程上限 = 页内超时 + 注入/序列化余量。页内那道 `Promise.race` 只在渲染进程还肯
     // 回话时才有效；被脚本卡死或中途导航走时它永远不触发，兜底必须由这一侧拿着
     // （AGENT-12 的第一因：一个永不 settle 的求值占死会话队列，把整条会话焊死）。
-    const deadline = { label: 'evaluateScript', timeoutMs: clampInteger(options.timeoutMs, 1, 30_000, 5_000) + 10_000 }
+    const deadline = {
+      label: 'evaluateScript',
+      timeoutMs: clampInteger(options.timeoutMs, 1, 30_000, 5_000) + 10_000,
+    }
     return options.frame
-      ? evaluateInFrame<BrowserScriptOutcome>(session.webContents, options.frame, script, true, deadline)
+      ? evaluateInFrame<BrowserScriptOutcome>(
+          session.webContents,
+          options.frame,
+          script,
+          true,
+          deadline
+        )
       : evaluateInWebContents<BrowserScriptOutcome>(session.webContents, script, true, deadline)
   }
 
-  public override async listFrames(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserFrameInfo[]> {
+  public override async listFrames(
+    sessionId: string,
+    context: BrowserSiteContext,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserFrameInfo[]> {
     abortSignal?.throwIfAborted()
-    if (this.getExternalPageSession(sessionId)) return super.listFrames(sessionId, context, abortSignal)
+    if (this.getExternalPageSession(sessionId))
+      return super.listFrames(sessionId, context, abortSignal)
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
     return listWebContentsFrames(session.webContents)
   }
@@ -263,9 +324,12 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     // 永远只会拿到空数组。建立之后如实告诉它「采集从现在开始」。
     const networkCapture = wantsNetwork ? await driverSession.driver.ensureNetworkCapture?.() : null
     const networkEntries = wantsNetwork
-      ? driverSession.driver.readDiagnostics?.({ limit, kinds, clear: options.clear }) ?? []
+      ? (driverSession.driver.readDiagnostics?.({ limit, kinds, clear: options.clear }) ?? [])
       : []
-    const entries = [...takeBrowserDiagnosticWindow(session.diagnostics, limit, kinds), ...networkEntries]
+    const entries = [
+      ...takeBrowserDiagnosticWindow(session.diagnostics, limit, kinds),
+      ...networkEntries,
+    ]
       .sort((left, right) => left.capturedAt - right.capturedAt)
       .slice(-limit)
 
@@ -412,10 +476,19 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     if (externalSession) return super.waitForPage(sessionId, context, options, abortSignal)
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-    const networkIdle = options.loadState === 'networkidle'
-      ? await this.pageWaiter.waitForNetworkIdle(session.webContents, BrowserTuning.page.networkIdleMs, options.timeoutMs ?? BrowserTuning.page.networkIdleTimeoutMs)
-      : true
-    const result = await evaluateInWebContents<BrowserPageWaitResult>(session.webContents, buildPageWaitScript(options), true)
+    const networkIdle =
+      options.loadState === 'networkidle'
+        ? await this.pageWaiter.waitForNetworkIdle(
+            session.webContents,
+            BrowserTuning.page.networkIdleMs,
+            options.timeoutMs ?? BrowserTuning.page.networkIdleTimeoutMs
+          )
+        : true
+    const result = await evaluateInWebContents<BrowserPageWaitResult>(
+      session.webContents,
+      buildPageWaitScript(options),
+      true
+    )
     // 页面脚本只认 readyState：网络空闲没等到时如实回没到。
     return networkIdle ? result : { ...result, matched: false, timedOut: true }
   }

@@ -9,27 +9,13 @@
     "rootDir": ".",
     "sourceMap": true,
     "paths": {
-      "@velaros-ai/core/platform": [
-        "./platform/index.ts"
-      ],
-      "@velaros-ai/core/platform/contracts": [
-        "./platform/contracts.ts"
-      ],
-      "@velaros-ai/core/platform/shared-resources": [
-        "./platform/shared-resources.ts"
-      ],
-      "@velaros-ai/core/text-files": [
-        "./text-files/index.ts"
-      ],
-      "@velaros-ai/core/text-files/contracts": [
-        "./text-files/contracts.ts"
-      ],
-      "@velaros-ai/core/path-rules": [
-        "./path-rules/index.ts"
-      ],
-      "@velaros-ai/core/path-rules/contracts": [
-        "./path-rules/contracts.ts"
-      ]
+      "@velaros-ai/core/platform": ["./platform/index.ts"],
+      "@velaros-ai/core/platform/contracts": ["./platform/contracts.ts"],
+      "@velaros-ai/core/platform/shared-resources": ["./platform/shared-resources.ts"],
+      "@velaros-ai/core/text-files": ["./text-files/index.ts"],
+      "@velaros-ai/core/text-files/contracts": ["./text-files/contracts.ts"],
+      "@velaros-ai/core/path-rules": ["./path-rules/index.ts"],
+      "@velaros-ai/core/path-rules/contracts": ["./path-rules/contracts.ts"]
     }
   },
   "include": [
@@ -38,10 +24,5 @@
     "path-rules/**/*.ts",
     "src/velaros-globals.d.ts"
   ],
-  "exclude": [
-    "*/spec/**",
-    "*/test/**",
-    "dist",
-    "node_modules"
-  ]
+  "exclude": ["*/spec/**", "*/test/**", "dist", "node_modules"]
 }

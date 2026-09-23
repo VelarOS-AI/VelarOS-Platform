@@ -32,8 +32,7 @@ const Domains = [
     config: kernelConfig,
     globs: ['packages/kernel/**'],
     // Kernel 原始规则里的 src/ 与 test/ 裸路径统一落到唯一 Kernel 包。
-    remap: (pattern) =>
-      /^(?:src|test)\//.test(pattern) ? `packages/kernel/${pattern}` : pattern,
+    remap: (pattern) => (/^(?:src|test)\//.test(pattern) ? `packages/kernel/${pattern}` : pattern),
   },
   {
     name: 'agent',
@@ -61,7 +60,6 @@ const Domains = [
       'tests/capabilities/**',
     ],
   },
-
 ]
 
 const toArray = (value) => (Array.isArray(value) ? value : [value])
@@ -93,7 +91,7 @@ function scopeDomain({ name, config, globs, remap }) {
     const scoped = { ...entry }
     scoped.files = entry.files
       ? entry.files.flatMap((pattern) =>
-          globs.map((glob) => [...toArray(pattern).map(mapPattern), glob]),
+          globs.map((glob) => [...toArray(pattern).map(mapPattern), glob])
         )
       : globs
     if (entry.ignores) scoped.ignores = entry.ignores.map(mapPattern)

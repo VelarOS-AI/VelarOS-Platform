@@ -7,7 +7,12 @@ import { createPlatform } from '@velaros-ai/core/platform'
 
 import { shellResolver } from '../../impl/local/ShellResolver.js'
 import { ShellUnavailableError } from '../../impl/local/ShellUnavailableError.js'
-import { buildNativeCommandSpec, describeNativeCommand, detectAvailableShells, replaceEnvironment } from '../../utils/shells.js'
+import {
+  buildNativeCommandSpec,
+  describeNativeCommand,
+  detectAvailableShells,
+  replaceEnvironment,
+} from '../../utils/shells.js'
 
 const gitRoot = 'C:\\Program Files\\Git'
 const bash = `${gitRoot}\\bin\\bash.exe`
@@ -17,9 +22,10 @@ const cmd = 'C:\\Windows\\System32\\cmd.exe'
 
 function installed(...shells: string[]) {
   const files = new Set(shells.map((file) => win32.normalize(file).toLowerCase()))
-  if (shells.includes(bash)) for (const file of ['git-bash.exe', 'usr\\bin\\msys-2.0.dll', 'cmd\\git.exe']) {
-    files.add(win32.join(gitRoot, file).toLowerCase())
-  }
+  if (shells.includes(bash))
+    for (const file of ['git-bash.exe', 'usr\\bin\\msys-2.0.dll', 'cmd\\git.exe']) {
+      files.add(win32.join(gitRoot, file).toLowerCase())
+    }
   return (file: string) => files.has(win32.normalize(file).toLowerCase())
 }
 
@@ -39,7 +45,11 @@ describe('Windows shell readiness and fallback', () => {
 
   test('falls through failed preflight probes and pins the successful shell for command generation', async () => {
     const checked: string[] = []
-    const options = { platform: 'win32' as const, env: {}, isFile: installed(bash, pwsh, powershell, cmd) }
+    const options = {
+      platform: 'win32' as const,
+      env: {},
+      isFile: installed(bash, pwsh, powershell, cmd),
+    }
     const shell = await shellResolver.resolveReady({
       ...options,
       probe: async (candidate) => {
@@ -51,33 +61,49 @@ describe('Windows shell readiness and fallback', () => {
     expect(shell.readiness).toBe('ready')
     expect(shell.version).toBe('5.1')
     expect(shellResolver.resolve({ ...options, env: shell.env }).shellPath).toBe(powershell)
-    expect(createPlatform({ platform: 'win32' }).getShellCommandSpec('Write-Output ready', shell).file)
-      .toBe(powershell)
+    expect(
+      createPlatform({ platform: 'win32' }).getShellCommandSpec('Write-Output ready', shell).file
+    ).toBe(powershell)
   })
 
   test('an invalid Git override still permits available Windows shells; unavailable pinned selection asks to refresh', () => {
     const isFile = installed(cmd)
-    expect(shellResolver.resolve({ platform: 'win32', env: { VELAROS_GIT_BASH: 'C:\\bad\\bash.exe' }, isFile }).kind)
-      .toBe('cmd')
-    expect(() => shellResolver.resolve({ platform: 'win32', env: { VELAROS_SHELL_PATH: bash }, isFile }))
-      .toThrow(ShellUnavailableError)
+    expect(
+      shellResolver.resolve({
+        platform: 'win32',
+        env: { VELAROS_GIT_BASH: 'C:\\bad\\bash.exe' },
+        isFile,
+      }).kind
+    ).toBe('cmd')
+    expect(() =>
+      shellResolver.resolve({ platform: 'win32', env: { VELAROS_SHELL_PATH: bash }, isFile })
+    ).toThrow(ShellUnavailableError)
   })
 
   test('all failed preflights produce an actionable result without running a user command', async () => {
-    await expect(shellResolver.resolveReady({
-      platform: 'win32', env: {}, isFile: installed(cmd),
-      probe: async () => ({ ready: false, reason: 'blocked executable' }),
-    })).rejects.toThrow('安装 Git for Windows')
+    await expect(
+      shellResolver.resolveReady({
+        platform: 'win32',
+        env: {},
+        isFile: installed(cmd),
+        probe: async () => ({ ready: false, reason: 'blocked executable' }),
+      })
+    ).rejects.toThrow('安装 Git for Windows')
   })
 
   test('PowerShell and CMD specs initialize encoding and retain their own command syntax', () => {
     const platform = createPlatform({ platform: 'win32' })
-    const ps = platform.getShellCommandSpec("Write-Output '中文'; node -e 'process.exit(17)'", { shellPath: powershell })
+    const ps = platform.getShellCommandSpec("Write-Output '中文'; node -e 'process.exit(17)'", {
+      shellPath: powershell,
+    })
     expect(ps.args.at(-1)).toContain('[Console]::OutputEncoding')
     expect(ps.args.at(-1)).toContain('exit $LASTEXITCODE')
-    expect(platform.quoteShellArg("O'Brien $env:PATH", { kind: 'powershell' })).toBe("'O''Brien $env:PATH'")
+    expect(platform.quoteShellArg("O'Brien $env:PATH", { kind: 'powershell' })).toBe(
+      "'O''Brien $env:PATH'"
+    )
     expect(platform.getShellCommandSpec('echo %TEMP%', { shellPath: cmd })).toEqual({
-      file: cmd, args: ['/d', '/s', '/v:off', '/c', '"chcp 65001 >nul & echo %TEMP%"'],
+      file: cmd,
+      args: ['/d', '/s', '/v:off', '/c', '"chcp 65001 >nul & echo %TEMP%"'],
       windowsVerbatimArguments: true,
     })
     const quotedCommand = '"C:\\工具 目录\\node.exe" "C:\\中文 项目\\argv.cjs" "中文 空格"'
@@ -88,9 +114,21 @@ describe('Windows shell readiness and fallback', () => {
   })
 
   test('native argv and environment overrides retain literal values without MSYS conversion', () => {
-    const shell = shellResolver.resolve({ platform: 'win32', env: { PATH: 'C:\\original' }, isFile: installed(bash) })
-    const args = ['/container/path', '--value=/a:/b', '中文🙂 "double" %PATH% ! &', 'C:\\trailing\\']
-    const plan = buildNativeCommandSpec({ file: 'C:\\Tools\\node.exe', args, env: { Path: 'C:\\override' } }, shell)
+    const shell = shellResolver.resolve({
+      platform: 'win32',
+      env: { PATH: 'C:\\original' },
+      isFile: installed(bash),
+    })
+    const args = [
+      '/container/path',
+      '--value=/a:/b',
+      '中文🙂 "double" %PATH% ! &',
+      'C:\\trailing\\',
+    ]
+    const plan = buildNativeCommandSpec(
+      { file: 'C:\\Tools\\node.exe', args, env: { Path: 'C:\\override' } },
+      shell
+    )
     expect(plan.file).toBe('C:\\Tools\\node.exe')
     expect(plan.args).toEqual(args)
     expect(plan.env.Path).toBe('C:\\override')
@@ -105,29 +143,58 @@ describe('Windows shell readiness and fallback', () => {
   test('writing a refreshed Windows environment back keeps the shell the host chose', () => {
     const cmdPath = 'C:\\Windows\\System32\\cmd.exe'
     // 刷新结果不带宿主设的输入变量；原来按结果整个覆盖，VELAROS_SHELL_PATH 被删，之后改用自动找到的 shell。
-    const hostEnv: NodeJS.ProcessEnv = { Path: 'C:\\old', VELAROS_SHELL_PATH: cmdPath, VELAROS_GIT_BASH: 'C:\\Git\\bin\\bash.exe', VELAROS_SHELL_KIND: 'cmd' }
+    const hostEnv: NodeJS.ProcessEnv = {
+      Path: 'C:\\old',
+      VELAROS_SHELL_PATH: cmdPath,
+      VELAROS_GIT_BASH: 'C:\\Git\\bin\\bash.exe',
+      VELAROS_SHELL_KIND: 'cmd',
+    }
     replaceEnvironment(hostEnv, { PATH: 'C:\\Windows\\System32' })
-    expect(hostEnv).toEqual({ PATH: 'C:\\Windows\\System32', VELAROS_SHELL_PATH: cmdPath, VELAROS_GIT_BASH: 'C:\\Git\\bin\\bash.exe' })
+    expect(hostEnv).toEqual({
+      PATH: 'C:\\Windows\\System32',
+      VELAROS_SHELL_PATH: cmdPath,
+      VELAROS_GIT_BASH: 'C:\\Git\\bin\\bash.exe',
+    })
     const isFile = (path: string): boolean => /(?:cmd|powershell)\.exe$/i.test(path)
-    expect(detectAvailableShells({ platform: 'win32', env: hostEnv, isFile })[0]?.shellPath).toBe(cmdPath)
+    expect(detectAvailableShells({ platform: 'win32', env: hostEnv, isFile })[0]?.shellPath).toBe(
+      cmdPath
+    )
   })
 
   test('CMD builtin availability uses the selected shell', async () => {
     const shell = shellResolver.resolve({ platform: 'win32', env: {}, isFile: installed(cmd) })
-    expect(await shellResolver.resolveCommand('dir', shell)).toMatchObject({ available: true, kind: 'builtin', path: 'dir' })
+    expect(await shellResolver.resolveCommand('dir', shell)).toMatchObject({
+      available: true,
+      kind: 'builtin',
+      path: 'dir',
+    })
   })
 
-  test.skipIf(process.platform === 'win32')('POSIX readiness and native execution preserve exact argv and exit code', async () => {
-    const shell = await shellResolver.resolveReady({ platform: 'linux', env: { PATH: '/usr/bin:/bin', SHELL: '/bin/bash' } })
-    const args = ['/container/path', '中文🙂 %PATH% "quotes"']
-    const plan = buildNativeCommandSpec({
-      file: process.execPath, args: ['-e', 'process.stdout.write(JSON.stringify(process.argv.slice(1)));process.exitCode=7', ...args],
-    }, shell)
-    const result = spawnSync(plan.file, plan.args, { env: plan.env, encoding: 'utf8' })
-    expect(result.status).toBe(7)
-    expect(JSON.parse(result.stdout)).toEqual(args)
-    const refreshed = await shellResolver.refreshWindowsEnvironment(shell.env, 'linux')
-    expect(refreshed.env.VELAROS_SHELL_PATH).toBeUndefined()
-    expect(refreshed.revision).toHaveLength(16)
-  })
+  test.skipIf(process.platform === 'win32')(
+    'POSIX readiness and native execution preserve exact argv and exit code',
+    async () => {
+      const shell = await shellResolver.resolveReady({
+        platform: 'linux',
+        env: { PATH: '/usr/bin:/bin', SHELL: '/bin/bash' },
+      })
+      const args = ['/container/path', '中文🙂 %PATH% "quotes"']
+      const plan = buildNativeCommandSpec(
+        {
+          file: process.execPath,
+          args: [
+            '-e',
+            'process.stdout.write(JSON.stringify(process.argv.slice(1)));process.exitCode=7',
+            ...args,
+          ],
+        },
+        shell
+      )
+      const result = spawnSync(plan.file, plan.args, { env: plan.env, encoding: 'utf8' })
+      expect(result.status).toBe(7)
+      expect(JSON.parse(result.stdout)).toEqual(args)
+      const refreshed = await shellResolver.refreshWindowsEnvironment(shell.env, 'linux')
+      expect(refreshed.env.VELAROS_SHELL_PATH).toBeUndefined()
+      expect(refreshed.revision).toHaveLength(16)
+    }
+  )
 })

@@ -1,11 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import {
-  mkdir,
-  mkdtemp,
-  readdir,
-  rename,
-  rm,
-} from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rename, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import {
@@ -20,15 +14,28 @@ import {
   toNullable,
 } from '@velaros-ai/core'
 
-import type { KernelArtifactExtractor, KernelArtifactSignatureVerifier, KernelFetch } from '../../contract/requires'
-import type { KernelActivationOptions, KernelActivePointer, KernelArtifactTarget, KernelCompatibilityOutcome, KernelCompatibilityRequirement, KernelEnsureInstalledOptions, KernelInstalledVersion, KernelInstallLayout, KernelInstallOutcome, KernelInstallRecord, KernelPruneOptions, KernelUpdateManifest, KernelUpdaterOptions } from '../../types/updater'
-import {
-  KernelUpdaterError,
-} from '../../utils/errors'
-import {
-  ignoreMissing,
-  writeJsonFileAtomic,
-} from '../../utils/fs'
+import type {
+  KernelArtifactExtractor,
+  KernelArtifactSignatureVerifier,
+  KernelFetch,
+} from '../../contract/requires'
+import type {
+  KernelActivationOptions,
+  KernelActivePointer,
+  KernelArtifactTarget,
+  KernelCompatibilityOutcome,
+  KernelCompatibilityRequirement,
+  KernelEnsureInstalledOptions,
+  KernelInstalledVersion,
+  KernelInstallLayout,
+  KernelInstallOutcome,
+  KernelInstallRecord,
+  KernelPruneOptions,
+  KernelUpdateManifest,
+  KernelUpdaterOptions,
+} from '../../types/updater'
+import { KernelUpdaterError } from '../../utils/errors'
+import { ignoreMissing, writeJsonFileAtomic } from '../../utils/fs'
 import { KernelTuning } from '../../utils/tuning'
 import { downloadKernelArtifact } from '../../utils/updater/download'
 import {
@@ -54,10 +61,7 @@ import {
   readKernelActivePointer,
   writeKernelActivePointer,
 } from '../../utils/updater/pointer'
-import {
-  assertKernelVersion,
-  satisfiesKernelVersionRange,
-} from '../../utils/updater/version'
+import { assertKernelVersion, satisfiesKernelVersionRange } from '../../utils/updater/version'
 
 import { KernelUpdateLock } from './KernelUpdateLock'
 import { PassthroughKernelArtifactExtractor } from './PassthroughKernelArtifactExtractor'
@@ -84,24 +88,18 @@ export interface KernelUpdaterApi {
   /** 列出本机装了哪些版本，按版本升序；半截的安装也在列，用 `complete` 区分。 */
   listInstalledVersions(): Promise<readonly KernelInstalledVersion[]>
   /** 取一份发布清单；没给来源、也没在构造时配来源时抛 MANIFEST_UNREACHABLE。 */
-  loadManifest(
-    source?: string,
-    signal?: AbortSignal,
-  ): Promise<KernelUpdateManifest>
+  loadManifest(source?: string, signal?: AbortSignal): Promise<KernelUpdateManifest>
   /** 保证某个版本装好（已经装好且是整的就直接复用）；下载、校验、解包、落位全程在更新锁下面跑。 */
   ensureInstalled(
     version: string,
-    options?: KernelEnsureInstalledOptions,
+    options?: KernelEnsureInstalledOptions
   ): Promise<KernelInstallOutcome>
   /** 保证有一个满足版本范围的内核处于激活状态：先用正在跑的，再用本机最新的合格版本，最后才去装发布的。都没有时抛 VERSION_UNAVAILABLE。 */
   ensureCompatible(
-    requirement: KernelCompatibilityRequirement | string,
+    requirement: KernelCompatibilityRequirement | string
   ): Promise<KernelCompatibilityOutcome>
   /** 把 `current.json` 切到一个已安装的版本；带了健康检查就切完跑一遍，没过先把指针恢复再抛 HEALTH_CHECK_FAILED。版本没装抛 VERSION_NOT_INSTALLED。 */
-  activateVersion(
-    version: string,
-    options?: KernelActivationOptions,
-  ): Promise<KernelActivePointer>
+  activateVersion(version: string, options?: KernelActivationOptions): Promise<KernelActivePointer>
   /** 回滚到指针里记的 `previousVersion`；没有可回滚的目标时抛 NO_ROLLBACK_TARGET。 */
   rollback(options?: KernelActivationOptions): Promise<KernelActivePointer>
   /** 清掉超出保留条数的旧安装与旧指针备份，返回删掉的版本号；激活版本与回滚目标永远保留。 */
@@ -124,14 +122,17 @@ export class KernelUpdater implements KernelUpdaterApi {
 
   public constructor(options: KernelUpdaterOptions = {}) {
     this.layout = options.layout ?? createKernelInstallLayout(options.root)
-    this.target = options.target
-      ?? resolveKernelArtifactTarget(options.platform, options.architecture)
+    this.target =
+      options.target ?? resolveKernelArtifactTarget(options.platform, options.architecture)
     this.fetch = options.fetch
     this.extractor = options.extractor ?? new PassthroughKernelArtifactExtractor()
-    this.signatureVerifier = options.signatureVerifier
-      ?? new UnverifiedKernelArtifactSignatureVerifier()
+    this.signatureVerifier =
+      options.signatureVerifier ?? new UnverifiedKernelArtifactSignatureVerifier()
     this.requireSignature = !!options.requireSignature
-    this.retainedVersions = Math.max(1, options.retainedVersions ?? KernelTuning.updaterRetainedVersions)
+    this.retainedVersions = Math.max(
+      1,
+      options.retainedVersions ?? KernelTuning.updaterRetainedVersions
+    )
     this.holderId = options.holderId ?? randomUUID()
     this.now = options.now ?? Date.now
     this.isProcessAlive = options.isProcessAlive
@@ -159,29 +160,23 @@ export class KernelUpdater implements KernelUpdaterApi {
     return listKernelInstalledVersions(this.layout, pointer?.version)
   }
 
-  public async loadManifest(
-    source?: string,
-    signal?: AbortSignal,
-  ): Promise<KernelUpdateManifest> {
+  public async loadManifest(source?: string, signal?: AbortSignal): Promise<KernelUpdateManifest> {
     const resolved = source ?? this.manifestSource
     if (isUndefined(resolved)) {
-      throw new KernelUpdaterError(
-        'MANIFEST_UNREACHABLE',
-        '没有配置内核更新清单的来源',
-      )
+      throw new KernelUpdaterError('MANIFEST_UNREACHABLE', '没有配置内核更新清单的来源')
     }
     return loadKernelUpdateManifest(resolved, { fetch: this.fetch, signal })
   }
 
   public async ensureInstalled(
     version: string,
-    options: KernelEnsureInstalledOptions = {},
+    options: KernelEnsureInstalledOptions = {}
   ): Promise<KernelInstallOutcome> {
     return this.exclusively(() => this.installVersion(version, options))
   }
 
   public async ensureCompatible(
-    requirement: KernelCompatibilityRequirement | string,
+    requirement: KernelCompatibilityRequirement | string
   ): Promise<KernelCompatibilityOutcome> {
     const resolved: KernelCompatibilityRequirement = isString(requirement)
       ? { range: requirement }
@@ -191,46 +186,35 @@ export class KernelUpdater implements KernelUpdaterApi {
 
   public async activateVersion(
     version: string,
-    options: KernelActivationOptions = {},
+    options: KernelActivationOptions = {}
   ): Promise<KernelActivePointer> {
     return this.exclusively(() => this.activate(version, options))
   }
 
-  public async rollback(
-    options: KernelActivationOptions = {},
-  ): Promise<KernelActivePointer> {
+  public async rollback(options: KernelActivationOptions = {}): Promise<KernelActivePointer> {
     return this.exclusively(async () => {
       const pointer = await readKernelActivePointer(this.layout.pointerPath)
       const target = toNullable(pointer?.previousVersion)
       if (isNull(target)) {
-        throw new KernelUpdaterError(
-          'NO_ROLLBACK_TARGET',
-          '没有记录可回滚的上一个内核版本',
-          { version: pointer?.version },
-        )
+        throw new KernelUpdaterError('NO_ROLLBACK_TARGET', '没有记录可回滚的上一个内核版本', {
+          version: pointer?.version,
+        })
       }
       return this.activate(target, options)
     })
   }
 
-  public async pruneVersions(
-    options: KernelPruneOptions = {},
-  ): Promise<readonly string[]> {
+  public async pruneVersions(options: KernelPruneOptions = {}): Promise<readonly string[]> {
     return this.exclusively(async () => {
       const retain = Math.max(1, options.retain ?? this.retainedVersions)
       const pointer = await readKernelActivePointer(this.layout.pointerPath)
-      const installed = await listKernelInstalledVersions(
-        this.layout,
-        pointer?.version,
-      )
+      const installed = await listKernelInstalledVersions(this.layout, pointer?.version)
       const protectedVersions = new Set(
-        [pointer?.version, pointer?.previousVersion].filter(
-          (version): version is string => isString(version),
-        ),
+        [pointer?.version, pointer?.previousVersion].filter((version): version is string =>
+          isString(version)
+        )
       )
-      const removable = installed.filter(
-        (entry) => !protectedVersions.has(entry.version),
-      )
+      const removable = installed.filter((entry) => !protectedVersions.has(entry.version))
       const keepCount = Math.max(0, retain - protectedVersions.size)
       const removed: string[] = []
       for (const entry of removable.slice(0, Math.max(0, removable.length - keepCount))) {
@@ -265,21 +249,20 @@ export class KernelUpdater implements KernelUpdaterApi {
   }
 
   private async resolveCompatible(
-    requirement: KernelCompatibilityRequirement,
+    requirement: KernelCompatibilityRequirement
   ): Promise<KernelCompatibilityOutcome> {
     const pointer = await readKernelActivePointer(this.layout.pointerPath)
-    const installed = await listKernelInstalledVersions(
-      this.layout,
-      pointer?.version,
+    const installed = await listKernelInstalledVersions(this.layout, pointer?.version)
+    const acceptable = installed.filter(
+      (entry) => entry.complete && satisfiesKernelVersionRange(entry.version, requirement.range)
     )
-    const acceptable = installed.filter((entry) =>
-      entry.complete && satisfiesKernelVersionRange(entry.version, requirement.range))
 
-    const running = isNotUndefined(pointer)
-      && acceptable.some((entry) => entry.version === pointer.version)
-      ? pointer
-      : undefined
-    if (isNotUndefined(running)) return {
+    const running =
+      isNotUndefined(pointer) && acceptable.some((entry) => entry.version === pointer.version)
+        ? pointer
+        : undefined
+    if (isNotUndefined(running))
+      return {
         version: running.version,
         installed: false,
         activated: false,
@@ -293,14 +276,11 @@ export class KernelUpdater implements KernelUpdaterApi {
       throw new KernelUpdaterError(
         'VERSION_UNAVAILABLE',
         `本机已安装的内核版本里没有满足 "${requirement.range}" 的`,
-        { versionRange: requirement.range },
+        { versionRange: requirement.range }
       )
     }
 
-    const manifest = await this.loadManifest(
-      requirement.manifestSource,
-      requirement.signal,
-    )
+    const manifest = await this.loadManifest(requirement.manifestSource, requirement.signal)
     const published = selectKernelManifestVersion(manifest, {
       range: requirement.range,
       target: this.target,
@@ -309,7 +289,7 @@ export class KernelUpdater implements KernelUpdaterApi {
       throw new KernelUpdaterError(
         'VERSION_UNAVAILABLE',
         `${this.target} 上发布的内核版本里没有满足 "${requirement.range}" 的`,
-        { versionRange: requirement.range, target: this.target },
+        { versionRange: requirement.range, target: this.target }
       )
     }
 
@@ -323,7 +303,7 @@ export class KernelUpdater implements KernelUpdaterApi {
   private async switchTo(
     version: string,
     installed: boolean,
-    options: KernelActivationOptions,
+    options: KernelActivationOptions
   ): Promise<KernelCompatibilityOutcome> {
     return {
       version,
@@ -335,34 +315,33 @@ export class KernelUpdater implements KernelUpdaterApi {
 
   private async installVersion(
     version: string,
-    options: KernelEnsureInstalledOptions,
+    options: KernelEnsureInstalledOptions
   ): Promise<KernelInstallOutcome> {
     assertKernelVersion(version)
     const destination = kernelVersionDirectory(this.layout, version)
     const existing = await readKernelInstallRecord(destination)
-    const reusable = isNotUndefined(existing) && !isTrue(options.force)
-      ? { version, path: destination, installed: false, record: existing }
-      : undefined
+    const reusable =
+      isNotUndefined(existing) && !isTrue(options.force)
+        ? { version, path: destination, installed: false, record: existing }
+        : undefined
     if (isNotUndefined(reusable)) return reusable
     if (
-      isNotUndefined(existing)
-      && (await readKernelActivePointer(this.layout.pointerPath))?.version === version
+      isNotUndefined(existing) &&
+      (await readKernelActivePointer(this.layout.pointerPath))?.version === version
     ) {
       throw new KernelUpdaterError(
         'INSTALL_FAILED',
         `内核版本 "${version}" 正在使用中，不能原地重装`,
-        { version, path: destination },
+        { version, path: destination }
       )
     }
 
-    const manifest = options.manifest
-      ?? await this.loadManifest(options.manifestSource, options.signal)
+    const manifest =
+      options.manifest ?? (await this.loadManifest(options.manifestSource, options.signal))
     const selection = selectKernelArtifact(manifest, version, this.target)
 
     await this.discardOrphanedStaging()
-    const stagingRoot = await mkdtemp(
-      join(this.layout.stagingDirectory, `${version}-`),
-    )
+    const stagingRoot = await mkdtemp(join(this.layout.stagingDirectory, `${version}-`))
     const payloadPath = join(stagingRoot, 'artifact.payload')
     const stagedDirectory = join(stagingRoot, 'install')
     try {
@@ -383,7 +362,7 @@ export class KernelUpdater implements KernelUpdaterApi {
         throw new KernelUpdaterError(
           'SIGNATURE_REJECTED',
           `内核制品的签名没有通过校验：${signature.reason ?? signature.method}`,
-          { version, target: this.target, url: selection.artifact.url },
+          { version, target: this.target, url: selection.artifact.url }
         )
       }
 
@@ -412,11 +391,11 @@ export class KernelUpdater implements KernelUpdaterApi {
       throw error instanceof KernelUpdaterError
         ? error
         : new KernelUpdaterError(
-          'INSTALL_FAILED',
-          `内核版本 "${version}" 安装失败`,
-          { version, target: this.target },
-          { cause: error },
-        )
+            'INSTALL_FAILED',
+            `内核版本 "${version}" 安装失败`,
+            { version, target: this.target },
+            { cause: error }
+          )
     } finally {
       await rm(stagingRoot, { recursive: true, force: true })
     }
@@ -424,16 +403,15 @@ export class KernelUpdater implements KernelUpdaterApi {
 
   private async activate(
     version: string,
-    options: KernelActivationOptions,
+    options: KernelActivationOptions
   ): Promise<KernelActivePointer> {
     assertKernelVersion(version)
     const path = kernelVersionDirectory(this.layout, version)
     if (isUndefined(await readKernelInstallRecord(path))) {
-      throw new KernelUpdaterError(
-        'VERSION_NOT_INSTALLED',
-        `内核版本 "${version}" 本机没有安装`,
-        { version, path },
-      )
+      throw new KernelUpdaterError('VERSION_NOT_INSTALLED', `内核版本 "${version}" 本机没有安装`, {
+        version,
+        path,
+      })
     }
 
     const previous = await readKernelActivePointer(this.layout.pointerPath)
@@ -473,13 +451,11 @@ export class KernelUpdater implements KernelUpdaterApi {
         previousVersion: optionalWhen(isString, previousVersion),
         path,
       },
-      isUndefined(failure) ? undefined : { cause: failure },
+      isUndefined(failure) ? undefined : { cause: failure }
     )
   }
 
-  private async revertPointer(
-    previous?: KernelActivePointer,
-  ): Promise<void> {
+  private async revertPointer(previous?: KernelActivePointer): Promise<void> {
     if (isUndefined(previous)) {
       await rm(this.layout.pointerPath, { force: true })
       return
@@ -490,17 +466,12 @@ export class KernelUpdater implements KernelUpdaterApi {
     })
   }
 
-  private async backupPointer(
-    previous?: KernelActivePointer,
-  ): Promise<void> {
+  private async backupPointer(previous?: KernelActivePointer): Promise<void> {
     if (isUndefined(previous)) return
     await mkdir(this.layout.backupsDirectory, { recursive: true, mode: 0o700 })
     await writeJsonFileAtomic(
-      join(
-        this.layout.backupsDirectory,
-        kernelPointerBackupFileName(previous),
-      ),
-      previous,
+      join(this.layout.backupsDirectory, kernelPointerBackupFileName(previous)),
+      previous
     )
   }
 
@@ -541,14 +512,15 @@ export class KernelUpdater implements KernelUpdaterApi {
         await lock.release()
       }
     })
-    this.queue = run.then(() => undefined, () => undefined)
+    this.queue = run.then(
+      () => undefined,
+      () => undefined
+    )
     return run
   }
 }
 
 /** 建一个共享 Runtime 更新器;不给选项就用缺省安装根与当前平台的产物目标。 */
-export function createKernelUpdater(
-  options: KernelUpdaterOptions = {},
-): KernelUpdaterApi {
+export function createKernelUpdater(options: KernelUpdaterOptions = {}): KernelUpdaterApi {
   return new KernelUpdater(options)
 }

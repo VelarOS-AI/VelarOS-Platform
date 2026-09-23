@@ -199,9 +199,14 @@ export interface ScriptPackageSurface {
 /** 精确编辑已保存程序中的主源码或一个既有附属模块。 */
 export interface CodeProgramTargetEdit extends CodeProgramEdit {
   /** 原程序 modules 中的精确键，省略时编辑主源码。 */
-  readonly module?:string
+  readonly module?: string
 }
 /** 一组编辑只产生完整候选或一个有定位的拒绝。 */
 export type CodeProgramEditResult =
-  | { readonly ok:true; readonly program:CodeProgramRequest; readonly changed:boolean }
-  | { readonly ok:false; readonly code:'SCRIPT_EDIT'; readonly message:string; readonly editIndex?:number }
+  | { readonly ok: true; readonly program: CodeProgramRequest; readonly changed: boolean }
+  | {
+      readonly ok: false
+      readonly code: 'SCRIPT_EDIT'
+      readonly message: string
+      readonly editIndex?: number
+    }

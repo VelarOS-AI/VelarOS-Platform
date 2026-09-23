@@ -4,7 +4,12 @@
 import type { DetectorRegistryApi, VerifierRegistryApi } from '../contract/provides.js'
 import type { AgentLabRuntimeLoader, LabDriver } from '../contract/requires.js'
 
-import type { CertificationPolicy, CertificationSubject, RunArchive, TrialSpec } from './agent-lab.js'
+import type {
+  CertificationPolicy,
+  CertificationSubject,
+  RunArchive,
+  TrialSpec,
+} from './agent-lab.js'
 
 /** 跑一条旅程要给的全部东西：身份、旅程定义、驱动、两个注册表，以及可替换的时钟与 run id 生成器。 */
 export interface RunJourneyOptions {

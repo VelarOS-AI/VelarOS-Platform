@@ -32,6 +32,7 @@ export function readBoundedOutputSince(
 ): { text: string; cursor: number; droppedChars: number } {
   const retainedFrom = produced - buffer.length
   const readFrom = Math.min(Math.max(cursor, 0), produced)
-  if (readFrom < retainedFrom) return { text: buffer, cursor: produced, droppedChars: retainedFrom - readFrom }
+  if (readFrom < retainedFrom)
+    return { text: buffer, cursor: produced, droppedChars: retainedFrom - readFrom }
   return { text: buffer.slice(readFrom - retainedFrom), cursor: produced, droppedChars: 0 }
 }

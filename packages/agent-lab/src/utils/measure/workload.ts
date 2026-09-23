@@ -3,7 +3,11 @@
  * 任务结果只由显式的验收证据定，执行跨度只定执行健康，两件事分开说。
  * 纯测量：不碰 Node 模块、不发请求。
  */
-import type { RealTaskAssertionOutcome, RealTaskHealth, RealTaskVerdict } from '../../contract/constants.js'
+import type {
+  RealTaskAssertionOutcome,
+  RealTaskHealth,
+  RealTaskVerdict,
+} from '../../contract/constants.js'
 import type {
   RealTaskAssessment,
   RealTaskAssessmentMetrics,
@@ -54,7 +58,9 @@ export function auditRepeatedToolErrors(spans: readonly RealTaskSpan[]): Repeate
   let redundant = 0
   for (const group of groups) {
     if (group.spans.length < AgentLabTuning.workload.repeatedToolErrorRun) continue
-    const sequential = group.spans.slice(1).every((span, index) => span.startedAt >= group.spans[index]!.endedAt)
+    const sequential = group.spans
+      .slice(1)
+      .every((span, index) => span.startedAt >= group.spans[index]!.endedAt)
     if (!sequential) {
       redundant += group.spans.length
       findings.push({
@@ -90,16 +96,20 @@ function taskOutcome(record: RealTaskRecord): RealTaskAssertionOutcome {
 }
 
 /** 任务结果与执行健康合成一句综合判词。 */
-function overallVerdict(outcome: RealTaskAssertionOutcome, health: RealTaskHealth): RealTaskVerdict {
+function overallVerdict(
+  outcome: RealTaskAssertionOutcome,
+  health: RealTaskHealth
+): RealTaskVerdict {
   if (outcome === 'fail') return 'verified-fail'
-  if (outcome === 'pass') return health === 'healthy' ? 'verified-pass' : 'verified-pass-with-issues'
+  if (outcome === 'pass')
+    return health === 'healthy' ? 'verified-pass' : 'verified-pass-with-issues'
   return health === 'broken' ? 'needs-review' : 'unknown'
 }
 
 /** 数出这次真实任务的量：调用了多少、错了多少、改了多少、验收过了几条。 */
 function assessmentMetrics(
   record: RealTaskRecord,
-  repeated: RepeatedToolErrorSummary,
+  repeated: RepeatedToolErrorSummary
 ): RealTaskAssessmentMetrics {
   const spans = record.evidence.spans
   const modelSpans = spans.filter((span) => span.category === 'model')
@@ -123,7 +133,10 @@ function assessmentMetrics(
 }
 
 /** 列出这次真实任务的全部发现：终态、工具错误、重复打转、没验收的副作用、断言与观测缺口。 */
-function auditFindings(record: RealTaskRecord, repeated: RepeatedToolErrorSummary): readonly RealTaskFinding[] {
+function auditFindings(
+  record: RealTaskRecord,
+  repeated: RepeatedToolErrorSummary
+): readonly RealTaskFinding[] {
   const findings: RealTaskFinding[] = []
   const toolSpans = record.evidence.spans.filter((span) => span.category === 'tool')
   const toolErrors = toolSpans.filter((span) => span.status === 'error')
@@ -221,7 +234,10 @@ function auditFindings(record: RealTaskRecord, repeated: RepeatedToolErrorSummar
 }
 
 /** 审计一次已经校验过的真实任务记录，给出评估；`generatedAt` 由调用方定。 */
-export function auditRealTaskRecord(record: RealTaskRecord, generatedAt: number): RealTaskAssessment {
+export function auditRealTaskRecord(
+  record: RealTaskRecord,
+  generatedAt: number
+): RealTaskAssessment {
   const repeated = auditRepeatedToolErrors(record.evidence.spans)
   const findings = auditFindings(record, repeated)
   const outcome = taskOutcome(record)
@@ -239,7 +255,9 @@ export function auditRealTaskRecord(record: RealTaskRecord, generatedAt: number)
     verdict: overallVerdict(outcome, health),
     promotionRecommended:
       outcome === 'fail' ||
-      findings.some((finding) => ['retry-loop', 'execution', 'user-rejected'].includes(finding.class)),
+      findings.some((finding) =>
+        ['retry-loop', 'execution', 'user-rejected'].includes(finding.class)
+      ),
     findings,
     metrics: assessmentMetrics(record, repeated),
   }

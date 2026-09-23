@@ -1,6 +1,11 @@
 /** 站点工作区的内部形状：解析后的路径、用户脚本存储要的文件口子、脚本索引与改动校验后的值。 */
 
-import type { BrowserUserScriptRecord, ProjectReadFileResult, WorkspaceWriteFileOptions, WorkspaceWriteFileResult } from './browser.js'
+import type {
+  BrowserUserScriptRecord,
+  ProjectReadFileResult,
+  WorkspaceWriteFileOptions,
+  WorkspaceWriteFileResult,
+} from './browser.js'
 
 /** 站点工作区里的一条路径。 */
 export interface BrowserWorkspacePath {

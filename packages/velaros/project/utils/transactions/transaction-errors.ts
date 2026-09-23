@@ -17,9 +17,17 @@ import { ProjectTuning } from '../tuning.js'
  */
 export function withNotAppliedOutcome(error: unknown): Error {
   if (error instanceof ProjectError)
-    return new ProjectError(error.reason, error.message, { ...error.details, executionOutcome: 'not-applied' }, error.suggestedNextAction)
+    return new ProjectError(
+      error.reason,
+      error.message,
+      { ...error.details, executionOutcome: 'not-applied' },
+      error.suggestedNextAction
+    )
   const failure = AppError.from(error)
-  return new AppError(failure.code, failure.message, error, { ...failure.context, executionOutcome: 'not-applied' })
+  return new AppError(failure.code, failure.message, error, {
+    ...failure.context,
+    executionOutcome: 'not-applied',
+  })
 }
 
 /** 把错误补上「没有写入」的结论后抛出（写盘开始之前的失败用）。 */
@@ -33,7 +41,7 @@ export function revisionMismatch(message: string, details: any): ProjectError {
     'BASE_REVISION_MISMATCH',
     message,
     details,
-    RevisionMismatchSuggestedNextAction,
+    RevisionMismatchSuggestedNextAction
   )
 }
 
@@ -78,7 +86,7 @@ export function diagnosticsEnvelope(diagnostics: readonly Diagnostic[]): {
           diagnostic.message,
         ]),
         diagnostic,
-      ]),
+      ])
     ).values(),
   ]
   // Array.prototype.sort 稳定：同档诊断保持 validator 产出顺序。
@@ -87,14 +95,22 @@ export function diagnosticsEnvelope(diagnostics: readonly Diagnostic[]): {
   const location = [first.path, first.line, optionalWhen(isPresent(first.line), first.column)]
     .filter(isPresent)
     .join(':')
-  const firstLine = truncateText(first.message.split('\n')[0].trim(), ProjectTuning.transactions.headlineChars)
+  const firstLine = truncateText(
+    first.message.split('\n')[0].trim(),
+    ProjectTuning.transactions.headlineChars
+  )
   return {
     headline: `${isEmpty(location) ? '' : `${location} `}${firstLine}（共 ${ordered.length} 条）`,
     details: {
-      diagnostics: ordered.slice(0, ProjectTuning.transactions.reportedDiagnostics).map((diagnostic) => ({
-        ...diagnostic,
-        message: truncateText(diagnostic.message, ProjectTuning.transactions.diagnosticMessageChars),
-      })),
+      diagnostics: ordered
+        .slice(0, ProjectTuning.transactions.reportedDiagnostics)
+        .map((diagnostic) => ({
+          ...diagnostic,
+          message: truncateText(
+            diagnostic.message,
+            ProjectTuning.transactions.diagnosticMessageChars
+          ),
+        })),
       diagnosticCount: ordered.length,
     },
   }
@@ -107,17 +123,34 @@ export function diagnosticsEnvelope(diagnostics: readonly Diagnostic[]): {
 export function validationFailed(
   transactionId: string,
   validation: ValidationResult,
-  context: { rebasedFiles?: string[] } = {},
+  context: { rebasedFiles?: string[] } = {}
 ): ProjectError {
-  const failedChecks = [...new Set(validation.checks.filter((check) => !check.ok).map((check) => check.id))]
-  const envelope = diagnosticsEnvelope(!isEmpty(validation.diagnostics) ? validation.diagnostics : [{
-    severity: 'error', message: !isEmpty(failedChecks) ? `检查未通过：${failedChecks.join('、')}` : '校验器返回未通过，未提供诊断详情。',
-  }])
+  const failedChecks = [
+    ...new Set(validation.checks.filter((check) => !check.ok).map((check) => check.id)),
+  ]
+  const envelope = diagnosticsEnvelope(
+    !isEmpty(validation.diagnostics)
+      ? validation.diagnostics
+      : [
+          {
+            severity: 'error',
+            message: !isEmpty(failedChecks)
+              ? `检查未通过：${failedChecks.join('、')}`
+              : '校验器返回未通过，未提供诊断详情。',
+          },
+        ]
+  )
   const windows: Array<Record<string, unknown>> = []
   const diagnostics = envelope.details.diagnostics.map((diagnostic) => {
-    if (!isPlainObject(diagnostic.data) || !isPlainObject(diagnostic.data.sourceContext)) return diagnostic
+    if (!isPlainObject(diagnostic.data) || !isPlainObject(diagnostic.data.sourceContext))
+      return diagnostic
     const { sourceContext, excerpt: _excerpt, ...data } = diagnostic.data
-    windows.push({ path: diagnostic.path, line: diagnostic.line, column: diagnostic.column, ...sourceContext })
+    windows.push({
+      path: diagnostic.path,
+      line: diagnostic.line,
+      column: diagnostic.column,
+      ...sourceContext,
+    })
     return { ...diagnostic, data: { ...data, coordinateSpace: 'candidate' } }
   })
   return new ProjectError(
@@ -140,6 +173,8 @@ export function validationFailed(
     },
     isPresent(context.rebasedFiles)
       ? '准备事务后 rebasedFiles 被外部修改，rebase 后的内容未通过校验；请重新读取这些文件，基于最新内容重新准备事务。'
-      : !isEmpty(windows) ? '按诊断与改完之后的预览修正编辑再提交；预览里的行号属于改完的内容，不能直接当原文的 range 用。' : '按诊断修正编辑再提交。',
+      : !isEmpty(windows)
+        ? '按诊断与改完之后的预览修正编辑再提交；预览里的行号属于改完的内容，不能直接当原文的 range 用。'
+        : '按诊断修正编辑再提交。'
   )
 }

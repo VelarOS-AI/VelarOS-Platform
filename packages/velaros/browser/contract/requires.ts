@@ -92,9 +92,42 @@ import type {
   CdpEventsInput,
   CdpSendInput,
 } from '../types/browser'
-import type { BrowserLoginDetection, BrowserPageDiagnosticEntry, BrowserPageState,BrowserPageTargetInfo } from '../types/browser.js'
-import type { CdpExternalBrowserLaunchOptions, CdpExternalBrowserSession, CdpScreencastConsumerOptions, CdpScreencastStartOptions, ScreencastCapturedFrame } from '../types/cdp.js'
-import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions,BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverKeyEvent, BrowserPageDriverKind, BrowserPageDriverMouseEvent, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkCaptureState, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState, BrowserSystemPointerMoveOptions } from '../types/driver.js'
+import type {
+  BrowserLoginDetection,
+  BrowserPageDiagnosticEntry,
+  BrowserPageState,
+  BrowserPageTargetInfo,
+} from '../types/browser.js'
+import type {
+  CdpExternalBrowserLaunchOptions,
+  CdpExternalBrowserSession,
+  CdpScreencastConsumerOptions,
+  CdpScreencastStartOptions,
+  ScreencastCapturedFrame,
+} from '../types/cdp.js'
+import type {
+  BrowserPageDriverClickCoordinatesOptions,
+  BrowserPageDriverDiagnosticsOptions,
+  BrowserPageDriverDownloadListener,
+  BrowserPageDriverDragCoordinatesOptions,
+  BrowserPageDriverFetchResourceOptions,
+  BrowserPageDriverFetchResourceResult,
+  BrowserPageDriverFileInputOptions,
+  BrowserPageDriverKeyEvent,
+  BrowserPageDriverKind,
+  BrowserPageDriverMouseEvent,
+  BrowserPageDriverMoveMouseOptions,
+  BrowserPageDriverNetworkCaptureState,
+  BrowserPageDriverNetworkControlState,
+  BrowserPageDriverNetworkIdleOptions,
+  BrowserPageDriverNetworkRequestDetailsResult,
+  BrowserPageDriverNetworkResponseBodyResult,
+  BrowserPageDriverPdfOptions,
+  BrowserPageDriverScreenshot,
+  BrowserPageDriverScreenshotOptions,
+  BrowserPageDriverState,
+  BrowserSystemPointerMoveOptions,
+} from '../types/driver.js'
 
 /**
  * 外部浏览器启动器：**接远程浏览器或容器的扩展点**。
@@ -204,7 +237,11 @@ export interface BrowserPageDriver {
   /** 列出页面的框架树：顶层页面与各层 iframe（含跨源的）。 */
   listFrames?(): Promise<BrowserFrameInfo[]>
   /** 在一个框架里跑一段脚本（frameId 取自 listFrames）；框架已经不在时抛 `BROWSER_FRAME_NOT_FOUND`。 */
-  executeJavaScriptInFrame?<T = unknown>(frameId: string, script: string, userGesture?: boolean): Promise<T>
+  executeJavaScriptInFrame?<T = unknown>(
+    frameId: string,
+    script: string,
+    userGesture?: boolean
+  ): Promise<T>
   /** 给模型单开一条 CDP 会话：和驱动自己用的那条互不影响，关掉就撤掉它做过的一切。 */
   openProtocolChannel?(): Promise<BrowserProtocolChannel>
   /** 列出这个浏览器里的页面（内嵌页面只有当前这一页）。 */
@@ -263,9 +300,15 @@ export interface BrowserPageDriver {
  */
 export interface BrowserProtocolChannel {
   /** 发一条命令并等结果：sessionId 给它挂出来的子会话（flatten），不给是页面本身；协议报错抛 `BROWSER_PROTOCOL_FAILED`。 */
-  send(method: string, params: Optional<Record<string, unknown>>, sessionId?: string): Promise<unknown>
+  send(
+    method: string,
+    params: Optional<Record<string, unknown>>,
+    sessionId?: string
+  ): Promise<unknown>
   /** 订阅这条会话与它挂出来的子会话上的全部事件（sessionId 是子会话，页面本身是 undefined）；返回取消订阅的函数。 */
-  onEvent(listener: (method: string, params: unknown, sessionId: Optional<string>) => void): () => void
+  onEvent(
+    listener: (method: string, params: unknown, sessionId: Optional<string>) => void
+  ): () => void
   /** 订阅会话断开（页面关了、调试器被拿走、连接断了）；返回取消订阅的函数。 */
   onClose(listener: () => void): () => void
   /** 断开这条会话。 */
@@ -357,9 +400,7 @@ export interface BrowserSpacePort {
   /** 调整页面缩放比例，便于视觉定位和点击。 */
   setPageZoom: (options: BrowserPageZoomOptions) => Promise<BrowserPageZoomResult>
   /** 配置外部 CDP 浏览器页面网络状态。 */
-  configureNetwork: (
-    options: BrowserNetworkControlOptions
-  ) => Promise<BrowserNetworkControlResult>
+  configureNetwork: (options: BrowserNetworkControlOptions) => Promise<BrowserNetworkControlResult>
   /** 按 requestId 读取请求、响应、timing 和可选响应体详情。 */
   readNetworkRequestDetails: (
     options: BrowserNetworkRequestDetailsOptions
@@ -375,17 +416,13 @@ export interface BrowserSpacePort {
     options: BrowserPerformanceInsightOptions
   ) => Promise<BrowserPerformanceInsightResult>
   /** 采集 V8 堆快照并落盘到浏览器工作区。 */
-  captureHeapSnapshot: (
-    options?: BrowserHeapSnapshotOptions
-  ) => Promise<BrowserHeapSnapshotResult>
+  captureHeapSnapshot: (options?: BrowserHeapSnapshotOptions) => Promise<BrowserHeapSnapshotResult>
   /** 开始页面录屏。 */
   startScreencast: (
     options?: BrowserScreencastStartOptions
   ) => Promise<BrowserScreencastStartResult>
   /** 停止录屏并合成 GIF 落盘。 */
-  stopScreencast: (
-    options?: BrowserScreencastStopOptions
-  ) => Promise<BrowserScreencastStopResult>
+  stopScreencast: (options?: BrowserScreencastStopOptions) => Promise<BrowserScreencastStopResult>
   /** 列出待处理的 dialog/download/permission 事件。 */
   listPendingEvents: () => Promise<BrowserPendingEventsResult>
   /** 枚举当前受控页面 target。 */

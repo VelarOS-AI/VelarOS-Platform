@@ -51,7 +51,10 @@ describe('office 路径包含门', () => {
     await symlink(harness.outside, join(harness.root, 'link'), 'dir')
 
     await expect(
-      officeOperations.createSpreadsheet({ outputPath: 'link/escaped.xlsx', content: 'name,value\nA,1' }, harness.context)
+      officeOperations.createSpreadsheet(
+        { outputPath: 'link/escaped.xlsx', content: 'name,value\nA,1' },
+        harness.context
+      )
     ).rejects.toMatchObject({ code: OfficeErrorCodes.pathOutsideProject })
     await expect(readFile(join(harness.outside, 'escaped.xlsx'))).rejects.toBeDefined()
   })
@@ -63,14 +66,20 @@ describe('office 路径包含门', () => {
     await symlink(victim, join(harness.root, 'report.xlsx'))
 
     await expect(
-      officeOperations.createSpreadsheet({ outputPath: 'report.xlsx', overwrite: true, content: 'name,value\nA,1' }, harness.context)
+      officeOperations.createSpreadsheet(
+        { outputPath: 'report.xlsx', overwrite: true, content: 'name,value\nA,1' },
+        harness.context
+      )
     ).rejects.toMatchObject({ code: OfficeErrorCodes.pathOutsideProject })
     expect(await readFile(victim, 'utf8')).toBe('ORIGINAL')
   })
 
   test('根内的普通相对路径照常写入', async () => {
     const harness = await createHarness()
-    const result = await officeOperations.createSpreadsheet({ outputPath: 'sheets/ok.xlsx', content: 'name,value\nA,1' }, harness.context)
+    const result = await officeOperations.createSpreadsheet(
+      { outputPath: 'sheets/ok.xlsx', content: 'name,value\nA,1' },
+      harness.context
+    )
     expect(result).toMatchObject({ path: join(harness.root, 'sheets/ok.xlsx'), created: true })
   })
 
@@ -78,7 +87,9 @@ describe('office 路径包含门', () => {
     const harness = await createHarness()
     await writeFile(join(harness.outside, 'secret.pdf'), await pdfWithPages(['SECRET-OUTSIDE']))
 
-    await expect(officeOperations.readPdf({ inputPath: '../outside/secret.pdf' }, harness.context)).rejects.toMatchObject({
+    await expect(
+      officeOperations.readPdf({ inputPath: '../outside/secret.pdf' }, harness.context)
+    ).rejects.toMatchObject({
       code: OfficeErrorCodes.pathOutsideProject,
       message: expect.stringContaining('工作区根'),
     })
@@ -100,7 +111,10 @@ describe('office 路径包含门', () => {
 
     await expect(
       officeOperations.createPresentation(
-        { outputPath: 'deck.pptx', slides: [{ background: { path: '../outside/bg.png' }, elements: [] }] },
+        {
+          outputPath: 'deck.pptx',
+          slides: [{ background: { path: '../outside/bg.png' }, elements: [] }],
+        },
         harness.context
       )
     ).rejects.toMatchObject({ code: OfficeErrorCodes.pathOutsideProject })

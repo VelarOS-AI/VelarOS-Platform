@@ -1,8 +1,6 @@
 import type { ToolSet } from 'ai'
 
-import type {
-  ModelRequestTransport,
-} from '../../contract/requires'
+import type { ModelRequestTransport } from '../../contract/requires'
 import type { ModelRequestOptions } from '../../types/model'
 import type {
   ModelRequestDecodedObjectInput,
@@ -102,7 +100,9 @@ class ModelRequestClient implements ModelRequestClientApi {
   }
 
   async #requestObject<TSchemaOutput>(
-    input: ModelRequestObjectInput<TSchemaOutput> | ModelRequestDecodedObjectInput<TSchemaOutput, unknown>
+    input:
+      | ModelRequestObjectInput<TSchemaOutput>
+      | ModelRequestDecodedObjectInput<TSchemaOutput, unknown>
   ): Promise<TSchemaOutput> {
     const output = this.transport.createObjectOutput({
       schema: input.schema,

@@ -4,7 +4,11 @@
  */
 import { randomUUID } from 'node:crypto'
 
-import { AgentLabPackageVersion, MeasurementBasis, RunArchiveSchemaId } from '../contract/constants.js'
+import {
+  AgentLabPackageVersion,
+  MeasurementBasis,
+  RunArchiveSchemaId,
+} from '../contract/constants.js'
 import type { JobRuntime } from '../contract/requires.js'
 import type {
   Budget,
@@ -86,38 +90,47 @@ class JourneyRunner implements JourneyRunnerApi {
     const archives: RunArchive[] = []
     let failed = false
     let failure: unknown = null
-    const workers = Array.from({ length: Math.min(job.concurrency, pending.length) }, async (): Promise<void> => {
-      for (;;) {
-        if (failed) return
-        const trial = pending.shift()
-        if (!trial) return
-        try {
-          const driver = await runtime.resolveDriver(trial)
-          const archive = await runtime.runTrial(trial, driver)
-          archives.push(archive)
-          await runtime.onArchive?.(archive)
-        } catch (error) {
-          if (!failed) {
-            failed = true
-            failure = error
+    const workers = Array.from(
+      { length: Math.min(job.concurrency, pending.length) },
+      async (): Promise<void> => {
+        for (;;) {
+          if (failed) return
+          const trial = pending.shift()
+          if (!trial) return
+          try {
+            const driver = await runtime.resolveDriver(trial)
+            const archive = await runtime.runTrial(trial, driver)
+            archives.push(archive)
+            await runtime.onArchive?.(archive)
+          } catch (error) {
+            if (!failed) {
+              failed = true
+              failure = error
+            }
+            return
           }
-          return
         }
       }
-    })
+    )
     // worker 自己不再抛，所以这里一定等到每个在飞的试验都收了尾，不留后台会话。
     await Promise.all(workers)
     if (failed) throw failure
-    return archives.sort((left, right) => left.manifest.trial.id.localeCompare(right.manifest.trial.id))
+    return archives.sort((left, right) =>
+      left.manifest.trial.id.localeCompare(right.manifest.trial.id)
+    )
   }
 
   public async runJourney(options: RunJourneyOptions): Promise<RunArchive> {
     const journey = journeySpecSchema.parse(options.journey)
-    if (options.trial.journeyId !== journey.id || options.trial.journeyVersion !== journey.version) {
+    if (
+      options.trial.journeyId !== journey.id ||
+      options.trial.journeyVersion !== journey.version
+    ) {
       throw new Error('试验声明的旅程身份与旅程定义对不上')
     }
     for (const detectorId of journey.gatingDetectorIds) {
-      if (!options.detectors.get(detectorId)) throw new Error(`旅程引用了没注册的探测器: ${detectorId}`)
+      if (!options.detectors.get(detectorId))
+        throw new Error(`旅程引用了没注册的探测器: ${detectorId}`)
     }
     for (const leg of journey.legs) {
       for (const criterion of leg.criteria) {
@@ -141,7 +154,10 @@ class JourneyRunner implements JourneyRunnerApi {
     })
     const taskDigest = sha256Json(journey)
     const detectorDigest = sha256Json(options.detectors.list().map((item) => item.definition))
-    const policyDigest = sha256Json({ budget: journey.budget, gatingDetectorIds: journey.gatingDetectorIds })
+    const policyDigest = sha256Json({
+      budget: journey.budget,
+      gatingDetectorIds: journey.gatingDetectorIds,
+    })
     const ledger = new BudgetLedger(now, startedAt)
     const legResults: LegResult[] = []
     const findings: Finding[] = []
@@ -214,14 +230,15 @@ class JourneyRunner implements JourneyRunnerApi {
                     reason: `预算耗尽: ${budgetLimit}`,
                   }
                   watchdog.current = abort
-                  if (capabilities.canAbortMidRun) await options.driver.abort(openSession, abort.reason)
+                  if (capabilities.canAbortMidRun)
+                    await options.driver.abort(openSession, abort.reason)
                   return { kind: 'abort', ...abort }
                 }
                 if (!watchdogBaseline) {
                   watchdogBaseline = options.detectors.watchdogBaseline(
                     observation,
                     sampleFindings,
-                    activeWatchdogDetectorIds,
+                    activeWatchdogDetectorIds
                   )
                   return { kind: 'continue' }
                 }
@@ -229,24 +246,36 @@ class JourneyRunner implements JourneyRunnerApi {
                   observation,
                   sampleFindings,
                   watchdogBaseline,
-                  activeWatchdogDetectorIds,
+                  activeWatchdogDetectorIds
                 )
                 if (!candidate) return { kind: 'continue' }
                 watchdog.current = candidate
-                if (capabilities.canAbortMidRun) await options.driver.abort(openSession, candidate.reason)
+                if (capabilities.canAbortMidRun)
+                  await options.driver.abort(openSession, candidate.reason)
                 return { kind: 'abort', ...candidate }
               },
             })
 
             const abortRequest = watchdog.current
             if (abortRequest && settleOutcome.kind === 'settled') {
-              settleOutcome = { kind: 'aborted', detectorId: abortRequest.detectorId, reason: abortRequest.reason }
+              settleOutcome = {
+                kind: 'aborted',
+                detectorId: abortRequest.detectorId,
+                reason: abortRequest.reason,
+              }
             }
-            const observation = normalizeObservation(await options.driver.collect(openSession, 'idle'))
+            const observation = normalizeObservation(
+              await options.driver.collect(openSession, 'idle')
+            )
             ledger.observe(observation)
-            const legFindings = options.detectors.detect(observation, { trial: options.trial, journey, leg })
+            const legFindings = options.detectors.detect(observation, {
+              trial: options.trial,
+              journey,
+              leg,
+            })
             const gatingFinding = legFindings.some(
-              (item) => item.severity === 'fail' && journey.gatingDetectorIds.includes(item.detectorId),
+              (item) =>
+                item.severity === 'fail' && journey.gatingDetectorIds.includes(item.detectorId)
             )
             const criteria = await verifyLeg({
               verifiers: options.verifiers,
@@ -280,14 +309,20 @@ class JourneyRunner implements JourneyRunnerApi {
               settleOutcome.kind !== 'settled' && leg.continueOn.includes(settleOutcome.kind)
             if (blockingFailure || (settleOutcome.kind !== 'settled' && !expectedNativeOutcome)) {
               exitReason =
-                settleOutcome.kind === 'settled' ? JourneyRunner.ExitReasons.blockingLegFailed : settleOutcome.kind
+                settleOutcome.kind === 'settled'
+                  ? JourneyRunner.ExitReasons.blockingLegFailed
+                  : settleOutcome.kind
               break
             }
           } catch (error) {
             const detail = error instanceof Error ? error.message : String(error)
             const legStartedAt = now()
             const observation = createUnobservedObservation('idle')
-            const settleOutcome: SettleOutcome = { kind: 'unavailable', cause: 'harness-failure', detail }
+            const settleOutcome: SettleOutcome = {
+              kind: 'unavailable',
+              cause: 'harness-failure',
+              detail,
+            }
             const criteria = await verifyLeg({
               verifiers: options.verifiers,
               trial: options.trial,

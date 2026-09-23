@@ -20,7 +20,15 @@
 //  - `failedMainFrameNavigations` 记住主框架失败，避免把失败页当成「已就绪」继续跑动作。
 import type electron from 'electron'
 
-import { isEmpty, isNumber, isString, isTrue, numberOrNull, toNullable, toOptional } from '@velaros-ai/core'
+import {
+  isEmpty,
+  isNumber,
+  isString,
+  isTrue,
+  numberOrNull,
+  toNullable,
+  toOptional,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
@@ -43,8 +51,20 @@ import {
 } from '../../types/electron'
 import type { BrowserPopupBootstrapLease, BrowserSessionLookup } from '../../types/electron.js'
 import { browserUserActivityConsolePrefix } from '../../utils/electron/sessions'
-import { formatKeyboardActivityDetail, isPlaceholderUrl, readEventString, readUserActivityKind } from '../../utils/electron/sessions'
-import { asBrowserDialogEventSource, buildBrowserPopupWindowOptions, buildBrowserUserActivityBridgeScript,isNamedPopupFrame, resolveBrowserPopupNavigation, resolveBrowserPopupUrl } from '../../utils/electron/sessions.js'
+import {
+  formatKeyboardActivityDetail,
+  isPlaceholderUrl,
+  readEventString,
+  readUserActivityKind,
+} from '../../utils/electron/sessions'
+import {
+  asBrowserDialogEventSource,
+  buildBrowserPopupWindowOptions,
+  buildBrowserUserActivityBridgeScript,
+  isNamedPopupFrame,
+  resolveBrowserPopupNavigation,
+  resolveBrowserPopupUrl,
+} from '../../utils/electron/sessions.js'
 import { BrowserTuning } from '../../utils/tuning'
 import { BrowserPendingEventsBroker } from '../session/BrowserPendingEventsBroker'
 
@@ -166,7 +186,10 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
   }
 
   /** 等待会话 WebContents attach 完成。 */
-  public waitForSession(sessionId: string, timeoutMs: number = BrowserTuning.session.attachTimeoutMs): Promise<BrowserSession> {
+  public waitForSession(
+    sessionId: string,
+    timeoutMs: number = BrowserTuning.session.attachTimeoutMs
+  ): Promise<BrowserSession> {
     const existing = this.getSession(sessionId)
     if (existing) return Promise.resolve(existing)
 
@@ -427,7 +450,10 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
 
     if (resolution.kind === 'bootstrap') {
       const nativeNamedPopup = isNamedPopupFrame(details.frameName)
-      if ((this.popupBootstraps.get(sessionId)?.size ?? 0) >= BrowserTuning.popup.maxBootstrapsPerSession) {
+      if (
+        (this.popupBootstraps.get(sessionId)?.size ?? 0) >=
+        BrowserTuning.popup.maxBootstrapsPerSession
+      ) {
         this.recordBrowserEvent(session, {
           kind: 'popup',
           level: 'warning',
@@ -457,10 +483,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
       return {
         action: 'allow',
         outlivesOpener: false,
-        overrideBrowserWindowOptions: buildBrowserPopupWindowOptions(
-          webContents,
-          nativeNamedPopup
-        ),
+        overrideBrowserWindowOptions: buildBrowserPopupWindowOptions(webContents, nativeNamedPopup),
       }
     }
 
@@ -608,11 +631,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
     ): void => {
       if (routingStarted) return
 
-      const resolution = resolveBrowserPopupUrl(
-        rawUrl,
-        'default',
-        initiatorUrl
-      )
+      const resolution = resolveBrowserPopupUrl(rawUrl, 'default', initiatorUrl)
       if (resolution.kind === 'bootstrap') return
       if (resolution.kind === 'deny') {
         this.recordBrowserEvent(session, {
@@ -694,19 +713,9 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
 
         if (!nativePopupActivated) {
           try {
-            popupWindow.setMaximumSize(
-              BrowserTuning.popup.maxWidth,
-              BrowserTuning.popup.maxHeight
-            )
-            popupWindow.setMinimumSize(
-              BrowserTuning.popup.minWidth,
-              BrowserTuning.popup.minHeight
-            )
-            popupWindow.setSize(
-              BrowserTuning.popup.width,
-              BrowserTuning.popup.height,
-              false
-            )
+            popupWindow.setMaximumSize(BrowserTuning.popup.maxWidth, BrowserTuning.popup.maxHeight)
+            popupWindow.setMinimumSize(BrowserTuning.popup.minWidth, BrowserTuning.popup.minHeight)
+            popupWindow.setSize(BrowserTuning.popup.width, BrowserTuning.popup.height, false)
             popupWindow.center()
             popupWindow.show()
           } catch (error) {
@@ -745,11 +754,10 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
       if (navigationHandlingStarted) return
       navigationHandlingStarted = true
       const referrer = details.referrer?.url ? details.referrer : undefined
-      routeBootstrapUrl(
+      routeBootstrapUrl(url, referrer ? { httpReferrer: referrer } : undefined, {
         url,
-        referrer ? { httpReferrer: referrer } : undefined,
-        { url, method: 'GET' }
-      )
+        method: 'GET',
+      })
     })
     popupWebContents.setWindowOpenHandler((details) => {
       const resolution = resolveBrowserPopupNavigation(

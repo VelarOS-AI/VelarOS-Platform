@@ -8,7 +8,8 @@ import type { BrowserScriptOutcome } from '../types/browser.js'
 
 /** 成功交回解开的值（脚本返回 undefined 时就是 undefined）；页面里抛错抛 `BROWSER_SCRIPT_FAILED`；结果太大抛 `BROWSER_RESULT_TOO_LARGE`。 */
 export function scriptOutcomeValue(outcome: BrowserScriptOutcome): unknown {
-  if (outcome.error) throw new AppError(BrowserErrorCodes.scriptFailed, describeScriptError(outcome))
+  if (outcome.error)
+    throw new AppError(BrowserErrorCodes.scriptFailed, describeScriptError(outcome))
   if (outcome.tooLargeChars) {
     throw new AppError(
       BrowserErrorCodes.resultTooLarge,
@@ -22,6 +23,8 @@ export function scriptOutcomeValue(outcome: BrowserScriptOutcome): unknown {
 /** 页面脚本报错的说明：错误名、原话，定位得到时加上它在 script 里的行列。 */
 function describeScriptError(outcome: BrowserScriptOutcome): string {
   const error = outcome.error!
-  const position = error.line ? `（script 第 ${error.line} 行${error.column ? `第 ${error.column} 列` : ''}）` : ''
+  const position = error.line
+    ? `（script 第 ${error.line} 行${error.column ? `第 ${error.column} 列` : ''}）`
+    : ''
   return `页面脚本抛错${position}：${error.name}: ${error.message}（页面 ${outcome.url}）`
 }

@@ -8,27 +8,58 @@
 
 import type { ApprovalPort } from '@velaros-ai/kernel'
 
-import type { CapabilityOperationContext, CapabilityOperationTable } from '../../packages/script/src/index'
+import type {
+  CapabilityOperationContext,
+  CapabilityOperationTable,
+} from '../../packages/script/src/index'
 import type { FileOperationContext } from '../../packages/velaros/files/index'
 import { fileOperations } from '../../packages/velaros/files/index'
 import { VelarFilesModule } from '../../packages/velaros/files/contracts'
 import { createLocalFilePort } from '../../packages/velaros/files/local'
-import type { ImageAttachment, ImageOperationContext, ImageSpacePort } from '../../packages/velaros/images/index'
+import type {
+  ImageAttachment,
+  ImageOperationContext,
+  ImageSpacePort,
+} from '../../packages/velaros/images/index'
 import { imageOperations } from '../../packages/velaros/images/index'
 import { VelarImagesModule } from '../../packages/velaros/images/contracts'
 import { createLocalImagePort } from '../../packages/velaros/images/local'
-import type { CodeAnalysisInput, CodeQueryInput, ProjectChangeInput, ProjectEditInput, ProjectHostPort, ProjectListInput, ProjectReadInput, ProjectSearchInput } from '../../packages/velaros/project/index'
-import { projectCapabilityPorts, projectCodeOperations, projectFileOperations } from '../../packages/velaros/project/index'
+import type {
+  CodeAnalysisInput,
+  CodeQueryInput,
+  ProjectChangeInput,
+  ProjectEditInput,
+  ProjectHostPort,
+  ProjectListInput,
+  ProjectReadInput,
+  ProjectSearchInput,
+} from '../../packages/velaros/project/index'
+import {
+  projectCapabilityPorts,
+  projectCodeOperations,
+  projectFileOperations,
+} from '../../packages/velaros/project/index'
 import { VelarCodeModule, VelarProjectModule } from '../../packages/velaros/project/contracts'
-import type { RehearsalSandboxHostPort, SandboxOperationContext, SandboxSurfacePort } from '../../packages/velaros/sandbox/index'
+import type {
+  RehearsalSandboxHostPort,
+  SandboxOperationContext,
+  SandboxSurfacePort,
+} from '../../packages/velaros/sandbox/index'
 import { sandboxOperations } from '../../packages/velaros/sandbox/index'
 import { VelarSandboxModule } from '../../packages/velaros/sandbox/contracts'
-import type { ShellHostPort, ShellOperationContext, ShellSpacePort } from '../../packages/velaros/shell/index'
+import type {
+  ShellHostPort,
+  ShellOperationContext,
+  ShellSpacePort,
+} from '../../packages/velaros/shell/index'
 import { shellOperations } from '../../packages/velaros/shell/index'
 import { VelarShellModule } from '../../packages/velaros/shell/contracts'
 
 /** 测试装配的公开能力说明。 */
-export interface MountedCapabilityModule { surface:{namespace:string;specifier:string;declarations:string}; resident:boolean }
+export interface MountedCapabilityModule {
+  surface: { namespace: string; specifier: string; declarations: string }
+  resident: boolean
+}
 
 /** 一个装好的空间：代码面的操作表，与挂了哪几件、哪几件常驻。 */
 export interface TestSpace {
@@ -52,7 +83,10 @@ export interface ProjectSpaceCall extends SystemSpaceCall {
 type Resolve<T> = (signal: Optional<AbortSignal>) => T | Promise<T>
 
 /** 图不进返回值：宿主另给了交图通道就用宿主的，没给就交给代码面的图片通道，程序跑完之后跟在结果后面给模型看。 */
-function attachImageOf(call: SystemSpaceCall, context: CapabilityOperationContext): (image: ImageAttachment) => void {
+function attachImageOf(
+  call: SystemSpaceCall,
+  context: CapabilityOperationContext
+): (image: ImageAttachment) => void {
   return call.attachImage ?? ((image) => context.attach({ type: 'image-data', ...image }))
 }
 
@@ -60,13 +94,14 @@ function attachImageOf(call: SystemSpaceCall, context: CapabilityOperationContex
 function sharedOperations(
   shell: (context: CapabilityOperationContext) => Promise<ShellOperationContext>,
   sandbox: (context: CapabilityOperationContext) => Promise<SandboxOperationContext>,
-  images: (context: CapabilityOperationContext) => Promise<ImageOperationContext>,
+  images: (context: CapabilityOperationContext) => Promise<ImageOperationContext>
 ): CapabilityOperationTable {
   return {
     shell: {
       run: async (input, context) => shellOperations.run(input, await shell(context)),
       listTasks: async (input, context) => shellOperations.listTasks(input, await shell(context)),
-      refreshEnvironment: async (_input, context) => shellOperations.refreshEnvironment(await shell(context)),
+      refreshEnvironment: async (_input, context) =>
+        shellOperations.refreshEnvironment(await shell(context)),
       stop: async (input, context) => shellOperations.stop(input, await shell(context)),
     },
     sandbox: {
@@ -84,7 +119,11 @@ function sharedOperations(
 
 /** 给 shell 的上下文带上会话（给了才带：后台任务按它登记与核对归属）。 */
 function shellContextOf(call: SystemSpaceCall, shell: ShellSpacePort): ShellOperationContext {
-  const context: ShellOperationContext = { abortSignal: call.abortSignal, approval: call.approval, shell }
+  const context: ShellOperationContext = {
+    abortSignal: call.abortSignal,
+    approval: call.approval,
+    shell,
+  }
   if (call.sessionId) context.sessionId = call.sessionId
   return context
 }
@@ -104,8 +143,12 @@ export function systemSpace(input: {
   const imagePort = createLocalImagePort({ resolvePath })
   const shellPort: ShellSpacePort = {
     resolveCwd: async (cwd) => resolvePath(cwd),
-    commandPolicy: (cwd) => ({ scopeLabel: cwd ?? '系统运行环境', riskScope: 'system-command:dangerous' }),
-    runCommand: (command, options, allowDangerous, abortSignal) => host.runCommand(command, options, allowDangerous, abortSignal),
+    commandPolicy: (cwd) => ({
+      scopeLabel: cwd ?? '系统运行环境',
+      riskScope: 'system-command:dangerous',
+    }),
+    runCommand: (command, options, allowDangerous, abortSignal) =>
+      host.runCommand(command, options, allowDangerous, abortSignal),
     listBackgroundTasks: (options) => host.listBackgroundTasks(options),
     refreshShellEnvironment: () => host.refreshShellEnvironment(),
     terminateBackgroundTask: (request) => host.terminateBackgroundTask(request),
@@ -122,8 +165,11 @@ export function systemSpace(input: {
     runInSandbox: (options, abortSignal) => sandboxHost().runInSandbox(options, abortSignal),
     resolveSource: async (source) => resolvePath(source),
   }
-  const call = (context: CapabilityOperationContext) => Promise.resolve(input.resolveCall(context.signal))
-  const fileContext = async (context: CapabilityOperationContext): Promise<FileOperationContext> => ({ abortSignal: (await call(context)).abortSignal, files })
+  const call = (context: CapabilityOperationContext) =>
+    Promise.resolve(input.resolveCall(context.signal))
+  const fileContext = async (
+    context: CapabilityOperationContext
+  ): Promise<FileOperationContext> => ({ abortSignal: (await call(context)).abortSignal, files })
   return {
     modules: [
       { surface: VelarFilesModule, resident: true },
@@ -141,12 +187,20 @@ export function systemSpace(input: {
         async (context) => shellContextOf(await call(context), shellPort),
         async (context) => {
           const current = await call(context)
-          return { abortSignal: current.abortSignal, approval: current.approval, sandbox: sandboxPort }
+          return {
+            abortSignal: current.abortSignal,
+            approval: current.approval,
+            sandbox: sandboxPort,
+          }
         },
         async (context) => {
           const current = await call(context)
-          return { abortSignal: current.abortSignal, images: imagePort, attachImage: attachImageOf(current, context) }
-        },
+          return {
+            abortSignal: current.abortSignal,
+            images: imagePort,
+            attachImage: attachImageOf(current, context),
+          }
+        }
       ),
     },
   }
@@ -154,12 +208,18 @@ export function systemSpace(input: {
 
 /** 装一个项目空间：每次调用向 `resolveCall` 要这一次的上下文，共用能力的项目端口按这次的宿主端口现装。 */
 export function projectSpace(input: { resolveCall: Resolve<ProjectSpaceCall> }): TestSpace {
-  const call = (context: CapabilityOperationContext) => Promise.resolve(input.resolveCall(context.signal))
+  const call = (context: CapabilityOperationContext) =>
+    Promise.resolve(input.resolveCall(context.signal))
   const toolContext = async (context: CapabilityOperationContext) => {
     const current = await call(context)
-    return { abortSignal: current.abortSignal, project: current.project, sessionId: current.sessionId }
+    return {
+      abortSignal: current.abortSignal,
+      project: current.project,
+      sessionId: current.sessionId,
+    }
   }
-  const imagePort = (current: ProjectSpaceCall): ImageSpacePort => projectCapabilityPorts.images(current.project)
+  const imagePort = (current: ProjectSpaceCall): ImageSpacePort =>
+    projectCapabilityPorts.images(current.project)
   return {
     modules: [
       { surface: VelarProjectModule, resident: true },
@@ -170,30 +230,49 @@ export function projectSpace(input: { resolveCall: Resolve<ProjectSpaceCall> }):
     ],
     operations: {
       project: {
-        read: async (input, context) => projectFileOperations.read(input as ProjectReadInput, await toolContext(context)),
-        list: async (input, context) => projectFileOperations.list(input as ProjectListInput, await toolContext(context)),
-        search: async (input, context) => projectFileOperations.search(input as ProjectSearchInput, await toolContext(context)),
-        edit: async (input, context) => projectFileOperations.edit(input as ProjectEditInput, await toolContext(context)),
-        inspect: async (input, context) => projectFileOperations.inspect(input as ProjectChangeInput, await toolContext(context)),
-        undo: async (input, context) => projectFileOperations.undo(input as ProjectChangeInput, await toolContext(context)),
+        read: async (input, context) =>
+          projectFileOperations.read(input as ProjectReadInput, await toolContext(context)),
+        list: async (input, context) =>
+          projectFileOperations.list(input as ProjectListInput, await toolContext(context)),
+        search: async (input, context) =>
+          projectFileOperations.search(input as ProjectSearchInput, await toolContext(context)),
+        edit: async (input, context) =>
+          projectFileOperations.edit(input as ProjectEditInput, await toolContext(context)),
+        inspect: async (input, context) =>
+          projectFileOperations.inspect(input as ProjectChangeInput, await toolContext(context)),
+        undo: async (input, context) =>
+          projectFileOperations.undo(input as ProjectChangeInput, await toolContext(context)),
       },
       code: {
-        query: async (input, context) => projectCodeOperations.query(input as CodeQueryInput, await toolContext(context)),
-        analyze: async (input, context) => projectCodeOperations.analyze(input as CodeAnalysisInput, await toolContext(context)),
+        query: async (input, context) =>
+          projectCodeOperations.query(input as CodeQueryInput, await toolContext(context)),
+        analyze: async (input, context) =>
+          projectCodeOperations.analyze(input as CodeAnalysisInput, await toolContext(context)),
       },
       ...sharedOperations(
         async (context) => {
           const current = await call(context)
-          return shellContextOf(current, projectCapabilityPorts.shell(current.project, current.abortSignal))
+          return shellContextOf(
+            current,
+            projectCapabilityPorts.shell(current.project, current.abortSignal)
+          )
         },
         async (context) => {
           const current = await call(context)
-          return { abortSignal: current.abortSignal, approval: current.approval, sandbox: projectCapabilityPorts.sandbox(current.project, current.abortSignal) }
+          return {
+            abortSignal: current.abortSignal,
+            approval: current.approval,
+            sandbox: projectCapabilityPorts.sandbox(current.project, current.abortSignal),
+          }
         },
         async (context) => {
           const current = await call(context)
-          return { abortSignal: current.abortSignal, images: imagePort(current), attachImage: attachImageOf(current, context) }
-        },
+          return {
+            abortSignal: current.abortSignal,
+            images: imagePort(current),
+            attachImage: attachImageOf(current, context),
+          }
+        }
       ),
     },
   }

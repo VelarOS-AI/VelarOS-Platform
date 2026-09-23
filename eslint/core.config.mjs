@@ -40,7 +40,8 @@ const localStylePlugin = {
               node.kind !== 'method' ||
               node.accessibility ||
               node.key?.type === 'PrivateIdentifier'
-            ) return
+            )
+              return
 
             context.report({
               node,
@@ -51,9 +52,7 @@ const localStylePlugin = {
                   ? sourceCode.getTokenAfter(decorators.at(-1))
                   : sourceCode.getFirstToken(node)
 
-                return insertBefore
-                  ? fixer.insertTextBefore(insertBefore, 'public ')
-                  : null
+                return insertBefore ? fixer.insertTextBefore(insertBefore, 'public ') : null
               },
             })
           },
@@ -105,15 +104,12 @@ const commonPlugins = {
 const commonRules = {
   'array-callback-return': 'error',
   'arrow-body-style': ['error', 'as-needed'],
-  'curly': ['error', 'multi-line', 'consistent'],
+  curly: ['error', 'multi-line', 'consistent'],
   'default-case-last': 'error',
   'dot-notation': 'off',
-  'eqeqeq': ['error', 'smart'],
+  eqeqeq: ['error', 'smart'],
   'eslint-comments/no-unused-disable': 'error',
-  'eslint-comments/require-description': [
-    'error',
-    { ignore: ['eslint-enable'] },
-  ],
+  'eslint-comments/require-description': ['error', { ignore: ['eslint-enable'] }],
   'no-array-constructor': 'error',
   'no-console': ['error', { allow: ['warn', 'error', 'info'] }],
   'no-else-return': ['error', { allowElseIf: false }],
@@ -147,7 +143,16 @@ const commonRules = {
         ['^node:'],
         ['^react$', '^react-dom', '^@?\\w'],
         ['^@velaros-ai/'],
-        ['^@shared/', '^@components/', '^@features/', '^@hooks/', '^@pages/', '^@styles/', '^@utils/', '^@/'],
+        [
+          '^@shared/',
+          '^@components/',
+          '^@features/',
+          '^@hooks/',
+          '^@pages/',
+          '^@styles/',
+          '^@utils/',
+          '^@/',
+        ],
         ['^\\.\\.(?!/?$)', '^\\.\\./?$'],
         ['^\\./(?=.*/)(?!/?$)', '^\\.(?!/?$)', '^\\./?$'],
         ['^.+\\.s?css$'],
@@ -255,10 +260,7 @@ export default [
         { allowInterfaces: 'with-single-extends' },
       ],
       '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-floating-promises': [
-        'error',
-        { ignoreIIFE: true, ignoreVoid: true },
-      ],
+      '@typescript-eslint/no-floating-promises': ['error', { ignoreIIFE: true, ignoreVoid: true }],
       '@typescript-eslint/no-implied-eval': 'error',
       '@typescript-eslint/no-inferrable-types': 'off',
       '@typescript-eslint/no-misused-promises': 'off',
@@ -308,9 +310,7 @@ export default [
     },
   },
   {
-    files: [
-      'packages/core/src/logger/**/*.{ts,tsx}',
-    ],
+    files: ['packages/core/src/logger/**/*.{ts,tsx}'],
     rules: {
       'no-console': 'off',
     },
@@ -324,8 +324,7 @@ export default [
           paths: [
             {
               name: '@velaros-ai/core/extensions',
-              message:
-                '原型扩展由宿主进程入口统一装载;库包勿 side-effect 导入。',
+              message: '原型扩展由宿主进程入口统一装载;库包勿 side-effect 导入。',
             },
           ],
         },

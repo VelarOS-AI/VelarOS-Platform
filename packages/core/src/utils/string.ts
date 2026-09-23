@@ -20,7 +20,7 @@ export function isBlank(value: string): boolean {
 export function clampToCodePointBoundary(
   value: string,
   index: number,
-  bias: 'backward' | 'forward' = 'backward',
+  bias: 'backward' | 'forward' = 'backward'
 ): number {
   if (index <= 0) return 0
   if (index >= value.length) return value.length

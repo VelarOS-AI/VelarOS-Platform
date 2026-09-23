@@ -22,7 +22,12 @@ export interface ProjectExecutionGateApi {
 export class ProjectExecutionGate implements ProjectExecutionGateApi {
   private readonly gates = new Map<string, Gate>()
 
-  public run<T>(root: string, write: boolean, signal: AbortSignal, task: () => Promise<T> | T): Promise<T> {
+  public run<T>(
+    root: string,
+    write: boolean,
+    signal: AbortSignal,
+    task: () => Promise<T> | T
+  ): Promise<T> {
     signal.throwIfAborted()
     let gate = this.gates.get(root)
     if (!gate) {

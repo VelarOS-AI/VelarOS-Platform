@@ -94,7 +94,10 @@ async function readDocxPart(path: string, part: string): Promise<Nullable<string
   return file ? file.async('string') : null
 }
 
-async function appendBullets(context: OfficeOperationContext, outputPath: string): Promise<unknown> {
+async function appendBullets(
+  context: OfficeOperationContext,
+  outputPath: string
+): Promise<unknown> {
   return officeOperations.createWord(
     {
       outputPath,

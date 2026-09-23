@@ -22,7 +22,10 @@ class GoalModule implements GoalModuleApi {
       instanceId: `standard:${GoalModuleId}`,
       generation: SystemContract.generation,
       summary: '跨运行的会话目标生命周期',
-      context: (call) => ({ goal: host.programs(call.invocation.sessionId).goal, abortSignal: call.signal }),
+      context: (call) => ({
+        goal: host.programs(call.invocation.sessionId).goal,
+        abortSignal: call.signal,
+      }),
       // 账本在写入前拒绝：入参不对、版本已变、另一次更新正在进行
       withoutEffect: (error) => hasErrorCode(error, ['GOAL_INPUT', 'GOAL_CONFLICT', 'GOAL_BUSY']),
     })

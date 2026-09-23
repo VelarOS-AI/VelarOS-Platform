@@ -12,7 +12,14 @@ import { ImageLimits } from '../contract/constants.js'
 import type { ImageOperationContext } from '../contract/requires.js'
 import type { ImageViewInput, ImageViewItem, ImageViewResult } from '../types/images.js'
 import type { ImageResizeRequest, ImageViewed } from '../types/space.js'
-import { base64Length, clampImageRegion, detectMediaType, readImageFile, readImageSize, shrinkImageToLimits } from '../utils/image.js'
+import {
+  base64Length,
+  clampImageRegion,
+  detectMediaType,
+  readImageFile,
+  readImageSize,
+  shrinkImageToLimits,
+} from '../utils/image.js'
 import { viewItems } from '../utils/input.js'
 
 const log = Log.tag('ImageOperations')
@@ -44,7 +51,9 @@ export class ImageOperations implements ImageOperationsApi {
       ctx.abortSignal.throwIfAborted()
       try {
         const viewed = await this.viewOne(item, ctx)
-        const where = viewed.region ? `，区域 ${viewed.region.x},${viewed.region.y} ${viewed.region.width}×${viewed.region.height}` : ''
+        const where = viewed.region
+          ? `，区域 ${viewed.region.x},${viewed.region.y} ${viewed.region.width}×${viewed.region.height}`
+          : ''
         attach({
           mediaType: viewed.image.mediaType,
           data: viewed.image.data.toString('base64'),
@@ -55,7 +64,10 @@ export class ImageOperations implements ImageOperationsApi {
         const failure = AppError.from(error)
         log.debug('one image in a view batch failed', { code: failure.code })
         firstFailure ??= failure
-        files.push({ path: String(item.path), error: { code: failure.code, message: failure.message } })
+        files.push({
+          path: String(item.path),
+          error: { code: failure.code, message: failure.message },
+        })
       }
     }
     if (firstFailure && files.every((file) => 'error' in file)) throw firstFailure
@@ -67,37 +79,69 @@ export class ImageOperations implements ImageOperationsApi {
    * 大多数图不用动——压分辨率只是给超限的图兜底，裁一块只在模型自己要放大看时才发生。
    */
   private async viewOne(item: ImageViewItem, ctx: ImageOperationContext): Promise<ImageViewed> {
-    const { target, shown } = await ctx.images.locate(this.platform.normalizeUserPathInput(item.path))
+    const { target, shown } = await ctx.images.locate(
+      this.platform.normalizeUserPathInput(item.path)
+    )
     const buffer = await readImageFile(target, shown, ImageLimits.fileBytes)
     const media = detectMediaType(buffer)
     if (media?.kind !== 'image') {
-      throw new AppError('VALIDATION', media
-        ? `${shown} 是 PDF；view 只看图片，文档不在这里读`
-        : `${shown} 不是能看的图片（PNG、JPEG、GIF、WebP）；文本文件用读文件的能力读，别的格式先转换`)
+      throw new AppError(
+        'VALIDATION',
+        media
+          ? `${shown} 是 PDF；view 只看图片，文档不在这里读`
+          : `${shown} 不是能看的图片（PNG、JPEG、GIF、WebP）；文本文件用读文件的能力读，别的格式先转换`
+      )
     }
     const size = readImageSize(buffer, media.mediaType)
-    if (!size) throw new AppError('VALIDATION', `${shown} 的图片头读不出宽高（或者宽高是 0），文件可能坏了`)
+    if (!size)
+      throw new AppError('VALIDATION', `${shown} 的图片头读不出宽高（或者宽高是 0），文件可能坏了`)
     const region = isPresent(item.region) ? clampImageRegion(item.region, size) : null
-    if (isPresent(item.region) && !region) throw new AppError('VALIDATION', `region 整块都在图外：${shown} 是 ${size.width}×${size.height}`)
+    if (isPresent(item.region) && !region)
+      throw new AppError(
+        'VALIDATION',
+        `region 整块都在图外：${shown} 是 ${size.width}×${size.height}`
+      )
 
-    const fits = !region
-      && Math.max(size.width, size.height) <= ImageLimits.edge
-      && base64Length(buffer.byteLength) <= ImageLimits.base64Bytes
+    const fits =
+      !region &&
+      Math.max(size.width, size.height) <= ImageLimits.edge &&
+      base64Length(buffer.byteLength) <= ImageLimits.base64Bytes
     if (fits) {
-      const entry = { path: shown, mediaType: media.mediaType, width: size.width, height: size.height, sent: { ...size } }
+      const entry = {
+        path: shown,
+        mediaType: media.mediaType,
+        width: size.width,
+        height: size.height,
+        sent: { ...size },
+      }
       return { entry, image: { data: buffer, mediaType: media.mediaType }, region }
     }
 
     const resize = ctx.images.resizeImage
     if (!resize) {
-      throw new AppError('PLATFORM', region
-        ? '这个宿主裁不了图；先用命令把那一块裁出来再看'
-        : `${shown} 是 ${size.width}×${size.height}，超过长边 ${ImageLimits.edge} px 或 ${ImageLimits.base64Bytes} 字节的上限，这个宿主压不了；先用命令缩小（macOS：sips -Z ${ImageLimits.edge} 原图 --out 新图；装了 ImageMagick 的：magick 原图 -resize ${ImageLimits.edge}x${ImageLimits.edge} 新图）`)
+      throw new AppError(
+        'PLATFORM',
+        region
+          ? '这个宿主裁不了图；先用命令把那一块裁出来再看'
+          : `${shown} 是 ${size.width}×${size.height}，超过长边 ${ImageLimits.edge} px 或 ${ImageLimits.base64Bytes} 字节的上限，这个宿主压不了；先用命令缩小（macOS：sips -Z ${ImageLimits.edge} 原图 --out 新图；装了 ImageMagick 的：magick 原图 -resize ${ImageLimits.edge}x${ImageLimits.edge} 新图）`
+      )
     }
-    const request: Omit<ImageResizeRequest, 'longEdge'> = { data: buffer, mediaType: media.mediaType }
+    const request: Omit<ImageResizeRequest, 'longEdge'> = {
+      data: buffer,
+      mediaType: media.mediaType,
+    }
     if (region) request.region = region
-    const shrunk = await shrinkImageToLimits(resize, request, { longEdge: ImageLimits.edge, base64Bytes: ImageLimits.base64Bytes })
-    const entry = { path: shown, mediaType: shrunk.mediaType, width: size.width, height: size.height, sent: { width: shrunk.width, height: shrunk.height } }
+    const shrunk = await shrinkImageToLimits(resize, request, {
+      longEdge: ImageLimits.edge,
+      base64Bytes: ImageLimits.base64Bytes,
+    })
+    const entry = {
+      path: shown,
+      mediaType: shrunk.mediaType,
+      width: size.width,
+      height: size.height,
+      sent: { width: shrunk.width, height: shrunk.height },
+    }
     return { entry, image: { data: shrunk.data, mediaType: shrunk.mediaType }, region }
   }
 }

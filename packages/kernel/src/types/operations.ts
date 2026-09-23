@@ -13,7 +13,7 @@ export interface OperationSchema {
   readonly items?: OperationSchema | readonly OperationSchema[]
   readonly additionalItems?: boolean
   readonly enum?: ReadonlyArray<Nullable<string | number | boolean>>
-  readonly const?:LooseOptional<string | number | boolean>
+  readonly const?: LooseOptional<string | number | boolean>
   readonly anyOf?: readonly OperationSchema[]
   readonly minimum?: number
   readonly maximum?: number
@@ -31,7 +31,9 @@ export interface OperationSurface {
   readonly declarations: string
   readonly template: string
   readonly revision: string
-  readonly operations: Readonly<Record<string, OperationDescriptor & { readonly hasInput: boolean }>>
+  readonly operations: Readonly<
+    Record<string, OperationDescriptor & { readonly hasInput: boolean }>
+  >
 }
 
 /**
@@ -53,7 +55,7 @@ export interface OperationDescriptor {
   readonly output: OperationSchema
   readonly effects: 'none' | 'write'
   /** 由宿主模式校验，与外界效果独立。 */
-  readonly allowedModes?:ReadonlyArray<'execute'|'observe'>
+  readonly allowedModes?: ReadonlyArray<'execute' | 'observe'>
   readonly examples?: readonly unknown[]
 }
 
@@ -74,10 +76,17 @@ export interface ModuleCard {
 }
 
 /** 模块发现的有界分页条件。 */
-export interface ModuleQuery { readonly query?: string; readonly offset?: number; readonly limit?: number }
+export interface ModuleQuery {
+  readonly query?: string
+  readonly offset?: number
+  readonly limit?: number
+}
 
 /** 模块发现的一页结果。 */
-export interface ModulePage { readonly items: readonly ModuleCard[]; readonly nextOffset: Nullable<number> }
+export interface ModulePage {
+  readonly items: readonly ModuleCard[]
+  readonly nextOffset: Nullable<number>
+}
 
 /** 参数在准备阶段固定，处理器与持久记录使用同一份。 */
 export interface PreparedInvocation {
@@ -104,7 +113,10 @@ export interface InvocationReceipt {
   /** 成功调用经宿主版本适配器确认的资源依赖。 */
   readonly reads?: readonly OperationReadStamp[]
   /** 宿主确认观察调用已正常结束，防护范围与世界效果分别表达。 */
-  readonly observation?:{readonly completed:true;readonly protection:'full'|'partial'|'none'}
+  readonly observation?: {
+    readonly completed: true
+    readonly protection: 'full' | 'partial' | 'none'
+  }
   readonly value?: unknown
   readonly error?: { readonly code: string; readonly message: string }
 }
@@ -149,5 +161,9 @@ export interface OperationReadStamp extends OperationResourceVersion {
 /** 写前版本验证结果，不把无法验证当作版本一致。 */
 export interface OperationReadValidation {
   readonly status: 'valid' | 'stale' | 'unverified'
-  readonly reads: ReadonlyArray<{ readonly stamp: OperationReadStamp; readonly status: 'valid' | 'stale' | 'unverified'; readonly reason?: string }>
+  readonly reads: ReadonlyArray<{
+    readonly stamp: OperationReadStamp
+    readonly status: 'valid' | 'stale' | 'unverified'
+    readonly reason?: string
+  }>
 }

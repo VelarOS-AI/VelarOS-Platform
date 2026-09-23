@@ -1,9 +1,4 @@
-import {
-  isBlank,
-  isNotUndefined,
-  isUndefined,
-  Log,
-} from '@velaros-ai/core'
+import { isBlank, isNotUndefined, isUndefined, Log } from '@velaros-ai/core'
 
 import { KernelCallErrorCodes, KernelErrorCodes } from '../../contract/constants'
 import type { KernelRegistration } from '../../contract/provides'
@@ -78,32 +73,21 @@ export interface KernelServiceApi {
    * 策略判不出来）。**本方法不记账**——记账归 RPC 或进程内连接的会话账本。
    */
   evaluateCapabilitySessionOpen(
-    input: unknown,
+    input: unknown
   ): Promise<
     | { readonly status: 'ok'; readonly request: CapabilitySessionOpenRequest }
     | CapabilitySessionOpenFailure
   >
   /** 执行一次能力调用；任何失败都折成带码的失败信封回来，不抛。 */
-  handleCapabilityCall(
-    input: unknown,
-    signal?: AbortSignal,
-  ): Promise<CapabilityCallResponse>
+  handleCapabilityCall(input: unknown, signal?: AbortSignal): Promise<CapabilityCallResponse>
   /** 订阅一类内核事件，返回退订句柄；没启动或事件类型为空时抛错。 */
-  subscribe<TPayload>(
-    type: string,
-    handler: KernelEventHandler<TPayload>,
-  ): KernelRegistration
+  subscribe<TPayload>(type: string, handler: KernelEventHandler<TPayload>): KernelRegistration
   /** 列出 mod pack；没启动或没接 ModStore 时抛带码的错误。 */
   listMods(): ReturnType<KernelModCatalog['list']>
   /** 开关一个 mod pack；没启动或没接 ModStore 时抛带码的错误。 */
-  setModEnabled(
-    id: string,
-    enabled: boolean,
-  ): ReturnType<KernelModCatalog['setEnabled']>
+  setModEnabled(id: string, enabled: boolean): ReturnType<KernelModCatalog['setEnabled']>
   /** 从目录装一个 mod pack；失败原因随带码的错误回到调用方，不只进日志。 */
-  installModFromDirectory(
-    directory: string,
-  ): ReturnType<KernelModCatalog['installFromDirectory']>
+  installModFromDirectory(directory: string): ReturnType<KernelModCatalog['installFromDirectory']>
 }
 
 /** 与产品无关的内核服务面。 */
@@ -119,8 +103,7 @@ export class KernelService implements KernelServiceApi {
     if (isBlank(options.kernelVersion.trim())) {
       throw new Error('内核版本号不能为空')
     }
-    this.clientAccessBroker = options.clientAccessBroker
-      ?? new DenyAllKernelClientAccessBroker()
+    this.clientAccessBroker = options.clientAccessBroker ?? new DenyAllKernelClientAccessBroker()
     this.capabilityInvoker = new KernelCapabilityInvoker(options.host)
   }
 
@@ -133,9 +116,7 @@ export class KernelService implements KernelServiceApi {
       case 'disposed':
         return Promise.reject(new Error('已回收的 Kernel service 不能再启动'))
       case 'failed':
-        return Promise.reject(
-          startFailedFailure(this.startFailure),
-        )
+        return Promise.reject(startFailedFailure(this.startFailure))
       case 'started':
         return Promise.resolve()
       case 'idle':
@@ -190,9 +171,9 @@ export class KernelService implements KernelServiceApi {
     const modules = snapshots.map(toKernelServiceModuleHealth)
     const degraded = modules.some(
       (module) =>
-        module.status !== 'ready'
-        || module.health.status === 'degraded'
-        || module.health.status === 'unhealthy',
+        module.status !== 'ready' ||
+        module.health.status === 'degraded' ||
+        module.health.status === 'unhealthy'
     )
     return {
       status: degraded ? 'degraded' : 'healthy',
@@ -201,22 +182,24 @@ export class KernelService implements KernelServiceApi {
   }
 
   public async evaluateCapabilitySessionOpen(
-    input: unknown,
+    input: unknown
   ): Promise<
     | { readonly status: 'ok'; readonly request: CapabilitySessionOpenRequest }
     | CapabilitySessionOpenFailure
   > {
     const parsed = CapabilitySessionOpenRequestSchema.safeParse(input)
-    if (!parsed.success) return capabilitySessionOpenFailure(
+    if (!parsed.success)
+      return capabilitySessionOpenFailure(
         'INVALID_REQUEST',
-        '打开能力会话的请求不符合 Kernel 协议 v2',
+        '打开能力会话的请求不符合 Kernel 协议 v2'
       )
 
     const request = parsed.data
-    if (this.status !== 'started') return capabilitySessionOpenFailure(
+    if (this.status !== 'started')
+      return capabilitySessionOpenFailure(
         'KERNEL_NOT_STARTED',
         'Kernel 服务面还没启动',
-        this.status === 'idle',
+        this.status === 'idle'
       )
 
     for (const item of request.requires) {
@@ -228,11 +211,12 @@ export class KernelService implements KernelServiceApi {
   }
 
   private async evaluateRequireItem(
-    item: CapabilityRequireItem,
+    item: CapabilityRequireItem
   ): Promise<CapabilitySessionOpenFailure | undefined> {
-    if (isUndefined(this.findCapabilityById(item.capabilityId))) return capabilitySessionOpenFailure(
+    if (isUndefined(this.findCapabilityById(item.capabilityId)))
+      return capabilitySessionOpenFailure(
         'CAPABILITY_NOT_AVAILABLE',
-        `能力 "${item.capabilityId}" 当前没有装载`,
+        `能力 "${item.capabilityId}" 当前没有装载`
       )
 
     try {
@@ -241,16 +225,14 @@ export class KernelService implements KernelServiceApi {
         operations: item.operations,
         scope: item.scope,
       })
-      if (decision.status === 'denied') return capabilitySessionOpenFailure(
-          'CAPABILITY_BIND_DENIED',
-          decision.reason,
-        )
+      if (decision.status === 'denied')
+        return capabilitySessionOpenFailure('CAPABILITY_BIND_DENIED', decision.reason)
     } catch (error) {
       log.warn('能力绑定策略判定失败', { capabilityId: item.capabilityId, error })
       return capabilitySessionOpenFailure(
         'CAPABILITY_BIND_FAILED',
         '判不出这次能力绑定的结果',
-        true,
+        true
       )
     }
     return undefined
@@ -258,14 +240,14 @@ export class KernelService implements KernelServiceApi {
 
   public async handleCapabilityCall(
     input: unknown,
-    signal: AbortSignal = new AbortController().signal,
+    signal: AbortSignal = new AbortController().signal
   ): Promise<CapabilityCallResponse> {
     const parsed = CapabilityCallRequestSchema.safeParse(input)
     if (!parsed.success)
       return capabilityCallFailure(
         readCapabilityCallId(input),
         'INVALID_REQUEST',
-        '能力调用请求不符合 Kernel 协议 v2',
+        '能力调用请求不符合 Kernel 协议 v2'
       )
 
     const request = parsed.data
@@ -274,7 +256,7 @@ export class KernelService implements KernelServiceApi {
         request.callId,
         'KERNEL_NOT_STARTED',
         'Kernel 服务面还没启动',
-        this.status === 'idle',
+        this.status === 'idle'
       )
 
     try {
@@ -300,19 +282,19 @@ export class KernelService implements KernelServiceApi {
             return capabilityCallFailure(
               request.callId,
               KernelCallErrorCodes.capabilityNotFound,
-              `能力 "${request.capabilityId}" 当前不可用`,
+              `能力 "${request.capabilityId}" 当前不可用`
             )
           case KernelCallErrorCodes.capabilityNotCallable:
             return capabilityCallFailure(
               request.callId,
               KernelCallErrorCodes.capabilityNotCallable,
-              `能力 "${request.capabilityId}" 没有可调用接口`,
+              `能力 "${request.capabilityId}" 没有可调用接口`
             )
           case KernelCallErrorCodes.operationNotFound:
             return capabilityCallFailure(
               request.callId,
               KernelCallErrorCodes.operationNotFound,
-              `能力 "${request.capabilityId}" 上没有操作 "${request.operation}"`,
+              `能力 "${request.capabilityId}" 上没有操作 "${request.operation}"`
             )
           case KernelCallErrorCodes.operationMetadataFailed:
             log.warn('取不到能力操作的元数据', {
@@ -323,7 +305,7 @@ export class KernelService implements KernelServiceApi {
             return capabilityCallFailure(
               request.callId,
               KernelCallErrorCodes.operationMetadataFailed,
-              '取不到能力操作的元数据',
+              '取不到能力操作的元数据'
             )
           // 进程内路径的错误消息就是 broker 给的原因；serve 路径不能把它丢掉，否则同一次拒绝
           // 在两条路径上说的不是一回事，模型也拿不到「为什么被拒」。
@@ -336,7 +318,7 @@ export class KernelService implements KernelServiceApi {
               {
                 permission: error.details.permission,
                 reason: error.details.reason ?? error.message,
-              },
+              }
             )
           case KernelCallErrorCodes.permissionCheckFailed:
             log.warn('判不出能力调用的授权结果', {
@@ -348,7 +330,7 @@ export class KernelService implements KernelServiceApi {
               request.callId,
               KernelCallErrorCodes.permissionCheckFailed,
               '判不出能力调用的授权结果',
-              true,
+              true
             )
           default:
             break
@@ -363,17 +345,15 @@ export class KernelService implements KernelServiceApi {
       return capabilityCallFailure(
         request.callId,
         signal.aborted ? 'CALL_ABORTED' : 'CAPABILITY_CALL_FAILED',
-        signal.aborted
-          ? '能力调用被中止'
-          : '能力调用失败',
-        !signal.aborted,
+        signal.aborted ? '能力调用被中止' : '能力调用失败',
+        !signal.aborted
       )
     }
   }
 
-  private findCapabilityById(capabilityId: string):
-    | { readonly token: { readonly id: string; readonly version: string } }
-    | undefined {
+  private findCapabilityById(
+    capabilityId: string
+  ): { readonly token: { readonly id: string; readonly version: string } } | undefined {
     const token = this.options.host.getActiveCapabilityToken(capabilityId)
     return isUndefined(token) ? undefined : { token }
   }
@@ -384,7 +364,7 @@ export class KernelService implements KernelServiceApi {
 
   public subscribe<TPayload>(
     type: string,
-    handler: KernelEventHandler<TPayload>,
+    handler: KernelEventHandler<TPayload>
   ): KernelRegistration {
     this.assertStarted()
     if (isBlank(type.trim())) {
@@ -398,10 +378,7 @@ export class KernelService implements KernelServiceApi {
     return this.requireModCatalog().list()
   }
 
-  public setModEnabled(
-    id: string,
-    enabled: boolean,
-  ): ReturnType<KernelModCatalog['setEnabled']> {
+  public setModEnabled(id: string, enabled: boolean): ReturnType<KernelModCatalog['setEnabled']> {
     this.assertStarted()
     return this.requireModCatalog().setEnabled(id, enabled)
   }
@@ -414,7 +391,7 @@ export class KernelService implements KernelServiceApi {
    * 真正的原因只进了守护进程日志。
    */
   public async installModFromDirectory(
-    directory: string,
+    directory: string
   ): ReturnType<KernelModCatalog['installFromDirectory']> {
     this.assertStarted()
     try {
@@ -427,7 +404,7 @@ export class KernelService implements KernelServiceApi {
         KernelErrorCodes.modInstallFailed,
         `从目录安装 mod pack 失败：${reason}`,
         { directory, reason },
-        { cause: error },
+        { cause: error }
       )
     }
   }
@@ -436,7 +413,7 @@ export class KernelService implements KernelServiceApi {
     if (isUndefined(this.options.modCatalog)) {
       throw new KernelError(
         KernelErrorCodes.modsUnavailable,
-        '本 Kernel 没有接 ModStore，mods.* 不可用',
+        '本 Kernel 没有接 ModStore，mods.* 不可用'
       )
     }
     return this.options.modCatalog

@@ -5,7 +5,11 @@ import { AppError } from '@velaros-ai/core/error'
 
 import { ModelErrorCodes } from '../../contract/constants.js'
 import type { ModelProviderAdapter } from '../../contract/requires'
-import type { EmbeddingRequest, LanguageModelFactory, ModelAdapterConfig } from '../../types/adapters'
+import type {
+  EmbeddingRequest,
+  LanguageModelFactory,
+  ModelAdapterConfig,
+} from '../../types/adapters'
 import type { ChatProviderId } from '../../types/model'
 import type { EvaluatedUserAdapter, UserAdapterFactoryInput } from '../../types/user-adapter'
 import {
@@ -153,7 +157,8 @@ class UserJsModelAdapter extends ModelAdapter implements ModelProviderAdapter {
     const createEmbeddingRequest =
       adapter.exports.createEmbeddingRequest ?? adapter.exports.default?.createEmbeddingRequest
 
-    if (!isFunction(createEmbeddingRequest)) return super.createEmbeddingRequest(config, model, texts)
+    if (!isFunction(createEmbeddingRequest))
+      return super.createEmbeddingRequest(config, model, texts)
 
     const input = createUserAdapterFactoryInput(
       adapter,

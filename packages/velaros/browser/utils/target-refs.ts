@@ -70,7 +70,5 @@ export function resolveStoredRef(
 
   // 兼容首个 observation 的历史裸 ref。generation > 1 时裸 @e1 无法表达
   // 它来自哪次观察，继续解析会把旧目标静默重绑定到新目标，因此必须拒绝。
-  return session.generation === 1
-    ? scopeRef(normalizedRef, session.generation)
-    : null
+  return session.generation === 1 ? scopeRef(normalizedRef, session.generation) : null
 }

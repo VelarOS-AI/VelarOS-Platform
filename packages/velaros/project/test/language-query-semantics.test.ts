@@ -52,10 +52,7 @@ async function createContext(): Promise<LanguageToolContext> {
 }
 
 async function run(input: Record<string, unknown>): Promise<Record<string, any>> {
-  return (await languageQueries.run(
-    input as never,
-    await createContext()
-  )) as Record<string, any>
+  return (await languageQueries.run(input as never, await createContext())) as Record<string, any>
 }
 
 beforeAll(async () => {
@@ -114,7 +111,9 @@ describe('TypeScript 语言服务池', () => {
 
     try {
       for (let index = 0; index < 10; index += 1) {
-        const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'velaros-development-pool-')))
+        const projectRoot = await realpath(
+          await mkdtemp(join(tmpdir(), 'velaros-development-pool-'))
+        )
         roots.push(projectRoot)
         await writeFile(
           join(projectRoot, 'tsconfig.json'),

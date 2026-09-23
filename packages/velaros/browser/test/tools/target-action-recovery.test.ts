@@ -38,7 +38,11 @@ function createRecoveryProbe(input: RecoveryProbeInput) {
     },
     evaluateScript: async (options: { script: string }) => {
       scripts.push(options.script)
-      return { url: 'https://example.test/', ok: true, json: JSON.stringify(input.bounds ?? { found: false, matchCount: 0 }) }
+      return {
+        url: 'https://example.test/',
+        ok: true,
+        json: JSON.stringify(input.bounds ?? { found: false, matchCount: 0 }),
+      }
     },
     clickCoordinates: async (point: { x: number; y: number }) => {
       clicks.push(point)
@@ -50,7 +54,10 @@ function createRecoveryProbe(input: RecoveryProbeInput) {
 }
 
 function createToolContext(browser: unknown): BrowserOperationContext {
-  return { browser, abortSignal: new AbortController().signal } as unknown as BrowserOperationContext
+  return {
+    browser,
+    abortSignal: new AbortController().signal,
+  } as unknown as BrowserOperationContext
 }
 
 function createTarget(frame?: BrowserElementTargetHint['frame']): BrowserElementTargetHint {
@@ -89,7 +96,18 @@ void describe('target action 的坐标恢复', () => {
 
   void test('带 frame 提示的 target 不做坐标恢复', async () => {
     const { result, screenshots } = await runRecovery(
-      { failureReason: 'not-found', bounds: { found: true, width: 40, height: 20, centerX: 60, centerY: 80, viewportWidth: 1280, viewportHeight: 800 } },
+      {
+        failureReason: 'not-found',
+        bounds: {
+          found: true,
+          width: 40,
+          height: 20,
+          centerX: 60,
+          centerY: 80,
+          viewportWidth: 1280,
+          viewportHeight: 800,
+        },
+      },
       { css: 'iframe#checkout', name: null, title: null, url: 'https://embed.example.test/widget' }
     )
 
@@ -100,7 +118,15 @@ void describe('target action 的坐标恢复', () => {
   void test('not-found 但元素宽高为 0 时不点 (0,0)，判恢复失败', async () => {
     const { result, clicks } = await runRecovery({
       failureReason: 'not-found',
-      bounds: { found: true, width: 0, height: 0, centerX: 0, centerY: 0, viewportWidth: 1280, viewportHeight: 800 },
+      bounds: {
+        found: true,
+        width: 0,
+        height: 0,
+        centerX: 0,
+        centerY: 0,
+        viewportWidth: 1280,
+        viewportHeight: 800,
+      },
     })
 
     assert.equal(result.matched, false)
@@ -111,7 +137,15 @@ void describe('target action 的坐标恢复', () => {
   void test('中心点落在视口外时不做坐标点击', async () => {
     const { result, clicks } = await runRecovery({
       failureReason: 'not-found',
-      bounds: { found: true, width: 40, height: 20, centerX: 60, centerY: 2400, viewportWidth: 1280, viewportHeight: 800 },
+      bounds: {
+        found: true,
+        width: 40,
+        height: 20,
+        centerX: 60,
+        centerY: 2400,
+        viewportWidth: 1280,
+        viewportHeight: 800,
+      },
     })
 
     assert.equal(result.matched, false)
@@ -121,7 +155,15 @@ void describe('target action 的坐标恢复', () => {
   void test('not-found 且元素有真实尺寸时才按中心点恢复', async () => {
     const { result, clicks, screenshots } = await runRecovery({
       failureReason: 'not-found',
-      bounds: { found: true, width: 120, height: 40, centerX: 300, centerY: 220, viewportWidth: 1280, viewportHeight: 800 },
+      bounds: {
+        found: true,
+        width: 120,
+        height: 40,
+        centerX: 300,
+        centerY: 220,
+        viewportWidth: 1280,
+        viewportHeight: 800,
+      },
     })
 
     assert.equal(result.matched, true)
@@ -141,7 +183,17 @@ void describe('target action 的坐标恢复', () => {
     const { result, clicks } = await runRecovery({
       failureReason: 'not-found',
       elementLabels: [
-        { index: 1, tagName: 'button', role: null, text: null, selector: '#buy', x: 10, y: 10, width: 0, height: 0 },
+        {
+          index: 1,
+          tagName: 'button',
+          role: null,
+          text: null,
+          selector: '#buy',
+          x: 10,
+          y: 10,
+          width: 0,
+          height: 0,
+        },
       ],
       bounds: { found: false, matchCount: 3 },
     })

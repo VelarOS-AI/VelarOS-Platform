@@ -1,131 +1,128 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from 'bun:test'
 
-import { archive, FullCapabilities } from "../spec/support.js";
-import { labCertification, labStatistics, labWire, ObservationFaces } from "../src/index.js";
+import { archive, FullCapabilities } from '../spec/support.js'
+import { labCertification, labStatistics, labWire, ObservationFaces } from '../src/index.js'
 
-describe("statistics and certification", () => {
-  test("strictly validates public certification inputs", () => {
+describe('statistics and certification', () => {
+  test('strictly validates public certification inputs', () => {
     expect(
       labWire.parseCertificationSubject({
-        kind: "mod",
-        id: "example-mod",
-        version: "1.0.0",
-        digest: "a".repeat(64),
-      }).id,
-    ).toBe("example-mod");
+        kind: 'mod',
+        id: 'example-mod',
+        version: '1.0.0',
+        digest: 'a'.repeat(64),
+      }).id
+    ).toBe('example-mod')
     expect(() =>
       labWire.parseCertificationPolicy({
-        id: "policy",
+        id: 'policy',
         version: 1,
-        requiredJourneyIds: ["journey-a"],
+        requiredJourneyIds: ['journey-a'],
         minimumReplicatesPerJourney: 3,
         minimumReliability: 1.5,
         maximumAttritionRate: 0.05,
-        requiredObservationCoverage: { transcript: "full" },
+        requiredObservationCoverage: { transcript: 'full' },
         requireSeparateVerifier: true,
         requireNativeExecution: true,
         requireBaseline: false,
         maximumBaselineRegression: 0.02,
-      }),
-    ).toThrow();
-  });
-  test("uses paired journey clusters and refuses false precision with one cluster", () => {
+      })
+    ).toThrow()
+  })
+  test('uses paired journey clusters and refuses false precision with one cluster', () => {
     const oneCluster = [
-      archive({ executorId: "a", journeyId: "j1", groupId: "g1", score: 1 }),
-      archive({ executorId: "b", journeyId: "j1", groupId: "g1", score: 0 }),
-    ];
-    const one = labStatistics.compareExecutors(oneCluster, "a", "b");
-    expect(one.completionDifference.estimate).toBe(1);
-    expect(one.completionDifference.lower95).toBeNull();
-    expect(one.decision).toBe("inconclusive");
+      archive({ executorId: 'a', journeyId: 'j1', groupId: 'g1', score: 1 }),
+      archive({ executorId: 'b', journeyId: 'j1', groupId: 'g1', score: 0 }),
+    ]
+    const one = labStatistics.compareExecutors(oneCluster, 'a', 'b')
+    expect(one.completionDifference.estimate).toBe(1)
+    expect(one.completionDifference.lower95).toBeNull()
+    expect(one.decision).toBe('inconclusive')
 
     const two = labStatistics.compareExecutors(
       [
         ...oneCluster,
-        archive({ executorId: "a", journeyId: "j2", groupId: "g2", score: 1 }),
-        archive({ executorId: "b", journeyId: "j2", groupId: "g2", score: 0 }),
+        archive({ executorId: 'a', journeyId: 'j2', groupId: 'g2', score: 1 }),
+        archive({ executorId: 'b', journeyId: 'j2', groupId: 'g2', score: 0 }),
       ],
-      "a",
-      "b",
-      { bootstrapSamples: 500, seed: 7 },
-    );
-    expect(two.clusters).toBe(2);
-    expect(two.decision).toBe("a-better");
-  });
+      'a',
+      'b',
+      { bootstrapSamples: 500, seed: 7 }
+    )
+    expect(two.clusters).toBe(2)
+    expect(two.decision).toBe('a-better')
+  })
 
-  test("separates attrition from reliability denominator and enforces comparability", () => {
+  test('separates attrition from reliability denominator and enforces comparability', () => {
     const dropped = archive({
-      runId: "dropped",
+      runId: 'dropped',
       drops: [
         {
-          trialId: "t",
+          trialId: 't',
           legId: null,
-          cause: "environment-drift",
-          detail: "changed",
+          cause: 'environment-drift',
+          detail: 'changed',
         },
       ],
-    });
-    const reliability = labStatistics.estimateReliability([archive(), dropped]);
-    expect(reliability.attempts).toBe(1);
-    expect(reliability.dropped).toBe(1);
-    const original = archive({ runId: "drifted" });
+    })
+    const reliability = labStatistics.estimateReliability([archive(), dropped])
+    expect(reliability.attempts).toBe(1)
+    expect(reliability.dropped).toBe(1)
+    const original = archive({ runId: 'drifted' })
     const drifted = {
       ...original,
       manifest: {
         ...original.manifest,
         budget: { ...original.manifest.budget, tokens: 99 },
       },
-    };
-    expect(labStatistics.checkComparability([archive(), drifted]).comparable).toBeFalse();
-  });
+    }
+    expect(labStatistics.checkComparability([archive(), drifted]).comparable).toBeFalse()
+  })
 
-  test("certifies only observed evidence and marks missing faces inconclusive", () => {
+  test('certifies only observed evidence and marks missing faces inconclusive', () => {
     const policy = {
-      id: "policy",
+      id: 'policy',
       version: 1,
-      requiredJourneyIds: ["journey-a"],
+      requiredJourneyIds: ['journey-a'],
       minimumReplicatesPerJourney: 1,
       minimumReliability: 0,
       maximumAttritionRate: 0,
-      requiredObservationCoverage: { artifacts: "full" as const },
+      requiredObservationCoverage: { artifacts: 'full' as const },
       requireSeparateVerifier: true,
       requireNativeExecution: true,
       requireBaseline: false,
       maximumBaselineRegression: 0.05,
-    };
+    }
     const subject = {
-      kind: "agent" as const,
-      id: "a",
-      version: "1",
-      digest: "digest",
-    };
+      kind: 'agent' as const,
+      id: 'a',
+      version: '1',
+      digest: 'digest',
+    }
     expect(
       labCertification.certify({
         subject,
         policy,
         archives: [archive()],
-        subjectExecutorId: "executor-a",
+        subjectExecutorId: 'executor-a',
         now: () => 1,
-      }).status,
-    ).toBe("certified");
+      }).status
+    ).toBe('certified')
 
     const noArtifacts = {
       ...FullCapabilities,
       observes: Object.fromEntries(
-        ObservationFaces.map((face) => [
-          face,
-          face === "artifacts" ? "none" : "full",
-        ]),
+        ObservationFaces.map((face) => [face, face === 'artifacts' ? 'none' : 'full'])
       ) as typeof FullCapabilities.observes,
-    };
+    }
     expect(
       labCertification.certify({
         subject,
         policy,
         archives: [archive({ capabilities: noArtifacts })],
-        subjectExecutorId: "executor-a",
+        subjectExecutorId: 'executor-a',
         now: () => 1,
-      }).status,
-    ).toBe("inconclusive");
-  });
-});
+      }).status
+    ).toBe('inconclusive')
+  })
+})

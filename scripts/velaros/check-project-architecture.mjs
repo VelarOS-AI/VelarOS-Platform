@@ -1,16 +1,6 @@
 #!/usr/bin/env node
-import {
-  existsSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-} from 'node:fs'
-import {
-  dirname,
-  extname,
-  relative,
-  resolve,
-} from 'node:path'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { dirname, extname, relative, resolve } from 'node:path'
 
 import * as ts from 'typescript'
 
@@ -31,8 +21,7 @@ const ForbiddenKernelSemanticImport =
   /(?:from\s+|import\s*\(|require\()\s*['"](?:@velaros-ai\/agent|@velaros-ai\/core\/(?:constants\/(?:project[^'"]*|model[^'"]*|memory[^'"]*|knowledge[^'"]*)|spaces\/[^'"]*|utils\/Browser[^'"]*))['"]/
 const CoreTypesImport =
   /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]@velaros-ai\/core\/types['"]/g
-const ConcreteCoreTypeName =
-  /\b(?:Browser|Project|Workbench|Model|Memory|Knowledge)[A-Z_a-z0-9]*/
+const ConcreteCoreTypeName = /\b(?:Browser|Project|Workbench|Model|Memory|Knowledge)[A-Z_a-z0-9]*/
 
 const manifest = JSON.parse(readFileSync(ManifestPath, 'utf8'))
 const failures = []
@@ -41,13 +30,19 @@ const fail = (message) => failures.push(message)
 const TransactionObjectNames = new Set(['tx', 'transaction', 'preparedTx'])
 
 function hasUnmanagedTransactionStatusAssignment(source, path) {
-  const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const sourceFile = ts.createSourceFile(
+    path,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS
+  )
   const stateMachineResults = new Set()
   const collectStateMachineResults = (node) => {
     if (
-      ts.isVariableDeclaration(node)
-      && ts.isIdentifier(node.name)
-      && node.initializer?.getText(sourceFile).includes('transactionStateMachine.')
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer?.getText(sourceFile).includes('transactionStateMachine.')
     ) {
       stateMachineResults.add(node.name.text)
     }
@@ -58,12 +53,12 @@ function hasUnmanagedTransactionStatusAssignment(source, path) {
   let unmanaged = false
   const visit = (node) => {
     if (
-      ts.isBinaryExpression(node)
-      && node.operatorToken.kind === ts.SyntaxKind.EqualsToken
-      && ts.isPropertyAccessExpression(node.left)
-      && node.left.name.text === 'status'
-      && ts.isIdentifier(node.left.expression)
-      && TransactionObjectNames.has(node.left.expression.text)
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      ts.isPropertyAccessExpression(node.left) &&
+      node.left.name.text === 'status' &&
+      ts.isIdentifier(node.left.expression) &&
+      TransactionObjectNames.has(node.left.expression.text)
     ) {
       const right = node.right.getText(sourceFile)
       if (!right.includes('transactionStateMachine.') && !stateMachineResults.has(right)) {
@@ -78,10 +73,15 @@ function hasUnmanagedTransactionStatusAssignment(source, path) {
 }
 
 function validationContextViolations(source, path, sourcePath) {
-  const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
-  const declarationName = (node) => node.name && ts.isIdentifier(node.name)
-    ? node.name.text
-    : undefined
+  const sourceFile = ts.createSourceFile(
+    path,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS
+  )
+  const declarationName = (node) =>
+    node.name && ts.isIdentifier(node.name) ? node.name.text : undefined
   const objectMemberName = (member) => declarationName(member)
   const validatorObjects = []
   const collectValidatorObjects = (node) => {
@@ -95,9 +95,10 @@ function validationContextViolations(source, path, sourcePath) {
   }
   collectValidatorObjects(sourceFile)
 
-  const participatesInValidationContract = sourcePath === 'types/validation.ts'
-    || validatorObjects.length > 0
-    || /\bProjectValidator\b|\bProjectValidationContext\b|\bregisterValidator\s*\(/.test(source)
+  const participatesInValidationContract =
+    sourcePath === 'types/validation.ts' ||
+    validatorObjects.length > 0 ||
+    /\bProjectValidator\b|\bProjectValidationContext\b|\bregisterValidator\s*\(/.test(source)
   if (!participatesInValidationContract) return []
 
   const violations = []
@@ -105,21 +106,21 @@ function validationContextViolations(source, path, sourcePath) {
   let hasProjectValidationContext = false
   const validateParameters = (node) => {
     const name = declarationName(node)
+    if (name === 'validate' && (ts.isMethodDeclaration(node) || ts.isMethodSignature(node)))
+      return node.parameters
     if (
-      name === 'validate'
-      && (ts.isMethodDeclaration(node) || ts.isMethodSignature(node))
-    ) return node.parameters
+      name === 'validate' &&
+      ts.isPropertyAssignment(node) &&
+      (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
+    )
+      return node.initializer.parameters
     if (
-      name === 'validate'
-      && ts.isPropertyAssignment(node)
-      && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
-    ) return node.initializer.parameters
-    if (
-      name === 'validate'
-      && ts.isPropertySignature(node)
-      && node.type
-      && ts.isFunctionTypeNode(node.type)
-    ) return node.type.parameters
+      name === 'validate' &&
+      ts.isPropertySignature(node) &&
+      node.type &&
+      ts.isFunctionTypeNode(node.type)
+    )
+      return node.type.parameters
     return undefined
   }
 
@@ -129,17 +130,22 @@ function validationContextViolations(source, path, sourcePath) {
     while (current && !ts.isSourceFile(current)) {
       if (ts.isVariableDeclaration(current) && isProjectValidatorType(current.type)) return true
       if (
-        (ts.isFunctionDeclaration(current) || ts.isFunctionExpression(current) || ts.isArrowFunction(current))
-        && isProjectValidatorType(current.type)
-      ) return true
+        (ts.isFunctionDeclaration(current) ||
+          ts.isFunctionExpression(current) ||
+          ts.isArrowFunction(current)) &&
+        isProjectValidatorType(current.type)
+      )
+        return true
       if (
-        ts.isCallExpression(current)
-        && current.expression.getText(sourceFile).endsWith('registerValidator')
-      ) return true
+        ts.isCallExpression(current) &&
+        current.expression.getText(sourceFile).endsWith('registerValidator')
+      )
+        return true
       if (
-        (ts.isAsExpression(current) || ts.isSatisfiesExpression(current))
-        && isProjectValidatorType(current.type)
-      ) return true
+        (ts.isAsExpression(current) || ts.isSatisfiesExpression(current)) &&
+        isProjectValidatorType(current.type)
+      )
+        return true
       current = current.parent
     }
     return false
@@ -148,24 +154,25 @@ function validationContextViolations(source, path, sourcePath) {
   const visit = (node) => {
     const name = declarationName(node)
     if (
-      name
-      && /(?:Validation|Validator)Context/.test(name)
-      && name !== 'ProjectValidationContext'
-      && (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node))
+      name &&
+      /(?:Validation|Validator)Context/.test(name) &&
+      name !== 'ProjectValidationContext' &&
+      (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node))
     ) {
       violations.push(`duplicate validator context declaration ${name}`)
     }
     if (name === 'ProjectValidationContext') hasProjectValidationContext = true
 
     if (
-      sourcePath === 'contract/requires.ts'
-      && ts.isInterfaceDeclaration(node)
-      && name === 'ProjectValidator'
+      sourcePath === 'contract/requires.ts' &&
+      ts.isInterfaceDeclaration(node) &&
+      name === 'ProjectValidator'
     ) {
       const validateMember = node.members.find((member) => declarationName(member) === 'validate')
-      const declaredContextType = validateMember && ts.isMethodSignature(validateMember)
-        ? validateMember.parameters[1]?.type
-        : undefined
+      const declaredContextType =
+        validateMember && ts.isMethodSignature(validateMember)
+          ? validateMember.parameters[1]?.type
+          : undefined
       projectValidatorContextType = declaredContextType?.getText(sourceFile)
     }
     ts.forEachChild(node, visit)
@@ -173,20 +180,29 @@ function validationContextViolations(source, path, sourcePath) {
   visit(sourceFile)
 
   for (const object of validatorObjects) {
-    const validateMember = object.properties.find((member) => objectMemberName(member) === 'validate')
+    const validateMember = object.properties.find(
+      (member) => objectMemberName(member) === 'validate'
+    )
     const contextParameter = validateMember ? validateParameters(validateMember)?.[1] : undefined
     const contextType = contextParameter?.type?.getText(sourceFile)
     if (contextType && contextType !== 'ProjectValidationContext') {
-      violations.push(`validator validate context must use ProjectValidationContext, got ${contextType}`)
+      violations.push(
+        `validator validate context must use ProjectValidationContext, got ${contextType}`
+      )
     } else if (!contextType && !hasProjectValidatorContext(object)) {
-      violations.push('structural ProjectValidator validate context must explicitly use ProjectValidationContext')
+      violations.push(
+        'structural ProjectValidator validate context must explicitly use ProjectValidationContext'
+      )
     }
   }
 
   if (sourcePath === 'types/validation.ts' && !hasProjectValidationContext) {
     violations.push('ProjectValidationContext declaration is required')
   }
-  if (sourcePath === 'contract/requires.ts' && projectValidatorContextType !== 'ProjectValidationContext') {
+  if (
+    sourcePath === 'contract/requires.ts' &&
+    projectValidatorContextType !== 'ProjectValidationContext'
+  ) {
     violations.push('ProjectValidator.validate must use ProjectValidationContext')
   }
   return violations
@@ -195,13 +211,16 @@ function validationContextViolations(source, path, sourcePath) {
 function registeredValidatorContextViolations() {
   const configFile = ts.readConfigFile(TsconfigPath, ts.sys.readFile)
   if (configFile.error)
-    return [`cannot read Project tsconfig: ${ts.flattenDiagnosticMessageText(configFile.error.messageText, '\n')}`]
+    return [
+      `cannot read Project tsconfig: ${ts.flattenDiagnosticMessageText(configFile.error.messageText, '\n')}`,
+    ]
   const parsed = ts.parseJsonConfigFileContent(configFile.config, ts.sys, RepoRoot)
   const program = ts.createProgram(parsed.fileNames, parsed.options)
   const checker = program.getTypeChecker()
   const validationSource = program.getSourceFile(resolve(SourceRoot, 'types/validation.ts'))
-  const contextDeclaration = validationSource?.statements.find((statement) =>
-    ts.isInterfaceDeclaration(statement) && statement.name.text === 'ProjectValidationContext'
+  const contextDeclaration = validationSource?.statements.find(
+    (statement) =>
+      ts.isInterfaceDeclaration(statement) && statement.name.text === 'ProjectValidationContext'
   )
   if (!contextDeclaration) return ['ProjectValidationContext declaration is required']
   const canonicalContextType = checker.getTypeAtLocation(contextDeclaration)
@@ -209,9 +228,9 @@ function registeredValidatorContextViolations() {
 
   const visit = (sourceFile, node) => {
     if (
-      ts.isCallExpression(node)
-      && node.arguments[0]
-      && node.expression.getText(sourceFile).endsWith('registerValidator')
+      ts.isCallExpression(node) &&
+      node.arguments[0] &&
+      node.expression.getText(sourceFile).endsWith('registerValidator')
     ) {
       const validatorType = checker.getTypeAtLocation(node.arguments[0])
       const validate = checker.getPropertyOfType(validatorType, 'validate')
@@ -225,13 +244,13 @@ function registeredValidatorContextViolations() {
       const contextType = contextParameter
         ? checker.getTypeOfSymbolAtLocation(
             contextParameter,
-            contextParameter.valueDeclaration ?? node.arguments[0],
+            contextParameter.valueDeclaration ?? node.arguments[0]
           )
         : undefined
       if (contextType !== canonicalContextType) {
         const actual = contextType ? checker.typeToString(contextType) : 'missing'
         violations.push(
-          `registered validator validate context must resolve to ProjectValidationContext, got ${actual} in ${relative(RepoRoot, sourceFile.fileName)}`,
+          `registered validator validate context must resolve to ProjectValidationContext, got ${actual} in ${relative(RepoRoot, sourceFile.fileName)}`
         )
       }
     }
@@ -247,13 +266,23 @@ function registeredValidatorContextViolations() {
 
 const ForbiddenInternalDependencies = [
   {
-    source: (sourcePath) => /^(impl\/(files|transactions|strategies|persistence|registries)|utils\/(files|transactions|editing))\//.test(sourcePath),
+    source: (sourcePath) =>
+      /^(impl\/(files|transactions|strategies|persistence|registries)|utils\/(files|transactions|editing))\//.test(
+        sourcePath
+      ),
     targets: ['impl/kernel/', 'impl/operations/', 'impl/ProjectTools'],
     label: 'services must use domain ports instead of runtime composition',
   },
   {
     source: (sourcePath) => /^(impl|utils)\/files\//.test(sourcePath),
-    targets: ['impl/transactions/', 'utils/transactions/', 'impl/strategies/', 'utils/editing/', 'utils/agent/', 'impl/operations/'],
+    targets: [
+      'impl/transactions/',
+      'utils/transactions/',
+      'impl/strategies/',
+      'utils/editing/',
+      'utils/agent/',
+      'impl/operations/',
+    ],
     label: 'file access must not depend on transaction or edit implementation',
   },
   {
@@ -263,7 +292,13 @@ const ForbiddenInternalDependencies = [
   },
   {
     source: (sourcePath) => sourcePath.startsWith('impl/strategies/'),
-    targets: ['impl/files/', 'utils/files/', 'impl/transactions/', 'utils/transactions/', 'impl/persistence/'],
+    targets: [
+      'impl/files/',
+      'utils/files/',
+      'impl/transactions/',
+      'utils/transactions/',
+      'impl/persistence/',
+    ],
     label: 'edit strategies must produce patches without persistence',
   },
   {
@@ -277,7 +312,10 @@ const ForbiddenInternalDependencies = [
     label: 'domain types must not depend on implementation or helpers',
   },
   {
-    source: (sourcePath) => /^(impl\/(kernel|files|transactions|strategies|persistence|registries)|utils\/(files|transactions|editing))\//.test(sourcePath),
+    source: (sourcePath) =>
+      /^(impl\/(kernel|files|transactions|strategies|persistence|registries)|utils\/(files|transactions|editing))\//.test(
+        sourcePath
+      ),
     targets: ['impl/operations/', 'utils/agent/', 'impl/ProjectTools'],
     label: 'Project implementation must not depend on Agent adapters',
   },
@@ -289,11 +327,18 @@ const ForbiddenInternalDependencies = [
   {
     source: (sourcePath) => /^impl\/(persistence|transactions)\//.test(sourcePath),
     targets: ['impl/kernel/LocalProjectKernel'],
-    label: 'persistence and transaction repositories must depend on transaction domain types, not ProjectKernel',
+    label:
+      'persistence and transaction repositories must depend on transaction domain types, not ProjectKernel',
   },
   {
     source: (sourcePath) => sourcePath === 'impl/transactions/TransactionOverlay.ts',
-    targets: ['impl/kernel/', 'impl/files/', 'utils/files/', 'impl/registries/', 'impl/persistence/'],
+    targets: [
+      'impl/kernel/',
+      'impl/files/',
+      'utils/files/',
+      'impl/registries/',
+      'impl/persistence/',
+    ],
     label: 'transaction overlay must depend only on domain types and injected callbacks',
   },
   {
@@ -309,7 +354,8 @@ const ForbiddenInternalDependencies = [
       'impl/registries/',
       'impl/persistence/',
     ],
-    label: 'transaction validation must use domain types, TransactionOverlay views, and injected callbacks',
+    label:
+      'transaction validation must use domain types, TransactionOverlay views, and injected callbacks',
   },
 ]
 
@@ -318,10 +364,12 @@ const ForbiddenInternalDependencies = [
 // 不存在的版本。钉字面量的旧写法让这条门在每次正常升版时变红（实测已卡在 1.2.3 而包已到
 // 1.2.5），红成常态的门等于没有门。项目单元随 @velaros-ai/velaros 发布，版本就是那个包的版本。
 const versionConstantSource = readFileSync(resolve(SourceRoot, 'contract/constants.ts'), 'utf8')
-const versionConstant = /ProjectPackageVersion\s*=\s*["']([^"']+)["']/.exec(versionConstantSource)?.[1]
+const versionConstant = /ProjectPackageVersion\s*=\s*["']([^"']+)["']/.exec(
+  versionConstantSource
+)?.[1]
 if (versionConstant !== manifest.version) {
   fail(
-    `ProjectPackageVersion (${versionConstant ?? 'not found'}) must match @velaros-ai/velaros version (${manifest.version})`,
+    `ProjectPackageVersion (${versionConstant ?? 'not found'}) must match @velaros-ai/velaros version (${manifest.version})`
   )
 }
 if (manifest.peerDependencies?.['@velaros-ai/agent'] !== 'workspace:^') {
@@ -349,15 +397,21 @@ for (const path of walk(SourceRoot)) {
   for (const violation of validationContextViolations(source, path, sourcePath)) {
     fail(`${violation} in ${sourcePath}`)
   }
-  if (sourcePath === 'impl/kernel/LocalProjectKernel.ts' && hasUnmanagedTransactionStatusAssignment(source, path)) {
+  if (
+    sourcePath === 'impl/kernel/LocalProjectKernel.ts' &&
+    hasUnmanagedTransactionStatusAssignment(source, path)
+  ) {
     fail('ProjectKernel transaction status changes must go through TransactionStateMachine')
   }
-  const importedSpecifiers = ts.preProcessFile(source, true, true).importedFiles
-    .map((reference) => reference.fileName)
+  const importedSpecifiers = ts
+    .preProcessFile(source, true, true)
+    .importedFiles.map((reference) => reference.fileName)
   if (sourcePath.startsWith('utils/editing/')) {
     for (const specifier of importedSpecifiers) {
       if (/^(?:node:)?(?:fs(?:\/promises)?|child_process|worker_threads)$/.test(specifier)) {
-        fail(`pure planner must not perform filesystem or process IO in ${sourcePath}: ${specifier}`)
+        fail(
+          `pure planner must not perform filesystem or process IO in ${sourcePath}: ${specifier}`
+        )
       }
     }
   }

@@ -51,11 +51,15 @@ export async function serveCapabilityCall(
  * 堆爆了要单独认出来：V8 是**直接 abort**，不抛异常、`done` 也发不出来，
  * 光看退出码只会报成「意外退出」，模型下一轮照样把整个仓库读进一个数组。
  */
-export function describeChildExit(code: Nullable<number>, stderr: string): {
+export function describeChildExit(
+  code: Nullable<number>,
+  stderr: string
+): {
   code: string
   message: string
 } {
-  if (stderr.includes('heap out of memory')) return {
+  if (stderr.includes('heap out of memory'))
+    return {
       code: CodeSurfaceErrorCodes.tooLarge,
       message:
         `脚本把 ${CodeSurfaceTuning.heapMb}MB 堆用光了，已被终止。` +

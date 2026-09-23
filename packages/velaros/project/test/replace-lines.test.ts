@@ -10,16 +10,24 @@ import type { ReplaceLinesOperation } from '../types/edit'
 import { ProjectEditOperationSchema } from './support/edit-intent-schema'
 
 let root = ''
-beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-line-edit-')) })
-afterEach(async () => { await rm(root, { recursive: true, force: true }) })
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), 'project-line-edit-'))
+})
+afterEach(async () => {
+  await rm(root, { recursive: true, force: true })
+})
 
 async function fixture(content: string, path = 'sample.txt', requireBaseRevision = true) {
   await writeFile(join(root, path), content)
   const project = await createProjectKernel({ root, corePolicy: { requireBaseRevision } })
   const read = await project.read({ path })
   const operation: ReplaceLinesOperation = {
-    type: 'replace_lines', path, baseRevision: read.snapshot.revision,
-    startLine: 2, endLine: 2, newLines: ['changed'],
+    type: 'replace_lines',
+    path,
+    baseRevision: read.snapshot.revision,
+    startLine: 2,
+    endLine: 2,
+    newLines: ['changed'],
   }
   return { project, operation }
 }
@@ -30,10 +38,19 @@ describe('revision-bound line edits', () => {
     const { project, operation } = await fixture(original)
     operation.newLines = ['中文🙂', 'next']
     expect(ProjectEditOperationSchema.safeParse(operation).success).toBe(true)
-    const tx = await project.prepareEdit({ operations: [
-      { operation },
-      { operation: { type: 'replace_text', path: operation.path, oldText: 'next', newText: 'done' } },
-    ] })
+    const tx = await project.prepareEdit({
+      operations: [
+        { operation },
+        {
+          operation: {
+            type: 'replace_text',
+            path: operation.path,
+            oldText: 'next',
+            newText: 'done',
+          },
+        },
+      ],
+    })
     await project.applyEdit({ transactionId: tx.transactionId })
     const actual = await readFile(join(root, operation.path), 'utf8')
     expect(actual).toBe('const path = "\\\\"\n中文🙂\ndone\n尾部🙂\n')
@@ -49,13 +66,16 @@ describe('revision-bound line edits', () => {
     ['a\r\nb', ['x', 'y'], 'a\r\nx\r\ny'],
     ['a\r\nb\nc\r\n', ['x', 'y'], 'a\r\nx\ny\nc\r\n'],
     ['a\nb\n', [''], 'a\n\n'],
-  ])('preserves regional line endings and file boundaries: %j', async (original, newLines, expected) => {
-    const { project, operation } = await fixture(original)
-    operation.newLines = newLines
-    const tx = await project.prepareEdit({ operations: [{ operation }] })
-    await project.applyEdit({ transactionId: tx.transactionId })
-    expect(await readFile(join(root, operation.path), 'utf8')).toBe(expected)
-  })
+  ])(
+    'preserves regional line endings and file boundaries: %j',
+    async (original, newLines, expected) => {
+      const { project, operation } = await fixture(original)
+      operation.newLines = newLines
+      const tx = await project.prepareEdit({ operations: [{ operation }] })
+      await project.applyEdit({ transactionId: tx.transactionId })
+      expect(await readFile(join(root, operation.path), 'utf8')).toBe(expected)
+    }
+  )
 
   test('supports empty files', async () => {
     const { project, operation } = await fixture('')
@@ -78,12 +98,24 @@ describe('revision-bound line edits', () => {
     await writeFile(join(root, path), original)
     const project = await createProjectKernel({ root })
     const read = await project.read({ path })
-    const tx = await project.prepareEdit({ operations: [{ operation: {
-      type: 'replace_lines', path, baseRevision: read.snapshot.revision,
-      startLine: 2, endLine: 2, newLines: ['新文🙂'],
-    } }] })
+    const tx = await project.prepareEdit({
+      operations: [
+        {
+          operation: {
+            type: 'replace_lines',
+            path,
+            baseRevision: read.snapshot.revision,
+            startLine: 2,
+            endLine: 2,
+            newLines: ['新文🙂'],
+          },
+        },
+      ],
+    })
     await project.applyEdit({ transactionId: tx.transactionId })
-    expect(await readFile(join(root, path))).toEqual(Buffer.from('\uFEFF标题🙂\r\n新文🙂\r\n', 'utf16le'))
+    expect(await readFile(join(root, path))).toEqual(
+      Buffer.from('\uFEFF标题🙂\r\n新文🙂\r\n', 'utf16le')
+    )
     await project.rollback({ transactionId: tx.transactionId })
     expect(await readFile(join(root, path))).toEqual(original)
   })
@@ -91,17 +123,23 @@ describe('revision-bound line edits', () => {
   test('rejects stale revisions even when optional revision policy is disabled', async () => {
     const { project, operation } = await fixture('a\nb\n', 'sample.txt', false)
     await writeFile(join(root, operation.path), 'external\na\nb\n')
-    await expect(project.prepareEdit({ operations: [{ operation }] })).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
+    await expect(project.prepareEdit({ operations: [{ operation }] })).rejects.toMatchObject({
+      reason: 'BASE_REVISION_MISMATCH',
+    })
     expect(await readFile(join(root, operation.path), 'utf8')).toBe('external\na\nb\n')
   })
 
   test('rejects line numbers invalidated by earlier operations atomically', async () => {
     const original = 'a\nb\n'
     const { project, operation } = await fixture(original)
-    await expect(project.prepareEdit({ operations: [
-      { operation: { type: 'prepend_text', path: operation.path, text: 'new\n' } },
-      { operation },
-    ] })).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
+    await expect(
+      project.prepareEdit({
+        operations: [
+          { operation: { type: 'prepend_text', path: operation.path, text: 'new\n' } },
+          { operation },
+        ],
+      })
+    ).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
     expect(await readFile(join(root, operation.path), 'utf8')).toBe(original)
   })
 
@@ -119,65 +157,92 @@ describe('revision-bound line edits', () => {
     const { project, operation } = await fixture(original, 'sample.mjs')
     operation.newLines = ['const second = ;']
     const tx = await project.prepareEdit({ operations: [{ operation }] })
-    await expect(project.applyEdit({ transactionId: tx.transactionId })).rejects.toMatchObject({ reason: 'VALIDATION_FAILED' })
+    await expect(project.applyEdit({ transactionId: tx.transactionId })).rejects.toMatchObject({
+      reason: 'VALIDATION_FAILED',
+    })
     expect(await readFile(join(root, operation.path), 'utf8')).toBe(original)
   })
 
   test('checks ranges and line payloads through schema and direct kernel calls', async () => {
     const { project, operation } = await fixture('a\nb')
     for (const overrides of [
-      { startLine: 0 }, { endLine: 1 }, { startLine: 1.5 },
-      { newLines: ['x\ny'] }, { newLines: ['x\ry'] },
-      { newLines: ['x\n'] }, { newLines: ['x\r\n'] }, { baseRevision: '' },
+      { startLine: 0 },
+      { endLine: 1 },
+      { startLine: 1.5 },
+      { newLines: ['x\ny'] },
+      { newLines: ['x\ry'] },
+      { newLines: ['x\n'] },
+      { newLines: ['x\r\n'] },
+      { baseRevision: '' },
     ]) {
       const invalid = { ...operation, ...overrides }
       expect(ProjectEditOperationSchema.safeParse(invalid).success).toBe(false)
-      await expect(project.prepareEdit({ operations: [{ operation: invalid }] })).rejects.toBeDefined()
+      await expect(
+        project.prepareEdit({ operations: [{ operation: invalid }] })
+      ).rejects.toBeDefined()
     }
-    await expect(project.prepareEdit({ operations: [{ operation: { ...operation, endLine: 3 } }] }))
-      .rejects.toMatchObject({ reason: 'INVALID_INPUT', details: { totalLines: 2 } })
+    await expect(
+      project.prepareEdit({ operations: [{ operation: { ...operation, endLine: 3 } }] })
+    ).rejects.toMatchObject({ reason: 'INVALID_INPUT', details: { totalLines: 2 } })
     expect(await readFile(join(root, operation.path), 'utf8')).toBe('a\nb')
   })
 })
 
 describe('batched edits against one read revision', () => {
-  test.each([false, true])('keeps original line numbers when earlier ranges expand (reverse=%s)', async (reverse) => {
-    const original = 'first\nsecond\nthird\nfourth\nfifth\n'
-    const { project, operation } = await fixture(original)
-    const edits: ReplaceLinesOperation[] = [
-      { ...operation, startLine: 2, endLine: 2, newLines: ['two', 'extra', 'more'] },
-      { ...operation, startLine: 4, endLine: 5, newLines: ['four-five'] },
-    ]
-    if (reverse) edits.reverse()
-    const tx = await project.prepareEdit({ operations: edits.map((operation) => ({ operation })) })
-    expect(tx.patches).toHaveLength(1)
-    await project.applyEdit({ transactionId: tx.transactionId })
-    expect(await readFile(join(root, operation.path), 'utf8')).toBe('first\ntwo\nextra\nmore\nthird\nfour-five\n')
-    await project.rollback({ transactionId: tx.transactionId })
-    expect(await readFile(join(root, operation.path), 'utf8')).toBe(original)
-  })
+  test.each([false, true])(
+    'keeps original line numbers when earlier ranges expand (reverse=%s)',
+    async (reverse) => {
+      const original = 'first\nsecond\nthird\nfourth\nfifth\n'
+      const { project, operation } = await fixture(original)
+      const edits: ReplaceLinesOperation[] = [
+        { ...operation, startLine: 2, endLine: 2, newLines: ['two', 'extra', 'more'] },
+        { ...operation, startLine: 4, endLine: 5, newLines: ['four-five'] },
+      ]
+      if (reverse) edits.reverse()
+      const tx = await project.prepareEdit({
+        operations: edits.map((operation) => ({ operation })),
+      })
+      expect(tx.patches).toHaveLength(1)
+      await project.applyEdit({ transactionId: tx.transactionId })
+      expect(await readFile(join(root, operation.path), 'utf8')).toBe(
+        'first\ntwo\nextra\nmore\nthird\nfour-five\n'
+      )
+      await project.rollback({ transactionId: tx.transactionId })
+      expect(await readFile(join(root, operation.path), 'utf8')).toBe(original)
+    }
+  )
 
   test('identifies the failing range and rejects the entire multi-file prepare', async () => {
     const { project, operation } = await fixture('first\nsecond\nthird\n')
-    await expect(project.prepareEdit({ operations: [
-      { operation: { type: 'create_file', path: 'new.txt', content: 'must not appear' } },
-      { operation },
-      { operation: { ...operation, startLine: 3, endLine: 99 } },
-    ] })).rejects.toMatchObject({ reason: 'INVALID_INPUT', details: { operationIndex: 2, stage: 'prepare', written: false } })
+    await expect(
+      project.prepareEdit({
+        operations: [
+          { operation: { type: 'create_file', path: 'new.txt', content: 'must not appear' } },
+          { operation },
+          { operation: { ...operation, startLine: 3, endLine: 99 } },
+        ],
+      })
+    ).rejects.toMatchObject({
+      reason: 'INVALID_INPUT',
+      details: { operationIndex: 2, stage: 'prepare', written: false },
+    })
     expect(await readFile(join(root, operation.path), 'utf8')).toBe('first\nsecond\nthird\n')
     expect(await Bun.file(join(root, 'new.txt')).exists()).toBe(false)
   })
 
   test('rejects overlapping ranges before writing', async () => {
     const { project, operation } = await fixture('first\nsecond\nthird\n')
-    await expect(project.prepareEdit({ operations: [
-      { operation: { ...operation, startLine: 1, endLine: 2 } },
-      { operation: { ...operation, startLine: 2, endLine: 3 } },
-    ] })).rejects.toMatchObject({ reason: 'INVALID_INPUT', details: { written: false } })
+    await expect(
+      project.prepareEdit({
+        operations: [
+          { operation: { ...operation, startLine: 1, endLine: 2 } },
+          { operation: { ...operation, startLine: 2, endLine: 3 } },
+        ],
+      })
+    ).rejects.toMatchObject({ reason: 'INVALID_INPUT', details: { written: false } })
     expect(await readFile(join(root, operation.path), 'utf8')).toBe('first\nsecond\nthird\n')
   })
 })
-
 
 test('detects same-size external edits with a preserved mtime before a line edit', async () => {
   const path = 'preserved-time.txt'
@@ -187,9 +252,21 @@ test('detects same-size external edits with a preserved mtime before a line edit
   const read = await project.read({ path })
   await writeFile(join(root, path), 'first\nnew\n')
   await utimes(join(root, path), 1700000000, 1700000000)
-  await expect(project.prepareEdit({ operations: [{ operation: {
-    type: 'replace_lines', path, baseRevision: read.snapshot.revision,
-    startLine: 2, endLine: 2, newLines: ['agent'],
-  } }] })).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
+  await expect(
+    project.prepareEdit({
+      operations: [
+        {
+          operation: {
+            type: 'replace_lines',
+            path,
+            baseRevision: read.snapshot.revision,
+            startLine: 2,
+            endLine: 2,
+            newLines: ['agent'],
+          },
+        },
+      ],
+    })
+  ).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
   expect(await readFile(join(root, path), 'utf8')).toBe('first\nnew\n')
 })

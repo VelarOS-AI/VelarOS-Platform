@@ -7,7 +7,10 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { AgentProjectKernelPort } from '../contract/requires.js'
 import { createProjectKernel, type EditOperation, typescriptPlugin } from '../index'
 import { executeAgentProjectSearch, readAgentFile } from '../utils/agent/kernel-port'
-import { diagnoseTextMatchMiss, findLineWhitespaceTolerantMatches } from '../utils/editing/text-match-feedback'
+import {
+  diagnoseTextMatchMiss,
+  findLineWhitespaceTolerantMatches,
+} from '../utils/editing/text-match-feedback'
 import { includesLineEndingAware } from '../utils/text'
 
 import { ProjectEditOperationSchema } from './support/edit-intent-schema'
@@ -43,8 +46,20 @@ describe('velaros:project read-to-line-edit flow', () => {
     const { call } = await projectToolFixture({ root })
     const [file] = (await call('project', 'read', { files: [{ path: 'source.ts' }] })).files
     // 读到的版本装在 fileRef 里：edit 凭它核对文件没变，再按行号改。
-    const result = await call('project', 'edit', { steps: [{ action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 2, text: 'const b = 3' }] }] })
-    expect(result).toMatchObject({ changed: true, changedFiles: ['source.ts'], oldRevisions: { 'source.ts': file.revision } })
+    const result = await call('project', 'edit', {
+      steps: [
+        {
+          action: 'edit',
+          fileRef: file.fileRef,
+          edits: [{ op: 'replace', range: 2, text: 'const b = 3' }],
+        },
+      ],
+    })
+    expect(result).toMatchObject({
+      changed: true,
+      changedFiles: ['source.ts'],
+      oldRevisions: { 'source.ts': file.revision },
+    })
     expect(await readFile(join(root, 'source.ts'), 'utf8')).toBe('const a = 1\nconst b = 3\n')
   })
 })
@@ -55,7 +70,12 @@ describe('read range clamping', () => {
     await writeFile(join(root, 'short.txt'), numberedLines(3))
     const { call } = await projectToolFixture({ root })
 
-    const result = await call('project', 'read', { files: [{ path: 'long.txt', range: [150, 400] }, { path: 'short.txt', range: [150, 400] }] })
+    const result = await call('project', 'read', {
+      files: [
+        { path: 'long.txt', range: [150, 400] },
+        { path: 'short.txt', range: [150, 400] },
+      ],
+    })
 
     expect(result.issues).toBeUndefined()
     expect(result.files[0].lines[0]).toEqual([150, 'line 150'])
@@ -70,7 +90,10 @@ describe('read range clamping', () => {
     await writeFile(join(root, 'streamed.txt'), 'abcdefghij\nsecond')
     const project = await createProjectKernel({ root, corePolicy: { maxFileSizeToReadBytes: 8 } })
 
-    for (const [path, totalLines] of [['small.txt', 1], ['streamed.txt', 2]] as const) {
+    for (const [path, totalLines] of [
+      ['small.txt', 1],
+      ['streamed.txt', 2],
+    ] as const) {
       const read = await project.read({ path, range: { startLine: 9 } })
       expect(read).toMatchObject({ content: '', totalLines, truncated: false, hasMore: false })
       expect(read.note).toContain(`文件共 ${totalLines} 行`)
@@ -82,10 +105,16 @@ describe('read range clamping', () => {
     await writeFile(join(root, 'streamed.txt'), 'abcdefghij\nsecond')
     const project = await createProjectKernel({ root, corePolicy: { maxFileSizeToReadBytes: 8 } })
 
-    const small = await project.read({ path: 'small.txt', range: { startLine: 1, endLine: 5, endColumn: 2 } })
+    const small = await project.read({
+      path: 'small.txt',
+      range: { startLine: 1, endLine: 5, endColumn: 2 },
+    })
     expect(small.content).toBe('abc\ndef')
     expect(small.note).toContain('忽略 endColumn')
-    const streamed = await project.read({ path: 'streamed.txt', range: { startLine: 2, endLine: 5, endColumn: 2 } })
+    const streamed = await project.read({
+      path: 'streamed.txt',
+      range: { startLine: 2, endLine: 5, endColumn: 2 },
+    })
     expect(streamed.content).toBe('second')
     expect(streamed.note).toContain('忽略 endColumn')
     const plain = await project.read({ path: 'small.txt', range: { startLine: 1, endLine: 5 } })
@@ -99,13 +128,27 @@ describe('read range clamping', () => {
     const project = await createProjectKernel({ root })
 
     await expect(readAgentFile(project, { path: 'missing.txt' })).rejects.toMatchObject({
-      reason: 'TARGET_NOT_FOUND', message: expect.stringContaining('missing.txt'), suggestedNextAction: expect.stringContaining('list'),
+      reason: 'TARGET_NOT_FOUND',
+      message: expect.stringContaining('missing.txt'),
+      suggestedNextAction: expect.stringContaining('list'),
     })
-    await expect(readAgentFile(project, { path: 'dir' })).rejects.toMatchObject({ reason: 'NOT_SUPPORTED', message: expect.stringContaining('目录') })
-    await expect(readAgentFile(project, { path: 'a.txt', baseRevision: 'stale-revision' })).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
+    await expect(readAgentFile(project, { path: 'dir' })).rejects.toMatchObject({
+      reason: 'NOT_SUPPORTED',
+      message: expect.stringContaining('目录'),
+    })
+    await expect(
+      readAgentFile(project, { path: 'a.txt', baseRevision: 'stale-revision' })
+    ).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
     // 读得到的只投影 Agent 边界要的字段：没有续读位置，也没有绝对路径这些内核元数据。
     const read = await readAgentFile(project, { path: 'a.txt' })
-    expect(Object.keys(read).sort()).toEqual(['content', 'note', 'range', 'snapshot', 'totalLines', 'truncated'])
+    expect(Object.keys(read).sort()).toEqual([
+      'content',
+      'note',
+      'range',
+      'snapshot',
+      'totalLines',
+      'truncated',
+    ])
     expect(read).toMatchObject({ content: 'alpha\n', truncated: false })
   })
 
@@ -113,14 +156,21 @@ describe('read range clamping', () => {
     await writeFile(join(root, 'big.txt'), numberedLines(30))
     await writeFile(join(root, 'short.txt'), numberedLines(3))
     const { call } = await projectToolFixture({ root })
-    const failure = await call('project', 'read', { files: [{ path: 'big.txt', range: [10, 2] }, { path: 'short.txt' }] }).catch((error: unknown) => error)
-    expect(failure).toMatchObject({ code: 'INVALID_INPUT', message: expect.stringContaining('files[0].range') })
+    const failure = await call('project', 'read', {
+      files: [{ path: 'big.txt', range: [10, 2] }, { path: 'short.txt' }],
+    }).catch((error: unknown) => error)
+    expect(failure).toMatchObject({
+      code: 'INVALID_INPUT',
+      message: expect.stringContaining('files[0].range'),
+    })
   })
 
   test('keeps the remaining column errors but names the file', async () => {
     await writeFile(join(root, 'cols.txt'), 'abc')
     const project = await createProjectKernel({ root })
-    await expect(project.read({ path: 'cols.txt', range: { startLine: 1, startColumn: 9 } })).rejects.toMatchObject({
+    await expect(
+      project.read({ path: 'cols.txt', range: { startLine: 1, startColumn: 9 } })
+    ).rejects.toMatchObject({
       reason: 'INVALID_INPUT',
       message: expect.stringContaining('cols.txt'),
       details: { path: 'cols.txt', lineLength: 3 },
@@ -152,7 +202,8 @@ describe('text anchor miss diagnostics', () => {
     const error = await prepareFailure({
       type: 'replace_text',
       path: 'render.ts',
-      oldText: 'export function render(template: string) {\n  const pattern = /\\\\{([^}]*)\\\\}/g\n  return template',
+      oldText:
+        'export function render(template: string) {\n  const pattern = /\\\\{([^}]*)\\\\}/g\n  return template',
       newText: 'x',
       expectedMatches: 1,
     })
@@ -219,7 +270,12 @@ describe('text anchor miss diagnostics', () => {
     expect(error.details).toMatchObject({
       candidateLine: 1,
       causes: ['content'],
-      firstMismatch: { oldTextLine: 2, fileLine: 2, expected: 'second valve', actual: 'second value' },
+      firstMismatch: {
+        oldTextLine: 2,
+        fileLine: 2,
+        expected: 'second valve',
+        actual: 'second value',
+      },
     })
   })
 
@@ -263,7 +319,11 @@ describe('text anchor miss diagnostics', () => {
       oldText: 'const a = "\\\\n"\nconst b = "\\\\t"',
       newText: 'x',
     })
-    expect(error.details).toMatchObject({ candidateLine: 1, causes: ['backslash_escape'], firstMismatch: { oldTextLine: 1 } })
+    expect(error.details).toMatchObject({
+      candidateLine: 1,
+      causes: ['backslash_escape'],
+      firstMismatch: { oldTextLine: 1 },
+    })
   })
 
   test('locates a single-line typo through the nearest similar line', async () => {
@@ -277,7 +337,11 @@ describe('text anchor miss diagnostics', () => {
     expect(error.details).toMatchObject({
       candidateLine: 3,
       causes: ['content'],
-      firstMismatch: { oldTextLine: 1, fileLine: 3, actual: '  return template.replace(pattern, (_, key) => lookup(key))' },
+      firstMismatch: {
+        oldTextLine: 1,
+        fileLine: 3,
+        actual: '  return template.replace(pattern, (_, key) => lookup(key))',
+      },
     })
     expect(error.message).not.toContain('任何非空行都不在文件中')
   })
@@ -309,13 +373,24 @@ describe('text anchor miss diagnostics', () => {
     expect(crlf.details).toMatchObject({
       causes: ['content'],
       tolerated: ['line_ending'],
-      firstMismatch: { oldTextLine: 3, fileLine: 3, expected: 'const gamm = 3', actual: 'const gamma = 3' },
+      firstMismatch: {
+        oldTextLine: 3,
+        fileLine: 3,
+        expected: 'const gamm = 3',
+        actual: 'const gamma = 3',
+      },
     })
   })
 
   test('lets rare anchor lines win over very common ones when picking the candidate', async () => {
-    const blocks = Array.from({ length: 300 }, (_, index) => `function f${index}() {\n  return null;\n}`).join('\n')
-    await writeFile(join(root, 'many.ts'), `${blocks}\nfunction target() {\n  return null;\n}\nfunction next() {\n  const re = /\\d+/\n}\n`)
+    const blocks = Array.from(
+      { length: 300 },
+      (_, index) => `function f${index}() {\n  return null;\n}`
+    ).join('\n')
+    await writeFile(
+      join(root, 'many.ts'),
+      `${blocks}\nfunction target() {\n  return null;\n}\nfunction next() {\n  const re = /\\d+/\n}\n`
+    )
     const error = await prepareFailure({
       type: 'replace_text',
       path: 'many.ts',
@@ -371,7 +446,12 @@ describe('text anchor miss diagnostics', () => {
       matchedLines: 1,
       causes: ['content'],
       tolerated: ['trailing_whitespace'],
-      firstMismatch: { oldTextLine: 2, fileLine: 2, expected: 'const y = ', actual: 'const x = 1;' },
+      firstMismatch: {
+        oldTextLine: 2,
+        fileLine: 2,
+        expected: 'const y = ',
+        actual: 'const x = 1;',
+      },
     })
     expect(error.message).toContain('该行内容与文件不同')
   })
@@ -394,17 +474,24 @@ describe('text anchor miss diagnostics', () => {
           const window = lines.slice(start, start + size)
           const last = window[size - 1]
           // 末行既取整行，也取停在每个空格之后的前缀：这正是 oldText 停在行中间的形态。
-          const cuts = [last.length, ...[...last].flatMap((char, index) => char === ' ' ? [index + 1] : [])]
+          const cuts = [
+            last.length,
+            ...[...last].flatMap((char, index) => (char === ' ' ? [index + 1] : [])),
+          ]
           for (const cut of cuts) {
             const base = [...window.slice(0, -1), last.slice(0, cut)]
             for (const [target, line] of base.entries()) {
               for (const variant of variantsOf(line)) {
-                const needle = base.map((other, index) => index === target ? variant : other).join('\n')
+                const needle = base
+                  .map((other, index) => (index === target ? variant : other))
+                  .join('\n')
                 if (includesLineEndingAware(content, needle)) continue
                 const diagnosis = diagnoseTextMatchMiss(content, needle)
                 const unexplained = diagnosis.causes.length === 0 || /^[；。]/.test(diagnosis.hint)
-                const unmatchedAgreement = diagnosis.candidateLine !== undefined && diagnosis.firstMismatch === undefined
-                  && findLineWhitespaceTolerantMatches(content, needle, 1).length === 0
+                const unmatchedAgreement =
+                  diagnosis.candidateLine !== undefined &&
+                  diagnosis.firstMismatch === undefined &&
+                  findLineWhitespaceTolerantMatches(content, needle, 1).length === 0
                 if (unexplained || unmatchedAgreement) failures.push({ content, needle, diagnosis })
               }
             }
@@ -421,15 +508,17 @@ describe('whitespace-tolerant text matching', () => {
     await writeFile(join(root, 'note.ts'), 'const a = 1   \nconst b = 2\n')
     const project = await createProjectKernel({ root })
     const transaction = await project.prepareEdit({
-      operations: [{
-        operation: {
-          type: 'replace_text',
-          path: 'note.ts',
-          oldText: 'const a = 1\nconst b = 2',
-          newText: 'const a = 10\nconst b = 20',
-          expectedMatches: 1,
+      operations: [
+        {
+          operation: {
+            type: 'replace_text',
+            path: 'note.ts',
+            oldText: 'const a = 1\nconst b = 2',
+            newText: 'const a = 10\nconst b = 20',
+            expectedMatches: 1,
+          },
         },
-      }],
+      ],
     })
     // 宽容匹配的说明记在补丁的 matchNote 上。
     expect(transaction.patches[0]?.metadata?.matchNote).toContain('行尾空白或换行符')
@@ -445,9 +534,16 @@ describe('whitespace-tolerant text matching', () => {
     await writeFile(join(root, 'unix.txt'), 'one\ntwo\nthree\n')
     const project = await createProjectKernel({ root })
     const transaction = await project.prepareEdit({
-      operations: [{
-        operation: { type: 'replace_text', path: 'unix.txt', oldText: 'one\r\ntwo', newText: 'uno\r\ndos' },
-      }],
+      operations: [
+        {
+          operation: {
+            type: 'replace_text',
+            path: 'unix.txt',
+            oldText: 'one\r\ntwo',
+            newText: 'uno\r\ndos',
+          },
+        },
+      ],
     })
     expect(transaction.patches[0]?.metadata?.matchNote).toContain('第 1 行')
     await project.applyEdit({ transactionId: transaction.transactionId })
@@ -456,11 +552,40 @@ describe('whitespace-tolerant text matching', () => {
 
   test('only tolerates stripped whitespace that really sits at the end of a line', async () => {
     const cases = [
-      { file: 'notes.md', content: 'config: const xyz = 1\n', operation: { type: 'replace_text', oldText: 'const x ', newText: 'const y ' } },
-      { file: 'notes.md', content: 'price 100\n', operation: { type: 'insert_text_at_anchor', anchorText: 'price 1 ', position: 'after', text: 'X' } },
-      { file: 'call.txt', content: 'call(foo,bar)\n', operation: { type: 'delete_text', oldText: 'foo, ' } },
-      { file: 'a.json', content: '{"key":"value"}\n', operation: { type: 'replace_text', oldText: '"key": ', newText: '"k": ' } },
-      { file: 'p.py', content: 'def f():\n    print("hello")\n', operation: { type: 'replace_text', oldText: 'def f():\n    print("hello ', newText: 'def f():\n    print("hi ' } },
+      {
+        file: 'notes.md',
+        content: 'config: const xyz = 1\n',
+        operation: { type: 'replace_text', oldText: 'const x ', newText: 'const y ' },
+      },
+      {
+        file: 'notes.md',
+        content: 'price 100\n',
+        operation: {
+          type: 'insert_text_at_anchor',
+          anchorText: 'price 1 ',
+          position: 'after',
+          text: 'X',
+        },
+      },
+      {
+        file: 'call.txt',
+        content: 'call(foo,bar)\n',
+        operation: { type: 'delete_text', oldText: 'foo, ' },
+      },
+      {
+        file: 'a.json',
+        content: '{"key":"value"}\n',
+        operation: { type: 'replace_text', oldText: '"key": ', newText: '"k": ' },
+      },
+      {
+        file: 'p.py',
+        content: 'def f():\n    print("hello")\n',
+        operation: {
+          type: 'replace_text',
+          oldText: 'def f():\n    print("hello ',
+          newText: 'def f():\n    print("hi ',
+        },
+      },
     ] as const
     for (const { file, content, operation } of cases) {
       await writeFile(join(root, file), content)
@@ -474,7 +599,17 @@ describe('whitespace-tolerant text matching', () => {
     await writeFile(join(root, 'price.txt'), 'price 1\nnext\n')
     const project = await createProjectKernel({ root })
     const transaction = await project.prepareEdit({
-      operations: [{ operation: { type: 'insert_text_at_anchor', path: 'price.txt', anchorText: 'price 1 ', position: 'after', text: 'X' } }],
+      operations: [
+        {
+          operation: {
+            type: 'insert_text_at_anchor',
+            path: 'price.txt',
+            anchorText: 'price 1 ',
+            position: 'after',
+            text: 'X',
+          },
+        },
+      ],
     })
     expect(transaction.patches[0]?.metadata?.matchNote).toContain('行尾空白')
     await project.applyEdit({ transactionId: transaction.transactionId })
@@ -484,12 +619,26 @@ describe('whitespace-tolerant text matching', () => {
   test('tolerates earlier trailing whitespace when the last line stops mid-line and matches its tail verbatim', async () => {
     const project = await createProjectKernel({ root })
     const cases = [
-      { file: 'mid.ts', content: 'foo\nconst x = 1;\n', oldText: 'foo \nconst x = ', newText: 'bar\nconst x = ', after: 'bar\nconst x = 1;\n' },
-      { file: 'indent.txt', content: 'foo \n  bar\n', oldText: 'foo\n  ', newText: 'baz\n    ', after: 'baz\n    bar\n' },
+      {
+        file: 'mid.ts',
+        content: 'foo\nconst x = 1;\n',
+        oldText: 'foo \nconst x = ',
+        newText: 'bar\nconst x = ',
+        after: 'bar\nconst x = 1;\n',
+      },
+      {
+        file: 'indent.txt',
+        content: 'foo \n  bar\n',
+        oldText: 'foo\n  ',
+        newText: 'baz\n    ',
+        after: 'baz\n    bar\n',
+      },
     ]
     for (const { file, content, oldText, newText, after } of cases) {
       await writeFile(join(root, file), content)
-      const transaction = await project.prepareEdit({ operations: [{ operation: { type: 'replace_text', path: file, oldText, newText } }] })
+      const transaction = await project.prepareEdit({
+        operations: [{ operation: { type: 'replace_text', path: file, oldText, newText } }],
+      })
       expect(transaction.patches[0]?.metadata?.matchNote).toContain('行尾空白')
       await project.applyEdit({ transactionId: transaction.transactionId })
       expect(await readFile(join(root, file), 'utf8')).toBe(after)
@@ -509,7 +658,9 @@ describe('whitespace-tolerant text matching', () => {
     for (const { oldText, newText, after } of cases) {
       await writeFile(join(root, 'mixed.txt'), content)
       const project = await createProjectKernel({ root })
-      const transaction = await project.prepareEdit({ operations: [{ operation: { type: 'replace_text', path: 'mixed.txt', oldText, newText } }] })
+      const transaction = await project.prepareEdit({
+        operations: [{ operation: { type: 'replace_text', path: 'mixed.txt', oldText, newText } }],
+      })
       await project.applyEdit({ transactionId: transaction.transactionId })
       expect(await readFile(join(root, 'mixed.txt'), 'utf8')).toBe(after)
     }
@@ -525,7 +676,9 @@ describe('whitespace-tolerant text matching', () => {
       newText: 'x',
     })
     expect(error.reason).toBe('TARGET_NOT_FOUND')
-    expect(error.details.whitespaceTolerantMatches.map((match: { line: number }) => match.line)).toEqual([1, 3])
+    expect(
+      error.details.whitespaceTolerantMatches.map((match: { line: number }) => match.line)
+    ).toEqual([1, 3])
     expect(error.message).toContain('未自动应用')
     expect(await readFile(join(root, 'dup.txt'), 'utf8')).toBe(content)
   })
@@ -549,20 +702,52 @@ describe('text feedback with the TypeScript plugin installed', () => {
     await writeFile(join(root, 'mod.ts'), 'export function run() {\n  return "a\\\\b"  \n}\n')
     const project = await createProjectKernel({ root, plugins: [typescriptPlugin()] })
 
-    const miss = await project.prepareEdit({
-      operations: [{ operation: { type: 'replace_text', path: 'mod.ts', oldText: 'export function run() {\n  return "a\\b"', newText: 'x' } }],
-    }).catch((error: unknown) => error)
-    expect(miss).toMatchObject({ reason: 'TARGET_NOT_FOUND', details: { causes: ['backslash_escape'], candidateLine: 1 } })
+    const miss = await project
+      .prepareEdit({
+        operations: [
+          {
+            operation: {
+              type: 'replace_text',
+              path: 'mod.ts',
+              oldText: 'export function run() {\n  return "a\\b"',
+              newText: 'x',
+            },
+          },
+        ],
+      })
+      .catch((error: unknown) => error)
+    expect(miss).toMatchObject({
+      reason: 'TARGET_NOT_FOUND',
+      details: { causes: ['backslash_escape'], candidateLine: 1 },
+    })
 
     const transaction = await project.prepareEdit({
-      operations: [{ operation: { type: 'replace_text', path: 'mod.ts', oldText: '  return "a\\\\b"\n}', newText: '  return "ok"\n}' } }],
+      operations: [
+        {
+          operation: {
+            type: 'replace_text',
+            path: 'mod.ts',
+            oldText: '  return "a\\\\b"\n}',
+            newText: '  return "ok"\n}',
+          },
+        },
+      ],
     })
     expect(transaction.patches[0]?.metadata?.matchNote).toContain('第 2 行')
     await project.applyEdit({ transactionId: transaction.transactionId })
-    expect(await readFile(join(root, 'mod.ts'), 'utf8')).toBe('export function run() {\n  return "ok"\n}\n')
+    expect(await readFile(join(root, 'mod.ts'), 'utf8')).toBe(
+      'export function run() {\n  return "ok"\n}\n'
+    )
 
-    const read = await readAgentFile(project, { path: 'mod.ts', range: { startLine: 50, endLine: 60 } })
-    expect(read).toMatchObject({ content: '', totalLines: 4, note: expect.stringContaining('起始行 50') })
+    const read = await readAgentFile(project, {
+      path: 'mod.ts',
+      range: { startLine: 50, endLine: 60 },
+    })
+    expect(read).toMatchObject({
+      content: '',
+      totalLines: 4,
+      note: expect.stringContaining('起始行 50'),
+    })
   })
 })
 
@@ -625,19 +810,23 @@ describe('ambiguous text anchors', () => {
 
     const project = await createProjectKernel({ root })
     const transaction = await project.prepareEdit({
-      operations: [{
-        operation: {
-          type: 'replace_text',
-          path: 'twice.ts',
-          oldText: 'const content = read()',
-          newText: 'const content = load()',
-          expectedMatches: 2,
-          occurrence: 2,
+      operations: [
+        {
+          operation: {
+            type: 'replace_text',
+            path: 'twice.ts',
+            oldText: 'const content = read()',
+            newText: 'const content = load()',
+            expectedMatches: 2,
+            occurrence: 2,
+          },
         },
-      }],
+      ],
     })
     await project.applyEdit({ transactionId: transaction.transactionId })
-    expect(await readFile(join(root, 'twice.ts'), 'utf8')).toBe(source.replace(/read\(\)(?![\s\S]*read\(\))/, 'load()'))
+    expect(await readFile(join(root, 'twice.ts'), 'utf8')).toBe(
+      source.replace(/read\(\)(?![\s\S]*read\(\))/, 'load()')
+    )
   })
 
   test('spells out how expectedMatches, occurrence, and replaceAll combine', () => {
@@ -660,20 +849,30 @@ describe('literal search hints', () => {
   }
 
   test('flags | in a literal query that found nothing', async () => {
-    const result = await executeAgentProjectSearch(emptySearchPort(), { query: 'alpha|beta', regex: false })
+    const result = await executeAgentProjectSearch(emptySearchPort(), {
+      query: 'alpha|beta',
+      regex: false,
+    })
     expect(result.hits).toEqual([])
     expect(result.nextAction).toContain('query 含 |')
     expect(result.nextAction).toContain('regex: true')
   })
 
   test('flags regex escapes in a literal query', async () => {
-    const result = await executeAgentProjectSearch(emptySearchPort(), { query: 'render\\(', regex: false })
+    const result = await executeAgentProjectSearch(emptySearchPort(), {
+      query: 'render\\(',
+      regex: false,
+    })
     expect(result.nextAction).toContain('\\(')
   })
 
   test('stays silent for regex searches and plain literal misses', async () => {
-    expect((await executeAgentProjectSearch(emptySearchPort(), { query: 'a|b', regex: true })).nextAction).toBeUndefined()
-    expect((await executeAgentProjectSearch(emptySearchPort(), { query: 'plainWord' })).nextAction).toBeUndefined()
+    expect(
+      (await executeAgentProjectSearch(emptySearchPort(), { query: 'a|b', regex: true })).nextAction
+    ).toBeUndefined()
+    expect(
+      (await executeAgentProjectSearch(emptySearchPort(), { query: 'plainWord' })).nextAction
+    ).toBeUndefined()
   })
 
   test('hints on a real literal miss and finds the alternatives once regex is on', async () => {

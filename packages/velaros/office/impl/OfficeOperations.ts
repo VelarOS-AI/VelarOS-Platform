@@ -58,11 +58,17 @@ export interface OfficeOperationsApi {
   /** @AgentView 生成 PowerPoint 演示文稿（.pptx）：给 Markdown 自动排版，或逐页给元素精细控制。
    * @OperationEffect write
    */
-  createPresentation(input: OfficePresentationInput, ctx: OfficeOperationContext): Promise<OfficeWritten>
+  createPresentation(
+    input: OfficePresentationInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeWritten>
   /** @AgentView 生成 Excel 工作簿（.xlsx）：给 CSV、Markdown 表格自动成表，或给结构化工作表（多表、公式、样式、合并、冻结）。
    * @OperationEffect write
    */
-  createSpreadsheet(input: OfficeSpreadsheetInput, ctx: OfficeOperationContext): Promise<OfficeWritten>
+  createSpreadsheet(
+    input: OfficeSpreadsheetInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeWritten>
   /** @AgentView 按页读文本型 PDF 的可选择文字。
    * @OperationEffect none
    */
@@ -98,47 +104,74 @@ export class OfficeOperations implements OfficeOperationsApi {
     private readonly markdown: OfficeMarkdownOperationsApi
   ) {}
 
-  public async createWord(input: OfficeWordInput, ctx: OfficeOperationContext): Promise<OfficeWritten> {
+  public async createWord(
+    input: OfficeWordInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeWritten> {
     ctx.abortSignal.throwIfAborted()
     return this.documents.createWord(wordInput(input), ctx)
   }
 
-  public async createPresentation(input: OfficePresentationInput, ctx: OfficeOperationContext): Promise<OfficeWritten> {
+  public async createPresentation(
+    input: OfficePresentationInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeWritten> {
     ctx.abortSignal.throwIfAborted()
     return this.documents.createPresentation(presentationInput(input), ctx)
   }
 
-  public async createSpreadsheet(input: OfficeSpreadsheetInput, ctx: OfficeOperationContext): Promise<OfficeWritten> {
+  public async createSpreadsheet(
+    input: OfficeSpreadsheetInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeWritten> {
     ctx.abortSignal.throwIfAborted()
     return this.documents.createSpreadsheet(spreadsheetInput(input), ctx)
   }
 
-  public async readPdf(input: OfficeReadPdfInput, ctx: OfficeOperationContext): Promise<OfficePdfText> {
+  public async readPdf(
+    input: OfficeReadPdfInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficePdfText> {
     ctx.abortSignal.throwIfAborted()
     return this.pdfs.readText(readPdfInput(input), ctx)
   }
 
-  public async wordToPdf(input: OfficeWordToPdfInput, ctx: OfficeOperationContext): Promise<OfficeWritten> {
+  public async wordToPdf(
+    input: OfficeWordToPdfInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeWritten> {
     ctx.abortSignal.throwIfAborted()
     return this.pdfs.wordToPdf(wordToPdfInput(input), ctx)
   }
 
-  public async latexToPdf(input: OfficeLatexInput, ctx: OfficeOperationContext): Promise<OfficeLatexCompiled> {
+  public async latexToPdf(
+    input: OfficeLatexInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeLatexCompiled> {
     ctx.abortSignal.throwIfAborted()
     return this.pdfs.latexToPdf(latexInput(input), ctx)
   }
 
-  public async editPdf(input: OfficeEditPdfInput, ctx: OfficeOperationContext): Promise<OfficeWritten> {
+  public async editPdf(
+    input: OfficeEditPdfInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeWritten> {
     ctx.abortSignal.throwIfAborted()
     return this.pdfs.editPdf(editPdfInput(input), ctx)
   }
 
-  public async preview(input: OfficePreviewInput, ctx: OfficeOperationContext): Promise<OfficePreview> {
+  public async preview(
+    input: OfficePreviewInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficePreview> {
     ctx.abortSignal.throwIfAborted()
     return this.previews.preview(previewInput(input), ctx)
   }
 
-  public async toMarkdown(input: OfficeMarkdownInput, ctx: OfficeOperationContext): Promise<OfficeMarkdown> {
+  public async toMarkdown(
+    input: OfficeMarkdownInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeMarkdown> {
     ctx.abortSignal.throwIfAborted()
     return this.markdown.toMarkdown(markdownInput(input), ctx)
   }

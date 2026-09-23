@@ -9,7 +9,15 @@
 import { isEmpty } from './utils/array.js'
 import { optionalWhen } from './utils/optionalWhen.js'
 import { clampToCodePointBoundary } from './utils/string.js'
-import { isArray, isBoolean, isNumber, isObject, isPlainObject,isPresent, isString } from './typeGuards'
+import {
+  isArray,
+  isBoolean,
+  isNumber,
+  isObject,
+  isPlainObject,
+  isPresent,
+  isString,
+} from './typeGuards'
 
 export type ErrorCode =
   | 'UNKNOWN'
@@ -64,7 +72,8 @@ export class AppError extends Error {
   /** 从未知 catch 值构造 AppError */
   public static from(err: unknown, code: ErrorCode = 'UNKNOWN'): AppError {
     if (err instanceof AppError) return err
-    if (this.isSerializedError(err)) return new AppError(err.code, err.message, undefined, err.context ?? {})
+    if (this.isSerializedError(err))
+      return new AppError(err.code, err.message, undefined, err.context ?? {})
     const message = this.getMessage(err)
     const resolvedCode = code === 'UNKNOWN' ? (this.getCode(err) ?? code) : code
     return new AppError(resolvedCode, message, err)
@@ -96,7 +105,8 @@ export class AppError extends Error {
 
     if (isNumber(value) || isBoolean(value)) return String(value)
 
-    if (value instanceof Error) return (
+    if (value instanceof Error)
+      return (
         this.normalizeMessage(value.message) ??
         this.findMessage((value as Error & { cause?: unknown }).cause, depth + 1)
       )
@@ -167,7 +177,8 @@ export class AppError extends Error {
       normalized === '[object Object]' ||
       normalized === 'undefined' ||
       normalized === 'null'
-    ) return null
+    )
+      return null
 
     return normalized
   }

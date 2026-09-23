@@ -99,10 +99,10 @@ describe('state-like turn context sources supersede instead of accumulate', () =
 
     // 另一个 source 的账本不受牵连（五源单 cursor 协议里各源账本互不相干）。
     expect(
-      runtimeErrors.peek('s1', { afterSeq: 0, generation: null }).deltas.map((d) => d.label),
+      runtimeErrors.peek('s1', { afterSeq: 0, generation: null }).deltas.map((d) => d.label)
     ).toEqual(['3 条运行错误'])
     expect(
-      sceneState.peek('s1', { afterSeq: 0, generation: null }).deltas.map((d) => d.label),
+      sceneState.peek('s1', { afterSeq: 0, generation: null }).deltas.map((d) => d.label)
     ).toEqual(['服务正在运行'])
   })
 
@@ -114,10 +114,10 @@ describe('state-like turn context sources supersede instead of accumulate', () =
     sceneState.replaceLatest('s1', { label: 's1 已停止', summaryText: 'c' })
 
     expect(
-      sceneState.peek('s1', { afterSeq: 0, generation: null }).deltas.map((d) => d.label),
+      sceneState.peek('s1', { afterSeq: 0, generation: null }).deltas.map((d) => d.label)
     ).toEqual(['s1 已停止'])
     expect(
-      sceneState.peek('s2', { afterSeq: 0, generation: null }).deltas.map((d) => d.label),
+      sceneState.peek('s2', { afterSeq: 0, generation: null }).deltas.map((d) => d.label)
     ).toEqual(['s2 已停止'])
   })
 })

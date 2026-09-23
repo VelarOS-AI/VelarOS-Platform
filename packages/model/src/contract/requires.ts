@@ -1,11 +1,7 @@
 import type { ToolSet } from 'ai'
 
 import type { ModelAdapterRegistryApi } from '../impl/composition/ModelAdapterRegistry'
-import type {
-  EmbeddingRequest,
-  LanguageModelFactory,
-  ModelAdapterConfig,
-} from '../types/adapters'
+import type { EmbeddingRequest, LanguageModelFactory, ModelAdapterConfig } from '../types/adapters'
 import type { ChatProviderId } from '../types/model'
 import type {
   ModelRequestEnvelope,

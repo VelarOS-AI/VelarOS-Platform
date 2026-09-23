@@ -102,7 +102,10 @@ export class ShellManagedProcess implements ManagedShellProcess {
       if (this.platform !== 'win32' && child.pid)
         void terminateProcessTree(child.pid, 'SIGKILL', { platform: this.platform })
       // 后代进程可能在直接子进程退出后继续持有继承的管道句柄。
-      this.later(() => this.finish(null, true), options.drainTimeoutMs ?? ShellTuning.process.drainTimeoutMs)
+      this.later(
+        () => this.finish(null, true),
+        options.drainTimeoutMs ?? ShellTuning.process.drainTimeoutMs
+      )
     })
     child.once('close', (code, exitSignal) => {
       this.exited = true
@@ -132,7 +135,10 @@ export class ShellManagedProcess implements ManagedShellProcess {
     if (this.finished) {
       const retryTimers = new TimerScope({ name: 'ShellProcessStopRetry' })
       try {
-        await retryTimers.withTimeout(this.options.terminationDeadlineMs ?? ShellTuning.process.terminationDeadlineMs, () => this.terminate(requestedSignal))
+        await retryTimers.withTimeout(
+          this.options.terminationDeadlineMs ?? ShellTuning.process.terminationDeadlineMs,
+          () => this.terminate(requestedSignal)
+        )
       } catch {
         // arch-guard:silent-catch-ok 重试结果只由已观察到的进程退出事实决定。
       } finally {
@@ -174,7 +180,10 @@ export class ShellManagedProcess implements ManagedShellProcess {
   private requestStop(requestedSignal: NodeJS.Signals = 'SIGTERM'): void {
     if (this.stopping || this.finished) return
     this.stopping = true
-    this.later(() => this.finish(null, true), this.options.terminationDeadlineMs ?? ShellTuning.process.terminationDeadlineMs)
+    this.later(
+      () => this.finish(null, true),
+      this.options.terminationDeadlineMs ?? ShellTuning.process.terminationDeadlineMs
+    )
     void this.kill(requestedSignal)
     if (requestedSignal !== 'SIGKILL')
       this.later(() => {
@@ -194,8 +203,10 @@ export class ShellManagedProcess implements ManagedShellProcess {
 
   /** 终止整棵进程树：调用方给了 terminate 就用它，否则按平台终止。 */
   private terminate(requestedSignal: NodeJS.Signals): Promise<unknown> {
-    return this.options.terminate?.(requestedSignal)
-      ?? terminateProcessTree(this.child.pid ?? 0, requestedSignal, { platform: this.platform })
+    return (
+      this.options.terminate?.(requestedSignal) ??
+      terminateProcessTree(this.child.pid ?? 0, requestedSignal, { platform: this.platform })
+    )
   }
 
   /** 还没收尾时才排定一个延时动作。 */

@@ -22,10 +22,23 @@ import {
   WidthType,
 } from 'docx'
 
-import { isArray, isEmpty, isNonBlankString, isString, optionalWhen, optionalWhenLazy } from '@velaros-ai/core'
+import {
+  isArray,
+  isEmpty,
+  isNonBlankString,
+  isString,
+  optionalWhen,
+  optionalWhenLazy,
+} from '@velaros-ai/core'
 
 import { OfficeInputLimits } from '../../contract/constants.js'
-import type { OfficeWordInput, WordBlock, WordDocumentLanguage, WordTableCellInput, WordTextRun } from '../../types/office.js'
+import type {
+  OfficeWordInput,
+  WordBlock,
+  WordDocumentLanguage,
+  WordTableCellInput,
+  WordTextRun,
+} from '../../types/office.js'
 import { OfficeTuning } from '../tuning.js'
 
 import {
@@ -116,9 +129,9 @@ export function buildWordTableCell(
         ? VerticalAlign.TOP
         : cell.verticalAlign === 'bottom'
           ? VerticalAlign.BOTTOM
-          : optionalWhen((cell.verticalAlign === 'center'), VerticalAlign.CENTER),
+          : optionalWhen(cell.verticalAlign === 'center', VerticalAlign.CENTER),
   }
-  const bg = cell.bgColor ?? (optionalWhen(isHeader, headerBgColor))
+  const bg = cell.bgColor ?? optionalWhen(isHeader, headerBgColor)
   // 表头可统一设置 headerBgColor，单元格 bgColor 优先级更高。
   return new TableCell({
     ...cellOpts,
@@ -130,7 +143,10 @@ export function buildWordTableCell(
 export function buildWordTable(block: Extract<WordBlock, { kind: 'table' }>): Table {
   const borderColor = block.borderColor ?? 'CBD5E1'
   return new Table({
-    width: { size: block.widthPct ?? OfficeInputLimits.word.maxWidthPercent, type: WidthType.PERCENTAGE },
+    width: {
+      size: block.widthPct ?? OfficeInputLimits.word.maxWidthPercent,
+      type: WidthType.PERCENTAGE,
+    },
     layout: TableLayoutType.FIXED,
     borders: {
       top: { style: BorderStyle.SINGLE, size: 1, color: borderColor },
@@ -249,7 +265,10 @@ export function buildWordChildren(
             children.push(
               new Paragraph({
                 alignment: alignToDocx(block.align),
-                spacing: { before: block.spaceBefore, after: block.spaceAfter ?? OfficeTuning.word.paragraphSpaceAfter },
+                spacing: {
+                  before: block.spaceBefore,
+                  after: block.spaceAfter ?? OfficeTuning.word.paragraphSpaceAfter,
+                },
                 indent: optionalWhenLazy(block.indent, () => ({ left: block.indent })),
                 children: [new TextRun({ text: line })],
               })
@@ -259,7 +278,10 @@ export function buildWordChildren(
           children.push(
             new Paragraph({
               alignment: alignToDocx(block.align),
-              spacing: { before: block.spaceBefore, after: block.spaceAfter ?? OfficeTuning.word.paragraphSpaceAfter },
+              spacing: {
+                before: block.spaceBefore,
+                after: block.spaceAfter ?? OfficeTuning.word.paragraphSpaceAfter,
+              },
               indent: optionalWhenLazy(block.indent, () => ({ left: block.indent })),
               children: buildParagraphChildren(block.text, block.runs),
             })
@@ -373,23 +395,21 @@ export function buildWordDocument(
     keywords: input.keywords?.join(', '),
     description: input.abstract,
     features: optionalWhenLazy(shouldIncludeAcademicToc(input), () => ({ updateFields: true })),
-    styles: isAcademic
-      ? buildAcademicWordStyles(language)
-      : buildStandardWordStyles(language),
+    styles: isAcademic ? buildAcademicWordStyles(language) : buildStandardWordStyles(language),
     sections: [
       {
         properties: optionalWhenLazy(isAcademic, () => ({
-              page: {
-                margin: {
-                  top: 1_440,
-                  right: 1_440,
-                  bottom: 1_440,
-                  left: 1_800,
-                  header: 720,
-                  footer: 720,
-                },
-              },
-            })),
+          page: {
+            margin: {
+              top: 1_440,
+              right: 1_440,
+              bottom: 1_440,
+              left: 1_800,
+              header: 720,
+              footer: 720,
+            },
+          },
+        })),
         footers: optionalWhenLazy(isAcademic, () => ({ default: buildAcademicWordFooter() })),
         children: buildWordChildren(input),
       },

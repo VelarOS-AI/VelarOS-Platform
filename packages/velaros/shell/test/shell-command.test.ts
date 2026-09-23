@@ -6,7 +6,9 @@ import { ShellCommandKinds, shellCommandPolicy } from '../index'
 
 // 每个种类取一条只读命令和一条危险命令：判定是五种语法的并集，词表里加了新种类却没在这里补一行，测试立刻红，
 // 提醒先去 utils/command-policy.ts 补它的形态——补之前它的命令判不了只读，模型挑了它就没有并发也没有无人值守放行。
-const samplesByKind: Readonly<Record<(typeof ShellCommandKinds)[number], { readOnly: string; dangerous: string }>> = {
+const samplesByKind: Readonly<
+  Record<(typeof ShellCommandKinds)[number], { readOnly: string; dangerous: string }>
+> = {
   'git-bash': { readOnly: 'ls -la', dangerous: 'rm -rf ./dist' },
   posix: { readOnly: 'git status', dangerous: 'rm -rf ./dist' },
   pwsh: { readOnly: 'Get-ChildItem -Force', dangerous: 'Remove-Item -Recurse -Force dist' },
@@ -45,12 +47,18 @@ describe('并发判定', () => {
     expect(shellCommandPolicy.isParallelSafe({ command: 'ls', parallel: true })).toBe(true)
     expect(shellCommandPolicy.isParallelSafe({ command: 'ls' })).toBe(false)
     expect(shellCommandPolicy.isParallelSafe({ command: 'ls' }, { optIn: false })).toBe(true)
-    expect(shellCommandPolicy.isParallelSafe({ command: 'ls', parallel: false }, { optIn: false })).toBe(false)
+    expect(
+      shellCommandPolicy.isParallelSafe({ command: 'ls', parallel: false }, { optIn: false })
+    ).toBe(false)
   })
 
   test('转后台、要确认、非只读、命令不是字符串的一律不并发', () => {
-    expect(shellCommandPolicy.isParallelSafe({ command: 'ls', parallel: true, background: true })).toBe(false)
-    expect(shellCommandPolicy.isParallelSafe({ command: 'npm run dev', parallel: true })).toBe(false)
+    expect(
+      shellCommandPolicy.isParallelSafe({ command: 'ls', parallel: true, background: true })
+    ).toBe(false)
+    expect(shellCommandPolicy.isParallelSafe({ command: 'npm run dev', parallel: true })).toBe(
+      false
+    )
     expect(shellCommandPolicy.isParallelSafe({ command: 'touch x', parallel: true })).toBe(false)
     expect(shellCommandPolicy.isParallelSafe({ command: 42, parallel: true })).toBe(false)
   })
@@ -75,10 +83,15 @@ describe('project 空间的原有语料', () => {
     expect(shellCommandPolicy.isReadOnly('git --future-option status')).toBe(false)
     expect(shellCommandPolicy.isReadOnly('git future-command')).toBe(false)
     expect(shellCommandPolicy.isReadOnly('git -C')).toBe(false)
-    expect(shellCommandPolicy.isParallelSafe({
-      command: 'git -C repo checkout main',
-      parallel: true,
-    }, { optIn: false })).toBe(false)
+    expect(
+      shellCommandPolicy.isParallelSafe(
+        {
+          command: 'git -C repo checkout main',
+          parallel: true,
+        },
+        { optIn: false }
+      )
+    ).toBe(false)
   })
 
   // 删整个文件夹恢复不了，不论带不带 -f 都要确认；删单个文件是日常操作，不打扰用户。
@@ -219,7 +232,10 @@ describe('project 空间的原有语料', () => {
       'git rm -rf --cached build',
       'find . -name "*.log"',
     ]) {
-      expect({ command, isDangerous: shellCommandPolicy.analyze(command).isDangerous }).toEqual({ command, isDangerous: false })
+      expect({ command, isDangerous: shellCommandPolicy.analyze(command).isDangerous }).toEqual({
+        command,
+        isDangerous: false,
+      })
     }
   })
 

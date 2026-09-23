@@ -3,7 +3,54 @@
  * 只从常量表 import type（一行），不带函数成员、不碰 Node 类型，随 `@velaros-ai/agent-lab/contracts` 出包。
  * 这里是线格式的**单一来源**：`utils/wire/` 的 zod schema 逐个 `satisfies z.ZodType<…>` 对齐它们，走形就编译不过。
  */
-import type { ArchiveShape, ArtifactProvenance, AttritionCause, CampaignFailureState, CampaignRootCauseClass, CertificationCheckStatus, CertificationStatus, CertificationSubjectKind, ComparisonDecision, ConfirmationPolicy, DetectorAbortClass, FailureClass, FindingSeverity, MeasurementBasis, ObservationCoverage, ObservationFace, ObservationPhase, RealTaskArtifactProvenance, RealTaskAssertionKind, RealTaskAssertionOutcome, RealTaskCaseOriginKind, RealTaskCasePrivacyClassification, RealTaskCaseSource, RealTaskCoverageArchetype, RealTaskCoverageDataShape, RealTaskCoverageInteraction, RealTaskCoverageLifecycle, RealTaskCoverageOutcome, RealTaskCoveragePath, RealTaskCoverageRisk, RealTaskFeedbackVerdict, RealTaskFindingClass, RealTaskHealth, RealTaskModelRequirement, RealTaskPrivacyClassification, RealTaskSource, RealTaskSpanCategory, RealTaskTerminalStatus, RealTaskVerdict, RunArchiveSchemaId, SettleOutcomeKind, SettleSignal, TranscriptKind, TranscriptRole, VerdictLevel, VerifierIsolation } from '../contract/constants.js'
+import type {
+  ArchiveShape,
+  ArtifactProvenance,
+  AttritionCause,
+  CampaignFailureState,
+  CampaignRootCauseClass,
+  CertificationCheckStatus,
+  CertificationStatus,
+  CertificationSubjectKind,
+  ComparisonDecision,
+  ConfirmationPolicy,
+  DetectorAbortClass,
+  FailureClass,
+  FindingSeverity,
+  MeasurementBasis,
+  ObservationCoverage,
+  ObservationFace,
+  ObservationPhase,
+  RealTaskArtifactProvenance,
+  RealTaskAssertionKind,
+  RealTaskAssertionOutcome,
+  RealTaskCaseOriginKind,
+  RealTaskCasePrivacyClassification,
+  RealTaskCaseSource,
+  RealTaskCoverageArchetype,
+  RealTaskCoverageDataShape,
+  RealTaskCoverageInteraction,
+  RealTaskCoverageLifecycle,
+  RealTaskCoverageOutcome,
+  RealTaskCoveragePath,
+  RealTaskCoverageRisk,
+  RealTaskFeedbackVerdict,
+  RealTaskFindingClass,
+  RealTaskHealth,
+  RealTaskModelRequirement,
+  RealTaskPrivacyClassification,
+  RealTaskSource,
+  RealTaskSpanCategory,
+  RealTaskTerminalStatus,
+  RealTaskVerdict,
+  RunArchiveSchemaId,
+  SettleOutcomeKind,
+  SettleSignal,
+  TranscriptKind,
+  TranscriptRole,
+  VerdictLevel,
+  VerifierIsolation,
+} from '../contract/constants.js'
 
 // ── JSON ───────────────────────────────────────────────────────
 
@@ -306,7 +353,12 @@ export interface DetectorDefinition {
 /** 一条判据的验证结局；`void` 是「判不了」，既不算通过也不算失败。 */
 export type VerificationOutcome =
   | { readonly kind: 'pass'; readonly credit: 1; readonly evidence: JsonObject }
-  | { readonly kind: 'partial'; readonly credit: number; readonly reason: string; readonly evidence: JsonObject }
+  | {
+      readonly kind: 'partial'
+      readonly credit: number
+      readonly reason: string
+      readonly evidence: JsonObject
+    }
   | {
       readonly kind: 'fail'
       readonly credit: 0
@@ -314,7 +366,12 @@ export type VerificationOutcome =
       readonly reason: string
       readonly evidence: JsonObject
     }
-  | { readonly kind: 'void'; readonly cause: AttritionCause; readonly detail: string; readonly evidence: JsonObject }
+  | {
+      readonly kind: 'void'
+      readonly cause: AttritionCause
+      readonly detail: string
+      readonly evidence: JsonObject
+    }
 
 /** 一条判据跑出来的结果。 */
 export interface CriterionResult {

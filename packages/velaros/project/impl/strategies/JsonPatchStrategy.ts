@@ -40,7 +40,7 @@ export class JsonPatchStrategy implements PatchStrategy {
         'VALIDATION_FAILED',
         '补丁前 JSON 含不能安全写回的非有限数值。',
         { path: snap.path, reason: 'document_not_json_value' },
-        '请先把 NaN 或正负 Infinity 改为标准 JSON 值，再准备 JSON Patch。',
+        '请先把 NaN 或正负 Infinity 改为标准 JSON 值，再准备 JSON Patch。'
       )
     }
     const operation = input.intent.operation

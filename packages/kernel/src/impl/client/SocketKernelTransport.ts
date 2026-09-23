@@ -1,7 +1,4 @@
-import {
-  createConnection,
-  type Socket,
-} from 'node:net'
+import { createConnection, type Socket } from 'node:net'
 
 import {
   isBlank,
@@ -91,65 +88,57 @@ export class SocketKernelTransport implements KernelClientTransport {
   }
 
   public async handshake(): Promise<KernelHandshake> {
-    return KernelHandshakeSchema.parse(
-      await this.request('handshake', null),
-    )
+    return KernelHandshakeSchema.parse(await this.request('handshake', null))
   }
 
   public async health(): Promise<KernelServiceHealth> {
-    return await this.request('health', null) as KernelServiceHealth
+    return (await this.request('health', null)) as KernelServiceHealth
   }
 
   public async openCapabilitySession(
-    request: CapabilitySessionOpenRequest,
+    request: CapabilitySessionOpenRequest
   ): Promise<CapabilitySessionOpenResponse> {
     return CapabilitySessionOpenResponseSchema.parse(
-      await this.request('capability.session.open', request),
+      await this.request('capability.session.open', request)
     )
   }
 
   public async closeCapabilitySession(
-    request: CapabilitySessionCloseRequest,
+    request: CapabilitySessionCloseRequest
   ): Promise<CapabilitySessionCloseResponse> {
     return CapabilitySessionCloseResponseSchema.parse(
-      await this.request('capability.session.close', request),
+      await this.request('capability.session.close', request)
     )
   }
 
   public async call(
     request: CapabilityCallRequest,
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ): Promise<CapabilityCallResponse> {
     return CapabilityCallResponseSchema.parse(
-      await this.request('capability.call', request, signal),
+      await this.request('capability.call', request, signal)
     )
   }
 
   public async listMods(request: ModsListRequest): Promise<ModsListResponse> {
-    return ModsListResponseSchema.parse(
-      await this.request('mods.list', request),
-    )
+    return ModsListResponseSchema.parse(await this.request('mods.list', request))
   }
 
-  public async setModEnabled(
-    request: ModsSetEnabledRequest,
-  ): Promise<ModsSetEnabledResponse> {
-    return ModsSetEnabledResponseSchema.parse(
-      await this.request('mods.setEnabled', request),
-    )
+  public async setModEnabled(request: ModsSetEnabledRequest): Promise<ModsSetEnabledResponse> {
+    return ModsSetEnabledResponseSchema.parse(await this.request('mods.setEnabled', request))
   }
 
   public async installModFromDirectory(
-    request: ModsInstallFromDirectoryRequest,
+    request: ModsInstallFromDirectoryRequest
   ): Promise<ModsInstallFromDirectoryResponse> {
     return ModsInstallFromDirectoryResponseSchema.parse(
-      await this.request('mods.installFromDirectory', request),
+      await this.request('mods.installFromDirectory', request)
     )
   }
 
   public async subscribe(
     eventType: string,
-    handler: KernelClientEventHandler,
+    handler: KernelClientEventHandler
   ): Promise<KernelEventSubscription> {
     const result = await this.request('events.subscribe', { eventType })
     const record: KernelClientEventSubscriptionRecord = {
@@ -218,13 +207,15 @@ export class SocketKernelTransport implements KernelClientTransport {
   private async request(
     method: KernelRpcMethod,
     params: unknown,
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ): Promise<unknown> {
     if (this.disposed) throw this.closedError()
-    if (isTrue(signal?.aborted)) throw new DOMException(SocketKernelTransport.AbortMessage, 'AbortError')
+    if (isTrue(signal?.aborted))
+      throw new DOMException(SocketKernelTransport.AbortMessage, 'AbortError')
     const socket = await this.connect()
     if (this.disposed) throw this.closedError()
-    if (isTrue(signal?.aborted)) throw new DOMException(SocketKernelTransport.AbortMessage, 'AbortError')
+    if (isTrue(signal?.aborted))
+      throw new DOMException(SocketKernelTransport.AbortMessage, 'AbortError')
     const requestId = `${process.pid}-${++this.requestSequence}`
 
     return new Promise((resolve, reject) => {
@@ -244,16 +235,18 @@ export class SocketKernelTransport implements KernelClientTransport {
             authToken: this.options.authToken,
             method,
             params,
-          })}\n`,
+          })}\n`
         )
       } catch {
         this.pending.delete(requestId)
         cleanup()
-        reject(this.localFailure(
-          KernelClientErrorCodes.transportWriteFailed,
-          'Kernel RPC 请求发不出去',
-          true,
-        ))
+        reject(
+          this.localFailure(
+            KernelClientErrorCodes.transportWriteFailed,
+            'Kernel RPC 请求发不出去',
+            true
+          )
+        )
       }
     })
   }
@@ -263,12 +256,10 @@ export class SocketKernelTransport implements KernelClientTransport {
     if (isNotUndefined(this.connecting)) return this.connecting
 
     this.connecting = new Promise((resolve, reject) => {
-      const socket = this.options.endpoint.kind === 'unix'
-        ? createConnection(this.options.endpoint.path)
-        : createConnection(
-            this.options.endpoint.port,
-            this.options.endpoint.host,
-          )
+      const socket =
+        this.options.endpoint.kind === 'unix'
+          ? createConnection(this.options.endpoint.path)
+          : createConnection(this.options.endpoint.port, this.options.endpoint.host)
       this.connectingSocket = socket
       const onError = () => {
         socket.off('close', onClose)
@@ -280,11 +271,7 @@ export class SocketKernelTransport implements KernelClientTransport {
         socket.off('error', onError)
         this.connectingSocket = undefined
         this.connecting = undefined
-        reject(
-          this.disposed
-            ? this.closedError()
-            : this.connectError(),
-        )
+        reject(this.disposed ? this.closedError() : this.connectError())
       }
       socket.once('error', onError)
       socket.once('close', onClose)
@@ -338,7 +325,7 @@ export class SocketKernelTransport implements KernelClientTransport {
       this.socket?.destroy()
       return
     }
-    if (!isObject(input) && !isNull(input) || isNull(input)) return
+    if ((!isObject(input) && !isNull(input)) || isNull(input)) return
     const type = Reflect.get(input, 'type')
     try {
       if (type === 'response') {
@@ -380,7 +367,7 @@ export class SocketKernelTransport implements KernelClientTransport {
           authToken: this.options.authToken,
           method: 'capability.cancel',
           params: { requestId: targetRequestId },
-        })}\n`,
+        })}\n`
       )
     } catch (error) {
       log.debug('Kernel cancellation frame could not be written', { error, targetRequestId })
@@ -393,11 +380,13 @@ export class SocketKernelTransport implements KernelClientTransport {
     this.buffer = ''
     // 服务端订阅 id 随连接作废，但本地记录留着：下次连上时照原样重建（restoreSubscriptions）。
     this.eventHandlers.clear()
-    this.rejectPending(this.localFailure(
-      KernelClientErrorCodes.transportDisconnected,
-      SocketKernelTransport.DisconnectedMessage,
-      true,
-    ))
+    this.rejectPending(
+      this.localFailure(
+        KernelClientErrorCodes.transportDisconnected,
+        SocketKernelTransport.DisconnectedMessage,
+        true
+      )
+    )
   }
 
   private rejectPending(error: Error): void {
@@ -412,7 +401,8 @@ export class SocketKernelTransport implements KernelClientTransport {
   private decodeResponse(input: object): KernelRpcResponse {
     const requestId = this.readRequiredString(input, 'requestId')
     const status = Reflect.get(input, 'status')
-    if (status === 'ok') return {
+    if (status === 'ok')
+      return {
         type: 'response',
         requestId,
         status,
@@ -420,7 +410,7 @@ export class SocketKernelTransport implements KernelClientTransport {
       }
     if (status !== 'error') throw this.invalidResponse('RPC status is invalid')
     const errorInput = Reflect.get(input, 'error')
-    if (!isObject(errorInput) && !isNull(errorInput) || isNull(errorInput)) {
+    if ((!isObject(errorInput) && !isNull(errorInput)) || isNull(errorInput)) {
       throw this.invalidResponse('RPC error is missing')
     }
     const retryable = Reflect.get(errorInput, 'retryable')
@@ -446,15 +436,12 @@ export class SocketKernelTransport implements KernelClientTransport {
   /** 解出一帧服务端推来的事件；事件内容缺失或序号不是整数时抛 INVALID_RESPONSE。 */
   private decodeEventFrame(input: object): KernelRpcEventFrame {
     const eventInput = Reflect.get(input, 'event')
-    if (!isObject(eventInput) && !isNull(eventInput) || isNull(eventInput)) {
+    if ((!isObject(eventInput) && !isNull(eventInput)) || isNull(eventInput)) {
       throw this.invalidResponse('事件帧里没有事件内容')
     }
     const sourceGeneration = Reflect.get(eventInput, 'sourceGeneration')
     const sequence = Reflect.get(eventInput, 'sequence')
-    if (
-      !Number.isInteger(sourceGeneration)
-      || !Number.isInteger(sequence)
-    ) {
+    if (!Number.isInteger(sourceGeneration) || !Number.isInteger(sequence)) {
       throw this.invalidResponse('Kernel event sequence is invalid')
     }
     return {
@@ -471,22 +458,15 @@ export class SocketKernelTransport implements KernelClientTransport {
   }
 
   /** 取一个必填的字符串字段；缺席、类型不对或（不允许空时）为空都抛 INVALID_RESPONSE。 */
-  private readRequiredString(
-    input: object,
-    field: string,
-    allowEmpty = false,
-  ): string {
+  private readRequiredString(input: object, field: string, allowEmpty = false): string {
     const value = Reflect.get(input, field)
-    if (
-      isString(value)
-      && (allowEmpty || value.length > 0)
-    ) return value
+    if (isString(value) && (allowEmpty || value.length > 0)) return value
     throw this.invalidResponse(`RPC field "${field}" is invalid`)
   }
 
   /** 从订阅回应里取出服务端发的订阅 id；取不出抛 INVALID_RESPONSE。 */
   private readSubscriptionId(input: unknown): string {
-    if (!isObject(input) && !isNull(input) || isNull(input)) {
+    if ((!isObject(input) && !isNull(input)) || isNull(input)) {
       throw this.invalidResponse('Subscription result is not an object')
     }
     const subscriptionId = Reflect.get(input, 'subscriptionId')
@@ -496,11 +476,7 @@ export class SocketKernelTransport implements KernelClientTransport {
 
   /** 收到不合协议的帧时的失败；不可重试，重试同一条连接只会再收到同样的垃圾。 */
   private invalidResponse(message: string): KernelClientError {
-    return this.localFailure(
-      KernelClientErrorCodes.invalidResponse,
-      message,
-      false,
-    )
+    return this.localFailure(KernelClientErrorCodes.invalidResponse, message, false)
   }
 
   /** 传输已回收后的失败；可重试的意思是「换一条连接可以再来」。 */
@@ -508,7 +484,7 @@ export class SocketKernelTransport implements KernelClientTransport {
     return this.localFailure(
       KernelClientErrorCodes.transportClosed,
       SocketKernelTransport.ClosedMessage,
-      true,
+      true
     )
   }
 
@@ -517,7 +493,7 @@ export class SocketKernelTransport implements KernelClientTransport {
     return this.localFailure(
       KernelClientErrorCodes.transportConnectFailed,
       SocketKernelTransport.ConnectFailedMessage,
-      true,
+      true
     )
   }
 
@@ -527,20 +503,14 @@ export class SocketKernelTransport implements KernelClientTransport {
    * `details` 里带上这条传输连的端点：一个进程里同时挂着几台内核时，光看文案分不出是哪条
    * 连接出的问题。
    */
-  private localFailure(
-    code: string,
-    message: string,
-    retryable: boolean,
-  ): KernelClientError {
+  private localFailure(code: string, message: string, retryable: boolean): KernelClientError {
     const endpoint = this.options.endpoint
     return fromKernelRpcError({
       code,
       message,
       retryable,
       details: {
-        endpoint: endpoint.kind === 'unix'
-          ? endpoint.path
-          : `${endpoint.host}:${endpoint.port}`,
+        endpoint: endpoint.kind === 'unix' ? endpoint.path : `${endpoint.host}:${endpoint.port}`,
       },
     })
   }

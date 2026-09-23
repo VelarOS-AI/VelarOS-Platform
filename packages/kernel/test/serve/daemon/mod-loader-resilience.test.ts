@@ -14,7 +14,8 @@ import type { KernelModPackRecord } from '../../../src/types/serve'
 import { createDefaultKernelDaemonPaths } from '../../../src/utils/rpc/descriptor'
 
 /** 测试里的模块导入函数；生产里由 `bin/velaros-kernel-daemon.mjs` 注入。 */
-const importModule = (url: string): Promise<Record<string, unknown>> => import(url) as Promise<Record<string, unknown>>
+const importModule = (url: string): Promise<Record<string, unknown>> =>
+  import(url) as Promise<Record<string, unknown>>
 
 const directories: string[] = []
 let logCaptureSequence = 0
@@ -36,7 +37,7 @@ async function writeHealthyPack(
   directory: string,
   fileName: string,
   moduleId: string,
-  capabilityId: string,
+  capabilityId: string
 ): Promise<string> {
   const specifier = join(directory, fileName)
   await writeFile(
@@ -54,28 +55,22 @@ async function writeHealthyPack(
   },
   activate() {},
 }
-`,
+`
   )
   return specifier
 }
 
 /** Installed pack entry that throws while importing (the runtime failure surface). */
-async function writeThrowingPack(
-  directory: string,
-  fileName: string,
-): Promise<string> {
+async function writeThrowingPack(directory: string, fileName: string): Promise<string> {
   const specifier = join(directory, fileName)
-  await writeFile(
-    specifier,
-    `throw new Error('pack boom: sibling capability dist missing')\n`,
-  )
+  await writeFile(specifier, `throw new Error('pack boom: sibling capability dist missing')\n`)
   return specifier
 }
 
 function packRecord(
   id: string,
   specifier: string,
-  provides: readonly string[],
+  provides: readonly string[]
 ): KernelModPackRecord {
   return {
     id,
@@ -90,16 +85,22 @@ function packRecord(
 function captureErrorLog(): { lines: string[]; restore: () => void } {
   const lines: string[] = []
   const id = `kernel-mod-loader-test-${++logCaptureSequence}`
-  Log.addTransport(createCallbackTransport({
-    id,
-    accepts: (record) => record.kind === 'message'
-      && record.scope === 'KernelModLoader'
-      && record.level === 'error',
-    write: (record) => {
-      lines.push(JSON.stringify(record))
+  Log.addTransport(
+    createCallbackTransport({
+      id,
+      accepts: (record) =>
+        record.kind === 'message' && record.scope === 'KernelModLoader' && record.level === 'error',
+      write: (record) => {
+        lines.push(JSON.stringify(record))
+      },
+    })
+  )
+  return {
+    lines,
+    restore: () => {
+      Log.removeTransport(id)
     },
-  }))
-  return { lines, restore: () => { Log.removeTransport(id) } }
+  }
 }
 
 describe('mod loader resilience', () => {
@@ -109,7 +110,7 @@ describe('mod loader resilience', () => {
       directory,
       'healthy.entry.mjs',
       'module.healthy',
-      'test.healthy',
+      'test.healthy'
     )
     const throwing = await writeThrowingPack(directory, 'boom.entry.mjs')
     const wrongShape = join(directory, 'shape.entry.mjs')
@@ -139,14 +140,16 @@ describe('mod loader resilience', () => {
     const boom = store.getLoadFailure('system.boom')
     expect(boom?.specifier).toBe(throwing)
     expect(boom?.reason).toContain('pack boom')
-    expect(store.getLoadFailure('system.shape')?.reason)
-      .toContain('不是一个 KernelModuleDefinition')
+    expect(store.getLoadFailure('system.shape')?.reason).toContain(
+      '不是一个 KernelModuleDefinition'
+    )
     expect(store.getLoadFailure('system.healthy')).toBeUndefined()
 
     // 不静默:每个失败都留下可读日志。
     expect(capture.lines).toHaveLength(2)
-    expect(capture.lines.some((line) => line.includes('system.boom')
-      && line.includes('pack boom'))).toBe(true)
+    expect(
+      capture.lines.some((line) => line.includes('system.boom') && line.includes('pack boom'))
+    ).toBe(true)
 
     // The pack stays enabled/visible — a load failure is not a silent uninstall.
     expect(store.listEnabled()).toHaveLength(3)
@@ -158,7 +161,7 @@ describe('mod loader resilience', () => {
       directory,
       'healthy.entry.mjs',
       'module.healthy',
-      'test.healthy',
+      'test.healthy'
     )
     const throwing = await writeThrowingPack(directory, 'boom.entry.mjs')
 
@@ -185,8 +188,12 @@ describe('mod loader resilience', () => {
       expect(booted.modLoadFailures.map((failure) => failure.id)).toEqual(['system.boom'])
       expect(booted.modStore.getLoadFailure('system.boom')?.reason).toContain('pack boom')
       // mods.list keeps reporting the pack as installed + enabled.
-      expect(booted.modStore.list().map((pack) => pack.id).sort())
-        .toEqual(['system.boom', 'system.healthy'])
+      expect(
+        booted.modStore
+          .list()
+          .map((pack) => pack.id)
+          .sort()
+      ).toEqual(['system.boom', 'system.healthy'])
       expect(capture.lines.some((line) => line.includes('system.boom'))).toBe(true)
     } finally {
       await booted.stop()

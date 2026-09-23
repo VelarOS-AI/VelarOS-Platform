@@ -22,7 +22,11 @@ import type {
   ComputerTypeResult,
 } from '../types/computer.js'
 import type { ComputerCommand } from '../types/protocol.js'
-import { classifyStartError, describeHelperError, permissionMissingDetail } from '../utils/availability.js'
+import {
+  classifyStartError,
+  describeHelperError,
+  permissionMissingDetail,
+} from '../utils/availability.js'
 import { spawnComputerHelperProcess } from '../utils/process.js'
 import {
   decodeComputerResponse,
@@ -159,7 +163,8 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
 
   public async ensureAvailable(): Promise<ComputerAvailability> {
     const spec = this.resolveHelper()
-    if (!spec) return {
+    if (!spec)
+      return {
         available: false,
         reason: 'helper-missing',
         detail: '没有找到桌面控制 helper 脚本（插件未安装或已被停用）。',
@@ -231,7 +236,10 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
   public dispose(): void {
     this.disposed = true
     this.rejectAllPending(
-      new AppError(ComputerErrorCodes.sidecarDisposed, '桌面控制 sidecar 已释放，这次请求不再继续。')
+      new AppError(
+        ComputerErrorCodes.sidecarDisposed,
+        '桌面控制 sidecar 已释放，这次请求不再继续。'
+      )
     )
     this.timers.dispose()
     this.teardown()
@@ -242,21 +250,34 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
     command: ComputerCommand,
     payload: Record<string, unknown>
   ): Promise<TResult> {
-    if (this.disposed) throw new AppError(ComputerErrorCodes.sidecarDisposed, '桌面控制 sidecar 已释放，无法继续使用。')
+    if (this.disposed)
+      throw new AppError(
+        ComputerErrorCodes.sidecarDisposed,
+        '桌面控制 sidecar 已释放，无法继续使用。'
+      )
     await this.start()
 
     const id = this.nextRequestId++
     return new Promise<TResult>((resolvePromise, rejectPromise) => {
-      const timer = this.timers.after(this.requestTimeoutMs, () => {
-        this.pending.delete(id)
-        rejectPromise(
-          new AppError('TIMEOUT', `桌面控制 helper 的 ${command} 请求在 ${this.requestTimeoutMs} 毫秒内没有回应。`, undefined, {
-            command,
-            requestId: id,
-            timeoutMs: this.requestTimeoutMs,
-          })
-        )
-      }, { label: `computer-request:${id}` })
+      const timer = this.timers.after(
+        this.requestTimeoutMs,
+        () => {
+          this.pending.delete(id)
+          rejectPromise(
+            new AppError(
+              'TIMEOUT',
+              `桌面控制 helper 的 ${command} 请求在 ${this.requestTimeoutMs} 毫秒内没有回应。`,
+              undefined,
+              {
+                command,
+                requestId: id,
+                timeoutMs: this.requestTimeoutMs,
+              }
+            )
+          )
+        },
+        { label: `computer-request:${id}` }
+      )
 
       this.pending.set(id, {
         resolve: (value) => resolvePromise(value as TResult),
@@ -301,7 +322,10 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
       if (!spec) {
         // 这条失败由错误码分类（见 classifyStartError），不靠文字，所以文案可以是中文。
         rejectPromise(
-          new AppError(ComputerErrorCodes.helperMissing, '没有找到桌面控制 helper 脚本（插件未安装或已被停用）。')
+          new AppError(
+            ComputerErrorCodes.helperMissing,
+            '没有找到桌面控制 helper 脚本（插件未安装或已被停用）。'
+          )
         )
         return
       }
@@ -334,16 +358,20 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
       }
       // helper 卡在导入阶段不打握手、或握手行被上一轮残片吞掉时，这道闸是唯一出口：
       // 没有它 start() 永不 settle，而请求的超时计时器要等 start() 返回才装，调用方永远挂起。
-      startupTimer = this.timers.after(this.startupTimeoutMs, () => {
-        onFail(
-          new AppError(
-            ComputerErrorCodes.sidecarStartupTimeout,
-            `桌面控制 helper 在 ${this.startupTimeoutMs} 毫秒内没有完成启动握手，已终止本次启动。`,
-            undefined,
-            { timeoutMs: this.startupTimeoutMs }
+      startupTimer = this.timers.after(
+        this.startupTimeoutMs,
+        () => {
+          onFail(
+            new AppError(
+              ComputerErrorCodes.sidecarStartupTimeout,
+              `桌面控制 helper 在 ${this.startupTimeoutMs} 毫秒内没有完成启动握手，已终止本次启动。`,
+              undefined,
+              { timeoutMs: this.startupTimeoutMs }
+            )
           )
-        )
-      }, { label: 'computer-startup' })
+        },
+        { label: 'computer-startup' }
+      )
 
       child.stdout.on('data', (chunk) => {
         // 上一轮进程被 teardown 后管道里还可能吐出残余数据，它属于已死的那一轮：
@@ -382,11 +410,18 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
         const reason =
           this.stderrBuffer.trim() ||
           `桌面控制 helper 在准备就绪前退出（退出码 ${code ?? 'null'}）。`
-        onFail(new AppError(ComputerErrorCodes.sidecarExited, reason, undefined, { exitCode: code }))
+        onFail(
+          new AppError(ComputerErrorCodes.sidecarExited, reason, undefined, { exitCode: code })
+        )
         this.rejectAllPending(
-          new AppError(ComputerErrorCodes.sidecarExited, '桌面控制 helper 进程已退出，这次请求没有完成。', undefined, {
-            exitCode: code,
-          })
+          new AppError(
+            ComputerErrorCodes.sidecarExited,
+            '桌面控制 helper 进程已退出，这次请求没有完成。',
+            undefined,
+            {
+              exitCode: code,
+            }
+          )
         )
         // ready 之后才退出时 onFail 已 settled、不会再 teardown，状态机会卡在「ready=true 但进程
         // 已死」——后续每个请求写进死管道再干等一整个超时，且永不重启。teardown 幂等，无条件调用
@@ -439,15 +474,21 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
       if (response.ok) {
         pending.resolve(response.result)
       } else {
-        const errorCode =
-          ComputerSidecarManager.SnapshotValidationErrorCodes.has(response.error.code)
-            ? 'VALIDATION'
-            : ComputerErrorCodes.helperError
+        const errorCode = ComputerSidecarManager.SnapshotValidationErrorCodes.has(
+          response.error.code
+        )
+          ? 'VALIDATION'
+          : ComputerErrorCodes.helperError
         // helper 资产是 Python，报错是英文；模型要照着它决定「重新截图还是换个做法」，所以在这里按码翻成中文。
         pending.reject(
-          new AppError(errorCode, describeHelperError(response.error.code, response.error.message), undefined, {
-            helperErrorCode: response.error.code,
-          })
+          new AppError(
+            errorCode,
+            describeHelperError(response.error.code, response.error.message),
+            undefined,
+            {
+              helperErrorCode: response.error.code,
+            }
+          )
         )
       }
     }

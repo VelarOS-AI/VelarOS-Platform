@@ -49,16 +49,29 @@ async function workspace(options: Parameters<typeof createHarness>[0] = {}) {
 describe('办公文档不变量验收', () => {
   test('INV-1 读写目标按真实路径都在工作区根内', async () => {
     const { office } = await workspace()
-    expect(await failureOf(office.call('createSpreadsheet', { outputPath: '../escaped.xlsx', content: 'a,b\n1,2' }))).toMatchObject({
+    expect(
+      await failureOf(
+        office.call('createSpreadsheet', { outputPath: '../escaped.xlsx', content: 'a,b\n1,2' })
+      )
+    ).toMatchObject({
       code: OfficeErrorCodes.pathOutsideProject,
     })
-    expect(await failureOf(office.call('readPdf', { inputPath: '../outside.pdf' }))).toMatchObject({ code: OfficeErrorCodes.pathOutsideProject })
+    expect(await failureOf(office.call('readPdf', { inputPath: '../outside.pdf' }))).toMatchObject({
+      code: OfficeErrorCodes.pathOutsideProject,
+    })
   })
 
   test('INV-2 入参里没有换执行目录的字段，多给了当场拒绝', async () => {
-    for (const field of ['cwd', 'workingDirectory', 'rootPath']) expect(OfficeDeclarations).not.toContain(`${field}?:`)
+    for (const field of ['cwd', 'workingDirectory', 'rootPath'])
+      expect(OfficeDeclarations).not.toContain(`${field}?:`)
     const { harness, office } = await workspace()
-    const failure = await failureOf(office.call('createSpreadsheet', { outputPath: 'book.xlsx', content: 'a,b\n1,2', cwd: '/tmp' }))
+    const failure = await failureOf(
+      office.call('createSpreadsheet', {
+        outputPath: 'book.xlsx',
+        content: 'a,b\n1,2',
+        cwd: '/tmp',
+      })
+    )
     expect(failure.code).toBe('VALIDATION')
     expect(failure.message).toContain('cwd')
     await expect(stat(join(harness.root, 'book.xlsx'))).rejects.toBeDefined()
@@ -69,20 +82,42 @@ describe('办公文档不变量验收', () => {
     await office.call('createSpreadsheet', { outputPath: 'book.xlsx', content: 'a,b\n1,2' })
     const before = await readFile(join(harness.root, 'book.xlsx'))
 
-    expect(await failureOf(office.call('createSpreadsheet', { outputPath: 'book.xlsx', content: 'a,b\n3,4' }))).toMatchObject({
+    expect(
+      await failureOf(
+        office.call('createSpreadsheet', { outputPath: 'book.xlsx', content: 'a,b\n3,4' })
+      )
+    ).toMatchObject({
       code: OfficeErrorCodes.outputExists,
     })
     expect(await readFile(join(harness.root, 'book.xlsx'))).toEqual(before)
-    expect(await office.call('createSpreadsheet', { outputPath: 'book.xlsx', content: 'a,b\n3,4', overwrite: true })).toMatchObject({ created: false })
+    expect(
+      await office.call('createSpreadsheet', {
+        outputPath: 'book.xlsx',
+        content: 'a,b\n3,4',
+        overwrite: true,
+      })
+    ).toMatchObject({ created: false })
 
     await office.call('createWord', { outputPath: 'notes.docx', content: '第一段' })
-    expect(await office.call('createWord', { outputPath: 'notes.docx', content: '第二段', appendMode: true })).toMatchObject({ created: false })
+    expect(
+      await office.call('createWord', {
+        outputPath: 'notes.docx',
+        content: '第二段',
+        appendMode: true,
+      })
+    ).toMatchObject({ created: false })
   })
 
   test('INV-5 外部转换器只经空间端口按原生 argv 执行', async () => {
-    const { harness, office } = await workspace({ availableCommands: ['soffice'], converters: 'working' })
+    const { harness, office } = await workspace({
+      availableCommands: ['soffice'],
+      converters: 'working',
+    })
     await office.call('createWord', { outputPath: 'source.docx', content: '正文' })
-    const written = await office.call('wordToPdf', { inputPath: 'source.docx', outputPath: 'source.pdf' })
+    const written = await office.call('wordToPdf', {
+      inputPath: 'source.docx',
+      outputPath: 'source.pdf',
+    })
     expect(written).toMatchObject({ path: join(harness.root, 'source.pdf'), created: true })
 
     expect(harness.commands.length).toBeGreaterThan(0)
@@ -94,10 +129,15 @@ describe('办公文档不变量验收', () => {
   })
 
   test('INV-7 预览 HTML 经白名单净化', async () => {
-    expect(sanitizePreviewHtml('<p onclick="alert(1)">正文<script>alert(2)</script></p>')).not.toMatch(/script|onclick/iu)
+    expect(
+      sanitizePreviewHtml('<p onclick="alert(1)">正文<script>alert(2)</script></p>')
+    ).not.toMatch(/script|onclick/iu)
 
     const { harness, office } = await workspace()
-    await office.call('createWord', { outputPath: 'doc.docx', content: '<script>alert(3)</script> 正文' })
+    await office.call('createWord', {
+      outputPath: 'doc.docx',
+      content: '<script>alert(3)</script> 正文',
+    })
     await office.call('preview', { inputPath: 'doc.docx', outputPath: 'preview.html' })
     const html = await readFile(join(harness.root, 'preview.html'), 'utf8')
     expect(html).not.toMatch(/<script/iu)
@@ -108,8 +148,14 @@ describe('办公文档不变量验收', () => {
     const { harness, office } = await workspace()
     await office.call('createWord', { outputPath: 'doc.docx', content: '正文' })
     await office.call('preview', { inputPath: 'doc.docx', outputPath: 'quiet.html' })
-    expect(await readFile(join(harness.root, 'quiet.html'), 'utf8')).not.toContain('location.reload')
-    await office.call('preview', { inputPath: 'doc.docx', outputPath: 'live.html', autoRefresh: true })
+    expect(await readFile(join(harness.root, 'quiet.html'), 'utf8')).not.toContain(
+      'location.reload'
+    )
+    await office.call('preview', {
+      inputPath: 'doc.docx',
+      outputPath: 'live.html',
+      autoRefresh: true,
+    })
     expect(await readFile(join(harness.root, 'live.html'), 'utf8')).toContain('location.reload')
   })
 
@@ -138,58 +184,137 @@ describe('办公文档不变量验收', () => {
   test('INV-13 缺转换器与转换失败抛带专属码的错误，message 说清缺什么、日志的结尾', async () => {
     const missing = await workspace()
     await missing.office.call('createWord', { outputPath: 'doc.docx', content: '正文' })
-    const noLibreOffice = await failureOf(missing.office.call('wordToPdf', { inputPath: 'doc.docx', outputPath: 'doc.pdf' }))
+    const noLibreOffice = await failureOf(
+      missing.office.call('wordToPdf', { inputPath: 'doc.docx', outputPath: 'doc.pdf' })
+    )
     expect(noLibreOffice.code).toBe(OfficeErrorCodes.converterMissing)
     expect(noLibreOffice.message).toContain('LibreOffice')
     expect(noLibreOffice.message).toContain('不要自己去装')
-    expect(await failureOf(missing.office.call('latexToPdf', { outputPath: 'paper.pdf', latexSource: '\\documentclass{article}' }))).toMatchObject({
+    expect(
+      await failureOf(
+        missing.office.call('latexToPdf', {
+          outputPath: 'paper.pdf',
+          latexSource: '\\documentclass{article}',
+        })
+      )
+    ).toMatchObject({
       code: OfficeErrorCodes.converterMissing,
     })
     await putFile(missing.harness.root, 'note.md', '# 标题')
-    expect(await failureOf(missing.office.call('toMarkdown', { inputPath: 'note.md' }))).toMatchObject({ code: OfficeErrorCodes.markItDownUnavailable })
+    expect(
+      await failureOf(missing.office.call('toMarkdown', { inputPath: 'note.md' }))
+    ).toMatchObject({ code: OfficeErrorCodes.markItDownUnavailable })
 
     const failing = await workspace({ availableCommands: ['tectonic'], converters: 'failing' })
-    const compileError = await failureOf(failing.office.call('latexToPdf', { outputPath: 'paper.pdf', latexSource: '\\documentclass{article}\n\\badmacro' }))
+    const compileError = await failureOf(
+      failing.office.call('latexToPdf', {
+        outputPath: 'paper.pdf',
+        latexSource: '\\documentclass{article}\n\\badmacro',
+      })
+    )
     expect(compileError.code).toBe(OfficeErrorCodes.conversionFailed)
     expect(compileError.message).toContain('Undefined control sequence')
     expect(await readFile(join(failing.harness.root, 'paper.tex'), 'utf8')).toContain('\\badmacro')
   })
 
   test('INV-14 入参在做事之前核对，不合法一步都不做', async () => {
-    const { harness, office } = await workspace({ availableCommands: ['soffice', 'tectonic'], converters: 'working' })
+    const { harness, office } = await workspace({
+      availableCommands: ['soffice', 'tectonic'],
+      converters: 'working',
+    })
     const neither = await failureOf(office.call('createWord', { outputPath: 'a.docx' }))
     expect(neither.code).toBe('VALIDATION')
     expect(neither.message).toContain('content')
-    expect((await failureOf(office.call('createWord', { outputPath: 'b.docx', content: '正文', blocks: [{ kind: 'pageBreak' }] }))).code).toBe('VALIDATION')
-    expect((await failureOf(office.call('readPdf', { inputPath: 'x.pdf', pages: [1], maxPages: 2 }))).code).toBe('VALIDATION')
-    expect((await failureOf(office.call('latexToPdf', { outputPath: 'c.pdf', latexSource: 'x', runs: OfficePdfLimits.compileRuns + 1 }))).code).toBe('VALIDATION')
-    const tooLong = await failureOf(office.call('createWord', { outputPath: 'd.docx', title: 'x'.repeat(OfficeInputLimits.titleChars + 1), content: '正文' }))
+    expect(
+      (
+        await failureOf(
+          office.call('createWord', {
+            outputPath: 'b.docx',
+            content: '正文',
+            blocks: [{ kind: 'pageBreak' }],
+          })
+        )
+      ).code
+    ).toBe('VALIDATION')
+    expect(
+      (await failureOf(office.call('readPdf', { inputPath: 'x.pdf', pages: [1], maxPages: 2 })))
+        .code
+    ).toBe('VALIDATION')
+    expect(
+      (
+        await failureOf(
+          office.call('latexToPdf', {
+            outputPath: 'c.pdf',
+            latexSource: 'x',
+            runs: OfficePdfLimits.compileRuns + 1,
+          })
+        )
+      ).code
+    ).toBe('VALIDATION')
+    const tooLong = await failureOf(
+      office.call('createWord', {
+        outputPath: 'd.docx',
+        title: 'x'.repeat(OfficeInputLimits.titleChars + 1),
+        content: '正文',
+      })
+    )
     expect(tooLong.code).toBe('VALIDATION')
     expect(tooLong.message).toContain('title')
     await putFile(harness.root, 'paper.pdf', await pdfWithPages(['page']))
-    const cjkStamp = await failureOf(office.call('editPdf', { inputPath: 'paper.pdf', outputPath: 'e.pdf', textStamps: [{ text: 'OK' }, { text: '内部资料' }] }))
+    const cjkStamp = await failureOf(
+      office.call('editPdf', {
+        inputPath: 'paper.pdf',
+        outputPath: 'e.pdf',
+        textStamps: [{ text: 'OK' }, { text: '内部资料' }],
+      })
+    )
     expect(cjkStamp.code).toBe('VALIDATION')
     expect(cjkStamp.message).toContain('textStamps[1].text')
     expect(harness.commands).toEqual([])
-    for (const name of ['a.docx', 'b.docx', 'c.pdf', 'c.tex', 'd.docx', 'e.pdf']) await expect(stat(join(harness.root, name))).rejects.toBeDefined()
+    for (const name of ['a.docx', 'b.docx', 'c.pdf', 'c.tex', 'd.docx', 'e.pdf'])
+      await expect(stat(join(harness.root, name))).rejects.toBeDefined()
   })
 
   test('INV-15 模型面是 velaros:office：声明从源码生成，模型的程序照它调到真实操作', async () => {
     expect(VelarOfficeModule.specifier).toBe('velaros:office')
     expect([...VelarOfficeModule.methods].sort()).toEqual(
-      ['createPresentation', 'createSpreadsheet', 'createWord', 'editPdf', 'latexToPdf', 'preview', 'readPdf', 'toMarkdown', 'wordToPdf'].sort()
+      [
+        'createPresentation',
+        'createSpreadsheet',
+        'createWord',
+        'editPdf',
+        'latexToPdf',
+        'preview',
+        'readPdf',
+        'toMarkdown',
+        'wordToPdf',
+      ].sort()
     )
     expect(VelarOfficeModule.declarations).toBe(OfficeDeclarations)
-    for (const hidden of ['OfficeOperationContext', 'OfficeSpacePort', 'prepareMutation', 'pdfToWord', 'convertPdfToWord']) expect(OfficeDeclarations).not.toContain(hidden)
+    for (const hidden of [
+      'OfficeOperationContext',
+      'OfficeSpacePort',
+      'prepareMutation',
+      'pdfToWord',
+      'convertPdfToWord',
+    ])
+      expect(OfficeDeclarations).not.toContain(hidden)
 
     const { harness, office } = await workspace()
-    await putFile(harness.root, 'paper.pdf', await pdfWithPages(['first page text', 'second page text']))
-    const result = await runModelProgram(office, `import { createWord, readPdf } from 'velaros:office'
+    await putFile(
+      harness.root,
+      'paper.pdf',
+      await pdfWithPages(['first page text', 'second page text'])
+    )
+    const result = await runModelProgram(
+      office,
+      `import { createWord, readPdf } from 'velaros:office'
 const pdf = await readPdf({ inputPath: 'paper.pdf' })
 const written = await createWord({ outputPath: 'paper.docx', blocks: pdf.pages.map((page) => ({ kind: 'paragraph', text: page.text })) })
 export const pages = pdf.pageCount
 export const bytes = written.bytes
-`)
+`
+    )
     expect(result.failed).toBeUndefined()
     expect(result.value).toMatchObject({ pages: 2 })
     expect((result.value as { bytes: number }).bytes).toBeGreaterThan(0)

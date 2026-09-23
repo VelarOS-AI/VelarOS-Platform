@@ -19,7 +19,9 @@ import ts from 'typescript'
 const RepoRoot = resolve(import.meta.dir, '../..')
 const [packageArg, planArg, ...flags] = process.argv.slice(2)
 if (!packageArg || !planArg) {
-  console.error('用法：bun scripts/ownership/move-declarations.mjs <包目录> <计划.json> [--dry-run]')
+  console.error(
+    '用法：bun scripts/ownership/move-declarations.mjs <包目录> <计划.json> [--dry-run]'
+  )
   process.exit(2)
 }
 const dryRun = flags.includes('--dry-run')
@@ -32,12 +34,17 @@ function walk(directory) {
   return readdirSync(directory).flatMap((entry) => {
     if (entry === 'node_modules' || entry === 'dist' || entry.startsWith('.')) return []
     const path = join(directory, entry)
-    return statSync(path).isDirectory() ? walk(path) : /\.(?:ts|tsx|mts|mjs)$/u.test(entry) && !entry.endsWith('.d.ts') ? [path] : []
+    return statSync(path).isDirectory()
+      ? walk(path)
+      : /\.(?:ts|tsx|mts|mjs)$/u.test(entry) && !entry.endsWith('.d.ts')
+        ? [path]
+        : []
   })
 }
 const allFiles = [...walk(join(RepoRoot, 'packages')), ...walk(join(RepoRoot, 'tests'))]
 const contents = new Map()
-const read = (file) => contents.has(file) ? contents.get(file) : existsSync(file) ? readFileSync(file, 'utf8') : ''
+const read = (file) =>
+  contents.has(file) ? contents.get(file) : existsSync(file) ? readFileSync(file, 'utf8') : ''
 const write = (file, text) => contents.set(file, text)
 const parse = (file) => ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true)
 
@@ -45,26 +52,53 @@ const parse = (file) => ts.createSourceFile(file, read(file), ts.ScriptTarget.La
 function resolveSpecifier(fromFile, specifier) {
   if (typeof specifier !== 'string' || !specifier.startsWith('.')) return null
   const base = resolve(dirname(fromFile), specifier)
-  const candidates = [base, base.replace(/\.js$/u, '.ts'), `${base}.ts`, `${base}.tsx`, join(base, 'index.ts')]
-  return candidates.find((candidate) => (contents.has(candidate) && contents.get(candidate) !== undefined) || (existsSync(candidate) && statSync(candidate).isFile())) ?? null
+  const candidates = [
+    base,
+    base.replace(/\.js$/u, '.ts'),
+    `${base}.ts`,
+    `${base}.tsx`,
+    join(base, 'index.ts'),
+  ]
+  return (
+    candidates.find(
+      (candidate) =>
+        (contents.has(candidate) && contents.get(candidate) !== undefined) ||
+        (existsSync(candidate) && statSync(candidate).isFile())
+    ) ?? null
+  )
 }
 
 /** 生成从 fromFile 指向 targetFile 的相对模块路径，统一写 .js 扩展名。 */
 function specifierFor(fromFile, targetFile) {
-  let path = relative(dirname(fromFile), targetFile).split(sep).join('/').replace(/\.tsx?$/u, '.js')
+  let path = relative(dirname(fromFile), targetFile)
+    .split(sep)
+    .join('/')
+    .replace(/\.tsx?$/u, '.js')
   if (!path.startsWith('.')) path = `./${path}`
   return path
 }
 
 /** 顶层语句声明了哪些名字。 */
 function declaredNames(statement) {
-  if (ts.isVariableStatement(statement)) return statement.declarationList.declarations.flatMap((declaration) => ts.isIdentifier(declaration.name) ? [declaration.name.text] : [])
-  if ((ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isFunctionDeclaration(statement) || ts.isEnumDeclaration(statement)) && statement.name) return [statement.name.text]
+  if (ts.isVariableStatement(statement))
+    return statement.declarationList.declarations.flatMap((declaration) =>
+      ts.isIdentifier(declaration.name) ? [declaration.name.text] : []
+    )
+  if (
+    (ts.isInterfaceDeclaration(statement) ||
+      ts.isTypeAliasDeclaration(statement) ||
+      ts.isClassDeclaration(statement) ||
+      ts.isFunctionDeclaration(statement) ||
+      ts.isEnumDeclaration(statement)) &&
+    statement.name
+  )
+    return [statement.name.text]
   return []
 }
 
 /** 声明是否只存在于类型层（接口、类型别名）。 */
-const isTypeOnlyDeclaration = (statement) => ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)
+const isTypeOnlyDeclaration = (statement) =>
+  ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)
 
 /** 语句连同它上方紧挨着的注释的起点。 */
 function statementStart(sourceFile, statement) {
@@ -89,7 +123,8 @@ function isReference(node) {
   if (ts.isQualifiedName(parent) && parent.right === node) return false
   if (ts.isShorthandPropertyAssignment(parent)) return true
   if ('name' in parent && parent.name === node && !ts.isTypeReferenceNode(parent)) return false
-  if (ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent) || ts.isLabeledStatement(parent)) return false
+  if (ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent) || ts.isLabeledStatement(parent))
+    return false
   return true
 }
 
@@ -97,13 +132,20 @@ function isReference(node) {
 function collectIdentifiers(node, into = new Map()) {
   const visit = (child, inType) => {
     // 类的 extends 引用的是值（运行时的父类），不能当类型位置；它的类型实参才是类型位置。
-    if (ts.isExpressionWithTypeArguments(child) && ts.isHeritageClause(child.parent) && child.parent.token === ts.SyntaxKind.ExtendsKeyword
-      && (ts.isClassDeclaration(child.parent.parent) || ts.isClassExpression(child.parent.parent))) {
+    if (
+      ts.isExpressionWithTypeArguments(child) &&
+      ts.isHeritageClause(child.parent) &&
+      child.parent.token === ts.SyntaxKind.ExtendsKeyword &&
+      (ts.isClassDeclaration(child.parent.parent) || ts.isClassExpression(child.parent.parent))
+    ) {
       visit(child.expression, inType)
       for (const argument of child.typeArguments ?? []) visit(argument, true)
       return
     }
-    const typeContext = inType || ts.isTypeNode(child) || ts.isHeritageClause(child) && child.token === ts.SyntaxKind.ImplementsKeyword
+    const typeContext =
+      inType ||
+      ts.isTypeNode(child) ||
+      (ts.isHeritageClause(child) && child.token === ts.SyntaxKind.ImplementsKeyword)
     if (ts.isIdentifier(child) && isReference(child)) {
       const previous = into.get(child.text)
       into.set(child.text, previous === undefined ? typeContext : previous && typeContext)
@@ -121,13 +163,22 @@ function importTable(sourceFile) {
     if (!ts.isImportDeclaration(statement) || !statement.importClause) continue
     const clause = statement.importClause
     const module = statement.moduleSpecifier.text
-    if (clause.name) table.set(clause.name.text, { module, imported: 'default', typeOnly: clause.isTypeOnly })
+    if (clause.name)
+      table.set(clause.name.text, { module, imported: 'default', typeOnly: clause.isTypeOnly })
     if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
       for (const element of clause.namedBindings.elements) {
-        table.set(element.name.text, { module, imported: (element.propertyName ?? element.name).text, typeOnly: clause.isTypeOnly || element.isTypeOnly })
+        table.set(element.name.text, {
+          module,
+          imported: (element.propertyName ?? element.name).text,
+          typeOnly: clause.isTypeOnly || element.isTypeOnly,
+        })
       }
     } else if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
-      table.set(clause.namedBindings.name.text, { module, imported: '*', typeOnly: clause.isTypeOnly })
+      table.set(clause.namedBindings.name.text, {
+        module,
+        imported: '*',
+        typeOnly: clause.isTypeOnly,
+      })
     }
   }
   return table
@@ -139,7 +190,10 @@ function insertAfterImports(text, addition) {
   const imports = sourceFile.statements.filter((statement) => ts.isImportDeclaration(statement))
   if (imports.length > 0) {
     const end = imports.at(-1).getEnd()
-    return `${text.slice(0, end)}\n\n${addition.trim()}\n${text.slice(end)}`.replace(/\n{3,}/gu, '\n\n')
+    return `${text.slice(0, end)}\n\n${addition.trim()}\n${text.slice(end)}`.replace(
+      /\n{3,}/gu,
+      '\n\n'
+    )
   }
   const first = sourceFile.statements[0]
   if (!first) return `${text.trimEnd()}${text.trim() ? '\n\n' : ''}${addition.trim()}\n`
@@ -164,28 +218,47 @@ function addImports(text, imports) {
     const [module, typeOnlyText] = key.split('\0')
     const typeOnly = typeOnlyText === 'true'
     // 命名空间与默认导入各自单独成行，不能塞进花括号。
-    for (const entry of entries.filter((item) => item.imported === '*' || item.imported === 'default')) {
-      const line = entry.imported === '*'
-        ? `import ${typeOnly ? 'type ' : ''}* as ${entry.name} from '${module}'`
-        : `import ${typeOnly ? 'type ' : ''}${entry.name} from '${module}'`
+    for (const entry of entries.filter(
+      (item) => item.imported === '*' || item.imported === 'default'
+    )) {
+      const line =
+        entry.imported === '*'
+          ? `import ${typeOnly ? 'type ' : ''}* as ${entry.name} from '${module}'`
+          : `import ${typeOnly ? 'type ' : ''}${entry.name} from '${module}'`
       sourceFile = ts.createSourceFile('x.ts', output, ts.ScriptTarget.Latest, true)
       const imports = sourceFile.statements.filter((statement) => ts.isImportDeclaration(statement))
-      output = imports.length > 0
-        ? `${output.slice(0, imports.at(-1).getEnd())}\n${line}${output.slice(imports.at(-1).getEnd())}`
-        : insertAfterImports(output, line)
+      output =
+        imports.length > 0
+          ? `${output.slice(0, imports.at(-1).getEnd())}\n${line}${output.slice(imports.at(-1).getEnd())}`
+          : insertAfterImports(output, line)
     }
     const named = entries.filter((item) => item.imported !== '*' && item.imported !== 'default')
     if (named.length === 0) continue
     sourceFile = ts.createSourceFile('x.ts', output, ts.ScriptTarget.Latest, true)
-    const namedTarget = sourceFile.statements.find((statement) => ts.isImportDeclaration(statement) && statement.moduleSpecifier.text === module
-      && statement.importClause && !statement.importClause.name && statement.importClause.namedBindings && ts.isNamedImports(statement.importClause.namedBindings)
-      && statement.importClause.isTypeOnly === typeOnly)
-    const specifiers = named.map((entry) => entry.imported === entry.name ? entry.name : `${entry.imported} as ${entry.name}`)
+    const namedTarget = sourceFile.statements.find(
+      (statement) =>
+        ts.isImportDeclaration(statement) &&
+        statement.moduleSpecifier.text === module &&
+        statement.importClause &&
+        !statement.importClause.name &&
+        statement.importClause.namedBindings &&
+        ts.isNamedImports(statement.importClause.namedBindings) &&
+        statement.importClause.isTypeOnly === typeOnly
+    )
+    const specifiers = named.map((entry) =>
+      entry.imported === entry.name ? entry.name : `${entry.imported} as ${entry.name}`
+    )
     const target = namedTarget
     if (target) {
       const bindings = target.importClause.namedBindings
-      const names = [...bindings.elements.map((element) => element.getText(sourceFile)), ...specifiers]
-      output = output.slice(0, bindings.getStart(sourceFile)) + `{ ${names.join(', ')} }` + output.slice(bindings.getEnd())
+      const names = [
+        ...bindings.elements.map((element) => element.getText(sourceFile)),
+        ...specifiers,
+      ]
+      output =
+        output.slice(0, bindings.getStart(sourceFile)) +
+        `{ ${names.join(', ')} }` +
+        output.slice(bindings.getEnd())
     } else {
       const line = `import ${typeOnly ? 'type ' : ''}{ ${specifiers.join(', ')} } from '${module}'`
       const imports = sourceFile.statements.filter((statement) => ts.isImportDeclaration(statement))
@@ -202,13 +275,17 @@ function addImports(text, imports) {
 
 /** 从一条 import / export from 语句里去掉一组名字；全去掉了就删整条语句。返回新文本和被去掉的说明符。 */
 function removeSpecifiers(text, statementNode, sourceFile, names) {
-  const clause = ts.isImportDeclaration(statementNode) ? statementNode.importClause?.namedBindings : statementNode.exportClause
-  if (!clause || !(ts.isNamedImports(clause) || ts.isNamedExports(clause))) return { text, removed: [] }
+  const clause = ts.isImportDeclaration(statementNode)
+    ? statementNode.importClause?.namedBindings
+    : statementNode.exportClause
+  if (!clause || !(ts.isNamedImports(clause) || ts.isNamedExports(clause)))
+    return { text, removed: [] }
   const keep = []
   const removed = []
   for (const element of clause.elements) {
     const original = (element.propertyName ?? element.name).text
-    if (names.has(original)) removed.push({ element, original, local: element.name.text, typeOnly: element.isTypeOnly })
+    if (names.has(original))
+      removed.push({ element, original, local: element.name.text, typeOnly: element.isTypeOnly })
     else keep.push(element.getText(sourceFile))
   }
   if (removed.length === 0) return { text, removed }
@@ -218,7 +295,13 @@ function removeSpecifiers(text, statementNode, sourceFile, names) {
     if (text[end] === '\n') end += 1
     return { text: text.slice(0, statementNode.getStart(sourceFile)) + text.slice(end), removed }
   }
-  return { text: text.slice(0, clause.getStart(sourceFile)) + `{ ${keep.join(', ')} }` + text.slice(clause.getEnd()), removed }
+  return {
+    text:
+      text.slice(0, clause.getStart(sourceFile)) +
+      `{ ${keep.join(', ')} }` +
+      text.slice(clause.getEnd()),
+    removed,
+  }
 }
 
 let movedCount = 0
@@ -233,24 +316,45 @@ for (const step of plan) {
 
   // 1. 从源文件取出声明。
   let sourceFile = parse(from)
-  const moving = sourceFile.statements.filter((statement) => declaredNames(statement).some((name) => names.has(name)))
-  for (const name of names) if (!moving.some((statement) => declaredNames(statement).includes(name))) throw new Error(`${step.from} 里找不到顶层声明 ${name}`)
-  for (const statement of moving) if (declaredNames(statement).some((name) => !names.has(name))) throw new Error(`${step.from} 的一条语句同时声明了 ${declaredNames(statement).join('、')}，要一起搬`)
-  const typeOnlyMoved = new Map(moving.flatMap((statement) => declaredNames(statement).map((name) => [name, isTypeOnlyDeclaration(statement)])))
-  const exported = (statement) => statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
-  const movedText = moving.map((statement) => {
-    const start = statementStart(sourceFile, statement)
-    const declarationStart = statement.getStart(sourceFile)
-    const leading = sourceFile.text.slice(start, declarationStart)
-    const body = sourceFile.text.slice(declarationStart, statement.getEnd())
-    return leading + (exported(statement) ? body : `export ${body}`)
-  }).join('\n\n')
+  const moving = sourceFile.statements.filter((statement) =>
+    declaredNames(statement).some((name) => names.has(name))
+  )
+  for (const name of names)
+    if (!moving.some((statement) => declaredNames(statement).includes(name)))
+      throw new Error(`${step.from} 里找不到顶层声明 ${name}`)
+  for (const statement of moving)
+    if (declaredNames(statement).some((name) => !names.has(name)))
+      throw new Error(
+        `${step.from} 的一条语句同时声明了 ${declaredNames(statement).join('、')}，要一起搬`
+      )
+  const typeOnlyMoved = new Map(
+    moving.flatMap((statement) =>
+      declaredNames(statement).map((name) => [name, isTypeOnlyDeclaration(statement)])
+    )
+  )
+  const exported = (statement) =>
+    statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+  const movedText = moving
+    .map((statement) => {
+      const start = statementStart(sourceFile, statement)
+      const declarationStart = statement.getStart(sourceFile)
+      const leading = sourceFile.text.slice(start, declarationStart)
+      const body = sourceFile.text.slice(declarationStart, statement.getEnd())
+      return leading + (exported(statement) ? body : `export ${body}`)
+    })
+    .join('\n\n')
 
   // 2. 被搬的声明用到的名字。
   const used = new Map()
   for (const statement of moving) collectIdentifiers(statement, used)
   const sourceImports = importTable(sourceFile)
-  const staying = new Map(sourceFile.statements.filter((statement) => !moving.includes(statement)).flatMap((statement) => declaredNames(statement).map((name) => [name, isTypeOnlyDeclaration(statement)])))
+  const staying = new Map(
+    sourceFile.statements
+      .filter((statement) => !moving.includes(statement))
+      .flatMap((statement) =>
+        declaredNames(statement).map((name) => [name, isTypeOnlyDeclaration(statement)])
+      )
+  )
   const targetImports = []
   for (const [name, onlyInTypes] of used) {
     if (names.has(name)) continue
@@ -259,15 +363,27 @@ for (const step of plan) {
       const resolved = resolveSpecifier(from, imported.module)
       if (resolved === to) continue
       const module = resolved ? specifierFor(to, resolved) : imported.module
-      targetImports.push({ module, name, imported: imported.imported, typeOnly: imported.typeOnly || onlyInTypes })
+      targetImports.push({
+        module,
+        name,
+        imported: imported.imported,
+        typeOnly: imported.typeOnly || onlyInTypes,
+      })
     } else if (staying.has(name)) {
-      targetImports.push({ module: specifierFor(to, from), name, imported: name, typeOnly: staying.get(name) || onlyInTypes })
+      targetImports.push({
+        module: specifierFor(to, from),
+        name,
+        imported: name,
+        typeOnly: staying.get(name) || onlyInTypes,
+      })
     }
   }
 
   // 源文件去掉声明；剩下的代码还用到被搬的名字就从目标文件引回来。
   let sourceText = sourceFile.text
-  for (const statement of [...moving].sort((a, b) => b.getStart(sourceFile) - a.getStart(sourceFile))) {
+  for (const statement of [...moving].sort(
+    (a, b) => b.getStart(sourceFile) - a.getStart(sourceFile)
+  )) {
     let end = statement.getEnd()
     while (sourceText[end] === '\n') end += 1
     sourceText = sourceText.slice(0, statementStart(sourceFile, statement)) + sourceText.slice(end)
@@ -276,7 +392,8 @@ for (const step of plan) {
   sourceFile = parse(from)
   const forwarded = []
   for (const statement of [...sourceFile.statements].reverse()) {
-    if (!ts.isExportDeclaration(statement) || statement.moduleSpecifier || !statement.exportClause) continue
+    if (!ts.isExportDeclaration(statement) || statement.moduleSpecifier || !statement.exportClause)
+      continue
     const { text: next, removed } = removeSpecifiers(sourceText, statement, sourceFile, names)
     if (removed.length === 0) continue
     sourceText = next
@@ -284,23 +401,40 @@ for (const step of plan) {
     forwarded.push(...removed)
   }
   if (forwarded.length > 0) {
-    const types = forwarded.filter((entry) => typeOnlyMoved.get(entry.original)).map((entry) => entry.original)
-    const values = forwarded.filter((entry) => !typeOnlyMoved.get(entry.original)).map((entry) => entry.original)
-    if (types.length > 0) sourceText = `${sourceText.trimEnd()}\nexport type { ${types.join(', ')} } from '${specifierFor(from, to)}'\n`
-    if (values.length > 0) sourceText = `${sourceText.trimEnd()}\nexport { ${values.join(', ')} } from '${specifierFor(from, to)}'\n`
+    const types = forwarded
+      .filter((entry) => typeOnlyMoved.get(entry.original))
+      .map((entry) => entry.original)
+    const values = forwarded
+      .filter((entry) => !typeOnlyMoved.get(entry.original))
+      .map((entry) => entry.original)
+    if (types.length > 0)
+      sourceText = `${sourceText.trimEnd()}\nexport type { ${types.join(', ')} } from '${specifierFor(from, to)}'\n`
+    if (values.length > 0)
+      sourceText = `${sourceText.trimEnd()}\nexport { ${values.join(', ')} } from '${specifierFor(from, to)}'\n`
   }
   write(from, sourceText)
   sourceFile = parse(from)
   const remainingUse = collectIdentifiers(sourceFile)
-  const backImports = [...names].filter((name) => remainingUse.has(name)).map((name) => ({ module: specifierFor(from, to), name, imported: name, typeOnly: typeOnlyMoved.get(name) || remainingUse.get(name) }))
+  const backImports = [...names]
+    .filter((name) => remainingUse.has(name))
+    .map((name) => ({
+      module: specifierFor(from, to),
+      name,
+      imported: name,
+      typeOnly: typeOnlyMoved.get(name) || remainingUse.get(name),
+    }))
   write(from, addImports(read(from), backImports))
 
   // 目标文件：去掉原来从源文件引这些名字的说明符，插入声明，补 import。
   let targetFile = parse(to)
   let targetText = targetFile.text
   for (const statement of [...targetFile.statements].reverse()) {
-    const fromSource = (ts.isImportDeclaration(statement) || (ts.isExportDeclaration(statement) && statement.moduleSpecifier && statement.exportClause))
-      && resolveSpecifier(to, statement.moduleSpecifier.text) === from
+    const fromSource =
+      (ts.isImportDeclaration(statement) ||
+        (ts.isExportDeclaration(statement) &&
+          statement.moduleSpecifier &&
+          statement.exportClause)) &&
+      resolveSpecifier(to, statement.moduleSpecifier.text) === from
     if (!fromSource) continue
     targetText = removeSpecifiers(targetText, statement, targetFile, names).text
     targetFile = ts.createSourceFile(to, targetText, ts.ScriptTarget.Latest, true)
@@ -330,8 +464,17 @@ for (const step of plan) {
       if (removed.length === 0) continue
       output = next
       current = ts.createSourceFile(file, output, ts.ScriptTarget.Latest, true)
-      const declarationTypeOnly = isImport ? statement.importClause.isTypeOnly : statement.isTypeOnly
-      for (const entry of removed) additions.push({ kind: isImport ? 'import' : 'export', module: specifierFor(file, to), name: entry.local, imported: entry.original, typeOnly: declarationTypeOnly || entry.typeOnly || typeOnlyMoved.get(entry.original) })
+      const declarationTypeOnly = isImport
+        ? statement.importClause.isTypeOnly
+        : statement.isTypeOnly
+      for (const entry of removed)
+        additions.push({
+          kind: isImport ? 'import' : 'export',
+          module: specifierFor(file, to),
+          name: entry.local,
+          imported: entry.original,
+          typeOnly: declarationTypeOnly || entry.typeOnly || typeOnlyMoved.get(entry.original),
+        })
     }
     const importAdds = additions.filter((entry) => entry.kind === 'import')
     output = addImports(output, importAdds)
@@ -339,13 +482,15 @@ for (const step of plan) {
     for (const typeOnly of [true, false]) {
       const group = exportAdds.filter((entry) => !!entry.typeOnly === typeOnly)
       if (group.length === 0) continue
-      output = `${output.trimEnd()}\nexport ${typeOnly ? 'type ' : ''}{ ${group.map((entry) => entry.imported === entry.name ? entry.name : `${entry.imported} as ${entry.name}`).join(', ')} } from '${specifierFor(file, to)}'\n`
+      output = `${output.trimEnd()}\nexport ${typeOnly ? 'type ' : ''}{ ${group.map((entry) => (entry.imported === entry.name ? entry.name : `${entry.imported} as ${entry.name}`)).join(', ')} } from '${specifierFor(file, to)}'\n`
     }
     if (reexports.length > 0) {
       const types = [...names].filter((name) => typeOnlyMoved.get(name))
       const values = [...names].filter((name) => !typeOnlyMoved.get(name))
-      if (types.length > 0) output = `${output.trimEnd()}\nexport type { ${types.join(', ')} } from '${specifierFor(file, to)}'\n`
-      if (values.length > 0) output = `${output.trimEnd()}\nexport { ${values.join(', ')} } from '${specifierFor(file, to)}'\n`
+      if (types.length > 0)
+        output = `${output.trimEnd()}\nexport type { ${types.join(', ')} } from '${specifierFor(file, to)}'\n`
+      if (values.length > 0)
+        output = `${output.trimEnd()}\nexport { ${values.join(', ')} } from '${specifierFor(file, to)}'\n`
     }
     if (output !== text) {
       write(file, output)
@@ -357,13 +502,20 @@ for (const step of plan) {
   movedCount += moving.length
 }
 
-const changed = [...contents.keys()].filter((file) => contents.get(file) !== (existsSync(file) ? readFileSync(file, 'utf8') : undefined))
+const changed = [...contents.keys()].filter(
+  (file) => contents.get(file) !== (existsSync(file) ? readFileSync(file, 'utf8') : undefined)
+)
 const emptied = changed.filter((file) => {
   const sourceFile = ts.createSourceFile(file, contents.get(file), ts.ScriptTarget.Latest, true)
   return sourceFile.statements.every((statement) => ts.isImportDeclaration(statement))
 })
-if (emptied.length > 0) console.info(`这些文件搬空了（只剩 import 或什么都没有），要手工删掉或合并：\n  ${emptied.map((file) => relative(RepoRoot, file)).join('\n  ')}`)
-console.info(`搬了 ${movedCount} 条声明，改动 ${changed.length} 个文件${dryRun ? '（演练，不落盘）' : ''}`)
+if (emptied.length > 0)
+  console.info(
+    `这些文件搬空了（只剩 import 或什么都没有），要手工删掉或合并：\n  ${emptied.map((file) => relative(RepoRoot, file)).join('\n  ')}`
+  )
+console.info(
+  `搬了 ${movedCount} 条声明，改动 ${changed.length} 个文件${dryRun ? '（演练，不落盘）' : ''}`
+)
 if (dryRun) {
   for (const file of changed) console.info(`  ${relative(RepoRoot, file)}`)
   process.exit(0)

@@ -21,7 +21,7 @@ export interface CapabilitySessionApi {
   /** 在这条会话上调一次能力；`signal` 中止时以 AbortError 结束。会话已经关掉时直接抛错，不再上线。 */
   call(
     request: Omit<CapabilityCallRequest, 'sessionId'>,
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ): Promise<CapabilityCallResponse>
   /** 关掉服务端的绑定；重复关是空操作，回应里的 `closed` 会是 false。 */
   dispose(): Promise<CapabilitySessionCloseResponse>
@@ -33,22 +33,26 @@ export class CapabilitySession implements CapabilitySessionApi {
   public constructor(
     private readonly transport: KernelClientTransport,
     public readonly sessionId: string,
-    public readonly requires: readonly CapabilityRequireItem[],
+    public readonly requires: readonly CapabilityRequireItem[]
   ) {}
 
   public call(
     request: Omit<CapabilityCallRequest, 'sessionId'>,
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ): Promise<CapabilityCallResponse> {
     this.assertOpen()
-    return this.transport.call({
-      ...request,
-      sessionId: this.sessionId,
-    }, signal)
+    return this.transport.call(
+      {
+        ...request,
+        sessionId: this.sessionId,
+      },
+      signal
+    )
   }
 
   public async dispose(): Promise<CapabilitySessionCloseResponse> {
-    if (this.disposed) return {
+    if (this.disposed)
+      return {
         protocolVersion: KernelProtocolVersion,
         closed: false,
       }

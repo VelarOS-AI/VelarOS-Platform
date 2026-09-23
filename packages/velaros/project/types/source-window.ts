@@ -1,5 +1,11 @@
 /** 正文里的一个物理行：行号、在原文里的起点、正文终点（不含换行符）、终点（含换行符）与行文本。 */
-export interface ProjectSourceLine { line: number; start: number; bodyEnd: number; end: number; text: string }
+export interface ProjectSourceLine {
+  line: number
+  start: number
+  bodyEnd: number
+  end: number
+  text: string
+}
 
 /** 交给模型之前的源码窗口：整行，带着签发 fileRef 要用的源码快照引用；签好之后写成模型面的 `ProjectWindow`。 */
 export interface ProjectSourceWindow {

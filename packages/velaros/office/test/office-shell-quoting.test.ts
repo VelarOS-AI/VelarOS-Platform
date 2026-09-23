@@ -10,7 +10,7 @@ import { buildLatexCompileCommands } from '../utils/pdf/latex'
 describe('Office 命令描述串', () => {
   test('每个参数都渲染成 JSON 字面量，注入片段不会变成 shell 语法', () => {
     const command: OfficeNativeCommand = {
-      file: "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+      file: '/Applications/LibreOffice.app/Contents/MacOS/soffice',
       args: ["中文 O'Brien", '$HOME `printf injected` $(printf injected)', 'a"b\\c'],
     }
     const described = describeOfficeNativeCommand(command)
@@ -49,10 +49,18 @@ describe('Office 命令描述串', () => {
 
 describe('Office native process bridge', () => {
   test('passes literal arguments and matching review text to the host without shell interpolation', async () => {
-    const argumentsToEcho = ['中文🙂', '/container/path', '%PATH% !literal! "quotes" & $(echo injected)']
+    const argumentsToEcho = [
+      '中文🙂',
+      '/container/path',
+      '%PATH% !literal! "quotes" & $(echo injected)',
+    ]
     const nativeCommand: OfficeNativeCommand = {
       file: process.execPath,
-      args: ['-e', 'process.stdout.write(JSON.stringify(process.argv.slice(1)))', ...argumentsToEcho],
+      args: [
+        '-e',
+        'process.stdout.write(JSON.stringify(process.argv.slice(1)))',
+        ...argumentsToEcho,
+      ],
     }
     const context = {
       office: {
@@ -60,7 +68,12 @@ describe('Office native process bridge', () => {
           expect(options.description).toBe(describeOfficeNativeCommand(native))
           expect(native).toEqual(nativeCommand)
           const result = spawnSync(native.file, native.args, { encoding: 'utf8' })
-          return { success: result.status === 0, exitCode: result.status, stdout: result.stdout, stderr: result.stderr }
+          return {
+            success: result.status === 0,
+            exitCode: result.status,
+            stdout: result.stdout,
+            stderr: result.stderr,
+          }
         },
       },
     } as unknown as OfficeOperationContext
@@ -73,12 +86,19 @@ describe('Office native process bridge', () => {
     const path = "C:\\Users\\中文 O'Brien\\100% !literal!"
     const commands = buildLatexCompileCommands({
       compiler: { name: 'xelatex', available: true, path: 'C:\\Program Files\\TeX\\xelatex.exe' },
-      sourceFileName: "draft 'final'.tex", tempDir: path, runs: 2,
+      sourceFileName: "draft 'final'.tex",
+      tempDir: path,
+      runs: 2,
     })
     expect(commands).toHaveLength(2)
     expect(commands[0]).toEqual({
       file: 'C:\\Program Files\\TeX\\xelatex.exe',
-      args: ['-interaction=nonstopmode', '-halt-on-error', `-output-directory=${path}`, "draft 'final'.tex"],
+      args: [
+        '-interaction=nonstopmode',
+        '-halt-on-error',
+        `-output-directory=${path}`,
+        "draft 'final'.tex",
+      ],
     })
   })
 })

@@ -29,7 +29,12 @@ export interface CodeSymbolTarget {
   nodeId?: string
 }
 
-export interface DiffHunk { oldStart: number; oldLines: number; newStart: number; newLines: number }
+export interface DiffHunk {
+  oldStart: number
+  oldLines: number
+  newStart: number
+  newLines: number
+}
 
 /** 一段行范围（闭区间，从 1 起）。 */
 export interface LineSpan {

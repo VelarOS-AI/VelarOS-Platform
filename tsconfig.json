@@ -3,78 +3,32 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@velaros-ai/agent-lab": [
-        "./packages/agent-lab/src/index.ts"
-      ],
-      "@velaros-ai/agent-lab/*": [
-        "./packages/agent-lab/src/*"
-      ],
-      "@velaros-ai/agent": [
-        "./packages/agent/src/index.ts"
-      ],
-      "@velaros-ai/agent/*": [
-        "./packages/agent/src/*"
-      ],
-      "@velaros-ai/core": [
-        "./packages/core/src/index.ts"
-      ],
-      "@velaros-ai/core/platform": [
-        "./packages/core/platform/index.ts"
-      ],
-      "@velaros-ai/core/platform/contracts": [
-        "./packages/core/platform/contracts.ts"
-      ],
+      "@velaros-ai/agent-lab": ["./packages/agent-lab/src/index.ts"],
+      "@velaros-ai/agent-lab/*": ["./packages/agent-lab/src/*"],
+      "@velaros-ai/agent": ["./packages/agent/src/index.ts"],
+      "@velaros-ai/agent/*": ["./packages/agent/src/*"],
+      "@velaros-ai/core": ["./packages/core/src/index.ts"],
+      "@velaros-ai/core/platform": ["./packages/core/platform/index.ts"],
+      "@velaros-ai/core/platform/contracts": ["./packages/core/platform/contracts.ts"],
       "@velaros-ai/core/platform/shared-resources": [
         "./packages/core/platform/shared-resources.ts"
       ],
-      "@velaros-ai/core/text-files": [
-        "./packages/core/text-files/index.ts"
-      ],
-      "@velaros-ai/core/text-files/contracts": [
-        "./packages/core/text-files/contracts.ts"
-      ],
-      "@velaros-ai/core/path-rules": [
-        "./packages/core/path-rules/index.ts"
-      ],
-      "@velaros-ai/core/path-rules/contracts": [
-        "./packages/core/path-rules/contracts.ts"
-      ],
-      "@velaros-ai/core/*": [
-        "./packages/core/src/*"
-      ],
-      "@velaros-ai/kernel": [
-        "./packages/kernel/src/index.ts"
-      ],
-      "@velaros-ai/kernel/contracts": [
-        "./packages/kernel/src/contracts.ts"
-      ],
-      "@velaros-ai/kernel/client": [
-        "./packages/kernel/src/client.ts"
-      ],
-      "@velaros-ai/kernel/serve": [
-        "./packages/kernel/src/serve.ts"
-      ],
-      "@velaros-ai/kernel/remote": [
-        "./packages/kernel/src/remote.ts"
-      ],
-      "@velaros-ai/velaros/files": [
-        "./packages/velaros/files/index.ts"
-      ],
-      "@velaros-ai/velaros/images": [
-        "./packages/velaros/images/index.ts"
-      ],
-      "@velaros-ai/velaros/sandbox": [
-        "./packages/velaros/sandbox/index.ts"
-      ],
-      "@velaros-ai/velaros/shell": [
-        "./packages/velaros/shell/index.ts"
-      ],
-      "@velaros-ai/velaros/project": [
-        "./packages/velaros/project/index.ts"
-      ],
-      "@velaros-ai/velaros/*": [
-        "./packages/velaros/*"
-      ]
+      "@velaros-ai/core/text-files": ["./packages/core/text-files/index.ts"],
+      "@velaros-ai/core/text-files/contracts": ["./packages/core/text-files/contracts.ts"],
+      "@velaros-ai/core/path-rules": ["./packages/core/path-rules/index.ts"],
+      "@velaros-ai/core/path-rules/contracts": ["./packages/core/path-rules/contracts.ts"],
+      "@velaros-ai/core/*": ["./packages/core/src/*"],
+      "@velaros-ai/kernel": ["./packages/kernel/src/index.ts"],
+      "@velaros-ai/kernel/contracts": ["./packages/kernel/src/contracts.ts"],
+      "@velaros-ai/kernel/client": ["./packages/kernel/src/client.ts"],
+      "@velaros-ai/kernel/serve": ["./packages/kernel/src/serve.ts"],
+      "@velaros-ai/kernel/remote": ["./packages/kernel/src/remote.ts"],
+      "@velaros-ai/velaros/files": ["./packages/velaros/files/index.ts"],
+      "@velaros-ai/velaros/images": ["./packages/velaros/images/index.ts"],
+      "@velaros-ai/velaros/sandbox": ["./packages/velaros/sandbox/index.ts"],
+      "@velaros-ai/velaros/shell": ["./packages/velaros/shell/index.ts"],
+      "@velaros-ai/velaros/project": ["./packages/velaros/project/index.ts"],
+      "@velaros-ai/velaros/*": ["./packages/velaros/*"]
     }
   },
   "files": []

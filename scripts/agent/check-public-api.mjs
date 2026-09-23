@@ -2,13 +2,7 @@
 // Tracks every published Agent entrypoint and declaration symbol. The package root remains a
 // compatibility umbrella, while new host integrations use the explicit runtime/host subpaths.
 import { createHash } from 'node:crypto'
-import {
-  existsSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -50,7 +44,7 @@ function canonicalTokens(source) {
     ts.ScriptTarget.Latest,
     true,
     ts.LanguageVariant.Standard,
-    source,
+    source
   )
   const tokens = []
   while (true) {
@@ -91,8 +85,8 @@ function symbolDeclarationHash(checker, exportedSymbol, fallbackSource) {
       checker.typeToString(
         checker.getTypeOfSymbolAtLocation(symbol, location),
         location,
-        ts.TypeFormatFlags.NoTruncation | ts.TypeFormatFlags.UseFullyQualifiedType,
-      ),
+        ts.TypeFormatFlags.NoTruncation | ts.TypeFormatFlags.UseFullyQualifiedType
+      )
     )
   }
   signatures.sort()
@@ -120,7 +114,9 @@ function exportedAlias(symbol) {
 function buildSnapshot(manifest) {
   const declarationFiles = collectDeclarationFiles(DistRoot)
   if (declarationFiles.length === 0) {
-    throw new Error('Agent declarations are missing; run `bun run --cwd packages/agent build` first.')
+    throw new Error(
+      'Agent declarations are missing; run `bun run --cwd packages/agent build` first.'
+    )
   }
   const program = ts.createProgram(declarationFiles, {
     module: ts.ModuleKind.NodeNext,
@@ -148,15 +144,17 @@ function buildSnapshot(manifest) {
     const symbols = []
     const exportedSymbols = checker
       .getExportsOfModule(moduleSymbol)
-      .sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0)
+      .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))
     entrySymbols.set(entrypoint, exportedSymbols)
     for (const exportedSymbol of exportedSymbols) {
       const target = unwrapAlias(checker, exportedSymbol)
-      symbols.push([
-        exportedSymbol.name,
-        symbolKind(target).join(','),
-        symbolDeclarationHash(checker, exportedSymbol, sourceFile),
-      ].join('\t'))
+      symbols.push(
+        [
+          exportedSymbol.name,
+          symbolKind(target).join(','),
+          symbolDeclarationHash(checker, exportedSymbol, sourceFile),
+        ].join('\t')
+      )
     }
     entries[entrypoint] = {
       types: typesTarget,
@@ -193,7 +191,10 @@ function validatePolicy(manifest, policy, entrySymbols) {
   } else if (removalMajor !== null && removalMajor !== undefined) {
     throw new Error('Primary Agent root entrypoint must not declare a removal major.')
   }
-  if (rootStatus === 'primary' && ((policy.deprecatedAliases ?? []).length > 0 || (policy.supportedAliases ?? []).length > 0)) {
+  if (
+    rootStatus === 'primary' &&
+    ((policy.deprecatedAliases ?? []).length > 0 || (policy.supportedAliases ?? []).length > 0)
+  ) {
     throw new Error('Primary Agent root entrypoint cannot carry compatibility aliases.')
   }
   for (const entrypoint of policy.rootEntrypoint.recommendedEntrypoints ?? []) {
@@ -213,8 +214,10 @@ function validatePolicy(manifest, policy, entrySymbols) {
   const managedAliases = new Map()
   for (const alias of policy.deprecatedAliases ?? []) {
     if (managedAliases.has(alias.name)) throw new Error(`Duplicate alias policy: ${alias.name}`)
-    if (alias.entrypoint !== '.') throw new Error(`Unsupported deprecated alias entry: ${alias.name}`)
-    if (!rootByName.has(alias.name)) throw new Error(`Deprecated alias is not exported: ${alias.name}`)
+    if (alias.entrypoint !== '.')
+      throw new Error(`Unsupported deprecated alias entry: ${alias.name}`)
+    if (!rootByName.has(alias.name))
+      throw new Error(`Deprecated alias is not exported: ${alias.name}`)
     if (!rootByName.has(alias.replacement)) {
       throw new Error(`Deprecated alias replacement is not exported: ${alias.replacement}`)
     }
@@ -224,7 +227,10 @@ function validatePolicy(manifest, policy, entrySymbols) {
     if (!hasDeprecatedTag(rootByName.get(alias.name))) {
       throw new Error(`${alias.name}: declaration is missing an @deprecated marker`)
     }
-    if (!Number.isSafeInteger(alias.earliestRemovalMajor) || alias.earliestRemovalMajor < removalMajor) {
+    if (
+      !Number.isSafeInteger(alias.earliestRemovalMajor) ||
+      alias.earliestRemovalMajor < removalMajor
+    ) {
       throw new Error(`${alias.name}: removal major cannot precede the root compatibility window`)
     }
     managedAliases.set(alias.name, alias.replacement)
@@ -255,7 +261,9 @@ function validatePolicy(manifest, policy, entrySymbols) {
       [
         unmanaged.length > 0 ? `unmanaged root aliases: ${unmanaged.join(', ')}` : '',
         stale.length > 0 ? `stale root alias policy: ${stale.join(', ')}` : '',
-      ].filter(Boolean).join('; '),
+      ]
+        .filter(Boolean)
+        .join('; ')
     )
   }
 }
@@ -267,7 +275,9 @@ function describeDiff(before, after) {
   const removals = []
   const beforeEntries = before.entries ?? {}
   const afterEntries = after.entries ?? {}
-  for (const entrypoint of [...new Set([...Object.keys(beforeEntries), ...Object.keys(afterEntries)])].sort()) {
+  for (const entrypoint of [
+    ...new Set([...Object.keys(beforeEntries), ...Object.keys(afterEntries)]),
+  ].sort()) {
     const previous = beforeEntries[entrypoint]
     const current = afterEntries[entrypoint]
     if (!previous) {
@@ -288,10 +298,10 @@ function describeDiff(before, after) {
       modifications.push(message)
     }
     const previousSymbols = new Map(
-      (previous.symbols ?? []).map((record) => [record.split('\t', 1)[0], record]),
+      (previous.symbols ?? []).map((record) => [record.split('\t', 1)[0], record])
     )
     const currentSymbols = new Map(
-      (current.symbols ?? []).map((record) => [record.split('\t', 1)[0], record]),
+      (current.symbols ?? []).map((record) => [record.split('\t', 1)[0], record])
     )
     for (const name of [...new Set([...previousSymbols.keys(), ...currentSymbols.keys()])].sort()) {
       if (!previousSymbols.has(name)) {
@@ -331,11 +341,15 @@ function validateBaseline(baseline, manifest) {
   }
   if (baseline.packageName !== manifest.name) {
     throw new Error(
-      `Agent public API baseline belongs to ${baseline.packageName ?? 'an unknown package'}, expected ${manifest.name}.`,
+      `Agent public API baseline belongs to ${baseline.packageName ?? 'an unknown package'}, expected ${manifest.name}.`
     )
   }
   parseVersion(baseline.acceptedPackageVersion, 'Baseline package version')
-  if (!baseline.entries || typeof baseline.entries !== 'object' || Array.isArray(baseline.entries)) {
+  if (
+    !baseline.entries ||
+    typeof baseline.entries !== 'object' ||
+    Array.isArray(baseline.entries)
+  ) {
     throw new Error('Agent public API baseline entries must be an object.')
   }
 }
@@ -353,7 +367,7 @@ if (ReviewedChangeKind && !['additive', 'breaking'].includes(ReviewedChangeKind)
 if (!existsSync(BaselinePath)) {
   if (!UpdateBaseline) {
     throw new Error(
-      'Agent public API baseline is missing. Review the surface, then run with VELAROS_AGENT_PUBLIC_API_UPDATE=1.',
+      'Agent public API baseline is missing. Review the surface, then run with VELAROS_AGENT_PUBLIC_API_UPDATE=1.'
     )
   }
   writeFileSync(BaselinePath, serialized)
@@ -368,7 +382,7 @@ const currentVersion = parseVersion(manifest.version, 'Agent package version')
 const versionComparison = compareVersions(currentVersion, previousVersion)
 if (versionComparison < 0) {
   throw new Error(
-    `Agent package version ${manifest.version} precedes the reviewed API baseline ${baseline.acceptedPackageVersion}.`,
+    `Agent package version ${manifest.version} precedes the reviewed API baseline ${baseline.acceptedPackageVersion}.`
   )
 }
 const { additions, changes, modifications, removals } = describeDiff(baseline, snapshot)
@@ -376,12 +390,12 @@ if (changes.length === 0) {
   if (versionComparison > 0) {
     if (!UpdateBaseline) {
       throw new Error(
-        `Agent public API declarations are unchanged, but the baseline is still bound to package version ${baseline.acceptedPackageVersion}. Run with VELAROS_AGENT_PUBLIC_API_UPDATE=1 to bind it to ${manifest.version}.`,
+        `Agent public API declarations are unchanged, but the baseline is still bound to package version ${baseline.acceptedPackageVersion}. Run with VELAROS_AGENT_PUBLIC_API_UPDATE=1 to bind it to ${manifest.version}.`
       )
     }
     writeFileSync(BaselinePath, serialized)
     console.log(
-      `Updated ${relative(RepoRoot, BaselinePath)} package version binding (${baseline.acceptedPackageVersion} -> ${manifest.version}); declarations are unchanged.`,
+      `Updated ${relative(RepoRoot, BaselinePath)} package version binding (${baseline.acceptedPackageVersion} -> ${manifest.version}); declarations are unchanged.`
     )
     process.exit(0)
   }
@@ -392,26 +406,28 @@ if (changes.length === 0) {
 if (UpdateBaseline) {
   if (versionComparison <= 0) {
     throw new Error(
-      `Agent public API changed without a package version increase (${baseline.acceptedPackageVersion} -> ${manifest.version}).`,
+      `Agent public API changed without a package version increase (${baseline.acceptedPackageVersion} -> ${manifest.version}).`
     )
   }
   if (removals.length > 0 && ReviewedChangeKind === 'additive') {
-    throw new Error(`Removed declarations cannot be reviewed as additive:\n${removals.slice(0, 40).join('\n')}`)
+    throw new Error(
+      `Removed declarations cannot be reviewed as additive:\n${removals.slice(0, 40).join('\n')}`
+    )
   }
-  const destructive = removals.length > 0 ||
-    (modifications.length > 0 && ReviewedChangeKind !== 'additive')
+  const destructive =
+    removals.length > 0 || (modifications.length > 0 && ReviewedChangeKind !== 'additive')
   if (destructive && currentVersion[0] <= previousVersion[0]) {
     throw new Error(
-      `Agent public API has destructive or unclassified declaration changes without a major version increase (${baseline.acceptedPackageVersion} -> ${manifest.version}):\n${[...removals, ...modifications].slice(0, 40).join('\n')}\nSet VELAROS_AGENT_PUBLIC_API_CHANGE=additive only after reviewing changed declarations as backward compatible.`,
+      `Agent public API has destructive or unclassified declaration changes without a major version increase (${baseline.acceptedPackageVersion} -> ${manifest.version}):\n${[...removals, ...modifications].slice(0, 40).join('\n')}\nSet VELAROS_AGENT_PUBLIC_API_CHANGE=additive only after reviewing changed declarations as backward compatible.`
     )
   }
   writeFileSync(BaselinePath, serialized)
   console.log(
-    `Updated ${relative(RepoRoot, BaselinePath)} with ${additions.length} additive, ${modifications.length} modified and ${removals.length} removed declaration(s).`,
+    `Updated ${relative(RepoRoot, BaselinePath)} with ${additions.length} additive, ${modifications.length} modified and ${removals.length} removed declaration(s).`
   )
   process.exit(0)
 }
 
 throw new Error(
-  `Agent public API differs from the reviewed baseline (${changes.length} change(s)):\n${changes.slice(0, 60).join('\n')}${changes.length > 60 ? '\n…' : ''}\nReview compatibility, then run with VELAROS_AGENT_PUBLIC_API_UPDATE=1.`,
+  `Agent public API differs from the reviewed baseline (${changes.length} change(s)):\n${changes.slice(0, 60).join('\n')}${changes.length > 60 ? '\n…' : ''}\nReview compatibility, then run with VELAROS_AGENT_PUBLIC_API_UPDATE=1.`
 )

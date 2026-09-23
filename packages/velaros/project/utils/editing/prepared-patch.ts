@@ -15,7 +15,7 @@ export function createTextPatch(
   oldContent: Optional<string>,
   newContent: string,
   strategyId: string,
-  metadata?: Record<string, unknown>,
+  metadata?: Record<string, unknown>
 ): PreparedPatch {
   const diff = unifiedDiff(path, oldContent ?? '', newContent)
   const changedLines = countChangedLines(diff)
@@ -58,7 +58,7 @@ export function assertFileTarget(snapshot: FileSnapshot, operationName: string):
       'NOT_SUPPORTED',
       `${operationName} 只能作用于文件，${snapshot.path} 是目录。`,
       { path: snapshot.path, operation: operationName },
-      '移动目录请用项目命令 git mv 或 mv；删除整个目录请用 rm -r，它会作为危险命令请求用户确认。',
+      '移动目录请用项目命令 git mv 或 mv；删除整个目录请用 rm -r，它会作为危险命令请求用户确认。'
     )
   }
 }

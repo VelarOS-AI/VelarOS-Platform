@@ -27,8 +27,6 @@ import {
 } from '../../utils/catalog/model-selection'
 import { trimTrailingPathSeparators } from '../../utils/urls'
 
-
-
 /** 一个产品装配独占的 provider 集合要什么。 */
 export interface ModelProviderCollectionOptions {
   /**
@@ -106,9 +104,9 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
   public listOperationalManifests(): ModelProviderOperationalManifest[] {
     return [
       ...asOperationalManifests(ModelProviderOperationalManifests),
-      ...this.providerScripts.listProviderManifests().map((manifest) =>
-        createScriptOperationalManifest(manifest)
-      ),
+      ...this.providerScripts
+        .listProviderManifests()
+        .map((manifest) => createScriptOperationalManifest(manifest)),
     ]
   }
 
@@ -135,9 +133,7 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
     throw new AppError(ModelErrorCodes.providerUnknown, `未知模型 provider：${provider}`)
   }
 
-  public getProviderIdsByAdapterKind(
-    adapterKind: ModelProviderAdapterKind
-  ): ChatProviderId[] {
+  public getProviderIdsByAdapterKind(adapterKind: ModelProviderAdapterKind): ChatProviderId[] {
     return this.listOperationalManifests()
       .filter((manifest) => manifest.adapterKind === adapterKind)
       .map((manifest) => manifest.id)
@@ -145,7 +141,8 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
 
   public requireCatalog(provider: ChatProviderId): SharedProviderCatalog {
     const script = this.providerScripts.getProviderScript(provider)
-    if (script) return {
+    if (script)
+      return {
         provider,
         defaultModel: script.manifest.defaultModel,
         models: script.manifest.models.map((model) => ({
@@ -179,12 +176,12 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
 
     const requestedModel = currentModel?.trim() ?? ''
     const models = script.manifest.models.map((model) => model.id)
-    if (requestedModel && models.includes(requestedModel)) return { model: requestedModel, didFallback: false }
+    if (requestedModel && models.includes(requestedModel))
+      return { model: requestedModel, didFallback: false }
 
     return {
       model: script.manifest.defaultModel,
-      didFallback:
-        requestedModel.length > 0 && requestedModel !== script.manifest.defaultModel,
+      didFallback: requestedModel.length > 0 && requestedModel !== script.manifest.defaultModel,
     }
   }
 
@@ -203,7 +200,7 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
     if (!isBlank(selection.apiKey)) return selection.apiKey
 
     const envName = this.getApiKeyEnvironmentName(selection.provider)
-    return envName ? env[envName] ?? '' : ''
+    return envName ? (env[envName] ?? '') : ''
   }
 
   public requireApiKey(
@@ -260,9 +257,7 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
     provider: ChatProviderId
   ): Nullable<AgentProviderRuntimeConfig> {
     return toNullable(
-      this.normalizeRuntimeConfigs(runtimeConfigs).find(
-        (config) => config.provider === provider
-      )
+      this.normalizeRuntimeConfigs(runtimeConfigs).find((config) => config.provider === provider)
     )
   }
 
@@ -278,17 +273,17 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
     if (supportsProvider && !supportsProvider(runtimeConfig.provider)) return false
 
     const config =
-      this.findRuntimeConfig(providerRuntimeConfigs, runtimeConfig.provider)
-      ?? runtimeConfig
+      this.findRuntimeConfig(providerRuntimeConfigs, runtimeConfig.provider) ?? runtimeConfig
     const manifest = this.requireOperationalManifest(runtimeConfig.provider)
-    if (manifest.adapterKind === 'custom-js') return !isBlank(config.adapter?.source ?? runtimeConfig.adapter?.source ?? '')
+    if (manifest.adapterKind === 'custom-js')
+      return !isBlank(config.adapter?.source ?? runtimeConfig.adapter?.source ?? '')
     if (manifest.apiKeyOptional) return true
     if (!isBlank(apiKeyOverride ?? '')) return true
     if (!isBlank(runtimeConfig.apiKey)) return true
     if (!isBlank(config.apiKey)) return true
 
     const envName = this.getApiKeyEnvironmentName(runtimeConfig.provider)
-    return !isBlank(envName ? env[envName] ?? '' : '')
+    return !isBlank(envName ? (env[envName] ?? '') : '')
   }
 
   public defaultEmbeddingModel(provider: ChatProviderId): string {

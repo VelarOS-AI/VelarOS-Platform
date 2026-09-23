@@ -15,9 +15,21 @@ import { Log } from '@velaros-ai/core/logger'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { BrowserPageDriver } from '../../contract/requires.js'
-import type { CdpChromeStderrDiagnostics, CdpDevToolsActivePort, CdpExternalBrowserChildProcess, CdpExternalBrowserLaunchOptions, CdpExternalBrowserSession, CdpExternalBrowserSpawn, CdpTargetDescription } from '../../types/cdp.js'
+import type {
+  CdpChromeStderrDiagnostics,
+  CdpDevToolsActivePort,
+  CdpExternalBrowserChildProcess,
+  CdpExternalBrowserLaunchOptions,
+  CdpExternalBrowserSession,
+  CdpExternalBrowserSpawn,
+  CdpTargetDescription,
+} from '../../types/cdp.js'
 import { resolveCdpTargetId, resolveCdpTargetListUrl } from '../../utils/cdp/driver.js'
-import { getExecutablePathCandidates, parseTargetEntry, shouldRetryLaunchAttempt } from '../../utils/cdp/launcher'
+import {
+  getExecutablePathCandidates,
+  parseTargetEntry,
+  shouldRetryLaunchAttempt,
+} from '../../utils/cdp/launcher'
 import { buildLaunchArgs, formatChromeEarlyExitMessage } from '../../utils/cdp/launcher'
 import { captureChromeStderr } from '../../utils/cdp/launcher'
 import { openCdpWebSocket } from '../../utils/cdp/transport.js'
@@ -89,7 +101,8 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
     this.execFileSync = dependencies.execFileSync ?? defaultExecFileSync
     this.connectPageDriver =
       dependencies.connectPageDriver ??
-      ((webSocketDebuggerUrl, options) => this.connectDefaultPageDriver(webSocketDebuggerUrl, options))
+      ((webSocketDebuggerUrl, options) =>
+        this.connectDefaultPageDriver(webSocketDebuggerUrl, options))
     this.sleep =
       dependencies.sleep ?? ((ms) => TimerScope.sleep(ms, { label: 'cdpExternalBrowser.poll' }))
   }
@@ -122,7 +135,11 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
     const timeoutMs = options.timeoutMs ?? BrowserTuning.externalBrowser.launchTimeoutMs
     let lastError: unknown = null
 
-    for (let attempt = 1; attempt <= BrowserTuning.externalBrowser.launchMaxAttempts; attempt += 1) {
+    for (
+      let attempt = 1;
+      attempt <= BrowserTuning.externalBrowser.launchMaxAttempts;
+      attempt += 1
+    ) {
       const userDataDir = ownsUserDataDir
         ? await this.mkdtemp(join(tmpdir(), 'velaros-cdp-browser-'))
         : configuredUserDataDir!
@@ -160,14 +177,7 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
     platform: NodeJS.Platform
     timeoutMs: number
   }): Promise<CdpExternalBrowserSession> {
-    const {
-      executablePath,
-      userDataDir,
-      ownsUserDataDir,
-      options,
-      platform,
-      timeoutMs,
-    } = input
+    const { executablePath, userDataDir, ownsUserDataDir, options, platform, timeoutMs } = input
     const downloadPath = options.downloadPath?.trim() || join(userDataDir, 'Downloads')
     const launchEnv = {
       ...process.env,
@@ -177,14 +187,18 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
     await this.unlink(join(userDataDir, 'DevToolsActivePort')).catch(() => {
       // arch-guard:silent-catch-ok 启动前清理允许文件不存在；新浏览器会写入自己的端口文件。
     })
-    const child = this.spawn(executablePath, buildLaunchArgs(userDataDir, options, {
-      env: launchEnv,
-      platform,
-    }), {
-      detached: platform !== 'win32',
-      env: launchEnv,
-      stdio: ['ignore', 'ignore', 'pipe'],
-    })
+    const child = this.spawn(
+      executablePath,
+      buildLaunchArgs(userDataDir, options, {
+        env: launchEnv,
+        platform,
+      }),
+      {
+        detached: platform !== 'win32',
+        env: launchEnv,
+        stdio: ['ignore', 'ignore', 'pipe'],
+      }
+    )
     const stderr = captureChromeStderr(child)
 
     try {
@@ -245,10 +259,7 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
     while (Date.now() <= deadline) {
       if (isPresent(child.exitCode)) {
         await this.sleep(0)
-        throw new AppError(
-          'EXECUTION_FAILED',
-          formatChromeEarlyExitMessage(child, stderr)
-        )
+        throw new AppError('EXECUTION_FAILED', formatChromeEarlyExitMessage(child, stderr))
       }
 
       const activePort = await this.readDevToolsActivePort(path)
@@ -270,9 +281,8 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
         port,
         browserWebSocketPath: lines[1]?.trim() || '/devtools/browser',
       }
-    }
-    // arch-guard:silent-catch-ok DevToolsActivePort 在 Chrome 写入前会反复缺席，轮询路径不刷日志。
-    catch {
+    } catch {
+      // arch-guard:silent-catch-ok DevToolsActivePort 在 Chrome 写入前会反复缺席，轮询路径不刷日志。
       return null
     }
   }

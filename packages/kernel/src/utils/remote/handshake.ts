@@ -9,10 +9,7 @@
 import { isNonBlankString, isNumber, isPresent, isRecord, Log } from '@velaros-ai/core'
 
 import { RemoteNodeClientErrorCodes } from '../../contract/constants'
-import type {
-  RemoteNodeHandshakeInput,
-  RemoteNodeHandshakeStep,
-} from '../../types/remote'
+import type { RemoteNodeHandshakeInput, RemoteNodeHandshakeStep } from '../../types/remote'
 import { RemoteNodeClientError } from '../errors'
 import {
   type RemoteNodePlatform,
@@ -30,10 +27,9 @@ const log = Log.tag('RemoteNodeHandshake')
  * 两个"需要重新配对"的入口刻意合并:全新设备,和本机凭据已丢而 Node 还记着旧公钥——
  * 后者从 Client 视角与前者无异,都只能重做人工仪式,分开处理只会多一条走不到的分支。
  */
-export function planRemoteNodeHandshake(
-  input: RemoteNodeHandshakeInput,
-): RemoteNodeHandshakeStep {
-  if (input.challenge.protocolVersion !== RemoteNodeProtocolVersion) return {
+export function planRemoteNodeHandshake(input: RemoteNodeHandshakeInput): RemoteNodeHandshakeStep {
+  if (input.challenge.protocolVersion !== RemoteNodeProtocolVersion)
+    return {
       kind: 'stop',
       error: new RemoteNodeClientError({
         code: RemoteNodeClientErrorCodes.ProtocolMismatch,
@@ -44,19 +40,18 @@ export function planRemoteNodeHandshake(
     }
 
   const credentials = input.credentials
-  if (input.challenge.paired && isPresent(credentials)) return {
+  if (input.challenge.paired && isPresent(credentials))
+    return {
       kind: 'authenticate',
       frame: {
         type: 'authenticate',
-        signature: signChallenge(
-          credentials.privateKey,
-          input.challenge.challenge,
-        ),
+        signature: signChallenge(credentials.privateKey, input.challenge.challenge),
       },
     }
 
   const pairingCode = input.pairingCode
-  if (!isNonBlankString(pairingCode)) return {
+  if (!isNonBlankString(pairingCode))
+    return {
       kind: 'stop',
       error: new RemoteNodeClientError({
         code: RemoteNodeClientErrorCodes.PairingRequired,

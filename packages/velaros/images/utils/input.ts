@@ -12,16 +12,30 @@ import type { ImageViewItem } from '../types/images.js'
  */
 export function viewItems(input: unknown): readonly ImageViewItem[] {
   const files = isPlainObject(input) ? input.files : undefined
-  if (!isArray(files)) throw new AppError('VALIDATION', '缺少 files：view 要 { files: [...] }，每张图一项')
+  if (!isArray(files))
+    throw new AppError('VALIDATION', '缺少 files：view 要 { files: [...] }，每张图一项')
   if (files.length < 1) throw new AppError('VALIDATION', 'files 是空的；至少给一张图')
-  if (files.length > ImageLimits.viewFiles) throw new AppError('VALIDATION', `view 一次最多 ${ImageLimits.viewFiles} 张，这里给了 ${files.length} 张；分几次调用`)
+  if (files.length > ImageLimits.viewFiles)
+    throw new AppError(
+      'VALIDATION',
+      `view 一次最多 ${ImageLimits.viewFiles} 张，这里给了 ${files.length} 张；分几次调用`
+    )
   return files.map((file, index) => {
-    if (!isPlainObject(file) || !isString(file.path) || !file.path.trim()) throw new AppError('VALIDATION', `files[${index}] 要是 { path: 'a.png' } 这样带 path 的对象`)
+    if (!isPlainObject(file) || !isString(file.path) || !file.path.trim())
+      throw new AppError('VALIDATION', `files[${index}] 要是 { path: 'a.png' } 这样带 path 的对象`)
     if (!isPresent(file.region)) return { path: file.path }
     const region = file.region
     const values = isPlainObject(region) ? [region.x, region.y, region.width, region.height] : []
-    if (values.length !== 4 || !values.every((value) => isFiniteNumber(value)) || (values[2] as number) <= 0 || (values[3] as number) <= 0) {
-      throw new AppError('VALIDATION', `files[${index}].region 要 { x, y, width, height }，按原图像素算，宽高是正数`)
+    if (
+      values.length !== 4 ||
+      !values.every((value) => isFiniteNumber(value)) ||
+      (values[2] as number) <= 0 ||
+      (values[3] as number) <= 0
+    ) {
+      throw new AppError(
+        'VALIDATION',
+        `files[${index}].region 要 { x, y, width, height }，按原图像素算，宽高是正数`
+      )
     }
     const [x, y, width, height] = values as number[]
     return { path: file.path, region: { x: x!, y: y!, width: width!, height: height! } }

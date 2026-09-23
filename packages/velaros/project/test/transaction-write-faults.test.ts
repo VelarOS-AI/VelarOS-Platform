@@ -50,7 +50,7 @@ describe('write failures at the filesystem commit boundary', () => {
     })
     try {
       await expect(project.applyEdit({ transactionId: tx.transactionId })).rejects.toThrow(
-        'injected failure',
+        'injected failure'
       )
       expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('before-a')
       expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('before-b')
@@ -107,7 +107,7 @@ describe('write failures at the filesystem commit boundary', () => {
     })
     try {
       await expect(project.rollback({ transactionId: tx.transactionId })).rejects.toThrow(
-        'injected failure',
+        'injected failure'
       )
       expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('after-a')
       expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('after-b')

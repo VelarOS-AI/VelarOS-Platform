@@ -49,9 +49,7 @@ function applyTopLevelPromptCacheProviderOptions(
 
   const promptCacheKey = readVelarosPromptCacheKey(providerOptions)
   const strippedOptions = omitRecordKey(providerOptions, VelarosProviderOptionsKey)
-  let nextOptions = !isEmpty(Object.keys(strippedOptions))
-    ? strippedOptions
-    : undefined
+  let nextOptions = !isEmpty(Object.keys(strippedOptions)) ? strippedOptions : undefined
 
   if (promptCacheKey && !hasExplicitProviderPromptCacheKey(providerOptions)) {
     nextOptions = mergeProviderOptionRecord(nextOptions, OpenAiProviderKey, {
@@ -75,7 +73,7 @@ function applyPromptPromptCacheProviderOptions(
     return nextMessage
   })
 
-  return changed ? nextPrompt as LanguageModelV3CallOptions['prompt'] : prompt
+  return changed ? (nextPrompt as LanguageModelV3CallOptions['prompt']) : prompt
 }
 
 /** 单条消息：剥掉 velaros 断点标记，需要时补上 `anthropic.cacheControl`。 */
@@ -87,9 +85,7 @@ function applyMessagePromptCacheProviderOptions(message: unknown): unknown {
 
   const hasBreakpoint = hasProviderPromptCacheBreakpoint(providerOptions)
   const strippedOptions = removeVelarosPromptCacheBoundaryProviderOptions(providerOptions)
-  let nextProviderOptions = !isEmpty(Object.keys(strippedOptions))
-    ? strippedOptions
-    : undefined
+  let nextProviderOptions = !isEmpty(Object.keys(strippedOptions)) ? strippedOptions : undefined
 
   if (hasBreakpoint && !hasProviderWireCacheControl(providerOptions)) {
     nextProviderOptions = mergeProviderOptionRecord(nextProviderOptions, AnthropicProviderKey, {
@@ -110,10 +106,8 @@ function hasProviderPromptCacheBreakpoint(providerOptions: unknown): boolean {
   if (!isPlainObject(providerOptions)) return false
 
   const velarosOptions = providerOptions[VelarosProviderOptionsKey]
-  if (
-    isPlainObject(velarosOptions) &&
-    isPresent(velarosOptions[PromptCacheBreakpointKey])
-  ) return true
+  if (isPlainObject(velarosOptions) && isPresent(velarosOptions[PromptCacheBreakpointKey]))
+    return true
 
   return hasProviderWireCacheControl(providerOptions)
 }
@@ -123,8 +117,7 @@ function hasProviderWireCacheControl(providerOptions: unknown): boolean {
   if (!isPlainObject(providerOptions)) return false
 
   const providerWireOptions = providerOptions[AnthropicProviderKey]
-  return isPlainObject(providerWireOptions) &&
-    isPresent(providerWireOptions[CacheControlField])
+  return isPlainObject(providerWireOptions) && isPresent(providerWireOptions[CacheControlField])
 }
 
 /** 调用方是不是已经自己写了 `openai.promptCacheKey`。 */
@@ -143,7 +136,8 @@ function removeVelarosPromptCacheBoundaryProviderOptions(
   providerOptions: Record<string, unknown>
 ): Record<string, unknown> {
   const velarosOptions = providerOptions[VelarosProviderOptionsKey]
-  if (!isPlainObject(velarosOptions) || !(PromptCacheBreakpointKey in velarosOptions)) return providerOptions
+  if (!isPlainObject(velarosOptions) || !(PromptCacheBreakpointKey in velarosOptions))
+    return providerOptions
 
   const nextProviderOptions: Record<string, unknown> = { ...providerOptions }
   const nextVelarosOptions = omitRecordKey(velarosOptions, PromptCacheBreakpointKey)
@@ -157,7 +151,9 @@ function removeVelarosPromptCacheBoundaryProviderOptions(
 }
 
 /** 读出 velaros 命名空间里的会话缓存键；空白值按缺席处理。 */
-function readVelarosPromptCacheKey(providerOptions: Record<string, unknown>): LooseOptional<string> {
+function readVelarosPromptCacheKey(
+  providerOptions: Record<string, unknown>
+): LooseOptional<string> {
   const velarosOptions = providerOptions[VelarosProviderOptionsKey]
   if (!isPlainObject(velarosOptions)) return undefined
 
@@ -182,8 +178,9 @@ function mergeProviderOptionRecord(
 }
 
 /** 复制一份去掉某个键的记录。 */
-function omitRecordKey(record: Record<string, unknown>, omittedKey: string): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(record).filter(([key]) => key !== omittedKey)
-  )
+function omitRecordKey(
+  record: Record<string, unknown>,
+  omittedKey: string
+): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(record).filter(([key]) => key !== omittedKey))
 }

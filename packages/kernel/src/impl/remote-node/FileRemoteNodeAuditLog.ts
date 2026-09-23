@@ -60,7 +60,7 @@ export class FileRemoteNodeAuditLog implements RemoteNodeAuditSink {
 
 /** 建一个文件审计落点;`directory` 不存在时首次写入按 0700 自建。 */
 export function createRemoteNodeAuditLog(
-  options: RemoteNodeFileAuditLogOptions,
+  options: RemoteNodeFileAuditLogOptions
 ): RemoteNodeAuditSink {
   return new FileRemoteNodeAuditLog(options)
 }

@@ -32,7 +32,10 @@ class LabDrivers implements LabDriversApi {
 
   private readonly providers = new Map<string, LabDriverProvider>()
 
-  public createPolling(adapter: PollingDriverAdapter, policy: Partial<PollingDriverPolicy> = {}): LabDriver {
+  public createPolling(
+    adapter: PollingDriverAdapter,
+    policy: Partial<PollingDriverPolicy> = {}
+  ): LabDriver {
     const resolved: PollingDriverPolicy = {
       pollMs: AgentLabTuning.driver.pollMs,
       settlePolls: AgentLabTuning.driver.settlePolls,
@@ -48,9 +51,13 @@ class LabDrivers implements LabDriversApi {
     this.providers.set(provider.id, provider)
   }
 
-  public async create(id: string, parameters: Readonly<Record<string, unknown>> = {}): Promise<LabDriver> {
+  public async create(
+    id: string,
+    parameters: Readonly<Record<string, unknown>> = {}
+  ): Promise<LabDriver> {
     const provider = this.providers.get(id)
-    if (!provider) throw new Error(`没有登记过这个驱动: ${id}（已登记: ${this.ids().join(', ') || '无'}）`)
+    if (!provider)
+      throw new Error(`没有登记过这个驱动: ${id}（已登记: ${this.ids().join(', ') || '无'}）`)
     return provider.create(parameters)
   }
 

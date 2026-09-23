@@ -21,7 +21,12 @@ import { ScopeValidator } from './ScopeValidator.js'
 
 export class CoreProjectPlugin implements ProjectPlugin {
   /** 核心 JS/TS adapter 的身份；TypeScript 插件以更高优先级另注册一份。 */
-  private static readonly JsTsAdapterIdentity = Object.freeze({ factoryId: 'jsts.factory', adapterId: 'jsts.adapter', priority: 80, checkId: 'jsts.syntax' })
+  private static readonly JsTsAdapterIdentity = Object.freeze({
+    factoryId: 'jsts.factory',
+    adapterId: 'jsts.adapter',
+    priority: 80,
+    checkId: 'jsts.syntax',
+  })
   /** 核心 JS/TS 补丁策略的身份。 */
   private static readonly JsTsStrategyIdentity = Object.freeze({ id: 'jsts.patch', priority: 90 })
 

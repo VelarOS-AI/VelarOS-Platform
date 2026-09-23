@@ -61,7 +61,7 @@ const runForOutput = (command, args, cwd) => {
   const result = spawnSync(command, args, { cwd, encoding: 'utf8', env: process.env })
   if (result.status !== 0) {
     throw new Error(
-      `${command} ${args.join(' ')} failed with exit code ${result.status}: ${result.stderr.trim()}`,
+      `${command} ${args.join(' ')} failed with exit code ${result.status}: ${result.stderr.trim()}`
     )
   }
   return result.stdout.trim()
@@ -84,11 +84,14 @@ const assertRegistryManifest = (item, tarballPath, workspaceVersions) => {
   const tarballDirectory = path.dirname(tarballPath)
   const tarballName = path.basename(tarballPath)
   const packedManifest = JSON.parse(
-    runForOutput('tar', ['-xOf', tarballName, 'package/package.json'], tarballDirectory),
+    runForOutput('tar', ['-xOf', tarballName, 'package/package.json'], tarballDirectory)
   )
-  if (packedManifest.name !== item.manifest.name || packedManifest.version !== item.manifest.version) {
+  if (
+    packedManifest.name !== item.manifest.name ||
+    packedManifest.version !== item.manifest.version
+  ) {
     throw new Error(
-      `${item.manifest.name} tarball identity is ${packedManifest.name}@${packedManifest.version}, expected ${item.manifest.name}@${item.manifest.version}`,
+      `${item.manifest.name} tarball identity is ${packedManifest.name}@${packedManifest.version}, expected ${item.manifest.name}@${item.manifest.version}`
     )
   }
 
@@ -102,14 +105,14 @@ const assertRegistryManifest = (item, tarballPath, workspaceVersions) => {
       const expected = expectedPackedWorkspaceSpecification(specification, workspaceVersion)
       if (packedManifest[field]?.[dependency] !== expected) {
         throw new Error(
-          `${item.manifest.name} tarball rewrote ${field}.${dependency} to ${packedManifest[field]?.[dependency] ?? '(missing)'}, expected ${expected}`,
+          `${item.manifest.name} tarball rewrote ${field}.${dependency} to ${packedManifest[field]?.[dependency] ?? '(missing)'}, expected ${expected}`
         )
       }
     }
     for (const [dependency, specification] of Object.entries(packedManifest[field] ?? {})) {
       if (typeof specification === 'string' && specification.startsWith('workspace:')) {
         throw new Error(
-          `${item.manifest.name} tarball contains non-installable ${field}.${dependency}=${specification}`,
+          `${item.manifest.name} tarball contains non-installable ${field}.${dependency}=${specification}`
         )
       }
     }
@@ -119,7 +122,7 @@ const assertRegistryManifest = (item, tarballPath, workspaceVersions) => {
 // 全量校验先跑完(声明集 ↔ 磁盘、版本 ↔ bun.lock、平台代、拓扑序),再谈这趟发几节车厢。
 const { rootManifest, platformGeneration, ordered } = await collectReleasePackages(root)
 const workspaceVersions = new Map(
-  ordered.map((item) => [item.manifest.name, item.manifest.version]),
+  ordered.map((item) => [item.manifest.name, item.manifest.version])
 )
 // tag 是发布身份，真实发布只接受显式 --local-tag；--only 只能手动收窄范围。
 // 单包 tag 已经把「发哪个包、发哪个版本」钉死,再让 --only 覆盖它等于让开关推翻身份。
@@ -133,7 +136,7 @@ const selected = selectReleasedPackages(
   ordered,
   // dry-run 沿用当前根版本的完整火车作为模拟身份；真实发布必须显式给出 --local-tag。
   requestedTag,
-  onlySelectors,
+  onlySelectors
 ).packages
 const releaseTag = tagSelection.tag
 
@@ -142,18 +145,19 @@ const sourceSha = runForOutput('git', ['rev-parse', 'HEAD'], root)
 if (!/^[a-f0-9]{40}$/u.test(sourceSha)) {
   throw new Error(`Expected a full source commit SHA, received: ${sourceSha}`)
 }
-const assertLocalIdentity = () => assertLocalReleaseIdentity({
-  root,
-  tag: localTag,
-  repository: rootManifest.repository,
-  expectedSourceSha: sourceSha,
-  runForOutput,
-})
+const assertLocalIdentity = () =>
+  assertLocalReleaseIdentity({
+    root,
+    tag: localTag,
+    repository: rootManifest.repository,
+    expectedSourceSha: sourceSha,
+    runForOutput,
+  })
 if (!dryRun) assertLocalIdentity()
 const workingTreeStatus = runForOutput(
   'git',
   ['status', '--porcelain', '--untracked-files=all'],
-  root,
+  root
 )
 if (workingTreeStatus && !dryRun) {
   throw new Error(`Release artifacts require a clean working tree:\n${workingTreeStatus}`)
@@ -162,18 +166,21 @@ if (!dryRun && !process.env.NODE_AUTH_TOKEN) {
   throw new Error('NODE_AUTH_TOKEN is required to publish packages')
 }
 if (!dryRun && skipBuild) {
-  throw new Error('--skip-build is a dry-run shortcut; a real publish must pack freshly built output')
+  throw new Error(
+    '--skip-build is a dry-run shortcut; a real publish must pack freshly built output'
+  )
 }
 
 console.info(`${dryRun ? 'dry-run' : 'release'} ${releaseTag} from ${sourceSha}`)
-if (!dryRun) console.info('release mode: explicit local tag; full quality gates run before publication')
+if (!dryRun)
+  console.info('release mode: explicit local tag; full quality gates run before publication')
 console.info(`registry: ${ReleaseRegistry}`)
 console.info(`platform generation: ${platformGeneration}`)
 console.info(`validated ${ordered.length} declared packages; publishing ${selected.length}`)
 console.info(`publish order (${selected.length} packages, dependencies first):`)
 selected.forEach((item, index) => {
   console.info(
-    `  ${String(index + 1).padStart(2, ' ')}. ${item.manifest.name}@${item.manifest.version}  (packages/${item.directoryName}, access=${item.manifest.publishConfig.access})`,
+    `  ${String(index + 1).padStart(2, ' ')}. ${item.manifest.name}@${item.manifest.version}  (packages/${item.directoryName}, access=${item.manifest.publishConfig.access})`
   )
 })
 // 收窄了就得说清收窄掉什么、以及被谁收窄:静默的范围缩减看起来和「全都发了」一模一样。
@@ -184,7 +191,7 @@ for (const item of ordered) {
 }
 if (workingTreeStatus && dryRun) {
   console.warn(
-    `! dry-run over a dirty working tree (${workingTreeStatus.split('\n').length} entries); a real publish refuses this`,
+    `! dry-run over a dirty working tree (${workingTreeStatus.split('\n').length} entries); a real publish refuses this`
   )
 }
 if (skipBuild) {
@@ -228,7 +235,7 @@ for (const item of selected) {
     // 从 ui 一个包推广到全部发布包。只断言 dist(声明在 files 里的其它目录未必存在——
     // 例如 workspace 的 files 列了 examples 但磁盘上没有,那是 npm 的合法 no-op,断言它会假红)。
     const tarballEntries = normalizeTarEntryPaths(
-      runForOutput('tar', ['-tzf', tarballs[0]], packDirectory),
+      runForOutput('tar', ['-tzf', tarballs[0]], packDirectory)
     )
     if (!tarballEntries.includes('package/package.json')) {
       throw new Error(`${item.manifest.name} tarball is missing package/package.json`)
@@ -238,8 +245,8 @@ for (const item of selected) {
     // 造出 registry 接受、消费者却因 EUNSUPPORTEDPROTOCOL 无法安装的永久坏版本。
     assertRegistryManifest(item, tarballPath, workspaceVersions)
     if (
-      item.manifest.files?.includes('dist')
-      && !tarballEntries.some((entry) => entry.startsWith('package/dist/'))
+      item.manifest.files?.includes('dist') &&
+      !tarballEntries.some((entry) => entry.startsWith('package/dist/'))
     ) {
       throw new Error(`${item.manifest.name} tarball ships no dist/ output; run the build first`)
     }
@@ -271,7 +278,11 @@ for (const item of selected) {
     ]
     if (dryRun) publishArgs.push('--dry-run')
     if (!dryRun) {
-      if (createHash('sha256').update(await readFile(tarballPath)).digest('hex') !== artifact.sha256) {
+      if (
+        createHash('sha256')
+          .update(await readFile(tarballPath))
+          .digest('hex') !== artifact.sha256
+      ) {
         throw new Error(`${item.manifest.name} tarball changed after validation`)
       }
       if (!dryRun) assertLocalIdentity()
@@ -283,5 +294,5 @@ for (const item of selected) {
 }
 
 console.info(
-  `${dryRun ? '✓ dry-run' : '✓ released'} ${selected.length} of ${ordered.length} declared packages at ${releaseTag}`,
+  `${dryRun ? '✓ dry-run' : '✓ released'} ${selected.length} of ${ordered.length} declared packages at ${releaseTag}`
 )

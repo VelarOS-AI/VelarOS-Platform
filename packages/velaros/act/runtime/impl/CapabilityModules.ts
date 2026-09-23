@@ -15,35 +15,65 @@ export interface CapabilityModulesApi {
 
 class CapabilityModules implements CapabilityModulesApi {
   public create<T extends object>(options: CapabilityModuleOptions<T>): OperationModuleDefinition {
-    const {surface,implementation} = options
-    if (surface.methods.length !== Object.keys(surface.operations).length || new Set(surface.methods).size !== surface.methods.length) throw new Error('领域声明与操作表不一致')
-    const operations:Record<string,OperationDefinition> = Object.create(null)
+    const { surface, implementation } = options
+    if (
+      surface.methods.length !== Object.keys(surface.operations).length ||
+      new Set(surface.methods).size !== surface.methods.length
+    )
+      throw new Error('领域声明与操作表不一致')
+    const operations: Record<string, OperationDefinition> = Object.create(null)
     for (const name of surface.methods) {
       const operation = surface.operations[name]
-      const handler = Reflect.get(implementation,name)
-      if (!operation || !isFunction(handler)) throw new Error(`领域实现缺少 ${surface.specifier}.${name}`)
-      const {hasInput,...descriptor} = operation
+      const handler = Reflect.get(implementation, name)
+      if (!operation || !isFunction(handler))
+        throw new Error(`领域实现缺少 ${surface.specifier}.${name}`)
+      const { hasInput, ...descriptor } = operation
       const reconcile = options.reconcile?.[name as keyof T]
-      const observe=options.observation?.[name as keyof T]
-      operations[name] = {...descriptor,reads: options.reads?.[name as keyof T] ? options.reads[name as keyof T] : undefined,observe: toOptional(observe),reconcile: toOptional(reconcile),run:async(input,call)=>{
-        call.signal.throwIfAborted()
-        let effectRecorded = false
-        try {
-          const context = await options.context({...call,recordEffect:effect=>{effectRecorded=true;call.recordEffect(effect)}})
+      const observe = options.observation?.[name as keyof T]
+      operations[name] = {
+        ...descriptor,
+        reads: options.reads?.[name as keyof T] ? options.reads[name as keyof T] : undefined,
+        observe: toOptional(observe),
+        reconcile: toOptional(reconcile),
+        run: async (input, call) => {
           call.signal.throwIfAborted()
-          const value:unknown = await Reflect.apply(handler,implementation,hasInput ? [input,context] : [context])
-          if (!effectRecorded) call.recordEffect(descriptor.effects === 'none' ? 'none' : 'committed')
-          return normalizeCapabilityValue(value)
-        } catch (error) {
-          if (!effectRecorded && options.withoutEffect?.(error)) call.recordEffect('none')
-          throw error
-        }
-      }}
+          let effectRecorded = false
+          try {
+            const context = await options.context({
+              ...call,
+              recordEffect: (effect) => {
+                effectRecorded = true
+                call.recordEffect(effect)
+              },
+            })
+            call.signal.throwIfAborted()
+            const value: unknown = await Reflect.apply(
+              handler,
+              implementation,
+              hasInput ? [input, context] : [context]
+            )
+            if (!effectRecorded)
+              call.recordEffect(descriptor.effects === 'none' ? 'none' : 'committed')
+            return normalizeCapabilityValue(value)
+          } catch (error) {
+            if (!effectRecorded && options.withoutEffect?.(error)) call.recordEffect('none')
+            throw error
+          }
+        },
+      }
     }
     return {
-      binding:{moduleId:surface.specifier,instanceId:options.instanceId,generation:options.generation ?? 1,schemaRevision:surface.revision},
-      summary:options.summary ?? surface.specifier, surface,operations,
-      activate: options.activate ? ()=>options.activate!() : undefined,dispose: options.dispose ? ()=>options.dispose!() : undefined,
+      binding: {
+        moduleId: surface.specifier,
+        instanceId: options.instanceId,
+        generation: options.generation ?? 1,
+        schemaRevision: surface.revision,
+      },
+      summary: options.summary ?? surface.specifier,
+      surface,
+      operations,
+      activate: options.activate ? () => options.activate!() : undefined,
+      dispose: options.dispose ? () => options.dispose!() : undefined,
     }
   }
 }
@@ -52,6 +82,8 @@ class CapabilityModules implements CapabilityModulesApi {
 export const capabilityModules: CapabilityModulesApi = new CapabilityModules()
 
 /** 对外入口的工厂：宿主挂业务能力时用它，同 `capabilityModules.create`。 */
-export function createCapabilityModule<T extends object>(options: CapabilityModuleOptions<T>): OperationModuleDefinition {
+export function createCapabilityModule<T extends object>(
+  options: CapabilityModuleOptions<T>
+): OperationModuleDefinition {
   return capabilityModules.create(options)
 }

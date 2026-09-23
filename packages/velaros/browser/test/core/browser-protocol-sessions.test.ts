@@ -11,7 +11,9 @@ import { BrowserProtocolSessions } from '../../impl/session/BrowserProtocolSessi
 /** 一条假的通道：记下发出去的命令，能手动推事件、手动断开。 */
 function createChannel() {
   const sent: Array<{ method: string; params: unknown; sessionId: Optional<string> }> = []
-  const eventListeners = new Set<(method: string, params: unknown, sessionId: Optional<string>) => void>()
+  const eventListeners = new Set<
+    (method: string, params: unknown, sessionId: Optional<string>) => void
+  >()
   const closeListeners = new Set<() => void>()
   let closed = 0
   const channel: BrowserProtocolChannel = {
@@ -34,7 +36,8 @@ function createChannel() {
   return {
     channel,
     sent,
-    emit: (method: string, params: unknown, sessionId?: string) => eventListeners.forEach((listener) => listener(method, params, sessionId)),
+    emit: (method: string, params: unknown, sessionId?: string) =>
+      eventListeners.forEach((listener) => listener(method, params, sessionId)),
     drop: () => closeListeners.forEach((listener) => listener()),
     closedTimes: () => closed,
   }
@@ -55,7 +58,9 @@ void describe('模型的 CDP 会话', () => {
     ])
     assert.equal(opened, 1)
     assert.deepEqual(result, { ok: 'DOM.getDocument' })
-    assert.deepEqual(fake.sent, [{ method: 'DOM.getDocument', params: { depth: 1 }, sessionId: undefined }])
+    assert.deepEqual(fake.sent, [
+      { method: 'DOM.getDocument', params: { depth: 1 }, sessionId: undefined },
+    ])
     await sessions.dispose()
   })
 
@@ -68,13 +73,22 @@ void describe('模型的 CDP 会话', () => {
     fake.emit('Page.loadEventFired', {})
     fake.emit('Network.responseReceived', { requestId: 'r1' }, 'child-1')
     const all = await sessions.read('s1', open, {})
-    assert.deepEqual(all.events.map((event) => event.method), ['Network.requestWillBeSent', 'Page.loadEventFired', 'Network.responseReceived'])
+    assert.deepEqual(
+      all.events.map((event) => event.method),
+      ['Network.requestWillBeSent', 'Page.loadEventFired', 'Network.responseReceived']
+    )
     assert.equal(all.last, all.events.at(-1)!.seq)
     assert.equal(all.events.at(-1)!.session, 'child-1')
     const network = await sessions.read('s1', open, { method: 'Network.' })
     assert.equal(network.events.length, 2)
-    const after = await sessions.read('s1', open, { method: 'Network.responseReceived', after: all.events[0]!.seq })
-    assert.deepEqual(after.events.map((event) => event.params), [{ requestId: 'r1' }])
+    const after = await sessions.read('s1', open, {
+      method: 'Network.responseReceived',
+      after: all.events[0]!.seq,
+    })
+    assert.deepEqual(
+      after.events.map((event) => event.params),
+      [{ requestId: 'r1' }]
+    )
     await sessions.dispose()
   })
 
@@ -83,7 +97,8 @@ void describe('模型的 CDP 会话', () => {
     const fake = createChannel()
     const open = async () => fake.channel
     await sessions.read('s1', open, {})
-    for (let index = 0; index < BrowserProtocolLimits.bufferedEvents + 3; index += 1) fake.emit('Log.entryAdded', { index })
+    for (let index = 0; index < BrowserProtocolLimits.bufferedEvents + 3; index += 1)
+      fake.emit('Log.entryAdded', { index })
     const read = await sessions.read('s1', open, {})
     assert.equal(read.events.length, BrowserProtocolLimits.bufferedEvents)
     assert.equal(read.dropped, 3)
@@ -96,16 +111,27 @@ void describe('模型的 CDP 会话', () => {
     const fake = createChannel()
     const open = async () => fake.channel
     await sessions.read('s1', open, {})
-    fake.emit('Fetch.requestPaused', { requestId: 'kept', request: { url: 'https://example.test/api/a' } })
-    fake.emit('Fetch.requestPaused', { requestId: 'released', request: { url: 'https://example.test/api/b' } })
-    await sessions.send('s1', open, { method: 'Fetch.continueRequest', params: { requestId: 'released' } })
+    fake.emit('Fetch.requestPaused', {
+      requestId: 'kept',
+      request: { url: 'https://example.test/api/a' },
+    })
+    fake.emit('Fetch.requestPaused', {
+      requestId: 'released',
+      request: { url: 'https://example.test/api/b' },
+    })
+    await sessions.send('s1', open, {
+      method: 'Fetch.continueRequest',
+      params: { requestId: 'released' },
+    })
     setSystemTime(new Date(Date.now() + BrowserProtocolLimits.autoContinueMs + 1_000))
     try {
       await new Promise((resolve) => setTimeout(resolve, 1_300))
     } finally {
       setSystemTime()
     }
-    const continued = fake.sent.filter((command) => command.method === 'Fetch.continueRequest').map((command) => (command.params as { requestId: string }).requestId)
+    const continued = fake.sent
+      .filter((command) => command.method === 'Fetch.continueRequest')
+      .map((command) => (command.params as { requestId: string }).requestId)
     assert.deepEqual(continued, ['released', 'kept'])
     const note = (await sessions.read('s1', open, { method: 'Velar.requestAutoContinued' })).events
     assert.equal(note.length, 1)
@@ -122,7 +148,10 @@ void describe('模型的 CDP 会话', () => {
     await sessions.read('s1', open, {})
     first.drop()
     await sessions.send('s1', open, { method: 'Page.enable' })
-    assert.deepEqual(second.sent.map((command) => command.method), ['Page.enable'])
+    assert.deepEqual(
+      second.sent.map((command) => command.method),
+      ['Page.enable']
+    )
     await sessions.close('s1')
     assert.equal(second.closedTimes(), 1)
     await sessions.dispose()

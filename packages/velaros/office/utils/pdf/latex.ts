@@ -2,7 +2,11 @@
 
 import { extname } from 'node:path'
 
-import type { LatexCompiler, OfficeEnvironmentCommandAvailability, OfficeNativeCommand } from '../../types/office.js'
+import type {
+  LatexCompiler,
+  OfficeEnvironmentCommandAvailability,
+  OfficeNativeCommand,
+} from '../../types/office.js'
 import { OfficeTuning } from '../tuning.js'
 
 /** 未显式指定 sourcePath 时，默认把输出 PDF 同名路径改成 .tex。 */
@@ -40,44 +44,34 @@ export function buildLatexCompileCommands(input: {
 
   switch (input.compiler.name) {
     case 'tectonic':
-      return [
-        { file, args: [
-          '--keep-logs',
-          '--keep-intermediates',
-          '--outdir',
-          output,
-          source,
-        ] },
-      ]
+      return [{ file, args: ['--keep-logs', '--keep-intermediates', '--outdir', output, source] }]
     case 'latexmk':
       return [
-        { file, args: [
-          '-pdf',
-          '-interaction=nonstopmode',
-          '-halt-on-error',
-          `-outdir=${output}`,
-          source,
-        ] },
+        {
+          file,
+          args: ['-pdf', '-interaction=nonstopmode', '-halt-on-error', `-outdir=${output}`, source],
+        },
       ]
     case 'xelatex':
     case 'pdflatex': {
       const runCount = input.runs ?? OfficeTuning.pdf.latexRuns
-      const command: OfficeNativeCommand = { file, args: [
-        '-interaction=nonstopmode',
-        '-halt-on-error',
-        `-output-directory=${output}`,
-        source,
-      ] }
+      const command: OfficeNativeCommand = {
+        file,
+        args: ['-interaction=nonstopmode', '-halt-on-error', `-output-directory=${output}`, source],
+      }
       return Array.from({ length: runCount }, () => command)
     }
     default:
       return [
-        { file, args: [
-          '-interaction=nonstopmode',
-          '-halt-on-error',
-          `-output-directory=${output}`,
-          source,
-        ] },
+        {
+          file,
+          args: [
+            '-interaction=nonstopmode',
+            '-halt-on-error',
+            `-output-directory=${output}`,
+            source,
+          ],
+        },
       ]
   }
 }

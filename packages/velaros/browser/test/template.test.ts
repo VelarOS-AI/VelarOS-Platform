@@ -11,7 +11,9 @@ import { browserSpace, createHarness, runModelProgram } from '../spec/support.js
 describe('代码模版', () => {
   test('velaros:browser：每个函数照写法跑通', async () => {
     const harness = createHarness({ open: false })
-    const outcome = await runModelProgram(browserSpace(harness), `${VelarBrowserModule.template}
+    const outcome = await runModelProgram(
+      browserSpace(harness),
+      `${VelarBrowserModule.template}
 export const looked = await look()
 export const rows = await readRows()
 export const searched = await search()
@@ -22,7 +24,9 @@ export const dragged = await dragHandle()
 export const selected = await shiftSelect()
 export const framed = await readFrame()
 export const downloaded = await saveDownload()
-`, 120_000)
+`,
+      120_000
+    )
     expect(outcome.failed).toBeUndefined()
     const values = outcome.value as Record<string, any>
     expect(values.looked).toMatchObject({ title: 'Example Domain', headings: ['Example Domain'] })
@@ -38,45 +42,80 @@ export const downloaded = await saveDownload()
     expect(values.downloaded).toEqual({ saved: true, path: 'downloads/report.pdf' })
 
     // fill 走真实输入：页面里全选、宿主插入文字、再读一次控件状态；下拉框的值经 args 传进页面脚本，没有拼进源码。
-    const actions = harness.calls.filter((call) => call.method === 'performTargetAction').map((call) => (call.args[0] as { action: string }).action)
+    const actions = harness.calls
+      .filter((call) => call.method === 'performTargetAction')
+      .map((call) => (call.args[0] as { action: string }).action)
     expect(actions).toEqual(expect.arrayContaining(['select_all', 'focus', 'click']))
-    expect(harness.calls.filter((call) => call.method === 'insertText').map((call) => (call.args[0] as { text: string }).text)).toEqual(['velaros', 'user@example.com'])
-    const selectScript = harness.calls.find((call) => call.method === 'evaluateScript' && (call.args[0] as { script: string }).script.includes('select[name=country]'))
+    expect(
+      harness.calls
+        .filter((call) => call.method === 'insertText')
+        .map((call) => (call.args[0] as { text: string }).text)
+    ).toEqual(['velaros', 'user@example.com'])
+    const selectScript = harness.calls.find(
+      (call) =>
+        call.method === 'evaluateScript' &&
+        (call.args[0] as { script: string }).script.includes('select[name=country]')
+    )
     expect((selectScript!.args[0] as { args: unknown[] }).args).toEqual(['CN'])
-    expect(harness.methods()).toEqual(expect.arrayContaining(['pressKey', 'keyDown', 'keyUp', 'mouseDown', 'mouseUp', 'listFrames']))
+    expect(harness.methods()).toEqual(
+      expect.arrayContaining(['pressKey', 'keyDown', 'keyUp', 'mouseDown', 'mouseUp', 'listFrames'])
+    )
   }, 180_000)
 
   test('velaros:devtools：每个函数照写法跑通', async () => {
     const harness = createHarness()
-    const outcome = await runModelProgram(browserSpace(harness), `${VelarDevtoolsModule.template}
+    const outcome = await runModelProgram(
+      browserSpace(harness),
+      `${VelarDevtoolsModule.template}
 export const errors = await consoleErrors()
 export const failures = await failedRequests()
 export const load = await measureLoad()
 export const mocked = await mockApi()
 export const recorded = await record()
 export const script = await hidePopup()
-`, 120_000)
+`,
+      120_000
+    )
     expect(outcome.failed).toBeUndefined()
     const values = outcome.value as Record<string, any>
-    expect(values.errors).toEqual([{ level: 'error', message: 'TypeError: boom', url: 'https://example.com/' }])
-    expect(values.failures).toEqual({ failures: 1, first: { status: 500, body: '{"error":"boom"}' } })
-    expect(values.load).toEqual({ metrics: 'NAVIGATION_0: LCP 258 ms, CLS 0.00', lcp: 'LCP 分解：TTFB 40 ms' })
+    expect(values.errors).toEqual([
+      { level: 'error', message: 'TypeError: boom', url: 'https://example.com/' },
+    ])
+    expect(values.failures).toEqual({
+      failures: 1,
+      first: { status: 500, body: '{"error":"boom"}' },
+    })
+    expect(values.load).toEqual({
+      metrics: 'NAVIGATION_0: LCP 258 ms, CLS 0.00',
+      lcp: 'LCP 分解：TTFB 40 ms',
+    })
     expect(values.mocked).toContain('500')
     expect(values.recorded).toEqual({ path: 'artifacts/recordings/checkout-flow.gif', frames: 12 })
     expect(values.script).toEqual({ id: 'script-1', enabled: false })
-    expect(harness.methods()).toEqual(expect.arrayContaining(['configureNetwork', 'startScreencast', 'stopScreencast', 'manageUserScripts']))
+    expect(harness.methods()).toEqual(
+      expect.arrayContaining([
+        'configureNetwork',
+        'startScreencast',
+        'stopScreencast',
+        'manageUserScripts',
+      ])
+    )
   }, 180_000)
 
   test('velaros:cdp：每个函数照写法跑通', async () => {
     const harness = createHarness()
-    const outcome = await runModelProgram(browserSpace(harness), `${VelarCdpModule.template}
+    const outcome = await runModelProgram(
+      browserSpace(harness),
+      `${VelarCdpModule.template}
 export const dark = await mobileDark()
 export const cookies = await cookieNames()
 export const requests = await requestsDuring()
 export const faked = await fakeResponse()
 export const injected = await beforePageScripts()
 export const undone = await undoAll()
-`, 120_000)
+`,
+      120_000
+    )
     expect(outcome.failed).toBeUndefined()
     const values = outcome.value as Record<string, any>
     expect(values.dark).toBe('手机尺寸与深色已设好')
@@ -85,8 +124,18 @@ export const undone = await undoAll()
     expect(values.faked).toBe('https://example.com/api/profile')
     expect(values.injected).toBe('script-1')
     expect(values.undone).toContain('会话已断开')
-    const sent = harness.calls.filter((call) => call.method === 'sendProtocolCommand').map((call) => (call.args[0] as { method: string }).method)
-    expect(sent).toEqual(expect.arrayContaining(['Emulation.setDeviceMetricsOverride', 'Network.getCookies', 'Fetch.enable', 'Fetch.fulfillRequest', 'Fetch.disable']))
+    const sent = harness.calls
+      .filter((call) => call.method === 'sendProtocolCommand')
+      .map((call) => (call.args[0] as { method: string }).method)
+    expect(sent).toEqual(
+      expect.arrayContaining([
+        'Emulation.setDeviceMetricsOverride',
+        'Network.getCookies',
+        'Fetch.enable',
+        'Fetch.fulfillRequest',
+        'Fetch.disable',
+      ])
+    )
     expect(harness.methods()).toContain('resetProtocolSession')
   }, 180_000)
 })

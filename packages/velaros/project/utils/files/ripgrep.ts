@@ -1,6 +1,10 @@
 import { isEmpty, isFalse, isNumber, isTrue, optionalWhen } from '@velaros-ai/core'
 
-import type { RgMessage, RipgrepSearchContext, RipgrepSearchResult } from '../../types/file-store.js'
+import type {
+  RgMessage,
+  RipgrepSearchContext,
+  RipgrepSearchResult,
+} from '../../types/file-store.js'
 import type { SearchHit } from '../../types/io.js'
 import { snippetWindow } from '../search-snippet.js'
 import { ProjectTuning } from '../tuning.js'
@@ -37,7 +41,11 @@ function buildRipgrepTimeoutDiagnostic(timeoutMs: number): string {
 }
 
 /** 解析 `rg --json` 的输出：只取 match 行，列号从 UTF-8 字节位置换算成 UTF-16 坐标，片段以命中为中心取到可调的字符数，满 maxResults 即止。 */
-export function parseRipgrepJsonLines(stdout: string, maxResults: number, filterPath?: (path: string) => boolean): SearchHit[] {
+export function parseRipgrepJsonLines(
+  stdout: string,
+  maxResults: number,
+  filterPath?: (path: string) => boolean
+): SearchHit[] {
   const hits: SearchHit[] = []
   for (const line of stdout.split(/\r?\n/)) {
     if (!line.trim() || hits.length >= maxResults) break
@@ -69,7 +77,12 @@ export function parseRipgrepJsonLines(stdout: string, maxResults: number, filter
     }
 
     // rg --json 交的是整行：片段以命中为中心取，长行（压缩过的脚本这类）里的命中也看得见。
-    const snippet = snippetWindow((lineText ?? '').replace(/\r?\n$/, ''), startCol - 1, endCol - 1, ProjectTuning.ripgrep.snippetChars)
+    const snippet = snippetWindow(
+      (lineText ?? '').replace(/\r?\n$/, ''),
+      startCol - 1,
+      endCol - 1,
+      ProjectTuning.ripgrep.snippetChars
+    )
     hits.push({
       path,
       revision: '',
@@ -95,7 +108,16 @@ export function parseRipgrepJsonLines(stdout: string, maxResults: number, filter
  */
 export async function searchWithRipgrep(ctx: RipgrepSearchContext): Promise<RipgrepSearchResult> {
   const maxResults = Math.min(Math.max(1, ctx.maxResults), ProjectTuning.ripgrep.maxResults)
-  const args: string[] = ['--json', '--max-columns', String(ProjectTuning.ripgrep.snippetChars), '--threads', String(ProjectTuning.ripgrep.threads), '--hidden', '--max-filesize', String(ctx.policy.maxSearchFileSizeBytes)]
+  const args: string[] = [
+    '--json',
+    '--max-columns',
+    String(ProjectTuning.ripgrep.snippetChars),
+    '--threads',
+    String(ProjectTuning.ripgrep.threads),
+    '--hidden',
+    '--max-filesize',
+    String(ctx.policy.maxSearchFileSizeBytes),
+  ]
   if (isFalse(ctx.excludeGitignored)) args.push('--no-ignore')
 
   for (const g of normalizeGlobList(ctx.include ?? [])) {
@@ -144,7 +166,11 @@ export async function searchWithRipgrep(ctx: RipgrepSearchContext): Promise<Ripg
     const hits = parseRipgrepJsonLines(result.stdout, maxResults, ctx.filterPath)
     const diagnostics = [
       ...(timedOut ? [buildRipgrepTimeoutDiagnostic(ctx.policy.ripgrepTimeoutMs)] : []),
-      ...(truncated ? ['ripgrep 输出达到宿主缓冲上限，当前结果可能不完整；请缩小搜索范围或增加命中条件后继续检索。'] : []),
+      ...(truncated
+        ? [
+            'ripgrep 输出达到宿主缓冲上限，当前结果可能不完整；请缩小搜索范围或增加命中条件后继续检索。',
+          ]
+        : []),
     ]
     return {
       hits: hits.length <= maxResults ? hits : hits.slice(0, maxResults),

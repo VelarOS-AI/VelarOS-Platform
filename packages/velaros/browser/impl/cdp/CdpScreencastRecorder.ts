@@ -3,7 +3,13 @@
 import { isEmpty, isFalse, isNumber, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { CdpScreencastConsumerOptions, CdpScreencastFrameEvent, CdpScreencastStartOptions, CdpTraceTransport, ScreencastCapturedFrame } from '../../types/cdp.js'
+import type {
+  CdpScreencastConsumerOptions,
+  CdpScreencastFrameEvent,
+  CdpScreencastStartOptions,
+  CdpTraceTransport,
+  ScreencastCapturedFrame,
+} from '../../types/cdp.js'
 import { BrowserTuning } from '../../utils/tuning'
 
 /** 录屏的缺省参数：帧的最大宽高、每隔几帧取一帧、最多攒多少帧。 */
@@ -113,11 +119,9 @@ export class CdpScreencastRecorder implements CdpScreencastRecorderApi {
     const sessionId = params?.sessionId
     // 每帧必须 ack，否则浏览器停发后续帧;帧限已到也要 ack 走完协议。
     if (isNumber(sessionId)) {
-      await this.transport
-        .send('Page.screencastFrameAck', { sessionId })
-        .catch(() => {
-          // arch-guard:silent-catch-ok 会话关闭时 ack 可能失败；当前帧仍可安全丢弃或消费。
-        })
+      await this.transport.send('Page.screencastFrameAck', { sessionId }).catch(() => {
+        // arch-guard:silent-catch-ok 会话关闭时 ack 可能失败；当前帧仍可安全丢弃或消费。
+      })
     }
 
     if (!this.running || this.frameLimitReached) return
@@ -157,4 +161,3 @@ export class CdpScreencastRecorder implements CdpScreencastRecorderApi {
 /* ------------------------------------------------------------------ *
  * GIF 合成
  * ------------------------------------------------------------------ */
-

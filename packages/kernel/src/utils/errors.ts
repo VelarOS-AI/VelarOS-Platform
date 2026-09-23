@@ -13,7 +13,6 @@ import type { KernelErrorDetails, KernelUpdaterErrorDetails } from '../types/run
 
 import type { RemoteNodeError } from './wire/remote-node'
 
-
 /**
  * 内核侧的统一失败：模块宿主、能力调用、服务面、mod 目录都抛它。
  *
@@ -31,7 +30,7 @@ export class KernelError extends Error {
     code: KernelErrorCode | KernelCallErrorCode,
     message: string,
     details: KernelErrorDetails = {},
-    options?: ErrorOptions,
+    options?: ErrorOptions
   ) {
     super(message, options)
     this.name = 'KernelError'
@@ -103,7 +102,7 @@ export class KernelUpdaterError extends Error {
     code: KernelUpdaterErrorCode,
     message: string,
     details: KernelUpdaterErrorDetails = {},
-    options?: ErrorOptions,
+    options?: ErrorOptions
   ) {
     super(message, options)
     this.name = 'KernelUpdaterError'
@@ -173,16 +172,13 @@ export function toError(error: unknown): Error {
  *
  * 码是 OPERATION_NOT_FOUND；外面按码判断，不要按文字判断。
  */
-export function unknownOperationFailure(
-  capabilityId?: string,
-  operation?: string,
-): KernelError {
+export function unknownOperationFailure(capabilityId?: string, operation?: string): KernelError {
   return new KernelError(
     KernelCallErrorCodes.operationNotFound,
     isUndefined(capabilityId) || isUndefined(operation)
       ? '该 Kernel 能力没有登记这个操作，已在求权限之前拒绝。'
       : `Kernel 能力 "${capabilityId}" 没有登记操作 "${operation}"，已在求权限之前拒绝。`,
-    { capabilityId, operation },
+    { capabilityId, operation }
   )
 }
 
@@ -194,13 +190,13 @@ export function unknownOperationFailure(
  */
 export function capabilityUnavailableFailure(
   capabilityId: string,
-  options?: ErrorOptions,
+  options?: ErrorOptions
 ): KernelError {
   return new KernelError(
     KernelCallErrorCodes.capabilityNotFound,
     `Kernel 能力 "${capabilityId}" 当前没有活动的提供方`,
     { capabilityId },
-    options,
+    options
   )
 }
 
@@ -209,7 +205,7 @@ export function capabilityNotCallableFailure(capabilityId: string): KernelError 
   return new KernelError(
     KernelCallErrorCodes.capabilityNotCallable,
     `Kernel 能力 "${capabilityId}" 不是可调用能力`,
-    { capabilityId },
+    { capabilityId }
   )
 }
 
@@ -217,13 +213,13 @@ export function capabilityNotCallableFailure(capabilityId: string): KernelError 
 export function operationMetadataFailure(
   capabilityId: string,
   operation: string,
-  options?: ErrorOptions,
+  options?: ErrorOptions
 ): KernelError {
   return new KernelError(
     KernelCallErrorCodes.operationMetadataFailed,
     '取不到 Kernel 能力的操作元数据',
     { capabilityId, operation },
-    options,
+    options
   )
 }
 
@@ -234,24 +230,20 @@ export function permissionDeniedFailure(input: {
   readonly permission: string
   readonly reason: string
 }): KernelError {
-  return new KernelError(
-    KernelCallErrorCodes.permissionDenied,
-    input.reason,
-    input,
-  )
+  return new KernelError(KernelCallErrorCodes.permissionDenied, input.reason, input)
 }
 
 /** 授权判定自己出错，没能给出结论；码 PERMISSION_CHECK_FAILED。 */
 export function permissionCheckFailure(
   capabilityId: string,
   operation: string,
-  options?: ErrorOptions,
+  options?: ErrorOptions
 ): KernelError {
   return new KernelError(
     KernelCallErrorCodes.permissionCheckFailed,
     '判不出 Kernel 能力调用的授权结果',
     { capabilityId, operation },
-    options,
+    options
   )
 }
 
@@ -270,14 +262,14 @@ export function startupFailure(input: {
       phase: input.phase,
       rollbackErrors: input.rollbackErrors,
     },
-    { cause: input.cause },
+    { cause: input.cause }
   )
 }
 
 /** 批量挂起或释放时有模块失败：逐个列出是谁失败的，码统一是 MODULE_STATE。 */
 export function lifecycleFailure(
   operationKind: 'suspend' | 'dispose',
-  failures: ReadonlyArray<{ readonly moduleId: string; readonly error: Error }>,
+  failures: ReadonlyArray<{ readonly moduleId: string; readonly error: Error }>
 ): KernelError {
   return new KernelError(
     KernelErrorCodes.moduleState,
@@ -286,16 +278,13 @@ export function lifecycleFailure(
       operationKind,
       failures,
       relatedModuleIds: failures.map((failure) => failure.moduleId),
-    },
+    }
   )
 }
 
 /** 服务面还没启动（或已经启动失败）：码 KERNEL_NOT_STARTED，这是可重试的状态。 */
 export function notStartedFailure(): KernelError {
-  return new KernelError(
-    KernelErrorCodes.kernelNotStarted,
-    'Kernel 服务面还没启动',
-  )
+  return new KernelError(KernelErrorCodes.kernelNotStarted, 'Kernel 服务面还没启动')
 }
 
 /** 之前已经启动失败过：码 KERNEL_START_FAILED，不是可重试的状态，要换一个新的 host / service。 */
@@ -304,7 +293,7 @@ export function startFailedFailure(cause: unknown): KernelError {
     KernelErrorCodes.kernelStartFailed,
     'Kernel 服务面已经启动失败过，不会重试；请重建 Kernel 再启动',
     {},
-    { cause },
+    { cause }
   )
 }
 

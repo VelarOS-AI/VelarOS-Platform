@@ -127,9 +127,15 @@ export class LocalShellHost implements LocalShellHostApi {
     this.workingDirectory = root
     const confinement: NonNullable<LocalShellHostOptions['processConfinement']> =
       options.processConfinement ?? { mode: 'danger-full-access', workspaceRoot: root }
-    this.observationCommands=new ShellCommandRunner({environment:options.environment,platform:this.hostPlatform,platformTools:this.platformTools,
-      confinement:{mode:'read-only',workspaceRoot:root,network:false},confinementProvider:options.confinementProvider,
-      shells:this.shells,processes:shellProcessManager})
+    this.observationCommands = new ShellCommandRunner({
+      environment: options.environment,
+      platform: this.hostPlatform,
+      platformTools: this.platformTools,
+      confinement: { mode: 'read-only', workspaceRoot: root, network: false },
+      confinementProvider: options.confinementProvider,
+      shells: this.shells,
+      processes: shellProcessManager,
+    })
     this.commands = new ShellCommandRunner({
       environment: options.environment,
       platform: this.hostPlatform,
@@ -148,7 +154,9 @@ export class LocalShellHost implements LocalShellHostApi {
 
   public async inspectEnvironment(commands: string[] = []): Promise<ShellEnvironmentInspection> {
     const shell = await this.resolveShell()
-    const commandAvailability = await Promise.all(commands.map((name) => this.shells.resolveCommand(name, shell)))
+    const commandAvailability = await Promise.all(
+      commands.map((name) => this.shells.resolveCommand(name, shell))
+    )
 
     return {
       os: {
@@ -160,8 +168,11 @@ export class LocalShellHost implements LocalShellHostApi {
       shells: this.detectShells(shell.env),
       shell: {
         path: shell.shellPath,
-        kind: shell.kind, name: shell.name, readiness: shell.readiness,
-        version: shell.version, recommendation: shell.recommendation,
+        kind: shell.kind,
+        name: shell.name,
+        readiness: shell.readiness,
+        version: shell.version,
+        recommendation: shell.recommendation,
         variableCount: Object.keys(shell.env).length,
         pathEntries: this.platformTools.getPathEntries(shell.env),
       },
@@ -175,17 +186,31 @@ export class LocalShellHost implements LocalShellHostApi {
     const [oneMinute, fiveMinutes, fifteenMinutes] = loadavg()
     const cpuCoreCount = Math.max(cpus().length, 1)
     const [cpuUsagePercent, diskStats, swapStats, topProcesses] = await Promise.all([
-      this.readPlatformStat(this.platformTools.getCpuUsageCommandSpec(), parseCpuUsagePercent, 'CPU usage'),
-      this.readPlatformStat(this.platformTools.getDiskStatsCommandSpec(), parseDiskStats, 'disk stats'),
-      this.readPlatformStat(this.platformTools.getSwapStatsCommandSpec(), parseSwapStats, 'swap stats'),
+      this.readPlatformStat(
+        this.platformTools.getCpuUsageCommandSpec(),
+        parseCpuUsagePercent,
+        'CPU usage'
+      ),
+      this.readPlatformStat(
+        this.platformTools.getDiskStatsCommandSpec(),
+        parseDiskStats,
+        'disk stats'
+      ),
+      this.readPlatformStat(
+        this.platformTools.getSwapStatsCommandSpec(),
+        parseSwapStats,
+        'swap stats'
+      ),
       this.listProcesses({ limit: ShellTuning.systemInfo.topProcesses }),
     ])
-    const swapUsagePercent = swapStats && swapStats.totalBytes > 0
-      ? (swapStats.usedBytes / swapStats.totalBytes) * 100
-      : null
-    const diskUsagePercent = diskStats && diskStats.totalBytes > 0
-      ? (diskStats.usedBytes / diskStats.totalBytes) * 100
-      : null
+    const swapUsagePercent =
+      swapStats && swapStats.totalBytes > 0
+        ? (swapStats.usedBytes / swapStats.totalBytes) * 100
+        : null
+    const diskUsagePercent =
+      diskStats && diskStats.totalBytes > 0
+        ? (diskStats.usedBytes / diskStats.totalBytes) * 100
+        : null
 
     return {
       sampledAt: Date.now(),
@@ -203,7 +228,10 @@ export class LocalShellHost implements LocalShellHostApi {
       loadAverage: { oneMinute, fiveMinutes, fifteenMinutes },
       levels: {
         cpu: metricLevel(cpuUsagePercent, ShellTuning.systemInfo.levels.cpu),
-        memory: metricLevel(totalMemory > 0 ? (usedMemory / totalMemory) * 100 : 0, ShellTuning.systemInfo.levels.memory),
+        memory: metricLevel(
+          totalMemory > 0 ? (usedMemory / totalMemory) * 100 : 0,
+          ShellTuning.systemInfo.levels.memory
+        ),
         swap: metricLevel(swapUsagePercent, ShellTuning.systemInfo.levels.swap),
         disk: metricLevel(diskUsagePercent, ShellTuning.systemInfo.levels.disk),
         load: metricLevel((oneMinute / cpuCoreCount) * 100, ShellTuning.systemInfo.levels.load),
@@ -212,7 +240,9 @@ export class LocalShellHost implements LocalShellHostApi {
     }
   }
 
-  public async listProcesses(options: SystemProcessQueryOptions = {}): Promise<SystemProcessInfo[]> {
+  public async listProcesses(
+    options: SystemProcessQueryOptions = {}
+  ): Promise<SystemProcessInfo[]> {
     const commandSpec = this.platformTools.getProcessListCommandSpec()
     if (!commandSpec) return []
 
@@ -220,7 +250,9 @@ export class LocalShellHost implements LocalShellHostApi {
     return selectProcesses(parseProcessRows(output.stdout, this.hostPlatform), options)
   }
 
-  public async listOpenPorts(options: SystemOpenPortQueryOptions = {}): Promise<SystemOpenPortInfo[]> {
+  public async listOpenPorts(
+    options: SystemOpenPortQueryOptions = {}
+  ): Promise<SystemOpenPortInfo[]> {
     const commandSpec = this.platformTools.getOpenPortInspectionCommandSpec()
     if (!commandSpec) return []
 
@@ -230,14 +262,22 @@ export class LocalShellHost implements LocalShellHostApi {
     const owners = isEmpty(pids)
       ? []
       : await this.listProcesses({ pids, includeCwd: !!options.includeCwd, limit: pids.length })
-    return selectOpenPorts(entries, new Map(owners.map((processInfo) => [processInfo.pid, processInfo])), options)
+    return selectOpenPorts(
+      entries,
+      new Map(owners.map((processInfo) => [processInfo.pid, processInfo])),
+      options
+    )
   }
 
-  public async listBackgroundTasks(options: ShellBackgroundTaskQueryOptions = {}): Promise<ShellBackgroundTaskRecord[]> {
+  public async listBackgroundTasks(
+    options: ShellBackgroundTaskQueryOptions = {}
+  ): Promise<ShellBackgroundTaskRecord[]> {
     return this.commands.listTasks(options)
   }
 
-  public terminateBackgroundTask(request: ShellTaskTerminateRequest): Promise<ShellTaskTerminateReport> {
+  public terminateBackgroundTask(
+    request: ShellTaskTerminateRequest
+  ): Promise<ShellTaskTerminateReport> {
     return this.commands.terminateTask(request)
   }
 
@@ -249,7 +289,9 @@ export class LocalShellHost implements LocalShellHostApi {
     return this.commands.readConsoleOutput(request)
   }
 
-  public interruptConsole(request: ShellConsoleInterruptRequest): Promise<ShellConsoleControlResult> {
+  public interruptConsole(
+    request: ShellConsoleInterruptRequest
+  ): Promise<ShellConsoleControlResult> {
     return this.commands.interruptConsole(request)
   }
 
@@ -261,7 +303,8 @@ export class LocalShellHost implements LocalShellHostApi {
       revision = String(this.environment.getRevision())
     } else {
       const refreshed = await this.shells.refreshWindowsEnvironment(process.env, this.hostPlatform)
-      if (this.hostPlatform === 'win32' && refreshed.refreshed) replaceEnvironment(process.env, refreshed.env)
+      if (this.hostPlatform === 'win32' && refreshed.refreshed)
+        replaceEnvironment(process.env, refreshed.env)
       revision = refreshed.revision
       reason = refreshed.reason
     }
@@ -287,23 +330,40 @@ export class LocalShellHost implements LocalShellHostApi {
     return this.commands.run(command, this.resolvePath(options.cwd), options, abortSignal)
   }
 
-  public runObservationCommand(command:string,options:ShellRunCommandOptions={},abortSignal?:AbortSignal):Promise<ShellCommandResult> {
-    return this.observationCommands.run(command,this.resolvePath(options.cwd),{...options,background:false,interactive:false},abortSignal)
+  public runObservationCommand(
+    command: string,
+    options: ShellRunCommandOptions = {},
+    abortSignal?: AbortSignal
+  ): Promise<ShellCommandResult> {
+    return this.observationCommands.run(
+      command,
+      this.resolvePath(options.cwd),
+      { ...options, background: false, interactive: false },
+      abortSignal
+    )
   }
 
   public resolvePath(path?: string): string {
     const given = path ?? this.workingDirectory
-    const expanded = given === '~' ? this.homeDir : /^~[\\/]/.test(given) ? join(this.homeDir, given.slice(2)) : given
+    const expanded =
+      given === '~'
+        ? this.homeDir
+        : /^~[\\/]/.test(given)
+          ? join(this.homeDir, given.slice(2))
+          : given
     return isAbsolute(expanded) ? resolve(expanded) : resolve(this.workingDirectory, expanded)
   }
 
   public async dispose(): Promise<void> {
-    await Promise.all([this.commands.dispose(),this.observationCommands.dispose()])
+    await Promise.all([this.commands.dispose(), this.observationCommands.dispose()])
   }
 
   /** 选出本机经过自检、真能工作的 shell。 */
   private resolveShell(): Promise<ResolvedShell> {
-    return this.environment?.resolveShell() ?? this.shells.resolveReady({ platform: this.hostPlatform, env: process.env })
+    return (
+      this.environment?.resolveShell() ??
+      this.shells.resolveReady({ platform: this.hostPlatform, env: process.env })
+    )
   }
 
   /** 本机可用的 shell 清单，按挑选优先顺序，第一个就是默认的那个；只查文件不试跑，所以每回合报告都付得起。 */

@@ -19,14 +19,16 @@ describe('Project capability', () => {
       expect((await project.read({ path: 'note.txt' })).content).toBe('before\n')
 
       const transaction = await project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'replace_text',
-            path: 'note.txt',
-            oldText: 'before',
-            newText: 'after',
+        operations: [
+          {
+            operation: {
+              type: 'replace_text',
+              path: 'note.txt',
+              oldText: 'before',
+              newText: 'after',
+            },
           },
-        }],
+        ],
       })
       await project.applyEdit({ transactionId: transaction.transactionId })
       expect(await readFile(join(root, 'note.txt'), 'utf8')).toBe('after\n')
@@ -114,23 +116,50 @@ describe('Project capability', () => {
         range: { startLine: 1, startColumn: 4, endLine: 1, endColumn: 7 },
       })
       expect(selected.content).toBe('def')
-      expect(selected.range).toMatchObject({ startLine: 1, startColumn: 4, endLine: 1, endColumn: 7 })
-      await expect(project.read({
-        path: 'long.txt',
-        range: { startLine: 1, startColumn: 7, endLine: 1, endColumn: 4 },
-      })).rejects.toMatchObject({ reason: 'INVALID_INPUT' })
-      expect(await project.read({
-        path: 'long.txt',
-        range: { startLine: 2 },
-      })).toMatchObject({ content: '', totalLines: 1, hasMore: false, note: expect.stringContaining('起始行 2') })
-      expect(await project.read({
-        path: 'tiny.txt',
-        range: { startLine: 2 },
-      })).toMatchObject({ content: '', totalLines: 1, hasMore: false, note: expect.stringContaining('起始行 2') })
-      expect(await project.read({
-        path: 'tiny.txt',
-        range: { startLine: 1, endLine: 2, endColumn: 1 },
-      })).toMatchObject({ content: 'abc', totalLines: 1, note: expect.stringContaining('忽略 endColumn') })
+      expect(selected.range).toMatchObject({
+        startLine: 1,
+        startColumn: 4,
+        endLine: 1,
+        endColumn: 7,
+      })
+      await expect(
+        project.read({
+          path: 'long.txt',
+          range: { startLine: 1, startColumn: 7, endLine: 1, endColumn: 4 },
+        })
+      ).rejects.toMatchObject({ reason: 'INVALID_INPUT' })
+      expect(
+        await project.read({
+          path: 'long.txt',
+          range: { startLine: 2 },
+        })
+      ).toMatchObject({
+        content: '',
+        totalLines: 1,
+        hasMore: false,
+        note: expect.stringContaining('起始行 2'),
+      })
+      expect(
+        await project.read({
+          path: 'tiny.txt',
+          range: { startLine: 2 },
+        })
+      ).toMatchObject({
+        content: '',
+        totalLines: 1,
+        hasMore: false,
+        note: expect.stringContaining('起始行 2'),
+      })
+      expect(
+        await project.read({
+          path: 'tiny.txt',
+          range: { startLine: 1, endLine: 2, endColumn: 1 },
+        })
+      ).toMatchObject({
+        content: 'abc',
+        totalLines: 1,
+        note: expect.stringContaining('忽略 endColumn'),
+      })
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -145,17 +174,19 @@ describe('Project capability', () => {
       const project = await createProjectKernel({ root })
 
       const valid = await project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'json_patch',
-            path: 'data.json',
-            patches: [
-              { op: 'replace', path: '/items/1', value: 'updated' },
-              { op: 'add', path: '/items/-', value: 'last' },
-              { op: 'remove', path: '/nested/keep' },
-            ],
+        operations: [
+          {
+            operation: {
+              type: 'json_patch',
+              path: 'data.json',
+              patches: [
+                { op: 'replace', path: '/items/1', value: 'updated' },
+                { op: 'add', path: '/items/-', value: 'last' },
+                { op: 'remove', path: '/nested/keep' },
+              ],
+            },
           },
-        }],
+        ],
       })
       await project.applyEdit({ transactionId: valid.transactionId })
       expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({
@@ -167,16 +198,18 @@ describe('Project capability', () => {
       let failure: unknown
       try {
         await project.prepareEdit({
-          operations: [{
-            operation: {
-              type: 'json_patch',
-              path: 'data.json',
-              patches: [
-                { op: 'add', path: '/nested/temporary', value: true },
-                { op: 'remove', path: '/items/nope' },
-              ],
+          operations: [
+            {
+              operation: {
+                type: 'json_patch',
+                path: 'data.json',
+                patches: [
+                  { op: 'add', path: '/nested/temporary', value: true },
+                  { op: 'remove', path: '/items/nope' },
+                ],
+              },
             },
-          }],
+          ],
         })
       } catch (error) {
         failure = error
@@ -188,52 +221,68 @@ describe('Project capability', () => {
       expect(await readFile(file, 'utf8')).toBe(beforeFailure)
       expect((await project.status()).transactions).toBe(1)
 
-      await expect(project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'json_patch',
-            path: 'data.json',
-            patches: [{ op: 'replace', path: '/missing/child', value: 1 }],
-          },
-        }],
-      })).rejects.toMatchObject({
+      await expect(
+        project.prepareEdit({
+          operations: [
+            {
+              operation: {
+                type: 'json_patch',
+                path: 'data.json',
+                patches: [{ op: 'replace', path: '/missing/child', value: 1 }],
+              },
+            },
+          ],
+        })
+      ).rejects.toMatchObject({
         details: { patchIndex: 0, path: '/missing/child', reason: 'parent_missing' },
       })
 
-      await expect(project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'json_patch',
-            path: 'data.json',
-            patches: [{ op: 'replace', path: '/items/0' }],
-          } as EditOperation,
-        }],
-      })).rejects.toMatchObject({
+      await expect(
+        project.prepareEdit({
+          operations: [
+            {
+              operation: {
+                type: 'json_patch',
+                path: 'data.json',
+                patches: [{ op: 'replace', path: '/items/0' }],
+              } as EditOperation,
+            },
+          ],
+        })
+      ).rejects.toMatchObject({
         details: { patchIndex: 0, path: '/items/0', reason: 'value_required' },
       })
-      await expect(project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'json_patch',
-            path: 'data.json',
-            patches: [{ op: 'replace', path: '/items/0', value: Number.POSITIVE_INFINITY }],
-          } as EditOperation,
-        }],
-      })).rejects.toMatchObject({
+      await expect(
+        project.prepareEdit({
+          operations: [
+            {
+              operation: {
+                type: 'json_patch',
+                path: 'data.json',
+                patches: [{ op: 'replace', path: '/items/0', value: Number.POSITIVE_INFINITY }],
+              } as EditOperation,
+            },
+          ],
+        })
+      ).rejects.toMatchObject({
         details: { patchIndex: 0, path: '/items/0', reason: 'value_not_json' },
       })
 
       const nonFiniteFile = join(root, 'non-finite.json')
       await writeFile(nonFiniteFile, '1e400\n')
-      await expect(project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'json_patch',
-            path: 'non-finite.json',
-            patches: [{ op: 'replace', path: '', value: 1 }],
-          },
-        }],
-      })).rejects.toMatchObject({
+      await expect(
+        project.prepareEdit({
+          operations: [
+            {
+              operation: {
+                type: 'json_patch',
+                path: 'non-finite.json',
+                patches: [{ op: 'replace', path: '', value: 1 }],
+              },
+            },
+          ],
+        })
+      ).rejects.toMatchObject({
         reason: 'VALIDATION_FAILED',
         details: { path: 'non-finite.json', reason: 'document_not_json_value' },
       })
@@ -258,44 +307,52 @@ describe('Project capability', () => {
       expect(resolved.status).toBe('ambiguous')
       if (resolved.status === 'ambiguous') expect(resolved.candidates).toHaveLength(3)
 
-      await expect(project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'replace_text',
-            path: 'matches.txt',
-            oldText: 'same',
-            newText: 'one',
-            expectedMatches: 3,
-          },
-        }],
-      })).rejects.toMatchObject({ reason: 'AMBIGUOUS_TARGET' })
+      await expect(
+        project.prepareEdit({
+          operations: [
+            {
+              operation: {
+                type: 'replace_text',
+                path: 'matches.txt',
+                oldText: 'same',
+                newText: 'one',
+                expectedMatches: 3,
+              },
+            },
+          ],
+        })
+      ).rejects.toMatchObject({ reason: 'AMBIGUOUS_TARGET' })
 
       const selected = await project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'replace_text',
-            path: 'matches.txt',
-            oldText: 'same',
-            newText: 'chosen',
-            expectedMatches: 3,
-            occurrence: 2,
+        operations: [
+          {
+            operation: {
+              type: 'replace_text',
+              path: 'matches.txt',
+              oldText: 'same',
+              newText: 'chosen',
+              expectedMatches: 3,
+              occurrence: 2,
+            },
           },
-        }],
+        ],
       })
       await project.applyEdit({ transactionId: selected.transactionId })
       expect(await readFile(file, 'utf8')).toBe('same chosen same\n')
 
       const all = await project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'replace_text',
-            path: 'matches.txt',
-            oldText: 'same',
-            newText: 'all',
-            expectedMatches: 2,
-            replaceAll: true,
+        operations: [
+          {
+            operation: {
+              type: 'replace_text',
+              path: 'matches.txt',
+              oldText: 'same',
+              newText: 'all',
+              expectedMatches: 2,
+              replaceAll: true,
+            },
           },
-        }],
+        ],
       })
       await project.applyEdit({ transactionId: all.transactionId })
       expect(await readFile(file, 'utf8')).toBe('all chosen all\n')
@@ -398,17 +455,21 @@ describe('Project capability', () => {
       await writeFile(path, original)
       const project = await createProjectKernel({ root })
       const transaction = await project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'replace_text',
-            path: 'package.json',
-            oldText: '"demo"',
-            newText: '"demo",,,BROKEN',
+        operations: [
+          {
+            operation: {
+              type: 'replace_text',
+              path: 'package.json',
+              oldText: '"demo"',
+              newText: '"demo",,,BROKEN',
+            },
           },
-        }],
+        ],
       })
 
-      await expect(project.applyEdit({ transactionId: transaction.transactionId })).rejects.toMatchObject({
+      await expect(
+        project.applyEdit({ transactionId: transaction.transactionId })
+      ).rejects.toMatchObject({
         reason: 'VALIDATION_FAILED',
       })
       expect(await readFile(path, 'utf8')).toBe(original)
@@ -445,14 +506,16 @@ describe('Project capability', () => {
 
       expect((await project.read({ path: 'notes.txt' })).content).toContain('second line')
       const transaction = await project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'replace_text',
-            path: 'notes.txt',
-            oldText: 'second line',
-            newText: 'updated second line',
+        operations: [
+          {
+            operation: {
+              type: 'replace_text',
+              path: 'notes.txt',
+              oldText: 'second line',
+              newText: 'updated second line',
+            },
           },
-        }],
+        ],
       })
       await project.applyEdit({ transactionId: transaction.transactionId })
 
@@ -473,14 +536,16 @@ describe('Project capability', () => {
 
       expect((await project.read({ path: 'notes.txt' })).content).toBe('你好世界\n第二行\n')
       const transaction = await project.prepareEdit({
-        operations: [{
-          operation: {
-            type: 'replace_text',
-            path: 'notes.txt',
-            oldText: '第二行',
-            newText: '新的行',
+        operations: [
+          {
+            operation: {
+              type: 'replace_text',
+              path: 'notes.txt',
+              oldText: '第二行',
+              newText: '新的行',
+            },
           },
-        }],
+        ],
       })
       await project.applyEdit({ transactionId: transaction.transactionId })
 
@@ -504,14 +569,16 @@ describe('Project capability', () => {
             op: {
               kind: 'prepare',
               input: {
-                operations: [{
-                  operation: {
-                    type: 'replace_text',
-                    path: 'note.txt',
-                    oldText: 'beta',
-                    newText: 'BETA',
+                operations: [
+                  {
+                    operation: {
+                      type: 'replace_text',
+                      path: 'note.txt',
+                      oldText: 'beta',
+                      newText: 'BETA',
+                    },
                   },
-                }],
+                ],
               },
             },
           },
@@ -520,14 +587,16 @@ describe('Project capability', () => {
             op: {
               kind: 'prepare',
               input: {
-                operations: [{
-                  operation: {
-                    type: 'replace_text',
-                    path: 'note.txt',
-                    oldText: 'beta',
-                    newText: 'Beta',
+                operations: [
+                  {
+                    operation: {
+                      type: 'replace_text',
+                      path: 'note.txt',
+                      oldText: 'beta',
+                      newText: 'Beta',
+                    },
                   },
-                }],
+                ],
               },
             },
           },
@@ -599,7 +668,9 @@ describe('Project capability', () => {
         ],
       })
 
-      await expect(project.applyEdit({ transactionId: transaction.transactionId })).rejects.toThrow()
+      await expect(
+        project.applyEdit({ transactionId: transaction.transactionId })
+      ).rejects.toThrow()
       expect(await readFile(path, 'utf8')).toBe('OLD\n')
       expect((await project.status()).locks).toHaveLength(0)
     } finally {
@@ -619,15 +690,17 @@ describe('Project capability', () => {
       const unsubscribe = feed.subscribe((change) => observed.push(change.lifecycle))
       const project = await createProjectKernel({ root, changeFeed: feed })
       const transaction = await project.prepareEdit({
-        operations: [{
-          reason: 'Rename the visible state',
-          operation: {
-            type: 'replace_text',
-            path: 'note.txt',
-            oldText: 'before',
-            newText: 'after',
+        operations: [
+          {
+            reason: 'Rename the visible state',
+            operation: {
+              type: 'replace_text',
+              path: 'note.txt',
+              oldText: 'before',
+              newText: 'after',
+            },
           },
-        }],
+        ],
       })
 
       const prepared = project.changeFeed.get(transaction.transactionId)

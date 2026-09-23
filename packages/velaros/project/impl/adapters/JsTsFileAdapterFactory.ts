@@ -18,7 +18,9 @@ export class JsTsFileAdapterFactory implements FileAdapterFactory {
   }
 
   public canHandle(snapshot: FileSnapshot): boolean {
-    return snapshot.exists && !snapshot.isDirectory && !snapshot.isBinary && isJsTsPath(snapshot.path)
+    return (
+      snapshot.exists && !snapshot.isDirectory && !snapshot.isBinary && isJsTsPath(snapshot.path)
+    )
   }
 
   public create(): FileAdapter {

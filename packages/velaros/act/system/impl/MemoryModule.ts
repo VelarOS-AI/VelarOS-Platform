@@ -4,7 +4,12 @@ import { capabilityModules } from '../../runtime/impl/CapabilityModules.js'
 import { hasErrorCode } from '../../runtime/utils/results.js'
 import { SystemContract } from '../contract/constants.js'
 import type { MemoryHost } from '../contract/requires.js'
-import { VelarSystemMemoryLocalModule, VelarSystemMemoryModule, VelarSystemMemoryPersistentLocalModule, VelarSystemMemoryPersistentModule } from '../contract/surface.js'
+import {
+  VelarSystemMemoryLocalModule,
+  VelarSystemMemoryModule,
+  VelarSystemMemoryPersistentLocalModule,
+  VelarSystemMemoryPersistentModule,
+} from '../contract/surface.js'
 
 import type { SystemMemoryOperationsApi } from './SystemMemoryOperations.js'
 import { systemMemoryOperations } from './SystemMemoryOperations.js'
@@ -19,29 +24,53 @@ class MemoryModule implements MemoryModuleApi {
   public create(host: MemoryHost, organize = true, persistent = false): OperationModuleDefinition {
     if (persistent && !host.longTermMemory) throw new Error('长期记忆合同需要宿主作用域端口')
     const surface = persistent
-      ? organize ? VelarSystemMemoryPersistentModule : VelarSystemMemoryPersistentLocalModule
-      : organize ? VelarSystemMemoryModule : VelarSystemMemoryLocalModule
+      ? organize
+        ? VelarSystemMemoryPersistentModule
+        : VelarSystemMemoryPersistentLocalModule
+      : organize
+        ? VelarSystemMemoryModule
+        : VelarSystemMemoryLocalModule
     return capabilityModules.create<SystemMemoryOperationsApi>({
       surface,
       implementation: systemMemoryOperations,
       instanceId: `standard:${surface.specifier}`,
       generation: SystemContract.generation,
-      summary: persistent ? '任务工作记忆与跨会话长期记忆' : '当前任务的原文召回、工作笔记与材料驻留',
+      summary: persistent
+        ? '任务工作记忆与跨会话长期记忆'
+        : '当前任务的原文召回、工作笔记与材料驻留',
       context: (call) => {
         const sessionId = call.invocation.sessionId
         const maintenance = host.maintenance
         return {
           memory: host.programs(sessionId).memory,
-          get plans() { return host.view(sessionId) },
-          organizer: maintenance ? { request: (intent, signal) => maintenance.request(sessionId, intent, signal) } : undefined,
+          get plans() {
+            return host.view(sessionId)
+          },
+          organizer: maintenance
+            ? { request: (intent, signal) => maintenance.request(sessionId, intent, signal) }
+            : undefined,
           // 长期记忆作用域用到才解析：只有 recall、save、remove 碰它
-          get longTerm() { return persistent ? host.longTermMemory!.scope(sessionId) : undefined },
+          get longTerm() {
+            return persistent ? host.longTermMemory!.scope(sessionId) : undefined
+          },
           executionId: call.invocation.executionId,
           abortSignal: call.signal,
         }
       },
       // 这些拒绝都发生在校验或版本核对通过之前，没有写下任何东西
-      withoutEffect: (error) => (error as { effect?: string })?.effect === 'none' || hasErrorCode(error, ['VALIDATION', 'MEMORY_INPUT', 'SCOPE_MISMATCH', 'WORKSPACE_CONFLICT', 'WORKSPACE_LIMIT', 'WORKSPACE_BUSY', 'CONTEXT_CONFLICT', 'MEMORY_REFERENCE_KIND', 'VIEW_SCHEMA']),
+      withoutEffect: (error) =>
+        (error as { effect?: string })?.effect === 'none' ||
+        hasErrorCode(error, [
+          'VALIDATION',
+          'MEMORY_INPUT',
+          'SCOPE_MISMATCH',
+          'WORKSPACE_CONFLICT',
+          'WORKSPACE_LIMIT',
+          'WORKSPACE_BUSY',
+          'CONTEXT_CONFLICT',
+          'MEMORY_REFERENCE_KIND',
+          'VIEW_SCHEMA',
+        ]),
     })
   }
 }

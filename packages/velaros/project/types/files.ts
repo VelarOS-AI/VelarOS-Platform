@@ -142,7 +142,13 @@ export interface ProjectSearchResult {
  */
 export type ProjectContentEdit =
   | { op: 'replace'; range?: ProjectLineRange; match?: string; text: string }
-  | { op: 'insert'; range?: ProjectLineRange; match?: string; side: 'before' | 'after'; text: string }
+  | {
+      op: 'insert'
+      range?: ProjectLineRange
+      match?: string
+      side: 'before' | 'after'
+      text: string
+    }
   | { op: 'insert'; at: 'start' | 'end'; text: string }
 
 /**
@@ -173,7 +179,13 @@ export type ProjectEditStep =
   | ({ action: 'overwrite'; text: string } & ProjectStepSource)
   | ({ action: 'move'; to: string } & ProjectStepSource)
   | ({ action: 'delete' } & ProjectStepSource)
-  | { action: 'recode'; paths: string[]; encoding?: ProjectRecodeEncoding; bom?: boolean; newline?: ProjectRecodeNewline }
+  | {
+      action: 'recode'
+      paths: string[]
+      encoding?: ProjectRecodeEncoding
+      bom?: boolean
+      newline?: ProjectRecodeNewline
+    }
   | ({ action: 'edit'; edits: ProjectContentEdit[] } & ProjectStepSource)
 
 /**

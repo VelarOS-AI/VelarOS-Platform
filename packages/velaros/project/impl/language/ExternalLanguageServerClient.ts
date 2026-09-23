@@ -121,7 +121,9 @@ export class ExternalLanguageServerClient implements ExternalLanguageServerClien
     child.once('exit', (code, exitSignal) => {
       if (this.child !== child) return
       this.child = null
-      this.fail(new Error(`语言服务 ${this.spec.id} 已退出（${code ?? exitSignal ?? '原因未知'}）。`))
+      this.fail(
+        new Error(`语言服务 ${this.spec.id} 已退出（${code ?? exitSignal ?? '原因未知'}）。`)
+      )
     })
     const rootUri = pathToFileURL(resolve(this.projectRoot)).href
     await this.request(

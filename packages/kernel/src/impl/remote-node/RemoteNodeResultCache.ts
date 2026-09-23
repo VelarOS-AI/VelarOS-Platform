@@ -23,7 +23,7 @@ export class RemoteNodeResultCache implements RemoteNodeResultCacheApi {
   private readonly entries = new Map<string, RemoteNodeResult>()
 
   public constructor(
-    private readonly capacity: number = KernelTuning.remoteNodeCompletedCallCapacity,
+    private readonly capacity: number = KernelTuning.remoteNodeCompletedCallCapacity
   ) {}
 
   public get(callId: string): Nullable<RemoteNodeResult> {

@@ -1,6 +1,10 @@
 import { isBlank, isUndefined } from '@velaros-ai/core'
 
-import type { KernelCallableCapabilityOperation, KernelCallableCapabilityService, KernelCapabilityOperationMetadata } from '../../contract/requires'
+import type {
+  KernelCallableCapabilityOperation,
+  KernelCallableCapabilityService,
+  KernelCapabilityOperationMetadata,
+} from '../../contract/requires'
 import type { ScopeRef } from '../../types/kernel.js'
 import { unknownOperationFailure } from '../../utils/errors'
 import { normalizeKernelOperationMetadata } from '../../utils/runtime/callable'
@@ -20,9 +24,7 @@ export class KernelCallableCapability implements KernelCallableCapabilityService
     }
   >()
 
-  public constructor(
-    operations: Readonly<Record<string, KernelCallableCapabilityOperation>>,
-  ) {
+  public constructor(operations: Readonly<Record<string, KernelCallableCapabilityOperation>>) {
     for (const [operation, definition] of Object.entries(operations)) {
       if (isBlank(operation.trim())) {
         throw new Error('可调用能力的操作名不能为空')
@@ -32,7 +34,7 @@ export class KernelCallableCapability implements KernelCallableCapabilityService
         Object.freeze({
           metadata: normalizeKernelOperationMetadata(operation, definition.metadata),
           invoke: definition.invoke,
-        }),
+        })
       )
     }
   }
@@ -44,16 +46,15 @@ export class KernelCallableCapability implements KernelCallableCapabilityService
    * 自己的服务对象，展开只带得走自有属性；挂在原型上会让那一圈包当场丢掉这两个方法。
    */
   public readonly getOperationMetadata = (
-    operation: string,
-  ): KernelCapabilityOperationMetadata | undefined =>
-    this.operations.get(operation)?.metadata
+    operation: string
+  ): KernelCapabilityOperationMetadata | undefined => this.operations.get(operation)?.metadata
 
   /** 执行一条已登记的操作；未知操作与已中止的调用都不会进到 provider 代码。 */
   public readonly invoke = (
     operation: string,
     scope: LooseOptional<ScopeRef>,
     input: unknown,
-    signal: AbortSignal,
+    signal: AbortSignal
   ): unknown | Promise<unknown> => {
     const definition = this.operations.get(operation)
     if (isUndefined(definition)) throw unknownOperationFailure()

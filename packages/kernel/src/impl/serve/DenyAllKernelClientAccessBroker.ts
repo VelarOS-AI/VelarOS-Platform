@@ -4,13 +4,10 @@ import type {
   KernelClientCapabilityBindRequest,
 } from '../../types/serve'
 
-
 /** 安全缺省：没注入策略时，任何外部 Client 都绑不上任何能力。 */
-export class DenyAllKernelClientAccessBroker
-  implements KernelClientAccessBroker
-{
+export class DenyAllKernelClientAccessBroker implements KernelClientAccessBroker {
   public async requestBind(
-    request: KernelClientCapabilityBindRequest,
+    request: KernelClientCapabilityBindRequest
   ): Promise<KernelClientAccessDecision> {
     return {
       status: 'denied',

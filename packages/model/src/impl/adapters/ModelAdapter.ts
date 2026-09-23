@@ -2,7 +2,11 @@ import { AppError } from '@velaros-ai/core/error'
 
 import { ModelErrorCodes } from '../../contract/constants.js'
 import type { ModelProviderAdapter } from '../../contract/requires'
-import type { EmbeddingRequest, LanguageModelFactory, ModelAdapterConfig } from '../../types/adapters'
+import type {
+  EmbeddingRequest,
+  LanguageModelFactory,
+  ModelAdapterConfig,
+} from '../../types/adapters'
 import type { ChatProviderId } from '../../types/model'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 
@@ -58,9 +62,7 @@ abstract class ModelAdapter implements ModelProviderAdapter {
   }
 
   /** 按 provider preset 解析最终 baseURL。 */
-  protected resolveBaseURL(
-    config: Pick<ModelAdapterConfig, 'provider' | 'baseURL'>
-  ): string {
+  protected resolveBaseURL(config: Pick<ModelAdapterConfig, 'provider' | 'baseURL'>): string {
     return this.providers.resolveBaseURL(config)
   }
 }

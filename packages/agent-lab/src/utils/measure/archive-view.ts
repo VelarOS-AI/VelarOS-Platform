@@ -3,12 +3,7 @@
  * 纯测量：不碰 Node 模块、不发请求。
  */
 import type { ArchiveShape } from '../../contract/constants.js'
-import type {
-  JsonObject,
-  JsonValue,
-  RunArchive,
-  RunArchiveView,
-} from '../../types/agent-lab.js'
+import type { JsonObject, JsonValue, RunArchive, RunArchiveView } from '../../types/agent-lab.js'
 import { runArchiveSchema } from '../wire/journey.js'
 
 /** 这个值是不是普通对象。 */
@@ -17,8 +12,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** 把任意值折成 JSON 值；有 `NaN`、函数这类折不动的东西就整体判失败。 */
-function toJsonValue(value: unknown): { readonly ok: true; readonly value: JsonValue } | { readonly ok: false } {
-  if (value === null || typeof value === 'boolean' || typeof value === 'string') return { ok: true, value }
+function toJsonValue(
+  value: unknown
+): { readonly ok: true; readonly value: JsonValue } | { readonly ok: false } {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string')
+    return { ok: true, value }
   if (typeof value === 'number') return Number.isFinite(value) ? { ok: true, value } : { ok: false }
   if (Array.isArray(value)) {
     const values: JsonValue[] = []
@@ -73,7 +71,11 @@ function jsonObject(value: unknown): JsonObject | null {
 }
 
 /** 造一份「什么都没读出来」的视图。 */
-function empty(shape: ArchiveShape, raw: JsonValue | null, errors: readonly string[] = []): RunArchiveView {
+function empty(
+  shape: ArchiveShape,
+  raw: JsonValue | null,
+  errors: readonly string[] = []
+): RunArchiveView {
   return {
     shape,
     archive: null,
@@ -121,7 +123,8 @@ export function readRunArchiveView(input: unknown): RunArchiveView {
     }
   }
 
-  if (Array.isArray(input)) return { ...empty('v0-array', raw), rounds: jsonArray(input), total: input.length }
+  if (Array.isArray(input))
+    return { ...empty('v0-array', raw), rounds: jsonArray(input), total: input.length }
   if (!isRecord(input)) return empty('invalid', raw, ['归档的根必须是对象或数组'])
 
   if (isRecord(input.manifest)) {

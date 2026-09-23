@@ -1,12 +1,16 @@
 import type { TurnContextAppendBus, TurnContextSessionLedgersApi } from '@velaros-ai/context'
 import { createTurnContextSessionLedgers } from '@velaros-ai/context'
-import { isNumber,toNullable, toOptional } from '@velaros-ai/core'
+import { isNumber, toNullable, toOptional } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { BrowserUserActivityEvent } from '../../types/browser.js'
 import type { BrowserTurnContextDeltaSource } from '../../types/runtime.js'
 import type { BrowserUserActivityItem } from '../../types/session.js'
-import type { BrowserActivitySessionState, BrowserUserActivityWaitResult, BrowserUserActivityWaitState } from '../../types/session.js'
+import type {
+  BrowserActivitySessionState,
+  BrowserUserActivityWaitResult,
+  BrowserUserActivityWaitState,
+} from '../../types/session.js'
 import { formatSummaryItem } from '../../utils/session'
 import { BrowserTuning } from '../../utils/tuning'
 
@@ -38,7 +42,11 @@ export interface BrowserActivityCoordinatorApi {
   /** 环境回合上下文 source adapter：只捕获内存账本，peek 同步零 IO。 */
   createTurnContextSource(): BrowserTurnContextDeltaSource
   /** 等用户停手；等待期间把状态通知宿主，中止信号到了就立刻返回。 */
-  waitForUserIdle(sessionId: string, abortSignal?: AbortSignal, onWaitStateChange?: BrowserActivityCoordinatorOptions['onWaitStateChange']): Promise<BrowserUserActivityWaitResult>
+  waitForUserIdle(
+    sessionId: string,
+    abortSignal?: AbortSignal,
+    onWaitStateChange?: BrowserActivityCoordinatorOptions['onWaitStateChange']
+  ): Promise<BrowserUserActivityWaitResult>
   /** 把一次模型动作包起来跑：先等用户停手，跑的过程中不把自己算成用户操作。 */
   withModelAction<T>(sessionId: string, action: () => Promise<T>): Promise<T>
   /** 清掉这条会话的活动记录。 */
@@ -48,7 +56,10 @@ export interface BrowserActivityCoordinatorApi {
 }
 
 class BrowserActivityCoordinator implements BrowserActivityCoordinatorApi {
-  private static readonly BrowserActivityKindLabels: Record<BrowserUserActivityEvent['kind'], string> = {
+  private static readonly BrowserActivityKindLabels: Record<
+    BrowserUserActivityEvent['kind'],
+    string
+  > = {
     click: '点击',
     keyboard: '键盘',
     scroll: '滚动',
@@ -198,4 +209,7 @@ class BrowserActivityCoordinator implements BrowserActivityCoordinatorApi {
 
 export { BrowserActivityCoordinator }
 export type { BrowserActivityCoordinatorOptions }
-export type { BrowserUserActivityWaitResult, BrowserUserActivityWaitState } from '../../types/session.js'
+export type {
+  BrowserUserActivityWaitResult,
+  BrowserUserActivityWaitState,
+} from '../../types/session.js'

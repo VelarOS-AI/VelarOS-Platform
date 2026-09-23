@@ -20,9 +20,16 @@ afterEach(async () => {
 
 test('护栏里的扫描结果与直接跑 RegExp 一致（含空匹配按码点前进）', () => {
   const content = 'alpha 🙂 beta alpha\nALPHA'
-  const direct = [...content.matchAll(/alpha/gi)].map((match) => ({ index: match.index, length: match[0].length }))
+  const direct = [...content.matchAll(/alpha/gi)].map((match) => ({
+    index: match.index,
+    length: match[0].length,
+  }))
   expect(execGuardedRegex('alpha', 'gi', content, 10)).toEqual(direct)
-  expect(execGuardedRegex('', 'g', '🙂b', 10)).toEqual([{ index: 0, length: 0 }, { index: 2, length: 0 }, { index: 3, length: 0 }])
+  expect(execGuardedRegex('', 'g', '🙂b', 10)).toEqual([
+    { index: 0, length: 0 },
+    { index: 2, length: 0 },
+    { index: 3, length: 0 },
+  ])
   expect(execGuardedRegex('a', 'g', 'aaaa', 2)).toHaveLength(2)
   expect(execGuardedRegex('a', 'g', 'aaaa', 0)).toEqual([])
 })
@@ -33,7 +40,9 @@ test('写错的正则报 INVALID_INPUT 并给中文下一步，不再把 SyntaxE
     execGuardedRegex('(', 'g', 'abc', 5)
   } catch (error) {
     expect((error as { reason?: string }).reason).toBe('INVALID_INPUT')
-    expect((error as { suggestedNextAction?: string }).suggestedNextAction).toContain('合法的 JavaScript 正则')
+    expect((error as { suggestedNextAction?: string }).suggestedNextAction).toContain(
+      '合法的 JavaScript 正则'
+    )
   }
 })
 
@@ -62,7 +71,10 @@ test('Node（生产用的 V8/Electron 引擎）下灾难回溯确实被时限打
   const script = `import { execGuardedRegex } from ${JSON.stringify(bundle)}
 try { execGuardedRegex('(x+x+)+y', 'gi', 'x'.repeat(40), 10); console.log('COMPLETED') }
 catch (error) { console.log(error.reason, '|', error.message.slice(0, 40)) }`
-  const result = await execa('node', ['--input-type=module', '--eval', script], { reject: false, timeout: 30_000 })
+  const result = await execa('node', ['--input-type=module', '--eval', script], {
+    reject: false,
+    timeout: 30_000,
+  })
   expect(result.stdout).toContain('INVALID_INPUT')
   expect(result.stdout).toContain('没跑完')
 }, 60_000)
@@ -70,7 +82,9 @@ catch (error) { console.log(error.reason, '|', error.message.slice(0, 40)) }`
 test('模型给的正则经 project 搜索时也走护栏：写错的 pattern 按 INVALID_INPUT 拒绝', async () => {
   await writeFile(join(root, 'a.txt'), 'hello\n')
   const kernel = await createProjectKernel({ root, corePolicy: { enableRipgrepSearch: false } })
-  await expect(kernel.search({ query: '(', regex: true })).rejects.toMatchObject({ reason: 'INVALID_INPUT' })
+  await expect(kernel.search({ query: '(', regex: true })).rejects.toMatchObject({
+    reason: 'INVALID_INPUT',
+  })
   const ok = await kernel.search({ query: 'hel+o', regex: true })
   expect(ok.hits.some((hit) => hit.path === 'a.txt')).toBe(true)
 })

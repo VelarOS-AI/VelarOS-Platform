@@ -1,8 +1,5 @@
 import type { KernelModuleDefinition } from '../../contract/requires.js'
-import type {
-  KernelBundledPack,
-  KernelModPackRecord,
-} from '../../types/serve.js'
+import type { KernelBundledPack, KernelModPackRecord } from '../../types/serve.js'
 
 /**
  * bundled pack 的 `specifier`：一个**身份 URI**，不是磁盘路径。
@@ -24,15 +21,14 @@ export function createBundledModPack(input: {
   return {
     id: input.id,
     version: input.version ?? input.module.manifest.version,
-    provides: input.provides
-      ?? input.module.manifest.provides.map((token) => token.id),
+    provides: input.provides ?? input.module.manifest.provides.map((token) => token.id),
     module: input.module,
   }
 }
 
 /** 把一批编译期模块折成 ModStore 记录。 */
 export function toBundledPackRecords(
-  packs: readonly KernelBundledPack[],
+  packs: readonly KernelBundledPack[]
 ): readonly KernelModPackRecord[] {
   return packs.map((pack) => ({
     id: pack.id,

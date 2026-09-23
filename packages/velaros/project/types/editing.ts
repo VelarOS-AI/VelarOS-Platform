@@ -4,7 +4,12 @@ import type { TextEncoding } from '@velaros-ai/core/text-files/contracts'
 
 import type { EditIntent } from './edit.js'
 import type { ProjectVisibleCoverage } from './file-refs.js'
-import type { ProjectRecodeEncoding, ProjectRecodeNewline, ProjectRecodeReceipt, ProjectStepSource } from './files.js'
+import type {
+  ProjectRecodeEncoding,
+  ProjectRecodeNewline,
+  ProjectRecodeReceipt,
+  ProjectStepSource,
+} from './files.js'
 
 export type TextMismatchCause =
   | 'line_ending'
@@ -75,7 +80,10 @@ export interface ProjectSourceCoordinates {
   readonly logical: string
 }
 
-export interface OffsetWindow { start: number; end: number }
+export interface OffsetWindow {
+  start: number
+  end: number
+}
 
 export interface ProjectResolvedMutation {
   start: number
@@ -87,7 +95,10 @@ export interface ProjectResolvedMutation {
   kind: 'replace' | 'insert'
 }
 
-export interface PlannerCoverageWindow { start: number; end: number }
+export interface PlannerCoverageWindow {
+  start: number
+  end: number
+}
 
 export interface ProjectMatchCandidate {
   range: readonly [number, number]
@@ -101,7 +112,10 @@ export interface ProjectMatchCandidate {
 }
 
 /** match 在所选区域之外的一处原文（首尾行）：visible 表示它在 fileRef 可见范围内，只是不在 range 里。 */
-export interface ProjectMatchElsewhere { range: readonly [number, number]; visible: boolean }
+export interface ProjectMatchElsewhere {
+  range: readonly [number, number]
+  visible: boolean
+}
 
 /** 用 text 替换原文的 [start, end)。 */
 export interface SourceSplice {
@@ -137,7 +151,10 @@ export interface FileIdentity {
   history: Array<{ content: string; mutations?: readonly ProjectResolvedMutation[] }>
 }
 
-export interface SourceSelection { identity: FileIdentity; view: ProjectEditView }
+export interface SourceSelection {
+  identity: FileIdentity
+  view: ProjectEditView
+}
 
 /**
  * `velaros:project` 的 edit 编译到一半的计划：每个路径在计划里的未来身份、引用绑定到的身份，以及已经排好的事务操作。

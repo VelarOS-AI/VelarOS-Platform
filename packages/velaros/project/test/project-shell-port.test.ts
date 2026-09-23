@@ -14,20 +14,36 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { ShellLimits } from '@velaros-ai/velaros/shell/contracts'
 
 import type { ProjectHostPort } from '../contract/requires'
-import {projectCapabilityPorts} from '../impl/operations/ProjectCapabilityPorts'
+import { projectCapabilityPorts } from '../impl/operations/ProjectCapabilityPorts'
 import { commandResult, createProjectPortsHarness, failureOf } from '../spec/support'
 
 const execute = promisify(execFile)
 
 let root = ''
-beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-shell-port-')) })
-afterEach(async () => { await rm(root, { recursive: true, force: true }) })
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), 'project-shell-port-'))
+})
+afterEach(async () => {
+  await rm(root, { recursive: true, force: true })
+})
 
 /** 用真的 /bin/sh 跑前台命令的宿主；这个宿主不许起后台进程。 */
-const realShell: ProjectHostPort['runCommand'] = async (command, options, _allowDangerous, signal) => {
+const realShell: ProjectHostPort['runCommand'] = async (
+  command,
+  options,
+  _allowDangerous,
+  signal
+) => {
   if (options?.background) throw new Error('这个宿主不允许启动后台项目进程。')
-  const result = await execute('/bin/sh', ['-c', command], { cwd: options?.cwd, signal, timeout: options?.timeoutMs ?? 5000 })
-  return commandResult(command, options?.cwd ?? root, { stdout: result.stdout.slice(0, options?.maxOutputChars), stderr: result.stderr })
+  const result = await execute('/bin/sh', ['-c', command], {
+    cwd: options?.cwd,
+    signal,
+    timeout: options?.timeoutMs ?? 5000,
+  })
+  return commandResult(command, options?.cwd ?? root, {
+    stdout: result.stdout.slice(0, options?.maxOutputChars),
+    stderr: result.stderr,
+  })
 }
 
 /** 一个等外面放行的承诺。 */
@@ -40,16 +56,33 @@ function deferred() {
 }
 
 describe('项目里的 velaros:shell', () => {
-  test.skipIf(process.platform === 'win32')('前台命令真的跑起来，工作目录缺省是项目根，时间与内存上限交给宿主；宿主不许起后台就抛', async () => {
-    const { call, runs } = await createProjectPortsHarness(root, { runCommand: realShell })
-    const result = await call('shell', 'run', { command: 'printf project-tool-check', timeoutMs: 5000 })
-    expect(result.stdout).toBe('project-tool-check')
-    expect(result.exitCode).toBe(0)
-    // 输出不折叠：交给宿主的是只守内存的那个上限。
-    expect(runs[0]).toMatchObject({ command: 'printf project-tool-check', options: { cwd: root, timeoutMs: 5000, maxOutputChars: ShellLimits.outputChars, background: false }, allowDangerous: false })
-    const background = await failureOf(call('shell', 'run', { command: 'printf background', background: true }))
-    expect(background.message).toContain('后台')
-  })
+  test.skipIf(process.platform === 'win32')(
+    '前台命令真的跑起来，工作目录缺省是项目根，时间与内存上限交给宿主；宿主不许起后台就抛',
+    async () => {
+      const { call, runs } = await createProjectPortsHarness(root, { runCommand: realShell })
+      const result = await call('shell', 'run', {
+        command: 'printf project-tool-check',
+        timeoutMs: 5000,
+      })
+      expect(result.stdout).toBe('project-tool-check')
+      expect(result.exitCode).toBe(0)
+      // 输出不折叠：交给宿主的是只守内存的那个上限。
+      expect(runs[0]).toMatchObject({
+        command: 'printf project-tool-check',
+        options: {
+          cwd: root,
+          timeoutMs: 5000,
+          maxOutputChars: ShellLimits.outputChars,
+          background: false,
+        },
+        allowDangerous: false,
+      })
+      const background = await failureOf(
+        call('shell', 'run', { command: 'printf background', background: true })
+      )
+      expect(background.message).toContain('后台')
+    }
+  )
 
   test('挑定的 shell 原样交给宿主，宿主没有的那个由宿主拒绝', async () => {
     const { call, runs } = await createProjectPortsHarness(root, {
@@ -61,7 +94,9 @@ describe('项目里的 velaros:shell', () => {
     })
     await call('shell', 'run', { command: 'ls' })
     await call('shell', 'run', { command: 'ls', shell: 'posix' })
-    expect((await failureOf(call('shell', 'run', { command: 'ls', shell: 'pwsh' }))).message).toContain('本机没有 pwsh')
+    expect(
+      (await failureOf(call('shell', 'run', { command: 'ls', shell: 'pwsh' }))).message
+    ).toContain('本机没有 pwsh')
     expect(runs.map((run) => run.options?.shell)).toEqual([undefined, 'posix', 'pwsh'])
   })
 
@@ -84,7 +119,9 @@ describe('项目里的 velaros:shell', () => {
 
   test('危险命令的确认卡片点名原样的命令与工作目录，必须用户亲自点、不记住答案；被拒不起进程，点了头宿主收到「已确认」', async () => {
     const denied = await createProjectPortsHarness(root, { approve: false })
-    expect((await failureOf(denied.call('shell', 'run', { command: 'rm -rf ./dist' }))).code).toBe('PERMISSION')
+    expect((await failureOf(denied.call('shell', 'run', { command: 'rm -rf ./dist' }))).code).toBe(
+      'PERMISSION'
+    )
     expect(denied.confirmations).toHaveLength(1)
     expect(denied.confirmations[0]!.options).toMatchObject({
       approvalRisk: 'high',
@@ -99,7 +136,9 @@ describe('项目里的 velaros:shell', () => {
     const approved = await createProjectPortsHarness(root)
     await approved.call('shell', 'run', { command: 'rm -rf ./dist' })
     expect(approved.confirmations).toHaveLength(1)
-    expect(approved.runs.map(({ command, allowDangerous }) => ({ command, allowDangerous }))).toEqual([{ command: 'rm -rf ./dist', allowDangerous: true }])
+    expect(
+      approved.runs.map(({ command, allowDangerous }) => ({ command, allowDangerous }))
+    ).toEqual([{ command: 'rm -rf ./dist', allowDangerous: true }])
   })
 
   test('前台命令在项目资源门里排队：会改项目的独占，排在后面的只读命令等它跑完；后台命令交给宿主，不占门', async () => {
@@ -177,19 +216,27 @@ describe('项目里的 velaros:shell', () => {
   })
 })
 
-
-test('项目观察命令保留宿主受限入口、原始保护证据和项目路径边界',async()=>{
-  const {host,runs}=await createProjectPortsHarness(root)
-  const controller=new AbortController()
-  expect(projectCapabilityPorts.shell(host,controller.signal).runObservationCommand).toBeUndefined()
-  const invoked:unknown[]=[]
-  const result=commandResult('collect',root)
-  host.runObservationCommand=async function(command,options,signal){
-    expect(this).toBe(host);invoked.push({command,options,signal});return result
+test('项目观察命令保留宿主受限入口、原始保护证据和项目路径边界', async () => {
+  const { host, runs } = await createProjectPortsHarness(root)
+  const controller = new AbortController()
+  expect(
+    projectCapabilityPorts.shell(host, controller.signal).runObservationCommand
+  ).toBeUndefined()
+  const invoked: unknown[] = []
+  const result = commandResult('collect', root)
+  host.runObservationCommand = async function (command, options, signal) {
+    expect(this).toBe(host)
+    invoked.push({ command, options, signal })
+    return result
   }
-  const port=projectCapabilityPorts.shell(host,controller.signal)
-  expect(await port.runObservationCommand!('collect',{cwd:'.'},controller.signal)).toBe(result)
-  expect(invoked).toEqual([{command:'collect',options:{cwd:root},signal:controller.signal}])
-  expect((await failureOf(port.runObservationCommand!('collect',{cwd:'..'}))).code).toBe('PERMISSION')
-  expect(invoked).toHaveLength(1);expect(runs).toHaveLength(0)
+  const port = projectCapabilityPorts.shell(host, controller.signal)
+  expect(await port.runObservationCommand!('collect', { cwd: '.' }, controller.signal)).toBe(result)
+  expect(invoked).toEqual([
+    { command: 'collect', options: { cwd: root }, signal: controller.signal },
+  ])
+  expect((await failureOf(port.runObservationCommand!('collect', { cwd: '..' }))).code).toBe(
+    'PERMISSION'
+  )
+  expect(invoked).toHaveLength(1)
+  expect(runs).toHaveLength(0)
 })

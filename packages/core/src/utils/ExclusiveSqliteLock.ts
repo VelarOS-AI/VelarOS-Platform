@@ -34,12 +34,21 @@ class ExclusiveSqliteLock implements ExclusiveSqliteLockApi {
       try {
         this.release()
       } catch (cleanupError) {
-        throw new AggregateError([error, cleanupError], 'SQLite lock acquisition and cleanup failed')
+        throw new AggregateError(
+          [error, cleanupError],
+          'SQLite lock acquisition and cleanup failed'
+        )
       }
       const code = isObject(error) && 'code' in error ? error.code : undefined
       const errcode = isObject(error) && 'errcode' in error ? error.errcode : undefined
       const primaryCode = isNumber(errcode) ? errcode & 0xff : undefined
-      if (code === 'SQLITE_BUSY' || code === 'SQLITE_LOCKED' || primaryCode === 5 || primaryCode === 6) return false
+      if (
+        code === 'SQLITE_BUSY' ||
+        code === 'SQLITE_LOCKED' ||
+        primaryCode === 5 ||
+        primaryCode === 6
+      )
+        return false
       throw error
     }
   }

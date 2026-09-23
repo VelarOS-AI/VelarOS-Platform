@@ -2,10 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { ModelProviderCollection } from '../src/impl/providers/ModelProviderCollection'
 import { type ChatProviderId, createModelRuntimeComposition } from '../src/index'
-import {
-  filterEmbeddingModels,
-  selectEmbeddingModel,
-} from '../src/utils/catalog/embedding'
+import { filterEmbeddingModels, selectEmbeddingModel } from '../src/utils/catalog/embedding'
 
 const InjectedEmbeddingProviderId = 'test-embedding-provider' as ChatProviderId
 
@@ -54,7 +51,7 @@ describe('Model-owned embedding selection helpers', () => {
         'nomic-embed-text',
         'text-embedding-3-small',
         'text-embedding-3-large',
-      ]),
+      ])
     ).toBe('text-embedding-3-large')
     expect(
       filterEmbeddingModels([
@@ -63,11 +60,9 @@ describe('Model-owned embedding selection helpers', () => {
         'text-embedding-3-large',
         'bge-m3',
         '',
-      ]),
+      ])
     ).toEqual(['text-embedding-3-large', 'bge-m3'])
-    expect(
-      providerCollection.defaultEmbeddingModel('openai'),
-    ).toBe('text-embedding-3-large')
+    expect(providerCollection.defaultEmbeddingModel('openai')).toBe('text-embedding-3-large')
     expect(providerCollection.defaultEmbeddingModel('openai')).toBe('text-embedding-3-large')
     expect(providerCollection.isEmbeddingCapable('openai')).toBe(true)
     expect(providerCollection.isEmbeddingCapable('anthropic')).toBe(false)
@@ -82,14 +77,12 @@ describe('Model-owned embedding selection helpers', () => {
       scriptPath: '/tmp/velaros-model-owner-embedding-provider.cjs',
     })
 
-    expect(
-      first.providerCollection.defaultEmbeddingModel(InjectedEmbeddingProviderId),
-    ).toBe('example-embed-v1')
-    expect(
-      first.providerCollection.isEmbeddingCapable(InjectedEmbeddingProviderId),
-    ).toBe(true)
+    expect(first.providerCollection.defaultEmbeddingModel(InjectedEmbeddingProviderId)).toBe(
+      'example-embed-v1'
+    )
+    expect(first.providerCollection.isEmbeddingCapable(InjectedEmbeddingProviderId)).toBe(true)
     expect(() =>
-      second.providerCollection.defaultEmbeddingModel(InjectedEmbeddingProviderId),
+      second.providerCollection.defaultEmbeddingModel(InjectedEmbeddingProviderId)
     ).toThrow(`未知模型 provider：${InjectedEmbeddingProviderId}`)
   })
 })
@@ -108,9 +101,7 @@ describe('Model-owned provider runtime availability helpers', () => {
     const normalized = providerCollection.normalizeRuntimeConfigs(runtimeConfigs)
 
     expect(normalized.length).toBeGreaterThan(runtimeConfigs.length)
-    expect(
-      providerCollection.findRuntimeConfig(runtimeConfigs, 'openai'),
-    ).toEqual({
+    expect(providerCollection.findRuntimeConfig(runtimeConfigs, 'openai')).toEqual({
       ...providerCollection.getDefaultRuntimeConfig('openai'),
       ...configuredOpenAI,
     })
@@ -119,14 +110,14 @@ describe('Model-owned provider runtime availability helpers', () => {
         runtimeConfig: configuredOpenAI,
         providerRuntimeConfigs: runtimeConfigs,
         env: { OPENAI_API_KEY: 'from-environment' },
-      }),
+      })
     ).toBe(true)
     expect(
       providerCollection.isRuntimeConfigured({
         runtimeConfig: configuredOpenAI,
         providerRuntimeConfigs: runtimeConfigs,
         env: {},
-      }),
+      })
     ).toBe(false)
   })
 
@@ -150,16 +141,14 @@ describe('Model-owned provider runtime availability helpers', () => {
     ]
 
     expect(
-      providerCollection
-        .normalizeRuntimeConfigs(runtimeConfigs)
-        .find((runtimeConfig) =>
-          providerCollection.isRuntimeConfigured({
-            runtimeConfig,
-            providerRuntimeConfigs: runtimeConfigs,
-            env: {},
-            supportsProvider: (provider) => provider === 'openai',
-          }),
-        )?.provider,
+      providerCollection.normalizeRuntimeConfigs(runtimeConfigs).find((runtimeConfig) =>
+        providerCollection.isRuntimeConfigured({
+          runtimeConfig,
+          providerRuntimeConfigs: runtimeConfigs,
+          env: {},
+          supportsProvider: (provider) => provider === 'openai',
+        })
+      )?.provider
     ).toBe('openai')
   })
 })
@@ -176,12 +165,10 @@ describe('portable provider environment boundary', () => {
         environment: { OPENAI_API_KEY: 'host-injected-secret' },
       })
 
-      expect(
-        portableProviders.resolveApiKey({ provider: 'openai', apiKey: '' }),
-      ).toBe('')
-      expect(
-        injectedProviders.resolveApiKey({ provider: 'openai', apiKey: '' }),
-      ).toBe('host-injected-secret')
+      expect(portableProviders.resolveApiKey({ provider: 'openai', apiKey: '' })).toBe('')
+      expect(injectedProviders.resolveApiKey({ provider: 'openai', apiKey: '' })).toBe(
+        'host-injected-secret'
+      )
     } finally {
       if (previousApiKey === undefined) {
         delete process.env.OPENAI_API_KEY

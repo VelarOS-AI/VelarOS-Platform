@@ -18,7 +18,12 @@ import type {
   ComputerTypeResult,
 } from '../types/computer.js'
 import { requireComputerAvailable } from '../utils/availability.js'
-import { actionPointFromResult, clickOptionsFromInput, moveOptionsFromInput, projectComputerPointResult } from '../utils/coordinates.js'
+import {
+  actionPointFromResult,
+  clickOptionsFromInput,
+  moveOptionsFromInput,
+  projectComputerPointResult,
+} from '../utils/coordinates.js'
 import { clickInput, keyInput, pointInput, typeInput } from '../utils/input.js'
 
 /**
@@ -64,7 +69,11 @@ export class ComputerOperations implements ComputerOperationsApi {
     if (!attach) throw new AppError('PLATFORM', '这个宿主没有把图交给模型的通道，screenshot 用不了')
     await requireComputerAvailable(ctx)
     const { base64, format, ...snapshot } = await ctx.computer.screenshot()
-    attach({ mediaType: `image/${format}`, data: base64, label: `桌面截图：主屏 ${snapshot.width}×${snapshot.height}，snapshotId ${snapshot.snapshotId}` })
+    attach({
+      mediaType: `image/${format}`,
+      data: base64,
+      label: `桌面截图：主屏 ${snapshot.width}×${snapshot.height}，snapshotId ${snapshot.snapshotId}`,
+    })
     return snapshot
   }
 
@@ -76,7 +85,10 @@ export class ComputerOperations implements ComputerOperationsApi {
     return projectComputerPointResult(result, actionPointFromResult(point, result))
   }
 
-  public async click(input: ComputerClickInput, ctx: ComputerOperationContext): Promise<ComputerClicked> {
+  public async click(
+    input: ComputerClickInput,
+    ctx: ComputerOperationContext
+  ): Promise<ComputerClicked> {
     ctx.abortSignal.throwIfAborted()
     const click = clickInput(input)
     await requireComputerAvailable(ctx)
@@ -84,14 +96,20 @@ export class ComputerOperations implements ComputerOperationsApi {
     return projectComputerPointResult(result, actionPointFromResult(click, result))
   }
 
-  public async typeText(input: ComputerTypeInput, ctx: ComputerOperationContext): Promise<ComputerTypeResult> {
+  public async typeText(
+    input: ComputerTypeInput,
+    ctx: ComputerOperationContext
+  ): Promise<ComputerTypeResult> {
     ctx.abortSignal.throwIfAborted()
     const { text } = typeInput(input)
     await requireComputerAvailable(ctx)
     return ctx.computer.typeText(text)
   }
 
-  public async key(input: ComputerKeyInput, ctx: ComputerOperationContext): Promise<ComputerKeyResult> {
+  public async key(
+    input: ComputerKeyInput,
+    ctx: ComputerOperationContext
+  ): Promise<ComputerKeyResult> {
     ctx.abortSignal.throwIfAborted()
     const { keys } = keyInput(input)
     await requireComputerAvailable(ctx)

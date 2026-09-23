@@ -133,7 +133,8 @@ class TypeScriptProjectPool implements TypeScriptProjectsApi, TypeScriptProjectP
   ): TypeScriptLanguageServiceLease {
     const cacheEntry = this.getOrCreateProjectCache(projectRoot, requestAbsolutePath, priorityPaths)
     const poolKey = cacheEntry.cacheKey
-    const project = this.pooledProjects.get(poolKey) ?? this.createPooledProject(poolKey, projectRoot, cacheEntry)
+    const project =
+      this.pooledProjects.get(poolKey) ?? this.createPooledProject(poolKey, projectRoot, cacheEntry)
     this.touch(poolKey)
 
     // 只对账脏文件（overlay）：磁盘文件保持原版本号不动，TS 的增量缓存才留得住。

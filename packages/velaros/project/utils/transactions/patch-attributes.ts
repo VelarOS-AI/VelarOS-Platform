@@ -14,10 +14,7 @@ export function patchFileAttributes(patch: PreparedPatch): FileAttributes {
   const mode = patch.metadata?.fileMode
   const encoding = patch.metadata?.textEncoding
   return {
-    mode:
-      isNumber(mode) && Number.isInteger(mode) && mode >= 0 && mode <= 0o777
-        ? mode
-        : undefined,
+    mode: isNumber(mode) && Number.isInteger(mode) && mode >= 0 && mode <= 0o777 ? mode : undefined,
     textEncoding: textCodec.isEncoding(encoding) ? encoding : undefined,
   }
 }
@@ -25,14 +22,14 @@ export function patchFileAttributes(patch: PreparedPatch): FileAttributes {
 /** mode=recode 的补丁写入时改用目标编码；其余补丁沿用原文件编码，回滚始终恢复原字节。 */
 export function patchTargetEncoding(patch: PreparedPatch): Optional<TextEncoding> {
   const metadata = patch.metadata
-  if (metadata?.op !== "replace_content" || metadata.mode !== "recode") return undefined
+  if (metadata?.op !== 'replace_content' || metadata.mode !== 'recode') return undefined
   return textCodec.isEncoding(metadata.targetEncoding) ? metadata.targetEncoding : undefined
 }
 
 /** 把文件属性（权限位、文本编码）记进补丁的 metadata，返回新补丁。 */
 export function withPatchFileAttributes(
   patch: PreparedPatch,
-  attributes: FileAttributes,
+  attributes: FileAttributes
 ): PreparedPatch {
   return {
     ...patch,

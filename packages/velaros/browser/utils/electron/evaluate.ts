@@ -22,7 +22,10 @@ export async function evaluateInWebContents<T>(
   if (webContents.isDestroyed()) {
     throw new AppError('VALIDATION', '页面已销毁，无法在其中求值。')
   }
-  return runWithEvaluateDeadline(() => webContents.executeJavaScript(script, userGesture) as Promise<T>, options)
+  return runWithEvaluateDeadline(
+    () => webContents.executeJavaScript(script, userGesture) as Promise<T>,
+    options
+  )
 }
 
 /**
@@ -39,16 +42,28 @@ export async function evaluateInFrame<T>(
   if (webContents.isDestroyed()) {
     throw new AppError('VALIDATION', '页面已销毁，无法在其中求值。')
   }
-  const frame = webContents.mainFrame.framesInSubtree.find((candidate) => String(candidate.frameTreeNodeId) === frameId)
+  const frame = webContents.mainFrame.framesInSubtree.find(
+    (candidate) => String(candidate.frameTreeNodeId) === frameId
+  )
   if (!frame) {
-    throw new AppError(BrowserErrorCodes.frameNotFound, `框架 ${frameId} 不在当前页面的框架树里（页面跳转之后旧 id 作废）：重新 frames()。`)
+    throw new AppError(
+      BrowserErrorCodes.frameNotFound,
+      `框架 ${frameId} 不在当前页面的框架树里（页面跳转之后旧 id 作废）：重新 frames()。`
+    )
   }
-  if (frame === webContents.mainFrame) return evaluateInWebContents<T>(webContents, script, userGesture, options)
-  return runWithEvaluateDeadline(() => frame.executeJavaScript(script, userGesture) as Promise<T>, options)
+  if (frame === webContents.mainFrame)
+    return evaluateInWebContents<T>(webContents, script, userGesture, options)
+  return runWithEvaluateDeadline(
+    () => frame.executeJavaScript(script, userGesture) as Promise<T>,
+    options
+  )
 }
 
 /** 给一次求值套上主进程的期限：渲染进程不回话时收口成 `TIMEOUT`，不让 await 永远挂着。 */
-async function runWithEvaluateDeadline<T>(run: () => Promise<T>, options: BrowserEvaluateDeadlineOptions): Promise<T> {
+async function runWithEvaluateDeadline<T>(
+  run: () => Promise<T>,
+  options: BrowserEvaluateDeadlineOptions
+): Promise<T> {
   const timeoutMs = options.timeoutMs ?? BrowserTuning.page.evaluateDeadlineMs
   const label = options.label ?? 'page-evaluate'
   const timers = new TimerScope({ name: 'BrowserWebContentsEvaluator' })

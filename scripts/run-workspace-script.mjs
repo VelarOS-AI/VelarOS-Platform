@@ -37,7 +37,11 @@ for (const directory of listPackageDirectories()) {
     continue
   }
   console.log(`▸ ${scriptName} ${manifest.name}`)
-  const result = spawnSync('bun', ['run', scriptName], { cwd: dir, env: process.env, stdio: 'inherit' })
+  const result = spawnSync('bun', ['run', scriptName], {
+    cwd: dir,
+    env: process.env,
+    stdio: 'inherit',
+  })
   if (result.status !== 0) {
     console.error(`✗ ${manifest.name} ${scriptName} 失败`)
     failed = true

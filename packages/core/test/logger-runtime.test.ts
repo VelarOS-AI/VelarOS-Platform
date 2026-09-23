@@ -31,8 +31,8 @@ test('a closed console pipe cannot crash the logging runtime', async () => {
     })
     child.once('error', reject)
   })
-  const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
-    (done) => child.once('close', (code, signal) => done({ code, signal }))
+  const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((done) =>
+    child.once('close', (code, signal) => done({ code, signal }))
   )
   expect(exit).toEqual({ code: 0, signal: null })
 })

@@ -1,5 +1,12 @@
 import type { ModelToolDelivery } from '@velaros-ai/agent'
-import type { ContextContent, ContextReadStamp, ContextRef, ContextResourceTarget, ContextSourceRead, ContextViewForm } from '@velaros-ai/context'
+import type {
+  ContextContent,
+  ContextReadStamp,
+  ContextRef,
+  ContextResourceTarget,
+  ContextSourceRead,
+  ContextViewForm,
+} from '@velaros-ai/context'
 
 /** @AgentView 一个搜索档位的资源上限：模型调用次数与 token、各阶段时限（毫秒）、来源查询次数、候选数、读取次数与字节数。 */
 export interface SearchProfile {
@@ -127,18 +134,28 @@ export interface SearchReadInput {
  * @AgentView
  * 读报告的结果：snapshot 是一页原文（读证据时带着它当时的版本 stamp）；current 是这一页证据的现状，ok 为假的那项 status 说明为什么没有正文（比如按行选的内容已经变了）。
  */
-export type SearchReadResult = (ContextContent & { readonly mode: 'snapshot'; readonly stamp?: ContextReadStamp }) | {
-  /** 当前读取不调用模型。 */
-  readonly mode: 'current'
-  /** 已发布报告身份。 */
-  readonly ref: ContextRef
-  /** 本页刷新结果，ok 区分事实正文与失败。 */
-  readonly items: ReadonlyArray<(ContextSourceRead & { readonly id: string; readonly target: ContextResourceTarget; readonly ok: true; readonly status: 'current' }) | { readonly id: string; readonly ok: false; readonly status: string }>
-  /** 可刷新的证据总数。 */
-  readonly total: number
-  /** 本操作不创建模型请求。 */
-  readonly modelCalled: false
-}
+export type SearchReadResult =
+  | (ContextContent & { readonly mode: 'snapshot'; readonly stamp?: ContextReadStamp })
+  | {
+      /** 当前读取不调用模型。 */
+      readonly mode: 'current'
+      /** 已发布报告身份。 */
+      readonly ref: ContextRef
+      /** 本页刷新结果，ok 区分事实正文与失败。 */
+      readonly items: ReadonlyArray<
+        | (ContextSourceRead & {
+            readonly id: string
+            readonly target: ContextResourceTarget
+            readonly ok: true
+            readonly status: 'current'
+          })
+        | { readonly id: string; readonly ok: false; readonly status: string }
+      >
+      /** 可刷新的证据总数。 */
+      readonly total: number
+      /** 本操作不创建模型请求。 */
+      readonly modelCalled: false
+    }
 
 /** @AgentView 一个搜索档位：name 传给 search 的 profile，default 为真的是不给 profile 时用的那个，limits 是它的全部资源上限。 */
 export interface SearchProfileInfo {

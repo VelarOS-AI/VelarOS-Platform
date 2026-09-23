@@ -8,7 +8,6 @@ import { AppError } from '@velaros-ai/core/error'
 import type { PdfMetadataInput, PdfTextStampInput } from '../../types/office.js'
 import { OfficeTuning } from '../tuning.js'
 
-
 /** 将 #RRGGBB 文本转换成 pdf-lib 的 RGB；非法颜色回退到默认红色。 */
 export function parsePdfColor(input?: string): RGB {
   const hex = (input ?? 'DC2626').replace(/^#/, '').trim()
@@ -49,7 +48,10 @@ export function applyPdfMetadata(document: PDFDocument, metadata?: PdfMetadataIn
  * 文字戳用的是标准字体 Helvetica，只写得了 WinAnsi（西欧拉丁）字符；supportedCodePoints 是字体自己报的字符集。
  * 有写不了的字就当场 `VALIDATION`，点名是哪一条、哪个字——免得画到一半才炸。换行与制表符由绘制拆行，不算在内。
  */
-export function assertTextStampsEncodable(stamps: readonly PdfTextStampInput[], supportedCodePoints: readonly number[]): void {
+export function assertTextStampsEncodable(
+  stamps: readonly PdfTextStampInput[],
+  supportedCodePoints: readonly number[]
+): void {
   const supported = new Set(supportedCodePoints)
   for (const [index, stamp] of stamps.entries()) {
     for (const character of stamp.text.replace(/[\n\r\t\f\v]/g, '')) {

@@ -22,7 +22,10 @@ export async function findRepositoryRoot(startPath: string): Promise<Nullable<st
 }
 
 /** 读某个目录（规则根下的相对路径，根自己给空串）里那份 .gitignore 的正文；没有这个文件或读不了时返回空串。 */
-export async function readGitignoreContent(rootPath: string, directoryRelativePath: string): Promise<string> {
+export async function readGitignoreContent(
+  rootPath: string,
+  directoryRelativePath: string
+): Promise<string> {
   // arch-guard:silent-catch-ok 缺少 .gitignore 或读取失败时按无规则处理。
   return readFile(join(rootPath, directoryRelativePath, '.gitignore'), 'utf8').catch(() => '')
 }

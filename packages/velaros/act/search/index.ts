@@ -1,8 +1,25 @@
 export type { EvidenceModuleApi } from './contract/provides.js'
 export type { SearchModuleApi } from './contract/provides.js'
-export type { EvidenceActivation, EvidenceHost, EvidenceOperationContext, EvidenceService } from './contract/requires.js'
+export type {
+  EvidenceActivation,
+  EvidenceHost,
+  EvidenceOperationContext,
+  EvidenceService,
+} from './contract/requires.js'
 export type { SearchHost, SearchOperationContext, SearchService } from './contract/requires.js'
 export type { VelarosSearchOptions } from './contract/requires.js'
 export { evidenceModule } from './impl/EvidenceModule.js'
 export { searchModule } from './impl/SearchModule.js'
-export type { EvidenceCandidate, EvidenceCandidates, SearchDraft, SearchEvidence, SearchProfile, SearchProfileInfo, SearchReadInput, SearchReadResult, SearchReportReceipt, SearchRequest, SearchResult } from './types.js'
+export type {
+  EvidenceCandidate,
+  EvidenceCandidates,
+  SearchDraft,
+  SearchEvidence,
+  SearchProfile,
+  SearchProfileInfo,
+  SearchReadInput,
+  SearchReadResult,
+  SearchReportReceipt,
+  SearchRequest,
+  SearchResult,
+} from './types.js'

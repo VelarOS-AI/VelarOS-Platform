@@ -54,7 +54,7 @@ function assertPackageMetadata(manifest, directoryName) {
   assert(manifest.name === `${packageScope}${directoryName}`, `${label}: package name mismatch`)
   assert(
     typeof manifest.description === 'string' && manifest.description.length > 20,
-    `${label}: description is required`,
+    `${label}: description is required`
   )
   assert(manifest.license === 'Apache-2.0', `${label}: license must be Apache-2.0`)
   assert(manifest.type === 'module', `${label}: only ESM packages are supported`)
@@ -62,22 +62,25 @@ function assertPackageMetadata(manifest, directoryName) {
   assert(manifest.engines?.node === '>=20.0.0', `${label}: Node engine policy is missing`)
   assert(manifest.main === './dist/index.js', `${label}: main must target dist/index.js`)
   assert(manifest.types === './dist/index.d.ts', `${label}: types must target dist/index.d.ts`)
-  assert(manifest.exports?.['.']?.import === './dist/index.js', `${label}: root import export is missing`)
-  assert(manifest.exports?.['.']?.types === './dist/index.d.ts', `${label}: root types export is missing`)
+  assert(
+    manifest.exports?.['.']?.import === './dist/index.js',
+    `${label}: root import export is missing`
+  )
+  assert(
+    manifest.exports?.['.']?.types === './dist/index.d.ts',
+    `${label}: root types export is missing`
+  )
   assert(manifest.files?.includes('dist'), `${label}: dist is missing from files`)
   assert(manifest.files?.includes('README.md'), `${label}: README is missing from files`)
   assert(manifest.files?.includes('docs'), `${label}: docs are missing from files`)
   assert(
     manifest.repository?.directory === `packages/${directoryName}`,
-    `${label}: repository.directory is incorrect`,
+    `${label}: repository.directory is incorrect`
   )
-  assert(
-    manifest.publishConfig?.access === 'public',
-    `${label}: publish access must be public`,
-  )
+  assert(manifest.publishConfig?.access === 'public', `${label}: publish access must be public`)
   assert(
     manifest.publishConfig?.registry === 'https://npm.pkg.github.com',
-    `${label}: publish registry is incorrect`,
+    `${label}: publish registry is incorrect`
   )
 }
 
@@ -86,7 +89,7 @@ async function collectFiles(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const filePath = path.join(directory, entry.name)
     if (entry.isDirectory()) {
-      files.push(...await collectFiles(filePath))
+      files.push(...(await collectFiles(filePath)))
     } else {
       files.push(filePath)
     }
@@ -106,30 +109,30 @@ async function assertExportedConstructorContracts(packageName, distDirectory) {
       await readFile(declarationFile, 'utf8'),
       ts.ScriptTarget.Latest,
       true,
-      ts.ScriptKind.TS,
+      ts.ScriptKind.TS
     )
     const exportedNames = new Set()
     const localContractNames = new Set()
 
     for (const statement of sourceFile.statements) {
       if (
-        (
-          ts.isInterfaceDeclaration(statement)
-          || ts.isTypeAliasDeclaration(statement)
-          || ts.isClassDeclaration(statement)
-          || ts.isEnumDeclaration(statement)
-        )
-        && statement.name
+        (ts.isInterfaceDeclaration(statement) ||
+          ts.isTypeAliasDeclaration(statement) ||
+          ts.isClassDeclaration(statement) ||
+          ts.isEnumDeclaration(statement)) &&
+        statement.name
       ) {
         localContractNames.add(statement.name.text)
-        if (statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) {
+        if (
+          statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+        ) {
           exportedNames.add(statement.name.text)
         }
       }
       if (
-        ts.isExportDeclaration(statement)
-        && statement.exportClause
-        && ts.isNamedExports(statement.exportClause)
+        ts.isExportDeclaration(statement) &&
+        statement.exportClause &&
+        ts.isNamedExports(statement.exportClause)
       ) {
         for (const element of statement.exportClause.elements) {
           exportedNames.add((element.propertyName ?? element.name).text)
@@ -139,9 +142,9 @@ async function assertExportedConstructorContracts(packageName, distDirectory) {
 
     for (const statement of sourceFile.statements) {
       if (
-        !ts.isClassDeclaration(statement)
-        || !statement.name
-        || !exportedNames.has(statement.name.text)
+        !ts.isClassDeclaration(statement) ||
+        !statement.name ||
+        !exportedNames.has(statement.name.text)
       ) {
         continue
       }
@@ -160,7 +163,7 @@ async function assertExportedConstructorContracts(packageName, distDirectory) {
           for (const name of referencedNames) {
             assert(
               !localContractNames.has(name) || exportedNames.has(name),
-              `${packageName}: ${statement.name.text} constructor uses non-exported ${name} in ${path.relative(distDirectory, declarationFile)}`,
+              `${packageName}: ${statement.name.text} constructor uses non-exported ${name} in ${path.relative(distDirectory, declarationFile)}`
             )
           }
         }
@@ -181,19 +184,19 @@ const repositoryHelperTypeNames = new Set([
 async function assertNoAmbientHelperTypes(packageName, installedDirectory) {
   const distDirectory = path.join(installedDirectory, 'dist')
   assert(
-    !await fileExists(path.join(distDirectory, 'velaros-globals.d.ts')),
-    `${packageName}: tarball must not publish velaros-globals.d.ts`,
+    !(await fileExists(path.join(distDirectory, 'velaros-globals.d.ts'))),
+    `${packageName}: tarball must not publish velaros-globals.d.ts`
   )
 
   for (const declarationFile of await collectDeclarationFiles(distDirectory)) {
     const sourceText = await readFile(declarationFile, 'utf8')
     assert(
       !sourceText.includes('reference types="@velaros-ai/core"'),
-      `${packageName}: declaration must not load Core ambient types`,
+      `${packageName}: declaration must not load Core ambient types`
     )
     assert(
       !sourceText.includes('velaros-globals.d.ts'),
-      `${packageName}: declaration still references velaros-globals.d.ts`,
+      `${packageName}: declaration still references velaros-globals.d.ts`
     )
 
     const sourceFile = ts.createSourceFile(
@@ -201,22 +204,21 @@ async function assertNoAmbientHelperTypes(packageName, installedDirectory) {
       sourceText,
       ts.ScriptTarget.Latest,
       true,
-      ts.ScriptKind.TS,
+      ts.ScriptKind.TS
     )
     for (const statement of sourceFile.statements) {
-      if (
-        ts.isModuleDeclaration(statement)
-        && statement.name.getText(sourceFile) === 'global'
-      ) {
-        throw new Error(`${packageName}: ${path.relative(distDirectory, declarationFile)} declares global scope`)
+      if (ts.isModuleDeclaration(statement) && statement.name.getText(sourceFile) === 'global') {
+        throw new Error(
+          `${packageName}: ${path.relative(distDirectory, declarationFile)} declares global scope`
+        )
       }
       if (
-        ts.isTypeAliasDeclaration(statement)
-        && repositoryHelperTypeNames.has(statement.name.text)
-        && !statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+        ts.isTypeAliasDeclaration(statement) &&
+        repositoryHelperTypeNames.has(statement.name.text) &&
+        !statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
       ) {
         throw new Error(
-          `${packageName}: ${path.relative(distDirectory, declarationFile)} publishes ambient helper ${statement.name.text}`,
+          `${packageName}: ${path.relative(distDirectory, declarationFile)} publishes ambient helper ${statement.name.text}`
         )
       }
     }
@@ -269,7 +271,7 @@ async function linkExternalDependencies(consumerNodeModules, packageNames, packa
   }
   dependencies.set(
     '@types/node',
-    await realpath(path.join(repositoryRoot, 'node_modules', '@types', 'node')),
+    await realpath(path.join(repositoryRoot, 'node_modules', '@types', 'node'))
   )
 
   for (const [name, source] of dependencies) {
@@ -296,16 +298,28 @@ async function expandPublicExports(manifest, installedDirectory) {
     assert(typeof typesTarget === 'string', `${manifest.name}: ${exportKey} has no types target`)
 
     if (!exportKey.includes('*')) {
-      assert(!importTarget.includes('*'), `${manifest.name}: malformed import target for ${exportKey}`)
-      assert(!typesTarget.includes('*'), `${manifest.name}: malformed types target for ${exportKey}`)
+      assert(
+        !importTarget.includes('*'),
+        `${manifest.name}: malformed import target for ${exportKey}`
+      )
+      assert(
+        !typesTarget.includes('*'),
+        `${manifest.name}: malformed types target for ${exportKey}`
+      )
       await access(path.join(installedDirectory, importTarget), fsConstants.R_OK)
       await access(path.join(installedDirectory, typesTarget), fsConstants.R_OK)
       specifiers.push(exportKey === '.' ? manifest.name : `${manifest.name}/${exportKey.slice(2)}`)
       continue
     }
 
-    assert(importTarget.includes('*'), `${manifest.name}: wildcard import target missing for ${exportKey}`)
-    assert(typesTarget.includes('*'), `${manifest.name}: wildcard types target missing for ${exportKey}`)
+    assert(
+      importTarget.includes('*'),
+      `${manifest.name}: wildcard import target missing for ${exportKey}`
+    )
+    assert(
+      typesTarget.includes('*'),
+      `${manifest.name}: wildcard types target missing for ${exportKey}`
+    )
     const [importPrefix, importSuffix] = importTarget.split('*')
     const searchDirectory = path.join(installedDirectory, path.dirname(importPrefix))
     const candidateFiles = await collectFiles(searchDirectory)
@@ -315,7 +329,10 @@ async function expandPublicExports(manifest, installedDirectory) {
       if (!candidate.startsWith(absolutePrefix) || !candidate.endsWith(absoluteSuffix)) return []
       return [candidate.slice(absolutePrefix.length, candidate.length - absoluteSuffix.length)]
     })
-    assert(wildcardMatches.length > 0, `${manifest.name}: wildcard export ${exportKey} matches no files`)
+    assert(
+      wildcardMatches.length > 0,
+      `${manifest.name}: wildcard export ${exportKey} matches no files`
+    )
 
     const [keyPrefix, keySuffix] = exportKey.split('*')
     const [typesPrefix, typesSuffix] = typesTarget.split('*')
@@ -332,9 +349,10 @@ async function expandPublicExports(manifest, installedDirectory) {
 
 async function assertPackedCli(manifest, installedDirectory) {
   if (manifest.bin) {
-    const entries = typeof manifest.bin === 'string'
-      ? [[manifest.name, manifest.bin]]
-      : Object.entries(manifest.bin)
+    const entries =
+      typeof manifest.bin === 'string'
+        ? [[manifest.name, manifest.bin]]
+        : Object.entries(manifest.bin)
     for (const [command, target] of entries) {
       const binPath = path.join(installedDirectory, target)
       await access(binPath, fsConstants.R_OK)
@@ -349,14 +367,8 @@ async function unpackPackage(record, consumerNodeModules) {
   await mkdir(installedDirectory, { recursive: true })
   run(
     'tar',
-    [
-      '-xzf',
-      record.tarballPath,
-      '-C',
-      installedDirectory,
-      '--strip-components=1',
-    ],
-    repositoryRoot,
+    ['-xzf', record.tarballPath, '-C', installedDirectory, '--strip-components=1'],
+    repositoryRoot
   )
   return installedDirectory
 }
@@ -372,27 +384,28 @@ async function createPackageConsumer(record, packagesByName, consumersRoot) {
     await unpackPackage(packagesByName.get(dependencyName), consumerNodeModules)
   }
 
-  const installedDirectory = path.join(
-    consumerNodeModules,
-    ...record.manifest.name.split('/'),
-  )
+  const installedDirectory = path.join(consumerNodeModules, ...record.manifest.name.split('/'))
   const publicSpecifiers = await expandPublicExports(record.packedManifest, installedDirectory)
   await assertExportedConstructorContracts(
     record.manifest.name,
-    path.join(installedDirectory, 'dist'),
+    path.join(installedDirectory, 'dist')
   )
   await assertPackedCli(record.packedManifest, installedDirectory)
 
   await writeFile(
     path.join(consumerRoot, 'package.json'),
-    JSON.stringify({
-      name: `consumer-${record.directoryName}`,
-      private: true,
-      type: 'module',
-      dependencies: {
-        [record.manifest.name]: record.packedManifest.version,
+    JSON.stringify(
+      {
+        name: `consumer-${record.directoryName}`,
+        private: true,
+        type: 'module',
+        dependencies: {
+          [record.manifest.name]: record.packedManifest.version,
+        },
       },
-    }, null, 2),
+      null,
+      2
+    )
   )
 
   const imports = publicSpecifiers
@@ -404,7 +417,7 @@ async function createPackageConsumer(record, packagesByName, consumersRoot) {
     `${imports}
 
 void [${values}]
-`,
+`
   )
   await writeFile(
     path.join(consumerRoot, 'runtime.mjs'),
@@ -413,22 +426,26 @@ for (const specifier of specifiers) {
   await import(specifier)
 }
 console.info(${JSON.stringify(record.manifest.name)} + \` runtime imports passed: \${specifiers.length}\`)
-`,
+`
   )
   await writeFile(
     path.join(consumerRoot, 'tsconfig.json'),
-    JSON.stringify({
-      compilerOptions: {
-        target: 'ES2022',
-        module: 'NodeNext',
-        moduleResolution: 'NodeNext',
-        strict: true,
-        noEmit: true,
-        skipLibCheck: false,
-        types: ['node'],
+    JSON.stringify(
+      {
+        compilerOptions: {
+          target: 'ES2022',
+          module: 'NodeNext',
+          moduleResolution: 'NodeNext',
+          strict: true,
+          noEmit: true,
+          skipLibCheck: false,
+          types: ['node'],
+        },
+        include: ['consumer.ts'],
       },
-      include: ['consumer.ts'],
-    }, null, 2),
+      null,
+      2
+    )
   )
 
   run(process.execPath, ['runtime.mjs'], consumerRoot, { stdio: 'inherit' })
@@ -436,11 +453,11 @@ console.info(${JSON.stringify(record.manifest.name)} + \` runtime imports passed
     process.execPath,
     [path.join(repositoryRoot, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', 'tsconfig.json'],
     consumerRoot,
-    { stdio: 'inherit' },
+    { stdio: 'inherit' }
   )
 
   console.info(
-    `${record.manifest.name} isolated consumer passed (internal closure: ${closure.join(', ')})`,
+    `${record.manifest.name} isolated consumer passed (internal closure: ${closure.join(', ')})`
   )
 }
 
@@ -466,28 +483,32 @@ async function createAmbientConflictConsumer(packagesByName, consumersRoot) {
   await mkdir(probePack, { recursive: true })
   await writeFile(
     path.join(probeSource, 'package.json'),
-    JSON.stringify({
-      name: '@velaros-ai/ui-conflict-probe',
-      version: '0.0.0',
-      private: true,
-      type: 'module',
-      main: './index.js',
-      types: './index.d.ts',
-      exports: {
-        '.': {
-          types: './index.d.ts',
-          import: './index.js',
+    JSON.stringify(
+      {
+        name: '@velaros-ai/ui-conflict-probe',
+        version: '0.0.0',
+        private: true,
+        type: 'module',
+        main: './index.js',
+        types: './index.d.ts',
+        exports: {
+          '.': {
+            types: './index.d.ts',
+            import: './index.js',
+          },
         },
+        files: ['index.js', 'index.d.ts', 'velaros-globals.d.ts'],
       },
-      files: ['index.js', 'index.d.ts', 'velaros-globals.d.ts'],
-    }, null, 2),
+      null,
+      2
+    )
   )
   await writeFile(
     path.join(probeSource, 'velaros-globals.d.ts'),
     `type Nullish = undefined | null
 type Nullable<T> = T | null
 type LooseOptional<T> = T | Nullish
-`,
+`
   )
   await writeFile(
     path.join(probeSource, 'index.d.ts'),
@@ -497,7 +518,7 @@ export interface UiConflictProbe {
   optional: LooseOptional<number>
 }
 export declare const uiConflictProbe: true
-`,
+`
   )
   await writeFile(path.join(probeSource, 'index.js'), 'export const uiConflictProbe = true\n')
   await safePackPackage({
@@ -510,14 +531,8 @@ export declare const uiConflictProbe: true
   await mkdir(probeInstall, { recursive: true })
   run(
     'tar',
-    [
-      '-xzf',
-      path.join(probePack, probeTarballs[0]),
-      '-C',
-      probeInstall,
-      '--strip-components=1',
-    ],
-    repositoryRoot,
+    ['-xzf', path.join(probePack, probeTarballs[0]), '-C', probeInstall, '--strip-components=1'],
+    repositoryRoot
   )
 
   await writeFile(
@@ -532,7 +547,7 @@ import {
 const probe: UiConflictProbe = { value: null, optional: undefined }
 const ids = new MonotonicExecutionIdFactory({ now: () => 1 }, 'consumer')
 void [new AppError('TEST', ids.createExecutionId()), probe, uiConflictProbe]
-`,
+`
   )
   await writeFile(
     path.join(consumerRoot, 'runtime.mjs'),
@@ -541,28 +556,32 @@ void [new AppError('TEST', ids.createExecutionId()), probe, uiConflictProbe]
   import('${agentRuntimeName}'),
   import('@velaros-ai/ui-conflict-probe'),
 ])
-`,
+`
   )
   await writeFile(
     path.join(consumerRoot, 'tsconfig.json'),
-    JSON.stringify({
-      compilerOptions: {
-        target: 'ES2022',
-        module: 'NodeNext',
-        moduleResolution: 'NodeNext',
-        strict: true,
-        noEmit: true,
-        skipLibCheck: false,
-        types: ['node'],
+    JSON.stringify(
+      {
+        compilerOptions: {
+          target: 'ES2022',
+          module: 'NodeNext',
+          moduleResolution: 'NodeNext',
+          strict: true,
+          noEmit: true,
+          skipLibCheck: false,
+          types: ['node'],
+        },
+        include: ['consumer.ts'],
       },
-      include: ['consumer.ts'],
-    }, null, 2),
+      null,
+      2
+    )
   )
   run(
     process.execPath,
     [path.join(repositoryRoot, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', 'tsconfig.json'],
     consumerRoot,
-    { stdio: 'inherit' },
+    { stdio: 'inherit' }
   )
   run(process.execPath, ['runtime.mjs'], consumerRoot, { stdio: 'inherit' })
   console.info('core + agent + ambient UI tarball conflict probe passed')
@@ -590,10 +609,7 @@ try {
     assertPackageMetadata(manifest, directoryName)
 
     const readme = await readFile(path.join(packageDirectory, 'README.md'), 'utf8')
-    assert(
-      ChineseCharacter.test(readme),
-      `${manifest.name}: README.md must be written in Chinese`,
-    )
+    assert(ChineseCharacter.test(readme), `${manifest.name}: README.md must be written in Chinese`)
 
     const before = new Set(await readdir(packedDirectory))
     await safePackPackage({
@@ -601,7 +617,7 @@ try {
       packageDirectory,
     })
     const tarball = (await readdir(packedDirectory)).find(
-      (entry) => entry.endsWith('.tgz') && !before.has(entry),
+      (entry) => entry.endsWith('.tgz') && !before.has(entry)
     )
     assert(tarball, `${manifest.name}: pack did not create one tarball`)
 
@@ -616,7 +632,7 @@ try {
         inspectionDirectory,
         '--strip-components=1',
       ],
-      repositoryRoot,
+      repositoryRoot
     )
     const packedManifest = await readJson(path.join(inspectionDirectory, 'package.json'))
     assertPackageMetadata(packedManifest, directoryName)
@@ -628,7 +644,7 @@ try {
       for (const version of Object.values(dependencies ?? {})) {
         assert(
           !String(version).startsWith('workspace:'),
-          `${manifest.name}: workspace selector leaked into tarball`,
+          `${manifest.name}: workspace selector leaked into tarball`
         )
       }
     }

@@ -47,7 +47,8 @@ export class LocalModelEnvironment implements LocalModelEnvironmentApi {
 
   public resolveOllamaBaseURL(defaultBaseURL: string): string {
     const configured =
-      this.readString(LocalModelEnvironment.OllamaEnvironmentNames.baseURL) || this.readString(OllamaHostEnvironmentName)
+      this.readString(LocalModelEnvironment.OllamaEnvironmentNames.baseURL) ||
+      this.readString(OllamaHostEnvironmentName)
     const raw = trimTrailingPathSeparators(configured || defaultBaseURL)
     const baseURL = raw && !/^https?:\/\//iu.test(raw) ? `http://${raw}` : raw
     if (!baseURL) return ''
@@ -61,15 +62,15 @@ export class LocalModelEnvironment implements LocalModelEnvironmentApi {
 
   public resolveOllamaContextWindow(defaultContextWindow?: number): Nullable<number> {
     return toNullable(
-      this.readPositiveInteger(LocalModelEnvironment.OllamaEnvironmentNames.contextWindow) ?? defaultContextWindow
+      this.readPositiveInteger(LocalModelEnvironment.OllamaEnvironmentNames.contextWindow) ??
+        defaultContextWindow
     )
   }
 
   public resolveOllamaVisibleChatModels(defaultModel = '', selectedModel = ''): string[] {
-    const models = [
-      this.resolveOllamaChatModel(defaultModel),
-      selectedModel.trim(),
-    ].filter((model) => !isBlank(model))
+    const models = [this.resolveOllamaChatModel(defaultModel), selectedModel.trim()].filter(
+      (model) => !isBlank(model)
+    )
 
     return [...new Set(models)]
   }

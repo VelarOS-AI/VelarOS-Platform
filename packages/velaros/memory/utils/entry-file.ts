@@ -16,9 +16,28 @@ const MemoryIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
 
 /** Windows 上当不了文件名的保留名，带不带扩展名都不行。 */
 const WindowsReservedNames: ReadonlySet<string> = new Set([
-  'con', 'prn', 'aux', 'nul',
-  'com1', 'com2', 'com3', 'com4', 'com5', 'com6', 'com7', 'com8', 'com9',
-  'lpt1', 'lpt2', 'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9',
+  'con',
+  'prn',
+  'aux',
+  'nul',
+  'com1',
+  'com2',
+  'com3',
+  'com4',
+  'com5',
+  'com6',
+  'com7',
+  'com8',
+  'com9',
+  'lpt1',
+  'lpt2',
+  'lpt3',
+  'lpt4',
+  'lpt5',
+  'lpt6',
+  'lpt7',
+  'lpt8',
+  'lpt9',
 ])
 
 /** 头部的围栏行。 */
@@ -28,7 +47,9 @@ const FenceLine = /^-{3,}\s*$/u
 const FieldLine = /^\s*([A-Za-z_][\w-]*)\s*:\s?(.*)$/u
 
 /** 头部键的别名：人手写的 name、summary、kind、modified 也认。 */
-const FieldAliases: Readonly<Record<string, 'title' | 'description' | 'type' | 'tags' | 'updated'>> = Object.freeze({
+const FieldAliases: Readonly<
+  Record<string, 'title' | 'description' | 'type' | 'tags' | 'updated'>
+> = Object.freeze({
   title: 'title',
   name: 'title',
   description: 'description',
@@ -45,7 +66,11 @@ const NeedsQuoting = /^[#&*!|>%@`'"[{]|: | #/u
 
 /** 是不是合法的记忆 id：小写字母、数字和连字符，不超长，也不是 Windows 的保留名。 */
 export function isMemoryId(value: string): boolean {
-  return value.length <= MemoryLimits.idChars && MemoryIdPattern.test(value) && !WindowsReservedNames.has(value)
+  return (
+    value.length <= MemoryLimits.idChars &&
+    MemoryIdPattern.test(value) &&
+    !WindowsReservedNames.has(value)
+  )
 }
 
 /** 一条记忆的文件名。 */
@@ -121,19 +146,33 @@ function splitFrontmatter(text: string): { fields: Map<string, string>; body: st
   const fields = new Map<string, string>()
   const lines = text.split('\n')
   const start = lines.findIndex((line) => !isBlank(line))
-  const end = start >= 0 && FenceLine.test(lines[start]!) ? lines.findIndex((line, index) => index > start && FenceLine.test(line)) : -1
+  const end =
+    start >= 0 && FenceLine.test(lines[start]!)
+      ? lines.findIndex((line, index) => index > start && FenceLine.test(line))
+      : -1
   if (end < 0) return { fields, body: text.trim() }
   for (const line of lines.slice(start + 1, end)) {
     const match = FieldLine.exec(line)
     const field = match ? FieldAliases[match[1]!.toLowerCase()] : undefined
     if (field && !fields.has(field)) fields.set(field, decodeValue(match![2] ?? ''))
   }
-  return { fields, body: lines.slice(end + 1).join('\n').trim() }
+  return {
+    fields,
+    body: lines
+      .slice(end + 1)
+      .join('\n')
+      .trim(),
+  }
 }
 
 /** 头部 tags 那一格拆成规整过的标签：逗号分隔，YAML 流式列表的方括号也认。 */
 function tagsOf(value: string): string[] {
-  return normalizeTags(value.replace(/^\[|\]$/gu, '').split(',').map(decodeValue))
+  return normalizeTags(
+    value
+      .replace(/^\[|\]$/gu, '')
+      .split(',')
+      .map(decodeValue)
+  )
 }
 
 /** 头部写的类别：认得的原样用，认不出的当作 work。 */
@@ -144,7 +183,11 @@ function memoryTypeOf(value: string): MemoryType {
 
 /** 正文第一行有字的内容（去掉 Markdown 标题的井号），截到描述的上限。 */
 function firstLine(body: string): string {
-  const line = body.split('\n').map((text) => text.replace(/^\s*#{1,6}\s+/u, '').trim()).find(Boolean) ?? ''
+  const line =
+    body
+      .split('\n')
+      .map((text) => text.replace(/^\s*#{1,6}\s+/u, '').trim())
+      .find(Boolean) ?? ''
   return line.slice(0, MemoryLimits.descriptionChars)
 }
 

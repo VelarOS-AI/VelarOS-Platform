@@ -6,7 +6,12 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { BrowserPageDriver } from '../../contract/requires.js'
 import type { BrowserUserScriptRecord } from '../../types/browser'
-import type { BrowserPageNavigationOptions, BrowserPageNavigationResult, BrowserPageTargetInfo, BrowserPageWindowState } from '../../types/browser'
+import type {
+  BrowserPageNavigationOptions,
+  BrowserPageNavigationResult,
+  BrowserPageTargetInfo,
+  BrowserPageWindowState,
+} from '../../types/browser'
 import type { BrowserPageDriverState } from '../../types/driver'
 import type { ExternalBrowserPageSession } from '../../types/runtime.js'
 import { getBrowserUrlCandidate } from '../address'
@@ -30,7 +35,9 @@ export function applyExternalPageState(
 }
 
 /** 拼出外部浏览器窗口的状态回执。 */
-export function buildExternalWindowState(session: ExternalBrowserPageSession): BrowserPageWindowState {
+export function buildExternalWindowState(
+  session: ExternalBrowserPageSession
+): BrowserPageWindowState {
   if (session.driver.isDestroyed())
     return {
       active: false,
@@ -94,9 +101,7 @@ export function buildExternalNavigationResult(
 /** 判断占位或错误页 URL。 */
 export function isPlaceholderUrl(url: LooseOptional<string>): boolean {
   return (
-    url === 'about:blank' ||
-    url === 'about:srcdoc' ||
-    (!!url && url.startsWith('chrome-error://'))
+    url === 'about:blank' || url === 'about:srcdoc' || (!!url && url.startsWith('chrome-error://'))
   )
 }
 

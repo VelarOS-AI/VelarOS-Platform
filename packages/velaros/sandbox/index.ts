@@ -17,7 +17,12 @@ export { sandboxOperations } from './impl/SandboxOperations.js'
 export type { LocalSandboxHostApi } from './impl/LocalSandboxHost.js'
 
 // ── 注入面：宿主要实现的沙箱端口，与调用命名空间时给的上下文 ─────
-export type { LocalSandboxHostOptions, RehearsalSandboxHostPort, SandboxOperationContext, SandboxSurfacePort } from './contract/requires.js'
+export type {
+  LocalSandboxHostOptions,
+  RehearsalSandboxHostPort,
+  SandboxOperationContext,
+  SandboxSurfacePort,
+} from './contract/requires.js'
 
 // ── 上面用到、又不在可移植文件里的数据 ───────────────────────────
 export type { SandboxApplyPrepareInput } from './types/apply.js'

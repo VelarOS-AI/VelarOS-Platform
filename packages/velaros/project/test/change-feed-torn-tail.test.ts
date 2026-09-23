@@ -17,7 +17,18 @@ afterEach(async () => {
 
 /** 一条最小的变更记录。 */
 function record(transactionId: string): ProjectChangeRecordInput {
-  return { transactionId, lifecycle: 'applied', intents: [], patches: [], changedFiles: ['a.ts'], diff: '', changedLines: 0, risk: 'low', revisions: [], createdAt: 1 }
+  return {
+    transactionId,
+    lifecycle: 'applied',
+    intents: [],
+    patches: [],
+    changedFiles: ['a.ts'],
+    diff: '',
+    changedLines: 0,
+    risk: 'low',
+    revisions: [],
+    createdAt: 1,
+  }
 }
 
 test('崩溃留下的残行在下次打开时被截掉，后续记录不会拼到它后面', async () => {
@@ -41,7 +52,12 @@ test('崩溃留下的残行在下次打开时被截掉，后续记录不会拼�
 
   // 再开一次不再抛错：残行已经不在文件里了（改动前这里会因为坏行整份记录报废）。
   const third = createFileProjectChangeFeed({ path })
-  expect(third.list().map((change) => change.transactionId).sort()).toEqual(['tx_1', 'tx_3'])
+  expect(
+    third
+      .list()
+      .map((change) => change.transactionId)
+      .sort()
+  ).toEqual(['tx_1', 'tx_3'])
   third.close()
 })
 

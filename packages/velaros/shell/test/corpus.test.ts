@@ -14,7 +14,7 @@ const DangerousCommands = [
   'git update-ref -d refs/heads/main',
   'git reflog expire --expire=now --all',
   'git filter-branch -f --index-filter "git rm --cached secrets" HEAD',
-  'node -e "require(\'fs\').rmSync(\'build\', { recursive: true })"',
+  "node -e \"require('fs').rmSync('build', { recursive: true })\"",
   'diskutil eraseDisk JHFS+ New disk2',
   'rm -r ./directory',
   'rm -R ./directory',
@@ -138,16 +138,30 @@ describe('判定语料', () => {
   test('危险命令一律判危险并给出理由', () => {
     for (const command of DangerousCommands) {
       const plan = shellCommandPolicy.analyze(command)
-      expect({ command, isDangerous: plan.isDangerous, hasReason: !!plan.dangerousReason }).toEqual({ command, isDangerous: true, hasReason: true })
+      expect({ command, isDangerous: plan.isDangerous, hasReason: !!plan.dangerousReason }).toEqual(
+        { command, isDangerous: true, hasReason: true }
+      )
     }
   })
 
   test('只读白名单的绕过写法判非只读，真正只读的写法判只读', () => {
-    for (const command of ReadOnlyBypassCommands) expect({ command, readOnly: shellCommandPolicy.isReadOnly(command) }).toEqual({ command, readOnly: false })
-    for (const command of ReadOnlyCommands) expect({ command, readOnly: shellCommandPolicy.isReadOnly(command) }).toEqual({ command, readOnly: true })
+    for (const command of ReadOnlyBypassCommands)
+      expect({ command, readOnly: shellCommandPolicy.isReadOnly(command) }).toEqual({
+        command,
+        readOnly: false,
+      })
+    for (const command of ReadOnlyCommands)
+      expect({ command, readOnly: shellCommandPolicy.isReadOnly(command) }).toEqual({
+        command,
+        readOnly: true,
+      })
   })
 
   test('日常命令不打扰用户', () => {
-    for (const command of RoutineCommands) expect({ command, isDangerous: shellCommandPolicy.analyze(command).isDangerous }).toEqual({ command, isDangerous: false })
+    for (const command of RoutineCommands)
+      expect({ command, isDangerous: shellCommandPolicy.analyze(command).isDangerous }).toEqual({
+        command,
+        isDangerous: false,
+      })
   })
 })

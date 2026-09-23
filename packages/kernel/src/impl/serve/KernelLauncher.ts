@@ -14,7 +14,10 @@ import {
   meansKernelDaemonIsNotRunning,
 } from '../../utils/serve/daemon-process'
 import { KernelTuning } from '../../utils/tuning'
-import { type KernelDaemonDirectoryConnection,kernelDaemons } from '../client/KernelDaemonDirectory'
+import {
+  type KernelDaemonDirectoryConnection,
+  kernelDaemons,
+} from '../client/KernelDaemonDirectory'
 
 const log = Log.tag('KernelLauncher')
 
@@ -159,9 +162,7 @@ export class KernelLauncher implements KernelLauncherApi {
     })
   }
 
-  public async verifyHealthy(
-    connection: KernelDaemonDirectoryConnection,
-  ): Promise<void> {
+  public async verifyHealthy(connection: KernelDaemonDirectoryConnection): Promise<void> {
     const health = await connection.client.health()
     if (health.status === 'stopped') {
       throw new KernelClientError({
@@ -196,10 +197,7 @@ export class KernelLauncher implements KernelLauncherApi {
   }
 
   /** 按轮询间隔等一个子进程退出，超过给定期限就回 false。 */
-  private async waitForExit(
-    child: ChildProcess,
-    timeoutMs: number,
-  ): Promise<boolean> {
+  private async waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
     const deadline = this.now() + timeoutMs
     while (this.now() < deadline) {
       if (hasChildProcessExited(child)) return true
@@ -246,7 +244,7 @@ export class KernelLauncher implements KernelLauncherApi {
           detached: true,
           stdio: 'ignore',
           env: { ...process.env, ...target.env },
-        },
+        }
       )
       // detached 起的是共享守护进程：不 unref 的话父进程会被它吊着退不出去。
       child.unref()
@@ -271,8 +269,6 @@ export class KernelLauncher implements KernelLauncherApi {
 }
 
 /** 建一个共享 Kernel 进程的启动器;实例归要用 Kernel 的产品,起停都由它负责。 */
-export function createKernelLauncher(
-  options: KernelLauncherOptions,
-): KernelLauncherApi {
+export function createKernelLauncher(options: KernelLauncherOptions): KernelLauncherApi {
   return new KernelLauncher(options)
 }

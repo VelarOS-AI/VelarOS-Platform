@@ -14,7 +14,12 @@ export { fileOperations } from './impl/FileOperations.js'
 export type { LocalFileSearchApi } from './impl/LocalFileSearch.js'
 
 // ── 注入面：空间要给的东西 ──────────────────────────────────────
-export type { FileOperationContext, FileSpacePort, LocalFilePortOptions, LocalFileSearchOptions } from './contract/requires.js'
+export type {
+  FileOperationContext,
+  FileSpacePort,
+  LocalFilePortOptions,
+  LocalFileSearchOptions,
+} from './contract/requires.js'
 
 // ── 上面用到、又不在可移植文件里的数据 ───────────────────────────
 export type { FileWrite } from './types/space.js'

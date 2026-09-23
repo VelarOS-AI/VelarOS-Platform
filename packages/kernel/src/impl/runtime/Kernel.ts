@@ -23,8 +23,7 @@ import { KernelCapabilityInvoker } from './KernelCapabilityInvoker'
 import { KernelModuleHost, type KernelModuleHostOptions } from './KernelModuleHost'
 
 /** 装配进程内内核时交进来的东西；四个策略件都可选，缺省是安全默认。 */
-export interface KernelOptions
-  extends Omit<KernelModuleHostOptions, 'apiVersion'> {
+export interface KernelOptions extends Omit<KernelModuleHostOptions, 'apiVersion'> {
   /** 覆盖模块清单 ABI 版本；只给测试用，产品不要写。 */
   readonly apiVersion?: number
   /** 覆盖内核自报的版本；不写就用常量表里的那一个。 */
@@ -64,13 +63,9 @@ export interface KernelApi {
   /** 这件能力现在有没有活动提供方。 */
   hasCapability(capabilityId: string): boolean
   /** 取一件能力的服务；没有就返回 undefined。 */
-  getCapability<TService extends object>(
-    token: CapabilityToken<TService>,
-  ): TService | undefined
+  getCapability<TService extends object>(token: CapabilityToken<TService>): TService | undefined
   /** 按能力 id 取可调用服务；能力不在、或服务不满足可调用约定时返回 null。 */
-  resolveCallableCapability(
-    capabilityId: string,
-  ): Nullable<KernelCallableCapabilityService>
+  resolveCallableCapability(capabilityId: string): Nullable<KernelCallableCapabilityService>
   /**
    * 单独求一次能力权限（不执行调用）。
    *
@@ -80,15 +75,12 @@ export interface KernelApi {
   requestCapabilityPermission(
     capabilityId: string,
     request: KernelModulePermissionRequest,
-    attribution?: { readonly callerModuleId: string },
+    attribution?: { readonly callerModuleId: string }
   ): Promise<KernelPermissionDecision>
   /** 过权限门调一次能力：未知操作在求权限之前就失败，声明的每条权限都在 provider 代码跑之前判完。 */
   invokeCapability(call: KernelCapabilityCall): Promise<unknown>
   /** 以宿主身份订阅一类事件；返回退订函数。 */
-  subscribeEvent<TPayload>(
-    type: string,
-    handler: KernelEventHandler<TPayload>,
-  ): () => void
+  subscribeEvent<TPayload>(type: string, handler: KernelEventHandler<TPayload>): () => void
 }
 
 export class Kernel implements KernelApi {
@@ -132,7 +124,8 @@ export class Kernel implements KernelApi {
   }
 
   public start(): Promise<void> {
-    if (this.status === 'disposed' || this.status === 'disposing') return Promise.reject(new Error('已回收的内核不能再启动'))
+    if (this.status === 'disposed' || this.status === 'disposing')
+      return Promise.reject(new Error('已回收的内核不能再启动'))
     this.startPromise ??= this.startOnce()
     return this.startPromise
   }
@@ -155,13 +148,13 @@ export class Kernel implements KernelApi {
   }
 
   public getCapability<TService extends object>(
-    token: CapabilityToken<TService>,
+    token: CapabilityToken<TService>
   ): TService | undefined {
     return this.host.getOptionalService(token)
   }
 
   public resolveCallableCapability(
-    capabilityId: string,
+    capabilityId: string
   ): Nullable<KernelCallableCapabilityService> {
     const token = this.host.getActiveCapabilityToken(capabilityId)
     if (isUndefined(token)) return null
@@ -172,10 +165,11 @@ export class Kernel implements KernelApi {
   public async requestCapabilityPermission(
     capabilityId: string,
     request: KernelModulePermissionRequest,
-    attribution?: { readonly callerModuleId: string },
+    attribution?: { readonly callerModuleId: string }
   ): Promise<KernelPermissionDecision> {
     const token = this.host.getActiveCapabilityToken(capabilityId)
-    if (isUndefined(token)) return {
+    if (isUndefined(token))
+      return {
         status: 'denied',
         reason: `能力 "${capabilityId}" 现在没有活动的提供方`,
       }
@@ -186,10 +180,7 @@ export class Kernel implements KernelApi {
     return this.capabilityInvoker.invoke(call)
   }
 
-  public subscribeEvent<TPayload>(
-    type: string,
-    handler: KernelEventHandler<TPayload>,
-  ): () => void {
+  public subscribeEvent<TPayload>(type: string, handler: KernelEventHandler<TPayload>): () => void {
     const registration: KernelRegistration = this.host.subscribe(type, handler)
     return () => registration.dispose()
   }

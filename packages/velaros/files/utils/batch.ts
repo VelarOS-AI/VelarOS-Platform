@@ -16,10 +16,19 @@ import type { FileWrite } from '../types/space.js'
  */
 export function batchItems<T>(input: unknown, max: number, operation: string): readonly T[] {
   const files = isPlainObject(input) ? input.files : undefined
-  if (!isArray(files)) throw new AppError('VALIDATION', `缺少 files：${operation} 要 { files: [...] }，每个文件一项`)
+  if (!isArray(files))
+    throw new AppError('VALIDATION', `缺少 files：${operation} 要 { files: [...] }，每个文件一项`)
   if (files.length < 1) throw new AppError('VALIDATION', 'files 是空的；至少给一个文件')
-  if (files.length > max) throw new AppError('VALIDATION', `${operation} 一次最多 ${max} 个文件，这里给了 ${files.length} 个；分几次调用`)
-  if (!files.every((file) => isPlainObject(file))) throw new AppError('VALIDATION', `${operation} 的 files 每一项都要是对象，例如 { path: 'a.txt' }`)
+  if (files.length > max)
+    throw new AppError(
+      'VALIDATION',
+      `${operation} 一次最多 ${max} 个文件，这里给了 ${files.length} 个；分几次调用`
+    )
+  if (!files.every((file) => isPlainObject(file)))
+    throw new AppError(
+      'VALIDATION',
+      `${operation} 的 files 每一项都要是对象，例如 { path: 'a.txt' }`
+    )
   return files as readonly T[]
 }
 
@@ -34,7 +43,9 @@ export function failureEntry(path: string, failure: AppError): FileFailure {
  */
 export function unresolvedEditFailure(problems: readonly FileEditProblem[]): AppError {
   const denied = problems.some((problem) => problem.reason === 'denied')
-  const listed = problems.map((problem) => `files[${problem.file}] ${problem.path}：${problem.message}`).join('；')
+  const listed = problems
+    .map((problem) => `files[${problem.file}] ${problem.path}：${problem.message}`)
+    .join('；')
   return new AppError(
     denied ? FileErrorCodes.editDenied : FileErrorCodes.editUnresolved,
     `这一批一个文件都没写，有 ${problems.length} 个问题。${listed}`,
@@ -44,7 +55,10 @@ export function unresolvedEditFailure(problems: readonly FileEditProblem[]): App
 }
 
 /** 核对调用方给的版本和文件现在的版本：给了且对不上就返回一条 stale 问题的字段，其余情况返回 null。文件不存在时当前版本为 null。 */
-export function staleProblem(expected: Optional<string>, current: Nullable<string>): Nullable<Pick<FileEditProblem, 'reason' | 'message' | 'currentVersion'>> {
+export function staleProblem(
+  expected: Optional<string>,
+  current: Nullable<string>
+): Nullable<Pick<FileEditProblem, 'reason' | 'message' | 'currentVersion'>> {
   if (!isPresent(expected) || expected === current) return null
   return {
     reason: 'stale',
@@ -56,7 +70,11 @@ export function staleProblem(expected: Optional<string>, current: Nullable<strin
 }
 
 /** 路径是符号链接时把真正被写的目标记进结果；不是链接就原样返回。 */
-export function withLinkTarget<T extends { target?: string }>(result: T, target: string, linked: boolean): T {
+export function withLinkTarget<T extends { target?: string }>(
+  result: T,
+  target: string,
+  linked: boolean
+): T {
   if (linked) result.target = target
   return result
 }
@@ -73,13 +91,22 @@ export function writeOfPlan(plan: FileEditPlan): FileWrite {
  * 落盘途中出错：空间点名了哪些已经写进去，就换成模型认得的路径写进报错；没点名说明什么都没写。
  * 已经写进去的那几个另记成一次改动，报错里给出它的号：程序可以拿去 undo，把这一批退回到改之前。
  */
-export function commitFailure(error: unknown, plans: readonly FileEditPlan[], record: (applied: readonly FileEditPlan[]) => Nullable<string>): AppError {
+export function commitFailure(
+  error: unknown,
+  plans: readonly FileEditPlan[],
+  record: (applied: readonly FileEditPlan[]) => Nullable<string>
+): AppError {
   const failure = AppError.from(error)
   const applied = isArray(failure.context.applied) ? failure.context.applied.filter(isString) : []
   const written = plans.filter((plan) => applied.includes(plan.target))
-  if (isEmpty(written)) return new AppError(failure.code, `这一批没有写进去：${failure.message}`, error, { applied: [] })
+  if (isEmpty(written))
+    return new AppError(failure.code, `这一批没有写进去：${failure.message}`, error, {
+      applied: [],
+    })
   const changeId = record(written)
-  const undo = changeId ? `要退回到改之前，就 undo({ changeId: '${changeId}' })` : '这几个文件改之前太大，没留原文，撤不回'
+  const undo = changeId
+    ? `要退回到改之前，就 undo({ changeId: '${changeId}' })`
+    : '这几个文件改之前太大，没留原文，撤不回'
   const message = `这一批只写进去了一部分——已经写入的：${written.map((plan) => plan.path).join('、')}；出错的原因：${failure.message}。${undo}；不要整批重发，先 read 一遍看现状`
   return new AppError(failure.code, message, error, { applied: written.map((plan) => plan.path) })
 }

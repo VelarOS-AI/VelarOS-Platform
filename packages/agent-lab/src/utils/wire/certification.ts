@@ -4,7 +4,11 @@
  */
 import { z } from 'zod'
 
-import { AgentLabLimits, CertificationSubjectKinds, ObservationFaces } from '../../contract/constants.js'
+import {
+  AgentLabLimits,
+  CertificationSubjectKinds,
+  ObservationFaces,
+} from '../../contract/constants.js'
 import type { CertificationPolicy, CertificationSubject } from '../../types/agent-lab.js'
 
 import { identifierSchema } from './primitives.js'
@@ -26,10 +30,12 @@ export const certificationPolicySchema = z.strictObject({
   minimumReliability: z.number().min(0).max(1),
   maximumAttritionRate: z.number().min(0).max(1),
   requiredObservationCoverage: z.strictObject(
-    Object.fromEntries(ObservationFaces.map((face) => [face, z.enum(['partial', 'full']).optional()])) as Record<
+    Object.fromEntries(
+      ObservationFaces.map((face) => [face, z.enum(['partial', 'full']).optional()])
+    ) as Record<
       (typeof ObservationFaces)[number],
       z.ZodOptional<z.ZodEnum<{ partial: 'partial'; full: 'full' }>>
-    >,
+    >
   ),
   requireSeparateVerifier: z.boolean(),
   requireNativeExecution: z.boolean(),

@@ -57,7 +57,13 @@ import type {
   VerificationOutcome,
 } from '../../types/agent-lab.js'
 
-import { identifierSchema, jsonObjectSchema, jsonValueSchema, nonEmptyTextSchema, nullableLimitSchema } from './primitives.js'
+import {
+  identifierSchema,
+  jsonObjectSchema,
+  jsonValueSchema,
+  nonEmptyTextSchema,
+  nullableLimitSchema,
+} from './primitives.js'
 
 const observationCoverageSchema = z.enum(ObservationCoverages)
 const observationFaceSchema = z.enum(ObservationFaces)
@@ -134,7 +140,11 @@ export const journeySpecSchema = z
     const legIds = new Set<string>()
     for (const [legIndex, leg] of journey.legs.entries()) {
       if (legIds.has(leg.id)) {
-        context.addIssue({ code: 'custom', message: `段 id 重复: ${leg.id}`, path: ['legs', legIndex, 'id'] })
+        context.addIssue({
+          code: 'custom',
+          message: `段 id 重复: ${leg.id}`,
+          path: ['legs', legIndex, 'id'],
+        })
       }
       legIds.add(leg.id)
       const criterionIds = new Set<string>()
@@ -321,7 +331,11 @@ const settleOutcomeSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('aborted'), detectorId: z.string(), reason: z.string() }),
   z.strictObject({ kind: z.literal('budget-exhausted'), limit: z.enum(BudgetLimits) }),
   z.strictObject({ kind: z.literal('timeout') }),
-  z.strictObject({ kind: z.literal('unavailable'), cause: attritionCauseSchema, detail: z.string() }),
+  z.strictObject({
+    kind: z.literal('unavailable'),
+    cause: attritionCauseSchema,
+    detail: z.string(),
+  }),
 ]) satisfies z.ZodType<SettleOutcome>
 
 const criterionResultSchema = z.strictObject({

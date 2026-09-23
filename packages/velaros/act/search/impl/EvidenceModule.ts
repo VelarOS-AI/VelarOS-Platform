@@ -21,7 +21,10 @@ class EvidenceModule implements EvidenceModuleApi {
       instanceId: 'standard:evidence',
       generation: VelarosRuntimeContract.generation,
       summary: '仅搜索作用域可用的真实来源检索和读取',
-      context: (call) => ({ activation: host.search.activation(call.invocation.sessionId), abortSignal: call.signal }),
+      context: (call) => ({
+        activation: host.search.activation(call.invocation.sessionId),
+        abortSignal: call.signal,
+      }),
     })
   }
 }

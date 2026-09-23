@@ -13,7 +13,9 @@ function deletes(patch: AgentProjectPreparedPatch): boolean {
 }
 
 /** 事务有没有真改动：按每个文件的最终状态比，不看中间补丁和差量文字（空文件也算存在）；存在与否、正文、权限、编码有一样变了就算改动，编码转换一律算。 */
-export function projectTransactionHasChanges(patches: readonly AgentProjectPreparedPatch[]): boolean {
+export function projectTransactionHasChanges(
+  patches: readonly AgentProjectPreparedPatch[]
+): boolean {
   const paths = new Map<string, PathEffect>()
   for (const patch of patches) {
     const previous = paths.get(patch.path)
@@ -21,9 +23,15 @@ export function projectTransactionHasChanges(patches: readonly AgentProjectPrepa
       previous.last = patch
       previous.existsAfter = !deletes(patch)
     } else {
-      const newlyCreated = patch.metadata?.op === 'rename_file_create' ||
+      const newlyCreated =
+        patch.metadata?.op === 'rename_file_create' ||
         (patch.metadata?.op === 'create_file' && !isTrue(patch.metadata?.replacesExisting))
-      paths.set(patch.path, { first: patch, last: patch, existedBefore: !newlyCreated, existsAfter: !deletes(patch) })
+      paths.set(patch.path, {
+        first: patch,
+        last: patch,
+        existedBefore: !newlyCreated,
+        existsAfter: !deletes(patch),
+      })
     }
   }
   return [...paths.values()].some(({ first, last, existedBefore, existsAfter }) => {
@@ -31,10 +39,12 @@ export function projectTransactionHasChanges(patches: readonly AgentProjectPrepa
     if (!existsAfter) return false
     if (!isString(first.oldContent) || !isString(last.newContent)) return true
     // 编码转换补丁只在需要重写字节的文件上生成，正文相同也算改动。
-    return first.oldContent !== last.newContent ||
+    return (
+      first.oldContent !== last.newContent ||
       first.metadata?.fileMode !== last.metadata?.fileMode ||
       (first.metadata?.textEncoding ?? 'utf8') !== (last.metadata?.textEncoding ?? 'utf8') ||
       last.metadata?.mode === 'recode'
+    )
   })
 }
 
@@ -48,7 +58,10 @@ export function projectCreatedPaths(patches: readonly AgentProjectPreparedPatch[
   for (const patch of patches) {
     if (seen.has(patch.path)) continue
     seen.add(patch.path)
-    if (patch.metadata?.op === 'rename_file_create' || (patch.metadata?.op === 'create_file' && !isTrue(patch.metadata?.replacesExisting)))
+    if (
+      patch.metadata?.op === 'rename_file_create' ||
+      (patch.metadata?.op === 'create_file' && !isTrue(patch.metadata?.replacesExisting))
+    )
       created.add(patch.path)
   }
   return created

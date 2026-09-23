@@ -1,5 +1,5 @@
 import type { Diagnostic, Range } from './common.js'
-import type {PrepareEditInput } from './edit.js'
+import type { PrepareEditInput } from './edit.js'
 import type { FileSnapshot } from './snapshot.js'
 
 /** 文件快照的粗粒度内容类型，用来选择最安全的 adapter。 */
@@ -16,13 +16,7 @@ export type AdapterKind =
 
 /** adapter 实例声明的可选能力。 */
 export type AdapterCapability =
-  | 'read'
-  | 'search'
-  | 'resolve'
-  | 'prepare_edit'
-  | 'validate'
-  | 'render'
-  | 'symbols'
+  'read' | 'search' | 'resolve' | 'prepare_edit' | 'validate' | 'render' | 'symbols'
 
 export interface ParseInput {
   snapshot: FileSnapshot
@@ -92,4 +86,3 @@ export interface AdapterValidateInput {
   transactionId?: string
   changedContent?: string
 }
-

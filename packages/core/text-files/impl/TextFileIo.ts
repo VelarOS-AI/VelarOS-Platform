@@ -10,7 +10,13 @@ import { AppError } from '@velaros-ai/core/error'
 import { TextFileErrorCodes } from '../contract/constants.js'
 import type { ExpectedBytes, TextChunk, TextEncoding } from '../types/text-files.js'
 import { decodeStrictly } from '../utils/encoding.js'
-import { assertBytesOnDisk, openRegularFile, readBoundedBytes, readHeadBytes, replaceFileAtomically } from '../utils/file-io.js'
+import {
+  assertBytesOnDisk,
+  openRegularFile,
+  readBoundedBytes,
+  readHeadBytes,
+  replaceFileAtomically,
+} from '../utils/file-io.js'
 import { TextFileTuning } from '../utils/tuning.js'
 
 import type { TextCodecApi } from './TextCodec.js'
@@ -27,12 +33,20 @@ export interface TextFileIoApi {
    * 已有文件精确恢复它的权限位；新文件用 mode 并精确设上，不给就由 umask 定。给了 expected 时写前、改名前各核对一次磁盘上的字节，对不上抛 externalEdit、什么都不写。
    * 已有的不是普通文件或有多个硬链接抛 notRegular；mode 不在 0–0777 抛 invalidMode；上级目录不存在、没有权限这类文件系统错误原样抛出。
    */
-  writeBytes(path: string, bytes: Uint8Array, options?: { mode?: number; expected?: ExpectedBytes }): Promise<void>
+  writeBytes(
+    path: string,
+    bytes: Uint8Array,
+    options?: { mode?: number; expected?: ExpectedBytes }
+  ): Promise<void>
   /**
    * 原子写一段正文：已有文件按它自己的编码（连同 BOM）写，认不出它的编码时抛 notText、不动它；新文件用 fallbackEncoding，缺省 utf8。
    * 正文写不成那种编码（孤立代理项、GB18030 表示不了的字符）时抛 lossy，磁盘不动；其余同 writeBytes。
    */
-  writeText(path: string, content: string, options?: { fallbackEncoding?: TextEncoding; mode?: number }): Promise<void>
+  writeText(
+    path: string,
+    content: string,
+    options?: { fallbackEncoding?: TextEncoding; mode?: number }
+  ): Promise<void>
   /** 在同一个句柄上有界读整个文件：不存在返回 undefined；不是普通文件抛 notRegular；超过 maxBytes 抛 tooLarge，不分配超大缓冲；读的过程中文件变长抛 externalEdit。 */
   readBounded(path: string, maxBytes: number): Promise<Buffer | undefined>
   /** 读文件开头最多 bytes 个字节（认编码、判二进制用），不把整个文件读进来；不是普通文件抛 notRegular，不存在时抛文件系统的 ENOENT。 */
@@ -57,15 +71,27 @@ export class TextFileIo implements TextFileIoApi {
     this.codec = codec
   }
 
-  public async writeBytes(path: string, bytes: Uint8Array, options: { mode?: number; expected?: ExpectedBytes } = {}): Promise<void> {
+  public async writeBytes(
+    path: string,
+    bytes: Uint8Array,
+    options: { mode?: number; expected?: ExpectedBytes } = {}
+  ): Promise<void> {
     await replaceFileAtomically(path, () => bytes, options)
   }
 
-  public async writeText(path: string, content: string, options: { fallbackEncoding?: TextEncoding; mode?: number } = {}): Promise<void> {
+  public async writeText(
+    path: string,
+    content: string,
+    options: { fallbackEncoding?: TextEncoding; mode?: number } = {}
+  ): Promise<void> {
     await replaceFileAtomically(
       path,
-      async (target, exists) => this.codec.encode(content, exists ? await this.existingEncoding(target) : options.fallbackEncoding ?? 'utf8'),
-      { mode: options.mode },
+      async (target, exists) =>
+        this.codec.encode(
+          content,
+          exists ? await this.existingEncoding(target) : (options.fallbackEncoding ?? 'utf8')
+        ),
+      { mode: options.mode }
     )
   }
 
@@ -80,8 +106,11 @@ export class TextFileIo implements TextFileIoApi {
   public async *readTextChunks(path: string, encoding?: TextEncoding): AsyncGenerator<TextChunk> {
     const handle = await openRegularFile(path)
     try {
-      const known = encoding ?? await this.inspect(handle)
-      if (!known) throw new AppError(TextFileErrorCodes.notText, '文件无法无损解码为文本。', undefined, { path })
+      const known = encoding ?? (await this.inspect(handle))
+      if (!known)
+        throw new AppError(TextFileErrorCodes.notText, '文件无法无损解码为文本。', undefined, {
+          path,
+        })
       const decoder = this.codec.createDecoder(known)
       const source = { path, encoding: known }
       const chunk = new Uint8Array(TextFileTuning.stream.chunkBytes)
@@ -128,7 +157,13 @@ export class TextFileIo implements TextFileIoApi {
     const handle = await openRegularFile(path)
     try {
       const encoding = await this.inspect(handle)
-      if (!encoding) throw new AppError(TextFileErrorCodes.notText, '现有文件无法无损解码，拒绝文本覆盖。', undefined, { path })
+      if (!encoding)
+        throw new AppError(
+          TextFileErrorCodes.notText,
+          '现有文件无法无损解码，拒绝文本覆盖。',
+          undefined,
+          { path }
+        )
       return encoding
     } finally {
       await handle.close()

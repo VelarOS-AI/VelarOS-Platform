@@ -50,38 +50,70 @@ class SqliteMigrations implements SqliteMigrationsApi {
     this.migrations = migrations.map((migration) => ({ ...migration }))
     this.migrations.forEach((migration, index) => {
       const previous = this.migrations[index - 1]?.version ?? 0
-      if (!Number.isSafeInteger(migration.version) || migration.version <= previous || !migration.name.trim())
-        throw new AppError('STORAGE', 'Invalid SQLite migration identity', undefined, { version: migration.version })
+      if (
+        !Number.isSafeInteger(migration.version) ||
+        migration.version <= previous ||
+        !migration.name.trim()
+      )
+        throw new AppError('STORAGE', 'Invalid SQLite migration identity', undefined, {
+          version: migration.version,
+        })
       if (Boolean(migration.upSql?.trim()) === Boolean(migration.up))
-        throw new AppError('STORAGE', 'Migration must define exactly one of upSql or up', undefined, { version: migration.version })
+        throw new AppError(
+          'STORAGE',
+          'Migration must define exactly one of upSql or up',
+          undefined,
+          { version: migration.version }
+        )
     })
   }
 
   public getStatus(): SqliteMigrationStatus {
-    const hasTable = this.database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'").all().length > 0
+    const hasTable =
+      this.database
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'"
+        )
+        .all().length > 0
     const rows = hasTable
-      ? this.database.prepare('SELECT version FROM schema_migrations ORDER BY version ASC').all() as Array<{ version: number }>
+      ? (this.database
+          .prepare('SELECT version FROM schema_migrations ORDER BY version ASC')
+          .all() as Array<{ version: number }>)
       : []
     const currentVersion = rows.at(-1)?.version ?? 0
     const latestVersion = this.migrations.at(-1)?.version ?? 0
     if (currentVersion > latestVersion)
-      throw new AppError('STORAGE_SCHEMA_AHEAD', 'SQLite schema is newer than the migration plan', undefined, { currentVersion, latestVersion })
+      throw new AppError(
+        'STORAGE_SCHEMA_AHEAD',
+        'SQLite schema is newer than the migration plan',
+        undefined,
+        { currentVersion, latestVersion }
+      )
     const known = new Set(this.migrations.map(({ version }) => version))
     if (rows.some(({ version }) => !known.has(version)))
       throw new AppError('STORAGE', 'SQLite migration history contains unknown versions')
     const applied = new Set(rows.map(({ version }) => version))
-    return { currentVersion, latestVersion, pendingVersions: this.migrations.filter(({ version }) => !applied.has(version)).map(({ version }) => version) }
+    return {
+      currentVersion,
+      latestVersion,
+      pendingVersions: this.migrations
+        .filter(({ version }) => !applied.has(version))
+        .map(({ version }) => version),
+    }
   }
 
   public migrate(): void {
-    if (this.database.inTransaction) throw new AppError('STORAGE', 'SQLite migrations require their own transaction')
+    if (this.database.inTransaction)
+      throw new AppError('STORAGE', 'SQLite migrations require their own transaction')
     this.database.transaction(() => {
       const status = this.getStatus()
       if (isEmpty(status.pendingVersions)) return
       this.database.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
         version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at INTEGER NOT NULL
       ) STRICT`)
-      const record = this.database.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
+      const record = this.database.prepare(
+        'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)'
+      )
       for (const migration of this.migrations) {
         if (!status.pendingVersions.includes(migration.version)) continue
         try {
@@ -92,7 +124,10 @@ class SqliteMigrations implements SqliteMigrationsApi {
           } else this.database.exec(migration.upSql!)
           record.run(migration.version, migration.name, Date.now())
         } catch (cause) {
-          throw new AppError('STORAGE', `SQLite migration v${migration.version} failed`, cause, { version: migration.version, name: migration.name })
+          throw new AppError('STORAGE', `SQLite migration v${migration.version} failed`, cause, {
+            version: migration.version,
+            name: migration.name,
+          })
         }
       }
     })()

@@ -1,10 +1,4 @@
-import type {
-  FlexibleSchema,
-  generateText,
-  Output as AiOutput,
-  streamText,
-  ToolSet,
-} from 'ai'
+import type { FlexibleSchema, generateText, Output as AiOutput, streamText, ToolSet } from 'ai'
 
 import type { ModelRequestOptions } from './model'
 
@@ -14,13 +8,9 @@ export type ModelRequestGenerateTextInput<
 export type ModelRequestGenerateTextResult<
   TOutput extends ModelRequestOutput = ModelRequestTextOutput,
 > = ReturnType<typeof generateText<ToolSet, TOutput>>
-export type ModelRequestOutput = NonNullable<
-  Parameters<typeof generateText>[0]['output']
->
+export type ModelRequestOutput = NonNullable<Parameters<typeof generateText>[0]['output']>
 export type ModelRequestTextOutput = ReturnType<typeof AiOutput.text>
-export type ModelRequestObjectOutput<TOutput> = ReturnType<
-  typeof AiOutput.object<TOutput>
->
+export type ModelRequestObjectOutput<TOutput> = ReturnType<typeof AiOutput.object<TOutput>>
 export type ModelRequestStreamTextInput<TToolSet extends ToolSet = ToolSet> = Parameters<
   typeof streamText<TToolSet>
 >[0]

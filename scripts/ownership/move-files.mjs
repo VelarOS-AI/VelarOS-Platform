@@ -70,10 +70,16 @@ const SourceExtensions = ['.ts', '.tsx', '.mts', '.cts', '.d.ts', '.js', '.mjs']
 function resolveOld(fromFile, specifier) {
   const base = resolve(dirname(fromFile), specifier)
   const candidates = [base]
-  if (/\.(?:js|mjs|cjs)$/u.test(base)) candidates.push(base.replace(/\.(?:js|mjs|cjs)$/u, '.ts'), base.replace(/\.(?:js|mjs|cjs)$/u, '.tsx'))
+  if (/\.(?:js|mjs|cjs)$/u.test(base))
+    candidates.push(
+      base.replace(/\.(?:js|mjs|cjs)$/u, '.ts'),
+      base.replace(/\.(?:js|mjs|cjs)$/u, '.tsx')
+    )
   for (const extension of SourceExtensions) candidates.push(`${base}${extension}`)
   for (const extension of SourceExtensions) candidates.push(join(base, `index${extension}`))
-  return candidates.find((candidate) => existsSync(candidate) && statSync(candidate).isFile()) ?? null
+  return (
+    candidates.find((candidate) => existsSync(candidate) && statSync(candidate).isFile()) ?? null
+  )
 }
 
 /** 按原写法（带不带扩展名、带什么扩展名）生成指向新位置的相对路径。 */
@@ -83,7 +89,8 @@ function formatSpecifier(fromFile, targetFile, original) {
   const originalExtension = extname(original)
   const targetExtension = targetFile.endsWith('.d.ts') ? '.d.ts' : extname(targetFile)
   const withoutExtension = path.slice(0, path.length - targetExtension.length)
-  if (/^\.(?:js|mjs|cjs)$/u.test(originalExtension)) return `${withoutExtension}${originalExtension}`
+  if (/^\.(?:js|mjs|cjs)$/u.test(originalExtension))
+    return `${withoutExtension}${originalExtension}`
   if (/^\.(?:ts|tsx|mts|cts)$/u.test(originalExtension)) return path
   return withoutExtension
 }
@@ -93,20 +100,40 @@ function relativeSpecifiers(file, text) {
   const sourceFile = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true)
   const found = []
   const add = (literal) => {
-    if (literal && ts.isStringLiteralLike(literal) && literal.text.startsWith('.')) found.push(literal)
+    if (literal && ts.isStringLiteralLike(literal) && literal.text.startsWith('.'))
+      found.push(literal)
   }
   const visit = (node) => {
-    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier) add(node.moduleSpecifier)
-    else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) add(node.argument.literal)
-    else if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === 'require'))) add(node.arguments[0])
-    else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) add(node.moduleReference.expression)
+    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier)
+      add(node.moduleSpecifier)
+    else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument))
+      add(node.argument.literal)
+    else if (
+      ts.isCallExpression(node) &&
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) && node.expression.text === 'require'))
+    )
+      add(node.arguments[0])
+    else if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isExternalModuleReference(node.moduleReference)
+    )
+      add(node.moduleReference.expression)
     ts.forEachChild(node, visit)
   }
   visit(sourceFile)
-  return found.map((literal) => ({ start: literal.getStart(sourceFile) + 1, end: literal.getEnd() - 1, text: literal.text }))
+  return found.map((literal) => ({
+    start: literal.getStart(sourceFile) + 1,
+    end: literal.getEnd() - 1,
+    text: literal.text,
+  }))
 }
 
-const files = [...walk(join(RepoRoot, 'packages')), ...(existsSync(join(RepoRoot, 'tests')) ? walk(join(RepoRoot, 'tests')) : []), ...walk(join(RepoRoot, 'scripts'))]
+const files = [
+  ...walk(join(RepoRoot, 'packages')),
+  ...(existsSync(join(RepoRoot, 'tests')) ? walk(join(RepoRoot, 'tests')) : []),
+  ...walk(join(RepoRoot, 'scripts')),
+]
 const rewrites = new Map()
 let changedSpecifiers = 0
 for (const file of files) {
@@ -132,12 +159,19 @@ for (const file of files) {
   if (changed) rewrites.set(file, output + text.slice(cursor))
 }
 
-console.info(`搬 ${moves.size} 个文件，改写 ${rewrites.size} 个文件里的 ${changedSpecifiers} 处相对路径${dryRun ? '（演练，不落盘）' : ''}`)
+console.info(
+  `搬 ${moves.size} 个文件，改写 ${rewrites.size} 个文件里的 ${changedSpecifiers} 处相对路径${dryRun ? '（演练，不落盘）' : ''}`
+)
 if (dryRun) process.exit(0)
 
 for (const [source, target] of moves) {
   mkdirSync(dirname(target), { recursive: true })
-  const tracked = execFileSync('git', ['ls-files', '--error-unmatch', source], { cwd: RepoRoot, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+  const tracked = execFileSync('git', ['ls-files', '--error-unmatch', source], {
+    cwd: RepoRoot,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  })
+    .toString()
+    .trim()
   if (!tracked) throw new Error(`没有纳入 git 的文件不搬：${source}`)
   execFileSync('git', ['mv', source, target], { cwd: RepoRoot })
 }

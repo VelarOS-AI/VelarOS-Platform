@@ -28,9 +28,7 @@ describe('single Mod manifest envelope', () => {
     expect(VelarosModManifestFileName).toBe('velaros.mod.json')
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.envelope.module.provides).toEqual([
-      { id: 'probe.capability', version: '1.0.0' },
-    ])
+    expect(result.envelope.module.provides).toEqual([{ id: 'probe.capability', version: '1.0.0' }])
     expect(result.envelope.module.isolation).toBe('in-process')
     expect(result.envelope.agent).toBe(agentSection)
     expect(result.envelope.ui).toBe(uiSection)

@@ -53,8 +53,8 @@ function resolveConsoleStream(method: ConsoleMethod): GuardedConsoleStream | nul
     }
   ).process
   return method === 'warn' || method === 'error'
-    ? runtimeProcess?.stderr ?? null
-    : runtimeProcess?.stdout ?? null
+    ? (runtimeProcess?.stderr ?? null)
+    : (runtimeProcess?.stdout ?? null)
 }
 
 function prepareConsoleStream(method: ConsoleMethod): boolean {

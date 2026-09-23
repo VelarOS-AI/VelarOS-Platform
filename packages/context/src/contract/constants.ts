@@ -25,7 +25,7 @@ export const StoreLimits = Object.freeze({
   /** 空间名称字符上限。 */
   nameChars: 128,
   /** 空间说明字符上限。 */
-  descriptionChars: 512
+  descriptionChars: 512,
 })
 /** 有限默认值，适配器仍需限制单次 I/O。 */
 export const DefaultContextViewLimits = Object.freeze({
@@ -50,7 +50,7 @@ export const DefaultContextViewLimits = Object.freeze({
   /** 单次物化时限毫秒。 */
   materializationMs: 30000,
   /** 任务租约时长毫秒。 */
-  leaseMs: 360000
+  leaseMs: 360000,
 })
 /** 上下文公共边界上限。 */
 export const ContextLimits = Object.freeze({
@@ -72,7 +72,13 @@ export const ContextLimits = Object.freeze({
   workingSetItems: 2000,
 })
 /** 观察需求能要求的表示形式。 */
-export const ContextViewForms = Object.freeze(['full', 'excerpt', 'definition', 'metadata', 'diff'] as const)
+export const ContextViewForms = Object.freeze([
+  'full',
+  'excerpt',
+  'definition',
+  'metadata',
+  'diff',
+] as const)
 /** 观察需求对外约定的上限。 */
 export const ViewIntentLimits = Object.freeze({
   /** 用途说明最多多少字符。 */

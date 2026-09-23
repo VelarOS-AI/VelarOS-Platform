@@ -31,7 +31,7 @@ export class PollingDriver implements LabDriver {
 
   constructor(
     private readonly adapter: PollingDriverAdapter,
-    private readonly policy: PollingDriverPolicy,
+    private readonly policy: PollingDriverPolicy
   ) {}
 
   public get id(): string {
@@ -83,19 +83,26 @@ export class PollingDriver implements LabDriver {
     let sawRunning = false
 
     while (Date.now() <= deadline) {
-      if (request.signal.aborted) return { kind: 'unavailable', cause: 'interrupted', detail: PollingDriver.InterruptedDetail }
+      if (request.signal.aborted)
+        return {
+          kind: 'unavailable',
+          cause: 'interrupted',
+          detail: PollingDriver.InterruptedDetail,
+        }
       const state = await this.adapter.readState(session)
-      if (state.unavailable) return { kind: 'unavailable', cause: 'agent-unavailable', detail: state.unavailable.detail }
+      if (state.unavailable)
+        return { kind: 'unavailable', cause: 'agent-unavailable', detail: state.unavailable.detail }
       sawRunning ||= state.running
 
       if (state.awaitingConfirmation) {
-        if (this.policy.confirmation === 'wait' || !this.adapter.resolveConfirmation) return { kind: 'awaiting-input' }
+        if (this.policy.confirmation === 'wait' || !this.adapter.resolveConfirmation)
+          return { kind: 'awaiting-input' }
         const approved = this.policy.confirmation === 'approve'
         await this.adapter.resolveConfirmation(
           session,
           approved,
           approved ? null : PollingDriver.RejectionMessage,
-          state.confirmationId,
+          state.confirmationId
         )
         stablePolls = 0
         const interrupted = await this.pause(request)
@@ -110,7 +117,8 @@ export class PollingDriver implements LabDriver {
         wallClockMs: Math.max(state.usage.wallClockMs ?? 0, Date.now() - startedAt),
       }
       const decision = await request.onSample({ observation, usage })
-      if (decision.kind === 'abort') return { kind: 'aborted', detectorId: decision.detectorId, reason: decision.reason }
+      if (decision.kind === 'abort')
+        return { kind: 'aborted', detectorId: decision.detectorId, reason: decision.reason }
       const budgetLimit = exceededBudget(usage, request.budget)
       if (budgetLimit) return { kind: 'budget-exhausted', limit: budgetLimit }
 
@@ -133,7 +141,12 @@ export class PollingDriver implements LabDriver {
       await delay(this.policy.pollMs, undefined, { signal: request.signal })
       return null
     } catch (error) {
-      if (request.signal.aborted) return { kind: 'unavailable', cause: 'interrupted', detail: PollingDriver.InterruptedDetail }
+      if (request.signal.aborted)
+        return {
+          kind: 'unavailable',
+          cause: 'interrupted',
+          detail: PollingDriver.InterruptedDetail,
+        }
       throw error
     }
   }

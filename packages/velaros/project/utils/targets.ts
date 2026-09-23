@@ -13,7 +13,7 @@ export function textRangeTarget(
   range: { startOffset: number; endOffset: number },
   input: ResolveTargetInput,
   confidence: number,
-  adapterId: string,
+  adapterId: string
 ): ResolvedTarget {
   const exactSnippet = snapshot.content?.slice(range.startOffset, range.endOffset)
   const symbol = input.target?.symbol
@@ -50,9 +50,12 @@ export function jsTsSymbolTarget(
   input: ResolveTargetInput & { snapshot: FileSnapshot },
   symbol: JsTsSymbol,
   confidence: number,
-  adapterId: string,
+  adapterId: string
 ): ResolvedTarget {
-  const exactSnippet = (input.snapshot.content ?? '').slice(symbol.range.startOffset, symbol.range.endOffset)
+  const exactSnippet = (input.snapshot.content ?? '').slice(
+    symbol.range.startOffset,
+    symbol.range.endOffset
+  )
   return {
     targetId: id('target'),
     path: input.snapshot.path,

@@ -74,7 +74,10 @@ export function readDiagnosticResourceType(
 }
 
 /** 把上传用的相对路径解析成真实路径，并确认它没走出站点工作区。 */
-export async function resolveUploadFilePath(workspaceRoot: string, requestedPath: string): Promise<string> {
+export async function resolveUploadFilePath(
+  workspaceRoot: string,
+  requestedPath: string
+): Promise<string> {
   return (await resolveWorkspaceFilePath(workspaceRoot, requestedPath, 'filePath')).path
 }
 
@@ -111,4 +114,3 @@ export function summarizePageDiagnostics(
     byResourceType: sortCountRecord(byResourceType),
   }
 }
-

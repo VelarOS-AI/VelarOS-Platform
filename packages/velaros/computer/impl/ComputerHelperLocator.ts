@@ -4,10 +4,7 @@ import { join } from 'node:path'
 import { toNullable } from '@velaros-ai/core'
 
 import { ComputerResourceLayout } from '../contract/constants.js'
-import type {
-  ComputerHelperLocatorOptions,
-  ComputerResourcePort,
-} from '../contract/requires.js'
+import type { ComputerHelperLocatorOptions, ComputerResourcePort } from '../contract/requires.js'
 import type { ComputerHelperLaunchSpec } from '../types/computer.js'
 import {
   buildDefaultResourceRoots,

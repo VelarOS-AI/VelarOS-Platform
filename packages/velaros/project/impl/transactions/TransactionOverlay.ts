@@ -12,14 +12,18 @@ import type { PreparedPatch } from '../../types/edit.js'
 import type { FileAttributes } from '../../types/snapshot.js'
 import type { StagedFileContent, TransactionContentOverlay } from '../../types/transaction.js'
 import { patchFileAttributes } from '../../utils/transactions/patch-attributes.js'
-import { isCreatePatch, stagedContentAfter, withoutStagedOffsets } from '../../utils/transactions/patch-chain.js'
+import {
+  isCreatePatch,
+  stagedContentAfter,
+  withoutStagedOffsets,
+} from '../../utils/transactions/patch-chain.js'
 
 /** 暂存视图要内核注入的两个回调：语言感知的补丁重新推导，与工作区读取。 */
 export interface TransactionOverlayDependencies {
   /** 基于前一补丁产出的暂存正文重新推导后继补丁；无法安全推导时返回 null。 */
   readonly rebasePatchAgainstContent: (
     patch: PreparedPatch,
-    stagedContent: string,
+    stagedContent: string
   ) => Promise<Nullable<PreparedPatch>>
   /** overlay 未触碰路径时回退到工作区当前正文。 */
   readonly readWorkspaceFile: (path: string) => Promise<string | undefined>
@@ -44,7 +48,9 @@ export interface TransactionOverlayApi {
    */
   build(patches?: readonly PreparedPatch[]): Promise<TransactionContentOverlay>
   /** 造一个读文件函数：暂存内容优先，暂存为删除（null）读成 undefined 而不回退磁盘，没暂存的路径读工作区当前正文。 */
-  createReader(contentByPath: ReadonlyMap<string, StagedFileContent>): (path: string) => Promise<string | undefined>
+  createReader(
+    contentByPath: ReadonlyMap<string, StagedFileContent>
+  ): (path: string) => Promise<string | undefined>
 }
 
 export class TransactionOverlay implements TransactionOverlayApi {
@@ -56,7 +62,7 @@ export class TransactionOverlay implements TransactionOverlayApi {
    */
   public async chainPatch(
     patch: PreparedPatch,
-    staged: StagedFileContent,
+    staged: StagedFileContent
   ): Promise<Nullable<PreparedPatch>> {
     if (isCreatePatch(patch)) return patch
     if (isNull(staged)) return null
@@ -106,7 +112,7 @@ export class TransactionOverlay implements TransactionOverlayApi {
 
   /** overlay 优先读取；null 表示事务已删除文件，必须读成 undefined 而不是回退磁盘。 */
   public createReader(
-    contentByPath: ReadonlyMap<string, StagedFileContent>,
+    contentByPath: ReadonlyMap<string, StagedFileContent>
   ): (path: string) => Promise<string | undefined> {
     return async (path) => {
       if (contentByPath.has(path)) return toOptional(contentByPath.get(path))

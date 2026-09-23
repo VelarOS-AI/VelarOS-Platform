@@ -27,7 +27,7 @@ export interface LabCertificationApi {
 class LabCertification implements LabCertificationApi {
   public certify(input: CertificationInput): CertificationReport {
     const subjectArchives = input.archives.filter(
-      (archive) => archive.manifest.executor.executorId === input.subjectExecutorId,
+      (archive) => archive.manifest.executor.executorId === input.subjectExecutorId
     )
     const checks: readonly CertificationCheck[] = [
       ...journeyChecks(input.policy, subjectArchives),
@@ -43,7 +43,9 @@ class LabCertification implements LabCertificationApi {
       status: certificationStatus(checks),
       checks,
       runIds: subjectArchives.map((archive) => archive.manifest.runId).sort(),
-      baselineRunIds: (input.baselineArchives ?? []).map((archive) => archive.manifest.runId).sort(),
+      baselineRunIds: (input.baselineArchives ?? [])
+        .map((archive) => archive.manifest.runId)
+        .sort(),
       issuedAt: (input.now ?? Date.now)(),
     }
     return { ...unsigned, digest: sha256Json(unsigned) }

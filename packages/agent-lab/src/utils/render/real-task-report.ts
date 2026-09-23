@@ -12,7 +12,10 @@ function metric(label: string, value: number | string | null): string {
 }
 
 /** 把一条真实任务记录与它的评估渲染成一份自包含的本地报告。 */
-export function renderRealTaskReportHtml(record: RealTaskRecord, assessment: RealTaskAssessment): string {
+export function renderRealTaskReportHtml(
+  record: RealTaskRecord,
+  assessment: RealTaskAssessment
+): string {
   const metrics = [
     metric('任务结果', assessment.outcome),
     metric('执行健康', assessment.health),
@@ -28,7 +31,7 @@ export function renderRealTaskReportHtml(record: RealTaskRecord, assessment: Rea
     ? assessment.findings
         .map(
           (finding) =>
-            `<article class="finding ${finding.severity}"><header><strong>${escapeHtml(finding.title)}</strong><code>${escapeHtml(finding.class)}</code></header><p>${escapeHtml(finding.detail)}</p><small>${escapeHtml(finding.id)}</small></article>`,
+            `<article class="finding ${finding.severity}"><header><strong>${escapeHtml(finding.title)}</strong><code>${escapeHtml(finding.class)}</code></header><p>${escapeHtml(finding.detail)}</p><small>${escapeHtml(finding.id)}</small></article>`
         )
         .join('')
     : '<p class="empty">没有发现执行健康问题。</p>'

@@ -34,11 +34,18 @@ async function initRepository(options: { committed?: Record<string, string> } = 
   if (committed.length > 0) {
     git('add', '--', ...committed.map(([relative]) => relative))
     git(
-      '-c', 'user.name=VelarOS',
-      '-c', 'user.email=velaros@example.com',
-      '-c', 'commit.gpgsign=false',
-      '-c', 'core.hooksPath=/dev/null',
-      'commit', '-q', '-m', 'baseline',
+      '-c',
+      'user.name=VelarOS',
+      '-c',
+      'user.email=velaros@example.com',
+      '-c',
+      'commit.gpgsign=false',
+      '-c',
+      'core.hooksPath=/dev/null',
+      'commit',
+      '-q',
+      '-m',
+      'baseline'
     )
   }
 }
@@ -79,14 +86,20 @@ async function kernelAt(root: string): Promise<RecordingKernel> {
 }
 
 async function applyOperations(project: ProjectKernel, ...operations: Operation[]) {
-  const transaction = await project.prepareEdit({ operations: operations.map((operation) => ({ operation })) })
+  const transaction = await project.prepareEdit({
+    operations: operations.map((operation) => ({ operation })),
+  })
   return project.applyEdit({ transactionId: transaction.transactionId })
 }
 
 const layouts = [
   { name: '已有提交的仓库', committed: { 'README.md': '# fixture\n' }, workspace: '' },
   { name: '尚无提交的仓库', committed: {}, workspace: '' },
-  { name: '内核根是仓库子目录', committed: { 'README.md': '# fixture\n' }, workspace: 'packages/app' },
+  {
+    name: '内核根是仓库子目录',
+    committed: { 'README.md': '# fixture\n' },
+    workspace: 'packages/app',
+  },
 ]
 
 describe('apply 删除本内核新建过的文件后，索引不留 intent-to-add 残留', () => {
@@ -98,7 +111,11 @@ describe('apply 删除本内核新建过的文件后，索引不留 intent-to-ad
       const prefix = layout.workspace ? `${layout.workspace}/` : ''
       const { project } = await kernelAt(root)
 
-      const created = await applyOperations(project, { type: 'create_file', path: 'scratch.txt', content: 'probe\n' })
+      const created = await applyOperations(project, {
+        type: 'create_file',
+        path: 'scratch.txt',
+        content: 'probe\n',
+      })
       expect(created.gitTrackedFiles).toEqual(['scratch.txt'])
       expect(statusLines()).toEqual([` A ${prefix}scratch.txt`])
 
@@ -120,7 +137,7 @@ describe('apply 删除本内核新建过的文件后，索引不留 intent-to-ad
     const deleted = await applyOperations(
       project,
       { type: 'delete_file', path: 'kept.txt' },
-      { type: 'delete_file', path: 'committed.txt' },
+      { type: 'delete_file', path: 'committed.txt' }
     )
 
     expect(deleted.gitUntrackedFiles).toBeUndefined()
@@ -138,7 +155,7 @@ describe('apply 删除本内核新建过的文件后，索引不留 intent-to-ad
     const renamed = await applyOperations(
       project,
       { type: 'rename_file', from: 'draft.txt', to: 'final.txt' },
-      { type: 'rename_file', from: 'committed.txt', to: 'moved.txt' },
+      { type: 'rename_file', from: 'committed.txt', to: 'moved.txt' }
     )
 
     expect(renamed.gitTrackedFiles).toEqual(['final.txt', 'moved.txt'])
@@ -155,7 +172,7 @@ describe('apply 删除本内核新建过的文件后，索引不留 intent-to-ad
       project,
       { type: 'create_file', path: 'transient.txt', content: 'gone\n' },
       { type: 'create_file', path: 'stays.txt', content: 'stays\n' },
-      { type: 'delete_file', path: 'transient.txt' },
+      { type: 'delete_file', path: 'transient.txt' }
     )
 
     expect(applied.gitTrackedFiles).toEqual(['stays.txt'])
@@ -183,13 +200,21 @@ describe('apply 删除本内核新建过的文件后，索引不留 intent-to-ad
     const staged = indexEntry('staged.txt')
     const { project } = await kernelAt(repository)
 
-    await applyOperations(project, { type: 'create_file', path: '[s]taged.txt', content: 'probe\n' })
+    await applyOperations(project, {
+      type: 'create_file',
+      path: '[s]taged.txt',
+      content: 'probe\n',
+    })
     const deleted = await applyOperations(project, { type: 'delete_file', path: '[s]taged.txt' })
     expect(deleted.gitUntrackedFiles).toEqual(['[s]taged.txt'])
     expect(indexEntry('staged.txt')).toBe(staged)
 
     // 回滚新建同样走字面路径：撤掉的只是回滚删掉的那个文件。
-    const recreated = await applyOperations(project, { type: 'create_file', path: '[s]taged.txt', content: 'again\n' })
+    const recreated = await applyOperations(project, {
+      type: 'create_file',
+      path: '[s]taged.txt',
+      content: 'again\n',
+    })
     await project.rollback({ transactionId: recreated.transactionId })
     expect(indexEntry('staged.txt')).toBe(staged)
     expect(statusLines()).toEqual(['A  staged.txt'])
@@ -198,7 +223,11 @@ describe('apply 删除本内核新建过的文件后，索引不留 intent-to-ad
   test('非 git 目录：新建与删除都不写 git，也不生成 .git', async () => {
     const { project, gitCalls } = await kernelAt(repository)
 
-    const created = await applyOperations(project, { type: 'create_file', path: 'scratch.txt', content: 'probe\n' })
+    const created = await applyOperations(project, {
+      type: 'create_file',
+      path: 'scratch.txt',
+      content: 'probe\n',
+    })
     const deleted = await applyOperations(project, { type: 'delete_file', path: 'scratch.txt' })
 
     expect(created.gitTrackedFiles).toBeUndefined()

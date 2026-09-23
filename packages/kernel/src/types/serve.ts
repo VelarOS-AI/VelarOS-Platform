@@ -1,10 +1,6 @@
 import type { KernelModuleDefinition } from '../contract/requires.js'
 
-import type {
-  KernelModPackDescriptor,
-  KernelModPackKind,
-  ScopeRef,
-} from './wire.js'
+import type { KernelModPackDescriptor, KernelModPackKind, ScopeRef } from './wire.js'
 
 /** 外部 Client 请求把一件能力绑进会话时交上来的东西。 */
 export interface KernelClientCapabilityBindRequest {
@@ -18,8 +14,7 @@ export interface KernelClientCapabilityBindRequest {
 
 /** 客户端准入策略对一次绑定请求的判定：准或不准，不准时带原因。 */
 export type KernelClientAccessDecision =
-  | { readonly status: 'granted' }
-  | { readonly status: 'denied'; readonly reason: string }
+  { readonly status: 'granted' } | { readonly status: 'denied'; readonly reason: string }
 
 /** 一条已经绑进会话的能力要求：调用来时按它判断这次调用在不在授权范围里。 */
 export interface BoundCapabilityRequirement {
@@ -54,12 +49,10 @@ export interface KernelModCatalog {
   /** 开关一个 pack；返回有没有改动，以及是否要重启才能生效。 */
   setEnabled(
     id: string,
-    enabled: boolean,
+    enabled: boolean
   ): Promise<{ readonly ok: boolean; readonly reloadRequired: boolean }>
   /** 从目录装一个 pack；返回装好的 pack 描述与是否要重启。目录不合法时抛带码的错误。 */
-  installFromDirectory(
-    directory: string,
-  ): Promise<{
+  installFromDirectory(directory: string): Promise<{
     readonly pack: KernelModPackDescriptor
     readonly reloadRequired: boolean
   }>

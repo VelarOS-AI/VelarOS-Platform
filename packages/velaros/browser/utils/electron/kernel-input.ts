@@ -21,11 +21,11 @@ export function parseSessionInput(input: unknown): string {
   if (!isPlainObject(input)) throw invalidCapabilityInput()
   const sessionId = input.sessionId
   if (
-    Object.keys(input).length !== 1
-    || !isString(sessionId)
-    || isBlank(sessionId)
-    || sessionId !== sessionId.trim()
-    || sessionId.length > 512
+    Object.keys(input).length !== 1 ||
+    !isString(sessionId) ||
+    isBlank(sessionId) ||
+    sessionId !== sessionId.trim() ||
+    sessionId.length > 512
   ) {
     throw invalidCapabilityInput()
   }

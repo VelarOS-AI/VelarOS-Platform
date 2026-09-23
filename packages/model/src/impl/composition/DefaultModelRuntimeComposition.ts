@@ -67,10 +67,9 @@ export class DefaultModelRuntimeComposition implements ModelRuntimeCompositionAp
     const velarCloudRuntime = new VelarCloudModelRuntime()
     this.localModelEnvironment = environment
     this.providerScriptRegistry = providerScriptRegistry
-    this.providerCollection = new ModelProviderCollection(
-      providerScriptRegistry,
-      { environment: environment.variables }
-    )
+    this.providerCollection = new ModelProviderCollection(providerScriptRegistry, {
+      environment: environment.variables,
+    })
     this.velarCloudRuntime = velarCloudRuntime
     this.modelAdapterRegistry = new ModelAdapterRegistry(
       providerScriptRegistry,

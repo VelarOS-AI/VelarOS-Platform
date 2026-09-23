@@ -17,13 +17,25 @@ afterEach(async () => {
 })
 
 /** 把一组文件整体改写成同一段正文，返回准备好的事务号。 */
-async function prepare(kernel: ProjectKernel, paths: readonly string[], text: string): Promise<string> {
+async function prepare(
+  kernel: ProjectKernel,
+  paths: readonly string[],
+  text: string
+): Promise<string> {
   const operations = []
   const baseRevisions: Record<string, string> = {}
   for (const path of paths) {
     const current = await kernel.read({ path })
     baseRevisions[path] = current.snapshot.revision
-    operations.push({ operation: { type: 'replace_content' as const, path, expectedContent: current.content!, content: text, mode: 'edit' as const } })
+    operations.push({
+      operation: {
+        type: 'replace_content' as const,
+        path,
+        expectedContent: current.content!,
+        content: text,
+        mode: 'edit' as const,
+      },
+    })
   }
   return (await kernel.prepareEdit({ operations, baseRevisions })).transactionId
 }
@@ -46,14 +58,15 @@ test('并发的两个 apply 各留各的恢复计划，重启后逐个恢复', a
   // 让慢事务停在两次写盘之间：路径不相交，锁允许另一个事务同时 apply（runBatch 并发时就是这样）。
   const original = TransactionRecovery.prototype.writePatch
   let release = (): void => {}
-  const gate = new Promise<void>((resolve) => { release = resolve })
-  const hook = spyOn(TransactionRecovery.prototype, 'writePatch').mockImplementation(async function (
-    this: TransactionRecovery,
-    ...args: Parameters<typeof original>
-  ) {
-    if (args[0].transactionId === slow && args[1].path === 'a2.txt') await gate
-    return original.apply(this, args)
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
   })
+  const hook = spyOn(TransactionRecovery.prototype, 'writePatch').mockImplementation(
+    async function (this: TransactionRecovery, ...args: Parameters<typeof original>) {
+      if (args[0].transactionId === slow && args[1].path === 'a2.txt') await gate
+      return original.apply(this, args)
+    }
+  )
 
   try {
     const slowApply = kernel.applyEdit({ transactionId: slow })
@@ -112,7 +125,14 @@ test('旧格式状态文件里的单槽位 pending 读回后照样恢复', async
       kind: 'apply',
       transactionId: transaction,
       previousStatus: 'validated',
-      restore: [{ path: 'note.txt', exists: true, content: 'before\n', ownedStates: [{ exists: true, content: 'after\n' }] }],
+      restore: [
+        {
+          path: 'note.txt',
+          exists: true,
+          content: 'before\n',
+          ownedStates: [{ exists: true, content: 'after\n' }],
+        },
+      ],
     },
   }
   await writeFile(statePath, JSON.stringify(legacy))

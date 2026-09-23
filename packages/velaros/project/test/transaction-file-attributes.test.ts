@@ -49,7 +49,7 @@ test.each([false, true])(
     await assertFile('source.sh', original, 0o751)
     expect(await Bun.file(join(root, 'final.sh')).exists()).toBe(false)
     expect(await Bun.file(join(root, 'middle.sh')).exists()).toBe(false)
-  },
+  }
 )
 
 test('delete rollback after reopening retains private file permissions', async () => {
@@ -89,7 +89,7 @@ test.each([false, true])(
     })
     try {
       await expect(project.applyEdit({ transactionId: tx.transactionId })).rejects.toThrow(
-        'injected receipt failure',
+        'injected receipt failure'
       )
       await assertFile('source.sh', original, 0o751)
       expect(await Bun.file(join(root, 'target.sh')).exists()).toBe(false)
@@ -98,7 +98,7 @@ test.each([false, true])(
     } finally {
       hook.mockRestore()
     }
-  },
+  }
 )
 
 test('rollback preserves a subsequent external chmod on an existing file', async () => {
@@ -164,7 +164,7 @@ test('restart recovers an interrupted rename from its durable restore plan', asy
 test('50-file rename batch and rollback restore exact bytes and varied permissions', async () => {
   const modes = [0o600, 0o640, 0o700, 0o751, 0o755]
   const originals = await Promise.all(
-    Array.from({ length: 50 }, (_, i) => seed(`source-${i}.txt`, modes[i % modes.length])),
+    Array.from({ length: 50 }, (_, i) => seed(`source-${i}.txt`, modes[i % modes.length]))
   )
   const project = await createProjectKernel({ root })
   const tx = await project.prepareEdit({
@@ -191,7 +191,7 @@ test.each([-1, 0o1000, 0o4755, 1.5, '0755', null])(
     state.transactions[0].patches[0].metadata.fileMode = mode
     await writeFile(transactionStatePath, JSON.stringify(state))
     expect(
-      () => new FileProjectTransactionStateStore({ path: transactionStatePath, root }),
+      () => new FileProjectTransactionStateStore({ path: transactionStatePath, root })
     ).toThrow('file mode')
-  },
+  }
 )

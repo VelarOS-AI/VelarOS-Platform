@@ -11,38 +11,115 @@ import { isEmpty, isFalse, isNull, isString, isTrue, toNullable } from '@velaros
 import type { ShellInvocation } from '../types/invocation.js'
 import type { ShellCommandPlan } from '../types/shell-command.js'
 
-
 const readOnlyCommands = new Set([
-  'cat', 'cut', 'date', 'df', 'du', 'env', 'find', 'git', 'grep', 'head', 'id', 'ls',
-  'pwd', 'rg', 'sed', 'stat', 'tail', 'tree', 'uname', 'wc', 'which', 'whoami',
+  'cat',
+  'cut',
+  'date',
+  'df',
+  'du',
+  'env',
+  'find',
+  'git',
+  'grep',
+  'head',
+  'id',
+  'ls',
+  'pwd',
+  'rg',
+  'sed',
+  'stat',
+  'tail',
+  'tree',
+  'uname',
+  'wc',
+  'which',
+  'whoami',
   // Windows（cmd.exe / PowerShell）只读读法。可执行名在查表前已统一 toLowerCase()
   // （见下方 isShellCommandReadOnly），按小写登记即可；PowerShell 命令名本就
   // 不区分大小写。ls/cat/pwd 等 POSIX 名同时也是 PowerShell 内置别名，重合是有意的。
-  'dir', 'type', 'findstr', 'where', 'gci', 'get-childitem', 'get-content', 'gc',
-  'get-item', 'gi', 'select-string', 'sls', 'test-path',
+  'dir',
+  'type',
+  'findstr',
+  'where',
+  'gci',
+  'get-childitem',
+  'get-content',
+  'gc',
+  'get-item',
+  'gi',
+  'select-string',
+  'sls',
+  'test-path',
 ])
 
 const readOnlyGitCommands = new Set([
-  'annotate', 'blame', 'cat-file', 'check-attr', 'check-ignore', 'check-mailmap',
-  'check-ref-format', 'count-objects', 'describe', 'diff', 'diff-files', 'diff-index',
-  'diff-tree', 'for-each-ref', 'grep', 'help', 'log', 'ls-files', 'ls-remote', 'ls-tree',
-  'merge-base', 'name-rev', 'range-diff', 'rev-list', 'rev-parse', 'shortlog', 'show',
-  'show-branch', 'status', 'verify-commit', 'verify-pack', 'verify-tag', 'version',
+  'annotate',
+  'blame',
+  'cat-file',
+  'check-attr',
+  'check-ignore',
+  'check-mailmap',
+  'check-ref-format',
+  'count-objects',
+  'describe',
+  'diff',
+  'diff-files',
+  'diff-index',
+  'diff-tree',
+  'for-each-ref',
+  'grep',
+  'help',
+  'log',
+  'ls-files',
+  'ls-remote',
+  'ls-tree',
+  'merge-base',
+  'name-rev',
+  'range-diff',
+  'rev-list',
+  'rev-parse',
+  'shortlog',
+  'show',
+  'show-branch',
+  'status',
+  'verify-commit',
+  'verify-pack',
+  'verify-tag',
+  'version',
   'whatchanged',
 ])
 
 const gitGlobalOptionsWithValue = new Set([
-  '-C', '-c', '--config-env', '--git-dir', '--namespace', '--work-tree',
+  '-C',
+  '-c',
+  '--config-env',
+  '--git-dir',
+  '--namespace',
+  '--work-tree',
 ])
 
 const gitGlobalOptionsWithoutValue = new Set([
-  '-p', '-P', '--bare', '--glob-pathspecs', '--icase-pathspecs', '--literal-pathspecs',
-  '--no-advice', '--no-lazy-fetch', '--no-optional-locks', '--no-pager',
-  '--no-replace-objects', '--noglob-pathspecs', '--paginate',
+  '-p',
+  '-P',
+  '--bare',
+  '--glob-pathspecs',
+  '--icase-pathspecs',
+  '--literal-pathspecs',
+  '--no-advice',
+  '--no-lazy-fetch',
+  '--no-optional-locks',
+  '--no-pager',
+  '--no-replace-objects',
+  '--noglob-pathspecs',
+  '--paginate',
 ])
 
 const gitGlobalOptionsWithInlineValue = [
-  '--config-env=', '--exec-path=', '--git-dir=', '--namespace=', '--work-tree=',
+  '--config-env=',
+  '--exec-path=',
+  '--git-dir=',
+  '--namespace=',
+  '--work-tree=',
 ] as const
 
 /**
@@ -65,7 +142,8 @@ const mutatingArgumentsByCommand: Readonly<Record<string, readonly RegExp[]>> = 
 const RecursiveRemoveReason = '该命令会递归删除整个文件夹及其中全部内容，删除后无法撤销。'
 
 /** cmd.exe `del /q`：安静模式只在目标是文件夹或通配符时才起作用，那时会不提示地删掉其中全部文件。 */
-const QuietBulkDeleteReason = '该命令以安静模式删除，目标是文件夹或通配符时会不经确认删掉其中全部文件，删除后无法撤销。'
+const QuietBulkDeleteReason =
+  '该命令以安静模式删除，目标是文件夹或通配符时会不经确认删掉其中全部文件，删除后无法撤销。'
 
 /** `find … -delete`：在整棵目录树里批量删除匹配到的文件。 */
 const TreeDeleteReason = '该命令会在整个目录树里批量删除匹配到的文件，删除后无法撤销。'
@@ -138,17 +216,19 @@ const windowsPrivilegedMutationPatterns: readonly RegExp[] = [
 
 /** 把命令文本按空白切成词，引号里的空格不切，并去掉外层引号。 */
 function tokenize(command: string): string[] {
-  return command.match(/(?:[^\s"'`]+|"[^"]*"|'[^']*')+/g)?.map((token) =>
-    token.replace(/^(['"])(.*)\1$/, '$2').replace(/(['"])(.*?)\1/g, '$2')
-  ) ?? []
+  return (
+    command
+      .match(/(?:[^\s"'`]+|"[^"]*"|'[^']*')+/g)
+      ?.map((token) => token.replace(/^(['"])(.*)\1$/, '$2').replace(/(['"])(.*?)\1/g, '$2')) ?? []
+  )
 }
 
 /** 判断一个 git 全局选项是否把取值直接写在自己身上，如 `-Crepo`、`--git-dir=path`。 */
 function hasInlineGitGlobalOptionValue(token: string): boolean {
   if (token.startsWith('-C') && token.length > 2) return true
   if (token.startsWith('-c') && token.length > 2 && token.includes('=')) return true
-  return gitGlobalOptionsWithInlineValue.some((prefix) =>
-    token.startsWith(prefix) && token.length > prefix.length
+  return gitGlobalOptionsWithInlineValue.some(
+    (prefix) => token.startsWith(prefix) && token.length > prefix.length
   )
 }
 
@@ -175,10 +255,16 @@ function findGitSubcommandIndex(args: readonly string[]): number {
 
 /** 判断一个 git 全局选项能不能让 git 去执行别的程序：`-c key=value`、`--config-env`、`--exec-path`、`-p` / `--paginate` 都能（pager、diff.external、fsmonitor 这类配置就是命令）。 */
 function isExecutableGitGlobalOption(argument: string): boolean {
-  return argument === '-c' || (argument.startsWith('-c') && argument.includes('='))
-    || argument === '--config-env' || argument.startsWith('--config-env=')
-    || argument === '--exec-path' || argument.startsWith('--exec-path=')
-    || argument === '-p' || argument === '--paginate'
+  return (
+    argument === '-c' ||
+    (argument.startsWith('-c') && argument.includes('=')) ||
+    argument === '--config-env' ||
+    argument.startsWith('--config-env=') ||
+    argument === '--exec-path' ||
+    argument.startsWith('--exec-path=') ||
+    argument === '-p' ||
+    argument === '--paginate'
+  )
 }
 
 /**
@@ -211,10 +297,43 @@ const CommandPrefixes: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['nohup', new Set<string>()],
   ['setsid', new Set<string>()],
   ['stdbuf', new Set(['-i', '-o', '-e'])],
-  ['sudo', new Set(['-u', '-g', '-C', '-D', '-h', '-p', '-r', '-t', '-T', '-U', '--user', '--group', '--chdir'])],
+  [
+    'sudo',
+    new Set([
+      '-u',
+      '-g',
+      '-C',
+      '-D',
+      '-h',
+      '-p',
+      '-r',
+      '-t',
+      '-T',
+      '-U',
+      '--user',
+      '--group',
+      '--chdir',
+    ]),
+  ],
   ['time', new Set(['-f', '-o'])],
   ['timeout', new Set(['-s', '-k', '--signal', '--kill-after'])],
-  ['xargs', new Set(['-a', '-d', '-E', '-I', '-L', '-n', '-P', '-s', '--arg-file', '--delimiter', '--max-args', '--max-procs'])],
+  [
+    'xargs',
+    new Set([
+      '-a',
+      '-d',
+      '-E',
+      '-I',
+      '-L',
+      '-n',
+      '-P',
+      '-s',
+      '--arg-file',
+      '--delimiter',
+      '--max-args',
+      '--max-procs',
+    ]),
+  ],
 ])
 
 /** 用 `-c <命令文本>` 执行一段脚本的 POSIX shell。 */
@@ -264,8 +383,14 @@ function readInvocation(tokens: readonly string[]): Nullable<ShellInvocation> {
     }
     const glued = /^(del|erase|rd|rmdir)((?:\/[^/]*)+)$/i.exec(token)
     if (glued) {
-      const switches = (glued[2] ?? '').split('/').filter(Boolean).map((part) => `/${part}`)
-      return { name: (glued[1] ?? '').toLowerCase(), args: [...switches, ...tokens.slice(index + 1)] }
+      const switches = (glued[2] ?? '')
+        .split('/')
+        .filter(Boolean)
+        .map((part) => `/${part}`)
+      return {
+        name: (glued[1] ?? '').toLowerCase(),
+        args: [...switches, ...tokens.slice(index + 1)],
+      }
     }
     const name = commandName(token)
     if (!CommandPrefixes.has(name)) return { name, args: tokens.slice(index + 1) }
@@ -283,7 +408,11 @@ function matchesLongOption(argument: string, option: string): boolean {
 }
 
 /** 判断实参能否表示某个 PowerShell 参数：大小写不敏感，可按唯一前缀缩写。 */
-function matchesPowerShellParameter(argument: string, parameter: string, minimumLength: number): boolean {
+function matchesPowerShellParameter(
+  argument: string,
+  parameter: string,
+  minimumLength: number
+): boolean {
   const [name = '', value] = argument.toLowerCase().split(':', 2)
   return value !== '$false' && name.length >= minimumLength && parameter.startsWith(name)
 }
@@ -294,7 +423,7 @@ function hasPowerShellRecurse(args: readonly string[]): boolean {
 }
 
 /** 读出 `rm` 是否递归、是否强制：POSIX 选项簇、GNU 长选项、PowerShell 参数名三种写法都认。 */
-function readRemoveFlags(args: readonly string[]): { recursive: boolean, force: boolean } {
+function readRemoveFlags(args: readonly string[]): { recursive: boolean; force: boolean } {
   let recursive = false
   let force = false
   for (const argument of args) {
@@ -332,12 +461,17 @@ function readInlineScript(invocation: ShellInvocation): Nullable<string> {
   const { name, args } = invocation
   if (name === 'eval') return args.join(' ')
   if (PosixShells.has(name)) {
-    const flagIndex = args.findIndex((argument) =>
-      /^-[A-Za-z]*c[A-Za-z]*$/.test(argument) || argument === '--command')
-    return flagIndex < 0 ? null : toNullable(args.slice(flagIndex + 1).find((argument) => !argument.startsWith('-')))
+    const flagIndex = args.findIndex(
+      (argument) => /^-[A-Za-z]*c[A-Za-z]*$/.test(argument) || argument === '--command'
+    )
+    return flagIndex < 0
+      ? null
+      : toNullable(args.slice(flagIndex + 1).find((argument) => !argument.startsWith('-')))
   }
   if (name === 'powershell' || name === 'pwsh') {
-    const flagIndex = args.findIndex((argument) => matchesPowerShellParameter(argument, '-command', 2))
+    const flagIndex = args.findIndex((argument) =>
+      matchesPowerShellParameter(argument, '-command', 2)
+    )
     return flagIndex < 0 ? null : args.slice(flagIndex + 1).join(' ')
   }
   if (name === 'cmd') {
@@ -350,10 +484,12 @@ function readInlineScript(invocation: ShellInvocation): Nullable<string> {
 /** 判断某个 git 选项是否在 `--` 之前出现，长选项与合写的短选项簇都认，区分大小写。 */
 function hasGitOption(args: readonly string[], short: Nullable<string>, long: string): boolean {
   const options = args.includes('--') ? args.slice(0, args.indexOf('--')) : args
-  return options.some((argument) =>
-    argument === long
-    || argument.startsWith(`${long}=`)
-    || (isString(short) && /^-[A-Za-z]+$/.test(argument) && argument.includes(short)))
+  return options.some(
+    (argument) =>
+      argument === long ||
+      argument.startsWith(`${long}=`) ||
+      (isString(short) && /^-[A-Za-z]+$/.test(argument) && argument.includes(short))
+  )
 }
 
 /** 判断一个 git 子命令会不会丢掉无法恢复的改动，返回危险理由；不危险返回 null。 */
@@ -365,17 +501,24 @@ function gitSubcommandDanger(subcommand: string, args: readonly string[]): Nulla
       return flags.recursive && flags.force ? RecursiveRemoveReason : null
     }
     case 'reset':
-      return hasGitOption(args, null, '--hard') || hasGitOption(args, null, '--merge') ? GitDiscardReason : null
+      return hasGitOption(args, null, '--hard') || hasGitOption(args, null, '--merge')
+        ? GitDiscardReason
+        : null
     case 'restore':
-      return hasGitOption(args, 'S', '--staged') && !hasGitOption(args, 'W', '--worktree') ? null : GitDiscardReason
+      return hasGitOption(args, 'S', '--staged') && !hasGitOption(args, 'W', '--worktree')
+        ? null
+        : GitDiscardReason
     case 'checkout': {
       const separator = args.indexOf('--')
-      const namesPath = (separator >= 0 && separator < args.length - 1)
-        || args.some((argument) => argument === '.' || argument.startsWith('./'))
+      const namesPath =
+        (separator >= 0 && separator < args.length - 1) ||
+        args.some((argument) => argument === '.' || argument.startsWith('./'))
       return namesPath || hasGitOption(args, 'f', '--force') ? GitDiscardReason : null
     }
     case 'switch':
-      return hasGitOption(args, 'f', '--force') || hasGitOption(args, null, '--discard-changes') ? GitDiscardReason : null
+      return hasGitOption(args, 'f', '--force') || hasGitOption(args, null, '--discard-changes')
+        ? GitDiscardReason
+        : null
     case 'clean':
       return hasGitOption(args, 'n', '--dry-run') ? null : GitCleanReason
     case 'stash': {
@@ -383,15 +526,27 @@ function gitSubcommandDanger(subcommand: string, args: readonly string[]): Nulla
       return action === 'drop' || action === 'clear' ? GitStashDropReason : null
     }
     case 'push':
-      return hasGitOption(args, 'f', '--force') || hasGitOption(args, null, '--force-with-lease') || hasGitOption(args, null, '--force-if-includes') ? GitForcePushReason : null
+      return hasGitOption(args, 'f', '--force') ||
+        hasGitOption(args, null, '--force-with-lease') ||
+        hasGitOption(args, null, '--force-if-includes')
+        ? GitForcePushReason
+        : null
     case 'branch':
-      return args.some((argument) => /^-[A-Za-z]*D[A-Za-z]*$/.test(argument)) || (hasGitOption(args, 'd', '--delete') && hasGitOption(args, 'f', '--force')) ? GitForceBranchDeleteReason : null
+      return args.some((argument) => /^-[A-Za-z]*D[A-Za-z]*$/.test(argument)) ||
+        (hasGitOption(args, 'd', '--delete') && hasGitOption(args, 'f', '--force'))
+        ? GitForceBranchDeleteReason
+        : null
     case 'worktree':
-      return args[0] === 'remove' && hasGitOption(args, 'f', '--force') ? GitForceWorktreeRemoveReason : null
+      return args[0] === 'remove' && hasGitOption(args, 'f', '--force')
+        ? GitForceWorktreeRemoveReason
+        : null
     case 'update-ref':
       return hasGitOption(args, 'd', '--delete') ? GitRefDeleteReason : null
     case 'reflog':
-      return args[0] === 'expire' && args.some((argument) => /^--expire(?:-unreachable)?=(?:now|all)$/.test(argument)) ? GitReflogExpireReason : null
+      return args[0] === 'expire' &&
+        args.some((argument) => /^--expire(?:-unreachable)?=(?:now|all)$/.test(argument))
+        ? GitReflogExpireReason
+        : null
     case 'filter-branch':
       return hasGitOption(args, 'f', '--force') ? GitHistoryRewriteReason : null
     default:
@@ -403,7 +558,8 @@ function gitSubcommandDanger(subcommand: string, args: readonly string[]): Nulla
 function invocationDanger(invocation: ShellInvocation): Nullable<string> {
   const { name, args } = invocation
   if (name === 'rm') return readRemoveFlags(args).recursive ? RecursiveRemoveReason : null
-  if (name === 'remove-item' || name === 'ri') return hasPowerShellRecurse(args) ? RecursiveRemoveReason : null
+  if (name === 'remove-item' || name === 'ri')
+    return hasPowerShellRecurse(args) ? RecursiveRemoveReason : null
   if (CmdRemoveCommands.has(name)) {
     const switches = readCmdSwitches(args)
     if (switches.has('s') || hasPowerShellRecurse(args)) return RecursiveRemoveReason
@@ -414,12 +570,19 @@ function invocationDanger(invocation: ShellInvocation): Nullable<string> {
     // -c key=value 的值可能就是要执行的程序（core.pager、diff.external、core.fsmonitor…），把值当命令再查一遍。
     for (const [index, argument] of args.entries()) {
       if (subcommandIndex >= 0 && index >= subcommandIndex) break
-      const assignment = argument === '-c' ? args[index + 1] : argument.startsWith('-c') && argument.includes('=') ? argument.slice(2) : null
+      const assignment =
+        argument === '-c'
+          ? args[index + 1]
+          : argument.startsWith('-c') && argument.includes('=')
+            ? argument.slice(2)
+            : null
       const configured = assignment?.slice(assignment.indexOf('=') + 1) ?? ''
       const reason = /\s/.test(configured) ? describeInvocationDanger(configured) : null
       if (reason) return reason
     }
-    return subcommandIndex < 0 ? null : gitSubcommandDanger(args[subcommandIndex] ?? '', args.slice(subcommandIndex + 1))
+    return subcommandIndex < 0
+      ? null
+      : gitSubcommandDanger(args[subcommandIndex] ?? '', args.slice(subcommandIndex + 1))
   }
   if (name === 'find') {
     if (args.includes('-delete')) return TreeDeleteReason
@@ -446,13 +609,55 @@ function describeInvocationDanger(command: string): Nullable<string> {
 }
 
 /** 本身就是长驻服务的程序名。 */
-const LongRunningCommands = new Set(['vite', 'webpack-dev-server', 'webpack-serve', 'nodemon', 'serve', 'http-server', 'live-server', 'browser-sync', 'json-server', 'ngrok', 'caddy', 'nginx', 'redis-server', 'mongod', 'postgres', 'mysqld'])
+const LongRunningCommands = new Set([
+  'vite',
+  'webpack-dev-server',
+  'webpack-serve',
+  'nodemon',
+  'serve',
+  'http-server',
+  'live-server',
+  'browser-sync',
+  'json-server',
+  'ngrok',
+  'caddy',
+  'nginx',
+  'redis-server',
+  'mongod',
+  'postgres',
+  'mysqld',
+])
 
 /** 包管理器与脚本运行器：后面跟 dev / serve / start / watch（或 run 再跟这几个）才算长驻。 */
-const ScriptRunners = new Set(['npm', 'pnpm', 'yarn', 'bun', 'bunx', 'npx', 'deno', 'cargo', 'make'])
+const ScriptRunners = new Set([
+  'npm',
+  'pnpm',
+  'yarn',
+  'bun',
+  'bunx',
+  'npx',
+  'deno',
+  'cargo',
+  'make',
+])
 
 /** 常见框架 CLI：后面跟 dev / serve / start 才算长驻。 */
-const FrameworkCommands = new Set(['next', 'nuxt', 'astro', 'remix', 'gatsby', 'expo', 'ng', 'vue-cli-service', 'react-scripts', 'rails', 'flask', 'uvicorn', 'gunicorn', 'php'])
+const FrameworkCommands = new Set([
+  'next',
+  'nuxt',
+  'astro',
+  'remix',
+  'gatsby',
+  'expo',
+  'ng',
+  'vue-cli-service',
+  'react-scripts',
+  'rails',
+  'flask',
+  'uvicorn',
+  'gunicorn',
+  'php',
+])
 
 const ServiceSubcommands = new Set(['dev', 'serve', 'server', 'start', 'watch', 'preview', 's'])
 
@@ -463,11 +668,21 @@ function looksLikeLongRunningService(command: string): boolean {
     const invocation = readInvocation(tokenize(segment.trim()))
     if (!invocation) return false
     const name = invocation.name.toLowerCase()
-    const words = invocation.args.filter((argument) => !argument.startsWith('-')).map((argument) => argument.toLowerCase())
+    const words = invocation.args
+      .filter((argument) => !argument.startsWith('-'))
+      .map((argument) => argument.toLowerCase())
     if (LongRunningCommands.has(name)) return true
-    if (name === 'python' || name === 'python3') return invocation.args[0] === '-m' && invocation.args[1] === 'http.server'
-    if (ScriptRunners.has(name)) return ServiceSubcommands.has(words[0] ?? '') || (words[0] === 'run' && ServiceSubcommands.has(words[1] ?? ''))
-    if (FrameworkCommands.has(name)) return ServiceSubcommands.has(words[0] ?? '') || (name === 'php' && invocation.args.includes('-S'))
+    if (name === 'python' || name === 'python3')
+      return invocation.args[0] === '-m' && invocation.args[1] === 'http.server'
+    if (ScriptRunners.has(name))
+      return (
+        ServiceSubcommands.has(words[0] ?? '') ||
+        (words[0] === 'run' && ServiceSubcommands.has(words[1] ?? ''))
+      )
+    if (FrameworkCommands.has(name))
+      return (
+        ServiceSubcommands.has(words[0] ?? '') || (name === 'php' && invocation.args.includes('-S'))
+      )
     return false
   })
 }
@@ -477,15 +692,20 @@ function describeDangerousCommand(command: string): Nullable<string> {
   const invocationReason = describeInvocationDanger(command)
   if (invocationReason) return invocationReason
   if (remoteScriptPatterns.some((pattern) => pattern.test(command))) return RemoteScriptReason
-  if (scriptedRecursiveRemovePatterns.some((pattern) => pattern.test(command))) return RecursiveRemoveReason
+  if (scriptedRecursiveRemovePatterns.some((pattern) => pattern.test(command)))
+    return RecursiveRemoveReason
   if (
-    /\bmkfs\b|\bdd\b[^&|;\r\n]*\b(?:if|of)=|\bdiskutil\s+(?:erase(?:disk|volume)|reformat|partitiondisk|secureerase|zerodisk|randomdisk)\b|\bshutdown\b|\breboot\b|\bkill\s+-9\s+-1\b/i.test(command)
-    || windowsDestructivePatterns.some((pattern) => pattern.test(command))
-  ) return DestructiveCommandReason
+    /\bmkfs\b|\bdd\b[^&|;\r\n]*\b(?:if|of)=|\bdiskutil\s+(?:erase(?:disk|volume)|reformat|partitiondisk|secureerase|zerodisk|randomdisk)\b|\bshutdown\b|\breboot\b|\bkill\s+-9\s+-1\b/i.test(
+      command
+    ) ||
+    windowsDestructivePatterns.some((pattern) => pattern.test(command))
+  )
+    return DestructiveCommandReason
   if (
-    /\bsudo\b|\bchmod\s+-R\b|\bchown\s+-R\b/i.test(command)
-    || windowsPrivilegedMutationPatterns.some((pattern) => pattern.test(command))
-  ) return PrivilegedMutationReason
+    /\bsudo\b|\bchmod\s+-R\b|\bchown\s+-R\b/i.test(command) ||
+    windowsPrivilegedMutationPatterns.some((pattern) => pattern.test(command))
+  )
+    return PrivilegedMutationReason
   return null
 }
 
@@ -522,7 +742,12 @@ function hasMutatingPrefix(tokens: readonly string[]): boolean {
     if (!CommandPrefixes.has(name)) return false
     const next = skipPrefixArguments(name, tokens, index + 1)
     const vetoes = mutatingPrefixOptions[name] ?? []
-    if (tokens.slice(index + 1, next).some((argument) => vetoes.some((pattern) => pattern.test(argument)))) return true
+    if (
+      tokens
+        .slice(index + 1, next)
+        .some((argument) => vetoes.some((pattern) => pattern.test(argument)))
+    )
+      return true
     index = next
   }
   return false
@@ -532,10 +757,37 @@ function hasMutatingPrefix(tokens: readonly string[]): boolean {
 const SedReadOnlyOptionCluster = /^-[nErsuz]+$/
 
 /** sed 只读时允许的长选项。 */
-const SedReadOnlyLongOptions = new Set(['--quiet', '--silent', '--regexp-extended', '--separate', '--unbuffered', '--null-data', '--posix', '--debug', '--sandbox'])
+const SedReadOnlyLongOptions = new Set([
+  '--quiet',
+  '--silent',
+  '--regexp-extended',
+  '--separate',
+  '--unbuffered',
+  '--null-data',
+  '--posix',
+  '--debug',
+  '--sandbox',
+])
 
 /** sed 脚本里不写盘、不执行命令的单字母指令；l、q、Q 后面可以跟一个数字。 */
-const SedReadOnlyCommands = new Set(['=', 'p', 'P', 'd', 'D', 'n', 'N', 'g', 'G', 'h', 'H', 'x', 'z', 'l', 'q', 'Q'])
+const SedReadOnlyCommands = new Set([
+  '=',
+  'p',
+  'P',
+  'd',
+  'D',
+  'n',
+  'N',
+  'g',
+  'G',
+  'h',
+  'H',
+  'x',
+  'z',
+  'l',
+  'q',
+  'Q',
+])
 
 /** 能当 sed 分隔符、而且各家 sed 切法都一样的字符：不是空白、反斜杠、方括号、字母和数字。 */
 function isSedDelimiter(char: string): boolean {
@@ -644,7 +896,8 @@ function isReadOnlySedScript(script: string): boolean {
       const delimiter = peek()
       if (!isSedDelimiter(delimiter)) return false
       index += 1
-      if (!readDelimited(delimiter, command === 's') || !readDelimited(delimiter, false)) return false
+      if (!readDelimited(delimiter, command === 's') || !readDelimited(delimiter, false))
+        return false
       if (command === 's') {
         while (/^[gpiImM0-9]$/u.test(peek())) index += 1
       }
@@ -679,7 +932,8 @@ function isReadOnlySedInvocation(args: readonly string[]): boolean {
       continue
     }
     // --expression 与短选项簇里的 e：取值连写在后面（--expression=p、-e'p'、-ne'p'），没连写就取下一个词。
-    const expression = /^--expression(?:=(.*))?$/su.exec(argument) ?? /^-[nErsuz]*e(.*)$/su.exec(argument)
+    const expression =
+      /^--expression(?:=(.*))?$/su.exec(argument) ?? /^-[nErsuz]*e(.*)$/su.exec(argument)
     if (expression) {
       let script = expression[1]
       if (!script) {
@@ -690,7 +944,8 @@ function isReadOnlySedInvocation(args: readonly string[]): boolean {
       scripts.push(script)
       continue
     }
-    if (!SedReadOnlyOptionCluster.test(argument) && !SedReadOnlyLongOptions.has(argument)) return false
+    if (!SedReadOnlyOptionCluster.test(argument) && !SedReadOnlyLongOptions.has(argument))
+      return false
   }
   if (isEmpty(scripts)) {
     const script = operands[0]
@@ -711,8 +966,14 @@ function hasMutatingGitArguments(subcommand: string, args: readonly string[]): b
   }
   return args.some((argument) => {
     if (argument === '--output' || argument.startsWith('--output=')) return true
-    if (subcommand === 'grep') return /^-[^-]*O/u.test(argument) || abbreviates(argument, '--open-files-in-pager', 4)
-    if (subcommand === 'ls-remote') return /^-[^-]*u/u.test(argument) || abbreviates(argument, '--upload-pack', 3) || abbreviates(argument, '--exec', 5)
+    if (subcommand === 'grep')
+      return /^-[^-]*O/u.test(argument) || abbreviates(argument, '--open-files-in-pager', 4)
+    if (subcommand === 'ls-remote')
+      return (
+        /^-[^-]*u/u.test(argument) ||
+        abbreviates(argument, '--upload-pack', 3) ||
+        abbreviates(argument, '--exec', 5)
+      )
     return false
   })
 }
@@ -736,11 +997,14 @@ export function isShellCommandReadOnly(command: string): boolean {
       const subcommandIndex = findGitSubcommandIndex(args)
       if (subcommandIndex < 0) return false
       // -c key=value、--config-env、--exec-path、-p 能让 log/diff/status 这类只读子命令去执行别的程序（core.pager、diff.external、core.fsmonitor…），一律不算只读。
-      if (args.slice(0, subcommandIndex).some((argument) => isExecutableGitGlobalOption(argument))) return false
+      if (args.slice(0, subcommandIndex).some((argument) => isExecutableGitGlobalOption(argument)))
+        return false
       const subcommand = args[subcommandIndex]
-      return !!subcommand
-        && readOnlyGitCommands.has(subcommand)
-        && !hasMutatingGitArguments(subcommand, args.slice(subcommandIndex + 1))
+      return (
+        !!subcommand &&
+        readOnlyGitCommands.has(subcommand) &&
+        !hasMutatingGitArguments(subcommand, args.slice(subcommandIndex + 1))
+      )
     }
     if (executable === 'sed') return isReadOnlySedInvocation(args)
     const vetoes = mutatingArgumentsByCommand[executable]
@@ -751,18 +1015,19 @@ export function isShellCommandReadOnly(command: string): boolean {
 /** 执行前给命令分类：是否只读、是否危险、是否该转入后台，以及可能占用的端口。 */
 export function analyzeCommandExecution(command: string): ShellCommandPlan {
   const trimmed = command.trim()
-  if (!trimmed) return {
-    isReadOnly: false,
-    shouldStartInBackground: false,
-    reason: null,
-    isDangerous: false,
-    dangerousReason: null,
-    ports: [],
-  }
+  if (!trimmed)
+    return {
+      isReadOnly: false,
+      shouldStartInBackground: false,
+      reason: null,
+      isDangerous: false,
+      dangerousReason: null,
+      ports: [],
+    }
   const dangerousReason = describeDangerousCommand(trimmed)
   const reason = looksLikeLongRunningService(trimmed)
-      ? '该命令看起来会启动长期驻留的服务或监听进程。'
-      : null
+    ? '该命令看起来会启动长期驻留的服务或监听进程。'
+    : null
   return {
     isReadOnly: isShellCommandReadOnly(trimmed),
     shouldStartInBackground: !!reason,
@@ -774,17 +1039,19 @@ export function analyzeCommandExecution(command: string): ShellCommandPlan {
 }
 
 /** 判断一次命令调用能否与其他调用并发：只读、不危险、不转后台；optIn 为真时还要求入参显式声明 parallel: true，为假时只拒绝显式的 parallel: false。 */
-export function isParallelCommandExecutionSafe(input: {
-  command?: unknown
-  background?: unknown
-  parallel?: unknown
-}, optIn: boolean): boolean {
+export function isParallelCommandExecutionSafe(
+  input: {
+    command?: unknown
+    background?: unknown
+    parallel?: unknown
+  },
+  optIn: boolean
+): boolean {
   if (optIn ? !isTrue(input.parallel) : isFalse(input.parallel)) return false
   if (isTrue(input.background) || !isString(input.command)) return false
   const plan = analyzeCommandExecution(input.command)
   return plan.isReadOnly && !plan.isDangerous && !plan.shouldStartInBackground
 }
-
 
 /** 生成危险命令的确认文案，写明命令、理由、是否后台运行与可能占用的端口。 */
 export function buildDangerousCommandConfirmationMessage(
@@ -798,9 +1065,13 @@ export function buildDangerousCommandConfirmationMessage(
     `准备在${scopeLabel}执行高风险命令：${command}`,
     plan.dangerousReason ?? '该命令可能造成不可逆结果。',
     ...(plan.dangerousReason === RecursiveRemoveReason || plan.dangerousReason === TreeDeleteReason
-      ? ['如果目标是一个项目或仓库目录（含 .git），未推送的提交和未提交的改动会一起没掉，无法找回。']
+      ? [
+          '如果目标是一个项目或仓库目录（含 .git），未推送的提交和未提交的改动会一起没掉，无法找回。',
+        ]
       : []),
-    willRunInBackground ? `该命令还可能长期驻留。${portSuffix}` : '这是一次需要显式确认的危险操作。',
+    willRunInBackground
+      ? `该命令还可能长期驻留。${portSuffix}`
+      : '这是一次需要显式确认的危险操作。',
     '是否继续？',
   ].join('\n')
 }

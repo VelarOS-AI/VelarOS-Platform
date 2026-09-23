@@ -3,8 +3,16 @@
  * 判定逻辑本身是纯函数，在 `utils/command-policy.ts`；这个类是它对外的唯一出口。
  */
 
-import type { ShellCommandConcurrencyInput, ShellCommandConcurrencyOptions, ShellCommandPlan } from '../types/shell-command.js'
-import { analyzeCommandExecution, isParallelCommandExecutionSafe, isShellCommandReadOnly } from '../utils/command-policy.js'
+import type {
+  ShellCommandConcurrencyInput,
+  ShellCommandConcurrencyOptions,
+  ShellCommandPlan,
+} from '../types/shell-command.js'
+import {
+  analyzeCommandExecution,
+  isParallelCommandExecutionSafe,
+  isShellCommandReadOnly,
+} from '../utils/command-policy.js'
 
 /**
  * 执行前给一条 shell 命令分类，实例是 `shellCommandPolicy`。`velaros:shell` 的 run、演练沙箱里的 run、项目空间的 run、宿主的审批界面与无人值守放行都用这一份，判定处处一致。
@@ -18,7 +26,10 @@ export interface ShellCommandPolicyApi {
   /** 这条命令是否在任何参数组合下都不写盘、不执行别的程序；判成只读的才允许并发、无人值守放行。 */
   isReadOnly(command: string): boolean
   /** 一次命令调用能不能与别的调用并发：只读、不危险、不转后台；optIn（缺省为真）时还要求入参显式写了 parallel: true。 */
-  isParallelSafe(input: ShellCommandConcurrencyInput, options?: ShellCommandConcurrencyOptions): boolean
+  isParallelSafe(
+    input: ShellCommandConcurrencyInput,
+    options?: ShellCommandConcurrencyOptions
+  ): boolean
 }
 
 export class ShellCommandPolicy implements ShellCommandPolicyApi {
@@ -30,7 +41,10 @@ export class ShellCommandPolicy implements ShellCommandPolicyApi {
     return isShellCommandReadOnly(command)
   }
 
-  public isParallelSafe(input: ShellCommandConcurrencyInput, options: ShellCommandConcurrencyOptions = {}): boolean {
+  public isParallelSafe(
+    input: ShellCommandConcurrencyInput,
+    options: ShellCommandConcurrencyOptions = {}
+  ): boolean {
     return isParallelCommandExecutionSafe(input, options.optIn ?? true)
   }
 }

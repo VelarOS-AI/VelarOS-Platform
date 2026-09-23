@@ -23,7 +23,8 @@ import { ShellTuning } from './tuning.js'
 /** 找到 Windows 原生进程宿主的可执行文件：先看显式配置，再看应用资源目录，最后看包里的 native 目录；非 Windows 或找不到返回 null。 */
 export function getProcessHostPath(options: ShellProcessHostOptions = {}): Nullable<string> {
   if ((options.platform ?? process.platform) !== 'win32') return null
-  const configured = options.hostPath ?? options.env?.VELAROS_PROCESS_HOST ?? process.env.VELAROS_PROCESS_HOST
+  const configured =
+    options.hostPath ?? options.env?.VELAROS_PROCESS_HOST ?? process.env.VELAROS_PROCESS_HOST
   const resources = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
   const candidates = [
     configured,
@@ -31,7 +32,11 @@ export function getProcessHostPath(options: ShellProcessHostOptions = {}): Nulla
     bundledProcessHostPath(),
   ]
   const probe = options.isFile ?? existsSync
-  return toNullable(candidates.find((candidate): candidate is string => !!candidate && isAbsolute(candidate) && probe(candidate)))
+  return toNullable(
+    candidates.find(
+      (candidate): candidate is string => !!candidate && isAbsolute(candidate) && probe(candidate)
+    )
+  )
 }
 
 /**
@@ -55,22 +60,37 @@ export function buildOwnedProcessSpec(
   options: ShellProcessHostOptions = {}
 ): { spec: CommandSpec; ownership: ShellProcessOwnership } {
   const host = getProcessHostPath(options)
-  if (!host) return {
-    spec,
-    ownership: { backend: 'process-tree', parentDeathCleanup: false, reason: 'native-host-unavailable' },
-  }
+  if (!host)
+    return {
+      spec,
+      ownership: {
+        backend: 'process-tree',
+        parentDeathCleanup: false,
+        reason: 'native-host-unavailable',
+      },
+    }
   return {
-    spec: { file: host, args: [
-      '--parent-pid', String(options.parentPid ?? process.pid),
-      ...(spec.windowsVerbatimArguments ? ['--verbatim-arguments'] : []),
-      '--', spec.file, ...spec.args,
-    ] },
+    spec: {
+      file: host,
+      args: [
+        '--parent-pid',
+        String(options.parentPid ?? process.pid),
+        ...(spec.windowsVerbatimArguments ? ['--verbatim-arguments'] : []),
+        '--',
+        spec.file,
+        ...spec.args,
+      ],
+    },
     ownership: { backend: 'windows-job', parentDeathCleanup: true, reason: 'native-job-host' },
   }
 }
 
 /** 在期限内执行一条短命令并返回 stdout，超时强制结束。 */
-export function execBounded(file: string, args: string[], timeoutMs: number = ShellTuning.process.controlTimeoutMs): Promise<string> {
+export function execBounded(
+  file: string,
+  args: string[],
+  timeoutMs: number = ShellTuning.process.controlTimeoutMs
+): Promise<string> {
   return new Promise((resolve, reject) => {
     let settled = false
     const timers = new TimerScope({ name: 'ShellProcessControl' })
@@ -135,7 +155,11 @@ export async function terminateProcessTree(
  * 往子进程的 stdin 写一段文本，最多等 timeoutMs：写完返回 'written'，写失败返回那个错误，
  * 到期还没写完（进程没在读输入）返回 'pending'，数据留在管道缓冲里等进程来读。
  */
-export function writeToChildInput(stdin: Writable, payload: string, timeoutMs: number): Promise<'written' | 'pending' | Error> {
+export function writeToChildInput(
+  stdin: Writable,
+  payload: string,
+  timeoutMs: number
+): Promise<'written' | 'pending' | Error> {
   return new Promise((resolve) => {
     let settled = false
     const timers = new TimerScope({ name: 'ShellConsoleInput' })
@@ -151,7 +175,10 @@ export function writeToChildInput(stdin: Writable, payload: string, timeoutMs: n
 }
 
 /** 等待子进程确认启动成功；超时或启动失败时报错。 */
-export function waitForProcessSpawn(child: ChildProcess, timeoutMs: number = ShellTuning.process.spawnTimeoutMs): Promise<void> {
+export function waitForProcessSpawn(
+  child: ChildProcess,
+  timeoutMs: number = ShellTuning.process.spawnTimeoutMs
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const timers = new TimerScope({ name: 'ShellProcessSpawn' })
     const cleanup = (): void => {
@@ -188,7 +215,9 @@ export async function runPlatformCommand(
     return await promisify(execFile)(commandSpec.file, commandSpec.args, {
       env: process.env,
       maxBuffer: ShellTuning.systemInfo.commandOutputBytes,
-      timeout: ShellTuning.systemInfo.commandTimeoutMs, killSignal: 'SIGKILL', windowsHide: true,
+      timeout: ShellTuning.systemInfo.commandTimeoutMs,
+      killSignal: 'SIGKILL',
+      windowsHide: true,
     })
   } catch (error) {
     // lsof 在"没有任何匹配"时以 exit 1 且空 stderr 结束——这不是失败，是空结果集。
@@ -199,7 +228,8 @@ export async function runPlatformCommand(
       commandSpec.file === 'lsof' &&
       String(failure?.code) === '1' &&
       !(isString(failure?.stderr) ? failure.stderr.trim() : '')
-    ) return { stdout: isString(failure?.stdout) ? failure.stdout : '' }
+    )
+      return { stdout: isString(failure?.stdout) ? failure.stdout : '' }
 
     throw new AppError('PLATFORM', `平台命令执行失败：${commandSpec.file}`, error)
   }

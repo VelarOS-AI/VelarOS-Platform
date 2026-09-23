@@ -1,7 +1,4 @@
-import type {
-  KernelModulePermissionRequest,
-  KernelPermissionDecision,
-} from '../../types/kernel.js'
+import type { KernelModulePermissionRequest, KernelPermissionDecision } from '../../types/kernel.js'
 import type { ScopedKernelPermissionBrokerOptions } from '../../types/runtime'
 
 /**
@@ -13,22 +10,17 @@ import type { ScopedKernelPermissionBrokerOptions } from '../../types/runtime'
  */
 export interface KernelModulePermissionBroker {
   /** 为一个权限位求授权；没在清单里声明过的权限直接拒，判定前后各查一次上下文是否还有效。 */
-  request(
-    request: KernelModulePermissionRequest,
-  ): Promise<KernelPermissionDecision>
+  request(request: KernelModulePermissionRequest): Promise<KernelPermissionDecision>
 }
 
 export class ScopedKernelPermissionBroker implements KernelModulePermissionBroker {
-  public constructor(
-    private readonly options: ScopedKernelPermissionBrokerOptions,
-  ) {}
+  public constructor(private readonly options: ScopedKernelPermissionBrokerOptions) {}
 
-  public async request(
-    request: KernelModulePermissionRequest,
-  ): Promise<KernelPermissionDecision> {
+  public async request(request: KernelModulePermissionRequest): Promise<KernelPermissionDecision> {
     const { assertActive, broker, generation, manifest } = this.options
     assertActive()
-    if (!manifest.permissions.includes(request.permission)) return {
+    if (!manifest.permissions.includes(request.permission))
+      return {
         status: 'denied',
         reason: `模块 "${manifest.id}" 没有声明权限 "${request.permission}"`,
       }

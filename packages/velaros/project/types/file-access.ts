@@ -24,7 +24,7 @@ export interface ProjectFileAccess {
   write(
     path: string,
     content: string,
-    options?: { encoding?: TextEncoding; mode?: number },
+    options?: { encoding?: TextEncoding; mode?: number }
   ): Promise<FileSnapshot>
   remove(path: string): Promise<void>
 }

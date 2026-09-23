@@ -1,7 +1,7 @@
-import type { TextEncoding } from "@velaros-ai/core/text-files/contracts";
+import type { TextEncoding } from '@velaros-ai/core/text-files/contracts'
 
-import type { JsonValue, RiskLevel } from "./common.js";
-import type { FileSnapshot } from "./snapshot.js";
+import type { JsonValue, RiskLevel } from './common.js'
+import type { FileSnapshot } from './snapshot.js'
 
 /** project 内核可转换为补丁的所有编辑原语联合类型。 */
 export type EditOperation =
@@ -23,294 +23,293 @@ export type EditOperation =
   | AddImportOperation
   | RemoveImportOperation
   | JsonPatchOperation
-  | CustomEditOperation;
+  | CustomEditOperation
 
 /** 编辑计划编译器的内部产物；准备事务时会再核一次原文是否相同。 */
 export interface ReplaceContentOperation {
-  type: 'replace_content';
-  path: string;
-  expectedContent: string;
-  content: string;
+  type: 'replace_content'
+  path: string
+  expectedContent: string
+  content: string
   /** 显式的整体覆盖和编译出来的局部编辑分开记，审计与审批按它区分。 */
-  mode?: 'edit' | 'overwrite' | 'guard' | 'recode';
+  mode?: 'edit' | 'overwrite' | 'guard' | 'recode'
   /** mode=recode 时的目标磁盘编码；正文之外的字节表示由事务字节计划按它重建。 */
-  targetEncoding?: TextEncoding;
+  targetEncoding?: TextEncoding
 }
 
 /** 行号绑定到已读取的磁盘 revision；新正文按行传递，不需要复述旧文本。 */
 export interface ReplaceLinesOperation {
-  type: "replace_lines";
-  path: string;
-  baseRevision: string;
-  startLine: number;
-  endLine: number;
+  type: 'replace_lines'
+  path: string
+  baseRevision: string
+  startLine: number
+  endLine: number
   /** 每项是一行，不含 CR/LF；空数组删除所选行。 */
-  newLines: string[];
+  newLines: string[]
 }
 
 export interface ReplaceTextOperation {
-  type: "replace_text";
+  type: 'replace_text'
   /** 目标文件路径；没有 targetId 时必填。 */
-  path?: string;
+  path?: string
   /** 可选精确锚点；除非 constraints 另有指定，否则应唯一存在。 */
-  oldText?: string;
-  newText: string;
+  oldText?: string
+  newText: string
   /** 安全断言：总匹配数必须等于该值；不决定修改数量。 */
-  expectedMatches?: number;
+  expectedMatches?: number
   /** 只修改第几个匹配（1-based）。 */
-  occurrence?: number;
+  occurrence?: number
   /** 修改全部匹配。 */
-  replaceAll?: boolean;
+  replaceAll?: boolean
   anchors?: {
-    before?: string;
-    after?: string;
-    mustContain?: string[];
-  };
+    before?: string
+    after?: string
+    mustContain?: string[]
+  }
 }
 
 export interface InsertTextOperation {
-  type: "insert_text";
+  type: 'insert_text'
   /** 目标文件路径；没有 targetId 时必填。 */
-  path?: string;
-  position: "before" | "after";
-  text: string;
+  path?: string
+  position: 'before' | 'after'
+  text: string
 }
 
 export interface InsertTextAtAnchorOperation {
-  type: "insert_text_at_anchor";
-  path: string;
+  type: 'insert_text_at_anchor'
+  path: string
   /** 用于替代数字行 offset 的字面量文本锚点。 */
-  anchorText: string;
-  position: "before" | "after";
-  text: string;
-  expectedMatches?: number;
-  occurrence?: number;
-  replaceAll?: boolean;
-  skipIfAlreadyPresent?: boolean;
+  anchorText: string
+  position: 'before' | 'after'
+  text: string
+  expectedMatches?: number
+  occurrence?: number
+  replaceAll?: boolean
+  skipIfAlreadyPresent?: boolean
 }
 
 export interface AppendTextOperation {
-  type: "append_text";
-  path: string;
-  text: string;
-  skipIfAlreadyPresent?: boolean;
+  type: 'append_text'
+  path: string
+  text: string
+  skipIfAlreadyPresent?: boolean
 }
 
 export interface PrependTextOperation {
-  type: "prepend_text";
-  path: string;
-  text: string;
-  skipIfAlreadyPresent?: boolean;
+  type: 'prepend_text'
+  path: string
+  text: string
+  skipIfAlreadyPresent?: boolean
 }
 
 export interface DeleteTextOperation {
-  type: "delete_text";
+  type: 'delete_text'
   /** 目标文件路径；没有 targetId 时必填。 */
-  path?: string;
-  oldText?: string;
-  expectedMatches?: number;
-  occurrence?: number;
-  replaceAll?: boolean;
+  path?: string
+  oldText?: string
+  expectedMatches?: number
+  occurrence?: number
+  replaceAll?: boolean
 }
 
 export interface CreateFileOperation {
-  type: "create_file";
-  path: string;
-  content: string;
-  overwrite?: boolean;
+  type: 'create_file'
+  path: string
+  content: string
+  overwrite?: boolean
 }
 
 export interface DeleteFileOperation {
-  type: "delete_file";
-  path: string;
+  type: 'delete_file'
+  path: string
 }
 
 export interface RenameFileOperation {
-  type: "rename_file";
-  from: string;
-  to: string;
+  type: 'rename_file'
+  from: string
+  to: string
 }
 
 export interface ReplaceSymbolOperation {
-  type: "replace_symbol";
+  type: 'replace_symbol'
   /** 没有 targetId 时由 Agent 直接提供的项目相对路径。 */
-  path?: string;
+  path?: string
   /** adapter 解析的符号选择器；路径通常来自 targetId 或 operation.path。 */
   symbol?: {
-    kind?: string;
-    name: string;
-    container?: string;
-  };
-  replacement: string;
-  mode?: "whole" | "body";
+    kind?: string
+    name: string
+    container?: string
+  }
+  replacement: string
+  mode?: 'whole' | 'body'
 }
 
 export interface InsertAroundSymbolOperation {
-  type: "insert_around_symbol";
+  type: 'insert_around_symbol'
   /** 没有 targetId 时由 Agent 直接提供的项目相对路径。 */
-  path?: string;
+  path?: string
   symbol?: {
-    kind?: string;
-    name: string;
-    container?: string;
-  };
-  position: "before" | "after";
-  text: string;
+    kind?: string
+    name: string
+    container?: string
+  }
+  position: 'before' | 'after'
+  text: string
 }
 
 export interface InsertBeforeSymbolOperation {
-  type: "insert_before_symbol";
+  type: 'insert_before_symbol'
   symbol?: {
-    kind?: string;
-    name: string;
-    container?: string;
-  };
-  text: string;
+    kind?: string
+    name: string
+    container?: string
+  }
+  text: string
 }
 
 export interface InsertAfterSymbolOperation {
-  type: "insert_after_symbol";
+  type: 'insert_after_symbol'
   symbol?: {
-    kind?: string;
-    name: string;
-    container?: string;
-  };
-  text: string;
+    kind?: string
+    name: string
+    container?: string
+  }
+  text: string
 }
 
 export interface AddImportOperation {
-  type: "add_import";
-  path?: string;
-  importStatement?: string;
-  module?: string;
-  named?: string[];
-  defaultImport?: string;
-  namespaceImport?: string;
-  sideEffectOnly?: boolean;
-  dedupe?: boolean;
+  type: 'add_import'
+  path?: string
+  importStatement?: string
+  module?: string
+  named?: string[]
+  defaultImport?: string
+  namespaceImport?: string
+  sideEffectOnly?: boolean
+  dedupe?: boolean
 }
 
 export interface RemoveImportOperation {
-  type: "remove_import";
-  path?: string;
-  importStatement?: string;
-  moduleSpecifier?: string;
-  module?: string;
-  name?: string;
+  type: 'remove_import'
+  path?: string
+  importStatement?: string
+  moduleSpecifier?: string
+  module?: string
+  name?: string
 }
 
 export interface JsonPatchOperation {
-  type: "json_patch";
+  type: 'json_patch'
   /** 目标 JSON 文件路径；没有 targetId 时必填。 */
-  path?: string;
+  path?: string
   patches: Array<
-    | { op: "add" | "replace"; path: string; value: JsonValue }
-    | { op: "remove"; path: string }
-  >;
+    { op: 'add' | 'replace'; path: string; value: JsonValue } | { op: 'remove'; path: string }
+  >
 }
 
 export interface CustomEditOperation {
-  type: "custom";
-  adapterId?: string;
-  payload: any;
+  type: 'custom'
+  adapterId?: string
+  payload: any
 }
 
 export interface EditConstraints {
   /** prepared transaction 的总补丁大小超过该限制时拒绝。 */
-  maxChangedLines?: number;
+  maxChangedLines?: number
   /** 要求选中的文本、锚点或符号匹配指定次数。 */
-  expectedMatches?: number;
-  onlyModifyTarget?: boolean;
+  expectedMatches?: number
+  onlyModifyTarget?: boolean
 }
 
 /** 单个编辑请求，以及可选目标和原因元数据。 */
 export interface EditIntent {
-  targetId?: string;
-  reason?: string;
-  operation: EditOperation;
-  constraints?: EditConstraints;
+  targetId?: string
+  reason?: string
+  operation: EditOperation
+  constraints?: EditConstraints
 }
 
 export interface PrepareEditInput {
   /** 将编辑与新读取上下文绑定起来的 evidence pack。 */
-  evidenceId?: string;
-  operations: EditIntent[];
+  evidenceId?: string
+  operations: EditIntent[]
   /** 没有 resolved target 自带 base revision 时使用的兼容 revision 防护。 */
-  baseRevision?: string;
+  baseRevision?: string
   /** 按项目相对路径绑定调用方读取到的 revision；优先于兼容的 baseRevision。 */
-  baseRevisions?: Record<string, string>;
-  dryRun?: boolean;
-  metadata?: Record<string, any>;
+  baseRevisions?: Record<string, string>
+  dryRun?: boolean
+  metadata?: Record<string, any>
 }
 
 export interface PreparedPatch {
-  patchId: string;
-  strategyId: string;
-  path: string;
+  patchId: string
+  strategyId: string
+  path: string
   /** 准备补丁时基于的 revision；存在时 apply 阶段会再次检查。 */
-  baseRevision?: string;
+  baseRevision?: string
   /**
    * 补丁写入前该路径的原文，rollback 据此写回。覆盖或删除既有文件却缺席，表示取不到原文
    * （二进制或超出读取上限的文件）：回滚无法恢复，事务因此是高风险。
    */
-  oldContent?: string;
-  newContent?: string;
-  diff: string;
-  changedLines: number;
-  risk: RiskLevel;
-  metadata?: Record<string, any>;
+  oldContent?: string
+  newContent?: string
+  diff: string
+  changedLines: number
+  risk: RiskLevel
+  metadata?: Record<string, any>
 }
 
 export interface PreparedTransaction {
-  transactionId: string;
-  status: "prepared";
+  transactionId: string
+  status: 'prepared'
   /** applyEdit 会按顺序精确重放的补丁列表。 */
-  patches: PreparedPatch[];
-  changedFiles: string[];
-  diff: string;
-  changedLines: number;
-  risk: RiskLevel;
-  createdAt: number;
-  baseSnapshots: FileSnapshot[];
-  metadata?: Record<string, any>;
+  patches: PreparedPatch[]
+  changedFiles: string[]
+  diff: string
+  changedLines: number
+  risk: RiskLevel
+  createdAt: number
+  baseSnapshots: FileSnapshot[]
+  metadata?: Record<string, any>
 }
 
 export interface ApplyEditInput {
-  transactionId: string;
+  transactionId: string
 }
 
 export interface AmendEditInput {
-  transactionId: string;
-  operations: EditIntent[];
-  evidenceId?: string;
-  metadata?: Record<string, any>;
+  transactionId: string
+  operations: EditIntent[]
+  evidenceId?: string
+  metadata?: Record<string, any>
 }
 
 export interface ApplyResult {
-  status: "applied";
-  transactionId: string;
-  changedFiles: string[];
+  status: 'applied'
+  transactionId: string
+  changedFiles: string[]
   /** 写入前观察到的 revision，按路径索引。 */
-  oldRevisions: Record<string, string>;
+  oldRevisions: Record<string, string>
   /** 写入后的 revision；被删除路径使用 "deleted"。 */
-  newRevisions: Record<string, string>;
-  rebasedFiles?: string[];
+  newRevisions: Record<string, string>
+  rebasedFiles?: string[]
   /** 新建后挂上 git intent-to-add 的路径。 */
-  gitTrackedFiles?: string[];
+  gitTrackedFiles?: string[]
   /** 删除后撤掉残留 intent-to-add 索引项的路径；带真实暂存内容的索引项不会出现在这里，也不会被改动。 */
-  gitUntrackedFiles?: string[];
+  gitUntrackedFiles?: string[]
 }
 
 export interface RollbackInput {
-  transactionId: string;
+  transactionId: string
 }
 
 export interface RollbackResult {
-  status: "rolled_back";
-  transactionId: string;
-  changedFiles: string[];
+  status: 'rolled_back'
+  transactionId: string
+  changedFiles: string[]
   /** 回滚删掉新建文件后撤掉的 git 索引项。 */
-  gitUntrackedFiles?: string[];
+  gitUntrackedFiles?: string[]
   /** 回滚恢复的文件里，apply 删除时撤掉过 intent-to-add、现已挂回的路径。 */
-  gitTrackedFiles?: string[];
+  gitTrackedFiles?: string[]
 }

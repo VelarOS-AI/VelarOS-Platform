@@ -35,7 +35,12 @@ declare module 'velaros:system-memory' {
   /**
    * 读到的一页原文：text 从第 offset 个字符开始（按 UTF-16 算），totalChars 是整份正文的字符数，没读完就从 offset + text.length 接着读。
    */
-  interface ContextContent { readonly record: ContextRecord; readonly text: string; readonly totalChars: number; readonly offset: number }
+  interface ContextContent {
+    readonly record: ContextRecord
+    readonly text: string
+    readonly totalChars: number
+    readonly offset: number
+  }
 
   /**
    * 改一份工作笔记：key 1 到 96 个字符，只用字母、数字与 _ . -，以字母或数字开头；baseRevision 是刚读到的 revision，新笔记为 0，而且必须给 body。
@@ -115,7 +120,10 @@ declare module 'velaros:system-memory' {
   /**
    * 原文引用：sessionId 与 id 一起定位一份不可变原文；只能在授权给你的会话范围里读。
    */
-  interface ContextRef { readonly sessionId: string; readonly id: string }
+  interface ContextRef {
+    readonly sessionId: string
+    readonly id: string
+  }
 
   /**
    * 一份原文的元数据：sequence 是它在会话里的序号，chars 是正文字符数，sources 是它引用的原文，createdAt 是 ISO 时间；正文按 ref 另读。
@@ -153,7 +161,8 @@ declare module 'velaros:system-memory' {
   /**
    * 原文的来源：user 用户输入、assistant 模型回复、tool 能力回执、event 运行事件、note 笔记、checkpoint 检查点、audit 审计记录。
    */
-  type ContextRecordKind = 'user' | 'assistant' | 'tool' | 'event' | 'note' | 'checkpoint' | 'audit'
+  type ContextRecordKind =
+    'user' | 'assistant' | 'tool' | 'event' | 'note' | 'checkpoint' | 'audit'
 
   /** 按种类与标题分页查当前任务的材料：只有引用、位置、大小与笔记版本。
    */

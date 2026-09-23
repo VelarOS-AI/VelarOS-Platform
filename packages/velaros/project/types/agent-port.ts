@@ -31,7 +31,10 @@ export interface AgentProjectPreparedTransaction {
   metadata?: Record<string, unknown>
 }
 
-export interface AgentProjectStoredTransaction extends Omit<AgentProjectPreparedTransaction, 'status'> {
+export interface AgentProjectStoredTransaction extends Omit<
+  AgentProjectPreparedTransaction,
+  'status'
+> {
   status: ProjectTransactionStatus
   appliedAt?: number
 }

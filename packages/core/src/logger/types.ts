@@ -7,12 +7,7 @@ export type LogLevel = 'trace' | 'debug' | 'info' | 'success' | 'warn' | 'error'
 export type LogEnvironment = 'development' | 'production' | 'test'
 
 export type LogPlatform =
-  | 'browser'
-  | 'electron-main'
-  | 'electron-renderer'
-  | 'worker'
-  | 'node'
-  | 'unknown'
+  'browser' | 'electron-main' | 'electron-renderer' | 'worker' | 'node' | 'unknown'
 
 export type LogContext = Record<string, unknown>
 

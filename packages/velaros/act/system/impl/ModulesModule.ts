@@ -26,7 +26,10 @@ class ModulesModule implements ModulesModuleApi {
       context: (call) => {
         const sessionId = call.invocation.sessionId
         return {
-          catalog: { list: (query) => catalog.list(sessionId, query), describe: (module, member) => catalog.describe(sessionId, module, member) },
+          catalog: {
+            list: (query) => catalog.list(sessionId, query),
+            describe: (module, member) => catalog.describe(sessionId, module, member),
+          },
           abortSignal: call.signal,
         }
       },

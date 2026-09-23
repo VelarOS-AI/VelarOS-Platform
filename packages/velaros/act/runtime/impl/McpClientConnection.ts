@@ -1,18 +1,39 @@
-import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
+import {
+  getDefaultEnvironment,
+  StdioClientTransport,
+} from '@modelcontextprotocol/sdk/client/stdio.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 
-import { isArray, isPresent, isRecord, Log, toNullable, toOptional } from "@velaros-ai/core";
-import { AppError } from "@velaros-ai/core/error";
+import { isArray, isPresent, isRecord, Log, toNullable, toOptional } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
-import { McpLimits } from "../contract/constants.js";
-import type { McpAuthorizationProvider, McpConnectionOptions, McpConnectionSpec } from "../contract/requires.js";
-import type { McpRawCallResult, McpResourceContent, McpResourceDescriptor, McpToolDescriptor, McpTransportKind } from "../types/mcp.js";
-import type { McpPendingAuthorization, McpPendingConnection, McpRemoteTransport } from "../types/mcp-runtime.js";
-import { isMcpTimeoutError, mcpAuthorizationRequired, parseMcpToolDescriptor } from "../utils/mcp-protocol.js";
+import { McpLimits } from '../contract/constants.js'
+import type {
+  McpAuthorizationProvider,
+  McpConnectionOptions,
+  McpConnectionSpec,
+} from '../contract/requires.js'
+import type {
+  McpRawCallResult,
+  McpResourceContent,
+  McpResourceDescriptor,
+  McpToolDescriptor,
+  McpTransportKind,
+} from '../types/mcp.js'
+import type {
+  McpPendingAuthorization,
+  McpPendingConnection,
+  McpRemoteTransport,
+} from '../types/mcp-runtime.js'
+import {
+  isMcpTimeoutError,
+  mcpAuthorizationRequired,
+  parseMcpToolDescriptor,
+} from '../utils/mcp-protocol.js'
 
 /** 外部 MCP 连接的完整生命周期。 */
 export interface McpClientConnectionApi {
@@ -31,7 +52,11 @@ export interface McpClientConnectionApi {
   /** 读一个资源，把 SDK 的 text/blob 联合收敛成固定形状（两个字段都在，没有的那个是 null）；超过 `callTimeoutMs` 或 `abortSignal` 取消时抛错。 */
   readResource(uri: string, abortSignal?: AbortSignal): Promise<McpResourceContent[]>
   /** 调一个工具，原样把 server 的结果记录交回（不是记录就给空对象），解析和 isError 判定在 `translateMcpCallResult` 那层做。有进度上报会重置超时；真超时抛 `TIMEOUT` 并带上服务器名、工具名和毫秒数。 */
-  callTool(toolName: string, args: Record<string, unknown>, abortSignal?: AbortSignal): Promise<McpRawCallResult>
+  callTool(
+    toolName: string,
+    args: Record<string, unknown>,
+    abortSignal?: AbortSignal
+  ): Promise<McpRawCallResult>
   /** 关连接：中断还在进行的连接尝试、关掉 client 与 transport、丢掉挂起的授权。关闭过程中的错误一律吞掉（释放优先），可重复调，也可以关完再 `connect()`。 */
   close(): Promise<void>
 }
@@ -66,7 +91,7 @@ export class McpClientConnection implements McpClientConnectionApi {
   constructor(
     private readonly serverName: string,
     private readonly spec: McpConnectionSpec,
-    private readonly options:McpConnectionOptions = {}
+    private readonly options: McpConnectionOptions = {}
   ) {}
 
   public get isConnected(): boolean {
@@ -84,9 +109,7 @@ export class McpClientConnection implements McpClientConnectionApi {
     if (this.connecting) return this.connecting.promise
     if (this.pendingAuthorization) {
       const provider = this.spec.authProvider as McpAuthorizationProvider | undefined
-      throw mcpAuthorizationRequired(
-        toNullable(provider?.authorizationUrl?.toString())
-      )
+      throw mcpAuthorizationRequired(toNullable(provider?.authorizationUrl?.toString()))
     }
 
     const pending: McpPendingConnection = {
@@ -103,9 +126,10 @@ export class McpClientConnection implements McpClientConnectionApi {
   }
 
   private async connectPending(pending: McpPendingConnection): Promise<void> {
-    const transportKinds = this.spec.transport === 'auto'
-      ? ['http', 'sse'] as const
-      : [this.spec.transport ?? 'stdio'] as const
+    const transportKinds =
+      this.spec.transport === 'auto'
+        ? (['http', 'sse'] as const)
+        : ([this.spec.transport ?? 'stdio'] as const)
     const errors: string[] = []
     for (const transportKind of transportKinds) {
       pending.controller.signal.throwIfAborted()
@@ -120,7 +144,11 @@ export class McpClientConnection implements McpClientConnectionApi {
           signal: pending.controller.signal,
         })
         pending.controller.signal.throwIfAborted()
-        if (!client.transport) throw new AppError('UNAVAILABLE', 'MCP 连接在握手完成前就断了：transport 已关闭，这次连接不算建立成功。')
+        if (!client.transport)
+          throw new AppError(
+            'UNAVAILABLE',
+            'MCP 连接在握手完成前就断了：transport 已关闭，这次连接不算建立成功。'
+          )
         this.client = client
         this.transport = transport
         return
@@ -141,15 +169,14 @@ export class McpClientConnection implements McpClientConnectionApi {
             await this.closeClientQuietly(client)
             await this.closeTransportQuietly(transport)
           }
-          throw mcpAuthorizationRequired(
-            toNullable(provider?.authorizationUrl?.toString())
-          )
+          throw mcpAuthorizationRequired(toNullable(provider?.authorizationUrl?.toString()))
         }
         await this.closeClientQuietly(client)
         await this.closeTransportQuietly(transport)
         errors.push(`${transportKind}: ${AppError.getMessage(error)}`)
         if (isMcpTimeoutError(error)) {
-          errors[errors.length - 1] = `${transportKind}: 连接超时（${this.options.connectTimeoutMs ?? McpLimits.connectTimeoutMs}ms）`
+          errors[errors.length - 1] =
+            `${transportKind}: 连接超时（${this.options.connectTimeoutMs ?? McpLimits.connectTimeoutMs}ms）`
         }
       }
     }
@@ -166,7 +193,11 @@ export class McpClientConnection implements McpClientConnectionApi {
    */
   public async completeAuthorization(code: string): Promise<void> {
     const pending = this.pendingAuthorization
-    if (!pending) throw new AppError('INVALID_STATE', '当前没有待完成的 MCP OAuth 授权：它可能已经完成或已被取消，重新发起连接拿一个新的授权链接。')
+    if (!pending)
+      throw new AppError(
+        'INVALID_STATE',
+        '当前没有待完成的 MCP OAuth 授权：它可能已经完成或已被取消，重新发起连接拿一个新的授权链接。'
+      )
     this.pendingAuthorization = null
     try {
       await pending.transport.finishAuth(code)
@@ -218,23 +249,20 @@ export class McpClientConnection implements McpClientConnectionApi {
     return resources
   }
 
-  private advanceListCursor(
-    cursor: LooseOptional<string>,
-    seen: Set<string>
-  ): Nullable<string> {
+  private advanceListCursor(cursor: LooseOptional<string>, seen: Set<string>): Nullable<string> {
     if (!isPresent(cursor)) return null
     if (seen.has(cursor)) {
-      throw new AppError('EXECUTION', `MCP 服务器「${this.serverName}」重复返回同一个分页 cursor：为避免无限翻页已中止这次枚举，拿到的结果可能不完整。`)
+      throw new AppError(
+        'EXECUTION',
+        `MCP 服务器「${this.serverName}」重复返回同一个分页 cursor：为避免无限翻页已中止这次枚举，拿到的结果可能不完整。`
+      )
     }
     seen.add(cursor)
     return cursor
   }
 
   /** 读取一个资源并把 text/blob 联合收敛成稳定、可序列化形状。 */
-  public async readResource(
-    uri: string,
-    abortSignal?: AbortSignal
-  ): Promise<McpResourceContent[]> {
+  public async readResource(uri: string, abortSignal?: AbortSignal): Promise<McpResourceContent[]> {
     const response = await this.requireClient().readResource(
       { uri },
       {
@@ -258,15 +286,11 @@ export class McpClientConnection implements McpClientConnectionApi {
   ): Promise<McpRawCallResult> {
     const client = this.requireClient()
     try {
-      const result = await client.callTool(
-        { name: toolName, arguments: args },
-        undefined,
-        {
-          timeout: this.options.callTimeoutMs ?? McpLimits.callTimeoutMs,
-          resetTimeoutOnProgress: true,
-          signal: abortSignal,
-        }
-      )
+      const result = await client.callTool({ name: toolName, arguments: args }, undefined, {
+        timeout: this.options.callTimeoutMs ?? McpLimits.callTimeoutMs,
+        resetTimeoutOnProgress: true,
+        signal: abortSignal,
+      })
       return isRecord(result) ? result : {}
     } catch (error) {
       if (isMcpTimeoutError(error)) {
@@ -290,8 +314,15 @@ export class McpClientConnection implements McpClientConnectionApi {
     this.client = null
     this.transport = null
     this.pendingAuthorization = null
-    pendingConnection?.controller.abort(new AppError('ABORTED', 'MCP 连接已关闭：正在进行的连接请求被主动中止。'))
-    const closing = this.closeOwnedConnections(client, transport, pendingAuthorization, pendingConnection)
+    pendingConnection?.controller.abort(
+      new AppError('ABORTED', 'MCP 连接已关闭：正在进行的连接请求被主动中止。')
+    )
+    const closing = this.closeOwnedConnections(
+      client,
+      transport,
+      pendingAuthorization,
+      pendingConnection
+    )
     this.closing = closing
     try {
       await closing
@@ -310,7 +341,8 @@ export class McpClientConnection implements McpClientConnectionApi {
     else if (transport) await this.closeTransportQuietly(transport)
     if (authorization) await this.closeClientQuietly(authorization.client)
     if (pending?.client && pending.client !== client) await this.closeClientQuietly(pending.client)
-    if (pending?.transport && pending.transport !== transport) await this.closeTransportQuietly(pending.transport)
+    if (pending?.transport && pending.transport !== transport)
+      await this.closeTransportQuietly(pending.transport)
     if (pending) await Promise.allSettled([pending.promise])
   }
 
@@ -326,7 +358,8 @@ export class McpClientConnection implements McpClientConnectionApi {
   }
 
   private createTransport(transport: Exclude<McpTransportKind, 'auto'>): Transport {
-    if (transport === 'stdio') return new StdioClientTransport({
+    if (transport === 'stdio')
+      return new StdioClientTransport({
         command: this.spec.command,
         args: [...this.spec.args],
         env: { ...getDefaultEnvironment(), ...this.spec.env },
@@ -340,7 +373,10 @@ export class McpClientConnection implements McpClientConnectionApi {
     const requestInit: RequestInit = { headers: { ...this.spec.headers } }
     return transport === 'sse'
       ? new SSEClientTransport(url, { requestInit, authProvider: this.spec.authProvider })
-      : new StreamableHTTPClientTransport(url, { requestInit, authProvider: this.spec.authProvider })
+      : new StreamableHTTPClientTransport(url, {
+          requestInit,
+          authProvider: this.spec.authProvider,
+        })
   }
 
   private requireClient(): Client {
@@ -370,6 +406,10 @@ export class McpClientConnection implements McpClientConnectionApi {
 }
 
 /** 建一条到 MCP 服务器的连接；超时与授权口由选项注入。 */
-export function createMcpClientConnection(serverName: string, spec: McpConnectionSpec, options:McpConnectionOptions = {}): McpClientConnectionApi {
+export function createMcpClientConnection(
+  serverName: string,
+  spec: McpConnectionSpec,
+  options: McpConnectionOptions = {}
+): McpClientConnectionApi {
   return new McpClientConnection(serverName, spec, options)
 }

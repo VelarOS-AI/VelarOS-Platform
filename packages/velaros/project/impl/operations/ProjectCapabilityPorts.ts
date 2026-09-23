@@ -49,7 +49,7 @@ export class ProjectCapabilityPorts implements ProjectCapabilityPortsApi {
 
   public shell(project: ProjectShellHostPort, abortSignal: AbortSignal): ShellSpacePort {
     const root = () => project.getRootPath()
-    const port:ShellSpacePort={
+    const port: ShellSpacePort = {
       resolveCwd: (cwd) => insideProject(root(), cwd ?? '.', '工作目录'),
       commandPolicy: () => ({ scopeLabel: '当前项目', riskScope: 'project-command:dangerous' }),
       runCommand: async (command, options, allowDangerous, signal) => {
@@ -57,28 +57,45 @@ export class ProjectCapabilityPorts implements ProjectCapabilityPortsApi {
         // 后台命令交给宿主的任务管理，不占门；前台命令按只读与否走读门或写门。
         return options?.background
           ? invoke()
-          : this.gate.run(root(), !shellCommandPolicy.isReadOnly(command), signal ?? abortSignal, invoke)
+          : this.gate.run(
+              root(),
+              !shellCommandPolicy.isReadOnly(command),
+              signal ?? abortSignal,
+              invoke
+            )
       },
       listBackgroundTasks: (options) => project.listBackgroundTasks(options),
       refreshShellEnvironment: () => project.refreshShellEnvironment(),
       terminateBackgroundTask: (request) => project.terminateBackgroundTask(request),
     }
-    const observe=project.runObservationCommand?.bind(project)
-    if(observe)port.runObservationCommand=async(command,options,signal)=>{
-      const cwd=await insideProject(root(),options.cwd??'.','工作目录')
-      return this.gate.run(root(),!shellCommandPolicy.isReadOnly(command),signal??abortSignal,()=>observe(command,{...options,cwd},signal??abortSignal))
-    }
+    const observe = project.runObservationCommand?.bind(project)
+    if (observe)
+      port.runObservationCommand = async (command, options, signal) => {
+        const cwd = await insideProject(root(), options.cwd ?? '.', '工作目录')
+        return this.gate.run(
+          root(),
+          !shellCommandPolicy.isReadOnly(command),
+          signal ?? abortSignal,
+          () => observe(command, { ...options, cwd }, signal ?? abortSignal)
+        )
+      }
     return port
   }
 
   public sandbox(project: ProjectHostPort, abortSignal: AbortSignal): SandboxSurfacePort {
     const sandbox = (): RehearsalSandboxHostPort => {
-      if (!project.sandbox) throw new AppError('UNAVAILABLE', '这台机器上没有演练沙箱：要改一批文件直接用 velaros:project 的 edit，要跑脚本用 velaros:shell 的 run')
+      if (!project.sandbox)
+        throw new AppError(
+          'UNAVAILABLE',
+          '这台机器上没有演练沙箱：要改一批文件直接用 velaros:project 的 edit，要跑脚本用 velaros:shell 的 run'
+        )
       return project.sandbox
     }
-    const source = (requested: Optional<string>) => insideProject(project.getRootPath(), requested ?? '.', '沙箱的源目录')
+    const source = (requested: Optional<string>) =>
+      insideProject(project.getRootPath(), requested ?? '.', '沙箱的源目录')
     return {
-      createSandbox: async (options) => sandbox().createSandbox({ ...options, source: await source(options?.source) }),
+      createSandbox: async (options) =>
+        sandbox().createSandbox({ ...options, source: await source(options?.source) }),
       diffSandbox: (options) => sandbox().diffSandbox(options),
       applySandbox: (options) => sandbox().applySandbox(options),
       discardSandbox: (sandboxId) => sandbox().discardSandbox(sandboxId),
@@ -104,4 +121,6 @@ export class ProjectCapabilityPorts implements ProjectCapabilityPortsApi {
 }
 
 /** 整个进程唯一的一份：前台命令都排进同一扇项目资源门。 */
-export const projectCapabilityPorts: ProjectCapabilityPortsApi = new ProjectCapabilityPorts(projectExecutionGate)
+export const projectCapabilityPorts: ProjectCapabilityPortsApi = new ProjectCapabilityPorts(
+  projectExecutionGate
+)

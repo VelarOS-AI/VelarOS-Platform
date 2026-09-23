@@ -2,11 +2,7 @@
  * 用量账本：一本账只记它自己那段时间的用量。整程一本、每段再开一本，两本各自和各自的预算比。
  */
 import type { BudgetLimit } from '../contract/constants.js'
-import type {
-  Budget,
-  BudgetUsage,
-  Observation,
-} from '../types/agent-lab.js'
+import type { Budget, BudgetUsage, Observation } from '../types/agent-lab.js'
 import { exceededBudget, maximumNullable } from '../utils/budget.js'
 import { collectToolCalls } from '../utils/measure/normalize.js'
 
@@ -40,7 +36,7 @@ export class BudgetLedger implements BudgetLedgerApi {
 
   constructor(
     private readonly now: () => number,
-    startedAt = now(),
+    startedAt = now()
   ) {
     this.startedAt = startedAt
     this.currentUsage = { toolCalls: null, workingMs: null, wallClockMs: 0, tokens: null, legs: 0 }
@@ -51,7 +47,8 @@ export class BudgetLedger implements BudgetLedgerApi {
   }
 
   public observe(observation: Observation): void {
-    const calls = observation.coverage.turns === 'none' ? null : collectToolCalls(observation).length
+    const calls =
+      observation.coverage.turns === 'none' ? null : collectToolCalls(observation).length
     const tokens = observation.usage?.totalTokens ?? null
     this.currentUsage = {
       ...this.currentUsage,

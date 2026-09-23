@@ -26,11 +26,13 @@ if (!expectedPlatform) {
   failures.push('root manifest must declare velaros.platform')
 } else if (manifest.velaros?.platform !== expectedPlatform) {
   failures.push(
-    `package platform generation ${manifest.velaros?.platform ?? 'missing'} must match root ${expectedPlatform}`,
+    `package platform generation ${manifest.velaros?.platform ?? 'missing'} must match root ${expectedPlatform}`
   )
 }
 if (manifest.repository?.url !== rootManifest.repository?.url) {
-  failures.push(`repository must be ${rootManifest.repository?.url ?? 'declared by the root manifest'}`)
+  failures.push(
+    `repository must be ${rootManifest.repository?.url ?? 'declared by the root manifest'}`
+  )
 }
 if (manifest.license !== 'Apache-2.0') {
   failures.push('license must be Apache-2.0')
@@ -101,11 +103,11 @@ for (const file of sourceFiles) {
       specifier === '@velaros-ai/core/error' ||
       specifier === '@velaros-ai/core/logger' ||
       specifier === '@velaros-ai/core/utils/TimerScope' ||
-      specifier === '@velaros-ai/kernel'
-      || specifier === '@velaros-ai/kernel/contracts'
+      specifier === '@velaros-ai/kernel' ||
+      specifier === '@velaros-ai/kernel/contracts'
     if (!allowed) {
       failures.push(
-        `${path.relative(root, file)} imports forbidden VelarOS implementation ${specifier}`,
+        `${path.relative(root, file)} imports forbidden VelarOS implementation ${specifier}`
       )
     }
   }
@@ -126,7 +128,7 @@ for (const ownedExport of [
 
 // 0.7.0 起根入口就是 Node 宿主入口（`./node` 已并进来），它只出工厂与实例，类一个都不出。
 const entryExportedNames = new Set(
-  [...entrySource.matchAll(/^\s{2}([A-Za-z][A-Za-z0-9_]*),?$/gmu)].map((match) => match[1]),
+  [...entrySource.matchAll(/^\s{2}([A-Za-z][A-Za-z0-9_]*),?$/gmu)].map((match) => match[1])
 )
 for (const forbiddenClassExport of [
   'AgentModelResolver',
@@ -153,48 +155,36 @@ if (!entrySource.includes('ModelAdapterRegistryApi')) {
   failures.push('portable public entry must export ModelAdapterRegistryApi')
 }
 
-const contractsSource = await readFile(
-  path.join(packageDirectory, 'src/contracts.ts'),
-  'utf8',
-)
+const contractsSource = await readFile(path.join(packageDirectory, 'src/contracts.ts'), 'utf8')
 const contractsStatements = contractsSource
   .split('\n')
   .map((line) => line.trim())
   .filter((line) => line.startsWith('export'))
 if (
-  contractsStatements.length === 0
-  || contractsStatements.some(
+  contractsStatements.length === 0 ||
+  contractsStatements.some(
     (statement) =>
-      !statement.startsWith('export type ')
-      && statement !== "export * from './contract/constants.js'",
+      !statement.startsWith('export type ') &&
+      statement !== "export * from './contract/constants.js'"
   )
 ) {
   failures.push('contracts entry must export only the constants table and type-only declarations')
 }
-for (const requiredContractOwner of [
-  './types/model',
-  './types/providers',
-]) {
+for (const requiredContractOwner of ['./types/model', './types/providers']) {
   if (!contractsSource.includes(requiredContractOwner)) {
     failures.push(`contracts entry must export types from ${requiredContractOwner}`)
   }
 }
 
-const catalogSource = await readFile(
-  path.join(packageDirectory, 'src/catalog.ts'),
-  'utf8',
-)
+const catalogSource = await readFile(path.join(packageDirectory, 'src/catalog.ts'), 'utf8')
 const catalogOwners = new Set(
-  [...catalogSource.matchAll(/from\s+['"]([^'"]+)['"]/gu)].map((match) => match[1]),
+  [...catalogSource.matchAll(/from\s+['"]([^'"]+)['"]/gu)].map((match) => match[1])
 )
 // 渲染进程能加载的目录入口只许经这几个所有者出去；合同与类型是纯声明，不带运行时。
-const expectedCatalogOwners = new Set([
-  './contracts.js',
-  './impl/providers/ModelCatalog',
-])
+const expectedCatalogOwners = new Set(['./contracts.js', './impl/providers/ModelCatalog'])
 if ([...catalogOwners].some((owner) => !expectedCatalogOwners.has(owner))) {
   failures.push(
-    'catalog entry may export only the portable contracts entry and the ModelCatalog instance',
+    'catalog entry may export only the portable contracts entry and the ModelCatalog instance'
   )
 }
 // 目录链里真带运行时的只有这两个实现文件，逐个核对它们不碰宿主进程。
@@ -204,14 +194,10 @@ for (const catalogOwner of [
 ]) {
   const source = await readFile(
     path.join(packageDirectory, `src/${catalogOwner.slice(2)}.ts`),
-    'utf8',
+    'utf8'
   )
   const executableSource = stripTypeScriptComments(source)
-  if (
-    /(?:\bprocess\s*\.\s*env\b|\bglobalThis\b[\s\S]{0,120}\bprocess\b)/u.test(
-      executableSource,
-    )
-  ) {
+  if (/(?:\bprocess\s*\.\s*env\b|\bglobalThis\b[\s\S]{0,120}\bprocess\b)/u.test(executableSource)) {
     failures.push(`${catalogOwner} must not discover an ambient process environment`)
   }
   if (/(?:from|import)\s*(?:\([^)]*)?['"]node:/u.test(executableSource)) {
@@ -234,37 +220,32 @@ for (const file of sourceFiles) {
   const source = await readFile(file, 'utf8')
   const executableSource = stripTypeScriptComments(source)
   if (
-    (/(?:from|import)\s*(?:\([^)]*)?['"]node:/u.test(executableSource)
-      || /\bprocess\s*\.\s*env\b/u.test(executableSource))
-    && !allowedNodeSources.has(file)
+    (/(?:from|import)\s*(?:\([^)]*)?['"]node:/u.test(executableSource) ||
+      /\bprocess\s*\.\s*env\b/u.test(executableSource)) &&
+    !allowedNodeSources.has(file)
   ) {
     failures.push(
-      `${path.relative(root, file)} leaks Node host semantics outside the Node entry graph`,
+      `${path.relative(root, file)} leaks Node host semantics outside the Node entry graph`
     )
   }
 }
 
 // embedding 与可用性判定都下沉成了纯函数：它们只许收清单，不许自己造或发现可变的 provider 状态。
-for (const helperName of [
-  'catalog/embedding',
-  'catalog/manifests',
-]) {
+for (const helperName of ['catalog/embedding', 'catalog/manifests']) {
   const helperSource = await readFile(
     path.join(packageDirectory, `src/utils/${helperName}.ts`),
-    'utf8',
+    'utf8'
   )
   if (
-    helperSource.includes('new ModelProviderCollection')
-    || helperSource.includes('createModelRuntimeComposition')
-    || helperSource.includes('ProviderScriptRegistry')
+    helperSource.includes('new ModelProviderCollection') ||
+    helperSource.includes('createModelRuntimeComposition') ||
+    helperSource.includes('ProviderScriptRegistry')
   ) {
-    failures.push(
-      `${helperName} must not create or discover mutable provider collection state`,
-    )
+    failures.push(`${helperName} must not create or discover mutable provider collection state`)
   }
   if (
-    helperSource.includes('@velaros-ai/desktop')
-    || helperSource.includes('@velaros-ai/velaros')
+    helperSource.includes('@velaros-ai/desktop') ||
+    helperSource.includes('@velaros-ai/velaros')
   ) {
     failures.push(`${helperName} must remain independent of product capabilities`)
   }
@@ -272,19 +253,15 @@ for (const helperName of [
 
 const compositionSource = await readFile(
   path.join(packageDirectory, 'src/impl/composition/DefaultModelRuntimeComposition.ts'),
-  'utf8',
+  'utf8'
 )
 if (
-  !compositionSource.includes('new ModelProviderCollection(')
-  || !compositionSource.includes('this.providerScriptRegistry')
+  !compositionSource.includes('new ModelProviderCollection(') ||
+  !compositionSource.includes('this.providerScriptRegistry')
 ) {
   failures.push('composition must create an explicit ModelProviderCollection')
 }
-if (
-  !compositionSource.includes(
-    'readonly providerCollection: ModelProviderCollectionApi',
-  )
-) {
+if (!compositionSource.includes('readonly providerCollection: ModelProviderCollectionApi')) {
   failures.push('composition must expose its product-owned providerCollection')
 }
 if (!compositionSource.includes('readonly velarCloudRuntime: VelarCloudModelRuntime')) {
@@ -293,12 +270,12 @@ if (!compositionSource.includes('readonly velarCloudRuntime: VelarCloudModelRunt
 
 const runtimeSource = await readFile(
   path.join(packageDirectory, 'src/impl/composition/AgentModelRuntime.ts'),
-  'utf8',
+  'utf8'
 )
 // 入参收窄已下沉到 utils/scripts/selection.ts，两边一起核：入口不许兜底，解析不许放过缺席的上下文。
 const selectionSource = await readFile(
   path.join(packageDirectory, 'src/utils/scripts/selection.ts'),
-  'utf8',
+  'utf8'
 )
 for (const [label, source] of [
   ['AgentModelRuntime', runtimeSource],
@@ -309,10 +286,8 @@ for (const [label, source] of [
   }
 }
 if (
-  !selectionSource.includes(
-    "requireRecord(value, 'Model Runtime context 必须显式提供。')",
-  )
-  || runtimeSource.includes('runtimeContext ??')
+  !selectionSource.includes("requireRecord(value, 'Model Runtime context 必须显式提供。')") ||
+  runtimeSource.includes('runtimeContext ??')
 ) {
   failures.push('AgentModelRuntime must require an explicitly injected runtime context')
 }
@@ -324,7 +299,7 @@ if (failures.length > 0) {
 }
 
 console.info(
-  `Model architecture boundary passed: ${sourceFiles.length} source files, Model-owned provider semantics, generic Core utilities only, zero Agent implementation dependencies.`,
+  `Model architecture boundary passed: ${sourceFiles.length} source files, Model-owned provider semantics, generic Core utilities only, zero Agent implementation dependencies.`
 )
 
 async function collectFiles(directory) {
@@ -341,7 +316,5 @@ async function collectFiles(directory) {
 }
 
 function stripTypeScriptComments(source) {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//gu, '')
-    .replace(/\/\/.*$/gmu, '')
+  return source.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/\/\/.*$/gmu, '')
 }

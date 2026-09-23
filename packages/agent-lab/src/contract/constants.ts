@@ -51,7 +51,13 @@ export const ObservationFaces = Object.freeze([
 ] as const)
 
 /** 会话里一条转写块的角色。 */
-export const TranscriptRoles = Object.freeze(['assistant', 'system', 'tool', 'user', 'unknown'] as const)
+export const TranscriptRoles = Object.freeze([
+  'assistant',
+  'system',
+  'tool',
+  'user',
+  'unknown',
+] as const)
 
 /** 会话里一条转写块的种类。 */
 export const TranscriptKinds = Object.freeze([
@@ -128,7 +134,13 @@ export const ContinuableSettleOutcomeKinds = Object.freeze([
 ] as const)
 
 /** 预算的五个维度；超预算时报出的就是这五个名字之一。 */
-export const BudgetLimits = Object.freeze(['toolCalls', 'workingMs', 'wallClockMs', 'tokens', 'legs'] as const)
+export const BudgetLimits = Object.freeze([
+  'toolCalls',
+  'workingMs',
+  'wallClockMs',
+  'tokens',
+  'legs',
+] as const)
 
 /** 驱动靠什么判「这一段跑完了」。 */
 export const SettleSignals = Object.freeze([
@@ -157,7 +169,12 @@ export const ArchiveShapes = Object.freeze([
 ] as const)
 
 /** 报告里一条判词的分量。 */
-export const VerdictLevels = Object.freeze(['critical', 'warning', 'information', 'positive'] as const)
+export const VerdictLevels = Object.freeze([
+  'critical',
+  'warning',
+  'information',
+  'positive',
+] as const)
 
 // ── 统计与认证 ─────────────────────────────────────────────────
 
@@ -186,7 +203,12 @@ export const CertificationCheckStatuses = Object.freeze(['pass', 'fail', 'unknow
 // ── 真实任务工作负载 ────────────────────────────────────────────
 
 /** 一次真实任务的终态。 */
-export const RealTaskTerminalStatuses = Object.freeze(['ok', 'error', 'aborted', 'unknown'] as const)
+export const RealTaskTerminalStatuses = Object.freeze([
+  'ok',
+  'error',
+  'aborted',
+  'unknown',
+] as const)
 
 /** 一条验收断言的结论；判不了就是 `unknown`，不当通过。 */
 export const RealTaskAssertionOutcomes = Object.freeze(['pass', 'fail', 'unknown'] as const)

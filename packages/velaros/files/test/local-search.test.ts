@@ -19,24 +19,30 @@ describe('Local file search visibility', () => {
   })
 
   test('protects direct macOS TCC roots but allows nested requested roots', () => {
-    expect(shouldSkipProtectedSearchDirectory({
-      platform: 'darwin',
-      homeDir: '/Users/example',
-      rootPath: '/Users/example',
-      candidatePath: '/Users/example/Library',
-    })).toBe(true)
-    expect(shouldSkipProtectedSearchDirectory({
-      platform: 'darwin',
-      homeDir: '/Users/example',
-      rootPath: '/Users/example/Library',
-      candidatePath: '/Users/example/Library',
-    })).toBe(false)
-    expect(shouldSkipProtectedSearchDirectory({
-      platform: 'win32',
-      homeDir: 'C:\\Users\\example',
-      rootPath: 'C:\\Users\\example',
-      candidatePath: 'C:\\Users\\example\\Library',
-    })).toBe(false)
+    expect(
+      shouldSkipProtectedSearchDirectory({
+        platform: 'darwin',
+        homeDir: '/Users/example',
+        rootPath: '/Users/example',
+        candidatePath: '/Users/example/Library',
+      })
+    ).toBe(true)
+    expect(
+      shouldSkipProtectedSearchDirectory({
+        platform: 'darwin',
+        homeDir: '/Users/example',
+        rootPath: '/Users/example/Library',
+        candidatePath: '/Users/example/Library',
+      })
+    ).toBe(false)
+    expect(
+      shouldSkipProtectedSearchDirectory({
+        platform: 'win32',
+        homeDir: 'C:\\Users\\example',
+        rootPath: 'C:\\Users\\example',
+        candidatePath: 'C:\\Users\\example\\Library',
+      })
+    ).toBe(false)
   })
 
   test('按公共件的忽略策略判定仓库内的条目', async () => {
@@ -46,7 +52,7 @@ describe('Local file search visibility', () => {
       await mkdir(join(rootPath, 'ignored'))
       await writeFile(
         join(rootPath, '.gitignore'),
-        ['ignored/', '*.log', '!important.log'].join('\n'),
+        ['ignored/', '*.log', '!important.log'].join('\n')
       )
 
       const policy = createIgnorePolicy(rootPath, { rulesFrom: 'repository' })
@@ -67,7 +73,8 @@ describe('Local file search visibility', () => {
   test('global path search reports truncated only when more matches exist', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-file-search-'))
     try {
-      for (const name of ['file1.txt', 'file2.txt', 'file3.txt']) await writeFile(join(root, name), name)
+      for (const name of ['file1.txt', 'file2.txt', 'file3.txt'])
+        await writeFile(join(root, name), name)
       const search = createLocalFileSearch({ homeDir: root })
       const capped = await search.search(root, { query: 'file', limit: 2 })
       expect(capped.count).toBe(2)
@@ -80,18 +87,24 @@ describe('Local file search visibility', () => {
     }
   })
 
-  test.skipIf(process.platform === 'win32')('content search skips pipes instead of hanging on them', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-file-search-fifo-'))
-    try {
-      const pipe = join(root, 'pipe')
-      expect(spawnSync('mkfifo', [pipe]).status).toBe(0)
-      await writeFile(join(root, 'a.txt'), 'needle\n')
-      // 原来读命名管道会一直挂着，abort 也收不回。
-      const found = await createLocalFileSearch({ homeDir: root }).search(root, { query: 'needle', mode: 'content' })
-      expect(found.matches?.map((match) => match.path)).toEqual(['a.txt'])
-      expect((await lstat(pipe)).isFIFO()).toBe(true)
-    } finally {
-      await rm(root, { recursive: true, force: true })
+  test.skipIf(process.platform === 'win32')(
+    'content search skips pipes instead of hanging on them',
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), 'velaros-file-search-fifo-'))
+      try {
+        const pipe = join(root, 'pipe')
+        expect(spawnSync('mkfifo', [pipe]).status).toBe(0)
+        await writeFile(join(root, 'a.txt'), 'needle\n')
+        // 原来读命名管道会一直挂着，abort 也收不回。
+        const found = await createLocalFileSearch({ homeDir: root }).search(root, {
+          query: 'needle',
+          mode: 'content',
+        })
+        expect(found.matches?.map((match) => match.path)).toEqual(['a.txt'])
+        expect((await lstat(pipe)).isFIFO()).toBe(true)
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
     }
-  })
+  )
 })

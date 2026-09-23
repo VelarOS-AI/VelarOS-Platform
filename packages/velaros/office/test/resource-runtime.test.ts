@@ -20,7 +20,11 @@ afterEach(async () => {
 async function installFakeMarkItDown(): Promise<string> {
   const resourceRoot = await mkdtemp(join(tmpdir(), 'velaros-office-resource-port-'))
   createdRoot = resourceRoot
-  const packageRoot = join(resourceRoot, 'markitdown', `markitdown-${process.platform}-${process.arch}`)
+  const packageRoot = join(
+    resourceRoot,
+    'markitdown',
+    `markitdown-${process.platform}-${process.arch}`
+  )
   await mkdir(join(packageRoot, 'bin'), { recursive: true })
   await writeFile(join(packageRoot, 'package.json'), JSON.stringify({ version: '1.2.3' }), 'utf8')
   for (const name of ['markitdown', 'markitdown.cmd', 'markitdown.exe']) {
@@ -53,6 +57,8 @@ describe('MarkItDown 定位器的注入面', () => {
     const resourceRoot = await installFakeMarkItDown()
 
     expect(createMarkItDownLocator({ resourceRoots: [resourceRoot] }).resolve()).not.toBeNull()
-    expect(createMarkItDownLocator({ resourceRoots: [join(resourceRoot, 'nowhere')] }).resolve()).toBeNull()
+    expect(
+      createMarkItDownLocator({ resourceRoots: [join(resourceRoot, 'nowhere')] }).resolve()
+    ).toBeNull()
   })
 })

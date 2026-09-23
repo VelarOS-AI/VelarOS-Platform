@@ -37,29 +37,24 @@ async function readWorkspaceRecords() {
     packageDirectories.map(async (directoryName) => ({
       manifest: await readJson(path.join(packagesRoot, directoryName, 'package.json')),
       workspacePath: `packages/${directoryName}`,
-    })),
+    }))
   )
-  return [
-    { manifest: rootManifest, workspacePath: '' },
-    ...packageRecords,
-  ]
+  return [{ manifest: rootManifest, workspacePath: '' }, ...packageRecords]
 }
 
 function externalVelarosRequirements(workspaceRecords) {
   const workspacePackageNames = new Set(
     workspaceRecords
       .filter(({ workspacePath }) => workspacePath)
-      .map(({ manifest }) => manifest.name),
+      .map(({ manifest }) => manifest.name)
   )
   const requirements = new Map()
 
   for (const { manifest } of workspaceRecords) {
     for (const [sectionName, dependencies] of dependencySections(manifest)) {
       for (const [packageName, range] of Object.entries(dependencies)) {
-        if (
-          !packageName.startsWith('@velaros-ai/')
-          || workspacePackageNames.has(packageName)
-        ) continue
+        if (!packageName.startsWith('@velaros-ai/') || workspacePackageNames.has(packageName))
+          continue
         const packageRequirements = requirements.get(packageName) ?? []
         packageRequirements.push({
           location: `${manifest.name}.${sectionName}.${packageName}`,
@@ -74,15 +69,9 @@ function externalVelarosRequirements(workspaceRecords) {
 
 function resolvedVersion(lockfile, packageName) {
   const resolution = lockfile.packages?.[packageName]?.[0]
-  assert(
-    typeof resolution === 'string',
-    `${packageName} has no concrete registry resolution`,
-  )
+  assert(typeof resolution === 'string', `${packageName} has no concrete registry resolution`)
   const prefix = `${packageName}@`
-  assert(
-    resolution.startsWith(prefix),
-    `${packageName} has malformed resolution ${resolution}`,
-  )
+  assert(resolution.startsWith(prefix), `${packageName} has malformed resolution ${resolution}`)
   return resolution.slice(prefix.length)
 }
 
@@ -99,8 +88,8 @@ function requirementIsSatisfied(resolution, requirement) {
   const [, requiredRepository, requiredSha] = pinnedGitHubRequirement
   const [, lockedRepository, lockedSha] = lockedGitHubResolution
   return (
-    requiredRepository.toLowerCase() === lockedRepository.toLowerCase()
-    && requiredSha.toLowerCase().startsWith(lockedSha.toLowerCase())
+    requiredRepository.toLowerCase() === lockedRepository.toLowerCase() &&
+    requiredSha.toLowerCase().startsWith(lockedSha.toLowerCase())
   )
 }
 
@@ -114,14 +103,14 @@ for (const { manifest, workspacePath } of workspaceRecords) {
   if (workspacePath) {
     assert(
       lockedWorkspace.version === manifest.version,
-      `${manifest.name}: manifest ${manifest.version} does not match workspace snapshot ${lockedWorkspace.version}`,
+      `${manifest.name}: manifest ${manifest.version} does not match workspace snapshot ${lockedWorkspace.version}`
     )
   }
   for (const [sectionName, dependencies] of dependencySections(manifest)) {
     for (const [dependencyName, dependencyRange] of Object.entries(dependencies)) {
       assert(
         lockedWorkspace[sectionName]?.[dependencyName] === dependencyRange,
-        `${manifest.name}: ${sectionName}.${dependencyName} snapshot does not match ${dependencyRange}`,
+        `${manifest.name}: ${sectionName}.${dependencyName} snapshot does not match ${dependencyRange}`
       )
     }
   }
@@ -134,18 +123,18 @@ for (const [packageName, packageRequirements] of requirements) {
   for (const { location, range } of packageRequirements) {
     assert(
       requirementIsSatisfied(version, range),
-      `${location} requires ${range}, but bun.lock resolves ${version}`,
+      `${location} requires ${range}, but bun.lock resolves ${version}`
     )
   }
   const expectedVersion = expectedRegistryVersions.get(packageName)
   if (expectedVersion) {
     assert(
       version === expectedVersion,
-      `${packageName} must resolve exactly to ${expectedVersion}, got ${version}`,
+      `${packageName} must resolve exactly to ${expectedVersion}, got ${version}`
     )
   }
 }
 
 console.info(
-  `✓ ${workspaceRecords.length} workspace snapshots and ${requirements.size} external VelarOS registry resolutions are consistent`,
+  `✓ ${workspaceRecords.length} workspace snapshots and ${requirements.size} external VelarOS registry resolutions are consistent`
 )

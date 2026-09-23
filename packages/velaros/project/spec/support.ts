@@ -13,9 +13,18 @@ import type { CapabilityOperationContext, CodeAttachment } from '@velaros-ai/scr
 import { createCapabilityPort } from '@velaros-ai/script'
 import type { ImageAttachment, ImageOperationContext } from '@velaros-ai/velaros/images'
 import { imageOperations } from '@velaros-ai/velaros/images'
-import type { RehearsalSandboxHostPort, SandboxDiff, SandboxOperationContext, SandboxRecord } from '@velaros-ai/velaros/sandbox'
+import type {
+  RehearsalSandboxHostPort,
+  SandboxDiff,
+  SandboxOperationContext,
+  SandboxRecord,
+} from '@velaros-ai/velaros/sandbox'
 import { sandboxOperations } from '@velaros-ai/velaros/sandbox'
-import type { ShellCommandResult, ShellOperationContext, ShellRunCommandOptions } from '@velaros-ai/velaros/shell'
+import type {
+  ShellCommandResult,
+  ShellOperationContext,
+  ShellRunCommandOptions,
+} from '@velaros-ai/velaros/shell'
 import { shellOperations } from '@velaros-ai/velaros/shell'
 
 import {
@@ -50,33 +59,47 @@ export interface ProgramFailure extends Error {
 
 /** 在 root 上建一个真内核和替身空间，返回按「命名空间.操作」调用的 call 与记录。 */
 export async function createProjectHarness(root: string, options: ProjectHarnessOptions = {}) {
-  const kernel = await createProjectKernel({ root, corePolicy: options.corePolicy, providers: options.providers })
+  const kernel = await createProjectKernel({
+    root,
+    corePolicy: options.corePolicy,
+    providers: options.providers,
+  })
   const project: ProjectSpacePort = {
     getRootPath: () => root,
     kernel: async () => kernel,
     queryCode: async () => ({}),
   }
-  const context: ProjectOperationContext = { abortSignal: new AbortController().signal, project, sessionId: 'project-acceptance' }
+  const context: ProjectOperationContext = {
+    abortSignal: new AbortController().signal,
+    project,
+    sessionId: 'project-acceptance',
+  }
   // 空间装配时给两件工具的就是这张表：每次调用交同一份上下文。
   const operations = {
     project: {
       read: (input: unknown) => projectFileOperations.read(input as ProjectReadInput, context),
       list: (input: unknown) => projectFileOperations.list(input as ProjectListInput, context),
-      search: (input: unknown) => projectFileOperations.search(input as ProjectSearchInput, context),
+      search: (input: unknown) =>
+        projectFileOperations.search(input as ProjectSearchInput, context),
       edit: (input: unknown) => projectFileOperations.edit(input as ProjectEditInput, context),
-      inspect: (input: unknown) => projectFileOperations.inspect(input as ProjectChangeInput, context),
+      inspect: (input: unknown) =>
+        projectFileOperations.inspect(input as ProjectChangeInput, context),
       undo: (input: unknown) => projectFileOperations.undo(input as ProjectChangeInput, context),
     },
     code: {
       query: (input: unknown) => projectCodeOperations.query(input as CodeQueryInput, context),
-      analyze: (input: unknown) => projectCodeOperations.analyze(input as CodeAnalysisInput, context),
+      analyze: (input: unknown) =>
+        projectCodeOperations.analyze(input as CodeAnalysisInput, context),
     },
   }
   const port = createCapabilityPort(operations)
   /** 像模型的程序那样调一次：成功交回返回值，失败抛带 code 的错误（程序看得到的就这两样）。 */
   const call = async (namespace: string, operation: string, input: unknown = {}): Promise<any> => {
     const outcome = await port.invoke({ namespace, operation, input })
-    if (outcome.error) throw Object.assign(new Error(outcome.error.message), { code: outcome.error.code }) as ProgramFailure
+    if (outcome.error)
+      throw Object.assign(new Error(outcome.error.message), {
+        code: outcome.error.code,
+      }) as ProgramFailure
     return outcome.value
   }
   /** 读一个文件的指定行，交回那一个窗口（带 fileRef）。 */
@@ -89,7 +112,9 @@ export async function createProjectHarness(root: string, options: ProjectHarness
 }
 
 /** 等一次调用失败，交回程序看得到的那两样。 */
-export async function failureOf(call: Promise<unknown>): Promise<{ code: string; message: string }> {
+export async function failureOf(
+  call: Promise<unknown>
+): Promise<{ code: string; message: string }> {
   try {
     await call
   } catch (error) {
@@ -131,10 +156,25 @@ export interface ProjectPortsHarnessOptions {
 }
 
 /** 一条命令的回执：退出码 0，前台跑完；按用例改。 */
-export function commandResult(command: string, cwd: string, overrides: Partial<ShellCommandResult> = {}): ShellCommandResult {
+export function commandResult(
+  command: string,
+  cwd: string,
+  overrides: Partial<ShellCommandResult> = {}
+): ShellCommandResult {
   return {
-    command, cwd, exitCode: 0, signal: null, stdout: '', stderr: '', durationMs: 0, timedOut: false, aborted: false, truncated: false,
-    success: true, verification: { kind: 'unknown', status: 'passed', issues: [] }, ...overrides,
+    command,
+    cwd,
+    exitCode: 0,
+    signal: null,
+    stdout: '',
+    stderr: '',
+    durationMs: 0,
+    timedOut: false,
+    aborted: false,
+    truncated: false,
+    success: true,
+    verification: { kind: 'unknown', status: 'passed', issues: [] },
+    ...overrides,
   }
 }
 
@@ -147,7 +187,10 @@ function throughJson(value: unknown): unknown {
  * 在 root 上建真内核与一个假宿主，把三件共用能力的操作配上 `projectCapabilityPorts` 现装的端口，接成代码面的能力端口。
  * 每次调用都按这一次的取消信号现装端口，和产品分发调用时一样。交回按「命名空间.操作」调用的 call、宿主本身（用例可以换掉它的方法）与记录。
  */
-export async function createProjectPortsHarness(root: string, options: ProjectPortsHarnessOptions = {}) {
+export async function createProjectPortsHarness(
+  root: string,
+  options: ProjectPortsHarnessOptions = {}
+) {
   const kernel = await createProjectKernel({ root })
   const confirmations: RecordedConfirmation[] = []
   const runs: HostRun[] = []
@@ -163,7 +206,9 @@ export async function createProjectPortsHarness(root: string, options: ProjectPo
       return { approved, message: approved ? null : '用户拒绝了这次操作。', autoApproved: false }
     },
   }
-  const respond: ProjectHostPort['runCommand'] = options.runCommand ?? (async (command, runOptions) => commandResult(command, runOptions?.cwd ?? root))
+  const respond: ProjectHostPort['runCommand'] =
+    options.runCommand ??
+    (async (command, runOptions) => commandResult(command, runOptions?.cwd ?? root))
   const host: ProjectHostPort = {
     getRootPath: () => root,
     kernel: async () => kernel,
@@ -174,15 +219,25 @@ export async function createProjectPortsHarness(root: string, options: ProjectPo
     },
     listBackgroundTasks: async () => [],
     refreshShellEnvironment: async () => ({ shell: '/bin/sh', variableCount: 0, refreshedAt: 0 }),
-    terminateBackgroundTask: async () => ({ terminated: false, statusAfter: 'unknown', message: '这个用例没接后台任务' }),
+    terminateBackgroundTask: async () => ({
+      terminated: false,
+      statusAfter: 'unknown',
+      message: '这个用例没接后台任务',
+    }),
   }
   if (options.sandbox) host.sandbox = options.sandbox
   if (options.resizeImage) host.resizeImage = options.resizeImage
   const sessionId = options.sessionId ?? 'project-ports'
-  const signalOf = (call: CapabilityOperationContext): AbortSignal => call.signal ?? new AbortController().signal
+  const signalOf = (call: CapabilityOperationContext): AbortSignal =>
+    call.signal ?? new AbortController().signal
   const shell = (call: CapabilityOperationContext): ShellOperationContext => {
     const abortSignal = signalOf(call)
-    return { abortSignal, approval, shell: projectCapabilityPorts.shell(host, abortSignal), sessionId }
+    return {
+      abortSignal,
+      approval,
+      shell: projectCapabilityPorts.shell(host, abortSignal),
+      sessionId,
+    }
   }
   const sandbox = (call: CapabilityOperationContext): SandboxOperationContext => {
     const abortSignal = signalOf(call)
@@ -213,10 +268,17 @@ export async function createProjectPortsHarness(root: string, options: ProjectPo
     },
   })
   /** 像模型的程序那样调一次：成功交回返回值，失败抛带 code 的错误（程序看得到的就这两样）；图记进 attachments。 */
-  const call = async <T = any>(namespace: string, operation: string, input: unknown = {}): Promise<T> => {
+  const call = async <T = any>(
+    namespace: string,
+    operation: string,
+    input: unknown = {}
+  ): Promise<T> => {
     const outcome = await port.invoke({ namespace, operation, input: throughJson(input) })
     attachments.push(...(outcome.attachments ?? []))
-    if (outcome.error) throw Object.assign(new Error(outcome.error.message), { code: outcome.error.code }) as ProgramFailure
+    if (outcome.error)
+      throw Object.assign(new Error(outcome.error.message), {
+        code: outcome.error.code,
+      }) as ProgramFailure
     return throughJson(outcome.value) as T
   }
   return { kernel, host, call, confirmations, runs, attachments, sessionId }
@@ -226,24 +288,56 @@ export async function createProjectPortsHarness(root: string, options: ProjectPo
  * 一个记下每次调用的假演练沙箱：镜像根在临时区，差量固定三列（`diff` 可以按用例改），镜像里跑命令交回 `stdout`（缺省 `ran`）。
  * `calls` 按顺序记下调到了宿主的哪个动作、带的什么参数。
  */
-export function fakeSandboxHost(source: string, options: { diff?: Partial<SandboxDiff>; stdout?: string } = {}) {
+export function fakeSandboxHost(
+  source: string,
+  options: { diff?: Partial<SandboxDiff>; stdout?: string } = {}
+) {
   const calls: Array<Record<string, unknown>> = []
   const record: SandboxRecord = {
-    id: '20260915-183000-3fa2c1', root: '/tmp/velaros-sandbox/20260915-183000-3fa2c1/tree', source, createdAt: 1,
-    network: false, ignored: 'link', fileCount: 3, bytes: 30, linkedDirectories: ['node_modules'], git: true,
+    id: '20260915-183000-3fa2c1',
+    root: '/tmp/velaros-sandbox/20260915-183000-3fa2c1/tree',
+    source,
+    createdAt: 1,
+    network: false,
+    ignored: 'link',
+    fileCount: 3,
+    bytes: 30,
+    linkedDirectories: ['node_modules'],
+    git: true,
   }
   const diff: SandboxDiff = {
-    sandboxId: record.id, source, created: ['src/new.ts'], modified: ['src/a.ts'], deleted: ['old.txt'],
-    gitChanged: false, textDiffs: [], omittedDiffs: 0, fingerprint: 'fp1', ...options.diff,
+    sandboxId: record.id,
+    source,
+    created: ['src/new.ts'],
+    modified: ['src/a.ts'],
+    deleted: ['old.txt'],
+    gitChanged: false,
+    textDiffs: [],
+    omittedDiffs: 0,
+    fingerprint: 'fp1',
+    ...options.diff,
   }
   const host: RehearsalSandboxHostPort = {
     createSandbox: async (create) => {
       calls.push({ create })
-      return { ...record, source: create?.source ?? source, network: !!create?.network, ignored: create?.ignored ?? 'link' }
+      return {
+        ...record,
+        source: create?.source ?? source,
+        network: !!create?.network,
+        ignored: create?.ignored ?? 'link',
+      }
     },
     runInSandbox: async (run) => {
       calls.push({ run })
-      return { exitCode: 0, stdout: options.stdout ?? 'ran', stderr: '', durationMs: 1, timedOut: false, truncated: false, success: true }
+      return {
+        exitCode: 0,
+        stdout: options.stdout ?? 'ran',
+        stderr: '',
+        durationMs: 1,
+        timedOut: false,
+        truncated: false,
+        success: true,
+      }
     },
     diffSandbox: async (diffOptions) => {
       calls.push({ diff: diffOptions })
@@ -251,7 +345,13 @@ export function fakeSandboxHost(source: string, options: { diff?: Partial<Sandbo
     },
     applySandbox: async (apply) => {
       calls.push({ apply })
-      return { sandboxId: apply.sandboxId, created: diff.created, modified: diff.modified, deleted: diff.deleted, skippedGit: false }
+      return {
+        sandboxId: apply.sandboxId,
+        created: diff.created,
+        modified: diff.modified,
+        deleted: diff.deleted,
+        skippedGit: false,
+      }
     },
     discardSandbox: async (sandboxId) => {
       calls.push({ discard: sandboxId })

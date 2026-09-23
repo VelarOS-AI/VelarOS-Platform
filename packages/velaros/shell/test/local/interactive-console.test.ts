@@ -34,7 +34,11 @@ async function readUntil(
 }
 
 /** 一直等到任务不再是 running。 */
-async function waitUntilExited(kernel: LocalShellHostApi, taskId: string, timeoutMs = 10_000): Promise<string> {
+async function waitUntilExited(
+  kernel: LocalShellHostApi,
+  taskId: string,
+  timeoutMs = 10_000
+): Promise<string> {
   const deadline = Date.now() + timeoutMs
   let status = 'running'
   while (Date.now() < deadline) {
@@ -166,24 +170,42 @@ describe('交互式命令的控制台', () => {
       const workingDirectory = await mkdtemp(join(tmpdir(), 'velaros-console-node-'))
       try {
         // 宿主跑在 Node（Electron 主进程）里，EPIPE 没人接会直接抛成未捕获异常；bun 下复现不了，所以把本机实现入口（`./local`）打包后交给 node 跑。
-        await writeFile(join(workingDirectory, 'entry.ts'), `export { createLocalShellHost } from ${JSON.stringify(resolve(import.meta.dir, '../../local.ts'))}\n`)
-        const built = await Bun.build({ entrypoints: [join(workingDirectory, 'entry.ts')], outdir: workingDirectory, target: 'node', format: 'esm', naming: '[name].mjs' })
+        await writeFile(
+          join(workingDirectory, 'entry.ts'),
+          `export { createLocalShellHost } from ${JSON.stringify(resolve(import.meta.dir, '../../local.ts'))}\n`
+        )
+        const built = await Bun.build({
+          entrypoints: [join(workingDirectory, 'entry.ts')],
+          outdir: workingDirectory,
+          target: 'node',
+          format: 'esm',
+          naming: '[name].mjs',
+        })
         expect(built.success).toBe(true)
-        await writeFile(join(workingDirectory, 'scenario.mjs'), [
-          "import { createLocalShellHost } from './entry.mjs'",
-          "process.on('uncaughtException', (error) => { console.log('UNCAUGHT', error.code); process.exit(3) })",
-          'const kernel = createLocalShellHost({ cwd: process.cwd() })',
-          "const closed = await kernel.runCommand('exec 0<&-; sleep 5', { background: true, interactive: true })",
-          'await new Promise((done) => setTimeout(done, 400))',
-          "const refused = await kernel.writeConsoleInput({ taskId: closed.backgroundProcess.taskId, text: 'y' })",
-          "const idle = await kernel.runCommand('sleep 20', { background: true, interactive: true })",
-          "await kernel.writeConsoleInput({ taskId: idle.backgroundProcess.taskId, text: 'x'.repeat(1024 * 1024) })",
-          'await kernel.dispose()',
-          'await new Promise((done) => setTimeout(done, 300))',
-          "console.log('survived', refused.accepted)",
-        ].join('\n'))
-        const run = Bun.spawnSync(['node', join(workingDirectory, 'scenario.mjs')], { cwd: workingDirectory, timeout: 30_000 })
-        expect({ code: run.exitCode, stdout: run.stdout.toString().trim() }).toEqual({ code: 0, stdout: 'survived false' })
+        await writeFile(
+          join(workingDirectory, 'scenario.mjs'),
+          [
+            "import { createLocalShellHost } from './entry.mjs'",
+            "process.on('uncaughtException', (error) => { console.log('UNCAUGHT', error.code); process.exit(3) })",
+            'const kernel = createLocalShellHost({ cwd: process.cwd() })',
+            "const closed = await kernel.runCommand('exec 0<&-; sleep 5', { background: true, interactive: true })",
+            'await new Promise((done) => setTimeout(done, 400))',
+            "const refused = await kernel.writeConsoleInput({ taskId: closed.backgroundProcess.taskId, text: 'y' })",
+            "const idle = await kernel.runCommand('sleep 20', { background: true, interactive: true })",
+            "await kernel.writeConsoleInput({ taskId: idle.backgroundProcess.taskId, text: 'x'.repeat(1024 * 1024) })",
+            'await kernel.dispose()',
+            'await new Promise((done) => setTimeout(done, 300))',
+            "console.log('survived', refused.accepted)",
+          ].join('\n')
+        )
+        const run = Bun.spawnSync(['node', join(workingDirectory, 'scenario.mjs')], {
+          cwd: workingDirectory,
+          timeout: 30_000,
+        })
+        expect({ code: run.exitCode, stdout: run.stdout.toString().trim() }).toEqual({
+          code: 0,
+          stdout: 'survived false',
+        })
       } finally {
         await rm(workingDirectory, { recursive: true, force: true })
       }

@@ -12,24 +12,19 @@ import { fileURLToPath } from 'node:url'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const RepoRoot = resolve(HERE, '../..')
 const BaselinePath = join(RepoRoot, 'baselines', 'kernel', 'kernel-wire-schema-snapshot.json')
-const SnapshotPath = join(
-  RepoRoot,
-  'packages',
-  'kernel',
-  'dist',
-  'schema-snapshot.json',
-)
+const SnapshotPath = join(RepoRoot, 'packages', 'kernel', 'dist', 'schema-snapshot.json')
 
 function stableStringify(value) {
   return JSON.stringify(value, (_key, val) => {
-    if (val && typeof val === 'object' && !Array.isArray(val)) return Object.fromEntries(Object.entries(val).sort(([a], [b]) => a.localeCompare(b)))
+    if (val && typeof val === 'object' && !Array.isArray(val))
+      return Object.fromEntries(Object.entries(val).sort(([a], [b]) => a.localeCompare(b)))
     return val
   })
 }
 
 if (!existsSync(SnapshotPath)) {
   console.error(
-    `❌ @velaros-ai/kernel: 找不到 wire schema 快照(${SnapshotPath})——请先构建该包:bun run --cwd packages/kernel build`,
+    `❌ @velaros-ai/kernel: 找不到 wire schema 快照(${SnapshotPath})——请先构建该包:bun run --cwd packages/kernel build`
   )
   process.exit(1)
 }
@@ -47,29 +42,27 @@ const baselineSnapshot = JSON.parse(readFileSync(BaselinePath, 'utf8'))
 const drift = []
 if (currentSnapshot.protocolVersion !== baselineSnapshot.protocolVersion) {
   drift.push(
-    `protocolVersion ${baselineSnapshot.protocolVersion}→${currentSnapshot.protocolVersion}`,
+    `protocolVersion ${baselineSnapshot.protocolVersion}→${currentSnapshot.protocolVersion}`
   )
 }
 
 const currentSchemas = currentSnapshot.schemas ?? {}
 const baselineSchemas = baselineSnapshot.schemas ?? {}
-for (const name of new Set([
-  ...Object.keys(currentSchemas),
-  ...Object.keys(baselineSchemas),
-])) {
+for (const name of new Set([...Object.keys(currentSchemas), ...Object.keys(baselineSchemas)])) {
   if (!(name in baselineSchemas)) drift.push(`+${name}`)
   else if (!(name in currentSchemas)) drift.push(`-${name}`)
-  else if (stableStringify(currentSchemas[name]) !== stableStringify(baselineSchemas[name])) drift.push(`~${name}`)
+  else if (stableStringify(currentSchemas[name]) !== stableStringify(baselineSchemas[name]))
+    drift.push(`~${name}`)
 }
 
 if (drift.length > 0) {
   console.error(`❌ Kernel wire schema 快照与基线不一致:${drift.join(', ')}`)
   console.error(
-    '   协议形状变更请 SCHEMA_BASELINE_UPDATE=1 bun scripts/check-schemas.mjs 重生成并在提交里说明。',
+    '   协议形状变更请 SCHEMA_BASELINE_UPDATE=1 bun scripts/check-schemas.mjs 重生成并在提交里说明。'
   )
   process.exit(1)
 }
 
 console.info(
-  `✓ Kernel wire schema 快照 ${Object.keys(currentSchemas).length} 个 schema 与基线一致(protocol v${currentSnapshot.protocolVersion})`,
+  `✓ Kernel wire schema 快照 ${Object.keys(currentSchemas).length} 个 schema 与基线一致(protocol v${currentSnapshot.protocolVersion})`
 )

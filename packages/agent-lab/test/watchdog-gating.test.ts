@@ -86,7 +86,9 @@ describe('watchdog gating', () => {
       retryOnly,
       settings
     )
-    expect(selectAbortCandidate(failedObservation, findings, baseline, retryOnly, settings)).toBeNull()
+    expect(
+      selectAbortCandidate(failedObservation, findings, baseline, retryOnly, settings)
+    ).toBeNull()
 
     const toolFailureGate = new Set(['tool-failure'])
     const gatedBaseline = createWatchdogBaseline(
@@ -96,7 +98,8 @@ describe('watchdog gating', () => {
       settings
     )
     expect(
-      selectAbortCandidate(failedObservation, findings, gatedBaseline, toolFailureGate, settings)?.detectorId
+      selectAbortCandidate(failedObservation, findings, gatedBaseline, toolFailureGate, settings)
+        ?.detectorId
     ).toBe('tool-failure')
   })
 

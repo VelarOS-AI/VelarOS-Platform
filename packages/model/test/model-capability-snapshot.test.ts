@@ -7,16 +7,22 @@ const Model = 'fixture/text-only-8k'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((done) => { resolve = done })
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
   return { promise, resolve }
 }
 
 function response(window: number, modalities: readonly ModelInputModality[] = ['text']) {
-  return Response.json({ data: [{
-    id: Model,
-    context_length: window,
-    architecture: { input_modalities: modalities },
-  }] })
+  return Response.json({
+    data: [
+      {
+        id: Model,
+        context_length: window,
+        architecture: { input_modalities: modalities },
+      },
+    ],
+  })
 }
 
 function createRuntime(fetch: typeof globalThis.fetch, timeoutMs = 1_000) {
@@ -33,15 +39,21 @@ function createRuntime(fetch: typeof globalThis.fetch, timeoutMs = 1_000) {
     ...overrides,
   })
   const resolve = (input = request(), signal?: AbortSignal) =>
-    composition.agentModelResolver.resolve({ ...input, model: Model }, {
-      providerRuntimeConfigs: [{ ...input, enabled: true }],
-      openRouter: { useFreeModelsForDebug: false },
-    }, signal)
+    composition.agentModelResolver.resolve(
+      { ...input, model: Model },
+      {
+        providerRuntimeConfigs: [{ ...input, enabled: true }],
+        openRouter: { useFreeModelsForDebug: false },
+      },
+      signal
+    )
   return { composition, request, resolve, catalog: composition.providerModelCatalogService }
 }
 
 function createScriptRuntime(metadataBody: string, listBody: string) {
-  const fixture = createRuntime(async () => { throw new Error('script must not use HTTP') }, 25)
+  const fixture = createRuntime(async () => {
+    throw new Error('script must not use HTTP')
+  }, 25)
   const provider = 'fixture-metadata-priority' as ChatProviderId
   fixture.composition.providerScriptRegistry.registerSource({
     scriptPath: '/tmp/velaros-metadata-priority.cjs',
@@ -76,7 +88,10 @@ describe('动态目录与运行时能力快照', () => {
       { metadata: '{inputModalities:["text"]}', window: 8192, modalities: ['text'] },
       { metadata: '{contextWindow:4096}', window: 4096, modalities: ['text', 'image'] },
     ]) {
-      const fixture = createScriptRuntime(`return ${scenario.metadata}`, `return [{id:'${Model}',contextWindow:8192,inputModalities:['text','image']}]`)
+      const fixture = createScriptRuntime(
+        `return ${scenario.metadata}`,
+        `return [{id:'${Model}',contextWindow:8192,inputModalities:['text','image']}]`
+      )
       const lookup = spyOn(fixture.catalog, 'resolveModelCapabilities')
       const runtime = await fixture.run()
       expect(lookup).toHaveBeenCalledTimes(1)
@@ -86,7 +101,10 @@ describe('动态目录与运行时能力快照', () => {
   })
 
   test('metadata 失败保留原因但不能以默认估计覆盖动态 8K 窗口', async () => {
-    const fixture = createScriptRuntime('throw new Error("metadata offline")', `return [{id:'${Model}',contextWindow:8192,inputModalities:['text']}]`)
+    const fixture = createScriptRuntime(
+      'throw new Error("metadata offline")',
+      `return [{id:'${Model}',contextWindow:8192,inputModalities:['text']}]`
+    )
     const runtime = await fixture.run()
     expect(runtime.contextWindow).toBe(8192)
     expect(runtime.supportedInputModalities).toEqual(['text'])
@@ -94,7 +112,10 @@ describe('动态目录与运行时能力快照', () => {
   })
 
   test('具体 config 只有模型名时，动态窗口优先于该模型的静态查表', async () => {
-    const fixture = createScriptRuntime('return {inputModalities:["text"],config:{provider:"openai",model:"gpt-4.1"}}', `return [{id:'${Model}',contextWindow:8192,inputModalities:['text','image']}]`)
+    const fixture = createScriptRuntime(
+      'return {inputModalities:["text"],config:{provider:"openai",model:"gpt-4.1"}}',
+      `return [{id:'${Model}',contextWindow:8192,inputModalities:['text','image']}]`
+    )
     const lookup = spyOn(fixture.catalog, 'resolveModelCapabilities')
     const runtime = await fixture.run()
     expect(lookup).toHaveBeenCalledTimes(1)
@@ -108,9 +129,11 @@ describe('动态目录与运行时能力快照', () => {
       const fixture = createRuntime(async (_input, init) => {
         const signal = init?.signal
         if (!signal) throw new Error('missing signal')
-        const body = new ReadableStream({ start(controller) {
-          signal.addEventListener('abort', () => controller.error(signal.reason), { once: true })
-        } })
+        const body = new ReadableStream({
+          start(controller) {
+            signal.addEventListener('abort', () => controller.error(signal.reason), { once: true })
+          },
+        })
         const headersReceived = new Response(body, { status })
         const method = status === 200 ? 'json' : 'text'
         const readBody = headersReceived[method].bind(headersReceived)
@@ -132,7 +155,10 @@ describe('动态目录与运行时能力快照', () => {
 
   test('远端 8K/text-only 能力进入同一运行时窗口和工具模态契约', async () => {
     let calls = 0
-    const fixture = createRuntime(async () => { calls++; return response(8192) })
+    const fixture = createRuntime(async () => {
+      calls++
+      return response(8192)
+    })
     const catalog = await fixture.catalog.listProviderModels(fixture.request())
     expect(catalog.models[0]).toMatchObject({ contextWindow: 8192, inputModalities: ['text'] })
     const runtime = await fixture.resolve()
@@ -151,9 +177,17 @@ describe('动态目录与运行时能力快照', () => {
       return response(window, window === 8192 ? ['text'] : ['text', 'image'])
     })
     expect((await fixture.resolve()).contextWindow).toBe(8192)
-    expect((await fixture.resolve(fixture.request({ baseURL: 'https://second.invalid/v1' }))).contextWindow).toBe(4096)
-    expect((await fixture.resolve(fixture.request({ apiKey: 'other-key' }))).supportedInputModalities).toEqual(['text', 'image'])
-    expect((await fixture.resolve(fixture.request({ provider: 'openai-compatible-gateway' }))).contextWindow).toBe(8192)
+    expect(
+      (await fixture.resolve(fixture.request({ baseURL: 'https://second.invalid/v1' })))
+        .contextWindow
+    ).toBe(4096)
+    expect(
+      (await fixture.resolve(fixture.request({ apiKey: 'other-key' }))).supportedInputModalities
+    ).toEqual(['text', 'image'])
+    expect(
+      (await fixture.resolve(fixture.request({ provider: 'openai-compatible-gateway' })))
+        .contextWindow
+    ).toBe(8192)
     expect((await fixture.resolve()).supportedInputModalities).toEqual(['text'])
     expect(calls).toBe(4)
   })
@@ -161,7 +195,10 @@ describe('动态目录与运行时能力快照', () => {
   test('显式刷新与失效后的下一次运行使用最新能力', async () => {
     let window = 8192
     let calls = 0
-    const fixture = createRuntime(async () => { calls++; return response(window) })
+    const fixture = createRuntime(async () => {
+      calls++
+      return response(window)
+    })
     expect((await fixture.resolve()).contextWindow).toBe(8192)
     window = 4096
     await fixture.catalog.listProviderModels(fixture.request())
@@ -176,7 +213,11 @@ describe('动态目录与运行时能力快照', () => {
     const pending = deferred<Response>()
     const started = deferred<void>()
     let calls = 0
-    const fixture = createRuntime(async () => { calls++; started.resolve(); return pending.promise })
+    const fixture = createRuntime(async () => {
+      calls++
+      started.resolve()
+      return pending.promise
+    })
     const controller = new AbortController()
     const first = fixture.resolve(fixture.request(), controller.signal)
     const second = fixture.resolve()
@@ -267,7 +308,10 @@ describe('动态目录与运行时能力快照', () => {
 
   test('目录超时有界回落，并复用短期失败快照', async () => {
     let calls = 0
-    const fixture = createRuntime(() => { calls++; return new Promise<Response>(() => {}) }, 20)
+    const fixture = createRuntime(() => {
+      calls++
+      return new Promise<Response>(() => {})
+    }, 20)
     const started = Date.now()
     expect((await fixture.resolve()).contextWindow).toBeUndefined()
     await fixture.resolve()
@@ -305,7 +349,10 @@ describe('动态目录与运行时能力快照', () => {
 
   test('大量凭据作用域保持缓存有界，淘汰后重新读取而不跨凭据复用', async () => {
     let calls = 0
-    const fixture = createRuntime(async () => { calls++; return response(8192) })
+    const fixture = createRuntime(async () => {
+      calls++
+      return response(8192)
+    })
     for (let index = 0; index < 129; index++) {
       await fixture.resolve(fixture.request({ apiKey: `scope-${index}` }))
     }
@@ -316,17 +363,20 @@ describe('动态目录与运行时能力快照', () => {
   })
 
   test('脚本替换后同一配置读取新目录，具体 metadata 继续优先', async () => {
-    const fixture = createRuntime(async () => { throw new Error('script must not use HTTP') })
+    const fixture = createRuntime(async () => {
+      throw new Error('script must not use HTTP')
+    })
     const provider = 'fixture-script' as ChatProviderId
-    const register = (window: number, metadata = '{}') => fixture.composition.providerScriptRegistry.registerSource({
-      scriptPath: '/tmp/velaros-capability-script.cjs',
-      source: `module.exports = {
+    const register = (window: number, metadata = '{}') =>
+      fixture.composition.providerScriptRegistry.registerSource({
+        scriptPath: '/tmp/velaros-capability-script.cjs',
+        source: `module.exports = {
         manifest: { id:'${provider}', label:'Fixture', description:'Fixture', defaultBaseURL:'', defaultApiKey:'', apiKeyOptional:true, baseURLConfigurable:true, enabledByDefault:true, defaultModel:'${Model}', models:[{id:'${Model}'}] },
         listModels() { return [{id:'${Model}',contextWindow:${window},inputModalities:['text','image']}] },
         resolveRuntimeMetadata() { return ${metadata} },
         createLanguageModelFactory() { return () => ({}) }
       }`,
-    })
+      })
     register(8192)
     expect((await fixture.resolve(fixture.request({ provider }))).contextWindow).toBe(8192)
     register(4096)

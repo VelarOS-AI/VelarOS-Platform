@@ -55,7 +55,12 @@ export function estimateReliability(archives: readonly RunArchive[]): Reliabilit
   const values = archives.map((archive) => archiveCompletion(archive))
   const attempts = values.filter((value) => value !== null).length
   const successes = values.filter((value) => value === 1).length
-  return { ...wilsonInterval(successes, attempts), successes, attempts, dropped: values.length - attempts }
+  return {
+    ...wilsonInterval(successes, attempts),
+    successes,
+    attempts,
+    dropped: values.length - attempts,
+  }
 }
 
 /** 失败形态分布：`unclassified` 单独数，不并进其它类。 */
@@ -158,7 +163,7 @@ function clusterKey(archive: RunArchive): string {
 /** 把两组归档按配对钥匙配成对；任一边没有完成度就整对丢掉，并记下是哪一边缺。 */
 export function matchCompletionPairs(
   archivesA: readonly RunArchive[],
-  archivesB: readonly RunArchive[],
+  archivesB: readonly RunArchive[]
 ): MatchedCompletionPairs {
   const a = new Map(archivesA.map((archive) => [pairedKey(archive), archive]))
   const b = new Map(archivesB.map((archive) => [pairedKey(archive), archive]))
@@ -187,7 +192,7 @@ export function matchCompletionPairs(
 function clusterBootstrap(
   pairs: readonly CompletionPair[],
   samples: number,
-  seed: number,
+  seed: number
 ): IntervalEstimate {
   if (pairs.length === 0) return { estimate: null, lower95: null, upper95: null, observations: 0 }
   const byCluster = new Map<string, CompletionPair[]>()
@@ -198,7 +203,8 @@ function clusterBootstrap(
   }
   const clusters = [...byCluster.values()]
   const estimate = mean(pairs.map((pair) => pair.a - pair.b))
-  if (clusters.length < 2) return { estimate, lower95: null, upper95: null, observations: pairs.length }
+  if (clusters.length < 2)
+    return { estimate, lower95: null, upper95: null, observations: pairs.length }
   const random = seededRandom(seed)
   const distribution: number[] = []
   for (let sample = 0; sample < samples; sample += 1) {
@@ -226,7 +232,7 @@ export function compareExecutors(
   archives: readonly RunArchive[],
   executorA: string,
   executorB: string,
-  options: PairedComparisonOptions,
+  options: PairedComparisonOptions
 ): PairedComparison {
   const archivesA = archives.filter((archive) => archive.manifest.executor.executorId === executorA)
   const archivesB = archives.filter((archive) => archive.manifest.executor.executorId === executorB)
@@ -236,12 +242,14 @@ export function compareExecutors(
   const completionDifference = clusterBootstrap(
     matched.pairs,
     options.bootstrapSamples ?? AgentLabTuning.statistics.bootstrapSamples,
-    options.seed ?? 1,
+    options.seed ?? 1
   )
   let decision: ComparisonDecision = 'inconclusive'
   if (!comparability.comparable) decision = 'not-comparable'
-  else if (completionDifference.lower95 !== null && completionDifference.lower95 > minimumEffect) decision = 'a-better'
-  else if (completionDifference.upper95 !== null && completionDifference.upper95 < -minimumEffect) decision = 'b-better'
+  else if (completionDifference.lower95 !== null && completionDifference.lower95 > minimumEffect)
+    decision = 'a-better'
+  else if (completionDifference.upper95 !== null && completionDifference.upper95 < -minimumEffect)
+    decision = 'b-better'
   return {
     executorA,
     executorB,

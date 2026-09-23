@@ -8,12 +8,22 @@ import { randomUUID } from 'node:crypto'
 
 import { createCapabilityPort } from '@velaros-ai/script'
 
-import type { CreateProjectKernelOptions, ProjectOperationContext, ProjectSpacePort } from '../../contract/requires'
+import type {
+  CreateProjectKernelOptions,
+  ProjectOperationContext,
+  ProjectSpacePort,
+} from '../../contract/requires'
 import { createProjectKernel } from '../../impl/kernel/LocalProjectKernel'
 import { projectCodeOperations } from '../../impl/operations/ProjectCodeOperations'
 import { projectFileOperations } from '../../impl/operations/ProjectFileOperations'
 import type { CodeAnalysisInput, CodeQueryInput } from '../../types/code'
-import type { ProjectChangeInput, ProjectEditInput, ProjectListInput, ProjectReadInput, ProjectSearchInput } from '../../types/files'
+import type {
+  ProjectChangeInput,
+  ProjectEditInput,
+  ProjectListInput,
+  ProjectReadInput,
+  ProjectSearchInput,
+} from '../../types/files'
 import type { ProjectCodeQuery } from '../../types/project'
 
 /** 建两件项目工具的测试夹具：内核按 root 建，空间端口的每一件都可以按用例换掉。 */
@@ -27,7 +37,12 @@ export async function projectToolFixture(options: {
   /** 会话号：缺省每个夹具一个新会话，引用不在用例之间串。 */
   sessionId?: string
 }) {
-  const kernel = await createProjectKernel({ root: options.root, plugins: options.plugins ?? [], corePolicy: options.corePolicy, providers: options.providers })
+  const kernel = await createProjectKernel({
+    root: options.root,
+    plugins: options.plugins ?? [],
+    corePolicy: options.corePolicy,
+    providers: options.providers,
+  })
   const queries: ProjectCodeQuery[] = []
   const host: ProjectSpacePort = {
     getRootPath: () => options.root,
@@ -37,7 +52,11 @@ export async function projectToolFixture(options: {
       return options.queryCode ? options.queryCode(input) : {}
     },
   }
-  const context: ProjectOperationContext = { abortSignal: new AbortController().signal, project: host, sessionId: options.sessionId ?? `test-${randomUUID()}` }
+  const context: ProjectOperationContext = {
+    abortSignal: new AbortController().signal,
+    project: host,
+    sessionId: options.sessionId ?? `test-${randomUUID()}`,
+  }
   // 空间装配时给两件工具的就是这张表：每次调用交同一份上下文。
   const port = createCapabilityPort({
     project: {
@@ -55,9 +74,14 @@ export async function projectToolFixture(options: {
   })
 
   /** 像模型的程序那样调一次能力：成功给返回值，失败抛带 code 的错误（代码面交给程序的就是这两样）。 */
-  const call = async <T = any>(namespace: string, operation: string, input: unknown = {}): Promise<T> => {
+  const call = async <T = any>(
+    namespace: string,
+    operation: string,
+    input: unknown = {}
+  ): Promise<T> => {
     const outcome = await port.invoke({ namespace, operation, input: throughJson(input) })
-    if (outcome.error) throw Object.assign(new Error(outcome.error.message), { code: outcome.error.code })
+    if (outcome.error)
+      throw Object.assign(new Error(outcome.error.message), { code: outcome.error.code })
     return throughJson(outcome.value) as T
   }
   return { kernel, host, context, port, call, queries }
@@ -69,7 +93,9 @@ function throughJson(value: unknown): unknown {
 }
 
 /** 等一次调用失败，交出码与说明。 */
-export async function failureOf(call: Promise<unknown>): Promise<{ code: string; message: string }> {
+export async function failureOf(
+  call: Promise<unknown>
+): Promise<{ code: string; message: string }> {
   try {
     await call
   } catch (error) {

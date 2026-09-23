@@ -10,8 +10,18 @@ import { AppError } from '@velaros-ai/core/error'
 import type { CommandSpec } from '@velaros-ai/core/platform/contracts'
 
 import { ShellErrorCodes } from '../contract/constants.js'
-import type { ShellProcessConfinementBuildOptions, ShellProcessConfinementPolicy, ShellProcessConfinementRequest, ShellProcessConfinementResult } from '../types/local.js'
-import type { ShellProcessConfinementBackend, ShellProcessConfinementEnforcement, ShellProcessConfinementEvidence, ShellProcessConfinementMode } from '../types/shell-command.js'
+import type {
+  ShellProcessConfinementBuildOptions,
+  ShellProcessConfinementPolicy,
+  ShellProcessConfinementRequest,
+  ShellProcessConfinementResult,
+} from '../types/local.js'
+import type {
+  ShellProcessConfinementBackend,
+  ShellProcessConfinementEnforcement,
+  ShellProcessConfinementEvidence,
+  ShellProcessConfinementMode,
+} from '../types/shell-command.js'
 
 const DefaultSandboxExecPath = '/usr/bin/sandbox-exec'
 
@@ -147,12 +157,17 @@ function assertProviderResult(
     })
   }
   if (policy.mode !== 'danger-full-access' && result.evidence.enforcement !== 'full') {
-    throw new AppError('INVARIANT', '当前请求需要完整进程约束，提供方返回的隔离能力不足。', undefined, {
-      source: 'system-process-confinement',
-      mode: policy.mode,
-      backend: result.evidence.backend,
-      enforcement: result.evidence.enforcement,
-    })
+    throw new AppError(
+      'INVARIANT',
+      '当前请求需要完整进程约束，提供方返回的隔离能力不足。',
+      undefined,
+      {
+        source: 'system-process-confinement',
+        mode: policy.mode,
+        backend: result.evidence.backend,
+        enforcement: result.evidence.enforcement,
+      }
+    )
   }
   return result
 }
@@ -177,16 +192,17 @@ export function buildConfinedSpawnSpec(
     ...request.policy,
     workspaceRoot: assertAbsoluteRoot(request.policy.workspaceRoot, 'workspaceRoot'),
   }
-  if (policy.mode === 'danger-full-access') return {
+  if (policy.mode === 'danger-full-access')
+    return {
       spec: { ...request.spec, args: [...request.spec.args] },
-    evidence: {
-      mode: policy.mode,
-      enforcement: 'none',
-      backend: 'none',
-      reason: 'explicit-danger-full-access',
-      writableRoots: [],
-    },
-  }
+      evidence: {
+        mode: policy.mode,
+        enforcement: 'none',
+        backend: 'none',
+        reason: 'explicit-danger-full-access',
+        writableRoots: [],
+      },
+    }
 
   if (options.provider)
     return assertProviderResult(options.provider.confine({ spec: request.spec, policy }), policy)
@@ -208,7 +224,13 @@ export function buildConfinedSpawnSpec(
         args: ['-p', profile, '--', request.spec.file, ...request.spec.args],
       },
       // 本进程与子进程的文件写全拦得住，系统服务代办的事拦不全（见 buildSeatbeltProfile），如实报 partial。
-      evidence: enforcedEvidence(policy.mode, 'seatbelt', uniqueRoots(policy, options.tempDir), 'partial', 'enforced-file-writes-only'),
+      evidence: enforcedEvidence(
+        policy.mode,
+        'seatbelt',
+        uniqueRoots(policy, options.tempDir),
+        'partial',
+        'enforced-file-writes-only'
+      ),
       profile,
     }
   }
@@ -234,6 +256,10 @@ export function buildConfinedSpawnSpec(
 }
 
 /** 把命令钉在一个根目录里的约束策略：只许写这个根和它自己的临时目录，网络按给的开关。受约束执行器（演练沙箱的镜像根）用它。 */
-export function confinedRootPolicy(root: string, tempDir: string, network: boolean): ShellProcessConfinementPolicy {
+export function confinedRootPolicy(
+  root: string,
+  tempDir: string,
+  network: boolean
+): ShellProcessConfinementPolicy {
   return { mode: 'workspace-write', workspaceRoot: root, writeRoots: [tempDir], network }
 }

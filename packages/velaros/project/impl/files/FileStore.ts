@@ -20,7 +20,14 @@ import type { BigIntStats } from 'node:fs'
 import { lstat, mkdir, readFile, rename, rm, stat } from 'node:fs/promises'
 import * as path from 'node:path'
 
-import { isNull, isObject, isPresent, isUndefined, optionalWhen, toOptional } from '@velaros-ai/core'
+import {
+  isNull,
+  isObject,
+  isPresent,
+  isUndefined,
+  optionalWhen,
+  toOptional,
+} from '@velaros-ai/core'
 import { textCodec, textFileIo } from '@velaros-ai/core/text-files'
 import type { ExpectedBytes, TextEncoding } from '@velaros-ai/core/text-files/contracts'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
@@ -37,7 +44,11 @@ import type {
 import type { CorePolicy } from '../../types/policy.js'
 import type { FileFilterInput } from '../../types/provider.js'
 import type { FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
-import { ProjectError, projectErrorFromTextFile, RevisionMismatchSuggestedNextAction } from '../../utils/errors.js'
+import {
+  ProjectError,
+  projectErrorFromTextFile,
+  RevisionMismatchSuggestedNextAction,
+} from '../../utils/errors.js'
 import { listProjectFiles } from '../../utils/files/file-listing.js'
 import {
   advanceReadCursor,
@@ -54,7 +65,10 @@ import {
   readTextLineWindow,
   sliceWindowColumns,
 } from '../../utils/files/file-reader.js'
-import { relativeInsideRealRoot, resolveConfinedRealPath } from '../../utils/files/path-containment.js'
+import {
+  relativeInsideRealRoot,
+  resolveConfinedRealPath,
+} from '../../utils/files/path-containment.js'
 import { validateReadBounds } from '../../utils/files/read-bounds.js'
 import { metadataFingerprint, metadataRevisionFor, revisionFor, sha256 } from '../../utils/hash.js'
 import { toAbs, toRel } from '../../utils/path.js'
@@ -82,7 +96,16 @@ export interface FileStoreApi {
   /** 轻量的文件状态：类型、大小、估算 token、行数（不太大的文本文件才数）、版本、编码和建议的首个读取窗口；不存在时返回 kind 为 missing。 */
   stat(input: FileStatInput): Promise<FileStatResult>
   /** 原子写入文本并返回写后的快照：已有文本文件沿用自己的编码与权限，encoding、mode 只在路径上还没有文件时生效；给了 transactionBytes 就原样写这些字节，给了 expectedBytes 时磁盘上的字节对不上就抛 CONFLICT_WITH_EXTERNAL_EDIT。 */
-  write(pathInput: string, content: string, options?: { encoding?: TextEncoding; mode?: number; transactionBytes?: Uint8Array; expectedBytes?: ExpectedBytes }): Promise<FileSnapshot>
+  write(
+    pathInput: string,
+    content: string,
+    options?: {
+      encoding?: TextEncoding
+      mode?: number
+      transactionBytes?: Uint8Array
+      expectedBytes?: ExpectedBytes
+    }
+  ): Promise<FileSnapshot>
   /** 事务捕获原字节用：执行根内约束，最多读 maximumBytes（缺省是整读上限）；文件不存在返回 undefined，类型或长度变了抛 CONFLICT_WITH_EXTERNAL_EDIT。 */
   readTransactionBytes(pathInput: string, maximumBytes?: number): Promise<Buffer | undefined>
   /** 删除工作区里的单个文件（不存在也不报错）；给了 expectedBytes 时先核对磁盘字节，对不上抛 CONFLICT_WITH_EXTERNAL_EDIT。 */
@@ -102,7 +125,10 @@ export class FileStore implements FileStoreApi {
   private command: CommandProvider
   private policy: CorePolicy
   private realRoot?: Promise<string>
-  private readonly searchTextKinds = new Map<string, { token: string; kind: 'native' | 'decoded' | 'excluded'; lastUsedAt: number }>()
+  private readonly searchTextKinds = new Map<
+    string,
+    { token: string; kind: 'native' | 'decoded' | 'excluded'; lastUsedAt: number }
+  >()
   private searchTextKindNextSweep = 0
   private readonly snapshotEncodings = new WeakMap<FileSnapshot, TextEncoding>()
 
@@ -110,7 +136,7 @@ export class FileStore implements FileStoreApi {
     root: string,
     policy: CorePolicy,
     fileFilter: LooseOptional<FileFilterProvider>,
-    command: CommandProvider,
+    command: CommandProvider
   ) {
     this.root = path.resolve(root)
     this.policy = policy
@@ -141,14 +167,15 @@ export class FileStore implements FileStoreApi {
     if (!this.fileFilter) return true
     if (!(await this.fileFilter.shouldInclude({ path: rel, action }))) return false
     const identity = await this.realRelative(rel)
-    return isNull(identity) || identity === rel || this.fileFilter.shouldInclude({ path: identity, action })
+    return (
+      isNull(identity) ||
+      identity === rel ||
+      this.fileFilter.shouldInclude({ path: identity, action })
+    )
   }
 
   /** 读取文件或目录的元数据，并按需附带文本内容。 */
-  public async snapshot(
-    pathInput: string,
-    includeContent = true,
-  ): Promise<FileSnapshot> {
+  public async snapshot(pathInput: string, includeContent = true): Promise<FileSnapshot> {
     // 所有公开读写路径都先按工作区根目录规范化。
     const { abs, rel } = await this.authorize(pathInput)
     // 用 bigint stat 一次拿到纳秒级 mtime：metadata 模式据此区分相邻写入，content 模式仍按毫秒计算保持兼容。
@@ -257,7 +284,7 @@ export class FileStore implements FileStoreApi {
     mtimeMs: number,
     mtimeToken: string,
     size: number,
-    contentHash: string,
+    contentHash: string
   ): { revision: string; sha256: string } {
     if (this.policy.revisionStrategy === 'metadata')
       return {
@@ -279,7 +306,7 @@ export class FileStore implements FileStoreApi {
           expected: input.baseRevision,
           actual: snap.revision,
         },
-        RevisionMismatchSuggestedNextAction,
+        RevisionMismatchSuggestedNextAction
       )
     }
     if (!snap.exists || snap.isDirectory || snap.isBinary) return { snapshot: snap }
@@ -300,19 +327,24 @@ export class FileStore implements FileStoreApi {
           size: snap.size,
           maxFileSizeToReadBytes: this.policy.maxFileSizeToReadBytes,
         },
-        '请读取有界范围，或传入 maxBytes。',
+        '请读取有界范围，或传入 maxBytes。'
       )
     }
     if (isUndefined(snap.content) && !hasRange && hasLimit) {
-      const prefix = await readLimitedTextPrefix(snap.absPath, snap.size, {
-        maxBytes: input.maxBytes,
-        maxChars: input.maxChars,
-      }, this.snapshotEncodings.get(snap))
+      const prefix = await readLimitedTextPrefix(
+        snap.absPath,
+        snap.size,
+        {
+          maxBytes: input.maxBytes,
+          maxChars: input.maxChars,
+        },
+        this.snapshotEncodings.get(snap)
+      )
       const limited = limitContent(prefix.content, input.maxBytes, input.maxChars)
       const truncated = prefix.truncated || limited.truncated
       const cursor = advanceReadCursor(
         { line: 1, column: 1 },
-        prefix.content.slice(0, limited.consumedChars),
+        prefix.content.slice(0, limited.consumedChars)
       )
       return {
         snapshot: snap,
@@ -323,7 +355,7 @@ export class FileStore implements FileStoreApi {
         nextStartLine: optionalWhen(truncated && cursor.column === 1, cursor.line),
         continuation: optionalWhen(
           truncated,
-          continuationInput(input, snap.path, snap.revision, cursor, true),
+          continuationInput(input, snap.path, snap.revision, cursor, true)
         ),
       }
     }
@@ -342,7 +374,7 @@ export class FileStore implements FileStoreApi {
           maxBytes: input.maxBytes,
           maxChars: input.maxChars,
         },
-        this.snapshotEncodings.get(snap),
+        this.snapshotEncodings.get(snap)
       )
       const requestedStartLine = range.startLine ?? 1
       if (isPresent(window.totalLines) && requestedStartLine > window.totalLines)
@@ -352,13 +384,13 @@ export class FileStore implements FileStoreApi {
         window.content,
         range,
         window.range.startLine,
-        window.range.endLine,
+        window.range.endLine
       )
       const limited = limitContent(selected.content, input.maxBytes, input.maxChars)
       const startCursor = { line: window.range.startLine, column: selected.startColumn }
       const limitedCursor = advanceReadCursor(
         startCursor,
-        selected.content.slice(0, limited.consumedChars),
+        selected.content.slice(0, limited.consumedChars)
       )
       const cursor = limited.truncated
         ? limitedCursor
@@ -381,13 +413,14 @@ export class FileStore implements FileStoreApi {
         nextStartLine: optionalWhen(hasMore && cursor.column === 1, cursor.line),
         continuation: optionalWhen(
           hasMore,
-          continuationInput(input, snap.path, snap.revision, cursor, limited.truncated),
+          continuationInput(input, snap.path, snap.revision, cursor, limited.truncated)
         ),
         note: endColumnClampNote(range, window.totalLines),
       }
     }
 
-    const rawContent = snap.content ?? (await readProjectTextFile(snap.absPath, this.snapshotEncodings.get(snap)))
+    const rawContent =
+      snap.content ?? (await readProjectTextFile(snap.absPath, this.snapshotEncodings.get(snap)))
     const allLines = rawContent.split('\n')
     const totalLines = allLines.length
 
@@ -401,13 +434,13 @@ export class FileStore implements FileStoreApi {
         sliced.content,
         range,
         sliced.range.startLine,
-        sliced.range.endLine,
+        sliced.range.endLine
       )
       const limited = limitContent(selected.content, input.maxBytes, input.maxChars)
       const startCursor = { line: sliced.range.startLine, column: selected.startColumn }
       const limitedCursor = advanceReadCursor(
         startCursor,
-        selected.content.slice(0, limited.consumedChars),
+        selected.content.slice(0, limited.consumedChars)
       )
       const cursor = limited.truncated
         ? limitedCursor
@@ -437,7 +470,7 @@ export class FileStore implements FileStoreApi {
         remainingLines: optionalWhen(hasMore, remainingLines),
         continuation: optionalWhen(
           hasMore,
-          continuationInput(input, snap.path, snap.revision, cursor, limited.truncated),
+          continuationInput(input, snap.path, snap.revision, cursor, limited.truncated)
         ),
         note: endColumnClampNote(range, totalLines),
       }
@@ -446,7 +479,7 @@ export class FileStore implements FileStoreApi {
     const limited = limitContent(rawContent, input.maxBytes, input.maxChars)
     const cursor = advanceReadCursor(
       { line: 1, column: 1 },
-      rawContent.slice(0, limited.consumedChars),
+      rawContent.slice(0, limited.consumedChars)
     )
     const hasMore = limited.truncated
     return {
@@ -458,11 +491,11 @@ export class FileStore implements FileStoreApi {
       nextStartLine: optionalWhen(hasMore && cursor.column === 1, cursor.line),
       remainingLines: optionalWhen(
         hasMore,
-        Math.max(0, totalLines - cursor.line + (cursor.column > 1 ? 1 : 0)),
+        Math.max(0, totalLines - cursor.line + (cursor.column > 1 ? 1 : 0))
       ),
       continuation: optionalWhen(
         hasMore,
-        continuationInput(input, snap.path, snap.revision, cursor, true),
+        continuationInput(input, snap.path, snap.revision, cursor, true)
       ),
     }
   }
@@ -472,17 +505,28 @@ export class FileStore implements FileStoreApi {
     const { abs, rel } = await this.authorize(pathInput)
     const metadata = await stat(abs, { bigint: true })
     if (!metadata.isFile() || metadata.size > this.policy.maxSearchFileSizeBytes) return 'excluded'
-    const token = [metadata.dev, metadata.ino, metadata.size, metadata.mtimeNs, metadata.ctimeNs].join(':')
+    const token = [
+      metadata.dev,
+      metadata.ino,
+      metadata.size,
+      metadata.mtimeNs,
+      metadata.ctimeNs,
+    ].join(':')
     const cached = this.searchTextKinds.get(rel)
     const now = Date.now()
     if (cached) cached.lastUsedAt = now
     if (cached?.token === token) return cached.kind
     const encoding = textCodec.detect(await readFile(abs))
-    const kind = !encoding ? 'excluded' : encoding === 'utf8' || encoding === 'utf8-bom' ? 'native' : 'decoded'
+    const kind = !encoding
+      ? 'excluded'
+      : encoding === 'utf8' || encoding === 'utf8-bom'
+        ? 'native'
+        : 'decoded'
     if (now >= this.searchTextKindNextSweep) {
       // 只回收近期不再参与查询的条目，容量外扫描不会把仍活跃的整批条目逐项顶出。
       for (const [path, entry] of this.searchTextKinds) {
-        if (now - entry.lastUsedAt >= ProjectTuning.files.searchTextKindIdleMs) this.searchTextKinds.delete(path)
+        if (now - entry.lastUsedAt >= ProjectTuning.files.searchTextKindIdleMs)
+          this.searchTextKinds.delete(path)
       }
       this.searchTextKindNextSweep = now + ProjectTuning.files.searchTextKindIdleMs
     }
@@ -568,7 +612,8 @@ export class FileStore implements FileStoreApi {
     let lineCount: Nullable<number> = null
     if (sizeBytes <= ProjectTuning.files.statLineCountBytes) {
       // 优先复用 snapshot 已读到的正文；仅当宿主把读取上限调得比行数上限更小时才回退到再读一次。
-      const text = snap.content ?? (await readProjectTextFile(snap.absPath, this.snapshotEncodings.get(snap)))
+      const text =
+        snap.content ?? (await readProjectTextFile(snap.absPath, this.snapshotEncodings.get(snap)))
       lineCount = countTextLines(text)
     } else {
       warnings.push('文件较大；stat 阶段未计算行数。')
@@ -603,13 +648,24 @@ export class FileStore implements FileStoreApi {
   public async write(
     pathInput: string,
     content: string,
-    options?: { encoding?: TextEncoding; mode?: number; transactionBytes?: Uint8Array; expectedBytes?: ExpectedBytes },
+    options?: {
+      encoding?: TextEncoding
+      mode?: number
+      transactionBytes?: Uint8Array
+      expectedBytes?: ExpectedBytes
+    }
   ): Promise<FileSnapshot> {
     const { abs, rel } = await this.authorize(pathInput)
     await mkdir(path.dirname(abs), { recursive: true })
     const written = options?.transactionBytes
-      ? textFileIo.writeBytes(abs, options.transactionBytes, { mode: options.mode, expected: options.expectedBytes })
-      : textFileIo.writeText(abs, content, { fallbackEncoding: options?.encoding, mode: options?.mode })
+      ? textFileIo.writeBytes(abs, options.transactionBytes, {
+          mode: options.mode,
+          expected: options.expectedBytes,
+        })
+      : textFileIo.writeText(abs, content, {
+          fallbackEncoding: options?.encoding,
+          mode: options?.mode,
+        })
     await written.catch((error: unknown) => {
       throw projectErrorFromTextFile(error)
     })
@@ -617,7 +673,10 @@ export class FileStore implements FileStoreApi {
   }
 
   /** 私有事务捕获；根内约束始终执行。 */
-  public async readTransactionBytes(pathInput: string, maximumBytes = this.policy.maxFileSizeToReadBytes): Promise<Buffer | undefined> {
+  public async readTransactionBytes(
+    pathInput: string,
+    maximumBytes = this.policy.maxFileSizeToReadBytes
+  ): Promise<Buffer | undefined> {
     const { abs } = await this.authorize(pathInput)
     return textFileIo.readBounded(abs, maximumBytes).catch((error: unknown) => {
       throw projectErrorFromTextFile(error)
@@ -625,7 +684,10 @@ export class FileStore implements FileStoreApi {
   }
 
   /** 删除工作区内的单个文件；给了 expectedBytes 时先核对磁盘字节。 */
-  public async remove(pathInput: string, options?: { expectedBytes?: ExpectedBytes }): Promise<void> {
+  public async remove(
+    pathInput: string,
+    options?: { expectedBytes?: ExpectedBytes }
+  ): Promise<void> {
     const { abs } = await this.authorize(pathInput)
     if (options?.expectedBytes) {
       await textFileIo.assertUnchanged(abs, options.expectedBytes).catch((error: unknown) => {
@@ -681,7 +743,7 @@ export class FileStore implements FileStoreApi {
       'project',
       sha256(snapshots.map((s) => `${s.path}:${s.sha256}`).join('\n')),
       Date.now(),
-      snapshots.length,
+      snapshots.length
     )
     return { root: this.root, revision, files: snapshots, createdAt: Date.now() }
   }

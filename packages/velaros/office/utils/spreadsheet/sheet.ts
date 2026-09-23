@@ -2,7 +2,14 @@
 
 import type { Workbook, Worksheet } from 'exceljs'
 
-import { isEmpty, isPlainObject, isPresent, isString, optionalWhenLazy, toNullable } from '@velaros-ai/core'
+import {
+  isEmpty,
+  isPlainObject,
+  isPresent,
+  isString,
+  optionalWhenLazy,
+  toNullable,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { OfficeInputLimits } from '../../contract/constants.js'
@@ -48,12 +55,12 @@ export function buildExcelCellValue(cell: ExcelCellInput): ExcelCellBuildResult 
       richText: obj.richText.map((rt) => ({
         text: rt.text,
         font: optionalWhenLazy(rt.font, () => ({
-              name: rt.font!.name,
-              size: rt.font!.size,
-              bold: rt.font!.bold,
-              italic: rt.font!.italic,
-              color: optionalWhenLazy(rt.font!.color, () => ({ argb: toArgbColor(rt.font!.color!) })),
-            })),
+          name: rt.font!.name,
+          size: rt.font!.size,
+          bold: rt.font!.bold,
+          italic: rt.font!.italic,
+          color: optionalWhenLazy(rt.font!.color, () => ({ argb: toArgbColor(rt.font!.color!) })),
+        })),
       })),
     }
   } else if (obj.formula) {
@@ -77,7 +84,7 @@ export function buildExcelCellValue(cell: ExcelCellInput): ExcelCellBuildResult 
 /** 按 A1 / A1:C9 这样的地址给区域刷数字格式；区域太大直接拒绝，不静默刷半张表。 */
 export function applyNumberFormats(
   sheet: Worksheet,
-  numberFormats?: Readonly<Record<string, string>>,
+  numberFormats?: Readonly<Record<string, string>>
 ): void {
   for (const [address, numFmt] of Object.entries(numberFormats ?? {})) {
     const match = ExcelAddressPattern.exec(address)
@@ -91,7 +98,10 @@ export function applyNumberFormats(
     const top = Math.min(startRow, endRow)
     const bottom = Math.max(startRow, endRow)
     if ((right - left + 1) * (bottom - top + 1) > OfficeInputLimits.spreadsheet.numberFormatCells)
-      throw new AppError('VALIDATION', `numberFormats 的区域 ${address} 太大：一个区域最多 ${OfficeInputLimits.spreadsheet.numberFormatCells} 格`)
+      throw new AppError(
+        'VALIDATION',
+        `numberFormats 的区域 ${address} 太大：一个区域最多 ${OfficeInputLimits.spreadsheet.numberFormatCells} 格`
+      )
     for (let row = top; row <= bottom; row++)
       for (let column = left; column <= right; column++)
         sheet.getRow(row).getCell(column).numFmt = numFmt
@@ -129,19 +139,18 @@ export function addSpreadsheetWorksheet(
   const showGridLines = sheetInput.showGridLines ?? true
   const hasFrozenPanes = hasFreezeRows || hasFreezeCols
   return workbook.addWorksheet(normalizeSheetName(sheetInput.name, sheetIndex), {
-    views:
-      optionalWhenLazy(hasFrozenPanes || !showGridLines, () => [
-            {
-              ...(hasFrozenPanes
-                ? {
-                    state: 'frozen' as const,
-                    xSplit: hasFreezeCols ? freezeCols : 0,
-                    ySplit: hasFreezeRows ? freezeRows : 0,
-                  }
-                : {}),
-              showGridLines,
-            },
-          ]),
+    views: optionalWhenLazy(hasFrozenPanes || !showGridLines, () => [
+      {
+        ...(hasFrozenPanes
+          ? {
+              state: 'frozen' as const,
+              xSplit: hasFreezeCols ? freezeCols : 0,
+              ySplit: hasFreezeRows ? freezeRows : 0,
+            }
+          : {}),
+        showGridLines,
+      },
+    ]),
     properties: optionalWhenLazy(sheetInput.tabColor, () => ({
       tabColor: { argb: toArgbColor(sheetInput.tabColor!) },
     })),
@@ -158,7 +167,8 @@ export function writeSpreadsheetRow(sheet: Worksheet, rowData: ExcelCellInput[])
   for (let colIdx = 0; colIdx < rowData.length; colIdx++) {
     const cellInput = rowData[colIdx]!
     const cell = excelRow.getCell(colIdx + 1)
-    const { excelValue, cellStyle, rowHeight, link, colSpan, rowSpan } = buildExcelCellValue(cellInput)
+    const { excelValue, cellStyle, rowHeight, link, colSpan, rowSpan } =
+      buildExcelCellValue(cellInput)
     cell.value = excelValue
     // 超链接在 ExcelJS 中是一种特殊 value，需要在基础值之后覆盖。
     if (link)

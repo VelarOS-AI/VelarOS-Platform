@@ -32,10 +32,19 @@ export class FileChanges implements FileChangesApi {
     this.sequence += 1
     const changeId = `change-${this.sequence}-${randomBytes(3).toString('hex')}`
     const bytes = entries.reduce((sum, entry) => sum + (entry.before?.byteLength ?? 0), 0)
-    const record: FileChangeRecord = { changeId, entries: [...entries], bytes, undoable: entries.every((entry) => !isUndefined(entry.before)), undone: false }
+    const record: FileChangeRecord = {
+      changeId,
+      entries: [...entries],
+      bytes,
+      undoable: entries.every((entry) => !isUndefined(entry.before)),
+      undone: false,
+    }
     this.records.set(changeId, record)
     this.totalBytes += bytes
-    while (this.records.size > FileLimits.undoChanges || (this.records.size > 1 && this.totalBytes > FileTuning.changes.totalBytes)) {
+    while (
+      this.records.size > FileLimits.undoChanges ||
+      (this.records.size > 1 && this.totalBytes > FileTuning.changes.totalBytes)
+    ) {
       const [oldest, dropped] = this.records.entries().next().value!
       this.records.delete(oldest)
       this.totalBytes -= dropped.bytes

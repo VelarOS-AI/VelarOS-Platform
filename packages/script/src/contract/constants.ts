@@ -22,7 +22,8 @@ export const CodeSurfaceErrorCodes = Object.freeze({
 } as const)
 
 /** 脚本执行错误码之一。 */
-export type CodeSurfaceErrorCode = (typeof CodeSurfaceErrorCodes)[keyof typeof CodeSurfaceErrorCodes]
+export type CodeSurfaceErrorCode =
+  (typeof CodeSurfaceErrorCodes)[keyof typeof CodeSurfaceErrorCodes]
 
 /**
  * 「找不到这个模块」的 TypeScript 诊断码。
@@ -87,7 +88,7 @@ export const CodeSurfaceLimits = Object.freeze({
 /** 单次增量提交的定位数量上限，全文提交沿用源码体量限制。 */
 export const CodeProgramEditLimits = Object.freeze({
   /** 一次提交最多定位 32 处替换。 */
-  edits:32,
+  edits: 32,
 })
 
 /**
@@ -96,25 +97,25 @@ export const CodeProgramEditLimits = Object.freeze({
  */
 export const ScriptOutputLimits = Object.freeze({
   /** 一次执行的输出块上限。 */
-  blocks:64,
+  blocks: 64,
   /** 原始 JSON 输出合计上限，避免 IPC 和归档无限增长。 */
-  rawChars:1_000_000,
+  rawChars: 1_000_000,
   /** 单份声明或问题的字符上限。 */
-  metadataChars:4000,
+  metadataChars: 4000,
   /** 默认展示预算。 */
-  displayChars:16_000,
+  displayChars: 16_000,
   /** 允许申请的最大展示预算，实际分配仍由请求编译器决定。 */
-  maxDisplayChars:200_000,
+  maxDisplayChars: 200_000,
   /** 捕获问题最多保留条数。 */
-  issues:16,
+  issues: 16,
   /** JSON 值嵌套层数上限。 */
-  depth:64,
+  depth: 64,
   /** 输出 key 最多多少字符。 */
-  keyChars:96,
+  keyChars: 96,
   /** 输出 purpose 最多多少字符。 */
-  purposeChars:1000,
+  purposeChars: 1000,
   /** 代码块的语言标签最多多少字符。 */
-  languageChars:80,
+  languageChars: 80,
   /** view.paths 最多几个 JSON Pointer。 */
-  paths:64,
+  paths: 64,
 })

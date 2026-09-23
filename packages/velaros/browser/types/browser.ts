@@ -315,12 +315,7 @@ export interface BrowserPageLink {
 
 /** @AgentView 可以点的东西是什么：button、submit、link、combobox（下拉框）、option、menuitem。 */
 export type BrowserPageActionRole =
-  | 'button'
-  | 'submit'
-  | 'link'
-  | 'combobox'
-  | 'option'
-  | 'menuitem'
+  'button' | 'submit' | 'link' | 'combobox' | 'option' | 'menuitem'
 
 /** @AgentView 页面上一个可以点的东西：text 是文字，role 是种类，target 交给 click。 */
 export interface BrowserPageAction {
@@ -1463,8 +1458,7 @@ export interface BrowserInspectInput {
 
 /** @AgentView 只截页面上的一块：给 selector（截那个元素），或者给完整的 x、y、width、height（页面 CSS 像素，含滚动，最多 20000）。 */
 export type BrowserScreenshotRegion =
-  | { selector: string }
-  | { x: number; y: number; width: number; height: number }
+  { selector: string } | { x: number; y: number; width: number; height: number }
 
 /**
  * @AgentView

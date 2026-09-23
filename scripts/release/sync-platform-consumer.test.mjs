@@ -18,19 +18,19 @@ test('resolves the TypeScript JSONC parser from namespace and default interop sh
 
   assert.equal(
     resolveTypeScriptJsoncParser({ parseConfigFileTextToJson: directParser }),
-    directParser,
+    directParser
   )
   assert.equal(
     resolveTypeScriptJsoncParser({
       default: { parseConfigFileTextToJson: defaultParser },
     }),
-    defaultParser,
+    defaultParser
   )
   assert.equal(
     resolveTypeScriptJsoncParser({
       default: { default: { parseConfigFileTextToJson: defaultParser } },
     }),
-    defaultParser,
+    defaultParser
   )
 })
 
@@ -49,14 +49,14 @@ test('updates only the selected dependency value without reformatting the manife
   const source = '{\n  "dependencies": {\n    "@velaros-ai/agent": "^0.5.1"\n  }\n}\n'
   assert.equal(
     replaceRequirementSource(source, '@velaros-ai/agent', '^0.5.1', '^0.6.0'),
-    '{\n  "dependencies": {\n    "@velaros-ai/agent": "^0.6.0"\n  }\n}\n',
+    '{\n  "dependencies": {\n    "@velaros-ai/agent": "^0.6.0"\n  }\n}\n'
   )
 })
 
 test('rejects ambiguous version expressions instead of guessing', () => {
   assert.throws(
     () => desiredSpecification('>=0.4.0 <1', '0.6.0'),
-    /Unsupported Platform package version specification/u,
+    /Unsupported Platform package version specification/u
   )
 })
 
@@ -87,9 +87,9 @@ test('train-only selection rejects unknown package names', () => {
           },
         ],
         'v0.6.0',
-        ['missing'],
+        ['missing']
       ),
-    /matches no declared release package/u,
+    /matches no declared release package/u
   )
 })
 
@@ -105,15 +105,15 @@ test('a Bun lockfile limits consumer manifests to registered workspaces', async 
   await Promise.all([
     writeFile(
       path.join(consumerRoot, 'package.json'),
-      '{"name":"desktop","dependencies":{"@velaros-ai/agent":"^0.6.10"}}\n',
+      '{"name":"desktop","dependencies":{"@velaros-ai/agent":"^0.6.10"}}\n'
     ),
     writeFile(
       path.join(consumerRoot, 'packages', 'ipc', 'package.json'),
-      '{"name":"ipc","devDependencies":{"@velaros-ai/agent":"^0.6.10"}}\n',
+      '{"name":"ipc","devDependencies":{"@velaros-ai/agent":"^0.6.10"}}\n'
     ),
     writeFile(
       path.join(consumerRoot, 'scratchpad', 'agent-harness-package-patch', 'package.json'),
-      '{"name":"scratch-copy","dependencies":{"@velaros-ai/agent":"^0.6.8"}}\n',
+      '{"name":"scratch-copy","dependencies":{"@velaros-ai/agent":"^0.6.8"}}\n'
     ),
   ])
 
@@ -128,29 +128,30 @@ test('a Bun lockfile limits consumer manifests to registered workspaces', async 
 
   assert.deepEqual(
     manifests.map(({ workspaceKey }) => workspaceKey),
-    ['', 'packages/ipc'],
+    ['', 'packages/ipc']
   )
   assert.deepEqual(
     manifests.map(({ manifest }) => manifest.name),
-    ['desktop', 'ipc'],
+    ['desktop', 'ipc']
   )
 
   const manifestsWithoutLock = await readManifests(consumerRoot)
-  assert.deepEqual(
-    manifestsWithoutLock.map(({ manifest }) => manifest.name).sort(),
-    ['desktop', 'ipc', 'scratch-copy'],
-  )
+  assert.deepEqual(manifestsWithoutLock.map(({ manifest }) => manifest.name).sort(), [
+    'desktop',
+    'ipc',
+    'scratch-copy',
+  ])
 })
 
 test('lockfile workspace keys cannot escape or alias the consumer root', () => {
   for (const workspaceKey of ['../outside', 'packages/../outside', 'packages\\outside']) {
     assert.throws(
       () => manifestPathsFromLockfile('/tmp/consumer', { workspaces: { [workspaceKey]: {} } }),
-      /invalid workspace key|escapes the consumer root/u,
+      /invalid workspace key|escapes the consumer root/u
     )
   }
   assert.throws(
     () => manifestPathsFromLockfile('/tmp/consumer', { workspaces: {} }),
-    /at least one workspace/u,
+    /at least one workspace/u
   )
 })

@@ -21,11 +21,7 @@ export function assertPresent<T>(
   }
 }
 
-export function required<T>(
-  value: T,
-  message: string,
-  context: ErrorContext = {}
-): NonNullable<T> {
+export function required<T>(value: T, message: string, context: ErrorContext = {}): NonNullable<T> {
   assertPresent(value, message, context)
   return value
 }

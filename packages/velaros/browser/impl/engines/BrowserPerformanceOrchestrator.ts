@@ -3,8 +3,17 @@ import { dirname, resolve } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type { BrowserHeapSnapshotOptions, BrowserHeapSnapshotResult, BrowserPerformanceInsightOptions, BrowserPerformanceInsightResult, BrowserPerformanceTraceStartOptions, BrowserPerformanceTraceStartResult, BrowserPerformanceTraceStopResult, BrowserSiteContext } from '../../types/browser.js'
-import type { BrowserPageDriverKernel,BrowserPerformanceTraceState } from '../../types/runtime.js'
+import type {
+  BrowserHeapSnapshotOptions,
+  BrowserHeapSnapshotResult,
+  BrowserPerformanceInsightOptions,
+  BrowserPerformanceInsightResult,
+  BrowserPerformanceTraceStartOptions,
+  BrowserPerformanceTraceStartResult,
+  BrowserPerformanceTraceStopResult,
+  BrowserSiteContext,
+} from '../../types/browser.js'
+import type { BrowserPageDriverKernel, BrowserPerformanceTraceState } from '../../types/runtime.js'
 import { extractKeyMetricsFromSummary, serializeBrowserTraceToGzip } from '../../utils/performance'
 import { resolveAutoStopMs } from '../../utils/performance'
 import { BrowserTuning } from '../../utils/tuning'
@@ -19,13 +28,31 @@ import { BrowserPerformanceTraceEngine } from './BrowserPerformanceTraceEngine'
  */
 export interface BrowserPerformanceOrchestratorApi {
   /** 开始录性能 trace。 */
-  startTrace(sessionId: string, context: BrowserSiteContext, options: BrowserPerformanceTraceStartOptions, abortSignal?: AbortSignal): Promise<BrowserPerformanceTraceStartResult>
+  startTrace(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserPerformanceTraceStartOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPerformanceTraceStartResult>
   /** 停止 + 解析 + 落盘。 */
-  stopTrace(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserPerformanceTraceStopResult>
+  stopTrace(
+    sessionId: string,
+    context: BrowserSiteContext,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPerformanceTraceStopResult>
   /** 对最近一次 trace 的指定 insight 输出详细分析（纯内存读，不进队列）。 */
-  analyzeInsight(sessionId: string, options: BrowserPerformanceInsightOptions, abortSignal?: AbortSignal): Promise<BrowserPerformanceInsightResult>
+  analyzeInsight(
+    sessionId: string,
+    options: BrowserPerformanceInsightOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPerformanceInsightResult>
   /** 采集 V8 堆快照并落盘（分析建议交给 memlab 等外部工具）。 */
-  captureHeapSnapshot(sessionId: string, context: BrowserSiteContext, options: BrowserHeapSnapshotOptions, abortSignal?: AbortSignal): Promise<BrowserHeapSnapshotResult>
+  captureHeapSnapshot(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserHeapSnapshotOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserHeapSnapshotResult>
   /** 应用退出/运行时重建时清理登记表；录制中的 collector 随 driver/webContents 销毁而终止。 */
   dispose(): void
 }
@@ -168,10 +195,7 @@ export class BrowserPerformanceOrchestrator implements BrowserPerformanceOrchest
     abortSignal?.throwIfAborted()
     const state = this.traces.get(sessionId)
     if (!state?.recording) {
-      throw new AppError(
-        'VALIDATION',
-        '当前会话还没有已完成的性能 trace，请先 start_trace 录制。'
-      )
+      throw new AppError('VALIDATION', '当前会话还没有已完成的性能 trace，请先 start_trace 录制。')
     }
 
     const output = await this.traceEngine.formatInsight(
@@ -234,4 +258,3 @@ export class BrowserPerformanceOrchestrator implements BrowserPerformanceOrchest
     this.traces.clear()
   }
 }
-

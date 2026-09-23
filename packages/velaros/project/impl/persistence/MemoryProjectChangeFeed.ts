@@ -4,4 +4,6 @@ import type { ProjectChangeFeedWriter } from '../../contract/requires.js'
 
 import { BaseProjectChangeFeed } from './BaseProjectChangeFeed.js'
 
-export class MemoryProjectChangeFeed extends BaseProjectChangeFeed implements ProjectChangeFeedWriter {}
+export class MemoryProjectChangeFeed
+  extends BaseProjectChangeFeed
+  implements ProjectChangeFeedWriter {}

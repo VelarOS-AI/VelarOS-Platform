@@ -12,7 +12,9 @@ import type { DiscoveredRunArchive } from '../types/agent-lab.js'
 import { readRunArchiveView } from './measure/archive-view.js'
 
 /** run id 会当目录名用：只许字母数字开头，后面只许字母数字与 `. _ : -`，长度按常量表的上限卡。 */
-const SafeRunIdPattern = new RegExp(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,${AgentLabLimits.runIdChars - 1}}$`)
+const SafeRunIdPattern = new RegExp(
+  `^[A-Za-z0-9][A-Za-z0-9._:-]{0,${AgentLabLimits.runIdChars - 1}}$`
+)
 
 /** 校验一个 run id 能不能当目录名；不能就当场报错，不去碰文件系统。 */
 export function assertSafeRunId(runId: string): void {
@@ -47,7 +49,7 @@ export async function writeJsonAtomically(path: string, value: unknown): Promise
 export async function fileExists(path: string): Promise<boolean> {
   return access(path).then(
     () => true,
-    () => false,
+    () => false
   )
 }
 
@@ -55,7 +57,9 @@ export async function fileExists(path: string): Promise<boolean> {
  * 在一个运行目录里找一份归档：先看 `report.json`，读不出来再退回 `progress.json`。
  * 不去把别的 JSON 夹具「发明」成第四种归档格式；都读不出来就是 `null`。
  */
-export async function readArchiveCandidate(directory: string): Promise<DiscoveredRunArchive | null> {
+export async function readArchiveCandidate(
+  directory: string
+): Promise<DiscoveredRunArchive | null> {
   for (const name of ['report.json', 'progress.json'] as const) {
     const path = join(directory, name)
     if (!(await fileExists(path))) continue

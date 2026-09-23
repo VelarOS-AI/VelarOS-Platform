@@ -1,4 +1,3 @@
-
 import {
   isArray,
   isBigInt,
@@ -48,12 +47,19 @@ export function encodeProviderRequestAuditValue(
   }
   if (value instanceof URL) return tagged('url', value.toString())
   if (value instanceof Date) return tagged('date', value.toISOString())
-  if (value instanceof Uint8Array) return tagged('bytes', encodeBytes(value instanceof Uint8Array?value:new Uint8Array(value)))
-  if (value instanceof ArrayBuffer) return tagged('bytes', encodeBytes(value instanceof Uint8Array?value:new Uint8Array(value)))
+  if (value instanceof Uint8Array)
+    return tagged('bytes', encodeBytes(value instanceof Uint8Array ? value : new Uint8Array(value)))
+  if (value instanceof ArrayBuffer)
+    return tagged('bytes', encodeBytes(value instanceof Uint8Array ? value : new Uint8Array(value)))
   if (!isObject(value)) {
-    throw new AppError('INVARIANT', '模型请求包含未登记的原始值类型，无法形成可重建快照。', undefined, {
-      source: 'provider-request-audit-serialization',
-    })
+    throw new AppError(
+      'INVARIANT',
+      '模型请求包含未登记的原始值类型，无法形成可重建快照。',
+      undefined,
+      {
+        source: 'provider-request-audit-serialization',
+      }
+    )
   }
   if (seen.has(value)) {
     throw new AppError('INVARIANT', '模型请求包含循环引用，无法形成可重建快照。', undefined, {
@@ -64,10 +70,15 @@ export function encodeProviderRequestAuditValue(
   try {
     if (isArray(value)) return value.map((item) => encodeProviderRequestAuditValue(item, seen))
     if (!isPlainObject(value)) {
-      throw new AppError('INVARIANT', '模型请求包含未登记的对象类型，无法形成可重建快照。', undefined, {
-        source: 'provider-request-audit-serialization',
-        constructor: value.constructor?.name ?? 'unknown',
-      })
+      throw new AppError(
+        'INVARIANT',
+        '模型请求包含未登记的对象类型，无法形成可重建快照。',
+        undefined,
+        {
+          source: 'provider-request-audit-serialization',
+          constructor: value.constructor?.name ?? 'unknown',
+        }
+      )
     }
     return Object.fromEntries(
       Object.keys(value)
@@ -87,19 +98,22 @@ export function encodeProviderRequestAuditValue(
 export function decodeProviderRequestAuditValue(value: ProviderRequestAuditValue): unknown {
   if (isNull(value) || !isObject(value)) return value
   if (isArray(value)) return value.map(decodeProviderRequestAuditValue)
-  if (
-    isString(value.$velarosType)
-    && isString(value.value)
-    && Object.keys(value).length === 2
-  ) {
+  if (isString(value.$velarosType) && isString(value.value) && Object.keys(value).length === 2) {
     switch (value.$velarosType) {
-      case 'bigint': return BigInt(value.value)
-      case 'bytes': return Uint8Array.from(atob(value.value),character=>character.charCodeAt(0))
-      case 'date': return new Date(value.value)
-      case 'number': return Number(value.value)
-      case 'undefined': return undefined
-      case 'url': return new URL(value.value)
-      default: break
+      case 'bigint':
+        return BigInt(value.value)
+      case 'bytes':
+        return Uint8Array.from(atob(value.value), (character) => character.charCodeAt(0))
+      case 'date':
+        return new Date(value.value)
+      case 'number':
+        return Number(value.value)
+      case 'undefined':
+        return undefined
+      case 'url':
+        return new URL(value.value)
+      default:
+        break
     }
   }
   return Object.fromEntries(
@@ -108,4 +122,8 @@ export function decodeProviderRequestAuditValue(value: ProviderRequestAuditValue
 }
 
 /** 使用标准 Web API 编码字节，避免宿主 Buffer 进入可移植请求图。 */
-function encodeBytes(value:Uint8Array):string {let text='';for(const byte of value)text+=String.fromCharCode(byte);return btoa(text)}
+function encodeBytes(value: Uint8Array): string {
+  let text = ''
+  for (const byte of value) text += String.fromCharCode(byte)
+  return btoa(text)
+}

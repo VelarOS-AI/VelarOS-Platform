@@ -10,14 +10,11 @@ import { kernelArtifactFileName } from '../../utils/updater/manifest'
  * 展开 tar / zip 需要内核不愿意背的第三方实现，所以发 `tar.gz`、`tar.zst`、`zip` 制品的部署
  * 自己注入一个解包器；实例由 `KernelUpdater` 在没人注入时兜底建一个。
  */
-export class PassthroughKernelArtifactExtractor
-implements KernelArtifactExtractor {
-  public async extract(
-    context: KernelArtifactExtractionContext,
-  ): Promise<void> {
+export class PassthroughKernelArtifactExtractor implements KernelArtifactExtractor {
+  public async extract(context: KernelArtifactExtractionContext): Promise<void> {
     await copyFile(
       context.payloadPath,
-      join(context.destinationDirectory, kernelArtifactFileName(context.artifact)),
+      join(context.destinationDirectory, kernelArtifactFileName(context.artifact))
     )
   }
 }

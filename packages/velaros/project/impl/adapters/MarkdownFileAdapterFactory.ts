@@ -16,7 +16,11 @@ export class MarkdownFileAdapterFactory implements FileAdapterFactory {
   public readonly id = 'core.markdown.factory'
 
   public canHandle(snapshot: FileSnapshot): boolean {
-    return snapshot.exists && !snapshot.isBinary && MarkdownFileAdapterFactory.Extensions.has(ext(snapshot.path))
+    return (
+      snapshot.exists &&
+      !snapshot.isBinary &&
+      MarkdownFileAdapterFactory.Extensions.has(ext(snapshot.path))
+    )
   }
 
   public create(): FileAdapter {

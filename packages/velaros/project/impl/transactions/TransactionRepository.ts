@@ -44,7 +44,10 @@ export interface TransactionRepositoryApi {
   /** 删掉一个事务（连同终态保留顺序里的记录）；返回原来有没有。 */
   delete(transactionId: string): boolean
   /** 用从落盘状态读回的事务整个替换事务表，并按 isTerminal 重建终态保留顺序。 */
-  hydrate(transactions: readonly StoredTransaction[], isTerminal: (transaction: StoredTransaction) => boolean): void
+  hydrate(
+    transactions: readonly StoredTransaction[],
+    isTerminal: (transaction: StoredTransaction) => boolean
+  ): void
   /** 拷一份结构快照（事务对象保持原引用），新增事务发布失败时交给 restore 换回。 */
   snapshot(): TransactionRepositorySnapshot
   /** 用快照整个换掉当前的事务表与终态保留顺序。 */
@@ -59,7 +62,7 @@ export interface TransactionRepositoryApi {
   capBytes(
     measure: (transaction: StoredTransaction) => number,
     maxBytes: number,
-    protectedIds: ReadonlySet<string>,
+    protectedIds: ReadonlySet<string>
   ): readonly string[]
 }
 
@@ -100,7 +103,7 @@ export class TransactionRepository implements TransactionRepositoryApi {
     const deleted = this.transactions.delete(transactionId)
     if (deleted) {
       this.terminalTransactionOrder = this.terminalTransactionOrder.filter(
-        (retainedId) => retainedId !== transactionId,
+        (retainedId) => retainedId !== transactionId
       )
     }
     return deleted
@@ -109,10 +112,10 @@ export class TransactionRepository implements TransactionRepositoryApi {
   /** 从 durable snapshot 装载事务，并按现有状态重建终态保留顺序。 */
   public hydrate(
     transactions: readonly StoredTransaction[],
-    isTerminal: (transaction: StoredTransaction) => boolean,
+    isTerminal: (transaction: StoredTransaction) => boolean
   ): void {
     this.transactions = new Map(
-      transactions.map((transaction) => [transaction.transactionId, transaction]),
+      transactions.map((transaction) => [transaction.transactionId, transaction])
     )
     this.terminalTransactionOrder = transactions
       .filter(isTerminal)
@@ -136,7 +139,7 @@ export class TransactionRepository implements TransactionRepositoryApi {
   public retainTerminal(transactionId: string): readonly string[] {
     if (!this.transactions.has(transactionId)) return []
     this.terminalTransactionOrder = this.terminalTransactionOrder.filter(
-      (retainedId) => retainedId !== transactionId,
+      (retainedId) => retainedId !== transactionId
     )
     this.terminalTransactionOrder.push(transactionId)
     return this.capTerminalTransactions(transactionId)
@@ -146,7 +149,7 @@ export class TransactionRepository implements TransactionRepositoryApi {
   public capBytes(
     measure: (transaction: StoredTransaction) => number,
     maxBytes: number,
-    protectedIds: ReadonlySet<string>,
+    protectedIds: ReadonlySet<string>
   ): readonly string[] {
     const sizes = new Map<string, number>()
     let total = 0

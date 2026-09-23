@@ -3,7 +3,11 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import { createBrowserLoginGate } from '../../../dist/browser/impl/workspace/BrowserLoginGate.js'
-import { buildBrowserLoginGateMessage, buildBrowserLoginGateRecord, resolveBrowserLoginGateOrigin } from '../../../dist/browser/utils/login-gate.js'
+import {
+  buildBrowserLoginGateMessage,
+  buildBrowserLoginGateRecord,
+  resolveBrowserLoginGateOrigin,
+} from '../../../dist/browser/utils/login-gate.js'
 import { buildInspectionScript } from '../../../dist/browser/utils/page-scripts/inspection.js'
 
 const requiresLoginDetection = {
@@ -67,7 +71,10 @@ void test('login detection ships inside the inspection script (no extra evaluate
 })
 
 void test('login gate origin follows the space identity strategy', () => {
-  assert.equal(resolveBrowserLoginGateOrigin('https://example.com/login?next=1'), 'https://example.com')
+  assert.equal(
+    resolveBrowserLoginGateOrigin('https://example.com/login?next=1'),
+    'https://example.com'
+  )
   assert.equal(resolveBrowserLoginGateOrigin('about:blank'), 'about:blank')
   assert.equal(resolveBrowserLoginGateOrigin(null), '')
 })

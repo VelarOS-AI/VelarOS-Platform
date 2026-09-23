@@ -18,7 +18,9 @@ test('one-time publication never overwrites a target or leaves a partial file on
     expect(readFileSync(path, 'utf8')).toBe('first')
     expect(readdirSync(root)).toEqual(['key'])
     expect(statSync(path).mode & 0o777).toBe(0o600)
-  } finally { rmSync(root, { recursive: true, force: true }) }
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 })
 
 test('secret boxes authenticate prefix and content, reopen persisted keys and reject corrupt keys', () => {
@@ -35,11 +37,17 @@ test('secret boxes authenticate prefix and content, reopen persisted keys and re
     encrypted[encrypted.length - 1] ^= 1
     expect(() => first.decrypt(encrypted)).toThrow()
     expect(() => first.decrypt(Buffer.from('invalid'))).toThrow()
-    expect(() => createFileSecretBox({ ...options, prefix: Buffer.from('OTHER\0') }).decrypt(first.encrypt('value'))).toThrow()
+    expect(() =>
+      createFileSecretBox({ ...options, prefix: Buffer.from('OTHER\0') }).decrypt(
+        first.encrypt('value')
+      )
+    ).toThrow()
     writeFileSync(keyPath, 'broken')
     expect(() => createFileSecretBox(options).prepare()).toThrow('Invalid local secret key')
     expect(readFileSync(keyPath, 'utf8')).toBe('broken')
-  } finally { rmSync(root, { recursive: true, force: true }) }
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 })
 
 test('concurrent processes encrypt using the same completely published key', async () => {
@@ -48,19 +56,27 @@ test('concurrent processes encrypt using the same completely published key', asy
   try {
     const keyPath = join(root, 'key')
     const source = resolve(import.meta.dir, '../src/utils/FileSecretBox.ts')
-    const ciphertexts = await Promise.all(Array.from({ length: 8 }, async (_, index) => {
-      const code = `import { createFileSecretBox } from ${JSON.stringify(source)};
+    const ciphertexts = await Promise.all(
+      Array.from({ length: 8 }, async (_, index) => {
+        const code = `import { createFileSecretBox } from ${JSON.stringify(source)};
         const box = createFileSecretBox({keyPath: () => ${JSON.stringify(keyPath)}, prefix: Buffer.from('TEST')});
         process.stdout.write(box.encrypt(${JSON.stringify(String(index))}).toString('base64'));`
-      const child = Bun.spawn([process.execPath, '-e', code], { stdout: 'pipe', stderr: 'pipe' })
-      children.push(child)
-      const [output, error, status] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
-      expect(error).toBe('')
-      expect(status).toBe(0)
-      return Buffer.from(output, 'base64')
-    }))
+        const child = Bun.spawn([process.execPath, '-e', code], { stdout: 'pipe', stderr: 'pipe' })
+        children.push(child)
+        const [output, error, status] = await Promise.all([
+          new Response(child.stdout).text(),
+          new Response(child.stderr).text(),
+          child.exited,
+        ])
+        expect(error).toBe('')
+        expect(status).toBe(0)
+        return Buffer.from(output, 'base64')
+      })
+    )
     const box = createFileSecretBox({ keyPath: () => keyPath, prefix: Buffer.from('TEST') })
-    expect(ciphertexts.map((value) => box.decrypt(value))).toEqual(Array.from({ length: 8 }, (_, index) => String(index)))
+    expect(ciphertexts.map((value) => box.decrypt(value))).toEqual(
+      Array.from({ length: 8 }, (_, index) => String(index))
+    )
     expect(readdirSync(root)).toEqual(['key'])
     expect(readFileSync(keyPath).length).toBe(32)
   } finally {

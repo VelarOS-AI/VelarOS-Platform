@@ -40,14 +40,16 @@ export function spliceGb18030Bytes(original: Uint8Array, before: string, after: 
   // 差异太大算不出来：只留公共前缀与后缀的原字节，中间整段重新编码；有了时间上限，不会演变成无界的差异搜索。
   // 前后缀的边界落在代理对中间（字节位置记着 0xffffffff）时往里退一个码元。
   let prefix = 0
-  while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix += 1
+  while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix])
+    prefix += 1
   if (offsets[prefix] === 0xffffffff) prefix -= 1
   let suffix = 0
   while (
     suffix < before.length - prefix &&
     suffix < after.length - prefix &&
     before[before.length - suffix - 1] === after[after.length - suffix - 1]
-  ) suffix += 1
+  )
+    suffix += 1
   if (offsets[before.length - suffix] === 0xffffffff) suffix -= 1
   return Buffer.concat([
     original.subarray(0, offsets[prefix]),
@@ -71,6 +73,9 @@ function gb18030CharOffsets(original: Uint8Array, before: string): Uint32Array {
   }
   offsets[unit] = byte
   if (byte !== original.length || unit !== before.length)
-    throw new AppError(TextFileErrorCodes.lossy, '原始字节与文本坐标不一致。', undefined, { bytes: original.length, chars: before.length })
+    throw new AppError(TextFileErrorCodes.lossy, '原始字节与文本坐标不一致。', undefined, {
+      bytes: original.length,
+      chars: before.length,
+    })
   return offsets
 }

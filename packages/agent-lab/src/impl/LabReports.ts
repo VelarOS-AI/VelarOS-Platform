@@ -26,7 +26,10 @@ export interface LabReportsApi {
   /** 把一批运行报告模型渲染成一份自包含 HTML。 */
   renderRunReportHtml: (models: readonly RunReportModel[], options?: ReportRenderOptions) => string
   /** 把一批历史归档视图渲染成一份自包含 HTML；缺的字段显示破折号。 */
-  renderHistoricalReportHtml: (views: readonly RunArchiveView[], options?: ReportRenderOptions) => string
+  renderHistoricalReportHtml: (
+    views: readonly RunArchiveView[],
+    options?: ReportRenderOptions
+  ) => string
   /** 渲染一份真实任务报告；它永远不嵌入提示词、回答、绝对路径或产物正文。 */
   renderRealTaskReportHtml: (record: RealTaskRecord, assessment: RealTaskAssessment) => string
 }
@@ -36,11 +39,17 @@ class LabReports implements LabReportsApi {
     return createRunReportModel(archive)
   }
 
-  public renderRunReportHtml(models: readonly RunReportModel[], options: ReportRenderOptions = {}): string {
+  public renderRunReportHtml(
+    models: readonly RunReportModel[],
+    options: ReportRenderOptions = {}
+  ): string {
     return renderReportHtml(models, options)
   }
 
-  public renderHistoricalReportHtml(views: readonly RunArchiveView[], options: ReportRenderOptions = {}): string {
+  public renderHistoricalReportHtml(
+    views: readonly RunArchiveView[],
+    options: ReportRenderOptions = {}
+  ): string {
     return renderHistoricalReportHtml(views, options)
   }
 

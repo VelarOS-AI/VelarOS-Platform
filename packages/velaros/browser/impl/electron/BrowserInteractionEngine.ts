@@ -30,13 +30,21 @@ import type {
 import type { BrowserSession } from '../../types/electron'
 import type { BrowserRuntimeKernel, BrowserRuntimePageDriverSession } from '../../types/electron.js'
 import type { BrowserPointerPoint } from '../../types/runtime.js'
-import { buildTargetActionEffect, readBrowserPointerPoint, resolvePageZoomFactor, resolveTargetActionClickMode } from '../../utils/cdp/interaction.js'
+import {
+  buildTargetActionEffect,
+  readBrowserPointerPoint,
+  resolvePageZoomFactor,
+  resolveTargetActionClickMode,
+} from '../../utils/cdp/interaction.js'
 import { evaluateInWebContents } from '../../utils/electron/evaluate'
 import { buildPageZoomHudScript, buildVirtualPointerScript } from '../../utils/electron/interaction'
 import { clampInteger, clampZoomFactor } from '../../utils/numbers.js'
 import { buildDragTargetScript } from '../../utils/page-scripts/drag'
 import { buildTargetActionScript } from '../../utils/page-scripts/target-action'
-import { buildHighlightFromTargetScript, buildHighlightScript } from '../../utils/page-scripts/target-highlight'
+import {
+  buildHighlightFromTargetScript,
+  buildHighlightScript,
+} from '../../utils/page-scripts/target-highlight'
 import { DEFAULT_BROWSER_VIEWPORT } from '../../utils/viewport.js'
 import { CdpInteractionEngine } from '../engines/CdpInteractionEngine'
 import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
@@ -57,38 +65,105 @@ export interface BrowserInteractionEngineApi {
   /** 运行时销毁时清空全部指针状态。 */
   dispose(): void
   /** 按目标元素描述做一步（点击、悬停、聚焦、全选），比坐标点击稳。 */
-  performTargetAction(sessionId: string, context: BrowserSiteContext, options: BrowserTargetActionOptions, abortSignal?: AbortSignal): Promise<BrowserTargetActionResult>
+  performTargetAction(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserTargetActionOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserTargetActionResult>
   /** 在当前焦点处插入文字（像输入法上屏，不发按键事件）。 */
-  insertText(sessionId: string, context: BrowserSiteContext, options: BrowserInsertTextOptions, abortSignal?: AbortSignal): Promise<BrowserInsertTextResult>
+  insertText(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserInsertTextOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserInsertTextResult>
   /** 按一个键（按下再抬起），可连按、可带修饰键；按住的修饰键照样带上。 */
-  pressKey(sessionId: string, context: BrowserSiteContext, options: BrowserPressKeyOptions, abortSignal?: AbortSignal): Promise<BrowserPressKeyResult>
+  pressKey(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserPressKeyOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPressKeyResult>
   /** 按下一个键并记在会话上，直到 keyUp。 */
-  keyDown(sessionId: string, context: BrowserSiteContext, input: BrowserKeyInput, abortSignal?: AbortSignal): Promise<BrowserKeyResult>
+  keyDown(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserKeyInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserKeyResult>
   /** 抬起一个按着的键。 */
-  keyUp(sessionId: string, context: BrowserSiteContext, input: BrowserKeyInput, abortSignal?: AbortSignal): Promise<BrowserKeyResult>
+  keyUp(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserKeyInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserKeyResult>
   /** 在指针现在的位置按下一个鼠标键。 */
-  mouseDown(sessionId: string, context: BrowserSiteContext, input: BrowserMouseButtonInput, abortSignal?: AbortSignal): Promise<BrowserMouseResult>
+  mouseDown(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserMouseButtonInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult>
   /** 在指针现在的位置松开一个鼠标键。 */
-  mouseUp(sessionId: string, context: BrowserSiteContext, input: BrowserMouseButtonInput, abortSignal?: AbortSignal): Promise<BrowserMouseResult>
+  mouseUp(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserMouseButtonInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult>
   /** 在指针现在的位置滚一下滚轮。 */
-  mouseWheel(sessionId: string, context: BrowserSiteContext, input: BrowserWheelInput, abortSignal?: AbortSignal): Promise<BrowserMouseResult>
+  mouseWheel(
+    sessionId: string,
+    context: BrowserSiteContext,
+    input: BrowserWheelInput,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult>
   /** 会话关闭时丢掉它的输入状态（按着的键、鼠标键与指针位置）。 */
   clearInputState(sessionId: string): void
   /** 在视口坐标上点一下，作为目标点击失败后的兜底。 */
-  clickCoordinates(sessionId: string, context: BrowserSiteContext, options: BrowserClickCoordinatesOptions, abortSignal?: AbortSignal): Promise<BrowserClickCoordinatesResult>
+  clickCoordinates(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserClickCoordinatesOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserClickCoordinatesResult>
   /** 把一个目标拖到另一个目标上。 */
-  dragTargets(sessionId: string, context: BrowserSiteContext, options: BrowserDragOptions, abortSignal?: AbortSignal): Promise<BrowserDragResult>
+  dragTargets(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserDragOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserDragResult>
   /** 把鼠标移到某个位置，可拆成几步；按着鼠标键时就是拖。 */
-  moveMouse(sessionId: string, context: BrowserSiteContext, options: BrowserMoveMouseOptions, abortSignal?: AbortSignal): Promise<BrowserMouseResult>
+  moveMouse(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserMoveMouseOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserMouseResult>
   /** 在页面上给目标元素画一个短暂的高亮框，方便用户看清 agent 在操作哪里。 */
-  highlightTarget(session: BrowserSession, target: BrowserElementTargetHint, label?: LooseOptional<string>): Promise<void>
+  highlightTarget(
+    session: BrowserSession,
+    target: BrowserElementTargetHint,
+    label?: LooseOptional<string>
+  ): Promise<void>
   /** 把输入焦点交给受控页面。 */
   focusWebContents(session: BrowserSession): void
   /** 改页面缩放比例。 */
-  setPageZoom(sessionId: string, context: BrowserSiteContext, options: BrowserPageZoomOptions, abortSignal?: AbortSignal): Promise<BrowserPageZoomResult>
+  setPageZoom(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserPageZoomOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPageZoomResult>
 }
 
-export class BrowserInteractionEngine extends CdpInteractionEngine implements BrowserInteractionEngineApi {
+export class BrowserInteractionEngine
+  extends CdpInteractionEngine
+  implements BrowserInteractionEngineApi
+{
   /** 记录每个 WebContents 的最新页面内指针位置，用于平滑移动虚拟指针。 */
   private readonly pointerPositions = new Map<number, BrowserPointerPoint>()
 
@@ -96,10 +171,9 @@ export class BrowserInteractionEngine extends CdpInteractionEngine implements Br
     private readonly electronKernel: BrowserRuntimeKernel,
     private readonly pageWaiter: BrowserPageWaiter,
     targetRefs: BrowserTargetRefStore,
-    onPreviewPointer?: LooseOptional<(
-      sessionId: string,
-      pointer: BrowserPagePreviewPointerEvent
-    ) => void>
+    onPreviewPointer?: LooseOptional<
+      (sessionId: string, pointer: BrowserPagePreviewPointerEvent) => void
+    >
   ) {
     super(electronKernel, targetRefs, onPreviewPointer)
   }
@@ -269,7 +343,11 @@ export class BrowserInteractionEngine extends CdpInteractionEngine implements Br
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
     this.focusWebContents(session)
-    const repeat = await this.pressWithDriver(this.getPageDriver(sessionId, session), sessionId, options)
+    const repeat = await this.pressWithDriver(
+      this.getPageDriver(sessionId, session),
+      sessionId,
+      options
+    )
 
     if (options.waitForNavigation) {
       // Enter 等按键可能提交表单，按需等待页面稳定。
@@ -362,7 +440,8 @@ export class BrowserInteractionEngine extends CdpInteractionEngine implements Br
       buildDragTargetScript(hydratedOptions),
       true
     )
-    if (!resolved.matched) return {
+    if (!resolved.matched)
+      return {
         ...resolved,
         steps,
         capturedAt: Date.now(),
@@ -370,7 +449,8 @@ export class BrowserInteractionEngine extends CdpInteractionEngine implements Br
 
     const sourcePoint = readBrowserPointerPoint(resolved.source.point)
     const targetPoint = readBrowserPointerPoint(resolved.target.point)
-    if (!sourcePoint || !targetPoint) return {
+    if (!sourcePoint || !targetPoint)
+      return {
         ...resolved,
         matched: false,
         startX: sourcePoint ? sourcePoint.x : null,
@@ -445,9 +525,18 @@ export class BrowserInteractionEngine extends CdpInteractionEngine implements Br
     const point = await this.clampViewportPoint(session, options.x, options.y)
     const pressed = this.inputState(sessionId).buttons.size > 0
 
-    await this.animateVirtualPointer(session, this.buildPointerPath(session, point.x, point.y), pressed)
+    await this.animateVirtualPointer(
+      session,
+      this.buildPointerPath(session, point.x, point.y),
+      pressed
+    )
     this.focusWebContents(session)
-    await this.mouseMoveWithDriver(this.getPageDriver(sessionId, session), sessionId, point, clampInteger(options.steps, 1, 60, 1))
+    await this.mouseMoveWithDriver(
+      this.getPageDriver(sessionId, session),
+      sessionId,
+      point,
+      clampInteger(options.steps, 1, 60, 1)
+    )
     return this.mouseSnapshot(sessionId, this.resolveCurrentPageUrl(session, context.url))
   }
 
@@ -458,11 +547,16 @@ export class BrowserInteractionEngine extends CdpInteractionEngine implements Br
     abortSignal?: AbortSignal
   ): Promise<BrowserKeyResult> {
     abortSignal?.throwIfAborted()
-    if (this.getExternalPageSession(sessionId)) return super.keyDown(sessionId, context, input, abortSignal)
+    if (this.getExternalPageSession(sessionId))
+      return super.keyDown(sessionId, context, input, abortSignal)
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
     this.focusWebContents(session)
-    const held = await this.keyDownWithDriver(this.getPageDriver(sessionId, session), sessionId, input.key)
+    const held = await this.keyDownWithDriver(
+      this.getPageDriver(sessionId, session),
+      sessionId,
+      input.key
+    )
     return { url: this.resolveCurrentPageUrl(session, context.url), key: input.key, held }
   }
 
@@ -473,10 +567,15 @@ export class BrowserInteractionEngine extends CdpInteractionEngine implements Br
     abortSignal?: AbortSignal
   ): Promise<BrowserKeyResult> {
     abortSignal?.throwIfAborted()
-    if (this.getExternalPageSession(sessionId)) return super.keyUp(sessionId, context, input, abortSignal)
+    if (this.getExternalPageSession(sessionId))
+      return super.keyUp(sessionId, context, input, abortSignal)
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-    const held = await this.keyUpWithDriver(this.getPageDriver(sessionId, session), sessionId, input.key)
+    const held = await this.keyUpWithDriver(
+      this.getPageDriver(sessionId, session),
+      sessionId,
+      input.key
+    )
     return { url: this.resolveCurrentPageUrl(session, context.url), key: input.key, held }
   }
 
@@ -487,12 +586,18 @@ export class BrowserInteractionEngine extends CdpInteractionEngine implements Br
     abortSignal?: AbortSignal
   ): Promise<BrowserMouseResult> {
     abortSignal?.throwIfAborted()
-    if (this.getExternalPageSession(sessionId)) return super.mouseDown(sessionId, context, input, abortSignal)
+    if (this.getExternalPageSession(sessionId))
+      return super.mouseDown(sessionId, context, input, abortSignal)
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
     const state = this.inputState(sessionId)
     this.focusWebContents(session)
-    await this.mouseButtonWithDriver(this.getPageDriver(sessionId, session), sessionId, 'mousePressed', input)
+    await this.mouseButtonWithDriver(
+      this.getPageDriver(sessionId, session),
+      sessionId,
+      'mousePressed',
+      input
+    )
     await this.updateVirtualPointer(session, state.x, state.y, true)
     return this.mouseSnapshot(sessionId, this.resolveCurrentPageUrl(session, context.url))
   }
@@ -504,11 +609,17 @@ export class BrowserInteractionEngine extends CdpInteractionEngine implements Br
     abortSignal?: AbortSignal
   ): Promise<BrowserMouseResult> {
     abortSignal?.throwIfAborted()
-    if (this.getExternalPageSession(sessionId)) return super.mouseUp(sessionId, context, input, abortSignal)
+    if (this.getExternalPageSession(sessionId))
+      return super.mouseUp(sessionId, context, input, abortSignal)
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
     const state = this.inputState(sessionId)
-    await this.mouseButtonWithDriver(this.getPageDriver(sessionId, session), sessionId, 'mouseReleased', input)
+    await this.mouseButtonWithDriver(
+      this.getPageDriver(sessionId, session),
+      sessionId,
+      'mouseReleased',
+      input
+    )
     await this.updateVirtualPointer(session, state.x, state.y, state.buttons.size > 0)
     return this.mouseSnapshot(sessionId, this.resolveCurrentPageUrl(session, context.url))
   }
@@ -520,7 +631,8 @@ export class BrowserInteractionEngine extends CdpInteractionEngine implements Br
     abortSignal?: AbortSignal
   ): Promise<BrowserMouseResult> {
     abortSignal?.throwIfAborted()
-    if (this.getExternalPageSession(sessionId)) return super.mouseWheel(sessionId, context, input, abortSignal)
+    if (this.getExternalPageSession(sessionId))
+      return super.mouseWheel(sessionId, context, input, abortSignal)
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
     this.focusWebContents(session)

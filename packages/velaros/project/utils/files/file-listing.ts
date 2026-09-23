@@ -7,7 +7,12 @@ import type { GitCheckIgnoreRunner } from '@velaros-ai/core/path-rules'
 import { createIgnorePolicy } from '@velaros-ai/core/path-rules'
 
 import type { CommandProvider } from '../../contract/requires.js'
-import type { ListedDirectory, ListingDependencies, ListingDirectory, ListingNode } from '../../types/file-store.js'
+import type {
+  ListedDirectory,
+  ListingDependencies,
+  ListingDirectory,
+  ListingNode,
+} from '../../types/file-store.js'
 import type { FileListEntry, ObserveInput } from '../../types/io.js'
 import { matchesAny } from '../glob.js'
 import { normalizeRel } from '../path.js'
@@ -45,7 +50,7 @@ function gitCheckIgnoreWith(command: CommandProvider): GitCheckIgnoreRunner {
         result.stdout
           .split(NulSeparator)
           .filter(Boolean)
-          .map((item) => normalizeRel(item).replace(/\/$/, '')),
+          .map((item) => normalizeRel(item).replace(/\/$/, ''))
       )
     } catch {
       // arch-guard:silent-catch-ok git check-ignore 不可用时回退到本地 gitignore 解析。
@@ -65,7 +70,7 @@ export function normalizeFilterList(values: LooseOptional<readonly string[]>): s
  */
 export async function listProjectFiles(
   input: ObserveInput,
-  dependencies: ListingDependencies,
+  dependencies: ListingDependencies
 ): Promise<FileListEntry[]> {
   const out: FileListEntry[] = []
   const max = input.maxFiles ?? ProjectTuning.files.listMaxFiles
@@ -87,7 +92,9 @@ export async function listProjectFiles(
 
   const requestsGitignoreExclusion = input.excludeGitignored ?? true
   const startIgnored =
-    requestsGitignoreExclusion && startRel !== '.' && (await ignorePolicy.shouldSkip(startDir, true))
+    requestsGitignoreExclusion &&
+    startRel !== '.' &&
+    (await ignorePolicy.shouldSkip(startDir, true))
   if (startIgnored && isTrue(input.excludeGitignored)) return out
   const excludeGitignored = requestsGitignoreExclusion && !startIgnored
 
@@ -109,17 +116,22 @@ export async function listProjectFiles(
       }
       listed.push({
         directory,
-        entries: entries.filter((entry) => entry.name !== VersionControlEntryName).map((entry) => {
-          const abs = path.join(directory.abs, entry.name)
-          return { entry, abs, rel: normalizeRel(path.relative(dependencies.root, abs)) }
-        }),
+        entries: entries
+          .filter((entry) => entry.name !== VersionControlEntryName)
+          .map((entry) => {
+            const abs = path.join(directory.abs, entry.name)
+            return { entry, abs, rel: normalizeRel(path.relative(dependencies.root, abs)) }
+          }),
       })
     }
     const ignored = excludeGitignored
       ? await ignorePolicy.ignoredAmong(
           listed.flatMap(({ entries }) =>
-            entries.map(({ entry, abs }) => ({ absolutePath: abs, isDirectory: entry.isDirectory() })),
-          ),
+            entries.map(({ entry, abs }) => ({
+              absolutePath: abs,
+              isDirectory: entry.isDirectory(),
+            }))
+          )
         )
       : new Set<string>()
     const nextLevel: ListingDirectory[] = []
@@ -134,7 +146,11 @@ export async function listProjectFiles(
           if (!access) continue
           outputRel = access.rel
         }
-        if (!hasExplicitStartPath && !(await dependencies.visible(rel, entry.isDirectory() ? 'observe' : 'search'))) continue
+        if (
+          !hasExplicitStartPath &&
+          !(await dependencies.visible(rel, entry.isDirectory() ? 'observe' : 'search'))
+        )
+          continue
         const node: ListingNode = {
           entry: { path: outputRel, type: entry.isDirectory() ? 'directory' : 'file' },
           included: isEmpty(include) || matchesAny(rel, include),

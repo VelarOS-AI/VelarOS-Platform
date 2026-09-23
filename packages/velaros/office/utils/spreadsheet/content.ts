@@ -7,10 +7,24 @@
 
 import { z } from 'zod'
 
-import { isArray, isBoolean, isEmpty, isNumber, isPlainObject, isPresent, isString, Log, trimmedStringOrEmpty } from '@velaros-ai/core'
+import {
+  isArray,
+  isBoolean,
+  isEmpty,
+  isNumber,
+  isPlainObject,
+  isPresent,
+  isString,
+  Log,
+  trimmedStringOrEmpty,
+} from '@velaros-ai/core'
 
 import { OfficeInputLimits } from '../../contract/constants.js'
-import type { ExcelCellInput, OfficeSpreadsheetInput, SpreadsheetSheetInput } from '../../types/office.js'
+import type {
+  ExcelCellInput,
+  OfficeSpreadsheetInput,
+  SpreadsheetSheetInput,
+} from '../../types/office.js'
 import { isMarkdownTableSeparator, parseMarkdownTableRow } from '../markdown.js'
 
 const log = Log.tag('OfficeSpreadsheetContent')
@@ -97,7 +111,7 @@ export const spreadsheetSheetArraySchema = z
       numberFormats: z
         .record(
           z.string().regex(/^[A-Z]+[1-9]\d*(?::[A-Z]+[1-9]\d*)?$/iu),
-          z.string().min(1).max(OfficeInputLimits.spreadsheet.numberFormatChars),
+          z.string().min(1).max(OfficeInputLimits.spreadsheet.numberFormatChars)
         )
         .optional(),
     })
@@ -120,9 +134,7 @@ export function parseStringifiedSpreadsheetSheets(
   try {
     const parsed = JSON.parse(content)
     if (!isArray(parsed) || isEmpty(parsed)) return null
-    const looksLikeSheets = parsed.every(
-      (item) => isPlainObject(item) && isArray(item.rows)
-    )
+    const looksLikeSheets = parsed.every((item) => isPlainObject(item) && isArray(item.rows))
     if (!looksLikeSheets) return null
 
     const withNames = parsed.map((item, index) => ({
@@ -190,7 +202,9 @@ export function parseJsonSpreadsheetRows(content: string): Nullable<ExcelCellInp
       .slice(0, OfficeInputLimits.spreadsheet.rows)
       .map((row) => {
         const cells = isArray(row) ? row : [row]
-        return cells.slice(0, OfficeInputLimits.spreadsheet.columns).map(coerceSpreadsheetDynamicCell)
+        return cells
+          .slice(0, OfficeInputLimits.spreadsheet.columns)
+          .map(coerceSpreadsheetDynamicCell)
       })
       .filter((row) => row.length > 0)
   } catch (error) {

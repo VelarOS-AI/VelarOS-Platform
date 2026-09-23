@@ -39,10 +39,7 @@ export function createReadonlyMapSnapshot<K, V>(
     entries: () => items.entries(),
     keys: () => items.keys(),
     values: () => items.values(),
-    forEach: (
-      callback: (value: V, key: K, map: ReadonlyMap<K, V>) => void,
-      thisArg?: unknown
-    ) => {
+    forEach: (callback: (value: V, key: K, map: ReadonlyMap<K, V>) => void, thisArg?: unknown) => {
       for (const [key, value] of items) callback.call(thisArg, value, key, snapshot)
     },
     [Symbol.iterator]: () => items[Symbol.iterator](),

@@ -79,7 +79,8 @@ export function detectPlatform(): LogPlatform {
     self?: unknown
   }
 
-  if (processRef?.versions?.electron) return processRef.type === 'renderer' ? 'electron-renderer' : 'electron-main'
+  if (processRef?.versions?.electron)
+    return processRef.type === 'renderer' ? 'electron-renderer' : 'electron-main'
   if (isPresent(globalRef.window) && isPresent(globalRef.document)) return 'browser'
   if (isPresent(globalRef.self) && !isPresent(globalRef.window)) return 'worker'
   if (processRef?.versions?.node) return 'node'
@@ -93,7 +94,8 @@ export function detectLevel(environment: LogEnvironment): LogLevel {
 export function shouldDispatch(record: LogRecord, transport: LogTransport): boolean {
   if (Object.is(transport.enabled, false)) return false
   if (transport.accepts && !transport.accepts(record)) return false
-  if (record.kind === 'message' && transport.minLevel) return LEVEL_TO_NUMERIC[record.level] >= LEVEL_TO_NUMERIC[transport.minLevel]
+  if (record.kind === 'message' && transport.minLevel)
+    return LEVEL_TO_NUMERIC[record.level] >= LEVEL_TO_NUMERIC[transport.minLevel]
   return true
 }
 

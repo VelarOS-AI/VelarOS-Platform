@@ -16,7 +16,11 @@ import { isMemoryId, normalizeTags } from './entry-file.js'
  * 没给 tags 时交回的也没有这一项：沿用原来的标签还是空着，由作用域看这条原来有没有来定。
  */
 export function saveInput(input: unknown): MemorySaveInput {
-  if (!isPlainObject(input)) throw new AppError('VALIDATION', 'save 要一个对象：{ id, type, title, description, tags?, content }')
+  if (!isPlainObject(input))
+    throw new AppError(
+      'VALIDATION',
+      'save 要一个对象：{ id, type, title, description, tags?, content }'
+    )
   const entry: MemorySaveInput = {
     id: memoryId(input.id),
     type: memoryType(input.type),
@@ -37,7 +41,10 @@ export function removeInput(input: unknown): string {
 /** id：小写字母、数字和连字符，不超长，不是 Windows 的保留名。 */
 function memoryId(value: unknown): string {
   if (isString(value) && isMemoryId(value)) return value
-  throw new AppError('VALIDATION', `id 只能用小写字母、数字和连字符，最多 ${MemoryLimits.idChars} 个字符，也不能是 con、nul 这类 Windows 保留名；比如 reply-style`)
+  throw new AppError(
+    'VALIDATION',
+    `id 只能用小写字母、数字和连字符，最多 ${MemoryLimits.idChars} 个字符，也不能是 con、nul 这类 Windows 保留名；比如 reply-style`
+  )
 }
 
 /** 类别：只认四个之一。 */
@@ -52,7 +59,8 @@ function lineField(name: string, value: unknown, limit: number): string {
   const text = trimmedStringOrEmpty(value)
   if (!text) throw new AppError('VALIDATION', `${name} 要是非空的字符串`)
   if (/[\r\n]/u.test(text)) throw new AppError('VALIDATION', `${name} 不能换行，写成一行`)
-  if (text.length > limit) throw new AppError('VALIDATION', `${name} 最多 ${limit} 个字符，这里有 ${text.length} 个`)
+  if (text.length > limit)
+    throw new AppError('VALIDATION', `${name} 最多 ${limit} 个字符，这里有 ${text.length} 个`)
   return text
 }
 
@@ -61,19 +69,32 @@ function contentField(value: unknown): string {
   if (!isString(value)) throw new AppError('VALIDATION', 'content 要是字符串（可以是空的）')
   const text = value.trim()
   if (text.length > MemoryLimits.contentChars) {
-    throw new AppError('VALIDATION', `content 最多 ${MemoryLimits.contentChars} 个字符，这里有 ${text.length} 个；拆成几条记`)
+    throw new AppError(
+      'VALIDATION',
+      `content 最多 ${MemoryLimits.contentChars} 个字符，这里有 ${text.length} 个；拆成几条记`
+    )
   }
   return text
 }
 
 /** 标签：字符串数组，每个不含逗号和换行、不超长，规整之后不超过条数上限。 */
 function tagsField(value: unknown): string[] {
-  if (!isArray(value) || !value.every(isString)) throw new AppError('VALIDATION', "tags 要是字符串数组，比如 ['发版', '提交']")
+  if (!isArray(value) || !value.every(isString))
+    throw new AppError('VALIDATION', "tags 要是字符串数组，比如 ['发版', '提交']")
   for (const tag of value) {
-    if (/[,\r\n]/u.test(tag)) throw new AppError('VALIDATION', `标签「${tag}」里有逗号或换行；一个标签写一个主题`)
-    if (tag.trim().length > MemoryLimits.tagChars) throw new AppError('VALIDATION', `一个标签最多 ${MemoryLimits.tagChars} 个字符，「${tag}」超了`)
+    if (/[,\r\n]/u.test(tag))
+      throw new AppError('VALIDATION', `标签「${tag}」里有逗号或换行；一个标签写一个主题`)
+    if (tag.trim().length > MemoryLimits.tagChars)
+      throw new AppError(
+        'VALIDATION',
+        `一个标签最多 ${MemoryLimits.tagChars} 个字符，「${tag}」超了`
+      )
   }
   const tags = normalizeTags(value)
-  if (tags.length > MemoryLimits.tagCount) throw new AppError('VALIDATION', `一条最多 ${MemoryLimits.tagCount} 个标签，这里有 ${tags.length} 个`)
+  if (tags.length > MemoryLimits.tagCount)
+    throw new AppError(
+      'VALIDATION',
+      `一条最多 ${MemoryLimits.tagCount} 个标签，这里有 ${tags.length} 个`
+    )
   return tags
 }

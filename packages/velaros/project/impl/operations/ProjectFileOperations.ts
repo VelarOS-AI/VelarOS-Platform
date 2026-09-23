@@ -4,7 +4,6 @@
  * 校验与撤销账本都在项目内核里，这里只负责把模型的步骤编成事务、把结果写成模型面的样子。
  */
 
-
 import type { ProjectOperationContext } from '../../contract/requires.js'
 import type {
   ProjectChangeInput,
@@ -78,29 +77,43 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
     return this.guarded(ctx, false, () => listEntries(input, ctx))
   }
 
-  public search(input: ProjectSearchInput, ctx: ProjectOperationContext): Promise<ProjectSearchResult> {
+  public search(
+    input: ProjectSearchInput,
+    ctx: ProjectOperationContext
+  ): Promise<ProjectSearchResult> {
     return this.guarded(ctx, false, () => searchFiles(input, ctx))
   }
 
-  public async edit(input: ProjectEditInput, ctx: ProjectOperationContext): Promise<ProjectEditResult> {
+  public async edit(
+    input: ProjectEditInput,
+    ctx: ProjectOperationContext
+  ): Promise<ProjectEditResult> {
     try {
       ctx.abortSignal.throwIfAborted()
       const steps = await locateEditSteps(editInput(input).steps, ctx)
-      return await this.gate.run(ctx.project.getRootPath(), true, ctx.abortSignal, () => commitProjectEdit(steps, ctx))
+      return await this.gate.run(ctx.project.getRootPath(), true, ctx.abortSignal, () =>
+        commitProjectEdit(steps, ctx)
+      )
     } catch (error) {
       throw projectFailure(error)
     }
   }
 
-  public async inspect(input: ProjectChangeInput, ctx: ProjectOperationContext): Promise<ProjectChangeInspection> {
+  public async inspect(
+    input: ProjectChangeInput,
+    ctx: ProjectOperationContext
+  ): Promise<ProjectChangeInspection> {
     try {
       ctx.abortSignal.throwIfAborted()
       const { changeRef } = changeInput(input)
       const record = changeRecordOf(changeRef, ctx)
       const transaction = await changeTransactionOf(ctx, record.transactionId, changeRef)
       const inspected: ProjectChangeInspection = {
-        changeRef, status: transaction.status, changedFiles: transaction.changedFiles,
-        diff: transaction.diff, diffLines: transaction.changedLines,
+        changeRef,
+        status: transaction.status,
+        changedFiles: transaction.changedFiles,
+        diff: transaction.diff,
+        diffLines: transaction.changedLines,
       }
       if (record.oldRevisions) inspected.oldRevisions = record.oldRevisions
       if (record.newRevisions) inspected.newRevisions = record.newRevisions
@@ -110,16 +123,22 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
     }
   }
 
-  public async undo(input: ProjectChangeInput, ctx: ProjectOperationContext): Promise<ProjectUndoResult> {
+  public async undo(
+    input: ProjectChangeInput,
+    ctx: ProjectOperationContext
+  ): Promise<ProjectUndoResult> {
     try {
       ctx.abortSignal.throwIfAborted()
       const { changeRef } = changeInput(input)
       const { transactionId } = changeRecordOf(changeRef, ctx)
       const transaction = await changeTransactionOf(ctx, transactionId, changeRef)
       // 撤销是幂等的：已经撤销过就如实回执，不报错。
-      if (transaction.status === 'rolled_back') return { changeRef, changedFiles: transaction.changedFiles, alreadyUndone: true }
+      if (transaction.status === 'rolled_back')
+        return { changeRef, changedFiles: transaction.changedFiles, alreadyUndone: true }
       const kernel = await ctx.project.kernel()
-      const rolled = await this.gate.run(ctx.project.getRootPath(), true, ctx.abortSignal, () => kernel.rollback({ transactionId }))
+      const rolled = await this.gate.run(ctx.project.getRootPath(), true, ctx.abortSignal, () =>
+        kernel.rollback({ transactionId })
+      )
       return { changeRef, changedFiles: rolled.changedFiles }
     } catch (error) {
       throw projectFailure(error)
@@ -127,15 +146,20 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
   }
 
   /** 在项目资源门里跑一个读操作；项目的领域错误翻成交给程序的错误。 */
-  private async guarded<T>(ctx: ProjectOperationContext, write: boolean, action: () => Promise<T>): Promise<T> {
+  private async guarded<T>(
+    ctx: ProjectOperationContext,
+    write: boolean,
+    action: () => Promise<T>
+  ): Promise<T> {
     try {
       return await this.gate.run(ctx.project.getRootPath(), write, ctx.abortSignal, action)
     } catch (error) {
       throw projectFailure(error)
     }
   }
-
 }
 
 /** 整个进程只有一份的项目文件操作；项目空间把它挂在代码面的 `project` 命名空间上。 */
-export const projectFileOperations: ProjectFileOperationsApi = new ProjectFileOperations(projectExecutionGate)
+export const projectFileOperations: ProjectFileOperationsApi = new ProjectFileOperations(
+  projectExecutionGate
+)

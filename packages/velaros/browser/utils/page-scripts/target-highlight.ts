@@ -88,7 +88,10 @@ export function buildHighlightScript(input: {
 }
 
 /** 按目标元素描述拼高亮脚本。 */
-export function buildHighlightFromTargetScript(target: BrowserElementTargetHint, label?: string): string {
+export function buildHighlightFromTargetScript(
+  target: BrowserElementTargetHint,
+  label?: string
+): string {
   const selectors: string[] = []
   if (target.css) selectors.push(target.css)
   if (target.attributes?.id) selectors.push(`#${target.attributes.id}`)

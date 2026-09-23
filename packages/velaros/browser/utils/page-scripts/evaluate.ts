@@ -76,11 +76,14 @@ function toJsonSafeValue(value: any, path: any[] = []): any {
   if (type === 'string' || type === 'number' || type === 'boolean') return value
   if (type === 'bigint' || type === 'symbol') return String(value)
   if (type === 'function') return undefined
-  if (value instanceof Error) return { name: value.name, message: value.message, stack: value.stack || null }
+  if (value instanceof Error)
+    return { name: value.name, message: value.message, stack: value.stack || null }
   // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：同上，页面内联 + DOM 能力探测。
-  if (typeof Element !== 'undefined' && value instanceof Element) return describeBrowserEvaluatedElement(value)
+  if (typeof Element !== 'undefined' && value instanceof Element)
+    return describeBrowserEvaluatedElement(value)
   // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：同上，页面内联 + DOM 能力探测。
-  if (typeof Node !== 'undefined' && value instanceof Node) return {
+  if (typeof Node !== 'undefined' && value instanceof Node)
+    return {
       nodeType: value.nodeType,
       nodeName: value.nodeName,
       text: String(value.textContent || '')
@@ -96,7 +99,8 @@ function toJsonSafeValue(value: any, path: any[] = []): any {
   path.push(value)
   try {
     // @arch-guard:suspend code-style/forbid-raw-runtime-type-guards 理由：页面内联，isArray 在页面上下文不存在。
-    if (Array.isArray(value)) return value.map((item) => {
+    if (Array.isArray(value))
+      return value.map((item) => {
         const converted = toJsonSafeValue(item, path)
         // @arch-guard:suspend code-style/forbid-nullish-churn 理由：页面内联，toNullable 在页面上下文不存在；数组里的 undefined 按 JSON 的规矩写成 null。
         return converted === undefined ? null : converted
@@ -126,7 +130,8 @@ function toJsonSafeValue(value: any, path: any[] = []): any {
  */
 export function buildEvaluateScript(options: BrowserEvaluateScriptOptions): string {
   const syntaxError = precheckBrowserInlineScriptSyntax(`return (\n${options.script}\n);`)
-  if (syntaxError) return `({ url: location.href, ok: false, error: { name: 'SyntaxError', message: ${JSON.stringify(syntaxError)} } })`
+  if (syntaxError)
+    return `({ url: location.href, ok: false, error: { name: 'SyntaxError', message: ${JSON.stringify(syntaxError)} } })`
 
   const head = `(async () => {
   const __velarosEvaluate = async (...args) => {
@@ -179,8 +184,4 @@ export function buildEvaluateScript(options: BrowserEvaluateScriptOptions): stri
 //# sourceURL=${EvaluateSourceUrl}`
 }
 
-export {
-  describeBrowserEvaluatedElement,
-  precheckBrowserInlineScriptSyntax,
-  toJsonSafeValue,
-}
+export { describeBrowserEvaluatedElement, precheckBrowserInlineScriptSyntax, toJsonSafeValue }

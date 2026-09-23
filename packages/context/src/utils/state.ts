@@ -13,6 +13,7 @@ export function contextFailure(code: string, message: string): Error & { code: s
 }
 /** 核对非负整数范围，拒绝 NaN 与负数。 */
 export function boundedInteger(value: number, max: number): number {
-  if (!Number.isSafeInteger(value) || value < 0 || value > max) throw contextFailure('INVALID_RANGE', '上下文范围必须是上限内的非负整数。')
+  if (!Number.isSafeInteger(value) || value < 0 || value > max)
+    throw contextFailure('INVALID_RANGE', '上下文范围必须是上限内的非负整数。')
   return value
 }

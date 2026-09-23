@@ -11,7 +11,13 @@ import { basename, join } from 'node:path'
 
 import { test } from 'bun:test'
 
-import { createMemoryStore, MemoryLimits, memoryOperations, MemoryTypes, VelarMemoryModule } from '../../dist/memory/index.js'
+import {
+  createMemoryStore,
+  MemoryLimits,
+  memoryOperations,
+  MemoryTypes,
+  VelarMemoryModule,
+} from '../../dist/memory/index.js'
 
 test('package root exposes the store factory and the three operations', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-memory-consumer-')))
@@ -19,9 +25,21 @@ test('package root exposes the store factory and the three operations', async ()
   try {
     const scope = createMemoryStore({ root }).scope('project:/srv/consumer')
     const context = { abortSignal: new AbortController().signal, memory: scope }
-    const saved = await memoryOperations.save({ id: 'consumer', type: 'reference', title: '构建产物', description: '入口照样能用', content: '' }, context)
+    const saved = await memoryOperations.save(
+      {
+        id: 'consumer',
+        type: 'reference',
+        title: '构建产物',
+        description: '入口照样能用',
+        content: '',
+      },
+      context
+    )
     assert.deepEqual(saved, { id: 'consumer', created: true })
-    assert.deepEqual((await memoryOperations.list(context)).map((entry) => entry.id), ['consumer'])
+    assert.deepEqual(
+      (await memoryOperations.list(context)).map((entry) => entry.id),
+      ['consumer']
+    )
     assert.match(await scope.renderIndex(), /\[构建产物\]\(consumer\)/u)
   } finally {
     await rm(root, { recursive: true, force: true })

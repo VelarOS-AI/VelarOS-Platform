@@ -15,14 +15,8 @@ interface ValueService {
 
 const ValueCapability = kernelModules.token<ValueService>('test.value')
 const DerivedCapability = kernelModules.token<ValueService>('test.derived')
-const CompatibleVersionCapability = kernelModules.token<ValueService>(
-  'test.versioned',
-  '1.4.0',
-)
-const IncompatibleVersionCapability = kernelModules.token<ValueService>(
-  'test.versioned',
-  '2.0.0',
-)
+const CompatibleVersionCapability = kernelModules.token<ValueService>('test.versioned', '1.4.0')
+const IncompatibleVersionCapability = kernelModules.token<ValueService>('test.versioned', '2.0.0')
 
 function moduleDefinition(options: {
   id: string
@@ -87,8 +81,9 @@ describe('KernelModuleHost', () => {
     await host.start()
     const active = host.describeComposition()
     expect(active.capabilities[0]).toMatchObject({ active: true, activeGeneration: 1 })
-    expect(active.modules.find((module) => module.manifest.id === 'module.provider'))
-      .toMatchObject({ status: 'ready', generation: 1 })
+    expect(active.modules.find((module) => module.manifest.id === 'module.provider')).toMatchObject(
+      { status: 'ready', generation: 1 }
+    )
     expect(Object.isFrozen(active)).toBeTrue()
     expect(Object.isFrozen(active.moduleOrder)).toBeTrue()
     expect(JSON.parse(JSON.stringify(active))).toEqual(active)
@@ -145,26 +140,27 @@ describe('KernelModuleHost', () => {
     let activationCount = 0
     let disposalCount = 0
     const host = new KernelModuleHost({ apiVersion: 1 })
-    host.registerModule(moduleDefinition({
-      id: 'module.concurrent-lifecycle',
-      provides: [ValueCapability],
-      activate(context) {
-        activationCount += 1
-        context.registerService(ValueCapability, { read: () => 'ready' })
-        return {
-          ready: () => readyGate,
-          dispose: () => {
-            disposalCount += 1
-          },
-        }
-      },
-    }))
+    host.registerModule(
+      moduleDefinition({
+        id: 'module.concurrent-lifecycle',
+        provides: [ValueCapability],
+        activate(context) {
+          activationCount += 1
+          context.registerService(ValueCapability, { read: () => 'ready' })
+          return {
+            ready: () => readyGate,
+            dispose: () => {
+              disposalCount += 1
+            },
+          }
+        },
+      })
+    )
 
     const firstStart = host.start()
     const secondStart = host.start()
     expect(secondStart).toBe(firstStart)
-    expect(() => host.registerModule(moduleDefinition({ id: 'module.late' })))
-      .toThrow(KernelError)
+    expect(() => host.registerModule(moduleDefinition({ id: 'module.late' }))).toThrow(KernelError)
 
     const firstDispose = host.dispose()
     const secondDispose = host.dispose()
@@ -194,10 +190,7 @@ describe('KernelModuleHost', () => {
       }),
     ])
 
-    expect(host.resolvePlan().order).toEqual([
-      'module.z-provider',
-      'module.a-consumer',
-    ])
+    expect(host.resolvePlan().order).toEqual(['module.z-provider', 'module.a-consumer'])
   })
 
   test('delivers attributed events and removes subscriptions on disposal', async () => {
@@ -221,9 +214,7 @@ describe('KernelModuleHost', () => {
         requires: [{ id: ValueCapability.id }],
         activate(context) {
           context.events.subscribe<string>('test.changed', (event) => {
-            received.push(
-              `${event.sourceModuleId}:${event.sequence}:${event.payload}`,
-            )
+            received.push(`${event.sourceModuleId}:${event.sequence}:${event.payload}`)
           })
         },
       }),
@@ -376,7 +367,7 @@ describe('KernelModuleHost', () => {
       moduleDefinition({
         id: 'module.missing',
         requires: [{ id: ValueCapability.id }],
-      }),
+      })
     )
     expectHostError(missingHost, 'MISSING_CAPABILITY')
 
@@ -390,16 +381,15 @@ describe('KernelModuleHost', () => {
       moduleDefinition({
         id: 'module.consumer',
         version: '0.1.0',
-        requires: [{
-          id: CompatibleVersionCapability.id,
-          versionRange: '^1.0.0',
-        }],
+        requires: [
+          {
+            id: CompatibleVersionCapability.id,
+            versionRange: '^1.0.0',
+          },
+        ],
       }),
     ])
-    expect(compatibleHost.resolvePlan().order).toEqual([
-      'module.provider',
-      'module.consumer',
-    ])
+    expect(compatibleHost.resolvePlan().order).toEqual(['module.provider', 'module.consumer'])
 
     const incompatibleHost = new KernelModuleHost({ apiVersion: 1 })
     incompatibleHost.registerModules([
@@ -411,10 +401,12 @@ describe('KernelModuleHost', () => {
       moduleDefinition({
         id: 'module.consumer',
         version: '0.1.0',
-        requires: [{
-          id: IncompatibleVersionCapability.id,
-          versionRange: '^1.0.0',
-        }],
+        requires: [
+          {
+            id: IncompatibleVersionCapability.id,
+            versionRange: '^1.0.0',
+          },
+        ],
       }),
     ])
     expectHostError(incompatibleHost, 'VERSION_MISMATCH')
@@ -466,15 +458,12 @@ describe('KernelModuleHost', () => {
       }),
     ])
 
-    const hiddenFailure = await hiddenConsumerHost.start()
-      .catch((error: unknown) => error)
+    const hiddenFailure = await hiddenConsumerHost.start().catch((error: unknown) => error)
     expect(hiddenFailure).toBeInstanceOf(KernelError)
-    expect(
-      (hiddenFailure as KernelError).cause,
-    ).toBeInstanceOf(KernelError)
-    expect(
-      ((hiddenFailure as KernelError).cause as KernelError).code,
-    ).toBe('UNDECLARED_CAPABILITY_ACCESS')
+    expect((hiddenFailure as KernelError).cause).toBeInstanceOf(KernelError)
+    expect(((hiddenFailure as KernelError).cause as KernelError).code).toBe(
+      'UNDECLARED_CAPABILITY_ACCESS'
+    )
 
     const undeclaredProviderHost = new KernelModuleHost({ apiVersion: 1 })
     undeclaredProviderHost.registerModule(
@@ -483,19 +472,15 @@ describe('KernelModuleHost', () => {
         activate(context) {
           context.registerService(ValueCapability, { read: () => 'value' })
         },
-      }),
+      })
     )
-    const providerFailure = await undeclaredProviderHost.start()
-      .catch((error: unknown) => error)
+    const providerFailure = await undeclaredProviderHost.start().catch((error: unknown) => error)
     expect(providerFailure).toBeInstanceOf(KernelError)
-    expect(
-      ((providerFailure as KernelError).cause as KernelError).code,
-    ).toBe('UNDECLARED_CAPABILITY_PROVIDER')
-
-    const wrongVersionToken = kernelModules.token<ValueService>(
-      ValueCapability.id,
-      '1.1.0',
+    expect(((providerFailure as KernelError).cause as KernelError).code).toBe(
+      'UNDECLARED_CAPABILITY_PROVIDER'
     )
+
+    const wrongVersionToken = kernelModules.token<ValueService>(ValueCapability.id, '1.1.0')
     const wrongVersionHost = new KernelModuleHost({ apiVersion: 1 })
     wrongVersionHost.registerModule(
       moduleDefinition({
@@ -506,14 +491,12 @@ describe('KernelModuleHost', () => {
             read: () => 'wrong-version',
           })
         },
-      }),
+      })
     )
-    const wrongVersionFailure = await wrongVersionHost.start()
-      .catch((error: unknown) => error)
-    expect(
-      ((wrongVersionFailure as KernelError).cause as KernelError)
-        .code,
-    ).toBe('UNDECLARED_CAPABILITY_PROVIDER')
+    const wrongVersionFailure = await wrongVersionHost.start().catch((error: unknown) => error)
+    expect(((wrongVersionFailure as KernelError).cause as KernelError).code).toBe(
+      'UNDECLARED_CAPABILITY_PROVIDER'
+    )
   })
 
   test('reports module health without interpreting capability details', async () => {
@@ -529,7 +512,7 @@ describe('KernelModuleHost', () => {
             }),
           }
         },
-      }),
+      })
     )
 
     await host.start()
@@ -561,15 +544,13 @@ describe('KernelModuleHost', () => {
             },
           }
         },
-      }),
+      })
     )
 
     await host.start().catch(() => undefined)
     expect(() =>
-      capturedContext?.registerService(
-        ValueCapability,
-        { read: () => 'resurrected' },
-      )).toThrow(KernelError)
+      capturedContext?.registerService(ValueCapability, { read: () => 'resurrected' })
+    ).toThrow(KernelError)
     await host.dispose()
 
     expect(disposeCount).toBe(1)
@@ -588,7 +569,7 @@ describe('KernelModuleHost', () => {
           await context.state.set('counter', 1)
           context.registerService(ValueCapability, { read: () => 'v1' })
         },
-      }),
+      })
     )
 
     await host.start()
@@ -607,7 +588,7 @@ describe('KernelModuleHost', () => {
             read: () => `v2:${previous}`,
           })
         },
-      }),
+      })
     )
 
     expect(host.getModule('module.replaceable')?.generation).toBe(2)
@@ -615,8 +596,7 @@ describe('KernelModuleHost', () => {
     expect(oldHandle.isActive()).toBe(false)
     expect(() => oldHandle.get()).toThrow(KernelError)
     expect(() => oldService.read()).toThrow(KernelError)
-    await expect(originalContext!.state.get('counter')).rejects
-      .toBeInstanceOf(KernelError)
+    await expect(originalContext!.state.get('counter')).rejects.toBeInstanceOf(KernelError)
   })
 
   test('module permission view cannot name a caller other than itself', async () => {
@@ -642,7 +622,7 @@ describe('KernelModuleHost', () => {
             ...({ callerModuleId: 'someone.else' } as Record<string, unknown>),
           })
         },
-      }),
+      })
     )
 
     await host.start()
@@ -679,7 +659,7 @@ describe('KernelModuleHost', () => {
             },
           }
         },
-      }),
+      })
     )
     await host.start()
 
@@ -693,7 +673,7 @@ describe('KernelModuleHost', () => {
         activate(context) {
           context.registerService(ValueCapability, { read: () => 'v2' })
         },
-      }),
+      })
     )
 
     expect(disposeCalls).toBe(1)
@@ -706,7 +686,7 @@ describe('KernelModuleHost', () => {
     const handle = host.getServiceHandle(ValueCapability)
     expect(handle.generation).toBe(2)
     await expect(
-      host.requestCapabilityPermission(ValueCapability, { permission: 'use' }),
+      host.requestCapabilityPermission(ValueCapability, { permission: 'use' })
     ).resolves.toMatchObject({ status: 'granted' })
   })
 
@@ -716,7 +696,7 @@ describe('KernelModuleHost', () => {
       moduleDefinition({
         id: 'module.needs-missing',
         requires: [{ id: 'test.missing', versionRange: '^1.0.0' }],
-      }),
+      })
     )
 
     // 依赖图不合法：resolvePlan 抛，快照照样给得出，并带上原因。
@@ -724,8 +704,7 @@ describe('KernelModuleHost', () => {
     const degraded = host.describeComposition()
     expect(degraded.resolutionError).toContain('test.missing')
     expect(degraded.moduleOrder).toEqual(['module.needs-missing'])
-    expect(degraded.modules.map((module) => module.manifest.id))
-      .toEqual(['module.needs-missing'])
+    expect(degraded.modules.map((module) => module.manifest.id)).toEqual(['module.needs-missing'])
     expect(degraded.capabilities).toEqual([])
     expect(JSON.parse(JSON.stringify(degraded))).toEqual(degraded)
 
@@ -742,12 +721,9 @@ describe('KernelModuleHost', () => {
         id: 'module.frozen-service',
         provides: [ValueCapability],
         activate(context) {
-          context.registerService(
-            ValueCapability,
-            Object.freeze({ read: () => 'frozen' }),
-          )
+          context.registerService(ValueCapability, Object.freeze({ read: () => 'frozen' }))
         },
-      }),
+      })
     )
 
     await host.start()
@@ -777,28 +753,30 @@ describe('KernelModuleHost', () => {
         activate(context) {
           context.registerService(ValueCapability, { read: () => 'stable' })
         },
-      }),
+      })
     )
     await host.start()
     const stableService = host.getService(ValueCapability)
 
-    const failure = await host.replaceModule(
-      moduleDefinition({
-        id: 'module.atomic-replace',
-        version: '2.0.0',
-        provides: [ValueCapability],
-        activate(context) {
-          replacementContext = context
-          context.registerService(ValueCapability, { read: () => 'broken' })
-          return {
-            async ready() {
-              await context.events.publish('replacement.ready', 'staged')
-              throw new Error('replacement failed')
-            },
-          }
-        },
-      }),
-    ).catch((error: unknown) => error)
+    const failure = await host
+      .replaceModule(
+        moduleDefinition({
+          id: 'module.atomic-replace',
+          version: '2.0.0',
+          provides: [ValueCapability],
+          activate(context) {
+            replacementContext = context
+            context.registerService(ValueCapability, { read: () => 'broken' })
+            return {
+              async ready() {
+                await context.events.publish('replacement.ready', 'staged')
+                throw new Error('replacement failed')
+              },
+            }
+          },
+        })
+      )
+      .catch((error: unknown) => error)
 
     expect(failure).toBeInstanceOf(KernelError)
     expect(host.getModule('module.atomic-replace')?.generation).toBe(1)
@@ -807,10 +785,8 @@ describe('KernelModuleHost', () => {
     expect(stableService.read()).toBe('stable')
     expect(deliveredEvents).toEqual([])
     expect(() =>
-      replacementContext?.registerService(
-        ValueCapability,
-        { read: () => 'resurrected' },
-      )).toThrow(KernelError)
+      replacementContext?.registerService(ValueCapability, { read: () => 'resurrected' })
+    ).toThrow(KernelError)
   })
 
   test('rejects service resolution through the wrong capability version', async () => {
@@ -822,13 +798,10 @@ describe('KernelModuleHost', () => {
         activate(context) {
           context.registerService(ValueCapability, { read: () => 'value' })
         },
-      }),
+      })
     )
     await host.start()
-    const wrongVersion = kernelModules.token<ValueService>(
-      ValueCapability.id,
-      '2.0.0',
-    )
+    const wrongVersion = kernelModules.token<ValueService>(ValueCapability.id, '2.0.0')
 
     expect(host.getOptionalService(wrongVersion)).toBeUndefined()
     expect(() => host.getService(wrongVersion)).toThrow(KernelError)
@@ -838,9 +811,7 @@ describe('KernelModuleHost', () => {
     const observedRequests: string[] = []
     const permissionBroker: KernelPermissionBroker = {
       request: async (request) => {
-        observedRequests.push(
-          `${request.moduleId}:${request.generation}:${request.permission}`,
-        )
+        observedRequests.push(`${request.moduleId}:${request.generation}:${request.permission}`)
         return { status: 'granted', grantId: 'grant-1' }
       },
     }
@@ -857,30 +828,21 @@ describe('KernelModuleHost', () => {
         permissions: ['test.read'],
         async activate(context) {
           context.registerService(ValueCapability, { read: () => 'value' })
-          declaredStatus = (
-            await context.permissions.request({ permission: 'test.read' })
-          ).status
-          undeclaredStatus = (
-            await context.permissions.request({ permission: 'test.write' })
-          ).status
+          declaredStatus = (await context.permissions.request({ permission: 'test.read' })).status
+          undeclaredStatus = (await context.permissions.request({ permission: 'test.write' }))
+            .status
         },
-      }),
+      })
     )
 
     await host.start()
     expect(declaredStatus).toBe('granted')
     expect(undeclaredStatus).toBe('denied')
     expect(
-      await host.requestCapabilityPermission(
-        ValueCapability,
-        { permission: 'test.read' },
-      ),
+      await host.requestCapabilityPermission(ValueCapability, { permission: 'test.read' })
     ).toMatchObject({ status: 'granted' })
     expect(
-      await host.requestCapabilityPermission(
-        ValueCapability,
-        { permission: 'test.write' },
-      ),
+      await host.requestCapabilityPermission(ValueCapability, { permission: 'test.write' })
     ).toMatchObject({ status: 'denied' })
     expect(observedRequests).toEqual([
       'module.permission:1:test.read',
@@ -894,11 +856,9 @@ describe('KernelModuleHost', () => {
         id: 'module.default-deny',
         permissions: ['test.read'],
         async activate(context) {
-          defaultStatus = (
-            await context.permissions.request({ permission: 'test.read' })
-          ).status
+          defaultStatus = (await context.permissions.request({ permission: 'test.read' })).status
         },
-      }),
+      })
     )
     await defaultHost.start()
     expect(defaultStatus).toBe('denied')
@@ -914,29 +874,30 @@ describe('KernelModuleHost', () => {
         activate() {
           localActivateCalled = true
         },
-      }),
+      })
     )
 
-    const missingFailure = await missingAdapterHost.start()
-      .catch((error: unknown) => error)
+    const missingFailure = await missingAdapterHost.start().catch((error: unknown) => error)
     expect(missingFailure).toBeInstanceOf(KernelError)
-    expect(
-      ((missingFailure as KernelError).cause as KernelError).code,
-    ).toBe('MISSING_ISOLATION_ADAPTER')
+    expect(((missingFailure as KernelError).cause as KernelError).code).toBe(
+      'MISSING_ISOLATION_ADAPTER'
+    )
     expect(localActivateCalled).toBe(false)
 
     let adapterActivateCalled = false
     const adaptedHost = new KernelModuleHost({
       apiVersion: 1,
-      isolationAdapters: [{
-        isolation: 'remote',
-        activate: (_module, context) => {
-          adapterActivateCalled = true
-          context.registerService(ValueCapability, {
-            read: () => 'isolated',
-          })
+      isolationAdapters: [
+        {
+          isolation: 'remote',
+          activate: (_module, context) => {
+            adapterActivateCalled = true
+            context.registerService(ValueCapability, {
+              read: () => 'isolated',
+            })
+          },
         },
-      }],
+      ],
     })
     adaptedHost.registerModule(
       moduleDefinition({
@@ -946,7 +907,7 @@ describe('KernelModuleHost', () => {
         activate() {
           localActivateCalled = true
         },
-      }),
+      })
     )
 
     await adaptedHost.start()
@@ -956,10 +917,7 @@ describe('KernelModuleHost', () => {
   })
 })
 
-function expectHostError(
-  host: KernelModuleHost,
-  code: KernelError['code'],
-): void {
+function expectHostError(host: KernelModuleHost, code: KernelError['code']): void {
   try {
     host.resolvePlan()
     throw new Error('Expected host plan to fail')

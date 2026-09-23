@@ -1,65 +1,66 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from 'bun:test'
 
-import { archive, observation } from "../spec/support.js";
-import { labArchives, labReports } from "../src/index.js";
-import { normalizeObservation } from "../src/utils/measure/normalize.js";
-import { assertSelfContainedHtml, findExternalResourceViolations } from "../src/utils/render/html.js";
+import { archive, observation } from '../spec/support.js'
+import { labArchives, labReports } from '../src/index.js'
+import { normalizeObservation } from '../src/utils/measure/normalize.js'
+import {
+  assertSelfContainedHtml,
+  findExternalResourceViolations,
+} from '../src/utils/render/html.js'
 
-describe("archive compatibility and reports", () => {
-  test("reads legacy shapes without inventing absent fields", () => {
-    const v0 = labArchives.readRunArchiveView([{ ok: true }]);
-    const v1 = labArchives.readRunArchiveView({ sessionId: "s1", rounds: [{ ok: true }] });
-    const v2 = labArchives.readRunArchiveView({ manifest: { runId: "r2" }, rounds: [] });
-    expect(v0.shape).toBe("v0-array");
-    expect(v0.passed).toBeNull();
-    expect(v1.total).toBe(1);
-    expect(v1.passed).toBeNull();
-    expect(v1.drops).toBeNull();
-    expect(v2.findings).toBeNull();
-  });
+describe('archive compatibility and reports', () => {
+  test('reads legacy shapes without inventing absent fields', () => {
+    const v0 = labArchives.readRunArchiveView([{ ok: true }])
+    const v1 = labArchives.readRunArchiveView({ sessionId: 's1', rounds: [{ ok: true }] })
+    const v2 = labArchives.readRunArchiveView({ manifest: { runId: 'r2' }, rounds: [] })
+    expect(v0.shape).toBe('v0-array')
+    expect(v0.passed).toBeNull()
+    expect(v1.total).toBe(1)
+    expect(v1.passed).toBeNull()
+    expect(v1.drops).toBeNull()
+    expect(v2.findings).toBeNull()
+  })
 
-  test("deduplicates cumulative debug snapshots by toolCallId", () => {
-    const base = observation();
+  test('deduplicates cumulative debug snapshots by toolCallId', () => {
+    const base = observation()
     const call = {
-      id: "call-1",
-      turnId: "turn-1",
-      name: "read",
-      input: { path: "/a" },
+      id: 'call-1',
+      turnId: 'turn-1',
+      name: 'read',
+      input: { path: '/a' },
       result: null,
       isError: null,
       startedAt: null,
       finishedAt: null,
-    } as const;
+    } as const
     const normalized = normalizeObservation({
       ...base,
       turns: [
-        { id: "turn-1", index: 0, toolCalls: [call], finishReasons: [] },
+        { id: 'turn-1', index: 0, toolCalls: [call], finishReasons: [] },
         {
-          id: "turn-2",
+          id: 'turn-2',
           index: 1,
-          toolCalls: [{ ...call, turnId: "turn-2" }],
+          toolCalls: [{ ...call, turnId: 'turn-2' }],
           finishReasons: [],
         },
       ],
-    });
-    expect(normalized.turns.flatMap((turn) => turn.toolCalls)).toHaveLength(1);
-  });
+    })
+    expect(normalized.turns.flatMap((turn) => turn.toolCalls)).toHaveLength(1)
+  })
 
-  test("renders deterministic self-contained v3 and legacy reports", () => {
-    const model = labReports.createRunReportModel(archive());
-    const first = labReports.renderRunReportHtml([model], { generatedAt: 1 });
-    const second = labReports.renderRunReportHtml([model], { generatedAt: 1 });
-    expect(first).toBe(second);
-    expect(findExternalResourceViolations(first)).toEqual([]);
+  test('renders deterministic self-contained v3 and legacy reports', () => {
+    const model = labReports.createRunReportModel(archive())
+    const first = labReports.renderRunReportHtml([model], { generatedAt: 1 })
+    const second = labReports.renderRunReportHtml([model], { generatedAt: 1 })
+    expect(first).toBe(second)
+    expect(findExternalResourceViolations(first)).toEqual([])
     const historical = labReports.renderHistoricalReportHtml(
-      [labArchives.readRunArchiveView({ sessionId: "legacy", rounds: [] })],
-      { generatedAt: 1 },
-    );
-    expect(historical).toContain('data-value="null">—</span>');
+      [labArchives.readRunArchiveView({ sessionId: 'legacy', rounds: [] })],
+      { generatedAt: 1 }
+    )
+    expect(historical).toContain('data-value="null">—</span>')
     expect(() =>
-      assertSelfContainedHtml(
-        `${historical}<script src="https://bad.invalid/x.js"></script>`,
-      ),
-    ).toThrow();
-  });
-});
+      assertSelfContainedHtml(`${historical}<script src="https://bad.invalid/x.js"></script>`)
+    ).toThrow()
+  })
+})

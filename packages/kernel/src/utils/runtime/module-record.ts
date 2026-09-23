@@ -19,7 +19,7 @@ export const HealthyModuleHealth: KernelModuleHealth = Object.freeze({ status: '
 export function createModuleRecord(
   definition: KernelModuleDefinition,
   manifest: KernelModuleManifest,
-  generation: number,
+  generation: number
 ): ModuleRecord {
   return {
     definition: {
@@ -40,7 +40,7 @@ export function assertModuleContextActive(record: ModuleRecord): void {
   throw new KernelError(
     KernelErrorCodes.moduleState,
     `内核模块上下文 "${record.definition.manifest.id}" 已经失效`,
-    { moduleId: record.definition.manifest.id },
+    { moduleId: record.definition.manifest.id }
   )
 }
 

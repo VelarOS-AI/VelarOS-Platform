@@ -4,7 +4,18 @@
  */
 
 /** 运行平台，取值同 Node 的 `process.platform`。 */
-export type RuntimePlatform = 'aix' | 'android' | 'darwin' | 'freebsd' | 'haiku' | 'linux' | 'openbsd' | 'sunos' | 'win32' | 'cygwin' | 'netbsd'
+export type RuntimePlatform =
+  | 'aix'
+  | 'android'
+  | 'darwin'
+  | 'freebsd'
+  | 'haiku'
+  | 'linux'
+  | 'openbsd'
+  | 'sunos'
+  | 'win32'
+  | 'cygwin'
+  | 'netbsd'
 
 /** shell 种类：Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的顺序挑选，其他平台是 POSIX shell。 */
 export type ShellKind = 'git-bash' | 'pwsh' | 'powershell' | 'cmd' | 'posix'

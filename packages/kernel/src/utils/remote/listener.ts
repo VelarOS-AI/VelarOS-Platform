@@ -8,10 +8,7 @@ import { WebSocketServer } from 'ws'
 import { isNull, isString } from '@velaros-ai/core'
 
 import { RemoteNodeSocketPath } from '../../contract/constants'
-import type {
-  RemoteNodeListener,
-  RemoteNodeListenerOptions,
-} from '../../types/remote'
+import type { RemoteNodeListener, RemoteNodeListenerOptions } from '../../types/remote'
 import { isNodeError } from '../fs'
 import { RemoteNodeMaxFrameBytes } from '../wire/remote-node'
 
@@ -39,7 +36,7 @@ function listenServer(server: Server, host: string, port: number): Promise<numbe
 
 /** 在端口区间里逐个试,EADDRINUSE 顺延,其它错误直接上抛。 */
 export async function listenRemoteNode(
-  options: RemoteNodeListenerOptions,
+  options: RemoteNodeListenerOptions
 ): Promise<RemoteNodeListener> {
   const { bindHost, portStart, portEnd } = options
   if (!Number.isInteger(portStart) || !Number.isInteger(portEnd) || portStart > portEnd) {

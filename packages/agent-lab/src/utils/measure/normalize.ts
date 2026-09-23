@@ -2,7 +2,11 @@
  * 观测归一：把驱动报上来的东西折成 `unique-tool-call` 这一个测量口径，探测器与指标都从这里之后开始算。
  * 纯测量：不碰 Node 模块、不发请求。
  */
-import type { ObservationCoverage, ObservationFace, ObservationPhase } from '../../contract/constants.js'
+import type {
+  ObservationCoverage,
+  ObservationFace,
+  ObservationPhase,
+} from '../../contract/constants.js'
 import { ObservationFaces } from '../../contract/constants.js'
 import type {
   Observation,
@@ -73,7 +77,7 @@ export function collectToolCalls(observation: Observation): readonly ToolCallRec
 /** 造一次「什么都没看到」的观测：七个面全是 `none`，缺的就是缺的，不拿空数组冒充看到了空。 */
 export function createUnobservedObservation(phase: ObservationPhase): Observation {
   const coverage = Object.fromEntries(
-    ObservationFaces.map((face) => [face, 'none' as ObservationCoverage]),
+    ObservationFaces.map((face) => [face, 'none' as ObservationCoverage])
   ) as Record<ObservationFace, ObservationCoverage>
   return {
     phase,

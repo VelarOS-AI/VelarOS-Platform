@@ -13,11 +13,7 @@ export type { RemoteNodeServerCredentialStore as RemoteNodeCredentialStore } fro
 // 宪章 §15 原则三:Node 零会话权威——它不认识会话、不持 Agent 主干,只把本机能力面摊开给
 // 唯一一台已配对的 Client。因此本文件的端口全是「被调」方向:没有任何允许 Node 主动向
 // Client 发起请求的回调形状,清单变更也只是单向推送而不是问答。
-import type {
-  RemoteNodeError,
-  RemoteNodeIdentity,
-  ScopeRef,
-} from './wire.js'
+import type { RemoteNodeError, RemoteNodeIdentity, ScopeRef } from './wire.js'
 
 /**
  * 一次能力派发的入参。
@@ -41,10 +37,8 @@ export interface RemoteNodeCapabilityInvokeRequest {
 export interface RemoteNodeCapabilityInvokeResult {
   readonly status: 'success' | 'denied'
   readonly output?: unknown
-  readonly error?: { readonly code: string, readonly message: string }
+  readonly error?: { readonly code: string; readonly message: string }
 }
-
-
 
 /** 已配对客户端的长期凭据。私钥永不上线,Node 侧只存公钥。 */
 export interface RemoteNodePairedCredential {
@@ -53,7 +47,6 @@ export interface RemoteNodePairedCredential {
   readonly clientName: string
   readonly pairedAt: number
 }
-
 
 /**
  * 审计行。
@@ -72,7 +65,6 @@ export interface RemoteNodeAuditEntry {
   readonly durationMs: number
   readonly errorCode: Nullable<string>
 }
-
 
 /**
  * 面向产品的本地执行流。
@@ -104,7 +96,6 @@ export type RemoteNodeActivityEvent =
       readonly output?: unknown
       readonly error: Nullable<RemoteNodeError>
     }
-
 
 /** 宿主装配 `RemoteNodeServer` 时必须交出来的全部东西。 */
 export interface RemoteNodeServerOptions {

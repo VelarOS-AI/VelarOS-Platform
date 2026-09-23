@@ -4,7 +4,13 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import { buildKeyDownEvent, buildKeyUpEvent, isKnownKeyName, modifiersMask, resolveKeyDefinition } from '../../utils/keyboard.js'
+import {
+  buildKeyDownEvent,
+  buildKeyUpEvent,
+  isKnownKeyName,
+  modifiersMask,
+  resolveKeyDefinition,
+} from '../../utils/keyboard.js'
 
 /** 认一个键，认不出来就让用例失败。 */
 function key(name: string) {
@@ -17,7 +23,13 @@ void describe('键位表', () => {
   void test('Enter 按下时上屏 \\r、keyCode 13；Tab、Escape 这类不出字的键用 rawKeyDown', () => {
     const enter = buildKeyDownEvent(key('Enter'), new Set(), false)
     assert.deepEqual(
-      { type: enter.type, key: enter.key, code: enter.code, keyCode: enter.windowsVirtualKeyCode, text: enter.text },
+      {
+        type: enter.type,
+        key: enter.key,
+        code: enter.code,
+        keyCode: enter.windowsVirtualKeyCode,
+        text: enter.text,
+      },
       { type: 'keyDown', key: 'Enter', code: 'Enter', keyCode: 13, text: '\r' }
     )
     const tab = buildKeyDownEvent(key('Tab'), new Set(), false)

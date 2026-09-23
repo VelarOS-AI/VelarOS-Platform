@@ -30,7 +30,7 @@ const DetachedCommentPattern = /^[\t ]*\r?\n[\t ]*\r?\n/
 export function planAddImport(
   path: string,
   content: string,
-  operation: AddImportOperation,
+  operation: AddImportOperation
 ): Nullable<SourceSplice> {
   const { sourceFile } = parseJsTs(path, content)
   const imports = topLevelImports(sourceFile)
@@ -65,21 +65,21 @@ export function planAddImport(
       return insertStatement(
         sourceFile,
         imports,
-        renderImport(module, { namespaceImport: alias }, style),
+        renderImport(module, { namespaceImport: alias }, style)
       )
     return holder.isTypeOnly ? combineSplices(content, promoteClause(sourceFile, holder, [])) : null
   }
   if (!isPresent(operation.defaultImport) && isEmpty(named)) {
     throw new ProjectError(
       'INVALID_INPUT',
-      'add_import 的 module 形式需要 sideEffectOnly、named、defaultImport 或 namespaceImport 之一',
+      'add_import 的 module 形式需要 sideEffectOnly、named、defaultImport 或 namespaceImport 之一'
     )
   }
   if (!dedupe)
     return insertStatement(
       sourceFile,
       imports,
-      renderImport(module, { defaultImport: operation.defaultImport, named }, style),
+      renderImport(module, { defaultImport: operation.defaultImport, named }, style)
     )
 
   // 去重只认值绑定：type-only 绑定会被编译擦除，满足不了值 import。已有同名 type-only 绑定时就地升级为值绑定，
@@ -87,8 +87,8 @@ export function planAddImport(
   const splices: SourceSplice[] = []
   const defaultHolder = preferValueClause(
     clauses.filter(
-      (clause) => isPresent(clause.name) && clause.name.text === operation.defaultImport,
-    ),
+      (clause) => isPresent(clause.name) && clause.name.text === operation.defaultImport
+    )
   )
   if (defaultHolder?.isTypeOnly) splices.push(...promoteClause(sourceFile, defaultHolder, []))
   const defaultImport = defaultHolder ? undefined : operation.defaultImport
@@ -100,7 +100,7 @@ export function planAddImport(
     const holders = clauses.flatMap((clause) =>
       namedElementsOf(clause)
         .filter((element) => elementKey(element) === key)
-        .map((element) => ({ clause, element })),
+        .map((element) => ({ clause, element }))
     )
     const [holder] = holders
     if (!holder) {
@@ -130,9 +130,9 @@ export function planAddImport(
             insertStatement(
               sourceFile,
               imports,
-              renderImport(module, { defaultImport, named: missing }, style),
+              renderImport(module, { defaultImport, named: missing }, style)
             ),
-          ]),
+          ])
     )
   }
   return isEmpty(splices) ? null : combineSplices(content, splices)
@@ -146,7 +146,7 @@ export function planAddImport(
 export function planRemoveImport(
   path: string,
   content: string,
-  operation: RemoveImportOperation,
+  operation: RemoveImportOperation
 ): SourceSplice {
   const { sourceFile } = parseJsTs(path, content)
   const imports = topLevelImports(sourceFile)
@@ -158,7 +158,7 @@ export function planRemoveImport(
     const matches = imports.filter((declaration) => importIdentity(declaration) === identity)
     return removeStatement(
       sourceFile,
-      single(matches, `未找到 import 语句：${requested.text}`, describe),
+      single(matches, `未找到 import 语句：${requested.text}`, describe)
     )
   }
 
@@ -176,7 +176,7 @@ export function planRemoveImport(
   const holder = single(
     holders,
     isEmpty(sameModule) ? moduleMissing : `模块 ${module} 的 import 中没有绑定：${name}`,
-    (candidate) => describe(candidate.declaration),
+    (candidate) => describe(candidate.declaration)
   )
   return removeBinding(sourceFile, holder.declaration, holder.binding)
 }
@@ -197,7 +197,7 @@ function requireModule(module: Optional<string>, operation: string): string {
   if (!isPresent(module))
     throw new ProjectError(
       'INVALID_INPUT',
-      `${operation} 需要 importStatement、moduleSpecifier 或 module`,
+      `${operation} 需要 importStatement、moduleSpecifier 或 module`
     )
   return module
 }
@@ -210,14 +210,14 @@ function single<T>(candidates: T[], notFound: string, describe: (candidate: T) =
     'AMBIGUOUS_TARGET',
     `找到 ${candidates.length} 条匹配的 import 声明，无法唯一确定要改哪一条`,
     { candidates: candidates.map(describe) },
-    '请改用 importStatement 指定完整的 import 语句。',
+    '请改用 importStatement 指定完整的 import 语句。'
   )
 }
 
 /** 调用方给的完整语句必须恰好是一条语法正确的 import 声明，否则在边界处拒绝，而不是原样塞进文件。 */
 function parseImportStatement(
   path: string,
-  statement: string,
+  statement: string
 ): { text: string; declaration: ts.ImportDeclaration } {
   const trimmed = statement.trim()
   const text = trimmed.endsWith(';') ? trimmed : `${trimmed};`
@@ -230,7 +230,7 @@ function parseImportStatement(
   ) {
     throw new ProjectError(
       'INVALID_INPUT',
-      `importStatement 必须是一条完整的 import 声明：${statement}`,
+      `importStatement 必须是一条完整的 import 声明：${statement}`
     )
   }
   return { text, declaration }
@@ -313,7 +313,7 @@ function dropTypeModifier(sourceFile: ts.SourceFile, element: ts.ImportSpecifier
 function promoteClause(
   sourceFile: ts.SourceFile,
   clause: ts.ImportClause,
-  requested: readonly ts.ImportSpecifier[],
+  requested: readonly ts.ImportSpecifier[]
 ): SourceSplice[] {
   const [keyword, firstBinding] = clause.getChildren(sourceFile)
   const splices = [
@@ -339,7 +339,7 @@ function mergeIntoClause(
   sourceFile: ts.SourceFile,
   clause: ts.ImportClause,
   defaultImport: Optional<string>,
-  missing: NamedSpec[],
+  missing: NamedSpec[]
 ): SourceSplice[] {
   const splices: SourceSplice[] = []
   // 能补 default 的 clause 自身没有 default，起点就是 `{`。
@@ -359,7 +359,7 @@ function mergeIntoClause(
               end: clause.end,
               text: `, { ${missing.map((spec) => spec.text).join(', ')} }`,
             },
-          ]),
+          ])
     )
   }
   return splices
@@ -372,7 +372,7 @@ function mergeIntoClause(
 function insertIntoNamedImports(
   sourceFile: ts.SourceFile,
   named: ts.NamedImports,
-  missing: NamedSpec[],
+  missing: NamedSpec[]
 ): SourceSplice[] {
   const texts = missing.map((spec) => spec.text)
   const last = named.elements.at(-1)
@@ -390,8 +390,7 @@ function insertIntoNamedImports(
   const trailingComma = named.elements.hasTrailingComma
   const eol = eolOf(content)
   const lines = texts.map(
-    (text, index) =>
-      `${indent}${text}${trailingComma || index < texts.length - 1 ? ',' : ''}${eol}`,
+    (text, index) => `${indent}${text}${trailingComma || index < texts.length - 1 ? ',' : ''}${eol}`
   )
   const splices = [{ start: closeLineStart, end: closeLineStart, text: lines.join('') }]
   if (!trailingComma) splices.push({ start: last.end, end: last.end, text: ',' })
@@ -424,7 +423,7 @@ function bindingOf(declaration: ts.ImportDeclaration, name: string): Optional<Im
     // 先按 imported 名匹配（`a as b` 用 a 命中），再退到本地名；行内 `type a` 同样适用。
     const element =
       bindings.elements.find(
-        (candidate) => (candidate.propertyName ?? candidate.name).text === name,
+        (candidate) => (candidate.propertyName ?? candidate.name).text === name
       ) ?? bindings.elements.find((candidate) => candidate.name.text === name)
     if (element) return { kind: 'named', clause, element }
   }
@@ -438,7 +437,7 @@ function bindingOf(declaration: ts.ImportDeclaration, name: string): Optional<Im
 function removeBinding(
   sourceFile: ts.SourceFile,
   declaration: ts.ImportDeclaration,
-  binding: ImportBinding,
+  binding: ImportBinding
 ): SourceSplice {
   const { clause } = binding
   if (binding.kind === 'named') {
@@ -469,7 +468,7 @@ function removeBinding(
  */
 function removeStatement(
   sourceFile: ts.SourceFile,
-  declaration: ts.ImportDeclaration,
+  declaration: ts.ImportDeclaration
 ): SourceSplice {
   const content = sourceFile.text
   let end = ts.getTrailingCommentRanges(content, declaration.end)?.at(-1)?.end ?? declaration.end
@@ -493,7 +492,7 @@ function removeStatement(
 function insertStatement(
   sourceFile: ts.SourceFile,
   imports: ts.ImportDeclaration[],
-  statement: string,
+  statement: string
 ): SourceSplice {
   const content = sourceFile.text
   const eol = eolOf(content)
@@ -540,7 +539,7 @@ function importStyle(imports: ts.ImportDeclaration[]): ImportStyle {
 function renderImport(
   module: string,
   bindings: { defaultImport?: string; namespaceImport?: string; named?: NamedSpec[] },
-  style: ImportStyle,
+  style: ImportStyle
 ): string {
   const specifier = `${style.quote}${module}${style.quote}`
   const named = bindings.named ?? []

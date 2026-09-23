@@ -1,8 +1,5 @@
 import { defineConfig, definePlugin } from '@velaros-ai/arch-guard'
-import {
-  codeStyleChecks,
-  createCodeStyleDefaults,
-} from '@velaros-ai/arch-guard/checks/code-style'
+import { codeStyleChecks, createCodeStyleDefaults } from '@velaros-ai/arch-guard/checks/code-style'
 
 /**
  * VelarOS Platform 仓库的 arch-guard 配置入口。
@@ -53,7 +50,6 @@ const platformCodeStyle = definePlugin({
       'code-style/forbid-raw-timers': {
         allowFiles: ['packages/core/src/utils/TimerScope.ts'],
       },
-
     },
   }),
 })

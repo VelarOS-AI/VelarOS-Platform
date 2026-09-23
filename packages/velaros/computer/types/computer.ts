@@ -15,7 +15,10 @@ export type ComputerPoint =
   | { x: number; y: number; coordinateSpace: 'global' }
 
 /** @AgentView 点击：坐标同 ComputerPoint；button 默认 left，count 默认 1（双击给 2，最多 3）。 */
-export type ComputerClickInput = ComputerPoint & { button?: 'left' | 'right' | 'middle'; count?: number }
+export type ComputerClickInput = ComputerPoint & {
+  button?: 'left' | 'right' | 'middle'
+  count?: number
+}
 
 /** @AgentView 要输入的文字：原样输入到当前焦点处，一次最多 10000 个字符。 */
 export interface ComputerTypeInput {
@@ -145,9 +148,7 @@ export interface ComputerPrimaryDisplayClickOptions extends ComputerClickModifie
   snapshotId: string
 }
 
-export type ComputerClickOptions =
-  | ComputerGlobalClickOptions
-  | ComputerPrimaryDisplayClickOptions
+export type ComputerClickOptions = ComputerGlobalClickOptions | ComputerPrimaryDisplayClickOptions
 
 /** 两种坐标空间共用的移动修饰：走多久（需要平滑移动的宿主用）。 */
 export interface ComputerMoveModifiers {
@@ -168,9 +169,7 @@ export interface ComputerPrimaryDisplayMoveOptions extends ComputerMoveModifiers
   snapshotId: string
 }
 
-export type ComputerMoveOptions =
-  | ComputerGlobalMoveOptions
-  | ComputerPrimaryDisplayMoveOptions
+export type ComputerMoveOptions = ComputerGlobalMoveOptions | ComputerPrimaryDisplayMoveOptions
 
 /** @AgentView 输入文字的结果：实际输入了多少个字符。 */
 export interface ComputerTypeResult {

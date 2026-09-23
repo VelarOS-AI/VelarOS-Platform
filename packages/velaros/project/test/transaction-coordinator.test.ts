@@ -52,7 +52,7 @@ describe('TransactionCoordinator', () => {
             },
           })
           expect(coordinator.isBusy(requestedTransactionId)).toBe(
-            requestedTransactionId === 'tx_active',
+            requestedTransactionId === 'tx_active'
           )
         }
       }

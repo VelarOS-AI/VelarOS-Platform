@@ -1,24 +1,13 @@
 import { randomUUID } from 'node:crypto'
-import {
-  readFile,
-  rename,
-  rm,
-  writeFile,
-} from 'node:fs/promises'
+import { readFile, rename, rm, writeFile } from 'node:fs/promises'
 
 import { stringifyPretty } from '@velaros-ai/core'
 
 import { KernelFileModes } from '../contract/constants'
 
-
 /** 判断一个错误是不是带指定 errno 码的 Node 文件系统错误。 */
-export function isNodeError(
-  error: unknown,
-  code: string,
-): error is NodeJS.ErrnoException {
-  return error instanceof Error
-    && 'code' in error
-    && error.code === code
+export function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error && error.code === code
 }
 
 /** 忽略「文件不存在」，别的错误照抛；给 `unlink`/`rm` 的 `.catch()` 用。 */
@@ -42,15 +31,11 @@ export async function readJsonFile(path: string): Promise<unknown> {
 export async function writeJsonFileAtomic(
   path: string,
   value: unknown,
-  mode: number = KernelFileModes.privateFile,
+  mode: number = KernelFileModes.privateFile
 ): Promise<void> {
   const temporaryPath = `${path}.${randomUUID()}.tmp`
   try {
-    await writeFile(
-      temporaryPath,
-      `${stringifyPretty(value)}\n`,
-      { encoding: 'utf8', mode },
-    )
+    await writeFile(temporaryPath, `${stringifyPretty(value)}\n`, { encoding: 'utf8', mode })
     await rename(temporaryPath, path)
   } catch (error) {
     await rm(temporaryPath, { force: true })

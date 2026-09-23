@@ -1,5 +1,14 @@
-import {isFalse,isUndefined} from '@velaros-ai/core'
-import { isArray, isBoolean, isEmpty, isFiniteNumber, isNull, isObject, isPlainObject, isString } from '@velaros-ai/core'
+import { isFalse, isUndefined } from '@velaros-ai/core'
+import {
+  isArray,
+  isBoolean,
+  isEmpty,
+  isFiniteNumber,
+  isNull,
+  isObject,
+  isPlainObject,
+  isString,
+} from '@velaros-ai/core'
 
 import type { OperationSchema } from '../../types/operations.js'
 
@@ -9,8 +18,14 @@ export function immutableOperationJson<T>(value: T): T {
   const copy = (item: unknown): unknown => {
     if (isNull(item) || isString(item) || isBoolean(item)) return item
     if (isFiniteNumber(item)) return item
-    if (!isObject(item) && !isNull(item) || seen.has(item)) throw new Error('操作数据必须是无环 JSON 值')
-    if (Object.getPrototypeOf(item) !== Object.prototype && !isNull(Object.getPrototypeOf(item)) && !isArray(item)) throw new Error('操作数据必须是普通 JSON 对象')
+    if ((!isObject(item) && !isNull(item)) || seen.has(item))
+      throw new Error('操作数据必须是无环 JSON 值')
+    if (
+      Object.getPrototypeOf(item) !== Object.prototype &&
+      !isNull(Object.getPrototypeOf(item)) &&
+      !isArray(item)
+    )
+      throw new Error('操作数据必须是普通 JSON 对象')
     seen.add(item)
     const result = isArray(item)
       ? item.map(copy)
@@ -24,48 +39,106 @@ export function immutableOperationJson<T>(value: T): T {
 /** 稳定排列字段，使同一 JSON 参数获得同一指纹。 */
 export function canonicalOperationJson(value: unknown): string {
   if (isArray(value)) return `[${value.map(canonicalOperationJson).join(',')}]`
-  if (isPlainObject(value)) return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalOperationJson(value[key])}`).join(',')}}`
+  if (isPlainObject(value))
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalOperationJson(value[key])}`)
+      .join(',')}}`
   return JSON.stringify(value)
 }
 
 /** 按规范化 JSON 生成实际用于调用去重与参数核对的摘要。 */
-export async function operationFingerprint(value:unknown):Promise<string> {
-  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonicalOperationJson(value)))
-  return Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('')
+export async function operationFingerprint(value: unknown): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(canonicalOperationJson(value))
+  )
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 /** 从同一 schema 生成静态声明；校验仍由运行时执行，数值与长度限制保留在描述中。 */
-export function operationSchemaType(schema: OperationSchema, definitions: Readonly<Record<string,OperationSchema>> = schema.definitions ?? {}, seen: ReadonlySet<string> = new Set()): string {
-  const render = (child:OperationSchema):string => operationSchemaType(child,definitions,seen)
+export function operationSchemaType(
+  schema: OperationSchema,
+  definitions: Readonly<Record<string, OperationSchema>> = schema.definitions ?? {},
+  seen: ReadonlySet<string> = new Set()
+): string {
+  const render = (child: OperationSchema): string => operationSchemaType(child, definitions, seen)
   if (schema.$ref) {
     const name = schema.$ref.slice('#/definitions/'.length)
-    return seen.has(name) ? 'unknown' : operationSchemaType(definitions[name]!,definitions,new Set([...seen,name]))
+    return seen.has(name)
+      ? 'unknown'
+      : operationSchemaType(definitions[name]!, definitions, new Set([...seen, name]))
   }
   if (schema.not && isEmpty(Object.keys(schema.not))) return 'never'
   if (!isUndefined(schema.const)) return JSON.stringify(schema.const)
-  if (schema.enum) return schema.enum.map(value => JSON.stringify(value)).join(' | ') || 'never'
-  if (schema.anyOf) return schema.anyOf.map(render).map(type => `(${type})`).join(' | ')
+  if (schema.enum) return schema.enum.map((value) => JSON.stringify(value)).join(' | ') || 'never'
+  if (schema.anyOf)
+    return schema.anyOf
+      .map(render)
+      .map((type) => `(${type})`)
+      .join(' | ')
   switch (schema.type) {
-    case 'string': return 'string'
-    case 'number': case 'integer': return 'number'
-    case 'boolean': return 'boolean'
-    case 'null': return 'null'
-    case 'array': return isArray(schema.items) ? `[${(schema.items as readonly OperationSchema[]).map((item,index)=>`${render(item)}${index >= (schema.minItems ?? (schema.items as readonly OperationSchema[]).length) ? '?' : ''}`).join(', ')}]` : `Array<${render((schema.items ?? {}) as OperationSchema)}>`
+    case 'string':
+      return 'string'
+    case 'number':
+    case 'integer':
+      return 'number'
+    case 'boolean':
+      return 'boolean'
+    case 'null':
+      return 'null'
+    case 'array':
+      return isArray(schema.items)
+        ? `[${(schema.items as readonly OperationSchema[]).map((item, index) => `${render(item)}${index >= (schema.minItems ?? (schema.items as readonly OperationSchema[]).length) ? '?' : ''}`).join(', ')}]`
+        : `Array<${render((schema.items ?? {}) as OperationSchema)}>`
     case 'object': {
-      const fields = Object.entries(schema.properties ?? {}).map(([name, field]) => `${JSON.stringify(name)}${schema.required?.includes(name) ? '' : '?'}: ${render(field)}`)
+      const fields = Object.entries(schema.properties ?? {}).map(
+        ([name, field]) =>
+          `${JSON.stringify(name)}${schema.required?.includes(name) ? '' : '?'}: ${render(field)}`
+      )
       if (!isFalse(schema.additionalProperties)) fields.push('[key: string]: unknown')
       return `{ ${fields.join('; ')} }`
     }
-    default: return 'unknown'
+    default:
+      return 'unknown'
   }
 }
 
 /** 检查 schema 方言，遇到不支持的关键字当场拒绝，避免声明与运行时静默失配。 */
-export function validateOperationSchema(schema: OperationSchema, definitions: Readonly<Record<string,OperationSchema>> = schema.definitions ?? {}): void {
-  const visit = (child:OperationSchema):void => validateOperationSchema(child,definitions)
-  const keywords = new Set(['$ref','definitions','not','type','description','properties','required','additionalProperties','items','additionalItems','enum','const','anyOf','minimum','maximum','minLength','maxLength','minItems','maxItems'])
-  for (const key of Object.keys(schema)) if (!keywords.has(key)) throw new Error(`不支持的 schema 关键字 ${key}`)
-  if (schema.$ref && (!/^#\/definitions\/[A-Za-z0-9_]+$/u.test(schema.$ref) || !Object.hasOwn(definitions,schema.$ref.slice('#/definitions/'.length)))) throw new Error('schema 引用必须指向当前合同定义')
+export function validateOperationSchema(
+  schema: OperationSchema,
+  definitions: Readonly<Record<string, OperationSchema>> = schema.definitions ?? {}
+): void {
+  const visit = (child: OperationSchema): void => validateOperationSchema(child, definitions)
+  const keywords = new Set([
+    '$ref',
+    'definitions',
+    'not',
+    'type',
+    'description',
+    'properties',
+    'required',
+    'additionalProperties',
+    'items',
+    'additionalItems',
+    'enum',
+    'const',
+    'anyOf',
+    'minimum',
+    'maximum',
+    'minLength',
+    'maxLength',
+    'minItems',
+    'maxItems',
+  ])
+  for (const key of Object.keys(schema))
+    if (!keywords.has(key)) throw new Error(`不支持的 schema 关键字 ${key}`)
+  if (
+    schema.$ref &&
+    (!/^#\/definitions\/[A-Za-z0-9_]+$/u.test(schema.$ref) ||
+      !Object.hasOwn(definitions, schema.$ref.slice('#/definitions/'.length)))
+  )
+    throw new Error('schema 引用必须指向当前合同定义')
   for (const field of Object.values(schema.properties ?? {})) visit(field)
   if (isArray(schema.items)) (schema.items as readonly OperationSchema[]).forEach(visit)
   else if (schema.items) visit(schema.items as OperationSchema)
@@ -76,9 +149,17 @@ export function validateOperationSchema(schema: OperationSchema, definitions: Re
 }
 
 /** 只读版本检查必须响应取消；迟到结果不能恢复已经结束的写入资格。 */
-export async function awaitOperationRead<T>(pending:Promise<T>,signal:AbortSignal):Promise<T>{
+export async function awaitOperationRead<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
   signal.throwIfAborted()
-  let cancel:()=>void=()=>{}
-  const aborted=new Promise<never>((_resolve,reject)=>{cancel=()=>reject(signal.reason??new Error('版本检查已取消'));signal.addEventListener('abort',cancel,{once:true});if(signal.aborted)cancel()})
-  try{return await Promise.race([pending,aborted])}finally{signal.removeEventListener('abort',cancel)}
+  let cancel: () => void = () => {}
+  const aborted = new Promise<never>((_resolve, reject) => {
+    cancel = () => reject(signal.reason ?? new Error('版本检查已取消'))
+    signal.addEventListener('abort', cancel, { once: true })
+    if (signal.aborted) cancel()
+  })
+  try {
+    return await Promise.race([pending, aborted])
+  } finally {
+    signal.removeEventListener('abort', cancel)
+  }
 }

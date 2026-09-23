@@ -8,16 +8,13 @@ import { parseVelarosModEnvelope } from '../../utils/wire/mod-envelope'
  */
 export interface VelarosModEnvelopeApi {
   /** 解析一份 `velaros.mod.json`；解析不了不抛错，原因在结果的 `diagnostics` 里。 */
-  parse(
-    input: unknown,
-    options?: { readonly origin?: string },
-  ): VelarosModEnvelopeParseResult
+  parse(input: unknown, options?: { readonly origin?: string }): VelarosModEnvelopeParseResult
 }
 
 export class VelarosModEnvelopeParser implements VelarosModEnvelopeApi {
   public parse(
     input: unknown,
-    options: { readonly origin?: string } = {},
+    options: { readonly origin?: string } = {}
   ): VelarosModEnvelopeParseResult {
     return parseVelarosModEnvelope(input, options)
   }

@@ -26,11 +26,7 @@ async function createSiteRoots(): Promise<{
 void describe('浏览器站点工作区的历史根回退', () => {
   void test('主根没有的文件从历史根读出来', async () => {
     const { siteRoot, legacyRoot } = await createSiteRoots()
-    await writeFile(
-      join(legacyRoot, 'recipes', 'old.json'),
-      '{"title":"old"}',
-      'utf8',
-    )
+    await writeFile(join(legacyRoot, 'recipes', 'old.json'), '{"title":"old"}', 'utf8')
 
     const access = createBrowserSiteWorkspaceFileAccess({
       workspaceRoot: siteRoot,
@@ -75,9 +71,7 @@ void describe('浏览器站点工作区的历史根回退', () => {
     assert.deepEqual(names, ['a.json', 'b.json', 'shared.json'])
     // 同名条目必须指向主根那一份：历史根只补缺，不覆盖。
     const realSiteRoot = await realpath(siteRoot)
-    const sharedEntry = entries.find((entry) =>
-      entry.path.endsWith('shared.json'),
-    )
+    const sharedEntry = entries.find((entry) => entry.path.endsWith('shared.json'))
     assert.ok(sharedEntry?.path.startsWith(realSiteRoot))
   })
 
@@ -93,14 +87,8 @@ void describe('浏览器站点工作区的历史根回退', () => {
       overwrite: true,
     })
 
-    assert.equal(
-      await readFile(join(siteRoot, 'recipes', 'old.json'), 'utf8'),
-      'rewritten',
-    )
-    assert.equal(
-      await readFile(join(legacyRoot, 'recipes', 'old.json'), 'utf8'),
-      'old',
-    )
+    assert.equal(await readFile(join(siteRoot, 'recipes', 'old.json'), 'utf8'), 'rewritten')
+    assert.equal(await readFile(join(legacyRoot, 'recipes', 'old.json'), 'utf8'), 'old')
   })
 
   void test('历史根里的绝对路径仍可预览，不被判越权', async () => {

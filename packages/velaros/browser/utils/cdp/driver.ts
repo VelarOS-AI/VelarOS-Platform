@@ -1,13 +1,28 @@
 /** CDP 页面驱动里用不着实例状态的那部分：CDP 回包的归一、键鼠码表、视口矩形。 */
 
-import { isArray, isFiniteNumber, isNonBlankString, isObject, isString, toNullable } from '@velaros-ai/core'
+import {
+  isArray,
+  isFiniteNumber,
+  isNonBlankString,
+  isObject,
+  isString,
+  toNullable,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserFrameInfo } from '../../types/browser.js'
 import type { BrowserMouseButton, BrowserPageDiagnosticLevel } from '../../types/browser.js'
 import type { CdpPageFrame, CdpPageFrameTree, CdpPageTargetDescription } from '../../types/cdp.js'
-import type { CdpRuntimeEvaluateResponse, CdpRuntimeRemoteObject, CdpTargetListEntry } from '../../types/cdp.js'
-import type { BrowserPageDriverFetchResourceOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions } from '../../types/driver'
+import type {
+  CdpRuntimeEvaluateResponse,
+  CdpRuntimeRemoteObject,
+  CdpTargetListEntry,
+} from '../../types/cdp.js'
+import type {
+  BrowserPageDriverFetchResourceOptions,
+  BrowserPageDriverScreenshot,
+  BrowserPageDriverScreenshotOptions,
+} from '../../types/driver'
 
 /** 从 CDP 的 target 列表条目里读出它的 id。 */
 export function resolveTargetListEntryId(entry: CdpTargetListEntry): Nullable<string> {
@@ -20,8 +35,13 @@ export function resolveTargetListEntryId(entry: CdpTargetListEntry): Nullable<st
 /** 剥出 Runtime.evaluate、Runtime.callFunctionOn 回包里的值；脚本抛了没接住的异常就抛 EXECUTION_FAILED，带上异常的原话。 */
 export function readRuntimeEvaluateValue(response: CdpRuntimeEvaluateResponse): unknown {
   if (response.exceptionDetails) {
-    const message = response.exceptionDetails.exception?.description || response.exceptionDetails.text || 'unknown exception'
-    throw new AppError('EXECUTION_FAILED', `浏览器 CDP 脚本执行失败：${message}`, undefined, { cdpMethod: 'Runtime.evaluate' })
+    const message =
+      response.exceptionDetails.exception?.description ||
+      response.exceptionDetails.text ||
+      'unknown exception'
+    throw new AppError('EXECUTION_FAILED', `浏览器 CDP 脚本执行失败：${message}`, undefined, {
+      cdpMethod: 'Runtime.evaluate',
+    })
   }
   return unwrapRuntimeEvaluateValue(response)
 }
@@ -96,7 +116,9 @@ export function resolveConsoleTimestamp(timestamp: unknown): number {
 }
 
 /** 按截图选项算出这次要截的视口矩形。 */
-export function buildViewportRect(options: BrowserPageDriverScreenshotOptions): BrowserPageDriverScreenshot['capture']['viewport'] {
+export function buildViewportRect(
+  options: BrowserPageDriverScreenshotOptions
+): BrowserPageDriverScreenshot['capture']['viewport'] {
   return {
     x: Math.max(0, Math.round(options.metadata.scrollX)),
     y: Math.max(0, Math.round(options.metadata.scrollY)),
@@ -186,16 +208,12 @@ export function normalizePageTargetDescription(entry: unknown): Nullable<CdpPage
 export function resolveConsoleMessage(args: unknown): string {
   if (!isArray(args)) return 'console event'
 
-  const parts = args
-    .map((arg) => stringifyConsoleArgument(arg))
-    .filter(isNonBlankString)
+  const parts = args.map((arg) => stringifyConsoleArgument(arg)).filter(isNonBlankString)
   return parts.join(' ') || 'console event'
 }
 
 /** 把区域截图的入参翻成 CDP 截图要的裁剪矩形。 */
-export function resolveRegionScreenshotInput(
-  options: BrowserPageDriverScreenshotOptions
-): {
+export function resolveRegionScreenshotInput(options: BrowserPageDriverScreenshotOptions): {
   params: Record<string, unknown>
   capture: BrowserPageDriverScreenshot['capture']
 } {
@@ -267,7 +285,10 @@ export function cdpFrameTreeOrigin(tree: unknown): Nullable<string> {
  * CDP 的框架树展平成一张表：id、上一层、地址、名字，与顶层页面不同源的记成 crossOrigin。
  * topOrigin 是页面顶层的源：展平跨进程 iframe 子会话上的那棵树时传进来（那棵树的根不是页面顶层）；不给就取这棵树自己的根。
  */
-export function flattenCdpFrameTree(tree: unknown, topOrigin: Nullable<string> = null): BrowserFrameInfo[] {
+export function flattenCdpFrameTree(
+  tree: unknown,
+  topOrigin: Nullable<string> = null
+): BrowserFrameInfo[] {
   const frames: BrowserFrameInfo[] = []
   const visit = (node: unknown, topOrigin: Nullable<string>): void => {
     if (!isObject(node)) return

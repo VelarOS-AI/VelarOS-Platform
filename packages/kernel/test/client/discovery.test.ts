@@ -25,14 +25,8 @@ afterEach(async () => {
   }
 })
 
-function handshakeResponder(handshake: {
-  protocolVersion: number
-  kernelVersion: string
-}) {
-  return (
-    request: ReceivedRequest,
-    connection: { send(frame: unknown): void },
-  ) => {
+function handshakeResponder(handshake: { protocolVersion: number; kernelVersion: string }) {
+  return (request: ReceivedRequest, connection: { send(frame: unknown): void }) => {
     if (request.method !== 'handshake') return
     connection.send({
       type: 'response',
@@ -43,15 +37,10 @@ function handshakeResponder(handshake: {
   }
 }
 
-async function startKernel(handshake: {
-  protocolVersion: number
-  kernelVersion: string
-}) {
+async function startKernel(handshake: { protocolVersion: number; kernelVersion: string }) {
   const directory = await temporaryRuntimeDirectory(directories)
   const endpoint = new FakeKernelEndpoint(
-    handshakeResponder(handshake) as ConstructorParameters<
-      typeof FakeKernelEndpoint
-    >[0],
+    handshakeResponder(handshake) as ConstructorParameters<typeof FakeKernelEndpoint>[0]
   )
   endpoints.push(endpoint)
   await endpoint.start(join(directory, 'kernel.sock'))
@@ -140,19 +129,15 @@ describe('kernel daemon discovery', () => {
       descriptorFor(endpoint.getEndpoint(), {
         protocolVersion: futureVersion,
         kernelVersion: '9.0.0',
-      }),
+      })
     )
 
-    const rejection = await kernelDaemons.connect(paths).catch(
-      (error: unknown) => error,
-    )
+    const rejection = await kernelDaemons.connect(paths).catch((error: unknown) => error)
     expect(rejection).toMatchObject({
       name: 'KernelClientError',
       code: 'PROTOCOL_VERSION_MISMATCH',
     })
-    expect((rejection as { guidance?: string }).guidance).toContain(
-      `v${futureVersion}`,
-    )
+    expect((rejection as { guidance?: string }).guidance).toContain(`v${futureVersion}`)
   })
 
   test('refuses a descriptor whose kernel version drifted from the live endpoint', async () => {
@@ -162,7 +147,7 @@ describe('kernel daemon discovery', () => {
     })
     await writeDescriptorFile(
       paths,
-      descriptorFor(endpoint.getEndpoint(), { kernelVersion: '0.2.0' }),
+      descriptorFor(endpoint.getEndpoint(), { kernelVersion: '0.2.0' })
     )
 
     await expect(kernelDaemons.connect(paths)).rejects.toMatchObject({

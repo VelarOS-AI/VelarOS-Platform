@@ -117,7 +117,10 @@ class ExternalLanguageService implements ExternalLanguageServiceApi {
     this.diagnosticsTimedOutFiles = timedOutFiles.length
     if (!isEmpty(timedOutFiles)) {
       log.warn('语言服务在超时前没有发回这些文件的诊断，这次的空结果不代表它们没有问题。', {
-        files: timedOutFiles.slice(0, DevelopmentTuning.externalLanguageServer.reportedTimedOutFiles),
+        files: timedOutFiles.slice(
+          0,
+          DevelopmentTuning.externalLanguageServer.reportedTimedOutFiles
+        ),
         timedOutFiles: timedOutFiles.length,
       })
     }

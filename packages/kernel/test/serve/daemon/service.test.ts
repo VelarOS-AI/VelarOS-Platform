@@ -41,10 +41,7 @@ function moduleDefinition(options: {
   }
 }
 
-function call(
-  capabilityId: string,
-  operation = 'read',
-): CapabilityCallRequest {
+function call(capabilityId: string, operation = 'read'): CapabilityCallRequest {
   return {
     protocolVersion: KernelProtocolVersion,
     callId: `call-${capabilityId}`,
@@ -81,15 +78,17 @@ describe('KernelService', () => {
     })
     let disposalCount = 0
     const host = new KernelModuleHost({ apiVersion: 1 })
-    host.registerModule(moduleDefinition({
-      id: 'module.concurrent-service',
-      token: CallableToken,
-      service: kernelModules.callable({}),
-      ready: () => readyGate,
-      dispose: () => {
-        disposalCount += 1
-      },
-    }))
+    host.registerModule(
+      moduleDefinition({
+        id: 'module.concurrent-service',
+        token: CallableToken,
+        service: kernelModules.callable({}),
+        ready: () => readyGate,
+        dispose: () => {
+          disposalCount += 1
+        },
+      })
+    )
     const service = new KernelService({ host, kernelVersion: '0.1.0' })
 
     const firstStart = service.start()
@@ -101,9 +100,7 @@ describe('KernelService', () => {
 
     expect(service.getStatus()).toBe('disposed')
     expect(disposalCount).toBe(1)
-    await expect(service.start()).rejects.toThrow(
-      '已回收的 Kernel service 不能再启动',
-    )
+    await expect(service.start()).rejects.toThrow('已回收的 Kernel service 不能再启动')
   })
 
   test('builds deterministic module descriptors from host snapshots', async () => {
@@ -114,7 +111,7 @@ describe('KernelService', () => {
         version: '2.3.4',
         token: CallableToken,
         service: { invoke: () => 'ok' },
-      }),
+      })
     )
     const service = new KernelService({ host, kernelVersion: '9.0.0' })
     await service.start()
@@ -143,18 +140,14 @@ describe('KernelService', () => {
         service: kernelModules.callable({
           double: {
             metadata: { permissions: [] },
-            invoke(
-            scope: unknown,
-            input: unknown,
-            signal: AbortSignal,
-          ) {
-            expect(scope).toBeUndefined()
-            expect(signal.aborted).toBeFalse()
-            return (input as { value: number }).value * 2
-          },
+            invoke(scope: unknown, input: unknown, signal: AbortSignal) {
+              expect(scope).toBeUndefined()
+              expect(signal.aborted).toBeFalse()
+              return (input as { value: number }).value * 2
+            },
           },
         }),
-      }),
+      })
     )
     const service = new KernelService({
       host,
@@ -167,26 +160,28 @@ describe('KernelService', () => {
     const transport = new InProcessKernelTransport(service)
     const client = new KernelClient(transport)
 
-    expect(await transport.call({
-      ...call(CallableToken.id, 'double'),
-      sessionId: 'missing',
-    })).toMatchObject({
+    expect(
+      await transport.call({
+        ...call(CallableToken.id, 'double'),
+        sessionId: 'missing',
+      })
+    ).toMatchObject({
       status: 'error',
       error: { code: 'CAPABILITY_NOT_GRANTED' },
     })
     const session = await client.openCapabilitySession({
-      requires: [
-        { capabilityId: CallableToken.id, operations: null, scope: null },
-      ],
+      requires: [{ capabilityId: CallableToken.id, operations: null, scope: null }],
     })
-    expect(await session.call({
-      protocolVersion: KernelProtocolVersion,
-      callId: 'call-test.callable',
-      capabilityId: CallableToken.id,
-      operation: 'double',
-      scope: null,
-      input: { value: 21 },
-    })).toEqual({
+    expect(
+      await session.call({
+        protocolVersion: KernelProtocolVersion,
+        callId: 'call-test.callable',
+        capabilityId: CallableToken.id,
+        operation: 'double',
+        scope: null,
+        input: { value: 21 },
+      })
+    ).toEqual({
       protocolVersion: KernelProtocolVersion,
       callId: 'call-test.callable',
       status: 'ok',
@@ -245,7 +240,7 @@ describe('KernelService', () => {
       await service.handleCapabilityCall({
         protocolVersion: 1,
         callId: 'bad-protocol',
-      }),
+      })
     ).toMatchObject({
       callId: 'bad-protocol',
       status: 'error',
@@ -257,9 +252,7 @@ describe('KernelService', () => {
     const observed: string[] = []
     const permissionBroker: KernelPermissionBroker = {
       request: async (request) => {
-        observed.push(
-          `${request.moduleId}:${request.generation}:${request.permission}`,
-        )
+        observed.push(`${request.moduleId}:${request.generation}:${request.permission}`)
         return request.permission === 'test.allowed'
           ? { status: 'granted' }
           : { status: 'denied', reason: 'blocked' }
@@ -279,25 +272,21 @@ describe('KernelService', () => {
             invoke: () => 'must-not-run',
           },
         }),
-      }),
+      })
     )
     const service = new KernelService({ host, kernelVersion: '0.1.0' })
     await service.start()
 
     // 拒绝原因必须随失败一起下发：serve 路径原来统一成一句英文、details: null，
     // 和进程内路径（消息就是 broker 给的原因）说的不是一回事。
-    expect(await service.handleCapabilityCall(call(CallableToken.id)))
-      .toMatchObject({
-        status: 'error',
-        error: {
-          code: 'PERMISSION_DENIED',
-          details: { permission: 'test.denied', reason: 'blocked' },
-        },
-      })
-    expect(observed).toEqual([
-      'module.protected:1:test.allowed',
-      'module.protected:1:test.denied',
-    ])
+    expect(await service.handleCapabilityCall(call(CallableToken.id))).toMatchObject({
+      status: 'error',
+      error: {
+        code: 'PERMISSION_DENIED',
+        details: { permission: 'test.denied', reason: 'blocked' },
+      },
+    })
+    expect(observed).toEqual(['module.protected:1:test.allowed', 'module.protected:1:test.denied'])
   })
 
   test('启动失败后进入 failed 终态，不再谎称可重试', async () => {
@@ -310,7 +299,7 @@ describe('KernelService', () => {
         ready: () => {
           throw new Error('ready boom')
         },
-      }),
+      })
     )
     const service = new KernelService({ host, kernelVersion: '0.1.0' })
 
@@ -322,19 +311,16 @@ describe('KernelService', () => {
     expect(
       await service.evaluateCapabilitySessionOpen({
         protocolVersion: KernelProtocolVersion,
-        requires: [
-          { capabilityId: CallableToken.id, operations: null, scope: null },
-        ],
-      }),
+        requires: [{ capabilityId: CallableToken.id, operations: null, scope: null }],
+      })
     ).toMatchObject({
       status: 'error',
       error: { code: 'KERNEL_NOT_STARTED', retryable: false },
     })
-    expect(await service.handleCapabilityCall(call(CallableToken.id)))
-      .toMatchObject({
-        status: 'error',
-        error: { code: 'KERNEL_NOT_STARTED', retryable: false },
-      })
+    expect(await service.handleCapabilityCall(call(CallableToken.id))).toMatchObject({
+      status: 'error',
+      error: { code: 'KERNEL_NOT_STARTED', retryable: false },
+    })
 
     // 再 start() 说明白「不会重试」，而不是重放同一个启动失败。
     await expect(service.start()).rejects.toMatchObject({
@@ -354,7 +340,7 @@ describe('KernelService', () => {
         dispose: () => {
           disposeCount += 1
         },
-      }),
+      })
     )
     const service = new KernelService({ host, kernelVersion: '0.1.0' })
     await service.start()

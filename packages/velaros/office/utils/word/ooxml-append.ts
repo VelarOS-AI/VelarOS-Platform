@@ -51,16 +51,14 @@ const WordContentTypesXmlPath = '[Content_Types].xml'
 const WordSupportParts: Readonly<Record<'numbering' | 'styles', WordSupportPart>> = {
   numbering: {
     path: WordNumberingXmlPath,
-    contentType:
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml',
+    contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml',
     relationshipType:
       'http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering',
   },
   styles: {
     path: WordStylesXmlPath,
     contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml',
-    relationshipType:
-      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles',
+    relationshipType: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles',
   },
 }
 /** 匹配一整个 Relationship 元素（自闭合或带结束标签）。 */
@@ -85,12 +83,16 @@ export async function appendWordDocumentBuffer(
   const existingDocumentFile = existingZip.file(WordDocumentXmlPath)
   const fragmentDocumentFile = fragmentZip.file(WordDocumentXmlPath)
   if (!existingDocumentFile || !fragmentDocumentFile)
-    throw new AppError(OfficeErrorCodes.appendTargetInvalid, '目标 Word 文档缺少 word/document.xml，无法追加内容。')
+    throw new AppError(
+      OfficeErrorCodes.appendTargetInvalid,
+      '目标 Word 文档缺少 word/document.xml，无法追加内容。'
+    )
 
   const existingDocumentXml = await existingDocumentFile.async('string')
   const fragmentDocumentXml = await fragmentDocumentFile.async('string')
   let fragmentChildrenXml = extractWordBodyChildrenXml(fragmentDocumentXml).trim()
-  if (!fragmentChildrenXml) throw new AppError(OfficeErrorCodes.emptyContent, '追加的内容是空的，Word 文档没有改。')
+  if (!fragmentChildrenXml)
+    throw new AppError(OfficeErrorCodes.emptyContent, '追加的内容是空的，Word 文档没有改。')
 
   // 追加超链接/媒体时要合并 relationship，并重写 fragment 中的 rId。
   const existingRelsFile = existingZip.file(WordDocumentRelsPath)
@@ -165,20 +167,33 @@ export function findWordBodyRange(documentXml: string): { openEnd: number; close
   const bodyOpen = /<w:body(?:\s[^>]*)?>/.exec(documentXml)
   const bodyCloseStart = documentXml.lastIndexOf('</w:body>')
   if (!bodyOpen || bodyOpen.index < 0 || bodyCloseStart < 0)
-    throw new AppError(OfficeErrorCodes.appendTargetInvalid, 'Word 文档 XML 缺少 w:body，无法追加内容。')
+    throw new AppError(
+      OfficeErrorCodes.appendTargetInvalid,
+      'Word 文档 XML 缺少 w:body，无法追加内容。'
+    )
   return { openEnd: bodyOpen.index + bodyOpen[0].length, closeStart: bodyCloseStart }
 }
 
 /** 定位 w:sectPr 范围；追加内容时不能把它复制到中间。 */
-export function findWordSectPrRange(bodyInnerXml: string): Nullable<{ start: number; end: number }> {
+export function findWordSectPrRange(
+  bodyInnerXml: string
+): Nullable<{ start: number; end: number }> {
   const start = bodyInnerXml.lastIndexOf('<w:sectPr')
   if (start < 0) return null
   const openEnd = bodyInnerXml.indexOf('>', start)
-  if (openEnd < 0) throw new AppError(OfficeErrorCodes.appendTargetInvalid, 'Word 文档 XML 中 w:sectPr 结构不完整。')
+  if (openEnd < 0)
+    throw new AppError(
+      OfficeErrorCodes.appendTargetInvalid,
+      'Word 文档 XML 中 w:sectPr 结构不完整。'
+    )
   if (bodyInnerXml[openEnd - 1] === '/') return { start, end: openEnd + 1 }
   const closeTag = '</w:sectPr>'
   const closeStart = bodyInnerXml.indexOf(closeTag, openEnd)
-  if (closeStart < 0) throw new AppError(OfficeErrorCodes.appendTargetInvalid, 'Word 文档 XML 中 w:sectPr 缺少结束标签。')
+  if (closeStart < 0)
+    throw new AppError(
+      OfficeErrorCodes.appendTargetInvalid,
+      'Word 文档 XML 中 w:sectPr 缺少结束标签。'
+    )
   return { start, end: closeStart + closeTag.length }
 }
 
@@ -205,7 +220,10 @@ export function mergeWordDocumentRelationships(
     return { relationshipsXml: existingRelsXml, fragmentChildrenXml: remappedChildrenXml }
   const closeIndex = existingRelsXml.lastIndexOf('</Relationships>')
   if (closeIndex < 0)
-    throw new AppError(OfficeErrorCodes.appendTargetInvalid, 'Word 文档关系文件结构不完整，无法追加链接或媒体关系。')
+    throw new AppError(
+      OfficeErrorCodes.appendTargetInvalid,
+      'Word 文档关系文件结构不完整，无法追加链接或媒体关系。'
+    )
   return {
     relationshipsXml: `${existingRelsXml.slice(0, closeIndex)}${additions.join('')}${existingRelsXml.slice(closeIndex)}`,
     fragmentChildrenXml: remappedChildrenXml,
@@ -222,7 +240,10 @@ export function collectWordRelationshipIds(relsXml: string): Set<string> {
 }
 
 /** 判断 body children 是否引用指定 relationship。 */
-export function wordChildrenReferenceRelationship(childrenXml: string, relationshipId: string): boolean {
+export function wordChildrenReferenceRelationship(
+  childrenXml: string,
+  relationshipId: string
+): boolean {
   return new RegExp(`\\br:(?:id|embed|link)=["']${escapeRegExp(relationshipId)}["']`).test(
     childrenXml
   )
@@ -324,7 +345,8 @@ function ensureXmlRootNamespaces(targetXml: string, donorXml: string, addedXml: 
   )
   const used = new Set<string>()
   for (const match of addedXml.matchAll(/<\/?([A-Za-z0-9]+):/g)) used.add(match[1] ?? '')
-  for (const match of addedXml.matchAll(/\s([A-Za-z0-9]+):[A-Za-z0-9]+\s*=/g)) used.add(match[1] ?? '')
+  for (const match of addedXml.matchAll(/\s([A-Za-z0-9]+):[A-Za-z0-9]+\s*=/g))
+    used.add(match[1] ?? '')
   const missing = [...used].filter((prefix) => !!prefix && !declared.has(prefix))
   if (isEmpty(missing)) return targetXml
 
@@ -348,7 +370,10 @@ function insertWordNumberingParts(
 ): string {
   const closeTag = '</w:numbering>'
   if (!numberingXml.includes(closeTag))
-    throw new AppError(OfficeErrorCodes.appendTargetInvalid, '目标 Word 文档的编号定义结构不完整，无法追加列表。')
+    throw new AppError(
+      OfficeErrorCodes.appendTargetInvalid,
+      '目标 Word 文档的编号定义结构不完整，无法追加列表。'
+    )
   const firstNumIndex = numberingXml.search(/<w:num\s/)
   const abstractAt = firstNumIndex >= 0 ? firstNumIndex : numberingXml.lastIndexOf(closeTag)
   const withAbstract = `${numberingXml.slice(0, abstractAt)}${abstractAdditions.join('')}${numberingXml.slice(abstractAt)}`
@@ -403,7 +428,9 @@ export function mergeWordNumberingDefinitions(input: {
     // 片段自己都没有这条定义：搬不了，保持原样（与修复前同样的退化，不新增失败）。
     if (!numXml) continue
     const abstractNumId = /<w:abstractNumId\b[^>]*\bw:val="([^"]+)"/.exec(numXml)?.[1]
-    const abstractXml = isString(abstractNumId) ? fragmentAbstractNums.get(abstractNumId) : undefined
+    const abstractXml = isString(abstractNumId)
+      ? fragmentAbstractNums.get(abstractNumId)
+      : undefined
     const newNumId = String(nextNumId)
     nextNumId += 1
     let numberedXml = replaceWordXmlAttribute(numXml, 'w:numId', newNumId)
@@ -493,7 +520,10 @@ export function mergeWordStyleDefinitions(input: {
   const closeTag = '</w:styles>'
   const closeIndex = merged.lastIndexOf(closeTag)
   if (closeIndex < 0)
-    throw new AppError(OfficeErrorCodes.appendTargetInvalid, '目标 Word 文档的样式定义结构不完整，无法追加样式。')
+    throw new AppError(
+      OfficeErrorCodes.appendTargetInvalid,
+      '目标 Word 文档的样式定义结构不完整，无法追加样式。'
+    )
   return `${merged.slice(0, closeIndex)}${additions.join('')}${merged.slice(closeIndex)}`
 }
 
@@ -508,7 +538,10 @@ export function registerWordPartContentType(
   const closeTag = '</Types>'
   const closeIndex = contentTypesXml.lastIndexOf(closeTag)
   if (closeIndex < 0)
-    throw new AppError(OfficeErrorCodes.appendTargetInvalid, '目标 Word 文档的内容类型清单不完整，无法登记新部件。')
+    throw new AppError(
+      OfficeErrorCodes.appendTargetInvalid,
+      '目标 Word 文档的内容类型清单不完整，无法登记新部件。'
+    )
   const override = `<Override PartName="${partName}" ContentType="${part.contentType}"/>`
   return `${contentTypesXml.slice(0, closeIndex)}${override}${contentTypesXml.slice(closeIndex)}`
 }
@@ -522,7 +555,10 @@ export function registerWordPartRelationship(
   const closeTag = '</Relationships>'
   const closeIndex = relationshipsXml.lastIndexOf(closeTag)
   if (closeIndex < 0)
-    throw new AppError(OfficeErrorCodes.appendTargetInvalid, 'Word 文档关系文件结构不完整，无法登记新部件。')
+    throw new AppError(
+      OfficeErrorCodes.appendTargetInvalid,
+      'Word 文档关系文件结构不完整，无法登记新部件。'
+    )
   const id = createUniqueWordRelationshipId(collectWordRelationshipIds(relationshipsXml))
   const target = part.path.replace(/^word\//, '')
   const relationship = `<Relationship Id="${id}" Type="${part.relationshipType}" Target="${target}"/>`

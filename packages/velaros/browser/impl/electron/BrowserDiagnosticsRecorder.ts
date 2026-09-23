@@ -26,7 +26,10 @@ class BrowserDiagnosticsRecorder implements BrowserDiagnosticsRecorderApi {
   public record(session: BrowserSession, entry: BrowserPageDiagnosticEntry): void {
     session.diagnostics.push(entry)
     if (session.diagnostics.length > BrowserTuning.diagnostics.maxEntries) {
-      session.diagnostics.splice(0, session.diagnostics.length - BrowserTuning.diagnostics.maxEntries)
+      session.diagnostics.splice(
+        0,
+        session.diagnostics.length - BrowserTuning.diagnostics.maxEntries
+      )
     }
   }
 

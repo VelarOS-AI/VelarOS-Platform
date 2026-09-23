@@ -1,10 +1,14 @@
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { isBlank, isFunction, isNotUndefined, isNull, isObject, isString } from '@velaros-ai/core';
+import { isBlank, isFunction, isNotUndefined, isNull, isObject, isString } from '@velaros-ai/core'
 
 import { KernelClientErrorCodes } from '../../contract/constants'
-import type { KernelDaemonEndpointDescriptor, KernelDaemonPaths, KernelRpcEndpoint } from '../../types/kernel.js'
+import type {
+  KernelDaemonEndpointDescriptor,
+  KernelDaemonPaths,
+  KernelRpcEndpoint,
+} from '../../types/kernel.js'
 import { KernelClientError } from '../errors'
 
 /** Kernel 运行目录：优先用登记过的环境变量，否则按当前用户在临时目录下开一个私有目录。 */
@@ -13,14 +17,14 @@ export function defaultKernelRuntimeDirectory(): string {
   if (isNotUndefined(configured) && !isBlank(configured.trim())) return configured
   const userIdentity = isFunction(process.getuid)
     ? String(process.getuid())
-    : process.env.USERNAME ?? 'user'
+    : (process.env.USERNAME ?? 'user')
   return join(tmpdir(), `velaros-kernel-${userIdentity}`)
 }
 
 /** 按运行目录折出守护进程的三条路径：端点 descriptor、单实例锁、unix socket。 */
 export function createDefaultKernelDaemonPaths(
   name = 'velaros-kernel',
-  runtimeDirectory = defaultKernelRuntimeDirectory(),
+  runtimeDirectory = defaultKernelRuntimeDirectory()
 ): KernelDaemonPaths {
   const safeName = name.replaceAll(/[^a-zA-Z0-9._-]/g, '-')
   return {
@@ -31,10 +35,8 @@ export function createDefaultKernelDaemonPaths(
 }
 
 /** 校验并解析端点 descriptor；任何一个字段不合格都抛 `DAEMON_DESCRIPTOR_INVALID`。 */
-export function parseKernelDaemonDescriptor(
-  input: unknown,
-): KernelDaemonEndpointDescriptor {
-  if (!isObject(input) && !isNull(input) || isNull(input)) {
+export function parseKernelDaemonDescriptor(input: unknown): KernelDaemonEndpointDescriptor {
+  if ((!isObject(input) && !isNull(input)) || isNull(input)) {
     throw invalidDescriptor()
   }
   const instanceId = Reflect.get(input, 'instanceId')
@@ -45,15 +47,15 @@ export function parseKernelDaemonDescriptor(
   const startedAt = Reflect.get(input, 'startedAt')
   const endpoint = parseEndpoint(Reflect.get(input, 'endpoint'))
   if (
-    !isString(instanceId)
-    || instanceId.length === 0
-    || !isString(authToken)
-    || authToken.length < 32
-    || !Number.isInteger(protocolVersion)
-    || !isString(kernelVersion)
-    || kernelVersion.length === 0
-    || !Number.isInteger(pid)
-    || !Number.isInteger(startedAt)
+    !isString(instanceId) ||
+    instanceId.length === 0 ||
+    !isString(authToken) ||
+    authToken.length < 32 ||
+    !Number.isInteger(protocolVersion) ||
+    !isString(kernelVersion) ||
+    kernelVersion.length === 0 ||
+    !Number.isInteger(pid) ||
+    !Number.isInteger(startedAt)
   ) {
     throw invalidDescriptor()
   }
@@ -70,7 +72,7 @@ export function parseKernelDaemonDescriptor(
 
 /** 解析 descriptor 里的端点：unix 要有路径，tcp 只认回环地址加正整数端口。 */
 function parseEndpoint(input: unknown): KernelRpcEndpoint {
-  if (!isObject(input) && !isNull(input) || isNull(input)) throw invalidDescriptor()
+  if ((!isObject(input) && !isNull(input)) || isNull(input)) throw invalidDescriptor()
   const kind = Reflect.get(input, 'kind')
   if (kind === 'unix') {
     const path = Reflect.get(input, 'path')
@@ -80,11 +82,7 @@ function parseEndpoint(input: unknown): KernelRpcEndpoint {
   if (kind === 'tcp') {
     const host = Reflect.get(input, 'host')
     const port = Reflect.get(input, 'port')
-    if (
-      host !== '127.0.0.1'
-      || !Number.isInteger(port)
-      || (port as number) <= 0
-    ) {
+    if (host !== '127.0.0.1' || !Number.isInteger(port) || (port as number) <= 0) {
       throw invalidDescriptor()
     }
     return { kind, host, port: port as number }

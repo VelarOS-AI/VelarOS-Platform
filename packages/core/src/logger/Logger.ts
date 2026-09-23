@@ -108,4 +108,3 @@ export class Logger implements ScopedLog {
     })
   }
 }
-

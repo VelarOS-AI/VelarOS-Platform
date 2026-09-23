@@ -2,14 +2,25 @@
 
 import { isString, toNullable } from '@velaros-ai/core'
 
-import type { BrowserElementTargetHint, BrowserTarget, BrowserTargetHint } from '../types/browser.js'
+import type {
+  BrowserElementTargetHint,
+  BrowserTarget,
+  BrowserTargetHint,
+} from '../types/browser.js'
 
 /** 字符串以 @ 开头当 ref（inspect、标注截图给的），其余当 CSS selector；定位线索逐字段补齐成端口的形状。 */
 export function toElementTarget(target: BrowserTarget): BrowserElementTargetHint {
   if (isString(target)) {
     const value = target.trim()
     const isRef = value.startsWith('@')
-    return { ref: isRef ? value : null, css: isRef ? null : value, role: null, text: null, name: null, attributes: {} }
+    return {
+      ref: isRef ? value : null,
+      css: isRef ? null : value,
+      role: null,
+      text: null,
+      name: null,
+      attributes: {},
+    }
   }
   return fromTargetHint(target)
 }

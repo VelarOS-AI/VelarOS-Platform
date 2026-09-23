@@ -5,7 +5,15 @@
 
 import { resolve } from 'node:path'
 
-import { isNull, isNumber, isPresent, isString, isUndefined, numberOrNull, toOptional } from '@velaros-ai/core'
+import {
+  isNull,
+  isNumber,
+  isPresent,
+  isString,
+  isUndefined,
+  numberOrNull,
+  toOptional,
+} from '@velaros-ai/core'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 
 import type { FileAdapter, PatchStrategy } from '../../contract/requires.js'
@@ -30,10 +38,20 @@ import { ProjectError } from '../../utils/errors.js'
 import { id } from '../../utils/id.js'
 import { toAbs, toRel } from '../../utils/path.js'
 import { assertWellFormedProjectText, countChangedLines } from '../../utils/text.js'
-import { operationFilePaths, operationPath, withIntentMetadata } from '../../utils/transactions/edit-intents.js'
-import { patchFileAttributes, withPatchFileAttributes } from '../../utils/transactions/patch-attributes.js'
+import {
+  operationFilePaths,
+  operationPath,
+  withIntentMetadata,
+} from '../../utils/transactions/edit-intents.js'
+import {
+  patchFileAttributes,
+  withPatchFileAttributes,
+} from '../../utils/transactions/patch-attributes.js'
 import { stagedContentAfter, withoutStagedOffsets } from '../../utils/transactions/patch-chain.js'
-import { assertEditsReadOriginal, canRevertToOriginal } from '../../utils/transactions/patch-ownership.js'
+import {
+  assertEditsReadOriginal,
+  canRevertToOriginal,
+} from '../../utils/transactions/patch-ownership.js'
 import { recoveryRead, revisionMismatch } from '../../utils/transactions/transaction-errors.js'
 
 /** 规划要内核注入的东西：根目录、策略、读快照的文件端口，以及补全快照、查目标、跑输入管线、造 adapter、选补丁策略的回调。 */
@@ -75,25 +93,37 @@ export interface TransactionPlannerPrepareOptions {
  */
 export interface TransactionPlannerApi {
   /** 用给定正文（和文件属性）造该路径的暂存快照：revision 带 staged: 前缀，编码按 UTF-8 记。 */
-  snapshotWithContent(pathValue: string, content: string, attributes?: FileAttributes): Promise<FileSnapshot>
+  snapshotWithContent(
+    pathValue: string,
+    content: string,
+    attributes?: FileAttributes
+  ): Promise<FileSnapshot>
   /**
    * 准备一个事务：输入先过 prepare.input 管线；每条操作按顺序生成补丁（文件 adapter 优先，其次补丁策略），
    * 同一路径的补丁首尾相接；首次触碰的路径核对 base revision；最后汇总净变化并核对事务规模。
    * 返回 status 为 prepared 的事务（带新事务号和基准快照），不写盘、不入库。
    */
-  prepareTransaction(input: PrepareEditInput, options?: TransactionPlannerPrepareOptions): Promise<PreparedTransaction>
+  prepareTransaction(
+    input: PrepareEditInput,
+    options?: TransactionPlannerPrepareOptions
+  ): Promise<PreparedTransaction>
   /**
    * 汇总补丁的净变化：同一文件的多个补丁按「事务前 → 最终内容」重算一份 diff（单补丁文件沿用补丁自带的 diff），
    * 算出改动文件、改动行数与风险；单个文件改动行数超过策略上限抛 SCOPE_VIOLATION。
    */
-  summarizePatches(patches: readonly PreparedPatch[]): Pick<PreparedTransaction, 'changedFiles' | 'diff' | 'changedLines' | 'risk'>
+  summarizePatches(
+    patches: readonly PreparedPatch[]
+  ): Pick<PreparedTransaction, 'changedFiles' | 'diff' | 'changedLines' | 'risk'>
   /** 事务规模的唯一判定点：prepare 与 amend 都走它，超出文件数或行数上限就抛出。 */
   assertScopeWithinPolicy(changedFiles: readonly string[], changedLines: number): void
   /**
    * 用最新快照重放补丁记下的原始意图，得到接在新内容上的补丁（保留补丁号，metadata 记下 rebase 来源）。
    * 只有文本定位类操作能重放；目标不是可读文本文件、重放出多个补丁或换了路径、重放失败都返回 null，不抛出。
    */
-  tryRebasePatch(patchValue: PreparedPatch, currentSnapshot: FileSnapshot): Promise<Nullable<PreparedPatch>>
+  tryRebasePatch(
+    patchValue: PreparedPatch,
+    currentSnapshot: FileSnapshot
+  ): Promise<Nullable<PreparedPatch>>
 }
 
 export class TransactionPlanner implements TransactionPlannerApi {
@@ -120,14 +150,14 @@ export class TransactionPlanner implements TransactionPlannerApi {
   private async transactionSnapshot(
     pathValue: string,
     stagedByPath: ReadonlyMap<string, StagedFileContent>,
-    attributesByPath: ReadonlyMap<string, FileAttributes>,
+    attributesByPath: ReadonlyMap<string, FileAttributes>
   ): Promise<FileSnapshot> {
     const staged = stagedByPath.get(pathValue)
     if (isString(staged))
       return this.snapshotWithContent(pathValue, staged, attributesByPath.get(pathValue))
     if (isUndefined(staged))
       return this.dependencies.enrichSnapshot(
-        await this.dependencies.store.snapshot(pathValue, true),
+        await this.dependencies.store.snapshot(pathValue, true)
       )
     const disk = await this.dependencies.store.snapshot(pathValue, false)
     return {
@@ -147,7 +177,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
   public async snapshotWithContent(
     pathValue: string,
     content: string,
-    attributes?: FileAttributes,
+    attributes?: FileAttributes
   ): Promise<FileSnapshot> {
     const snapshot = await this.dependencies.store.snapshot(pathValue, true)
     return this.dependencies.enrichSnapshot({
@@ -192,7 +222,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
         'INVALID_INPUT',
         `${first} 和 ${pathValue} 是同一个文件（项目内的符号链接或大小写别名指向同一份内容），一次事务里不能各改各的`,
         { paths: [first, pathValue] },
-        `把这两处改动合并成对 ${first} 一个路径的一组编辑，再提交；确实要分开改就拆成两次事务。`,
+        `把这两处改动合并成对 ${first} 一个路径的一组编辑，再提交；确实要分开改就拆成两次事务。`
       )
     }
   }
@@ -215,7 +245,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
 
   public async prepareTransaction(
     input: PrepareEditInput,
-    options: TransactionPlannerPrepareOptions = {},
+    options: TransactionPlannerPrepareOptions = {}
   ): Promise<PreparedTransaction> {
     // 从文件系统角度看，prepare 只生成补丁预览，不写盘。
     const processed = await this.dependencies.transform(input)
@@ -229,11 +259,11 @@ export class TransactionPlanner implements TransactionPlannerApi {
       Object.entries(processed.baseRevisions ?? {}).map(([pathValue, revision]) => [
         this.canonicalPath(pathValue),
         revision,
-      ]),
+      ])
     )
 
     const intents = processed.operations.map((operationIntent) =>
-      this.withCanonicalPaths(operationIntent),
+      this.withCanonicalPaths(operationIntent)
     )
     await this.assertNoAliasedFiles(intents)
     let groupedThrough = -1
@@ -272,7 +302,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
               'TARGET_NOT_FOUND',
               `${pathForOp} 已被本事务前面的操作删除，不能再执行 ${intent.operation.type}`,
               { path: pathForOp, operation: intent.operation.type },
-              '如需重建该文件请用 create_file；否则去掉这条操作，或拆成单独事务。',
+              '如需重建该文件请用 create_file；否则去掉这条操作，或拆成单独事务。'
             )
           }
           if (target && isStaged) {
@@ -280,7 +310,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
               'INVALID_INPUT',
               `${pathForOp} 已被本事务前面的操作修改，targetId 基于磁盘 revision 的定位已失效`,
               { path: pathForOp, targetId: target.targetId, expected: target.baseRevision },
-              '同一文件的后续操作请改用 path 加 oldText / anchorText / symbol 定位，或拆成单独事务。',
+              '同一文件的后续操作请改用 path 加 oldText / anchorText / symbol 定位，或拆成单独事务。'
             )
           }
           snapshot = await this.transactionSnapshot(pathForOp, stagedByPath, attributesByPath)
@@ -310,13 +340,17 @@ export class TransactionPlanner implements TransactionPlannerApi {
           }
           if (intent.operation.type === 'rename_file') {
             const renameTargetIsStaged = stagedByPath.has(intent.operation.to)
-            renameTargetSnapshot = await this.transactionSnapshot(intent.operation.to, stagedByPath, attributesByPath)
+            renameTargetSnapshot = await this.transactionSnapshot(
+              intent.operation.to,
+              stagedByPath,
+              attributesByPath
+            )
             if (renameTargetSnapshot.exists) {
               throw new ProjectError(
                 'CONFLICT_WITH_EXTERNAL_EDIT',
                 `重命名目标已存在，拒绝覆盖：${intent.operation.to}`,
                 { path: intent.operation.to, actual: renameTargetSnapshot.revision },
-                '请选择一个不存在的目标路径，或先单独处理现有目标文件。',
+                '请选择一个不存在的目标路径，或先单独处理现有目标文件。'
               )
             }
             const requestedTargetRevision = baseRevisions.get(intent.operation.to)
@@ -346,7 +380,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
               snapshot.content,
               replaceSnapshotLineRanges(snapshot, lineGroup),
               'core.text-patch',
-              { op: 'replace_lines', ranges: lineGroup.length },
+              { op: 'replace_lines', ranges: lineGroup.length }
             ),
           ]
         }
@@ -383,7 +417,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
           intentPatches = intentPatches.map((patch) =>
             patch.path === snapshot.path || patch.metadata?.op === 'rename_file_create'
               ? withPatchFileAttributes(patch, snapshot)
-              : patch,
+              : patch
           )
         }
         for (const patch of intentPatches) {
@@ -393,13 +427,13 @@ export class TransactionPlanner implements TransactionPlannerApi {
           intentPatches = intentPatches.map((patchValue) =>
             patchValue.metadata?.op === 'rename_file_create'
               ? { ...patchValue, baseRevision: renameTargetSnapshot.revision }
-              : patchValue,
+              : patchValue
           )
         }
         const chainedPatches: PreparedPatch[] = []
         for (const patchValue of intentPatches) {
           chainedPatches.push(
-            stagedByPath.has(patchValue.path) ? withoutStagedOffsets(patchValue) : patchValue,
+            stagedByPath.has(patchValue.path) ? withoutStagedOffsets(patchValue) : patchValue
           )
           stagedByPath.set(patchValue.path, stagedContentAfter(patchValue))
           attributesByPath.set(patchValue.path, patchFileAttributes(patchValue))
@@ -410,8 +444,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
         const path = operationPath(intent.operation)
         const details: Record<string, unknown> = error.details ?? {}
         const line = toOptional(numberOrNull(details.candidateLine))
-        const failedIndex =
-          operationIndex + (isNumber(details.rangeIndex) ? details.rangeIndex : 0)
+        const failedIndex = operationIndex + (isNumber(details.rangeIndex) ? details.rangeIndex : 0)
         throw new ProjectError(
           error.reason,
           `第 ${failedIndex + 1} 个编辑操作失败：${error.message}`,
@@ -425,7 +458,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
             written: false,
             recovery: path ? recoveryRead(path, line) : details.recovery,
           },
-          error.suggestedNextAction,
+          error.suggestedNextAction
         )
       }
     }
@@ -456,7 +489,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
    * 单补丁文件直接沿用补丁自带的 diff，保留策略/插件自己的 diff 表达。
    */
   public summarizePatches(
-    patches: readonly PreparedPatch[],
+    patches: readonly PreparedPatch[]
   ): Pick<PreparedTransaction, 'changedFiles' | 'diff' | 'changedLines' | 'risk'> {
     const patchesByPath = new Map<string, PreparedPatch[]>()
     for (const patchValue of patches) {
@@ -473,7 +506,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
           : unifiedDiff(
               pathValue,
               first.oldContent ?? '',
-              stagedContentAfter(pathPatches[pathPatches.length - 1]) ?? '',
+              stagedContentAfter(pathPatches[pathPatches.length - 1]) ?? ''
             )
       const changedLines = countChangedLines(diff)
       if (changedLines > this.dependencies.policy.maxChangedLinesPerFile) {
@@ -487,7 +520,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
             stage: 'prepare',
             written: false,
           },
-          '把这个文件的改动缩小到上限之内；确实要一次改这么多，请用户调整项目策略。',
+          '把这个文件的改动缩小到上限之内；确实要一次改这么多，请用户调整项目策略。'
         )
       }
       return { diff, changedLines }
@@ -510,7 +543,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
   private resolveTransactionRisk(
     patches: readonly PreparedPatch[],
     changedFiles: readonly string[],
-    changedLines: number,
+    changedLines: number
   ): RiskLevel {
     if (patches.some((patchValue) => !canRevertToOriginal(patchValue))) return 'high'
 
@@ -535,7 +568,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
           actual: changedFiles.length,
           maximum: this.dependencies.policy.maxChangedFilesPerTransaction,
         },
-        `请按独立意图拆成每批最多 ${this.dependencies.policy.maxChangedFilesPerTransaction} 个文件的多个原子事务。`,
+        `请按独立意图拆成每批最多 ${this.dependencies.policy.maxChangedFilesPerTransaction} 个文件的多个原子事务。`
       )
     }
     if (changedLines > this.dependencies.policy.maxChangedLinesPerTransaction) {
@@ -543,14 +576,14 @@ export class TransactionPlanner implements TransactionPlannerApi {
         'SCOPE_VIOLATION',
         `变更行数过多：${changedLines}`,
         { actual: changedLines, maximum: this.dependencies.policy.maxChangedLinesPerTransaction },
-        `请按独立意图拆成每批最多 ${this.dependencies.policy.maxChangedLinesPerTransaction} 行的多个原子事务。`,
+        `请按独立意图拆成每批最多 ${this.dependencies.policy.maxChangedLinesPerTransaction} 行的多个原子事务。`
       )
     }
   }
 
   public async tryRebasePatch(
     patchValue: PreparedPatch,
-    currentSnapshot: FileSnapshot,
+    currentSnapshot: FileSnapshot
   ): Promise<Nullable<PreparedPatch>> {
     // rebase 会用最新快照重新执行原始 intent，同时保留补丁 id。
     const metadata = patchValue.metadata as
@@ -561,7 +594,8 @@ export class TransactionPlanner implements TransactionPlannerApi {
         }
       | undefined
     const operation = metadata?.intentOperation
-    if (!operation || !TransactionPlanner.QueueRebaseFriendlyOperations.has(operation.type)) return null
+    if (!operation || !TransactionPlanner.QueueRebaseFriendlyOperations.has(operation.type))
+      return null
     if (!currentSnapshot.exists || currentSnapshot.isDirectory || currentSnapshot.isBinary)
       return null
 

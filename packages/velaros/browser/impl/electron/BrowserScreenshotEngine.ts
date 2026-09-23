@@ -4,7 +4,14 @@ import { dirname } from 'node:path'
 
 import electron from 'electron'
 
-import { isNumber, isPlainObject, isString,optionalWhenLazy, toNullable, toOptional } from '@velaros-ai/core'
+import {
+  isNumber,
+  isPlainObject,
+  isString,
+  optionalWhenLazy,
+  toNullable,
+  toOptional,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 
@@ -31,14 +38,44 @@ import type {
 } from '../../types/browser'
 import type { ScreencastCapturedFrame } from '../../types/cdp.js'
 import { type BrowserSession } from '../../types/electron'
-import type { BrowserRuntimeKernel, BrowserScreenshotDiffFrame, BrowserScreenshotImageCapture } from '../../types/electron.js'
+import type {
+  BrowserRuntimeKernel,
+  BrowserScreenshotDiffFrame,
+  BrowserScreenshotImageCapture,
+} from '../../types/electron.js'
 import type { ExternalBrowserPageSession } from '../../types/runtime.js'
 import { evaluateInWebContents } from '../../utils/electron/evaluate'
-import { buildScreenshotDiffSample, buildScreenshotElementLabelsScript, buildScreenshotElementLegend, buildScreenshotMetadataScript, buildScreenshotModelCoordinateMap, buildViewportCaptureRegion, compareScreenshotDiffSamples, normalizeScreenshotCursor, normalizeScreenshotElementLabels, readRecentBrowserEvents, resolveDomStabilityOptions, resolveScreenshotElementLabelOptions, resolveScreenshotFullPageOptions, resolveScreenshotModelImageOptions, resolveScreenshotPath, resolveScreenshotRegionRect, writeScreenshotModelImage } from '../../utils/electron/screenshot-image'
-import { normalizeLoginDetection, resolveExternalScreenshotOptions } from '../../utils/electron/screenshot-image'
+import {
+  buildScreenshotDiffSample,
+  buildScreenshotElementLabelsScript,
+  buildScreenshotElementLegend,
+  buildScreenshotMetadataScript,
+  buildScreenshotModelCoordinateMap,
+  buildViewportCaptureRegion,
+  compareScreenshotDiffSamples,
+  normalizeScreenshotCursor,
+  normalizeScreenshotElementLabels,
+  readRecentBrowserEvents,
+  resolveDomStabilityOptions,
+  resolveScreenshotElementLabelOptions,
+  resolveScreenshotFullPageOptions,
+  resolveScreenshotModelImageOptions,
+  resolveScreenshotPath,
+  resolveScreenshotRegionRect,
+  writeScreenshotModelImage,
+} from '../../utils/electron/screenshot-image'
+import {
+  normalizeLoginDetection,
+  resolveExternalScreenshotOptions,
+} from '../../utils/electron/screenshot-image'
 import { createElectronScreencastFrameDecoder } from '../../utils/electron/screenshot-image'
 import { encodeScreencastFramesToGif } from '../../utils/gif.js'
-import { clampInteger, clampNumber, clampZoomFactor, readFiniteNumber } from '../../utils/numbers.js'
+import {
+  clampInteger,
+  clampNumber,
+  clampZoomFactor,
+  readFiniteNumber,
+} from '../../utils/numbers.js'
 import { BrowserTuning } from '../../utils/tuning'
 import { DEFAULT_BROWSER_VIEWPORT } from '../../utils/viewport.js'
 import { resolveBrowserWorkspacePath } from '../../utils/workspace-paths'
@@ -60,24 +97,50 @@ export interface BrowserScreenshotEngineApi {
    * 预览不写入 browser workspace，也不更新截图 diff/legend 等模型侧状态；关闭观察窗后
    * renderer 会停止调用，因此不会给后台浏览器留下 artifact 垃圾。
    */
-  capturePreviewFrame(sessionId: string, context: BrowserSiteContext, options: { maxWidth?: number; quality?: number }, abortSignal?: AbortSignal): Promise<BrowserPagePreviewFrame>
+  capturePreviewFrame(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: { maxWidth?: number; quality?: number },
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPagePreviewFrame>
   /**
    * 用 CDP Page.startScreencast 向宿主画中画持续推帧。
    *
    * 与 capturePreviewFrame 不同，这里不轮询截图、不进入 actionQueue，也不在主进程保存帧；
    * 页面每次合成的新画面会直接交给 renderer，关闭窗口时由 stopPreviewFrameStream 释放。
    */
-  startPreviewFrameStream(sessionId: string, context: BrowserSiteContext, options: { maxWidth?: number; quality?: number }, onEvent: (event: BrowserPagePreviewStreamEvent) => void, abortSignal?: AbortSignal): Promise<void>
+  startPreviewFrameStream(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: { maxWidth?: number; quality?: number },
+    onEvent: (event: BrowserPagePreviewStreamEvent) => void,
+    abortSignal?: AbortSignal
+  ): Promise<void>
   /** 高频指针更新沿现有画中画通道发送，避免为了移动光标重复编码整张页面。 */
   notifyPreviewPointer(sessionId: string, pointer: BrowserPagePreviewPointerEvent): void
   /** 停止画中画的 CDP 实时流；重复调用安全。 */
   stopPreviewFrameStream(sessionId: string): Promise<void>
   /** 开始页面录屏（GIF 产物）。 */
-  startScreencast(sessionId: string, context: BrowserSiteContext, options: BrowserScreencastStartOptions, abortSignal?: AbortSignal): Promise<BrowserScreencastStartResult>
+  startScreencast(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserScreencastStartOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserScreencastStartResult>
   /** 停止录屏，合成 GIF 并落盘 artifacts/recordings/。 */
-  stopScreencast(sessionId: string, context: BrowserSiteContext, options: BrowserScreencastStopOptions, abortSignal?: AbortSignal): Promise<BrowserScreencastStopResult>
+  stopScreencast(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserScreencastStopOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserScreencastStopResult>
   /** 截图并把图片存进站点工作区，可标注元素、等页面稳定、与上一张比对。 */
-  captureScreenshot(sessionId: string, context: BrowserSiteContext, options?: BrowserCaptureScreenshotOptions, abortSignal?: AbortSignal): Promise<BrowserScreenshotArtifact>
+  captureScreenshot(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options?: BrowserCaptureScreenshotOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserScreenshotArtifact>
 }
 
 export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
@@ -131,11 +194,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       context.url
     )
     const metadata = await this.readExternalScreenshotMetadata(externalSession)
-    const screenshotOptions = await resolveExternalScreenshotOptions(
-      externalSession,
-      metadata,
-      {}
-    )
+    const screenshotOptions = await resolveExternalScreenshotOptions(externalSession, metadata, {})
     const captured = await externalSession.driver.captureScreenshot(screenshotOptions)
     let image = electron.nativeImage.createFromBuffer(captured.bytes)
 
@@ -143,11 +202,21 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       throw new AppError('EXECUTION_FAILED', '浏览器页面预览不是有效图像。')
     }
 
-    const maxWidth = clampInteger(options.maxWidth, 240, 1_280, BrowserTuning.screenshot.previewMaxWidth)
+    const maxWidth = clampInteger(
+      options.maxWidth,
+      240,
+      1_280,
+      BrowserTuning.screenshot.previewMaxWidth
+    )
     if (image.getSize().width > maxWidth) {
       image = image.resize({ width: maxWidth })
     }
-    const quality = clampInteger(options.quality, 35, 90, BrowserTuning.screenshot.previewJpegQuality)
+    const quality = clampInteger(
+      options.quality,
+      35,
+      90,
+      BrowserTuning.screenshot.previewJpegQuality
+    )
     const jpeg = image.toJPEG(quality)
     const { width, height } = image.getSize()
 
@@ -196,7 +265,12 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       { driver, externalSession },
       context.url
     )
-    const maxWidth = clampInteger(options.maxWidth, 240, 1_280, BrowserTuning.screenshot.previewStreamMaxWidth)
+    const maxWidth = clampInteger(
+      options.maxWidth,
+      240,
+      1_280,
+      BrowserTuning.screenshot.previewStreamMaxWidth
+    )
     const quality = clampInteger(options.quality, 35, 90, 62)
 
     await driver.startScreencast(
@@ -484,11 +558,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     }
 
     const metadata = await this.readExternalScreenshotMetadata(session)
-    const screenshotOptions = await resolveExternalScreenshotOptions(
-      session,
-      metadata,
-      options
-    )
+    const screenshotOptions = await resolveExternalScreenshotOptions(session, metadata, options)
     const captured = await session.driver.captureScreenshot(screenshotOptions)
     const image = electron.nativeImage.createFromBuffer(captured.bytes)
     if (image.isEmpty()) {
@@ -758,7 +828,11 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       let effectiveHeight = targetHeight
       // 高熵页面（密集小字）在既定质量下可能远超字节预算,先降质、再整体缩一档。
       for (const quality of BrowserScreenshotEngine.ModelImageQualityLadder) {
-        if (bytes.byteLength <= BrowserTuning.screenshot.modelImageByteBudget || quality >= effectiveQuality) continue
+        if (
+          bytes.byteLength <= BrowserTuning.screenshot.modelImageByteBudget ||
+          quality >= effectiveQuality
+        )
+          continue
         bytes = effectiveImage.toJPEG(quality)
         effectiveQuality = quality
       }
@@ -782,11 +856,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
         sourceHeight,
         scale: effectiveWidth / sourceWidth,
         quality: effectiveQuality,
-        coordinateMap: buildScreenshotModelCoordinateMap(
-          capture,
-          effectiveWidth,
-          effectiveHeight
-        ),
+        coordinateMap: buildScreenshotModelCoordinateMap(capture, effectiveWidth, effectiveHeight),
       }
     } catch (error) {
       this.log.debug('压缩浏览器截图失败，回退 PNG 模型图', {

@@ -8,12 +8,7 @@
 // 从没上线的调用失败了就是失败了,上过线却拿不到终态的,必须按「可能已半执行」上抛。
 import { randomUUID } from 'node:crypto'
 
-import {
-  isNull,
-  isTrue,
-  isUndefined,
-  Log,
-} from '@velaros-ai/core'
+import { isNull, isTrue, isUndefined, Log } from '@velaros-ai/core'
 import type { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { RemoteNodeClientErrorCode } from '../../contract/constants'
@@ -56,10 +51,7 @@ export interface RemoteNodePendingCallsApi {
   /** 已经写上线的调用数;只用于诊断与日志。 */
   readonly dispatchedCount: number
   /** 登记一次调用并尝试立刻派发,兑现能力输出;超时、中止与对端终态都从这里结算。 */
-  track(
-    request: RemoteNodeInvokeRequest,
-    signal: LooseOptional<AbortSignal>,
-  ): Promise<unknown>
+  track(request: RemoteNodeInvokeRequest, signal: LooseOptional<AbortSignal>): Promise<unknown>
   /** 连接就绪后冲刷:排队的首次派发,已上线的按 callId 幂等重放。 */
   flush(): void
   /** 收一帧终态:成功兑现输出,否则按 denied / failed 分档拒绝;未知 callId 静默。 */
@@ -77,7 +69,7 @@ export class RemoteNodePendingCalls implements RemoteNodePendingCallsApi {
 
   public constructor(
     private readonly timers: TimerScope,
-    private readonly host: RemoteNodePendingCallsHost,
+    private readonly host: RemoteNodePendingCallsHost
   ) {}
 
   public get dispatchedCount(): number {
@@ -92,7 +84,7 @@ export class RemoteNodePendingCalls implements RemoteNodePendingCallsApi {
    */
   public track(
     request: RemoteNodeInvokeRequest,
-    signal: LooseOptional<AbortSignal>,
+    signal: LooseOptional<AbortSignal>
   ): Promise<unknown> {
     const callId = randomUUID()
     return new Promise<unknown>((resolve, reject) => {
@@ -105,7 +97,7 @@ export class RemoteNodePendingCalls implements RemoteNodePendingCallsApi {
       const deadline = this.timers.after(
         resolveRemoteNodeDeadlineMs(request) + KernelTuning.remoteClientDeadlineGraceMs,
         () => this.settleTimeout(callId),
-        { label: 'remote-node.call-deadline', unref: true },
+        { label: 'remote-node.call-deadline', unref: true }
       )
       this.entries.set(callId, {
         callId,
@@ -134,19 +126,21 @@ export class RemoteNodePendingCalls implements RemoteNodePendingCallsApi {
         return
       }
       const denied = frame.status === 'denied'
-      pending.reject(new RemoteNodeClientError({
-        code: denied
-          ? RemoteNodeClientErrorCodes.CallDenied
-          : RemoteNodeClientErrorCodes.CallFailed,
-        message: describeRemoteNodeError(
-          frame.error,
-          denied ? '远程节点拒绝了这次调用' : '远程节点调用失败',
-        ),
-        nodeError: frame.error,
-        // 两者都是对端给出的终态判决,不存在"可能半执行"。
-        resultUnknown: false,
-        retryable: !denied && isTrue(frame.error?.retryable),
-      }))
+      pending.reject(
+        new RemoteNodeClientError({
+          code: denied
+            ? RemoteNodeClientErrorCodes.CallDenied
+            : RemoteNodeClientErrorCodes.CallFailed,
+          message: describeRemoteNodeError(
+            frame.error,
+            denied ? '远程节点拒绝了这次调用' : '远程节点调用失败'
+          ),
+          nodeError: frame.error,
+          // 两者都是对端给出的终态判决,不存在"可能半执行"。
+          resultUnknown: false,
+          retryable: !denied && isTrue(frame.error?.retryable),
+        })
+      )
     })
   }
 
@@ -170,12 +164,14 @@ export class RemoteNodePendingCalls implements RemoteNodePendingCallsApi {
         continue
       }
       this.settle(entry.callId, (pending) => {
-        pending.reject(new RemoteNodeClientError({
-          code: RemoteNodeClientErrorCodes.NodeRestarted,
-          message: `"${describeRemoteNodeCall(pending.request)}" 还在途时远程节点重启了，结果未知`,
-          resultUnknown: true,
-          retryable: false,
-        }))
+        pending.reject(
+          new RemoteNodeClientError({
+            code: RemoteNodeClientErrorCodes.NodeRestarted,
+            message: `"${describeRemoteNodeCall(pending.request)}" 还在途时远程节点重启了，结果未知`,
+            resultUnknown: true,
+            retryable: false,
+          })
+        )
       })
     }
   }
@@ -184,12 +180,14 @@ export class RemoteNodePendingCalls implements RemoteNodePendingCallsApi {
   public failAll(code: RemoteNodeClientErrorCode | string, message: string): void {
     for (const entry of [...this.entries.values()]) {
       this.settle(entry.callId, (pending) => {
-        pending.reject(new RemoteNodeClientError({
-          code,
-          message,
-          resultUnknown: pending.dispatched,
-          retryable: false,
-        }))
+        pending.reject(
+          new RemoteNodeClientError({
+            code,
+            message,
+            resultUnknown: pending.dispatched,
+            retryable: false,
+          })
+        )
       })
     }
   }
@@ -223,12 +221,14 @@ export class RemoteNodePendingCalls implements RemoteNodePendingCallsApi {
         callId,
         reason: '超过客户端侧的截止时间',
       })
-      pending.reject(new RemoteNodeClientError({
-        code: RemoteNodeClientErrorCodes.CallTimeout,
-        message: `远程节点调用 "${describeRemoteNodeCall(pending.request)}" 超过了客户端侧的截止时间`,
-        resultUnknown: pending.dispatched,
-        retryable: false,
-      }))
+      pending.reject(
+        new RemoteNodeClientError({
+          code: RemoteNodeClientErrorCodes.CallTimeout,
+          message: `远程节点调用 "${describeRemoteNodeCall(pending.request)}" 超过了客户端侧的截止时间`,
+          resultUnknown: pending.dispatched,
+          retryable: false,
+        })
+      )
     })
   }
 

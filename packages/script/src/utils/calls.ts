@@ -25,7 +25,13 @@ export function foldCalls(calls: readonly CompletedCall[]): CompletedCall[] {
   for (const entry of calls) {
     const last = folded.at(-1)
     const plain = isUndefined(entry.changeRef)
-    if (last && plain && isUndefined(last.changeRef) && last.call === entry.call && last.ok === entry.ok) {
+    if (
+      last &&
+      plain &&
+      isUndefined(last.changeRef) &&
+      last.call === entry.call &&
+      last.ok === entry.ok
+    ) {
       last.times = (last.times ?? 1) + 1
       continue
     }

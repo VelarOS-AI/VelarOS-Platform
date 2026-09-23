@@ -275,9 +275,33 @@ export type PresentationTemplate = 'modern' | 'consulting' | 'academic' | 'minim
  * data 是 PptxGenJS 的系列数组（每项 { name, labels, values }）。
  */
 export type PptElement =
-  | { kind: 'text'; value: string | PptTextProps[]; x: number; y: number; w: number; h: number; options?: Record<string, unknown> }
-  | { kind: 'table'; rows: PptTableCell[][]; x: number; y: number; w: number; h: number; options?: Record<string, unknown> }
-  | { kind: 'shape'; shape: string; x: number; y: number; w: number; h: number; options?: Record<string, unknown> }
+  | {
+      kind: 'text'
+      value: string | PptTextProps[]
+      x: number
+      y: number
+      w: number
+      h: number
+      options?: Record<string, unknown>
+    }
+  | {
+      kind: 'table'
+      rows: PptTableCell[][]
+      x: number
+      y: number
+      w: number
+      h: number
+      options?: Record<string, unknown>
+    }
+  | {
+      kind: 'shape'
+      shape: string
+      x: number
+      y: number
+      w: number
+      h: number
+      options?: Record<string, unknown>
+    }
   | {
       kind: 'image'
       data: string

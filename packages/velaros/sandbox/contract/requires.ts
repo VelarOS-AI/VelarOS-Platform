@@ -7,7 +7,17 @@
 import type { ApprovalPort } from '@velaros-ai/kernel'
 import type { ShellProcessConfinementProvider } from '@velaros-ai/velaros/shell'
 
-import type { SandboxApplyOptions, SandboxApplyResult, SandboxCommandOutcome, SandboxCreateOptions, SandboxDiff, SandboxDiffOptions, SandboxDiscardResult, SandboxRecord, SandboxRunOptions } from '../types/rehearsal-sandbox.js'
+import type {
+  SandboxApplyOptions,
+  SandboxApplyResult,
+  SandboxCommandOutcome,
+  SandboxCreateOptions,
+  SandboxDiff,
+  SandboxDiffOptions,
+  SandboxDiscardResult,
+  SandboxRecord,
+  SandboxRunOptions,
+} from '../types/rehearsal-sandbox.js'
 
 /**
  * 宿主的演练沙箱：把一个目录镜像到临时区、在镜像里跑命令、看镜像相对创建时的变化、把变化落回源目录、丢弃镜像。
@@ -23,7 +33,10 @@ export interface RehearsalSandboxHostPort {
   /** 丢弃：只删沙箱基目录之下的镜像；本来就不在时 removed 为 false。 */
   discardSandbox: (sandboxId: string) => Promise<SandboxDiscardResult>
   /** 在镜像根里跑一条命令，约束钉在镜像根，写到源目录会失败；命令自己失败写进回执不抛错，abortSignal 触发时尽快停下。 */
-  runInSandbox: (options: SandboxRunOptions, abortSignal?: AbortSignal) => Promise<SandboxCommandOutcome>
+  runInSandbox: (
+    options: SandboxRunOptions,
+    abortSignal?: AbortSignal
+  ) => Promise<SandboxCommandOutcome>
 }
 
 /**

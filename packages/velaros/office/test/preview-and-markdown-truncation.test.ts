@@ -79,7 +79,13 @@ describe('预览页数与 Markdown 截断的如实上报', () => {
     await officeOperations.createPresentation(
       {
         outputPath: 'deck.pptx',
-        content: ['# 第一页\n正文一', '# 第二页\n正文二', '# 第三页\n正文三', '# 第四页\n正文四', '# 第五页\n正文五'].join('\n'),
+        content: [
+          '# 第一页\n正文一',
+          '# 第二页\n正文二',
+          '# 第三页\n正文三',
+          '# 第四页\n正文四',
+          '# 第五页\n正文五',
+        ].join('\n'),
       },
       context
     )
@@ -117,8 +123,9 @@ describe('预览页数与 Markdown 截断的如实上报', () => {
       throw new Error('disabled converter must not run')
     }
 
-    await expect(officeOperations.toMarkdown({ inputPath: 'short.md' }, context))
-      .rejects.toMatchObject({ code: 'OFFICE_MARKITDOWN_UNAVAILABLE' })
+    await expect(
+      officeOperations.toMarkdown({ inputPath: 'short.md' }, context)
+    ).rejects.toMatchObject({ code: 'OFFICE_MARKITDOWN_UNAVAILABLE' })
     expect(commands).toBe(0)
   })
 
@@ -130,6 +137,10 @@ describe('预览页数与 Markdown 截断的如实上报', () => {
 
     const result = await officeOperations.toMarkdown({ inputPath: 'short.md' }, context)
 
-    expect(result).toEqual({ path: join(root, 'short.md'), markdown: '# 标题\n正文', truncated: false })
+    expect(result).toEqual({
+      path: join(root, 'short.md'),
+      markdown: '# 标题\n正文',
+      truncated: false,
+    })
   })
 })

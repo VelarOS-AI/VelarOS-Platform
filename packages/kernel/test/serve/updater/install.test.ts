@@ -1,10 +1,4 @@
-import {
-  mkdir,
-  readdir,
-  readFile,
-  stat,
-  writeFile,
-} from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
@@ -52,7 +46,7 @@ function resources(): Record<string, Uint8Array | string> {
 function createUpdater(
   root: string,
   overrides: Partial<KernelUpdaterOptions> = {},
-  fetchOptions: FakeFetchOptions = {},
+  fetchOptions: FakeFetchOptions = {}
 ): KernelUpdater {
   return new KernelUpdater({
     root,
@@ -64,10 +58,7 @@ function createUpdater(
 }
 
 async function payloadOf(root: string, version: string): Promise<string> {
-  return readFile(
-    join(root, 'versions', version, `kernel-${version}.bin`),
-    'utf8',
-  )
+  return readFile(join(root, 'versions', version, `kernel-${version}.bin`), 'utf8')
 }
 
 describe('Kernel side-by-side installation', () => {
@@ -87,16 +78,25 @@ describe('Kernel side-by-side installation', () => {
     expect((await readdir(join(root, 'versions'))).sort()).toEqual(['1.0.0', '1.1.0'])
     expect(await payloadOf(root, '1.0.0')).toBe('kernel-1.0.0')
     expect(await payloadOf(root, '1.1.0')).toBe('kernel-1.1.0')
-    expect((await readdir(root)).sort())
-      .toEqual(['.staging', 'backups', 'data', 'runtime', 'versions'])
+    expect((await readdir(root)).sort()).toEqual([
+      '.staging',
+      'backups',
+      'data',
+      'runtime',
+      'versions',
+    ])
   })
 
   test('treats an already installed version as satisfied', async () => {
     const root = await directories.create()
     const requested: string[] = []
-    const updater = createUpdater(root, {}, {
-      onRequest: (url) => requested.push(url),
-    })
+    const updater = createUpdater(
+      root,
+      {},
+      {
+        onRequest: (url) => requested.push(url),
+      }
+    )
 
     await updater.ensureInstalled('1.0.0')
     const repeat = await updater.ensureInstalled('1.0.0')
@@ -128,10 +128,14 @@ describe('Kernel side-by-side installation', () => {
     await createUpdater(root).activateVersion('1.0.0')
     const pointerBefore = await readFile(join(root, 'current.json'), 'utf8')
 
-    const interrupted = createUpdater(root, {}, {
-      interruptAfterBytes: 8,
-      interruptUrls: [second.descriptor.url],
-    })
+    const interrupted = createUpdater(
+      root,
+      {},
+      {
+        interruptAfterBytes: 8,
+        interruptUrls: [second.descriptor.url],
+      }
+    )
     await expect(interrupted.ensureInstalled('1.1.0')).rejects.toMatchObject({
       code: 'DOWNLOAD_FAILED',
     })
@@ -160,8 +164,7 @@ describe('Kernel side-by-side installation', () => {
       details: { version: '1.1.0' },
     })
     expect(await readdir(join(root, 'versions'))).toEqual(['1.0.0'])
-    expect((await readKernelActivePointer(join(root, 'current.json')))?.version)
-      .toBe('1.0.0')
+    expect((await readKernelActivePointer(join(root, 'current.json')))?.version).toBe('1.0.0')
     expect(await readdir(join(root, '.staging'))).toEqual([])
   })
 
@@ -186,8 +189,7 @@ describe('Kernel side-by-side installation', () => {
     const outcome = await createUpdater(root).ensureInstalled('1.0.0')
 
     expect(outcome.installed).toBe(true)
-    expect((await readdir(partial)).sort())
-      .toEqual(['.kernel-install.json', 'kernel-1.0.0.bin'])
+    expect((await readdir(partial)).sort()).toEqual(['.kernel-install.json', 'kernel-1.0.0.bin'])
   })
 
   test('refuses to reinstall over the active version', async () => {
@@ -196,8 +198,10 @@ describe('Kernel side-by-side installation', () => {
     await updater.ensureInstalled('1.0.0')
     await updater.activateVersion('1.0.0')
 
-    await expect(updater.ensureInstalled('1.0.0', { force: true }))
-      .rejects.toMatchObject({ code: 'INSTALL_FAILED', details: { version: '1.0.0' } })
+    await expect(updater.ensureInstalled('1.0.0', { force: true })).rejects.toMatchObject({
+      code: 'INSTALL_FAILED',
+      details: { version: '1.0.0' },
+    })
     expect(await payloadOf(root, '1.0.0')).toBe('kernel-1.0.0')
   })
 
@@ -238,7 +242,7 @@ describe('Kernel side-by-side installation', () => {
     await writeFile(
       join(root, 'update.lock'),
       JSON.stringify({ holderId: 'other', pid: process.pid, acquiredAt: 1 }),
-      { encoding: 'utf8', mode: 0o600 },
+      { encoding: 'utf8', mode: 0o600 }
     )
 
     const contender = createUpdater(root)
@@ -250,8 +254,9 @@ describe('Kernel side-by-side installation', () => {
     })
 
     expect(await readdir(join(root, 'versions'))).toEqual(['1.0.0'])
-    expect(JSON.parse(await readFile(join(root, 'update.lock'), 'utf8')))
-      .toMatchObject({ holderId: 'other' })
+    expect(JSON.parse(await readFile(join(root, 'update.lock'), 'utf8'))).toMatchObject({
+      holderId: 'other',
+    })
   })
 
   test('serialises concurrent operations issued by one updater', async () => {
@@ -265,9 +270,7 @@ describe('Kernel side-by-side installation', () => {
     ])
 
     expect(outcomes.map((outcome) => outcome.installed)).toEqual([true, true, true])
-    expect((await readdir(join(root, 'versions'))).sort())
-      .toEqual(['1.0.0', '1.1.0', '1.2.0'])
-    await expect(stat(join(root, 'update.lock'))).rejects
-      .toMatchObject({ code: 'ENOENT' })
+    expect((await readdir(join(root, 'versions'))).sort()).toEqual(['1.0.0', '1.1.0', '1.2.0'])
+    await expect(stat(join(root, 'update.lock'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 })

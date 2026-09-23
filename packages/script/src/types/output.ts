@@ -90,7 +90,7 @@ export interface ScriptOutputEdit {
   /** 替换整体展示配置；不填表示保持原样。 */
   readonly config?: ScriptOutputConfig
   /** 按稳定键完整替换 view，其余观察意图保持不变。 */
-  readonly outputs?: ReadonlyArray<{readonly key:string; readonly view:ScriptOutputView}>
+  readonly outputs?: ReadonlyArray<{ readonly key: string; readonly view: ScriptOutputView }>
 }
 /** 摘要严格绑定原始内容和当前任务解释代次。 */
 export interface ScriptOutputSummary {
@@ -106,56 +106,56 @@ export interface ScriptOutputSummary {
 /** 每个块的实际展示状态，正文和原始值分别保存。 */
 export interface ScriptOutputPresentation {
   /** 输出身份。 */
-  readonly key:string
+  readonly key: string
   /** 内容类型。 */
-  readonly type:ScriptOutputType
+  readonly type: ScriptOutputType
   /** 观察目的。 */
-  readonly purpose?:string
+  readonly purpose?: string
   /** 代码语言标签。 */
-  readonly language?:string
+  readonly language?: string
   /** 原始值指纹，仅内容相同时相同。 */
-  readonly contentHash:string
+  readonly contentHash: string
   /** 完整正文、片段、摘要或引用。 */
-  readonly representation:'full'|'excerpt'|'summary'|'reference'
+  readonly representation: 'full' | 'excerpt' | 'summary' | 'reference'
   /** 本轮实际展示的正文。 */
-  readonly text:string
+  readonly text: string
   /** 是否实际提供正文。 */
-  readonly bodyIncluded:boolean
+  readonly bodyIncluded: boolean
   /** 原始执行结果引用。 */
-  readonly rawRef:string
+  readonly rawRef: string
   /** 原始归档中的 JSON Pointer。 */
-  readonly pointer:string
+  readonly pointer: string
   /** 原始快照字符数。 */
-  readonly totalChars:number
+  readonly totalChars: number
   /** 列表原始条数。 */
-  readonly totalItems?:number
+  readonly totalItems?: number
   /** 实际选择的范围或缺失路径。 */
-  readonly selection?:unknown
+  readonly selection?: unknown
   /** 降级或缺口说明。 */
-  readonly reason?:string
+  readonly reason?: string
 }
 /** 输出整理的完整结果；prompt 才是计算预算的实际文字。 */
 export interface ScriptOutputProjection {
   /** 块目录，可用于结构化审计。 */
-  readonly blocks:readonly ScriptOutputPresentation[]
+  readonly blocks: readonly ScriptOutputPresentation[]
   /** 实际发送的有界文字。 */
-  readonly prompt:string
+  readonly prompt: string
   /** 源码申请的上限。 */
-  readonly requestedChars:number
+  readonly requestedChars: number
   /** 宿主实际分配的上限。 */
-  readonly allocatedChars:number
+  readonly allocatedChars: number
   /** 连目录也放不下的块数量。 */
-  readonly omittedBlocks:number
+  readonly omittedBlocks: number
   /** 捕获问题始终明确显示。 */
-  readonly issues:readonly string[]
+  readonly issues: readonly string[]
 }
 
 /** 宿主计量的一次执行成本，不把输出大小误称为外部读取量。 */
 export interface ScriptExecutionMetrics {
   /** 端到端执行耗时，包含等待能力返回。 */
-  readonly durationMs:number
+  readonly durationMs: number
   /** 实际发起的能力调用数。 */
-  readonly capabilityCalls:number
+  readonly capabilityCalls: number
   /** 成功归档输出的 JSON UTF-16 字符数。 */
-  readonly rawOutputChars:number
+  readonly rawOutputChars: number
 }

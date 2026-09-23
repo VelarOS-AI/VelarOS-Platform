@@ -553,8 +553,7 @@ declare module 'velaros:browser' {
 
   /** 只截页面上的一块：给 selector（截那个元素），或者给完整的 x、y、width、height（页面 CSS 像素，含滚动，最多 20000）。 */
   type BrowserScreenshotRegion =
-    | { selector: string }
-    | { x: number; y: number; width: number; height: number }
+    { selector: string } | { x: number; y: number; width: number; height: number }
 
   /** 截的是页面哪一块：mode 是 viewport、full-page、region；x、y、width、height 是那块在页面上的位置（CSS 像素，含滚动），clipped 为真表示超出上限被裁过。 */
   interface BrowserScreenshotCaptureRegion extends BrowserScreenshotRect {
@@ -680,12 +679,7 @@ declare module 'velaros:browser' {
 
   /** 可以点的东西是什么：button、submit、link、combobox（下拉框）、option、menuitem。 */
   type BrowserPageActionRole =
-    | 'button'
-    | 'submit'
-    | 'link'
-    | 'combobox'
-    | 'option'
-    | 'menuitem'
+    'button' | 'submit' | 'link' | 'combobox' | 'option' | 'menuitem'
 
   /** 紧凑快照从哪来：dom-inspection 或 cdp-accessibility（无障碍树）。 */
   type BrowserPageSnapshotSource = 'dom-inspection' | 'cdp-accessibility'

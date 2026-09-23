@@ -31,19 +31,31 @@ function isPermissionBits(mode: number): boolean {
  * 非 Windows 上按非阻塞方式打开，命名管道没有写端也立刻返回、随即按类型拒掉，不会把调用卡住。
  */
 export async function openRegularFile(path: string): Promise<FileHandle> {
-  const handle = await open(path, process.platform === 'win32' ? constants.O_RDONLY : constants.O_RDONLY | constants.O_NONBLOCK)
+  const handle = await open(
+    path,
+    process.platform === 'win32' ? constants.O_RDONLY : constants.O_RDONLY | constants.O_NONBLOCK
+  )
   let regular = false
   try {
     regular = (await handle.stat()).isFile()
   } finally {
     if (!regular) await handle.close()
   }
-  if (!regular) throw new AppError(TextFileErrorCodes.notRegular, '不是普通文件（目录、管道或设备），不能当文本读写。', undefined, { path })
+  if (!regular)
+    throw new AppError(
+      TextFileErrorCodes.notRegular,
+      '不是普通文件（目录、管道或设备），不能当文本读写。',
+      undefined,
+      { path }
+    )
   return handle
 }
 
 /** 在同一个句柄上有界读整个文件：不存在返回 undefined；超过 maxBytes 抛 tooLarge，不分配大缓冲；多读一个字节，读的过程中文件变长抛 externalEdit。 */
-export async function readBoundedBytes(path: string, maxBytes: number): Promise<Buffer | undefined> {
+export async function readBoundedBytes(
+  path: string,
+  maxBytes: number
+): Promise<Buffer | undefined> {
   const handle = await openRegularFile(path).catch((error: unknown) => {
     if (errnoOf(error) === 'ENOENT') return undefined
     throw error
@@ -51,7 +63,13 @@ export async function readBoundedBytes(path: string, maxBytes: number): Promise<
   if (!handle) return undefined
   try {
     const { size } = await handle.stat()
-    if (size > maxBytes) throw new AppError(TextFileErrorCodes.tooLarge, `文件字节长度 ${size} 超过上限 ${maxBytes}。`, undefined, { path, size, maxBytes })
+    if (size > maxBytes)
+      throw new AppError(
+        TextFileErrorCodes.tooLarge,
+        `文件字节长度 ${size} 超过上限 ${maxBytes}。`,
+        undefined,
+        { path, size, maxBytes }
+      )
     // 多要一个字节：读得到第 size + 1 个字节，说明文件在读的过程中变长了。
     const bytes = Buffer.alloc(size + 1)
     let offset = 0
@@ -60,7 +78,13 @@ export async function readBoundedBytes(path: string, maxBytes: number): Promise<
       if (bytesRead === 0) break
       offset += bytesRead
     }
-    if (offset > size) throw new AppError(TextFileErrorCodes.externalEdit, '文件在读取期间变长了，已被外部修改。', undefined, { path })
+    if (offset > size)
+      throw new AppError(
+        TextFileErrorCodes.externalEdit,
+        '文件在读取期间变长了，已被外部修改。',
+        undefined,
+        { path }
+      )
     return bytes.subarray(0, offset)
   } finally {
     await handle.close()
@@ -92,12 +116,23 @@ export function matchesExpected(current: Optional<Uint8Array>, expected: Expecte
 }
 
 /** 核对磁盘上的字节还是预期那份：按预期的长度有界读，多出字节、变成了别的类型、内容不同都算被外部改过，抛 externalEdit（message 说明是哪一步的核对）。 */
-export async function assertBytesOnDisk(path: string, expected: ExpectedBytes, message: string): Promise<void> {
-  const current = await readBoundedBytes(path, expected.bytes?.length ?? 0).catch((error: unknown) => {
-    const changedShape = error instanceof AppError && (error.code === TextFileErrorCodes.tooLarge || error.code === TextFileErrorCodes.notRegular)
-    throw changedShape ? new AppError(TextFileErrorCodes.externalEdit, message, error, { path }) : error
-  })
-  if (!matchesExpected(current, expected)) throw new AppError(TextFileErrorCodes.externalEdit, message, undefined, { path })
+export async function assertBytesOnDisk(
+  path: string,
+  expected: ExpectedBytes,
+  message: string
+): Promise<void> {
+  const current = await readBoundedBytes(path, expected.bytes?.length ?? 0).catch(
+    (error: unknown) => {
+      const changedShape =
+        error instanceof AppError &&
+        (error.code === TextFileErrorCodes.tooLarge || error.code === TextFileErrorCodes.notRegular)
+      throw changedShape
+        ? new AppError(TextFileErrorCodes.externalEdit, message, error, { path })
+        : error
+    }
+  )
+  if (!matchesExpected(current, expected))
+    throw new AppError(TextFileErrorCodes.externalEdit, message, undefined, { path })
 }
 
 /**
@@ -108,10 +143,15 @@ export async function assertBytesOnDisk(path: string, expected: ExpectedBytes, m
 export async function replaceFileAtomically(
   path: string,
   prepare: (target: string, exists: boolean) => Uint8Array | Promise<Uint8Array>,
-  options: { mode?: number; expected?: ExpectedBytes },
+  options: { mode?: number; expected?: ExpectedBytes }
 ): Promise<void> {
   if (isPresent(options.mode) && !isPermissionBits(options.mode))
-    throw new AppError(TextFileErrorCodes.invalidMode, '文件权限必须是 0 到 0777 的普通权限位。', undefined, { path, mode: options.mode })
+    throw new AppError(
+      TextFileErrorCodes.invalidMode,
+      '文件权限必须是 0 到 0777 的普通权限位。',
+      undefined,
+      { path, mode: options.mode }
+    )
   const entry = await lstat(path).catch((error: unknown) => {
     if (errnoOf(error) === 'ENOENT') return undefined
     throw error
@@ -123,7 +163,7 @@ export async function replaceFileAtomically(
       TextFileErrorCodes.notRegular,
       '原子替换只接受普通文件或指向普通文件的符号链接；有多个硬链接的文件替换后会和其余链接分家，拒绝写入。',
       undefined,
-      { path, nlink: existing.nlink },
+      { path, nlink: existing.nlink }
     )
   }
   if (options.expected) await assertBytesOnDisk(target, options.expected, WriteMismatchMessage)

@@ -35,13 +35,29 @@ const pathSchema = z.string().trim().min(1).max(OfficeInputLimits.pathChars)
 const titleSchema = z.string().min(1).max(OfficeInputLimits.titleChars)
 const authorSchema = z.string().min(1).max(OfficeInputLimits.shortFieldChars)
 const textSchema = z.string().min(1).max(OfficeInputLimits.textChars)
-const keywordsSchema = z.array(z.string().min(1).max(OfficeInputLimits.tinyFieldChars)).max(OfficeInputLimits.keywords)
+const keywordsSchema = z
+  .array(z.string().min(1).max(OfficeInputLimits.tinyFieldChars))
+  .max(OfficeInputLimits.keywords)
 const pageNumberSchema = z.number().int().positive()
 
 // ── Word ────────────────────────────────────────────────────────
 
 const wordHighlightSchema = z.enum([
-  'yellow', 'green', 'cyan', 'magenta', 'blue', 'red', 'darkBlue', 'darkCyan', 'darkGreen', 'darkMagenta', 'darkRed', 'darkYellow', 'darkGray', 'lightGray', 'black',
+  'yellow',
+  'green',
+  'cyan',
+  'magenta',
+  'blue',
+  'red',
+  'darkBlue',
+  'darkCyan',
+  'darkGreen',
+  'darkMagenta',
+  'darkRed',
+  'darkYellow',
+  'darkGray',
+  'lightGray',
+  'black',
 ])
 
 const wordTextRunSchema = z.object({
@@ -114,7 +130,11 @@ const wordBlockSchema = z.discriminatedUnion('kind', [
     header: z.boolean().optional(),
     headerBgColor: z.string().optional(),
     borderColor: z.string().optional(),
-    widthPct: z.number().min(OfficeInputLimits.word.minWidthPercent).max(OfficeInputLimits.word.maxWidthPercent).optional(),
+    widthPct: z
+      .number()
+      .min(OfficeInputLimits.word.minWidthPercent)
+      .max(OfficeInputLimits.word.maxWidthPercent)
+      .optional(),
   }),
   z.object({ kind: z.literal('pageBreak') }),
 ])
@@ -156,17 +176,36 @@ const wordInputSchema = z
 // ── PowerPoint ──────────────────────────────────────────────────
 
 const pptOptionsSchema = z.record(z.string(), z.unknown())
-const pptBoxShape = { x: z.number(), y: z.number(), w: z.number().positive(), h: z.number().positive(), options: pptOptionsSchema.optional() }
+const pptBoxShape = {
+  x: z.number(),
+  y: z.number(),
+  w: z.number().positive(),
+  h: z.number().positive(),
+  options: pptOptionsSchema.optional(),
+}
 
 const pptElementSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('text'),
-    value: z.union([z.string(), z.array(z.object({ text: z.string(), options: pptOptionsSchema.optional() }))]),
+    value: z.union([
+      z.string(),
+      z.array(z.object({ text: z.string(), options: pptOptionsSchema.optional() })),
+    ]),
     ...pptBoxShape,
   }),
   z.object({
     kind: z.literal('table'),
-    rows: z.array(z.array(z.union([z.string(), z.number(), z.object({ text: z.string(), options: pptOptionsSchema.optional() })]))).min(1),
+    rows: z
+      .array(
+        z.array(
+          z.union([
+            z.string(),
+            z.number(),
+            z.object({ text: z.string(), options: pptOptionsSchema.optional() }),
+          ])
+        )
+      )
+      .min(1),
     ...pptBoxShape,
   }),
   z.object({ kind: z.literal('shape'), shape: z.string().min(1), ...pptBoxShape }),
@@ -191,7 +230,13 @@ const presentationInputSchema = z
     slides: z
       .array(
         z.object({
-          background: z.object({ color: z.string().optional(), path: z.string().optional(), data: z.string().optional() }).optional(),
+          background: z
+            .object({
+              color: z.string().optional(),
+              path: z.string().optional(),
+              data: z.string().optional(),
+            })
+            .optional(),
           elements: z.array(pptElementSchema).max(OfficeInputLimits.presentation.elements),
           notes: z.string().optional(),
         })
@@ -201,7 +246,9 @@ const presentationInputSchema = z
       .optional(),
     template: z.enum(['modern', 'consulting', 'academic', 'minimal']).optional(),
     layout: z.enum(['LAYOUT_4x3', 'LAYOUT_16x9', 'LAYOUT_16x10', 'LAYOUT_WIDE']).optional(),
-    theme: z.object({ headFontFace: z.string().optional(), bodyFontFace: z.string().optional() }).optional(),
+    theme: z
+      .object({ headFontFace: z.string().optional(), bodyFontFace: z.string().optional() })
+      .optional(),
     title: titleSchema.optional(),
     author: authorSchema.optional(),
     rtlMode: z.boolean().optional(),
@@ -273,7 +320,12 @@ const editPdfInputSchema = z.strictObject({
   pageSelection: z.array(pageNumberSchema).min(1).max(OfficePdfLimits.pageList).optional(),
   removePages: z.array(pageNumberSchema).max(OfficePdfLimits.pageList).optional(),
   rotatePages: z
-    .array(z.object({ page: pageNumberSchema, degrees: z.union([z.literal(90), z.literal(180), z.literal(270)]) }))
+    .array(
+      z.object({
+        page: pageNumberSchema,
+        degrees: z.union([z.literal(90), z.literal(180), z.literal(270)]),
+      })
+    )
     .max(OfficePdfLimits.pageList)
     .optional(),
   textStamps: z.array(pdfTextStampSchema).max(OfficePdfLimits.textStamps).optional(),
@@ -300,7 +352,12 @@ const previewInputSchema = z.strictObject({
 
 const markdownInputSchema = z.strictObject({
   inputPath: pathSchema,
-  maxChars: z.number().int().min(OfficeMarkdownLimits.minReturnChars).max(OfficeMarkdownLimits.maxReturnChars).optional(),
+  maxChars: z
+    .number()
+    .int()
+    .min(OfficeMarkdownLimits.minReturnChars)
+    .max(OfficeMarkdownLimits.maxReturnChars)
+    .optional(),
   outputPath: pathSchema.optional(),
   overwrite: z.boolean().optional(),
 })

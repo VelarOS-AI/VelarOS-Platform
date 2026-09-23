@@ -21,12 +21,21 @@ export interface ShellCommandApprovalApi {
 export class ShellCommandApproval implements ShellCommandApprovalApi {
   public dangerous(input: ShellCommandApprovalInput): ShellCommandApprovalRequest {
     return {
-      message: buildDangerousCommandConfirmationMessage(input.command, input.plan, input.scopeLabel, input.background),
+      message: buildDangerousCommandConfirmationMessage(
+        input.command,
+        input.plan,
+        input.scopeLabel,
+        input.background
+      ),
       options: approvalContracts.createManualApprovalOptions({
         approvalRisk: 'high',
         riskScope: input.riskScope,
         operation: {
-          key: approvalContracts.createApprovalOperationKey(ShellCommandOperationKind, { command: input.command.trim(), cwd: input.cwd, background: input.background }),
+          key: approvalContracts.createApprovalOperationKey(ShellCommandOperationKind, {
+            command: input.command.trim(),
+            cwd: input.cwd,
+            background: input.background,
+          }),
           label: input.command,
           target: input.cwd,
         },

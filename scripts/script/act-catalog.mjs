@@ -28,13 +28,18 @@ const Activation = Object.freeze({
 })
 
 const entries = CodeSurfaces.filter((surface) => surface.unit?.startsWith('act/'))
-const missing = entries.filter((entry) => !Activation[entry.namespace]).map((entry) => entry.namespace)
-if (missing.length > 0) throw new Error(`act-catalog.mjs 缺这些投影的可用条件：${missing.join('、')}`)
+const missing = entries
+  .filter((entry) => !Activation[entry.namespace])
+  .map((entry) => entry.namespace)
+if (missing.length > 0)
+  throw new Error(`act-catalog.mjs 缺这些投影的可用条件：${missing.join('、')}`)
 
-const surfaces = await Promise.all(entries.map(async (entry) => {
-  const module = await import(`../../packages/velaros/dist/${entry.unit}/contract/surface.js`)
-  return { entry, surface: module[surfaceConstantName(entry.namespace)] }
-}))
+const surfaces = await Promise.all(
+  entries.map(async (entry) => {
+    const module = await import(`../../packages/velaros/dist/${entry.unit}/contract/surface.js`)
+    return { entry, surface: module[surfaceConstantName(entry.namespace)] }
+  })
+)
 
 /** 模块在模型那边的叫法：velaros:system 的成员写成 system.<成员>，其余就是 import 用的名字。 */
 function modelName(specifier) {
@@ -44,15 +49,26 @@ function modelName(specifier) {
 
 const rows = surfaces.map(({ entry, surface }) => {
   const group = entry.unit.slice('act/'.length)
-  const templates = [entry.templates].flat().map((name) => `[${name}](${group}/${name})`).join(' + ')
+  const templates = [entry.templates]
+    .flat()
+    .map((name) => `[${name}](${group}/${name})`)
+    .join(' + ')
   return `| [${group}/ — ${entry.namespace}](${group}/MODULE.md) | ${surface.methods.map((name) => `\`${name}\``).join('、')} | ${Activation[entry.namespace]} | ${templates} |`
 })
-const operations = [...new Set(surfaces.flatMap(({ surface }) => surface.methods.map((name) => {
-  const operation = surface.operations[name]
-  const modes = operation.allowedModes ?? (operation.effects === 'none' ? ['observe', 'execute'] : ['execute'])
-  const summary = operation.summary.replaceAll('\n', ' ').replaceAll('|', '\\|')
-  return `| \`${modelName(surface.specifier)}.${name}\` | ${modes.map((mode) => `\`${mode}\``).join('、')} | \`${operation.effects}\` | ${summary} |`
-})))]
+const operations = [
+  ...new Set(
+    surfaces.flatMap(({ surface }) =>
+      surface.methods.map((name) => {
+        const operation = surface.operations[name]
+        const modes =
+          operation.allowedModes ??
+          (operation.effects === 'none' ? ['observe', 'execute'] : ['execute'])
+        const summary = operation.summary.replaceAll('\n', ' ').replaceAll('|', '\\|')
+        return `| \`${modelName(surface.specifier)}.${name}\` | ${modes.map((mode) => `\`${mode}\``).join('、')} | \`${operation.effects}\` | ${summary} |`
+      })
+    )
+  ),
+]
 const projected = surfaces.reduce((count, { surface }) => count + surface.methods.length, 0)
 
 const body = `# Act 能力目录
@@ -89,9 +105,13 @@ ${operations.join('\n')}
 
 if (process.argv.includes('--write')) {
   writeFileSync(Destination, body)
-  process.stdout.write(`✓ ${Destination.slice(Destination.indexOf('packages/'))}：${surfaces.length} 种合同投影、${operations.length} 项用法\n`)
+  process.stdout.write(
+    `✓ ${Destination.slice(Destination.indexOf('packages/'))}：${surfaces.length} 种合同投影、${operations.length} 项用法\n`
+  )
 } else if (readFileSync(Destination, 'utf8') !== body) {
-  process.stdout.write('✗ packages/velaros/act/README.md 与生成的模型面不一致；`bun run generate:act-catalog` 重算并提交\n')
+  process.stdout.write(
+    '✗ packages/velaros/act/README.md 与生成的模型面不一致；`bun run generate:act-catalog` 重算并提交\n'
+  )
   process.exit(1)
 } else {
   process.stdout.write(`✓ Act 能力目录与生成的模型面一致（${surfaces.length} 种合同投影）\n`)

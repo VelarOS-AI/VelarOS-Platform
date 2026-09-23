@@ -10,7 +10,8 @@ const canonicalIssues = 'https://github.com/VelarOS-AI/VelarOS-Platform/issues'
 // 许可证只有仓根一份 LICENSE（用户裁决）：包、产品、vendor 目录里不放，仓根也不另放 NOTICE、第三方声明或
 // third-party-licenses/。checkLicenseFilesOnlyAtRoot 拦许可证样式的文件与目录。
 const rootLicenseFile = 'LICENSE'
-const licenseFileName = /^(?:licen[cs]e|notice|copying)(?:[._-].*)?$|^third[-_]party[-_]notices(?:\..*)?$/iu
+const licenseFileName =
+  /^(?:licen[cs]e|notice|copying)(?:[._-].*)?$|^third[-_]party[-_]notices(?:\..*)?$/iu
 const licenseDirectoryName = /^third[-_]party[-_]licen[cs]es$/iu
 const codeFileExtension = /\.(?:[cm]?[jt]sx?)$/u
 const ignoredDirectoryNames = new Set([
@@ -44,14 +45,18 @@ const forbiddenText = [
     pattern: /\/Users\/(?!(?:example|plaintext|velaros)(?=\/|[^A-Za-z0-9._-]|$))[^/\s"'`]+/gi,
   },
   { label: 'personal Gmail address', pattern: /\b[A-Z0-9._%+-]+@gmail\.com\b/gi },
-  { label: 'retired license metadata', pattern: new RegExp(`\\b${['UN', 'LICENSED'].join('')}\\b`, 'g') },
+  {
+    label: 'retired license metadata',
+    pattern: new RegExp(`\\b${['UN', 'LICENSED'].join('')}\\b`, 'g'),
+  },
   {
     label: 'retired split repository URL',
     pattern: /github\.com\/VelarOS-AI\/VelarOS-HTML-Artifacts\b/gi,
   },
   {
     label: 'non-public VelarOS repository URL',
-    pattern: /github\.com\/VelarOS-AI\/(?:VelarOS-(?:Cloud|Desktop|Extension|Labs|Termel|Workbench|Workspace|Website)|VelarScript-Website)\b/gi,
+    pattern:
+      /github\.com\/VelarOS-AI\/(?:VelarOS-(?:Cloud|Desktop|Extension|Labs|Termel|Workbench|Workspace|Website)|VelarScript-Website)\b/gi,
   },
   { label: 'GitHub token', pattern: /\bgh[pousr]_[A-Za-z0-9]{20,}\b/g },
   { label: 'OpenAI API key', pattern: /\bsk-[A-Za-z0-9_-]{20,}\b/g },
@@ -79,12 +84,11 @@ function walk(directory, root = repositoryRoot) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const entryPath = join(directory, entry.name)
     if (
-      entry.isDirectory()
-      && (
-        ignoredDirectoryNames.has(entry.name)
-        || (directory === root && ignoredRootDirectories.has(entry.name))
-      )
-    ) continue
+      entry.isDirectory() &&
+      (ignoredDirectoryNames.has(entry.name) ||
+        (directory === root && ignoredRootDirectories.has(entry.name)))
+    )
+      continue
     if (entry.isDirectory()) files.push(...walk(entryPath, root))
     else if (entry.isFile()) files.push(entryPath)
   }
@@ -108,8 +112,25 @@ function isTextFile(filePath) {
   const extension = extname(filePath).toLowerCase()
   if (
     new Set([
-      '.cjs', '.css', '.html', '.js', '.json', '.jsonl', '.jsx', '.md', '.mjs',
-      '.py', '.scss', '.sh', '.toml', '.ts', '.tsx', '.txt', '.xml', '.yaml', '.yml',
+      '.cjs',
+      '.css',
+      '.html',
+      '.js',
+      '.json',
+      '.jsonl',
+      '.jsx',
+      '.md',
+      '.mjs',
+      '.py',
+      '.scss',
+      '.sh',
+      '.toml',
+      '.ts',
+      '.tsx',
+      '.txt',
+      '.xml',
+      '.yaml',
+      '.yml',
     ]).has(extension)
   ) {
     return true
@@ -141,7 +162,7 @@ function checkRootFiles() {
 
   const pptxPatchRecord = readFileSync(
     join(repositoryRoot, 'packages/velaros/office/vendor/pptxgenjs/README.md'),
-    'utf8',
+    'utf8'
   )
   for (const marker of ['reviewed local security patches', "UUID helper's", 'relationship paths']) {
     if (!pptxPatchRecord.includes(marker)) {
@@ -153,23 +174,28 @@ function checkRootFiles() {
 function checkPackageMetadata() {
   const rootManifest = readJson(join(repositoryRoot, 'package.json'))
   const expectedDirectories = new Set(
-    Object.values(rootManifest.velaros?.domainPackages ?? {}).flat(),
+    Object.values(rootManifest.velaros?.domainPackages ?? {}).flat()
   )
   const actualDirectories = new Set(
-    readdirSync(packageRoot)
-      .filter((directory) => existsSync(join(packageRoot, directory, 'package.json'))),
+    readdirSync(packageRoot).filter((directory) =>
+      existsSync(join(packageRoot, directory, 'package.json'))
+    )
   )
 
   for (const directory of expectedDirectories) {
-    if (!actualDirectories.has(directory)) fail(`registered package is missing: packages/${directory}`)
+    if (!actualDirectories.has(directory))
+      fail(`registered package is missing: packages/${directory}`)
   }
   for (const directory of actualDirectories) {
-    if (!expectedDirectories.has(directory)) fail(`unregistered package exists: packages/${directory}`)
+    if (!expectedDirectories.has(directory))
+      fail(`unregistered package exists: packages/${directory}`)
   }
 
-  if (rootManifest.private !== true) fail('root workspace must remain private to prevent accidental publication')
+  if (rootManifest.private !== true)
+    fail('root workspace must remain private to prevent accidental publication')
   if (rootManifest.license !== 'Apache-2.0') fail('root license must be Apache-2.0')
-  if (rootManifest.repository?.url !== officialRepository) fail('root repository URL is not canonical')
+  if (rootManifest.repository?.url !== officialRepository)
+    fail('root repository URL is not canonical')
 
   for (const directory of [...expectedDirectories].sort()) {
     const directoryPath = join(packageRoot, directory)
@@ -178,14 +204,21 @@ function checkPackageMetadata() {
     const publishable = manifest.private !== true
     const expectedHomepage = `https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/${directory}#readme`
 
-    if (manifest.name !== `@velaros-ai/${directory}`) fail(`${label}: package name does not match its directory`)
+    if (manifest.name !== `@velaros-ai/${directory}`)
+      fail(`${label}: package name does not match its directory`)
     if (manifest.license !== 'Apache-2.0') fail(`${label}: license must be Apache-2.0`)
-    if (publishable && manifest.publishConfig?.access !== 'public') fail(`${label}: publish access must be public`)
-    if (publishable && manifest.publishConfig?.registry !== 'https://npm.pkg.github.com') fail(`${label}: registry is not canonical`)
-    if (manifest.repository?.url !== rootManifest.repository.url) fail(`${label}: repository URL is not canonical`)
-    if (manifest.repository?.directory !== `packages/${directory}`) fail(`${label}: repository directory is not canonical`)
-    if (publishable && manifest.homepage !== expectedHomepage) fail(`${label}: homepage is not canonical`)
-    if (publishable && manifest.bugs?.url !== canonicalIssues) fail(`${label}: issue tracker is not canonical`)
+    if (publishable && manifest.publishConfig?.access !== 'public')
+      fail(`${label}: publish access must be public`)
+    if (publishable && manifest.publishConfig?.registry !== 'https://npm.pkg.github.com')
+      fail(`${label}: registry is not canonical`)
+    if (manifest.repository?.url !== rootManifest.repository.url)
+      fail(`${label}: repository URL is not canonical`)
+    if (manifest.repository?.directory !== `packages/${directory}`)
+      fail(`${label}: repository directory is not canonical`)
+    if (publishable && manifest.homepage !== expectedHomepage)
+      fail(`${label}: homepage is not canonical`)
+    if (publishable && manifest.bugs?.url !== canonicalIssues)
+      fail(`${label}: issue tracker is not canonical`)
     if (!existsSync(join(directoryPath, 'README.md'))) fail(`${label}: README.md is missing`)
   }
 }
@@ -197,22 +230,35 @@ function checkLicenseFilesOnlyAtRoot(directory = repositoryRoot) {
     const entryPath = join(directory, entry.name)
     if (atRoot && entry.name === rootLicenseFile) continue
     if (entry.isDirectory()) {
-      if (ignoredDirectoryNames.has(entry.name) || (atRoot && ignoredRootDirectories.has(entry.name))) continue
+      if (
+        ignoredDirectoryNames.has(entry.name) ||
+        (atRoot && ignoredRootDirectories.has(entry.name))
+      )
+        continue
       if (licenseDirectoryName.test(entry.name)) {
-        fail(`license directory is not allowed: ${relative(repositoryRoot, entryPath)} (the root LICENSE is the only license file)`)
+        fail(
+          `license directory is not allowed: ${relative(repositoryRoot, entryPath)} (the root LICENSE is the only license file)`
+        )
         continue
       }
       checkLicenseFilesOnlyAtRoot(entryPath)
-    } else if (entry.isFile() && licenseFileName.test(entry.name) && !codeFileExtension.test(entry.name)) {
-      fail(`license file is not allowed: ${relative(repositoryRoot, entryPath)} (the root LICENSE is the only license file)`)
+    } else if (
+      entry.isFile() &&
+      licenseFileName.test(entry.name) &&
+      !codeFileExtension.test(entry.name)
+    ) {
+      fail(
+        `license file is not allowed: ${relative(repositoryRoot, entryPath)} (the root LICENSE is the only license file)`
+      )
     }
   }
 }
 
 function checkRuntimeDependencyOwnership() {
   const runtimeSections = ['dependencies', 'optionalDependencies']
-  const capabilityDirectories = readdirSync(packageRoot)
-    .filter((directory) => existsSync(join(packageRoot, directory, 'package.json')))
+  const capabilityDirectories = readdirSync(packageRoot).filter((directory) =>
+    existsSync(join(packageRoot, directory, 'package.json'))
+  )
 
   for (const directory of capabilityDirectories) {
     const manifest = readJson(join(packageRoot, directory, 'package.json'))
@@ -220,7 +266,7 @@ function checkRuntimeDependencyOwnership() {
       for (const section of runtimeSections) {
         if (manifest[section]?.['@velaros-ai/agent']) {
           fail(
-            `${manifest.name}: @velaros-ai/agent must be a peer owned by the host, not a private ${section} runtime`,
+            `${manifest.name}: @velaros-ai/agent must be a peer owned by the host, not a private ${section} runtime`
           )
         }
       }
@@ -229,7 +275,9 @@ function checkRuntimeDependencyOwnership() {
     for (const section of runtimeSections) {
       for (const dependency of Object.keys(manifest[section] ?? {})) {
         if (/^(?:@huggingface\/transformers|onnxruntime(?:-|$))/u.test(dependency)) {
-          fail(`${manifest.name}: optional inference stack must not be a bundled ${section} dependency (${dependency})`)
+          fail(
+            `${manifest.name}: optional inference stack must not be a bundled ${section} dependency (${dependency})`
+          )
         }
       }
     }
@@ -253,7 +301,7 @@ export function collectTextHygieneFailures(root = repositoryRoot) {
     if (controlCharacter) {
       const codePoint = controlCharacter.code.toString(16).toUpperCase().padStart(4, '0')
       hygieneFailures.push(
-        `${displayPath}:${lineAt(content, controlCharacter.index)}: raw control character U+${codePoint} (only tab, LF and CR are allowed)`,
+        `${displayPath}:${lineAt(content, controlCharacter.index)}: raw control character U+${codePoint} (only tab, LF and CR are allowed)`
       )
     }
   }
@@ -277,7 +325,9 @@ function resolveMarkdownTarget(markdownPath, rawTarget) {
 function checkMarkdownLinks() {
   for (const markdownPath of walk(repositoryRoot).filter((file) => extname(file) === '.md')) {
     const content = readFileSync(markdownPath, 'utf8')
-    const scannableContent = content.replace(/```[\s\S]*?```/g, (block) => block.replace(/[^\n]/g, ' '))
+    const scannableContent = content.replace(/```[\s\S]*?```/g, (block) =>
+      block.replace(/[^\n]/g, ' ')
+    )
     for (const match of scannableContent.matchAll(/!?\[[^\]]*\]\(([^)]+)\)/g)) {
       const target = resolveMarkdownTarget(markdownPath, match[1])
       if (!target || existsSync(target)) continue

@@ -13,12 +13,40 @@ import type {
   BrowserPageDiagnosticEntry,
   BrowserViewportOptions,
 } from '../../types/browser'
-import type { CdpScreencastConsumerOptions, CdpScreencastStartOptions, CdpSend,ScreencastCapturedFrame } from '../../types/cdp.js'
-import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverKeyEvent, BrowserPageDriverMouseEvent, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkCaptureState, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverState } from '../../types/driver'
-import { captureCdpHeapSnapshot, createWebContentsCdpTraceTransport } from '../../utils/cdp/tracing.js'
-import { clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
+import type {
+  CdpScreencastConsumerOptions,
+  CdpScreencastStartOptions,
+  CdpSend,
+  ScreencastCapturedFrame,
+} from '../../types/cdp.js'
+import type {
+  BrowserPageDriverClickCoordinatesOptions,
+  BrowserPageDriverDiagnosticsOptions,
+  BrowserPageDriverDragCoordinatesOptions,
+  BrowserPageDriverKeyEvent,
+  BrowserPageDriverMouseEvent,
+  BrowserPageDriverMoveMouseOptions,
+  BrowserPageDriverNetworkCaptureState,
+  BrowserPageDriverNetworkControlState,
+  BrowserPageDriverNetworkIdleOptions,
+  BrowserPageDriverNetworkRequestDetailsResult,
+  BrowserPageDriverNetworkResponseBodyResult,
+  BrowserPageDriverState,
+} from '../../types/driver'
+import {
+  captureCdpHeapSnapshot,
+  createWebContentsCdpTraceTransport,
+} from '../../utils/cdp/tracing.js'
+import {
+  clearBrowserDiagnosticEntries,
+  takeBrowserDiagnosticWindow,
+} from '../../utils/diagnostics.js'
 import { evaluateInFrame } from '../../utils/electron/evaluate'
-import { cdpMouseButtonsMask, clampEmbeddedDiagnosticLimit, listWebContentsFrames } from '../../utils/electron/webcontents'
+import {
+  cdpMouseButtonsMask,
+  clampEmbeddedDiagnosticLimit,
+  listWebContentsFrames,
+} from '../../utils/electron/webcontents'
 import { BrowserTuning } from '../../utils/tuning'
 import { buildBrowserViewportDeviceMetrics } from '../../utils/viewport'
 import { BrowserCdpNetworkController } from '../cdp/BrowserCdpNetworkController'
@@ -386,7 +414,15 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     this.webContents.focus()
     const dispatched = await this.dispatchCdpMouseEvents([
       { type: 'mouseMoved', x: startX, y: startY, button: 'none', buttons: 0, modifiers },
-      { type: 'mousePressed', x: startX, y: startY, button: 'left', buttons: 1, clickCount: 1, modifiers },
+      {
+        type: 'mousePressed',
+        x: startX,
+        y: startY,
+        button: 'left',
+        buttons: 1,
+        clickCount: 1,
+        modifiers,
+      },
       ...path.map((point) => ({
         type: 'mouseMoved',
         x: point.x,
@@ -395,7 +431,15 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
         buttons: 1,
         modifiers,
       })),
-      { type: 'mouseReleased', x: endX, y: endY, button: 'left', buttons: 0, clickCount: 1, modifiers },
+      {
+        type: 'mouseReleased',
+        x: endX,
+        y: endY,
+        button: 'left',
+        buttons: 0,
+        clickCount: 1,
+        modifiers,
+      },
     ])
     if (!dispatched) {
       this.webContents.sendInputEvent({
@@ -455,24 +499,36 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     return Promise.resolve(listWebContentsFrames(this.webContents))
   }
 
-  public executeJavaScriptInFrame<T = unknown>(frameId: string, script: string, userGesture?: boolean): Promise<T> {
+  public executeJavaScriptInFrame<T = unknown>(
+    frameId: string,
+    script: string,
+    userGesture?: boolean
+  ): Promise<T> {
     return evaluateInFrame<T>(this.webContents, frameId, script, userGesture)
   }
 
   /** 给模型单开一条 CDP 会话：debugger 上用 Target.attachToTarget 连页面自己，挂出一条 flatten 子会话。 */
   public async openProtocolChannel(): Promise<BrowserProtocolChannel> {
     this.ensureInputDebugger()
-    const info = (await this.debuggerSend('Target.getTargetInfo')) as { targetInfo?: { targetId?: unknown } }
+    const info = (await this.debuggerSend('Target.getTargetInfo')) as {
+      targetInfo?: { targetId?: unknown }
+    }
     const targetId = info.targetInfo?.targetId
-    if (!isString(targetId)) throw new AppError('EXECUTION_FAILED', '读不到页面的 target id，开不了单独的 CDP 会话。')
-    const attached = (await this.debuggerSend('Target.attachToTarget', { targetId, flatten: true })) as { sessionId?: unknown }
-    if (!isString(attached.sessionId)) throw new AppError('EXECUTION_FAILED', 'Target.attachToTarget 没有交回会话 id。')
+    if (!isString(targetId))
+      throw new AppError('EXECUTION_FAILED', '读不到页面的 target id，开不了单独的 CDP 会话。')
+    const attached = (await this.debuggerSend('Target.attachToTarget', {
+      targetId,
+      flatten: true,
+    })) as { sessionId?: unknown }
+    if (!isString(attached.sessionId))
+      throw new AppError('EXECUTION_FAILED', 'Target.attachToTarget 没有交回会话 id。')
     return new ElectronProtocolChannel(this.webContents, attached.sessionId)
   }
 
   /** 输入与模型会话要一直挂着的 debugger：没 attach 就 attach，不主动 detach（与模拟、网络采集同样的持久语义）。 */
   private ensureInputDebugger(): void {
-    if (this.webContents.isDestroyed()) throw new AppError('VALIDATION', '页面已销毁，发不了输入事件。')
+    if (this.webContents.isDestroyed())
+      throw new AppError('VALIDATION', '页面已销毁，发不了输入事件。')
     if (!this.webContents.debugger.isAttached()) this.webContents.debugger.attach('1.3')
   }
 

@@ -14,9 +14,7 @@ import { isNonBlankString } from '@velaros-ai/core'
  * id 需要的是唯一与稳定,不是可读——可读性由 `hostName` 自己承担。
  */
 export function slugifyRemoteHostName(hostName: string): string {
-  const replaced = hostName
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/gu, '-')
+  const replaced = hostName.toLowerCase().replaceAll(/[^a-z0-9]+/gu, '-')
   let start = 0
   let end = replaced.length
   while (replaced[start] === '-') start += 1
@@ -28,16 +26,11 @@ export function slugifyRemoteHostName(hostName: string): string {
 
 /** 远端 id 的本地化:`velaros.system` → `velaros.remote.<slug>.system`。 */
 export function namespaceRemoteId(hostSlug: string, remoteId: string): string {
-  const tail = remoteId.startsWith('velaros.')
-    ? remoteId.slice('velaros.'.length)
-    : remoteId
+  const tail = remoteId.startsWith('velaros.') ? remoteId.slice('velaros.'.length) : remoteId
   return `velaros.remote.${hostSlug}.${tail}`
 }
 
 /** 工具名的本地化:`<hostSlug>:<toolName>`,模型看得见是哪台机器在干活。 */
-export function namespaceRemoteToolName(
-  hostSlug: string,
-  toolName: string,
-): string {
+export function namespaceRemoteToolName(hostSlug: string, toolName: string): string {
   return `${hostSlug}:${toolName}`
 }

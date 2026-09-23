@@ -38,16 +38,28 @@ describe('PlatformCompatibility', () => {
     expect(linux.isPathTextInside('/etc\\..\\work\\app\\x', '/work/app')).toBe(false)
 
     const macOS = createPlatform({ platform: 'darwin' })
-    expect(macOS.relativePathTextInside('/Users/Example/Project/Src', '/users/example/project')).toBe('Src')
-    expect(macOS.isPathTextInside('/Users/Example/Project', '/users/example/project', { caseSensitive: true })).toBe(false)
+    expect(
+      macOS.relativePathTextInside('/Users/Example/Project/Src', '/users/example/project')
+    ).toBe('Src')
+    expect(
+      macOS.isPathTextInside('/Users/Example/Project', '/users/example/project', {
+        caseSensitive: true,
+      })
+    ).toBe(false)
 
     const windows = createPlatform({ platform: 'win32' })
-    expect(windows.relativePathTextInside('c:\\Work\\App\\src\\a.ts', 'C:/work/app')).toBe('src/a.ts')
+    expect(windows.relativePathTextInside('c:\\Work\\App\\src\\a.ts', 'C:/work/app')).toBe(
+      'src/a.ts'
+    )
     expect(windows.isPathTextInside('C:\\work\\app\\..\\..\\Windows', 'C:\\work\\app')).toBe(false)
     expect(windows.isPathTextInside('D:\\work\\app', 'C:\\work\\app')).toBe(false)
-    expect(windows.relativePathTextInside('\\\\server\\share\\team\\doc.md', '\\\\SERVER\\share')).toBe('team/doc.md')
+    expect(
+      windows.relativePathTextInside('\\\\server\\share\\team\\doc.md', '\\\\SERVER\\share')
+    ).toBe('team/doc.md')
     expect(windows.relativePathTextInside('\\\\?\\C:\\work\\app\\a', 'C:\\work\\app')).toBe('a')
-    expect(windows.relativePathTextInside('\\\\?\\UNC\\server\\share\\a', '\\\\server\\share')).toBe('a')
+    expect(
+      windows.relativePathTextInside('\\\\?\\UNC\\server\\share\\a', '\\\\server\\share')
+    ).toBe('a')
     expect(windows.isPathTextInside('C:', 'C:\\')).toBe(true)
     expect(windows.isPathTextInside('C:foo', 'C:\\')).toBe(false)
     expect(windows.isPathTextInside('\\work\\app', '\\work')).toBe(false)
@@ -81,34 +93,43 @@ describe('PlatformCompatibility', () => {
       file: 'C:\\Program Files\\Git\\bin\\bash.exe',
       args: ['--noprofile', '--norc', '-c', 'echo ready'],
     })
-    expect(createPlatform({
-      platform: 'win32',
-      env: { ComSpec: 'C:\\Users\\attacker\\cmd.exe' },
-    }).getOpenExternalFallbackSpec('https://example.com')).toEqual({
+    expect(
+      createPlatform({
+        platform: 'win32',
+        env: { ComSpec: 'C:\\Users\\attacker\\cmd.exe' },
+      }).getOpenExternalFallbackSpec('https://example.com')
+    ).toEqual({
       file: 'C:\\Windows\\System32\\cmd.exe',
       args: ['/c', 'start', '', 'https://example.com'],
     })
-    expect(createPlatform({
-      platform: 'win32',
-      env: {
-        ComSpec: 'cmd.exe',
-        COMSPEC: 'powershell.exe',
-        SystemRoot: 'D:\\CustomWindows',
-      },
-    }).getShellCommandSpec('echo ready').args).toEqual(['/d', '/s', '/v:off', '/c', '"chcp 65001 >nul & echo ready"'])
-    expect(createPlatform({
-      platform: 'win32',
-      env: { ComSpec: '.\\cmd.exe', WINDIR: 'relative-root' },
-    }).getPreferredShellPath()).toBe('C:\\Windows\\System32\\cmd.exe')
-    expect(createPlatform({
-      platform: 'win32',
-      env: { ComSpec: 'E:\\Tools\\not-cmd.exe' },
-    }).getOpenApplicationCommandSpec('notepad.exe').file).toBe('C:\\Windows\\System32\\cmd.exe')
+    expect(
+      createPlatform({
+        platform: 'win32',
+        env: {
+          ComSpec: 'cmd.exe',
+          COMSPEC: 'powershell.exe',
+          SystemRoot: 'D:\\CustomWindows',
+        },
+      }).getShellCommandSpec('echo ready').args
+    ).toEqual(['/d', '/s', '/v:off', '/c', '"chcp 65001 >nul & echo ready"'])
+    expect(
+      createPlatform({
+        platform: 'win32',
+        env: { ComSpec: '.\\cmd.exe', WINDIR: 'relative-root' },
+      }).getPreferredShellPath()
+    ).toBe('C:\\Windows\\System32\\cmd.exe')
+    expect(
+      createPlatform({
+        platform: 'win32',
+        env: { ComSpec: 'E:\\Tools\\not-cmd.exe' },
+      }).getOpenApplicationCommandSpec('notepad.exe').file
+    ).toBe('C:\\Windows\\System32\\cmd.exe')
     expect(windows.getDirectorySymlinkType()).toBe('junction')
     expect(windows.shouldUseDetachedProcessGroup()).toBe(false)
     expect(windows.getInteractiveShellArgs()).toEqual(['--noprofile', '--norc', '-i'])
-    expect(windows.quoteShellArg("中文 $HOME `echo bad` ' \\n"))
-      .toBe("'中文 $HOME `echo bad` '\\'' \\n'")
+    expect(windows.quoteShellArg("中文 $HOME `echo bad` ' \\n")).toBe(
+      "'中文 $HOME `echo bad` '\\'' \\n'"
+    )
 
     expect(macOS.getPreferredShellPath()).toBe('/opt/homebrew/bin/zsh')
     expect(macOS.getLoginShellCandidates()).toEqual([
@@ -169,8 +190,12 @@ describe('PlatformCompatibility', () => {
       file: 'taskkill',
       args: ['/PID', '42', '/T', '/F'],
     })
-    expect(windows.getTerminateCommand(42, true, { kind: 'git-bash' })).toBe('MSYS_NO_PATHCONV=1 taskkill.exe /PID 42 /T /F')
-    expect(windows.getTerminateCommand(42, true, { kind: 'powershell' })).toBe('taskkill.exe /PID 42 /T /F')
+    expect(windows.getTerminateCommand(42, true, { kind: 'git-bash' })).toBe(
+      'MSYS_NO_PATHCONV=1 taskkill.exe /PID 42 /T /F'
+    )
+    expect(windows.getTerminateCommand(42, true, { kind: 'powershell' })).toBe(
+      'taskkill.exe /PID 42 /T /F'
+    )
     expect(windows.getFallbackTerminateCommand('bun run dev')).toBeNull()
     const windowsProcessList = windows.getProcessListCommandSpec()
     expect(windowsProcessList).toEqual({ file: 'tasklist.exe', args: ['/FO', 'CSV', '/NH'] })
@@ -179,11 +204,11 @@ describe('PlatformCompatibility', () => {
       args: ['-ano', '-p', 'tcp'],
     })
 
-  expect(linux.getProcessKillPid(42)).toBe(-42)
-  expect(linux.isProcessMissingError({ code: 'ESRCH' })).toBe(true)
-  expect(linux.isProcessMissingError({ errno: 3 })).toBe(true)
-  expect(linux.isProcessMissingError({ errno: -3 })).toBe(true)
-  expect(linux.isProcessMissingError({ code: 'EPERM' })).toBe(false)
+    expect(linux.getProcessKillPid(42)).toBe(-42)
+    expect(linux.isProcessMissingError({ code: 'ESRCH' })).toBe(true)
+    expect(linux.isProcessMissingError({ errno: 3 })).toBe(true)
+    expect(linux.isProcessMissingError({ errno: -3 })).toBe(true)
+    expect(linux.isProcessMissingError({ code: 'EPERM' })).toBe(false)
     expect(linux.getFallbackTerminateCommand('bun   run dev')).toBe("pkill -f 'bun run dev'")
     expect(linux.getCpuUsageCommandSpec()).toEqual({
       file: 'cat',

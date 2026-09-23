@@ -30,7 +30,7 @@ const scanScript = new Script(
   }
   return matches
 })()`,
-  { filename: 'velaros-project-regex-guard.js' },
+  { filename: 'velaros-project-regex-guard.js' }
 )
 
 /** 正则写错时的失败：报 INVALID_INPUT，说明是哪条 pattern。 */
@@ -39,7 +39,7 @@ function invalidPattern(pattern: string, message: string): ProjectError {
     'INVALID_INPUT',
     `正则表达式无效：${pattern}`,
     { pattern, error: message },
-    '请改写成合法的 JavaScript 正则，或去掉 regex 改用字面文本查询。',
+    '请改写成合法的 JavaScript 正则，或去掉 regex 改用字面文本查询。'
   )
 }
 
@@ -49,7 +49,7 @@ function patternTimedOut(pattern: string, timeoutMs: number): ProjectError {
     'INVALID_INPUT',
     `正则表达式在 ${timeoutMs} 毫秒内没跑完，已中止：${pattern}`,
     { pattern, timeoutMs },
-    '请把嵌套的重复（如 (a+)+）改写成不会回溯爆炸的形式，或先用字面文本缩小范围再匹配。',
+    '请把嵌套的重复（如 (a+)+）改写成不会回溯爆炸的形式，或先用字面文本缩小范围再匹配。'
   )
 }
 
@@ -66,15 +66,19 @@ export function execGuardedRegex(
   pattern: string,
   flags: string,
   content: string,
-  limit: number,
+  limit: number
 ): GuardedRegexMatch[] {
   if (limit <= 0) return []
   const timeoutMs = ProjectTuning.regex.executionTimeoutMs
   let flat: number[]
   try {
-    flat = scanScript.runInContext(createContext({ pattern, flags, content, limit }), { timeout: timeoutMs }) as number[]
+    flat = scanScript.runInContext(createContext({ pattern, flags, content, limit }), {
+      timeout: timeoutMs,
+    }) as number[]
   } catch (error) {
-    throw isSyntaxError(error) ? invalidPattern(pattern, AppError.getMessage(error)) : patternTimedOut(pattern, timeoutMs)
+    throw isSyntaxError(error)
+      ? invalidPattern(pattern, AppError.getMessage(error))
+      : patternTimedOut(pattern, timeoutMs)
   }
   const matches: GuardedRegexMatch[] = []
   for (let index = 0; index + 1 < flat.length; index += 2) {

@@ -5,21 +5,12 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-const packageRoot = join(
-  repositoryRoot,
-  'node_modules/chrome-devtools-frontend',
-)
-const entrypoint = join(
-  repositoryRoot,
-  'scripts/browser/devtoolsPerformanceEngine.entry.ts',
-)
-const nodeHostRuntimePath = join(
-  packageRoot,
-  'front_end/core/platform/node/HostRuntime.ts',
-)
+const packageRoot = join(repositoryRoot, 'node_modules/chrome-devtools-frontend')
+const entrypoint = join(repositoryRoot, 'scripts/browser/devtoolsPerformanceEngine.entry.ts')
+const nodeHostRuntimePath = join(packageRoot, 'front_end/core/platform/node/HostRuntime.ts')
 const outputPath = join(
   repositoryRoot,
-  'packages/velaros/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs',
+  'packages/velaros/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs'
 )
 const expectedUpstreamVersion = '1.0.1652307'
 const embeddedGoogleApiKey = /\bAIza[0-9A-Za-z_-]{35}\b/g
@@ -88,17 +79,14 @@ const devtoolsStubPlugin = {
         const source = await readFile(path, 'utf8')
         if (!source.includes(upstreamLegacyModuleLoader)) {
           throw new Error(
-            'Upstream DevTools Runtime.loadLegacyModule shape changed; update the Node-only stub.',
+            'Upstream DevTools Runtime.loadLegacyModule shape changed; update the Node-only stub.'
           )
         }
         return {
-          contents: source.replace(
-            upstreamLegacyModuleLoader,
-            disabledLegacyModuleLoader,
-          ),
+          contents: source.replace(upstreamLegacyModuleLoader, disabledLegacyModuleLoader),
           loader: 'ts',
         }
-      },
+      }
     )
     build.onLoad({ filter: /.*/, namespace: 'velaros-stub' }, ({ path }) => ({
       contents: dependencyStubs[path],
@@ -110,33 +98,26 @@ const devtoolsStubPlugin = {
 function assertDesktopMainEmbeddable(output) {
   const dynamicImportIndex = output.search(/\bimport\s*\(/)
   if (dynamicImportIndex !== -1) {
-    const context = output.slice(
-      Math.max(0, dynamicImportIndex - 120),
-      dynamicImportIndex + 240,
-    )
+    const context = output.slice(Math.max(0, dynamicImportIndex - 120), dynamicImportIndex + 240)
     throw new Error(
-      `Bundled DevTools engine contains a dynamic import that Desktop CJS embedding cannot preserve: ${context}`,
+      `Bundled DevTools engine contains a dynamic import that Desktop CJS embedding cannot preserve: ${context}`
     )
   }
   if (output.includes('Unknown runtime!')) {
     throw new Error(
-      'Bundled DevTools engine retained the generic top-level-await host runtime instead of the Node runtime.',
+      'Bundled DevTools engine retained the generic top-level-await host runtime instead of the Node runtime.'
     )
   }
 }
 
-const upstreamManifest = JSON.parse(
-  await readFile(join(packageRoot, 'package.json'), 'utf8'),
-)
+const upstreamManifest = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8'))
 if (upstreamManifest.version !== expectedUpstreamVersion) {
   throw new Error(
-    `Expected chrome-devtools-frontend ${expectedUpstreamVersion}, received ${upstreamManifest.version}`,
+    `Expected chrome-devtools-frontend ${expectedUpstreamVersion}, received ${upstreamManifest.version}`
   )
 }
 
-const temporaryDirectory = await mkdtemp(
-  join(tmpdir(), 'velaros-devtools-engine-'),
-)
+const temporaryDirectory = await mkdtemp(join(tmpdir(), 'velaros-devtools-engine-'))
 try {
   const result = await Bun.build({
     entrypoints: [entrypoint],
@@ -160,18 +141,14 @@ try {
     throw: true,
   })
   if (!result.success || result.outputs.length !== 1) {
-    throw new Error(
-      `Unexpected Bun build result: ${result.outputs.length} output(s)`,
-    )
+    throw new Error(`Unexpected Bun build result: ${result.outputs.length} output(s)`)
   }
 
   const builtPath = result.outputs[0].path
   let output = await readFile(builtPath, 'utf8')
   const embeddedKeys = output.match(embeddedGoogleApiKey) ?? []
   if (embeddedKeys.length !== 1) {
-    throw new Error(
-      `Expected one upstream Google API key, found ${embeddedKeys.length}`,
-    )
+    throw new Error(`Expected one upstream Google API key, found ${embeddedKeys.length}`)
   }
 
   // VelarOS supplies an explicit device scope to the formatter and never uses
@@ -184,14 +161,14 @@ try {
     const committed = await readFile(outputPath, 'utf8')
     if (committed !== output) {
       throw new Error(
-        'Bundled DevTools performance engine is stale. Run `bun run build:devtools-performance-engine`.',
+        'Bundled DevTools performance engine is stale. Run `bun run build:devtools-performance-engine`.'
       )
     }
     console.log('DevTools performance engine is reproducible and current.')
   } else {
     await writeFile(outputPath, output)
     console.log(
-      'Generated packages/velaros/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs',
+      'Generated packages/velaros/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs'
     )
   }
 } finally {

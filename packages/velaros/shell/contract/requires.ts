@@ -14,7 +14,10 @@
 import type { ApprovalPort } from '@velaros-ai/kernel'
 
 import type { ShellEnvironmentApi } from '../impl/local/ShellEnvironment.js'
-import type { ShellProcessConfinementRequest, ShellProcessConfinementResult } from '../types/local.js'
+import type {
+  ShellProcessConfinementRequest,
+  ShellProcessConfinementResult,
+} from '../types/local.js'
 import type {
   ShellBackgroundTaskQueryOptions,
   ShellBackgroundTaskRecord,
@@ -33,7 +36,11 @@ import type {
  */
 export interface ShellHostPort {
   /** 观察命令的受限执行口；不能回退普通 runCommand，返回实际约束证据。 */
-  runObservationCommand?: (command:string, options:ShellRunCommandOptions, abortSignal?:AbortSignal)=>Promise<ShellCommandResult>
+  runObservationCommand?: (
+    command: string,
+    options: ShellRunCommandOptions,
+    abortSignal?: AbortSignal
+  ) => Promise<ShellCommandResult>
   /**
    * 跑一条命令：前台等它结束并返回输出；background 为真时登记成后台任务后立即返回。命令自己失败不抛错，如实写进结果；
    * 不能或不允许跑后台任务时以 `PERMISSION` 拒绝。`allowDangerous` 为真表示这条命令被判为危险、用户已经亲自确认过，宿主不必再问。
@@ -46,7 +53,9 @@ export interface ShellHostPort {
     abortSignal?: AbortSignal
   ) => Promise<ShellCommandResult>
   /** 查询以后台方式启动的命令任务，可按任务 id、会话、过滤词、只看运行中筛选，最新的在前。 */
-  listBackgroundTasks: (options?: ShellBackgroundTaskQueryOptions) => Promise<ShellBackgroundTaskRecord[]>
+  listBackgroundTasks: (
+    options?: ShellBackgroundTaskQueryOptions
+  ) => Promise<ShellBackgroundTaskRecord[]>
   /** 重新选定能用的 shell 并读取它的环境变量，返回刷新后的 shell 描述、本机可用的 shell 清单和变量个数。 */
   refreshShellEnvironment: () => Promise<ShellEnvironmentRefreshResult>
   /**
@@ -72,7 +81,7 @@ export interface ShellSpacePort extends ShellHostPort {
 /** 每次调用 `velaros:shell` 时宿主给的上下文。它不是模型能填的入参：宿主分发这次调用时按当前空间装好，生成声明时整个丢掉。 */
 export interface ShellOperationContext {
   /** 仅由宿主受限实现设置，模型输入不能切换。 */
-  observation?:boolean
+  observation?: boolean
   /** 本次调用的取消信号：用户取消或上层超时时触发，命令也应随之停下。 */
   abortSignal: AbortSignal
   /** 这个空间的端口：作用域、口径、执行都经它，操作类自己不起进程。 */

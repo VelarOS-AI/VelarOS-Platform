@@ -4,7 +4,13 @@
  */
 
 import type { MemoryOperationContext } from '../contract/requires.js'
-import type { MemoryEntry, MemoryIdInput, MemoryRemoved, MemorySaved, MemorySaveInput } from '../types/memory.js'
+import type {
+  MemoryEntry,
+  MemoryIdInput,
+  MemoryRemoved,
+  MemorySaved,
+  MemorySaveInput,
+} from '../types/memory.js'
 
 /**
  * @AgentView

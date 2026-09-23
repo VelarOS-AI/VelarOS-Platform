@@ -68,4 +68,3 @@ export interface ProjectChangeListOptions {
 export type ProjectChangeListener = (change: ProjectChangeRecord) => void
 
 export type ProjectChangeRecordInput = Omit<ProjectChangeRecord, 'sequence' | 'updatedAt'>
-

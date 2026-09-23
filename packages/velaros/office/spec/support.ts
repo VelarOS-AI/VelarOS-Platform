@@ -17,9 +17,18 @@ import { PDFDocument, StandardFonts } from 'pdf-lib'
 
 import { AppError } from '@velaros-ai/core/error'
 import type { CapabilityOperationContext } from '@velaros-ai/script'
-import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import {
+  codeProgramChecker,
+  createCapabilityPort,
+  createCodeSurfaceSession,
+  nodeSubprocessCodeRunner,
+} from '@velaros-ai/script'
 
-import type { OfficeNativeCommand, OfficeOperationContext, OfficeSystemCommandResult } from '../index.js'
+import type {
+  OfficeNativeCommand,
+  OfficeOperationContext,
+  OfficeSystemCommandResult,
+} from '../index.js'
 import { officeOperations } from '../index.js'
 
 /** 一个临时工作区与它的空间端口替身。 */
@@ -33,7 +42,9 @@ export interface OfficeHarness {
 }
 
 /** 造一个工作区加一份空间端口替身；availableCommands 是本机「装了」的命令，converters 决定替身跑命令时的表现。 */
-export async function createHarness(options: { availableCommands?: string[]; converters?: 'working' | 'failing' } = {}): Promise<OfficeHarness> {
+export async function createHarness(
+  options: { availableCommands?: string[]; converters?: 'working' | 'failing' } = {}
+): Promise<OfficeHarness> {
   const root = await mkdtemp(join(tmpdir(), 'velaros-office-spec-'))
   const available = new Set(options.availableCommands ?? [])
   const commands: OfficeNativeCommand[] = []
@@ -42,11 +53,21 @@ export async function createHarness(options: { availableCommands?: string[]; con
     office: {
       getRootPath: () => root,
       inspectEnvironment: async (names) => ({
-        commands: (names ?? []).map((name) => ({ name, available: available.has(name), path: available.has(name) ? `/usr/bin/${name}` : null })),
+        commands: (names ?? []).map((name) => ({
+          name,
+          available: available.has(name),
+          path: available.has(name) ? `/usr/bin/${name}` : null,
+        })),
       }),
       runCommand: async (command, commandOptions) => {
         commands.push(command)
-        if (options.converters === 'failing') return commandResult(command, commandOptions.cwd, false, '! Undefined control sequence.\nl.3 \\badmacro')
+        if (options.converters === 'failing')
+          return commandResult(
+            command,
+            commandOptions.cwd,
+            false,
+            '! Undefined control sequence.\nl.3 \\badmacro'
+          )
         if (options.converters === 'working') await produceConverterOutput(command)
         return commandResult(command, commandOptions.cwd, true, '')
       },
@@ -58,7 +79,12 @@ export async function createHarness(options: { availableCommands?: string[]; con
 }
 
 /** 一条命令的结果：成败与一段输出。 */
-function commandResult(command: OfficeNativeCommand, cwd: string, success: boolean, stdout: string): OfficeSystemCommandResult {
+function commandResult(
+  command: OfficeNativeCommand,
+  cwd: string,
+  success: boolean,
+  stdout: string
+): OfficeSystemCommandResult {
   return {
     command: command.file,
     cwd,
@@ -81,7 +107,10 @@ async function produceConverterOutput(command: OfficeNativeCommand): Promise<voi
   if (outdirIndex < 0) return
   const outdir = command.args[outdirIndex + 1]!
   const source = command.args.at(-1)!
-  await writeFile(join(outdir, `${basename(source, extname(source))}.pdf`), await pdfWithPages([`converted from ${basename(source)}`]))
+  await writeFile(
+    join(outdir, `${basename(source, extname(source))}.pdf`),
+    await pdfWithPages([`converted from ${basename(source)}`])
+  )
 }
 
 /** 一份每页一行文字的 PDF（pdf-lib 的标准字体写的，pdfjs 读得出文字）。 */
@@ -93,7 +122,11 @@ export async function pdfWithPages(texts: readonly string[]): Promise<Uint8Array
 }
 
 /** 在工作区里放一份文件（父目录一并建好）。 */
-export async function putFile(root: string, path: string, content: string | Uint8Array): Promise<string> {
+export async function putFile(
+  root: string,
+  path: string,
+  content: string | Uint8Array
+): Promise<string> {
   const target = join(root, path)
   await mkdir(dirname(target), { recursive: true })
   await writeFile(target, content)
@@ -113,12 +146,17 @@ export async function readDocumentProperties(path: string): Promise<string> {
 
 /** 一个挂着 `velaros:office` 的空间：经真的能力端口调九个操作，取消信号跟着每次调用。 */
 export function officeSpace(context: OfficeOperationContext) {
-  const hostContext = (call: CapabilityOperationContext): OfficeOperationContext => ({ ...context, abortSignal: call.signal ?? new AbortController().signal })
+  const hostContext = (call: CapabilityOperationContext): OfficeOperationContext => ({
+    ...context,
+    abortSignal: call.signal ?? new AbortController().signal,
+  })
   const capabilities = createCapabilityPort({
     office: {
       createWord: (input, call) => officeOperations.createWord(input as never, hostContext(call)),
-      createPresentation: (input, call) => officeOperations.createPresentation(input as never, hostContext(call)),
-      createSpreadsheet: (input, call) => officeOperations.createSpreadsheet(input as never, hostContext(call)),
+      createPresentation: (input, call) =>
+        officeOperations.createPresentation(input as never, hostContext(call)),
+      createSpreadsheet: (input, call) =>
+        officeOperations.createSpreadsheet(input as never, hostContext(call)),
       readPdf: (input, call) => officeOperations.readPdf(input as never, hostContext(call)),
       wordToPdf: (input, call) => officeOperations.wordToPdf(input as never, hostContext(call)),
       latexToPdf: (input, call) => officeOperations.latexToPdf(input as never, hostContext(call)),
@@ -129,20 +167,30 @@ export function officeSpace(context: OfficeOperationContext) {
   })
   /** 像模型的程序那样调一次：成功交回返回值，失败抛带 code 的错误（程序看得到的就这两样）。入参与返回值都过一遍 JSON。 */
   const call = async (operation: string, input?: unknown): Promise<any> => {
-    const outcome = await capabilities.invoke({ namespace: 'office', operation, input: input === undefined ? undefined : JSON.parse(JSON.stringify(input)) })
-    if (outcome.error) throw Object.assign(new Error(outcome.error.message), { code: outcome.error.code })
+    const outcome = await capabilities.invoke({
+      namespace: 'office',
+      operation,
+      input: input === undefined ? undefined : JSON.parse(JSON.stringify(input)),
+    })
+    if (outcome.error)
+      throw Object.assign(new Error(outcome.error.message), { code: outcome.error.code })
     return outcome.value === undefined ? undefined : JSON.parse(JSON.stringify(outcome.value))
   }
   return { capabilities, call }
 }
 
 /** 等一个调用失败，交出它的码与说明。 */
-export async function failureOf(call: Promise<unknown>): Promise<{ code: string; message: string }> {
+export async function failureOf(
+  call: Promise<unknown>
+): Promise<{ code: string; message: string }> {
   try {
     await call
   } catch (error) {
     const failure = error as { code?: string; message?: string }
-    return { code: failure.code ?? AppError.from(error).code, message: failure.message ?? String(error) }
+    return {
+      code: failure.code ?? AppError.from(error).code,
+      message: failure.message ?? String(error),
+    }
   }
   throw new Error('应当失败，却成功了')
 }
@@ -150,7 +198,10 @@ export async function failureOf(call: Promise<unknown>): Promise<{ code: string;
 // ── 代码面 ──────────────────────────────────────────────────────
 
 /** 模型这一轮读到的 `velaros:office` 声明：就是提交进仓的那份生成物，程序照着它过 typecheck。 */
-export const OfficeDeclarations = readFileSync(fileURLToPath(new URL('../../../../baselines/script/office.d.ts', import.meta.url)), 'utf8')
+export const OfficeDeclarations = readFileSync(
+  fileURLToPath(new URL('../../../../baselines/script/office.d.ts', import.meta.url)),
+  'utf8'
+)
 
 /** 这一轮授给程序的模块：只有 `office` 一个命名空间。 */
 const Granted = [{ namespace: 'office', declarations: OfficeDeclarations }]
@@ -162,11 +213,22 @@ export function checkModelProgram(source: string) {
 }
 
 /** 让一段真程序照生成的声明过 typecheck，再在隔离里跑完：交出程序的结果。 */
-export async function runModelProgram(space: ReturnType<typeof officeSpace>, source: string, timeoutMs = 60_000) {
-  const session = createCodeSurfaceSession({ checker: codeProgramChecker, runner: nodeSubprocessCodeRunner, capabilities: space.capabilities })
+export async function runModelProgram(
+  space: ReturnType<typeof officeSpace>,
+  source: string,
+  timeoutMs = 60_000
+) {
+  const session = createCodeSurfaceSession({
+    checker: codeProgramChecker,
+    runner: nodeSubprocessCodeRunner,
+    capabilities: space.capabilities,
+  })
   const outcome = await session.submit({ program: { source }, granted: Granted, timeoutMs })
   if (!outcome.checked) {
-    const why = 'needsModules' in outcome ? `要先补模块 ${outcome.needsModules.join(', ')}` : JSON.stringify(outcome.check.diagnostics)
+    const why =
+      'needsModules' in outcome
+        ? `要先补模块 ${outcome.needsModules.join(', ')}`
+        : JSON.stringify(outcome.check.diagnostics)
     throw new Error(`程序没过 typecheck：${why}`)
   }
   return outcome.result

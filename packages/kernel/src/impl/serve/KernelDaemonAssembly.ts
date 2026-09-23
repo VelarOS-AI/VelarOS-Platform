@@ -26,11 +26,7 @@ import { AllowLoadedKernelClientAccessBroker } from './AllowLoadedKernelClientAc
 import { InProcessKernelTransport } from './InProcessKernelTransport'
 import { KernelLocalDaemon, type KernelLocalDaemonApi } from './KernelLocalDaemon'
 import { KernelModLoader } from './KernelModLoader'
-import {
-  BundledSpecifierScheme,
-  KernelModStore,
-  type KernelModStoreApi,
-} from './KernelModStore'
+import { BundledSpecifierScheme, KernelModStore, type KernelModStoreApi } from './KernelModStore'
 import { KernelService, type KernelServiceApi } from './KernelService'
 
 const log = Log.tag('KernelBoot')
@@ -155,12 +151,9 @@ export class KernelDaemonAssembly implements BootedKernelDaemonApi {
     if (modules.length > 0) {
       host.registerModules(modules)
     }
-    const clientAccessBroker = options.clientAccessBroker
-      ?? (
-        modules.length > 0
-          ? new AllowLoadedKernelClientAccessBroker(host)
-          : undefined
-      )
+    const clientAccessBroker =
+      options.clientAccessBroker ??
+      (modules.length > 0 ? new AllowLoadedKernelClientAccessBroker(host) : undefined)
     this.service = new KernelService({
       host,
       kernelVersion: options.kernelVersion,
@@ -187,7 +180,7 @@ export class KernelDaemonAssembly implements BootedKernelDaemonApi {
       } catch (disposeError) {
         throw new AggregateError(
           [error, disposeError],
-          'Kernel daemon 启动失败，且回收 Kernel service 时再次失败。',
+          'Kernel daemon 启动失败，且回收 Kernel service 时再次失败。'
         )
       }
       throw error
@@ -254,7 +247,7 @@ export class KernelDaemonAssembly implements BootedKernelDaemonApi {
   private retainActivatableModules(
     modules: readonly KernelModuleDefinition[],
     isolationAdapters: readonly KernelModuleIsolationAdapter[],
-    packByModule: ReadonlyMap<KernelModuleDefinition, KernelModPackRecord>,
+    packByModule: ReadonlyMap<KernelModuleDefinition, KernelModPackRecord>
   ): readonly KernelModuleDefinition[] {
     const supported = new Set<string>([KernelDaemonAssembly.AlwaysSupportedIsolation])
     for (const adapter of isolationAdapters) supported.add(adapter.isolation)
@@ -295,7 +288,7 @@ export class KernelDaemonAssembly implements BootedKernelDaemonApi {
  * 模块定义来自显式注入、ModStore 里开着的 pack，或者两者都没有（空目录）。
  */
 export async function bootKernelDaemon(
-  options: KernelDaemonAssemblyOptions,
+  options: KernelDaemonAssemblyOptions
 ): Promise<BootedKernelDaemonApi> {
   const modStore = new KernelModStore(options.modsRoot)
   if (options.modPacks) {
@@ -306,9 +299,10 @@ export async function bootKernelDaemon(
   }
   const explicitModules = options.modules ?? []
   // Loader 按 pack 隔离故障：单个损坏 pack 只损失自身能力，不拖垮整个 Kernel 进程。
-  const loaded = explicitModules.length === 0 && modStore.listEnabled().length > 0
-    ? await new KernelModLoader(modStore, options.importModule).loadEnabled()
-    : null
+  const loaded =
+    explicitModules.length === 0 && modStore.listEnabled().length > 0
+      ? await new KernelModLoader(modStore, options.importModule).loadEnabled()
+      : null
   const assembly = new KernelDaemonAssembly({ loaded, modStore, options })
   await assembly.start()
   return assembly

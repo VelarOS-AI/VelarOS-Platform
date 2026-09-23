@@ -54,15 +54,13 @@ function previewImageRows(parsed: ParsedOfficePreview): string[][] {
     const sheet = parsed.sheets?.[0]
     return sheet?.rows.slice(0, maxRows) ?? []
   }
-  if (parsed.kind === 'pptx') return (parsed.slides ?? []).slice(0, 16).map((slide) => [
-      `第 ${slide.index} 页`,
-      slide.title,
-      slide.bullets.join(' · '),
-    ])
-  const outline = (parsed.outline ?? []).slice(0, maxRows).map((item) => [
-    `H${item.level ?? 1}`,
-    item.title,
-  ])
+  if (parsed.kind === 'pptx')
+    return (parsed.slides ?? [])
+      .slice(0, 16)
+      .map((slide) => [`第 ${slide.index} 页`, slide.title, slide.bullets.join(' · ')])
+  const outline = (parsed.outline ?? [])
+    .slice(0, maxRows)
+    .map((item) => [`H${item.level ?? 1}`, item.title])
   return !isEmpty(outline) ? outline : [[truncateText(htmlToText(parsed.htmlBody).trim(), 240)]]
 }
 

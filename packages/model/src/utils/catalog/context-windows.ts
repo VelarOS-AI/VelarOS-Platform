@@ -1,4 +1,11 @@
-import { isEmpty, isNumber, isPlainObject, toNullable, toOptional, trimmedStringOrEmpty } from '@velaros-ai/core'
+import {
+  isEmpty,
+  isNumber,
+  isPlainObject,
+  toNullable,
+  toOptional,
+  trimmedStringOrEmpty,
+} from '@velaros-ai/core'
 
 import type { ChatProviderId, ProviderScriptRuntimeMetadata } from '../../types/model'
 import { toPositiveInteger } from '../numbers'
@@ -152,11 +159,13 @@ export function resolveProviderModelContextWindow(
 }
 
 /** provider script 在 `config` 里声明的具体 provider/model 三元组；形状不对时按缺席处理。 */
-function readConcreteProviderModelConfig(value: unknown): {
-  provider: string
-  model: string
-  contextWindow: Nullable<number>
-} | undefined {
+function readConcreteProviderModelConfig(value: unknown):
+  | {
+      provider: string
+      model: string
+      contextWindow: Nullable<number>
+    }
+  | undefined {
   if (!isPlainObject(value)) return undefined
 
   const provider = trimmedStringOrEmpty(value.provider)
@@ -175,8 +184,8 @@ export function resolveProviderScriptMetadataContextWindow(
   metadata?: LooseOptional<ProviderScriptRuntimeMetadata>
 ): number | undefined {
   return toOptional(
-    readConcreteProviderModelConfig(metadata?.config)?.contextWindow
-    ?? toPositiveInteger(metadata?.contextWindow)
+    readConcreteProviderModelConfig(metadata?.config)?.contextWindow ??
+      toPositiveInteger(metadata?.contextWindow)
   )
 }
 
@@ -200,5 +209,7 @@ export function resolveProviderScriptContextWindow(input: {
     if (resolved) return resolved
   }
 
-  return toOptional(toNullable(resolveProviderModelContextWindow(input.providerId, input.runtimeModel)))
+  return toOptional(
+    toNullable(resolveProviderModelContextWindow(input.providerId, input.runtimeModel))
+  )
 }

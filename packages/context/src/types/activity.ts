@@ -20,7 +20,6 @@ export interface TurnContextDelta {
   inspect?: TurnContextInspectHint
 }
 
-
 export interface TurnContextSourcePeekInput {
   sessionId: string
   /** 上次已消费到的 seq；generation 不匹配时忽略此值。 */
@@ -28,7 +27,6 @@ export interface TurnContextSourcePeekInput {
   /** 上次 cursor 的 generation；null 表示首次。 */
   generation: Nullable<string>
 }
-
 
 /** 往账本里记一条环境变化要填的东西：正文在这一刻就定稿，之后谁都不许重排版。 */
 export interface TurnContextLedgerAppendInput {

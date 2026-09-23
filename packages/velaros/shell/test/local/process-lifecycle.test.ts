@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test'
 
 import { shellProcessManager } from '../../impl/local/ShellProcessManager.js'
@@ -6,7 +5,6 @@ import { fakeChild } from '../../spec/support'
 import { waitForProcessSpawn } from '../../utils/process.js'
 
 describe('bounded process lifecycle', () => {
-
   test('bounds inherited pipe drain after exit and preserves the real exit code', async () => {
     const child = fakeChild()
     const owned = shellProcessManager.manage(child, { drainTimeoutMs: 10 })
@@ -83,8 +81,12 @@ test('status remains unconfirmed between root exit and the final close receipt',
     drainTimeoutMs: 1_000,
   })
   child.emit('exit', 0, null)
-  expect(await shellProcessManager.resolveStatus(child.pid!, owned.identity, 'win32')).toBe('unknown')
+  expect(await shellProcessManager.resolveStatus(child.pid!, owned.identity, 'win32')).toBe(
+    'unknown'
+  )
   child.emit('close', 0, null)
   await owned.completion
-  expect(await shellProcessManager.resolveStatus(child.pid!, owned.identity, 'win32')).toBe('exited')
+  expect(await shellProcessManager.resolveStatus(child.pid!, owned.identity, 'win32')).toBe(
+    'exited'
+  )
 })

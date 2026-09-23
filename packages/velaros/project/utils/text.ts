@@ -16,7 +16,7 @@ export function assertWellFormedProjectText(content: string): void {
     'INVALID_INPUT',
     `文本在 UTF-16 offset ${lone.offset} 含不完整的 Unicode 字符，拒绝有损写入。`,
     lone,
-    '请重新构造该字符的完整内容；不要把截断的 surrogate 当作字符提交。',
+    '请重新构造该字符的完整内容；不要把截断的 surrogate 当作字符提交。'
   )
 }
 
@@ -70,7 +70,7 @@ export function rangeFromOffsets(content: string, startOffset: number, endOffset
 export function sliceLines(
   content: string,
   startLine?: number,
-  endLine?: number,
+  endLine?: number
 ): { content: string; range: Range } {
   const lines = content.split(/\n/)
   const start = Math.max(1, startLine ?? 1)
@@ -86,7 +86,7 @@ export function countChangedLines(diff: string): number {
     .filter(
       (line) =>
         (line.startsWith('+') && !line.startsWith('+++')) ||
-        (line.startsWith('-') && !line.startsWith('---')),
+        (line.startsWith('-') && !line.startsWith('---'))
     ).length
 }
 
@@ -110,7 +110,7 @@ export function uniqueIndexOf(content: string, needle: string): { index: number;
 export function resolveLineEndingAwareTextMatch(
   content: string,
   needle: string,
-  replacementText?: string,
+  replacementText?: string
 ): LineEndingAwareTextMatch {
   if (shouldTryCrlfMatch(content, needle)) {
     const crlfNeedle = toCrlfText(needle)
@@ -154,7 +154,9 @@ export function nextCodePointOffset(content: string, offset: number): number {
 }
 
 /** 依次将整串小写化后的偏移还原到原文；无需为整个大文件分配逐字符索引。 */
-export function createLowercaseOffsetMapper(content: string): (offset: number, endBoundary: boolean) => number {
+export function createLowercaseOffsetMapper(
+  content: string
+): (offset: number, endBoundary: boolean) => number {
   let sourceOffset = 0
   let foldedOffset = 0
   return (offset, endBoundary) => {

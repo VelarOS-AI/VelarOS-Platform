@@ -9,7 +9,10 @@ import { describe, test } from 'bun:test'
 import type { BrowserOperationContext } from '../../contract/requires.js'
 import { devtoolsOperations } from '../../impl/DevtoolsOperations.js'
 import type { BrowserPageDiagnosticEntry } from '../../types/browser.js'
-import { clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
+import {
+  clearBrowserDiagnosticEntries,
+  takeBrowserDiagnosticWindow,
+} from '../../utils/diagnostics.js'
 
 function createEntry(
   kind: BrowserPageDiagnosticEntry['kind'],
@@ -53,13 +56,26 @@ function createDiagnosticsContext(buffer: BrowserPageDiagnosticEntry[]) {
         url: 'https://example.test/',
         title: null,
         entries,
-        summary: { total: entries.length, byLevel: {}, byKind: {}, byOrigin: {}, byStatus: {}, byResourceType: {} },
+        summary: {
+          total: entries.length,
+          byLevel: {},
+          byKind: {},
+          byOrigin: {},
+          byStatus: {},
+          byResourceType: {},
+        },
         capturedAt: 0,
       }
     },
   }
 
-  return { calls, ctx: { browser, abortSignal: new AbortController().signal } as unknown as BrowserOperationContext }
+  return {
+    calls,
+    ctx: {
+      browser,
+      abortSignal: new AbortController().signal,
+    } as unknown as BrowserOperationContext,
+  }
 }
 
 void describe('诊断按种类取窗口', () => {
@@ -82,14 +98,17 @@ void describe('诊断按种类取窗口', () => {
     const buffer = createNoisyBuffer()
     const { ctx } = createDiagnosticsContext(buffer)
 
-    await devtoolsOperations.diagnostics(
-      { kind: 'network', limit: 50, clear: true },
-      ctx
-    )
+    await devtoolsOperations.diagnostics({ kind: 'network', limit: 50, clear: true }, ctx)
 
-    assert.equal(buffer.some((entry) => entry.kind === 'network'), false)
+    assert.equal(
+      buffer.some((entry) => entry.kind === 'network'),
+      false
+    )
     assert.equal(buffer.filter((entry) => entry.kind === 'console').length, 200)
-    assert.equal(buffer.some((entry) => entry.kind === 'page-error'), true)
+    assert.equal(
+      buffer.some((entry) => entry.kind === 'page-error'),
+      true
+    )
   })
 
   void test('console 与页面异常各自只读自己的种类', async () => {

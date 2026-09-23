@@ -70,11 +70,17 @@ export interface DevtoolsOperationsApi {
   /** @AgentView 读诊断：先按种类过滤再取最近的几条，网络条目带 requestId。
    * @OperationEffect none
    */
-  diagnostics(input: DevtoolsDiagnosticsInput, ctx: BrowserOperationContext): Promise<BrowserPageDiagnosticsReadResult>
+  diagnostics(
+    input: DevtoolsDiagnosticsInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserPageDiagnosticsReadResult>
   /** @AgentView 读一次网络请求的请求头、postData、响应头、耗时与体积，可带响应体；较早的请求可能已经读不到。
    * @OperationEffect none
    */
-  request(input: DevtoolsRequestInput, ctx: BrowserOperationContext): Promise<BrowserNetworkRequestDetailsResult>
+  request(
+    input: DevtoolsRequestInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserNetworkRequestDetailsResult>
   /** @AgentView 调页面缩放。
    * @OperationEffect write
    */
@@ -82,11 +88,17 @@ export interface DevtoolsOperationsApi {
   /** @AgentView 设常驻的网络规则：断网、加请求头、拦请求、给请求回假响应（宿主一直替你应答，程序跑完也生效，再调一次就换掉）。
    * @OperationEffect write
    */
-  network(input: DevtoolsNetworkInput, ctx: BrowserOperationContext): Promise<BrowserNetworkControlResult>
+  network(
+    input: DevtoolsNetworkInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserNetworkControlResult>
   /** @AgentView 开始录性能 trace；到点自动停时直接交回分析摘要。
    * @OperationEffect write
    */
-  startTrace(input: DevtoolsTraceInput, ctx: BrowserOperationContext): Promise<BrowserPerformanceTraceStartResult>
+  startTrace(
+    input: DevtoolsTraceInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserPerformanceTraceStartResult>
   /** @AgentView 停止录 trace，交回 Core Web Vitals 与可深入分析的 insight 清单；原始 trace 落在站点工作区。
    * @OperationEffect write
    */
@@ -94,19 +106,31 @@ export interface DevtoolsOperationsApi {
   /** @AgentView 对最近一次 trace 的一条 insight 出详细分析。
    * @OperationEffect none
    */
-  insight(input: DevtoolsInsightInput, ctx: BrowserOperationContext): Promise<BrowserPerformanceInsightResult>
+  insight(
+    input: DevtoolsInsightInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserPerformanceInsightResult>
   /** @AgentView 采一份 V8 堆快照落盘（按「基线、操作、回退」各采一份对比着查泄漏）。
    * @OperationEffect write
    */
-  heapSnapshot(input: DevtoolsHeapSnapshotInput, ctx: BrowserOperationContext): Promise<BrowserHeapSnapshotResult>
+  heapSnapshot(
+    input: DevtoolsHeapSnapshotInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserHeapSnapshotResult>
   /** @AgentView 开始录屏：之后的页面操作都录下来，stopRecording 合成 GIF。
    * @OperationEffect write
    */
-  startRecording(input: DevtoolsRecordingInput, ctx: BrowserOperationContext): Promise<BrowserScreencastStartResult>
+  startRecording(
+    input: DevtoolsRecordingInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserScreencastStartResult>
   /** @AgentView 停止录屏并合成 GIF 落进站点工作区（帧数到上限会自动截断，frameLimitReached 为真）。
    * @OperationEffect write
    */
-  stopRecording(input: DevtoolsStopRecordingInput, ctx: BrowserOperationContext): Promise<BrowserScreencastStopResult>
+  stopRecording(
+    input: DevtoolsStopRecordingInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserScreencastStopResult>
   /** @AgentView 列出全部用户脚本、总开关，以及哪些脚本匹配当前页面。
    * @OperationEffect none
    */
@@ -114,31 +138,52 @@ export interface DevtoolsOperationsApi {
   /** @AgentView 读一个用户脚本，带源码。
    * @OperationEffect none
    */
-  readUserScript(input: DevtoolsUserScriptIdInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult>
+  readUserScript(
+    input: DevtoolsUserScriptIdInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserUserScriptMutationResult>
   /** @AgentView 新建一个用户脚本（一律先停用）。
    * @OperationEffect write
    */
-  createUserScript(input: DevtoolsCreateUserScriptInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult>
+  createUserScript(
+    input: DevtoolsCreateUserScriptInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserUserScriptMutationResult>
   /** @AgentView 改一个用户脚本。
    * @OperationEffect write
    */
-  updateUserScript(input: DevtoolsUpdateUserScriptInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult>
+  updateUserScript(
+    input: DevtoolsUpdateUserScriptInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserUserScriptMutationResult>
   /** @AgentView 启用或停用一个用户脚本。
    * @OperationEffect write
    */
-  enableUserScript(input: DevtoolsEnableUserScriptInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult>
+  enableUserScript(
+    input: DevtoolsEnableUserScriptInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserUserScriptMutationResult>
   /** @AgentView 打开或关闭用户脚本的总开关。
    * @OperationEffect write
    */
-  enableUserScripts(input: DevtoolsEnableUserScriptsInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult>
+  enableUserScripts(
+    input: DevtoolsEnableUserScriptsInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserUserScriptMutationResult>
   /** @AgentView 调整一个用户脚本的注入顺序。
    * @OperationEffect write
    */
-  moveUserScript(input: DevtoolsMoveUserScriptInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult>
+  moveUserScript(
+    input: DevtoolsMoveUserScriptInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserUserScriptMutationResult>
   /** @AgentView 删掉一个用户脚本（不撤销当前页面已经执行的副作用）。
    * @OperationEffect write
    */
-  deleteUserScript(input: DevtoolsUserScriptIdInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult>
+  deleteUserScript(
+    input: DevtoolsUserScriptIdInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserUserScriptMutationResult>
 }
 
 /**
@@ -147,14 +192,20 @@ export interface DevtoolsOperationsApi {
  */
 export class DevtoolsOperations implements DevtoolsOperationsApi {
   /** 读诊断的种类 → 诊断缓冲里的种类名；all 不过滤。 */
-  private static readonly DiagnosticKinds: Record<BrowserPageDiagnosticsReadKind, Optional<readonly BrowserPageDiagnosticKind[]>> = {
+  private static readonly DiagnosticKinds: Record<
+    BrowserPageDiagnosticsReadKind,
+    Optional<readonly BrowserPageDiagnosticKind[]>
+  > = {
     all: undefined,
     console: ['console'],
     network: ['network'],
     page_error: ['page-error'],
   }
 
-  public async diagnostics(input: DevtoolsDiagnosticsInput, ctx: BrowserOperationContext): Promise<BrowserPageDiagnosticsReadResult> {
+  public async diagnostics(
+    input: DevtoolsDiagnosticsInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserPageDiagnosticsReadResult> {
     ctx.abortSignal.throwIfAborted()
     const options = diagnosticsInput(input)
     requireOpenSite(ctx)
@@ -175,7 +226,10 @@ export class DevtoolsOperations implements DevtoolsOperationsApi {
     }
   }
 
-  public async request(input: DevtoolsRequestInput, ctx: BrowserOperationContext): Promise<BrowserNetworkRequestDetailsResult> {
+  public async request(
+    input: DevtoolsRequestInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserNetworkRequestDetailsResult> {
     ctx.abortSignal.throwIfAborted()
     const options = requestInput(input)
     requireOpenSite(ctx)
@@ -186,21 +240,30 @@ export class DevtoolsOperations implements DevtoolsOperationsApi {
     })
   }
 
-  public async zoom(input: DevtoolsZoomInput, ctx: BrowserOperationContext): Promise<BrowserPageZoomResult> {
+  public async zoom(
+    input: DevtoolsZoomInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserPageZoomResult> {
     ctx.abortSignal.throwIfAborted()
     const options = zoomInput(input)
     requireOpenSite(ctx)
     return ctx.browser.setPageZoom(options)
   }
 
-  public async network(input: DevtoolsNetworkInput, ctx: BrowserOperationContext): Promise<BrowserNetworkControlResult> {
+  public async network(
+    input: DevtoolsNetworkInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserNetworkControlResult> {
     ctx.abortSignal.throwIfAborted()
     const options = networkInput(input)
     requireOpenSite(ctx)
     return ctx.browser.configureNetwork(options)
   }
 
-  public async startTrace(input: DevtoolsTraceInput, ctx: BrowserOperationContext): Promise<BrowserPerformanceTraceStartResult> {
+  public async startTrace(
+    input: DevtoolsTraceInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserPerformanceTraceStartResult> {
     ctx.abortSignal.throwIfAborted()
     const options = traceInput(input)
     requireOpenSite(ctx)
@@ -213,28 +276,40 @@ export class DevtoolsOperations implements DevtoolsOperationsApi {
     return ctx.browser.stopPerformanceTrace()
   }
 
-  public async insight(input: DevtoolsInsightInput, ctx: BrowserOperationContext): Promise<BrowserPerformanceInsightResult> {
+  public async insight(
+    input: DevtoolsInsightInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserPerformanceInsightResult> {
     ctx.abortSignal.throwIfAborted()
     const options = insightInput(input)
     requireOpenSite(ctx)
     return ctx.browser.analyzePerformanceInsight(options)
   }
 
-  public async heapSnapshot(input: DevtoolsHeapSnapshotInput, ctx: BrowserOperationContext): Promise<BrowserHeapSnapshotResult> {
+  public async heapSnapshot(
+    input: DevtoolsHeapSnapshotInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserHeapSnapshotResult> {
     ctx.abortSignal.throwIfAborted()
     const options = heapSnapshotInput(input)
     requireOpenSite(ctx)
     return ctx.browser.captureHeapSnapshot(options)
   }
 
-  public async startRecording(input: DevtoolsRecordingInput, ctx: BrowserOperationContext): Promise<BrowserScreencastStartResult> {
+  public async startRecording(
+    input: DevtoolsRecordingInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserScreencastStartResult> {
     ctx.abortSignal.throwIfAborted()
     const options = recordingInput(input)
     requireOpenSite(ctx)
     return ctx.browser.startScreencast(options)
   }
 
-  public async stopRecording(input: DevtoolsStopRecordingInput, ctx: BrowserOperationContext): Promise<BrowserScreencastStopResult> {
+  public async stopRecording(
+    input: DevtoolsStopRecordingInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserScreencastStopResult> {
     ctx.abortSignal.throwIfAborted()
     const options = stopRecordingInput(input)
     requireOpenSite(ctx)
@@ -247,50 +322,74 @@ export class DevtoolsOperations implements DevtoolsOperationsApi {
     return ctx.browser.manageUserScripts({ action: 'list' })
   }
 
-  public async readUserScript(input: DevtoolsUserScriptIdInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult> {
+  public async readUserScript(
+    input: DevtoolsUserScriptIdInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserUserScriptMutationResult> {
     ctx.abortSignal.throwIfAborted()
     const { id } = userScriptIdInput(input, 'readUserScript')
     requireOpenSite(ctx)
     return ctx.browser.manageUserScripts({ action: 'read', id })
   }
 
-  public async createUserScript(input: DevtoolsCreateUserScriptInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult> {
+  public async createUserScript(
+    input: DevtoolsCreateUserScriptInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserUserScriptMutationResult> {
     ctx.abortSignal.throwIfAborted()
     const script = createUserScriptInput(input)
     requireOpenSite(ctx)
     // 新建的脚本一律停用：启用要用户明确同意，由 enableUserScript 单独做。
-    return ctx.browser.manageUserScripts({ action: 'create', script: { ...script, enabled: false, source: 'agent' } })
+    return ctx.browser.manageUserScripts({
+      action: 'create',
+      script: { ...script, enabled: false, source: 'agent' },
+    })
   }
 
-  public async updateUserScript(input: DevtoolsUpdateUserScriptInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult> {
+  public async updateUserScript(
+    input: DevtoolsUpdateUserScriptInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserUserScriptMutationResult> {
     ctx.abortSignal.throwIfAborted()
     const { id, ...patch } = updateUserScriptInput(input)
     requireOpenSite(ctx)
     return ctx.browser.manageUserScripts({ action: 'update', id, patch })
   }
 
-  public async enableUserScript(input: DevtoolsEnableUserScriptInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult> {
+  public async enableUserScript(
+    input: DevtoolsEnableUserScriptInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserUserScriptMutationResult> {
     ctx.abortSignal.throwIfAborted()
     const { id, enabled } = enableUserScriptInput(input)
     requireOpenSite(ctx)
     return ctx.browser.manageUserScripts({ action: 'set_enabled', id, enabled })
   }
 
-  public async enableUserScripts(input: DevtoolsEnableUserScriptsInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult> {
+  public async enableUserScripts(
+    input: DevtoolsEnableUserScriptsInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserUserScriptMutationResult> {
     ctx.abortSignal.throwIfAborted()
     const { enabled } = enableUserScriptsInput(input)
     requireOpenSite(ctx)
     return ctx.browser.manageUserScripts({ action: 'set_global_enabled', enabled })
   }
 
-  public async moveUserScript(input: DevtoolsMoveUserScriptInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult> {
+  public async moveUserScript(
+    input: DevtoolsMoveUserScriptInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserUserScriptMutationResult> {
     ctx.abortSignal.throwIfAborted()
     const { id, direction } = moveUserScriptInput(input)
     requireOpenSite(ctx)
     return ctx.browser.manageUserScripts({ action: 'move', id, direction })
   }
 
-  public async deleteUserScript(input: DevtoolsUserScriptIdInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult> {
+  public async deleteUserScript(
+    input: DevtoolsUserScriptIdInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserUserScriptMutationResult> {
     ctx.abortSignal.throwIfAborted()
     const { id } = userScriptIdInput(input, 'deleteUserScript')
     requireOpenSite(ctx)

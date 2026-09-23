@@ -21,7 +21,7 @@ export interface KernelEventHubApi {
     moduleId: string,
     generation: number,
     assertActive: () => void,
-    isDeliveryEnabled?: () => boolean,
+    isDeliveryEnabled?: () => boolean
   ): KernelModuleEventBus
   /**
    * 发一条事件。
@@ -34,7 +34,7 @@ export interface KernelEventHubApi {
     sourceGeneration: number,
     type: string,
     payload: TPayload,
-    deliver?: boolean,
+    deliver?: boolean
   ): Promise<KernelEvent<TPayload>>
   /** 订阅一类事件；返回的登记 dispose 之后就不再收。 */
   subscribe<TPayload>(
@@ -42,7 +42,7 @@ export interface KernelEventHubApi {
     generation: number,
     type: string,
     handler: KernelEventHandler<TPayload>,
-    isDeliveryEnabled?: () => boolean,
+    isDeliveryEnabled?: () => boolean
   ): KernelRegistration
   /** 摘掉某个模块某一代的全部订阅；模块释放或换代时由宿主调。 */
   removeOwner(ownerModuleId: string, generation: number): void
@@ -56,15 +56,9 @@ export class KernelEventHub implements KernelEventHubApi {
     moduleId: string,
     generation: number,
     assertActive: () => void,
-    isDeliveryEnabled: () => boolean = () => true,
+    isDeliveryEnabled: () => boolean = () => true
   ): KernelModuleEventBus {
-    return new ScopedKernelEventBus(
-      this,
-      moduleId,
-      generation,
-      assertActive,
-      isDeliveryEnabled,
-    )
+    return new ScopedKernelEventBus(this, moduleId, generation, assertActive, isDeliveryEnabled)
   }
 
   public async publish<TPayload>(
@@ -72,7 +66,7 @@ export class KernelEventHub implements KernelEventHubApi {
     sourceGeneration: number,
     type: string,
     payload: TPayload,
-    deliver = true,
+    deliver = true
   ): Promise<KernelEvent<TPayload>> {
     const event: KernelEvent<TPayload> = Object.freeze({
       type,
@@ -106,7 +100,7 @@ export class KernelEventHub implements KernelEventHubApi {
     generation: number,
     type: string,
     handler: KernelEventHandler<TPayload>,
-    isDeliveryEnabled: () => boolean = () => true,
+    isDeliveryEnabled: () => boolean = () => true
   ): KernelRegistration {
     const subscriptions = this.subscriptions.get(type) ?? new Set()
     if (!this.subscriptions.has(type)) {
@@ -135,8 +129,8 @@ export class KernelEventHub implements KernelEventHubApi {
     for (const [type, subscriptions] of this.subscriptions) {
       for (const subscription of subscriptions) {
         if (
-          subscription.ownerModuleId === ownerModuleId
-          && subscription.generation === generation
+          subscription.ownerModuleId === ownerModuleId &&
+          subscription.generation === generation
         ) {
           subscriptions.delete(subscription)
         }

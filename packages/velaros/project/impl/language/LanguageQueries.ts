@@ -47,10 +47,16 @@ export interface LanguageQueriesApi {
 class LanguageQueries implements LanguageQueriesApi {
   private readonly registry = languageServiceRegistry
 
-  public async run(input: ProjectCodeLanguageQuery, context: LanguageToolContext): Promise<unknown> {
+  public async run(
+    input: ProjectCodeLanguageQuery,
+    context: LanguageToolContext
+  ): Promise<unknown> {
     context.abortSignal.throwIfAborted()
     this.registry.assertKnownLanguage(input.language)
-    return withCodeQuerySource(CodeQuerySources.languageService, await this.dispatch(input, context))
+    return withCodeQuerySource(
+      CodeQuerySources.languageService,
+      await this.dispatch(input, context)
+    )
   }
 
   /** 按 action 分派；`action` 本身不是查询参数，剥掉再交给各动作。 */
@@ -91,7 +97,10 @@ class LanguageQueries implements LanguageQueriesApi {
   }
 
   /** 找符号：多个语言服务的结果按路径与行号排好再截断。 */
-  private async findSymbols(input: FindSymbolsInput, ctx: LanguageToolContext): Promise<PlainObject> {
+  private async findSymbols(
+    input: FindSymbolsInput,
+    ctx: LanguageToolContext
+  ): Promise<PlainObject> {
     const services = this.registry.selectLanguageServices(input)
     const results = await Promise.all(services.map((service) => service.findSymbols(ctx, input)))
     const symbols = results.flatMap((result) => result.symbols)
@@ -108,7 +117,10 @@ class LanguageQueries implements LanguageQueriesApi {
   }
 
   /** 列导出。 */
-  private async listExports(input: ListExportsInput, ctx: LanguageToolContext): Promise<PlainObject> {
+  private async listExports(
+    input: ListExportsInput,
+    ctx: LanguageToolContext
+  ): Promise<PlainObject> {
     const services = this.registry.selectLanguageServices(input)
     const results = await Promise.all(services.map((service) => service.listExports(ctx, input)))
     const exports: LanguageExportRecord[] = results.flatMap((result) => result.exports)
@@ -124,7 +136,10 @@ class LanguageQueries implements LanguageQueriesApi {
   }
 
   /** 列引入。 */
-  private async findImports(input: FindImportsInput, ctx: LanguageToolContext): Promise<PlainObject> {
+  private async findImports(
+    input: FindImportsInput,
+    ctx: LanguageToolContext
+  ): Promise<PlainObject> {
     const services = this.registry.selectLanguageServices(input)
     const results = await Promise.all(services.map((service) => service.findImports(ctx, input)))
     const imports = results.flatMap((result) => result.imports)

@@ -28,7 +28,7 @@ type OptionalWhenGuardedValue<T> = T extends OptionalWhenTypeGuard<infer Value> 
 type NonFunctionCondition<T> = T extends AnyFunction ? never : T
 
 const OptionalWhenTypeGuardNames = new Set<VelarosRuntimeTypeGuardName>(
-  VelarosRuntimeTypeGuardNames,
+  VelarosRuntimeTypeGuardNames
 )
 
 /**
@@ -51,31 +51,28 @@ function describeOptionalWhenFunction(value: Function): string {
 
 export function optionalWhen<G extends OptionalWhenKnownTypeGuard>(
   guard: G,
-  value: unknown,
+  value: unknown
 ): OptionalWhenGuardedValue<G> | undefined
 export function optionalWhen<G extends OptionalWhenKnownTypeGuard, F>(
   guard: G,
   value: unknown,
-  fallback: F,
+  fallback: F
 ): OptionalWhenGuardedValue<G> | F
-export function optionalWhen<C, T>(
-  condition: NonFunctionCondition<C>,
-  value: T,
-): T | undefined
+export function optionalWhen<C, T>(condition: NonFunctionCondition<C>, value: T): T | undefined
 export function optionalWhen<C, T, F>(
   condition: NonFunctionCondition<C>,
   value: T,
-  fallback: F,
+  fallback: F
 ): T | F
 export function optionalWhen<T, F = undefined>(
   conditionOrGuard: unknown | ((value: unknown) => value is T),
   value: unknown,
-  fallback?: F,
+  fallback?: F
 ): T | F | undefined {
   if (typeof conditionOrGuard === 'function') {
     if (!isOptionalWhenTypeGuard<T>(conditionOrGuard)) {
       throw new TypeError(
-        `optionalWhen 的守卫位只接受 TypeGuards 里的谓词函数，收到的是 ${describeOptionalWhenFunction(conditionOrGuard)}。`,
+        `optionalWhen 的守卫位只接受 TypeGuards 里的谓词函数，收到的是 ${describeOptionalWhenFunction(conditionOrGuard)}。`
       )
     }
     return conditionOrGuard(value) ? (value as T) : fallback

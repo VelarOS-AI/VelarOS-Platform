@@ -8,9 +8,23 @@ export type { ContextViewApi } from './contract/provides.js'
 export type { EvidenceAccessApi } from './contract/provides.js'
 export type { TurnContextSessionLedgersApi } from './contract/provides.js'
 export type { TurnContextAppendHubApi } from './contract/provides.js'
-export type { ContextRuntimeOptions, ContextStorage, LocalContextStorageOptions } from './contract/requires.js'
-export type { ContextBuildOptions, ContextCompletionPort, ContextPlannerPort, ContextSourcePort, ContextViewOptions } from './contract/requires.js'
-export type { TurnContextAppendBus, TurnContextAppendListener, TurnContextLedgerOptions } from './contract/requires.js'
+export type {
+  ContextRuntimeOptions,
+  ContextStorage,
+  LocalContextStorageOptions,
+} from './contract/requires.js'
+export type {
+  ContextBuildOptions,
+  ContextCompletionPort,
+  ContextPlannerPort,
+  ContextSourcePort,
+  ContextViewOptions,
+} from './contract/requires.js'
+export type {
+  TurnContextAppendBus,
+  TurnContextAppendListener,
+  TurnContextLedgerOptions,
+} from './contract/requires.js'
 export type { StoreStorage } from './contract/requires.js'
 export { createContextInvocationJournal } from './impl/ContextInvocationJournal.js'
 export { createContextView } from './impl/ContextViewSession.js'
@@ -18,8 +32,93 @@ export { createEvidenceAccess } from './impl/EvidenceAccess.js'
 export { createContextRuntime } from './impl/SessionContext.js'
 export { createTurnContextAppendHub } from './impl/TurnContextAppendHub.js'
 export { createTurnContextSessionLedgers } from './impl/TurnContextSessionLedgers.js'
-export type { TurnContextDelta, TurnContextInspectHint, TurnContextLedgerAppendInput, TurnContextLedgerPeekResult, TurnContextSourceId, TurnContextSourcePeekInput } from './types/activity.js'
+export type {
+  TurnContextDelta,
+  TurnContextInspectHint,
+  TurnContextLedgerAppendInput,
+  TurnContextLedgerPeekResult,
+  TurnContextSourceId,
+  TurnContextSourcePeekInput,
+} from './types/activity.js'
 export type { ContextInputFile, ContextInputSummary, ContextUserInput } from './types/context.js'
-export type { ContextAppend, ContextArtifactProvenance, ContextCandidate, ContextCompletionResult, ContextContent, ContextEvidence, ContextFeedback, ContextGap, ContextObjectCollection, ContextObjectCollectionResult,ContextPlannerDecision, ContextPlannerInput, ContextProgress, ContextProjection, ContextQuery, ContextReadRange, ContextReadStamp, ContextRecord, ContextRecordKind, ContextRecordPage, ContextRecordQuery, ContextRef, ContextResourceTarget, ContextSearchHit, ContextSearchPage, ContextSelection, ContextSelector, ContextSnapshot, ContextSourceCapabilities, ContextSourceCard, ContextSourceHit, ContextSourceRead, ContextState, ContextStepRecord, ContextStepView, ContextTarget, ContextTaskFrame, ContextTaskMetrics, ContextTaskScope, ContextTaskState, ContextTaskStatus, ContextTaskUsage, ContextTextChange, ContextTime, ContextViewForm, ContextViewLimits, ContextViewMetrics, ModelView, NoteWrite, RegisteredViewIntent, TaskCapsule, ViewIntentInput, WorkingSet, WorkingSetChange, WorkingSetCommit } from './types/context.js'
-export type { ContextMetadata, ContextRecordSelection, ContextRecordSnapshot } from './types/context.js'
-export type { StoreCard, StoreChange, StoreChanges, StoreCreate, StoreDescriptor, StoreDirectory, StoreEvent, StoreEventAck,StoreEventCard, StoreEventPage, StoreMutation, StoreObject, StorePage, StorePublish, StoreSubscription, StoreValue, StoreWatch } from './types/store.js'
+export type {
+  ContextAppend,
+  ContextArtifactProvenance,
+  ContextCandidate,
+  ContextCompletionResult,
+  ContextContent,
+  ContextEvidence,
+  ContextFeedback,
+  ContextGap,
+  ContextObjectCollection,
+  ContextObjectCollectionResult,
+  ContextPlannerDecision,
+  ContextPlannerInput,
+  ContextProgress,
+  ContextProjection,
+  ContextQuery,
+  ContextReadRange,
+  ContextReadStamp,
+  ContextRecord,
+  ContextRecordKind,
+  ContextRecordPage,
+  ContextRecordQuery,
+  ContextRef,
+  ContextResourceTarget,
+  ContextSearchHit,
+  ContextSearchPage,
+  ContextSelection,
+  ContextSelector,
+  ContextSnapshot,
+  ContextSourceCapabilities,
+  ContextSourceCard,
+  ContextSourceHit,
+  ContextSourceRead,
+  ContextState,
+  ContextStepRecord,
+  ContextStepView,
+  ContextTarget,
+  ContextTaskFrame,
+  ContextTaskMetrics,
+  ContextTaskScope,
+  ContextTaskState,
+  ContextTaskStatus,
+  ContextTaskUsage,
+  ContextTextChange,
+  ContextTime,
+  ContextViewForm,
+  ContextViewLimits,
+  ContextViewMetrics,
+  ModelView,
+  NoteWrite,
+  RegisteredViewIntent,
+  TaskCapsule,
+  ViewIntentInput,
+  WorkingSet,
+  WorkingSetChange,
+  WorkingSetCommit,
+} from './types/context.js'
+export type {
+  ContextMetadata,
+  ContextRecordSelection,
+  ContextRecordSnapshot,
+} from './types/context.js'
+export type {
+  StoreCard,
+  StoreChange,
+  StoreChanges,
+  StoreCreate,
+  StoreDescriptor,
+  StoreDirectory,
+  StoreEvent,
+  StoreEventAck,
+  StoreEventCard,
+  StoreEventPage,
+  StoreMutation,
+  StoreObject,
+  StorePage,
+  StorePublish,
+  StoreSubscription,
+  StoreValue,
+  StoreWatch,
+} from './types/store.js'

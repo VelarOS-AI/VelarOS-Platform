@@ -1,4 +1,3 @@
-
 import { once } from 'node:events'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
@@ -19,7 +18,9 @@ function stdioFixture(pagination: 'single' | 'paged' | 'repeated' = 'single'): s
   const directory = mkdtempSync(join(tmpdir(), 'mcp-lifecycle-test-'))
   fixtureDirectories.push(directory)
   const path = join(directory, 'server.mjs')
-  writeFileSync(path, `
+  writeFileSync(
+    path,
+    `
 import { createInterface } from 'node:readline';
 const lines = createInterface({ input: process.stdin });
 const reply = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\\n');
@@ -48,27 +49,38 @@ lines.on('line', (line) => {
     setTimeout(() => process.exit(0), 10);
   }
 });
-`)
+`
+  )
   return path
 }
 
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map(async (server) => {
-    server.close()
-    await once(server, 'close')
-  }))
-  fixtureDirectories.splice(0).forEach((directory) => rmSync(directory, { recursive: true, force: true }))
+  await Promise.all(
+    servers.splice(0).map(async (server) => {
+      server.close()
+      await once(server, 'close')
+    })
+  )
+  fixtureDirectories
+    .splice(0)
+    .forEach((directory) => rmSync(directory, { recursive: true, force: true }))
 })
 
 describe('McpClientConnection', () => {
   test('follows SDK nextCursor for the complete tools and resources catalogs', async () => {
     const connection = new McpClientConnection('paged', {
-      command: process.execPath, args: [stdioFixture('paged')], env: {}, cwd: null,
+      command: process.execPath,
+      args: [stdioFixture('paged')],
+      env: {},
+      cwd: null,
     })
     try {
       await connection.connect()
       expect((await connection.listTools()).map((tool) => tool.name)).toEqual(['first', 'second'])
-      expect((await connection.listResources()).map((resource) => resource.name)).toEqual(['first', 'second'])
+      expect((await connection.listResources()).map((resource) => resource.name)).toEqual([
+        'first',
+        'second',
+      ])
     } finally {
       await connection.close()
     }
@@ -76,7 +88,10 @@ describe('McpClientConnection', () => {
 
   test('rejects a repeated tools or resources cursor before requesting that page again', async () => {
     const connection = new McpClientConnection('repeated', {
-      command: process.execPath, args: [stdioFixture('repeated')], env: {}, cwd: null,
+      command: process.execPath,
+      args: [stdioFixture('repeated')],
+      env: {},
+      cwd: null,
     })
     try {
       await connection.connect()
@@ -88,12 +103,22 @@ describe('McpClientConnection', () => {
   })
 
   test('closing during initialize prevents late connection publication and permits a fresh connect', async () => {
-    const connection = new McpClientConnection('slow', {
-      command: process.execPath, args: [stdioFixture()], env: {}, cwd: null,
-    }, { connectTimeoutMs: 2_000 })
+    const connection = new McpClientConnection(
+      'slow',
+      {
+        command: process.execPath,
+        args: [stdioFixture()],
+        env: {},
+        cwd: null,
+      },
+      { connectTimeoutMs: 2_000 }
+    )
     try {
       const connecting = connection.connect()
-      const rejected = connecting.then(() => false, () => true)
+      const rejected = connecting.then(
+        () => false,
+        () => true
+      )
       await connection.close()
       expect(await rejected).toBe(true)
       expect(connection.isConnected).toBe(false)
@@ -108,13 +133,24 @@ describe('McpClientConnection', () => {
 
   test('server exit withdraws connected state and reconnect establishes a fresh transport', async () => {
     let observeClose!: () => void
-    const closed = new Promise<void>((resolve) => { observeClose = resolve })
-    const connection = new McpClientConnection('exiting', {
-      command: process.execPath, args: [stdioFixture()], env: {}, cwd: null,
-    }, { connectTimeoutMs: 2_000, onClose: observeClose })
+    const closed = new Promise<void>((resolve) => {
+      observeClose = resolve
+    })
+    const connection = new McpClientConnection(
+      'exiting',
+      {
+        command: process.execPath,
+        args: [stdioFixture()],
+        env: {},
+        cwd: null,
+      },
+      { connectTimeoutMs: 2_000, onClose: observeClose }
+    )
     try {
       await Promise.all([connection.connect(), connection.connect()])
-      expect(await connection.callTool('exit', {})).toEqual({ content: [{ type: 'text', text: 'completed' }] })
+      expect(await connection.callTool('exit', {})).toEqual({
+        content: [{ type: 'text', text: 'completed' }],
+      })
       await closed
       expect(connection.isConnected).toBe(false)
       await expect(connection.callTool('exit', {})).rejects.toThrow(/尚未连接/u)
@@ -132,11 +168,15 @@ describe('McpClientConnection', () => {
     const httpServer = createServer(async (request, response) => {
       authorizationHeaders.push(request.headers.authorization)
       const server = new McpServer({ name: 'platform-mcp-test', version: '1.0.0' })
-      server.registerTool('lookup', {
-        description: 'Look up a document.',
-        inputSchema: { query: z.string() },
-        annotations: { readOnlyHint: true },
-      }, async ({ query }) => ({ content: [{ type: 'text', text: `Found ${query}` }] }))
+      server.registerTool(
+        'lookup',
+        {
+          description: 'Look up a document.',
+          inputSchema: { query: z.string() },
+          annotations: { readOnlyHint: true },
+        },
+        async ({ query }) => ({ content: [{ type: 'text', text: `Found ${query}` }] })
+      )
       server.registerResource(
         'guide',
         'docs://platform/guide',
@@ -158,7 +198,8 @@ describe('McpClientConnection', () => {
     httpServer.listen(0, '127.0.0.1')
     await once(httpServer, 'listening')
     const address = httpServer.address()
-    if (!address || typeof address === 'string') throw new Error('test MCP server has no TCP address')
+    if (!address || typeof address === 'string')
+      throw new Error('test MCP server has no TCP address')
 
     const connection = new McpClientConnection('docs', {
       transport: 'http',
@@ -170,22 +211,28 @@ describe('McpClientConnection', () => {
       headers: { Authorization: 'Bearer platform-test' },
     })
     await connection.connect()
-    expect(await connection.listTools()).toEqual([expect.objectContaining({
-      name: 'lookup',
-      annotations: expect.objectContaining({ readOnlyHint: true }),
-    })])
-    expect(await connection.listResources()).toEqual([{
-      uri: 'docs://platform/guide',
-      name: 'guide',
-      description: 'Platform guide',
-      mimeType: 'text/markdown',
-    }])
-    expect(await connection.readResource('docs://platform/guide')).toEqual([{
-      uri: 'docs://platform/guide',
-      mimeType: 'text/markdown',
-      text: '# Platform',
-      blob: null,
-    }])
+    expect(await connection.listTools()).toEqual([
+      expect.objectContaining({
+        name: 'lookup',
+        annotations: expect.objectContaining({ readOnlyHint: true }),
+      }),
+    ])
+    expect(await connection.listResources()).toEqual([
+      {
+        uri: 'docs://platform/guide',
+        name: 'guide',
+        description: 'Platform guide',
+        mimeType: 'text/markdown',
+      },
+    ])
+    expect(await connection.readResource('docs://platform/guide')).toEqual([
+      {
+        uri: 'docs://platform/guide',
+        mimeType: 'text/markdown',
+        text: '# Platform',
+        blob: null,
+      },
+    ])
     expect(await connection.callTool('lookup', { query: 'sessions' })).toEqual({
       content: [{ type: 'text', text: 'Found sessions' }],
     })

@@ -9,9 +9,28 @@ import { join } from 'node:path'
 import { isPresent } from '@velaros-ai/core'
 
 import type { MemoryScopePort } from '../contract/requires.js'
-import type { MemoryEntry, MemoryIdInput, MemoryRemoved, MemorySaved, MemorySaveInput } from '../types/memory.js'
-import { compareByRecency, memoryFileName, memoryIdOfFile, parseMemoryFile, parseMemoryTags, serializeMemoryFile } from '../utils/entry-file.js'
-import { readDirectoryNames, readTextIfExists, removeFileIfExists, writeFileAtomically, writeFileIfMissing } from '../utils/fs.js'
+import type {
+  MemoryEntry,
+  MemoryIdInput,
+  MemoryRemoved,
+  MemorySaved,
+  MemorySaveInput,
+} from '../types/memory.js'
+import {
+  compareByRecency,
+  memoryFileName,
+  memoryIdOfFile,
+  parseMemoryFile,
+  parseMemoryTags,
+  serializeMemoryFile,
+} from '../utils/entry-file.js'
+import {
+  readDirectoryNames,
+  readTextIfExists,
+  removeFileIfExists,
+  writeFileAtomically,
+  writeFileIfMissing,
+} from '../utils/fs.js'
 import { renderMemoryIndex } from '../utils/index-text.js'
 import { removeInput, saveInput } from '../utils/input.js'
 import { ScopeRecordFileName } from '../utils/scope-directory.js'
@@ -25,7 +44,7 @@ export interface MemoryScopeApi extends MemoryScopePort {
 export class MemoryScope implements MemoryScopeApi {
   constructor(
     private readonly scope: string,
-    private readonly directory: string,
+    private readonly directory: string
   ) {}
 
   public async list(): Promise<MemoryEntry[]> {
@@ -42,7 +61,10 @@ export class MemoryScope implements MemoryScopeApi {
     const tags = entry.tags ?? (isPresent(previous) ? parseMemoryTags(previous) : [])
     await mkdir(this.directory, { recursive: true })
     await writeFileIfMissing(join(this.directory, ScopeRecordFileName), this.scope)
-    await writeFileAtomically(path, serializeMemoryFile({ ...entry, tags }, new Date().toISOString()))
+    await writeFileAtomically(
+      path,
+      serializeMemoryFile({ ...entry, tags }, new Date().toISOString())
+    )
     return { id: entry.id, created: !isPresent(previous) }
   }
 

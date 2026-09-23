@@ -14,14 +14,10 @@ import type { ComputerHelperLaunchSpec } from '../types/computer.js'
  *   标准输入输出协议实时且不在插件目录生成编译产物。
  */
 export function spawnComputerHelperProcess(spec: ComputerHelperLaunchSpec): ComputerSidecarProcess {
-  const child: ChildProcessWithoutNullStreams = spawn(
-    spec.pythonCommand,
-    [spec.helperScript],
-    {
-      cwd: spec.runtimeDir,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, PYTHONUNBUFFERED: '1', PYTHONDONTWRITEBYTECODE: '1' },
-    }
-  )
+  const child: ChildProcessWithoutNullStreams = spawn(spec.pythonCommand, [spec.helperScript], {
+    cwd: spec.runtimeDir,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env, PYTHONUNBUFFERED: '1', PYTHONDONTWRITEBYTECODE: '1' },
+  })
   return child
 }

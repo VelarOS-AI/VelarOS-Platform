@@ -1,5 +1,5 @@
-import {Log} from '@velaros-ai/core'
-import {isUndefined} from '@velaros-ai/core'
+import { Log } from '@velaros-ai/core'
+import { isUndefined } from '@velaros-ai/core'
 /**
  * 会话层：把一次「模型交了段程序」办完。
  *
@@ -9,8 +9,17 @@ import {isUndefined} from '@velaros-ai/core'
 import { isEmpty, isObject, isString, isTrue } from '@velaros-ai/core'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 
-import { CodeSurfaceErrorCodes, CodeSurfaceLimits, ScriptOutputLimits } from '../contract/constants.js'
-import type { CodeCapabilityOutcome, CodeCapabilityPort, CodeRunnerApi, CodeSurfaceEventSink } from '../contract/requires.js'
+import {
+  CodeSurfaceErrorCodes,
+  CodeSurfaceLimits,
+  ScriptOutputLimits,
+} from '../contract/constants.js'
+import type {
+  CodeCapabilityOutcome,
+  CodeCapabilityPort,
+  CodeRunnerApi,
+  CodeSurfaceEventSink,
+} from '../contract/requires.js'
 import type { CodeAttachment, CodeSurfaceOutcome } from '../types/outcome.js'
 import type { CodeCallNotice, CodeProgramRequest, CompletedCall } from '../types/script.js'
 import type { GrantedModule, ScriptPackageDefinition } from '../types/script.js'
@@ -61,7 +70,8 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     const { program } = input
     const source = program.source
     const oversized = describeProgramOversize(source, program.blobs, program.input)
-    if (isString(oversized)) return {
+    if (isString(oversized))
+      return {
         checked: true,
         result: { failed: { code: CodeSurfaceErrorCodes.tooLarge, message: oversized } },
       }
@@ -97,8 +107,13 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     const attachments: CodeAttachment[] = []
     let calls = 0
     // 隔离里没有模块系统：import 改写成 __velaros(...) 与 __import(...)、导出改写成登记，行数一个不变。
-    const modules = Object.fromEntries(Object.entries(program.modules ?? {}).map(([path, text]) => [path, rewriteModuleForIsolate(text, { importer: path, library: true })]))
-    const executionStartedAt=Date.now()
+    const modules = Object.fromEntries(
+      Object.entries(program.modules ?? {}).map(([path, text]) => [
+        path,
+        rewriteModuleForIsolate(text, { importer: path, library: true }),
+      ])
+    )
+    const executionStartedAt = Date.now()
     const outcome = await this.runner.run(
       {
         source: rewriteModuleForIsolate(checked.transpiled ?? source, { importer: program.path }),
@@ -107,11 +122,15 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
         input: program.input,
         operations: this.capabilities.listOperations(),
         packages: input.packages,
-        timeoutMs: Math.min(input.timeoutMs ?? CodeSurfaceTuning.defaultTimeoutMs, CodeSurfaceLimits.timeoutMs),
+        timeoutMs: Math.min(
+          input.timeoutMs ?? CodeSurfaceTuning.defaultTimeoutMs,
+          CodeSurfaceLimits.timeoutMs
+        ),
       },
       async (call, holdClock) => {
         calls += 1
-        if (calls > CodeSurfaceLimits.calls) return {
+        if (calls > CodeSurfaceLimits.calls)
+          return {
             error: {
               code: CodeSurfaceErrorCodes.tooLarge,
               message: `这次脚本已经发了 ${CodeSurfaceLimits.calls} 次能力调用，到上限了。把循环收窄，或者分几次做。`,
@@ -134,7 +153,11 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
           release()
           inFlight.delete(call.callId)
         }
-        this.events.callSettled?.({ callId: call.callId, ok: !result.error, elapsedMs: Date.now() - startedAt })
+        this.events.callSettled?.({
+          callId: call.callId,
+          ok: !result.error,
+          elapsedMs: Date.now() - startedAt,
+        })
         completed.push(settledCall(name, result))
         if (result.notices) notices.push(...result.notices)
         if (result.attachments) attachments.push(...result.attachments)
@@ -153,28 +176,81 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     if (!isEmpty(unsettled)) run.abort(new Error('脚本已经停了，这次调用没人等了'))
 
     // 图先收拢：它自己也会往插手记录里记一笔「丢了几张」，得赶在文字结果编好之前。
-    if(outcome.ok&&!isUndefined(outcome.value)){
-      try{if(JSON.stringify(outcome.value).length>ScriptOutputLimits.rawChars)throw new Error('程序返回值超过原始归档上限')}
-      catch(error){Log.tag('ActRuntime').debug('CodeSurfaceSession 已进入异常处理或降级分支');outcome.ok=false;outcome.error={code:'TOO_LARGE',message:String(error)}}
+    if (outcome.ok && !isUndefined(outcome.value)) {
+      try {
+        if (JSON.stringify(outcome.value).length > ScriptOutputLimits.rawChars)
+          throw new Error('程序返回值超过原始归档上限')
+      } catch (error) {
+        Log.tag('ActRuntime').debug('CodeSurfaceSession 已进入异常处理或降级分支')
+        outcome.ok = false
+        outcome.error = { code: 'TOO_LARGE', message: String(error) }
+      }
     }
-    const outputAttachments:Array<{key:string;index:number}>=[]
-    for(const block of outcome.output?.blocks??[]){
-      if(block.options.type!=='image'||!block.value||!isObject(block.value) ||!('data' in block.value))continue
-      try{
-        const image={...(block.value as CodeAttachment),origin:'capability' as const}
-        modelRequestEncoder.messages({instructions:'',materials:[],images:[image],response:{type:'text'},mode:'work',outputTokens:1})
-        outputAttachments.push({key:block.key,index:attachments.length});attachments.push(image)
-      }catch(error){Log.tag('ActRuntime').debug('CodeSurfaceSession 已进入异常处理或降级分支');outcome.ok=false;outcome.error={code:'PROGRAM_ERROR',message:`输出图片无效：${String(error)}`}}
+    const outputAttachments: Array<{ key: string; index: number }> = []
+    for (const block of outcome.output?.blocks ?? []) {
+      if (
+        block.options.type !== 'image' ||
+        !block.value ||
+        !isObject(block.value) ||
+        !('data' in block.value)
+      )
+        continue
+      try {
+        const image = { ...(block.value as CodeAttachment), origin: 'capability' as const }
+        modelRequestEncoder.messages({
+          instructions: '',
+          materials: [],
+          images: [image],
+          response: { type: 'text' },
+          mode: 'work',
+          outputTokens: 1,
+        })
+        outputAttachments.push({ key: block.key, index: attachments.length })
+        attachments.push(image)
+      } catch (error) {
+        Log.tag('ActRuntime').debug('CodeSurfaceSession 已进入异常处理或降级分支')
+        outcome.ok = false
+        outcome.error = { code: 'PROGRAM_ERROR', message: `输出图片无效：${String(error)}` }
+      }
     }
-    if(outcome.output?.issues.length){outcome.ok=false;outcome.error={code:'PROGRAM_ERROR',message:outcome.output.issues.join('; ')}}
+    if (outcome.output?.issues.length) {
+      outcome.ok = false
+      outcome.error = { code: 'PROGRAM_ERROR', message: outcome.output.issues.join('; ') }
+    }
     const shown = fitAttachmentsToBudget(attachments, notices)
-    const preview=outcome.output?.blocks.some(block=>block.options.type==='image')?{...outcome,value:{default:outcome.output.blocks.length===1?{representation:'native-image',key:outcome.output.blocks[0]!.key}:outcome.output.blocks.map(block=>block.options.type==='image'?{representation:'native-image',key:block.key}:block.value)}}:outcome
-    const result = composeProgramResult(preview, notices, completed, unsettled, hasNamedExports(checked.transpiled ?? source))
+    const preview = outcome.output?.blocks.some((block) => block.options.type === 'image')
+      ? {
+          ...outcome,
+          value: {
+            default:
+              outcome.output.blocks.length === 1
+                ? { representation: 'native-image', key: outcome.output.blocks[0]!.key }
+                : outcome.output.blocks.map((block) =>
+                    block.options.type === 'image'
+                      ? { representation: 'native-image', key: block.key }
+                      : block.value
+                  ),
+          },
+        }
+      : outcome
+    const result = composeProgramResult(
+      preview,
+      notices,
+      completed,
+      unsettled,
+      hasNamedExports(checked.transpiled ?? source)
+    )
     const settled: Extract<CodeSurfaceOutcome, { checked: true }> = { checked: true, result }
-    settled.metrics={durationMs:Date.now()-executionStartedAt,capabilityCalls:calls,rawOutputChars:outcome.output?.blocks.reduce((sum,block)=>sum+block.chars,0)??0}
-    if(outcome.output)settled.output=outcome.output
-    if(!isEmpty(outputAttachments))settled.outputAttachments=outputAttachments.filter(item=>item.index<shown.length)
-    if(outcome.ok&&!outcome.output?.blocks.length&&!isUndefined(outcome.value))settled.rawValue=outcome.value
+    settled.metrics = {
+      durationMs: Date.now() - executionStartedAt,
+      capabilityCalls: calls,
+      rawOutputChars: outcome.output?.blocks.reduce((sum, block) => sum + block.chars, 0) ?? 0,
+    }
+    if (outcome.output) settled.output = outcome.output
+    if (!isEmpty(outputAttachments))
+      settled.outputAttachments = outputAttachments.filter((item) => item.index < shown.length)
+    if (outcome.ok && !outcome.output?.blocks.length && !isUndefined(outcome.value))
+      settled.rawValue = outcome.value
     if (!isEmpty(shown)) settled.attachments = shown
     if (!isEmpty(completed)) settled.calls = foldCalls(completed)
     return settled

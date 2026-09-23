@@ -21,8 +21,16 @@ export class CdpProtocolChannel implements BrowserProtocolChannel {
     })
   }
 
-  public async send(method: string, params: Optional<Record<string, unknown>>, sessionId?: string): Promise<unknown> {
-    if (this.closed) throw new AppError(BrowserErrorCodes.protocolFailed, `${method}：CDP 会话已经断开，再发一条会重新连。`)
+  public async send(
+    method: string,
+    params: Optional<Record<string, unknown>>,
+    sessionId?: string
+  ): Promise<unknown> {
+    if (this.closed)
+      throw new AppError(
+        BrowserErrorCodes.protocolFailed,
+        `${method}：CDP 会话已经断开，再发一条会重新连。`
+      )
     try {
       return await this.transport.send(method, params ?? {}, sessionId)
     } catch (error) {
@@ -31,7 +39,9 @@ export class CdpProtocolChannel implements BrowserProtocolChannel {
     }
   }
 
-  public onEvent(listener: (method: string, params: unknown, sessionId: Optional<string>) => void): () => void {
+  public onEvent(
+    listener: (method: string, params: unknown, sessionId: Optional<string>) => void
+  ): () => void {
     return this.transport.onAnyEvent(listener)
   }
 

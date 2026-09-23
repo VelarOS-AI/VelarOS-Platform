@@ -21,14 +21,22 @@ export function findCodeSymbols(content: string): SymbolInfo[] {
     while ((match = regex.exec(content))) {
       const start = match.index
       const lineEnd = content.indexOf('\n', start)
-      symbols.push({ kind, name: match[1], range: rangeFromOffsets(content, start, lineEnd === -1 ? content.length : lineEnd), signatureHash: undefined })
+      symbols.push({
+        kind,
+        name: match[1],
+        range: rangeFromOffsets(content, start, lineEnd === -1 ? content.length : lineEnd),
+        signatureHash: undefined,
+      })
     }
   }
   return symbols.sort((a, b) => (a.range.startOffset ?? 0) - (b.range.startOffset ?? 0))
 }
 
 /** 从声明起点推断整个块：签名后不远处有花括号就按括号配对，否则按缩进扩到下一个顶格的声明之前。 */
-export function expandCodeBlock(content: string, startOffset: number): { startOffset: number; endOffset: number } {
+export function expandCodeBlock(
+  content: string,
+  startOffset: number
+): { startOffset: number; endOffset: number } {
   const lineEnd = content.indexOf('\n', startOffset)
   const signatureEnd = lineEnd === -1 ? content.length : lineEnd + 1
   const open = content.indexOf('{', startOffset)
@@ -55,6 +63,7 @@ export function expandCodeBlock(content: string, startOffset: number): { startOf
   const lines = content.slice(0, startOffset).split('\n').length
   let endOffset = startOffset
   const all = content.split('\n')
-  for (let i = lines - 1; i < Math.min(all.length, lines - 1 + endLines); i++) endOffset += all[i].length + 1
+  for (let i = lines - 1; i < Math.min(all.length, lines - 1 + endLines); i++)
+    endOffset += all[i].length + 1
   return { startOffset, endOffset: Math.min(content.length, endOffset) }
 }

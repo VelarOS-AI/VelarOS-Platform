@@ -65,14 +65,17 @@ export class IgnorePolicy implements IgnorePolicyApi {
     }
     if (isEmpty(candidates)) return ignored
 
-    const fromGit = await this.askGit(rulesRoot, candidates.map(({ relativePath }) => relativePath))
+    const fromGit = await this.askGit(
+      rulesRoot,
+      candidates.map(({ relativePath }) => relativePath)
+    )
     for (const candidate of candidates) {
       const isIgnored = isNotNull(fromGit)
         ? fromGit.has(candidate.relativePath)
         : this.rules.isIgnored(
             candidate.relativePath,
             await this.rulesFor(rulesRoot, candidate.relativePath),
-            candidate.isDirectory,
+            candidate.isDirectory
           )
       if (isIgnored) ignored.add(candidate.absolutePath)
     }
@@ -92,7 +95,11 @@ export class IgnorePolicy implements IgnorePolicyApi {
     if (isNull(repositoryRoot) || repositoryRoot === this.rootPath) return repositoryRoot
     const relativePath = relativeInsideRoot(repositoryRoot, this.rootPath)
     if (isNull(relativePath)) return null
-    const ignored = this.rules.isIgnored(relativePath, await this.rulesFor(repositoryRoot, relativePath), true)
+    const ignored = this.rules.isIgnored(
+      relativePath,
+      await this.rulesFor(repositoryRoot, relativePath),
+      true
+    )
     return ignored ? null : repositoryRoot
   }
 
@@ -109,7 +116,10 @@ export class IgnorePolicy implements IgnorePolicyApi {
   }
 
   /** 读一个目录累积到它为止的全部规则：先要它各级上级的，再加它自己那份。 */
-  private async loadRules(rulesRoot: string, directoryRelativePath: string): Promise<GitignoreRule[]> {
+  private async loadRules(
+    rulesRoot: string,
+    directoryRelativePath: string
+  ): Promise<GitignoreRule[]> {
     const inherited = isEmpty(directoryRelativePath)
       ? []
       : await this.rulesFor(rulesRoot, directoryRelativePath)
@@ -117,7 +127,10 @@ export class IgnorePolicy implements IgnorePolicyApi {
   }
 
   /** 问 git 哪些被忽略；没给执行口、之前问失败过、或者这次没问成都返回 null，由本地规则接手。 */
-  private async askGit(rulesRoot: string, relativePaths: readonly string[]): Promise<Nullable<ReadonlySet<string>>> {
+  private async askGit(
+    rulesRoot: string,
+    relativePaths: readonly string[]
+  ): Promise<Nullable<ReadonlySet<string>>> {
     const runner = this.options.gitCheckIgnore
     if (!runner || this.gitUnavailable) return null
     const answer = await runner(rulesRoot, relativePaths)
@@ -127,6 +140,9 @@ export class IgnorePolicy implements IgnorePolicyApi {
 }
 
 /** 建一份遍历用的忽略策略；一次遍历一份，读过的规则随它一起丢。 */
-export function createIgnorePolicy(rootPath: string, options: IgnorePolicyOptions = {}): IgnorePolicyApi {
+export function createIgnorePolicy(
+  rootPath: string,
+  options: IgnorePolicyOptions = {}
+): IgnorePolicyApi {
   return new IgnorePolicy(rootPath, options, gitignoreRules)
 }

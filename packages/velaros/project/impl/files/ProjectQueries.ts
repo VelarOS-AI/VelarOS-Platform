@@ -1,13 +1,7 @@
 /**
  * 内核的查询面：`ProjectQueries`。接口 `ProjectQueriesApi` 与构造参数 `ProjectQueriesDependencies` 在本文件的类上方。
  */
-import {
-  isEmpty,
-  isNotNull,
-  isObject,
-  isUndefined,
-  optionalWhen,
-} from '@velaros-ai/core'
+import { isEmpty, isNotNull, isObject, isUndefined, optionalWhen } from '@velaros-ai/core'
 
 import type { FileAdapter } from '../../contract/requires.js'
 import type { ProjectSymbol } from '../../types/adapter.js'
@@ -172,7 +166,10 @@ export class ProjectQueries implements ProjectQueriesApi {
             processed.excludeGitignored ??
             defaultExcludeGitignoredForRoot(authorizedProcessed.root),
           maxResults,
-          filterPath: optionalWhen(!!this.dependencies.searchTextKind, (path: string) => textKinds.get(path) === 'native'),
+          filterPath: optionalWhen(
+            !!this.dependencies.searchTextKind,
+            (path: string) => textKinds.get(path) === 'native'
+          ),
           command: this.dependencies.providers.command,
           policy: this.dependencies.policy,
         })
@@ -188,7 +185,8 @@ export class ProjectQueries implements ProjectQueriesApi {
             const kind = textKinds.get(hit.path)
             if (this.dependencies.searchTextKind && kind !== 'native') continue
             // 点名的搜索起点下面不问列举过滤器，别处按它略过宿主不想列的文件（与列举同一个规矩）。
-            if (!rootAccess && !(await this.dependencies.store.visible(hit.path, 'search'))) continue
+            if (!rootAccess && !(await this.dependencies.store.visible(hit.path, 'search')))
+              continue
             try {
               let revision = revisionByPath.get(hit.path)
               if (isUndefined(revision)) {
@@ -207,9 +205,15 @@ export class ProjectQueries implements ProjectQueriesApi {
             }
             if (enriched.length >= maxResults) break
           }
-          const decodedPaths = [...textKinds].filter(([, kind]) => kind === 'decoded').map(([path]) => path)
+          const decodedPaths = [...textKinds]
+            .filter(([, kind]) => kind === 'decoded')
+            .map(([path]) => path)
           if (!isEmpty(decodedPaths) && enriched.length < maxResults) {
-            const decoded = await this.searchViaAdapters(authorizedProcessed, maxResults - enriched.length, decodedPaths)
+            const decoded = await this.searchViaAdapters(
+              authorizedProcessed,
+              maxResults - enriched.length,
+              decodedPaths
+            )
             enriched.push(...decoded.hits)
           }
           enriched.sort((a, b) => b.score - a.score)
@@ -266,20 +270,33 @@ export class ProjectQueries implements ProjectQueriesApi {
   }
 
   /** 快速后端只负责其可精确解释的文本；遗留编码在统一解码后交给同一搜索适配器。 */
-  private async classifySearchFiles(input: SearchInput): Promise<Map<string, 'native' | 'decoded' | 'excluded'>> {
+  private async classifySearchFiles(
+    input: SearchInput
+  ): Promise<Map<string, 'native' | 'decoded' | 'excluded'>> {
     const kinds = new Map<string, 'native' | 'decoded' | 'excluded'>()
     if (!this.dependencies.searchTextKind) return kinds
     for (const path of await this.searchFilePaths(input)) {
       const classified = await this.classifySearchFile(path)
       kinds.set(path, classified.kind)
-      if (classified.error) this.dependencies.journal.record({ actor: 'system', action: 'search', path, outputSummary: '格式检测失败，已跳过不可读取文件。' })
+      if (classified.error)
+        this.dependencies.journal.record({
+          actor: 'system',
+          action: 'search',
+          path,
+          outputSummary: '格式检测失败，已跳过不可读取文件。',
+        })
     }
     return kinds
   }
 
-  private async classifySearchFile(path: string): Promise<{ kind: 'native' | 'decoded' | 'excluded'; error?: unknown }> {
-    try { return { kind: await this.dependencies.searchTextKind!(path) } }
-    catch (error) { return { kind: 'excluded', error } }
+  private async classifySearchFile(
+    path: string
+  ): Promise<{ kind: 'native' | 'decoded' | 'excluded'; error?: unknown }> {
+    try {
+      return { kind: await this.dependencies.searchTextKind!(path) }
+    } catch (error) {
+      return { kind: 'excluded', error }
+    }
   }
 
   private async searchFilePaths(processed: SearchInput): Promise<string[]> {
@@ -287,7 +304,8 @@ export class ProjectQueries implements ProjectQueriesApi {
       path: processed.root,
       include: processed.include,
       exclude: resolveSearchExcludeGlobs(processed),
-      excludeGitignored: processed.excludeGitignored ?? defaultExcludeGitignoredForRoot(processed.root),
+      excludeGitignored:
+        processed.excludeGitignored ?? defaultExcludeGitignoredForRoot(processed.root),
       recursive: true,
       // 搜索必须遍历完整候选集；公开 list 的展示页长不能静默裁掉旧编码文件。
       maxFiles: Number.MAX_SAFE_INTEGER,
@@ -300,9 +318,9 @@ export class ProjectQueries implements ProjectQueriesApi {
   private async searchViaAdapters(
     processed: SearchInput,
     maxResults: number,
-    selectedFiles?: string[],
+    selectedFiles?: string[]
   ): Promise<{ hits: SearchHit[]; scannedFiles: number; truncated: boolean }> {
-    const files = selectedFiles ?? await this.searchFilePaths(processed)
+    const files = selectedFiles ?? (await this.searchFilePaths(processed))
     const hits: SearchHit[] = []
     let scannedFiles = 0
     let stoppedEarly = false
@@ -312,7 +330,7 @@ export class ProjectQueries implements ProjectQueriesApi {
       let snap: FileSnapshot
       try {
         snap = await this.dependencies.enrichSnapshot(
-          await this.dependencies.store.snapshot(file, true),
+          await this.dependencies.store.snapshot(file, true)
         )
       } catch {
         // arch-guard:silent-catch-ok 搜索扫描按 best-effort 跳过不可读取文件。
@@ -359,7 +377,7 @@ export class ProjectQueries implements ProjectQueriesApi {
   /** 收集指定文件中各适配器解析出的符号列表。 */
   public async listSymbols(pathInput: string): Promise<ProjectSymbol[]> {
     const snap = await this.dependencies.enrichSnapshot(
-      await this.dependencies.store.snapshot(pathInput, true),
+      await this.dependencies.store.snapshot(pathInput, true)
     )
     const codeIntel = this.dependencies.providers.codeIntelligence
     // 只有宿主显式启用代码智能时才使用远端/索引后端，否则回退本地 adapter。
@@ -407,7 +425,7 @@ export class ProjectQueries implements ProjectQueriesApi {
             column: symbol.range.startColumn,
             endLine: symbol.range.endLine,
             endColumn: symbol.range.endColumn,
-          })),
+          }))
         )
       }
     }
@@ -421,7 +439,7 @@ export class ProjectQueries implements ProjectQueriesApi {
     const access = await this.dependencies.store.authorize(processed.path)
     const authorizedInput = { ...processed, path: access.rel }
     const snap = await this.dependencies.enrichSnapshot(
-      await this.dependencies.store.snapshot(authorizedInput.path, true),
+      await this.dependencies.store.snapshot(authorizedInput.path, true)
     )
     const codeIntel = this.dependencies.providers.codeIntelligence
     const symbolName = authorizedInput.target?.symbol?.name
@@ -511,8 +529,14 @@ export class ProjectQueries implements ProjectQueriesApi {
 
     if (includeCurrentWindow && targetPath && targetRange) {
       // Evidence 只截取目标附近的新鲜窗口，不把整文件塞进上下文。
-      const before = Math.max(0, input.include?.windowLinesBefore ?? ProjectTuning.queries.evidenceWindowLines)
-      const after = Math.max(0, input.include?.windowLinesAfter ?? ProjectTuning.queries.evidenceWindowLines)
+      const before = Math.max(
+        0,
+        input.include?.windowLinesBefore ?? ProjectTuning.queries.evidenceWindowLines
+      )
+      const after = Math.max(
+        0,
+        input.include?.windowLinesAfter ?? ProjectTuning.queries.evidenceWindowLines
+      )
       const contextStart = Math.max(1, targetRange.startLine - before)
       const contextEnd = Math.max(contextStart, targetRange.endLine + after)
       const read = await this.read({
@@ -530,7 +554,11 @@ export class ProjectQueries implements ProjectQueriesApi {
         suggestedReads.push({
           path: read.snapshot.path,
           range: {
-            startLine: Math.max(1, contextRange.startLine - Math.max(before, ProjectTuning.queries.evidenceSuggestedReadLines)),
+            startLine: Math.max(
+              1,
+              contextRange.startLine -
+                Math.max(before, ProjectTuning.queries.evidenceSuggestedReadLines)
+            ),
             endLine: contextRange.startLine - 1,
           },
           reason: 'before-context',
@@ -541,7 +569,9 @@ export class ProjectQueries implements ProjectQueriesApi {
           path: read.snapshot.path,
           range: {
             startLine: contextRange.endLine + 1,
-            endLine: contextRange.endLine + Math.max(after, ProjectTuning.queries.evidenceSuggestedReadLines),
+            endLine:
+              contextRange.endLine +
+              Math.max(after, ProjectTuning.queries.evidenceSuggestedReadLines),
           },
           reason: 'after-context',
         })

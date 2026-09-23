@@ -11,14 +11,22 @@ import { BrowserTuning } from '../../utils/tuning'
  */
 export interface BrowserSessionActionQueueApi {
   /** 写操作：串行排队执行 */
-  run<T>(sessionId: string, action: () => Promise<T>, options?: BrowserSessionActionOptions): Promise<T>
+  run<T>(
+    sessionId: string,
+    action: () => Promise<T>,
+    options?: BrowserSessionActionOptions
+  ): Promise<T>
   /**
    * 只读操作仍会访问共享 WebContents，需要跟导航/点击保持顺序。
    *
    * 当前实现与 run 行为完全一致；保留独立方法是给未来扩展（如读写锁、并行读）留接口。
    * 现阶段不要把它当成“可以并发”的标志。
    */
-  runReadOnly<T>(sessionId: string, action: () => Promise<T>, options?: BrowserSessionActionOptions): Promise<T>
+  runReadOnly<T>(
+    sessionId: string,
+    action: () => Promise<T>,
+    options?: BrowserSessionActionOptions
+  ): Promise<T>
   /**
    * 丢掉这条会话现有的排队链，**下一次 `run` 立刻开跑**。
    *

@@ -8,7 +8,7 @@ import { ProjectError } from '../errors.js'
 function lineChange(
   snapshot: FileSnapshot,
   operation: ReplaceLinesOperation,
-  lineOffsets: readonly number[],
+  lineOffsets: readonly number[]
 ): { start: number; end: number; replacement: string } {
   const { startLine, endLine, newLines, baseRevision } = operation
   if (
@@ -20,7 +20,7 @@ function lineChange(
       'BASE_REVISION_MISMATCH',
       `replace_lines 的行号必须绑定当前磁盘 revision：${snapshot.path}`,
       { path: snapshot.path, expected: baseRevision, actual: snapshot.revision },
-      '先提交同一个文件前面的修改，再重新 read 目标区域，按新的版本与行号重做。',
+      '先提交同一个文件前面的修改，再重新 read 目标区域，按新的版本与行号重做。'
     )
   }
   if (
@@ -31,7 +31,7 @@ function lineChange(
   ) {
     throw new ProjectError(
       'NOT_SUPPORTED',
-      `replace_lines 需要完整可读的文本文件：${snapshot.path}`,
+      `replace_lines 需要完整可读的文本文件：${snapshot.path}`
     )
   }
   const content = snapshot.content
@@ -48,16 +48,13 @@ function lineChange(
       'INVALID_INPUT',
       `replace_lines 范围 ${startLine}–${endLine} 超出有效行号 1–${totalLines}：${snapshot.path}`,
       { path: snapshot.path, startLine, endLine, totalLines },
-      '按 read 返回的行号选范围；编辑范围不会自动钳制。',
+      '按 read 返回的行号选范围；编辑范围不会自动钳制。'
     )
   }
-  if (
-    !isArray(newLines) ||
-    newLines.some((line) => !isString(line) || /[\r\n]/.test(line))
-  ) {
+  if (!isArray(newLines) || newLines.some((line) => !isString(line) || /[\r\n]/.test(line))) {
     throw new ProjectError(
       'INVALID_INPUT',
-      'replace_lines.newLines 每项必须是一行字符串，不含 CR/LF。',
+      'replace_lines.newLines 每项必须是一行字符串，不含 CR/LF。'
     )
   }
   const start = lineOffsets[startLine - 1]
@@ -73,7 +70,7 @@ function lineChange(
 /** 按一个 replace_lines 操作替换快照里的整行，返回新正文。 */
 export function replaceSnapshotLines(
   snapshot: FileSnapshot,
-  operation: ReplaceLinesOperation,
+  operation: ReplaceLinesOperation
 ): string {
   return replaceSnapshotLineRanges(snapshot, [operation])
 }
@@ -81,7 +78,7 @@ export function replaceSnapshotLines(
 /** 同一快照的多个不重叠范围一次拼接，调用方不需要计算前序编辑引起的行号位移。 */
 export function replaceSnapshotLineRanges(
   snapshot: FileSnapshot,
-  operations: readonly ReplaceLinesOperation[],
+  operations: readonly ReplaceLinesOperation[]
 ): string {
   const lineOffsets = [0]
   const content = snapshot.content ?? ''
@@ -102,7 +99,7 @@ export function replaceSnapshotLineRanges(
           error.reason,
           error.message,
           { ...error.details, rangeIndex },
-          error.suggestedNextAction,
+          error.suggestedNextAction
         )
       }
     })

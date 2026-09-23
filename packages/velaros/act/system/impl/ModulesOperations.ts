@@ -4,7 +4,12 @@
  */
 
 import type { ModulesOperationContext } from '../contract/requires.js'
-import type { SystemModuleDescribeInput, SystemModuleDescription, SystemModulePage, SystemModuleQuery } from '../types/modules.js'
+import type {
+  SystemModuleDescribeInput,
+  SystemModuleDescription,
+  SystemModulePage,
+  SystemModuleQuery,
+} from '../types/modules.js'
 
 /**
  * @AgentView
@@ -18,25 +23,40 @@ export interface ModulesOperationsApi {
   /** @AgentView 按关键词找模块：匹配模块名、简介与操作名。
    * @OperationEffect none
    */
-  search(input: Optional<SystemModuleQuery>, ctx: ModulesOperationContext): Promise<SystemModulePage>
+  search(
+    input: Optional<SystemModuleQuery>,
+    ctx: ModulesOperationContext
+  ): Promise<SystemModulePage>
   /** @AgentView 读一个模块的合同：完整声明、用法示例与每个操作的说明。
    * @OperationEffect none
    */
-  describe(input: SystemModuleDescribeInput, ctx: ModulesOperationContext): Promise<SystemModuleDescription>
+  describe(
+    input: SystemModuleDescribeInput,
+    ctx: ModulesOperationContext
+  ): Promise<SystemModuleDescription>
 }
 
 export class ModulesOperations implements ModulesOperationsApi {
-  public async list(input: Optional<SystemModuleQuery>, ctx: ModulesOperationContext): Promise<SystemModulePage> {
+  public async list(
+    input: Optional<SystemModuleQuery>,
+    ctx: ModulesOperationContext
+  ): Promise<SystemModulePage> {
     ctx.abortSignal.throwIfAborted()
     return ctx.catalog.list(input ?? {})
   }
 
-  public async search(input: Optional<SystemModuleQuery>, ctx: ModulesOperationContext): Promise<SystemModulePage> {
+  public async search(
+    input: Optional<SystemModuleQuery>,
+    ctx: ModulesOperationContext
+  ): Promise<SystemModulePage> {
     ctx.abortSignal.throwIfAborted()
     return ctx.catalog.list(input ?? {})
   }
 
-  public async describe(input: SystemModuleDescribeInput, ctx: ModulesOperationContext): Promise<SystemModuleDescription> {
+  public async describe(
+    input: SystemModuleDescribeInput,
+    ctx: ModulesOperationContext
+  ): Promise<SystemModuleDescription> {
     ctx.abortSignal.throwIfAborted()
     return ctx.catalog.describe(input.module, input.export)
   }

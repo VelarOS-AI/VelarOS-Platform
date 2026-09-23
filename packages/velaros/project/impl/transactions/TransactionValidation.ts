@@ -8,13 +8,21 @@ import { isEmpty, isNull, isString, optionalWhen } from '@velaros-ai/core'
 import type { CommandProvider, FileAdapter, ProjectProviders } from '../../contract/requires.js'
 import type { CorePolicy } from '../../types/policy.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
-import type { StagedFileContent, StoredTransaction, TransactionContentOverlay } from '../../types/transaction.js'
+import type {
+  StagedFileContent,
+  StoredTransaction,
+  TransactionContentOverlay,
+} from '../../types/transaction.js'
 import type {
   ProjectValidationContext,
   ValidateInput,
   ValidationResult,
 } from '../../types/validation.js'
-import { validationPolicyView, validationProvidersView, validationTransactionView } from '../../utils/transactions/validation-views.js'
+import {
+  validationPolicyView,
+  validationProvidersView,
+  validationTransactionView,
+} from '../../utils/transactions/validation-views.js'
 
 /** 事务校验要内核注入的东西：根目录、策略、宿主能力，以及读事务、重放暂存内容、跑登记的 validator、造快照与 adapter 的回调。 */
 export interface TransactionValidationDependencies {

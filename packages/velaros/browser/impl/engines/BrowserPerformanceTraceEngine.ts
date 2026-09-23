@@ -6,10 +6,7 @@ import type { BrowserParsedTraceRecording } from '../../types/runtime.js'
 import { readBrowserTraceInsight } from '../../utils/performance'
 
 import type * as DevtoolsPerformanceEngineModule from '#devtools-performance-engine'
-import type {
-  DevtoolsParsedTrace,
-  DevtoolsTraceModel,
-} from '#devtools-performance-engine'
+import type { DevtoolsParsedTrace, DevtoolsTraceModel } from '#devtools-performance-engine'
 
 type PerformanceEngineModule = typeof DevtoolsPerformanceEngineModule
 
@@ -28,7 +25,11 @@ export interface BrowserPerformanceTraceEngineApi {
   /** 把解析结果格式化成整体摘要（含可用 insight 清单）。 */
   formatSummary(recording: BrowserParsedTraceRecording): Promise<string>
   /** 把某一个 insight 格式化成详细分析文本。 */
-  formatInsight(recording: BrowserParsedTraceRecording, insightSetId: string, insightName: string): Promise<string>
+  formatInsight(
+    recording: BrowserParsedTraceRecording,
+    insightSetId: string,
+    insightName: string
+  ): Promise<string>
 }
 
 export class BrowserPerformanceTraceEngine implements BrowserPerformanceTraceEngineApi {
@@ -67,9 +68,7 @@ export class BrowserPerformanceTraceEngine implements BrowserPerformanceTraceEng
 
   /** 首次用到时才加载 vendor 引擎（约 2 MB），加载完顺手做一次 i18n 引导。 */
   private async loadEngineModule(): Promise<PerformanceEngineModule> {
-    this.engineModulePromise ??= import(
-      '#devtools-performance-engine'
-    ).then((module) => {
+    this.engineModulePromise ??= import('#devtools-performance-engine').then((module) => {
       this.bootstrapEngineI18n(module)
       return module
     })
@@ -123,4 +122,3 @@ export class BrowserPerformanceTraceEngine implements BrowserPerformanceTraceEng
     }
   }
 }
-

@@ -26,7 +26,10 @@ export const AnonymousProgramFile = '.program.js'
  * **只拼授权的**——不授权的模块不进来，`import` 它就解析不出来（TS2307）。
  * 这道闸是语言给的，不用我们写判定；也正因为如此，检查器绝不能图省事加载全量。
  */
-export function joinGrantedDeclarations(program: string, granted: ReadonlyArray<{ declarations: string }>): string {
+export function joinGrantedDeclarations(
+  program: string,
+  granted: ReadonlyArray<{ declarations: string }>
+): string {
   return [program, ...granted.map((module) => module.declarations)].join('\n\n')
 }
 
@@ -80,13 +83,16 @@ export function createMemoryCompilerHost(
   const defaultHost = ts.createCompilerHost(options, true)
   const directories = new Set<string>()
   for (const name of files.keys()) {
-    for (let index = name.lastIndexOf('/'); index > 0; index = name.lastIndexOf('/', index - 1)) directories.add(name.slice(0, index))
+    for (let index = name.lastIndexOf('/'); index > 0; index = name.lastIndexOf('/', index - 1))
+      directories.add(name.slice(0, index))
   }
   return {
     ...defaultHost,
     fileExists: (name) => files.has(name) || defaultHost.fileExists(name),
-    directoryExists: (name) => directories.has(name.replace(/\/+$/u, '')) || !!defaultHost.directoryExists?.(name),
-    realpath: (name) => (files.has(name) || directories.has(name) ? name : defaultHost.realpath?.(name) ?? name),
+    directoryExists: (name) =>
+      directories.has(name.replace(/\/+$/u, '')) || !!defaultHost.directoryExists?.(name),
+    realpath: (name) =>
+      files.has(name) || directories.has(name) ? name : (defaultHost.realpath?.(name) ?? name),
     readFile: (name) => files.get(name) ?? defaultHost.readFile(name),
     getSourceFile: (name, languageVersion, onError) => {
       const text = files.get(name)
@@ -103,12 +109,22 @@ export function createMemoryCompilerHost(
  * **程序不包装**（它本来就是个模块），所以编译器给的 0 基行号要加一才是模型写的那一行。
  * 早先用「函数体 + 包装」时包装恰好占掉第 0 行，两者数值相等——那是巧合，形态一改就错一位。
  */
-export function toModelDiagnostic(diagnostic: ts.Diagnostic, mainFile: string): CodeProgramDiagnostic {
+export function toModelDiagnostic(
+  diagnostic: ts.Diagnostic,
+  mainFile: string
+): CodeProgramDiagnostic {
   const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, ' ')
   const file = diagnostic.file
-  if (!file || isUndefined(diagnostic.start)) return { line: 1, column: 1, code: diagnostic.code, message }
+  if (!file || isUndefined(diagnostic.start))
+    return { line: 1, column: 1, code: diagnostic.code, message }
   const { line, character } = file.getLineAndCharacterOfPosition(diagnostic.start)
-  const shaped: CodeProgramDiagnostic = { line: line + 1, column: character + 1, code: diagnostic.code, message, frame: renderDiagnosticFrame(file.text, line + 1, character + 1) }
+  const shaped: CodeProgramDiagnostic = {
+    line: line + 1,
+    column: character + 1,
+    code: diagnostic.code,
+    message,
+    frame: renderDiagnosticFrame(file.text, line + 1, character + 1),
+  }
   if (file.fileName !== mainFile) shaped.file = file.fileName.slice(LibraryRoot.length + 1)
   return shaped
 }
@@ -130,9 +146,17 @@ export function diagnoseProgram(
     const file = `${LibraryRoot}/${path}`
     if (!files.has(file)) files.set(file, source)
   }
-  const program = ts.createProgram([DeclarationFileName, fileName], options, createMemoryCompilerHost(files, options))
+  const program = ts.createProgram(
+    [DeclarationFileName, fileName],
+    options,
+    createMemoryCompilerHost(files, options)
+  )
   return [...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()]
-    .filter((diagnostic) => diagnostic.file?.fileName === fileName || Boolean(diagnostic.file?.fileName.startsWith(`${LibraryRoot}/`)))
+    .filter(
+      (diagnostic) =>
+        diagnostic.file?.fileName === fileName ||
+        Boolean(diagnostic.file?.fileName.startsWith(`${LibraryRoot}/`))
+    )
     .map((diagnostic) => toModelDiagnostic(diagnostic, fileName))
 }
 

@@ -40,12 +40,14 @@ export interface RealTaskWorkloadApi {
   /** 按产品面汇总加权覆盖；重复结果与指向未知用例的结果一律报错，不许悄悄改分母。 */
   summarizeCoverage: (
     cases: readonly RealTaskCase[],
-    results: readonly RealTaskCoverageResult[],
+    results: readonly RealTaskCoverageResult[]
   ) => readonly RealTaskSurfaceCoverageSummary[]
   /** 把一份归档折成覆盖统计认的那一种结局；宿主不许自己重新解释。 */
   classifyArchiveOutcome: (archive: RunArchive) => RunArchiveOutcome
   /** 从真实执行回执算模型重复输入的减少量；字符数不是 token 估算。 */
-  summarizeToolInputEfficiency: (records: readonly ToolAttemptReceiptRecord[]) => ToolInputEfficiency
+  summarizeToolInputEfficiency: (
+    records: readonly ToolAttemptReceiptRecord[]
+  ) => ToolInputEfficiency
 }
 
 class RealTaskWorkload implements RealTaskWorkloadApi {
@@ -79,7 +81,7 @@ class RealTaskWorkload implements RealTaskWorkloadApi {
 
   public summarizeCoverage(
     cases: readonly RealTaskCase[],
-    results: readonly RealTaskCoverageResult[],
+    results: readonly RealTaskCoverageResult[]
   ): readonly RealTaskSurfaceCoverageSummary[] {
     return summarizeRealTaskCoverage(cases, results)
   }
@@ -88,7 +90,9 @@ class RealTaskWorkload implements RealTaskWorkloadApi {
     return classifyRunArchiveOutcome(archive)
   }
 
-  public summarizeToolInputEfficiency(records: readonly ToolAttemptReceiptRecord[]): ToolInputEfficiency {
+  public summarizeToolInputEfficiency(
+    records: readonly ToolAttemptReceiptRecord[]
+  ): ToolInputEfficiency {
     return summarizeToolInputEfficiency(records)
   }
 }

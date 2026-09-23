@@ -1,6 +1,9 @@
 import { isBlank, isUndefined } from '@velaros-ai/core'
 
-import type { KernelCallableCapabilityOperation, KernelCallableCapabilityService } from '../../contract/requires'
+import type {
+  KernelCallableCapabilityOperation,
+  KernelCallableCapabilityService,
+} from '../../contract/requires'
 import type { KernelModuleDefinition } from '../../contract/requires'
 import type { CapabilityRequirement, CapabilityToken } from '../../types/kernel.js'
 
@@ -15,17 +18,14 @@ import { KernelCallableCapability } from './KernelCallableCapability'
  */
 export interface KernelModuleKitApi {
   /** 造一枚能力令牌；id 与版本都不能为空，返回的对象是冻结的。 */
-  token<TService extends object = object>(
-    id: string,
-    version?: string,
-  ): CapabilityToken<TService>
+  token<TService extends object = object>(id: string, version?: string): CapabilityToken<TService>
   /** 把一枚令牌写成清单里的依赖声明；不给版本范围就是接受任意版本。 */
   requirement(token: CapabilityToken, versionRange?: string): CapabilityRequirement
   /** 原样交回模块定义，只在编译期核对它符合 ABI，并保住调用方写下的精确类型。 */
   define<TModule extends KernelModuleDefinition>(module: TModule): TModule
   /** 把一张操作表做成内核认的可调用能力；未知操作在求权限之前就被拒绝。 */
   callable(
-    operations: Readonly<Record<string, KernelCallableCapabilityOperation>>,
+    operations: Readonly<Record<string, KernelCallableCapabilityOperation>>
   ): KernelCallableCapabilityService
 }
 
@@ -35,7 +35,7 @@ export class KernelModuleKit implements KernelModuleKitApi {
 
   public token<TService extends object = object>(
     id: string,
-    version: string = KernelModuleKit.defaultCapabilityVersion,
+    version: string = KernelModuleKit.defaultCapabilityVersion
   ): CapabilityToken<TService> {
     if (isBlank(id.trim())) {
       throw new Error('能力令牌的 id 不能为空')
@@ -46,10 +46,7 @@ export class KernelModuleKit implements KernelModuleKitApi {
     return Object.freeze({ id, version })
   }
 
-  public requirement(
-    token: CapabilityToken,
-    versionRange?: string,
-  ): CapabilityRequirement {
+  public requirement(token: CapabilityToken, versionRange?: string): CapabilityRequirement {
     return isUndefined(versionRange)
       ? Object.freeze({ id: token.id })
       : Object.freeze({ id: token.id, versionRange })
@@ -60,7 +57,7 @@ export class KernelModuleKit implements KernelModuleKitApi {
   }
 
   public callable(
-    operations: Readonly<Record<string, KernelCallableCapabilityOperation>>,
+    operations: Readonly<Record<string, KernelCallableCapabilityOperation>>
   ): KernelCallableCapabilityService {
     return new KernelCallableCapability(operations)
   }

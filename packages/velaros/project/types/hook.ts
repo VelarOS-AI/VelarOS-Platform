@@ -1,24 +1,23 @@
 /** 可观察 project 操作前后发出的生命周期事件。 */
 export type HookEvent =
-  | "BeforeRead"
-  | "AfterRead"
-  | "BeforeSearch"
-  | "AfterSearch"
-  | "BeforeResolve"
-  | "AfterResolve"
-  | "BeforePrepareEdit"
-  | "AfterPrepareEdit"
-  | "BeforeApplyEdit"
-  | "AfterApplyEdit"
-  | "BeforeValidate"
-  | "AfterValidate"
-  | "BeforeRollback"
-  | "AfterRollback";
+  | 'BeforeRead'
+  | 'AfterRead'
+  | 'BeforeSearch'
+  | 'AfterSearch'
+  | 'BeforeResolve'
+  | 'AfterResolve'
+  | 'BeforePrepareEdit'
+  | 'AfterPrepareEdit'
+  | 'BeforeApplyEdit'
+  | 'AfterApplyEdit'
+  | 'BeforeValidate'
+  | 'AfterValidate'
+  | 'BeforeRollback'
+  | 'AfterRollback'
 
 export interface HookContext {
-  event: HookEvent;
+  event: HookEvent
   /** 运行时内核实例；这里用 any 让插件包保持低耦合。 */
-  kernel: any;
-  data: any;
+  kernel: any
+  data: any
 }
-

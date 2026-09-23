@@ -91,7 +91,7 @@ export async function readResolvedFile(
   requestedPath: string,
   startLine?: number,
   endLine?: number,
-  maxChars?: number,
+  maxChars?: number
 ): Promise<ProjectReadFileResult> {
   const fileStats = await stat(target.path).catch((error: any) => {
     throw new AppError('NOT_FOUND', '找不到浏览器工作区文件。', error, {
@@ -100,14 +100,9 @@ export async function readResolvedFile(
   })
 
   if (!fileStats.isFile()) {
-    throw new AppError(
-      'VALIDATION',
-      '浏览器工作区路径必须指向文件。',
-      undefined,
-      {
-        path: requestedPath,
-      },
-    )
+    throw new AppError('VALIDATION', '浏览器工作区路径必须指向文件。', undefined, {
+      path: requestedPath,
+    })
   }
 
   const content = await readFile(target.path, 'utf8')
@@ -118,19 +113,16 @@ export async function readResolvedFile(
     endLine,
     safeStartLine,
     Math.max(safeStartLine, totalLines),
-    totalLines,
+    totalLines
   )
   const rangedContent = lines.slice(safeStartLine - 1, safeEndLine).join('\n')
   const safeMaxChars =
-    Number.isFinite(maxChars) && (maxChars as number) > 0
-      ? Math.trunc(maxChars as number)
-      : null
+    Number.isFinite(maxChars) && (maxChars as number) > 0 ? Math.trunc(maxChars as number) : null
   const returnedContent =
     safeMaxChars && rangedContent.length > safeMaxChars
       ? rangedContent.slice(0, safeMaxChars)
       : rangedContent
-  const truncated =
-    returnedContent.length < rangedContent.length || safeEndLine < totalLines
+  const truncated = returnedContent.length < rangedContent.length || safeEndLine < totalLines
 
   return {
     path: target.path,
@@ -161,25 +153,20 @@ export async function ensureRoot(workspaceRoot: string): Promise<string> {
 /** 在一个根下把相对路径解析成真实路径；文件不在就返回 null。 */
 export async function resolveExistingPathInRoot(
   workspaceRoot: string,
-  path: string,
+  path: string
 ): Promise<BrowserWorkspaceResolvedPath> {
   const root = await ensureRoot(workspaceRoot)
   const target = await resolveBrowserWorkspacePath(
     root,
     normalizeRelativePath(path),
-    '浏览器工作区文件路径',
+    '浏览器工作区文件路径'
   )
   const existingStats = await lstat(target.literalPath).catch((error: any) => {
     if (isMissingFileError(error)) return null
     throw error
   })
   if (existingStats?.isSymbolicLink()) {
-    throw new AppError(
-      'PERMISSION',
-      '浏览器工作区不能读取符号链接。',
-      undefined,
-      { path },
-    )
+    throw new AppError('PERMISSION', '浏览器工作区不能读取符号链接。', undefined, { path })
   }
 
   return { path: target.path, root }
@@ -206,10 +193,7 @@ export async function collectRootEntries(input: {
   seenRelativePaths: Set<string>
 }): Promise<void> {
   const { entries, limit, maxDepth, recursive, seenRelativePaths } = input
-  const target = await resolveExistingPathInRoot(
-    input.workspaceRoot,
-    input.path,
-  ).catch(() => null)
+  const target = await resolveExistingPathInRoot(input.workspaceRoot, input.path).catch(() => null)
   if (!target) return
 
   const targetStats = await stat(target.path).catch((error: any) => {
@@ -218,10 +202,7 @@ export async function collectRootEntries(input: {
   })
   if (!targetStats) return
 
-  const pushEntry = (
-    entryPath: string,
-    type: WorkspaceFileEntry['type'],
-  ): boolean => {
+  const pushEntry = (entryPath: string, type: WorkspaceFileEntry['type']): boolean => {
     const relativePath = getRelativePathInsideRoot(target.root, entryPath)
     if (!relativePath || seenRelativePaths.has(relativePath)) return false
     seenRelativePaths.add(relativePath)
@@ -238,12 +219,10 @@ export async function collectRootEntries(input: {
   const visit = async (directory: string, depth: number): Promise<void> => {
     if (entries.length >= limit) return
 
-    const dirents = await readdir(directory, { withFileTypes: true }).catch(
-      (error: any) => {
-        if (isMissingFileError(error)) return []
-        throw error
-      },
-    )
+    const dirents = await readdir(directory, { withFileTypes: true }).catch((error: any) => {
+      if (isMissingFileError(error)) return []
+      throw error
+    })
     dirents.sort((a, b) => a.name.localeCompare(b.name))
 
     for (const dirent of dirents) {

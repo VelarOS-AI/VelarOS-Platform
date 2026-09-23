@@ -6,7 +6,11 @@
 import { isEmpty, isPresent } from '@velaros-ai/core'
 
 import type { ProjectValidator } from '../../contract/requires.js'
-import type { ProjectValidationContext, ValidateInput, ValidationResult } from '../../types/validation.js'
+import type {
+  ProjectValidationContext,
+  ValidateInput,
+  ValidationResult,
+} from '../../types/validation.js'
 
 export class PostconditionValidator implements ProjectValidator {
   public readonly id = 'core.postcondition'
@@ -15,30 +19,60 @@ export class PostconditionValidator implements ProjectValidator {
     return !!input.postconditions && !isEmpty(input.postconditions)
   }
 
-  public async validate(input: ValidateInput, context: ProjectValidationContext): Promise<ValidationResult> {
+  public async validate(
+    input: ValidateInput,
+    context: ProjectValidationContext
+  ): Promise<ValidationResult> {
     const diagnostics: ValidationResult['diagnostics'] = []
     const tx = input.transactionId ? context.getTransaction(input.transactionId) : undefined
     for (const post of input.postconditions ?? []) {
       if (post.type === 'changed_files_allowlist' && tx) {
         const allow = post.value as string[]
         for (const file of tx.changedFiles) {
-          if (!allow.includes(file)) diagnostics.push({ severity: 'error', message: `变更文件不在允许列表中：${file}`, path: file, source: this.id })
+          if (!allow.includes(file))
+            diagnostics.push({
+              severity: 'error',
+              message: `变更文件不在允许列表中：${file}`,
+              path: file,
+              source: this.id,
+            })
         }
       }
       if (post.type === 'max_changed_lines' && tx) {
         const max = Number(post.value)
-        if (tx.changedLines > max) diagnostics.push({ severity: 'error', message: `变更行数 ${tx.changedLines} 超过上限 ${max}`, source: this.id })
+        if (tx.changedLines > max)
+          diagnostics.push({
+            severity: 'error',
+            message: `变更行数 ${tx.changedLines} 超过上限 ${max}`,
+            source: this.id,
+          })
       }
       if ((post.type === 'must_contain' || post.type === 'must_not_contain') && tx) {
         const needle = String(post.value)
         for (const file of tx.changedFiles) {
           const content = await context.readFile(file)
           if (!isPresent(content)) continue
-          if (post.type === 'must_contain' && !content.includes(needle)) diagnostics.push({ severity: 'error', message: `文件必须包含：${needle}`, path: file, source: this.id })
-          if (post.type === 'must_not_contain' && content.includes(needle)) diagnostics.push({ severity: 'error', message: `文件不能包含：${needle}`, path: file, source: this.id })
+          if (post.type === 'must_contain' && !content.includes(needle))
+            diagnostics.push({
+              severity: 'error',
+              message: `文件必须包含：${needle}`,
+              path: file,
+              source: this.id,
+            })
+          if (post.type === 'must_not_contain' && content.includes(needle))
+            diagnostics.push({
+              severity: 'error',
+              message: `文件不能包含：${needle}`,
+              path: file,
+              source: this.id,
+            })
         }
       }
     }
-    return { ok: isEmpty(diagnostics), diagnostics, checks: [{ id: this.id, ok: isEmpty(diagnostics), diagnostics }] }
+    return {
+      ok: isEmpty(diagnostics),
+      diagnostics,
+      checks: [{ id: this.id, ok: isEmpty(diagnostics), diagnostics }],
+    }
   }
 }

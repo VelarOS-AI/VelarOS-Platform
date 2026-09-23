@@ -52,29 +52,25 @@ export interface RemoteNodeIsolationAdapterOptions {
 export class RemoteNodeIsolationAdapter implements KernelModuleIsolationAdapter {
   public readonly isolation = 'remote' as const
 
-  public constructor(
-    private readonly options: RemoteNodeIsolationAdapterOptions,
-  ) {}
+  public constructor(private readonly options: RemoteNodeIsolationAdapterOptions) {}
 
   public activate(
     module: KernelModuleDefinition,
-    context: KernelModuleActivateContext,
+    context: KernelModuleActivateContext
   ): KernelModuleLifecycle {
     const registrations: KernelRegistration[] = []
     for (const token of module.manifest.provides) {
       const binding = this.options.resolveBinding(token.id)
       if (!isPresent(binding)) {
         // 投影与注册面对不上:继续下去只会注册一张调不通的能力面,不如当场停。
-        throw new Error(
-          `当前的节点投影里没有远程能力 "${token.id}" 的绑定`,
-        )
+        throw new Error(`当前的节点投影里没有远程能力 "${token.id}" 的绑定`)
       }
-      registrations.push(context.registerService(
-        kernelModules.token(token.id, token.version),
-        kernelModules.callable(
-          this.buildOperationTable(binding, context),
-        ),
-      ))
+      registrations.push(
+        context.registerService(
+          kernelModules.token(token.id, token.version),
+          kernelModules.callable(this.buildOperationTable(binding, context))
+        )
+      )
     }
 
     return {
@@ -88,7 +84,7 @@ export class RemoteNodeIsolationAdapter implements KernelModuleIsolationAdapter 
 
   private buildOperationTable(
     binding: RemoteNodeCapabilityBinding,
-    context: KernelModuleActivateContext,
+    context: KernelModuleActivateContext
   ): Record<string, KernelCallableCapabilityOperation> {
     const nodeName = this.options.client.currentSession?.node.nodeName
     const hostLabel = isNonBlankString(nodeName) ? nodeName : 'the remote host'
@@ -115,7 +111,7 @@ export class RemoteNodeIsolationAdapter implements KernelModuleIsolationAdapter 
     scope: LooseOptional<ScopeRef>,
     input: unknown,
     signal: AbortSignal,
-    context: KernelModuleActivateContext,
+    context: KernelModuleActivateContext
   ): Promise<unknown> {
     try {
       return await this.options.client.invoke(
@@ -124,21 +120,24 @@ export class RemoteNodeIsolationAdapter implements KernelModuleIsolationAdapter 
           deadlineMs: this.options.defaultDeadlineMs,
           input,
           onProgress: (event) => {
-            void context.events.publish<RemoteNodeProgressEvent>(
-              RemoteNodeProgressEventType,
-              { capabilityId: binding.localCapabilityId, event, operation },
-            ).catch((error: unknown) => {
-              log.warn('Remote node progress event could not be published', {
+            void context.events
+              .publish<RemoteNodeProgressEvent>(RemoteNodeProgressEventType, {
                 capabilityId: binding.localCapabilityId,
-                error,
+                event,
                 operation,
               })
-            })
+              .catch((error: unknown) => {
+                log.warn('Remote node progress event could not be published', {
+                  capabilityId: binding.localCapabilityId,
+                  error,
+                  operation,
+                })
+              })
           },
           operation,
           scope,
         },
-        signal,
+        signal
       )
     } catch (error) {
       throw toRemoteNodeKernelError(binding, operation, error)
@@ -148,12 +147,14 @@ export class RemoteNodeIsolationAdapter implements KernelModuleIsolationAdapter 
   private describeHealth(): KernelModuleHealth {
     const client = this.options.client
     const stopReason = client.stopReason
-    if (!isNull(stopReason)) return {
+    if (!isNull(stopReason))
+      return {
         status: 'unhealthy',
         message: stopReason.message,
         details: { code: stopReason.code },
       }
-    if (client.connectionState === 'ready') return { status: 'healthy', details: { state: client.connectionState } }
+    if (client.connectionState === 'ready')
+      return { status: 'healthy', details: { state: client.connectionState } }
     return {
       status: 'degraded',
       message: '远程节点连接还没就绪',
@@ -164,7 +165,7 @@ export class RemoteNodeIsolationAdapter implements KernelModuleIsolationAdapter 
 
 /** 建一个远程隔离适配器;作为 `isolationAdapters` 注入内核,一台远端主机一个。 */
 export function createRemoteNodeIsolationAdapter(
-  options: RemoteNodeIsolationAdapterOptions,
+  options: RemoteNodeIsolationAdapterOptions
 ): KernelModuleIsolationAdapter {
   return new RemoteNodeIsolationAdapter(options)
 }

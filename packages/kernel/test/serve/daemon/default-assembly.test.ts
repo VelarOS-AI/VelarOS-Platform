@@ -63,83 +63,86 @@ const echoModule = kernelModules.define({
           metadata: { permissions: [] },
           invoke: (_scope, input) => input,
         },
-      }),
+      })
     )
   },
 })
 
 describe('Kernel 默认装配', () => {
   // Windows 的守护进程走 TCP 回环，Unix socket 路径不适用；冒烟只在类 Unix 上跑。
-  test.skipIf(process.platform === 'win32')('缺隔离适配器的模块被跳过，守护进程照常起来并响应一次调用', async () => {
-    const runtimeDirectory = await temporaryDirectory()
-    const paths = {
-      descriptorPath: join(runtimeDirectory, 'velaros-kernel.endpoint.json'),
-      lockPath: join(runtimeDirectory, 'velaros-kernel.lock'),
-      socketPath: join(runtimeDirectory, 'k.sock'),
-    }
-
-    // 与 `serve/main.ts` 相同的装配顺序。
-    const modStore = new KernelModStore(runtimeDirectory)
-    await modStore.loadPersistedIndex()
-    modStore.registerAll([
-      {
-        ...createBundledModPack({ id: 'system.test.echo', module: echoModule }),
-        kind: 'system' as const,
-        specifier: 'bundled:velaros.test.echo.module',
-        enabled: true,
-      },
-      {
-        ...createBundledModPack({ id: 'system.test.remote-only', module: remoteOnlyModule }),
-        kind: 'system' as const,
-        specifier: 'bundled:velaros.test.remote-only.module',
-        enabled: true,
-      },
-    ])
-
-    const booted = await bootKernelDaemon({
-      kernelVersion: '0.2.3',
-      modsRoot: runtimeDirectory,
-      modPacks: modStore.list(),
-      paths,
-    })
-
-    try {
-      // 没有适配器的模块被跳过并如实登记，能激活的模块照常进 handshake。
-      expect([...booted.modLoadFailures].map((failure) => failure.id).sort())
-        .toEqual(['system.test.remote-only'])
-      for (const failure of booted.modLoadFailures) {
-        expect(failure.reason).toContain('没有对应的适配器')
+  test.skipIf(process.platform === 'win32')(
+    '缺隔离适配器的模块被跳过，守护进程照常起来并响应一次调用',
+    async () => {
+      const runtimeDirectory = await temporaryDirectory()
+      const paths = {
+        descriptorPath: join(runtimeDirectory, 'velaros-kernel.endpoint.json'),
+        lockPath: join(runtimeDirectory, 'velaros-kernel.lock'),
+        socketPath: join(runtimeDirectory, 'k.sock'),
       }
-      expect(booted.service.handshake().modules.map((module) => module.id))
-        .toEqual(['velaros.test.echo.module'])
 
-      // 客户端能连上并真的调一次能力。
-      const connected = await kernelDaemons.connect(paths)
+      // 与 `serve/main.ts` 相同的装配顺序。
+      const modStore = new KernelModStore(runtimeDirectory)
+      await modStore.loadPersistedIndex()
+      modStore.registerAll([
+        {
+          ...createBundledModPack({ id: 'system.test.echo', module: echoModule }),
+          kind: 'system' as const,
+          specifier: 'bundled:velaros.test.echo.module',
+          enabled: true,
+        },
+        {
+          ...createBundledModPack({ id: 'system.test.remote-only', module: remoteOnlyModule }),
+          kind: 'system' as const,
+          specifier: 'bundled:velaros.test.remote-only.module',
+          enabled: true,
+        },
+      ])
+
+      const booted = await bootKernelDaemon({
+        kernelVersion: '0.2.3',
+        modsRoot: runtimeDirectory,
+        modPacks: modStore.list(),
+        paths,
+      })
+
       try {
-        expect(connected.handshake.kernelVersion).toBe('0.2.3')
-        const session = await connected.client.openCapabilitySession({
-          requires: [
-            { capabilityId: EchoToken.id, operations: null, scope: null },
-          ],
-        })
-        const response = await session.call({
-          protocolVersion: KernelProtocolVersion,
-          callId: 'call-boot-smoke',
-          capabilityId: EchoToken.id,
-          operation: 'echo',
-          scope: null,
-          input: { value: 7 },
-        })
-        expect(response).toMatchObject({
-          status: 'ok',
-          output: { value: 7 },
-        })
-        await session.dispose()
+        // 没有适配器的模块被跳过并如实登记，能激活的模块照常进 handshake。
+        expect([...booted.modLoadFailures].map((failure) => failure.id).sort()).toEqual([
+          'system.test.remote-only',
+        ])
+        for (const failure of booted.modLoadFailures) {
+          expect(failure.reason).toContain('没有对应的适配器')
+        }
+        expect(booted.service.handshake().modules.map((module) => module.id)).toEqual([
+          'velaros.test.echo.module',
+        ])
+
+        // 客户端能连上并真的调一次能力。
+        const connected = await kernelDaemons.connect(paths)
+        try {
+          expect(connected.handshake.kernelVersion).toBe('0.2.3')
+          const session = await connected.client.openCapabilitySession({
+            requires: [{ capabilityId: EchoToken.id, operations: null, scope: null }],
+          })
+          const response = await session.call({
+            protocolVersion: KernelProtocolVersion,
+            callId: 'call-boot-smoke',
+            capabilityId: EchoToken.id,
+            operation: 'echo',
+            scope: null,
+            input: { value: 7 },
+          })
+          expect(response).toMatchObject({
+            status: 'ok',
+            output: { value: 7 },
+          })
+          await session.dispose()
+        } finally {
+          await connected.client.dispose()
+        }
       } finally {
-        await connected.client.dispose()
+        await booted.stop()
       }
-    } finally {
-      await booted.stop()
     }
-  })
+  )
 })

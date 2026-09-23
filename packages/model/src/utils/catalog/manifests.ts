@@ -38,7 +38,8 @@ export function asOperationalManifests(
 export function requireVelarCloudManagedProviderId(
   providerId: ChatProviderId
 ): VelarCloudManagedProviderId {
-  if ((VelarCloudManagedProviderIds as readonly string[]).includes(providerId)) return providerId as VelarCloudManagedProviderId
+  if ((VelarCloudManagedProviderIds as readonly string[]).includes(providerId))
+    return providerId as VelarCloudManagedProviderId
   throw new AppError(
     ModelErrorCodes.providerUnknown,
     `不是 Velar Cloud 托管 provider：${providerId}`

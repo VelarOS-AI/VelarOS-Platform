@@ -1,12 +1,6 @@
 /** 点击的坐标恢复：selector 没找到元素时，在标注截图或元素矩形里找回唯一确定的那个元素，按坐标补点。 */
 
-import {
-  isFiniteNumber,
-  isNull,
-  isPlainObject,
-  isPresent,
-  isTrue,
-} from '@velaros-ai/core'
+import { isFiniteNumber, isNull, isPlainObject, isPresent, isTrue } from '@velaros-ai/core'
 
 import { BrowserEvaluateLimits } from '../contract/constants.js'
 import type { BrowserOperationContext } from '../contract/requires.js'
@@ -38,9 +32,13 @@ export async function performTargetActionWithRecovery(
   action: BrowserTargetActionOptions & { action: 'click' | 'hover' },
   ctx: BrowserOperationContext
 ): Promise<BrowserActed> {
-  const result: BrowserActed = { ...(await ctx.browser.performTargetAction(action)), action: action.action }
+  const result: BrowserActed = {
+    ...(await ctx.browser.performTargetAction(action)),
+    action: action.action,
+  }
   const actionEffect = buildTargetActionEffectRecovery(action, result)
-  if (result.matched || action.action !== 'click') return actionEffect ? { ...result, actionEffect } : result
+  if (result.matched || action.action !== 'click')
+    return actionEffect ? { ...result, actionEffect } : result
 
   // 坐标恢复只解决一种失败:**selector 没找到元素**。其余失败都不该走这里——
   // covered 的元素对同一中心点再点一次只会点中遮挡层,还会让增强层的 covered 指引
@@ -208,8 +206,8 @@ function scoreStableLabelSelector(
 function hasStableTargetAttribute(
   attributes: LooseOptional<BrowserElementTargetHint['attributes']>
 ): boolean {
-  return ['id', 'data-testid', 'data-test', 'data-qa', 'name'].some((key) =>
-    !!attributes?.[key]?.trim()
+  return ['id', 'data-testid', 'data-test', 'data-qa', 'name'].some(
+    (key) => !!attributes?.[key]?.trim()
   )
 }
 
@@ -226,26 +224,28 @@ async function findClickPointFromBounds(
   const css = target.css?.trim()
   if (!css) return null
 
-  const payload = scriptOutcomeValue(await ctx.browser.evaluateScript({
-    script: [
-      '(selector) => {',
-      '  const matches = Array.from(document.querySelectorAll(selector))',
-      '  if (matches.length !== 1) return { found: false, matchCount: matches.length }',
-      '  const r = matches[0].getBoundingClientRect()',
-      '  return {',
-      '    found: true,',
-      '    width: r.width,',
-      '    height: r.height,',
-      '    centerX: Math.round(r.x + r.width / 2),',
-      '    centerY: Math.round(r.y + r.height / 2),',
-      '    viewportWidth: window.innerWidth,',
-      '    viewportHeight: window.innerHeight,',
-      '  }',
-      '}',
-    ].join('\n'),
-    args: [css],
-    maxResultChars: BrowserEvaluateLimits.resultChars,
-  }))
+  const payload = scriptOutcomeValue(
+    await ctx.browser.evaluateScript({
+      script: [
+        '(selector) => {',
+        '  const matches = Array.from(document.querySelectorAll(selector))',
+        '  if (matches.length !== 1) return { found: false, matchCount: matches.length }',
+        '  const r = matches[0].getBoundingClientRect()',
+        '  return {',
+        '    found: true,',
+        '    width: r.width,',
+        '    height: r.height,',
+        '    centerX: Math.round(r.x + r.width / 2),',
+        '    centerY: Math.round(r.y + r.height / 2),',
+        '    viewportWidth: window.innerWidth,',
+        '    viewportHeight: window.innerHeight,',
+        '  }',
+        '}',
+      ].join('\n'),
+      args: [css],
+      maxResultChars: BrowserEvaluateLimits.resultChars,
+    })
+  )
 
   if (!isPlainObject(payload) || !isTrue(payload.found)) return null
 

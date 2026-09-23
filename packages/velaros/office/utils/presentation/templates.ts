@@ -2,7 +2,11 @@
 
 import { isEmpty } from '@velaros-ai/core'
 
-import type { PptElement, PresentationSlideInput, PresentationTemplate } from '../../types/office.js'
+import type {
+  PptElement,
+  PresentationSlideInput,
+  PresentationTemplate,
+} from '../../types/office.js'
 import type { PptxTheme } from '../../types/pptx.js'
 import type { PresentationTemplatePalette } from '../../types/presentation.js'
 import { OfficeTuning } from '../tuning.js'
@@ -79,7 +83,8 @@ export function buildTemplatePresentationSlide(input: {
     .filter(Boolean)
     .slice(0, 8)
 
-  if (input.isTitleSlide) return {
+  if (input.isTitleSlide)
+    return {
       background: { color: palette.primary },
       elements: [
         {

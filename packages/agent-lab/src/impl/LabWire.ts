@@ -13,7 +13,10 @@ import type {
   RealTaskRecord,
   RunArchive,
 } from '../types/agent-lab.js'
-import { certificationPolicySchema, certificationSubjectSchema } from '../utils/wire/certification.js'
+import {
+  certificationPolicySchema,
+  certificationSubjectSchema,
+} from '../utils/wire/certification.js'
 import { jobSpecSchema, journeySpecSchema, runArchiveSchema } from '../utils/wire/journey.js'
 import {
   realTaskAcceptanceContractSchema,

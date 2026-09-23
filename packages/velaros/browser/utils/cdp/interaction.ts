@@ -1,19 +1,41 @@
 /** CDP 交互引擎里用不着实例状态的那部分：动作入参与回执的归一。 */
 
-import { isArray, isBoolean, isEmpty, isFiniteNumber, isNumber, isPlainObject, isString } from '@velaros-ai/core'
+import {
+  isArray,
+  isBoolean,
+  isEmpty,
+  isFiniteNumber,
+  isNumber,
+  isPlainObject,
+  isString,
+} from '@velaros-ai/core'
 
 import type { BrowserPageDriver } from '../../contract/requires.js'
 import type { BrowserTargetActionEffect } from '../../types/browser.js'
-import type { BrowserElementTargetHint, BrowserPageZoomOptions, BrowserTargetActionTextDiff } from '../../types/browser.js'
-import type { BrowserTargetActionEffectSnapshot, BrowserTargetActionOptions } from '../../types/browser.js'
-import type { BrowserPointerPoint, BrowserTargetActionClickMode, BrowserTargetActionInternalEffectSnapshot } from '../../types/runtime.js'
+import type {
+  BrowserElementTargetHint,
+  BrowserPageZoomOptions,
+  BrowserTargetActionTextDiff,
+} from '../../types/browser.js'
+import type {
+  BrowserTargetActionEffectSnapshot,
+  BrowserTargetActionOptions,
+} from '../../types/browser.js'
+import type {
+  BrowserPointerPoint,
+  BrowserTargetActionClickMode,
+  BrowserTargetActionInternalEffectSnapshot,
+} from '../../types/runtime.js'
 import { clampZoomFactor } from '../numbers.js'
 import { clampInteger } from '../numbers.js'
 import { BrowserTuning } from '../tuning'
 
 /** 目标元素的匹配文本归一：去空白、转小写。 */
 export function normalizeTargetMatchText(value: LooseOptional<string>): string {
-  return String(value ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
+  return String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
 }
 
 /** 目标元素的身份字段归一，用来判断前后是不是同一个元素。 */
@@ -64,9 +86,10 @@ export function countLongestCommonSubsequence(before: string[], after: string[])
   for (const beforeLine of before) {
     const current = Array.from({ length: after.length + 1 }, () => 0)
     after.forEach((afterLine, afterIndex) => {
-      current[afterIndex + 1] = beforeLine === afterLine
-        ? previous[afterIndex] + 1
-        : Math.max(previous[afterIndex + 1], current[afterIndex])
+      current[afterIndex + 1] =
+        beforeLine === afterLine
+          ? previous[afterIndex] + 1
+          : Math.max(previous[afterIndex + 1], current[afterIndex])
     })
     previous = current
   }
@@ -143,10 +166,7 @@ export function diffTargetActionTextSamples(
   before: BrowserTargetActionInternalEffectSnapshot,
   after: BrowserTargetActionInternalEffectSnapshot
 ): BrowserTargetActionTextDiff {
-  const unchanged = countLongestCommonSubsequence(
-    before.textSampleLines,
-    after.textSampleLines
-  )
+  const unchanged = countLongestCommonSubsequence(before.textSampleLines, after.textSampleLines)
   const additions = Math.max(0, after.textSampleLines.length - unchanged)
   const removals = Math.max(0, before.textSampleLines.length - unchanged)
 

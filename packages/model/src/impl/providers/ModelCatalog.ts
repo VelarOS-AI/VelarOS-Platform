@@ -44,10 +44,7 @@ export interface ModelCatalogApi {
   /** 一份模型清单在某个 provider 下的可见子集。 */
   visibleModels(providerId: ChatProviderId, models: string[]): string[]
   /** 在同一个 provider 内选一个可用模型，并说明有没有发生回退。 */
-  resolveModelSelection(
-    providerId: ChatProviderId,
-    currentModel?: string
-  ): ProviderModelResolution
+  resolveModelSelection(providerId: ChatProviderId, currentModel?: string): ProviderModelResolution
   /** 在同一个 provider 内选一个可用模型，只要结果。 */
   resolveModel(providerId: ChatProviderId, currentModel?: string): string
   /** 这个 provider 走不走 OpenRouter 的路由语义。 */
@@ -139,17 +136,11 @@ export class ModelCatalog implements ModelCatalogApi {
     return resolveProviderScriptContextWindow(input)
   }
 
-  public resolveOllamaBaseURL(
-    defaultBaseURL: string,
-    environment?: ModelEnvironmentPort
-  ): string {
+  public resolveOllamaBaseURL(defaultBaseURL: string, environment?: ModelEnvironmentPort): string {
     return new LocalModelEnvironment({}, environment).resolveOllamaBaseURL(defaultBaseURL)
   }
 
-  public resolveOllamaChatModel(
-    defaultModel = '',
-    environment?: ModelEnvironmentPort
-  ): string {
+  public resolveOllamaChatModel(defaultModel = '', environment?: ModelEnvironmentPort): string {
     return new LocalModelEnvironment({}, environment).resolveOllamaChatModel(defaultModel)
   }
 
@@ -157,7 +148,9 @@ export class ModelCatalog implements ModelCatalogApi {
     defaultContextWindow?: number,
     environment?: ModelEnvironmentPort
   ): Nullable<number> {
-    return new LocalModelEnvironment({}, environment).resolveOllamaContextWindow(defaultContextWindow)
+    return new LocalModelEnvironment({}, environment).resolveOllamaContextWindow(
+      defaultContextWindow
+    )
   }
 
   public resolveOllamaVisibleChatModels(
@@ -165,7 +158,10 @@ export class ModelCatalog implements ModelCatalogApi {
     selectedModel = '',
     environment?: ModelEnvironmentPort
   ): string[] {
-    return new LocalModelEnvironment({}, environment).resolveOllamaVisibleChatModels(defaultModel, selectedModel)
+    return new LocalModelEnvironment({}, environment).resolveOllamaVisibleChatModels(
+      defaultModel,
+      selectedModel
+    )
   }
 }
 

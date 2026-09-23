@@ -13,7 +13,11 @@ import {
 
 import { isEmpty, isNonBlankString } from '@velaros-ai/core'
 
-import type { OfficeWordInput, WordDocumentLanguage, WordDocumentProfile } from '../../types/office.js'
+import type {
+  OfficeWordInput,
+  WordDocumentLanguage,
+  WordDocumentProfile,
+} from '../../types/office.js'
 import type { WordAcademicLabels } from '../../types/word.js'
 
 import { resolveWordFontFamilies } from './fonts.js'

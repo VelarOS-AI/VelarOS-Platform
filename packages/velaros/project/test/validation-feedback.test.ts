@@ -4,13 +4,16 @@ import { jsTsSyntaxDiagnostics } from '../utils/jsts-ast'
 import { validationFailed } from '../utils/transactions/transaction-errors'
 
 test('failed candidate syntax shows both sides of the edit boundary in candidate coordinates', () => {
-  const candidate = 'export const adapter = {\n  search() { return [] },\n  },\n  resolveTarget() { return 1 },\n}\n'
+  const candidate =
+    'export const adapter = {\n  search() { return [] },\n  },\n  resolveTarget() { return 1 },\n}\n'
   const diagnostics = jsTsSyntaxDiagnostics('adapter.ts', candidate, 'core.typescript')
   expect(diagnostics.length).toBeGreaterThan(0)
   const failure = validationFailed('candidate', { ok: false, diagnostics, checks: [] })
   expect(failure.details.executionOutcome).toBe('not-applied')
   expect(failure.details.recovery).toMatchObject({
-    kind: 'project-edit-validation', coordinateSpace: 'candidate', applied: false,
+    kind: 'project-edit-validation',
+    coordinateSpace: 'candidate',
+    applied: false,
   })
   const window = failure.details.recovery.windows[0]
   expect(window.lines).toContainEqual([2, '  search() { return [] },'])
@@ -45,20 +48,26 @@ test('syntax context previews stay bounded and keep split Unicode characters wel
 
 test('failed checks without diagnostics preserve their reason and safe retry outcome', () => {
   const failure = validationFailed('no-diagnostics', {
-    ok: false, diagnostics: [], checks: [{ id: 'custom.validation', ok: false }],
+    ok: false,
+    diagnostics: [],
+    checks: [{ id: 'custom.validation', ok: false }],
   })
   expect(failure.reason).toBe('VALIDATION_FAILED')
   expect(failure.message).toContain('custom.validation')
   expect(failure.details.executionOutcome).toBe('not-applied')
   expect(failure.details.recovery).toBeUndefined()
   expect(failure.details.failedChecks).toEqual(['custom.validation'])
-  expect(validationFailed('empty', { ok: false, diagnostics: [], checks: [] }).message).toContain('未提供诊断')
+  expect(validationFailed('empty', { ok: false, diagnostics: [], checks: [] }).message).toContain(
+    '未提供诊断'
+  )
 })
 
 test('external validator excerpts are not relabeled as candidate source', () => {
   const failure = validationFailed('external', {
     ok: false,
-    diagnostics: [{ severity: 'error', message: 'external failed', data: { excerpt: 'command output' } }],
+    diagnostics: [
+      { severity: 'error', message: 'external failed', data: { excerpt: 'command output' } },
+    ],
     checks: [],
   })
   expect(failure.details.recovery).toBeUndefined()

@@ -26,9 +26,18 @@ import type { LegScore, VerifyLegInput } from '../types/internal.js'
 /** 一次收敛结局折成共享的验证结局；正常收敛与等待输入不折，交给验证器自己判。 */
 export function settleOutcomeToVerification(outcome: SettleOutcome): VerificationOutcome | null {
   if (outcome.kind === 'settled' || outcome.kind === 'awaiting-input') return null
-  if (outcome.kind === 'unavailable') return { kind: 'void', cause: outcome.cause, detail: outcome.detail, evidence: {} }
-  if (outcome.kind === 'timeout') return { kind: 'fail', credit: 0, failureClass: 'timeout', reason: '执行体没有在时限内收敛', evidence: {} }
-  if (outcome.kind === 'budget-exhausted') return {
+  if (outcome.kind === 'unavailable')
+    return { kind: 'void', cause: outcome.cause, detail: outcome.detail, evidence: {} }
+  if (outcome.kind === 'timeout')
+    return {
+      kind: 'fail',
+      credit: 0,
+      failureClass: 'timeout',
+      reason: '执行体没有在时限内收敛',
+      evidence: {},
+    }
+  if (outcome.kind === 'budget-exhausted')
+    return {
       kind: 'fail',
       credit: 0,
       failureClass: 'budget-exhausted',
@@ -61,7 +70,10 @@ export function scoreCriteria(leg: LegSpec, criteria: readonly CriterionResult[]
     weight += criterion.weight
     if (criterion.gate && result.outcome.kind !== 'pass') gateFailed = true
   }
-  return { score: weight > 0 ? weightedCredit / weight : null, passed: hasVoidGate ? null : !gateFailed }
+  return {
+    score: weight > 0 ? weightedCredit / weight : null,
+    passed: hasVoidGate ? null : !gateFailed,
+  }
 }
 
 /** 取整程的 token 与费用账：以最后一次观测到的为准，没观测到就是未知。 */
@@ -74,7 +86,9 @@ export function mergeLegUsage(legs: readonly LegResult[]): UsageAccount | null {
 /** 合并整程的上下文账；一段都没观测到上下文驻留时是未知（不是空账）。 */
 export function contextAccount(legs: readonly LegResult[]): RunArchiveContext | null {
   const observations = legs.map((leg) => leg.observation)
-  const hasContext = observations.some((observation) => observation.coverage['context-residency'] !== 'none')
+  const hasContext = observations.some(
+    (observation) => observation.coverage['context-residency'] !== 'none'
+  )
   if (!hasContext) return null
   const events = new Map<string, ContextResidencyEvent>()
   let peakTokens: number | null = null
@@ -89,7 +103,9 @@ export function contextAccount(legs: readonly LegResult[]): RunArchiveContext | 
   return {
     peakTokens,
     windowLimit,
-    epochs: [...events.values()].sort((left, right) => left.epoch - right.epoch || left.id.localeCompare(right.id)),
+    epochs: [...events.values()].sort(
+      (left, right) => left.epoch - right.epoch || left.id.localeCompare(right.id)
+    ),
   }
 }
 
@@ -106,7 +122,7 @@ export function collectArtifacts(legs: readonly LegResult[]): readonly ArtifactR
 export function dropRecords(
   trialId: string,
   legId: string,
-  criteria: readonly CriterionResult[],
+  criteria: readonly CriterionResult[]
 ): readonly DropRecord[] {
   const unique = new Map<string, DropRecord>()
   for (const criterion of criteria) {
@@ -124,7 +140,9 @@ export function dropRecords(
 
 /** 判完一段的每一条判据；驱动那边已经给出非收敛结局时，整段共用那个结局，不再去叫验证器。 */
 export async function verifyLeg(input: VerifyLegInput): Promise<readonly CriterionResult[]> {
-  const continued = input.settleOutcome.kind !== 'settled' && input.leg.continueOn.includes(input.settleOutcome.kind)
+  const continued =
+    input.settleOutcome.kind !== 'settled' &&
+    input.leg.continueOn.includes(input.settleOutcome.kind)
   const sharedOutcome = continued ? null : settleOutcomeToVerification(input.settleOutcome)
   const results: CriterionResult[] = []
   for (const criterion of input.leg.criteria) {
@@ -178,7 +196,7 @@ export async function verifyLeg(input: VerifyLegInput): Promise<readonly Criteri
 /** 驱动连能力都报不出来时用的「什么都看不到」能力表。 */
 export function unavailableCapabilities(): DriverCapabilities {
   const observes = Object.fromEntries(
-    ObservationFaces.map((face) => [face, 'none' as ObservationCoverage]),
+    ObservationFaces.map((face) => [face, 'none' as ObservationCoverage])
   ) as Record<ObservationFace, ObservationCoverage>
   return {
     observes,

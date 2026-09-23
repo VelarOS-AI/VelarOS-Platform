@@ -3,10 +3,7 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import {
-  ComputerHelperErrorCodes,
-  ComputerResourceLayout,
-} from '../../contracts'
+import { ComputerHelperErrorCodes, ComputerResourceLayout } from '../../contracts'
 import { createComputerHelperLocator, createComputerRuntime } from '../../index'
 import { decodeComputerResponse } from '../../utils/protocol'
 
@@ -45,7 +42,7 @@ describe('桌面控制的失败面', () => {
     expect(() => decodeComputerResponse('{')).toThrow('不是合法 JSON')
     expect(() => decodeComputerResponse('{"id":1}')).toThrow('缺少布尔字段 ok')
     expect(() => decodeComputerResponse('{"id":1}')).toThrow(
-      expect.objectContaining({ code: 'COMPUTER_PROTOCOL_INVALID' }),
+      expect.objectContaining({ code: 'COMPUTER_PROTOCOL_INVALID' })
     )
   })
 
@@ -59,7 +56,7 @@ describe('桌面控制的失败面', () => {
           code: ComputerHelperErrorCodes.snapshotStale,
           message: 'The screenshot is unknown or expired; take a new computer:screenshot',
         },
-      }),
+      })
     )
 
     expect(response.ok).toBe(false)
@@ -72,7 +69,9 @@ describe('桌面控制的失败面', () => {
 
     expect(root.endsWith(ComputerResourceLayout.bundledRuntimeDirectory)).toBe(true)
     expect(existsSync(join(root, 'mac_helper.py'))).toBe(true)
-    expect(existsSync(join(root, HelperScriptNames[process.platform] ?? 'mac_helper.py'))).toBe(true)
+    expect(existsSync(join(root, HelperScriptNames[process.platform] ?? 'mac_helper.py'))).toBe(
+      true
+    )
     expect(createComputerHelperLocator().bundledSourceRoot()).toBe(root)
   })
 })

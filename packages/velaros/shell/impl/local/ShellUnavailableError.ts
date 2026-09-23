@@ -9,7 +9,9 @@ import { ShellErrorCodes } from '../../contract/constants.js'
 export class ShellUnavailableError extends Error {
   public readonly code = ShellErrorCodes.shellUnavailable
   constructor(detail = '') {
-    super(`找不到能用的命令 shell${detail ? `（${detail.trim()}）` : ''}。在 Windows 上安装 Git for Windows（https://git-scm.com/download/win），再刷新命令环境。`)
+    super(
+      `找不到能用的命令 shell${detail ? `（${detail.trim()}）` : ''}。在 Windows 上安装 Git for Windows（https://git-scm.com/download/win），再刷新命令环境。`
+    )
     this.name = 'ShellUnavailableError'
   }
 }

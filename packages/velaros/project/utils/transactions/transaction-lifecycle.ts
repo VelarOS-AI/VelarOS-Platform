@@ -5,7 +5,11 @@
 
 import { isPresent } from '@velaros-ai/core'
 
-import type { ProjectTransactionCommand, ProjectTransactionStatus, StoredTransaction } from '../../types/transaction.js'
+import type {
+  ProjectTransactionCommand,
+  ProjectTransactionStatus,
+  StoredTransaction,
+} from '../../types/transaction.js'
 import { ProjectError } from '../errors.js'
 
 /** 命令可以从哪些稳定状态开始；运行期额外不变量（如 appliedAt）由状态机一并检查。 */
@@ -28,9 +32,12 @@ export const ValidationSuccessTable = Object.freeze({
 } as const satisfies Readonly<Record<ProjectTransactionStatus, ProjectTransactionStatus>>)
 
 /** 判断命令能不能从这个稳定状态开始（查 ProjectTransactionCommandTable）。 */
-export function commandAllowedFrom(command: ProjectTransactionCommand, status: ProjectTransactionStatus): boolean {
+export function commandAllowedFrom(
+  command: ProjectTransactionCommand,
+  status: ProjectTransactionStatus
+): boolean {
   return (ProjectTransactionCommandTable[command] as readonly ProjectTransactionStatus[]).includes(
-    status,
+    status
   )
 }
 
@@ -38,20 +45,20 @@ export function commandAllowedFrom(command: ProjectTransactionCommand, status: P
 export function invalidTransition(
   transaction: StoredTransaction,
   command: ProjectTransactionCommand,
-  message: string,
+  message: string
 ): never {
   throw new ProjectError(
     'INVALID_INPUT',
     `${message}：${transaction.transactionId}`,
     { transactionId: transaction.transactionId, command, status: transaction.status },
-    '请读取最新事务状态，并只执行该状态允许的下一步操作。',
+    '请读取最新事务状态，并只执行该状态允许的下一步操作。'
   )
 }
 
 /** 核对状态与 appliedAt 一致：applied、rolled_back 必须带 appliedAt，其余状态必须不带；不一致按非法转换抛出。 */
 export function assertConsistentStableState(
   transaction: StoredTransaction,
-  command: ProjectTransactionCommand,
+  command: ProjectTransactionCommand
 ): void {
   const hasAppliedAt = isPresent(transaction.appliedAt)
   const expectsAppliedAt = transaction.status === 'applied' || transaction.status === 'rolled_back'

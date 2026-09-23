@@ -41,8 +41,11 @@ export async function readTextIfExists(path: string): Promise<Nullable<string>> 
 
 /** 删一个文件，交回删没删：本来就不存在时是 false。 */
 export async function removeFileIfExists(path: string): Promise<boolean> {
-  return rm(path).then(() => true, (error: unknown) => {
-    if (readErrnoCode(error) === 'ENOENT') return false
-    throw error
-  })
+  return rm(path).then(
+    () => true,
+    (error: unknown) => {
+      if (readErrnoCode(error) === 'ENOENT') return false
+      throw error
+    }
+  )
 }

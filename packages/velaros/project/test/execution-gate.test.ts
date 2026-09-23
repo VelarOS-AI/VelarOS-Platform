@@ -51,9 +51,11 @@ test('readers overlap, a queued writer is fair, and cancelled waiters never run'
     order.push('write')
   })
   const abort = new AbortController()
-  const cancelled = gate.run('/fair', false, abort.signal, () => {
-    throw new Error('must not run')
-  }).catch(() => 'cancelled')
+  const cancelled = gate
+    .run('/fair', false, abort.signal, () => {
+      throw new Error('must not run')
+    })
+    .catch(() => 'cancelled')
   abort.abort()
   const after = gate.run('/fair', false, signal(), () => {
     order.push('after')

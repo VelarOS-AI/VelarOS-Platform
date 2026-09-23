@@ -20,8 +20,10 @@ const log = Log.tag('FileChangeWindows')
 /** 从 unified diff 里取出每段改动的旧起始行、旧行数、新起始行、新行数；省略的行数按 1 算。 */
 function diffHunks(diff: string): DiffHunk[] {
   return [...diff.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)].map((match) => ({
-    oldStart: Number(match[1]), oldLines: Number(match[2] ?? 1),
-    newStart: Number(match[3]), newLines: Number(match[4] ?? 1),
+    oldStart: Number(match[1]),
+    oldLines: Number(match[2] ?? 1),
+    newStart: Number(match[3]),
+    newLines: Number(match[4] ?? 1),
   }))
 }
 
@@ -40,7 +42,10 @@ function migrateLine(line: number, hunks: readonly DiffHunk[], edge: 'start' | '
       shift += hunk.newLines - hunk.oldLines
       continue
     }
-    return Math.max(1, edge === 'start' ? hunk.newStart : hunk.newStart + Math.max(hunk.newLines, 1) - 1)
+    return Math.max(
+      1,
+      edge === 'start' ? hunk.newStart : hunk.newStart + Math.max(hunk.newLines, 1) - 1
+    )
   }
   return Math.max(1, line + shift)
 }
@@ -56,7 +61,8 @@ function mergeSpans(spans: readonly LineSpan[]): LineSpan[] {
   const merged: LineSpan[] = []
   for (const span of [...spans].sort((a, b) => a.startLine - b.startLine)) {
     const last = merged.at(-1)
-    if (last && span.startLine <= last.endLine + 1) last.endLine = Math.max(last.endLine, span.endLine)
+    if (last && span.startLine <= last.endLine + 1)
+      last.endLine = Math.max(last.endLine, span.endLine)
     else merged.push({ ...span })
   }
   return merged
@@ -66,9 +72,13 @@ function mergeSpans(spans: readonly LineSpan[]): LineSpan[] {
  * 改完之后每个文件要看的范围：本次 diff 每段前后几行，加上此前看得到的范围沿补丁链迁移后的位置。
  * 补丁链里每段 diff 相对前一个补丁的产出，前面的范围逐段迁移。
  */
-export function changedSpans(patches: ReadonlyArray<{ path: string; diff: string }>, previous: Readonly<Record<string, readonly LineSpan[]>>): Record<string, LineSpan[]> {
+export function changedSpans(
+  patches: ReadonlyArray<{ path: string; diff: string }>,
+  previous: Readonly<Record<string, readonly LineSpan[]>>
+): Record<string, LineSpan[]> {
   const chains = new Map<string, DiffHunk[][]>()
-  for (const patch of patches) chains.set(patch.path, [...(chains.get(patch.path) ?? []), diffHunks(patch.diff)])
+  for (const patch of patches)
+    chains.set(patch.path, [...(chains.get(patch.path) ?? []), diffHunks(patch.diff)])
   const spans: Record<string, LineSpan[]> = {}
   for (const [path, chain] of chains) {
     let changed: LineSpan[] = []
@@ -77,8 +87,17 @@ export function changedSpans(patches: ReadonlyArray<{ path: string; diff: string
       changed = changed.map((span) => migrateSpan(span, hunks))
       seen = seen.map((span) => migrateSpan(span, hunks))
       for (const hunk of hunks) {
-        const startLine = Math.max(1, hunk.newStart - ProjectTuning.receiptWindows.changeContextLines)
-        changed.push({ startLine, endLine: Math.max(startLine, hunk.newStart + hunk.newLines + ProjectTuning.receiptWindows.changeContextLines) })
+        const startLine = Math.max(
+          1,
+          hunk.newStart - ProjectTuning.receiptWindows.changeContextLines
+        )
+        changed.push({
+          startLine,
+          endLine: Math.max(
+            startLine,
+            hunk.newStart + hunk.newLines + ProjectTuning.receiptWindows.changeContextLines
+          ),
+        })
       }
     }
     spans[path] = mergeSpans([...changed, ...seen])
@@ -94,7 +113,7 @@ export async function changeWindows(
   ctx: ProjectOperationContext,
   patches: readonly AgentProjectPreparedPatch[],
   newRevisions: Readonly<Record<string, string>>,
-  previous: Readonly<Record<string, readonly LineSpan[]>>,
+  previous: Readonly<Record<string, readonly LineSpan[]>>
 ): Promise<ProjectWindow[]> {
   const windows: ProjectSourceWindow[] = []
   for (const [path, spans] of Object.entries(changedSpans(patches, previous))) {

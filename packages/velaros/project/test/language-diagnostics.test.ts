@@ -256,7 +256,10 @@ describe('language_diagnostics 标准库定位', () => {
     const partialLibraryDirectory = join(scratch, 'partial-lib')
     await mkdir(partialLibraryDirectory, { recursive: true })
     for (const fileName of ['lib.es2022.full.d.ts', 'lib.es2022.d.ts']) {
-      await symlink(join(bundledLibraryDirectory, fileName), join(partialLibraryDirectory, fileName))
+      await symlink(
+        join(bundledLibraryDirectory, fileName),
+        join(partialLibraryDirectory, fileName)
+      )
     }
     simulatePackagedTypeScript()
     typeScriptProjects.configureLibraryDirectory(partialLibraryDirectory)
@@ -444,10 +447,23 @@ describe('language_diagnostics 目录扫描', () => {
 
 describe('language 参数', () => {
   test('服务 id、语言名与扩展名简写都选中同一个语言服务', () => {
-    for (const language of ['jsts', 'JSTS', 'typescript', 'TypeScript', 'javascript', 'ts', 'tsx', '.mjs'])
-      expect(languageServiceRegistry.resolveLanguageServices(language).map((service) => service.id)).toEqual(['jsts'])
+    for (const language of [
+      'jsts',
+      'JSTS',
+      'typescript',
+      'TypeScript',
+      'javascript',
+      'ts',
+      'tsx',
+      '.mjs',
+    ])
+      expect(
+        languageServiceRegistry.resolveLanguageServices(language).map((service) => service.id)
+      ).toEqual(['jsts'])
     for (const language of ['python', 'Python', 'py'])
-      expect(languageServiceRegistry.resolveLanguageServices(language).map((service) => service.id)).toEqual(['python'])
+      expect(
+        languageServiceRegistry.resolveLanguageServices(language).map((service) => service.id)
+      ).toEqual(['python'])
     expect(languageServiceRegistry.resolveLanguageServices('cobol')).toEqual([])
   })
 

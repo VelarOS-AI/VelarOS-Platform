@@ -1,11 +1,4 @@
-import {
-  isEmpty,
-  isNull,
-  isObject,
-  isString,
-  toNullable,
-  toOptional,
-} from '@velaros-ai/core'
+import { isEmpty, isNull, isObject, isString, toNullable, toOptional } from '@velaros-ai/core'
 
 import type {
   KernelModuleSnapshot,
@@ -28,9 +21,7 @@ export function toModuleCatalogRevision(snapshot: KernelModuleSnapshot): string 
 }
 
 /** 把宿主里的模块快照投影成 wire 上的模块描述（握手与目录都用它）。 */
-export function toKernelModuleDescriptor(
-  snapshot: KernelModuleSnapshot,
-): KernelModuleDescriptor {
+export function toKernelModuleDescriptor(snapshot: KernelModuleSnapshot): KernelModuleDescriptor {
   const { manifest } = snapshot
   return {
     id: manifest.id,
@@ -41,12 +32,10 @@ export function toKernelModuleDescriptor(
       id,
       versionRange: toNullable(versionRange),
     })),
-    optionalRequires: manifest.optionalRequires.map(
-      ({ id, versionRange }) => ({
-        id,
-        versionRange: toNullable(versionRange),
-      }),
-    ),
+    optionalRequires: manifest.optionalRequires.map(({ id, versionRange }) => ({
+      id,
+      versionRange: toNullable(versionRange),
+    })),
     permissions: [...manifest.permissions],
     isolation: manifest.isolation,
     catalogRevision: toModuleCatalogRevision(snapshot),
@@ -59,7 +48,7 @@ export function capabilityCallFailure(
   code: string,
   message: string,
   retryable = false,
-  details: Nullable<Readonly<Record<string, unknown>>> = null,
+  details: Nullable<Readonly<Record<string, unknown>>> = null
 ): CapabilityCallFailure {
   return {
     protocolVersion: KernelProtocolVersion,
@@ -78,7 +67,7 @@ export function capabilityCallFailure(
 export function capabilitySessionOpenFailure(
   code: string,
   message: string,
-  retryable = false,
+  retryable = false
 ): CapabilitySessionOpenFailure {
   return {
     protocolVersion: KernelProtocolVersion,
@@ -94,7 +83,7 @@ export function capabilitySessionOpenFailure(
 
 /** 把模块快照投影成健康报告里的一行。 */
 export function toKernelServiceModuleHealth(
-  snapshot: KernelModuleSnapshot,
+  snapshot: KernelModuleSnapshot
 ): KernelServiceModuleHealth {
   return {
     id: snapshot.manifest.id,
@@ -108,7 +97,7 @@ export function toKernelServiceModuleHealth(
 
 /** 把 wire 上的作用域（缺省是 `null`）转成 SDK 侧的作用域（缺省是 `undefined`）。 */
 export function toKernelCapabilityScope(
-  scope: CapabilityCallRequest['scope'],
+  scope: CapabilityCallRequest['scope']
 ): ScopeRef | undefined {
   if (isNull(scope)) return undefined
   return {
@@ -126,15 +115,13 @@ export function toKernelCapabilityScope(
 export function readCapabilityCallId(input: unknown): string {
   if (!isObject(input) || isNull(input)) return 'invalid-call'
   const callId = Reflect.get(input, 'callId')
-  return isString(callId) && !isEmpty(callId)
-    ? callId
-    : 'invalid-call'
+  return isString(callId) && !isEmpty(callId) ? callId : 'invalid-call'
 }
 
 /** 会话绑下的操作集合覆不覆盖这次调用的操作；`null` 表示全部操作都在里面。 */
 export function capabilityOperationsCover(
   granted: Nullable<ReadonlySet<string>>,
-  operation: string,
+  operation: string
 ): boolean {
   if (isNull(granted)) return true
   return granted.has(operation)
@@ -143,13 +130,13 @@ export function capabilityOperationsCover(
 /** 会话绑下的作用域覆不覆盖这次调用的作用域；绑的是 `null` 表示不限，请求是 `null` 则不给过。 */
 export function capabilityScopesCover(
   granted: Nullable<KernelWireScopeRef>,
-  requested: Nullable<KernelWireScopeRef>,
+  requested: Nullable<KernelWireScopeRef>
 ): boolean {
   if (isNull(granted)) return true
   if (isNull(requested)) return false
   return (
-    granted.id === requested.id
-    && granted.ownerModuleId === requested.ownerModuleId
-    && granted.kind === requested.kind
+    granted.id === requested.id &&
+    granted.ownerModuleId === requested.ownerModuleId &&
+    granted.kind === requested.kind
   )
 }

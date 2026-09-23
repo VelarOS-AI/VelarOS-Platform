@@ -1,4 +1,4 @@
-import { isFiniteNumber, isString,optionalWhen } from '@velaros-ai/core'
+import { isFiniteNumber, isString, optionalWhen } from '@velaros-ai/core'
 
 /** 是有限数就原样返回，否则返回 undefined。 */
 export function readFiniteNumber(value: unknown): number | undefined {

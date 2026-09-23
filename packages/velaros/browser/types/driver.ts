@@ -1,6 +1,17 @@
 import type { BrowserPageDriverDownloadItem } from '../contract/requires.js'
 
-import type { BrowserClickCoordinatesOptions, BrowserDragCoordinatesOptions, BrowserMouseButton, BrowserMoveMouseOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsResult, BrowserPageDiagnosticKind, BrowserScreenshotCaptureRegion, BrowserScreenshotMetadata, BrowserScreenshotRect } from './browser.js'
+import type {
+  BrowserClickCoordinatesOptions,
+  BrowserDragCoordinatesOptions,
+  BrowserMouseButton,
+  BrowserMoveMouseOptions,
+  BrowserNetworkControlOptions,
+  BrowserNetworkRequestDetailsResult,
+  BrowserPageDiagnosticKind,
+  BrowserScreenshotCaptureRegion,
+  BrowserScreenshotMetadata,
+  BrowserScreenshotRect,
+} from './browser.js'
 
 export type BrowserPageDriverKind = 'webview' | 'external'
 
@@ -23,9 +34,7 @@ export interface BrowserSystemPointerMoveOptions {
   durationMs: number
 }
 
-export type BrowserPageDriverPointerListener = (
-  event: BrowserPageDriverPointerEvent
-) => void
+export type BrowserPageDriverPointerListener = (event: BrowserPageDriverPointerEvent) => void
 
 export interface BrowserPageDriverMoveMouseOptions extends BrowserMoveMouseOptions {
   onPointerEvent?: LooseOptional<BrowserPageDriverPointerListener>
@@ -175,7 +184,4 @@ export interface BrowserPageDriverDownloadEvent {
   item: BrowserPageDriverDownloadItem
 }
 
-export type BrowserPageDriverDownloadListener = (
-  event: BrowserPageDriverDownloadEvent
-) => void
-
+export type BrowserPageDriverDownloadListener = (event: BrowserPageDriverDownloadEvent) => void

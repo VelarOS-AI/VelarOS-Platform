@@ -6,7 +6,15 @@ import * as ts from 'typescript'
 import { isEmpty, isPresent, isUndefined } from '@velaros-ai/core'
 
 import type { Diagnostic } from '../types/common.js'
-import type { JsTsAccessor, JsTsRange, JsTsSymbol, JsTsSymbolKind, JsTsSymbolQuery, OverloadableDeclaration, ParsedJsTs } from '../types/jsts.js'
+import type {
+  JsTsAccessor,
+  JsTsRange,
+  JsTsSymbol,
+  JsTsSymbolKind,
+  JsTsSymbolQuery,
+  OverloadableDeclaration,
+  ParsedJsTs,
+} from '../types/jsts.js'
 
 import { sha256 } from './hash.js'
 import { ext } from './path.js'
@@ -58,12 +66,20 @@ export function parseJsTs(path: string, content: string): ParsedJsTs {
     parseCache.set(cacheKey, cached)
     return cached
   }
-  const sourceFile = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true, scriptKindForPath(path))
+  const sourceFile = ts.createSourceFile(
+    path,
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKindForPath(path)
+  )
   const parsed: ParsedJsTs = {
     sourceFile,
     symbols: collectSymbols(sourceFile),
     // parseDiagnostics 是 TypeScript 未公开声明的字段，但它正是不建 Program 时唯一的纯语法诊断来源。
-    diagnostics: (sourceFile as ts.SourceFile & { parseDiagnostics?: ts.DiagnosticWithLocation[] }).parseDiagnostics ?? [],
+    diagnostics:
+      (sourceFile as ts.SourceFile & { parseDiagnostics?: ts.DiagnosticWithLocation[] })
+        .parseDiagnostics ?? [],
   }
   parseCache.set(cacheKey, parsed)
   while (parseCache.size > ProjectTuning.jsTs.cachedParses) {
@@ -79,10 +95,14 @@ export function parseJsTs(path: string, content: string): ParsedJsTs {
  * 只命中对应的访问器，用来拆开同名同容器的 get / set 对。kind 为 function 却没有同名函数时兼容命中
  * 同名方法——调用方常把方法也叫作 function，但只要存在真正的同名函数就不掺入方法，避免凭空制造歧义。
  */
-export function selectJsTsSymbols(symbols: readonly JsTsSymbol[], query: JsTsSymbolQuery): JsTsSymbol[] {
+export function selectJsTsSymbols(
+  symbols: readonly JsTsSymbol[],
+  query: JsTsSymbolQuery
+): JsTsSymbol[] {
   const named = symbols.filter(
     (symbol) =>
-      (!query.name || symbol.name === query.name) && (!query.container || symbol.container === query.container)
+      (!query.name || symbol.name === query.name) &&
+      (!query.container || symbol.container === query.container)
   )
   if (!query.kind || WildcardKinds.has(query.kind)) return named
   const accessor = AccessorQueryKinds.get(query.kind)
@@ -94,7 +114,11 @@ export function selectJsTsSymbols(symbols: readonly JsTsSymbol[], query: JsTsSym
 }
 
 /** 解析源码后按 name / kind / container 选符号。 */
-export function findJsTsSymbols(content: string, path: string, query: JsTsSymbolQuery = {}): JsTsSymbol[] {
+export function findJsTsSymbols(
+  content: string,
+  path: string,
+  query: JsTsSymbolQuery = {}
+): JsTsSymbol[] {
   return selectJsTsSymbols(parseJsTs(path, content).symbols, query)
 }
 
@@ -114,7 +138,10 @@ export function jsTsSyntaxDiagnostics(path: string, content: string, source: str
       data: {
         code: diagnostic.code,
         excerpt: lineExcerpt(sourceFile, line, character),
-        sourceContext: index < ProjectTuning.jsTs.syntaxPreviewDiagnostics ? syntaxSourceContext(sourceFile, line, character) : undefined,
+        sourceContext:
+          index < ProjectTuning.jsTs.syntaxPreviewDiagnostics
+            ? syntaxSourceContext(sourceFile, line, character)
+            : undefined,
       },
     }
   })
@@ -133,7 +160,9 @@ function syntaxSourceContext(sourceFile: ts.SourceFile, line: number, character:
 function lineExcerpt(sourceFile: ts.SourceFile, line: number, character: number): string {
   const limit = ProjectTuning.jsTs.syntaxExcerptChars
   const lineStart = sourceFile.getPositionOfLineAndCharacter(line, 0)
-  const text = sourceFile.text.slice(lineStart, sourceFile.getLineEndOfPosition(lineStart)).trimEnd()
+  const text = sourceFile.text
+    .slice(lineStart, sourceFile.getLineEndOfPosition(lineStart))
+    .trimEnd()
   if (text.length <= limit) return text
   // 超长行（压缩代码、长字符串）以错误列为中心截窗，两端用省略号标出被截断。
   let from = Math.max(0, Math.min(character - limit / 2, text.length - limit))
@@ -176,7 +205,9 @@ function collectSymbols(sourceFile: ts.SourceFile): JsTsSymbol[] {
       bodyRange: options.bodyRange,
       statementRange: options.statementRange,
       signatureHash: sha256(sourceFile.text.slice(start, Math.min(end, start + 500))),
-      metadata: isPresent(options.accessor) ? { exported, accessor: options.accessor } : { exported },
+      metadata: isPresent(options.accessor)
+        ? { exported, accessor: options.accessor }
+        : { exported },
     })
     return name
   }
@@ -202,14 +233,22 @@ function collectSymbols(sourceFile: ts.SourceFile): JsTsSymbol[] {
       })
     }
     if (ts.isInterfaceDeclaration(node) || ts.isEnumDeclaration(node))
-      return push(ts.isInterfaceDeclaration(node) ? 'interface' : 'enum', node.name.text, node, container, {
-        exported: hasExportModifier(node),
-        bodyRange: bracedContentRange(sourceFile, node),
-      })
+      return push(
+        ts.isInterfaceDeclaration(node) ? 'interface' : 'enum',
+        node.name.text,
+        node,
+        container,
+        {
+          exported: hasExportModifier(node),
+          bodyRange: bracedContentRange(sourceFile, node),
+        }
+      )
     if (ts.isTypeAliasDeclaration(node))
       return push('type', node.name.text, node, container, {
         exported: hasExportModifier(node),
-        bodyRange: ts.isTypeLiteralNode(node.type) ? bracedContentRange(sourceFile, node.type) : undefined,
+        bodyRange: ts.isTypeLiteralNode(node.type)
+          ? bracedContentRange(sourceFile, node.type)
+          : undefined,
       })
     if (ts.isModuleDeclaration(node)) {
       const body = namespaceBlock(node)
@@ -220,7 +259,12 @@ function collectSymbols(sourceFile: ts.SourceFile): JsTsSymbol[] {
     }
     if (ts.isImportDeclaration(node)) {
       const specifier = node.moduleSpecifier
-      push('import', ts.isStringLiteral(specifier) ? specifier.text : specifier.getText(sourceFile), node, container)
+      push(
+        'import',
+        ts.isStringLiteral(specifier) ? specifier.text : specifier.getText(sourceFile),
+        node,
+        container
+      )
       return undefined
     }
     if (ts.isVariableDeclaration(node)) return declareVariable(node, container)
@@ -228,11 +272,19 @@ function collectSymbols(sourceFile: ts.SourceFile): JsTsSymbol[] {
     return undefined
   }
 
-  function declareVariable(node: ts.VariableDeclaration, container: Optional<string>): Optional<string> {
+  function declareVariable(
+    node: ts.VariableDeclaration,
+    container: Optional<string>
+  ): Optional<string> {
     const list = node.parent
     const statement = list.parent
     // catch 参数、for 循环变量等不在 VariableStatement 里的声明不是可编辑的独立符号。
-    if (!ts.isVariableDeclarationList(list) || !ts.isVariableStatement(statement) || !ts.isIdentifier(node.name)) return undefined
+    if (
+      !ts.isVariableDeclarationList(list) ||
+      !ts.isVariableStatement(statement) ||
+      !ts.isIdentifier(node.name)
+    )
+      return undefined
     const initializer = node.initializer
     const callable = isPresent(initializer) && isFunctionExpressionLike(initializer)
     const classExpression = isPresent(initializer) && ts.isClassExpression(initializer)
@@ -243,7 +295,9 @@ function collectSymbols(sourceFile: ts.SourceFile): JsTsSymbol[] {
     const multiple = list.declarations.length > 1
     return push(kind, node.name.text, multiple ? node : statement, container, {
       exported: hasExportModifier(statement),
-      statementRange: multiple ? rangeOf(sourceFile, statement.getStart(sourceFile), statement.getEnd()) : undefined,
+      statementRange: multiple
+        ? rangeOf(sourceFile, statement.getStart(sourceFile), statement.getEnd())
+        : undefined,
       bodyRange: callable
         ? functionBodyRange(sourceFile, initializer.body)
         : classExpression
@@ -254,7 +308,9 @@ function collectSymbols(sourceFile: ts.SourceFile): JsTsSymbol[] {
 
   function declareClassMember(node: ts.Node, className: Optional<string>): Optional<string> {
     if (ts.isConstructorDeclaration(node) || ts.isMethodDeclaration(node)) {
-      const name = ts.isConstructorDeclaration(node) ? 'constructor' : memberName(node.name, sourceFile)
+      const name = ts.isConstructorDeclaration(node)
+        ? 'constructor'
+        : memberName(node.name, sourceFile)
       if (!name || isOverloadSignature(node)) return undefined
       return push('method', name, node, className, {
         start: overloadGroupStart(node, sourceFile),
@@ -271,10 +327,16 @@ function collectSymbols(sourceFile: ts.SourceFile): JsTsSymbol[] {
       })
     }
     // 箭头函数 / 函数表达式属性（`handle = async () => {}`）按方法对待：它们就是类的行为成员。
-    if (ts.isPropertyDeclaration(node) && isPresent(node.initializer) && isFunctionExpressionLike(node.initializer)) {
+    if (
+      ts.isPropertyDeclaration(node) &&
+      isPresent(node.initializer) &&
+      isFunctionExpressionLike(node.initializer)
+    ) {
       const name = memberName(node.name, sourceFile)
       return name
-        ? push('method', name, node, className, { bodyRange: functionBodyRange(sourceFile, node.initializer.body) })
+        ? push('method', name, node, className, {
+            bodyRange: functionBodyRange(sourceFile, node.initializer.body),
+          })
         : undefined
     }
     return undefined
@@ -310,8 +372,14 @@ function overloadGroupStart(node: OverloadableDeclaration, sourceFile: ts.Source
 }
 
 /** 兄弟声明是不是同一重载组的：种类相同、名字相同。 */
-function isSameOverload(candidate: ts.Node, node: OverloadableDeclaration): candidate is OverloadableDeclaration {
-  return candidate.kind === node.kind && overloadName(candidate as OverloadableDeclaration) === overloadName(node)
+function isSameOverload(
+  candidate: ts.Node,
+  node: OverloadableDeclaration
+): candidate is OverloadableDeclaration {
+  return (
+    candidate.kind === node.kind &&
+    overloadName(candidate as OverloadableDeclaration) === overloadName(node)
+  )
 }
 
 /** 重载组用来比对的名字；构造函数一律叫 constructor。 */
@@ -323,7 +391,8 @@ function overloadName(node: OverloadableDeclaration): Optional<string> {
 function siblingDeclarations(node: ts.Node): readonly ts.Node[] {
   const parent = node.parent
   if (ts.isClassLike(parent)) return parent.members
-  if (ts.isSourceFile(parent) || ts.isModuleBlock(parent) || ts.isBlock(parent)) return parent.statements
+  if (ts.isSourceFile(parent) || ts.isModuleBlock(parent) || ts.isBlock(parent))
+    return parent.statements
   return [node]
 }
 
@@ -333,20 +402,29 @@ function isDeclarationScope(node: ts.Node): boolean {
 }
 
 /** 表达式是不是箭头函数或 function 表达式。 */
-function isFunctionExpressionLike(node: ts.Expression): node is ts.ArrowFunction | ts.FunctionExpression {
+function isFunctionExpressionLike(
+  node: ts.Expression
+): node is ts.ArrowFunction | ts.FunctionExpression {
   return ts.isArrowFunction(node) || ts.isFunctionExpression(node)
 }
 
 /** 匿名的 export default 函数或类记作 default。 */
 function defaultExportName(node: ts.FunctionDeclaration | ts.ClassDeclaration): Optional<string> {
-  return (ts.getModifiers(node) ?? []).some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)
+  return (ts.getModifiers(node) ?? []).some(
+    (modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword
+  )
     ? 'default'
     : undefined
 }
 
 /** 类成员的名字：标识符、私有名、字符串与数字字面量取文本，计算属性名取表达式原文。 */
 function memberName(name: ts.PropertyName, sourceFile: ts.SourceFile): Optional<string> {
-  if (ts.isIdentifier(name) || ts.isPrivateIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name))
+  if (
+    ts.isIdentifier(name) ||
+    ts.isPrivateIdentifier(name) ||
+    ts.isStringLiteral(name) ||
+    ts.isNumericLiteral(name)
+  )
     return name.text
   if (ts.isComputedPropertyName(name)) return name.expression.getText(sourceFile)
   return undefined
@@ -355,13 +433,20 @@ function memberName(name: ts.PropertyName, sourceFile: ts.SourceFile): Optional<
 /** 声明带不带 export 修饰。 */
 function hasExportModifier(node: ts.Node): boolean {
   if (!ts.canHaveModifiers(node)) return false
-  return (ts.getModifiers(node) ?? []).some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+  return (ts.getModifiers(node) ?? []).some(
+    (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword
+  )
 }
 
 /** 函数 body：块体取花括号之间，表达式体（箭头函数）取表达式本身；重载签名与抽象方法没有 body。 */
-function functionBodyRange(sourceFile: ts.SourceFile, body: Optional<ts.ConciseBody>): Optional<JsTsRange> {
+function functionBodyRange(
+  sourceFile: ts.SourceFile,
+  body: Optional<ts.ConciseBody>
+): Optional<JsTsRange> {
   if (!body) return undefined
-  return ts.isBlock(body) ? bracedContentRange(sourceFile, body) : rangeOf(sourceFile, body.getStart(sourceFile), body.getEnd())
+  return ts.isBlock(body)
+    ? bracedContentRange(sourceFile, body)
+    : rangeOf(sourceFile, body.getStart(sourceFile), body.getEnd())
 }
 
 /**

@@ -21,14 +21,14 @@ export function patchError(
   patchIndex: number,
   patchPath: unknown,
   reason: string,
-  message: string,
+  message: string
 ): never {
   const path = isString(patchPath) ? patchPath : String(patchPath)
   throw new ProjectError(
     'INVALID_INPUT',
     `json_patch[${patchIndex}] ${message}`,
     { patchIndex, path, reason },
-    '请修正该 patch 的 JSON Pointer 或操作参数后重新准备事务。',
+    '请修正该 patch 的 JSON Pointer 或操作参数后重新准备事务。'
   )
 }
 
@@ -43,7 +43,7 @@ function pointerParts(pointer: unknown, patchIndex: number): string[] {
       patchIndex,
       pointer,
       'invalid_pointer',
-      `JSON Pointer 必须为空字符串或以 / 开头：${pointer}`,
+      `JSON Pointer 必须为空字符串或以 / 开头：${pointer}`
     )
   }
   return pointer
@@ -55,7 +55,7 @@ function pointerParts(pointer: unknown, patchIndex: number): string[] {
           patchIndex,
           pointer,
           'invalid_pointer_escape',
-          `JSON Pointer 含无效 ~ 转义：${pointer}`,
+          `JSON Pointer 含无效 ~ 转义：${pointer}`
         )
       }
       return part.replace(/~1/gu, '/').replace(/~0/gu, '~')
@@ -97,7 +97,7 @@ export function isStrictJsonValue(value: unknown): value is JsonValue {
 function assertJsonValue(
   value: unknown,
   patchIndex: number,
-  path: string,
+  path: string
 ): asserts value is JsonValue {
   if (!isStrictJsonValue(value)) {
     patchError(patchIndex, path, 'value_not_json', 'value 必须是可序列化的有限 JSON 值。')
@@ -115,7 +115,7 @@ function arrayIndex(
   length: number,
   mode: JsonPatch['op'],
   patchIndex: number,
-  path: string,
+  path: string
 ): number {
   if (token === '-') {
     if (mode === 'add') return length
@@ -131,7 +131,7 @@ function arrayIndex(
       patchIndex,
       path,
       'array_index_out_of_bounds',
-      `数组索引越界：${token}（${mode} 允许的最大索引为 ${maximum}）。`,
+      `数组索引越界：${token}（${mode} 允许的最大索引为 ${maximum}）。`
     )
   }
   return index
@@ -142,7 +142,7 @@ function resolveParent(
   root: JsonValue,
   parts: string[],
   patchIndex: number,
-  path: string,
+  path: string
 ): JsonContainer {
   let current = root
   for (const token of parts.slice(0, -1)) {
@@ -175,7 +175,7 @@ export function applyJsonPatch(root: JsonValue, patch: JsonPatch, patchIndex: nu
       patchIndex,
       patch.path,
       'unexpected_field',
-      `${patch.op} 含不支持的字段：${unexpectedField}`,
+      `${patch.op} 含不支持的字段：${unexpectedField}`
     )
   }
   if (patch.op !== 'remove') {
@@ -191,7 +191,7 @@ export function applyJsonPatch(root: JsonValue, patch: JsonPatch, patchIndex: nu
         patchIndex,
         patch.path,
         'root_remove_unsupported',
-        '不能删除整个 JSON 文档根节点。',
+        '不能删除整个 JSON 文档根节点。'
       )
     }
     return cloneJsonValue(patch.value)

@@ -12,10 +12,7 @@ import { KernelVersionAxes } from '../../contract/constants'
 import type { KernelModuleImporter } from '../../contract/requires'
 import { parseKernelSystemModPacks } from '../../utils/serve/mod-index'
 
-import {
-  type BootedKernelDaemonApi,
-  bootKernelDaemon,
-} from './KernelDaemonAssembly'
+import { type BootedKernelDaemonApi, bootKernelDaemon } from './KernelDaemonAssembly'
 import { KernelModStore } from './KernelModStore'
 
 const log = Log.tag('KernelServe')
@@ -46,9 +43,8 @@ export class KernelDaemonProcess implements KernelDaemonProcessApi {
 
     // 建 ModStore：先读用户索引，再按环境变量登记系统 pack、安装目录 pack。
     const userModsRoot = environment.VELAROS_KERNEL_USER_MODS?.trim()
-    const modsRoot = isNotUndefined(userModsRoot) && !isEmpty(userModsRoot)
-      ? userModsRoot
-      : undefined
+    const modsRoot =
+      isNotUndefined(userModsRoot) && !isEmpty(userModsRoot) ? userModsRoot : undefined
     const store = new KernelModStore(modsRoot)
     await store.loadPersistedIndex()
 

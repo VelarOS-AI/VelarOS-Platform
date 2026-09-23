@@ -5,14 +5,21 @@ import { isEmpty, isUndefined, mapDefined, optionalWhen } from '@velaros-ai/core
 import { textCodec, textFileIo } from '@velaros-ai/core/text-files'
 import type { TextChunk, TextEncoding } from '@velaros-ai/core/text-files/contracts'
 
-import type { ByteLimitedContent, LineWindowReadResult, ReadCursor } from '../../types/file-store.js'
+import type {
+  ByteLimitedContent,
+  LineWindowReadResult,
+  ReadCursor,
+} from '../../types/file-store.js'
 import type { ReadInput, ReadResult } from '../../types/io.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
 import { ProjectError, projectErrorFromTextFile } from '../errors.js'
 import { ProjectTuning } from '../tuning.js'
 
 /** 流式读正文（公共件 text-files 的分块读）：没给编码就先流式认完整个文件再严格逐块解；失败翻成项目错误，提前结束也关句柄。 */
-async function* readProjectTextChunks(absPath: string, encoding?: TextEncoding): AsyncGenerator<TextChunk> {
+async function* readProjectTextChunks(
+  absPath: string,
+  encoding?: TextEncoding
+): AsyncGenerator<TextChunk> {
   try {
     yield* textFileIo.readTextChunks(absPath, encoding)
   } catch (error) {
@@ -31,7 +38,7 @@ export function readProjectTextFile(absPath: string, encoding?: TextEncoding): P
 export function limitContent(
   content: string,
   maxBytes?: number,
-  maxChars?: number,
+  maxChars?: number
 ): ByteLimitedContent {
   const byteBounded = !isUndefined(maxBytes)
   const charBounded = !isUndefined(maxChars)
@@ -70,7 +77,7 @@ export function limitContent(
       'INVALID_INPUT',
       'maxBytes 小于下一个完整 UTF-8 字符所需字节数',
       { maxBytes },
-      '请提高 maxBytes 后重试；读取不会返回半个 UTF-8 字符。',
+      '请提高 maxBytes 后重试；读取不会返回半个 UTF-8 字符。'
     )
   }
 
@@ -120,7 +127,7 @@ export function countTextLines(content: string): number {
 export function readPastEnd(
   snapshot: FileSnapshot,
   startLine: number,
-  totalLines: number,
+  totalLines: number
 ): ReadResult {
   return {
     snapshot,
@@ -138,7 +145,7 @@ export function readPastEnd(
  */
 export function endColumnClampNote(
   range: NonNullable<ReadInput['range']>,
-  totalLines: Optional<number>,
+  totalLines: Optional<number>
 ): Optional<string> {
   if (
     isUndefined(totalLines) ||
@@ -156,9 +163,12 @@ function assertCharacterBoundary(text: string, offset: number, path: string, lin
   const before = text.charCodeAt(offset - 1)
   const after = text.charCodeAt(offset)
   if (before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff) {
-    throw new ProjectError('INVALID_INPUT', `${path}：第 ${line} 行列边界截断了 Unicode 字符。`,
+    throw new ProjectError(
+      'INVALID_INPUT',
+      `${path}：第 ${line} 行列边界截断了 Unicode 字符。`,
       { path, line, column: offset + 1, characterColumns: [offset, offset + 2] },
-      '请把列边界放在完整字符的前后，或按完整行读取。')
+      '请把列边界放在完整字符的前后，或按完整行读取。'
+    )
   }
 }
 
@@ -168,7 +178,7 @@ export function sliceWindowColumns(
   content: string,
   range: ReadInput['range'],
   absoluteStartLine: number,
-  absoluteEndLine: number,
+  absoluteEndLine: number
 ): {
   content: string
   startColumn: number
@@ -187,14 +197,14 @@ export function sliceWindowColumns(
     throw new ProjectError(
       'INVALID_INPUT',
       `${filePath}：startColumn ${startColumn} 超出第 ${absoluteStartLine} 行长度 ${firstLine.length}`,
-      { path: filePath, range, lineLength: firstLine.length },
+      { path: filePath, range, lineLength: firstLine.length }
     )
   }
   if (endColumn > lastLine.length + 1) {
     throw new ProjectError(
       'INVALID_INPUT',
       `${filePath}：endColumn ${endColumn} 超出第 ${absoluteEndLine} 行长度 ${lastLine.length}`,
-      { path: filePath, range, lineLength: lastLine.length },
+      { path: filePath, range, lineLength: lastLine.length }
     )
   }
   assertCharacterBoundary(firstLine, startColumn - 1, filePath, absoluteStartLine)
@@ -204,7 +214,7 @@ export function sliceWindowColumns(
       throw new ProjectError(
         'INVALID_INPUT',
         `${filePath}：同一行的 endColumn 不能早于 startColumn`,
-        { path: filePath, range },
+        { path: filePath, range }
       )
     }
     return {
@@ -244,7 +254,7 @@ export function continuationInput(
   pathValue: string,
   revision: string,
   cursor: ReadCursor,
-  preserveRequestedEnd: boolean,
+  preserveRequestedEnd: boolean
 ): ReadInput {
   return {
     path: pathValue,
@@ -266,7 +276,7 @@ export async function readLimitedTextPrefix(
   absPath: string,
   fileSize: number,
   limits: { maxBytes?: number; maxChars?: number },
-  encoding?: TextEncoding,
+  encoding?: TextEncoding
 ): Promise<{ content: string; truncated: boolean }> {
   const parts: string[] = []
   let characters = 0
@@ -274,9 +284,13 @@ export async function readLimitedTextPrefix(
   for await (const part of readProjectTextChunks(absPath, encoding)) {
     parts.push(part.content)
     if (!isUndefined(limits.maxChars)) characters += [...part.content.replace(/\r\n/g, '\n')].length
-    if (!isUndefined(limits.maxBytes)) bytes += new TextEncoder().encode(part.content.replace(/\r\n/g, '\n')).length
-    if ((!isUndefined(limits.maxChars) && characters > limits.maxChars) ||
-        (!isUndefined(limits.maxBytes) && bytes > limits.maxBytes)) return { content: parts.join(''), truncated: part.byteOffset < fileSize }
+    if (!isUndefined(limits.maxBytes))
+      bytes += new TextEncoder().encode(part.content.replace(/\r\n/g, '\n')).length
+    if (
+      (!isUndefined(limits.maxChars) && characters > limits.maxChars) ||
+      (!isUndefined(limits.maxBytes) && bytes > limits.maxBytes)
+    )
+      return { content: parts.join(''), truncated: part.byteOffset < fileSize }
   }
   return { content: parts.join(''), truncated: false }
 }
@@ -286,13 +300,16 @@ export async function readTextLineWindow(
   absPath: string,
   range: { startLine?: number; endLine?: number; startColumn?: number; endColumn?: number },
   limits: { maxBytes?: number; maxChars?: number } = {},
-  encoding?: TextEncoding,
+  encoding?: TextEncoding
 ): Promise<LineWindowReadResult> {
   const startLine = Math.max(1, Math.floor(range.startLine ?? 1))
   const requestedEndLine = Math.max(startLine, range.endLine ?? Number.MAX_SAFE_INTEGER)
-  const outputLimits = [limits.maxBytes, isUndefined(limits.maxChars) ? undefined : limits.maxChars * 2]
-    .filter((value): value is number => !isUndefined(value))
-  const outputLimit = isEmpty(outputLimits) ? Number.MAX_SAFE_INTEGER
+  const outputLimits = [
+    limits.maxBytes,
+    isUndefined(limits.maxChars) ? undefined : limits.maxChars * 2,
+  ].filter((value): value is number => !isUndefined(value))
+  const outputLimit = isEmpty(outputLimits)
+    ? Number.MAX_SAFE_INTEGER
     : Math.max(0, (range.startColumn ?? 1) - 1) + Math.min(...outputLimits) + 4
   const pieces: string[] = []
   let currentLine = 1
@@ -310,14 +327,26 @@ export async function readTextLineWindow(
         pieces.push(text)
         outputLength += text.length
         // 显式末列仍需读到能验证的位置，不能把预算截断的行当作真实文件末尾。
-        const endColumnKnown = range.endLine !== currentLine || isUndefined(range.endColumn) ||
-          currentColumn + text.length >= range.endColumn || newline >= 0
-        if (outputLength >= outputLimit && endColumnKnown) { hasMore = true; break outer }
+        const endColumnKnown =
+          range.endLine !== currentLine ||
+          isUndefined(range.endColumn) ||
+          currentColumn + text.length >= range.endColumn ||
+          newline >= 0
+        if (outputLength >= outputLimit && endColumnKnown) {
+          hasMore = true
+          break outer
+        }
       }
       currentColumn += end - from
       if (newline < 0) break
-      if (currentLine >= requestedEndLine) { hasMore = true; break outer }
-      if (currentLine >= startLine) { pieces.push('\n'); outputLength += 1 }
+      if (currentLine >= requestedEndLine) {
+        hasMore = true
+        break outer
+      }
+      if (currentLine >= startLine) {
+        pieces.push('\n')
+        outputLength += 1
+      }
       currentLine += 1
       currentColumn = 1
       from = newline + 1
@@ -335,7 +364,7 @@ export async function readTextLineWindow(
 
 /** 流式读完整个文件：一边算 sha256 内容哈希，一边判定文本编码；认不出无损编码的算二进制。 */
 export async function hashFileAndDetectBinary(
-  absPath: string,
+  absPath: string
 ): Promise<{ hash: string; binary: boolean; textEncoding: Nullable<TextEncoding> }> {
   const handle = await open(absPath, 'r')
   const hash = createHash('sha256')

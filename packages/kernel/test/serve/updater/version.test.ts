@@ -53,8 +53,7 @@ describe('Kernel version matching', () => {
   })
 
   test('rejects an unparsable range distinctly from an unparsable version', () => {
-    expect(() => satisfiesKernelVersionRange('nightly', '^1.0.0'))
-      .toThrowError(/内核版本号/)
+    expect(() => satisfiesKernelVersionRange('nightly', '^1.0.0')).toThrowError(/内核版本号/)
     try {
       satisfiesKernelVersionRange('1.0.0', '^1.x')
       throw new Error('Expected the range to be rejected')

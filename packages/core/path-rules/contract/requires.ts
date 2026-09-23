@@ -10,5 +10,5 @@
  */
 export type GitCheckIgnoreRunner = (
   rootPath: string,
-  relativePaths: readonly string[],
+  relativePaths: readonly string[]
 ) => Promise<Nullable<ReadonlySet<string>>>

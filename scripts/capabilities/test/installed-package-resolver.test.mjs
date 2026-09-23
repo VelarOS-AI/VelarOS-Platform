@@ -1,12 +1,5 @@
 import { expect, test } from 'bun:test'
-import {
-  mkdir,
-  mkdtemp,
-  realpath,
-  rm,
-  symlink,
-  writeFile,
-} from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -17,24 +10,13 @@ const TokenizerName = 'gpt-tokenizer'
 
 async function writeManifest(directory, manifest) {
   await mkdir(directory, { recursive: true })
-  await writeFile(
-    path.join(directory, 'package.json'),
-    `${JSON.stringify(manifest, null, 2)}\n`,
-  )
+  await writeFile(path.join(directory, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 }
 
 async function linkInstalledPackage(workspaceDirectory, packageName, source) {
-  const target = path.join(
-    workspaceDirectory,
-    'node_modules',
-    ...packageName.split('/'),
-  )
+  const target = path.join(workspaceDirectory, 'node_modules', ...packageName.split('/'))
   await mkdir(path.dirname(target), { recursive: true })
-  await symlink(
-    source,
-    target,
-    process.platform === 'win32' ? 'junction' : 'dir',
-  )
+  await symlink(source, target, process.platform === 'win32' ? 'junction' : 'dir')
 }
 
 test('resolves a fresh Bun layout from a workspace that declares the package', async () => {
@@ -125,10 +107,7 @@ test('resolves a transitive dependency through its declaring package graph', asy
     })
 
     expect(
-      await resolver.resolve(
-        TokenizerName,
-        { declaringPackageDirectories: [installedCore] },
-      ),
+      await resolver.resolve(TokenizerName, { declaringPackageDirectories: [installedCore] })
     ).toBe(await realpath(installedTokenizer))
   } finally {
     await rm(root, { recursive: true, force: true })

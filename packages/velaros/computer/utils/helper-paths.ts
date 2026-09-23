@@ -19,10 +19,14 @@ const require = createRequire(typeof __filename === 'string' ? __filename : impo
 /** 各平台对应的 helper 脚本文件名；不支持的平台返回 null。 */
 export function helperScriptName(platform: NodeJS.Platform): Nullable<string> {
   switch (platform) {
-    case 'darwin': return 'mac_helper.py'
-    case 'win32': return 'win_helper.py'
-    case 'linux': return 'linux_helper.py'
-    default: return null
+    case 'darwin':
+      return 'mac_helper.py'
+    case 'win32':
+      return 'win_helper.py'
+    case 'linux':
+      return 'linux_helper.py'
+    default:
+      return null
   }
 }
 

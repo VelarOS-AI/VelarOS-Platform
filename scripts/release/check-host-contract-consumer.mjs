@@ -15,12 +15,20 @@ const hostPackageDirectories = ['agent', 'model', 'velaros', 'core', 'kernel']
 const packageDirectories = await firstPartyClosure(hostPackageDirectories)
 const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
 const nodeTypesVersion = manifest.devDependencies?.['@types/node']
-if (!nodeTypesVersion) throw new Error('Host contract consumer requires root @types/node declaration')
-const bunVersion = (await runGuardedCommand({
-  command: 'bun', args: ['--version'], cwd: root, operation: 'Read consumer Bun version',
-})).stdout.trim()
+if (!nodeTypesVersion)
+  throw new Error('Host contract consumer requires root @types/node declaration')
+const bunVersion = (
+  await runGuardedCommand({
+    command: 'bun',
+    args: ['--version'],
+    cwd: root,
+    operation: 'Read consumer Bun version',
+  })
+).stdout.trim()
 if (manifest.packageManager !== `bun@${bunVersion}`) {
-  throw new Error(`Host contract consumer requires ${manifest.packageManager}, received bun@${bunVersion}`)
+  throw new Error(
+    `Host contract consumer requires ${manifest.packageManager}, received bun@${bunVersion}`
+  )
 }
 
 const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'velaros-host-contract-consumer-'))
@@ -33,30 +41,43 @@ try {
   const packedManifests = []
   for (const directoryName of packageDirectories) {
     const packageDirectory = path.join(root, 'packages', directoryName)
-    const packageManifest = JSON.parse(await readFile(path.join(packageDirectory, 'package.json'), 'utf8'))
+    const packageManifest = JSON.parse(
+      await readFile(path.join(packageDirectory, 'package.json'), 'utf8')
+    )
     const tarballPath = path.join(tarballDirectory, `${directoryName}.tgz`)
     await safePackPackage({ packageDirectory, filename: tarballPath })
     dependencies[packageManifest.name] = `file:${tarballPath}`
     packedManifests.push(packageManifest)
-    console.info(`✓ packed host contract dependency ${packageManifest.name}@${packageManifest.version}`)
+    console.info(
+      `✓ packed host contract dependency ${packageManifest.name}@${packageManifest.version}`
+    )
   }
   // 每一条第一方运行/类型依赖都必须来自本次打包，避免注册表旧包掩盖候选声明问题。
   for (const packageManifest of packedManifests) {
     for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
       for (const name of Object.keys(packageManifest[field] ?? {})) {
         if (name.startsWith('@velaros-ai/') && !Object.hasOwn(dependencies, name)) {
-          throw new Error(`${packageManifest.name} ${field}.${name} is missing from the packed consumer closure`)
+          throw new Error(
+            `${packageManifest.name} ${field}.${name} is missing from the packed consumer closure`
+          )
         }
       }
     }
   }
-  await writeFile(path.join(consumerDirectory, 'package.json'), `${JSON.stringify({
-    name: 'velaros-host-contract-consumer',
-    private: true,
-    type: 'module',
-    dependencies: { ...dependencies, '@types/node': nodeTypesVersion },
-    overrides: dependencies,
-  }, null, 2)}\n`)
+  await writeFile(
+    path.join(consumerDirectory, 'package.json'),
+    `${JSON.stringify(
+      {
+        name: 'velaros-host-contract-consumer',
+        private: true,
+        type: 'module',
+        dependencies: { ...dependencies, '@types/node': nodeTypesVersion },
+        overrides: dependencies,
+      },
+      null,
+      2
+    )}\n`
+  )
   for (const file of [
     'consumer.ts',
     'browser.ts',
@@ -67,23 +88,40 @@ try {
     await copyFile(path.join(fixtureDirectory, file), path.join(consumerDirectory, file))
   }
   await runGuardedCommand({
-    command: 'bun', args: ['install', '--ignore-scripts'], cwd: consumerDirectory,
-    operation: 'Install isolated host contract tarballs', stdio: 'inherit',
+    command: 'bun',
+    args: ['install', '--ignore-scripts'],
+    cwd: consumerDirectory,
+    operation: 'Install isolated host contract tarballs',
+    stdio: 'inherit',
   })
   await runGuardedCommand({
     command: process.execPath,
-    args: [path.join(root, 'node_modules', 'typescript', 'bin', 'tsc'), '--project', 'tsconfig.json'],
-    cwd: consumerDirectory, operation: 'Strict NodeNext public host declarations', stdio: 'inherit',
+    args: [
+      path.join(root, 'node_modules', 'typescript', 'bin', 'tsc'),
+      '--project',
+      'tsconfig.json',
+    ],
+    cwd: consumerDirectory,
+    operation: 'Strict NodeNext public host declarations',
+    stdio: 'inherit',
   })
   await runGuardedCommand({
-    command: 'bun', args: ['build', './browser.ts', '--target=browser', '--outdir=browser-dist'],
-    cwd: consumerDirectory, operation: 'Browser capability contracts bundle', stdio: 'inherit',
+    command: 'bun',
+    args: ['build', './browser.ts', '--target=browser', '--outdir=browser-dist'],
+    cwd: consumerDirectory,
+    operation: 'Browser capability contracts bundle',
+    stdio: 'inherit',
   })
   await runGuardedCommand({
-    command: process.execPath, args: ['runtime.mjs'], cwd: consumerDirectory,
-    operation: 'Execute packed host runtime contracts', stdio: 'inherit',
+    command: process.execPath,
+    args: ['runtime.mjs'],
+    cwd: consumerDirectory,
+    operation: 'Execute packed host runtime contracts',
+    stdio: 'inherit',
   })
-  console.info('✓ packed host contracts: isolated install, strict NodeNext declarations, browser bundle and runtime execution')
+  console.info(
+    '✓ packed host contracts: isolated install, strict NodeNext declarations, browser bundle and runtime execution'
+  )
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true })
 }
@@ -93,15 +131,19 @@ async function firstPartyClosure(startDirectories) {
   const directoryByName = new Map()
   for (const entry of await readdir(path.join(root, 'packages'), { withFileTypes: true })) {
     const manifestPath = path.join(root, 'packages', entry.name, 'package.json')
-    if (entry.isDirectory() && existsSync(manifestPath)) directoryByName.set(JSON.parse(await readFile(manifestPath, 'utf8')).name, entry.name)
+    if (entry.isDirectory() && existsSync(manifestPath))
+      directoryByName.set(JSON.parse(await readFile(manifestPath, 'utf8')).name, entry.name)
   }
   const closure = [...startDirectories]
   for (let index = 0; index < closure.length; index += 1) {
-    const packageManifest = JSON.parse(await readFile(path.join(root, 'packages', closure[index], 'package.json'), 'utf8'))
+    const packageManifest = JSON.parse(
+      await readFile(path.join(root, 'packages', closure[index], 'package.json'), 'utf8')
+    )
     for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
       for (const name of Object.keys(packageManifest[field] ?? {})) {
         const directory = directoryByName.get(name)
-        if (name.startsWith('@velaros-ai/') && directory && !closure.includes(directory)) closure.push(directory)
+        if (name.startsWith('@velaros-ai/') && directory && !closure.includes(directory))
+          closure.push(directory)
       }
     }
   }

@@ -8,7 +8,9 @@ import { isMarkdownTableSeparator, parseMarkdownTableRow } from '../markdown.js'
 import { OfficeTuning } from '../tuning.js'
 
 /** 将工具输入统一转成结构化 WordBlock 列表。 */
-export function normalizeWordBlocks(input: Pick<OfficeWordInput, 'blocks' | 'content'>): WordBlock[] {
+export function normalizeWordBlocks(
+  input: Pick<OfficeWordInput, 'blocks' | 'content'>
+): WordBlock[] {
   if (isArray(input.blocks)) return input.blocks
   return isString(input.content) ? parseWordContentToBlocks(input.content) : []
 }
@@ -26,7 +28,12 @@ export function parseWordContentToBlocks(content: string): WordBlock[] {
     paragraphLines = []
     if (!text) return
     for (const chunk of splitLongWordText(text, OfficeTuning.word.plainParagraphChars)) {
-      blocks.push({ kind: 'paragraph', text: chunk, align: 'justify', spaceAfter: OfficeTuning.word.paragraphSpaceAfter })
+      blocks.push({
+        kind: 'paragraph',
+        text: chunk,
+        align: 'justify',
+        spaceAfter: OfficeTuning.word.paragraphSpaceAfter,
+      })
     }
   }
 
@@ -141,7 +148,10 @@ export function parseWordBulletLine(trimmed: string): Nullable<{ text: string; l
   const match = trimmed.match(/^(\s*)([-*•])\s+(.+)$/)
   if (!match?.[3]) return null
   const indent = match[1]?.length ?? 0
-  return { text: match[3].trim(), level: Math.min(Math.floor(indent / 2), OfficeInputLimits.word.bulletLevel) }
+  return {
+    text: match[3].trim(),
+    level: Math.min(Math.floor(indent / 2), OfficeInputLimits.word.bulletLevel),
+  }
 }
 
 /** 从指定行尝试解析 Markdown 表格。 */
@@ -167,7 +177,10 @@ export function parseMarkdownTableAt(
     nextIndex += 1
   }
   if (rows.length < 2) return null
-  const width = Math.min(Math.max(...rows.map((row) => row.length)), OfficeInputLimits.word.tableColumns)
+  const width = Math.min(
+    Math.max(...rows.map((row) => row.length)),
+    OfficeInputLimits.word.tableColumns
+  )
   // 每行补齐到同一列数，避免 docx 表格行宽不一致。
   return {
     block: {

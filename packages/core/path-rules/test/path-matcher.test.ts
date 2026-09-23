@@ -26,7 +26,8 @@ describe('PathMatcher', () => {
   test('缓存超容量时淘汰最久没用的，结论不受影响', () => {
     const matcher = new PathMatcher()
     const total = PathRulesTuning.glob.matcherCacheEntries + 8
-    for (let index = 0; index < total; index += 1) expect(matcher.matches(`a${index}/x.ts`, `a${index}/*.ts`)).toBe(true)
+    for (let index = 0; index < total; index += 1)
+      expect(matcher.matches(`a${index}/x.ts`, `a${index}/*.ts`)).toBe(true)
     // 第一条早被淘汰了，再问一次照样对。
     expect(matcher.matches('a0/x.ts', 'a0/*.ts')).toBe(true)
     expect(matcher.matches('a0/deep/x.ts', 'a0/*.ts')).toBe(false)

@@ -42,8 +42,7 @@ export interface RemoteNodeKeyPair {
 
 /** 一帧的解码结果:成功带帧,失败带一句可读因由(因由只进日志,不回给对端当协议内容)。 */
 export type FrameDecodeResult<TFrame> =
-  | { readonly ok: true, readonly frame: TFrame }
-  | { readonly ok: false, readonly reason: string }
+  { readonly ok: true; readonly frame: TFrame } | { readonly ok: false; readonly reason: string }
 
 /**
  * 关闭码判决:还试不试。
@@ -62,14 +61,14 @@ export type RemoteNodeCloseAction =
 
 /** 收到一枚 challenge 后的三选一:补签名、走配对、停手。 */
 export type RemoteNodeHandshakeStep =
-  | { readonly kind: 'authenticate', readonly frame: RemoteNodeAuthenticate }
+  | { readonly kind: 'authenticate'; readonly frame: RemoteNodeAuthenticate }
   | {
       readonly kind: 'pair'
       readonly frame: RemoteNodePair
       /** 本轮新生成的密钥对;`paired` 到达后才由调用方落盘,配对没成就丢弃。 */
       readonly keyPair: RemoteNodeKeyPair
     }
-  | { readonly kind: 'stop', readonly error: RemoteNodeClientFailure }
+  | { readonly kind: 'stop'; readonly error: RemoteNodeClientFailure }
 
 /** 握手判定的全部入参:一枚 challenge、本机现有凭据、人给的一次性配对码。 */
 export interface RemoteNodeHandshakeInput {
@@ -173,7 +172,7 @@ export interface RemoteNodeProgressEvent {
 
 /** 按本机能力 id 找绑定;装配方从投影里摘下来交给隔离适配器。 */
 export type RemoteNodeBindingResolver = (
-  localCapabilityId: string,
+  localCapabilityId: string
 ) => LooseOptional<RemoteNodeCapabilityBinding>
 
 /**
@@ -211,12 +210,7 @@ export interface RemoteNodeReadyWaiter {
 
 /** 一条连接在握手状态机里的位置;`closed` 是终态。 */
 export type RemoteNodeConnectionPhase =
-  | 'hello'
-  | 'pair'
-  | 'pairing'
-  | 'authenticate'
-  | 'ready'
-  | 'closed'
+  'hello' | 'pair' | 'pairing' | 'authenticate' | 'ready' | 'closed'
 
 /** Node 侧记的一条在线连接。 */
 export interface RemoteNodeConnection {

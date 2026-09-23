@@ -12,11 +12,15 @@ export function parseReleaseArguments(argv) {
         throw new Error(`${argument} requires a value`)
       }
       if (argument === '--local-tag') {
-        if (options.localTag !== undefined) throw new Error('--local-tag must be specified exactly once')
+        if (options.localTag !== undefined)
+          throw new Error('--local-tag must be specified exactly once')
         if (value !== value.trim()) throw new Error('--local-tag must be an exact tag name')
         options.localTag = value
       } else {
-        const selectors = value.split(',').map((entry) => entry.trim()).filter(Boolean)
+        const selectors = value
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter(Boolean)
         if (selectors.length === 0) throw new Error('--only requires at least one package name')
         options.onlySelectors.push(...selectors)
       }
@@ -26,10 +30,14 @@ export function parseReleaseArguments(argv) {
     throw new Error('--local-tag is a real publication mode; use --dry-run separately')
   }
   if (!options.dryRun && !options.localTag) {
-    throw new Error('A real publication requires --local-tag <tag> from a maintained local checkout')
+    throw new Error(
+      'A real publication requires --local-tag <tag> from a maintained local checkout'
+    )
   }
   if (!options.dryRun && options.skipBuild) {
-    throw new Error('--skip-build is a dry-run shortcut; a real publish must pack freshly built output')
+    throw new Error(
+      '--skip-build is a dry-run shortcut; a real publish must pack freshly built output'
+    )
   }
   return options
 }
@@ -37,7 +45,9 @@ export function parseReleaseArguments(argv) {
 export function githubRepositoryIdentity(repository) {
   const input = typeof repository === 'string' ? repository : repository?.url
   if (typeof input !== 'string') throw new Error('Local publishing requires package.repository')
-  const normalized = input.replace(/^git\+/u, '').replace(/^git@github\.com:/u, 'ssh://git@github.com/')
+  const normalized = input
+    .replace(/^git\+/u, '')
+    .replace(/^git@github\.com:/u, 'ssh://git@github.com/')
   let url
   try {
     url = new URL(normalized)
@@ -45,23 +55,35 @@ export function githubRepositoryIdentity(repository) {
     throw new Error('Release repository must be an exact GitHub HTTPS or SSH repository URL')
   }
   if (
-    url.hostname !== 'github.com'
-    || !['https:', 'ssh:'].includes(url.protocol)
-    || url.port || url.search || url.hash || url.password
-    || (url.protocol === 'https:' && url.username)
-    || (url.protocol === 'ssh:' && url.username !== 'git')
-  ) throw new Error('Release repository must be an exact GitHub HTTPS or SSH repository URL')
+    url.hostname !== 'github.com' ||
+    !['https:', 'ssh:'].includes(url.protocol) ||
+    url.port ||
+    url.search ||
+    url.hash ||
+    url.password ||
+    (url.protocol === 'https:' && url.username) ||
+    (url.protocol === 'ssh:' && url.username !== 'git')
+  )
+    throw new Error('Release repository must be an exact GitHub HTTPS or SSH repository URL')
   const match = /^\/([A-Za-z0-9-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/u.exec(url.pathname)
-  if (!match || ['.', '..'].includes(match[2])) throw new Error('Release repository must name one GitHub repository')
+  if (!match || ['.', '..'].includes(match[2]))
+    throw new Error('Release repository must name one GitHub repository')
   return `${match[1]}/${match[2]}`.toLowerCase()
 }
 
 /** runForOutput is injected so the complete identity gate can be tested without a network or credentials. */
-export function assertLocalReleaseIdentity({ root, tag, repository, expectedSourceSha, runForOutput }) {
+export function assertLocalReleaseIdentity({
+  root,
+  tag,
+  repository,
+  expectedSourceSha,
+  runForOutput,
+}) {
   const git = (args) => runForOutput('git', args, root)
   git(['check-ref-format', `refs/tags/${tag}`])
   const sourceSha = git(['rev-parse', 'HEAD'])
-  if (!/^[a-f0-9]{40}$/u.test(sourceSha)) throw new Error('Local release HEAD must be a full commit SHA')
+  if (!/^[a-f0-9]{40}$/u.test(sourceSha))
+    throw new Error('Local release HEAD must be a full commit SHA')
   if (expectedSourceSha && sourceSha !== expectedSourceSha) {
     throw new Error('Release source changed after validation')
   }

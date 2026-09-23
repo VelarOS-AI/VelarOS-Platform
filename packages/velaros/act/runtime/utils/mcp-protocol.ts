@@ -1,9 +1,9 @@
-import { ErrorCode } from "@modelcontextprotocol/sdk/types.js";
+import { ErrorCode } from '@modelcontextprotocol/sdk/types.js'
 
-import { isBoolean, isRecord, isString } from "@velaros-ai/core";
-import { asRecord, readString } from "@velaros-ai/core/utils/unknownJsonRecord";
+import { isBoolean, isRecord, isString } from '@velaros-ai/core'
+import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
-import type { McpToolDescriptor } from "../types/mcp.js";
+import type { McpToolDescriptor } from '../types/mcp.js'
 
 // MCP 协议边界上的无状态解析：server 报上来的原始 JSON 与 SDK 抛出的错误，在这里收敛成本包认识的形状。
 // 不持有连接、不记状态，纯函数，`McpClientConnection` 逐条调用。
@@ -47,4 +47,10 @@ export function isMcpTimeoutError(error: unknown): boolean {
 }
 
 /** 返回可由宿主继续 OAuth 的标准错误，不触发产品交互。 */
-export function mcpAuthorizationRequired(authorizationUrl:Nullable<string>):Error{return Object.assign(new Error('MCP 服务器要求先完成 OAuth 授权'),{name:'McpAuthorizationRequiredError',code:'MCP_AUTHORIZATION_REQUIRED',authorizationUrl})}
+export function mcpAuthorizationRequired(authorizationUrl: Nullable<string>): Error {
+  return Object.assign(new Error('MCP 服务器要求先完成 OAuth 授权'), {
+    name: 'McpAuthorizationRequiredError',
+    code: 'MCP_AUTHORIZATION_REQUIRED',
+    authorizationUrl,
+  })
+}

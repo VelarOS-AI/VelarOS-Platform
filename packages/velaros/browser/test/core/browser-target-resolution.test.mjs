@@ -93,10 +93,7 @@ test('inspection refs are generation-scoped, fail closed, and keep stored target
     '- button "Cancel" (ref=@e2:g1)',
     'custom ref=@e10:g1; state=ready',
   ])
-  assert.equal(
-    store.hydrateTarget('session', target({ ref: '@e1' })).css,
-    '#save',
-  )
+  assert.equal(store.hydrateTarget('session', target({ ref: '@e1' })).css, '#save')
 
   const removeAccount = target({
     ref: '@e1',
@@ -104,41 +101,44 @@ test('inspection refs are generation-scoped, fail closed, and keep stored target
     role: 'button',
     text: 'Delete account',
   })
-  store.storeInspection('session', inspection({
-    actions: [{ text: 'Delete account', role: 'button', target: removeAccount }],
-    lines: ['- button "Delete account" [ref=@e1]'],
-  }))
+  store.storeInspection(
+    'session',
+    inspection({
+      actions: [{ text: 'Delete account', role: 'button', target: removeAccount }],
+      lines: ['- button "Delete account" [ref=@e1]'],
+    })
+  )
 
   assert.equal(removeAccount.ref, '@e1:g2')
   assert.throws(
     () => store.hydrateTarget('session', target({ ref: '@e1:g1' })),
-    (error) => error?.code === 'VALIDATION' && /ref 已失效/u.test(error.message),
+    (error) => error?.code === 'VALIDATION' && /ref 已失效/u.test(error.message)
   )
   assert.throws(
     () => store.hydrateTarget('session', target({ ref: '@e1' })),
-    (error) => error?.context?.reason === 'stale-ref',
+    (error) => error?.context?.reason === 'stale-ref'
   )
-  assert.equal(
-    store.hydrateTarget('session', target({ ref: '@e1:g2' })).css,
-    '#remove-account',
-  )
+  assert.equal(store.hydrateTarget('session', target({ ref: '@e1:g2' })).css, '#remove-account')
   assert.throws(
     () => store.hydrateTarget('session', target({ ref: '@e1:g1', css: '#known-safe-target' })),
-    (error) => error?.context?.reason === 'stale-ref',
+    (error) => error?.context?.reason === 'stale-ref'
   )
   assert.throws(
     () => store.hydrateTarget('session', target({ ref: 'not-a-ref', css: '#known-safe-target' })),
-    (error) => error?.context?.reason === 'invalid-ref',
+    (error) => error?.context?.reason === 'invalid-ref'
   )
 
-  const authoritative = store.hydrateTarget('session', target({
-    ref: '@e1:g2',
-    css: '#caller-override',
-    role: 'link',
-    text: 'Caller override',
-    name: 'Caller override',
-    attributes: { 'data-qa': 'caller-override' },
-  }))
+  const authoritative = store.hydrateTarget(
+    'session',
+    target({
+      ref: '@e1:g2',
+      css: '#caller-override',
+      role: 'link',
+      text: 'Caller override',
+      name: 'Caller override',
+      attributes: { 'data-qa': 'caller-override' },
+    })
+  )
   assert.deepEqual(authoritative, {
     ref: '@e1:g2',
     css: '#remove-account',
@@ -149,7 +149,7 @@ test('inspection refs are generation-scoped, fail closed, and keep stored target
   })
   assert.equal(
     store.hydrateTarget('session', target({ css: '#independent-target' })).css,
-    '#independent-target',
+    '#independent-target'
   )
 })
 
@@ -167,9 +167,7 @@ test('snapshot only publishes refs retained by the final target collection', () 
 
   store.storeInspection('low-max-elements', lowMaxElementsInspection)
 
-  assert.deepEqual(lowMaxElementsInspection.snapshot.lines, [
-    '- button "Primary" [ref=@e1:g1]',
-  ])
+  assert.deepEqual(lowMaxElementsInspection.snapshot.lines, ['- button "Primary" [ref=@e1:g1]'])
   assert.equal(lowMaxElementsInspection.snapshot.refCount, 1)
   assert.equal(lowMaxElementsInspection.snapshot.truncated, true)
   for (const line of lowMaxElementsInspection.snapshot.lines) {
@@ -202,7 +200,7 @@ test('external drag hydrates both sourceRef and targetRef before building the pa
         title: 'Example',
       }),
     },
-    store,
+    store
   )
 
   await engine.dragTargets(
@@ -211,7 +209,7 @@ test('external drag hydrates both sourceRef and targetRef before building the pa
     {
       source: target({ ref: source.ref }),
       target: target({ ref: destination.ref }),
-    },
+    }
   )
 
   assert.ok(dragScript.includes('#source'))
@@ -239,7 +237,7 @@ test('embedded drag hydrates both sourceRef and targetRef before building the pa
       wrapPageDriver: () => driver,
     },
     {},
-    store,
+    store
   )
 
   await engine.dragTargets(
@@ -248,7 +246,7 @@ test('embedded drag hydrates both sourceRef and targetRef before building the pa
     {
       source: target({ ref: source.ref }),
       target: target({ ref: destination.ref }),
-    },
+    }
   )
 
   assert.ok(dragScript.includes('#embedded-source'))
@@ -257,14 +255,17 @@ test('embedded drag hydrates both sourceRef and targetRef before building the pa
 
 test('target self-healing requires a reliable identity signal and a unique best match', () => {
   const engine = new CdpInteractionEngine({}, new BrowserTargetRefStore())
-  const find = (stale, candidates) => engine.findSelfHealingTarget(
-    { action: 'click', target: stale },
-    inspection({ actions: candidates.map((candidate) => ({
-      text: candidate.text ?? '',
-      role: 'button',
-      target: candidate,
-    })) }),
-  )
+  const find = (stale, candidates) =>
+    engine.findSelfHealingTarget(
+      { action: 'click', target: stale },
+      inspection({
+        actions: candidates.map((candidate) => ({
+          text: candidate.text ?? '',
+          role: 'button',
+          target: candidate,
+        })),
+      })
+    )
 
   assert.equal(
     find(
@@ -273,9 +274,9 @@ test('target self-healing requires a reliable identity signal and a unique best 
         text: 'Save',
         attributes: { 'data-testid': 'save-primary' },
       }),
-      [target({ css: '#new-save', text: 'Save', attributes: {} })],
+      [target({ css: '#new-save', text: 'Save', attributes: {} })]
     ),
-    null,
+    null
   )
   assert.equal(
     find(
@@ -289,13 +290,15 @@ test('target self-healing requires a reliable identity signal and a unique best 
           url: null,
         },
       }),
-      [target({
-        css: '#new-save',
-        text: 'Save',
-        frame: { css: null, name: null, title: 'Payment Frame', url: null },
-      })],
+      [
+        target({
+          css: '#new-save',
+          text: 'Save',
+          frame: { css: null, name: null, title: 'Payment Frame', url: null },
+        }),
+      ]
     ),
-    null,
+    null
   )
   assert.equal(
     find(
@@ -304,13 +307,15 @@ test('target self-healing requires a reliable identity signal and a unique best 
         text: 'Save',
         attributes: { 'data-testid': 'SavePrimary' },
       }),
-      [target({
-        css: '#new-save',
-        text: 'Save',
-        attributes: { 'data-testid': 'saveprimary' },
-      })],
+      [
+        target({
+          css: '#new-save',
+          text: 'Save',
+          attributes: { 'data-testid': 'saveprimary' },
+        }),
+      ]
     ),
-    null,
+    null
   )
   assert.equal(
     find(
@@ -319,13 +324,15 @@ test('target self-healing requires a reliable identity signal and a unique best 
         text: 'Save',
         frame: { css: 'iframe#Checkout', name: null, title: null, url: null },
       }),
-      [target({
-        css: '#new-save',
-        text: 'Save',
-        frame: { css: 'iframe#checkout', name: null, title: null, url: null },
-      })],
+      [
+        target({
+          css: '#new-save',
+          text: 'Save',
+          frame: { css: 'iframe#checkout', name: null, title: null, url: null },
+        }),
+      ]
     ),
-    null,
+    null
   )
   assert.equal(
     find(
@@ -334,13 +341,15 @@ test('target self-healing requires a reliable identity signal and a unique best 
         text: 'Save',
         frame: { css: null, name: null, title: null, url: 'https://example.test/Checkout' },
       }),
-      [target({
-        css: '#new-save',
-        text: 'Save',
-        frame: { css: null, name: null, title: null, url: 'https://example.test/checkout' },
-      })],
+      [
+        target({
+          css: '#new-save',
+          text: 'Save',
+          frame: { css: null, name: null, title: null, url: 'https://example.test/checkout' },
+        }),
+      ]
     ),
-    null,
+    null
   )
   assert.equal(
     find(
@@ -349,40 +358,35 @@ test('target self-healing requires a reliable identity signal and a unique best 
         text: 'Save',
         frame: { css: null, name: null, title: 'Payment Frame', url: null },
       }),
-      [target({
-        css: '#new-save',
-        text: 'Save',
-        frame: { css: null, name: null, title: 'payment frame', url: null },
-      })],
-    )?.css,
-    '#new-save',
-  )
-  assert.equal(
-    find(
-      target({ css: '#old-save', role: 'button' }),
-      [target({ css: '#delete-account', role: 'button', text: 'Delete account' })],
-    ),
-    null,
-  )
-  assert.equal(
-    find(
-      target({ css: '#old-save', role: 'button', text: 'Save' }),
       [
-        target({ css: '#delete-account', role: 'button', text: 'Delete account' }),
-        target({ css: '#new-save', role: 'button', text: 'Save' }),
-      ],
+        target({
+          css: '#new-save',
+          text: 'Save',
+          frame: { css: null, name: null, title: 'payment frame', url: null },
+        }),
+      ]
     )?.css,
-    '#new-save',
+    '#new-save'
   )
   assert.equal(
-    find(
-      target({ css: '#old-save', role: 'button', text: 'Save' }),
-      [
-        target({ css: '#save-primary', role: 'button', text: 'Save' }),
-        target({ css: '#save-secondary', role: 'button', text: 'Save' }),
-      ],
-    ),
-    null,
+    find(target({ css: '#old-save', role: 'button' }), [
+      target({ css: '#delete-account', role: 'button', text: 'Delete account' }),
+    ]),
+    null
+  )
+  assert.equal(
+    find(target({ css: '#old-save', role: 'button', text: 'Save' }), [
+      target({ css: '#delete-account', role: 'button', text: 'Delete account' }),
+      target({ css: '#new-save', role: 'button', text: 'Save' }),
+    ])?.css,
+    '#new-save'
+  )
+  assert.equal(
+    find(target({ css: '#old-save', role: 'button', text: 'Save' }), [
+      target({ css: '#save-primary', role: 'button', text: 'Save' }),
+      target({ css: '#save-secondary', role: 'button', text: 'Save' }),
+    ]),
+    null
   )
 })
 
@@ -402,14 +406,17 @@ test('failed internal self-heal inspection does not invalidate refs already show
   }
   const driver = {
     kind: 'external',
-    executeJavaScript: async () => inspection({
-      actions: [{
-        text: 'Different',
-        role: 'button',
-        target: target({ ref: '@e1', css: '#different', text: 'Different' }),
-      }],
-      lines: ['- button "Different" [ref=@e1]'],
-    }),
+    executeJavaScript: async () =>
+      inspection({
+        actions: [
+          {
+            text: 'Different',
+            role: 'button',
+            target: target({ ref: '@e1', css: '#different', text: 'Different' }),
+          },
+        ],
+        lines: ['- button "Different" [ref=@e1]'],
+      }),
   }
   const engine = new CdpInteractionEngine({}, store)
 
@@ -461,35 +468,75 @@ function recoveryContext(labels, options = {}) {
 
 test('coordinate recovery refuses role-only and duplicate-label screenshot matches', async () => {
   const roleOnly = recoveryContext([
-    { index: 1, tagName: 'button', role: 'button', text: 'Delete account', selector: '#delete', x: 10, y: 10, width: 80, height: 30 },
+    {
+      index: 1,
+      tagName: 'button',
+      role: 'button',
+      text: 'Delete account',
+      selector: '#delete',
+      x: 10,
+      y: 10,
+      width: 80,
+      height: 30,
+    },
   ])
   const roleOnlyResult = await performTargetActionWithRecovery(
     { action: 'click', target: target({ role: 'button' }) },
-    roleOnly.ctx,
+    roleOnly.ctx
   )
   assert.equal(roleOnlyResult.matched, false)
   assert.deepEqual(roleOnly.clicks, [])
 
   const duplicateText = recoveryContext([
-    { index: 1, tagName: 'button', role: 'button', text: 'Save', selector: '#save-one', x: 10, y: 10, width: 80, height: 30 },
-    { index: 2, tagName: 'button', role: 'button', text: 'Save', selector: '#save-two', x: 110, y: 10, width: 80, height: 30 },
+    {
+      index: 1,
+      tagName: 'button',
+      role: 'button',
+      text: 'Save',
+      selector: '#save-one',
+      x: 10,
+      y: 10,
+      width: 80,
+      height: 30,
+    },
+    {
+      index: 2,
+      tagName: 'button',
+      role: 'button',
+      text: 'Save',
+      selector: '#save-two',
+      x: 110,
+      y: 10,
+      width: 80,
+      height: 30,
+    },
   ])
   const duplicateResult = await performTargetActionWithRecovery(
     { action: 'click', target: target({ role: 'button', text: 'Save' }) },
-    duplicateText.ctx,
+    duplicateText.ctx
   )
   assert.equal(duplicateResult.matched, false)
   assert.deepEqual(duplicateText.clicks, [])
 
   const conflictingStableAttribute = recoveryContext([
-    { index: 1, tagName: 'button', role: 'button', text: 'Save', selector: '[data-qa="danger-save"]', x: 10, y: 10, width: 80, height: 30 },
+    {
+      index: 1,
+      tagName: 'button',
+      role: 'button',
+      text: 'Save',
+      selector: '[data-qa="danger-save"]',
+      x: 10,
+      y: 10,
+      width: 80,
+      height: 30,
+    },
   ])
   const conflictingResult = await performTargetActionWithRecovery(
     {
       action: 'click',
       target: target({ role: 'button', text: 'Save', attributes: { 'data-qa': 'safe-save' } }),
     },
-    conflictingStableAttribute.ctx,
+    conflictingStableAttribute.ctx
   )
   assert.equal(conflictingResult.matched, false)
   assert.deepEqual(conflictingStableAttribute.clicks, [])
@@ -497,22 +544,52 @@ test('coordinate recovery refuses role-only and duplicate-label screenshot match
 
 test('coordinate recovery clicks one exact identity match and bounds fallback requires one selector match', async () => {
   const unique = recoveryContext([
-    { index: 1, tagName: 'button', role: 'button', text: 'Save', selector: '#save', x: 20, y: 30, width: 100, height: 40 },
-    { index: 2, tagName: 'button', role: 'button', text: 'Delete', selector: '#delete', x: 20, y: 90, width: 100, height: 40 },
+    {
+      index: 1,
+      tagName: 'button',
+      role: 'button',
+      text: 'Save',
+      selector: '#save',
+      x: 20,
+      y: 30,
+      width: 100,
+      height: 40,
+    },
+    {
+      index: 2,
+      tagName: 'button',
+      role: 'button',
+      text: 'Delete',
+      selector: '#delete',
+      x: 20,
+      y: 90,
+      width: 100,
+      height: 40,
+    },
   ])
   const uniqueResult = await performTargetActionWithRecovery(
     { action: 'click', target: target({ role: 'button', text: 'Save' }) },
-    unique.ctx,
+    unique.ctx
   )
   assert.equal(uniqueResult.matched, true)
   assert.deepEqual(unique.clicks, [{ x: 70, y: 50 }])
 
   const stableDataAttribute = recoveryContext([
-    { index: 1, tagName: 'button', role: 'button', text: '', selector: '[data-qa="safe-save"]', x: 30, y: 40, width: 80, height: 20 },
+    {
+      index: 1,
+      tagName: 'button',
+      role: 'button',
+      text: '',
+      selector: '[data-qa="safe-save"]',
+      x: 30,
+      y: 40,
+      width: 80,
+      height: 20,
+    },
   ])
   const stableResult = await performTargetActionWithRecovery(
     { action: 'click', target: target({ attributes: { 'data-qa': 'safe-save' } }) },
-    stableDataAttribute.ctx,
+    stableDataAttribute.ctx
   )
   assert.equal(stableResult.matched, true)
   assert.deepEqual(stableDataAttribute.clicks, [{ x: 70, y: 50 }])
@@ -526,7 +603,7 @@ test('coordinate recovery clicks one exact identity match and bounds fallback re
   })
   const boundsResult = await performTargetActionWithRecovery(
     { action: 'click', target: target({ css: '.save' }) },
-    ambiguousBounds.ctx,
+    ambiguousBounds.ctx
   )
   assert.equal(boundsResult.matched, false)
   assert.deepEqual(ambiguousBounds.clicks, [])

@@ -1,12 +1,16 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import { isArray, isNumber, isPlainObject, isString, Log, trimmedStringOrEmpty } from '@velaros-ai/core'
+import {
+  isArray,
+  isNumber,
+  isPlainObject,
+  isString,
+  Log,
+  trimmedStringOrEmpty,
+} from '@velaros-ai/core'
 
-import type {
-  ExternalLanguageDiagnostic,
-  ExternalLanguageLocation,
-} from '../../types/project.js'
+import type { ExternalLanguageDiagnostic, ExternalLanguageLocation } from '../../types/project.js'
 
 const log = Log.tag('ExternalLanguageServer')
 
@@ -46,7 +50,11 @@ export function normalizeLspDiagnostic(
   const message = trimmedStringOrEmpty(value.message)
   if (!isNumber(start.line) || !isNumber(start.character) || !message) return null
   const severity =
-    value.severity === 2 ? 'warning' : value.severity === 3 || value.severity === 4 ? 'info' : 'error'
+    value.severity === 2
+      ? 'warning'
+      : value.severity === 3 || value.severity === 4
+        ? 'info'
+        : 'error'
   return {
     severity,
     path,

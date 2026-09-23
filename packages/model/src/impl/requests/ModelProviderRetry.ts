@@ -9,10 +9,7 @@ import { planProviderRetry, waitForRetry } from '../../utils/retry'
  */
 export interface ModelProviderRetryApi {
   /** 只把能安全当成瞬时传输/服务端故障的失败判成可重试；判不出来就返回 null。 */
-  plan(
-    error: unknown,
-    options: ModelProviderRetryOptions
-  ): Nullable<ModelProviderRetryDecision>
+  plan(error: unknown, options: ModelProviderRetryOptions): Nullable<ModelProviderRetryDecision>
   /** 等一次退避；等待期间被取消就把取消原因抛出去。 */
   wait(delayMs: number, signal: AbortSignal): Promise<void>
 }

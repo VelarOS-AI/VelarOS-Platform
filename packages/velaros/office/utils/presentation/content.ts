@@ -3,15 +3,23 @@
 import { isArray, isEmpty, isString, optionalWhen } from '@velaros-ai/core'
 
 import { OfficeInputLimits } from '../../contract/constants.js'
-import type { OfficePresentationInput, PresentationSlideInput, PresentationTemplate } from '../../types/office.js'
+import type {
+  OfficePresentationInput,
+  PresentationSlideInput,
+  PresentationTemplate,
+} from '../../types/office.js'
 import { OfficeTuning } from '../tuning.js'
 
 import { buildTemplatePresentationSlide } from './templates.js'
 
 /** 将输入统一转成 PresentationSlideInput 列表。 */
-export function normalizePresentationSlides(input: OfficePresentationInput): PresentationSlideInput[] {
+export function normalizePresentationSlides(
+  input: OfficePresentationInput
+): PresentationSlideInput[] {
   if (isArray(input.slides)) return input.slides
-  return isString(input.content) ? parsePresentationContentToSlides(input.content, input.title, input.template ?? 'modern') : []
+  return isString(input.content)
+    ? parsePresentationContentToSlides(input.content, input.title, input.template ?? 'modern')
+    : []
 }
 
 /** 把 Markdown/纯文本拆成简单标题+正文幻灯片。 */
@@ -57,7 +65,7 @@ export function buildPresentationSlideFromLines(
   deckTitle?: string,
   template: PresentationTemplate = 'modern'
 ): PresentationSlideInput {
-  let slideTitle = optionalWhen((index === 0), deckTitle)
+  let slideTitle = optionalWhen(index === 0, deckTitle)
   const bodyLines: string[] = []
   for (const rawLine of lines) {
     const line = rawLine.trim()

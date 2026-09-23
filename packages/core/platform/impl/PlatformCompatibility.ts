@@ -5,8 +5,21 @@
 
 import { isEmpty, isNotNull, isPlainObject } from '@velaros-ai/core'
 
-import type { DefaultAppDataPathOptions, PathTextContainmentOptions, PlatformCompatibilityOptions, ShellCommandSpecOptions } from '../types/options.js'
-import type { BackgroundShellLaunchOptions, CommandSpec, DirectorySymlinkType, EditorCommandDefinition, PathTextSeparator, RuntimePlatform, ShellKind } from '../types/platform.js'
+import type {
+  DefaultAppDataPathOptions,
+  PathTextContainmentOptions,
+  PlatformCompatibilityOptions,
+  ShellCommandSpecOptions,
+} from '../types/options.js'
+import type {
+  BackgroundShellLaunchOptions,
+  CommandSpec,
+  DirectorySymlinkType,
+  EditorCommandDefinition,
+  PathTextSeparator,
+  RuntimePlatform,
+  ShellKind,
+} from '../types/platform.js'
 import {
   buildShellCommandSpec,
   buildWindowsExecutableCandidates,
@@ -70,7 +83,11 @@ export interface PlatformCompatibilityApi {
    */
   isPathTextInside(candidate: string, root: string, options?: PathTextContainmentOptions): boolean
   /** 同 isPathTextInside；在里面时返回相对 root 的路径（各级名字保持 candidate 的写法、用 `/` 连接，root 本身是 `.`），不在返回 null。 */
-  relativePathTextInside(candidate: string, root: string, options?: PathTextContainmentOptions): Nullable<string>
+  relativePathTextInside(
+    candidate: string,
+    root: string,
+    options?: PathTextContainmentOptions
+  ): Nullable<string>
 
   // 可执行文件与 shell
 
@@ -102,7 +119,11 @@ export interface PlatformCompatibilityApi {
   /** 这个错误是否表示「目标进程已经不在了」（ESRCH）；终止进程时据此把竞态当成已经退出。 */
   isProcessMissingError(error: unknown): boolean
   /** 给人看的终止命令：Windows 用 taskkill 终止整棵进程树（force 时加 /F），其他平台用 kill -TERM 或 kill -KILL。 */
-  getTerminateCommand(pid: number, force?: boolean, options?: ShellCommandSpecOptions): Nullable<string>
+  getTerminateCommand(
+    pid: number,
+    force?: boolean,
+    options?: ShellCommandSpecOptions
+  ): Nullable<string>
   /** 按命令行文本兜底终止的命令（pkill -f，只取命令前 120 个字符）；Windows 没有，返回 null。 */
   getFallbackTerminateCommand(command: string): Nullable<string>
   /** Windows 上终止整棵进程树的 taskkill 启动规格；不是 Windows 或 pid 不合法时返回 null。 */
@@ -128,9 +149,16 @@ export interface PlatformCompatibilityApi {
   /** 用系统默认方式打开一个路径或网址的启动规格：macOS 用 open，Windows 用 start，Linux 用 xdg-open。 */
   getOpenExternalFallbackSpec(target: string): CommandSpec
   /** 启动一个应用的启动规格，可带要打开的路径和启动参数。 */
-  getOpenApplicationCommandSpec(application: string, args?: string[], targetPath?: string): CommandSpec
+  getOpenApplicationCommandSpec(
+    application: string,
+    args?: string[],
+    targetPath?: string
+  ): CommandSpec
   /** 用指定编辑器打开路径的启动规格：macOS 优先按应用名打开，否则用编辑器命令；两样都没有时返回 null。 */
-  getOpenPathWithEditorCommandSpec(path: string, editor: EditorCommandDefinition): Nullable<CommandSpec>
+  getOpenPathWithEditorCommandSpec(
+    path: string,
+    editor: EditorCommandDefinition
+  ): Nullable<CommandSpec>
   /** 应用数据目录的默认位置：Windows 在 APPDATA，macOS 在 ~/Library/Application Support，Linux 在 XDG_CONFIG_HOME 或 ~/.config。 */
   getDefaultAppDataPath(appName: string, options?: DefaultAppDataPathOptions): string
   /** 目录符号链接用哪种类型：Windows 用 junction（不需要管理员权限），其他平台用 dir。 */
@@ -221,23 +249,39 @@ export class PlatformCompatibility implements PlatformCompatibilityApi {
     return suffix ? `${root}${separator}${suffix}` : root
   }
 
-  public isPathTextInside(candidate: string, root: string, options?: PathTextContainmentOptions): boolean {
+  public isPathTextInside(
+    candidate: string,
+    root: string,
+    options?: PathTextContainmentOptions
+  ): boolean {
     return isNotNull(this.relativePathTextInside(candidate, root, options))
   }
 
-  public relativePathTextInside(candidate: string, root: string, options?: PathTextContainmentOptions): Nullable<string> {
+  public relativePathTextInside(
+    candidate: string,
+    root: string,
+    options?: PathTextContainmentOptions
+  ): Nullable<string> {
     const target = splitAbsolutePathText(candidate, this.platform)
     const base = splitAbsolutePathText(root, this.platform)
     if (!target || !base || target.segments.length < base.segments.length) return null
-    const caseSensitive = options?.caseSensitive ?? !(this.platform === 'win32' || this.platform === 'darwin')
-    const same = (left: string, right: string): boolean => (caseSensitive ? left === right : left.toLowerCase() === right.toLowerCase())
-    if (!same(target.root, base.root) || base.segments.some((segment, index) => !same(segment, target.segments[index]))) return null
+    const caseSensitive =
+      options?.caseSensitive ?? !(this.platform === 'win32' || this.platform === 'darwin')
+    const same = (left: string, right: string): boolean =>
+      caseSensitive ? left === right : left.toLowerCase() === right.toLowerCase()
+    if (
+      !same(target.root, base.root) ||
+      base.segments.some((segment, index) => !same(segment, target.segments[index]))
+    )
+      return null
     const rest = target.segments.slice(base.segments.length)
     return isEmpty(rest) ? '.' : rest.join('/')
   }
 
   public normalizeUserPathInput(inputPath: string, homeDir?: string): string {
-    const normalizedPath = inputPath.replace(PlatformCompatibility.UnicodeSpacesPattern, ' ').replace(/^@/, '')
+    const normalizedPath = inputPath
+      .replace(PlatformCompatibility.UnicodeSpacesPattern, ' ')
+      .replace(/^@/, '')
     const normalizedHome = homeDir?.trim()
     if (!normalizedHome) return normalizedPath
     if (normalizedPath === '~') return normalizedHome
@@ -274,13 +318,16 @@ export class PlatformCompatibility implements PlatformCompatibilityApi {
 
   public getPreferredShellPath(env: NodeJS.ProcessEnv = this.env): string {
     if (!this.isWindows()) return preferredPosixShellPath(this.platform, env)
-    return Object.entries(env).find(([key]) => key.toUpperCase() === 'VELAROS_SHELL_PATH')?.[1]
-      || Object.entries(env).find(([key]) => key.toUpperCase() === 'VELAROS_GIT_BASH')?.[1]
-      || WindowsCommandShellPath
+    return (
+      Object.entries(env).find(([key]) => key.toUpperCase() === 'VELAROS_SHELL_PATH')?.[1] ||
+      Object.entries(env).find(([key]) => key.toUpperCase() === 'VELAROS_GIT_BASH')?.[1] ||
+      WindowsCommandShellPath
+    )
   }
 
   public getInteractiveShellArgs(options: ShellCommandSpecOptions = {}): string[] {
-    const kind = options.kind ?? getShellKind(options.shellPath || this.getPreferredShellPath(options.env))
+    const kind =
+      options.kind ?? getShellKind(options.shellPath || this.getPreferredShellPath(options.env))
     if (kind === 'git-bash') return ['--noprofile', '--norc', '-i']
     if (kind === 'pwsh' || kind === 'powershell') return ['-NoLogo', '-NoProfile']
     return kind === 'cmd' ? ['/d', '/v:off'] : ['-l']
@@ -294,7 +341,10 @@ export class PlatformCompatibility implements PlatformCompatibilityApi {
   }
 
   public quoteShellArg(value: string, options: ShellCommandSpecOptions = {}): string {
-    return quoteShellArgument(value, options.kind ?? getShellKind(options.shellPath || this.getPreferredShellPath(options.env)))
+    return quoteShellArgument(
+      value,
+      options.kind ?? getShellKind(options.shellPath || this.getPreferredShellPath(options.env))
+    )
   }
 
   public getDefaultInspectableCommands(): string[] {
@@ -319,9 +369,14 @@ export class PlatformCompatibility implements PlatformCompatibilityApi {
     return error.code === 'ESRCH' || error.errno === 3 || error.errno === -3
   }
 
-  public getTerminateCommand(pid: number, force = false, options: ShellCommandSpecOptions = {}): Nullable<string> {
+  public getTerminateCommand(
+    pid: number,
+    force = false,
+    options: ShellCommandSpecOptions = {}
+  ): Nullable<string> {
     if (this.isWindows()) {
-      const kind = options.kind ?? getShellKind(options.shellPath || this.getPreferredShellPath(options.env))
+      const kind =
+        options.kind ?? getShellKind(options.shellPath || this.getPreferredShellPath(options.env))
       return `${kind === 'git-bash' ? 'MSYS_NO_PATHCONV=1 ' : ''}taskkill.exe /PID ${pid} /T${force ? ' /F' : ''}`
     }
     return force ? `kill -KILL ${pid}` : `kill -TERM ${pid}`
@@ -350,8 +405,7 @@ export class PlatformCompatibility implements PlatformCompatibilityApi {
   }
 
   public getProcessListCommandSpec(): Nullable<CommandSpec> {
-    if (this.isWindows())
-      return { file: 'tasklist.exe', args: ['/FO', 'CSV', '/NH'] }
+    if (this.isWindows()) return { file: 'tasklist.exe', args: ['/FO', 'CSV', '/NH'] }
     return {
       file: 'ps',
       args: ['-axo', 'pid=,ppid=,user=,lstart=,stat=,%cpu=,rss=,ucomm=,command='],
@@ -359,8 +413,7 @@ export class PlatformCompatibility implements PlatformCompatibilityApi {
   }
 
   public getOpenPortInspectionCommandSpec(): Nullable<CommandSpec> {
-    if (this.isWindows())
-      return { file: 'netstat.exe', args: ['-ano', '-p', 'tcp'] }
+    if (this.isWindows()) return { file: 'netstat.exe', args: ['-ano', '-p', 'tcp'] }
     return { file: 'lsof', args: ['-nP', '-iTCP', '-sTCP:LISTEN', '-FpcnT'] }
   }
 
@@ -469,7 +522,9 @@ export class PlatformCompatibility implements PlatformCompatibilityApi {
 }
 
 /** 按指定的平台与环境变量创建一份兼容层；什么都不指定时和 `currentPlatform` 一样按当前进程回答。 */
-export function createPlatform(options: PlatformCompatibilityOptions = {}): PlatformCompatibilityApi {
+export function createPlatform(
+  options: PlatformCompatibilityOptions = {}
+): PlatformCompatibilityApi {
   return new PlatformCompatibility(options)
 }
 

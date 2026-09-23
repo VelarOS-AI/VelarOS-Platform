@@ -5,7 +5,12 @@
 
 import { ProjectTransactionLimits } from '../../contract/constants.js'
 import type { ProjectChangeFeedWriter } from '../../contract/requires.js'
-import type { ProjectChangeListener, ProjectChangeListOptions, ProjectChangeRecord, ProjectChangeRecordInput } from '../../types/change-feed.js'
+import type {
+  ProjectChangeListener,
+  ProjectChangeListOptions,
+  ProjectChangeRecord,
+  ProjectChangeRecordInput,
+} from '../../types/change-feed.js'
 import { cloneChange } from '../../utils/transactions/change-records.js'
 
 export abstract class BaseProjectChangeFeed implements ProjectChangeFeedWriter {
@@ -40,7 +45,13 @@ export abstract class BaseProjectChangeFeed implements ProjectChangeFeedWriter {
 
   public list(options: ProjectChangeListOptions = {}): readonly ProjectChangeRecord[] {
     const before = options.beforeSequence ?? Number.POSITIVE_INFINITY
-    const limit = Math.max(1, Math.min(ProjectTransactionLimits.listMax, Math.floor(options.limit ?? ProjectTransactionLimits.listDefault)))
+    const limit = Math.max(
+      1,
+      Math.min(
+        ProjectTransactionLimits.listMax,
+        Math.floor(options.limit ?? ProjectTransactionLimits.listDefault)
+      )
+    )
     return [...this.changes.values()]
       .filter((change) => change.sequence < before)
       .sort((left, right) => right.sequence - left.sequence)

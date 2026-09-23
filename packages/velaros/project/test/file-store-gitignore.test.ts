@@ -42,7 +42,8 @@ function kernelRecordingCheckIgnore(exitCodes: number[]): Promise<ProjectKernel>
       command: {
         async run(input): Promise<CommandRunResult> {
           const result = await node.run(input)
-          if (input.command === 'git' && input.args?.[0] === 'check-ignore') exitCodes.push(result.exitCode)
+          if (input.command === 'git' && input.args?.[0] === 'check-ignore')
+            exitCodes.push(result.exitCode)
           return result
         },
       },
@@ -50,7 +51,10 @@ function kernelRecordingCheckIgnore(exitCodes: number[]): Promise<ProjectKernel>
   })
 }
 
-async function listedPaths(project: ProjectKernel, input: Parameters<ProjectKernel['listFiles']>[0]): Promise<string[]> {
+async function listedPaths(
+  project: ProjectKernel,
+  input: Parameters<ProjectKernel['listFiles']>[0]
+): Promise<string[]> {
   return (await project.listFiles(input)).map((entry) => entry.path).sort()
 }
 
@@ -91,7 +95,7 @@ for (const engine of engines) {
       expect(fromRoot).not.toContain('pkg/dist')
       expect(fromRoot).not.toContain('pkg/src/debug.log')
       expect(fromRoot.filter((path) => path.startsWith('pkg/'))).toEqual(
-        await listedPaths(project, { path: 'pkg', recursive: true }),
+        await listedPaths(project, { path: 'pkg', recursive: true })
       )
     })
 
@@ -103,9 +107,9 @@ for (const engine of engines) {
     test('显式指向被忽略目录：缺省照常列出其内容，显式要求排除时为空', async () => {
       expect(await listedPaths(project, { path: 'pkg/dist' })).toEqual(['pkg/dist/x.js'])
       expect(await listedPaths(project, { path: 'pkg/dist', excludeGitignored: true })).toEqual([])
-      expect(await listedPaths(project, { path: 'pkg', recursive: true, excludeGitignored: false })).toContain(
-        'pkg/dist/x.js',
-      )
+      expect(
+        await listedPaths(project, { path: 'pkg', recursive: true, excludeGitignored: false })
+      ).toContain('pkg/dist/x.js')
     })
   })
 }
@@ -116,7 +120,9 @@ test('列举跳过版本库内部：.git 目录与子模块里的 .git 链接文
   await writeFile(join(root, 'vendor/lib/.git'), 'gitdir: ../../.git/modules/lib\n')
   await writeFile(join(root, 'vendor/lib/index.ts'), 'export {}\n')
   const kernel = await createProjectKernel({ root })
-  const paths = (await kernel.listFiles({ recursive: true, maxDepth: 10 })).map((entry) => entry.path)
+  const paths = (await kernel.listFiles({ recursive: true, maxDepth: 10 })).map(
+    (entry) => entry.path
+  )
   expect(paths.filter((path) => path.split('/').includes('.git'))).toEqual([])
   expect(paths).toEqual(expect.arrayContaining(['pkg/src/y.ts', 'vendor/lib/index.ts']))
   expect((await kernel.read({ path: '.git/HEAD' })).content).toStartWith('ref: ')

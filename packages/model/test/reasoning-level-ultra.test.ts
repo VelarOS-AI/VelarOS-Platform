@@ -135,9 +135,9 @@ describe('reasoningLevel=ultra', () => {
     expect(
       createThinkingDepthProviderOptions('openai', OpenAiModelId, 'balanced', 'ultra')
     ).toEqual({ openai: { reasoningEffort: 'high', reasoningSummary: 'auto' } })
-    expect(createThinkingDepthProviderOptions('openai', OpenAiModelId, 'balanced', 'ultra')).toEqual(
-      createThinkingDepthProviderOptions('openai', OpenAiModelId, 'balanced', 'high')
-    )
+    expect(
+      createThinkingDepthProviderOptions('openai', OpenAiModelId, 'balanced', 'ultra')
+    ).toEqual(createThinkingDepthProviderOptions('openai', OpenAiModelId, 'balanced', 'high'))
   })
 
   test('包装层用本轮真实的 maxOutputTokens 重算预算', async () => {

@@ -11,7 +11,11 @@ import { AppError } from '@velaros-ai/core/error'
 import type { MemoryStoreOptions } from '../contract/requires.js'
 import type { MemoryScopeSummary } from '../types/memory.js'
 import { readDirectoryNames, readTextIfExists } from '../utils/fs.js'
-import { compareScopeSummaries, scopeDirectoryName, ScopeRecordFileName } from '../utils/scope-directory.js'
+import {
+  compareScopeSummaries,
+  scopeDirectoryName,
+  ScopeRecordFileName,
+} from '../utils/scope-directory.js'
 
 import type { MemoryScopeApi } from './MemoryScope.js'
 import { MemoryScope } from './MemoryScope.js'
@@ -28,12 +32,15 @@ export class MemoryStore implements MemoryStoreApi {
   constructor(private readonly root: string) {}
 
   public scope(scope: string): MemoryScopeApi {
-    if (!scope.trim()) throw new AppError('VALIDATION', '作用域是空的：产品层要给一个非空的作用域字符串')
+    if (!scope.trim())
+      throw new AppError('VALIDATION', '作用域是空的：产品层要给一个非空的作用域字符串')
     return new MemoryScope(scope, join(this.root, scopeDirectoryName(scope)))
   }
 
   public async listScopes(): Promise<MemoryScopeSummary[]> {
-    const summaries = await Promise.all((await readDirectoryNames(this.root)).map((name) => this.summarize(name)))
+    const summaries = await Promise.all(
+      (await readDirectoryNames(this.root)).map((name) => this.summarize(name))
+    )
     return summaries.filter(isPresent).sort(compareScopeSummaries)
   }
 
@@ -50,6 +57,7 @@ export class MemoryStore implements MemoryStoreApi {
 
 /** 造一个记忆库：root 是宿主给的根目录，要是绝对路径。 */
 export function createMemoryStore(options: MemoryStoreOptions): MemoryStoreApi {
-  if (!isAbsolute(options.root)) throw new AppError('VALIDATION', `记忆的根目录要是绝对路径，现在是 ${options.root}`)
+  if (!isAbsolute(options.root))
+    throw new AppError('VALIDATION', `记忆的根目录要是绝对路径，现在是 ${options.root}`)
   return new MemoryStore(options.root)
 }

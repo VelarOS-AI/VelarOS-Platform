@@ -6,15 +6,15 @@
 //   2. **符号链接层** `FileStore.authorize`：对 realpath 解析后的真实路径再比一次，拦
 //      「root 内的软链指向 root 外」。只有第 1 层时，一个 `ln -s / root/escape` 就能读全盘。
 // 两层必须共用同一份边界判定；分成两份实现时，**弱的那份就是实际安全水位**。
-import * as path from "node:path";
+import * as path from 'node:path'
 
 import { currentPlatform } from '@velaros-ai/core/platform'
 
-import { ProjectError } from "./errors.js";
+import { ProjectError } from './errors.js'
 
 /** 把路径里的反斜杠换成 /，去掉开头的 ./。 */
 export function normalizeRel(input: string): string {
-  return input.replace(/\\/g, "/").replace(/^\.\//, "");
+  return input.replace(/\\/g, '/').replace(/^\.\//, '')
 }
 
 /**
@@ -23,32 +23,32 @@ export function normalizeRel(input: string): string {
  * 已经 `path.resolve` 过、要么是 realpath 的结果，盘上的写法是什么就是什么。
  */
 export function isInsideRoot(rootAbs: string, abs: string): boolean {
-  return currentPlatform.isPathTextInside(abs, rootAbs, { caseSensitive: true });
+  return currentPlatform.isPathTextInside(abs, rootAbs, { caseSensitive: true })
 }
 
 /** 把相对 root 的路径（或绝对路径）解析成绝对路径；越出 root 就抛 PERMISSION_DENIED。这是根内约束的词法那一层。 */
 export function toAbs(root: string, relOrAbs: string): string {
-  const abs = path.resolve(root, relOrAbs);
-  const rootAbs = path.resolve(root);
+  const abs = path.resolve(root, relOrAbs)
+  const rootAbs = path.resolve(root)
   if (!isInsideRoot(rootAbs, abs)) {
-    throw new ProjectError("PERMISSION_DENIED", `路径出了当前项目：${relOrAbs}`);
+    throw new ProjectError('PERMISSION_DENIED', `路径出了当前项目：${relOrAbs}`)
   }
-  return abs;
+  return abs
 }
 
 /** 把路径换成相对 root 的写法，分隔符统一成 /。不检查是否越出 root。 */
 export function toRel(root: string, absOrRel: string): string {
-  const rootAbs = path.resolve(root);
-  const abs = path.resolve(root, absOrRel);
-  return normalizeRel(path.relative(rootAbs, abs));
+  const rootAbs = path.resolve(root)
+  const abs = path.resolve(root, absOrRel)
+  return normalizeRel(path.relative(rootAbs, abs))
 }
 
 /** 取小写的扩展名（带点，如 .ts）；没有扩展名时是空串。 */
 export function ext(input: string): string {
-  return path.extname(input).toLowerCase();
+  return path.extname(input).toLowerCase()
 }
 
 /** 取路径的父目录。 */
 export function dirname(input: string): string {
-  return path.dirname(input);
+  return path.dirname(input)
 }

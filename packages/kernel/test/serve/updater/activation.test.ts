@@ -1,8 +1,4 @@
-import {
-  readdir,
-  readFile,
-  stat,
-} from 'node:fs/promises'
+import { readdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
@@ -14,12 +10,7 @@ import {
   readKernelActivePointer,
 } from '../../../src/utils/updater/pointer'
 
-import {
-  artifactOf,
-  createFakeFetch,
-  createTemporaryDirectories,
-  manifestOf,
-} from './support'
+import { artifactOf, createFakeFetch, createTemporaryDirectories, manifestOf } from './support'
 
 const directories = createTemporaryDirectories('activation')
 
@@ -33,10 +24,12 @@ const releases = ['1.0.0', '1.1.0', '1.2.0', '2.0.0'].map((version) => ({
   artifact: artifactOf(`https://cdn.example.com/kernel-${version}.bin`, `kernel-${version}`),
 }))
 
-const manifest = manifestOf(releases.map((release) => ({
-  version: release.version,
-  artifacts: { 'linux-x64': release.artifact.descriptor },
-})))
+const manifest = manifestOf(
+  releases.map((release) => ({
+    version: release.version,
+    artifacts: { 'linux-x64': release.artifact.descriptor },
+  }))
+)
 
 function resources(): Record<string, Uint8Array | string> {
   const map: Record<string, Uint8Array | string> = {
@@ -48,10 +41,7 @@ function resources(): Record<string, Uint8Array | string> {
   return map
 }
 
-function createUpdater(
-  root: string,
-  overrides: Partial<KernelUpdaterOptions> = {},
-): KernelUpdater {
+function createUpdater(root: string, overrides: Partial<KernelUpdaterOptions> = {}): KernelUpdater {
   return new KernelUpdater({
     root,
     target: 'linux-x64',
@@ -64,7 +54,7 @@ function createUpdater(
 
 async function pointerOf(root: string): Promise<unknown> {
   return parseKernelActivePointer(
-    JSON.parse(await readFile(join(root, 'current.json'), 'utf8')) as unknown,
+    JSON.parse(await readFile(join(root, 'current.json'), 'utf8')) as unknown
   )
 }
 
@@ -95,8 +85,7 @@ describe('Kernel activation pointer', () => {
     expect(await updater.getActiveVersion()).toBe('1.1.0')
     if (process.platform !== 'win32')
       expect((await stat(join(root, 'current.json'))).mode & 0o777).toBe(0o600)
-    expect((await readdir(root)).filter((entry) => entry.includes('.tmp')))
-      .toEqual([])
+    expect((await readdir(root)).filter((entry) => entry.includes('.tmp'))).toEqual([])
     expect((await readdir(join(root, 'backups'))).length).toBe(1)
   })
 
@@ -122,12 +111,14 @@ describe('Kernel activation pointer', () => {
     const before = await updater.getActivePointer()
 
     const inspected: KernelHealthCheckContext[] = []
-    await expect(updater.activateVersion('1.1.0', {
-      healthCheck: (context) => {
-        inspected.push(context)
-        return false
-      },
-    })).rejects.toMatchObject({
+    await expect(
+      updater.activateVersion('1.1.0', {
+        healthCheck: (context) => {
+          inspected.push(context)
+          return false
+        },
+      })
+    ).rejects.toMatchObject({
       code: 'HEALTH_CHECK_FAILED',
       details: { version: '1.1.0', previousVersion: '1.0.0' },
     })
@@ -153,13 +144,14 @@ describe('Kernel activation pointer', () => {
     await updater.activateVersion('1.0.0')
     await updater.ensureInstalled('1.1.0')
 
-    const failure = await updater.activateVersion('1.1.0', {
-      healthCheck: () => Promise.reject(new Error('handshake timed out')),
-    }).catch((caught: unknown) => caught)
+    const failure = await updater
+      .activateVersion('1.1.0', {
+        healthCheck: () => Promise.reject(new Error('handshake timed out')),
+      })
+      .catch((caught: unknown) => caught)
 
     expect(failure).toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
-    expect((failure as Error).cause)
-      .toMatchObject({ message: 'handshake timed out' })
+    expect((failure as Error).cause).toMatchObject({ message: 'handshake timed out' })
     expect(await updater.getActiveVersion()).toBe('1.0.0')
   })
 
@@ -168,12 +160,12 @@ describe('Kernel activation pointer', () => {
     const updater = createUpdater(root)
     await updater.ensureInstalled('1.0.0')
 
-    await expect(updater.activateVersion('1.0.0', { healthCheck: () => false }))
-      .rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
+    await expect(
+      updater.activateVersion('1.0.0', { healthCheck: () => false })
+    ).rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
 
     expect(await updater.getActivePointer()).toBeUndefined()
-    await expect(stat(join(root, 'current.json'))).rejects
-      .toMatchObject({ code: 'ENOENT' })
+    await expect(stat(join(root, 'current.json'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   test('rolls back to the previously active version on request', async () => {
@@ -254,8 +246,7 @@ describe('Kernel compatibility resolution', () => {
       activated: true,
       pointer: { version: '1.2.0', previousVersion: '1.0.0' },
     })
-    expect((await readdir(join(root, 'versions'))).sort())
-      .toEqual(['1.0.0', '1.2.0'])
+    expect((await readdir(join(root, 'versions'))).sort()).toEqual(['1.0.0', '1.2.0'])
   })
 
   test('rolls the pointer back when the upgraded Kernel is unhealthy', async () => {
@@ -264,17 +255,18 @@ describe('Kernel compatibility resolution', () => {
     await updater.ensureInstalled('1.0.0')
     await updater.activateVersion('1.0.0')
 
-    await expect(updater.ensureCompatible({
-      range: '>=1.2.0 <2.0.0',
-      healthCheck: (context) => context.version === '1.0.0',
-    })).rejects.toMatchObject({
+    await expect(
+      updater.ensureCompatible({
+        range: '>=1.2.0 <2.0.0',
+        healthCheck: (context) => context.version === '1.0.0',
+      })
+    ).rejects.toMatchObject({
       code: 'HEALTH_CHECK_FAILED',
       details: { version: '1.2.0', previousVersion: '1.0.0' },
     })
 
     expect(await updater.getActiveVersion()).toBe('1.0.0')
-    expect((await readdir(join(root, 'versions'))).sort())
-      .toEqual(['1.0.0', '1.2.0'])
+    expect((await readdir(join(root, 'versions'))).sort()).toEqual(['1.0.0', '1.2.0'])
   })
 
   test('refuses to download when installation is not permitted', async () => {
@@ -282,10 +274,12 @@ describe('Kernel compatibility resolution', () => {
     const updater = createUpdater(root)
     await updater.ensureInstalled('1.0.0')
 
-    await expect(updater.ensureCompatible({
-      range: '^2.0.0',
-      allowInstall: false,
-    })).rejects.toMatchObject({
+    await expect(
+      updater.ensureCompatible({
+        range: '^2.0.0',
+        allowInstall: false,
+      })
+    ).rejects.toMatchObject({
       code: 'VERSION_UNAVAILABLE',
       details: { versionRange: '^2.0.0' },
     })
@@ -294,11 +288,10 @@ describe('Kernel compatibility resolution', () => {
   test('reports when no published version satisfies the requirement', async () => {
     const root = await directories.create()
 
-    await expect(createUpdater(root).ensureCompatible('^3.0.0')).rejects
-      .toMatchObject({
-        code: 'VERSION_UNAVAILABLE',
-        details: { versionRange: '^3.0.0', target: 'linux-x64' },
-      })
+    await expect(createUpdater(root).ensureCompatible('^3.0.0')).rejects.toMatchObject({
+      code: 'VERSION_UNAVAILABLE',
+      details: { versionRange: '^3.0.0', target: 'linux-x64' },
+    })
   })
 })
 
@@ -313,10 +306,11 @@ describe('Kernel version retention', () => {
     await updater.activateVersion('2.0.0')
 
     expect(await updater.pruneVersions()).toEqual(['1.0.0', '1.2.0'])
-    expect((await readdir(join(root, 'versions'))).sort())
-      .toEqual(['1.1.0', '2.0.0'])
-    expect((await readKernelActivePointer(join(root, 'current.json'))))
-      .toMatchObject({ version: '2.0.0', previousVersion: '1.1.0' })
+    expect((await readdir(join(root, 'versions'))).sort()).toEqual(['1.1.0', '2.0.0'])
+    expect(await readKernelActivePointer(join(root, 'current.json'))).toMatchObject({
+      version: '2.0.0',
+      previousVersion: '1.1.0',
+    })
   })
 
   test('prunes the pointer backups that every activation leaves behind', async () => {
@@ -353,7 +347,6 @@ describe('Kernel version retention', () => {
     }
 
     expect(await updater.pruneVersions({ retain: 3 })).toEqual(['1.0.0'])
-    expect((await readdir(join(root, 'versions'))).sort())
-      .toEqual(['1.1.0', '1.2.0', '2.0.0'])
+    expect((await readdir(join(root, 'versions'))).sort()).toEqual(['1.1.0', '1.2.0', '2.0.0'])
   })
 })

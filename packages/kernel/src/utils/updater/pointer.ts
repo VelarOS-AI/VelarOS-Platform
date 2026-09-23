@@ -4,10 +4,7 @@ import { isUndefined } from '@velaros-ai/core'
 
 import type { KernelActivePointer } from '../../types/updater'
 import { KernelUpdaterError } from '../errors'
-import {
-  readJsonFile,
-  writeJsonFileAtomic,
-} from '../fs'
+import { readJsonFile, writeJsonFileAtomic } from '../fs'
 
 import { KernelVersionSchema } from './manifest'
 
@@ -37,7 +34,7 @@ export function parseKernelActivePointer(input: unknown): KernelActivePointer {
       'INVALID_POINTER',
       '内核的激活版本指针不合法',
       {},
-      { cause: result.error },
+      { cause: result.error }
     )
   }
   return result.data
@@ -45,7 +42,7 @@ export function parseKernelActivePointer(input: unknown): KernelActivePointer {
 
 /** 读出激活指针；文件不在时是 undefined，读不动或内容不合格时抛 INVALID_POINTER。 */
 export async function readKernelActivePointer(
-  pointerPath: string,
+  pointerPath: string
 ): Promise<KernelActivePointer | undefined> {
   let input: unknown
   try {
@@ -55,7 +52,7 @@ export async function readKernelActivePointer(
       'INVALID_POINTER',
       '读不出内核的激活版本指针',
       { path: pointerPath },
-      { cause: error },
+      { cause: error }
     )
   }
   if (isUndefined(input)) return undefined
@@ -65,7 +62,7 @@ export async function readKernelActivePointer(
 /** 整份写下激活指针（先校验再原子改名落位），从不部分更新。 */
 export async function writeKernelActivePointer(
   pointerPath: string,
-  pointer: KernelActivePointer,
+  pointer: KernelActivePointer
 ): Promise<void> {
   await writeJsonFileAtomic(pointerPath, parseKernelActivePointer(pointer))
 }

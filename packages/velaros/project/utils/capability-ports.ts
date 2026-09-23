@@ -25,21 +25,35 @@ const AppCodeOfReason: Readonly<Record<string, string>> = Object.freeze({
 export function genericFailure(error: unknown): unknown {
   const failure = error as { reason?: unknown; message?: unknown; suggestedNextAction?: unknown }
   if (!isString(failure?.reason) || !isString(failure.message)) return error
-  const next = isString(failure.suggestedNextAction) ? `\n下一步：${failure.suggestedNextAction}` : ''
-  return new AppError(AppCodeOfReason[failure.reason] ?? 'VALIDATION', `${failure.message}${next}`, error)
+  const next = isString(failure.suggestedNextAction)
+    ? `\n下一步：${failure.suggestedNextAction}`
+    : ''
+  return new AppError(
+    AppCodeOfReason[failure.reason] ?? 'VALIDATION',
+    `${failure.message}${next}`,
+    error
+  )
 }
 
 /**
  * 把模型给的路径钳在项目之内，返回解析后的绝对路径。判定按**真实路径**算：只看字面时，
  * 项目里一个指向项目外的链接就能把读写引到项目外面去。
  */
-export async function insideProject(root: string, requested: string, what: '文件' | '工作目录' | '沙箱的源目录'): Promise<string> {
+export async function insideProject(
+  root: string,
+  requested: string,
+  what: '文件' | '工作目录' | '沙箱的源目录'
+): Promise<string> {
   const resolved = resolve(root, requested)
-  const inside = currentPlatform.isPathTextInside(await resolveRealPath(resolved), await resolveRealPath(root), { caseSensitive: true })
+  const inside = currentPlatform.isPathTextInside(
+    await resolveRealPath(resolved),
+    await resolveRealPath(root),
+    { caseSensitive: true }
+  )
   if (!inside) {
     throw new AppError(
       'PERMISSION',
-      `${what}必须在当前项目之内：${requested}（经符号链接指到项目外的也不行）；项目空间只碰项目里的东西，要碰外面的换系统空间`,
+      `${what}必须在当前项目之内：${requested}（经符号链接指到项目外的也不行）；项目空间只碰项目里的东西，要碰外面的换系统空间`
     )
   }
   return resolved

@@ -14,16 +14,51 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { BrowserNetworkControlOptions, BrowserNetworkMockResponse, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserPageDiagnosticEntry } from '../../types/browser.js'
-import type { CdpFetchRequestPausedEvent, CdpNetworkGetResponseBodyResponse, CdpNetworkLoadingFailedEvent, CdpNetworkLoadingFinishedEvent, CdpNetworkRequestPayload, CdpNetworkRequestRecord, CdpNetworkRequestWillBeSentEvent, CdpNetworkResponsePayload, CdpNetworkResponseReceivedEvent, CdpSend } from '../../types/cdp.js'
+import type {
+  BrowserNetworkControlOptions,
+  BrowserNetworkMockResponse,
+  BrowserNetworkRequestDetailsOptions,
+  BrowserNetworkResponseBodyOptions,
+  BrowserPageDiagnosticEntry,
+} from '../../types/browser.js'
+import type {
+  CdpFetchRequestPausedEvent,
+  CdpNetworkGetResponseBodyResponse,
+  CdpNetworkLoadingFailedEvent,
+  CdpNetworkLoadingFinishedEvent,
+  CdpNetworkRequestPayload,
+  CdpNetworkRequestRecord,
+  CdpNetworkRequestWillBeSentEvent,
+  CdpNetworkResponsePayload,
+  CdpNetworkResponseReceivedEvent,
+  CdpSend,
+} from '../../types/cdp.js'
 import type {
   BrowserPageDriverNetworkControlState,
   BrowserPageDriverNetworkIdleOptions,
   BrowserPageDriverNetworkRequestDetailsResult,
   BrowserPageDriverNetworkResponseBodyResult,
 } from '../../types/driver'
-import { assignNetworkBooleanDetail, assignNetworkStringDetail, buildMockResponseHeaders, cloneNetworkMockResponses, computeNetworkRequestDurationMs, matchesURLPattern, normalizeBlockedURLPatterns, normalizeExtraHTTPHeaders, normalizeHeadersRecord, normalizeNetworkStatus, normalizeNullableInteger, normalizeNullableNumber, resolveNetworkResponseDiagnosticLevel } from '../../utils/cdp/network'
-import { normalizeBlockedResourceTypes, normalizeNetworkMockResponses, normalizeNetworkResourceType } from '../../utils/cdp/network'
+import {
+  assignNetworkBooleanDetail,
+  assignNetworkStringDetail,
+  buildMockResponseHeaders,
+  cloneNetworkMockResponses,
+  computeNetworkRequestDurationMs,
+  matchesURLPattern,
+  normalizeBlockedURLPatterns,
+  normalizeExtraHTTPHeaders,
+  normalizeHeadersRecord,
+  normalizeNetworkStatus,
+  normalizeNullableInteger,
+  normalizeNullableNumber,
+  resolveNetworkResponseDiagnosticLevel,
+} from '../../utils/cdp/network'
+import {
+  normalizeBlockedResourceTypes,
+  normalizeNetworkMockResponses,
+  normalizeNetworkResourceType,
+} from '../../utils/cdp/network'
 import { clampPositiveInteger } from '../../utils/numbers.js'
 import { BrowserTuning } from '../../utils/tuning'
 
@@ -51,11 +86,17 @@ export interface BrowserCdpNetworkControllerApi {
   /** 统一 CDP 事件入口:两条 transport 的网络/Fetch 事件都路由到这里。 */
   handleCdpEvent(method: string, params: unknown): void
   /** 配置页面网络：离线、请求头、拦截与 mock。 */
-  configureNetwork(options: BrowserNetworkControlOptions): Promise<BrowserPageDriverNetworkControlState>
+  configureNetwork(
+    options: BrowserNetworkControlOptions
+  ): Promise<BrowserPageDriverNetworkControlState>
   /** 按 requestId 读响应体；不在缓存里就如实回报读不到。 */
-  readNetworkResponseBody(options: BrowserNetworkResponseBodyOptions): Promise<BrowserPageDriverNetworkResponseBodyResult>
+  readNetworkResponseBody(
+    options: BrowserNetworkResponseBodyOptions
+  ): Promise<BrowserPageDriverNetworkResponseBodyResult>
   /** 按 requestId 读请求、响应与 timing 详情。 */
-  readNetworkRequestDetails(options: BrowserNetworkRequestDetailsOptions): Promise<BrowserPageDriverNetworkRequestDetailsResult>
+  readNetworkRequestDetails(
+    options: BrowserNetworkRequestDetailsOptions
+  ): Promise<BrowserPageDriverNetworkRequestDetailsResult>
   /** 等页面网络空闲（一段时间内没有新请求）。 */
   waitForNetworkIdle(options: BrowserPageDriverNetworkIdleOptions): Promise<boolean>
   /** 会话重置/销毁时清空记录表与待结请求。 */
@@ -455,9 +496,7 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
   }
 
   private recordNetworkResponseReceived(event: CdpNetworkResponseReceivedEvent): void {
-    const response = isObject(event.response)
-      ? (event.response as CdpNetworkResponsePayload)
-      : null
+    const response = isObject(event.response) ? (event.response as CdpNetworkResponsePayload) : null
     const status = normalizeNetworkStatus(response?.status)
     if (!status) return
 
@@ -511,7 +550,7 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
       encodedDataLength: normalizeNullableNumber(response.encodedDataLength),
       remoteIPAddress: isString(response.remoteIPAddress) ? response.remoteIPAddress : null,
       remotePort: normalizeNullableInteger(response.remotePort),
-      timing: isPlainObject(response.timing) ? { ...(response.timing) } : null,
+      timing: isPlainObject(response.timing) ? { ...response.timing } : null,
     }
   }
 
@@ -670,9 +709,7 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
 
   private findNetworkMockResponse(url: string): Nullable<BrowserNetworkMockResponse> {
     return toNullable(
-      this.networkMockResponses.find((response) =>
-        matchesURLPattern(response.urlPattern, url)
-      )
+      this.networkMockResponses.find((response) => matchesURLPattern(response.urlPattern, url))
     )
   }
 }

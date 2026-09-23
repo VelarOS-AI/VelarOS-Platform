@@ -1,72 +1,72 @@
-import type { Range } from "./common.js";
-import type { ResolvedTarget } from "./target.js";
+import type { Range } from './common.js'
+import type { ResolvedTarget } from './target.js'
 
 export interface EvidenceTaskInput {
-  description?: string;
-  goal?: string;
-  userConstraints?: string[];
-  successCriteria?: string[];
-  riskLevel?: "low" | "medium" | "high";
+  description?: string
+  goal?: string
+  userConstraints?: string[]
+  successCriteria?: string[]
+  riskLevel?: 'low' | 'medium' | 'high'
 }
 
 export interface BuildEvidenceToolInput {
-  task?: EvidenceTaskInput;
-  target?: EvidenceTargetInput;
+  task?: EvidenceTaskInput
+  target?: EvidenceTargetInput
   include?: {
-    currentWindow?: boolean;
-    windowLinesBefore?: number;
-    windowLinesAfter?: number;
-  };
-  editScope?: EvidencePack["editScope"];
-  metadata?: Record<string, unknown>;
+    currentWindow?: boolean
+    windowLinesBefore?: number
+    windowLinesAfter?: number
+  }
+  editScope?: EvidencePack['editScope']
+  metadata?: Record<string, unknown>
 }
 
 export interface EvidencePack {
-  evidenceId: string;
-  task?: EvidenceTaskInput;
+  evidenceId: string
+  task?: EvidenceTaskInput
   /** evidence 对应的已解析目标；没有目标时为空。 */
-  target?: ResolvedTarget;
+  target?: ResolvedTarget
   editScope: {
-    allowedFiles?: string[];
-    forbiddenFiles?: string[];
-    maxChangedFiles?: number;
-    maxChangedLines?: number;
-  };
+    allowedFiles?: string[]
+    forbiddenFiles?: string[]
+    maxChangedFiles?: number
+    maxChangedLines?: number
+  }
   freshContext?: {
     /** 目标附近的新鲜有界文本窗口，用来给模型提供依据。 */
-    currentWindow?: string;
-    path?: string;
-    revision?: string;
-    targetRange?: Range;
-    contextRange?: Range;
+    currentWindow?: string
+    path?: string
+    revision?: string
+    targetRange?: Range
+    contextRange?: Range
     citation?: {
-      path: string;
-      revision?: string;
-      range?: Range;
-    };
-    hasMoreBefore?: boolean;
-    hasMoreAfter?: boolean;
+      path: string
+      revision?: string
+      range?: Range
+    }
+    hasMoreBefore?: boolean
+    hasMoreAfter?: boolean
     suggestedReads?: Array<{
-      path: string;
-      range: Range;
+      path: string
+      range: Range
       /** 调用方可能需要继续读取相邻范围的原因。 */
-      reason: "before-context" | "after-context" | "wider-target";
-    }>;
-    metadata?: Record<string, any>;
-  };
+      reason: 'before-context' | 'after-context' | 'wider-target'
+    }>
+    metadata?: Record<string, any>
+  }
   trust: {
     /** 构造 prompt 时，工作区文件一律按不可信输入处理。 */
-    projectContentIsUntrusted: boolean;
-  };
-  metadata?: Record<string, any>;
+    projectContentIsUntrusted: boolean
+  }
+  metadata?: Record<string, any>
 }
 
 export type EvidenceTargetInput = {
-  targetId?: string;
-  path?: string;
-  baseRevision?: string;
-  range?: Partial<Range>;
-};
+  targetId?: string
+  path?: string
+  baseRevision?: string
+  range?: Partial<Range>
+}
 
 /** 构建紧凑、便于引用的 evidence packet 的请求。 */
-export type BuildEvidencePackInput = BuildEvidenceToolInput;
+export type BuildEvidencePackInput = BuildEvidenceToolInput

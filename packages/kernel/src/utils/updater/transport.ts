@@ -17,7 +17,6 @@ const SchemePattern = /^[a-zA-Z][a-zA-Z0-9+.-]*:/
 
 /** 读不到东西时给出的空回应体。 */
 const EmptyResponseBody: AsyncIterable<Uint8Array> = {
-
   async *[Symbol.asyncIterator]() {},
 }
 
@@ -53,14 +52,14 @@ export const nodeKernelFetch: KernelFetch = async (request) => {
 export async function fetchKernelText(
   fetchImplementation: KernelFetch,
   url: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<string> {
   const response = await fetchImplementation({ url, signal })
   if (response.status < 200 || response.status >= 300) {
     throw new KernelUpdaterError(
       'MANIFEST_UNREACHABLE',
       `取内核更新清单失败，HTTP 状态 ${response.status}`,
-      { url, actual: String(response.status) },
+      { url, actual: String(response.status) }
     )
   }
 
@@ -70,11 +69,10 @@ export async function fetchKernelText(
     for await (const chunk of response.body) {
       size += chunk.byteLength
       if (size > MaximumKernelManifestBytes) {
-        throw new KernelUpdaterError(
-          'MANIFEST_UNREACHABLE',
-          '内核更新清单超过了允许的最大体积',
-          { url, expected: String(MaximumKernelManifestBytes) },
-        )
+        throw new KernelUpdaterError('MANIFEST_UNREACHABLE', '内核更新清单超过了允许的最大体积', {
+          url,
+          expected: String(MaximumKernelManifestBytes),
+        })
       }
       chunks.push(chunk)
     }
@@ -82,11 +80,11 @@ export async function fetchKernelText(
     throw error instanceof KernelUpdaterError
       ? error
       : new KernelUpdaterError(
-        'MANIFEST_UNREACHABLE',
-        `读不出 "${url}" 处的内核更新清单`,
-        { url },
-        { cause: error },
-      )
+          'MANIFEST_UNREACHABLE',
+          `读不出 "${url}" 处的内核更新清单`,
+          { url },
+          { cause: error }
+        )
   }
   return Buffer.concat(chunks).toString('utf8')
 }
@@ -95,16 +93,14 @@ export async function fetchKernelText(
 function toLocalPath(source: string): string {
   if (source.startsWith('file:')) return fileURLToPath(source)
   if (!SchemePattern.test(source) || isAbsolute(source)) return source
-  throw new KernelUpdaterError(
-    'DOWNLOAD_FAILED',
-    `"${source}" 用了不支持的内核制品 URL 协议`,
-    { url: source },
-  )
+  throw new KernelUpdaterError('DOWNLOAD_FAILED', `"${source}" 用了不支持的内核制品 URL 协议`, {
+    url: source,
+  })
 }
 
 /** 把 Web 的 ReadableStream 转成按块产出的异步迭代器；流为空时一个块都不产。 */
 async function* readWebStream(
-  stream: Nullable<ReadableStream<Uint8Array>>,
+  stream: Nullable<ReadableStream<Uint8Array>>
 ): AsyncGenerator<Uint8Array> {
   if (isNull(stream)) return
   const reader = stream.getReader()

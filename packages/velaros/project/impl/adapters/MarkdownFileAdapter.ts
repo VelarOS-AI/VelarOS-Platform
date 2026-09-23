@@ -4,7 +4,12 @@
  */
 
 import type { FileAdapter } from '../../contract/requires.js'
-import type { AdapterCapability, AdapterKind, ParseInput, ParseResult } from '../../types/adapter.js'
+import type {
+  AdapterCapability,
+  AdapterKind,
+  ParseInput,
+  ParseResult,
+} from '../../types/adapter.js'
 
 export class MarkdownFileAdapter implements FileAdapter {
   public readonly id = 'core.markdown'
@@ -17,7 +22,11 @@ export class MarkdownFileAdapter implements FileAdapter {
       .split('\n')
       .map((line, i) => ({ line, i }))
       .filter(({ line }) => /^#{1,6}\s+/.test(line))
-      .map(({ line, i }) => ({ kind: 'heading', name: line.replace(/^#+\s+/, ''), range: { startLine: i + 1, endLine: i + 1 } }))
+      .map(({ line, i }) => ({
+        kind: 'heading',
+        name: line.replace(/^#+\s+/, ''),
+        range: { startLine: i + 1, endLine: i + 1 },
+      }))
     return { ok: true, symbols: headings, diagnostics: [] }
   }
 }

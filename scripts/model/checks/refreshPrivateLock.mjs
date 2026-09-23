@@ -1,9 +1,6 @@
 #!/usr/bin/env node
 
-import {
-  readFileSync,
-  writeFileSync,
-} from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -23,23 +20,21 @@ export class GroupedPrivateLockRefresher {
   } = {}) {
     this.#repositoryRoot = repositoryRoot
     this.#runUpdate = runUpdate
-    this.#validator =
-      validator ?? new LockfileConsistencyValidator({ repositoryRoot })
+    this.#validator = validator ?? new LockfileConsistencyValidator({ repositoryRoot })
   }
 
   refresh() {
-    const updateGroups =
-      this.#validator.listExternalVelarosDependencyGroups()
+    const updateGroups = this.#validator.listExternalVelarosDependencyGroups()
     if (updateGroups.length === 0) {
-      throw new Error(
-        'No external @velaros-ai packages were found in repository manifests.',
-      )
+      throw new Error('No external @velaros-ai packages were found in repository manifests.')
     }
     const manifestSnapshots = new Map(
-      this.#validator.listWorkspaceManifestPaths().map((manifestPath) => [
-        manifestPath,
-        readFileSync(join(this.#repositoryRoot, manifestPath)),
-      ]),
+      this.#validator
+        .listWorkspaceManifestPaths()
+        .map((manifestPath) => [
+          manifestPath,
+          readFileSync(join(this.#repositoryRoot, manifestPath)),
+        ])
     )
 
     for (const group of updateGroups) {
@@ -86,13 +81,13 @@ export class GroupedPrivateLockRefresher {
     }
     if (formattingOnlyChanges.length > 0) {
       process.stdout.write(
-        `Restored formatting-only manifest changes: ${formattingOnlyChanges.join(', ')}\n`,
+        `Restored formatting-only manifest changes: ${formattingOnlyChanges.join(', ')}\n`
       )
     }
     if (semanticChanges.length > 0) {
       throw new Error(
         `bun update changed package manifest semantics; original bytes restored: ${semanticChanges.join(', ')}`,
-        updateError ? { cause: updateError } : undefined,
+        updateError ? { cause: updateError } : undefined
       )
     }
     if (updateError) throw updateError
@@ -100,22 +95,15 @@ export class GroupedPrivateLockRefresher {
 }
 
 function runBunUpdate({ cwd, manifestPath, packageNames }) {
-  process.stdout.write(
-    `Refreshing ${manifestPath}: ${packageNames.join(', ')}\n`,
-  )
+  process.stdout.write(`Refreshing ${manifestPath}: ${packageNames.join(', ')}\n`)
   const result = spawnSync(
     'bun',
-    [
-      'update',
-      ...packageNames,
-      '--lockfile-only',
-      '--ignore-scripts',
-    ],
+    ['update', ...packageNames, '--lockfile-only', '--ignore-scripts'],
     {
       cwd,
       env: process.env,
       stdio: 'inherit',
-    },
+    }
   )
   if (result.error) {
     throw new Error(`bun update failed for ${manifestPath}: ${result.error.message}`)
@@ -123,10 +111,8 @@ function runBunUpdate({ cwd, manifestPath, packageNames }) {
   if (result.status !== 0) {
     throw new Error(
       `bun update failed for ${manifestPath}${
-        result.signal
-          ? ` with signal ${result.signal}`
-          : ` with exit code ${result.status}`
-      }`,
+        result.signal ? ` with signal ${result.signal}` : ` with exit code ${result.status}`
+      }`
     )
   }
 }
@@ -134,7 +120,7 @@ function runBunUpdate({ cwd, manifestPath, packageNames }) {
 function run() {
   const report = new GroupedPrivateLockRefresher().refresh()
   process.stdout.write(
-    `Grouped lock refresh passed: ${report.updateGroupCount} manifest groups, ${report.externalResolutionCount} external resolutions.\n`,
+    `Grouped lock refresh passed: ${report.updateGroupCount} manifest groups, ${report.externalResolutionCount} external resolutions.\n`
   )
 }
 

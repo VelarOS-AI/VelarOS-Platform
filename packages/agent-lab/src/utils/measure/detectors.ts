@@ -21,7 +21,15 @@ import { AgentLabTuning } from '../tuning.js'
 import { collectToolCalls, normalizeObservation } from './normalize.js'
 
 /** 这些结束原因是正常终止，不用报未知。 */
-const TerminalFinishReasons = new Set(['stop', 'end_turn', 'end-turn', 'tool_calls', 'tool-calls', 'aborted', 'abort'])
+const TerminalFinishReasons = new Set([
+  'stop',
+  'end_turn',
+  'end-turn',
+  'tool_calls',
+  'tool-calls',
+  'aborted',
+  'abort',
+])
 
 /** 连接占位文案：它被当成 agent 的回答写进会话就是输出契约破了。 */
 const PlaceholderLeakPattern = /连接中断。请检查网络|请检查网络或稍后再试/
@@ -30,7 +38,8 @@ const PlaceholderLeakPattern = /连接中断。请检查网络|请检查网络�
 const ProtocolLeakPattern = /<\/artifact>/
 
 /** 工具回执里表示失败的几种痕迹。 */
-const ToolFailurePattern = /"isError"\s*:\s*true|tool_execution_failed|VALIDATION|schema_validation_failed|PERMISSION_DENIED/
+const ToolFailurePattern =
+  /"isError"\s*:\s*true|tool_execution_failed|VALIDATION|schema_validation_failed|PERMISSION_DENIED/
 
 /** 结束原因是不是内容过滤。 */
 const ContentFilterPattern = /content.?filter/i
@@ -47,7 +56,11 @@ function isJsonObject(value: JsonValue): value is JsonObject {
 }
 
 /** 造一条指向观测某一处的引用。 */
-function reference(face: ObservationReference['face'], id: string, detail: string | null = null): ObservationReference {
+function reference(
+  face: ObservationReference['face'],
+  id: string,
+  detail: string | null = null
+): ObservationReference {
   return { face, id, detail }
 }
 
@@ -58,7 +71,7 @@ function finding(
   failureClass: Finding['failureClass'],
   summary: string,
   references: readonly ObservationReference[],
-  evidence: JsonObject = {},
+  evidence: JsonObject = {}
 ): Finding {
   return { detectorId, severity, failureClass, summary, references, evidence }
 }
@@ -70,7 +83,7 @@ function definition(
   phases: readonly ObservationPhase[],
   defaultSeverity: FindingSeverity,
   abortClass: DetectorDefinition['abortClass'],
-  description: string,
+  description: string
 ): DetectorDefinition {
   return { id, version: 1, face, phases, defaultSeverity, abortClass, description }
 }
@@ -78,7 +91,7 @@ function definition(
 /** 把自述和实现拼成一个可注册的探测器。 */
 function detector(
   detectorDefinition: DetectorDefinition,
-  detect: (observation: Observation, context: DetectorContext) => readonly Finding[],
+  detect: (observation: Observation, context: DetectorContext) => readonly Finding[]
 ): RegisteredDetector {
   return { definition: detectorDefinition, detect }
 }
@@ -89,25 +102,45 @@ function toolResultText(call: ToolCallRecord): string {
 }
 
 /** 造齐十三个内置探测器；阈值与两份工具名单由调用方定型后传进来。 */
-export function createBuiltinDetectors(settings: ResolvedDetectorSettings): readonly RegisteredDetector[] {
+export function createBuiltinDetectors(
+  settings: ResolvedDetectorSettings
+): readonly RegisteredDetector[] {
   const { thresholds } = settings
   const interactiveToolNames = new Set(settings.interactiveToolNames)
   const catalogToolNames = new Set(settings.catalogToolNames)
 
   return [
     detector(
-      definition('stuck-streaming-block', 'transcript', SettledPhases, 'fail', 'fail', '会话已经收敛，流式输出还开着。'),
+      definition(
+        'stuck-streaming-block',
+        'transcript',
+        SettledPhases,
+        'fail',
+        'fail',
+        '会话已经收敛，流式输出还开着。'
+      ),
       (observation) =>
         observation.transcript
           .filter((block) => block.kind === 'artifact' && block.isStreaming === true)
           .map((block) =>
-            finding('stuck-streaming-block', 'fail', 'state-corruption', '制品块在会话收敛后仍处于流式状态', [
-              reference('transcript', block.id, block.messageId),
-            ]),
-          ),
+            finding(
+              'stuck-streaming-block',
+              'fail',
+              'state-corruption',
+              '制品块在会话收敛后仍处于流式状态',
+              [reference('transcript', block.id, block.messageId)]
+            )
+          )
     ),
     detector(
-      definition('stuck-running-tool', 'transcript', SettledPhases, 'fail', 'fail', '会话已经收敛，工具还在执行态。'),
+      definition(
+        'stuck-running-tool',
+        'transcript',
+        SettledPhases,
+        'fail',
+        'fail',
+        '会话已经收敛，工具还在执行态。'
+      ),
       (observation) =>
         observation.transcript
           .filter((block) => block.kind === 'tool-call' && block.isRunning === true)
@@ -117,15 +150,25 @@ export function createBuiltinDetectors(settings: ResolvedDetectorSettings): read
               'fail',
               'state-corruption',
               `工具在会话收敛后仍处于执行态: ${block.toolName ?? 'unknown'}`,
-              [reference('transcript', block.id, block.toolCallId)],
-            ),
-          ),
+              [reference('transcript', block.id, block.toolCallId)]
+            )
+          )
     ),
     detector(
-      definition('orphan-tool-call', 'transcript', SettledPhases, 'warn', null, '工具调用没有终态结果。'),
+      definition(
+        'orphan-tool-call',
+        'transcript',
+        SettledPhases,
+        'warn',
+        null,
+        '工具调用没有终态结果。'
+      ),
       (observation) =>
         observation.transcript
-          .filter((block) => block.kind === 'tool-call' && block.isRunning !== true && block.toolResult === null)
+          .filter(
+            (block) =>
+              block.kind === 'tool-call' && block.isRunning !== true && block.toolResult === null
+          )
           .map((block) => {
             const interactive = interactiveToolNames.has(block.toolName ?? '')
             return finding(
@@ -134,12 +177,19 @@ export function createBuiltinDetectors(settings: ResolvedDetectorSettings): read
               'state-corruption',
               `工具调用没有终态结果: ${block.toolName ?? 'unknown'}`,
               [reference('transcript', block.id, block.toolCallId)],
-              { interactive },
+              { interactive }
             )
-          }),
+          })
     ),
     detector(
-      definition('placeholder-leak', 'transcript', AllPhases, 'fail', 'fail', '连接占位文案被当作回答留了下来。'),
+      definition(
+        'placeholder-leak',
+        'transcript',
+        AllPhases,
+        'fail',
+        'fail',
+        '连接占位文案被当作回答留了下来。'
+      ),
       (observation) =>
         observation.transcript
           .filter(
@@ -147,16 +197,27 @@ export function createBuiltinDetectors(settings: ResolvedDetectorSettings): read
               block.role === 'assistant' &&
               block.kind === 'text' &&
               typeof block.text === 'string' &&
-              PlaceholderLeakPattern.test(block.text),
+              PlaceholderLeakPattern.test(block.text)
           )
           .map((block) =>
-            finding('placeholder-leak', 'fail', 'output-contract', '连接占位文案被当作 agent 回答写入', [
-              reference('transcript', block.id, block.messageId),
-            ]),
-          ),
+            finding(
+              'placeholder-leak',
+              'fail',
+              'output-contract',
+              '连接占位文案被当作 agent 回答写入',
+              [reference('transcript', block.id, block.messageId)]
+            )
+          )
     ),
     detector(
-      definition('protocol-leak', 'transcript', AllPhases, 'warn', null, '制品协议原文泄漏进了 assistant 文本。'),
+      definition(
+        'protocol-leak',
+        'transcript',
+        AllPhases,
+        'warn',
+        null,
+        '制品协议原文泄漏进了 assistant 文本。'
+      ),
       (observation) =>
         observation.transcript
           .filter(
@@ -167,22 +228,36 @@ export function createBuiltinDetectors(settings: ResolvedDetectorSettings): read
               block.text.length > AgentLabTuning.detectors.protocolLeakMinChars &&
               ProtocolLeakPattern.test(block.text) &&
               !observation.transcript.some(
-                (candidate) => candidate.messageId === block.messageId && candidate.kind === 'artifact',
-              ),
+                (candidate) =>
+                  candidate.messageId === block.messageId && candidate.kind === 'artifact'
+              )
           )
           .map((block) =>
-            finding('protocol-leak', 'warn', 'output-contract', 'assistant 文本疑似泄漏完整制品协议', [
-              reference('transcript', block.id, block.messageId),
-            ]),
-          ),
+            finding(
+              'protocol-leak',
+              'warn',
+              'output-contract',
+              'assistant 文本疑似泄漏完整制品协议',
+              [reference('transcript', block.id, block.messageId)]
+            )
+          )
     ),
     detector(
-      definition('empty-final-answer', 'transcript', SettledPhases, 'warn', null, '最后一条 assistant 消息是空的。'),
+      definition(
+        'empty-final-answer',
+        'transcript',
+        SettledPhases,
+        'warn',
+        null,
+        '最后一条 assistant 消息是空的。'
+      ),
       (observation) => {
-        const lastAssistant = [...observation.transcript].reverse().find((block) => block.role === 'assistant')
+        const lastAssistant = [...observation.transcript]
+          .reverse()
+          .find((block) => block.role === 'assistant')
         if (!lastAssistant) return []
         const messageBlocks = observation.transcript.filter(
-          (block) => block.role === 'assistant' && block.messageId === lastAssistant.messageId,
+          (block) => block.role === 'assistant' && block.messageId === lastAssistant.messageId
         )
         const hasSubstance = messageBlocks.some((block) => {
           if (block.kind === 'text') return Boolean(block.text?.trim())
@@ -190,14 +265,25 @@ export function createBuiltinDetectors(settings: ResolvedDetectorSettings): read
         })
         if (hasSubstance) return []
         return [
-          finding('empty-final-answer', 'warn', 'output-contract', '最后一条 assistant 消息没有实质内容', [
-            reference('transcript', lastAssistant.id, lastAssistant.messageId),
-          ]),
+          finding(
+            'empty-final-answer',
+            'warn',
+            'output-contract',
+            '最后一条 assistant 消息没有实质内容',
+            [reference('transcript', lastAssistant.id, lastAssistant.messageId)]
+          ),
         ]
-      },
+      }
     ),
     detector(
-      definition('context-estimate-sanity', 'runtime', AllPhases, 'fail', 'fail', '上下文估算必须是物理上说得通的数。'),
+      definition(
+        'context-estimate-sanity',
+        'runtime',
+        AllPhases,
+        'fail',
+        'fail',
+        '上下文估算必须是物理上说得通的数。'
+      ),
       (observation) => {
         const runtime = observation.runtime
         if (!runtime) return []
@@ -206,12 +292,13 @@ export function createBuiltinDetectors(settings: ResolvedDetectorSettings): read
           findings.push(
             finding('context-estimate-sanity', 'fail', 'context-governance', '上下文窗口不是正数', [
               reference('runtime', 'context-window'),
-            ]),
+            ])
           )
         }
         if (
           runtime.contextPercent !== null &&
-          (runtime.contextPercent < 0 || runtime.contextPercent > AgentLabTuning.detectors.contextPercentCeiling)
+          (runtime.contextPercent < 0 ||
+            runtime.contextPercent > AgentLabTuning.detectors.contextPercentCeiling)
         ) {
           findings.push(
             finding(
@@ -219,72 +306,117 @@ export function createBuiltinDetectors(settings: ResolvedDetectorSettings): read
               'warn',
               'context-governance',
               `上下文占用百分比异常: ${runtime.contextPercent}%`,
-              [reference('runtime', 'context-percent')],
-            ),
+              [reference('runtime', 'context-percent')]
+            )
           )
         }
         if (
           runtime.contextTokens !== null &&
           runtime.contextWindow !== null &&
-          runtime.contextTokens > runtime.contextWindow * AgentLabTuning.detectors.contextOverrunRatio
+          runtime.contextTokens >
+            runtime.contextWindow * AgentLabTuning.detectors.contextOverrunRatio
         ) {
           findings.push(
-            finding('context-estimate-sanity', 'warn', 'context-governance', '上下文估算超出模型窗口 20% 以上', [
-              reference('runtime', 'context-tokens'),
-            ]),
+            finding(
+              'context-estimate-sanity',
+              'warn',
+              'context-governance',
+              '上下文估算超出模型窗口 20% 以上',
+              [reference('runtime', 'context-tokens')]
+            )
           )
         }
         return findings
-      },
+      }
     ),
     detector(
-      definition('finish-truncation', 'turns', AllPhases, 'fail', null, '模型输出因长度或内容限制被截断。'),
+      definition(
+        'finish-truncation',
+        'turns',
+        AllPhases,
+        'fail',
+        null,
+        '模型输出因长度或内容限制被截断。'
+      ),
       (observation) =>
         observation.turns.flatMap((turn) =>
           turn.finishReasons.flatMap((reason) => {
-            if (reason === 'length') return [
-                finding('finish-truncation', 'fail', 'output-contract', '模型输出因长度上限被截断', [
-                  reference('turns', turn.id, reason),
-                ]),
+            if (reason === 'length')
+              return [
+                finding(
+                  'finish-truncation',
+                  'fail',
+                  'output-contract',
+                  '模型输出因长度上限被截断',
+                  [reference('turns', turn.id, reason)]
+                ),
               ]
-            if (ContentFilterPattern.test(reason)) return [
-                finding('finish-truncation', 'warn', 'output-contract', `模型输出因 ${reason} 被截断`, [
-                  reference('turns', turn.id, reason),
-                ]),
+            if (ContentFilterPattern.test(reason))
+              return [
+                finding(
+                  'finish-truncation',
+                  'warn',
+                  'output-contract',
+                  `模型输出因 ${reason} 被截断`,
+                  [reference('turns', turn.id, reason)]
+                ),
               ]
             return []
-          }),
-        ),
+          })
+        )
     ),
     detector(
-      definition('finish-unknown', 'turns', AllPhases, 'info', null, '认不出的结束原因照实报出来。'),
+      definition(
+        'finish-unknown',
+        'turns',
+        AllPhases,
+        'info',
+        null,
+        '认不出的结束原因照实报出来。'
+      ),
       (observation) =>
         observation.turns.flatMap((turn) =>
           turn.finishReasons
             .filter(
               (reason) =>
-                !TerminalFinishReasons.has(reason) && reason !== 'length' && !ContentFilterPattern.test(reason),
+                !TerminalFinishReasons.has(reason) &&
+                reason !== 'length' &&
+                !ContentFilterPattern.test(reason)
             )
             .map((reason) =>
               finding('finish-unknown', 'info', 'unclassified', `未知 finish reason: ${reason}`, [
                 reference('turns', turn.id, reason),
-              ]),
-            ),
-        ),
+              ])
+            )
+        )
     ),
     detector(
-      definition('tool-failure', 'turns', AllPhases, 'fail', null, '工具失败是明确的诊断结论，不是噪音。'),
+      definition(
+        'tool-failure',
+        'turns',
+        AllPhases,
+        'fail',
+        null,
+        '工具失败是明确的诊断结论，不是噪音。'
+      ),
       (observation) =>
         collectToolCalls(observation)
           .filter((call) => call.isError === true || ToolFailurePattern.test(toolResultText(call)))
           .map((call) =>
             finding('tool-failure', 'fail', 'tool-failure', `工具调用失败: ${call.name}`, [
               reference('turns', call.id, call.turnId),
-            ]),
-          ),
+            ])
+          )
     ),
     detector(
-      definition('tool-retry-loop', 'turns', AllPhases, 'warn', 'loop', '同一工具与同一参数反复调用说明在打转。'),
+      definition(
+        'tool-retry-loop',
+        'turns',
+        AllPhases,
+        'warn',
+        'loop',
+        '同一工具与同一参数反复调用说明在打转。'
+      ),
       (observation) => {
         const groups = new Map<string, { call: ToolCallRecord; count: number }>()
         let previousKey: string | null = null
@@ -316,13 +448,20 @@ export function createBuiltinDetectors(settings: ResolvedDetectorSettings): read
               'loop',
               `同一工具与参数连续重复 ${count} 次: ${call.name}`,
               [reference('turns', call.id, call.turnId)],
-              { count, abortAt: thresholds.retryAbort },
-            ),
+              { count, abortAt: thresholds.retryAbort }
+            )
           )
-      },
+      }
     ),
     detector(
-      definition('toolmap-read-loop', 'turns', AllPhases, 'warn', 'loop', '同一张工具目录页反复读，说明没找到该用的工具。'),
+      definition(
+        'toolmap-read-loop',
+        'turns',
+        AllPhases,
+        'warn',
+        'loop',
+        '同一张工具目录页反复读，说明没找到该用的工具。'
+      ),
       (observation) => {
         const reads = new Map<string, { call: ToolCallRecord; count: number }>()
         for (const call of collectToolCalls(observation)) {
@@ -341,13 +480,20 @@ export function createBuiltinDetectors(settings: ResolvedDetectorSettings): read
               'tool-selection',
               `同一工具目录页重复读取 ${count} 次`,
               [reference('turns', call.id, call.turnId)],
-              { count, abortAt: thresholds.toolMapReadAbort },
-            ),
+              { count, abortAt: thresholds.toolMapReadAbort }
+            )
           )
-      },
+      }
     ),
     detector(
-      definition('turn-tool-density', 'turns', AllPhases, 'warn', 'loop', '单轮工具调用过多，说明已经失控。'),
+      definition(
+        'turn-tool-density',
+        'turns',
+        AllPhases,
+        'warn',
+        'loop',
+        '单轮工具调用过多，说明已经失控。'
+      ),
       (observation) =>
         normalizeObservation(observation)
           .turns.filter((turn) => turn.toolCalls.length > thresholds.turnDensityWarn)
@@ -358,9 +504,9 @@ export function createBuiltinDetectors(settings: ResolvedDetectorSettings): read
               'loop',
               `单轮工具调用达到 ${turn.toolCalls.length} 次`,
               [reference('turns', turn.id)],
-              { count: turn.toolCalls.length, abortAt: thresholds.turnDensityAbort },
-            ),
-          ),
+              { count: turn.toolCalls.length, abortAt: thresholds.turnDensityAbort }
+            )
+          )
     ),
   ]
 }

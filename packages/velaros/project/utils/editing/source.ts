@@ -9,11 +9,23 @@ export function createProjectSourceCoordinates(content: string): ProjectSourceCo
   let removed = 0
   for (let end = content.indexOf('\n'); end !== -1; end = content.indexOf('\n', start)) {
     const crlf = end > start && content[end - 1] === '\r'
-    lines.push({ start, bodyEnd: end - (crlf ? 1 : 0), end: end + 1, logicalStart: start - removed, newline: crlf ? '\r\n' : '\n' })
+    lines.push({
+      start,
+      bodyEnd: end - (crlf ? 1 : 0),
+      end: end + 1,
+      logicalStart: start - removed,
+      newline: crlf ? '\r\n' : '\n',
+    })
     removed += crlf ? 1 : 0
     start = end + 1
   }
-  lines.push({ start, bodyEnd: content.length, end: content.length, logicalStart: start - removed, newline: '' })
+  lines.push({
+    start,
+    bodyEnd: content.length,
+    end: content.length,
+    logicalStart: start - removed,
+    newline: '',
+  })
   return { content, lines, logical: content.replace(/\r\n/g, '\n') }
 }
 
@@ -24,7 +36,11 @@ export function sourceLineCount(source: ProjectSourceCoordinates): number {
 }
 
 /** 偏移落在第几行（从 1 起）；logical 为 true 时把 offset 当逻辑偏移。 */
-export function sourceLineAt(source: ProjectSourceCoordinates, offset: number, logical = false): number {
+export function sourceLineAt(
+  source: ProjectSourceCoordinates,
+  offset: number,
+  logical = false
+): number {
   let low = 0
   let high = source.lines.length
   while (low + 1 < high) {
@@ -52,7 +68,11 @@ export function logicalSourceOffset(source: ProjectSourceCoordinates, offset: nu
 }
 
 /** [start, end) 这段该用哪种换行：先看段内各行，没有换行再往前找，整份源码都没有换行时用 LF。 */
-export function sourceNewlineAt(source: ProjectSourceCoordinates, start: number, end = start): string {
+export function sourceNewlineAt(
+  source: ProjectSourceCoordinates,
+  start: number,
+  end = start
+): string {
   const first = sourceLineAt(source, start) - 1
   const last = sourceLineAt(source, Math.max(start, end - 1)) - 1
   for (let index = first; index <= last; index += 1) {

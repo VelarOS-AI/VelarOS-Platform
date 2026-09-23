@@ -25,7 +25,9 @@ export function decoderLabelOf(encoding: TextEncoding): string {
     ? 'utf-16le'
     : encoding.startsWith('utf16be')
       ? 'utf-16be'
-      : encoding === 'gb18030' ? 'gb18030' : 'utf-8'
+      : encoding === 'gb18030'
+        ? 'gb18030'
+        : 'utf-8'
 }
 
 /** 字节串是不是以给定前缀开头。 */
@@ -85,7 +87,13 @@ export function findLoneSurrogate(content: string): Nullable<{ offset: number; c
 /** 按编码把正文写成字节，需要 BOM 的带上；正文里有孤立代理项，或 GB18030 写不回原文时抛 lossy。 */
 export function encodeText(content: string, encoding: TextEncoding): Buffer {
   const lone = findLoneSurrogate(content)
-  if (lone) throw new AppError(TextFileErrorCodes.lossy, `文本在 UTF-16 offset ${lone.offset} 含不完整的 Unicode 字符，拒绝有损写入。`, undefined, lone)
+  if (lone)
+    throw new AppError(
+      TextFileErrorCodes.lossy,
+      `文本在 UTF-16 offset ${lone.offset} 含不完整的 Unicode 字符，拒绝有损写入。`,
+      undefined,
+      lone
+    )
   switch (encoding) {
     case 'utf8-bom':
       return Buffer.concat([Utf8Bom, Buffer.from(content, 'utf-8')])
@@ -119,7 +127,7 @@ function encodeGb18030(content: string): Buffer {
     TextFileErrorCodes.lossy,
     `文本在 UTF-16 offset ${offset} 处有 GB18030 表示不了的字符，无法按 GB18030 无损写回。`,
     undefined,
-    { offset, codeUnit: content.charCodeAt(offset) },
+    { offset, codeUnit: content.charCodeAt(offset) }
   )
 }
 
@@ -152,10 +160,18 @@ export function gb18030CompleteLength(bytes: Uint8Array): number {
 }
 
 /** 跑一次严格解码，遇到非法字节抛 notText（context 带路径与编码），不静默替换。 */
-export function decodeStrictly(decode: () => string, source: { path: string; encoding: TextEncoding }): string {
+export function decodeStrictly(
+  decode: () => string,
+  source: { path: string; encoding: TextEncoding }
+): string {
   try {
     return decode()
   } catch (error) {
-    throw new AppError(TextFileErrorCodes.notText, `文件内容不是合法的 ${source.encoding} 文本，无法无损解码。`, error, { ...source })
+    throw new AppError(
+      TextFileErrorCodes.notText,
+      `文件内容不是合法的 ${source.encoding} 文本，无法无损解码。`,
+      error,
+      { ...source }
+    )
   }
 }

@@ -30,22 +30,43 @@ function assertVendoredPptxGenJs() {
   const runtimeText = runtime.toString('utf8')
   const typesText = types.toString('utf8')
 
-  assert(!velarPackage.dependencies?.pptxgenjs, 'velaros/office must use the audited vendored PptxGenJS runtime')
-  assert(!rootPackage.patchedDependencies?.['image-size@1.2.1'], 'The obsolete image-size patch must stay removed')
-  assert(runtimeText.startsWith('/* PptxGenJS 4.0.1 '), 'Vendored PptxGenJS runtime version changed')
-  assert(typesText.startsWith('// Type definitions for pptxgenjs 4.0.1'), 'Vendored PptxGenJS types version changed')
-  assert(runtimeText.includes("import JSZip from 'jszip';"), 'Vendored PptxGenJS must keep JSZip external')
-  assert(runtimeText.includes("typeof globalThis.crypto.getRandomValues !== 'function'"), 'Vendored PptxGenJS Web Crypto UUID patch is missing')
-  assert(runtimeText.includes('resolvePresentationArchiveTarget(rel.Target)'), 'Vendored PptxGenJS archive path patch is missing')
+  assert(
+    !velarPackage.dependencies?.pptxgenjs,
+    'velaros/office must use the audited vendored PptxGenJS runtime'
+  )
+  assert(
+    !rootPackage.patchedDependencies?.['image-size@1.2.1'],
+    'The obsolete image-size patch must stay removed'
+  )
+  assert(
+    runtimeText.startsWith('/* PptxGenJS 4.0.1 '),
+    'Vendored PptxGenJS runtime version changed'
+  )
+  assert(
+    typesText.startsWith('// Type definitions for pptxgenjs 4.0.1'),
+    'Vendored PptxGenJS types version changed'
+  )
+  assert(
+    runtimeText.includes("import JSZip from 'jszip';"),
+    'Vendored PptxGenJS must keep JSZip external'
+  )
+  assert(
+    runtimeText.includes("typeof globalThis.crypto.getRandomValues !== 'function'"),
+    'Vendored PptxGenJS Web Crypto UUID patch is missing'
+  )
+  assert(
+    runtimeText.includes('resolvePresentationArchiveTarget(rel.Target)'),
+    'Vendored PptxGenJS archive path patch is missing'
+  )
   assert(!/image-size/i.test(runtimeText), 'Vendored PptxGenJS unexpectedly references image-size')
   assert(
     sha256(runtime) === '1d5b4af9da57182a1b6c3f7308c5cefe32d3b034709ceb2b95c7f0b7c60565f4',
-    'Vendored PptxGenJS patched runtime changed; review the upstream and local security diffs',
+    'Vendored PptxGenJS patched runtime changed; review the upstream and local security diffs'
   )
   assert(
     sha256(Buffer.from(typesText.replace(/\r\n/gu, '\n'))) ===
       '0726d015dbcb55ccfa75546cb2fd43fe13a0dfeb783d08572f1c62f59193bbe5',
-    'Vendored PptxGenJS upstream type declarations changed; review the public API diff',
+    'Vendored PptxGenJS upstream type declarations changed; review the public API diff'
   )
 }
 
@@ -65,13 +86,19 @@ function assertExcelJsUsesOnlyUuidV4() {
     .map((filePath) => ({ filePath, content: readFileSync(filePath, 'utf8') }))
     .filter(({ content }) => /require\(['"]uuid['"]\)/.test(content))
 
-  assert(uuidImports.length === 1, `Expected one ExcelJS uuid call site, found ${uuidImports.length}`)
+  assert(
+    uuidImports.length === 1,
+    `Expected one ExcelJS uuid call site, found ${uuidImports.length}`
+  )
   const [{ filePath, content }] = uuidImports
   assert(
     /\{\s*v4:\s*uuidv4\s*\}\s*=\s*require\(['"]uuid['"]\)/.test(content),
-    `ExcelJS uuid usage changed at ${filePath}; reassess CVE-2026-41907`,
+    `ExcelJS uuid usage changed at ${filePath}; reassess CVE-2026-41907`
   )
-  assert(!/\b(?:v3|v5|v6)\s*[:(]/.test(content), 'ExcelJS now uses a uuid API covered by CVE-2026-41907')
+  assert(
+    !/\b(?:v3|v5|v6)\s*[:(]/.test(content),
+    'ExcelJS now uses a uuid API covered by CVE-2026-41907'
+  )
 }
 
 assertVendoredPptxGenJs()

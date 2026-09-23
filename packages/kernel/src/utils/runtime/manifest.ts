@@ -7,14 +7,14 @@ export function cloneManifest(manifest: KernelModuleManifest): KernelModuleManif
     ...manifest,
     provides: Object.freeze(
       manifest.provides.map((capability) =>
-        Object.freeze({ id: capability.id, version: capability.version })),
+        Object.freeze({ id: capability.id, version: capability.version })
+      )
     ),
     requires: Object.freeze(
-      manifest.requires.map((requirement) => Object.freeze({ ...requirement })),
+      manifest.requires.map((requirement) => Object.freeze({ ...requirement }))
     ),
     optionalRequires: Object.freeze(
-      manifest.optionalRequires.map((requirement) =>
-        Object.freeze({ ...requirement })),
+      manifest.optionalRequires.map((requirement) => Object.freeze({ ...requirement }))
     ),
     permissions: Object.freeze([...manifest.permissions]),
   })

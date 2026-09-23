@@ -40,7 +40,9 @@ export type Detector = (observation: Observation, context: DetectorContext) => r
  * 验证器：判一条判据成不成立。它是结果的唯一来源——没有验证器判过的事一律是 `unknown`，不拿总分掩盖。
  * 由宿主提供并注册进 `VerifierRegistryApi`；允许读磁盘、跑命令，但不该去改被测工作区。
  */
-export type Verifier = (context: VerificationContext) => Promise<VerificationOutcome> | VerificationOutcome
+export type Verifier = (
+  context: VerificationContext
+) => Promise<VerificationOutcome> | VerificationOutcome
 
 /** 注册进来的一个探测器：它的自述加上它的实现。 */
 export interface RegisteredDetector {
@@ -114,7 +116,7 @@ export interface PollingDriverAdapter {
     session: SessionHandle,
     approved: boolean,
     rejectionMessage: string | null,
-    confirmationId?: string | null,
+    confirmationId?: string | null
   ) => Promise<void>
   /** 中止当前这一段。 */
   abort: (session: SessionHandle, reason: string) => Promise<void>

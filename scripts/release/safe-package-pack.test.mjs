@@ -43,13 +43,16 @@ async function installFakeBun(t, fixtureRoot, mode = 'capture') {
   await mkdir(binDirectory)
   if (process.platform === 'win32') {
     const runnerPath = path.join(binDirectory, 'fake-bun.cjs')
-    await writeFile(runnerPath, `
+    await writeFile(
+      runnerPath,
+      `
 const { writeFileSync } = require('node:fs')
 writeFileSync(process.env.SAFE_PACK_CAPTURE_FILE, JSON.stringify({
   argv: process.argv.slice(2),
   cwd: process.cwd(),
 }))
-`)
+`
+    )
     return { binDirectory, bunArguments: [runnerPath], bunCommand: process.execPath }
   } else {
     await writeFile(path.join(binDirectory, 'bun'), fakeBunSource)
@@ -130,7 +133,7 @@ function waitForChildExit(child, timeoutMs = 5_000) {
 
 async function startHangingPackRunner(
   t,
-  { destination, fixtureRoot, packageDirectory, pidFile, ipc = false },
+  { destination, fixtureRoot, packageDirectory, pidFile, ipc = false }
 ) {
   const { binDirectory } = await installFakeBun(t, fixtureRoot, 'hang')
   registerProcessGroupCleanup(t, pidFile)
@@ -171,7 +174,7 @@ async function startHangingPackRunner(
       }
     }),
     true,
-    'fake Bun did not report its process group',
+    'fake Bun did not report its process group'
   )
   return runner
 }
@@ -185,7 +188,7 @@ test('rejects a workspace root instead of packing it as a leaf package', async (
 
   await assert.rejects(
     safePackPackage({ packageDirectory, destination }),
-    /must be a leaf package; workspace roots cannot be packed/u,
+    /must be a leaf package; workspace roots cannot be packed/u
   )
 })
 
@@ -194,7 +197,7 @@ test('rejects shared temporary roots as archive destinations', async (t) => {
 
   await assert.rejects(
     safePackPackage({ packageDirectory, destination: tmpdir() }),
-    /must not be a shared temporary root/u,
+    /must not be a shared temporary root/u
   )
 })
 
@@ -205,7 +208,7 @@ test('rejects a symbolic-link destination before Bun can enter its makePath loop
 
   await assert.rejects(
     safePackPackage({ packageDirectory, destination: destinationLink }),
-    /destination must not be a symbolic link/u,
+    /destination must not be a symbolic link/u
   )
 })
 
@@ -214,7 +217,7 @@ test('requires a publishable package identity', async (t) => {
 
   await assert.rejects(
     safePackPackage({ packageDirectory, destination }),
-    /package\.json must declare a non-empty name/u,
+    /package\.json must declare a non-empty name/u
   )
 })
 
@@ -272,138 +275,151 @@ test('requires destination and filename to be exclusive and safely separated fro
       destination,
       filename: path.join(destination, 'leaf-package.tgz'),
     }),
-    /Exactly one of destination or filename/u,
+    /Exactly one of destination or filename/u
   )
   await assert.rejects(
     safePackPackage({ packageDirectory, destination: nestedDestination }),
-    /must not overlap package source/u,
+    /must not overlap package source/u
   )
   await assert.rejects(
     safePackPackage({ packageDirectory, filename: path.join(packageDirectory, 'unsafe.tgz') }),
-    /must not overlap package source/u,
+    /must not overlap package source/u
   )
 })
 
 test('uses taskkill tree arguments and force only for escalation on Windows', () => {
   assert.deepEqual(windowsTaskkillArguments(123), ['/PID', '123', '/T'])
-  assert.deepEqual(
-    windowsTaskkillArguments(123, { force: true }),
-    ['/PID', '123', '/T', '/F'],
-  )
+  assert.deepEqual(windowsTaskkillArguments(123, { force: true }), ['/PID', '123', '/T', '/F'])
 })
 
-test('times out and removes the detached Bun process group including its grandchild', {
-  skip: process.platform === 'win32',
-}, async (t) => {
-  const { destination, fixtureRoot, packageDirectory } = await createFixture(t)
-  await installFakeBun(t, fixtureRoot, 'hang')
-  const pidFile = path.join(fixtureRoot, 'pids.json')
-  setTestEnvironment(t, 'SAFE_PACK_PID_FILE', pidFile)
-  registerProcessGroupCleanup(t, pidFile)
+test(
+  'times out and removes the detached Bun process group including its grandchild',
+  {
+    skip: process.platform === 'win32',
+  },
+  async (t) => {
+    const { destination, fixtureRoot, packageDirectory } = await createFixture(t)
+    await installFakeBun(t, fixtureRoot, 'hang')
+    const pidFile = path.join(fixtureRoot, 'pids.json')
+    setTestEnvironment(t, 'SAFE_PACK_PID_FILE', pidFile)
+    registerProcessGroupCleanup(t, pidFile)
 
-  const readiness = waitFor(() => {
-    try {
-      return Boolean(JSON.parse(readFileSync(pidFile, 'utf8')))
-    } catch {
-      return false
-    }
-  }, 1_500)
-  const timeoutResult = safePackPackage({
-    packageDirectory,
-    destination,
-    timeoutMs: 2_000,
-  }).then(
-    () => ({ error: undefined }),
-    (error) => ({ error }),
-  )
+    const readiness = waitFor(() => {
+      try {
+        return Boolean(JSON.parse(readFileSync(pidFile, 'utf8')))
+      } catch {
+        return false
+      }
+    }, 1_500)
+    const timeoutResult = safePackPackage({
+      packageDirectory,
+      destination,
+      timeoutMs: 2_000,
+    }).then(
+      () => ({ error: undefined }),
+      (error) => ({ error })
+    )
 
-  assert.equal(await readiness, true, 'fake Bun did not install its signal traps before timeout')
-  const { error } = await timeoutResult
-  assert.match(error?.message ?? '', /timed out after 2000 ms.*SIGTERM followed by SIGKILL/u)
+    assert.equal(await readiness, true, 'fake Bun did not install its signal traps before timeout')
+    const { error } = await timeoutResult
+    assert.match(error?.message ?? '', /timed out after 2000 ms.*SIGTERM followed by SIGKILL/u)
 
-  const { child, grandchild } = JSON.parse(await readFile(pidFile, 'utf8'))
-  assert.equal(await waitFor(() => !isProcessAlive(child)), true, `child ${child} remained alive`)
-  assert.equal(
-    await waitFor(() => !isProcessAlive(grandchild)),
-    true,
-    `grandchild ${grandchild} remained alive`,
-  )
-})
+    const { child, grandchild } = JSON.parse(await readFile(pidFile, 'utf8'))
+    assert.equal(await waitFor(() => !isProcessAlive(child)), true, `child ${child} remained alive`)
+    assert.equal(
+      await waitFor(() => !isProcessAlive(grandchild)),
+      true,
+      `grandchild ${grandchild} remained alive`
+    )
+  }
+)
 
-test('removes a same-group grandchild after the Bun leader exits successfully', {
-  skip: process.platform === 'win32',
-}, async (t) => {
-  const { destination, fixtureRoot, packageDirectory } = await createFixture(t)
-  await installFakeBun(t, fixtureRoot, 'orphan')
-  const pidFile = path.join(fixtureRoot, 'orphan-pid.json')
-  setTestEnvironment(t, 'SAFE_PACK_PID_FILE', pidFile)
-  registerProcessGroupCleanup(t, pidFile)
+test(
+  'removes a same-group grandchild after the Bun leader exits successfully',
+  {
+    skip: process.platform === 'win32',
+  },
+  async (t) => {
+    const { destination, fixtureRoot, packageDirectory } = await createFixture(t)
+    await installFakeBun(t, fixtureRoot, 'orphan')
+    const pidFile = path.join(fixtureRoot, 'orphan-pid.json')
+    setTestEnvironment(t, 'SAFE_PACK_PID_FILE', pidFile)
+    registerProcessGroupCleanup(t, pidFile)
 
-  const result = await safePackPackage({
-    packageDirectory,
-    destination,
-    stdio: 'ignore',
-    timeoutMs: 5_000,
-  })
-  const { grandchild } = JSON.parse(await readFile(pidFile, 'utf8'))
+    const result = await safePackPackage({
+      packageDirectory,
+      destination,
+      stdio: 'ignore',
+      timeoutMs: 5_000,
+    })
+    const { grandchild } = JSON.parse(await readFile(pidFile, 'utf8'))
 
-  assert.equal(result.code, 0)
-  assert.equal(
-    await waitFor(() => !isProcessAlive(grandchild)),
-    true,
-    `grandchild ${grandchild} remained alive after its Bun leader exited`,
-  )
-})
+    assert.equal(result.code, 0)
+    assert.equal(
+      await waitFor(() => !isProcessAlive(grandchild)),
+      true,
+      `grandchild ${grandchild} remained alive after its Bun leader exited`
+    )
+  }
+)
 
-test('cleans the Bun process group on SIGHUP even if another signal arrives during cleanup', {
-  skip: process.platform === 'win32',
-}, async (t) => {
-  const { destination, fixtureRoot, packageDirectory } = await createFixture(t)
-  const pidFile = path.join(fixtureRoot, 'signal-pids.json')
-  const runner = await startHangingPackRunner(t, {
-    destination,
-    fixtureRoot,
-    packageDirectory,
-    pidFile,
-  })
-  runner.kill('SIGHUP')
-  setTimeout(() => {
-    if (runner.exitCode === null && runner.signalCode === null) runner.kill('SIGTERM')
-  }, 50)
-  const status = await waitForChildExit(runner)
-  const { child, grandchild } = JSON.parse(await readFile(pidFile, 'utf8'))
+test(
+  'cleans the Bun process group on SIGHUP even if another signal arrives during cleanup',
+  {
+    skip: process.platform === 'win32',
+  },
+  async (t) => {
+    const { destination, fixtureRoot, packageDirectory } = await createFixture(t)
+    const pidFile = path.join(fixtureRoot, 'signal-pids.json')
+    const runner = await startHangingPackRunner(t, {
+      destination,
+      fixtureRoot,
+      packageDirectory,
+      pidFile,
+    })
+    runner.kill('SIGHUP')
+    setTimeout(() => {
+      if (runner.exitCode === null && runner.signalCode === null) runner.kill('SIGTERM')
+    }, 50)
+    const status = await waitForChildExit(runner)
+    const { child, grandchild } = JSON.parse(await readFile(pidFile, 'utf8'))
 
-  assert.deepEqual(status, { code: null, signal: 'SIGHUP' })
-  assert.equal(await waitFor(() => !isProcessAlive(child)), true, `child ${child} remained alive`)
-  assert.equal(
-    await waitFor(() => !isProcessAlive(grandchild)),
-    true,
-    `grandchild ${grandchild} remained alive`,
-  )
-})
+    assert.deepEqual(status, { code: null, signal: 'SIGHUP' })
+    assert.equal(await waitFor(() => !isProcessAlive(child)), true, `child ${child} remained alive`)
+    assert.equal(
+      await waitFor(() => !isProcessAlive(grandchild)),
+      true,
+      `grandchild ${grandchild} remained alive`
+    )
+  }
+)
 
-test('uses the synchronous exit fallback when the parent calls process.exit', {
-  skip: process.platform === 'win32',
-}, async (t) => {
-  const { destination, fixtureRoot, packageDirectory } = await createFixture(t)
-  const pidFile = path.join(fixtureRoot, 'exit-pids.json')
-  const runner = await startHangingPackRunner(t, {
-    destination,
-    fixtureRoot,
-    ipc: true,
-    packageDirectory,
-    pidFile,
-  })
+test(
+  'uses the synchronous exit fallback when the parent calls process.exit',
+  {
+    skip: process.platform === 'win32',
+  },
+  async (t) => {
+    const { destination, fixtureRoot, packageDirectory } = await createFixture(t)
+    const pidFile = path.join(fixtureRoot, 'exit-pids.json')
+    const runner = await startHangingPackRunner(t, {
+      destination,
+      fixtureRoot,
+      ipc: true,
+      packageDirectory,
+      pidFile,
+    })
 
-  runner.send('exit-now')
-  const status = await waitForChildExit(runner)
-  const { child, grandchild } = JSON.parse(await readFile(pidFile, 'utf8'))
+    runner.send('exit-now')
+    const status = await waitForChildExit(runner)
+    const { child, grandchild } = JSON.parse(await readFile(pidFile, 'utf8'))
 
-  assert.deepEqual(status, { code: 23, signal: null })
-  assert.equal(await waitFor(() => !isProcessAlive(child)), true, `child ${child} remained alive`)
-  assert.equal(
-    await waitFor(() => !isProcessAlive(grandchild)),
-    true,
-    `grandchild ${grandchild} remained alive`,
-  )
-})
+    assert.deepEqual(status, { code: 23, signal: null })
+    assert.equal(await waitFor(() => !isProcessAlive(child)), true, `child ${child} remained alive`)
+    assert.equal(
+      await waitFor(() => !isProcessAlive(grandchild)),
+      true,
+      `grandchild ${grandchild} remained alive`
+    )
+  }
+)

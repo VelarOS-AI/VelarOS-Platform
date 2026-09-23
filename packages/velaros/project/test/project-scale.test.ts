@@ -65,7 +65,7 @@ describe('large transaction workload', () => {
     await project.applyEdit({ transactionId: tx.transactionId })
     const expected = lines
       .flatMap((line, i) =>
-        i % 39 === 0 && i / 39 < 500 ? [`changed ${i / 39}`, 'added'] : [line],
+        i % 39 === 0 && i / 39 < 500 ? [`changed ${i / 39}`, 'added'] : [line]
       )
       .join('\n')
     expect(await readFile(join(root, path), 'utf8')).toBe(expected)
@@ -106,7 +106,7 @@ describe('large transaction workload', () => {
             },
           },
         ],
-      }),
+      })
     ).rejects.toMatchObject({
       reason: 'SCOPE_VIOLATION',
       details: { path: 'small.txt', actual: 3, maximum: 2 },

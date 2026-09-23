@@ -34,24 +34,26 @@ function darwinInstallRoot(): string {
 /** Windows 上的安装根：`%LOCALAPPDATA%\VelarOS\kernel`，变量没设时按家目录折出来。 */
 function windowsInstallRoot(): string {
   const localAppData = process.env.LOCALAPPDATA
-  const base = isNotUndefined(localAppData) && !isBlank(localAppData.trim())
-    ? localAppData
-    : join(homedir(), 'AppData', 'Local')
+  const base =
+    isNotUndefined(localAppData) && !isBlank(localAppData.trim())
+      ? localAppData
+      : join(homedir(), 'AppData', 'Local')
   return join(base, 'VelarOS', 'kernel')
 }
 
 /** 其余平台按 XDG 约定：`$XDG_DATA_HOME/velaros/kernel`，变量没设时用 `~/.local/share`。 */
 function xdgInstallRoot(): string {
   const dataHome = process.env.XDG_DATA_HOME
-  const base = isNotUndefined(dataHome) && !isBlank(dataHome.trim())
-    ? dataHome
-    : join(homedir(), '.local', 'share')
+  const base =
+    isNotUndefined(dataHome) && !isBlank(dataHome.trim())
+      ? dataHome
+      : join(homedir(), '.local', 'share')
   return join(base, 'velaros', 'kernel')
 }
 
 /** 从一个安装根派生出更新器要用的全部绝对路径。 */
 export function createKernelInstallLayout(
-  root: string = defaultKernelInstallRoot(),
+  root: string = defaultKernelInstallRoot()
 ): KernelInstallLayout {
   return {
     root,
@@ -66,18 +68,13 @@ export function createKernelInstallLayout(
 }
 
 /** 某个版本的安装目录；版本号先校验过，所以它永远逃不出 `versions/`。 */
-export function kernelVersionDirectory(
-  layout: KernelInstallLayout,
-  version: string,
-): string {
+export function kernelVersionDirectory(layout: KernelInstallLayout, version: string): string {
   assertKernelVersion(version)
   return join(layout.versionsDirectory, version)
 }
 
 /** 把布局里的目录挨个建出来（只有属主可进）；已经在了就什么都不做。 */
-export async function ensureKernelInstallLayout(
-  layout: KernelInstallLayout,
-): Promise<void> {
+export async function ensureKernelInstallLayout(layout: KernelInstallLayout): Promise<void> {
   for (const directory of [
     layout.root,
     layout.versionsDirectory,

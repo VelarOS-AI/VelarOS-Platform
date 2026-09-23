@@ -21,9 +21,7 @@ import type { LocalModelEnvironmentApi } from '../providers/LocalModelEnvironmen
 import { LocalModelEnvironment } from '../providers/LocalModelEnvironment'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 import type { ProviderScriptRegistryScripts } from '../providers/ProviderScriptRegistry'
-import {
-  type VelarCloudModelRuntimeLookup,
-} from '../providers/VelarCloudModelRuntime'
+import { type VelarCloudModelRuntimeLookup } from '../providers/VelarCloudModelRuntime'
 
 /**
  * 模型适配器注册表。

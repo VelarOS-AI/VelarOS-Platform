@@ -14,13 +14,13 @@ function cell(value: unknown): string {
 /** 把一批历史归档视图渲染成一份自包含 HTML；缺失字段保持缺失。 */
 export function renderHistoricalReportHtml(
   views: readonly RunArchiveView[],
-  options: ReportRenderOptions = {},
+  options: ReportRenderOptions = {}
 ): string {
   const title = options.title ?? 'VelarOS Agent Lab 历史归档'
   const rows = views
     .map(
       (view) =>
-        `<tr><td>${escapeHtml(view.shape)}</td><td>${cell(view.runId)}</td><td>${cell(view.sessionId)}</td><td>${cell(view.passed)}</td><td>${cell(view.total)}</td><td>${cell(view.findings?.length)}</td><td>${cell(view.drops?.length)}</td><td>${view.errors.length ? escapeHtml(view.errors.join('; ')) : '—'}</td></tr>`,
+        `<tr><td>${escapeHtml(view.shape)}</td><td>${cell(view.runId)}</td><td>${cell(view.sessionId)}</td><td>${cell(view.passed)}</td><td>${cell(view.total)}</td><td>${cell(view.findings?.length)}</td><td>${cell(view.drops?.length)}</td><td>${view.errors.length ? escapeHtml(view.errors.join('; ')) : '—'}</td></tr>`
     )
     .join('')
   const generatedAt = options.generatedAt ?? null

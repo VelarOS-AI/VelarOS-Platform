@@ -5,7 +5,14 @@
 
 import { SearchLimits } from '../contract/constants.js'
 import type { EvidenceOperationContext } from '../contract/requires.js'
-import type { EvidenceCandidates, EvidenceQueryInput, EvidenceReadInput, SearchDraft, SearchEvidence, SearchReportReceipt } from '../types.js'
+import type {
+  EvidenceCandidates,
+  EvidenceQueryInput,
+  EvidenceReadInput,
+  SearchDraft,
+  SearchEvidence,
+  SearchReportReceipt,
+} from '../types.js'
 
 /**
  * @AgentView
@@ -31,17 +38,35 @@ export interface EvidenceOperationsApi {
 }
 
 export class EvidenceOperations implements EvidenceOperationsApi {
-  public async query(input: EvidenceQueryInput, ctx: EvidenceOperationContext): Promise<EvidenceCandidates> {
+  public async query(
+    input: EvidenceQueryInput,
+    ctx: EvidenceOperationContext
+  ): Promise<EvidenceCandidates> {
     ctx.abortSignal.throwIfAborted()
-    return ctx.activation.query(input.source, input.query, input.limit ?? SearchLimits.defaultCandidates, ctx.abortSignal)
+    return ctx.activation.query(
+      input.source,
+      input.query,
+      input.limit ?? SearchLimits.defaultCandidates,
+      ctx.abortSignal
+    )
   }
 
-  public async read(input: EvidenceReadInput, ctx: EvidenceOperationContext): Promise<SearchEvidence> {
+  public async read(
+    input: EvidenceReadInput,
+    ctx: EvidenceOperationContext
+  ): Promise<SearchEvidence> {
     ctx.abortSignal.throwIfAborted()
-    return ctx.activation.inspect(input.target, input.maxBytes ?? SearchLimits.defaultReadBytes, ctx.abortSignal)
+    return ctx.activation.inspect(
+      input.target,
+      input.maxBytes ?? SearchLimits.defaultReadBytes,
+      ctx.abortSignal
+    )
   }
 
-  public async report(input: SearchDraft, ctx: EvidenceOperationContext): Promise<SearchReportReceipt> {
+  public async report(
+    input: SearchDraft,
+    ctx: EvidenceOperationContext
+  ): Promise<SearchReportReceipt> {
     ctx.abortSignal.throwIfAborted()
     return ctx.activation.report(input, ctx.abortSignal)
   }

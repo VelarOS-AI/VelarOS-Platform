@@ -1,4 +1,8 @@
-import type { PlannerCoverageWindow, ProjectEditView, ProjectResolvedMutation } from '../../types/editing.js'
+import type {
+  PlannerCoverageWindow,
+  ProjectEditView,
+  ProjectResolvedMutation,
+} from '../../types/editing.js'
 import type { ProjectVisibleCoverage } from '../../types/file-refs.js'
 
 import { orderProjectMutations } from './content-planner.js'
@@ -7,7 +11,15 @@ import { createProjectSourceCoordinates, sourceLineAt } from './source.js'
 /** 整份正文都可见时的覆盖范围：一个从头到尾、整行完整的窗口。 */
 export function completeProjectCoverage(content: string): ProjectVisibleCoverage[] {
   const source = createProjectSourceCoordinates(content)
-  return [{ startOffset: 0, endOffset: content.length, startLine: 1, endLine: source.lines.length, completeLines: true }]
+  return [
+    {
+      startOffset: 0,
+      endOffset: content.length,
+      startLine: 1,
+      endLine: source.lines.length,
+      completeLines: true,
+    },
+  ]
 }
 
 /** 这个视图看没看过整份正文：整份替换要求看过全文，不然没看过的行会被一起丢掉。 */
@@ -21,7 +33,11 @@ export function coversWholeProjectFile(view: ProjectEditView): boolean {
 }
 
 /** 按本计划的拼接推进可见覆盖范围：没改动的可见原文照旧可见，再加上本计划自己写进去的文本，其余仍算没看过。 */
-export function advanceProjectCoverage(view: ProjectEditView, content: string, mutations: readonly ProjectResolvedMutation[]): ProjectVisibleCoverage[] {
+export function advanceProjectCoverage(
+  view: ProjectEditView,
+  content: string,
+  mutations: readonly ProjectResolvedMutation[]
+): ProjectVisibleCoverage[] {
   const ordered = orderProjectMutations(mutations)
   const known: PlannerCoverageWindow[] = []
   let oldCursor = 0
@@ -30,7 +46,8 @@ export function advanceProjectCoverage(view: ProjectEditView, content: string, m
     for (const window of view.coverage) {
       const start = Math.max(oldCursor, window.startOffset)
       const stop = Math.min(end, window.endOffset)
-      if (stop >= start) known.push({ start: newCursor + start - oldCursor, end: newCursor + stop - oldCursor })
+      if (stop >= start)
+        known.push({ start: newCursor + start - oldCursor, end: newCursor + stop - oldCursor })
     }
     newCursor += end - oldCursor
     oldCursor = end
@@ -59,7 +76,13 @@ export function advanceProjectCoverage(view: ProjectEditView, content: string, m
       const start = Math.max(window.start, line.start)
       const end = Math.min(window.end, line.end)
       if (end === start && line.end !== line.start) continue
-      coverage.push({ startOffset: start, endOffset: end, startLine: number, endLine: number, completeLines: start === line.start && end === line.end })
+      coverage.push({
+        startOffset: start,
+        endOffset: end,
+        startLine: number,
+        endLine: number,
+        completeLines: start === line.start && end === line.end,
+      })
     }
   }
   return coverage

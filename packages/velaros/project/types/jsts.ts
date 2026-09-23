@@ -1,7 +1,7 @@
 import type * as ts from 'typescript'
 
 import type { SymbolInfo } from './adapter.js'
-import type { OffsetRange,Range } from './common.js'
+import type { OffsetRange, Range } from './common.js'
 
 /** 同一实现以不同身份注册：核心 adapter 与 TypeScript 插件 adapter 只差 id、优先级与检查项名。 */
 export interface JsTsAdapterIdentity {
@@ -57,4 +57,5 @@ export interface JsTsSymbolQuery {
   container?: string
 }
 
-export type OverloadableDeclaration = ts.FunctionDeclaration | ts.MethodDeclaration | ts.ConstructorDeclaration
+export type OverloadableDeclaration =
+  ts.FunctionDeclaration | ts.MethodDeclaration | ts.ConstructorDeclaration

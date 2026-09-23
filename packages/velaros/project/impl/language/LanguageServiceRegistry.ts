@@ -1,7 +1,10 @@
 import { AppError, isEmpty, isNonBlankString } from '@velaros-ai/core'
 
 import type { LanguageNavigationService } from '../../types/language.js'
-import { languageLabelWords, serviceMatchesExtensions } from '../../utils/language/language-queries.js'
+import {
+  languageLabelWords,
+  serviceMatchesExtensions,
+} from '../../utils/language/language-queries.js'
 import { normalizeExtension, sourceFileExtension } from '../../utils/language/source-files.js'
 
 import { jsTsLanguageService } from './JsTsLanguageService.js'
@@ -69,9 +72,7 @@ class LanguageServiceRegistry implements LanguageServiceRegistryApi {
   public assertKnownLanguage(language: LooseOptional<string>): void {
     if (!isNonBlankString(language) || !isEmpty(this.resolveLanguageServices(language))) return
 
-    const available = this.services
-      .map((service) => `${service.id}（${service.label}）`)
-      .join('、')
+    const available = this.services.map((service) => `${service.id}（${service.label}）`).join('、')
     throw new AppError(
       'VALIDATION',
       `language "${language}" 没有对应的语言服务，可用：${available}。省略 language 时按 path 的扩展名自动选择。`

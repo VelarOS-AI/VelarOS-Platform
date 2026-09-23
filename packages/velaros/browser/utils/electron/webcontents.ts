@@ -17,7 +17,10 @@ export function clampEmbeddedDiagnosticLimit(value: unknown): number {
   const numberValue = Number(value)
   if (!Number.isFinite(numberValue)) return 100
 
-  return Math.max(1, Math.min(BrowserTuning.cdp.embeddedNetworkDiagnostics, Math.round(numberValue)))
+  return Math.max(
+    1,
+    Math.min(BrowserTuning.cdp.embeddedNetworkDiagnostics, Math.round(numberValue))
+  )
 }
 
 /** 内嵌页面的框架树展平成一张表：id 是 frameTreeNodeId，顶层页面在最前；与顶层页面不同源的 iframe 记成 crossOrigin。 */

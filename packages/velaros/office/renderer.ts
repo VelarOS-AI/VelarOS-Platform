@@ -7,7 +7,12 @@
 export { OfficeErrorCodes } from './contract/constants.js'
 export type { OfficeDocumentRendererApi } from './contract/provides.js'
 export { officeDocumentRenderer } from './impl/runtime/OfficeDocumentRenderer.js'
-export type { NormalizedWordInput, PreviewOutlineItem, PreviewSheet, PreviewSlide } from './types/office.js'
+export type {
+  NormalizedWordInput,
+  PreviewOutlineItem,
+  PreviewSheet,
+  PreviewSlide,
+} from './types/office.js'
 export type {
   MammothMessage,
   OfficePreviewKind,

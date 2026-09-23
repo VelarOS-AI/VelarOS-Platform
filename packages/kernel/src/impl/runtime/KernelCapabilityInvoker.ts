@@ -11,7 +11,10 @@ import {
   permissionDeniedFailure,
   unknownOperationFailure,
 } from '../../utils/errors'
-import { isKernelCallableCapabilityService, resolveKernelCapabilityOperationReason } from '../../utils/runtime/callable'
+import {
+  isKernelCallableCapabilityService,
+  resolveKernelCapabilityOperationReason,
+} from '../../utils/runtime/callable'
 
 import type { KernelModuleHostApi } from './KernelModuleHost'
 
@@ -57,11 +60,7 @@ export class KernelCapabilityInvoker implements KernelCapabilityInvokerApi {
     try {
       metadata = service.getOperationMetadata(call.operation)
     } catch (error) {
-      throw operationMetadataFailure(
-        call.capabilityId,
-        call.operation,
-        { cause: error },
-      )
+      throw operationMetadataFailure(call.capabilityId, call.operation, { cause: error })
     }
     if (isUndefined(metadata)) {
       throw unknownOperationFailure(call.capabilityId, call.operation)
@@ -75,11 +74,7 @@ export class KernelCapabilityInvoker implements KernelCapabilityInvokerApi {
         input: call.input,
       })
     } catch (error) {
-      throw permissionCheckFailure(
-        call.capabilityId,
-        call.operation,
-        { cause: error },
-      )
+      throw permissionCheckFailure(call.capabilityId, call.operation, { cause: error })
     }
 
     for (const permission of metadata.permissions) {
@@ -89,21 +84,18 @@ export class KernelCapabilityInvoker implements KernelCapabilityInvokerApi {
           token,
           {
             permission,
-            reason: call.permissionContext?.reason
-              ?? reason
-              ?? `调用能力 "${call.capabilityId}" 的操作 "${call.operation}"。`,
+            reason:
+              call.permissionContext?.reason ??
+              reason ??
+              `调用能力 "${call.capabilityId}" 的操作 "${call.operation}"。`,
             resource: call.permissionContext?.resource,
             details: call.permissionContext?.details,
             scope: call.scope,
           },
-          call.attribution,
+          call.attribution
         )
       } catch (error) {
-        throw permissionCheckFailure(
-          call.capabilityId,
-          call.operation,
-          { cause: error },
-        )
+        throw permissionCheckFailure(call.capabilityId, call.operation, { cause: error })
       }
       if (decision.status === 'denied') {
         throw permissionDeniedFailure({
@@ -115,11 +107,6 @@ export class KernelCapabilityInvoker implements KernelCapabilityInvokerApi {
       }
     }
 
-    return service.invoke(
-      call.operation,
-      call.scope,
-      call.input,
-      call.signal,
-    )
+    return service.invoke(call.operation, call.scope, call.input, call.signal)
   }
 }

@@ -5,7 +5,7 @@ import type { ProjectChangeRecordInput } from '../types/change-feed'
 
 function projection(
   transactionId: string,
-  lifecycle: ProjectChangeRecordInput['lifecycle'] = 'prepared',
+  lifecycle: ProjectChangeRecordInput['lifecycle'] = 'prepared'
 ): ProjectChangeRecordInput {
   return {
     transactionId,
@@ -80,10 +80,7 @@ describe('TransactionProjectionRepository', () => {
 
   test('supports synchronizing transaction eviction without retaining stale projections', () => {
     const repository = new TransactionProjectionRepository({ maxProjections: 2 })
-    repository.hydrate([
-      projection('tx_first'),
-      projection('tx_second'),
-    ])
+    repository.hydrate([projection('tx_first'), projection('tx_second')])
 
     repository.delete('tx_first')
     repository.set(projection('tx_third'))

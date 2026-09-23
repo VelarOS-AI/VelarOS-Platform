@@ -5,13 +5,17 @@ import type { ContextViewForms } from '../contract/constants.js'
  * @AgentView
  * 原文的来源：user 用户输入、assistant 模型回复、tool 能力回执、event 运行事件、note 笔记、checkpoint 检查点、audit 审计记录。
  */
-export type ContextRecordKind = 'user' | 'assistant' | 'tool' | 'event' | 'note' | 'checkpoint' | 'audit'
+export type ContextRecordKind =
+  'user' | 'assistant' | 'tool' | 'event' | 'note' | 'checkpoint' | 'audit'
 /**
  * 内容引用在所属会话中解析。
  * @AgentView
  * 原文引用：sessionId 与 id 一起定位一份不可变原文；只能在授权给你的会话范围里读。
  */
-export interface ContextRef { readonly sessionId: string; readonly id: string }
+export interface ContextRef {
+  readonly sessionId: string
+  readonly id: string
+}
 /**
  * 不可变原始记录；正文由对象存储保存。
  * @AgentView
@@ -39,56 +43,121 @@ export interface ContextState {
   readonly records: readonly ContextRecord[]
   readonly workingSet: WorkingSet
   readonly task?: ContextTaskState
-  readonly inputSummaries?:ReadonlyArray<{readonly input:ContextRef;readonly summary:ContextRef;readonly revision:number}>
+  readonly inputSummaries?: ReadonlyArray<{
+    readonly input: ContextRef
+    readonly summary: ContextRef
+    readonly revision: number
+  }>
 }
 /** 不含历史记录目录的状态；版本与完整快照共享同一 CAS 序列。 */
-export type ContextMetadata = Omit<ContextState,'records'>
+export type ContextMetadata = Omit<ContextState, 'records'>
 /**
  * 记录正文与可信的来源元数据。
  * @AgentView
  * 读到的一页原文：text 从第 offset 个字符开始（按 UTF-16 算），totalChars 是整份正文的字符数，没读完就从 offset + text.length 接着读。
  */
-export interface ContextContent { readonly record: ContextRecord; readonly text: string; readonly totalChars: number; readonly offset: number }
+export interface ContextContent {
+  readonly record: ContextRecord
+  readonly text: string
+  readonly totalChars: number
+  readonly offset: number
+}
 /** 工作集检查结果；事件游标包括提交期间追加的新事实。 */
-export interface ContextSnapshot { readonly revision: number; readonly cursor: number; readonly items: readonly ContextRef[]; readonly protected: readonly ContextRef[] }
+export interface ContextSnapshot {
+  readonly revision: number
+  readonly cursor: number
+  readonly items: readonly ContextRef[]
+  readonly protected: readonly ContextRef[]
+}
 /** 一次带乐观锁的工作集替换。 */
-export interface WorkingSetChange { readonly baseRevision: number; readonly baseCursor: number; readonly items: readonly ContextRef[] }
+export interface WorkingSetChange {
+  readonly baseRevision: number
+  readonly baseCursor: number
+  readonly items: readonly ContextRef[]
+}
 /** 原子提交的回执。 */
-export interface WorkingSetCommit { readonly revision: number; readonly effective: 'next-model-request'; readonly cursor: number }
+export interface WorkingSetCommit {
+  readonly revision: number
+  readonly effective: 'next-model-request'
+  readonly cursor: number
+}
 /** 可由模型写入的材料。 */
-export interface NoteWrite { readonly kind: 'note' | 'checkpoint'; readonly title: string; readonly body: string; readonly sources?: readonly ContextRef[] }
+export interface NoteWrite {
+  readonly kind: 'note' | 'checkpoint'
+  readonly title: string
+  readonly body: string
+  readonly sources?: readonly ContextRef[]
+}
 /** 宿主追加的真实会话事件。 */
-export interface ContextAppend { readonly kind: ContextRecordKind; readonly title?: string; readonly body: string; readonly sources?: readonly ContextRef[] }
+export interface ContextAppend {
+  readonly kind: ContextRecordKind
+  readonly title?: string
+  readonly body: string
+  readonly sources?: readonly ContextRef[]
+}
 /** 原文读取范围，单位是 UTF-16 字符。 */
-export interface ContextReadRange { readonly offset?: number; readonly limit?: number }
+export interface ContextReadRange {
+  readonly offset?: number
+  readonly limit?: number
+}
 /** 分页检索条件。 */
-export interface ContextQuery { readonly query: string; readonly offset?: number; readonly limit?: number }
+export interface ContextQuery {
+  readonly query: string
+  readonly offset?: number
+  readonly limit?: number
+}
 /** 检索命中的元数据与有界预览。 */
-export interface ContextSearchHit { readonly ref: ContextRef; readonly kind: ContextRecordKind; readonly title: string; readonly preview: string }
+export interface ContextSearchHit {
+  readonly ref: ContextRef
+  readonly kind: ContextRecordKind
+  readonly title: string
+  readonly preview: string
+}
 /** 可继续翻页的检索结果。 */
-export interface ContextSearchPage { readonly items: readonly ContextSearchHit[]; readonly nextOffset: Nullable<number> }
+export interface ContextSearchPage {
+  readonly items: readonly ContextSearchHit[]
+  readonly nextOffset: Nullable<number>
+}
 /** 模型请求所用的不可变材料投影。 */
-export interface ContextProjection { readonly revision: number; readonly cursor: number; readonly records: readonly ContextContent[]; readonly chars: number }
+export interface ContextProjection {
+  readonly revision: number
+  readonly cursor: number
+  readonly records: readonly ContextContent[]
+  readonly chars: number
+}
 /** 宿主绑定的任务作用域；模型不能指定调用身份。 */
-export interface ContextTaskScope { readonly sessionId: string; readonly revision: number }
+export interface ContextTaskScope {
+  readonly sessionId: string
+  readonly revision: number
+}
 /**
  * 精确选择器由数据源解释，核心不理解文件和 AST。
  * @AgentView
  * 读资源的哪一部分：whole 整份，lines 按行（start、end 从 1 数，含两端），symbol 按名字取一个符号。
  */
-export type ContextSelector = { readonly kind: 'whole' } | { readonly kind: 'lines'; readonly start: number; readonly end: number } | { readonly kind: 'symbol'; readonly name: string }
+export type ContextSelector =
+  | { readonly kind: 'whole' }
+  | { readonly kind: 'lines'; readonly start: number; readonly end: number }
+  | { readonly kind: 'symbol'; readonly name: string }
 /**
  * 来源里的一个资源；检索候选与证据都指向它。
  * @AgentView
  * 来源里的一个资源：sourceId 是来源，resourceId 是来源里的资源身份，selector 选读哪一部分，不给就是整份。
  */
-export interface ContextResourceTarget { readonly kind: 'resource'; readonly sourceId: string; readonly resourceId: string; readonly selector?: ContextSelector }
+export interface ContextResourceTarget {
+  readonly kind: 'resource'
+  readonly sourceId: string
+  readonly resourceId: string
+  readonly selector?: ContextSelector
+}
 /** 资源身份和不可变记录引用采用已有会话命名空间。 */
 export type ContextTarget =
-  | ContextResourceTarget
-  | { readonly kind: 'artifact'; readonly ref: ContextRef }
+  ContextResourceTarget | { readonly kind: 'artifact'; readonly ref: ContextRef }
 /** 本次观察的时间要求。 */
-export type ContextTime = { readonly kind: 'after-step' } | { readonly kind: 'historical' } | { readonly kind: 'snapshot'; readonly snapshotId: string }
+export type ContextTime =
+  | { readonly kind: 'after-step' }
+  | { readonly kind: 'historical' }
+  | { readonly kind: 'snapshot'; readonly snapshotId: string }
 /**
  * 可由真实源产生的有限表示。
  * @AgentView
@@ -104,7 +173,11 @@ export type ViewIntentInput = {
   readonly maxTokensHint?: number
 } & (
   | { readonly kind: 'direct'; readonly target: ContextTarget }
-  | { readonly kind: 'semantic'; readonly objective: string; readonly anchors?: readonly ContextTarget[] }
+  | {
+      readonly kind: 'semantic'
+      readonly objective: string
+      readonly anchors?: readonly ContextTarget[]
+    }
 )
 /** 主机签发的观察身份。 */
 export interface RegisteredViewIntent {
@@ -147,7 +220,10 @@ export interface ContextSourceRead {
   readonly mediaType: string
 }
 /** 宿主实际装配的证据源发现卡片，不含凭据或路径实现细节。 */
-export interface ContextSourceCard { readonly id: string; readonly capabilities: ContextSourceCapabilities }
+export interface ContextSourceCard {
+  readonly id: string
+  readonly capabilities: ContextSourceCapabilities
+}
 /** 经过 Source 当前范围检查的原始检索命中。 */
 export interface ContextSourceHit {
   readonly target: ContextTarget
@@ -168,9 +244,19 @@ export interface ContextSelection {
 /** 有界上下文模型的一次控制决策。 */
 export type ContextPlannerDecision =
   | { readonly kind: 'select'; readonly selections: readonly ContextSelection[] }
-  | { readonly kind: 'search'; readonly intentId: string; readonly sourceId: string; readonly query: string; readonly limit: number }
+  | {
+      readonly kind: 'search'
+      readonly intentId: string
+      readonly sourceId: string
+      readonly query: string
+      readonly limit: number
+    }
   | { readonly kind: 'inspect'; readonly candidateIds: readonly string[] }
-  | { readonly kind: 'insufficient'; readonly intentIds: readonly string[]; readonly reason: string }
+  | {
+      readonly kind: 'insufficient'
+      readonly intentIds: readonly string[]
+      readonly reason: string
+    }
 /** 同一任务的共享事实与进度，两个模型步骤按职责读取同一快照。 */
 export interface ContextTaskFrame {
   readonly goals: readonly ContextContent[]
@@ -197,7 +283,12 @@ export interface ContextPlan {
   readonly degraded: readonly string[]
 }
 /** 缺口必须留在最终视图中。 */
-export interface ContextGap { readonly intentId: string; readonly required: boolean; readonly code: string; readonly detail: string }
+export interface ContextGap {
+  readonly intentId: string
+  readonly required: boolean
+  readonly code: string
+  readonly detail: string
+}
 /** 真实读取产生的证据，恢复引用指向已持久化正文。 */
 export interface ContextEvidence {
   readonly id: string
@@ -236,9 +327,17 @@ export interface ContextFeedback {
 }
 /** 已结算后发布的、自足的下一轮模型视图。 */
 /** 当前执行的原文引用始终能召回，下一轮仅内联有界片段。 */
-export interface ContextStepRecord { readonly source: ContextRef; readonly result: ContextRef; readonly attachments?: readonly ContextRef[] }
+export interface ContextStepRecord {
+  readonly source: ContextRef
+  readonly result: ContextRef
+  readonly attachments?: readonly ContextRef[]
+}
 /** 脚本变化和输出变化保持各自来源，不能把脚本当作已执行效果。 */
-export interface ContextStepView { readonly source: ContextContent; readonly result: ContextContent; readonly attachments?: ReadonlyArray<{readonly ref:ContextRef;readonly hash:string}> }
+export interface ContextStepView {
+  readonly source: ContextContent
+  readonly result: ContextContent
+  readonly attachments?: ReadonlyArray<{ readonly ref: ContextRef; readonly hash: string }>
+}
 /** 物化阶段的可聚合计量，不携带正文或参数。 */
 export interface ContextViewMetrics {
   readonly sourceReads: number
@@ -247,7 +346,9 @@ export interface ContextViewMetrics {
   readonly durationMs: number
 }
 /** 任务累计计量与正文分开存储，供评测和普通 trace 使用。 */
-export interface ContextTaskMetrics extends ContextViewMetrics { readonly views: number }
+export interface ContextTaskMetrics extends ContextViewMetrics {
+  readonly views: number
+}
 /** 仅描述变化的有界差量；完整证据以本次 view 为准。 */
 export interface ContextTextChange {
   readonly from: Nullable<ContextRef>
@@ -263,7 +364,14 @@ export interface ContextProgress {
   readonly previousViewId: Nullable<string>
   readonly script: ContextTextChange
   readonly result: ContextTextChange
-  readonly evidence: ReadonlyArray<{ readonly target: ContextTarget; readonly change: 'added' | 'updated' | 'removed'; readonly patch: string; readonly truncated: boolean; readonly before: Nullable<string>; readonly after: Nullable<string> }>
+  readonly evidence: ReadonlyArray<{
+    readonly target: ContextTarget
+    readonly change: 'added' | 'updated' | 'removed'
+    readonly patch: string
+    readonly truncated: boolean
+    readonly before: Nullable<string>
+    readonly after: Nullable<string>
+  }>
   readonly unchangedEvidence: number
   readonly repeatedSteps: number
   readonly stalled: boolean
@@ -276,14 +384,26 @@ export interface ModelView extends ContextTaskFrame {
   readonly executionId: string
   readonly evidence: readonly ContextEvidence[]
   readonly gaps: readonly ContextGap[]
-  readonly coverage: ReadonlyArray<{ readonly intentId: string; readonly status: 'satisfied' | 'partial' | 'missing' }>
+  readonly coverage: ReadonlyArray<{
+    readonly intentId: string
+    readonly status: 'satisfied' | 'partial' | 'missing'
+  }>
   readonly readSet: readonly ContextReadStamp[]
   readonly plannerCalls: number
   readonly degraded: readonly string[]
   readonly builtAt: string
 }
 /** 可恢复任务阶段；终态只由新的用户运行显式开启。 */
-export type ContextTaskStatus = 'ready' | 'executing' | 'context-pending' | 'view-ready' | 'needs-reconcile' | 'context-blocked' | 'completed' | 'cancelled' | 'failed'
+export type ContextTaskStatus =
+  | 'ready'
+  | 'executing'
+  | 'context-pending'
+  | 'view-ready'
+  | 'needs-reconcile'
+  | 'context-blocked'
+  | 'completed'
+  | 'cancelled'
+  | 'failed'
 /** 双角色用量统一记账，供应商没有报告时保留 unknown。 */
 export interface ContextTaskUsage {
   readonly mainCalls: number
@@ -302,15 +422,17 @@ export interface ContextArtifactProvenance {
 }
 export interface ContextTaskState {
   /** 当前逻辑任务使用的持久 store ID；由 Runtime 维护，展示时重新核验权限。 */
-  readonly storeRefs?:readonly string[]
+  readonly storeRefs?: readonly string[]
   /** 已退出自动展示的授权空间；实际访问会重新激活。 */
-  readonly releasedStoreRefs?:readonly string[]
+  readonly releasedStoreRefs?: readonly string[]
   /** 逻辑任务身份，跨多次 submit 继续使用；旧存储在下次 begin 时补齐。 */
-  readonly id?:string
+  readonly id?: string
   /** 当前任务的材料边界，原始会话记录仍可按引用归档读取。 */
-  readonly startedSequence?:number
+  readonly startedSequence?: number
   /** 在同一任务存储内记录活动执行及其决策证据，不与模型帧共用单一身份。 */
-  readonly activeExecutions?: Readonly<Record<string,{readonly view:Nullable<ModelView>;readonly concurrent:boolean}>>
+  readonly activeExecutions?: Readonly<
+    Record<string, { readonly view: Nullable<ModelView>; readonly concurrent: boolean }>
+  >
   readonly step?: number
   readonly provenance?: readonly ContextArtifactProvenance[]
   readonly metrics?: ContextTaskMetrics
@@ -344,15 +466,15 @@ export interface ContextViewLimits {
 }
 /** 用户原始输入附件，由宿主先保存至当前会话。 */
 export interface ContextInputFile {
-  readonly ref:ContextRef
-  readonly name:string
-  readonly mediaType:string
-  readonly bytes?:number
+  readonly ref: ContextRef
+  readonly name: string
+  readonly mediaType: string
+  readonly bytes?: number
 }
 /** 宿主输入；原文与附件保存在唯一对象存储。 */
 export interface ContextUserInput {
-  readonly text?:string
-  readonly files?:readonly ContextInputFile[]
+  readonly text?: string
+  readonly files?: readonly ContextInputFile[]
 }
 /**
  * 模型理解后的输入投影，不改变用户原始事实。
@@ -361,84 +483,84 @@ export interface ContextUserInput {
  * constraints 逐条列出约束（已有摘要时先读它，逐字保留原有约束再追加），unresolved 是没解决的事项。
  */
 export interface ContextInputSummary {
-  readonly ref:ContextRef
-  readonly summary:string
-  readonly constraints:readonly string[]
-  readonly unresolved:readonly string[]
-  readonly baseRevision:number
+  readonly ref: ContextRef
+  readonly summary: string
+  readonly constraints: readonly string[]
+  readonly unresolved: readonly string[]
+  readonly baseRevision: number
 }
 
 /** 完成验证的后续动作；由事实或领域验收器给出，不自动重跑脚本。 */
 export interface ContextCompletionResult {
   /** 任务是否已正式完成。 */
-  readonly completed:boolean
+  readonly completed: boolean
   /** 是否经过领域验收。 */
-  readonly verified:boolean
+  readonly verified: boolean
   /** 可供下一轮或宿主处理的具体原因。 */
-  readonly reason:string
+  readonly reason: string
   /** 未完成时应补读修复、刷新、核对、等待输入或处理容量。 */
-  readonly recovery?:'repair'|'refresh'|'reconcile'|'input'|'capacity'
+  readonly recovery?: 'repair' | 'refresh' | 'reconcile' | 'input' | 'capacity'
 }
 
 /** 同一快照内的记录选择；字段取交集，各选择结果取并集。 */
 export interface ContextRecordSelection {
   /** 精确标题。 */
-  readonly title?:string
+  readonly title?: string
   /** 按字面匹配的标题前缀。 */
-  readonly titlePrefix?:string
+  readonly titlePrefix?: string
   /** 按字面匹配的标题后缀。 */
-  readonly titleSuffix?:string
+  readonly titleSuffix?: string
   /** 精确记录序号。 */
-  readonly sequence?:number
+  readonly sequence?: number
   /** 每个匹配标题仅返回最新一项，不与 latest/last 合用。 */
-  readonly latestPerTitle?:boolean
+  readonly latestPerTitle?: boolean
   /** 返回匹配记录的最后 N 项，最多 recordPage 项，不与 latest 合用。 */
-  readonly last?:number
+  readonly last?: number
   /** 精确引用身份。 */
-  readonly refId?:string
+  readonly refId?: string
   /** 原始记录类型。 */
-  readonly kind?:ContextRecordKind
+  readonly kind?: ContextRecordKind
   /** 仅取本选择中序号最大的记录。 */
-  readonly latest?:boolean
+  readonly latest?: boolean
 }
 /** 同一版本的元数据和所选目录；records 不是完整目录，不可用于完整 CAS。 */
 export interface ContextRecordSnapshot {
   /** 与所有选中记录来自同一个读快照。 */
-  readonly metadata:ContextMetadata
+  readonly metadata: ContextMetadata
   /** 选择结果按身份去重后，按 sequence 升序返回。 */
-  readonly records:readonly ContextRecord[]
+  readonly records: readonly ContextRecord[]
 }
 /** 按索引分页查询原文目录，正文继续通过对象引用读取。 */
 export interface ContextRecordQuery {
   /** 序号下界，不包含此项。 */
-  readonly after?:number
+  readonly after?: number
   /** 每页条数，最多 recordPage 项。 */
-  readonly limit?:number
+  readonly limit?: number
   /** 精确记录标题过滤。 */
-  readonly title?:string
+  readonly title?: string
   /** 精确原始引用身份过滤。 */
-  readonly refId?:string
+  readonly refId?: string
 }
 /** 单调序号分页结果。 */
 export interface ContextRecordPage {
   /** 本页目录记录。 */
-  readonly items:readonly ContextRecord[]
+  readonly items: readonly ContextRecord[]
   /** 仍有下一页时使用的序号。 */
-  readonly nextAfter:Nullable<number>
+  readonly nextAfter: Nullable<number>
 }
 /** 回收只针对未被目录引用且超过宽限期的孤立对象。 */
 export interface ContextObjectCollection {
   /** 宿主确认的会话版本，变化时整体拒绝回收。 */
-  readonly expectedVersion:number
+  readonly expectedVersion: number
   /** 对象最后写入时间的上界，Unix 毫秒；不能进入存储宽限期。 */
-  readonly before:number
+  readonly before: number
   /** 默认只报告候选；false 才实际回收。 */
-  readonly dryRun?:boolean
+  readonly dryRun?: boolean
 }
 /** 回收计数，持久记录和已引用正文始终保持。 */
 export interface ContextObjectCollectionResult {
   /** 符合孤立及时间条件的对象数。 */
-  readonly candidates:number
+  readonly candidates: number
   /** 本次实际删除对象数。 */
-  readonly deleted:number
+  readonly deleted: number
 }

@@ -66,7 +66,7 @@ export interface ShellRunInput {
  */
 export interface ShellRunResult {
   /** 宿主实际采用的约束；partial 不是无副作用保证。 */
-  confinement?:ShellProcessConfinementEvidence
+  confinement?: ShellProcessConfinementEvidence
   command: string
   cwd: string
   success: boolean
@@ -229,20 +229,13 @@ export interface ShellBackgroundProcessInfo {
 // ── 进程约束与归属 ──────────────────────────────────────────────
 
 /** @AgentView 命令在操作系统进程层实际采用的文件副作用边界。 */
-export type ShellProcessConfinementMode =
-  | 'read-only'
-  | 'workspace-write'
-  | 'danger-full-access'
+export type ShellProcessConfinementMode = 'read-only' | 'workspace-write' | 'danger-full-access'
 
 /** @AgentView 约束强度；`partial` 不等于 `full`，别把它当成绝对边界。 */
 export type ShellProcessConfinementEnforcement = 'none' | 'partial' | 'full'
 
 /** @AgentView 实际承担约束的后端：macOS 是 Seatbelt，Linux 是 bubblewrap，`host` 表示宿主注入的实现。 */
-export type ShellProcessConfinementBackend =
-  | 'none'
-  | 'bubblewrap'
-  | 'seatbelt'
-  | 'host'
+export type ShellProcessConfinementBackend = 'none' | 'bubblewrap' | 'seatbelt' | 'host'
 
 /** @AgentView 这次进程启动真实生效的约束，不是请求的那个。审批事实与约束事实分开记，谁也不冒充谁。 */
 export interface ShellProcessConfinementEvidence {

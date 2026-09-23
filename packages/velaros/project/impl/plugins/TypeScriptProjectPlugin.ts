@@ -13,9 +13,17 @@ import { TypeScriptSyntaxValidator } from './TypeScriptSyntaxValidator.js'
 
 export class TypeScriptProjectPlugin implements ProjectPlugin {
   /** 本插件的 JS/TS adapter 身份：优先级高于核心那份，语法检查项叫 typescript.syntax。 */
-  private static readonly AdapterIdentity = Object.freeze({ factoryId: 'velaros.typescript.factory', adapterId: 'velaros.typescript.ast', priority: 100, checkId: 'typescript.syntax' })
+  private static readonly AdapterIdentity = Object.freeze({
+    factoryId: 'velaros.typescript.factory',
+    adapterId: 'velaros.typescript.ast',
+    priority: 100,
+    checkId: 'typescript.syntax',
+  })
   /** 本插件的 JS/TS 补丁策略身份：优先级高于核心那份。 */
-  private static readonly StrategyIdentity = Object.freeze({ id: 'velaros.typescript.symbol-patch', priority: 100 })
+  private static readonly StrategyIdentity = Object.freeze({
+    id: 'velaros.typescript.symbol-patch',
+    priority: 100,
+  })
 
   public readonly name = '@velaros-ai/project-typescript'
   public readonly version = ProjectPackageVersion

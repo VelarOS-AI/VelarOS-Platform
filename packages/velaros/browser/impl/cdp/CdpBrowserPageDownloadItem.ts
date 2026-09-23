@@ -1,11 +1,15 @@
-import { copyFile,mkdir, rename, unlink } from 'node:fs/promises'
+import { copyFile, mkdir, rename, unlink } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 import { isFiniteNumber } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserPageDriverDownloadItem } from '../../contract/requires.js'
-import type { CdpBrowserPageDownloadItemOptions, CdpDownloadDoneState, CdpDownloadProgressEvent } from '../../types/cdp.js'
+import type {
+  CdpBrowserPageDownloadItemOptions,
+  CdpDownloadDoneState,
+  CdpDownloadProgressEvent,
+} from '../../types/cdp.js'
 
 /**
  * 一条正在下载的 CDP 条目：既是宿主端口要的那份下载项，也带着 CDP 侧独有的两件——

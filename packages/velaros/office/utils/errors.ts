@@ -28,7 +28,11 @@ export function markItDownUnavailableError(): AppError {
 }
 
 /** 外部命令失败：写明是超时、取消还是退出码不对，再附上输出的结尾，照着改了再试。 */
-export function conversionFailedError(operation: string, result: OfficeSystemCommandResult, note = ''): AppError {
+export function conversionFailedError(
+  operation: string,
+  result: OfficeSystemCommandResult,
+  note = ''
+): AppError {
   const log = commandLogTail(result)
   return new AppError(
     OfficeErrorCodes.conversionFailed,
@@ -38,7 +42,10 @@ export function conversionFailedError(operation: string, result: OfficeSystemCom
 
 /** 外部命令跑完了、却没有产出预期的文件。 */
 export function missingOutputError(operation: string, expected: string): AppError {
-  return new AppError(OfficeErrorCodes.conversionFailed, `${operation}的命令跑完了，却没有生成 ${expected}。`)
+  return new AppError(
+    OfficeErrorCodes.conversionFailed,
+    `${operation}的命令跑完了，却没有生成 ${expected}。`
+  )
 }
 
 /** 命令是怎么结束的：超时、被取消，还是退出码不为零。 */

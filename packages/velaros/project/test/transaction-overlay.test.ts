@@ -2,14 +2,19 @@ import { describe, expect, test } from 'bun:test'
 
 import { TransactionOverlay } from '../impl/transactions/TransactionOverlay'
 import type { PreparedPatch } from '../types/edit'
-import { isCreatePatch, isDeletePatch, stagedContentAfter, withoutStagedOffsets } from '../utils/transactions/patch-chain.js'
+import {
+  isCreatePatch,
+  isDeletePatch,
+  stagedContentAfter,
+  withoutStagedOffsets,
+} from '../utils/transactions/patch-chain.js'
 
 function patch(
   patchId: string,
   path: string,
   oldContent: string | undefined,
   newContent: string | undefined,
-  operation = 'replace_text',
+  operation = 'replace_text'
 ): PreparedPatch {
   return {
     patchId,
@@ -24,10 +29,12 @@ function patch(
   }
 }
 
-function createOverlay(options: {
-  rebase?: (patchValue: PreparedPatch, stagedContent: string) => Promise<PreparedPatch | null>
-  read?: (path: string) => Promise<string | undefined>
-} = {}): TransactionOverlay {
+function createOverlay(
+  options: {
+    rebase?: (patchValue: PreparedPatch, stagedContent: string) => Promise<PreparedPatch | null>
+    read?: (path: string) => Promise<string | undefined>
+  } = {}
+): TransactionOverlay {
   return new TransactionOverlay({
     rebasePatchAgainstContent: options.rebase ?? (async () => null),
     readWorkspaceFile: options.read ?? (async () => undefined),
@@ -39,7 +46,13 @@ describe('TransactionOverlay', () => {
     const create = patch('create', 'file.txt', undefined, '', 'create_file')
     const remove = patch('remove', 'file.txt', 'before', undefined, 'delete_file')
     const renameCreate = patch('rename-create', 'to.txt', undefined, 'moved', 'rename_file_create')
-    const renameDelete = patch('rename-delete', 'from.txt', 'moved', undefined, 'rename_file_delete')
+    const renameDelete = patch(
+      'rename-delete',
+      'from.txt',
+      'moved',
+      undefined,
+      'rename_file_delete'
+    )
 
     expect(isCreatePatch(create)).toBe(true)
     expect(isDeletePatch(create)).toBe(false)
@@ -73,10 +86,12 @@ describe('TransactionOverlay', () => {
     ])
 
     expect(rebasedCalls).toEqual([['third', 'first\n']])
-    expect(result.contentByPath).toEqual(new Map([
-      ['a.txt', 'first\nthird\n'],
-      ['b.txt', 'changed\n'],
-    ]))
+    expect(result.contentByPath).toEqual(
+      new Map([
+        ['a.txt', 'first\nthird\n'],
+        ['b.txt', 'changed\n'],
+      ])
+    )
     expect(result.diagnostics).toEqual([])
   })
 
@@ -152,10 +167,12 @@ describe('TransactionOverlay', () => {
         return `workspace:${path}`
       },
     })
-    const reader = overlay.createReader(new Map([
-      ['present.txt', ''],
-      ['deleted.txt', null],
-    ]))
+    const reader = overlay.createReader(
+      new Map([
+        ['present.txt', ''],
+        ['deleted.txt', null],
+      ])
+    )
 
     expect(await reader('present.txt')).toBe('')
     expect(await reader('deleted.txt')).toBeUndefined()

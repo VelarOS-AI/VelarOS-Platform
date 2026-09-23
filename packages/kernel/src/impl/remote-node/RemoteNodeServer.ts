@@ -13,13 +13,7 @@ import type { Socket } from 'node:net'
 
 import { type RawData, WebSocket, type WebSocketServer } from 'ws'
 
-import {
-  isNotNull,
-  isNull,
-  isPresent,
-  Log,
-  toNullable,
-} from '@velaros-ai/core'
+import { isNotNull, isNull, isPresent, Log, toNullable } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { RemoteNodeLimits } from '../../contract/constants'
@@ -36,10 +30,7 @@ import {
   verifyChallengeSignature,
 } from '../../utils/remote/crypto'
 import { decodeClientFrame, sendFrame } from '../../utils/remote/frames'
-import {
-  readMismatchedHelloVersion,
-  resolveRemoteNodePlatform,
-} from '../../utils/remote/handshake'
+import { readMismatchedHelloVersion, resolveRemoteNodePlatform } from '../../utils/remote/handshake'
 import { listenRemoteNode } from '../../utils/remote/listener'
 import { KernelTuning } from '../../utils/tuning'
 import {
@@ -222,7 +213,8 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
       activity: this.options.activity,
       timers: this.timers,
       now: this.now,
-      maxConcurrent: this.options.maxConcurrentInvocations ?? KernelTuning.remoteNodeMaxConcurrentInvocations,
+      maxConcurrent:
+        this.options.maxConcurrentInvocations ?? KernelTuning.remoteNodeMaxConcurrentInvocations,
       deliver: (clientId, result) => this.deliver(clientId, result),
     })
   }
@@ -299,17 +291,12 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
         connection,
         'UNAUTHORIZED',
         'Remote node call arrived before the handshake completed',
-        RemoteNodeCloseCode.Unauthorized,
+        RemoteNodeCloseCode.Unauthorized
       )
       return
     }
     if (frame.type === 'invoke') {
-      this.runner.submit(
-        frame,
-        clientId,
-        connection.clientName ?? clientId,
-        this.manifest.revision,
-      )
+      this.runner.submit(frame, clientId, connection.clientName ?? clientId, this.manifest.revision)
       return
     }
     this.runner.cancel(frame)
@@ -321,7 +308,7 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
         connection,
         'UNAUTHORIZED',
         'Remote node handshake has already advanced past hello',
-        RemoteNodeCloseCode.Unauthorized,
+        RemoteNodeCloseCode.Unauthorized
       )
       return
     }
@@ -341,10 +328,7 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
     })
   }
 
-  private async handlePair(
-    connection: RemoteNodeConnection,
-    frame: RemoteNodePair,
-  ): Promise<void> {
+  private async handlePair(connection: RemoteNodeConnection, frame: RemoteNodePair): Promise<void> {
     const clientId = connection.clientId
     // 已配对的 clientId 不接受再次配对:换设备 / 换密钥必须先由宿主 `unpair()`,免得一枚泄漏的
     // 配对码就能把已有凭据顶掉。
@@ -353,7 +337,7 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
         connection,
         'UNAUTHORIZED',
         'Remote node pairing is not expected on this connection',
-        RemoteNodeCloseCode.Unauthorized,
+        RemoteNodeCloseCode.Unauthorized
       )
       return
     }
@@ -363,7 +347,7 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
         connection,
         'UNAUTHORIZED',
         'Remote node pairing code is invalid, expired, or locked out',
-        RemoteNodeCloseCode.Unauthorized,
+        RemoteNodeCloseCode.Unauthorized
       )
       return
     }
@@ -385,7 +369,7 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
         connection,
         'PAIRING_FAILED',
         'Remote node credential could not be persisted',
-        RemoteNodeCloseCode.Transient,
+        RemoteNodeCloseCode.Transient
       )
       return
     }
@@ -401,23 +385,23 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
 
   private handleAuthenticate(
     connection: RemoteNodeConnection,
-    frame: RemoteNodeAuthenticate,
+    frame: RemoteNodeAuthenticate
   ): void {
     const credential = this.credential
     // 允许 ready 之后再补一帧 authenticate(Client 若在 `paired` 之后仍习惯性补签),验签通过按
     // 幂等吞掉。宽容只针对**多余的帧**,不针对错误的签名:签不过照样斩断。
     const expected = connection.phase === 'authenticate' || connection.phase === 'ready'
     if (
-      !expected
-      || isNull(credential)
-      || credential.clientId !== connection.clientId
-      || !verifyChallengeSignature(credential.publicKey, connection.challenge, frame.signature)
+      !expected ||
+      isNull(credential) ||
+      credential.clientId !== connection.clientId ||
+      !verifyChallengeSignature(credential.publicKey, connection.challenge, frame.signature)
     ) {
       this.fatal(
         connection,
         'UNAUTHORIZED',
         'Remote node challenge signature was rejected',
-        RemoteNodeCloseCode.Unauthorized,
+        RemoteNodeCloseCode.Unauthorized
       )
       return
     }
@@ -450,10 +434,14 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
   private armIdle(connection: RemoteNodeConnection): void {
     connection.idle?.cancel()
     if (connection.phase === 'closed') return
-    connection.idle = this.timers.after(RemoteNodeIdleTimeoutMs, () => {
-      // 空闲超时是链路判决而非权限判决,所以给 Transient:Client 可以立刻重连。
-      this.closeConnection(connection, RemoteNodeCloseCode.Transient, 'Idle timeout')
-    }, { label: 'remote-node-idle', unref: true })
+    connection.idle = this.timers.after(
+      RemoteNodeIdleTimeoutMs,
+      () => {
+        // 空闲超时是链路判决而非权限判决,所以给 Transient:Client 可以立刻重连。
+        this.closeConnection(connection, RemoteNodeCloseCode.Transient, 'Idle timeout')
+      },
+      { label: 'remote-node-idle', unref: true }
+    )
   }
 
   private rejectProtocolVersion(connection: RemoteNodeConnection, clientVersion: number): void {
@@ -474,7 +462,7 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
       connection,
       'PROTOCOL_MISMATCH',
       `Node speaks remote node protocol ${RemoteNodeProtocolVersion}, client speaks ${clientVersion}`,
-      RemoteNodeCloseCode.ProtocolMismatch,
+      RemoteNodeCloseCode.ProtocolMismatch
     )
   }
 
@@ -482,7 +470,7 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
     connection: RemoteNodeConnection,
     code: string,
     message: string,
-    closeCode: RemoteNodeCloseCodeValue,
+    closeCode: RemoteNodeCloseCodeValue
   ): void {
     sendFrame(connection.socket, {
       type: 'fatal',
@@ -495,7 +483,7 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
   private closeConnection(
     connection: RemoteNodeConnection,
     code: RemoteNodeCloseCodeValue,
-    reason: string,
+    reason: string
   ): void {
     connection.phase = 'closed'
     connection.idle?.cancel()
@@ -508,8 +496,6 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
 }
 
 /** 建一台远程能力节点的 Node 侧服务端;宿主注入四个端口,本函数只负责把它们接到 wire 上。 */
-export function createRemoteNodeServer(
-  options: RemoteNodeServerOptions,
-): RemoteNodeServerApi {
+export function createRemoteNodeServer(options: RemoteNodeServerOptions): RemoteNodeServerApi {
   return new RemoteNodeServer(options)
 }

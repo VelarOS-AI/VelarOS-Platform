@@ -4,7 +4,13 @@
 
 import { isNull } from '@velaros-ai/core'
 
-import type { ShellCommandOutputCapture, ShellCommandResult, ShellDescriptor, ShellProcessConfinementEvidence, ShellProcessOwnership } from '../types/shell-command.js'
+import type {
+  ShellCommandOutputCapture,
+  ShellCommandResult,
+  ShellDescriptor,
+  ShellProcessConfinementEvidence,
+  ShellProcessOwnership,
+} from '../types/shell-command.js'
 
 import { takeUnicodeSafeTail } from './output.js'
 import { ShellTuning } from './tuning.js'
@@ -15,7 +21,9 @@ export function summarizeFailureOutput(stdout: string, stderr: string): string[]
     const output = (stream === 'stdout' ? stdout : stderr).trim()
     if (!output) return []
     const prefix = `${stream}:\n`
-    return [`${prefix}${takeUnicodeSafeTail(output, ShellTuning.command.verificationIssueChars - prefix.length)}`]
+    return [
+      `${prefix}${takeUnicodeSafeTail(output, ShellTuning.command.verificationIssueChars - prefix.length)}`,
+    ]
   })
 }
 
@@ -43,8 +51,11 @@ export function buildShellCommandResult(
     confinement: ShellProcessConfinementEvidence
   }
 ): ShellCommandResult {
-  const success = (result.exitCode === 0 || (!!result.backgroundProcess && isNull(result.exitCode)))
-    && !result.timedOut && !result.aborted && !result.cleanupIncomplete
+  const success =
+    (result.exitCode === 0 || (!!result.backgroundProcess && isNull(result.exitCode))) &&
+    !result.timedOut &&
+    !result.aborted &&
+    !result.cleanupIncomplete
   return {
     command,
     cwd,

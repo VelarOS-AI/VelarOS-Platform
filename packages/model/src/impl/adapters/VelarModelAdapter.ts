@@ -5,7 +5,11 @@ import { AppError } from '@velaros-ai/core/error'
 
 import { ModelErrorCodes, VelarCloudManagedProviderIds } from '../../contract/constants.js'
 import type { ModelProviderAdapter } from '../../contract/requires'
-import type { EmbeddingRequest, LanguageModelFactory, ModelAdapterConfig } from '../../types/adapters'
+import type {
+  EmbeddingRequest,
+  LanguageModelFactory,
+  ModelAdapterConfig,
+} from '../../types/adapters'
 import { requireVelarCloudManagedProviderId } from '../../utils/catalog/manifests'
 import { postVelarEmbedding } from '../../utils/wire/fetch-shims'
 import { injectVelarThinkingRouting } from '../../utils/wire/reasoning'
@@ -43,10 +47,7 @@ export class VelarModelAdapter extends ModelAdapter implements ModelProviderAdap
       if (providerId === 'velaros' && isBlank(modelId))
         return languageModelWrappers.withPromptCache(provider.chat('velaros/auto'))
       if (isBlank(modelId)) {
-        throw new AppError(
-          'VALIDATION',
-          'Velar Dev 模型必须由 Cloud 动态目录显式选择。'
-        )
+        throw new AppError('VALIDATION', 'Velar Dev 模型必须由 Cloud 动态目录显式选择。')
       }
 
       // Cloud 下发的公共模型 ID 是不透明契约，Platform 不加前缀、不拆分也不规范化。

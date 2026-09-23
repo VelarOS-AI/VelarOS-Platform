@@ -24,7 +24,8 @@ const Concurrency = Math.max(2, Math.min(8, availableParallelism()))
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
     const path = join(directory, entry)
-    if (statSync(path).isDirectory()) return directory === UnitRoot && Companions.has(entry) ? [] : sourceFiles(path)
+    if (statSync(path).isDirectory())
+      return directory === UnitRoot && Companions.has(entry) ? [] : sourceFiles(path)
     return entry.endsWith('.ts') && !entry.endsWith('.d.ts') ? [path] : []
   })
 }
@@ -34,17 +35,26 @@ function entrySources(): Map<string, string> {
   const manifest = JSON.parse(readFileSync(join(PackageRoot, 'package.json'), 'utf8')) as {
     exports: Record<string, { import: string }>
   }
-  return new Map(Object.entries(manifest.exports)
-    .filter(([subpath]) => subpath === `./${Unit}` || subpath.startsWith(`./${Unit}/`))
-    .map(([subpath, target]) => [
-      subpath,
-      join(PackageRoot, target.import.replace(/^\.\/dist\//u, '').replace(/\.js$/u, '.ts')),
-    ]))
+  return new Map(
+    Object.entries(manifest.exports)
+      .filter(([subpath]) => subpath === `./${Unit}` || subpath.startsWith(`./${Unit}/`))
+      .map(([subpath, target]) => [
+        subpath,
+        join(PackageRoot, target.import.replace(/^\.\/dist\//u, '').replace(/\.js$/u, '.ts')),
+      ])
+  )
 }
 
 /** 报错输出里第一行像错误说明的内容。 */
 function firstErrorLine(stderr: string): string {
-  return stderr.split('\n').find((line) => /Error|error:/u.test(line))?.trim() ?? stderr.trim().split('\n')[0] ?? ''
+  return (
+    stderr
+      .split('\n')
+      .find((line) => /Error|error:/u.test(line))
+      ?.trim() ??
+    stderr.trim().split('\n')[0] ??
+    ''
+  )
 }
 
 /** 在全新的 bun 进程里只 import 这一个文件；成功返回 null，失败返回说明。 */
@@ -61,7 +71,11 @@ function importAlone(file: string): Promise<string | null> {
     const timer = setTimeout(() => child.kill('SIGKILL'), ImportTimeoutMs)
     child.on('close', (code, signal) => {
       clearTimeout(timer)
-      done(code === 0 ? null : `${relative(PackageRoot, file)}：${signal ?? `退出码 ${code}`} ${firstErrorLine(stderr)}`)
+      done(
+        code === 0
+          ? null
+          : `${relative(PackageRoot, file)}：${signal ?? `退出码 ${code}`} ${firstErrorLine(stderr)}`
+      )
     })
   })
 }
@@ -86,12 +100,18 @@ describe('每个源文件都能单独加载', () => {
   test('包清单里本单元的每个入口都对应单元里的一个源文件', () => {
     const entries = entrySources()
     expect(entries.size).toBeGreaterThan(0)
-    expect([...entries].filter(([, file]) => !existsSync(file)).map(([subpath]) => subpath)).toEqual([])
+    expect(
+      [...entries].filter(([, file]) => !existsSync(file)).map(([subpath]) => subpath)
+    ).toEqual([])
   })
 
-  test('入口与单元下每个源文件各在全新进程里单独 import 都不报错', async () => {
-    const files = sourceFiles(UnitRoot).sort()
-    for (const entry of entrySources().values()) expect(files).toContain(entry)
-    expect(await importEachAlone(files)).toEqual([])
-  }, SuiteTimeoutMs)
+  test(
+    '入口与单元下每个源文件各在全新进程里单独 import 都不报错',
+    async () => {
+      const files = sourceFiles(UnitRoot).sort()
+      for (const entry of entrySources().values()) expect(files).toContain(entry)
+      expect(await importEachAlone(files)).toEqual([])
+    },
+    SuiteTimeoutMs
+  )
 })

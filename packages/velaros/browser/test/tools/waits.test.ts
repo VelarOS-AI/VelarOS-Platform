@@ -26,7 +26,12 @@ void describe('宿主轮询的等待', () => {
       },
       async () => outcome({ count: 3 }),
     ]
-    const value = await pollPageCondition({ evaluate: () => answers.shift()!(), timeoutMs: 5_000, intervalMs: 50, abortSignal: signal })
+    const value = await pollPageCondition({
+      evaluate: () => answers.shift()!(),
+      timeoutMs: 5_000,
+      intervalMs: 50,
+      abortSignal: signal,
+    })
     assert.deepEqual(value, { count: 3 })
     assert.equal(answers.length, 0)
   })
@@ -35,7 +40,11 @@ void describe('宿主轮询的等待', () => {
     const startedAt = Date.now()
     await assert.rejects(
       pollPageCondition({
-        evaluate: async () => ({ url: 'https://example.test/', ok: false, error: { name: 'TypeError', message: 'x is null' } }),
+        evaluate: async () => ({
+          url: 'https://example.test/',
+          ok: false,
+          error: { name: 'TypeError', message: 'x is null' },
+        }),
         timeoutMs: 5_000,
         intervalMs: 50,
         abortSignal: signal,
@@ -58,7 +67,12 @@ void describe('宿主轮询的等待', () => {
 
   void test('到点没成立抛 TIMEOUT，message 带最后一次看到的值', async () => {
     await assert.rejects(
-      pollPageCondition({ evaluate: async () => outcome(0), timeoutMs: 200, intervalMs: 50, abortSignal: signal }),
+      pollPageCondition({
+        evaluate: async () => outcome(0),
+        timeoutMs: 200,
+        intervalMs: 50,
+        abortSignal: signal,
+      }),
       (error) => {
         const failure = AppError.from(error)
         return failure.code === 'TIMEOUT' && failure.message.includes('判定式的值是 0')
@@ -68,11 +82,22 @@ void describe('宿主轮询的等待', () => {
 
   void test('挂起事件：等到了交回事件，等不到抛 TIMEOUT 并列出此刻挂着的', async () => {
     const download = { id: 'download-1', kind: 'download' as const, createdAt: 1, details: {} }
-    const event = await waitForPendingEvent({ kind: 'download', timeoutMs: 1_000, abortSignal: signal, listPendingEvents: async () => ({ pending: [download], capturedAt: 1 }) })
+    const event = await waitForPendingEvent({
+      kind: 'download',
+      timeoutMs: 1_000,
+      abortSignal: signal,
+      listPendingEvents: async () => ({ pending: [download], capturedAt: 1 }),
+    })
     assert.equal(event.id, 'download-1')
     await assert.rejects(
-      waitForPendingEvent({ kind: 'dialog', timeoutMs: 100, abortSignal: signal, listPendingEvents: async () => ({ pending: [download], capturedAt: 1 }) }),
-      (error) => AppError.from(error).code === 'TIMEOUT' && AppError.from(error).message.includes('download')
+      waitForPendingEvent({
+        kind: 'dialog',
+        timeoutMs: 100,
+        abortSignal: signal,
+        listPendingEvents: async () => ({ pending: [download], capturedAt: 1 }),
+      }),
+      (error) =>
+        AppError.from(error).code === 'TIMEOUT' && AppError.from(error).message.includes('download')
     )
   })
 
@@ -87,7 +112,18 @@ void describe('宿主轮询的等待', () => {
         reads.push(query.after ?? 0)
         return reads.length < 2
           ? { events: [], last: 9, dropped: 0 }
-          : { events: [{ seq: 10, method: 'Network.responseReceived', params: { requestId: 'r1' }, session: null }], last: 10, dropped: 0 }
+          : {
+              events: [
+                {
+                  seq: 10,
+                  method: 'Network.responseReceived',
+                  params: { requestId: 'r1' },
+                  session: null,
+                },
+              ],
+              last: 10,
+              dropped: 0,
+            }
       },
     })
     assert.equal(found.seq, 10)

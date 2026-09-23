@@ -5,17 +5,18 @@
 // **可执行的下一步**（`suggestedNextAction`），这三样是 agent 自救所需的全部信息。裸
 // `new Error` 只有一句英文，模型看到只能重试。新增失败形态时先往合同常量表 `ProjectErrorCodes`
 // 加一项，别用 `INVALID_INPUT` 兜底掉真实原因。
-import { isNull, isUndefined } from "@velaros-ai/core";
+import { isNull, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TextFileErrorCodes } from '@velaros-ai/core/text-files/contracts'
 
-import { type ProjectErrorCode, ProjectErrorCodes } from "../contract/constants.js";
+import { type ProjectErrorCode, ProjectErrorCodes } from '../contract/constants.js'
 
 /**
  * 版本过期时的下一步。内核同时服务领域 SDK 与模型工具，只说「重读当前内容」，
  * 不点名 snapshot.revision、fileRef 这类某一侧协议的字段。
  */
-export const RevisionMismatchSuggestedNextAction = '文件在读取后已被修改：请重新读取当前内容，再基于它修改。'
+export const RevisionMismatchSuggestedNextAction =
+  '文件在读取后已被修改：请重新读取当前内容，再基于它修改。'
 
 /** 项目空间的领域错误：reason 是合同里的错误原因，details 是结构化详情，suggestedNextAction 是给模型的下一步。 */
 export class ProjectError extends Error {
@@ -66,7 +67,8 @@ export function projectErrorFromTextFile(error: unknown): unknown {
  * `unknown` 会强制本函数把每种形态都显式收窄一遍——那正是它存在的理由。
  */
 export function toErrorObject(error: unknown): Record<string, any> {
-  if (error instanceof ProjectError) return {
+  if (error instanceof ProjectError)
+    return {
       name: error.name,
       reason: error.reason,
       message: error.message,
@@ -74,11 +76,13 @@ export function toErrorObject(error: unknown): Record<string, any> {
       suggestedNextAction: error.suggestedNextAction,
     }
   if (error instanceof Error) return { name: error.name, message: error.message }
-  if (isNull(error)) return {
+  if (isNull(error))
+    return {
       name: 'NullError',
       message: '预期错误对象，但收到或抛出了 null。',
     }
-  if (isUndefined(error)) return {
+  if (isUndefined(error))
+    return {
       name: 'UndefinedError',
       message: '预期错误对象，但收到或抛出了 undefined。',
     }

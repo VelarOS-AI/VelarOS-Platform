@@ -79,17 +79,13 @@ export class KernelLocalDaemon implements KernelLocalDaemonApi {
       mode: 0o700,
     })
     await assertKernelRuntimeDirectoryIsPrivate(runtimeDirectory)
-    this.lockHandle = await acquireKernelDaemonLock(
-      this.paths.lockPath,
-      this.instanceId,
-    )
+    this.lockHandle = await acquireKernelDaemonLock(this.paths.lockPath, this.instanceId)
     try {
-      const endpoint = this.options.endpoint
-        ?? (
-          process.platform === 'win32'
-            ? { kind: 'tcp', host: '127.0.0.1', port: 0 } as const
-            : { kind: 'unix', path: this.paths.socketPath } as const
-        )
+      const endpoint =
+        this.options.endpoint ??
+        (process.platform === 'win32'
+          ? ({ kind: 'tcp', host: '127.0.0.1', port: 0 } as const)
+          : ({ kind: 'unix', path: this.paths.socketPath } as const))
       this.server = new KernelLocalRpcServer({
         authToken: this.authToken,
         endpoint,

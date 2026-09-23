@@ -25,15 +25,18 @@ describe('远程节点凭据落点', () => {
   test('没有 HOME 时落在用户主目录，而不是共享的 /tmp', () => {
     // Windows 通常没有 HOME：原来的 '/tmp' 兜底会把 Ed25519 私钥写到当前盘根的
     // \tmp\.velaros\，NTFS 上 0600 不生效，同机其他用户可读。
-    expect(defaultRemoteNodeCredentialsPath('example-host', undefined))
-      .toBe(join(homedir(), '.velaros', 'remote-nodes', 'example-host.json'))
-    expect(defaultRemoteNodeCredentialsPath('example-host', '   '))
-      .toBe(join(homedir(), '.velaros', 'remote-nodes', 'example-host.json'))
+    expect(defaultRemoteNodeCredentialsPath('example-host', undefined)).toBe(
+      join(homedir(), '.velaros', 'remote-nodes', 'example-host.json')
+    )
+    expect(defaultRemoteNodeCredentialsPath('example-host', '   ')).toBe(
+      join(homedir(), '.velaros', 'remote-nodes', 'example-host.json')
+    )
   })
 
   test('显式给出的主目录照用', () => {
-    expect(defaultRemoteNodeCredentialsPath('example-host', '/home/someone'))
-      .toBe(join('/home/someone', '.velaros', 'remote-nodes', 'example-host.json'))
+    expect(defaultRemoteNodeCredentialsPath('example-host', '/home/someone')).toBe(
+      join('/home/someone', '.velaros', 'remote-nodes', 'example-host.json')
+    )
   })
 
   test('凭据文件按 0600 落盘并能原样读回', async () => {

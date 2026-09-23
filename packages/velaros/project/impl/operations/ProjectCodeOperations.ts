@@ -45,16 +45,23 @@ export class ProjectCodeOperations implements ProjectCodeOperationsApi {
   public async query(input: CodeQueryInput, ctx: ProjectOperationContext): Promise<CodeResult> {
     try {
       const checked = codeQueryInput(input)
-      return await this.gate.run(ctx.project.getRootPath(), false, ctx.abortSignal, () => queryProjectCode(checked, ctx))
+      return await this.gate.run(ctx.project.getRootPath(), false, ctx.abortSignal, () =>
+        queryProjectCode(checked, ctx)
+      )
     } catch (error) {
       throw projectFailure(error)
     }
   }
 
-  public async analyze(input: CodeAnalysisInput, ctx: ProjectOperationContext): Promise<CodeResult> {
+  public async analyze(
+    input: CodeAnalysisInput,
+    ctx: ProjectOperationContext
+  ): Promise<CodeResult> {
     try {
       const checked = codeAnalysisInput(input)
-      return await this.gate.run(ctx.project.getRootPath(), false, ctx.abortSignal, () => analyzeProjectCode(checked, ctx))
+      return await this.gate.run(ctx.project.getRootPath(), false, ctx.abortSignal, () =>
+        analyzeProjectCode(checked, ctx)
+      )
     } catch (error) {
       throw projectFailure(error)
     }
@@ -62,4 +69,6 @@ export class ProjectCodeOperations implements ProjectCodeOperationsApi {
 }
 
 /** 整个进程只有一份的代码理解操作；项目空间把它挂在代码面的 `code` 命名空间上。 */
-export const projectCodeOperations: ProjectCodeOperationsApi = new ProjectCodeOperations(projectExecutionGate)
+export const projectCodeOperations: ProjectCodeOperationsApi = new ProjectCodeOperations(
+  projectExecutionGate
+)

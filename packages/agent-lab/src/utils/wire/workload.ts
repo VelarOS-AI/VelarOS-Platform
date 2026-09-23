@@ -53,7 +53,6 @@ import type {
   RealTaskWorkspaceReference,
 } from '../../types/agent-lab.js'
 
-
 const nullableNumberSchema = z.number().finite().nonnegative().nullable()
 const countSchema = z.number().int().nonnegative()
 const parametersSchema = z.record(z.string(), z.unknown())

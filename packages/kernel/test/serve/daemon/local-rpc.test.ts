@@ -1,10 +1,4 @@
-import {
-  chmod,
-  mkdir,
-  mkdtemp,
-  rm,
-  stat,
-} from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -68,12 +62,12 @@ function createRpcService(): {
                 signal.addEventListener(
                   'abort',
                   () => reject(new DOMException('aborted', 'AbortError')),
-                  { once: true },
+                  { once: true }
                 )
               })
             },
           },
-        }),
+        })
       )
     },
   }
@@ -103,156 +97,160 @@ async function temporaryDirectory(): Promise<string> {
 }
 
 describe('Kernel local RPC', () => {
-  test.skipIf(process.platform === 'win32')('routes calls, identities, and pushed events over a Unix socket', async () => {
-    const directory = await temporaryDirectory()
-    const { service, call } = createRpcService()
-    const server = new KernelLocalRpcServer({
-      authToken: RpcAuthToken,
-      endpoint: { kind: 'unix', path: join(directory, 'kernel.sock') },
-      service,
-    })
-    const endpoint = await server.start()
-    const transport = new SocketKernelTransport({
-      authToken: RpcAuthToken,
-      endpoint,
-    })
-    let resolveEvent: (event: unknown) => void = () => undefined
-    const receivedEvent = new Promise<unknown>((resolve) => {
-      resolveEvent = resolve
-    })
-    const subscription = await transport.subscribe(
-      'test.rpc.completed',
-      (event) => resolveEvent(event),
-    )
-
-    try {
-      const handshake = await transport.handshake()
-      expect(handshake.kernelVersion).toBe('0.2.0')
-      expect(JSON.stringify(handshake)).not.toContain(RpcAuthToken)
-      expect(
-        await transport.call(call),
-      ).toMatchObject({
-        status: 'error',
-        error: { code: 'CAPABILITY_NOT_GRANTED' },
+  test.skipIf(process.platform === 'win32')(
+    'routes calls, identities, and pushed events over a Unix socket',
+    async () => {
+      const directory = await temporaryDirectory()
+      const { service, call } = createRpcService()
+      const server = new KernelLocalRpcServer({
+        authToken: RpcAuthToken,
+        endpoint: { kind: 'unix', path: join(directory, 'kernel.sock') },
+        service,
       })
-      const sessionOpen = await transport.openCapabilitySession({
-        protocolVersion: KernelProtocolVersion,
-        requires: [
-          {
-            capabilityId: EchoToken.id,
-            operations: null,
-            scope: null,
-          },
-        ],
+      const endpoint = await server.start()
+      const transport = new SocketKernelTransport({
+        authToken: RpcAuthToken,
+        endpoint,
       })
-      expect(sessionOpen).toMatchObject({
-        status: 'ok',
-        requires: [
-          {
-            capabilityId: EchoToken.id,
-            operations: null,
-            scope: null,
-          },
-        ],
+      let resolveEvent: (event: unknown) => void = () => undefined
+      const receivedEvent = new Promise<unknown>((resolve) => {
+        resolveEvent = resolve
       })
-      if (sessionOpen.status !== 'ok') throw new Error('session open failed')
-      const boundCall = { ...call, sessionId: sessionOpen.sessionId }
-      expect(await transport.call(boundCall)).toMatchObject({
-        status: 'ok',
-        output: { value: 42 },
-      })
-      expect(await withTimeout(receivedEvent)).toMatchObject({
-        type: 'test.rpc.completed',
-        payload: { value: 42 },
-        sourceModuleId: 'module.rpc',
-      })
-      const controller = new AbortController()
-      const cancelled = transport.call(
-        { ...boundCall, callId: 'call-cancelled', operation: 'wait' },
-        controller.signal,
+      const subscription = await transport.subscribe('test.rpc.completed', (event) =>
+        resolveEvent(event)
       )
-      setTimeout(() => controller.abort(), 10)
-      await expect(cancelled).rejects.toMatchObject({ name: 'AbortError' })
-    } finally {
-      await subscription.dispose()
-      await transport.dispose()
-      await server.dispose()
-    }
 
-    expect(service.getStatus()).toBe('disposed')
-  })
-
-  test.skipIf(process.platform === 'win32')('publishes one discoverable endpoint and enforces a daemon lock', async () => {
-    const directory = await temporaryDirectory()
-    const paths = createDefaultKernelDaemonPaths('test-kernel', directory)
-    const first = createRpcService()
-    const firstDaemon = new KernelLocalDaemon({
-      paths,
-      service: first.service,
-    })
-    const descriptor = await firstDaemon.start()
-    const second = createRpcService()
-    const secondDaemon = new KernelLocalDaemon({
-      paths,
-      service: second.service,
-    })
-
-    try {
-      expect(await kernelDaemons.discover(paths)).toEqual(descriptor)
-      if (process.platform !== 'win32') {
-        expect((await stat(paths.descriptorPath)).mode & 0o777).toBe(0o600)
-      }
-      const connected = await kernelDaemons.connect(paths)
       try {
-        expect(connected.handshake.kernelVersion).toBe('0.2.0')
-        expect(connected.descriptor.instanceId).toBe(descriptor.instanceId)
+        const handshake = await transport.handshake()
+        expect(handshake.kernelVersion).toBe('0.2.0')
+        expect(JSON.stringify(handshake)).not.toContain(RpcAuthToken)
+        expect(await transport.call(call)).toMatchObject({
+          status: 'error',
+          error: { code: 'CAPABILITY_NOT_GRANTED' },
+        })
+        const sessionOpen = await transport.openCapabilitySession({
+          protocolVersion: KernelProtocolVersion,
+          requires: [
+            {
+              capabilityId: EchoToken.id,
+              operations: null,
+              scope: null,
+            },
+          ],
+        })
+        expect(sessionOpen).toMatchObject({
+          status: 'ok',
+          requires: [
+            {
+              capabilityId: EchoToken.id,
+              operations: null,
+              scope: null,
+            },
+          ],
+        })
+        if (sessionOpen.status !== 'ok') throw new Error('session open failed')
+        const boundCall = { ...call, sessionId: sessionOpen.sessionId }
+        expect(await transport.call(boundCall)).toMatchObject({
+          status: 'ok',
+          output: { value: 42 },
+        })
+        expect(await withTimeout(receivedEvent)).toMatchObject({
+          type: 'test.rpc.completed',
+          payload: { value: 42 },
+          sourceModuleId: 'module.rpc',
+        })
+        const controller = new AbortController()
+        const cancelled = transport.call(
+          { ...boundCall, callId: 'call-cancelled', operation: 'wait' },
+          controller.signal
+        )
+        setTimeout(() => controller.abort(), 10)
+        await expect(cancelled).rejects.toMatchObject({ name: 'AbortError' })
       } finally {
-        await connected.client.dispose()
+        await subscription.dispose()
+        await transport.dispose()
+        await server.dispose()
       }
-      await expect(secondDaemon.start()).rejects.toBeInstanceOf(
-        KernelClientError,
-      )
-      expect(second.service.getStatus()).toBe('idle')
-    } finally {
-      await secondDaemon.dispose()
-      await firstDaemon.dispose()
+
+      expect(service.getStatus()).toBe('disposed')
     }
+  )
 
-    await expect(kernelDaemons.discover(paths)).rejects.toMatchObject({
-      code: 'DAEMON_NOT_RUNNING',
-    })
-  })
-
-  test.skipIf(process.platform === 'win32')('refuses a runtime directory that other local users can enter', async () => {
-    // 缺省落点在共享的 <tmpdir>/velaros-kernel-<uid>：别的用户预先建好这个目录，就能替换
-    // descriptor 把客户端引到自己的 socket，客户端会把认证令牌发过去。
-    const directory = await temporaryDirectory()
-    const runtimeDirectory = join(directory, 'shared-runtime')
-    await mkdir(runtimeDirectory, { recursive: true, mode: 0o700 })
-    await chmod(runtimeDirectory, 0o755)
-    const paths = createDefaultKernelDaemonPaths('test-kernel', runtimeDirectory)
-    const { service } = createRpcService()
-    const daemon = new KernelLocalDaemon({ paths, service })
-
-    try {
-      await expect(daemon.start()).rejects.toMatchObject({
-        name: 'KernelClientError',
-        code: 'DAEMON_LOCK_FAILED',
+  test.skipIf(process.platform === 'win32')(
+    'publishes one discoverable endpoint and enforces a daemon lock',
+    async () => {
+      const directory = await temporaryDirectory()
+      const paths = createDefaultKernelDaemonPaths('test-kernel', directory)
+      const first = createRpcService()
+      const firstDaemon = new KernelLocalDaemon({
+        paths,
+        service: first.service,
       })
-      // 目录已存在时 mkdir 的 mode 不生效，所以拒绝之后它仍然是 0755，没有被悄悄改掉。
-      expect((await stat(runtimeDirectory)).mode & 0o777).toBe(0o755)
+      const descriptor = await firstDaemon.start()
+      const second = createRpcService()
+      const secondDaemon = new KernelLocalDaemon({
+        paths,
+        service: second.service,
+      })
+
+      try {
+        expect(await kernelDaemons.discover(paths)).toEqual(descriptor)
+        if (process.platform !== 'win32') {
+          expect((await stat(paths.descriptorPath)).mode & 0o777).toBe(0o600)
+        }
+        const connected = await kernelDaemons.connect(paths)
+        try {
+          expect(connected.handshake.kernelVersion).toBe('0.2.0')
+          expect(connected.descriptor.instanceId).toBe(descriptor.instanceId)
+        } finally {
+          await connected.client.dispose()
+        }
+        await expect(secondDaemon.start()).rejects.toBeInstanceOf(KernelClientError)
+        expect(second.service.getStatus()).toBe('idle')
+      } finally {
+        await secondDaemon.dispose()
+        await firstDaemon.dispose()
+      }
+
       await expect(kernelDaemons.discover(paths)).rejects.toMatchObject({
         code: 'DAEMON_NOT_RUNNING',
       })
-
-      // 收紧到 0700 之后照常起来。
-      await chmod(runtimeDirectory, 0o700)
-      await daemon.start()
-      expect((await kernelDaemons.discover(paths)).pid).toBe(process.pid)
-    } finally {
-      await daemon.dispose()
     }
-  })
+  )
+
+  test.skipIf(process.platform === 'win32')(
+    'refuses a runtime directory that other local users can enter',
+    async () => {
+      // 缺省落点在共享的 <tmpdir>/velaros-kernel-<uid>：别的用户预先建好这个目录，就能替换
+      // descriptor 把客户端引到自己的 socket，客户端会把认证令牌发过去。
+      const directory = await temporaryDirectory()
+      const runtimeDirectory = join(directory, 'shared-runtime')
+      await mkdir(runtimeDirectory, { recursive: true, mode: 0o700 })
+      await chmod(runtimeDirectory, 0o755)
+      const paths = createDefaultKernelDaemonPaths('test-kernel', runtimeDirectory)
+      const { service } = createRpcService()
+      const daemon = new KernelLocalDaemon({ paths, service })
+
+      try {
+        await expect(daemon.start()).rejects.toMatchObject({
+          name: 'KernelClientError',
+          code: 'DAEMON_LOCK_FAILED',
+        })
+        // 目录已存在时 mkdir 的 mode 不生效，所以拒绝之后它仍然是 0755，没有被悄悄改掉。
+        expect((await stat(runtimeDirectory)).mode & 0o777).toBe(0o755)
+        await expect(kernelDaemons.discover(paths)).rejects.toMatchObject({
+          code: 'DAEMON_NOT_RUNNING',
+        })
+
+        // 收紧到 0700 之后照常起来。
+        await chmod(runtimeDirectory, 0o700)
+        await daemon.start()
+        expect((await kernelDaemons.discover(paths)).pid).toBe(process.pid)
+      } finally {
+        await daemon.dispose()
+      }
+    }
+  )
 
   test('supports the explicit loopback TCP fallback', async () => {
     const { service } = createRpcService()
@@ -291,15 +289,10 @@ describe('Kernel local RPC', () => {
     const endpoint = await server.start()
 
     try {
-      for (const authToken of [
-        '',
-        'wrong-auth-token-0123456789-abcdef',
-      ]) {
+      for (const authToken of ['', 'wrong-auth-token-0123456789-abcdef']) {
         const transport = new SocketKernelTransport({ authToken, endpoint })
         try {
-          const error = await transport.handshake().catch(
-            (caught: unknown) => caught,
-          )
+          const error = await transport.handshake().catch((caught: unknown) => caught)
           expect(error).toMatchObject({
             rpcError: {
               code: 'UNAUTHORIZED',

@@ -65,7 +65,9 @@ export function clearBrowserDiagnosticEntries<Entry extends { kind: BrowserPageD
 }
 
 /** 从诊断缓冲里挑出页面未处理异常。 */
-export function buildBrowserPageErrorsResult(diagnostics: BrowserPageDiagnostics): BrowserPageErrorsResult {
+export function buildBrowserPageErrorsResult(
+  diagnostics: BrowserPageDiagnostics
+): BrowserPageErrorsResult {
   const entries = diagnostics.entries.filter((entry) => entry.kind === 'page-error')
 
   return {
@@ -85,7 +87,9 @@ export function buildBrowserNetworkEventsResult(
 ): BrowserNetworkEventsResult {
   const filters = normalizeBrowserNetworkEventFilters(input)
   const networkEntries = diagnostics.entries.filter((entry) => entry.kind === 'network')
-  const entries = networkEntries.filter((entry) => matchesBrowserNetworkEventFilters(entry, filters))
+  const entries = networkEntries.filter((entry) =>
+    matchesBrowserNetworkEventFilters(entry, filters)
+  )
 
   return {
     url: diagnostics.url,
@@ -116,7 +120,8 @@ export function matchesBrowserNetworkEventFilters(
   filters: BrowserNetworkEventFilters
 ): boolean {
   if (filters.status && readBrowserDiagnosticStatus(entry) !== filters.status) return false
-  if (filters.resourceType && readBrowserDiagnosticResourceType(entry) !== filters.resourceType) return false
+  if (filters.resourceType && readBrowserDiagnosticResourceType(entry) !== filters.resourceType)
+    return false
   if (filters.failedOnly && !isFailedBrowserNetworkEvent(entry)) return false
 
   return true
@@ -125,7 +130,9 @@ export function matchesBrowserNetworkEventFilters(
 /** 判一条网络事件算不算失败：级别是错误 / 警告，或状态码不小于 400。 */
 export function isFailedBrowserNetworkEvent(entry: BrowserPageDiagnosticEntry): boolean {
   const status = readBrowserDiagnosticStatus(entry)
-  return entry.level === 'error' || entry.level === 'warning' || (isNotNull(status) && status >= 400)
+  return (
+    entry.level === 'error' || entry.level === 'warning' || (isNotNull(status) && status >= 400)
+  )
 }
 
 /** 从诊断缓冲里挑出 console 事件并按 level / errorsOnly 过滤，回一份带汇总的回执。 */
@@ -135,7 +142,9 @@ export function buildBrowserConsoleEventsResult(
 ): BrowserConsoleEventsResult {
   const filters = normalizeBrowserConsoleEventFilters(input)
   const consoleEntries = diagnostics.entries.filter((entry) => entry.kind === 'console')
-  const entries = consoleEntries.filter((entry) => matchesBrowserConsoleEventFilters(entry, filters))
+  const entries = consoleEntries.filter((entry) =>
+    matchesBrowserConsoleEventFilters(entry, filters)
+  )
 
   return {
     url: diagnostics.url,

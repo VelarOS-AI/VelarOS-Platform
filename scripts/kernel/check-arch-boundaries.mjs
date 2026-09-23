@@ -64,7 +64,8 @@ function collectSourceFiles(dir) {
   const out = []
   if (!existsSync(dir)) return out
   for (const entry of readdirSync(dir)) {
-    if (entry === 'node_modules' || entry === 'dist' || entry === 'out' || entry === 'build') continue
+    if (entry === 'node_modules' || entry === 'dist' || entry === 'out' || entry === 'build')
+      continue
     const full = join(dir, entry)
     if (statSync(full).isDirectory()) {
       out.push(...collectSourceFiles(full))
@@ -120,9 +121,9 @@ function stripCodeComments(source) {
         result += source[i + 1] ?? ''
         i += 1
       } else if (
-        (state === 'single' && ch === "'")
-        || (state === 'double' && ch === '"')
-        || (state === 'template' && ch === '`')
+        (state === 'single' && ch === "'") ||
+        (state === 'double' && ch === '"') ||
+        (state === 'template' && ch === '`')
       ) {
         state = 'code'
       }
@@ -162,7 +163,11 @@ function scanStatements(roots, test, build) {
         let statement = lines[index]
         let start = index
         // 折行的 `import type {\n … \n} from '…'`:一直并到出现 `from '…'` 为止。
-        if (/^\s*(?:import\b|export\s+(?:type\s+)?\{)/.test(statement) && statement.includes('{') && !statement.includes('}')) {
+        if (
+          /^\s*(?:import\b|export\s+(?:type\s+)?\{)/.test(statement) &&
+          statement.includes('{') &&
+          !statement.includes('}')
+        ) {
           while (index + 1 < lines.length && !/\}\s*from\s*['"]/.test(lines[index])) {
             index += 1
             statement += ` ${lines[index].trim()}`
@@ -182,8 +187,8 @@ function scanStatements(roots, test, build) {
 // 「Kernel 域的包集合」。域包清单单源 = 仓根 package.json 的 velaros.domainPackages.kernel;
 // 两处必须一致,新增 Kernel 包要同时登记 PublicPackages 与该清单,漏登即红。
 const DomainPackageDirectories =
-  JSON.parse(readFileSync(join(RepoRoot, 'package.json'), 'utf8')).velaros
-    ?.domainPackages?.kernel ?? []
+  JSON.parse(readFileSync(join(RepoRoot, 'package.json'), 'utf8')).velaros?.domainPackages
+    ?.kernel ?? []
 
 function scanPackageSet() {
   const owned = new Set(PublicPackages)
@@ -227,7 +232,7 @@ function scanHostNeutrality() {
       rule: 'kernel-host-neutrality',
       fingerprint: `kernel-host-neutrality::${file}:${line}`,
       message: `${file}:${line}: Kernel 必须 host 无关,禁止 import electron/@electron 或 Desktop 传输与 renderer/main 路径。`,
-    }),
+    })
   )
 }
 
@@ -237,7 +242,7 @@ const InternalImplementationPattern =
 
 function importsPackage(line, names) {
   const pattern = new RegExp(
-    `(?:from\\s+|import\\s*\\(|require\\()\\s*['"](?:${names.join('|')})(?:/[^'"]*)?['"]`,
+    `(?:from\\s+|import\\s*\\(|require\\()\\s*['"](?:${names.join('|')})(?:/[^'"]*)?['"]`
   )
   return pattern.test(line)
 }
@@ -254,8 +259,8 @@ function scanDependencyDirection() {
         rule: 'core-kernel-independence',
         fingerprint: `core-kernel-independence::${file}:${line}`,
         message: `${file}:${line}: Core 是共享 primitives,不得依赖 Kernel。`,
-      }),
-    ),
+      })
+    )
   )
 
   // contract 与 types 是最内层稳定面,不得认识实现或部署切片。
@@ -263,14 +268,16 @@ function scanDependencyDirection() {
   // wire 类型已经手写进 types/wire.ts、schema 留在 utils/wire 并 `satisfies z.ZodType<…>` 反向守,
   // 所以这条从「只禁 impl」收紧成「impl 与 utils 都禁」(方案 §3.5 第 1 条)。
   const contractsForbidden = (line) =>
-    InternalImplementationPattern.test(line)
-    || importsPackage(line, [
+    InternalImplementationPattern.test(line) ||
+    importsPackage(line, [
       '@velaros-ai/kernel',
       '@velaros-ai/kernel/client',
       '@velaros-ai/kernel/serve',
       '@velaros-ai/kernel/remote',
-    ])
-    || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:impl|utils)(?:\/[^'"]*)?['"]/.test(line)
+    ]) ||
+    /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:impl|utils)(?:\/[^'"]*)?['"]/.test(
+      line
+    )
   const contractsViolation = (file, line) => ({
     rule: 'contracts-dependency-direction',
     fingerprint: `contracts-dependency-direction::${file}:${line}`,
@@ -278,7 +285,7 @@ function scanDependencyDirection() {
   })
   // types 一条口子都不留:它只引 types 与合同。
   violations.push(
-    ...scanLines(['packages/kernel/src/types'], contractsForbidden, contractsViolation),
+    ...scanLines(['packages/kernel/src/types'], contractsForbidden, contractsViolation)
   )
   // contract 唯一的例外是纯类型的登记语句:仓库标准(ADR 0007 / docs/architecture/module-ownership.md)
   // 规定类实现的 API 写在类上方,由 provides.ts 用 `export type { X } from '../impl/<类>.js'` 登记,
@@ -288,8 +295,8 @@ function scanDependencyDirection() {
     ...scanStatements(
       ['packages/kernel/src/contract'],
       (line) => !/^\s*(?:import|export) type \{/.test(line) && contractsForbidden(line),
-      contractsViolation,
-    ),
+      contractsViolation
+    )
   )
 
   // 进程内内核在最底层,不得反向依赖接入与部署组合。
@@ -297,14 +304,20 @@ function scanDependencyDirection() {
     ...scanLines(
       ['packages/kernel/src/impl/runtime', 'packages/kernel/src/utils/runtime'],
       (line) =>
-        importsPackage(line, ['@velaros-ai/kernel/client', '@velaros-ai/kernel/serve', '@velaros-ai/kernel/remote'])
-        || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:client|serve|updater|remote-client|remote-node|rpc)(?:\/[^'"]*)?['"]/.test(line),
+        importsPackage(line, [
+          '@velaros-ai/kernel/client',
+          '@velaros-ai/kernel/serve',
+          '@velaros-ai/kernel/remote',
+        ]) ||
+        /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:client|serve|updater|remote-client|remote-node|rpc)(?:\/[^'"]*)?['"]/.test(
+          line
+        ),
       (file, line) => ({
         rule: 'runtime-dependency-direction',
         fingerprint: `runtime-dependency-direction::${file}:${line}`,
         message: `${file}:${line}: Kernel 的进程内内核不得依赖 client、serve、updater 或远程节点两端。`,
-      }),
-    ),
+      })
+    )
   )
 
   // 瘦客户端只依赖合同与 utils;不能绕回进程内内核或 serve 实现。
@@ -312,14 +325,16 @@ function scanDependencyDirection() {
     ...scanLines(
       ['packages/kernel/src/impl/client'],
       (line) =>
-        importsPackage(line, ['@velaros-ai/kernel', '@velaros-ai/kernel/serve'])
-        || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:runtime|serve)(?:\/[^'"]*)?['"]/.test(line),
+        importsPackage(line, ['@velaros-ai/kernel', '@velaros-ai/kernel/serve']) ||
+        /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:runtime|serve)(?:\/[^'"]*)?['"]/.test(
+          line
+        ),
       (file, line) => ({
         rule: 'client-dependency-direction',
         fingerprint: `client-dependency-direction::${file}:${line}`,
         message: `${file}:${line}: Kernel 瘦客户端只能依赖合同与 utils,不得依赖进程内内核或 serve。`,
-      }),
-    ),
+      })
+    )
   )
 
   // updater 只负责字节、签名与版本指针,不得触达别的实现切片。
@@ -327,8 +342,8 @@ function scanDependencyDirection() {
     ...scanLines(
       ['packages/kernel/src/impl/updater', 'packages/kernel/src/utils/updater'],
       (line) =>
-        UpdaterReachesOtherSlicePattern.test(line)
-        || importsPackage(line, [
+        UpdaterReachesOtherSlicePattern.test(line) ||
+        importsPackage(line, [
           '@velaros-ai/kernel',
           '@velaros-ai/kernel/client',
           '@velaros-ai/kernel/contracts',
@@ -339,22 +354,28 @@ function scanDependencyDirection() {
         rule: 'updater-dependency-direction',
         fingerprint: `updater-dependency-direction::${file}:${line}`,
         message: `${file}:${line}: Kernel updater 不得依赖别的实现切片。`,
-      }),
-    ),
+      })
+    )
   )
 
   // 远程节点两端互不引用:共用的只许放在 utils/remote/。
-  for (const [side, other] of [['remote-client', 'remote-node'], ['remote-node', 'remote-client']]) {
+  for (const [side, other] of [
+    ['remote-client', 'remote-node'],
+    ['remote-node', 'remote-client'],
+  ]) {
     violations.push(
       ...scanLines(
         [`packages/kernel/src/impl/${side}`],
-        (line) => new RegExp(`(?:from\\s+|import\\s*\\(|require\\()\\s*['"]\\.\\.(?:\\/\\.\\.)*\\/${other}(?:\\/[^'"]*)?['"]`).test(line),
+        (line) =>
+          new RegExp(
+            `(?:from\\s+|import\\s*\\(|require\\()\\s*['"]\\.\\.(?:\\/\\.\\.)*\\/${other}(?:\\/[^'"]*)?['"]`
+          ).test(line),
         (file, line) => ({
           rule: 'remote-sides-independence',
           fingerprint: `remote-sides-independence::${file}:${line}`,
           message: `${file}:${line}: 远程节点两端互不引用,共用的放 utils/remote/。`,
-        }),
-      ),
+        })
+      )
     )
   }
 
@@ -394,7 +415,8 @@ function scanProtocolSingleSource() {
   }
 
   // 协议 zod schema 只能定义在唯一实现处;别处重新定义 wire schema 即为复制协议。
-  const wireSchemaDefinition = /export\s+const\s+\w*(?:Handshake|CapabilityCall|ModuleDescriptor|ScopeRef|ResourceRef|CapabilityToken)\w*Schema\s*=/
+  const wireSchemaDefinition =
+    /export\s+const\s+\w*(?:Handshake|CapabilityCall|ModuleDescriptor|ScopeRef|ResourceRef|CapabilityToken)\w*Schema\s*=/
   for (const file of collectSourceFiles(resolve(RepoRoot, KernelLibraryRoot))) {
     if (file.startsWith(`${protocolHome}${sep}`)) continue
     const relativeFile = normalizeSeparators(relative(RepoRoot, file))
@@ -421,7 +443,7 @@ function scanApprovalPort() {
       rule: 'require-approval-port',
       fingerprint: `require-approval-port::${file}:${line}::${match[1]}`,
       message: `${file}:${line}: 审批动词 \`${match[1]}\` 写在 \`ctx.execution\` 接收面上;审批必须经 \`ctx.approval.${match[1]}(...)\`(宪章 §4 ApprovalPort 默认 deny)。`,
-    }),
+    })
   )
 }
 
@@ -434,7 +456,7 @@ function scanConcreteCapabilityDirection() {
       rule: 'concrete-capability-direction',
       fingerprint: `concrete-capability-direction::${file}:${line}`,
       message: `${file}:${line}: Kernel 不得 import 具体能力实现;请由能力包反向依赖 Kernel 并在产品装配根注入。`,
-    }),
+    })
   )
 
   for (const packageName of PublicPackages) {
@@ -467,11 +489,7 @@ function scanConcreteCapabilityDirection() {
 // helper from weakening its own verifier at the same time.
 function scanReleaseIdentityBoundary() {
   const violations = []
-  const expectedWorkflowFiles = [
-    'ci.yml',
-    'codeql.yml',
-    'release-packages.yml',
-  ]
+  const expectedWorkflowFiles = ['ci.yml', 'codeql.yml', 'release-packages.yml']
   const actualWorkflowFiles = readdirSync(resolve(RepoRoot, '.github/workflows'), {
     withFileTypes: true,
   })
@@ -607,9 +625,7 @@ function scanReleaseIdentityBoundary() {
     }
     const source = readFileSync(contractPath, 'utf8').replaceAll('\r\n', '\n')
     const missing = contract.markers.filter((marker) => !source.includes(marker))
-    const forbidden = (contract.forbiddenMarkers ?? []).filter((marker) =>
-      source.includes(marker),
-    )
+    const forbidden = (contract.forbiddenMarkers ?? []).filter((marker) => source.includes(marker))
     if (missing.length === 0 && forbidden.length === 0) continue
     violations.push({
       rule: 'release-artifact-identity',
@@ -636,10 +652,7 @@ function scanRuntimeSinglePath() {
   for (const file of collectSourceFiles(resolve(RepoRoot, KernelLibraryRoot))) {
     const relativeFile = normalizeSeparators(relative(RepoRoot, file))
     const source = stripCodeComments(readFileSync(file, 'utf8'))
-    if (
-      /new\s+KernelModuleHost\s*\(/u.test(source)
-      && !allowedHostConstructors.has(relativeFile)
-    ) {
+    if (/new\s+KernelModuleHost\s*\(/u.test(source) && !allowedHostConstructors.has(relativeFile)) {
       violations.push({
         rule: 'kernel-runtime-single-path',
         fingerprint: `kernel-runtime-single-path::host-constructor::${relativeFile}`,
@@ -676,8 +689,8 @@ function scanRuntimeSinglePath() {
         rule: 'kernel-module-api-version-single-source',
         fingerprint: `kernel-module-api-version-single-source::${file}:${line}`,
         message: `${file}:${line}: module apiVersion 必须引用 KernelVersionAxes.moduleApi,禁止复制数字版本。`,
-      }),
-    ),
+      })
+    )
   )
 
   return violations
@@ -714,8 +727,8 @@ function main() {
           fingerprints: currentFingerprints,
         },
         null,
-        2,
-      )}\n`,
+        2
+      )}\n`
     )
     console.log(`[arch-boundaries] baseline 已重生成:${currentFingerprints.length} 条冻结指纹。`)
     return
@@ -728,7 +741,7 @@ function main() {
     console.log(
       `[arch-boundaries] 通过。包集合 + host 无关 + 依赖方向 + 协议单一事实来源 + 审批端口 + 能力注入 + 发布身份 + 单内核运行语义:0 条新违规${
         exempt > 0 ? `(${exempt} 条存量入基线冻结)` : '(现状零违规)'
-      }。`,
+      }。`
     )
     return
   }
@@ -736,7 +749,7 @@ function main() {
   console.error(`[arch-boundaries] 失败:${fresh.length} 条新违规(基线只减不增):`)
   for (const v of fresh) console.error(`  [${v.rule}] ${v.message}`)
   console.error(
-    '\n若为有意的架构变化,修复违规;确需入基线时 VELAROS_ARCH_BASELINE_UPDATE=1 bun scripts/check-arch-boundaries.mjs 重生成并在提交信息说明。',
+    '\n若为有意的架构变化,修复违规;确需入基线时 VELAROS_ARCH_BASELINE_UPDATE=1 bun scripts/check-arch-boundaries.mjs 重生成并在提交信息说明。'
   )
   process.exit(1)
 }

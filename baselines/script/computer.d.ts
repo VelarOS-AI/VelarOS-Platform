@@ -46,7 +46,10 @@ declare module 'velaros:computer' {
   }
 
   /** 点击：坐标同 ComputerPoint；button 默认 left，count 默认 1（双击给 2，最多 3）。 */
-  type ComputerClickInput = ComputerPoint & { button?: 'left' | 'right' | 'middle'; count?: number }
+  type ComputerClickInput = ComputerPoint & {
+    button?: 'left' | 'right' | 'middle'
+    count?: number
+  }
 
   /** 点击的结果：落点同 ComputerMoved，另有按了哪个键、按了几下。 */
   interface ComputerClicked extends ComputerMoved {

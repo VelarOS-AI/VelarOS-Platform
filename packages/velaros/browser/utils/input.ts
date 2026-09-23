@@ -75,7 +75,10 @@ import { BrowserTuning } from './tuning.js'
 // ── 共用片段 ────────────────────────────────────────────────────
 
 const selectorSchema = z.string().trim().min(1).max(BrowserInspectLimits.selectorChars)
-const ignoreSelectorsSchema = z.array(selectorSchema).max(BrowserInspectLimits.ignoreSelectors).optional()
+const ignoreSelectorsSchema = z
+  .array(selectorSchema)
+  .max(BrowserInspectLimits.ignoreSelectors)
+  .optional()
 const urlSchema = z.string().trim().min(1).max(BrowserActionLimits.urlChars)
 const coordinateSchema = z.number().int().min(0).max(BrowserActionLimits.coordinate)
 const workspacePathSchema = z.string().trim().min(1).max(BrowserFetchLimits.pathChars)
@@ -87,11 +90,17 @@ const keySchema = z
   .string()
   .min(1)
   .max(BrowserActionLimits.keyChars)
-  .refine(isKnownKeyName, '不认识这个键：写 Enter、Tab、Escape、Backspace、ArrowDown、Home、F5 这类键名，或者一个字符')
+  .refine(
+    isKnownKeyName,
+    '不认识这个键：写 Enter、Tab、Escape、Backspace、ArrowDown、Home、F5 这类键名，或者一个字符'
+  )
 const scriptSchema = z.string().min(1).max(BrowserEvaluateLimits.scriptChars)
 const scriptArgsSchema = z
   .array(z.unknown())
-  .refine((value) => jsonLength(value) <= BrowserEvaluateLimits.argsChars, `args 按 JSON 算超过 ${BrowserEvaluateLimits.argsChars} 个字符`)
+  .refine(
+    (value) => jsonLength(value) <= BrowserEvaluateLimits.argsChars,
+    `args 按 JSON 算超过 ${BrowserEvaluateLimits.argsChars} 个字符`
+  )
   .optional()
 const frameIdSchema = z.string().trim().min(1).optional()
 
@@ -114,10 +123,18 @@ const targetHintSchema = z
     attributes: z.record(z.string(), z.string()).optional(),
   })
   .refine(
-    (value) => !!value.ref || !!value.css || !!value.text || !!value.name || !isEmpty(Object.keys(value.attributes ?? {})),
+    (value) =>
+      !!value.ref ||
+      !!value.css ||
+      !!value.text ||
+      !!value.name ||
+      !isEmpty(Object.keys(value.attributes ?? {})),
     'target 至少要有 ref、css、text、name、attributes 中的一样'
   )
-const targetSchema = z.union([z.string().trim().min(1).max(BrowserInspectLimits.selectorChars), targetHintSchema])
+const targetSchema = z.union([
+  z.string().trim().min(1).max(BrowserInspectLimits.selectorChars),
+  targetHintSchema,
+])
 
 /** 一个值按 JSON 写出来有多少字符：args 与 CDP 的 params 按它限长。 */
 function jsonLength(value: unknown): number {
@@ -160,10 +177,27 @@ const screenshotSchema = z.strictObject({
   fullPage: z.boolean().optional(),
   region: regionSchema.optional(),
   annotate: z.boolean().optional(),
-  width: z.number().int().min(BrowserCaptureLimits.minViewportWidth).max(BrowserCaptureLimits.maxViewportWidth).optional(),
-  height: z.number().int().min(BrowserCaptureLimits.minViewportHeight).max(BrowserCaptureLimits.maxViewportHeight).optional(),
+  width: z
+    .number()
+    .int()
+    .min(BrowserCaptureLimits.minViewportWidth)
+    .max(BrowserCaptureLimits.maxViewportWidth)
+    .optional(),
+  height: z
+    .number()
+    .int()
+    .min(BrowserCaptureLimits.minViewportHeight)
+    .max(BrowserCaptureLimits.maxViewportHeight)
+    .optional(),
   waitForNetworkIdle: z
-    .union([z.boolean(), z.number().int().min(BrowserCaptureLimits.minNetworkIdleMs).max(BrowserCaptureLimits.maxNetworkIdleMs)])
+    .union([
+      z.boolean(),
+      z
+        .number()
+        .int()
+        .min(BrowserCaptureLimits.minNetworkIdleMs)
+        .max(BrowserCaptureLimits.maxNetworkIdleMs),
+    ])
     .optional(),
   waitForDomStable: z.boolean().optional(),
   compareWithPrevious: z.boolean().optional(),
@@ -184,31 +218,54 @@ const clickSchema = z
     waitForNavigation: z.boolean().optional(),
   })
   .refine(
-    (value) => isPresent(value.target) !== (isPresent(value.x) || isPresent(value.y)) && isPresent(value.x) === isPresent(value.y),
+    (value) =>
+      isPresent(value.target) !== (isPresent(value.x) || isPresent(value.y)) &&
+      isPresent(value.x) === isPresent(value.y),
     'target 与 x、y 只给一样：点元素给 target，点坐标给 x 和 y'
   )
-const fillSchema = z.strictObject({ target: targetSchema, value: z.string().max(BrowserActionLimits.textChars) })
+const fillSchema = z.strictObject({
+  target: targetSchema,
+  value: z.string().max(BrowserActionLimits.textChars),
+})
 const hoverSchema = z.strictObject({ target: targetSchema })
-const insertTextSchema = z.strictObject({ text: z.string().min(1).max(BrowserActionLimits.textChars) })
+const insertTextSchema = z.strictObject({
+  text: z.string().min(1).max(BrowserActionLimits.textChars),
+})
 const pressSchema = z.strictObject({
   key: keySchema,
-  modifiers: z.array(z.enum(['shift', 'control', 'alt', 'meta'])).max(4).optional(),
+  modifiers: z
+    .array(z.enum(['shift', 'control', 'alt', 'meta']))
+    .max(4)
+    .optional(),
   repeat: z.number().int().positive().max(BrowserActionLimits.keyRepeat).optional(),
   waitForNavigation: z.boolean().optional(),
 })
 const singleKeySchema = z.strictObject({
-  key: keySchema.refine((key) => !/.\+./u.test(key), '一次一个键：组合键先 keyDown 修饰键，或者用 press'),
+  key: keySchema.refine(
+    (key) => !/.\+./u.test(key),
+    '一次一个键：组合键先 keyDown 修饰键，或者用 press'
+  ),
 })
 const mouseMoveSchema = z.strictObject({
   x: coordinateSchema,
   y: coordinateSchema,
   steps: z.number().int().positive().max(BrowserActionLimits.moveSteps).optional(),
 })
-const mouseButtonInputSchema = z.strictObject({ button: mouseButtonSchema.optional(), clickCount: clickCountSchema.optional() })
-const wheelDeltaSchema = z.number().int().min(-BrowserActionLimits.coordinate).max(BrowserActionLimits.coordinate)
+const mouseButtonInputSchema = z.strictObject({
+  button: mouseButtonSchema.optional(),
+  clickCount: clickCountSchema.optional(),
+})
+const wheelDeltaSchema = z
+  .number()
+  .int()
+  .min(-BrowserActionLimits.coordinate)
+  .max(BrowserActionLimits.coordinate)
 const wheelSchema = z
   .strictObject({ deltaX: wheelDeltaSchema.optional(), deltaY: wheelDeltaSchema.optional() })
-  .refine((value) => isPresent(value.deltaX) || isPresent(value.deltaY), '至少给 deltaX、deltaY 中的一个')
+  .refine(
+    (value) => isPresent(value.deltaX) || isPresent(value.deltaY),
+    '至少给 deltaX、deltaY 中的一个'
+  )
 const dragSchema = z.strictObject({
   source: targetSchema,
   target: targetSchema,
@@ -222,7 +279,12 @@ const waitForFunctionSchema = z.strictObject({
   args: scriptArgsSchema,
   frame: frameIdSchema,
   timeoutMs: waitTimeoutSchema,
-  intervalMs: z.number().int().min(BrowserWaitLimits.minIntervalMs).max(BrowserWaitLimits.maxIntervalMs).optional(),
+  intervalMs: z
+    .number()
+    .int()
+    .min(BrowserWaitLimits.minIntervalMs)
+    .max(BrowserWaitLimits.maxIntervalMs)
+    .optional(),
 })
 const waitForLoadSchema = z.strictObject({
   state: z.enum(['domcontentloaded', 'load', 'networkidle']).optional(),
@@ -232,10 +294,21 @@ const waitForEventSchema = z.strictObject({
   kind: z.enum(['dialog', 'download', 'permission']).optional(),
   timeoutMs: z.number().int().positive().max(BrowserPendingEventLimits.maxWaitMs).optional(),
 })
-const dialogSchema = z.strictObject({ eventId: eventIdSchema, accept: z.boolean(), promptText: z.string().optional() })
+const dialogSchema = z.strictObject({
+  eventId: eventIdSchema,
+  accept: z.boolean(),
+  promptText: z.string().optional(),
+})
 const downloadDecisionSchema = z
-  .strictObject({ eventId: eventIdSchema, savePath: workspacePathSchema.optional(), cancel: z.boolean().optional() })
-  .refine((value) => !!value.cancel !== isPresent(value.savePath), '要么给 savePath 保存，要么 cancel: true 取消，只给一样')
+  .strictObject({
+    eventId: eventIdSchema,
+    savePath: workspacePathSchema.optional(),
+    cancel: z.boolean().optional(),
+  })
+  .refine(
+    (value) => !!value.cancel !== isPresent(value.savePath),
+    '要么给 savePath 保存，要么 cancel: true 取消，只给一样'
+  )
 const permissionSchema = z.strictObject({ eventId: eventIdSchema, grant: z.boolean() })
 const downloadSchema = z.strictObject({
   url: z.string().trim().url().max(BrowserFetchLimits.pathChars),
@@ -307,7 +380,10 @@ export function mouseMoveInput(input: unknown): BrowserMouseMoveInput {
 }
 
 /** mouseDown、mouseUp 的入参。 */
-export function mouseButtonInput(input: unknown, operation: 'mouseDown' | 'mouseUp'): BrowserMouseButtonInput {
+export function mouseButtonInput(
+  input: unknown,
+  operation: 'mouseDown' | 'mouseUp'
+): BrowserMouseButtonInput {
   return parseInput(mouseButtonInputSchema, input, operation)
 }
 
@@ -386,15 +462,31 @@ const diagnosticsSchema = z.strictObject({
 const requestSchema = z.strictObject({
   requestId: z.string().trim().min(1).max(BrowserDiagnosticsLimits.requestIdChars),
   includeResponseBody: z.boolean().optional(),
-  maxBodyChars: z.number().int().positive().max(BrowserDiagnosticsLimits.responseBodyChars).optional(),
+  maxBodyChars: z
+    .number()
+    .int()
+    .positive()
+    .max(BrowserDiagnosticsLimits.responseBodyChars)
+    .optional(),
 })
 const zoomSchema = z
   .strictObject({
     action: z.enum(['in', 'out', 'reset', 'set']),
-    zoomFactor: z.number().min(BrowserConditionLimits.minZoomFactor).max(BrowserConditionLimits.maxZoomFactor).optional(),
-    step: z.number().min(BrowserConditionLimits.minZoomStep).max(BrowserConditionLimits.maxZoomStep).optional(),
+    zoomFactor: z
+      .number()
+      .min(BrowserConditionLimits.minZoomFactor)
+      .max(BrowserConditionLimits.maxZoomFactor)
+      .optional(),
+    step: z
+      .number()
+      .min(BrowserConditionLimits.minZoomStep)
+      .max(BrowserConditionLimits.maxZoomStep)
+      .optional(),
   })
-  .refine((value) => value.action !== 'set' || isPresent(value.zoomFactor), { message: 'action 是 set 时要给 zoomFactor', path: ['zoomFactor'] })
+  .refine((value) => value.action !== 'set' || isPresent(value.zoomFactor), {
+    message: 'action 是 set 时要给 zoomFactor',
+    path: ['zoomFactor'],
+  })
 const headersSchema = z.record(
   z.string().min(1).max(BrowserConditionLimits.headerNameChars),
   z.string().max(BrowserConditionLimits.headerValueChars)
@@ -404,8 +496,14 @@ const networkSchema = z
   .strictObject({
     offline: z.boolean().optional(),
     extraHTTPHeaders: headersSchema.optional(),
-    blockedURLPatterns: z.array(urlPatternSchema).max(BrowserConditionLimits.blockedUrlPatterns).optional(),
-    blockedResourceTypes: z.array(z.string().min(1).max(80)).max(BrowserConditionLimits.blockedResourceTypes).optional(),
+    blockedURLPatterns: z
+      .array(urlPatternSchema)
+      .max(BrowserConditionLimits.blockedUrlPatterns)
+      .optional(),
+    blockedResourceTypes: z
+      .array(z.string().min(1).max(80))
+      .max(BrowserConditionLimits.blockedResourceTypes)
+      .optional(),
     mockResponses: z
       .array(
         z.strictObject({
@@ -419,23 +517,48 @@ const networkSchema = z
       .max(BrowserConditionLimits.mockResponses)
       .optional(),
   })
-  .refine((value) => Object.values(value).some(isPresent), '至少要设一样：offline、extraHTTPHeaders、blockedURLPatterns、blockedResourceTypes 或 mockResponses')
+  .refine(
+    (value) => Object.values(value).some(isPresent),
+    '至少要设一样：offline、extraHTTPHeaders、blockedURLPatterns、blockedResourceTypes 或 mockResponses'
+  )
 const traceSchema = z.strictObject({
   reload: z.boolean().optional(),
-  autoStopMs: z.number().int().min(BrowserPerformanceLimits.minTraceMs).max(BrowserPerformanceLimits.maxTraceMs).nullable().optional(),
+  autoStopMs: z
+    .number()
+    .int()
+    .min(BrowserPerformanceLimits.minTraceMs)
+    .max(BrowserPerformanceLimits.maxTraceMs)
+    .nullable()
+    .optional(),
 })
 const insightSchema = z.strictObject({
   insightSetId: z.string().trim().min(1).max(BrowserPerformanceLimits.insightIdChars),
   insightName: z.string().trim().min(1).max(BrowserPerformanceLimits.insightIdChars),
 })
-const heapSnapshotSchema = z.strictObject({ path: z.string().trim().min(1).max(BrowserPerformanceLimits.snapshotPathChars).optional() })
-const recordingSchema = z.strictObject({
-  maxWidth: z.number().int().min(BrowserCaptureLimits.minScreencastWidth).max(BrowserCaptureLimits.maxScreencastWidth).optional(),
-  everyNthFrame: z.number().int().min(1).max(BrowserCaptureLimits.maxScreencastFrameStep).optional(),
+const heapSnapshotSchema = z.strictObject({
+  path: z.string().trim().min(1).max(BrowserPerformanceLimits.snapshotPathChars).optional(),
 })
-const stopRecordingSchema = z.strictObject({ name: z.string().trim().min(1).max(BrowserCaptureLimits.screencastNameChars).optional() })
+const recordingSchema = z.strictObject({
+  maxWidth: z
+    .number()
+    .int()
+    .min(BrowserCaptureLimits.minScreencastWidth)
+    .max(BrowserCaptureLimits.maxScreencastWidth)
+    .optional(),
+  everyNthFrame: z
+    .number()
+    .int()
+    .min(1)
+    .max(BrowserCaptureLimits.maxScreencastFrameStep)
+    .optional(),
+})
+const stopRecordingSchema = z.strictObject({
+  name: z.string().trim().min(1).max(BrowserCaptureLimits.screencastNameChars).optional(),
+})
 const userScriptIdSchema = z.strictObject({ id: z.string().trim().min(1) })
-const matchRulesSchema = z.array(z.string().min(1).max(BrowserUserScriptLimits.matchRuleChars)).max(BrowserUserScriptLimits.matchRules)
+const matchRulesSchema = z
+  .array(z.string().min(1).max(BrowserUserScriptLimits.matchRuleChars))
+  .max(BrowserUserScriptLimits.matchRules)
 const userScriptFields = {
   name: z.string().min(1).max(BrowserUserScriptLimits.nameChars),
   code: z.string().min(1).max(BrowserUserScriptLimits.codeBytes),
@@ -460,9 +583,15 @@ const updateUserScriptSchema = z
     world: userScriptFields.world,
   })
   .refine(({ id: _id, ...patch }) => Object.values(patch).some(isPresent), '至少要改一样')
-const enableUserScriptSchema = z.strictObject({ id: z.string().trim().min(1), enabled: z.boolean() })
+const enableUserScriptSchema = z.strictObject({
+  id: z.string().trim().min(1),
+  enabled: z.boolean(),
+})
 const enableUserScriptsSchema = z.strictObject({ enabled: z.boolean() })
-const moveUserScriptSchema = z.strictObject({ id: z.string().trim().min(1), direction: z.enum(['up', 'down']) })
+const moveUserScriptSchema = z.strictObject({
+  id: z.string().trim().min(1),
+  direction: z.enum(['up', 'down']),
+})
 
 /** diagnostics 的入参。 */
 export function diagnosticsInput(input: unknown): DevtoolsDiagnosticsInput {
@@ -552,17 +681,26 @@ const protocolMethodFilterSchema = z
   .trim()
   .min(1)
   .max(BrowserProtocolLimits.methodChars)
-  .regex(/^[A-Z][A-Za-z]*\.(?:[a-zA-Z]+)?$/u, 'method 写成完整方法名（Network.responseReceived）或以点结尾的域（Network.）')
+  .regex(
+    /^[A-Z][A-Za-z]*\.(?:[a-zA-Z]+)?$/u,
+    'method 写成完整方法名（Network.responseReceived）或以点结尾的域（Network.）'
+  )
 const sendSchema = z.strictObject({
   method: protocolMethodSchema,
   params: z
     .record(z.string(), z.unknown())
-    .refine((value) => jsonLength(value) <= BrowserProtocolLimits.paramsChars, `params 按 JSON 算超过 ${BrowserProtocolLimits.paramsChars} 个字符`)
+    .refine(
+      (value) => jsonLength(value) <= BrowserProtocolLimits.paramsChars,
+      `params 按 JSON 算超过 ${BrowserProtocolLimits.paramsChars} 个字符`
+    )
     .optional(),
   session: z.string().trim().min(1).max(BrowserProtocolLimits.sessionChars).optional(),
 })
 const eventCursorSchema = z.number().int().min(0).optional()
-const eventsSchema = z.strictObject({ method: protocolMethodFilterSchema.optional(), after: eventCursorSchema })
+const eventsSchema = z.strictObject({
+  method: protocolMethodFilterSchema.optional(),
+  after: eventCursorSchema,
+})
 const protocolWaitSchema = z.strictObject({
   method: protocolMethodFilterSchema,
   after: eventCursorSchema,

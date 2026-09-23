@@ -10,8 +10,12 @@ import { textCodec, TextFileErrorCodes, textFileIo } from '../index'
 import { replaceFileAtomically } from '../utils/file-io'
 
 let root = ''
-beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'text-files-io-')) })
-afterEach(async () => { await rm(root, { recursive: true, force: true }) })
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), 'text-files-io-'))
+})
+afterEach(async () => {
+  await rm(root, { recursive: true, force: true })
+})
 
 describe('读文件头', () => {
   test('只读开头最多那么多字节；不存在抛 ENOENT；目录不是普通文件', async () => {
@@ -19,9 +23,13 @@ describe('读文件头', () => {
     await writeFile(path, 'gitdir: ../elsewhere\n')
     expect((await textFileIo.readHead(path, 6)).toString()).toBe('gitdir')
     expect((await textFileIo.readHead(path, 4096)).toString()).toBe('gitdir: ../elsewhere\n')
-    await expect(textFileIo.readHead(join(root, 'missing.txt'), 6)).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(textFileIo.readHead(join(root, 'missing.txt'), 6)).rejects.toMatchObject({
+      code: 'ENOENT',
+    })
     await mkdir(join(root, 'directory'))
-    await expect(textFileIo.readHead(join(root, 'directory'), 6)).rejects.toMatchObject({ code: TextFileErrorCodes.notRegular })
+    await expect(textFileIo.readHead(join(root, 'directory'), 6)).rejects.toMatchObject({
+      code: TextFileErrorCodes.notRegular,
+    })
   })
 })
 
@@ -38,7 +46,9 @@ describe('新文件', () => {
   })
 
   test('上级目录不存在时原样抛文件系统错误，不留临时文件', async () => {
-    await expect(textFileIo.writeBytes(join(root, 'missing', 'a.txt'), Buffer.from('x'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(
+      textFileIo.writeBytes(join(root, 'missing', 'a.txt'), Buffer.from('x'))
+    ).rejects.toMatchObject({ code: 'ENOENT' })
     expect(await readdir(root)).toEqual([])
   })
 
@@ -53,10 +63,16 @@ describe('改名前的第二次核对', () => {
   test('写临时文件期间外部改了文件：改名前核对不上，外部内容留着，临时文件清掉', async () => {
     const path = join(root, 'target.txt')
     await writeFile(path, 'original')
-    await expect(replaceFileAtomically(path, async (target) => {
-      await writeFile(target, 'external')
-      return Buffer.from('mine')
-    }, { expected: { exists: true, bytes: Buffer.from('original') } })).rejects.toMatchObject({ code: TextFileErrorCodes.externalEdit })
+    await expect(
+      replaceFileAtomically(
+        path,
+        async (target) => {
+          await writeFile(target, 'external')
+          return Buffer.from('mine')
+        },
+        { expected: { exists: true, bytes: Buffer.from('original') } }
+      )
+    ).rejects.toMatchObject({ code: TextFileErrorCodes.externalEdit })
     expect(await readFile(path, 'utf8')).toBe('external')
     expect(await readdir(root)).toEqual(['target.txt'])
   })

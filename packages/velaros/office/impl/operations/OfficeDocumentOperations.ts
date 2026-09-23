@@ -48,27 +48,50 @@ export interface OfficeDocumentOperationsApi {
   /** 生成 .docx；appendMode 命中已有文件时把新内容缝进原文档，否则新建整篇。 */
   createWord(input: OfficeWordInput, ctx: OfficeOperationContext): Promise<OfficeWritten>
   /** 生成 .pptx；slides 为结构化页面，content 走自动拆页。 */
-  createPresentation(input: OfficePresentationInput, ctx: OfficeOperationContext): Promise<OfficeWritten>
+  createPresentation(
+    input: OfficePresentationInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeWritten>
   /** 生成 .xlsx；sheets 为结构化工作表，content 走 CSV/TSV/Markdown/JSON 自动解析。 */
-  createSpreadsheet(input: OfficeSpreadsheetInput, ctx: OfficeOperationContext): Promise<OfficeWritten>
+  createSpreadsheet(
+    input: OfficeSpreadsheetInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeWritten>
 }
 
 export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
   /** 内容归一化之后什么都没有时给模型的说明，按操作索引。 */
   private static readonly EmptyContentMessages = {
     createWord: 'createWord 没有可写的内容：blocks 是空的，或 content 解析不出任何段落。',
-    createPresentation: 'createPresentation 没有可写的内容：slides 是空的，或 content 拆不出任何一页。',
-    createSpreadsheet: 'createSpreadsheet 没有可写的内容：sheets 是空的，或 content 解析不出任何一行。',
+    createPresentation:
+      'createPresentation 没有可写的内容：slides 是空的，或 content 拆不出任何一页。',
+    createSpreadsheet:
+      'createSpreadsheet 没有可写的内容：sheets 是空的，或 content 解析不出任何一行。',
   }
 
   /** 幻灯片背景图认的扩展名。 */
-  private static readonly BackgroundImageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.bmp', '.webp']
+  private static readonly BackgroundImageExtensions = [
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.gif',
+    '.svg',
+    '.bmp',
+    '.webp',
+  ]
 
   constructor(private readonly workspace: OfficeWorkspaceApi) {}
 
-  public async createWord(input: OfficeWordInput, ctx: OfficeOperationContext): Promise<OfficeWritten> {
+  public async createWord(
+    input: OfficeWordInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeWritten> {
     const blocks = normalizeWordBlocks(input)
-    if (isEmpty(blocks)) throw new AppError(OfficeErrorCodes.emptyContent, OfficeDocumentOperations.EmptyContentMessages.createWord)
+    if (isEmpty(blocks))
+      throw new AppError(
+        OfficeErrorCodes.emptyContent,
+        OfficeDocumentOperations.EmptyContentMessages.createWord
+      )
     ctx.abortSignal.throwIfAborted()
 
     const output = await this.workspace.prepareWordOutput(ctx, input)
@@ -86,12 +109,24 @@ export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
     return writeOfficeFile(output, await Packer.toBuffer(document))
   }
 
-  public async createPresentation(input: OfficePresentationInput, ctx: OfficeOperationContext): Promise<OfficeWritten> {
+  public async createPresentation(
+    input: OfficePresentationInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeWritten> {
     const slides = normalizePresentationSlides(input)
-    if (isEmpty(slides)) throw new AppError(OfficeErrorCodes.emptyContent, OfficeDocumentOperations.EmptyContentMessages.createPresentation)
+    if (isEmpty(slides))
+      throw new AppError(
+        OfficeErrorCodes.emptyContent,
+        OfficeDocumentOperations.EmptyContentMessages.createPresentation
+      )
     ctx.abortSignal.throwIfAborted()
 
-    const output = await this.workspace.prepareOutput(ctx, input.outputPath, '.pptx', input.overwrite)
+    const output = await this.workspace.prepareOutput(
+      ctx,
+      input.outputPath,
+      '.pptx',
+      input.overwrite
+    )
     const pptx = new PptxGenJS()
     // 基础文档属性和可选 layout/theme 都在创建后设置。
     pptx.layout = input.layout ?? 'LAYOUT_WIDE'
@@ -107,7 +142,8 @@ export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
     for (const slideInput of slides) {
       const slide = pptx.addSlide()
       // 每页可独立设置背景、元素和 speaker notes；背景图按工作区根解析，出了根一样拒绝。
-      if (slideInput.background) slide.background = await this.resolveBackground(ctx, slideInput.background)
+      if (slideInput.background)
+        slide.background = await this.resolveBackground(ctx, slideInput.background)
       addSlideElements(slide, slideInput.elements)
       if (slideInput.notes) slide.addNotes(slideInput.notes)
     }
@@ -116,13 +152,25 @@ export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
     return writtenReceipt(output)
   }
 
-  public async createSpreadsheet(input: OfficeSpreadsheetInput, ctx: OfficeOperationContext): Promise<OfficeWritten> {
+  public async createSpreadsheet(
+    input: OfficeSpreadsheetInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeWritten> {
     // 先把所有输入规整为工作表数组，后续生成逻辑只关心 sheets。
     const sheets = normalizeSpreadsheetSheets(input)
-    if (isEmpty(sheets)) throw new AppError(OfficeErrorCodes.emptyContent, OfficeDocumentOperations.EmptyContentMessages.createSpreadsheet)
+    if (isEmpty(sheets))
+      throw new AppError(
+        OfficeErrorCodes.emptyContent,
+        OfficeDocumentOperations.EmptyContentMessages.createSpreadsheet
+      )
     ctx.abortSignal.throwIfAborted()
 
-    const output = await this.workspace.prepareOutput(ctx, input.outputPath, '.xlsx', input.overwrite)
+    const output = await this.workspace.prepareOutput(
+      ctx,
+      input.outputPath,
+      '.xlsx',
+      input.overwrite
+    )
     const workbook = new ExcelJS.Workbook()
     // 工作簿级元数据写在文件属性里，不影响表格内容。
     workbook.creator = input.author ?? ''
@@ -167,10 +215,16 @@ export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
     background: NonNullable<PresentationSlideInput['background']>
   ): Promise<PptxBackground> {
     if (!background.path) return background as PptxBackground
-    const path = await this.workspace.resolveInput(ctx, background.path, OfficeDocumentOperations.BackgroundImageExtensions)
+    const path = await this.workspace.resolveInput(
+      ctx,
+      background.path,
+      OfficeDocumentOperations.BackgroundImageExtensions
+    )
     return { ...background, path } as PptxBackground
   }
 }
 
 /** 整个进程共用的创建操作。 */
-export const officeDocumentOperations: OfficeDocumentOperationsApi = new OfficeDocumentOperations(officeWorkspace)
+export const officeDocumentOperations: OfficeDocumentOperationsApi = new OfficeDocumentOperations(
+  officeWorkspace
+)

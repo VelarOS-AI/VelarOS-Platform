@@ -9,7 +9,12 @@
  * 这里的每个接口都必须从根入口导出。
  */
 
-import type { ImageAttachment, ImageLocation, ImageResizeRequest, ImageResizeResult } from '../types/space.js'
+import type {
+  ImageAttachment,
+  ImageLocation,
+  ImageResizeRequest,
+  ImageResizeResult,
+} from '../types/space.js'
 
 /**
  * `velaros:images` 的空间端口：作用域与缩图两件事。空间之间的差别全落在这里，模型那边因此只有一套说明：

@@ -7,13 +7,11 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { kernelModules } from '../../../src/impl/runtime/KernelModuleKit'
 import { KernelModLoader } from '../../../src/impl/serve/KernelModLoader'
 import { KernelModStore } from '../../../src/impl/serve/KernelModStore'
-import {
-  createBundledModPack,
-  toBundledPackRecords,
-} from '../../../src/utils/serve/mod-packs'
+import { createBundledModPack, toBundledPackRecords } from '../../../src/utils/serve/mod-packs'
 
 /** 测试里的模块导入函数；生产里由 `bin/velaros-kernel-daemon.mjs` 注入。 */
-const importModule = (url: string): Promise<Record<string, unknown>> => import(url) as Promise<Record<string, unknown>>
+const importModule = (url: string): Promise<Record<string, unknown>> =>
+  import(url) as Promise<Record<string, unknown>>
 
 const directories: string[] = []
 
@@ -93,9 +91,7 @@ describe('bundled packs', () => {
 
   test('registers first-time bundled packs enabled', () => {
     const store = emptyStore()
-    store.registerBundled([
-      createBundledModPack({ id: 'system.probe', module: probeModule }),
-    ])
+    store.registerBundled([createBundledModPack({ id: 'system.probe', module: probeModule })])
     expect(store.get('system.probe')?.enabled).toBe(true)
   })
 
@@ -111,9 +107,7 @@ describe('bundled packs', () => {
       provides: ['velaros.probe'],
     })
 
-    store.registerBundled([
-      createBundledModPack({ id: 'system.probe', module: probeModule }),
-    ])
+    store.registerBundled([createBundledModPack({ id: 'system.probe', module: probeModule })])
 
     const pack = store.get('system.probe')
     expect(pack?.enabled).toBe(false)
@@ -148,9 +142,7 @@ describe('bundled packs', () => {
   test('persists the enabled bit but never the live module object', async () => {
     const root = await temporaryDirectory()
     const store = new KernelModStore(root)
-    store.registerBundled([
-      createBundledModPack({ id: 'system.probe', module: probeModule }),
-    ])
+    store.registerBundled([createBundledModPack({ id: 'system.probe', module: probeModule })])
     store.disable('system.probe')
 
     // 索引的落点由内核自己定：数据根下的 mod-index.json。

@@ -14,7 +14,11 @@ const BinaryCommand = 'velaros-agent-lab'
 const BinaryTarget = `./bin/${BinaryCommand}.mjs`
 const BinaryShebang = '#!/usr/bin/env node'
 /** `src` 下不许有副作用：这几样一出现就说明有东西在 import 时就跑起来了，或者在包里直接写了进程的流。 */
-const SideEffectPatterns = [/\bprocess\.(?:stdout|stderr)\.write\b/, /\bprocess\.exit\s*\(/, /\bprocess\.exitCode\b/]
+const SideEffectPatterns = [
+  /\bprocess\.(?:stdout|stderr)\.write\b/,
+  /\bprocess\.exit\s*\(/,
+  /\bprocess\.exitCode\b/,
+]
 /** 本包不读任何环境变量：地址、凭据、驱动全部从注入面进来。 */
 const EnvironmentPattern = /\bprocess\.env\b/
 
@@ -33,7 +37,7 @@ async function files(root) {
     entries.map((entry) => {
       const path = join(root, entry.name)
       return entry.isDirectory() ? files(path) : [path]
-    }),
+    })
   )
   return nested.flat()
 }
@@ -61,13 +65,16 @@ const binaryPath = join(PackageRoot, 'bin', `${BinaryCommand}.mjs`)
 const binarySource = await readFile(binaryPath, 'utf8').catch(() => null)
 if (binarySource === null) fail(`missing executable shell: bin/${BinaryCommand}.mjs`)
 else {
-  if (!binarySource.startsWith(BinaryShebang)) fail(`bin/${BinaryCommand}.mjs must start with ${BinaryShebang}`)
+  if (!binarySource.startsWith(BinaryShebang))
+    fail(`bin/${BinaryCommand}.mjs must start with ${BinaryShebang}`)
   if (!binarySource.includes('dist/index.js')) {
     fail(`bin/${BinaryCommand}.mjs must hand the process to dist/index.js`)
   }
 }
 
-const sourceFiles = (await files(SourceRoot)).filter((path) => ['.ts', '.tsx'].includes(extname(path)))
+const sourceFiles = (await files(SourceRoot)).filter((path) =>
+  ['.ts', '.tsx'].includes(extname(path))
+)
 for (const path of sourceFiles) {
   const source = withoutComments(await readFile(path, 'utf8'))
   const name = packageRelative(path)
@@ -76,15 +83,20 @@ for (const path of sourceFiles) {
     fail(`${name} reaches into the retired Desktop implementation`)
   }
   if (EnvironmentPattern.test(source)) {
-    fail(`${name} reads an environment variable; the host injects addresses, credentials, and drivers instead`)
+    fail(
+      `${name} reads an environment variable; the host injects addresses, credentials, and drivers instead`
+    )
   }
   for (const pattern of SideEffectPatterns) {
-    if (pattern.test(source)) fail(`${name} has a process side effect; only bin/ may touch the process`)
+    if (pattern.test(source))
+      fail(`${name} has a process side effect; only bin/ may touch the process`)
   }
 }
 
 for (const root of PureRoots) {
-  for (const path of (await files(join(SourceRoot, root))).filter((item) => extname(item) === '.ts')) {
+  for (const path of (await files(join(SourceRoot, root))).filter(
+    (item) => extname(item) === '.ts'
+  )) {
     const source = await readFile(path, 'utf8')
     const name = packageRelative(path)
     if (/from\s+['"]node:|import\s*\(['"]node:/.test(source)) {
@@ -120,9 +132,10 @@ for (const path of requiredFiles) {
   if (!present.has(path)) fail(`required product surface is missing: ${path}`)
 }
 
-const legacySnapshot = await readFile(join(PackageRoot, 'test/fixtures/legacy-equivalence.tsv'), 'utf8').then(
-  (source) => source.replaceAll('\r\n', '\n'),
-)
+const legacySnapshot = await readFile(
+  join(PackageRoot, 'test/fixtures/legacy-equivalence.tsv'),
+  'utf8'
+).then((source) => source.replaceAll('\r\n', '\n'))
 const legacyRows = legacySnapshot.trim().split('\n')
 if (
   legacyRows[0] !== 'schema\tagent-lab/legacy-equivalence-snapshot@1' ||
@@ -139,5 +152,7 @@ for (const [index, row] of legacyRows.slice(3).entries()) {
 }
 
 if (!process.exitCode) {
-  process.stdout.write('agent-lab architecture: public surface, purity, executable shell, and product files verified\n')
+  process.stdout.write(
+    'agent-lab architecture: public surface, purity, executable shell, and product files verified\n'
+  )
 }

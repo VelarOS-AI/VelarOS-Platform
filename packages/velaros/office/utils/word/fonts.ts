@@ -14,7 +14,7 @@ import type { WordFontFamilies } from '../../types/word.js'
  */
 export function resolveWordFontFamilies(
   language: WordDocumentLanguage,
-  hostPlatform: NodeJS.Platform = nodePlatform(),
+  hostPlatform: NodeJS.Platform = nodePlatform()
 ): WordFontFamilies {
   if (language === 'en-US') return { body: 'Times New Roman', heading: 'Aptos Display' }
   if (hostPlatform === 'darwin') return { body: 'Arial Unicode MS', heading: 'Arial Unicode MS' }

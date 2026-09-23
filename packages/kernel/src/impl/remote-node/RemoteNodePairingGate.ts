@@ -5,10 +5,7 @@
 import { isPresent, toNullable } from '@velaros-ai/core'
 import type { TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import {
-  createPairingCode,
-  remoteNodeCodesEqual,
-} from '../../utils/remote/crypto'
+import { createPairingCode, remoteNodeCodesEqual } from '../../utils/remote/crypto'
 import {
   RemoteNodePairingLifetimeMs,
   RemoteNodePairingLockoutMs,
@@ -59,9 +56,9 @@ export class RemoteNodePairingGate implements RemoteNodePairingGateApi {
 
   public get available(): boolean {
     const now = this.options.now()
-    return isPresent(this.activeCode)
-      && (this.activeExpiresAt ?? 0) > now
-      && this.blockedUntil <= now
+    return (
+      isPresent(this.activeCode) && (this.activeExpiresAt ?? 0) > now && this.blockedUntil <= now
+    )
   }
 
   /** 对外可见的码:锁定或过期期间一律不再展示,免得人对着一枚已经不生效的码干瞪眼。 */
@@ -83,11 +80,15 @@ export class RemoteNodePairingGate implements RemoteNodePairingGateApi {
     this.timer?.cancel()
     this.activeCode = this.options.pairingCode ?? createPairingCode()
     this.activeExpiresAt = this.options.now() + RemoteNodePairingLifetimeMs
-    this.timer = this.options.timers.after(RemoteNodePairingLifetimeMs, () => {
-      this.activeCode = undefined
-      this.activeExpiresAt = undefined
-      this.timer = undefined
-    }, { label: 'remote-node-pairing-expiry', unref: true })
+    this.timer = this.options.timers.after(
+      RemoteNodePairingLifetimeMs,
+      () => {
+        this.activeCode = undefined
+        this.activeExpiresAt = undefined
+        this.timer = undefined
+      },
+      { label: 'remote-node-pairing-expiry', unref: true }
+    )
   }
 
   public accept(supplied: string): boolean {
@@ -96,10 +97,11 @@ export class RemoteNodePairingGate implements RemoteNodePairingGateApi {
     if (this.blockedUntil > now) return false
     const expected = this.activeCode
     if (
-      isPresent(expected)
-      && (this.activeExpiresAt ?? 0) > now
-      && remoteNodeCodesEqual(expected, supplied)
-    ) return true
+      isPresent(expected) &&
+      (this.activeExpiresAt ?? 0) > now &&
+      remoteNodeCodesEqual(expected, supplied)
+    )
+      return true
     this.failures += 1
     if (this.failures >= RemoteNodePairingMaxFailures) {
       this.failures = 0

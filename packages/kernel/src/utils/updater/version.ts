@@ -20,17 +20,18 @@ export const KernelVersionPattern = SemanticVersionPattern
 /** 把 semver 的带码失败翻成更新器的说法；不是版本失败就原样抛回去。 */
 function toUpdaterError(error: unknown, source: string): unknown {
   if (!(error instanceof KernelError)) return error
-  if (error.code === KernelErrorCodes.invalidVersion) return new KernelUpdaterError(
-    KernelUpdaterErrorCodes.invalidVersion,
-    `内核版本号 "${source}" 不合法`,
-    { version: source },
-  )
+  if (error.code === KernelErrorCodes.invalidVersion)
+    return new KernelUpdaterError(
+      KernelUpdaterErrorCodes.invalidVersion,
+      `内核版本号 "${source}" 不合法`,
+      { version: source }
+    )
   if (error.code === KernelErrorCodes.invalidVersionRange) {
     const range = isString(error.details.source) ? error.details.source : source
     return new KernelUpdaterError(
       KernelUpdaterErrorCodes.invalidVersionRange,
       `内核版本范围 "${range}" 不合法`,
-      { versionRange: range },
+      { versionRange: range }
     )
   }
   return error
@@ -70,10 +71,7 @@ export function compareKernelVersions(left: string, right: string): number {
  * 覆盖精确版本、`*`、caret、tilde、比较符交集与 `||` 并集；内核自带这份匹配器是为了让同一个
  * 范围串在每台宿主上得到同一个结论，不引运行时依赖。
  */
-export function satisfiesKernelVersionRange(
-  version: string,
-  range?: string,
-): boolean {
+export function satisfiesKernelVersionRange(version: string, range?: string): boolean {
   try {
     return satisfiesSemanticVersionRange(version, range)
   } catch (error) {

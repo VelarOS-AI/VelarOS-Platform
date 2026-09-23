@@ -64,7 +64,11 @@ class PythonLanguageService implements PythonLanguageServiceApi {
     input: FindSymbolsInput
   ): Promise<LanguageSymbolResult> {
     const limit = limitOf(input.limit)
-    const selection = await this.selectFiles(ctx, input, DevelopmentTuning.fileBudget.symbolsPerResult)
+    const selection = await this.selectFiles(
+      ctx,
+      input,
+      DevelopmentTuning.fileBudget.symbolsPerResult
+    )
     const query = input.query?.trim()
     const kinds = new Set(input.kinds?.map((kind) => kind.toLowerCase()))
     const symbols: LanguageSymbolRecord[] = []
@@ -143,7 +147,11 @@ class PythonLanguageService implements PythonLanguageServiceApi {
     input: FindImportsInput
   ): Promise<LanguageImportResult> {
     const limit = limitOf(input.limit)
-    const selection = await this.selectFiles(ctx, input, DevelopmentTuning.fileBudget.importsPerResult)
+    const selection = await this.selectFiles(
+      ctx,
+      input,
+      DevelopmentTuning.fileBudget.importsPerResult
+    )
     const records: LanguageImportRecord[] = []
 
     for (const file of selection.files) {

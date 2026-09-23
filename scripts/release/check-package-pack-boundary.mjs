@@ -31,10 +31,7 @@ const executableExtensions = new Set([
   '.yml',
   '.zsh',
 ])
-const unsafePatterns = [
-  /\bbun\s+pm\s+pack\b/u,
-  /\[\s*['"]pm['"]\s*,\s*['"]pack['"]/u,
-]
+const unsafePatterns = [/\bbun\s+pm\s+pack\b/u, /\[\s*['"]pm['"]\s*,\s*['"]pack['"]/u]
 
 function shouldScanFile(filePath) {
   const basename = path.basename(filePath)
@@ -52,7 +49,7 @@ async function collectExecutableSources(directory) {
     const entryPath = path.join(directory, entry.name)
     if (entry.isDirectory()) {
       if (ignoredDirectories.has(entry.name)) continue
-      files.push(...await collectExecutableSources(entryPath))
+      files.push(...(await collectExecutableSources(entryPath)))
     } else if (entry.isFile() && shouldScanFile(entryPath)) {
       files.push(entryPath)
     }
@@ -71,7 +68,7 @@ for (const filePath of await collectExecutableSources(repositoryRoot)) {
 
 if (violations.length > 0) {
   throw new Error(
-    `Raw package packing bypasses the timeout/path guard:\n${violations.map((file) => `- ${file}`).join('\n')}`,
+    `Raw package packing bypasses the timeout/path guard:\n${violations.map((file) => `- ${file}`).join('\n')}`
   )
 }
 

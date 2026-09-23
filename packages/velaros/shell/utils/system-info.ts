@@ -7,13 +7,24 @@ import { basename } from 'node:path'
 import { isNotNull, isNull, isPresent, toNullable } from '@velaros-ai/core'
 
 import type { ByteStats, ParsedProcessRow, RawPortEntry } from '../types/processes.js'
-import type { ShellBackgroundTaskQueryOptions, ShellBackgroundTaskRecord } from '../types/shell-command.js'
-import type { SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions } from '../types/shell-command.js'
+import type {
+  ShellBackgroundTaskQueryOptions,
+  ShellBackgroundTaskRecord,
+} from '../types/shell-command.js'
+import type {
+  SystemOpenPortInfo,
+  SystemOpenPortQueryOptions,
+  SystemProcessInfo,
+  SystemProcessQueryOptions,
+} from '../types/shell-command.js'
 
 import { ShellTuning } from './tuning.js'
 
 /** 按查询条件筛选后台任务，最新启动的在前：过滤词（命令行里不区分大小写的包含）、任务 id、会话、会话集合、只看运行中；先过滤再截断，最多 limit 条。 */
-export function selectBackgroundTasks(tasks: readonly ShellBackgroundTaskRecord[], options: ShellBackgroundTaskQueryOptions): ShellBackgroundTaskRecord[] {
+export function selectBackgroundTasks(
+  tasks: readonly ShellBackgroundTaskRecord[],
+  options: ShellBackgroundTaskQueryOptions
+): ShellBackgroundTaskRecord[] {
   const sessionIds = new Set(options.sessionIds ?? [])
   const filter = options.filter?.trim().toLowerCase()
   return [...tasks]
@@ -30,7 +41,10 @@ export function selectBackgroundTasks(tasks: readonly ShellBackgroundTaskRecord[
 }
 
 /** 把进程行转成对外的进程信息，再按查询条件筛选：过滤词、pid、名字、命令行片段、用户、只看当前用户、CPU 与内存下限；最多 limit 条（默认 50）。 */
-export function selectProcesses(rows: ParsedProcessRow[], options: SystemProcessQueryOptions): SystemProcessInfo[] {
+export function selectProcesses(
+  rows: ParsedProcessRow[],
+  options: SystemProcessQueryOptions
+): SystemProcessInfo[] {
   const limit = options.limit ?? ShellTuning.systemInfo.listItems
   const filter = options.filter?.trim().toLowerCase()
   const pids = new Set(options.pids ?? [])
@@ -43,11 +57,13 @@ export function selectProcesses(rows: ParsedProcessRow[], options: SystemProcess
       startTime: row.startTime || null,
     }))
     .filter((processInfo) => {
-      if (filter && !`${processInfo.name}\0${processInfo.command}`.toLowerCase().includes(filter)) return false
+      if (filter && !`${processInfo.name}\0${processInfo.command}`.toLowerCase().includes(filter))
+        return false
       if (options.pid && processInfo.pid !== options.pid) return false
       if (pids.size > 0 && !pids.has(processInfo.pid)) return false
       if (options.name && !processInfo.name.includes(options.name)) return false
-      if (options.commandContains && !processInfo.command.includes(options.commandContains)) return false
+      if (options.commandContains && !processInfo.command.includes(options.commandContains))
+        return false
       if (options.user && processInfo.user !== options.user) return false
       if (options.onlyCurrentUser && !isCurrentUser(processInfo.user, currentUser)) return false
       if (options.minCpuPercent && processInfo.cpuPercent < options.minCpuPercent) return false
@@ -59,7 +75,9 @@ export function selectProcesses(rows: ParsedProcessRow[], options: SystemProcess
 
 /** 取出端口条目里出现的全部 pid，去重。 */
 export function collectPortPids(entries: RawPortEntry[]): number[] {
-  return [...new Set(entries.map((entry) => entry.pid).filter((pid): pid is number => isPresent(pid)))]
+  return [
+    ...new Set(entries.map((entry) => entry.pid).filter((pid): pid is number => isPresent(pid))),
+  ]
 }
 
 /** 给端口条目配上占用进程的名字、命令行和工作目录，再按查询条件筛选：过滤词、pid、进程名、端口、端口范围；最多 limit 条（默认 50）。 */
@@ -87,7 +105,11 @@ export function selectOpenPorts(
       }
     })
     .filter((entry) => {
-      if (filter && !`${entry.processName ?? ''}\0${entry.command ?? ''}`.toLowerCase().includes(filter)) return false
+      if (
+        filter &&
+        !`${entry.processName ?? ''}\0${entry.command ?? ''}`.toLowerCase().includes(filter)
+      )
+        return false
       if (options.pid && entry.pid !== options.pid) return false
       if (options.processName && !entry.processName?.includes(options.processName)) return false
       if (options.port && entry.port !== options.port) return false
@@ -153,10 +175,12 @@ export function parseSwapStats(stdout: string, platform: NodeJS.Platform): Nulla
   if (platform === 'darwin') {
     const totalMatch = stdout.match(/total = ([\d.]+)([KMGTP])/)
     const usedMatch = stdout.match(/used = ([\d.]+)([KMGTP])/)
-    return totalMatch && usedMatch ? {
-      usedBytes: convertSizedValueToBytes(Number(usedMatch[1]), usedMatch[2]),
-      totalBytes: convertSizedValueToBytes(Number(totalMatch[1]), totalMatch[2]),
-    } : null
+    return totalMatch && usedMatch
+      ? {
+          usedBytes: convertSizedValueToBytes(Number(usedMatch[1]), usedMatch[2]),
+          totalBytes: convertSizedValueToBytes(Number(totalMatch[1]), totalMatch[2]),
+        }
+      : null
   }
   if (platform === 'linux') {
     const totalKb = readMeminfoKilobytes(stdout, 'SwapTotal')
@@ -171,7 +195,10 @@ export function parseSwapStats(stdout: string, platform: NodeJS.Platform): Nulla
 /** 从各平台磁盘命令的输出读出已用与总量字节数；解析不了返回 null。 */
 export function parseDiskStats(stdout: string, platform: NodeJS.Platform): Nullable<ByteStats> {
   if (platform === 'win32') return parseTabSeparatedByteStats(stdout)
-  const row = stdout.split(/\r?\n/).map((line) => line.trim()).find((line, index) => index > 0 && line)
+  const row = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line, index) => index > 0 && line)
   const parts = row?.split(/\s+/)
   if (!parts || parts.length < 5) return null
   const totalBlocks = Number(parts[1])
@@ -193,8 +220,15 @@ function parseProcessLine(line: string, platform: NodeJS.Platform): Nullable<Par
       const memoryKb = Number((memoryText ?? '').replace(/\D/gu, ''))
       if (isNull(pid) || !Number.isFinite(memoryKb)) return null
       return {
-        pid, ppid: 0, user: '', startTime: '', status: 'Running', cpuPercent: 0,
-        memoryBytes: memoryKb * 1024, name: name || String(pid), command: name || String(pid),
+        pid,
+        ppid: 0,
+        user: '',
+        startTime: '',
+        status: 'Running',
+        cpuPercent: 0,
+        memoryBytes: memoryKb * 1024,
+        name: name || String(pid),
+        command: name || String(pid),
       }
     }
     const parts = trimmed.split('\t')
@@ -202,20 +236,38 @@ function parseProcessLine(line: string, platform: NodeJS.Platform): Nullable<Par
     const ppid = positiveInteger(parts[1] ?? '')
     const cpuPercent = Number(parts[5])
     const memoryKb = Number(parts[6])
-    if (isNull(pid) || isNull(ppid) || !Number.isFinite(cpuPercent) || !Number.isFinite(memoryKb)) return null
+    if (isNull(pid) || isNull(ppid) || !Number.isFinite(cpuPercent) || !Number.isFinite(memoryKb))
+      return null
     const name = parts[7]?.trim() || String(pid)
     return {
-      pid, ppid, user: parts[2]?.trim() || '', startTime: parts[3]?.trim() || '',
-      status: parts[4]?.trim() || 'Running', cpuPercent, memoryBytes: memoryKb * 1024,
-      name, command: parts.slice(8).join('\t').trim() || name,
+      pid,
+      ppid,
+      user: parts[2]?.trim() || '',
+      startTime: parts[3]?.trim() || '',
+      status: parts[4]?.trim() || 'Running',
+      cpuPercent,
+      memoryBytes: memoryKb * 1024,
+      name,
+      command: parts.slice(8).join('\t').trim() || name,
     }
   }
-  const match = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+([A-Za-z]{3}\s+[A-Za-z]{3}\s+\d+\s+\d{2}:\d{2}:\d{2}\s+\d{4})\s+(\S+)\s+([0-9.]+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$/.exec(trimmed)
-  return match ? {
-    pid: Number(match[1]), ppid: Number(match[2]), user: match[3], startTime: match[4],
-    status: match[5], cpuPercent: Number(match[6]), memoryBytes: Number(match[7]) * 1024,
-    name: basename(match[8]), command: match[9],
-  } : null
+  const match =
+    /^\s*(\d+)\s+(\d+)\s+(\S+)\s+([A-Za-z]{3}\s+[A-Za-z]{3}\s+\d+\s+\d{2}:\d{2}:\d{2}\s+\d{4})\s+(\S+)\s+([0-9.]+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$/.exec(
+      trimmed
+    )
+  return match
+    ? {
+        pid: Number(match[1]),
+        ppid: Number(match[2]),
+        user: match[3],
+        startTime: match[4],
+        status: match[5],
+        cpuPercent: Number(match[6]),
+        memoryBytes: Number(match[7]) * 1024,
+        name: basename(match[8]),
+        command: match[9],
+      }
+    : null
 }
 
 /** 解析 lsof 字段格式输出（p、c、n、TST 开头的行）里的监听端口。 */
@@ -225,8 +277,11 @@ function parseLsofOpenPortEntries(stdout: string): RawPortEntry[] {
   let processName: Nullable<string> = null
   let current: Nullable<RawPortEntry> = null
   for (const line of stdout.split(/\r?\n/)) {
-    if (line.startsWith('p')) { pid = positiveInteger(line.slice(1)); processName = null; current = null }
-    else if (line.startsWith('c')) processName = line.slice(1).trim() || null
+    if (line.startsWith('p')) {
+      pid = positiveInteger(line.slice(1))
+      processName = null
+      current = null
+    } else if (line.startsWith('c')) processName = line.slice(1).trim() || null
     else if (line.startsWith('n')) {
       const parsed = parseAddressAndPort(line.slice(1))
       if (parsed) {
@@ -240,28 +295,34 @@ function parseLsofOpenPortEntries(stdout: string): RawPortEntry[] {
 
 /** 解析 Windows 上的监听端口输出：制表符分隔格式，或 netstat 的 LISTENING 行。 */
 function parseWindowsOpenPortEntries(stdout: string): RawPortEntry[] {
-  return stdout.split(/\r?\n/).map((line): Nullable<RawPortEntry> => {
-    const parts = line.trimEnd().split('\t')
-    const port = positiveInteger(parts[3] ?? '')
-    if (parts.length >= 5 && isNotNull(port)) return {
-      pid: positiveInteger(parts[0] ?? ''),
-      processName: parts[1]?.trim() || null,
-      address: parts[2]?.trim() || '',
-      port,
-      state: parts[4]?.trim() || null,
-    }
+  return stdout
+    .split(/\r?\n/)
+    .map((line): Nullable<RawPortEntry> => {
+      const parts = line.trimEnd().split('\t')
+      const port = positiveInteger(parts[3] ?? '')
+      if (parts.length >= 5 && isNotNull(port))
+        return {
+          pid: positiveInteger(parts[0] ?? ''),
+          processName: parts[1]?.trim() || null,
+          address: parts[2]?.trim() || '',
+          port,
+          state: parts[4]?.trim() || null,
+        }
 
-    const netstat = /^\s*TCP\s+(\S+)\s+\S+\s+LISTENING\s+(\d+)\s*$/iu.exec(line)
-    if (!netstat) return null
-    const address = parseAddressAndPort(netstat[1]!)
-    return address ? {
-      pid: positiveInteger(netstat[2]!),
-      processName: null,
-      address: address.address,
-      port: address.port,
-      state: 'LISTENING',
-    } : null
-  }).filter((entry): entry is RawPortEntry => isNotNull(entry))
+      const netstat = /^\s*TCP\s+(\S+)\s+\S+\s+LISTENING\s+(\d+)\s*$/iu.exec(line)
+      if (!netstat) return null
+      const address = parseAddressAndPort(netstat[1]!)
+      return address
+        ? {
+            pid: positiveInteger(netstat[2]!),
+            processName: null,
+            address: address.address,
+            port: address.port,
+            state: 'LISTENING',
+          }
+        : null
+    })
+    .filter((entry): entry is RawPortEntry => isNotNull(entry))
 }
 
 /** 把 tasklist CSV 的一行拆成五个字段；格式不对返回 null。 */
@@ -295,7 +356,10 @@ function positiveInteger(value: string): Nullable<number> {
 
 /** 解析「已用<TAB>总量」格式的字节统计；解析不了返回 null。 */
 function parseTabSeparatedByteStats(stdout: string): Nullable<ByteStats> {
-  const line = stdout.split(/\r?\n/).map((entry) => entry.trim()).find(Boolean)
+  const line = stdout
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .find(Boolean)
   const [usedText, totalText] = line?.split('\t') ?? []
   const usedBytes = Number(usedText)
   const totalBytes = Number(totalText)

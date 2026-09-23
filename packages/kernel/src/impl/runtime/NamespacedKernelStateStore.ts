@@ -21,14 +21,11 @@ export interface KernelStateStore {
 }
 
 export class NamespacedKernelStateStore implements KernelStateStore {
-  public constructor(
-    private readonly options: NamespacedKernelStateStoreOptions,
-  ) {}
+  public constructor(private readonly options: NamespacedKernelStateStoreOptions) {}
 
   public async get<TValue = unknown>(key: string): Promise<TValue | undefined> {
     this.assertUsable(key)
-    return this.options.backend.get(this.options.namespace, key) as
-      Promise<TValue | undefined>
+    return this.options.backend.get(this.options.namespace, key) as Promise<TValue | undefined>
   }
 
   public async set<TValue = unknown>(key: string, value: TValue): Promise<void> {
@@ -50,10 +47,7 @@ export class NamespacedKernelStateStore implements KernelStateStore {
   private assertUsable(key: string): void {
     this.options.assertActive()
     if (isBlank(key.trim())) {
-      throw new KernelError(
-        KernelErrorCodes.moduleState,
-        '内核模块的状态键不能为空',
-      )
+      throw new KernelError(KernelErrorCodes.moduleState, '内核模块的状态键不能为空')
     }
   }
 }

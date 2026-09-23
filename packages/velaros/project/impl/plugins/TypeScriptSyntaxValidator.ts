@@ -9,7 +9,11 @@ import { createHash } from 'node:crypto'
 import { isEmpty } from '@velaros-ai/core'
 
 import type { ProjectValidator } from '../../contract/requires.js'
-import type { ProjectValidationContext, ValidateInput, ValidationResult } from '../../types/validation.js'
+import type {
+  ProjectValidationContext,
+  ValidateInput,
+  ValidationResult,
+} from '../../types/validation.js'
 import { isSelectedValidator } from '../../utils/checks.js'
 import { isJsTsPath, jsTsSyntaxDiagnostics } from '../../utils/jsts-ast.js'
 
@@ -24,9 +28,7 @@ export class TypeScriptSyntaxValidator implements ProjectValidator {
   public async cacheKey(input: ValidateInput, context: ProjectValidationContext): Promise<string> {
     const paths = (
       input.paths ??
-      (input.transactionId
-        ? (context.getTransaction(input.transactionId)?.changedFiles ?? [])
-        : [])
+      (input.transactionId ? (context.getTransaction(input.transactionId)?.changedFiles ?? []) : [])
     )
       .filter(isJsTsPath)
       .sort()
@@ -35,12 +37,13 @@ export class TypeScriptSyntaxValidator implements ProjectValidator {
     return hash.digest('hex')
   }
 
-  public async validate(input: ValidateInput, context: ProjectValidationContext): Promise<ValidationResult> {
+  public async validate(
+    input: ValidateInput,
+    context: ProjectValidationContext
+  ): Promise<ValidationResult> {
     const paths =
       input.paths ??
-      (input.transactionId
-        ? (context.getTransaction(input.transactionId)?.changedFiles ?? [])
-        : [])
+      (input.transactionId ? (context.getTransaction(input.transactionId)?.changedFiles ?? []) : [])
     const result: ValidationResult = { ok: true, diagnostics: [], checks: [] }
     for (const path of paths.filter(isJsTsPath)) {
       const content = await context.readFile(path)

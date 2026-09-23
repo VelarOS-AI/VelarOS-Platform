@@ -1,7 +1,11 @@
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { CdpIoReadResult, CdpTraceTransport, CdpTracingCompleteEvent } from '../../types/cdp.js'
+import type {
+  CdpIoReadResult,
+  CdpTraceTransport,
+  CdpTracingCompleteEvent,
+} from '../../types/cdp.js'
 import { parseTraceEvents } from '../../utils/cdp/tracing'
 import { BrowserTuning } from '../../utils/tuning'
 
@@ -167,4 +171,3 @@ export class CdpTraceCollector implements CdpTraceCollectorApi {
     this.started = false
   }
 }
-

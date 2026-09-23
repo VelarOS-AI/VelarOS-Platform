@@ -1,4 +1,4 @@
-import { structuredPatch } from "diff";
+import { structuredPatch } from 'diff'
 
 import { isEmpty } from '@velaros-ai/core'
 
@@ -23,26 +23,24 @@ import { isEmpty } from '@velaros-ai/core'
  * ...
  * ```
  */
-export function unifiedDiff(path: string, oldContent = "", newContent = ""): string {
-  if (oldContent === newContent) return "";
+export function unifiedDiff(path: string, oldContent = '', newContent = ''): string {
+  if (oldContent === newContent) return ''
 
-  const patch = structuredPatch(path, path, oldContent, newContent, "", "", { context: 3 });
-  if (isEmpty(patch.hunks)) return "";
+  const patch = structuredPatch(path, path, oldContent, newContent, '', '', { context: 3 })
+  if (isEmpty(patch.hunks)) return ''
 
-  const lines: string[] = [`--- a/${path}`, `+++ b/${path}`];
+  const lines: string[] = [`--- a/${path}`, `+++ b/${path}`]
   for (const hunk of patch.hunks) {
-    lines.push(
-      `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`,
-    );
+    lines.push(`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`)
     for (const line of hunk.lines) {
-      lines.push(line);
+      lines.push(line)
     }
   }
 
-  return lines.join("\n");
+  return lines.join('\n')
 }
 
 /** 把几段 unified diff 用换行连起来，空的跳过。 */
 export function combineDiffs(diffs: string[]): string {
-  return diffs.filter(Boolean).join("\n");
+  return diffs.filter(Boolean).join('\n')
 }

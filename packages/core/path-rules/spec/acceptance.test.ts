@@ -9,7 +9,12 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { createIgnorePolicy, type GitCheckIgnoreRunner, gitignoreRules, pathMatcher } from '../index'
+import {
+  createIgnorePolicy,
+  type GitCheckIgnoreRunner,
+  gitignoreRules,
+  pathMatcher,
+} from '../index'
 
 let root = ''
 beforeEach(async () => {
@@ -49,7 +54,9 @@ describe('glob 匹配', () => {
     expect(pathMatcher.matchesAny('.ENV', ['.env'], { caseSensitive: false })).toBe(true)
     expect(pathMatcher.matchesAny('SRC/a.ts', ['src/'], { caseSensitive: false })).toBe(true)
     expect(pathMatcher.matchesAny('SRC/a.ts', ['src/**'], { caseSensitive: false })).toBe(true)
-    expect(pathMatcher.matchesAny('src/api.GENERATED.ts', ['**/*.generated.*'], { caseSensitive: false })).toBe(true)
+    expect(
+      pathMatcher.matchesAny('src/api.GENERATED.ts', ['**/*.generated.*'], { caseSensitive: false })
+    ).toBe(true)
     expect(pathMatcher.matchesAny('src/api.GENERATED.ts', ['**/*.generated.*'])).toBe(false)
   })
 })
@@ -157,7 +164,9 @@ describe('遍历忽略策略', () => {
     const insideRepo = createIgnorePolicy(root, { rulesFrom: 'repository' })
     expect(await insideRepo.shouldSkip(join(root, 'out'), true)).toBe(true)
 
-    const insideIgnored = createIgnorePolicy(join(root, 'node_modules'), { rulesFrom: 'repository' })
+    const insideIgnored = createIgnorePolicy(join(root, 'node_modules'), {
+      rulesFrom: 'repository',
+    })
     expect(await insideIgnored.shouldSkip(join(root, 'node_modules', 'pkg'), true)).toBe(false)
   })
 })

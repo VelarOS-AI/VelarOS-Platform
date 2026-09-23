@@ -30,7 +30,7 @@ function ratio(numerator: number, denominator: number): number {
  */
 export function summarizeRealTaskCoverage(
   cases: readonly RealTaskCase[],
-  results: readonly RealTaskCoverageResult[],
+  results: readonly RealTaskCoverageResult[]
 ): readonly RealTaskSurfaceCoverageSummary[] {
   const byId = new Map(cases.map((taskCase) => [taskCase.id, taskCase]))
   if (byId.size !== cases.length) throw new Error('真实任务用例的 id 必须唯一')
@@ -38,7 +38,8 @@ export function summarizeRealTaskCoverage(
   const outcomes = new Map<string, RealTaskCoverageOutcome>()
   for (const result of results) {
     if (!byId.has(result.caseId)) throw new Error(`覆盖结果指向了不存在的用例: ${result.caseId}`)
-    if (outcomes.has(result.caseId)) throw new Error(`同一个用例出现了两份覆盖结果: ${result.caseId}`)
+    if (outcomes.has(result.caseId))
+      throw new Error(`同一个用例出现了两份覆盖结果: ${result.caseId}`)
     outcomes.set(result.caseId, result.outcome)
   }
 
@@ -96,26 +97,31 @@ export function summarizeRealTaskCoverage(
  * 宿主不许自己重新解释验证器失败或丢弃，否则两边的分母就对不上了。
  */
 export function classifyRunArchiveOutcome(archive: RunArchive): RunArchiveOutcome {
-  if (archive.drops.length > 0) return {
+  if (archive.drops.length > 0)
+    return {
       outcome: 'void',
       detail: archive.drops.map((drop) => `${drop.cause}: ${drop.detail}`).join('; '),
     }
 
   const failedCriteria = archive.legs.flatMap((leg) =>
     leg.criteria.flatMap((criterion) =>
-      criterion.outcome.kind === 'fail' ? [`${criterion.criterionId}: ${criterion.outcome.reason}`] : [],
-    ),
+      criterion.outcome.kind === 'fail'
+        ? [`${criterion.criterionId}: ${criterion.outcome.reason}`]
+        : []
+    )
   )
-  if (failedCriteria.length > 0 || archive.legs.some((leg) => leg.passed === false)) return { outcome: 'fail', detail: failedCriteria.join('; ') || archive.manifest.exitReason }
+  if (failedCriteria.length > 0 || archive.legs.some((leg) => leg.passed === false))
+    return { outcome: 'fail', detail: failedCriteria.join('; ') || archive.manifest.exitReason }
 
-  if (archive.legs.length > 0 && archive.legs.every((leg) => leg.passed === true)) return { outcome: 'pass', detail: '执行门与外部真相门全部通过' }
+  if (archive.legs.length > 0 && archive.legs.every((leg) => leg.passed === true))
+    return { outcome: 'pass', detail: '执行门与外部真相门全部通过' }
 
   return { outcome: 'void', detail: archive.manifest.exitReason }
 }
 
 /** 消费实际执行回执，计算模型重复输入减少量；字符数不是 token 估算，内部尝试仍计入分母。 */
 export function summarizeToolInputEfficiency(
-  records: readonly ToolAttemptReceiptRecord[],
+  records: readonly ToolAttemptReceiptRecord[]
 ): ToolInputEfficiency {
   let attempts = 0
   let completed = 0

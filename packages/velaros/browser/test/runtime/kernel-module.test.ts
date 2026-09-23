@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
-import type {
-  KernelModuleActivateContext,
-} from '@velaros-ai/kernel'
+import type { KernelModuleActivateContext } from '@velaros-ai/kernel'
 
-import { BrowserRuntimeCapability, createBrowserKernelModule } from '../../impl/electron/ElectronBrowserRuntime'
+import {
+  BrowserRuntimeCapability,
+  createBrowserKernelModule,
+} from '../../impl/electron/ElectronBrowserRuntime'
 import type { BrowserRuntimeCapabilityService } from '../../types/electron.js'
 
 function createContext() {
@@ -51,28 +52,29 @@ describe('browser kernel module', () => {
     await module.activate(context)
     const service = readService()
     expect(service.getOperationMetadata('missing')).toBeUndefined()
-    expect(await service.invoke(
-      'close_session',
-      undefined,
-      { sessionId: 'browser-1' },
-      new AbortController().signal,
-    )).toEqual({ closed: true, sessionId: 'browser-1' })
+    expect(
+      await service.invoke(
+        'close_session',
+        undefined,
+        { sessionId: 'browser-1' },
+        new AbortController().signal
+      )
+    ).toEqual({ closed: true, sessionId: 'browser-1' })
     expect(service.getOperationMetadata('close_session')).toEqual({
       permissions: ['browser:control'],
       reason: '关掉一个由产品持有的浏览器会话。',
     })
-    await expect(service.invoke(
-      'close_session',
-      undefined,
-      { sessionId: ' browser-1 ' },
-      new AbortController().signal,
-    )).rejects.toThrow('浏览器能力的入参形状不对。')
-    expect(await service.invoke(
-      'close_all_sessions',
-      undefined,
-      {},
-      new AbortController().signal,
-    )).toEqual({ closed: true })
+    await expect(
+      service.invoke(
+        'close_session',
+        undefined,
+        { sessionId: ' browser-1 ' },
+        new AbortController().signal
+      )
+    ).rejects.toThrow('浏览器能力的入参形状不对。')
+    expect(
+      await service.invoke('close_all_sessions', undefined, {}, new AbortController().signal)
+    ).toEqual({ closed: true })
 
     expect(calls).toEqual(['close:browser-1', 'close-all'])
   })

@@ -1,5 +1,3 @@
-
-
 import type { ModelAdapterConfig } from './adapters'
 import type {
   ChatProviderId,
@@ -43,16 +41,12 @@ export interface RegisteredProviderScriptSource {
  */
 export interface ProviderScriptRegistryPort {
   supportsProvider(provider: ChatProviderId): boolean
-  getProviderScript(
-    provider: ChatProviderId
-  ): Nullable<ProviderScriptDescriptor>
+  getProviderScript(provider: ChatProviderId): Nullable<ProviderScriptDescriptor>
   listProviderManifests(): ProviderScriptManifest[]
   validateProviderRuntime(
     request: ValidateProviderRuntimeRequest
   ): Promise<{ ok: boolean; message: Nullable<string> }>
-  listProviderModels(
-    request: ListProviderModelsRequest
-  ): Promise<ProviderModelCatalogEntry[]>
+  listProviderModels(request: ListProviderModelsRequest): Promise<ProviderModelCatalogEntry[]>
   resolveRuntimeMetadata(
     config: ModelAdapterConfig,
     model: string,

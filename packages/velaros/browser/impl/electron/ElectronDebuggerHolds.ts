@@ -80,13 +80,20 @@ export interface ElectronDebuggerHoldsApi {
 
 export class ElectronDebuggerHolds implements ElectronDebuggerHoldsApi {
   private readonly traces = new WeakMap<electron.WebContents, ElectronDebuggerHoldsTrace>()
-  private readonly screencasts = new WeakMap<electron.WebContents, ElectronDebuggerHoldsScreencast>()
+  private readonly screencasts = new WeakMap<
+    electron.WebContents,
+    ElectronDebuggerHoldsScreencast
+  >()
   private readonly emulations = new WeakSet<electron.WebContents>()
   private readonly networks = new WeakMap<electron.WebContents, ElectronDebuggerHoldsNetwork>()
   private readonly protocols = new WeakMap<electron.WebContents, ElectronDebuggerHoldsProtocol>()
 
   public hasPersistentHold(webContents: electron.WebContents): boolean {
-    return this.emulations.has(webContents) || this.networks.has(webContents) || this.protocols.has(webContents)
+    return (
+      this.emulations.has(webContents) ||
+      this.networks.has(webContents) ||
+      this.protocols.has(webContents)
+    )
   }
 
   public getTrace(webContents: electron.WebContents): ElectronDebuggerHoldsTrace | undefined {

@@ -6,7 +6,13 @@
 import type { ContextContent } from '@velaros-ai/context'
 
 import type { ContextMaterialsOperationContext } from '../contract/requires.js'
-import type { ContextMaintenancePage, ContextMaterialsQuery, ContextMaterialsReadInput, ContextPatch, ContextPatchReceipt } from '../types/maintenance.js'
+import type {
+  ContextMaintenancePage,
+  ContextMaterialsQuery,
+  ContextMaterialsReadInput,
+  ContextPatch,
+  ContextPatchReceipt,
+} from '../types/maintenance.js'
 
 /**
  * @AgentView
@@ -18,12 +24,18 @@ export interface ContextMaterialsOperationsApi {
    * @OperationEffect none
    * @OperationModes execute
    */
-  list(input: ContextMaterialsQuery, ctx: ContextMaterialsOperationContext): Promise<ContextMaintenancePage>
+  list(
+    input: ContextMaterialsQuery,
+    ctx: ContextMaterialsOperationContext
+  ): Promise<ContextMaintenancePage>
   /** @AgentView 按快照里的引用读一页父会话原文，正文在 text。
    * @OperationEffect none
    * @OperationModes execute
    */
-  read(input: ContextMaterialsReadInput, ctx: ContextMaterialsOperationContext): Promise<ContextContent>
+  read(
+    input: ContextMaterialsReadInput,
+    ctx: ContextMaterialsOperationContext
+  ): Promise<ContextContent>
   /** @AgentView 交来整理补丁：先整份校验，不合格就报错（修正后再交），合格就受理；受理之后声明完成。
    * @OperationEffect none
    * @OperationModes execute
@@ -32,21 +44,31 @@ export interface ContextMaterialsOperationsApi {
 }
 
 export class ContextMaterialsOperations implements ContextMaterialsOperationsApi {
-  public async list(input: ContextMaterialsQuery, ctx: ContextMaterialsOperationContext): Promise<ContextMaintenancePage> {
+  public async list(
+    input: ContextMaterialsQuery,
+    ctx: ContextMaterialsOperationContext
+  ): Promise<ContextMaintenancePage> {
     ctx.abortSignal.throwIfAborted()
     return ctx.materials.list(input, ctx.abortSignal)
   }
 
-  public async read(input: ContextMaterialsReadInput, ctx: ContextMaterialsOperationContext): Promise<ContextContent> {
+  public async read(
+    input: ContextMaterialsReadInput,
+    ctx: ContextMaterialsOperationContext
+  ): Promise<ContextContent> {
     ctx.abortSignal.throwIfAborted()
     return ctx.materials.read(input, ctx.abortSignal)
   }
 
-  public async submit(input: ContextPatch, ctx: ContextMaterialsOperationContext): Promise<ContextPatchReceipt> {
+  public async submit(
+    input: ContextPatch,
+    ctx: ContextMaterialsOperationContext
+  ): Promise<ContextPatchReceipt> {
     ctx.abortSignal.throwIfAborted()
     return ctx.materials.submit(input, ctx.abortSignal)
   }
 }
 
 /** 整个进程只有一份的快照读取操作；装配时把本整理会话的材料端口塞进每次调用的上下文。 */
-export const contextMaterialsOperations: ContextMaterialsOperationsApi = new ContextMaterialsOperations()
+export const contextMaterialsOperations: ContextMaterialsOperationsApi =
+  new ContextMaterialsOperations()

@@ -15,11 +15,13 @@ const log = Log.tag('RemoteNodeFrames')
 /** 把一帧原始载荷解成协议帧:先判类型与体积,再解 JSON,最后过 schema;任何一步失败都给可读因由。 */
 function decode<TFrame>(
   raw: unknown,
-  parse: (input: unknown) => { success: boolean, data?: TFrame },
+  parse: (input: unknown) => { success: boolean; data?: TFrame }
 ): FrameDecodeResult<TFrame> {
-  if (!(raw instanceof Buffer) && !isString(raw)) return { ok: false, reason: '帧的载荷既不是文本也不是二进制' }
+  if (!(raw instanceof Buffer) && !isString(raw))
+    return { ok: false, reason: '帧的载荷既不是文本也不是二进制' }
   const text = raw.toString()
-  if (Buffer.byteLength(text, 'utf8') > RemoteNodeMaxFrameBytes) return { ok: false, reason: '帧超过了协议的体积上限' }
+  if (Buffer.byteLength(text, 'utf8') > RemoteNodeMaxFrameBytes)
+    return { ok: false, reason: '帧超过了协议的体积上限' }
   let input: unknown
   try {
     input = JSON.parse(text) as unknown
@@ -27,21 +29,18 @@ function decode<TFrame>(
     return { ok: false, reason: '帧不是合法 JSON' }
   }
   const parsed = parse(input)
-  if (!parsed.success || isUndefined(parsed.data)) return { ok: false, reason: '帧不符合协议 schema' }
+  if (!parsed.success || isUndefined(parsed.data))
+    return { ok: false, reason: '帧不符合协议 schema' }
   return { ok: true, frame: parsed.data }
 }
 
 /** 解一帧 Client 发来的报文(Node 侧收帧用);解不开只返回因由,不抛。 */
-export function decodeClientFrame(
-  raw: unknown,
-): FrameDecodeResult<RemoteNodeClientFrame> {
+export function decodeClientFrame(raw: unknown): FrameDecodeResult<RemoteNodeClientFrame> {
   return decode(raw, (input) => RemoteNodeClientFrameSchema.safeParse(input))
 }
 
 /** 解一帧 Node 发来的报文(Client 侧收帧用);解不开只返回因由,不抛。 */
-export function decodeServerFrame(
-  raw: unknown,
-): FrameDecodeResult<RemoteNodeServerFrame> {
+export function decodeServerFrame(raw: unknown): FrameDecodeResult<RemoteNodeServerFrame> {
   return decode(raw, (input) => RemoteNodeServerFrameSchema.safeParse(input))
 }
 
@@ -53,7 +52,7 @@ export function decodeServerFrame(
  */
 export function sendFrame(
   socket: { send(data: string): void },
-  frame: RemoteNodeClientFrame | RemoteNodeServerFrame,
+  frame: RemoteNodeClientFrame | RemoteNodeServerFrame
 ): boolean {
   let text: string
   try {

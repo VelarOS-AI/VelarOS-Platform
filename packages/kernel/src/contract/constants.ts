@@ -378,7 +378,8 @@ export const KernelEnvironmentVariables = Object.freeze({
   runtimeDirectory: {
     name: 'VELAROS_KERNEL_RUNTIME_DIR',
     direction: 'input',
-    description: '守护进程运行目录（socket、descriptor、锁文件都落在这里）；不设时按平台默认位置算。',
+    description:
+      '守护进程运行目录（socket、descriptor、锁文件都落在这里）；不设时按平台默认位置算。',
   },
   installRoot: {
     name: 'VELAROS_KERNEL_HOME',
@@ -414,13 +415,16 @@ export type KernelErrorCode = (typeof KernelErrorCodes)[keyof typeof KernelError
 export type KernelCallErrorCode = (typeof KernelCallErrorCodes)[keyof typeof KernelCallErrorCodes]
 
 /** 瘦客户端、启动器与本机 RPC 的失败码。 */
-export type KernelClientErrorCode = (typeof KernelClientErrorCodes)[keyof typeof KernelClientErrorCodes]
+export type KernelClientErrorCode =
+  (typeof KernelClientErrorCodes)[keyof typeof KernelClientErrorCodes]
 
 /** 共享 Runtime 安装器的失败码。 */
-export type KernelUpdaterErrorCode = (typeof KernelUpdaterErrorCodes)[keyof typeof KernelUpdaterErrorCodes]
+export type KernelUpdaterErrorCode =
+  (typeof KernelUpdaterErrorCodes)[keyof typeof KernelUpdaterErrorCodes]
 
 /** 远程节点 Client 侧的失败码。 */
-export type RemoteNodeClientErrorCode = (typeof RemoteNodeClientErrorCodes)[keyof typeof RemoteNodeClientErrorCodes]
+export type RemoteNodeClientErrorCode =
+  (typeof RemoteNodeClientErrorCodes)[keyof typeof RemoteNodeClientErrorCodes]
 
 /** 本机 RPC 的方法名。 */
 export type KernelRpcMethod = (typeof KernelRpcMethods)[number]
@@ -432,4 +436,5 @@ export type RemoteNodeErrorCode = (typeof RemoteNodeErrorCodes)[keyof typeof Rem
 export type RemoteNodeCloseCode = (typeof RemoteNodeCloseCodes)[keyof typeof RemoteNodeCloseCodes]
 
 /** 合法的模块隔离形态。 */
-export type KernelModuleIsolation = (typeof KernelModuleIsolations)[keyof typeof KernelModuleIsolations]
+export type KernelModuleIsolation =
+  (typeof KernelModuleIsolations)[keyof typeof KernelModuleIsolations]

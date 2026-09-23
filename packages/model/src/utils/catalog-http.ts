@@ -1,4 +1,12 @@
-import { isArray, isBlank, isEmpty, isPlainObject, isString, optionalWhen, toOptional } from '@velaros-ai/core'
+import {
+  isArray,
+  isBlank,
+  isEmpty,
+  isPlainObject,
+  isString,
+  optionalWhen,
+  toOptional,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
@@ -15,10 +23,10 @@ import { ModelTuning } from './tuning'
 /** 这类 provider 有没有可以列模型的远端 `/models`。 */
 export function canListRemoteProviderModels(validationKind: ModelProviderValidationKind): boolean {
   return (
-    validationKind === 'openrouter-key'
-    || validationKind === 'openai-compatible-models'
-    || validationKind === 'anthropic-models'
-    || validationKind === 'google-models'
+    validationKind === 'openrouter-key' ||
+    validationKind === 'openai-compatible-models' ||
+    validationKind === 'anthropic-models' ||
+    validationKind === 'google-models'
   )
 }
 
@@ -87,10 +95,7 @@ export function createProviderModelListRequest(
     default:
       return {
         url: appendPath(baseURL, 'models'),
-        headers: [
-          ...optionalBearerHeader(request.apiKey),
-          ['Content-Type', 'application/json'],
-        ],
+        headers: [...optionalBearerHeader(request.apiKey), ['Content-Type', 'application/json']],
       }
   }
 }
@@ -129,9 +134,7 @@ export function readRemoteModelEntries(
       ? payload.models.flatMap((item): RemoteProviderModelEntry[] => {
           if (!isPlainObject(item)) return []
           const rawName = isString(item.name) ? item.name : ''
-          const id = rawName.startsWith('models/')
-            ? rawName.slice('models/'.length)
-            : rawName
+          const id = rawName.startsWith('models/') ? rawName.slice('models/'.length) : rawName
           if (!id.trim()) return []
           return [
             {
@@ -200,8 +203,8 @@ export function normalizeProviderErrorMessage(
   }
 
   if (
-    status === 401
-    || /missing authentication header|invalid api key|authentication/iu.test(message)
+    status === 401 ||
+    /missing authentication header|invalid api key|authentication/iu.test(message)
   )
     return `${providerLabel} API Key 不可用`
   return message ? message.slice(0, ModelTuning.catalog.errorMessageChars) : `HTTP ${status}`

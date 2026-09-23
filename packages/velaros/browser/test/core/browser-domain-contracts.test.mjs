@@ -5,11 +5,18 @@ import { test } from 'bun:test'
 import { BrowserFallbackVirtualPointer } from '../../../dist/browser/contract/constants.js'
 import { CdpInteractionEngine } from '../../../dist/browser/impl/engines/CdpInteractionEngine.js'
 import { checkBrowserActionPolicy } from '../../../dist/browser/utils/action-policy.js'
-import { resolveBrowserNavigationInput, resolveBrowserSearchOrNavigationInput } from '../../../dist/browser/utils/address.js'
+import {
+  resolveBrowserNavigationInput,
+  resolveBrowserSearchOrNavigationInput,
+} from '../../../dist/browser/utils/address.js'
 import { buildBrowserLoginDetectionScript } from '../../../dist/browser/utils/page-scripts/login-detection.js'
 import { buildTargetActionScript } from '../../../dist/browser/utils/page-scripts/target-action.js'
 import { buildBrowserFallbackVirtualPointerSvg } from '../../../dist/browser/utils/pointer.js'
-import { BrowserScreenshotDefaultDomStable, BrowserScreenshotDefaultModelImage, buildBrowserScreenshotOptions } from '../../../dist/browser/utils/screenshot-options.js'
+import {
+  BrowserScreenshotDefaultDomStable,
+  BrowserScreenshotDefaultModelImage,
+  buildBrowserScreenshotOptions,
+} from '../../../dist/browser/utils/screenshot-options.js'
 
 class SystemPointerTestEngine extends CdpInteractionEngine {
   constructor() {
@@ -78,9 +85,9 @@ void test('hidden pages never take over the operating-system pointer', async () 
       { kind: 'external', bringToFront: async () => {}, executeJavaScript: async () => ({}) },
       { x: 20, y: 30 },
       false,
-      200,
+      200
     ),
-    false,
+    false
   )
   assert.equal(moved, false)
 })
@@ -101,7 +108,7 @@ void test('browser address policy distinguishes navigation from search', () => {
     resolveBrowserSearchOrNavigationInput('browser capability boundary', {
       searchEngine: 'bing',
     }),
-    'https://www.bing.com/search?q=browser%20capability%20boundary',
+    'https://www.bing.com/search?q=browser%20capability%20boundary'
   )
 })
 
@@ -127,15 +134,12 @@ void test('browser fill actions return the resulting control value as direct evi
 })
 
 void test('browser action policy owns deny, allow and alias precedence', () => {
-  assert.deepEqual(
-    checkBrowserActionPolicy(undefined, { action: 'navigate' }),
-    {
-      kind: 'allow',
-      action: 'navigate',
-      matchedAction: null,
-      reason: null,
-    },
-  )
+  assert.deepEqual(checkBrowserActionPolicy(undefined, { action: 'navigate' }), {
+    kind: 'allow',
+    action: 'navigate',
+    matchedAction: null,
+    reason: null,
+  })
 
   const policy = {
     allow: ['navigate', 'target_action'],
@@ -147,7 +151,7 @@ void test('browser action policy owns deny, allow and alias precedence', () => {
       action: 'target_action.click',
       aliases: ['target_action', 'click'],
     }).kind,
-    'allow',
+    'allow'
   )
   assert.equal(checkBrowserActionPolicy(policy, { action: 'evaluate' }).kind, 'deny')
   assert.equal(checkBrowserActionPolicy(policy, { action: 'navigate' }).kind, 'allow')
@@ -155,14 +159,11 @@ void test('browser action policy owns deny, allow and alias precedence', () => {
 })
 
 void test('browser action policy supports wildcard deny matches and explicit default deny', () => {
-  assert.deepEqual(
-    checkBrowserActionPolicy({ deny: ['*'] }, { action: 'upload' }),
-    {
-      kind: 'deny',
-      action: 'upload',
-      matchedAction: '*',
-      reason: '浏览器动作被策略拒绝：upload',
-    },
-  )
+  assert.deepEqual(checkBrowserActionPolicy({ deny: ['*'] }, { action: 'upload' }), {
+    kind: 'deny',
+    action: 'upload',
+    matchedAction: '*',
+    reason: '浏览器动作被策略拒绝：upload',
+  })
   assert.equal(checkBrowserActionPolicy({ default: 'deny' }, { action: 'inspect' }).kind, 'deny')
 })

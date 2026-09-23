@@ -37,7 +37,12 @@ export interface TextCodecApi {
    * 改过的正文按原文件的编码写成字节，尽量沿用没改的片段的原字节：GB18030 里同一个字可能有两种写法（别名字节），没改的片段按原字节拼回；
    * 其余编码等同 encode。before 与 after 一样时原样返回 original；GB18030 下 original 与 before 对不上、或拼出的字节读回来不是 after 时抛 lossy。
    */
-  encodePreserving(original: Uint8Array, before: string, after: string, encoding: TextEncoding): Buffer
+  encodePreserving(
+    original: Uint8Array,
+    before: string,
+    after: string,
+    encoding: TextEncoding
+  ): Buffer
   /** 找正文里第一个孤立代理项（没有配对的 UTF-16 代理码元）：返回它的 UTF-16 下标与码元；没有返回 null。 */
   findLoneSurrogate(content: string): Nullable<{ offset: number; codeUnit: number }>
   /** 一个值是不是本包认识的编码名；持久化或补丁 metadata 里读回的编码名用它核对。 */
@@ -70,11 +75,19 @@ export class TextCodec implements TextCodecApi {
     return encodeText(content, encoding)
   }
 
-  public encodePreserving(original: Uint8Array, before: string, after: string, encoding: TextEncoding): Buffer {
+  public encodePreserving(
+    original: Uint8Array,
+    before: string,
+    after: string,
+    encoding: TextEncoding
+  ): Buffer {
     if (before === after) return Buffer.from(original)
     if (encoding !== 'gb18030') return this.encode(after, encoding)
     const result = spliceGb18030Bytes(original, before, after)
-    if (this.decode(result)?.content !== after) throw new AppError(TextFileErrorCodes.lossy, '字节编辑无法无损表示目标文本。', undefined, { encoding })
+    if (this.decode(result)?.content !== after)
+      throw new AppError(TextFileErrorCodes.lossy, '字节编辑无法无损表示目标文本。', undefined, {
+        encoding,
+      })
     return result
   }
 

@@ -3,7 +3,11 @@ import type electron from 'electron'
 import { isPlainObject, isString } from '@velaros-ai/core'
 
 import type { BrowserUserActivityKind } from '../../types/browser'
-import type { BrowserDialogEventSource,BrowserPopupNavigationResolution, BrowserPopupUrlResolution } from '../../types/electron.js'
+import type {
+  BrowserDialogEventSource,
+  BrowserPopupNavigationResolution,
+  BrowserPopupUrlResolution,
+} from '../../types/electron.js'
 import { BrowserTuning } from '../tuning.js'
 
 /**
@@ -30,7 +34,9 @@ export function buildBrowserPopupLoadOptions(
     const rawContentType = details.postBody.contentType.replace(/[\r\n]+/g, '').trim()
     const rawBoundary = details.postBody.boundary?.replace(/[\r\n]+/g, '').trim()
     const contentType =
-      rawBoundary && /^multipart\/form-data\b/i.test(rawContentType) && !/;\s*boundary=/i.test(rawContentType)
+      rawBoundary &&
+      /^multipart\/form-data\b/i.test(rawContentType) &&
+      !/;\s*boundary=/i.test(rawContentType)
         ? `${rawContentType}; boundary=${rawBoundary}`
         : rawContentType
 
@@ -151,11 +157,7 @@ export function resolveBrowserPopupNavigation(
   openerUrl?: LooseOptional<string>
 ): BrowserPopupNavigationResolution {
   const initiatorUrl = details.referrer?.url || openerUrl
-  const resolution = resolveBrowserPopupUrl(
-    details.url,
-    String(details.disposition),
-    initiatorUrl
-  )
+  const resolution = resolveBrowserPopupUrl(details.url, String(details.disposition), initiatorUrl)
   if (resolution.kind !== 'route') return resolution
 
   return {
@@ -233,7 +235,9 @@ export function readUserActivityKind(payload: unknown): BrowserUserActivityKind 
 }
 
 /** 把一次键盘活动拼成一句可读的说明。 */
-export function formatKeyboardActivityDetail(input: { key?: LooseOptional<string> }): Nullable<string> {
+export function formatKeyboardActivityDetail(input: {
+  key?: LooseOptional<string>
+}): Nullable<string> {
   const key = input.key?.trim()
   if (!key || key.length === 1) return null
 

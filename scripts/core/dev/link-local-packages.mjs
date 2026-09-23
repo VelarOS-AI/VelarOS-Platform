@@ -7,26 +7,42 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.
 const projectsRoot = path.dirname(root)
 const scope = '@velaros-ai/'
 const readJson = async (file) => JSON.parse(await readFile(file, 'utf8'))
-const exists = async (file) => access(file).then(() => true, () => false)
+const exists = async (file) =>
+  access(file).then(
+    () => true,
+    () => false
+  )
 
 const packageManifests = []
 const packagesDirectory = path.join(root, 'packages')
 if (await exists(packagesDirectory)) {
   for (const entry of await readdir(packagesDirectory, { withFileTypes: true })) {
     const manifestPath = path.join(packagesDirectory, entry.name, 'package.json')
-    if (entry.isDirectory() && await exists(manifestPath)) {
-      packageManifests.push({ directory: path.dirname(manifestPath), manifest: await readJson(manifestPath) })
+    if (entry.isDirectory() && (await exists(manifestPath))) {
+      packageManifests.push({
+        directory: path.dirname(manifestPath),
+        manifest: await readJson(manifestPath),
+      })
     }
   }
 }
 
 const ownNames = new Set(packageManifests.map(({ manifest }) => manifest.name))
-const manifests = [await readJson(path.join(root, 'package.json')), ...packageManifests.map(({ manifest }) => manifest)]
+const manifests = [
+  await readJson(path.join(root, 'package.json')),
+  ...packageManifests.map(({ manifest }) => manifest),
+]
 const externalNames = new Set()
 for (const manifest of manifests) {
-  for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
+  for (const field of [
+    'dependencies',
+    'devDependencies',
+    'peerDependencies',
+    'optionalDependencies',
+  ]) {
     for (const [name, spec] of Object.entries(manifest[field] ?? {})) {
-      if (name.startsWith(scope) && !ownNames.has(name) && spec !== 'workspace:*') externalNames.add(name)
+      if (name.startsWith(scope) && !ownNames.has(name) && spec !== 'workspace:*')
+        externalNames.add(name)
     }
   }
 }
@@ -35,10 +51,10 @@ const available = new Map()
 for (const repo of await readdir(projectsRoot, { withFileTypes: true })) {
   if (!repo.isDirectory() || !repo.name.startsWith('VelarOS-')) continue
   const siblingPackages = path.join(projectsRoot, repo.name, 'packages')
-  if (!await exists(siblingPackages)) continue
+  if (!(await exists(siblingPackages))) continue
   for (const entry of await readdir(siblingPackages, { withFileTypes: true })) {
     const manifestPath = path.join(siblingPackages, entry.name, 'package.json')
-    if (!entry.isDirectory() || !await exists(manifestPath)) continue
+    if (!entry.isDirectory() || !(await exists(manifestPath))) continue
     const manifest = await readJson(manifestPath)
     if (manifest.name?.startsWith(scope)) available.set(manifest.name, path.dirname(manifestPath))
   }
@@ -46,7 +62,8 @@ for (const repo of await readdir(projectsRoot, { withFileTypes: true })) {
 
 const run = (args, cwd) => {
   const result = spawnSync('bun', args, { cwd, stdio: 'inherit' })
-  if (result.status !== 0) throw new Error(`bun ${args.join(' ')} failed with exit code ${result.status}`)
+  if (result.status !== 0)
+    throw new Error(`bun ${args.join(' ')} failed with exit code ${result.status}`)
 }
 
 const linkIntoProject = async (base, name, directory) => {
@@ -81,4 +98,6 @@ for (const item of packageManifests) {
   }
 }
 
-console.log(`Registered ${ownNames.size} local package(s); linked ${externalNames.size} external package(s).`)
+console.log(
+  `Registered ${ownNames.size} local package(s); linked ${externalNames.size} external package(s).`
+)

@@ -4,7 +4,14 @@ import { setImmediate as yieldToEventLoop } from 'node:timers/promises'
 
 import * as ts from 'typescript'
 
-import { AppError, isEmpty, isFalse, isPresent, optionalWhen, optionalWhenLazy } from '@velaros-ai/core'
+import {
+  AppError,
+  isEmpty,
+  isFalse,
+  isPresent,
+  optionalWhen,
+  optionalWhenLazy,
+} from '@velaros-ai/core'
 
 import { DevelopmentCodeLimits, LanguageServiceIds } from '../../contract/constants.js'
 import type { LanguageToolContext } from '../../contract/requires.js'
@@ -104,7 +111,14 @@ class JsTsLanguageService implements JsTsLanguageServiceApi {
   public readonly id: string = LanguageServiceIds.jsts
   public readonly label = 'JavaScript / TypeScript'
   public readonly extensions: readonly string[] = [
-    'ts', 'tsx', 'js', 'jsx', 'mts', 'cts', 'mjs', 'cjs',
+    'ts',
+    'tsx',
+    'js',
+    'jsx',
+    'mts',
+    'cts',
+    'mjs',
+    'cjs',
   ]
 
   /** 标准库缺席时语义层与建议层会把 Record/Set 等全局名全部报成缺失，只保留语法层结果。 */
@@ -117,7 +131,11 @@ class JsTsLanguageService implements JsTsLanguageServiceApi {
     input: FindSymbolsInput
   ): Promise<LanguageSymbolResult> {
     const limit = limitOf(input.limit)
-    const selection = await this.selectFiles(ctx, input, DevelopmentTuning.fileBudget.symbolsPerResult)
+    const selection = await this.selectFiles(
+      ctx,
+      input,
+      DevelopmentTuning.fileBudget.symbolsPerResult
+    )
     const kernel = await ctx.project.kernel()
     const query = input.query?.trim()
     const kinds = new Set(input.kinds?.map((kind) => kind.toLowerCase()))
@@ -159,7 +177,11 @@ class JsTsLanguageService implements JsTsLanguageServiceApi {
     input: ListExportsInput
   ): Promise<LanguageExportResult> {
     const limit = limitOf(input.limit)
-    const selection = await this.selectFiles(ctx, input, DevelopmentTuning.fileBudget.exportsPerResult)
+    const selection = await this.selectFiles(
+      ctx,
+      input,
+      DevelopmentTuning.fileBudget.exportsPerResult
+    )
     const records: JsTsExportRecord[] = []
     const kernel = await ctx.project.kernel()
 
@@ -222,7 +244,11 @@ class JsTsLanguageService implements JsTsLanguageServiceApi {
     input: FindImportsInput
   ): Promise<LanguageImportResult> {
     const limit = limitOf(input.limit)
-    const selection = await this.selectFiles(ctx, input, DevelopmentTuning.fileBudget.importsPerResult)
+    const selection = await this.selectFiles(
+      ctx,
+      input,
+      DevelopmentTuning.fileBudget.importsPerResult
+    )
     const records: JsTsImportRecord[] = []
 
     for (const file of selection.files) {
@@ -259,7 +285,9 @@ class JsTsLanguageService implements JsTsLanguageServiceApi {
           ...record,
           resolvedPath: optionalWhenLazy(
             record.isRelative,
-            () => resolveImportedPath(record.path, record.specifier, this.extensions, fileSet) || undefined
+            () =>
+              resolveImportedPath(record.path, record.specifier, this.extensions, fileSet) ||
+              undefined
           ),
           language: this.id,
         })
@@ -423,7 +451,8 @@ class JsTsLanguageService implements JsTsLanguageServiceApi {
     // 只有 JS/TS 扩展名的文件能进入 TS 程序；其它扩展名（vue、json…）的文件交给语言服务会直接
     // 抛错，所以选文件前就收窄到 JS/TS 子集，被剔除的扩展名在结果里说明。
     const requestedExtensions = normalizeExtensionsWithDefault(input.extensions, this.extensions)
-    const isJsTsExtension = (extension: string): boolean => TypeScriptExtensions.has(`.${extension}`)
+    const isJsTsExtension = (extension: string): boolean =>
+      TypeScriptExtensions.has(`.${extension}`)
     const extensions = requestedExtensions.filter(isJsTsExtension)
     const ignoredExtensions = requestedExtensions.filter((extension) => !isJsTsExtension(extension))
     const extensionNote = optionalWhen(

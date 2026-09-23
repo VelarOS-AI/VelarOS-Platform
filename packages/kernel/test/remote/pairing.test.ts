@@ -143,31 +143,42 @@ describe('远程节点配对窗口', () => {
 
 describe('远程节点清单修订号', () => {
   test('工具 inputSchema 的键序不影响修订号', () => {
-    const tools = (schema: Record<string, unknown>) => [{
-      name: 'search',
-      description: '搜索',
-      capabilityId: 'velaros.search',
-      operation: 'run',
-      category: null,
-      readOnly: true,
-      inputSchema: schema,
-    }]
+    const tools = (schema: Record<string, unknown>) => [
+      {
+        name: 'search',
+        description: '搜索',
+        capabilityId: 'velaros.search',
+        operation: 'run',
+        category: null,
+        readOnly: true,
+        inputSchema: schema,
+      },
+    ]
     // 同一份 schema 换个键序：内容没变，修订号就不该变，否则在途调用被当过期拒绝。
-    const first = computeManifestRevision([], tools({
-      type: 'object',
-      properties: { query: { type: 'string' }, limit: { type: 'number' } },
-    }))
-    const second = computeManifestRevision([], tools({
-      properties: { limit: { type: 'number' }, query: { type: 'string' } },
-      type: 'object',
-    }))
+    const first = computeManifestRevision(
+      [],
+      tools({
+        type: 'object',
+        properties: { query: { type: 'string' }, limit: { type: 'number' } },
+      })
+    )
+    const second = computeManifestRevision(
+      [],
+      tools({
+        properties: { limit: { type: 'number' }, query: { type: 'string' } },
+        type: 'object',
+      })
+    )
     expect(second).toBe(first)
 
     // 内容真的变了仍然换修订号。
-    const changed = computeManifestRevision([], tools({
-      type: 'object',
-      properties: { query: { type: 'number' } },
-    }))
+    const changed = computeManifestRevision(
+      [],
+      tools({
+        type: 'object',
+        properties: { query: { type: 'number' } },
+      })
+    )
     expect(changed).not.toBe(first)
   })
 })

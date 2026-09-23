@@ -1,7 +1,4 @@
-import {
-  readdir,
-  readFile,
-} from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
@@ -33,12 +30,14 @@ const payload = 'velaros-kernel-runtime-bytes-1.0.0'
 const artifact = artifactOf('https://cdn.example.com/kernel-1.0.0.bin', payload)
 
 function artifactFor(overrides: Readonly<Record<string, unknown>> = {}) {
-  const manifest = parseKernelUpdateManifest(manifestOf([
-    {
-      version: '1.0.0',
-      artifacts: { 'linux-x64': { ...artifact.descriptor, ...overrides } },
-    },
-  ]))
+  const manifest = parseKernelUpdateManifest(
+    manifestOf([
+      {
+        version: '1.0.0',
+        artifacts: { 'linux-x64': { ...artifact.descriptor, ...overrides } },
+      },
+    ])
+  )
   return selectKernelArtifact(manifest, '1.0.0', 'linux-x64').artifact
 }
 
@@ -112,20 +111,24 @@ describe('Kernel artifact download and verification', () => {
   test('maps transport failures onto DOWNLOAD_FAILED and leaves no file behind', async () => {
     const directory = await directories.create()
 
-    await expect(downloadKernelArtifact({
-      artifact: artifactFor(),
-      destination: join(directory, 'missing'),
-      fetch: createFakeFetch({}),
-    })).rejects.toMatchObject({ code: 'DOWNLOAD_FAILED', details: { actual: '404' } })
+    await expect(
+      downloadKernelArtifact({
+        artifact: artifactFor(),
+        destination: join(directory, 'missing'),
+        fetch: createFakeFetch({}),
+      })
+    ).rejects.toMatchObject({ code: 'DOWNLOAD_FAILED', details: { actual: '404' } })
 
-    await expect(downloadKernelArtifact({
-      artifact: artifactFor(),
-      destination: join(directory, 'interrupted'),
-      fetch: createFakeFetch(
-        { [artifact.descriptor.url]: artifact.bytes },
-        { interruptAfterBytes: 8 },
-      ),
-    })).rejects.toMatchObject({ code: 'DOWNLOAD_FAILED' })
+    await expect(
+      downloadKernelArtifact({
+        artifact: artifactFor(),
+        destination: join(directory, 'interrupted'),
+        fetch: createFakeFetch(
+          { [artifact.descriptor.url]: artifact.bytes },
+          { interruptAfterBytes: 8 }
+        ),
+      })
+    ).rejects.toMatchObject({ code: 'DOWNLOAD_FAILED' })
 
     expect(await readdir(directory)).toEqual([])
   })
@@ -147,10 +150,15 @@ describe('Kernel artifact download and verification', () => {
 
   test('derives a safe payload file name from the artifact URL', () => {
     expect(kernelArtifactFileName(artifactFor())).toBe('kernel-1.0.0.bin')
-    expect(kernelArtifactFileName(artifactFor({
-      url: 'https://cdn.example.com/downloads/kernel.tar.gz?token=abc',
-    }))).toBe('kernel.tar.gz')
-    expect(kernelArtifactFileName(artifactFor({ url: 'https://cdn.example.com/' })))
-      .toBe('kernel-payload')
+    expect(
+      kernelArtifactFileName(
+        artifactFor({
+          url: 'https://cdn.example.com/downloads/kernel.tar.gz?token=abc',
+        })
+      )
+    ).toBe('kernel.tar.gz')
+    expect(kernelArtifactFileName(artifactFor({ url: 'https://cdn.example.com/' }))).toBe(
+      'kernel-payload'
+    )
   })
 })

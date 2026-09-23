@@ -31,27 +31,64 @@ function matchedText(content: string, range: { startOffset?: number; endOffset?:
 }
 
 describe('text search fallback', () => {
-  test.each(['[', ']', '{', '}', '(', ')', '*', '+', '?', '.', '^', '$', '|', String.fromCharCode(92)])('treats isolated %s literally', (query) => {
+  test.each([
+    '[',
+    ']',
+    '{',
+    '}',
+    '(',
+    ')',
+    '*',
+    '+',
+    '?',
+    '.',
+    '^',
+    '$',
+    '|',
+    String.fromCharCode(92),
+  ])('treats isolated %s literally', (query) => {
     const content = `before ${query} after`
     const hits = new TextFileAdapter().search!({ snapshot: snapshot(content), query, regex: false })
     expect(hits).toHaveLength(1)
     expect(matchedText(content, hits[0]!.range!)).toBe(query)
   })
 
-  test.each([String.raw`\_`, String.raw`\a`, '{', ']'])('preserves legacy regex syntax %s', (query) => {
-    const content = '_a{]'
-    const expected = new RegExp(query, 'g').exec(content)!
-    const hits = new TextFileAdapter().search!({ snapshot: snapshot(content), query, regex: true, caseSensitive: true })
-    expect(hits).toHaveLength(1)
-    expect(hits[0]!.range).toMatchObject({ startOffset: expected.index, endOffset: expected.index + expected[0].length })
-  })
+  test.each([String.raw`\_`, String.raw`\a`, '{', ']'])(
+    'preserves legacy regex syntax %s',
+    (query) => {
+      const content = '_a{]'
+      const expected = new RegExp(query, 'g').exec(content)!
+      const hits = new TextFileAdapter().search!({
+        snapshot: snapshot(content),
+        query,
+        regex: true,
+        caseSensitive: true,
+      })
+      expect(hits).toHaveLength(1)
+      expect(hits[0]!.range).toMatchObject({
+        startOffset: expected.index,
+        endOffset: expected.index + expected[0].length,
+      })
+    }
+  )
 
   test('preserves whole-string lowercase semantics and maps matches within expanded characters', () => {
-    const search = (content: string, query: string) => new TextFileAdapter().search!({ snapshot: snapshot(content), query, regex: false, caseSensitive: false })
+    const search = (content: string, query: string) =>
+      new TextFileAdapter().search!({
+        snapshot: snapshot(content),
+        query,
+        regex: false,
+        caseSensitive: false,
+      })
     expect(search('ΟΣ', 'σ')).toEqual([])
     expect(search('ΟΣ', 'ς')[0]!.range).toMatchObject({ startOffset: 1, endOffset: 2 })
     for (const query of ['i', '\u0307', 'İ']) {
-      expect(search('İİ', query).map((hit) => [hit.range!.startOffset, hit.range!.endOffset])).toEqual([[0, 1], [1, 2]])
+      expect(
+        search('İİ', query).map((hit) => [hit.range!.startOffset, hit.range!.endOffset])
+      ).toEqual([
+        [0, 1],
+        [1, 2],
+      ])
     }
     const content = 'İ😀İ NEEDLE'
     const hits = search(content, 'needle')
@@ -63,19 +100,36 @@ describe('text search fallback', () => {
     const adapter = new TextFileAdapter()
     const source = snapshot('AaAA')
     expect(adapter.search!({ snapshot: source, query: 'aa', caseSensitive: true })).toEqual([])
-    expect(adapter.search!({ snapshot: source, query: 'aa', caseSensitive: false }).map((hit) => hit.range!.startOffset)).toEqual([0, 2])
-    expect(adapter.search!({ snapshot: source, query: 'aa', caseSensitive: false, maxResults: 1 }).map((hit) => hit.range!.startOffset)).toEqual([0])
+    expect(
+      adapter.search!({ snapshot: source, query: 'aa', caseSensitive: false }).map(
+        (hit) => hit.range!.startOffset
+      )
+    ).toEqual([0, 2])
+    expect(
+      adapter.search!({ snapshot: source, query: 'aa', caseSensitive: false, maxResults: 1 }).map(
+        (hit) => hit.range!.startOffset
+      )
+    ).toEqual([0])
     expect(adapter.search!({ snapshot: source, query: 'aa', maxResults: 0 })).toEqual([])
   })
 
-  test.each([false, true])('bounds empty queries and code-point advancement with regex=%s', (regex) => {
-    const adapter = new TextFileAdapter()
-    const search = (content: string, query: string, maxResults = 20) => adapter.search!({ snapshot: snapshot(content), query, regex, maxResults })
-    expect(search('😀', '').map((hit) => [hit.range!.startOffset, hit.range!.endOffset])).toEqual([[0, 0], [2, 2]])
-    expect(search('😀', '', 1).map((hit) => hit.range!.startOffset)).toEqual([0])
-    expect(search('😀', '', 0)).toEqual([])
-    expect(search('', '')).toEqual([])
-  })
+  test.each([false, true])(
+    'bounds empty queries and code-point advancement with regex=%s',
+    (regex) => {
+      const adapter = new TextFileAdapter()
+      const search = (content: string, query: string, maxResults = 20) =>
+        adapter.search!({ snapshot: snapshot(content), query, regex, maxResults })
+      expect(search('😀', '').map((hit) => [hit.range!.startOffset, hit.range!.endOffset])).toEqual(
+        [
+          [0, 0],
+          [2, 2],
+        ]
+      )
+      expect(search('😀', '', 1).map((hit) => hit.range!.startOffset)).toEqual([0])
+      expect(search('😀', '', 0)).toEqual([])
+      expect(search('', '')).toEqual([])
+    }
+  )
 
   test('treats backslashes and square brackets literally when regex is disabled', () => {
     const content = String.raw`prefix C:\work [needle] suffix`
@@ -147,7 +201,7 @@ describe('text search fallback', () => {
       for (const encoding of encodings) {
         await writeFile(
           join(root, 'encoded', `${encoding}.txt`),
-          textCodec.encode(content, encoding),
+          textCodec.encode(content, encoding)
         )
       }
 
@@ -163,7 +217,7 @@ describe('text search fallback', () => {
       expect(result.backend).toBe('adapters')
       expect(result.hits).toHaveLength(encodings.length)
       expect(result.hits.map((hit) => hit.path).sort()).toEqual(
-        encodings.map((encoding) => `encoded/${encoding}.txt`).sort(),
+        encodings.map((encoding) => `encoded/${encoding}.txt`).sort()
       )
       for (const hit of result.hits) {
         expect(hit.range).toMatchObject({

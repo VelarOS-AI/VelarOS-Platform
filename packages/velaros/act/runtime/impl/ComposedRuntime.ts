@@ -1,46 +1,70 @@
-import type { ActInputFile, AgentJob, AgentStart, AgentSupervisorApi } from "@velaros-ai/agent";
-import { createAgentSupervisor } from "@velaros-ai/agent";
-import { createContextInvocationJournal, createEvidenceAccess } from "@velaros-ai/context";
-import {Log} from '@velaros-ai/core'
-import {isFalse,isNull,isUndefined} from '@velaros-ai/core'
+import type { ActInputFile, AgentJob, AgentStart, AgentSupervisorApi } from '@velaros-ai/agent'
+import { createAgentSupervisor } from '@velaros-ai/agent'
+import { createContextInvocationJournal, createEvidenceAccess } from '@velaros-ai/context'
+import { Log } from '@velaros-ai/core'
+import { isFalse, isNull, isUndefined } from '@velaros-ai/core'
 import { isEmpty, isString } from '@velaros-ai/core'
-import type { ModuleDescription, ModulePage, ModuleQuery, OperationContext, OperationModuleDefinition, OperationRuntimeApi } from "@velaros-ai/kernel";
-import { createOperationRuntime } from "@velaros-ai/kernel";
-import type {ModelDriver} from '@velaros-ai/model';
-import type {ScriptPackageDefinition} from '@velaros-ai/script'
-import type {MemoryScopePort} from '@velaros-ai/velaros/memory';
+import type {
+  ModuleDescription,
+  ModulePage,
+  ModuleQuery,
+  OperationContext,
+  OperationModuleDefinition,
+  OperationRuntimeApi,
+} from '@velaros-ai/kernel'
+import { createOperationRuntime } from '@velaros-ai/kernel'
+import type { ModelDriver } from '@velaros-ai/model'
+import type { ScriptPackageDefinition } from '@velaros-ai/script'
+import type { MemoryScopePort } from '@velaros-ai/velaros/memory'
 
-import { EvidenceModuleId } from "../../search/contract/constants.js";
-import type { AdvancedSearchApi } from "../../search/impl/AdvancedSearch.js";
-import { AdvancedSearch } from "../../search/impl/AdvancedSearch.js";
-import { ContextMaterialsModuleId, GoalModuleId, LocalMemoryModuleId, LongTermMemoryModuleIds, MemoryModuleId, PersistentMemoryModuleId, StoreModuleId, StoreReadModuleId, StoreWriteModuleId, SystemPackageSpecifier } from '../../system/contract/constants.js';
-import type {StoreSessionApi} from '../../system/impl/StoreSession.js'
-import {StoreSession} from '../../system/impl/StoreSession.js'
-import { systemModules } from '../../system/impl/SystemModules.js';
-import { systemMembers } from '../../system/utils/members.js';
-import { ModelToolLimits,VelarosAgentBudget, VelarosAgentRunLimits, VelarosMainBudget, VelarosRunLimits } from "../contract/constants.js";
-import type { VelarosRuntimeOptions } from "../contract/requires.js";
-import type {ActTracePage,ActTraceQuery} from '../types/trace.js'
+import { EvidenceModuleId } from '../../search/contract/constants.js'
+import type { AdvancedSearchApi } from '../../search/impl/AdvancedSearch.js'
+import { AdvancedSearch } from '../../search/impl/AdvancedSearch.js'
+import {
+  ContextMaterialsModuleId,
+  GoalModuleId,
+  LocalMemoryModuleId,
+  LongTermMemoryModuleIds,
+  MemoryModuleId,
+  PersistentMemoryModuleId,
+  StoreModuleId,
+  StoreReadModuleId,
+  StoreWriteModuleId,
+  SystemPackageSpecifier,
+} from '../../system/contract/constants.js'
+import type { StoreSessionApi } from '../../system/impl/StoreSession.js'
+import { StoreSession } from '../../system/impl/StoreSession.js'
+import { systemModules } from '../../system/impl/SystemModules.js'
+import { systemMembers } from '../../system/utils/members.js'
+import {
+  ModelToolLimits,
+  VelarosAgentBudget,
+  VelarosAgentRunLimits,
+  VelarosMainBudget,
+  VelarosRunLimits,
+} from '../contract/constants.js'
+import type { VelarosRuntimeOptions } from '../contract/requires.js'
+import type { ActTracePage, ActTraceQuery } from '../types/trace.js'
 
-import { BudgetedModelDriver } from "./BudgetedModelDriver.js";
-import { ContextMaintenance } from './ContextMaintenance.js';
-import {EffectScheduler} from './EffectScheduler.js'
-import { ModelToolRuntime } from "./ModelToolRuntime.js";
-import type {RuntimeBootstrapOptions} from './RuntimeBootstrap.js'
-import {runtimeBootstrap} from './RuntimeBootstrap.js'
-import {RuntimeDiagnostics} from './RuntimeDiagnostics.js'
-import type { RuntimeSessionAccess, VelarosSession } from "./RuntimeSession.js";
-import { RuntimeSession } from "./RuntimeSession.js";
-import {RuntimeTrace} from './RuntimeTrace.js'
-import {RuntimeWorkspaceBinding} from './RuntimeWorkspaceBinding.js'
-import { standardModules } from "./StandardModules.js";
+import { BudgetedModelDriver } from './BudgetedModelDriver.js'
+import { ContextMaintenance } from './ContextMaintenance.js'
+import { EffectScheduler } from './EffectScheduler.js'
+import { ModelToolRuntime } from './ModelToolRuntime.js'
+import type { RuntimeBootstrapOptions } from './RuntimeBootstrap.js'
+import { runtimeBootstrap } from './RuntimeBootstrap.js'
+import { RuntimeDiagnostics } from './RuntimeDiagnostics.js'
+import type { RuntimeSessionAccess, VelarosSession } from './RuntimeSession.js'
+import { RuntimeSession } from './RuntimeSession.js'
+import { RuntimeTrace } from './RuntimeTrace.js'
+import { RuntimeWorkspaceBinding } from './RuntimeWorkspaceBinding.js'
+import { standardModules } from './StandardModules.js'
 
 /** 一份由共享主干装配好的运行时。 */
 export interface VelarosRuntime {
- /** 分页读取主线或持久归属下的支线原始上下文、响应、脚本与回执；不唤醒模型。 */
- trace(rootSessionId:string,input?:ActTraceQuery):Promise<ActTracePage>
- /** 宿主访问活动会话，包括子任务的交互回答；不存在时不创建。 */
- getSession(id:string):Optional<VelarosSession>
+  /** 分页读取主线或持久归属下的支线原始上下文、响应、脚本与回执；不唤醒模型。 */
+  trace(rootSessionId: string, input?: ActTraceQuery): Promise<ActTracePage>
+  /** 宿主访问活动会话，包括子任务的交互回答；不存在时不创建。 */
+  getSession(id: string): Optional<VelarosSession>
   /** 打开或恢复持久会话，先原子核对工作区绑定；同一实例内相同 id 复用句柄。 */
   openSession(id: string): Promise<VelarosSession>
   /** 查询实际挂载的模块目录。 */
@@ -52,256 +76,828 @@ export interface VelarosRuntime {
 }
 
 class ComposedRuntime implements VelarosRuntime {
-  private readonly maintenance?:ContextMaintenance
-  private readonly taskModels=new Map<string,ModelDriver>()
-  private readonly search?:AdvancedSearchApi
-  private readonly agents?:AgentSupervisorApi
-  private readonly tools:ModelToolRuntime
-  private readonly scopes=new Map<string,{kind:'main'|'search'|'agent'|'context';modules?:readonly string[];writes?:readonly string[]}>()
-  private readonly kernel:OperationRuntimeApi
-  private readonly sessions=new Map<string,VelarosSession>()
-  private closing?:Promise<void>
-  private readonly effects=new EffectScheduler()
-  private readonly diagnostics:RuntimeDiagnostics
+  private readonly maintenance?: ContextMaintenance
+  private readonly taskModels = new Map<string, ModelDriver>()
+  private readonly search?: AdvancedSearchApi
+  private readonly agents?: AgentSupervisorApi
+  private readonly tools: ModelToolRuntime
+  private readonly scopes = new Map<
+    string,
+    {
+      kind: 'main' | 'search' | 'agent' | 'context'
+      modules?: readonly string[]
+      writes?: readonly string[]
+    }
+  >()
+  private readonly kernel: OperationRuntimeApi
+  private readonly sessions = new Map<string, VelarosSession>()
+  private closing?: Promise<void>
+  private readonly effects = new EffectScheduler()
+  private readonly diagnostics: RuntimeDiagnostics
   private readonly journal
-  private readonly programAccess=new Map<string,RuntimeSessionAccess>()
-  private readonly memories=new Map<string,MemoryScopePort>()
-  private readonly stores=new Map<string,StoreSessionApi>()
-  private readonly openings=new Map<string,Promise<VelarosSession>>()
+  private readonly programAccess = new Map<string, RuntimeSessionAccess>()
+  private readonly memories = new Map<string, MemoryScopePort>()
+  private readonly stores = new Map<string, StoreSessionApi>()
+  private readonly openings = new Map<string, Promise<VelarosSession>>()
 
-  private readonly options:RuntimeBootstrapOptions
-  public constructor(input:RuntimeBootstrapOptions) {
-    this.diagnostics=new RuntimeDiagnostics(input.storage,input.onMetric)
-    this.options = {...input,storage:this.diagnostics.storage,context:{sources:[],...input.context,limits:{...VelarosMainBudget,...input.context?.limits}}}
-    const options=this.options
-    if(options.modules.some(module=>[SystemPackageSpecifier,'velaros:program',ContextMaterialsModuleId].includes(module.binding.moduleId)||systemModules.owns(module.binding.moduleId)))throw new Error('业务模块占用了系统保留身份')
-    if(options.modules.some(module=>module.binding.moduleId==='velaros:memory'))throw new Error('长期记忆请通过 Runtime memory(sessionId) 装配到 velaros:system')
-    const journal=this.journal=createContextInvocationJournal(options.storage)
-    this.tools=new ModelToolRuntime({storage:options.storage,policy:options.modelTools,view:id=>{const view=this.sessions.get(id)?.view;if(!view)throw new Error('模型工具预算会话不可用');return view},deadline:id=>this.programAccess.get(id)?.deadline()})
-    if(!isFalse(options.context?.maintenance)&&(options.model||options.agents||options.context?.maintenance?.model))this.maintenance=new ContextMaintenance({preview:id=>{const access=this.programAccess.get(id);if(!access)throw new Error('父会话不可用');return access},storage:options.storage,tools:this.tools,options:options.context?.maintenance,model:id=>this.taskModels.get(id),open:async(id,model,tool,profile)=>{
-      this.scopes.set(id,{kind:'context'})
-      const materials=this.kernel.describe(ContextMaterialsModuleId)
-      const contextTool={...tool,phase:()=>{const phase=tool.phase();return {...phase,instructions:`${phase.instructions}\n本会话材料读取合同：\n${materials.declarations}\n${materials.template??''}`}}}
-      const session=new RuntimeSession(id,{packages:[this.systemPackage(id)],allowedModules:()=>this.allowedModuleIds(id),tool:contextTool,memory:{recentRecords:32,recentShare:0.4},protocol:{...options.protocol,allowed:['blobs','execute','done'],defaultRetain:'task'},journal,contextOptions:{sources:[],limits:{modelCalls:profile.modelCalls,modelTokens:profile.modelTokens}},kernel:this.kernel,runner:options.runner,storage:options.storage,model:this.tools.model(id,model),limits:{...VelarosRunLimits,turns:profile.modelCalls,timeoutMs:profile.timeoutMs,outputTokens:profile.outputTokens,projectionChars:profile.projectionChars},register:access=>this.programAccess.set(id,access)})
-      this.sessions.set(id,session);return session
-    },close:async id=>{try{await this.sessions.get(id)?.close()}finally{this.sessions.delete(id);this.programAccess.delete(id);this.scopes.delete(id)}}})
-    if(options.agents)this.agents=createAgentSupervisor({deliver:(job,payload)=>this.tools.deliver(job.parentSessionId,job.sessionId,'agent',payload,job.status==='completed'?'completed':job.status==='waiting'?'partial':job.status==='needs_reconcile'?'needs-reconcile':'failed',[],{operation:'agents.resume',input:{id:job.id,input:'继续核对交付中未完成的事项。'}}),storage:options.storage,concurrency:options.agents.concurrency,maxChildren:options.agents.maxChildren,open:(job,input,signal)=>this.openChild(job,input,signal)})
-    if(options.search)this.search=new AdvancedSearch({tools:this.tools,storage:options.storage,evidence:createEvidenceAccess(options.context?.sources??[]),parentDeadline:id=>this.programAccess.get(id)?.deadline(),options:{...options.search,profiles:structuredClone(options.search.profiles)},view:id=>{const view=this.sessions.get(id)?.view;if(!view)throw new Error('父任务尚未打开');return view},open:async(id,activation,profile)=>{
-      this.scopes.set(id,{kind:'search'})
-      const evidence=this.kernel.describe(EvidenceModuleId)
-      const session=new RuntimeSession(id,{packages:[this.systemPackage(id)],allowedModules:()=>this.allowedModuleIds(id),tool:{pressure:()=>activation.pressure(),deadline:()=>activation.deadline(),phase:()=>{const phase=activation.phase();return {...phase,instructions:`${phase.instructions}\n本会话证据合同：\n${evidence.declarations}`}},material:maxChars=>activation.material(maxChars),refresh:signal=>activation.refresh(signal),authorizeReference:(ref,signal)=>activation.authorizeReference(ref,signal)},memory:{recentRecords:64,recentShare:0.4,...options.search?.memory},protocol:{...options.protocol,allowed:['blobs','execute','done'],defaultRetain:'task'},journal:this.journal,contextOptions:{sources:[],policy:options.search?.contextPolicy,limits:{modelCalls:profile.modelCalls,modelTokens:profile.modelTokens}},kernel:this.kernel,runner:options.runner,storage:options.storage,model:this.tools.model(id,activation),limits:{...options.limits??VelarosRunLimits,turns:profile.modelCalls,timeoutMs:profile.timeoutMs,outputTokens:profile.outputTokens,projectionChars:profile.projectionChars},register:access=>this.programAccess.set(id,access)})
-      this.sessions.set(id,session);return session
-    },close:async id=>{try{await this.sessions.get(id)?.close()}finally{this.sessions.delete(id);this.programAccess.delete(id);this.scopes.delete(id)}}})
-    this.kernel=createOperationRuntime({journal,beforeReadValidation:async(invocation,descriptor,signal)=>{
-      if(!this.allows(invocation.sessionId,invocation.binding.moduleId))throw Object.assign(new Error('观察资源授权已撤回'),{code:'CAPABILITY_DENIED'})
-      await this.options.authorize?.(invocation,descriptor,signal)
-    },beforeDispatch:async(invocation,descriptor,signal)=>{
-      if(!this.allows(invocation.sessionId,invocation.binding.moduleId))throw Object.assign(new Error('当前会话没有此模块能力'),{code:'CAPABILITY_DENIED'})
-      const scope=this.scopes.get(invocation.sessionId)!
-      if(scope.kind==='agent'&&descriptor.effects==='write'&&!systemModules.owns(invocation.binding.moduleId)&&!scope.writes?.includes(invocation.binding.moduleId))throw new Error('子任务没有占用该模块的写入范围')
-      if(descriptor.effects==='write'&&!systemModules.owns(invocation.binding.moduleId))this.assertWriteDelegation(invocation.sessionId,invocation.binding.moduleId)
-      await this.options.authorize?.(invocation,descriptor,signal)
-      if(this.programAccess.get(invocation.sessionId)?.phase()==='maintenance'&&!systemModules.owns(invocation.binding.moduleId))throw Object.assign(new Error('上下文维护轮不派发业务能力'),{code:'CONTEXT_MAINTENANCE'})
-      await this.search?.authorize(invocation,descriptor,signal)
-      if(invocation.mode==='observe'||descriptor.effects !== 'write'||systemModules.owns(invocation.binding.moduleId))return
-      const view=this.sessions.get(invocation.sessionId)?.view
-      if(!view)throw new Error('任务视图不可用')
-      await view.assertCanWrite(invocation.executionId,signal)
-    },modules:[...standardModules.create({agentProfiles:()=>Object.entries(options.agents?.profiles??{}).map(([name,profile])=>({name,description:profile.description??'在指定能力范围内完成父任务派发的工作',modules:profile.modules.filter(module=>module!=='velaros:agents'),stores:!isFalse(profile.stores),turns:profile.limits?.turns??VelarosAgentRunLimits.turns,timeoutMs:profile.limits?.timeoutMs??VelarosAgentRunLimits.timeoutMs,modelCalls:profile.budget?.modelCalls??VelarosAgentBudget.modelCalls,modelTokens:profile.budget?.modelTokens??VelarosAgentBudget.modelTokens})),stores:options.storage.stores?{stores:id=>{const state=this.stores.get(id);if(!state)throw Object.assign(new Error('当前会话未获配共享状态'),{code:'STORE_DENIED',effect:'none'});return state}}:undefined,longTermMemory:options.memory?{organize:Boolean(this.maintenance&&(options.model||options.context?.maintenance&&options.context.maintenance.model)),scope:id=>{const memory=this.memories.get(id);if(!memory)throw new Error('主会话长期记忆未装配');return memory}}:undefined,maintenance:this.maintenance,agents:this.agents,allows:(id,module)=>this.allows(id,module),search:this.search,journal,kernel:()=>this.kernel,programs:id=>{const access=this.programAccess.get(id);if(!access)throw new Error('会话尚未打开');return access},view:id=>{
-      const view=this.sessions.get(id)?.view
-      if(!view)throw Object.assign(new Error('当前会话尚未打开'),{code:'SESSION_NOT_OPEN'})
-      return view
-    }    }),...options.modules].map(module=>this.scheduleEffects(module))})
+  private readonly options: RuntimeBootstrapOptions
+  public constructor(input: RuntimeBootstrapOptions) {
+    this.diagnostics = new RuntimeDiagnostics(input.storage, input.onMetric)
+    this.options = {
+      ...input,
+      storage: this.diagnostics.storage,
+      context: {
+        sources: [],
+        ...input.context,
+        limits: { ...VelarosMainBudget, ...input.context?.limits },
+      },
+    }
+    const options = this.options
+    if (
+      options.modules.some(
+        (module) =>
+          [SystemPackageSpecifier, 'velaros:program', ContextMaterialsModuleId].includes(
+            module.binding.moduleId
+          ) || systemModules.owns(module.binding.moduleId)
+      )
+    )
+      throw new Error('业务模块占用了系统保留身份')
+    if (options.modules.some((module) => module.binding.moduleId === 'velaros:memory'))
+      throw new Error('长期记忆请通过 Runtime memory(sessionId) 装配到 velaros:system')
+    const journal = (this.journal = createContextInvocationJournal(options.storage))
+    this.tools = new ModelToolRuntime({
+      storage: options.storage,
+      policy: options.modelTools,
+      view: (id) => {
+        const view = this.sessions.get(id)?.view
+        if (!view) throw new Error('模型工具预算会话不可用')
+        return view
+      },
+      deadline: (id) => this.programAccess.get(id)?.deadline(),
+    })
+    if (
+      !isFalse(options.context?.maintenance) &&
+      (options.model || options.agents || options.context?.maintenance?.model)
+    )
+      this.maintenance = new ContextMaintenance({
+        preview: (id) => {
+          const access = this.programAccess.get(id)
+          if (!access) throw new Error('父会话不可用')
+          return access
+        },
+        storage: options.storage,
+        tools: this.tools,
+        options: options.context?.maintenance,
+        model: (id) => this.taskModels.get(id),
+        open: async (id, model, tool, profile) => {
+          this.scopes.set(id, { kind: 'context' })
+          const materials = this.kernel.describe(ContextMaterialsModuleId)
+          const contextTool = {
+            ...tool,
+            phase: () => {
+              const phase = tool.phase()
+              return {
+                ...phase,
+                instructions: `${phase.instructions}\n本会话材料读取合同：\n${materials.declarations}\n${materials.template ?? ''}`,
+              }
+            },
+          }
+          const session = new RuntimeSession(id, {
+            packages: [this.systemPackage(id)],
+            allowedModules: () => this.allowedModuleIds(id),
+            tool: contextTool,
+            memory: { recentRecords: 32, recentShare: 0.4 },
+            protocol: {
+              ...options.protocol,
+              allowed: ['blobs', 'execute', 'done'],
+              defaultRetain: 'task',
+            },
+            journal,
+            contextOptions: {
+              sources: [],
+              limits: { modelCalls: profile.modelCalls, modelTokens: profile.modelTokens },
+            },
+            kernel: this.kernel,
+            runner: options.runner,
+            storage: options.storage,
+            model: this.tools.model(id, model),
+            limits: {
+              ...VelarosRunLimits,
+              turns: profile.modelCalls,
+              timeoutMs: profile.timeoutMs,
+              outputTokens: profile.outputTokens,
+              projectionChars: profile.projectionChars,
+            },
+            register: (access) => this.programAccess.set(id, access),
+          })
+          this.sessions.set(id, session)
+          return session
+        },
+        close: async (id) => {
+          try {
+            await this.sessions.get(id)?.close()
+          } finally {
+            this.sessions.delete(id)
+            this.programAccess.delete(id)
+            this.scopes.delete(id)
+          }
+        },
+      })
+    if (options.agents)
+      this.agents = createAgentSupervisor({
+        deliver: (job, payload) =>
+          this.tools.deliver(
+            job.parentSessionId,
+            job.sessionId,
+            'agent',
+            payload,
+            job.status === 'completed'
+              ? 'completed'
+              : job.status === 'waiting'
+                ? 'partial'
+                : job.status === 'needs_reconcile'
+                  ? 'needs-reconcile'
+                  : 'failed',
+            [],
+            {
+              operation: 'agents.resume',
+              input: { id: job.id, input: '继续核对交付中未完成的事项。' },
+            }
+          ),
+        storage: options.storage,
+        concurrency: options.agents.concurrency,
+        maxChildren: options.agents.maxChildren,
+        open: (job, input, signal) => this.openChild(job, input, signal),
+      })
+    if (options.search)
+      this.search = new AdvancedSearch({
+        tools: this.tools,
+        storage: options.storage,
+        evidence: createEvidenceAccess(options.context?.sources ?? []),
+        parentDeadline: (id) => this.programAccess.get(id)?.deadline(),
+        options: { ...options.search, profiles: structuredClone(options.search.profiles) },
+        view: (id) => {
+          const view = this.sessions.get(id)?.view
+          if (!view) throw new Error('父任务尚未打开')
+          return view
+        },
+        open: async (id, activation, profile) => {
+          this.scopes.set(id, { kind: 'search' })
+          const evidence = this.kernel.describe(EvidenceModuleId)
+          const session = new RuntimeSession(id, {
+            packages: [this.systemPackage(id)],
+            allowedModules: () => this.allowedModuleIds(id),
+            tool: {
+              pressure: () => activation.pressure(),
+              deadline: () => activation.deadline(),
+              phase: () => {
+                const phase = activation.phase()
+                return {
+                  ...phase,
+                  instructions: `${phase.instructions}\n本会话证据合同：\n${evidence.declarations}`,
+                }
+              },
+              material: (maxChars) => activation.material(maxChars),
+              refresh: (signal) => activation.refresh(signal),
+              authorizeReference: (ref, signal) => activation.authorizeReference(ref, signal),
+            },
+            memory: { recentRecords: 64, recentShare: 0.4, ...options.search?.memory },
+            protocol: {
+              ...options.protocol,
+              allowed: ['blobs', 'execute', 'done'],
+              defaultRetain: 'task',
+            },
+            journal: this.journal,
+            contextOptions: {
+              sources: [],
+              policy: options.search?.contextPolicy,
+              limits: { modelCalls: profile.modelCalls, modelTokens: profile.modelTokens },
+            },
+            kernel: this.kernel,
+            runner: options.runner,
+            storage: options.storage,
+            model: this.tools.model(id, activation),
+            limits: {
+              ...(options.limits ?? VelarosRunLimits),
+              turns: profile.modelCalls,
+              timeoutMs: profile.timeoutMs,
+              outputTokens: profile.outputTokens,
+              projectionChars: profile.projectionChars,
+            },
+            register: (access) => this.programAccess.set(id, access),
+          })
+          this.sessions.set(id, session)
+          return session
+        },
+        close: async (id) => {
+          try {
+            await this.sessions.get(id)?.close()
+          } finally {
+            this.sessions.delete(id)
+            this.programAccess.delete(id)
+            this.scopes.delete(id)
+          }
+        },
+      })
+    this.kernel = createOperationRuntime({
+      journal,
+      beforeReadValidation: async (invocation, descriptor, signal) => {
+        if (!this.allows(invocation.sessionId, invocation.binding.moduleId))
+          throw Object.assign(new Error('观察资源授权已撤回'), { code: 'CAPABILITY_DENIED' })
+        await this.options.authorize?.(invocation, descriptor, signal)
+      },
+      beforeDispatch: async (invocation, descriptor, signal) => {
+        if (!this.allows(invocation.sessionId, invocation.binding.moduleId))
+          throw Object.assign(new Error('当前会话没有此模块能力'), { code: 'CAPABILITY_DENIED' })
+        const scope = this.scopes.get(invocation.sessionId)!
+        if (
+          scope.kind === 'agent' &&
+          descriptor.effects === 'write' &&
+          !systemModules.owns(invocation.binding.moduleId) &&
+          !scope.writes?.includes(invocation.binding.moduleId)
+        )
+          throw new Error('子任务没有占用该模块的写入范围')
+        if (descriptor.effects === 'write' && !systemModules.owns(invocation.binding.moduleId))
+          this.assertWriteDelegation(invocation.sessionId, invocation.binding.moduleId)
+        await this.options.authorize?.(invocation, descriptor, signal)
+        if (
+          this.programAccess.get(invocation.sessionId)?.phase() === 'maintenance' &&
+          !systemModules.owns(invocation.binding.moduleId)
+        )
+          throw Object.assign(new Error('上下文维护轮不派发业务能力'), {
+            code: 'CONTEXT_MAINTENANCE',
+          })
+        await this.search?.authorize(invocation, descriptor, signal)
+        if (
+          invocation.mode === 'observe' ||
+          descriptor.effects !== 'write' ||
+          systemModules.owns(invocation.binding.moduleId)
+        )
+          return
+        const view = this.sessions.get(invocation.sessionId)?.view
+        if (!view) throw new Error('任务视图不可用')
+        await view.assertCanWrite(invocation.executionId, signal)
+      },
+      modules: [
+        ...standardModules.create({
+          agentProfiles: () =>
+            Object.entries(options.agents?.profiles ?? {}).map(([name, profile]) => ({
+              name,
+              description: profile.description ?? '在指定能力范围内完成父任务派发的工作',
+              modules: profile.modules.filter((module) => module !== 'velaros:agents'),
+              stores: !isFalse(profile.stores),
+              turns: profile.limits?.turns ?? VelarosAgentRunLimits.turns,
+              timeoutMs: profile.limits?.timeoutMs ?? VelarosAgentRunLimits.timeoutMs,
+              modelCalls: profile.budget?.modelCalls ?? VelarosAgentBudget.modelCalls,
+              modelTokens: profile.budget?.modelTokens ?? VelarosAgentBudget.modelTokens,
+            })),
+          stores: options.storage.stores
+            ? {
+                stores: (id) => {
+                  const state = this.stores.get(id)
+                  if (!state)
+                    throw Object.assign(new Error('当前会话未获配共享状态'), {
+                      code: 'STORE_DENIED',
+                      effect: 'none',
+                    })
+                  return state
+                },
+              }
+            : undefined,
+          longTermMemory: options.memory
+            ? {
+                organize: Boolean(
+                  this.maintenance &&
+                  (options.model ||
+                    (options.context?.maintenance && options.context.maintenance.model))
+                ),
+                scope: (id) => {
+                  const memory = this.memories.get(id)
+                  if (!memory) throw new Error('主会话长期记忆未装配')
+                  return memory
+                },
+              }
+            : undefined,
+          maintenance: this.maintenance,
+          agents: this.agents,
+          allows: (id, module) => this.allows(id, module),
+          search: this.search,
+          journal,
+          kernel: () => this.kernel,
+          programs: (id) => {
+            const access = this.programAccess.get(id)
+            if (!access) throw new Error('会话尚未打开')
+            return access
+          },
+          view: (id) => {
+            const view = this.sessions.get(id)?.view
+            if (!view)
+              throw Object.assign(new Error('当前会话尚未打开'), { code: 'SESSION_NOT_OPEN' })
+            return view
+          },
+        }),
+        ...options.modules,
+      ].map((module) => this.scheduleEffects(module)),
+    })
   }
 
-  private systemPackage(id:string):ScriptPackageDefinition {
-    const allowed=new Set(this.allowedModuleIds(id))
-    return {specifier:SystemPackageSpecifier,exports:Object.fromEntries(systemMembers(module=>allowed.has(module)))}
+  private systemPackage(id: string): ScriptPackageDefinition {
+    const allowed = new Set(this.allowedModuleIds(id))
+    return {
+      specifier: SystemPackageSpecifier,
+      exports: Object.fromEntries(systemMembers((module) => allowed.has(module))),
+    }
   }
 
-  private allowedModuleIds(id:string):readonly string[]{
-    const ids:string[]=[];let offset:Nullable<number>=0
-    while(!isNull(offset)){const page=this.kernel.list({offset});ids.push(...page.items.filter(item=>this.allows(id,item.binding.moduleId)).map(item=>item.binding.moduleId));offset=page.nextOffset}
+  private allowedModuleIds(id: string): readonly string[] {
+    const ids: string[] = []
+    let offset: Nullable<number> = 0
+    while (!isNull(offset)) {
+      const page = this.kernel.list({ offset })
+      ids.push(
+        ...page.items
+          .filter((item) => this.allows(id, item.binding.moduleId))
+          .map((item) => item.binding.moduleId)
+      )
+      offset = page.nextOffset
+    }
     return ids
   }
 
-  private allows(id:string,module:string):boolean {
-    const scope=this.scopes.get(id)
-    if(!scope)return false
-    if(module===GoalModuleId)return scope.kind==='main'
-    if(module===ContextMaterialsModuleId)return scope.kind==='context'&&Boolean(this.maintenance?.active(id))
-    if(scope.kind==='context')return false
-    if(module==='velaros:interaction')return scope.kind==='main'||scope.kind==='agent'
-    if(module===StoreModuleId||module===StoreWriteModuleId||module===StoreReadModuleId){const stores=this.stores.get(id);return Boolean(stores&&module===(stores.mode==='create'?StoreModuleId:stores.mode==='write'?StoreWriteModuleId:StoreReadModuleId))}
-    if(LongTermMemoryModuleIds.includes(module))return scope.kind==='main'&&Boolean(this.options.memory)
-    if(module===LocalMemoryModuleId)return scope.kind==='search'||!this.allows(id,MemoryModuleId)&&!this.allows(id,PersistentMemoryModuleId)
-    if(scope.kind==='search')return module!==MemoryModuleId&&(!!this.search?.allows(id,module))
-    if(scope.kind!=='main'&&module==='velaros:agents')return false
-    if(scope.kind==='agent'&&(this.options.modelTools?.maxDepth??ModelToolLimits.maxDepth)<2&&(module===MemoryModuleId||module==='velaros:search'))return false
-    if(module===MemoryModuleId)return !this.allows(id,PersistentMemoryModuleId)&&Boolean(this.maintenance&&(this.taskModels.has(id)||this.options.context?.maintenance&&this.options.context.maintenance.model))
-    if(scope.modules&&!scope.modules.includes(module)&&!systemModules.owns(module))return false
-    return module!=='velaros:evidence'
-
+  private allows(id: string, module: string): boolean {
+    const scope = this.scopes.get(id)
+    if (!scope) return false
+    if (module === GoalModuleId) return scope.kind === 'main'
+    if (module === ContextMaterialsModuleId)
+      return scope.kind === 'context' && Boolean(this.maintenance?.active(id))
+    if (scope.kind === 'context') return false
+    if (module === 'velaros:interaction') return scope.kind === 'main' || scope.kind === 'agent'
+    if (module === StoreModuleId || module === StoreWriteModuleId || module === StoreReadModuleId) {
+      const stores = this.stores.get(id)
+      return Boolean(
+        stores &&
+        module ===
+          (stores.mode === 'create'
+            ? StoreModuleId
+            : stores.mode === 'write'
+              ? StoreWriteModuleId
+              : StoreReadModuleId)
+      )
+    }
+    if (LongTermMemoryModuleIds.includes(module))
+      return scope.kind === 'main' && Boolean(this.options.memory)
+    if (module === LocalMemoryModuleId)
+      return (
+        scope.kind === 'search' ||
+        (!this.allows(id, MemoryModuleId) && !this.allows(id, PersistentMemoryModuleId))
+      )
+    if (scope.kind === 'search')
+      return module !== MemoryModuleId && !!this.search?.allows(id, module)
+    if (scope.kind !== 'main' && module === 'velaros:agents') return false
+    if (
+      scope.kind === 'agent' &&
+      (this.options.modelTools?.maxDepth ?? ModelToolLimits.maxDepth) < 2 &&
+      (module === MemoryModuleId || module === 'velaros:search')
+    )
+      return false
+    if (module === MemoryModuleId)
+      return (
+        !this.allows(id, PersistentMemoryModuleId) &&
+        Boolean(
+          this.maintenance &&
+          (this.taskModels.has(id) ||
+            (this.options.context?.maintenance && this.options.context.maintenance.model))
+        )
+      )
+    if (scope.modules && !scope.modules.includes(module) && !systemModules.owns(module))
+      return false
+    return module !== 'velaros:evidence'
   }
 
-  private async openChild(job:AgentJob,input:Optional<AgentStart>,signal:AbortSignal){
-    const profile=this.options.agents?.profiles[job.profile]; const parent=this.sessions.get(job.parentSessionId)
-    if(!profile||!parent)throw new Error('子任务配置或父任务不可用')
-    if(this.scopes.get(job.parentSessionId)?.kind!=='main')throw new Error('只有主线可以派发业务子任务')
-    const childLimits={...VelarosAgentRunLimits,outputTokens:profile.model.limits.outputTokens,...profile.limits}
-    const modules=profile.modules.filter(module=>module!=='velaros:agents')
-    for(const module of modules)if(!this.allows(job.parentSessionId,module))throw new Error('子任务能力不能超过父任务')
-    if(job.writes.some(module=>!modules.includes(module)))throw new Error('子任务写入范围超出能力配置')
-    let childStores:Optional<StoreSessionApi>
-    const parentStores=this.stores.get(job.parentSessionId)
-    if(job.stores?.length){
-      if(!parentStores||isFalse(profile.stores))throw new Error('子任务没有共享空间能力')
-      const grants=await parentStores.delegate(job.stores)
-      childStores=new StoreSession(job.sessionId,this.options.storage,{scope:parentStores.scope,create:false,grants},false)
+  private async openChild(job: AgentJob, input: Optional<AgentStart>, signal: AbortSignal) {
+    const profile = this.options.agents?.profiles[job.profile]
+    const parent = this.sessions.get(job.parentSessionId)
+    if (!profile || !parent) throw new Error('子任务配置或父任务不可用')
+    if (this.scopes.get(job.parentSessionId)?.kind !== 'main')
+      throw new Error('只有主线可以派发业务子任务')
+    const childLimits = {
+      ...VelarosAgentRunLimits,
+      outputTokens: profile.model.limits.outputTokens,
+      ...profile.limits,
+    }
+    const modules = profile.modules.filter((module) => module !== 'velaros:agents')
+    for (const module of modules)
+      if (!this.allows(job.parentSessionId, module)) throw new Error('子任务能力不能超过父任务')
+    if (job.writes.some((module) => !modules.includes(module)))
+      throw new Error('子任务写入范围超出能力配置')
+    let childStores: Optional<StoreSessionApi>
+    const parentStores = this.stores.get(job.parentSessionId)
+    if (job.stores?.length) {
+      if (!parentStores || isFalse(profile.stores)) throw new Error('子任务没有共享空间能力')
+      const grants = await parentStores.delegate(job.stores)
+      childStores = new StoreSession(
+        job.sessionId,
+        this.options.storage,
+        { scope: parentStores.scope, create: false, grants },
+        false
+      )
       await childStores.initialize()
     }
-    const activity=await this.tools.begin(job.sessionId,job.parentSessionId,'agent',childLimits.timeoutMs,signal)
-    if(childStores)this.stores.set(job.sessionId,childStores)
-    this.scopes.set(job.sessionId,{kind:'agent',modules,writes:job.writes})
-    this.taskModels.set(job.sessionId,profile.model)
-    const model=new BudgetedModelDriver({model:profile.model,parent:activity.budget,signal:activity.signal})
-    let session:VelarosSession
-    try{session=new RuntimeSession(job.sessionId,{maintain:this.allows(job.sessionId,MemoryModuleId)?(input,signal)=>this.maintenance!.maintain(job.sessionId,input,signal):undefined,stores:this.stores.get(job.sessionId),packages:[this.systemPackage(job.sessionId)],allowedModules:()=>this.allowedModuleIds(job.sessionId),agents:this.agents,settleModelTools:executionId=>this.search?.settleExecution(job.sessionId,executionId)??Promise.resolve(),memory:profile.memory,protocol:this.options.protocol,journal:this.journal,contextOptions:{...this.options.context!,limits:{...this.options.context?.limits,...VelarosAgentBudget,...profile.budget}},kernel:this.kernel,runner:this.options.runner,storage:this.options.storage,model:this.tools.model(job.sessionId,model),limits:childLimits,register:access=>this.programAccess.set(job.sessionId,access)})}
-    catch(error){const settled=await Promise.allSettled([model.close(),activity.close()]);this.programAccess.delete(job.sessionId);this.scopes.delete(job.sessionId);this.stores.delete(job.sessionId);this.taskModels.delete(job.sessionId);const failures=settled.flatMap(result=>result.status==='rejected'?[result.reason]:[]);if(!isEmpty(failures))throw new AggregateError([error,...failures],'子会话建立和清理失败');throw error}
-    this.sessions.set(job.sessionId,session)
-    const files:ActInputFile[]=[]
-    try{
-      for(const ref of input?.materials??[]){
-        if(ref.sessionId!==job.parentSessionId)throw new Error('只能分享父任务已经持有的原文')
-        const source=(await this.options.storage.load(ref.sessionId))?.records.find(r=>r.ref.id===ref.id)
-        if(!source)throw new Error('共享材料不存在')
-        const body=await this.options.storage.get(ref.sessionId,source.objectId)
-        if(isNull(body))throw new Error('共享原文缺失')
+    const activity = await this.tools.begin(
+      job.sessionId,
+      job.parentSessionId,
+      'agent',
+      childLimits.timeoutMs,
+      signal
+    )
+    if (childStores) this.stores.set(job.sessionId, childStores)
+    this.scopes.set(job.sessionId, { kind: 'agent', modules, writes: job.writes })
+    this.taskModels.set(job.sessionId, profile.model)
+    const model = new BudgetedModelDriver({
+      model: profile.model,
+      parent: activity.budget,
+      signal: activity.signal,
+    })
+    let session: VelarosSession
+    try {
+      session = new RuntimeSession(job.sessionId, {
+        maintain: this.allows(job.sessionId, MemoryModuleId)
+          ? (input, signal) => this.maintenance!.maintain(job.sessionId, input, signal)
+          : undefined,
+        stores: this.stores.get(job.sessionId),
+        packages: [this.systemPackage(job.sessionId)],
+        allowedModules: () => this.allowedModuleIds(job.sessionId),
+        agents: this.agents,
+        settleModelTools: (executionId) =>
+          this.search?.settleExecution(job.sessionId, executionId) ?? Promise.resolve(),
+        memory: profile.memory,
+        protocol: this.options.protocol,
+        journal: this.journal,
+        contextOptions: {
+          ...this.options.context!,
+          limits: { ...this.options.context?.limits, ...VelarosAgentBudget, ...profile.budget },
+        },
+        kernel: this.kernel,
+        runner: this.options.runner,
+        storage: this.options.storage,
+        model: this.tools.model(job.sessionId, model),
+        limits: childLimits,
+        register: (access) => this.programAccess.set(job.sessionId, access),
+      })
+    } catch (error) {
+      const settled = await Promise.allSettled([model.close(), activity.close()])
+      this.programAccess.delete(job.sessionId)
+      this.scopes.delete(job.sessionId)
+      this.stores.delete(job.sessionId)
+      this.taskModels.delete(job.sessionId)
+      const failures = settled.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : []
+      )
+      if (!isEmpty(failures)) throw new AggregateError([error, ...failures], '子会话建立和清理失败')
+      throw error
+    }
+    this.sessions.set(job.sessionId, session)
+    const files: ActInputFile[] = []
+    try {
+      for (const ref of input?.materials ?? []) {
+        if (ref.sessionId !== job.parentSessionId) throw new Error('只能分享父任务已经持有的原文')
+        const source = (await this.options.storage.load(ref.sessionId))?.records.find(
+          (r) => r.ref.id === ref.id
+        )
+        if (!source) throw new Error('共享材料不存在')
+        const body = await this.options.storage.get(ref.sessionId, source.objectId)
+        if (isNull(body)) throw new Error('共享原文缺失')
         signal.throwIfAborted()
-        const copied=await session.context.append({kind:'note',title:'shared:material',body})
-        await session.context.append({kind:'audit',title:'shared:provenance',body:JSON.stringify({source:ref,objectId:source.objectId,copy:copied.ref,profile:job.profile})})
-        files.push({ref:copied.ref,name:source.title||ref.id,mediaType:'text/plain'})
+        const copied = await session.context.append({
+          kind: 'note',
+          title: 'shared:material',
+          body,
+        })
+        await session.context.append({
+          kind: 'audit',
+          title: 'shared:provenance',
+          body: JSON.stringify({
+            source: ref,
+            objectId: source.objectId,
+            copy: copied.ref,
+            profile: job.profile,
+          }),
+        })
+        files.push({ ref: copied.ref, name: source.title || ref.id, mediaType: 'text/plain' })
       }
-    }catch(error){const cleanup=await Promise.allSettled([session.close(),model.close()]);try{await activity.close()}finally{this.sessions.delete(job.sessionId);this.programAccess.delete(job.sessionId);this.scopes.delete(job.sessionId);this.stores.delete(job.sessionId);this.taskModels.delete(job.sessionId)}const failures=cleanup.flatMap(result=>result.status==='rejected'?[result.reason]:[]);if(!isEmpty(failures))throw new AggregateError([error,...failures],'子会话启动失败且清理异常');throw error}
+    } catch (error) {
+      const cleanup = await Promise.allSettled([session.close(), model.close()])
+      try {
+        await activity.close()
+      } finally {
+        this.sessions.delete(job.sessionId)
+        this.programAccess.delete(job.sessionId)
+        this.scopes.delete(job.sessionId)
+        this.stores.delete(job.sessionId)
+        this.taskModels.delete(job.sessionId)
+      }
+      const failures = cleanup.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : []
+      )
+      if (!isEmpty(failures))
+        throw new AggregateError([error, ...failures], '子会话启动失败且清理异常')
+      throw error
+    }
     return {
-      submit:(value:Parameters<typeof session.submit>[0],runSignal?:AbortSignal)=>session.submit(!isEmpty(files)?{...(isString(value)?{text:value}:value),files}:value,AbortSignal.any([activity.signal,...(runSignal?[runSignal]:[])])),
-      answer:(value:Parameters<typeof session.answer>[0])=>session.answer(value),
-      steer:(value:Parameters<typeof session.steer>[0])=>session.steer(value),cancel:()=>session.cancel(),
-      close:async()=>{
-        const results=await Promise.allSettled([session.close(),model.close()])
-        this.sessions.delete(job.sessionId);this.programAccess.delete(job.sessionId);this.scopes.delete(job.sessionId);this.stores.delete(job.sessionId);this.taskModels.delete(job.sessionId)
-        const failures=results.flatMap(result=>result.status==='rejected'?[result.reason]:[])
-        try{await activity.close()}catch(error){Log.tag('ActRuntime').debug('ComposedRuntime 已进入异常处理或降级分支');failures.push(error)}
-        if(!isEmpty(failures))throw new AggregateError(failures,'子会话和父预算清理失败')
+      submit: (value: Parameters<typeof session.submit>[0], runSignal?: AbortSignal) =>
+        session.submit(
+          !isEmpty(files) ? { ...(isString(value) ? { text: value } : value), files } : value,
+          AbortSignal.any([activity.signal, ...(runSignal ? [runSignal] : [])])
+        ),
+      answer: (value: Parameters<typeof session.answer>[0]) => session.answer(value),
+      steer: (value: Parameters<typeof session.steer>[0]) => session.steer(value),
+      cancel: () => session.cancel(),
+      close: async () => {
+        const results = await Promise.allSettled([session.close(), model.close()])
+        this.sessions.delete(job.sessionId)
+        this.programAccess.delete(job.sessionId)
+        this.scopes.delete(job.sessionId)
+        this.stores.delete(job.sessionId)
+        this.taskModels.delete(job.sessionId)
+        const failures = results.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : []
+        )
+        try {
+          await activity.close()
+        } catch (error) {
+          Log.tag('ActRuntime').debug('ComposedRuntime 已进入异常处理或降级分支')
+          failures.push(error)
+        }
+        if (!isEmpty(failures)) throw new AggregateError(failures, '子会话和父预算清理失败')
       },
     }
   }
 
-  private assertWriteDelegation(id:string,module:string):void {
-    for(const [child,scope] of this.scopes)if(scope.writes?.some(write=>write===module||module.startsWith(`${write}/`)||write.startsWith(`${module}/`))&&this.tools.descends(child,id))throw Object.assign(new Error('写入范围正在由后代任务使用，请等待子任务结束'),{code:'WRITE_DELEGATED'})
+  private assertWriteDelegation(id: string, module: string): void {
+    for (const [child, scope] of this.scopes)
+      if (
+        scope.writes?.some(
+          (write) =>
+            write === module || module.startsWith(`${write}/`) || write.startsWith(`${module}/`)
+        ) &&
+        this.tools.descends(child, id)
+      )
+        throw Object.assign(new Error('写入范围正在由后代任务使用，请等待子任务结束'), {
+          code: 'WRITE_DELEGATED',
+        })
   }
 
-  private scheduleEffects(module:OperationModuleDefinition):OperationModuleDefinition {
-    return {...module,operations:Object.fromEntries(Object.entries(module.operations).map(([name,operation])=>[name,operation.effects==='none'?operation:{...operation,
-      run:(input,call)=>this.withEffectGate(call,()=>operation.run(input,call)),
-      observe: operation.observe ? (input:unknown,call:OperationContext)=>this.withEffectGate(call,()=>operation.observe!(input,call)) : undefined,
-    }]))}
-  }
-
-  private async withEffectGate(call:OperationContext,run:()=>unknown|Promise<unknown>):Promise<unknown> {
-    let release=():void=>{}
-    const queuedAt=performance.now();let started:Optional<number>;let succeeded=false
-    try{
-      try{
-        call.signal.throwIfAborted()
-        release=await this.effects.acquire(this.options.effectResources?.(call.invocation),call.signal)
-        call.signal.throwIfAborted()
-        started=performance.now()
-        this.diagnostics.record({phase:'effect-wait',sessionId:call.invocation.sessionId,executionId:call.invocation.executionId,operation:`${call.invocation.binding.moduleId}.${call.invocation.operation}`,durationMs:started-queuedAt,succeeded:true})
-        if(call.invocation.mode!=='observe'&&!systemModules.owns(call.invocation.binding.moduleId))await this.sessions.get(call.invocation.sessionId)!.view.assertCanWrite(call.invocation.executionId,call.signal)
-        if(call.invocation.mode!=='observe'&&!systemModules.owns(call.invocation.binding.moduleId)){this.assertWriteDelegation(call.invocation.sessionId,call.invocation.binding.moduleId);await this.programAccess.get(call.invocation.sessionId)!.validateDecision(call.invocation.executionId,call.signal)}
-        call.signal.throwIfAborted()
-      }catch(error){call.recordEffect('none');throw error}
-      const value=await run();succeeded=true;return value
-    }finally{
-      const ended=performance.now();release()
-      this.diagnostics.record({phase:isUndefined(started)?'effect-wait':'effect-run',sessionId:call.invocation.sessionId,executionId:call.invocation.executionId,operation:`${call.invocation.binding.moduleId}.${call.invocation.operation}`,durationMs:ended-(started??queuedAt),succeeded})
+  private scheduleEffects(module: OperationModuleDefinition): OperationModuleDefinition {
+    return {
+      ...module,
+      operations: Object.fromEntries(
+        Object.entries(module.operations).map(([name, operation]) => [
+          name,
+          operation.effects === 'none'
+            ? operation
+            : {
+                ...operation,
+                run: (input, call) => this.withEffectGate(call, () => operation.run(input, call)),
+                observe: operation.observe
+                  ? (input: unknown, call: OperationContext) =>
+                      this.withEffectGate(call, () => operation.observe!(input, call))
+                  : undefined,
+              },
+        ])
+      ),
     }
   }
 
-  public async openSession(id:string):Promise<VelarosSession> {
-    const prior=this.openings.get(id)
-    if(prior)return prior
-    const opening=this.openMain(id);this.openings.set(id,opening)
-    try{return await opening}finally{if(this.openings.get(id)===opening)this.openings.delete(id)}
+  private async withEffectGate(
+    call: OperationContext,
+    run: () => unknown | Promise<unknown>
+  ): Promise<unknown> {
+    let release = (): void => {}
+    const queuedAt = performance.now()
+    let started: Optional<number>
+    let succeeded = false
+    try {
+      try {
+        call.signal.throwIfAborted()
+        release = await this.effects.acquire(
+          this.options.effectResources?.(call.invocation),
+          call.signal
+        )
+        call.signal.throwIfAborted()
+        started = performance.now()
+        this.diagnostics.record({
+          phase: 'effect-wait',
+          sessionId: call.invocation.sessionId,
+          executionId: call.invocation.executionId,
+          operation: `${call.invocation.binding.moduleId}.${call.invocation.operation}`,
+          durationMs: started - queuedAt,
+          succeeded: true,
+        })
+        if (
+          call.invocation.mode !== 'observe' &&
+          !systemModules.owns(call.invocation.binding.moduleId)
+        )
+          await this.sessions
+            .get(call.invocation.sessionId)!
+            .view.assertCanWrite(call.invocation.executionId, call.signal)
+        if (
+          call.invocation.mode !== 'observe' &&
+          !systemModules.owns(call.invocation.binding.moduleId)
+        ) {
+          this.assertWriteDelegation(call.invocation.sessionId, call.invocation.binding.moduleId)
+          await this.programAccess
+            .get(call.invocation.sessionId)!
+            .validateDecision(call.invocation.executionId, call.signal)
+        }
+        call.signal.throwIfAborted()
+      } catch (error) {
+        call.recordEffect('none')
+        throw error
+      }
+      const value = await run()
+      succeeded = true
+      return value
+    } finally {
+      const ended = performance.now()
+      release()
+      this.diagnostics.record({
+        phase: isUndefined(started) ? 'effect-wait' : 'effect-run',
+        sessionId: call.invocation.sessionId,
+        executionId: call.invocation.executionId,
+        operation: `${call.invocation.binding.moduleId}.${call.invocation.operation}`,
+        durationMs: ended - (started ?? queuedAt),
+        succeeded,
+      })
+    }
   }
 
-  private async openMain(id:string):Promise<VelarosSession> {
-    if(this.closing||!id||id.startsWith('search:')||id.startsWith('agent:')||id.startsWith('context:')||id.startsWith('store-material:'))throw new Error('运行时已关闭或会话身份无效')
-    await new RuntimeWorkspaceBinding(this.options.storage,this.options.workspace,this.options.dataDir).bind(id)
-    if(this.closing)throw new Error('运行时已关闭')
+  public async openSession(id: string): Promise<VelarosSession> {
+    const prior = this.openings.get(id)
+    if (prior) return prior
+    const opening = this.openMain(id)
+    this.openings.set(id, opening)
+    try {
+      return await opening
+    } finally {
+      if (this.openings.get(id) === opening) this.openings.delete(id)
+    }
+  }
+
+  private async openMain(id: string): Promise<VelarosSession> {
+    if (
+      this.closing ||
+      !id ||
+      id.startsWith('search:') ||
+      id.startsWith('agent:') ||
+      id.startsWith('context:') ||
+      id.startsWith('store-material:')
+    )
+      throw new Error('运行时已关闭或会话身份无效')
+    await new RuntimeWorkspaceBinding(
+      this.options.storage,
+      this.options.workspace,
+      this.options.dataDir
+    ).bind(id)
+    if (this.closing) throw new Error('运行时已关闭')
     await this.kernel.start()
-    if(this.closing)throw new Error('运行时已关闭')
-    let session=this.sessions.get(id)
-    if(!session){
-     try{
-      const configuration=this.options.stores?this.options.stores(id):this.options.storage.stores?{scope:`session:${id}`}:undefined
-      if(configuration){if(!this.options.storage.stores)throw new Error('当前 ContextStorage 未实现持久 store');const stores=new StoreSession(id,this.options.storage,configuration);await stores.initialize();if(this.closing)throw new Error('运行时已关闭');this.stores.set(id,stores)}
-      const memory=this.options.memory?.(id)
-      if(memory)this.memories.set(id,memory)
-      this.scopes.set(id,{kind:'main'})
-      this.tools.root(id)
-      if(this.options.model)this.taskModels.set(id,this.options.model)
-      session=new RuntimeSession(id,{instructions:this.options.instructions,maintain:this.maintenance&&(this.options.model||this.options.context?.maintenance&&this.options.context.maintenance.model)?(input,signal)=>this.maintenance!.maintain(id,input,signal):undefined,stores:this.stores.get(id),packages:[this.systemPackage(id)],allowedModules:()=>this.allowedModuleIds(id),agents:this.agents,settleModelTools:executionId=>this.search?.settleExecution(id,executionId)??Promise.resolve(),protocol:this.options.protocol,inputs:this.options.inputs?()=>this.options.inputs!(id):undefined,journal:this.journal,contextOptions:this.options.context,kernel:this.kernel,runner:this.options.runner,storage:this.options.storage,model:this.options.model?this.tools.model(id,this.options.model):undefined,limits:this.options.limits??VelarosRunLimits,
-        closed:()=>{if(this.sessions.get(id)===session)this.releaseMain(id)},
-        register:access=>{this.programAccess.set(id,access)}})
-      this.sessions.set(id,session)
-     }catch(error){this.releaseMain(id);throw error}
+    if (this.closing) throw new Error('运行时已关闭')
+    let session = this.sessions.get(id)
+    if (!session) {
+      try {
+        const configuration = this.options.stores
+          ? this.options.stores(id)
+          : this.options.storage.stores
+            ? { scope: `session:${id}` }
+            : undefined
+        if (configuration) {
+          if (!this.options.storage.stores) throw new Error('当前 ContextStorage 未实现持久 store')
+          const stores = new StoreSession(id, this.options.storage, configuration)
+          await stores.initialize()
+          if (this.closing) throw new Error('运行时已关闭')
+          this.stores.set(id, stores)
+        }
+        const memory = this.options.memory?.(id)
+        if (memory) this.memories.set(id, memory)
+        this.scopes.set(id, { kind: 'main' })
+        this.tools.root(id)
+        if (this.options.model) this.taskModels.set(id, this.options.model)
+        session = new RuntimeSession(id, {
+          instructions: this.options.instructions,
+          maintain:
+            this.maintenance &&
+            (this.options.model ||
+              (this.options.context?.maintenance && this.options.context.maintenance.model))
+              ? (input, signal) => this.maintenance!.maintain(id, input, signal)
+              : undefined,
+          stores: this.stores.get(id),
+          packages: [this.systemPackage(id)],
+          allowedModules: () => this.allowedModuleIds(id),
+          agents: this.agents,
+          settleModelTools: (executionId) =>
+            this.search?.settleExecution(id, executionId) ?? Promise.resolve(),
+          protocol: this.options.protocol,
+          inputs: this.options.inputs ? () => this.options.inputs!(id) : undefined,
+          journal: this.journal,
+          contextOptions: this.options.context,
+          kernel: this.kernel,
+          runner: this.options.runner,
+          storage: this.options.storage,
+          model: this.options.model ? this.tools.model(id, this.options.model) : undefined,
+          limits: this.options.limits ?? VelarosRunLimits,
+          closed: () => {
+            if (this.sessions.get(id) === session) this.releaseMain(id)
+          },
+          register: (access) => {
+            this.programAccess.set(id, access)
+          },
+        })
+        this.sessions.set(id, session)
+      } catch (error) {
+        this.releaseMain(id)
+        throw error
+      }
     }
     return session
   }
 
-  private releaseMain(id:string):void {
-    this.sessions.delete(id);this.programAccess.delete(id);this.scopes.delete(id);this.stores.delete(id);this.memories.delete(id);this.taskModels.delete(id);this.tools.releaseRoot(id)
+  private releaseMain(id: string): void {
+    this.sessions.delete(id)
+    this.programAccess.delete(id)
+    this.scopes.delete(id)
+    this.stores.delete(id)
+    this.memories.delete(id)
+    this.taskModels.delete(id)
+    this.tools.releaseRoot(id)
   }
 
-  public async trace(rootSessionId:string,input?:ActTraceQuery):Promise<ActTracePage>{
-    if(this.closing)throw new Error('运行时已关闭')
-    return new RuntimeTrace(rootSessionId,this.options.storage,this.journal).page(input)
+  public async trace(rootSessionId: string, input?: ActTraceQuery): Promise<ActTracePage> {
+    if (this.closing) throw new Error('运行时已关闭')
+    return new RuntimeTrace(rootSessionId, this.options.storage, this.journal).page(input)
   }
 
-  public getSession(id:string){return this.sessions.get(id)}
+  public getSession(id: string) {
+    return this.sessions.get(id)
+  }
 
-  public modules(query?:ModuleQuery):ModulePage {return this.kernel.list(query)}
-  public describe(moduleId:string):ModuleDescription {return this.kernel.describe(moduleId)}
+  public modules(query?: ModuleQuery): ModulePage {
+    return this.kernel.list(query)
+  }
+  public describe(moduleId: string): ModuleDescription {
+    return this.kernel.describe(moduleId)
+  }
 
-  public close():Promise<void> {
-    this.closing??=this.shutdown()
+  public close(): Promise<void> {
+    this.closing ??= this.shutdown()
     return this.closing
   }
 
-  private async shutdown():Promise<void> {
-    const failures:unknown[]=[]
+  private async shutdown(): Promise<void> {
+    const failures: unknown[] = []
     await Promise.allSettled([...this.openings.values()])
-    try{await this.agents?.close()}catch(error){Log.tag('ActRuntime').debug('ComposedRuntime 已进入异常处理或降级分支');failures.push(error)}
-    for(const result of await Promise.allSettled([...this.sessions.values()].map(session=>session.close())))if(result.status==='rejected')failures.push(result.reason)
-    try{await this.kernel.dispose()}catch(error){Log.tag('ActRuntime').debug('ComposedRuntime 已进入异常处理或降级分支');failures.push(error)}
-    try{await this.options.storage.close()}catch(error){Log.tag('ActRuntime').debug('ComposedRuntime 已进入异常处理或降级分支');failures.push(error)}
+    try {
+      await this.agents?.close()
+    } catch (error) {
+      Log.tag('ActRuntime').debug('ComposedRuntime 已进入异常处理或降级分支')
+      failures.push(error)
+    }
+    for (const result of await Promise.allSettled(
+      [...this.sessions.values()].map((session) => session.close())
+    ))
+      if (result.status === 'rejected') failures.push(result.reason)
+    try {
+      await this.kernel.dispose()
+    } catch (error) {
+      Log.tag('ActRuntime').debug('ComposedRuntime 已进入异常处理或降级分支')
+      failures.push(error)
+    }
+    try {
+      await this.options.storage.close()
+    } catch (error) {
+      Log.tag('ActRuntime').debug('ComposedRuntime 已进入异常处理或降级分支')
+      failures.push(error)
+    }
     this.sessions.clear()
     this.programAccess.clear()
     this.memories.clear()
     this.stores.clear()
     this.scopes.clear()
     this.taskModels.clear()
-    if(!isEmpty(failures))throw new AggregateError(failures,'Runtime 关闭失败；已尝试释放全部资源')
+    if (!isEmpty(failures))
+      throw new AggregateError(failures, 'Runtime 关闭失败；已尝试释放全部资源')
   }
 }
 
 /** 宿主提供模型周边资源，一份实例图统一维护模块、脚本与上下文。 */
-export async function createRuntime(options:VelarosRuntimeOptions):Promise<VelarosRuntime> {
- const configured=await runtimeBootstrap.prepare(options)
- try{return new ComposedRuntime(configured)}catch(error){
-  try{if(!options.storage)await configured.storage.close()}catch(cleanup){throw new AggregateError([error,cleanup],'Runtime 初始化及存储清理失败')}
-  throw error
- }
+export async function createRuntime(options: VelarosRuntimeOptions): Promise<VelarosRuntime> {
+  const configured = await runtimeBootstrap.prepare(options)
+  try {
+    return new ComposedRuntime(configured)
+  } catch (error) {
+    try {
+      if (!options.storage) await configured.storage.close()
+    } catch (cleanup) {
+      throw new AggregateError([error, cleanup], 'Runtime 初始化及存储清理失败')
+    }
+    throw error
+  }
 }

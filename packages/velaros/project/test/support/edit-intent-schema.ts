@@ -18,7 +18,7 @@ const TextMatchSelectionSchema = {
     .positive()
     .optional()
     .describe(
-      '总数断言：文件中该文本的匹配总数必须恰好等于此值，否则失败；它不选择修改位置。可与 occurrence 或 replaceAll 同用。',
+      '总数断言：文件中该文本的匹配总数必须恰好等于此值，否则失败；它不选择修改位置。可与 occurrence 或 replaceAll 同用。'
     ),
   occurrence: z
     .number()
@@ -26,13 +26,13 @@ const TextMatchSelectionSchema = {
     .positive()
     .optional()
     .describe(
-      '按文件中出现顺序只修改第 N 个匹配（从 1 开始）；与 replaceAll 互斥。若同时给 expectedMatches，须等于实际总数而不是 1。',
+      '按文件中出现顺序只修改第 N 个匹配（从 1 开始）；与 replaceAll 互斥。若同时给 expectedMatches，须等于实际总数而不是 1。'
     ),
   replaceAll: z
     .boolean()
     .optional()
     .describe(
-      '修改全部匹配；与 occurrence 互斥。occurrence 与 replaceAll 都不传时，文件中必须恰好只有 1 处匹配。',
+      '修改全部匹配；与 occurrence 互斥。occurrence 与 replaceAll 都不传时，文件中必须恰好只有 1 处匹配。'
     ),
 }
 
@@ -62,7 +62,7 @@ const ProjectModelEditOperationSchemas = [
         .string()
         .min(1)
         .describe(
-          '必填：当前文件视图的 revision 或 project:read 返回的 snapshot.revision；行号绑定该版本。同文件连续的 replace_lines 使用同一版本的原始行号，范围须不重叠。',
+          '必填：当前文件视图的 revision 或 project:read 返回的 snapshot.revision；行号绑定该版本。同文件连续的 replace_lines 使用同一版本的原始行号，范围须不重叠。'
         ),
       startLine: z.number().int().positive().describe('替换起始行，1-based，含本行。'),
       endLine: z.number().int().positive().describe('替换结束行，含本行，不能超出文件。'),
@@ -258,7 +258,7 @@ const ProjectModelEditOperationSchemas = [
 /** occurrence 与 replaceAll 只能二选一：同时给时记一条 schema 问题，指向 replaceAll。 */
 function validateMatchSelection(
   operation: Record<string, unknown>,
-  context: z.RefinementCtx,
+  context: z.RefinementCtx
 ): void {
   if (
     'occurrence' in operation &&
@@ -283,7 +283,17 @@ const ProjectEditOperationSchema = z
       expectedContent: z.string(),
       content: z.string(),
       mode: z.enum(['edit', 'overwrite', 'guard', 'recode']).optional(),
-      targetEncoding: z.enum(['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-nobom', 'gb18030']).optional(),
+      targetEncoding: z
+        .enum([
+          'utf8',
+          'utf8-bom',
+          'utf16le',
+          'utf16be',
+          'utf16le-nobom',
+          'utf16be-nobom',
+          'gb18030',
+        ])
+        .optional(),
     }),
     z.strictObject({
       type: z.literal('delete_text'),
@@ -294,11 +304,21 @@ const ProjectEditOperationSchema = z
   ])
   .superRefine(validateMatchSelection)
 const ProjectModelEditOperationSchema = z
-  .discriminatedUnion('type', [...ProjectModelEditOperationSchemas, z.strictObject({
-    type: z.literal('replace_selection'),
-    selectionRef: z.string().min(1).describe('project:read 返回的 editTarget；自动包含路径、版本和行范围。'),
-    newLines: z.array(z.string().refine((line) => !line.includes('\n') && !line.includes('\r'), '每项只能包含一行源码')),
-  })])
+  .discriminatedUnion('type', [
+    ...ProjectModelEditOperationSchemas,
+    z.strictObject({
+      type: z.literal('replace_selection'),
+      selectionRef: z
+        .string()
+        .min(1)
+        .describe('project:read 返回的 editTarget；自动包含路径、版本和行范围。'),
+      newLines: z.array(
+        z
+          .string()
+          .refine((line) => !line.includes('\n') && !line.includes('\r'), '每项只能包含一行源码')
+      ),
+    }),
+  ])
   .superRefine(validateMatchSelection)
 
 const ProjectEditIntentSchema = z.strictObject({
@@ -313,7 +333,7 @@ const ProjectEditIntentSchema = z.strictObject({
         .positive()
         .optional()
         .describe(
-          '兼容字段：断言匹配总数，不选择要修改的匹配；新调用优先放在具体文本 operation 内。',
+          '兼容字段：断言匹配总数，不选择要修改的匹配；新调用优先放在具体文本 operation 内。'
         ),
     })
     .optional(),
@@ -324,7 +344,13 @@ const ProjectEditOperationsSchema = z.array(ProjectEditIntentSchema)
 /** 模型只提交扁平操作；内部事务意图包装由 Agent 适配层负责。 */
 const ProjectModelEditSchema = z.strictObject({
   edits: z.array(ProjectModelEditOperationSchema).min(1).max(1000),
-  cwd: z.string().min(1).optional().describe('当前项目内的工作目录，可用相对路径或绝对路径；省略时使用当前项目目录。不能用它切换到项目之外。'),
+  cwd: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      '当前项目内的工作目录，可用相对路径或绝对路径；省略时使用当前项目目录。不能用它切换到项目之外。'
+    ),
   baseRevisions: z.record(z.string().min(1), z.string().min(1)).optional(),
 })
 export {

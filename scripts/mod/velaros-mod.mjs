@@ -60,7 +60,8 @@ function parseManifest(bytes, origin, { bundled = false } = {}) {
   if (!envelope.ok) {
     fail(envelope.diagnostics.map((item) => `${item.path}: ${item.message}`).join('; '))
   }
-  if (envelope.envelope.agent !== undefined) fail('此包包含旧 Agent seam；请将贡献注册为 Kernel 能力及 Context 来源后重新打包')
+  if (envelope.envelope.agent !== undefined)
+    fail('此包包含旧 Agent seam；请将贡献注册为 Kernel 能力及 Context 来源后重新打包')
   return { raw, envelope: envelope.envelope }
 }
 

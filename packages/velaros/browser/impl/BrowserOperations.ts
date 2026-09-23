@@ -125,7 +125,10 @@ export interface BrowserOperationsApi {
   /** @AgentView 把之后的操作切到外部浏览器的另一个标签页（不关闭任何窗口）。
    * @OperationEffect write
    */
-  switchTab(input: BrowserSwitchTabInput, ctx: BrowserOperationContext): Promise<BrowserSwitchPageTargetResult>
+  switchTab(
+    input: BrowserSwitchTabInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserSwitchPageTargetResult>
   /** @AgentView 看页面：正文、标题结构、链接、可交互元素与表单字段（元素带 target，可以直接交给 click 这类操作）。
    * @OperationEffect none
    */
@@ -133,7 +136,10 @@ export interface BrowserOperationsApi {
   /** @AgentView 截图：图交给你看，返回值是落盘位置、坐标换算与标注说明。能在页面里读的（表格、列表、文字）用 evaluate 读，别靠截图。
    * @OperationEffect write
    */
-  screenshot(input: BrowserScreenshotInput, ctx: BrowserOperationContext): Promise<BrowserScreenshot>
+  screenshot(
+    input: BrowserScreenshotInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserScreenshot>
   /**
    * @AgentView
    * 在页面里跑一段 JavaScript，交回它的值：结果按 JSON 整份取回（DOM 元素换成它的描述，环引用写成 "[Circular]"，日期照 toJSON），
@@ -161,7 +167,10 @@ export interface BrowserOperationsApi {
   /** @AgentView 在当前焦点处插入文字。
    * @OperationEffect write
    */
-  insertText(input: BrowserInsertTextInput, ctx: BrowserOperationContext): Promise<BrowserInsertTextResult>
+  insertText(
+    input: BrowserInsertTextInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserInsertTextResult>
   /** @AgentView 按一个键或组合键（提交表单按 Enter）。
    * @OperationEffect write
    */
@@ -181,7 +190,10 @@ export interface BrowserOperationsApi {
   /** @AgentView 在鼠标现在的位置按下一个鼠标键。
    * @OperationEffect write
    */
-  mouseDown(input: BrowserMouseButtonInput, ctx: BrowserOperationContext): Promise<BrowserMouseResult>
+  mouseDown(
+    input: BrowserMouseButtonInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserMouseResult>
   /** @AgentView 在鼠标现在的位置松开一个鼠标键。
    * @OperationEffect write
    */
@@ -221,31 +233,52 @@ export interface BrowserOperationsApi {
   /** @AgentView 等页面加载到某个状态，交回那时的页面状态。
    * @OperationEffect none
    */
-  waitForLoad(input: BrowserWaitForLoadInput, ctx: BrowserOperationContext): Promise<BrowserPageState>
+  waitForLoad(
+    input: BrowserWaitForLoadInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserPageState>
   /** @AgentView 等一个挂起事件出现，交回这个事件（点了下载按钮之后等下载事件，再 handleDownload）。
    * @OperationEffect none
    */
-  waitForEvent(input: BrowserWaitForEventInput, ctx: BrowserOperationContext): Promise<BrowserPendingEventSummary>
+  waitForEvent(
+    input: BrowserWaitForEventInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserPendingEventSummary>
   /** @AgentView 处理 JS 弹窗（alert、confirm、prompt）。
    * @OperationEffect write
    */
-  handleDialog(input: BrowserDialogInput, ctx: BrowserOperationContext): Promise<BrowserHandleDialogResult>
+  handleDialog(
+    input: BrowserDialogInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserHandleDialogResult>
   /** @AgentView 保存或取消一次下载。
    * @OperationEffect write
    */
-  handleDownload(input: BrowserDownloadDecisionInput, ctx: BrowserOperationContext): Promise<BrowserHandleDownloadResult>
+  handleDownload(
+    input: BrowserDownloadDecisionInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserHandleDownloadResult>
   /** @AgentView 允许或拒绝一次权限请求。
    * @OperationEffect write
    */
-  handlePermission(input: BrowserPermissionInput, ctx: BrowserOperationContext): Promise<BrowserHandlePermissionResult>
+  handlePermission(
+    input: BrowserPermissionInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserHandlePermissionResult>
   /** @AgentView 带着当前页面的登录态下载一个资源到站点工作区。
    * @OperationEffect write
    */
-  download(input: BrowserDownloadInput, ctx: BrowserOperationContext): Promise<BrowserFetchResourceResult>
+  download(
+    input: BrowserDownloadInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserFetchResourceResult>
   /** @AgentView 把当前页面导出成 PDF。
    * @OperationEffect write
    */
-  savePdf(input: BrowserSavePdfInput, ctx: BrowserOperationContext): Promise<BrowserExportPagePdfResult>
+  savePdf(
+    input: BrowserSavePdfInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserExportPagePdfResult>
 }
 
 /**
@@ -286,14 +319,20 @@ export class BrowserOperations implements BrowserOperationsApi {
     return ctx.browser.showPage()
   }
 
-  public async switchTab(input: BrowserSwitchTabInput, ctx: BrowserOperationContext): Promise<BrowserSwitchPageTargetResult> {
+  public async switchTab(
+    input: BrowserSwitchTabInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserSwitchPageTargetResult> {
     ctx.abortSignal.throwIfAborted()
     const { targetId } = switchTabInput(input)
     requireOpenSite(ctx)
     return ctx.browser.switchPageTarget({ targetId })
   }
 
-  public async inspect(input: BrowserInspectInput, ctx: BrowserOperationContext): Promise<BrowserPageInspection> {
+  public async inspect(
+    input: BrowserInspectInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserPageInspection> {
     ctx.abortSignal.throwIfAborted()
     const options = inspectInput(input)
     requireOpenSite(ctx)
@@ -306,12 +345,17 @@ export class BrowserOperations implements BrowserOperationsApi {
     })
   }
 
-  public async screenshot(input: BrowserScreenshotInput, ctx: BrowserOperationContext): Promise<BrowserScreenshot> {
+  public async screenshot(
+    input: BrowserScreenshotInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserScreenshot> {
     ctx.abortSignal.throwIfAborted()
     const options = screenshotInput(input)
     requireOpenSite(ctx)
     const attach = ctx.attachImage
-    const artifact = await ctx.browser.captureScreenshot(buildModelScreenshotOptions(options, !!attach))
+    const artifact = await ctx.browser.captureScreenshot(
+      buildModelScreenshotOptions(options, !!attach)
+    )
     // 图交给模型看，不进返回值：返回值是给程序的，程序看不了像素。
     if (attach && artifact.modelImage) {
       attach({
@@ -343,17 +387,24 @@ export class BrowserOperations implements BrowserOperationsApi {
     return ctx.browser.listFrames()
   }
 
-  public async click(input: BrowserClickInput, ctx: BrowserOperationContext): Promise<BrowserActed> {
+  public async click(
+    input: BrowserClickInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserActed> {
     ctx.abortSignal.throwIfAborted()
     const request = clickInput(input)
     requireOpenSite(ctx)
-    if (request.kind === 'target') return performTargetActionWithRecovery({
-        action: 'click',
-        target: toElementTarget(request.target),
-        waitForNavigation: request.waitForNavigation,
-        button: request.button,
-        clickCount: request.clickCount,
-      }, ctx)
+    if (request.kind === 'target')
+      return performTargetActionWithRecovery(
+        {
+          action: 'click',
+          target: toElementTarget(request.target),
+          waitForNavigation: request.waitForNavigation,
+          button: request.button,
+          clickCount: request.clickCount,
+        },
+        ctx
+      )
     const clicked = await ctx.browser.clickCoordinates({
       x: request.x,
       y: request.y,
@@ -380,79 +431,118 @@ export class BrowserOperations implements BrowserOperationsApi {
     // 真实输入：页面里聚焦并全选，宿主再像输入法一样插入（空字符串就按退格删掉选中的），最后读一次控件状态。
     // 直接改 value 的写法 React 认不到（它盯着 value 的写入，判定「没变」），富文本编辑器也会把改动还原。
     const element = toElementTarget(target)
-    const selected = await ctx.browser.performTargetAction({ action: 'select_all', target: element })
+    const selected = await ctx.browser.performTargetAction({
+      action: 'select_all',
+      target: element,
+    })
     if (!selected.matched) return { ...selected, action: 'fill' }
     if (isEmpty(value)) await ctx.browser.pressKey({ key: 'Backspace' })
     else await ctx.browser.insertText({ text: value })
     // 读状态的那一步不算动作效果：它前后页面本来就不变，带着它只会让模型以为没写进去。
-    const { effect: _unchanged, ...filled } = await ctx.browser.performTargetAction({ action: 'focus', target: element })
+    const { effect: _unchanged, ...filled } = await ctx.browser.performTargetAction({
+      action: 'focus',
+      target: element,
+    })
     return { ...filled, action: 'fill' }
   }
 
-  public async hover(input: BrowserHoverInput, ctx: BrowserOperationContext): Promise<BrowserActed> {
+  public async hover(
+    input: BrowserHoverInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserActed> {
     ctx.abortSignal.throwIfAborted()
     const { target } = hoverInput(input)
     requireOpenSite(ctx)
-    return performTargetActionWithRecovery({ action: 'hover', target: toElementTarget(target) }, ctx)
+    return performTargetActionWithRecovery(
+      { action: 'hover', target: toElementTarget(target) },
+      ctx
+    )
   }
 
-  public async insertText(input: BrowserInsertTextInput, ctx: BrowserOperationContext): Promise<BrowserInsertTextResult> {
+  public async insertText(
+    input: BrowserInsertTextInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserInsertTextResult> {
     ctx.abortSignal.throwIfAborted()
     const { text } = insertTextInput(input)
     requireOpenSite(ctx)
     return ctx.browser.insertText({ text })
   }
 
-  public async press(input: BrowserPressInput, ctx: BrowserOperationContext): Promise<BrowserPressKeyResult> {
+  public async press(
+    input: BrowserPressInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserPressKeyResult> {
     ctx.abortSignal.throwIfAborted()
     const options = pressInput(input)
     requireOpenSite(ctx)
     return ctx.browser.pressKey(options)
   }
 
-  public async keyDown(input: BrowserKeyInput, ctx: BrowserOperationContext): Promise<BrowserKeyResult> {
+  public async keyDown(
+    input: BrowserKeyInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserKeyResult> {
     ctx.abortSignal.throwIfAborted()
     const { key } = keyInput(input, 'keyDown')
     requireOpenSite(ctx)
     return ctx.browser.keyDown({ key })
   }
 
-  public async keyUp(input: BrowserKeyInput, ctx: BrowserOperationContext): Promise<BrowserKeyResult> {
+  public async keyUp(
+    input: BrowserKeyInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserKeyResult> {
     ctx.abortSignal.throwIfAborted()
     const { key } = keyInput(input, 'keyUp')
     requireOpenSite(ctx)
     return ctx.browser.keyUp({ key })
   }
 
-  public async mouseMove(input: BrowserMouseMoveInput, ctx: BrowserOperationContext): Promise<BrowserMouseResult> {
+  public async mouseMove(
+    input: BrowserMouseMoveInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserMouseResult> {
     ctx.abortSignal.throwIfAborted()
     const move = mouseMoveInput(input)
     requireOpenSite(ctx)
     return ctx.browser.moveMouse(move)
   }
 
-  public async mouseDown(input: BrowserMouseButtonInput, ctx: BrowserOperationContext): Promise<BrowserMouseResult> {
+  public async mouseDown(
+    input: BrowserMouseButtonInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserMouseResult> {
     ctx.abortSignal.throwIfAborted()
     const press = mouseButtonInput(input, 'mouseDown')
     requireOpenSite(ctx)
     return ctx.browser.mouseDown(press)
   }
 
-  public async mouseUp(input: BrowserMouseButtonInput, ctx: BrowserOperationContext): Promise<BrowserMouseResult> {
+  public async mouseUp(
+    input: BrowserMouseButtonInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserMouseResult> {
     ctx.abortSignal.throwIfAborted()
     const release = mouseButtonInput(input, 'mouseUp')
     requireOpenSite(ctx)
     return ctx.browser.mouseUp(release)
   }
 
-  public async wheel(input: BrowserWheelInput, ctx: BrowserOperationContext): Promise<BrowserMouseResult> {
+  public async wheel(
+    input: BrowserWheelInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserMouseResult> {
     ctx.abortSignal.throwIfAborted()
     const delta = wheelInput(input)
     requireOpenSite(ctx)
     return ctx.browser.mouseWheel(delta)
   }
 
-  public async drag(input: BrowserDragInput, ctx: BrowserOperationContext): Promise<BrowserDragResult> {
+  public async drag(
+    input: BrowserDragInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserDragResult> {
     ctx.abortSignal.throwIfAborted()
     const options = dragInput(input)
     requireOpenSite(ctx)
@@ -464,14 +554,23 @@ export class BrowserOperations implements BrowserOperationsApi {
     })
   }
 
-  public async upload(input: BrowserUploadInput, ctx: BrowserOperationContext): Promise<BrowserUploadFileResult> {
+  public async upload(
+    input: BrowserUploadInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserUploadFileResult> {
     ctx.abortSignal.throwIfAborted()
     const options = uploadInput(input)
     requireOpenSite(ctx)
-    return ctx.browser.uploadFile({ target: toElementTarget(options.target), filePath: options.filePath })
+    return ctx.browser.uploadFile({
+      target: toElementTarget(options.target),
+      filePath: options.filePath,
+    })
   }
 
-  public async goto(input: BrowserGotoInput, ctx: BrowserOperationContext): Promise<BrowserPageNavigationResult> {
+  public async goto(
+    input: BrowserGotoInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserPageNavigationResult> {
     ctx.abortSignal.throwIfAborted()
     const { url } = gotoInput(input)
     requireOpenSite(ctx)
@@ -496,37 +595,53 @@ export class BrowserOperations implements BrowserOperationsApi {
     return ctx.browser.navigatePage({ action: 'reload' })
   }
 
-  public async waitForFunction(input: BrowserWaitForFunctionInput, ctx: BrowserOperationContext): Promise<any> {
+  public async waitForFunction(
+    input: BrowserWaitForFunctionInput,
+    ctx: BrowserOperationContext
+  ): Promise<any> {
     ctx.abortSignal.throwIfAborted()
     const options = waitForFunctionInput(input)
     requireOpenSite(ctx)
     return pollPageCondition({
-      evaluate: (timeoutMs) => ctx.browser.evaluateScript({
-        script: options.script,
-        args: options.args,
-        frame: options.frame,
-        timeoutMs,
-        maxResultChars: BrowserEvaluateLimits.resultChars,
-      }),
+      evaluate: (timeoutMs) =>
+        ctx.browser.evaluateScript({
+          script: options.script,
+          args: options.args,
+          frame: options.frame,
+          timeoutMs,
+          maxResultChars: BrowserEvaluateLimits.resultChars,
+        }),
       timeoutMs: options.timeoutMs ?? BrowserWaitLimits.defaultMs,
       intervalMs: options.intervalMs ?? BrowserWaitLimits.defaultIntervalMs,
       abortSignal: ctx.abortSignal,
     })
   }
 
-  public async waitForLoad(input: BrowserWaitForLoadInput, ctx: BrowserOperationContext): Promise<BrowserPageState> {
+  public async waitForLoad(
+    input: BrowserWaitForLoadInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserPageState> {
     ctx.abortSignal.throwIfAborted()
     const options = waitForLoadInput(input)
     requireOpenSite(ctx)
     const state = options.state ?? 'load'
-    const waited = await ctx.browser.waitForPage({ loadState: state, timeoutMs: options.timeoutMs ?? BrowserWaitLimits.defaultMs })
+    const waited = await ctx.browser.waitForPage({
+      loadState: state,
+      timeoutMs: options.timeoutMs ?? BrowserWaitLimits.defaultMs,
+    })
     if (!waited.matched) {
-      throw new AppError('TIMEOUT', `等了 ${waited.elapsedMs} 毫秒，页面还没到 ${state}：现在是 ${waited.loadState}，地址 ${waited.url}。`)
+      throw new AppError(
+        'TIMEOUT',
+        `等了 ${waited.elapsedMs} 毫秒，页面还没到 ${state}：现在是 ${waited.loadState}，地址 ${waited.url}。`
+      )
     }
     return ctx.browser.getPageState()
   }
 
-  public async waitForEvent(input: BrowserWaitForEventInput, ctx: BrowserOperationContext): Promise<BrowserPendingEventSummary> {
+  public async waitForEvent(
+    input: BrowserWaitForEventInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserPendingEventSummary> {
     ctx.abortSignal.throwIfAborted()
     const options = waitForEventInput(input)
     requireOpenSite(ctx)
@@ -538,14 +653,20 @@ export class BrowserOperations implements BrowserOperationsApi {
     })
   }
 
-  public async handleDialog(input: BrowserDialogInput, ctx: BrowserOperationContext): Promise<BrowserHandleDialogResult> {
+  public async handleDialog(
+    input: BrowserDialogInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserHandleDialogResult> {
     ctx.abortSignal.throwIfAborted()
     const options = dialogInput(input)
     requireOpenSite(ctx)
     return ctx.browser.handleDialog(options)
   }
 
-  public async handleDownload(input: BrowserDownloadDecisionInput, ctx: BrowserOperationContext): Promise<BrowserHandleDownloadResult> {
+  public async handleDownload(
+    input: BrowserDownloadDecisionInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserHandleDownloadResult> {
     ctx.abortSignal.throwIfAborted()
     const options = downloadDecisionInput(input)
     requireOpenSite(ctx)
@@ -556,21 +677,30 @@ export class BrowserOperations implements BrowserOperationsApi {
     })
   }
 
-  public async handlePermission(input: BrowserPermissionInput, ctx: BrowserOperationContext): Promise<BrowserHandlePermissionResult> {
+  public async handlePermission(
+    input: BrowserPermissionInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserHandlePermissionResult> {
     ctx.abortSignal.throwIfAborted()
     const options = permissionInput(input)
     requireOpenSite(ctx)
     return ctx.browser.handlePermission(options)
   }
 
-  public async download(input: BrowserDownloadInput, ctx: BrowserOperationContext): Promise<BrowserFetchResourceResult> {
+  public async download(
+    input: BrowserDownloadInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserFetchResourceResult> {
     ctx.abortSignal.throwIfAborted()
     const options = downloadInput(input)
     requireOpenSite(ctx)
     return ctx.browser.fetchResource(options)
   }
 
-  public async savePdf(input: BrowserSavePdfInput, ctx: BrowserOperationContext): Promise<BrowserExportPagePdfResult> {
+  public async savePdf(
+    input: BrowserSavePdfInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserExportPagePdfResult> {
     ctx.abortSignal.throwIfAborted()
     const { path } = savePdfInput(input)
     requireOpenSite(ctx)

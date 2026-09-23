@@ -20,11 +20,22 @@ export type { ConfinedShellRunnerApi } from './impl/local/ConfinedShellRunner.js
 export type { LocalShellHostApi } from './impl/local/LocalShellHost.js'
 
 // ── 注入面：空间要给的东西，与本机实现的配置 ──────────────────────
-export type { ConfinedShellRunnerOptions, LocalShellHostOptions, ShellHostPort, ShellOperationContext, ShellProcessConfinementProvider, ShellSpacePort } from './contract/requires.js'
+export type {
+  ConfinedShellRunnerOptions,
+  LocalShellHostOptions,
+  ShellHostPort,
+  ShellOperationContext,
+  ShellProcessConfinementProvider,
+  ShellSpacePort,
+} from './contract/requires.js'
 
 // ── 上面用到、又不在可移植文件里的数据 ───────────────────────────
 export type { ShellEnvironmentOptions } from './contract/requires.js'
 export type { ShellEnvironmentApi } from './impl/local/ShellEnvironment.js'
 export type { ShellCommandApprovalInput, ShellCommandApprovalRequest } from './types/approval.js'
-export type { ShellProcessConfinementPolicy, ShellProcessConfinementRequest, ShellProcessConfinementResult } from './types/local.js'
+export type {
+  ShellProcessConfinementPolicy,
+  ShellProcessConfinementRequest,
+  ShellProcessConfinementResult,
+} from './types/local.js'
 export type { ResolvedShell } from './types/local.js'

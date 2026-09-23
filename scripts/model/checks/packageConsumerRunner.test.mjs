@@ -94,7 +94,7 @@ test('does not retry ordinary nonzero command failures', () => {
       assert.match(error.message, /stdout:\npacking/)
       assert.match(error.message, /stderr:\ninvalid package/)
       return true
-    },
+    }
   )
   assert.equal(attempts, 1)
 })
@@ -127,7 +127,7 @@ test('reports exhausted spawn failures without assuming output exists', () => {
       assert.match(error.message, /exit status: null/)
       assert.equal(error.cause, spawnError)
       return true
-    },
+    }
   )
   assert.equal(attempts, 3)
 })

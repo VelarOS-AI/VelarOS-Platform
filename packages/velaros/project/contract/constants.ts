@@ -176,15 +176,63 @@ export const DevelopmentCodeLimits = Object.freeze({
  * 拉起进程，不下载、不安装、不改名。宿主可以在 `createExternalLanguageService` 时给自己的表替换它。
  */
 export const BuiltinExternalLanguageServers = Object.freeze([
-  { id: 'basedpyright', command: 'basedpyright-langserver', args: ['--stdio'], extensions: ['.py', '.pyi'], languageId: 'python' },
-  { id: 'pyright', command: 'pyright-langserver', args: ['--stdio'], extensions: ['.py', '.pyi'], languageId: 'python' },
+  {
+    id: 'basedpyright',
+    command: 'basedpyright-langserver',
+    args: ['--stdio'],
+    extensions: ['.py', '.pyi'],
+    languageId: 'python',
+  },
+  {
+    id: 'pyright',
+    command: 'pyright-langserver',
+    args: ['--stdio'],
+    extensions: ['.py', '.pyi'],
+    languageId: 'python',
+  },
   { id: 'gopls', command: 'gopls', args: ['serve'], extensions: ['.go'], languageId: 'go' },
-  { id: 'rust-analyzer', command: 'rust-analyzer', args: [], extensions: ['.rs'], languageId: 'rust' },
-  { id: 'clangd', command: 'clangd', args: ['--background-index=0'], extensions: ['.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.hxx'], languageId: 'cpp' },
-  { id: 'json', command: 'vscode-json-language-server', args: ['--stdio'], extensions: ['.json', '.jsonc'], languageId: 'json' },
-  { id: 'css', command: 'vscode-css-language-server', args: ['--stdio'], extensions: ['.css', '.less', '.scss'], languageId: 'css' },
-  { id: 'html', command: 'vscode-html-language-server', args: ['--stdio'], extensions: ['.html', '.htm'], languageId: 'html' },
-  { id: 'vue', command: 'vue-language-server', args: ['--stdio'], extensions: ['.vue'], languageId: 'vue' },
+  {
+    id: 'rust-analyzer',
+    command: 'rust-analyzer',
+    args: [],
+    extensions: ['.rs'],
+    languageId: 'rust',
+  },
+  {
+    id: 'clangd',
+    command: 'clangd',
+    args: ['--background-index=0'],
+    extensions: ['.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.hxx'],
+    languageId: 'cpp',
+  },
+  {
+    id: 'json',
+    command: 'vscode-json-language-server',
+    args: ['--stdio'],
+    extensions: ['.json', '.jsonc'],
+    languageId: 'json',
+  },
+  {
+    id: 'css',
+    command: 'vscode-css-language-server',
+    args: ['--stdio'],
+    extensions: ['.css', '.less', '.scss'],
+    languageId: 'css',
+  },
+  {
+    id: 'html',
+    command: 'vscode-html-language-server',
+    args: ['--stdio'],
+    extensions: ['.html', '.htm'],
+    languageId: 'html',
+  },
+  {
+    id: 'vue',
+    command: 'vue-language-server',
+    args: ['--stdio'],
+    extensions: ['.vue'],
+    languageId: 'vue',
+  },
 ] as const)
 
 /** 内置语言服务 id 的取值。 */

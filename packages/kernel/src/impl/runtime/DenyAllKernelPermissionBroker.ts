@@ -1,7 +1,4 @@
-import type {
-  KernelPermissionDecision,
-  KernelPermissionRequest,
-} from '../../types/kernel.js'
+import type { KernelPermissionDecision, KernelPermissionRequest } from '../../types/kernel.js'
 
 /**
  * 宿主没注入权限策略时的安全默认：任何权限都不给。
@@ -14,9 +11,7 @@ export interface KernelPermissionBroker {
 }
 
 export class DenyAllKernelPermissionBroker implements KernelPermissionBroker {
-  public async request(
-    request: KernelPermissionRequest,
-  ): Promise<KernelPermissionDecision> {
+  public async request(request: KernelPermissionRequest): Promise<KernelPermissionDecision> {
     return {
       status: 'denied',
       reason: `权限 "${request.permission}" 被宿主的默认策略拒绝（本次装配没有注入权限裁决）`,

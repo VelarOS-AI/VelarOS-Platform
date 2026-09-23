@@ -12,7 +12,12 @@ import { createIgnorePolicy } from '@velaros-ai/core/path-rules'
 import { textCodec } from '@velaros-ai/core/text-files'
 
 import type { LocalFileSearchOptions } from '../contract/requires.js'
-import type { FileSearchEntry, FileSearchMatch, FileSearchOptions, FileSearchResult } from '../types/files.js'
+import type {
+  FileSearchEntry,
+  FileSearchMatch,
+  FileSearchOptions,
+  FileSearchResult,
+} from '../types/files.js'
 import {
   buildLineMatcher,
   matchesSearchPath,
@@ -40,7 +45,11 @@ export interface LocalFileSearchApi {
    * mode 为 content 时逐行搜文件内容（字面或正则），跳过大于 1MB 或读不出文本的文件，每个文件最多 maxResultsPerFile 条（默认 5）。
    * 找够 limit 条（默认 60）就停并标 truncated，最深 maxDepth 层（默认 6）。根目录不存在时报 NOT_FOUND。
    */
-  search(rootPath: string, options: FileSearchOptions, abortSignal?: AbortSignal): Promise<FileSearchResult>
+  search(
+    rootPath: string,
+    options: FileSearchOptions,
+    abortSignal?: AbortSignal
+  ): Promise<FileSearchResult>
 }
 
 export class LocalFileSearch implements LocalFileSearchApi {
@@ -82,7 +91,12 @@ export class LocalFileSearch implements LocalFileSearchApi {
 
     await this.walk(rootPath, options, abortSignal, async (absolutePath, type) => {
       if (!entryTypes.has(type)) return false
-      if (type === 'file' && extensions.size > 0 && !extensions.has(extname(absolutePath).toLowerCase())) return false
+      if (
+        type === 'file' &&
+        extensions.size > 0 &&
+        !extensions.has(extname(absolutePath).toLowerCase())
+      )
+        return false
 
       const relativePath = relative(rootPath, absolutePath) || '.'
       if (!matchesSearchPath(relativePath, query, options.pathMatchMode ?? 'contains')) return false
@@ -118,38 +132,44 @@ export class LocalFileSearch implements LocalFileSearchApi {
       caseSensitive: options.caseSensitive,
     })
 
-    const truncated = await this.walk(rootPath, options, abortSignal, async (absolutePath, type) => {
-      if (type !== 'file') return false
-      if (extensions.size > 0 && !extensions.has(extname(absolutePath).toLowerCase())) return false
-      const stats = await lstat(absolutePath).catch(() => null)
-      // 只读普通文件：命名管道这类读起来可能永远等不到数据。
-      if (!stats?.isFile() || stats.size > FileTuning.search.fileBytes) return false
+    const truncated = await this.walk(
+      rootPath,
+      options,
+      abortSignal,
+      async (absolutePath, type) => {
+        if (type !== 'file') return false
+        if (extensions.size > 0 && !extensions.has(extname(absolutePath).toLowerCase()))
+          return false
+        const stats = await lstat(absolutePath).catch(() => null)
+        // 只读普通文件：命名管道这类读起来可能永远等不到数据。
+        if (!stats?.isFile() || stats.size > FileTuning.search.fileBytes) return false
 
-      abortSignal?.throwIfAborted()
-      // 认不出是文本（二进制、非法字节、认不出的编码）的文件跳过，不读成替换字符再去匹配。
-      const textFile = textCodec.decode(await readFile(absolutePath).catch(() => Buffer.alloc(0)))
-      if (!textFile) return false
-
-      let perFileMatches = 0
-      const lines = textFile.content.split(/\r?\n/)
-      for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
         abortSignal?.throwIfAborted()
-        const line = lines[lineIndex] ?? ''
-        for (const column of matcher(line)) {
-          matches.push({
-            path: relative(rootPath, absolutePath) || basename(absolutePath),
-            line: lineIndex + 1,
-            column,
-            excerpt: line.trim(),
-          })
-          perFileMatches += 1
+        // 认不出是文本（二进制、非法字节、认不出的编码）的文件跳过，不读成替换字符再去匹配。
+        const textFile = textCodec.decode(await readFile(absolutePath).catch(() => Buffer.alloc(0)))
+        if (!textFile) return false
+
+        let perFileMatches = 0
+        const lines = textFile.content.split(/\r?\n/)
+        for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+          abortSignal?.throwIfAborted()
+          const line = lines[lineIndex] ?? ''
+          for (const column of matcher(line)) {
+            matches.push({
+              path: relative(rootPath, absolutePath) || basename(absolutePath),
+              line: lineIndex + 1,
+              column,
+              excerpt: line.trim(),
+            })
+            perFileMatches += 1
+            if (matches.length >= limit || perFileMatches >= maxResultsPerFile) break
+          }
           if (matches.length >= limit || perFileMatches >= maxResultsPerFile) break
         }
-        if (matches.length >= limit || perFileMatches >= maxResultsPerFile) break
-      }
 
-      return matches.length >= limit
-    })
+        return matches.length >= limit
+      }
+    )
 
     return {
       mode: 'content',
@@ -172,7 +192,10 @@ export class LocalFileSearch implements LocalFileSearchApi {
   ): Promise<boolean> {
     abortSignal?.throwIfAborted()
     const maxDepth = options.maxDepth ?? FileTuning.search.maxDepth
-    const ignorePolicy = createIgnorePolicy(rootPath, { rulesFrom: 'repository', unrestricted: options.unrestricted })
+    const ignorePolicy = createIgnorePolicy(rootPath, {
+      rulesFrom: 'repository',
+      unrestricted: options.unrestricted,
+    })
     const visit = async (currentPath: string, depth: number): Promise<boolean> => {
       abortSignal?.throwIfAborted()
       if (depth > maxDepth) return false
@@ -181,14 +204,26 @@ export class LocalFileSearch implements LocalFileSearchApi {
 
       const type = stats.isDirectory() ? 'directory' : 'file'
       if (currentPath !== rootPath) {
-        if (shouldSkipSearchEntry(basename(currentPath), type === 'directory', !!options.includeHidden, !!options.unrestricted)) return false
+        if (
+          shouldSkipSearchEntry(
+            basename(currentPath),
+            type === 'directory',
+            !!options.includeHidden,
+            !!options.unrestricted
+          )
+        )
+          return false
         if (await ignorePolicy.shouldSkip(currentPath, type === 'directory')) return false
-        if (type === 'directory' && shouldSkipProtectedSearchDirectory({
-          platform: this.platform,
-          homeDir: this.homeDir,
-          rootPath,
-          candidatePath: currentPath,
-        })) return false
+        if (
+          type === 'directory' &&
+          shouldSkipProtectedSearchDirectory({
+            platform: this.platform,
+            homeDir: this.homeDir,
+            rootPath,
+            candidatePath: currentPath,
+          })
+        )
+          return false
         if (await onEntry(currentPath, type)) return true
       }
       if (type !== 'directory') return false

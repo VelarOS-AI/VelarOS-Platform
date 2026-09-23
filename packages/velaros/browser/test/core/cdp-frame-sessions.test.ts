@@ -10,7 +10,12 @@ import { CdpFrameSessions } from '../../impl/cdp/CdpFrameSessions.js'
 import type { CdpBrowserPageDriverTransport } from '../../types/cdp.js'
 
 function frame(id: string, url: string, parentId?: string): Record<string, string> {
-  const described: Record<string, string> = { id, url, name: '', securityOrigin: new URL(url).origin }
+  const described: Record<string, string> = {
+    id,
+    url,
+    name: '',
+    securityOrigin: new URL(url).origin,
+  }
   if (parentId) described.parentId = parentId
   return described
 }
@@ -21,29 +26,46 @@ function frame(id: string, url: string, parentId?: string): Record<string, strin
  */
 function createPage() {
   const sent: Array<{ method: string; params: any; sessionId: Optional<string> }> = []
-  const listeners = new Set<(method: string, params: unknown, sessionId: Optional<string>) => void>()
-  const emit = (method: string, params: unknown, sessionId?: string) => listeners.forEach((listener) => listener(method, params, sessionId))
+  const listeners = new Set<
+    (method: string, params: unknown, sessionId: Optional<string>) => void
+  >()
+  const emit = (method: string, params: unknown, sessionId?: string) =>
+    listeners.forEach((listener) => listener(method, params, sessionId))
   const trees: Record<string, unknown> = {
-    root: { frame: frame('top', 'https://a.test/'), childFrames: [{ frame: frame('same', 'https://a.test/inner', 'top') }] },
+    root: {
+      frame: frame('top', 'https://a.test/'),
+      childFrames: [{ frame: frame('same', 'https://a.test/inner', 'top') }],
+    },
     'session-b': { frame: frame('oopif', 'https://b.test/frame', 'top') },
     'session-c': { frame: frame('nested', 'https://a.test/nested', 'oopif') },
   }
-  const children: Record<string, string[]> = { root: ['session-b'], 'session-b': ['session-c'], 'session-c': [] }
+  const children: Record<string, string[]> = {
+    root: ['session-b'],
+    'session-b': ['session-c'],
+    'session-c': [],
+  }
   const gone = new Set<string>()
   const transport: CdpBrowserPageDriverTransport = {
-    send: async <T,>(method: string, params: any = {}, sessionId?: string): Promise<T> => {
+    send: async <T>(method: string, params: any = {}, sessionId?: string): Promise<T> => {
       sent.push({ method, params, sessionId })
       const session = sessionId ?? 'root'
       if (gone.has(session)) throw new Error(`No session with given id ${session}`)
       if (method === 'Target.setAutoAttach') {
-        for (const child of children[session]) emit('Target.attachedToTarget', { sessionId: child, targetInfo: { type: 'iframe' } }, sessionId)
+        for (const child of children[session])
+          emit(
+            'Target.attachedToTarget',
+            { sessionId: child, targetInfo: { type: 'iframe' } },
+            sessionId
+          )
         return {} as T
       }
       if (method === 'Page.getFrameTree') return { frameTree: trees[session] } as T
       if (method === 'DOM.getFrameOwner') return { backendNodeId: 7 } as T
-      if (method === 'DOM.describeNode') return { node: { contentDocument: { backendNodeId: 8 } } } as T
+      if (method === 'DOM.describeNode')
+        return { node: { contentDocument: { backendNodeId: 8 } } } as T
       if (method === 'DOM.resolveNode') return { object: { objectId: 'document-8' } } as T
-      if (method === 'Runtime.evaluate' || method === 'Runtime.callFunctionOn') return { result: { type: 'string', value: `${method}@${session}` } } as T
+      if (method === 'Runtime.evaluate' || method === 'Runtime.callFunctionOn')
+        return { result: { type: 'string', value: `${method}@${session}` } } as T
       return {} as T
     },
     onAnyEvent: (listener) => {
@@ -51,7 +73,13 @@ function createPage() {
       return () => listeners.delete(listener)
     },
   }
-  return { transport, sent, emit, drop: (session: string) => gone.add(session), listenerCount: () => listeners.size }
+  return {
+    transport,
+    sent,
+    emit,
+    drop: (session: string) => gone.add(session),
+    listenerCount: () => listeners.size,
+  }
 }
 
 describe('CdpFrameSessions', () => {
@@ -62,7 +90,13 @@ describe('CdpFrameSessions', () => {
 
     const listed = await frames.listFrames()
     assert.deepEqual(
-      listed.map((entry) => [entry.info.id, entry.info.parentId, entry.info.crossOrigin, entry.session, entry.sessionRoot]),
+      listed.map((entry) => [
+        entry.info.id,
+        entry.info.parentId,
+        entry.info.crossOrigin,
+        entry.session,
+        entry.sessionRoot,
+      ]),
       [
         ['top', null, false, null, true],
         ['same', 'top', false, null, false],
@@ -74,7 +108,10 @@ describe('CdpFrameSessions', () => {
     await frames.listFrames()
     assert.equal(page.sent.filter((call) => call.method === 'Target.setAutoAttach').length, 3)
     assert.deepEqual(page.sent.find((call) => call.method === 'Target.setAutoAttach')?.params, {
-      autoAttach: true, waitForDebuggerOnStart: false, flatten: true, filter: [{ type: 'iframe', exclude: false }],
+      autoAttach: true,
+      waitForDebuggerOnStart: false,
+      flatten: true,
+      filter: [{ type: 'iframe', exclude: false }],
     })
   })
 
@@ -84,13 +121,28 @@ describe('CdpFrameSessions', () => {
     const listed = await frames.listFrames()
     const byId = (id: string) => listed.find((entry) => entry.info.id === id)!
 
-    assert.equal(await frames.evaluateInFrame(byId('oopif'), '1 + 1', false), 'Runtime.evaluate@session-b')
-    assert.equal(await frames.evaluateInFrame(byId('same'), '(async () => 1)()', true), 'Runtime.callFunctionOn@root')
+    assert.equal(
+      await frames.evaluateInFrame(byId('oopif'), '1 + 1', false),
+      'Runtime.evaluate@session-b'
+    )
+    assert.equal(
+      await frames.evaluateInFrame(byId('same'), '(async () => 1)()', true),
+      'Runtime.callFunctionOn@root'
+    )
     const call = page.sent.find((entry) => entry.method === 'Runtime.callFunctionOn')!
     assert.equal(call.params.objectId, 'document-8')
     assert.equal(call.params.userGesture, true)
-    assert.match(call.params.functionDeclaration, /^async function \(\) \{ return await \(\(async \(\) => 1\)\(\)\n\) \}$/, 'script 的第一行还在第一行')
-    assert.ok(page.sent.some((entry) => entry.method === 'Runtime.releaseObject' && entry.params.objectId === 'document-8'))
+    assert.match(
+      call.params.functionDeclaration,
+      /^async function \(\) \{ return await \(\(async \(\) => 1\)\(\)\n\) \}$/,
+      'script 的第一行还在第一行'
+    )
+    assert.ok(
+      page.sent.some(
+        (entry) =>
+          entry.method === 'Runtime.releaseObject' && entry.params.objectId === 'document-8'
+      )
+    )
   })
 
   test('子会话没了就划掉；列框架时读不到的那条跳过，框架已经不在的抛 BROWSER_FRAME_NOT_FOUND', async () => {
@@ -99,14 +151,23 @@ describe('CdpFrameSessions', () => {
     const listed = await frames.listFrames()
 
     page.emit('Target.detachedFromTarget', { sessionId: 'session-c' }, 'session-b')
-    assert.deepEqual((await frames.listFrames()).map((entry) => entry.info.id), ['top', 'same', 'oopif'])
+    assert.deepEqual(
+      (await frames.listFrames()).map((entry) => entry.info.id),
+      ['top', 'same', 'oopif']
+    )
 
     page.drop('session-b')
-    assert.deepEqual((await frames.listFrames()).map((entry) => entry.info.id), ['top', 'same'])
+    assert.deepEqual(
+      (await frames.listFrames()).map((entry) => entry.info.id),
+      ['top', 'same']
+    )
 
     page.drop('root')
     const same = listed.find((entry) => entry.info.id === 'same')!
-    await assert.rejects(frames.evaluateInFrame(same, '1', false), (error: { code?: string }) => error.code === BrowserErrorCodes.frameNotFound)
+    await assert.rejects(
+      frames.evaluateInFrame(same, '1', false),
+      (error: { code?: string }) => error.code === BrowserErrorCodes.frameNotFound
+    )
   })
 
   test('dispose 退订', async () => {

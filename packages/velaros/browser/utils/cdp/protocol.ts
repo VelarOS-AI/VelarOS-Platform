@@ -8,7 +8,9 @@ import { BrowserErrorCodes } from '../../contract/constants.js'
 /** 协议报错换成 `BROWSER_PROTOCOL_FAILED`：message 用协议给的原话（传输层记在 context 里的那句优先），前面点名是哪条命令。 */
 export function protocolFailure(method: string, error: unknown): AppError {
   const failure = AppError.from(error)
-  const protocolMessage = isString(failure.context.protocolMessage) ? failure.context.protocolMessage : failure.message
+  const protocolMessage = isString(failure.context.protocolMessage)
+    ? failure.context.protocolMessage
+    : failure.message
   return new AppError(BrowserErrorCodes.protocolFailed, `${method}：${protocolMessage}`, error)
 }
 

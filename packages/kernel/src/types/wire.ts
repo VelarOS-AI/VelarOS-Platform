@@ -3,7 +3,11 @@
 // 这些类型手写在这里，zod schema 留在 `utils/wire/`，并用 `satisfies z.ZodType<…>` 反向守：
 // 类型是人读的单源，schema 是运行期校验，两边对不上编译期就报错（方案 §3.5 第 1 条）。
 // wire 形态与 ABI 形态刻意不合并：wire 上缺席一律写成 `null`，ABI 上写成可选字段。
-import type { KernelModuleIsolation, KernelRpcMethod,RemoteNodeCloseCode } from '../contract/constants.js'
+import type {
+  KernelModuleIsolation,
+  KernelRpcMethod,
+  RemoteNodeCloseCode,
+} from '../contract/constants.js'
 
 import type { KernelEvent } from './kernel.js'
 
@@ -143,8 +147,7 @@ export interface CapabilitySessionOpenFailure {
 
 /** 会话打开的应答。 */
 export type CapabilitySessionOpenResponse =
-  | CapabilitySessionOpenSuccess
-  | CapabilitySessionOpenFailure
+  CapabilitySessionOpenSuccess | CapabilitySessionOpenFailure
 
 /** 关闭能力会话。 */
 export interface CapabilitySessionCloseRequest {

@@ -9,7 +9,13 @@
  * 这里的每个接口都必须从根入口导出。
  */
 
-import type { MemoryEntry, MemoryIdInput, MemoryRemoved, MemorySaved, MemorySaveInput } from '../types/memory.js'
+import type {
+  MemoryEntry,
+  MemoryIdInput,
+  MemoryRemoved,
+  MemorySaved,
+  MemorySaveInput,
+} from '../types/memory.js'
 
 /** 宿主造记忆库（`createMemoryStore`）时给的东西。 */
 export interface MemoryStoreOptions {

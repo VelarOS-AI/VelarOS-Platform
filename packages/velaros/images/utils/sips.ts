@@ -18,7 +18,9 @@ async function runSips(args: string[]): Promise<{ stdout: string }> {
     return await promisify(execFile)('sips', args, {
       env: process.env,
       maxBuffer: ImageTuning.sips.outputBytes,
-      timeout: ImageTuning.sips.timeoutMs, killSignal: 'SIGKILL', windowsHide: true,
+      timeout: ImageTuning.sips.timeoutMs,
+      killSignal: 'SIGKILL',
+      windowsHide: true,
     })
   } catch (error) {
     throw new AppError('PLATFORM', '平台命令执行失败：sips', error)
@@ -26,7 +28,11 @@ async function runSips(args: string[]): Promise<{ stdout: string }> {
 }
 
 /** macOS 自带 sips 认的输出格式：PNG 与 JPEG 原样保留，GIF、WebP 一律转成 PNG（只取第一帧，与 API 的处理一致）。 */
-function sipsOutputOf(mediaType: string): { format: 'png' | 'jpeg'; extension: string; mediaType: string } {
+function sipsOutputOf(mediaType: string): {
+  format: 'png' | 'jpeg'
+  extension: string
+  mediaType: string
+} {
   return mediaType === 'image/jpeg'
     ? { format: 'jpeg', extension: 'jpg', mediaType: 'image/jpeg' }
     : { format: 'png', extension: 'png', mediaType: 'image/png' }
@@ -37,7 +43,8 @@ async function sipsPixelSize(path: string): Promise<{ width: number; height: num
   const { stdout } = await runSips(['-g', 'pixelWidth', '-g', 'pixelHeight', path])
   const width = Number(/pixelWidth:\s*(\d+)/u.exec(stdout)?.[1])
   const height = Number(/pixelHeight:\s*(\d+)/u.exec(stdout)?.[1])
-  if (!width || !height) throw new AppError('PLATFORM', `sips 读不出这张图的尺寸：${stdout.trim().slice(0, 200)}`)
+  if (!width || !height)
+    throw new AppError('PLATFORM', `sips 读不出这张图的尺寸：${stdout.trim().slice(0, 200)}`)
   return { width, height }
 }
 
@@ -55,23 +62,51 @@ export async function resizeImageWithSips(request: ImageResizeRequest): Promise<
   try {
     let current = join(directory, 'source')
     await writeFile(current, request.data)
-    let size = request.region ? { width: request.region.width, height: request.region.height } : await sipsPixelSize(current)
+    let size = request.region
+      ? { width: request.region.width, height: request.region.height }
+      : await sipsPixelSize(current)
 
     if (request.region) {
       const cropped = join(directory, `cropped.${output.extension}`)
       const { x, y, width, height } = request.region
-      await runSips(['-s', 'format', output.format, '-c', String(height), String(width), '--cropOffset', String(y), String(x), current, '--out', cropped])
+      await runSips([
+        '-s',
+        'format',
+        output.format,
+        '-c',
+        String(height),
+        String(width),
+        '--cropOffset',
+        String(y),
+        String(x),
+        current,
+        '--out',
+        cropped,
+      ])
       current = cropped
     }
     const oversized = Math.max(size.width, size.height) > request.longEdge
     if (oversized || !request.region) {
       const resized = join(directory, `resized.${output.extension}`)
-      await runSips(['-s', 'format', output.format, ...(oversized ? ['-Z', String(request.longEdge)] : []), current, '--out', resized])
+      await runSips([
+        '-s',
+        'format',
+        output.format,
+        ...(oversized ? ['-Z', String(request.longEdge)] : []),
+        current,
+        '--out',
+        resized,
+      ])
       current = resized
       size = await sipsPixelSize(current)
     }
 
-    return { data: await readFile(current), mediaType: output.mediaType, width: size.width, height: size.height }
+    return {
+      data: await readFile(current),
+      mediaType: output.mediaType,
+      width: size.width,
+      height: size.height,
+    }
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

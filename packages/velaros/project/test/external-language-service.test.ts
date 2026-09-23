@@ -20,13 +20,15 @@ describe('ExternalLanguageService', () => {
     await writeFile(join(root, 'sample.foo'), 'example')
     const outsideFile = join(outsideRoot, 'outside.foo')
     await writeFile(outsideFile, 'outside')
-    const service = createExternalLanguageService(root, [{
-      id: 'missing-test-server',
-      command: 'velaros-definitely-missing-language-server',
-      args: [],
-      extensions: ['.foo'],
-      languageId: 'foo',
-    }])
+    const service = createExternalLanguageService(root, [
+      {
+        id: 'missing-test-server',
+        command: 'velaros-definitely-missing-language-server',
+        args: [],
+        extensions: ['.foo'],
+        languageId: 'foo',
+      },
+    ])
     expect(service.supports('sample.foo')).toBe(true)
     expect(await service.diagnostics(['sample.foo'])).toEqual([])
     expect(service.status()).toMatchObject({

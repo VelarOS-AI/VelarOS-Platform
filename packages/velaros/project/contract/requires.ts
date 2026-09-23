@@ -17,22 +17,60 @@ import type { ImageResizeRequest, ImageResizeResult } from '@velaros-ai/velaros/
 import type { RehearsalSandboxHostPort } from '@velaros-ai/velaros/sandbox'
 import type { ShellHostPort } from '@velaros-ai/velaros/shell'
 
-import type { AdapterCapability, AdapterKind, AdapterPrepareEditInput, AdapterSearchHit, AdapterSearchInput, AdapterValidateInput, ParseInput, ParseResult, ProjectSymbol } from '../types/adapter.js'
-import type { AgentProjectApplyResult, AgentProjectKernelReadResult, AgentProjectPreparedTransaction, AgentProjectSearchResult, AgentProjectStoredTransaction } from '../types/agent-port.js'
-import type { ProjectChangeRecord,ProjectChangeRecordInput } from '../types/change-feed.js'
+import type {
+  AdapterCapability,
+  AdapterKind,
+  AdapterPrepareEditInput,
+  AdapterSearchHit,
+  AdapterSearchInput,
+  AdapterValidateInput,
+  ParseInput,
+  ParseResult,
+  ProjectSymbol,
+} from '../types/adapter.js'
+import type {
+  AgentProjectApplyResult,
+  AgentProjectKernelReadResult,
+  AgentProjectPreparedTransaction,
+  AgentProjectSearchResult,
+  AgentProjectStoredTransaction,
+} from '../types/agent-port.js'
+import type { ProjectChangeRecord, ProjectChangeRecordInput } from '../types/change-feed.js'
 import type { EvidencePack } from '../types/context.js'
-import type { ApplyEditInput, PreparedPatch, PrepareEditInput, RollbackInput, RollbackResult } from '../types/edit.js'
-import type { FixInput, FixResult,ProjectFixContext } from '../types/fix.js'
-import type { HookContext,HookEvent } from '../types/hook.js'
-import type { FileStatInput, FileStatResult, ObserveInput, ReadInput, SearchInput } from '../types/io.js'
+import type {
+  ApplyEditInput,
+  PreparedPatch,
+  PrepareEditInput,
+  RollbackInput,
+  RollbackResult,
+} from '../types/edit.js'
+import type { FixInput, FixResult, ProjectFixContext } from '../types/fix.js'
+import type { HookContext, HookEvent } from '../types/hook.js'
+import type {
+  FileStatInput,
+  FileStatResult,
+  ObserveInput,
+  ReadInput,
+  SearchInput,
+} from '../types/io.js'
 import type { PatchStrategyInput } from '../types/patch.js'
 import type { PipelineContext, PipelinePhase } from '../types/pipeline.js'
 import type { CorePolicy } from '../types/policy.js'
 import type { ProjectCodeIndexQuery, ProjectCodeQuery } from '../types/project.js'
-import type { CommandRunInput, CommandRunResult,FileFilterInput, ProjectIntelligenceLocation, ProjectIntelligenceSymbol } from '../types/provider.js'
+import type {
+  CommandRunInput,
+  CommandRunResult,
+  FileFilterInput,
+  ProjectIntelligenceLocation,
+  ProjectIntelligenceSymbol,
+} from '../types/provider.js'
 import type { FileSnapshot } from '../types/snapshot.js'
 import type { ResolveTargetInput, ResolveTargetResult } from '../types/target.js'
-import type { ProjectValidationContext,ValidateInput, ValidationResult } from '../types/validation.js'
+import type {
+  ProjectValidationContext,
+  ValidateInput,
+  ValidationResult,
+} from '../types/validation.js'
 
 import type { ProjectChangeFeed, ProjectKernel } from './provides.js'
 
@@ -75,9 +113,7 @@ export interface AgentProjectKernelPort {
    * 按事务号取内核里的事务（补丁、改动文件、差量、状态、提交时间），调用方只读；不存在或已被淘汰时返回 undefined。
    * `velaros:project` 的 edit 提交后凭它取最终补丁，inspect、undo 凭它核对回执。
    */
-  getTransaction(
-    transactionId: string
-  ): AgentProjectStoredTransaction | undefined
+  getTransaction(transactionId: string): AgentProjectStoredTransaction | undefined
   /**
    * 提交一个事务：先跑校验（不过抛 VALIDATION_FAILED），再锁住改动的文件写盘；文件在准备之后被外部改过时先试着 rebase，
    * 接不上抛 BASE_REVISION_MISMATCH。多个文件要么全部写入、要么全部还原；新建的文件在 git 仓库里挂上 intent-to-add。返回每个文件提交前后的 revision。
@@ -111,71 +147,74 @@ export interface ProjectChangeFeedWriter extends ProjectChangeFeed {
  */
 export interface PipelineStage<I = any, O = any> {
   /** 这一段的标识；内核不按它去重。 */
-  id: string;
+  id: string
   /** 挂在哪个阶段。 */
-  phase: PipelinePhase;
+  phase: PipelinePhase
   /** 同一阶段里的先后，小的先跑；缺省 0，相同时按登记顺序。 */
-  order?: number;
+  order?: number
   /** 改写输入并返回改写后的值（可以原样返回）；ctx 里有内核实例和阶段名。抛错时这次请求失败。 */
-  run(input: I, ctx: PipelineContext): Promise<O> | O;
+  run(input: I, ctx: PipelineContext): Promise<O> | O
 }
 
 /** 生命周期 hook：内核在读、搜索、解析目标、准备编辑、提交、校验、撤销的前后发出事件，同一事件的 hook 按登记顺序依次执行。 */
 export interface ProjectHook {
   /** 这个 hook 的标识；内核不按它去重。 */
-  id: string;
+  id: string
   /** 订阅的事件：Read、Search、Resolve、PrepareEdit、ApplyEdit、Validate、Rollback 各有 Before 与 After 两个。 */
-  event: HookEvent;
+  event: HookEvent
   /**
    * 事件发生时执行，ctx 里有事件名、内核实例与事件数据（Before 事件是请求，After 事件是结果）。
    * Before 事件里抛错，这次操作就不做了；After 事件里抛错时操作已经完成（比如文件已经写入），调用仍以这个错误失败。
    */
-  run(ctx: HookContext): Promise<void> | void;
+  run(ctx: HookContext): Promise<void> | void
 }
 
 /** 修复器：在未提交事务的暂存内容上自动修正问题（格式、导入等），修出的内容由内核并进事务。经 fixTransaction 触发，按登记顺序逐个试。 */
 export interface ProjectFixer {
   /** 修复器标识；FixInput.checks 按它挑选，诊断的来源也用它命名。 */
-  id: string;
+  id: string
   /** 运行潜在昂贵的 fix 之前的低成本适用性检查，返回 false 就跳过；抛错记成一条诊断，不影响其他修复器。 */
-  canFix(input: FixInput, ctx: ProjectFixContext): Promise<boolean> | boolean;
+  canFix(input: FixInput, ctx: ProjectFixContext): Promise<boolean> | boolean
   /**
    * 修复：经 ctx.readFile 读暂存内容（没暂存的读工作区），返回修好的整文件内容（fixes）、改没改、诊断；改动只经返回值交回，由内核并进事务。
    * 抛错记成一条诊断，这次修复算失败。
    */
-  fix(input: FixInput, ctx: ProjectFixContext): Promise<FixResult> | FixResult;
+  fix(input: FixInput, ctx: ProjectFixContext): Promise<FixResult> | FixResult
 }
 
 /** 校验器：提交之前在事务的暂存内容上（不带事务时在当前工作区上）做检查，有一项不过事务就不能提交。按登记顺序逐个跑。 */
 export interface ProjectValidator {
   /** 校验器标识；ValidateInput.checks 可按它挑选，结果里的检查项也以它命名。 */
-  id: string;
+  id: string
   /** 除 validator id 外可用于 ValidateInput.checks 选择本 validator 的稳定别名。 */
-  readonly checkIds?: readonly string[];
+  readonly checkIds?: readonly string[]
   /** 快速过滤器，让 registry 跳过与本次请求无关的 validator。 */
-  canValidate(input: ValidateInput): boolean;
+  canValidate(input: ValidateInput): boolean
   /** 依赖指纹：必须覆盖结果依赖的源码、配置和环境；同一指纹下通过过的结果直接复用。缺省或返回 undefined 时每次都跑。 */
-  cacheKey?(input: ValidateInput, context: ProjectValidationContext): Promise<string | undefined> | string | undefined;
+  cacheKey?(
+    input: ValidateInput,
+    context: ProjectValidationContext
+  ): Promise<string | undefined> | string | undefined
   /**
    * 做检查：经 context.readFile 读暂存内容（没暂存的读工作区），返回是否通过、诊断与检查项；有 error 级诊断即算不通过。
    * 抛错时这次 validate 直接失败，提交也随之失败。
    */
   validate(
     input: ValidateInput,
-    context: ProjectValidationContext,
-  ): Promise<ValidationResult> | ValidationResult;
+    context: ProjectValidationContext
+  ): Promise<ValidationResult> | ValidationResult
 }
 
 /** 补丁策略：把一个编辑意图变成具体补丁。文件适配器都不接手的意图，交给 canHandle 为真的策略里 priority 最高的那个。 */
 export interface PatchStrategy {
   /** 策略的标识；内核不按它去重。 */
-  id: string;
+  id: string
   /** 多个 strategy 都能处理同一 intent 时，priority 更高者优先。 */
-  priority?: number;
+  priority?: number
   /** 能不能处理这个意图（按操作类型、目标文件判断）；一个策略都不能处理时 prepareEdit 报 NOT_SUPPORTED。 */
-  canHandle(input: PatchStrategyInput): boolean;
+  canHandle(input: PatchStrategyInput): boolean
   /** 生成补丁：基于 input.snapshot 算出新内容与差量，不碰磁盘；定位失败时抛带 reason 错误码的错误。 */
-  prepare(input: PatchStrategyInput): Promise<PreparedPatch[]> | PreparedPatch[];
+  prepare(input: PatchStrategyInput): Promise<PreparedPatch[]> | PreparedPatch[]
 }
 
 /**
@@ -212,33 +251,36 @@ export interface FileAdapterFactory {
   /** 创建 adapter 前对每个文件快照执行的快速适配性检查。 */
   canHandle(snapshot: FileSnapshot): Promise<boolean> | boolean
   /** 为这个快照新建适配器；kernel 是当前内核实例，适配器要读别的文件时用它。 */
-  create(input: { snapshot: FileSnapshot; kernel: ProjectKernel }): Promise<FileAdapter> | FileAdapter
+  create(input: {
+    snapshot: FileSnapshot
+    kernel: ProjectKernel
+  }): Promise<FileAdapter> | FileAdapter
 }
 
 /** 可安装的扩展点集合，用于注册 adapter、strategy、validator、hook 和 fixer。建内核时经 `CreateProjectKernelOptions.plugins` 给，按顺序装在内置核心插件之后。 */
 export interface ProjectPlugin {
   /** 插件名；同名插件在一个内核里只装一次，重复的直接跳过。 */
-  name: string;
+  name: string
   /** 插件版本；内核不读它。 */
-  version: string;
+  version: string
   /** 安装：经 ctx 登记扩展。抛错时插件不算装上（同名的以后还能再装），但抛错之前已经登记的扩展不会撤回；建内核随之失败。 */
-  setup(ctx: ProjectPluginContext): Promise<void> | void;
+  setup(ctx: ProjectPluginContext): Promise<void> | void
 }
 
 /** 插件安装时拿到的登记入口，由内核实现：插件拿到的是从内核上绑定下来的这六个方法，每个把一件扩展登记进正在安装这个插件的内核。 */
 export interface ProjectPluginContext {
   /** 登记文件适配器工厂；同一个 id 只认第一次。 */
-  registerAdapterFactory(factory: FileAdapterFactory): void;
+  registerAdapterFactory(factory: FileAdapterFactory): void
   /** 登记补丁策略，按 priority 重新排序。 */
-  registerPatchStrategy(strategy: PatchStrategy): void;
+  registerPatchStrategy(strategy: PatchStrategy): void
   /** 登记校验器；此后每次 validate 与提交前的校验都会问它。 */
-  registerValidator(validator: ProjectValidator): void;
+  registerValidator(validator: ProjectValidator): void
   /** 登记修复器；此后 fixTransaction 会试它。 */
-  registerFixer(fixer: ProjectFixer): void;
+  registerFixer(fixer: ProjectFixer): void
   /** 登记生命周期 hook，和同一事件的其他 hook 按登记顺序执行。 */
-  registerHook(hook: ProjectHook): void;
+  registerHook(hook: ProjectHook): void
   /** 登记管线阶段，按 order 重新排序。 */
-  registerPipelineStage(stage: PipelineStage): void;
+  registerPipelineStage(stage: PipelineStage): void
 }
 
 // ── 内核的宿主能力 ──────────────────────────────────────────────
@@ -246,20 +288,17 @@ export interface ProjectPluginContext {
 /** 代码智能后端（例如宿主的 CodeGraph 索引）：给了而且对当前项目启用时，内核列符号、按符号名解析目标都先问它，出错或没结果再回退本地适配器。 */
 export interface ProjectCodeIntelligenceHost {
   /** 这个项目根是否启用了代码智能；返回 false 时内核完全不问这个后端。 */
-  isProjectEnabled(projectRoot: string): boolean;
+  isProjectEnabled(projectRoot: string): boolean
   /** 列一个文件（path 相对项目根）里的符号，行列从 1 起算（和项目里的行号一致）；抛错或返回空时内核改用本地适配器解析。 */
-  listSymbols(input: {
-    projectRoot: string;
-    path: string;
-  }): Promise<ProjectIntelligenceSymbol[]>;
+  listSymbols(input: { projectRoot: string; path: string }): Promise<ProjectIntelligenceSymbol[]>
   /** 按文件、行列与符号名查定义位置，内核把第一个结果当作解析出的目标；抛错或没有结果时回退适配器。 */
   getDefinition(input: {
-    projectRoot: string;
-    path: string;
-    line: number;
-    column: number;
-    symbol?: string;
-  }): Promise<ProjectIntelligenceLocation[]>;
+    projectRoot: string
+    path: string
+    line: number
+    column: number
+    symbol?: string
+  }): Promise<ProjectIntelligenceLocation[]>
 }
 
 /** 宿主提供的列举过滤器：只管列举、扫描与搜索时哪些条目不出现，点名读写从不问它。 */
@@ -268,27 +307,29 @@ export interface FileFilterProvider {
    * 一个路径（相对项目根）在列举、扫描、搜索时出不出现：返回 false 的条目不出现在结果里（按路径与它解开符号链接后的真实路径各问一次）。
    * 点名的路径（读、写、stat、点名的列举或搜索起点及其下面的条目）不问它，照常能读能写。
    */
-  shouldInclude(input: FileFilterInput): Promise<boolean> | boolean;
+  shouldInclude(input: FileFilterInput): Promise<boolean> | boolean
 }
 
 /** 证据包后端：内核建证据包（buildEvidencePack）时让宿主补充元数据，并在交出去之前做最后清洗。 */
 export interface ContextProvider {
   /** 为 evidence pack 补充宿主侧元数据：返回的对象挂在 pack.metadata.contextProvider 下，返回非对象则忽略。 */
-  buildEvidence?(input: EvidencePack): Promise<Record<string, unknown>> | Record<string, unknown> | undefined;
+  buildEvidence?(
+    input: EvidencePack
+  ): Promise<Record<string, unknown>> | Record<string, unknown> | undefined
   /** evidence 离开 project 边界前的最后清洗步骤：返回证据包就整个替换（没带 evidenceId 时沿用原来的），返回非对象则不改。 */
-  sanitize?(input: EvidencePack): Promise<EvidencePack> | EvidencePack | undefined;
+  sanitize?(input: EvidencePack): Promise<EvidencePack> | EvidencePack | undefined
 }
 
 /** 日志后端：内核把不影响结果的附带失败（变更记录写失败、事务状态二次落盘失败、git 索引维护失败）记到这里；校验器与修复器也经 providers 拿到它。 */
 export interface LoggerProvider {
   /** 调试级日志；内核自己不写，留给插件。 */
-  debug?(message: string, data?: any): void;
+  debug?(message: string, data?: any): void
   /** 信息级日志；内核自己不写，留给插件。 */
-  info?(message: string, data?: any): void;
+  info?(message: string, data?: any): void
   /** 告警：内核写的 message 是以 project. 开头的事件名，data 是事务号、错误等详情。 */
-  warn?(message: string, data?: any): void;
+  warn?(message: string, data?: any): void
   /** 错误级日志；内核自己不写，留给插件。 */
-  error?(message: string, data?: any): void;
+  error?(message: string, data?: any): void
 }
 
 /** 子进程后端：内核跑 ripgrep、git，命令型校验器与修复器跑 prettier、eslint、tsc，都经它。没给时内核用自带的 Node 实现。 */
@@ -297,29 +338,33 @@ export interface CommandProvider {
    * 受控子进程 runner：跑一个程序（命令名加参数数组，不经 shell；可给 cwd、超时、环境变量、stdin），返回退出码与输出。非零退出与超时照常返回、不抛错；
    * 程序不存在时在 toolRequirements 里报 missing-command（退出码按惯例给 127），ripgrep 搜索据此改用逐文件扫描。
    */
-  run(input: CommandRunInput): Promise<CommandRunResult> | CommandRunResult;
+  run(input: CommandRunInput): Promise<CommandRunResult> | CommandRunResult
 }
 
 /** 遥测后端：内核每跑完一次批处理（runBatch）发一条 project.batch 事件，属性是成败与工作池指标。 */
 export interface TelemetryProvider {
   /** 发一条事件（名字、属性、时间戳）；内核不等它、也不处理它的失败，返回的 Promise 不要拒绝。 */
-  emit?(event: { name: string; properties?: Record<string, any>; timestamp?: number }): void | Promise<void>;
+  emit?(event: {
+    name: string
+    properties?: Record<string, any>
+    timestamp?: number
+  }): void | Promise<void>
 }
 
 /** 内核的可选宿主能力，建内核时经 `CreateProjectKernelOptions.providers` 一次给齐；每一项都可以不给，不给时按各项说的缺省处理。 */
 export interface ProjectProviders {
   /** 列举过滤：列举、扫描、搜索时哪些条目不出现；不给就只按 .gitignore 与调用方的 exclude。 */
-  fileFilter?: FileFilterProvider;
+  fileFilter?: FileFilterProvider
   /** 证据包的补充与清洗；不给就用内核建的原样。 */
-  context?: ContextProvider;
+  context?: ContextProvider
   /** 日志；不给就不记附带失败。 */
-  logger?: LoggerProvider;
+  logger?: LoggerProvider
   /** 子进程：ripgrep、git、命令型校验器经它跑；不给就用内核自带的 Node 实现。 */
-  command?: CommandProvider;
+  command?: CommandProvider
   /** 遥测；不给就不发。 */
-  telemetry?: TelemetryProvider;
+  telemetry?: TelemetryProvider
   /** 可选代码智能后端（由宿主注入，例如 CodeGraph MCP）：列符号、按符号名解析目标时先问它；不给就只用本地适配器。 */
-  codeIntelligence?: ProjectCodeIntelligenceHost;
+  codeIntelligence?: ProjectCodeIntelligenceHost
 }
 
 // ── 建内核 ──────────────────────────────────────────────────────

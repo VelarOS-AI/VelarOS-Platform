@@ -1,7 +1,12 @@
-import {isNull,toNullable} from '@velaros-ai/core'
+import { isNull, toNullable } from '@velaros-ai/core'
 import type { ModuleBinding, OperationRuntimeApi } from '@velaros-ai/kernel'
 
-import type { CodeCapabilityCall, CodeCapabilityOutcome, CodeCapabilityPort, KernelScriptSessionOptions } from '../contract/requires.js'
+import type {
+  CodeCapabilityCall,
+  CodeCapabilityOutcome,
+  CodeCapabilityPort,
+  KernelScriptSessionOptions,
+} from '../contract/requires.js'
 import { shapeOperationFailure } from '../utils/capability-failure.js'
 
 export class KernelInvocationPort implements CodeCapabilityPort {
@@ -34,14 +39,40 @@ export class KernelInvocationPort implements CodeCapabilityPort {
     this.operations = Object.freeze(operations)
   }
 
-  public listOperations(): Readonly<Record<string, readonly string[]>> { return this.operations }
+  public listOperations(): Readonly<Record<string, readonly string[]>> {
+    return this.operations
+  }
 
-  public async invoke(call: CodeCapabilityCall, signal?: AbortSignal): Promise<CodeCapabilityOutcome> {
+  public async invoke(
+    call: CodeCapabilityCall,
+    signal?: AbortSignal
+  ): Promise<CodeCapabilityOutcome> {
     try {
       const binding = this.bindings.get(call.namespace)
       if (!binding) throw new Error(`本次程序没有模块绑定 ${call.namespace}`)
-      const receipt = await this.runtime.invoke({ mode:this.mode, id: `${this.executionId}:${++this.calls}`, sessionId: this.sessionId, executionId: this.executionId, binding, operation: call.operation, input: toNullable(call.input) }, signal)
-      return receipt.error ? { attachments:receipt.attachments, error: { code: receipt.error.code, message: `${receipt.error.message}（调用 ${receipt.invocation.id}，效果 ${receipt.effect}）` } } : { value: receipt.value, attachments:receipt.attachments }
-    } catch (error) { return { error: shapeOperationFailure(error) } }
+      const receipt = await this.runtime.invoke(
+        {
+          mode: this.mode,
+          id: `${this.executionId}:${++this.calls}`,
+          sessionId: this.sessionId,
+          executionId: this.executionId,
+          binding,
+          operation: call.operation,
+          input: toNullable(call.input),
+        },
+        signal
+      )
+      return receipt.error
+        ? {
+            attachments: receipt.attachments,
+            error: {
+              code: receipt.error.code,
+              message: `${receipt.error.message}（调用 ${receipt.invocation.id}，效果 ${receipt.effect}）`,
+            },
+          }
+        : { value: receipt.value, attachments: receipt.attachments }
+    } catch (error) {
+      return { error: shapeOperationFailure(error) }
+    }
   }
 }

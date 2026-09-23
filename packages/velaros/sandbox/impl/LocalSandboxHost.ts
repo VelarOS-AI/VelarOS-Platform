@@ -16,8 +16,32 @@ import { createConfinedShellRunner } from '@velaros-ai/velaros/shell/local'
 import { RehearsalSandboxLimits } from '../contract/constants.js'
 import type { LocalSandboxHostOptions, RehearsalSandboxHostPort } from '../contract/requires.js'
 import type { LocalSandboxEntry, SandboxManifest } from '../types/mirror.js'
-import type { SandboxApplyOptions, SandboxApplyResult, SandboxCommandOutcome, SandboxCreateOptions, SandboxDiff, SandboxDiffOptions, SandboxDiscardResult, SandboxRecord, SandboxRunOptions } from '../types/rehearsal-sandbox.js'
-import { applyMirrorChanges, diffMirror, disableGitPush, isPathInsideRoot, mirrorTree, newSandboxId, readSandboxManifest, removeSandboxDirectory, sandboxBaseDirectory, sandboxChangedSinceDiff, sandboxDirectoryOf, scanTree, stampOfEntry } from '../utils/mirror.js'
+import type {
+  SandboxApplyOptions,
+  SandboxApplyResult,
+  SandboxCommandOutcome,
+  SandboxCreateOptions,
+  SandboxDiff,
+  SandboxDiffOptions,
+  SandboxDiscardResult,
+  SandboxRecord,
+  SandboxRunOptions,
+} from '../types/rehearsal-sandbox.js'
+import {
+  applyMirrorChanges,
+  diffMirror,
+  disableGitPush,
+  isPathInsideRoot,
+  mirrorTree,
+  newSandboxId,
+  readSandboxManifest,
+  removeSandboxDirectory,
+  sandboxBaseDirectory,
+  sandboxChangedSinceDiff,
+  sandboxDirectoryOf,
+  scanTree,
+  stampOfEntry,
+} from '../utils/mirror.js'
 import { SandboxTuning } from '../utils/tuning.js'
 
 import { rehearsalSandboxRules } from './RehearsalSandboxRules.js'
@@ -58,17 +82,27 @@ export class LocalSandboxHost implements LocalSandboxHostApi {
   public async createSandbox(options: SandboxCreateOptions = {}): Promise<SandboxRecord> {
     const source = options.source
     // 空间的 resolveSource 已经把源目录解析成绝对路径；这里不替空间猜默认目录，也不拿进程的工作目录去补相对路径。
-    if (isUndefined(source) || !isAbsolute(source)) throw new AppError('VALIDATION', '建沙箱要给源目录的绝对路径（空间的 resolveSource 解析好的那个）')
+    if (isUndefined(source) || !isAbsolute(source))
+      throw new AppError(
+        'VALIDATION',
+        '建沙箱要给源目录的绝对路径（空间的 resolveSource 解析好的那个）'
+      )
     const network = !!options.network
     const ignored = options.ignored ?? 'link'
-    if (this.entries.size >= RehearsalSandboxLimits.sandboxes) throw new AppError('VALIDATION', `同时最多 ${RehearsalSandboxLimits.sandboxes} 个沙箱；先 discard 一个`)
+    if (this.entries.size >= RehearsalSandboxLimits.sandboxes)
+      throw new AppError(
+        'VALIDATION',
+        `同时最多 ${RehearsalSandboxLimits.sandboxes} 个沙箱；先 discard 一个`
+      )
     const realSource = await resolveRealPath(source)
     const sourceStats = await stat(realSource).catch(() => null)
     if (!sourceStats?.isDirectory()) throw new AppError('NOT_FOUND', `沙箱的源不是目录：${source}`)
     await mkdir(this.baseDir, { recursive: true, mode: 0o700 })
     const realBase = await resolveRealPath(this.baseDir)
-    if (isPathInsideRoot(realSource, realBase)) throw new AppError('VALIDATION', '沙箱的源不能在沙箱基目录之内')
-    if (isPathInsideRoot(realBase, realSource)) throw new AppError('VALIDATION', '沙箱的源包含了沙箱基目录；换一个范围小一点的目录')
+    if (isPathInsideRoot(realSource, realBase))
+      throw new AppError('VALIDATION', '沙箱的源不能在沙箱基目录之内')
+    if (isPathInsideRoot(realBase, realSource))
+      throw new AppError('VALIDATION', '沙箱的源包含了沙箱基目录；换一个范围小一点的目录')
 
     const id = newSandboxId()
     const directory = join(this.baseDir, id)
@@ -83,21 +117,44 @@ export class LocalSandboxHost implements LocalSandboxHostApi {
       const ignorePolicy = createIgnorePolicy(realSource, { rulesFrom: 'repository' })
       const mirrored = await mirrorTree(realSource, root, {
         ignored,
-        shouldSkip: (absolutePath, isDirectory) => ignorePolicy.shouldSkip(absolutePath, isDirectory),
+        shouldSkip: (absolutePath, isDirectory) =>
+          ignorePolicy.shouldSkip(absolutePath, isDirectory),
         limits: { files: RehearsalSandboxLimits.files, bytes: RehearsalSandboxLimits.bytes },
       })
       // 剪断镜像里每个仓库的推送；改过的配置文件在清单里记改完的印记，刚建好的沙箱差量才是干净的。
-      for (const path of await disableGitPush(root, mirrored.gitConfigs)) mirrored.mirror[path] = stampOfEntry(await lstat(join(root, path)))
+      for (const path of await disableGitPush(root, mirrored.gitConfigs))
+        mirrored.mirror[path] = stampOfEntry(await lstat(join(root, path)))
       const record: SandboxRecord = {
-        id, root, source: realSource, createdAt: Date.now(), network, ignored,
-        fileCount: Object.keys(mirrored.files).length, bytes: mirrored.bytes, linkedDirectories: mirrored.linkedDirectories,
-        git: mirrored.gitConfigs.includes('.git/config'), detachedGitLinks: mirrored.detachedGitLinks,
+        id,
+        root,
+        source: realSource,
+        createdAt: Date.now(),
+        network,
+        ignored,
+        fileCount: Object.keys(mirrored.files).length,
+        bytes: mirrored.bytes,
+        linkedDirectories: mirrored.linkedDirectories,
+        git: mirrored.gitConfigs.includes('.git/config'),
+        detachedGitLinks: mirrored.detachedGitLinks,
       }
-      const manifest: SandboxManifest = { version: 1, record, files: mirrored.files, mirror: mirrored.mirror }
+      const manifest: SandboxManifest = {
+        version: 1,
+        record,
+        files: mirrored.files,
+        mirror: mirrored.mirror,
+      }
       // 清单原子落盘：写到一半崩溃不会留下读不出来的清单。
-      await textFileIo.writeBytes(join(directory, 'manifest.json'), Buffer.from(JSON.stringify(manifest)))
+      await textFileIo.writeBytes(
+        join(directory, 'manifest.json'),
+        Buffer.from(JSON.stringify(manifest))
+      )
       this.entries.set(id, { record, directory, runner })
-      log.info('sandbox created', { id, source: realSource, files: record.fileCount, bytes: record.bytes })
+      log.info('sandbox created', {
+        id,
+        source: realSource,
+        files: record.fileCount,
+        bytes: record.bytes,
+      })
       return record
     } catch (error) {
       await removeSandboxDirectory(directory)
@@ -109,7 +166,10 @@ export class LocalSandboxHost implements LocalSandboxHostApi {
     const entry = await this.resolveEntry(options.sandboxId)
     const manifest = await readSandboxManifest(entry.directory)
     const current = await scanTree(entry.record.root)
-    const changes = await diffMirror(manifest, current, { paths: options.paths, textDiffs: options.textDiffs })
+    const changes = await diffMirror(manifest, current, {
+      paths: options.paths,
+      textDiffs: options.textDiffs,
+    })
     return { sandboxId: entry.record.id, source: entry.record.source, ...changes }
   }
 
@@ -117,15 +177,31 @@ export class LocalSandboxHost implements LocalSandboxHostApi {
     const entry = await this.resolveEntry(options.sandboxId)
     const manifest = await readSandboxManifest(entry.directory)
     // 落回按完整的三列算，不附文本差量。
-    const changes = await diffMirror(manifest, await scanTree(entry.record.root), { textDiffs: false })
+    const changes = await diffMirror(manifest, await scanTree(entry.record.root), {
+      textDiffs: false,
+    })
     // 落回前核对的那份差量和现在的对不上（核对之后镜像又被改过）：整批不落，让调用方重新 diff 再落。
-    if (isPresent(options.fingerprint) && options.fingerprint !== changes.fingerprint) throw sandboxChangedSinceDiff()
+    if (isPresent(options.fingerprint) && options.fingerprint !== changes.fingerprint)
+      throw sandboxChangedSinceDiff()
     const selection = rehearsalSandboxRules.select(changes, options.paths)
-    if (!isEmpty(selection.unknown)) throw new AppError('VALIDATION', `这些路径在沙箱里没有变化：${selection.unknown.slice(0, SandboxTuning.listedPaths).join('、')}`)
+    if (!isEmpty(selection.unknown))
+      throw new AppError(
+        'VALIDATION',
+        `这些路径在沙箱里没有变化：${selection.unknown.slice(0, SandboxTuning.listedPaths).join('、')}`
+      )
     const applied = await applyMirrorChanges(manifest, selection)
-    log.info('sandbox applied', { id: entry.record.id, created: applied.created.length, modified: applied.modified.length, deleted: applied.deleted.length })
+    log.info('sandbox applied', {
+      id: entry.record.id,
+      created: applied.created.length,
+      modified: applied.modified.length,
+      deleted: applied.deleted.length,
+    })
     // .git 里的变化差量阶段就已经只汇总不列出，所以这里按差量的 gitChanged 如实报「没落」。
-    return { sandboxId: entry.record.id, ...applied, skippedGit: applied.skippedGit || changes.gitChanged }
+    return {
+      sandboxId: entry.record.id,
+      ...applied,
+      skippedGit: applied.skippedGit || changes.gitChanged,
+    }
   }
 
   public async discardSandbox(sandboxId: string): Promise<SandboxDiscardResult> {
@@ -141,11 +217,26 @@ export class LocalSandboxHost implements LocalSandboxHostApi {
     return { sandboxId, removed: true }
   }
 
-  public async runInSandbox(options: SandboxRunOptions, abortSignal?: AbortSignal): Promise<SandboxCommandOutcome> {
+  public async runInSandbox(
+    options: SandboxRunOptions,
+    abortSignal?: AbortSignal
+  ): Promise<SandboxCommandOutcome> {
     // 按 id 取登记项：没登记的从清单重新登记；清单读不出来就报错，绝不退回没有约束的执行器。
     const entry = await this.resolveEntry(options.sandboxId)
-    const result = await entry.runner.run(options.command, { timeoutMs: options.timeoutMs, maxOutputChars: options.maxOutputChars }, abortSignal)
-    return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, durationMs: result.durationMs, timedOut: result.timedOut, truncated: result.truncated, success: result.success }
+    const result = await entry.runner.run(
+      options.command,
+      { timeoutMs: options.timeoutMs, maxOutputChars: options.maxOutputChars },
+      abortSignal
+    )
+    return {
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      durationMs: result.durationMs,
+      timedOut: result.timedOut,
+      truncated: result.truncated,
+      success: result.success,
+    }
   }
 
   public listSandboxes(): SandboxRecord[] {
@@ -158,7 +249,13 @@ export class LocalSandboxHost implements LocalSandboxHostApi {
 
   /** 给一个沙箱建专属的受约束执行器：约束钉死在镜像根，临时目录环境变量指进沙箱，git 不许交互式要口令；没有约束后端就抛错。 */
   private createRunner(root: string, temp: string, network: boolean): LocalSandboxEntry['runner'] {
-    return createConfinedShellRunner({ root, tempDir: temp, network, platform: this.options.platform, confinementProvider: this.options.confinementProvider })
+    return createConfinedShellRunner({
+      root,
+      tempDir: temp,
+      network,
+      platform: this.options.platform,
+      confinementProvider: this.options.confinementProvider,
+    })
   }
 
   /**
@@ -185,9 +282,12 @@ export class LocalSandboxHost implements LocalSandboxHostApi {
     const root = join(directory, 'tree')
     const temp = join(directory, 'tmp')
     await mkdir(temp, { recursive: true })
-    const entry: LocalSandboxEntry = { record: { ...manifest.record, root }, directory, runner: this.createRunner(root, temp, manifest.record.network) }
+    const entry: LocalSandboxEntry = {
+      record: { ...manifest.record, root },
+      directory,
+      runner: this.createRunner(root, temp, manifest.record.network),
+    }
     this.entries.set(sandboxId, entry)
     return entry
   }
-
 }

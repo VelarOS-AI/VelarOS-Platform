@@ -1,7 +1,14 @@
 import { isEmpty, isNotNull } from '@velaros-ai/core'
 
-import type { TurnContextDelta, TurnContextSourceId, TurnContextSourcePeekInput } from '../types/activity.js'
-import type { TurnContextLedgerAppendInput, TurnContextLedgerPeekResult } from '../types/activity.js'
+import type {
+  TurnContextDelta,
+  TurnContextSourceId,
+  TurnContextSourcePeekInput,
+} from '../types/activity.js'
+import type {
+  TurnContextLedgerAppendInput,
+  TurnContextLedgerPeekResult,
+} from '../types/activity.js'
 
 /** 会话活动记录的唯一访问接口。 */
 export interface TurnContextLedgerApi {
@@ -12,7 +19,9 @@ export interface TurnContextLedgerApi {
   /** 状态型 source 专用：先清空整本账，再记这一条，永远只留最新的一份事实。刻意不动 `droppedBeforeSeq`——容量淘汰是「你漏看了」要报缺口，取代是「那条已经不成立」，消费方本来就不该再看到它。 */
   replaceLatest(input: TurnContextLedgerAppendInput): TurnContextDelta
   /** 取消费方还没看过的那批 delta：`afterSeq` 是它上次消费到的位置，`generation` 是它手里的代次。代次对不上时不回放任何旧 delta，只交出当前基底让它重新对齐。纯读，不改账本状态。 */
-  peek(input: Pick<TurnContextSourcePeekInput, 'afterSeq' | 'generation'>): TurnContextLedgerPeekResult
+  peek(
+    input: Pick<TurnContextSourcePeekInput, 'afterSeq' | 'generation'>
+  ): TurnContextLedgerPeekResult
 }
 
 /** 进程代次：重启后与持久化旧 cursor 不匹配，消费方不回放旧 delta 只重发 anchors。 */
@@ -41,7 +50,7 @@ export class TurnContextLedger implements TurnContextLedgerApi {
   constructor(
     private readonly sourceId: TurnContextSourceId,
     private readonly maxEntries: number,
-    public readonly generation: string = crypto.randomUUID(),
+    public readonly generation: string = crypto.randomUUID()
   ) {}
 
   public append(input: TurnContextLedgerAppendInput): TurnContextDelta {
@@ -86,12 +95,15 @@ export class TurnContextLedger implements TurnContextLedgerApi {
     return this.append(input)
   }
 
-  public peek(input: Pick<TurnContextSourcePeekInput, 'afterSeq' | 'generation'>): TurnContextLedgerPeekResult {
+  public peek(
+    input: Pick<TurnContextSourcePeekInput, 'afterSeq' | 'generation'>
+  ): TurnContextLedgerPeekResult {
     const tailSeq = this.nextSeq - 1
     const headSeq = !isEmpty(this.items) ? this.items[0]!.seq : this.nextSeq
 
     // 代次不匹配（重启后持久化旧 cursor）：不回放旧 delta，只交出当前基底。
-    if (isNotNull(input.generation) && input.generation !== this.generation) return {
+    if (isNotNull(input.generation) && input.generation !== this.generation)
+      return {
         generation: this.generation,
         headSeq,
         tailSeq,
@@ -114,4 +126,3 @@ export class TurnContextLedger implements TurnContextLedgerApi {
 
 /** 单条回合上下文账本的条目上限，值在 `AgentTuning.records.turnContextLedgerMaxEntries`。 */
 /** 最多同时为多少个会话保留账本，值在 `AgentTuning.records.turnContextMaxSessions`。 */
-

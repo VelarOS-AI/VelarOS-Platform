@@ -14,7 +14,11 @@ import type {
   CdpTargetAttachedEvent,
   CdpTargetDetachedEvent,
 } from '../../types/cdp.js'
-import { cdpFrameTreeOrigin, flattenCdpFrameTree, readRuntimeEvaluateValue } from '../../utils/cdp/driver'
+import {
+  cdpFrameTreeOrigin,
+  flattenCdpFrameTree,
+  readRuntimeEvaluateValue,
+} from '../../utils/cdp/driver'
 
 /**
  * 外部浏览器页面的框架，含跨进程的 iframe：列框架树、在某个子框架里跑脚本。
@@ -46,16 +50,30 @@ export class CdpFrameSessions implements CdpFrameSessionsApi {
     await this.ensureAttached()
     const root = await this.transport.send<CdpPageGetFrameTreeResponse>('Page.getFrameTree')
     const topOrigin = cdpFrameTreeOrigin(root.frameTree)
-    const frames: CdpSessionFrame[] = flattenCdpFrameTree(root.frameTree).map((info, index) => ({ info, session: null, sessionRoot: index === 0 }))
+    const frames: CdpSessionFrame[] = flattenCdpFrameTree(root.frameTree).map((info, index) => ({
+      info,
+      session: null,
+      sessionRoot: index === 0,
+    }))
     for (const session of this.sessions) {
       const tree = await this.readSessionFrameTree(session)
       if (!isNotNull(tree)) continue
-      frames.push(...flattenCdpFrameTree(tree, topOrigin).map((info, index) => ({ info, session, sessionRoot: index === 0 })))
+      frames.push(
+        ...flattenCdpFrameTree(tree, topOrigin).map((info, index) => ({
+          info,
+          session,
+          sessionRoot: index === 0,
+        }))
+      )
     }
     return frames
   }
 
-  public async evaluateInFrame(frame: CdpSessionFrame, script: string, userGesture: boolean): Promise<unknown> {
+  public async evaluateInFrame(
+    frame: CdpSessionFrame,
+    script: string,
+    userGesture: boolean
+  ): Promise<unknown> {
     const session = optionalWhen(isNonBlankString, frame.session)
     if (frame.sessionRoot) {
       const response = await this.transport.send<CdpRuntimeEvaluateResponse>(
@@ -71,7 +89,13 @@ export class CdpFrameSessions implements CdpFrameSessionsApi {
       // 包在同一行里：script 的第一行还是求值源码的第一行，报错时的行号照旧能换算回 script 里的行号。
       const response = await this.transport.send<CdpRuntimeEvaluateResponse>(
         'Runtime.callFunctionOn',
-        { objectId, functionDeclaration: `async function () { return await (${script}\n) }`, awaitPromise: true, returnByValue: true, userGesture },
+        {
+          objectId,
+          functionDeclaration: `async function () { return await (${script}\n) }`,
+          awaitPromise: true,
+          returnByValue: true,
+          userGesture,
+        },
         session
       )
       return readRuntimeEvaluateValue(response)
@@ -91,14 +115,18 @@ export class CdpFrameSessions implements CdpFrameSessionsApi {
   /** 第一次要框架时开自动挂接；开不起来（传输不报事件、浏览器不支持）就只有驱动那条连接上的框架。 */
   private ensureAttached(): Promise<void> {
     this.attaching ??= this.attach().catch((error) => {
-      this.log.debug('跨进程 iframe 的子会话挂不上，框架只列驱动那条连接上的', { error: AppError.from(error).message })
+      this.log.debug('跨进程 iframe 的子会话挂不上，框架只列驱动那条连接上的', {
+        error: AppError.from(error).message,
+      })
     })
     return this.attaching
   }
 
   private async attach(): Promise<void> {
     if (!this.transport.onAnyEvent) return
-    this.unsubscribers.push(this.transport.onAnyEvent((method, params) => this.handleEvent(method, params)))
+    this.unsubscribers.push(
+      this.transport.onAnyEvent((method, params) => this.handleEvent(method, params))
+    )
     await this.autoAttach(undefined)
   }
 
@@ -106,7 +134,12 @@ export class CdpFrameSessions implements CdpFrameSessionsApi {
   private autoAttach(session: Optional<string>): Promise<unknown> {
     return this.transport.send(
       'Target.setAutoAttach',
-      { autoAttach: true, waitForDebuggerOnStart: false, flatten: true, filter: [{ type: 'iframe', exclude: false }] },
+      {
+        autoAttach: true,
+        waitForDebuggerOnStart: false,
+        flatten: true,
+        filter: [{ type: 'iframe', exclude: false }],
+      },
       session
     )
   }
@@ -117,7 +150,9 @@ export class CdpFrameSessions implements CdpFrameSessionsApi {
       if (!isNonBlankString(sessionId) || targetInfo?.type !== 'iframe') return
       this.sessions.add(sessionId)
       void this.autoAttach(sessionId).catch((error) => {
-        this.log.debug('iframe 子会话里再套的 iframe 挂不上', { error: AppError.from(error).message })
+        this.log.debug('iframe 子会话里再套的 iframe 挂不上', {
+          error: AppError.from(error).message,
+        })
       })
       return
     }
@@ -130,21 +165,42 @@ export class CdpFrameSessions implements CdpFrameSessionsApi {
   /** 读一条子会话上的框架树；子会话刚好没了就是 null。 */
   private async readSessionFrameTree(session: string): Promise<unknown> {
     try {
-      const response = await this.transport.send<CdpPageGetFrameTreeResponse>('Page.getFrameTree', {}, session)
+      const response = await this.transport.send<CdpPageGetFrameTreeResponse>(
+        'Page.getFrameTree',
+        {},
+        session
+      )
       return response.frameTree
     } catch (error) {
-      this.log.debug('iframe 子会话的框架树读不到，多半跟着页面没了', { error: AppError.from(error).message })
+      this.log.debug('iframe 子会话的框架树读不到，多半跟着页面没了', {
+        error: AppError.from(error).message,
+      })
       return null
     }
   }
 
   /** 同一进程里的子框架：经它的宿主元素取到它的 document，交回 document 在框架主世界里的对象句柄。 */
-  private async resolveFrameDocument(frame: CdpSessionFrame, session: Optional<string>): Promise<string> {
+  private async resolveFrameDocument(
+    frame: CdpSessionFrame,
+    session: Optional<string>
+  ): Promise<string> {
     const missing = (error?: unknown): AppError =>
-      new AppError(BrowserErrorCodes.frameNotFound, `框架 ${frame.info.id}（${frame.info.url}）已经不在页面里了（页面跳转之后旧 id 作废）：重新 frames()。`, error)
+      new AppError(
+        BrowserErrorCodes.frameNotFound,
+        `框架 ${frame.info.id}（${frame.info.url}）已经不在页面里了（页面跳转之后旧 id 作废）：重新 frames()。`,
+        error
+      )
     try {
-      const owner = await this.transport.send<CdpDomFrameOwnerResponse>('DOM.getFrameOwner', { frameId: frame.info.id }, session)
-      const described = await this.transport.send<CdpDomDescribeNodeResponse>('DOM.describeNode', { backendNodeId: owner.backendNodeId }, session)
+      const owner = await this.transport.send<CdpDomFrameOwnerResponse>(
+        'DOM.getFrameOwner',
+        { frameId: frame.info.id },
+        session
+      )
+      const described = await this.transport.send<CdpDomDescribeNodeResponse>(
+        'DOM.describeNode',
+        { backendNodeId: owner.backendNodeId },
+        session
+      )
       const resolved = await this.transport.send<CdpDomResolveNodeResponse>(
         'DOM.resolveNode',
         { backendNodeId: described.node?.contentDocument?.backendNodeId },

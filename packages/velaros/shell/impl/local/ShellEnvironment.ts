@@ -49,8 +49,10 @@ export class ShellEnvironment implements ShellEnvironmentApi {
     private readonly options: ShellEnvironmentOptions = {},
     private readonly shells: ShellResolverApi = shellResolver
   ) {
-    if (!isUndefined(options.captureTimeoutMs) &&
-      (!Number.isFinite(options.captureTimeoutMs) || options.captureTimeoutMs <= 0))
+    if (
+      !isUndefined(options.captureTimeoutMs) &&
+      (!Number.isFinite(options.captureTimeoutMs) || options.captureTimeoutMs <= 0)
+    )
       throw new AppError('VALIDATION', '登录环境读取超时必须是有限的正数。')
     this.platform = options.platform ?? process.platform
   }
@@ -62,48 +64,67 @@ export class ShellEnvironment implements ShellEnvironmentApi {
     if (this.cached) return { ...this.cached.env }
     if (!this.inflight) {
       const revision = this.revision
-      const loading = this.load().then((snapshot) => {
-        this.controller.signal.throwIfAborted()
-        if (revision === this.revision) this.cached = snapshot
-        return snapshot.env
-      }).finally(() => {
-        if (revision === this.revision) this.inflight = undefined
-      })
+      const loading = this.load()
+        .then((snapshot) => {
+          this.controller.signal.throwIfAborted()
+          if (revision === this.revision) this.cached = snapshot
+          return snapshot.env
+        })
+        .finally(() => {
+          if (revision === this.revision) this.inflight = undefined
+        })
       this.inflight = this.track(loading)
     }
-    return { ...await this.waitForEnvironment(this.inflight, signal) }
+    return { ...(await this.waitForEnvironment(this.inflight, signal)) }
   }
 
   public getShellPath(env?: NodeJS.ProcessEnv): string {
     this.controller.signal.throwIfAborted()
-    return this.shells.resolve({ platform: this.platform, env: env ?? this.cached?.env ?? this.baseEnvironment() }).shellPath
+    return this.shells.resolve({
+      platform: this.platform,
+      env: env ?? this.cached?.env ?? this.baseEnvironment(),
+    }).shellPath
   }
 
   public async resolveShell(): Promise<ResolvedShell> {
     this.controller.signal.throwIfAborted()
     if (!this.resolved) {
       const revision = this.revision
-      const resolving = this.getEnvironment().then((env) =>
-        (revision === this.revision ? this.cached?.shell : undefined) ?? this.shells.resolveReady({
-          platform: this.platform, env, signal: this.controller.signal,
+      const resolving = this.getEnvironment()
+        .then(
+          (env) =>
+            (revision === this.revision ? this.cached?.shell : undefined) ??
+            this.shells.resolveReady({
+              platform: this.platform,
+              env,
+              signal: this.controller.signal,
+            })
+        )
+        .catch((error) => {
+          if (revision === this.revision) this.resolved = undefined
+          throw error
         })
-      ).catch((error) => {
-        if (revision === this.revision) this.resolved = undefined
-        throw error
-      })
       this.resolved = this.track(resolving)
     }
     const shell = await this.resolved
     this.controller.signal.throwIfAborted()
-    return { ...shell, env: { ...shell.env }, recommendation: shell.recommendation ? { ...shell.recommendation } : null }
+    return {
+      ...shell,
+      env: { ...shell.env },
+      recommendation: shell.recommendation ? { ...shell.recommendation } : null,
+    }
   }
 
-  public getRevision(): number { return this.revision }
+  public getRevision(): number {
+    return this.revision
+  }
 
   public subscribe(listener: () => void): () => void {
     this.controller.signal.throwIfAborted()
     this.listeners.add(listener)
-    return () => { this.listeners.delete(listener) }
+    return () => {
+      this.listeners.delete(listener)
+    }
   }
 
   public async refresh(): Promise<NodeJS.ProcessEnv> {
@@ -116,8 +137,11 @@ export class ShellEnvironment implements ShellEnvironmentApi {
     if (revision === this.revision && !this.controller.signal.aborted) {
       for (const listener of [...this.listeners]) {
         if (revision !== this.revision || this.controller.signal.aborted) break
-        try { listener() }
-        catch (error) { Log.tag('ShellEnvironment').warn('environment listener failed', { error }) }
+        try {
+          listener()
+        } catch (error) {
+          Log.tag('ShellEnvironment').warn('environment listener failed', { error })
+        }
       }
     }
     return env
@@ -138,43 +162,65 @@ export class ShellEnvironment implements ShellEnvironmentApi {
   /** 把并发代次的任务都纳入关闭回执，旧代次也要收尾。 */
   private track<T>(operation: Promise<T>): Promise<T> {
     this.pending.add(operation)
-    return operation.finally(() => { this.pending.delete(operation) })
+    return operation.finally(() => {
+      this.pending.delete(operation)
+    })
   }
 
   /** 单次命令可以及时停止等待，应用持有的共享加载仍供其他调用者使用。 */
-  private waitForEnvironment(operation: Promise<NodeJS.ProcessEnv>, signal?: AbortSignal): Promise<NodeJS.ProcessEnv> {
+  private waitForEnvironment(
+    operation: Promise<NodeJS.ProcessEnv>,
+    signal?: AbortSignal
+  ): Promise<NodeJS.ProcessEnv> {
     this.controller.signal.throwIfAborted()
     if (!signal) return operation
     signal.throwIfAborted()
     return new Promise((resolve, reject) => {
-      const abort = (): void => { signal.removeEventListener('abort', abort); reject(signal.reason) }
+      const abort = (): void => {
+        signal.removeEventListener('abort', abort)
+        reject(signal.reason)
+      }
       signal.addEventListener('abort', abort, { once: true })
-      operation.then((env) => {
-        signal.removeEventListener('abort', abort)
-        resolve(env)
-      }, (error) => {
-        signal.removeEventListener('abort', abort)
-        reject(error)
-      })
+      operation.then(
+        (env) => {
+          signal.removeEventListener('abort', abort)
+          resolve(env)
+        },
+        (error) => {
+          signal.removeEventListener('abort', abort)
+          reject(error)
+        }
+      )
     })
   }
 
   /** 读取宿主原始环境时就复制，刷新过程不修改宿主全局环境。 */
-  private baseEnvironment(): NodeJS.ProcessEnv { return { ...(this.options.env?.() ?? process.env) } }
+  private baseEnvironment(): NodeJS.ProcessEnv {
+    return { ...(this.options.env?.() ?? process.env) }
+  }
 
   private async load(): Promise<ShellEnvironmentSnapshot> {
     const env = this.baseEnvironment()
     if (this.platform === 'win32') {
-      const refreshed = await this.shells.refreshWindowsEnvironment(env, this.platform, this.controller.signal)
+      const refreshed = await this.shells.refreshWindowsEnvironment(
+        env,
+        this.platform,
+        this.controller.signal
+      )
       this.controller.signal.throwIfAborted()
       replaceEnvironment(env, refreshed.env)
-      const shell = await this.shells.resolveReady({ platform: this.platform, env, signal: this.controller.signal })
+      const shell = await this.shells.resolveReady({
+        platform: this.platform,
+        env,
+        signal: this.controller.signal,
+      })
       return { env: shell.env, shell }
     }
     const platform = createPlatform({ platform: this.platform, env })
     for (const shell of platform.getLoginShellCandidates(env)) {
-      try { return { env: await this.capture(shell, env) } }
-      catch (error) {
+      try {
+        return { env: await this.capture(shell, env) }
+      } catch (error) {
         this.controller.signal.throwIfAborted()
         if (this.cleanupError) throw this.cleanupError
         Log.tag('ShellEnvironment').warn('login environment capture failed', { shell, error })
@@ -188,7 +234,9 @@ export class ShellEnvironment implements ShellEnvironmentApi {
     this.controller.signal.throwIfAborted()
     const marker = `environment-${randomUUID()}`
     const child = spawn(shell, ['-lic', `printf '\\0${marker}\\0'; env -0`], {
-      env, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
     })
     const managed = shellProcessManager.manage(child, {
       abortSignal: this.controller.signal,
@@ -210,14 +258,27 @@ export class ShellEnvironment implements ShellEnvironmentApi {
       } else chunks.push(chunk)
     })
     child.stderr.setEncoding('utf8')
-    child.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-ShellTuning.shell.captureStderrChars) })
+    child.stderr.on('data', (chunk: string) => {
+      stderr = (stderr + chunk).slice(-ShellTuning.shell.captureStderrChars)
+    })
     const result = await managed.completion
     if (result.cleanupIncomplete)
-      this.cleanupError = new AppError('PLATFORM', '登录环境读取进程未能完整清理。', undefined, { shell, ...result })
+      this.cleanupError = new AppError('PLATFORM', '登录环境读取进程未能完整清理。', undefined, {
+        shell,
+        ...result,
+      })
     this.controller.signal.throwIfAborted()
     if (result.spawnError) throw result.spawnError
     if (result.timedOut || result.cleanupIncomplete || exceeded || result.exitCode !== 0)
-      throw this.cleanupError ?? new AppError('PLATFORM', '登录 shell 环境读取失败。', undefined, { shell, ...result, exceeded, stderr })
+      throw (
+        this.cleanupError ??
+        new AppError('PLATFORM', '登录 shell 环境读取失败。', undefined, {
+          shell,
+          ...result,
+          exceeded,
+          stderr,
+        })
+      )
     return { ...env, ...parseLoginEnvironment(Buffer.concat(chunks).toString('utf8'), marker) }
   }
 }

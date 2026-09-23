@@ -37,31 +37,28 @@ function matchPricingEntry(
   const entries = catalog?.entries ?? []
   const sameProvider = entries.filter((entry) => entry.provider === provider)
   return toNullable(
-    sameProvider.find((entry) => entry.model === model)
-      ?? sameProvider.find((entry) => entry.aliases.includes(model))
+    sameProvider.find((entry) => entry.model === model) ??
+      sameProvider.find((entry) => entry.aliases.includes(model))
   )
 }
 
 /** 把 AI SDK 各版本的 usage 形状归一成本包的账本，顺带按单价算钱。 */
 export function normalizeRunUsage(value: unknown, pricing?: ModelPricingRates): ModelRunUsage {
-  const inputTokens = tokenValue(value, ['inputTokens', 'total'])
-    ?? tokenValue(value, ['inputTokens'])
-    ?? 0
-  const outputTokens = tokenValue(value, ['outputTokens', 'total'])
-    ?? tokenValue(value, ['outputTokens'])
-    ?? 0
-  const reasoningTokens = tokenValue(value, ['outputTokens', 'reasoning'])
-    ?? tokenValue(value, ['reasoningTokens'])
-    ?? 0
-  const cachedInputTokens = tokenValue(value, ['inputTokens', 'cacheRead'])
-    ?? tokenValue(value, ['cachedInputTokens'])
-    ?? 0
+  const inputTokens =
+    tokenValue(value, ['inputTokens', 'total']) ?? tokenValue(value, ['inputTokens']) ?? 0
+  const outputTokens =
+    tokenValue(value, ['outputTokens', 'total']) ?? tokenValue(value, ['outputTokens']) ?? 0
+  const reasoningTokens =
+    tokenValue(value, ['outputTokens', 'reasoning']) ?? tokenValue(value, ['reasoningTokens']) ?? 0
+  const cachedInputTokens =
+    tokenValue(value, ['inputTokens', 'cacheRead']) ?? tokenValue(value, ['cachedInputTokens']) ?? 0
   const totalTokens = tokenValue(value, ['totalTokens']) ?? inputTokens + outputTokens
   const inputRate = toNullable(pricing?.inputPerMillion)
   const outputRate = toNullable(pricing?.outputPerMillion)
-  const cost = isNull(inputRate) || isNull(outputRate)
-    ? null
-    : ((inputTokens * inputRate) + (outputTokens * outputRate)) / 1_000_000
+  const cost =
+    isNull(inputRate) || isNull(outputRate)
+      ? null
+      : (inputTokens * inputRate + outputTokens * outputRate) / 1_000_000
   return { inputTokens, outputTokens, reasoningTokens, cachedInputTokens, totalTokens, cost }
 }
 
@@ -73,9 +70,7 @@ export function normalizePersistedUsage(value: Record<string, unknown>): ModelRu
     reasoningTokens: positiveNumber(value.reasoningTokens),
     cachedInputTokens: positiveNumber(value.cachedInputTokens),
     totalTokens: positiveNumber(value.totalTokens),
-    cost: isFiniteNumber(value.cost) && value.cost >= 0
-      ? value.cost
-      : null,
+    cost: isFiniteNumber(value.cost) && value.cost >= 0 ? value.cost : null,
   }
 }
 
@@ -114,9 +109,7 @@ function tokenValue(value: unknown, path: readonly string[]): Nullable<number> {
     if (!isRecord(current)) return null
     current = current[key]
   }
-  return isFiniteNumber(current) && current >= 0
-    ? Math.round(current)
-    : null
+  return isFiniteNumber(current) && current >= 0 ? Math.round(current) : null
 }
 
 /** 非负有限数原样返回，其余一律算 0。 */

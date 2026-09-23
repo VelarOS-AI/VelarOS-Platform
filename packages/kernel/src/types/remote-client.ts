@@ -23,10 +23,6 @@ import type {
   RemoteNodePlatform,
 } from './wire.js'
 
-
-
-
-
 /**
  * 设备凭据。
  *
@@ -41,12 +37,7 @@ export interface RemoteNodeCredentials {
 }
 
 /** 连接态。`stopped` 是终态:只有 dispose 与重建能离开它。 */
-export type RemoteNodeConnectionState =
-  | 'idle'
-  | 'connecting'
-  | 'reconnecting'
-  | 'ready'
-  | 'stopped'
+export type RemoteNodeConnectionState = 'idle' | 'connecting' | 'reconnecting' | 'ready' | 'stopped'
 
 /** 一次成功握手后的会话面。`node.epoch` 变化即对端重启。 */
 export interface RemoteNodeSession {
@@ -73,9 +64,7 @@ export interface RemoteNodeClientFailure extends Error {
 
 export type RemoteNodeProgressListener = (event: unknown) => void
 export type RemoteNodeManifestListener = (manifest: RemoteNodeManifest) => void
-export type RemoteNodeStateListener = (
-  state: RemoteNodeConnectionState,
-) => void
+export type RemoteNodeStateListener = (state: RemoteNodeConnectionState) => void
 export type RemoteNodeStopListener = (error: RemoteNodeClientFailure) => void
 export type RemoteNodeUnsubscribe = () => void
 

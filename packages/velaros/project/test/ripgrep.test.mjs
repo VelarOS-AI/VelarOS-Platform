@@ -87,12 +87,14 @@ test('node command provider reports a missing ripgrep executable for adapter fal
   })
 
   assert.equal(commandResult.exitCode, 127)
-  assert.deepEqual(commandResult.toolRequirements, [{
-    kind: 'missing-command',
-    command: missingCommand,
-    sourceCommand: missingCommand,
-    reason: `${missingCommand} 不在 PATH 中，当前环境无法调用该命令。`,
-  }])
+  assert.deepEqual(commandResult.toolRequirements, [
+    {
+      kind: 'missing-command',
+      command: missingCommand,
+      sourceCommand: missingCommand,
+      reason: `${missingCommand} 不在 PATH 中，当前环境无法调用该命令。`,
+    },
+  ])
 
   const searchResult = await searchWithRipgrep({
     rootAbs: '/repo',

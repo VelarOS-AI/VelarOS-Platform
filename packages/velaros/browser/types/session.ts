@@ -1,6 +1,10 @@
 import type { BrowserPageDriverDownloadItem, BrowserProtocolChannel } from '../contract/requires.js'
 
-import type { BrowserElementTargetHint, BrowserProtocolEvent, BrowserUserActivityKind } from './browser.js'
+import type {
+  BrowserElementTargetHint,
+  BrowserProtocolEvent,
+  BrowserUserActivityKind,
+} from './browser.js'
 
 /** 一条被模型的 Fetch 拦下、还没放行的请求：它在哪个子会话上（页面本身缺席）、什么时候拦下的、请求的地址。 */
 export interface BrowserProtocolPausedRequest {

@@ -32,10 +32,7 @@ export interface VelarCloudModelRuntimeLookup {
 export class VelarCloudModelRuntime
   implements VelarCloudModelRuntimeApi, VelarCloudModelRuntimeLookup
 {
-  private readonly bindings = new Map<
-    VelarCloudManagedProviderId,
-    VelarCloudModelRuntimeBinding
-  >()
+  private readonly bindings = new Map<VelarCloudManagedProviderId, VelarCloudModelRuntimeBinding>()
 
   public registerProvider(
     providerId: VelarCloudManagedProviderId,
@@ -60,7 +57,9 @@ export class VelarCloudModelRuntime
     return this.bindings.has(providerId)
   }
 
-  public require(providerId: VelarCloudManagedProviderId = 'velaros'): VelarCloudModelRuntimeBinding {
+  public require(
+    providerId: VelarCloudManagedProviderId = 'velaros'
+  ): VelarCloudModelRuntimeBinding {
     const binding = this.bindings.get(providerId)
     if (!binding?.baseURL) {
       throw new AppError(

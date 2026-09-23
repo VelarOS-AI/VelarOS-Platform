@@ -1,10 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import {
-  readRawString,
-  readRawStringScalar,
-  readString,
-} from '../src/utils/unknownJsonRecord'
+import { readRawString, readRawStringScalar, readString } from '../src/utils/unknownJsonRecord'
 
 describe('unknown JSON string readers', () => {
   test('keeps normalized and raw string semantics separate', () => {

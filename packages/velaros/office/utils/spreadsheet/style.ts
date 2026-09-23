@@ -2,7 +2,14 @@
 
 import { isNonBlankString, isPresent, optionalWhenLazy } from '@velaros-ai/core'
 
-import type { ExcelAlignment, ExcelBorders, ExcelBorderSide, ExcelCellStyle, ExcelFill, ExcelFont } from '../../types/office.js'
+import type {
+  ExcelAlignment,
+  ExcelBorders,
+  ExcelBorderSide,
+  ExcelCellStyle,
+  ExcelFill,
+  ExcelFont,
+} from '../../types/office.js'
 
 /** ExcelJS 使用 ARGB；用户常传 6 位 RGB，这里自动补上不透明 Alpha。 */
 export function toArgbColor(hex: string): string {
@@ -64,7 +71,10 @@ export function applyExcelBorder(target: { border?: object }, border?: ExcelBord
 }
 
 /** 对齐配置无需额外转换，直接挂到 ExcelJS cell.alignment。 */
-export function applyExcelAlignment(target: { alignment?: object }, alignment?: ExcelAlignment): void {
+export function applyExcelAlignment(
+  target: { alignment?: object },
+  alignment?: ExcelAlignment
+): void {
   if (!alignment) return
   target.alignment = alignment
 }
@@ -84,14 +94,14 @@ export function buildExcelCellStyle(style?: ExcelCellStyle): Record<string, unkn
           ...flatFont,
           ...style.font,
         }
-      : undefined,
+      : undefined
   )
   applyExcelFill(
     cellStyle,
     style.fill ??
       (isNonBlankString(style.bgColor)
         ? { type: 'pattern', pattern: 'solid', fgColor: style.bgColor }
-        : undefined),
+        : undefined)
   )
   applyExcelBorder(cellStyle, style.border)
   applyExcelAlignment(cellStyle, style.alignment)

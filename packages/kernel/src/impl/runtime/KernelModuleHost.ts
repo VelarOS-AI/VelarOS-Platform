@@ -1,7 +1,11 @@
 import { isEmpty, isTrue, isUndefined, Log } from '@velaros-ai/core'
 
 import { KernelErrorCodes } from '../../contract/constants'
-import type { KernelModuleActivateContext, KernelRegistration, KernelServiceHandle } from '../../contract/provides'
+import type {
+  KernelModuleActivateContext,
+  KernelRegistration,
+  KernelServiceHandle,
+} from '../../contract/provides'
 import type { KernelEventHandler } from '../../contract/requires'
 import type { KernelModuleDefinition, KernelModuleLifecycle } from '../../contract/requires'
 import type { KernelPermissionBroker } from '../../contract/requires'
@@ -17,12 +21,7 @@ import type {
   KernelPermissionDecision,
 } from '../../types/kernel.js'
 import type { ModuleRecord } from '../../types/runtime'
-import {
-  KernelError,
-  lifecycleFailure,
-  startupFailure,
-  toError,
-} from '../../utils/errors'
+import { KernelError, lifecycleFailure, startupFailure, toError } from '../../utils/errors'
 import { cloneManifest } from '../../utils/runtime/manifest'
 import {
   type KernelModulePlan,
@@ -42,9 +41,7 @@ import {
 import { DenyAllKernelPermissionBroker } from './DenyAllKernelPermissionBroker'
 import { InMemoryKernelStateBackend } from './InMemoryKernelStateBackend'
 import { KernelEventHub } from './KernelEventHub'
-import {
-  KernelServiceStore,
-} from './KernelServiceStore'
+import { KernelServiceStore } from './KernelServiceStore'
 import { NamespacedKernelStateStore } from './NamespacedKernelStateStore'
 import { ScopedKernelPermissionBroker } from './ScopedKernelPermissionBroker'
 import { ScopedKernelServiceResolver } from './ScopedKernelServiceResolver'
@@ -92,11 +89,11 @@ export interface KernelModuleHostApi {
   getService<TService extends object>(token: CapabilityToken<TService>): TService
   /** 取一件能力的服务句柄；句柄绑死在取的那一代，换代之后就失效。 */
   getServiceHandle<TService extends object>(
-    token: CapabilityToken<TService>,
+    token: CapabilityToken<TService>
   ): KernelServiceHandle<TService>
   /** 取一件能力当前活动的服务，没有就返回 undefined，不抛错。 */
   getOptionalService<TService extends object>(
-    token: CapabilityToken<TService>,
+    token: CapabilityToken<TService>
   ): TService | undefined
   /**
    * 把能力 id 解析成当前活动提供方的那一枚令牌。
@@ -113,13 +110,10 @@ export interface KernelModuleHostApi {
   requestCapabilityPermission(
     token: CapabilityToken,
     request: KernelModulePermissionRequest,
-    attribution?: { readonly callerModuleId: string },
+    attribution?: { readonly callerModuleId: string }
   ): Promise<KernelPermissionDecision>
   /** 以宿主身份订阅一类事件；返回的登记用完要 dispose。 */
-  subscribe<TPayload>(
-    type: string,
-    handler: KernelEventHandler<TPayload>,
-  ): KernelRegistration
+  subscribe<TPayload>(type: string, handler: KernelEventHandler<TPayload>): KernelRegistration
   /** 取一个模块的只读快照，没注册过返回 undefined。 */
   getModule(moduleId: string): KernelModuleSnapshot | undefined
   /** 按模块 id 排序列出全部模块的只读快照。 */
@@ -157,20 +151,15 @@ export class KernelModuleHost implements KernelModuleHostApi {
 
   public constructor(private readonly options: KernelModuleHostOptions) {
     if (!Number.isInteger(options.apiVersion) || options.apiVersion <= 0) {
-      throw new KernelError(
-        KernelErrorCodes.invalidManifest,
-        '内核宿主的 apiVersion 必须是正整数',
-      )
+      throw new KernelError(KernelErrorCodes.invalidManifest, '内核宿主的 apiVersion 必须是正整数')
     }
-    this.permissionBroker = options.permissionBroker
-      ?? new DenyAllKernelPermissionBroker()
-    this.stateBackend = options.stateBackend
-      ?? new InMemoryKernelStateBackend()
+    this.permissionBroker = options.permissionBroker ?? new DenyAllKernelPermissionBroker()
+    this.stateBackend = options.stateBackend ?? new InMemoryKernelStateBackend()
     for (const adapter of options.isolationAdapters ?? []) {
       if (this.isolationAdapters.has(adapter.isolation)) {
         throw new KernelError(
           KernelErrorCodes.invalidManifest,
-          `隔离形态 "${adapter.isolation}" 注册了两个适配器`,
+          `隔离形态 "${adapter.isolation}" 注册了两个适配器`
         )
       }
       this.isolationAdapters.set(adapter.isolation, adapter)
@@ -180,10 +169,7 @@ export class KernelModuleHost implements KernelModuleHostApi {
   public registerModule(definition: KernelModuleDefinition): void {
     this.assertNotDisposed()
     if (!isUndefined(this.startPromise)) {
-      throw new KernelError(
-        KernelErrorCodes.moduleState,
-        '内核模块必须在宿主启动之前注册',
-      )
+      throw new KernelError(KernelErrorCodes.moduleState, '内核模块必须在宿主启动之前注册')
     }
     const manifest = cloneManifest(definition.manifest)
     validateManifest(manifest, this.options.apiVersion)
@@ -191,7 +177,7 @@ export class KernelModuleHost implements KernelModuleHostApi {
       throw new KernelError(
         KernelErrorCodes.duplicateModule,
         `内核模块 "${manifest.id}" 已经注册过了`,
-        { moduleId: manifest.id },
+        { moduleId: manifest.id }
       )
     }
 
@@ -205,13 +191,8 @@ export class KernelModuleHost implements KernelModuleHostApi {
   public resolvePlan(): KernelModulePlan {
     this.assertNotDisposed()
     return resolveKernelModulePlan(
-      new Map(
-        [...this.modules].map(([moduleId, record]) => [
-          moduleId,
-          record.definition,
-        ]),
-      ),
-      this.options.apiVersion,
+      new Map([...this.modules].map(([moduleId, record]) => [moduleId, record.definition])),
+      this.options.apiVersion
     )
   }
 
@@ -260,10 +241,7 @@ export class KernelModuleHost implements KernelModuleHostApi {
         record.health = HealthyModuleHealth
       } catch (error) {
         failModuleRecord(record, error)
-        const rollbackErrors = await this.rollback(
-          activatedModuleIds,
-          moduleId,
-        )
+        const rollbackErrors = await this.rollback(activatedModuleIds, moduleId)
         throw startupFailure({
           moduleId,
           phase: 'ready',
@@ -282,9 +260,7 @@ export class KernelModuleHost implements KernelModuleHostApi {
    * visibility and event delivery switch synchronously. A failed replacement
    * is removed without disturbing the current graph.
    */
-  public async replaceModule(
-    definition: KernelModuleDefinition,
-  ): Promise<void> {
+  public async replaceModule(definition: KernelModuleDefinition): Promise<void> {
     this.assertNotDisposed()
     const manifest = cloneManifest(definition.manifest)
     validateManifest(manifest, this.options.apiVersion)
@@ -293,36 +269,29 @@ export class KernelModuleHost implements KernelModuleHostApi {
       throw new KernelError(
         KernelErrorCodes.moduleState,
         `模块 "${manifest.id}" 没注册过，替换不了`,
-        { moduleId: manifest.id },
+        { moduleId: manifest.id }
       )
     }
     if (
-      previous.status !== 'ready'
-      && previous.status !== 'active'
-      && previous.status !== 'suspended'
+      previous.status !== 'ready' &&
+      previous.status !== 'active' &&
+      previous.status !== 'suspended'
     ) {
       throw new KernelError(
         KernelErrorCodes.moduleState,
         `内核模块 "${manifest.id}" 当前是 "${previous.status}" 状态，不能替换`,
-        { moduleId: manifest.id },
+        { moduleId: manifest.id }
       )
     }
 
-    const replacement = createModuleRecord(
-      definition,
-      manifest,
-      previous.generation + 1,
-    )
+    const replacement = createModuleRecord(definition, manifest, previous.generation + 1)
     const tentativeDefinitions = new Map(
       [...this.modules].map(([moduleId, record]) => [
         moduleId,
         moduleId === manifest.id ? replacement.definition : record.definition,
-      ]),
+      ])
     )
-    const plan = resolveKernelModulePlan(
-      tentativeDefinitions,
-      this.options.apiVersion,
-    )
+    const plan = resolveKernelModulePlan(tentativeDefinitions, this.options.apiVersion)
 
     let replacementCommitted = false
     replacement.status = 'activating'
@@ -330,13 +299,10 @@ export class KernelModuleHost implements KernelModuleHostApi {
     replacement.contextActive = true
     let failedPhase: 'activate' | 'ready' = 'activate'
     try {
-      const lifecycle = await this.activateRecord(
-        replacement,
-        {
-          stageServices: true,
-          isEventDeliveryEnabled: () => replacementCommitted,
-        },
-      )
+      const lifecycle = await this.activateRecord(replacement, {
+        stageServices: true,
+        isEventDeliveryEnabled: () => replacementCommitted,
+      })
       replacement.lifecycle = lifecycle ?? {}
       replacement.status = 'readying'
       failedPhase = 'ready'
@@ -465,20 +431,18 @@ export class KernelModuleHost implements KernelModuleHostApi {
     }
   }
 
-  public getService<TService extends object>(
-    token: CapabilityToken<TService>,
-  ): TService {
+  public getService<TService extends object>(token: CapabilityToken<TService>): TService {
     return this.serviceStore.get(token)
   }
 
   public getServiceHandle<TService extends object>(
-    token: CapabilityToken<TService>,
+    token: CapabilityToken<TService>
   ): KernelServiceHandle<TService> {
     return this.serviceStore.getHandle(token)
   }
 
   public getOptionalService<TService extends object>(
-    token: CapabilityToken<TService>,
+    token: CapabilityToken<TService>
   ): TService | undefined {
     return this.serviceStore.getOptional(token)
   }
@@ -490,9 +454,7 @@ export class KernelModuleHost implements KernelModuleHostApi {
    * a guessed default version. The service registry is the only source that
    * knows which generation and capability version is currently visible.
    */
-  public getActiveCapabilityToken(
-    capabilityId: string,
-  ): CapabilityToken | undefined {
+  public getActiveCapabilityToken(capabilityId: string): CapabilityToken | undefined {
     return this.serviceStore.getActiveToken(capabilityId)
   }
 
@@ -511,20 +473,18 @@ export class KernelModuleHost implements KernelModuleHostApi {
   public async requestCapabilityPermission(
     token: CapabilityToken,
     request: KernelModulePermissionRequest,
-    attribution?: { readonly callerModuleId: string },
+    attribution?: { readonly callerModuleId: string }
   ): Promise<KernelPermissionDecision> {
     this.assertNotDisposed()
     const handle = this.serviceStore.getHandle(token)
     const record = this.modules.get(handle.ownerModuleId)
-    if (
-      isUndefined(record)
-      || record.generation !== handle.generation
-      || !record.contextActive
-    ) return {
+    if (isUndefined(record) || record.generation !== handle.generation || !record.contextActive)
+      return {
         status: 'denied',
         reason: `Capability "${token.id}" has no active provider`,
       }
-    if (!record.definition.manifest.permissions.includes(request.permission)) return {
+    if (!record.definition.manifest.permissions.includes(request.permission))
+      return {
         status: 'denied',
         reason: `Module "${handle.ownerModuleId}" did not declare permission "${request.permission}"`,
       }
@@ -539,7 +499,7 @@ export class KernelModuleHost implements KernelModuleHostApi {
 
   public subscribe<TPayload>(
     type: string,
-    handler: KernelEventHandler<TPayload>,
+    handler: KernelEventHandler<TPayload>
   ): KernelRegistration {
     this.assertNotDisposed()
     return this.eventHub.subscribe('@host', 0, type, handler)
@@ -574,13 +534,8 @@ export class KernelModuleHost implements KernelModuleHostApi {
     let resolutionError: Nullable<string> = null
     try {
       plan = resolveKernelModulePlan(
-        new Map(
-          [...this.modules].map(([moduleId, record]) => [
-            moduleId,
-            record.definition,
-          ]),
-        ),
-        this.options.apiVersion,
+        new Map([...this.modules].map(([moduleId, record]) => [moduleId, record.definition])),
+        this.options.apiVersion
       )
     } catch (error) {
       // 不外抛：原因随快照一起交给调用方（`resolutionError`），日志留一条便于对账。
@@ -601,8 +556,7 @@ export class KernelModuleHost implements KernelModuleHostApi {
           providerModuleId: provider.moduleId,
         }))
     const capabilities = providers
-      .sort((left, right) =>
-        left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
+      .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
       .map((provider) => {
         const active = activeServices.get(provider.id)
         return Object.freeze({
@@ -610,22 +564,19 @@ export class KernelModuleHost implements KernelModuleHostApi {
           version: provider.version,
           providerModuleId: provider.providerModuleId,
           active: Boolean(
-            active
-            && active.ownerModuleId === provider.providerModuleId
-            && active.capabilityVersion === provider.version
+            active &&
+            active.ownerModuleId === provider.providerModuleId &&
+            active.capabilityVersion === provider.version
           ),
-          activeGeneration: active?.ownerModuleId === provider.providerModuleId
-            ? active.generation
-            : null,
+          activeGeneration:
+            active?.ownerModuleId === provider.providerModuleId ? active.generation : null,
         })
       })
     return Object.freeze({
       schemaVersion: 1,
       apiVersion: this.options.apiVersion,
       // 解析不出顺序时退回登记顺序（依赖图不合法时它本来也不存在真正的激活顺序）。
-      moduleOrder: Object.freeze(
-        isUndefined(plan) ? [...this.modules.keys()] : [...plan.order],
-      ),
+      moduleOrder: Object.freeze(isUndefined(plan) ? [...this.modules.keys()] : [...plan.order]),
       modules: Object.freeze([...this.listModules()]),
       capabilities: Object.freeze(capabilities),
       resolutionError,
@@ -683,14 +634,12 @@ export class KernelModuleHost implements KernelModuleHostApi {
   }
 
   private assertStartable(): void {
-    const invalid = [...this.modules.values()].find(
-      (record) => record.status !== 'registered',
-    )
+    const invalid = [...this.modules.values()].find((record) => record.status !== 'registered')
     if (isUndefined(invalid)) return
     throw new KernelError(
       KernelErrorCodes.moduleState,
       `内核模块 "${invalid.definition.manifest.id}" 当前是 "${invalid.status}" 状态，起不来`,
-      { moduleId: invalid.definition.manifest.id },
+      { moduleId: invalid.definition.manifest.id }
     )
   }
 
@@ -699,7 +648,7 @@ export class KernelModuleHost implements KernelModuleHostApi {
     options: {
       readonly stageServices?: boolean
       readonly isEventDeliveryEnabled?: () => boolean
-    } = {},
+    } = {}
   ): KernelModuleActivateContext {
     const { manifest } = record.definition
     const readableCapabilityIds = [
@@ -711,7 +660,7 @@ export class KernelModuleHost implements KernelModuleHostApi {
       manifest.id,
       readableCapabilityIds,
       this.serviceStore,
-      () => assertModuleContextActive(record),
+      () => assertModuleContextActive(record)
     )
 
     return Object.freeze({
@@ -723,53 +672,48 @@ export class KernelModuleHost implements KernelModuleHostApi {
         manifest.id,
         record.generation,
         () => assertModuleContextActive(record),
-        options.isEventDeliveryEnabled,
+        options.isEventDeliveryEnabled
       ),
-      permissions: Object.freeze(new ScopedKernelPermissionBroker({
-        manifest,
-        generation: record.generation,
-        broker: this.permissionBroker,
-        assertActive: () => assertModuleContextActive(record),
-      })),
-      state: Object.freeze(new NamespacedKernelStateStore({
-        namespace: manifest.id,
-        backend: this.stateBackend,
-        assertActive: () => assertModuleContextActive(record),
-      })),
+      permissions: Object.freeze(
+        new ScopedKernelPermissionBroker({
+          manifest,
+          generation: record.generation,
+          broker: this.permissionBroker,
+          assertActive: () => assertModuleContextActive(record),
+        })
+      ),
+      state: Object.freeze(
+        new NamespacedKernelStateStore({
+          namespace: manifest.id,
+          backend: this.stateBackend,
+          assertActive: () => assertModuleContextActive(record),
+        })
+      ),
       registerService: <TService extends object>(
         token: CapabilityToken<TService>,
-        service: TService,
+        service: TService
       ) => {
         assertModuleContextActive(record)
         const declaredCapability = manifest.provides.find(
-          (capability) => capability.id === token.id,
+          (capability) => capability.id === token.id
         )
-        if (
-          isUndefined(declaredCapability)
-          || declaredCapability.version !== token.version
-        ) {
+        if (isUndefined(declaredCapability) || declaredCapability.version !== token.version) {
           throw new KernelError(
             KernelErrorCodes.undeclaredCapabilityProvider,
             `模块 "${manifest.id}" 注册了自己没声明提供的能力 "${token.id}"（版本 "${token.version}"）`,
-            { moduleId: manifest.id, capabilityId: token.id },
+            { moduleId: manifest.id, capabilityId: token.id }
           )
         }
-        return this.serviceStore.register(
-          manifest.id,
-          record.generation,
-          token,
-          service,
-          { activate: !isTrue(options.stageServices) },
-        )
+        return this.serviceStore.register(manifest.id, record.generation, token, service, {
+          activate: !isTrue(options.stageServices),
+        })
       },
     })
   }
 
-
-
   private async rollback(
     activatedModuleIds: readonly string[],
-    failedModuleId?: string,
+    failedModuleId?: string
   ): Promise<readonly Error[]> {
     const rollbackErrors: Error[] = []
     for (const moduleId of [...activatedModuleIds].reverse()) {
@@ -800,15 +744,12 @@ export class KernelModuleHost implements KernelModuleHostApi {
     this.eventHub.removeOwner(id, record.generation)
   }
 
-
-
-
   private activateRecord(
     record: ModuleRecord,
     options?: {
       readonly stageServices?: boolean
       readonly isEventDeliveryEnabled?: () => boolean
-    },
+    }
   ): Promise<KernelModuleLifecycle | void> {
     const context = this.createActivateContext(record, options)
     const { isolation } = record.definition.manifest
@@ -819,7 +760,7 @@ export class KernelModuleHost implements KernelModuleHostApi {
       throw new KernelError(
         KernelErrorCodes.missingIsolationAdapter,
         `Module "${record.definition.manifest.id}" requires a "${isolation}" isolation adapter`,
-        { moduleId: record.definition.manifest.id },
+        { moduleId: record.definition.manifest.id }
       )
     }
     return Promise.resolve(adapter.activate(record.definition, context))

@@ -1,15 +1,20 @@
-import { createHash } from "node:crypto";
+import { createHash } from 'node:crypto'
 
 /** 字符串或字节的 SHA-256，十六进制。 */
 export function sha256(input: string | Buffer): string {
-  const h = createHash("sha256");
-  h.update(input);
-  return h.digest("hex");
+  const h = createHash('sha256')
+  h.update(input)
+  return h.digest('hex')
 }
 
 /** 内容型 revision：由路径、内容哈希、修改时间和字节数算出，形如 rev_ 加 24 位十六进制。 */
-export function revisionFor(path: string, contentHash: string, mtimeMs: number, size: number): string {
-  return `rev_${sha256(`${path}:${contentHash}:${mtimeMs}:${size}`).slice(0, 24)}`;
+export function revisionFor(
+  path: string,
+  contentHash: string,
+  mtimeMs: number,
+  size: number
+): string {
+  return `rev_${sha256(`${path}:${contentHash}:${mtimeMs}:${size}`).slice(0, 24)}`
 }
 
 /**
@@ -18,10 +23,10 @@ export function revisionFor(path: string, contentHash: string, mtimeMs: number, 
  * 注意：同 size + 同 mtime 的内容改动无法区分（见 revisionStrategy 文档）。
  */
 export function metadataRevisionFor(path: string, mtimeToken: string, size: number): string {
-  return `rev_${sha256(`meta:${path}:${mtimeToken}:${size}`).slice(0, 24)}`;
+  return `rev_${sha256(`meta:${path}:${mtimeToken}:${size}`).slice(0, 24)}`
 }
 
 /** 与 metadataRevisionFor 同源的元数据指纹，用于 metadata 模式下的 snapshot.sha256 占位。 */
 export function metadataFingerprint(path: string, mtimeToken: string, size: number): string {
-  return sha256(`metafp:${path}:${mtimeToken}:${size}`);
+  return sha256(`metafp:${path}:${mtimeToken}:${size}`)
 }

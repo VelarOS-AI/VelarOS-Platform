@@ -1,10 +1,5 @@
 #!/usr/bin/env node
-import {
-  existsSync,
-  readFileSync,
-  readdirSync,
-  realpathSync,
-} from 'node:fs'
+import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs'
 import { dirname, join, parse, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -104,9 +99,10 @@ const usedOverrides = new Set()
 for (const { manifest, manifestPath } of packages) {
   if (manifest.name.startsWith('@velaros-ai/')) continue
   const identity = `${manifest.name}@${manifest.version}`
-  let license = typeof manifest.license === 'string' && manifest.license.trim()
-    ? manifest.license.trim()
-    : licenseFromIncludedText(manifestPath)
+  let license =
+    typeof manifest.license === 'string' && manifest.license.trim()
+      ? manifest.license.trim()
+      : licenseFromIncludedText(manifestPath)
   const override = overrides[identity]
   if (!license && override) {
     license = override.license
@@ -123,7 +119,9 @@ for (const { manifest, manifestPath } of packages) {
 
 for (const identity of Object.keys(overrides)) {
   if (!usedOverrides.has(identity)) {
-    failures.push(`${identity}: stale dependency license override is not used by the runtime closure`)
+    failures.push(
+      `${identity}: stale dependency license override is not used by the runtime closure`
+    )
   }
 }
 
@@ -132,10 +130,10 @@ if (failures.length > 0) {
   for (const failure of failures) console.error(`  - ${failure}`)
   process.exitCode = 1
 } else {
-  const thirdPartyCount = packages.filter(({ manifest }) =>
-    !manifest.name.startsWith('@velaros-ai/')
+  const thirdPartyCount = packages.filter(
+    ({ manifest }) => !manifest.name.startsWith('@velaros-ai/')
   ).length
   console.info(
-    `Dependency-license check passed for ${thirdPartyCount} installed third-party runtime package versions (${usedOverrides.size} documented override).`,
+    `Dependency-license check passed for ${thirdPartyCount} installed third-party runtime package versions (${usedOverrides.size} documented override).`
   )
 }

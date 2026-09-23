@@ -5,12 +5,12 @@ import { z } from 'zod'
 
 import { isNotUndefined, isUndefined, Log } from '@velaros-ai/core'
 
-import type { KernelInstalledVersion, KernelInstallLayout, KernelInstallRecord } from '../../types/updater'
-import {
-  ignoreMissing,
-  readJsonFile,
-  writeJsonFileAtomic,
-} from '../fs'
+import type {
+  KernelInstalledVersion,
+  KernelInstallLayout,
+  KernelInstallRecord,
+} from '../../types/updater'
+import { ignoreMissing, readJsonFile, writeJsonFileAtomic } from '../fs'
 
 import { kernelVersionDirectory } from './layout'
 import {
@@ -18,10 +18,7 @@ import {
   KernelArtifactTargetSchema,
   KernelVersionSchema,
 } from './manifest'
-import {
-  compareKernelVersions,
-  isKernelVersion,
-} from './version'
+import { compareKernelVersions, isKernelVersion } from './version'
 
 export type { KernelInstalledVersion, KernelInstallRecord } from '../../types/updater'
 const log = Log.tag('KernelInstallation')
@@ -45,7 +42,7 @@ export const KernelInstallRecordSchema = z.strictObject({
 
 /** 读一个安装目录里的安装记录；文件不在、读不动或内容不合格一律当没有（安装不整）。 */
 export async function readKernelInstallRecord(
-  directory: string,
+  directory: string
 ): Promise<KernelInstallRecord | undefined> {
   let input: unknown
   try {
@@ -62,19 +59,19 @@ export async function readKernelInstallRecord(
 /** 把安装记录写进暂存目录（先校验再原子落位）；这一步做完这份安装才算整的。 */
 export async function writeKernelInstallRecord(
   directory: string,
-  record: KernelInstallRecord,
+  record: KernelInstallRecord
 ): Promise<void> {
   await writeJsonFileAtomic(
     join(directory, KernelInstallRecordFileName),
     KernelInstallRecordSchema.parse(record),
-    0o644,
+    0o644
   )
 }
 
 /** 列出本机装了哪些版本，按版本升序；暂存残留与外来目录直接跳过，版本目录不存在时给空表。 */
 export async function listKernelInstalledVersions(
   layout: KernelInstallLayout,
-  activeVersion?: string,
+  activeVersion?: string
 ): Promise<readonly KernelInstalledVersion[]> {
   let entries: string[]
   try {

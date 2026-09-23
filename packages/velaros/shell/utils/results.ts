@@ -15,7 +15,7 @@ import type {
 
 /** 宿主的完整回执里模型用得上的那几项：命令、目录、成败、退出码与信号、超时与取消、耗时、全部输出。 */
 export function runResult(result: ShellCommandResult): ShellRunResult {
-  const value:ShellRunResult={
+  const value: ShellRunResult = {
     command: result.command,
     cwd: result.cwd,
     success: result.success,
@@ -28,7 +28,7 @@ export function runResult(result: ShellCommandResult): ShellRunResult {
     stderr: result.stderr,
     truncated: result.truncated,
   }
-  if(result.confinement)value.confinement=result.confinement
+  if (result.confinement) value.confinement = result.confinement
   return value
 }
 
@@ -60,7 +60,9 @@ export function environmentOf(result: ShellEnvironmentRefreshResult): ShellEnvir
     ready: descriptor.readiness === 'ready',
   }))
   const environment: ShellEnvironment = { shell: result.shell, shells }
-  const notes = [result.reason, result.runtime?.recommendation?.message].filter((note): note is string => Boolean(note))
+  const notes = [result.reason, result.runtime?.recommendation?.message].filter(
+    (note): note is string => Boolean(note)
+  )
   if (!isEmpty(notes)) environment.note = notes.join('；')
   return environment
 }

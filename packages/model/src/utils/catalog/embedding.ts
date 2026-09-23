@@ -1,4 +1,9 @@
-import type { BuiltInChatProviderId, ChatProviderId, ModelProviderAdapterKind, ModelProviderOperationalManifest } from '../../types/model'
+import type {
+  BuiltInChatProviderId,
+  ChatProviderId,
+  ModelProviderAdapterKind,
+  ModelProviderOperationalManifest,
+} from '../../types/model'
 
 /** 能造 embedding 请求的适配器种类；别的种类一律判不支持。 */
 const EmbeddingAdapterKinds = new Set<ModelProviderAdapterKind>([
@@ -30,11 +35,8 @@ function getEmbeddingCandidateScore(model: string): number {
   if (normalized.includes('embedding')) return 80
   if (normalized.includes('mistral-embed')) return 75
   if (normalized.includes('embed')) return 70
-  if (
-    normalized.includes('bge')
-    || normalized.includes('nomic')
-    || normalized.includes('jina')
-  ) return 60
+  if (normalized.includes('bge') || normalized.includes('nomic') || normalized.includes('jina'))
+    return 60
   if (/(^|[-_/])e5($|[-_/])/u.test(normalized)) return 55
 
   return 0
@@ -46,9 +48,7 @@ function getEmbeddingCandidateScore(model: string): number {
  * Velar Dev 的 Cloud 网关只暴露动态聊天目录与 chat/completions，
  * 不能因为它复用 OpenAI-compatible 聊天适配器就把它误判成 embedding provider。
  */
-export function isEmbeddingCapableManifest(
-  manifest: ModelProviderOperationalManifest
-): boolean {
+export function isEmbeddingCapableManifest(manifest: ModelProviderOperationalManifest): boolean {
   if (manifest.id === 'velar-dev') return false
 
   return EmbeddingAdapterKinds.has(manifest.adapterKind)
@@ -60,9 +60,9 @@ export function resolveDefaultEmbeddingModel(
   provider: ChatProviderId
 ): string {
   return (
-    manifest.providerScript?.embeddingModel
-    ?? DefaultEmbeddingModelsByProvider[provider as BuiltInChatProviderId]
-    ?? ''
+    manifest.providerScript?.embeddingModel ??
+    DefaultEmbeddingModelsByProvider[provider as BuiltInChatProviderId] ??
+    ''
   )
 }
 
@@ -87,10 +87,12 @@ export function selectEmbeddingModel(candidateModels: readonly string[]): string
 
 /** 只留下看起来像 embedding 的候选模型，并去重。 */
 export function filterEmbeddingModels(candidateModels: readonly string[]): string[] {
-  return candidateModels.map((candidate) => candidate.trim()).filter((candidate, index, list) => {
-    if (!candidate || list.indexOf(candidate) !== index) return false
-    return getEmbeddingCandidateScore(candidate) > 0
-  })
+  return candidateModels
+    .map((candidate) => candidate.trim())
+    .filter((candidate, index, list) => {
+      if (!candidate || list.indexOf(candidate) !== index) return false
+      return getEmbeddingCandidateScore(candidate) > 0
+    })
 }
 
 /** 这次目录是给 embedding 用时只留 embedding 模型；聊天用途原样返回。 */

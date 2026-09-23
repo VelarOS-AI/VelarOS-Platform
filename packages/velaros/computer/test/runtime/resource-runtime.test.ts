@@ -31,7 +31,12 @@ async function installFakePackage(): Promise<string> {
   createdRoot = root
   const packageRoot = join(root, 'computer-use', `computeruse-${process.platform}-${process.arch}`)
   const venvDirectory = process.platform === 'win32' ? 'Scripts' : 'bin'
-  const venvPython = join(packageRoot, 'venv', venvDirectory, process.platform === 'win32' ? 'python.exe' : 'python')
+  const venvPython = join(
+    packageRoot,
+    'venv',
+    venvDirectory,
+    process.platform === 'win32' ? 'python.exe' : 'python'
+  )
   await mkdir(join(packageRoot, 'venv', venvDirectory), { recursive: true })
   await writeFile(venvPython, '')
   await writeFile(join(packageRoot, scriptName ?? ''), '')

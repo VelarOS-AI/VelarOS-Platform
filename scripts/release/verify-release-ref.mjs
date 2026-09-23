@@ -9,16 +9,11 @@
 import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
 
-import {
-  assertLocalReleaseIdentity,
-  parseReleaseArguments,
-} from './local-release-identity.mjs'
+import { assertLocalReleaseIdentity, parseReleaseArguments } from './local-release-identity.mjs'
 import { collectReleasePackages, resolveReleaseSelection } from './releaseTopology.mjs'
 
 const repoRoot = resolve(import.meta.dirname, '../..')
-const { dryRun, skipBuild, localTag, onlySelectors } = parseReleaseArguments(
-  process.argv.slice(2),
-)
+const { dryRun, skipBuild, localTag, onlySelectors } = parseReleaseArguments(process.argv.slice(2))
 if (dryRun || skipBuild || onlySelectors.length > 0) {
   throw new Error('release:verify accepts exactly one local tag and no publication selectors')
 }
@@ -27,7 +22,7 @@ const runForOutput = (command, args, cwd) => {
   const result = spawnSync(command, args, { cwd, encoding: 'utf8' })
   if (result.status !== 0) {
     throw new Error(
-      `${command} ${args.join(' ')} failed with exit code ${result.status}: ${result.stderr.trim()}`,
+      `${command} ${args.join(' ')} failed with exit code ${result.status}: ${result.stderr.trim()}`
     )
   }
   return result.stdout.trim()
@@ -50,7 +45,7 @@ console.info(`✓ release tag: ${identity.tag}`)
 console.info(`✓ release repository: ${identity.repository}`)
 console.info(`✓ platform generation: ${platformGeneration}`)
 console.info(
-  `✓ release contents: ${selection.kind} — ${selection.packages.length} of ${ordered.length} declared packages`,
+  `✓ release contents: ${selection.kind} — ${selection.packages.length} of ${ordered.length} declared packages`
 )
 for (const item of selection.packages) {
   console.info(`  · ${item.manifest.name}@${item.manifest.version}`)

@@ -7,7 +7,12 @@
  */
 
 import type { ContextContent, TaskCapsule } from '@velaros-ai/context'
-import type { MemoryIdInput, MemoryRemoved, MemorySaved, MemorySaveInput } from '@velaros-ai/velaros/memory'
+import type {
+  MemoryIdInput,
+  MemoryRemoved,
+  MemorySaved,
+  MemorySaveInput,
+} from '@velaros-ai/velaros/memory'
 import { memoryOperations } from '@velaros-ai/velaros/memory'
 
 import { MemoryRecallLimits } from '../contract/constants.js'
@@ -70,7 +75,10 @@ export interface SystemMemoryOperationsOrganizeApi {
    * @OperationEffect write
    * @OperationModes execute
    */
-  organize(input: MemoryOrganizeIntent, ctx: SystemMemoryOperationContext): Promise<MemoryOrganizeReceipt>
+  organize(
+    input: MemoryOrganizeIntent,
+    ctx: SystemMemoryOperationContext
+  ): Promise<MemoryOrganizeReceipt>
 }
 
 /**
@@ -96,7 +104,11 @@ export interface SystemMemoryOperationsLongTermApi {
 }
 
 /** 三份合在一起的完整能力；实现类只有这一份。 */
-export interface SystemMemoryOperationsApi extends SystemMemoryOperationsWorkingApi, SystemMemoryOperationsOrganizeApi, SystemMemoryOperationsLongTermApi {}
+export interface SystemMemoryOperationsApi
+  extends
+    SystemMemoryOperationsWorkingApi,
+    SystemMemoryOperationsOrganizeApi,
+    SystemMemoryOperationsLongTermApi {}
 
 export class SystemMemoryOperations implements SystemMemoryOperationsApi {
   public async list(input: MemoryQuery, ctx: SystemMemoryOperationContext): Promise<MemoryPage> {
@@ -104,53 +116,104 @@ export class SystemMemoryOperations implements SystemMemoryOperationsApi {
     return ctx.memory.catalog(input, ctx.abortSignal)
   }
 
-  public async read(input: MemoryReadInput, ctx: SystemMemoryOperationContext): Promise<ContextContent> {
+  public async read(
+    input: MemoryReadInput,
+    ctx: SystemMemoryOperationContext
+  ): Promise<ContextContent> {
     ctx.abortSignal.throwIfAborted()
     return ctx.memory.readMaterial(input.ref, input.offset, input.limit, ctx.abortSignal)
   }
 
-  public async update(input: WorkspaceUpdate, ctx: SystemMemoryOperationContext): Promise<WorkspaceEntry> {
+  public async update(
+    input: WorkspaceUpdate,
+    ctx: SystemMemoryOperationContext
+  ): Promise<WorkspaceEntry> {
     ctx.abortSignal.throwIfAborted()
     return ctx.memory.update(input, ctx.abortSignal)
   }
 
-  public async plan(input: Partial<TaskCapsule>, ctx: SystemMemoryOperationContext): Promise<TaskCapsule> {
+  public async plan(
+    input: Partial<TaskCapsule>,
+    ctx: SystemMemoryOperationContext
+  ): Promise<TaskCapsule> {
     ctx.abortSignal.throwIfAborted()
     return ctx.plans.updateCapsule(input, ctx.abortSignal, ctx.executionId)
   }
 
-  public async retain(input: MemoryRetainInput, ctx: SystemMemoryOperationContext): Promise<MemoryRetention> {
+  public async retain(
+    input: MemoryRetainInput,
+    ctx: SystemMemoryOperationContext
+  ): Promise<MemoryRetention> {
     ctx.abortSignal.throwIfAborted()
     return ctx.memory.retainMaterial(input.ref, input.turns ?? 'task', ctx.abortSignal)
   }
 
-  public async release(input: MemoryReleaseInput, ctx: SystemMemoryOperationContext): Promise<MemoryRetention> {
+  public async release(
+    input: MemoryReleaseInput,
+    ctx: SystemMemoryOperationContext
+  ): Promise<MemoryRetention> {
     ctx.abortSignal.throwIfAborted()
     return ctx.memory.retainMaterial(input.ref, null, ctx.abortSignal)
   }
 
-  public async organize(input: MemoryOrganizeIntent, ctx: SystemMemoryOperationContext): Promise<MemoryOrganizeReceipt> {
+  public async organize(
+    input: MemoryOrganizeIntent,
+    ctx: SystemMemoryOperationContext
+  ): Promise<MemoryOrganizeReceipt> {
     ctx.abortSignal.throwIfAborted()
     return assembledPort(ctx.organizer, '整理服务').request(input, ctx.abortSignal)
   }
 
-  public async recall(input: LongTermMemoryQuery, ctx: SystemMemoryOperationContext): Promise<LongTermMemoryPage> {
-    const entries = await memoryOperations.list({ memory: assembledPort(ctx.longTerm, '长期记忆'), abortSignal: ctx.abortSignal })
+  public async recall(
+    input: LongTermMemoryQuery,
+    ctx: SystemMemoryOperationContext
+  ): Promise<LongTermMemoryPage> {
+    const entries = await memoryOperations.list({
+      memory: assembledPort(ctx.longTerm, '长期记忆'),
+      abortSignal: ctx.abortSignal,
+    })
     ctx.abortSignal.throwIfAborted()
     const query = input.query?.trim().toLowerCase()
-    const selected = entries.filter((entry) => (!input.id || entry.id === input.id) && (!query || [entry.id, entry.title, entry.description, ...entry.tags, entry.content].join(' ').toLowerCase().includes(query)))
+    const selected = entries.filter(
+      (entry) =>
+        (!input.id || entry.id === input.id) &&
+        (!query ||
+          [entry.id, entry.title, entry.description, ...entry.tags, entry.content]
+            .join(' ')
+            .toLowerCase()
+            .includes(query))
+    )
     // 分页越界按边界钳制，不拒绝：负偏移从头开始，页大小落在 1 到上限之间
     const offset = Math.max(0, Math.trunc(input.offset ?? 0))
-    const limit = Math.min(Math.max(1, Math.trunc(input.limit ?? MemoryRecallLimits.page)), MemoryRecallLimits.maxPage)
-    return { items: selected.slice(offset, offset + limit), total: selected.length, nextOffset: offset + limit < selected.length ? offset + limit : null }
+    const limit = Math.min(
+      Math.max(1, Math.trunc(input.limit ?? MemoryRecallLimits.page)),
+      MemoryRecallLimits.maxPage
+    )
+    return {
+      items: selected.slice(offset, offset + limit),
+      total: selected.length,
+      nextOffset: offset + limit < selected.length ? offset + limit : null,
+    }
   }
 
-  public async save(input: MemorySaveInput, ctx: SystemMemoryOperationContext): Promise<MemorySaved> {
-    return memoryOperations.save(input, { memory: assembledPort(ctx.longTerm, '长期记忆'), abortSignal: ctx.abortSignal })
+  public async save(
+    input: MemorySaveInput,
+    ctx: SystemMemoryOperationContext
+  ): Promise<MemorySaved> {
+    return memoryOperations.save(input, {
+      memory: assembledPort(ctx.longTerm, '长期记忆'),
+      abortSignal: ctx.abortSignal,
+    })
   }
 
-  public async remove(input: MemoryIdInput, ctx: SystemMemoryOperationContext): Promise<MemoryRemoved> {
-    return memoryOperations.remove(input, { memory: assembledPort(ctx.longTerm, '长期记忆'), abortSignal: ctx.abortSignal })
+  public async remove(
+    input: MemoryIdInput,
+    ctx: SystemMemoryOperationContext
+  ): Promise<MemoryRemoved> {
+    return memoryOperations.remove(input, {
+      memory: assembledPort(ctx.longTerm, '长期记忆'),
+      abortSignal: ctx.abortSignal,
+    })
   }
 }
 

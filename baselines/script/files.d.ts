@@ -126,9 +126,7 @@ declare module 'velaros:files' {
    * text 是新的几行，行与行之间用 `\n` 分开，结尾不用加 `\n`（加了就多一个空行）。
    * 行号是 `read` 那一版的行号：同一个文件的几处都按那一版算，互相不重叠，不用自己算前面改动带来的错位。
    */
-  type FileLineEdit =
-    | { range: FileLineRange; text: string }
-    | { after: number; text: string }
+  type FileLineEdit = { range: FileLineRange; text: string } | { after: number; text: string }
 
   /**
    * 读文本文件：每个文件交回带行号的行（给了 range 就只交那几行）和整个文件的版本号。

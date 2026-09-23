@@ -26,10 +26,7 @@ import type {
   ProviderScriptManifest,
   ProviderScriptRuntimeMetadata,
 } from '../../types/model'
-import type {
-  ProviderScriptDefinition,
-  ProviderScriptHelpers,
-} from '../../types/script-authoring'
+import type { ProviderScriptDefinition, ProviderScriptHelpers } from '../../types/script-authoring'
 import type { ProviderScriptDevConfig } from '../../types/scripts'
 import { toPositiveInteger } from '../numbers'
 
@@ -105,10 +102,14 @@ export function normalizeRuntimeMetadata(value: unknown): Nullable<ProviderScrip
 export function normalizeModelInputModalities(value: unknown): ModelInputModality[] | undefined {
   if (!isArray(value)) return undefined
 
-  const modalities = [...new Set(value.filter(
-    (entry): entry is ModelInputModality =>
-      entry === 'text' || entry === 'image' || entry === 'audio'
-  ))]
+  const modalities = [
+    ...new Set(
+      value.filter(
+        (entry): entry is ModelInputModality =>
+          entry === 'text' || entry === 'image' || entry === 'audio'
+      )
+    ),
+  ]
   return !isEmpty(modalities) ? modalities : undefined
 }
 
@@ -229,7 +230,8 @@ export function normalizeLoadedDefinition(
   const candidate =
     isPlainObject(exported) && isPlainObject(exported.default) ? exported.default : exported
 
-  if (isFunction(candidate)) return parseProviderScriptDefinition(
+  if (isFunction(candidate))
+    return parseProviderScriptDefinition(
       candidate({ helpers }),
       'provider script factory 必须返回合法定义对象。'
     )
@@ -239,7 +241,8 @@ export function normalizeLoadedDefinition(
   }
 
   const factory = (candidate as { createProviderScript?: unknown }).createProviderScript
-  if (isFunction(factory)) return parseProviderScriptDefinition(
+  if (isFunction(factory))
+    return parseProviderScriptDefinition(
       factory({ helpers }),
       'createProviderScript 必须返回合法定义对象。'
     )

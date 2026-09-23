@@ -67,12 +67,20 @@ declare module 'velaros:evidence' {
   /**
    * 来源里的一个资源：sourceId 是来源，resourceId 是来源里的资源身份，selector 选读哪一部分，不给就是整份。
    */
-  interface ContextResourceTarget { readonly kind: 'resource'; readonly sourceId: string; readonly resourceId: string; readonly selector?: ContextSelector }
+  interface ContextResourceTarget {
+    readonly kind: 'resource'
+    readonly sourceId: string
+    readonly resourceId: string
+    readonly selector?: ContextSelector
+  }
 
   /**
    * 原文引用：sessionId 与 id 一起定位一份不可变原文；只能在授权给你的会话范围里读。
    */
-  interface ContextRef { readonly sessionId: string; readonly id: string }
+  interface ContextRef {
+    readonly sessionId: string
+    readonly id: string
+  }
 
   /**
    * 读到的是哪个版本：revision 是来源给的版本（没有就是 null），contentHash 是正文指纹，observedAt 是读取时间；
@@ -95,7 +103,10 @@ declare module 'velaros:evidence' {
   /**
    * 读资源的哪一部分：whole 整份，lines 按行（start、end 从 1 数，含两端），symbol 按名字取一个符号。
    */
-  type ContextSelector = { readonly kind: 'whole' } | { readonly kind: 'lines'; readonly start: number; readonly end: number } | { readonly kind: 'symbol'; readonly name: string }
+  type ContextSelector =
+    | { readonly kind: 'whole' }
+    | { readonly kind: 'lines'; readonly start: number; readonly end: number }
+    | { readonly kind: 'symbol'; readonly name: string }
 
   /** 在一个来源里按字面检索候选；source 用本轮实际授权的来源。
    */

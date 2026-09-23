@@ -205,23 +205,22 @@ class SubprocessCodeRunner implements CodeRunnerApi {
               ok: isTrue(message.ok),
               value: message.value,
               logs,
-              error:
-                isTrue(message.ok)
-                  ? undefined
-                  : {
-                      code:
-                        error?.code === CodeSurfaceErrorCodes.tooLarge
-                          ? CodeSurfaceErrorCodes.tooLarge
-                          : error?.code === CodeSurfaceErrorCodes.timeout
-                            ? CodeSurfaceErrorCodes.timeout
-                            : CodeSurfaceErrorCodes.programError,
-                      message:
-                        error?.code === CodeSurfaceErrorCodes.tooLarge &&
-                        error.message.includes('out of memory')
-                          ? '脚本堆内存已到上限，请分批读取并只保留需要的数据。'
-                          : (error?.message ?? '脚本失败但没给出原因。'),
-                      line: error?.line,
-                    },
+              error: isTrue(message.ok)
+                ? undefined
+                : {
+                    code:
+                      error?.code === CodeSurfaceErrorCodes.tooLarge
+                        ? CodeSurfaceErrorCodes.tooLarge
+                        : error?.code === CodeSurfaceErrorCodes.timeout
+                          ? CodeSurfaceErrorCodes.timeout
+                          : CodeSurfaceErrorCodes.programError,
+                    message:
+                      error?.code === CodeSurfaceErrorCodes.tooLarge &&
+                      error.message.includes('out of memory')
+                        ? '脚本堆内存已到上限，请分批读取并只保留需要的数据。'
+                        : (error?.message ?? '脚本失败但没给出原因。'),
+                    line: error?.line,
+                  },
             })
             return
           }

@@ -17,7 +17,13 @@ export const ShellCommandOperationKind = 'shell-command' as const
  * 判定（只读与危险）不分种类：它同时认这五种语法（POSIX/Git Bash 的 `rm -rf`、cmd 的 `rd /s`、PowerShell 的 `Remove-Item -Recurse`），
  * 是并集不是按种类挑一套，所以挑哪一种都不会让判定变松。往这张表里加新种类的规矩见 `utils/command-policy.ts` 的开头。
  */
-export const ShellCommandKinds = Object.freeze(['git-bash', 'pwsh', 'powershell', 'cmd', 'posix'] as const)
+export const ShellCommandKinds = Object.freeze([
+  'git-bash',
+  'pwsh',
+  'powershell',
+  'cmd',
+  'posix',
+] as const)
 
 /** @AgentView 一条命令可以挑的 shell 种类。Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的顺序挑默认的那个。 */
 export type ShellCommandKind = (typeof ShellCommandKinds)[number]
@@ -59,7 +65,8 @@ export const ShellEnvironmentVariables = Object.freeze({
   shellPath: {
     name: 'VELAROS_SHELL_PATH',
     direction: 'input',
-    description: 'Windows 上指定用哪个 shell 的完整路径；子进程环境里也会写上实际使用的 shell 路径。',
+    description:
+      'Windows 上指定用哪个 shell 的完整路径；子进程环境里也会写上实际使用的 shell 路径。',
   },
   gitBash: {
     name: 'VELAROS_GIT_BASH',

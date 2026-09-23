@@ -1,7 +1,7 @@
-import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import type { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import type { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
+import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 
 /** 已建立的远端鉴权连接。 */
 export type McpRemoteTransport = SSEClientTransport | StreamableHTTPClientTransport

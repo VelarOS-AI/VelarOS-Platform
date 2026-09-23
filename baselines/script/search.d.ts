@@ -72,18 +72,28 @@ declare module 'velaros:search' {
   /**
    * 读报告的结果：snapshot 是一页原文（读证据时带着它当时的版本 stamp）；current 是这一页证据的现状，ok 为假的那项 status 说明为什么没有正文（比如按行选的内容已经变了）。
    */
-  type SearchReadResult = (ContextContent & { readonly mode: 'snapshot'; readonly stamp?: ContextReadStamp }) | {
-    /** 当前读取不调用模型。 */
-    readonly mode: 'current'
-    /** 已发布报告身份。 */
-    readonly ref: ContextRef
-    /** 本页刷新结果，ok 区分事实正文与失败。 */
-    readonly items: ReadonlyArray<(ContextSourceRead & { readonly id: string; readonly target: ContextResourceTarget; readonly ok: true; readonly status: 'current' }) | { readonly id: string; readonly ok: false; readonly status: string }>
-    /** 可刷新的证据总数。 */
-    readonly total: number
-    /** 本操作不创建模型请求。 */
-    readonly modelCalled: false
-  }
+  type SearchReadResult =
+    | (ContextContent & { readonly mode: 'snapshot'; readonly stamp?: ContextReadStamp })
+    | {
+        /** 当前读取不调用模型。 */
+        readonly mode: 'current'
+        /** 已发布报告身份。 */
+        readonly ref: ContextRef
+        /** 本页刷新结果，ok 区分事实正文与失败。 */
+        readonly items: ReadonlyArray<
+          | (ContextSourceRead & {
+              readonly id: string
+              readonly target: ContextResourceTarget
+              readonly ok: true
+              readonly status: 'current'
+            })
+          | { readonly id: string; readonly ok: false; readonly status: string }
+        >
+        /** 可刷新的证据总数。 */
+        readonly total: number
+        /** 本操作不创建模型请求。 */
+        readonly modelCalled: false
+      }
 
   /** 一个搜索档位的资源上限：模型调用次数与 token、各阶段时限（毫秒）、来源查询次数、候选数、读取次数与字节数。 */
   interface SearchProfile {
@@ -106,12 +116,20 @@ declare module 'velaros:search' {
   /**
    * 原文引用：sessionId 与 id 一起定位一份不可变原文；只能在授权给你的会话范围里读。
    */
-  interface ContextRef { readonly sessionId: string; readonly id: string }
+  interface ContextRef {
+    readonly sessionId: string
+    readonly id: string
+  }
 
   /**
    * 来源里的一个资源：sourceId 是来源，resourceId 是来源里的资源身份，selector 选读哪一部分，不给就是整份。
    */
-  interface ContextResourceTarget { readonly kind: 'resource'; readonly sourceId: string; readonly resourceId: string; readonly selector?: ContextSelector }
+  interface ContextResourceTarget {
+    readonly kind: 'resource'
+    readonly sourceId: string
+    readonly resourceId: string
+    readonly selector?: ContextSelector
+  }
 
   /**
    * 搜索的结论：每条发现至少引用一个 read 登记过的证据 id（候选 id 不算）；gaps 写没查清的缺口（code 用大写短词，detail 写清楚缺什么），没有就给 []；nextSteps 是建议的下一步。
@@ -134,25 +152,32 @@ declare module 'velaros:search' {
    */
   interface ModelToolDelivery {
     /** 清单自身的持久引用。 */
-    readonly ref:{readonly sessionId:string;readonly id:string}
+    readonly ref: { readonly sessionId: string; readonly id: string }
     /** 清单协议版本。 */
-    readonly schemaVersion:1
+    readonly schemaVersion: 1
     /** 工具种类，由实际宿主配置决定。 */
-    readonly kind:string
+    readonly kind: string
     /** 实际生产者会话。 */
-    readonly sessionId:string
+    readonly sessionId: string
     /** 交付所属的父逻辑任务。 */
-    readonly parentTaskId?:string
+    readonly parentTaskId?: string
     /** 完成状态，交付不等于领域验收通过。 */
-    readonly status:'completed'|'partial'|'failed'|'needs-reconcile'
+    readonly status: 'completed' | 'partial' | 'failed' | 'needs-reconcile'
     /** 领域原始报告或补丁的引用。 */
-    readonly payload:{readonly sessionId:string;readonly id:string}
+    readonly payload: { readonly sessionId: string; readonly id: string }
     /** 发布时固定的证据与产物位置及原始对象指纹。 */
-    readonly artifacts:ReadonlyArray<{readonly kind:'evidence'|'script'|'result';readonly ref:{readonly sessionId:string;readonly id:string};readonly objectId:string}>
+    readonly artifacts: ReadonlyArray<{
+      readonly kind: 'evidence' | 'script' | 'result'
+      readonly ref: { readonly sessionId: string; readonly id: string }
+      readonly objectId: string
+    }>
     /** 本次清单没有附带的较早脚本数量。 */
-    readonly omittedScripts:number
+    readonly omittedScripts: number
     /** 宿主签发的继续入口；参数仍须经过原能力验证。 */
-    readonly continuation?:{readonly operation:string;readonly input:Readonly<Record<string,unknown>>}
+    readonly continuation?: {
+      readonly operation: string
+      readonly input: Readonly<Record<string, unknown>>
+    }
   }
 
   /** 一条读过的证据：ref 是完整原文的引用，excerpt 是摘录，stamp 是读到的版本，complete 为假说明只读了一部分。 */
@@ -168,7 +193,12 @@ declare module 'velaros:search' {
   /**
    * 读到的一页原文：text 从第 offset 个字符开始（按 UTF-16 算），totalChars 是整份正文的字符数，没读完就从 offset + text.length 接着读。
    */
-  interface ContextContent { readonly record: ContextRecord; readonly text: string; readonly totalChars: number; readonly offset: number }
+  interface ContextContent {
+    readonly record: ContextRecord
+    readonly text: string
+    readonly totalChars: number
+    readonly offset: number
+  }
 
   /**
    * 读到的是哪个版本：revision 是来源给的版本（没有就是 null），contentHash 是正文指纹，observedAt 是读取时间；
@@ -198,7 +228,10 @@ declare module 'velaros:search' {
   /**
    * 读资源的哪一部分：whole 整份，lines 按行（start、end 从 1 数，含两端），symbol 按名字取一个符号。
    */
-  type ContextSelector = { readonly kind: 'whole' } | { readonly kind: 'lines'; readonly start: number; readonly end: number } | { readonly kind: 'symbol'; readonly name: string }
+  type ContextSelector =
+    | { readonly kind: 'whole' }
+    | { readonly kind: 'lines'; readonly start: number; readonly end: number }
+    | { readonly kind: 'symbol'; readonly name: string }
 
   /**
    * 一份原文的元数据：sequence 是它在会话里的序号，chars 是正文字符数，sources 是它引用的原文，createdAt 是 ISO 时间；正文按 ref 另读。
@@ -222,7 +255,8 @@ declare module 'velaros:search' {
   /**
    * 原文的来源：user 用户输入、assistant 模型回复、tool 能力回执、event 运行事件、note 笔记、checkpoint 检查点、audit 审计记录。
    */
-  type ContextRecordKind = 'user' | 'assistant' | 'tool' | 'event' | 'note' | 'checkpoint' | 'audit'
+  type ContextRecordKind =
+    'user' | 'assistant' | 'tool' | 'event' | 'note' | 'checkpoint' | 'audit'
 
   /** 列出能选的搜索档位、默认的那个与它们的全部资源上限。
    */

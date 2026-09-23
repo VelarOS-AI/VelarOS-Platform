@@ -95,7 +95,11 @@ export const RemoteNodeHeartbeatIntervalMs = RemoteNodeLimits.heartbeatIntervalM
 /** 空闲多久判死。 */
 export const RemoteNodeIdleTimeoutMs = RemoteNodeLimits.idleTimeoutMs
 
-export const RemoteNodePlatformSchema = z.enum(['darwin', 'linux', 'win32']) satisfies z.ZodType<RemoteNodePlatform>
+export const RemoteNodePlatformSchema = z.enum([
+  'darwin',
+  'linux',
+  'win32',
+]) satisfies z.ZodType<RemoteNodePlatform>
 
 /**
  * 节点身份。
@@ -333,4 +337,3 @@ export const RemoteNodeCloseCode = Object.freeze({
   /** 空闲超时或 Node 正常停机——可重连。 */
   Transient: RemoteNodeCloseCodes.nodeStopped,
 })
-

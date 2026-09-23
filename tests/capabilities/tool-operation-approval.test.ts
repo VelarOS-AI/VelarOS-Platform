@@ -9,7 +9,7 @@ import { join, resolve } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import {type ApprovalPort,createTaskApprovalState} from '@velaros-ai/kernel'
+import { type ApprovalPort, createTaskApprovalState } from '@velaros-ai/kernel'
 
 import { createCapabilityPort } from '../../packages/script/src/index'
 import type { ProjectHostPort } from '../../packages/velaros/project/index'
@@ -30,29 +30,51 @@ function spaces(approved: boolean) {
   let cards = 0
   let runs = 0
   const delegate: ApprovalPort = {
-    awaitConfirmation: async () => { throw new Error('use shared decision channel') },
-    awaitConfirmationDecision: async () => { cards++; return { approved, message: 'use a backup' } },
+    awaitConfirmation: async () => {
+      throw new Error('use shared decision channel')
+    },
+    awaitConfirmationDecision: async () => {
+      cards++
+      return { approved, message: 'use a backup' }
+    },
   }
   // 宿主决策用同一 Kernel 授权账本；两种能力端口必须发出同一操作 key。
-  const approval:ApprovalPort={
-   ...delegate,
-   async awaitConfirmation(message,signal,options){
-    const key=options?.operation?.key
-    if(!key)throw Error('operation identity missing')
-    const denial=tracker.denial(key)
-    if(denial)throw Object.assign(Error(denial),{code:'PERMISSION_DENIED'})
-    const decision=await delegate.awaitConfirmationDecision(message,signal,options)
-    if(!decision.approved){tracker.record(key,false,options??{},decision.message??undefined);throw Object.assign(Error('denied'),{code:'PERMISSION_DENIED'})}
-    expect(options?.requireManualApproval).toBe(true);expect(options?.rememberRiskScope).toBe(false)
-   },
+  const approval: ApprovalPort = {
+    ...delegate,
+    async awaitConfirmation(message, signal, options) {
+      const key = options?.operation?.key
+      if (!key) throw Error('operation identity missing')
+      const denial = tracker.denial(key)
+      if (denial) throw Object.assign(Error(denial), { code: 'PERMISSION_DENIED' })
+      const decision = await delegate.awaitConfirmationDecision(message, signal, options)
+      if (!decision.approved) {
+        tracker.record(key, false, options ?? {}, decision.message ?? undefined)
+        throw Object.assign(Error('denied'), { code: 'PERMISSION_DENIED' })
+      }
+      expect(options?.requireManualApproval).toBe(true)
+      expect(options?.rememberRiskScope).toBe(false)
+    },
   }
   const run = async (command: string) => {
     runs++
-    return { command, cwd: workspaceRoot, stdout: '', stderr: '', exitCode: 0, signal: null,
-      durationMs: 0, timedOut: false, aborted: false, truncated: false, success: true,
-      verification: { kind: 'unknown' as const, status: 'unknown' as const, issues: [] } }
+    return {
+      command,
+      cwd: workspaceRoot,
+      stdout: '',
+      stderr: '',
+      exitCode: 0,
+      signal: null,
+      durationMs: 0,
+      timedOut: false,
+      aborted: false,
+      truncated: false,
+      success: true,
+      verification: { kind: 'unknown' as const, status: 'unknown' as const, issues: [] },
+    }
   }
-  const unused = (): never => { throw new Error('unexpected host access') }
+  const unused = (): never => {
+    throw new Error('unexpected host access')
+  }
   const shell: ShellHostPort & { resolvePath(path?: string): string } = {
     resolvePath: (path?: string) => resolve(workspaceRoot, path ?? '.'),
     runCommand: run,
@@ -69,9 +91,19 @@ function spaces(approved: boolean) {
     terminateBackgroundTask: unused,
     queryCode: unused,
   }
-  const system = createCapabilityPort(systemSpace({ shell, resolveCall: () => ({ abortSignal: new AbortController().signal, approval }) }).operations)
-  const project = createCapabilityPort(projectSpace({ resolveCall: () => ({ abortSignal: new AbortController().signal, approval, project: host }) }).operations)
-  const runIn = (port: typeof system, command: string) => port.invoke({ namespace: 'shell', operation: 'run', input: { command } })
+  const system = createCapabilityPort(
+    systemSpace({
+      shell,
+      resolveCall: () => ({ abortSignal: new AbortController().signal, approval }),
+    }).operations
+  )
+  const project = createCapabilityPort(
+    projectSpace({
+      resolveCall: () => ({ abortSignal: new AbortController().signal, approval, project: host }),
+    }).operations
+  )
+  const runIn = (port: typeof system, command: string) =>
+    port.invoke({ namespace: 'shell', operation: 'run', input: { command } })
   return { system, project, runIn, tracker, cards: () => cards, runs: () => runs }
 }
 

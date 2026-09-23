@@ -7,9 +7,22 @@
 //
 // 宽容匹配与分歧定位共用同一口径（忽略行尾空白与 \r，且被忽略的空白必须真的位于行尾）：
 // 系统会自动放过的差异不能被报告成「第一处分歧」，否则模型会去修一行根本不用修的内容。
-import { isBlank, isEmpty, isPresent, optionalWhen, toNullable, truncate, unique } from '@velaros-ai/core'
+import {
+  isBlank,
+  isEmpty,
+  isPresent,
+  optionalWhen,
+  toNullable,
+  truncate,
+  unique,
+} from '@velaros-ai/core'
 
-import type { CandidateStart, TextMatchLocation, TextMatchMissDiagnosis, TextMismatchCause } from '../../types/editing.js'
+import type {
+  CandidateStart,
+  TextMatchLocation,
+  TextMatchMissDiagnosis,
+  TextMismatchCause,
+} from '../../types/editing.js'
 import { execGuardedRegex } from '../regex-guard.js'
 import { offsetToLine } from '../text.js'
 import { ProjectTuning } from '../tuning.js'
@@ -53,7 +66,7 @@ function alignedEqual(
   actual: Optional<string>,
   index: number,
   count: number,
-  endAnchored = false,
+  endAnchored = false
 ): boolean {
   if (!isPresent(actual)) return false
   if (index === 0)
@@ -73,7 +86,7 @@ function equalUnder(
   expected: string,
   actual: Optional<string>,
   index: number,
-  count: number,
+  count: number
 ): boolean {
   if (!isPresent(actual)) return false
   const normalized = normalizeWith(steps, expected)
@@ -81,13 +94,13 @@ function equalUnder(
   if (alignedEqual(normalized, normalizeWith(steps, actual), index, count, stripped)) return true
   if (!stripped || index !== count - 1) return false
   const bodySteps = steps.filter(
-    ([cause]) => cause !== 'line_ending' && cause !== 'trailing_whitespace',
+    ([cause]) => cause !== 'line_ending' && cause !== 'trailing_whitespace'
   )
   return alignedEqual(
     normalizeWith(bodySteps, expected),
     normalizeWith(bodySteps, actual),
     index,
-    count,
+    count
   )
 }
 
@@ -108,7 +121,7 @@ function alignedAnchorStarts(file: readonly string[], needle: readonly string[])
     index > 0 && index < count - 1
       ? (lineIndex.get(anchor) ?? [])
       : file.flatMap((line, fileIndex) =>
-          alignedEqual(anchor, line, index, count) ? [fileIndex] : [],
+          alignedEqual(anchor, line, index, count) ? [fileIndex] : []
         )
   const starts = needle
     .map((anchor, index) => ({
@@ -139,7 +152,7 @@ function bigramCounts(text: string): Map<string, number> {
 function fragmentSimilarity(
   anchorGrams: ReadonlyMap<string, number>,
   anchorLength: number,
-  line: string,
+  line: string
 ): number {
   const remaining = new Map(anchorGrams)
   let shared = 0
@@ -167,7 +180,10 @@ function fuzzyAnchorStarts(file: readonly string[], needle: readonly string[]): 
       if (fileIndex < anchor.index) continue
       const similarity = fragmentSimilarity(grams, anchor.text.length, line)
       const start = fileIndex - anchor.index
-      if (similarity >= ProjectTuning.editing.fuzzySimilarity && similarity > (best.get(start) ?? 0))
+      if (
+        similarity >= ProjectTuning.editing.fuzzySimilarity &&
+        similarity > (best.get(start) ?? 0)
+      )
         best.set(start, similarity)
     }
   }
@@ -189,7 +205,7 @@ function outranks(left: readonly number[], right: readonly number[]): boolean {
  */
 function bestCandidateStart(
   fileLines: readonly string[],
-  needleLines: readonly string[],
+  needleLines: readonly string[]
 ): Optional<number> {
   const semanticFile = fileLines.map((line) => normalizeWith(MismatchNormalizers, line))
   const semanticNeedle = needleLines.map((line) => normalizeWith(MismatchNormalizers, line))
@@ -202,7 +218,7 @@ function bestCandidateStart(
   const candidates = isEmpty(aligned) ? fuzzyAnchorStarts(semanticFile, semanticNeedle) : aligned
   let best: Optional<{ start: number; rank: number[] }>
   for (const { start, similarity } of [...candidates].sort(
-    (left, right) => left.start - right.start,
+    (left, right) => left.start - right.start
   )) {
     const rank = [
       alignedLines(semanticNeedle, semanticFile, start),
@@ -222,7 +238,7 @@ function mismatchCauses(
   expected: string,
   actual: string,
   index: number,
-  count: number,
+  count: number
 ): TextMismatchCause[] {
   for (let depth = 1; depth <= MismatchNormalizers.length; depth += 1) {
     const steps = MismatchNormalizers.slice(0, depth)
@@ -235,8 +251,8 @@ function mismatchCauses(
             expected,
             actual,
             index,
-            count,
-          ),
+            count
+          )
       )
       .map(([cause]) => cause)
   }
@@ -323,12 +339,12 @@ export function diagnoseTextMatchMiss(content: string, needle: string): TextMatc
         .flatMap((line, index) =>
           alignedEqual(line, fileLines[start + index], index, count)
             ? []
-            : mismatchCauses(line, fileLines[start + index], index, count),
-        ),
+            : mismatchCauses(line, fileLines[start + index], index, count)
+        )
     )
   // 宽容口径下仍不相等的第一行才是模型需要修正的分歧。
   const mismatchIndex = needleLines.findIndex(
-    (line, index) => !equalUnder(TolerantSteps, line, fileLines[start + index], index, count),
+    (line, index) => !equalUnder(TolerantSteps, line, fileLines[start + index], index, count)
   )
   if (mismatchIndex === -1) {
     const tolerated = toleratedBefore(count)
@@ -405,7 +421,7 @@ export function textMatchMissNextAction(diagnosis: TextMatchMissDiagnosis): stri
 export function findLineWhitespaceTolerantMatches(
   content: string,
   needle: string,
-  limit: number,
+  limit: number
 ): Array<{ index: number; text: string }> {
   if (isBlank(needle)) return []
   const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -427,7 +443,7 @@ export function findLineWhitespaceTolerantMatches(
 /** 把匹配 offset 投影成有上限的行号列表，并附带所属外层行帮助区分同形文本。 */
 export function locateTextMatches(
   content: string,
-  indices: readonly number[],
+  indices: readonly number[]
 ): TextMatchLocation[] {
   const lines = content.split('\n')
   return indices.slice(0, ProjectTuning.editing.reportedMatches).map((offset, position) => {
@@ -447,7 +463,8 @@ function enclosingLine(lines: readonly string[], lineIndex: number): Optional<st
     index -= 1
   ) {
     const line = lines[index]
-    if (!isBlank(line) && indentOf(line) < indent) return truncate(line.trim(), ProjectTuning.editing.enclosingLineChars)
+    if (!isBlank(line) && indentOf(line) < indent)
+      return truncate(line.trim(), ProjectTuning.editing.enclosingLineChars)
   }
   return undefined
 }

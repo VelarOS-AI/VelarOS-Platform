@@ -1,5 +1,14 @@
 import type { ModelImage } from '../types/model.js'
-import type { InvocationReceipt, InvocationReconciliation, InvocationRecord, ModuleBinding, OperationDescriptor, OperationResourceVersion, OperationSurface, PreparedInvocation } from '../types/operations.js'
+import type {
+  InvocationReceipt,
+  InvocationReconciliation,
+  InvocationRecord,
+  ModuleBinding,
+  OperationDescriptor,
+  OperationResourceVersion,
+  OperationSurface,
+  PreparedInvocation,
+} from '../types/operations.js'
 
 /** 具体调用的受控上下文；模块资源在挂载时闭包注入。 */
 export interface OperationContext {
@@ -8,7 +17,7 @@ export interface OperationContext {
   /** 取消只要求停止后续工作，不表示撤销已发生的效果。 */
   readonly signal: AbortSignal
   /** 观察适配器确认已正常收束；partial/none 不承诺无副作用。 */
-  recordObservation?(evidence:NonNullable<InvocationReceipt['observation']>):void
+  recordObservation?(evidence: NonNullable<InvocationReceipt['observation']>): void
   /** 处理器在提交效果后更新事实，随最终回执保存。 */
   recordEffect(effect: InvocationReceipt['effect']): void
   /** 把真实图像交给模型；先验证再纳入持久回执。 */
@@ -18,9 +27,16 @@ export interface OperationContext {
 /** 领域版本适配器；捕获与验证都不得产生外界写入。 */
 export interface OperationReadContract {
   /** 从本次真实返回值提取资源版本；不能再次读取并冒充采集时的版本。 */
-  capture(input: unknown, value: unknown, context: OperationContext): readonly OperationResourceVersion[] | Promise<readonly OperationResourceVersion[]>
+  capture(
+    input: unknown,
+    value: unknown,
+    context: OperationContext
+  ): readonly OperationResourceVersion[] | Promise<readonly OperationResourceVersion[]>
   /** 在原授权作用域内比较当前版本，无法验证返回 null。 */
-  validate(version: OperationResourceVersion, context: OperationContext): Nullable<boolean | Promise<Nullable<boolean>>>
+  validate(
+    version: OperationResourceVersion,
+    context: OperationContext
+  ): Nullable<boolean | Promise<Nullable<boolean>>>
 }
 
 /** 操作定义；schema、文档与处理器只有这一个登记处。 */
@@ -30,7 +46,10 @@ export interface OperationDefinition extends OperationDescriptor {
   /** 观察模式专用的受限实现；写操作只有经此口才能用于观察，保护范围由实现报告。 */
   observe?(input: unknown, context: OperationContext): unknown | Promise<unknown>
   /** 按已固定身份只读核对外部效果；未知返回 null，不能重新执行该操作。 */
-  reconcile?(invocation: PreparedInvocation, signal: AbortSignal): Promise<Nullable<Omit<InvocationReconciliation, 'checkedAt'>>>
+  reconcile?(
+    invocation: PreparedInvocation,
+    signal: AbortSignal
+  ): Promise<Nullable<Omit<InvocationReconciliation, 'checkedAt'>>>
   /** 显式准备一次输入；准备不得产生外部副作用。 */
   prepare?(input: unknown): unknown | Promise<unknown>
   /** 执行已经准备并校验过的参数。 */
@@ -58,7 +77,11 @@ export interface OperationModuleDefinition {
 /** 意图和回执的可靠日志；claim 必须跨进程原子去重。 */
 export interface InvocationJournal {
   /** 追加已核对事实，不覆盖原回执；缺少此端口时不能持久化恢复结论。 */
-  recordReconciliation?(sessionId: string, id: string, result: InvocationReconciliation): Promise<void>
+  recordReconciliation?(
+    sessionId: string,
+    id: string,
+    result: InvocationReconciliation
+  ): Promise<void>
   /** 原子写入意图；已有同号记录时返回它，新写入返回 null。 */
   claim(prepared: PreparedInvocation): Promise<Nullable<InvocationRecord>>
   /** 唯一占用者提交准备后的不可变参数；完成后才允许派发。 */
@@ -72,9 +95,17 @@ export interface InvocationJournal {
 /** 操作运行时的依赖；所有入口共享这一个实例。 */
 export interface OperationRuntimeOptions {
   /** 版本验证前重验原调用授权；与业务写入调度分开，不再次执行原操作。 */
-  beforeReadValidation?(invocation: PreparedInvocation, descriptor: OperationDescriptor, signal: AbortSignal): Promise<void>
+  beforeReadValidation?(
+    invocation: PreparedInvocation,
+    descriptor: OperationDescriptor,
+    signal: AbortSignal
+  ): Promise<void>
   /** 持久化派发前复核任务执行前提；抛错表示尚无外部效果。 */
-  beforeDispatch?(invocation: PreparedInvocation, descriptor: OperationDescriptor, signal: AbortSignal): Promise<void>
+  beforeDispatch?(
+    invocation: PreparedInvocation,
+    descriptor: OperationDescriptor,
+    signal: AbortSignal
+  ): Promise<void>
   /** 完整挂载定义。 */
   readonly modules: readonly OperationModuleDefinition[]
   /** 副作用派发前必须写入的持久日志。 */
@@ -108,7 +139,14 @@ import type {
   KernelClientAccessDecision,
   KernelClientCapabilityBindRequest,
 } from '../types/serve.js'
-import type { KernelArtifactExtractionContext, KernelArtifactSignatureContext, KernelArtifactSignatureResult, KernelFetchRequest, KernelFetchResponse, KernelHealthCheckContext } from '../types/updater.js'
+import type {
+  KernelArtifactExtractionContext,
+  KernelArtifactSignatureContext,
+  KernelArtifactSignatureResult,
+  KernelFetchRequest,
+  KernelFetchResponse,
+  KernelHealthCheckContext,
+} from '../types/updater.js'
 import type { RemoteNodeManifest } from '../types/wire.js'
 import type {
   CapabilityCallRequest,
@@ -179,9 +217,7 @@ export interface KernelModuleDefinition {
   /** 模块的静态清单；内核在模块代码跑起来之前就靠它解析依赖图。 */
   readonly manifest: KernelModuleManifest
   /** 激活模块；拿到的上下文是收窄过的宿主面，返回生命周期钩子或什么都不返回。 */
-  activate(
-    context: KernelModuleActivateContext,
-  ): Awaitable<KernelModuleLifecycle | void>
+  activate(context: KernelModuleActivateContext): Awaitable<KernelModuleLifecycle | void>
 }
 
 /** 一次能力调用的上下文；算权限理由时可以按它变文案。 */
@@ -196,8 +232,7 @@ export interface KernelCapabilityOperationContext {
 
 /** 权限理由：常量串，或按本次调用算出来的一句话。 */
 export type KernelCapabilityOperationReason =
-  | string
-  | ((context: KernelCapabilityOperationContext) => string)
+  string | ((context: KernelCapabilityOperationContext) => string)
 
 /** 一条可调用操作声明的权限策略。 */
 export interface KernelCapabilityOperationMetadata {
@@ -215,7 +250,7 @@ export interface KernelCallableCapabilityOperation {
   invoke(
     scope: LooseOptional<ScopeRef>,
     input: unknown,
-    signal: AbortSignal,
+    signal: AbortSignal
   ): unknown | Promise<unknown>
 }
 
@@ -227,15 +262,13 @@ export interface KernelCallableCapabilityOperation {
  */
 export interface KernelCallableCapabilityService {
   /** 取一条操作的权限声明；没登记过就返回 undefined。 */
-  getOperationMetadata(
-    operation: string,
-  ): Optional<KernelCapabilityOperationMetadata>
+  getOperationMetadata(operation: string): Optional<KernelCapabilityOperationMetadata>
   /** 执行一条已登记的操作；未知操作与已中止的调用都不进 provider 代码。 */
   invoke(
     operation: string,
     scope: LooseOptional<ScopeRef>,
     input: unknown,
-    signal: AbortSignal,
+    signal: AbortSignal
   ): unknown | Promise<unknown>
 }
 
@@ -250,13 +283,13 @@ export interface KernelModuleIsolationAdapter {
   /** 激活一个非本地模块；拿到的上下文与进程内模块的完全一样。 */
   activate(
     module: KernelModuleDefinition,
-    context: KernelModuleActivateContext,
+    context: KernelModuleActivateContext
   ): Awaitable<KernelModuleLifecycle | void>
 }
 
 /** 事件订阅回调：订阅方在 `subscribe` 时给；它抛错只记日志，不影响发布方与别的订阅者。 */
 export type KernelEventHandler<TPayload = unknown> = (
-  event: KernelEvent<TPayload>,
+  event: KernelEvent<TPayload>
 ) => Awaitable<void>
 
 // ── 瘦客户端的传输实现（`./client`、`./serve`）────────────────────────────
@@ -278,17 +311,14 @@ export interface KernelClientTransport {
   // 产品路径：KernelClient.openCapabilitySession → CapabilitySession.call/dispose
   /** 开一条能力会话，回应里带会话 id 与实际绑上的能力；被拒时回应本身是失败信封，不抛。 */
   openCapabilitySession(
-    request: CapabilitySessionOpenRequest,
+    request: CapabilitySessionOpenRequest
   ): Promise<CapabilitySessionOpenResponse>
   /** 关掉一条能力会话；会话已经不在时回应里的 `closed` 是 false。 */
   closeCapabilitySession(
-    request: CapabilitySessionCloseRequest,
+    request: CapabilitySessionCloseRequest
   ): Promise<CapabilitySessionCloseResponse>
   /** 在一条已开的会话上调一次能力；`signal` 中止时以 AbortError 结束并往对端发取消帧。 */
-  call(
-    request: CapabilityCallRequest,
-    signal?: AbortSignal,
-  ): Promise<CapabilityCallResponse>
+  call(request: CapabilityCallRequest, signal?: AbortSignal): Promise<CapabilityCallResponse>
 
   // --- mod 仓库线（RPC：mods.*）---
   /** 列出对端已知的全部 mod 与它们的启停状态。 */
@@ -297,42 +327,33 @@ export interface KernelClientTransport {
   setModEnabled(request: ModsSetEnabledRequest): Promise<ModsSetEnabledResponse>
   /** 从一个本机目录安装 mod；目录不合法时回应是失败信封。 */
   installModFromDirectory(
-    request: ModsInstallFromDirectoryRequest,
+    request: ModsInstallFromDirectoryRequest
   ): Promise<ModsInstallFromDirectoryResponse>
 
   // --- 事件 ---
   /** 订阅一类内核事件，返回可关闭的句柄；断线重连后由传输自己把订阅补回来。 */
-  subscribe(
-    eventType: string,
-    handler: KernelClientEventHandler,
-  ): Promise<KernelEventSubscription>
+  subscribe(eventType: string, handler: KernelClientEventHandler): Promise<KernelEventSubscription>
 
   /** 关掉这条传输：断开连接、清空订阅，在途请求一律以 TRANSPORT_CLOSED 落空。 */
   dispose(): void | Promise<void>
 }
 
 /** 订阅到的每一条内核事件都交给它；抛出的错误只记日志，不影响别的订阅者。 */
-export type KernelClientEventHandler = (
-  event: KernelEvent,
-) => void | Promise<void>
+export type KernelClientEventHandler = (event: KernelEvent) => void | Promise<void>
 
 /**
  * 注入面：清单与制品的字节来源。
  *
  * 更新器读安装根以外的任何东西都经这个函数，测试与离线宿主由此换成自己的传输，不碰网络。
  */
-export type KernelFetch = (
-  request: KernelFetchRequest,
-) => Promise<KernelFetchResponse>
+export type KernelFetch = (request: KernelFetchRequest) => Promise<KernelFetchResponse>
 
 /**
  * 注入面：判断刚激活的内核能不能用。
  *
  * 返回 false 或抛错都算没过，更新器会把指针恢复成上一个版本再报失败。
  */
-export type KernelHealthCheck = (
-  context: KernelHealthCheckContext,
-) => Promise<boolean> | boolean
+export type KernelHealthCheck = (context: KernelHealthCheckContext) => Promise<boolean> | boolean
 
 /**
  * 注入面：把校验过的制品展开成一个暂存目录。
@@ -352,9 +373,7 @@ export interface KernelArtifactExtractor {
  */
 export interface KernelArtifactSignatureVerifier {
   /** 校验 `context` 里那份制品的签名；返回结论，校验不了也要给出 `verified: false` 与原因。 */
-  verify(
-    context: KernelArtifactSignatureContext,
-  ): Promise<KernelArtifactSignatureResult>
+  verify(context: KernelArtifactSignatureContext): Promise<KernelArtifactSignatureResult>
 }
 
 /**
@@ -375,9 +394,7 @@ export type KernelModuleImporter = (url: string) => Promise<Record<string, unkno
  */
 export interface KernelClientAccessBroker {
   /** 判一次绑定请求：准了回 granted，不准回 denied 并带上给人看的原因；判不出来时抛错，由调用方按「判不出授权结果」处理。 */
-  requestBind(
-    request: KernelClientCapabilityBindRequest,
-  ): Promise<KernelClientAccessDecision>
+  requestBind(request: KernelClientCapabilityBindRequest): Promise<KernelClientAccessDecision>
 }
 
 // ── 远程能力节点两端（`./remote`）────────────────────────────────────────
@@ -407,7 +424,6 @@ export interface RemoteNodeSocket {
 /** 按 url 建一条 socket；缺省实现走 `ws`，测试与替代传输注入自己的。 */
 export type RemoteNodeSocketFactory = (url: string) => RemoteNodeSocket
 
-
 /**
  * 凭据存储端口。
  *
@@ -428,7 +444,7 @@ export interface RemoteNodeCapabilityInvoker {
   /** 派发一次能力调用，只兑现 `success` / `denied` 两态；`signal` 承载取消与超时。 */
   invoke(
     request: RemoteNodeCapabilityInvokeRequest,
-    signal: AbortSignal,
+    signal: AbortSignal
   ): Promise<RemoteNodeCapabilityInvokeResult>
 }
 
@@ -482,7 +498,12 @@ export interface RemoteNodeActivitySink {
   record(event: RemoteNodeActivityEvent): void
 }
 
-import type { ModelDriverLimits, ModelInputEstimate, ModelTurnDelta, ModelTurnRequest } from '../types/model.js'
+import type {
+  ModelDriverLimits,
+  ModelInputEstimate,
+  ModelTurnDelta,
+  ModelTurnRequest,
+} from '../types/model.js'
 
 /** 主干依赖的中立模型驱动；供应商编码与使用量归驱动负责。 */
 export interface ModelDriver {
@@ -496,11 +517,19 @@ export interface ModelDriver {
   stream(request: ModelTurnRequest, signal: AbortSignal): AsyncIterable<ModelTurnDelta>
 }
 
-import type { ApprovalDecision,ToolConfirmationDecisionOptions } from '../types/approval.js'
+import type { ApprovalDecision, ToolConfirmationDecisionOptions } from '../types/approval.js'
 /** 操作审批端口；缺席必须默认拒绝。 */
 export interface ApprovalPort {
- /** 被拒绝时终止当前操作。 */
- awaitConfirmation(message:string,signal?:AbortSignal,options?:ToolConfirmationDecisionOptions):Promise<void>
- /** 返回绑定当前操作的明确审批结论。 */
- awaitConfirmationDecision(message:string,signal?:AbortSignal,options?:ToolConfirmationDecisionOptions):Promise<ApprovalDecision>
+  /** 被拒绝时终止当前操作。 */
+  awaitConfirmation(
+    message: string,
+    signal?: AbortSignal,
+    options?: ToolConfirmationDecisionOptions
+  ): Promise<void>
+  /** 返回绑定当前操作的明确审批结论。 */
+  awaitConfirmationDecision(
+    message: string,
+    signal?: AbortSignal,
+    options?: ToolConfirmationDecisionOptions
+  ): Promise<ApprovalDecision>
 }

@@ -21,10 +21,19 @@ import type {
   OfficeWordToPdfInput,
   OfficeWritten,
 } from '../../types/office.js'
-import { conversionFailedError, converterMissingError, missingOutputError } from '../../utils/errors.js'
+import {
+  conversionFailedError,
+  converterMissingError,
+  missingOutputError,
+} from '../../utils/errors.js'
 import { copyOfficeOutput, findGeneratedPdf, writeOfficeFile } from '../../utils/paths.js'
 import { buildLatexCompileCommands, getDefaultLatexSourcePath } from '../../utils/pdf/latex.js'
-import { applyPdfMetadata, applyPdfTextStamp, assertTextStampsEncodable, resolvePdfPageNumbers } from '../../utils/pdf/pages.js'
+import {
+  applyPdfMetadata,
+  applyPdfTextStamp,
+  assertTextStampsEncodable,
+  resolvePdfPageNumbers,
+} from '../../utils/pdf/pages.js'
 import { OfficeTuning } from '../../utils/tuning.js'
 import { pdfjsRuntime, type PdfjsRuntimeApi } from '../runtime/PdfjsRuntime.js'
 
@@ -61,7 +70,10 @@ export class OfficePdfOperations implements OfficePdfOperationsApi {
     private readonly pdfjs: PdfjsRuntimeApi
   ) {}
 
-  public async readText(input: OfficeReadPdfInput, ctx: OfficeOperationContext): Promise<OfficePdfText> {
+  public async readText(
+    input: OfficeReadPdfInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficePdfText> {
     ctx.abortSignal.throwIfAborted()
     const path = await this.workspace.resolveInput(ctx, input.inputPath, ['.pdf'])
     const extracted = await this.pdfjs.extractTextPages(path, {
@@ -76,15 +88,24 @@ export class OfficePdfOperations implements OfficePdfOperationsApi {
     }
   }
 
-  public async wordToPdf(input: OfficeWordToPdfInput, ctx: OfficeOperationContext): Promise<OfficeWritten> {
+  public async wordToPdf(
+    input: OfficeWordToPdfInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeWritten> {
     ctx.abortSignal.throwIfAborted()
     // Word 转 PDF 依赖 LibreOffice 的 headless 转换能力；本机缺命令时不静默失败。
     const libreOffice = await this.converters.findLibreOffice(ctx)
-    if (!libreOffice) throw converterMissingError('LibreOffice（soffice）', OfficePdfOperations.LibreOfficePurpose)
+    if (!libreOffice)
+      throw converterMissingError('LibreOffice（soffice）', OfficePdfOperations.LibreOfficePurpose)
 
     // 输入支持 .doc/.docx；输出路径统一补 .pdf。
     const inputPath = await this.workspace.resolveInput(ctx, input.inputPath, ['.docx', '.doc'])
-    const output = await this.workspace.prepareOutput(ctx, input.outputPath, '.pdf', input.overwrite)
+    const output = await this.workspace.prepareOutput(
+      ctx,
+      input.outputPath,
+      '.pdf',
+      input.overwrite
+    )
     // 旧版 .doc 先转成临时 .docx；转换失败时转换器自己清掉临时目录再抛错。
     const normalizedWord = await this.converters.normalizeWordInput({
       ctx,
@@ -107,25 +128,41 @@ export class OfficePdfOperations implements OfficePdfOperationsApi {
       )
       if (!commandResult.success) throw conversionFailedError('Word 转 PDF ', commandResult)
       // LibreOffice 会按原文件名生成 PDF，所以需要从临时目录中定位实际产物。
-      const generatedPdf = await findGeneratedPdf(tempDir, `${basename(normalizedInputPath, extname(normalizedInputPath))}.pdf`)
+      const generatedPdf = await findGeneratedPdf(
+        tempDir,
+        `${basename(normalizedInputPath, extname(normalizedInputPath))}.pdf`
+      )
       if (!generatedPdf) throw missingOutputError('Word 转 PDF ', 'PDF')
       return await copyOfficeOutput(output, generatedPdf)
     } finally {
-      await rm(tempDir, { recursive: true, force: true }).catch(() => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */)
+      await rm(tempDir, { recursive: true, force: true }).catch(
+        () => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */
+      )
       await this.converters.cleanupNormalizedWordInput(normalizedWord)
     }
   }
 
-  public async latexToPdf(input: OfficeLatexInput, ctx: OfficeOperationContext): Promise<OfficeLatexCompiled> {
+  public async latexToPdf(
+    input: OfficeLatexInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeLatexCompiled> {
     ctx.abortSignal.throwIfAborted()
     // 根据指定或 auto 策略查找本机可用编译器。
     const compiler = await this.converters.findLatexCompiler(ctx, input.compiler)
     if (!compiler) {
-      const requested = input.compiler && input.compiler !== 'auto' ? input.compiler : 'LaTeX 编译器（tectonic、latexmk、xelatex、pdflatex 都没有）'
+      const requested =
+        input.compiler && input.compiler !== 'auto'
+          ? input.compiler
+          : 'LaTeX 编译器（tectonic、latexmk、xelatex、pdflatex 都没有）'
       throw converterMissingError(requested, OfficePdfOperations.LatexPurpose)
     }
 
-    const output = await this.workspace.prepareOutput(ctx, input.outputPath, '.pdf', input.overwrite)
+    const output = await this.workspace.prepareOutput(
+      ctx,
+      input.outputPath,
+      '.pdf',
+      input.overwrite
+    )
     const source = await this.workspace.prepareOutput(
       ctx,
       input.sourcePath ?? getDefaultLatexSourcePath(input.outputPath),
@@ -151,27 +188,53 @@ export class OfficePdfOperations implements OfficePdfOperationsApi {
       const lastResult = commandResults.at(-1)
       // 编译失败时 .tex 留着，报错里带编译日志的结尾，照着改源码再编。
       if (!lastResult) throw missingOutputError(`用 ${compiler.name} 编译 LaTeX `, 'PDF')
-      if (!lastResult.success) throw conversionFailedError(`用 ${compiler.name} 编译 LaTeX `, lastResult, `；源码已写在 ${source.path}`)
+      if (!lastResult.success)
+        throw conversionFailedError(
+          `用 ${compiler.name} 编译 LaTeX `,
+          lastResult,
+          `；源码已写在 ${source.path}`
+        )
       // 不同编译器都应在临时目录生成同名 PDF，这里统一查找。
-      const generatedPdf = await findGeneratedPdf(tempDir, `${basename(source.path, extname(source.path))}.pdf`)
+      const generatedPdf = await findGeneratedPdf(
+        tempDir,
+        `${basename(source.path, extname(source.path))}.pdf`
+      )
       if (!generatedPdf) throw missingOutputError(`用 ${compiler.name} 编译 LaTeX `, 'PDF')
-      return { ...(await copyOfficeOutput(output, generatedPdf)), sourcePath: source.path, compiler: compiler.name }
+      return {
+        ...(await copyOfficeOutput(output, generatedPdf)),
+        sourcePath: source.path,
+        compiler: compiler.name,
+      }
     } finally {
-      await rm(tempDir, { recursive: true, force: true }).catch(() => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */)
+      await rm(tempDir, { recursive: true, force: true }).catch(
+        () => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */
+      )
     }
   }
 
-  public async editPdf(input: OfficeEditPdfInput, ctx: OfficeOperationContext): Promise<OfficeWritten> {
+  public async editPdf(
+    input: OfficeEditPdfInput,
+    ctx: OfficeOperationContext
+  ): Promise<OfficeWritten> {
     ctx.abortSignal.throwIfAborted()
     const outputDocument = await PDFDocument.create()
     const font = await outputDocument.embedFont(StandardFonts.Helvetica)
     // 文字戳写不了的字先拒绝，路径都还没碰。
     assertTextStampsEncodable(input.textStamps ?? [], font.getCharacterSet())
     const inputPath = await this.workspace.resolveInput(ctx, input.inputPath, ['.pdf'])
-    const output = await this.workspace.prepareOutput(ctx, input.outputPath, '.pdf', input.overwrite)
+    const output = await this.workspace.prepareOutput(
+      ctx,
+      input.outputPath,
+      '.pdf',
+      input.overwrite
+    )
     const sourceDocument = await PDFDocument.load(await readFile(inputPath))
     // 先根据选择/删除规则确定要复制的源页码，再按顺序复制到新文档。
-    const sourcePageNumbers = resolvePdfPageNumbers(sourceDocument.getPageCount(), input.pageSelection, input.removePages)
+    const sourcePageNumbers = resolvePdfPageNumbers(
+      sourceDocument.getPageCount(),
+      input.pageSelection,
+      input.removePages
+    )
     const copiedPages = await outputDocument.copyPages(
       sourceDocument,
       sourcePageNumbers.map((page) => page - 1)
@@ -182,7 +245,9 @@ export class OfficePdfOperations implements OfficePdfOperationsApi {
     applyPdfMetadata(outputDocument, input.metadata)
 
     // 旋转配置按源页码索引，确保 pageSelection 重排后仍能命中原页。
-    const rotateBySourcePage = new Map((input.rotatePages ?? []).map((entry) => [entry.page, entry.degrees] as const))
+    const rotateBySourcePage = new Map(
+      (input.rotatePages ?? []).map((entry) => [entry.page, entry.degrees] as const)
+    )
 
     outputDocument.getPages().forEach((page, index) => {
       const sourcePageNumber = sourcePageNumbers[index] ?? index + 1
@@ -202,4 +267,8 @@ export class OfficePdfOperations implements OfficePdfOperationsApi {
 }
 
 /** 整个进程共用的 PDF 操作。 */
-export const officePdfOperations: OfficePdfOperationsApi = new OfficePdfOperations(officeWorkspace, officeConverters, pdfjsRuntime)
+export const officePdfOperations: OfficePdfOperationsApi = new OfficePdfOperations(
+  officeWorkspace,
+  officeConverters,
+  pdfjsRuntime
+)

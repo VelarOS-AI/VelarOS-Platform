@@ -70,8 +70,21 @@ export type {
   ModelResolutionTraceEntry,
   ResolvedAgentModelRuntime,
 } from './types/adapters'
-export type { CompiledModelRequest,ProviderRequestAuditValue,ProviderRequestFingerprint,ProviderRequestSnapshot } from './types/compiler.js'
-export type { ModelDriverLimits, ModelImage, ModelInputEstimate, ModelMaterial, ModelResponseFormat, ModelTurnDelta,ModelTurnRequest } from './types/driver.js'
+export type {
+  CompiledModelRequest,
+  ProviderRequestAuditValue,
+  ProviderRequestFingerprint,
+  ProviderRequestSnapshot,
+} from './types/compiler.js'
+export type {
+  ModelDriverLimits,
+  ModelImage,
+  ModelInputEstimate,
+  ModelMaterial,
+  ModelResponseFormat,
+  ModelTurnDelta,
+  ModelTurnRequest,
+} from './types/driver.js'
 export type {
   ModelProviderAvailabilityOptions,
   ModelProviderConfiguredInput,

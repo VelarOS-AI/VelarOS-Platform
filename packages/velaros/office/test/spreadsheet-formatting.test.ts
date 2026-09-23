@@ -26,27 +26,33 @@ describe('spreadsheet formatting', () => {
       await officeOperations.createSpreadsheet(
         {
           outputPath: 'formatted.xlsx',
-          sheets: [{
-            name: '总览',
-            columns: ['项目', '金额'],
-            rows: [['研发', 12_000], ['市场', 8_000]],
-            headerStyle: {
-              font: { bold: true, color: '#FFFFFF' },
-              fill: { type: 'pattern', pattern: 'solid', fgColor: '#1F4E78' },
+          sheets: [
+            {
+              name: '总览',
+              columns: ['项目', '金额'],
+              rows: [
+                ['研发', 12_000],
+                ['市场', 8_000],
+              ],
+              headerStyle: {
+                font: { bold: true, color: '#FFFFFF' },
+                fill: { type: 'pattern', pattern: 'solid', fgColor: '#1F4E78' },
+              },
+              numberFormats: { 'B2:B3': '#,##0.00' },
             },
-            numberFormats: { 'B2:B3': '#,##0.00' },
-          }, {
-            name: '明细',
-            columns: ['类别', '金额'],
-            rows: [['云服务', 28_500]],
-            headerStyle: {
-              bold: true,
-              color: '#FFFFFF',
-              bgColor: '#1F4E78',
+            {
+              name: '明细',
+              columns: ['类别', '金额'],
+              rows: [['云服务', 28_500]],
+              headerStyle: {
+                bold: true,
+                color: '#FFFFFF',
+                bgColor: '#1F4E78',
+              },
             },
-          }],
+          ],
         },
-        context,
+        context
       )
 
       const workbook = new ExcelJS.Workbook()

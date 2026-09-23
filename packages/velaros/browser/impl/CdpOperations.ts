@@ -6,7 +6,11 @@
 import { toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { BrowserErrorCodes, BrowserProtocolLimits, BrowserWaitLimits } from '../contract/constants.js'
+import {
+  BrowserErrorCodes,
+  BrowserProtocolLimits,
+  BrowserWaitLimits,
+} from '../contract/constants.js'
 import type { BrowserOperationContext } from '../contract/requires.js'
 import type {
   BrowserProtocolEvent,
@@ -40,7 +44,10 @@ export interface CdpOperationsApi {
   /** @AgentView 等一条事件到来，交回它（先记下 events 的 last，再触发动作，再从 last 之后等，不会错过）。
    * @OperationEffect none
    */
-  waitForEvent(input: CdpWaitForEventInput, ctx: BrowserOperationContext): Promise<BrowserProtocolEvent>
+  waitForEvent(
+    input: CdpWaitForEventInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserProtocolEvent>
   /** @AgentView 断开你的会话：开过的域、设过的仿真与拦截、缓冲的事件一并清掉；下一次 send 重新连一条。
    * @OperationEffect write
    */
@@ -67,19 +74,26 @@ export class CdpOperations implements CdpOperationsApi {
     return result
   }
 
-  public async events(input: CdpEventsInput, ctx: BrowserOperationContext): Promise<BrowserProtocolEvents> {
+  public async events(
+    input: CdpEventsInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserProtocolEvents> {
     ctx.abortSignal.throwIfAborted()
     const query = eventsInput(input)
     requireOpenSite(ctx)
     return ctx.browser.readProtocolEvents(query)
   }
 
-  public async waitForEvent(input: CdpWaitForEventInput, ctx: BrowserOperationContext): Promise<BrowserProtocolEvent> {
+  public async waitForEvent(
+    input: CdpWaitForEventInput,
+    ctx: BrowserOperationContext
+  ): Promise<BrowserProtocolEvent> {
     ctx.abortSignal.throwIfAborted()
     const options = protocolWaitInput(input)
     requireOpenSite(ctx)
     // 不给 after 就从现在起等新来的：先记下此刻的最后一个序号。
-    const after = options.after ?? (await ctx.browser.readProtocolEvents({ method: options.method })).last
+    const after =
+      options.after ?? (await ctx.browser.readProtocolEvents({ method: options.method })).last
     return waitForProtocolEvent({
       method: options.method,
       after,

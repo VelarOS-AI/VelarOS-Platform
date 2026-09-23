@@ -1,23 +1,18 @@
 import { randomUUID } from 'node:crypto'
-import {
-  type FileHandle,
-  mkdir,
-  open,
-  readFile,
-  unlink,
-} from 'node:fs/promises'
+import { type FileHandle, mkdir, open, readFile, unlink } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import { isNotUndefined, isNull, isNumber, isObject, isUndefined, Log } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { KernelUpdaterErrorCodes } from '../../contract/constants'
-import type { KernelUpdateLockOptions, KernelUpdateLockOwner, KernelUpdateLockRecord } from '../../types/updater'
+import type {
+  KernelUpdateLockOptions,
+  KernelUpdateLockOwner,
+  KernelUpdateLockRecord,
+} from '../../types/updater'
 import { KernelUpdaterError } from '../../utils/errors'
-import {
-  ignoreMissing,
-  isNodeError,
-} from '../../utils/fs'
+import { ignoreMissing, isNodeError } from '../../utils/fs'
 import { KernelTuning } from '../../utils/tuning'
 
 const log = Log.tag('KernelUpdateLock')
@@ -45,10 +40,8 @@ export class KernelUpdateLock implements KernelUpdateLockApi {
   private held?: KernelUpdateLockRecord
 
   public constructor(private readonly options: KernelUpdateLockOptions) {
-    this.ownerReadRetries = options.ownerReadRetries
-      ?? KernelTuning.lockOwnerReadRetries
-    this.ownerReadRetryMs = options.ownerReadRetryMs
-      ?? KernelTuning.lockOwnerReadRetryMs
+    this.ownerReadRetries = options.ownerReadRetries ?? KernelTuning.lockOwnerReadRetries
+    this.ownerReadRetryMs = options.ownerReadRetryMs ?? KernelTuning.lockOwnerReadRetryMs
   }
 
   public get record(): KernelUpdateLockRecord | undefined {
@@ -78,7 +71,7 @@ export class KernelUpdateLock implements KernelUpdateLockApi {
             throw new KernelUpdaterError(
               KernelUpdaterErrorCodes.updateLockHeld,
               `Kernel 更新锁正被进程 ${owner.pid} 持有`,
-              { path: this.options.lockPath, ownerPid: owner.pid },
+              { path: this.options.lockPath, ownerPid: owner.pid }
             )
           case 'unreadable':
             // 读不出属主：对方很可能刚 open('wx') 还没来得及写 pid。删掉它等于两个进程同时
@@ -86,7 +79,7 @@ export class KernelUpdateLock implements KernelUpdateLockApi {
             throw new KernelUpdaterError(
               KernelUpdaterErrorCodes.updateLockHeld,
               `Kernel 更新锁存在但读不出属主，按被占用处理；若确认没有更新在跑，删掉 ${this.options.lockPath} 后重试`,
-              { path: this.options.lockPath },
+              { path: this.options.lockPath }
             )
           case 'stale':
             await unlink(this.options.lockPath).catch(ignoreMissing)
@@ -95,11 +88,9 @@ export class KernelUpdateLock implements KernelUpdateLockApi {
       }
     }
 
-    throw new KernelUpdaterError(
-      KernelUpdaterErrorCodes.updateLockHeld,
-      '拿不到 Kernel 更新锁',
-      { path: this.options.lockPath },
-    )
+    throw new KernelUpdaterError(KernelUpdaterErrorCodes.updateLockHeld, '拿不到 Kernel 更新锁', {
+      path: this.options.lockPath,
+    })
   }
 
   public async release(): Promise<void> {
@@ -122,9 +113,8 @@ export class KernelUpdateLock implements KernelUpdateLockApi {
   private async resolveOwner(): Promise<KernelUpdateLockOwner> {
     for (let attempt = 0; attempt <= this.ownerReadRetries; attempt += 1) {
       const pid = await this.readOwnerPid()
-      if (isNotUndefined(pid)) return this.isOwnerAlive(pid)
-        ? { status: 'held', pid }
-        : { status: 'stale' }
+      if (isNotUndefined(pid))
+        return this.isOwnerAlive(pid) ? { status: 'held', pid } : { status: 'stale' }
       if (attempt < this.ownerReadRetries) await this.pause()
     }
     return { status: 'unreadable' }
@@ -133,14 +123,10 @@ export class KernelUpdateLock implements KernelUpdateLockApi {
   /** 从锁文件里读出属主 pid；文件为空、内容损坏或 pid 不是正整数都当读不出。 */
   private async readOwnerPid(): Promise<number | undefined> {
     try {
-      const input = JSON.parse(
-        await readFile(this.options.lockPath, 'utf8'),
-      ) as unknown
-      if (!isObject(input) && !isNull(input) || isNull(input)) return undefined
+      const input = JSON.parse(await readFile(this.options.lockPath, 'utf8')) as unknown
+      if ((!isObject(input) && !isNull(input)) || isNull(input)) return undefined
       const pid = Reflect.get(input, 'pid') as unknown
-      return isNumber(pid) && Number.isInteger(pid) && pid > 0
-        ? pid
-        : undefined
+      return isNumber(pid) && Number.isInteger(pid) && pid > 0 ? pid : undefined
     } catch (error) {
       log.debug('Kernel update lock owner could not be read', {
         error,

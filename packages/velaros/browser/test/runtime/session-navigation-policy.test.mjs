@@ -307,10 +307,7 @@ void test('keeps named popup form navigation native instead of guessing its meth
   assert.deepEqual(popupWindow.maximumSize, [1600, 1200])
   assert.deepEqual(popupWindow.size, [900, 700])
   assert.equal(harness.diagnostics.at(-1).details.method, 'preserved-by-browser')
-  assert.equal(
-    harness.diagnostics.at(-1).details.routingStatus,
-    'opened-controlled-popup'
-  )
+  assert.equal(harness.diagnostics.at(-1).details.routingStatus, 'opened-controlled-popup')
   assert.equal(popupWindow.destroyCount, 0)
   harness.manager.dispose()
   assert.equal(popupWindow.destroyCount, 1)
@@ -458,12 +455,7 @@ void test('caps blank popups and retries a failed destroy while still tracked', 
   assert.equal(windows[0].destroyAttempts, 1)
   assert.equal(windows[0].destroyCount, 0)
   const orphanedDownload = new FakeDownloadItem()
-  harness.webContents.session.emit(
-    'will-download',
-    {},
-    orphanedDownload,
-    windows[0].webContents
-  )
+  harness.webContents.session.emit('will-download', {}, orphanedDownload, windows[0].webContents)
   assert.equal(orphanedDownload.cancelCount, 1)
 
   harness.manager.closeAllSessions()
