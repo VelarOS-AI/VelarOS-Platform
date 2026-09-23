@@ -6,9 +6,15 @@ VelarOS 各领域都可复用的无领域语义基础包：`src/` 里是基础�
 Core 只负责：
 
 - 断言、错误与 `Result`。
-- 日志抽象。
+- 日志抽象与通用 transport。
 - 运行时类型守卫。
 - 数组、字符串、数字、JSON、空值、定时器、文件持久化与真实路径（`utils/RealPath`，判定安全用、会追悬空符号链接）等通用原语。
+- `utils/ExclusiveSqliteLock` 提供独立 SQLite 排他事务的获取与释放：宿主注入零等待连接，负责稳定的锁库路径；忙锁返回 false，其余错误抛出，关闭失败保留连接供重试。支持原生驱动的字符串错误码与 Node 内置 SQLite 的数值错误码，产品元数据由宿主维护。
+- `utils/SqliteMigrations` 注入同步 SQLite 连接与有序版本计划，只读评估历史，把本轮全部待执行迁移及版本记录放在同一事务内提交，失败整批回滚。数据库路径、连接配置与备份策略由宿主决定。
+- `utils/FilePersistence` 的 `writeFileOnceSync` 完整写入并刷新临时文件后一次性发布，目标已存在时返回 false；`utils/FileSecretBox` 使用它创建本地密钥并提供 AES-256-GCM 文本加解密。宿主注入密钥位置与密文版本前缀，损坏密钥直接报错，并发创建者读取同一个正式文件。两者仅用于 Node 环境。
+- `utils/KeyedSerialQueue` 的 `createKeyedSerialQueue()` 为每个资源串行执行操作，不同资源互不等待；异常只返回给对应调用者，队尾完成后回收资源。浏览器脚本、项目写回与聊天存储共用这一机制。
+- `utils/fetchWithTimeout` 在同一截止时间内完成 Fetch 和响应正文消费，支持宿主注入 Fetch、调用者取消与超时中止。调用者传入正文消费函数和 `timeoutMs`；JSON、HTTP 状态码与产品错误映射由宿主决定。该入口与串行队列均可在浏览器使用。
+- `stableStringify(value, options)` 按对象键排序并保留数组顺序；`omitKeys` 在各层排除调用者指定的字段，`rejectCircular` 拒绝循环引用。账号路由、离线授权与 Mod 签名共用排序机制，各自持有载荷、排除字段和信任规则；序列化保留自有的 `__proto__` 字段。
 
 Core 不负责：
 
@@ -26,6 +32,7 @@ Core 不负责：
 | `@velaros-ai/core/assert` | 断言 |
 | `@velaros-ai/core/error` | `AppError` 与错误处理 |
 | `@velaros-ai/core/logger` | logger 与 transport 抽象 |
+| `@velaros-ai/core/logger/node` | Node 文件 transport：有序 JSONL、按记录日期分文件、写入与关闭回执 |
 | `@velaros-ai/core/result` | `Result` |
 | `@velaros-ai/core/utils/*` | 低频工具的逐文件入口 |
 | `@velaros-ai/core/platform` | 跨平台约定：路径文本、shell 命令规格、进程与系统信息命令、应用与数据目录（`createPlatform`、`currentPlatform`）；不碰 Node 模块，渲染进程也能加载 |
@@ -47,6 +54,15 @@ import { createIgnorePolicy, pathMatcher } from '@velaros-ai/core/path-rules'
 
 三个单元各自的说明、骨干链路与不变量见 `platform/MODULE.md`、`text-files/MODULE.md`、`path-rules/MODULE.md`。
 它们以前是三个独立的包（`@velaros-ai/platform`、`@velaros-ai/text-files`、`@velaros-ai/path-rules`），并进来后入口换成上表的子路径，名字不变（ADR 0014）。
+
+## Node 文件日志
+
+`createFileLogTransport({ filePath, id?, minLevel?, accepts? })` 实现现有 `LogTransport` 合同。
+宿主决定文件基名、级别和记录筛选；transport 在提交时固化记录，按顺序追加 JSONL，
+以每条记录的本地日期拆分文件。`resolveDatedLogFilePath(filePath, timestamp?)` 可获取对应路径。
+错误堆栈、原因、BigInt 与循环引用可写入。一次写入失败会拒绝该次写入，但后续记录仍继续处理；
+`flush` 等待已提交记录并报告首个尚未报告的失败，`dispose` 同步停止准入并共用关闭回执。
+产品通知与运行环境装配由宿主持有。该入口依赖 Node 文件系统，与浏览器可用的 `logger` 入口分开。
 
 ## 归属规则
 

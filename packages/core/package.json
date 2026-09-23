@@ -30,6 +30,10 @@
       "types": "./dist/logger/index.d.ts",
       "import": "./dist/logger/index.js"
     },
+    "./logger/node": {
+      "types": "./dist/logger/node.d.ts",
+      "import": "./dist/logger/node.js"
+    },
     "./result": {
       "types": "./dist/result.d.ts",
       "import": "./dist/result.js"

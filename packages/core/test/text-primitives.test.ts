@@ -105,6 +105,28 @@ describe('readErrnoCode', () => {
 })
 
 describe('stableStringify', () => {
+  test('excludes explicit object fields recursively without reordering arrays', () => {
+    const value = { z: [{ runtime: 'private', b: 2, a: 1 }, 3], runtime: 'private', a: undefined }
+    expect(stableStringify(value, { omitKeys: ['runtime'], rejectCircular: true }))
+      .toBe('{"z":[{"a":1,"b":2},3]}')
+    expect(value.runtime).toBe('private')
+  })
+
+  test('keeps own prototype keys in the serialized bytes', () => {
+    const value = JSON.parse('{"z":1,"__proto__":{"x":2},"constructor":3}')
+    expect(stableStringify(value, { rejectCircular: true }))
+      .toBe('{"__proto__":{"x":2},"constructor":3,"z":1}')
+  })
+
+  test('strict projection rejects cycles but accepts repeated references', () => {
+    const shared = { z: 1 }
+    expect(stableStringify([shared, shared], { rejectCircular: true })).toBe('[{"z":1},{"z":1}]')
+    const circular: unknown[] = []
+    circular.push(circular)
+    expect(() => stableStringify(circular, { rejectCircular: true })).toThrow(TypeError)
+    expect(stableStringify(circular)).toBe('["[circular]"]')
+  })
+
   test('键序与写入顺序无关，按码元序排', () => {
     expect(stableStringify({ b: 1, a: 2, A: 3 })).toBe(stableStringify({ a: 2, A: 3, b: 1 }))
     expect(stableStringify({ b: 1, a: 2, A: 3 })).toBe('{"A":3,"a":2,"b":1}')

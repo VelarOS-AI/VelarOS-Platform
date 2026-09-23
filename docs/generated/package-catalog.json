@@ -25,6 +25,7 @@
         "./assert",
         "./error",
         "./logger",
+        "./logger/node",
         "./path-rules",
         "./path-rules/contracts",
         "./platform",

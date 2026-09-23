@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import {
+  closeSync,
+  fsyncSync,
+  linkSync,
   mkdirSync,
+  openSync,
   renameSync,
   rmSync,
   type WriteFileOptions,
@@ -10,6 +14,7 @@ import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import { logRuntime } from '../logger'
+import { isUndefined } from '../typeGuards'
 
 const DefaultEncoding: BufferEncoding = 'utf-8'
 const log = logRuntime.tag('FilePersistence')
@@ -86,6 +91,41 @@ function writeFileAtomicallySync(
   }
 }
 
+/** 完整写入并刷新临时文件后，以硬链接一次性发布；目标已存在时返回 false，绝不覆盖。 */
+function writeFileOnceSync(
+  filePath: string,
+  content: AtomicFileWriteContent,
+  options: AtomicTextFileWriteOptions = {}
+): boolean {
+  mkdirSync(dirname(filePath), { recursive: true })
+  const tmpPath = createAtomicTempPath(filePath)
+  let descriptor: number | undefined
+  try {
+    descriptor = openSync(tmpPath, 'wx', options.mode ?? 0o600)
+    writeFileSync(descriptor, content, toWriteFileOptions(options))
+    fsyncSync(descriptor)
+    closeSync(descriptor)
+    descriptor = undefined
+    try {
+      linkSync(tmpPath, filePath)
+      return true
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false
+      throw error
+    }
+  } finally {
+    try {
+      if (!isUndefined(descriptor)) closeSync(descriptor)
+    } finally {
+      try {
+        rmSync(tmpPath, { force: true })
+      } catch (error) {
+        log.warn('failed to remove one-time file staging path', { error, tmpPath })
+      }
+    }
+  }
+}
+
 async function writeTextFileAtomically(
   filePath: string,
   content: string,
@@ -129,6 +169,7 @@ function writeJsonFileAtomicallySync<T>(
 export {
   writeFileAtomically,
   writeFileAtomicallySync,
+  writeFileOnceSync,
   writeJsonFileAtomically,
   writeJsonFileAtomicallySync,
   writeTextFileAtomically,
