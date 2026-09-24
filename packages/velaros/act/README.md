@@ -69,9 +69,9 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 | `velaros:context-materials.list` | `execute` | `none` | 列快照里的原文元数据，不读正文。 |
 | `velaros:context-materials.read` | `execute` | `none` | 按快照里的引用读一页父会话原文，正文在 text。 |
 | `velaros:context-materials.submit` | `execute` | `none` | 交来整理补丁：先整份校验，不合格就报错（修正后再交），合格就受理；受理之后声明完成。 |
-| `velaros:interaction.ask` | `execute` | `none` | 要信息，返回对方的回答。 |
+| `velaros:interaction.ask` | `execute` | `none` | 要信息，返回对方的回答；给了 options 或 fields 时对方在卡片上点选或填写。 |
 | `velaros:interaction.capability` | `execute` | `none` | 说明缺少的能力；可以先交付当前进度，由父任务更新环境后续跑。 |
-| `velaros:interaction.confirm` | `execute` | `none` | 要确认，返回对方的答复；它不代替具体操作的权限校验。 |
+| `velaros:interaction.confirm` | `execute` | `none` | 要确认，返回对方是否同意及不同意的理由；它不代替具体操作的权限校验。 |
 | `velaros:agents.profiles` | `observe`、`execute` | `none` | 列出能选的配置：名称、能力范围与预算；start/resume 用 name。 |
 | `velaros:agents.start` | `execute` | `none` | 派发子任务，返回它的 job。 |
 | `velaros:agents.resume` | `execute` | `none` | 子任务收束后接着跑同一个会话，已用预算保留；可以换配置、写入范围与共享空间，追加材料。 |

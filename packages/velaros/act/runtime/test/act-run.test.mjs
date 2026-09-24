@@ -119,6 +119,42 @@ test('script interaction is delivered while execution waits and answers bind to 
   assert.deepEqual(await f.session.events(persisted.at(-1).sequence), [])
 })
 
+test('choice questions reach the host as detail and the chosen ids come back to the script', async (t) => {
+  let calls = 0
+  const f = await setup(t, async function* (request) {
+    calls++
+    if (calls === 1) {
+      yield {
+        type: 'text',
+        text: block(
+          request,
+          "import {ask} from 'velaros:interaction';import {output} from 'velaros';output(await ask({message:'哪个环境？',options:[{id:'staging',label:'预发'},{id:'production',label:'生产'}]}));"
+        ),
+      }
+      yield finish
+    } else {
+      assert.match(modelText(request), /"choices":\["staging"\]/)
+      yield* done(request)
+    }
+  })
+  let question
+  for await (const event of f.session.submit('部署')) {
+    if (event.type !== 'interaction') continue
+    question = event.request
+    await f.session.answer({
+      id: question.id,
+      runId: question.runId,
+      value: { choices: ['staging', 'production'] },
+    })
+  }
+  assert.equal(question.kind, 'input')
+  assert.deepEqual(
+    question.detail.options.map((option) => option.id),
+    ['staging', 'production']
+  )
+  assert.equal(calls, 2)
+})
+
 test('cancelling a pending interaction releases the run and rejects late answers', async (t) => {
   const f = await setup(t, async function* (request) {
     yield {

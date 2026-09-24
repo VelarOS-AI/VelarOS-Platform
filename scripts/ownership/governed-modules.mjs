@@ -151,7 +151,7 @@ export const GovernedModules = [
     ],
     layers: [
       ['AgentsModule.ts', 'InteractionModule.ts'],
-      ['AgentsOperations.ts', 'InteractionOperations.ts'],
+      ['AgentsOperations.ts', 'InteractionOperations.ts', 'InteractionQuestions.ts'],
     ],
     invariants: 'act/agents/spec/invariants.md',
     acceptance: 'act/agents/spec/acceptance.test.mjs',

@@ -4,8 +4,19 @@
  */
 
 import type { InteractionOperationContext } from '../contract/requires.js'
-import type { CapabilityRequest, InteractionRequest } from '../types/interaction.js'
-import { checkInteractionMessage } from '../utils/requests.js'
+import type {
+  CapabilityRequest,
+  ConfirmationAnswer,
+  ConfirmationRequest,
+  InteractionAnswer,
+  InteractionRequest,
+} from '../types/interaction.js'
+import {
+  interactionDetail,
+  normalizeConfirmationAnswer,
+  normalizeInteractionAnswer,
+} from '../utils/answers.js'
+import { checkInteractionMessage, checkInteractionRequest } from '../utils/requests.js'
 
 /**
  * @AgentView
@@ -13,28 +24,37 @@ import { checkInteractionMessage } from '../utils/requests.js'
  * 回答本身不授予任何权限：写操作照样过各自的检查，要换能力得等父任务更新环境后续跑。
  */
 export interface InteractionOperationsApi {
-  /** @AgentView 要信息，返回对方的回答。
+  /** @AgentView 要信息，返回对方的回答；给了 options 或 fields 时对方在卡片上点选或填写。
    * @OperationEffect none
    * @OperationModes execute
    */
-  ask(input: InteractionRequest, ctx: InteractionOperationContext): Promise<unknown>
+  ask(input: InteractionRequest, ctx: InteractionOperationContext): Promise<InteractionAnswer>
   /** @AgentView 说明缺少的能力；可以先交付当前进度，由父任务更新环境后续跑。
    * @OperationEffect none
    * @OperationModes execute
    */
   capability(input: CapabilityRequest, ctx: InteractionOperationContext): Promise<unknown>
-  /** @AgentView 要确认，返回对方的答复；它不代替具体操作的权限校验。
+  /** @AgentView 要确认，返回对方是否同意及不同意的理由；它不代替具体操作的权限校验。
    * @OperationEffect none
    * @OperationModes execute
    */
-  confirm(input: InteractionRequest, ctx: InteractionOperationContext): Promise<unknown>
+  confirm(input: ConfirmationRequest, ctx: InteractionOperationContext): Promise<ConfirmationAnswer>
 }
 
 export class InteractionOperations implements InteractionOperationsApi {
-  public async ask(input: InteractionRequest, ctx: InteractionOperationContext): Promise<unknown> {
+  public async ask(
+    input: InteractionRequest,
+    ctx: InteractionOperationContext
+  ): Promise<InteractionAnswer> {
     ctx.abortSignal.throwIfAborted()
-    checkInteractionMessage(input.message)
-    return ctx.interaction.interact('input', input.message, ctx.abortSignal)
+    checkInteractionRequest(input)
+    const answer = await ctx.interaction.interact(
+      'input',
+      input.message,
+      ctx.abortSignal,
+      interactionDetail(input)
+    )
+    return normalizeInteractionAnswer(input, answer)
   }
 
   public async capability(
@@ -47,12 +67,14 @@ export class InteractionOperations implements InteractionOperationsApi {
   }
 
   public async confirm(
-    input: InteractionRequest,
+    input: ConfirmationRequest,
     ctx: InteractionOperationContext
-  ): Promise<unknown> {
+  ): Promise<ConfirmationAnswer> {
     ctx.abortSignal.throwIfAborted()
     checkInteractionMessage(input.message)
-    return ctx.interaction.interact('confirmation', input.message, ctx.abortSignal)
+    return normalizeConfirmationAnswer(
+      await ctx.interaction.interact('confirmation', input.message, ctx.abortSignal)
+    )
   }
 }
 

@@ -13,7 +13,7 @@ declare const model: ModelDriver
 declare const cheapModel: ModelDriver
 declare const projectRoot: string
 declare const stateDir: string
-declare function askUser(kind: string, message: string): Promise<unknown>
+declare function askUser(kind: string, message: string, detail: unknown): Promise<unknown>
 
 // 配置名由宿主定：模型用 profiles() 看到说明、模块与预算，只能按名字选
 const agents: VelarosAgentsOptions = {
@@ -27,9 +27,10 @@ const agents: VelarosAgentsOptions = {
 const runtime = await createRuntime({ workspace: projectRoot, dataDir: stateDir, model, agents })
 const session = await runtime.openSession('main')
 for await (const event of session.submit('先审查登录模块，再按审查结论修复')) {
-  // 主线的 ask、confirm、capability 交给宿主；子任务的提问先交给父任务的模型，由它 reply
+  // 主线的 ask、confirm、capability 交给宿主；子任务的提问先交给父任务的模型，由它 reply。
+  // ask 带选项或表单时 detail 是 { options, multiple, allowText, fields }，回答给 { choices } 或 { values }
   if (event.type === 'interaction')
-    await session.answer({ id: event.request.id, runId: event.request.runId, value: await askUser(event.request.kind, event.request.message) })
+    await session.answer({ id: event.request.id, runId: event.request.runId, value: await askUser(event.request.kind, event.request.message, event.request.detail) })
 }
 
 // 子任务是主会话的支线：追踪的 branches 里 kind 为 agent，按 sessionId 读各自的请求与回执
@@ -41,7 +42,7 @@ console.log(page.branches.filter((branch) => branch.kind === 'agent').map((branc
 
 | 入口 | 运行环境 | 内容 |
 | --- | --- | --- |
-| `@velaros-ai/velaros/act/agents` | Node | 运行时用的装配 `agentsModule`、`interactionModule`，它们要的宿主端口与每次调用的上下文，配置目录的数据 `AgentProfileInfo`；子任务配置的类型 `VelarosAgentsOptions`、`AgentProfile` 在包根入口 |
+| `@velaros-ai/velaros/act/agents` | Node | 运行时用的装配 `agentsModule`、`interactionModule`，它们要的宿主端口与每次调用的上下文，配置目录的数据 `AgentProfileInfo`，宿主读提问的 `interactionQuestions.read`（带选项或表单的问题返回 `InteractionRequest`，否则 null）；子任务配置的类型 `VelarosAgentsOptions`、`AgentProfile` 在包根入口 |
 
 ## 约定
 
@@ -51,6 +52,8 @@ console.log(page.branches.filter((branch) => branch.kind === 'agent').map((branc
 - 子任务要写，得在 `start`、`resume` 的 `writes` 里占用模块，没占用就写抛 `PERMISSION`；两个在跑的子任务写入范围不能重叠（`CONFLICT`）。
 - `concurrency` 是同时在跑的子任务上限，满了 `start` 当场抛 `CONFLICT`、不排队；同一逻辑任务派满 `maxChildren` 抛 `LIMIT`；模型请求另受 `modelTools` 的并发上限约束。
 - 不给 `budget`、`limits` 用运行时的缺省额度；子任务的用量都受全部祖先的剩余额度约束。
+- `ask` 可以给 `options`（2 到 8 个，最多一个 `recommended`；`multiple` 多选，`allowText` 另可自由作答）或 `fields`（1 到 8 项，`text`、`number`、`boolean`、`choice`），二者不同时给；形状不对当场抛 `VALIDATION`、不发起交互。宿主在 `interaction` 事件的 `detail` 里拿到选项与表单。
+- 回答回到模型前按问题整理：`ask` 得到 `{ text?, choices?, values?, declined?, reason? }`，字符串当自由作答，问题里没有的选项、字段和类型不对的值丢掉；`confirm` 得到 `{ approved, reason? }`，只有布尔值或带 `approved` 的对象算数，其余回答一律按不同意、原文当理由。
 - 交互的回答不授予任何权限：`confirm` 不代替具体操作的权限校验，子任务换能力或写入范围要等它收束后由父任务 `resume`，已用预算保留。
 - 子任务的请求与结果先持久化再唤醒父任务，结果随父任务的下一轮交回；父运行取消时子任务一起取消。
 - `start` 的 `stores` 只能是父任务空间权限的子集，子任务没有创建权；配置里 `stores: false` 关掉这项共享。

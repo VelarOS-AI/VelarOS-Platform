@@ -12,4 +12,16 @@ export const InteractionModuleId = 'velaros:interaction' as const
 export const InteractionLimits = Object.freeze({
   /** 一次请求的说明最多多少字符。 */
   messageChars: 8000,
+  /** 一个问题或一个选择字段最多给几个选项；至少两个。 */
+  options: 8,
+  /** 一张表单最多几项。 */
+  fields: 8,
+  /** 选项与字段 id 最多多少字符。 */
+  idChars: 64,
+  /** 选项与字段的标题最多多少字符。 */
+  labelChars: 200,
+  /** 选项说明与输入提示最多多少字符。 */
+  descriptionChars: 500,
+  /** 宿主回答里的文字最多保留多少字符。 */
+  answerChars: 8000,
 })
