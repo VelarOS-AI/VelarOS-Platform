@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
+import { AppError } from '@velaros-ai/core/error'
 import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import { createRuntime, createShellCapabilityModule } from '../../../dist/act/runtime/index.js'
@@ -424,6 +425,35 @@ test('an unavailable observation command backend never falls back to ordinary ex
   success(await submit(f))
   assert.equal(executed, 0)
   assert.match(f.frames[0].observation.text, /宿主没有提供受限/)
+})
+
+test('a dangerous command the user rejects records no effect, so the run needs no reconcile', async (t) => {
+  let executed = 0
+  const shell = {
+    resolveCwd: async () => '/test',
+    commandPolicy: () => ({ scopeLabel: 'test', riskScope: 'test' }),
+    runCommand: async () => {
+      executed++
+      return { command: 'rm -rf dist', cwd: '/test', success: true, exitCode: 0 }
+    },
+  }
+  const module = createShellCapabilityModule({
+    instanceId: 'rejecting-shell',
+    shell,
+    approval: {
+      awaitConfirmation: async () => {
+        throw new AppError('PERMISSION', '用户拒绝了此操作：先别删')
+      },
+    },
+  })
+  const f = await fixture(t, stop, { modules: [module] })
+  const receipt = await f.session.execute({
+    source: "import {run} from 'velaros:shell';await run({command:'rm -rf dist'});",
+  })
+  assert.equal(executed, 0)
+  assert.match(receipt.result.failed.message, /先别删/)
+  assert.equal((await submit(f)).at(-1).status, 'completed')
+  assert(!f.frames[0].mandatory.some((item) => item.effect === 'unknown'))
 })
 
 test('an unknown world outcome survives expiration of its ordinary result body', async (t) => {

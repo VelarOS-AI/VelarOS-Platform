@@ -18,6 +18,7 @@ import type {
   ShellStopInput,
   ShellStopResult,
 } from '../types/shell-command.js'
+import { beforeCommand } from '../utils/effects.js'
 import { clampPositive } from '../utils/limits.js'
 import { environmentOf, runResult, taskOf } from '../utils/results.js'
 
@@ -78,7 +79,7 @@ export class ShellOperations implements ShellOperationsApi {
   ): Promise<ShellRunResult> {
     ctx.abortSignal.throwIfAborted()
     // 工作目录先由空间解析：越界的排在确认之前拒绝，用户不会被问一条注定跑不了的命令。
-    const commandCwd = await ctx.shell.resolveCwd(cwd)
+    const commandCwd = await beforeCommand(() => ctx.shell.resolveCwd(cwd))
     const plan = this.policy.analyze(command)
     // 交互式命令一定跑在后台：它要一直开着等用户在控制台里输入。
     const inBackground = !!interactive || (background ?? plan.shouldStartInBackground)
@@ -127,7 +128,9 @@ export class ShellOperations implements ShellOperationsApi {
         scopeLabel,
         riskScope,
       })
-      await ctx.approval.awaitConfirmation(request.message, ctx.abortSignal, request.options)
+      await beforeCommand(() =>
+        ctx.approval.awaitConfirmation(request.message, ctx.abortSignal, request.options)
+      )
     }
 
     // 超时在这里钳，不靠调用方拦：超了按上限跑，别为一个数字废掉一整次调用。输出不折叠，只守内存的上限。
