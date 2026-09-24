@@ -286,6 +286,8 @@ export class RuntimeSession implements VelarosSession {
   private modelRunning = false
   private runDeadline?: number
   private runController?: AbortController
+  /** 本次运行收到的输入（提交与运行中的追加引导）；帧里不在其中的目标来自此前的运行。 */
+  private readonly runInputs = new Set<string>()
   private contextPhase: 'work' | 'maintenance' | 'finalizing' = 'work'
   private readonly agent?: ActRunServiceApi
   private readonly programs: ProgramContextApi
@@ -587,6 +589,11 @@ export class RuntimeSession implements VelarosSession {
     )
     const frame = JSON.parse(projected.body)
     frame.partitions.runtime = { environment, ...frame.partitions.runtime }
+    // 同一任务里此前运行的输入只作上文，模型据此只回应本次运行的新请求
+    frame.partitions.task.goals = frame.partitions.task.goals.map(
+      (goal: { record: { ref: { id: string } } }) =>
+        this.runInputs.has(goal.record.ref.id) ? goal : { ...goal, earlier: true }
+    )
     if (goal) frame.partitions.runtime.goal = goal
     if (stores) frame.partitions.runtime.stores = stores
     if (tool) frame.partitions.runtime.modelTool = tool
@@ -623,11 +630,15 @@ export class RuntimeSession implements VelarosSession {
     this.modelRunning = true
     this.runDeadline = Date.now() + this.dependencies.limits.timeoutMs
     this.runController = new AbortController()
+    this.runInputs.clear()
     try {
-      yield* this.agent.submit(
+      for await (const event of this.agent.submit(
         input,
         AbortSignal.any([this.runController.signal, ...(signal ? [signal] : [])])
-      )
+      )) {
+        if (event.type === 'input') this.runInputs.add(event.ref.id)
+        yield event
+      }
     } finally {
       this.runController.abort()
       try {

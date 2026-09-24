@@ -70,6 +70,39 @@ test('INV-26 continue keeps task identity and accounting; new archives the previ
   assert.equal((await session.context.read(first.goals[0])).text, 'First task')
 })
 
+test('inputs of earlier runs stay in the task as context and are marked earlier', async (t) => {
+  const storage = localContextStorage({ path: ':memory:' })
+  const frames = []
+  const runtime = await createRuntime({
+    storage,
+    runner: nodeSubprocessCodeRunner,
+    modules: [],
+    context: { maintenance: false },
+    model: {
+      id: 'task',
+      limits,
+      estimate,
+      async *stream(request) {
+        frames.push(JSON.parse(request.materials[0].text))
+        yield* done(request, 'answered')
+      },
+    },
+  })
+  t.after(() => runtime.close())
+  const session = await runtime.openSession('root')
+  await submit(session, 'first question')
+  await submit(session, 'follow-up question')
+  const goals = frames.at(-1).partitions.task.goals
+  assert.deepEqual(
+    goals.map((goal) => [goal.text, goal.earlier === true]),
+    [
+      ['first question', true],
+      ['follow-up question', false],
+    ]
+  )
+  assert.equal(frames[0].partitions.task.goals[0].earlier, undefined)
+})
+
 test('new task cannot discard unknown effects', async (t) => {
   const runtime = await createRuntime({
     storage: localContextStorage({ path: ':memory:' }),
