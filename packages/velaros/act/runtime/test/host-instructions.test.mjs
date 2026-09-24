@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { createRuntime } from '../../../dist/act/runtime/index.js'
+import { frameEnvironment } from '../../../dist/act/runtime/utils/environment.js'
 
 import { done } from './support/model-turn.mjs'
 
@@ -144,5 +145,75 @@ test('resident modules must be a list of module names', async () => {
     )
   } finally {
     await rm(dataDir, { recursive: true, force: true })
+  }
+})
+
+test('every frame carries the local clock and host environment entries in runtime.environment', async (t) => {
+  const frames = []
+  const f = await fixture(t, {
+    model: driver(async function* (request) {
+      frames.push(request)
+      yield* done(request)
+    }),
+    environment: () => ({ os: 'macOS 26.3.1 (arm64)', time: 'host-cannot-override' }),
+  })
+  for await (const event of f.session.submit('what time is it'))
+    assert.notEqual(event.type, 'error')
+  const environment = JSON.parse(frames[0].materials[0].text).partitions.runtime.environment
+  assert.equal(environment.os, 'macOS 26.3.1 (arm64)')
+  assert.match(environment.time, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/)
+  assert(Math.abs(Date.parse(environment.time) - Date.now()) < 60_000)
+  assert.match(environment.localTime, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [A-Z][a-z]+day$/)
+  assert.equal(environment.timezone, Intl.DateTimeFormat().resolvedOptions().timeZone)
+  assert.match(frames[0].instructions, /runtime\.environment/)
+})
+
+test('a failing host environment drops only its own entries and the run goes on', async (t) => {
+  const frames = []
+  const f = await fixture(t, {
+    model: driver(async function* (request) {
+      frames.push(request)
+      yield* done(request)
+    }),
+    environment: () => {
+      throw new Error('probe failed')
+    },
+  })
+  const events = []
+  for await (const event of f.session.submit('answer')) events.push(event)
+  assert.equal(events.at(-1).status, 'completed')
+  const environment = JSON.parse(frames[0].materials[0].text).partitions.runtime.environment
+  assert.deepEqual(Object.keys(environment).sort(), ['localTime', 'time', 'timezone'])
+})
+
+test('environment must be a function returning host entries', async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'runtime-environment-invalid-'))
+  try {
+    await assert.rejects(
+      createRuntime({ dataDir, environment: { os: 'macOS' }, agents: false, search: false }),
+      { code: 'VALIDATION' }
+    )
+  } finally {
+    await rm(dataDir, { recursive: true, force: true })
+  }
+})
+
+test('the frame clock writes the zone offset and weekday of the host time zone', () => {
+  const zone = process.env.TZ
+  const instant = new Date('2026-09-24T18:11:57Z')
+  try {
+    for (const [tz, time, localTime] of [
+      ['Asia/Shanghai', '2026-09-25T02:11:57+08:00', '2026-09-25 02:11:57 Friday'],
+      ['America/New_York', '2026-09-24T14:11:57-04:00', '2026-09-24 14:11:57 Thursday'],
+      ['Asia/Kolkata', '2026-09-24T23:41:57+05:30', '2026-09-24 23:41:57 Thursday'],
+    ]) {
+      process.env.TZ = tz
+      // ICU 可能给出同一时区的规范别名（Asia/Kolkata → Asia/Calcutta），时区名以它为准
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      assert.deepEqual(frameEnvironment(undefined, instant), { time, localTime, timezone })
+    }
+  } finally {
+    if (typeof zone === 'string') process.env.TZ = zone
+    else delete process.env.TZ
   }
 })

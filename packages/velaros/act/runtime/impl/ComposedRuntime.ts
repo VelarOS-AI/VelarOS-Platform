@@ -161,6 +161,7 @@ class ComposedRuntime implements VelarosRuntime {
             instructions: `本会话材料读取合同：\n${materials.declarations}\n${materials.template ?? ''}`,
           }
           const session = new RuntimeSession(id, {
+            environment: options.environment,
             packages: [this.systemPackage(id)],
             allowedModules: () => this.allowedModuleIds(id),
             tool: contextTool,
@@ -243,6 +244,7 @@ class ComposedRuntime implements VelarosRuntime {
           this.scopes.set(id, { kind: 'search' })
           const evidence = this.kernel.describe(EvidenceModuleId)
           const session = new RuntimeSession(id, {
+            environment: options.environment,
             packages: [this.systemPackage(id)],
             allowedModules: () => this.allowedModuleIds(id),
             tool: {
@@ -512,6 +514,7 @@ class ComposedRuntime implements VelarosRuntime {
     let session: VelarosSession
     try {
       session = new RuntimeSession(job.sessionId, {
+        environment: this.options.environment,
         maintain: this.allows(job.sessionId, MemoryModuleId)
           ? (input, signal) => this.maintenance!.maintain(job.sessionId, input, signal)
           : undefined,
@@ -775,6 +778,7 @@ class ComposedRuntime implements VelarosRuntime {
         session = new RuntimeSession(id, {
           instructions: this.options.instructions,
           residentModules: this.options.residentModules,
+          environment: this.options.environment,
           maintain:
             this.maintenance &&
             (this.options.model ||

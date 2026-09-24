@@ -113,6 +113,11 @@ export interface VelarosRuntimeOptions {
    * 不必每次先 modules.list / describe。随会话配置固定，不影响前缀缓存。
    */
   readonly residentModules?: readonly string[]
+  /**
+   * 宿主环境条目（如操作系统），每帧和运行时读的当地时间、时区一起放进 runtime.environment；
+   * 在帧尾，不影响前缀缓存。读取失败的那一帧只给时间。
+   */
+  readonly environment?: () => Readonly<Record<string, string>>
   /** 常规本地工作区；框架装配已有 Project 内核与只读证据来源。 */
   readonly workspace?: string
   /** 是否挂载工作区的默认 Project 与证据来源；false 保留工作区绑定但关闭这两项能力。 */

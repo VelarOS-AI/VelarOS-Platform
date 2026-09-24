@@ -70,6 +70,7 @@ import type {
 } from '../types/session.js'
 import type { ActTurnTrace } from '../types/trace.js'
 import { memoryPrompt } from '../utils/context-memory.js'
+import { frameEnvironment } from '../utils/environment.js'
 import { runtimeInstructions } from '../utils/model-instructions.js'
 import {
   recoverScriptSubmission,
@@ -142,6 +143,8 @@ export interface RuntimeSessionDependencies {
   readonly instructions?: string
   /** 常驻模块：本会话可用的那些把声明与用法示例附进运行说明。 */
   readonly residentModules?: readonly string[]
+  /** 宿主环境条目；每帧与当地时间一起进 runtime 分区。 */
+  readonly environment?: () => Readonly<Record<string, string>>
   /** 会话全部资源收束后撤回宿主持有的活动句柄。 */
   closed?(): void
   /** 固定授权的持久状态及订阅交付。 */
@@ -568,7 +571,9 @@ export class RuntimeSession implements VelarosSession {
     )
     const currentGoal = this.dependencies.tool ? null : await this.goal.get(signal)
     const goal = currentGoal?.status === 'removed' ? null : currentGoal
+    const environment = frameEnvironment(this.dependencies.environment)
     const extra =
+      JSON.stringify(environment).length +
       (goal ? JSON.stringify(goal).length : 0) +
       (stores ? JSON.stringify(stores).length : 0) +
       (tool ? JSON.stringify(tool).length : 0)
@@ -579,8 +584,8 @@ export class RuntimeSession implements VelarosSession {
       signal,
       Math.max(1, maxChars - extra)
     )
-    if (!stores && !tool && !goal) return projected
     const frame = JSON.parse(projected.body)
+    frame.partitions.runtime = { environment, ...frame.partitions.runtime }
     if (goal) frame.partitions.runtime.goal = goal
     if (stores) frame.partitions.runtime.stores = stores
     if (tool) frame.partitions.runtime.modelTool = tool
