@@ -483,6 +483,7 @@ test('INV-51 the main run renews at its turn limit and keeps going instead of fa
 test('INV-51 a renewing main run still cancels a turn stuck for a second clock period', async (t) => {
   const f = await setup(
     t,
+    // eslint-disable-next-line require-yield -- 这一轮故意一直卡住、不产出任何片段，直到被取消
     async function* (_request, signal) {
       await new Promise((resolve) => {
         signal.addEventListener('abort', resolve, { once: true })

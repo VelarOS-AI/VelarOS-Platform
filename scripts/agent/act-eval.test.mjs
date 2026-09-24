@@ -10,7 +10,9 @@ import { evaluationScenario } from './act-scenarios.mjs'
 import { runActEvaluationBatch } from './act-eval-batch.mjs'
 
 const limits = { contextTokens: 200000, inputTokens: 180000, outputTokens: 4096 }
-const marker = (request) => request.instructions.match(/当前帧标记：(\S+)。普通/u)[1]
+/** 本帧会变的协议与阶段说明在最后一条消息末尾（系统提示在会话内不变）。 */
+const frameText = (request) => request.compiledPrompt ?? ''
+const marker = (request) => frameText(request).match(/当前帧标记：(\S+)。普通/u)[1]
 const block = (request, kind, source) =>
   `${marker(request)} ${kind}()\n${source}\n${marker(request)}`
 const model = (stream) => ({
@@ -251,12 +253,15 @@ test('model configuration requires an explicit credential variable and never ret
   assert.equal(configured.configuration.reasoningLevel, 'high')
 })
 
+/** 段内历史里最近一次执行的输出值：首行是元数据，正文在「当次输出：」之后。 */
 const latestOutput = (request) =>
   [...(request.history ?? [])].reverse().flatMap((message) => {
     try {
       const split = message.content.indexOf('\n')
       const row = JSON.parse(split < 0 ? message.content : message.content.slice(0, split))
-      if (split >= 0) row.text = message.content.slice(split + 1)
+      const body = split < 0 ? '' : message.content.slice(split + 1)
+      const output = body.indexOf('当次输出：\n')
+      row.text = output < 0 ? body : body.slice(output + '当次输出：\n'.length)
       if (row.origin !== 'runtime-execution' || !row.text) return []
       const result = JSON.parse(row.text)
       return result.result?.value?.default === undefined ? [] : [result.result.value.default]
@@ -272,12 +277,14 @@ test('cooperation workload verifies the persisted child write, exact message ack
     child = 0
   const driver = model(async function* (request) {
     let code
-    if (request.instructions.includes('你是上下文整理工具')) {
-      const snapshot = JSON.parse(frame(request).partitions.task.goals[0].text).snapshot
-      code = `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify({ baseRevision: snapshot.baseRevision, summary: 'Keep the verified total and task goal', unresolved: [], recentRecords: 2 })}));`
-      yield {
-        type: 'text',
-        text: block(request, 'execute', code) + '\n' + marker(request) + ' done',
+    if (frameText(request).includes('你是上下文整理工具')) {
+      // 整理支线分两步：先提交补丁，受理后的下一帧再完成
+      if (frameText(request).includes('当前候选补丁已通过校验并受理'))
+        yield { type: 'text', text: marker(request) + ' done' }
+      else {
+        const snapshot = JSON.parse(frame(request).partitions.task.goals[0].text).snapshot
+        code = `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify({ baseRevision: snapshot.baseRevision, summary: 'Keep the verified total and task goal', unresolved: [] })}));`
+        yield { type: 'text', text: block(request, 'execute', code) }
       }
     } else if (!request.instructions.includes('velaros:agents')) {
       if (++child === 1) {
@@ -347,7 +354,7 @@ test('cooperation workload verifies the persisted child write, exact message ack
     })
   )
   assert(result.branches.some((branch) => branch.kind === 'agent' && branch.turns.length === 2))
-  assert(result.branches.some((branch) => branch.kind === 'context' && branch.turns.length === 1))
+  assert(result.branches.some((branch) => branch.kind === 'context' && branch.turns.length === 2))
   assert(
     result.branches.every((branch) => branch.turns.every((turn) => turn.request && turn.response))
   )
@@ -357,7 +364,7 @@ test('semantic search workload retains real branch evidence and verifies the fix
   let main = 0,
     search = 0
   const driver = model(async function* (request) {
-    if (request.instructions.includes('你正在执行有界搜索')) {
+    if (frameText(request).includes('你正在执行有界搜索')) {
       if (++search === 1)
         yield {
           type: 'text',
@@ -475,19 +482,20 @@ test('reconciliation advances four actual source versions through the same child
   const seenGoals = new Set()
   const driver = model(async function* (request) {
     const view = frame(request)
-    if (request.instructions.includes('你是上下文整理工具')) {
-      const snapshot = JSON.parse(view.partitions.task.goals[0].text).snapshot
-      yield {
-        type: 'text',
-        text:
-          block(
+    if (frameText(request).includes('你是上下文整理工具')) {
+      // 整理支线分两步：先提交补丁，受理后的下一帧再完成
+      if (frameText(request).includes('当前候选补丁已通过校验并受理'))
+        yield { type: 'text', text: marker(request) + ' done' }
+      else {
+        const snapshot = JSON.parse(view.partitions.task.goals[0].text).snapshot
+        yield {
+          type: 'text',
+          text: block(
             request,
             'execute',
-            `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify({ baseRevision: snapshot.baseRevision, summary: 'Preserve stage progress and store reference', unresolved: [], recentRecords: 2 })}));`
-          ) +
-          '\n' +
-          marker(request) +
-          ' done',
+            `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify({ baseRevision: snapshot.baseRevision, summary: 'Preserve stage progress and store reference', unresolved: [] })}));`
+          ),
+        }
       }
     } else if (!request.instructions.includes('velaros:agents')) {
       child++
