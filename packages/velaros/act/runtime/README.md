@@ -58,7 +58,7 @@ projector.finish() // 交付结束：清掉没接纳的预览
 | 入口 | 运行环境 | 内容 |
 | --- | --- | --- |
 | `@velaros-ai/velaros` | Node | `createRuntime` 与会话；把能力挂进来的 `createCapabilityModule`、`createShellCapabilityModule`、`createProjectCapabilityModule`、`createMcpModule` 与 `createMcpClientConnection`；可靠交付 `createEventDelivery` |
-| `@velaros-ai/velaros/contracts` | 任何进程 | 上限与代际 `VelarosRunLimits`、`McpLimits`、`ScriptLeaseLimits`、`VelarosRuntimeContract`，目标、笔记、追踪、搜索结果这些可移植数据 |
+| `@velaros-ai/velaros/contracts` | 任何进程 | 上限与代际 `VelarosRunLimits`、`McpLimits`、`ScriptLeaseLimits`、`GoalLimits`（宿主用用户正文建目标前按它截断）、`VelarosRuntimeContract`，目标、笔记、追踪、搜索结果这些可移植数据 |
 | `@velaros-ai/velaros/renderer` | 任何进程，含渲染进程 | 事件投影 `createActEventProjector` 与展示快照 `ActPresentation` |
 
 ## 约定

@@ -1,4 +1,4 @@
-export { ScriptLeaseLimits } from '../system/contract/constants.js'
+export { GoalLimits, ScriptLeaseLimits } from '../system/contract/constants.js'
 export type { GoalControl, GoalState, GoalStatus, GoalUpdate } from '../system/types/goal.js'
 export type { WorkspaceEntry } from '../system/types/workspace.js'
 export { McpLimits } from './contract/constants.js'
