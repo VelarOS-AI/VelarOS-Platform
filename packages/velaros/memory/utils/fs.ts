@@ -31,6 +31,15 @@ export async function readDirectoryNames(directory: string): Promise<string[]> {
   })
 }
 
+/** 只列一个目录下的子目录名，普通文件不算；目录还不存在时交回空的。 */
+export async function readSubdirectoryNames(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true }).catch((error: unknown) => {
+    if (readErrnoCode(error) === 'ENOENT') return []
+    throw error
+  })
+  return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+}
+
 /** 读一个小文本文件；不存在时交回 null。 */
 export async function readTextIfExists(path: string): Promise<Nullable<string>> {
   return readFile(path, 'utf8').catch((error: unknown) => {

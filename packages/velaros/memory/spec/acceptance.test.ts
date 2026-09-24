@@ -4,7 +4,7 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { readdir, readFile, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, utimes, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -60,7 +60,7 @@ describe('作用域', () => {
     expect((await upper.list()).map((memory) => memory.title)).toEqual(['大写那份'])
   })
 
-  test('INV-2 作用域目录是小写前缀接哈希，第一次写入才建；.scope 记着原串，listScopes 交回原串、条数与最近更新', async () => {
+  test('INV-2 作用域目录是小写前缀接哈希，第一次写入才建；.scope 记着原串，listScopes 交回原串、条数与最近更新，根目录的杂项不算', async () => {
     const store = createMemoryStore({ root })
     const project = store.scope('project:/Srv/Repos/VelarOS Platform')
     expect(await project.list()).toEqual([])
@@ -77,6 +77,10 @@ describe('作用域', () => {
     const emptied = store.scope('site:https://emptied.example')
     await emptied.save(entry('gone'))
     await emptied.remove({ id: 'gone' })
+    // Finder 的 .DS_Store、宿主以前留下的文件与目录都在根目录里，但它们不是作用域
+    await writeFile(join(root, '.DS_Store'), 'finder')
+    await writeFile(join(root, 'MEMORY.md'), '# 旧索引')
+    await mkdir(join(root, 'entries'))
     const scopes = await store.listScopes()
     expect(scopes.map(({ scope, count }) => [scope, count]).sort()).toEqual([
       ['project:/Srv/Repos/VelarOS Platform', 1],

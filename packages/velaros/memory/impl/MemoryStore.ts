@@ -10,7 +10,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { MemoryStoreOptions } from '../contract/requires.js'
 import type { MemoryScopeSummary } from '../types/memory.js'
-import { readDirectoryNames, readTextIfExists } from '../utils/fs.js'
+import { readSubdirectoryNames, readTextIfExists } from '../utils/fs.js'
 import {
   compareScopeSummaries,
   scopeDirectoryName,
@@ -38,8 +38,9 @@ export class MemoryStore implements MemoryStoreApi {
   }
 
   public async listScopes(): Promise<MemoryScopeSummary[]> {
+    // 根目录里的普通文件（Finder 的 .DS_Store、宿主以前留下的东西）不是作用域，只看子目录。
     const summaries = await Promise.all(
-      (await readDirectoryNames(this.root)).map((name) => this.summarize(name))
+      (await readSubdirectoryNames(this.root)).map((name) => this.summarize(name))
     )
     return summaries.filter(isPresent).sort(compareScopeSummaries)
   }

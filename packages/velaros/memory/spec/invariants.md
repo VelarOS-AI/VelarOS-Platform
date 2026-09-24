@@ -9,7 +9,7 @@
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
 | INV-1 | 作用域之间互相看不见：两个作用域的读写落在不同目录，互相列不到、删不到；作用域按字符串逐字区分，只差大小写的两个字符串也是两个作用域 | 测试 | `spec/acceptance.test.ts` |
-| INV-2 | 作用域的目录：名字是小写可读前缀接作用域字符串 SHA-256 的前 16 位十六进制，第一次写入时才建；目录里的 `.scope` 原样记着作用域字符串，`listScopes` 据此交回原串、条数与最近一次更新，一条记忆都没有的不列；作用域是空的、根目录不是绝对路径，一律 `VALIDATION` | 测试 | `spec/acceptance.test.ts` |
+| INV-2 | 作用域的目录：名字是小写可读前缀接作用域字符串 SHA-256 的前 16 位十六进制，第一次写入时才建；目录里的 `.scope` 原样记着作用域字符串，`listScopes` 据此交回原串、条数与最近一次更新，一条记忆都没有的不列，根目录里的普通文件与没有 `.scope` 的目录不算作用域；作用域是空的、根目录不是绝对路径，一律 `VALIDATION` | 测试 | `spec/acceptance.test.ts` |
 | INV-3 | id 就是文件名：只许小写字母、数字和连字符（连字符不在头尾、不连写），最多 64 个字符，不许 Windows 的保留名；别的一律 `VALIDATION`，所以读写出不了这个作用域的目录 | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | save 整条覆盖（只有 tags 例外，见 INV-13）：同一个 id 再写就是更新（`created` 为假）；文件头部只有 title、description、type、tags、updated 五个字段，入参里多出来的字段不落盘；updated 由记忆库在写入时填；标题、描述、正文去掉首尾空白，标签去掉首尾空白、转小写、去重；先写临时文件再改名，不留临时文件 | 测试 | `spec/acceptance.test.ts` |
 | INV-5 | remove 真删：文件没了，之后列不到；本来就没有这一条时 `removed` 为假，不报错 | 测试 | `spec/acceptance.test.ts` |
