@@ -68,6 +68,28 @@ test('throttle and stall notices show while they apply and clear on the next tur
   assert.equal('notice' in other.snapshot().runs.run, false)
 })
 
+test('the last failed completion check stays on the run so hosts can explain how it ended', () => {
+  const p = createActEventProjector()
+  const check = (completed, reason, recovery) => ({
+    type: 'verification',
+    runId: 'run',
+    completed,
+    verified: false,
+    reason,
+    ...(recovery ? { recovery } : {}),
+  })
+  p.applyLive(check(false, 'GOAL_ACTIVE: 目标仍在推进', 'repair'))
+  assert.deepEqual(p.snapshot().runs.run.verification, {
+    reason: 'GOAL_ACTIVE: 目标仍在推进',
+    recovery: 'repair',
+  })
+  p.applyLive(check(true, 'ok'))
+  assert.equal(p.snapshot().runs.run.verification, undefined)
+  p.applyLive(check(false, 'NEEDS_RECONCILE', 'reconcile'))
+  p.applyLive({ type: 'state', runId: 'run', status: 'needs_reconcile' })
+  assert.equal(p.snapshot().runs.run.verification.reason, 'NEEDS_RECONCILE')
+})
+
 test('duplicate turns cannot count twice or rewind the active preview', () => {
   const projector = createActEventProjector()
   projector.applyLive({ type: 'turn', runId: 'run', turnId: 'one' })

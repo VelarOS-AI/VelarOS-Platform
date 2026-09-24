@@ -22,6 +22,8 @@ export interface ActRunPresentation {
   readonly queuedInputIds: readonly string[]
   /** input-retained 明确确认的保留身份；结束或断流不自行推断保留。 */
   readonly retainedInputIds: readonly string[]
+  /** 最近一次没通过的完成检查：reason 以原因码开头（如 GOAL_ACTIVE、NEEDS_RECONCILE），后面可能跟着写给模型的说明；之后的检查通过时清除。 */
+  readonly verification?: { readonly reason: string; readonly recovery?: string }
   /** 运行当前的提示：限速等待中，或连续没有进展已暂停；下一回合开始或运行结束时清除。 */
   readonly notice?:
     | { readonly kind: 'throttled'; readonly retryAfterMs: number }
