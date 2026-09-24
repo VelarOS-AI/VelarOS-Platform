@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -12,7 +12,7 @@ import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 import { createProjectCapabilityModule, createRuntime } from '../../../dist/act/runtime/index.js'
 import { createProjectKernel } from '../../../dist/project/index.js'
 
-import { done, turn } from './support/model-turn.mjs'
+import { done, marker, turn } from './support/model-turn.mjs'
 
 const signal = new AbortController().signal
 function worldModule(world, versioned = true) {
@@ -316,6 +316,87 @@ test('resource validation survives storage reload and treats a new module genera
     (await second.validateReads('s', receipt.reads, signal)).reads[0].reason,
     'module-generation'
   )
+})
+
+test('a reopened runtime keeps read authorization for modules the session still has', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'basis-reopen-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const workspace = join(root, 'project')
+  await mkdir(workspace)
+  const notes = []
+  const noteModule = {
+    binding: { moduleId: 'test:note', instanceId: 'one', generation: 1, schemaRevision: '1' },
+    summary: 'notes',
+    operations: {
+      add: {
+        summary: 'add a note',
+        input: { type: 'string' },
+        output: { type: 'integer' },
+        effects: 'write',
+        run: (text, call) => {
+          notes.push(text)
+          call.recordEffect('committed')
+          return notes.length
+        },
+      },
+    },
+  }
+  // Desktop 每轮新建运行时：同一数据目录重开，项目模块在这一轮还没被脚本导入
+  const open = (stream) =>
+    createRuntime({
+      workspace,
+      dataDir: join(root, 'data'),
+      runner: nodeSubprocessCodeRunner,
+      agents: false,
+      search: false,
+      memory: false,
+      context: { maintenance: false },
+      modules: [noteModule],
+      model: {
+        id: 'reopen',
+        limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
+        estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
+        stream,
+      },
+    })
+  const block = (request, source) => `${marker(request)} execute\n${source}\n${marker(request)}`
+  let calls = 0
+  const first = await open(async function* (request) {
+    if (++calls > 1) return yield* done(request)
+    yield {
+      type: 'text',
+      text: block(
+        request,
+        "import {output} from 'velaros';import {edit} from 'velaros:project';output(await edit({steps:[{action:'create',path:'plan.md',text:'# Plan\\n'}]}));"
+      ),
+    }
+    yield { type: 'finish', reason: 'stop' }
+  })
+  for await (const event of (await first.openSession('root')).submit('create the plan'))
+    assert.notEqual(event.type, 'error')
+  await first.close()
+  calls = 0
+  let reads = 0
+  const second = await open(async function* (request) {
+    if (++calls > 1) return yield* done(request)
+    reads = JSON.parse(request.materials[0].text).partitions.runtime.decision.reads.length
+    yield {
+      type: 'text',
+      text: block(request, "import {add} from 'test:note';await add('after reopen');"),
+    }
+    yield { type: 'finish', reason: 'stop' }
+  })
+  t.after(() => second.close())
+  const events = []
+  for await (const event of (await second.openSession('root')).submit('add a note'))
+    events.push(event)
+  assert(reads > 0, '重开后的第一帧应当带着上一轮项目写入的读取依据')
+  assert.deepEqual(
+    notes,
+    ['after reopen'],
+    JSON.stringify(events.filter((e) => e.type === 'error'))
+  )
+  assert.equal(events.at(-1).status, 'completed')
 })
 
 test('real project versions detect external file changes and own edits advance the decision basis', async (t) => {

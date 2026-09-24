@@ -25,7 +25,12 @@ import { Log } from '@velaros-ai/core'
 import { isNull, isUndefined, toNullable, toOptional } from '@velaros-ai/core'
 import { isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { ModelImage, ModelTurnRequest, OperationRuntimeApi } from '@velaros-ai/kernel'
+import type {
+  ModelImage,
+  ModelTurnRequest,
+  OperationReadStamp,
+  OperationRuntimeApi,
+} from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
 import { createProviderRequestCompiler } from '@velaros-ai/model'
 import type {
@@ -517,7 +522,7 @@ export class RuntimeSession implements VelarosSession {
                 reason: 'CONTEXT_REQUIRED',
                 recovery: 'repair',
               }
-            const validation = await dependencies.kernel.validateReads(id, basis.reads, signal)
+            const validation = await this.validateReads(basis.reads, signal)
             return validation.status === 'valid'
               ? undefined
               : {
@@ -600,6 +605,17 @@ export class RuntimeSession implements VelarosSession {
     frame.memoryStatus.footprint.runtime = JSON.stringify(frame.partitions.runtime).length
     const body = JSON.stringify(frame)
     return { ...projected, body, prompt: memoryPrompt(body) }
+  }
+
+  /**
+   * 核对行动依据的读取之前，先补上本会话仍然获准的模块绑定：绑定在脚本第一次导入时才建立，
+   * 换了运行时实例、这一轮还没导入过的模块不等于授权被撤回；已经移出本会话的模块照样核不过。
+   */
+  private async validateReads(reads: readonly OperationReadStamp[], signal: AbortSignal) {
+    const allowed = new Set(this.dependencies.allowedModules())
+    for (const moduleId of new Set(reads.map((stamp) => stamp.binding.moduleId)))
+      if (allowed.has(moduleId)) this.dependencies.kernel.bind(this.id, moduleId)
+    return this.dependencies.kernel.validateReads(this.id, reads, signal)
   }
 
   private async waitExecution(signal: AbortSignal): Promise<void> {
@@ -1125,7 +1141,7 @@ export class RuntimeSession implements VelarosSession {
           )
           reads.push(stamp)
         }
-    const validation = await this.dependencies.kernel.validateReads(this.id, reads, signal)
+    const validation = await this.validateReads(reads, signal)
     if (validation.status === 'stale')
       throw AppError.withFields(
         'STALE_OBSERVATION',
