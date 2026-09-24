@@ -113,3 +113,36 @@ test('repair requests retain host instructions without accepting malformed respo
 test('invalid host instruction configuration is rejected before runtime activation', async () => {
   await assert.rejects(createRuntime({ instructions: { text: 'invalid' } }), /instructions/)
 })
+
+test('resident modules put their full contract into the instructions so the model can skip describe', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'runtime-resident-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  const frames = []
+  const model = driver(async function* (request) {
+    frames.push(request)
+    yield* done(request)
+  })
+  const f = await fixture(t, {
+    model,
+    workspace,
+    residentModules: ['velaros:project', 'velaros:not-mounted'],
+  })
+  for await (const event of f.session.submit('read the readme'))
+    assert.notEqual(event.type, 'error')
+  const declarations = f.runtime.describe('velaros:project').declarations
+  assert.match(frames[0].instructions, /常驻模块 velaros:project 的声明/)
+  assert.ok(frames[0].instructions.includes(declarations))
+  assert.doesNotMatch(frames[0].instructions, /velaros:not-mounted/)
+})
+
+test('resident modules must be a list of module names', async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'runtime-resident-invalid-'))
+  try {
+    await assert.rejects(
+      createRuntime({ dataDir, residentModules: 'velaros:project', agents: false, search: false }),
+      { code: 'VALIDATION' }
+    )
+  } finally {
+    await rm(dataDir, { recursive: true, force: true })
+  }
+})

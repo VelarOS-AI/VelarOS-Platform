@@ -108,6 +108,11 @@ export interface ContextMaintenanceOptions {
 export interface VelarosRuntimeOptions {
   /** 宿主可信的主会话产品指令；追加到运行协议说明，参与真实请求预算，不传给专项模型工具。 */
   readonly instructions?: string
+  /**
+   * 常驻模块：主会话可用时把它们的完整声明与用法示例附进运行说明，模型直接 import 使用，
+   * 不必每次先 modules.list / describe。随会话配置固定，不影响前缀缓存。
+   */
+  readonly residentModules?: readonly string[]
   /** 常规本地工作区；框架装配已有 Project 内核与只读证据来源。 */
   readonly workspace?: string
   /** 是否挂载工作区的默认 Project 与证据来源；false 保留工作区绑定但关闭这两项能力。 */

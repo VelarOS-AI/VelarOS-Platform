@@ -5,7 +5,7 @@ import { isAbsolute, join, relative, sep } from 'node:path'
 import type { ActRunLimits } from '@velaros-ai/agent'
 import type { ContextStorage } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
-import { isFalse, isString, isTrue, isUndefined } from '@velaros-ai/core'
+import { isArray, isFalse, isString, isTrue, isUndefined } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { OperationModuleDefinition } from '@velaros-ai/kernel'
@@ -62,6 +62,11 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
     const sources = [...(options.context?.sources ?? [])]
     if (!isUndefined(options.instructions) && !isString(options.instructions))
       throw new AppError('VALIDATION', 'instructions 必须是宿主提供的文本')
+    if (
+      !isUndefined(options.residentModules) &&
+      !(isArray(options.residentModules) && options.residentModules.every(isString))
+    )
+      throw new AppError('VALIDATION', 'residentModules 必须是模块名列表')
     let workspace: Optional<string>
     if (options.workspace) {
       if (!isAbsolute(options.workspace)) throw new AppError('VALIDATION', 'workspace 需要绝对路径')

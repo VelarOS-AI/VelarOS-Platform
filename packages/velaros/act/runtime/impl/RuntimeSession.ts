@@ -140,6 +140,8 @@ export interface RuntimeSessionModelTool {
 export interface RuntimeSessionDependencies {
   /** 主会话的可信宿主产品指令；与运行协议一起编译和归档。 */
   readonly instructions?: string
+  /** 常驻模块：本会话可用的那些把声明与用法示例附进运行说明。 */
+  readonly residentModules?: readonly string[]
   /** 会话全部资源收束后撤回宿主持有的活动句柄。 */
   closed?(): void
   /** 固定授权的持久状态及订阅交付。 */
@@ -320,9 +322,16 @@ export class RuntimeSession implements VelarosSession {
       this.history,
       dependencies.memory ?? dependencies.contextOptions?.memory
     )
+    const modules = dependencies.allowedModules()
     const instructions =
       runtimeInstructions({
-        modules: dependencies.allowedModules(),
+        modules,
+        resident: (dependencies.residentModules ?? [])
+          .filter((module) => modules.includes(module))
+          .map((module) => {
+            const { declarations, template } = dependencies.kernel.describe(module)
+            return { module, declarations, template }
+          }),
         storeMode: dependencies.stores?.mode,
         maintain: Boolean(dependencies.maintain),
         observe: this.config.allowed.includes('observe'),

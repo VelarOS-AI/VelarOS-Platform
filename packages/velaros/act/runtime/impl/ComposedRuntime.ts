@@ -774,6 +774,7 @@ class ComposedRuntime implements VelarosRuntime {
         if (this.options.model) this.taskModels.set(id, this.options.model)
         session = new RuntimeSession(id, {
           instructions: this.options.instructions,
+          residentModules: this.options.residentModules,
           maintain:
             this.maintenance &&
             (this.options.model ||
