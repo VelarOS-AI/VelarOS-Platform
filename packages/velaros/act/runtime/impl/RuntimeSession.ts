@@ -71,6 +71,7 @@ import type {
 import type { ActTurnTrace } from '../types/trace.js'
 import { memoryPrompt } from '../utils/context-memory.js'
 import { frameEnvironment } from '../utils/environment.js'
+import { executionOutcome } from '../utils/execution-outcome.js'
 import { runtimeInstructions } from '../utils/model-instructions.js'
 import {
   recoverScriptSubmission,
@@ -1362,17 +1363,14 @@ export class RuntimeSession implements VelarosSession {
               decision
             )) as ScriptExecutionReceipt
             results[index] = outcome
-            const ok =
-              outcome.checked && !outcome.result.failed && !outcome.result.unsettled?.length
-            const unknown = (await this.dependencies.journal.list(this.id, executionId)).some(
-              (record) => !record.receipt || record.receipt.effect === 'unknown'
+            const { status, failure } = executionOutcome(
+              outcome,
+              (await this.dependencies.journal.list(this.id, executionId)).map(
+                (record) => record.receipt
+              )
             )
-            await this.programs.job({
-              ...job,
-              status: unknown ? 'unknown' : ok ? 'succeeded' : 'failed',
-              resultRef: outcome.resultRef,
-            })
-            if (!ok) {
+            await this.programs.job({ ...job, status, resultRef: outcome.resultRef })
+            if (failure) {
               failed = true
               controller.abort(new AppError('CANCELLED', '本批程序失败'))
             }

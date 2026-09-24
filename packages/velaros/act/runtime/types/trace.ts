@@ -47,6 +47,32 @@ export interface ActInvocationSummary {
   readonly outputTruncated: boolean
 }
 
+/** 一次执行没成功的原因。 */
+export interface ActExecutionFailure {
+  /** 失败类别：SCRIPT_CHECK、NEEDS_MODULES、UNSETTLED、INTERRUPTED，或运行与脚本自己的错误码。 */
+  readonly code: string
+  /** 一句话原因。 */
+  readonly message: string
+  /** 出错在源码第几行，从 1 起；换算不出来时为 null。 */
+  readonly line: Nullable<number>
+}
+
+/** 本回合响应派发的一段 execute；状态由持久结果与调用回执推出，宿主不必解析内部记录。 */
+export interface ActExecutionSummary {
+  /** 执行身份，与 invocations[].executionId 对应。 */
+  readonly executionId: string
+  /** 在本回合响应的 execute 声明里排第几，从 0 起；同一回合的第几个 execute 程序事件与它对应。 */
+  readonly position: number
+  /** 还没有结果时是 running；unknown 表示有调用的外部效果未知，需要先核对。 */
+  readonly status: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'unknown'
+  /** 脚本没成功时的原因；运行中、成功，或只是效果未知时为 null。 */
+  readonly failure: Nullable<ActExecutionFailure>
+  /** 实际运行的源码，受本页正文预算约束。 */
+  readonly source: string
+  /** 源码是否被截断。 */
+  readonly sourceTruncated: boolean
+}
+
 /** 封存请求的只读展示；不证明供应商已收到请求，图像数据只保留占位。 */
 export interface ActRequestSummary {
   /** 编译器封存的模型身份。 */
@@ -97,6 +123,8 @@ export interface ActTurnTrace {
   readonly decision: Nullable<ActTraceRecord>
   /** 调度身份及对应源码、控制回执、结果、租约变化。 */
   readonly records: readonly ActTraceRecord[]
+  /** 本回合响应派发的一次性执行，按声明顺序；租约带进本帧的旧结果不在这里。 */
+  readonly executions: readonly ActExecutionSummary[]
   /** Kernel 权威调用记录的有界 JSON；空数组不证明世界没有发生效果。 */
   readonly invocations: ReadonlyArray<{
     readonly id: string

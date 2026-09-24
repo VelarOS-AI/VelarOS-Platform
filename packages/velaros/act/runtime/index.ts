@@ -67,6 +67,8 @@ export type {
 } from './types/session.js'
 export type { ScriptSourceProgram, ScriptSubmissionFields } from './types/session.js'
 export type {
+  ActExecutionFailure,
+  ActExecutionSummary,
   ActInvocationSummary,
   ActRequestSummary,
   ActTracePage,

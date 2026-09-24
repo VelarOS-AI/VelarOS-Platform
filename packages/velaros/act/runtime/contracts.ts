@@ -27,6 +27,8 @@ export type {
 } from './types/runtime.js'
 export type { ScriptProtocolOptions } from './types/runtime.js'
 export type {
+  ActExecutionFailure,
+  ActExecutionSummary,
   ActInvocationSummary,
   ActRequestSummary,
   ActTracePage,

@@ -4,13 +4,21 @@ import type {
   ContextState,
   ContextStorage,
 } from '@velaros-ai/context'
-import { isNull, isUndefined, toNullable } from '@velaros-ai/core'
+import { isNull, isString, isUndefined, toNullable } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ModelToolBinding } from '../types/model-tools.js'
-import type { ScriptSubmissionReceipt } from '../types/session.js'
-import type { ActTracePage, ActTraceQuery, ActTraceRecord, ActTurnTrace } from '../types/trace.js'
+import type { ScriptControlReceipt } from '../types/runtime.js'
+import type { ScriptExecutionReceipt, ScriptSubmissionReceipt } from '../types/session.js'
+import type {
+  ActExecutionSummary,
+  ActTracePage,
+  ActTraceQuery,
+  ActTraceRecord,
+  ActTurnTrace,
+} from '../types/trace.js'
+import { executionOutcome } from '../utils/execution-outcome.js'
 import { summarizeInvocation, summarizeModelRequest } from '../utils/tracePresentation.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
@@ -169,6 +177,8 @@ export class RuntimeTrace implements RuntimeTraceApi {
     if (!response) gaps.push('本次请求尚无持久化模型原文')
     const selected = new Set<string>()
     const executions = new Set<string>()
+    // 本回合响应派发的一次性执行，按声明顺序；取每次派发的最后一份控制回执
+    const dispatched: Array<ScriptControlReceipt | ScriptExecutionReceipt> = []
     const select = (record: Optional<ContextRecord>) => {
       if (record) selected.add(record.ref.id)
     }
@@ -193,11 +203,13 @@ export class RuntimeTrace implements RuntimeTraceApi {
       const { controlId } = JSON.parse(body)
       const receipts = records.filter((record) => record.title === `script:control:${controlId}`)
       if (isEmpty(receipts)) gaps.push(`派发尚无控制回执：${controlId}`)
-      for (const record of receipts) {
+      for (const [index, record] of receipts.entries()) {
         select(record)
         const saved = await raw(record)
         if (isNull(saved)) continue
         const receipt = JSON.parse(saved).receipt as ScriptSubmissionReceipt
+        if (index === receipts.length - 1)
+          dispatched.push(...(receipt.executions ?? (receipt.execute ? [receipt.execute] : [])))
         for (const item of [receipt.observe, receipt.execute, ...(receipt.executions ?? [])])
           if (item) {
             select(byRef(item.sourceRef))
@@ -300,8 +312,11 @@ export class RuntimeTrace implements RuntimeTraceApi {
     for (const record of records)
       if (selected.has(record.ref.id)) traceRecords.push(await project(record))
     const invocations: Array<ActTurnTrace['invocations'][number]> = []
+    const journal = new Map<string, Awaited<ReturnType<ContextInvocationJournalApi['list']>>>()
     for (const executionId of executions)
-      for (const invocation of await this.journal.list(this.sessionId, executionId)) {
+      journal.set(executionId, await this.journal.list(this.sessionId, executionId))
+    for (const executionId of executions)
+      for (const invocation of journal.get(executionId)!) {
         const summary = summarizeInvocation(invocation, remaining)
         remaining -= summary.input.length + summary.output.length
         const rawBody = JSON.stringify(invocation)
@@ -316,6 +331,36 @@ export class RuntimeTrace implements RuntimeTraceApi {
           summary,
         })
       }
+    const summaries: ActExecutionSummary[] = []
+    for (const [position, item] of dispatched.entries()) {
+      if (!item.executionId) continue
+      const result = records.findLast(
+        (record) => record.title === `script:${item.executionId}:result`
+      )
+      const saved = result ? await raw(result) : null
+      // 没过检查的执行没有运行结果，控制回执本身就是它的结局
+      const outcome = executionOutcome(
+        'status' in item && item.status === 'rejected'
+          ? item
+          : isNull(saved)
+            ? undefined
+            : JSON.parse(saved),
+        (journal.get(item.executionId) ?? []).map((invocation) => invocation.receipt)
+      )
+      const ref = item.sourceRef ?? ('draftRef' in item ? item.draftRef : undefined)
+      const program = ref && recordById.get(ref) ? await raw(recordById.get(ref)!) : null
+      const text = isNull(program) ? '' : (JSON.parse(program) as { source?: unknown }).source
+      const full = isString(text) ? text : ''
+      const source = full.slice(0, Math.max(0, remaining))
+      remaining -= source.length
+      summaries.push({
+        executionId: item.executionId,
+        position,
+        ...outcome,
+        source,
+        sourceTruncated: source.length < full.length,
+      })
+    }
     return {
       sessionId: this.sessionId,
       turnId,
@@ -333,6 +378,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
       response: responseTrace,
       decision: decisionTrace,
       records: traceRecords,
+      executions: summaries,
       invocations,
       nextTurnId: toNullable(next?.ref.id),
       snapshotVersion: snapshot!.version,
