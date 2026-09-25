@@ -12,6 +12,7 @@ import type {
 } from '@velaros-ai/agent'
 import { createActRunService } from '@velaros-ai/agent'
 import type {
+  ContextCompletionResult,
   ContextFeedback,
   ContextInvocationJournalApi,
   ContextRef,
@@ -42,6 +43,7 @@ import type {
 import { createKernelScriptSession } from '@velaros-ai/script'
 
 import {
+  GoalLimits,
   LongTermMemoryModuleIds,
   ScriptLeaseLimits,
   StoreProjectionLimits,
@@ -58,6 +60,7 @@ import type { PreparedScript, ScriptProtocolSubmission } from '../types/program.
 import type { ScriptRetention } from '../types/results.js'
 import type {
   ObservationRegistration,
+  RuntimeSubmitOptions,
   ScriptControlIdentity,
   ScriptControlOptions,
   ScriptControlReceipt,
@@ -212,7 +215,11 @@ export interface VelarosSession {
   /** 宿主记录输入、读取原文和投影下一次请求的入口。 */
   readonly context: ContextRuntime
   /** 由共享 Agent 循环处理用户输入、脚本与上下文维护。 */
-  submit(input: string | ActInput, signal?: AbortSignal): AsyncIterable<ActRunEvent>
+  submit(
+    input: string | ActInput,
+    signal?: AbortSignal,
+    options?: RuntimeSubmitOptions
+  ): AsyncIterable<ActRunEvent>
   /** 运行中追加用户输入，抢占尚未派发的模型响应。 */
   steer(input: string | ActInput): Promise<void>
   /** 回答当前运行的指定交互。 */
@@ -293,6 +300,8 @@ export class RuntimeSession implements VelarosSession {
   private runController?: AbortController
   /** 本次运行收到的输入（提交与运行中的追加引导）；帧里不在其中的目标来自此前的运行。 */
   private readonly runInputs = new Set<string>()
+  /** 本次运行待建立的目标；第一次读取目标之前写入。 */
+  private goalSeed?: string
   private contextPhase: 'work' | 'maintenance' | 'finalizing' = 'work'
   private readonly agent?: ActRunServiceApi
   private readonly programs: ProgramContextApi
@@ -484,13 +493,15 @@ export class RuntimeSession implements VelarosSession {
           },
           project: (view, signal, maxChars) => this.project(view, signal, maxChars),
           acknowledge: (request, signal) => this.acknowledge(request, signal),
-          completion: async (request, signal) => {
-            if (!dependencies.tool && (await this.goal.get(signal))?.status === 'active')
+          completion: async (request, signal, claim) => {
+            const goal = dependencies.tool ? null : await this.goal.get(signal)
+            const active = goal?.status === 'active' ? goal : null
+            if (active && !claim)
               return {
                 completed: false,
                 verified: false,
                 reason:
-                  'GOAL_ACTIVE: 目标仍在推进，请继续执行；验收完成后用 goal.update 明确完成，确有阻碍则记录依据',
+                  'GOAL_ACTIVE: 目标仍在推进，请继续执行；达成后用 done("完成依据") 收尾，确有阻碍用 goal.update 记录依据',
                 recovery: 'repair',
               }
             if (await this.childNeedsReconcile())
@@ -523,17 +534,17 @@ export class RuntimeSession implements VelarosSession {
                 recovery: 'repair',
               }
             const validation = await this.validateReads(basis.reads, signal)
-            return validation.status === 'valid'
-              ? undefined
-              : {
-                  completed: false,
-                  verified: false,
-                  reason:
-                    validation.status === 'stale'
-                      ? 'STALE_OBSERVATION'
-                      : 'OBSERVATION_UNVERIFIABLE',
-                  recovery: 'refresh',
-                }
+            if (validation.status !== 'valid')
+              return {
+                completed: false,
+                verified: false,
+                reason:
+                  validation.status === 'stale' ? 'STALE_OBSERVATION' : 'OBSERVATION_UNVERIFIABLE',
+                recovery: 'refresh',
+              }
+            // 其余检查都通过才结束目标：运行被打回时，目标不能已经标成完成。
+            if (active && claim) return this.completeGoal(active, claim, signal)
+            return undefined
           },
           needsRefresh: async (request) => {
             if (this.backgroundFailure) throw this.backgroundFailure
@@ -568,6 +579,40 @@ export class RuntimeSession implements VelarosSession {
       : false
   }
 
+  /** done 附带完成依据时结束进行中的目标；期间目标被用户改动就重新读一帧再判断。 */
+  private async completeGoal(
+    goal: GoalState,
+    reason: string,
+    signal: AbortSignal
+  ): Promise<Optional<ContextCompletionResult>> {
+    try {
+      await this.goal.update({ baseRevision: goal.revision, status: 'complete', reason }, signal)
+      return undefined
+    } catch (error) {
+      if ((error as { code?: string }).code !== 'GOAL_CONFLICT') throw error
+      return {
+        completed: false,
+        verified: false,
+        reason: 'GOAL_CHANGED: 目标刚被改动，请按最新目标状态决定是否收尾',
+        recovery: 'refresh',
+      }
+    }
+  }
+
+  /** 目标模式首帧之前建立目标；已有推进中、暂停或受阻的目标时保持原样。 */
+  private async seedGoal(objective: string, signal: AbortSignal): Promise<void> {
+    this.goalSeed = undefined
+    const current = await this.goal.get(signal)
+    if (current && !['complete', 'cancelled', 'removed'].includes(current.status)) return
+    await this.goal.update(
+      {
+        baseRevision: current?.revision ?? 0,
+        objective: objective.slice(0, GoalLimits.objectiveChars),
+      },
+      signal
+    )
+  }
+
   private async project(view: ModelView, signal: AbortSignal, maxChars: number) {
     const stores = await this.dependencies.stores?.frame(
       Math.max(1, Math.min(8, Math.floor(maxChars / 4000))),
@@ -577,6 +622,7 @@ export class RuntimeSession implements VelarosSession {
     const tool = this.dependencies.tool?.material?.(
       Math.min(ActRuntimeTuning.modelToolContextChars, Math.floor(maxChars / 4))
     )
+    if (!this.dependencies.tool && this.goalSeed) await this.seedGoal(this.goalSeed, signal)
     const currentGoal = this.dependencies.tool ? null : await this.goal.get(signal)
     const goal = currentGoal?.status === 'removed' ? null : currentGoal
     const environment = frameEnvironment(this.dependencies.environment)
@@ -633,7 +679,11 @@ export class RuntimeSession implements VelarosSession {
     }
   }
 
-  public async *submit(input: string | ActInput, signal?: AbortSignal): AsyncIterable<ActRunEvent> {
+  public async *submit(
+    input: string | ActInput,
+    signal?: AbortSignal,
+    options: RuntimeSubmitOptions = {}
+  ): AsyncIterable<ActRunEvent> {
     if (this.closed || this.active.size || this.controls.size)
       throw new AppError('CLOSED', '会话已关闭或已有活动程序')
     if (!this.agent) throw new AppError('UNAVAILABLE', '运行时尚未配置模型驱动')
@@ -647,6 +697,7 @@ export class RuntimeSession implements VelarosSession {
     this.runDeadline = Date.now() + this.dependencies.limits.timeoutMs
     this.runController = new AbortController()
     this.runInputs.clear()
+    this.goalSeed = options.goal?.trim() || undefined
     try {
       for await (const event of this.agent.submit(
         input,
@@ -663,6 +714,7 @@ export class RuntimeSession implements VelarosSession {
         this.modelRunning = false
         this.runDeadline = undefined
         this.runController = undefined
+        this.goalSeed = undefined
       }
     }
   }

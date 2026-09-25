@@ -6,7 +6,21 @@ import { test } from 'node:test'
 
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 
-import { done, turn } from './support/model-turn.mjs'
+import { done, frameText, marker, turn } from './support/model-turn.mjs'
+
+const limits = { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 }
+const estimate = async () => ({ tokens: 1000, precision: 'exact' })
+/** 最终答复带完成依据：有进行中的目标时由 Runtime 据此结束目标。 */
+async function* doneWith(request, reason, message = '') {
+  yield {
+    type: 'text',
+    text: `${message}${message ? '\n' : ''}${marker(request)} done(${JSON.stringify(reason)})`,
+  }
+  yield { type: 'finish', reason: 'stop' }
+}
+const runtimeGoal = (request) =>
+  JSON.parse(request.materials.find((m) => m.origin === 'runtime-view').text).partitions.runtime
+    .goal
 
 async function fixture(t, model) {
   const dataDir = await mkdtemp(join(tmpdir(), 'session-goal-'))
@@ -98,6 +112,85 @@ test('active goal prevents premature done; model operation explicitly completes 
   const projected = JSON.parse(frames[0].materials.find((m) => m.origin === 'runtime-view').text)
   assert.equal(projected.partitions.runtime.goal.objective, '需要明确验收的目标')
   assert(!events.some((e) => e.type === 'error'), JSON.stringify(events))
+})
+
+test('done with a completion reason ends the active goal in the same reply', async (t) => {
+  const frames = []
+  const model = {
+    id: 'goal-claim-test',
+    limits,
+    estimate,
+    async *stream(request) {
+      frames.push(request)
+      yield* doneWith(request, '已按问题给出答复', '答复正文')
+    },
+  }
+  const { session } = await fixture(t, model)
+  await session.updateGoal({ baseRevision: 0, objective: '回答一个简单问题' })
+  const events = await Array.fromAsync(session.submit('一个简单问题'))
+  assert.equal(frames.length, 1, JSON.stringify(events))
+  assert(frameText(frames[0]).includes('done("完成依据")'), 'the frame protocol offers the claim')
+  const goal = await session.getGoal()
+  assert.equal(goal.status, 'complete')
+  assert.equal(goal.reason, '已按问题给出答复')
+  assert(!events.some((e) => e.type === 'error'), JSON.stringify(events))
+})
+
+test('a goal passed with submit is set before the first frame, clipped to the objective limit', async (t) => {
+  const frames = []
+  const model = {
+    id: 'goal-seed-test',
+    limits,
+    estimate,
+    async *stream(request) {
+      frames.push(request)
+      yield* doneWith(request, '已完成')
+    },
+  }
+  const dataDir = await mkdtemp(join(tmpdir(), 'session-goal-seed-'))
+  const runtime = await createRuntime({
+    dataDir,
+    agents: false,
+    search: false,
+    memory: false,
+    context: { maintenance: false },
+    model,
+  })
+  t.after(async () => {
+    await runtime.close()
+    await rm(dataDir, { recursive: true, force: true })
+  })
+  const session = await runtime.openSession('seed')
+  const objective = `新的目标${'。'.repeat(9000)}`
+  await Array.fromAsync(session.submit(objective, undefined, { goal: objective }))
+  assert.equal(frames.length, 1)
+  const first = runtimeGoal(frames[0])
+  assert.equal(first.status, 'active')
+  assert.equal(first.objective, objective.slice(0, 8000))
+  assert.equal((await session.getGoal()).status, 'complete')
+})
+
+test('a goal passed with submit keeps a paused goal and replaces a finished one', async (t) => {
+  const frames = []
+  const model = {
+    id: 'goal-seed-keep-test',
+    limits,
+    estimate,
+    async *stream(request) {
+      frames.push(request)
+      yield* runtimeGoal(request)?.status === 'active' ? doneWith(request, '已完成') : done(request)
+    },
+  }
+  const { session } = await fixture(t, model)
+  await session.updateGoal({ baseRevision: 0, objective: '原来的目标' })
+  await session.controlGoal({ baseRevision: 1, action: 'pause' })
+  await Array.fromAsync(session.submit('新的问题', undefined, { goal: '新的问题' }))
+  assert.equal(runtimeGoal(frames[0]).objective, '原来的目标')
+  assert.equal((await session.getGoal()).status, 'paused')
+  await session.controlGoal({ baseRevision: 2, action: 'complete' })
+  await Array.fromAsync(session.submit('下一个目标', undefined, { goal: '下一个目标' }))
+  assert.equal(runtimeGoal(frames[1]).objective, '下一个目标')
+  assert.equal((await session.getGoal()).status, 'complete')
 })
 
 test('paused goals survive normal submissions and cancellation never completes an active goal', async (t) => {

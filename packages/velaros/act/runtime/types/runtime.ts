@@ -121,6 +121,15 @@ export interface ScriptJob {
   readonly resultRef?: string
 }
 
+/** 一次提交的宿主选项。 */
+export interface RuntimeSubmitOptions {
+  /**
+   * 按这段话建立目标（目标模式）：在本次运行第一次读取目标之前写入，首帧就能看到。
+   * 当前目标还在推进、暂停或受阻时保持原目标；超出目标长度上限的部分截掉，全文照常作为本次输入。
+   */
+  readonly goal?: string
+}
+
 /** 宿主重试同一请求时保留此身份，新执行必须使用新身份；不暴露到模型 schema。 */
 export interface ScriptControlOptions {
   readonly callId: string

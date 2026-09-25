@@ -20,6 +20,7 @@ export type {
 export type { ScriptRetention } from './types/results.js'
 export type {
   ObservationRegistration,
+  RuntimeSubmitOptions,
   ScriptControlOptions,
   ScriptControlReceipt,
   ScriptObservationEdit,

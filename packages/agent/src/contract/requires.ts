@@ -92,10 +92,14 @@ export interface ActContextPort {
     /** 分段投影时的段状态。 */
     segment?: ActFrameSegment
   }>
-  /** 完成前检查实际送达的运行时材料；返回拒绝原因时进入相应恢复路径。 */
+  /**
+   * 完成前检查实际送达的运行时材料；返回拒绝原因时进入相应恢复路径。
+   * `claim` 是本轮 done 声明附带的完成依据，没有附带时缺席。
+   */
   completion?(
     request: ModelTurnRequest,
-    signal: AbortSignal
+    signal: AbortSignal,
+    claim?: string
   ): Promise<Optional<ContextCompletionResult>>
   /** 完成前检查是否有本帧尚未展示的新结果或任务变化。 */
   needsRefresh(request: ModelTurnRequest): Promise<boolean>

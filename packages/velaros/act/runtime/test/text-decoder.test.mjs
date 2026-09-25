@@ -88,7 +88,10 @@ for (const [name, input] of [
   ['getter', block('execute({get x(){return 1}})', source)],
   ['duplicate argument', block('execute({retain:1,retain:2})', source)],
   ['duplicate blob', block('blobs("x")', '1') + block('blobs("x")', '2')],
-  ['done with arguments', `${marker} done(1)`],
+  ['done with a non-string argument', `${marker} done(1)`],
+  ['done with two arguments', `${marker} done("a", "b")`],
+  ['done with a blank reason', `${marker} done("  ")`],
+  ['done with an object', `${marker} done({reason:"x"})`],
   ['done twice', `${marker} done\n${marker} done()`],
   ['control after done', `${marker} done\n${block('execute', source)}`],
   ['two observers', block('observe', source) + block('observe', source)],
@@ -102,6 +105,15 @@ for (const [name, input] of [
 ])
   test(`rejects ${name} before a submission exists`, () =>
     assert.throws(() => decode(input), { code: 'SCRIPT_PROTOCOL' }))
+
+test('done may carry one completion reason for the active goal', () => {
+  const result = decode(`答复\n${marker} done("已回答用户的问题")`)
+  assert.equal(result.done, true)
+  assert.equal(result.completion, '已回答用户的问题')
+  assert.equal(result.message, '答复\n')
+  assert.equal('completion' in decode(`${marker} done`), false)
+  assert.throws(() => decode(`${marker} done("${'x'.repeat(4001)}")`), { code: 'SCRIPT_PROTOCOL' })
+})
 
 test('response, header, block budgets and decoder reset are bounded', () => {
   assert.throws(() => decode(text, { maxChars: 5 }), /预算/)

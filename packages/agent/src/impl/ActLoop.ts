@@ -352,6 +352,7 @@ export class ActLoop implements ActLoopApi {
                   decoded: {
                     message: decoded.message,
                     done: decoded.done,
+                    completion: decoded.completion,
                     submission: decoded.submission,
                   },
                 }),
@@ -526,7 +527,11 @@ export class ActLoop implements ActLoopApi {
         let completion: ContextCompletionResult
         try {
           completion =
-            (await this.options.frames.completion?.(compiled.request, completionSignal)) ??
+            (await this.options.frames.completion?.(
+              compiled.request,
+              completionSignal,
+              decoded.completion
+            )) ??
             (await this.options.view.complete(this.options.completionVerifier, completionSignal))
         } catch (error) {
           if (

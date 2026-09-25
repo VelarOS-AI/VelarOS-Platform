@@ -2,6 +2,7 @@ import type { ActDecodedTurn, ActPreview } from '@velaros-ai/agent'
 import { isTrue, isUndefined } from '@velaros-ai/core'
 import { isBoolean, isEmpty, isObject, isPlainObject, isString } from '@velaros-ai/core'
 
+import { GoalLimits } from '../../system/contract/constants.js'
 import type { ScriptProtocolSubmission } from '../types/program.js'
 import type { ScriptProtocolOptions } from '../types/runtime.js'
 import type { ScriptSubmission } from '../types/session.js'
@@ -38,6 +39,8 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
   private chars = 0
   private message = ''
   private done = false
+  /** done 声明附带的完成依据。 */
+  private completion?: string
   private ended = false
   private records: Array<{
     kind: 'blobs' | 'observe' | 'execute'
@@ -78,6 +81,7 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
     this.chars = 0
     this.message = ''
     this.done = false
+    this.completion = undefined
     this.ended = false
     this.records = []
     this.active = undefined
@@ -233,6 +237,7 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
       )
     const submission: ScriptProtocolSubmission = { observe, executions }
     const result = { message: this.message, done: this.done, events: this.events }
+    if (!isUndefined(this.completion)) Object.assign(result, { completion: this.completion })
     if (!isUndefined(observe) || !isEmpty(executions)) Object.assign(result, { submission })
     return result
   }
@@ -267,8 +272,13 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
       throw protocolFailure(`当前运行模式禁止 ${kind}`, this.line)
     if (!kind) throw protocolFailure(`未知控制声明：${declaration.name}`, this.line)
     if (kind === 'done') {
-      if (!isEmpty(declaration.args)) throw protocolFailure('done 不接受参数', this.line)
+      const [claim, ...rest] = declaration.args
+      if (!isEmpty(rest) || (!isUndefined(claim) && (!isString(claim) || !claim.trim())))
+        throw protocolFailure('done 至多带一个非空的完成依据字符串', this.line)
+      if (isString(claim) && claim.trim().length > GoalLimits.reasonChars)
+        throw protocolFailure(`完成依据最多 ${GoalLimits.reasonChars} 个字符`, this.line)
       this.done = true
+      if (isString(claim)) this.completion = claim.trim()
       return
     }
     if (this.records.length >= this.config.maxBlocks)

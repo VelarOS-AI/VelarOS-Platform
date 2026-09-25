@@ -53,6 +53,8 @@ export type ActPreview =
 export interface ActDecodedTurn {
   readonly message: string
   readonly done: boolean
+  /** done 声明附带的完成依据；有进行中的目标时，宿主据此在完成检查里结束目标。 */
+  readonly completion?: string
   readonly submission?: unknown
   readonly events: readonly ActPreview[]
 }
