@@ -148,12 +148,15 @@ class ActEventProjector implements ActEventProjectorApi {
     if (
       event.type === 'accepted' &&
       !run.messages.some((message) => message.turnId === event.turnId)
-    )
+    ) {
+      // 之后又有回合被接纳：协议修复这类 error 之后运行照常继续，它不再是失败原因
+      const { failure: _failure, ...rest } = run
       run = {
-        ...run,
+        ...rest,
         preview: run.turnId === event.turnId ? '' : run.preview,
         messages: [...run.messages, { turnId: event.turnId, text: event.text, ref: event.ref }],
       }
+    }
     if (event.type === 'rejected') {
       this.rejected.add(`${event.runId}:${event.turnId}`)
       run = {

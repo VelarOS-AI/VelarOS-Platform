@@ -16,7 +16,7 @@ export interface ActRunPresentation {
   }>
   /** 协议拒绝和运行错误的展示记录；协议拒绝不等于运行失败。 */
   readonly errors: readonly string[]
-  /** 最近一次 error 事件给出的运行失败原因。 */
+  /** 最近一次 error 事件给出的原因；之后有回合被接纳就清除：协议修复、用量暂停也发 error，运行照常继续时不算失败。 */
   readonly failure?: string
   /** 已接纳且未消费的引导，以及明确保留的输入身份；按宿主关联身份去重。 */
   readonly queuedInputIds: readonly string[]

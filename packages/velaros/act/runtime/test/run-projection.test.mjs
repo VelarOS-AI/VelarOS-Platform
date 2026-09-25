@@ -147,6 +147,25 @@ test('root input becomes queued only on retained receipt; protocol rejection is 
   assert.deepEqual(p.snapshot(), ended)
 })
 
+test('INV-44 an error the run recovers from stops being its failure once a later turn is accepted', () => {
+  const p = createActEventProjector()
+  p.applyLive({ type: 'turn', runId: 'run', turnId: 'one' })
+  p.applyLive({ type: 'rejected', runId: 'run', turnId: 'one', message: 'no decision' })
+  p.applyLive({ type: 'error', runId: 'run', message: '协议未通过，正在修复：no decision' })
+  assert.equal(p.snapshot().runs.run.failure, '协议未通过，正在修复：no decision')
+  p.applyLive({ type: 'turn', runId: 'run', turnId: 'two' })
+  p.applyLive({ type: 'accepted', runId: 'run', turnId: 'two', text: 'done', ref: ref('answer') })
+  assert.equal(p.snapshot().runs.run.failure, undefined)
+  assert.deepEqual(p.snapshot().runs.run.errors, [
+    'no decision',
+    '协议未通过，正在修复：no decision',
+  ])
+  // 之后没有回合再被接纳的 error 照旧留着，宿主据此说明运行为什么停下
+  p.applyLive({ type: 'error', runId: 'run', message: '任务的模型用量已到上限，已暂停' })
+  p.applyLive({ type: 'state', runId: 'run', status: 'waiting' })
+  assert.equal(p.snapshot().runs.run.failure, '任务的模型用量已到上限，已暂停')
+})
+
 test('runs remain isolated and snapshots cannot mutate internal input facts', () => {
   const p = createActEventProjector()
   p.applyLive(input('guide'))
