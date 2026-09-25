@@ -77,11 +77,3 @@ export type ModelCallProviderOptions = NonNullable<LanguageModelV3CallOptions['p
 export type ReasoningProviderOptionsResolver = (
   maxOutputTokens?: number
 ) => Nullable<ModelCallProviderOptions>
-
-/**
- * 发给服务商的 reasoning 力度三档；四档 `ReasoningLevel` 映射到它。
- *
- * 它是出线前的 wire 细节，不是产品面的轴：产品只选 level，映射由本包做，所以它不放在可移植数据
- * 文件里。
- */
-export type ReasoningEffort = 'low' | 'medium' | 'high'

@@ -44,9 +44,9 @@ import {
 } from '../../utils/scripts/provider-scripts'
 import { ModelTuning } from '../../utils/tuning'
 import {
+  fitReasoningLevel,
   mergeOpenRouterReasoning,
   resolveReasoningBudget,
-  resolveReasoningEffort,
 } from '../../utils/wire/reasoning'
 
 /**
@@ -423,9 +423,9 @@ export class ProviderScriptRegistry
         getAppVersion: () => this.getAppVersion(),
       },
       reasoning: {
+        fitReasoningLevel,
         mergeOpenRouterReasoning,
         resolveReasoningBudget,
-        resolveReasoningEffort,
       },
       AppError,
     }

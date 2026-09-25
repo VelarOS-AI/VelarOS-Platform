@@ -15,8 +15,9 @@ describe('Velar thinking routing', () => {
     ['low', { effort: 'low' }],
     ['medium', { effort: 'medium' }],
     ['high', { effort: 'high' }],
-    // 请求体没带 max_tokens 时 ultra 走 ultraFloor；带了就按 ultraRatio 换算（见 reasoning-level-ultra）。
-    ['ultra', { effort: 'high', max_tokens: 16_000 }],
+    // velaros/auto 看不出是哪家，超过 high 的档退到 high（见 reasoning-levels）。
+    ['xhigh', { effort: 'high' }],
+    ['max', { effort: 'high' }],
   ])('maps level=%s', (level, expected) => {
     const result = injectVelarThinkingRouting(
       { method: 'POST', body: JSON.stringify({ model: 'velaros/auto', messages: [] }) },

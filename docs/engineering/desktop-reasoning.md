@@ -13,7 +13,7 @@
 
 - 思考属于最近一个 `turn` 事件；协议被拒重发时有新的 `turn`，思考也跟着新的回合。被拒回合的思考由宿主决定撤不撤，Desktop 撤掉。
 - 思考不是正文：不能拼进接纳的正文，也不计入正文预览。翻译、折叠等展示功能归宿主。
-- 思考只有一个控制：`reasoningLevel`，low / medium / high / ultra 四档，就是输入框里的「思考深度」滑块；没给按 medium（`DefaultReasoningLevel`）。直连供应商、OpenRouter、Velar 三条路同一口径。2026-09-25 删掉了旧的三档 `thinkingDepth`（fast / balanced / deep）和 off 档；此前直连这条路缺 `thinkingDepth` 就一个参数都不发，力度与摘要请求都到不了模型。
+- 思考只有一个控制：`reasoningLevel`，low / medium / high / xhigh / max 五档，就是输入框里的「思考深度」滑块；没给按 medium（`DefaultReasoningLevel`）。直连供应商、OpenRouter、Velar 三条路同一口径。发 effort 的型号（OpenAI、自适应思考的 Claude、OpenRouter、Velar）按型号登记的最高档回退：选的档超过它就退到它（`fitReasoningLevel`），没登记的按 high；按数字预算发的型号（Claude 4.5 及更早、Gemini）五档各对应一个预算。OpenRouter 与 Velar 只发 effort，不再同时发 max_tokens。2026-09-25 删掉了旧的三档 `thinkingDepth` 与 off 档。
 
 ## 已知限制
 

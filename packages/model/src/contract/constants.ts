@@ -42,8 +42,8 @@ export const ModelProviderValidationKinds = Object.freeze([
   'custom-adapter-source',
 ] as const)
 
-/** 思考力度四档：决定 reasoning 的力度与预算。 */
-export const ReasoningLevels = Object.freeze(['low', 'medium', 'high', 'ultra'] as const)
+/** 思考力度五档，由低到高；型号不支持的档往下退到它支持的最高一档（见 `fitReasoningLevel`）。 */
+export const ReasoningLevels = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max'] as const)
 
 /** 宿主没给思考力度时按这一档发，与输入框的默认档一致。 */
 export const DefaultReasoningLevel = 'medium' as const

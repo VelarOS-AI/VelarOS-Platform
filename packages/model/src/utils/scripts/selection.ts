@@ -9,6 +9,7 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
+import { ReasoningLevels } from '../../contract/constants'
 import type {
   AgentProviderAdapterConfig,
   AgentProviderRuntimeConfig,
@@ -166,9 +167,10 @@ function parseAdapter(value: unknown): AgentProviderAdapterConfig | undefined {
   }
 }
 
-/** 思考力度只认四档；缺席按缺席，别的值一律拒。 */
+/** 思考力度只认五档；缺席按缺席，别的值一律拒。 */
 function parseReasoningLevel(value: unknown): ReasoningLevel | undefined {
   if (!isPresent(value)) return undefined
-  if (value === 'low' || value === 'medium' || value === 'high' || value === 'ultra') return value
-  throw new AppError('VALIDATION', 'reasoningLevel 必须是 low、medium、high 或 ultra。')
+  const level = ReasoningLevels.find((candidate) => candidate === value)
+  if (level) return level
+  throw new AppError('VALIDATION', `reasoningLevel 必须是 ${ReasoningLevels.join('、')} 之一。`)
 }

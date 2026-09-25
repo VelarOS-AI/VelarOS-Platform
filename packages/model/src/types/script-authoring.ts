@@ -11,12 +11,7 @@ import type { logRuntime } from '@velaros-ai/core/logger'
 
 import type { ProviderScriptHostBridge } from '../contract/requires'
 
-import type {
-  EmbeddingRequest,
-  LanguageModelFactory,
-  ModelAdapterConfig,
-  ReasoningEffort,
-} from './adapters'
+import type { EmbeddingRequest, LanguageModelFactory, ModelAdapterConfig } from './adapters'
 import type {
   ChatProviderId,
   ListProviderModelsRequest,
@@ -91,16 +86,16 @@ export interface ProviderScriptHelpers {
    * 函数本体，不是另抄一份：脚本照着发，请求字节与内置 provider 对齐。
    */
   reasoning: {
-    /** 合并 OpenRouter 风格的 reasoning 开关；给了 `maxOutputTokens` 才能按比例换算 ultra 的预算。 */
+    /** 合并 OpenRouter 风格的 reasoning 参数：只发 effort，按型号退到它支持的最高档。 */
     mergeOpenRouterReasoning: (
       existing: unknown,
       level: ReasoningLevel,
-      maxOutputTokens?: number
+      model: string
     ) => Record<string, unknown>
-    /** 算这次请求的 thinking budget：low、medium、high 各一档，`ultra` 在 high 之上再抬一档。 */
+    /** 算这次请求的 thinking budget：五档各一个预算，逐档递增。 */
     resolveReasoningBudget: (maxOutputTokens: Optional<number>, level: ReasoningLevel) => number
-    /** 算这次请求的 reasoning 力度。 */
-    resolveReasoningEffort: (level: ReasoningLevel) => ReasoningEffort
+    /** 选的档超过这个型号支持的最高档时退到那一档，永远不往上。 */
+    fitReasoningLevel: (level: ReasoningLevel, model: string) => ReasoningLevel
   }
   /** 本仓的错误类，脚本抛它才能被统一按码处理。 */
   AppError: typeof AppError

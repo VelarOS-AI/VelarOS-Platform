@@ -1,15 +1,6 @@
-import {
-  isArray,
-  isFiniteNumber,
-  isNumber,
-  isPlainObject,
-  isString,
-  Log,
-  optionalWhen,
-} from '@velaros-ai/core'
+import { isArray, isFiniteNumber, isNumber, isPlainObject, isString, Log } from '@velaros-ai/core'
 
-import { DefaultReasoningLevel } from '../../contract/constants'
-import type { ReasoningEffort } from '../../types/adapters'
+import { DefaultReasoningLevel, ReasoningLevels } from '../../contract/constants'
 import type { ChatProviderId, ReasoningLevel } from '../../types/model'
 import { ModelTuning } from '../tuning'
 
@@ -24,122 +15,71 @@ function hasUsableOutputBudget(maxOutputTokens?: number): maxOutputTokens is num
   return isFiniteNumber(maxOutputTokens) && maxOutputTokens !== 0
 }
 
-/** reasoning 力度。ultra 与 high 同为 high effort（力度轴上限），差异体现在 budget。 */
-export function resolveReasoningEffort(level: ReasoningLevel): ReasoningEffort {
-  switch (level) {
-    case 'low':
-      return 'low'
-    case 'medium':
-      return 'medium'
-    default:
-      return 'high'
-  }
+/**
+ * 各型号支持的最高思考力度，先匹配先得，型号名可以带路由前缀（`openai/gpt-5.5`）。
+ *
+ * 没登记的推理型号按 high：OpenAI、Anthropic、OpenRouter 的推理型号都认 low / medium / high，发了型号不认的
+ * 值整条请求会被拒。依据各家官方文档（2026-09-25 核对），核实一个加一个。按数字预算发的型号（Claude 4.5
+ * 及更早、Gemini）五档都换成预算，不查这张表。
+ */
+const ReasoningCeilings: ReadonlyArray<{
+  readonly model: RegExp
+  readonly ceiling: ReasoningLevel
+}> = [
+  { model: /(?:^|\/)gpt-5\.[245](?:-\d{4}-\d{2}-\d{2})?$/i, ceiling: 'xhigh' },
+  { model: /(?:^|\/)gpt-5\.1-codex-max(?:$|-)/i, ceiling: 'xhigh' },
+  { model: /(?:^|\/)claude-opus-5(?:$|[.-])/i, ceiling: 'max' },
+]
+
+/** 选的档超过这个型号支持的最高档时退到那一档，永远不往上。 */
+export function fitReasoningLevel(level: ReasoningLevel, model: string): ReasoningLevel {
+  const ceiling = ReasoningCeilings.find((entry) => entry.model.test(model))?.ceiling ?? 'high'
+  return ReasoningLevels.indexOf(level) > ReasoningLevels.indexOf(ceiling) ? ceiling : level
 }
 
 /**
- * thinking budget：low、medium、high 各有一档，ultra 在 high 之上再抬一档。
+ * 按数字预算发的型号这一档的 thinking budget：拿不到本次输出上限时用这一档的常量，拿得到就按比例换算，
+ * 再钳到这一档的上限与 `budgetMin` 之间。
  *
- * 抬高的口径：拿不到本次请求的 `maxOutputTokens` 时按 `ultraFloor` 走，拿得到就按 `ultraRatio`
- * 换算再钳到 `ultraCeil`。比例小于 1 顺带保证了「预算严格小于输出上限」，这是 Anthropic
- * `budget_tokens < max_tokens` 的硬约束；`ultraCeil` 同时低于两家的 thinking budget 合法上限
+ * 各档的比例与上限逐档递增，高一档的预算不会比低一档少。比例都小于 1，预算严格小于输出上限（Anthropic
+ * `budget_tokens < max_tokens` 的硬约束）；最高一档的上限 24 000 低于两家的 thinking budget 合法上限
  * （Gemini 2.5 Flash 24 576 / Pro 32 768，Claude 一系被匹配到的最小输出上限 32 000）。
  */
 export function resolveReasoningBudget(
   maxOutputTokens: Optional<number>,
   level: ReasoningLevel
 ): number {
-  const base = resolveTierBudget(maxOutputTokens, level === 'ultra' ? 'high' : level)
-  if (level !== 'ultra') return base
-
-  const boosted = hasUsableOutputBudget(maxOutputTokens)
-    ? Math.min(
-        ModelTuning.reasoning.ultraCeil,
-        Math.floor(maxOutputTokens * ModelTuning.reasoning.ultraRatio)
-      )
-    : ModelTuning.reasoning.ultraFloor
-  return Math.max(base, boosted)
-}
-
-/** low、medium、high 三档的 thinking budget；没有输出预算可换算时走各档常量。 */
-function resolveTierBudget(
-  maxOutputTokens: Optional<number>,
-  tier: Exclude<ReasoningLevel, 'ultra'>
-): number {
-  if (!hasUsableOutputBudget(maxOutputTokens)) {
-    switch (tier) {
-      case 'low':
-        return ModelTuning.reasoning.budgetLow
-      case 'high':
-        return ModelTuning.reasoning.budgetHigh
-      default:
-        return ModelTuning.reasoning.budgetMedium
-    }
-  }
-
-  const multiplier =
-    tier === 'low'
-      ? ModelTuning.reasoning.lowMultiplier
-      : tier === 'high'
-        ? ModelTuning.reasoning.highMultiplier
-        : 1
-  const maxBudget =
-    tier === 'high' ? ModelTuning.reasoning.budgetMaxHigh : ModelTuning.reasoning.budgetMax
+  const budget = ModelTuning.reasoning.budgets[level]
+  if (!hasUsableOutputBudget(maxOutputTokens)) return budget.fallback
 
   return Math.max(
     ModelTuning.reasoning.budgetMin,
-    Math.min(
-      maxBudget,
-      Math.floor(maxOutputTokens * ModelTuning.reasoning.budgetRatio * multiplier)
-    )
+    Math.min(budget.cap, Math.floor(maxOutputTokens * budget.ratio))
   )
 }
 
 /**
- * 路由层 ultra 档的数字预算；算不出安全值就返回 null，让这一轮退回只发 effort。
- *
- * 路由层的 `max_tokens` 是整轮输出的总额，`reasoning.max_tokens` 必须严格小于它（Anthropic 的硬约束，
- * 由路由原样透传）。低于 `budgetMin` 的数各家都会拒，所以钳不进 `[budgetMin, max_tokens)` 时宁可少发。
- */
-function resolveOpenRouterUltraBudget(maxOutputTokens?: number): Nullable<number> {
-  const budget = resolveReasoningBudget(maxOutputTokens, 'ultra')
-  if (!hasUsableOutputBudget(maxOutputTokens)) return budget
-
-  return budget < maxOutputTokens ? budget : null
-}
-
-/**
- * OpenRouter 与 Velar 路由层的 reasoning 参数：ultra 在力度之外再发 token 预算，其余只给力度。
- *
- * `maxOutputTokens` 是本次请求体里的 `max_tokens`，给了就按它换算 ultra 的预算，这样 ultra 在这一层与在
- * 内置适配器上走的是同一套换算（`resolveReasoningBudget`）。调用方已经写死的字段一律优先，不覆盖显式意图。
+ * OpenRouter 与 Velar 路由层的 reasoning 参数：只发 effort（OpenRouter 的 effort 与 max_tokens 只能二选一），
+ * 按型号退到它支持的最高档。调用方已经写了 effort 或 max_tokens 的，一律原样保留，不覆盖显式意图。
  */
 export function mergeOpenRouterReasoning(
   existing: unknown,
   level: ReasoningLevel,
-  maxOutputTokens?: number
+  model: string
 ): Record<string, unknown> {
   const base = isPlainObject(existing) ? existing : {}
-  const effort = isString(base.effort) ? base.effort : resolveReasoningEffort(level)
-  if (level !== 'ultra') return { ...base, effort }
+  if (isString(base.effort) || isNumber(base.max_tokens)) return base
 
-  // ultra：高 effort 之外再抬高 token 预算，使其在支持 max_tokens 的 provider 上区别于 high。
-  const budget = isNumber(base.max_tokens)
-    ? base.max_tokens
-    : resolveOpenRouterUltraBudget(maxOutputTokens)
-
-  return isNumber(budget) ? { ...base, effort, max_tokens: budget } : { ...base, effort }
+  return { ...base, effort: fitReasoningLevel(level, model) }
 }
 
 /**
  * 按 provider 与具体模型算出这一轮要附加的 reasoning providerOptions；不需要时返回 null。
  *
- * `level` 是用户在输入框选的思考力度；没给时按 `DefaultReasoningLevel`（medium）发。
+ * `level` 是用户在输入框选的思考力度；没给时按 `DefaultReasoningLevel`（medium）发。OpenAI 与自适应思考
+ * 的 Claude 发 effort，按型号退到它支持的最高档；Anthropic 非自适应与 Google 发数字预算，五档各不相同。
  * `maxOutputTokens` 是本次调用的输出上限，只有逐轮包装层（`ReasoningLanguageModel`）拿得到；
  * 解析期先按缺省算一版，包装层每轮再用真实值重算，两处走的是同一套换算。
- *
- * **ultra 在哪几家能看出来**：Anthropic 非自适应与 Google 发的是数字预算，ultra 严格高于 high；
- * OpenAI 与自适应 Claude 那一代只有 `effort` 枚举（low/medium/high），没有数字预算可抬，ultra 与 high
- * 发出去的字节必然相同——这是 provider 能力所限，不为了"看起来有区别"硬造一个厂商不认的值。
  */
 export function createReasoningProviderOptions(
   provider: ChatProviderId,
@@ -154,7 +94,7 @@ export function createReasoningProviderOptions(
       return matchesOpenAiReasoningModel(model)
         ? {
             openai: {
-              reasoningEffort: resolveReasoningEffort(effective),
+              reasoningEffort: fitReasoningLevel(effective, model),
               reasoningSummary: 'auto',
             },
           }
@@ -205,7 +145,7 @@ export function mergeProviderOptions(
  * 数字那一支不另外钳 `maxOutputTokens`：`@ai-sdk/anthropic` 发出去的 `max_tokens` 是
  * 「本次输出上限 + budgetTokens」，`budget_tokens < max_tokens` 天然成立；它对已知模型会把
  * `max_tokens` 压回该模型的输出上限，而这里被 `matchesClaudeReasoningModel` 匹配到的模型里
- * 最小的那个也有 32 000，仍高于 `ultraCeil`。
+ * 最小的那个也有 32 000，仍高于最高一档的预算上限。
  */
 function createAnthropicThinkingOptions(
   model: string,
@@ -219,7 +159,7 @@ function createAnthropicThinkingOptions(
         type: 'adaptive',
         display: 'summarized',
       },
-      effort: resolveReasoningEffort(level),
+      effort: fitReasoningLevel(level, model),
     }
 
   return {
@@ -239,15 +179,16 @@ function matchesOpenAiReasoningModel(model: string): boolean {
 /** 这个模型名看起来是不是支持 thinking 的 Claude。 */
 function matchesClaudeReasoningModel(model: string): boolean {
   return [
-    /claude-(?:opus|sonnet|haiku)-(?:latest|4(?:[.-]\d+)?)/i,
+    /claude-(?:opus|sonnet|haiku)-(?:latest|[45](?:[.-]\d+)?)/i,
     /claude-(?:4(?:[.-]\d+)?)-(?:opus|sonnet|haiku)/i,
     /claude-(?:3[.-]7-sonnet|sonnet-3[.-]7)/i,
   ].some((matcher) => matcher.test(model))
 }
 
-/** 这个模型名看起来是不是自适应思考那一代的 Claude。 */
+/** 这个模型名看起来是不是自适应思考那一代的 Claude（4.6、4.7 与 5 系）。 */
 function matchesAdaptiveClaudeThinkingModel(model: string): boolean {
   return [
+    /claude-(?:opus|sonnet|haiku)-5(?:$|[.-])/i,
     /claude-(?:opus|sonnet)-(?:latest|4[.-](?:6|7)(?:\D|$))/i,
     /claude-4[.-](?:6|7)(?:\D|$).*(?:opus|sonnet)/i,
   ].some((matcher) => matcher.test(model))
@@ -279,8 +220,7 @@ export function injectVelarThinkingRouting(
         reasoning: mergeOpenRouterReasoning(
           body.reasoning,
           reasoningLevel ?? DefaultReasoningLevel,
-          // 请求体里的输出上限就是这一轮真实的 maxOutputTokens，拿它换算 ultra 的预算。
-          optionalWhen(isNumber, body.max_tokens)
+          isString(body.model) ? body.model : ''
         ),
       }),
     }

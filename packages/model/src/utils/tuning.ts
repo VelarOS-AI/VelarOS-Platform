@@ -27,32 +27,61 @@ export const ModelTuning = Object.freeze({
     /** 已求值 adapter 的缓存条数，超了从最旧的开始丢。 */
     evaluationCacheEntries: 16,
   }),
-  /** 思考力度到各家 reasoning 参数的换算。 */
+  /** 思考力度到按数字预算发的型号的 thinking budget。 */
   reasoning: Object.freeze({
-    /** low 档（off 同）在没有输出预算可换算时的 thinking budget，token。 */
-    budgetLow: 2048,
-    /** medium 档在没有输出预算可换算时的 thinking budget，token。 */
-    budgetMedium: 4096,
-    /** high 档在没有输出预算可换算时的 thinking budget，token。 */
-    budgetHigh: 8192,
+    /**
+     * 各档的 thinking budget，token：拿不到本次输出上限时用 `fallback`，拿得到就按 `ratio` 换算再钳到 `cap`。
+     * 比例与上限逐档递增。
+     */
+    budgets: Object.freeze({
+      /** low 档。 */
+      low: Object.freeze({
+        /** 拿不到本次输出上限时的预算，token。 */
+        fallback: 2048,
+        /** 相对输出上限的预算比例。 */
+        ratio: 0.175,
+        /** 按比例换算后的预算上限，token。 */
+        cap: 8192,
+      }),
+      /** medium 档。 */
+      medium: Object.freeze({
+        /** 拿不到本次输出上限时的预算，token。 */
+        fallback: 4096,
+        /** 相对输出上限的预算比例。 */
+        ratio: 0.35,
+        /** 按比例换算后的预算上限，token。 */
+        cap: 8192,
+      }),
+      /** high 档。 */
+      high: Object.freeze({
+        /** 拿不到本次输出上限时的预算，token。 */
+        fallback: 8192,
+        /** 相对输出上限的预算比例。 */
+        ratio: 0.525,
+        /** 按比例换算后的预算上限，token。 */
+        cap: 12_000,
+      }),
+      /** xhigh 档。 */
+      xhigh: Object.freeze({
+        /** 拿不到本次输出上限时的预算，token。 */
+        fallback: 16_000,
+        /** 相对输出上限的预算比例。 */
+        ratio: 0.6,
+        /** 按比例换算后的预算上限，token。 */
+        cap: 16_000,
+      }),
+      /** max 档。 */
+      max: Object.freeze({
+        /** 拿不到本次输出上限时的预算，token。 */
+        fallback: 24_000,
+        /** 相对输出上限的预算比例。 */
+        ratio: 0.75,
+        /** 按比例换算后的预算上限，token。 */
+        cap: 24_000,
+      }),
+    }),
     /** 按比例换算后的 thinking budget 下限，token。 */
     budgetMin: 1024,
-    /** low、medium 档按比例换算后的 thinking budget 上限，token。 */
-    budgetMax: 8192,
-    /** high 档按比例换算后的 thinking budget 上限，token。 */
-    budgetMaxHigh: 12_000,
-    /** 相对 maxOutputTokens 的预算系数基线，再乘各档系数。 */
-    budgetRatio: 0.35,
-    /** low 档在基线之上的预算系数。 */
-    lowMultiplier: 0.5,
-    /** high 档在基线之上的预算系数。 */
-    highMultiplier: 1.5,
-    /** ultra 档没有显式输出预算时的 thinking budget 下限，token。 */
-    ultraFloor: 16_000,
-    /** ultra 档 thinking budget 的硬上限，token。 */
-    ultraCeil: 24_000,
-    /** ultra 档相对 maxOutputTokens 的预算系数。 */
-    ultraRatio: 0.6,
   }),
   /** 请求输入的保守估算。 */
   estimate: Object.freeze({

@@ -188,7 +188,7 @@ describe('Velar Cloud managed providers', () => {
       provider: 'velar-dev',
       apiKey: '',
       baseURL: '',
-      reasoningLevel: 'ultra',
+      reasoningLevel: 'max',
     })
     await velarDev(VelarDevModelId).doGenerate(ChatCallOptions)
 
@@ -205,7 +205,7 @@ describe('Velar Cloud managed providers', () => {
       provider: 'velaros',
       apiKey: '',
       baseURL: '',
-      reasoningLevel: 'ultra',
+      reasoningLevel: 'max',
     })
     await velaros('velaros/auto').doGenerate(ChatCallOptions)
 
@@ -214,8 +214,8 @@ describe('Velar Cloud managed providers', () => {
         url: 'https://cloud.test/v1/model/chat/completions',
         body: expect.objectContaining({
           model: 'velaros/auto',
-          // 这次调用没给 maxOutputTokens，请求体里也就没有 max_tokens，ultra 按 ultraFloor 发。
-          reasoning: { effort: 'high', max_tokens: 16_000 },
+          // Cloud 的型号名看不出是哪家，按没登记的型号封顶在 high；只发 effort。
+          reasoning: { effort: 'high' },
         }),
       },
     ])
