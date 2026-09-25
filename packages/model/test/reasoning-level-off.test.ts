@@ -120,13 +120,22 @@ describe('reasoningLevel=off', () => {
     expect(createThinkingDepthProviderOptions('google', GoogleModelId, 'deep', 'off')).toBeNull()
   })
 
-  test('缺 thinkingDepth 时 off 一样生效，其它档仍按 thinkingDepth 走', () => {
+  test('缺 thinkingDepth 时力度照发、基线按 balanced；两个轴都没给才不发', () => {
     expect(
       createThinkingDepthProviderOptions('anthropic', AnthropicModelId, undefined, 'off')
     ).toEqual({ anthropic: { thinking: { type: 'disabled' } } })
-    // 只有 off 与 thinkingDepth 无关：没有 thinkingDepth 的其它档仍然什么都不发。
     expect(
       createThinkingDepthProviderOptions('anthropic', AnthropicModelId, undefined, 'ultra')
+    ).toEqual(
+      createThinkingDepthProviderOptions('anthropic', AnthropicModelId, 'balanced', 'ultra')
+    )
+    expect(
+      createThinkingDepthProviderOptions('openai', OpenAiModelId, undefined, 'medium')
+    ).toEqual({
+      openai: { reasoningEffort: 'medium', reasoningSummary: 'auto' },
+    })
+    expect(
+      createThinkingDepthProviderOptions('openai', OpenAiModelId, undefined, undefined)
     ).toBeNull()
     // 有 thinkingDepth 时 level 是用户的显式选择，力度按 level 走而不是按 depth 走。
     expect(

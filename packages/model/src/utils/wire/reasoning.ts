@@ -216,7 +216,9 @@ function createReasoningDisabledProviderOptions(
 /**
  * 按 provider 与具体模型算出这一轮要附加的 reasoning providerOptions；不需要时返回 null。
  *
- * `level` 与 `depth` 两个轴都要往下发：`depth` 定基线，`level` 是用户在界面上的显式选择。
+ * `level` 与 `depth` 两个轴都要往下发：`depth` 定基线，`level` 是用户在界面上的显式选择。只给了 `level`
+ * 时基线按 balanced 算，与 Velar 路由层（`injectVelarThinkingRouting`）同一口径；两个都没给才算宿主
+ * 没有偏好，一个参数都不发，由服务端默认值兜底。
  * `maxOutputTokens` 是本次调用的输出上限，只有逐轮包装层（`ThinkingDepthLanguageModel`）拿得到；
  * 解析期先按缺省算一版，包装层每轮再用真实值重算，两处走的是同一套换算。
  *
@@ -234,14 +236,15 @@ export function createThinkingDepthProviderOptions(
   // off 先判：这一档与 thinkingDepth 无关，缺 depth 时也要生效。
   if (isReasoningDisabledByLevel(level))
     return createReasoningDisabledProviderOptions(provider, model)
-  if (!depth) return null
+  if (!depth && !level) return null
+  const baseline = requireThinkingDepth(depth)
 
   switch (provider) {
     case 'openai':
       return matchesOpenAiReasoningModel(model)
         ? {
             openai: {
-              reasoningEffort: resolveReasoningEffort(level, depth),
+              reasoningEffort: resolveReasoningEffort(level, baseline),
               reasoningSummary: 'auto',
             },
           }
@@ -249,7 +252,7 @@ export function createThinkingDepthProviderOptions(
     case 'anthropic':
       return matchesClaudeReasoningModel(model)
         ? {
-            anthropic: createAnthropicThinkingOptions(model, depth, level, maxOutputTokens),
+            anthropic: createAnthropicThinkingOptions(model, baseline, level, maxOutputTokens),
           }
         : null
     case 'google':
@@ -258,7 +261,7 @@ export function createThinkingDepthProviderOptions(
             google: {
               thinkingConfig: {
                 includeThoughts: true,
-                thinkingBudget: resolveReasoningBudget(maxOutputTokens, level, depth),
+                thinkingBudget: resolveReasoningBudget(maxOutputTokens, level, baseline),
               },
             },
           }

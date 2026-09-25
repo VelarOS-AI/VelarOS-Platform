@@ -13,7 +13,7 @@
 
 - 思考属于最近一个 `turn` 事件；协议被拒重发时有新的 `turn`，思考也跟着新的回合。被拒回合的思考由宿主决定撤不撤，Desktop 撤掉。
 - 思考不是正文：不能拼进接纳的正文，也不计入正文预览。翻译、折叠等展示功能归宿主。
-- 直连的供应商（OpenAI、Anthropic、Google）只在适配器配置里有 `thinkingDepth` 时才发思考参数。宿主解析模型时要同时给 `thinkingDepth` 和 `reasoningLevel`：只给 `reasoningLevel` 时，所选力度和摘要请求都不会发出去。这与 `reasoningLevel`「存在时优先于 thinkingDepth」的说明不一致（`createThinkingDepthProviderOptions` 缺 depth 直接返回 null），是否改成缺 depth 时按 balanced 算，待维护者定。
+- 宿主解析模型时给 `thinkingDepth`（设置里的基线）和 `reasoningLevel`（这次选的力度）。只给力度时基线按 balanced 算，直连的供应商（OpenAI、Anthropic、Google）照样发力度和摘要请求，与 Velar 路由层同一口径；两个都没给才不发任何思考参数。2026-09-25 之前直连这条路缺 `thinkingDepth` 就一个参数都不发，力度与摘要请求都到不了模型。
 
 ## 已知限制
 
