@@ -2257,7 +2257,12 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     }
   }
 
-  /** 尝试把历史快照恢复到占位 webContents；返回是否真的发起了恢复导航。 */
+  /**
+   * 尝试把历史快照恢复到没加载过页面的 webContents；返回是否真的发起了恢复导航。
+   *
+   * Electron 只在没加载过任何页面的 webContents 上恢复历史，about:blank 也算加载过：
+   * 嵌入方的占位 webview 不能先加载占位地址，否则这里只能退回直接加载页面。
+   */
   private async restoreNavigationHistory(
     webContents: Electron.WebContents,
     navigationHistory?: BrowserNavigationHistoryRestore,
@@ -2268,7 +2273,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       !navigationHistory ||
       isEmpty(navigationHistory.entries) ||
       webContents.isDestroyed() ||
-      !isPlaceholderUrl(webContents.getURL())
+      !!webContents.getURL()
     )
       return false
 

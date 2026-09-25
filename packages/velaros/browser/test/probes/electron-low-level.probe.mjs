@@ -133,12 +133,17 @@ function createPort(runtime, sessionId, context) {
   }
 }
 
-/** 一轮检查：label 标在每一行前面。 */
-async function suite(label, ctx) {
-  const check = (name, ok, detail = '') => {
+/** 记一行检查结果：label 标在每一行前面。 */
+const checkerOf =
+  (label) =>
+  (name, ok, detail = '') => {
     results.push(ok)
     console.info(`${ok ? '✓' : '✗'} [${label}] ${name}${detail ? `：${detail}` : ''}`)
   }
+
+/** 一轮检查。 */
+async function suite(label, ctx) {
+  const check = checkerOf(label)
   const evaluate = (script, extra = {}) => browserOperations.evaluate({ script, ...extra }, ctx)
 
   // evaluate：整份取回、args、报错带 script 里的行列
@@ -383,6 +388,39 @@ async function suite(label, ctx) {
   )
 }
 
+/** 恢复历史：没加载过页面的 webContents 交给 presentPage 时按快照恢复前进后退，停在给的位置。 */
+async function restoreHistorySuite(runtime, servers, workspaceRoot) {
+  const check = checkerOf('恢复历史')
+  const window = new BrowserWindow({ show: false, width: 1000, height: 700 })
+  const entries = [1, 2, 3].map((step) => ({
+    url: `${servers.url}page2?step=${step}`,
+    title: `第 ${step} 页`,
+  }))
+  try {
+    await runtime.presentPage(
+      'restored',
+      { url: entries[1].url, workspaceRoot },
+      window.webContents.id,
+      {
+        entries,
+        index: 1,
+      }
+    )
+    const history = window.webContents.navigationHistory
+    check(
+      '恢复成三条、停在第二条',
+      history.length() === 3 &&
+        history.getActiveIndex() === 1 &&
+        window.webContents.getURL() === entries[1].url,
+      `${history.length()} 条，停在第 ${history.getActiveIndex() + 1} 条：${window.webContents.getURL()}`
+    )
+    check('恢复后前进后退都能走', history.canGoBack() && history.canGoForward())
+  } finally {
+    await runtime.closeSession('restored')
+    window.destroy()
+  }
+}
+
 async function run() {
   const servers = await startServers()
   const runtime = createElectronBrowserRuntime()
@@ -403,6 +441,7 @@ async function run() {
     await runtime.closeSession('embedded')
     window.destroy()
   }
+  await restoreHistorySuite(runtime, servers, workspaceRoot)
 
   if (existsSync(ChromePath)) {
     const external = contextOf()
