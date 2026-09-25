@@ -13,7 +13,12 @@
 
 - 思考属于最近一个 `turn` 事件；协议被拒重发时有新的 `turn`，思考也跟着新的回合。被拒回合的思考由宿主决定撤不撤，Desktop 撤掉。
 - 思考不是正文：不能拼进接纳的正文，也不计入正文预览。翻译、折叠等展示功能归宿主。
-- 思考只有一个控制：`reasoningLevel`，low / medium / high / xhigh / max 五档，就是输入框里的「思考深度」滑块；没给按 medium（`DefaultReasoningLevel`）。直连供应商、OpenRouter、Velar 三条路同一口径。发 effort 的型号（OpenAI、自适应思考的 Claude、OpenRouter、Velar）按型号登记的最高档回退：选的档超过它就退到它（`fitReasoningLevel`），没登记的按 high；按数字预算发的型号（Claude 4.5 及更早、Gemini）五档各对应一个预算。OpenRouter 与 Velar 只发 effort，不再同时发 max_tokens。2026-09-25 删掉了旧的三档 `thinkingDepth` 与 off 档。
+- 思考只有一个控制：`reasoningLevel`，low / medium / high / xhigh / max 五档，就是输入框里的「思考深度」滑块；没给按 medium（`DefaultReasoningLevel`）。各家怎么发：
+  - OpenAI（Responses）、自适应思考的 Claude（4.6、4.7、5 系）、OpenRouter、Velar 发 effort，按型号登记的最高档往下退（`fitReasoningLevel`；gpt-5.2 / 5.4 / 5.5、5.1-codex-max 到 xhigh，自适应 Claude 到 max，没登记的到 high）。
+  - Claude 4.5 及更早、Gemini 发数字预算，五档各一个。
+  - 走 Chat Completions 的供应商按厂商写请求体（`chatReasoningFields`）：通义 `enable_thinking` + `thinking_budget`；DeepSeek 只在 high 及以上写 `reasoning_effort`（high / max）；兼容网关、Grok、Kimi、智谱、本地服务等按型号名认出推理型号后写 `reasoning_effort`。
+  - 兜底：型号因思考参数拒掉请求（400 / 422 且报错提到思考相关字段）时往下退一档重发，退到底不带思考参数发，能用的档按供应商与型号记在这份运行时里（`ReasoningFallback`，model INV-14）。所以映射不求每家都精确，只保证能用；与思考无关的 400 原样交出。
+  - OpenRouter 与 Velar 只发 effort，不再同时发 max_tokens。2026-09-25 删掉了旧的三档 `thinkingDepth` 与 off 档。
 
 ## 已知限制
 

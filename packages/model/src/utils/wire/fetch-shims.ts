@@ -1,4 +1,4 @@
-import { isBlank, isPlainObject, isString, Log } from '@velaros-ai/core'
+import { isBlank, isPlainObject, isString, Log, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { ModelTuning } from '../tuning'
@@ -81,6 +81,22 @@ export function mergeJsonRequestBody<TInit extends object>(
       error,
     })
     return init
+  }
+}
+
+/** 请求体是 JSON 对象就解析出来；不是字符串、解析不了或不是对象时返回 undefined。 */
+export function readJsonRequestBody<TInit extends object>(
+  init: Optional<TInit>
+): Optional<Record<string, unknown>> {
+  const rawBody = (init as { body?: unknown } | undefined)?.body
+  if (!isString(rawBody)) return undefined
+
+  try {
+    const body: unknown = JSON.parse(rawBody)
+    return optionalWhen(isPlainObject, body)
+  } catch (error) {
+    Log.tag('OpenAIModelAdapter').debug('请求体不是 JSON，按没有请求体处理', { error })
+    return undefined
   }
 }
 

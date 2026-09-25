@@ -10,6 +10,8 @@ import type {
 import type { ChatProviderId } from '../../types/model'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 
+import { ReasoningFallback, type ReasoningFallbackApi } from './ReasoningFallback'
+
 /**
  * 模型适配器基类。
  *
@@ -21,6 +23,9 @@ import type { ModelProviderCollectionApi } from '../providers/ModelProviderColle
  * 本类下一轮入口收口后不再出包。
  */
 abstract class ModelAdapter implements ModelProviderAdapter {
+  /** 思考参数被拒时的退档记忆：适配器随运行时对象图各建一份，型号能用的档记在这里。 */
+  protected readonly reasoningFallback: ReasoningFallbackApi = new ReasoningFallback()
+
   constructor(
     private readonly providerIds: readonly ChatProviderId[],
     private readonly providers: ModelProviderCollectionApi

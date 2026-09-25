@@ -12,6 +12,7 @@ import type {
 import { describe, expect, test } from 'bun:test'
 
 import { languageModelWrappers } from '../src/impl/adapters/LanguageModelWrappers'
+import { ReasoningFallback } from '../src/impl/adapters/ReasoningFallback'
 import type { ChatProviderId } from '../src/index'
 import { createModelRuntimeComposition } from '../src/index'
 import { createReasoningProviderOptions } from '../src/utils/wire/reasoning'
@@ -119,7 +120,13 @@ describe('思考力度的默认档', () => {
 
   test('适配器包装层把这一档的参数合进本次调用', async () => {
     const { model, calls } = createRecordingLanguageModel()
-    const wrapped = languageModelWrappers.withReasoning(model, 'anthropic', AnthropicModelId, 'low')
+    const wrapped = languageModelWrappers.withReasoning(
+      model,
+      'anthropic',
+      AnthropicModelId,
+      'low',
+      new ReasoningFallback()
+    )
     await (wrapped as LanguageModelV3).doGenerate(ChatCallOptions)
 
     expect(calls).toEqual([

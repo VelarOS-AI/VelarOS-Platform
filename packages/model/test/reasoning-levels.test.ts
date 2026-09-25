@@ -4,15 +4,17 @@
  * summary: 模型运行时 · 按数字预算发的型号五档逐档递增；发 effort 的型号按型号退到它支持的最高档。
  * area: package
  */
-import type {
-  LanguageModelV3,
-  LanguageModelV3CallOptions,
-  LanguageModelV3GenerateResult,
+import {
+  APICallError,
+  type LanguageModelV3,
+  type LanguageModelV3CallOptions,
+  type LanguageModelV3GenerateResult,
 } from '@ai-sdk/provider'
 import { describe, expect, test } from 'bun:test'
 
 import type { ReasoningLevel } from '../src/contracts'
 import { languageModelWrappers } from '../src/impl/adapters/LanguageModelWrappers'
+import { ReasoningFallback } from '../src/impl/adapters/ReasoningFallback'
 import {
   createReasoningProviderOptions,
   fitReasoningLevel,
@@ -122,12 +124,12 @@ describe('五档思考力度', () => {
     expect(createReasoningProviderOptions('openai', OpenAiModelId, 'max')).toEqual({
       openai: { reasoningEffort: 'xhigh', reasoningSummary: 'auto' },
     })
-    // 自适应思考的 Claude 发 effort：4.6 没登记，按 high 封顶；5 系纳入自适应思考。
+    // 自适应思考的 Claude（4.6、4.7、5 系）发 effort，放到 max；型号不认时由退档重发兜底。
     expect(createReasoningProviderOptions('anthropic', AnthropicAdaptiveModelId, 'max')).toEqual({
       anthropic: {
         sendReasoning: true,
         thinking: { type: 'adaptive', display: 'summarized' },
-        effort: 'high',
+        effort: 'max',
       },
     })
     expect(createReasoningProviderOptions('anthropic', 'claude-opus-5-5', 'max')).toEqual({
@@ -145,7 +147,8 @@ describe('五档思考力度', () => {
       model,
       'anthropic',
       AnthropicBudgetModelId,
-      'xhigh'
+      'xhigh',
+      new ReasoningFallback()
     )
 
     await (wrapped as LanguageModelV3).doGenerate(ChatCallOptions)
@@ -165,6 +168,48 @@ describe('五档思考力度', () => {
         },
       },
     ])
+  })
+
+  test('型号不认这一档时往下退档重发，同一个型号之后直接从能用的那一档发', async () => {
+    const efforts: unknown[] = []
+    const model: LanguageModelV3 = {
+      specificationVersion: 'v3',
+      provider: 'test',
+      modelId: 'test',
+      supportedUrls: {},
+      doGenerate: async (options) => {
+        const effort = (options.providerOptions?.anthropic as { effort?: string } | undefined)
+          ?.effort
+        efforts.push(effort)
+        if (effort === 'max' || effort === 'xhigh')
+          throw new APICallError({
+            message: `effort: '${effort}' is not supported by this model`,
+            url: 'https://api.anthropic.test/v1/messages',
+            requestBodyValues: {},
+            statusCode: 400,
+          })
+        return {
+          content: [],
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          warnings: [],
+        } as unknown as LanguageModelV3GenerateResult
+      },
+      doStream: () => {
+        throw new Error('未使用')
+      },
+    }
+    const wrapped = languageModelWrappers.withReasoning(
+      model,
+      'anthropic',
+      AnthropicAdaptiveModelId,
+      'max',
+      new ReasoningFallback()
+    ) as LanguageModelV3
+
+    await wrapped.doGenerate(ChatCallOptions)
+    await wrapped.doGenerate(ChatCallOptions)
+    expect(efforts).toEqual(['max', 'xhigh', 'high', 'high'])
   })
 
   test('路由层只发 effort，按型号退档；调用方写死的字段原样保留', () => {

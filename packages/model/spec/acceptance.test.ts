@@ -8,6 +8,7 @@ import { describe, expect, test } from 'bun:test'
 import type { KernelModuleActivateContext, ModelTurnRequest } from '@velaros-ai/kernel'
 import type { CapabilityToken } from '@velaros-ai/kernel/contracts'
 
+import { ReasoningFallback } from '../src/impl/adapters/ReasoningFallback'
 import {
   type ChatProviderId,
   createAiSdkModelDriver,
@@ -362,4 +363,40 @@ test('INV-13 思考摘要只转给宿主展示：一条响应只认一路来源�
       { type: 'reasoning-end', id: 'r:0' },
     ])
   ).toEqual([long])
+})
+
+test('INV-14 型号不认思考参数时往下退档重发、退到底不带思考参数，并在同一份运行时里记住；与思考无关的 400 原样交出', async () => {
+  const efforts: unknown[] = []
+  const chat = new ReasoningFallback().chatFetch({
+    provider: 'openai-compatible-gateway',
+    level: 'max',
+    fetch: async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as {
+        reasoning_effort?: string
+        messages: unknown[]
+      }
+      efforts.push(body.reasoning_effort ?? null)
+      if (body.messages.length > 0)
+        return Response.json(
+          { error: { message: 'maximum context length exceeded' } },
+          { status: 400 }
+        )
+      return body.reasoning_effort === 'xhigh'
+        ? Response.json(
+            { error: { message: "reasoning_effort does not support 'xhigh'" } },
+            { status: 400 }
+          )
+        : Response.json({ ok: true })
+    },
+  })
+  const send = (messages: unknown[]) =>
+    chat('https://gateway.test/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'gpt-5.5', messages }),
+    })
+
+  expect((await send([])).status).toBe(200)
+  expect((await send([])).status).toBe(200)
+  expect((await send(['too long'])).status).toBe(400)
+  expect(efforts).toEqual(['xhigh', 'high', 'high', 'high'])
 })

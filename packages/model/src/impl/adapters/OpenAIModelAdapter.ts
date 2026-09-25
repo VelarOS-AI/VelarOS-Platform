@@ -44,7 +44,8 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
             openai(modelId),
             config.provider,
             modelId,
-            config.reasoningLevel
+            config.reasoningLevel,
+            this.reasoningFallback
           )
         )
       }

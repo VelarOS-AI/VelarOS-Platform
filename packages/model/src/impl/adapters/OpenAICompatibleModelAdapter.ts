@@ -2,7 +2,7 @@ import { createOpenAI } from '@ai-sdk/openai'
 
 import { isBlank } from '@velaros-ai/core'
 
-import { OllamaProviderId } from '../../contract/constants.js'
+import { DefaultReasoningLevel, OllamaProviderId } from '../../contract/constants.js'
 import type { ModelProviderAdapter } from '../../contract/requires'
 import type {
   EmbeddingRequest,
@@ -46,7 +46,12 @@ class OpenAICompatibleModelAdapter extends ModelAdapter implements ModelProvider
       apiKey,
       baseURL: this.resolveBaseURL(config),
       name: config.provider,
-      fetch: this.createCompatibleFetch(config.provider, apiKey),
+      // 思考参数按厂商写进请求体，型号不认就退档重发（见 ReasoningFallback）。
+      fetch: this.reasoningFallback.chatFetch({
+        provider: config.provider,
+        level: config.reasoningLevel ?? DefaultReasoningLevel,
+        fetch: this.createCompatibleFetch(config.provider, apiKey),
+      }),
     })
 
     return (modelId) => languageModelWrappers.withPromptCache(compatible.chat(modelId))

@@ -1,3 +1,5 @@
+import { APICallError } from '@ai-sdk/provider'
+
 import { isArray, isFiniteNumber, isNumber, isPlainObject, isString, Log } from '@velaros-ai/core'
 
 import { DefaultReasoningLevel, ReasoningLevels } from '../../contract/constants'
@@ -18,9 +20,10 @@ function hasUsableOutputBudget(maxOutputTokens?: number): maxOutputTokens is num
 /**
  * 各型号支持的最高思考力度，先匹配先得，型号名可以带路由前缀（`openai/gpt-5.5`）。
  *
- * 没登记的推理型号按 high：OpenAI、Anthropic、OpenRouter 的推理型号都认 low / medium / high，发了型号不认的
- * 值整条请求会被拒。依据各家官方文档（2026-09-25 核对），核实一个加一个。按数字预算发的型号（Claude 4.5
- * 及更早、Gemini）五档都换成预算，不查这张表。
+ * 没登记的推理型号按 high：OpenAI、Anthropic、OpenRouter 的推理型号都认 low / medium / high。依据各家官方
+ * 文档（2026-09-25 核对）；自适应思考的 Claude 各型号支持的档不一，统一放到 max，真被拒了由调用处往下退档
+ * 重发（见 `isReasoningRejection`）。按数字预算发的型号（Claude 4.5 及更早、Gemini）五档都换成预算，不查
+ * 这张表。
  */
 const ReasoningCeilings: ReadonlyArray<{
   readonly model: RegExp
@@ -28,8 +31,31 @@ const ReasoningCeilings: ReadonlyArray<{
 }> = [
   { model: /(?:^|\/)gpt-5\.[245](?:-\d{4}-\d{2}-\d{2})?$/i, ceiling: 'xhigh' },
   { model: /(?:^|\/)gpt-5\.1-codex-max(?:$|-)/i, ceiling: 'xhigh' },
-  { model: /(?:^|\/)claude-opus-5(?:$|[.-])/i, ceiling: 'max' },
+  { model: /claude-(?:opus|sonnet|haiku)-(?:4[.-][67]|5)(?:$|\D)/i, ceiling: 'max' },
 ]
+
+/** 思考参数被拒时报错里会提到的字样。 */
+const ReasoningRejectionPattern = /reason|effort|think|budget/i
+
+/** SDK 抛的调用错误是不是因为思考参数被拒：400 / 422，且报错提到思考相关的字段。 */
+export function isReasoningRejection(error: unknown): boolean {
+  return (
+    APICallError.isInstance(error) &&
+    [400, 422].includes(error.statusCode ?? 0) &&
+    ReasoningRejectionPattern.test(`${error.message} ${error.responseBody ?? ''}`)
+  )
+}
+
+/** 原始响应是不是因为思考参数被拒；读的是响应副本，原响应照常交给调用方。 */
+export async function isReasoningRejected(response: Response): Promise<boolean> {
+  if (![400, 422].includes(response.status)) return false
+  try {
+    return ReasoningRejectionPattern.test(await response.clone().text())
+  } catch (error) {
+    Log.tag('AiSdkModelDriver').debug('读取被拒响应正文失败，按不是思考参数被拒处理', { error })
+    return false
+  }
+}
 
 /** 选的档超过这个型号支持的最高档时退到那一档，永远不往上。 */
 export function fitReasoningLevel(level: ReasoningLevel, model: string): ReasoningLevel {

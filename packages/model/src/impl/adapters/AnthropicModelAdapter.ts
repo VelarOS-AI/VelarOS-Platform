@@ -27,7 +27,8 @@ class AnthropicModelAdapter extends ModelAdapter implements ModelProviderAdapter
           anthropic(modelId),
           config.provider,
           modelId,
-          config.reasoningLevel
+          config.reasoningLevel,
+          this.reasoningFallback
         )
       )
   }

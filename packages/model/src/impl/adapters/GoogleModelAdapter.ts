@@ -27,7 +27,8 @@ class GoogleModelAdapter extends ModelAdapter implements ModelProviderAdapter {
           google(modelId),
           config.provider,
           modelId,
-          config.reasoningLevel
+          config.reasoningLevel,
+          this.reasoningFallback
         )
       )
   }

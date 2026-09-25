@@ -1,11 +1,13 @@
 import type { LanguageModel } from 'ai'
 
+import { DefaultReasoningLevel } from '../../contract/constants'
 import type { ModelCallProviderOptions } from '../../types/adapters'
 import type { ChatProviderId, ReasoningLevel } from '../../types/model'
 import { asWrappableLanguageModel } from '../../utils/wire/language-models'
 import { createReasoningProviderOptions } from '../../utils/wire/reasoning'
 
 import { PromptCacheLanguageModel } from './PromptCacheLanguageModel'
+import type { ReasoningFallbackApi } from './ReasoningFallback'
 import { ReasoningLanguageModel } from './ReasoningLanguageModel'
 
 /**
@@ -19,12 +21,16 @@ import { ReasoningLanguageModel } from './ReasoningLanguageModel'
 export interface LanguageModelWrappersApi {
   /** 套上提示词缓存标记的出线翻译层；包不了就原样返回。 */
   withPromptCache(model: LanguageModel): LanguageModel
-  /** 套上这一轮 reasoning 参数的合并层；这一轮不需要发 reasoning、或包不了就原样返回。 */
+  /**
+   * 套上这一轮 reasoning 参数的合并层；这一轮不需要发 reasoning、或包不了就原样返回。型号不认这一档时
+   * 由 `fallback`（适配器所在运行时的那一份）往下退档重发。
+   */
   withReasoning(
     model: LanguageModel,
     provider: ChatProviderId,
     modelId: string,
-    level?: LooseOptional<ReasoningLevel>
+    level: LooseOptional<ReasoningLevel>,
+    fallback: ReasoningFallbackApi
   ): LanguageModel
 }
 
@@ -39,7 +45,8 @@ export class LanguageModelWrappers implements LanguageModelWrappersApi {
     model: LanguageModel,
     provider: ChatProviderId,
     modelId: string,
-    level?: LooseOptional<ReasoningLevel>
+    level: LooseOptional<ReasoningLevel>,
+    fallback: ReasoningFallbackApi
   ): LanguageModel {
     // 包不包只看"这一档到底发不发 reasoning"，那个判断与输出上限无关，先按缺省算一遍即可。
     const wrappable = createReasoningProviderOptions(provider, modelId, level)
@@ -47,16 +54,20 @@ export class LanguageModelWrappers implements LanguageModelWrappersApi {
       : null
     if (!wrappable) return model
 
-    return new ReasoningLanguageModel(
-      wrappable,
-      (maxOutputTokens) =>
-        createReasoningProviderOptions(
-          provider,
-          modelId,
-          level,
-          maxOutputTokens
-        ) as Nullable<ModelCallProviderOptions>
-    )
+    return new ReasoningLanguageModel(wrappable, {
+      key: `${provider}:${modelId}`,
+      level: level ?? DefaultReasoningLevel,
+      fallback,
+      resolve: (current, maxOutputTokens) =>
+        current
+          ? (createReasoningProviderOptions(
+              provider,
+              modelId,
+              current,
+              maxOutputTokens
+            ) as Nullable<ModelCallProviderOptions>)
+          : null,
+    })
   }
 }
 
