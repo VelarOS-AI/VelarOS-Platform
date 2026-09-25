@@ -2,13 +2,15 @@
  * model 域的不变量验收：`spec/invariants.md` 里每一条「测试」档的检验器。
  * 用例名以 INV-<编号> 开头，`check:module-ownership` 按这个前缀核对登记表与实现对得上。
  */
+import { MockLanguageModelV3, simulateReadableStream } from 'ai/test'
 import { describe, expect, test } from 'bun:test'
 
-import type { KernelModuleActivateContext } from '@velaros-ai/kernel'
+import type { KernelModuleActivateContext, ModelTurnRequest } from '@velaros-ai/kernel'
 import type { CapabilityToken } from '@velaros-ai/kernel/contracts'
 
 import {
   type ChatProviderId,
+  createAiSdkModelDriver,
   createModelKernelModule,
   createModelRuntimeComposition,
   DefaultProviderModels,
@@ -21,6 +23,7 @@ import {
   modelUsage,
 } from '../src/index'
 import { SharedProviderCatalogs } from '../src/utils/catalog/provider-catalogs'
+import { ModelTuning } from '../src/utils/tuning'
 
 const InjectedProviderId = 'velaros-spec-provider' as ChatProviderId
 
@@ -270,4 +273,93 @@ test('INV-12 凭据探测使用供应商鉴权端点，缺密钥不发请求', a
     ).ok
   ).toBe(false)
   expect(urls).toEqual(['https://openrouter.ai/api/v1/key'])
+})
+
+/** 用一段模拟的供应商流驱动 AI SDK 驱动，收下转给宿主的思考摘要。 */
+async function streamedReasoning(parts: readonly unknown[]): Promise<string[]> {
+  const request: ModelTurnRequest = {
+    instructions: 'spec',
+    materials: [],
+    response: { type: 'text' },
+    mode: 'work',
+    outputTokens: 100,
+  }
+  const driver = createAiSdkModelDriver({
+    id: 'spec',
+    model: new MockLanguageModelV3({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          initialDelayInMs: null,
+          chunkDelayInMs: null,
+          chunks: [
+            { type: 'stream-start', warnings: [] },
+            ...parts,
+            { type: 'text-start', id: 't' },
+            { type: 'text-delta', id: 't', delta: 'ok' },
+            { type: 'text-end', id: 't' },
+            {
+              type: 'finish',
+              finishReason: { unified: 'stop', raw: 'stop' },
+              usage: {
+                inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+                outputTokens: { total: 2, text: 2, reasoning: 0 },
+              },
+            },
+          ] as any,
+        }),
+      }),
+    }),
+    limits: { contextTokens: 32_000, inputTokens: 30_000, outputTokens: 1_000 },
+  })
+  const reasoning: string[] = []
+  let text = ''
+  for await (const delta of driver.stream(request, new AbortController().signal)) {
+    if (delta.type === 'reasoning') reasoning.push(delta.text)
+    if (delta.type === 'text') text += delta.text
+    if (delta.type === 'error') throw Error(delta.message)
+  }
+  expect(text).toBe('ok')
+  return reasoning
+}
+
+test('INV-13 思考摘要只转给宿主展示：一条响应只认一路来源，分段空一行，超出上限只停转发', async () => {
+  // Responses、Anthropic、Google：SDK 解析出的思考分片
+  expect(
+    await streamedReasoning([
+      { type: 'reasoning-start', id: 'r:0' },
+      { type: 'reasoning-delta', id: 'r:0', delta: '先看目录' },
+      { type: 'reasoning-end', id: 'r:0' },
+      { type: 'reasoning-start', id: 'r:1' },
+      { type: 'reasoning-delta', id: 'r:1', delta: '再读文件' },
+      { type: 'reasoning-end', id: 'r:1' },
+    ])
+  ).toEqual(['先看目录', '\n\n再读文件'])
+  // Chat Completions：原始分块里的 reasoning_content 或 reasoning，别的形状不算
+  expect(
+    await streamedReasoning([
+      { type: 'raw', rawValue: { choices: [{ delta: { reasoning_content: '想一想' } }] } },
+      { type: 'raw', rawValue: { choices: [{ delta: { reasoning: '再想想', content: null } }] } },
+      { type: 'raw', rawValue: { choices: [{ delta: { reasoning_content: null } }] } },
+      { type: 'raw', rawValue: { type: 'response.reasoning_summary_text.delta', delta: '不算' } },
+    ])
+  ).toEqual(['想一想', '再想想'])
+  // 两路都有时只认先到的那一路，同一段思考不重复
+  expect(
+    await streamedReasoning([
+      { type: 'raw', rawValue: { choices: [{ delta: { reasoning_content: '一次' } }] } },
+      { type: 'reasoning-start', id: 'r:0' },
+      { type: 'reasoning-delta', id: 'r:0', delta: '一次' },
+      { type: 'reasoning-end', id: 'r:0' },
+    ])
+  ).toEqual(['一次'])
+  // 超出上限不再转发，正文照常收完
+  const long = 'x'.repeat(ModelTuning.stream.reasoningChars)
+  expect(
+    await streamedReasoning([
+      { type: 'reasoning-start', id: 'r:0' },
+      { type: 'reasoning-delta', id: 'r:0', delta: long },
+      { type: 'reasoning-delta', id: 'r:0', delta: '更多' },
+      { type: 'reasoning-end', id: 'r:0' },
+    ])
+  ).toEqual([long])
 })

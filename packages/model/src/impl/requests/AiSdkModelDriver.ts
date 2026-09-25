@@ -14,7 +14,9 @@ import type {
 } from '../../types/driver.js'
 import { estimateRequestInput } from '../../utils/request-estimate.js'
 import { planProviderRetry } from '../../utils/retry.js'
+import { ModelTuning } from '../../utils/tuning.js'
 import { markPromptCacheBreakpoints, withPromptCacheKey } from '../../utils/wire/prompt-cache.js'
+import { readChatCompletionReasoning } from '../../utils/wire/reasoning.js'
 
 class AiSdkModelDriver implements ModelDriver {
   public readonly id: string
@@ -41,6 +43,8 @@ class AiSdkModelDriver implements ModelDriver {
         messages: markPromptCacheBreakpoints(modelRequestEncoder.messages(request)),
         maxOutputTokens: request.outputTokens,
         maxRetries: 0,
+        // Chat Completions 通道的思考摘要只在原始分块里（见 readChatCompletionReasoning）。
+        includeRawChunks: true,
         // 完整 JSON Schema 允许可选字段和动态 input；本地校验是接收门。
         providerOptions: withPromptCacheKey(
           format.type === 'json' ? { openai: { strictJsonSchema: false } } : undefined,
@@ -75,9 +79,29 @@ class AiSdkModelDriver implements ModelDriver {
       let textSegments = 0
       let separator = false
       let endedWithNewline = true
+      // 思考摘要只作展示：同一条响应只认先到的那一路来源，分段之间空一行，超出上限就不再转发。
+      let reasoningSource: Optional<'parts' | 'raw'>
+      let reasoningChars = 0
+      let reasoningBreak = false
       for await (const part of result.fullStream) {
         signal.throwIfAborted()
         if (finish) throw new AppError('PROTOCOL', '供应商在结束响应后继续发送内容')
+        if (part.type === 'reasoning-start' && reasoningChars > 0) reasoningBreak = true
+        let reasoning = ''
+        if (part.type === 'reasoning-delta' && reasoningSource !== 'raw') {
+          reasoningSource = 'parts'
+          reasoning = part.text
+        }
+        if (part.type === 'raw' && reasoningSource !== 'parts') {
+          reasoning = readChatCompletionReasoning(part.rawValue)
+          if (reasoning) reasoningSource = 'raw'
+        }
+        if (reasoning && reasoningChars < ModelTuning.stream.reasoningChars) {
+          const text = (reasoningBreak ? '\n\n' : '') + reasoning
+          reasoningBreak = false
+          reasoningChars += text.length
+          yield { type: 'reasoning', text }
+        }
         if (part.type === 'text-start' && format.type === 'text') {
           // Responses 可把说明和正式答复放在不同消息里；消息边界不能把两行粘成一行。
           separator = chars > 0 && !endedWithNewline

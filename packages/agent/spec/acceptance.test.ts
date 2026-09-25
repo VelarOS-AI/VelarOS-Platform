@@ -203,6 +203,60 @@ test('INV-42 persistent faults in a segment run pressure maintenance once and as
   await service.close()
 })
 
+test('INV-43 reasoning reaches the host after its turn and never enters the context or the event journal', async () => {
+  const f = runFixture()
+  const written: string[] = []
+  const put = f.store.put
+  f.store.put = async (id, body) => {
+    written.push(body)
+    return put(id, body)
+  }
+  f.options.model = {
+    ...f.options.model,
+    async *stream() {
+      yield { type: 'reasoning', text: 'weighing the options' }
+      yield { type: 'reasoning', text: '' }
+      yield { type: 'text', text: 'done' }
+      yield { type: 'finish', reason: 'stop' }
+    },
+  }
+  const service = createActRunService(f.options)
+  const events = []
+  for await (const event of service.submit('work')) events.push(event)
+  expect(events.filter((event) => event.type === 'reasoning')).toEqual([
+    { type: 'reasoning', runId: expect.any(String), text: 'weighing the options' },
+  ])
+  // 思考属于最近一个 turn 事件，宿主据此把它归进那一轮
+  const turn = events.findIndex((event) => event.type === 'turn')
+  expect(turn).toBeGreaterThanOrEqual(0)
+  expect(events.findIndex((event) => event.type === 'reasoning')).toBeGreaterThan(turn)
+  expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+  expect((await service.events()).some((item) => item.event.type === 'reasoning')).toBe(false)
+  expect(written.some((body) => body.includes('weighing the options'))).toBe(false)
+  await service.close()
+  const malformed = {
+    ...f.options.model,
+    async *stream() {
+      yield { type: 'reasoning', text: 42 } as never
+    },
+  }
+  await expect(
+    (async () => {
+      for await (const _ of boundedModelStream(
+        malformed,
+        {
+          instructions: '',
+          materials: [],
+          response: { type: 'text' },
+          mode: 'work',
+          outputTokens: 10,
+        },
+        AbortSignal.timeout(1000)
+      ))
+        throw Error('accepted a malformed reasoning delta')
+    })()
+  ).rejects.toThrow('模型思考增量不是文本')
+})
 test('closing a consumer during thinking releases the view without accepting late model output', async () => {
   const f = runFixture()
   let stopped = 0

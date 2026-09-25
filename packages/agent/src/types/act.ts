@@ -100,6 +100,8 @@ export type ActRunEvent =
   | { readonly type: 'answer'; readonly runId: string; readonly id: string }
   | { readonly type: 'state'; readonly runId: string; readonly status: ActRunStatus }
   | { readonly type: 'text'; readonly runId: string; readonly text: string }
+  /** 模型这一轮的思考摘要增量，只作展示：不进上下文、不落事件账，属于最近一个 turn 事件。 */
+  | { readonly type: 'reasoning'; readonly runId: string; readonly text: string }
   | {
       readonly type: 'program'
       readonly runId: string

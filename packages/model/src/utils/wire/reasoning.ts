@@ -1,4 +1,5 @@
 import {
+  isArray,
   isFiniteNumber,
   isNumber,
   isPlainObject,
@@ -376,4 +377,21 @@ export function injectVelarThinkingRouting(
     Log.tag('VelarModelAdapter').debug('注入 Velar reasoning 路由失败，保留原始请求体', { error })
     return init
   }
+}
+
+/**
+ * Chat Completions 流式分块里的思考增量；不是这种分块或这一块没有思考时返回空串。
+ *
+ * `@ai-sdk/openai` 的 chat 模型不解析思考字段，走 Chat Completions 的通道（兼容网关、DeepSeek、
+ * OpenRouter、Velar）只能从原始分块里取：DeepSeek 与多数兼容网关写 `reasoning_content`，OpenRouter
+ * 写 `reasoning`。Responses、Anthropic、Google 的原始事件没有 `choices`，它们的思考由 SDK 解析成
+ * 思考分片，不走这里。
+ */
+export function readChatCompletionReasoning(chunk: unknown): string {
+  if (!isPlainObject(chunk) || !isArray(chunk.choices)) return ''
+  const [choice] = chunk.choices
+  const delta = isPlainObject(choice) ? choice.delta : undefined
+  if (!isPlainObject(delta)) return ''
+  const text = isString(delta.reasoning_content) ? delta.reasoning_content : delta.reasoning
+  return isString(text) ? text : ''
 }

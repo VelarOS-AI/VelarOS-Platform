@@ -319,6 +319,8 @@ export class ActLoop implements ActLoopApi {
                   outputTokens: delta.outputTokens,
                 }
               }
+              if (delta.type === 'reasoning' && !isEmpty(delta.text))
+                yield { type: 'reasoning', runId, text: delta.text }
               if (delta.type === 'text') {
                 if (isNull(firstTextMs) && !isEmpty(delta.text))
                   firstTextMs = performance.now() - modelStarted

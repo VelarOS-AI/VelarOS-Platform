@@ -59,6 +59,11 @@ export const ModelTuning = Object.freeze({
     /** 每张图片按多少 token 计：主流供应商把图片缩到一两千 token 以内，取上沿；base64 字节数与真实开销无关。 */
     imageTokens: 2_000,
   }),
+  /** 流式响应的转发。 */
+  stream: Object.freeze({
+    /** 一条响应最多转给宿主多少字符的思考摘要；超出的部分不再转发，响应照常接收。 */
+    reasoningChars: 200_000,
+  }),
   /** 瞬时故障重试。 */
   retry: Object.freeze({
     /** 第一次重试的退避基数，毫秒；之后按指数翻倍。 */

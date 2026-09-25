@@ -109,6 +109,8 @@ export interface ModelInputEstimate {
 /** 流式响应仅传递模型事实；控制状态由 Agent 决定。 */
 export type ModelTurnDelta =
   | { readonly type: 'text'; readonly text: string }
+  /** 供应商给的思考摘要增量：只供宿主展示，不进上下文，也不参与协议解码。 */
+  | { readonly type: 'reasoning'; readonly text: string }
   | { readonly type: 'output'; readonly value: unknown }
   | {
       readonly type: 'usage'

@@ -386,7 +386,7 @@ class ActRunService implements ActRunServiceApi {
       })
   }
   private async emit(event: ActRunEvent): Promise<void> {
-    if (event.type === 'text' || event.type === 'program') {
+    if (event.type === 'text' || event.type === 'reasoning' || event.type === 'program') {
       this.outbox.push(event)
       this.notify()
       return

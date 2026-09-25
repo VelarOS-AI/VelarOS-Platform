@@ -29,3 +29,4 @@
 | INV-10 | 文件分工与对外边界不塌：合同、类型、常量分开且接口成员有中文说明；实现一类一文件、类实现接口、按登记分层引用；utils 只放带中文说明的函数与常量；对外入口只转发，类、utils 函数、内部接口不出包；环境变量全部登记 | 门禁 | `check:module-ownership` |
 | INV-11 | `./catalog` 与 `./contracts` 的整条引用链不碰 Node 内置模块、不读宿主进程环境；根入口不出任何类 | 门禁 | `check:model-arch` |
 | INV-12 | 供应商凭据验证复用 Model 协议：缺密钥不发请求，OpenRouter 使用鉴权端点，超时包含错误正文读取 | 测试 | `spec/acceptance.test.ts` |
+| INV-13 | 思考摘要只转给宿主展示：同一条响应只认一路来源（SDK 思考分片或 Chat Completions 原始分块），分段之间空一行；超出上限只停转发，不判失败 | 测试 | `spec/acceptance.test.ts` |

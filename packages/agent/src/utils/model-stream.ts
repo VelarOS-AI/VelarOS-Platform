@@ -46,10 +46,15 @@ export async function* boundedModelStream(
       signal.throwIfAborted()
       if (result.done) return
       const delta = result.value
-      if (!delta || !['output', 'text', 'usage', 'error', 'finish'].includes(delta.type))
+      if (
+        !delta ||
+        !['output', 'text', 'reasoning', 'usage', 'error', 'finish'].includes(delta.type)
+      )
         throw new AppError('PROTOCOL', '模型响应包含契约之外的事件')
       if (delta.type === 'text' && (request.response.type !== 'text' || !isString(delta.text)))
         throw new AppError('PROTOCOL', '模型文本增量不符合响应模式')
+      if (delta.type === 'reasoning' && !isString(delta.text))
+        throw new AppError('PROTOCOL', '模型思考增量不是文本')
       if (delta.type === 'output' && request.response.type !== 'json')
         throw new AppError('PROTOCOL', '文本模式不能返回结构化响应事件')
       if (delta.type === 'finish' && !['stop', 'length'].includes(delta.reason))
