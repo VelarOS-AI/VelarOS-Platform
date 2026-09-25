@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageName": "@velaros-ai/agent",
-  "acceptedPackageVersion": "7.4.0",
+  "acceptedPackageVersion": "8.0.0",
   "entries": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -30,10 +30,9 @@
         "ActRunSnapshot\ttype\tf14f420c2249c43b9cf30a64d08bc9122925ed0c67fbc416041e9ce4b792c20d",
         "ActRunStatus\ttype\t956fd535f57f61dd0a15e71a675137b65523909918de769bcd3cb31769e963a2",
         "ActTurnDecoder\ttype\td8db1ee9583cfcfe91d77c7ad26c77a37bed4bf394a7f80fc014de4f545144f0",
-        "AgentJob\ttype\td774c5ccdbfb63b51edc823cbbd02e5de1104aaf7982bcb13c2ff71f7b025971",
-        "AgentResume\ttype\tcda89f703722568899c7f478fb667a3b02409c85182fa1ff578c38bb10cf24bb",
-        "AgentStart\ttype\t6a3e66108f8bedfc7259b0af4e6100ade527169a4afd6f1ae742961d91032078",
-        "AgentStoreGrant\ttype\t3bfebe29ffce3b76f3e4ab9587e8122cf93d234587809773918b25781692938f",
+        "AgentJob\ttype\te234703e25d71afd49304d14b0a7aaa1a27c0bc5879ed230d36dae53467d3a55",
+        "AgentResume\ttype\t1d507cf5723454dfd839226268303e2fdab39a70be7034efef5041ee5f2c8ac6",
+        "AgentStart\ttype\tfb2edce88666fa723799ba4d7ccae1ec977272bda7ceb59de6dc2933c925d28a",
         "AgentSupervisorApi\ttype\tc16c1d6343ef65048802d72684724322cac5507c792713a1602ec57135cc450a",
         "AgentSupervisorOptions\ttype\tc0d5936adb2b813f233b3eadbe2a04225a36bee639927125818cdc8679557917",
         "ModelToolDelivery\ttype\tfb5b45d88544f9a39d62cb544a5de5087b475566ba741a584d41fa8ee78e028c",
@@ -59,10 +58,9 @@
         "ActRunLimits\ttype\t21c764fcfd3a4e720d3a590307714b2d944065e1aa853a1c80d1b2c12fc3751b",
         "ActRunSnapshot\ttype\tf14f420c2249c43b9cf30a64d08bc9122925ed0c67fbc416041e9ce4b792c20d",
         "ActRunStatus\ttype\t956fd535f57f61dd0a15e71a675137b65523909918de769bcd3cb31769e963a2",
-        "AgentJob\ttype\td774c5ccdbfb63b51edc823cbbd02e5de1104aaf7982bcb13c2ff71f7b025971",
-        "AgentResume\ttype\tcda89f703722568899c7f478fb667a3b02409c85182fa1ff578c38bb10cf24bb",
-        "AgentStart\ttype\t6a3e66108f8bedfc7259b0af4e6100ade527169a4afd6f1ae742961d91032078",
-        "AgentStoreGrant\ttype\t3bfebe29ffce3b76f3e4ab9587e8122cf93d234587809773918b25781692938f",
+        "AgentJob\ttype\te234703e25d71afd49304d14b0a7aaa1a27c0bc5879ed230d36dae53467d3a55",
+        "AgentResume\ttype\t1d507cf5723454dfd839226268303e2fdab39a70be7034efef5041ee5f2c8ac6",
+        "AgentStart\ttype\tfb2edce88666fa723799ba4d7ccae1ec977272bda7ceb59de6dc2933c925d28a",
         "ModelToolDelivery\ttype\tfb5b45d88544f9a39d62cb544a5de5087b475566ba741a584d41fa8ee78e028c"
       ]
     }

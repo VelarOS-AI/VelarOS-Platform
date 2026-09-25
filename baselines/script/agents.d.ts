@@ -1,15 +1,14 @@
 declare module 'velaros:agents' {
   /**
-   * 在同一个运行时上派发有界的子任务：能力范围与预算由宿主配置（profiles 列出），writes 按模块独占写入。
+   * 在同一个运行时上派发子任务：它继承你的能力与权限，自己开一个会话去做，预算由宿主配置（profiles 列出）。
    * 派发、等待、回答、续跑、引导、取消都只能在 execute 里做；wait 不额外调用模型，遇到子任务提问或结束就返回。
    */
 
-  /** 一个可选的子任务配置：name 传给 start/resume 的 profile；modules 是子任务能用的模块，stores 表示能否接受共享空间授权，其余是单次运行与累计的预算。 */
+  /** 一个子任务配置：name 可以传给 start/resume 的 profile；modules 是子任务能用的模块，其余是单次运行与累计的预算。 */
   interface AgentProfileInfo {
     readonly name: string
     readonly description: string
     readonly modules: readonly string[]
-    readonly stores: boolean
     readonly turns: number
     readonly timeoutMs: number
     readonly modelCalls: number
@@ -17,21 +16,17 @@ declare module 'velaros:agents' {
   }
 
   /**
-   * 派发子任务：task 写清楚要它完成什么；profile 取 profiles() 里的 name；materials 把已有原文引用复制给它（最多 32 条）；
-   * writes 是它要独占的外部模块写入范围；stores 显式共享空间，每项的 write 前缀都必须落在同一项的 read 前缀里，并且不超出自己的授权。
+   * 派发子任务：task 写清楚要它完成什么；它直接继承你的能力与权限（模块、写入、共享空间），不用另外声明。
+   * profile 可省，省略就用宿主给的第一个配置（profiles() 里能看到）；materials 把已有原文引用复制给它（最多 32 条）。
    */
   interface AgentStart {
-    /** 显式共享的空间与范围；省略则不共享。 */
-    readonly stores?: readonly AgentStoreGrant[]
     readonly task: string
-    readonly profile: string
-    readonly writes?: readonly string[]
+    readonly profile?: string
     readonly materials?: ReadonlyArray<{ readonly sessionId: string; readonly id: string }>
   }
 
   /**
    * 一个子任务：status 为 waiting 时 pending 里有它在等的请求，用 reply 回答；结束后 result 是结果原文的引用，delivery 是交付清单，失败时 error 说明原因。
-   * writes 是它占着的外部模块写入范围，stores 是派给它的共享空间授权。
    */
   interface AgentJob {
     /** 已落盘且仍待处理的子运行请求，答案通过 reply 绑定原运行。 */
@@ -42,8 +37,6 @@ declare module 'velaros:agents' {
       readonly message: string
       readonly detail?: unknown
     }>
-    /** 派发时固定的空间授权，续跑时重新校验。 */
-    readonly stores?: readonly AgentStoreGrant[]
     readonly id: string
     readonly parentSessionId: string
     /** 父逻辑任务身份，防止新任务隐式恢复旧子运行。 */
@@ -52,7 +45,6 @@ declare module 'velaros:agents' {
     readonly profile: string
     readonly status:
       'running' | 'waiting' | 'completed' | 'cancelled' | 'failed' | 'interrupted' | 'needs_reconcile'
-    readonly writes: readonly string[]
     readonly result?: { readonly sessionId: string; readonly id: string }
     /** 宿主发布的统一交付清单。 */
     readonly delivery?: ModelToolDelivery
@@ -80,18 +72,6 @@ declare module 'velaros:agents' {
   interface AgentSendInput {
     readonly id: string
     readonly input: string
-  }
-
-  /**
-   * 共享给子任务的一个空间：read 是它能读和订阅的键前缀，write 是能写的前缀，必须落在 read 里。
-   */
-  interface AgentStoreGrant {
-    /** 已存在的空间标识。 */
-    readonly store: string
-    /** 可读和订阅的键前缀。 */
-    readonly read: readonly string[]
-    /** 可写前缀，必须属于可读范围。 */
-    readonly write: readonly string[]
   }
 
   /**
@@ -128,22 +108,18 @@ declare module 'velaros:agents' {
   }
 
   /**
-   * 续跑的内容：input 是新一阶段的目标与说明；给了 profile、writes、stores 就整份替换原来的（空数组表示全部收回），materials 追加新的原文引用。
+   * 续跑的内容：input 是新一阶段的目标与说明；给了 profile 就换成那个配置，materials 追加新的原文引用。
    */
   interface AgentResume {
     /** 新一阶段的目标与说明。 */
     readonly input: string
     /** 可选替换为另一个宿主已配置的能力档案。 */
     readonly profile?: string
-    /** 可选替换外部模块写入范围，空数组释放全部写入。 */
-    readonly writes?: readonly string[]
-    /** 可选替换共享空间授权，空数组撤回共享。 */
-    readonly stores?: readonly AgentStoreGrant[]
     /** 本次继续附加的父会话材料。 */
     readonly materials?: ReadonlyArray<{ readonly sessionId: string; readonly id: string }>
   }
 
-  /** 列出能选的配置：名称、能力范围与预算；start/resume 用 name。
+  /** 列出宿主给的配置：名称、能力范围与预算；start/resume 不给 profile 就用第一个。
    */
   export function profiles(): Promise<AgentProfileInfo[]>
 
@@ -151,11 +127,11 @@ declare module 'velaros:agents' {
    */
   export function start(input: AgentStart): Promise<AgentJob>
 
-  /** 子任务收束后接着跑同一个会话，已用预算保留；可以换配置、写入范围与共享空间，追加材料。
+  /** 子任务收束后接着跑同一个会话，已用预算保留；可以换配置、追加材料。
    */
   export function resume(input: AgentResumeRequest): Promise<AgentJob>
 
-  /** 回答子任务在 job.pending 里的请求；回答不改变它的权限，要换环境得等它收束后 resume。
+  /** 回答子任务在 job.pending 里的请求。
    */
   export function reply(input: AgentReplyInput): Promise<null>
 

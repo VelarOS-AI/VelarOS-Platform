@@ -2,7 +2,6 @@
  * 子任务的稳定身份与真实生命周期，结果通过原文引用返回。
  * @AgentView
  * 一个子任务：status 为 waiting 时 pending 里有它在等的请求，用 reply 回答；结束后 result 是结果原文的引用，delivery 是交付清单，失败时 error 说明原因。
- * writes 是它占着的外部模块写入范围，stores 是派给它的共享空间授权。
  */
 export interface AgentJob {
   /** 已落盘且仍待处理的子运行请求，答案通过 reply 绑定原运行。 */
@@ -13,8 +12,6 @@ export interface AgentJob {
     readonly message: string
     readonly detail?: unknown
   }>
-  /** 派发时固定的空间授权，续跑时重新校验。 */
-  readonly stores?: readonly AgentStoreGrant[]
   readonly id: string
   readonly parentSessionId: string
   /** 父逻辑任务身份，防止新任务隐式恢复旧子运行。 */
@@ -23,24 +20,20 @@ export interface AgentJob {
   readonly profile: string
   readonly status:
     'running' | 'waiting' | 'completed' | 'cancelled' | 'failed' | 'interrupted' | 'needs_reconcile'
-  readonly writes: readonly string[]
   readonly result?: { readonly sessionId: string; readonly id: string }
   /** 宿主发布的统一交付清单。 */
   readonly delivery?: ModelToolDelivery
   readonly error?: string
 }
 /**
- * 子任务只选择宿主配置，不接受模型自行注入能力或驱动。
+ * 子任务只选择宿主配置，不接受模型自行注入能力或驱动；能做的事与父任务一样。
  * @AgentView
- * 派发子任务：task 写清楚要它完成什么；profile 取 profiles() 里的 name；materials 把已有原文引用复制给它（最多 32 条）；
- * writes 是它要独占的外部模块写入范围；stores 显式共享空间，每项的 write 前缀都必须落在同一项的 read 前缀里，并且不超出自己的授权。
+ * 派发子任务：task 写清楚要它完成什么；它直接继承你的能力与权限（模块、写入、共享空间），不用另外声明。
+ * profile 可省，省略就用宿主给的第一个配置（profiles() 里能看到）；materials 把已有原文引用复制给它（最多 32 条）。
  */
 export interface AgentStart {
-  /** 显式共享的空间与范围；省略则不共享。 */
-  readonly stores?: readonly AgentStoreGrant[]
   readonly task: string
-  readonly profile: string
-  readonly writes?: readonly string[]
+  readonly profile?: string
   readonly materials?: ReadonlyArray<{ readonly sessionId: string; readonly id: string }>
 }
 
@@ -80,33 +73,15 @@ export interface ModelToolDelivery {
 }
 
 /**
- * 随子任务持久化的共享空间授权；实际范围由父运行时核验。
+ * 在同一子会话里继续；已使用预算保持，能力与权限按父任务此刻的重新继承。
  * @AgentView
- * 共享给子任务的一个空间：read 是它能读和订阅的键前缀，write 是能写的前缀，必须落在 read 里。
- */
-export interface AgentStoreGrant {
-  /** 已存在的空间标识。 */
-  readonly store: string
-  /** 可读和订阅的键前缀。 */
-  readonly read: readonly string[]
-  /** 可写前缀，必须属于可读范围。 */
-  readonly write: readonly string[]
-}
-
-/**
- * 在同一子会话的安全边界更新环境并继续；已使用预算保持。
- * @AgentView
- * 续跑的内容：input 是新一阶段的目标与说明；给了 profile、writes、stores 就整份替换原来的（空数组表示全部收回），materials 追加新的原文引用。
+ * 续跑的内容：input 是新一阶段的目标与说明；给了 profile 就换成那个配置，materials 追加新的原文引用。
  */
 export interface AgentResume {
   /** 新一阶段的目标与说明。 */
   readonly input: string
   /** 可选替换为另一个宿主已配置的能力档案。 */
   readonly profile?: string
-  /** 可选替换外部模块写入范围，空数组释放全部写入。 */
-  readonly writes?: readonly string[]
-  /** 可选替换共享空间授权，空数组撤回共享。 */
-  readonly stores?: readonly AgentStoreGrant[]
   /** 本次继续附加的父会话材料。 */
   readonly materials?: ReadonlyArray<{ readonly sessionId: string; readonly id: string }>
 }

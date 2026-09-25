@@ -29,7 +29,7 @@ declare module 'velaros:interaction' {
     readonly reason?: string
   }
 
-  /** 说明缺少的能力：message 1 到 8000 个字符；detail 放任意 JSON 补充，比如为什么需要、要哪个模块或写入范围。 */
+  /** 说明缺少的能力：message 1 到 8000 个字符；detail 放任意 JSON 补充，比如为什么需要、要哪个模块。 */
   interface CapabilityRequest {
     readonly message: string
     readonly detail?: unknown

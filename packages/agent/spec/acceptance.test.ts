@@ -538,7 +538,7 @@ test('INV-29 a driver ignoring cancellation cannot publish late deltas', async (
     })()
   ).rejects.toThrow()
 })
-test('INV-30 concurrent child dispatch reserves quota and conflicting write scopes before opening', async () => {
+test('INV-30 concurrent child dispatch reserves quota before opening; children do not claim write scopes', async () => {
   let opened = 0
   const supervisor = createAgentSupervisor({
     storage: storage(),
@@ -551,15 +551,9 @@ test('INV-30 concurrent child dispatch reserves quota and conflicting write scop
   })
   const signal = new AbortController().signal
   try {
-    const a = await supervisor.start('p', { task: 'a', profile: 'read', writes: ['files'] }, signal)
-    await expect(
-      supervisor.start('p', { task: 'b', profile: 'read', writes: ['files'] }, signal)
-    ).rejects.toThrow('冲突')
-    const b = await supervisor.start(
-      'p',
-      { task: 'b', profile: 'read', writes: ['browser'] },
-      signal
-    )
+    // 两个子任务做同一类事也能同时跑：子任务不占写入范围，能做的与父任务一样
+    const a = await supervisor.start('p', { task: 'a', profile: 'read' }, signal)
+    const b = await supervisor.start('p', { task: 'b', profile: 'read' }, signal)
     await expect(supervisor.start('p', { task: 'c', profile: 'read' }, signal)).rejects.toThrow(
       '额度'
     )

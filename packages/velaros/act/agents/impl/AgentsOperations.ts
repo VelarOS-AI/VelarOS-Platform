@@ -1,6 +1,6 @@
 /**
  * 子任务（`velaros:agents`）的操作：`AgentsOperations` 与整个进程唯一的 `agentsOperations`。接口 `AgentsOperationsApi` 在本文件的类上方。
- * 八个操作都以调用所在的会话为父会话转发给共享调度器；材料条数与引导内容在这里核对，配置、授权与写入范围由调度器和父运行时核验。
+ * 八个操作都以调用所在的会话为父会话转发给共享调度器；材料条数与引导内容在这里核对，没选配置时用宿主给的第一个。
  */
 
 import type { AgentJob, AgentStart } from '@velaros-ai/agent'
@@ -18,11 +18,11 @@ import { checkAgentMaterials } from '../utils/requests.js'
 
 /**
  * @AgentView
- * 在同一个运行时上派发有界的子任务：能力范围与预算由宿主配置（profiles 列出），writes 按模块独占写入。
+ * 在同一个运行时上派发子任务：它继承你的能力与权限，自己开一个会话去做，预算由宿主配置（profiles 列出）。
  * 派发、等待、回答、续跑、引导、取消都只能在 execute 里做；wait 不额外调用模型，遇到子任务提问或结束就返回。
  */
 export interface AgentsOperationsApi {
-  /** @AgentView 列出能选的配置：名称、能力范围与预算；start/resume 用 name。
+  /** @AgentView 列出宿主给的配置：名称、能力范围与预算；start/resume 不给 profile 就用第一个。
    * @OperationEffect none
    */
   profiles(ctx: AgentsOperationContext): Promise<AgentProfileInfo[]>
@@ -31,12 +31,12 @@ export interface AgentsOperationsApi {
    * @OperationModes execute
    */
   start(input: AgentStart, ctx: AgentsOperationContext): Promise<AgentJob>
-  /** @AgentView 子任务收束后接着跑同一个会话，已用预算保留；可以换配置、写入范围与共享空间，追加材料。
+  /** @AgentView 子任务收束后接着跑同一个会话，已用预算保留；可以换配置、追加材料。
    * @OperationEffect none
    * @OperationModes execute
    */
   resume(input: AgentResumeRequest, ctx: AgentsOperationContext): Promise<AgentJob>
-  /** @AgentView 回答子任务在 job.pending 里的请求；回答不改变它的权限，要换环境得等它收束后 resume。
+  /** @AgentView 回答子任务在 job.pending 里的请求。
    * @OperationEffect none
    * @OperationModes execute
    */
@@ -71,7 +71,8 @@ export class AgentsOperations implements AgentsOperationsApi {
   public async start(input: AgentStart, ctx: AgentsOperationContext): Promise<AgentJob> {
     ctx.abortSignal.throwIfAborted()
     checkAgentMaterials(input.materials)
-    return ctx.agents.start(ctx.sessionId, input, ctx.runSignal())
+    const profile = input.profile ?? ctx.profiles()[0]?.name
+    return ctx.agents.start(ctx.sessionId, { ...input, profile }, ctx.runSignal())
   }
 
   public async resume(input: AgentResumeRequest, ctx: AgentsOperationContext): Promise<AgentJob> {

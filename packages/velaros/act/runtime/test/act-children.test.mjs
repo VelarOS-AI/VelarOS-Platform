@@ -82,7 +82,7 @@ test('unknown child effects block parent writes, completion and task switching u
       if (++main === 1) {
         yield task(
           request,
-          "import {start,wait} from 'velaros:agents';import {write} from 'probe:uncertain';import {output} from 'velaros';const job=await start({task:'write',profile:'writer',writes:['probe:uncertain']});output(await wait({id:job.id}));await write();"
+          "import {start,wait} from 'velaros:agents';import {write} from 'probe:uncertain';import {output} from 'velaros';const job=await start({task:'write',profile:'writer'});output(await wait({id:job.id}));await write();"
         )
         yield { type: 'finish', reason: 'stop' }
       } else yield* done(request)
@@ -139,7 +139,6 @@ test('an orphaned durable child admission requires host reconciliation even with
       sessionId: 'agent:root:orphan',
       profile: 'reader',
       status: 'running',
-      writes: [],
     }),
   })
   const blocked = []
@@ -341,7 +340,7 @@ test('shared material is copied with provenance and caller cannot forge another 
   assert(reports.some((r) => JSON.parse(r.text).job.status === 'failed'))
 })
 
-test('child capability discovery and actual write dispatch use the same host scope', async (t) => {
+test('a child writes through its modules without claiming anything first, like its parent', async (t) => {
   let writes = 0
   let childCalls = 0
   let main = 0
@@ -353,7 +352,7 @@ test('child capability discovery and actual write dispatch use the same host sco
       )
       yield { type: 'finish', reason: 'stop' }
     } else {
-      assert.match(modelText(request), /没有占用该模块/)
+      assert.doesNotMatch(modelText(request), /PERMISSION|写入范围/)
       yield* done(request)
     }
   })
@@ -391,7 +390,7 @@ test('child capability discovery and actual write dispatch use the same host sco
       if (++main === 1) {
         yield task(
           request,
-          "import {start,wait} from 'velaros:agents';import {output} from 'velaros';const a=await start({task:'try write without scope claim',profile:'read'});output(await wait({id:a.id}));"
+          "import {start,wait} from 'velaros:agents';import {output} from 'velaros';const a=await start({task:'write without claiming a scope'});output(await wait({id:a.id}));"
         )
         yield { type: 'finish', reason: 'stop' }
       } else yield* done(request)
@@ -400,7 +399,7 @@ test('child capability discovery and actual write dispatch use the same host sco
   for await (const event of f.session.submit('inspect')) {
     assert.equal(typeof event.type, 'string')
   }
-  assert.equal(writes, 0)
+  assert.equal(writes, 1)
   assert.equal(childCalls, 2)
 })
 
@@ -650,7 +649,7 @@ test(
   }
 )
 test(
-  'same child resumes with newly granted writes and store access without resetting identity',
+  'same child resumes on another profile and writes, including the parent store, without any grants',
   { timeout: 15000 },
   async (t) => {
     let main = 0
@@ -707,7 +706,7 @@ test(
           childId = job.sessionId
           yield task(
             request,
-            `import {resume,wait} from 'velaros:agents';import {output} from 'velaros';const job=await resume({id:${JSON.stringify(job.id)},input:'implement',profile:'writer',writes:['probe:grant'],stores:[{store:${JSON.stringify(storeId)},read:[''],write:['']}]});output(await wait({id:job.id}));`
+            `import {resume,wait} from 'velaros:agents';import {output} from 'velaros';const job=await resume({id:${JSON.stringify(job.id)},input:'implement',profile:'writer'});output(await wait({id:job.id}));`
           )
           yield { type: 'finish', reason: 'stop' }
         } else {

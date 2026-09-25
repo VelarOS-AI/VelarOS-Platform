@@ -169,18 +169,14 @@ output(work);
 
 后续脚本使用返回的实际 id；`store.list` 也能在重建会话后发现它。observe 中调用 `store.get({store:id,key:'plan'})`，通过 output 选择每轮真正需要的正文。
 
-主线通过已有子任务派发显式共享：
+子任务直接继承父任务的空间（ADR 0018）：派发只写任务，子任务每次运行都拿到父任务此刻能用的全部空间与同样的读写范围。
 
 ```js
 import {start} from 'velaros:agents';
-const job = await start({
-  task:'调查登录状态恢复并将结论写入 findings/',
-  profile:'investigator',
-  stores:[{store:work.id,read:['plan','findings/'],write:['findings/']}]
-});
+const job = await start({task:'调查登录状态恢复并将结论写入 findings/'});
 ```
 
-job.stores 持久保存这份授权，resume 时重新检查父范围和宿主 profile。子任务没有创建空间的能力，其写入范围必须包含在读取范围内，并且两者都不能超过父会话的范围。`AgentProfile.stores=false` 可以整体关闭共享。未获配的空间不会进入目录，未共享空间的子任务没有 store 成员；搜索和整理保留专项能力。
+父任务能建空间，子任务也能建，建的归子任务自己；续跑时按父任务当时的空间重新继承。搜索和整理保留专项能力。
 
 宿主配置主线的空间边界及跨主线授权：
 

@@ -29,5 +29,4 @@ export type {
   ActRunSnapshot,
   ActRunStatus,
 } from './types/act.js'
-export type { AgentStoreGrant } from './types/delegation.js'
 export type { AgentJob, AgentResume, AgentStart, ModelToolDelivery } from './types/delegation.js'

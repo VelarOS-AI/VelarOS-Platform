@@ -1,4 +1,3 @@
-import type { AgentStoreGrant } from '@velaros-ai/agent'
 import type {
   ContextRef,
   StoreChanges,
@@ -7,8 +6,15 @@ import type {
   StoreEventPage,
   StoreValue,
 } from '@velaros-ai/context'
-/** 同一数据合同用于宿主授权和子任务派发。 */
-export type StoreGrant = AgentStoreGrant
+/** 宿主给会话的一个空间授权，子任务继承父会话时也按它传下去。 */
+export interface StoreGrant {
+  /** 已存在的空间标识。 */
+  readonly store: string
+  /** 可读和订阅的键前缀。 */
+  readonly read: readonly string[]
+  /** 可写前缀，必须属于可读范围。 */
+  readonly write: readonly string[]
+}
 /** 宿主固定的存储边界及可用空间。 */
 export interface StoreConfiguration {
   /** 租户或项目边界，模型不能修改。 */

@@ -8,7 +8,7 @@
 | INV-18 | 实现、注入、数据和公开面归属唯一 | 门禁 | `check:module-ownership` |
 | INV-19 | 公开破坏性变更需要主版本和基线 | 门禁 | `check:agent-public-api` |
 | INV-29 | 不响应取消的驱动不能无限阻塞循环 | 测试 | `spec/acceptance.test.ts` |
-| INV-30 | 并发额度与写范围在派发前占位 | 测试 | `spec/acceptance.test.ts` |
+| INV-30 | 并发额度在派发前占位；子任务不占写入范围 | 测试 | `spec/acceptance.test.ts` |
 | INV-31 | 子任务身份和配额可重启恢复 | 测试 | `spec/acceptance.test.ts` |
 | INV-32 | 父取消传播并保留部分结果 | 测试 | `spec/acceptance.test.ts` |
 | INV-33 | 并发失败不覆盖已完成任务的事实 | 测试 | `spec/acceptance.test.ts` |

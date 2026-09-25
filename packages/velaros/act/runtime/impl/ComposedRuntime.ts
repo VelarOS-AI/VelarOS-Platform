@@ -87,7 +87,6 @@ class ComposedRuntime implements VelarosRuntime {
     {
       kind: 'main' | 'search' | 'agent' | 'context'
       modules?: readonly string[]
-      writes?: readonly string[]
     }
   >()
   private readonly kernel: OperationRuntimeApi
@@ -304,16 +303,6 @@ class ComposedRuntime implements VelarosRuntime {
       beforeDispatch: async (invocation, descriptor, signal) => {
         if (!this.allows(invocation.sessionId, invocation.binding.moduleId))
           throw new AppError('CAPABILITY_DENIED', '当前会话没有此模块能力')
-        const scope = this.scopes.get(invocation.sessionId)!
-        if (
-          scope.kind === 'agent' &&
-          descriptor.effects === 'write' &&
-          !systemModules.owns(invocation.binding.moduleId) &&
-          !scope.writes?.includes(invocation.binding.moduleId)
-        )
-          throw new AppError('PERMISSION', '子任务没有占用该模块的写入范围')
-        if (descriptor.effects === 'write' && !systemModules.owns(invocation.binding.moduleId))
-          this.assertWriteDelegation(invocation.sessionId, invocation.binding.moduleId)
         await this.options.authorize?.(invocation, descriptor, signal)
         if (
           this.programAccess.get(invocation.sessionId)?.phase() === 'maintenance' &&
@@ -338,7 +327,6 @@ class ComposedRuntime implements VelarosRuntime {
               name,
               description: profile.description ?? '在指定能力范围内完成父任务派发的工作',
               modules: profile.modules.filter((module) => module !== 'velaros:agents'),
-              stores: !isFalse(profile.stores),
               turns: profile.limits?.turns ?? VelarosAgentRunLimits.turns,
               timeoutMs: profile.limits?.timeoutMs ?? VelarosAgentRunLimits.timeoutMs,
               modelCalls: profile.budget?.modelCalls ?? VelarosAgentBudget.modelCalls,
@@ -480,20 +468,15 @@ class ComposedRuntime implements VelarosRuntime {
     for (const module of modules)
       if (!this.allows(job.parentSessionId, module))
         throw new AppError('VALIDATION', '子任务能力不能超过父任务')
-    if (job.writes.some((module) => !modules.includes(module)))
-      throw new AppError('PERMISSION', '子任务写入范围超出能力配置')
+    // 子任务直接继承父任务此刻能用的共享空间与读写范围；父任务能建空间，子任务也能建（归它自己）
     let childStores: Optional<StoreSessionApi>
     const parentStores = this.stores.get(job.parentSessionId)
-    if (job.stores?.length) {
-      if (!parentStores || isFalse(profile.stores))
-        throw new AppError('PERMISSION', '子任务没有共享空间能力')
-      const grants = await parentStores.delegate(job.stores)
-      childStores = new StoreSession(
-        job.sessionId,
-        this.options.storage,
-        { scope: parentStores.scope, create: false, grants },
-        false
-      )
+    if (parentStores) {
+      childStores = new StoreSession(job.sessionId, this.options.storage, {
+        scope: parentStores.scope,
+        create: parentStores.mode === 'create',
+        grants: await parentStores.inherit(),
+      })
       await childStores.initialize()
     }
     const activity = await this.tools.begin(
@@ -504,7 +487,7 @@ class ComposedRuntime implements VelarosRuntime {
       signal
     )
     if (childStores) this.stores.set(job.sessionId, childStores)
-    this.scopes.set(job.sessionId, { kind: 'agent', modules, writes: job.writes })
+    this.scopes.set(job.sessionId, { kind: 'agent', modules })
     this.taskModels.set(job.sessionId, profile.model)
     const model = new BudgetedModelDriver({
       model: profile.model,
@@ -628,18 +611,6 @@ class ComposedRuntime implements VelarosRuntime {
     }
   }
 
-  private assertWriteDelegation(id: string, module: string): void {
-    for (const [child, scope] of this.scopes)
-      if (
-        scope.writes?.some(
-          (write) =>
-            write === module || module.startsWith(`${write}/`) || write.startsWith(`${module}/`)
-        ) &&
-        this.tools.descends(child, id)
-      )
-        throw new AppError('WRITE_DELEGATED', '写入范围正在由后代任务使用，请等待子任务结束')
-  }
-
   private scheduleEffects(module: OperationModuleDefinition): OperationModuleDefinition {
     return {
       ...module,
@@ -689,15 +660,10 @@ class ComposedRuntime implements VelarosRuntime {
         if (
           call.invocation.mode !== 'observe' &&
           !systemModules.owns(call.invocation.binding.moduleId)
-        )
+        ) {
           await this.sessions
             .get(call.invocation.sessionId)!
             .view.assertCanWrite(call.invocation.executionId, call.signal)
-        if (
-          call.invocation.mode !== 'observe' &&
-          !systemModules.owns(call.invocation.binding.moduleId)
-        ) {
-          this.assertWriteDelegation(call.invocation.sessionId, call.invocation.binding.moduleId)
           await this.programAccess
             .get(call.invocation.sessionId)!
             .validateDecision(call.invocation.executionId, call.signal)

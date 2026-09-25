@@ -49,11 +49,11 @@ const job = await start({ task: '检查登录状态来源', profile: 'investigat
 output(await wait({ id: job.id }));
 ```
 
-start 返回 id、parentSessionId、sessionId、profile、status、writes。终态增加 result 引用，原文保存在父会话；完整子事件和请求保存在子会话。父上下文每轮包含子任务状态及结果引用。
+start 返回 id、parentSessionId、sessionId、profile、status。终态增加 result 引用，原文保存在父会话；完整子事件和请求保存在子会话。父上下文每轮包含子任务状态及结果引用。
 
-调度器在打开会话前原子占用进程内并发槽和写范围。writes 使用模块 id，外部写入要求占用该模块；同模块的并发子任务冲突会明确拒绝。Kernel 的效果队列继续串行化真实写操作。当前递归派发由根任务协调，不向子配置开放 agents 模块。
+调度器在打开会话前原子占用进程内并发槽。子任务直接继承父任务的权限，不占写入范围（ADR 0018），几个子任务可以同时做同一类事；Kernel 的效果队列继续串行化真实写操作，各领域的版本核对照旧。当前递归派发由根任务协调，不向子配置开放 agents 模块。
 
-子任务使用同一个 RuntimeSession 和 ActLoop。BudgetedModelDriver 在实际发送前占用父任务预算；本地子账记录执行明细，父总账只记录一次子调用。子会话个数以持久父会话记录累计，续跑不新建会话。resume 重新检查当前宿主配置，读写权限不能超过父任务。
+子任务使用同一个 RuntimeSession 和 ActLoop。BudgetedModelDriver 在实际发送前占用父任务预算；本地子账记录执行明细，父总账只记录一次子调用。子会话个数以持久父会话记录累计，续跑不新建会话。resume 重新检查当前宿主配置，能力与共享空间按父任务此刻的重新继承。
 
 materials 只接受父会话持有的引用；Runtime 复制不可变原文到子范围，保存 source/objectId/copy 谱系，以文件引用交给子模型。模型通过 memory.read 真实读取。共享授予发生在派发时，后续可见租约不改变该份已授权快照；需要动态撤销材料的宿主应关闭对应子任务并重新创建收窄后的任务。
 

@@ -215,12 +215,13 @@ export interface McpConnectionOptions {
   onClose?(): void
 }
 
-/** 子任务配置由宿主命名，模型只能选已开放的配置。 */
+/**
+ * 子任务配置由宿主命名，模型不选时用第一个。子任务能用配置里的模块（不能超过父任务），
+ * 写入与共享空间跟父任务一样，不用另外授权。
+ */
 export interface AgentProfile {
   /** 给主模型选择配置时看的任务用途。 */
   readonly description?: string
-  /** 是否允许父线通过 start.stores 显式共享空间；默认允许，实际授权逐次取父权限子集。 */
-  readonly stores?: boolean
   /** 子任务模型总额度；仍受全部祖先的剩余总额约束。 */
   readonly budget?: Partial<Pick<ContextViewLimits, 'modelCalls' | 'modelTokens'>>
   /** 真实模型驱动，使用同一编译和计费路径。 */

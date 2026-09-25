@@ -72,10 +72,10 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 | `velaros:interaction.ask` | `execute` | `none` | 要信息，返回对方的回答；给了 options 或 fields 时对方在卡片上点选或填写。 |
 | `velaros:interaction.capability` | `execute` | `none` | 说明缺少的能力；可以先交付当前进度，由父任务更新环境后续跑。 |
 | `velaros:interaction.confirm` | `execute` | `none` | 要确认，返回对方是否同意及不同意的理由；它不代替具体操作的权限校验。 |
-| `velaros:agents.profiles` | `observe`、`execute` | `none` | 列出能选的配置：名称、能力范围与预算；start/resume 用 name。 |
+| `velaros:agents.profiles` | `observe`、`execute` | `none` | 列出宿主给的配置：名称、能力范围与预算；start/resume 不给 profile 就用第一个。 |
 | `velaros:agents.start` | `execute` | `none` | 派发子任务，返回它的 job。 |
-| `velaros:agents.resume` | `execute` | `none` | 子任务收束后接着跑同一个会话，已用预算保留；可以换配置、写入范围与共享空间，追加材料。 |
-| `velaros:agents.reply` | `execute` | `none` | 回答子任务在 job.pending 里的请求；回答不改变它的权限，要换环境得等它收束后 resume。 |
+| `velaros:agents.resume` | `execute` | `none` | 子任务收束后接着跑同一个会话，已用预算保留；可以换配置、追加材料。 |
+| `velaros:agents.reply` | `execute` | `none` | 回答子任务在 job.pending 里的请求。 |
 | `velaros:agents.status` | `observe`、`execute` | `none` | 读子任务的状态与结果引用。 |
 | `velaros:agents.wait` | `execute` | `none` | 等到子任务提问或结束；status 为 waiting 时 pending 里的请求要 reply。 |
 | `velaros:agents.cancel` | `execute` | `none` | 取消子任务并等它收束。 |

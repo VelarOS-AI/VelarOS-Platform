@@ -358,17 +358,16 @@ test('INV-14 关注声明可取消，无关键不进入通知且不会驱动额�
   await submit(f.session)
   assert.equal(frames(f.requests).at(-1).stores.changes.length, 0)
 })
-test('INV-15 子 Agent 共享父空间，只写获配前缀且不能派发子任务', async (t) => {
+test('INV-15 子 Agent 继承父空间与读写范围，但不能再派发子任务', async (t) => {
   let calls = 0
   let started = false
   const child = model(async function* (request) {
     const frame = runtimeFrame(request)
-    assert.equal(frame.stores.items[0].access.write.length, 1)
+    assert.deepEqual(frame.stores.items[0].access, { read: [''], write: [''] })
     if (calls++ === 0) {
-      const own = frame.stores.items[0].access.write[0]
       yield turn(request, {
         execute: {
-          source: `${prelude}const parent=await store.get({store:currentStore,key:'plan'});if(!parent)throw Error('missing plan');let denied;try{await store.set({store:currentStore,key:'plan',baseRevision:1,value:'wrong'})}catch(error){denied=error.code}const list=await modules.list({});await store.set({store:currentStore,key:${JSON.stringify(`${own}result`)},baseRevision:0,value:{parent:parent.value,denied,canDelegate:list.items.some(x=>x.specifier==='velaros:agents')}});`,
+          source: `${prelude}const parent=await store.get({store:currentStore,key:'plan'});if(!parent)throw Error('missing plan');await store.set({store:currentStore,key:'plan',baseRevision:parent.revision,value:'revised'});const list=await modules.list({});await store.set({store:currentStore,key:'agents/result',baseRevision:0,value:{parent:parent.value,canDelegate:list.items.some(x=>x.specifier==='velaros:agents')}});`,
         },
       })
       yield { type: 'finish', reason: 'stop' }
@@ -377,9 +376,10 @@ test('INV-15 子 Agent 共享父空间，只写获配前缀且不能派发子任
   const root = model(async function* (request) {
     if (!started) {
       started = true
+      // 不给 profile、不声明写入与空间：子任务直接继承
       yield turn(request, {
         execute: {
-          source: `${prelude}import {start,wait} from 'velaros:agents';const job=await start({task:'inspect',profile:'worker',stores:[{store:currentStore,read:[''],write:['agents/']}]});await wait({id:job.id});`,
+          source: `${prelude}import {start,wait} from 'velaros:agents';const job=await start({task:'inspect'});await wait({id:job.id});`,
         },
       })
       yield { type: 'finish', reason: 'stop' }
@@ -395,24 +395,11 @@ test('INV-15 子 Agent 共享父空间，只写获配前缀且不能派发子任
   )
   const events = await submit(f.session)
   assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
-  const listing = await f.storage.stores.list(f.storeId, { read: ['agents/'] })
-  assert.equal(
-    listing.items.length,
-    1,
-    JSON.stringify(
-      await Promise.all(
-        (await f.storage.load('main')).records
-          .filter((r) => r.title === 'act:child-result')
-          .map((r) => f.storage.get('main', r.objectId))
-      )
-    )
-  )
-  const childResult = await f.storage.stores.get(f.storeId, listing.items[0].key)
-  assert.deepEqual(childResult.value, {
+  assert.deepEqual((await f.storage.stores.get(f.storeId, 'agents/result')).value, {
     parent: 'implement',
-    denied: 'STORE_DENIED',
     canDelegate: false,
   })
+  assert.equal((await f.storage.stores.get(f.storeId, 'plan')).value, 'revised')
 })
 test('INV-15 当前状态版本参加 Kernel 读依赖验证，外部写入前发现过期依据', async (t) => {
   let calls = 0
@@ -784,7 +771,7 @@ test('INV-16 多空间变化共享总预算，轮换投递不会饿死后面的�
   await fresh.watch({ store: ids[0], keys: [] }, 'clear')
   assert.equal(await fresh.pending(), false)
 })
-test('INV-16 共享授权只能缩小；获配 ID 不等于权限；租户边界不能跨越', async (t) => {
+test('INV-16 子任务继承的空间与范围不超过自己；获配 ID 不等于权限；租户边界不能跨越', async (t) => {
   const storage = localContextStorage({ path: ':memory:' })
   t.after(() => storage.close())
   const owner = new StoreSession('owner', storage, { scope: 'p' })
@@ -803,11 +790,15 @@ test('INV-16 共享授权只能缩小；获配 ID 不等于权限；租户边界
     (await reader.list({})).items.map((x) => x.id),
     [a.id]
   )
-  assert.deepEqual(await reader.delegate([grant]), [grant])
-  await assert.rejects(reader.delegate([{ ...grant, write: ['public/'] }]), {
-    code: 'STORE_DENIED',
-  })
-  await assert.rejects(reader.delegate([{ ...grant, store: b.id }]), { code: 'STORE_DENIED' })
+  // 继承的就是自己此刻的范围：不会比自己宽，也拿不到没授权的空间
+  assert.deepEqual(await reader.inherit(), [grant])
+  assert.deepEqual(
+    (await owner.inherit()).map((x) => [x.store, x.read, x.write]).sort(),
+    [
+      [a.id, [''], ['']],
+      [b.id, [''], ['']],
+    ].sort()
+  )
   await assert.rejects(reader.get(b.id, 'x'), { code: 'STORE_DENIED' })
   const foreign = new StoreSession('owner', storage, { scope: 'foreign', grants: [grant] })
   await assert.rejects(foreign.initialize(), { code: 'STORE_DENIED' })
@@ -928,22 +919,16 @@ test('INV-16 创建回执丢失可核对，重试原调用只得到同一个空�
   assert.equal((await session.list({})).items.length, 1)
 })
 
-test('INV-16 子任务续跑复用持久授权，不能创建空间；未共享的子任务没有 store', async (t) => {
+test('INV-16 子任务每次运行都继承父任务此刻的空间与权限，续跑重新继承，能建空间', async (t) => {
   let rootCalls = 0
   let childCalls = 0
   let jobId
   const child = model(async function* (request) {
     childCalls++
     const frame = runtimeFrame(request)
-    if (childCalls === 3) {
-      assert.equal(frame.stores, undefined)
-      assert(!request.instructions.includes('导入 store'))
-    } else {
-      assert.equal(frame.stores.items[0].id, f.storeId)
-      assert.equal(frame.stores.active.items[0].id, f.storeId)
-      assert.deepEqual(frame.stores.items[0].access.write, ['result/'])
-      assert(!request.instructions.includes('create 只在'))
-    }
+    assert.equal(frame.stores.items[0].id, f.storeId)
+    assert.deepEqual(frame.stores.items[0].access, { read: [''], write: [''] })
+    assert(request.instructions.includes('create 只在'))
     yield* done(request)
   })
   const root = model(async function* (request) {
@@ -951,7 +936,7 @@ test('INV-16 子任务续跑复用持久授权，不能创建空间；未共享�
     if (rootCalls === 1) {
       yield turn(request, {
         execute: {
-          source: `${prelude}import {start,wait} from 'velaros:agents';const j=await start({task:'read',profile:'worker',stores:[{store:currentStore,read:[''],write:['result/']}]});output(await wait({id:j.id}));`,
+          source: `${prelude}import {start,wait} from 'velaros:agents';const j=await start({task:'read'});output(await wait({id:j.id}));`,
         },
       })
       yield { type: 'finish', reason: 'stop' }
@@ -979,48 +964,6 @@ test('INV-16 子任务续跑复用持久授权，不能创建空间；未共享�
   })
   assert.equal((await submit(f.session)).at(-1).status, 'completed')
   assert.equal(childCalls, 3)
-  const snapshot = await f.storage.load('main')
-  const record = snapshot.records.findLast((x) => x.title === `act:child:${jobId}`)
-  assert.deepEqual(JSON.parse(await f.storage.get('main', record.objectId)).stores, [
-    { store: f.storeId, read: [''], write: ['result/'] },
-  ])
-})
-test('INV-16 主线传入未授权空间时，子任务在模型启动前失败', async (t) => {
-  let called = 0
-  let childCalls = 0
-  const child = model(async function* (request) {
-    childCalls++
-    yield* done(request)
-  })
-  const root = model(async function* (request) {
-    if (called++ === 0) {
-      yield turn(request, {
-        execute: {
-          source: `import {start,wait} from 'velaros:agents';const j=await start({task:'invalid',profile:'worker',stores:[{store:${JSON.stringify(secret)},read:[''],write:[]}]});await wait({id:j.id});`,
-        },
-      })
-      yield { type: 'finish', reason: 'stop' }
-    } else yield* done(request)
-  })
-  const f = await fixture(t, {
-    model: root,
-    agents: { profiles: { worker: { model: child, modules: [] } }, concurrency: 1, maxChildren: 1 },
-  })
-  const secret = (
-    await f.storage.stores.create({
-      scope: 'session:main',
-      owner: 'foreign',
-      name: 'private',
-      operationId: 'private',
-    })
-  ).id
-  await submit(f.session)
-  assert.equal(childCalls, 0)
-  const records = (await f.storage.load('main')).records.filter((x) =>
-    x.title?.startsWith('act:child:')
-  )
-  assert(records.length)
-  assert.equal(JSON.parse(await f.storage.get('main', records.at(-1).objectId)).status, 'failed')
 })
 test('INV-16 宿主显式收窄拥有者权限时，目录与合同一致，订阅按当前授权跨实例恢复', async (t) => {
   const storage = localContextStorage({ path: ':memory:' })

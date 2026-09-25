@@ -1,11 +1,10 @@
 import type { AgentResume } from '@velaros-ai/agent'
 
-/** @AgentView 一个可选的子任务配置：name 传给 start/resume 的 profile；modules 是子任务能用的模块，stores 表示能否接受共享空间授权，其余是单次运行与累计的预算。 */
+/** @AgentView 一个子任务配置：name 可以传给 start/resume 的 profile；modules 是子任务能用的模块，其余是单次运行与累计的预算。 */
 export interface AgentProfileInfo {
   readonly name: string
   readonly description: string
   readonly modules: readonly string[]
-  readonly stores: boolean
   readonly turns: number
   readonly timeoutMs: number
   readonly modelCalls: number

@@ -115,8 +115,8 @@ export interface StoreSessionApi {
   version(resourceId: string): Promise<string>
   /** 根据调用身份核对真实提交。 */
   committed(operationId: string, store?: string): Promise<boolean>
-  /** 验证子任务申请为当前授权子集，返回独立数据副本。 */
-  delegate(grants: readonly StoreGrant[]): Promise<readonly StoreGrant[]>
+  /** 子任务继承用：此刻能用的全部空间与各自的读写范围，最多 StoreLimits.stores 个。 */
+  inherit(): Promise<readonly StoreGrant[]>
 }
 export class StoreSession implements StoreSessionApi {
   public readonly scope: string
@@ -565,22 +565,12 @@ export class StoreSession implements StoreSessionApi {
     if (receipt) await this.remember([receipt.id])
     return Boolean(receipt)
   }
-  public async delegate(grants: readonly StoreGrant[]): Promise<readonly StoreGrant[]> {
-    if (
-      grants.length > StoreLimits.stores ||
-      new Set(grants.map((g) => g.store)).size !== grants.length
-    )
-      throw storeDenied('共享空间数量或身份无效')
-    for (const grant of grants) {
-      const current = await this.access(grant.store)
-      for (const mode of ['read', 'write'] as const)
-        if (
-          grant[mode].some((prefix) => !current[mode].some((parent) => prefix.startsWith(parent)))
-        )
-          throw storeDenied('共享范围超出父会话权限')
-    }
-    await this.remember(grants.map((grant) => grant.store))
-    return structuredClone(grants)
+  public async inherit(): Promise<readonly StoreGrant[]> {
+    return (await this.all()).slice(0, StoreLimits.stores).map((entry) => ({
+      store: entry.id,
+      read: [...entry.access.read],
+      write: [...entry.access.write],
+    }))
   }
   private async active(
     entries?: readonly StoreEntry[]

@@ -69,7 +69,8 @@ class AgentSupervisor implements AgentSupervisorApi {
   public async start(parent: string, input: AgentStart, signal: AbortSignal): Promise<AgentJob> {
     return this.lock(async () => {
       signal.throwIfAborted()
-      if (!input.task?.trim() || !input.profile?.trim())
+      const profile = input.profile?.trim()
+      if (!input.task?.trim() || !profile)
         throw new AppError('VALIDATION', '子任务需要目标与宿主配置')
       const snapshot = await this.options.storage.load(parent)
       const count = new Set(
@@ -87,12 +88,10 @@ class AgentSupervisor implements AgentSupervisorApi {
         id,
         parentSessionId: parent,
         sessionId: `agent:${parent}:${id}`,
-        profile: input.profile,
+        profile,
         status: 'running',
-        writes: [...new Set(input.writes ?? [])],
       }
       if (snapshot?.task) Object.assign(job, { parentTaskId: snapshot.task.id })
-      if (input.stores) Object.assign(job, { stores: structuredClone(input.stores) })
       this.assertAvailable(job)
       await this.save(job)
       this.launch(job, input.task, input, signal)
@@ -118,27 +117,14 @@ class AgentSupervisor implements AgentSupervisorApi {
         pending: _pending,
         ...rest
       } = prior
-      const job: AgentJob = {
-        ...rest,
-        status: 'running',
-        profile: input.profile ?? prior.profile,
-        writes: [...new Set(input.writes ?? prior.writes)],
-      }
-      if (input.stores ?? prior.stores)
-        Object.assign(job, { stores: structuredClone(input.stores ?? prior.stores) })
+      const job: AgentJob = { ...rest, status: 'running', profile: input.profile ?? prior.profile }
       this.assertAvailable(job)
       await this.save(job)
       this.failures.delete(id)
       this.launch(
         job,
         input.input,
-        {
-          task: input.input,
-          profile: job.profile,
-          writes: job.writes,
-          stores: job.stores,
-          materials: input.materials,
-        },
+        { task: input.input, profile: job.profile, materials: input.materials },
         signal
       )
       return job
@@ -225,13 +211,6 @@ class AgentSupervisor implements AgentSupervisorApi {
   private assertAvailable(job: AgentJob): void {
     if (this.closed || this.active.size >= this.options.concurrency || this.active.has(job.id))
       throw new AppError('CONFLICT', '子运行并发额度耗尽或重复激活')
-    for (const current of this.active.values())
-      if (
-        job.writes.some((a) =>
-          current.job.writes.some((b) => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`))
-        )
-      )
-        throw new AppError('CONFLICT', '活动子任务写入范围冲突')
   }
   private launch(
     job: AgentJob,

@@ -46,7 +46,7 @@ export function runtimeInstructions(options: {
       ? 'velaros:search 的 profiles 列出档位；search 在 execute 中调用独立的只读搜索模型，返回发现、证据引用和缺口；read 的 current 模式刷新已有证据，不调用模型；把上一份报告的 ref 作为 resume 交给 search 可以继续此前的调查。'
       : '',
     has('velaros:agents')
-      ? 'velaros:agents 的 profiles 列出可用配置、模块和预算。start 派发独立子任务；共享空间时每项 write 前缀都必须由同一项的 read 覆盖，写入需要读取版本。runtime.children 给出状态和 pending 请求；wait 遇到提问或结束即返回，reply 回答其中的请求。能力回答不授权；子任务收束后用 resume 更新环境，保留同一会话和已用预算。派发、等待、回复、续跑都放在 execute。'
+      ? 'velaros:agents 派发子任务：start({ task }) 就行，子任务继承你的能力与权限（模块、写入、共享空间），不用另外声明；profiles 列出宿主给的配置与预算，不选就用第一个。runtime.children 给出状态和 pending 请求；wait 遇到提问或结束即返回，reply 回答其中的请求。子任务收束后可以 resume 接着做，保留同一会话和已用预算。派发、等待、回复、续跑都放在 execute。'
       : '',
     !has('velaros:agents') && has('velaros:interaction')
       ? '需要信息或能力时通过 velaros:interaction 的 ask/confirm/capability 向父任务或宿主请求。能力回答不授予权限；需要更换环境时交付已有证据，完成当前阶段并等待续跑。'

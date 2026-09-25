@@ -77,5 +77,5 @@ await session.close()
 - `inputId` 只是宿主的消息身份，原样回到 `input`、`input-applied`、`input-retained` 回执里，不做重复提交去重；`input-applied` 只说明输入进了某次已归档的模型请求，不证明供应商已经收到。
 - 输入或已接受的响应落不了盘时，不派发模型也不执行脚本：`submit` 的迭代抛出原错误，运行记为可恢复的 `failed`。
 - 运行事件与状态都在 `ContextStorage` 里：`events(after)` 按持久序号重放，重启后 `inspect()` 给出恢复的状态；运行服务自己只持有本进程的取消权与待回答的交互。
-- `createAgentSupervisor` 在启动子任务前就核对额度：累计超过 `maxChildren` 抛 `LIMIT`（跨重启与继续不重置，显式新任务才重新计数），并发已满或 `writes` 与活动子任务重叠抛 `CONFLICT`；父运行结束或取消时由宿主调 `cancelParent` 收束它的子任务。
+- `createAgentSupervisor` 在启动子任务前就核对额度：累计超过 `maxChildren` 抛 `LIMIT`（跨重启与继续不重置，显式新任务才重新计数），并发已满抛 `CONFLICT`；父运行结束或取消时由宿主调 `cancelParent` 收束它的子任务。
 - 子任务的 `job.result` 指向父会话里的一条结果摘要：只内嵌有界的事件尾部并报告略去条数（`omittedEvents`），完整事件在子会话里。
