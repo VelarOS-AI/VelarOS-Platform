@@ -22,6 +22,7 @@ const Activation = Object.freeze({
   'system-store-read': '共享空间只读授权',
   'context-materials': '整理作用域',
   interaction: '默认装配',
+  widget: '宿主配置 widgets',
   agents: '宿主配置 agents',
   search: '宿主配置 search',
   evidence: '搜索作用域',

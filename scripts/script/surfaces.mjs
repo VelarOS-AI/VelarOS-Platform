@@ -192,6 +192,14 @@ export const CodeSurfaces = [
     templates: 'interaction-template.js',
   },
   {
+    // 在对话里给用户显示小部件；宿主给了显示端口才挂
+    namespace: 'widget',
+    directory: 'velaros',
+    unit: 'act/agents',
+    interfaces: ['WidgetOperationsApi'],
+    templates: 'widget-template.js',
+  },
+  {
     // 同一运行时上的有界子任务
     namespace: 'agents',
     directory: 'velaros',
@@ -260,6 +268,7 @@ export const HostContextTypes = new Set([
   'SystemMemoryOperationContext',
   'ContextMaterialsOperationContext',
   'InteractionOperationContext',
+  'WidgetOperationContext',
   'AgentsOperationContext',
   'SearchOperationContext',
   'EvidenceOperationContext',

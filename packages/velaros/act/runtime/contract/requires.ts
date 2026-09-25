@@ -18,6 +18,7 @@ import type {
 } from '@velaros-ai/kernel'
 import type { ModelAdapterConfig, ModelDriver, ModelDriverLimits } from '@velaros-ai/model'
 import type { CodeRunnerApi } from '@velaros-ai/script'
+import type { WidgetHost } from '@velaros-ai/velaros/act/agents'
 import type { VelarosSearchOptions } from '@velaros-ai/velaros/act/search'
 import type { StoreConfiguration } from '@velaros-ai/velaros/act/system'
 import type { MemoryScopePort } from '@velaros-ai/velaros/memory'
@@ -132,6 +133,8 @@ export interface VelarosRuntimeOptions {
   readonly modelTools?: ModelToolPolicy
   /** 同一 Act 工厂上的通用子任务；工作区预设默认提供 worker，false 可关闭。 */
   readonly agents?: boolean | VelarosAgentsOptions
+  /** 宿主能在对话里显示小部件时给：模型用 velaros:widget 的 show 交来 HTML 或 SVG，宿主负责显示；不给就不挂这个模块。 */
+  readonly widgets?: WidgetHost
   /** 每次派发前的宿主权限检查，拒绝时尚未执行。 */
   authorize?(
     invocation: PreparedInvocation,

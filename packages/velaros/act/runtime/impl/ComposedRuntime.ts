@@ -360,6 +360,7 @@ class ComposedRuntime implements VelarosRuntime {
             : undefined,
           maintenance: this.maintenance,
           agents: this.agents,
+          widgets: options.widgets,
           allows: (id, module) => this.allows(id, module),
           search: this.search,
           journal,

@@ -25,8 +25,8 @@ import type {
 import { VelarShellModule } from '../../../shell/contract/surface.js'
 import { shellOperations } from '../../../shell/impl/ShellOperations.js'
 import type { ShellRunInput } from '../../../shell/types/shell-command.js'
-import type { AgentsHost } from '../../agents/contract/requires.js'
-import { agentsModule, interactionModule } from '../../agents/index.js'
+import type { AgentsHost, WidgetHost } from '../../agents/contract/requires.js'
+import { agentsModule, interactionModule, widgetModule } from '../../agents/index.js'
 import type { AdvancedSearchApi } from '../../search/impl/AdvancedSearch.js'
 import { evidenceModule, searchModule } from '../../search/index.js'
 import type {
@@ -60,6 +60,8 @@ export interface StandardModulesHost {
   readonly maintenance?: ContextMaintenanceHost
   /** 子任务统一调度器。 */
   readonly agents?: AgentSupervisorApi
+  /** 宿主的小部件显示端口；给了才挂 velaros:widget。 */
+  readonly widgets?: WidgetHost
   /** 发现和执行使用相同能力范围。 */
   allows(sessionId: string, moduleId: string): boolean
   /** 配置存在时装配高级搜索。 */
@@ -94,6 +96,7 @@ class StandardModules implements StandardModuleFactory {
     return [
       ...systemModules.create(host),
       interactionModule.create(host),
+      ...(host.widgets ? [widgetModule.create(host.widgets)] : []),
       ...(host.agents ? [agentsModule.create({ ...host, agents: host.agents })] : []),
       ...(host.search
         ? [

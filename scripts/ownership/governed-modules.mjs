@@ -148,10 +148,16 @@ export const GovernedModules = [
     surfaceFile: [
       'act/agents/impl/AgentsOperations.ts',
       'act/agents/impl/InteractionOperations.ts',
+      'act/agents/impl/WidgetOperations.ts',
     ],
     layers: [
-      ['AgentsModule.ts', 'InteractionModule.ts'],
-      ['AgentsOperations.ts', 'InteractionOperations.ts', 'InteractionQuestions.ts'],
+      ['AgentsModule.ts', 'InteractionModule.ts', 'WidgetModule.ts'],
+      [
+        'AgentsOperations.ts',
+        'InteractionOperations.ts',
+        'InteractionQuestions.ts',
+        'WidgetOperations.ts',
+      ],
     ],
     invariants: 'act/agents/spec/invariants.md',
     acceptance: 'act/agents/spec/acceptance.test.mjs',

@@ -1,11 +1,12 @@
 # @velaros-ai/velaros/act/agents
 
-子任务与用户交互：模型用 `velaros:agents` 在同一运行时上派子任务（子任务继承父任务的能力与权限；等结果、回答它的提问、收束后续跑），用 `velaros:interaction` 向对方要信息、要确认或说明缺什么能力。宿主经 `createRuntime` 的 `agents` 开放子任务配置，主线的交互请求以 `interaction` 事件交给宿主回答。
+子任务与用户交互：模型用 `velaros:agents` 在同一运行时上派子任务（子任务继承父任务的能力与权限；等结果、回答它的提问、收束后续跑），用 `velaros:interaction` 向对方要信息、要确认或说明缺什么能力，用 `velaros:widget` 在对话里给用户显示小部件（图表、示意图、可交互的小工具）。宿主经 `createRuntime` 的 `agents` 开放子任务配置，主线的交互请求以 `interaction` 事件交给宿主回答，给了 `widgets` 显示端口才有小部件。
 
 ## 用法
 
 ```ts
 import { createRuntime, type VelarosAgentsOptions } from '@velaros-ai/velaros'
+import type { WidgetView } from '@velaros-ai/velaros/act/agents'
 import type { ModelDriver } from '@velaros-ai/model'
 
 // 宿主给：主模型与便宜些的模型、项目目录与状态目录（绝对路径），以及怎么问用户
@@ -14,6 +15,7 @@ declare const cheapModel: ModelDriver
 declare const projectRoot: string
 declare const stateDir: string
 declare function askUser(kind: string, message: string, detail: unknown): Promise<unknown>
+declare function showInConversation(widget: WidgetView, sessionId: string): void
 
 // 配置名由宿主定：模型用 profiles() 看到说明、模块与预算；start 不给 profile 就用第一个
 const agents: VelarosAgentsOptions = {
@@ -24,7 +26,9 @@ const agents: VelarosAgentsOptions = {
   concurrency: 2,
   maxChildren: 32,
 }
-const runtime = await createRuntime({ workspace: projectRoot, dataDir: stateDir, model, agents })
+// 模型用 velaros:widget 的 show 交来的小部件由宿主显示在对应会话里
+const widgets = { show: showInConversation }
+const runtime = await createRuntime({ workspace: projectRoot, dataDir: stateDir, model, agents, widgets })
 const session = await runtime.openSession('main')
 for await (const event of session.submit('先审查登录模块，再按审查结论修复')) {
   // 主线的 ask、confirm、capability 交给宿主；子任务的提问先交给父任务的模型，由它 reply。
@@ -42,7 +46,7 @@ console.log(page.branches.filter((branch) => branch.kind === 'agent').map((branc
 
 | 入口 | 运行环境 | 内容 |
 | --- | --- | --- |
-| `@velaros-ai/velaros/act/agents` | Node | 运行时用的装配 `agentsModule`、`interactionModule`，它们要的宿主端口与每次调用的上下文，配置目录的数据 `AgentProfileInfo`，宿主读提问的 `interactionQuestions.read`（带选项或表单的问题返回 `InteractionRequest`，否则 null）；子任务配置的类型 `VelarosAgentsOptions`、`AgentProfile` 在包根入口 |
+| `@velaros-ai/velaros/act/agents` | Node | 运行时用的装配 `agentsModule`、`interactionModule`、`widgetModule`，它们要的宿主端口与每次调用的上下文，交给宿主显示的小部件 `WidgetView`，配置目录的数据 `AgentProfileInfo`，宿主读提问的 `interactionQuestions.read`（带选项或表单的问题返回 `InteractionRequest`，否则 null）；子任务配置的类型 `VelarosAgentsOptions`、`AgentProfile` 在包根入口 |
 
 ## 约定
 
@@ -56,4 +60,5 @@ console.log(page.branches.filter((branch) => branch.kind === 'agent').map((branc
 - 回答回到模型前按问题整理：`ask` 得到 `{ text?, choices?, values?, declined?, reason? }`，字符串当自由作答，问题里没有的选项、字段和类型不对的值丢掉；`confirm` 得到 `{ approved, reason? }`，只有布尔值或带 `approved` 的对象算数，其余回答一律按不同意、原文当理由。
 - 交互的回答不授予任何权限：`confirm` 不代替具体操作的确认；子任务要换配置等它收束后由父任务 `resume`，已用预算保留。
 - 子任务的请求与结果先持久化再唤醒父任务，结果随父任务的下一轮交回；父运行取消时子任务一起取消。
-- `agentsModule`、`interactionModule` 是运行时自己用的装配；只有自己拼 Kernel 的宿主才直接用，传 `AgentsHost`、`InteractionHost`。
+- 给了 `widgets` 才挂 `velaros:widget`：`show` 只在 execute 里调，核对标题（1 到 200 个字符）与代码（1 到 120000 个字符），高度收进 120 到 900（缺省 400）后带着调用身份交给宿主，立即返回。沙箱、主题变量、`sendPrompt` 回传都由宿主的显示负责。
+- `agentsModule`、`interactionModule`、`widgetModule` 是运行时自己用的装配；只有自己拼 Kernel 的宿主才直接用，传 `AgentsHost`、`InteractionHost`、`WidgetHost`。

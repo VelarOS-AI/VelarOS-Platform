@@ -1,16 +1,27 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { AgentsLimits, InteractionLimits } from '../../../dist/act/agents/contract/constants.js'
+import { localContextStorage } from '@velaros-ai/context/node'
+import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
+
+import {
+  AgentsLimits,
+  InteractionLimits,
+  WidgetLimits,
+} from '../../../dist/act/agents/contract/constants.js'
 import {
   VelarAgentsModule,
   VelarInteractionModule,
+  VelarWidgetModule,
 } from '../../../dist/act/agents/contract/surface.js'
+import { widgetOperations } from '../../../dist/act/agents/impl/WidgetOperations.js'
 import {
   agentsModule,
   interactionModule,
   interactionQuestions,
+  widgetModule,
 } from '../../../dist/act/agents/index.js'
+import { createRuntime } from '../../../dist/act/runtime/index.js'
 import {
   interactionDetail,
   normalizeConfirmationAnswer,
@@ -18,11 +29,14 @@ import {
 } from '../../../dist/act/agents/utils/answers.js'
 import { checkInteractionRequest } from '../../../dist/act/agents/utils/requests.js'
 import { verifyModule } from '../../runtime/test/support/module-contract.mjs'
+import { done, turn } from '../../runtime/test/support/model-turn.mjs'
 
 test('INV-1 agents 的实际操作与模板一致', () =>
   verifyModule(agentsModule, new URL('../template.js', import.meta.url)))
 test('INV-1 interaction 的实际操作与模板一致', () =>
   verifyModule(interactionModule, new URL('../interaction-template.js', import.meta.url)))
+test('INV-1 widget 的实际操作与模板一致', () =>
+  verifyModule(widgetModule, new URL('../widget-template.js', import.meta.url)))
 
 test('INV-2 声明里写给模型的上限与常量表一致', () => {
   for (const [surface, fragments] of [
@@ -38,6 +52,14 @@ test('INV-2 声明里写给模型的上限与常量表一致', () => {
       [
         `要对方回答的话：message 1 到 ${InteractionLimits.messageChars} 个字符`,
         `说明缺少的能力：message 1 到 ${InteractionLimits.messageChars} 个字符`,
+      ],
+    ],
+    [
+      VelarWidgetModule,
+      [
+        `给用户看的标题，1 到 ${WidgetLimits.titleChars} 个字符`,
+        `1 到 ${WidgetLimits.codeChars} 个字符`,
+        `${WidgetLimits.minHeight} 到 ${WidgetLimits.maxHeight}，缺省 ${WidgetLimits.defaultHeight}`,
       ],
     ],
   ])
@@ -167,4 +189,77 @@ test('INV-5 宿主读提问：带选项或表单的原样还原，普通问题�
     }),
     null
   )
+})
+
+test('INV-6 小部件核对长度、收好高度后交给宿主；宿主不给显示端口就没有这个模块', async (t) => {
+  const shown = []
+  const ctx = {
+    show: async (widget) => {
+      shown.push(widget)
+    },
+    invocationId: 'call-1',
+    abortSignal: new AbortController().signal,
+  }
+  await widgetOperations.show({ title: ' 访问量 ', code: '<svg></svg>', height: 20 }, ctx)
+  await widgetOperations.show({ title: '大图', code: '<div></div>', height: 5000 }, ctx)
+  await widgetOperations.show({ title: '缺省', code: '<div></div>' }, ctx)
+  assert.deepEqual(
+    shown.map((widget) => [widget.id, widget.title, widget.height]),
+    [
+      ['call-1', '访问量', WidgetLimits.minHeight],
+      ['call-1', '大图', WidgetLimits.maxHeight],
+      ['call-1', '缺省', WidgetLimits.defaultHeight],
+    ]
+  )
+  for (const bad of [
+    { title: ' ', code: '<div></div>' },
+    { title: '空', code: ' ' },
+    { title: 'x'.repeat(WidgetLimits.titleChars + 1), code: '<div></div>' },
+    { title: '太长', code: 'x'.repeat(WidgetLimits.codeChars + 1) },
+  ])
+    await assert.rejects(widgetOperations.show(bad, ctx), { code: 'VALIDATION' })
+
+  const received = []
+  let calls = 0
+  const model = (stream) => ({
+    id: 'fixture',
+    limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
+    estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+    stream,
+  })
+  const runtime = await createRuntime({
+    storage: localContextStorage({ path: ':memory:' }),
+    runner: nodeSubprocessCodeRunner,
+    modules: [],
+    widgets: { show: (widget, sessionId) => received.push({ ...widget, sessionId }) },
+    model: model(async function* (request) {
+      if (++calls === 1) {
+        yield turn(request, {
+          execute: {
+            source:
+              "import {show} from 'velaros:widget';await show({title:'趋势',code:'<svg></svg>'});",
+          },
+        })
+        yield { type: 'finish', reason: 'stop' }
+      } else yield* done(request)
+    }),
+  })
+  t.after(() => runtime.close())
+  assert.ok(runtime.modules().items.some((item) => item.binding.moduleId === 'velaros:widget'))
+  const session = await runtime.openSession('main')
+  for await (const event of session.submit('画一张趋势图'))
+    assert.equal(typeof event.type, 'string')
+  assert.equal(received.length, 1)
+  assert.equal(received[0].title, '趋势')
+  assert.equal(received[0].height, WidgetLimits.defaultHeight)
+  assert.equal(received[0].sessionId, 'main')
+  assert.ok(received[0].id)
+
+  const bare = await createRuntime({
+    storage: localContextStorage({ path: ':memory:' }),
+    runner: nodeSubprocessCodeRunner,
+    modules: [],
+  })
+  t.after(() => bare.close())
+  assert.ok(!bare.modules().items.some((item) => item.binding.moduleId === 'velaros:widget'))
 })
