@@ -67,10 +67,48 @@ export interface ActExecutionSummary {
   readonly status: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'unknown'
   /** 脚本没成功时的原因；运行中、成功，或只是效果未知时为 null。 */
   readonly failure: Nullable<ActExecutionFailure>
+  /** 这次执行用了多少毫秒，取自持久结果；还没有结果或没过检查时为 null。 */
+  readonly durationMs: Nullable<number>
   /** 实际运行的源码，受本页正文预算约束。 */
   readonly source: string
   /** 源码是否被截断。 */
   readonly sourceTruncated: boolean
+}
+
+/** 本回合响应里 observe 声明的登记结果；登记本身不运行程序，新版本从下一回合起每帧运行。 */
+export interface ActObservationRegistration {
+  /** updated 登记了新版本，unchanged 与当前版本一样，cleared 清掉了观察，rejected 没登记上。 */
+  readonly status: 'updated' | 'unchanged' | 'cleared' | 'rejected'
+  /** 没登记上的原因；登记上了为 null。 */
+  readonly failure: Nullable<ActExecutionFailure>
+  /** 登记的源码，受本页正文预算约束；清除时为空。 */
+  readonly source: string
+  /** 源码是否被截断。 */
+  readonly sourceTruncated: boolean
+}
+
+/** 本回合请求发出前运行的那次观察，它的结果进了这一帧；状态与执行同一套判定。 */
+export interface ActObservationRun {
+  /** 运行身份，与 invocations[].executionId 对应。 */
+  readonly executionId: string
+  /** 还没有结果时是 running；unknown 表示有调用的外部效果未知，需要先核对。 */
+  readonly status: ActExecutionSummary['status']
+  /** 观察没成功时的原因；运行中、成功，或只是效果未知时为 null。 */
+  readonly failure: Nullable<ActExecutionFailure>
+  /** 这次观察用了多少毫秒，取自持久结果；还没有结果时为 null。 */
+  readonly durationMs: Nullable<number>
+  /** 实际运行的源码，受本页正文预算约束。 */
+  readonly source: string
+  /** 源码是否被截断。 */
+  readonly sourceTruncated: boolean
+}
+
+/** 本回合与持续观察有关的两件事，宿主据此展示观察，不必解析内部记录。 */
+export interface ActObservationSummary {
+  /** 这一回合响应登记的观察；这一回合没有 observe 声明时为 null。 */
+  readonly registration: Nullable<ActObservationRegistration>
+  /** 喂进这一回合请求的观察运行；当时没有观察时为 null。 */
+  readonly run: Nullable<ActObservationRun>
 }
 
 /** 封存请求的只读展示；不证明供应商已收到请求，图像数据只保留占位。 */
@@ -125,6 +163,8 @@ export interface ActTurnTrace {
   readonly records: readonly ActTraceRecord[]
   /** 本回合响应派发的一次性执行，按声明顺序；租约带进本帧的旧结果不在这里。 */
   readonly executions: readonly ActExecutionSummary[]
+  /** 本回合登记的观察与喂进这一回合请求的观察运行；观察运行的调用也在 invocations 里。 */
+  readonly observation: ActObservationSummary
   /** Kernel 权威调用记录的有界 JSON；空数组不证明世界没有发生效果。 */
   readonly invocations: ReadonlyArray<{
     readonly id: string

@@ -35,6 +35,13 @@ export function executionOutcome(
   return { status: cancelled ? 'cancelled' : 'failed', failure }
 }
 
+/** 持久结果里记下的运行耗时（毫秒）；没有结果、或结果里没记耗时时为 null。 */
+export function executionDuration(result: unknown): Nullable<number> {
+  if (!isPlainObject(result) || !isPlainObject(result.timing)) return null
+  const { durationMs } = result.timing
+  return isFiniteNumber(durationMs) && durationMs >= 0 ? durationMs : null
+}
+
 /** 结果里的失败原因：没过检查、导入了没授权的模块、脚本抛错、调用没落定、中断或被拒绝。 */
 function executionFailure(result: Record<string, unknown>): Nullable<ActExecutionFailure> {
   if (result.code === 'INTERRUPTED')

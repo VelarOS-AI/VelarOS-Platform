@@ -17,6 +17,16 @@ Desktop 在模型回合切换时读取上一回合，运行收尾关闭 Runtime 
 - 参数最多 2000 字符，结果最多 6000 字符；二者计入 trace 与分页 trace 的 maxChars 总正文预算。摘要先于同条调用的 raw body 分配剩余预算，因而同一预算下原始 body 可能比原先更早截断；原始数据仍保存在 Platform。
 - provides/requires 方法、工具定义和执行权限不变。手工构造 ActTurnTrace 的消费者需要补齐 summary。
 
+## 观察摘要
+
+`ActTurnTrace.observation`（`ActObservationSummary`，根入口与 contracts 入口导出）给宿主展示持续观察用，宿主不必解析内部记录：
+
+- `registration`：这一回合响应里 observe 声明的登记结果。`status` 是 updated / unchanged / cleared / rejected；没登记上时 `failure` 与没过检查的执行同一套原因（如 `OBSERVATION_CHECK` 带出错行）；`source` 是登记的源码（清除时为空），计入本页正文预算。这一回合没有 observe 声明时为 null。
+- `run`：喂进这一回合请求的那次观察运行（观察每帧在请求前运行，结果进这一帧）。`executionId` 与 `invocations[].executionId` 对应，观察运行的调用照常列在 `invocations` 里；`status` / `failure` 由持久结果与调用回执推出，与执行摘要同一套判定；`durationMs` 取自持久结果；当时没有观察时为 null。
+- 执行摘要同样带 `durationMs`（持久结果里记的运行耗时）；还没有结果或没过检查时为 null。
+- 登记本身不运行程序：同一次观察的登记在第 N 回合，运行结果从第 N+1 回合的追踪开始出现；登记被拒时，后面回合的 `run` 仍是原来那个观察。
+- 程序记录读不出源码时源码为空并记一处 `gaps`，不让整页读取失败。
+
 ## Desktop 归属与恢复
 
 宿主不解析 Kernel 原始 JSON，也不根据会话结束推断调用成功。沿用既有卡片和会话持久化通道，不复制执行日志 owner。

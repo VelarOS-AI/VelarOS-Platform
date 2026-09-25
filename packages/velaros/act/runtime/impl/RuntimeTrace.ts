@@ -4,7 +4,7 @@ import type {
   ContextState,
   ContextStorage,
 } from '@velaros-ai/context'
-import { isNull, isString, isUndefined, toNullable } from '@velaros-ai/core'
+import { isNull, isString, isUndefined, Log, toNullable } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
@@ -13,12 +13,14 @@ import type { ScriptControlReceipt } from '../types/runtime.js'
 import type { ScriptExecutionReceipt, ScriptSubmissionReceipt } from '../types/session.js'
 import type {
   ActExecutionSummary,
+  ActObservationRegistration,
+  ActObservationRun,
   ActTracePage,
   ActTraceQuery,
   ActTraceRecord,
   ActTurnTrace,
 } from '../types/trace.js'
-import { executionOutcome } from '../utils/execution-outcome.js'
+import { executionDuration, executionOutcome } from '../utils/execution-outcome.js'
 import { summarizeInvocation, summarizeModelRequest } from '../utils/tracePresentation.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
@@ -32,6 +34,8 @@ export interface RuntimeTraceApi {
 
 /** 从唯一存储及 Kernel 日志连接证据，缺失记录不推断成执行成功。 */
 export class RuntimeTrace implements RuntimeTraceApi {
+  private readonly log = Log.tag('RuntimeTrace')
+
   public constructor(
     private readonly sessionId: string,
     private readonly storage: ContextStorage,
@@ -179,6 +183,10 @@ export class RuntimeTrace implements RuntimeTraceApi {
     const executions = new Set<string>()
     // 本回合响应派发的一次性执行，按声明顺序；取每次派发的最后一份控制回执
     const dispatched: Array<ScriptControlReceipt | ScriptExecutionReceipt> = []
+    // 本回合响应登记的观察，同样取最后一份控制回执
+    let registered: Optional<ScriptControlReceipt>
+    // 喂进本回合请求的那次观察运行
+    let observed: Optional<{ sourceRef?: string; resultRef?: string }>
     const select = (record: Optional<ContextRecord>) => {
       if (record) selected.add(record.ref.id)
     }
@@ -208,8 +216,10 @@ export class RuntimeTrace implements RuntimeTraceApi {
         const saved = await raw(record)
         if (isNull(saved)) continue
         const receipt = JSON.parse(saved).receipt as ScriptSubmissionReceipt
-        if (index === receipts.length - 1)
+        if (index === receipts.length - 1) {
           dispatched.push(...(receipt.executions ?? (receipt.execute ? [receipt.execute] : [])))
+          if (receipt.observe) registered = receipt.observe
+        }
         for (const item of [receipt.observe, receipt.execute, ...(receipt.executions ?? [])])
           if (item) {
             select(byRef(item.sourceRef))
@@ -233,6 +243,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
           }
         : saved
       for (const goal of frame.goals ?? []) select(byRef(goal.record?.ref?.id))
+      observed = frame.observation
       select(byRef(frame.observation?.sourceRef))
       select(byRef(frame.observation?.resultRef))
       for (const result of frame.results ?? []) {
@@ -331,6 +342,24 @@ export class RuntimeTrace implements RuntimeTraceApi {
           summary,
         })
       }
+    // 程序记录里的源码，按本页剩下的正文预算截取；记录读不出源码时记一处缺口，不让整页读取失败
+    const programSource = async (
+      ref: Optional<string>
+    ): Promise<Pick<ActExecutionSummary, 'source' | 'sourceTruncated'>> => {
+      const program = ref && recordById.get(ref) ? await raw(recordById.get(ref)!) : null
+      let text: unknown = ''
+      if (!isNull(program))
+        try {
+          text = (JSON.parse(program) as { source?: unknown }).source
+        } catch (error) {
+          this.log.debug('程序记录读不出源码', { ref, error: AppError.getMessage(error) })
+          gaps.push(`程序记录读不出源码：${ref}`)
+        }
+      const full = isString(text) ? text : ''
+      const source = full.slice(0, Math.max(0, remaining))
+      remaining -= source.length
+      return { source, sourceTruncated: source.length < full.length }
+    }
     const summaries: ActExecutionSummary[] = []
     for (const [position, item] of dispatched.entries()) {
       if (!item.executionId) continue
@@ -338,28 +367,51 @@ export class RuntimeTrace implements RuntimeTraceApi {
         (record) => record.title === `script:${item.executionId}:result`
       )
       const saved = result ? await raw(result) : null
+      const persisted: unknown = isNull(saved) ? undefined : JSON.parse(saved)
       // 没过检查的执行没有运行结果，控制回执本身就是它的结局
+      const rejected = 'status' in item && item.status === 'rejected'
       const outcome = executionOutcome(
-        'status' in item && item.status === 'rejected'
-          ? item
-          : isNull(saved)
-            ? undefined
-            : JSON.parse(saved),
+        rejected ? item : persisted,
         (journal.get(item.executionId) ?? []).map((invocation) => invocation.receipt)
       )
       const ref = item.sourceRef ?? ('draftRef' in item ? item.draftRef : undefined)
-      const program = ref && recordById.get(ref) ? await raw(recordById.get(ref)!) : null
-      const text = isNull(program) ? '' : (JSON.parse(program) as { source?: unknown }).source
-      const full = isString(text) ? text : ''
-      const source = full.slice(0, Math.max(0, remaining))
-      remaining -= source.length
       summaries.push({
         executionId: item.executionId,
         position,
         ...outcome,
-        source,
-        sourceTruncated: source.length < full.length,
+        durationMs: rejected ? null : executionDuration(persisted),
+        ...(await programSource(ref)),
       })
+    }
+    let registration: Nullable<ActObservationRegistration> = null
+    if (registered && ['updated', 'unchanged', 'cleared', 'rejected'].includes(registered.status)) {
+      const status = registered.status as ActObservationRegistration['status']
+      registration = {
+        status,
+        // 没登记上的控制回执带着诊断，与没过检查的执行同一套原因
+        failure: status === 'rejected' ? executionOutcome(registered, []).failure : null,
+        ...(status === 'cleared'
+          ? { source: '', sourceTruncated: false }
+          : await programSource(registered.sourceRef ?? registered.draftRef)),
+      }
+    }
+    let run: Nullable<ActObservationRun> = null
+    const observation = observed?.resultRef ? recordById.get(observed.resultRef) : undefined
+    const observationId = observation
+      ? /^script:([0-9a-f-]{36}):result$/u.exec(observation.title)?.[1]
+      : undefined
+    if (observation && observationId) {
+      const saved = await raw(observation)
+      const persisted: unknown = isNull(saved) ? undefined : JSON.parse(saved)
+      run = {
+        executionId: observationId,
+        ...executionOutcome(
+          persisted,
+          (journal.get(observationId) ?? []).map((invocation) => invocation.receipt)
+        ),
+        durationMs: executionDuration(persisted),
+        ...(await programSource(observed?.sourceRef)),
+      }
     }
     return {
       sessionId: this.sessionId,
@@ -379,6 +431,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
       decision: decisionTrace,
       records: traceRecords,
       executions: summaries,
+      observation: { registration, run },
       invocations,
       nextTurnId: toNullable(next?.ref.id),
       snapshotVersion: snapshot!.version,

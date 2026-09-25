@@ -136,6 +136,9 @@ test('execution summaries follow the declarations of their own turn and say why 
       ]
     )
     assert.equal(first.executions[0].failure, null)
+    assert(
+      first.executions.every((item) => Number.isFinite(item.durationMs) && item.durationMs >= 0)
+    )
     assert.equal(first.executions[1].failure.code, 'PROGRAM_ERROR')
     assert.match(first.executions[1].failure.message, /boom/)
     assert.equal(second.executions.length, 1)
@@ -145,6 +148,69 @@ test('execution summaries follow the declarations of their own turn and say why 
     assert.match(second.executions[0].failure.message, /missingName/)
     // 前两回合的结果仍在租约里、会出现在这一帧，但不是这一回合派发的
     assert.deepEqual(last.executions, [])
+  } finally {
+    await runtime.close()
+  }
+})
+
+test('observation summaries say what a turn registered and which run fed its request', async (t) => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'trace-observation-'))
+  t.after(() => rm(dataDir, { recursive: true, force: true }))
+  const watch = "// 数一数\nimport {output} from 'velaros'\noutput(1)"
+  const typo = "import {output} from 'velaros'\noutput(missingName)"
+  let calls = 0
+  const observe = (request, source) => ({
+    type: 'text',
+    text: `${marker(request)} observe\n${source}\n${marker(request)}`,
+  })
+  const runtime = await createRuntime({
+    dataDir,
+    agents: false,
+    search: false,
+    memory: false,
+    context: { maintenance: false },
+    model: {
+      id: 'trace-observation',
+      limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
+      estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
+      async *stream(request) {
+        calls++
+        if (calls === 1) yield observe(request, watch)
+        else if (calls === 2) yield observe(request, typo)
+        else return yield* done(request)
+        yield { type: 'finish', reason: 'stop' }
+      },
+    },
+  })
+  try {
+    const session = await runtime.openSession('s')
+    const turns = []
+    for await (const event of session.submit('keep watching'))
+      if (event.type === 'turn') turns.push(event.turnId)
+    const [first, second, last] = await Promise.all(turns.map((id) => session.trace(id)))
+    assert.deepEqual(first.observation, {
+      registration: { status: 'updated', failure: null, source: watch, sourceTruncated: false },
+      run: null,
+    })
+    // 没过检查的观察登记不上，原因与没过检查的执行同一套；这一回合的帧仍由原来的观察喂
+    assert.equal(second.observation.registration.status, 'rejected')
+    assert.equal(second.observation.registration.failure.code, 'OBSERVATION_CHECK')
+    assert.equal(second.observation.registration.failure.line, 2)
+    assert.match(second.observation.registration.failure.message, /missingName/)
+    assert.equal(second.observation.registration.source, typo)
+    for (const trace of [second, last]) {
+      assert.equal(trace.observation.run.status, 'succeeded')
+      assert(
+        Number.isFinite(trace.observation.run.durationMs) && trace.observation.run.durationMs >= 0
+      )
+      assert.equal(trace.observation.run.source, watch)
+      assert.equal(trace.observation.run.failure, null)
+      assert(
+        trace.executions.every((item) => item.executionId !== trace.observation.run.executionId)
+      )
+    }
+    assert.notEqual(second.observation.run.executionId, last.observation.run.executionId)
+    assert.equal(last.observation.registration, null)
   } finally {
     await runtime.close()
   }
