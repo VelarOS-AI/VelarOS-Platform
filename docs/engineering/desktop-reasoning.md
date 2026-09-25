@@ -7,7 +7,7 @@
 - kernel `ModelTurnDelta` 增加 `reasoning`（text）：供应商给的思考摘要增量，只供宿主展示，不进上下文，也不参与协议解码。
 - agent `ActRunEvent` 增加 `reasoning`（runId、text），跟在所属请求的 `turn` 事件之后。运行服务只把它放进出站队列、不写事件账（与 text / program 预览相同），`events()` 回放和重启后都没有它，宿主要留就自己存。包版本 7.3.0 → 7.4.0，按 additive 审核声明基线；宿主的穷尽事件匹配要加这一支。
 - model：AI SDK 驱动转发两路来源。一路是 SDK 解析出的思考分片（OpenAI Responses、Anthropic、Google）；另一路是 Chat Completions 原始分块里的 `reasoning_content` / `reasoning`（兼容网关、DeepSeek、OpenRouter、Velar），`@ai-sdk/openai` 的 chat 模型不解析这两个字段，所以驱动开了 `includeRawChunks` 自己取。同一条响应只认先到的那一路，不会重复；思考分段之间空一行；一条响应最多转发 20 万字符（`ModelTuning.stream.reasoningChars`），超出只停转发，响应照常接收。
-- 请求侧没有改：各家本来就按思考力度请求摘要（OpenAI `reasoningSummary: 'auto'`、Anthropic summarized thinking、Google `includeThoughts`、OpenRouter / Velar 的 `reasoning`）。
+- 请求侧：各家本来就按思考力度请求摘要（OpenAI `reasoningSummary: 'auto'`、Anthropic summarized thinking、Google `includeThoughts`、OpenRouter / Velar 的 `reasoning`）；缺 `thinkingDepth` 时怎么发，见下一节。
 
 ## 宿主消费
 
