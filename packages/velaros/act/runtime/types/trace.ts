@@ -1,3 +1,5 @@
+import type { ContextRecord } from '@velaros-ai/context'
+
 import type { ModelToolBinding } from './model-tools.js'
 
 /** 宿主诊断采样，不含正文、参数或资源路径；阶段可能嵌套，不能相加当作墙钟总耗时。 */
@@ -111,6 +113,41 @@ export interface ActObservationSummary {
   readonly run: Nullable<ActObservationRun>
 }
 
+/**
+ * 本回合执行里的一次派发或续跑；同一个子任务续跑时每一段各一份，状态、回答与耗时都只取这一段的持久记录。
+ * 宿主据此展示子任务，不必解析内部记录。
+ */
+export interface ActAgentSummary {
+  /** 子任务身份，即 job.id。 */
+  readonly id: string
+  /** 子任务自己的会话，按它读支线的追踪。 */
+  readonly sessionId: string
+  /** 派发或续跑它的那段执行，与 executions[].executionId 对应。 */
+  readonly executionId: string
+  /** 选用的配置名。 */
+  readonly profile: string
+  /** 派发时交代的任务（续跑时是这一阶段的说明），受本页正文预算约束。 */
+  readonly task: string
+  /** 这一段现在的状态。 */
+  readonly status:
+    'running' | 'waiting' | 'completed' | 'cancelled' | 'failed' | 'interrupted' | 'needs_reconcile'
+  /** 没有完成时的原因；没有原因时为 null。 */
+  readonly error: Nullable<string>
+  /** 这一段最后接纳的一段回答，受本页正文预算约束；还没收束或没有回答时为空。 */
+  readonly answer: string
+  /** 回答是否被截断。 */
+  readonly answerTruncated: boolean
+  /** 从这一段开始（派发或续跑）到收束用了多少毫秒；还没收束时为 null。 */
+  readonly durationMs: Nullable<number>
+}
+
+/** 追踪里子任务的一段：从派发或续跑写下的那份记录起，到这一段最新的那份；job 是最新那份的内容。 */
+export interface TraceChildPhase {
+  readonly first: ContextRecord
+  readonly last: ContextRecord
+  readonly job: Record<string, unknown>
+}
+
 /** 封存请求的只读展示；不证明供应商已收到请求，图像数据只保留占位。 */
 export interface ActRequestSummary {
   /** 编译器封存的模型身份。 */
@@ -165,6 +202,8 @@ export interface ActTurnTrace {
   readonly executions: readonly ActExecutionSummary[]
   /** 本回合登记的观察与喂进这一回合请求的观察运行；观察运行的调用也在 invocations 里。 */
   readonly observation: ActObservationSummary
+  /** 本回合执行里派发或续跑的子任务，按调用顺序。 */
+  readonly agents: readonly ActAgentSummary[]
   /** Kernel 权威调用记录的有界 JSON；空数组不证明世界没有发生效果。 */
   readonly invocations: ReadonlyArray<{
     readonly id: string

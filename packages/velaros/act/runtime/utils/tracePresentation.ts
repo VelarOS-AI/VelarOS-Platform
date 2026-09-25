@@ -34,6 +34,15 @@ export function summarizeInvocation(
   }
 }
 
+/** 子任务结果笔记里最后接纳的一段回答；笔记形状不对或没有回答时为空。 */
+export function childAnswerText(note: unknown): string {
+  if (!isPlainObject(note) || !isArray(note.events)) return ''
+  const accepted: unknown = note.events.findLast(
+    (event) => isPlainObject(event) && event.type === 'accepted' && isString(event.text)
+  )
+  return isPlainObject(accepted) && isString(accepted.text) ? accepted.text : ''
+}
+
 /** 从完整封存请求提取展示，正文计入调用方预算；二进制不进入宿主展示缓存。 */
 export function summarizeModelRequest(
   audit: unknown,

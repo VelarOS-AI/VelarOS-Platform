@@ -4,7 +4,7 @@ import type {
   ContextState,
   ContextStorage,
 } from '@velaros-ai/context'
-import { isNull, isString, isUndefined, Log, toNullable } from '@velaros-ai/core'
+import { isNull, isPlainObject, isString, isUndefined, Log, toNullable } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
@@ -12,6 +12,7 @@ import type { ModelToolBinding } from '../types/model-tools.js'
 import type { ScriptControlReceipt } from '../types/runtime.js'
 import type { ScriptExecutionReceipt, ScriptSubmissionReceipt } from '../types/session.js'
 import type {
+  ActAgentSummary,
   ActExecutionSummary,
   ActObservationRegistration,
   ActObservationRun,
@@ -19,9 +20,14 @@ import type {
   ActTraceQuery,
   ActTraceRecord,
   ActTurnTrace,
+  TraceChildPhase,
 } from '../types/trace.js'
 import { executionDuration, executionOutcome } from '../utils/execution-outcome.js'
-import { summarizeInvocation, summarizeModelRequest } from '../utils/tracePresentation.js'
+import {
+  childAnswerText,
+  summarizeInvocation,
+  summarizeModelRequest,
+} from '../utils/tracePresentation.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
 /** 只读连接既有记录，不执行代码或生成事实正文。 */
@@ -413,6 +419,80 @@ export class RuntimeTrace implements RuntimeTraceApi {
         ...(await programSource(observed?.sourceRef)),
       }
     }
+    // 本回合执行里派发或续跑的子任务：start、resume 的回执就是 job。同一个子任务可以续跑好几次，它的
+    // 持久记录按段切开：派发或续跑写下的那份还没有 pending，是一段的开头，之后的提问、回答与收束都记在这一段。
+    // 本回合第 k 次派发或续跑它，对应本回合请求之后它开始的第 k 段；状态、回答与耗时都只取那一段
+    const phases = new Map<string, TraceChildPhase[]>()
+    const childPhases = async (id: string) => {
+      if (!phases.has(id)) {
+        const list: TraceChildPhase[] = []
+        for (const record of records) {
+          if (record.title !== `act:child:${id}` || record.sequence < requestRecord.sequence)
+            continue
+          const body = await raw(record)
+          if (isNull(body)) continue
+          const job: Record<string, unknown> = JSON.parse(body)
+          if (job.status === 'running' && !('pending' in job))
+            list.push({ first: record, last: record, job })
+          else if (!isEmpty(list)) list[list.length - 1] = { ...list.at(-1)!, last: record, job }
+        }
+        phases.set(id, list)
+      }
+      return phases.get(id)!
+    }
+    const claimed = new Map<string, number>()
+    const agents: ActAgentSummary[] = []
+    for (const item of dispatched) {
+      if (!item.executionId) continue
+      for (const invocation of journal.get(item.executionId) ?? []) {
+        const { binding, operation, input } = invocation.prepared
+        const job: unknown = invocation.receipt?.value
+        if (
+          binding.moduleId !== 'velaros:agents' ||
+          !['start', 'resume'].includes(operation) ||
+          !isPlainObject(job) ||
+          !isString(job.id) ||
+          !isString(job.sessionId) ||
+          !isString(job.profile)
+        )
+          continue
+        const index = claimed.get(job.id) ?? 0
+        claimed.set(job.id, index + 1)
+        const phase = (await childPhases(job.id))[index]
+        const latest = phase?.job ?? job
+        const task = isPlainObject(input) ? (operation === 'start' ? input.task : input.input) : ''
+        const taskText = (isString(task) ? task : '').slice(0, Math.max(0, remaining))
+        remaining -= taskText.length
+        const resultId =
+          isPlainObject(latest.result) && isString(latest.result.id) ? latest.result.id : ''
+        const resultRecord = recordById.get(resultId)
+        const note = resultRecord ? await raw(resultRecord) : null
+        const answer = isNull(note) ? '' : childAnswerText(JSON.parse(note))
+        const answerText = answer.slice(0, Math.max(0, remaining))
+        remaining -= answerText.length
+        const status = (
+          isString(latest.status) ? latest.status : 'running'
+        ) as ActAgentSummary['status']
+        const settled = !['running', 'waiting'].includes(status)
+        const startedAt = Date.parse(phase?.first.createdAt ?? '')
+        const settledAt = Date.parse((resultRecord ?? phase?.last)?.createdAt ?? '')
+        agents.push({
+          id: job.id,
+          sessionId: job.sessionId,
+          executionId: item.executionId,
+          profile: isString(latest.profile) ? latest.profile : job.profile,
+          task: taskText,
+          status,
+          error: isString(latest.error) ? latest.error : null,
+          answer: answerText,
+          answerTruncated: answerText.length < answer.length,
+          durationMs:
+            settled && Number.isFinite(startedAt) && Number.isFinite(settledAt)
+              ? Math.max(0, settledAt - startedAt)
+              : null,
+        })
+      }
+    }
     return {
       sessionId: this.sessionId,
       turnId,
@@ -432,6 +512,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
       records: traceRecords,
       executions: summaries,
       observation: { registration, run },
+      agents,
       invocations,
       nextTurnId: toNullable(next?.ref.id),
       snapshotVersion: snapshot!.version,

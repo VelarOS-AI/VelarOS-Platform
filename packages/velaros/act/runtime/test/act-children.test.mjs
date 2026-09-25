@@ -151,6 +151,84 @@ test('an orphaned durable child admission requires host reconciliation even with
   assert.equal(finished.at(-1).status, 'completed')
 })
 
+test('turn traces summarise the sub-tasks their executions started, with the latest state and answer', async (t) => {
+  let main = 0
+  const child = model(async function* (request) {
+    yield* done(request, '找到三个文件')
+  })
+  const f = await setup(t, {
+    agents: { profiles: { read: { model: child, modules: [] } }, concurrency: 1, maxChildren: 2 },
+    model: model(async function* (request) {
+      if (++main === 1) {
+        yield task(
+          request,
+          "import {start,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'数一数根目录的文件',profile:'read'});output(await wait({id:job.id}));"
+        )
+        yield { type: 'finish', reason: 'stop' }
+      } else yield* done(request, 'parent complete')
+    }),
+  })
+  const turns = []
+  for await (const event of f.session.submit('count the files'))
+    if (event.type === 'turn') turns.push(event.turnId)
+  const [first, second] = await Promise.all(turns.map((id) => f.session.trace(id)))
+  assert.equal(first.agents.length, 1)
+  const [agent] = first.agents
+  assert.equal(agent.profile, 'read')
+  assert.equal(agent.task, '数一数根目录的文件')
+  assert.equal(agent.status, 'completed')
+  assert.match(agent.answer, /找到三个文件/)
+  assert.equal(agent.answerTruncated, false)
+  assert.equal(agent.error, null)
+  assert(Number.isFinite(agent.durationMs) && agent.durationMs >= 0)
+  assert.equal(agent.executionId, first.executions[0].executionId)
+  assert.match(agent.sessionId, /^agent:root:/)
+  // 下一回合没有派发子任务
+  assert.deepEqual(second.agents, [])
+})
+
+test('a resumed sub-task is summarised per phase: each start or resume shows only its own answer', async (t) => {
+  let main = 0
+  let childCalls = 0
+  const child = model(async function* (request) {
+    yield* done(request, ++childCalls === 1 ? '第一段回答' : '第二段回答')
+  })
+  const f = await setup(t, {
+    agents: { profiles: { read: { model: child, modules: [] } }, concurrency: 1, maxChildren: 1 },
+    model: model(async function* (request) {
+      if (++main === 1) {
+        yield task(
+          request,
+          "import {start,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'先看一遍',profile:'read'});output(await wait({id:job.id}));"
+        )
+        yield { type: 'finish', reason: 'stop' }
+      } else if (main === 2) {
+        const job = runtimeFrame(request).children[0]
+        yield task(
+          request,
+          `import {resume,wait} from 'velaros:agents';import {output} from 'velaros';const job=await resume({id:${JSON.stringify(job.id)},input:'再看一遍'});output(await wait({id:job.id}));`
+        )
+        yield { type: 'finish', reason: 'stop' }
+      } else yield* done(request, 'parent complete')
+    }),
+  })
+  const turns = []
+  for await (const event of f.session.submit('look twice'))
+    if (event.type === 'turn') turns.push(event.turnId)
+  const [first, second] = await Promise.all(turns.slice(0, 2).map((id) => f.session.trace(id)))
+  assert.equal(first.agents.length, 1)
+  assert.equal(second.agents.length, 1)
+  assert.equal(second.agents[0].id, first.agents[0].id)
+  assert.equal(first.agents[0].task, '先看一遍')
+  assert.equal(first.agents[0].status, 'completed')
+  assert.match(first.agents[0].answer, /第一段回答/)
+  assert.equal(second.agents[0].task, '再看一遍')
+  assert.equal(second.agents[0].status, 'completed')
+  assert.match(second.agents[0].answer, /第二段回答/)
+  assert(Number.isFinite(first.agents[0].durationMs))
+  assert(Number.isFinite(second.agents[0].durationMs))
+})
+
 test('INV-31 parent and child run the same ScriptAct loop and charge the shared root budget once per call', async (t) => {
   let main = 0
   let children = 0
