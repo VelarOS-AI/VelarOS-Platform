@@ -42,11 +42,11 @@ export const ModelProviderValidationKinds = Object.freeze([
   'custom-adapter-source',
 ] as const)
 
-/** 思考深度三档：产品的旧口径，仍然是 provider 参数映射的兜底轴。 */
-export const ThinkingDepths = Object.freeze(['fast', 'balanced', 'deep'] as const)
+/** 思考力度四档：决定 reasoning 的力度与预算。 */
+export const ReasoningLevels = Object.freeze(['low', 'medium', 'high', 'ultra'] as const)
 
-/** 思考力度五档：存在时优先于 thinkingDepth 决定 reasoning 的开关、力度与预算。 */
-export const ReasoningLevels = Object.freeze(['off', 'low', 'medium', 'high', 'ultra'] as const)
+/** 宿主没给思考力度时按这一档发，与输入框的默认档一致。 */
+export const DefaultReasoningLevel = 'medium' as const
 
 /** 具体模型接受的输入形态；缺席表示未知，不表示不支持。 */
 export const ModelInputModalities = Object.freeze(['text', 'image', 'audio'] as const)

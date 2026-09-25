@@ -24,7 +24,6 @@ import type {
   ProviderScriptManifest,
   ProviderScriptRuntimeMetadata,
   ReasoningLevel,
-  ThinkingDepth,
 } from './model'
 
 /**
@@ -88,30 +87,20 @@ export interface ProviderScriptHelpers {
   /**
    * 思考力度与预算的换算。
    *
-   * 这四个就是内置适配器（anthropic / openai / google）与路由层（OpenRouter / Velar）自己在用的那几个
+   * 这三个就是内置适配器（anthropic / openai / google）与路由层（OpenRouter / Velar）自己在用的那几个
    * 函数本体，不是另抄一份：脚本照着发，请求字节与内置 provider 对齐。
    */
   reasoning: {
-    /** off 档：这次请求完全不发 reasoning。 */
-    isReasoningDisabledByLevel: (level?: LooseOptional<ReasoningLevel>) => boolean
     /** 合并 OpenRouter 风格的 reasoning 开关；给了 `maxOutputTokens` 才能按比例换算 ultra 的预算。 */
     mergeOpenRouterReasoning: (
       existing: unknown,
-      depth?: LooseOptional<ThinkingDepth>,
-      level?: LooseOptional<ReasoningLevel>,
+      level: ReasoningLevel,
       maxOutputTokens?: number
     ) => Record<string, unknown>
-    /** 算这次请求的 thinking budget：`depth` 定基线，`ultra` 在基线之上再抬一档。 */
-    resolveReasoningBudget: (
-      maxOutputTokens?: number,
-      level?: LooseOptional<ReasoningLevel>,
-      depth?: LooseOptional<ThinkingDepth>
-    ) => number
+    /** 算这次请求的 thinking budget：low、medium、high 各一档，`ultra` 在 high 之上再抬一档。 */
+    resolveReasoningBudget: (maxOutputTokens: Optional<number>, level: ReasoningLevel) => number
     /** 算这次请求的 reasoning 力度。 */
-    resolveReasoningEffort: (
-      level?: LooseOptional<ReasoningLevel>,
-      depth?: LooseOptional<ThinkingDepth>
-    ) => ReasoningEffort
+    resolveReasoningEffort: (level: ReasoningLevel) => ReasoningEffort
   }
   /** 本仓的错误类，脚本抛它才能被统一按码处理。 */
   AppError: typeof AppError

@@ -38,9 +38,7 @@ export class VelarModelAdapter extends ModelAdapter implements ModelProviderAdap
       fetch: (input, init) =>
         runtime.fetch(
           input,
-          providerId === 'velaros'
-            ? injectVelarThinkingRouting(init, config.thinkingDepth, config.reasoningLevel)
-            : init
+          providerId === 'velaros' ? injectVelarThinkingRouting(init, config.reasoningLevel) : init
         ),
     })
     return (modelId) => {

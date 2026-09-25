@@ -17,7 +17,6 @@ import type {
   OpenRouterRoutingConfig,
   ProviderScriptRuntimeMetadata,
   ReasoningLevel,
-  ThinkingDepth,
 } from '../../types/model'
 import type { ProviderScriptRegistryPort } from '../../types/scripts'
 import {
@@ -33,7 +32,7 @@ import {
   mergeModelRequestOptions,
   UnknownModelInputModalities,
 } from '../../utils/resolution'
-import { createThinkingDepthProviderOptions } from '../../utils/wire/reasoning'
+import { createReasoningProviderOptions } from '../../utils/wire/reasoning'
 import type { LocalModelEnvironmentApi } from '../providers/LocalModelEnvironment'
 import { LocalModelEnvironment } from '../providers/LocalModelEnvironment'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
@@ -128,7 +127,6 @@ class AgentModelResolver implements AgentModelResolverApi {
       model: modelResolution.model,
       apiKey,
       baseURL,
-      thinkingDepth: selection.thinkingDepth,
       reasoningLevel: selection.reasoningLevel,
       openRouterConfig: runtimeContext.openRouter,
       adapter,
@@ -143,7 +141,6 @@ class AgentModelResolver implements AgentModelResolverApi {
     model: string
     apiKey: string
     baseURL: string
-    thinkingDepth?: LooseOptional<ThinkingDepth>
     reasoningLevel?: LooseOptional<ReasoningLevel>
     openRouterConfig: OpenRouterRoutingConfig
     adapter?: LooseOptional<AgentProviderAdapterConfig>
@@ -162,7 +159,6 @@ class AgentModelResolver implements AgentModelResolverApi {
       apiKey: input.apiKey,
       baseURL: input.baseURL,
       adapter: input.adapter,
-      thinkingDepth: input.thinkingDepth,
       reasoningLevel: input.reasoningLevel,
       signal: input.signal,
     })
@@ -206,12 +202,7 @@ class AgentModelResolver implements AgentModelResolverApi {
         resolvedModel.requestOptions,
         providerScriptMetadata?.modelRequestOptions
       ),
-      createThinkingDepthProviderOptions(
-        input.providerId,
-        runtimeModel,
-        input.thinkingDepth ?? 'balanced',
-        input.reasoningLevel
-      )
+      createReasoningProviderOptions(input.providerId, runtimeModel, input.reasoningLevel)
     )
     const metadataFallbackReason = providerScriptMetadata?.fallbackReason
     const runtimeTrace = input.resolutionTrace.map((entry) => {
@@ -232,7 +223,6 @@ class AgentModelResolver implements AgentModelResolverApi {
         apiKey: input.apiKey,
         baseURL: input.baseURL,
         adapter: input.adapter,
-        thinkingDepth: input.thinkingDepth,
         reasoningLevel: toNullable(input.reasoningLevel),
         providerScriptRuntimeMetadata: providerScriptMetadata,
       }),
@@ -286,7 +276,6 @@ class AgentModelResolver implements AgentModelResolverApi {
     apiKey: string
     baseURL: string
     adapter: LooseOptional<AgentProviderAdapterConfig>
-    thinkingDepth: LooseOptional<ThinkingDepth>
     reasoningLevel: LooseOptional<ReasoningLevel>
     signal?: AbortSignal
   }): Promise<Nullable<ProviderScriptRuntimeMetadata>> {
@@ -300,7 +289,6 @@ class AgentModelResolver implements AgentModelResolverApi {
           apiKey: input.apiKey,
           baseURL: input.baseURL,
           adapter: input.adapter,
-          thinkingDepth: input.thinkingDepth,
           reasoningLevel: toNullable(input.reasoningLevel),
         },
         input.model,

@@ -18,7 +18,6 @@ import type {
   ModelSelection,
   ProviderScriptManifest,
   ReasoningLevel,
-  ThinkingDepth,
 } from '../../types/model'
 
 const SelectionLog = logRuntime.tag('AgentModelRuntime')
@@ -50,7 +49,6 @@ export function parseProviderSelection(value: unknown): ModelProviderSelection {
     apiKey: optionalString(record.apiKey),
     baseURL: optionalString(record.baseURL),
     adapter: parseAdapter(record.adapter),
-    thinkingDepth: parseThinkingDepth(record.thinkingDepth),
     reasoningLevel: parseReasoningLevel(record.reasoningLevel),
   }
 }
@@ -168,23 +166,9 @@ function parseAdapter(value: unknown): AgentProviderAdapterConfig | undefined {
   }
 }
 
-/** 思考深度只认三档；缺席按缺席，别的值一律拒。 */
-function parseThinkingDepth(value: unknown): ThinkingDepth | undefined {
-  if (!isPresent(value)) return undefined
-  if (value === 'fast' || value === 'balanced' || value === 'deep') return value
-  throw new AppError('VALIDATION', 'thinkingDepth 必须是 fast、balanced 或 deep。')
-}
-
-/** 思考力度只认五档；缺席按缺席，别的值一律拒。 */
+/** 思考力度只认四档；缺席按缺席，别的值一律拒。 */
 function parseReasoningLevel(value: unknown): ReasoningLevel | undefined {
   if (!isPresent(value)) return undefined
-  if (
-    value === 'off' ||
-    value === 'low' ||
-    value === 'medium' ||
-    value === 'high' ||
-    value === 'ultra'
-  )
-    return value
-  throw new AppError('VALIDATION', 'reasoningLevel 必须是 off、low、medium、high 或 ultra。')
+  if (value === 'low' || value === 'medium' || value === 'high' || value === 'ultra') return value
+  throw new AppError('VALIDATION', 'reasoningLevel 必须是 low、medium、high 或 ultra。')
 }

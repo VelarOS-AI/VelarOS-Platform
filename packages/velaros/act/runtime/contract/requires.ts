@@ -260,7 +260,7 @@ export interface McpModuleOptions {
 /** 声明式 Provider 配置；凭据只用于建立驱动，不进入模型材料和追踪。 */
 export interface RuntimeModelConfiguration extends Pick<
   ModelAdapterConfig,
-  'provider' | 'apiKey' | 'baseURL' | 'reasoningLevel' | 'thinkingDepth'
+  'provider' | 'apiKey' | 'baseURL' | 'reasoningLevel'
 > {
   /** 供应商接受的模型标识。 */
   readonly model: string

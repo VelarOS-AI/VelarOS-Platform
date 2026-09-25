@@ -40,11 +40,10 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
         })
 
         return languageModelWrappers.withPromptCache(
-          languageModelWrappers.withThinkingDepth(
+          languageModelWrappers.withReasoning(
             openai(modelId),
             config.provider,
             modelId,
-            config.thinkingDepth,
             config.reasoningLevel
           )
         )

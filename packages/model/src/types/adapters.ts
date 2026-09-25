@@ -9,7 +9,6 @@ import type {
   ModelRequestOptions,
   ProviderScriptRuntimeMetadata,
   ReasoningLevel,
-  ThinkingDepth,
 } from './model'
 
 export interface ModelAdapterConfig {
@@ -21,9 +20,7 @@ export interface ModelAdapterConfig {
   baseURL: string
   /** 用户上传的自定义 provider adapter。 */
   adapter?: LooseOptional<AgentProviderAdapterConfig>
-  /** 本次请求期望的模型运行策略；adapter 会按 provider 能力映射为 reasoning/thinking 参数。 */
-  thinkingDepth?: LooseOptional<ThinkingDepth>
-  /** Composer 思考力度 5 档；存在时优先于 thinkingDepth 决定 reasoning 开关/力度/预算。 */
+  /** 输入框选的思考力度；adapter 按 provider 能力映射为 reasoning/thinking 参数，缺席时按 medium。 */
   reasoningLevel?: LooseOptional<ReasoningLevel>
   /** 本地 provider script 已解析的运行时元数据；执行阶段复用它，避免同一轮运行二次解析漂移。 */
   providerScriptRuntimeMetadata?: LooseOptional<ProviderScriptRuntimeMetadata>
@@ -77,14 +74,14 @@ export type OpenAIModelFetchInit = Parameters<OpenAIModelFetch>[1]
 export type ModelCallProviderOptions = NonNullable<LanguageModelV3CallOptions['providerOptions']>
 
 /** 按这一轮的输出上限算 reasoning 选项；这一档不发 reasoning 时返回 null。 */
-export type ThinkingDepthProviderOptionsResolver = (
+export type ReasoningProviderOptionsResolver = (
   maxOutputTokens?: number
 ) => Nullable<ModelCallProviderOptions>
 
 /**
- * 发给服务商的 reasoning 力度三档；五档 `ReasoningLevel` 与三档 `ThinkingDepth` 都映射到它。
+ * 发给服务商的 reasoning 力度三档；四档 `ReasoningLevel` 映射到它。
  *
- * 它是出线前的 wire 细节，不是产品面的轴：产品只选 level 或 depth，映射由本包做，所以它不放在
- * 可移植数据文件里。
+ * 它是出线前的 wire 细节，不是产品面的轴：产品只选 level，映射由本包做，所以它不放在可移植数据
+ * 文件里。
  */
 export type ReasoningEffort = 'low' | 'medium' | 'high'

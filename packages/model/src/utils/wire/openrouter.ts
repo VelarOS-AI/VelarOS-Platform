@@ -1,17 +1,20 @@
 import { isArray, isBlank, isEmpty, isNumber, isPlainObject, optionalWhen } from '@velaros-ai/core'
 
-import { OpenRouterAutoModelId, OpenRouterFreeModelId } from '../../contract/constants.js'
+import {
+  DefaultReasoningLevel,
+  OpenRouterAutoModelId,
+  OpenRouterFreeModelId,
+} from '../../contract/constants.js'
 import type { OpenAIModelFetch, OpenAIModelFetchInit } from '../../types/adapters'
 import type {
   ModelRequestOptions,
   OpenRouterProviderRoutingPreferences,
   ReasoningLevel,
-  ThinkingDepth,
 } from '../../types/model'
 import type { OpenRouterRequestRouting } from '../../types/providers'
 
 import { mergeJsonRequestBody } from './fetch-shims'
-import { isReasoningDisabledByLevel, mergeOpenRouterReasoning } from './reasoning'
+import { mergeOpenRouterReasoning } from './reasoning'
 
 /** OpenRouter 自动路由到的模型可能带推理能力，按这些模式名判要不要注入 reasoning。 */
 const OpenRouterReasoningModelMatchers = [
@@ -94,10 +97,7 @@ export function shouldInjectAutoRouterPlugin(model: string, allowedModels: strin
 export function normalizeOpenRouterRouting(
   modelId: string,
   options: Optional<ModelRequestOptions>,
-  depths: {
-    thinkingDepth?: LooseOptional<ThinkingDepth>
-    reasoningLevel?: LooseOptional<ReasoningLevel>
-  }
+  reasoning: { reasoningLevel?: LooseOptional<ReasoningLevel> }
 ): OpenRouterRequestRouting {
   const routing = options?.openRouter
   const useFreeModelsForDebug = !!routing?.useFreeModelsForDebug
@@ -107,8 +107,7 @@ export function normalizeOpenRouterRouting(
       model: OpenRouterFreeModelId,
       allowedModels: [],
       useFreeModelsForDebug,
-      thinkingDepth: depths.thinkingDepth,
-      reasoningLevel: depths.reasoningLevel,
+      reasoningLevel: reasoning.reasoningLevel,
     }
 
   return {
@@ -116,20 +115,18 @@ export function normalizeOpenRouterRouting(
     allowedModels: normalizeOpenRouterAllowedModels(routing?.allowedModels ?? []),
     providerPreferences: routing?.providerPreferences,
     useFreeModelsForDebug,
-    thinkingDepth: depths.thinkingDepth,
-    reasoningLevel: depths.reasoningLevel,
+    reasoningLevel: reasoning.reasoningLevel,
   }
 }
 
 /**
- * 仅在 OpenRouter 支持或可能自动路由到 reasoning 模型时注入运行策略。
+ * OpenRouter 支持或可能自动路由到 reasoning 模型时才注入思考力度（没给按 `DefaultReasoningLevel`）。
  *
- * off 档没有 thinkingDepth 也要注入：`reasoning: { enabled: false, exclude: true }` 是 OpenRouter 的关闭
- * 写法，不发它等于把开关交还给上游模型的默认值（新一代模型默认思考），用户选的"关"就不生效。
+ * off 档同样要注入：`reasoning: { enabled: false, exclude: true }` 是 OpenRouter 的关闭写法，不发它等于
+ * 把开关交还给上游模型的默认值（新一代模型默认思考），用户选的"关"就不生效。
  */
 export function shouldInjectOpenRouterReasoning(routing: OpenRouterRequestRouting): boolean {
   if (routing.useFreeModelsForDebug) return false
-  if (!routing.thinkingDepth && !isReasoningDisabledByLevel(routing.reasoningLevel)) return false
 
   if (routing.model === OpenRouterAutoModelId)
     return (
@@ -150,9 +147,11 @@ export function injectOpenRouterRouting(
 ): Optional<OpenAIModelFetchInit> {
   const injectAutoRouter = shouldInjectAutoRouterPlugin(routing.model, routing.allowedModels)
   const injectPreferences = !!routing.providerPreferences
-  const injectReasoning = shouldInjectOpenRouterReasoning(routing)
+  const reasoningLevel = shouldInjectOpenRouterReasoning(routing)
+    ? (routing.reasoningLevel ?? DefaultReasoningLevel)
+    : null
 
-  if (!injectAutoRouter && !injectPreferences && !injectReasoning) return init
+  if (!injectAutoRouter && !injectPreferences && !reasoningLevel) return init
 
   return mergeJsonRequestBody(init, (body) => {
     const nextBody: Record<string, unknown> = { ...body }
@@ -168,11 +167,10 @@ export function injectOpenRouterRouting(
       )
     }
 
-    if (injectReasoning) {
+    if (reasoningLevel) {
       nextBody.reasoning = mergeOpenRouterReasoning(
         body.reasoning,
-        routing.thinkingDepth,
-        routing.reasoningLevel,
+        reasoningLevel,
         // 请求体里的输出上限就是这一轮真实的 maxOutputTokens，拿它换算 ultra 的预算。
         optionalWhen(isNumber, body.max_tokens)
       )

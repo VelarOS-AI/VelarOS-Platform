@@ -44,7 +44,6 @@ import {
 } from '../../utils/scripts/provider-scripts'
 import { ModelTuning } from '../../utils/tuning'
 import {
-  isReasoningDisabledByLevel,
   mergeOpenRouterReasoning,
   resolveReasoningBudget,
   resolveReasoningEffort,
@@ -424,7 +423,6 @@ export class ProviderScriptRegistry
         getAppVersion: () => this.getAppVersion(),
       },
       reasoning: {
-        isReasoningDisabledByLevel,
         mergeOpenRouterReasoning,
         resolveReasoningBudget,
         resolveReasoningEffort,

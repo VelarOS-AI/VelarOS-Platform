@@ -1,12 +1,12 @@
 import type { LanguageModel } from 'ai'
 
 import type { ModelCallProviderOptions } from '../../types/adapters'
-import type { ChatProviderId, ReasoningLevel, ThinkingDepth } from '../../types/model'
+import type { ChatProviderId, ReasoningLevel } from '../../types/model'
 import { asWrappableLanguageModel } from '../../utils/wire/language-models'
-import { createThinkingDepthProviderOptions } from '../../utils/wire/reasoning'
+import { createReasoningProviderOptions } from '../../utils/wire/reasoning'
 
 import { PromptCacheLanguageModel } from './PromptCacheLanguageModel'
-import { ThinkingDepthLanguageModel } from './ThinkingDepthLanguageModel'
+import { ReasoningLanguageModel } from './ReasoningLanguageModel'
 
 /**
  * 给语言模型套包装层的那一处。
@@ -20,11 +20,10 @@ export interface LanguageModelWrappersApi {
   /** 套上提示词缓存标记的出线翻译层；包不了就原样返回。 */
   withPromptCache(model: LanguageModel): LanguageModel
   /** 套上这一轮 reasoning 参数的合并层；这一轮不需要发 reasoning、或包不了就原样返回。 */
-  withThinkingDepth(
+  withReasoning(
     model: LanguageModel,
     provider: ChatProviderId,
     modelId: string,
-    depth?: LooseOptional<ThinkingDepth>,
     level?: LooseOptional<ReasoningLevel>
   ): LanguageModel
 }
@@ -36,26 +35,24 @@ export class LanguageModelWrappers implements LanguageModelWrappersApi {
     return wrappable ? new PromptCacheLanguageModel(wrappable) : model
   }
 
-  public withThinkingDepth(
+  public withReasoning(
     model: LanguageModel,
     provider: ChatProviderId,
     modelId: string,
-    depth?: LooseOptional<ThinkingDepth>,
     level?: LooseOptional<ReasoningLevel>
   ): LanguageModel {
     // 包不包只看"这一档到底发不发 reasoning"，那个判断与输出上限无关，先按缺省算一遍即可。
-    const wrappable = createThinkingDepthProviderOptions(provider, modelId, depth, level)
+    const wrappable = createReasoningProviderOptions(provider, modelId, level)
       ? asWrappableLanguageModel(model)
       : null
     if (!wrappable) return model
 
-    return new ThinkingDepthLanguageModel(
+    return new ReasoningLanguageModel(
       wrappable,
       (maxOutputTokens) =>
-        createThinkingDepthProviderOptions(
+        createReasoningProviderOptions(
           provider,
           modelId,
-          depth,
           level,
           maxOutputTokens
         ) as Nullable<ModelCallProviderOptions>

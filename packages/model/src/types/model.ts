@@ -4,7 +4,6 @@ import type {
   ModelProviderOperationalManifests,
   ModelProviderValidationKinds,
   ReasoningLevels,
-  ThinkingDepths,
   VelarCloudManagedProviderIds,
 } from '../contract/constants.js'
 
@@ -21,7 +20,6 @@ export type InjectedChatProviderId = string & {
 
 export type ChatProviderId = BuiltInChatProviderId | InjectedChatProviderId
 
-export type ThinkingDepth = (typeof ThinkingDepths)[number]
 export type ReasoningLevel = (typeof ReasoningLevels)[number]
 export type ModelInputModality = (typeof ModelInputModalities)[number]
 export type ModelProviderAdapterKind = (typeof ModelProviderAdapterKinds)[number]
@@ -170,7 +168,6 @@ export interface ModelProviderSelection {
   apiKey: string
   baseURL: string
   adapter?: LooseOptional<AgentProviderAdapterConfig>
-  thinkingDepth?: LooseOptional<ThinkingDepth>
   reasoningLevel?: LooseOptional<ReasoningLevel>
 }
 

@@ -23,11 +23,10 @@ class GoogleModelAdapter extends ModelAdapter implements ModelProviderAdapter {
 
     return (modelId) =>
       languageModelWrappers.withPromptCache(
-        languageModelWrappers.withThinkingDepth(
+        languageModelWrappers.withReasoning(
           google(modelId),
           config.provider,
           modelId,
-          config.thinkingDepth,
           config.reasoningLevel
         )
       )

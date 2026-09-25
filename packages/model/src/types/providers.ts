@@ -5,7 +5,6 @@ import type {
   OpenRouterProviderRoutingPreferences,
   ProviderModelCatalog,
   ReasoningLevel,
-  ThinkingDepth,
 } from './model'
 
 /** 静态目录里的一条模型定义：id、已知窗口，以及它是不是只在 OpenAI 直连下可选。 */
@@ -65,6 +64,5 @@ export interface OpenRouterRequestRouting {
   allowedModels: string[]
   providerPreferences?: OpenRouterProviderRoutingPreferences
   useFreeModelsForDebug: boolean
-  thinkingDepth?: LooseOptional<ThinkingDepth>
   reasoningLevel?: LooseOptional<ReasoningLevel>
 }

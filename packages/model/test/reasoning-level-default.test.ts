@@ -1,7 +1,7 @@
 /**
  * @test-meta
- * title: reasoningLevel=off 的请求字节
- * summary: 模型运行时 · 用户选"关思考"时各家 provider 发出去的推理参数。
+ * title: 思考力度的默认档与各家请求字节
+ * summary: 模型运行时 · 宿主不给思考力度时按 medium 发，给了就按力度发；解析链路与包装层同一口径。
  * area: package
  */
 import type {
@@ -14,7 +14,7 @@ import { describe, expect, test } from 'bun:test'
 import { languageModelWrappers } from '../src/impl/adapters/LanguageModelWrappers'
 import type { ChatProviderId } from '../src/index'
 import { createModelRuntimeComposition } from '../src/index'
-import { createThinkingDepthProviderOptions } from '../src/utils/wire/reasoning'
+import { createReasoningProviderOptions } from '../src/utils/wire/reasoning'
 
 const AnthropicModelId = 'claude-sonnet-4-6'
 const OpenAiModelId = 'gpt-5.5'
@@ -102,73 +102,35 @@ async function resolveProviderOptions(
   return resolved.modelRequestOptions?.providerOptions
 }
 
-describe('reasoningLevel=off', () => {
-  test('Anthropic 发厂商的关闭写法，而不是自适应思考', () => {
-    expect(
-      createThinkingDepthProviderOptions('anthropic', AnthropicModelId, 'balanced', 'off')
-    ).toEqual({ anthropic: { thinking: { type: 'disabled' } } })
-    // 非推理模型仍然什么都不发。
-    expect(
-      createThinkingDepthProviderOptions('anthropic', 'claude-3-5-haiku', 'balanced', 'off')
-    ).toBeNull()
-  })
-
-  test('OpenAI 与 Google 一个推理参数都不发', () => {
-    expect(
-      createThinkingDepthProviderOptions('openai', OpenAiModelId, 'balanced', 'off')
-    ).toBeNull()
-    expect(createThinkingDepthProviderOptions('google', GoogleModelId, 'deep', 'off')).toBeNull()
-  })
-
-  test('缺 thinkingDepth 时力度照发、基线按 balanced；两个轴都没给才不发', () => {
-    expect(
-      createThinkingDepthProviderOptions('anthropic', AnthropicModelId, undefined, 'off')
-    ).toEqual({ anthropic: { thinking: { type: 'disabled' } } })
-    expect(
-      createThinkingDepthProviderOptions('anthropic', AnthropicModelId, undefined, 'ultra')
-    ).toEqual(
-      createThinkingDepthProviderOptions('anthropic', AnthropicModelId, 'balanced', 'ultra')
-    )
-    expect(
-      createThinkingDepthProviderOptions('openai', OpenAiModelId, undefined, 'medium')
-    ).toEqual({
+describe('思考力度的默认档', () => {
+  test('没给力度时按 medium 发，与输入框的默认档一致', () => {
+    expect(createReasoningProviderOptions('openai', OpenAiModelId)).toEqual({
       openai: { reasoningEffort: 'medium', reasoningSummary: 'auto' },
     })
-    expect(
-      createThinkingDepthProviderOptions('openai', OpenAiModelId, undefined, undefined)
-    ).toBeNull()
-    // 有 thinkingDepth 时 level 是用户的显式选择，力度按 level 走而不是按 depth 走。
-    expect(
-      createThinkingDepthProviderOptions('anthropic', AnthropicModelId, 'balanced', 'ultra')
-    ).toEqual({
-      anthropic: {
-        sendReasoning: true,
-        thinking: { type: 'adaptive', display: 'summarized' },
-        effort: 'high',
-      },
-    })
+    expect(createReasoningProviderOptions('anthropic', AnthropicModelId)).toEqual(
+      createReasoningProviderOptions('anthropic', AnthropicModelId, 'medium')
+    )
+    expect(createReasoningProviderOptions('google', GoogleModelId)).toEqual(
+      createReasoningProviderOptions('google', GoogleModelId, 'medium')
+    )
+    // 非推理模型一个参数都不发。
+    expect(createReasoningProviderOptions('anthropic', 'claude-3-5-haiku')).toBeNull()
   })
 
-  test('适配器包装层把关闭写法合进本次调用', async () => {
+  test('适配器包装层把这一档的参数合进本次调用', async () => {
     const { model, calls } = createRecordingLanguageModel()
-    const wrapped = languageModelWrappers.withThinkingDepth(
-      model,
-      'anthropic',
-      AnthropicModelId,
-      'deep',
-      'off'
-    )
+    const wrapped = languageModelWrappers.withReasoning(model, 'anthropic', AnthropicModelId, 'low')
     await (wrapped as LanguageModelV3).doGenerate(ChatCallOptions)
 
-    expect(calls).toEqual([{ anthropic: { thinking: { type: 'disabled' } } }])
-  })
-
-  test('解析链路上 off 不再带出推理参数', async () => {
-    expect(await resolveProviderOptions('anthropic', AnthropicModelId, 'off')).toEqual({
-      anthropic: { thinking: { type: 'disabled' } },
-    })
-    expect(await resolveProviderOptions('openai', OpenAiModelId, 'off')).toBeUndefined()
-    expect(await resolveProviderOptions('google', GoogleModelId, 'off')).toBeUndefined()
+    expect(calls).toEqual([
+      {
+        anthropic: {
+          sendReasoning: true,
+          thinking: { type: 'adaptive', display: 'summarized' },
+          effort: 'low',
+        },
+      },
+    ])
   })
 
   test('不选档位时的默认请求字节没变', async () => {
@@ -184,7 +146,7 @@ describe('reasoningLevel=off', () => {
     })
   })
 
-  test('OpenRouter 发路由层的关闭开关，其它档仍发 effort', async () => {
+  test('OpenRouter 没给力度按 medium，给了按力度发 effort', async () => {
     const composition = createModelRuntimeComposition({
       environment: {},
       providerScripts: { configPaths: [] },
@@ -210,28 +172,24 @@ describe('reasoningLevel=off', () => {
     }) as typeof fetch
 
     try {
-      const off = composition.agentModelRuntime.createAgentProvider({
+      const unset = composition.agentModelRuntime.createAgentProvider({
         provider: 'openrouter',
         apiKey: 'sk-test',
         baseURL: '',
-        reasoningLevel: 'off',
       })
-      await off(OpenRouterModelId).doGenerate(ChatCallOptions)
+      await unset(OpenRouterModelId).doGenerate(ChatCallOptions)
 
-      const deep = composition.agentModelRuntime.createAgentProvider({
+      const high = composition.agentModelRuntime.createAgentProvider({
         provider: 'openrouter',
         apiKey: 'sk-test',
         baseURL: '',
-        thinkingDepth: 'deep',
+        reasoningLevel: 'high',
       })
-      await deep(OpenRouterModelId).doGenerate(ChatCallOptions)
+      await high(OpenRouterModelId).doGenerate(ChatCallOptions)
     } finally {
       globalThis.fetch = originalFetch
     }
 
-    expect(bodies.map((body) => body.reasoning)).toEqual([
-      { enabled: false, exclude: true },
-      { effort: 'high' },
-    ])
+    expect(bodies.map((body) => body.reasoning)).toEqual([{ effort: 'medium' }, { effort: 'high' }])
   })
 })

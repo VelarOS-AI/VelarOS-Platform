@@ -23,11 +23,10 @@ class AnthropicModelAdapter extends ModelAdapter implements ModelProviderAdapter
 
     return (modelId) =>
       languageModelWrappers.withPromptCache(
-        languageModelWrappers.withThinkingDepth(
+        languageModelWrappers.withReasoning(
           anthropic(modelId),
           config.provider,
           modelId,
-          config.thinkingDepth,
           config.reasoningLevel
         )
       )

@@ -188,7 +188,6 @@ describe('Velar Cloud managed providers', () => {
       provider: 'velar-dev',
       apiKey: '',
       baseURL: '',
-      thinkingDepth: 'deep',
       reasoningLevel: 'ultra',
     })
     await velarDev(VelarDevModelId).doGenerate(ChatCallOptions)
@@ -206,7 +205,6 @@ describe('Velar Cloud managed providers', () => {
       provider: 'velaros',
       apiKey: '',
       baseURL: '',
-      thinkingDepth: 'deep',
       reasoningLevel: 'ultra',
     })
     await velaros('velaros/auto').doGenerate(ChatCallOptions)

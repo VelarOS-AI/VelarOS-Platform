@@ -7,13 +7,13 @@
 - kernel `ModelTurnDelta` 增加 `reasoning`（text）：供应商给的思考摘要增量，只供宿主展示，不进上下文，也不参与协议解码。
 - agent `ActRunEvent` 增加 `reasoning`（runId、text），跟在所属请求的 `turn` 事件之后。运行服务只把它放进出站队列、不写事件账（与 text / program 预览相同），`events()` 回放和重启后都没有它，宿主要留就自己存。包版本 7.3.0 → 7.4.0，按 additive 审核声明基线；宿主的穷尽事件匹配要加这一支。
 - model：AI SDK 驱动转发两路来源。一路是 SDK 解析出的思考分片（OpenAI Responses、Anthropic、Google）；另一路是 Chat Completions 原始分块里的 `reasoning_content` / `reasoning`（兼容网关、DeepSeek、OpenRouter、Velar），`@ai-sdk/openai` 的 chat 模型不解析这两个字段，所以驱动开了 `includeRawChunks` 自己取。同一条响应只认先到的那一路，不会重复；思考分段之间空一行；一条响应最多转发 20 万字符（`ModelTuning.stream.reasoningChars`），超出只停转发，响应照常接收。
-- 请求侧：各家本来就按思考力度请求摘要（OpenAI `reasoningSummary: 'auto'`、Anthropic summarized thinking、Google `includeThoughts`、OpenRouter / Velar 的 `reasoning`）；缺 `thinkingDepth` 时怎么发，见下一节。
+- 请求侧：各家本来就按思考力度请求摘要（OpenAI `reasoningSummary: 'auto'`、Anthropic summarized thinking、Google `includeThoughts`、OpenRouter / Velar 的 `reasoning`）。
 
 ## 宿主消费
 
 - 思考属于最近一个 `turn` 事件；协议被拒重发时有新的 `turn`，思考也跟着新的回合。被拒回合的思考由宿主决定撤不撤，Desktop 撤掉。
 - 思考不是正文：不能拼进接纳的正文，也不计入正文预览。翻译、折叠等展示功能归宿主。
-- 宿主解析模型时给 `thinkingDepth`（设置里的基线）和 `reasoningLevel`（这次选的力度）。只给力度时基线按 balanced 算，直连的供应商（OpenAI、Anthropic、Google）照样发力度和摘要请求，与 Velar 路由层同一口径；两个都没给才不发任何思考参数。2026-09-25 之前直连这条路缺 `thinkingDepth` 就一个参数都不发，力度与摘要请求都到不了模型。
+- 思考只有一个控制：`reasoningLevel`，low / medium / high / ultra 四档，就是输入框里的「思考深度」滑块；没给按 medium（`DefaultReasoningLevel`）。直连供应商、OpenRouter、Velar 三条路同一口径。2026-09-25 删掉了旧的三档 `thinkingDepth`（fast / balanced / deep）和 off 档；此前直连这条路缺 `thinkingDepth` 就一个参数都不发，力度与摘要请求都到不了模型。
 
 ## 已知限制
 

@@ -10,19 +10,16 @@ import { injectVelarThinkingRouting } from '../src/utils/wire/reasoning.ts'
 
 describe('Velar thinking routing', () => {
   test.each([
-    ['fast', undefined, { effort: 'low' }],
-    ['balanced', undefined, { effort: 'medium' }],
-    ['deep', undefined, { effort: 'high' }],
-    ['balanced', 'off', { enabled: false, exclude: true }],
-    ['balanced', 'low', { effort: 'low' }],
-    ['balanced', 'medium', { effort: 'medium' }],
-    ['balanced', 'high', { effort: 'high' }],
+    // 没给力度按 medium 发，与输入框的默认档一致。
+    [undefined, { effort: 'medium' }],
+    ['low', { effort: 'low' }],
+    ['medium', { effort: 'medium' }],
+    ['high', { effort: 'high' }],
     // 请求体没带 max_tokens 时 ultra 走 ultraFloor；带了就按 ultraRatio 换算（见 reasoning-level-ultra）。
-    ['balanced', 'ultra', { effort: 'high', max_tokens: 16_000 }],
-  ])('maps depth=%s level=%s', (depth, level, expected) => {
+    ['ultra', { effort: 'high', max_tokens: 16_000 }],
+  ])('maps level=%s', (level, expected) => {
     const result = injectVelarThinkingRouting(
       { method: 'POST', body: JSON.stringify({ model: 'velaros/auto', messages: [] }) },
-      depth,
       level
     )
     const body = JSON.parse(result.body)

@@ -7,7 +7,7 @@ import type {
 
 import type {
   ModelCallProviderOptions,
-  ThinkingDepthProviderOptionsResolver,
+  ReasoningProviderOptionsResolver,
 } from '../../types/adapters'
 import { mergeProviderOptions } from '../../utils/wire/reasoning'
 
@@ -18,12 +18,12 @@ import { mergeProviderOptions } from '../../utils/wire/reasoning'
  * 参数是逐轮**算**而不是构造时算死的：ultra 档的 thinking budget 要按这次调用的
  * `maxOutputTokens` 换算，而输出上限只有走到 `doGenerate` / `doStream` 才知道。
  */
-export interface ThinkingDepthLanguageModelApi extends LanguageModelV3 {}
+export interface ReasoningLanguageModelApi extends LanguageModelV3 {}
 
-export class ThinkingDepthLanguageModel implements ThinkingDepthLanguageModelApi {
+export class ReasoningLanguageModel implements ReasoningLanguageModelApi {
   constructor(
     private readonly model: LanguageModelV3,
-    private readonly resolveProviderOptions: ThinkingDepthProviderOptionsResolver
+    private readonly resolveProviderOptions: ReasoningProviderOptionsResolver
   ) {}
 
   public get specificationVersion(): 'v3' {

@@ -27,26 +27,26 @@ export const ModelTuning = Object.freeze({
     /** 已求值 adapter 的缓存条数，超了从最旧的开始丢。 */
     evaluationCacheEntries: 16,
   }),
-  /** 思考深度与思考力度到各家 reasoning 参数的换算。 */
+  /** 思考力度到各家 reasoning 参数的换算。 */
   reasoning: Object.freeze({
-    /** fast 档在没有输出预算可换算时的 thinking budget，token。 */
-    budgetFast: 2048,
-    /** balanced 档在没有输出预算可换算时的 thinking budget，token。 */
-    budgetBalanced: 4096,
-    /** deep 档在没有输出预算可换算时的 thinking budget，token。 */
-    budgetDeep: 8192,
+    /** low 档（off 同）在没有输出预算可换算时的 thinking budget，token。 */
+    budgetLow: 2048,
+    /** medium 档在没有输出预算可换算时的 thinking budget，token。 */
+    budgetMedium: 4096,
+    /** high 档在没有输出预算可换算时的 thinking budget，token。 */
+    budgetHigh: 8192,
     /** 按比例换算后的 thinking budget 下限，token。 */
     budgetMin: 1024,
-    /** 非 deep 档按比例换算后的 thinking budget 上限，token。 */
+    /** low、medium 档按比例换算后的 thinking budget 上限，token。 */
     budgetMax: 8192,
-    /** deep 档按比例换算后的 thinking budget 上限，token。 */
-    budgetMaxDeep: 12_000,
-    /** 非 ultra 档相对 maxOutputTokens 的预算系数基线，再乘各档系数。 */
+    /** high 档按比例换算后的 thinking budget 上限，token。 */
+    budgetMaxHigh: 12_000,
+    /** 相对 maxOutputTokens 的预算系数基线，再乘各档系数。 */
     budgetRatio: 0.35,
-    /** fast 档在基线之上的预算系数。 */
-    fastMultiplier: 0.5,
-    /** deep 档在基线之上的预算系数。 */
-    deepMultiplier: 1.5,
+    /** low 档在基线之上的预算系数。 */
+    lowMultiplier: 0.5,
+    /** high 档在基线之上的预算系数。 */
+    highMultiplier: 1.5,
     /** ultra 档没有显式输出预算时的 thinking budget 下限，token。 */
     ultraFloor: 16_000,
     /** ultra 档 thinking budget 的硬上限，token。 */

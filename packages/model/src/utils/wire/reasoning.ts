@@ -8,8 +8,9 @@ import {
   optionalWhen,
 } from '@velaros-ai/core'
 
+import { DefaultReasoningLevel } from '../../contract/constants'
 import type { ReasoningEffort } from '../../types/adapters'
-import type { ChatProviderId, ReasoningLevel, ThinkingDepth } from '../../types/model'
+import type { ChatProviderId, ReasoningLevel } from '../../types/model'
 import { ModelTuning } from '../tuning'
 
 /**
@@ -23,66 +24,20 @@ function hasUsableOutputBudget(maxOutputTokens?: number): maxOutputTokens is num
   return isFiniteNumber(maxOutputTokens) && maxOutputTokens !== 0
 }
 
-/** 把任意输入收窄成三档思考深度，认不出来的按 balanced。 */
-export function requireThinkingDepth(depth?: LooseOptional<ThinkingDepth>): ThinkingDepth {
-  return depth === 'fast' || depth === 'balanced' || depth === 'deep' ? depth : 'balanced'
-}
-
-/** 五档思考力度落到三档思考深度上。 */
-function reasoningLevelToThinkingDepth(level: ReasoningLevel): ThinkingDepth {
+/** reasoning 力度。ultra 与 high 同为 high effort（力度轴上限），差异体现在 budget。 */
+export function resolveReasoningEffort(level: ReasoningLevel): ReasoningEffort {
   switch (level) {
-    case 'off':
-    case 'low':
-      return 'fast'
-    case 'high':
-    case 'ultra':
-      return 'deep'
-    default:
-      return 'balanced'
-  }
-}
-
-/** 三档思考深度对应的 reasoning 力度。 */
-export function resolveThinkingDepthEffort(depth?: LooseOptional<ThinkingDepth>): ReasoningEffort {
-  switch (requireThinkingDepth(depth)) {
-    case 'fast':
-      return 'low'
-    case 'deep':
-      return 'high'
-    default:
-      return 'medium'
-  }
-}
-
-/** off 档：本次请求完全不发 reasoning。 */
-export function isReasoningDisabledByLevel(level?: LooseOptional<ReasoningLevel>): boolean {
-  return level === 'off'
-}
-
-/** reasoning 力度：有 5 档 level 时优先按 level，否则回落到 3 档 thinkingDepth。ultra 与 high 同为 high effort（力度轴上限），差异体现在 budget。 */
-export function resolveReasoningEffort(
-  level?: LooseOptional<ReasoningLevel>,
-  depth?: LooseOptional<ThinkingDepth>
-): ReasoningEffort {
-  switch (level) {
-    case 'off':
     case 'low':
       return 'low'
     case 'medium':
       return 'medium'
-    case 'high':
-    case 'ultra':
-      return 'high'
     default:
-      return resolveThinkingDepthEffort(depth)
+      return 'high'
   }
 }
 
 /**
- * thinking budget：`depth` 定基线，`ultra` 在基线之上再抬一档。
- *
- * 两个轴不合并：ultra 刻意**不**把 `depth` 换成 deep，它只负责把预算往上顶；off/low/medium/high
- * 则是用户对 `depth` 的显式改写，仍然换算到三档深度上。
+ * thinking budget：low、medium、high 各有一档，ultra 在 high 之上再抬一档。
  *
  * 抬高的口径：拿不到本次请求的 `maxOutputTokens` 时按 `ultraFloor` 走，拿得到就按 `ultraRatio`
  * 换算再钳到 `ultraCeil`。比例小于 1 顺带保证了「预算严格小于输出上限」，这是 Anthropic
@@ -90,12 +45,10 @@ export function resolveReasoningEffort(
  * （Gemini 2.5 Flash 24 576 / Pro 32 768，Claude 一系被匹配到的最小输出上限 32 000）。
  */
 export function resolveReasoningBudget(
-  maxOutputTokens?: number,
-  level?: LooseOptional<ReasoningLevel>,
-  depth?: LooseOptional<ThinkingDepth>
+  maxOutputTokens: Optional<number>,
+  level: ReasoningLevel
 ): number {
-  const effectiveDepth = level && level !== 'ultra' ? reasoningLevelToThinkingDepth(level) : depth
-  const base = resolveThinkingBudget(maxOutputTokens, effectiveDepth)
+  const base = resolveTierBudget(maxOutputTokens, level === 'ultra' ? 'high' : level)
   if (level !== 'ultra') return base
 
   const boosted = hasUsableOutputBudget(maxOutputTokens)
@@ -107,34 +60,30 @@ export function resolveReasoningBudget(
   return Math.max(base, boosted)
 }
 
-/** 三档思考深度对应的 thinking budget；没有输出预算可换算时走各档常量。 */
-export function resolveThinkingBudget(
-  maxOutputTokens?: number,
-  depth?: LooseOptional<ThinkingDepth>
+/** low、medium、high 三档的 thinking budget；没有输出预算可换算时走各档常量。 */
+function resolveTierBudget(
+  maxOutputTokens: Optional<number>,
+  tier: Exclude<ReasoningLevel, 'ultra'>
 ): number {
-  const normalizedDepth = requireThinkingDepth(depth)
-
   if (!hasUsableOutputBudget(maxOutputTokens)) {
-    switch (normalizedDepth) {
-      case 'fast':
-        return ModelTuning.reasoning.budgetFast
-      case 'deep':
-        return ModelTuning.reasoning.budgetDeep
+    switch (tier) {
+      case 'low':
+        return ModelTuning.reasoning.budgetLow
+      case 'high':
+        return ModelTuning.reasoning.budgetHigh
       default:
-        return ModelTuning.reasoning.budgetBalanced
+        return ModelTuning.reasoning.budgetMedium
     }
   }
 
   const multiplier =
-    normalizedDepth === 'fast'
-      ? ModelTuning.reasoning.fastMultiplier
-      : normalizedDepth === 'deep'
-        ? ModelTuning.reasoning.deepMultiplier
+    tier === 'low'
+      ? ModelTuning.reasoning.lowMultiplier
+      : tier === 'high'
+        ? ModelTuning.reasoning.highMultiplier
         : 1
   const maxBudget =
-    normalizedDepth === 'deep'
-      ? ModelTuning.reasoning.budgetMaxDeep
-      : ModelTuning.reasoning.budgetMax
+    tier === 'high' ? ModelTuning.reasoning.budgetMaxHigh : ModelTuning.reasoning.budgetMax
 
   return Math.max(
     ModelTuning.reasoning.budgetMin,
@@ -151,100 +100,61 @@ export function resolveThinkingBudget(
  * 路由层的 `max_tokens` 是整轮输出的总额，`reasoning.max_tokens` 必须严格小于它（Anthropic 的硬约束，
  * 由路由原样透传）。低于 `budgetMin` 的数各家都会拒，所以钳不进 `[budgetMin, max_tokens)` 时宁可少发。
  */
-function resolveOpenRouterUltraBudget(
-  maxOutputTokens?: number,
-  depth?: LooseOptional<ThinkingDepth>
-): Nullable<number> {
-  const budget = resolveReasoningBudget(maxOutputTokens, 'ultra', depth)
+function resolveOpenRouterUltraBudget(maxOutputTokens?: number): Nullable<number> {
+  const budget = resolveReasoningBudget(maxOutputTokens, 'ultra')
   if (!hasUsableOutputBudget(maxOutputTokens)) return budget
 
   return budget < maxOutputTokens ? budget : null
 }
 
 /**
- * OpenRouter 与 Velar 路由层的 reasoning 开关：off 显式关，ultra 在力度之外再发 token 预算，其余只给力度。
+ * OpenRouter 与 Velar 路由层的 reasoning 参数：ultra 在力度之外再发 token 预算，其余只给力度。
  *
  * `maxOutputTokens` 是本次请求体里的 `max_tokens`，给了就按它换算 ultra 的预算，这样 ultra 在这一层与在
  * 内置适配器上走的是同一套换算（`resolveReasoningBudget`）。调用方已经写死的字段一律优先，不覆盖显式意图。
  */
 export function mergeOpenRouterReasoning(
   existing: unknown,
-  depth?: LooseOptional<ThinkingDepth>,
-  level?: LooseOptional<ReasoningLevel>,
+  level: ReasoningLevel,
   maxOutputTokens?: number
 ): Record<string, unknown> {
   const base = isPlainObject(existing) ? existing : {}
-
-  // off：显式关闭 reasoning（即便上游漏掉 enable 门控也兜底）。
-  if (level === 'off') return { ...base, enabled: false, exclude: true }
-
-  const effort = isString(base.effort) ? base.effort : resolveReasoningEffort(level, depth)
+  const effort = isString(base.effort) ? base.effort : resolveReasoningEffort(level)
   if (level !== 'ultra') return { ...base, effort }
 
   // ultra：高 effort 之外再抬高 token 预算，使其在支持 max_tokens 的 provider 上区别于 high。
   const budget = isNumber(base.max_tokens)
     ? base.max_tokens
-    : resolveOpenRouterUltraBudget(maxOutputTokens, depth)
+    : resolveOpenRouterUltraBudget(maxOutputTokens)
 
   return isNumber(budget) ? { ...base, effort, max_tokens: budget } : { ...base, effort }
 }
 
 /**
- * off 档各家的写法（查各家 API 语义后逐家定，不是一刀切）：
- *
- * - **anthropic 必须显式发关闭**：省略 `thinking` 不等于不思考——新一代模型的自适应思考是默认开的，
- *   `claude-*-latest` 这类别名更可能指到默认开的那一代。厂商的关闭写法是 `thinking: { type: 'disabled' }`，
- *   3.7/4.x 都接受；5 一代只在 effort ≤ high 时接受，本档刻意不发 `effort`（服务端默认就是 high），所以也安全。
- *   **加模型匹配器时要一起查这条**：有的型号（思考永远开的那一代）会直接拒绝 `disabled`，只能省略 `thinking`；
- *   现在 `matchesClaudeReasoningModel` 匹配不到它们，所以这里没有分支。
- * - **openai / google 一个推理参数都不发**：两家都没有覆盖本包全部推理模型的通用关闭写法
- *   （`reasoning_effort: 'none'` 要 GPT-5.1 起才支持，发给 o3/o4 会被拒；`thinkingBudget: 0` 只有
- *   Gemini 2.5 Flash 一系接受，2.5 Pro 有下限、Gemini 3 改用 `thinkingLevel` 且没有关闭档）。
- *   发错写法是整条请求被拒，比"这一档少省一点思考"严重得多，所以退回"不发"，由服务端默认值兜底。
- * - **OpenRouter 与 Velar 不走这里**：它们在请求体里发 `reasoning: { enabled: false, exclude: true }`
- *   （见 `mergeOpenRouterReasoning`），那是路由层自己的开关，与上游模型默认值无关。
- */
-function createReasoningDisabledProviderOptions(
-  provider: ChatProviderId,
-  model: string
-): Nullable<Record<string, unknown>> {
-  if (provider !== 'anthropic' || !matchesClaudeReasoningModel(model)) return null
-
-  return { anthropic: { thinking: { type: 'disabled' } } }
-}
-
-/**
  * 按 provider 与具体模型算出这一轮要附加的 reasoning providerOptions；不需要时返回 null。
  *
- * `level` 与 `depth` 两个轴都要往下发：`depth` 定基线，`level` 是用户在界面上的显式选择。只给了 `level`
- * 时基线按 balanced 算，与 Velar 路由层（`injectVelarThinkingRouting`）同一口径；两个都没给才算宿主
- * 没有偏好，一个参数都不发，由服务端默认值兜底。
- * `maxOutputTokens` 是本次调用的输出上限，只有逐轮包装层（`ThinkingDepthLanguageModel`）拿得到；
+ * `level` 是用户在输入框选的思考力度；没给时按 `DefaultReasoningLevel`（medium）发。
+ * `maxOutputTokens` 是本次调用的输出上限，只有逐轮包装层（`ReasoningLanguageModel`）拿得到；
  * 解析期先按缺省算一版，包装层每轮再用真实值重算，两处走的是同一套换算。
  *
  * **ultra 在哪几家能看出来**：Anthropic 非自适应与 Google 发的是数字预算，ultra 严格高于 high；
  * OpenAI 与自适应 Claude 那一代只有 `effort` 枚举（low/medium/high），没有数字预算可抬，ultra 与 high
  * 发出去的字节必然相同——这是 provider 能力所限，不为了"看起来有区别"硬造一个厂商不认的值。
  */
-export function createThinkingDepthProviderOptions(
+export function createReasoningProviderOptions(
   provider: ChatProviderId,
   model: string,
-  depth?: LooseOptional<ThinkingDepth>,
   level?: LooseOptional<ReasoningLevel>,
   maxOutputTokens?: number
 ): Nullable<Record<string, unknown>> {
-  // off 先判：这一档与 thinkingDepth 无关，缺 depth 时也要生效。
-  if (isReasoningDisabledByLevel(level))
-    return createReasoningDisabledProviderOptions(provider, model)
-  if (!depth && !level) return null
-  const baseline = requireThinkingDepth(depth)
+  const effective = level ?? DefaultReasoningLevel
 
   switch (provider) {
     case 'openai':
       return matchesOpenAiReasoningModel(model)
         ? {
             openai: {
-              reasoningEffort: resolveReasoningEffort(level, baseline),
+              reasoningEffort: resolveReasoningEffort(effective),
               reasoningSummary: 'auto',
             },
           }
@@ -252,7 +162,7 @@ export function createThinkingDepthProviderOptions(
     case 'anthropic':
       return matchesClaudeReasoningModel(model)
         ? {
-            anthropic: createAnthropicThinkingOptions(model, baseline, level, maxOutputTokens),
+            anthropic: createAnthropicThinkingOptions(model, effective, maxOutputTokens),
           }
         : null
     case 'google':
@@ -261,7 +171,7 @@ export function createThinkingDepthProviderOptions(
             google: {
               thinkingConfig: {
                 includeThoughts: true,
-                thinkingBudget: resolveReasoningBudget(maxOutputTokens, level, baseline),
+                thinkingBudget: resolveReasoningBudget(maxOutputTokens, effective),
               },
             },
           }
@@ -299,8 +209,7 @@ export function mergeProviderOptions(
  */
 function createAnthropicThinkingOptions(
   model: string,
-  depth: ThinkingDepth,
-  level?: LooseOptional<ReasoningLevel>,
+  level: ReasoningLevel,
   maxOutputTokens?: number
 ): Record<string, unknown> {
   if (matchesAdaptiveClaudeThinkingModel(model))
@@ -310,14 +219,14 @@ function createAnthropicThinkingOptions(
         type: 'adaptive',
         display: 'summarized',
       },
-      effort: resolveReasoningEffort(level, depth),
+      effort: resolveReasoningEffort(level),
     }
 
   return {
     sendReasoning: true,
     thinking: {
       type: 'enabled',
-      budgetTokens: resolveReasoningBudget(maxOutputTokens, level, depth),
+      budgetTokens: resolveReasoningBudget(maxOutputTokens, level),
     },
   }
 }
@@ -349,13 +258,14 @@ function matchesGoogleReasoningModel(model: string): boolean {
   return /gemini-(?:2\.5|3(?:[.-]|$))/i.test(model)
 }
 
-/** 把这一轮的推理档位注进 Velar 路由的请求体；注不进去就保留原请求，宁可这一轮不带 reasoning。 */
+/**
+ * 把这一轮的思考力度注进 Velar 路由的请求体（没给按 `DefaultReasoningLevel`）；注不进去就保留原请求，
+ * 宁可这一轮不带 reasoning。
+ */
 export function injectVelarThinkingRouting(
   init: Parameters<typeof fetch>[1],
-  thinkingDepth?: LooseOptional<ThinkingDepth>,
   reasoningLevel?: LooseOptional<ReasoningLevel>
 ): Parameters<typeof fetch>[1] {
-  if (!thinkingDepth && !reasoningLevel) return init
   if (!isString(init?.body)) return init
 
   try {
@@ -368,8 +278,7 @@ export function injectVelarThinkingRouting(
         ...body,
         reasoning: mergeOpenRouterReasoning(
           body.reasoning,
-          thinkingDepth,
-          reasoningLevel,
+          reasoningLevel ?? DefaultReasoningLevel,
           // 请求体里的输出上限就是这一轮真实的 maxOutputTokens，拿它换算 ultra 的预算。
           optionalWhen(isNumber, body.max_tokens)
         ),
