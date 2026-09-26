@@ -24,7 +24,7 @@ export interface ScriptOutputView {
  * @AgentView
  * 这一块输出的用途与展示：key 是本次执行里唯一的稳定名字（字母或数字开头，只用字母、数字与 _ . -，最多 96 个字符），整理工具凭它调整展示；
  * purpose 说明持续观察它的原因（最多 1000 个字符）；priority 是 high、normal 或 low，只影响预算分配；
- * required 为 true 表示这块原值是做决定必需的，必须带 key，放不下时报告缺口并挡住外部写入，只用于少量关键事实。
+ * required 为 true 表示这块原值是做决定必需的，必须带 key，放不下时报告缺口、收尾要等它补齐，只用于少量关键事实。
  */
 export interface ScriptOutputOptions {
   readonly key?: string

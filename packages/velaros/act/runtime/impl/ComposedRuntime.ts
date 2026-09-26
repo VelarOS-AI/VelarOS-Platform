@@ -663,9 +663,6 @@ class ComposedRuntime implements VelarosRuntime {
           await this.sessions
             .get(call.invocation.sessionId)!
             .view.assertCanWrite(call.invocation.executionId, call.signal)
-          await this.programAccess
-            .get(call.invocation.sessionId)!
-            .validateDecision(call.invocation.executionId, call.signal)
         }
         call.signal.throwIfAborted()
       } catch (error) {

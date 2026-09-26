@@ -105,8 +105,6 @@ import { standardModules } from './StandardModules.js'
 export interface RuntimeSessionAccess extends ContextCandidateValidator {
   /** 模型与宿主共用的会话目标。 */
   readonly goal: SessionGoalApi
-  /** 写入闸门内核对本执行实际看到的资源依据。 */
-  validateDecision(executionId: string, signal: AbortSignal): Promise<void>
   /** 父运行的取消权，独立于单次脚本调用。 */
   runSignal(): AbortSignal
   /** 当前会话的统一工作区。 */
@@ -276,8 +274,6 @@ export interface VelarosSession {
 export class RuntimeSession implements VelarosSession {
   public readonly context: ContextRuntime
   public readonly view: ContextViewApi
-  private decision?: ScriptDecisionBasis
-  private readonly decisions = new Map<string, ScriptDecisionBasis>()
   private readonly active = new Map<
     string,
     { pending: Promise<CodeSurfaceOutcome>; controller: AbortController }
@@ -395,7 +391,6 @@ export class RuntimeSession implements VelarosSession {
         if (!checked.okToSend)
           throw new AppError('CONTEXT_BUDGET', '整理候选仍超过实际模型窗口，补丁未发布')
       },
-      validateDecision: (executionId, signal) => this.validateDecision(executionId, signal),
       context: this.context,
       runSignal: () => {
         if (!this.runController) throw new AppError('UNAVAILABLE', '需要活动模型运行')
@@ -671,7 +666,6 @@ export class RuntimeSession implements VelarosSession {
     if (!isString(input) && input.task === 'new' && this.dependencies.agents?.pending(this.id))
       throw new AppError('CONFLICT', '子任务仍在运行，不能切换逻辑任务')
     await this.recoverInterrupted(signal)
-    this.decision = undefined
     this.modelRunning = true
     this.runDeadline = Date.now() + this.dependencies.limits.timeoutMs
     this.runController = new AbortController()
@@ -1150,42 +1144,6 @@ export class RuntimeSession implements VelarosSession {
     }
   }
 
-  private async validateDecision(executionId: string, signal: AbortSignal): Promise<void> {
-    const basis = this.decisions.get(executionId)
-    if (!basis) return
-    if (basis.missing?.length)
-      throw AppError.withFields(
-        'CONTEXT_REQUIRED',
-        '决策必需的观察正文尚未完整投递，请先修复输出范围或预算',
-        { effect: 'none' }
-      )
-    let reads = [...basis.reads]
-    // 同一程序显式重新读取或自己的写回版本可以推进该资源的前提。
-    for (const record of await this.dependencies.journal.list(this.id, executionId))
-      if (record.receipt?.outcome === 'succeeded')
-        for (const stamp of record.receipt.reads ?? []) {
-          reads = reads.filter(
-            (old) =>
-              JSON.stringify([old.binding, old.resourceId]) !==
-              JSON.stringify([stamp.binding, stamp.resourceId])
-          )
-          reads.push(stamp)
-        }
-    const validation = await this.validateReads(reads, signal)
-    if (validation.status === 'stale')
-      throw AppError.withFields(
-        'STALE_OBSERVATION',
-        '本次行动依据的观察资源已经变化，当前写入尚未派发；请重新观察',
-        { effect: 'none' }
-      )
-    if (validation.status === 'unverified')
-      throw AppError.withFields(
-        'OBSERVATION_UNVERIFIABLE',
-        '原本可验证的观察资源现在无法核验，当前写入尚未派发',
-        { effect: 'none' }
-      )
-  }
-
   private async prepareObservation(signal: AbortSignal): Promise<void> {
     if (this.backgroundFailure) throw this.backgroundFailure
     await this.dependencies.tool?.refresh(signal)
@@ -1205,7 +1163,6 @@ export class RuntimeSession implements VelarosSession {
     if (material) {
       const frame = JSON.parse(material.text)
       this.dependencies.tool?.acknowledge?.(frame.partitions.runtime.modelTool)
-      this.decision = frame.partitions.runtime.decision
       this.expectedObservation = toNullable(frame.partitions.observation.sourceRef)
       if (frame.frameId && request.mode !== 'maintenance') {
         await this.programs.consume(frame.frameId, signal)
@@ -1223,8 +1180,7 @@ export class RuntimeSession implements VelarosSession {
     turns?: ScriptRetention,
     executionId: string = crypto.randomUUID(),
     parentRef?: string,
-    basis?: LooseOptional<ModelView>,
-    decision: Optional<ScriptDecisionBasis> = this.decision
+    basis?: LooseOptional<ModelView>
   ): Promise<CodeSurfaceOutcome> {
     if (this.closed || this.active.has(executionId))
       return Promise.reject(new AppError('CLOSED', '会话已关闭或执行身份已占用'))
@@ -1241,8 +1197,7 @@ export class RuntimeSession implements VelarosSession {
         'sourceRef' in program ? { sessionId: this.id, id: program.sourceRef } : undefined,
         executionId,
         parentRef,
-        basis,
-        decision
+        basis
       )
     )
     this.active.set(executionId, { pending, controller })
@@ -1346,7 +1301,6 @@ export class RuntimeSession implements VelarosSession {
           ? await this.prepareProgram(input.observe, control, signal, false)
           : undefined
       const basis = toNullable((await this.view.inspect())?.view)
-      const decision = this.decision
       const executions: PreparedScript[] = []
       for (let index = 0; index < input.executions.length; index++) {
         const { retainTurns: _retain, ...program } = input.executions[index].program
@@ -1416,8 +1370,7 @@ export class RuntimeSession implements VelarosSession {
               input.executions[index].program.retainTurns ?? ScriptLeaseLimits.defaultTurns,
               executionId,
               item.receipt.parentRef,
-              basis,
-              decision
+              basis
             )) as ScriptExecutionReceipt
             results[index] = outcome
             const { status, failure } = executionOutcome(
@@ -1570,8 +1523,7 @@ export class RuntimeSession implements VelarosSession {
     savedSource?: ContextRef,
     identity?: string,
     parentRef?: string,
-    basis?: LooseOptional<ModelView>,
-    decision?: ScriptDecisionBasis
+    basis?: LooseOptional<ModelView>
   ): Promise<CodeSurfaceOutcome> {
     if (signal.aborted) throw new AppError('CANCELLED', '程序已取消')
     const executionId = identity ?? crypto.randomUUID()
@@ -1583,7 +1535,6 @@ export class RuntimeSession implements VelarosSession {
         )
     if (mode !== 'observe') {
       await this.view?.startStep(executionId, signal, this.modelRunning, basis)
-      if (decision) this.decisions.set(executionId, decision)
     }
     await this.context.append(
       {
@@ -1724,7 +1675,6 @@ export class RuntimeSession implements VelarosSession {
           )
       }
       if (turns) await this.programs.add(output.ref, source.ref, executionId, turns)
-      this.decisions.delete(executionId)
       if (this.view && mode !== 'observe') {
         const records = await this.dependencies.journal.list(this.id, executionId)
         const feedback: ContextFeedback[] = records.map((record) => ({

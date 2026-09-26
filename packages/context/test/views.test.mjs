@@ -457,7 +457,7 @@ test('weak sources cannot claim snapshot consistency and a hung verifier remains
   assert.equal((await g.view.inspect()).status, 'view-ready')
 })
 
-test('concurrent steps keep their own decision evidence and cannot finish each other', async (t) => {
+test('concurrent steps keep their own identities and cannot finish each other', async (t) => {
   const f = await fixture(t)
   const original = await observe(f)
   await f.view.startStep('a', undefined, true, original)
@@ -465,7 +465,8 @@ test('concurrent steps keep their own decision evidence and cannot finish each o
   f.data.revision = 'v2'
   const next = await f.view.build({ maxChars: 12000 })
   await f.view.startStep('b', undefined, true, next)
-  await assert.rejects(() => f.view.assertCanWrite('a'), { code: 'STALE_VIEW' })
+  // 依据变了不挡写入：资源是不是变了由各领域写入时自己的版本核对管
+  await f.view.assertCanWrite('a')
   await f.view.assertCanWrite('b')
   await assert.rejects(() => f.view.putArtifact('ambiguous'), { code: 'LEASE_LOST' })
   await f.view.settle([

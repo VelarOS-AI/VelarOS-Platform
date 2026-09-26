@@ -84,7 +84,7 @@ export interface ContextViewApi {
   build(options: ContextBuildOptions, signal?: AbortSignal): Promise<ModelView>
   /** 发送前复核任务、范围和资源版本。 */
   validate(view: ModelView, signal?: AbortSignal): Promise<boolean>
-  /** 世界写入前核对当前执行身份与先前证据。 */
+  /** 世界写入前核对当前执行身份；资源是不是变了由各领域写入时自己的版本核对管。 */
   assertCanWrite(executionId: string, signal?: AbortSignal): Promise<void>
   /** 在模型或后台任务等待时续期当前所有权，失去所有权则失败。 */
   renew(signal?: AbortSignal): Promise<void>
@@ -498,11 +498,6 @@ export class ContextViewSession implements ContextViewApi {
     signal.throwIfAborted()
     const task = this.executing(toOptional(await this.inspect()), executionId)
     if (task.executionId !== executionId) throw contextFailure('LEASE_LOST', '操作不属于当前执行')
-    const basis = task.activeExecutions?.[executionId]?.view ?? task.view
-    if (basis?.gaps.some((gap) => gap.required))
-      throw contextFailure('REQUIRED_EVIDENCE_MISSING', '先补齐所需证据，再执行修改')
-    if (basis && !(await this.builder.validate(basis, signal)))
-      throw contextFailure('STALE_VIEW', '决策依赖的资源已经变化，请重新观察')
   }
 
   public async renew(signal?: AbortSignal): Promise<void> {

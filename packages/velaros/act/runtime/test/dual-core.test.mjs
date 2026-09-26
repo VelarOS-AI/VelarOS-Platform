@@ -250,7 +250,7 @@ test('Phase 2: main model receives the compiled v2 view with independent verific
   assert(lastRequest.compiledPrompt.includes('runtime-view'))
 })
 
-test('A06: changed decision evidence blocks a stale write with no new effects', async (t) => {
+test('A06: changed decision evidence does not block a write made with the fresh revision; a stale revision is still refused', async (t) => {
   const f = await fixture(t)
   const s = await taskSession(f)
   await s.view.begin((await s.context.inspect()).protected[0])
@@ -261,14 +261,18 @@ test('A06: changed decision evidence blocks a stale write with no new effects', 
   await s.view.end()
   await writeFile(join(f.root, 'a.txt'), 'external newer content\n')
   const result = await s.execute({
-    source: `import {read,write} from 'test:project';const fresh=await read();await write({revision:fresh.revision,text:'should not overwrite'});`,
+    source: `import {read,write} from 'test:project';const fresh=await read();await write({revision:fresh.revision,text:'written with the fresh revision'});`,
   })
-  assert(result.result?.failed)
-  assert.equal(f.writes, 0)
-  assert.equal(await readFile(join(f.root, 'a.txt'), 'utf8'), 'external newer content\n')
-  assert(
-    (await s.view.inspect()).mandatory.some((x) => x.code === 'STALE_VIEW' && x.effect === 'none')
-  )
+  assert(!result.result?.failed, JSON.stringify(result.result))
+  assert.equal(f.writes, 1)
+  assert.equal(await readFile(join(f.root, 'a.txt'), 'utf8'), 'written with the fresh revision')
+  // 拿旧版本写由领域自己的版本核对拒绝，一处都不写
+  const stale = await s.execute({
+    source: `import {write} from 'test:project';await write({revision:'stale-revision',text:'should not overwrite'});`,
+  })
+  assert(stale.result?.failed)
+  assert.equal(f.writes, 1)
+  assert.equal(await readFile(join(f.root, 'a.txt'), 'utf8'), 'written with the fresh revision')
 })
 
 test('A14/A24: caught errors and partial progress remain in the next view without ViewIntent', async (t) => {

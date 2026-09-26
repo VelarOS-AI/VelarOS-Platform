@@ -76,7 +76,7 @@ async function submit(session) {
   return state
 }
 
-test('INV-24 changed observation blocks a world write; next normal observation repairs the decision', async (t) => {
+test('INV-24 a changed observation does not block a world write; the next frame carries the fresh version', async (t) => {
   const world = { value: 1, revision: 1, writes: 0 }
   let calls = 0
   const f = await setup(t, world, async function* (request) {
@@ -86,36 +86,18 @@ test('INV-24 changed observation blocks a world write; next normal observation r
     if (calls === 1) {
       world.value = 2
       world.revision++
-    }
-    if (calls === 2) {
-      assert.equal(world.writes, 0)
-      assert.match(request.compiledPrompt, /STALE_OBSERVATION/)
-    }
-    if (calls <= 2) {
       yield turn(request, {
         execute: { source: "import {write} from 'test:world';await write(3);" },
       })
       yield { type: 'finish', reason: 'stop' }
-    } else yield* done(request)
+    } else {
+      assert.equal(world.writes, 1)
+      assert.equal(frame.partitions.runtime.decision.reads[0].version, String(world.revision))
+      yield* done(request)
+    }
   })
   assert.equal(await submit(f.session), 'completed')
   assert.equal(world.writes, 1)
-  assert.equal(world.value, 3)
-})
-
-test('same script advances a resource precondition using its own authoritative write receipts', async (t) => {
-  const world = { value: 1, revision: 1, writes: 0 }
-  let calls = 0
-  const f = await setup(t, world, async function* (request) {
-    if (++calls === 1) {
-      yield turn(request, {
-        execute: { source: "import {write} from 'test:world';await write(2);await write(3);" },
-      })
-      yield { type: 'finish', reason: 'stop' }
-    } else yield* done(request)
-  })
-  assert.equal(await submit(f.session), 'completed')
-  assert.equal(world.writes, 2)
   assert.equal(world.value, 3)
 })
 
@@ -399,7 +381,7 @@ test('a reopened runtime keeps read authorization for modules the session still 
   assert.equal(events.at(-1).status, 'completed')
 })
 
-test('real project versions detect external file changes and own edits advance the decision basis', async (t) => {
+test('real project versions: an external file change does not block writes and own edits keep the basis current', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'act-version-'))
   await writeFile(join(root, 'a.txt'), 'one\n')
   const projectKernel = await createProjectKernel({ root })
@@ -419,8 +401,8 @@ test('real project versions detect external file changes and own edits advance t
       calls++
       const frame = JSON.parse(request.materials[0].text)
       const reads = frame.partitions.runtime.decision.reads
-      assert.equal(reads.length, 1)
-      assert.equal(reads[0].resourceId, 'file:a.txt')
+      // 观察读的 a.txt 一直在依据里；模型自己建的文件随它的执行回执进来
+      assert(reads.some((stamp) => stamp.resourceId === 'file:a.txt'))
       if (calls === 1) {
         await writeFile(join(root, 'a.txt'), 'external\n')
         yield turn(request, {
@@ -431,8 +413,7 @@ test('real project versions detect external file changes and own edits advance t
         })
         yield { type: 'finish', reason: 'stop' }
       } else if (calls === 2) {
-        assert.match(request.compiledPrompt, /STALE_OBSERVATION/)
-        await assert.rejects(readFile(join(root, 'out.txt')), { code: 'ENOENT' })
+        assert.equal(await readFile(join(root, 'out.txt'), 'utf8'), 'premature')
         yield turn(request, {
           execute: {
             source:
@@ -508,7 +489,7 @@ test('project query versions ignore generated handles but detect changes to the 
   assert.equal((await kernel.validateReads('s', list.reads, signal)).status, 'stale')
 })
 
-test('INV-25 missing required observation permits source repair but blocks writes until the full value is delivered', async (t) => {
+test('INV-25 missing required observation lets writes through, but completion waits until the full value is delivered', async (t) => {
   const world = { value: 1, revision: 1, writes: 0 }
   let calls = 0
   const f = await setup(t, world, async function* (request) {
@@ -520,7 +501,10 @@ test('INV-25 missing required observation permits source repair but blocks write
         execute: { source: "import {write} from 'test:world';await write(2);" },
       })
     } else if (calls === 2) {
-      assert.equal(world.writes, 0)
+      assert.equal(world.writes, 1)
+      yield* done(request)
+      return
+    } else if (calls === 3) {
       assert.match(request.compiledPrompt, /CONTEXT_REQUIRED/)
       yield turn(request, {
         observe: {
@@ -528,12 +512,8 @@ test('INV-25 missing required observation permits source repair but blocks write
             "import {output} from 'velaros';import {read} from 'test:world';output(await read(),{key:'state',required:true});",
         },
       })
-    } else if (calls === 3) {
-      assert.deepEqual(decision.missing, [])
-      yield turn(request, {
-        execute: { source: "import {write} from 'test:world';await write(2);" },
-      })
     } else {
+      assert.deepEqual(decision.missing, [])
       yield* done(request)
       return
     }
@@ -562,7 +542,7 @@ test('completion rejects stale observations and refreshes before accepting done'
   assert.equal(world.writes, 0)
 })
 
-test('required leased results also block writes until released explicitly', async (t) => {
+test('required leased results let writes through; completion waits until they are released', async (t) => {
   const world = { value: 1, revision: 1, writes: 0 }
   let calls = 0
   const f = await setup(t, world, async function* (request) {
@@ -573,18 +553,18 @@ test('required leased results also block writes until released explicitly', asyn
         execute: { source: "import {write} from 'test:world';await write(2);" },
       })
     } else if (calls === 2) {
-      assert.equal(world.writes, 0)
+      assert.equal(world.writes, 1)
+      yield* done(request)
+      return
+    } else if (calls === 3) {
+      assert.match(request.compiledPrompt, /CONTEXT_REQUIRED/)
       yield turn(request, {
         execute: {
           source: `import {memory as results} from 'velaros:system';await results.release({ref:${JSON.stringify(result.resultRef)}});`,
         },
       })
-    } else if (calls === 3) {
-      assert.deepEqual(basis.missing, [])
-      yield turn(request, {
-        execute: { source: "import {write} from 'test:world';await write(2);" },
-      })
     } else {
+      assert.deepEqual(basis.missing, [])
       yield* done(request)
       return
     }
@@ -602,7 +582,7 @@ test('required leased results also block writes until released explicitly', asyn
   assert.equal(world.writes, 1)
 })
 
-test('cancelled resource validation releases the write gate without accepting a late validator result', async (t) => {
+test('cancelled resource validation rejects without accepting a late validator result', async (t) => {
   const world = { value: 1, revision: 1, writes: 0 }
   const module = worldModule(world)
   let finish

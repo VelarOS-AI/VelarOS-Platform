@@ -33,3 +33,5 @@ Accepted records are durable rationale, not a substitute for schemas or executab
 - [0019: 模型写的脚本只查语法，不查类型](0019-scripts-check-syntax-only.md)
 
 - [0020: 效果不明不再等宿主核对](0020-no-host-reconciliation.md)
+
+- [0021: 写入不再按决策依据拦](0021-no-decision-basis-write-gate.md)

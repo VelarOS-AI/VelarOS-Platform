@@ -399,7 +399,7 @@ test('INV-15 子 Agent 继承父空间与读写范围，但不能再派发子任
   })
   assert.equal((await f.storage.stores.get(f.storeId, 'plan')).value, 'revised')
 })
-test('INV-15 当前状态版本参加 Kernel 读依赖验证，外部写入前发现过期依据', async (t) => {
+test('INV-15 当前状态版本参加 Kernel 读依赖验证：外部改动不挡业务写入，收尾前发现过期依据先刷新', async (t) => {
   let calls = 0
   let writes = 0
   const business = {
@@ -426,7 +426,7 @@ test('INV-15 当前状态版本参加 Kernel 读依赖验证，外部写入前�
             x.resourceId === JSON.stringify([f.storeId, 'x'])
         )
       )
-      if (++calls === 1)
+      if (++calls === 1) {
         await f.storage.stores.commit({
           store: f.storeId,
           key: 'x',
@@ -435,16 +435,25 @@ test('INV-15 当前状态版本参加 Kernel 读依赖验证，外部写入前�
           actor: 'external',
           operationId: 'external',
         })
-      if (calls === 2) {
-        assert.equal(writes, 0)
-        assert.match(request.compiledPrompt, /STALE_OBSERVATION/)
-      }
-      if (calls <= 2) {
         yield turn(request, {
           execute: { source: "import {write} from 'test:business';await write(null);" },
         })
         yield { type: 'finish', reason: 'stop' }
-      } else yield* done(request)
+      } else if (calls === 2) {
+        assert.equal(writes, 1)
+        await f.storage.stores.commit({
+          store: f.storeId,
+          key: 'x',
+          baseRevision: 2,
+          value: 3,
+          actor: 'external',
+          operationId: 'external-again',
+        })
+        yield* done(request)
+      } else {
+        assert.match(request.compiledPrompt, /STALE_OBSERVATION/)
+        yield* done(request)
+      }
     }),
   })
   await execute(f.session, "await store.set({store:currentStore,key:'x',baseRevision:0,value:1});")
