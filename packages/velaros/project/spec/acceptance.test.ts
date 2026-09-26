@@ -433,6 +433,63 @@ describe('不折叠', () => {
   })
 })
 
+describe('结果可以复核', () => {
+  test('INV-41 同一份内容搜两遍交回的一样：命中同分按路径、再按行列排，不跟 ripgrep 交回的次序走', async () => {
+    const files: Record<string, string> = {
+      'b.ts': 'needle b\n',
+      'a.ts': 'x\nneedle a1\nneedle a2\n',
+      'src/c.ts': 'needle c\n',
+    }
+    await mkdir(join(root, 'src'))
+    for (const [path, text] of Object.entries(files)) await writeFile(join(root, path), text)
+    // 假 ripgrep：按 rg --json 的形状交回命中，每跑一次次序倒一次（真 rg 多线程时，文件之间的次序本来就不定）。
+    const matches = Object.entries(files).flatMap(([path, text]) =>
+      text.split('\n').flatMap((line, index) =>
+        line.startsWith('needle')
+          ? [
+              JSON.stringify({
+                type: 'match',
+                data: {
+                  path: { text: path },
+                  lines: { text: `${line}\n` },
+                  line_number: index + 1,
+                  submatches: [{ start: 0, end: 6 }],
+                },
+              }),
+            ]
+          : []
+      )
+    )
+    let searches = 0
+    const { call } = await createProjectHarness(root, {
+      providers: {
+        command: {
+          run: async (input) => {
+            if (input.command !== 'rg') return { exitCode: 0, stdout: '', stderr: '' }
+            const order = searches++ % 2 ? [...matches].reverse() : matches
+            return { exitCode: 0, stdout: `${order.join('\n')}\n`, stderr: '' }
+          },
+        },
+      },
+    })
+    const first = await call('project', 'search', { query: 'needle', contextLines: 0 })
+    const second = await call('project', 'search', { query: 'needle', contextLines: 0 })
+    expect(searches).toBe(2)
+    expect(second).toEqual(first)
+    expect(
+      first.hits.map(
+        (hit: { path: string; range: { startLine: number } }) =>
+          `${hit.path}:${hit.range.startLine}`
+      )
+    ).toEqual(['a.ts:2', 'a.ts:3', 'b.ts:1', 'src/c.ts:1'])
+    expect(first.files.map((window: { path: string }) => window.path)).toEqual([
+      'a.ts',
+      'b.ts',
+      'src/c.ts',
+    ])
+  })
+})
+
 describe('不问人，只排队', () => {
   test('INV-17 改动与撤销不问人：上下文里没有审批端口、空间端口里没有授权口子，编辑、撤销照样做完', async () => {
     await writeFile(join(root, 'a.txt'), 'alpha\n')

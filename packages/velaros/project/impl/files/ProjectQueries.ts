@@ -26,6 +26,7 @@ import type { FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
 import type { ResolvedTarget, ResolveTargetInput, ResolveTargetResult } from '../../types/target.js'
 import {
   capInsertionOrderedMap,
+  compareSearchHits,
   defaultExcludeGitignoredForRoot,
   resolveEvidenceTargetRange,
   resolveSearchExcludeGlobs,
@@ -216,7 +217,7 @@ export class ProjectQueries implements ProjectQueriesApi {
             )
             enriched.push(...decoded.hits)
           }
-          enriched.sort((a, b) => b.score - a.score)
+          enriched.sort(compareSearchHits)
           truncated =
             !!rgResult.timedOut ||
             !!rgResult.truncated ||
@@ -365,7 +366,7 @@ export class ProjectQueries implements ProjectQueriesApi {
       }
     }
 
-    hits.sort((a, b) => b.score - a.score)
+    hits.sort(compareSearchHits)
     const truncated = stoppedEarly || hits.length > maxResults
     return {
       hits: hits.slice(0, maxResults),

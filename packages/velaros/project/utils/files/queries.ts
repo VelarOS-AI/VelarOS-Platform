@@ -1,11 +1,11 @@
 /**
- * 内核查询面（ProjectQueries）用的纯函数：搜索范围的缺省排除、符号去重、证据窗口的目标范围、有上限的 Map。
+ * 内核查询面（ProjectQueries）用的纯函数：搜索范围的缺省排除、搜索命中的次序、符号去重、证据窗口的目标范围、有上限的 Map。
  */
 import { isPresent, isUndefined, optionalWhen } from '@velaros-ai/core'
 
 import type { ProjectSymbol } from '../../types/adapter.js'
 import type { Range } from '../../types/common.js'
-import type { SearchInput } from '../../types/io.js'
+import type { SearchHit, SearchInput } from '../../types/io.js'
 import type { ResolvedTarget } from '../../types/target.js'
 
 /** 搜整个项目时默认跳过的目录：依赖、git 仓库、构建产物、覆盖率报告。 */
@@ -33,6 +33,19 @@ function defaultImplicitSearchExcludeGlobs(root?: string): string[] {
   const normalizedRoot = root?.trim()
   if (normalizedRoot && normalizedRoot !== '.') return []
   return [...DefaultImplicitSearchExcludeGlobs]
+}
+
+/**
+ * 搜索命中的次序：分高的在前，同分按路径、再按行列。ripgrep 多线程交回的次序每次不一样，
+ * 不在这里定下来，同一份内容搜两遍结果就不一样，按结果核对的读取凭据会被误判成过期。
+ */
+export function compareSearchHits(a: SearchHit, b: SearchHit): number {
+  return (
+    b.score - a.score ||
+    (a.path < b.path ? -1 : a.path > b.path ? 1 : 0) ||
+    (a.range?.startLine ?? 0) - (b.range?.startLine ?? 0) ||
+    (a.range?.startColumn ?? 0) - (b.range?.startColumn ?? 0)
+  )
 }
 
 /** 证据包对准的目标范围：存过的目标用它自己的范围，否则用入参给的范围（起止行都给了才算）。 */

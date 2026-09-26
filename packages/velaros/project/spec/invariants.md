@@ -60,3 +60,4 @@ INV-18（读完之后被改过时给出新行号重提）作废、编号不复�
 | INV-38 | TypeScript 语言服务池可以被宿主释放：`typeScriptProjects.release()` 之后旧凭据自报失效，调用方按 `isCurrent()` 重新取 | 测试 | `spec/language-acceptance.test.ts` |
 | INV-39 | `./project/contracts` 入口整条引用链不碰 Node 内置模块，渲染进程与浏览器都能加载；语言服务实现、工具函数与内部接口一律不出包 | 门禁 | `check:module-ownership` |
 | INV-40 | 语言查询的注入面只借内核的三个读方法，多一个都借不到：类型上就是对 `AgentProjectKernelPort` 取 `listFiles`、`read`、`listSymbols` 三键的 `Pick` | 类型 | `contract/requires.ts::LanguageReadPort` |
+| INV-41 | 同一份内容搜两遍，交回的一样：命中同分按路径、再按行列排，不跟 ripgrep 多线程交回的次序走（act 运行时按结果核对 search 的读取凭据，次序一变就会被误判成过期、逼模型白白重读一轮） | 测试 | `spec/acceptance.test.ts` |
