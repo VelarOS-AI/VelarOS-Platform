@@ -17,6 +17,7 @@ import {
 } from '../src/impl/NodeSubprocessCodeRunner'
 import type { GrantedModule } from '../src/types/script'
 import { resolveNodeExecutable } from '../src/utils/node-executable'
+import { CodeSurfaceTuning } from '../src/utils/tuning'
 
 /** 这一轮授权的那一个命名空间；没授权的模块 import 不出来，那道闸是语言给的。 */
 const granted: GrantedModule[] = [
@@ -311,6 +312,90 @@ export default first.contents`)
     const rendered = outcome.check.diagnostics.map((item) => item.frame).join('\n')
     expect(rendered).toContain('3 | export default r.files[0].contents')
     expect(rendered).toContain('^')
+  })
+
+  test('INV-38 名字写错时，诊断接上实际有什么：成员、入参字段、模块导出，还是 Promise 时提醒 await', () => {
+    const messages = (source: string, modules: GrantedModule[] = granted) => {
+      const checked = codeProgramChecker.check({ source, granted: modules })
+      if (checked.ok) throw new Error('应当没通过检查')
+      return checked.diagnostics.map((item) => item.message)
+    }
+
+    // 猜得离谱的字段：TS 只说没有，后面接上这个类型实际有的成员，类型照声明原文写
+    expect(
+      messages(
+        `${importDemo}\nconst r = await read({ paths: ['a.ts'] })\nexport default r.files[0].body`
+      )
+    ).toEqual([
+      "Property 'body' does not exist on type 'ReadFile'. ReadFile 的成员：path: string、content: string、hasMore: boolean",
+    ])
+    // 入参里多写的字段：列出入参实际收什么
+    expect(
+      messages(`${importDemo}\nexport default await read({ paths: ['a.ts'], recursive: true })`)[0]
+    ).toEndWith('可用的成员：paths: string[]')
+    // import 了模块没有的名字：列出模块的值导出。名字和某个类型相近时 TS 会建议那个类型（脚本用不上），照样列
+    const demoExports =
+      'velaros:demo 的导出：read()、write()、danger()、bulk()、refuse()、slow()、hang()'
+    expect(
+      messages("import { listEverything } from 'velaros:demo'\nexport default listEverything")[0]
+    ).toEndWith(demoExports)
+    expect(
+      messages("import { readFile } from 'velaros:demo'\nexport default readFile")[0]
+    ).toEndWith(demoExports)
+    // 忘了 await：不列 Promise 的 then/catch，直接说先 await
+    expect(
+      messages(`${importDemo}\nconst r = read({ paths: ['a.ts'] })\nexport default r.files`)[0]
+    ).toEndWith('这个值还是 Promise：先 await 再取字段。')
+    // 模型本来就认得的类型不补
+    expect(messages("const s = 'abc'\nexport default s.body")).toEqual([
+      "Property 'body' does not exist on type '\"abc\"'.",
+    ])
+    expect(messages('export default [1, 2].items')).toEqual([
+      "Property 'items' does not exist on type 'number[]'.",
+    ])
+  })
+
+  test('INV-38 联合类型按分支列并先说怎么收窄；列不下只说一共几个，整条守住单条诊断的预算', () => {
+    const wideFields = Array.from({ length: 60 }, (_, index) => `field${index}: string`).join('; ')
+    const probe: GrantedModule[] = [
+      {
+        namespace: 'probe',
+        declarations: `declare module 'velaros:probe' {
+  interface Found { entries: string[]; truncated: boolean }
+  interface Wide { ${wideFields} }
+  export function diagnose(): Promise<Found | { error: string }>
+  export function wide(): Promise<Wide>
+  export function sprawl(): Promise<{ ${wideFields} } | { error: string }>
+}`,
+      },
+    ]
+    const first = (source: string) => {
+      const checked = codeProgramChecker.check({ source, granted: probe })
+      if (checked.ok) throw new Error('应当没通过检查')
+      return checked.diagnostics[0]?.message ?? ''
+    }
+
+    expect(
+      first(
+        "import { diagnose } from 'velaros:probe'\nconst d = await diagnose()\nexport default d.entries"
+      )
+    ).toEndWith(
+      "先用 'entries' in 值 判断是哪一种。各分支：Found 有 entries、truncated；{ error: string; } 有 error"
+    )
+
+    const wide = first(
+      "import { wide } from 'velaros:probe'\nconst w = await wide()\nexport default w.nope"
+    )
+    expect(wide).toContain('Wide 的成员：field0: string、field1: string')
+    expect(wide).toEndWith('…共 60 个')
+
+    // TS 的原话本身就很长时截的是它，补的那句完整留着
+    const sprawl = first(
+      "import { sprawl } from 'velaros:probe'\nconst s = await sprawl()\nexport default s.nope"
+    )
+    expect(sprawl.length).toBeLessThanOrEqual(CodeSurfaceTuning.diagnosticMessageChars)
+    expect(sprawl).toStartWith("Property 'nope' does not exist")
+    expect(sprawl).toContain('… 各分支：')
   })
 
   test('INV-13 import 了没授权的模块：一行都不执行，回要补的命名空间', async () => {

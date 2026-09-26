@@ -8,7 +8,11 @@ import { isUndefined } from '@velaros-ai/core'
 
 import type { CodeProgramDiagnostic } from '../types/script.js'
 
-import { renderDiagnosticFrame } from './diagnostics.js'
+import {
+  appendAvailableNames,
+  describeAvailableNames,
+  renderDiagnosticFrame,
+} from './diagnostics.js'
 import { programForCheck } from './program.js'
 
 /** 生成出来的能力声明在内存文件系统里的名字。 */
@@ -105,15 +109,20 @@ export function createMemoryCompilerHost(
 
 /**
  * 把一条 TS 诊断换算成模型面的形状；出在库里别的脚本上时带上它在库里的路径。
+ * 名字写错（属性、字段、导出）时，说明后面接上实际有什么，见 `describeAvailableNames`。
  *
  * **程序不包装**（它本来就是个模块），所以编译器给的 0 基行号要加一才是模型写的那一行。
  * 早先用「函数体 + 包装」时包装恰好占掉第 0 行，两者数值相等——那是巧合，形态一改就错一位。
  */
 export function toModelDiagnostic(
   diagnostic: ts.Diagnostic,
-  mainFile: string
+  mainFile: string,
+  program: ts.Program
 ): CodeProgramDiagnostic {
-  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, ' ')
+  const message = appendAvailableNames(
+    ts.flattenDiagnosticMessageText(diagnostic.messageText, ' '),
+    describeAvailableNames(diagnostic, program)
+  )
   const file = diagnostic.file
   if (!file || isUndefined(diagnostic.start))
     return { line: 1, column: 1, code: diagnostic.code, message }
@@ -157,7 +166,7 @@ export function diagnoseProgram(
         diagnostic.file?.fileName === fileName ||
         Boolean(diagnostic.file?.fileName.startsWith(`${LibraryRoot}/`))
     )
-    .map((diagnostic) => toModelDiagnostic(diagnostic, fileName))
+    .map((diagnostic) => toModelDiagnostic(diagnostic, fileName, program))
 }
 
 /** TS8xxx 是「这个语法只能在 TypeScript 文件里用」那一族；只有整份诊断都落在这一族里才算手滑。 */
