@@ -78,8 +78,6 @@ class StoreModule implements StoreModuleApi {
         remove: reconcile,
         create: reconcile,
       },
-      // 空间端口在写入之前拒绝时（没有授权、入参不对、版本冲突）会在错误上标明没有效果
-      withoutEffect: (error) => (error as { effect?: string })?.effect === 'none',
     })
   }
 }

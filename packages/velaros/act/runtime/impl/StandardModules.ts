@@ -188,8 +188,6 @@ export function createShellCapabilityModule(
     surface: VelarShellModule,
     implementation: shellOperations,
     instanceId: options.instanceId,
-    // 命令启动之前的失败（越界、危险命令被拒）由 shell 标成没有效果
-    withoutEffect: (error) => (error as { effect?: string })?.effect === 'none',
     context: (call) => {
       const context: ShellOperationContext = {
         shell: options.shell,

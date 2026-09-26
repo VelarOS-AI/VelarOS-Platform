@@ -30,6 +30,15 @@ export function withNotAppliedOutcome(error: unknown): Error {
   })
 }
 
+/** 跑写盘之前的一段（解析入参、定位、读记录）：同步、异步抛出的失败都补上「没有写入」的结论。 */
+export async function beforeWrite<T>(task: () => Promise<T> | T): Promise<T> {
+  try {
+    return await task()
+  } catch (error) {
+    throw withNotAppliedOutcome(error)
+  }
+}
+
 /** 把错误补上「没有写入」的结论后抛出（写盘开始之前的失败用）。 */
 export function rethrowNotApplied(error: unknown): never {
   throw withNotAppliedOutcome(error)

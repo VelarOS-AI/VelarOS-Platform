@@ -3,11 +3,14 @@ import { AppError } from '@velaros-ai/core/error'
 import type { OperationDefinition, OperationModuleDefinition } from '@velaros-ai/kernel'
 
 import type { CapabilityModuleOptions } from '../contract/requires.js'
+import { isFailureWithoutEffect } from '../utils/effects.js'
 import { normalizeCapabilityValue } from '../utils/results.js'
 
 /**
  * 把生成的模型面接到它的操作实现上：业务能力与 Act 自管理能力走同一条校验、派发、效果与持久回执链。
  * 模型面（声明、schema、效果、允许的入口）只来自操作接口生成的 surface，这里只补宿主上下文、版本读取与效果核对。
+ * 写操作失败时，带着「没有写入」约定标记的错误（见 {@link isFailureWithoutEffect}）一律记成没有效果，
+ * 领域的 `withoutEffect` 只需认标记以外的写前失败；两样都不认的才是效果未知，要等宿主核对。
  */
 export interface CapabilityModulesApi {
   /** 按一份生成的模型面装配 Kernel 模块；实现缺了哪个方法当场报错。 */
@@ -57,7 +60,11 @@ class CapabilityModules implements CapabilityModulesApi {
               call.recordEffect(descriptor.effects === 'none' ? 'none' : 'committed')
             return normalizeCapabilityValue(value)
           } catch (error) {
-            if (!effectRecorded && options.withoutEffect?.(error)) call.recordEffect('none')
+            if (
+              !effectRecorded &&
+              (isFailureWithoutEffect(error) || options.withoutEffect?.(error))
+            )
+              call.recordEffect('none')
             throw error
           }
         },

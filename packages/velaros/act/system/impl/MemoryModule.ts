@@ -61,7 +61,6 @@ class MemoryModule implements MemoryModuleApi {
       },
       // 这些拒绝都发生在校验或版本核对通过之前，没有写下任何东西
       withoutEffect: (error) =>
-        (error as { effect?: string })?.effect === 'none' ||
         hasErrorCode(error, [
           'VALIDATION',
           'MEMORY_INPUT',

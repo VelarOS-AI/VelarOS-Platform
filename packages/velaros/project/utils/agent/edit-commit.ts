@@ -12,7 +12,7 @@ import type {
   ProjectRecodeReceipt,
 } from '../../types/files.js'
 import { compileProjectEdit } from '../editing/planner-index.js'
-import { rethrowNotApplied } from '../transactions/transaction-errors.js'
+import { beforeWrite, rethrowNotApplied } from '../transactions/transaction-errors.js'
 
 import { seenFileSpans } from './change-records.js'
 import { changeWindows } from './change-windows.js'
@@ -53,8 +53,8 @@ export async function commitProjectEdit(
     if (recode) unchanged.recode = recode
     return unchanged
   }
-  const previous = await seenFileSpans(steps, ctx)
-  const kernel = await ctx.project.kernel()
+  const previous = await beforeWrite(() => seenFileSpans(steps, ctx))
+  const kernel = await beforeWrite(() => ctx.project.kernel())
   const prepared = await kernel.prepareEdit(plan).catch(rethrowNotApplied)
   try {
     const applied = await kernel.applyEdit({ transactionId: prepared.transactionId })

@@ -207,6 +207,79 @@ test('INV-1 real Project and Files operations run through QuickJS, shared receip
   assert.equal(disposed, 1)
 })
 
+test('INV-55 write failures marked as not applied are recorded without an effect; unmarked ones stay unknown', async (t) => {
+  const f = await storageFixture(t)
+  await writeFile(join(f.root, 'a.txt'), 'one\ntwo\nthree\n')
+  const kernel = await createProjectKernel({ root: f.root })
+  const project = {
+    getRootPath: () => f.root,
+    kernel: async () => kernel,
+    queryCode: async () => ({}),
+  }
+  const runtime = createOperationRuntime({
+    modules: [
+      createCapabilityModule({
+        surface: VelarProjectModule,
+        implementation: projectFileOperations,
+        instanceId: f.root,
+        context: (call) => ({
+          project,
+          abortSignal: call.signal,
+          sessionId: call.invocation.sessionId,
+        }),
+      }),
+    ],
+    journal: createContextInvocationJournal(f.storage),
+  })
+  f.cleanup.push(() => runtime.dispose())
+  await runtime.start()
+  const binding = runtime.bind('s', 'velaros:project')
+  const call = (id, operation, input) =>
+    runtime.invoke({ id, sessionId: 's', executionId: 'e', binding, operation, input })
+  const read = await call('read', 'read', { files: [{ path: 'a.txt', range: [1, 1] }] })
+  const fileRef = read.value.files[0].fileRef
+  // 只看过一段就整份替换：项目在写盘之前拒绝，标了没有写入，回执记成没有效果，不用等宿主核对
+  const refused = await call('overwrite', 'edit', {
+    steps: [{ action: 'overwrite', fileRef, text: 'replaced\n' }],
+  })
+  assert.equal(refused.outcome, 'failed')
+  assert.equal(refused.effect, 'none')
+  assert.equal(refused.error.code, 'SCOPE_VIOLATION')
+  assert.equal(await readFile(join(f.root, 'a.txt'), 'utf8'), 'one\ntwo\nthree\n')
+
+  // 没有标记的写失败仍是效果未知
+  const unmarked = createOperationRuntime({
+    modules: [
+      createCapabilityModule({
+        surface: VelarProjectModule,
+        implementation: Object.fromEntries(
+          VelarProjectModule.methods.map((name) => [
+            name,
+            () => {
+              throw new Error('disk went away mid-write')
+            },
+          ])
+        ),
+        instanceId: 'unmarked',
+        context: () => ({}),
+      }),
+    ],
+    journal: createContextInvocationJournal(f.storage),
+  })
+  f.cleanup.push(() => unmarked.dispose())
+  await unmarked.start()
+  const lost = await unmarked.invoke({
+    id: 'unmarked-edit',
+    sessionId: 's',
+    executionId: 'e2',
+    binding: unmarked.bind('s', 'velaros:project'),
+    operation: 'edit',
+    input: { steps: [{ action: 'create', path: 'b.txt', text: 'b\n' }] },
+  })
+  assert.equal(lost.outcome, 'failed')
+  assert.equal(lost.effect, 'unknown')
+})
+
 test('project evidence accepts the shared source candidate range through one hundred', async (t) => {
   const f = await storageFixture(t)
   await writeFile(

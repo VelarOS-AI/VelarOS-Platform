@@ -24,6 +24,7 @@ import { changeInput, editInput } from '../../utils/agent/file-input.js'
 import { listEntries, readFiles, searchFiles } from '../../utils/agent/file-reads.js'
 import { locateEditSteps } from '../../utils/agent/planner-resolver.js'
 import { projectFailure } from '../../utils/agent/ports.js'
+import { beforeWrite } from '../../utils/transactions/transaction-errors.js'
 
 import type { ProjectExecutionGateApi } from './ProjectExecutionGate.js'
 import { projectExecutionGate } from './ProjectExecutionGate.js'
@@ -90,7 +91,7 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
   ): Promise<ProjectEditResult> {
     try {
       ctx.abortSignal.throwIfAborted()
-      const steps = await locateEditSteps(editInput(input).steps, ctx)
+      const steps = await beforeWrite(() => locateEditSteps(editInput(input).steps, ctx))
       return await this.gate.run(ctx.project.getRootPath(), true, ctx.abortSignal, () =>
         commitProjectEdit(steps, ctx)
       )
@@ -129,13 +130,15 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
   ): Promise<ProjectUndoResult> {
     try {
       ctx.abortSignal.throwIfAborted()
-      const { changeRef } = changeInput(input)
-      const { transactionId } = changeRecordOf(changeRef, ctx)
-      const transaction = await changeTransactionOf(ctx, transactionId, changeRef)
+      const { changeRef, transactionId, transaction, kernel } = await beforeWrite(async () => {
+        const { changeRef } = changeInput(input)
+        const { transactionId } = changeRecordOf(changeRef, ctx)
+        const transaction = await changeTransactionOf(ctx, transactionId, changeRef)
+        return { changeRef, transactionId, transaction, kernel: await ctx.project.kernel() }
+      })
       // 撤销是幂等的：已经撤销过就如实回执，不报错。
       if (transaction.status === 'rolled_back')
         return { changeRef, changedFiles: transaction.changedFiles, alreadyUndone: true }
-      const kernel = await ctx.project.kernel()
       const rolled = await this.gate.run(ctx.project.getRootPath(), true, ctx.abortSignal, () =>
         kernel.rollback({ transactionId })
       )
