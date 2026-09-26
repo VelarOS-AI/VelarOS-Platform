@@ -47,6 +47,7 @@ export type {
   ProjectFixer,
   ProjectHook,
   ProjectHostPort,
+  ProjectImagesHost,
   ProjectOperationContext,
   ProjectPlugin,
   ProjectPluginContext,

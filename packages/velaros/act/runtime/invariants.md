@@ -69,3 +69,4 @@
 | INV-53 | 自动封成的一卷至少六轮、那一段又没改笔记和计划时，下一个请求边界由整理支线补写叙事，每卷最多一次、不认领显式整理请求；叙事和长期单随下一次底座重建进入请求 | 测试 | `test/context-management.test.mjs` |
 | INV-54 | 读回上一帧因容量不够只给了引用的笔记或没排进本帧的租约结果记一次缺页（同一帧同一份只记一次，派生展示主动移出的不算）；封段时按缺页调整下一段的笔记份额，没有缺页就回落到宿主配置 | 测试 | `test/context-memory.test.mjs` |
 | INV-55 | 写操作失败时，错误（或它 cause 链里的任一层）带着「没有写入」约定标记——`effect: 'none'` 或 `executionOutcome: 'not-applied'`——就记成没有效果；两样都不认的写失败仍是效果未知，照实给模型看 | 测试 | `test/platform.test.mjs` |
+| INV-56 | 工作区项目可以另挂 velaros:code 与 velaros:images：都用运行时自己的项目内核；看图钳在项目里，出了项目那一张报 PERMISSION；没有代码图谱后端时语言服务照常答、图谱类分析报 UNAVAILABLE；不给 project 选项时两件都不挂 | 测试 | test/platform.test.mjs |

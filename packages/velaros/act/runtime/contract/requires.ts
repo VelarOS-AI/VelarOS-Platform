@@ -21,8 +21,9 @@ import type { CodeRunnerApi } from '@velaros-ai/script'
 import type { WidgetHost } from '@velaros-ai/velaros/act/agents'
 import type { VelarosSearchOptions } from '@velaros-ai/velaros/act/search'
 import type { StoreConfiguration } from '@velaros-ai/velaros/act/system'
+import type { ImageSpacePort } from '@velaros-ai/velaros/images'
 import type { MemoryScopePort } from '@velaros-ai/velaros/memory'
-import type { ProjectSpacePort } from '@velaros-ai/velaros/project'
+import type { ProjectCodeIndexApi, ProjectSpacePort } from '@velaros-ai/velaros/project'
 import type { ShellOperationContext, ShellSpacePort } from '@velaros-ai/velaros/shell'
 
 import type { McpClientConnectionApi } from '../impl/McpClientConnection.js'
@@ -108,6 +109,23 @@ export interface ContextMaintenanceOptions {
   readonly profile?: Partial<ContextMaintenanceProfile>
 }
 
+/** 项目上的看图模块：项目端口之外，可选宿主的裁图缩图（macOS 上是系统自带的 sips）。 */
+export interface ProjectImagesModuleOptions extends ProjectCapabilityModuleOptions {
+  /** 看超过上限的图、只看一块区域时用；不给时 view 遇到这种图会明说做不了。 */
+  readonly resizeImage?: ImageSpacePort['resizeImage']
+}
+
+/** 工作区项目上另挂的能力：都用运行时自己的那个项目内核，钳在项目根里。 */
+export interface VelarosProjectOptions {
+  /**
+   * 挂 velaros:code：内置的 JS/TS、Python 语言服务答大纲、定义、引用、诊断与波及面；
+   * 给了代码图谱后端时调用关系与四类分析也能答，不给时它们报 UNAVAILABLE。
+   */
+  readonly code?: boolean | ProjectCodeIndexApi
+  /** 挂 velaros:images：只看项目里的图；macOS 上超限的图与区域裁图用系统自带的 sips 缩。 */
+  readonly images?: boolean
+}
+
 /** 正式 Runtime 的单一装配入口。 */
 export interface VelarosRuntimeOptions {
   /** 宿主可信的主会话产品指令；追加到运行协议说明，参与真实请求预算，不传给专项模型工具。 */
@@ -124,8 +142,11 @@ export interface VelarosRuntimeOptions {
   readonly environment?: () => Readonly<Record<string, string>>
   /** 常规本地工作区；框架装配已有 Project 内核与只读证据来源。 */
   readonly workspace?: string
-  /** 是否挂载工作区的默认 Project 与证据来源；false 保留工作区绑定但关闭这两项能力。 */
-  readonly project?: boolean
+  /**
+   * 是否挂载工作区的默认 Project 与证据来源；false 保留工作区绑定但关闭这两项能力。
+   * 给对象时照样挂这两项，另按项挂上同一个项目内核上的能力（见 VelarosProjectOptions）。
+   */
+  readonly project?: boolean | VelarosProjectOptions
   /** 框架状态目录，放在业务工作区之外；未注入 storage 时必填。 */
   readonly dataDir?: string
   /** 固定主会话存储边界、创建权限和已授予空间；返回 undefined 关闭。 */

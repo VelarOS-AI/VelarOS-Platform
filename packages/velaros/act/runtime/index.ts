@@ -10,6 +10,7 @@ export type { EventDeliveryApi } from './contract/provides.js'
 export type {
   RuntimeModelConfiguration,
   VelarosContextOptions,
+  VelarosProjectOptions,
   VelarosRuntimeOptions,
 } from './contract/requires.js'
 export type { CapabilityModuleOptions } from './contract/requires.js'
@@ -23,6 +24,7 @@ export type { AgentProfile, VelarosAgentsOptions } from './contract/requires.js'
 export type { McpModuleOptions } from './contract/requires.js'
 export type { CapabilityContext } from './contract/requires.js'
 export type { ProjectCapabilityModuleOptions } from './contract/requires.js'
+export type { ProjectImagesModuleOptions } from './contract/requires.js'
 export type { ContextMaintenanceOptions } from './contract/requires.js'
 export type { EventDeliveryOptions } from './contract/requires.js'
 export { createCapabilityModule } from './impl/CapabilityModules.js'
@@ -33,6 +35,7 @@ export type { McpClientConnectionApi } from './impl/McpClientConnection.js'
 export { createMcpClientConnection } from './impl/McpClientConnection.js'
 export type { VelarosSession } from './impl/RuntimeSession.js'
 export { createProjectCapabilityModule } from './impl/StandardModules.js'
+export { createProjectCodeModule, createProjectImagesModule } from './impl/StandardModules.js'
 export { createShellCapabilityModule } from './impl/StandardModules.js'
 export { createMcpModule } from './impl/StandardModules.js'
 export type {

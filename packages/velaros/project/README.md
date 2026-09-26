@@ -80,4 +80,4 @@ export function closeProject() {
 - 不给 `changeFeed` 时变更记录只在内存里；给了 `transactionStatePath`，重启建内核时恢复中断的提交或回滚，遇到归属不明的改动报 `TRANSACTION_RECOVERY_CONFLICT` 并保留现场。
 - `velaros:code` 的语言动作由内置的 JS/TS、Python 语言服务答，答不准时结果带 `degraded`；图谱动作没有后端时 `query` 记成降级，`analyze` 抛 `UNAVAILABLE`。外部语言服务不下载命令，用完 `stop()`。
 - 项目空间里的 `velaros:shell`、`velaros:sandbox`、`velaros:images` 用 `projectCapabilityPorts` 按每次调用的 `ProjectHostPort` 现装的端口：工作目录、沙箱源目录与图片都钳在项目内，宿主没给沙箱时沙箱操作报 `UNAVAILABLE`。
-- `createRuntime({ workspace })` 已经按工作区装好 `velaros:project`（不带 `velaros:code`）和 id 为 `project` 的证据源，再挂同名模块或来源报 `VALIDATION`；要自己装就传 `project: false`，证据源用 `createProjectContextSource({ id, kernel })` 交进 `context.sources`。
+- `createRuntime({ workspace })` 已经按工作区装好 `velaros:project` 和 id 为 `project` 的证据源（`project: { code: true, images: true }` 时另挂 `velaros:code` 与项目里的 `velaros:images`），再挂同名模块或来源报 `VALIDATION`；要自己装就传 `project: false`，证据源用 `createProjectContextSource({ id, kernel })` 交进 `context.sources`。

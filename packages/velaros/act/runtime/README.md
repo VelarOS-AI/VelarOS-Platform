@@ -64,7 +64,7 @@ projector.finish() // 交付结束：清掉没接纳的预览
 ## 约定
 
 - `workspace` 是已有目录的绝对路径，`dataDir` 是绝对路径且按真实路径在工作区之外；不注入 `storage` 时 `dataDir` 必填。不合要求抛 `VALIDATION`。
-- 给了 `workspace` 或声明式 `model` 就按工作区预设装：项目能力与项目证据来源、`worker` 子任务、`standard` 搜索档位；给了 `dataDir` 还带 `dataDir/memory` 下的长期记忆。`project`、`agents`、`search`、`memory` 设成 `false` 分别关掉；没有 `workspace`、`model` 又是注入的驱动时，子任务与搜索只在显式配置时才开。
+- 给了 `workspace` 或声明式 `model` 就按工作区预设装：项目能力与项目证据来源、`worker` 子任务、`standard` 搜索档位；给了 `dataDir` 还带 `dataDir/memory` 下的长期记忆。`project` 给 `{ code: true, images: true }` 就在同一个项目内核上另挂 `velaros:code` 与 `velaros:images`（`code` 也可以直接给代码图谱后端）；`project`、`agents`、`search`、`memory` 设成 `false` 分别关掉；没有 `workspace`、`model` 又是注入的驱动时，子任务与搜索只在显式配置时才开。
 - 声明式 `model` 要有 `model` 与 `apiKey`，`baseURL` 是不带凭据和查询串的 http(s) 地址，`limits` 的输入、输出加安全余量不能超过总窗口；凭据只用来建驱动，不进模型材料与追踪。
 - 业务能力经 `modules` 挂；`velaros:system` 及其成员、`velaros:program`、`velaros:context-materials` 是保留身份，长期记忆只能经 `memory(sessionId)` 装；给了 `workspace` 又自己挂 `velaros:project` 或 `project` 来源（没设 `project: false`）也抛 `VALIDATION`。
 - 会话 id 第一次 `openSession` 时与工作区真实路径原子绑定，换工作区重开抛 `WORKSPACE_BINDING_MISMATCH`；`project: false` 也保留这份绑定。

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -398,6 +398,63 @@ test('normalization keeps committed effects visible, respects explicit partial e
   const bad = await call('bad')
   assert.equal(bad.outcome, 'failed')
   assert.equal(bad.effect, 'committed')
+})
+
+test('INV-56 a workspace project can also mount velaros:code and velaros:images on the runtime kernel', async (t) => {
+  const f = await storageFixture(t)
+  const workspace = join(f.root, 'workspace')
+  await mkdir(join(workspace, 'src'), { recursive: true })
+  await writeFile(
+    join(workspace, 'src/a.ts'),
+    'export function greet(name: string) {\n  return `hi ${name}`\n}\n'
+  )
+  const png =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a+9sAAAAASUVORK5CYII='
+  await writeFile(join(workspace, 'tiny.png'), Buffer.from(png, 'base64'))
+  await writeFile(join(f.root, 'outside.png'), Buffer.from(png, 'base64'))
+  const runtime = await createRuntime({
+    storage: f.storage,
+    runner: nodeSubprocessCodeRunner,
+    workspace,
+    project: { code: true, images: true },
+  })
+  f.cleanup.push(() => runtime.close())
+  const s = await open(runtime)
+  const receipt = await s.execute({
+    source:
+      "import {query,analyze} from 'velaros:code';import {view} from 'velaros:images';export const outline=await query({intent:'outline',path:'src/a.ts'});export const seen=await view({files:[{path:'tiny.png'},{path:'../outside.png'}]});let graph='none';try{await analyze({intent:'cycles'})}catch(error){graph=error.code};export {graph};",
+  })
+  ok(receipt)
+  const { outline, seen, graph } = receipt.result.value
+  assert(JSON.stringify(outline).includes('greet'), JSON.stringify(outline))
+  assert.equal(seen.files[0].width, 1)
+  // 看图钳在项目里：出了项目的那一张看不了
+  assert.equal(seen.files[1].error.code, 'PERMISSION')
+  // 没有代码图谱后端：图谱类分析如实报不可用
+  assert.equal(graph, 'UNAVAILABLE')
+
+  // 不给这两项就不挂
+  const plainStorage = localContextStorage({ path: join(f.root, 'plain.sqlite') })
+  const plain = await createRuntime({
+    storage: plainStorage,
+    runner: nodeSubprocessCodeRunner,
+    workspace,
+  })
+  f.cleanup.push(async () => {
+    await plain.close()
+    await plainStorage.close()
+  })
+  const listed = await (
+    await open(plain)
+  ).execute({
+    source:
+      "import {modules} from 'velaros:system';export const list=await modules.list({limit:64});",
+  })
+  ok(listed)
+  const specifiers = listed.result.value.list.items.map((item) => item.specifier)
+  assert(specifiers.includes('velaros:project'))
+  assert(!specifiers.includes('velaros:code'))
+  assert(!specifiers.includes('velaros:images'))
 })
 
 test('INV-7 real image capability persists attachments and sends them as images in the next model request', async (t) => {

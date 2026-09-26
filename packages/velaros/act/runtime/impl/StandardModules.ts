@@ -14,7 +14,11 @@ import type {
   OperationSchema,
 } from '@velaros-ai/kernel'
 
-import { VelarProjectModule } from '../../../project/contract/surface.js'
+import { VelarImagesModule } from '../../../images/contract/surface.js'
+import { imageOperations } from '../../../images/impl/ImageOperations.js'
+import { VelarCodeModule, VelarProjectModule } from '../../../project/contract/surface.js'
+import { projectCapabilityPorts } from '../../../project/impl/operations/ProjectCapabilityPorts.js'
+import { projectCodeOperations } from '../../../project/impl/operations/ProjectCodeOperations.js'
 import { projectFileOperations } from '../../../project/impl/operations/ProjectFileOperations.js'
 import type {
   ProjectEditResult,
@@ -39,6 +43,7 @@ import { systemModules } from '../../system/index.js'
 import type {
   McpModuleOptions,
   ProjectCapabilityModuleOptions,
+  ProjectImagesModuleOptions,
   ShellCapabilityModuleOptions,
 } from '../contract/requires.js'
 import type { ScriptSubmission } from '../types/session.js'
@@ -170,6 +175,42 @@ export function createProjectCapabilityModule(
       abortSignal: call.signal,
     }),
     reads: { read: files, list: query('list'), search: query('search'), edit: files, undo: files },
+  })
+}
+
+/** 项目上的 velaros:code：语言查询只借项目内核的只读端口；图谱类查询经项目端口的 queryCode。 */
+export function createProjectCodeModule(
+  options: ProjectCapabilityModuleOptions
+): OperationModuleDefinition {
+  return capabilityModules.create({
+    surface: VelarCodeModule,
+    implementation: projectCodeOperations,
+    instanceId: options.instanceId,
+    generation: options.generation,
+    context: (call) => ({
+      project: options.project,
+      sessionId: call.invocation.sessionId,
+      abortSignal: call.signal,
+    }),
+  })
+}
+
+/** 项目上的 velaros:images：只看项目里的图，图经代码面的图片通道跟在结果后面交给模型。 */
+export function createProjectImagesModule(
+  options: ProjectImagesModuleOptions
+): OperationModuleDefinition {
+  const project = { ...options.project, resizeImage: options.resizeImage }
+  const images = projectCapabilityPorts.images(project)
+  return capabilityModules.create({
+    surface: VelarImagesModule,
+    implementation: imageOperations,
+    instanceId: options.instanceId,
+    generation: options.generation,
+    context: (call) => ({
+      abortSignal: call.signal,
+      images,
+      attachImage: (image) => call.attach({ type: 'image-data', ...image }),
+    }),
   })
 }
 

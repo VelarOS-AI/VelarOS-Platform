@@ -445,6 +445,9 @@ export interface ProjectHostPort extends ProjectSpacePort, ProjectShellHostPort 
   resizeImage?: (request: ImageResizeRequest) => Promise<ImageResizeResult>
 }
 
+/** 项目里看图要的那几样：项目根、内核（取真实路径），与可选的裁图缩图。 */
+export type ProjectImagesHost = Pick<ProjectHostPort, 'getRootPath' | 'kernel' | 'resizeImage'>
+
 /** 项目证据源只复用当前项目内核，不获得模型或任意文件系统端口。 */
 export interface ProjectContextSourceOptions {
   /** 宿主登记的证据源 ID。 */

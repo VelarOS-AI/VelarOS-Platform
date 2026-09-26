@@ -5,7 +5,16 @@ import { isAbsolute, join, relative, sep } from 'node:path'
 import type { ActRunLimits } from '@velaros-ai/agent'
 import type { ContextStorage } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
-import { isArray, isFalse, isFunction, isString, isTrue, isUndefined } from '@velaros-ai/core'
+import {
+  isArray,
+  isBoolean,
+  isFalse,
+  isFunction,
+  isPlainObject,
+  isString,
+  isTrue,
+  isUndefined,
+} from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { OperationModuleDefinition } from '@velaros-ai/kernel'
@@ -14,9 +23,15 @@ import { createAiSdkModelDriver, createModelRuntimeComposition } from '@velaros-
 import type { CodeRunnerApi } from '@velaros-ai/script'
 import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
+import { createLocalImagePort } from '../../../images/local.js'
 import type { MemoryScopePort } from '../../../memory/index.js'
 import { createMemoryStore } from '../../../memory/index.js'
-import { createProjectContextSource, createProjectKernel } from '../../../project/index.js'
+import type { ProjectCodeIndexApi, ProjectSpacePort } from '../../../project/index.js'
+import {
+  createProjectCodeQuery,
+  createProjectContextSource,
+  createProjectKernel,
+} from '../../../project/index.js'
 import type { VelarosSearchOptions } from '../../search/index.js'
 import {
   ModelToolLimits,
@@ -24,9 +39,17 @@ import {
   RuntimeSearchProfile,
   VelarosRunLimits,
 } from '../contract/constants.js'
-import type { VelarosAgentsOptions, VelarosRuntimeOptions } from '../contract/requires.js'
+import type {
+  VelarosAgentsOptions,
+  VelarosProjectOptions,
+  VelarosRuntimeOptions,
+} from '../contract/requires.js'
 
-import { createProjectCapabilityModule } from './StandardModules.js'
+import {
+  createProjectCapabilityModule,
+  createProjectCodeModule,
+  createProjectImagesModule,
+} from './StandardModules.js'
 
 /** 在同一正式入口内建立缺省依赖，具体机制仍归原能力单元。 */
 export interface RuntimeBootstrapApi {
@@ -57,6 +80,12 @@ export interface RuntimeBootstrapOptions extends Omit<
 }
 
 class RuntimeBootstrap implements RuntimeBootstrapApi {
+  /** 没有代码图谱后端：语言服务照常答，图谱类查询报 UNAVAILABLE（不可用时不会调 query）。 */
+  private static readonly NoCodeGraph: ProjectCodeIndexApi = {
+    isAvailable: () => false,
+    query: async () => ({}),
+  }
+
   public async prepare(options: VelarosRuntimeOptions): Promise<RuntimeBootstrapOptions> {
     const modules = [...(options.modules ?? [])]
     const sources = [...(options.context?.sources ?? [])]
@@ -113,18 +142,34 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
           )
         : undefined
       const kernel = await createProjectKernel({ root, transactionStatePath })
-      modules.push(
-        createProjectCapabilityModule({
-          instanceId: root,
-          project: {
-            getRootPath: () => root,
-            kernel: async () => kernel,
-            queryCode: async () => {
+      const extras: VelarosProjectOptions = isPlainObject(options.project) ? options.project : {}
+      const code = extras.code
+      const codeIndex =
+        isUndefined(code) || isBoolean(code)
+          ? isTrue(code)
+            ? RuntimeBootstrap.NoCodeGraph
+            : undefined
+          : code
+      const project: ProjectSpacePort = {
+        getRootPath: () => root,
+        kernel: async () => kernel,
+        queryCode: codeIndex
+          ? createProjectCodeQuery(codeIndex)
+          : async () => {
               throw new AppError('UNAVAILABLE', '此项目没有装配代码智能端口')
             },
-          },
-        })
-      )
+      }
+      modules.push(createProjectCapabilityModule({ instanceId: root, project }))
+      if (codeIndex) modules.push(createProjectCodeModule({ instanceId: root, project }))
+      if (isTrue(extras.images))
+        modules.push(
+          createProjectImagesModule({
+            instanceId: root,
+            project,
+            // 本机看图端口只借它的缩图（macOS 的 sips）；看哪张图仍由项目端口钳在项目里。
+            resizeImage: createLocalImagePort({ resolvePath: (path) => path }).resizeImage,
+          })
+        )
       sources.push(createProjectContextSource({ id: 'project', kernel }))
     }
     let model: RuntimeBootstrapOptions['model']

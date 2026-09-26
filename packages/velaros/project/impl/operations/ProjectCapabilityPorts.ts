@@ -9,7 +9,11 @@ import type { RehearsalSandboxHostPort, SandboxSurfacePort } from '@velaros-ai/v
 import type { ShellSpacePort } from '@velaros-ai/velaros/shell'
 import { shellCommandPolicy } from '@velaros-ai/velaros/shell'
 
-import type { ProjectHostPort, ProjectShellHostPort } from '../../contract/requires.js'
+import type {
+  ProjectHostPort,
+  ProjectImagesHost,
+  ProjectShellHostPort,
+} from '../../contract/requires.js'
 import { genericFailure, insideProject, projectRelativePath } from '../../utils/capability-ports.js'
 
 import type { ProjectExecutionGateApi } from './ProjectExecutionGate.js'
@@ -37,7 +41,7 @@ export interface ProjectCapabilityPortsApi {
    * `velaros:images` 的项目端口：只看项目里的图（经符号链接指到外面的也不行，PERMISSION），经项目内核取真实路径，
    * 交给模型时写相对项目根的路径；裁图缩图用宿主给的，宿主没给就不带这个口子。
    */
-  images(project: ProjectHostPort): ImageSpacePort
+  images(project: ProjectImagesHost): ImageSpacePort
 }
 
 export class ProjectCapabilityPorts implements ProjectCapabilityPortsApi {
@@ -104,7 +108,7 @@ export class ProjectCapabilityPorts implements ProjectCapabilityPortsApi {
     }
   }
 
-  public images(project: ProjectHostPort): ImageSpacePort {
+  public images(project: ProjectImagesHost): ImageSpacePort {
     const port: ImageSpacePort = {
       locate: async (requested) => {
         const path = await projectRelativePath(project.getRootPath(), requested)
