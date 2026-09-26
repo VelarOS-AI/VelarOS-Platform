@@ -28,7 +28,11 @@ export interface SystemModulePage {
   readonly nextOffset: Nullable<number>
 }
 
-/** @AgentView 要读哪个模块的合同：module 是 import 用的名字；读 velaros:system 时可以用 export 只要一个成员（goal、memory、store、modules）。 */
+/**
+ * @AgentView
+ * 要读哪个模块的合同：module 是 import 用的名字。export 给一个导出名（函数或类型）时只交回它的声明和它用到的类型，比整份声明小得多；
+ * 读 velaros:system 时 export 是成员名（goal、memory、store、modules）。
+ */
 export interface SystemModuleDescribeInput {
   readonly module: string
   readonly export?: string

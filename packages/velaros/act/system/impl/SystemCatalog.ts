@@ -72,14 +72,13 @@ export class SystemCatalog implements SystemCatalogApi {
     const available = this.available(sessionId)
     const members = systemMembers((id) => available.some((item) => item.binding.moduleId === id))
     if (module !== SystemPackageSpecifier) {
-      if (!isUndefined(member)) throw new AppError('MODULE_EXPORT', '成员查询只适用于聚合包')
       if (!this.host.allows(sessionId, module))
         throw new AppError('CAPABILITY_DENIED', '当前会话没有此能力')
       const description = this.host.kernel().describe(module)
       const entry = members.find(([, id]) => id === module)
       // 外部接入的模块（MCP）没有用法示例，交回空字符串，模型不必为它另写分支
       const template = description.template ?? ''
-      return entry
+      const described: SystemModuleDescription = entry
         ? {
             ...description,
             template,
@@ -88,6 +87,20 @@ export class SystemCatalog implements SystemCatalogApi {
             export: entry[0],
           }
         : { ...description, template, specifier: module, space: 'capability' }
+      if (isUndefined(member)) return described
+      // 给了导出名：只交回它与它用到的类型，操作说明也只留它自己的
+      const slice = scriptPackageCompiler.sliceExport(description.declarations, module, member)
+      if (isNull(slice.declarations))
+        throw new AppError(
+          'MODULE_EXPORT',
+          `${module} 没有 ${member}；它导出的有：${slice.exports.join('、')}`
+        )
+      const operation = description.operations[member]
+      return {
+        ...described,
+        declarations: slice.declarations,
+        operations: isUndefined(operation) ? {} : { [member]: operation },
+      }
     }
     const selected = members.filter(([name]) => isUndefined(member) || member === name)
     if (isEmpty(selected)) throw new AppError('CAPABILITY_DENIED', '系统成员不存在或未授权')

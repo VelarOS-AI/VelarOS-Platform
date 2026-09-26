@@ -11,7 +11,7 @@ import {
   fitLogsToBudget,
   fitValueToBudget,
 } from '../src/utils/budget'
-import { isTypeScriptOnlySyntax } from '../src/utils/compiler'
+import { declaredModules, isTypeScriptOnlySyntax, sliceModuleExport } from '../src/utils/compiler'
 import { applyProgramEdits } from '../src/utils/edit'
 import { readModuleSpecifiers, rewriteModuleForIsolate } from '../src/utils/module-form'
 import { keepTail, readCapabilityNamespace } from '../src/utils/program'
@@ -313,5 +313,63 @@ void describe('逐行差量', () => {
     expect(diff).toContain('-line 2\n+line 2 changed')
     expect(diff.match(/^@@/gmu)).toHaveLength(2)
     expect(unifiedLineDiff('same', 'same', { from: 'a', to: 'b' })).toBe('')
+  })
+})
+
+describe('声明切片', () => {
+  const declarations = `declare module 'velaros:demo' {
+  /** 读写一个东西。 */
+
+  /** 读一个东西。 */
+  export function read(input: ReadInput): Promise<ReadResult>
+  /** 写一个东西。 */
+  export function write(input: WriteInput): Promise<void>
+  /** 读的入参。 */
+  export interface ReadInput { path: string; options?: ReadOptions }
+  export interface ReadOptions { encoding?: Encoding }
+  export type Encoding = 'utf8' | 'base64'
+  export interface ReadResult extends Base { text: string; parts: Array<Part> }
+  export interface Base { size: number }
+  export type Part = { kind: Encoding }
+  export interface WriteInput { path: string; data: string }
+}`
+
+  test('切出一个导出：它自己加上签名传递用到的类型，保持原来的先后与注释', () => {
+    const slice = sliceModuleExport(declarations, 'velaros:demo', 'read')
+    const text = slice.declarations ?? ''
+    for (const name of [
+      'function read',
+      'interface ReadInput',
+      'interface ReadOptions',
+      'type Encoding',
+      'interface ReadResult',
+      'interface Base',
+      'type Part',
+    ])
+      expect(text).toContain(name)
+    expect(text).not.toContain('WriteInput')
+    expect(text).not.toContain('function write')
+    expect(text).toContain('/** 读的入参。 */')
+    expect(text.indexOf('function read')).toBeLessThan(text.indexOf('interface ReadInput'))
+    // 切出来的仍是一份能解析的模块声明
+    expect([...(declaredModules(text).get('velaros:demo')?.names ?? [])]).toContain('read')
+  })
+
+  test('要的是类型名时切出这个类型与它用到的类型', () => {
+    const text = sliceModuleExport(declarations, 'velaros:demo', 'ReadInput').declarations ?? ''
+    expect(text).toContain('interface ReadInput')
+    expect(text).toContain('type Encoding')
+    expect(text).not.toContain('function read')
+  })
+
+  test('模块里没有这个名字：declarations 为 null，交回它导出的值', () => {
+    expect(sliceModuleExport(declarations, 'velaros:demo', 'remove')).toEqual({
+      declarations: null,
+      exports: ['read', 'write'],
+    })
+    expect(sliceModuleExport(declarations, 'velaros:other', 'read')).toEqual({
+      declarations: null,
+      exports: [],
+    })
   })
 })

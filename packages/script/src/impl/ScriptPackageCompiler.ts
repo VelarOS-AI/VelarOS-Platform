@@ -3,9 +3,11 @@ import { AppError } from '@velaros-ai/core/error'
 import { VelarosStandardDeclarations } from '../contract/surface.js'
 import type {
   GrantedModule,
+  ScriptModuleExportSlice,
   ScriptPackageDefinition,
   ScriptPackageSurface,
 } from '../types/script.js'
+import { sliceModuleExport } from '../utils/compiler.js'
 
 /** 虚拟包的唯一声明与可执行投影编译入口。 */
 export interface ScriptPackageCompilerApi {
@@ -14,6 +16,8 @@ export interface ScriptPackageCompilerApi {
     packages: readonly ScriptPackageDefinition[],
     modules: readonly GrantedModule[]
   ): ScriptPackageSurface
+  /** 从一个模块的声明里切出一个导出（函数或类型）与它用到的类型；没有这个名字时 declarations 为 null。 */
+  sliceExport(declarations: string, specifier: string, name: string): ScriptModuleExportSlice
 }
 
 class ScriptPackageCompiler implements ScriptPackageCompilerApi {
@@ -63,6 +67,14 @@ class ScriptPackageCompiler implements ScriptPackageCompilerApi {
     if (!names.has('velaros'))
       granted.push({ namespace: 'velaros', declarations: VelarosStandardDeclarations })
     return { packages: Object.freeze(projected), granted: Object.freeze(granted) }
+  }
+
+  public sliceExport(
+    declarations: string,
+    specifier: string,
+    name: string
+  ): ScriptModuleExportSlice {
+    return sliceModuleExport(declarations, specifier, name)
   }
 }
 

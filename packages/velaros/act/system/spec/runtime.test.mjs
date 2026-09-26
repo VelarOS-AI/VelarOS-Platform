@@ -288,6 +288,71 @@ test('INV-7 过滤授权后分页，不出现空页跳过可见能力', async ()
   }
 })
 
+test('INV-3 业务模块按导出名读合同：只交回它与它用到的类型，没有这个名字时说出它导出了什么', async () => {
+  const declarations = [
+    "declare module 'velaros:docs' {",
+    '  /** 写一份文档。 */',
+    '  export function write(input: WriteInput): Promise<Written>',
+    '  /** 读一份文档。 */',
+    '  export function read(input: { path: string }): Promise<string>',
+    '  export interface WriteInput { path: string; blocks: Block[] }',
+    "  export type Block = { kind: 'heading' | 'paragraph'; text: string }",
+    '  export interface Written { path: string }',
+    '}',
+  ].join('\n')
+  const operation = (summary) => ({
+    summary,
+    input: { type: 'object' },
+    output: { type: 'object' },
+    effects: 'none',
+    run: () => null,
+  })
+  const kernel = createOperationRuntime({
+    modules: [
+      {
+        binding: {
+          moduleId: 'velaros:docs',
+          instanceId: 'docs',
+          generation: 1,
+          schemaRevision: '1',
+        },
+        summary: 'docs',
+        surface: {
+          specifier: 'velaros:docs',
+          namespace: 'docs',
+          methods: ['write', 'read'],
+          declarations,
+          template: '// docs',
+          revision: '1',
+          operations: {
+            write: { ...operation('write'), hasInput: true },
+            read: { ...operation('read'), hasInput: true },
+          },
+        },
+        operations: { write: operation('write'), read: operation('read') },
+      },
+    ],
+    journal: {},
+  })
+  try {
+    const catalog = new SystemCatalog({ kernel: () => kernel, allows: () => true })
+    const write = catalog.describe('s', 'velaros:docs', 'write')
+    assert.match(write.declarations, /function write/)
+    assert.match(write.declarations, /interface WriteInput/)
+    assert.match(write.declarations, /type Block/)
+    assert.match(write.declarations, /interface Written/)
+    assert.doesNotMatch(write.declarations, /function read/)
+    assert.deepEqual(Object.keys(write.operations), ['write'])
+    assert.equal(write.specifier, 'velaros:docs')
+    assert.throws(() => catalog.describe('s', 'velaros:docs', 'remove'), {
+      code: 'MODULE_EXPORT',
+      message: /write、read/,
+    })
+  } finally {
+    await kernel.dispose()
+  }
+})
+
 test('INV-8 任意业务包不能占用系统身份或替换系统入口', async () => {
   for (const id of ['velaros:system', 'velaros:system-memory', 'velaros:program']) {
     const storage = localContextStorage({ path: ':memory:' })

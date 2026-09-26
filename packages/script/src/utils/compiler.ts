@@ -95,6 +95,78 @@ export function declaredModules(
 }
 
 /**
+ * 从一个模块的声明里切出一个导出（函数或类型；函数的重载一并带上），加上它传递用到的、同一模块里声明的类型；
+ * 各条保持原来的先后与注释，外面包回 `declare module`。模块里没有这个名字时 declarations 为 null，exports 给出它导出的值。
+ */
+export function sliceModuleExport(
+  declarations: string,
+  specifier: string,
+  name: string
+): { declarations: Nullable<string>; exports: string[] } {
+  const file = ts.createSourceFile(
+    DeclarationFileName,
+    declarations,
+    ProgramTarget,
+    true,
+    ts.ScriptKind.TS
+  )
+  const module = file.statements.find(
+    (statement): statement is ts.ModuleDeclaration =>
+      ts.isModuleDeclaration(statement) &&
+      ts.isStringLiteral(statement.name) &&
+      statement.name.text === specifier
+  )
+  const body = module?.body && ts.isModuleBlock(module.body) ? module.body.statements : []
+  const exports = declaredModules(declarations).get(specifier)?.listed ?? []
+  const byName = new Map<string, ts.Statement[]>()
+  for (const statement of body)
+    for (const declared of declaredNamesOf(statement))
+      byName.set(declared, [...(byName.get(declared) ?? []), statement])
+  if (!byName.has(name)) return { declarations: null, exports }
+
+  const picked = new Set<ts.Statement>()
+  const pending = [name]
+  for (let next = pending.pop(); !isUndefined(next); next = pending.pop())
+    for (const statement of byName.get(next) ?? []) {
+      if (picked.has(statement)) continue
+      picked.add(statement)
+      pending.push(...referencedTypeNames(statement))
+    }
+  const text = body
+    .filter((statement) => picked.has(statement))
+    .map((statement) => statement.getFullText(file).replace(/^\n+/u, ''))
+    .join('\n')
+  return { declarations: `declare module '${specifier}' {\n${text}\n}`, exports }
+}
+
+/** 一段声明里引用到的类型名：类型引用、extends / implements 的基类型、typeof 的对象（限定名取最左边那段）。 */
+function referencedTypeNames(node: ts.Node): string[] {
+  const names: string[] = []
+  const leftmost = (entity: ts.EntityName | ts.Expression): Optional<string> =>
+    ts.isIdentifier(entity)
+      ? entity.text
+      : ts.isQualifiedName(entity)
+        ? leftmost(entity.left)
+        : ts.isPropertyAccessExpression(entity)
+          ? leftmost(entity.expression)
+          : undefined
+  const visit = (child: ts.Node): void => {
+    const entity = ts.isTypeReferenceNode(child)
+      ? child.typeName
+      : ts.isExpressionWithTypeArguments(child)
+        ? child.expression
+        : ts.isTypeQueryNode(child)
+          ? child.exprName
+          : undefined
+    const referenced = entity ? leftmost(entity) : undefined
+    if (referenced) names.push(referenced)
+    ts.forEachChild(child, visit)
+  }
+  ts.forEachChild(node, visit)
+  return names
+}
+
+/**
  * 只查语法：交上来的这份与它 import 到的库里的脚本各解析一遍，再核对每个 import 都落得到。
  * 不查类型——字段名写错、入参形状不对，留给运行时当场报（能力的入参照样按 schema 校验）。
  * 行号就是模型写的那一行；出在库里别的脚本上的带着那个脚本的路径。

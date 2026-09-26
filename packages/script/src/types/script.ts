@@ -188,6 +188,14 @@ export interface ScriptPackageDefinition {
   readonly exports: Readonly<Record<string, string>>
 }
 
+/** 从一个模块的声明里切出的一个导出。 */
+export interface ScriptModuleExportSlice {
+  /** 这个导出与它用到的类型，包在 `declare module` 里；模块没有这个名字时为 null。 */
+  readonly declarations: Nullable<string>
+  /** 模块导出的值（函数、常量、转出的命名空间），说给找不到导出的模型听。 */
+  readonly exports: readonly string[]
+}
+
 /** 按当前授权编译的包和声明，检查器与执行器共用。 */
 export interface ScriptPackageSurface {
   /** 已过滤不可用成员的包投影。 */

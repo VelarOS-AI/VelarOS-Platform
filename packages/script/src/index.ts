@@ -80,5 +80,9 @@ export type {
   CompletedCall,
   GrantedModule,
 } from './types/script.js'
-export type { ScriptPackageDefinition, ScriptPackageSurface } from './types/script.js'
+export type {
+  ScriptModuleExportSlice,
+  ScriptPackageDefinition,
+  ScriptPackageSurface,
+} from './types/script.js'
 export type { ScriptWorkerCommand, ScriptWorkerEvent } from './types/worker.js'
