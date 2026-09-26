@@ -58,6 +58,14 @@ async function collectPages(maxPages = 3) {
   return items
 }
 
+// 点「加载更多」：先数现在有几行，点完等行数真的变多了再读。按钮先变成「加载中」不代表数据到了，只等「页面有变化」会读到不全的表。
+async function loadMore(button = 'button.load-more', rows = 'table tbody tr') {
+  const before = await evaluate({ script: '(selector) => document.querySelectorAll(selector).length', args: [rows] })
+  await click({ target: button })
+  await waitForFunction({ script: '(selector, count) => document.querySelectorAll(selector).length > count', args: [rows, before], timeoutMs: 10000 })
+  return evaluate({ script: '(selector) => [...document.querySelectorAll(selector)].map((row) => [...row.cells].map((cell) => cell.innerText))', args: [rows] })
+}
+
 // 看图定位：截一张带编号的图（图会交给你看），按编号对应的 target 去点。
 async function clickByLook(label = '登录') {
   const shot = await screenshot({ annotate: true })

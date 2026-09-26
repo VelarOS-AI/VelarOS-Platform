@@ -71,6 +71,8 @@ const target = (css: string) => ({
 /** 页面脚本交回什么：按脚本里的特征认出是哪一种读法，交回那一页假页面上的结果。 */
 function pageScriptValue(script: string, args: unknown[]): unknown {
   if (script.includes('row.cells')) return [['华北', '1200']]
+  if (script.includes('document.querySelectorAll(selector).length > count')) return true
+  if (script.includes('(selector) => document.querySelectorAll(selector).length')) return 1
   if (script.includes("'.result').length > 0")) return true
   if (script.includes("'.result a')].map") || script.includes("'.result')].map"))
     return [{ title: '第一条', href: 'https://example.com/1' }]
