@@ -32,7 +32,7 @@ export interface RehearsalSandboxRulesApi {
    */
   prepareApply(input: SandboxApplyPrepareInput): Nullable<SandboxSelection>
   /**
-   * 镜像里跑的命令要不要先问用户。危险命令（递归删除、丢未提交改动的 git、提权这类，判定用 `velaros:shell` 的那一套）照常问：
+   * 镜像里跑的命令要不要先问用户。危险命令（递归删除目录、清掉未跟踪文件、强推这类，判定用 `velaros:shell` 的那一套）照常问：
    * 它写不出镜像，但用户仍然要看得到脚本在做什么（ADR 0006）。不危险返回 null；危险就给出确认文案与审批选项——
    * 高风险、必须用户亲自点、不可记忆，操作身份与 `velaros:shell` 同一个种类，工作目录记成这个沙箱。
    */

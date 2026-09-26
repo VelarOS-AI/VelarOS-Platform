@@ -347,7 +347,6 @@ describe('只读与危险判定', () => {
       'RM --RECURSIVE --FORCE /',
       'sudo rm -r /tmp/cache',
       'ls | xargs rm -r',
-      'git rm -rf ./directory',
       'rm ./directory -Recurse',
     ]) {
       const plan = shellCommandPolicy.analyze(command)
@@ -446,10 +445,18 @@ describe('危险命令的审批请求', () => {
         riskScope: 'x',
       }).options.operation?.key
     ).not.toBe(first.options.operation?.key)
-    // 文案写明命令、理由，递归删除时提醒仓库里的未推送提交会一起没掉。
-    expect(first.message).toContain('rm -rf ./dist')
-    expect(first.message).toContain('递归删除整个文件夹')
-    expect(first.message).toContain('未推送的提交')
+    // 确认卡只有一行：在哪、是哪一类，加上命令的第一行；很长的命令截断，不摊开正文。
+    expect(first.message).toBe('在当前项目递归删除：rm -rf ./dist')
+    const long = shellCommandApproval.dangerous({
+      command: `rm -rf ./${'a'.repeat(300)}\nsecond line`,
+      plan,
+      cwd: '/repo',
+      background: false,
+      scopeLabel: '当前项目',
+      riskScope: 'x',
+    })
+    expect(long.message.split('\n')).toHaveLength(1)
+    expect(long.message.endsWith('…')).toBe(true)
   })
 })
 

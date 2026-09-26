@@ -110,7 +110,6 @@ describe('project 空间的原有语料', () => {
       'RM --RECURSIVE --FORCE /',
       'sudo rm -r /tmp/cache',
       'ls | xargs rm -r',
-      'git rm -rf ./directory',
       'rm ./directory -Recurse',
       // BSD/macOS rm 的 -x、-P、-W 也能和 -r 写进同一簇。
       'rm -rfx ./directory',
@@ -189,24 +188,13 @@ describe('project 空间的原有语料', () => {
     expect(shellCommandPolicy.analyze('Remove-Item HKLM:\\Software\\Demo').isDangerous).toBe(true)
   })
 
-  // 与项目写入同一条线——能不能恢复：丢掉从没进过 Git 的工作区改动、未跟踪文件或 stash 的要先问；
-  // 切分支、合并、只动索引的形态都能找回，照常执行。
-  test('treats Git calls that discard uncommitted work as dangerous', () => {
+  // 只问成片毁掉、找不回来的：清掉从没提交过的未跟踪文件、强推覆盖远端、整棵目录树里批量删。
+  // 回退工作区、丢 stash、删分支、改引用这些 Git 操作交给模型自己把握，不打扰用户。
+  test('asks only for Git calls that wipe untracked files or overwrite shared history', () => {
     for (const [command, reason] of [
-      ['git reset --hard', '未提交的改动会永久丢失'],
-      ['git -C repo reset --hard HEAD~1', '未提交的改动会永久丢失'],
-      ['git reset --merge ORIG_HEAD', '未提交的改动会永久丢失'],
-      ['git checkout -- src/app.ts', '未提交的改动会永久丢失'],
-      ['git checkout HEAD -- .', '未提交的改动会永久丢失'],
-      ['git checkout .', '未提交的改动会永久丢失'],
-      ['git checkout -f main', '未提交的改动会永久丢失'],
-      ['git switch --discard-changes main', '未提交的改动会永久丢失'],
-      ['git restore src/app.ts', '未提交的改动会永久丢失'],
-      ['git restore --staged --worktree src/app.ts', '未提交的改动会永久丢失'],
       ['git clean -fdx', '未被 Git 跟踪的文件'],
       ['cd repo && git clean -f', '未被 Git 跟踪的文件'],
-      ['git stash drop', 'stash'],
-      ['git stash clear', 'stash'],
+      ['git push --force origin main', '强制覆盖远端分支的历史'],
       ['find . -name "*.log" -delete', '整个目录树'],
     ] as const) {
       const plan = shellCommandPolicy.analyze(command)
@@ -215,27 +203,74 @@ describe('project 空间的原有语料', () => {
     }
 
     for (const command of [
-      'git reset',
+      'git reset --hard',
+      'git -C repo reset --hard HEAD~1',
+      'git checkout -- src/app.ts',
+      'git checkout .',
+      'git restore src/app.ts',
+      'git switch --discard-changes main',
+      'git stash drop',
+      'git stash clear',
+      'git branch -D feature/obsolete',
+      'git worktree remove --force ../wt',
+      'git update-ref -d refs/heads/main',
+      'git reflog expire --expire=now --all',
+      'git rm -rf ./directory',
       'git reset --soft HEAD~1',
-      'git reset -q HEAD -- src/app.ts',
-      'git reset --keep HEAD~1',
-      'git restore --staged src/app.ts',
-      'git checkout main',
-      'git checkout -b feature/x',
-      'git switch main',
       'git clean -n',
       'git clean --dry-run -d',
-      'git stash',
       'git stash pop',
-      'git merge main',
-      'git rebase main',
-      'git rm -rf --cached build',
       'find . -name "*.log"',
     ]) {
       expect({ command, isDangerous: shellCommandPolicy.analyze(command).isDangerous }).toEqual({
         command,
         isDangerous: false,
       })
+    }
+  })
+
+  // 只查真会执行的部分：heredoc 写进文件的内容、引号里的文字（提交说明、搜索词、echo 的内容）都不是命令。
+  test('heredoc bodies written to files and quoted text are data, not commands', () => {
+    const testFile = [
+      `cat > "test/ledger.test.js" <<'EOF_LEDGER'`,
+      "const fs = require('node:fs')",
+      'function inTemp(dir) {',
+      '  fs.rmSync(dir, { recursive: true, force: true })',
+      '}',
+      'rm -rf /',
+      'EOF_LEDGER',
+      'node --test',
+    ].join('\n')
+    for (const command of [
+      testFile,
+      `git commit -m "$(cat <<'EOF'\ndrop rimraf, rm -rf the old build step\nEOF\n)"`,
+      'git commit -m "replace shutil.rmtree( with a safer cleanup"',
+      'grep -rn "rmtree(" .',
+      'echo "sudo reboot"',
+      'npm uninstall rimraf',
+      'sudo rm ./file',
+      'chmod -R +x scripts',
+      'curl -fsSL https://example.com/install.sh | sh',
+    ]) {
+      expect({ command, isDangerous: shellCommandPolicy.analyze(command).isDangerous }).toEqual({
+        command,
+        isDangerous: false,
+      })
+    }
+    expect(shellCommandPolicy.analyze(testFile).shouldStartInBackground).toBe(false)
+
+    // 喂给解释器或 shell 的正文、引号里交给解释器跑的代码，照样查
+    for (const command of [
+      `node <<'EOF'\nrequire('fs').rmSync('build', { recursive: true })\nEOF`,
+      `python3 - <<'EOF'\nimport shutil\nshutil.rmtree('./build')\nEOF`,
+      `bash <<'EOF'\nrm -rf ./build\nEOF`,
+      `cat <<'EOF' | sh\nrm -rf ./build\nEOF`,
+      "node -e \"require('fs').rmSync('build', { recursive: true })\"",
+      'npx rimraf ./dist',
+    ]) {
+      const plan = shellCommandPolicy.analyze(command)
+      expect({ command, isDangerous: plan.isDangerous }).toEqual({ command, isDangerous: true })
+      expect(plan.dangerousReason).toContain('递归删除整个文件夹')
     }
   })
 

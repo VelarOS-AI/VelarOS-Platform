@@ -6,10 +6,20 @@
  * 往词表里加新种类的规矩：先在这里补它的形态，补完在 `test/shell-command.test.ts` 的按种类取样里加一行；
  * 补之前它的命令一律判不了只读（`isShellCommandReadOnly` 的白名单里没有它的命令名，整条按非只读处理），这是刻意的保守。
  */
-import { isEmpty, isFalse, isNull, isString, isTrue, toNullable } from '@velaros-ai/core'
+import {
+  isEmpty,
+  isFalse,
+  isNull,
+  isString,
+  isTrue,
+  isUndefined,
+  toNullable,
+} from '@velaros-ai/core'
 
 import type { ShellInvocation } from '../types/invocation.js'
 import type { ShellCommandPlan } from '../types/shell-command.js'
+
+import { ShellTuning } from './tuning.js'
 
 const readOnlyCommands = new Set([
   'cat',
@@ -148,42 +158,28 @@ const QuietBulkDeleteReason =
 /** `find … -delete`：在整棵目录树里批量删除匹配到的文件。 */
 const TreeDeleteReason = '该命令会在整个目录树里批量删除匹配到的文件，删除后无法撤销。'
 
-/** 用 Git 里的版本覆盖工作区：未提交的改动从没进过 Git，覆盖后找不回来。 */
-const GitDiscardReason = '该命令会用 Git 里的版本覆盖工作区，未提交的改动会永久丢失。'
-
 const GitCleanReason = '该命令会删除未被 Git 跟踪的文件，它们从未提交过，删除后无法恢复。'
-
-const GitStashDropReason = '该命令会永久丢弃 Git stash 里暂存的改动。'
 
 const GitForcePushReason = '该命令会强制覆盖远端分支的历史，别人已经拉取或推送的提交会被丢弃。'
 
-const GitForceBranchDeleteReason = '该命令会强制删除分支，分支上没合并的提交会丢失。'
-
-/** `git worktree remove --force`：连同工作树里未提交的改动一起删。 */
-const GitForceWorktreeRemoveReason = '该命令会强制删除工作树目录，其中未提交的改动会永久丢失。'
-
-/** `git update-ref -d`：直接删引用，指向的提交可能再也找不回来。 */
-const GitRefDeleteReason = '该命令会直接删除 Git 引用，它指向的提交可能再也找不回来。'
-
-/** `git reflog expire --expire=now`：立刻清掉 reflog，丢失的提交没法再靠它找回。 */
-const GitReflogExpireReason = '该命令会立即清空 reflog，之后丢失的提交将无法通过 reflog 找回。'
-
-/** `git filter-branch -f`：强制改写整个分支历史。 */
-const GitHistoryRewriteReason = '该命令会强制改写整个分支历史，原来的提交会被替换。'
-
-const RemoteScriptReason = '该命令把网上下载的脚本不经检查直接交给 shell 执行。'
-
 const DestructiveCommandReason = '该命令可能删除数据、破坏文件系统或终止关键进程。'
 
-const PrivilegedMutationReason = '该命令会以提升权限批量修改系统资源。'
+/** 确认卡上那一行标题的开头：一眼看出是哪一类，后面接命令的第一行。 */
+const ReasonTitles: ReadonlyMap<string, string> = new Map([
+  [RecursiveRemoveReason, '递归删除'],
+  [QuietBulkDeleteReason, '批量删除'],
+  [TreeDeleteReason, '批量删除'],
+  [GitCleanReason, '清掉未跟踪的文件'],
+  [GitForcePushReason, '强推覆盖远端历史'],
+  [DestructiveCommandReason, '运行高风险命令'],
+])
 
 /**
- * Windows 下其余破坏性命令形态（删除类命令由 `describeInvocationDanger` 按词法判定）。单杠参数要求
- * 前面紧跟空白（而非 `--force` 里的第二个 `-`），避免跟 `npm run format` 这类常见跨平台命令误撞。
+ * 抹盘、格式化、关机重启、杀掉全部进程这类整机级破坏，连同 Windows 下的同类形态（删除类命令由 `describeInvocationDanger` 按词法判定）。
+ * 单杠参数要求前面紧跟空白（而非 `--force` 里的第二个 `-`），避免跟 `npm run format` 这类常见跨平台命令误撞。
  */
-const windowsDestructivePatterns: readonly RegExp[] = [
-  // 删除命令的目标落在注册表根路径（PowerShell 的 HKLM: 等驱动器）视同破坏性删除。
-  /\b(?:del|erase|rd|rmdir|ri|rm|remove-item)\b[^&|;\r\n]*\b(?:hklm|hkcu|hkcr|hku|hkcc|hkey_[a-z_]+)\b/i,
+const DestructivePatterns: readonly RegExp[] = [
+  /\bmkfs\b|\bdd\b[^&|;\r\n]*\b(?:if|of)=|\bdiskutil\s+(?:erase(?:disk|volume)|reformat|partitiondisk|secureerase|zerodisk|randomdisk)\b|\bshutdown\b|\breboot\b|\bkill\s+-9\s+-1\b/i,
   /\bformat\s+[a-z]:/i,
   /\bdiskpart\b|\bvssadmin\s+delete\b|\bbcdedit\b|\bbootrec\b/i,
   /\breg\s+delete\b|\bremove-itemproperty\b/i,
@@ -191,28 +187,88 @@ const windowsDestructivePatterns: readonly RegExp[] = [
   /\brestart-computer\b|\bstop-computer\b/i,
 ]
 
-/** 把网上下载的内容直接管道给 shell：curl/wget 接 sh、bash、zsh，或 PowerShell 的 iwr/irm 接 iex。 */
-const remoteScriptPatterns: readonly RegExp[] = [
-  /\b(?:curl|wget)\b[^|&;\r\n]*\|\s*(?:sudo\s+(?:-\S+\s+)*)?(?:ba|z|da|k|fi)?sh\b/i,
-  /\b(?:iwr|irm|invoke-webrequest|invoke-restmethod)\b[^|&;\r\n]*\|\s*(?:iex|invoke-expression)\b/i,
+/** 删除命令的目标落在注册表根路径（PowerShell 的 HKLM: 等驱动器）视同破坏性删除；路径常写在引号里，按原文查。 */
+const RegistryRootDeletePattern =
+  /\b(?:del|erase|rd|rmdir|ri|rm|remove-item)\b[^&|;\r\n]*\b(?:hklm|hkcu|hkcr|hku|hkcc|hkey_[a-z_]+)\b/i
+
+/**
+ * 程序代码里的递归删除：Python 的 shutil.rmtree、Node 的 rimraf 与带 recursive 的 fs.rm/rmSync。整个文件夹连同里面的仓库一起没掉，和 rm -rf 一样危险。
+ * 只在真会被执行的代码里查（解释器的内联脚本、喂给解释器的 heredoc），写进文件的内容、提交说明里提到它们都不算。
+ */
+const ScriptedRecursiveRemovePatterns: readonly RegExp[] = [
+  /\brmtree\s*\(/i,
+  /\brimraf(?:Sync)?\s*[(.]/i,
+  /\brm(?:Sync)?\s*\((?=[^)]*\brecursive\s*:\s*true)/i,
 ]
 
-/** 藏在脚本或别的程序里的递归删除：Python 的 shutil.rmtree、Node 的 rimraf、CMD 的 rd/rmdir/del /s。整个文件夹连同里面的仓库一起没掉，和 rm -rf 一样危险。 */
-const scriptedRecursiveRemovePatterns: readonly RegExp[] = [
-  /\brmtree\s*\(/i,
-  /\brimraf\b/i,
-  /\brm(?:Sync)?\s*\((?=[^)]*\brecursive\s*:\s*true)/i,
+/** 词法判定之外的命令行递归删除：rimraf 命令（含 npx、pnpm dlx 这类调用），CMD 的 rd/rmdir/del 带 /s。 */
+const RecursiveRemoveCommandPatterns: readonly RegExp[] = [
+  /(?:^|[\s;&|(`])(?:(?:npx|bunx|pnpx)\s+(?:-\S+\s+)*|(?:pnpm|yarn)\s+(?:dlx|exec)\s+)?rimraf(?=\s)/i,
   /\b(?:rd|rmdir)\b[^&|;\r\n]*\s\/s(?=\s|$)/i,
   /\bdel\b[^&|;\r\n]*\s\/s(?=\s|$)/i,
 ]
 
-const windowsPrivilegedMutationPatterns: readonly RegExp[] = [
-  /\brunas\b|\bstart-process\b[^&|;\r\n]*\s-verb(?:\s+|:)['"]?runas\b/i,
-  /\btakeown\b|\bicacls\b[^&|;\r\n]*\/reset\b/i,
-  // `icacls ... /grant` 单独出现很常见且通常无害（给单个文件加一条权限）；只有再叠加
-  // 递归 `/t` 才逼近"对根目录批量改权限"，因此用双 lookahead 要求二者同现、不论先后。
-  /\bicacls\b(?=[^&|;\r\n]*\/grant\b)(?=[^&|;\r\n]*\/t\b)/i,
-]
+/**
+ * 命令里有没有把参数或输入当代码跑的调用：shell、eval、PowerShell、cmd 与常见脚本解释器。有的话引号里的就可能是代码，照原文查；
+ * 没有的话引号里只是文字（提交说明、搜索词、echo 的内容），查之前先抹掉。
+ */
+const InterpreterCallPattern =
+  /(?:^|[\s;&|(`$])(?:sh|bash|zsh|dash|ksh|mksh|ash|fish|eval|node|nodejs|deno|bun|python[23]?|ruby|perl|php|pwsh|powershell|cmd)(?:\.exe)?(?=\s|$)/i
+
+/** 把 heredoc 正文当代码跑的脚本解释器（shell 另算：它的正文按命令递归判定）。 */
+const ScriptInterpreters = new Set([
+  'node',
+  'nodejs',
+  'deno',
+  'bun',
+  'python',
+  'python2',
+  'python3',
+  'ruby',
+  'perl',
+  'php',
+])
+
+/** 只把 heredoc 正文当数据用的命令：写进文件、过滤、比较、压缩，正文不会被执行。 */
+const HeredocDataCommands = new Set([
+  'cat',
+  'tee',
+  'head',
+  'tail',
+  'wc',
+  'sort',
+  'uniq',
+  'tr',
+  'cut',
+  'grep',
+  'egrep',
+  'fgrep',
+  'rg',
+  'jq',
+  'yq',
+  'base64',
+  'xxd',
+  'od',
+  'diff',
+  'cmp',
+  'column',
+  'fold',
+  'fmt',
+  'nl',
+  'paste',
+  'rev',
+  'iconv',
+  'gzip',
+  'bzip2',
+  'xz',
+  'zstd',
+  'pbcopy',
+  'clip',
+  'patch',
+])
+
+/** heredoc 的开头：`<<EOF`、`<<-'EOF'`、`<< "EOF"`；`<<<` 是 here-string，不算。 */
+const HeredocStart = /(?<!<)<<(-?)[ \t]*(['"]?)([A-Za-z_][\w.-]*)\2/g
 
 /** 把命令文本按空白切成词，引号里的空格不切，并去掉外层引号。 */
 function tokenize(command: string): string[] {
@@ -492,66 +548,19 @@ function hasGitOption(args: readonly string[], short: Nullable<string>, long: st
   )
 }
 
-/** 判断一个 git 子命令会不会丢掉无法恢复的改动，返回危险理由；不危险返回 null。 */
+/**
+ * 判断一个 git 子命令会不会成片毁掉找不回来的东西，返回危险理由；不危险返回 null。
+ * 只剩两种：清掉从没提交过的未跟踪文件，强推覆盖远端别人也在用的历史。回退工作区、丢 stash、删分支这类由模型自己把握，不打扰用户。
+ */
 function gitSubcommandDanger(subcommand: string, args: readonly string[]): Nullable<string> {
-  switch (subcommand) {
-    case 'rm': {
-      if (hasGitOption(args, null, '--cached')) return null
-      const flags = readRemoveFlags(args)
-      return flags.recursive && flags.force ? RecursiveRemoveReason : null
-    }
-    case 'reset':
-      return hasGitOption(args, null, '--hard') || hasGitOption(args, null, '--merge')
-        ? GitDiscardReason
-        : null
-    case 'restore':
-      return hasGitOption(args, 'S', '--staged') && !hasGitOption(args, 'W', '--worktree')
-        ? null
-        : GitDiscardReason
-    case 'checkout': {
-      const separator = args.indexOf('--')
-      const namesPath =
-        (separator >= 0 && separator < args.length - 1) ||
-        args.some((argument) => argument === '.' || argument.startsWith('./'))
-      return namesPath || hasGitOption(args, 'f', '--force') ? GitDiscardReason : null
-    }
-    case 'switch':
-      return hasGitOption(args, 'f', '--force') || hasGitOption(args, null, '--discard-changes')
-        ? GitDiscardReason
-        : null
-    case 'clean':
-      return hasGitOption(args, 'n', '--dry-run') ? null : GitCleanReason
-    case 'stash': {
-      const action = args.find((argument) => !argument.startsWith('-'))
-      return action === 'drop' || action === 'clear' ? GitStashDropReason : null
-    }
-    case 'push':
-      return hasGitOption(args, 'f', '--force') ||
-        hasGitOption(args, null, '--force-with-lease') ||
-        hasGitOption(args, null, '--force-if-includes')
-        ? GitForcePushReason
-        : null
-    case 'branch':
-      return args.some((argument) => /^-[A-Za-z]*D[A-Za-z]*$/.test(argument)) ||
-        (hasGitOption(args, 'd', '--delete') && hasGitOption(args, 'f', '--force'))
-        ? GitForceBranchDeleteReason
-        : null
-    case 'worktree':
-      return args[0] === 'remove' && hasGitOption(args, 'f', '--force')
-        ? GitForceWorktreeRemoveReason
-        : null
-    case 'update-ref':
-      return hasGitOption(args, 'd', '--delete') ? GitRefDeleteReason : null
-    case 'reflog':
-      return args[0] === 'expire' &&
-        args.some((argument) => /^--expire(?:-unreachable)?=(?:now|all)$/.test(argument))
-        ? GitReflogExpireReason
-        : null
-    case 'filter-branch':
-      return hasGitOption(args, 'f', '--force') ? GitHistoryRewriteReason : null
-    default:
-      return null
-  }
+  if (subcommand === 'clean') return hasGitOption(args, 'n', '--dry-run') ? null : GitCleanReason
+  if (subcommand === 'push')
+    return hasGitOption(args, 'f', '--force') ||
+      hasGitOption(args, null, '--force-with-lease') ||
+      hasGitOption(args, null, '--force-if-includes')
+      ? GitForcePushReason
+      : null
+  return null
 }
 
 /** 判断一次调用的危险理由；不危险返回 null。 */
@@ -687,25 +696,77 @@ function looksLikeLongRunningService(command: string): boolean {
   })
 }
 
-/** 给出整条命令的危险理由：删除类按词法判定，其余破坏性与提权命令按通用规则判定；不危险返回 null。 */
+/**
+ * 把 heredoc 的正文从命令里拿出来，按喂给谁分开：`cat`、`tee` 这类只把正文当数据的，正文丢掉不查（写进文件的测试里有 rmSync 不算删除）；
+ * 脚本解释器拿到的是要执行的代码，放进 scripts 单独查；shell、认不出的命令与接了管道的，正文放进 commands 按命令递归判定。
+ */
+function splitHeredocs(command: string): { shell: string; commands: string[]; scripts: string[] } {
+  const lines = command.split('\n')
+  const kept: string[] = []
+  const commands: string[] = []
+  const scripts: string[] = []
+  let index = 0
+  while (index < lines.length) {
+    const line = lines[index] ?? ''
+    kept.push(line)
+    index += 1
+    for (const opener of line.matchAll(HeredocStart)) {
+      const [matched, dash, , delimiter] = opener
+      const body: string[] = []
+      while (index < lines.length) {
+        const current = lines[index] ?? ''
+        index += 1
+        if ((dash ? current.replace(/^\t+/u, '') : current) === delimiter) break
+        body.push(current)
+      }
+      const at = opener.index ?? 0
+      const owner = readInvocation(
+        tokenize(
+          line
+            .slice(0, at)
+            .split(/&&|\|\||[;|&(){}`]/)
+            .at(-1) ?? ''
+        )
+      )?.name
+      const piped = line.slice(at + matched.length).includes('|')
+      if (!piped && !isUndefined(owner) && HeredocDataCommands.has(owner)) continue
+      if (!piped && !isUndefined(owner) && ScriptInterpreters.has(owner))
+        scripts.push(body.join('\n'))
+      else commands.push(body.join('\n'))
+    }
+  }
+  return { shell: kept.join('\n'), commands, scripts }
+}
+
+/** 抹掉引号里的文字，只留一对空引号：没有解释器把它当代码跑时，引号里只是参数文本。 */
+function withoutQuotedText(command: string): string {
+  return command.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (quoted) => `${quoted[0]}${quoted[0]}`)
+}
+
+/**
+ * 给出整条命令的危险理由；不危险返回 null。删除类按词法判定，其余规则只查真会执行的部分：
+ * heredoc 写进文件的正文不查，引号里的文字只在有解释器把它当代码跑时才查，喂给 shell 的正文递归判定。
+ */
 function describeDangerousCommand(command: string): Nullable<string> {
-  const invocationReason = describeInvocationDanger(command)
+  const { shell, commands, scripts } = splitHeredocs(command)
+  const invocationReason = describeInvocationDanger(shell)
   if (invocationReason) return invocationReason
-  if (remoteScriptPatterns.some((pattern) => pattern.test(command))) return RemoteScriptReason
-  if (scriptedRecursiveRemovePatterns.some((pattern) => pattern.test(command)))
+  const text = InterpreterCallPattern.test(shell) ? shell : withoutQuotedText(shell)
+  const code = [text, ...scripts]
+  if (
+    code.some((part) => ScriptedRecursiveRemovePatterns.some((pattern) => pattern.test(part))) ||
+    RecursiveRemoveCommandPatterns.some((pattern) => pattern.test(text))
+  )
     return RecursiveRemoveReason
   if (
-    /\bmkfs\b|\bdd\b[^&|;\r\n]*\b(?:if|of)=|\bdiskutil\s+(?:erase(?:disk|volume)|reformat|partitiondisk|secureerase|zerodisk|randomdisk)\b|\bshutdown\b|\breboot\b|\bkill\s+-9\s+-1\b/i.test(
-      command
-    ) ||
-    windowsDestructivePatterns.some((pattern) => pattern.test(command))
+    RegistryRootDeletePattern.test(shell) ||
+    code.some((part) => DestructivePatterns.some((pattern) => pattern.test(part)))
   )
     return DestructiveCommandReason
-  if (
-    /\bsudo\b|\bchmod\s+-R\b|\bchown\s+-R\b/i.test(command) ||
-    windowsPrivilegedMutationPatterns.some((pattern) => pattern.test(command))
-  )
-    return PrivilegedMutationReason
+  for (const body of commands) {
+    const reason = describeDangerousCommand(body)
+    if (reason) return reason
+  }
   return null
 }
 
@@ -1025,7 +1086,9 @@ export function analyzeCommandExecution(command: string): ShellCommandPlan {
       ports: [],
     }
   const dangerousReason = describeDangerousCommand(trimmed)
-  const reason = looksLikeLongRunningService(trimmed)
+  // 长驻与端口只看命令本身，heredoc 里写进文件的内容（README 里的 npm run dev、代码里的 :8080）不算
+  const { shell } = splitHeredocs(trimmed)
+  const reason = looksLikeLongRunningService(shell)
     ? '该命令看起来会启动长期驻留的服务或监听进程。'
     : null
   return {
@@ -1034,7 +1097,7 @@ export function analyzeCommandExecution(command: string): ShellCommandPlan {
     reason,
     isDangerous: !!dangerousReason,
     dangerousReason,
-    ports: extractPorts(trimmed),
+    ports: extractPorts(shell),
   }
 }
 
@@ -1053,25 +1116,14 @@ export function isParallelCommandExecutionSafe(
   return plan.isReadOnly && !plan.isDangerous && !plan.shouldStartInBackground
 }
 
-/** 生成危险命令的确认文案，写明命令、理由、是否后台运行与可能占用的端口。 */
+/** 危险命令确认卡上的那一行：在哪、是哪一类，加上命令的第一行（太长截断）。细节不摊开。 */
 export function buildDangerousCommandConfirmationMessage(
   command: string,
   plan: ShellCommandPlan,
-  scopeLabel: string,
-  willRunInBackground: boolean
+  scopeLabel: string
 ): string {
-  const portSuffix = !isEmpty(plan.ports) ? ` 可能涉及端口：${plan.ports.join(', ')}。` : ''
-  return [
-    `准备在${scopeLabel}执行高风险命令：${command}`,
-    plan.dangerousReason ?? '该命令可能造成不可逆结果。',
-    ...(plan.dangerousReason === RecursiveRemoveReason || plan.dangerousReason === TreeDeleteReason
-      ? [
-          '如果目标是一个项目或仓库目录（含 .git），未推送的提交和未提交的改动会一起没掉，无法找回。',
-        ]
-      : []),
-    willRunInBackground
-      ? `该命令还可能长期驻留。${portSuffix}`
-      : '这是一次需要显式确认的危险操作。',
-    '是否继续？',
-  ].join('\n')
+  const head = command.trim().split('\n')[0]?.trim() ?? ''
+  const limit = ShellTuning.command.confirmationCommandChars
+  const shown = head.length > limit ? `${head.slice(0, limit)}…` : head
+  return `在${scopeLabel}${ReasonTitles.get(plan.dangerousReason ?? '') ?? '运行高风险命令'}：${shown}`
 }

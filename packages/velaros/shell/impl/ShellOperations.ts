@@ -35,7 +35,7 @@ import { shellCommandPolicy } from './ShellCommandPolicy.js'
  *
  * @AgentView
  * 跑命令、看和停后台任务、刷新 shell 环境。
- * 危险命令（递归删除、丢掉未提交改动的 git 操作、提权这类）每次都由用户亲自确认，被拒时一个进程都没起，调用抛错；
+ * 只有成片毁掉、找不回来的命令（递归删除目录、清掉未跟踪文件、强推覆盖远端、抹盘格式化这类）每次由用户亲自确认，被拒时一个进程都没起，调用抛错；
  * 判定认全部五种 shell 的语法，换个 shell 写照样问。别的命令直接跑。
  */
 export interface ShellOperationsApi {

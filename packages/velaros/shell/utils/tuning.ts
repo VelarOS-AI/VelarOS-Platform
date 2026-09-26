@@ -28,6 +28,8 @@ export const ShellTuning = Object.freeze({
     consoleRows: 30,
     /** 验证摘要里从失败输出末尾摘多少字符。 */
     verificationIssueChars: 1_000,
+    /** 危险命令确认卡的标题里命令最多摆多少字符；再长的截断，要看全文的人看命令本身。 */
+    confirmationCommandChars: 120,
   }),
   /** 受管子进程：ShellProcessManager、ShellManagedProcess、进程控制用的短命令。 */
   process: Object.freeze({

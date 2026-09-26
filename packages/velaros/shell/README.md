@@ -55,7 +55,7 @@ export async function shutdown() {
 ## 约定
 
 - 作用域在空间端口：`resolveCwd` 要对越界的目录抛 `PERMISSION`，它排在确认与执行之前；`commandPolicy` 给确认文案里「在哪儿执行」和风险分类，宿主靠 `:dangerous` 后缀认出硬门。
-- 只有危险命令（递归删除、丢未提交改动的 git、提权这类）经 `approval` 问，每次都问、不可记忆；被拒时一个进程都不起，拒绝原样抛出。别的命令直接跑，长驻命令自动转后台。
+- 只有成片毁掉、找不回来的危险命令（递归删除目录、清掉未跟踪文件、强推覆盖远端、抹盘格式化这类）经 `approval` 问，确认文案只有一行，每次都问、不可记忆；被拒时一个进程都不起，拒绝原样抛出。别的命令直接跑，长驻命令自动转后台。
 - 命令自己失败（非零退出、超时、取消）不抛错，看回执的 `success`；超时钳到 `ShellLimits.timeoutMs`，输出不折叠，超过 `ShellLimits.outputChars` 只留末尾并标 `truncated`。
 - 观察模式只跑前台、不危险的命令（否则抛 `OBSERVATION_EFFECT_DENIED`），只走端口的 `runObservationCommand`，端口没给就抛 `OBSERVATION_SHELL_UNAVAILABLE`，不退回普通执行。
 - 挑了本机没有的 `shell` 在起进程之前抛 `VALIDATION`，不换默认 shell 照跑；一个能用的 shell 都找不到抛 `SHELL_UNAVAILABLE`。

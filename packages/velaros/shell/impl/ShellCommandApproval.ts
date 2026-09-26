@@ -24,8 +24,7 @@ export class ShellCommandApproval implements ShellCommandApprovalApi {
       message: buildDangerousCommandConfirmationMessage(
         input.command,
         input.plan,
-        input.scopeLabel,
-        input.background
+        input.scopeLabel
       ),
       options: approvalContracts.createManualApprovalOptions({
         approvalRisk: 'high',

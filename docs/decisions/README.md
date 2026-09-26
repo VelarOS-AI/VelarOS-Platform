@@ -35,3 +35,5 @@ Accepted records are durable rationale, not a substitute for schemas or executab
 - [0020: 效果不明不再等宿主核对](0020-no-host-reconciliation.md)
 
 - [0021: 写入不再按决策依据拦](0021-no-decision-basis-write-gate.md)
+
+- [0022: 命令确认只留成片毁掉、找不回来的](0022-confirm-only-mass-irreversible-commands.md)
