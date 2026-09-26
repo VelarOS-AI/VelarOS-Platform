@@ -233,9 +233,13 @@ describe('交互式命令的控制台', () => {
         const [record] = await kernel.listBackgroundTasks({ taskId })
         expect(taskOf(record!).output).toBe('>>> 1+1\n2\n')
 
-        // 停掉任务：进程组收掉，控制台不再收输入。
+        // 停掉任务：进程组收掉，任务记下怎么结束的，控制台不再收输入。
         await kernel.terminateBackgroundTask({ taskId, sessionId: 'session-terminal' })
         expect(await waitUntilExited(kernel, taskId)).toBe('exited')
+        const [ended] = await kernel.listBackgroundTasks({ taskId })
+        expect(ended).toMatchObject({ status: 'exited', signal: 'SIGTERM', exitCode: null })
+        expect(ended?.finishedAt).toBeNumber()
+        expect(ended?.console?.acceptsInput).toBe(false)
         const refused = await kernel.writeConsoleInput({ taskId, text: 'late' })
         expect(refused.accepted).toBe(false)
       } finally {

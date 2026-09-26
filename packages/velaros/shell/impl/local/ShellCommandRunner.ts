@@ -276,10 +276,12 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       }
     }
 
+    // 停下时收尾回调已经把退出码、信号、结束时间和关掉的控制台写进任务了：在它之上更新，别拿停之前那份盖回去。
+    const current = this.tasks.get(taskId) ?? task
     const updatedTask = {
-      ...task,
+      ...current,
       updatedAt: Date.now(),
-      status: this.resolveTaskStatus(task),
+      status: this.resolveTaskStatus(current),
     }
     this.tasks.set(taskId, updatedTask)
 
