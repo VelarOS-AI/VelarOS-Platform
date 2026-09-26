@@ -299,7 +299,7 @@ test('cooperation workload verifies the persisted child write, exact message ack
           "import {store,memory} from 'velaros:system';import {output} from 'velaros';const space=await store.create({name:'handoff',description:'Order totals and child results'});await store.subscribe({store:space.id,topics:['result/']});await memory.update({key:'progress',baseRevision:0,body:'Await child total, then verify report',sources:[]});output(space);"
       else if (main === 2) {
         const id = frame(request).partitions.runtime.stores.active.items[0].id
-        code = `import {start,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'Read orders and write total to result/summary with event result/ready',profile:'worker',stores:[{store:${JSON.stringify(id)},read:[''],write:['result/']}]});output(await wait({id:job.id}));`
+        code = `import {start,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'Read orders and write total to result/summary with event result/ready',profile:'worker'});output(await wait({id:job.id}));`
       } else if (main === 3) {
         const id = frame(request).partitions.runtime.stores.active.items[0].id
         code = `import {store,memory} from 'velaros:system';import {output} from 'velaros';const page=await store.events({store:${JSON.stringify(id)}});if(!page)throw Error('subscription missing');await store.ack({store:${JSON.stringify(id)},ids:page.events.map(event=>event.id)});output(await store.events({store:${JSON.stringify(id)}}));output(await memory.organize({focus:'Keep total 50 and next report verification'}));`
@@ -520,7 +520,7 @@ test('reconciliation advances four actual source versions through the same child
         code =
           "import {store,memory} from 'velaros:system';import {output} from 'velaros';const space=await store.create({name:'handoff',description:'Four-stage order reconciliation'});await store.subscribe({store:space.id,topics:['result/']});output(await memory.update({key:'progress',baseRevision:0,body:'Four-stage reconciliation'}));"
       else if (main === 2) {
-        code = `import {start,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'Summarize all order batches into result/summary and notify result/ready',profile:'worker',stores:[{store:${JSON.stringify(id)},read:[''],write:['result/']}]});output(await wait({id:job.id}));`
+        code = `import {start,wait} from 'velaros:agents';import {output} from 'velaros';const job=await start({task:'Summarize all order batches into result/summary and notify result/ready',profile:'worker'});output(await wait({id:job.id}));`
         yield {
           type: 'text',
           text:
