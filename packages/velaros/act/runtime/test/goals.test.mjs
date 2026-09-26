@@ -222,10 +222,9 @@ test('paused goals survive normal submissions and cancellation never completes a
   session.cancel()
   await running
   assert.equal((await session.getGoal()).status, 'active')
-  await assert.rejects(
-    session.execute({
-      source: `import {goal} from 'velaros:system';await goal.update({baseRevision:3,status:'removed'});`,
-    }),
-    /代码检查失败/
-  )
+  const removed = await session.execute({
+    source: `import {goal} from 'velaros:system';await goal.update({baseRevision:3,status:'removed'});`,
+  })
+  assert.match(removed.result.failed.message, /status 只能是/)
+  assert.equal((await session.getGoal()).status, 'active')
 })

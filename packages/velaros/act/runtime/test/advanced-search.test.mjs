@@ -1525,7 +1525,7 @@ test('INV-33 exhausted query allowance still permits reading previously found ca
   }
 })
 
-test('a malformed gap receives its exact contract and can be corrected without another search', async (t) => {
+test('a malformed gap is rejected at the call naming the wrong field and can be corrected without another search', async (t) => {
   const f = await fixture(t, async function* (request, f) {
     if (f.calls === 1) {
       yield {
@@ -1541,8 +1541,8 @@ test('a malformed gap receives its exact contract and can be corrected without a
         request.materials.find((item) => item.origin === 'runtime-view').text
       ).partitions.runtime.modelTool.items[0]
       assert(evidence)
-      // 写错形状的结论在执行前就被类型检查拦下，诊断里直接给出 gaps 的类型
-      if (f.calls === 3) assert.match(modelText(request), /readonly code: string/)
+      // 写错形状的结论在调用时被入参校验拒绝，报错指出哪个字段错在哪
+      if (f.calls === 3) assert.match(modelText(request), /gaps\[0\] 应当是 object/)
       const gaps =
         f.calls === 2
           ? ['Not all related paths have been verified']

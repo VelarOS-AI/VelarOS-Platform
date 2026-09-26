@@ -26,14 +26,16 @@ export type CodeSurfaceErrorCode =
   (typeof CodeSurfaceErrorCodes)[keyof typeof CodeSurfaceErrorCodes]
 
 /**
- * 「找不到这个模块」的 TypeScript 诊断码。
+ * import 落不到时的诊断码，沿用 TypeScript 的编号：和 ES 模块链接时一样，这两种在执行之前就报。
  *
- * `import { x } from 'velaros:git'` 而 git 没授权时就是它。认这个专属码就够了，不用自己写判定——
- * **那道「非常驻能力必须先导入」的闸是语言给的**，我们只是认出它。
+ * `import { x } from 'velaros:git'` 而 git 没授权时是 `unresolvedModule`；
+ * 模块在、名字不在（`import { readFile } from 'velaros:files'`）时是 `missingExport`。
  */
 export const CodeSurfaceDiagnosticCodes = Object.freeze({
-  /** `Cannot find module 'velaros:git'`：import 了没授权的能力模块。 */
+  /** 找不到模块：import 了没授权的能力模块、不是能力模块的名字，或者库里没有的脚本。 */
   unresolvedModule: 2307,
+  /** 模块没有这个导出：名字照声明核对。 */
+  missingExport: 2305,
 } as const)
 
 /**

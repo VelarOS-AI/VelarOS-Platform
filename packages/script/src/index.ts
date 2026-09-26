@@ -1,4 +1,4 @@
-/** 根入口：给 Node 宿主用；起隔离进程、跑 TypeScript 检查，都要 Node。 */
+/** 根入口：给 Node 宿主用；起隔离进程、用 TypeScript 解析器查语法，都要 Node。 */
 
 export type { CodeSurfaceErrorCode } from './contract/constants.js'
 export {

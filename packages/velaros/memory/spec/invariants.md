@@ -16,7 +16,7 @@
 | INV-6 | 做事之前核对：入参不合法（不是对象、类别不对、标题或描述是空的、换行或超长、正文不是字符串或超长、标签不是字符串数组、含逗号、超长、超条数）一律 `VALIDATION`，一个文件都不写、不删；取消信号已经触发时，三个操作都不碰磁盘 | 测试 | `spec/acceptance.test.ts` |
 | INV-7 | 人手改过的文件照样认：没有头部、CRLF、BOM、name 与 summary 与 kind 这类别名、认不出的类别、没有 updated，都读得出来——标题取 id、描述取正文第一行、类别当作 work、标签为空、更新时间取文件的修改时间；不是 `<合法 id>.md` 的文件不算记忆 | 测试 | `spec/acceptance.test.ts` |
 | INV-8 | 开场索引从条目现算：按 user、feedback、work、reference 分组，一行一条，写着标题、id 与描述；先放 user 与 feedback，剩下的名额按更新时间给 work 与 reference，条数或字数到上限就停，报出没列的条数；条目后面一行按全部条目数出现有标签；空作用域只有一句「还没有记忆」 | 测试 | `spec/acceptance.test.ts` |
-| INV-9 | 代码面是一条真路：模型写的程序照生成的 `baselines/script/memory.d.ts` 过 typecheck，经代码面的门调到真实操作；声明只放出 list、save、remove，调用上下文、作用域端口、记忆库与索引都不进模型面；失败时程序看得到的就是 `error.code` 与 `error.message` | 测试 | `spec/acceptance.test.ts` |
+| INV-9 | 代码面是一条真路：模型写的程序 import 生成的 `baselines/script/memory.d.ts` 里的操作、过语法检查，经代码面的门调到真实操作；声明只放出 list、save、remove，调用上下文、作用域端口、记忆库与索引都不进模型面；失败时程序看得到的就是 `error.code` 与 `error.message` | 测试 | `spec/acceptance.test.ts` |
 | INV-10 | 模型面与常量表一致：声明里 id、标题、描述、正文、标签的上限就是 `MemoryLimits`，类别就是 `MemoryTypes` | 测试 | `spec/acceptance.test.ts` |
 | INV-11 | 代码模版（`template.js`）是日常用法的示例程序（只是示例，模型按需要改写），import 只写一次：整份照生成的声明过类型检查，不嵌进声明、随模型面发布、按需读；在真的记忆库上逐个函数跑一遍，交回的是它说的样子 | 测试 | `spec/acceptance.test.ts` |
 | INV-12 | 分工与对外边界不塌：合同、类型、实现、工具函数各在其位，作用域端口的每个方法都有操作在调；`./contracts` 入口整条引用链不碰 Node 内置模块，渲染进程可以直接加载 | 门禁 | `check:module-ownership` |

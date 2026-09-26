@@ -3,8 +3,8 @@ import { isUndefined } from '@velaros-ai/core'
 /**
  * 会话层：把一次「模型交了段程序」办完。
  *
- * 顺序是硬的——**先 typecheck，不过就不执行**。这一关拦掉的是模型对回执形状的误解；
- * 让不合法的程序跑起来，等于用真实副作用去试错。
+ * 顺序是硬的——**先查语法，不过就不执行**：语法错、import 落不到的程序一行都不跑，
+ * 免得跑到一半才炸、前面的副作用已经做了。类型不查，字段写错由运行时当场报。
  */
 import { isEmpty, isObject, isString, isTrue } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -36,7 +36,7 @@ import type { CodeProgramCheckerApi } from './CodeProgramChecker.js'
 /** 代码面会话。 */
 export interface CodeSurfaceSessionApi {
   /**
-   * 办完一次程序：查体量 → typecheck → 隔离里跑 → 把能力调用转给宿主 → 编成给模型看的结果。
+   * 办完一次程序：查体量 → 查语法 → 隔离里跑 → 把能力调用转给宿主 → 编成给模型看的结果。
    * 程序连同它 import 到的库里的脚本一起检查、一起送进隔离；参数与大段文本原样送进 `velaros:program`。
    */
   submit(input: {

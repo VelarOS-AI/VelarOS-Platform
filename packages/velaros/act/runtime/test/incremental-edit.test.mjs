@@ -195,26 +195,26 @@ test('INV-8 failed checks persist a repairable draft, including after restart; s
   const bad = await rejection(
     f.session.observe({
       sourceRef: v1.sourceRef,
-      edits: [{ oldText: 'count = 1', newText: 'count = missing' }],
+      edits: [{ oldText: 'count = 1', newText: 'count = (1' }],
     }),
     'OBSERVATION_CHECK'
   )
   assert.ok(bad.draftRef)
   assert.ok(bad.diagnostics.length)
-  assert.match(bad.diagnostics[0].frame, /count = missing/)
+  assert.match(bad.diagnostics[0].frame, /count = \(1/)
   assert.match(bad.diagnostics[0].frame, /\^/)
   assert.equal((await f.state()).observation, v1.sourceRef)
   await f.restart()
   const fixed = await f.session.observe({
     sourceRef: bad.draftRef,
-    edits: [{ oldText: 'count = missing', newText: 'count = 2' }],
+    edits: [{ oldText: 'count = (1', newText: 'count = 2' }],
   })
   assert.equal(fixed.parentRef, bad.draftRef)
   assert.match((await f.source(fixed.sourceRef)).source, /count = 2/)
   const stale = await rejection(
     f.session.observe({
       sourceRef: bad.draftRef,
-      edits: [{ oldText: 'count = missing', newText: 'count = 3' }],
+      edits: [{ oldText: 'count = (1', newText: 'count = 3' }],
     }),
     'SCRIPT_CONFLICT'
   )
@@ -325,7 +325,7 @@ test('incremental failure prevents the paired execution and includes the draft i
       yield turn(request, {
         observe: {
           sourceRef: frames[0].observation.sourceRef,
-          edits: [{ oldText: 'count = 1', newText: 'count = missing' }],
+          edits: [{ oldText: 'count = 1', newText: 'count = (1' }],
         },
         execute: { source: write },
       })
@@ -337,7 +337,7 @@ test('incremental failure prevents the paired execution and includes the draft i
   assert.equal(f.world.writes, 0)
   assert.equal(f.frames[1].observation.sourceRef, v1.sourceRef)
   assert.match(f.frames[1].results[0].text, /draftRef/)
-  assert.match(f.frames[1].results[0].source, /count = missing/)
+  assert.match(f.frames[1].results[0].source, /count = \(1/)
 })
 
 test('CAS rejects a concurrent head change and preserves unrelated context appends', async (t) => {

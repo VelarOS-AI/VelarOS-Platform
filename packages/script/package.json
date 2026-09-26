@@ -4,7 +4,7 @@
   "velaros": {
     "platform": "0.6"
   },
-  "description": "Code surface for capability spaces: the model writes a JavaScript ES module that imports generated capability declarations, the program is typechecked before it runs, and it executes in an isolated process whose only reachable capabilities are the host operations it calls back into.",
+  "description": "Code surface for capability spaces: the model writes a JavaScript ES module that imports generated capability declarations, the program's syntax and imports are checked before it runs, and it executes in an isolated process whose only reachable capabilities are the host operations it calls back into.",
   "license": "Apache-2.0",
   "author": "VelarOS",
   "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/script#readme",

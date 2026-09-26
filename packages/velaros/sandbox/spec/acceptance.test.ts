@@ -67,7 +67,7 @@ function diffOf(overrides: Partial<SandboxDiff> = {}): SandboxDiff {
   }
 }
 
-/** 模型这一轮读到的能力声明：就是提交进仓的那份生成物，程序照着它过 typecheck。 */
+/** 模型这一轮读到的能力声明：就是提交进仓的那份生成物：程序照它核对 import，代码模版照它过类型检查。 */
 const ModelFacingDeclarations = readFileSync(
   fileURLToPath(new URL('../../../../baselines/script/sandbox.d.ts', import.meta.url)),
   'utf8'
@@ -189,7 +189,7 @@ async function invokeOperation(
   throw new AppError('VALIDATION', `没有 sandbox.${operation} 这个操作。`)
 }
 
-/** 让一段真程序照生成的声明过 typecheck，再在隔离里跑完，交出它 return 的东西。 */
+/** 让一段真程序过语法检查，再在隔离里跑完，交出它 return 的东西。 */
 async function runModelProgram(
   space: ReturnType<typeof fakeSpace>,
   source: string
@@ -219,7 +219,7 @@ async function runModelProgram(
       'needsModules' in outcome
         ? `要先补模块 ${outcome.needsModules.join(', ')}`
         : JSON.stringify(outcome.check.diagnostics)
-    throw new Error(`程序没过 typecheck：${why}`)
+    throw new Error(`程序没过检查：${why}`)
   }
   if (outcome.result.failed) throw new Error(`程序没跑完：${outcome.result.failed.message}`)
   return outcome.result.value
@@ -400,7 +400,7 @@ describe('代码模版', () => {
       'utf8'
     )
     const template = readFileSync(resolve(root, 'template.js'), 'utf8')
-    const checked = codeProgramChecker.check({
+    const checked = codeProgramChecker.typecheck({
       source: template,
       granted: [{ namespace: 'sandbox', declarations }],
     })

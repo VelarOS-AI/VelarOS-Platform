@@ -1,34 +1,39 @@
 /**
- * 编译器那一侧的活：内存文件系统、诊断换算、按 JavaScript 或 TypeScript 各查一遍、剥类型。
+ * 编译器那一侧的活：模型交的程序只查语法、核对每个 import 落不落得到，手滑写成 TypeScript 时剥类型；
+ * 我们自己写的代码模版另外照声明做完整类型检查（模型交的程序不走那一条）。
  * 全是纯函数，所以不放在类里；`CodeProgramChecker` 只负责按什么顺序用它们。
  */
 import ts from 'typescript'
 
-import { isUndefined } from '@velaros-ai/core'
+import { isNotNull, isNull, isUndefined } from '@velaros-ai/core'
 
+import { CodeSurfaceDiagnosticCodes } from '../contract/constants.js'
 import type { CodeProgramDiagnostic } from '../types/script.js'
 
-import {
-  appendAvailableNames,
-  describeAvailableNames,
-  renderDiagnosticFrame,
-} from './diagnostics.js'
-import { programForCheck } from './program.js'
+import { renderDiagnosticFrame } from './diagnostics.js'
+import { programForCheck, readCapabilityNamespace } from './program.js'
+import { isRelativeSpecifier, resolveLibraryImport } from './refs.js'
 
 /** 生成出来的能力声明在内存文件系统里的名字。 */
 export const DeclarationFileName = '/velaros.d.ts'
 
-/** 检查时脚本库在内存文件系统里的根目录：库里的 `lib/x.js` 就是 `/scripts/lib/x.js`，相对 import 照常解析。 */
+/** 检查时脚本库的根目录：库里的 `lib/x.js` 就是 `/scripts/lib/x.js`。 */
 export const LibraryRoot = '/scripts'
 
 /** 直接跑的代码在库根上用的文件名：以点开头，库里的脚本不许这样起名，所以撞不上。 */
 export const AnonymousProgramFile = '.program.js'
 
+/** 手滑写成 TypeScript 时剥类型用的那份文件名；换个后缀编译器才会按 TS 解析。 */
+export const TypeScriptProgramFileName = '/program.ts'
+
+/** 程序按哪一版 JavaScript 解析。 */
+const ProgramTarget = ts.ScriptTarget.ES2022
+
 /**
  * 把恒常可用的程序数据模块与这一轮授权的几个命名空间拼成一份声明。
  *
- * **只拼授权的**——不授权的模块不进来，`import` 它就解析不出来（TS2307）。
- * 这道闸是语言给的，不用我们写判定；也正因为如此，检查器绝不能图省事加载全量。
+ * **只拼授权的**——不授权的模块不在这份声明里，`import` 它就落不到；
+ * 也正因为如此，检查器绝不能图省事加载全量。
  */
 export function joinGrantedDeclarations(
   program: string,
@@ -37,136 +42,109 @@ export function joinGrantedDeclarations(
   return [program, ...granted.map((module) => module.declarations)].join('\n\n')
 }
 
-/** 手滑写成 TypeScript 时剥类型用的那份文件名；换个后缀编译器才会按 TS 解析。 */
-export const TypeScriptProgramFileName = '/program.ts'
-
-/** 检查时交上来的这份程序在内存文件系统里叫什么：库里的脚本在库里它自己的位置，直接跑的代码在库根上；按 TypeScript 查时换成 .ts。 */
+/** 检查时交上来的这份程序叫什么：库里的脚本在库里它自己的位置，直接跑的代码在库根上；按 TypeScript 解析时换成 .ts。 */
 export function checkedProgramFile(path: Optional<string>, typescript: boolean): string {
   const file = `${LibraryRoot}/${path ?? AnonymousProgramFile}`
   return typescript ? file.replace(/\.js$/u, '.ts') : file
 }
 
 /**
- * 常规路径的编译选项：模型写 JavaScript，类型全靠声明推。
- * 严格度与产品代码同档；不产出、跳过 lib 检查（lib 是我们自己给的，不必再查一遍）。
+ * 声明里提供了哪些模块、各自导出哪些名字（`declare module 'velaros:files' { export function read… }`）。
+ * names 用来核对 import 的名字：声明里出现过的都算，类型也算——import 一个类型名跑起来只是 undefined，不值得拦；
+ * listed 是说给模型听的那份，只列值（函数、常量、转出的命名空间）。含 `export * from` 的模块说不全自己有什么，open 为真、不核对名字。
  */
-export const JavaScriptCheckOptions: ts.CompilerOptions = Object.freeze({
-  target: ts.ScriptTarget.ES2022,
-  module: ts.ModuleKind.ESNext,
-  moduleResolution: ts.ModuleResolutionKind.Bundler,
-  strict: true,
-  noEmit: true,
-  skipLibCheck: true,
-  // 写 JavaScript 换来的是：中间不必转译，因而没有转译带来的行号错位。
-  allowJs: true,
-  checkJs: true,
-  // `catch (e)` 在 JS 里没法写 `as Error`；不放开这条，模型每写一个 try/catch 都会红。
-  useUnknownInCatchVariables: false,
-  // 程序是普通 JS：自己写的小函数、JSON.parse 出来的数据上的回调不带类型是常态，逼着写注解只会让一段对的程序一行都不执行。
-  // 要拦的是用错能力——能力的返回值都有声明，字段写错、入参形状错照样拦得住。
-  noImplicitAny: false,
-  // 不让程序看见 @types/*：模型只该看见我们给的声明，多一个环境类型就多一条它以为能用的路。
-  types: [],
-})
-
-/** 手滑那条路上用的选项：同一套严格度，只是按 TypeScript 解析。 */
-export const TypeScriptCheckOptions: ts.CompilerOptions = Object.freeze({
-  ...JavaScriptCheckOptions,
-  allowJs: false,
-  checkJs: false,
-})
-
-/**
- * 内存文件系统：认得传进来的这几份（连同它们所在的目录，脚本库的相对 import 要靠它解析），其余交给默认 host（它要去读 lib.*.d.ts）。
- * 程序因此不必落盘。
- */
-export function createMemoryCompilerHost(
-  files: ReadonlyMap<string, string>,
-  options: ts.CompilerOptions
-): ts.CompilerHost {
-  const defaultHost = ts.createCompilerHost(options, true)
-  const directories = new Set<string>()
-  for (const name of files.keys()) {
-    for (let index = name.lastIndexOf('/'); index > 0; index = name.lastIndexOf('/', index - 1))
-      directories.add(name.slice(0, index))
-  }
-  return {
-    ...defaultHost,
-    fileExists: (name) => files.has(name) || defaultHost.fileExists(name),
-    directoryExists: (name) =>
-      directories.has(name.replace(/\/+$/u, '')) || !!defaultHost.directoryExists?.(name),
-    realpath: (name) =>
-      files.has(name) || directories.has(name) ? name : (defaultHost.realpath?.(name) ?? name),
-    readFile: (name) => files.get(name) ?? defaultHost.readFile(name),
-    getSourceFile: (name, languageVersion, onError) => {
-      const text = files.get(name)
-      if (isUndefined(text)) return defaultHost.getSourceFile(name, languageVersion, onError)
-      return ts.createSourceFile(name, text, languageVersion, true)
-    },
-    writeFile: () => {},
-  }
-}
-
-/**
- * 把一条 TS 诊断换算成模型面的形状；出在库里别的脚本上时带上它在库里的路径。
- * 名字写错（属性、字段、导出）时，说明后面接上实际有什么，见 `describeAvailableNames`。
- *
- * **程序不包装**（它本来就是个模块），所以编译器给的 0 基行号要加一才是模型写的那一行。
- * 早先用「函数体 + 包装」时包装恰好占掉第 0 行，两者数值相等——那是巧合，形态一改就错一位。
- */
-export function toModelDiagnostic(
-  diagnostic: ts.Diagnostic,
-  mainFile: string,
-  program: ts.Program
-): CodeProgramDiagnostic {
-  const message = appendAvailableNames(
-    ts.flattenDiagnosticMessageText(diagnostic.messageText, ' '),
-    describeAvailableNames(diagnostic, program)
+export function declaredModules(
+  declarations: string
+): Map<string, { names: Set<string>; listed: string[]; open: boolean }> {
+  const file = ts.createSourceFile(
+    DeclarationFileName,
+    declarations,
+    ProgramTarget,
+    false,
+    ts.ScriptKind.TS
   )
-  const file = diagnostic.file
-  if (!file || isUndefined(diagnostic.start))
-    return { line: 1, column: 1, code: diagnostic.code, message }
-  const { line, character } = file.getLineAndCharacterOfPosition(diagnostic.start)
-  const shaped: CodeProgramDiagnostic = {
-    line: line + 1,
-    column: character + 1,
-    code: diagnostic.code,
-    message,
-    frame: renderDiagnosticFrame(file.text, line + 1, character + 1),
+  const modules = new Map<string, { names: Set<string>; listed: string[]; open: boolean }>()
+  for (const statement of file.statements) {
+    if (!ts.isModuleDeclaration(statement) || !ts.isStringLiteral(statement.name)) continue
+    const module = { names: new Set<string>(), listed: [] as string[], open: false }
+    const add = (name: string, value: boolean): void => {
+      if (value && name !== 'default' && !module.names.has(name)) module.listed.push(name)
+      module.names.add(name)
+    }
+    const body = statement.body && ts.isModuleBlock(statement.body) ? statement.body.statements : []
+    for (const member of body) {
+      if (ts.isExportDeclaration(member)) {
+        const clause = member.exportClause
+        if (!clause) module.open = true
+        else if (ts.isNamespaceExport(clause)) add(clause.name.text, true)
+        else for (const element of clause.elements) add(element.name.text, true)
+        continue
+      }
+      if (ts.isExportAssignment(member)) {
+        add('default', true)
+        continue
+      }
+      const modifiers = ts.canHaveModifiers(member) ? (ts.getModifiers(member) ?? []) : []
+      const isDefault = modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)
+      const value = !ts.isInterfaceDeclaration(member) && !ts.isTypeAliasDeclaration(member)
+      for (const name of declaredNamesOf(member)) add(isDefault ? 'default' : name, value)
+    }
+    modules.set(statement.name.text, module)
   }
-  if (file.fileName !== mainFile) shaped.file = file.fileName.slice(LibraryRoot.length + 1)
-  return shaped
+  return modules
 }
 
 /**
- * 按给定的文件名与编译选项查一遍：交上来的这份放在 fileName，它会 import 到的库里的脚本放在库根下各自的位置。
- * 只留脚本自己的诊断（交上来的这份与库里的脚本）——声明是我们生成的，它有问题该在生成那一侧炸。
+ * 只查语法：交上来的这份与它 import 到的库里的脚本各解析一遍，再核对每个 import 都落得到。
+ * 不查类型——字段名写错、入参形状不对，留给运行时当场报（能力的入参照样按 schema 校验）。
+ * 行号就是模型写的那一行；出在库里别的脚本上的带着那个脚本的路径。
  */
-export function diagnoseProgram(
-  input: { source: string; declarations: string; modules?: Readonly<Record<string, string>> },
-  fileName: string,
-  options: ts.CompilerOptions
+export function diagnoseSyntax(
+  input: {
+    source: string
+    declarations: string
+    path?: string
+    modules?: Readonly<Record<string, string>>
+  },
+  typescript: boolean
 ): CodeProgramDiagnostic[] {
-  const files = new Map([
-    [DeclarationFileName, input.declarations],
-    [fileName, programForCheck(input.source)],
-  ])
-  for (const [path, source] of Object.entries(input.modules ?? {})) {
-    const file = `${LibraryRoot}/${path}`
-    if (!files.has(file)) files.set(file, source)
+  const { mainFile, files, problems } = readProgramFiles(input, typescript)
+  const byName = new Map(files.map((file) => [file.fileName, file]))
+  const host: ts.CompilerHost = {
+    getSourceFile: (name) => byName.get(name),
+    getDefaultLibFileName: () => 'lib.d.ts',
+    writeFile: () => {},
+    getCurrentDirectory: () => '/',
+    getCanonicalFileName: (name) => name,
+    useCaseSensitiveFileNames: () => true,
+    getNewLine: () => '\n',
+    fileExists: (name) => byName.has(name),
+    readFile: (name) => byName.get(name)?.text,
   }
+  // 只要语法诊断：不读标准库、不解析 import（上面已经按隔离里的规矩自己落过了），建程序只是为了拿到「这个语法只能在 TypeScript 里用」那一族
   const program = ts.createProgram(
-    [DeclarationFileName, fileName],
-    options,
-    createMemoryCompilerHost(files, options)
+    [...byName.keys()],
+    { allowJs: true, noLib: true, noResolve: true, noEmit: true, target: ProgramTarget },
+    host
   )
-  return [...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()]
-    .filter(
-      (diagnostic) =>
-        diagnostic.file?.fileName === fileName ||
-        Boolean(diagnostic.file?.fileName.startsWith(`${LibraryRoot}/`))
-    )
-    .map((diagnostic) => toModelDiagnostic(diagnostic, fileName, program))
+  return [
+    ...files.flatMap((file) =>
+      program.getSyntacticDiagnostics(file).map((diagnostic) => toDiagnostic(diagnostic, mainFile))
+    ),
+    ...problems.map(({ file, node, code, message }) =>
+      located(file, node.getStart(file), code, message, mainFile)
+    ),
+  ]
+}
+
+/** 程序（连同它 import 到的库里的脚本）import 了哪些这一轮没有的能力模块：只回命名空间，按出现的顺序、不重复。 */
+export function missingCapabilityModules(input: {
+  source: string
+  declarations: string
+  path?: string
+  modules?: Readonly<Record<string, string>>
+}): string[] {
+  return readProgramFiles(input, false).missing
 }
 
 /** TS8xxx 是「这个语法只能在 TypeScript 文件里用」那一族；只有整份诊断都落在这一族里才算手滑。 */
@@ -183,10 +161,231 @@ export function isTypeScriptOnlySyntax(code: number): boolean {
 export function stripTypes(source: string): string {
   return ts.transpileModule(source, {
     compilerOptions: {
-      target: JavaScriptCheckOptions.target,
+      target: ProgramTarget,
       module: ts.ModuleKind.ESNext,
       removeComments: false,
     },
     fileName: TypeScriptProgramFileName,
   }).outputText
+}
+
+/**
+ * 代码模版的检查选项：模版是我们写的、会原样教给模型，所以照声明做完整类型检查。
+ * 严格度与产品代码同档；`catch (e)` 在 JS 里没法写 `as Error`，自己的小函数不带类型也是常态，这两条放开。
+ * 不让模版看见 @types/*：它只该用我们给的声明。
+ */
+const TemplateCheckOptions: ts.CompilerOptions = Object.freeze({
+  target: ProgramTarget,
+  module: ts.ModuleKind.ESNext,
+  moduleResolution: ts.ModuleResolutionKind.Bundler,
+  strict: true,
+  noEmit: true,
+  skipLibCheck: true,
+  allowJs: true,
+  checkJs: true,
+  useUnknownInCatchVariables: false,
+  noImplicitAny: false,
+  types: [],
+})
+
+/** 照声明给一份代码模版做完整类型检查；模型交的程序不走这里。 */
+export function typecheckTemplate(input: {
+  source: string
+  declarations: string
+}): CodeProgramDiagnostic[] {
+  const fileName = checkedProgramFile(undefined, false)
+  const files = new Map([
+    [DeclarationFileName, input.declarations],
+    [fileName, input.source],
+  ])
+  const defaultHost = ts.createCompilerHost(TemplateCheckOptions, true)
+  const program = ts.createProgram([DeclarationFileName, fileName], TemplateCheckOptions, {
+    ...defaultHost,
+    fileExists: (name) => files.has(name) || defaultHost.fileExists(name),
+    readFile: (name) => files.get(name) ?? defaultHost.readFile(name),
+    getSourceFile: (name, languageVersion, onError) => {
+      const text = files.get(name)
+      if (isUndefined(text)) return defaultHost.getSourceFile(name, languageVersion, onError)
+      return ts.createSourceFile(name, text, languageVersion, true)
+    },
+    writeFile: () => {},
+  })
+  // 只留模版自己的诊断——声明是我们生成的，它有问题该在生成那一侧炸
+  return [...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()]
+    .filter((diagnostic) => diagnostic.file?.fileName === fileName)
+    .map((diagnostic) => toDiagnostic(diagnostic, fileName))
+}
+
+/**
+ * 程序连同它 import 到的库里的脚本，各解析一遍；顺手核对每个 import，和 ES 模块链接时一样在执行之前报：
+ * 能力模块要在这一轮的声明里、要的名字它得有；相对路径按隔离里的同一套规矩落到库里一份存在的脚本上。
+ * 只认顶层的静态 import 与 re-export，和改写进隔离的那一步同一个口径。missing 是落不到的能力模块的命名空间。
+ */
+function readProgramFiles(
+  input: {
+    source: string
+    declarations: string
+    path?: string
+    modules?: Readonly<Record<string, string>>
+  },
+  typescript: boolean
+): {
+  mainFile: string
+  files: ts.SourceFile[]
+  problems: Array<{ file: ts.SourceFile; node: ts.Node; code: number; message: string }>
+  missing: string[]
+} {
+  const declared = declaredModules(input.declarations)
+  const modules = input.modules ?? {}
+  const mainFile = checkedProgramFile(input.path, typescript)
+  const files: ts.SourceFile[] = []
+  const problems: Array<{ file: ts.SourceFile; node: ts.Node; code: number; message: string }> = []
+  const missing: string[] = []
+  const unresolved = (file: ts.SourceFile, node: ts.Node, message: string): void => {
+    problems.push({ file, node, code: CodeSurfaceDiagnosticCodes.unresolvedModule, message })
+  }
+  const seen = new Set(isUndefined(input.path) ? [] : [input.path])
+  const pending = [{ path: input.path, file: parseScript(mainFile, programForCheck(input.source)) }]
+  for (let next = pending.shift(); next; next = pending.shift()) {
+    const { path, file } = next
+    files.push(file)
+    for (const statement of file.statements) {
+      if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) continue
+      const specifier = statement.moduleSpecifier
+      if (!specifier || !ts.isStringLiteral(specifier)) continue
+      if (!isRelativeSpecifier(specifier.text)) {
+        const module = declared.get(specifier.text)
+        if (module) {
+          for (const [node, name] of importedNames(statement))
+            if (!module.open && !module.names.has(name))
+              problems.push({
+                file,
+                node,
+                code: CodeSurfaceDiagnosticCodes.missingExport,
+                message: missingExportMessage(specifier.text, name, module.listed),
+              })
+          continue
+        }
+        unresolved(file, specifier, unresolvedMessage(specifier.text, null))
+        const namespace = readCapabilityNamespace(specifier.text)
+        if (isNotNull(namespace) && !missing.includes(namespace)) missing.push(namespace)
+        continue
+      }
+      const target = resolveLibraryImport(path, specifier.text)
+      if (isNull(target) || (target !== input.path && !Object.hasOwn(modules, target))) {
+        unresolved(file, specifier, unresolvedMessage(specifier.text, target))
+        continue
+      }
+      if (seen.has(target)) continue
+      seen.add(target)
+      pending.push({
+        path: target,
+        file: parseScript(`${LibraryRoot}/${target}`, modules[target] ?? ''),
+      })
+    }
+  }
+  return { mainFile, files, problems, missing }
+}
+
+/** import 或 re-export 从模块里要了哪些名字，连同写在哪；默认导入要的是 default，`* as` 什么都不要。 */
+function importedNames(
+  statement: ts.ImportDeclaration | ts.ExportDeclaration
+): Array<[ts.Node, string]> {
+  if (ts.isExportDeclaration(statement))
+    return statement.exportClause && ts.isNamedExports(statement.exportClause)
+      ? statement.exportClause.elements.map((element) => [
+          element,
+          (element.propertyName ?? element.name).text,
+        ])
+      : []
+  const clause = statement.importClause
+  const names: Array<[ts.Node, string]> = clause?.name ? [[clause.name, 'default']] : []
+  if (clause?.namedBindings && ts.isNamedImports(clause.namedBindings))
+    for (const element of clause.namedBindings.elements)
+      names.push([element, (element.propertyName ?? element.name).text])
+  return names
+}
+
+/** 一条声明语句声明了哪些名字。 */
+function declaredNamesOf(statement: ts.Statement): string[] {
+  if (ts.isVariableStatement(statement))
+    return statement.declarationList.declarations.flatMap((declaration) =>
+      ts.isIdentifier(declaration.name) ? [declaration.name.text] : []
+    )
+  if (
+    (ts.isFunctionDeclaration(statement) ||
+      ts.isClassDeclaration(statement) ||
+      ts.isInterfaceDeclaration(statement) ||
+      ts.isTypeAliasDeclaration(statement) ||
+      ts.isEnumDeclaration(statement) ||
+      ts.isModuleDeclaration(statement)) &&
+    statement.name &&
+    ts.isIdentifier(statement.name)
+  )
+    return [statement.name.text]
+  return []
+}
+
+/** 解析一份脚本；后缀是 .ts 时按 TypeScript 解析（手滑那条路）。 */
+function parseScript(fileName: string, text: string): ts.SourceFile {
+  return ts.createSourceFile(
+    fileName,
+    text,
+    ProgramTarget,
+    true,
+    fileName.endsWith('.ts') ? ts.ScriptKind.TS : ts.ScriptKind.JS
+  )
+}
+
+/** import 落不到时说给模型的那句：相对路径说落到了库里哪儿，别的说这一轮能 import 什么。 */
+function unresolvedMessage(specifier: string, target: Nullable<string>): string {
+  if (isRelativeSpecifier(specifier))
+    return isNull(target)
+      ? `找不到模块 '${specifier}'：库里的脚本路径要落在库根之内、以 .js 结尾。`
+      : `找不到模块 '${specifier}'：库里没有 ${target}。`
+  return isNull(readCapabilityNamespace(specifier))
+    ? `找不到模块 '${specifier}'：脚本只能 import velaros 的能力模块和库里的脚本（./ 或 ../ 开头）。`
+    : `找不到模块 '${specifier}'：这一轮没有这个能力模块。`
+}
+
+/** 模块在、名字不在时说给模型的那句：连同它实际导出了什么。 */
+function missingExportMessage(specifier: string, name: string, listed: readonly string[]): string {
+  if (name === 'default')
+    return `'${specifier}' 没有默认导出：用 import { 名字 } from '${specifier}' 或 import * as 名字 from '${specifier}'。`
+  return listed.length === 0
+    ? `'${specifier}' 没有导出 ${name}。`
+    : `'${specifier}' 没有导出 ${name}；它导出 ${listed.join('、')}。`
+}
+
+/**
+ * 把一条 TS 诊断换算成模型面的形状。
+ *
+ * **程序不包装**（它本来就是个模块），所以编译器给的 0 基行号要加一才是模型写的那一行。
+ */
+function toDiagnostic(diagnostic: ts.Diagnostic, mainFile: string): CodeProgramDiagnostic {
+  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, ' ')
+  const file = diagnostic.file
+  if (!file || isUndefined(diagnostic.start))
+    return { line: 1, column: 1, code: diagnostic.code, message }
+  return located(file, diagnostic.start, diagnostic.code, message, mainFile)
+}
+
+/** 落在某份脚本某个位置上的一条诊断：行列号从 1 起，带上那一行的代码帧；不在交上来的这份上时带上它在库里的路径。 */
+function located(
+  file: ts.SourceFile,
+  start: number,
+  code: number,
+  message: string,
+  mainFile: string
+): CodeProgramDiagnostic {
+  const { line, character } = file.getLineAndCharacterOfPosition(start)
+  const shaped: CodeProgramDiagnostic = {
+    line: line + 1,
+    column: character + 1,
+    code,
+    message,
+    frame: renderDiagnosticFrame(file.text, line + 1, character + 1),
+  }
+  if (file.fileName !== mainFile) shaped.file = file.fileName.slice(LibraryRoot.length + 1)
+  return shaped
 }

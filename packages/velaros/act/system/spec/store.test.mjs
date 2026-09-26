@@ -183,12 +183,10 @@ test('INV-13 多主线显式共享，未授权空间不可发现；只读投影�
     'subscribe',
     'watch',
   ])
-  await assert.rejects(
-    reader.execute({
-      source: `${prelude}await store.set({store:currentStore,key:'public/x',baseRevision:1,value:2});`,
-    }),
-    { code: 'SCRIPT_CHECK' }
-  )
+  const readOnly = await reader.execute({
+    source: `${prelude}await store.set({store:currentStore,key:'public/x',baseRevision:1,value:2});`,
+  })
+  assert.match(readOnly.result.failed.message, /not a function/)
   assert.equal(
     await execute(
       reader,
@@ -1217,12 +1215,10 @@ test('INV-18 只读接收者可订阅和确认，发布不可发现；原子事�
   await reader.context.append({ kind: 'user', body: 'reader' })
   await writer.context.append({ kind: 'user', body: 'writer' })
   await execute(reader, "await store.subscribe({store:currentStore,topics:['public/']});")
-  await assert.rejects(
-    reader.execute({
-      source: `${prelude}await store.publish({store:currentStore,topic:'public/a',value:1});`,
-    }),
-    { code: 'SCRIPT_CHECK' }
-  )
+  const unpublished = await reader.execute({
+    source: `${prelude}await store.publish({store:currentStore,topic:'public/a',value:1});`,
+  })
+  assert.match(unpublished.result.failed.message, /not a function/)
   assert.equal(
     await execute(
       reader,

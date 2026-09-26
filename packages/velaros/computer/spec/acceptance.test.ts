@@ -17,13 +17,13 @@ import {
 } from '../index'
 
 import {
-  checkModelProgram,
   ComputerDeclarations,
   computerDesk,
   Display,
   failureOf,
   runModelProgram,
   SnapshotId,
+  typecheckTemplate,
 } from './support'
 
 describe('运行时', () => {
@@ -268,7 +268,7 @@ export default await typeText({ text: 'hi' })`
 
   test('INV-15 代码模版整份照生成的声明过类型检查，import 只写一次；它不嵌进声明，随模型面发布的就是这份文件', () => {
     const template = readFileSync(resolve(import.meta.dir, '../template.js'), 'utf8')
-    expect(checkModelProgram(template)).toEqual([])
+    expect(typecheckTemplate(template)).toEqual([])
     expect(template.match(/^import /gmu)).toHaveLength(1)
     expect(VelarComputerModule.template).toBe(template.trim())
     expect(ComputerDeclarations).not.toContain('的代码模版')

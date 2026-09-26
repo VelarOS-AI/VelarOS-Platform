@@ -43,11 +43,11 @@ import {
   BrowserDeclarations,
   browserSpace,
   CdpDeclarations,
-  checkModelProgram,
   createHarness,
   DevtoolsDeclarations,
   failureOf,
   runModelProgram,
+  typecheckTemplate,
 } from './support.js'
 
 let root = ''
@@ -351,7 +351,7 @@ export const cookieCount = cookies.length
     for (const module of [VelarBrowserModule, VelarDevtoolsModule, VelarCdpModule]) {
       expect(module.template.length).toBeGreaterThan(0)
       expect(module.declarations).not.toContain(module.template.split('\n')[0]!)
-      expect(checkModelProgram(module.template)).toEqual([])
+      expect(typecheckTemplate(module.template)).toEqual([])
       // import 只写一次。
       expect(module.template.match(/^import /gmu)?.length).toBe(1)
     }

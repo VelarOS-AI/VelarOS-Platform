@@ -21,7 +21,7 @@ system 原来的 INV-31（系统空间的操作表与模块清单）、INV-35（
 | INV-8 | 入参不合法由操作方法自己拦，不靠调用方：不是对象、files 不是数组、空批、超过 10 张、项不是带非空 path 的对象、region 不是四个有限数或宽高不是正数，一律 `VALIDATION`，整批一张都不看，不会半途崩 | 测试 | `spec/acceptance.test.ts` |
 | INV-9 | 只看 PNG、JPEG、GIF、WebP，按文件头认、不看扩展名：PDF 报 `VALIDATION` 并说明文档不在这里看，文本与其他格式报 `VALIDATION` 并指向读文件的能力或先转换，头读不出来的算坏文件；目录与超过 20 MB 的文件同样只算那一张失败，太大的在读之前就拦下 | 测试 | `spec/acceptance.test.ts` |
 | INV-10 | 取消信号在每张图之间核对：取消之后后面的图不再定位、不再交出，整个调用抛出取消原因 | 测试 | `spec/acceptance.test.ts` |
-| INV-11 | 代码面的 `images` 命名空间是一条真路：模型写的程序照生成的 `baselines/script/images.d.ts` 过 typecheck，在隔离里调到真实操作；图走代码面的图片通道、跟在结果旁边回去，程序拿到的只有尺寸（读像素的写法过不了 typecheck）；全部失败时程序接得住，看得见的就是 `error.code` 与 `error.message` | 测试 | `spec/acceptance.test.ts` |
+| INV-11 | 代码面的 `images` 命名空间是一条真路：模型写的程序 import 生成的 `baselines/script/images.d.ts` 里的操作、过语法检查，在隔离里调到真实操作；图走代码面的图片通道、跟在结果旁边回去，程序拿到的只有尺寸（结果上没有像素那一格，读到的是 undefined）；全部失败时程序接得住，看得见的就是 `error.code` 与 `error.message` | 测试 | `spec/acceptance.test.ts` |
 | INV-12 | 代码模版（`template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它**整份照生成的真实声明过类型检查**，不嵌进声明，随模型面发布、按需读（`velaros:system` 的 modules.describe）。写错的模版会原样教出去，所以不许漂；在真的空间里把每个函数跑一遍、看交回的是不是它说的样子，由仓库层的 `tests/capabilities/capability-templates.test.ts` 核对 | 测试 | `spec/acceptance.test.ts` |
 | INV-13 | 模型面与常量表一致：声明里写的张数、长边、base64 体积上限都与 `ImageLimits` 对得上，带单位的数字一处都不漂；view 在模型面上只有一个入参，空间端口、调用上下文、缩图与交图的口子都不进模型面 | 测试 | `spec/acceptance.test.ts` |
 | INV-14 | 分工与对外边界不塌：合同、类型、实现、工具函数各在其位，空间端口的每个方法都有操作在调；`./contracts` 入口整条引用链不碰 Node 内置模块，渲染进程可以直接加载；本机看图端口的值只在只给 Node 的 `./local` 入口 | 门禁 | `check:module-ownership` |

@@ -17,9 +17,8 @@ import {
 } from '../src/impl/NodeSubprocessCodeRunner'
 import type { GrantedModule } from '../src/types/script'
 import { resolveNodeExecutable } from '../src/utils/node-executable'
-import { CodeSurfaceTuning } from '../src/utils/tuning'
 
-/** 这一轮授权的那一个命名空间；没授权的模块 import 不出来，那道闸是语言给的。 */
+/** 这一轮授权的命名空间；没授权的模块不在声明里，import 它就落不到。 */
 const granted: GrantedModule[] = [
   {
     namespace: 'demo',
@@ -112,15 +111,27 @@ const submit = (
 const importDemo = "import { read, write, danger, bulk } from 'velaros:demo'"
 
 void describe('代码面验收', () => {
-  test('INV-1 typecheck 没过就一行都不执行，行号与模型写的对得上', async () => {
+  test('INV-1 语法没过就一行都不执行，行号与模型写的对得上', async () => {
     const outcome = await submit(
-      `${importDemo}\nconst r = await read({ paths: ['a.ts'] })\nexport default r.files[0].contents`
+      `${importDemo}\nawait write({ text: '不该跑' })\nexport default [1, 2].map((n) => n * 2`
     )
     expect(outcome.checked).toBe(false)
     if (outcome.checked || !('check' in outcome)) throw new Error('应当没通过检查')
     const [first] = outcome.check.diagnostics
     expect(first?.line).toBe(3)
-    expect(first?.message).toContain('content')
+    expect(first?.message).toContain("')' expected")
+  })
+
+  test('INV-1 类型不查：字段名写错、空数组推不出类型的程序照跑，写错的字段读到 undefined', async () => {
+    const outcome = await submit(`${importDemo}
+const r = await read({ paths: ['a.ts'] })
+const found = { items: [] }
+found.items.push(r.files[0].path)
+export default { missing: r.files[0].contents ?? '没有这个字段', items: found.items }`)
+    expect(outcome.checked).toBe(true)
+    if (!outcome.checked) throw new Error('类型不查，应当照跑')
+    expect(outcome.result.failed).toBeUndefined()
+    expect(outcome.result.value).toEqual({ missing: '没有这个字段', items: ['a.ts'] })
   })
 
   test('INV-1 通过检查的程序照常跑完，只有它交出的那点东西出来', async () => {
@@ -294,108 +305,34 @@ export default first.path`)
     expect(outcome.result.notices?.some((notice) => notice.action === 'normalized')).toBe(true)
   })
 
-  test('INV-10 但真的类型错照样拦下来，不因为夹带 TypeScript 语法就放行', async () => {
+  test('INV-10 但真的语法错照样拦下来，不因为夹带 TypeScript 语法就放行', async () => {
     const outcome = await submit(`${importDemo}
 const r = await read({ paths: ['a.ts'] })
 const first = r.files[0] as { path: string }
-export default first.contents`)
+export default first.path)`)
     expect(outcome.checked).toBe(false)
     if (outcome.checked || !('check' in outcome)) throw new Error('应当拦下来')
-    expect(outcome.check.diagnostics.length).toBeGreaterThan(0)
+    expect(outcome.check.diagnostics.some((diagnostic) => diagnostic.line === 4)).toBe(true)
   })
 
   test('INV-12 诊断带代码帧，模型不必数行', async () => {
-    const source = `${importDemo}\nconst r = await read({ paths: ['a.ts'] })\nexport default r.files[0].contents`
+    const source = `${importDemo}\nconst r = await read({ paths: ['a.ts'] })\nexport default r.files.map((f) => f.content`
     const outcome = await submit(source)
     expect(outcome.checked).toBe(false)
     if (outcome.checked || !('check' in outcome)) throw new Error('应当没通过检查')
     const rendered = outcome.check.diagnostics.map((item) => item.frame).join('\n')
-    expect(rendered).toContain('3 | export default r.files[0].contents')
+    expect(rendered).toContain('3 | export default r.files.map((f) => f.content')
     expect(rendered).toContain('^')
   })
 
-  test('INV-38 名字写错时，诊断接上实际有什么：成员、入参字段、模块导出，还是 Promise 时提醒 await', () => {
-    const messages = (source: string, modules: GrantedModule[] = granted) => {
-      const checked = codeProgramChecker.check({ source, granted: modules })
-      if (checked.ok) throw new Error('应当没通过检查')
-      return checked.diagnostics.map((item) => item.message)
-    }
-
-    // 猜得离谱的字段：TS 只说没有，后面接上这个类型实际有的成员，类型照声明原文写
-    expect(
-      messages(
-        `${importDemo}\nconst r = await read({ paths: ['a.ts'] })\nexport default r.files[0].body`
-      )
-    ).toEqual([
-      "Property 'body' does not exist on type 'ReadFile'. ReadFile 的成员：path: string、content: string、hasMore: boolean",
-    ])
-    // 入参里多写的字段：列出入参实际收什么
-    expect(
-      messages(`${importDemo}\nexport default await read({ paths: ['a.ts'], recursive: true })`)[0]
-    ).toEndWith('可用的成员：paths: string[]')
-    // import 了模块没有的名字：列出模块的值导出。名字和某个类型相近时 TS 会建议那个类型（脚本用不上），照样列
-    const demoExports =
-      'velaros:demo 的导出：read()、write()、danger()、bulk()、refuse()、slow()、hang()'
-    expect(
-      messages("import { listEverything } from 'velaros:demo'\nexport default listEverything")[0]
-    ).toEndWith(demoExports)
-    expect(
-      messages("import { readFile } from 'velaros:demo'\nexport default readFile")[0]
-    ).toEndWith(demoExports)
-    // 忘了 await：不列 Promise 的 then/catch，直接说先 await
-    expect(
-      messages(`${importDemo}\nconst r = read({ paths: ['a.ts'] })\nexport default r.files`)[0]
-    ).toEndWith('这个值还是 Promise：先 await 再取字段。')
-    // 模型本来就认得的类型不补
-    expect(messages("const s = 'abc'\nexport default s.body")).toEqual([
-      "Property 'body' does not exist on type '\"abc\"'.",
-    ])
-    expect(messages('export default [1, 2].items')).toEqual([
-      "Property 'items' does not exist on type 'number[]'.",
-    ])
-  })
-
-  test('INV-38 联合类型按分支列并先说怎么收窄；列不下只说一共几个，整条守住单条诊断的预算', () => {
-    const wideFields = Array.from({ length: 60 }, (_, index) => `field${index}: string`).join('; ')
-    const probe: GrantedModule[] = [
-      {
-        namespace: 'probe',
-        declarations: `declare module 'velaros:probe' {
-  interface Found { entries: string[]; truncated: boolean }
-  interface Wide { ${wideFields} }
-  export function diagnose(): Promise<Found | { error: string }>
-  export function wide(): Promise<Wide>
-  export function sprawl(): Promise<{ ${wideFields} } | { error: string }>
-}`,
-      },
-    ]
-    const first = (source: string) => {
-      const checked = codeProgramChecker.check({ source, granted: probe })
-      if (checked.ok) throw new Error('应当没通过检查')
-      return checked.diagnostics[0]?.message ?? ''
-    }
-
-    expect(
-      first(
-        "import { diagnose } from 'velaros:probe'\nconst d = await diagnose()\nexport default d.entries"
-      )
-    ).toEndWith(
-      "先用 'entries' in 值 判断是哪一种。各分支：Found 有 entries、truncated；{ error: string; } 有 error"
-    )
-
-    const wide = first(
-      "import { wide } from 'velaros:probe'\nconst w = await wide()\nexport default w.nope"
-    )
-    expect(wide).toContain('Wide 的成员：field0: string、field1: string')
-    expect(wide).toEndWith('…共 60 个')
-
-    // TS 的原话本身就很长时截的是它，补的那句完整留着
-    const sprawl = first(
-      "import { sprawl } from 'velaros:probe'\nconst s = await sprawl()\nexport default s.nope"
-    )
-    expect(sprawl.length).toBeLessThanOrEqual(CodeSurfaceTuning.diagnosticMessageChars)
-    expect(sprawl).toStartWith("Property 'nope' does not exist")
-    expect(sprawl).toContain('… 各分支：')
+  test('INV-39 代码模版另走完整类型检查：写错的键照声明拦下；模型交的程序不走这条', () => {
+    const template = `${importDemo}\nconst r = await read({ paths: ['a.ts'] })\nexport default r.files[0].contents`
+    const typed = codeProgramChecker.typecheck({ source: template, granted })
+    expect(typed.ok).toBe(false)
+    if (typed.ok) throw new Error('模版写错的键应当被拦下')
+    expect(typed.diagnostics[0]).toMatchObject({ line: 3 })
+    expect(typed.diagnostics[0]?.message).toContain("'content'")
+    expect(codeProgramChecker.check({ source: template, granted }).ok).toBe(true)
   })
 
   test('INV-13 import 了没授权的模块：一行都不执行，回要补的命名空间', async () => {
@@ -405,23 +342,51 @@ export default first.contents`)
     expect(outcome.needsModules).toEqual(['git'])
   })
 
-  test('INV-13 没 import 直接用没授权的名字，是干净的报错不是要补模块', async () => {
+  test('INV-13 没 import 直接用没授权的名字，不是要补模块：跑到那一行干净地报错', async () => {
     const outcome = await submit('export default await git.log({})')
+    if (!outcome.checked) throw new Error('没有 import 就不是要补模块')
+    expect(outcome.result.failed?.message).toContain('git')
+  })
+
+  test('INV-13 能力模块的导出名照声明核对：写错的名字执行之前就报，并说它实际导出什么', async () => {
+    const outcome = await submit(
+      "import { readFile } from 'velaros:demo'\nexport default await readFile({})"
+    )
+    expect(outcome.checked).toBe(false)
+    if (outcome.checked || !('check' in outcome)) throw new Error('应当是诊断')
+    expect(outcome.check.diagnostics).toMatchObject([
+      {
+        line: 1,
+        code: 2305,
+        message:
+          "'velaros:demo' 没有导出 readFile；它导出 read、write、danger、bulk、refuse、slow、hang。",
+      },
+    ])
+  })
+
+  test('INV-13 import 落不到的都在执行之前拦下：非能力模块、库里没有的脚本', async () => {
+    const outcome = await submit(
+      "import { readFileSync } from 'node:fs'\nimport { helper } from './lib/missing.js'\nexport default helper(readFileSync)"
+    )
     expect(outcome.checked).toBe(false)
     if (outcome.checked || !('check' in outcome)) throw new Error('应当是诊断')
     expect(
-      outcome.check.diagnostics.some((d) => d.message.includes("Cannot find name 'git'"))
-    ).toBe(true)
+      outcome.check.diagnostics.map(({ line, code, message }) => [line, code, message])
+    ).toEqual([
+      [
+        1,
+        2307,
+        "找不到模块 'node:fs'：脚本只能 import velaros 的能力模块和库里的脚本（./ 或 ../ 开头）。",
+      ],
+      [2, 2307, "找不到模块 './lib/missing.js'：库里没有 lib/missing.js。"],
+    ])
   })
 
   test('INV-15 blobs 必须导入，不是隐形全局；velaros:program 不占授权名额也不进租约账', async () => {
     // 不导入直接用 → 干净的报错，不是「有个全局你本来就该知道」
     const bare = await submit('export default blobs.patch', { blobs: { patch: 'x' } })
-    expect(bare.checked).toBe(false)
-    if (bare.checked || !('check' in bare)) throw new Error('应当是诊断')
-    expect(bare.check.diagnostics.some((d) => d.message.includes("Cannot find name 'blobs'"))).toBe(
-      true
-    )
+    if (!bare.checked) throw new Error('语法没错，应当照跑')
+    expect(bare.result.failed?.message).toContain('blobs')
 
     // 导入了就能用，而且 velaros:program 不出现在回给宿主的 imports 里
     const imported = await submit(
@@ -544,9 +509,9 @@ export default 1`)
     expect(JSON.stringify(outcome).length).toBeLessThan(CodeSurfaceLimits.noticeChars + 500)
   })
 
-  test('INV-21 两千个类型错只列前面那几条，并说明省了几条', async () => {
+  test('INV-21 两千个语法错只列前面那几条，并说明省了几条', async () => {
     const outcome = await submit(
-      Array.from({ length: 2000 }, (_, index) => `const v${index} = 1; v${index}.nope()`).join('\n')
+      Array.from({ length: 2000 }, (_, index) => `const v${index} = ;`).join('\n')
     )
     if (outcome.checked || !('check' in outcome)) throw new Error('应当是诊断')
     expect(outcome.check.diagnostics.length).toBeLessThanOrEqual(CodeSurfaceLimits.diagnostics)
@@ -775,13 +740,13 @@ describe('程序编辑与附属模块', () => {
     expect(outcome.result.logs?.filter((line) => line.includes('module-once'))).toHaveLength(1)
     const checked = codeProgramChecker.check({
       ...program,
-      modules: { ...program.modules, 'lib/value.js': 'export const n = missingName;' },
+      modules: { ...program.modules, 'lib/value.js': 'export const n = (3;' },
       granted,
     })
     expect(checked.ok).toBe(false)
     if (checked.ok) throw new Error('应当给出模块诊断')
     expect(checked.diagnostics[0]).toMatchObject({ file: 'lib/value.js', line: 1 })
-    expect(checked.diagnostics[0]?.frame).toContain('export const n = missingName;')
+    expect(checked.diagnostics[0]?.frame).toContain('export const n = (3;')
     expect(checked.diagnostics[0]?.frame).toContain('^')
     const failed = await session.submit({
       program: {

@@ -173,7 +173,7 @@ export async function submitModelProgram(
   })
 }
 
-/** 让一段真程序照生成的声明过 typecheck，再在隔离里跑完，交出整个结果；没过检查直接抛。 */
+/** 让一段真程序过语法检查，再在隔离里跑完，交出整个结果；没过检查直接抛。 */
 export async function runModelProgram(
   space: ReturnType<typeof diskSpace>,
   source: string,
@@ -185,7 +185,7 @@ export async function runModelProgram(
       'needsModules' in outcome
         ? `要先补模块 ${outcome.needsModules.join(', ')}`
         : JSON.stringify(outcome.check.diagnostics)
-    throw new Error(`程序没过 typecheck：${why}`)
+    throw new Error(`程序没过检查：${why}`)
   }
   return outcome.result
 }

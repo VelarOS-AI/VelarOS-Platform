@@ -95,7 +95,7 @@ test('execution summaries follow the declarations of their own turn and say why 
   t.after(() => rm(dataDir, { recursive: true, force: true }))
   const ok = "// 读一个常量\nimport {output} from 'velaros'\noutput(1)"
   const boom = "import {output} from 'velaros'\nthrow new Error('boom')"
-  const typo = "import {output} from 'velaros'\noutput(missingName)"
+  const typo = "import {output} from 'velaros'\noutput(1 +)"
   let calls = 0
   const execute = (request, ...sources) => ({
     type: 'text',
@@ -145,7 +145,7 @@ test('execution summaries follow the declarations of their own turn and say why 
     assert.equal(second.executions[0].status, 'failed')
     assert.equal(second.executions[0].failure.code, 'SCRIPT_CHECK')
     assert.equal(second.executions[0].failure.line, 2)
-    assert.match(second.executions[0].failure.message, /missingName/)
+    assert.match(second.executions[0].failure.message, /Expression expected/)
     // 前两回合的结果仍在租约里、会出现在这一帧，但不是这一回合派发的
     assert.deepEqual(last.executions, [])
   } finally {
@@ -157,7 +157,7 @@ test('observation summaries say what a turn registered and which run fed its req
   const dataDir = await mkdtemp(join(tmpdir(), 'trace-observation-'))
   t.after(() => rm(dataDir, { recursive: true, force: true }))
   const watch = "// 数一数\nimport {output} from 'velaros'\noutput(1)"
-  const typo = "import {output} from 'velaros'\noutput(missingName)"
+  const typo = "import {output} from 'velaros'\noutput(1 +)"
   let calls = 0
   const observe = (request, source) => ({
     type: 'text',
@@ -196,7 +196,7 @@ test('observation summaries say what a turn registered and which run fed its req
     assert.equal(second.observation.registration.status, 'rejected')
     assert.equal(second.observation.registration.failure.code, 'OBSERVATION_CHECK')
     assert.equal(second.observation.registration.failure.line, 2)
-    assert.match(second.observation.registration.failure.message, /missingName/)
+    assert.match(second.observation.registration.failure.message, /Expression expected/)
     assert.equal(second.observation.registration.source, typo)
     for (const trace of [second, last]) {
       assert.equal(trace.observation.run.status, 'succeeded')

@@ -10,7 +10,7 @@ export type CodeAttachment = ModelImage
 export type CodeSurfaceOutcome =
   | { checked: false; check: CodeProgramCheckFailure }
   | {
-      /** typecheck 没走到：程序 import 了没授权的模块。 */
+      /** 检查没走到：程序 import 了没授权的模块。 */
       checked: false
       /** 没授权的命名空间，按程序里出现的顺序；只有名字，不附签名。 */
       needsModules: string[]

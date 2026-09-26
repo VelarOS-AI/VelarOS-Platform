@@ -1,6 +1,6 @@
 # @velaros-ai/script
 
-模型写的 JavaScript 程序在这里检查、精确编辑和隔离运行：先按当前能力声明过类型检查，没过一行不执行；过了就在 QuickJS 子进程里跑，每次能力调用都经同一个 Kernel 的权限、效果分类与回执。给装配会话的宿主用；模型面的 `script` 入口、源码版本与结果租约由 `@velaros-ai/velaros` 装配。
+模型写的 JavaScript 程序在这里检查、精确编辑和隔离运行：先查 JavaScript 语法、核对每个 import 都在当前能力声明里，没过一行不执行（类型不查，字段写错由运行时当场报）；过了就在 QuickJS 子进程里跑，每次能力调用都经同一个 Kernel 的权限、效果分类与回执。给装配会话的宿主用；模型面的 `script` 入口、源码版本与结果租约由 `@velaros-ai/velaros` 装配。
 
 ## 用法
 
@@ -40,7 +40,7 @@ if (!checked.ok) console.warn(checked.diagnostics.map((item) => `${item.line}:${
 const stop = new AbortController() // 用户点停止时 stop.abort()
 const outcome = await script.run(program, stop.signal)
 if (!outcome.checked) {
-  // 一行都没执行：import 了没授权的模块，或者类型检查没过
+  // 一行都没执行：import 了没授权的模块，或者语法没过
   console.warn('needsModules' in outcome ? outcome.needsModules : outcome.check.diagnostics)
 } else if (outcome.result.failed) {
   // 没跑完：已落定与没落定的调用都列出来，副作用按它们核对

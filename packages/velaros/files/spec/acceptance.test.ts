@@ -705,21 +705,19 @@ export default r.files.flatMap((f) => ('error' in f ? [\`\${f.path}: \${f.error.
     expect(result.value).toEqual(['a.ts:2', 'missing.ts: NOT_FOUND'])
   }, 60_000)
 
-  test('INV-6 形状写错的程序过不了 typecheck，一行都不执行', async () => {
+  test('INV-6 语法错的程序过不了检查，一行都不执行', async () => {
     await writeFile(join(root, 'a.txt'), 'alpha\n')
     const space = diskSpace({ root, clamp: true })
     const outcome = await submitModelProgram(
       space,
       `import { edit, read } from 'velaros:files'
 await edit({ files: [{ path: 'made.txt', newText: '这一行不该跑' }] })
-const [file] = (await read({ files: [{ path: 'a.txt', version: 'v1' }] })).files
-await edit({ files: [{ path: 'a.txt', restore: 'v1' }] })
-export default file.lines.length`
+const [file] = (await read({ files: [{ path: 'a.txt' }] })).files
+export default file.lines.length)`
     )
-    if (outcome.checked || !('check' in outcome)) throw new Error('应当被 typecheck 挡回去')
-    // 读旧写法的 version、写旧写法的 restore、不先分开失败那支就取 lines：三行各被拦一次
+    if (outcome.checked || !('check' in outcome)) throw new Error('应当被检查挡回去')
     expect([...new Set(outcome.check.diagnostics.map((diagnostic) => diagnostic.line))]).toEqual([
-      3, 4, 5,
+      4,
     ])
     expect(existsSync(join(root, 'made.txt'))).toBe(false)
     expect(space.located).toHaveLength(0)
@@ -978,7 +976,7 @@ describe('入参', () => {
 describe('模型面', () => {
   test('INV-9 代码模版整份照真实声明过类型检查，import 只写一次；它不嵌进声明，随模型面发布的就是这份文件', () => {
     const template = readFileSync(resolve(UnitRoot, 'template.js'), 'utf8')
-    const checked = codeProgramChecker.check({
+    const checked = codeProgramChecker.typecheck({
       source: template,
       granted: [{ namespace: 'files', declarations: Declarations }],
     })

@@ -22,7 +22,6 @@ import { OfficeTuning } from '../utils/tuning.js'
 
 import type { OfficeHarness } from './support.js'
 import {
-  checkModelProgram,
   createHarness,
   failureOf,
   OfficeDeclarations,
@@ -31,6 +30,7 @@ import {
   putFile,
   readDocumentProperties,
   runModelProgram,
+  typecheckTemplate,
 } from './support.js'
 
 const harnesses: OfficeHarness[] = []
@@ -348,7 +348,7 @@ export const bytes = written.bytes
 
   test('INV-17 代码模版照真实声明过类型检查，不嵌进声明', () => {
     const template = VelarOfficeModule.template
-    expect(checkModelProgram(template)).toEqual([])
+    expect(typecheckTemplate(template)).toEqual([])
     expect(template.match(/^import .* from 'velaros:office'$/gmu)).toHaveLength(1)
     expect(OfficeDeclarations).not.toContain('代码模版')
     expect(template).toContain('只是示例')

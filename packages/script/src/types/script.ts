@@ -1,5 +1,5 @@
 /**
- * 可移植数据：代码面上流动的那些形状——模型交上来的程序、typecheck 的诊断、跑完之后回给模型的结果。
+ * 可移植数据：代码面上流动的那些形状——模型交上来的程序、语法检查的诊断、跑完之后回给模型的结果。
  * 不 import 任何东西，渲染进程也能加载（从 `@velaros-ai/script/contracts` 取）。
  */
 
@@ -30,9 +30,9 @@ export interface CodeProgramRequest {
   /**
    * 脚本正文，是一个 **JavaScript ES 模块**：`import` 拿能力，顶层 `await` 直接用，`export` 交出答案。
    *
-   * 写 JavaScript 而不是 TypeScript，但**照样受类型检查**——类型从生成的声明里推，
-   * 字段名拼错、读一个不存在的字段、入参形状错，都在执行之前就被拦下。
-   * 不写类型标注换来的是：中间不必转译，因而没有转译带来的行号错位，报给模型的位置永远是它写的那一行。
+   * 写 JavaScript 而不是 TypeScript：执行之前只查语法、核对每个 import 落得到，不查类型；
+   * 字段名拼错、入参形状错由运行时当场报（能力的入参按 schema 校验，写错的那次调用不生效）。
+   * 中间不必转译，因而没有转译带来的行号错位，报给模型的位置永远是它写的那一行。
    */
   source: string
   /** 这份脚本在脚本库里的路径（`lib/changelog.js`），它里面的相对 import 从这里算；直接跑的代码没有路径，从库根算。 */
@@ -45,7 +45,7 @@ export interface CodeProgramRequest {
   blobs?: Record<string, string>
 }
 
-/** typecheck 的一条诊断；行列号已经换算成模型写的那一行。 */
+/** 检查的一条诊断；行列号已经换算成模型写的那一行。 */
 export interface CodeProgramDiagnostic {
   /** 出在脚本库里的哪个脚本（它 import 的那些）；出在交上来的这份本身时不给。 */
   file?: string
@@ -53,7 +53,7 @@ export interface CodeProgramDiagnostic {
   line: number
   /** 列号，从 1 起。 */
   column: number
-  /** TypeScript 的诊断码，如 2551。 */
+  /** TypeScript 的诊断码，如 1005；import 落不到是 2307。 */
   code: number
   /** 诊断正文，已经把嵌套链展平成一行。 */
   message: string
@@ -144,7 +144,7 @@ export interface CodeProgramResult {
   failed?: CodeProgramFailure
 }
 
-/** typecheck 没过时的结果：程序**一行都没有执行**，所以不是 `CodeProgramResult` 的形状。 */
+/** 检查没过时的结果：程序**一行都没有执行**，所以不是 `CodeProgramResult` 的形状。 */
 export interface CodeProgramCheckFailure {
   /** 恒为 false，用来和通过的那支区分。 */
   ok: false
@@ -154,7 +154,7 @@ export interface CodeProgramCheckFailure {
   omitted?: number
 }
 
-/** typecheck 通过。 */
+/** 检查通过。 */
 export interface CodeProgramCheckSuccess {
   /** 恒为 true。 */
   ok: true
@@ -162,14 +162,14 @@ export interface CodeProgramCheckSuccess {
    * 模型手滑写了 TypeScript 时，这里是替它剥掉类型之后的 JavaScript；写的本来就是 JS 时没有这一格。
    *
    * 为什么不直接弹回去：仓库的宽容铁律是「钳制不拒绝」——语法偏好不值得废掉一整轮。
-   * 真正的类型错误照样拦，只有「这个语法只能在 TypeScript 文件里用」那一族才走这条路。
+   * 真正的语法错误照样拦，只有「这个语法只能在 TypeScript 文件里用」那一族才走这条路。
    */
   transpiled?: string
   /** 走过上面那条路时为真，用来在回执里提醒模型下次直接写 JavaScript。 */
   wroteTypeScript?: true
 }
 
-/** typecheck 的结果。 */
+/** 检查的结果。 */
 export type CodeProgramCheckResult = CodeProgramCheckSuccess | CodeProgramCheckFailure
 
 /** 这一轮授给程序的一个能力模块：命名空间与它的完整声明。 */

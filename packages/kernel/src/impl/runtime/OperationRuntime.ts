@@ -32,6 +32,7 @@ import { validateModelImages } from '../../utils/runtime/model-request.js'
 import {
   awaitOperationRead,
   canonicalOperationJson,
+  describeSchemaErrors,
   immutableOperationJson,
   operationFingerprint,
   operationSchemaType,
@@ -390,7 +391,7 @@ class OperationRuntime implements OperationRuntimeApi {
     if (!validators.input(original))
       throw AppError.withFields(
         'INPUT_SCHEMA',
-        `输入不符合 schema: ${JSON.stringify(validators.input.errors)}`,
+        `输入不符合 schema：${describeSchemaErrors(validators.input.errors)}`,
         { effect: 'none' }
       )
     const requestFingerprint = await operationFingerprint({ ...call, input: original })
@@ -437,7 +438,7 @@ class OperationRuntime implements OperationRuntimeApi {
       if (!validators.input(input))
         throw new AppError(
           'VALIDATION',
-          `准备后的参数不符合 schema: ${JSON.stringify(validators.input.errors)}`
+          `准备后的参数不符合 schema：${describeSchemaErrors(validators.input.errors)}`
         )
       prepared = immutableOperationJson({
         ...reserved,
@@ -512,7 +513,7 @@ class OperationRuntime implements OperationRuntimeApi {
             if (!validators.output(value))
               error = {
                 code: 'OUTPUT_SCHEMA',
-                message: `返回值不符合 schema: ${JSON.stringify(validators.output.errors)}`,
+                message: `返回值不符合 schema：${describeSchemaErrors(validators.output.errors)}`,
               }
           } catch (failure) {
             Log.tag('ActRuntime').debug('OperationRuntime 已进入异常处理或降级分支')

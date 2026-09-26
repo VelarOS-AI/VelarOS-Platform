@@ -1,3 +1,5 @@
+import type { ErrorObject } from 'ajv'
+
 import { isFalse, isUndefined } from '@velaros-ai/core'
 import {
   isArray,
@@ -103,6 +105,68 @@ export function operationSchemaType(
     default:
       return 'unknown'
   }
+}
+
+/**
+ * 把 schema 校验的错误写成一句读得懂的话：哪个字段、错在哪（`gaps[0] 应当是 object；多了不认识的字段 targetChars`）。
+ * 脚本执行之前只查语法，入参形状全靠这里当场报；原样的 Ajv JSON 要模型自己拆，常量联合还会一个分支报一条——
+ * 同一位置的常量分支并成「只能是 …」。最多列 8 条，余下的只说还有几条。
+ */
+export function describeSchemaErrors(errors: Optional<Nullable<readonly ErrorObject[]>>): string {
+  const all = errors ?? []
+  const allowed = new Map<string, unknown[]>()
+  for (const error of all)
+    if (error.keyword === 'const')
+      allowed.set(error.instancePath, [
+        ...(allowed.get(error.instancePath) ?? []),
+        (error.params as { allowedValue: unknown }).allowedValue,
+      ])
+  const lines: string[] = []
+  const add = (line: string): void => {
+    if (!lines.includes(line)) lines.push(line)
+  }
+  for (const error of all) {
+    const where = schemaErrorPath(error.instancePath)
+    const at = where ? `${where} ` : ''
+    const params = error.params as Record<string, unknown>
+    const choices = allowed.get(error.instancePath)
+    if (error.keyword === 'const') {
+      if (!all.some((item) => item.keyword === 'anyOf' && item.instancePath === error.instancePath))
+        add(`${at}只能是 ${(choices ?? []).map((value) => JSON.stringify(value)).join(' / ')}`)
+    } else if (error.keyword === 'anyOf')
+      add(
+        choices
+          ? `${at}只能是 ${choices.map((value) => JSON.stringify(value)).join(' / ')}`
+          : `${at}不符合任何一种允许的写法`
+      )
+    else if (error.keyword === 'additionalProperties')
+      add(`${at}多了不认识的字段 ${String(params.additionalProperty)}`)
+    else if (error.keyword === 'required')
+      add(`${at}缺少必填字段 ${String(params.missingProperty)}`)
+    else if (error.keyword === 'type') add(`${at}应当是 ${String(params.type)}`)
+    else if (error.keyword === 'enum')
+      add(
+        `${at}只能是 ${(params.allowedValues as unknown[]).map((value) => JSON.stringify(value)).join(' / ')}`
+      )
+    else add(`${at}${error.message ?? error.keyword}`)
+  }
+  const shown = lines.slice(0, 8)
+  return lines.length > shown.length
+    ? `${shown.join('；')}；还有 ${lines.length - shown.length} 处`
+    : shown.join('；')
+}
+
+/** JSON Pointer 写成程序里的样子：`/files/0/path` → `files[0].path`；整个入参是空串。 */
+function schemaErrorPath(pointer: string): string {
+  return pointer
+    .split('/')
+    .slice(1)
+    .map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'))
+    .reduce(
+      (path, segment) =>
+        /^\d+$/u.test(segment) ? `${path}[${segment}]` : path ? `${path}.${segment}` : segment,
+      ''
+    )
 }
 
 /** 检查 schema 方言，遇到不支持的关键字当场拒绝，避免声明与运行时静默失配。 */

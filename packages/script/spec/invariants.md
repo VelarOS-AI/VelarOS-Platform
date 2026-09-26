@@ -4,7 +4,7 @@
 
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
-| INV-1 | 先检查后执行：程序是 JavaScript，但**照样过 TypeScript 的检查**（`checkJs`，类型从生成的声明推）；没过时程序**一行都不执行**，回的是诊断而不是结果；诊断的行号与模型写的那一行对得上，中间不转译所以行号不会错位 | 测试 | `spec/acceptance.test.ts` |
+| INV-1 | 先检查后执行：程序是 JavaScript，执行之前**只查语法**、核对每个 import 都落得到，**不查类型**——类型推断上的挑剔（空数组推成 `never[]`、字面量拓宽）只会把对的程序整轮弹回去；字段名写错读到 undefined，入参形状错由能力按 schema 当场拒绝。没过时程序**一行都不执行**，回的是诊断而不是结果；诊断的行号与模型写的那一行对得上，中间不转译所以行号不会错位 | 测试 | `spec/acceptance.test.ts` |
 | INV-2 | 程序够不到宿主的环境能力：读写文件、起子进程在隔离里一律失败，程序只能经能力端口做事 | 测试 | `spec/acceptance.test.ts` |
 | INV-3 | 到时必停：超过 `timeoutMs` 的程序一定被终止并回 `TIMEOUT`，死循环也不例外；`signal` 触发时同样停 | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 拒绝是可捕获的异常：能力端口报错在程序里是一个能 `try/catch` 的 throw，不是一份静默的空回执；**拒绝**（用户或策略说了不，码里带 DENIED、PERMISSION）同时进回给模型的 `notices`，程序把异常吞了模型也知道；找不到、不唯一这类是调用自己的结果，程序接得住，不在 `notices` 里再回放；程序正是死在那次拒绝上时 `failed` 已经说了，不重复 | 测试 | `spec/acceptance.test.ts` |
@@ -13,10 +13,10 @@
 | INV-7 | 超预算不静默：返回值与日志超过上限时按**结尾**保留（失败现场在尾部），并在 `notices` 里说清省略了多少 | 测试 | `spec/acceptance.test.ts` |
 | INV-8 | 程序源码与 blobs 超过体量上限一律拒，不截断后照跑——半截程序跑出来的结果比不跑更坏 | 测试 | `spec/acceptance.test.ts` |
 | INV-9 | 隔离必须自证才接活：QuickJS guest 中的 process、require、fetch 与 WebSocket 均不可达；Node 默认运行器不会把 Electron 误作 Node，Electron 须注入其宿主进程 | 测试 | `spec/acceptance.test.ts` |
-| INV-10 | 手滑写了 TypeScript 不废掉一整轮：整份诊断都落在「这个语法只能在 TypeScript 文件里用」那一族时，按 TypeScript 再查一遍（真类型错照样拦），剥掉类型照跑，并在 `notices` 里告诉模型下次直接写 JavaScript | 测试 | `spec/acceptance.test.ts` |
+| INV-10 | 手滑写了 TypeScript 不废掉一整轮：整份诊断都落在「这个语法只能在 TypeScript 文件里用」那一族时，按 TypeScript 再解析一遍（真语法错照样拦），剥掉类型照跑，并在 `notices` 里告诉模型下次直接写 JavaScript | 测试 | `spec/acceptance.test.ts` |
 | INV-11 | `KernelScriptSession.edit` 按同一底稿精确替换：定位唯一、不重叠，主源码与附属模块全成或全不成；失败返回 SCRIPT_EDIT 和索引，原程序不变 | 测试 | `spec/acceptance.test.ts` |
 | INV-12 | 诊断必须带代码帧：出错那一行连同一个指向出错列的插字符一起给出。只回行列号等于让模型靠数行定位，而数行是它最不准的事之一 | 测试 | `spec/acceptance.test.ts` |
-| INV-13 | 宿主只提供本次授权能力的声明；程序引用未提供的能力时先拒绝执行并报告缺失命名空间；Kernel 会话按本次导入获取挂载声明，能力权限仍由 Kernel 校验 | 测试 | `spec/acceptance.test.ts` |
+| INV-13 | 宿主只提供本次授权能力的声明；程序引用未提供的能力时先拒绝执行并报告缺失命名空间；import 了不是能力模块的名字、库里没有的脚本、或者能力模块没有的导出名，和 ES 模块链接时一样在执行之前给出诊断（导出名照声明核对，诊断里列出它实际导出什么）；Kernel 会话按本次导入获取挂载声明，能力权限仍由 Kernel 校验 | 测试 | `spec/acceptance.test.ts` |
 | INV-15 | **我们发明的东西要导入，语言自带的不动**：`input` 与 `blobs` 走恒常可用的 `velaros:program` 模块，不做隐形全局——隐形全局是只有提示词告诉过模型才知道的暗知识；`console` 是 JavaScript 自带的，不动。`velaros:program` 由引擎提供 | 测试 | `spec/acceptance.test.ts` |
 | INV-16 | 没跑完就交账：程序中止、超时或抛错时，**已经落定的能力调用逐条回给模型**（连着的同名同结果折成一条带 `times`），跑完了不给。这是**账**不是事务——不承诺回滚（跑过的命令回滚不了），承诺**知道**：工具面里中断落在两次调用之间、天然干净，程序里落在执行中途，副作用是真的，只回一个 `ABORTED` 等于让模型对着三个字瞎猜 | 测试 | `spec/acceptance.test.ts` |
 | INV-17 | 内存也要封顶：隔离进程带 `--max-old-space-size` 起，堆爆时回 `TOO_LARGE` 并说清怎么改，不报成「意外退出」。超时管得住死循环，管不住一个循环里把整个仓库读进数组；子进程 stderr 必须有人收（没人收会把它堵死，而堆爆的现场只在那里） | 测试 | `spec/acceptance.test.ts` |
@@ -27,11 +27,11 @@
 | INV-23 | 能力交给模型的图走**结果旁边**的通道，不进返回值：程序拿不到像素，文字结果里没有 base64，`resultChars` 只算文字。一次程序最多交 20 张、合计 20 MB——张数对齐 API「一个请求超过 20 张图，每张都不得超过 2000 px」那条线；超出的按顺序丢后面的，并在插手记录里说明 | 测试 | `spec/acceptance.test.ts` |
 | INV-26 | 程序停下时（跑完、失败、超时、被中止都算）还没落定的能力调用，会话触发这一轮的取消信号**叫停它们**，并按发出的顺序列进结果的 `unsettled`：发出去不等就交卷、或者死在一次调用中途，副作用都可能做了一半，模型得知道去核对哪几样 | 测试 | `spec/acceptance.test.ts` |
 | INV-27 | 程序数据模块 velaros:program 只导出本次 input 与 blobs，声明和运行时一致；模块模板统一由 velaros:system 的 modules.describe 按授权提供 | 测试 | `spec/acceptance.test.ts` |
-| INV-33 | 附属模块来自提交的 modules，按相对路径解析并在单次运行中只初始化一次；类型诊断包含附属模块路径、行列与代码帧，运行错误可追踪 | 测试 | `spec/acceptance.test.ts` |
+| INV-33 | 附属模块来自提交的 modules，按相对路径解析并在单次运行中只初始化一次；语法诊断包含附属模块路径、行列与代码帧，运行错误可追踪 | 测试 | `spec/acceptance.test.ts` |
 | INV-34 | output 在调用时捕获无环 JSON 快照，原始归档与有界预览分离；失败和中止保留已捕获块，采集问题不能被 catch 隐藏 | 测试 | `test/output.test.ts` |
 | INV-35 | output 展示按类型保留结构和省略范围，正文与目录总量守展示预算；摘要同时匹配原值和任务代次 | 测试 | `test/output.test.ts` |
 | INV-36 | 受限输出编辑只接受真实导入的顶层字面量声明，保持采集和用途不变，不执行脚本 | 测试 | `test/output.test.ts` |
 | INV-37 | output 声明里写的上限与 ScriptOutputLimits 一致，输出校验恰好在这些边界上放行与拒绝 | 测试 | `test/output.test.ts` |
-| INV-38 | 名字写错时告诉模型实际有什么：属性不存在、对象字面量里多写的字段、模块没有的导出，诊断说明后面接上这个类型的成员（类型照声明原文写）或模块的导出；联合类型按分支列，读值时先说用 `in` 收窄；值还是 Promise 时提醒先 await。字符串、数组、标准库里的类型不补。整条守住单条诊断的预算，超了先截 TS 的原话，补的这句保全。TS 只在名字相近时给 Did you mean，猜得离谱时只说「没有」，模型只好再猜一轮 | 测试 | `spec/acceptance.test.ts` |
+| INV-39 | 我们自己写的代码模版另走 `typecheck`，照声明做完整类型检查：模版会原样教给模型，写错一个键模型照着写就跟着错。模型交的程序不走这条 | 测试 | `spec/acceptance.test.ts` |
 
 | INV-28 | 宿主进程注入只改变启动与消息运输；共享父端在预取消、启动/发送故障、终态和中断时回收一次并等待退出，完成后不发送迟到能力回执 | 测试 | `test/subprocess.test.ts` |

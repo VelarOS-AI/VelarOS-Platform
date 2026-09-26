@@ -167,7 +167,7 @@ export interface RuntimeSessionDependencies {
   ): Promise<boolean>
   /** 当前装配的虚拟包，由声明与运行器共同使用。 */
   readonly packages: readonly ScriptPackageDefinition[]
-  /** 当前宿主范围中的模块；发现、类型检查和执行共用它。 */
+  /** 当前宿主范围中的模块；发现、检查和执行共用它。 */
   allowedModules(): readonly string[]
   /** 同一子运行调度器。 */
   readonly agents?: AgentSupervisorApi

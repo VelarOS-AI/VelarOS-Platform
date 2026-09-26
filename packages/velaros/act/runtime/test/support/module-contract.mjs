@@ -71,7 +71,7 @@ export async function verifyModule(factory, templateUrl) {
           modules
         ).granted
       : scriptPackageCompiler.compile([], modules).granted
-    const checked = codeProgramChecker.check({ source: description.template, granted })
+    const checked = codeProgramChecker.typecheck({ source: description.template, granted })
     assert.equal(checked.ok, true, JSON.stringify(checked))
   } finally {
     await runtime.dispose()

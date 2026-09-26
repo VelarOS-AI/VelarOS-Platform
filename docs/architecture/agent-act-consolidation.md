@@ -83,7 +83,7 @@ AdvancedSearch 创建相同 RuntimeSession，使用相同 ActRunService、ActLoo
 
 长期模型指导、计划和进度集中在 task capsule（模型经 `memory.plan` 修改），用户原文和宿主固定指令保持各自来源。修改 capsule 不会改写用户目标或授权。
 
-模块发现、脚本类型检查、实际调用使用相同范围。`VelarosRuntimeOptions.authorize` 在每次真实派发前接受不可变 PreparedInvocation 和 descriptor；宿主可接审批政策。领域已有的 shell/sandbox 审批继续使用 Kernel 的 ApprovalPort，缺少审批端口默认拒绝。
+模块发现、脚本检查、实际调用使用相同范围。`VelarosRuntimeOptions.authorize` 在每次真实派发前接受不可变 PreparedInvocation 和 descriptor；宿主可接审批政策。领域已有的 shell/sandbox 审批继续使用 Kernel 的 ApprovalPort，缺少审批端口默认拒绝。
 
 MCP 连接迁入 Velaros：`createMcpClientConnection` 保留 stdio、HTTP、SSE、OAuth 挂起续接、分页、取消和关闭。`createMcpModule` 将固定工具快照接成 OperationModuleDefinition。远端 readOnlyHint 不自动授予观察权限，宿主显式 readOnly 名单才可；写操作要求 authorize，结果不明保持 unknown。图片经独立附件链发送。变更目录应更新绑定代际并重新装配。
 

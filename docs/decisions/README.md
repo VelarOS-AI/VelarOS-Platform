@@ -29,3 +29,5 @@ Accepted records are durable rationale, not a substitute for schemas or executab
 - [0017: 长程上下文按段追加、按剩余轮数封段](0017-long-running-context.md)
 
 - [0018: 子任务直接继承父任务的权限，不用声明](0018-sub-tasks-inherit-parent.md)
+
+- [0019: 模型写的脚本只查语法，不查类型](0019-scripts-check-syntax-only.md)

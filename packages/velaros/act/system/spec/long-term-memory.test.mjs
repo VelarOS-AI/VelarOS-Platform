@@ -78,7 +78,7 @@ test('INV-12 主线长期记忆统一包合同、模板、发现和真实存储�
   )
   assert.equal(operations.organize, undefined)
   assert.equal(
-    codeProgramChecker.check({
+    codeProgramChecker.typecheck({
       source: description.template,
       granted: [{ namespace: 'velaros:system', declarations: description.declarations }],
     }).ok,
@@ -160,10 +160,10 @@ test('INV-12 作用域在主会话打开时固定，同作用域跨会话与重�
   await other.context.append({ kind: 'user', body: 'Private' })
   assert.equal((await execute(other, 'output(await memory.recall({}));')).value.total, 0)
   assert.equal(mappings, 2)
-  await assert.rejects(
-    other.execute({ source: `${prelude}output(await memory.recall({scope:"project:shared"}));` }),
-    { code: 'SCRIPT_CHECK' }
-  )
+  const outside = await other.execute({
+    source: `${prelude}output(await memory.recall({scope:"project:shared"}));`,
+  })
+  assert.match(outside.result.failed.message, /多了不认识的字段 scope/)
 })
 
 test('INV-12 释放笔记和结果驻留不会删除长期记忆，remove 才会删除原始 Markdown', async (t) => {
@@ -312,10 +312,8 @@ test('INV-12 未装配长期记忆时实际合同隐藏三个操作，重复的�
   ).value
   assert(!description.declarations.includes('recall'))
   assert(!description.template.includes('savedMemory'))
-  await assert.rejects(
-    f.session.execute({ source: `${prelude}output(await memory.recall({}));` }),
-    { code: 'SCRIPT_CHECK' }
-  )
+  const hidden = await f.session.execute({ source: `${prelude}output(await memory.recall({}));` })
+  assert.match(hidden.result.failed.message, /not a function/)
   const storage = localContextStorage({ path: ':memory:' })
   t.after(() => storage.close())
   await assert.rejects(
@@ -466,7 +464,7 @@ test('INV-12 长期记忆与整理共享主入口，整理模型只读固定材�
   assert.equal(Object.keys(description.exports.memory.operations).length, 10)
   assert.equal(description.exports.memory.binding.moduleId, PersistentMemoryModuleId)
   assert.equal(
-    codeProgramChecker.check({
+    codeProgramChecker.typecheck({
       source: description.template,
       granted: [{ namespace: 'velaros:system', declarations: description.declarations }],
     }).ok,

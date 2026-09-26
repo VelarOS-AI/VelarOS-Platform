@@ -178,7 +178,7 @@ test('a stricter host depth cap omits child search from executable declarations'
       yield execute(request, lookup)
       yield finish
     } else {
-      assert.match(JSON.stringify(request), /Cannot find module 'velaros:search'/)
+      assert.match(JSON.stringify(request), /找不到模块 'velaros:search'/)
       yield* done(request)
     }
   })

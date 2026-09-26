@@ -195,7 +195,7 @@ async function invokeOperation(
   throw new AppError('VALIDATION', `没有 shell.${operation} 这个操作。`)
 }
 
-/** 让一段真程序照生成的声明过 typecheck，再在隔离里跑完，交出它 export default 的东西。 */
+/** 让一段真程序过语法检查，再在隔离里跑完，交出它 export default 的东西。 */
 async function runModelProgram(
   space: ReturnType<typeof fakeSpace>,
   source: string
@@ -228,7 +228,7 @@ async function runModelProgram(
       'needsModules' in outcome
         ? `要先补模块 ${outcome.needsModules.join(', ')}`
         : JSON.stringify(outcome.check.diagnostics)
-    throw new Error(`程序没过 typecheck：${why}`)
+    throw new Error(`程序没过检查：${why}`)
   }
   if (outcome.result.failed) throw new Error(`程序没跑完：${outcome.result.failed.message}`)
   return outcome.result.value
@@ -618,7 +618,7 @@ export default outcome`
 describe('代码模版', () => {
   test('INV-8 代码模版整份照真实声明过类型检查；它不嵌进声明，随模型面发布的就是这份文件', () => {
     const template = readFileSync(resolve(UnitRoot, 'template.js'), 'utf8')
-    const checked = codeProgramChecker.check({
+    const checked = codeProgramChecker.typecheck({
       source: template,
       granted: [{ namespace: 'shell', declarations: ModelFacingDeclarations }],
     })

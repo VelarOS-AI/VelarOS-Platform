@@ -954,12 +954,10 @@ test('organize validates preserve scope, coalesces a pending request and keeps e
       "import {memory} from 'velaros:system';await memory.organize({preserve:[{sessionId:'elsewhere',id:'unknown'}]});",
   })
   assert(bad.result.failed)
-  await assert.rejects(
-    f.session.execute({
-      source: "import {memory} from 'velaros:system';await memory.organize({targetChars:1});",
-    }),
-    { code: 'SCRIPT_CHECK' }
-  )
+  const unknownField = await f.session.execute({
+    source: "import {memory} from 'velaros:system';await memory.organize({targetChars:1});",
+  })
+  assert.match(unknownField.result.failed.message, /多了不认识的字段 targetChars/)
   await runTool(f)
   assert.equal(snapshot.intent.focus, 'Next')
   assert.deepEqual(snapshot.intent.preserve, [ref])
@@ -1108,7 +1106,7 @@ test('a maintenance patch error is corrected within the same leaf before publica
   let calls = 0
   const maintenance = driver(async function* (request) {
     calls++
-    // 类型合法、状态不符：过得了类型检查，由补丁校验在同一支线里报出来
+    // 形状合法、状态不符：由补丁校验在同一支线里报出来
     if (calls === 1) {
       yield* deliverPatch(request, {
         volume: { summary: 'nothing sealed', evidence: [], unresolved: [], negativeAttempts: [] },

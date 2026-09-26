@@ -157,17 +157,17 @@ test('INV-36 the latest script diagnostic survives body omission and clears afte
         yield turn(request, {
           execute: {
             source:
-              "import {modules} from 'velaros:system';import {output} from 'velaros';const page=await modules.list();output(page.modules);",
+              "import {modules} from 'velaros:system';import {output} from 'velaros';const page=await modules.list();output(page.items.length;",
           },
         })
         yield { type: 'finish', reason: 'stop' }
       } else if (call === 2) {
-        assert(!frame.partitions.recent.results.at(-1).text.includes("Property 'modules'"))
+        assert(!frame.partitions.recent.results.at(-1).text.includes("')' expected"))
         const feedback = frame.partitions.runtime.progress.feedback
         assert.equal(feedback.failure.code, 'SCRIPT_CHECK')
         assert(feedback.failure.draftRef)
         assert.equal(feedback.ref, frame.partitions.recent.results.at(-1).ref)
-        assert.match(request.compiledPrompt, /Property 'modules' does not exist/)
+        assert.match(request.compiledPrompt, /'\)' expected/)
         assert(JSON.stringify(feedback).length < 3000)
         yield turn(request, {
           execute: {

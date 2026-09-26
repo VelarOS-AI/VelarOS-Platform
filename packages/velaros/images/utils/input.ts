@@ -1,4 +1,4 @@
-/** view 的入参核对：入参来自模型的程序，类型检查挡不住的（数值范围、空字符串、绕过检查的错形状）在这里拦。 */
+/** view 的入参核对：入参来自模型的程序，程序只查过语法、不查类型，数值范围、空字符串、错形状都在这里拦。 */
 
 import { isArray, isFiniteNumber, isPlainObject, isPresent, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'

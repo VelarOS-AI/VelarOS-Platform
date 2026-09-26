@@ -19,7 +19,6 @@ import { ImageLimits, imageOperations } from '../index'
 import { createLocalImagePort } from '../local'
 
 import {
-  checkModelProgram,
   failureOf,
   gifImage,
   ImageDeclarations,
@@ -31,6 +30,7 @@ import {
   removeScratch,
   runModelProgram,
   solidPng,
+  typecheckTemplate,
   webpImage,
 } from './support'
 
@@ -692,20 +692,18 @@ export default files.map((f) => ('error' in f ? { path: f.path, code: f.error.co
       expect(serialized).not.toContain(attachment.data.slice(0, 64))
   }, 60_000)
 
-  test('INV-11 读像素的写法过不了 typecheck：结果的类型上根本没有这一格', () => {
-    const diagnostics = checkModelProgram(`import { view } from 'velaros:images'
+  test('INV-11 读像素的写法读不到东西：结果上根本没有这一格', async () => {
+    await writeFile(join(root, 'shot.png'), pngImage(40, 30))
+    const { result } = await runModelProgram(
+      imageSpace({ root, clamp: true }),
+      `import { view } from 'velaros:images'
 
 const [image] = (await view({ files: [{ path: 'shot.png' }] })).files
-export default 'error' in image ? null : image.data`)
-    // 只有这一条：成功的那支上没有 data（TS2339），程序在执行之前就被拦下
-    expect(
-      diagnostics.map((diagnostic) => [
-        diagnostic.line,
-        diagnostic.code,
-        diagnostic.message.includes("'data'"),
-      ])
-    ).toEqual([[4, 2339, true]])
-  })
+export default 'error' in image ? null : (image.data ?? '没有像素')`
+    )
+    expect(result.failed).toBeUndefined()
+    expect(result.value).toBe('没有像素')
+  }, 60_000)
 
   test('INV-11 全部失败时程序接得住：看得见的就是 error.code 与 error.message', async () => {
     const space = imageSpace({ root, clamp: true })
@@ -733,7 +731,7 @@ export default outcome`
 describe('模型面', () => {
   test('INV-12 代码模版整份照真实声明过类型检查；它不嵌进声明，随模型面发布的就是这份文件', () => {
     const template = readFileSync(fileURLToPath(new URL('../template.js', import.meta.url)), 'utf8')
-    expect(checkModelProgram(template)).toEqual([])
+    expect(typecheckTemplate(template)).toEqual([])
     expect(template.match(/^import /gmu)).toHaveLength(1)
     expect(VelarImagesModule.template).toBe(template.trim())
     expect(ImageDeclarations).not.toContain('的代码模版')

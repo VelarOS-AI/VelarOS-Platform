@@ -103,7 +103,7 @@ test('INV-3 目录集中展示系统包，成员合同和模板可直接检查�
   assert.equal(result.value.exports.memory.binding.moduleId, 'velaros:system-memory')
   assert.deepEqual(Object.keys(result.value.exports), ['memory'])
   assert.equal(
-    codeProgramChecker.check({
+    codeProgramChecker.typecheck({
       source: result.value.template,
       granted: [{ namespace: 'velaros:system', declarations: result.value.declarations }],
     }).ok,

@@ -16,13 +16,13 @@ import { createMemoryStore, MemoryLimits, memoryOperations, MemoryTypes } from '
 import { MemoryTuning } from '../utils/tuning'
 
 import {
-  checkModelProgram,
   failureOf,
   makeScratch,
   MemoryDeclarations,
   memorySpace,
   removeScratch,
   runModelProgram,
+  typecheckTemplate,
 } from './support'
 
 /** 一条合法的记忆，按用例改几个字段。 */
@@ -456,7 +456,7 @@ export const removed = await remove({ id: 'reply-style' })`
 
   test('INV-11 代码模版整份照声明过类型检查，不嵌进声明，随模型面发布的就是这份文件', () => {
     const template = readFileSync(fileURLToPath(new URL('../template.js', import.meta.url)), 'utf8')
-    expect(checkModelProgram(template)).toEqual([])
+    expect(typecheckTemplate(template)).toEqual([])
     expect(template.match(/^import /gmu)).toHaveLength(1)
     expect(VelarMemoryModule.template).toBe(template.trim())
     expect(MemoryDeclarations).not.toContain('的代码模版')

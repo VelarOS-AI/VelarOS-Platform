@@ -201,7 +201,7 @@ export async function failureOf(
 
 // ── 代码面 ──────────────────────────────────────────────────────
 
-/** 模型这一轮读到的 `velaros:computer` 声明：就是提交进仓的那份生成物，程序照着它过 typecheck。 */
+/** 模型这一轮读到的 `velaros:computer` 声明：就是提交进仓的那份生成物：程序照它核对 import，代码模版照它过类型检查。 */
 export const ComputerDeclarations = readFileSync(
   fileURLToPath(new URL('../../../../baselines/script/computer.d.ts', import.meta.url)),
   'utf8'
@@ -210,13 +210,13 @@ export const ComputerDeclarations = readFileSync(
 /** 这一轮授给程序的模块：只有 `computer` 一个命名空间。 */
 const Granted = [{ namespace: 'computer', declarations: ComputerDeclarations }]
 
-/** 只照生成的声明做 typecheck、不执行：交回诊断，过了就是空的。 */
-export function checkModelProgram(source: string) {
-  const checked = codeProgramChecker.check({ source, granted: Granted })
+/** 代码模版照生成的声明做完整类型检查、不执行：交回诊断，过了就是空的。模型交的程序只查语法，不走这里。 */
+export function typecheckTemplate(source: string) {
+  const checked = codeProgramChecker.typecheck({ source, granted: Granted })
   return checked.ok ? [] : checked.diagnostics
 }
 
-/** 让一段真程序照生成的声明过 typecheck，再在隔离里跑完：交出程序的结果与跟在结果旁边交给模型的图。 */
+/** 让一段真程序过语法检查，再在隔离里跑完：交出程序的结果与跟在结果旁边交给模型的图。 */
 export async function runModelProgram(
   desk: ReturnType<typeof computerDesk>,
   source: string,
@@ -233,7 +233,7 @@ export async function runModelProgram(
       'needsModules' in outcome
         ? `要先补模块 ${outcome.needsModules.join(', ')}`
         : JSON.stringify(outcome.check.diagnostics)
-    throw new Error(`程序没过 typecheck：${why}`)
+    throw new Error(`程序没过检查：${why}`)
   }
   return { result: outcome.result, attachments: outcome.attachments ?? [] }
 }

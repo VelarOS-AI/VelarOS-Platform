@@ -88,7 +88,7 @@ describe('模型面', () => {
     ] as const) {
       const declarations = await readFile(join(Baselines, `${surface.namespace}.d.ts`), 'utf8')
       const template = await readFile(resolve(import.meta.dir, '..', file), 'utf8')
-      const checked = codeProgramChecker.check({
+      const checked = codeProgramChecker.typecheck({
         source: template,
         granted: [{ namespace: surface.namespace, declarations }],
       })
