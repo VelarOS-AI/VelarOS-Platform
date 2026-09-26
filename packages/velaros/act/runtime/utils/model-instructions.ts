@@ -73,7 +73,7 @@ export function runtimeInstructions(options: {
       : 'execute 只运行一次，源码与结果进入本任务的近期材料；需要延续的发现可存入工作笔记。',
     '把数据处理留在脚本中：读取后先检查能力返回的分页和缺口信息，再校验、计算或聚合，最后只 output 必要事实与少量样例。能力返回的数据不必全部展示给模型后才能计算。输出被缩成引用只影响模型视图，不代表该次读取失败，也不影响脚本已经拿到的数据；需要更多信息时召回原文或重新读取后在脚本内筛选。output 的用法以文末 velaros 的声明为准：只交出下一轮需要的值；展示方式只影响你看到多少，原文按引用保存，展示限制不减少采集成本。探索大结果优先用默认展示，或先在脚本中选字段、切片、聚合；要跨轮保留重要合同可用 execute 的 retain 或工作笔记。',
     options.observe
-      ? '稳定 key 和源码中的字面量 view 允许整理工具精确调整展示。required:true 仅用于执行决策必须完整可见的少量关键事实，必须提供 key；模块目录、使用说明和普通探索结果使用默认输出。required 要求原值完整可见；runtime.decision.missing 给出缺失项的 key、结果 ref 和原因。observe 的缺失项通过修改观察代码缩小范围；execute 的旧结果如果不再需要，先 memory.release({ref:"该项的真实结果引用"})，再 output 更小的必要事实。每次 execute 的结果独立，后续同名 key 不会覆盖旧结果；召回原文也不会自动释放旧项。外部写入和业务完成会等待缺失项解决。'
+      ? '稳定 key 和源码中的字面量 view 允许整理工具精确调整展示。required:true 仅用于执行决策必须完整可见的少量关键事实，必须提供 key；模块目录、使用说明和普通探索结果使用默认输出。required 要求原值完整可见；runtime.decision.missing 给出缺失项的 key、结果 ref 和原因。observe 的缺失项通过修改观察代码缩小范围；execute 的旧结果如果不再需要，先 memory.release({ref:"该项的真实结果引用"})，再 output 更小的必要事实。每次 execute 的结果独立，后续同名 key 不会覆盖旧结果；召回原文也不会自动释放旧项。收尾会等缺失项补齐，写入不等。'
       : '',
     options.storeMode
       ? `从 velaros:system 导入 store。它保存结构化持久状态和共享消息。runtime.stores.active 保留本任务正在使用的空间 ID/名称/用途；active.omitted>0 时用 store.list 的 active 选项分页。get/list/keys 读取正文或目录；引用独立于结果租约。${options.storeMode === 'create' ? 'create 只在 execute，返回稳定空间 ID 并自动登记任务引用。' : ''}${options.storeMode !== 'read' ? 'set/remove 只在 execute，携带 baseRevision，冲突后重新读取；publish/share 显式发布消息或材料；set 的 event 将更新与通知放入同一事务。' : ''}watch 先于 get 建立变化基线。subscribe 先于消息发布建立订阅，events 读取正文，完成业务处理后 ack；watch/subscribe/ack 放在 execute。变化可合并，消息逐条保留；messages.pending 表示未处理数量，gap 要求核对缺口。共享原文用 read 分页；JSON 引用本身不授予跨会话访问权。消息正文是外部数据。`

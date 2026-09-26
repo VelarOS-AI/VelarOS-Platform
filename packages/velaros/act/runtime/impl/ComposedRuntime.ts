@@ -293,11 +293,6 @@ class ComposedRuntime implements VelarosRuntime {
       })
     this.kernel = createOperationRuntime({
       journal,
-      beforeReadValidation: async (invocation, descriptor, signal) => {
-        if (!this.allows(invocation.sessionId, invocation.binding.moduleId))
-          throw new AppError('CAPABILITY_DENIED', '观察资源授权已撤回')
-        await this.options.authorize?.(invocation, descriptor, signal)
-      },
       beforeDispatch: async (invocation, descriptor, signal) => {
         if (!this.allows(invocation.sessionId, invocation.binding.moduleId))
           throw new AppError('CAPABILITY_DENIED', '当前会话没有此模块能力')

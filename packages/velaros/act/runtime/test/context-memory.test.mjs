@@ -57,14 +57,7 @@ test('INV-35 model receipt grouping preserves full raw decisions and every failu
       recent: { history: [], results: [] },
       runtime: {
         mandatory: [...reads, ...unsafe],
-        decision: {
-          frameId: 'frame',
-          unverified: reads.map((item) => ({
-            invocationId: item.id,
-            moduleId: 'materials',
-            operation: 'read',
-          })),
-        },
+        decision: { frameId: 'frame', missing: [] },
       },
     },
     memoryStatus: {},
@@ -895,5 +888,4 @@ test('zero-history results and current observation render code without extra str
   assert.match(request.history[0].content, /runtime-segment-base/)
   const frame = JSON.parse(request.materials[0].text)
   assert.equal(JSON.parse(frame.partitions.observation.text).blocks[0].text, observed)
-  assert(frame.partitions.runtime.decision.sources.includes(frame.partitions.observation.resultRef))
 })

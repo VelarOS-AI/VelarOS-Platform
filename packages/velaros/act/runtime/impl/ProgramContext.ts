@@ -12,7 +12,7 @@ import { ContextLimits } from '@velaros-ai/context'
 import { isFalse, isNull, toNullable } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { ModelImage, OperationReadStamp } from '@velaros-ai/kernel'
+import type { ModelImage } from '@velaros-ai/kernel'
 import {
   type CodeProgramRequest,
   type ScriptOutputCapture,
@@ -642,11 +642,6 @@ export class ProgramContext implements ProgramContextApi {
           },
         })
       }
-    const decisionMaterials: Array<{
-      ref: string
-      reads: readonly OperationReadStamp[]
-      unverified: ReadonlyArray<{ invocationId: string; moduleId: string; operation: string }>
-    }> = []
     const leaseMissing: Array<{ key: string; ref: string; reason: string }> = []
     for (const lease of allVisible.filter(
       (item) => !visible.some((current) => current.ref === item.ref)
@@ -694,11 +689,6 @@ export class ProgramContext implements ProgramContextApi {
       const archived = JSON.parse(full)
       const failure = programFailure(archived)
       feedback = failure ? { ref: lease.ref, sourceRef: lease.sourceRef, failure } : undefined
-      decisionMaterials.push({
-        ref: lease.ref,
-        reads: archived.dependencies?.reads ?? [],
-        unverified: archived.dependencies?.unverified ?? [],
-      })
       const output = archived.output as Optional<ScriptOutputCapture>
       const managed =
         output &&
@@ -833,12 +823,6 @@ export class ProgramContext implements ProgramContextApi {
     const original = current
       ? JSON.parse((await this.storage.get(this.sessionId, current.record.objectId))!)
       : undefined
-    if (observation)
-      decisionMaterials.push({
-        ref: observation.id,
-        reads: original?.dependencies?.reads ?? [],
-        unverified: original?.dependencies?.unverified ?? [],
-      })
     const capture = original?.output as Optional<ScriptOutputCapture>
     const savedProgram = source
       ? (JSON.parse(
@@ -982,7 +966,6 @@ export class ProgramContext implements ProgramContextApi {
     const body = JSON.stringify({
       decision: {
         frameId,
-        materials: decisionMaterials,
         missing: [...leaseMissing, ...missingRequired],
       },
       id: view.id,

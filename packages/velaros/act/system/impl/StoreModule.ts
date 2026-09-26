@@ -1,4 +1,3 @@
-import type { StoreObject } from '@velaros-ai/context'
 import type { OperationDefinition, OperationModuleDefinition } from '@velaros-ai/kernel'
 
 import { capabilityModules } from '../../runtime/impl/CapabilityModules.js'
@@ -24,20 +23,6 @@ class StoreModule implements StoreModuleApi {
     host: StoreHost,
     mode: 'create' | 'write' | 'read' = 'create'
   ): OperationModuleDefinition {
-    // 读到的对象版本按「空间 + 键」登记，写入前据此核对没有被别人改过
-    const reads: NonNullable<OperationDefinition['reads']> = {
-      capture: async (input, value) => {
-        const target = input as { store: string; key: string }
-        return [
-          {
-            resourceId: JSON.stringify([target.store, target.key]),
-            version: String((value as Nullable<StoreObject>)?.revision ?? 0),
-          },
-        ]
-      },
-      validate: async (stamp, call) =>
-        stamp.version === (await host.stores(call.invocation.sessionId).version(stamp.resourceId)),
-    }
     // 写操作的效果按空间事务回执核对，不重跑脚本
     const reconcile: NonNullable<OperationDefinition['reconcile']> = async (invocation, signal) => {
       signal.throwIfAborted()
@@ -66,7 +51,6 @@ class StoreModule implements StoreModuleApi {
         invocationId: call.invocation.id,
         abortSignal: call.signal,
       }),
-      reads: { get: reads, read: reads, share: reads, set: reads, remove: reads },
       reconcile: {
         subscribe: reconcile,
         ack: reconcile,

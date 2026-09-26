@@ -399,7 +399,7 @@ test('INV-15 子 Agent 继承父空间与读写范围，但不能再派发子任
   })
   assert.equal((await f.storage.stores.get(f.storeId, 'plan')).value, 'revised')
 })
-test('INV-15 当前状态版本参加 Kernel 读依赖验证：外部改动不挡业务写入，收尾前发现过期依据先刷新', async (t) => {
+test('INV-15 外部改了读过的状态不挡业务写入，收尾也不再按读到的版本打回', async (t) => {
   let calls = 0
   let writes = 0
   const business = {
@@ -418,14 +418,6 @@ test('INV-15 当前状态版本参加 Kernel 读依赖验证：外部改动不�
   const f = await fixture(t, {
     modules: [business],
     model: model(async function* (request) {
-      const frame = runtimeFrame(request)
-      assert(
-        frame.decision.reads.some(
-          (x) =>
-            x.binding.moduleId === 'velaros:system-store' &&
-            x.resourceId === JSON.stringify([f.storeId, 'x'])
-        )
-      )
       if (++calls === 1) {
         await f.storage.stores.commit({
           store: f.storeId,
@@ -450,10 +442,7 @@ test('INV-15 当前状态版本参加 Kernel 读依赖验证：外部改动不�
           operationId: 'external-again',
         })
         yield* done(request)
-      } else {
-        assert.match(request.compiledPrompt, /STALE_OBSERVATION/)
-        yield* done(request)
-      }
+      } else assert.fail('收尾不该被打回重来')
     }),
   })
   await execute(f.session, "await store.set({store:currentStore,key:'x',baseRevision:0,value:1});")
@@ -462,8 +451,9 @@ test('INV-15 当前状态版本参加 Kernel 读依赖验证：外部改动不�
   })
   assert.equal((await submit(f.session)).at(-1).status, 'completed')
   assert.equal(writes, 1)
+  assert.equal(calls, 2)
 })
-test('INV-15 自己的状态写回推进读依据，同一脚本可继续修改和删除', async (t) => {
+test('INV-15 自己的状态写回按版本接着改，同一脚本可继续修改和删除', async (t) => {
   let calls = 0
   const f = await fixture(t, {
     model: model(async function* (request) {
@@ -719,7 +709,6 @@ test('INV-16 模型创建多个同名空间，相同键互不影响；observe �
   const frame = frames(f.requests)[0]
   assert.match(frame.observation.text, /A/)
   assert.match(frame.observation.text, /B/)
-  assert.equal(new Set(frame.decision.reads.map((x) => x.resourceId)).size, 2)
   assert.equal((await execute(f.session, 'output(await store.list({}));')).items.length, 3)
   await assert.rejects(
     f.session.execute({ source: "import {state} from 'velaros:system';state.get({key:'x'});" }),

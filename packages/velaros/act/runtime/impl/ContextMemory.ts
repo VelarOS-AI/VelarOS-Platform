@@ -13,7 +13,7 @@ import { isEmpty } from '@velaros-ai/core'
 import { isFalse, isNull, isUndefined, toNullable } from '@velaros-ai/core'
 import { isArray, isBoolean, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { ModelHistoryMessage, ModelImage, OperationReadStamp } from '@velaros-ai/kernel'
+import type { ModelHistoryMessage, ModelImage } from '@velaros-ai/kernel'
 import type { WorkspaceEntry, WorkspaceUpdate } from '@velaros-ai/velaros/act/system'
 
 import { WorkspaceLimits } from '../../system/contract/constants.js'
@@ -610,41 +610,9 @@ export class ContextMemory implements ContextMemoryApi {
         .filter((item: { bodyIncluded: boolean; text?: string }) => item.bodyIncluded && item.text)
         .map((item: { ref: string }) => item.ref),
     ]
-    const deliveredRefs = new Set([
-      ...resultRefs,
-      ...(material.observation.bodyIncluded && material.observation.resultRef
-        ? [material.observation.resultRef]
-        : []),
-    ])
-    const dependencies = (
-      material.decision.materials as Array<{
-        ref: string
-        reads: OperationReadStamp[]
-        unverified: unknown[]
-      }>
-    ).filter((item) => deliveredRefs.has(item.ref))
-    const currentReads =
-      dependencies.find((item) => item.ref === material.observation.resultRef)?.reads ?? []
-    const resourceKey = (stamp: OperationReadStamp) =>
-      JSON.stringify([stamp.binding, stamp.resourceId])
-    // 按持久结果顺序接纳更新的真实读取和写回版本，展示排序不参与；当前观察最后覆盖。
-    const historical = dependencies
-      .filter((item) => item.ref !== material.observation.resultRef)
-      .sort((a, b) => (sequence.get(a.ref) ?? 0) - (sequence.get(b.ref) ?? 0))
-      .flatMap((item) => item.reads)
-    const reads = new Map(
-      [...historical, ...currentReads].map((stamp) => [resourceKey(stamp), stamp])
-    )
-    const superseded = [...historical, ...currentReads].filter(
-      (stamp) => JSON.stringify(reads.get(resourceKey(stamp))) !== JSON.stringify(stamp)
-    )
     const decision = {
       frameId: material.programFrame.id,
       missing: material.decision.missing,
-      reads: [...reads.values()],
-      unverified: dependencies.flatMap((item) => item.unverified),
-      sources: dependencies.map((item) => item.ref),
-      superseded,
     }
     await this.programs.delivered(material.programFrame.id, resultRefs, signal)
     const entries = [

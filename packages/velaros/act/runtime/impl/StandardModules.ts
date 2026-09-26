@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto'
-
 import type { AgentSupervisorApi } from '@velaros-ai/agent'
 import type { ContextViewApi } from '@velaros-ai/context'
 import { isPlainObject } from '@velaros-ai/core'
@@ -20,12 +18,6 @@ import { VelarCodeModule, VelarProjectModule } from '../../../project/contract/s
 import { projectCapabilityPorts } from '../../../project/impl/operations/ProjectCapabilityPorts.js'
 import { projectCodeOperations } from '../../../project/impl/operations/ProjectCodeOperations.js'
 import { projectFileOperations } from '../../../project/impl/operations/ProjectFileOperations.js'
-import type {
-  ProjectEditResult,
-  ProjectListInput,
-  ProjectReadResult,
-  ProjectSearchInput,
-} from '../../../project/types/files.js'
 import type { ShellOperationContext } from '../../../shell/contract/requires.js'
 import { VelarShellModule } from '../../../shell/contract/surface.js'
 import { shellOperations } from '../../../shell/impl/ShellOperations.js'
@@ -117,53 +109,10 @@ class StandardModules implements StandardModuleFactory {
 /** 标准工具装配保持单一入口，模型看见的说明和执行使用同一份定义。 */
 export const standardModules: StandardModuleFactory = new StandardModules()
 
-/** 用既有项目内核装配真实版本读取；不从模型输出推断文件版本。 */
+/** 项目上的 velaros:project：读、列、搜与按路径改，都经同一个项目内核。 */
 export function createProjectCapabilityModule(
   options: ProjectCapabilityModuleOptions
 ): OperationModuleDefinition {
-  const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
-  const files: NonNullable<OperationDefinition['reads']> = {
-    capture: (_input, value) => {
-      const result = value as Partial<ProjectReadResult & ProjectEditResult>
-      const versions = new Map(
-        (result.files ?? [])
-          .filter((file) => file.revision)
-          .map((file) => [`file:${file.path}`, file.revision!] as const)
-      )
-      for (const [path, version] of Object.entries(result.newRevisions ?? {}))
-        versions.set(`file:${path}`, version)
-      for (const issue of result.issues ?? [])
-        if (issue.code === 'TARGET_NOT_FOUND') versions.set(`file:${issue.path}`, 'missing')
-      return [...versions].map(([resourceId, version]) => ({ resourceId, version }))
-    },
-    validate: async (stamp, call) => {
-      call.signal.throwIfAborted()
-      if (!stamp.resourceId.startsWith('file:')) return null
-      const stat = await (await options.project.kernel()).stat({ path: stamp.resourceId.slice(5) })
-      call.signal.throwIfAborted()
-      return !stat.exists
-        ? ['deleted', 'missing'].includes(stamp.version)
-        : stat.revision === stamp.version
-    },
-  }
-  const query = (name: 'list' | 'search'): NonNullable<OperationDefinition['reads']> => ({
-    capture: (input, value) => [{ resourceId: `${name}:${hash(input)}`, version: hash(value) }],
-    validate: async (stamp, call) => {
-      if (stamp.resourceId.startsWith('file:')) return files.validate(stamp, call)
-      if (stamp.resourceId !== `${name}:${hash(call.invocation.input)}`) return false
-      const context = {
-        project: options.project,
-        sessionId: call.invocation.sessionId,
-        abortSignal: call.signal,
-      }
-      const value =
-        name === 'list'
-          ? await projectFileOperations.list(call.invocation.input as ProjectListInput, context)
-          : await projectFileOperations.search(call.invocation.input as ProjectSearchInput, context)
-      call.signal.throwIfAborted()
-      return hash(value) === stamp.version
-    },
-  })
   return capabilityModules.create({
     surface: VelarProjectModule,
     implementation: projectFileOperations,
@@ -174,7 +123,6 @@ export function createProjectCapabilityModule(
       sessionId: call.invocation.sessionId,
       abortSignal: call.signal,
     }),
-    reads: { read: files, list: query('list'), search: query('search'), edit: files, undo: files },
   })
 }
 

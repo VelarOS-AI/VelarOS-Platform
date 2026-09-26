@@ -111,8 +111,6 @@ export interface StoreSessionApi {
   pending(): Promise<boolean>
   /** 等待任一获配空间的相关变化。 */
   wait(signal: AbortSignal): Promise<void>
-  /** 校验带空间身份的真实对象版本。 */
-  version(resourceId: string): Promise<string>
   /** 根据调用身份核对真实提交。 */
   committed(operationId: string, store?: string): Promise<boolean>
   /** 子任务继承用：此刻能用的全部空间与各自的读写范围，最多 StoreLimits.stores 个。 */
@@ -549,10 +547,6 @@ export class StoreSession implements StoreSessionApi {
         controller.abort()
       }
     }
-  }
-  public async version(resourceId: string): Promise<string> {
-    const [store, key] = JSON.parse(resourceId) as [string, string]
-    return String((await this.get(store, key))?.revision ?? 0)
   }
   public async committed(operationId: string, store?: string): Promise<boolean> {
     if (store) {

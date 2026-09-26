@@ -37,7 +37,7 @@ function defaultImplicitSearchExcludeGlobs(root?: string): string[] {
 
 /**
  * 搜索命中的次序：分高的在前，同分按路径、再按行列。ripgrep 多线程交回的次序每次不一样，
- * 不在这里定下来，同一份内容搜两遍结果就不一样，按结果核对的读取凭据会被误判成过期。
+ * 不在这里定下来，同一份内容搜两遍结果就不一样：模型看着乱，进了上下文的结果也坏了前缀缓存。
  */
 export function compareSearchHits(a: SearchHit, b: SearchHit): number {
   return (

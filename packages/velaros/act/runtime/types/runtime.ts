@@ -1,5 +1,3 @@
-import type { OperationReadStamp } from '@velaros-ai/kernel'
-
 import type { ScriptRetention } from './results.js'
 
 /** 按当前会话的自动保存记录再次执行代码，调用会获得新的执行身份。 */
@@ -179,7 +177,7 @@ export interface ScriptControlIdentity {
   readonly expectedObservation: Nullable<string>
 }
 
-/** 实际投递帧中世界读取的宿主证据，执行期间固定。 */
+/** 实际投递帧里收尾要看的缺口：required 输出没完整可见的那几项。读到的资源版本不再记在这里（ADR 0025）。 */
 export interface ScriptDecisionBasis {
   readonly frameId: string
   /** 必须完整可见的输出缺口；引用、摘要不满足 required。 */
@@ -187,11 +185,5 @@ export interface ScriptDecisionBasis {
     readonly key: string
     readonly ref: Nullable<string>
     readonly reason: string
-  }>
-  readonly reads: readonly OperationReadStamp[]
-  readonly unverified: ReadonlyArray<{
-    readonly invocationId: string
-    readonly moduleId: string
-    readonly operation: string
   }>
 }

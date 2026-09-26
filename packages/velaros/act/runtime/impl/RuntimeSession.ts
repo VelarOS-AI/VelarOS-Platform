@@ -26,12 +26,7 @@ import { Log } from '@velaros-ai/core'
 import { isNull, isUndefined, toNullable, toOptional } from '@velaros-ai/core'
 import { isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type {
-  ModelImage,
-  ModelTurnRequest,
-  OperationReadStamp,
-  OperationRuntimeApi,
-} from '@velaros-ai/kernel'
+import type { ModelImage, ModelTurnRequest, OperationRuntimeApi } from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
 import { createProviderRequestCompiler } from '@velaros-ai/model'
 import type {
@@ -44,7 +39,6 @@ import { createKernelScriptSession } from '@velaros-ai/script'
 
 import {
   GoalLimits,
-  LongTermMemoryModuleIds,
   ScriptLeaseLimits,
   StoreProjectionLimits,
 } from '../../system/contract/constants.js'
@@ -52,7 +46,6 @@ import type { ContextCandidateValidator } from '../../system/contract/requires.j
 import type { StoreSessionApi } from '../../system/impl/StoreSession.js'
 import type { GoalControl, GoalState, GoalUpdate } from '../../system/types/goal.js'
 import type { WorkspaceEntry } from '../../system/types/workspace.js'
-import { isSystemMember } from '../../system/utils/members.js'
 import type { VelarosContextOptions } from '../contract/requires.js'
 import type { RuntimeNoteContent, RuntimeNoteRead, RuntimeNoteRetention } from '../types/memory.js'
 import type { ContextMemoryPolicy } from '../types/memory.js'
@@ -509,15 +502,7 @@ export class RuntimeSession implements VelarosSession {
                 reason: 'CONTEXT_REQUIRED',
                 recovery: 'repair',
               }
-            const validation = await this.validateReads(basis.reads, signal)
-            if (validation.status !== 'valid')
-              return {
-                completed: false,
-                verified: false,
-                reason:
-                  validation.status === 'stale' ? 'STALE_OBSERVATION' : 'OBSERVATION_UNVERIFIABLE',
-                recovery: 'refresh',
-              }
+            // 收尾不再按读到的版本核对（ADR 0025）：读完之后世界变了，模型要不要重看由它自己判断。
             // 其余检查都通过才结束目标：运行被打回时，目标不能已经标成完成。
             if (active && claim) return this.completeGoal(active, claim, signal)
             return undefined
@@ -627,17 +612,6 @@ export class RuntimeSession implements VelarosSession {
     frame.memoryStatus.footprint.runtime = JSON.stringify(frame.partitions.runtime).length
     const body = JSON.stringify(frame)
     return { ...projected, body, prompt: memoryPrompt(body) }
-  }
-
-  /**
-   * 核对行动依据的读取之前，先补上本会话仍然获准的模块绑定：绑定在脚本第一次导入时才建立，
-   * 换了运行时实例、这一轮还没导入过的模块不等于授权被撤回；已经移出本会话的模块照样核不过。
-   */
-  private async validateReads(reads: readonly OperationReadStamp[], signal: AbortSignal) {
-    const allowed = new Set(this.dependencies.allowedModules())
-    for (const moduleId of new Set(reads.map((stamp) => stamp.binding.moduleId)))
-      if (allowed.has(moduleId)) this.dependencies.kernel.bind(this.id, moduleId)
-    return this.dependencies.kernel.validateReads(this.id, reads, signal)
   }
 
   private async waitExecution(signal: AbortSignal): Promise<void> {
@@ -1587,23 +1561,6 @@ export class RuntimeSession implements VelarosSession {
           )
       const persisted = result?.checked ? { ...result, attachments: undefined } : result
       const dependencies = await this.dependencies.journal.list(this.id, executionId)
-      const reads = dependencies.flatMap((record) =>
-        record.receipt?.outcome === 'succeeded' ? (record.receipt.reads ?? []) : []
-      )
-      const unverified = dependencies
-        .filter(
-          (record) =>
-            record.receipt?.outcome === 'succeeded' &&
-            !record.receipt.reads?.length &&
-            (!isSystemMember(record.prepared.binding.moduleId) ||
-              (LongTermMemoryModuleIds.includes(record.prepared.binding.moduleId) &&
-                record.prepared.operation === 'recall'))
-        )
-        .map((record) => ({
-          invocationId: record.prepared.id,
-          moduleId: record.prepared.binding.moduleId,
-          operation: record.prepared.operation,
-        }))
       const observationFeedback =
         mode === 'observe'
           ? (await this.dependencies.journal.list(this.id, executionId))
@@ -1631,7 +1588,6 @@ export class RuntimeSession implements VelarosSession {
         body: JSON.stringify({
           executionId,
           mode,
-          dependencies: { reads, unverified },
           ...(persisted ?? { error: String(failure) }),
           timing: { durationMs },
           attachments: !isEmpty(attachments) ? attachments : undefined,

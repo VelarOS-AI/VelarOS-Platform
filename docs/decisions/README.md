@@ -41,3 +41,4 @@ Accepted records are durable rationale, not a substitute for schemas or executab
 - [0023: 读出来是连续正文，改的时候按路径写](0023-continuous-text-path-edits.md)
 
 - [0024: 模块不用申请](0024-no-capability-requests.md)
+- [0025: 收尾不再按读到的版本核对](0025-no-completion-read-check.md)
