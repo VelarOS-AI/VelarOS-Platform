@@ -173,6 +173,20 @@ export interface ShellCapabilityModuleOptions {
   readonly shell: ShellSpacePort
   /** 一次性危险操作仍使用现有审批端口。 */
   readonly approval: ShellOperationContext['approval']
+  /** 宿主要在界面上显示命令跑着时的输出就给：前台命令每吐出一段回调一次，带上是哪段执行的哪次调用。 */
+  readonly output?: (output: ShellInvocationOutput) => void
+}
+
+/** 一次 `velaros:shell` 调用跑着时吐出的一段输出。 */
+export interface ShellInvocationOutput {
+  /** 调用所属会话。 */
+  readonly sessionId: string
+  /** 调用所在的那段执行，与回合追踪里的 `executionId` 相同。 */
+  readonly executionId: string
+  /** 这次调用，与回合追踪里调用的 `id` 相同。 */
+  readonly invocationId: string
+  /** 新吐出的一段，stdout、stderr 按到达顺序。 */
+  readonly text: string
 }
 
 /** 宿主持有 OAuth 凭据与交互。 */

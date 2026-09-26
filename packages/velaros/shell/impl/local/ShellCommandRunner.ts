@@ -17,6 +17,7 @@ import type { PlatformCompatibilityApi } from '@velaros-ai/core/platform'
 import { ShellLimits } from '../../contract/constants.js'
 import type {
   ShellProcessConfinementProvider,
+  ShellRunCommandHooks,
   ShellTerminalFactory,
 } from '../../contract/requires.js'
 import type {
@@ -91,6 +92,7 @@ export interface ShellCommandRunnerApi {
    * 后台（options.background）：进程拉起后登记成后台任务就返回，结果里带任务 id 和终止命令。
    * 交互式（options.interactive，必须和 background 一起）：宿主给了伪终端工厂就在真终端里跑（channel 为 `pty`），
    * 没给就留一根保持打开的 stdin 管道（channel 为 `pipe`）；输出另外存进控制台缓冲区，结果的 `backgroundProcess.console` 给出这个控制台。
+   * 前台命令跑着时，给了 `options.onOutput` 就把每段解码好的输出（stdout、stderr 按到达顺序）交给它；它抛错只记日志。
    * 命令自己失败（非零退出、超时、取消）不抛错，如实写进结果；找不到能用的 shell、约束后端缺失、进程拉不起来才抛错。
    * @param command 命令文本；给了 options.nativeCommand 时只用来展示
    * @param cwd 已经解析好的绝对工作目录
@@ -98,7 +100,7 @@ export interface ShellCommandRunnerApi {
   run(
     command: string,
     cwd: string,
-    options: ShellRunCommandOptions,
+    options: ShellRunCommandOptions & ShellRunCommandHooks,
     abortSignal?: AbortSignal
   ): Promise<ShellCommandResult>
   /** 列出后台任务：可按任务 id、会话、命令过滤词、只看运行中来筛，给了 limit 就最多那么多条（不给全列）；状态按受管进程此刻的情况给出。 */
@@ -184,7 +186,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
   public async run(
     commandInput: string,
     cwd: string,
-    options: ShellRunCommandOptions,
+    options: ShellRunCommandOptions & ShellRunCommandHooks,
     abortSignal?: AbortSignal
   ): Promise<ShellCommandResult> {
     abortSignal?.throwIfAborted()
@@ -226,6 +228,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       timeoutMs: options.timeoutMs ?? ShellTuning.command.timeoutMs,
       maxOutputChars: options.maxOutputChars ?? ShellTuning.command.outputChars,
       stdin: options.stdin,
+      onOutput: options.onOutput,
       abortSignal,
     })
     return buildShellCommandResult(command, cwd, startedAt, {
@@ -518,6 +521,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       timeoutMs: number
       maxOutputChars: number
       stdin?: string
+      onOutput?: (text: string) => void
       abortSignal?: AbortSignal
     }
   ): Promise<{
@@ -555,6 +559,13 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       totalBytes += Buffer.byteLength(text)
       if (output[stream].length + text.length > maxChars) truncated = true
       output[stream] = appendBoundedOutput(output[stream], text, maxChars)
+      if (!text || !options.onOutput) return
+      // 宿主看运行中的输出只是展示：它出错不能打断命令，也不能让这段输出丢出结果。
+      try {
+        options.onOutput(text)
+      } catch (error) {
+        log.warn('命令运行中输出的接收方处理失败', { error })
+      }
     }
     for (const stream of ['stdout', 'stderr'] as const)
       child[stream].on('data', (chunk: Buffer) => append(stream, decoders[stream].write(chunk)))

@@ -11,7 +11,11 @@ import type { PlatformCompatibilityApi } from '@velaros-ai/core/platform'
 import { createPlatform } from '@velaros-ai/core/platform'
 import type { CommandSpec } from '@velaros-ai/core/platform/contracts'
 
-import type { LocalShellHostOptions, ShellHostPort } from '../../contract/requires.js'
+import type {
+  LocalShellHostOptions,
+  ShellHostPort,
+  ShellRunCommandHooks,
+} from '../../contract/requires.js'
 import type { ResolvedShell } from '../../types/local.js'
 import type {
   ShellBackgroundTaskQueryOptions,
@@ -352,7 +356,7 @@ export class LocalShellHost implements LocalShellHostApi {
 
   public runCommand(
     command: string,
-    options: ShellRunCommandOptions = {},
+    options: ShellRunCommandOptions & ShellRunCommandHooks = {},
     _allowDangerous = false,
     abortSignal?: AbortSignal
   ): Promise<ShellCommandResult> {

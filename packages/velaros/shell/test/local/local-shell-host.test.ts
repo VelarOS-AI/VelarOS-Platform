@@ -10,6 +10,35 @@ import { createLocalShellHost } from '../../impl/local/LocalShellHost.js'
 import { buildConfinedSpawnSpec, buildSeatbeltProfile } from '../../utils/confinement.js'
 
 describe('Local shell host', () => {
+  test.skipIf(process.platform === 'win32')(
+    '前台命令跑着时按段交出输出，接收方出错不打断命令，结果里的输出照样齐全',
+    async () => {
+      const workingDirectory = await mkdtemp(join(tmpdir(), 'velaros-live-output-'))
+      const host = createLocalShellHost({ cwd: workingDirectory })
+      try {
+        const chunks: string[] = []
+        const result = await host.runCommand(
+          "printf 'first\\n'; sleep 0.3; printf 'second\\n' >&2; sleep 0.3; printf 'third\\n'",
+          {
+            onOutput: (text) => {
+              chunks.push(text)
+              throw new Error('展示端坏了')
+            },
+          }
+        )
+        expect(result.success).toBe(true)
+        expect(chunks.join('')).toBe('first\nsecond\nthird\n')
+        expect(chunks.length).toBeGreaterThanOrEqual(3)
+        expect(result.stdout).toBe('first\nthird\n')
+        expect(result.stderr).toBe('second\n')
+      } finally {
+        await host.dispose()
+        await rm(workingDirectory, { recursive: true, force: true })
+      }
+    },
+    30_000
+  )
+
   test('builds deterministic platform confinement profiles with an observable backend', () => {
     const policy = {
       mode: 'workspace-write' as const,

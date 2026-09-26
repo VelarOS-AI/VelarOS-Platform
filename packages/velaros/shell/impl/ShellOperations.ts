@@ -144,6 +144,7 @@ export class ShellOperations implements ShellOperationsApi {
         interactive,
         maxOutputChars: ShellLimits.outputChars,
         sessionId: ctx.sessionId,
+        onOutput: ctx.onOutput,
       },
       plan.isDangerous,
       ctx.abortSignal

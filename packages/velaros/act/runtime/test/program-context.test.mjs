@@ -456,6 +456,53 @@ test('a dangerous command the user rejects records no effect, so the run needs n
   assert(!f.frames[0].mandatory.some((item) => item.effect === 'unknown'))
 })
 
+test('a running shell call hands its output to the host with the execution and call it belongs to', async (t) => {
+  const outputs = []
+  const shell = {
+    resolveCwd: async () => '/test',
+    commandPolicy: () => ({ scopeLabel: 'test', riskScope: 'test' }),
+    runCommand: async (command, options) => {
+      options.onOutput?.(`${command} 1\n`)
+      options.onOutput?.(`${command} 2\n`)
+      return {
+        command,
+        cwd: '/test',
+        success: true,
+        exitCode: 0,
+        signal: null,
+        timedOut: false,
+        aborted: false,
+        durationMs: 1,
+        stdout: '',
+        stderr: '',
+        truncated: false,
+      }
+    },
+  }
+  const module = createShellCapabilityModule({
+    instanceId: 'live-shell',
+    shell,
+    approval: {},
+    output: (output) => outputs.push(output),
+  })
+  const f = await fixture(t, stop, { modules: [module] })
+  ok(
+    await f.session.execute({
+      source:
+        "import {run} from 'velaros:shell';await run({command:'build'});await run({command:'test'});",
+    })
+  )
+  assert.deepEqual(
+    outputs.map((output) => output.text),
+    ['build 1\n', 'build 2\n', 'test 1\n', 'test 2\n']
+  )
+  const [build, , check] = outputs
+  assert.equal(build.sessionId, 's')
+  assert.equal(build.executionId, check.executionId)
+  assert.notEqual(build.invocationId, check.invocationId)
+  assert.ok(build.invocationId.startsWith(`${build.executionId}:`))
+})
+
 test('an unknown world outcome survives expiration of its ordinary result body', async (t) => {
   let calls = 0
   const module = {

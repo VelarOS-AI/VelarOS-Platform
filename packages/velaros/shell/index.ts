@@ -26,6 +26,7 @@ export type {
   ShellHostPort,
   ShellOperationContext,
   ShellProcessConfinementProvider,
+  ShellRunCommandHooks,
   ShellSpacePort,
   ShellTerminalExit,
   ShellTerminalFactory,

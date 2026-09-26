@@ -48,7 +48,7 @@ export interface ShellHostPort {
    */
   runCommand: (
     command: string,
-    options?: ShellRunCommandOptions,
+    options?: ShellRunCommandOptions & ShellRunCommandHooks,
     allowDangerous?: boolean,
     abortSignal?: AbortSignal
   ) => Promise<ShellCommandResult>
@@ -63,6 +63,12 @@ export interface ShellHostPort {
    * 本来就不在跑时不抛错，`terminated` 为 false。期限内没停下来时抛错，调用方可以再带 force 来一次。
    */
   terminateBackgroundTask: (request: ShellTaskTerminateRequest) => Promise<ShellTaskTerminateResult>
+}
+
+/** 跑一条命令时宿主要的回调。入参是可移植数据、放不下函数，回调单独放这里，和入参合在一起传。 */
+export interface ShellRunCommandHooks {
+  /** 前台命令跑着时每吐出一段输出（stdout、stderr 按到达顺序）就回调一次；后台命令不回调。 */
+  onOutput?: (text: string) => void
 }
 
 /**
@@ -90,6 +96,8 @@ export interface ShellOperationContext {
   approval: ApprovalPort
   /** 本次调用所属会话。给了，后台任务就按会话登记与核对归属，别的会话列不到；不给就不隔离。 */
   sessionId?: string
+  /** 这次调用的前台命令跑着时吐出的输出交给谁；宿主要在界面上显示运行中的输出才给。 */
+  onOutput?: (text: string) => void
 }
 
 // ── 本机宿主 ────────────────────────────────────────────────────

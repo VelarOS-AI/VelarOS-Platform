@@ -13,7 +13,7 @@ export type {
   VelarosRuntimeOptions,
 } from './contract/requires.js'
 export type { CapabilityModuleOptions } from './contract/requires.js'
-export type { ShellCapabilityModuleOptions } from './contract/requires.js'
+export type { ShellCapabilityModuleOptions, ShellInvocationOutput } from './contract/requires.js'
 export type {
   McpAuthorizationProvider,
   McpConnectionOptions,

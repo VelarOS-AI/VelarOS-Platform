@@ -22,6 +22,7 @@ import type {
   ProjectReadResult,
   ProjectSearchInput,
 } from '../../../project/types/files.js'
+import type { ShellOperationContext } from '../../../shell/contract/requires.js'
 import { VelarShellModule } from '../../../shell/contract/surface.js'
 import { shellOperations } from '../../../shell/impl/ShellOperations.js'
 import type { ShellRunInput } from '../../../shell/types/shell-command.js'
@@ -189,12 +190,21 @@ export function createShellCapabilityModule(
     instanceId: options.instanceId,
     // 命令启动之前的失败（越界、危险命令被拒）由 shell 标成没有效果
     withoutEffect: (error) => (error as { effect?: string })?.effect === 'none',
-    context: (call) => ({
-      shell: options.shell,
-      approval: options.approval,
-      abortSignal: call.signal,
-      sessionId: call.invocation.sessionId,
-    }),
+    context: (call) => {
+      const context: ShellOperationContext = {
+        shell: options.shell,
+        approval: options.approval,
+        abortSignal: call.signal,
+        sessionId: call.invocation.sessionId,
+      }
+      // 宿主要看命令跑着时的输出：每段带上是哪个会话、哪段执行、哪次调用。
+      const output = options.output
+      if (output) {
+        const { sessionId, executionId, id } = call.invocation
+        context.onOutput = (text) => output({ sessionId, executionId, invocationId: id, text })
+      }
+      return context
+    },
     observation: {
       run: async (input, call) => {
         let result

@@ -60,6 +60,7 @@ export async function shutdown() {
 - 观察模式只跑前台、不危险的命令（否则抛 `OBSERVATION_EFFECT_DENIED`），只走端口的 `runObservationCommand`，端口没给就抛 `OBSERVATION_SHELL_UNAVAILABLE`，不退回普通执行。
 - 挑了本机没有的 `shell` 在起进程之前抛 `VALIDATION`，不换默认 shell 照跑；一个能用的 shell 都找不到抛 `SHELL_UNAVAILABLE`。
 - 后台任务按 `sessionId` 登记和核对归属，不给就不隔离；任务表在本机宿主的内存里，`dispose()` 停掉它起的、还在跑的后台进程。
+- 前台命令跑着时的输出：`runCommand` 的选项给了 `onOutput` 就按段交出（stdout、stderr 按到达顺序），`velaros:shell` 的调用上下文给了 `onOutput` 原样往下传；接收方抛错只记日志，结果里的输出照样齐全。
 - 交互式任务：本机宿主给了 `terminal`（伪终端工厂，宿主用 node-pty 这类实现）就在真终端里跑、控制台报 `pty`，输入原样进终端、中断是写一个 Ctrl+C、可以 `resizeConsole`；不给用保持打开的 stdin 管道（`pipe`）。界面先 `readConsoleOutput` 补历史，再 `watchConsoleOutput` 跟上新输出。
 - 本机宿主缺省不约束进程，回执如实报 `enforcement: none`；要约束却没有后端（macOS 没有 sandbox-exec、Linux 没装 bubblewrap、Windows 没注入 `confinementProvider`）时抛 `SHELL_CONFINEMENT_UNAVAILABLE`，不退回裸进程；macOS 的约束报 `partial`。
 - 不给 `environment` 时命令用当前进程的环境；`createShellEnvironment()` 读登录 shell 的环境并按代次缓存，谁创建谁 `dispose()`，本机宿主只借用。
