@@ -203,6 +203,44 @@ test('INV-42 persistent faults in a segment run pressure maintenance once and as
   await service.close()
 })
 
+test('INV-45 measured usage reaches the host with the cache reads and writes the provider reported', async () => {
+  const usageOf = async (usage: Record<string, number>) => {
+    const f = runFixture()
+    f.options.model = {
+      ...f.options.model,
+      async *stream() {
+        yield { type: 'text', text: 'done' }
+        yield { type: 'usage', inputTokens: 900, outputTokens: 20, ...usage }
+        yield { type: 'finish', reason: 'stop' }
+      },
+    }
+    const service = createActRunService(f.options)
+    const events = []
+    for await (const event of service.submit('work')) events.push(event)
+    await service.close()
+    return events.filter((event) => event.type === 'usage')
+  }
+  expect(await usageOf({ cacheReadTokens: 600, cacheWriteTokens: 100 })).toEqual([
+    {
+      type: 'usage',
+      runId: expect.any(String),
+      inputTokens: 900,
+      outputTokens: 20,
+      cacheReadTokens: 600,
+      cacheWriteTokens: 100,
+    },
+  ])
+  // 供应商没报告缓存时不带这两个数，宿主不会把「没报告」当成零
+  const [plain] = await usageOf({})
+  expect(plain).toEqual({
+    type: 'usage',
+    runId: expect.any(String),
+    inputTokens: 900,
+    outputTokens: 20,
+  })
+  expect('cacheReadTokens' in plain!).toBe(false)
+})
+
 test('INV-43 reasoning reaches the host after its turn and never enters the context or the event journal', async () => {
   const f = runFixture()
   const written: string[] = []

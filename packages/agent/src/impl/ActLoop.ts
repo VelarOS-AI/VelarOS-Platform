@@ -312,11 +312,18 @@ export class ActLoop implements ActLoopApi {
                     writeTokens: delta.cacheWriteTokens ?? 0,
                   }
                 await this.options.view.recordUsage(delta.inputTokens, delta.outputTokens)
+                // 供应商报告了前缀缓存的读写才带上，宿主据此按缓存价算钱
+                const cache: { cacheReadTokens?: number; cacheWriteTokens?: number } = {}
+                if (!isUndefined(delta.cacheReadTokens))
+                  cache.cacheReadTokens = delta.cacheReadTokens
+                if (!isUndefined(delta.cacheWriteTokens))
+                  cache.cacheWriteTokens = delta.cacheWriteTokens
                 yield {
                   type: 'usage',
                   runId,
                   inputTokens: delta.inputTokens,
                   outputTokens: delta.outputTokens,
+                  ...cache,
                 }
               }
               if (delta.type === 'reasoning' && !isEmpty(delta.text))

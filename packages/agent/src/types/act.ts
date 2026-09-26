@@ -113,8 +113,13 @@ export type ActRunEvent =
   | {
       readonly type: 'usage'
       readonly runId: string
+      /** 这一次请求的输入 token，含读自与写进前缀缓存的部分。 */
       readonly inputTokens: number
       readonly outputTokens: number
+      /** 输入里读自供应商前缀缓存的 token；供应商不报告时缺省。 */
+      readonly cacheReadTokens?: number
+      /** 输入里本次写进供应商前缀缓存的 token；供应商不报告时缺省。 */
+      readonly cacheWriteTokens?: number
     }
   | {
       readonly type: 'verification'
