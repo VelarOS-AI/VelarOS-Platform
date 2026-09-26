@@ -12,8 +12,9 @@ import {
   modelProviderRetry,
 } from '@velaros-ai/model'
 
-import type { ActLoopOptions } from '../contract/requires.js'
+import type { ActLoopOptions, ActRunServiceOptions } from '../contract/requires.js'
 import type { ActComposedFrame, ActDecodedTurn, ActInput, ActRunEvent } from '../types/act.js'
+import { sessionCacheKey } from '../utils/cache-key.js'
 import { framedRequest, requestChars } from '../utils/frame-prompt.js'
 import { boundedModelOperation, boundedModelStream } from '../utils/model-stream.js'
 import { AgentTuning, ContextPlanTuning } from '../utils/tuning.js'
@@ -37,7 +38,9 @@ export class ActLoop implements ActLoopApi {
   private cache?: { readonly readTokens: number; readonly writeTokens: number }
   private stallBase?: number
 
-  public constructor(private readonly options: ActLoopOptions) {
+  public constructor(
+    private readonly options: ActLoopOptions & Pick<ActRunServiceOptions, 'sessionId'>
+  ) {
     this.policy = {
       foldTurns: ContextPlanTuning.foldTurns,
       boundaryTurns: ContextPlanTuning.boundaryTurns,
@@ -684,6 +687,8 @@ export class ActLoop implements ActLoopApi {
       repeatedSteps >= ContextPlanTuning.stallReflect
         ? `\n反思轮：本次运行已连续 ${repeatedSteps} 步没有进展（程序、输出、证据和计划都没变，也没有写效果）。这一轮不要再跑同样的程序：先用 memory.plan 写下换什么办法，把试过没用的做法记进笔记，再继续。`
         : ''
+    // 同一会话每帧同一个缓存键：认它的供应商把这个会话的请求路由到同一处前缀缓存
+    const cacheKey = await sessionCacheKey(this.options.sessionId)
     const compose = async (maxChars: number) => {
       const projected = await frames.project(evidence, signal, maxChars)
       const phase = frames.phase?.() ?? { phase: 'work' as const, instructions: '' }
@@ -704,6 +709,7 @@ export class ActLoop implements ActLoopApi {
           response: { type: 'text' },
           mode: phase.phase === 'maintenance' ? 'maintenance' : 'work',
           outputTokens,
+          cacheKey,
         },
         `${protocolInstructions}\n${phase.instructions}${recovery}${reflection}`
       )

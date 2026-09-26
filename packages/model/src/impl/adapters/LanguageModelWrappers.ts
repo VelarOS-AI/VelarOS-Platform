@@ -1,7 +1,7 @@
 import type { LanguageModel } from 'ai'
 
 import { DefaultReasoningLevel } from '../../contract/constants'
-import type { ModelCallProviderOptions } from '../../types/adapters'
+import type { ModelCallProviderOptions, PromptCacheWireOptions } from '../../types/adapters'
 import type { ChatProviderId, ReasoningLevel } from '../../types/model'
 import { asWrappableLanguageModel } from '../../utils/wire/language-models'
 import { createReasoningProviderOptions } from '../../utils/wire/reasoning'
@@ -19,8 +19,11 @@ import { ReasoningLanguageModel } from './ReasoningLanguageModel'
  * 实例是 `languageModelWrappers`。
  */
 export interface LanguageModelWrappersApi {
-  /** 套上提示词缓存标记的出线翻译层；包不了就原样返回。 */
-  withPromptCache(model: LanguageModel): LanguageModel
+  /**
+   * 套上提示词缓存标记的出线翻译层；包不了就原样返回。会话缓存键默认不出线，
+   * 线路认 `prompt_cache_key` 时由适配器传 `{ sessionKey: true }`。
+   */
+  withPromptCache(model: LanguageModel, wire?: PromptCacheWireOptions): LanguageModel
   /**
    * 套上这一轮 reasoning 参数的合并层；这一轮不需要发 reasoning、或包不了就原样返回。型号不认这一档时
    * 由 `fallback`（适配器所在运行时的那一份）往下退档重发。
@@ -35,10 +38,13 @@ export interface LanguageModelWrappersApi {
 }
 
 export class LanguageModelWrappers implements LanguageModelWrappersApi {
-  public withPromptCache(model: LanguageModel): LanguageModel {
+  public withPromptCache(
+    model: LanguageModel,
+    wire: PromptCacheWireOptions = { sessionKey: false }
+  ): LanguageModel {
     const wrappable = asWrappableLanguageModel(model)
 
-    return wrappable ? new PromptCacheLanguageModel(wrappable) : model
+    return wrappable ? new PromptCacheLanguageModel(wrappable, wire) : model
   }
 
   public withReasoning(

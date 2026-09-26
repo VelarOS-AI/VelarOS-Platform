@@ -21,6 +21,8 @@ import { ModelAdapter } from './ModelAdapter'
  *
  * 普通 OpenAI 直接创建 openai(modelId)；OpenRouter 需要额外在 fetch 中注入
  * auto-router 插件和 provider 偏好，因此单独做 routing 归一化。
+ * 两条线路都认会话缓存键 `prompt_cache_key`：OpenAI 按它把同一会话的请求路由到同一处前缀缓存，
+ * OpenRouter 拿它做会话粘性路由。
  */
 class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
   constructor(providerIds: readonly ChatProviderId[], providers: ModelProviderCollectionApi) {
@@ -46,7 +48,8 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
             modelId,
             config.reasoningLevel,
             this.reasoningFallback
-          )
+          ),
+          { sessionKey: true }
         )
       }
 
@@ -58,7 +61,9 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
         fetch: createOpenRouterFetch(routing),
       })
 
-      return languageModelWrappers.withPromptCache(openrouter.chat(routing.model))
+      return languageModelWrappers.withPromptCache(openrouter.chat(routing.model), {
+        sessionKey: true,
+      })
     }
   }
 

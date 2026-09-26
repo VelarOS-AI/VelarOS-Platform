@@ -4,6 +4,8 @@ import type { ModelMessage } from 'ai'
 import { isArray, isEmpty, isPlainObject, isPresent, isString } from '@velaros-ai/core'
 import type { ModelHistoryMessage } from '@velaros-ai/kernel'
 
+import type { PromptCacheWireOptions } from '../../types/adapters'
+
 /**
  * 提示词缓存断点的**内部协议**与出线翻译。
  *
@@ -14,12 +16,15 @@ import type { ModelHistoryMessage } from '@velaros-ai/kernel'
  * `promptCacheBreakpoint`（消息级断点）与 `promptCacheKey`（会话级缓存键）。写标记是 agent 的活，
  * 本包只负责出线前把它们翻译掉。
  *
- * **不变量（改这里先确认这两条还成立）**：
+ * **不变量（改这里先确认这三条还成立）**：
  * 1. `velaros` 命名空间**绝不能出线**。`applyPromptCacheCallOptions` 在 `doGenerate` 或
  *    `doStream` 前把它整个剥掉并翻译成 `anthropic.cacheControl` 或 `openai.promptCacheKey`；
  *    漏剥会让服务商收到未知字段并拒绝整次请求。
  * 2. **调用方显式写的线上字段永远赢**。`hasExplicitProviderPromptCacheKey` /
  *    `hasProviderWireCacheControl` 命中时本层不覆盖也不追加——这是"产品默认值不得压过显式意图"。
+ * 3. **会话缓存键只发给认它的线路**。同样走 OpenAI SDK 的兼容线路未必认 `prompt_cache_key`：
+ *    Groq 回 400、Mistral 回 422，整次请求作废。所以适配器用 `PromptCacheWireOptions.sessionKey`
+ *    声明认不认，不认的只剥掉内部标记。
  */
 const VelarosProviderOptionsKey = 'velaros'
 const PromptCacheBreakpointKey = 'promptCacheBreakpoint'
@@ -51,11 +56,12 @@ export function withPromptCacheKey(
   return { ...providerOptions, [VelarosProviderOptionsKey]: { [PromptCacheKeyField]: cacheKey } }
 }
 
-/** 出线前把内部缓存标记整体翻译成各家的线上字段。 */
+/** 出线前把内部缓存标记整体翻译成各家的线上字段；会话缓存键只在线路认它时出线。 */
 export function applyPromptCacheCallOptions(
-  options: LanguageModelV3CallOptions
+  options: LanguageModelV3CallOptions,
+  wire: PromptCacheWireOptions
 ): LanguageModelV3CallOptions {
-  const providerOptions = applyTopLevelPromptCacheProviderOptions(options.providerOptions)
+  const providerOptions = applyTopLevelPromptCacheProviderOptions(options.providerOptions, wire)
   const prompt = applyPromptPromptCacheProviderOptions(options.prompt)
   if (providerOptions === options.providerOptions && prompt === options.prompt) return options
 
@@ -66,9 +72,10 @@ export function applyPromptCacheCallOptions(
   }
 }
 
-/** 顶层选项：剥掉 velaros 命名空间，把会话缓存键翻译成 `openai.promptCacheKey`。 */
+/** 顶层选项：剥掉 velaros 命名空间，线路认的话把会话缓存键翻译成 `openai.promptCacheKey`。 */
 function applyTopLevelPromptCacheProviderOptions(
-  providerOptions: LanguageModelV3CallOptions['providerOptions']
+  providerOptions: LanguageModelV3CallOptions['providerOptions'],
+  wire: PromptCacheWireOptions
 ): LanguageModelV3CallOptions['providerOptions'] {
   if (!isPlainObject(providerOptions)) return providerOptions
 
@@ -76,7 +83,7 @@ function applyTopLevelPromptCacheProviderOptions(
   const strippedOptions = omitRecordKey(providerOptions, VelarosProviderOptionsKey)
   let nextOptions = !isEmpty(Object.keys(strippedOptions)) ? strippedOptions : undefined
 
-  if (promptCacheKey && !hasExplicitProviderPromptCacheKey(providerOptions)) {
+  if (wire.sessionKey && promptCacheKey && !hasExplicitProviderPromptCacheKey(providerOptions)) {
     nextOptions = mergeProviderOptionRecord(nextOptions, OpenAiProviderKey, {
       [PromptCacheKeyField]: promptCacheKey,
     })

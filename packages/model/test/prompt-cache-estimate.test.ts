@@ -72,7 +72,7 @@ test('calibration shrinks only the text part and admits by the calibrated estima
     )
 })
 
-test('neutral breakpoints and cache keys become provider wire fields on the way out', () => {
+test('neutral breakpoints and cache keys become provider wire fields on the way out; the key only on lines that accept it', () => {
   const messages = markPromptCacheBreakpoints([
     { role: 'user', content: 'segment base', cacheBreakpoint: true },
     { role: 'assistant', content: 'script' },
@@ -85,14 +85,15 @@ test('neutral breakpoints and cache keys become provider wire fields on the way 
   expect(messages[1]).toEqual({ role: 'assistant', content: 'script' })
   const providerOptions = withPromptCacheKey({ openai: { strictJsonSchema: false } }, 'session-1')
   expect(withPromptCacheKey(undefined, undefined)).toBeUndefined()
-  const wire = applyPromptCacheCallOptions({
+  const call = {
     prompt: messages.map((message) => ({
       role: message.role,
       content: [{ type: 'text', text: String(message.content) }],
       providerOptions: message.providerOptions,
     })),
     providerOptions,
-  } as never)
+  } as never
+  const wire = applyPromptCacheCallOptions(call, { sessionKey: true })
   expect(wire.providerOptions).toEqual({
     openai: { strictJsonSchema: false, promptCacheKey: 'session-1' },
   })
@@ -100,6 +101,12 @@ test('neutral breakpoints and cache keys become provider wire fields on the way 
     anthropic: { cacheControl: { type: 'ephemeral' } },
   })
   expect(wire.prompt[1]?.providerOptions).toBeUndefined()
+  // 不认会话缓存键的线路：内部标记照样剥掉，键不出线，断点照常翻译
+  const withoutKey = applyPromptCacheCallOptions(call, { sessionKey: false })
+  expect(withoutKey.providerOptions).toEqual({ openai: { strictJsonSchema: false } })
+  expect(withoutKey.prompt[0]?.providerOptions).toEqual({
+    anthropic: { cacheControl: { type: 'ephemeral' } },
+  })
 })
 
 test('the driver sends cache markers and reports cache reads and writes', async () => {

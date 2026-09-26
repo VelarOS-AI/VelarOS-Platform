@@ -400,3 +400,63 @@ test('INV-14 型号不认思考参数时往下退档重发、退到底不带思�
   expect((await send(['too long'])).status).toBe(400)
   expect(efforts).toEqual(['xhigh', 'high', 'high', 'high'])
 })
+
+test('INV-15 会话缓存键只发给认它的线路：OpenAI 官方与 OpenRouter 带 prompt_cache_key，Groq、Mistral、DeepSeek 不带', async () => {
+  const composition = createModelRuntimeComposition({
+    environment: {},
+    providerScripts: { configPaths: [] },
+  })
+  const key = 'a'.repeat(32)
+  const request: ModelTurnRequest = {
+    instructions: 'spec',
+    materials: [{ ref: 'view-1', origin: 'runtime-view', text: 'current view', totalChars: 12 }],
+    response: { type: 'text' },
+    mode: 'work',
+    outputTokens: 100,
+    cacheKey: key,
+  }
+  const bodies = new Map<string, Record<string, unknown>>()
+  let provider = ''
+  const originalFetch = globalThis.fetch
+  // 夹具记下请求体就拒绝：只看出线的字段，不关心响应
+  globalThis.fetch = (async (_input: unknown, init: { body?: unknown }) => {
+    bodies.set(provider, JSON.parse(String(init.body)) as Record<string, unknown>)
+    return Response.json(
+      { error: { message: 'spec fixture rejects the request' } },
+      { status: 400 }
+    )
+  }) as typeof fetch
+  try {
+    for (const [id, model] of [
+      ['openai', 'gpt-5.5'],
+      ['openrouter', 'openai/gpt-5.5'],
+      ['groq', 'llama-3.3-70b-versatile'],
+      ['mistral', 'mistral-large-latest'],
+      ['deepseek', 'deepseek-chat'],
+    ] as const) {
+      provider = id
+      const factory = composition.agentModelRuntime.createAgentProvider({
+        provider: id,
+        apiKey: 'sk-test',
+        baseURL: '',
+      })
+      const driver = createAiSdkModelDriver({
+        id,
+        model: factory(model),
+        limits: { contextTokens: 32_000, inputTokens: 30_000, outputTokens: 1_000 },
+      })
+      const deltas = []
+      for await (const delta of driver.stream(request, new AbortController().signal))
+        deltas.push(delta)
+      expect(deltas.at(-1)).toMatchObject({ type: 'error' })
+    }
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+  expect([...bodies.keys()]).toEqual(['openai', 'openrouter', 'groq', 'mistral', 'deepseek'])
+  expect(bodies.get('openai')?.prompt_cache_key).toBe(key)
+  expect(bodies.get('openrouter')?.prompt_cache_key).toBe(key)
+  for (const id of ['groq', 'mistral', 'deepseek'])
+    expect(Object.hasOwn(bodies.get(id)!, 'prompt_cache_key')).toBe(false)
+  for (const body of bodies.values()) expect(JSON.stringify(body)).not.toContain('velaros')
+})

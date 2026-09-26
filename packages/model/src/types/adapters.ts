@@ -73,6 +73,12 @@ export type OpenAIModelFetchInit = Parameters<OpenAIModelFetch>[1]
 /** 一次调用上挂着的厂商选项表。 */
 export type ModelCallProviderOptions = NonNullable<LanguageModelV3CallOptions['providerOptions']>
 
+/** 提示词缓存包装层怎么出线：这条线路认不认会话缓存键。 */
+export interface PromptCacheWireOptions {
+  /** 会话缓存键译成 OpenAI 的 `prompt_cache_key` 发出去；不认这个字段的线路只剥掉内部标记。 */
+  readonly sessionKey: boolean
+}
+
 /** 按这一轮的输出上限算 reasoning 选项；这一档不发 reasoning 时返回 null。 */
 export type ReasoningProviderOptionsResolver = (
   maxOutputTokens?: number

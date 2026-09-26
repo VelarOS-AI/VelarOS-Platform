@@ -5,6 +5,7 @@ import type {
   LanguageModelV3StreamResult,
 } from '@ai-sdk/provider'
 
+import type { PromptCacheWireOptions } from '../../types/adapters'
 import { applyPromptCacheCallOptions as applyCallOptions } from '../../utils/wire/prompt-cache'
 
 /**
@@ -12,11 +13,15 @@ import { applyPromptCacheCallOptions as applyCallOptions } from '../../utils/wir
  *
  * 为什么包一层而不在装配处改选项：断点必须跟随每一次 `doGenerate` 或 `doStream`，
  * 而选项是逐轮构造的；包装模型让翻译落在唯一必经之路上，装配处漏接线也不会静默失效。
+ * 会话缓存键出不出线由包装时的 `wire` 决定，同一个模型的每次调用口径一致。
  */
 export interface PromptCacheLanguageModelApi extends LanguageModelV3 {}
 
 export class PromptCacheLanguageModel implements PromptCacheLanguageModelApi {
-  constructor(private readonly model: LanguageModelV3) {}
+  constructor(
+    private readonly model: LanguageModelV3,
+    private readonly wire: PromptCacheWireOptions
+  ) {}
 
   public get specificationVersion(): 'v3' {
     return this.model.specificationVersion
@@ -37,10 +42,10 @@ export class PromptCacheLanguageModel implements PromptCacheLanguageModelApi {
   public doGenerate(
     options: LanguageModelV3CallOptions
   ): PromiseLike<LanguageModelV3GenerateResult> {
-    return this.model.doGenerate(applyCallOptions(options))
+    return this.model.doGenerate(applyCallOptions(options, this.wire))
   }
 
   public doStream(options: LanguageModelV3CallOptions): PromiseLike<LanguageModelV3StreamResult> {
-    return this.model.doStream(applyCallOptions(options))
+    return this.model.doStream(applyCallOptions(options, this.wire))
   }
 }

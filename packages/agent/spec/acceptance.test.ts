@@ -1,13 +1,17 @@
+import { createHash } from 'node:crypto'
+
 import { expect, test } from 'bun:test'
 
 import type { ContextState } from '@velaros-ai/context'
 import type { ContextStorage } from '@velaros-ai/context'
 import { createContextRuntime, createContextView } from '@velaros-ai/context'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { ActChildSession } from '../src/contract/requires.js'
 import type { ActRunServiceOptions } from '../src/contract/requires.js'
 import { createAgentSupervisor } from '../src/index.js'
 import { createActRunService } from '../src/index.js'
+import { sessionCacheKey } from '../src/utils/cache-key.js'
 import { boundedModelStream } from '../src/utils/model-stream.js'
 
 function runFixture() {
@@ -294,6 +298,47 @@ test('INV-43 reasoning reaches the host after its turn and never enters the cont
         throw Error('accepted a malformed reasoning delta')
     })()
   ).rejects.toThrow('模型思考增量不是文本')
+})
+test('INV-44 every model request of a session carries the same fixed-length cache key, protocol repairs included', async () => {
+  const f = runFixture()
+  const keys: Array<string | undefined> = []
+  f.options.model = {
+    ...f.options.model,
+    async *stream(request) {
+      keys.push(request.cacheKey)
+      yield { type: 'text', text: 'done' }
+      yield { type: 'finish', reason: 'stop' }
+    },
+  }
+  // 第一份响应按协议错误拒掉，逼出一次修复重发
+  let rejected = false
+  f.options.protocol = {
+    open: () => ({
+      instructions: 'fixture',
+      reset() {},
+      push() {
+        return []
+      },
+      finish() {
+        if (!rejected) {
+          rejected = true
+          throw new AppError('SCRIPT_PROTOCOL', 'fixture rejects the first response')
+        }
+        return { message: 'done', done: true, events: [] }
+      },
+    }),
+  }
+  const service = createActRunService(f.options)
+  const events = []
+  for await (const event of service.submit('work')) events.push(event)
+  expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+  await service.close()
+  const expected = createHash('sha256').update('fault').digest('hex').slice(0, 32)
+  expect(keys).toEqual([expected, expected])
+  // 普通会话下的子任务 id 已有 66 个字符，键仍是 32 位，碰不到 OpenAI 64 字符的上限
+  const child = 'agent:session-1789097089764-4:22a2d800-9c22-4105-a411-06d2b0427538'
+  expect(child.length).toBeGreaterThan(64)
+  expect(await sessionCacheKey(child)).toMatch(/^[0-9a-f]{32}$/)
 })
 test('closing a consumer during thinking releases the view without accepting late model output', async () => {
   const f = runFixture()

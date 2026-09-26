@@ -31,3 +31,4 @@
 | INV-12 | 供应商凭据验证复用 Model 协议：缺密钥不发请求，OpenRouter 使用鉴权端点，超时包含错误正文读取                                                                                                                     | 测试     | `spec/acceptance.test.ts` |
 | INV-13 | 思考摘要只转给宿主展示：同一条响应只认一路来源（SDK 思考分片或 Chat Completions 原始分块），分段之间空一行；超出上限只停转发，不判失败                                                                           | 测试     | `spec/acceptance.test.ts` |
 | INV-14 | 型号不认思考参数时往下退档重发、退到底不带思考参数，能用的档在同一份运行时里记住；与思考无关的 400 原样交出，不重发                                                                                              | 测试     | `spec/acceptance.test.ts` |
+| INV-15 | 会话缓存键只发给认它的线路：OpenAI 官方直连与 OpenRouter 译成 `prompt_cache_key`，其余适配器（OpenAI 兼容、DeepSeek、Anthropic、Google、Velar Cloud、脚本与自定义）只剥掉内部标记、不出线                        | 测试     | `spec/acceptance.test.ts` |

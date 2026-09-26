@@ -24,4 +24,5 @@
 | INV-41 | 每小时模型用量到上限时发 throttled 并等待后继续；用户总上限到了以 waiting 暂停，输入保留给下一次运行 | 测试 | `spec/acceptance.test.ts` |
 | INV-42 | 一段里缺页持续偏高按结构性超载处理：同一段只跑一次压力整理，ContextStatus 给出收紧工作集的建议 | 测试 | `spec/acceptance.test.ts` |
 | INV-43 | 模型的思考摘要作为 reasoning 事件跟在所属 turn 之后交给宿主，只作展示：不进上下文、不落事件账 | 测试 | `spec/acceptance.test.ts` |
+| INV-44 | 同一会话的每个模型请求（含协议修复重发）都带同一个会话缓存键：会话 id 的 SHA-256 前 32 位十六进制，长度与会话 id 无关，碰不到 OpenAI `prompt_cache_key` 64 字符的上限 | 测试 | `spec/acceptance.test.ts` |
 | INV-45 | 模型实测用量随 usage 事件交给宿主：供应商报告了前缀缓存的读写 token 时一并带上，没报告时不带 | 测试 | `spec/acceptance.test.ts` |
