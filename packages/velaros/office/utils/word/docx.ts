@@ -12,6 +12,7 @@ import {
   LevelFormat,
   LineRuleType,
   Paragraph,
+  type ParagraphChild,
   ShadingType,
   Table,
   TableCell,
@@ -194,7 +195,7 @@ function buildListParagraph(
   ordered: boolean,
   level: number,
   instance: number,
-  children: TextRun[]
+  children: ParagraphChild[]
 ): Paragraph {
   return ordered
     ? new Paragraph({
