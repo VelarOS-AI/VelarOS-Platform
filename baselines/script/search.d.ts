@@ -162,7 +162,7 @@ declare module 'velaros:search' {
     /** 交付所属的父逻辑任务。 */
     readonly parentTaskId?: string
     /** 完成状态，交付不等于领域验收通过。 */
-    readonly status: 'completed' | 'partial' | 'failed' | 'needs-reconcile'
+    readonly status: 'completed' | 'partial' | 'failed'
     /** 领域原始报告或补丁的引用。 */
     readonly payload: { readonly sessionId: string; readonly id: string }
     /** 发布时固定的证据与产物位置及原始对象指纹。 */

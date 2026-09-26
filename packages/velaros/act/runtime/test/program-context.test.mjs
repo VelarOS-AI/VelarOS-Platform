@@ -522,12 +522,22 @@ test('an unknown world outcome survives expiration of its ordinary result body',
       },
     },
   }
-  const f = await fixture(t, stop, { modules: [module] })
+  const f = await fixture(
+    t,
+    async function* (request, frames) {
+      if (frames.length === 1) {
+        yield turn(request, {
+          execute: { source: "import {output} from 'velaros';output('next');" },
+        })
+        yield { type: 'finish', reason: 'stop' }
+      } else yield* done(request)
+    },
+    { modules: [module] }
+  )
   ok(await f.session.execute({ source: "import {write} from 'test:uncertain';await write();" }, 1))
-  assert.equal((await submit(f)).at(-1).status, 'needs_reconcile')
-  assert.equal((await f.state()).leases.length, 0)
-  assert.equal((await submit(f)).at(-1).status, 'needs_reconcile')
-  assert.equal(f.frames[1].results.length, 0)
+  assert.equal((await submit(f)).at(-1).status, 'completed')
+  // 第二回合时这次写入的正文租约已经过期，效果不明的事实仍在
+  assert(!JSON.stringify(f.frames[1].results).includes('test:uncertain'))
   assert(
     f.frames[1].mandatory.some(
       (item) => item.effect === 'unknown' && item.operation === 'test:uncertain.write'

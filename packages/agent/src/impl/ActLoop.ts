@@ -102,9 +102,7 @@ export class ActLoop implements ActLoopApi {
     const runId = this.options.control?.runId ?? crypto.randomUUID()
     this.completionFeedback = undefined
     let completionAttempts = 0
-    let terminal: Optional<
-      'completed' | 'cancelled' | 'failed' | 'context-blocked' | 'needs-reconcile'
-    >
+    let terminal: Optional<'completed' | 'cancelled' | 'failed' | 'context-blocked'>
     let heartbeat: Optional<ReturnType<TimerScope['every']>>
     let renewal: Optional<Promise<void>>
     let ownsView = false
@@ -572,21 +570,11 @@ export class ActLoop implements ActLoopApi {
             yield { type: 'state', runId, status: 'waiting' }
             return
           }
-          terminal =
-            recovery === 'reconcile'
-              ? 'needs-reconcile'
-              : recovery === 'capacity'
-                ? 'context-blocked'
-                : 'failed'
+          terminal = recovery === 'capacity' ? 'context-blocked' : 'failed'
           yield {
             type: 'state',
             runId,
-            status:
-              terminal === 'needs-reconcile'
-                ? 'needs_reconcile'
-                : terminal === 'context-blocked'
-                  ? 'context_blocked'
-                  : 'failed',
+            status: terminal === 'context-blocked' ? 'context_blocked' : 'failed',
           }
           return
         }

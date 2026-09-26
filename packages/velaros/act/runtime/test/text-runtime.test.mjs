@@ -517,7 +517,7 @@ test('a synchronous runtime failure cancels the unstarted remainder of its batch
   assert(f.frames[1].jobs.some((job) => job.status === 'cancelled'))
 })
 
-test('reconciliation recovers persisted queued and completed jobs without replaying source', async (t) => {
+test('the next run recovers persisted queued and completed jobs without replaying source', async (t) => {
   const f = await fixture(t, async function* (request) {
     yield* done(request)
   })
@@ -539,7 +539,7 @@ test('reconciliation recovers persisted queued and completed jobs without replay
   await f.session.view.begin(goal.ref)
   await f.session.view.startStep(completed.executionId, undefined, true)
   await f.session.view.end()
-  await f.session.reconcile()
+  assertDone(await collect(f))
   assert.equal(f.writes.length, 1)
   const state = await f.programs.state()
   assert.equal(
@@ -548,8 +548,6 @@ test('reconciliation recovers persisted queued and completed jobs without replay
   )
   assert.equal(state.jobs.find((job) => job.executionId === queued).status, 'cancelled')
   assert.deepEqual((await f.session.view.inspect()).activeExecutions, {})
-  assertDone(await collect(f))
-  assert.equal(f.writes.length, 1)
 })
 
 test('raw blob names and nested input keys keep JSON semantics in the isolated runner', async (t) => {

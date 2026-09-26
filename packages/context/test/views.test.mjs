@@ -89,7 +89,7 @@ test('A07: diff without a baseline becomes current text or an explicit gap', asy
   assert.equal(result.evidence[0].form, 'full')
 })
 
-test('INV-4 A15: unknown effects block replay and survive omitted intents', async (t) => {
+test('INV-4 A15: unknown effects stay in the facts without blocking the next step or delivery', async (t) => {
   const f = await fixture(t)
   await f.view.startStep('step')
   await f.view.settle([
@@ -103,8 +103,18 @@ test('INV-4 A15: unknown effects block replay and survive omitted intents', asyn
   ])
   const result = await f.view.build({ maxChars: 12000 })
   assert.equal(result.mandatory[0].effect, 'unknown')
-  await assert.rejects(f.view.startStep('again'), { code: 'NEEDS_RECONCILE' })
-  assert.equal((await f.view.complete()).reason, 'NEEDS_RECONCILE')
+  await f.view.startStep('again')
+  await f.view.settle([
+    {
+      id: 'read-1',
+      executionId: 'again',
+      operation: 'remote.read',
+      outcome: 'succeeded',
+      effect: 'none',
+    },
+  ])
+  await f.view.build({ maxChars: 12000 })
+  assert.equal((await f.view.complete()).completed, true)
 })
 
 test('A05/A17: stale versions and revoked scope cannot be published', async (t) => {

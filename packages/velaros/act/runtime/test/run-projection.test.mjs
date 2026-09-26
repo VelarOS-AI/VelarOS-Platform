@@ -85,9 +85,15 @@ test('the last failed completion check stays on the run so hosts can explain how
   })
   p.applyLive(check(true, 'ok'))
   assert.equal(p.snapshot().runs.run.verification, undefined)
-  p.applyLive(check(false, 'NEEDS_RECONCILE', 'reconcile'))
-  p.applyLive({ type: 'state', runId: 'run', status: 'needs_reconcile' })
-  assert.equal(p.snapshot().runs.run.verification.reason, 'NEEDS_RECONCILE')
+  p.applyLive(check(false, 'STALE_VIEW', 'refresh'))
+  p.applyLive({ type: 'state', runId: 'run', status: 'failed' })
+  assert.equal(p.snapshot().runs.run.verification.reason, 'STALE_VIEW')
+})
+
+test('an end state an older version stored as needs_reconcile reads as failed', () => {
+  const projector = createActEventProjector()
+  projector.applyLive({ type: 'state', runId: 'old', status: 'needs_reconcile' })
+  assert.equal(projector.snapshot().runs.old.status, 'failed')
 })
 
 test('duplicate turns cannot count twice or rewind the active preview', () => {

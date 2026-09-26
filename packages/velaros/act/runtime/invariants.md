@@ -29,7 +29,7 @@
 | INV-25 | required 输出必须完整可见；整理候选先校验再 CAS，取消阻止迟到发布；派生展示在任务内保留，策略变化重建段底座；整理没解决的超载同段不再重复 | 测试 | `test/decision-basis.test.mjs`、`test/context-maintenance.test.mjs`、`test/output-context.test.mjs` |
 | INV-26 | continue 累计任务身份和配额；new 归档并切换驻留状态，未决效果阻止切换 | 测试 | `test/task-lifecycle.test.mjs`、`test/model-tools.test.mjs` |
 | INV-27 | 观察健康状态持久化，重复失败或未知效果暂停自动重跑；源码修复后才能恢复 | 测试 | `test/task-lifecycle.test.mjs` |
-| INV-28 | 完成拒绝按恢复类别有界推进；子任务未知效果向父写入、完成与任务切换传播，宿主核对不重跑脚本 | 测试 | `test/completion-recovery.test.mjs`、`test/act-children.test.mjs` |
+| INV-28 | 完成拒绝按恢复类别有界推进；效果不明的操作（包括子任务的）不挡写入、完成与任务切换；上次中断的执行在下一轮开始前自动按日志收拾，不重跑脚本 | 测试 | `test/completion-recovery.test.mjs`、`test/act-children.test.mjs` |
 | INV-29 | 搜索、子任务、整理使用统一交付清单；共享材料保留原始指纹，源码复用经过调用者自身校验与权限 | 测试 | `test/advanced-search.test.mjs`、`test/model-tools.test.mjs`、`test/context-maintenance.test.mjs` |
 
 | INV-30 | 声明式入口复用唯一主干；路径与重复挂载在执行前校验；关闭重开与初始化重试恢复持久状态 | 测试 | `test/runtime.test.mjs` |
@@ -68,4 +68,4 @@
 | INV-52 | 段底座带三张长期单：否定尝试跨卷累积去重、未解问题取最新写下的叙事、用户约束取输入摘要，各有条数上限，超出只计数并保留出处；段起点之前的任务目标只在底座列第一行，本帧尾只留最新的目标和段内新提的目标 | 测试 | `test/context-memory.test.mjs` |
 | INV-53 | 自动封成的一卷至少六轮、那一段又没改笔记和计划时，下一个请求边界由整理支线补写叙事，每卷最多一次、不认领显式整理请求；叙事和长期单随下一次底座重建进入请求 | 测试 | `test/context-management.test.mjs` |
 | INV-54 | 读回上一帧因容量不够只给了引用的笔记或没排进本帧的租约结果记一次缺页（同一帧同一份只记一次，派生展示主动移出的不算）；封段时按缺页调整下一段的笔记份额，没有缺页就回落到宿主配置 | 测试 | `test/context-memory.test.mjs` |
-| INV-55 | 写操作失败时，错误（或它 cause 链里的任一层）带着「没有写入」约定标记——`effect: 'none'` 或 `executionOutcome: 'not-applied'`——就记成没有效果，不必等宿主核对；两样都不认的写失败仍是效果未知 | 测试 | `test/platform.test.mjs` |
+| INV-55 | 写操作失败时，错误（或它 cause 链里的任一层）带着「没有写入」约定标记——`effect: 'none'` 或 `executionOutcome: 'not-applied'`——就记成没有效果；两样都不认的写失败仍是效果未知，照实给模型看 | 测试 | `test/platform.test.mjs` |

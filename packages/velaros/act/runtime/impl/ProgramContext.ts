@@ -145,7 +145,7 @@ export class ProgramContext implements ProgramContextApi {
               : success
                 ? 'healthy'
                 : 'degraded',
-          reason: !success ? (uncertain ? 'needs-reconcile' : 'collection-failed') : undefined,
+          reason: !success ? (uncertain ? 'effect-unknown' : 'collection-failed') : undefined,
         },
       }
     })

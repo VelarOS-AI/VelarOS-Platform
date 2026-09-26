@@ -33,7 +33,7 @@ Desktop 在模型回合切换时读取上一回合，运行收尾关闭 Runtime 
 
 - `id`、`sessionId`（子任务自己的会话，按它读支线追踪）、`executionId`（派发它的那段执行）、`profile`，以及派发时交代的 `task`（续跑时是这一阶段的说明）。
 - 同一个子任务可以续跑好几次，它的持久记录按段切开：派发或续跑写下的那份（还没有 `pending`）是一段的开头，之后的提问、回答与收束都记在这一段。这一回合第 k 次派发或续跑它，对应这一回合请求之后它开始的第 k 段，下面几项都只取那一段：
-  - `status` 与 `error` 取这一段最新的记录（`running` / `waiting` / `completed` / `cancelled` / `failed` / `interrupted` / `needs_reconcile`）；
+  - `status` 与 `error` 取这一段最新的记录（`running` / `waiting` / `completed` / `cancelled` / `failed` / `interrupted`）；
   - `answer` 是这一段结果笔记里最后接纳的一段回答，收束前为空；
   - `durationMs` 是从这一段开头到收束的时间，收束前为 null。
 - 任务与回答计入本页正文预算，截断时 `answerTruncated` 为真。后面的回合续跑同一个子任务时，那一回合的追踪列出新的一段，身份不变；前面回合的摘要仍是它自己那一段。

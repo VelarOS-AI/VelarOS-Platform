@@ -67,7 +67,7 @@ test('repeated domain failure is bounded and is reported as failure with the act
   assert.equal(events.findLast((e) => e.type === 'verification').recovery, 'repair')
 })
 
-test('uncertain world effects stop in needs_reconcile without automatically replaying the script', async (t) => {
+test('uncertain world effects do not stop the run, and the script is never replayed automatically', async (t) => {
   let writes = 0
   let calls = 0
   const module = {
@@ -100,8 +100,8 @@ test('uncertain world effects stop in needs_reconcile without automatically repl
     [module]
   )
   const events = await run(session)
-  assert.equal(events.at(-1).status, 'needs_reconcile')
+  assert.equal(events.at(-1).status, 'completed')
   assert.equal(writes, 1)
   assert.equal(calls, 2)
-  assert.equal((await session.inspect()).status, 'needs_reconcile')
+  assert.equal((await session.inspect()).status, 'completed')
 })

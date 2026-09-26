@@ -278,6 +278,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
           select(record)
           if (
             event.type === 'state' &&
+            // needs_reconcile 是旧版本写下的结束状态
             ['completed', 'cancelled', 'failed', 'context_blocked', 'needs_reconcile'].includes(
               event.status
             )

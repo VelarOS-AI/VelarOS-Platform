@@ -28,11 +28,10 @@ const setup = async (t, options) => {
 }
 const task = (request, source) => turn(request, { execute: { source } })
 
-test('unknown child effects block parent writes, completion and task switching until host reconciliation', async (t) => {
+test('unknown child effects do not block the parent: it keeps writing, completes and can switch tasks', async (t) => {
   let writes = 0
   let childCalls = 0
   let main = 0
-  let checks = 0
   const module = {
     binding: {
       moduleId: 'probe:uncertain',
@@ -52,14 +51,6 @@ test('unknown child effects block parent writes, completion and task switching u
           if (writes === 1) throw Error('reply lost')
           call.recordEffect('committed')
           return null
-        },
-        reconcile: async () => {
-          checks++
-          return {
-            outcome: 'succeeded',
-            effect: 'committed',
-            evidence: 'remote receipt confirms original operation',
-          }
         },
       },
     },
@@ -90,35 +81,18 @@ test('unknown child effects block parent writes, completion and task switching u
   })
   const events = []
   for await (const event of f.session.submit('delegate')) events.push(event)
-  assert.equal(events.at(-1).status, 'needs_reconcile', JSON.stringify(events))
-  assert.equal(writes, 1)
-  assert.equal(
-    events.findLast((event) => event.type === 'verification').reason,
-    'CHILD_NEEDS_RECONCILE'
-  )
-  await assert.rejects(
-    async () => {
-      for await (const event of f.session.submit({ task: 'new', text: 'skip old uncertainty' })) {
-        assert.equal(typeof event.type, 'string')
-      }
-    },
-    { code: 'NEEDS_RECONCILE' }
-  )
-  await f.session.reconcile()
-  assert.equal(writes, 1)
-  assert.equal(checks, 1)
-  const result = await f.session.execute({
-    source: "import {write} from 'probe:uncertain';await write();",
-  })
-  assert(!result.result.failed, JSON.stringify(result))
+  assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+  // 子任务那次写入回执丢了，效果不明；父任务照常写自己的，谁都没有自动重放
   assert.equal(writes, 2)
-  const resumed = []
-  for await (const event of f.session.submit('finish')) resumed.push(event)
-  assert.equal(resumed.at(-1).status, 'completed')
   assert.equal(childCalls, 2)
+  const switched = []
+  for await (const event of f.session.submit({ task: 'new', text: 'next task' }))
+    switched.push(event)
+  assert.equal(switched.at(-1).status, 'completed')
+  assert.equal(writes, 2)
 })
 
-test('an orphaned durable child admission requires host reconciliation even without an in-memory worker', async (t) => {
+test('an orphaned durable child admission is recovered by the next run without the host', async (t) => {
   const f = await setup(t, {
     context: { maintenance: false },
     model: model(async function* (request) {
@@ -141,12 +115,8 @@ test('an orphaned durable child admission requires host reconciliation even with
       status: 'running',
     }),
   })
-  const blocked = []
-  for await (const event of f.session.submit('continue')) blocked.push(event)
-  assert.equal(blocked.at(-1).status, 'needs_reconcile')
-  await f.session.reconcile()
   const finished = []
-  for await (const event of f.session.submit('continue after checking')) finished.push(event)
+  for await (const event of f.session.submit('continue')) finished.push(event)
   assert.equal(finished.at(-1).status, 'completed')
 })
 
@@ -733,7 +703,7 @@ test(
 )
 
 test('INV-38 live projection clears rejected, cancelled and interrupted previews while retaining accepted text', () => {
-  for (const status of ['cancelled', 'failed', 'context_blocked', 'needs_reconcile', 'completed']) {
+  for (const status of ['cancelled', 'failed', 'context_blocked', 'completed']) {
     const p = createActEventProjector()
     p.applyLive({ type: 'turn', runId: 'r', turnId: 'first' })
     p.applyLive({

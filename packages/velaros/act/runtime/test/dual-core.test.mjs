@@ -287,15 +287,16 @@ test('A14/A24: caught errors and partial progress remain in the next view withou
   assert.equal(view.goals.length, 1)
 })
 
-test('A15: lost outcome is persisted and a new script cannot replay it', async (t) => {
+test('A15: a lost outcome is kept as unknown and does not block the next script, which never replays it', async (t) => {
   const f = await fixture(t)
   const s = await taskSession(f)
   await s.execute({ source: `import {uncertain} from 'test:project';await uncertain();` })
-  assert.equal((await s.view.inspect()).status, 'needs-reconcile')
-  await assert.rejects(
-    s.execute({ source: `import {uncertain} from 'test:project';await uncertain();` }),
-    /核对/
+  assert(
+    (await s.view.inspect()).mandatory.some(
+      (x) => x.operation === 'test:project.uncertain' && x.effect === 'unknown'
+    )
   )
+  ok(await s.execute({ source: observeCode }))
   assert.equal(f.writes, 1)
 })
 
@@ -364,32 +365,6 @@ test('A01/A28: project source resolves symbols, preserves UTF-16 and rejects bin
   )
 })
 
-test('Phase 4: domain reconciliation appends durable proof without reissuing an unknown write', async (t) => {
-  const f = await fixture(t)
-  const s = await taskSession(f)
-  await s.execute({ source: `import {uncertain} from 'test:project';await uncertain();` })
-  f.options.modules[0].operations.uncertain.reconcile = async () => ({
-    outcome: 'succeeded',
-    effect: 'committed',
-    evidence: 'remote idempotency record confirms one write',
-  })
-  await f.runtime.close()
-  const runtime = await createRuntime({
-    ...f.options,
-    storage: localContextStorage({ path: f.path }),
-  })
-  try {
-    const resumed = await runtime.openSession('s')
-    await resumed.reconcile()
-    assert.equal((await resumed.view.inspect()).status, 'context-pending')
-    assert((await resumed.view.inspect()).mandatory.some((x) => x.code === 'RECONCILED'))
-    ok(await resumed.execute({ source: observeCode }))
-    assert.equal(f.writes, 1)
-  } finally {
-    await runtime.close()
-  }
-})
-
 test('A15: actual process death after a world write recovers from the prepared journal without replay', async (t) => {
   const { execFile } = await import('node:child_process')
   const { promisify } = await import('node:util')
@@ -437,13 +412,16 @@ test('A15: actual process death after a world write recovers from the prepared j
     await new Promise((resolve) =>
       setTimeout(resolve, Math.max(0, task.lease.expiresAt - Date.now() + 5))
     )
-    await s.reconcile()
-    assert.equal((await s.view.inspect()).status, 'context-pending')
-    assert.equal((await s.view.inspect()).mandatory[0].code, 'RECONCILED')
+    // 不用宿主出手：下一次执行开始前自动按日志收拾，领域能核实的照核实结果记
     ok(
       await s.execute({
-        source: `import {output} from 'velaros';output('continue after reconciliation');`,
+        source: `import {output} from 'velaros';output('continue after recovery');`,
       })
+    )
+    assert(
+      (await s.view.inspect()).mandatory.some(
+        (x) => x.operation === 'test:crash.send' && x.code === 'RECOVERED'
+      )
     )
     assert.equal(await readFile(target, 'utf8'), '1')
   } finally {
@@ -541,7 +519,8 @@ test('A16: cancellation keeps its terminal state when an already dispatched oper
   assert.equal((await s.view.inspect()).status, 'cancelled')
   release()
   await new Promise((resolve) => setTimeout(resolve, 30))
-  await s.reconcile()
+  // 下一次提交之前自动按日志补记：取消之后才落定的写入照实记下，取消的终态不变
+  await s.observe({ source: "import {output} from 'velaros';output(1);" })
   assert.equal((await s.view.inspect()).status, 'cancelled')
   assert(
     (await s.view.inspect()).mandatory.some(

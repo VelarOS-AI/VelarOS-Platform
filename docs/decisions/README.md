@@ -31,3 +31,5 @@ Accepted records are durable rationale, not a substitute for schemas or executab
 - [0018: 子任务直接继承父任务的权限，不用声明](0018-sub-tasks-inherit-parent.md)
 
 - [0019: 模型写的脚本只查语法，不查类型](0019-scripts-check-syntax-only.md)
+
+- [0020: 效果不明不再等宿主核对](0020-no-host-reconciliation.md)

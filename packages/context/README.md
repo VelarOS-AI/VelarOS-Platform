@@ -87,7 +87,7 @@ await view.end()
 - `ContextStorage` 是唯一事实，`ContextRuntime` 不缓存：同一会话可以开多个实例，`replace` 靠存储的 CAS 定胜负，输的一方抛 `CONTEXT_CONFLICT`，重新 `inspect` 后再提交（`append` 自己重试，不会冲突）。
 - 引用只在所属会话里解析，跨会话抛 `SCOPE_MISMATCH`；正文缺失抛 `OBJECT_MISSING`，不拿空串顶替；`project` 超预算抛 `CONTEXT_BUDGET`，不隐式压缩，最新一条用户输入与工作集之后到达的新事件总会带上。
 - 用户输入、工具结果这类事实只由宿主 `append`，模型经 `write` 只能写笔记与检查点；工作集提交从下一次模型请求起生效，原文从不删除。
-- 证据视图一个会话同时只有一个租约持有者（否则 `TASK_BUSY`），租约时长见 `DefaultContextViewLimits.leaseMs`，长等待期间 `renew`；结算里有未知效果时下一步抛 `NEEDS_RECONCILE`，先核对真实效果再用 `recover` 合入。
+- 证据视图一个会话同时只有一个租约持有者（否则 `TASK_BUSY`），租约时长见 `DefaultContextViewLimits.leaseMs`，长等待期间 `renew`；效果不明的操作照实留在结算事实里，不挡下一步也不挡交付。上次执行中断时 `begin` 抛 `TASK_INTERRUPTED`，先把按持久日志收拾出的事实用 `recover` 合入。
 - `build` 只从 `ContextSourcePort` 真实读取，发布前核对版本与授权（不过抛 `STALE_VIEW`）；发送前还要 `validate`；没给 `ContextCompletionPort` 时 `complete` 的结果始终是未验证。
 - 独立使用时存储由宿主创建与 `close()`；交给 `createRuntime({ storage })` 并创建成功后由 Runtime 关闭；`close()` 幂等，只释放连接与等待，不删数据。
 - `localContextStorage` 在创建时才加载 `node:sqlite`；注入别的 `ContextStorage` 的进程不需要 SQLite。

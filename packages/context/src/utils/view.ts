@@ -40,8 +40,15 @@ export function resourceTarget(
   return target
 }
 
-/** 恢复任务必须包含结构完整的状态，避免把损坏记录解释为新任务。 */
-export function assertContextTask(value: ContextTaskState): void {
+/**
+ * 读回任务检查点：结构不完整就拒，避免把损坏记录解释为新任务。
+ * 旧版本写下的「待核对」（needs-reconcile）已经没有这一态，按 context-pending 读。
+ */
+export function readContextTask(stored: ContextTaskState): ContextTaskState {
+  const value =
+    stored && (stored.status as string) === 'needs-reconcile'
+      ? { ...stored, status: 'context-pending' as const }
+      : stored
   if (
     !value ||
     !Number.isSafeInteger(value.revision) ||
@@ -51,7 +58,6 @@ export function assertContextTask(value: ContextTaskState): void {
       'executing',
       'context-pending',
       'view-ready',
-      'needs-reconcile',
       'context-blocked',
       'completed',
       'cancelled',
@@ -70,6 +76,7 @@ export function assertContextTask(value: ContextTaskState): void {
   for (const count of [...Object.values(counts), ...Object.values(hourly ?? {})])
     if (!Number.isSafeInteger(count) || count < 0)
       throw contextFailure('TASK_STATE', '任务用量无效')
+  return value
 }
 
 /** 有界等待适配器；迟到结果不能越过取消边界发布。 */

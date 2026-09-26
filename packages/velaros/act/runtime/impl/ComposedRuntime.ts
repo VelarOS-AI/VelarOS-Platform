@@ -213,13 +213,11 @@ class ComposedRuntime implements VelarosRuntime {
               ? 'completed'
               : job.status === 'waiting'
                 ? 'partial'
-                : job.status === 'needs_reconcile'
-                  ? 'needs-reconcile'
-                  : 'failed',
+                : 'failed',
             [],
             {
               operation: 'agents.resume',
-              input: { id: job.id, input: '继续核对交付中未完成的事项。' },
+              input: { id: job.id, input: '继续完成交付中未完成的事项。' },
             }
           ),
         storage: options.storage,

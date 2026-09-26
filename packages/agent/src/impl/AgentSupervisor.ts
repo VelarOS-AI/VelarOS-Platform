@@ -141,7 +141,10 @@ class AgentSupervisor implements AgentSupervisorApi {
     const record = snapshot?.records.findLast((r) => r.title === `act:child:${id}`)
     if (!record) throw new AppError('NOT_FOUND', '子运行不存在或不在当前范围')
     const job = JSON.parse((await this.options.storage.get(parent, record.objectId))!) as AgentJob
-    return job.status === 'running' || job.status === 'waiting'
+    // 旧版本记下的 needs_reconcile 已经没有这一态，和没跑完的一样按中断对待
+    return job.status === 'running' ||
+      job.status === 'waiting' ||
+      (job.status as string) === 'needs_reconcile'
       ? { ...job, status: 'interrupted' }
       : job
   }
@@ -273,9 +276,7 @@ class AgentSupervisor implements AgentSupervisorApi {
                 ? 'waiting'
                 : status === 'cancelled'
                   ? 'cancelled'
-                  : status === 'needs_reconcile'
-                    ? 'needs_reconcile'
-                    : 'failed',
+                  : 'failed',
         }
       } catch (error) {
         live.job = {

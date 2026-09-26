@@ -371,7 +371,6 @@ export type ContextTaskStatus =
   | 'executing'
   | 'context-pending'
   | 'view-ready'
-  | 'needs-reconcile'
   | 'context-blocked'
   | 'completed'
   | 'cancelled'
@@ -479,8 +478,8 @@ export interface ContextCompletionResult {
   readonly verified: boolean
   /** 可供下一轮或宿主处理的具体原因。 */
   readonly reason: string
-  /** 未完成时应补读修复、刷新、核对、等待输入或处理容量。 */
-  readonly recovery?: 'repair' | 'refresh' | 'reconcile' | 'input' | 'capacity'
+  /** 未完成时应补读修复、刷新、等待输入或处理容量。 */
+  readonly recovery?: 'repair' | 'refresh' | 'input' | 'capacity'
 }
 
 /** 同一快照内的记录选择；字段取交集，各选择结果取并集。 */

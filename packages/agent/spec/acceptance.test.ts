@@ -555,7 +555,7 @@ function child(block = false): ActChildSession {
   }
 }
 
-test('INV-38 child delivery bounds embedded history and preserves the needs-reconcile state', async () => {
+test('INV-38 child delivery bounds embedded history and never turns an unfinished end into completion', async () => {
   const store = storage()
   const signal = new AbortController().signal
   const supervisor = createAgentSupervisor({
@@ -574,14 +574,14 @@ test('INV-38 child delivery bounds embedded history and preserves the needs-reco
               text: 'x'.repeat(5000),
               ref: { sessionId: 'child', id: String(i) },
             }
-          yield { type: 'state', runId: 'child', status: 'needs_reconcile' }
+          yield { type: 'state', runId: 'child', status: 'context_blocked' }
         },
       }
     },
   })
   const started = await supervisor.start('p', { task: 'many turns', profile: 'read' }, signal)
   const job = await supervisor.wait('p', started.id, signal)
-  expect(job.status).toBe('needs_reconcile')
+  expect(job.status).toBe('failed')
   const context = createContextRuntime({ sessionId: 'p', storage: store })
   const record = await context.read(job.result!, { limit: 1 })
   const raw = (await store.get('p', record.record.objectId))!
@@ -589,7 +589,7 @@ test('INV-38 child delivery bounds embedded history and preserves the needs-reco
   expect(raw.length).toBeLessThan(130000)
   expect(result.omittedEvents).toBeGreaterThan(970)
   expect(result.events.length + result.omittedEvents).toBe(1001)
-  expect(result.events.at(-1).status).toBe('needs_reconcile')
+  expect(result.events.at(-1).status).toBe('context_blocked')
   expect(result.eventSource.sessionId).toBe(job.sessionId)
   await supervisor.close()
 })

@@ -27,7 +27,7 @@ import type {
 import type { ContextTaskMutation } from '../types/runtime.js'
 import { contextFailure, emptyContextState, sameContextRef } from '../utils/state.js'
 import { hourlyRetryMs, recentHourlyTokens, rolledHourly } from '../utils/usage.js'
-import { assertContextTask, awaitContextOperation, resolveViewLimits } from '../utils/view.js'
+import { awaitContextOperation, readContextTask, resolveViewLimits } from '../utils/view.js'
 import { checkTaskCapsule, checkViewIntent } from '../utils/view-input.js'
 
 import { ContextEvidenceBuilder } from './ContextEvidenceBuilder.js'
@@ -84,7 +84,7 @@ export interface ContextViewApi {
   build(options: ContextBuildOptions, signal?: AbortSignal): Promise<ModelView>
   /** 发送前复核任务、范围和资源版本。 */
   validate(view: ModelView, signal?: AbortSignal): Promise<boolean>
-  /** 世界写入前核对当前执行身份、未决效果与先前证据。 */
+  /** 世界写入前核对当前执行身份与先前证据。 */
   assertCanWrite(executionId: string, signal?: AbortSignal): Promise<void>
   /** 在模型或后台任务等待时续期当前所有权，失去所有权则失败。 */
   renew(signal?: AbortSignal): Promise<void>
@@ -94,9 +94,9 @@ export interface ContextViewApi {
   releaseModel(role: 'main' | 'context', tokens: number): Promise<void>
   /** 保存供应商实际用量；缺少用量时保持未知计数。 */
   recordUsage(inputTokens: number, outputTokens: number): Promise<void>
-  /** 依照未决效果、证据缺口、新鲜度和领域验收器判断交付。 */
+  /** 依照证据缺口、新鲜度和领域验收器判断交付；效果不明的操作不挡交付，照实留在结算事实里。 */
   complete(verifier?: ContextCompletionPort, signal?: AbortSignal): Promise<ContextCompletionResult>
-  /** 宿主将日志恢复或核对事实合入检查点；不复活取消终态。 */
+  /** 上次执行中断后，把按持久日志收拾出的结算事实合入检查点；不复活取消终态。 */
   recover(feedback: readonly ContextFeedback[]): Promise<void>
   /** 宿主保存结束或暂停阶段，撤销当前租约。 */
   end(status?: ContextTaskStatus): Promise<void>
@@ -127,8 +127,7 @@ export class ContextViewSession implements ContextViewApi {
         ? this.options.storage.loadMetadata(this.options.sessionId)
         : this.options.storage.load(this.options.sessionId))
     )?.task
-    if (task) assertContextTask(task)
-    return toNullable(task)
+    return task ? readContextTask(task) : null
   }
 
   public async begin(
@@ -150,15 +149,8 @@ export class ContextViewSession implements ContextViewApi {
             current?.status === 'executing' ||
             Object.keys(current?.activeExecutions ?? {}).length
           )
-            throw contextFailure('NEEDS_RECONCILE', '上次执行被中断，必须先核对已派发操作')
+            throw contextFailure('TASK_INTERRUPTED', '上次执行被中断，先按持久日志收拾再开始')
           const revision = (current?.revision ?? 0) + 1
-          if (
-            mode === 'new' &&
-            current?.mandatory.some(
-              (item) => item.effect === 'unknown' || item.outcome === 'unknown'
-            )
-          )
-            throw contextFailure('NEEDS_RECONCILE', '必须先核对未知效果，不能通过新任务跳过')
           const prior = mode === 'new' ? undefined : current
           return {
             ...prior,
@@ -247,10 +239,6 @@ export class ContextViewSession implements ContextViewApi {
               !concurrent)
           )
             throw contextFailure('TASK_BUSY', '当前步骤尚未结束')
-          if (
-            task.mandatory.some((item) => item.effect === 'unknown' || item.outcome === 'unknown')
-          )
-            throw contextFailure('NEEDS_RECONCILE', '未知操作结果需要先由宿主核对')
           return {
             ...task,
             revision: task.revision + 1,
@@ -405,13 +393,7 @@ export class ContextViewSession implements ContextViewApi {
             revision: task.revision + 1,
             mandatory,
             lastStep: step ?? task.lastStep,
-            status: mandatory.some(
-              (item) => item.effect === 'unknown' || item.outcome === 'unknown'
-            )
-              ? 'needs-reconcile'
-              : !isEmpty(Object.keys(activeExecutions))
-                ? 'executing'
-                : 'context-pending',
+            status: !isEmpty(Object.keys(activeExecutions)) ? 'executing' : 'context-pending',
           }
         },
       },
@@ -481,7 +463,7 @@ export class ContextViewSession implements ContextViewApi {
               ...latest,
               view,
               metrics,
-              status: latest.status === 'needs-reconcile' ? 'needs-reconcile' : 'view-ready',
+              status: 'view-ready',
             }
           },
         },
@@ -516,8 +498,6 @@ export class ContextViewSession implements ContextViewApi {
     signal.throwIfAborted()
     const task = this.executing(toOptional(await this.inspect()), executionId)
     if (task.executionId !== executionId) throw contextFailure('LEASE_LOST', '操作不属于当前执行')
-    if (task.mandatory.some((item) => item.effect === 'unknown' || item.outcome === 'unknown'))
-      throw contextFailure('NEEDS_RECONCILE', '操作结果尚待核对')
     const basis = task.activeExecutions?.[executionId]?.view ?? task.view
     if (basis?.gaps.some((gap) => gap.required))
       throw contextFailure('REQUIRED_EVIDENCE_MISSING', '先补齐所需证据，再执行修改')
@@ -623,8 +603,6 @@ export class ContextViewSession implements ContextViewApi {
         reason: 'PENDING_EXECUTIONS',
         recovery: 'refresh',
       }
-    if (task.mandatory.some((item) => item.effect === 'unknown' || item.outcome === 'unknown'))
-      return { completed: false, verified: false, reason: 'NEEDS_RECONCILE', recovery: 'reconcile' }
     if (!task.view || task.view.gaps.some((gap) => gap.required))
       return {
         completed: false,
@@ -684,11 +662,7 @@ export class ContextViewSession implements ContextViewApi {
             mandatory,
             view: null,
             lease: task.lease?.id === this.leaseId ? task.lease : null,
-            status: terminal
-              ? task.status
-              : mandatory.some((item) => item.effect === 'unknown' || item.outcome === 'unknown')
-                ? 'needs-reconcile'
-                : 'context-pending',
+            status: terminal ? task.status : 'context-pending',
           }
         },
       },
@@ -761,8 +735,7 @@ export class ContextViewSession implements ContextViewApi {
             workingSet: { revision: 0, cursor: 0, items: [] },
           })
         : (full ?? emptyContextState())
-      if (state.task) assertContextTask(state.task)
-      let task = mutation.apply(state.task)
+      let task = mutation.apply(state.task ? readContextTask(state.task) : undefined)
       if (renew && task.lease)
         task = { ...task, lease: { ...task.lease, expiresAt: Date.now() + this.limits.leaseMs } }
       signal?.throwIfAborted()

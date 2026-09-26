@@ -170,18 +170,14 @@ class ActEventProjector implements ActEventProjectorApi {
       run = { ...run, preview: '', failure: event.message, errors: [...run.errors, event.message] }
     }
     if (event.type === 'state') {
-      const terminal = [
-        'completed',
-        'cancelled',
-        'failed',
-        'context_blocked',
-        'needs_reconcile',
-      ].includes(event.status)
+      // 旧版本写下的 needs_reconcile 已经没有这一态：那一轮没做完就停了，按失败展示
+      const status = (event.status as string) === 'needs_reconcile' ? 'failed' : event.status
+      const terminal = ['completed', 'cancelled', 'failed', 'context_blocked'].includes(status)
       if (terminal) this.ended.add(event.runId)
       const { notice: _notice, ...rest } = run
       run = {
         ...(terminal ? rest : run),
-        status: event.status,
+        status,
         preview: terminal ? '' : run.preview,
       }
     }

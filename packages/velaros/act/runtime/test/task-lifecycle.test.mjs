@@ -103,7 +103,7 @@ test('inputs of earlier runs stay in the task as context and are marked earlier'
   assert.equal(frames[0].partitions.task.goals[0].earlier, undefined)
 })
 
-test('new task cannot discard unknown effects', async (t) => {
+test('unknown effects do not stop the user from starting a new task', async (t) => {
   const runtime = await createRuntime({
     storage: localContextStorage({ path: ':memory:' }),
     runner: nodeSubprocessCodeRunner,
@@ -146,9 +146,8 @@ test('new task cannot discard unknown effects', async (t) => {
   const task = await session.view.inspect()
   assert(task.mandatory.some((item) => item.effect === 'unknown'))
   const events = await submit(session, { task: 'new', text: 'Another task' })
-  assert.equal(events.at(-1).status, 'failed')
-  assert.match(events.find((e) => e.type === 'error').message, /核对/)
-  assert.equal((await session.view.inspect()).id, task.id)
+  assert.equal(events.at(-1).status, 'completed')
+  assert.notEqual((await session.view.inspect()).id, task.id)
 })
 
 test('uncertain observation effects pause immediately and are never retried automatically', async (t) => {
@@ -191,7 +190,7 @@ test('uncertain observation effects pause immediately and are never retried auto
   t.after(() => runtime.close())
   const session = await runtime.openSession('root')
   await session.observe({ source: "import {read} from 'test:observe';await read();" })
-  assert.equal((await submit(session, 'Inspect')).at(-1).status, 'needs_reconcile')
+  assert.equal((await submit(session, 'Inspect')).at(-1).status, 'completed')
   assert.equal(dispatches, 1)
   assert.equal(frames[0].partitions.observation.health.status, 'paused')
   await submit(session, 'Continue inspection')

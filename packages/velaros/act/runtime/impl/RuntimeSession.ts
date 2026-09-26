@@ -269,8 +269,6 @@ export interface VelarosSession {
     signal?: AbortSignal,
     options?: ScriptControlOptions
   ): Promise<ScriptExecutionReceipt>
-  /** 由宿主调用领域核对器恢复中断任务；不会重新运行脚本。 */
-  reconcile(signal?: AbortSignal): Promise<void>
   /** 取消在途程序并释放会话绑定。 */
   close(): Promise<void>
 }
@@ -504,24 +502,6 @@ export class RuntimeSession implements VelarosSession {
                   'GOAL_ACTIVE: 目标仍在推进，请继续执行；达成后用 done("完成依据") 收尾，确有阻碍用 goal.update 记录依据',
                 recovery: 'repair',
               }
-            if (await this.childNeedsReconcile())
-              return {
-                completed: false,
-                verified: false,
-                reason: 'CHILD_NEEDS_RECONCILE',
-                recovery: 'reconcile',
-              }
-            if (
-              (await this.view.inspect())?.mandatory.some(
-                (item) => item.effect === 'unknown' || item.outcome === 'unknown'
-              )
-            )
-              return {
-                completed: false,
-                verified: false,
-                reason: 'NEEDS_RECONCILE',
-                recovery: 'reconcile',
-              }
             const basis = JSON.parse(
               request.materials.findLast((item) => item.origin === 'runtime-view')!.text
             ).partitions.runtime.decision as ScriptDecisionBasis
@@ -690,8 +670,7 @@ export class RuntimeSession implements VelarosSession {
     if (this.modelRunning) throw new AppError('CONFLICT', '会话已有活动模型运行')
     if (!isString(input) && input.task === 'new' && this.dependencies.agents?.pending(this.id))
       throw new AppError('CONFLICT', '子任务仍在运行，不能切换逻辑任务')
-    if (!isString(input) && input.task === 'new' && (await this.childNeedsReconcile()))
-      throw new AppError('NEEDS_RECONCILE', '子任务未知效果需要先核对，不能切换任务')
+    await this.recoverInterrupted(signal)
     this.decision = undefined
     this.modelRunning = true
     this.runDeadline = Date.now() + this.dependencies.limits.timeoutMs
@@ -807,6 +786,7 @@ export class RuntimeSession implements VelarosSession {
     options?: ScriptControlOptions
   ): Promise<ScriptSubmissionReceipt> {
     if (this.closed || this.modelRunning) throw new AppError('CLOSED', '会话已关闭或正在运行模型')
+    await this.recoverInterrupted(signal)
     return this.control(
       input,
       signal,
@@ -1171,8 +1151,6 @@ export class RuntimeSession implements VelarosSession {
   }
 
   private async validateDecision(executionId: string, signal: AbortSignal): Promise<void> {
-    if (await this.childNeedsReconcile())
-      throw new AppError('NEEDS_RECONCILE', '子任务仍有未知效果，宿主需先调用 reconcile 核对')
     const basis = this.decisions.get(executionId)
     if (!basis) return
     if (basis.missing?.length)
@@ -1741,7 +1719,7 @@ export class RuntimeSession implements VelarosSession {
               operation: `${record.prepared.binding.moduleId}.${record.prepared.operation}`,
               outcome: record.receipt?.outcome ?? 'unknown',
               effect: record.receipt?.effect ?? 'unknown',
-              code: 'OBSERVATION_NEEDS_RECONCILE',
+              code: 'OBSERVATION_EFFECT_UNKNOWN',
             }))
           )
       }
@@ -1827,53 +1805,49 @@ export class RuntimeSession implements VelarosSession {
     )
   }
 
-  private async childNeedsReconcile(): Promise<boolean> {
-    for (const job of await this.currentChildren()) {
-      if (
-        ['running', 'waiting'].includes(job.status) &&
-        !this.dependencies.agents?.pending(this.id)
-      )
-        return true
-      const state = await this.dependencies.storage.load(job.sessionId)
-      if (
-        state?.task?.mandatory.some(
-          (item) => item.effect === 'unknown' || item.outcome === 'unknown'
+  /**
+   * 上次停在执行中途（进程退出、崩溃、后台收尾失败）或被取消时，下一轮开始前自动按持久日志收拾，不等宿主：
+   * 中断的脚本记成失败、没重跑，调用的效果照日志记（领域能核实的就核实；取消之后才落定的照实补记），
+   * 没跑完的子任务记成中断。效果仍然不明的照实留在结算事实里给模型看，不挡下一步。
+   */
+  private async recoverInterrupted(
+    signal: AbortSignal = new AbortController().signal
+  ): Promise<void> {
+    // 本进程里还有东西在跑时，眼前的执行态是它的，不是上次留下的
+    if (this.active.size || this.modelRunning || this.controls.size) return
+    const task = await this.view.inspect()
+    const children = this.dependencies.agents?.pending(this.id)
+      ? []
+      : (await this.currentChildren()).filter(
+          (job) =>
+            ['running', 'waiting'].includes(job.status) ||
+            // 旧版本记下的 needs_reconcile 同样是没收尾的子任务
+            (job.status as string) === 'needs_reconcile'
         )
-      )
-        return true
-    }
-    return false
-  }
-
-  public async reconcile(signal: AbortSignal = new AbortController().signal): Promise<void> {
     if (
-      this.active.size ||
-      this.modelRunning ||
-      this.controls.size ||
-      this.dependencies.agents?.pending(this.id)
+      !this.backgroundFailure &&
+      task?.status !== 'executing' &&
+      task?.status !== 'cancelled' &&
+      isEmpty(Object.keys(task?.activeExecutions ?? {})) &&
+      isEmpty(children)
     )
-      throw new AppError('CONFLICT', '活动任务不能同时核对')
-    for (const job of await this.currentChildren()) {
-      await this.reconcileStored(job.sessionId, signal)
-      const task = (await this.dependencies.storage.load(job.sessionId))?.task
-      if (
-        ['needs_reconcile', 'running', 'waiting'].includes(job.status) &&
-        !task?.mandatory.some((item) => item.effect === 'unknown' || item.outcome === 'unknown')
+      return
+    for (const job of children) {
+      await this.recoverStored(job.sessionId, signal)
+      await this.context.append(
+        {
+          kind: 'audit',
+          title: `act:child:${job.id}`,
+          body: JSON.stringify({ ...job, status: 'interrupted' }),
+        },
+        signal
       )
-        await this.context.append(
-          {
-            kind: 'audit',
-            title: `act:child:${job.id}`,
-            body: JSON.stringify({ ...job, status: 'interrupted' }),
-          },
-          signal
-        )
     }
-    await this.reconcileStored(this.id, signal)
+    await this.recoverStored(this.id, signal)
     this.backgroundFailure = undefined
   }
 
-  private async reconcileStored(id: string, signal: AbortSignal): Promise<void> {
+  private async recoverStored(id: string, signal: AbortSignal): Promise<void> {
     const context =
       id === this.id
         ? this.context
@@ -1919,7 +1893,7 @@ export class RuntimeSession implements VelarosSession {
         outcome: resolved?.outcome ?? checked.receipt?.outcome ?? 'unknown',
         effect: resolved?.effect ?? checked.receipt?.effect ?? 'unknown',
         ...(resolved
-          ? { code: 'RECONCILED', detail: resolved.evidence }
+          ? { code: 'RECOVERED', detail: resolved.evidence }
           : checked.receipt?.error
             ? {
                 code: checked.receipt.error.code,
@@ -1940,8 +1914,8 @@ export class RuntimeSession implements VelarosSession {
           effect: children.some((item) => item.effect === 'committed' || item.effect === 'partial')
             ? 'partial'
             : 'none',
-          code: 'RECONCILED',
-          detail: '子操作效果已核对，原脚本的失败事实保持',
+          code: 'RECOVERED',
+          detail: '子操作的效果已按日志确定，原脚本的失败事实保持',
         })
     }
     // 恢复只核对日志与保存的结果，不从进程中断位置自动续跑。
@@ -1999,8 +1973,8 @@ export class RuntimeSession implements VelarosSession {
             ? 'cancelled'
             : 'failed',
         effect,
-        code: 'RECONCILED',
-        detail: '已核对持久日志；中断脚本没有重跑',
+        code: 'RECOVERED',
+        detail: '上次执行中断：已按持久日志收拾，脚本没有重跑',
       })
       await programs.job({
         ...job,

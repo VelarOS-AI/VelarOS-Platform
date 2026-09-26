@@ -146,9 +146,7 @@ class ActRunService implements ActRunServiceApi {
         for await (const event of run.submit(input, combined)) {
           if (
             event.type === 'state' &&
-            ['completed', 'cancelled', 'failed', 'context_blocked', 'needs_reconcile'].includes(
-              event.status
-            )
+            ['completed', 'cancelled', 'failed', 'context_blocked'].includes(event.status)
           ) {
             this.status = event.status
             terminal = event
@@ -208,9 +206,7 @@ class ActRunService implements ActRunServiceApi {
       !this.active ||
       !this.controller ||
       this.controller.signal.aborted ||
-      ['completed', 'cancelled', 'failed', 'context_blocked', 'needs_reconcile'].includes(
-        this.status
-      )
+      ['completed', 'cancelled', 'failed', 'context_blocked'].includes(this.status)
     )
       throw new AppError('UNAVAILABLE', '没有可接收引导的活动运行')
     const signal = this.controller.signal
@@ -315,9 +311,10 @@ class ActRunService implements ActRunServiceApi {
     const value = JSON.parse(
       (await this.options.storage.get(this.options.sessionId, record.objectId))!
     ) as ActRunSnapshot
-    return ['thinking', 'executing'].includes(value.status) || !isEmpty(value.pending)
-      ? { ...value, status: 'interrupted', pending: [] }
-      : value
+    if (['thinking', 'executing'].includes(value.status) || !isEmpty(value.pending))
+      return { ...value, status: 'interrupted', pending: [] }
+    // 旧版本记下的 needs_reconcile 已经没有这一态：那一轮没做完就停了
+    return (value.status as string) === 'needs_reconcile' ? { ...value, status: 'failed' } : value
   }
   public async events(after = 0, limit = AgentTuning.eventPage): Promise<readonly ActEvent[]> {
     if (

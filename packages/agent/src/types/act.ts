@@ -31,14 +31,7 @@ export interface ActInput {
 }
 /** 核心循环的状态，由真实生命周期变化驱动。 */
 export type ActRunStatus =
-  | 'thinking'
-  | 'executing'
-  | 'waiting'
-  | 'completed'
-  | 'cancelled'
-  | 'failed'
-  | 'context_blocked'
-  | 'needs_reconcile'
+  'thinking' | 'executing' | 'waiting' | 'completed' | 'cancelled' | 'failed' | 'context_blocked'
 /** 协议解码器分流的展示增量，不代表程序已经执行。 */
 export type ActPreview =
   | { readonly type: 'text'; readonly text: string }
@@ -127,7 +120,7 @@ export type ActRunEvent =
       readonly completed: boolean
       readonly verified: boolean
       readonly reason: string
-      readonly recovery?: 'repair' | 'refresh' | 'reconcile' | 'input' | 'capacity'
+      readonly recovery?: 'repair' | 'refresh' | 'input' | 'capacity'
     }
   | { readonly type: 'error'; readonly runId: string; readonly message: string }
   /** 任务到了每小时的模型用量上限：等 retryAfterMs 后自动继续。 */

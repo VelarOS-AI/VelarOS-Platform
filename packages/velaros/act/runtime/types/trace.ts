@@ -129,8 +129,7 @@ export interface ActAgentSummary {
   /** 派发时交代的任务（续跑时是这一阶段的说明），受本页正文预算约束。 */
   readonly task: string
   /** 这一段现在的状态。 */
-  readonly status:
-    'running' | 'waiting' | 'completed' | 'cancelled' | 'failed' | 'interrupted' | 'needs_reconcile'
+  readonly status: 'running' | 'waiting' | 'completed' | 'cancelled' | 'failed' | 'interrupted'
   /** 没有完成时的原因；没有原因时为 null。 */
   readonly error: Nullable<string>
   /** 这一段最后接纳的一段回答，受本页正文预算约束；还没收束或没有回答时为空。 */

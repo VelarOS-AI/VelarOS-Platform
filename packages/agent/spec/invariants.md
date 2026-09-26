@@ -16,7 +16,7 @@
 | INV-35 | 接受事件不能持久化时不派发脚本 | 测试 | `spec/acceptance.test.ts` |
 | INV-36 | 子结果落盘故障必须传给父等待者 | 测试 | `spec/acceptance.test.ts` |
 | INV-37 | 新输入从到达时抢占旧响应，轮边界等待输入持久化 | 测试 | `spec/acceptance.test.ts` |
-| INV-38 | 子任务交付内嵌事件有界并声明省略量；需要核对的状态不能变成普通完成 | 测试 | `spec/acceptance.test.ts` |
+| INV-38 | 子任务交付内嵌事件有界并声明省略量；没完成就结束的状态（容量受阻等）不能变成普通完成 | 测试 | `spec/acceptance.test.ts` |
 
 | INV-39 | 输入接纳与消费分别持久化并带宿主身份；消费绑定具体请求，取消保留未消费输入，重启后只消费一次，回执写入失败不派发模型 | 测试 | `spec/acceptance.test.ts` |
 

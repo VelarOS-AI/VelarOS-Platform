@@ -54,8 +54,8 @@ for await (const event of session.submit({ text: '修好 README 里的错别字'
       runId: event.runId,
       value: await askUser(event.request),
     })
-  else if (event.type === 'state' && event.status === 'needs_reconcile')
-    console.warn('有操作的真实效果未知，核对之后才能继续')
+  else if (event.type === 'state' && event.status === 'context_blocked')
+    console.warn('上下文容量不够，这一轮停在这里')
 }
 await session.close()
 ```
@@ -72,7 +72,7 @@ await session.close()
 - 一个会话同一时刻只有一个运行：运行中再 `submit` 抛 `CLOSED`；运行中的补充用 `steer`，它从到达起抢占还没被接受的模型响应，在轮边界递交，没有活动运行时抛 `UNAVAILABLE`。
 - 提前退出 `submit` 的迭代就是取消这次运行；终态的 `state` 事件要等执行、租约与帧的收尾全部完成才发出。
 - 执行端口要问用户时调 `request(kind, message, signal)`，它发出 `interaction` 事件并等 `answer`；回答只认当前运行的那一次交互，重复或过期抛 `CONFLICT`，运行结束时没回答的一律拒绝。
-- `needs_reconcile` 表示有操作的真实效果未知，宿主核对之后才能推进；子任务同样停在这个状态，不会算作完成。
+- 效果不明的操作不挡运行：它照实留在结算事实里给模型看，运行照常推进、照常收尾，不等宿主核对。
 - `task: 'new'` 开新的逻辑任务与总预算（旧任务归档保留），缺省 `continue` 沿用原任务。
 - `inputId` 只是宿主的消息身份，原样回到 `input`、`input-applied`、`input-retained` 回执里，不做重复提交去重；`input-applied` 只说明输入进了某次已归档的模型请求，不证明供应商已经收到。
 - 输入或已接受的响应落不了盘时，不派发模型也不执行脚本：`submit` 的迭代抛出原错误，运行记为可恢复的 `failed`。
