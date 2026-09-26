@@ -8,6 +8,145 @@ declare module 'velaros:browser' {
    * 诊断、网络规则、性能、录屏与用户脚本在 velaros:devtools；直接发 CDP 命令在 velaros:cdp。
    */
 
+  /** 打开一个网站并进入它的站点（换网站就再 open 一次，各站点的工作区互不相通）。
+   */
+  export function open(input: BrowserOpenInput): Promise<BrowserOpened>
+
+  /** 退出站点：之后要页面的操作都要先 open；站点工作区里的文件留着。
+   */
+  export function leave(): Promise<void>
+
+  /** 看现在进没进站点、在哪一页、有哪些标签页、有没有挂着等处理的弹窗下载与权限；没进站点时也能调。
+   */
+  export function state(): Promise<BrowserState>
+
+  /** 把受控页面显示出来给用户看，不执行任何脚本。
+   */
+  export function show(): Promise<BrowserPageWindowState>
+
+  /** 把之后的操作切到外部浏览器的另一个标签页（不关闭任何窗口）。
+   */
+  export function switchTab(input: BrowserSwitchTabInput): Promise<BrowserSwitchPageTargetResult>
+
+  /** 看页面：正文、标题结构、链接、可交互元素与表单字段（元素带 target，可以直接交给 click 这类操作）。
+   */
+  export function inspect(input: BrowserInspectInput): Promise<BrowserPageInspection>
+
+  /** 截图：图交给你看，返回值是落盘位置、坐标换算与标注说明。能在页面里读的（表格、列表、文字）用 evaluate 读，别靠截图。
+   */
+  export function screenshot(input: BrowserScreenshotInput): Promise<BrowserScreenshot>
+
+  /**
+   * 在页面里跑一段 JavaScript，交回它的值：结果按 JSON 整份取回（DOM 元素换成它的描述，环引用写成 "[Circular]"，日期照 toJSON），
+   * 超过 10000000 个字符抛 BROWSER_RESULT_TOO_LARGE；页面里抛错（语法错误也算）抛 BROWSER_SCRIPT_FAILED，message 带页面的报错与它在 script 里的行列。
+   * 读页面、取表格列表正文、改 DOM、设下拉框、读 localStorage 都用它。
+   */
+  export function evaluate(input: BrowserEvaluateInput): Promise<any>
+
+  /** 列出页面的框架树：顶层页面与各层 iframe（含跨源的），id 交给 evaluate、waitForFunction 的 frame。页面跳转之后旧 id 作废。
+   */
+  export function frames(): Promise<BrowserFrameInfo[]>
+
+  /** 点一下元素或视口里的一个点；元素没找到时如实回 matched 为假与原因，只在唯一确定的元素上改用坐标补点。
+   */
+  export function click(input: BrowserClickInput): Promise<BrowserActed>
+
+  /** 往输入框、文本域或可编辑区域写入文字，替换原来的内容（真实输入）。
+   */
+  export function fill(input: BrowserFillInput): Promise<BrowserActed>
+
+  /** 把鼠标移到元素中心（悬停出菜单、提示）。
+   */
+  export function hover(input: BrowserHoverInput): Promise<BrowserActed>
+
+  /** 在当前焦点处插入文字。
+   */
+  export function insertText(input: BrowserInsertTextInput): Promise<BrowserInsertTextResult>
+
+  /** 按一个键或组合键（提交表单按 Enter）。
+   */
+  export function press(input: BrowserPressInput): Promise<BrowserPressKeyResult>
+
+  /** 按下一个键不放，直到 keyUp。
+   */
+  export function keyDown(input: BrowserKeyInput): Promise<BrowserKeyResult>
+
+  /** 抬起一个按着的键。
+   */
+  export function keyUp(input: BrowserKeyInput): Promise<BrowserKeyResult>
+
+  /** 把鼠标移到视口里的一个点（按着鼠标键时就是拖）。
+   */
+  export function mouseMove(input: BrowserMouseMoveInput): Promise<BrowserMouseResult>
+
+  /** 在鼠标现在的位置按下一个鼠标键。
+   */
+  export function mouseDown(input: BrowserMouseButtonInput): Promise<BrowserMouseResult>
+
+  /** 在鼠标现在的位置松开一个鼠标键。
+   */
+  export function mouseUp(input: BrowserMouseButtonInput): Promise<BrowserMouseResult>
+
+  /** 在鼠标现在的位置滚一下滚轮（地图、虚拟列表、只认滚轮的区域）；整页滚动在 evaluate 里 scrollBy 就行。
+   */
+  export function wheel(input: BrowserWheelInput): Promise<BrowserMouseResult>
+
+  /** 把一个元素拖到另一个元素上。
+   */
+  export function drag(input: BrowserDragInput): Promise<BrowserDragResult>
+
+  /** 给 file input 选一个站点工作区里的文件。
+   */
+  export function upload(input: BrowserUploadInput): Promise<BrowserUploadFileResult>
+
+  /** 在当前站点里跳到一个网址（换网站用 open）。
+   */
+  export function goto(input: BrowserGotoInput): Promise<BrowserPageNavigationResult>
+
+  /** 后退。
+   */
+  export function back(): Promise<BrowserPageNavigationResult>
+
+  /** 前进。
+   */
+  export function forward(): Promise<BrowserPageNavigationResult>
+
+  /** 刷新当前页。
+   */
+  export function reload(): Promise<BrowserPageNavigationResult>
+
+  /** 等页面里一个条件成立，交回判定式的值（元素出现、文字出现、地址变了、数据加载完，都写成一个判定式）。
+   */
+  export function waitForFunction(input: BrowserWaitForFunctionInput): Promise<any>
+
+  /** 等页面加载到某个状态，交回那时的页面状态。
+   */
+  export function waitForLoad(input: BrowserWaitForLoadInput): Promise<BrowserPageState>
+
+  /** 等一个挂起事件出现，交回这个事件（点了下载按钮之后等下载事件，再 handleDownload）。
+   */
+  export function waitForEvent(input: BrowserWaitForEventInput): Promise<BrowserPendingEventSummary>
+
+  /** 处理 JS 弹窗（alert、confirm、prompt）。
+   */
+  export function handleDialog(input: BrowserDialogInput): Promise<BrowserHandleDialogResult>
+
+  /** 保存或取消一次下载。
+   */
+  export function handleDownload(input: BrowserDownloadDecisionInput): Promise<BrowserHandleDownloadResult>
+
+  /** 允许或拒绝一次权限请求。
+   */
+  export function handlePermission(input: BrowserPermissionInput): Promise<BrowserHandlePermissionResult>
+
+  /** 带着当前页面的登录态下载一个资源到站点工作区。
+   */
+  export function download(input: BrowserDownloadInput): Promise<BrowserFetchResourceResult>
+
+  /** 把当前页面导出成 PDF。
+   */
+  export function savePdf(input: BrowserSavePdfInput): Promise<BrowserExportPagePdfResult>
+
   /** 打开一个网站并进入它的站点：url 最多 2048 个字符，不带协议按 https:// 补全，localhost 也行。 */
   interface BrowserOpenInput {
     url: string
@@ -758,143 +897,4 @@ declare module 'velaros:browser' {
     textHash: string
     textLength: number
   }
-
-  /** 打开一个网站并进入它的站点（换网站就再 open 一次，各站点的工作区互不相通）。
-   */
-  export function open(input: BrowserOpenInput): Promise<BrowserOpened>
-
-  /** 退出站点：之后要页面的操作都要先 open；站点工作区里的文件留着。
-   */
-  export function leave(): Promise<void>
-
-  /** 看现在进没进站点、在哪一页、有哪些标签页、有没有挂着等处理的弹窗下载与权限；没进站点时也能调。
-   */
-  export function state(): Promise<BrowserState>
-
-  /** 把受控页面显示出来给用户看，不执行任何脚本。
-   */
-  export function show(): Promise<BrowserPageWindowState>
-
-  /** 把之后的操作切到外部浏览器的另一个标签页（不关闭任何窗口）。
-   */
-  export function switchTab(input: BrowserSwitchTabInput): Promise<BrowserSwitchPageTargetResult>
-
-  /** 看页面：正文、标题结构、链接、可交互元素与表单字段（元素带 target，可以直接交给 click 这类操作）。
-   */
-  export function inspect(input: BrowserInspectInput): Promise<BrowserPageInspection>
-
-  /** 截图：图交给你看，返回值是落盘位置、坐标换算与标注说明。能在页面里读的（表格、列表、文字）用 evaluate 读，别靠截图。
-   */
-  export function screenshot(input: BrowserScreenshotInput): Promise<BrowserScreenshot>
-
-  /**
-   * 在页面里跑一段 JavaScript，交回它的值：结果按 JSON 整份取回（DOM 元素换成它的描述，环引用写成 "[Circular]"，日期照 toJSON），
-   * 超过 10000000 个字符抛 BROWSER_RESULT_TOO_LARGE；页面里抛错（语法错误也算）抛 BROWSER_SCRIPT_FAILED，message 带页面的报错与它在 script 里的行列。
-   * 读页面、取表格列表正文、改 DOM、设下拉框、读 localStorage 都用它。
-   */
-  export function evaluate(input: BrowserEvaluateInput): Promise<any>
-
-  /** 列出页面的框架树：顶层页面与各层 iframe（含跨源的），id 交给 evaluate、waitForFunction 的 frame。页面跳转之后旧 id 作废。
-   */
-  export function frames(): Promise<BrowserFrameInfo[]>
-
-  /** 点一下元素或视口里的一个点；元素没找到时如实回 matched 为假与原因，只在唯一确定的元素上改用坐标补点。
-   */
-  export function click(input: BrowserClickInput): Promise<BrowserActed>
-
-  /** 往输入框、文本域或可编辑区域写入文字，替换原来的内容（真实输入）。
-   */
-  export function fill(input: BrowserFillInput): Promise<BrowserActed>
-
-  /** 把鼠标移到元素中心（悬停出菜单、提示）。
-   */
-  export function hover(input: BrowserHoverInput): Promise<BrowserActed>
-
-  /** 在当前焦点处插入文字。
-   */
-  export function insertText(input: BrowserInsertTextInput): Promise<BrowserInsertTextResult>
-
-  /** 按一个键或组合键（提交表单按 Enter）。
-   */
-  export function press(input: BrowserPressInput): Promise<BrowserPressKeyResult>
-
-  /** 按下一个键不放，直到 keyUp。
-   */
-  export function keyDown(input: BrowserKeyInput): Promise<BrowserKeyResult>
-
-  /** 抬起一个按着的键。
-   */
-  export function keyUp(input: BrowserKeyInput): Promise<BrowserKeyResult>
-
-  /** 把鼠标移到视口里的一个点（按着鼠标键时就是拖）。
-   */
-  export function mouseMove(input: BrowserMouseMoveInput): Promise<BrowserMouseResult>
-
-  /** 在鼠标现在的位置按下一个鼠标键。
-   */
-  export function mouseDown(input: BrowserMouseButtonInput): Promise<BrowserMouseResult>
-
-  /** 在鼠标现在的位置松开一个鼠标键。
-   */
-  export function mouseUp(input: BrowserMouseButtonInput): Promise<BrowserMouseResult>
-
-  /** 在鼠标现在的位置滚一下滚轮（地图、虚拟列表、只认滚轮的区域）；整页滚动在 evaluate 里 scrollBy 就行。
-   */
-  export function wheel(input: BrowserWheelInput): Promise<BrowserMouseResult>
-
-  /** 把一个元素拖到另一个元素上。
-   */
-  export function drag(input: BrowserDragInput): Promise<BrowserDragResult>
-
-  /** 给 file input 选一个站点工作区里的文件。
-   */
-  export function upload(input: BrowserUploadInput): Promise<BrowserUploadFileResult>
-
-  /** 在当前站点里跳到一个网址（换网站用 open）。
-   */
-  export function goto(input: BrowserGotoInput): Promise<BrowserPageNavigationResult>
-
-  /** 后退。
-   */
-  export function back(): Promise<BrowserPageNavigationResult>
-
-  /** 前进。
-   */
-  export function forward(): Promise<BrowserPageNavigationResult>
-
-  /** 刷新当前页。
-   */
-  export function reload(): Promise<BrowserPageNavigationResult>
-
-  /** 等页面里一个条件成立，交回判定式的值（元素出现、文字出现、地址变了、数据加载完，都写成一个判定式）。
-   */
-  export function waitForFunction(input: BrowserWaitForFunctionInput): Promise<any>
-
-  /** 等页面加载到某个状态，交回那时的页面状态。
-   */
-  export function waitForLoad(input: BrowserWaitForLoadInput): Promise<BrowserPageState>
-
-  /** 等一个挂起事件出现，交回这个事件（点了下载按钮之后等下载事件，再 handleDownload）。
-   */
-  export function waitForEvent(input: BrowserWaitForEventInput): Promise<BrowserPendingEventSummary>
-
-  /** 处理 JS 弹窗（alert、confirm、prompt）。
-   */
-  export function handleDialog(input: BrowserDialogInput): Promise<BrowserHandleDialogResult>
-
-  /** 保存或取消一次下载。
-   */
-  export function handleDownload(input: BrowserDownloadDecisionInput): Promise<BrowserHandleDownloadResult>
-
-  /** 允许或拒绝一次权限请求。
-   */
-  export function handlePermission(input: BrowserPermissionInput): Promise<BrowserHandlePermissionResult>
-
-  /** 带着当前页面的登录态下载一个资源到站点工作区。
-   */
-  export function download(input: BrowserDownloadInput): Promise<BrowserFetchResourceResult>
-
-  /** 把当前页面导出成 PDF。
-   */
-  export function savePdf(input: BrowserSavePdfInput): Promise<BrowserExportPagePdfResult>
 }

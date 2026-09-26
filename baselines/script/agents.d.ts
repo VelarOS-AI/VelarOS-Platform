@@ -4,6 +4,38 @@ declare module 'velaros:agents' {
    * 派发、等待、回答、续跑、引导、取消都只能在 execute 里做；wait 不额外调用模型，遇到子任务提问或结束就返回。
    */
 
+  /** 列出宿主给的配置：名称、能力范围与预算；start/resume 不给 profile 就用第一个。
+   */
+  export function profiles(): Promise<AgentProfileInfo[]>
+
+  /** 派发子任务，返回它的 job。
+   */
+  export function start(input: AgentStart): Promise<AgentJob>
+
+  /** 子任务收束后接着跑同一个会话，已用预算保留；可以换配置、追加材料。
+   */
+  export function resume(input: AgentResumeRequest): Promise<AgentJob>
+
+  /** 回答子任务在 job.pending 里的请求。
+   */
+  export function reply(input: AgentReplyInput): Promise<null>
+
+  /** 读子任务的状态与结果引用。
+   */
+  export function status(input: AgentJobTarget): Promise<AgentJob>
+
+  /** 等到子任务提问或结束；status 为 waiting 时 pending 里的请求要 reply。
+   */
+  export function wait(input: AgentJobTarget): Promise<AgentJob>
+
+  /** 取消子任务并等它收束。
+   */
+  export function cancel(input: AgentJobTarget): Promise<AgentJob>
+
+  /** 给正在跑的子任务发引导。
+   */
+  export function send(input: AgentSendInput): Promise<null>
+
   /** 一个子任务配置：name 可以传给 start/resume 的 profile；modules 是子任务能用的模块，其余是单次运行与累计的预算。 */
   interface AgentProfileInfo {
     readonly name: string
@@ -117,36 +149,4 @@ declare module 'velaros:agents' {
     /** 本次继续附加的父会话材料。 */
     readonly materials?: ReadonlyArray<{ readonly sessionId: string; readonly id: string }>
   }
-
-  /** 列出宿主给的配置：名称、能力范围与预算；start/resume 不给 profile 就用第一个。
-   */
-  export function profiles(): Promise<AgentProfileInfo[]>
-
-  /** 派发子任务，返回它的 job。
-   */
-  export function start(input: AgentStart): Promise<AgentJob>
-
-  /** 子任务收束后接着跑同一个会话，已用预算保留；可以换配置、追加材料。
-   */
-  export function resume(input: AgentResumeRequest): Promise<AgentJob>
-
-  /** 回答子任务在 job.pending 里的请求。
-   */
-  export function reply(input: AgentReplyInput): Promise<null>
-
-  /** 读子任务的状态与结果引用。
-   */
-  export function status(input: AgentJobTarget): Promise<AgentJob>
-
-  /** 等到子任务提问或结束；status 为 waiting 时 pending 里的请求要 reply。
-   */
-  export function wait(input: AgentJobTarget): Promise<AgentJob>
-
-  /** 取消子任务并等它收束。
-   */
-  export function cancel(input: AgentJobTarget): Promise<AgentJob>
-
-  /** 给正在跑的子任务发引导。
-   */
-  export function send(input: AgentSendInput): Promise<null>
 }

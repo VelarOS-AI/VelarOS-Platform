@@ -4,6 +4,18 @@ declare module 'velaros:search' {
    * search 只能在 execute 里调用；read 读已发布的报告或刷新其中的证据，不调用模型，observe 里也能用。
    */
 
+  /** 列出能选的搜索档位、默认的那个与它们的全部资源上限。
+   */
+  export function profiles(): Promise<SearchProfileInfo[]>
+
+  /** 新建或续查一项有界搜索，返回报告。
+   */
+  export function search(input: SearchRequest): Promise<SearchResult>
+
+  /** 读已发布的报告：snapshot 读当时的原文，current 重读选中证据的现状。
+   */
+  export function read(input: SearchReadInput): Promise<SearchReadResult>
+
   /** 一个搜索档位：name 传给 search 的 profile，default 为真的是不给 profile 时用的那个，limits 是它的全部资源上限。 */
   interface SearchProfileInfo {
     readonly name: string
@@ -257,16 +269,4 @@ declare module 'velaros:search' {
    */
   type ContextRecordKind =
     'user' | 'assistant' | 'tool' | 'event' | 'note' | 'checkpoint' | 'audit'
-
-  /** 列出能选的搜索档位、默认的那个与它们的全部资源上限。
-   */
-  export function profiles(): Promise<SearchProfileInfo[]>
-
-  /** 新建或续查一项有界搜索，返回报告。
-   */
-  export function search(input: SearchRequest): Promise<SearchResult>
-
-  /** 读已发布的报告：snapshot 读当时的原文，current 重读选中证据的现状。
-   */
-  export function read(input: SearchReadInput): Promise<SearchReadResult>
 }

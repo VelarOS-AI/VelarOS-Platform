@@ -4,6 +4,18 @@ declare module 'velaros:evidence' {
    * 收尾阶段不能再检索或读取，直接用已有证据 report。
    */
 
+  /** 在一个来源里按字面检索候选；source 用本轮实际授权的来源。
+   */
+  export function query(input: EvidenceQueryInput): Promise<EvidenceCandidates>
+
+  /** 读一个资源并登记成证据：返回证据 id、原文引用与读到的版本。
+   */
+  export function read(input: EvidenceReadInput): Promise<SearchEvidence>
+
+  /** 交付这次搜索的结论；受理之后声明完成。结论不合约定时报错，修正后再交。
+   */
+  export function report(input: SearchDraft): Promise<SearchReportReceipt>
+
   /** 在一个已授权来源里按字面检索：query 用短关键词（1 到 8000 个字符），limit 每次最多 100 个候选，默认 16。 */
   interface EvidenceQueryInput {
     readonly source: string
@@ -107,16 +119,4 @@ declare module 'velaros:evidence' {
     | { readonly kind: 'whole' }
     | { readonly kind: 'lines'; readonly start: number; readonly end: number }
     | { readonly kind: 'symbol'; readonly name: string }
-
-  /** 在一个来源里按字面检索候选；source 用本轮实际授权的来源。
-   */
-  export function query(input: EvidenceQueryInput): Promise<EvidenceCandidates>
-
-  /** 读一个资源并登记成证据：返回证据 id、原文引用与读到的版本。
-   */
-  export function read(input: EvidenceReadInput): Promise<SearchEvidence>
-
-  /** 交付这次搜索的结论；受理之后声明完成。结论不合约定时报错，修正后再交。
-   */
-  export function report(input: SearchDraft): Promise<SearchReportReceipt>
 }

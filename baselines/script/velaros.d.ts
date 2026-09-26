@@ -3,6 +3,8 @@ declare module 'velaros' {
    * 交出结果。只 output 下一轮真正需要的事实：数据在脚本里先筛选、计算、聚合，读到的全部内容不必都交出来。
    */
 
+  export const output: ScriptOutput
+
   /**
    * 交出一个值给下一轮看：按 JSON 保存，对象里值为 undefined 的字段省略，数组里的空位或 undefined 变成 null，只有交出 undefined 本身会报错；一次执行最多 64 块。
    * configure 要在第一次 output 之前调用。
@@ -53,6 +55,4 @@ declare module 'velaros' {
     readonly edge?: 'head' | 'tail'
     readonly paths?: readonly string[]
   }
-
-  export const output: ScriptOutput
 }

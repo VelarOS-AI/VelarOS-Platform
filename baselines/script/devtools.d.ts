@@ -6,6 +6,78 @@ declare module 'velaros:devtools' {
    * 页面存储用 velaros:browser 的 evaluate 读；cookie（含 HttpOnly）、视口、时区、地理位置、深浅色这类仿真直接用 velaros:cdp 发命令。
    */
 
+  /** 读诊断：先按种类过滤再取最近的几条，网络条目带 requestId。
+   */
+  export function diagnostics(input: DevtoolsDiagnosticsInput): Promise<BrowserPageDiagnosticsReadResult>
+
+  /** 读一次网络请求的请求头、postData、响应头、耗时与体积，可带响应体；较早的请求可能已经读不到。
+   */
+  export function request(input: DevtoolsRequestInput): Promise<BrowserNetworkRequestDetailsResult>
+
+  /** 调页面缩放。
+   */
+  export function zoom(input: DevtoolsZoomInput): Promise<BrowserPageZoomResult>
+
+  /** 设常驻的网络规则：断网、加请求头、拦请求、给请求回假响应（宿主一直替你应答，程序跑完也生效，再调一次就换掉）。
+   */
+  export function network(input: DevtoolsNetworkInput): Promise<BrowserNetworkControlResult>
+
+  /** 开始录性能 trace；到点自动停时直接交回分析摘要。
+   */
+  export function startTrace(input: DevtoolsTraceInput): Promise<BrowserPerformanceTraceStartResult>
+
+  /** 停止录 trace，交回 Core Web Vitals 与可深入分析的 insight 清单；原始 trace 落在站点工作区。
+   */
+  export function stopTrace(): Promise<BrowserPerformanceTraceStopResult>
+
+  /** 对最近一次 trace 的一条 insight 出详细分析。
+   */
+  export function insight(input: DevtoolsInsightInput): Promise<BrowserPerformanceInsightResult>
+
+  /** 采一份 V8 堆快照落盘（按「基线、操作、回退」各采一份对比着查泄漏）。
+   */
+  export function heapSnapshot(input: DevtoolsHeapSnapshotInput): Promise<BrowserHeapSnapshotResult>
+
+  /** 开始录屏：之后的页面操作都录下来，stopRecording 合成 GIF。
+   */
+  export function startRecording(input: DevtoolsRecordingInput): Promise<BrowserScreencastStartResult>
+
+  /** 停止录屏并合成 GIF 落进站点工作区（帧数到上限会自动截断，frameLimitReached 为真）。
+   */
+  export function stopRecording(input: DevtoolsStopRecordingInput): Promise<BrowserScreencastStopResult>
+
+  /** 列出全部用户脚本、总开关，以及哪些脚本匹配当前页面。
+   */
+  export function userScripts(): Promise<BrowserUserScriptMutationResult>
+
+  /** 读一个用户脚本，带源码。
+   */
+  export function readUserScript(input: DevtoolsUserScriptIdInput): Promise<BrowserUserScriptMutationResult>
+
+  /** 新建一个用户脚本（一律先停用）。
+   */
+  export function createUserScript(input: DevtoolsCreateUserScriptInput): Promise<BrowserUserScriptMutationResult>
+
+  /** 改一个用户脚本。
+   */
+  export function updateUserScript(input: DevtoolsUpdateUserScriptInput): Promise<BrowserUserScriptMutationResult>
+
+  /** 启用或停用一个用户脚本。
+   */
+  export function enableUserScript(input: DevtoolsEnableUserScriptInput): Promise<BrowserUserScriptMutationResult>
+
+  /** 打开或关闭用户脚本的总开关。
+   */
+  export function enableUserScripts(input: DevtoolsEnableUserScriptsInput): Promise<BrowserUserScriptMutationResult>
+
+  /** 调整一个用户脚本的注入顺序。
+   */
+  export function moveUserScript(input: DevtoolsMoveUserScriptInput): Promise<BrowserUserScriptMutationResult>
+
+  /** 删掉一个用户脚本（不撤销当前页面已经执行的副作用）。
+   */
+  export function deleteUserScript(input: DevtoolsUserScriptIdInput): Promise<BrowserUserScriptMutationResult>
+
   /**
    * 读诊断：kind 缺省 all；limit 是过滤之后最多几条（最多 300，不给就取到上限），clear 为真读完把这一类清掉。
    * console 可按 level 或 errorsOnly 过滤；network 可按 status（100 到 999）、resourceType（最多 80 个字符）或 failedOnly 过滤，
@@ -476,76 +548,4 @@ declare module 'velaros:devtools' {
     | 'dialog'
     | 'network'
     | 'storage'
-
-  /** 读诊断：先按种类过滤再取最近的几条，网络条目带 requestId。
-   */
-  export function diagnostics(input: DevtoolsDiagnosticsInput): Promise<BrowserPageDiagnosticsReadResult>
-
-  /** 读一次网络请求的请求头、postData、响应头、耗时与体积，可带响应体；较早的请求可能已经读不到。
-   */
-  export function request(input: DevtoolsRequestInput): Promise<BrowserNetworkRequestDetailsResult>
-
-  /** 调页面缩放。
-   */
-  export function zoom(input: DevtoolsZoomInput): Promise<BrowserPageZoomResult>
-
-  /** 设常驻的网络规则：断网、加请求头、拦请求、给请求回假响应（宿主一直替你应答，程序跑完也生效，再调一次就换掉）。
-   */
-  export function network(input: DevtoolsNetworkInput): Promise<BrowserNetworkControlResult>
-
-  /** 开始录性能 trace；到点自动停时直接交回分析摘要。
-   */
-  export function startTrace(input: DevtoolsTraceInput): Promise<BrowserPerformanceTraceStartResult>
-
-  /** 停止录 trace，交回 Core Web Vitals 与可深入分析的 insight 清单；原始 trace 落在站点工作区。
-   */
-  export function stopTrace(): Promise<BrowserPerformanceTraceStopResult>
-
-  /** 对最近一次 trace 的一条 insight 出详细分析。
-   */
-  export function insight(input: DevtoolsInsightInput): Promise<BrowserPerformanceInsightResult>
-
-  /** 采一份 V8 堆快照落盘（按「基线、操作、回退」各采一份对比着查泄漏）。
-   */
-  export function heapSnapshot(input: DevtoolsHeapSnapshotInput): Promise<BrowserHeapSnapshotResult>
-
-  /** 开始录屏：之后的页面操作都录下来，stopRecording 合成 GIF。
-   */
-  export function startRecording(input: DevtoolsRecordingInput): Promise<BrowserScreencastStartResult>
-
-  /** 停止录屏并合成 GIF 落进站点工作区（帧数到上限会自动截断，frameLimitReached 为真）。
-   */
-  export function stopRecording(input: DevtoolsStopRecordingInput): Promise<BrowserScreencastStopResult>
-
-  /** 列出全部用户脚本、总开关，以及哪些脚本匹配当前页面。
-   */
-  export function userScripts(): Promise<BrowserUserScriptMutationResult>
-
-  /** 读一个用户脚本，带源码。
-   */
-  export function readUserScript(input: DevtoolsUserScriptIdInput): Promise<BrowserUserScriptMutationResult>
-
-  /** 新建一个用户脚本（一律先停用）。
-   */
-  export function createUserScript(input: DevtoolsCreateUserScriptInput): Promise<BrowserUserScriptMutationResult>
-
-  /** 改一个用户脚本。
-   */
-  export function updateUserScript(input: DevtoolsUpdateUserScriptInput): Promise<BrowserUserScriptMutationResult>
-
-  /** 启用或停用一个用户脚本。
-   */
-  export function enableUserScript(input: DevtoolsEnableUserScriptInput): Promise<BrowserUserScriptMutationResult>
-
-  /** 打开或关闭用户脚本的总开关。
-   */
-  export function enableUserScripts(input: DevtoolsEnableUserScriptsInput): Promise<BrowserUserScriptMutationResult>
-
-  /** 调整一个用户脚本的注入顺序。
-   */
-  export function moveUserScript(input: DevtoolsMoveUserScriptInput): Promise<BrowserUserScriptMutationResult>
-
-  /** 删掉一个用户脚本（不撤销当前页面已经执行的副作用）。
-   */
-  export function deleteUserScript(input: DevtoolsUserScriptIdInput): Promise<BrowserUserScriptMutationResult>
 }

@@ -7,6 +7,26 @@ declare module 'velaros:computer' {
    * 网页里的东西用浏览器的能力，不要拿桌面截图代替。
    */
 
+  /** 截主屏：图交给你看（跟在程序结果后面，只看一次），返回值是它的几何与 snapshotId。
+   */
+  export function screenshot(): Promise<ComputerSnapshot>
+
+  /** 把指针移到一个坐标，不点击（悬停用）。
+   */
+  export function move(input: ComputerPoint): Promise<ComputerMoved>
+
+  /** 在一个坐标点击：按钮、菜单、输入框这类桌面元素。
+   */
+  export function click(input: ComputerClickInput): Promise<ComputerClicked>
+
+  /** 在当前焦点处原样输入文字；先点一下输入框拿到焦点。组合键用 key。
+   */
+  export function typeText(input: ComputerTypeInput): Promise<ComputerTypeResult>
+
+  /** 按一个键或组合键：Enter、Esc、Tab、快捷键。普通文字用 typeText。
+   */
+  export function key(input: ComputerKeyInput): Promise<ComputerKeyResult>
+
   /**
    * 一次截图：图本身交给你看（跟在程序结果后面，只看一次），这里是它的几何与 snapshotId。
    * width、height 是图的尺寸，也就是按截图量坐标的范围；按这张图上的坐标移动、点击时原样带上 snapshotId。
@@ -79,24 +99,4 @@ declare module 'velaros:computer' {
 
   /** 坐标空间：primary-display 是按截图量的坐标，global 是虚拟桌面的全局坐标。 */
   type ComputerCoordinateSpace = 'primary-display' | 'global'
-
-  /** 截主屏：图交给你看（跟在程序结果后面，只看一次），返回值是它的几何与 snapshotId。
-   */
-  export function screenshot(): Promise<ComputerSnapshot>
-
-  /** 把指针移到一个坐标，不点击（悬停用）。
-   */
-  export function move(input: ComputerPoint): Promise<ComputerMoved>
-
-  /** 在一个坐标点击：按钮、菜单、输入框这类桌面元素。
-   */
-  export function click(input: ComputerClickInput): Promise<ComputerClicked>
-
-  /** 在当前焦点处原样输入文字；先点一下输入框拿到焦点。组合键用 key。
-   */
-  export function typeText(input: ComputerTypeInput): Promise<ComputerTypeResult>
-
-  /** 按一个键或组合键：Enter、Esc、Tab、快捷键。普通文字用 typeText。
-   */
-  export function key(input: ComputerKeyInput): Promise<ComputerKeyResult>
 }

@@ -4,6 +4,18 @@ declare module 'velaros:context-materials' {
    * 只能读这次整理授权的快照；读取额度用完后不能再读，直接交付已有结论。
    */
 
+  /** 列快照里的原文元数据，不读正文。
+   */
+  export function list(input: ContextMaterialsQuery): Promise<ContextMaintenancePage>
+
+  /** 按快照里的引用读一页父会话原文，正文在 text。
+   */
+  export function read(input: ContextMaterialsReadInput): Promise<ContextContent>
+
+  /** 交来整理补丁：先整份校验，不合格就报错（修正后再交），合格就受理；受理之后声明完成。
+   */
+  export function submit(input: ContextPatch): Promise<ContextPatchReceipt>
+
   /** 翻快照目录：after 是上一页的 nextAfter，从头翻不给；limit 每页最多 64 项。 */
   interface ContextMaterialsQuery {
     readonly after?: number
@@ -168,16 +180,4 @@ declare module 'velaros:context-materials' {
     readonly edge?: 'head' | 'tail'
     readonly paths?: readonly string[]
   }
-
-  /** 列快照里的原文元数据，不读正文。
-   */
-  export function list(input: ContextMaterialsQuery): Promise<ContextMaintenancePage>
-
-  /** 按快照里的引用读一页父会话原文，正文在 text。
-   */
-  export function read(input: ContextMaterialsReadInput): Promise<ContextContent>
-
-  /** 交来整理补丁：先整份校验，不合格就报错（修正后再交），合格就受理；受理之后声明完成。
-   */
-  export function submit(input: ContextPatch): Promise<ContextPatchReceipt>
 }

@@ -8,6 +8,42 @@ declare module 'velaros:office' {
    * 要把 PDF 变成 Word：readPdf 读出文字，再用 createWord 按页写成标题与段落。
    */
 
+  /** 生成 Word 文档（.docx），或把新内容接在已有文档末尾。
+   */
+  export function createWord(input: OfficeWordInput): Promise<OfficeWritten>
+
+  /** 生成 PowerPoint 演示文稿（.pptx）：给 Markdown 自动排版，或逐页给元素精细控制。
+   */
+  export function createPresentation(input: OfficePresentationInput): Promise<OfficeWritten>
+
+  /** 生成 Excel 工作簿（.xlsx）：给 CSV、Markdown 表格自动成表，或给结构化工作表（多表、公式、样式、合并、冻结）。
+   */
+  export function createSpreadsheet(input: OfficeSpreadsheetInput): Promise<OfficeWritten>
+
+  /** 按页读文本型 PDF 的可选择文字。
+   */
+  export function readPdf(input: OfficeReadPdfInput): Promise<OfficePdfText>
+
+  /** 把 Word 文档转成 PDF，尽量保留排版（要本机装了 LibreOffice）。
+   */
+  export function wordToPdf(input: OfficeWordToPdfInput): Promise<OfficeWritten>
+
+  /** 把 LaTeX 源码编译成 PDF：论文、数学公式、要求严格排版的文档；普通文档用 createWord 就好。
+   */
+  export function latexToPdf(input: OfficeLatexInput): Promise<OfficeLatexCompiled>
+
+  /** 编辑 PDF 写成新文件：挑页、重排、删页、旋转、贴文字、改文档信息。
+   */
+  export function editPdf(input: OfficeEditPdfInput): Promise<OfficeWritten>
+
+  /** 预览 Word、PowerPoint、Excel 文档的结构与正文，检查生成的文档对不对；也可以写出 HTML 或 PNG 预览给人看。
+   */
+  export function preview(input: OfficePreviewInput): Promise<OfficePreview>
+
+  /** 用 MarkItDown 把 PDF、Office、HTML、CSV、JSON、EPub 这类文档转成 Markdown 来读（要装了 MarkItDown）。
+   */
+  export function toMarkdown(input: OfficeMarkdownInput): Promise<OfficeMarkdown>
+
   /**
    * 生成 Word（.docx）：outputPath 必填（最多 1200 个字符，没写扩展名补 .docx）；正文给 content（Markdown 或纯文本，自动排成标题、段落、列表、表格）
    * 或 blocks（结构化内容块，最多 500 块），只给一样。
@@ -554,40 +590,4 @@ declare module 'velaros:office' {
       | 'mediumDashDot'
     color?: string
   }
-
-  /** 生成 Word 文档（.docx），或把新内容接在已有文档末尾。
-   */
-  export function createWord(input: OfficeWordInput): Promise<OfficeWritten>
-
-  /** 生成 PowerPoint 演示文稿（.pptx）：给 Markdown 自动排版，或逐页给元素精细控制。
-   */
-  export function createPresentation(input: OfficePresentationInput): Promise<OfficeWritten>
-
-  /** 生成 Excel 工作簿（.xlsx）：给 CSV、Markdown 表格自动成表，或给结构化工作表（多表、公式、样式、合并、冻结）。
-   */
-  export function createSpreadsheet(input: OfficeSpreadsheetInput): Promise<OfficeWritten>
-
-  /** 按页读文本型 PDF 的可选择文字。
-   */
-  export function readPdf(input: OfficeReadPdfInput): Promise<OfficePdfText>
-
-  /** 把 Word 文档转成 PDF，尽量保留排版（要本机装了 LibreOffice）。
-   */
-  export function wordToPdf(input: OfficeWordToPdfInput): Promise<OfficeWritten>
-
-  /** 把 LaTeX 源码编译成 PDF：论文、数学公式、要求严格排版的文档；普通文档用 createWord 就好。
-   */
-  export function latexToPdf(input: OfficeLatexInput): Promise<OfficeLatexCompiled>
-
-  /** 编辑 PDF 写成新文件：挑页、重排、删页、旋转、贴文字、改文档信息。
-   */
-  export function editPdf(input: OfficeEditPdfInput): Promise<OfficeWritten>
-
-  /** 预览 Word、PowerPoint、Excel 文档的结构与正文，检查生成的文档对不对；也可以写出 HTML 或 PNG 预览给人看。
-   */
-  export function preview(input: OfficePreviewInput): Promise<OfficePreview>
-
-  /** 用 MarkItDown 把 PDF、Office、HTML、CSV、JSON、EPub 这类文档转成 Markdown 来读（要装了 MarkItDown）。
-   */
-  export function toMarkdown(input: OfficeMarkdownInput): Promise<OfficeMarkdown>
 }

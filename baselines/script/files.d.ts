@@ -7,6 +7,24 @@ declare module 'velaros:files' {
    * 列目录、搜文本用命令做（`velaros:shell` 的 run：ls、find、`rg -n`）；看图片用 `velaros:images`。
    */
 
+  /**
+   * 读文本文件：每个文件交回连续的正文与它第一行的行号（给了 range 就只交那几行）。
+   * 图片、PDF 与其他二进制文件、目录、设备文件、超过 20 MB 的文件，都算这个文件失败。
+   */
+  export function read(input: FileReadInput): Promise<FileReadResult>
+
+  /**
+   * 改文件：按路径一步一步写，write 整份写、replace 把一段原文换掉。**优先一次改完**：几个文件、几处改动都放进 steps，一次成败，成了给一个 changeId。
+   * 定下改法之后、写进去之前文件被别人改过，整次不写（重新提交就是）。
+   * 路径是管道、设备、套接字，或文件有多个硬链接时不碰。新内容编不成原编码（孤立代理项、GB18030 表示不了的字符）就整次不写。
+   */
+  export function edit(input: FileEditInput): Promise<FileEditResult>
+
+  /**
+   * 撤回一次 edit：那次改的每个文件回到改动前，那次新建的删掉，整次一起。只留最近 50 次改动。
+   */
+  export function undo(input: FileUndoInput): Promise<FileUndoResult>
+
   /** 一批最多 20 个。一批里前面的文件用掉了预算时，读不下的那几个各自算失败条目——单独放进一次 `read` 就行。 */
   interface FileReadInput {
     files: FileReadItem[]
@@ -118,22 +136,4 @@ declare module 'velaros:files' {
 
   /** 文件在磁盘上的文本编码。utf8-bom、utf16le、utf16be 带 BOM，-nobom 的不带；gb18030 也包括 GBK 与 GB2312 的文件。 */
   type TextEncoding = 'utf8' | 'utf8-bom' | 'utf16le' | 'utf16be' | 'utf16le-nobom' | 'utf16be-nobom' | 'gb18030'
-
-  /**
-   * 读文本文件：每个文件交回连续的正文与它第一行的行号（给了 range 就只交那几行）。
-   * 图片、PDF 与其他二进制文件、目录、设备文件、超过 20 MB 的文件，都算这个文件失败。
-   */
-  export function read(input: FileReadInput): Promise<FileReadResult>
-
-  /**
-   * 改文件：按路径一步一步写，write 整份写、replace 把一段原文换掉。**优先一次改完**：几个文件、几处改动都放进 steps，一次成败，成了给一个 changeId。
-   * 定下改法之后、写进去之前文件被别人改过，整次不写（重新提交就是）。
-   * 路径是管道、设备、套接字，或文件有多个硬链接时不碰。新内容编不成原编码（孤立代理项、GB18030 表示不了的字符）就整次不写。
-   */
-  export function edit(input: FileEditInput): Promise<FileEditResult>
-
-  /**
-   * 撤回一次 edit：那次改的每个文件回到改动前，那次新建的删掉，整次一起。只留最近 50 次改动。
-   */
-  export function undo(input: FileUndoInput): Promise<FileUndoResult>
 }

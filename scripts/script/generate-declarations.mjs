@@ -575,7 +575,8 @@ function declarationModule(program, specifier, headers, exports, wanted, wantedV
       .split('\n')
       .map((line) => (line.length > 0 ? `  ${line}` : line))
       .join('\n')
-  const body = [...headers.map(indented), ...types.map(indented), ...exported.map(indented)].join(
+  // 导出的函数排在类型前面：只看得到开头一段时（展示截断），模型先看到有哪些函数、各自做什么，类型往后查。
+  const body = [...headers.map(indented), ...exported.map(indented), ...types.map(indented)].join(
     '\n\n'
   )
   // 这份文字就是模型看到的全部：维护者要的说明（谁生成的、怎么重算）写在随包发布的 surface.ts 与这个脚本里，不进来。

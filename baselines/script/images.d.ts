@@ -5,6 +5,10 @@ declare module 'velaros:images' {
    * 文本文件用读文件的能力读；PDF 与其他文档不在这里看。
    */
 
+  /** 看一批图片（最多 10 张）：图交给你看，返回值里只有尺寸。
+   */
+  export function view(input: ImageViewInput): Promise<ImageViewResult>
+
   /** 一批最多 10 张，单个图片文件最大 20 MB（再大的先用命令缩小）。 */
   interface ImageViewInput {
     files: ImageViewItem[]
@@ -59,8 +63,4 @@ declare module 'velaros:images' {
     width: number
     height: number
   }
-
-  /** 看一批图片（最多 10 张）：图交给你看，返回值里只有尺寸。
-   */
-  export function view(input: ImageViewInput): Promise<ImageViewResult>
 }

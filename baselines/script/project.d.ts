@@ -10,6 +10,30 @@ declare module 'velaros:project' {
    * 失败时 error.code 是原因（INVALID_INPUT、TARGET_NOT_FOUND、AMBIGUOUS_TARGET、NOT_SUPPORTED、PERMISSION_DENIED、超过守内存上限的 SCOPE_VIOLATION……），error.message 写着为什么、下一步怎么办。
    */
 
+  /** 读项目里的文本文件：交回连续的正文与它第一行的行号。看图用 `velaros:images`，目录用 list。
+   */
+  export function read(input: ProjectReadInput): Promise<ProjectReadResult>
+
+  /** 列项目里的文件和目录，按深度优先的稳定顺序全部交回；.gitignore 忽略的与版本库内部（.git）不列。
+   */
+  export function list(input: ProjectListInput): Promise<ProjectListResult>
+
+  /** 按字面文本或正则搜项目源码，交回全部命中与命中处连同前后几行的正文。
+   */
+  export function search(input: ProjectSearchInput): Promise<ProjectSearchResult>
+
+  /** 改项目文件：按路径写整份或换一段原文，steps 按顺序合成一个事务提交。
+   */
+  export function edit(input: ProjectEditInput): Promise<ProjectEditResult>
+
+  /** 看一次改动的差量与状态。
+   */
+  export function inspect(input: ProjectChangeInput): Promise<ProjectChangeInspection>
+
+  /** 整次撤销一次改动：写回原文、删掉它新建的文件。
+   */
+  export function undo(input: ProjectChangeInput): Promise<ProjectUndoResult>
+
   /**
    * files 每项一个文件，一次最多 20 个；每个文件交回请求的整段，看多少、筛什么在程序里定。
    * 一次交回的正文总共不超过 20000000 字符（只为守住内存），装不下的文件在 issues 里：单独读，或者用 range 读一段。
@@ -211,28 +235,4 @@ declare module 'velaros:project' {
 
   /** recode 统一成哪种物理换行。 */
   type ProjectRecodeNewline = 'lf' | 'crlf'
-
-  /** 读项目里的文本文件：交回连续的正文与它第一行的行号。看图用 `velaros:images`，目录用 list。
-   */
-  export function read(input: ProjectReadInput): Promise<ProjectReadResult>
-
-  /** 列项目里的文件和目录，按深度优先的稳定顺序全部交回；.gitignore 忽略的与版本库内部（.git）不列。
-   */
-  export function list(input: ProjectListInput): Promise<ProjectListResult>
-
-  /** 按字面文本或正则搜项目源码，交回全部命中与命中处连同前后几行的正文。
-   */
-  export function search(input: ProjectSearchInput): Promise<ProjectSearchResult>
-
-  /** 改项目文件：按路径写整份或换一段原文，steps 按顺序合成一个事务提交。
-   */
-  export function edit(input: ProjectEditInput): Promise<ProjectEditResult>
-
-  /** 看一次改动的差量与状态。
-   */
-  export function inspect(input: ProjectChangeInput): Promise<ProjectChangeInspection>
-
-  /** 整次撤销一次改动：写回原文、删掉它新建的文件。
-   */
-  export function undo(input: ProjectChangeInput): Promise<ProjectUndoResult>
 }

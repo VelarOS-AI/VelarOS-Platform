@@ -6,6 +6,38 @@ declare module 'velaros:system-store-read' {
    * 除了读，所有操作都只能在 execute 里调用。
    */
 
+  /** 分页列出能访问的空间。
+   */
+  export function list(input: StoreListInput): Promise<StoreEntryPage>
+
+  /** 分页列出一个空间里自己能读的对象元数据；正文用 get 读。
+   */
+  export function keys(input: StoreKeysInput): Promise<StorePage>
+
+  /** 读一个对象与它的版本：没建过是 null，删掉的是墓碑。
+   */
+  export function get(input: StoreKeyInput): Promise<StoreObject | null>
+
+  /** 读订阅里的消息正文；没订阅过是 null。
+   */
+  export function events(input: StoreEventsInput): Promise<StoreEventPage | null>
+
+  /** 分页读别人 share 过来的共享材料正文。
+   */
+  export function read(input: StoreMaterialInput): Promise<StoreMaterialPage>
+
+  /** 订阅主题前缀；相同的声明保留进度。
+   */
+  export function subscribe(input: StoreSubscribeInput): Promise<StoreSubscription>
+
+  /** 业务处理完之后逐条确认消息；只能确认自己订阅范围里的。
+   */
+  export function ack(input: StoreAckInput): Promise<StoreEventAck>
+
+  /** 替换一个空间的关注集合；相同的声明不重置进度。
+   */
+  export function watch(input: StoreWatchInput): Promise<StoreWatch>
+
   /** 翻空间目录：active 为真只列当前任务在用的空间；limit 每页最多 64 个。 */
   interface StoreListInput {
     readonly after?: string
@@ -226,36 +258,4 @@ declare module 'velaros:system-store-read' {
     /** 创建时间。 */
     readonly createdAt: string
   }
-
-  /** 分页列出能访问的空间。
-   */
-  export function list(input: StoreListInput): Promise<StoreEntryPage>
-
-  /** 分页列出一个空间里自己能读的对象元数据；正文用 get 读。
-   */
-  export function keys(input: StoreKeysInput): Promise<StorePage>
-
-  /** 读一个对象与它的版本：没建过是 null，删掉的是墓碑。
-   */
-  export function get(input: StoreKeyInput): Promise<StoreObject | null>
-
-  /** 读订阅里的消息正文；没订阅过是 null。
-   */
-  export function events(input: StoreEventsInput): Promise<StoreEventPage | null>
-
-  /** 分页读别人 share 过来的共享材料正文。
-   */
-  export function read(input: StoreMaterialInput): Promise<StoreMaterialPage>
-
-  /** 订阅主题前缀；相同的声明保留进度。
-   */
-  export function subscribe(input: StoreSubscribeInput): Promise<StoreSubscription>
-
-  /** 业务处理完之后逐条确认消息；只能确认自己订阅范围里的。
-   */
-  export function ack(input: StoreAckInput): Promise<StoreEventAck>
-
-  /** 替换一个空间的关注集合；相同的声明不重置进度。
-   */
-  export function watch(input: StoreWatchInput): Promise<StoreWatch>
 }

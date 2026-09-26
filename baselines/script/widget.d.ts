@@ -6,6 +6,10 @@ declare module 'velaros:widget' {
    * unpkg、esm.sh 加载，不能访问网络接口。
    */
 
+  /** 显示一个小部件，立即返回，不等用户操作。
+   */
+  export function show(input: WidgetRequest): Promise<null>
+
   /**
    * 要显示的小部件：title 是给用户看的标题，1 到 200 个字符；code 是一段 HTML 片段（依次写 style、内容、script，
    * 不写 doctype、html、head、body）或以 <svg 开头的 SVG，1 到 120000 个字符；height 是初始高度，像素，120 到 900，缺省 400。
@@ -15,8 +19,4 @@ declare module 'velaros:widget' {
     readonly code: string
     readonly height?: number
   }
-
-  /** 显示一个小部件，立即返回，不等用户操作。
-   */
-  export function show(input: WidgetRequest): Promise<null>
 }

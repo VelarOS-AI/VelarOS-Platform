@@ -5,6 +5,30 @@ declare module 'velaros:system-memory-local' {
    * 改动只能在 execute 里做。
    */
 
+  /** 按种类与标题分页查当前任务的材料：只有引用、位置、大小与笔记版本。
+   */
+  export function list(input: MemoryQuery): Promise<MemoryPage>
+
+  /** 按引用分页读原文：输入、源码、结果、笔记与材料都用它。
+   */
+  export function read(input: MemoryReadInput): Promise<ContextContent>
+
+  /** 改自己的一份笔记，交回它的新版本。
+   */
+  export function update(input: WorkspaceUpdate): Promise<WorkspaceEntry>
+
+  /** 改自己的任务计划：只给要改的字段，其余保留，交回整份计划。
+   */
+  export function plan(input: Partial<TaskCapsule>): Promise<TaskCapsule>
+
+  /** 保留一份笔记或执行结果的自动展示；不重跑脚本。
+   */
+  export function retain(input: MemoryRetainInput): Promise<MemoryRetention>
+
+  /** 释放一份笔记或执行结果的自动展示，原文仍可召回。
+   */
+  export function release(input: MemoryReleaseInput): Promise<MemoryRetention>
+
   /**
    * 查当前任务的材料目录：kind 按种类筛（notes 笔记、inputs 用户输入、programs 脚本、results 执行结果、history 回复与结果、artifacts 交付物），默认全部；
    * query 按标题关键词筛；after 是上一页的 nextAfter，through 固定目录快照的结束序号；limit 每页最多 64 项。
@@ -145,28 +169,4 @@ declare module 'velaros:system-memory-local' {
    */
   type ContextRecordKind =
     'user' | 'assistant' | 'tool' | 'event' | 'note' | 'checkpoint' | 'audit'
-
-  /** 按种类与标题分页查当前任务的材料：只有引用、位置、大小与笔记版本。
-   */
-  export function list(input: MemoryQuery): Promise<MemoryPage>
-
-  /** 按引用分页读原文：输入、源码、结果、笔记与材料都用它。
-   */
-  export function read(input: MemoryReadInput): Promise<ContextContent>
-
-  /** 改自己的一份笔记，交回它的新版本。
-   */
-  export function update(input: WorkspaceUpdate): Promise<WorkspaceEntry>
-
-  /** 改自己的任务计划：只给要改的字段，其余保留，交回整份计划。
-   */
-  export function plan(input: Partial<TaskCapsule>): Promise<TaskCapsule>
-
-  /** 保留一份笔记或执行结果的自动展示；不重跑脚本。
-   */
-  export function retain(input: MemoryRetainInput): Promise<MemoryRetention>
-
-  /** 释放一份笔记或执行结果的自动展示，原文仍可召回。
-   */
-  export function release(input: MemoryReleaseInput): Promise<MemoryRetention>
 }

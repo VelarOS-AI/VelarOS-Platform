@@ -6,6 +6,28 @@ declare module 'velaros:shell' {
    */
 
   /**
+   * 跑一条命令，等它跑完交回全部输出。background 或 interactive 的命令立刻返回，之后用 listTasks 看它跑到哪了；interactive 一定跑在后台，它要开着等用户在控制台里输入。
+   * 长驻命令不传 background 也会自动转后台，回执里 backgroundProcess.autoStarted 为真。
+   */
+  export function run(input: ShellRunInput): Promise<ShellRunResult>
+
+  /**
+   * 重新选定本机能用的 shell 并读一遍它的环境变量；Windows 上还会重读用户与系统环境变量写回本进程。
+   * 只改本进程的环境，不动用户的 shell 配置文件，也不装任何东西：刷过一次还缺的命令就是没装。
+   */
+  export function refreshEnvironment(): Promise<ShellEnvironment>
+
+  /**
+   * 列出 run 起在后台的任务，最新的在前，每条带着它到现在的全部输出。
+   */
+  export function listTasks(input: ShellListTasksInput): Promise<ShellListTasksResult>
+
+  /**
+   * 停掉一条后台任务。普通终止停不下来时抛错，再带 force: true 来一次；任务不存在时抛错。
+   */
+  export function stop(input: ShellStopInput): Promise<ShellStopResult>
+
+  /**
    * 一条命令。cwd 不给就是当前空间的根目录，相对路径相对它；越出空间允许的范围在执行之前就拒绝。
    * shell 只能填本机有的那几个（环境报告里列着），不填用默认的那个，命令照挑定的 shell 的语法写。
    * timeoutMs 最多 600000，超了按上限跑。
@@ -156,26 +178,4 @@ declare module 'velaros:shell' {
 
   /** 控制台后面接的是什么：真正的终端（宿主提供 PTY，有回显和终端尺寸）还是一根保持打开的 stdin 管道。 */
   type ShellConsoleChannel = 'pty' | 'pipe'
-
-  /**
-   * 跑一条命令，等它跑完交回全部输出。background 或 interactive 的命令立刻返回，之后用 listTasks 看它跑到哪了；interactive 一定跑在后台，它要开着等用户在控制台里输入。
-   * 长驻命令不传 background 也会自动转后台，回执里 backgroundProcess.autoStarted 为真。
-   */
-  export function run(input: ShellRunInput): Promise<ShellRunResult>
-
-  /**
-   * 重新选定本机能用的 shell 并读一遍它的环境变量；Windows 上还会重读用户与系统环境变量写回本进程。
-   * 只改本进程的环境，不动用户的 shell 配置文件，也不装任何东西：刷过一次还缺的命令就是没装。
-   */
-  export function refreshEnvironment(): Promise<ShellEnvironment>
-
-  /**
-   * 列出 run 起在后台的任务，最新的在前，每条带着它到现在的全部输出。
-   */
-  export function listTasks(input: ShellListTasksInput): Promise<ShellListTasksResult>
-
-  /**
-   * 停掉一条后台任务。普通终止停不下来时抛错，再带 force: true 来一次；任务不存在时抛错。
-   */
-  export function stop(input: ShellStopInput): Promise<ShellStopResult>
 }

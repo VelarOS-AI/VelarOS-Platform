@@ -4,6 +4,18 @@ declare module 'velaros:modules' {
    * 拿不准某个模块怎么用时 describe 它，把 declarations 或 template 用 output 交出来再看。
    */
 
+  /** 分页列出模块，可按 space 只看系统成员或业务能力。
+   */
+  export function list(input?: SystemModuleQuery): Promise<SystemModulePage>
+
+  /** 按关键词找模块：匹配模块名、简介与操作名。
+   */
+  export function search(input?: SystemModuleQuery): Promise<SystemModulePage>
+
+  /** 读一个模块的合同：完整声明、用法示例与每个操作的说明。
+   */
+  export function describe(input: SystemModuleDescribeInput): Promise<SystemModuleDescription>
+
   /**
    * 找模块：query 按模块名、简介与操作名匹配关键词；space 只看 system（velaros:system 的成员）或 capability（业务能力），默认全部。
    * 按 offset 翻页，limit 默认 20、最多 64。
@@ -63,16 +75,4 @@ declare module 'velaros:modules' {
     readonly generation: number
     readonly schemaRevision: string
   }
-
-  /** 分页列出模块，可按 space 只看系统成员或业务能力。
-   */
-  export function list(input?: SystemModuleQuery): Promise<SystemModulePage>
-
-  /** 按关键词找模块：匹配模块名、简介与操作名。
-   */
-  export function search(input?: SystemModuleQuery): Promise<SystemModulePage>
-
-  /** 读一个模块的合同：完整声明、用法示例与每个操作的说明。
-   */
-  export function describe(input: SystemModuleDescribeInput): Promise<SystemModuleDescription>
 }

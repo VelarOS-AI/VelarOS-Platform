@@ -13,6 +13,18 @@ declare module 'velaros:memory' {
    * 记忆反映的是写下那时的情况，不是指令；里面提到的文件、函数、开关，用之前先核实还在。
    */
 
+  /** 当前这一份的全部记忆，含正文，按更新时间从新到旧排。
+   */
+  export function list(): Promise<MemoryEntry[]>
+
+  /** 写一条：id 已有就整条覆盖（tags 不给就沿用原来的），没有就新建。
+   */
+  export function save(input: MemorySaveInput): Promise<MemorySaved>
+
+  /** 删一条：真删，删了就没了。
+   */
+  export function remove(input: MemoryIdInput): Promise<MemoryRemoved>
+
   /** 一条记忆。tags 是主题标签；updatedAt 是 ISO 时间，字符串直接比大小就是比先后。 */
   interface MemoryEntry {
     id: string
@@ -55,16 +67,4 @@ declare module 'velaros:memory' {
 
   /** user 用户、feedback 反馈、work 工作、reference 参考。 */
   type MemoryType = 'user' | 'feedback' | 'work' | 'reference'
-
-  /** 当前这一份的全部记忆，含正文，按更新时间从新到旧排。
-   */
-  export function list(): Promise<MemoryEntry[]>
-
-  /** 写一条：id 已有就整条覆盖（tags 不给就沿用原来的），没有就新建。
-   */
-  export function save(input: MemorySaveInput): Promise<MemorySaved>
-
-  /** 删一条：真删，删了就没了。
-   */
-  export function remove(input: MemoryIdInput): Promise<MemoryRemoved>
 }

@@ -6,6 +6,18 @@ declare module 'velaros:code' {
    */
 
   /**
+   * 按一个 intent 问：outline / definition / references / callers / callees / imports / importers / impact / diagnostics。
+   * 语言服务没装或这个文件它不认时，结果会降级成按名字找到的候选，`degraded` 里说清楚。
+   */
+  export function query(input: CodeQueryInput): Promise<CodeResult>
+
+  /**
+   * 要代码图谱后端才答得了的四类：trace（两个符号之间的调用路径）、cycles（依赖环）、deadcode（没用到的代码候选）、routing（框架路由）。
+   * 宿主没接图后端时整个调用失败，报 `UNAVAILABLE`——这时改用 query 的 references、impact 凑合看。
+   */
+  export function analyze(input: CodeAnalysisInput): Promise<CodeResult>
+
+  /**
    * 问代码：一个 intent 就是一句「要知道什么」。
    * outline 这个文件里有什么、definition 符号定义在哪、references 谁在用它、callers 谁调用它、callees 它调用谁、
    * imports 这个文件引了谁、importers 谁引它、impact 改了会波及谁、diagnostics 这个文件报什么错。
@@ -89,16 +101,4 @@ declare module 'velaros:code' {
     versioned: boolean
     revisions: Array<{ revision: string; scope: string }>
   }
-
-  /**
-   * 按一个 intent 问：outline / definition / references / callers / callees / imports / importers / impact / diagnostics。
-   * 语言服务没装或这个文件它不认时，结果会降级成按名字找到的候选，`degraded` 里说清楚。
-   */
-  export function query(input: CodeQueryInput): Promise<CodeResult>
-
-  /**
-   * 要代码图谱后端才答得了的四类：trace（两个符号之间的调用路径）、cycles（依赖环）、deadcode（没用到的代码候选）、routing（框架路由）。
-   * 宿主没接图后端时整个调用失败，报 `UNAVAILABLE`——这时改用 query 的 references、impact 凑合看。
-   */
-  export function analyze(input: CodeAnalysisInput): Promise<CodeResult>
 }

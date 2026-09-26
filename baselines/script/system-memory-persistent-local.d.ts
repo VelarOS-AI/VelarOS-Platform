@@ -10,6 +10,42 @@ declare module 'velaros:system-memory-persistent-local' {
    * 改动只能在 execute 里做。
    */
 
+  /** 分页召回长期记忆，含正文。
+   */
+  export function recall(input: LongTermMemoryQuery): Promise<LongTermMemoryPage>
+
+  /** 写一条长期记忆：同一个 id 整条覆盖，tags 不给就沿用原来的。
+   */
+  export function save(input: MemorySaveInput): Promise<MemorySaved>
+
+  /** 删掉一条长期记忆的原文；与 release 只释放当前任务的展示不同。
+   */
+  export function remove(input: MemoryIdInput): Promise<MemoryRemoved>
+
+  /** 按种类与标题分页查当前任务的材料：只有引用、位置、大小与笔记版本。
+   */
+  export function list(input: MemoryQuery): Promise<MemoryPage>
+
+  /** 按引用分页读原文：输入、源码、结果、笔记与材料都用它。
+   */
+  export function read(input: MemoryReadInput): Promise<ContextContent>
+
+  /** 改自己的一份笔记，交回它的新版本。
+   */
+  export function update(input: WorkspaceUpdate): Promise<WorkspaceEntry>
+
+  /** 改自己的任务计划：只给要改的字段，其余保留，交回整份计划。
+   */
+  export function plan(input: Partial<TaskCapsule>): Promise<TaskCapsule>
+
+  /** 保留一份笔记或执行结果的自动展示；不重跑脚本。
+   */
+  export function retain(input: MemoryRetainInput): Promise<MemoryRetention>
+
+  /** 释放一份笔记或执行结果的自动展示，原文仍可召回。
+   */
+  export function release(input: MemoryReleaseInput): Promise<MemoryRetention>
+
   /** 召回长期记忆：id 精确取一条；query 按 id、标题、描述、标签与正文匹配关键词；按 offset 翻页，limit 默认 8、最多 32。 */
   interface LongTermMemoryQuery {
     readonly id?: string
@@ -208,40 +244,4 @@ declare module 'velaros:system-memory-persistent-local' {
    */
   type ContextRecordKind =
     'user' | 'assistant' | 'tool' | 'event' | 'note' | 'checkpoint' | 'audit'
-
-  /** 分页召回长期记忆，含正文。
-   */
-  export function recall(input: LongTermMemoryQuery): Promise<LongTermMemoryPage>
-
-  /** 写一条长期记忆：同一个 id 整条覆盖，tags 不给就沿用原来的。
-   */
-  export function save(input: MemorySaveInput): Promise<MemorySaved>
-
-  /** 删掉一条长期记忆的原文；与 release 只释放当前任务的展示不同。
-   */
-  export function remove(input: MemoryIdInput): Promise<MemoryRemoved>
-
-  /** 按种类与标题分页查当前任务的材料：只有引用、位置、大小与笔记版本。
-   */
-  export function list(input: MemoryQuery): Promise<MemoryPage>
-
-  /** 按引用分页读原文：输入、源码、结果、笔记与材料都用它。
-   */
-  export function read(input: MemoryReadInput): Promise<ContextContent>
-
-  /** 改自己的一份笔记，交回它的新版本。
-   */
-  export function update(input: WorkspaceUpdate): Promise<WorkspaceEntry>
-
-  /** 改自己的任务计划：只给要改的字段，其余保留，交回整份计划。
-   */
-  export function plan(input: Partial<TaskCapsule>): Promise<TaskCapsule>
-
-  /** 保留一份笔记或执行结果的自动展示；不重跑脚本。
-   */
-  export function retain(input: MemoryRetainInput): Promise<MemoryRetention>
-
-  /** 释放一份笔记或执行结果的自动展示，原文仍可召回。
-   */
-  export function release(input: MemoryReleaseInput): Promise<MemoryRetention>
 }
