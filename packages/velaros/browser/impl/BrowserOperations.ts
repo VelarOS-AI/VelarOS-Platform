@@ -227,6 +227,8 @@ export interface BrowserOperationsApi {
    */
   reload(ctx: BrowserOperationContext): Promise<BrowserPageNavigationResult>
   /** @AgentView 等页面里一个条件成立，交回判定式的值（元素出现、文字出现、地址变了、数据加载完，都写成一个判定式）。
+   * 判定式盯着你要的数据本身：点「加载更多」之后等行数比点之前多，翻页之后等第一条变了；别只等「页面有变化」——按钮先变成
+   * 「加载中」也算变化，那时数据还没到，读出来的就是不全的。
    * @OperationEffect write
    */
   waitForFunction(input: BrowserWaitForFunctionInput, ctx: BrowserOperationContext): Promise<any>
