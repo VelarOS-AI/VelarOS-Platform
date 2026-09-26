@@ -44,7 +44,7 @@ import { officePreviewOperations } from './operations/OfficePreviewOperations.js
 /**
  * @AgentView
  * 办公文档：生成 Word、PowerPoint、Excel，读 PDF 的文字、编辑 PDF，Word 转 PDF、LaTeX 编译成 PDF，预览 Office 文档，把文档转成 Markdown。
- * 路径相对当前空间的工作区根（也可以写根里面的绝对路径），出了根一律拒绝；目标文件已经在时要传 overwrite: true 才覆盖。
+ * 路径怎么写、能到哪儿由当前空间决定（环境报告里写着），出了空间的根一律拒绝；目标文件已经在时要传 overwrite: true 才覆盖。
  * 失败抛的错误带 code：OFFICE_OUTPUT_EXISTS 文件已在、OFFICE_INPUT_MISSING 输入文件不在、OFFICE_PATH_OUTSIDE_PROJECT 出了工作区根、
  * OFFICE_CONVERTER_MISSING 本机缺 LibreOffice 或 LaTeX 编译器（照 message 告诉用户，不要自己去装）、
  * OFFICE_CONVERSION_FAILED 外部转换失败（message 里有命令输出的结尾，LaTeX 就照着改源码再编）、OFFICE_MARKITDOWN_UNAVAILABLE 没装 MarkItDown。

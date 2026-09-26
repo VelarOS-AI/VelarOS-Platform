@@ -22,7 +22,7 @@ INV-12（工具 schema 由源码生成）随工具面一起作废，模型面的
 
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
-| INV-1 | 读写目标按解开符号链接后的真实路径都在空间给的工作区根内，越界一律拒绝（`OFFICE_PATH_OUTSIDE_PROJECT`），不写、不读 | 测试 | `spec/acceptance.test.ts` |
+| INV-1 | 读写目标按解开符号链接后的真实路径都在空间给的工作区根内，越界一律拒绝（`OFFICE_PATH_OUTSIDE_PROJECT`），不写、不读；空间给的路径换算（`resolvePath`）只决定路径怎么解析，换出来的照样按根判 | 测试 | `spec/acceptance.test.ts` |
 | INV-2 | 九个操作的入参里没有换执行目录的字段：路径只相对空间给的工作区根，多给 cwd 这类字段当场拒绝 | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 目标已存在时不带 `overwrite` 不覆盖（`OFFICE_OUTPUT_EXISTS`），原文件一个字节不动；只有 Word 的 appendMode 追加是例外 | 测试 | `spec/acceptance.test.ts` |
 | INV-5 | 外部转换器只经空间端口按原生 argv 执行，本单元不拼 shell 串、不自己起进程 | 测试 | `spec/acceptance.test.ts` |

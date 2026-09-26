@@ -72,7 +72,7 @@ console.log(page.width, page.height, page.pageCount, page.buffer.byteLength)
 
 ## 约定
 
-- 路径相对端口给的 `getRootPath()`，也可以写根里面的绝对路径；按解开符号链接后的真实路径判断，出了根抛 `OFFICE_PATH_OUTSIDE_PROJECT`，不读不写。写盘不问人，这就是全部边界。
+- 路径相对端口给的 `getRootPath()`，也可以写根里面的绝对路径；端口给了 `resolvePath` 就先经它换成绝对路径（比如系统空间把 `~` 展开到家目录、相对路径按系统工作区算）。按解开符号链接后的真实路径判断，出了根抛 `OFFICE_PATH_OUTSIDE_PROJECT`，不读不写。写盘不问人，这就是全部边界。
 - 目标已在又没传 `overwrite: true` 抛 `OFFICE_OUTPUT_EXISTS`，原文件一个字节不动；只有 `createWord` 的 `appendMode` 例外。
 - 入参在做事之前整份核对，不对抛 `VALIDATION`（message 点名字段），端口一次都不调；正文 `content` 与结构化的 `blocks`、`slides`、`sheets` 只能给一样。
 - 外部转换器只经端口的 `runCommand` 按原生 argv 执行，本单元不拼 shell 串、不自己起进程、不装东西；超时由本单元在命令选项里给，进程怎么起、怎么收由宿主的 `runCommand` 负责。

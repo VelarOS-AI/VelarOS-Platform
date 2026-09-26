@@ -61,6 +61,50 @@ describe('办公文档不变量验收', () => {
     })
   })
 
+  test('INV-1 空间给的路径换算只决定怎么解析，换出来的路径照样按根判', async () => {
+    const { harness } = await workspace()
+    await putFile(harness.root, 'home/docs/paper.pdf', await pdfWithPages(['HOME']))
+    const seen: string[] = []
+    const home = (path: string) =>
+      path.startsWith('~/')
+        ? join(harness.root, 'home', path.slice(2))
+        : join(harness.root, 'work', path)
+    const office = officeSpace({
+      ...harness.context,
+      office: {
+        ...harness.context.office,
+        resolvePath: (path) => {
+          seen.push(path)
+          return home(path)
+        },
+      },
+    })
+    const sheet = await office.call('createSpreadsheet', {
+      outputPath: '~/sheets/a',
+      content: 'a,b\n1,2',
+    })
+    expect(sheet.path.endsWith(join('home', 'sheets', 'a.xlsx'))).toBe(true)
+    const relative = await office.call('createSpreadsheet', {
+      outputPath: 'b.xlsx',
+      content: 'a,b\n1,2',
+    })
+    expect(relative.path.endsWith(join('work', 'b.xlsx'))).toBe(true)
+    expect(
+      (await office.call('readPdf', { inputPath: '~/docs/paper.pdf' })).pages[0].text
+    ).toContain('HOME')
+    expect(seen).toEqual(['~/sheets/a', 'b.xlsx', '~/docs/paper.pdf'])
+    const escaping = officeSpace({
+      ...harness.context,
+      office: {
+        ...harness.context.office,
+        resolvePath: () => join(harness.root, '..', 'escaped.xlsx'),
+      },
+    })
+    expect(
+      await failureOf(escaping.call('createSpreadsheet', { outputPath: 'x', content: 'a,b\n1,2' }))
+    ).toMatchObject({ code: OfficeErrorCodes.pathOutsideProject })
+  })
+
   test('INV-2 入参里没有换执行目录的字段，多给了当场拒绝', async () => {
     for (const field of ['cwd', 'workingDirectory', 'rootPath'])
       expect(OfficeDeclarations).not.toContain(`${field}?:`)

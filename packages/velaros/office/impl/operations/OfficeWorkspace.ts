@@ -3,6 +3,8 @@
  * 所有操作的读写路径都经它；路径包含门只有这一处，别处不要自己 resolve 完就用。
  */
 
+import { isBlank } from '@velaros-ai/core'
+
 import type { OfficeOperationContext } from '../../contract/requires.js'
 import type { OfficeWordInput } from '../../types/office.js'
 import {
@@ -18,6 +20,11 @@ import {
 export interface OfficeWorkspaceApi {
   /** 当前工作区根的绝对路径；空间没有可用根时抛错。 */
   rootPath(ctx: OfficeOperationContext): string
+  /**
+   * 把模型写的路径换成绝对路径：空间给了换算（`~` 展开到家目录、相对路径按系统工作区算）就用它，否则原样交回、
+   * 之后相对工作区根解析。换出来的路径照样按根判；空的原样交回，由后面报「路径不能为空」。
+   */
+  userPath(ctx: OfficeOperationContext, path: string): string
   /** 准备输出路径：补齐/校验扩展名、按 overwrite 挡覆盖、建好父目录。 */
   prepareOutput(
     ctx: OfficeOperationContext,
@@ -43,20 +50,32 @@ export class OfficeWorkspace implements OfficeWorkspaceApi {
     return ctx.office.getRootPath()
   }
 
+  public userPath(ctx: OfficeOperationContext, path: string): string {
+    return ctx.office.resolvePath && !isBlank(path) ? ctx.office.resolvePath(path.trim()) : path
+  }
+
   public async prepareOutput(
     ctx: OfficeOperationContext,
     outputPath: string,
     extension: string,
     overwrite?: boolean
   ): Promise<{ path: string; created: boolean }> {
-    return prepareOfficeOutputPath(this.rootPath(ctx), outputPath, extension, overwrite)
+    return prepareOfficeOutputPath(
+      this.rootPath(ctx),
+      this.userPath(ctx, outputPath),
+      extension,
+      overwrite
+    )
   }
 
   public async prepareWordOutput(
     ctx: OfficeOperationContext,
     input: Pick<OfficeWordInput, 'outputPath' | 'overwrite' | 'appendMode'>
   ): Promise<{ path: string; created: boolean; append: boolean }> {
-    return prepareWordDocumentOutputPath(this.rootPath(ctx), input)
+    return prepareWordDocumentOutputPath(this.rootPath(ctx), {
+      ...input,
+      outputPath: this.userPath(ctx, input.outputPath),
+    })
   }
 
   public async resolveInput(
@@ -64,7 +83,11 @@ export class OfficeWorkspace implements OfficeWorkspaceApi {
     inputPath: string,
     extensions: readonly string[]
   ): Promise<string> {
-    return resolveInputPathWithExtensions(this.rootPath(ctx), inputPath, extensions)
+    return resolveInputPathWithExtensions(
+      this.rootPath(ctx),
+      this.userPath(ctx, inputPath),
+      extensions
+    )
   }
 }
 

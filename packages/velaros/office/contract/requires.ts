@@ -26,6 +26,11 @@ import type {
 export interface OfficeSpacePort {
   /** 当前可写的工作区根；产物只能落在它里面。没有任何可用根时抛错。 */
   getRootPath: () => string
+  /**
+   * 把模型写的路径换成绝对路径（比如 `~` 展开到家目录、相对路径按系统工作区算）；不给就相对 `getRootPath` 解析。
+   * 换出来的路径照旧要落在工作区根里。
+   */
+  resolvePath?: (path: string) => string
   /** 探测这几个命令在本机是否可用、路径在哪。 */
   inspectEnvironment: (commands?: string[]) => Promise<OfficeEnvironmentInspection>
   /** 执行一条外部命令；只收原生 argv，本单元不拼 shell 串。 */
