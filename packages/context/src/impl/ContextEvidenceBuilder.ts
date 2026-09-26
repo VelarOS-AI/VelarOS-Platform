@@ -13,7 +13,6 @@ import type {
   ContextEvidence,
   ContextGap,
   ContextPlan,
-  ContextPlannerDecision,
   ContextSelection,
   ContextSourceRead,
   ContextTarget,
@@ -26,9 +25,7 @@ import type {
 } from '../types/context.js'
 import { contextProgress } from '../utils/progress.js'
 import { contextFailure, sameContextRef } from '../utils/state.js'
-import { checkContextSelections } from '../utils/view.js'
 import { awaitContextOperation, contextGap, contextHash, resolveViewLimits } from '../utils/view.js'
-import { checkPlannerDecision } from '../utils/view-input.js'
 
 import { createEvidenceAccess } from './EvidenceAccess.js'
 
@@ -44,7 +41,7 @@ export interface ContextEvidenceBuilderApi {
   validate(view: ModelView, signal: AbortSignal): Promise<boolean>
 }
 
-/** 只从已登记源读取事实，模型计划仅决定候选和表示。 */
+/** 只从已登记源读取事实；观察需求只决定读哪些候选、用什么表示。 */
 export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
   private readonly sources: ReadonlyMap<string, ContextSourcePort>
   private readonly access
@@ -119,7 +116,7 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
     const candidates: ContextCandidate[] = []
     const direct: ContextSelection[] = []
     const degraded: string[] = []
-    const budget = { searches: 0, bytes: 0, calls: 0 }
+    const budget = { searches: 0 }
     const readSource = async (
       target: ContextTarget,
       form: ContextViewForm,
@@ -230,100 +227,22 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
     let chosen: readonly ContextSelection[] = []
     const semantic = task.intents.filter((intent) => intent.request.kind === 'semantic')
     if (!isEmpty(semantic)) {
-      if (options.planner) {
-        for (let attempt = 0; attempt < this.limits.plannerCalls; attempt++) {
-          signal.throwIfAborted()
-          try {
-            for (let index = candidates.length - 1; index >= 0; index--) {
-              try {
-                await this.authorize(scope, candidates[index]!.target, task, signal)
-              } catch {
-                Log.tag('ActRuntime').debug('ContextEvidenceBuilder 已进入异常处理或降级分支')
-                candidates.splice(index, 1)
-                degraded.push('候选范围已变化，已移除其预览')
-              }
-            }
-            signal.throwIfAborted()
-            budget.calls++
-            const decision: ContextPlannerDecision = await awaitContextOperation(
-              options.planner.decide(
-                {
-                  scope,
-                  task: taskFrame,
-                  intents: semantic,
-                  candidates,
-                  sources: [...this.sources.keys()],
-                  remainingCalls: this.limits.plannerCalls - attempt,
-                  feedback: degraded.slice(-3),
-                },
-                signal
-              ),
-              signal
-            )
-            checkPlannerDecision(decision)
-            if (decision.kind === 'select') {
-              checkContextSelections(decision.selections, candidates, semantic)
-              chosen = decision.selections
-              break
-            }
-            if (decision.kind === 'insufficient') {
-              if (decision.intentIds.some((id) => !semantic.some((intent) => intent.id === id)))
-                throw contextFailure('PLAN_SCOPE', '未知需求')
-              degraded.push('规划器报告证据不足')
-              break
-            }
-            if (decision.kind === 'search') {
-              const intent = semantic.find((item) => item.id === decision.intentId)
-              const source = this.sources.get(decision.sourceId)
-              if (!intent || !source) throw contextFailure('PLAN_SCOPE', '检索引用不在当前候选范围')
-              await search(intent, source, decision.query, decision.limit)
-            } else {
-              for (const id of decision.candidateIds) {
-                if (++budget.searches > this.limits.searchCalls)
-                  throw contextFailure('INSPECT_LIMIT', '只读检索与检查共享预算耗尽')
-                const candidate = candidates.find((item) => item.id === id)
-                if (!candidate || budget.bytes >= this.limits.inspectBytes)
-                  throw contextFailure('INSPECT_LIMIT', '候选检查预算或身份无效')
-                const read = await readSource(
-                  candidate.target,
-                  'excerpt',
-                  { kind: 'after-step' },
-                  this.limits.inspectBytes - budget.bytes
-                )
-                const bytes = new TextEncoder().encode(read.text).byteLength
-                if (bytes > this.limits.inspectBytes - budget.bytes)
-                  throw contextFailure('INSPECT_LIMIT', '适配器超过读取预算')
-                budget.bytes += bytes
-                const index = candidates.indexOf(candidate)
-                candidates[index] = { ...candidate, preview: read.text.slice(0, 2000) }
-              }
-            }
-          } catch (error) {
-            Log.tag('ActRuntime').debug('ContextEvidenceBuilder 已进入异常处理或降级分支')
-            signal.throwIfAborted()
-            degraded.push(`规划未被接受：${(error as { code?: string }).code ?? 'PLANNER_FAILED'}`)
-          }
-        }
-      }
-      if (isEmpty(chosen)) {
-        chosen = candidates
-          .filter((candidate) => semantic.some((intent) => candidate.intentIds.includes(intent.id)))
-          .slice(0, 8)
-          .map((candidate) => ({
-            candidateId: candidate.id,
-            intentIds: candidate.intentIds,
-            form: candidate.forms.find((form) => form !== 'diff') ?? 'full',
-          }))
-        degraded.push('语义需求使用确定性候选回退，覆盖仍需判断')
-        for (const intent of semantic)
-          gaps.push(contextGap(intent, 'INSUFFICIENT_EVIDENCE', '确定性候选尚未证明语义需求已覆盖'))
-      }
+      chosen = candidates
+        .filter((candidate) => semantic.some((intent) => candidate.intentIds.includes(intent.id)))
+        .slice(0, 8)
+        .map((candidate) => ({
+          candidateId: candidate.id,
+          intentIds: candidate.intentIds,
+          form: candidate.forms.find((form) => form !== 'diff') ?? 'full',
+        }))
+      degraded.push('语义需求使用确定性候选，覆盖仍需判断')
+      for (const intent of semantic)
+        gaps.push(contextGap(intent, 'INSUFFICIENT_EVIDENCE', '确定性候选尚未证明语义需求已覆盖'))
     }
     const plan: ContextPlan = {
       id: crypto.randomUUID(),
       scope,
       selections: [...direct, ...chosen],
-      plannerCalls: budget.calls,
       degraded,
     }
     await this.options.context.append(
@@ -434,7 +353,6 @@ export class ContextEvidenceBuilder implements ContextEvidenceBuilderApi {
       gaps,
       coverage,
       readSet: evidence.flatMap((block) => block.readSet),
-      plannerCalls: plan.plannerCalls,
       degraded,
       builtAt: new Date().toISOString(),
     }

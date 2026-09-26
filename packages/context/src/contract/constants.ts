@@ -33,11 +33,9 @@ export const DefaultContextViewLimits = Object.freeze({
   intents: 16,
   /** 候选证据数量上限。 */
   candidates: 32,
-  /** 每次物化的规划调用上限。 */
-  plannerCalls: 2,
   /** 每次物化的来源检索上限。 */
   searchCalls: 6,
-  /** 规划器检查正文的字节上限。 */
+  /** 物化时单次来源读取的字节上限。 */
   inspectBytes: 65536,
   /** 物化证据的字符上限。 */
   evidenceChars: 24000,
@@ -95,21 +93,6 @@ export const ViewIntentLimits = Object.freeze({
   maxTokensHint: 100000,
   /** 语义需求最多带几个锚点。 */
   anchors: 8,
-})
-/** 上下文规划器一次决定对外约定的上限。 */
-export const ContextPlannerLimits = Object.freeze({
-  /** 一次最多选入的候选数。 */
-  selections: 32,
-  /** 一项选择或缺口最多对应的需求数。 */
-  intentIds: 16,
-  /** 检索语句最多多少字符。 */
-  queryChars: 2000,
-  /** 一次检索最多要多少个候选。 */
-  searchLimit: 32,
-  /** 一次最多细看的候选数。 */
-  candidateIds: 8,
-  /** 缺口说明最多多少字符。 */
-  reasonChars: 2000,
 })
 /** 任务计划对外约定的上限。 */
 export const TaskCapsuleLimits = Object.freeze({

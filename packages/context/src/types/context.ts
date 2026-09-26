@@ -235,51 +235,24 @@ export interface ContextCandidate extends ContextSourceHit {
   readonly id: string
   readonly intentIds: readonly string[]
 }
-/** 模型只选择登记候选，不能提供事实正文。 */
+/** 选择只指向已登记的候选，不携带事实正文。 */
 export interface ContextSelection {
   readonly candidateId: string
   readonly intentIds: readonly string[]
   readonly form: ContextViewForm
 }
-/** 有界上下文模型的一次控制决策。 */
-export type ContextPlannerDecision =
-  | { readonly kind: 'select'; readonly selections: readonly ContextSelection[] }
-  | {
-      readonly kind: 'search'
-      readonly intentId: string
-      readonly sourceId: string
-      readonly query: string
-      readonly limit: number
-    }
-  | { readonly kind: 'inspect'; readonly candidateIds: readonly string[] }
-  | {
-      readonly kind: 'insufficient'
-      readonly intentIds: readonly string[]
-      readonly reason: string
-    }
-/** 同一任务的共享事实与进度，两个模型步骤按职责读取同一快照。 */
+/** 同一任务的共享事实与进度，每次物化的视图都以它为底。 */
 export interface ContextTaskFrame {
   readonly goals: readonly ContextContent[]
   readonly capsule: TaskCapsule
   readonly mandatory: readonly ContextFeedback[]
   readonly lastStep?: ContextStepView
 }
-/** 规划器从当前任务快照和候选中选择证据。 */
-export interface ContextPlannerInput {
-  readonly scope: ContextTaskScope
-  readonly task: ContextTaskFrame
-  readonly intents: readonly RegisteredViewIntent[]
-  readonly candidates: readonly ContextCandidate[]
-  readonly sources: readonly string[]
-  readonly remainingCalls: number
-  readonly feedback: readonly string[]
-}
 /** 已校验的物理证据选择。 */
 export interface ContextPlan {
   readonly id: string
   readonly scope: ContextTaskScope
   readonly selections: readonly ContextSelection[]
-  readonly plannerCalls: number
   readonly degraded: readonly string[]
 }
 /** 缺口必须留在最终视图中。 */
@@ -389,7 +362,6 @@ export interface ModelView extends ContextTaskFrame {
     readonly status: 'satisfied' | 'partial' | 'missing'
   }>
   readonly readSet: readonly ContextReadStamp[]
-  readonly plannerCalls: number
   readonly degraded: readonly string[]
   readonly builtAt: string
 }
@@ -404,7 +376,7 @@ export type ContextTaskStatus =
   | 'completed'
   | 'cancelled'
   | 'failed'
-/** 双角色用量统一记账，供应商没有报告时保留 unknown。 */
+/** 主模型与搜索、整理会话的用量统一记账，供应商没有报告时保留 unknown。 */
 export interface ContextTaskUsage {
   readonly mainCalls: number
   readonly contextCalls: number
@@ -458,11 +430,10 @@ export interface ContextTaskState {
   readonly usage: ContextTaskUsage
   readonly verification: 'unverified' | 'verified'
 }
-/** 宿主配置的有限预算；主模型与上下文模型共同消费。 */
+/** 宿主配置的有限预算；模型调用与 token 预算由主模型和搜索、整理会话共用。 */
 export interface ContextViewLimits {
   readonly intents: number
   readonly candidates: number
-  readonly plannerCalls: number
   readonly searchCalls: number
   readonly inspectBytes: number
   readonly evidenceChars: number

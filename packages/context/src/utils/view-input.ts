@@ -1,12 +1,7 @@
 import { isArray, isPlainObject, isString, isUndefined } from '@velaros-ai/core'
 
-import {
-  ContextPlannerLimits,
-  ContextViewForms,
-  TaskCapsuleLimits,
-  ViewIntentLimits,
-} from '../contract/constants.js'
-import type { ContextPlannerDecision, TaskCapsule, ViewIntentInput } from '../types/context.js'
+import { ContextViewForms, TaskCapsuleLimits, ViewIntentLimits } from '../contract/constants.js'
+import type { TaskCapsule, ViewIntentInput } from '../types/context.js'
 
 import { contextFailure } from './state.js'
 
@@ -134,43 +129,6 @@ export function checkViewIntent(value: unknown): asserts value is ViewIntentInpu
   checkText(value.objective, 'objective', 1, ViewIntentLimits.objectiveChars)
   if (!isUndefined(value.anchors))
     checkList(value.anchors, 'anchors', 0, ViewIntentLimits.anchors, checkTarget)
-}
-
-/** 上下文规划器的一次决定，按 `ContextPlannerDecision` 与 `ContextPlannerLimits` 逐项核对。 */
-export function checkPlannerDecision(value: unknown): asserts value is ContextPlannerDecision {
-  const id = (entry: unknown, label: string) => checkText(entry, label, 0)
-  if (!isPlainObject(value)) throw viewInput('规划决定必须是对象')
-  switch (value.kind) {
-    case 'select':
-      checkFields(value, ['kind', 'selections'], '规划决定')
-      return checkList(
-        value.selections,
-        'selections',
-        0,
-        ContextPlannerLimits.selections,
-        (entry, label) => {
-          checkFields(entry, ['candidateId', 'intentIds', 'form'], label)
-          id(entry.candidateId, `${label}.candidateId`)
-          checkList(entry.intentIds, `${label}.intentIds`, 1, ContextPlannerLimits.intentIds, id)
-          checkForm(entry.form, `${label}.form`)
-        }
-      )
-    case 'search':
-      checkFields(value, ['kind', 'intentId', 'sourceId', 'query', 'limit'], '规划决定')
-      id(value.intentId, 'intentId')
-      id(value.sourceId, 'sourceId')
-      checkText(value.query, 'query', 1, ContextPlannerLimits.queryChars)
-      return checkInteger(value.limit, 'limit', 1, ContextPlannerLimits.searchLimit)
-    case 'inspect':
-      checkFields(value, ['kind', 'candidateIds'], '规划决定')
-      return checkList(value.candidateIds, 'candidateIds', 1, ContextPlannerLimits.candidateIds, id)
-    case 'insufficient':
-      checkFields(value, ['kind', 'intentIds', 'reason'], '规划决定')
-      checkList(value.intentIds, 'intentIds', 1, ContextPlannerLimits.intentIds, id)
-      return checkText(value.reason, 'reason', 1, ContextPlannerLimits.reasonChars)
-    default:
-      throw viewInput('kind 只能是 select、search、inspect 或 insufficient')
-  }
 }
 
 /** 模型对任务计划的一次修改（只给要改的字段），按 `TaskCapsule` 与 `TaskCapsuleLimits` 逐项核对。 */

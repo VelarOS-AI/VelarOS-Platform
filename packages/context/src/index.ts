@@ -16,7 +16,6 @@ export type {
 export type {
   ContextBuildOptions,
   ContextCompletionPort,
-  ContextPlannerPort,
   ContextSourcePort,
   ContextViewOptions,
 } from './contract/requires.js'
@@ -44,7 +43,6 @@ export type { ContextInputFile, ContextInputSummary, ContextUserInput } from './
 export type {
   ContextAppend,
   ContextArtifactProvenance,
-  ContextCandidate,
   ContextCompletionResult,
   ContextContent,
   ContextEvidence,
@@ -53,8 +51,6 @@ export type {
   ContextHourlyUsage,
   ContextObjectCollection,
   ContextObjectCollectionResult,
-  ContextPlannerDecision,
-  ContextPlannerInput,
   ContextProgress,
   ContextProjection,
   ContextQuery,
@@ -68,7 +64,6 @@ export type {
   ContextResourceTarget,
   ContextSearchHit,
   ContextSearchPage,
-  ContextSelection,
   ContextSelector,
   ContextSnapshot,
   ContextSourceCapabilities,

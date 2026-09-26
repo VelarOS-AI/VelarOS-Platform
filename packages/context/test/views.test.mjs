@@ -75,7 +75,6 @@ test('INV-3 A04: edits materialize the latest revision and preserve protected go
   assert.equal(next.evidence[0].body, 'version two')
   assert.equal(next.readSet[0].revision, 'v2')
   assert.equal(next.goals[0].text, 'Keep the user constraint exactly.')
-  assert.equal(next.plannerCalls, 0)
   assert.equal((await f.view.complete()).verified, false)
   assert.equal((await f.view.inspect()).status, 'completed')
 })
@@ -123,59 +122,60 @@ test('A05/A17: stale versions and revoked scope cannot be published', async (t) 
   assert.equal(result.gaps[0].code, 'DENIED')
 })
 
-test('INV-5 A02/A08: semantic planner only selects registered candidates within a bound', async (t) => {
-  const f = await fixture(t)
-  await f.view.startStep('semantic')
+test('INV-5 A02/A08: semantic requests only read registered candidates within the candidate and search bounds', async (t) => {
+  const hits = (...ids) =>
+    ids.map((resourceId) => ({
+      target: { kind: 'resource', sourceId: 'project', resourceId },
+      preview: `preview of ${resourceId}`,
+      forms: ['full'],
+    }))
+  // 候选上限：检索多给的命中不登记，也不物化
+  const f = await fixture(t, { candidates: 2 })
+  f.source.search = async () => hits('a.ts', 'b.ts', 'c.ts')
+  await f.view.startStep('candidates')
   await f.view.request({
     kind: 'semantic',
     objective: 'find authentication logic',
     purpose: 'impact analysis',
   })
   await f.view.settle([])
-  let calls = 0
-  const result = await f.view.build({
-    maxChars: 12000,
-    planner: {
-      decide: async (input) => {
-        calls++
-        if (calls === 1)
-          return {
-            kind: 'select',
-            selections: [
-              { candidateId: 'fabricated', intentIds: [input.intents[0].id], form: 'full' },
-            ],
-          }
-        return {
-          kind: 'select',
-          selections: [
-            { candidateId: input.candidates[0].id, intentIds: [input.intents[0].id], form: 'full' },
-          ],
-        }
-      },
-    },
-  })
-  assert.equal(calls, 2)
-  assert.equal(result.evidence[0].body, 'version one')
-  assert.equal(result.evidence[0].trust, 'source-data')
-  assert.equal(result.gaps.length, 0)
+  const bounded = await f.view.build({ maxChars: 12000 })
+  assert.deepEqual(
+    bounded.evidence.map((item) => item.target.resourceId),
+    ['a.ts', 'b.ts']
+  )
+  assert(bounded.evidence.every((item) => item.body === 'version one'))
+  assert(bounded.evidence.every((item) => item.trust === 'source-data'))
+  // 检索次数上限：第二条需求不再检索，它的缺口照样留着，原始目标也不丢
+  const g = await fixture(t, { searchCalls: 1 })
+  let searches = 0
+  g.source.search = async () => {
+    searches++
+    return hits('a.ts')
+  }
+  await g.view.startStep('searches')
+  await g.view.request({ kind: 'semantic', objective: 'find authentication logic' })
+  await g.view.request({ kind: 'semantic', objective: 'find session storage' })
+  await g.view.settle([])
+  const limited = await g.view.build({ maxChars: 12000 })
+  assert.equal(searches, 1)
+  assert.deepEqual(
+    limited.coverage.map((item) => item.status),
+    ['partial', 'missing']
+  )
+  assert.deepEqual(
+    limited.gaps.map((gap) => gap.code),
+    ['INSUFFICIENT_EVIDENCE', 'INSUFFICIENT_EVIDENCE']
+  )
+  assert.equal(limited.goals[0].text, 'Keep the user constraint exactly.')
 })
 
-test('A13/A27: failed planner falls back with an honest semantic coverage gap', async (t) => {
+test('A13/A27: semantic requests read search candidates and keep an honest coverage gap', async (t) => {
   const f = await fixture(t)
   await f.view.startStep('semantic')
   await f.view.request({ kind: 'semantic', objective: 'find logic', purpose: 'investigate' })
   await f.view.settle([])
-  let calls = 0
-  const result = await f.view.build({
-    maxChars: 12000,
-    planner: {
-      decide: async () => {
-        calls++
-        throw Error('provider offline')
-      },
-    },
-  })
-  assert.equal(calls, 2)
+  const result = await f.view.build({ maxChars: 12000 })
   assert.equal(result.evidence.length, 1)
   assert.equal(result.coverage[0].status, 'partial')
   assert.equal((await f.view.complete()).completed, false)
@@ -322,7 +322,7 @@ test('A26: observed-only sources disclose weak freshness and never assert a snap
   assert.equal(view.readSet[0].revision, null)
 })
 
-test('A11: denied candidate previews never reach the planner, view, or plan audit', async (t) => {
+test('A11: denied candidate previews never reach the view or plan audit', async (t) => {
   const f = await fixture(t)
   f.source.search = async () => [
     { target: f.direct.target, preview: 'FORBIDDEN_SECRET', forms: ['full'] },
@@ -331,15 +331,7 @@ test('A11: denied candidate previews never reach the planner, view, or plan audi
   await f.view.startStep('denied')
   await f.view.request({ kind: 'semantic', objective: 'find' })
   await f.view.settle([])
-  const view = await f.view.build({
-    maxChars: 12000,
-    planner: {
-      decide: async (input) => {
-        assert(!JSON.stringify(input).includes('FORBIDDEN_SECRET'))
-        return { kind: 'insufficient', intentIds: input.intents.map((x) => x.id), reason: 'none' }
-      },
-    },
-  })
+  const view = await f.view.build({ maxChars: 12000 })
   assert(!JSON.stringify(view).includes('FORBIDDEN_SECRET'))
   assert.equal((await f.context.search({ query: 'FORBIDDEN_SECRET' })).items.length, 0)
 })
@@ -387,30 +379,19 @@ test('journal namespaces cannot be opened as ordinary sessions', async (t) => {
   )
 })
 
-test('A05: a source changed while planning is materialized from v3 rather than its earlier preview', async (t) => {
+test('A05: a source changed after search is materialized from v3 rather than its search preview', async (t) => {
   const f = await fixture(t)
-  await f.view.startStep('planning')
+  const search = f.source.search
+  f.source.search = async (...args) => {
+    const hits = await search(...args)
+    f.data.revision = 'v3'
+    f.data.text = 'version three'
+    return hits
+  }
+  await f.view.startStep('search')
   await f.view.request({ kind: 'semantic', objective: 'version' })
   await f.view.settle([])
-  const view = await f.view.build({
-    maxChars: 12000,
-    planner: {
-      decide: async (input) => {
-        f.data.revision = 'v3'
-        f.data.text = 'version three'
-        return {
-          kind: 'select',
-          selections: [
-            {
-              candidateId: input.candidates[0].id,
-              intentIds: input.candidates[0].intentIds,
-              form: 'full',
-            },
-          ],
-        }
-      },
-    },
-  })
+  const view = await f.view.build({ maxChars: 12000 })
   assert.equal(view.evidence[0].body, 'version three')
   assert.equal(view.readSet[0].revision, 'v3')
 })
@@ -424,29 +405,12 @@ test('concurrent shutdown is idempotent and cannot replace a terminal result', a
   assert.equal((await f.view.inspect()).lease, null)
 })
 
-test('planner candidates respect requested forms and recheck scope before exposure', async (t) => {
+test('semantic candidates respect requested forms and recheck scope before publication', async (t) => {
   const f = await fixture(t)
   await f.view.startStep('forms')
   await f.view.request({ kind: 'semantic', objective: 'find', forms: ['excerpt'] })
   await f.view.settle([])
-  const view = await f.view.build({
-    maxChars: 12000,
-    planner: {
-      decide: async (input) => {
-        assert.deepEqual(input.candidates[0].forms, ['excerpt'])
-        return {
-          kind: 'select',
-          selections: [
-            {
-              candidateId: input.candidates[0].id,
-              intentIds: input.candidates[0].intentIds,
-              form: 'excerpt',
-            },
-          ],
-        }
-      },
-    },
-  })
+  const view = await f.view.build({ maxChars: 12000 })
   assert.equal(view.evidence[0].form, 'excerpt')
   const g = await fixture(t)
   let checks = 0
@@ -454,19 +418,9 @@ test('planner candidates respect requested forms and recheck scope before exposu
   await g.view.startStep('revoke')
   await g.view.request({ kind: 'semantic', objective: 'find' })
   await g.view.settle([])
-  await g.view.build({
-    maxChars: 12000,
-    planner: {
-      decide: async (input) => {
-        assert.equal(input.candidates.length, 0)
-        return {
-          kind: 'insufficient',
-          intentIds: input.intents.map((x) => x.id),
-          reason: 'scope revoked',
-        }
-      },
-    },
-  })
+  const revoked = await g.view.build({ maxChars: 12000 })
+  assert.equal(revoked.evidence.length, 0)
+  assert(revoked.gaps.some((gap) => gap.code === 'DENIED'))
 })
 
 test('weak sources cannot claim snapshot consistency and a hung verifier remains cancellable', async (t) => {

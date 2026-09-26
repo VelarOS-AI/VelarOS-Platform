@@ -12,8 +12,6 @@ import type {
   ContextState,
 } from '../types/context.js'
 import type {
-  ContextPlannerDecision,
-  ContextPlannerInput,
   ContextReadStamp,
   ContextSourceCapabilities,
   ContextSourceHit,
@@ -124,12 +122,6 @@ export interface ContextSourcePort {
   ): Promise<'current' | 'changed' | 'unknown'>
 }
 
-/** 上下文模型只能返回有限决策，不能得到世界操作端口。 */
-export interface ContextPlannerPort {
-  /** 通过共享模型发送和任务计费入口调用；不在此端口直连 provider。 */
-  decide(input: ContextPlannerInput, signal: AbortSignal): Promise<ContextPlannerDecision>
-}
-
 /** 单会话证据视图的装配依赖。 */
 export interface ContextViewOptions {
   /** 当前会话，引用无法跨这个边界解析。 */
@@ -150,8 +142,6 @@ export interface ContextBuildOptions {
   readonly executionDetails?: boolean
   /** 当前仍有可见租约的执行，未知效果始终保留。 */
   readonly visibleExecutionIds?: readonly string[]
-  /** 只有语义请求可以调用此策略。 */
-  readonly planner?: ContextPlannerPort
   /** 完整视图最大字符数；真正 token 门由 ProviderRequestCompiler 执行。 */
   readonly maxChars: number
 }

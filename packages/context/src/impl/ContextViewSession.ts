@@ -80,7 +80,7 @@ export interface ContextViewApi {
   ): Promise<void>
   /** 在同一存储上只读组装候选，不发布视图也不要求执行租约。 */
   preview(options: ContextBuildOptions, signal?: AbortSignal): Promise<ModelView>
-  /** 精确解析或有界规划后发布当前证据；重做本阶段不执行世界操作。 */
+  /** 精确解析或按检索取候选后发布当前证据；重做本阶段不执行世界操作。 */
   build(options: ContextBuildOptions, signal?: AbortSignal): Promise<ModelView>
   /** 发送前复核任务、范围和资源版本。 */
   validate(view: ModelView, signal?: AbortSignal): Promise<boolean>
@@ -88,7 +88,7 @@ export interface ContextViewApi {
   assertCanWrite(executionId: string, signal?: AbortSignal): Promise<void>
   /** 在模型或后台任务等待时续期当前所有权，失去所有权则失败。 */
   renew(signal?: AbortSignal): Promise<void>
-  /** 为两个模型预占调用与 token 预算。 */
+  /** 为主模型或搜索、整理会话预占调用与 token 预算。 */
   reserveModel(role: 'main' | 'context', tokens: number): Promise<void>
   /** 释放未实际发出的预留模型调用。 */
   releaseModel(role: 'main' | 'context', tokens: number): Promise<void>
@@ -426,7 +426,7 @@ export class ContextViewSession implements ContextViewApi {
   ): Promise<ModelView> {
     const task = await this.inspect()
     if (!task) throw contextFailure('TASK_STATE', '任务不存在')
-    return this.builder.build(task, { ...options, planner: undefined }, signal)
+    return this.builder.build(task, options, signal)
   }
 
   public async build(

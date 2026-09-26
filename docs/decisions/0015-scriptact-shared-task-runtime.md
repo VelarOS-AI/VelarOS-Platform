@@ -42,6 +42,6 @@ Core 持有通用差量；Kernel 持有中立模型/操作合同、派发与生�
 下面几处已被后续实现取代，现行设计以 [运行主链](../architecture/platform-runtime.md)、[文本协议](../architecture/scriptact-text-protocol.md)、[Agent 与 Act](../architecture/agent-act-consolidation.md) 和 [长程上下文](../architecture/long-running-context.md)（[ADR 0017](0017-long-running-context.md)）为准。
 
 - **外层入口。** 「外层统一 `script.run`」指模型每轮交一份结构化提交，342be1f2 时是按 JSON schema 约束的整份 `script_turn` 响应。2026-09-22 起（71fa202a）改成纯文本帧协议：模型输出纯文本，程序段用每帧随机标记框出（`blobs` / `observe` / `execute` / `done`），供应商请求里没有业务工具表，也没有 JSON responseFormat。宿主的 `session.script / observe / execute` 仍在，走同一套检查、发布与运行。
-- **上下文规划器。** 「主模型决定行动与观察需求，有界上下文规划器选择证据」不再成立：BoundedContextPlanner 及其独立 JSON 模型循环已在 71fa202a 删除。主模型自己在 observe / execute 程序里读取证据；要检索时在 execute 里调 `velaros:search`，搜索与上下文整理都是跑同一套 ScriptAct 循环的独立会话；容量按剩余轮数封段，封段不调用模型。现在代码里叫 planner 的两处都不是它：agent 包的 `ContextPlanner` 是 ADR 0017 的容量规划（校准估算、算剩余轮数）；context 包低层物化合同里可选的 `ContextPlannerPort`，运行时装配显式不传，只有该包自己的测试在用。
+- **上下文规划器。** 「主模型决定行动与观察需求，有界上下文规划器选择证据」不再成立：BoundedContextPlanner 及其独立 JSON 模型循环已在 71fa202a 删除。主模型自己在 observe / execute 程序里读取证据；要检索时在 execute 里调 `velaros:search`，搜索与上下文整理都是跑同一套 ScriptAct 循环的独立会话；容量按剩余轮数封段，封段不调用模型。代码里现在叫 planner 的只有 agent 包的 `ContextPlanner`，它是 ADR 0017 的容量规划（校准估算、算剩余轮数），不是这个规划器；context 包物化合同里残留的可选 `ContextPlannerPort` 已删除，语义观察需求按检索顺序取候选并留下覆盖缺口。
 - **off / shadow。** `createRuntime` 已经没有 active / off / shadow 这几档，「兼容测试显式配置 off」「迁移回退可显式选择 off/shadow」随之作废。
 - **所有权。** ProviderRequestCompiler 现在归 Model（`model/src/impl/requests/`），Agent 持有 ActLoop 与运行控制。
