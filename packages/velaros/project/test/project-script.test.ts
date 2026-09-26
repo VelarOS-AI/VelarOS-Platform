@@ -55,8 +55,13 @@ describe('九个 intent 的代码查询', () => {
     const detail = await query({ intent: 'definition', target: symbol.target })
     expect(detail.declaration).toMatchObject({ startLine: 1, endLine: 3 })
     expect(detail.body).toBeDefined()
-    expect(detail.coverage).toMatchObject({ path: 'service.ts', versioned: true })
-    expect(detail.coverage.revision).toBeTruthy()
+    // 覆盖范围照声明的形状给：绑在解析时的版本上，版本记在 revisions 里。
+    expect(detail.coverage).toEqual({
+      path: 'service.ts',
+      truncated: false,
+      versioned: true,
+      revisions: [{ revision: expect.any(String), scope: 'velaros.typescript.ast' }],
+    })
     expect(detail.sources).toEqual([{ backend: 'velaros.typescript.ast' }])
     // 正文不在这里给，要看那几行用 velaros:project 的 read。
     expect(JSON.stringify(detail)).not.toContain('return')

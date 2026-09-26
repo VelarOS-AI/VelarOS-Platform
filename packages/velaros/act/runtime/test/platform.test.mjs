@@ -422,11 +422,15 @@ test('INV-56 a workspace project can also mount velaros:code and velaros:images 
   const s = await open(runtime)
   const receipt = await s.execute({
     source:
-      "import {query,analyze} from 'velaros:code';import {view} from 'velaros:images';export const outline=await query({intent:'outline',path:'src/a.ts'});export const seen=await view({files:[{path:'tiny.png'},{path:'../outside.png'}]});let graph='none';try{await analyze({intent:'cycles'})}catch(error){graph=error.code};export {graph};",
+      "import {query,analyze} from 'velaros:code';import {view} from 'velaros:images';export const outline=await query({intent:'outline',path:'src/a.ts'});export const definition=await query({intent:'definition',target:{symbol:'greet'}});export const seen=await view({files:[{path:'tiny.png'},{path:'../outside.png'}]});let graph='none';try{await analyze({intent:'cycles'})}catch(error){graph=error.code};export {graph};",
   })
   ok(receipt)
-  const { outline, seen, graph } = receipt.result.value
+  const { outline, definition, seen, graph } = receipt.result.value
   assert(JSON.stringify(outline).includes('greet'), JSON.stringify(outline))
+  // 找到声明的那一路也过得了返回值的 schema：覆盖范围照声明的形状给
+  assert.equal(definition.declaration.startLine, 1)
+  assert.equal(definition.coverage.versioned, true)
+  assert.equal(definition.coverage.revisions.length, 1)
   assert.equal(seen.files[0].width, 1)
   // 看图钳在项目里：出了项目的那一张看不了
   assert.equal(seen.files[1].error.code, 'PERMISSION')

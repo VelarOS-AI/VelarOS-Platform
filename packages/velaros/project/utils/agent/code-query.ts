@@ -327,6 +327,14 @@ async function definition(
     bodyRange?: ProjectSymbol['range']
     statementRange?: ProjectSymbol['range']
   }
+  // 声明位置绑在解析时看到的那个版本上：文件在这之后被改过，行号就只是候选了。
+  const revision = before.snapshot.revision
+  const coverage: CodeResultCoverage = {
+    path: symbol.path,
+    truncated: false,
+    versioned: isString(revision),
+    revisions: isString(revision) ? [{ revision, scope: symbol.adapterId ?? 'host' }] : [],
+  }
   return envelope(
     input,
     {
@@ -337,13 +345,7 @@ async function definition(
       declaration: symbol.range,
       body: detail.bodyRange,
       statement: detail.statementRange,
-      // 声明位置绑在解析时看到的那个版本上：文件在这之后被改过，行号就只是候选了。
-      coverage: {
-        path: symbol.path,
-        versioned: true,
-        range: symbol.range,
-        revision: before.snapshot.revision,
-      },
+      coverage,
     }
   )
 }
