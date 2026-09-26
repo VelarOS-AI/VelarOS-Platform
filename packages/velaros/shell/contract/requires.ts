@@ -130,6 +130,57 @@ export interface LocalShellHostOptions {
   }
   /** 约束后端；平台没有内置后端（Windows）时靠它，缺了就在受约束模式下、以及建演练沙箱时失败。 */
   confinementProvider?: ShellProcessConfinementProvider
+  /** 伪终端工厂；给了，交互式任务就在真终端里跑（控制台报 `pty`），不给用保持打开的输入管道。 */
+  terminal?: ShellTerminalFactory
+}
+
+/**
+ * 伪终端（PTY）工厂：宿主注入。交互式任务在它起的终端里跑，有回显、有终端尺寸，Ctrl+C 经终端送给前台进程，
+ * 只读终端的提示（密码、`read -p`）照常出现。本包不带原生依赖，Node 宿主一般用 node-pty 实现它。
+ */
+export interface ShellTerminalFactory {
+  /** 在新的伪终端里起一个进程：参数照原样传，约束包装已经在里面；起不来时抛错。 */
+  spawn(file: string, args: string[], options: ShellTerminalSpawnOptions): ShellTerminalProcess
+}
+
+/** 起伪终端时给的：目录、环境、初始尺寸、终端类型。 */
+export interface ShellTerminalSpawnOptions {
+  /** 工作目录，已经解析好的绝对路径。 */
+  cwd: string
+  /** 进程的环境变量，已经带上 TERM。 */
+  env: NodeJS.ProcessEnv
+  /** 初始列数；界面量好尺寸后再改。 */
+  cols: number
+  /** 初始行数。 */
+  rows: number
+  /** 终端类型名，同 TERM。 */
+  name: string
+  /** Windows 上参数原样拼进命令行、不再加引号，同 `child_process` 的同名选项。 */
+  windowsVerbatimArguments?: boolean
+}
+
+/** 伪终端里跑着的进程：工厂返回的那一面，node-pty 的进程对象就长这样。 */
+export interface ShellTerminalProcess {
+  /** 进程号。 */
+  readonly pid: number
+  /** 订阅终端输出（已按 UTF-8 解码）；返回的对象用来退订。 */
+  onData(listener: (data: string) => void): { dispose(): void }
+  /** 订阅进程退出：退出码，被信号杀掉时另给信号编号。 */
+  onExit(listener: (event: ShellTerminalExit) => void): { dispose(): void }
+  /** 往终端写入，相当于用户按键。 */
+  write(data: string): void
+  /** 改终端尺寸。 */
+  resize(cols: number, rows: number): void
+  /** 给进程发信号，缺省 SIGHUP。 */
+  kill(signal?: string): void
+}
+
+/** 伪终端里的进程退出了：退出码，被信号杀掉时另给信号编号。 */
+export interface ShellTerminalExit {
+  /** 退出码。 */
+  exitCode: number
+  /** 杀掉它的信号编号；正常退出时没有或为 0。 */
+  signal?: number
 }
 
 /** 建受约束执行器时给的配置：演练沙箱给每个镜像根建一个。 */

@@ -1,10 +1,11 @@
 /**
- * 进程：有界执行短命令与平台命令、终止进程树、等待启动确认、定位 Windows 原生进程宿主。
+ * 进程：有界执行短命令与平台命令、终止进程树、等待启动确认、信号编号换名字、定位 Windows 原生进程宿主。
  */
 
 import type { ChildProcess } from 'node:child_process'
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { constants } from 'node:os'
 import { dirname, isAbsolute, join, win32 } from 'node:path'
 import type { Writable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
@@ -233,4 +234,11 @@ export async function runPlatformCommand(
 
     throw new AppError('PLATFORM', `平台命令执行失败：${commandSpec.file}`, error)
   }
+}
+
+/** 信号编号换成名字（伪终端只报编号）；没有信号（0 或不给）时是 null，认不出的编号写成 SIG 加编号。 */
+export function signalNameOf(signal: LooseOptional<number>): Nullable<string> {
+  if (!signal) return null
+  const name = Object.entries(constants.signals).find(([, number]) => number === signal)?.[0]
+  return name ?? `SIG${signal}`
 }

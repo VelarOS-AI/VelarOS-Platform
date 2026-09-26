@@ -6,11 +6,13 @@
 import type { ChildProcess } from 'node:child_process'
 import { win32 } from 'node:path'
 
+import type { ShellTerminalProcess } from '../../contract/requires.js'
 import { execBounded } from '../../utils/process.js'
 import { ShellTuning } from '../../utils/tuning.js'
 
 import type {
   ManagedShellProcess,
+  ShellManagedProcessHooks,
   ShellManagedProcessLifecycleOptions,
 } from './ShellManagedProcess.js'
 import { ShellManagedProcess } from './ShellManagedProcess.js'
@@ -29,6 +31,11 @@ export interface ShellProcessManagerApi {
    * POSIX 上直接子进程退出后，会顺手杀掉仍然存活的整个进程组。
    */
   manage(child: ChildProcess, options?: ShellManagedProcessLifecycleOptions): ManagedShellProcess
+  /** 接管宿主伪终端里刚起来的进程并登记；收尾与终止的规矩同 `manage`，只是没有管道要等。 */
+  manageTerminal(
+    terminal: ShellTerminalProcess,
+    options?: ShellManagedProcessLifecycleOptions
+  ): ManagedShellProcess
   /** 按 pid 找本包登记过的受管进程；没登记过返回 undefined。 */
   find(pid: number): Optional<ManagedShellProcess>
   /**
@@ -59,12 +66,14 @@ class ShellProcessManager implements ShellProcessManagerApi {
     child: ChildProcess,
     options: ShellManagedProcessLifecycleOptions = {}
   ): ManagedShellProcess {
-    return new ShellManagedProcess(child, options, {
-      track: (managed) => {
-        if (managed.child.pid) this.processes.set(managed.child.pid, managed)
-      },
-      onFinished: () => this.pruneCompleted(),
-    })
+    return new ShellManagedProcess({ kind: 'child', child }, options, this.hooks())
+  }
+
+  public manageTerminal(
+    terminal: ShellTerminalProcess,
+    options: ShellManagedProcessLifecycleOptions = {}
+  ): ManagedShellProcess {
+    return new ShellManagedProcess({ kind: 'terminal', terminal }, options, this.hooks())
   }
 
   public find(pid: number): Optional<ManagedShellProcess> {
@@ -135,6 +144,16 @@ class ShellProcessManager implements ShellProcessManagerApi {
         .filter((entry) => !entry.result || !entry.exited)
         .map((entry) => entry.stop('SIGKILL'))
     )
+  }
+
+  /** 受管进程回报登记表的两个时刻：有了 pid 就按 pid 登记，收尾后清理过多的回执。 */
+  private hooks(): ShellManagedProcessHooks {
+    return {
+      track: (managed) => {
+        if (managed.pid) this.processes.set(managed.pid, managed)
+      },
+      onFinished: () => this.pruneCompleted(),
+    }
   }
 
   /** 已结束的回执超过上限时，从最早登记的开始删，直到回到上限。 */

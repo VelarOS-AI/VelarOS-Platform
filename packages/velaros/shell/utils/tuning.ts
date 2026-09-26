@@ -22,6 +22,10 @@ export const ShellTuning = Object.freeze({
     consoleBufferChars: 100_000,
     /** 往控制台写输入最多等多少毫秒：进程到期还没读走就报「已排队」返回，不让调用方一直挂着。 */
     consoleWriteTimeoutMs: 2_000,
+    /** 伪终端的初始列数；界面量好尺寸后再改。 */
+    consoleColumns: 120,
+    /** 伪终端的初始行数。 */
+    consoleRows: 30,
     /** 验证摘要里从失败输出末尾摘多少字符。 */
     verificationIssueChars: 1_000,
   }),

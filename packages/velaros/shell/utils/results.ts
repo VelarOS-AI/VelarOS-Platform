@@ -13,6 +13,8 @@ import type {
   ShellTask,
 } from '../types/shell-command.js'
 
+import { plainTerminalText } from './output.js'
+
 /** 宿主的完整回执里模型用得上的那几项：命令、目录、成败、退出码与信号、超时与取消、耗时、全部输出。 */
 export function runResult(result: ShellCommandResult): ShellRunResult {
   const value: ShellRunResult = {
@@ -32,8 +34,12 @@ export function runResult(result: ShellCommandResult): ShellRunResult {
   return value
 }
 
-/** 宿主任务表里的一条整成模型看的样子：去掉进程号、日志路径、终止命令这些宿主自己用的，输出改叫 output。 */
+/**
+ * 宿主任务表里的一条整成模型看的样子：去掉进程号、日志路径、终止命令这些宿主自己用的，输出改叫 output；
+ * 伪终端里跑的任务输出带着颜色、光标这些控制序列，整成纯文本再给。
+ */
 export function taskOf(record: ShellBackgroundTaskRecord): ShellTask {
+  const output = record.recentOutput ?? ''
   const task: ShellTask = {
     id: record.id,
     command: record.command,
@@ -42,7 +48,7 @@ export function taskOf(record: ShellBackgroundTaskRecord): ShellTask {
     ports: record.ports,
     autoStarted: record.autoStarted,
     startedAt: record.startedAt,
-    output: record.recentOutput ?? '',
+    output: record.console?.channel === 'pty' ? plainTerminalText(output) : output,
   }
   if (isNotUndefined(record.exitCode)) task.exitCode = record.exitCode
   if (isNotUndefined(record.signal)) task.signal = record.signal

@@ -1,14 +1,18 @@
 /**
  * 命令数据：进程约束的策略与请求结果（宿主注入约束后端时要用，从根入口导出），以及命令执行、shell 选择、进程约束实现自己的工作类型
- * （受管进程的收尾结果、自检结果、刷新后的环境、准备好的命令、控制台缓冲、带回调的选项）。只放类型；ResolvedShell 随登录环境 API 导出，其余工作类型在包内使用。
+ * （受管进程的来源与收尾结果、自检结果、刷新后的环境、准备好的命令、控制台、带回调的选项）。只放类型；ResolvedShell 随登录环境 API 导出，其余工作类型在包内使用。
  */
+
+import type { ChildProcess } from 'node:child_process'
+import type { Writable } from 'node:stream'
 
 import type { ShellCommandSpecOptions } from '@velaros-ai/core/platform'
 import type { CommandSpec } from '@velaros-ai/core/platform/contracts'
 
-import type { ShellProcessConfinementProvider } from '../contract/requires.js'
+import type { ShellProcessConfinementProvider, ShellTerminalProcess } from '../contract/requires.js'
 
 import type {
+  ShellConsoleOutputEvent,
   ShellDescriptor,
   ShellProcessConfinementEvidence,
   ShellProcessConfinementMode,
@@ -80,11 +84,24 @@ export interface PreparedShellCommand {
   shell: ShellDescriptor
 }
 
-/** 一个交互式任务的控制台输出缓冲：只留末尾一段，produced 记住这路输出从头到现在一共产生过多少字符。 */
+/**
+ * 一个交互式任务的控制台：输出缓冲只留末尾一段，produced 记住这路输出从头到现在一共产生过多少字符；
+ * 另一头在进程起来之后接上；订阅新输出的人在 watchers 里。
+ */
 export interface ShellConsoleBuffer {
   buffer: string
   produced: number
+  end?: ShellConsoleEnd
+  watchers: Set<(event: ShellConsoleOutputEvent) => void>
 }
+
+/** 控制台的另一头：进程的输入管道，或宿主伪终端里的进程。 */
+export type ShellConsoleEnd =
+  { channel: 'pipe'; stdin: Writable } | { channel: 'pty'; terminal: ShellTerminalProcess }
+
+/** 交给受管进程管的那个进程：Node 起的子进程，或宿主伪终端里的进程；起法不同，收尾的规矩一样。 */
+export type ShellManagedProcessSource =
+  { kind: 'child'; child: ChildProcess } | { kind: 'terminal'; terminal: ShellTerminalProcess }
 
 /** 选 shell 时的选项；平台、环境变量、指定的 shell 路径与种类见继承的 `ShellCommandSpecOptions`。 */
 export interface ResolveShellOptions extends ShellCommandSpecOptions {

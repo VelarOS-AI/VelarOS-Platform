@@ -27,6 +27,10 @@ export type {
   ShellOperationContext,
   ShellProcessConfinementProvider,
   ShellSpacePort,
+  ShellTerminalExit,
+  ShellTerminalFactory,
+  ShellTerminalProcess,
+  ShellTerminalSpawnOptions,
 } from './contract/requires.js'
 
 // ── 上面用到、又不在可移植文件里的数据 ───────────────────────────

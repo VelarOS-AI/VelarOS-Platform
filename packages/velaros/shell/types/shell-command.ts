@@ -498,7 +498,7 @@ export interface SystemMetricsSnapshot {
  * 交互式后台任务的控制台数据：命令在控制台里跑，用户在界面上看输出、往里打字、发中断。
  *
  * 命令用 `interactive` 启动后就是一条普通的后台任务，只是多了一个控制台：
- * 任务表、状态查询、终止都照旧走后台任务那套，这里只多出「写输入、读增量输出、发中断」三件事。
+ * 任务表、状态查询、终止都照旧走后台任务那套，这里只多出「写输入、读增量输出、订阅新输出、发中断、改终端尺寸」几件事。
  */
 
 /** 读控制台增量输出的请求；`cursor` 是上一次返回的位置，不给就从留着的最早一段开始读。 */
@@ -522,6 +522,27 @@ export interface ShellConsoleInputRequest {
 export interface ShellConsoleInterruptRequest {
   taskId: string
   sessionId?: string
+}
+
+/** 改控制台终端尺寸的请求：列数、行数都是正整数。 */
+export interface ShellConsoleResizeRequest {
+  taskId: string
+  sessionId?: string
+  cols: number
+  rows: number
+}
+
+/** 订阅控制台新输出的请求。 */
+export interface ShellConsoleWatchRequest {
+  taskId: string
+  sessionId?: string
+}
+
+/** 控制台新到的一段输出；`cursor` 是这段结束处的位置，和读增量输出用的是同一把尺子。 */
+export interface ShellConsoleOutputEvent {
+  taskId: string
+  text: string
+  cursor: number
 }
 
 /** 本机宿主终止后台任务的完整结果：在端口要的那三项之外，记下进程号、发的信号与终止前的状态，给宿主界面用。 */

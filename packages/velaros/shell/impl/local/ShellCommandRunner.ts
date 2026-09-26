@@ -1,7 +1,8 @@
 /**
  * 命令执行器：`ShellCommandRunner`。接口 `ShellCommandRunnerApi` 与它的构造参数 `ShellCommandRunnerOptions` 就在本文件的类上方。
  * 本机宿主与受约束执行器创建并持有它；一条命令从选 shell、加约束、起受管子进程，到前台采集或后台登记，都在这里。
- * 交互式任务的控制台也归它：stdin 留一根打开的管道，输出另存一份带位置的缓冲，用户的输入、中断经这里递给进程。
+ * 交互式任务的控制台也归它：宿主给了伪终端工厂就在真终端里跑，没给就留一根打开的 stdin 管道；输出另存一份带位置的缓冲，
+ * 用户的输入、中断、终端尺寸经这里递给进程，新输出推给订阅的人。
  */
 
 import { spawn } from 'node:child_process'
@@ -14,7 +15,10 @@ import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/core/platform'
 
 import { ShellLimits } from '../../contract/constants.js'
-import type { ShellProcessConfinementProvider } from '../../contract/requires.js'
+import type {
+  ShellProcessConfinementProvider,
+  ShellTerminalFactory,
+} from '../../contract/requires.js'
 import type {
   PreparedShellCommand,
   ShellConsoleBuffer,
@@ -39,7 +43,10 @@ import type {
 import type {
   ShellConsoleInputRequest,
   ShellConsoleInterruptRequest,
+  ShellConsoleOutputEvent,
   ShellConsoleOutputRequest,
+  ShellConsoleResizeRequest,
+  ShellConsoleWatchRequest,
   ShellTaskTerminateRequest,
 } from '../../types/shell-command.js'
 import { buildShellCommandResult } from '../../utils/command-result.js'
@@ -82,8 +89,8 @@ export interface ShellCommandRunnerApi {
    * → 加进程约束 → Windows 上包进原生进程宿主 → 启动受管子进程。
    * 前台：有界采集 stdout 与 stderr，超时或取消后在期限内收敛，失败时把输出末尾摘进 verification。
    * 后台（options.background）：进程拉起后登记成后台任务就返回，结果里带任务 id 和终止命令。
-   * 交互式（options.interactive，必须和 background 一起）：stdin 留一根保持打开的管道，输出另外存进控制台缓冲区，
-   * 结果的 `backgroundProcess.console` 给出这个控制台；本机没有 PTY，channel 一律是 `pipe`，真正的 PTY 由宿主自己的端口实现提供。
+   * 交互式（options.interactive，必须和 background 一起）：宿主给了伪终端工厂就在真终端里跑（channel 为 `pty`），
+   * 没给就留一根保持打开的 stdin 管道（channel 为 `pipe`）；输出另外存进控制台缓冲区，结果的 `backgroundProcess.console` 给出这个控制台。
    * 命令自己失败（非零退出、超时、取消）不抛错，如实写进结果；找不到能用的 shell、约束后端缺失、进程拉不起来才抛错。
    * @param command 命令文本；给了 options.nativeCommand 时只用来展示
    * @param cwd 已经解析好的绝对工作目录
@@ -104,16 +111,29 @@ export interface ShellCommandRunnerApi {
    */
   terminateTask(request: ShellTaskTerminateRequest): Promise<ShellTaskTerminateReport>
   /**
-   * 往交互式任务的控制台写一段输入，缺省补一个换行。
+   * 往交互式任务的控制台写一段输入，缺省补一个回车（管道里是换行，终端里是 `\r`）。
    * 先核对任务存在、属于请求里的会话；进程已经退出、这条任务不是交互式的、stdin 已经关掉时不抛错，结果里 `accepted` 为 false。
-   * 写入最多等 `ShellTuning.command.consoleWriteTimeoutMs`：进程到期还没读走就如实报「已排队」；上一笔还压在管道里时拒绝再写。
-   * stdin 管道断开（进程关了输入、写到一半进程退出）的错误在启动时就接住了，不会变成宿主进程的未捕获异常。
+   * 管道：写入最多等 `ShellTuning.command.consoleWriteTimeoutMs`，进程到期还没读走就如实报「已排队」；上一笔还压在管道里时拒绝再写。
+   * stdin 管道断开（进程关了输入、写到一半进程退出）的错误在启动时就接住了，不会变成宿主进程的未捕获异常。终端：原样写进去，由终端回显。
    */
   writeConsoleInput(request: ShellConsoleInputRequest): Promise<ShellConsoleControlResult>
   /** 读控制台从 cursor 起的增量输出；缓冲区只留最近一段，挤掉的字符数如实给出。任务不存在或不属于该会话时抛错。 */
   readConsoleOutput(request: ShellConsoleOutputRequest): Promise<ShellConsoleOutputChunk>
-  /** 给控制台发中断（POSIX 向进程组发 SIGINT，Windows 退回按进程树终止）；进程已经退出时不抛错，`accepted` 为 false。 */
+  /**
+   * 给控制台发中断：终端里写一个 Ctrl+C，由终端发给它的前台进程组（交互 shell 里正在跑的那条命令也收得到）；
+   * 管道下 POSIX 向进程组发 SIGINT，Windows 退回按进程树终止。进程已经退出时不抛错，`accepted` 为 false。
+   */
   interruptConsole(request: ShellConsoleInterruptRequest): Promise<ShellConsoleControlResult>
+  /** 改控制台的终端尺寸；列数、行数不是正整数时抛 VALIDATION。管道后面的任务没有尺寸、进程已经退出时不抛错，`accepted` 为 false。 */
+  resizeConsole(request: ShellConsoleResizeRequest): Promise<ShellConsoleControlResult>
+  /**
+   * 订阅控制台的新输出：每段带着它结束处的 cursor（与读增量输出同一把尺子），返回退订函数。
+   * 任务不存在或不属于该会话时抛错；不是交互式任务时什么也收不到。订阅方抛错只记日志，不影响输出入缓冲。
+   */
+  watchConsoleOutput(
+    request: ShellConsoleWatchRequest,
+    listener: (event: ShellConsoleOutputEvent) => void
+  ): () => void
   /** 停掉这个执行器启动过、还没退出的全部后台进程。 */
   dispose(): Promise<void>
 }
@@ -138,12 +158,19 @@ export interface ShellCommandRunnerOptions {
   confinementTempDir?: string
   /** 每条命令额外带上的环境变量，盖过 shell 自己的；沙箱执行器用它把 TMPDIR 指进沙箱。 */
   extraEnv?: Readonly<Record<string, string>>
+  /** 宿主的伪终端工厂；给了，交互式任务在真终端里跑。 */
+  terminal?: ShellTerminalFactory
 }
 
 export class ShellCommandRunner implements ShellCommandRunnerApi {
   /** 交互式任务启动后给模型的一句话：别在这次工具调用里等输出。 */
   private static readonly ConsoleStartedNote =
     '命令在控制台里跑，正在等用户输入；用户在控制台里打字，本次调用不再有输出。'
+  /** 伪终端里的进程看到的终端类型：256 色，并声明支持真彩色。 */
+  private static readonly TerminalEnv = Object.freeze({
+    TERM: 'xterm-256color',
+    COLORTERM: 'truecolor',
+  })
 
   private readonly tasks = new Map<string, ShellBackgroundTaskRecord>()
   private readonly executions = new Map<string, ManagedShellProcess>()
@@ -230,7 +257,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     if (statusBefore === 'running') {
       try {
         const owned = this.executions.get(taskId)
-        if (!owned || owned.child.pid !== task.pid)
+        if (!owned || owned.pid !== task.pid)
           throw new AppError('PERMISSION', '无法确认后台进程的受管身份。')
         terminated = await owned.stop(signal)
         if (!terminated && !owned.exited)
@@ -281,14 +308,20 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
         message: '这条后台任务不是交互式的，没有可以写的控制台。',
       }
 
-    const stdin = this.executions.get(task.id)?.child.stdin
-    if (status !== 'running' || !stdin?.writable)
+    const end = this.consoles.get(task.id)?.end
+    if (status !== 'running' || !end || (end.channel === 'pipe' && !end.stdin.writable))
       return {
         taskId: task.id,
         accepted: false,
         status,
         message: '控制台已经关闭：进程不在运行，或输入通道已经断开。',
       }
+    // 终端里回车是 \r，由终端按自己的设置换成程序读到的换行；回显也归终端。
+    if (end.channel === 'pty') {
+      end.terminal.write(isFalse(request.submit) ? request.text : `${request.text}\r`)
+      return { taskId: task.id, accepted: true, status, message: '输入已写进控制台。' }
+    }
+    const stdin = end.stdin
     // 上一笔输入还压在管道里没被读走：进程多半没在读输入，再写只会越积越多。
     if (stdin.writableNeedDrain)
       return {
@@ -349,13 +382,20 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
 
     // 只中断自己启动的那个进程：pid 可能已经被系统复用，身份对不上就什么都不发。
     const owned = this.executions.get(task.id)
-    if (owned?.child.pid !== task.pid)
+    if (owned?.pid !== task.pid)
       return {
         taskId: task.id,
         accepted: false,
         status,
         message: '无法确认后台进程的受管身份，没有发送中断。',
       }
+
+    // 终端里就是按一下 Ctrl+C：终端把 SIGINT 发给它的前台进程组，交互 shell 里正在跑的那条命令也收得到。
+    const end = this.consoles.get(task.id)?.end
+    if (end?.channel === 'pty') {
+      end.terminal.write('\u0003')
+      return { taskId: task.id, accepted: true, status, message: '已发送中断（Ctrl+C）。' }
+    }
 
     // POSIX 向整个进程组发 SIGINT；Windows 没有 SIGINT，退回按进程树终止。
     const delivered = await terminateProcessTree(task.pid, 'SIGINT', {
@@ -366,6 +406,47 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       accepted: delivered,
       status: this.resolveTaskStatus(task),
       message: delivered ? '已发送中断（Ctrl+C）。' : '中断信号没能送到进程。',
+    }
+  }
+
+  public async resizeConsole(
+    request: ShellConsoleResizeRequest
+  ): Promise<ShellConsoleControlResult> {
+    const { cols, rows } = request
+    if (![cols, rows].every((size) => Number.isInteger(size) && size > 0))
+      throw new AppError('VALIDATION', `终端尺寸要是正整数：${cols}×${rows}`)
+    const task = this.requireTask(request.taskId, request.sessionId)
+    const status = this.resolveTaskStatus(task)
+    const end = this.consoles.get(task.id)?.end
+    if (end?.channel !== 'pty')
+      return {
+        taskId: task.id,
+        accepted: false,
+        status,
+        message: '这条任务不在终端里跑，没有终端尺寸。',
+      }
+    if (status !== 'running')
+      return {
+        taskId: task.id,
+        accepted: false,
+        status,
+        message: '进程已经不在运行，不用再改尺寸。',
+      }
+
+    end.terminal.resize(cols, rows)
+    return { taskId: task.id, accepted: true, status, message: `终端尺寸改成了 ${cols}×${rows}。` }
+  }
+
+  public watchConsoleOutput(
+    request: ShellConsoleWatchRequest,
+    listener: (event: ShellConsoleOutputEvent) => void
+  ): () => void {
+    const task = this.requireTask(request.taskId, request.sessionId)
+    const buffered = this.consoles.get(task.id)
+    if (!buffered) return () => undefined
+    buffered.watchers.add(listener)
+    return () => {
+      buffered.watchers.delete(listener)
     }
   }
 
@@ -496,7 +577,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
 
   /**
    * 后台启动：等进程确认拉起后登记成任务，持续记下最近的输出；进程收尾时把退出码写回任务。拉不起来就停掉并抛错。
-   * 交互式任务另外留一根打开的 stdin 管道和一份控制台输出缓冲，回执里带上控制台。
+   * 交互式任务另外建一份控制台（输出缓冲与另一头：伪终端或打开的 stdin 管道），回执里带上控制台。
    */
   private async startInBackground(
     command: string,
@@ -506,46 +587,34 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     startedAt: number,
     abortSignal?: AbortSignal
   ): Promise<ShellBackgroundProcessInfo> {
-    const { platform, platformTools, processes } = this.options
+    const { platformTools } = this.options
     const { sessionId, interactive } = options
+    const terminal = interactive ? this.options.terminal : undefined
     const taskId = randomUUID()
-    const child = spawn(prepared.spec.file, prepared.spec.args, {
-      cwd,
-      detached: platformTools.shouldUseDetachedProcessGroup(),
-      stdio: [interactive ? 'pipe' : 'ignore', 'pipe', 'pipe'],
-      env: prepared.env,
-      windowsHide: true,
-      windowsVerbatimArguments: prepared.spec.windowsVerbatimArguments,
-    })
-    // stdin 管道断开（进程关了输入、写到一半进程退出）时流上会报 error；不接住就成了宿主进程的未捕获异常。写入结果由写的一方从回调里拿，这里只记日志。
-    child.stdin?.on('error', (error) => log.debug('控制台的输入管道断开', { taskId, error }))
-    const owned = processes.manage(child, { platform, abortSignal })
     // 控制台缓冲在挂输出监听之前就建好，进程一启动就吐的输出不会丢。
-    if (interactive) this.consoles.set(taskId, { buffer: '', produced: 0 })
+    if (interactive) this.consoles.set(taskId, { buffer: '', produced: 0, watchers: new Set() })
     let recentOutput = ''
-    const decoders = { stdout: new ShellOutputDecoder(), stderr: new ShellOutputDecoder() }
     const append = (text: string): void => {
       recentOutput = appendBoundedOutput(recentOutput, text, ShellLimits.outputChars)
       this.appendConsoleOutput(taskId, text)
       const task = this.tasks.get(taskId)
       if (task) this.tasks.set(taskId, { ...task, recentOutput, updatedAt: Date.now() })
     }
-    // 交互式任务的 stdin 是管道，非交互式是 ignore，所以这里的输出管道按可空处理。
-    for (const stream of ['stdout', 'stderr'] as const)
-      child[stream]?.on('data', (chunk: Buffer) => append(decoders[stream].write(chunk)))
+    let started: { owned: ManagedShellProcess; flush: () => void }
     try {
-      await waitForProcessSpawn(child)
-      abortSignal?.throwIfAborted()
+      started = terminal
+        ? this.startInTerminal(terminal, prepared, cwd, taskId, append, abortSignal)
+        : await this.startWithPipes(prepared, cwd, taskId, !!interactive, append, abortSignal)
     } catch (error) {
       this.consoles.delete(taskId)
-      await owned.stop('SIGKILL')
       throw error
     }
-    const pid = child.pid!
-    // 本机只有管道，没有 PTY：真正的终端由宿主在自己的端口实现里提供，那时 channel 报成 pty。
+    const { owned, flush } = started
+    const pid = owned.pid!
+    // 宿主给了伪终端就是真终端（pty），没给就是一根保持打开的输入管道（pipe）。
     const consoleSession: Optional<ShellConsoleSessionInfo> = optionalWhen(interactive, {
       taskId,
-      channel: 'pipe' as const,
+      channel: terminal ? ('pty' as const) : ('pipe' as const),
       acceptsInput: true,
       note: ShellCommandRunner.ConsoleStartedNote,
     })
@@ -592,7 +661,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     this.executions.set(taskId, owned)
     void owned.completion
       .then((result) => {
-        for (const stream of ['stdout', 'stderr'] as const) append(decoders[stream].end())
+        flush()
         this.tasks.set(taskId, {
           ...task,
           status: result.cleanupIncomplete ? 'unknown' : 'exited',
@@ -610,6 +679,82 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     return backgroundProcess
   }
 
+  /**
+   * 用管道起后台进程：stdout、stderr 各自解码后记下；交互式的留一根打开的 stdin 当控制台的另一头。
+   * 等进程确认拉起，拉不起来（或这时已经取消）就强杀并抛错。返回的 flush 在收尾时把解码器里剩下的半个字吐出来。
+   */
+  private async startWithPipes(
+    prepared: PreparedShellCommand,
+    cwd: string,
+    taskId: string,
+    interactive: boolean,
+    append: (text: string) => void,
+    abortSignal?: AbortSignal
+  ): Promise<{ owned: ManagedShellProcess; flush: () => void }> {
+    const { platform, platformTools, processes } = this.options
+    const child = spawn(prepared.spec.file, prepared.spec.args, {
+      cwd,
+      detached: platformTools.shouldUseDetachedProcessGroup(),
+      stdio: [interactive ? 'pipe' : 'ignore', 'pipe', 'pipe'],
+      env: prepared.env,
+      windowsHide: true,
+      windowsVerbatimArguments: prepared.spec.windowsVerbatimArguments,
+    })
+    // stdin 管道断开（进程关了输入、写到一半进程退出）时流上会报 error；不接住就成了宿主进程的未捕获异常。写入结果由写的一方从回调里拿，这里只记日志。
+    child.stdin?.on('error', (error) => log.debug('控制台的输入管道断开', { taskId, error }))
+    const owned = processes.manage(child, { platform, abortSignal })
+    const decoders = { stdout: new ShellOutputDecoder(), stderr: new ShellOutputDecoder() }
+    // 交互式任务的 stdin 是管道，非交互式是 ignore，所以这里的输出管道按可空处理。
+    for (const stream of ['stdout', 'stderr'] as const)
+      child[stream]?.on('data', (chunk: Buffer) => append(decoders[stream].write(chunk)))
+    try {
+      await waitForProcessSpawn(child)
+      abortSignal?.throwIfAborted()
+    } catch (error) {
+      await owned.stop('SIGKILL')
+      throw error
+    }
+    const buffered = this.consoles.get(taskId)
+    if (buffered && child.stdin) buffered.end = { channel: 'pipe', stdin: child.stdin }
+    return {
+      owned,
+      flush: () => {
+        for (const stream of ['stdout', 'stderr'] as const) append(decoders[stream].end())
+      },
+    }
+  }
+
+  /**
+   * 在宿主的伪终端里起交互式任务：终端输出只有一路、已经解码，终端本身就是控制台的另一头。
+   * 进程带着约束包装原样交给工厂，TERM 与终端类型一致；工厂起不来就抛错。
+   */
+  private startInTerminal(
+    factory: ShellTerminalFactory,
+    prepared: PreparedShellCommand,
+    cwd: string,
+    taskId: string,
+    append: (text: string) => void,
+    abortSignal?: AbortSignal
+  ): { owned: ManagedShellProcess; flush: () => void } {
+    abortSignal?.throwIfAborted()
+    const terminal = factory.spawn(prepared.spec.file, prepared.spec.args, {
+      cwd,
+      env: { ...prepared.env, ...ShellCommandRunner.TerminalEnv },
+      cols: ShellTuning.command.consoleColumns,
+      rows: ShellTuning.command.consoleRows,
+      name: ShellCommandRunner.TerminalEnv.TERM,
+      windowsVerbatimArguments: prepared.spec.windowsVerbatimArguments,
+    })
+    const owned = this.options.processes.manageTerminal(terminal, {
+      platform: this.options.platform,
+      abortSignal,
+    })
+    terminal.onData(append)
+    const buffered = this.consoles.get(taskId)
+    if (buffered) buffered.end = { channel: 'pty', terminal }
+    return { owned, flush: () => undefined }
+  }
+
   /** 已结束的任务只留最近 ShellTuning.command.finishedTasks 条：最早结束的先删，它们的进程句柄一起释放。 */
   private pruneFinishedTasks(): void {
     const finished = [...this.tasks.values()]
@@ -625,14 +770,24 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     }
   }
 
-  /** 把一段输出并进控制台缓冲区；不是交互式任务就什么都不做。 */
+  /** 把一段输出并进控制台缓冲区并推给订阅的人；不是交互式任务就什么都不做。 */
   private appendConsoleOutput(taskId: string, text: string): void {
     const buffered = this.consoles.get(taskId)
     if (!buffered || !text) return
-    this.consoles.set(taskId, {
-      buffer: appendBoundedOutput(buffered.buffer, text, ShellTuning.command.consoleBufferChars),
-      produced: buffered.produced + text.length,
-    })
+    buffered.buffer = appendBoundedOutput(
+      buffered.buffer,
+      text,
+      ShellTuning.command.consoleBufferChars
+    )
+    buffered.produced += text.length
+    const event: ShellConsoleOutputEvent = { taskId, text, cursor: buffered.produced }
+    for (const watcher of buffered.watchers) {
+      try {
+        watcher(event)
+      } catch (error) {
+        log.warn('控制台新输出的订阅方处理失败', { taskId, error })
+      }
+    }
   }
 
   /** 取出一条任务并核对会话归属：任务不存在、不属于请求里的会话时抛错。 */

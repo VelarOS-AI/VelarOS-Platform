@@ -21,7 +21,10 @@ import type {
   ShellConsoleInputRequest,
   ShellConsoleInterruptRequest,
   ShellConsoleOutputChunk,
+  ShellConsoleOutputEvent,
   ShellConsoleOutputRequest,
+  ShellConsoleResizeRequest,
+  ShellConsoleWatchRequest,
   ShellDescriptor,
   ShellEnvironmentInspection,
   ShellEnvironmentRefreshResult,
@@ -68,8 +71,9 @@ export function createLocalShellHost(options: LocalShellHostOptions): LocalShell
  *
  * 实现是 `LocalShellHost`，只做转接：命令与后台任务交给命令执行器，进程、端口、指标跑平台命令读出来。
  * 相对路径都相对构造时给的 cwd，`~` 展开到家目录。空间给 `velaros:shell` 装端口时把执行那四件原样接上，自己补作用域与口径
- * （系统空间的 `resolveCwd` 就是这里的 `resolvePath`）。另给宿主十个方法：路径解析、环境体检、指标、进程、端口、
- * 终止后台任务（带完整记录）、交互式任务的控制台三件事（写输入、读增量输出、发中断）与释放。
+ * （系统空间的 `resolveCwd` 就是这里的 `resolvePath`）。另给宿主十二个方法：路径解析、环境体检、指标、进程、端口、
+ * 终止后台任务（带完整记录）、交互式任务的控制台五件事（写输入、读增量输出、订阅新输出、发中断、改终端尺寸）与释放。
+ * 构造时给了伪终端工厂，交互式任务就在真终端里跑。
  * 这些方法模型碰不到（模型用 `velaros:shell` 的 run 跑系统命令，控制台归用户）。由 `createLocalShellHost(options)` 创建。
  */
 export interface LocalShellHostApi extends ShellHostPort {
@@ -89,9 +93,9 @@ export interface LocalShellHostApi extends ShellHostPort {
   /** 终止一个后台任务：核对任务存在、属于请求里的会话、进程确实是自己启动的那个，再发信号并等它退出；返回进程号、信号与终止前后的状态。 */
   terminateBackgroundTask(request: ShellTaskTerminateRequest): Promise<ShellTaskTerminateReport>
   /**
-   * 往交互式任务的控制台写一段用户输入，缺省在末尾补一个换行（相当于用户按回车）。
+   * 往交互式任务的控制台写一段用户输入，缺省在末尾补一个回车（相当于用户按回车）；终端里跑的任务原样写进终端，由终端回显。
    * 任务不存在、不属于请求里的会话时抛错；进程已经退出或这条任务不是交互式的，不抛错，结果里 `accepted` 为 false 并说明原因。
-   * 写入有时限：进程到期还没读走就如实报「已排队」，上一笔还压在管道里时拒绝再写；输入管道断开不会让宿主进程崩溃。
+   * 管道的写入有时限：进程到期还没读走就如实报「已排队」，上一笔还压在管道里时拒绝再写；输入管道断开不会让宿主进程崩溃。
    */
   writeConsoleInput(request: ShellConsoleInputRequest): Promise<ShellConsoleControlResult>
   /**
@@ -100,10 +104,23 @@ export interface LocalShellHostApi extends ShellHostPort {
    */
   readConsoleOutput(request: ShellConsoleOutputRequest): Promise<ShellConsoleOutputChunk>
   /**
-   * 给控制台发中断，相当于用户按 Ctrl+C：POSIX 上向整个进程组发 SIGINT，Windows 上退回按进程树终止。
-   * 任务不存在、不属于请求里的会话时抛错；进程已经退出时不抛错，结果里 `accepted` 为 false。
+   * 给控制台发中断，相当于用户按 Ctrl+C：终端里写一个 Ctrl+C，由终端发给前台进程组；管道下 POSIX 向整个进程组发 SIGINT，
+   * Windows 上退回按进程树终止。任务不存在、不属于请求里的会话时抛错；进程已经退出时不抛错，结果里 `accepted` 为 false。
    */
   interruptConsole(request: ShellConsoleInterruptRequest): Promise<ShellConsoleControlResult>
+  /**
+   * 改控制台的终端尺寸（界面量好格子数后告诉终端）；列数、行数不是正整数时抛 VALIDATION。
+   * 任务不存在、不属于请求里的会话时抛错；管道后面的任务没有尺寸、进程已经退出时不抛错，结果里 `accepted` 为 false。
+   */
+  resizeConsole(request: ShellConsoleResizeRequest): Promise<ShellConsoleControlResult>
+  /**
+   * 订阅控制台的新输出，每段带着它结束处的 cursor（与 `readConsoleOutput` 同一把尺子），返回退订函数；
+   * 界面先按 cursor 读一遍补上历史，再靠推送跟上。任务不存在、不属于请求里的会话时抛错；不是交互式任务时什么也收不到。
+   */
+  watchConsoleOutput(
+    request: ShellConsoleWatchRequest,
+    listener: (event: ShellConsoleOutputEvent) => void
+  ): () => void
   /** 释放：停掉这个宿主启动过、还没退出的全部后台进程。 */
   dispose(): Promise<void>
 }
@@ -149,6 +166,7 @@ export class LocalShellHost implements LocalShellHostApi {
       confinementProvider: options.confinementProvider,
       shells: this.shells,
       processes: shellProcessManager,
+      terminal: options.terminal,
     })
   }
 
@@ -293,6 +311,17 @@ export class LocalShellHost implements LocalShellHostApi {
     request: ShellConsoleInterruptRequest
   ): Promise<ShellConsoleControlResult> {
     return this.commands.interruptConsole(request)
+  }
+
+  public resizeConsole(request: ShellConsoleResizeRequest): Promise<ShellConsoleControlResult> {
+    return this.commands.resizeConsole(request)
+  }
+
+  public watchConsoleOutput(
+    request: ShellConsoleWatchRequest,
+    listener: (event: ShellConsoleOutputEvent) => void
+  ): () => void {
+    return this.commands.watchConsoleOutput(request, listener)
   }
 
   public async refreshShellEnvironment(): Promise<ShellEnvironmentRefreshResult> {

@@ -103,6 +103,8 @@ export function buildSeatbeltProfile(
     '(allow default)',
     '(deny file-write*)',
     `(allow file-write* (literal ${quoteSeatbeltString('/dev/null')}))`,
+    // 自己的控制终端：伪终端里的命令要口令时会重新打开它（ssh、sudo、getpass），只放这一个，别的终端设备照旧不许写。
+    `(allow file-write* (literal ${quoteSeatbeltString('/dev/tty')}))`,
     `(deny mach-lookup (global-name ${quoteSeatbeltString('com.apple.cfprefsd.daemon')}) (global-name ${quoteSeatbeltString('com.apple.cfprefsd.agent')}))`,
     '(deny appleevent-send)',
   ]
