@@ -13,6 +13,7 @@ import {
   OfficeInputLimits,
   OfficeMarkdownLimits,
   OfficeMarkItDownInputExtensions,
+  officeOperations,
   OfficePdfLimits,
   OfficePreviewLimits,
   VelarOfficeModule,
@@ -259,6 +260,51 @@ describe('办公文档不变量验收', () => {
     expect(compileError.code).toBe(OfficeErrorCodes.conversionFailed)
     expect(compileError.message).toContain('Undefined control sequence')
     expect(await readFile(join(failing.harness.root, 'paper.tex'), 'utf8')).toContain('\\badmacro')
+  })
+
+  test('INV-18 写之前就停下的失败标成没有写入，转换跑过之后的失败不标', async () => {
+    /** 直接调操作，拿到带上下文的原始错误（代码面只交给程序 code 与 message）。 */
+    const raw = async (run: () => Promise<unknown>) => {
+      try {
+        await run()
+      } catch (error) {
+        return error as { code: string; context?: Record<string, unknown> }
+      }
+      throw new Error('应当失败，却成功了')
+    }
+    const { harness } = await workspace()
+    const ctx = harness.context
+    await officeOperations.createWord({ outputPath: 'doc.docx', content: '正文' }, ctx)
+    for (const failure of [
+      await raw(() =>
+        officeOperations.createSpreadsheet({ outputPath: '../x.xlsx', content: 'a,b\n1,2' }, ctx)
+      ),
+      await raw(() =>
+        officeOperations.createWord({ outputPath: 'doc.docx', content: '又一份' }, ctx)
+      ),
+      await raw(() => officeOperations.readPdf({ inputPath: 'missing.pdf' }, ctx)),
+      await raw(() =>
+        officeOperations.wordToPdf({ inputPath: 'doc.docx', outputPath: 'doc.pdf' }, ctx)
+      ),
+      await raw(() =>
+        officeOperations.createSpreadsheet(
+          { outputPath: 'y.xlsx', content: 'a\n1', sheets: [{ name: 's' }] } as never,
+          ctx
+        )
+      ),
+    ])
+      expect(failure.context?.executionOutcome, failure.code).toBe('not-applied')
+
+    // LaTeX 编译失败时 .tex 已经写进工作区：不标没有写入，交给运行时按效果未知处理
+    const failing = await workspace({ availableCommands: ['tectonic'], converters: 'failing' })
+    const compile = await raw(() =>
+      officeOperations.latexToPdf(
+        { outputPath: 'paper.pdf', latexSource: '\\documentclass{article}\n\\badmacro' },
+        failing.harness.context
+      )
+    )
+    expect(compile.code).toBe(OfficeErrorCodes.conversionFailed)
+    expect(compile.context?.executionOutcome).toBeUndefined()
   })
 
   test('INV-14 入参在做事之前核对，不合法一步都不做', async () => {

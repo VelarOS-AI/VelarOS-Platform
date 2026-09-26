@@ -3,9 +3,9 @@
 import { type PDFDocument, type PDFPage, type RGB, rgb } from 'pdf-lib'
 
 import { isEmpty, isUndefined } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 
 import type { PdfMetadataInput, PdfTextStampInput } from '../../types/office.js'
+import { officeError } from '../errors.js'
 import { OfficeTuning } from '../tuning.js'
 
 /** 将 #RRGGBB 文本转换成 pdf-lib 的 RGB；非法颜色回退到默认红色。 */
@@ -31,7 +31,7 @@ export function resolvePdfPageNumbers(
       ? selection
       : Array.from({ length: pageCount }, (_, index) => index + 1)
   const pages = rawPages.filter((page) => page >= 1 && page <= pageCount && !removed.has(page))
-  if (isEmpty(pages)) throw new AppError('VALIDATION', 'PDF 处理后没有剩余页面。')
+  if (isEmpty(pages)) throw officeError('VALIDATION', 'PDF 处理后没有剩余页面。')
   return pages
 }
 
@@ -57,7 +57,7 @@ export function assertTextStampsEncodable(
     for (const character of stamp.text.replace(/[\n\r\t\f\v]/g, '')) {
       const codePoint = character.codePointAt(0)
       if (isUndefined(codePoint) || supported.has(codePoint)) continue
-      throw new AppError(
+      throw officeError(
         'VALIDATION',
         `textStamps[${index}].text 里的「${character}」写不进 PDF：文字戳用的是标准字体 Helvetica，只认拉丁字母、数字和常见西文标点，中文等其他文字写不了。`
       )

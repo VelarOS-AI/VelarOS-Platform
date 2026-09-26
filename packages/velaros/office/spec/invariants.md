@@ -36,3 +36,4 @@ INV-12（工具 schema 由源码生成）随工具面一起作废，模型面的
 | INV-15 | 模型面是 `velaros:office`：声明从源码生成、只放出九个操作，随包发布的声明（`VelarOfficeModule`）与生成物是同一份；空间端口与调用上下文不进模型面；能由别的操作拼出来的不单做（PDF 转 Word 就是 readPdf 加 createWord）；模型写的程序照这份声明调到真实操作 | 测试 | `spec/acceptance.test.ts` |
 | INV-16 | 声明里写给模型的数字就是常量表里的：路径、标题、作者、正文、内容块、页、条目这些上限（`OfficeInputLimits`、`OfficePdfLimits`、`OfficeMarkdownLimits`、`OfficePreviewLimits`）与 MarkItDown 认的扩展名；改常量不改说明（或反过来）过不了验收 | 测试 | `spec/acceptance.test.ts` |
 | INV-17 | 代码模版（`template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它整份照生成的真实声明过类型检查，不嵌进声明，随模型面发布、按需读（`velaros:system` 的 modules.describe）；每个函数照写法跑通由 `test/template.test.ts` 核对 | 测试 | `spec/acceptance.test.ts` |
+| INV-18 | 写之前就停下的失败（入参不对、路径越界、目标已在、输入不在、缺转换器或 MarkItDown、Word 追加目标不完整）都标成没有写入（`executionOutcome: 'not-applied'`），运行时据此记成没有效果；转换跑过之后的失败（LaTeX 的 .tex 已写）不标 | 测试 | `spec/acceptance.test.ts` |

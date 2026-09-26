@@ -8,7 +8,6 @@ import { writeFile } from 'node:fs/promises'
 import { extname } from 'node:path'
 
 import { toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 
 import { OfficeErrorCodes } from '../../contract/constants.js'
 import type { OfficeOperationContext } from '../../contract/requires.js'
@@ -19,7 +18,7 @@ import type {
   OfficePreviewWritten,
 } from '../../types/office.js'
 import type { OfficePreviewKind, ParsedOfficePreview } from '../../types/preview.js'
-import { converterMissingError } from '../../utils/errors.js'
+import { converterMissingError, officeError } from '../../utils/errors.js'
 import { writtenReceipt } from '../../utils/paths.js'
 import { OfficeTuning } from '../../utils/tuning.js'
 import type { OfficeDocumentRendererApi } from '../runtime/OfficeDocumentRenderer.js'
@@ -151,7 +150,7 @@ export class OfficePreviewOperations implements OfficePreviewOperationsApi {
   ): Promise<OfficePreviewWritten> {
     const extension = extname(outputPath).toLowerCase() || '.html'
     if (extension !== '.html' && extension !== '.png') {
-      throw new AppError(
+      throw officeError(
         OfficeErrorCodes.invalidExtension,
         `预览文件的扩展名要是 .html 或 .png：${outputPath}`
       )

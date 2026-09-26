@@ -30,11 +30,11 @@ import { readFile } from 'node:fs/promises'
 import JSZip from 'jszip'
 
 import { isEmpty, isString } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 
 import { OfficeErrorCodes } from '../../contract/constants.js'
 import type { OfficeWritten } from '../../types/office.js'
 import type { WordSupportPart } from '../../types/word.js'
+import { officeError } from '../errors.js'
 import { writeOfficeFile } from '../paths.js'
 
 /** document.xml 在 docx 包里的路径。 */
@@ -83,7 +83,7 @@ export async function appendWordDocumentBuffer(
   const existingDocumentFile = existingZip.file(WordDocumentXmlPath)
   const fragmentDocumentFile = fragmentZip.file(WordDocumentXmlPath)
   if (!existingDocumentFile || !fragmentDocumentFile)
-    throw new AppError(
+    throw officeError(
       OfficeErrorCodes.appendTargetInvalid,
       '目标 Word 文档缺少 word/document.xml，无法追加内容。'
     )
@@ -92,7 +92,7 @@ export async function appendWordDocumentBuffer(
   const fragmentDocumentXml = await fragmentDocumentFile.async('string')
   let fragmentChildrenXml = extractWordBodyChildrenXml(fragmentDocumentXml).trim()
   if (!fragmentChildrenXml)
-    throw new AppError(OfficeErrorCodes.emptyContent, '追加的内容是空的，Word 文档没有改。')
+    throw officeError(OfficeErrorCodes.emptyContent, '追加的内容是空的，Word 文档没有改。')
 
   // 追加超链接/媒体时要合并 relationship，并重写 fragment 中的 rId。
   const existingRelsFile = existingZip.file(WordDocumentRelsPath)
@@ -167,7 +167,7 @@ export function findWordBodyRange(documentXml: string): { openEnd: number; close
   const bodyOpen = /<w:body(?:\s[^>]*)?>/.exec(documentXml)
   const bodyCloseStart = documentXml.lastIndexOf('</w:body>')
   if (!bodyOpen || bodyOpen.index < 0 || bodyCloseStart < 0)
-    throw new AppError(
+    throw officeError(
       OfficeErrorCodes.appendTargetInvalid,
       'Word 文档 XML 缺少 w:body，无法追加内容。'
     )
@@ -182,7 +182,7 @@ export function findWordSectPrRange(
   if (start < 0) return null
   const openEnd = bodyInnerXml.indexOf('>', start)
   if (openEnd < 0)
-    throw new AppError(
+    throw officeError(
       OfficeErrorCodes.appendTargetInvalid,
       'Word 文档 XML 中 w:sectPr 结构不完整。'
     )
@@ -190,7 +190,7 @@ export function findWordSectPrRange(
   const closeTag = '</w:sectPr>'
   const closeStart = bodyInnerXml.indexOf(closeTag, openEnd)
   if (closeStart < 0)
-    throw new AppError(
+    throw officeError(
       OfficeErrorCodes.appendTargetInvalid,
       'Word 文档 XML 中 w:sectPr 缺少结束标签。'
     )
@@ -220,7 +220,7 @@ export function mergeWordDocumentRelationships(
     return { relationshipsXml: existingRelsXml, fragmentChildrenXml: remappedChildrenXml }
   const closeIndex = existingRelsXml.lastIndexOf('</Relationships>')
   if (closeIndex < 0)
-    throw new AppError(
+    throw officeError(
       OfficeErrorCodes.appendTargetInvalid,
       'Word 文档关系文件结构不完整，无法追加链接或媒体关系。'
     )
@@ -353,7 +353,7 @@ function ensureXmlRootNamespaces(targetXml: string, donorXml: string, addedXml: 
   const declarations = missing.map((prefix) => {
     const uri = new RegExp(`xmlns:${prefix}="([^"]*)"`).exec(donorRoot[0])?.[1]
     if (!isString(uri))
-      throw new AppError(
+      throw officeError(
         OfficeErrorCodes.appendTargetInvalid,
         `追加内容用到了未声明的 XML 命名空间前缀 ${prefix}，已放弃写入以免损坏文档。`
       )
@@ -370,7 +370,7 @@ function insertWordNumberingParts(
 ): string {
   const closeTag = '</w:numbering>'
   if (!numberingXml.includes(closeTag))
-    throw new AppError(
+    throw officeError(
       OfficeErrorCodes.appendTargetInvalid,
       '目标 Word 文档的编号定义结构不完整，无法追加列表。'
     )
@@ -520,7 +520,7 @@ export function mergeWordStyleDefinitions(input: {
   const closeTag = '</w:styles>'
   const closeIndex = merged.lastIndexOf(closeTag)
   if (closeIndex < 0)
-    throw new AppError(
+    throw officeError(
       OfficeErrorCodes.appendTargetInvalid,
       '目标 Word 文档的样式定义结构不完整，无法追加样式。'
     )
@@ -538,7 +538,7 @@ export function registerWordPartContentType(
   const closeTag = '</Types>'
   const closeIndex = contentTypesXml.lastIndexOf(closeTag)
   if (closeIndex < 0)
-    throw new AppError(
+    throw officeError(
       OfficeErrorCodes.appendTargetInvalid,
       '目标 Word 文档的内容类型清单不完整，无法登记新部件。'
     )
@@ -555,7 +555,7 @@ export function registerWordPartRelationship(
   const closeTag = '</Relationships>'
   const closeIndex = relationshipsXml.lastIndexOf(closeTag)
   if (closeIndex < 0)
-    throw new AppError(
+    throw officeError(
       OfficeErrorCodes.appendTargetInvalid,
       'Word 文档关系文件结构不完整，无法登记新部件。'
     )

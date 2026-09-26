@@ -8,8 +8,6 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, extname, join } from 'node:path'
 
-import { AppError } from '@velaros-ai/core/error'
-
 import { OfficeErrorCodes } from '../../contract/constants.js'
 import type { OfficeOperationContext } from '../../contract/requires.js'
 import type {
@@ -20,7 +18,7 @@ import type {
   OfficeSystemCommandResult,
 } from '../../types/office.js'
 import { describeOfficeNativeCommand, libreOfficeCommandCandidates } from '../../utils/commands.js'
-import { conversionFailedError, missingOutputError } from '../../utils/errors.js'
+import { conversionFailedError, missingOutputError, officeError } from '../../utils/errors.js'
 import { findGeneratedOfficeFile } from '../../utils/paths.js'
 import { resolveLatexCompilerCandidates } from '../../utils/pdf/latex.js'
 import { OfficeTuning } from '../../utils/tuning.js'
@@ -185,7 +183,7 @@ export class OfficeConverters implements OfficeConvertersApi {
       }
 
     if (sourceExtension !== '.doc') {
-      throw new AppError(
+      throw officeError(
         OfficeErrorCodes.invalidExtension,
         `Word 输入文件的扩展名要是 .docx 或 .doc：${input.inputPath}`
       )

@@ -6,7 +6,6 @@
 import { z } from 'zod'
 
 import { isNonBlankString, isPresent } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 
 import {
   OfficeInputLimits,
@@ -27,6 +26,7 @@ import type {
 } from '../types/office.js'
 
 import { spreadsheetSheetArraySchema } from './spreadsheet/content.js'
+import { officeError } from './errors.js'
 import { OfficeTuning } from './tuning.js'
 
 // ── 共用片段 ────────────────────────────────────────────────────
@@ -421,5 +421,5 @@ function parseInput<T>(schema: z.ZodType<T>, input: unknown, operation: string):
   const issues = parsed.error.issues
     .slice(0, OfficeTuning.input.reportedIssues)
     .map((issue) => `${issue.path.join('.') || '入参'}：${issue.message}`)
-  throw new AppError('VALIDATION', `${operation} 的入参不对——${issues.join('；')}`)
+  throw officeError('VALIDATION', `${operation} 的入参不对——${issues.join('；')}`)
 }

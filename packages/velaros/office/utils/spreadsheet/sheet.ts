@@ -10,11 +10,11 @@ import {
   optionalWhenLazy,
   toNullable,
 } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 
 import { OfficeInputLimits } from '../../contract/constants.js'
 import type { ExcelCellInput, SpreadsheetSheetInput } from '../../types/office.js'
 import type { ExcelCellBuildResult } from '../../types/spreadsheet.js'
+import { officeError } from '../errors.js'
 
 import { buildExcelCellStyle, toArgbColor } from './style.js'
 
@@ -98,7 +98,7 @@ export function applyNumberFormats(
     const top = Math.min(startRow, endRow)
     const bottom = Math.max(startRow, endRow)
     if ((right - left + 1) * (bottom - top + 1) > OfficeInputLimits.spreadsheet.numberFormatCells)
-      throw new AppError(
+      throw officeError(
         'VALIDATION',
         `numberFormats 的区域 ${address} 太大：一个区域最多 ${OfficeInputLimits.spreadsheet.numberFormatCells} 格`
       )

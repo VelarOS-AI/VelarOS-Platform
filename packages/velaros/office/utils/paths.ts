@@ -4,12 +4,13 @@ import { copyFile, mkdir, readdir, stat, writeFile } from 'node:fs/promises'
 import { dirname, extname, isAbsolute, join, resolve } from 'node:path'
 
 import { isPlainObject } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import { currentPlatform } from '@velaros-ai/core/platform'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 
 import { OfficeErrorCodes } from '../contract/constants.js'
 import type { OfficeWordInput, OfficeWritten } from '../types/office.js'
+
+import { officeError } from './errors.js'
 
 /**
  * 真实路径意义上的「在不在根里」。
@@ -47,7 +48,7 @@ export async function assertOfficePathInsideProject(
   originalPath: string
 ): Promise<void> {
   if (!(await isOfficePathInsideProject(rootPath, resolvedPath))) {
-    throw new AppError(
+    throw officeError(
       OfficeErrorCodes.pathOutsideProject,
       `路径出了工作区根（按解开符号链接后的真实路径算）：${originalPath}`
     )
@@ -61,7 +62,7 @@ export async function normalizeExtensionPath(
   extension: string
 ): Promise<string> {
   const trimmedPath = outputPath.trim()
-  if (!trimmedPath) throw new AppError('VALIDATION', '输出路径不能为空。')
+  if (!trimmedPath) throw officeError('VALIDATION', '输出路径不能为空。')
 
   // 相对路径以工作区 root 为基准，绝对路径也必须最终落在 root 内。
   const basePath = isAbsolute(trimmedPath) ? resolve(trimmedPath) : resolve(rootPath, trimmedPath)
@@ -69,7 +70,7 @@ export async function normalizeExtensionPath(
 
   // 用户显式给了错误扩展名时直接拒绝，避免生成文件类型和路径不一致。
   if (currentExtension && currentExtension !== extension) {
-    throw new AppError(
+    throw officeError(
       OfficeErrorCodes.invalidExtension,
       `输出文件的扩展名要是 ${extension}（不写扩展名会自动补上）：${outputPath}`
     )
@@ -93,11 +94,11 @@ export async function prepareOfficeOutputPath(
   const existing = await getFileStats(resolvedPath)
   // 目标存在但不是普通文件时拒绝，避免覆盖目录或特殊文件。
   if (existing && !existing.isFile()) {
-    throw new AppError('VALIDATION', `目标路径不是文件：${outputPath}`)
+    throw officeError('VALIDATION', `目标路径不是文件：${outputPath}`)
   }
   // 覆盖必须显式声明。
   if (existing && !overwrite) {
-    throw new AppError(
+    throw officeError(
       OfficeErrorCodes.outputExists,
       `文件已经在了，要覆盖就传 overwrite: true：${outputPath}`
     )
@@ -115,12 +116,12 @@ export async function prepareWordDocumentOutputPath(
   const resolvedPath = await normalizeExtensionPath(rootPath, input.outputPath, '.docx')
   const existing = await getFileStats(resolvedPath)
   if (existing && !existing.isFile())
-    throw new AppError('VALIDATION', `目标路径不是文件：${input.outputPath}`)
+    throw officeError('VALIDATION', `目标路径不是文件：${input.outputPath}`)
   await mkdir(dirname(resolvedPath), { recursive: true })
   // appendMode 只在目标文件已存在时生效。
   if (input.appendMode && existing) return { path: resolvedPath, created: false, append: true }
   if (existing && !input.overwrite)
-    throw new AppError(
+    throw officeError(
       OfficeErrorCodes.outputExists,
       `文件已经在了，要覆盖就传 overwrite: true，要接在后面就传 appendMode: true：${input.outputPath}`
     )
@@ -134,7 +135,7 @@ export async function resolveInputPathWithExtensions(
   extensions: readonly string[]
 ): Promise<string> {
   const trimmedPath = inputPath.trim()
-  if (!trimmedPath) throw new AppError('VALIDATION', '输入路径不能为空。')
+  if (!trimmedPath) throw officeError('VALIDATION', '输入路径不能为空。')
 
   // 输入文件同样必须在工作区内。
   const resolvedPath = isAbsolute(trimmedPath)
@@ -143,7 +144,7 @@ export async function resolveInputPathWithExtensions(
   const currentExtension = extname(resolvedPath).toLowerCase()
   // 多扩展名用于 PDF/Word 等转换场景。
   if (!extensions.includes(currentExtension)) {
-    throw new AppError(
+    throw officeError(
       OfficeErrorCodes.invalidExtension,
       `输入文件的扩展名要是 ${extensions.join('、')} 之一：${inputPath}`
     )
@@ -154,7 +155,7 @@ export async function resolveInputPathWithExtensions(
 
   // 转换/编辑前必须确认输入文件存在。
   if (!existing?.isFile()) {
-    throw new AppError(OfficeErrorCodes.inputMissing, `输入文件不存在或不是文件：${inputPath}`)
+    throw officeError(OfficeErrorCodes.inputMissing, `输入文件不存在或不是文件：${inputPath}`)
   }
 
   return resolvedPath

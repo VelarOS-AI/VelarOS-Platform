@@ -8,7 +8,6 @@ import { Document, Packer } from 'docx'
 import ExcelJS from 'exceljs'
 
 import { isEmpty, isPresent, isString } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 
 import { OfficeErrorCodes } from '../../contract/constants.js'
 import type { OfficeOperationContext } from '../../contract/requires.js'
@@ -20,6 +19,7 @@ import type {
   PresentationSlideInput,
 } from '../../types/office.js'
 import type { PptxBackground } from '../../types/pptx.js'
+import { officeError } from '../../utils/errors.js'
 import { writeOfficeFile, writtenReceipt } from '../../utils/paths.js'
 import { normalizePresentationSlides } from '../../utils/presentation/content.js'
 import { addSlideElements } from '../../utils/presentation/elements.js'
@@ -88,7 +88,7 @@ export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
   ): Promise<OfficeWritten> {
     const blocks = normalizeWordBlocks(input)
     if (isEmpty(blocks))
-      throw new AppError(
+      throw officeError(
         OfficeErrorCodes.emptyContent,
         OfficeDocumentOperations.EmptyContentMessages.createWord
       )
@@ -115,7 +115,7 @@ export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
   ): Promise<OfficeWritten> {
     const slides = normalizePresentationSlides(input)
     if (isEmpty(slides))
-      throw new AppError(
+      throw officeError(
         OfficeErrorCodes.emptyContent,
         OfficeDocumentOperations.EmptyContentMessages.createPresentation
       )
@@ -159,7 +159,7 @@ export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
     // 先把所有输入规整为工作表数组，后续生成逻辑只关心 sheets。
     const sheets = normalizeSpreadsheetSheets(input)
     if (isEmpty(sheets))
-      throw new AppError(
+      throw officeError(
         OfficeErrorCodes.emptyContent,
         OfficeDocumentOperations.EmptyContentMessages.createSpreadsheet
       )

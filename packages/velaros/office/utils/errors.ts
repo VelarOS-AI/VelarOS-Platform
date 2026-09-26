@@ -1,19 +1,28 @@
 /**
- * 外部转换的失败拼成带专属码的错误：缺转换器、命令失败或没有产出、MarkItDown 不可用。
+ * 失败拼成带专属码的错误：写之前就停下的那些（入参、路径、缺转换器、MarkItDown 不可用）标成没有写入；
+ * 命令失败或没有产出另算，那时可能已经写过东西（LaTeX 的 .tex）。
  * message 是写给模型看的：缺什么、为什么要它、命令输出的结尾——程序只看得到 code 与 message，要它知道的都写在这里。
  */
 
 import { isNonBlankString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { OfficeErrorCodes } from '../contract/constants.js'
+import { type OfficeErrorCode, OfficeErrorCodes } from '../contract/constants.js'
 import type { OfficeSystemCommandResult } from '../types/office.js'
 
 import { OfficeTuning } from './tuning.js'
 
+/**
+ * 写之前就停下的失败：入参不对、路径越界、目标已在、输入不在、缺转换器……产物一个字节都还没写。
+ * 标上「一处都没写」（`executionOutcome: 'not-applied'`），运行时据此记成没有效果，不报效果未知。
+ */
+export function officeError(code: OfficeErrorCode | 'VALIDATION', message: string): AppError {
+  return new AppError(code, message, undefined, { executionOutcome: 'not-applied' })
+}
+
 /** 本机缺某个外部命令：说清缺哪个、为什么要它，并请模型如实告诉用户，不要自己去装。 */
 export function converterMissingError(command: string, purpose: string): AppError {
-  return new AppError(
+  return officeError(
     OfficeErrorCodes.converterMissing,
     `本机没找到 ${command}：${purpose}。请如实告诉用户需要先装好它，不要自己去装依赖。`
   )
@@ -21,7 +30,7 @@ export function converterMissingError(command: string, purpose: string): AppErro
 
 /** MarkItDown 没装或被用户停用：toMarkdown 做不了，PDF 可以改用 readPdf、Office 文档可以改用 preview。 */
 export function markItDownUnavailableError(): AppError {
-  return new AppError(
+  return officeError(
     OfficeErrorCodes.markItDownUnavailable,
     '没找到 MarkItDown（没装，或在设置里停用了），toMarkdown 做不了。PDF 可以改用 readPdf 读文字，Word、PowerPoint、Excel 可以改用 preview；要装请用户在插件市场里装。'
   )
