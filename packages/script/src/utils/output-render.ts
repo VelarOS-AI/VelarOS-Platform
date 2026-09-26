@@ -216,8 +216,17 @@ export function projectOutputs(
     renderBlock(block, index, { ...view, mode: 'reference' }, ref, 0, summaries, taskRevision)
   )
   let omittedBlocks = 0
+  // 放不下（有块被省略或只露出一部分）时写出这次的展示预算，模型对得上是自己交多了
   const encode = () =>
-    JSON.stringify({ blocks, omittedBlocks, issues: !isEmpty(issues) ? issues : undefined })
+    JSON.stringify({
+      blocks,
+      omittedBlocks,
+      displayChars:
+        omittedBlocks > 0 || blocks.some((block) => block.representation !== 'full')
+          ? allocatedChars
+          : undefined,
+      issues: !isEmpty(issues) ? issues : undefined,
+    })
   while (!isEmpty(blocks) && encode().length > allocatedChars) {
     blocks.pop()
     omittedBlocks++

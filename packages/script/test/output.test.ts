@@ -222,6 +222,13 @@ test('source editor refuses shadowed, nested, dynamic, duplicate and privileged 
   ).toThrow('越权')
 })
 
+test('a result that does not fit says its display budget; one that fits does not', () => {
+  const small = scriptOutputs.project(capture('short', { key: 'note' }), 'ref', 2000)
+  expect(JSON.parse(small.prompt).displayChars).toBeUndefined()
+  const long = scriptOutputs.project(capture('x'.repeat(5000), { key: 'code' }), 'ref', 2000)
+  expect(JSON.parse(long.prompt).displayChars).toBe(2000)
+})
+
 test('configuration and per-block zero budget produce references or explicit omissions', () => {
   const raw = capture({ a: 1 }, { key: 'data', view: { maxChars: 0 } })
   expect(scriptOutputs.project(raw, 'ref', 2000).blocks[0]!.bodyIncluded).toBe(false)
@@ -293,7 +300,8 @@ test('INV-37 output 声明里写的上限与 ScriptOutputLimits 一致，校验�
     `最多 ${limits.keyChars} 个字符），整理工具凭它调整展示`,
     `purpose 说明持续观察它的原因（最多 ${limits.purposeChars} 个字符）`,
     `代码的语言标签，最多 ${limits.languageChars} 个字符`,
-    `maxChars 包括输出目录与省略说明（最多 ${limits.maxDisplayChars}）`,
+    `缺省 ${limits.displayChars} 个字符，包括输出目录与省略说明`,
+    `output.configure({maxChars}) 放大（最多 ${limits.maxDisplayChars}，`,
     `maxChars 本块最多展示多少字符（最多 ${limits.maxDisplayChars}）`,
     `JSON Pointer 数组（最多 ${limits.paths} 个）`,
   ])
