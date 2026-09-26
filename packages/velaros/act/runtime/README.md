@@ -25,7 +25,7 @@ try {
   for await (const event of session.submit('找出登录失败的原因并修好')) {
     if (event.type === 'accepted') console.log(event.text) // 这一轮被接纳的正文；流式预览在 text、program 事件里
     else if (event.type === 'interaction')
-      // 模型的 ask、confirm、capability：一个请求只收一次答案
+      // 模型的 ask、confirm：一个请求只收一次答案
       await session.answer({ id: event.request.id, runId: event.request.runId, value: await askUser(event.request.message) })
     else if (event.type === 'error') console.error(event.message)
     else if (event.type === 'state') status = event.status

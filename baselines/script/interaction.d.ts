@@ -1,7 +1,7 @@
 declare module 'velaros:interaction' {
   /**
-   * 向用户要信息、确认或能力；在子任务里是向父任务要。调用一直等到对方回答，返回的就是回答。
-   * 回答本身不授予任何权限：写操作照样过各自的检查，要换能力得等父任务更新环境后续跑。
+   * 向用户要信息或确认；在子任务里是向父任务要。调用一直等到对方回答，返回的就是回答。
+   * 回答本身不授予任何权限：写操作照样过各自的检查。模块不用申请，modules.list 里有的直接 import。
    */
 
   /**
@@ -27,12 +27,6 @@ declare module 'velaros:interaction' {
     readonly values?: Readonly<Record<string, InteractionFieldValue>>
     readonly declined?: boolean
     readonly reason?: string
-  }
-
-  /** 说明缺少的能力：message 1 到 8000 个字符；detail 放任意 JSON 补充，比如为什么需要、要哪个模块。 */
-  interface CapabilityRequest {
-    readonly message: string
-    readonly detail?: unknown
   }
 
   /** 要对方确认的话：message 1 到 8000 个字符，说清楚要同意什么、会产生什么效果。 */
@@ -74,10 +68,6 @@ declare module 'velaros:interaction' {
   /** 要信息，返回对方的回答；给了 options 或 fields 时对方在卡片上点选或填写。
    */
   export function ask(input: InteractionRequest): Promise<InteractionAnswer>
-
-  /** 说明缺少的能力；可以先交付当前进度，由父任务更新环境后续跑。
-   */
-  export function capability(input: CapabilityRequest): Promise<unknown>
 
   /** 要确认，返回对方是否同意及不同意的理由；它不代替具体操作的权限校验。
    */

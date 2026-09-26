@@ -2,7 +2,7 @@
 
 <!-- 由 scripts/script/act-catalog.mjs 从 surfaces.mjs 的登记与生成的模型面写出，不要手改。 -->
 
-当前共 15 种合同投影、91 个投影操作、49 项去重后的用法。系统包 `velaros:system` 有 4 个成员（modules、goal、memory、store），每个成员按宿主装配与会话授权挂上其中一种投影；实际可用项由宿主配置、会话作用域和当前授权决定。
+当前共 15 种合同投影、90 个投影操作、48 项去重后的用法。系统包 `velaros:system` 有 4 个成员（modules、goal、memory、store），每个成员按宿主装配与会话授权挂上其中一种投影；实际可用项由宿主配置、会话作用域和当前授权决定。
 
 | 目录 | 模型操作 | 可用条件 | 使用模板 |
 | --- | --- | --- | --- |
@@ -16,7 +16,7 @@
 | [system/ — system-store-read](system/README.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch` | 共享空间只读授权 | [store-read-template.js](system/store-read-template.js) |
 | [system/ — modules](system/README.md) | `list`、`search`、`describe` | 默认装配 | [modules-template.js](system/modules-template.js) |
 | [system/ — context-materials](system/README.md) | `list`、`read`、`submit` | 整理作用域 | [context-materials-template.js](system/context-materials-template.js) |
-| [agents/ — interaction](agents/README.md) | `ask`、`capability`、`confirm` | 默认装配 | [interaction-template.js](agents/interaction-template.js) |
+| [agents/ — interaction](agents/README.md) | `ask`、`confirm` | 默认装配 | [interaction-template.js](agents/interaction-template.js) |
 | [agents/ — widget](agents/README.md) | `show` | 宿主配置 widgets | [widget-template.js](agents/widget-template.js) |
 | [agents/ — agents](agents/README.md) | `profiles`、`start`、`resume`、`reply`、`status`、`wait`、`cancel`、`send` | 宿主配置 agents | [template.js](agents/template.js) |
 | [search/ — search](search/README.md) | `profiles`、`search`、`read` | 宿主配置 search | [template.js](search/template.js) |
@@ -71,7 +71,6 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 | `velaros:context-materials.read` | `execute` | `none` | 按快照里的引用读一页父会话原文，正文在 text。 |
 | `velaros:context-materials.submit` | `execute` | `none` | 交来整理补丁：先整份校验，不合格就报错（修正后再交），合格就受理；受理之后声明完成。 |
 | `velaros:interaction.ask` | `execute` | `none` | 要信息，返回对方的回答；给了 options 或 fields 时对方在卡片上点选或填写。 |
-| `velaros:interaction.capability` | `execute` | `none` | 说明缺少的能力；可以先交付当前进度，由父任务更新环境后续跑。 |
 | `velaros:interaction.confirm` | `execute` | `none` | 要确认，返回对方是否同意及不同意的理由；它不代替具体操作的权限校验。 |
 | `velaros:widget.show` | `execute` | `none` | 显示一个小部件，立即返回，不等用户操作。 |
 | `velaros:agents.profiles` | `observe`、`execute` | `none` | 列出宿主给的配置：名称、能力范围与预算；start/resume 不给 profile 就用第一个。 |

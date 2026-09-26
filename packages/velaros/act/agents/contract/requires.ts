@@ -40,7 +40,7 @@ export interface InteractionHost {
 export interface InteractionSession {
   /** 请求并等待当前交互答案。 */
   interact(
-    kind: 'input' | 'confirmation' | 'capability',
+    kind: 'input' | 'confirmation',
     message: string,
     signal: AbortSignal,
     detail?: unknown

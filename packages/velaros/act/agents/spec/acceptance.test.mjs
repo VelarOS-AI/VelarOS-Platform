@@ -51,7 +51,7 @@ test('INV-2 声明里写给模型的上限与常量表一致', () => {
       VelarInteractionModule,
       [
         `要对方回答的话：message 1 到 ${InteractionLimits.messageChars} 个字符`,
-        `说明缺少的能力：message 1 到 ${InteractionLimits.messageChars} 个字符`,
+        `要对方确认的话：message 1 到 ${InteractionLimits.messageChars} 个字符`,
       ],
     ],
     [

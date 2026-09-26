@@ -31,7 +31,7 @@ const widgets = { show: showInConversation }
 const runtime = await createRuntime({ workspace: projectRoot, dataDir: stateDir, model, agents, widgets })
 const session = await runtime.openSession('main')
 for await (const event of session.submit('先审查登录模块，再按审查结论修复')) {
-  // 主线的 ask、confirm、capability 交给宿主；子任务的提问先交给父任务的模型，由它 reply。
+  // 主线的 ask、confirm 交给宿主；子任务的提问先交给父任务的模型，由它 reply。
   // ask 带选项或表单时 detail 是 { options, multiple, allowText, fields }，回答给 { choices } 或 { values }
   if (event.type === 'interaction')
     await session.answer({ id: event.request.id, runId: event.request.runId, value: await askUser(event.request.kind, event.request.message, event.request.detail) })

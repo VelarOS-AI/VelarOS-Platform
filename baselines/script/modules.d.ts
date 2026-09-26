@@ -1,6 +1,7 @@
 declare module 'velaros:modules' {
   /**
-   * 能力发现：只列本会话真能 import 的模块。拿不准某个模块怎么用时 describe 它，把 declarations 或 template 用 output 交出来再看。
+   * 能力发现：只列本会话真能 import 的模块，列出来的直接 import，不用申请；列不出来的这个会话装不上，换现有的能力做，或者在回复里说明缺什么。
+   * 拿不准某个模块怎么用时 describe 它，把 declarations 或 template 用 output 交出来再看。
    */
 
   /**

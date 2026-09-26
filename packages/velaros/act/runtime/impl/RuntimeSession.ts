@@ -111,7 +111,7 @@ export interface RuntimeSessionAccess extends ContextCandidateValidator {
   readonly memory: ContextMemoryApi
   /** 通过当前 Act 运行发起用户交互。 */
   interact(
-    kind: 'input' | 'confirmation' | 'capability',
+    kind: 'input' | 'confirmation',
     message: string,
     signal: AbortSignal,
     detail?: unknown

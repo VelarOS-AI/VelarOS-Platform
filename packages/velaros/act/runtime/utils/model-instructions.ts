@@ -52,7 +52,7 @@ export function runtimeInstructions(options: {
       ? '要给用户看图表、示意图或可交互的小工具时，用 velaros:widget 的 show 直接显示在对话里，不要只用文字描述。'
       : '',
     !has('velaros:agents') && has('velaros:interaction')
-      ? '需要信息或能力时通过 velaros:interaction 的 ask/confirm/capability 向父任务或宿主请求。能力回答不授予权限；需要更换环境时交付已有证据，完成当前阶段并等待续跑。'
+      ? '需要信息或确认时通过 velaros:interaction 的 ask/confirm 向父任务或宿主请求；回答不授予权限。'
       : '',
     `脚本标准库 velaros 的声明（与脚本检查用的是同一份）：\n${scriptPackageCompiler.compile([], []).granted.find((module) => module.namespace === 'velaros')!.declarations}`,
     ...resident.map(
