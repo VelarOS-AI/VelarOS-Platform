@@ -32,8 +32,8 @@ import {
   writeSpreadsheetRow,
 } from '../../utils/spreadsheet/sheet.js'
 import { buildExcelCellStyle } from '../../utils/spreadsheet/style.js'
-import { normalizeWordBlocks } from '../../utils/word/content.js'
-import { buildWordChildren, buildWordDocument } from '../../utils/word/docx.js'
+import { normalizeWordBlocks, withoutRepeatedTitle } from '../../utils/word/content.js'
+import { buildWordChildren, buildWordDocument, buildWordNumbering } from '../../utils/word/docx.js'
 import { appendWordDocumentBuffer } from '../../utils/word/ooxml-append.js'
 
 import type { OfficeWorkspaceApi } from './OfficeWorkspace.js'
@@ -100,12 +100,16 @@ export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
       const fragmentDocument = new Document({
         title: input.title,
         creator: input.author ?? '',
+        numbering: buildWordNumbering(),
         sections: [{ children: buildWordChildren({ blocks }) }],
       })
       return appendWordDocumentBuffer(output, await Packer.toBuffer(fragmentDocument))
     }
-    // 新建模式直接构建完整 document。
-    const document = buildWordDocument({ ...input, blocks })
+    // 新建模式直接构建完整 document；抬头已经写了 title，正文开头同名的一级标题不再写一遍。
+    const document = buildWordDocument({
+      ...input,
+      blocks: withoutRepeatedTitle(blocks, input.title),
+    })
     return writeOfficeFile(output, await Packer.toBuffer(document))
   }
 

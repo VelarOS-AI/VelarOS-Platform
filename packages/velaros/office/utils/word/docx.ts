@@ -9,6 +9,7 @@ import {
   HeadingLevel,
   type IRunOptions,
   type ITableCellOptions,
+  LevelFormat,
   LineRuleType,
   Paragraph,
   ShadingType,
@@ -167,6 +168,43 @@ export function buildWordTable(block: Extract<WordBlock, { kind: 'table' }>): Ta
   })
 }
 
+/** 有序列表的编号定义名。 */
+const OrderedListNumbering = 'velaros-ordered-list'
+
+/** 文档的编号定义：有序列表九级都是十进制（1. 1. 1.），逐级缩进；每个列表用自己的 instance，编号各自从 1 排起。 */
+export function buildWordNumbering() {
+  return {
+    config: [
+      {
+        reference: OrderedListNumbering,
+        levels: Array.from({ length: OfficeInputLimits.word.bulletLevel + 1 }, (_, level) => ({
+          level,
+          format: LevelFormat.DECIMAL,
+          text: `%${level + 1}.`,
+          alignment: AlignmentType.START,
+          style: { paragraph: { indent: { left: 720 * (level + 1), hanging: 360 } } },
+        })),
+      },
+    ],
+  }
+}
+
+/** 列表里的一项：项目符号列表用 docx 自带的圆点，有序列表用上面的编号定义。 */
+function buildListParagraph(
+  ordered: boolean,
+  level: number,
+  instance: number,
+  children: TextRun[]
+): Paragraph {
+  return ordered
+    ? new Paragraph({
+        numbering: { reference: OrderedListNumbering, level, instance },
+        spacing: { after: 80 },
+        children,
+      })
+    : new Paragraph({ bullet: { level }, spacing: { after: 80 }, children })
+}
+
 /** 构建标准文档的抬头：标题、副标题和「单位 · 作者 · 日期」一行。 */
 export function buildStandardWordFrontMatter(
   children: FileChild[],
@@ -228,6 +266,7 @@ export function buildWordChildren(
     // 标题与标准文档元数据只在新建完整文档时传入；append fragment 不重复插入。
     buildStandardWordFrontMatter(children, input)
   }
+  let orderedLists = 0
   for (const block of blocks) {
     switch (block.kind) {
       case 'heading': {
@@ -290,23 +329,16 @@ export function buildWordChildren(
         break
       }
       case 'bullets': {
+        const ordered = !!block.ordered
+        if (ordered) orderedLists += 1
         for (const item of block.items) {
-          if (isString(item)) {
-            children.push(
-              new Paragraph({ text: item, bullet: { level: 0 }, spacing: { after: 80 } })
-            )
-          } else {
-            children.push(
-              new Paragraph({
-                bullet: { level: item.level ?? 0 },
-                spacing: { after: 80 },
-                children:
-                  !!item.runs && !isEmpty(item.runs)
-                    ? item.runs.map(buildTextRun)
-                    : [new TextRun({ text: item.text })],
-              })
-            )
-          }
+          const runs = isString(item)
+            ? [new TextRun({ text: item })]
+            : !!item.runs && !isEmpty(item.runs)
+              ? item.runs.map(buildTextRun)
+              : [new TextRun({ text: item.text })]
+          const level = isString(item) ? 0 : (item.level ?? 0)
+          children.push(buildListParagraph(ordered, level, orderedLists, runs))
         }
         break
       }
@@ -396,6 +428,7 @@ export function buildWordDocument(
     description: input.abstract,
     features: optionalWhenLazy(shouldIncludeAcademicToc(input), () => ({ updateFields: true })),
     styles: isAcademic ? buildAcademicWordStyles(language) : buildStandardWordStyles(language),
+    numbering: buildWordNumbering(),
     sections: [
       {
         properties: optionalWhenLazy(isAcademic, () => ({

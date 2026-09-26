@@ -107,6 +107,7 @@ const wordBlockSchema = z.discriminatedUnion('kind', [
   }),
   z.object({
     kind: z.literal('bullets'),
+    ordered: z.boolean().optional(),
     items: z
       .array(
         z.union([

@@ -228,7 +228,8 @@ declare module 'velaros:office' {
 
   /**
    * 一个内容块，kind 说是哪种：heading 标题（text 最多 500 个字符，level 1 到 3，缺省 1）；paragraph 段落（text 最多 20000 个字符，或 runs 富文本；
-   * spaceBefore、spaceAfter 是段前段后间距，单位是二十分之一磅；indent 是缩进）；bullets 列表（最多 200 项，每项最多 1000 个字符，level 是缩进层级 0 到 8）；
+   * spaceBefore、spaceAfter 是段前段后间距，单位是二十分之一磅；indent 是缩进）；bullets 列表（ordered 为真是 1. 2. 3. 编号列表，否则是项目符号；最多 200 项，
+   * 每项最多 1000 个字符，level 是缩进层级 0 到 8）；
    * table 表格（最多 500 行、每行最多 30 格；header 为真第一行当表头，widthPct 是宽度占页宽的百分比 10 到 100）；pageBreak 分页。
    */
   type WordBlock =
@@ -250,6 +251,7 @@ declare module 'velaros:office' {
       }
     | {
         kind: 'bullets'
+        ordered?: boolean
         items: Array<string | { text: string; runs?: WordTextRun[]; level?: number }>
       }
     | {
