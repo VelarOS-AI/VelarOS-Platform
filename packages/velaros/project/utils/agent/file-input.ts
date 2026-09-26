@@ -140,35 +140,28 @@ export function searchInput(input: unknown): ProjectSearchInput {
   return search
 }
 
-/** 一步里指文件的三种写法恰好给一种。 */
-function oneSource(step: Record<string, unknown>, where: string): void {
-  const given = ['fileRef', 'sourceRef', 'path'].filter((field) => !isUndefined(step[field]))
-  if (given.length !== 1)
-    throw invalid(
-      `${where} 的 fileRef、sourceRef、path 恰好给一个，这里给了 ${isEmpty(given) ? '零个' : given.join('、')}`
-    )
-  text(step[given[0]!], `${where}.${given[0]}`)
-}
-
-/** 一步的形状：按 action 核对各自的字段；每处编辑的细节（op、range、match）由编辑规划核对。 */
+/** 一步的形状：按 action 核对各自的字段；oldText 在文件里找不找得到、唯不唯一由编辑规划核对。 */
 function step(value: unknown, index: number): ProjectEditStep {
   const where = `steps[${index}]`
   const item = objectOf(value, where)
   switch (item.action) {
-    case 'create':
+    case 'write':
       text(item.path, `${where}.path`)
-      if (!isString(item.text)) throw invalid(`${where}.text 要新文件的完整正文（字符串）`)
+      if (!isString(item.text)) throw invalid(`${where}.text 要文件的完整正文（字符串）`)
       break
-    case 'overwrite':
-      oneSource(item, where)
-      if (!isString(item.text)) throw invalid(`${where}.text 要替换后的完整正文（字符串）`)
+    case 'replace':
+      text(item.path, `${where}.path`)
+      if (!isString(item.oldText) || isEmpty(item.oldText))
+        throw invalid(`${where}.oldText 要文件里一段原文（非空字符串）`)
+      if (!isString(item.newText))
+        throw invalid(`${where}.newText 要换上去的正文（字符串，空串就是删掉）`)
       break
     case 'move':
-      oneSource(item, where)
+      text(item.path, `${where}.path`)
       text(item.to, `${where}.to`)
       break
     case 'delete':
-      oneSource(item, where)
+      text(item.path, `${where}.path`)
       break
     case 'recode':
       if (
@@ -187,24 +180,9 @@ function step(value: unknown, index: number): ProjectEditStep {
       if (!isUndefined(item.newline) && item.newline !== 'lf' && item.newline !== 'crlf')
         throw invalid(`${where}.newline 只收 lf 或 crlf`)
       break
-    case 'edit':
-      oneSource(item, where)
-      if (
-        !isArray(item.edits) ||
-        isEmpty(item.edits) ||
-        item.edits.length > ProjectFileLimits.editsPerFile
-      )
-        throw invalid(`${where}.edits 要 1–${ProjectFileLimits.editsPerFile} 处编辑`)
-      item.edits.forEach((edit, at) => {
-        const shaped = objectOf(edit, `${where}.edits[${at}]`)
-        if (!isString(shaped.text))
-          throw invalid(`${where}.edits[${at}].text 要字符串（空串就是删掉）`)
-        if (!isUndefined(shaped.range)) lineRange(shaped.range, `${where}.edits[${at}].range`)
-      })
-      break
     default:
       throw invalid(
-        `${where}.action 只收 create、overwrite、move、delete、recode、edit，这里给的是 ${JSON.stringify(item.action)}`
+        `${where}.action 只收 write、replace、move、delete、recode，这里给的是 ${JSON.stringify(item.action)}`
       )
   }
   return item as ProjectEditStep

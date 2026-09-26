@@ -23,7 +23,7 @@ export const ProjectErrorCodes = Object.freeze({
   targetExists: 'TARGET_EXISTS',
   /** 补丁套不上当前内容。 */
   patchApplyError: 'PATCH_APPLY_ERROR',
-  /** 超出允许的范围：range 超出 fileRef 实际显示的范围、符号引用不属于当前项目、一个事务的文件数或行数超过预算，或者一次读、列、搜的量超过守内存的上限。 */
+  /** 超出允许的范围：要改的文件太大整份读不全、符号引用不属于当前项目、一个事务的文件数或行数超过预算，或者一次读、列、搜的量超过守内存的上限。 */
   scopeViolation: 'SCOPE_VIOLATION',
   /** 校验器没通过，改动没有提交。 */
   validationFailed: 'VALIDATION_FAILED',

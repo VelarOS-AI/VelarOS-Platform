@@ -40,19 +40,15 @@ async function prepareFailure(operation: EditOperation): Promise<any> {
   throw new Error('prepareEdit 应当失败')
 }
 
-describe('velaros:project read-to-line-edit flow', () => {
+describe('velaros:project read-to-edit flow', () => {
   test('uses a real read revision through the model-facing edit boundary', async () => {
     await writeFile(join(root, 'source.ts'), 'const a = 1\nconst b = 2\n')
     const { call } = await projectToolFixture({ root })
     const [file] = (await call('project', 'read', { files: [{ path: 'source.ts' }] })).files
-    // 读到的版本装在 fileRef 里：edit 凭它核对文件没变，再按行号改。
+    // 照读到的原文写 oldText：文件没变过，回执里提交前的版本就是读到的那一版。
     const result = await call('project', 'edit', {
       steps: [
-        {
-          action: 'edit',
-          fileRef: file.fileRef,
-          edits: [{ op: 'replace', range: 2, text: 'const b = 3' }],
-        },
+        { action: 'replace', path: 'source.ts', oldText: 'const b = 2', newText: 'const b = 3' },
       ],
     })
     expect(result).toMatchObject({
@@ -78,9 +74,10 @@ describe('read range clamping', () => {
     })
 
     expect(result.issues).toBeUndefined()
-    expect(result.files[0].lines[0]).toEqual([150, 'line 150'])
-    expect(result.files[0].lines.at(-1)).toEqual([200, 'line 200'])
-    expect(result.files[1]).toMatchObject({ path: 'short.txt', lines: [], totalLines: 3 })
+    expect(result.files[0]).toMatchObject({ path: 'long.txt', startLine: 150, totalLines: 200 })
+    expect(result.files[0].text.split('\n')[0]).toBe('line 150')
+    expect(result.files[0].text.split('\n').at(-1)).toBe('line 200')
+    expect(result.files[1]).toMatchObject({ path: 'short.txt', text: '', totalLines: 3 })
     expect(result.files[1].note).toContain('文件共 3 行')
     expect(result.files[1].note).toContain('起始行 150')
   })

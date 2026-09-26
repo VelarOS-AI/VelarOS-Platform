@@ -7,16 +7,14 @@ import { isEmpty, isPlainObject, optionalWhen } from '@velaros-ai/core'
 import type { ProjectOperationContext } from '../../contract/requires.js'
 import type { PrepareEditInput } from '../../types/edit.js'
 import type {
-  ProjectEditInput,
   ProjectEditResult,
+  ProjectPlanInput,
   ProjectRecodeReceipt,
 } from '../../types/files.js'
 import { compileProjectEdit } from '../editing/planner-index.js'
 import { beforeWrite, rethrowNotApplied } from '../transactions/transaction-errors.js'
 
-import { seenFileSpans } from './change-records.js'
 import { changeWindows } from './change-windows.js'
-import { withEditRecovery } from './edit-recovery.js'
 import { saveReceipt } from './file-refs.js'
 import { projectPlannerResolver } from './planner-resolver.js'
 import { projectCreatedPaths, projectTransactionHasChanges } from './transaction-result.js'
@@ -27,12 +25,12 @@ import { projectCreatedPaths, projectTransactionHasChanges } from './transaction
  * 提交失败时丢掉事务，一个文件都没写。
  */
 export async function commitProjectEdit(
-  steps: ProjectEditInput['steps'],
+  steps: ProjectPlanInput['steps'],
   ctx: ProjectOperationContext
 ): Promise<ProjectEditResult> {
-  const plan = (await withEditRecovery(steps, ctx, () =>
-    compileProjectEdit({ steps }, projectPlannerResolver(ctx))
-  ).catch(rethrowNotApplied)) as PrepareEditInput
+  const plan = (await compileProjectEdit({ steps }, projectPlannerResolver(ctx)).catch(
+    rethrowNotApplied
+  )) as PrepareEditInput
   const recode = optionalWhen(
     isPlainObject,
     plan.metadata?.recode
@@ -53,7 +51,6 @@ export async function commitProjectEdit(
     if (recode) unchanged.recode = recode
     return unchanged
   }
-  const previous = await beforeWrite(() => seenFileSpans(steps, ctx))
   const kernel = await beforeWrite(() => ctx.project.kernel())
   const prepared = await kernel.prepareEdit(plan).catch(rethrowNotApplied)
   try {
@@ -74,7 +71,7 @@ export async function commitProjectEdit(
         Object.entries(applied.oldRevisions).filter(([path]) => !created.has(path))
       ),
       newRevisions: applied.newRevisions,
-      files: await changeWindows(ctx, final.patches, applied.newRevisions, previous),
+      files: await changeWindows(ctx, final.patches, applied.newRevisions),
       diff: final.diff,
       diffLines: final.changedLines,
     }

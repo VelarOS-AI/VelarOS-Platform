@@ -41,47 +41,38 @@ export interface FileFailure {
 
 /**
  * @AgentView
- * 按行号改一处。range 选中的整行换成 text（text 是空串就是删掉这几行）；after 在第几行后面插入 text（0 是插在最前面）。
- * text 是新的几行，行与行之间用 `\n` 分开，结尾不用加 `\n`（加了就多一个空行）。
- * 行号是 `read` 那一版的行号：同一个文件的几处都按那一版算，互相不重叠，不用自己算前面改动带来的错位。
+ * 改文件的一步，按路径指文件：
+ * `write` 把 text 整份写进去（文件不存在就连同上级目录新建；已有的二进制文件拒改）；
+ * `replace` 把文件里的一段原文 oldText 换成 newText：oldText 照读到的原文写（空白、引号、换行都要一样），在文件里只能出现一次，出现好几处就多带几行上下文。
+ * 换行一律写 `\n`：写回去时按原文件的换行风格存（原来是 CRLF 的还是 CRLF），编码也按原文件的（新文件是 UTF-8）。
  */
-export type FileLineEdit = { range: FileLineRange; text: string } | { after: number; text: string }
+export type FileEditStep =
+  | { action: 'write'; path: string; text: string }
+  | { action: 'replace'; path: string; oldText: string; newText: string }
 
 /**
  * @AgentView
- * 改一个文件，两种改法只用一种：
- * `edits` 按行号改几处（一次最多 1000 处，必须带上 read 给的 `version`，行号只在那一版上成立）；
- * `newText` 整份写进去（文件不存在就连同上级目录新建；已有的二进制文件拒改）。
- * 换行一律写 `\n`：写回去时按原文件的换行风格存（原来是 CRLF 的还是 CRLF），编码也按原文件的（新文件是 UTF-8）。
- * `version` 给了就先核对文件还是那一版，被改过就整批不写，message 里有现在的版本；不给就不核对（只有 newText 可以不给）。
+ * 一次最多 1000 步、20 个文件，合成一次改动，全成或全不成。
+ * 同一个文件接连几步时，后一步按前一步改完的内容算（先 write 新建、再 replace 也行）。
  */
-export interface FileEditItem {
-  path: string
-  version?: string
-  edits?: FileLineEdit[]
-  newText?: string
-}
-
-/** @AgentView 一批最多 20 个文件，全成或全不成；同一个文件的几处改动放进同一项的 edits。 */
 export interface FileEditInput {
-  files: FileEditItem[]
+  steps: FileEditStep[]
 }
 
-/** @AgentView 写好的一个文件：新的版本号与行数。path 是符号链接时，target 是真正被写的那个文件。 */
+/** @AgentView 写好的一个文件：改完之后的行数。path 是符号链接时，target 是真正被写的那个文件。 */
 export interface FileWritten {
   path: string
   target?: string
   created: boolean
-  version: string
   totalLines: number
 }
 
 /**
  * @AgentView
- * files 与入参的 files 一一对应。changeId 是这次改动的号，交给 `undo` 整次撤回。
+ * files 是这次写到的每个文件，按第一次写到它的顺序。changeId 是这次改动的号，交给 `undo` 整次撤回。
  * undoable 为 false 时这次改动撤不回（有文件改之前超过 2 MB，原文没留下来）。
- * 任何一个写不下去就整个抛错、一个文件都不写：error.code 是 `FILES_EDIT_UNRESOLVED`（message 逐条写明第几个文件、为什么，
- * 版本对不上的带上现在的版本）或 `FILES_EDIT_DENIED`（越出空间范围，或文件权限不让写）。写到一半出了意外时，message 点名哪几个已经写进去了、怎么撤回。
+ * 任何一步写不下去就整个抛错、一个文件都不写：error.code 是 `FILES_EDIT_UNRESOLVED`（message 逐条写明第几步、为什么：
+ * 原文找不到的带上最像的几行，出现好几处的带上在第几行）或 `FILES_EDIT_DENIED`（越出空间范围，或文件权限不让写）。写到一半出了意外时，message 点名哪几个已经写进去了、怎么撤回。
  */
 export interface FileEditResult {
   changeId: string

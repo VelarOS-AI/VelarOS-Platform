@@ -103,66 +103,55 @@ describe('模型面', () => {
 })
 
 describe('编辑的边界', () => {
-  test('INV-2 fileRef 只覆盖程序拿到的那几行，range 越出去整批拒绝、文件不变', async () => {
+  test('INV-2 编辑按路径写：write 整份写入（没有就新建），replace 把唯一的一段原文换掉；同一个文件接连几步，后一步按前一步改完的算', async () => {
     await writeFile(join(root, 'a.txt'), 'first\nsecond\nthird\n')
-    const { call, read } = await createProjectHarness(root)
-    const view = await read('a.txt', 2)
-    expect(view.fileRef).toStartWith('view:')
-    expect(view.lines).toEqual([[2, 'second']])
-    const failure = await failureOf(
-      call('project', 'edit', {
-        steps: [
-          {
-            action: 'edit',
-            fileRef: view.fileRef,
-            edits: [{ op: 'replace', range: 3, text: 'bad' }],
-          },
-        ],
-      })
-    )
-    expect(failure.code).toBe('SCOPE_VIOLATION')
-    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('first\nsecond\nthird\n')
+    const { call } = await createProjectHarness(root)
+    await call('project', 'edit', {
+      steps: [
+        { action: 'replace', path: 'a.txt', oldText: 'second', newText: 'SECOND' },
+        { action: 'write', path: 'nested/b.txt', text: 'new file\n' },
+      ],
+    })
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('first\nSECOND\nthird\n')
+    expect(await readFile(join(root, 'nested/b.txt'), 'utf8')).toBe('new file\n')
+    await call('project', 'edit', {
+      steps: [
+        { action: 'write', path: 'a.txt', text: 'whole\n' },
+        { action: 'replace', path: 'a.txt', oldText: 'whole', newText: 'one' },
+        { action: 'replace', path: 'a.txt', oldText: 'one', newText: 'two' },
+      ],
+    })
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('two\n')
   })
 
-  test('INV-3 读取之后被外部改过，基于旧版本的编辑整批拒绝，不覆盖外部改动', async () => {
+  test('INV-3 按路径的改动作用在提交那一刻的内容上：读取之后外部改了别处照样保住；要换的原文被外部改没了就一个字都不写', async () => {
     await writeFile(join(root, 'a.txt'), 'one\ntwo\n')
     const { call, read } = await createProjectHarness(root)
-    const view = await read('a.txt')
-    await writeFile(join(root, 'a.txt'), 'one\nchanged outside\n')
+    expect((await read('a.txt')).text).toBe('one\ntwo\n')
+    await writeFile(join(root, 'a.txt'), 'one\ntwo\nadded outside\n')
+    await call('project', 'edit', {
+      steps: [{ action: 'replace', path: 'a.txt', oldText: 'two', newText: 'mine' }],
+    })
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('one\nmine\nadded outside\n')
+    await writeFile(join(root, 'a.txt'), 'rewritten outside\n')
     const failure = await failureOf(
       call('project', 'edit', {
-        steps: [
-          {
-            action: 'edit',
-            fileRef: view.fileRef,
-            edits: [{ op: 'replace', range: 2, text: 'mine' }],
-          },
-        ],
+        steps: [{ action: 'replace', path: 'a.txt', oldText: 'mine', newText: 'again' }],
       })
     )
-    expect(failure.code).toBe('BASE_REVISION_MISMATCH')
-    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('one\nchanged outside\n')
+    expect(failure.code).toBe('TARGET_NOT_FOUND')
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('rewritten outside\n')
   })
 
-  test('INV-4 一次 edit 是一个事务：一处定不下来就全不改，message 点名是第几步第几处', async () => {
+  test('INV-4 一次 edit 是一个事务：一处定不下来就全不改，message 点名是第几步', async () => {
     await writeFile(join(root, 'a.txt'), 'alpha\n')
     await writeFile(join(root, 'b.txt'), 'beta\n')
-    const { call, read } = await createProjectHarness(root)
-    const a = await read('a.txt')
-    const b = await read('b.txt')
+    const { call } = await createProjectHarness(root)
     const failure = await failureOf(
       call('project', 'edit', {
         steps: [
-          {
-            action: 'edit',
-            fileRef: a.fileRef,
-            edits: [{ op: 'replace', range: 1, text: 'ALPHA' }],
-          },
-          {
-            action: 'edit',
-            fileRef: b.fileRef,
-            edits: [{ op: 'replace', match: 'not in the file', text: 'x' }],
-          },
+          { action: 'replace', path: 'a.txt', oldText: 'alpha', newText: 'ALPHA' },
+          { action: 'replace', path: 'b.txt', oldText: 'not in the file', newText: 'x' },
         ],
       })
     )
@@ -174,15 +163,9 @@ describe('编辑的边界', () => {
 
   test('INV-5 撤销遇到之后的外部修改拒绝覆盖；撤过的再撤一次是幂等成功', async () => {
     await writeFile(join(root, 'a.txt'), 'one\n')
-    const { call, read } = await createProjectHarness(root)
+    const { call } = await createProjectHarness(root)
     const edited = await call('project', 'edit', {
-      steps: [
-        {
-          action: 'edit',
-          fileRef: (await read('a.txt')).fileRef,
-          edits: [{ op: 'replace', range: 1, text: 'two' }],
-        },
-      ],
+      steps: [{ action: 'replace', path: 'a.txt', oldText: 'one', newText: 'two' }],
     })
     expect(edited.changeRef).toStartWith('change:')
     await writeFile(join(root, 'a.txt'), 'three\n')
@@ -193,13 +176,7 @@ describe('编辑的边界', () => {
 
     await writeFile(join(root, 'b.txt'), 'b1\n')
     const second = await call('project', 'edit', {
-      steps: [
-        {
-          action: 'edit',
-          fileRef: (await read('b.txt')).fileRef,
-          edits: [{ op: 'replace', range: 1, text: 'b2' }],
-        },
-      ],
+      steps: [{ action: 'replace', path: 'b.txt', oldText: 'b1', newText: 'b2' }],
     })
     await call('project', 'undo', { changeRef: second.changeRef })
     expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('b1\n')
@@ -225,7 +202,7 @@ describe('编辑的边界', () => {
         (
           await failureOf(
             call('project', 'edit', {
-              steps: [{ action: 'create', path: 'link/new.txt', text: 'x\n' }],
+              steps: [{ action: 'write', path: 'link/new.txt', text: 'x\n' }],
             })
           )
         ).code
@@ -238,21 +215,15 @@ describe('编辑的边界', () => {
 
   test('INV-9 文本改动保留原来的 BOM 与换行，没改到的字节不动；新建文件是无 BOM 的 UTF-8、LF', async () => {
     await writeFile(join(root, 'crlf.txt'), Buffer.from(`${Bom}one\r\ntwo\r\nthree\r\n`, 'utf8'))
-    const { call, read } = await createProjectHarness(root)
+    const { call } = await createProjectHarness(root)
     await call('project', 'edit', {
-      steps: [
-        {
-          action: 'edit',
-          fileRef: (await read('crlf.txt')).fileRef,
-          edits: [{ op: 'replace', range: 2, text: 'TWO' }],
-        },
-      ],
+      steps: [{ action: 'replace', path: 'crlf.txt', oldText: 'two', newText: 'TWO' }],
     })
     expect([...(await readFile(join(root, 'crlf.txt')))]).toEqual([
       ...Buffer.from(`${Bom}one\r\nTWO\r\nthree\r\n`, 'utf8'),
     ])
     await call('project', 'edit', {
-      steps: [{ action: 'create', path: 'fresh.txt', text: 'a\nb\n' }],
+      steps: [{ action: 'write', path: 'fresh.txt', text: 'a\nb\n' }],
     })
     expect([...(await readFile(join(root, 'fresh.txt')))]).toEqual([
       ...Buffer.from('a\nb\n', 'utf8'),
@@ -262,22 +233,12 @@ describe('编辑的边界', () => {
   test('INV-13 同一个物理文件的项目内别名算同一个文件：一次编辑里出现两次整批拒绝；宿主的列举过滤器按真实路径判、只管列举', async () => {
     await writeFile(join(root, 'real.txt'), 'L1\nL2\n')
     await symlink('real.txt', join(root, 'link.txt'))
-    const { call, read } = await createProjectHarness(root)
-    const linkView = await read('link.txt')
-    const realView = await read('real.txt')
+    const { call } = await createProjectHarness(root)
     const failure = await failureOf(
       call('project', 'edit', {
         steps: [
-          {
-            action: 'edit',
-            fileRef: linkView.fileRef,
-            edits: [{ op: 'replace', range: 1, text: 'A' }],
-          },
-          {
-            action: 'edit',
-            fileRef: realView.fileRef,
-            edits: [{ op: 'replace', range: 2, text: 'B' }],
-          },
+          { action: 'replace', path: 'link.txt', oldText: 'L1', newText: 'A' },
+          { action: 'replace', path: 'real.txt', oldText: 'L2', newText: 'B' },
         ],
       })
     )
@@ -295,20 +256,21 @@ describe('编辑的边界', () => {
     expect(listed).toContain('real.txt')
     expect(listed).not.toContain('.env')
     expect(listed).not.toContain('env.sample')
-    expect((await filtered.read('.env')).lines).toEqual([[1, 'API_KEY=local']])
+    expect((await filtered.read('.env')).text).toBe('API_KEY=local\n')
   })
 
   test('INV-14 没有读写名单：.git 里的、.env 这类照常能读能写，只受根内约束', async () => {
     await mkdir(join(root, '.git', 'info'), { recursive: true })
     await writeFile(join(root, '.git', 'info', 'exclude'), '# local\n')
     const { call, read } = await createProjectHarness(root)
-    const view = await read('.git/info/exclude')
+    expect((await read('.git/info/exclude')).text).toBe('# local\n')
     await call('project', 'edit', {
       steps: [
         {
-          action: 'edit',
-          fileRef: view.fileRef,
-          edits: [{ op: 'insert', range: 1, side: 'after', text: 'scratch/' }],
+          action: 'replace',
+          path: '.git/info/exclude',
+          oldText: '# local',
+          newText: '# local\nscratch/',
         },
       ],
     })
@@ -320,59 +282,25 @@ describe('编辑的边界', () => {
   test('INV-10 没有生成文件名单：生成出来的文件也改得动', async () => {
     const { call } = await createProjectHarness(root)
     await call('project', 'edit', {
-      steps: [{ action: 'create', path: 'src/api.generated.ts', text: 'export {}\n' }],
+      steps: [{ action: 'write', path: 'src/api.generated.ts', text: 'export {}\n' }],
     })
     expect(await readFile(join(root, 'src/api.generated.ts'), 'utf8')).toBe('export {}\n')
   })
 
-  test('INV-18 文件在读完之后被改过、原来要改的地方还唯一时，message 给出新行号与新 fileRef，换上它重提就成', async () => {
-    await writeFile(join(root, 'a.ts'), 'const a = 1\nconst b = 2\nconst c = 3\n')
-    const { call, read } = await createProjectHarness(root)
-    const view = await read('a.ts')
-    await writeFile(join(root, 'a.ts'), '// header\nconst a = 1\nconst b = 2\nconst c = 3\n')
-    const failure = await failureOf(
-      call('project', 'edit', {
-        steps: [
-          {
-            action: 'edit',
-            fileRef: view.fileRef,
-            edits: [{ op: 'replace', range: 2, match: 'b = 2', text: 'b = 20' }],
-          },
-        ],
-      })
-    )
-    expect(failure.code).toBe('BASE_REVISION_MISMATCH')
-    expect(failure.message).toContain('第 3 行')
-    const fresh = /view:[a-f0-9]{64}/.exec(failure.message)?.[0]
-    expect(fresh).toBeDefined()
-    await call('project', 'edit', {
-      steps: [
-        {
-          action: 'edit',
-          fileRef: fresh,
-          edits: [{ op: 'replace', range: 3, match: 'b = 2', text: 'b = 20' }],
-        },
-      ],
-    })
-    expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe(
-      '// header\nconst a = 1\nconst b = 20\nconst c = 3\n'
-    )
-  })
-
-  test('INV-19 读出来的就是原文：像密钥的片段不遮，窗口照常签发 fileRef、能改', async () => {
+  test('INV-19 读出来的就是原文：像密钥的片段不遮，照常能改', async () => {
     // 假密钥拼出来写：源码里写成整串，公开前的扫描会把它当成真的 API key。
     const fakeKey = ['sk', 'live', 'abcdefghijklmnopqrstuvwxyz0123456789'].join('-')
     await writeFile(join(root, 'config.ts'), `export const key = "${fakeKey}"\n`)
     const { call, read } = await createProjectHarness(root)
     const view = await read('config.ts')
-    expect(view.lines).toEqual([[1, `export const key = "${fakeKey}"`]])
-    expect(view.editable).toBeUndefined()
+    expect(view.text).toBe(`export const key = "${fakeKey}"\n`)
     await call('project', 'edit', {
       steps: [
         {
-          action: 'edit',
-          fileRef: view.fileRef,
-          edits: [{ op: 'replace', range: 1, text: 'export const key = process.env.KEY' }],
+          action: 'replace',
+          path: 'config.ts',
+          oldText: `"${fakeKey}"`,
+          newText: 'process.env.KEY',
         },
       ],
     })
@@ -383,70 +311,37 @@ describe('编辑的边界', () => {
 
   test('INV-20 程序看得到的只有 code 与 message：定位不唯一时 message 里有位置、候选与下一步', async () => {
     await writeFile(join(root, 'dup.txt'), 'same\nother\nsame\n')
-    const { call, read } = await createProjectHarness(root)
-    const view = await read('dup.txt')
+    const { call } = await createProjectHarness(root)
     const failure = await failureOf(
       call('project', 'edit', {
-        steps: [
-          {
-            action: 'edit',
-            fileRef: view.fileRef,
-            edits: [{ op: 'replace', match: 'same', text: 'x' }],
-          },
-        ],
+        steps: [{ action: 'replace', path: 'dup.txt', oldText: 'same', newText: 'x' }],
       })
     )
     expect(failure.code).toBe('AMBIGUOUS_TARGET')
-    expect(failure.message).toContain('steps[0].edits[0]')
+    expect(failure.message).toContain('steps[0]')
+    expect(failure.message).not.toContain('edits[')
     expect(failure.message).toContain('候选')
     expect(failure.message).toContain('下一步')
   })
 
-  test('INV-23 行号照 wc -l 数：结尾换行之后那个零宽的行不给模型看，读到最后一行就是读到头，末尾照样插得进去', async () => {
+  test('INV-23 行号照 wc -l 数：读到文件末尾时正文结尾的换行照原样在，整份读回来原样写回不多一行也不少一行', async () => {
     await writeFile(join(root, 'a.txt'), 'one\ntwo\n\n')
     const { call, read } = await createProjectHarness(root)
     const whole = await read('a.txt')
-    expect(whole.lines).toEqual([
-      [1, 'one'],
-      [2, 'two'],
-      [3, ''],
-    ])
-    expect(whole.totalLines).toBe(3)
-    // 范围停在一个空行上，那一行照样交出来。
+    expect(whole).toMatchObject({ startLine: 1, text: 'one\ntwo\n\n', totalLines: 3 })
+    // 范围停在一个空行上，那一行照样交出来；它是最后一行，结尾的换行跟着在。
     const ranged = await read('a.txt', [2, 3])
-    expect(ranged.lines).toEqual([
-      [2, 'two'],
-      [3, ''],
-    ])
+    expect(ranged).toMatchObject({ startLine: 2, text: 'two\n\n' })
+    const partial = await read('a.txt', [1, 2])
+    expect(partial).toMatchObject({ startLine: 1, text: 'one\ntwo' })
     await call('project', 'edit', {
-      steps: [
-        {
-          action: 'edit',
-          fileRef: ranged.fileRef,
-          edits: [{ op: 'insert', at: 'end', text: 'four' }],
-        },
-      ],
+      steps: [{ action: 'write', path: 'a.txt', text: `${whole.text}four\n` }],
     })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('one\ntwo\n\nfour\n')
-    // 空文件是 0 行；越出行数的行号报出文件实际有几行，并指向在末尾插入的写法。
+    // 空文件是 0 行；越出行数的起始行在说明里报出文件实际有几行。
     await writeFile(join(root, 'empty.txt'), '')
-    const empty = await read('empty.txt')
-    expect(empty.lines).toEqual([])
-    expect(empty.totalLines).toBe(0)
-    const current = await read('a.txt')
-    const beyond = await failureOf(
-      call('project', 'edit', {
-        steps: [
-          {
-            action: 'edit',
-            fileRef: current.fileRef,
-            edits: [{ op: 'replace', range: 9, text: 'x' }],
-          },
-        ],
-      })
-    )
-    expect(beyond.message).toContain('第 9 行超出了文件的行数（4 行）')
-    expect(beyond.message).toContain("at: 'end'")
+    expect(await read('empty.txt')).toMatchObject({ text: '', totalLines: 0 })
+    expect((await read('a.txt', 9)).note).toContain('文件共 4 行')
   })
 })
 
@@ -462,7 +357,7 @@ describe('不折叠', () => {
 
     // 不给 range 就是整个文件：三千行都在，没有续读。
     const whole = await read('long.txt')
-    expect(whole.lines).toHaveLength(3000)
+    expect(whole.text.split('\n')).toHaveLength(3001)
     expect(whole).not.toHaveProperty('continuation')
     // 不给 depth 就是整棵树：第五层的文件也在，没有分页。
     const listed = await call('project', 'list', { path: 'a' })
@@ -470,19 +365,19 @@ describe('不折叠', () => {
       'a/b/c/d/e/leaf.txt'
     )
     expect(Object.keys(listed)).toEqual(['entries'])
-    // 全部命中，每个命中的文件一个能直接改的窗口。
+    // 全部命中，每个命中的文件一段命中处的正文。
     const searched = await call('project', 'search', { query: 'needle' })
     expect(searched.hits).toHaveLength(150)
     expect(searched.files).toHaveLength(150)
-    expect(
-      searched.files.every((window: { fileRef?: string }) => window.fileRef?.startsWith('view:'))
-    ).toBe(true)
+    expect(searched.files.every((window: { text: string }) => window.text.includes('needle'))).toBe(
+      true
+    )
     // 差量是完整的：整份换掉三千行，每一行都在 diff 里，inspect 给的是同一份。
     const edited = await call('project', 'edit', {
       steps: [
         {
-          action: 'overwrite',
-          fileRef: whole.fileRef,
+          action: 'write',
+          path: 'long.txt',
           text: `${long.map((line) => `${line}!`).join('\n')}\n`,
         },
       ],
@@ -543,15 +438,10 @@ describe('不问人，只排队', () => {
     await writeFile(join(root, 'a.txt'), 'alpha\n')
     const harness = await createProjectHarness(root)
     expect(Object.keys(harness.context).sort()).toEqual(['abortSignal', 'project', 'sessionId'])
-    const file = await harness.read('a.txt')
     const edited = await harness.call('project', 'edit', {
       steps: [
-        { action: 'create', path: 'created.txt', text: 'new\n' },
-        {
-          action: 'edit',
-          fileRef: file.fileRef,
-          edits: [{ op: 'replace', range: 1, text: 'ALPHA' }],
-        },
+        { action: 'write', path: 'created.txt', text: 'new\n' },
+        { action: 'replace', path: 'a.txt', oldText: 'alpha', newText: 'ALPHA' },
       ],
     })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('ALPHA\n')

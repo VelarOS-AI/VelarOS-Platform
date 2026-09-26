@@ -2,7 +2,7 @@ declare module 'velaros:files' {
   /**
    * 读写本机上的文本文件。下面这几件事三个方法都成立，各自说明里不再重复：
    * 相对路径、`~` 怎么解析，哪些路径越出了范围，由当前空间决定（环境报告里写着）；越界的直接拒绝。
-   * 读出来的是带行号的行；改的时候按行号改几处，或者整份写。读写保留原文件的编码（UTF-8、带 BOM、UTF-16、GB18030）与换行风格，
+   * 读出来的是连续的正文，带第一行的行号；改的时候按路径写：整份写进去，或者把一段原文换成新文。读写保留原文件的编码（UTF-8、带 BOM、UTF-16、GB18030）与换行风格，
    * 认不出编码或有非法字节的按二进制处理。写是原子的，失败不会留下半截文件；路径是符号链接时读写它指向的那个文件，链接本身不变。
    * 列目录、搜文本用命令做（`velaros:shell` 的 run：ls、find、`rg -n`）；看图片用 `velaros:images`。
    */
@@ -17,16 +17,19 @@ declare module 'velaros:files' {
     files: Array<FileText | FileFailure>
   }
 
-  /** 一批最多 20 个文件，全成或全不成；同一个文件的几处改动放进同一项的 edits。 */
+  /**
+   * 一次最多 1000 步、20 个文件，合成一次改动，全成或全不成。
+   * 同一个文件接连几步时，后一步按前一步改完的内容算（先 write 新建、再 replace 也行）。
+   */
   interface FileEditInput {
-    files: FileEditItem[]
+    steps: FileEditStep[]
   }
 
   /**
-   * files 与入参的 files 一一对应。changeId 是这次改动的号，交给 `undo` 整次撤回。
+   * files 是这次写到的每个文件，按第一次写到它的顺序。changeId 是这次改动的号，交给 `undo` 整次撤回。
    * undoable 为 false 时这次改动撤不回（有文件改之前超过 2 MB，原文没留下来）。
-   * 任何一个写不下去就整个抛错、一个文件都不写：error.code 是 `FILES_EDIT_UNRESOLVED`（message 逐条写明第几个文件、为什么，
-   * 版本对不上的带上现在的版本）或 `FILES_EDIT_DENIED`（越出空间范围，或文件权限不让写）。写到一半出了意外时，message 点名哪几个已经写进去了、怎么撤回。
+   * 任何一步写不下去就整个抛错、一个文件都不写：error.code 是 `FILES_EDIT_UNRESOLVED`（message 逐条写明第几步、为什么：
+   * 原文找不到的带上最像的几行，出现好几处的带上在第几行）或 `FILES_EDIT_DENIED`（越出空间范围，或文件权限不让写）。写到一半出了意外时，message 点名哪几个已经写进去了、怎么撤回。
    */
   interface FileEditResult {
     changeId: string
@@ -59,18 +62,18 @@ declare module 'velaros:files' {
   }
 
   /**
-   * 读到的一个文件（或它的那几行）：lines 每项是 [行号, 原文]，原文不带换行符；行号只用来定位，写回去的正文照原文写、不带行号。
-   * 行号的数法和 `wc -l` 一样：结尾那个换行不算多出一行。totalLines 是整个文件的行数。
-   * version 是整个文件的版本号（不管只读了哪几行）：edit 带上它，就能挡住「读完之后别人又改过」。
-   * lines 落在程序的变量里，**不进你的上下文**——要看哪几行就 export default 哪几行。
+   * 读到的一个文件（或它的那几行）：text 是连续的正文，startLine 是它第一行的行号，totalLines 是整个文件的行数。
+   * 换行一律是 `\n`（原文件是 CRLF 的也一样）；读到文件末尾时，文件结尾的换行照原样在 text 里——整份读出来原样 write 回去，不多一行也不少一行。
+   * 行号的数法和 `wc -l` 一样：结尾那个换行不算多出一行，空文件是 0 行。
+   * text 落在程序的变量里，**不进你的上下文**——要看哪一段就 export default 哪一段。
    */
   interface FileText {
     path: string
     target?: string
-    version: string
     encoding: TextEncoding
     totalLines: number
-    lines: Array<[number, string]>
+    startLine: number
+    text: string
   }
 
   /**
@@ -86,25 +89,20 @@ declare module 'velaros:files' {
   }
 
   /**
-   * 改一个文件，两种改法只用一种：
-   * `edits` 按行号改几处（一次最多 1000 处，必须带上 read 给的 `version`，行号只在那一版上成立）；
-   * `newText` 整份写进去（文件不存在就连同上级目录新建；已有的二进制文件拒改）。
+   * 改文件的一步，按路径指文件：
+   * `write` 把 text 整份写进去（文件不存在就连同上级目录新建；已有的二进制文件拒改）；
+   * `replace` 把文件里的一段原文 oldText 换成 newText：oldText 照读到的原文写（空白、引号、换行都要一样），在文件里只能出现一次，出现好几处就多带几行上下文。
    * 换行一律写 `\n`：写回去时按原文件的换行风格存（原来是 CRLF 的还是 CRLF），编码也按原文件的（新文件是 UTF-8）。
-   * `version` 给了就先核对文件还是那一版，被改过就整批不写，message 里有现在的版本；不给就不核对（只有 newText 可以不给）。
    */
-  interface FileEditItem {
-    path: string
-    version?: string
-    edits?: FileLineEdit[]
-    newText?: string
-  }
+  type FileEditStep =
+    | { action: 'write'; path: string; text: string }
+    | { action: 'replace'; path: string; oldText: string; newText: string }
 
-  /** 写好的一个文件：新的版本号与行数。path 是符号链接时，target 是真正被写的那个文件。 */
+  /** 写好的一个文件：改完之后的行数。path 是符号链接时，target 是真正被写的那个文件。 */
   interface FileWritten {
     path: string
     target?: string
     created: boolean
-    version: string
     totalLines: number
   }
 
@@ -122,22 +120,15 @@ declare module 'velaros:files' {
   type TextEncoding = 'utf8' | 'utf8-bom' | 'utf16le' | 'utf16be' | 'utf16le-nobom' | 'utf16be-nobom' | 'gb18030'
 
   /**
-   * 按行号改一处。range 选中的整行换成 text（text 是空串就是删掉这几行）；after 在第几行后面插入 text（0 是插在最前面）。
-   * text 是新的几行，行与行之间用 `\n` 分开，结尾不用加 `\n`（加了就多一个空行）。
-   * 行号是 `read` 那一版的行号：同一个文件的几处都按那一版算，互相不重叠，不用自己算前面改动带来的错位。
-   */
-  type FileLineEdit = { range: FileLineRange; text: string } | { after: number; text: string }
-
-  /**
-   * 读文本文件：每个文件交回带行号的行（给了 range 就只交那几行）和整个文件的版本号。
+   * 读文本文件：每个文件交回连续的正文与它第一行的行号（给了 range 就只交那几行）。
    * 图片、PDF 与其他二进制文件、目录、设备文件、超过 20 MB 的文件，都算这个文件失败。
    */
   export function read(input: FileReadInput): Promise<FileReadResult>
 
   /**
-   * 改文件：按行号改几处，或者整份写。**优先整批改**：files 里放几个就改几个，整批一次成败，成了给一个 changeId。
-   * 定下改法之后、写进去之前文件被别人改过，整批不写。
-   * 路径是管道、设备、套接字，或文件有多个硬链接时不碰。新内容编不成原编码（孤立代理项、GB18030 表示不了的字符）就整批不写。
+   * 改文件：按路径一步一步写，write 整份写、replace 把一段原文换掉。**优先一次改完**：几个文件、几处改动都放进 steps，一次成败，成了给一个 changeId。
+   * 定下改法之后、写进去之前文件被别人改过，整次不写（重新提交就是）。
+   * 路径是管道、设备、套接字，或文件有多个硬链接时不碰。新内容编不成原编码（孤立代理项、GB18030 表示不了的字符）就整次不写。
    */
   export function edit(input: FileEditInput): Promise<FileEditResult>
 

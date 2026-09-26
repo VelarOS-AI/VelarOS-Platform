@@ -16,12 +16,19 @@
 它们本来就是从这里的原 INV-7、INV-16、INV-21（以及原 INV-14、INV-17 的一半）搬过去的；INV-7、INV-16、INV-21 照旧作废、不复用。
 那边的 INV-1（空间挂五个命名空间、模块清单）随装配表作废；INV-6（入口门禁）由本单元的 INV-12 管着，不另立。
 
+2026-09-27（ADR 0023）读改协议改成连续正文、按路径写：read 与 search 交回的窗口是一段连续的正文（`text`，带第一行的行号 `startLine`），不再是逐行的 `[行号, 正文]`，也不再交出 `fileRef`；
+edit 的步骤只剩 write、replace、move、delete、recode，全按路径指文件，replace 按原文定位。读取凭据还在，只是由 edit 自己按路径去取，不经模型的手。
+原来改一处要先抄 fileRef、数行号、写 range，一处定不下来整轮弹回——模型写起来比改文件本身还费劲。
+随之 INV-2、INV-3 改写：INV-2 从「只认读取回执里的 fileRef」改成「按路径写、后一步接着前一步」；INV-3 原来的承诺（读取之后外部改过就整批拒绝）作废——
+编辑作用在提交那一刻的内容上，replace 要换的原文还在就照样成立、外部改动保住，原文被改没了才拒绝；write 是整份换掉，和 shell 的重定向一样不核对读过的版本，被换掉的内容由这次改动的撤销记录找得回来。
+INV-18（读完之后被改过时给出新行号重提）作废、编号不复用：按原文定位之后没有「旧行号」这回事。INV-4、INV-19、INV-20、INV-23、INV-24 去掉 fileRef 与「第几处」的说法。
+
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
 | INV-1 | `velaros:project` 有六个操作（read、list、search、edit、inspect、undo）、`velaros:code` 有两个（query、analyze），声明从源码生成、只放出这些，调用上下文与空间端口不进模型面；两件工具随包发布的声明（`VelarProjectModule`、`VelarCodeModule`）与生成物是同一份，放出的方法就是能调的那些 | 测试 | `spec/acceptance.test.ts` |
-| INV-2 | 编辑只认本会话读取、搜索或编辑回执里的 fileRef：它绑定路径、版本和实际交给程序的那段源码；range 越出这段就整批拒绝（SCOPE_VIOLATION），文件一个字节都不变；整份替换（overwrite）要求 fileRef 覆盖全文，move、delete 只核对版本 | 测试 | `spec/acceptance.test.ts` |
-| INV-3 | 文件在读取之后被外部改过，基于旧版本的编辑整批拒绝（BASE_REVISION_MISMATCH），不覆盖外部改动 | 测试 | `spec/acceptance.test.ts` |
-| INV-4 | 一次 edit 是一个事务：几个文件、几处编辑全成或全不成；定不下来的那一处在 message 里点名第几步第几处 | 测试 | `spec/acceptance.test.ts` |
+| INV-2 | 编辑按路径写：write 把正文整份写进一个文件（不存在就新建，上级目录自动建），replace 把文件里唯一的一段原文换成新文；同一次 edit 里对同一个文件接连几步时，后一步按前一步改完的内容算，move 之后按新路径接着改 | 测试 | `spec/acceptance.test.ts` |
+| INV-3 | 编辑作用在提交那一刻的内容上：读取之后外部改了文件的别处，replace 照样成立、外部改动保住；要换的那段原文被外部改没了就整批拒绝（TARGET_NOT_FOUND），一个字节都不写 | 测试 | `spec/acceptance.test.ts` |
+| INV-4 | 一次 edit 是一个事务：几个文件、几步全成或全不成；定不下来的那一步在 message 里点名第几步（`steps[i]`） | 测试 | `spec/acceptance.test.ts` |
 | INV-5 | 撤销只撤本事务写下的内容：遇到之后的外部修改拒绝覆盖（CONFLICT_WITH_EXTERNAL_EDIT）；已经撤销过的再撤一次是幂等成功，不报错也不改坏东西 | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 读、列、搜、改都只在项目根之内：越出项目的路径（包括经符号链接指到项目外）一律拒绝（PERMISSION_DENIED） | 测试 | `spec/acceptance.test.ts` |
 | INV-8 | 同一项目根上写操作串行、读操作可并发；排队的写者不被后来的读者饿死，取消了的等待者不运行 | 测试 | `spec/acceptance.test.ts` |
@@ -32,12 +39,11 @@
 | INV-13 | 同一个物理文件的项目内别名（符号链接、大小写变体）算同一个文件：一次事务里两个入参指向同一份内容时，在写任何东西之前整批拒绝（INVALID_INPUT）；宿主的列举过滤器只管列举、扫描与搜索，按请求路径和解开符号链接后的真实路径各问一次（经链接的别名也列不出来），点名读写从不问它 | 测试 | `spec/acceptance.test.ts` |
 | INV-14 | 没有读写名单：`.git` 里的、`.env` 这类照常能读能写，只受根内约束（INV-6） | 测试 | `spec/acceptance.test.ts` |
 | INV-17 | 改动与撤销不问人：调用上下文里没有审批端口，空间端口里没有授权口子；回滚恢复不了原文的写入照样记成 high 风险（给界面与审计看），照常写盘 | 测试 | `spec/acceptance.test.ts` |
-| INV-18 | 文件在读完之后被改过、而原来要改的地方（连同前后的行）仍然唯一时，失败的 message 给出每处编辑的新行号与一个签了新 fileRef 的确认窗口；换上它按新行号重提就成，正文不用重写 | 测试 | `spec/acceptance.test.ts` |
-| INV-19 | 读出来的就是原文：像密钥的片段不遮，读到的窗口照常签发 fileRef、能改；搜索片段取命中所在的行，行太长时以命中为中心收窄，命中一定在片段里 | 测试 | `spec/acceptance.test.ts` |
-| INV-20 | 程序看得到的只有 `error.code` 与 `error.message`：code 是 `ProjectErrorCodes` 的原因码，details 里的位置（第几步第几处）、候选、诊断、改完之后的预览与下一步都写进 message | 测试 | `spec/acceptance.test.ts` |
+| INV-19 | 读出来的就是原文：像密钥的片段不遮，照读到的原文写 replace 照常能改；搜索片段取命中所在的行，行太长时以命中为中心收窄，命中一定在片段里 | 测试 | `spec/acceptance.test.ts` |
+| INV-20 | 程序看得到的只有 `error.code` 与 `error.message`：code 是 `ProjectErrorCodes` 的原因码，details 里的位置（第几步）、候选、诊断、改完之后的预览与下一步都写进 message | 测试 | `spec/acceptance.test.ts` |
 | INV-22 | 两份代码模版（`template.js`、`code-template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它们整份照生成的真实声明过类型检查，不嵌进声明，随模型面发布、按需读（`velaros:system` 的 modules.describe）；在真的空间里把每个函数跑一遍、看交回的是不是它说的样子，由仓库层的 `tests/capabilities/capability-templates.test.ts` 核对 | 测试 | `spec/acceptance.test.ts` |
-| INV-23 | 行号照 `wc -l` 数，和 `velaros:files` 一样：结尾换行之后那个零宽的行不给模型看、不算进 totalLines（空文件是 0 行），越出行数的说明也照它数；它仍在可见范围里，在文件末尾插入照样成立；停在空行上的范围照样交出那一空行 | 测试 | `spec/acceptance.test.ts` |
-| INV-24 | 什么都不折叠，看多少由程序定：read 交回要的整段（不给 range 就是整个文件，没有续读），list 交回全部条目（不给 depth 就是整棵树，没有分页），search 交回全部命中、每个命中的文件一个带 fileRef 的窗口，edit 与 inspect 交回完整差量，`velaros:code` 不按条数截；只有守内存的上限（`ProjectFileLimits.readChars`、`listEntries`、`searchHits`，`ProjectCodeLimits.results`），超了明说（SCOPE_VIOLATION，或宿主标的 coverage.truncated），不交回一部分冒充全部 | 测试 | `spec/acceptance.test.ts` |
+| INV-23 | 行号照 `wc -l` 数，和 `velaros:files` 一样：结尾换行之后那个零宽的行不算进 totalLines（空文件是 0 行），越出行数的说明也照它数；读到文件末尾的窗口，正文结尾的换行照原样在，整份读回来原样 write 回去不多一行也不少一行；停在空行上的范围照样交出那一空行 | 测试 | `spec/acceptance.test.ts` |
+| INV-24 | 什么都不折叠，看多少由程序定：read 交回要的整段（不给 range 就是整个文件，没有续读），list 交回全部条目（不给 depth 就是整棵树，没有分页），search 交回全部命中、每个命中的文件一段命中处（连同前后几行）的连续正文，edit 与 inspect 交回完整差量，`velaros:code` 不按条数截；只有守内存的上限（`ProjectFileLimits.readChars`、`listEntries`、`searchHits`，`ProjectCodeLimits.results`），超了明说（SCOPE_VIOLATION，或宿主标的 coverage.truncated），不交回一部分冒充全部 | 测试 | `spec/acceptance.test.ts` |
 | INV-25 | 声明里写给模型的上限就是常量表 `ProjectFileLimits`、`ProjectCodeLimits` 与缺省策略里的数：改常量不改说明（或反过来）过不了验收 | 测试 | `spec/acceptance.test.ts` |
 | INV-26 | 项目里的危险命令每次都由用户亲自确认（高风险、手动、不可记忆，确认文案说「当前项目」，风险分类 `project-command:dangerous`）；被拒时抛错、一个进程都不起；别的命令（会改项目的、长驻的也一样）不问，直接跑，输出原样交回 | 测试 | `spec/acceptance.test.ts` |
 | INV-27 | 命令的工作目录与演练沙箱的源目录按解开符号链接后的真实路径钳在项目之内：出了项目在问用户之前就拒绝（`PERMISSION`），一个进程都不起、什么都不镜像；项目里的交给宿主时是解析好的绝对路径 | 测试 | `spec/acceptance.test.ts` |

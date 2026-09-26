@@ -1,16 +1,15 @@
 /**
- * `velaros:project` 的读的一侧：read 的源码窗口与 fileRef 覆盖、list、search 窗口，以及三者都不折叠、只有守内存的上限。
- * 一律经 `call('project', …)` 走真的代码面端口；fileRef 实际覆盖了什么用 `loadFileView` 核对。
+ * `velaros:project` 的读的一侧：read 的源码窗口（连续的正文加第一行的行号）、list、search 窗口，以及三者都不折叠、只有守内存的上限。
+ * 一律经 `call('project', …)` 走真的代码面端口；窗口里的正文照磁盘上的原文核对，要改就按路径改。
  */
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { ProjectFileLimits, ProjectPolicyDefaults } from '../contract/constants'
-import { loadFileView } from '../utils/agent/file-refs'
 import { projectSourceLines } from '../utils/agent/source-window'
 
 import { failureOf, projectToolFixture } from './support/tools'
@@ -25,6 +24,16 @@ afterEach(async () => {
 
 type Fixture = Awaited<ReturnType<typeof projectToolFixture>>
 
+/** 模型面上的一个窗口。 */
+interface Window {
+  path: string
+  revision?: string
+  startLine: number
+  text: string
+  totalLines?: number
+  note?: string
+}
+
 /** 读一个文件，交回它的第一个窗口。 */
 async function readOne(call: Fixture['call'], path: string, range?: unknown) {
   return (
@@ -32,232 +41,168 @@ async function readOne(call: Fixture['call'], path: string, range?: unknown) {
   ).files[0]
 }
 
-/** 凭一个 fileRef 改一处。 */
-function editLine(call: Fixture['call'], fileRef: string, range: unknown, text: string) {
-  return call('project', 'edit', {
-    steps: [{ action: 'edit', fileRef, edits: [{ op: 'replace', range, text }] }],
-  })
+/** 按路径把一段原文换成新文。 */
+function replace(call: Fixture['call'], path: string, oldText: string, newText: string) {
+  return call('project', 'edit', { steps: [{ action: 'replace', path, oldText, newText }] })
 }
 
-describe('read 的窗口与 fileRef', () => {
-  test('fileRef 只授权真正交出去的那几行：窗口外的一行都改不了', async () => {
+/** 按路径整份写入。 */
+function write(call: Fixture['call'], path: string, text: string) {
+  return call('project', 'edit', { steps: [{ action: 'write', path, text }] })
+}
+
+describe('read 的窗口', () => {
+  test('按 range 只交回那几行，窗口里只有模型面的字段；改的时候按整个文件找原文，没读到的行也改得了', async () => {
     await writeFile(join(root, 'a.txt'), 'first\nsecond\nthird\n')
-    const { call, context } = await projectToolFixture({ root })
+    const { call } = await projectToolFixture({ root })
     const window = await readOne(call, 'a.txt', [2])
-    expect(window.lines).toEqual([[2, 'second']])
-    expect(window.fileRef).toStartWith('view:')
-    // 窗口里只有模型面的字段：没有整份正文，也没有内部的源码快照引用。
-    expect(window.content).toBeUndefined()
-    expect(window.viewSource).toBeUndefined()
-    const view = await loadFileView(context, window.fileRef)
-    expect(view.content).toBe('first\nsecond\nthird\n')
-    expect(view.coverage).toEqual([
-      { startOffset: 6, endOffset: 13, startLine: 2, endLine: 2, completeLines: true },
+    expect(window).toMatchObject({ path: 'a.txt', startLine: 2, text: 'second', totalLines: 3 })
+    // 窗口里只有模型面的字段：没有整份正文、内部的源码快照引用，也没有编辑凭据。
+    expect(Object.keys(window).sort()).toEqual([
+      'path',
+      'revision',
+      'startLine',
+      'text',
+      'totalLines',
     ])
-    const failure = await failureOf(editLine(call, window.fileRef, 3, 'bad'))
-    expect(failure.code).toBe('SCOPE_VIOLATION')
-    expect(failure.message).toContain('steps[0].edits[0]')
-    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('first\nsecond\nthird\n')
+    await replace(call, 'a.txt', 'third', 'THIRD')
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('first\nsecond\nTHIRD\n')
   })
 
-  test('range 的三种写法、原样的行文本与整份原文共用一套坐标（CRLF、转义、emoji）', async () => {
+  test('range 的三种写法读到同一行；CRLF、转义、emoji 原样，整份读回来原样写回一个字节都不变', async () => {
+    // 这段正文不是合法的 TS：用 .txt，写回时不跑语法校验。
     const original = 'first\r\n123|literal🙂\\n\r\nlast\r\n'
-    await writeFile(join(root, 'a.ts'), original)
-    const { call, context } = await projectToolFixture({ root })
+    await writeFile(join(root, 'a.txt'), original)
+    const { call } = await projectToolFixture({ root })
     for (const range of [2, [2], [2, 2]]) {
-      const window = await readOne(call, 'a.ts', range)
-      expect(window.lines).toEqual([[2, '123|literal🙂\\n']])
-      const view = await loadFileView(context, window.fileRef)
-      expect(view.content).toBe(original)
-      expect(view.coverage).toEqual([
-        {
-          startOffset: 7,
-          endOffset: original.indexOf('last'),
-          startLine: 2,
-          endLine: 2,
-          completeLines: true,
-        },
-      ])
+      expect(await readOne(call, 'a.txt', range), JSON.stringify(range)).toMatchObject({
+        startLine: 2,
+        text: '123|literal🙂\\n',
+        totalLines: 3,
+      })
     }
-    expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe(original)
+    // 行与行之间是 \n，CRLF 的 \r 不在正文里；写回时按文件原来的换行落盘。
+    const whole = await readOne(call, 'a.txt')
+    expect(whole.text).toBe('first\n123|literal🙂\\n\nlast\n')
+    expect((await write(call, 'a.txt', whole.text)).changed).toBe(false)
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe(original)
+    // 照窗口里的原文写 oldText：换掉的那段两边的 CRLF 原样留着。
+    await replace(call, 'a.txt', '123|literal🙂\\n', '456|literal🙂\\n')
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe(
+      'first\r\n456|literal🙂\\n\r\nlast\r\n'
+    )
   })
 
-  test('不给 range 就交回整个文件：一千行都在，fileRef 覆盖整个文件，最后一行照样改得了', async () => {
+  test('不给 range 就交回整个文件：一千行都在，最后一行照样改得了', async () => {
     const original = Array.from({ length: 1000 }, (_, index) => `line ${index + 1} 🙂`).join('\n')
     await writeFile(join(root, 'a.txt'), original)
-    const { call, context } = await projectToolFixture({ root })
+    const { call } = await projectToolFixture({ root })
     const window = await readOne(call, 'a.txt')
-    expect(window.lines).toHaveLength(1000)
-    expect(window.lines.at(-1)).toEqual([1000, 'line 1000 🙂'])
-    expect(window.totalLines).toBe(1000)
-    // 模型面上没有续读、分段这些字段了。
-    expect(window.hasMore).toBeUndefined()
-    expect(window.continuation).toBeUndefined()
-    expect(window.fragments).toBeUndefined()
-    const view = await loadFileView(context, window.fileRef)
-    expect(view.coverage).toEqual([
-      {
-        startOffset: 0,
-        endOffset: original.length,
-        startLine: 1,
-        endLine: 1000,
-        completeLines: true,
-      },
-    ])
-    await editLine(call, window.fileRef, 1000, 'last')
+    expect(window).toMatchObject({ startLine: 1, text: original, totalLines: 1000 })
+    expect(window.text.split('\n').at(-1)).toBe('line 1000 🙂')
+    // 模型面上没有续读、分段、逐行这些字段了。
+    for (const field of ['hasMore', 'continuation', 'fragments', 'lines', 'fileRef'])
+      expect(window[field], field).toBeUndefined()
+    await replace(call, 'a.txt', 'line 1000 🙂', 'last')
     expect((await readFile(join(root, 'a.txt'), 'utf8')).endsWith('line 999 🙂\nlast')).toBe(true)
   })
 
-  test('一行再长也整行交回，fileRef 覆盖整行', async () => {
+  test('一行再长也整行交回', async () => {
     const original = '🙂\\n"'.repeat(100_000)
     await writeFile(join(root, 'a.ts'), original)
-    const { call, context } = await projectToolFixture({ root })
-    const window = await readOne(call, 'a.ts')
-    expect(window.lines).toEqual([[1, original]])
-    const view = await loadFileView(context, window.fileRef)
-    expect(view.coverage).toEqual([
-      { startOffset: 0, endOffset: original.length, startLine: 1, endLine: 1, completeLines: true },
-    ])
+    const { call } = await projectToolFixture({ root })
+    expect(await readOne(call, 'a.ts')).toMatchObject({
+      startLine: 1,
+      text: original,
+      totalLines: 1,
+    })
   })
 
-  test('读到文件外时给空窗口并说明，不给编辑权', async () => {
+  test('读到文件外时给空窗口并说明', async () => {
     await writeFile(join(root, 'target.ts'), 'const a = 1\nconst b = 2\n')
     const { call } = await projectToolFixture({ root })
     const beyond = await readOne(call, 'target.ts', [99, 100])
     // 行数照 wc -l 数，说明也照它写。
-    expect(beyond).toMatchObject({ lines: [], totalLines: 2, editable: false })
-    expect(beyond.fileRef).toBeUndefined()
+    expect(beyond).toMatchObject({ text: '', totalLines: 2 })
     expect(beyond.note).toContain('文件共 2 行')
     expect(beyond.note).toContain('超出范围')
-    // 从最后一行的下一行起读：那里只有结尾换行之后那个零宽的行，不给模型看，但末尾照样插得进去。
+    // 从最后一行的下一行起读：那里只有结尾换行之后那个零宽的行，正文是空的，不算超出范围。
     const tail = await readOne(call, 'target.ts', [3, 5])
-    expect(tail).toMatchObject({ lines: [], totalLines: 2 })
-    await call('project', 'edit', {
-      steps: [
-        {
-          action: 'edit',
-          fileRef: tail.fileRef,
-          edits: [{ op: 'insert', at: 'end', text: 'const c = 3' }],
-        },
-      ],
-    })
-    expect(await readFile(join(root, 'target.ts'), 'utf8')).toBe(
-      'const a = 1\nconst b = 2\nconst c = 3\n'
-    )
-    await writeFile(join(root, 'target.ts'), 'const a = 1\nconst b = 2\n')
-    expect(await readFile(join(root, 'target.ts'), 'utf8')).toBe('const a = 1\nconst b = 2\n')
+    expect(tail).toMatchObject({ startLine: 3, text: '', totalLines: 2 })
+    expect(tail.note).toBeUndefined()
   })
 
-  test('fileRef 只在签发它的会话里有效；正文变了就作废，哪怕版本号没变', async () => {
+  test('读到的总是现在的正文，改的时候按提交时的正文算：版本号只看元数据、正文变了版本号没变也一样；换了会话照样改', async () => {
     await writeFile(join(root, 'a.ts'), 'first')
-    const { call, context, kernel } = await projectToolFixture({ root })
-    // 版本号只看元数据的宿主：内容变了版本号也不变，fileRef 照样要按正文核对。
-    const originalRead = kernel.read.bind(kernel)
-    kernel.read = async (input) => {
-      const value = await originalRead({ ...input, baseRevision: undefined })
-      return { ...value, snapshot: { ...value.snapshot, revision: 'constant-metadata-revision' } }
-    }
-    const window = await readOne(call, 'a.ts')
-    const own = context.sessionId
-    context.sessionId = 'another-session'
-    const foreign = await failureOf(editLine(call, window.fileRef, 1, 'x'))
-    expect(foreign.code).toBe('INVALID_INPUT')
-    expect(foreign.message).toContain('不是本会话签发的')
-    context.sessionId = own
+    await utimes(join(root, 'a.ts'), 10, 10)
+    const { call, context } = await projectToolFixture({
+      root,
+      corePolicy: { revisionStrategy: 'metadata' },
+    })
+    const before = await readOne(call, 'a.ts')
+    // 同样大小、同样 mtime 的外部改动：版本号不变，正文变了。
     await writeFile(join(root, 'a.ts'), 'other')
-    expect((await failureOf(editLine(call, window.fileRef, 1, 'x'))).code).toBe(
-      'BASE_REVISION_MISMATCH'
-    )
+    await utimes(join(root, 'a.ts'), 10, 10)
+    const after = await readOne(call, 'a.ts')
+    expect(after.revision).toBe(before.revision)
+    expect(after.text).toBe('other')
+    // 按路径改不凭本会话读过什么。
+    context.sessionId = 'another-session'
+    const stale = await failureOf(replace(call, 'a.ts', 'first', 'x'))
+    expect(stale.code).toBe('TARGET_NOT_FOUND')
     expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('other')
-    const next = await readOne(call, 'a.ts')
-    expect(next.fileRef).not.toBe(window.fileRef)
-    expect((await loadFileView(context, next.fileRef)).content).toBe('other')
+    await replace(call, 'a.ts', 'other', 'x')
+    expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('x')
   })
 
-  test('行数照 wc -l 数：结尾换行之后那个零宽的行不给模型看，但在可见范围里，末尾照样插得进去', async () => {
-    const { call, context } = await projectToolFixture({ root })
-    for (const [original, lines] of [
-      ['', []],
-      ['line\n', [[1, 'line']]],
-      [
-        'a\n\n',
-        [
-          [1, 'a'],
-          [2, ''],
-        ],
-      ],
-      [
-        'a\nb',
-        [
-          [1, 'a'],
-          [2, 'b'],
-        ],
-      ],
+  test('行数照 wc -l 数：结尾的换行不算多出一行；读到文件末尾时正文带着结尾的换行，整份读回来原样写回不多一行也不少一行', async () => {
+    const { call } = await projectToolFixture({ root })
+    for (const [original, totalLines] of [
+      ['', 0],
+      ['line\n', 1],
+      ['a\n\n', 2],
+      ['a\nb', 2],
     ] as const) {
       await writeFile(join(root, 'a.ts'), original)
       const window = await readOne(call, 'a.ts')
-      expect(window.lines, JSON.stringify(original)).toEqual(lines)
-      expect(window.totalLines, JSON.stringify(original)).toBe(lines.length)
-      const view = await loadFileView(context, window.fileRef)
-      expect(view.coverage.at(-1)?.completeLines).toBe(true)
-      expect(view.coverage.at(-1)?.endOffset).toBe(original.length)
+      expect(window, JSON.stringify(original)).toMatchObject({
+        startLine: 1,
+        text: original,
+        totalLines,
+      })
+      expect((await write(call, 'a.ts', window.text)).changed, JSON.stringify(original)).toBe(false)
+      expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe(original)
     }
-    // 按范围读到最后一行真实的行，就算读到头了：没有续读，末尾插入要的那个零宽的行也在可见范围里。
+    // 按范围读到最后一行真实的行，就算读到头了：正文带着结尾的换行，没有续读；接着写一行就正好多一行。
     await writeFile(join(root, 'a.ts'), 'a\n\n')
     const ranged = await readOne(call, 'a.ts', [1, 2])
-    expect(ranged.lines).toEqual([
-      [1, 'a'],
-      [2, ''],
-    ])
+    expect(ranged).toMatchObject({ startLine: 1, text: 'a\n\n', totalLines: 2 })
     expect(ranged.hasMore).toBeUndefined()
-    await call('project', 'edit', {
-      steps: [
-        {
-          action: 'edit',
-          fileRef: ranged.fileRef,
-          edits: [{ op: 'insert', at: 'end', text: 'z' }],
-        },
-      ],
-    })
+    await write(call, 'a.ts', `${ranged.text}z\n`)
     expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('a\n\nz\n')
     // 只有 \n 与 \r\n 算换行，孤立的 \r 是行里的字符。
     expect(projectSourceLines('a\r\nb\rc').map((line) => line.text)).toEqual(['a', 'b\rc'])
   })
 
-  test('同一份源码不相连的几个窗口共用一个 fileRef，中间没读的行照样改不了', async () => {
+  test('同一个文件读两段：各是一个窗口，各带自己的起始行号；同一个文件可以接连几步改', async () => {
     await writeFile(join(root, 'a.ts'), 'one\ntwo\nthree\nfour\nfive')
-    const { call, context } = await projectToolFixture({ root })
+    const { call } = await projectToolFixture({ root })
     const result = await call('project', 'read', {
       files: [
         { path: 'a.ts', range: 1 },
         { path: 'a.ts', range: [4, 5] },
       ],
     })
-    expect(result.files.map((window: { lines: unknown }) => window.lines)).toEqual([
-      [[1, 'one']],
-      [
-        [4, 'four'],
-        [5, 'five'],
-      ],
+    expect(
+      result.files.map((window: Window) => [window.path, window.startLine, window.text])
+    ).toEqual([
+      ['a.ts', 1, 'one'],
+      ['a.ts', 4, 'four\nfive'],
     ])
-    const [{ fileRef }] = result.files
-    expect(result.files[1].fileRef).toBe(fileRef)
-    const view = await loadFileView(context, fileRef)
-    expect(view.coverage.map((range) => [range.startLine, range.endLine])).toEqual([
-      [1, 1],
-      [4, 5],
-    ])
-    expect((await failureOf(editLine(call, fileRef, 2, 'TWO'))).code).toBe('SCOPE_VIOLATION')
     await call('project', 'edit', {
       steps: [
-        {
-          action: 'edit',
-          fileRef,
-          edits: [
-            { op: 'replace', range: 1, text: 'ONE' },
-            { op: 'replace', range: 5, text: 'FIVE' },
-          ],
-        },
+        { action: 'replace', path: 'a.ts', oldText: 'one', newText: 'ONE' },
+        { action: 'replace', path: 'a.ts', oldText: 'five', newText: 'FIVE' },
       ],
     })
     expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('ONE\ntwo\nthree\nfour\nFIVE')
@@ -266,23 +211,30 @@ describe('read 的窗口与 fileRef', () => {
   test('路径钳在项目里：项目里的绝对路径也认，出了项目就拒', async () => {
     await writeFile(join(root, 'a.txt'), 'inside\n')
     const { call } = await projectToolFixture({ root })
-    expect((await readOne(call, join(root, 'a.txt'))).lines).toEqual([[1, 'inside']])
+    expect(await readOne(call, join(root, 'a.txt'))).toMatchObject({
+      path: 'a.txt',
+      text: 'inside\n',
+    })
     const outside = await failureOf(readOne(call, '../outside.txt'))
     expect(outside.code).toBe('PERMISSION_DENIED')
     expect(outside.message).toContain('项目之内')
   })
 
-  test('像密钥的片段原样读出来，窗口照常能改', async () => {
+  test('像密钥的片段原样读出来，照常能改', async () => {
     const secret = ['sk', 'live', '0123456789abcdefghij'].join('-')
-    await writeFile(join(root, 'env.ts'), `const token = "${secret}"\nconst plain = 1\n`)
+    const original = `const token = "${secret}"\nconst plain = 1\n`
+    await writeFile(join(root, 'env.ts'), original)
     const { call } = await projectToolFixture({ root })
     const window = await readOne(call, 'env.ts')
-    expect(window.lines[0]).toEqual([1, `const token = "${secret}"`])
-    expect(typeof window.fileRef).toBe('string')
-    expect(window.editable).toBeUndefined()
+    expect(window.text).toBe(original)
+    expect(window.note).toBeUndefined()
+    await replace(call, 'env.ts', 'const plain = 1', 'const plain = 2')
+    expect(await readFile(join(root, 'env.ts'), 'utf8')).toBe(
+      original.replace('plain = 1', 'plain = 2')
+    )
   })
 
-  test('超过可编辑上限的大文件只给只读窗口并说明，不签发用起来必然失败的 fileRef', async () => {
+  test('超过可编辑上限的大文件照样读得到、带一句说明；write、replace 改不了它，直说', async () => {
     const line = `${'a'.repeat(127)}\n`
     const lines = Math.ceil(
       (ProjectPolicyDefaults.maxFileSizeToReadBytes + 1024 * 1024) / line.length
@@ -291,14 +243,22 @@ describe('read 的窗口与 fileRef', () => {
     await writeFile(join(root, 'small.txt'), 'first\nsecond\nthird\n')
     const { call } = await projectToolFixture({ root })
     const huge = await readOne(call, 'huge.txt', [1, 2])
-    expect(huge.lines[0]).toEqual([1, 'a'.repeat(127)])
-    expect(huge.fileRef).toBeUndefined()
-    expect(huge.editable).toBe(false)
+    expect(huge).toMatchObject({ startLine: 1, text: `${'a'.repeat(127)}\n${'a'.repeat(127)}` })
     expect(huge.note).toContain('可编辑的上限')
-    // 同一条路上的普通文件照常签发 fileRef。
+    for (const step of [
+      { action: 'replace', path: 'huge.txt', oldText: 'a'.repeat(127), newText: 'b' },
+      { action: 'write', path: 'huge.txt', text: 'b\n' },
+    ]) {
+      const failure = await failureOf(call('project', 'edit', { steps: [step] }))
+      expect(failure.code, step.action).toBe('NOT_SUPPORTED')
+      expect(failure.message, step.action).toContain('可编辑的上限')
+    }
+    expect((await stat(join(root, 'huge.txt'))).size).toBe(line.length * lines)
+    // 同一条路上的普通文件照常读、照常改。
     const small = await readOne(call, 'small.txt', [1, 2])
-    expect(small.fileRef).toStartWith('view:')
     expect(small.note).toBeUndefined()
+    await replace(call, 'small.txt', 'second', 'SECOND')
+    expect(await readFile(join(root, 'small.txt'), 'utf8')).toBe('first\nSECOND\nthird\n')
   }, 120_000)
 })
 
@@ -310,11 +270,11 @@ describe('批量读', () => {
     const result = await call('project', 'read', {
       files: [{ path: 'a.ts', range: 2 }, { path: 'missing.ts' }, { path: 'b.ts', range: [1, 2] }],
     })
-    expect(result.files.map((window: { path: string }) => window.path)).toEqual(['a.ts', 'b.ts'])
-    expect(result.files[0].lines).toEqual([[2, 'a2']])
-    expect(result.files[1].lines).toEqual([
-      [1, 'b1'],
-      [2, 'b2'],
+    expect(
+      result.files.map((window: Window) => [window.path, window.startLine, window.text])
+    ).toEqual([
+      ['a.ts', 2, 'a2'],
+      ['b.ts', 1, 'b1\nb2'],
     ])
     expect(result.issues).toEqual([
       expect.objectContaining({
@@ -329,41 +289,39 @@ describe('批量读', () => {
     expect(single.message).toContain('list')
   })
 
-  test('读不到的文件进 issues（出了项目、不存在），其余文件照常给可编辑的窗口', async () => {
+  test('读不到的文件进 issues（出了项目、不存在），其余文件照常给窗口', async () => {
     await writeFile(join(root, 'open.txt'), 'visible\n')
     const { call } = await projectToolFixture({ root })
     const result = await call('project', 'read', {
       files: [{ path: '../outside.txt' }, { path: 'missing.txt' }, { path: 'open.txt', range: 1 }],
     })
-    expect(result.files.map((window: { path: string }) => window.path)).toEqual(['open.txt'])
-    expect(result.files[0].fileRef).toStartWith('view:')
+    // 第 1 行就是最后一行：读到了文件末尾，正文带着结尾的换行。
+    expect(result.files).toEqual([
+      expect.objectContaining({ path: 'open.txt', startLine: 1, text: 'visible\n' }),
+    ])
     expect(result.issues).toEqual([
       expect.objectContaining({ path: '../outside.txt', code: 'PERMISSION_DENIED' }),
       expect.objectContaining({ path: 'missing.txt', code: 'TARGET_NOT_FOUND' }),
     ])
   })
 
-  test('批量读每个文件都整份交回，各带 fileRef', async () => {
-    const modules = Array.from({ length: 6 }, (_, index) => `module-${index}.ts`)
-    for (const [index, path] of modules.entries()) {
+  test('批量读每个文件都整份交回', async () => {
+    const modules = Array.from({ length: 6 }, (_, index) => {
       const lines = Array.from(
         { length: 120 },
         (_, line) => `export const value_${index}_${line} = "中文🙂 ${'x'.repeat(28)}" // beacon`
       )
-      await writeFile(join(root, path), `${lines.join('\n')}\n`)
-    }
+      return { path: `module-${index}.ts`, text: `${lines.join('\n')}\n` }
+    })
+    for (const { path, text } of modules) await writeFile(join(root, path), text)
     const { call } = await projectToolFixture({ root })
-    const result = await call('project', 'read', { files: modules.map((path) => ({ path })) })
+    const result = await call('project', 'read', { files: modules.map(({ path }) => ({ path })) })
     expect(result.issues).toBeUndefined()
-    expect(result.files.map((window: { path: string }) => window.path)).toEqual(modules)
-    for (const [index, window] of result.files.entries()) {
-      expect(window.lines, window.path).toHaveLength(120)
-      expect(window.lines.at(-1), window.path).toEqual([
-        120,
-        `export const value_${index}_119 = "中文🙂 ${'x'.repeat(28)}" // beacon`,
-      ])
-      expect(window.fileRef, window.path).toStartWith('view:')
-    }
+    expect(result.files).toEqual(
+      modules.map(({ path, text }) =>
+        expect.objectContaining({ path, startLine: 1, text, totalLines: 120 })
+      )
+    )
   })
 
   test('一次 read 交回的正文有守内存的上限：批量里装不下的文件进 issues，只读一个时整个失败，都说清怎么分段', async () => {
@@ -529,7 +487,7 @@ describe('list', () => {
 })
 
 describe('search', () => {
-  test('字面与正则都搜得到；命中处的窗口带 fileRef，直接拿去改', async () => {
+  test('字面与正则都搜得到；命中处的窗口是连续的原文，照着写 oldText 就能改', async () => {
     await writeFile(join(root, 'a.txt'), 'first\nneedle A\nsecond\nneedle B\nend\n')
     const { call } = await projectToolFixture({ root })
     const literal = await call('project', 'search', {
@@ -538,18 +496,10 @@ describe('search', () => {
       contextLines: 0,
     })
     expect(literal.hits).toHaveLength(1)
-    const [window] = literal.files
-    expect(window.lines).toEqual([[2, 'needle A']])
-    expect(window.fileRef).toStartWith('view:')
-    await call('project', 'edit', {
-      steps: [
-        {
-          action: 'edit',
-          fileRef: window.fileRef,
-          edits: [{ op: 'replace', match: 'needle A', text: 'changed A' }],
-        },
-      ],
-    })
+    expect(literal.files).toEqual([
+      expect.objectContaining({ path: 'a.txt', startLine: 2, text: 'needle A' }),
+    ])
+    await replace(call, 'a.txt', literal.files[0].text, 'changed A')
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe(
       'first\nchanged A\nsecond\nneedle B\nend\n'
     )
@@ -560,26 +510,43 @@ describe('search', () => {
       contextLines: 0,
     })
     expect(regex.hits).toHaveLength(2)
+    // 同一个文件里不相连的两处各是一个窗口。
     expect(
-      regex.files.every((file: { fileRef?: string }) => typeof file.fileRef === 'string')
-    ).toBe(true)
+      regex.files.map((window: Window) => [window.path, window.startLine, window.text])
+    ).toEqual([
+      ['a.txt', 2, 'changed A'],
+      ['a.txt', 4, 'needle B'],
+    ])
   })
 
-  test('窗口只授权命中所在版本上真正给出的那几行', async () => {
+  test('窗口是命中所在的那一版；搜完之后文件又被改了，命中照样给位置和 snippet，只是没有窗口', async () => {
     await writeFile(join(root, 'a.ts'), 'before\nconst target = 1\nafter\n')
-    const { call, context } = await projectToolFixture({ root })
+    const { call, kernel } = await projectToolFixture({ root })
     const result = await call('project', 'search', { query: 'target' })
     expect(result.hits).toHaveLength(1)
     expect(result.hits[0].revision).toBeTruthy()
-    const [window] = result.files
-    expect(window.revision).toBe(result.hits[0].revision)
-    expect(window.lines).toContainEqual([2, 'const target = 1'])
-    const view = await loadFileView(context, window.fileRef)
-    // 窗口给到了最后一行，结尾换行之后那个零宽的行（内核里的第 4 行）也在可见范围里：在末尾插入要它。
-    expect(view.coverage.map((range) => [range.startLine, range.endLine])).toEqual([[1, 4]])
+    // 命中进了窗口就不另给 snippet；窗口读到了最后一行，正文带着结尾的换行。
+    expect(result.hits[0].snippet).toBeUndefined()
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        revision: result.hits[0].revision,
+        startLine: 1,
+        text: 'before\nconst target = 1\nafter\n',
+      }),
+    ])
+    const search = kernel.search.bind(kernel)
+    kernel.search = async (input) => {
+      const found = await search(input)
+      await writeFile(join(root, 'a.ts'), 'before\nconst target = 2\nafter\n')
+      return found
+    }
+    const changed = await call('project', 'search', { query: 'target' })
+    expect(changed.files).toEqual([])
+    expect(changed.hits[0].range.startLine).toBe(2)
+    expect(changed.hits[0].snippet).toContain('const target = 1')
   })
 
-  test('交回全部命中：一百个文件一百个窗口，每个都带 fileRef、能直接改', async () => {
+  test('交回全部命中：一百个文件一百个窗口', async () => {
     for (let index = 0; index < 100; index++)
       await writeFile(
         join(root, `hit-${index}.ts`),
@@ -589,50 +556,38 @@ describe('search', () => {
     const result = await call('project', 'search', { query: 'needle', contextLines: 3 })
     expect(result.hits).toHaveLength(100)
     expect(result.truncated).toBeUndefined()
-    expect(new Set(result.files.map((window: { path: string }) => window.path)).size).toBe(100)
-    for (const hit of result.hits) expect(hit.editable, hit.path).toBeUndefined()
-    expect(
-      result.files.every((window: { fileRef?: string }) => window.fileRef?.startsWith('view:'))
-    ).toBe(true)
+    expect(result.files).toHaveLength(100)
+    expect(new Set(result.files.map((window: Window) => window.path)).size).toBe(100)
+    for (const hit of result.hits) expect(hit.snippet, hit.path).toBeUndefined()
+    for (const window of result.files as Window[]) {
+      const index = Number(/^hit-(\d+)\.ts$/.exec(window.path)?.[1])
+      expect(window.text, window.path).toBe(
+        `// before\nexport const needle_${index} = ${index}\n// after\n`
+      )
+    }
   })
 
-  test('一个文件里的几处命中合成一个窗口：只有命中附近的行，中间没给的行改不了', async () => {
+  test('一个文件里相隔很远的几处命中各是一个窗口：只有命中附近的行', async () => {
     const lines = Array.from({ length: 30 }, (_, index) => `line ${index + 1}`)
     lines[1] = 'needle one'
     lines[19] = 'needle two'
     await writeFile(join(root, 'a.txt'), `${lines.join('\n')}\n`)
-    const { call, context } = await projectToolFixture({ root })
+    const { call } = await projectToolFixture({ root })
     const result = await call('project', 'search', { query: 'needle' })
     expect(result.hits.map((hit: { range: { startLine: number } }) => hit.range.startLine)).toEqual(
       [2, 20]
     )
-    expect(result.files).toHaveLength(1)
-    const [window] = result.files
-    expect(window.lines.map(([line]: [number, string]) => line)).toEqual([1, 2, 3, 19, 20, 21])
-    expect(window.totalLines).toBe(30)
-    const view = await loadFileView(context, window.fileRef)
-    expect(view.coverage.map((range) => [range.startLine, range.endLine])).toEqual([
-      [1, 3],
-      [19, 21],
-    ])
-    expect((await failureOf(editLine(call, window.fileRef, 10, 'x'))).code).toBe('SCOPE_VIOLATION')
-    await call('project', 'edit', {
-      steps: [
-        {
-          action: 'edit',
-          fileRef: window.fileRef,
-          edits: [
-            { op: 'replace', range: 2, text: 'ONE' },
-            { op: 'replace', range: 20, text: 'TWO' },
-          ],
-        },
-      ],
-    })
     expect(
-      (await readFile(join(root, 'a.txt'), 'utf8'))
-        .split('\n')
-        .filter((line) => line === 'ONE' || line === 'TWO')
-    ).toEqual(['ONE', 'TWO'])
+      result.files.map((window: Window) => [
+        window.path,
+        window.startLine,
+        window.text,
+        window.totalLines,
+      ])
+    ).toEqual([
+      ['a.txt', 1, 'line 1\nneedle one\nline 3', 30],
+      ['a.txt', 19, 'line 19\nneedle two\nline 21', 30],
+    ])
   })
 
   test('命中超过守内存的上限、或者搜索没能收全（超时）时整个失败，不交回一部分冒充全部', async () => {
@@ -670,13 +625,13 @@ describe('search', () => {
   })
 
   test('内核的搜索不按文件截命中：一个文件上千处命中照样全部交回', async () => {
-    await writeFile(
-      join(root, 'many.ts'),
-      `${Array.from({ length: 1200 }, (_, index) => `hit ${index}`).join('\n')}\n`
-    )
+    const content = `${Array.from({ length: 1200 }, (_, index) => `hit ${index}`).join('\n')}\n`
+    await writeFile(join(root, 'many.ts'), content)
     const { call } = await projectToolFixture({ root })
     const result = await call('project', 'search', { query: 'hit', contextLines: 0 })
     expect(result.hits).toHaveLength(1200)
-    expect(result.files[0].lines).toHaveLength(1200)
+    // 命中一行挨一行，并成一个窗口：就是整个文件。
+    expect(result.files).toHaveLength(1)
+    expect(result.files[0]).toMatchObject({ startLine: 1, text: content, totalLines: 1200 })
   })
 })

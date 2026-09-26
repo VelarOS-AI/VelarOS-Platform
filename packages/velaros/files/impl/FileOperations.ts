@@ -1,6 +1,6 @@
 /**
  * 代码面 `files` 命名空间的三个操作：`FileOperations` 与整个进程唯一的 `fileOperations`。接口 `FileOperationsApi` 在本文件的类上方。
- * 本机文件（系统空间）的读、写、撤回：有界地读、认编码、按行拆合、核版本、留原文、一批的成败在这里只做一份；
+ * 本机文件（系统空间）的读、写、撤回：有界地读、认编码、按路径逐步改、核版本、留原文、一次改动的成败在这里只做一份；
  * 空间的差别全交给注入的 `FileSpacePort`：路径怎么解析、哪些要问人、怎么落盘。项目里的文件另有一套（`velaros:project`）。
  */
 
@@ -16,7 +16,6 @@ import {
   isUndefined,
   Log,
   toNullable,
-  toOptional,
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/core/platform'
@@ -25,10 +24,14 @@ import { textCodec } from '@velaros-ai/core/text-files'
 
 import { FileErrorCodes, FileLimits } from '../contract/constants.js'
 import type { FileOperationContext } from '../contract/requires.js'
-import type { FileChangeEntry, FileEditPlan, FileEditProblem } from '../types/edit.js'
+import type {
+  FileChangeEntry,
+  FileEditDraft,
+  FileEditPlan,
+  FileEditProblem,
+} from '../types/edit.js'
 import type {
   FileEditInput,
-  FileEditItem,
   FileEditResult,
   FileLocation,
   FileReadInput,
@@ -48,9 +51,9 @@ import {
   withLinkTarget,
   writeOfPlan,
 } from '../utils/batch.js'
-import { lineSpan, numberedLines, splitLines } from '../utils/lines.js'
+import { lineSpan, splitLines, windowText } from '../utils/lines.js'
 import { fileIdentity } from '../utils/paths.js'
-import { planFileEdit } from '../utils/plan.js'
+import { applyStep, finishDraft, openDraft, parseStep } from '../utils/plan.js'
 import {
   currentFileVersion,
   decodeText,
@@ -74,23 +77,23 @@ const log = Log.tag('FileOperations')
  * @AgentView
  * 读写本机上的文本文件。下面这几件事三个方法都成立，各自说明里不再重复：
  * 相对路径、`~` 怎么解析，哪些路径越出了范围，由当前空间决定（环境报告里写着）；越界的直接拒绝。
- * 读出来的是带行号的行；改的时候按行号改几处，或者整份写。读写保留原文件的编码（UTF-8、带 BOM、UTF-16、GB18030）与换行风格，
+ * 读出来的是连续的正文，带第一行的行号；改的时候按路径写：整份写进去，或者把一段原文换成新文。读写保留原文件的编码（UTF-8、带 BOM、UTF-16、GB18030）与换行风格，
  * 认不出编码或有非法字节的按二进制处理。写是原子的，失败不会留下半截文件；路径是符号链接时读写它指向的那个文件，链接本身不变。
  * 列目录、搜文本用命令做（`velaros:shell` 的 run：ls、find、`rg -n`）；看图片用 `velaros:images`。
  */
 export interface FileOperationsApi {
   /**
    * @AgentView
-   * 读文本文件：每个文件交回带行号的行（给了 range 就只交那几行）和整个文件的版本号。
+   * 读文本文件：每个文件交回连续的正文与它第一行的行号（给了 range 就只交那几行）。
    * 图片、PDF 与其他二进制文件、目录、设备文件、超过 20 MB 的文件，都算这个文件失败。
    * @OperationEffect none
    */
   read(input: FileReadInput, ctx: FileOperationContext): Promise<FileReadResult>
   /**
    * @AgentView
-   * 改文件：按行号改几处，或者整份写。**优先整批改**：files 里放几个就改几个，整批一次成败，成了给一个 changeId。
-   * 定下改法之后、写进去之前文件被别人改过，整批不写。
-   * 路径是管道、设备、套接字，或文件有多个硬链接时不碰。新内容编不成原编码（孤立代理项、GB18030 表示不了的字符）就整批不写。
+   * 改文件：按路径一步一步写，write 整份写、replace 把一段原文换掉。**优先一次改完**：几个文件、几处改动都放进 steps，一次成败，成了给一个 changeId。
+   * 定下改法之后、写进去之前文件被别人改过，整次不写（重新提交就是）。
+   * 路径是管道、设备、套接字，或文件有多个硬链接时不碰。新内容编不成原编码（孤立代理项、GB18030 表示不了的字符）就整次不写。
    * @OperationEffect write
    */
   edit(input: FileEditInput, ctx: FileOperationContext): Promise<FileEditResult>
@@ -115,7 +118,7 @@ export class FileOperations implements FileOperationsApi {
     let failed = 0
     let firstFailure: Nullable<AppError> = null
     // 一次调用总共最多交回 readChars 个字符：预算用完之后的文件根本不读盘，那一项换成失败条目。
-    // 这个预算保护的是这一侧的内存与 IPC——行落在程序的变量里，模型看不到它。
+    // 这个预算保护的是这一侧的内存与 IPC——正文落在程序的变量里，模型看不到它。
     let remaining = FileLimits.readChars
     for (const item of items) {
       try {
@@ -125,7 +128,7 @@ export class FileOperations implements FileOperationsApi {
             `本次调用的 ${FileLimits.readChars} 字符预算已被前面的文件用完，这个文件没有读；另起一次调用再读`
           )
         const result = await this.readOne(item, remaining, ctx)
-        remaining -= result.lines.reduce((sum, [, text]) => sum + text.length, 0)
+        remaining -= result.text.length
         files.push(result)
       } catch (error) {
         const failure = AppError.from(error)
@@ -141,63 +144,89 @@ export class FileOperations implements FileOperationsApi {
 
   public async edit(input: FileEditInput, ctx: FileOperationContext): Promise<FileEditResult> {
     ctx.abortSignal.throwIfAborted()
-    const items = batchItems<FileEditItem>(input, FileLimits.editFiles, 'edit')
-    // 第一段：每个文件定位、按真实路径判重、把改法定下来，不写。
-    // 有任何问题就整批失败，问题全部列出来让程序一次改完。
-    const plans: FileEditPlan[] = []
+    const steps = batchItems(input, FileLimits.editSteps, 'edit')
+    // 第一段：每一步定位、按真实路径把同一个文件的几步归到一起，在内存里按顺序改好，不写。
+    // 有任何问题就整次失败，问题全部列出来让程序一次改完；一个文件出了问题，它后面的几步不再看。
+    const drafts = new Map<string, FileEditDraft>()
+    const broken = new Set<string>()
+    // 出了问题、还没认出是哪个文件的那几步：按原样的写法记着。后面同一个路径上形状没毛病的步骤不再看，
+    // 免得报出连带的问题（前一步没写成，后一步自然找不到原文）；形状本身不对的照样逐条报。
+    const brokenPaths = new Set<string>()
     const problems: FileEditProblem[] = []
-    const seen = new Set<string>()
-    for (const [index, item] of items.entries()) {
+    for (const [index, step] of steps.entries()) {
       const problem = (
         reason: FileEditProblem['reason'],
         message: string,
-        path = String(item.path)
-      ): FileEditProblem => ({ file: index, path, reason, message })
-      const location = await this.locate(item.path, ctx).catch((error: unknown) =>
+        path = String(step.path)
+      ): FileEditProblem => ({ step: index, path, reason, message })
+      const parsed = parseStep(step)
+      if (isString(parsed)) {
+        problems.push(problem('invalid', parsed))
+        brokenPaths.add(String(step.path))
+        continue
+      }
+      if (brokenPaths.has(parsed.path)) continue
+      const location = await this.locate(parsed.path, ctx).catch((error: unknown) =>
         AppError.from(error)
       )
       if (location instanceof AppError) {
         problems.push(
           problem(location.code === 'PERMISSION' ? 'denied' : 'invalid', location.message)
         )
+        brokenPaths.add(parsed.path)
         continue
       }
       const identity = fileIdentity(location.target, this.platform.getPlatform())
-      if (seen.has(identity)) {
-        problems.push(
-          problem(
-            'invalid',
-            '同一个文件在这一批里出现了不止一次（写法不同、经符号链接指向同一个文件的也算）；把它的改动合进一项',
-            location.path
+      if (broken.has(identity)) continue
+      let draft = drafts.get(identity)
+      if (!draft) {
+        if (drafts.size + broken.size >= FileLimits.editFiles)
+          throw new AppError(
+            'VALIDATION',
+            `edit 一次最多改 ${FileLimits.editFiles} 个文件，steps[${index}] 碰到了第 ${FileLimits.editFiles + 1} 个；分几次调用`
           )
-        )
-        continue
+        const opened = await openDraft(index, location)
+        if ('reason' in opened) {
+          problems.push(opened)
+          broken.add(identity)
+          continue
+        }
+        draft = opened
+        drafts.set(identity, draft)
       }
-      seen.add(identity)
-      const planned = await planFileEdit(index, location, item)
+      const failed = applyStep(draft, parsed)
+      if (failed) {
+        problems.push(problem('invalid', failed, location.path))
+        drafts.delete(identity)
+        broken.add(identity)
+      }
+    }
+    if (!isEmpty(problems)) throw unresolvedEditFailure(problems)
+    const plans: FileEditPlan[] = []
+    for (const draft of drafts.values()) {
+      const planned = finishDraft(draft)
       if ('reason' in planned) problems.push(planned)
       else plans.push(planned)
     }
     if (!isEmpty(problems)) throw unresolvedEditFailure(problems)
 
-    // 定改法的这段时间里文件可能又被别人改了：写之前再 stat 一次，印记没变的大文件不重读，其余重读核版本；变了就整批不写。
+    // 定改法的这段时间里文件可能又被别人改了：写之前再 stat 一次，印记没变的大文件不重读，其余重读核版本；变了就整次不写。
     for (const plan of plans) {
       const now = stampOf(await stat(plan.target).catch(() => null))
       if (stampProvesUnchanged(plan.stamp, now)) continue
-      const current = await currentFileVersion(plan.target)
-      if (current !== plan.baseVersion) {
+      if ((await currentFileVersion(plan.target)) !== plan.baseVersion) {
         problems.push({
-          file: plan.index,
+          step: plan.step,
           path: plan.path,
           reason: 'stale',
-          message: '定下改法之后文件又被改过了；重新读一遍再改',
-          currentVersion: toOptional(current),
+          message:
+            '定下改法之后文件又被别处改过了；重新提交这次 edit（replace 会按新的内容找原文）',
         })
       }
     }
     if (!isEmpty(problems)) throw unresolvedEditFailure(problems)
 
-    // 第二段：整批交给空间落盘；写进去的记成一次改动，`undo` 凭它的号整次撤回。
+    // 第二段：整次交给空间落盘；写进去的记成一次改动，`undo` 凭它的号整次撤回。
     try {
       await ctx.files.commit(plans.map(writeOfPlan))
     } catch (error) {
@@ -209,12 +238,7 @@ export class FileOperations implements FileOperationsApi {
     const record = this.recordChange(plans)
     const files = plans.map((plan) =>
       withLinkTarget<FileWritten>(
-        {
-          path: plan.path,
-          created: plan.created,
-          version: fileVersionOf(plan.bytes),
-          totalLines: plan.totalLines,
-        },
+        { path: plan.path, created: plan.created, totalLines: plan.totalLines },
         plan.target,
         plan.linked
       )
@@ -250,8 +274,7 @@ export class FileOperations implements FileOperationsApi {
         ? !bytes
         : Boolean(bytes && entry.before && bytes.equals(entry.before))
       if (bytes && version === entry.after && !alreadyBack) pending.push({ entry, current: bytes })
-      else if (!alreadyBack)
-        conflicts.push(bytes ? `${entry.path}（现在是 ${version}）` : `${entry.path}（已经不在了）`)
+      else if (!alreadyBack) conflicts.push(bytes ? entry.path : `${entry.path}（已经不在了）`)
     }
     if (!isEmpty(conflicts)) {
       throw new AppError(
@@ -309,7 +332,7 @@ export class FileOperations implements FileOperationsApi {
     )
   }
 
-  /** 读一个文件：定位、有界读、认出图片与文档就拒、严格解码，再按 range 交出带行号的行；超过这次调用剩下的预算就这一项失败，不回半份。 */
+  /** 读一个文件：定位、有界读、认出图片与文档就拒、严格解码，再按 range 交出连续的正文；超过这次调用剩下的预算就这一项失败，不回半份。 */
   private async readOne(
     item: FileReadItem,
     budgetChars: number,
@@ -341,16 +364,15 @@ export class FileOperations implements FileOperationsApi {
         'VALIDATION',
         `${path} 只有 ${text.lines.length} 行，range 从第 ${from} 行起`
       )
-    const lines = numberedLines(text, from, to)
-    const chars = lines.reduce((sum, [, line]) => sum + line.length, 0)
-    if (chars > budgetChars) {
+    const window = windowText(text, from, to)
+    if (window.length > budgetChars) {
       throw new AppError(
         'VALIDATION',
-        `${path} 要交回 ${chars} 个字符，这次调用前面的文件已经用掉了大半预算，剩下 ${budgetChars}；把它单独放进一次 read，或者用 range 少读几行`
+        `${path} 要交回 ${window.length} 个字符，这次调用前面的文件已经用掉了大半预算，剩下 ${budgetChars}；把它单独放进一次 read，或者用 range 少读几行`
       )
     }
     return withLinkTarget<FileText>(
-      { path, version: fileVersionOf(buffer), encoding, totalLines: text.lines.length, lines },
+      { path, encoding, totalLines: text.lines.length, startLine: from, text: window },
       target,
       linked
     )

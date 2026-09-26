@@ -51,7 +51,7 @@ try {
 | [act/system](act/system/README.md) | `@velaros-ai/velaros/act/system` | 模型自管理的 `velaros:system`：发现能力、会话目标、任务笔记与长期记忆、持久空间 |
 | [act/search](act/search/README.md) | `@velaros-ai/velaros/act/search` | 有界高级搜索 `velaros:search` 与搜索支线里的证据读取 `velaros:evidence` |
 | [act/agents](act/agents/README.md) | `@velaros-ai/velaros/act/agents` | 子任务 `velaros:agents` 与用户交互 `velaros:interaction` |
-| [files](files/README.md) | `@velaros-ai/velaros/files` | 本机文件 `velaros:files`：带行号地读、按行号改或整份写、整次撤回 |
+| [files](files/README.md) | `@velaros-ai/velaros/files` | 本机文件 `velaros:files`：读出连续的正文、按路径整份写或换掉一段原文、整次撤回 |
 | [images](images/README.md) | `@velaros-ai/velaros/images` | 看图 `velaros:images`：把图片交到模型眼前 |
 | [shell](shell/README.md) | `@velaros-ai/velaros/shell` | 跑命令 `velaros:shell`：前台与后台任务，危险命令先问用户 |
 | [sandbox](sandbox/README.md) | `@velaros-ai/velaros/sandbox` | 演练沙箱 `velaros:sandbox`：在镜像里先跑，看过差量再落回 |

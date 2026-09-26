@@ -114,7 +114,7 @@ test('model file creation centralizes UTF-8 without BOM and LF while preserving 
   // 经项目空间写：新建文件一律是无 BOM 的 UTF-8、LF，正文里的 BOM 与 CRLF 在编辑规划这一层归一，转义原样保留。
   const { call } = await projectToolFixture({ root })
   await call('project', 'edit', {
-    steps: [{ action: 'create', path: 'new.txt', text: '\uFEFF中文🙂\r\n\\n\\u1234\r\n' }],
+    steps: [{ action: 'write', path: 'new.txt', text: '\uFEFF中文🙂\r\n\\n\\u1234\r\n' }],
   })
   expect(await readFile(join(root, 'new.txt'))).toEqual(Buffer.from('中文🙂\n\\n\\u1234\n'))
 })

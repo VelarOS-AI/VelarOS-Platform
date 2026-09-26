@@ -171,7 +171,7 @@ test('INV-30 正式入口从 workspace/dataDir 建立唯一主干；关闭重开
   await first.context.append({ kind: 'user', body: 'Edit a.txt and preserve script state' })
   const receipt = await first.execute({
     source:
-      "import {output} from 'velaros';import {read,edit} from 'velaros:project';const file=(await read({files:[{path:'a.txt'}]})).files[0];if(!file.fileRef)throw Error('missing');await edit({steps:[{action:'edit',fileRef:file.fileRef,edits:[{op:'replace',range:1,text:'two'}]}]});output('changed');",
+      "import {output} from 'velaros';import {read,edit} from 'velaros:project';const file=(await read({files:[{path:'a.txt'}]})).files[0];if(file.text!=='one\\n')throw Error('unexpected');await edit({steps:[{action:'replace',path:'a.txt',oldText:'one',newText:'two'}]});output('changed');",
   })
   assert.equal(receipt.result.failed, undefined, JSON.stringify(receipt))
   assert.equal(await readFile(join(workspace, 'a.txt'), 'utf8'), 'two\n')

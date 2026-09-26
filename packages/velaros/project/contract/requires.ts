@@ -422,7 +422,7 @@ export interface ProjectOperationContext {
   abortSignal: AbortSignal
   /** 空间端口：项目根、内核与代码查询都经它要。 */
   project: ProjectSpacePort
-  /** 本次调用所属会话：fileRef、续读页与改动引用按会话签发与核对。 */
+  /** 本次调用所属会话：改动引用（changeRef）与按路径改时取的读取凭据按会话签发与核对。 */
   sessionId?: string
 }
 

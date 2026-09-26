@@ -49,7 +49,13 @@ describe('compact edit selector contract', () => {
       expect(normalizeProjectLineRange(range as never)).toEqual(expected)
       // 代码面的 read 收同样的写法，读到的正好是这几行。
       const [window] = (await readRangeThroughSurface(range)).files
-      expect([window.lines[0][0], window.lines.at(-1)[0]]).toEqual(expected)
+      expect(window.startLine).toBe(expected[0])
+      expect(window.text).toBe(
+        Array.from(
+          { length: expected[1] - expected[0] + 1 },
+          (_, index) => `line ${expected[0] + index}`
+        ).join('\n')
+      )
     }
   )
 
@@ -73,35 +79,25 @@ describe('compact edit selector contract', () => {
     expect((await failureOf(readRangeThroughSurface(range))).code).toBe('INVALID_INPUT')
   })
 
-  test('each combination has one meaning: ambiguous edits, two sources and internal operations are rejected at the code surface', async () => {
+  test('each step shape has one meaning: incomplete path steps, the retired fileRef steps and internal operations are rejected at the code surface', async () => {
     await writeFile(join(root, 'x.txt'), 'x\n')
     const { call, kernel } = await projectToolFixture({ root })
-    const [file] = (await call('project', 'read', { files: [{ path: 'x.txt' }] })).files
     const rejected = async (steps: unknown[]) =>
       (await failureOf(call('project', 'edit', { steps }))).code
-    for (const operation of [
-      { op: 'replace', text: 'x' },
-      { op: 'replace', range: 1, match: '', text: 'x' },
-      { op: 'insert', range: 1, text: 'x' },
-      { op: 'insert', at: 'start', side: 'before', text: 'x' },
-      { op: 'insert', at: 'end', range: 1, text: 'x' },
-      { op: 'replace', range: 1, side: 'after', text: 'x' },
+    for (const step of [
+      { action: 'replace', path: 'x.txt', newText: 'y' },
+      { action: 'replace', path: 'x.txt', oldText: '', newText: 'y' },
+      { action: 'replace', path: 'x.txt', oldText: 'x' },
+      { action: 'replace', oldText: 'x', newText: 'y' },
+      { action: 'write', path: 'x.txt' },
+      { action: 'move', path: 'x.txt' },
+      // 编辑规划内部的步骤（凭 fileRef、按行号编辑）模型写不进来：它们只由系统按路径换出来。
+      { action: 'edit', path: 'x.txt', edits: [{ op: 'replace', range: 1, text: 'y' }] },
+      { action: 'create', path: 'y.txt', text: 'y' },
+      { action: 'overwrite', path: 'x.txt', text: 'y' },
     ])
-      expect(
-        await rejected([{ action: 'edit', fileRef: file.fileRef, edits: [operation] }]),
-        JSON.stringify(operation)
-      ).toBe('INVALID_INPUT')
-    expect(
-      await rejected([
-        {
-          action: 'edit',
-          sourceRef: file.fileRef,
-          path: 'x.txt',
-          edits: [{ op: 'replace', range: 1, text: 'x' }],
-        },
-      ])
-    ).toBe('INVALID_INPUT')
-    // 内核内部的整段替换（replace_content）从代码面够不着：它只能由规划器按读到的范围编出来。
+      expect(await rejected([step]), JSON.stringify(step)).toBe('INVALID_INPUT')
+    // 内核内部的整段替换（replace_content）从代码面够不着：它只能由规划器编出来。
     expect(
       await rejected([
         { action: 'replace_content', path: 'x.txt', expectedContent: 'x\n', content: 'y\n' },
@@ -120,7 +116,7 @@ describe('compact edit selector contract', () => {
     )
     expect(() => edit('aaa', [{ op: 'replace', match: 'aa', text: 'x' }])).toThrow('出现了 2 次')
     expect(() => edit('MATCH', [{ op: 'replace', match: 'match', text: 'x' }])).toThrow(
-      '没有精确匹配'
+      '没有一模一样的原文'
     )
   })
 
@@ -173,10 +169,10 @@ describe('compact edit selector contract', () => {
     ])
     expect(() =>
       planProjectFileEdits(partial, [{ op: 'replace', match: 'hidden', text: 'x' }])
-    ).toThrow('原文在未显示的第 2 行')
+    ).toThrow('不在读到的范围里，它在第 2 行')
     expect(() =>
       planProjectFileEdits(partial, [{ op: 'replace', match: 'first\nlast', text: 'x' }])
-    ).toThrow('没有精确匹配')
+    ).toThrow('没有一模一样的原文')
     expect(() =>
       planProjectFileEdits(partial, [{ op: 'replace', range: [1, 3], match: 'first', text: 'x' }])
     ).toThrow('实际显示')
@@ -196,7 +192,7 @@ describe('compact edit selector contract', () => {
     ).toThrow('实际显示')
     expect(() =>
       planProjectFileEdits(fragment, [{ op: 'replace', match: 'target right', text: 'changed' }])
-    ).toThrow('原文在未显示的第 1 行')
+    ).toThrow('不在读到的范围里，它在第 1 行')
     expect(() =>
       planProjectFileEdits(fragment, [{ op: 'insert', at: 'end', text: 'new' }])
     ).toThrow('实际显示')
@@ -242,7 +238,7 @@ describe('compact edit selector contract', () => {
     throw new Error('ambiguous long line unexpectedly accepted')
   })
 
-  test('zero-hit guidance says whether to move the range, read more, or recopy the source', () => {
+  test('zero-hit guidance says whether to drop the line restriction, search the whole file, or recopy the source', () => {
     const failure = (
       content: string,
       edits: ProjectContentEdit[],
@@ -259,24 +255,27 @@ describe('compact edit selector contract', () => {
       { op: 'replace', range: 1, match: 'three', text: 'x' },
     ])
     expect(outside.details.elsewhere).toEqual([{ range: [3, 3], visible: true }])
-    expect(outside.suggestedNextAction).toContain('range')
+    expect(outside.message).toContain('不在所选的行里，它出现在第 3 行')
+    expect(outside.suggestedNextAction).toContain('别限定行')
     const hidden = failure(
       'one\ntwo\nthree\n',
       [{ op: 'replace', match: 'three', text: 'x' }],
       [{ startOffset: 0, endOffset: 4, startLine: 1, endLine: 1, completeLines: true }]
     )
     expect(hidden.details.elsewhere).toEqual([{ range: [3, 3], visible: false }])
-    expect(hidden.suggestedNextAction).toContain('先 read 这些行')
+    expect(hidden.message).toContain('不在读到的范围里，它在第 3 行')
+    expect(hidden.suggestedNextAction).toContain('按原文在整个文件里找')
     const absent = failure('one\ntwo\n', [{ op: 'replace', match: 'zzz', text: 'x' }])
-    expect(absent.message).toContain('也没有相近的原文')
+    expect(absent.message).toContain('也没有相近的')
     expect(absent.details.elsewhere).toBeUndefined()
-    expect(absent.suggestedNextAction).not.toContain('核对候选')
+    expect(absent.suggestedNextAction).toContain('先 read')
+    expect(absent.suggestedNextAction).not.toContain('候选')
   })
 
   test('matches cannot extend beyond an explicit range', () => {
     expect(() =>
       edit('one\ntwo\n', [{ op: 'replace', range: 1, match: 'one\ntwo', text: 'x' }])
-    ).toThrow('不在所选 range 内，它出现在第 1–2 行')
+    ).toThrow('不在所选的行里，它出现在第 1–2 行')
     expect(() => edit('one\n', [{ op: 'replace', range: 3, text: 'x' }])).toThrow(
       '第 3 行超出了文件的行数（1 行）'
     )
@@ -492,7 +491,7 @@ describe('compiled plans on the real transaction engine', () => {
         resolver
       )
     ).rejects.toMatchObject({ reason: 'SCOPE_VIOLATION' })
-    // 前面的步骤动过这个文件：这是入参该换成 sourceRef，不是版本过期。
+    // 前面的步骤动过这个文件还写 fileRef：按入参不对拒绝，不是版本过期（按路径的步骤由系统换成 sourceRef）。
     await expect(
       compileProjectEdit(
         {
@@ -505,7 +504,7 @@ describe('compiled plans on the real transaction engine', () => {
       )
     ).rejects.toMatchObject({
       reason: 'INVALID_INPUT',
-      suggestedNextAction: expect.stringContaining('sourceRef'),
+      message: expect.stringContaining('已被本计划前面的步骤移动或修改'),
     })
     const valid = await compileProjectEdit(
       {

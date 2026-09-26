@@ -138,7 +138,7 @@ test('formal Runtime evaluation archives raw requests and independently verifies
         text: block(
           request,
           'execute',
-          "import {read,edit} from 'velaros:project';import {output} from 'velaros';const file=(await read({files:[{path:'state.txt'}]})).files[0];if(!file.fileRef)throw Error('missing');output(await edit({steps:[{action:'edit',fileRef:file.fileRef,edits:[{op:'replace',range:1,text:'two'}]}]}));"
+          "import {read,edit} from 'velaros:project';import {output} from 'velaros';const file=(await read({files:[{path:'state.txt'}]})).files[0];if(file.text!=='one\\n')throw Error('unexpected');output(await edit({steps:[{action:'replace',path:'state.txt',oldText:'one',newText:'two'}]}));"
         ),
       }
     } else {
@@ -289,7 +289,7 @@ test('cooperation workload verifies the persisted child write, exact message ack
     } else if (!request.instructions.includes('velaros:agents')) {
       if (++child === 1) {
         const id = frame(request).partitions.runtime.stores.active.items[0].id
-        code = `import {store} from 'velaros:system';import {read} from 'velaros:project';import {output} from 'velaros';const f=(await read({files:[{path:'orders.json'}]})).files[0];const numbers=JSON.parse(f.lines.map(x=>x[1]).join('\\n'));output(await store.set({store:${JSON.stringify(id)},key:'result/summary',baseRevision:0,value:{total:numbers.reduce((a,b)=>a+b,0),count:numbers.length},event:{topic:'result/ready',value:{ready:true}}}));`
+        code = `import {store} from 'velaros:system';import {read} from 'velaros:project';import {output} from 'velaros';const f=(await read({files:[{path:'orders.json'}]})).files[0];const numbers=JSON.parse(f.text);output(await store.set({store:${JSON.stringify(id)},key:'result/summary',baseRevision:0,value:{total:numbers.reduce((a,b)=>a+b,0),count:numbers.length},event:{topic:'result/ready',value:{ready:true}}}));`
         yield { type: 'text', text: block(request, 'execute', code) }
       } else yield { type: 'text', text: marker(request) + ' done' }
     } else {
@@ -305,7 +305,7 @@ test('cooperation workload verifies the persisted child write, exact message ack
         code = `import {store,memory} from 'velaros:system';import {output} from 'velaros';const page=await store.events({store:${JSON.stringify(id)}});if(!page)throw Error('subscription missing');await store.ack({store:${JSON.stringify(id)},ids:page.events.map(event=>event.id)});output(await store.events({store:${JSON.stringify(id)}}));output(await memory.organize({focus:'Keep total 50 and next report verification'}));`
       } else if (main === 4) {
         code =
-          "import {edit} from 'velaros:project';import {output} from 'velaros';output(await edit({steps:[{action:'create',path:'report.json',text:JSON.stringify({total:50,count:4})+'\\n'}]}));"
+          "import {edit} from 'velaros:project';import {output} from 'velaros';output(await edit({steps:[{action:'write',path:'report.json',text:JSON.stringify({total:50,count:4})+'\\n'}]}));"
         yield {
           type: 'text',
           text:
@@ -409,7 +409,7 @@ test('semantic search workload retains real branch evidence and verifies the fix
           text: block(
             request,
             'execute',
-            `import {read as refresh} from 'velaros:search';import {read,edit} from 'velaros:project';import {output} from 'velaros';output(await refresh({ref:${JSON.stringify(report.ref)},mode:'current'}));const file=(await read({files:[{path:'src/session.mjs'}]})).files[0];if(!file.fileRef)throw Error('missing');output(await edit({steps:[{action:'edit',fileRef:file.fileRef,edits:[{op:'replace',range:3,match:'>=',text:'>'}]}]}));`
+            `import {read as refresh} from 'velaros:search';import {read,edit} from 'velaros:project';import {output} from 'velaros';output(await refresh({ref:${JSON.stringify(report.ref)},mode:'current'}));const file=(await read({files:[{path:'src/session.mjs'}]})).files[0];if(!file.text.includes('>='))throw Error('missing');output(await edit({steps:[{action:'replace',path:'src/session.mjs',oldText:'>=',newText:'>'}]}));`
           ),
         }
       } else if (main === 3)
@@ -508,7 +508,7 @@ test('reconciliation advances four actual source versions through the same child
           text: block(
             request,
             'execute',
-            `import {store} from 'velaros:system';import {read} from 'velaros:project';import {output} from 'velaros';const files=(await read({files:Array.from({length:12},(_,i)=>({path:'orders/batch-'+(i+1)+'.json'}))})).files;const orders=files.flatMap(f=>JSON.parse(f.lines.map(row=>row[1]).join('\\n')));const value={totalCents:0,approved:0,pending:0,count:orders.length};for(const order of orders){if(order.status==='approved'){value.totalCents+=order.cents;value.approved++}else value.pending++}const previous=await store.get({store:${JSON.stringify(id)},key:'result/summary'});output(await store.set({store:${JSON.stringify(id)},key:'result/summary',baseRevision:previous?.revision??0,value,event:{topic:'result/ready',value:{updated:true}}}));`
+            `import {store} from 'velaros:system';import {read} from 'velaros:project';import {output} from 'velaros';const files=(await read({files:Array.from({length:12},(_,i)=>({path:'orders/batch-'+(i+1)+'.json'}))})).files;const orders=files.flatMap(f=>JSON.parse(f.text));const value={totalCents:0,approved:0,pending:0,count:orders.length};for(const order of orders){if(order.status==='approved'){value.totalCents+=order.cents;value.approved++}else value.pending++}const previous=await store.get({store:${JSON.stringify(id)},key:'result/summary'});output(await store.set({store:${JSON.stringify(id)},key:'result/summary',baseRevision:previous?.revision??0,value,event:{topic:'result/ready',value:{updated:true}}}));`
           ),
         }
       } else yield { type: 'text', text: marker(request) + ' done' }
@@ -546,7 +546,7 @@ test('reconciliation advances four actual source versions through the same child
                 "import {read} from 'velaros:project';import {output} from 'velaros';// Continuously verify the persisted final report\noutput(await read({files:[{path:'report.json'}]}),{key:'final-report',purpose:'Verify the actual final report',view:{maxChars:4000}});"
               ) + '\n',
           }
-        code = `import {store,memory} from 'velaros:system';import {edit} from 'velaros:project';import {output} from 'velaros';const item=await store.get({store:${JSON.stringify(id)},key:'result/summary'});if(!item)throw Error('missing summary');const page=await store.events({store:${JSON.stringify(id)}});if(!page)throw Error('missing subscription');await store.ack({store:${JSON.stringify(id)},ids:page.events.map(event=>event.id)});await edit({steps:[{action:'create',path:'stage-${phase}.json',text:JSON.stringify(item.value)+'\\n'}]});await memory.update({key:'stage-${phase}',baseRevision:0,body:'Stage ${phase} verified and persisted'});${phase === 0 ? "output(await memory.organize({focus:'Keep stage progress for continuation'}));" : ''}${phase === 3 ? "await edit({steps:[{action:'create',path:'report.json',text:JSON.stringify(item.value)+'\\n'}]});" : ''}output(item.value);`
+        code = `import {store,memory} from 'velaros:system';import {edit} from 'velaros:project';import {output} from 'velaros';const item=await store.get({store:${JSON.stringify(id)},key:'result/summary'});if(!item)throw Error('missing summary');const page=await store.events({store:${JSON.stringify(id)}});if(!page)throw Error('missing subscription');await store.ack({store:${JSON.stringify(id)},ids:page.events.map(event=>event.id)});await edit({steps:[{action:'write',path:'stage-${phase}.json',text:JSON.stringify(item.value)+'\\n'}]});await memory.update({key:'stage-${phase}',baseRevision:0,body:'Stage ${phase} verified and persisted'});${phase === 0 ? "output(await memory.organize({focus:'Keep stage progress for continuation'}));" : ''}${phase === 3 ? "await edit({steps:[{action:'write',path:'report.json',text:JSON.stringify(item.value)+'\\n'}]});" : ''}output(item.value);`
       } else yield { type: 'text', text: marker(request) + ' done' }
       if (code) yield { type: 'text', text: block(request, 'execute', code) }
     }

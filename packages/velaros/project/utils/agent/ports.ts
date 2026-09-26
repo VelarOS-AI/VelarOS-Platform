@@ -6,7 +6,6 @@ import { resolve } from 'node:path'
 
 import {
   isArray,
-  isEmpty,
   isNumber,
   isPlainObject,
   isPresent,
@@ -20,6 +19,7 @@ import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import type { ProjectOperationContext } from '../../contract/requires.js'
 import { ProjectError } from '../errors.js'
 import { resolveInsideProject } from '../files/path-containment.js'
+import { ProjectTuning } from '../tuning.js'
 
 /** 空间端口抛的通用码对应到哪个原因码：项目的能力只用一套码。 */
 const ReasonOfAppCode: Readonly<Record<string, string>> = Object.freeze({
@@ -72,38 +72,46 @@ function diagnosticLine(diagnostic: Record<string, unknown>): string {
   return `  - ${location ? `${location} ` : ''}${String(diagnostic.message ?? '')}`
 }
 
-/** 改完之后的候选预览（没写进磁盘）：出错那几行。 */
-function previewText(window: Record<string, unknown>): Optional<string> {
-  if (!isArray(window.lines)) return undefined
-  const lines = window.lines.filter(
-    (line): line is [number, string] => isArray(line) && isNumber(line[0]) && isString(line[1])
-  )
-  if (isEmpty(lines)) return undefined
-  const title = [window.path, window.line]
-    .filter((part) => isString(part) || isNumber(part))
-    .join(':')
-  return `改完之后（没写进去）${title ? ` ${title}` : ''} 附近是这样：\n${lines.map(([line, text]) => `  ${line}: ${text}`).join('\n')}`
+/**
+ * 改完之后的候选预览（没写进磁盘）：同一个文件的几处出错并成一段，重叠的行只出一次、隔开的地方用 … 接上，
+ * 每个文件最多列 `failurePreviewLines` 行——连带出来的一串语法错误各带一份预览只会把同几行重复好几遍。
+ */
+function previewTexts(windows: ReadonlyArray<Record<string, unknown>>): string[] {
+  const byPath = new Map<string, Map<number, string>>()
+  for (const window of windows) {
+    if (!isArray(window.lines)) continue
+    const path = isString(window.path) ? window.path : ''
+    const lines = byPath.get(path) ?? new Map<number, string>()
+    for (const line of window.lines)
+      if (isArray(line) && isNumber(line[0]) && isString(line[1])) lines.set(line[0], line[1])
+    if (lines.size > 0) byPath.set(path, lines)
+  }
+  return [...byPath].map(([path, lines]) => {
+    const rows: string[] = []
+    let previous: Optional<number>
+    const numbers = [...lines.keys()].sort((left, right) => left - right)
+    for (const line of numbers.slice(0, ProjectTuning.agent.failurePreviewLines)) {
+      if (isNumber(previous) && line > previous + 1) rows.push('  …')
+      rows.push(`  ${line}: ${lines.get(line)}`)
+      previous = line
+    }
+    return `改完之后（没写进去）${path ? ` ${path}` : ''} 出错的地方附近是这样：\n${rows.join('\n')}`
+  })
 }
 
 /** 把一个项目错误写成交给程序的说明：位置、说明、候选、诊断、预览，最后是下一步。 */
 function describeProjectFailure(error: ProjectError): string {
   const details = isPlainObject(error.details) ? error.details : {}
-  const where = [
-    Number.isInteger(details.stepIndex) ? `steps[${String(details.stepIndex)}]` : '',
-    Number.isInteger(details.editIndex) ? `edits[${String(details.editIndex)}]` : '',
-  ]
-    .filter(Boolean)
-    .join('.')
+  // 按路径的一步就是一处改动，只说第几步
+  const where = Number.isInteger(details.stepIndex) ? `steps[${String(details.stepIndex)}]` : ''
   const parts = [where ? `${where}：${error.message}` : error.message]
   const recovery = optionalWhen(isPlainObject, details.recovery)
   const candidates = isArray(recovery?.candidates) ? recovery.candidates.filter(isPlainObject) : []
   if (candidates.length) parts.push(`候选：\n${candidates.map(candidateLine).join('\n')}`)
   const diagnostics = isArray(details.diagnostics) ? details.diagnostics.filter(isPlainObject) : []
   if (diagnostics.length) parts.push(`诊断：\n${diagnostics.map(diagnosticLine).join('\n')}`)
-  const previews = isArray(recovery?.windows)
-    ? recovery.windows.filter(isPlainObject).map(previewText).filter(isString)
-    : []
-  parts.push(...previews)
+  if (isArray(recovery?.windows))
+    parts.push(...previewTexts(recovery.windows.filter(isPlainObject)))
   if (error.suggestedNextAction) parts.push(`下一步：${error.suggestedNextAction}`)
   return parts.join('\n')
 }

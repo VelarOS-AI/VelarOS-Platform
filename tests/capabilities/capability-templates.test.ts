@@ -265,6 +265,8 @@ describe('系统空间里的模版', () => {
 export const shown = await showFile('.zshrc')
 export const grep = await grepFile('logs/app.log', /error/i, 2)
 export const many = await readMany(['.zshrc', 'missing.cfg'])
+export const replacedOnce = await replaceOnce('.zshrc', 'export EDITOR=nano', 'export EDITOR=vi')
+export const missedOnce = await replaceOnce('.zshrc', 'export EDITOR=nano', 'export EDITOR=vi')
 export const setExisting = await setLine('.zshrc', /^export EDITOR=/, 'export EDITOR=vim')
 export const setAppended = await setLine('.zshrc', /^export PAGER=/, 'export PAGER=less')
 export const deleted = await deleteLines('.zshrc', /^alias ll=/)
@@ -275,15 +277,18 @@ export const replacedOnDisk = typeof replaced === 'string' ? replaced : (await r
 export const reverted = typeof replaced === 'string' ? replaced : await revert(replaced.changeId)
 `
     )
-    expect(values.shown).toBe("1: export PATH=/usr/bin\n2: alias ll='ls -l'\n3: export EDITOR=nano")
+    expect(values.shown).toBe("export PATH=/usr/bin\nalias ll='ls -l'\nexport EDITOR=nano\n")
     expect(values.grep).toEqual({ total: 3, last: ['4: ERROR b', '6: ERROR c'] })
     // 读到的那项交回解析过的路径（系统空间里是绝对路径），读不了的那项照传入的原样。
     expect(relative(root, values.many[0].path)).toBe('.zshrc')
-    expect(values.many[0].text).toBe("export PATH=/usr/bin\nalias ll='ls -l'\nexport EDITOR=nano")
+    expect(values.many[0].text).toBe("export PATH=/usr/bin\nalias ll='ls -l'\nexport EDITOR=nano\n")
     expect(values.many[1].path).toBe('missing.cfg')
     expect(values.many[1].error).toBeString()
-    for (const name of ['setExisting', 'setAppended', 'deleted', 'json', 'created'])
+    for (const name of ['replacedOnce', 'setExisting', 'setAppended', 'deleted', 'json', 'created'])
       expect(values[name].changeId, name).toBeString()
+    // 同一处已经换过了：再换就找不到原文，程序拿到的是原因码和说明，不是一个崩掉的程序。
+    expect(values.missedOnce.code).toBe('FILES_EDIT_UNRESOLVED')
+    expect(values.missedOnce.message).toContain('oldText')
     expect(await readFile(join(root, '.zshrc'), 'utf8')).toBe(
       'export PATH=/usr/bin\nexport EDITOR=vim\nexport PAGER=less\n'
     )
@@ -296,10 +301,7 @@ export const reverted = typeof replaced === 'string' ? replaced : await revert(r
       'notes/a.md',
       'notes/b.md',
     ])
-    expect(values.replacedOnDisk[0].lines).toEqual([
-      [1, 'nothing'],
-      [2, 'newName again, newName'],
-    ])
+    expect(values.replacedOnDisk[0].text).toBe('nothing\nnewName again, newName\n')
     // 撤回之后两个文件都回到改之前。
     expect(values.reverted.files).toHaveLength(2)
     expect(await readFile(join(root, 'notes/b.md'), 'utf8')).toBe(
@@ -485,20 +487,20 @@ export const configs = await readConfigs(['package.json', 'tsconfig.json', 'miss
 export const layout = await tree('.', 2)
 export const tests = await findFiles('src', '*.test.ts')
 export const usage = await whereUsed('useSettings')
-export const edited = await editFile('src/service.ts', 'oldCall(', 'newCall(')
+export const edited = await renameInFile('src/service.ts', 'oldCall(', 'newCall(')
 export const retried = await replaceOnce('src/config.ts', 'const retries = 3', 'const retries = 5')
 export const missed = await replaceOnce('src/config.ts', 'const retries = 3', 'const retries = 7')
-export const added = await addModule('src/index.ts', 'src/cache.ts')
+export const written = await writeFile('src/extra.ts', 'export const extra = 1\\n')
+export const added = await addModule('src/index.ts', 'src/cache.ts', "import { UserService } from './user.js'")
 export const moved = await renameFile('src/old-name.ts', 'src/new-name.ts', 'OldName', 'NewName')
 export const renamed = await renameEverywhere('loadSettings', 'readSettings')
 export const reviewed = typeof renamed === 'string' ? renamed : await review(renamed.changeRef)
 export const reverted = typeof renamed === 'string' ? renamed : await revert(renamed.changeRef)
 `
     )
-    expect(values.file).toStartWith('1: export class UserService {\n2:   find(id: string) {')
-    expect(values.fn.path).toBe('src/index.ts')
-    expect(values.fn.fileRef).toStartWith('view:')
-    expect(values.fn.text).toStartWith('3: export function loadSettings() {')
+    expect(values.file).toStartWith('export class UserService {\n  find(id: string) {')
+    expect(values.fn).toMatchObject({ path: 'src/index.ts', startLine: 3 })
+    expect(values.fn.text).toStartWith('export function loadSettings() {')
     expect(values.configs.files.map((file: { path: string }) => file.path)).toEqual([
       'package.json',
       'tsconfig.json',
@@ -514,17 +516,19 @@ export const reverted = typeof renamed === 'string' ? renamed : await revert(ren
     expect(values.tests).toEqual(['src/feature.test.ts'])
     expect(values.usage).toEqual({ total: 4, perFile: { 'src/app.ts': 2, 'src/view.tsx': 2 } })
     expect(values.edited).toMatchObject({ changed: true, changedFiles: ['src/service.ts'] })
-    expect(await readFile(join(root, 'src/service.ts'), 'utf8')).toStartWith(
-      "import { newCall } from './calls.js'\nexport function run() {\n  return newCall(1)\n}"
+    expect(await readFile(join(root, 'src/service.ts'), 'utf8')).toBe(
+      'export function run() {\n  return newCall(1)\n}\n\nfunction newCall(n: number) {\n  return n\n}\n'
     )
     expect(values.retried).toMatchObject({ changed: true })
     expect(await readFile(join(root, 'src/config.ts'), 'utf8')).toBe('export const retries = 5\n')
     // 同一处已经改过了：再改就找不到原文，程序拿到的是原因码和说明，不是一个崩掉的程序。
     expect(values.missed.code).toBe('TARGET_NOT_FOUND')
     expect(values.missed.message).toBeString()
+    expect(values.written).toMatchObject({ changed: true, changedFiles: ['src/extra.ts'] })
+    expect(await readFile(join(root, 'src/extra.ts'), 'utf8')).toBe('export const extra = 1\n')
     expect([...values.added.changedFiles].sort()).toEqual(['src/cache.ts', 'src/index.ts'])
     expect(await readFile(join(root, 'src/index.ts'), 'utf8')).toStartWith(
-      "import { cache } from './cache.js'\n"
+      "import { UserService } from './user.js'\nimport { cache } from './cache.js'\n"
     )
     expect(existsSync(join(root, 'src/old-name.ts'))).toBe(false)
     expect(await readFile(join(root, 'src/new-name.ts'), 'utf8')).toBe('export class NewName {}\n')

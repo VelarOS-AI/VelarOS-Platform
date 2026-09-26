@@ -1,6 +1,6 @@
 /**
- * edit 回执里改过的文件的窗口：本次每段改动前后几行，加上这次编辑用到的 fileRef 原来看得到、沿补丁链迁到新内容上的范围。
- * 每个文件从改完的内容里整份读一次、只留这些行，签发新的 fileRef——程序接着改就用它，不必重读。
+ * edit 回执里改过的文件的窗口：本次每段改动前后几行，核对改得对不对用。
+ * 每个文件从改完的内容里整份读一次、只留这些行，写成连续正文的窗口（不相连的几段各一个）。
  * 行号全部由最终补丁推导（含 rebase），不用模型提交时的原始坐标。
  */
 
@@ -13,7 +13,7 @@ import type { ProjectWindow } from '../../types/files.js'
 import type { ProjectSourceWindow } from '../../types/source-window.js'
 import { ProjectTuning } from '../tuning.js'
 
-import { finalizeFileWindows, presentFileSpans, toProjectWindow } from './source-window.js'
+import { presentFileSpans, toProjectWindows } from './source-window.js'
 
 const log = Log.tag('FileChangeWindows')
 
@@ -69,12 +69,11 @@ function mergeSpans(spans: readonly LineSpan[]): LineSpan[] {
 }
 
 /**
- * 改完之后每个文件要看的范围：本次 diff 每段前后几行，加上此前看得到的范围沿补丁链迁移后的位置。
- * 补丁链里每段 diff 相对前一个补丁的产出，前面的范围逐段迁移。
+ * 改完之后每个文件要看的范围：本次 diff 每段前后几行。
+ * 补丁链里每段 diff 相对前一个补丁的产出，前面补丁的范围逐段迁移到最后的内容上。
  */
 export function changedSpans(
-  patches: ReadonlyArray<{ path: string; diff: string }>,
-  previous: Readonly<Record<string, readonly LineSpan[]>>
+  patches: ReadonlyArray<{ path: string; diff: string }>
 ): Record<string, LineSpan[]> {
   const chains = new Map<string, DiffHunk[][]>()
   for (const patch of patches)
@@ -82,10 +81,8 @@ export function changedSpans(
   const spans: Record<string, LineSpan[]> = {}
   for (const [path, chain] of chains) {
     let changed: LineSpan[] = []
-    let seen = (previous[path] ?? []).map(({ startLine, endLine }) => ({ startLine, endLine }))
     for (const hunks of chain) {
       changed = changed.map((span) => migrateSpan(span, hunks))
-      seen = seen.map((span) => migrateSpan(span, hunks))
       for (const hunk of hunks) {
         const startLine = Math.max(
           1,
@@ -100,23 +97,22 @@ export function changedSpans(
         })
       }
     }
-    spans[path] = mergeSpans([...changed, ...seen])
+    spans[path] = mergeSpans(changed)
   }
   return spans
 }
 
 /**
- * 读回改过的文件的窗口并签发新的 fileRef：每个改过的文件一个窗口，删掉的、移走的旧路径不给。
- * 读不到（刚改完又被别人改了）就跳过这个文件，回执照样成立；程序要接着改它就先 read。
+ * 读回改过的文件的窗口：每个改过的文件的改动处，删掉的、移走的旧路径不给。
+ * 读不到（刚改完又被别人改了）就跳过这个文件，回执照样成立。
  */
 export async function changeWindows(
   ctx: ProjectOperationContext,
   patches: readonly AgentProjectPreparedPatch[],
-  newRevisions: Readonly<Record<string, string>>,
-  previous: Readonly<Record<string, readonly LineSpan[]>>
+  newRevisions: Readonly<Record<string, string>>
 ): Promise<ProjectWindow[]> {
   const windows: ProjectSourceWindow[] = []
-  for (const [path, spans] of Object.entries(changedSpans(patches, previous))) {
+  for (const [path, spans] of Object.entries(changedSpans(patches))) {
     const revision = newRevisions[path]
     if (!revision || isEmpty(spans)) continue
     try {
@@ -125,5 +121,5 @@ export async function changeWindows(
       log.debug('改后的窗口读不到', { path, error: String(error) })
     }
   }
-  return (await finalizeFileWindows(ctx, windows)).map(toProjectWindow)
+  return windows.flatMap(toProjectWindows)
 }

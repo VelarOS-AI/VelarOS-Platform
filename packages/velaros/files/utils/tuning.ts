@@ -10,6 +10,15 @@ export const FileTuning = Object.freeze({
     /** 小于这个字节数的文件写前一律重读核版本：印记的时间精度不够时，小文件重读几乎不花钱。 */
     alwaysRehashBytes: 64 * 1024,
   }),
+  /** 按原文换一段（replace）找不到、不唯一时，说明里带多少线索。 */
+  replace: Object.freeze({
+    /** 出现好几处时点名前几处在第几行。 */
+    shownMatches: 3,
+    /** 找不到时列出最像的几行。 */
+    nearLines: 3,
+    /** 列出来的每一行最多多少个字符。 */
+    nearLineChars: 160,
+  }),
   /** 留着能撤回的改动：FileChanges。单个文件的原文上限与留几次是对外承诺，在常量表。 */
   changes: Object.freeze({
     /** 所有留着的原文加起来最多多少字节，超了从最早的那次改动丢起。 */

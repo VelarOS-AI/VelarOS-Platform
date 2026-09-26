@@ -183,7 +183,7 @@ test('INV-1 real Project and Files operations run through QuickJS, shared receip
   const s = await open(runtime)
   ok(
     await s.execute({
-      source: `import { output } from 'velaros'; import {read,edit} from 'velaros:project'; const [file]=(await read({files:[{path:'a.txt'}]})).files; if(!file.fileRef) throw Error('missing file'); await edit({steps:[{action:'edit',fileRef:file.fileRef,edits:[{op:'replace',range:1,text:'two'}]}]}); output('changed');`,
+      source: `import { output } from 'velaros'; import {read,edit} from 'velaros:project'; const [file]=(await read({files:[{path:'a.txt'}]})).files; if(file.text!=='one\\n') throw Error('unexpected text'); await edit({steps:[{action:'replace',path:'a.txt',oldText:'one',newText:'two'}]}); output('changed');`,
     })
   )
   assert.equal(await readFile(join(f.root, 'a.txt'), 'utf8'), 'two\n')
@@ -194,7 +194,7 @@ test('INV-1 real Project and Files operations run through QuickJS, shared receip
   assert.equal(state.view.progress.step, 1)
   ok(
     await s.execute({
-      source: `import {output} from 'velaros';import {read,edit} from 'velaros:files';const file=(await read({files:[{path:'a.txt'}]})).files[0];if('error' in file)throw Error(file.error.message);await edit({files:[{path:'a.txt',version:file.version,edits:[{range:1,text:'three'}]}]});output('file changed');`,
+      source: `import {output} from 'velaros';import {read,edit} from 'velaros:files';const file=(await read({files:[{path:'a.txt'}]})).files[0];if('error' in file)throw Error(file.error.message);await edit({steps:[{action:'replace',path:'a.txt',oldText:file.text.trim(),newText:'three'}]});output('file changed');`,
     })
   )
   assert.equal(await readFile(join(f.root, 'a.txt'), 'utf8'), 'three\n')
@@ -236,15 +236,13 @@ test('INV-55 write failures marked as not applied are recorded without an effect
   const binding = runtime.bind('s', 'velaros:project')
   const call = (id, operation, input) =>
     runtime.invoke({ id, sessionId: 's', executionId: 'e', binding, operation, input })
-  const read = await call('read', 'read', { files: [{ path: 'a.txt', range: [1, 1] }] })
-  const fileRef = read.value.files[0].fileRef
-  // 只看过一段就整份替换：项目在写盘之前拒绝，标了没有写入，回执记成没有效果，不用等宿主核对
-  const refused = await call('overwrite', 'edit', {
-    steps: [{ action: 'overwrite', fileRef, text: 'replaced\n' }],
+  // 要换的原文在文件里没有：项目在写盘之前拒绝，标了没有写入，回执记成没有效果，不用等宿主核对
+  const refused = await call('replace', 'edit', {
+    steps: [{ action: 'replace', path: 'a.txt', oldText: 'four', newText: 'replaced' }],
   })
   assert.equal(refused.outcome, 'failed')
   assert.equal(refused.effect, 'none')
-  assert.equal(refused.error.code, 'SCOPE_VIOLATION')
+  assert.equal(refused.error.code, 'TARGET_NOT_FOUND')
   assert.equal(await readFile(join(f.root, 'a.txt'), 'utf8'), 'one\ntwo\nthree\n')
 
   // 没有标记的写失败仍是效果未知
@@ -274,7 +272,7 @@ test('INV-55 write failures marked as not applied are recorded without an effect
     executionId: 'e2',
     binding: unmarked.bind('s', 'velaros:project'),
     operation: 'edit',
-    input: { steps: [{ action: 'create', path: 'b.txt', text: 'b\n' }] },
+    input: { steps: [{ action: 'write', path: 'b.txt', text: 'b\n' }] },
   })
   assert.equal(lost.outcome, 'failed')
   assert.equal(lost.effect, 'unknown')

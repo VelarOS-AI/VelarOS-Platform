@@ -651,7 +651,7 @@ describe('validation failure envelope', () => {
         }
 
         expect(failure?.reason).toBe('VALIDATION_FAILED')
-        expect(failure.message).toStartWith('事务校验失败，未写入磁盘：b.ts:8')
+        expect(failure.message).toStartWith('改完的内容过不了校验，什么都没写：b.ts:8')
         expect(failure.message).toMatch(/（共 \d+ 条）$/)
         expect(failure.details.transactionId).toBe(transaction.transactionId)
         expect(failure.details.checks).toBeUndefined()
@@ -719,9 +719,11 @@ describe('validation failure envelope', () => {
       }
 
       expect(failure?.reason).toBe('VALIDATION_FAILED')
-      expect(failure.message).toBe('事务校验失败，未写入磁盘：note.txt:2:3 huge output（共 14 条）')
+      expect(failure.message).toBe(
+        '改完的内容过不了校验，什么都没写：note.txt:2:3 huge output（共 14 条）'
+      )
       expect(failure.details.diagnosticCount).toBe(14)
-      expect(failure.details.diagnostics).toHaveLength(10)
+      expect(failure.details.diagnostics).toHaveLength(5)
       expect(failure.details.diagnostics[0].data).toEqual({ code: 1000 })
       expect(failure.details.diagnostics[0].message.length).toBeLessThan(2100)
       expect(failure.details.failedChecks).toEqual(['test.failing'])

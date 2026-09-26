@@ -122,7 +122,7 @@ export function findJsTsSymbols(
   return selectJsTsSymbols(parseJsTs(path, content).symbols, query)
 }
 
-/** 语法诊断：每条都带 1 起的行列、TS 诊断码与出错行摘录，调用方不必再回读文件才能定位。 */
+/** 语法诊断：每条都带 1 起的行列、TS 诊断码与出错行摘录，调用方不必再回读文件才能定位；位置在字段里，说明里不再重复。 */
 export function jsTsSyntaxDiagnostics(path: string, content: string, source: string): Diagnostic[] {
   const { sourceFile, diagnostics } = parseJsTs(path, content)
   return diagnostics.map((diagnostic, index) => {
@@ -130,7 +130,7 @@ export function jsTsSyntaxDiagnostics(path: string, content: string, source: str
     const text = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
     return {
       severity: 'error' as const,
-      message: `JS/TS 语法错误（${path}:${line + 1}:${character + 1}，TS${diagnostic.code}）：${text}`,
+      message: `JS/TS 语法错误（TS${diagnostic.code}）：${text}`,
       path,
       line: line + 1,
       column: character + 1,

@@ -53,10 +53,7 @@ describe('edit 的 recode', () => {
     expect(await readFile(join(root, 'plain.txt'), 'utf8')).toBe('already unicode\n')
     // 转换后的文件照常读、照常改，正文与原文一致。
     const read = await call('project', 'read', { files: [{ path: 'gb.txt' }] })
-    expect(read.files[0].lines).toEqual([
-      [1, '第一行 🙂 C:\\src\\path 字面 \\n'],
-      [2, 'second line'],
-    ])
+    expect(read.files[0].text).toBe('第一行 🙂 C:\\src\\path 字面 \\n\nsecond line\n')
     // 撤销恢复原始字节，包括 BOM 与 CRLF。
     await call('project', 'undo', { changeRef: result.changeRef })
     expect((await bytes('gb.txt')).equals(textCodec.encode(text, 'gb18030'))).toBe(true)
@@ -135,7 +132,7 @@ describe('edit 的 recode', () => {
     const { call } = await projectToolFixture({ root })
     const result = await call('project', 'edit', {
       steps: [
-        { action: 'create', path: 'new.txt', text: 'created\n' },
+        { action: 'write', path: 'new.txt', text: 'created\n' },
         { action: 'recode', paths: ['legacy.txt'], newline: 'lf' },
       ],
     })

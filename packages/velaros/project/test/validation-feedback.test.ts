@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 
+import { projectFailure } from '../utils/agent/ports'
 import { jsTsSyntaxDiagnostics } from '../utils/jsts-ast'
 import { validationFailed } from '../utils/transactions/transaction-errors'
 
@@ -19,7 +20,7 @@ test('failed candidate syntax shows both sides of the edit boundary in candidate
   expect(window.lines).toContainEqual([2, '  search() { return [] },'])
   expect(window.lines).toContainEqual([3, '  },'])
   expect(window.lines).toContainEqual([4, '  resolveTarget() { return 1 },'])
-  expect(failure.suggestedNextAction).toContain('不能直接当原文的 range 用')
+  expect(failure.suggestedNextAction).toContain('预览里的行号是改完之后的')
   expect(failure.suggestedNextAction).not.toContain('reuse')
   // Candidate source lives only in the transient recovery envelope, never in current file views.
   expect(JSON.stringify(failure.details.diagnostics)).not.toContain('search()')
@@ -72,4 +73,17 @@ test('external validator excerpts are not relabeled as candidate source', () => 
   })
   expect(failure.details.recovery).toBeUndefined()
   expect(failure.details.diagnostics[0].data.excerpt).toBe('command output')
+})
+
+test('交给程序的说明里，同一个文件的几处出错预览并成一段：连带出来的语法错误不把同几行重复好几遍', () => {
+  const diagnostics = jsTsSyntaxDiagnostics('many.ts', 'const = ;\n'.repeat(6), 'core.typescript')
+  expect(diagnostics.length).toBeGreaterThan(1)
+  const failure = projectFailure(validationFailed('many', { ok: false, diagnostics, checks: [] }))
+  const message = (failure as Error).message
+  expect(message.split('改完之后（没写进去）')).toHaveLength(2)
+  const rows = message.match(/^ {2}\d+: .*$/gm) ?? []
+  expect(rows.length).toBeGreaterThan(0)
+  expect(new Set(rows).size).toBe(rows.length)
+  // 位置只在列诊断时写一次，说明本身不再带。
+  expect(message).not.toMatch(/many\.ts:\d+:\d+ JS\/TS 语法错误（many\.ts/)
 })

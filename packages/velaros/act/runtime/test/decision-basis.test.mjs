@@ -349,7 +349,7 @@ test('a reopened runtime keeps read authorization for modules the session still 
       type: 'text',
       text: block(
         request,
-        "import {output} from 'velaros';import {edit} from 'velaros:project';output(await edit({steps:[{action:'create',path:'plan.md',text:'# Plan\\n'}]}));"
+        "import {output} from 'velaros';import {edit} from 'velaros:project';output(await edit({steps:[{action:'write',path:'plan.md',text:'# Plan\\n'}]}));"
       ),
     }
     yield { type: 'finish', reason: 'stop' }
@@ -408,7 +408,7 @@ test('real project versions: an external file change does not block writes and o
         yield turn(request, {
           execute: {
             source:
-              "import {edit} from 'velaros:project';await edit({steps:[{action:'create',path:'out.txt',text:'premature'}]});",
+              "import {edit} from 'velaros:project';await edit({steps:[{action:'write',path:'out.txt',text:'premature'}]});",
           },
         })
         yield { type: 'finish', reason: 'stop' }
@@ -417,7 +417,7 @@ test('real project versions: an external file change does not block writes and o
         yield turn(request, {
           execute: {
             source:
-              "import {read,edit} from 'velaros:project';let a=(await read({files:[{path:'a.txt'}]})).files[0];if(!a.fileRef)throw Error('missing');let e=await edit({steps:[{action:'overwrite',fileRef:a.fileRef,text:'two\\n'}]});if(!e.files[0].fileRef)throw Error('missing');await edit({steps:[{action:'overwrite',fileRef:e.files[0].fileRef,text:'three\\n'}]});",
+              "import {read,edit} from 'velaros:project';let a=(await read({files:[{path:'a.txt'}]})).files[0];if(a.text!=='external\\n')throw Error('unexpected');let e=await edit({steps:[{action:'write',path:'a.txt',text:'two\\n'}]});if(!e.changeRef)throw Error('missing');await edit({steps:[{action:'write',path:'a.txt',text:'three\\n'}]});",
           },
         })
         yield { type: 'finish', reason: 'stop' }
@@ -443,7 +443,7 @@ test('real project versions: an external file change does not block writes and o
   assert.equal(await readFile(join(root, 'a.txt'), 'utf8'), 'three\n')
 })
 
-test('project query versions ignore generated handles but detect changes to the actual query result', async (t) => {
+test('project query versions detect changes to the actual query result', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'act-query-'))
   await writeFile(join(root, 'a.txt'), 'needle\n')
   const projectKernel = await createProjectKernel({ root })

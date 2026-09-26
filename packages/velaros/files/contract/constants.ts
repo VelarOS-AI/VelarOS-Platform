@@ -7,11 +7,11 @@
 
 /**
  * `velaros:files` 专属的错误码：模型的程序接住异常时 `error.code` 就是它，声明里写着这几个值。
- * 别的失败沿用 `@velaros-ai/core` 的通用码：`VALIDATION`（入参不对、文件不是文本、太大、行号越界）、
+ * 别的失败沿用 `@velaros-ai/core` 的通用码：`VALIDATION`（入参不对、文件不是文本、太大、range 越界）、
  * `PERMISSION`（越出空间范围、文件权限不让读写）、`NOT_FOUND`（文件不存在、改动号找不到）。
  */
 export const FileErrorCodes = Object.freeze({
-  /** edit 整批定不下来（版本过期、不是文本、行号越界、编不回原编码、同一个文件出现两次）：一个文件都没写，message 逐条写明每个问题。 */
+  /** edit 整批定不下来（原文找不到或不唯一、不是文本、编不回原编码、定下改法之后文件又被改过）：一个文件都没写，message 逐条写明每个问题。 */
   editUnresolved: 'FILES_EDIT_UNRESOLVED',
   /** edit 里有文件写不了（越出空间范围，或文件权限不让读写）：一个文件都没写。 */
   editDenied: 'FILES_EDIT_DENIED',
@@ -34,10 +34,10 @@ export const FileLimits = Object.freeze({
   readChars: 20 * 1024 * 1024,
   /** read 一次最多几个文件。 */
   readFiles: 20,
-  /** edit 一次最多几个文件。 */
+  /** edit 一次最多改几个文件。 */
   editFiles: 20,
-  /** 一个文件一次最多按行号改几处。 */
-  editsPerFile: 1000,
+  /** edit 一次最多几步。 */
+  editSteps: 1000,
   /** 单个文件最大多少字节：`read` 读得进来、`edit` 改得了的上限；再大的用命令处理。 */
   fileBytes: 20 * 1024 * 1024,
   /**

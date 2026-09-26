@@ -22,7 +22,7 @@ import { changeRecordOf, changeTransactionOf } from '../../utils/agent/change-re
 import { commitProjectEdit } from '../../utils/agent/edit-commit.js'
 import { changeInput, editInput } from '../../utils/agent/file-input.js'
 import { listEntries, readFiles, searchFiles } from '../../utils/agent/file-reads.js'
-import { locateEditSteps } from '../../utils/agent/planner-resolver.js'
+import { planPathSteps } from '../../utils/agent/path-steps.js'
 import { projectFailure } from '../../utils/agent/ports.js'
 import { beforeWrite } from '../../utils/transactions/transaction-errors.js'
 
@@ -31,17 +31,17 @@ import { projectExecutionGate } from './ProjectExecutionGate.js'
 
 /**
  * @AgentView
- * 项目里的文件：带行号的读、列目录、搜源码，以及把几步文件动作与源码编辑合成一个事务的改动。下面这些对每个方法都成立，各自的说明里不再重复：
+ * 项目里的文件：读、列目录、搜源码，以及把几步文件改动合成一个事务。下面这些对每个方法都成立，各自的说明里不再重复：
  * 路径一律相对项目根（写成项目里的绝对路径也认），出不了项目，经符号链接指到外面的也不行。
- * 读出来的是带版本的窗口：lines 每项 [行号, 原文]，窗口上的 fileRef 是编辑凭据，edit 凭它核对文件没被改过、要改的行都读到过。
+ * 读出来的是连续的正文，带第一行的行号；改的时候按路径写：整份写入，或者把一段原文换成新文。
  * 改动经事务：一次 edit 全成或全不成，跑项目的校验器，保留文件原来的编码与换行；成了给 changeRef，inspect 看差量、undo 整次撤销。
  * 项目里的文件都能读能改，不问用户。生成出来的文件（*.generated.*、generated/ 下的这类）也改得动，但下次生成会被覆盖：一般改生成器的输入再重新生成。
  * 什么都不折叠：read 交回要的整段，list 交回全部条目，search 交回全部命中，edit、inspect 交回完整差量；看多少、筛什么在程序里定。
- * 引用（fileRef、changeRef）只在本会话里有效，一律原样用，不能手写。
- * 失败时 error.code 是原因（INVALID_INPUT、TARGET_NOT_FOUND、NOT_SUPPORTED、PERMISSION_DENIED、BASE_REVISION_MISMATCH、超过守内存上限的 SCOPE_VIOLATION……），error.message 写着为什么、下一步怎么办。
+ * changeRef 只在本会话里有效，原样用，不能手写。
+ * 失败时 error.code 是原因（INVALID_INPUT、TARGET_NOT_FOUND、AMBIGUOUS_TARGET、NOT_SUPPORTED、PERMISSION_DENIED、超过守内存上限的 SCOPE_VIOLATION……），error.message 写着为什么、下一步怎么办。
  */
 export interface ProjectFileOperationsApi {
-  /** @AgentView 读项目里的文本文件：交回带行号的窗口，每个窗口带 fileRef。看图用 `velaros:images`，目录用 list。
+  /** @AgentView 读项目里的文本文件：交回连续的正文与它第一行的行号。看图用 `velaros:images`，目录用 list。
    * @OperationEffect none
    */
   read(input: ProjectReadInput, ctx: ProjectOperationContext): Promise<ProjectReadResult>
@@ -49,11 +49,11 @@ export interface ProjectFileOperationsApi {
    * @OperationEffect none
    */
   list(input: ProjectListInput, ctx: ProjectOperationContext): Promise<ProjectListResult>
-  /** @AgentView 按字面文本或正则搜项目源码，交回全部命中；命中所在的行合成带 fileRef 的窗口，可以直接拿去 edit。
+  /** @AgentView 按字面文本或正则搜项目源码，交回全部命中与命中处连同前后几行的正文。
    * @OperationEffect none
    */
   search(input: ProjectSearchInput, ctx: ProjectOperationContext): Promise<ProjectSearchResult>
-  /** @AgentView 改项目文件：steps 按顺序合成一个事务提交。
+  /** @AgentView 改项目文件：按路径写整份或换一段原文，steps 按顺序合成一个事务提交。
    * @OperationEffect write
    */
   edit(input: ProjectEditInput, ctx: ProjectOperationContext): Promise<ProjectEditResult>
@@ -91,10 +91,11 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
   ): Promise<ProjectEditResult> {
     try {
       ctx.abortSignal.throwIfAborted()
-      const steps = await beforeWrite(() => locateEditSteps(editInput(input).steps, ctx))
-      return await this.gate.run(ctx.project.getRootPath(), true, ctx.abortSignal, () =>
-        commitProjectEdit(steps, ctx)
-      )
+      // 按路径取读取凭据也排在写门里：同一个项目里别的改动落盘之后才取，取到的就是提交时的内容。
+      return await this.gate.run(ctx.project.getRootPath(), true, ctx.abortSignal, async () => {
+        const steps = await beforeWrite(() => planPathSteps(editInput(input).steps, ctx))
+        return commitProjectEdit(steps, ctx)
+      })
     } catch (error) {
       throw projectFailure(error)
     }

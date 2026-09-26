@@ -1,7 +1,7 @@
 /**
- * 源码窗口：把读取结果排成 [行号, 原文] 的行，按实际交给程序的行签发 fileRef，最后写成模型面的 `ProjectWindow`。
- * 分两步：先出候选窗口（记着源码快照），交出去之前再按窗口里真有的行核对一遍、签发 fileRef——同一份源码的几个窗口共用可见范围的并集。
- * 读取总是整行的，窗口里没有半行。引用签发不了时源码照常作为只读内容给出，只是不带编辑权。
+ * 源码窗口：把读取结果排成 [行号, 原文] 的行，交给模型时写成连续正文的 `ProjectWindow`（不相连的几段各一个）。
+ * 编辑规划要的 fileRef 也从这里签发：按路径改文件时系统整份读一次、按窗口里真有的行签发——同一份源码的几个窗口共用可见范围的并集。
+ * 读取总是整行的，窗口里没有半行。
  */
 
 import { isEmpty, isNumber, isString, isTrue, isUndefined, Log } from '@velaros-ai/core'
@@ -317,22 +317,28 @@ export async function finalizeFileWindows(
   return signed
 }
 
-/** 把签好的窗口写成模型面的 `ProjectWindow`：只留声明里的字段。 */
-export function toProjectWindow(window: ProjectSourceWindow): ProjectWindow {
-  const shaped: ProjectWindow = {
-    path: window.path,
-    // 结尾换行之后那个零宽的行只进可见范围，不给模型看（模型面照 wc -l 数行）。
-    lines: isNumber(window.trailingLine)
-      ? window.lines.filter(([line, text]) => line !== window.trailingLine || !isEmpty(text))
-      : window.lines,
+/**
+ * 把候选窗口写成模型面的 `ProjectWindow`：相连的行并成一段连续正文，不相连的几段各一个窗口。
+ * 结尾换行之后那个零宽的行跟着并进去，于是读到文件末尾时正文结尾的换行照原样在——整份读回来原样写回不多一行也不少一行。
+ * 一行都没有的（起始行超出文件这类）照样给一个空窗口，带着说明。
+ */
+export function toProjectWindows(window: ProjectSourceWindow): ProjectWindow[] {
+  const runs: Array<Array<[number, string]>> = []
+  for (const entry of window.lines) {
+    const run = runs.at(-1)
+    if (run && run.at(-1)![0] + 1 === entry[0]) run.push(entry)
+    else runs.push([entry])
   }
-  if (isString(window.revision)) shaped.revision = window.revision
-  if (isString(window.fileRef)) shaped.fileRef = window.fileRef
-  if (isNumber(window.totalLines)) shaped.totalLines = window.totalLines
-  if (!isString(window.fileRef)) shaped.editable = false
-  const notes = [window.referenceUnavailable, window.note].filter(isString)
-  if (!isString(window.fileRef) && isEmpty(notes))
-    notes.push('这段只能看、不能改：重新 read 拿可编辑的窗口。')
-  if (!isEmpty(notes)) shaped.note = notes.join(' ')
-  return shaped
+  const note = [window.referenceUnavailable, window.note].filter(isString).join(' ')
+  return (isEmpty(runs) ? [[]] : runs).map((run) => {
+    const shaped: ProjectWindow = {
+      path: window.path,
+      startLine: run[0]?.[0] ?? 1,
+      text: run.map(([, text]) => text).join('\n'),
+    }
+    if (isString(window.revision)) shaped.revision = window.revision
+    if (isNumber(window.totalLines)) shaped.totalLines = window.totalLines
+    if (!isEmpty(note)) shaped.note = note
+    return shaped
+  })
 }

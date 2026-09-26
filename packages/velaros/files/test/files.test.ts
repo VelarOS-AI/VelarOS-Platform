@@ -1,4 +1,4 @@
-/** 文件能力的实现细节测试：对外承诺在 spec/acceptance.test.ts，这里补行的拆合与按行改、改动账、一批的小工具、特殊文件、媒体类型这些边角。 */
+/** 文件能力的实现细节测试：对外承诺在 spec/acceptance.test.ts，这里补行的拆分与取段、按原文换一段、一步的形状与底稿、改动账、一批的小工具、特殊文件、媒体类型这些边角。 */
 
 import { spawnSync } from 'node:child_process'
 import { chmod, lstat, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
@@ -12,25 +12,19 @@ import { AppError } from '@velaros-ai/core/error'
 import { FileChanges } from '../impl/FileChanges'
 import { FileErrorCodes, FileLimits, fileOperations } from '../index'
 import { diskSpace, failureOf } from '../spec/support'
-import type { FileEditPlan } from '../types/edit'
+import type { FileEditDraft, FileEditPlan } from '../types/edit'
 import {
+  batchItems,
   commitFailure,
-  staleProblem,
   unresolvedEditFailure,
   withLinkTarget,
   writeOfPlan,
 } from '../utils/batch'
-import {
-  applyLineEdits,
-  joinLines,
-  lineCount,
-  lineSpan,
-  numberedLines,
-  splitLines,
-  toFileNewlines,
-} from '../utils/lines'
+import { lineCount, lineSpan, splitLines, toFileNewlines, windowText } from '../utils/lines'
 import { fileIdentity } from '../utils/paths'
-import { detectMediaType, stampProvesUnchanged } from '../utils/text-file'
+import { applyStep, finishDraft, parseStep } from '../utils/plan'
+import { replaceOnce } from '../utils/replace'
+import { detectMediaType, fileVersionOf, stampProvesUnchanged } from '../utils/text-file'
 import { FileTuning } from '../utils/tuning'
 
 let root = ''
@@ -41,25 +35,47 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true })
 })
 
-/** 在一段正文上按行号改，交回改好的正文；改法不合法直接让用例挂掉。 */
-function edited(content: string, edits: unknown): string {
-  const result = applyLineEdits(splitLines(content), edits)
-  if (typeof result === 'string') throw new Error(`应当改得了，却被拒：${result}`)
-  return joinLines(result)
+/** 在一段正文上换一段，应当换得成：交回换好的正文（换行风格照这段正文为主的那种）。 */
+function replaced(content: string, oldText: string, newText: string): string {
+  const result = replaceOnce(content, splitLines(content).eol, oldText, newText)
+  if ('problem' in result) throw new Error(`应当换得成，却被拒：${result.problem}`)
+  return result.content
 }
 
-/** 在一段正文上按行号改，应当被拒：交回那句说明。 */
-function rejected(content: string, edits: unknown): string {
-  const result = applyLineEdits(splitLines(content), edits)
-  if (typeof result !== 'string')
-    throw new Error(`应当被拒，却改成了 ${JSON.stringify(joinLines(result))}`)
-  return result
+/** 在一段正文上换一段，应当被拒：交回那句说明。 */
+function refused(content: string, oldText: string): string {
+  const result = replaceOnce(content, splitLines(content).eol, oldText, 'x')
+  if ('content' in result) throw new Error(`应当被拒，却换成了 ${JSON.stringify(result.content)}`)
+  return result.problem
+}
+
+/** 一份底稿：缺省是一个还没写过的新文件。 */
+function draftOf(overrides: Partial<FileEditDraft> = {}): FileEditDraft {
+  return {
+    step: 0,
+    location: { path: 'a.txt', target: '/space/a.txt', linked: false },
+    original: null,
+    stamp: null,
+    content: null,
+    eol: '\n',
+    ...overrides,
+  }
+}
+
+/** 一个已有文件的底稿：原文按 UTF-8 读进来，还没改过，换行风格照它。 */
+function existingDraft(content: string): FileEditDraft {
+  return draftOf({
+    original: { buffer: Buffer.from(content), content, encoding: 'utf8' },
+    stamp: { mtimeMs: 1, size: Buffer.byteLength(content) },
+    content,
+    eol: splitLines(content).eol,
+  })
 }
 
 /** 一份写入计划：缺省是一个已有的小文件，原文留着。 */
 function planOf(overrides: Partial<FileEditPlan> = {}): FileEditPlan {
   return {
-    index: 0,
+    step: 0,
     path: 'a.txt',
     target: '/space/a.txt',
     linked: false,
@@ -73,7 +89,7 @@ function planOf(overrides: Partial<FileEditPlan> = {}): FileEditPlan {
   }
 }
 
-describe('行：拆开、数行、拼回', () => {
+describe('行：拆开、数行、取一段', () => {
   test('\\n 与 \\r\\n 都算换行，行文本不带换行符；结尾的换行不多出一行，最后一行没换行也算一行；单独的 \\r 不算换行', () => {
     const cases: Array<[string, Array<{ text: string; br: string }>]> = [
       ['', []],
@@ -124,21 +140,6 @@ describe('行：拆开、数行、拼回', () => {
       )
   })
 
-  test('拼回去和原文一字不差：每行接上它自己的换行符', () => {
-    for (const content of [
-      '',
-      'a',
-      'a\n',
-      'a\r\nb\nc',
-      '\r\n\n\r\n',
-      'x\ry\r\n',
-      '中文\r\n第二行',
-      'tail\n\n',
-    ]) {
-      expect(joinLines(splitLines(content))).toBe(content)
-    }
-  })
-
   test('新写的行用出现得多的那种换行；一样多或者一个换行都没有时用 \\n', () => {
     expect(splitLines('a\r\nb\r\nc\n').eol).toBe('\r\n')
     expect(splitLines('a\nb\nc\r\n').eol).toBe('\n')
@@ -154,20 +155,47 @@ describe('行：拆开、数行、拼回', () => {
     ])
   })
 
-  test('取一段带行号的行：末行超过文件行数就到最后一行为止', () => {
+  test('取一段连续的正文：行与行之间是 \\n，末行超过文件行数就到最后一行为止；读到了最后一行、文件又以换行结尾时带上结尾的换行', () => {
     const text = splitLines('a\nb\nc\n')
-    expect(numberedLines(text, 2, 99)).toEqual([
-      [2, 'b'],
-      [3, 'c'],
+    expect(windowText(text, 1, 3)).toBe('a\nb\nc\n')
+    expect(windowText(text, 2, 99)).toBe('b\nc\n')
+    expect(windowText(text, 3, 3)).toBe('c\n')
+    expect(windowText(text, 1, 1)).toBe('a')
+    expect(windowText(text, 1, 2)).toBe('a\nb')
+    expect(windowText(text, 4, 5)).toBe('')
+    expect(windowText(splitLines('a\nb'), 1, 2)).toBe('a\nb')
+    expect(windowText(splitLines('a\nb'), 2, 9)).toBe('b')
+    expect(windowText(splitLines('a\r\nb\r\n'), 1, 2)).toBe('a\nb\n')
+    expect(windowText(splitLines('a\r\nb\nc'), 1, 3)).toBe('a\nb\nc')
+    expect(windowText(splitLines(''), 1, 1)).toBe('')
+    // 全是空行：只取第一行是空串，取到最后一行才带上结尾的换行
+    expect(windowText(splitLines('\n\n'), 1, 1)).toBe('')
+    expect(windowText(splitLines('\n\n'), 2, 2)).toBe('\n')
+    expect(windowText(splitLines('\n\n'), 1, 2)).toBe('\n\n')
+    // 单独的 \r 不是换行，原样留在正文里
+    expect(windowText(splitLines('x\ry\r\n'), 1, 1)).toBe('x\ry\n')
+  })
+
+  test('整份取出来再换回文件的换行风格，和原文一字不差（各行换行一致的文件）', () => {
+    const whole = (content: string): string => {
+      const text = splitLines(content)
+      return toFileNewlines(windowText(text, 1, text.lines.length), text.eol)
+    }
+    for (const content of [
+      '',
+      'a',
+      'a\n',
+      'a\nb',
+      'a\nb\n',
+      '\n\n',
+      'tail\n\n',
+      'a\r\nb\r\n',
+      'a\r\nb',
+      '\r\n\r\n',
+      'x\ry\r\n',
+      '中文\r\n第二行',
     ])
-    expect(numberedLines(text, 1, 1)).toEqual([[1, 'a']])
-    expect(numberedLines(text, 1, 3)).toEqual([
-      [1, 'a'],
-      [2, 'b'],
-      [3, 'c'],
-    ])
-    expect(numberedLines(text, 4, 5)).toEqual([])
-    expect(numberedLines(splitLines(''), 1, 1)).toEqual([])
+      expect(JSON.stringify(whole(content))).toBe(JSON.stringify(content))
   })
 
   test('行号与区间：正整数、[n]、[首行, 末行]（末行不小于首行）；其余一律不认', () => {
@@ -200,7 +228,7 @@ describe('行：拆开、数行、拼回', () => {
       )
   })
 
-  test('整份写的正文换成文件的换行风格：先把 \\r\\n 统一成 \\n，单独的 \\r 不动', () => {
+  test('新内容换成文件的换行风格：先把 \\r\\n 统一成 \\n，单独的 \\r 不动', () => {
     expect(toFileNewlines('a\nb\r\nc', '\r\n')).toBe('a\r\nb\r\nc')
     expect(toFileNewlines('a\r\nb\n', '\n')).toBe('a\nb\n')
     expect(toFileNewlines('a\rb\n', '\r\n')).toBe('a\rb\r\n')
@@ -208,208 +236,202 @@ describe('行：拆开、数行、拼回', () => {
   })
 })
 
-describe('行：按行号改几处', () => {
-  test('插在最前面、接在最后一行后面；空文件插进去的内容照空文件的样子，结尾不加换行', () => {
-    expect(edited('a\nb\n', [{ after: 0, text: 'top' }])).toBe('top\na\nb\n')
-    expect(edited('a\nb\n', [{ after: 2, text: 'end' }])).toBe('a\nb\nend\n')
-    expect(edited('a\nb', [{ after: 2, text: 'end' }])).toBe('a\nb\nend')
-    expect(edited('a\nb', [{ after: 0, text: 'top' }])).toBe('top\na\nb')
-    expect(edited('', [{ after: 0, text: 'x\ny' }])).toBe('x\ny')
-    // 空文件里要结尾换行，就像说明写的那样在 text 结尾多加一个 \n
-    expect(edited('', [{ after: 0, text: 'x\n' }])).toBe('x\n')
+describe('按原文换一段：replaceOnce', () => {
+  test('换掉唯一的一段，没换到的地方一个字节都不动；newText 是空串就是删掉，里面的 \\r\\n 先统一成 \\n；单独的 \\r 照原样比', () => {
+    expect(replaced('a\nb\nc\n', 'b', 'B')).toBe('a\nB\nc\n')
+    expect(replaced('let a = 1', 'a = 1', 'a = 2')).toBe('let a = 2')
+    expect(replaced('a\nb\nc\n', 'b\n', '')).toBe('a\nc\n')
+    expect(replaced('a\nb\n', 'a', 'x\r\ny')).toBe('x\ny\nb\n')
+    expect(replaced('a\rb\nc\n', 'a\rb', 'x')).toBe('x\nc\n')
   })
 
-  test('CRLF 文件：新写的行用 \\r\\n，没动的行不变；text 里写的 \\r\\n 先统一成 \\n 再拆', () => {
-    expect(edited('a\r\nb\r\nc\r\n', [{ range: 2, text: 'B1\nB2' }])).toBe('a\r\nB1\r\nB2\r\nc\r\n')
-    expect(edited('a\r\nb', [{ after: 2, text: 'c' }])).toBe('a\r\nb\r\nc')
-    expect(edited('a\r\nb\r\n', [{ after: 0, text: 'x\r\ny' }])).toBe('x\r\ny\r\na\r\nb\r\n')
-    expect(edited('a\nb\n', [{ range: 1, text: 'x\r\ny' }])).toBe('x\ny\nb\n')
+  test('CRLF 文件按 \\n 比：跨行的一段对得上，oldText 里写 \\r\\n 也行；换进去的新文用 \\r\\n', () => {
+    expect(replaced('a\r\nb\r\nc\r\n', 'a\nb', 'A\nB')).toBe('A\r\nB\r\nc\r\n')
+    expect(replaced('a\r\nb\r\nc\r\n', 'a\r\nb', 'x')).toBe('x\r\nc\r\n')
+    expect(replaced('a\r\nb\r\n', 'b', 'B1\nB2')).toBe('a\r\nB1\r\nB2\r\n')
   })
 
-  test('混合换行：没动的行留着自己的换行符，新写的行用为主的那种', () => {
-    expect(edited('one\r\ntwo\nthree\r\nfour\r\n', [{ range: 3, text: 'THREE' }])).toBe(
+  test('混合换行：没换到的行留着自己的换行符，被换掉的那段里的换行跟着走，换进去的新文用为主的那种', () => {
+    expect(replaced('one\r\ntwo\nthree\r\n', 'three', 'THREE\nfour')).toBe(
       'one\r\ntwo\nTHREE\r\nfour\r\n'
     )
-    expect(edited('one\ntwo\r\nthree\n', [{ after: 1, text: 'new' }])).toBe(
-      'one\nnew\ntwo\r\nthree\n'
+    expect(replaced('one\r\ntwo\nthree\r\n', 'two\nthree', '2\n3')).toBe('one\r\n2\r\n3\r\n')
+    expect(replaced('one\ntwo\r\nthree\n', 'one', 'ONE\nnew')).toBe('ONE\nnew\ntwo\r\nthree\n')
+  })
+
+  test('段的两头落在 \\r\\n 上：从换行起头的连 \\r 一起换，以换行收尾的整个 \\r\\n 一起换；换掉结尾的换行，文件就不再以换行结尾', () => {
+    expect(replaced('a\r\nb\r\n', '\nb', '')).toBe('a\r\n')
+    expect(replaced('a\r\nb\r\n', 'a\n', 'A\n')).toBe('A\r\nb\r\n')
+    expect(replaced('a\r\nb\r\n', 'b\n', 'b')).toBe('a\r\nb')
+    expect(replaced('a\nb\n', 'b\n', 'b')).toBe('a\nb')
+    expect(replaced('a\nb', '\nb', '')).toBe('a')
+  })
+
+  test('出现好几处就不换：说出现了几次、前几处在第几行（CRLF 文件也按行数），更多的写「等」', () => {
+    expect(refused('x\ny\nx\n', 'x')).toBe(
+      'oldText 在文件里出现了 2 次（第 1、3 行）；多带几行上下文让它只出现一次'
     )
-    // 换掉的那一行原来的换行符不留：它是新写的行
-    expect(edited('one\r\ntwo\nthree\r\n', [{ range: 2, text: 'TWO' }])).toBe(
-      'one\r\nTWO\r\nthree\r\n'
+    expect(refused('x\r\ny\r\nx\r\n', 'x')).toContain('出现了 2 次（第 1、3 行）')
+    expect(refused('a\nb\nc\na\nb\n', 'a\nb')).toContain('出现了 2 次（第 1、4 行）')
+    const shown = FileTuning.replace.shownMatches
+    const lines = Array.from({ length: shown }, (_, index) => index + 1).join('、')
+    expect(refused('k\n'.repeat(shown), 'k')).toContain(`出现了 ${shown} 次（第 ${lines} 行）`)
+    expect(refused('k\n'.repeat(shown + 1), 'k')).toContain(
+      `出现了 ${shown + 1} 次（第 ${lines} 行 等）`
+    )
+    // 同一行的几处只算一行；列满了之后还在列过的那一行上的，不算「等」
+    expect(refused('x = x\ny = x\n', 'x')).toContain('出现了 3 次（第 1、2 行）；')
+    expect(refused('k k\n'.repeat(shown), 'k')).toContain(
+      `出现了 ${shown * 2} 次（第 ${lines} 行）；`
     )
   })
 
-  test('原来结尾没有换行的：删掉、换掉最后一行，接在后面，改完结尾还是没有；原来有的还有；全删了是空文件', () => {
-    expect(edited('a\nb', [{ range: 2, text: '' }])).toBe('a')
-    expect(edited('a\nb', [{ range: 2, text: 'x\ny' }])).toBe('a\nx\ny')
-    expect(
-      edited('a\nb', [
-        { range: 2, text: '' },
-        { after: 2, text: 'c' },
-      ])
-    ).toBe('a\nc')
-    expect(edited('a\nb\n', [{ range: 2, text: '' }])).toBe('a\n')
-    expect(edited('a\nb\n', [{ range: 2, text: 'x' }])).toBe('a\nx\n')
-    expect(edited('a\nb', [{ range: [1, 2], text: '' }])).toBe('')
-    expect(edited('a\nb\n', [{ range: [1, 2], text: '' }])).toBe('')
-    expect(edited('a\r\nb', [{ range: 1, text: '' }])).toBe('b')
-  })
-
-  test('几处都按改之前那一版的行号算，给的顺序不要紧；挨着的几处各改各的', () => {
-    const base = '1\n2\n3\n4\n5\n'
-    const edits = [
-      { range: 4, text: 'D' },
-      { range: [2, 3], text: 'BC' },
-      { after: 0, text: 'top' },
-      { after: 5, text: 'end' },
-      { range: 1, text: 'A' },
-    ]
-    expect(edited(base, edits)).toBe('top\nA\nBC\nD\n5\nend\n')
-    expect(edited(base, [...edits].reverse())).toBe('top\nA\nBC\nD\n5\nend\n')
-    expect(
-      edited(base, [
-        { range: [1, 2], text: 'x' },
-        { range: [3, 4], text: 'y' },
-      ])
-    ).toBe('x\ny\n5\n')
-    expect(
-      edited(base, [
-        { range: 5, text: 'e' },
-        { range: 4, text: 'd' },
-        { range: 3, text: 'c' },
-      ])
-    ).toBe('1\n2\nc\nd\ne\n')
-  })
-
-  test('同一个位置：先换后插，插在第 n 行后面的落在从第 n+1 行起被换掉的那一段前面；几处插入按给的顺序排', () => {
-    expect(
-      edited('1\n2\n3\n', [
-        { range: 2, text: 'B' },
-        { after: 1, text: 'I' },
-      ])
-    ).toBe('1\nI\nB\n3\n')
-    expect(
-      edited('1\n2\n3\n', [
-        { after: 1, text: 'I' },
-        { range: 2, text: 'B' },
-      ])
-    ).toBe('1\nI\nB\n3\n')
-    expect(
-      edited('1\n2\n', [
-        { after: 1, text: 'x' },
-        { after: 1, text: 'y' },
-        { after: 1, text: 'z' },
-      ])
-    ).toBe('1\nx\ny\nz\n2\n')
-    expect(
-      edited('1\n2\n3\n', [
-        { range: 2, text: '' },
-        { after: 1, text: 'X' },
-        { after: 2, text: 'Y' },
-      ])
-    ).toBe('1\nX\nY\n3\n')
-    // 插在被换掉的那一段的前后两头都不算重叠
-    expect(
-      edited('1\n2\n3\n4\n', [
-        { range: [2, 3], text: 'x' },
-        { after: 1, text: 'before' },
-        { after: 3, text: 'after' },
-      ])
-    ).toBe('1\nbefore\nx\nafter\n4\n')
-    expect(
-      edited('1\n2\n3\n', [
-        { range: [1, 2], text: 'AB' },
-        { after: 2, text: 'C' },
-      ])
-    ).toBe('AB\nC\n3\n')
-  })
-
-  test('text 是空串就删掉那几行；结尾多加一个 \\n 就多一个空行；插入空串什么都不加', () => {
-    expect(edited('a\nb\nc\n', [{ range: 2, text: '' }])).toBe('a\nc\n')
-    expect(edited('a\nb\n', [{ range: 1, text: 'x\n' }])).toBe('x\n\nb\n')
-    expect(edited('a\nb\n', [{ after: 1, text: '' }])).toBe('a\nb\n')
-    expect(edited('a\nb\n', [{ after: 1, text: '\n' }])).toBe('a\n\n\nb\n')
-  })
-
-  test('重叠的几处拒绝：两段区间交叉、同一行换两次、插入点落在被换掉的几行中间', () => {
-    expect(
-      rejected('1\n2\n3\n4\n', [
-        { range: [1, 2], text: 'x' },
-        { range: [2, 3], text: 'y' },
-      ])
-    ).toContain('edits[0] 与 edits[1] 重叠了')
-    expect(
-      rejected('1\n2\n3\n4\n', [
-        { range: 2, text: 'x' },
-        { range: 2, text: 'y' },
-      ])
-    ).toContain('edits[0] 与 edits[1] 重叠了')
-    expect(
-      rejected('1\n2\n3\n4\n', [
-        { range: [1, 4], text: 'x' },
-        { range: [2, 3], text: 'y' },
-      ])
-    ).toContain('重叠了')
-    expect(
-      rejected('1\n2\n3\n4\n', [
-        { range: [2, 4], text: 'x' },
-        { after: 3, text: 'y' },
-      ])
-    ).toContain('edits[1] 与 edits[0] 重叠了')
-    expect(
-      rejected('1\n2\n3\n4\n', [
-        { after: 2, text: 'y' },
-        { range: [2, 3], text: 'x' },
-      ])
-    ).toContain('edits[0] 与 edits[1] 重叠了')
-  })
-
-  test('改法不合法交回一句说明：不是数组、空的、超过上限、形状不对、行号越出文件', () => {
-    const wholeShape = `edits 要 1–${FileLimits.editsPerFile} 处改动的数组`
-    expect(rejected('a\n', 'x')).toBe(wholeShape)
-    expect(rejected('a\n', [])).toBe(wholeShape)
-    expect(
-      rejected(
-        'a\n',
-        Array.from({ length: FileLimits.editsPerFile + 1 }, () => ({ after: 0, text: 'x' }))
-      )
-    ).toBe(wholeShape)
-    expect(rejected('a\n', [{ range: 1, text: 'ok' }, null])).toContain(
-      'edits[1] 要 { range, text } 或 { after, text }'
+  test('一处都没有就不换：拿 oldText 第一行有内容的去找最像的行，去掉首尾空白后相同的优先，其次是包含它的，列的行数与每行长短有上限；一行都不像就说先 read', () => {
+    expect(refused('  port = 80\n', 'port = 80\nhost = a')).toBe(
+      'oldText 在文件里没有一模一样的原文，最像的是第 1 行「port = 80」；照那里的原文写 oldText（空白、引号、换行都要一样）'
     )
-    expect(rejected('a\n', [{ range: 1 }])).toContain('edits[0] 要 { range, text }')
-    expect(rejected('a\n', [{ range: 1, text: 3 }])).toContain('text 是字符串')
-    expect(rejected('a\n', [{ range: 1, after: 0, text: 'x' }])).toContain(
-      'range 与 after 只给一个'
+    // 开头的空行跳过，拿第一行有内容的去找
+    expect(refused('a\n  debug=1\n', '\n\n  debug=1 \nzzz')).toContain(
+      '最像的是第 2 行「debug=1」；'
     )
-    expect(rejected('a\n', [{ text: 'x' }])).toContain('range 与 after 只给一个')
-    expect(rejected('a\n', [{ range: [0, 1], text: 'x' }])).toContain(
-      'edits[0].range 要行号或 [首行, 末行]'
+    // 有去掉空白后一模一样的行，就不列只是包含它的
+    expect(refused('set debug=1\ndebug=1\n', 'debug=1\nzzz')).toContain(
+      '最像的是第 2 行「debug=1」；'
     )
-    expect(rejected('a\nb\n', [{ range: [2, 3], text: 'x' }])).toBe(
-      'edits[0].range 超出了文件：文件只有 2 行，这里要到第 3 行'
+    // 只有包含它的：按行号顺序列，列到上限为止
+    const near = FileTuning.replace.nearLines
+    const rows = Array.from({ length: near + 1 }, (_, index) => `${index} debug=1`)
+    expect(refused(rows.join('\n'), 'debug=1\nzzz')).toContain(
+      `最像的是${rows
+        .slice(0, near)
+        .map((row, index) => `第 ${index + 1} 行「${row}」`)
+        .join('、')}；`
     )
-    expect(rejected('', [{ range: 1, text: 'x' }])).toContain('文件只有 0 行')
-    expect(rejected('a\n', [{ after: 2, text: 'x' }])).toContain('edits[0].after 要 0–1 的整数')
-    expect(rejected('a\n', [{ after: -1, text: 'x' }])).toContain('edits[0].after 要 0–1 的整数')
-    expect(rejected('a\n', [{ after: '1', text: 'x' }])).toContain('这里给的是 "1"')
-    expect(rejected('a\n', [{ after: 0.5, text: 'x' }])).toContain('edits[0].after')
-    // 正好到上限的照改
+    const long = `debug=1 ${'x'.repeat(FileTuning.replace.nearLineChars * 2)}`
+    expect(refused(long, 'debug=1\nzzz')).toContain(
+      `「${long.slice(0, FileTuning.replace.nearLineChars)}」`
+    )
+    const nothing =
+      'oldText 在文件里没有一模一样的原文，也找不到相近的行；先 read 要改的那一段，照读到的原文写 oldText（空白、引号、换行都要一样）'
+    expect(refused('a\nb\n', 'nothing like it')).toBe(nothing)
+    expect(refused('a\nb\n', '   \n  ')).toBe(nothing)
+    expect(refused('', 'a')).toBe(nothing)
+  })
+})
+
+describe('一步一步改：utils/plan.ts', () => {
+  test('取出一步：合法的只留认得的字段；write 要字符串 text（空串也行），replace 要非空的 oldText 与字符串 newText（空串就是删掉）', () => {
+    expect(parseStep({ action: 'write', path: 'a.txt', text: '', version: 'v1' })).toEqual({
+      action: 'write',
+      path: 'a.txt',
+      text: '',
+    })
     expect(
-      lineCount(
-        edited(
-          'a\n',
-          Array.from({ length: FileLimits.editsPerFile }, () => ({ after: 1, text: 'x' }))
-        )
-      )
-    ).toBe(FileLimits.editsPerFile + 1)
+      parseStep({ action: 'replace', path: 'a.txt', oldText: 'x', newText: '', text: 'y' })
+    ).toEqual({ action: 'replace', path: 'a.txt', oldText: 'x', newText: '' })
   })
 
-  test('传进来的行不被改动：改好的是另一份', () => {
-    const text = splitLines('a\nb')
-    const result = applyLineEdits(text, [{ after: 2, text: 'c' }])
-    expect(joinLines(text)).toBe('a\nb')
-    expect(typeof result === 'string' ? result : joinLines(result)).toBe('a\nb\nc')
+  test('一步的形状不对交回一句说明：先看 action，再看 path，再看 text / oldText / newText；旧写法（没有 action）也在这里拦下', () => {
+    const action = 'action 要 write（整份写）或 replace（把一段原文换掉），这里给的是'
+    expect(parseStep({ action: 'insert', path: 'a.txt', text: 'x' })).toBe(`${action} "insert"`)
+    expect(parseStep({ path: 'a.txt', newText: 'x' })).toBe(`${action} undefined`)
+    expect(parseStep({ action: 'insert', path: 3 })).toBe(`${action} "insert"`)
+    const path = '每一步都要有 path（字符串）'
+    for (const missing of [undefined, 3, '', '  '])
+      expect(parseStep({ action: 'write', path: missing, text: 'x' })).toBe(path)
+    expect(parseStep({ action: 'replace', oldText: '', newText: 'x' })).toBe(path)
+    const text = 'write 要 text（字符串）：这个文件的全部新内容'
+    expect(parseStep({ action: 'write', path: 'a.txt' })).toBe(text)
+    expect(parseStep({ action: 'write', path: 'a.txt', text: 3 })).toBe(text)
+    const oldText =
+      'replace 要 oldText（非空字符串）：照读到的原文写要换掉的那一段；要整份换掉就用 write'
+    expect(parseStep({ action: 'replace', path: 'a.txt', oldText: '', newText: 'x' })).toBe(oldText)
+    expect(parseStep({ action: 'replace', path: 'a.txt', newText: 'x' })).toBe(oldText)
+    expect(parseStep({ action: 'replace', path: 'a.txt', oldText: 'x' })).toBe(
+      'replace 要 newText（字符串）：换上去的新文，删掉就给空串'
+    )
+  })
+
+  test('新文件的底稿：没写过就 replace 指向用 write 新建；write 照写，之后换进去的新文跟着它自己的换行风格', () => {
+    const draft = draftOf()
+    expect(applyStep(draft, { action: 'replace', path: 'a.txt', oldText: 'a', newText: 'b' })).toBe(
+      '文件不存在：a.txt；新建文件用 write（同一次 edit 里先 write 再 replace 也行）'
+    )
+    expect(applyStep(draft, { action: 'write', path: 'a.txt', text: 'one\r\ntwo\r\n' })).toBeNull()
+    expect([draft.content, draft.eol]).toEqual(['one\r\ntwo\r\n', '\r\n'])
+    expect(
+      applyStep(draft, { action: 'replace', path: 'a.txt', oldText: 'two', newText: '2\n3' })
+    ).toBeNull()
+    expect(draft.content).toBe('one\r\n2\r\n3\r\n')
+  })
+
+  test('已有文件的底稿：write 按它原来的换行风格存，风格不跟着新内容变；replace 按前一步改完的内容找原文，找不到时底稿不动', () => {
+    const draft = existingDraft('a\r\nb\r\n')
+    expect(applyStep(draft, { action: 'write', path: 'a.txt', text: 'x\ny\n' })).toBeNull()
+    expect([draft.content, draft.eol]).toEqual(['x\r\ny\r\n', '\r\n'])
+    expect(
+      applyStep(draft, { action: 'replace', path: 'a.txt', oldText: 'a', newText: 'b' })
+    ).toContain('没有一模一样的原文')
+    expect(draft.content).toBe('x\r\ny\r\n')
+    expect(
+      applyStep(draft, { action: 'replace', path: 'a.txt', oldText: 'x\ny', newText: 'z' })
+    ).toBeNull()
+    expect(draft.content).toBe('z\r\n')
+  })
+
+  test('底稿编成写入计划：新建的原文记 null、没有版本；已有的留原文与计划时的版本和印记，原文超过 2 MB 就不留', () => {
+    expect(finishDraft(draftOf({ content: 'a\nb\n' }))).toEqual({
+      step: 0,
+      path: 'a.txt',
+      target: '/space/a.txt',
+      linked: false,
+      created: true,
+      previous: null,
+      bytes: Buffer.from('a\nb\n'),
+      totalLines: 2,
+      baseVersion: null,
+      stamp: null,
+    })
+    const kept = existingDraft('old\r\n')
+    kept.content = 'new\r\nline\r\n'
+    expect(finishDraft(kept)).toEqual({
+      step: 0,
+      path: 'a.txt',
+      target: '/space/a.txt',
+      linked: false,
+      created: false,
+      previous: Buffer.from('old\r\n'),
+      bytes: Buffer.from('new\r\nline\r\n'),
+      totalLines: 2,
+      baseVersion: fileVersionOf(Buffer.from('old\r\n')),
+      stamp: { mtimeMs: 1, size: 5 },
+    })
+    const big = existingDraft('x'.repeat(FileLimits.undoBytes + 1))
+    big.content = 'short\n'
+    const plan = finishDraft(big)
+    expect(plan).toMatchObject({ created: false, bytes: Buffer.from('short\n') })
+    expect(plan).not.toHaveProperty('previous')
+  })
+
+  test('写不下去的底稿成了问题，记在第一次碰到这个文件的那一步：带 NUL 的、编不回原编码的、写出去超过 20 MB 的', () => {
+    expect(finishDraft(draftOf({ step: 3, content: 'a\0b' }))).toEqual({
+      step: 3,
+      path: 'a.txt',
+      reason: 'invalid',
+      message: '新内容里有 NUL 字节，是二进制数据，不能当文本写入',
+    })
+    const gbk = draftOf({
+      original: { buffer: Buffer.from([0xd6, 0xd0]), content: '中', encoding: 'gb18030' },
+      content: '中\uD800',
+    })
+    expect(finishDraft(gbk)).toMatchObject({
+      reason: 'invalid',
+      message: expect.stringContaining('不能按 gb18030 无损写进这个文件'),
+    })
+    expect(finishDraft(draftOf({ content: 'x'.repeat(FileLimits.fileBytes + 1) }))).toMatchObject({
+      reason: 'invalid',
+      message: expect.stringContaining(`超过 ${FileLimits.fileBytes} 字节的上限`),
+    })
   })
 })
 
@@ -486,6 +508,37 @@ describe('改动账：FileChanges', () => {
 })
 
 describe('一批的小工具：utils/batch.ts', () => {
+  test('取一批：files / steps 要是非空数组、每项是对象、不超过上限；说明里点名缺的是哪个键、例子怎么写', () => {
+    const refusal = (run: () => unknown): string => {
+      try {
+        run()
+      } catch (error) {
+        return error instanceof AppError ? `${error.code} ${error.message}` : String(error)
+      }
+      return '没有拦住'
+    }
+    expect(refusal(() => batchItems(undefined, 20, 'read'))).toBe(
+      'VALIDATION 缺少 files：read 要 { files: [...] }，每个文件一项'
+    )
+    expect(refusal(() => batchItems({ files: [{}] }, 20, 'edit'))).toBe(
+      'VALIDATION 缺少 steps：edit 要 { steps: [...] }，每步一项'
+    )
+    expect(refusal(() => batchItems({ steps: [] }, 20, 'edit'))).toBe(
+      'VALIDATION steps 是空的；至少给一项'
+    )
+    expect(refusal(() => batchItems({ steps: [{}, {}] }, 1, 'edit'))).toBe(
+      'VALIDATION edit 一次最多 1 步，这里给了 2 步；分几次调用'
+    )
+    expect(refusal(() => batchItems({ files: [{}, {}, {}] }, 2, 'read'))).toBe(
+      'VALIDATION read 一次最多 2 个文件，这里给了 3 个文件；分几次调用'
+    )
+    expect(refusal(() => batchItems({ steps: ['a.txt'] }, 20, 'edit'))).toBe(
+      "VALIDATION edit 的 steps 每一项都要是对象，例如 { action: 'write', path: 'a.txt', text: '...' }"
+    )
+    const steps = [{ action: 'write' }]
+    expect(batchItems({ steps }, 1, 'edit')).toBe(steps)
+  })
+
   test('落盘时核对什么：留着原文的核对原字节，新建的核对仍不存在，原文没留的不核对（只靠计划后那次印记）', () => {
     expect(writeOfPlan(planOf())).toEqual({
       target: '/space/a.txt',
@@ -508,50 +561,30 @@ describe('一批的小工具：utils/batch.ts', () => {
     })
   })
 
-  test('整批的失败：有一个被拒就是 FILES_EDIT_DENIED，否则 FILES_EDIT_UNRESOLVED；问题逐条进 message，完整清单进 context', () => {
-    const stale = {
-      file: 1,
-      path: 'b.txt',
-      reason: 'stale' as const,
-      message: '被改过',
-      currentVersion: 'v2',
-    }
+  test('整次的失败：有一个被拒就是 FILES_EDIT_DENIED，否则 FILES_EDIT_UNRESOLVED；问题按第几步逐条进 message，完整清单进 context', () => {
+    const stale = { step: 1, path: 'b.txt', reason: 'stale' as const, message: '被改过' }
     const unresolved = unresolvedEditFailure([
-      { file: 0, path: 'a.txt', reason: 'invalid', message: '不是文本' },
+      { step: 0, path: 'a.txt', reason: 'invalid', message: '不是文本' },
       stale,
     ])
     expect(unresolved.code).toBe(FileErrorCodes.editUnresolved)
     expect(unresolved.message).toBe(
-      '这一批一个文件都没写，有 2 个问题。files[0] a.txt：不是文本；files[1] b.txt：被改过'
+      '这次改动一个文件都没写，有 2 个问题。steps[0] a.txt：不是文本；steps[1] b.txt：被改过'
     )
     expect(unresolved.context).toEqual({
       executionOutcome: 'not-applied',
-      problems: [{ file: 0, path: 'a.txt', reason: 'invalid', message: '不是文本' }, stale],
+      problems: [{ step: 0, path: 'a.txt', reason: 'invalid', message: '不是文本' }, stale],
     })
     expect(
       unresolvedEditFailure([
         stale,
-        { file: 2, path: 'c.pem', reason: 'denied', message: '用户没同意' },
+        { step: 2, path: 'c.pem', reason: 'denied', message: '越出了空间' },
       ]).code
     ).toBe(FileErrorCodes.editDenied)
   })
 
-  test('核对版本：没给就不核；给了对不上带上现在的版本；文件不存在另说', () => {
-    expect(staleProblem(undefined, 'v1')).toBeNull()
-    expect(staleProblem('v1', 'v1')).toBeNull()
-    expect(staleProblem('v1', 'v2')).toEqual({
-      reason: 'stale',
-      message: '文件在版本 v1 之后被改过，现在是 v2；重新读一遍再改',
-      currentVersion: 'v2',
-    })
-    expect(staleProblem('v1', null)).toEqual({
-      reason: 'stale',
-      message: '给了版本 v1，但文件不存在',
-    })
-  })
-
   test('落盘途中出错：空间点名写进去的换成模型认得的路径，另记成一次改动给出号；撤不回时直说；没点名就是什么都没写', () => {
-    const plans = [planOf(), planOf({ index: 1, path: 'b.txt', target: '/space/b.txt' })]
+    const plans = [planOf(), planOf({ step: 1, path: 'b.txt', target: '/space/b.txt' })]
     const recorded: string[][] = []
     const failure = new AppError('PLATFORM', '磁盘满了', undefined, { applied: ['/space/a.txt'] })
     const partial = commitFailure(failure, plans, (applied) => {
@@ -560,7 +593,7 @@ describe('一批的小工具：utils/batch.ts', () => {
     })
     expect(partial.code).toBe('PLATFORM')
     expect(partial.message).toBe(
-      "这一批只写进去了一部分——已经写入的：a.txt；出错的原因：磁盘满了。要退回到改之前，就 undo({ changeId: 'change-9-abc' })；不要整批重发，先 read 一遍看现状"
+      "这次改动只写进去了一部分——已经写入的：a.txt；出错的原因：磁盘满了。要退回到改之前，就 undo({ changeId: 'change-9-abc' })；不要整次重发，先 read 一遍看现状"
     )
     expect(partial.context).toEqual({ applied: ['a.txt'] })
     expect(recorded).toEqual([['a.txt']])
@@ -570,7 +603,7 @@ describe('一批的小工具：utils/batch.ts', () => {
     const nothing = commitFailure(new AppError('PLATFORM', '磁盘满了'), plans, () => {
       throw new Error('什么都没写时不该记改动')
     })
-    expect(nothing.message).toBe('这一批没有写进去：磁盘满了')
+    expect(nothing.message).toBe('这次改动没有写进去：磁盘满了')
     expect(nothing.context).toEqual({ applied: [] })
   })
 
@@ -583,7 +616,7 @@ describe('一批的小工具：utils/batch.ts', () => {
     ).not.toHaveProperty('target')
   })
 
-  test('判重的身份键：Windows 与 macOS 不分大小写，Linux 分；Windows 两种分隔符都认', () => {
+  test('认同一个文件的身份键：Windows 与 macOS 不分大小写，Linux 分；Windows 两种分隔符都认', () => {
     expect(fileIdentity('/a/B.txt', 'darwin')).toBe(fileIdentity('/a/b.txt', 'darwin'))
     expect(fileIdentity('/a/./x/../B.txt', 'darwin')).toBe('/a/b.txt')
     expect(fileIdentity('/a/B.txt', 'linux')).not.toBe(fileIdentity('/a/b.txt', 'linux'))
@@ -591,8 +624,96 @@ describe('一批的小工具：utils/batch.ts', () => {
   })
 })
 
+describe('edit：按路径一步一步写', () => {
+  test('一个文件出了问题，它后面的几步不再看、不再报；别的文件照样一步一步核对，问题一起报', async () => {
+    const space = diskSpace({ root })
+    await writeFile(join(root, 'a.txt'), 'a\n')
+    await writeFile(join(root, 'b.txt'), 'b\n')
+    const failure = await failureOf(
+      fileOperations.edit(
+        {
+          steps: [
+            { action: 'replace', path: 'a.txt', oldText: 'missing', newText: 'x' },
+            { action: 'replace', path: 'a.txt', oldText: 'also missing', newText: 'y' },
+            { action: 'write', path: 'b.txt', text: 'B\n' },
+            // 前一步已经把 b 换成了 B：这一步按改完的内容找，找不到
+            { action: 'replace', path: 'b.txt', oldText: 'b', newText: 'x' },
+            { action: 'replace', path: 'c.txt', oldText: 'c', newText: 'x' },
+          ],
+        },
+        space.context
+      )
+    )
+    expect(failure.message).toContain('有 3 个问题')
+    expect(failure.context).toMatchObject({
+      problems: [
+        { step: 0, path: join(root, 'a.txt') },
+        { step: 3, path: join(root, 'b.txt') },
+        { step: 4, path: join(root, 'c.txt') },
+      ],
+    })
+    expect(space.commits).toHaveLength(0)
+    expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('b\n')
+  })
+
+  test('同一个文件换个写法也是同一个文件：几步接着改，回执里只有一项、只落盘一次', async () => {
+    await writeFile(join(root, 'a.pem'), 'a\n')
+    const space = diskSpace({ root })
+    const result = await fileOperations.edit(
+      {
+        steps: [
+          { action: 'write', path: 'a.pem', text: 'x\n' },
+          { action: 'replace', path: './sub/../a.pem', oldText: 'x', newText: 'y' },
+          { action: 'replace', path: join(root, 'a.pem'), oldText: 'y', newText: 'z' },
+        ],
+      },
+      space.context
+    )
+    expect(result.files).toEqual([{ path: join(root, 'a.pem'), created: false, totalLines: 1 }])
+    expect(space.commits).toEqual([[expect.objectContaining({ target: join(root, 'a.pem') })]])
+    expect(await readFile(join(root, 'a.pem'), 'utf8')).toBe('z\n')
+  })
+
+  test('replace 不存在的文件指向用 write 新建；同一次 edit 里先 write 再 replace 就行', async () => {
+    const { context } = diskSpace({ root })
+    const missing = await failureOf(
+      fileOperations.edit(
+        { steps: [{ action: 'replace', path: 'nope.txt', oldText: 'a', newText: 'b' }] },
+        context
+      )
+    )
+    expect(missing.message).toContain(
+      `文件不存在：${join(root, 'nope.txt')}；新建文件用 write（同一次 edit 里先 write 再 replace 也行）`
+    )
+    await fileOperations.edit(
+      {
+        steps: [
+          { action: 'write', path: 'nope.txt', text: 'a\n' },
+          { action: 'replace', path: 'nope.txt', oldText: 'a', newText: 'b' },
+        ],
+      },
+      context
+    )
+    expect(await readFile(join(root, 'nope.txt'), 'utf8')).toBe('b\n')
+  })
+
+  test('edit 回执里的行数就是写进去的那份：CRLF 文件按落盘的内容数', async () => {
+    const space = diskSpace({ root })
+    await writeFile(join(root, 'crlf.txt'), 'a\r\n')
+    const result = await fileOperations.edit(
+      { steps: [{ action: 'write', path: 'crlf.txt', text: 'x\ny\nz' }] },
+      space.context
+    )
+    const [file] = (await fileOperations.read({ files: [{ path: 'crlf.txt' }] }, space.context))
+      .files
+    expect(result.files[0]?.totalLines).toBe(3)
+    expect(file && 'totalLines' in file ? file.totalLines : 0).toBe(3)
+    expect(await readFile(join(root, 'crlf.txt'), 'utf8')).toBe('x\r\ny\r\nz')
+  })
+})
+
 describe('读写的边角', () => {
-  test('UTF-16 解码后行文本不带换行符，编码照实报', async () => {
+  test('UTF-16 解码后正文里的换行是 \\n，编码照实报', async () => {
     await writeFile(
       join(root, 'utf16.txt'),
       Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('a\r\nb', 'utf16le')])
@@ -600,14 +721,7 @@ describe('读写的边角', () => {
     const [file] = (
       await fileOperations.read({ files: [{ path: 'utf16.txt' }] }, diskSpace({ root }).context)
     ).files
-    expect(file).toMatchObject({
-      encoding: 'utf16le',
-      totalLines: 2,
-      lines: [
-        [1, 'a'],
-        [2, 'b'],
-      ],
-    })
+    expect(file).toMatchObject({ encoding: 'utf16le', totalLines: 2, startLine: 1, text: 'a\nb' })
   })
 
   test('目录、其他二进制、设备文件、不存在的文件都算失败；全部失败时整个调用抛第一个失败', async () => {
@@ -654,20 +768,20 @@ describe('读写的边角', () => {
   test('读越界只是那一项失败；只有这一项时整个调用报出拒绝原因', async () => {
     await writeFile(join(root, 'note.txt'), 'here')
     const space = diskSpace({ root, clamp: true })
-    const refused = await fileOperations.read(
+    const refusedRead = await fileOperations.read(
       { files: [{ path: 'note.txt' }, { path: '/etc/hosts' }] },
       space.context
     )
     expect(
-      refused.files.map((entry) => ('error' in entry ? entry.error.code : entry.lines))
-    ).toEqual([[[1, 'here']], 'PERMISSION'])
+      refusedRead.files.map((entry) => ('error' in entry ? entry.error.code : entry.text))
+    ).toEqual(['here', 'PERMISSION'])
     await expect(
       fileOperations.read({ files: [{ path: '/etc/hosts' }] }, space.context)
     ).rejects.toThrow('在这个空间之外')
   })
 
   test.skipIf(process.platform === 'win32')(
-    '已有文件的权限位原样保留，新文件的权限由 umask 定',
+    '已有文件的权限位原样保留（整份写、换一段都是），新文件的权限由 umask 定',
     async () => {
       const mask = process.umask(0o077)
       try {
@@ -675,11 +789,19 @@ describe('读写的边角', () => {
         await writeFile(join(root, 'shared.sh'), 'echo one\n')
         await chmod(join(root, 'shared.sh'), 0o777)
         await fileOperations.edit(
-          { files: [{ path: 'shared.sh', newText: 'echo two\n' }] },
+          { steps: [{ action: 'write', path: 'shared.sh', text: 'echo two\n' }] },
           context
         )
         expect((await stat(join(root, 'shared.sh'))).mode & 0o777).toBe(0o777)
-        await fileOperations.edit({ files: [{ path: 'fresh.txt', newText: 'new\n' }] }, context)
+        await fileOperations.edit(
+          { steps: [{ action: 'replace', path: 'shared.sh', oldText: 'two', newText: 'three' }] },
+          context
+        )
+        expect((await stat(join(root, 'shared.sh'))).mode & 0o777).toBe(0o777)
+        await fileOperations.edit(
+          { steps: [{ action: 'write', path: 'fresh.txt', text: 'new\n' }] },
+          context
+        )
         expect((await stat(join(root, 'fresh.txt'))).mode & 0o777).toBe(0o600)
       } finally {
         process.umask(mask)
@@ -692,13 +814,14 @@ describe('读写的边角', () => {
     async () => {
       const pipe = join(root, 'pipe')
       expect(spawnSync('mkfifo', [pipe]).status).toBe(0)
-      const failure = await failureOf(
-        fileOperations.edit(
-          { files: [{ path: 'pipe', newText: 'x' }] },
-          diskSpace({ root }).context
-        )
-      )
-      expect(failure.message).toContain('不是普通文件')
+      const { context } = diskSpace({ root })
+      for (const step of [
+        { action: 'write' as const, path: 'pipe', text: 'x' },
+        { action: 'replace' as const, path: 'pipe', oldText: 'x', newText: 'y' },
+      ]) {
+        const failure = await failureOf(fileOperations.edit({ steps: [step] }, context))
+        expect(failure.message).toContain('不是普通文件')
+      }
       expect((await lstat(pipe)).isFIFO()).toBe(true)
     }
   )
@@ -707,95 +830,39 @@ describe('读写的边角', () => {
     const { context } = diskSpace({ root })
     await writeFile(join(root, 'a.txt'), 'a\n')
     spawnSync('ln', [join(root, 'a.txt'), join(root, 'b.txt')])
+    const messageOf = async (path: string): Promise<string> =>
+      (
+        await failureOf(
+          fileOperations.edit({ steps: [{ action: 'write', path, text: 'x' }] }, context)
+        )
+      ).message
+    expect(await messageOf('a.txt')).toContain('2 个硬链接')
+    expect(await messageOf('a.txt/child.txt')).toContain('上级路径不是目录')
+    expect(await messageOf('.')).toContain('路径是目录，不是文件')
     expect(
-      (await failureOf(fileOperations.edit({ files: [{ path: 'a.txt', newText: 'x' }] }, context)))
-        .message
+      (
+        await failureOf(
+          fileOperations.edit(
+            { steps: [{ action: 'replace', path: 'b.txt', oldText: 'a', newText: 'x' }] },
+            context
+          )
+        )
+      ).message
     ).toContain('2 个硬链接')
-    expect(
-      (
-        await failureOf(
-          fileOperations.edit({ files: [{ path: 'a.txt/child.txt', newText: 'x' }] }, context)
-        )
-      ).message
-    ).toContain('上级路径不是目录')
-    expect(
-      (await failureOf(fileOperations.edit({ files: [{ path: '.', newText: 'x' }] }, context)))
-        .message
-    ).toContain('路径是目录，不是文件')
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('a\n')
-  })
-
-  test('同一个文件换个写法也算出现两次，整批不写', async () => {
-    await writeFile(join(root, 'a.pem'), 'a\n')
-    const space = diskSpace({ root })
-    const failure = await failureOf(
-      fileOperations.edit(
-        {
-          files: [
-            { path: 'a.pem', newText: 'x' },
-            { path: './sub/../a.pem', newText: 'y' },
-          ],
-        },
-        space.context
-      )
-    )
-    expect(failure.message).toContain('files[1]')
-    expect(failure.message).toContain('不止一次')
-    expect(space.commits).toHaveLength(0)
-    expect(await readFile(join(root, 'a.pem'), 'utf8')).toBe('a\n')
-  })
-
-  test('按行号改不存在的文件指向用 newText 新建；带 version 的 newText 遇上不存在的文件算版本对不上', async () => {
-    const { context } = diskSpace({ root })
-    expect(
-      (
-        await failureOf(
-          fileOperations.edit(
-            { files: [{ path: 'nope.txt', version: 'v1', edits: [{ after: 0, text: 'x' }] }] },
-            context
-          )
-        )
-      ).message
-    ).toContain('新建文件用 newText')
-    expect(
-      (
-        await failureOf(
-          fileOperations.edit(
-            { files: [{ path: 'nope.txt', version: 'v1', newText: 'x' }] },
-            context
-          )
-        )
-      ).message
-    ).toContain('给了版本 v1，但文件不存在')
-  })
-
-  test('edit 回执里的版本与行数就是写进去的那份：CRLF 文件按落盘的字节算版本', async () => {
-    const space = diskSpace({ root })
-    await writeFile(join(root, 'crlf.txt'), 'a\r\n')
-    const result = await fileOperations.edit(
-      { files: [{ path: 'crlf.txt', newText: 'x\ny\nz' }] },
-      space.context
-    )
-    const [file] = (await fileOperations.read({ files: [{ path: 'crlf.txt' }] }, space.context))
-      .files
-    expect(result.files[0]).toMatchObject({
-      totalLines: 3,
-      version: file && 'version' in file ? file.version : '',
-    })
-    expect(await readFile(join(root, 'crlf.txt'), 'utf8')).toBe('x\r\ny\r\nz')
   })
 })
 
 describe('这一轮修的几处', () => {
-  test('GB18030 按行改：没动的行沿用原字节（同一个字的另一种写法不被改写）', async () => {
-    // 0x80 在 GB18030 里解成 €，重新编码却写成 A2 E3：没动的第一行必须原样留着 0x80。
+  test('GB18030 换一段：没换到的地方沿用原字节（同一个字的另一种写法不被改写）', async () => {
+    // 0x80 在 GB18030 里解成 €，重新编码却写成 A2 E3：没换到的第一行必须原样留着 0x80。
     await writeFile(join(root, 'gb.txt'), Buffer.from([0x80, 0x0a, 0x61, 0x0a]))
     const space = diskSpace({ root })
     const [file] = (await fileOperations.read({ files: [{ path: 'gb.txt' }] }, space.context)).files
     if (!file || 'error' in file) throw new Error('应当读得到')
     expect(file.encoding).toBe('gb18030')
     await fileOperations.edit(
-      { files: [{ path: 'gb.txt', version: file.version, edits: [{ range: 2, text: 'b' }] }] },
+      { steps: [{ action: 'replace', path: 'gb.txt', oldText: 'a', newText: 'b' }] },
       space.context
     )
     expect([...(await readFile(join(root, 'gb.txt')))]).toEqual([0x80, 0x0a, 0x62, 0x0a])
@@ -808,9 +875,9 @@ describe('这一轮修的几处', () => {
     const space = diskSpace({ root, failOn: (target) => broken && target.endsWith('b.txt') })
     const change = await fileOperations.edit(
       {
-        files: [
-          { path: 'a.txt', newText: 'A\n' },
-          { path: 'b.txt', newText: 'B\n' },
+        steps: [
+          { action: 'write', path: 'a.txt', text: 'A\n' },
+          { action: 'write', path: 'b.txt', text: 'B\n' },
         ],
       },
       space.context
@@ -835,7 +902,7 @@ describe('这一轮修的几处', () => {
     let broken = false
     const space = diskSpace({ root, failOn: () => broken })
     const change = await fileOperations.edit(
-      { files: [{ path: 'a.txt', newText: 'A\n' }] },
+      { steps: [{ action: 'write', path: 'a.txt', text: 'A\n' }] },
       space.context
     )
     broken = true
@@ -846,15 +913,15 @@ describe('这一轮修的几处', () => {
     expect(failure.message).not.toContain('做到一半')
   })
 
-  test('第一项越界：整批不写，后面那一项也不写', async () => {
+  test('第一步越界：整次不写，后面那一步也不写', async () => {
     await writeFile(join(root, 'k.pem'), 'k\n')
     const space = diskSpace({ root, clamp: true })
     const failure = await failureOf(
       fileOperations.edit(
         {
-          files: [
-            { path: '/etc/hosts', newText: 'x' },
-            { path: 'k.pem', newText: 'y\n' },
+          steps: [
+            { action: 'write', path: '/etc/hosts', text: 'x' },
+            { action: 'write', path: 'k.pem', text: 'y\n' },
           ],
         },
         space.context
@@ -869,7 +936,11 @@ describe('这一轮修的几处', () => {
     const space = diskSpace({ root })
     const failure = await failureOf(
       fileOperations.edit(
-        { files: [{ path: 'huge.txt', newText: 'x'.repeat(FileLimits.fileBytes + 1) }] },
+        {
+          steps: [
+            { action: 'write', path: 'huge.txt', text: 'x'.repeat(FileLimits.fileBytes + 1) },
+          ],
+        },
         space.context
       )
     )

@@ -37,3 +37,5 @@ Accepted records are durable rationale, not a substitute for schemas or executab
 - [0021: 写入不再按决策依据拦](0021-no-decision-basis-write-gate.md)
 
 - [0022: 命令确认只留成片毁掉、找不回来的](0022-confirm-only-mass-irreversible-commands.md)
+
+- [0023: 读出来是连续正文，改的时候按路径写](0023-continuous-text-path-edits.md)

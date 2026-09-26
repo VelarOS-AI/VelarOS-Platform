@@ -31,7 +31,7 @@ try {
         yield turn(request, {
           execute: {
             source:
-              "import {output} from 'velaros';import {read,edit} from 'velaros:project';const file=(await read({files:[{path:'value.txt'}]})).files[0];if(!file.fileRef)throw Error('missing file');await edit({steps:[{action:'edit',fileRef:file.fileRef,edits:[{op:'replace',range:1,text:'two'}]}]});output('saved');",
+              "import {output} from 'velaros';import {read,edit} from 'velaros:project';const file=(await read({files:[{path:'value.txt'}]})).files[0];if(file.text!=='one\\n')throw Error('unexpected');await edit({steps:[{action:'replace',path:'value.txt',oldText:'one',newText:'two'}]});output('saved');",
           },
           observe: {
             source:

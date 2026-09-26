@@ -993,7 +993,9 @@ describe('JS/TS syntax diagnostics', () => {
           column: 27,
           data: { code: 1136, excerpt: 'export const bad = { a: 1,, }' },
         })
-        expect(first?.message).toContain('a.ts:4:27')
+        // 位置在字段里，说明里不再重复：列诊断时前面已经写了 路径:行:列。
+        expect(first?.message).toStartWith('JS/TS 语法错误（TS1136）：')
+        expect(first?.message).not.toContain('a.ts:4:27')
       })
     }
   })

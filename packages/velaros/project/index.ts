@@ -165,7 +165,6 @@ export type {
 export type {
   ProjectChangeInput,
   ProjectChangeInspection,
-  ProjectContentEdit,
   ProjectEditInput,
   ProjectEditResult,
   ProjectEditStep,
@@ -184,7 +183,6 @@ export type {
   ProjectSearchInput,
   ProjectSearchRange,
   ProjectSearchResult,
-  ProjectStepSource,
   ProjectUndoResult,
   ProjectWindow,
 } from './types/files.js'

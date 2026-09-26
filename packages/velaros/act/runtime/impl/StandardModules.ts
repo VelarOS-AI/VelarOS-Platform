@@ -116,14 +116,7 @@ export const standardModules: StandardModuleFactory = new StandardModules()
 export function createProjectCapabilityModule(
   options: ProjectCapabilityModuleOptions
 ): OperationModuleDefinition {
-  const hash = (value: unknown) =>
-    createHash('sha256')
-      .update(
-        JSON.stringify(value, (key, item) =>
-          ['fileRef', 'changeRef'].includes(key) ? undefined : item
-        )
-      )
-      .digest('hex')
+  const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
   const files: NonNullable<OperationDefinition['reads']> = {
     capture: (_input, value) => {
       const result = value as Partial<ProjectReadResult & ProjectEditResult>

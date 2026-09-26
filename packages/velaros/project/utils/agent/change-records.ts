@@ -1,38 +1,11 @@
 /**
- * edit、inspect、undo 共用的几步：取回 fileRef 原来看得到的整行、凭 changeRef 取回事务。
+ * inspect、undo 共用的一步：凭 changeRef 取回事务。
  */
 
-import { isString, Log } from '@velaros-ai/core'
-
 import type { ProjectOperationContext } from '../../contract/requires.js'
-import type { LineSpan } from '../../types/agent.js'
-import type { ProjectEditInput } from '../../types/files.js'
 import { ProjectError } from '../errors.js'
 
-import { loadFileView, readReceipt } from './file-refs.js'
-
-const log = Log.tag('ProjectChangeRecords')
-
-/** 这次编辑凭的 fileRef 原来看得到哪些整行：改完之后沿补丁链迁过去，回执窗口照样给程序看这些地方。 */
-export async function seenFileSpans(
-  steps: ProjectEditInput['steps'],
-  ctx: ProjectOperationContext
-): Promise<Record<string, LineSpan[]>> {
-  const spans: Record<string, LineSpan[]> = {}
-  for (const step of steps) {
-    if (!('fileRef' in step) || !isString(step.fileRef)) continue
-    try {
-      const view = await loadFileView(ctx, step.fileRef)
-      const lines = view.coverage
-        .filter((region) => region.completeLines)
-        .map(({ startLine, endLine }) => ({ startLine, endLine }))
-      spans[view.path] = [...(spans[view.path] ?? []), ...lines]
-    } catch (error) {
-      log.debug('fileRef 的可见范围取不回来，回执窗口只看改动处', { error: String(error) })
-    }
-  }
-  return spans
-}
+import { readReceipt } from './file-refs.js'
 
 /** 凭 changeRef 取回事务号与提交前后的版本；取不回来时什么都没做，照实说。 */
 export function changeRecordOf(

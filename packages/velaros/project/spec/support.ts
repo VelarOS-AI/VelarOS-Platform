@@ -102,7 +102,7 @@ export async function createProjectHarness(root: string, options: ProjectHarness
       }) as ProgramFailure
     return outcome.value
   }
-  /** 读一个文件的指定行，交回那一个窗口（带 fileRef）。 */
+  /** 读一个文件的指定行，交回那一个窗口（连续的正文与第一行的行号）。 */
   const read = async (path: string, range?: number | [number, number]): Promise<any> => {
     const file: Record<string, unknown> = { path }
     if (range !== undefined) file.range = range

@@ -23,8 +23,7 @@ import { ProjectTuning } from '../tuning.js'
 const sessions = new Map<string, RefSession>()
 
 /** 引用不可用时的下一步：模型只能原样用签发出来的引用，缺了就去读，不能自己拼。 */
-const ReadForReferenceNextAction =
-  'fileRef 只能从 read、search 的窗口或上一次 edit 回执的 files 里原样拿；手里没有这个文件的，先 read 一遍要改的那几行。'
+const ReadForReferenceNextAction = '重新提交这次 edit。'
 
 /** 当前调用的会话：没给会话号的调用共用一份。 */
 function sessionOf(ctx: ProjectOperationContext): RefSession {
@@ -197,9 +196,9 @@ export async function resolveFileRef(
   ) {
     throw new ProjectError(
       'BASE_REVISION_MISMATCH',
-      `${view.path} 在这个 fileRef 之后改过（当前版本 ${current.snapshot.revision ?? '未知'}）。`,
+      `${view.path} 在这次改动准备的时候被别处改了（当前版本 ${current.snapshot.revision ?? '未知'}）。`,
       { path: view.path, expected: view.revision, actual: current.snapshot.revision },
-      '可能就是你上一次改的：用上一次 edit 回执里这个文件的新 fileRef 按新行号重做；回执里没有这个文件的，重新 read 要改的那几行。'
+      '重新提交这次 edit；还冲突就先 read 看看现在的内容。'
     )
   }
   return { ...view, revision: current.snapshot.revision }

@@ -34,12 +34,12 @@ const project: ProjectSpacePort = {
   queryCode: createProjectCodeQuery(codeIndex),
 }
 
-// 宿主自己调用：读出带 fileRef 的窗口，凭它改，凭 changeRef 撤销
+// 宿主自己调用：读出连续的正文，按路径改，凭 changeRef 撤销
 const context: ProjectOperationContext = { abortSignal: new AbortController().signal, project, sessionId: 'session-1' }
 const [file] = (await projectFileOperations.read({ files: [{ path: 'src/index.ts', range: [1, 20] }] }, context)).files
-if (file?.fileRef) {
+if (file?.text.startsWith('// index')) {
   const change = await projectFileOperations.edit(
-    { steps: [{ action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: '// 入口' }] }] },
+    { steps: [{ action: 'replace', path: 'src/index.ts', oldText: '// index', newText: '// 入口' }] },
     context
   )
   await projectFileOperations.undo({ changeRef: change.changeRef }, context)
@@ -71,8 +71,10 @@ export function closeProject() {
 ## 约定
 
 - 路径按真实路径钳在项目根内，出了项目抛 `PERMISSION_DENIED`；没有读写名单、不问人。同一项目根上写串行、读并发（进程内的项目资源门），项目里的前台命令也排进这扇门。
-- `fileRef`、续读页和 `changeRef` 按 `sessionId` 签发与核对（不给的调用共用一份），存在进程内存里、有条数上限，进程重启后全部作废，重读就是。
-- `edit` 的步骤合成一个事务，全成或全不成；失败时一个文件都没写，按 `error.code`（`ProjectErrorCodes` 里的码）分支，位置、候选与下一步都在 message 里。
+- `read`、`search` 交回连续的正文（`text` 带第一行的行号 `startLine`）；`edit` 按路径指文件：`write` 整份写入（没有就新建），`replace` 把唯一的一段原文换掉。读取凭据由 `edit` 自己按路径取，不经调用方的手。
+- 编辑作用在提交那一刻的内容上：`replace` 要换的原文被外部改没了抛 `TARGET_NOT_FOUND`，`write` 整份换掉、不核对读过的版本，被换掉的内容靠这次改动的 `undo` 找回。
+- `changeRef` 按 `sessionId` 签发与核对（不给的调用共用一份），存在进程内存里、有条数上限，进程重启后全部作废。
+- `edit` 的步骤合成一个事务，全成或全不成；失败时一个文件都没写，按 `error.code`（`ProjectErrorCodes` 里的码）分支，第几步、候选与下一步都在 message 里。
 - `undo` 遇到外部改动抛 `CONFLICT_WITH_EXTERNAL_EDIT`、不覆盖，撤过的再撤是幂等成功；可撤销历史按条数和字节预算淘汰，被挤出去的撤销报 `NOT_SUPPORTED`。
 - 读、列、搜不折叠，`ProjectFileLimits` 只为守内存：超了整个失败，批量读里装不下的文件进 `issues`；一个事务缺省最多改 `ProjectPolicyDefaults.maxChangedFilesPerTransaction` 个文件，建内核时用 `corePolicy` 调。
 - 不给 `changeFeed` 时变更记录只在内存里；给了 `transactionStatePath`，重启建内核时恢复中断的提交或回滚，遇到归属不明的改动报 `TRANSACTION_RECOVERY_CONFLICT` 并保留现场。

@@ -5,14 +5,12 @@
 
 /** 项目包的可调参数，按用途分组。 */
 export const ProjectTuning = Object.freeze({
-  /** 文件能力的适配层（utils/agent）：要整份正文时的读取预算，编辑版本过期时的恢复说明。 */
+  /** 文件能力的适配层（utils/agent）：要整份正文时的读取预算，失败说明里的预览。 */
   agent: Object.freeze({
-    /** 要整份正文时（签发可编辑视图、编辑恢复找新位置、编码转换）向内核读取的字符预算；读不全就不签发编辑引用、不给恢复候选、拒绝转换。 */
+    /** 要整份正文时（按路径改之前取读取凭据、编码转换）向内核读取的字符预算；读不全就改不了、拒绝转换。 */
     fullReadChars: 16_000_000,
-    /** 编辑版本过期时，恢复说明里候选位置与确认窗口行数的上限，超过就不给候选。 */
-    recoveryItems: 10,
-    /** 恢复说明里确认窗口的行最多多少字符；装不下就只给候选行号，让模型先 read。 */
-    recoveryWindowChars: 10_000,
+    /** 失败说明里「改完之后」的预览一个文件最多几行：同一个文件的几处出错并成一段，超出的不列。 */
+    failurePreviewLines: 30,
   }),
   /** 文件引用（utils/agent/file-refs.ts）：源码快照、fileRef、改动回执按会话存在进程内存里，这是它们的上限。 */
   refs: Object.freeze({
@@ -46,8 +44,8 @@ export const ProjectTuning = Object.freeze({
     recoveryReadLinesBefore: 3,
     /** 知道出错行时，建议回读的范围从出错行往下多读几行。 */
     recoveryReadLinesAfter: 6,
-    /** 校验失败回执最多带几条诊断；前几条足以指路，其余只报总数。 */
-    reportedDiagnostics: 10,
+    /** 校验失败回执最多带几条诊断；前几条足以指路（语法错误后面的多是连带出来的），其余只报总数。 */
+    reportedDiagnostics: 5,
     /** 回执里每条诊断的 message 最多多少字符；命令型 validator 会把整段 stdout/stderr 塞进一条诊断，超出截断。 */
     diagnosticMessageChars: 2_000,
     /** 失败消息里那行摘要（第一条诊断的第一行）最多多少字符。 */
@@ -190,8 +188,8 @@ export const ProjectTuning = Object.freeze({
     cachedParses: 200,
     /** 语法诊断里出错行的摘录最多多少字符；超长行以出错列为中心截窗。 */
     syntaxExcerptChars: 160,
-    /** 一个文件的前几条语法诊断附带出错行前后几行的源码预览。 */
-    syntaxPreviewDiagnostics: 10,
+    /** 一个文件的前几条语法诊断附带出错行前后几行的源码预览（后面的多是第一处连带出来的）。 */
+    syntaxPreviewDiagnostics: 3,
   }),
 })
 

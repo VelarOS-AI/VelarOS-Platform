@@ -462,7 +462,8 @@ export async function runActEvaluation({
       item.value?.files?.some(
         (file) =>
           (file.path === 'state.txt' || file.path.endsWith('/state.txt')) &&
-          file.lines.some(([number, line]) => number === 1 && line === text)
+          file.startLine === 1 &&
+          file.text.split('\n')[0] === text
       ) && item.visible.includes(text)
     const first = observations.findIndex((item) => matches(item, 'one'))
     const sawOne = first >= 0

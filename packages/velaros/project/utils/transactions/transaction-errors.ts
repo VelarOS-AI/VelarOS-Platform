@@ -164,7 +164,7 @@ export function validationFailed(
   })
   return new ProjectError(
     'VALIDATION_FAILED',
-    `事务校验失败，未写入磁盘：${envelope.headline}`,
+    `改完的内容过不了校验，什么都没写：${envelope.headline}`,
     {
       transactionId,
       ...context,
@@ -177,13 +177,13 @@ export function validationFailed(
         coordinateSpace: 'candidate',
         applied: false,
         windows,
-        note: 'windows 是尚未写入的候选源码预览，行号属于候选内容。检查错误附近和替换边界；修改 range 时仍使用输入 fileRef 对应的原文坐标，match/text 填源码。',
+        note: 'windows 是尚未写入的候选源码预览，行号属于候选内容。检查错误附近和替换边界，照原文改好 oldText / newText 再提交。',
       }),
     },
     isPresent(context.rebasedFiles)
-      ? '准备事务后 rebasedFiles 被外部修改，rebase 后的内容未通过校验；请重新读取这些文件，基于最新内容重新准备事务。'
+      ? '这些文件在准备改动之后被别处改了，合在一起过不了校验：先 read 看看现在的内容，再重新提交这次 edit。'
       : !isEmpty(windows)
-        ? '按诊断与改完之后的预览修正编辑再提交；预览里的行号属于改完的内容，不能直接当原文的 range 用。'
-        : '按诊断修正编辑再提交。'
+        ? '按诊断与改完之后的预览改好再提交；预览里的行号是改完之后的。'
+        : '按诊断改好再提交。'
   )
 }

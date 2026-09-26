@@ -15,8 +15,8 @@ import type {
 } from '../../types/editing.js'
 import type {
   ProjectContentEdit,
-  ProjectEditInput,
-  ProjectEditStep,
+  ProjectPlanInput,
+  ProjectPlanStep,
   ProjectRecodeNewline,
   ProjectStepSource,
 } from '../../types/files.js'
@@ -213,7 +213,7 @@ async function planDestination(plan: ProjectFilePlanState, path: string): Promis
       'TARGET_EXISTS',
       `目标路径已存在：${observed.path}。`,
       { path: observed.path },
-      'create 与 move 不覆盖已有文件：换一个不存在的路径；确实要整体替换，先读取该文件获取 fileRef，再用 overwrite。'
+      '新建与移动不覆盖已有文件：换一个不存在的路径；要整份换掉它就用 write。'
     )
   }
   if (isUndefined(staged)) plan.baseRevisions[observed.path] = observed.revision
@@ -234,9 +234,9 @@ async function planSource(
     if (!identity?.created || identity.deleted) {
       throw new ProjectError(
         'TARGET_NOT_FOUND',
-        `path 只指本次前面的步骤 create 出来、还在的文件，${observed.path} 不是。`,
+        `${observed.path} 不是本次前面的步骤新建、还在的文件。`,
         { path: observed.path },
-        '已有的文件用 read 或 search 给的 fileRef 指；被本次前面的步骤移动或改过的，用 sourceRef 填同一个原 fileRef。'
+        '把这一步拆到下一次 edit 里再提交。'
       )
     }
     return { identity, view: identity.view }
@@ -290,7 +290,7 @@ async function planSource(
       'INVALID_INPUT',
       `这一步引用的文件已被本计划前面的步骤移动或修改（现在是 ${identity.view.path}）。`,
       { path: identity.view.path },
-      '同一个文件的几处编辑合并到同一步的 edits 里；确实要分成几步就把这一项的键名 fileRef 改成 sourceRef，值不变，range 按前面步骤改完后的内容算，拿不准就用 match。'
+      '把这一步拆到下一次 edit 里再提交。'
     )
   return binding
 }
@@ -333,7 +333,7 @@ async function planFileAction(
           'SCOPE_VIOLATION',
           `${view.path} 只看过其中一段，不能整份替换。`,
           { path: view.path },
-          '整份替换前先 read 整个文件（不给 range 就是整个文件），拿覆盖整个文件的 fileRef 再 overwrite；只改其中几处用 edit 步骤。'
+          '只改其中几处用 replace；要整份换掉就用 write。'
         )
       const source = createProjectSourceCoordinates(view.content)
       const text = normalizePhysicalNewlines(
@@ -411,7 +411,7 @@ async function planEditStep(
 }
 
 /** 把一步文件动作翻成计划内部那套形状：字段一样，只是判别键从 action 换成 op。 */
-function stepFileAction(step: Exclude<ProjectEditStep, { action: 'edit' }>): ProjectPlanFileAction {
+function stepFileAction(step: Exclude<ProjectPlanStep, { action: 'edit' }>): ProjectPlanFileAction {
   const { action, ...rest } = step
   return { op: action, ...rest } as ProjectPlanFileAction
 }
@@ -426,7 +426,7 @@ function planResult(plan: ProjectFilePlanState): PrepareEditInput {
 
 /** 把 edit 的有序步骤编译成一个事务输入：后面的步骤可以用 sourceRef、path 跟随前面步骤的结果，出错时补上 stepIndex。 */
 export async function compileProjectEdit(
-  input: ProjectEditInput,
+  input: ProjectPlanInput,
   resolver: ProjectPlannerResolver
 ): Promise<PrepareEditInput> {
   if (isEmpty(input.steps) || input.steps.length > ProjectFileLimits.steps)

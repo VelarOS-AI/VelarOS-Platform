@@ -2,70 +2,83 @@
 // 用的时候把要的那段放进程序，调用它并把要看的导出去，比如 `export default await showFile('~/.zshrc')`。
 import { edit, read, undo } from 'velaros:files'
 
-// 看一个文件：lines 每项是 [行号, 原文]，排成「行号: 原文」最好读。只要其中几行就在 files 里给 range: [首行, 末行]。
+// 看一个文件：text 是连续的正文，startLine 是它第一行的行号。只要其中几行就在 files 里给 range: [首行, 末行]。
 async function showFile(path = '~/.zshrc') {
   const [file] = (await read({ files: [{ path }] })).files
   if ('error' in file) throw new Error(file.error.message)
-  return file.lines.map(([line, text]) => `${line}: ${text}`).join('\n')
+  return file.text
 }
 
-// 在文件里找行（翻日志、找配置项）：整份读进程序里筛，只交出命中的那些行。
+// 在文件里找行（翻日志、找配置项）：整份读进程序里筛，只交出命中的那些行，带上行号好定位。
 async function grepFile(path = '/var/log/system.log', pattern = /error/i, last = 30) {
   const [file] = (await read({ files: [{ path }] })).files
   if ('error' in file) throw new Error(file.error.message)
-  const hits = file.lines.filter(([, text]) => pattern.test(text))
-  return { total: hits.length, last: hits.slice(-last).map(([line, text]) => `${line}: ${text}`) }
+  const hits = file.text
+    .split('\n')
+    .map((text, index) => ({ line: file.startLine + index, text }))
+    .filter(({ text }) => pattern.test(text))
+  return { total: hits.length, last: hits.slice(-last).map(({ line, text }) => `${line}: ${text}`) }
 }
 
 // 一次读几个文件：读不了的那个单独是一项失败（用 'error' in 分开），别的照常。
 async function readMany(paths = ['~/.gitconfig', '~/.npmrc']) {
   const { files } = await read({ files: paths.map((path) => ({ path })) })
-  return files.map((file) => ('error' in file ? { path: file.path, error: file.error.message } : { path: file.path, text: file.lines.map(([, text]) => text).join('\n') }))
+  return files.map((file) => ('error' in file ? { path: file.path, error: file.error.message } : { path: file.path, text: file.text }))
 }
 
-// 改一行配置：找到就换掉，找不到就加在末尾。行号只在读到的那一版上成立，所以带上 version。
+// 改一处：把一段原文换成新文。oldText 照读到的原文写、在文件里只能出现一次（出现好几处就多带几行上下文）。
+async function replaceOnce(path = '~/.zshrc', oldText = 'export EDITOR=nano', newText = 'export EDITOR=vim') {
+  try {
+    return await edit({ steps: [{ action: 'replace', path, oldText, newText }] })
+  } catch (error) {
+    // 找不到或不唯一时整次不写：error.message 里有最像的几行，或者出现在第几行。
+    return { code: error.code, message: error.message }
+  }
+}
+
+// 改一行配置：有就换掉，没有就加在末尾。先读出来按行在程序里改，再整份写回去。
 async function setLine(path = '~/.zshrc', match = /^export EDITOR=/, line = 'export EDITOR=vim') {
   const [file] = (await read({ files: [{ path }] })).files
   if ('error' in file) throw new Error(file.error.message)
-  const found = file.lines.find(([, text]) => match.test(text))
-  const change = found ? { range: found[0], text: line } : { after: file.totalLines, text: line }
-  return edit({ files: [{ path, version: file.version, edits: [change] }] })
+  const lines = file.text.split('\n')
+  const at = lines.findIndex((text) => match.test(text))
+  // 文件以换行结尾时，split 出来的最后一项是空串：新行插在它前面，结尾的换行照旧。
+  if (at >= 0) lines[at] = line
+  else lines.splice(lines.at(-1) === '' ? -1 : lines.length, 0, line)
+  return edit({ steps: [{ action: 'write', path, text: lines.join('\n') }] })
 }
 
-// 删掉几行：几处改动放进同一个 edits，行号都按读到的那一版算，不用管前面删掉的行带来的错位；text 为空串就是删掉。
+// 删掉几行：读出来在程序里过滤掉，整份写回去。读到文件末尾时 text 带着结尾的换行，原样拼回去不多不少。
 async function deleteLines(path = '~/.zshrc', match = /^alias ll=/) {
   const [file] = (await read({ files: [{ path }] })).files
   if ('error' in file) throw new Error(file.error.message)
-  const edits = file.lines.filter(([, text]) => match.test(text)).map(([line]) => ({ range: line, text: '' }))
-  if (!edits.length) return '没有要删的行'
-  return edit({ files: [{ path, version: file.version, edits }] })
+  const lines = file.text.split('\n')
+  const kept = lines.filter((text) => !match.test(text))
+  if (kept.length === lines.length) return '没有要删的行'
+  return edit({ steps: [{ action: 'write', path, text: kept.join('\n') }] })
 }
 
 // 改 JSON 配置：读出来解析，在程序里改好，再整份写回去（结构化的文件这样最稳）。
 async function updateJson(path = '~/.config/app/settings.json', key = 'theme', value = 'dark') {
   const [file] = (await read({ files: [{ path }] })).files
   if ('error' in file) throw new Error(file.error.message)
-  const data = JSON.parse(file.lines.map(([, text]) => text).join('\n'))
+  const data = JSON.parse(file.text)
   data[key] = value
-  return edit({ files: [{ path, version: file.version, newText: `${JSON.stringify(data, null, 2)}\n` }] })
+  return edit({ steps: [{ action: 'write', path, text: `${JSON.stringify(data, null, 2)}\n` }] })
 }
 
-// 新建文件：给 newText 就行，缺的上级目录会自动建。不带 version 时文件已经在也会被整份替换，要防着就先读一次、带上它的 version。
+// 新建文件：write 给出全部内容就行，缺的上级目录会自动建；文件已经在就整份换掉。
 async function createFile(path = '~/bin/hello.sh', text = '#!/bin/sh\necho hello\n') {
-  return edit({ files: [{ path, newText: text }] })
+  return edit({ steps: [{ action: 'write', path, text }] })
 }
 
-// 几个文件里一起换掉一个词：一批一次成败；写不下去时整批不写，error.message 逐条写着是哪个文件、为什么。
+// 几个文件里一起换掉一个词：每个文件读一遍、换掉、写回；所有文件合成一次改动，全成或全不成。
 async function replaceInFiles(paths = ['~/notes/a.md', '~/notes/b.md'], from = 'oldName', to = 'newName') {
   const { files } = await read({ files: paths.map((path) => ({ path })) })
-  const changes = []
-  for (const file of files) {
-    if ('error' in file) continue
-    const edits = file.lines.filter(([, text]) => text.includes(from)).map(([line, text]) => ({ range: line, text: text.replaceAll(from, to) }))
-    if (edits.length) changes.push({ path: file.path, version: file.version, edits })
-  }
-  if (!changes.length) return '没有要改的'
-  const result = await edit({ files: changes })
+  const targets = []
+  for (const file of files) if (!('error' in file) && file.text.includes(from)) targets.push(file)
+  if (!targets.length) return '没有要改的'
+  const result = await edit({ steps: targets.map((file) => ({ action: 'write', path: file.path, text: file.text.replaceAll(from, to) })) })
   return { changeId: result.changeId, changed: result.files.map((file) => file.path) }
 }
 

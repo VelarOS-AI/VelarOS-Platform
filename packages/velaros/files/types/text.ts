@@ -9,18 +9,18 @@ import type { FileFailure } from './files.js'
 
 /**
  * @AgentView
- * 读到的一个文件（或它的那几行）：lines 每项是 [行号, 原文]，原文不带换行符；行号只用来定位，写回去的正文照原文写、不带行号。
- * 行号的数法和 `wc -l` 一样：结尾那个换行不算多出一行。totalLines 是整个文件的行数。
- * version 是整个文件的版本号（不管只读了哪几行）：edit 带上它，就能挡住「读完之后别人又改过」。
- * lines 落在程序的变量里，**不进你的上下文**——要看哪几行就 export default 哪几行。
+ * 读到的一个文件（或它的那几行）：text 是连续的正文，startLine 是它第一行的行号，totalLines 是整个文件的行数。
+ * 换行一律是 `\n`（原文件是 CRLF 的也一样）；读到文件末尾时，文件结尾的换行照原样在 text 里——整份读出来原样 write 回去，不多一行也不少一行。
+ * 行号的数法和 `wc -l` 一样：结尾那个换行不算多出一行，空文件是 0 行。
+ * text 落在程序的变量里，**不进你的上下文**——要看哪一段就 export default 哪一段。
  */
 export interface FileText {
   path: string
   target?: string
-  version: string
   encoding: TextEncoding
   totalLines: number
-  lines: Array<[number, string]>
+  startLine: number
+  text: string
 }
 
 /** @AgentView files 与入参的 files 一一对应；某个文件读不了只有它那一项是失败。 */
@@ -45,12 +45,4 @@ export interface FileTextContent extends DecodedText {
 export interface FileTextLines {
   lines: Array<{ text: string; br: string }>
   eol: '\n' | '\r\n'
-}
-
-/** 一处按行号的改动落到行上：换掉 [start, end] 这几行（插入时 end = start - 1，也就是一行都不换），换成 lines 这些行；order 是它在 edits 里的位置。 */
-export interface FileLineSplice {
-  start: number
-  end: number
-  lines: string[]
-  order: number
 }

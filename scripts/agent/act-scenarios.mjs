@@ -57,7 +57,7 @@ function observedReport(traces, expected) {
         call.receipt.value?.files?.some((file) => {
           if (file.path !== 'report.json') return false
           try {
-            return exactReport(JSON.parse(file.lines.map(([, text]) => text).join('\n')), expected)
+            return exactReport(JSON.parse(file.text), expected)
           } catch {
             return false
           }

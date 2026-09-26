@@ -1,5 +1,5 @@
 /**
- * `velaros:project` 的三个读操作的主体：read 读带行号的源码窗口，list 列目录，search 搜源码并把命中合成可编辑的窗口。
+ * `velaros:project` 的三个读操作的主体：read 读连续正文的源码窗口，list 列目录，search 搜源码并把命中处合成窗口。
  * 什么都不折叠：read 交回要的整段，list 交回全部条目，search 交回全部命中与它们所在的行；看多少由程序定。
  * 只有守住内存的上限（ProjectFileLimits 里标明的那几个），超了就明说，不交回一部分冒充全部。
  * 路径都相对项目根、钳在项目内；数据都经项目内核取。排队用的项目资源门在执行类里套，这里不管。
@@ -27,12 +27,7 @@ import { ProjectError } from '../errors.js'
 import { listInput, readInput, searchInput } from './file-input.js'
 import { executeAgentProjectSearch, isAgentProjectError, readAgentFile } from './kernel-port.js'
 import { projectRelativePath } from './ports.js'
-import {
-  finalizeFileWindows,
-  presentFileRead,
-  presentFileSpans,
-  toProjectWindow,
-} from './source-window.js'
+import { presentFileRead, presentFileSpans, toProjectWindows } from './source-window.js'
 
 const log = Log.tag('ProjectFileReads')
 
@@ -64,7 +59,7 @@ function beyondReadLimit(file: ProjectReadItem, remaining: number): ProjectError
 }
 
 /**
- * read：逐个读要的整段（没给 range 就是整个文件），排成带行号的窗口并签发 fileRef。一次交回的正文总量有守内存的上限，装不下的文件不读。
+ * read：逐个读要的整段（没给 range 就是整个文件），写成连续正文的窗口。一次交回的正文总量有守内存的上限，装不下的文件不读。
  * 批量里单个文件读不到（不存在、是目录或二进制、不许读、在项目外、装不下）只进 issues；只读一个文件时直接失败。
  */
 export async function readFiles(
@@ -91,9 +86,7 @@ export async function readFiles(
       issues.push(issueOf(file.path, error))
     }
   }
-  const read: ProjectReadResult = {
-    files: (await finalizeFileWindows(ctx, windows)).map(toProjectWindow),
-  }
+  const read: ProjectReadResult = { files: windows.flatMap(toProjectWindows) }
   if (!isEmpty(issues)) read.issues = issues
   return read
 }
@@ -209,8 +202,8 @@ function hitSpans(
 }
 
 /**
- * search：字面文本或正则，交回全部命中；每个命中的文件整份读一次，命中所在的行（连同前后 contextLines 行）合成一个带 fileRef 的窗口。
- * 命中超过守内存的上限时整个调用失败。搜完之后文件又被改了的，命中照样给位置，只是没有窗口（editable 为 false）。
+ * search：字面文本或正则，交回全部命中；每个命中的文件整份读一次，命中所在的行（连同前后 contextLines 行）合成连续正文的窗口。
+ * 命中超过守内存的上限时整个调用失败。搜完之后文件又被改了的，命中照样给位置和 snippet，只是没有窗口。
  */
 export async function searchFiles(
   raw: unknown,
@@ -238,11 +231,11 @@ export async function searchFiles(
     try {
       windows.push(await presentFileSpans(ctx, file.path, file.revision, file.spans))
     } catch (error) {
-      // 搜完之后文件又被改了：命中的位置照样给，可编辑的窗口要重读。
+      // 搜完之后文件又被改了：命中的位置照样给，窗口要重读。
       log.debug('命中处的窗口读不到', { path: file.path, error: String(error) })
     }
   }
-  const files = (await finalizeFileWindows(ctx, windows)).map(toProjectWindow)
+  const files = windows.flatMap(toProjectWindows)
   const inWindow = (hit: { path: string; revision?: string }) =>
     windows.some((window) => window.path === hit.path && window.revision === hit.revision)
   const searched: ProjectSearchResult = {
@@ -250,10 +243,7 @@ export async function searchFiles(
       const shaped: ProjectSearchHit = { path: hit.path }
       if (hit.revision) shaped.revision = hit.revision
       if (hit.range) shaped.range = hit.range
-      if (!inWindow(hit)) {
-        shaped.editable = false
-        if (isString(hit.snippet)) shaped.snippet = hit.snippet
-      }
+      if (!inWindow(hit) && isString(hit.snippet)) shaped.snippet = hit.snippet
       return shaped
     }),
     files,

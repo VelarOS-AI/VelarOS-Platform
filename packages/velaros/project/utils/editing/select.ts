@@ -27,9 +27,9 @@ import {
 } from './source.js'
 
 const CandidateNextAction =
-  '核对候选后缩小 range 或修正 match 再提交；把 match 扩成更长的原文时，替换的 text 也要带上候选的 prefix/suffix。候选只供确认，什么都没写。'
+  '照候选的原文改 oldText 再提交；出现好几处就带上前后几行让它唯一，newText 也要带上同样的前后文。候选只供确认，什么都没写。'
 
-/** 零命中按原因给下一步：原文在 range 外、在未显示的行、有相近候选，或完全对不上。 */
+/** 零命中按原因给下一步：原文在所选的行外、在没读到的行、有相近候选，或完全对不上。 */
 function missingMatchGuidance(
   candidates: readonly ProjectMatchCandidate[],
   elsewhere: readonly ProjectMatchElsewhere[]
@@ -42,22 +42,22 @@ function missingMatchGuidance(
       .join('、')
   if (elsewhere.some((item) => item.visible))
     return {
-      message: `match 不在所选 range 内，它出现在第 ${lines(true)} 行。`,
-      next: '把这一处的 range 改成覆盖这段原文，或者去掉 range 只用 match（在读到的范围里必须唯一）。',
+      message: `要换的原文不在所选的行里，它出现在第 ${lines(true)} 行。`,
+      next: '按原文在整个文件里找，别限定行。',
     }
   if (!isEmpty(elsewhere))
     return {
-      message: `match 在 fileRef 可见区域中没有匹配，原文在未显示的第 ${lines(false)} 行。`,
-      next: '先 read 这些行拿新 fileRef，把这一步的 fileRef 换成它（有 range 的一起改），text 不用动。',
+      message: `要换的原文不在读到的范围里，它在第 ${lines(false)} 行。`,
+      next: '重新提交这一步，按原文在整个文件里找。',
     }
   if (!isEmpty(candidates))
     return {
-      message: 'match 在读到的这段里没有精确匹配，下面是相近的原文。',
+      message: 'oldText 在文件里没有一模一样的原文，下面是最接近的几处。',
       next: CandidateNextAction,
     }
   return {
-    message: 'match 在读到的这段里没有精确匹配，也没有相近的原文。',
-    next: '照窗口 lines 里那几行的原文写 match（空白、引号、反斜杠都要一样）；或者去掉 match，只用 range 按整行改。',
+    message: 'oldText 在文件里没有一模一样的原文，也没有相近的。',
+    next: '先 read 要改的那一段，照读到的原文写 oldText（空白、引号、反斜杠、换行都要一样）。',
   }
 }
 
@@ -174,7 +174,7 @@ export function selectProjectMutations(
           const { message, next } =
             total === 0
               ? missingMatchGuidance(candidates, elsewhere)
-              : { message: `match 在读到的这段里出现了 ${total} 次。`, next: CandidateNextAction }
+              : { message: `oldText 在文件里出现了 ${total} 次。`, next: CandidateNextAction }
           throw new ProjectError(
             total === 0 ? 'TARGET_NOT_FOUND' : 'AMBIGUOUS_TARGET',
             message,
