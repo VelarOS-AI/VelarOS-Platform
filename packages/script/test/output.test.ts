@@ -300,8 +300,7 @@ test('INV-37 output 声明里写的上限与 ScriptOutputLimits 一致，校验�
     `最多 ${limits.keyChars} 个字符），整理工具凭它调整展示`,
     `purpose 说明持续观察它的原因（最多 ${limits.purposeChars} 个字符）`,
     `代码的语言标签，最多 ${limits.languageChars} 个字符`,
-    `缺省 ${limits.displayChars} 个字符，包括输出目录与省略说明`,
-    `output.configure({maxChars}) 放大（最多 ${limits.maxDisplayChars}，`,
+    `maxChars 包括输出目录与省略说明（最多 ${limits.maxDisplayChars}）`,
     `maxChars 本块最多展示多少字符（最多 ${limits.maxDisplayChars}）`,
     `JSON Pointer 数组（最多 ${limits.paths} 个）`,
   ])

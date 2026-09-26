@@ -31,8 +31,8 @@ declare module 'velaros' {
   }
 
   /**
-   * 整份输出的展示预算：缺省 16000 个字符，包括输出目录与省略说明；交的放不下时每块只露出一部分，结果头里写着这次的 displayChars。
-   * 要一次看完整段代码或长文，先 output.configure({maxChars}) 放大（最多 200000，实际分配仍由宿主决定），或者分几次执行各交一部分。
+   * 整份输出的展示预算：maxChars 包括输出目录与省略说明（最多 200000），实际分配由宿主决定；交的放不下时每块只露出一部分，
+   * 结果头里写着这次实际给的 displayChars。要看的内容多（几个大文件、长文），就分几次执行各交一部分。
    */
   interface ScriptOutputConfig {
     readonly maxChars?: number
