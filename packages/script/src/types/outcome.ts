@@ -12,7 +12,7 @@ export type CodeSurfaceOutcome =
   | {
       /** typecheck 没走到：程序 import 了没授权的模块。 */
       checked: false
-      /** 要补签名的命名空间，按程序里出现的顺序。 */
+      /** 没授权的命名空间，按程序里出现的顺序；只有名字，不附签名。 */
       needsModules: string[]
     }
   | {

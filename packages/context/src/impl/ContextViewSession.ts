@@ -32,7 +32,7 @@ import { checkTaskCapsule, checkViewIntent } from '../utils/view-input.js'
 
 import { ContextEvidenceBuilder } from './ContextEvidenceBuilder.js'
 
-/** 绑定会话的双核任务与证据视图，不另持有工具、模型或数据库。 */
+/** 绑定会话的任务检查点与证据视图，不另持有工具、模型或数据库。 */
 export interface ContextViewApi {
   /** 列出已装配的证据源与其真实一致性能力。 */
   sources(): readonly ContextSourceCard[]

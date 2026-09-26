@@ -77,8 +77,8 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
         result: { failed: { code: CodeSurfaceErrorCodes.tooLarge, message: oversized } },
       }
 
-    // 非常驻能力必须先导入才能用：import 了没授权的模块时**一行都不执行**，回它们的签名让模型重写。
-    // 这不是失败，是「先拿说明书」——代码面里写错一处的代价是整段程序不执行，不是一次调用失败。
+    // 非常驻能力必须先导入才能用：import 了没授权的模块时**一行都不执行**，只回缺的命名空间（needsModules），不附签名；
+    // 找不到模块的诊断在这里换成命名空间名单，其余诊断留给下面的检查。
     const target = { source, granted: input.granted, path: program.path, modules: program.modules }
     const missing = this.checker.missingModules(target)
     if (!isEmpty(missing)) return { checked: false, needsModules: missing }

@@ -208,7 +208,7 @@ export interface VelarosSession {
   updateGoal(input: GoalUpdate): Promise<GoalState>
   /** 用户侧目标控制，包括保留历史的删除。 */
   controlGoal(input: GoalControl): Promise<GoalState>
-  /** 双核任务检查点与视图，仅宿主可访问完整控制面。 */
+  /** 任务检查点与证据视图，仅宿主可访问完整控制面。 */
   readonly view: ContextViewApi
   /** 会话的稳定身份。 */
   readonly id: string

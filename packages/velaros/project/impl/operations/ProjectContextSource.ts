@@ -183,7 +183,7 @@ export class ProjectContextSource implements ProjectContextSourceApi {
   }
 }
 
-/** 为双核 Runtime 装配项目证据；正文与修改操作使用同一份项目版本权威。 */
+/** 项目的上下文证据源，供运行时物化证据视图；正文与修改操作使用同一份项目版本权威。 */
 export function createProjectContextSource(
   options: ProjectContextSourceOptions
 ): ProjectContextSourceApi {
