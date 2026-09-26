@@ -165,7 +165,10 @@ export class OfficeOperations implements OfficeOperationsApi {
     ctx: OfficeOperationContext
   ): Promise<OfficePreview> {
     ctx.abortSignal.throwIfAborted()
-    return this.previews.preview(previewInput(input), ctx)
+    const request = previewInput(input)
+    // 不给 outputPath 只是读：这次调用对外界没有效果
+    if (!request.outputPath) ctx.recordEffect?.('none')
+    return this.previews.preview(request, ctx)
   }
 
   public async toMarkdown(
@@ -173,7 +176,9 @@ export class OfficeOperations implements OfficeOperationsApi {
     ctx: OfficeOperationContext
   ): Promise<OfficeMarkdown> {
     ctx.abortSignal.throwIfAborted()
-    return this.markdown.toMarkdown(markdownInput(input), ctx)
+    const request = markdownInput(input)
+    if (!request.outputPath) ctx.recordEffect?.('none')
+    return this.markdown.toMarkdown(request, ctx)
   }
 }
 

@@ -45,12 +45,17 @@ export interface OfficeSpacePort {
   locateMarkItDown?: () => Nullable<MarkItDownLaunchSpec>
 }
 
-/** 每次调用拿到的上下文：取消信号与空间端口。 */
+/** 每次调用拿到的上下文：取消信号与空间端口，可选的效果登记。 */
 export interface OfficeOperationContext {
   /** 本次调用的取消信号；用户取消或上层超时时触发，操作和宿主都要尽快收手。 */
   abortSignal: AbortSignal
   /** 空间端口：操作经它向空间要工作区根与系统能力，写作 `ctx.office`。 */
   office: OfficeSpacePort
+  /**
+   * 可选：登记这次调用对外界的实际效果。preview 与 toMarkdown 声明为写，但只有给了 outputPath 才写文件；
+   * 没给时本单元在这里登记 'none'。宿主不给这一项，运行时就按声明记成写入。
+   */
+  recordEffect?: (effect: 'none') => void
 }
 
 /** 可选资源端口：宿主的插件登记表经它告诉本单元额外去哪找资源、哪个资源被用户停用了。 */

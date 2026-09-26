@@ -48,7 +48,8 @@ export const officeModule = createCapabilityModule({
   surface: VelarOfficeModule,
   implementation: officeOperations,
   instanceId: 'workspace-office',
-  context: (call) => ({ abortSignal: call.signal, office }),
+  // 不给 outputPath 的 preview 与 toMarkdown 只是读，经 recordEffect 记成没有效果
+  context: (call) => ({ abortSignal: call.signal, office, recordEffect: call.recordEffect }),
 })
 ```
 

@@ -307,6 +307,23 @@ describe('办公文档不变量验收', () => {
     expect(compile.context?.executionOutcome).toBeUndefined()
   })
 
+  test('INV-19 preview 与 toMarkdown 不给 outputPath 只是读，登记成没有效果', async () => {
+    const { harness } = await workspace()
+    const recorded: string[] = []
+    const ctx = { ...harness.context, recordEffect: (effect: 'none') => void recorded.push(effect) }
+    await officeOperations.createWord({ outputPath: 'doc.docx', content: '正文' }, harness.context)
+
+    await officeOperations.preview({ inputPath: 'doc.docx' }, ctx)
+    expect(recorded).toEqual(['none'])
+    // 没装 MarkItDown 也一样：登记在做事之前，读失败同样没有效果
+    await failureOf(officeOperations.toMarkdown({ inputPath: 'doc.docx' }, ctx))
+    expect(recorded).toEqual(['none', 'none'])
+
+    // 给了 outputPath 就是写：不登记，运行时照声明记成写入
+    await officeOperations.preview({ inputPath: 'doc.docx', outputPath: 'doc.html' }, ctx)
+    expect(recorded).toEqual(['none', 'none'])
+  })
+
   test('INV-14 入参在做事之前核对，不合法一步都不做', async () => {
     const { harness, office } = await workspace({
       availableCommands: ['soffice', 'tectonic'],
