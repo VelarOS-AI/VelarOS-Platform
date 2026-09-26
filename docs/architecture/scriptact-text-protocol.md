@@ -190,7 +190,7 @@ output(blobs.payload);
 - 宿主 `submit` 需接受文字与附件组合，并允许仅附件输入；兼容现有文字调用。
 - 供应商或模型不支持某种附件时显式报告，不能用图片路径文字假称模型已经看见图片。
 
-高级搜索通过 execute 中的 `velaros:search.search` 按需调用，使用共享 ScriptAct 协议与增量历史。执行协议和上下文策略分别通过 FoundationActionPort、FoundationContextPort 接入；模式相关的容量、租约与恢复规则见 [context-management.md](./context-management.md)。
+高级搜索通过 execute 中的 `velaros:search.search` 按需调用，使用共享 ScriptAct 协议与增量历史。协议、执行和上下文策略分别通过 ActProtocolPort、ActExecutionPort、ActContextPort 接入；模式相关的容量、租约与恢复规则见 [context-management.md](./context-management.md)。
 
 ## 11. 正式实现和验证入口
 
@@ -199,7 +199,7 @@ output(blobs.payload);
 - `test/text-decoder.test.mjs`：任意分片、裸名称/函数形式、CRLF、闭合边界、原文保真、字面量参数、别名及预算。
 - `test/text-runtime.test.mjs`：真实隔离脚本、重复块、并行读取、串行写入、事件等待、冻结输入、图片、续期、曝光竞态、取消与恢复。
 - `test/model-protocol.test.mjs`：截断、缺尾、非法结束和协议错误均无派发、无接受、无租期消费。
-- 现有增量编辑、观察、租期、平台能力和双核测试覆盖 v1→v2、CAS、草稿、权限、未知效果与重启。
+- 现有增量编辑、观察、租期、平台能力测试与 `dual-core.test.mjs`（文件名沿用双核时期）覆盖 v1→v2、CAS、草稿、权限、未知效果与重启。
 - `test/provider.test.ts` 使用真实 AI SDK 和模拟供应商验证实际请求选项、流式返回、图片字节和通用 JSON 消费者。
 
 实例内的写操作统一串行，跨进程并发仍由领域版本前提与宿主锁处理。任务恢复通过现有 journal 核对；程序运行不跨进程自动续跑。真实在线模型的协议遵循率、长任务效率和供应商矩阵需要使用模型服务进一步评估。

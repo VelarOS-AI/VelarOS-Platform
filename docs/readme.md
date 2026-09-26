@@ -27,7 +27,7 @@ The root [README](../README.md) contains the human-readable package inventory, s
 merge-gate commands. The [generated package catalog](generated/package-catalog.json) is the deterministic
 machine-readable projection of the root manifest and package manifests.
 
-The [module structure refresh report](engineering/module-structure-refresh-delta.md) records the unified layout migration and current-document refresh. Design-package and refactor-plan records are dated evidence; start with the architecture guides above for current integration.
+The [module structure refresh report](engineering/module-structure-refresh-delta.md) records the unified layout migration and current-document refresh. Refactor-plan records are dated evidence; start with the architecture guides above for current integration.
 
 ## Local validation and release
 
@@ -65,6 +65,7 @@ Host products own their adapters, installation UI, and product-specific policies
 | Document | Purpose |
 | --- | --- |
 | [Agent integration](architecture/agent-act-consolidation.md) | Loop ownership, injected ports and durable run control |
+| [Code surface design](engineering/script-design.md) | Why the model writes programs, how declarations are generated and how capabilities reach the model |
 | [Text protocol](architecture/scriptact-text-protocol.md) | Frames, streaming, blobs, execution and completion |
 | [Result leases](architecture/script-context-leases.md) | Recurring observations and retained one-shot results |
 | [Incremental edits](architecture/script-incremental-edit.md) | Version-bound updates to model-maintained programs |

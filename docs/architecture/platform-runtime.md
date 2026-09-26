@@ -52,7 +52,7 @@ output({ label: input.label, source: blobs.payload });
 
 下一帧的内部材料包含 `schemaVersion/id/frameId/partitions/memoryStatus`。五区中的观察和结果带源码引用、结果引用、剩余曝光次数、实际时间和截断信息；workspace 保存稳定键、版本和驻留笔记，runtime 保存 jobs、mandatory、progress、programFrame。模型 prompt 直接排版源码和输出；历史消息由来源元数据和原始正文组成，代码不再嵌在多层转义字符串中。内部帧继续保留 JSON，历史正文在消息通道与当前 prompt 之间只发送一份。图片的字节进入图片部分，文字中只保留来源说明。
 
-容量预警触发有界整理。整理模型只提出派生展示，Runtime 验证原文依据、快照版本及完整请求容量后发布。自动整理的摘要和笔记呈现按成功业务轮过期，经验证的 `maxChars` 则保留到同任务下一份策略或任务切换；后续每轮仍采集当前观察。这样可以维持可发送的容量，又不会把临时判断永久当成当前事实。
+平常按剩余轮数封段，封段不调用模型（见 [长程上下文](long-running-context.md)）。整理支线只在四种时机运行：模型调用 `memory.organize`（下一请求边界先封段再整理）、结构性超载（同一段只一次）、供应商超窗拒绝且没有可封的历史、自动封成的大卷需要补写叙事。整理支线是跑同一套 ScriptAct 循环的独立会话，只提出派生展示补丁，Runtime 验证原文依据、快照版本及完整请求容量后发布。派生展示在任务内保留到下一份策略或任务切换，策略变化时下一帧重建段底座；策略里的 `maxChars` 只作记录，每帧容量按剩余轮数规划。后续每轮仍采集当前观察，不会把整理时的判断当成当前事实。
 
 宿主事件包括 `text`、`program`（start/delta/end 预览）、`usage`、`state`、`verification`、`error`。程序预览不代表程序执行成功。宿主直接调用 `script` 时仍返回单次 `ScriptSubmissionReceipt`；模型多块提交的持久回执使用 `executions[]`。
 

@@ -10,12 +10,12 @@
 
 | 会话 | 系统面 | 可委托模型工具 |
 | --- | --- | --- |
-| 主线 | modules；memory 五个本地操作，按配置增加 organize 和 recall/save/remove；store 按授权装配 | 按宿主配置搜索、整理、业务子任务 |
-| 业务子任务 | modules；memory 六个操作；store 通过派发显式获配 | 按宿主配置搜索、整理 |
-| 搜索 | modules；memory 五个本地操作 | 完成搜索职责 |
+| 主线 | modules；memory 六个本地操作，按配置增加 organize 和 recall/save/remove；store 按授权装配 | 按宿主配置搜索、整理、业务子任务 |
+| 业务子任务 | modules；memory 七个操作；store 继承父任务此刻的空间（ADR 0018） | 按宿主配置搜索、整理 |
+| 搜索 | modules；memory 六个本地操作 | 完成搜索职责 |
 | 整理 | context-materials.list/read/submit | 用 submit 交付展示补丁 |
 
-未启用整理的主线或业务子任务也使用五操作的本地合同。没有获配的能力同时不进入发现、模板、类型声明和执行绑定。主线与本地记忆使用同一个 MemoryModule 实现，仅合同投影不同。
+未启用整理的主线或业务子任务也使用六个操作的本地合同。没有获配的能力同时不进入发现、模板、类型声明和执行绑定。主线与本地记忆使用同一个 MemoryModule 实现，仅合同投影不同。
 
 ## 模型 API
 

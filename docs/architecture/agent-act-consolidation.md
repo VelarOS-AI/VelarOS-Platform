@@ -1,6 +1,6 @@
 # Agent 与 Act 正式架构
 
-更新：2026-09-20。本文描述当前实现；差量和验收记录见 `../engineering/agent-act-consolidation-delta.md`。
+更新：2026-09-26。本文描述当前实现；差量和验收记录见 `../engineering/agent-act-consolidation-delta.md`。
 
 运行完成事件在执行、帧及租约收尾成功后提交；各清理阶段独立尝试，持久化与子结果故障向宿主传播。`session.trace(turnId)` 按同一存储中的真实记录连接请求、模型原文、协议判定、脚本版本、Kernel 回执、租约和下一帧。故障覆盖及追踪合同见 [执行可靠性与原始追踪](../engineering/act-reliability-delta.md)。
 
@@ -67,20 +67,21 @@ AdvancedSearch 创建相同 RuntimeSession，使用相同 ActRunService、ActLoo
 
 ## 能力与装配
 
-标准定义只在 StandardModules：
+标准模块由 StandardModules 汇总装配；合同写在各组 `impl/*Operations.ts` 的操作接口上，生成的声明、效果与模板见 [Act 能力目录](../../packages/velaros/act/README.md)：
 
 | 模块 | 作用 |
 | --- | --- |
-| modules | 当前授权目录、声明及绑定释放 |
-| programs / results | 程序版本和结果召回、租约 |
-| inputs | 用户原文、附件、意图摘要 |
-| artifacts / execution | 同会话材料和调用事实 |
-| task | inspect 与 update；模型的下一步、假设、决定、未解问题 |
-| interaction | ask / confirm；答案不代替具体操作授权 |
+| `velaros:system` 的 modules | 当前授权目录、声明与用法示例（list / search / describe） |
+| `velaros:system` 的 goal | 主会话的当前目标：读取，建立、暂停、恢复或结束 |
+| `velaros:system` 的 memory | 笔记与任务计划（update / plan）；输入、程序、结果、历史与交付物按引用召回（list / read）；笔记与执行结果的展示驻留（retain / release）；整理请求（organize）；宿主配置时的长期记忆（recall / save / remove） |
+| `velaros:system` 的 store | 持久空间、共享材料与消息 |
+| interaction | ask / confirm / capability；答案不代替具体操作授权 |
 | agents | 通用子任务 |
-| search / evidence / history | 有界搜索、真实来源、段内历史与卷 |
+| search / evidence | 有界搜索与真实来源；evidence 只在搜索会话里 |
+| context-materials | 只在整理会话里：读父快照、交补丁 |
+| widget | 宿主配置时在对话里显示小部件 |
 
-长期模型指导、计划和进度集中在 task capsule，用户原文和宿主固定指令保持各自来源。修改 capsule 不会改写用户目标或授权。
+长期模型指导、计划和进度集中在 task capsule（模型经 `memory.plan` 修改），用户原文和宿主固定指令保持各自来源。修改 capsule 不会改写用户目标或授权。
 
 模块发现、脚本类型检查、实际调用使用相同范围。`VelarosRuntimeOptions.authorize` 在每次真实派发前接受不可变 PreparedInvocation 和 descriptor；宿主可接审批政策。领域已有的 shell/sandbox 审批继续使用 Kernel 的 ApprovalPort，缺少审批端口默认拒绝。
 

@@ -15,13 +15,20 @@
 }
 ```
 
+上面是宿主 `session.script` 的入参。模型在文本帧里把同样的字段写进控制头、载荷留空，头行后面紧跟尾行（[文本协议](scriptact-text-protocol.md)）：
+
+````text
+@@s7f3a9c2d observe({ edits: [{ oldText: "const limit = 10;", newText: "const limit = 30;" }] })
+@@s7f3a9c2d
+````
+
 observe 省略 sourceRef 时绑定本轮展示的观察版本；没有当前版本时需要先提供 source。历史、草稿和 execute 的增量编辑显式提供 sourceRef。
 
 `edits` 为 1–32 项。每项的 `oldText` 必须在原始目标中精确匹配一次，各项不能重叠或依赖其他项刚产生的文本。所有目标都定位成功后再一次性形成完整候选。空 `newText` 表示删除；插入通过保留原锚点并追加文字表达。匹配严格保留换行、Unicode、缩进及注释。
 
 `module` 是保存程序的 `modules` 精确键。新增或删除模块使用全文程序。增量提交保留未修改的模块、input 与 blobs，显式提供 input/blobs 时整体覆盖对应值。`source` 与 `edits` 互斥。
 
-需要完整底稿时，在脚本中调用 `programs.read({ref,offset,limit})`。返回的 JSON 包含 source、modules、input 和 blobs，分页读取不执行代码。
+需要完整底稿时，在脚本中调用 `velaros:system` 的 `memory.read({ref,offset,limit})`。返回的 JSON 包含 source、modules、input 和 blobs，分页读取不执行代码。
 
 ## 版本与原子发布
 
@@ -54,5 +61,5 @@ script 返回 status、executed，以及本次涉及的 observe / execute 回执
 - `packages/velaros/act/runtime/test/script-submission.test.mjs`：合并提交、隐含版本、全量预检、持久占位、并发重试和真实下一轮上下文。
 - `packages/velaros/act/runtime/test/incremental-edit.test.mjs`：版本、草稿、编辑、CAS 并发、身份重试和故障注入。
 - `packages/velaros/act/runtime/test/program-context.test.mjs`：观察、结果租约、未知效果、命令约束和投影预算。
-- `packages/velaros/act/runtime/test/provider.test.ts`：实际 Provider 编译和发送的唯一 script schema。
-- `packages/velaros/act/runtime/test/dual-core.test.mjs`：真实项目操作、重启、进程中断和保留的上下文助手。
+- `packages/velaros/act/runtime/test/provider.test.ts`：主文本模式不向供应商发送工具或对象 schema；宿主提交口的 schema 仍接受编辑并拒绝无效程序合同。
+- `packages/velaros/act/runtime/test/dual-core.test.mjs`（文件名沿用双核时期）：真实项目操作、重启、进程中断与未知效果核对。

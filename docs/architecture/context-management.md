@@ -113,7 +113,7 @@ ContextStatus 每轮报告 mode:partitioned、阶段、总输入估计与依据�
 - RuntimeSession：同一组装入口、观察准备、执行和投递确认。
 - ContextMaintenance / ContextMaintenanceState：独立整理活动、固定快照、原子补丁与结果回执。
 - Context / Kernel / ProviderRequestCompiler：可靠存储、用户原文、事实与权限、预算和最终消息。
-- SystemModules：modules/memory 两个系统成员；同一实现按主线与叶子作用域投影真实合同。
+- SystemModules：modules、goal、memory、store 四个系统成员；同一实现按主线与叶子作用域投影真实合同。
 
 验收入口包含 context-memory.test.mjs、context-management.test.mjs、advanced-search.test.mjs 和原有执行/多模态回归。受控驱动验证机制和持久性；模型整理笔记、摘要与检索的实际质量仍需真实 Provider 评估。
 

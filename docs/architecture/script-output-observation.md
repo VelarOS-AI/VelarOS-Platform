@@ -38,7 +38,7 @@ output(state, {
 
 view.mode 有 auto/full/reference/summary。auto 做确定性选取；full 无法完整满足时报告 full-unavailable；reference 明确不带正文；summary 只消费外部整理模型已经提供且验证指纹的摘要。output 本身不调用模型。high/normal/low 是预算排序，和异步输出到达顺序无关，也不突破最终窗口。
 
-JSON 字段指针、原始结果 ref 和 `/output/blocks/<index>/value` 定位到归档。results.read 仍按原始结果 ref 和 offset/limit 分页；pointer 是归档内位置提示，不是独立的权限或自动读取承诺。文件引用的权限由已有文件/输入读取入口判断。
+JSON 字段指针、原始结果 ref 和 `/output/blocks/<index>/value` 定位到归档。`memory.read` 仍按原始结果 ref 和 offset/limit 分页；pointer 是归档内位置提示，不是独立的权限或自动读取承诺。文件引用的权限由已有文件/输入读取入口判断。
 
 ## 原值、预览和归档
 
