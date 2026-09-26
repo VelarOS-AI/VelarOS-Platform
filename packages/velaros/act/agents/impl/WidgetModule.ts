@@ -20,7 +20,6 @@ class WidgetModule implements WidgetModuleApi {
       implementation: widgetOperations,
       instanceId: 'standard:widget',
       generation: VelarosRuntimeContract.generation,
-      summary: '在对话里给用户显示小部件（图表、示意图、可交互的小工具）',
       context: (call) => ({
         show: async (widget) => {
           await host.show(widget, call.invocation.sessionId)

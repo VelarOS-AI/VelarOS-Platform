@@ -7,7 +7,7 @@ import { VelarAgentsModule } from '../contract/surface.js'
 
 import { agentsOperations } from './AgentsOperations.js'
 
-/** 同一 Act 运行时上的有界子任务；能力由宿主配置，writes 按模块占用。 */
+/** 同一 Act 运行时上的有界子任务：子任务继承父任务的能力与权限，预算由宿主配置。 */
 export interface AgentsModuleApi {
   /** 注入宿主端口，装配到共享 Kernel。 */
   create(host: AgentsHost): OperationModuleDefinition
@@ -20,7 +20,6 @@ class AgentsModule implements AgentsModuleApi {
       implementation: agentsOperations,
       instanceId: 'standard:agents',
       generation: VelarosRuntimeContract.generation,
-      summary: '同一 Act 运行时上的有界子任务；能力由宿主配置，writes 按模块占用',
       context: (call) => ({
         agents: host.agents,
         sessionId: call.invocation.sessionId,

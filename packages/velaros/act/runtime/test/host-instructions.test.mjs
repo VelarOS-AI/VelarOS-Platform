@@ -136,6 +136,39 @@ test('resident modules put their full contract into the instructions so the mode
   assert.doesNotMatch(frames[0].instructions, /velaros:not-mounted/)
 })
 
+test('INV-57 the instructions list every other importable module with its one-line summary', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'runtime-importable-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  const frames = []
+  const model = driver(async function* (request) {
+    frames.push(request)
+    yield* done(request)
+  })
+  const f = await fixture(t, {
+    model,
+    workspace,
+    project: { code: true, images: true },
+    residentModules: ['velaros:project'],
+  })
+  for await (const event of f.session.submit('where is greet defined'))
+    assert.notEqual(event.type, 'error')
+  const index = /本会话还能直接 import 这些模块[^\n]*/u.exec(frames[0].instructions)?.[0]
+  assert.ok(index, frames[0].instructions)
+  // 一句简介取自模块声明开头那段说明的第一句
+  assert.match(
+    index,
+    /velaros:code（问代码，而不是自己读文件猜：定义在哪、谁在用它、改了波及谁、这个文件报什么错）/
+  )
+  assert.match(index, /velaros:images（看图：把 PNG、JPEG、GIF、WebP 交到你眼前）/)
+  // 常驻的已经整份附在文末，velaros:system 的成员从 velaros:system 导入，都不再列
+  assert.doesNotMatch(index, /velaros:project|velaros:modules|velaros:system/)
+  // 模块目录的卡片也是这句简介，不是模块名本身
+  assert.equal(
+    f.runtime.describe('velaros:images').summary,
+    '看图：把 PNG、JPEG、GIF、WebP 交到你眼前。'
+  )
+})
+
 test('resident modules must be a list of module names', async () => {
   const dataDir = await mkdtemp(join(tmpdir(), 'runtime-resident-invalid-'))
   try {

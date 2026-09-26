@@ -4,6 +4,7 @@ import type { OperationDefinition, OperationModuleDefinition } from '@velaros-ai
 
 import type { CapabilityModuleOptions } from '../contract/requires.js'
 import { isFailureWithoutEffect } from '../utils/effects.js'
+import { moduleLead } from '../utils/model-instructions.js'
 import { normalizeCapabilityValue } from '../utils/results.js'
 
 /**
@@ -77,7 +78,7 @@ class CapabilityModules implements CapabilityModulesApi {
         generation: options.generation ?? 1,
         schemaRevision: surface.revision,
       },
-      summary: options.summary ?? surface.specifier,
+      summary: options.summary ?? moduleLead(surface.declarations) ?? surface.specifier,
       surface,
       operations,
       activate: options.activate ? () => options.activate!() : undefined,

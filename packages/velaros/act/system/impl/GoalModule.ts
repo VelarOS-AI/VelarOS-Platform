@@ -21,7 +21,6 @@ class GoalModule implements GoalModuleApi {
       implementation: goalOperations,
       instanceId: `standard:${GoalModuleId}`,
       generation: SystemContract.generation,
-      summary: '跨运行的会话目标生命周期',
       context: (call) => ({
         goal: host.programs(call.invocation.sessionId).goal,
         abortSignal: call.signal,

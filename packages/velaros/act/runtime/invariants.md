@@ -70,3 +70,4 @@
 | INV-54 | 读回上一帧因容量不够只给了引用的笔记或没排进本帧的租约结果记一次缺页（同一帧同一份只记一次，派生展示主动移出的不算）；封段时按缺页调整下一段的笔记份额，没有缺页就回落到宿主配置 | 测试 | `test/context-memory.test.mjs` |
 | INV-55 | 写操作失败时，错误（或它 cause 链里的任一层）带着「没有写入」约定标记——`effect: 'none'` 或 `executionOutcome: 'not-applied'`——就记成没有效果；两样都不认的写失败仍是效果未知，照实给模型看 | 测试 | `test/platform.test.mjs` |
 | INV-56 | 工作区项目可以另挂 velaros:code 与 velaros:images：都用运行时自己的项目内核；看图钳在项目里，出了项目那一张报 PERMISSION；没有代码图谱后端时语言服务照常答、图谱类分析报 UNAVAILABLE；不给 project 选项时两件都不挂 | 测试 | test/platform.test.mjs |
+| INV-57 | 运行说明列出本会话其余能 import 的模块，每个带模块目录里的一句简介（模块声明开头那段说明的第一句）；常驻的与 velaros:system 的成员不重复列；`modules.list` 的卡片 summary 也是这句，而不是模块名本身 | 测试 | test/host-instructions.test.mjs |

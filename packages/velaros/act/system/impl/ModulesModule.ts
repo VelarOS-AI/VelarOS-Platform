@@ -22,7 +22,6 @@ class ModulesModule implements ModulesModuleApi {
       implementation: modulesOperations,
       instanceId: 'standard:modules',
       generation: SystemContract.generation,
-      summary: '发现当前能力、读取系统包成员合同和使用模板',
       context: (call) => {
         const sessionId = call.invocation.sessionId
         return {

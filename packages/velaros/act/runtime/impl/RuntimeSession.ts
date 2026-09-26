@@ -346,6 +346,7 @@ export class RuntimeSession implements VelarosSession {
             const { declarations, template } = dependencies.kernel.describe(module)
             return { module, declarations, template }
           }),
+        summary: (module) => dependencies.kernel.describe(module).summary,
         storeMode: dependencies.stores?.mode,
         maintain: Boolean(dependencies.maintain),
         observe: this.config.allowed.includes('observe'),

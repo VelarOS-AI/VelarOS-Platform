@@ -20,7 +20,6 @@ class SearchModule implements SearchModuleApi {
       implementation: searchOperations,
       instanceId: 'standard:search',
       generation: VelarosRuntimeContract.generation,
-      summary: '有界高级搜索与可恢复报告；search 只允许 execute，read 可用于 observe',
       context: (call) => ({ search: host.search, call }),
     })
   }

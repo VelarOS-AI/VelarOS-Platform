@@ -37,9 +37,6 @@ class MemoryModule implements MemoryModuleApi {
       implementation: systemMemoryOperations,
       instanceId: `standard:${surface.specifier}`,
       generation: SystemContract.generation,
-      summary: persistent
-        ? '任务工作记忆与跨会话长期记忆'
-        : '当前任务的原文召回、工作笔记与材料驻留',
       context: (call) => {
         const sessionId = call.invocation.sessionId
         const maintenance = host.maintenance

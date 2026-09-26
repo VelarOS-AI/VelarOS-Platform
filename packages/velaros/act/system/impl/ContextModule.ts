@@ -21,7 +21,6 @@ class ContextModule implements ContextModuleApi {
         implementation: contextMaterialsOperations,
         instanceId: `standard:${ContextMaterialsModuleId}`,
         generation: SystemContract.generation,
-        summary: '读取当前整理任务的固定父快照，返回原文引用与分页',
         context: (call) => {
           const sessionId = call.invocation.sessionId
           return {

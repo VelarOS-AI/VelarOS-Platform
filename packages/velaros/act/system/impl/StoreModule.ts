@@ -61,7 +61,6 @@ class StoreModule implements StoreModuleApi {
       implementation: storeOperations,
       instanceId: 'standard:store',
       generation: SystemContract.generation,
-      summary: '独立持久空间、结构化对象、显式共享与恢复通知',
       context: (call) => ({
         store: host.stores(call.invocation.sessionId),
         invocationId: call.invocation.id,

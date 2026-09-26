@@ -20,7 +20,6 @@ class InteractionModule implements InteractionModuleApi {
       implementation: interactionOperations,
       instanceId: 'standard:interaction',
       generation: VelarosRuntimeContract.generation,
-      summary: '请求用户提供信息或确认，答案绑定当前运行与请求身份',
       context: (call) => ({
         interaction: host.programs(call.invocation.sessionId),
         abortSignal: call.signal,

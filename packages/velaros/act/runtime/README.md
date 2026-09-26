@@ -74,6 +74,7 @@ projector.finish() // 交付结束：清掉没接纳的预览
 - `authorize` 在每次派发前调用，抛错即拒绝、操作还没执行；写操作默认互斥，`effectResources` 给出完整的冲突资源集合后，互不相交的才并行。
 - `instructions` 是宿主可信的产品指令（身份、界面语言、模式），追加到主会话说明并计入预算；它不是授权，专项模型工具不继承，用户输入与文件正文不放这里。
 - `residentModules` 列出常驻模块：主会话可用的那些把完整声明与用法示例附在运行说明末尾，模型直接 import 使用，不必先 `modules.list` / `describe`；未挂载的忽略。它随会话配置固定，不影响前缀缓存，但每次请求都计入预算，只放每轮都会用的模块。
+- 其余能 import 的模块在运行说明里列成一行索引，每个带模块目录里的一句简介（模块声明开头那段说明的第一句），模型不用先翻 `modules.list` 才知道有什么；常驻的与 `velaros:system` 的成员不重复列。
 - `environment` 返回宿主环境条目（如 `{ os: 'macOS 26.3.1 (arm64)' }`），每帧和运行时自己读的当地时间一起放进 `runtime.environment`：`time` 是带时区偏移的 ISO 时间，`localTime` 带星期，`timezone` 是时区名，这三项宿主不能覆盖。它在帧尾，不影响前缀缓存；主会话、子任务和专项模型工具都会带上，回调抛错或返回的不是文本键值时这一帧只给时间。
 - `createRuntime` 成功后接管注入的 `storage`，`runtime.close()` 时关闭，初始化失败时连接仍归调用方；`session.close()` 只关这个会话，同 id 再 `openSession` 恢复持久数据；`runtime.close()` 重复调用安全。
 - `runtime.trace(rootSessionId, query)` 分页读原始请求、回复、脚本与回执，支线关闭后也能读，不唤醒模型；运行中的回合要重读。每个回合的 `executions` 按声明顺序列出这一回合派发的 execute：`position` 对应该回合第几个 execute 程序事件，`status` 与 `failure`（带出错行）由持久结果和调用回执推出，租约带进这一帧的旧结果不在里面。宿主画脚本卡直接用它，不要解析 `records` 里的内部记录。
