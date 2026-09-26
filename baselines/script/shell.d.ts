@@ -98,7 +98,7 @@ declare module 'velaros:shell' {
     taskId: string
     ports: number[]
     autoStarted: boolean
-    /** 交互式任务的控制台：命令正在等用户输入，用户在控制台卡片里打字。不是交互式任务时缺席。 */
+    /** 交互式任务的控制台：命令正在等用户输入，用户在控制台里打字。不是交互式任务时缺席。 */
     console?: ShellConsoleSessionInfo
   }
 

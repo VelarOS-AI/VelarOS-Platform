@@ -143,7 +143,7 @@ export interface ShellCommandRunnerOptions {
 export class ShellCommandRunner implements ShellCommandRunnerApi {
   /** 交互式任务启动后给模型的一句话：别在这次工具调用里等输出。 */
   private static readonly ConsoleStartedNote =
-    '命令在控制台里跑，正在等用户输入；用户在聊天里的控制台卡片中打字，本次调用不再有输出。'
+    '命令在控制台里跑，正在等用户输入；用户在控制台里打字，本次调用不再有输出。'
 
   private readonly tasks = new Map<string, ShellBackgroundTaskRecord>()
   private readonly executions = new Map<string, ManagedShellProcess>()
