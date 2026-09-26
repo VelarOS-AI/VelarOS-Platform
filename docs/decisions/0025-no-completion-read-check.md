@@ -23,8 +23,10 @@ project INV-41 修掉），一次是模型 list 之后自己用 shell 建了文�
 - 帧里的 `runtime.decision` 只剩 `frameId` 与 `missing`；执行结果不再记 `dependencies.reads / unverified`。
 - `velaros:project` 与系统空间 store 不再登记读取凭据（`reads` 的 capture / validate）；store 会话只为核验而有的 `version` 一并删除。
   写入冲突照旧由各领域在写入处自己核对：store 按 `baseRevision`，项目与本机文件按提交时的内容找原文（ADR 0023）。
-- Kernel 的读取凭据能力（`OperationDefinition.reads`、`validateReads`）作为通用能力保留，act 运行时不再使用；
-  它眼下没有使用方，是否一并删除另行评估。
+- Kernel 的读取凭据能力（`OperationDefinition.reads`、`validateReads`）随之删除：act 运行时是它唯一的使用方，
+  各产品仓也没有别的接入（2026-09-27 另行评估后删；`OperationReadContract`、`OperationReadStamp`、
+  `OperationReadValidation`、`OperationResourceVersion`、回执上的 `reads`、`beforeReadValidation` 与
+  `CapabilityModuleOptions.reads` 一并去掉）。
 
 ## Alternatives
 
@@ -43,7 +45,7 @@ project INV-41 修掉），一次是模型 list 之后自己用 shell 建了文�
 
 ## Validation
 
-act 运行时 INV-24 改写（读到的版本不进帧、不挡写入、不打回收尾），`test/decision-basis.test.mjs` 换成新语义并保留 Kernel 凭据核验的用例；
+act 运行时 INV-24 改写（读到的版本不进帧、不挡写入、不打回收尾），`test/decision-basis.test.mjs` 换成新语义（Kernel 凭据核验的用例随能力一起删掉）；
 系统空间 INV-15 与 `spec/store.test.mjs` 对应改写。
 
 ## Consequences

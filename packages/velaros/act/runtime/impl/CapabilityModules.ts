@@ -37,7 +37,6 @@ class CapabilityModules implements CapabilityModulesApi {
       const observe = options.observation?.[name as keyof T]
       operations[name] = {
         ...descriptor,
-        reads: options.reads?.[name as keyof T] ? options.reads[name as keyof T] : undefined,
         observe: toOptional(observe),
         reconcile: toOptional(reconcile),
         run: async (input, call) => {

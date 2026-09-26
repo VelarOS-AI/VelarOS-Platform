@@ -1,8 +1,8 @@
 import { Ajv, type ValidateFunction } from 'ajv'
 
 import { Log } from '@velaros-ai/core'
-import { isFalse, isTrue, isUndefined } from '@velaros-ai/core'
-import { isArray, isString } from '@velaros-ai/core'
+import { isTrue, isUndefined } from '@velaros-ai/core'
+import { isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { KernelVersionAxes } from '../../contract/constants.js'
@@ -10,7 +10,6 @@ import type { OperationRuntimeApi } from '../../contract/provides.js'
 import type {
   InvocationJournal,
   KernelCallableCapabilityOperation,
-  OperationReadContract,
   OperationRuntimeOptions,
 } from '../../contract/requires.js'
 import type { ModelImage } from '../../types/model.js'
@@ -24,8 +23,6 @@ import type {
   ModuleQuery,
   OperationCall,
   OperationDescriptor,
-  OperationReadStamp,
-  OperationReadValidation,
   PreparedInvocation,
 } from '../../types/operations.js'
 import { validateModelImages } from '../../utils/runtime/model-request.js'
@@ -60,7 +57,6 @@ class OperationRuntime implements OperationRuntimeApi {
     { key: string; promise: Promise<InvocationReceipt> }
   >()
   private readonly observable = new Set<string>()
-  private readonly resourceReaders = new Map<string, OperationReadContract>()
   private started?: Promise<void>
   private closing = false
 
@@ -138,12 +134,6 @@ class OperationRuntime implements OperationRuntimeApi {
         // 处理器在 Kernel 的可调用服务中注册，宿主与脚本不会各保留一份分发器。
         const run = operation.run
         const observe = operation.observe
-        const reads = operation.reads
-        if (reads)
-          this.resourceReaders.set(`${binding.moduleId}/${name}`, {
-            capture: reads.capture.bind(reads),
-            validate: reads.validate.bind(reads),
-          })
         if (observe) this.observable.add(`${binding.moduleId}/${name}`)
         if (operation.reconcile)
           this.reconcilers.set(`${binding.moduleId}/${name}`, operation.reconcile)
@@ -188,39 +178,7 @@ class OperationRuntime implements OperationRuntimeApi {
                     : prepared.mode === 'observe'
                       ? 'unknown'
                       : 'committed'
-              const versions = reads
-                ? immutableOperationJson(await reads.capture(prepared.input, value, context))
-                : undefined
-              if (
-                versions &&
-                (!isArray(versions) ||
-                  versions.length > KernelTuning.resourceReads ||
-                  versions.some(
-                    (item) =>
-                      !item ||
-                      !isString(item.resourceId) ||
-                      !item.resourceId ||
-                      item.resourceId.length > KernelTuning.resourceVersionChars ||
-                      !isString(item.version) ||
-                      !item.version ||
-                      item.version.length > KernelTuning.resourceVersionChars
-                  ))
-              )
-                throw new AppError('VALIDATION', '能力资源版本无效或超限')
-              return {
-                value,
-                effect,
-                attachments,
-                observation,
-                reads: versions
-                  ? versions.map((version) => ({
-                      resourceId: version.resourceId,
-                      version: version.version,
-                      invocationId: prepared.id,
-                      binding,
-                    }))
-                  : undefined,
-              }
+              return { value, effect, attachments, observation }
             } catch (error) {
               return {
                 effect,
@@ -500,7 +458,6 @@ class OperationRuntime implements OperationRuntimeApi {
         })) as {
           value?: unknown
           observation?: InvocationReceipt['observation']
-          reads?: readonly OperationReadStamp[]
           attachments?: readonly ModelImage[]
           effect: InvocationReceipt['effect']
           error?: { code: string; message: string }
@@ -528,7 +485,6 @@ class OperationRuntime implements OperationRuntimeApi {
         }
         if (!error && result.observation)
           Object.assign(receipt, { observation: result.observation })
-        if (!error && result.reads) Object.assign(receipt, { reads: result.reads })
         if (result.attachments?.length) Object.assign(receipt, { attachments: result.attachments })
         if (!isUndefined(value)) Object.assign(receipt, { value })
         if (error) Object.assign(receipt, { error })
@@ -538,82 +494,6 @@ class OperationRuntime implements OperationRuntimeApi {
     } finally {
       this.active.delete(activeKey)
       signal?.removeEventListener('abort', cancel)
-    }
-  }
-
-  public async validateReads(
-    sessionId: string,
-    stamps: readonly OperationReadStamp[],
-    signal: AbortSignal = new AbortController().signal
-  ): Promise<OperationReadValidation> {
-    const reads: Array<OperationReadValidation['reads'][number]> = []
-    for (const stamp of stamps) {
-      signal.throwIfAborted()
-      const record = await this.journal.read(sessionId, stamp.invocationId)
-      if (
-        !record?.receipt?.reads?.some(
-          (saved) => canonicalOperationJson(saved) === canonicalOperationJson(stamp)
-        )
-      )
-        throw new AppError('READ_STAMP_INVALID', '资源版本不属于当前会话的真实回执')
-      const description = this.descriptions.get(stamp.binding.moduleId)
-      if (
-        !description ||
-        canonicalOperationJson(description.binding) !== canonicalOperationJson(stamp.binding)
-      ) {
-        reads.push({ stamp, status: 'stale', reason: 'module-generation' })
-        continue
-      }
-      if (!this.leases.get(sessionId)?.has(stamp.binding.moduleId))
-        throw new AppError('CAPABILITY_DENIED', '资源读取授权已经撤回')
-      await awaitOperationRead(
-        Promise.resolve(
-          this.options.beforeReadValidation?.(
-            record.prepared,
-            description.operations[record.prepared.operation]!,
-            signal
-          )
-        ),
-        signal
-      )
-      const reader = this.resourceReaders.get(
-        `${stamp.binding.moduleId}/${record.prepared.operation}`
-      )
-      if (!reader) {
-        reads.push({ stamp, status: 'unverified', reason: 'validator-unavailable' })
-        continue
-      }
-      const verdict = await awaitOperationRead(
-        Promise.resolve(
-          reader.validate(
-            { resourceId: stamp.resourceId, version: stamp.version },
-            {
-              invocation: record.prepared,
-              signal,
-              recordEffect: () => {
-                throw new AppError('INVARIANT', '版本验证不能记录写效果')
-              },
-              attach: () => {
-                throw new AppError('INVARIANT', '版本验证不能产生模型附件')
-              },
-            }
-          )
-        ),
-        signal
-      )
-      signal.throwIfAborted()
-      reads.push({
-        stamp,
-        status: isTrue(verdict) ? 'valid' : isFalse(verdict) ? 'stale' : 'unverified',
-      })
-    }
-    return {
-      status: reads.some((item) => item.status === 'stale')
-        ? 'stale'
-        : reads.some((item) => item.status === 'unverified')
-          ? 'unverified'
-          : 'valid',
-      reads,
     }
   }
 

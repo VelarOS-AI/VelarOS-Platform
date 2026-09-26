@@ -1,21 +1,14 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { createContextInvocationJournal } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
-import { createOperationRuntime } from '@velaros-ai/kernel'
 import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { done, turn } from './support/model-turn.mjs'
 
-const signal = new AbortController().signal
-function worldModule(world, versioned = true) {
-  const reads = {
-    capture: (_input, value) => [{ resourceId: 'state', version: value.version }],
-    validate: (stamp) => stamp.version === String(world.revision),
-  }
+function worldModule(world) {
   return {
     binding: { moduleId: 'test:world', instanceId: 'one', generation: 1, schemaRevision: '1' },
     summary: 'versioned state',
@@ -25,7 +18,6 @@ function worldModule(world, versioned = true) {
         input: { type: 'null' },
         output: { type: 'object' },
         effects: 'none',
-        ...(versioned ? { reads } : {}),
         run: () => ({ value: world.value, version: String(world.revision) }),
       },
       write: {
@@ -33,7 +25,6 @@ function worldModule(world, versioned = true) {
         input: { type: 'integer' },
         output: { type: 'object' },
         effects: 'write',
-        ...(versioned ? { reads } : {}),
         run: (value) => {
           world.writes++
           world.value = value
@@ -44,7 +35,7 @@ function worldModule(world, versioned = true) {
     },
   }
 }
-async function setup(t, world, stream, versioned = true) {
+async function setup(t, world, stream) {
   const storage = localContextStorage({ path: ':memory:' })
   const model = {
     id: 'basis-test',
@@ -56,7 +47,7 @@ async function setup(t, world, stream, versioned = true) {
     storage,
     runner: nodeSubprocessCodeRunner,
     model,
-    modules: [worldModule(world, versioned)],
+    modules: [worldModule(world)],
   })
   t.after(() => runtime.close())
   const session = await runtime.openSession('root')
@@ -197,112 +188,4 @@ test('required leased results let writes through; completion waits until they ar
   )
   assert.equal(await submit(f.session), 'completed')
   assert.equal(world.writes, 1)
-})
-
-test('Kernel validates archived read stamps, authorization, and current resource version without replay', async (t) => {
-  const world = { value: 1, revision: 1, writes: 0 }
-  let allowed = true
-  const storage = localContextStorage({ path: ':memory:' })
-  const journal = createContextInvocationJournal(storage)
-  const kernel = createOperationRuntime({
-    journal,
-    modules: [worldModule(world)],
-    beforeReadValidation: async () => {
-      if (!allowed) throw Object.assign(Error('revoked'), { code: 'CAPABILITY_DENIED' })
-    },
-  })
-  t.after(async () => {
-    await kernel.dispose()
-    await storage.close()
-  })
-  await kernel.start()
-  const binding = kernel.bind('session', 'test:world')
-  const receipt = await kernel.invoke({
-    id: 'read1',
-    sessionId: 'session',
-    executionId: 'observe1',
-    binding,
-    operation: 'read',
-    input: null,
-  })
-  assert.equal((await kernel.validateReads('session', receipt.reads, signal)).status, 'valid')
-  await assert.rejects(
-    kernel.validateReads('session', [{ ...receipt.reads[0], version: 'forged' }], signal),
-    { code: 'READ_STAMP_INVALID' }
-  )
-  await assert.rejects(kernel.validateReads('other', receipt.reads, signal), {
-    code: 'READ_STAMP_INVALID',
-  })
-  world.revision++
-  assert.equal((await kernel.validateReads('session', receipt.reads, signal)).status, 'stale')
-  allowed = false
-  await assert.rejects(kernel.validateReads('session', receipt.reads, signal), {
-    code: 'CAPABILITY_DENIED',
-  })
-  assert.equal(world.writes, 0)
-})
-
-test('resource validation survives storage reload and treats a new module generation as stale', async (t) => {
-  const world = { value: 1, revision: 1, writes: 0 }
-  const storage = localContextStorage({ path: ':memory:' })
-  const journal = createContextInvocationJournal(storage)
-  const first = createOperationRuntime({ journal, modules: [worldModule(world)] })
-  await first.start()
-  const receipt = await first.invoke({
-    id: 'generation-read',
-    sessionId: 's',
-    executionId: 'e',
-    binding: first.bind('s', 'test:world'),
-    operation: 'read',
-    input: null,
-  })
-  await first.dispose()
-  const module = worldModule(world)
-  module.binding.generation = 2
-  const second = createOperationRuntime({ journal, modules: [module] })
-  await second.start()
-  second.bind('s', 'test:world')
-  t.after(async () => {
-    await second.dispose()
-    await storage.close()
-  })
-  assert.equal(
-    (await second.validateReads('s', receipt.reads, signal)).reads[0].reason,
-    'module-generation'
-  )
-})
-
-test('cancelled resource validation rejects without accepting a late validator result', async (t) => {
-  const world = { value: 1, revision: 1, writes: 0 }
-  const module = worldModule(world)
-  let finish
-  module.operations.read.reads.validate = () =>
-    new Promise((resolve) => {
-      finish = resolve
-    })
-  const storage = localContextStorage({ path: ':memory:' })
-  const kernel = createOperationRuntime({
-    journal: createContextInvocationJournal(storage),
-    modules: [module],
-  })
-  await kernel.start()
-  t.after(async () => {
-    await kernel.dispose()
-    await storage.close()
-  })
-  const receipt = await kernel.invoke({
-    id: 'cancellable',
-    sessionId: 's',
-    executionId: 'e',
-    binding: kernel.bind('s', 'test:world'),
-    operation: 'read',
-    input: null,
-  })
-  const controller = new AbortController()
-  const validation = kernel.validateReads('s', receipt.reads, controller.signal)
-  await new Promise((resolve) => setImmediate(resolve))
-  controller.abort()
-  await assert.rejects(validation, { name: 'AbortError' })
-  finish(true)
-  assert.equal(world.writes, 0)
 })

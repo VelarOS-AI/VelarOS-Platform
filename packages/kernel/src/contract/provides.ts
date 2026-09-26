@@ -120,18 +120,10 @@ import type {
   ModulePage,
   ModuleQuery,
   OperationCall,
-  OperationReadStamp,
-  OperationReadValidation,
 } from '../types/operations.js'
 
 /** 模块发现、租约与调用共用的运行时。 */
 export interface OperationRuntimeApi {
-  /** 核验原始回执、当前授权和资源版本；不重跑原操作。 */
-  validateReads(
-    sessionId: string,
-    reads: readonly OperationReadStamp[],
-    signal?: AbortSignal
-  ): Promise<OperationReadValidation>
   /** 宿主请求只读核对未知效果，未提供领域核对器时返回原记录。 */
   reconcile(
     sessionId: string,

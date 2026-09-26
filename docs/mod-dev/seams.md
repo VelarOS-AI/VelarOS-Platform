@@ -9,7 +9,7 @@
 | 固定每帧参数 | Runtime inputs(sessionId)，由协议解析器冻结快照 |
 | 准备与派发操作 | OperationDefinition.prepare/run，OperationContext 提供信号、真实效果和图片回执 |
 | 调用前授权 | Runtime authorize(invocation, descriptor, signal) |
-| 证据读取与写前校验 | ContextSourcePort 与 OperationReadContract |
+| 证据读取 | ContextSourcePort；写入冲突由领域在写入处按版本核对 |
 | 观察时运行受限实现 | OperationDefinition.observe 或 CapabilityModuleOptions.observation |
 | 核对未知效果 | OperationDefinition.reconcile，只读核对原调用 |
 | 推进 Agent 循环 | ActProtocolPort、ActContextPort、ActExecutionPort，由正式 Runtime 装配 |

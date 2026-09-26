@@ -5,7 +5,6 @@ import type {
   InvocationRecord,
   ModuleBinding,
   OperationDescriptor,
-  OperationResourceVersion,
   OperationSurface,
   PreparedInvocation,
 } from '../types/operations.js'
@@ -24,25 +23,8 @@ export interface OperationContext {
   attach(image: ModelImage): void
 }
 
-/** 领域版本适配器；捕获与验证都不得产生外界写入。 */
-export interface OperationReadContract {
-  /** 从本次真实返回值提取资源版本；不能再次读取并冒充采集时的版本。 */
-  capture(
-    input: unknown,
-    value: unknown,
-    context: OperationContext
-  ): readonly OperationResourceVersion[] | Promise<readonly OperationResourceVersion[]>
-  /** 在原授权作用域内比较当前版本，无法验证返回 null。 */
-  validate(
-    version: OperationResourceVersion,
-    context: OperationContext
-  ): Nullable<boolean | Promise<Nullable<boolean>>>
-}
-
 /** 操作定义；schema、文档与处理器只有这一个登记处。 */
 export interface OperationDefinition extends OperationDescriptor {
-  /** 真实资源版本采集与写前验证；未提供时不能承诺资源一致。 */
-  readonly reads?: OperationReadContract
   /** 观察模式专用的受限实现；写操作只有经此口才能用于观察，保护范围由实现报告。 */
   observe?(input: unknown, context: OperationContext): unknown | Promise<unknown>
   /** 按已固定身份只读核对外部效果；未知返回 null，不能重新执行该操作。 */
@@ -94,12 +76,6 @@ export interface InvocationJournal {
 
 /** 操作运行时的依赖；所有入口共享这一个实例。 */
 export interface OperationRuntimeOptions {
-  /** 版本验证前重验原调用授权；与业务写入调度分开，不再次执行原操作。 */
-  beforeReadValidation?(
-    invocation: PreparedInvocation,
-    descriptor: OperationDescriptor,
-    signal: AbortSignal
-  ): Promise<void>
   /** 持久化派发前复核任务执行前提；抛错表示尚无外部效果。 */
   beforeDispatch?(
     invocation: PreparedInvocation,

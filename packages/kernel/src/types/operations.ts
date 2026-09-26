@@ -110,8 +110,6 @@ export interface InvocationReceipt {
   readonly retry: 'safe' | 'requires-check' | 'never'
   /** 能力产生的图像与返回值独立保存。 */
   readonly attachments?: readonly ModelImage[]
-  /** 成功调用经宿主版本适配器确认的资源依赖。 */
-  readonly reads?: readonly OperationReadStamp[]
   /** 宿主确认观察调用已正常结束，防护范围与世界效果分别表达。 */
   readonly observation?: {
     readonly completed: true
@@ -146,24 +144,4 @@ export interface OperationCall {
   readonly binding: ModuleBinding
   readonly operation: string
   readonly input: unknown
-}
-
-/** 能力适配器从真实资源取得的版本；版本是不透明比较值。 */
-export interface OperationResourceVersion {
-  readonly resourceId: string
-  readonly version: string
-}
-/** Kernel 绑定到已归档调用的读取证据，模型不能自行签发。 */
-export interface OperationReadStamp extends OperationResourceVersion {
-  readonly invocationId: string
-  readonly binding: ModuleBinding
-}
-/** 写前版本验证结果，不把无法验证当作版本一致。 */
-export interface OperationReadValidation {
-  readonly status: 'valid' | 'stale' | 'unverified'
-  readonly reads: ReadonlyArray<{
-    readonly stamp: OperationReadStamp
-    readonly status: 'valid' | 'stale' | 'unverified'
-    readonly reason?: string
-  }>
 }

@@ -71,8 +71,6 @@ export interface CapabilityModuleOptions<T extends object> {
   readonly reconcile?: Readonly<Partial<Record<keyof T, OperationDefinition['reconcile']>>>
   /** 某些能力在观察模式下的受限实现，例如使用受限进程的命令执行。 */
   readonly observation?: Readonly<Partial<Record<keyof T, OperationDefinition['run']>>>
-  /** 接入已有领域的真实版本读写契约，供当前决策在写入前验证。 */
-  readonly reads?: Readonly<Partial<Record<keyof T, OperationDefinition['reads']>>>
   /**
    * 认出发生在任何写入之前的失败（入参不对、版本冲突、没有授权），回执记成没有效果。带 `effect: 'none'` 或
    * `executionOutcome: 'not-applied'` 标记的错误不用在这里认，公共入口已经认了；两样都不认的写操作失败是效果未知。

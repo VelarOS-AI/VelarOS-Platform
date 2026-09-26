@@ -157,7 +157,6 @@ export type {
   OperationContext,
   OperationDefinition,
   OperationModuleDefinition,
-  OperationReadContract,
   OperationRuntimeOptions,
 } from './contract/requires.js'
 export type { ModelDriver } from './contract/requires.js'
@@ -214,9 +213,6 @@ export type {
   ModuleQuery,
   OperationCall,
   OperationDescriptor,
-  OperationReadStamp,
-  OperationReadValidation,
-  OperationResourceVersion,
   OperationSchema,
   OperationSurface,
   PreparedInvocation,
