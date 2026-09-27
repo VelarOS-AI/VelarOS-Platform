@@ -154,6 +154,11 @@ export interface CdpExternalBrowserLaunchOptions {
    * Chrome 会弹窗请用户允许。缺省是；false 时一概不碰用户的 Chrome。
    */
   preferRunningBrowser?: LooseOptional<boolean>
+  /**
+   * 找不到开着的浏览器时拉起一个。缺省是；false 时只接开着的，接不上就报
+   * `ExternalBrowserUnavailableReason`，由宿主决定怎么办（比如把要网页的活交给别处）。
+   */
+  spawnIfNoneRunning?: LooseOptional<boolean>
 }
 
 /** 一次 launch 在外部浏览器里开的那一页：驱动挂在它上面。 */

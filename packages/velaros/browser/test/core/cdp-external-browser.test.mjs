@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
+import { ExternalBrowserUnavailableReason } from '../../../dist/browser/contract/constants.js'
 import { createElectronBrowserRuntime } from '../../../dist/browser/electron.js'
 import { CdpBrowserConnection } from '../../../dist/browser/impl/cdp/CdpBrowserConnection.js'
 import { CdpBrowserPageDriver } from '../../../dist/browser/impl/cdp/CdpBrowserPageDriver.js'
@@ -584,6 +585,34 @@ describe('外部浏览器启动器', () => {
     assert.equal(machine.reads.filter((path) => path.startsWith(Home)).length, 0)
     assert.equal(machine.network.opened.includes(userBrowser.url), false)
     assert.equal(machine.spawned.length, 1)
+    session.dispose()
+    machine.launcher.dispose()
+  })
+
+  test('spawnIfNoneRunning: false 只接开着的：没有就报 external-browser-unavailable，不拉起；用户开着就照常接上', async () => {
+    const machine = createMachine()
+
+    await assert.rejects(
+      machine.launcher.launch({
+        url: 'https://a.test/',
+        platform: 'darwin',
+        spawnIfNoneRunning: false,
+      }),
+      (error) => {
+        assert.equal(error.context?.reason, ExternalBrowserUnavailableReason)
+        return true
+      }
+    )
+    assert.equal(machine.spawned.length, 0)
+
+    const userBrowser = machine.runUserChrome()
+    const session = await machine.launcher.launch({
+      url: 'https://a.test/',
+      platform: 'darwin',
+      spawnIfNoneRunning: false,
+    })
+    assert.equal(machine.spawned.length, 0)
+    assert.equal(machine.network.opened.includes(userBrowser.url), true)
     session.dispose()
     machine.launcher.dispose()
   })

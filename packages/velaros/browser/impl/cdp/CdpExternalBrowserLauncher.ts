@@ -6,6 +6,7 @@
 //     `preferRunningBrowser: false` 时整步跳过，一个用户目录都不读。
 //  2. `userDataDir` 上还开着的浏览器（我们早先在这个目录上拉起的）；没给 userDataDir 时是本实例早先在临时目录上拉起、还开着的那个。
 //  3. 都没有才拉起一个：给了 userDataDir 就拉在它上面（目录一直留着），不给就拉在自己建的临时目录上（收尾删掉）。
+//     `spawnIfNoneRunning: false` 时不拉起，报 `ExternalBrowserUnavailableReason`。
 // 过期的端口文件、连不上、用户拒绝、等超时，都记一条 debug 换下一个。
 //
 // ## 不变量（改这些会破什么）
@@ -32,6 +33,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
+import { ExternalBrowserUnavailableReason } from '../../contract/constants.js'
 import type {
   CdpChromeStderrDiagnostics,
   CdpDevToolsActivePort,
@@ -196,6 +198,13 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
       if (temporary) return temporary
     }
 
+    if (!(options.spawnIfNoneRunning ?? true))
+      throw new AppError(
+        'UNAVAILABLE',
+        '没有能接的外部浏览器：用户没开着允许远程调试的 Chrome（chrome://inspect/#remote-debugging），这次也不另外拉起。',
+        undefined,
+        { reason: ExternalBrowserUnavailableReason }
+      )
     return this.spawnBrowser(options, platform, userDataDir)
   }
 

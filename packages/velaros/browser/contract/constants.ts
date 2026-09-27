@@ -261,6 +261,13 @@ export const DefaultBrowserSearchEngine = 'google' as const
 export const BrowserViewNotAttachedReason = 'browser-view-not-attached' as const
 
 /**
+ * 「没有能接的外部浏览器」这一失败态的跨层标记（挂在 `AppError.context.reason` 上）：
+ * 用户没开着允许远程调试的 Chrome，宿主又不许另外拉起（`spawnIfNoneRunning: false`）。
+ * 宿主捕获后翻译成可执行指引；文案可以随便改，标记不能。
+ */
+export const ExternalBrowserUnavailableReason = 'external-browser-unavailable' as const
+
+/**
  * 浏览器自动化的统一虚拟指针外观：页面注入脚本与宿主预览窗口共用这一份，免得两处各画一份。
  */
 export const BrowserFallbackVirtualPointer = Object.freeze({
