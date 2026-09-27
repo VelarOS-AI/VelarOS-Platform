@@ -104,7 +104,8 @@ export interface BrowserScreenshotEngineApi {
     abortSignal?: AbortSignal
   ): Promise<BrowserPagePreviewFrame>
   /**
-   * 用 CDP Page.startScreencast 向宿主画中画持续推帧。
+   * 用 CDP Page.startScreencast 向宿主画中画持续推帧：外部浏览器的页面，或者内置浏览器的页面
+   * （界面切走后宿主开的后台页面也是，隐藏着照常合成画面）。
    *
    * 与 capturePreviewFrame 不同，这里不轮询截图、不进入 actionQueue，也不在主进程保存帧；
    * 页面每次合成的新画面会直接交给 renderer，关闭窗口时由 stopPreviewFrameStream 释放。
@@ -231,7 +232,8 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
   }
 
   /**
-   * 用 CDP Page.startScreencast 向宿主画中画持续推帧。
+   * 用 CDP Page.startScreencast 向宿主画中画持续推帧：外部浏览器的页面，或者内置浏览器的页面
+   * （界面切走后宿主开的后台页面也是，隐藏着照常合成画面）。
    *
    * 与 capturePreviewFrame 不同，这里不轮询截图、不进入 actionQueue，也不在主进程保存帧；
    * 页面每次合成的新画面会直接交给 renderer，关闭窗口时由 stopPreviewFrameStream 释放。
@@ -248,13 +250,10 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       throw new AppError('VALIDATION', '该后台浏览器画中画已经在实时同步。')
     }
 
-    const externalSession = this.kernel.getExternalPageSession(sessionId)
-    if (!externalSession) {
-      throw new AppError('NOT_FOUND', '后台浏览器页面尚未就绪，无法启动实时预览。')
-    }
-    const driver = externalSession.driver
+    const pageSession = await this.kernel.getLivePageDriverSession(sessionId, abortSignal)
+    const driver = pageSession.driver
     if (!driver.startScreencast || !driver.stopScreencast) {
-      throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持实时画面同步。')
+      throw new AppError('VALIDATION', '当前浏览器页面不支持实时画面同步。')
     }
     if (driver.isScreencasting?.()) {
       throw new AppError('VALIDATION', '页面正在执行其他录屏任务，暂时无法启动画中画。')
@@ -262,7 +261,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
 
     const pageState = await this.kernel.refreshPageDriverSessionState(
       sessionId,
-      { driver, externalSession },
+      pageSession,
       context.url
     )
     const maxWidth = clampInteger(
