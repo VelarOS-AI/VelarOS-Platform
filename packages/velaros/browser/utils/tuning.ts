@@ -100,6 +100,12 @@ export const BrowserTuning = Object.freeze({
     stitchedImageMaxPixels: 32_000_000,
     /** 分块拼接的截图单边最多多少像素。 */
     stitchedImageMaxSide: 16_384,
+    /** 截图时给宿主盖住页面的定格图的 JPEG 质量。 */
+    captureFreezeJpegQuality: 85,
+    /** 等宿主盖好定格图最多等多少毫秒；过了就照截，顶多看得见页面跳。 */
+    captureFreezeTimeoutMs: 1_500,
+    /** 截完多等多少毫秒再拿掉定格图、放开画中画：页面还原（去掉编号、回到原来的画面）的那一帧要先画出来。 */
+    captureFreezeReleaseDelayMs: 80,
     /** 元素标注最多标几个，超过的不画框。 */
     elementLabelLimit: 40,
     /** 宿主预览帧的宽度上限，像素。 */

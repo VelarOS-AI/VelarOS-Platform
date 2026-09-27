@@ -623,6 +623,8 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     resolveCurrentPageUrl: (session, fallbackUrl) =>
       this.resolveCurrentPageUrl(session, fallbackUrl),
     wrapPageDriver: (sessionId, session) => this.getPageDriver(sessionId, session),
+    freezePageForCapture: (sessionId, captureFrame) =>
+      this.sessionManager.freezePageForCapture(sessionId, captureFrame),
     syncSessionSiteContext: (sessionId, url) =>
       this.sessionManager.syncSessionSiteContext(sessionId, url),
     refreshExternalPageState: (sessionId, session, fallbackUrl) =>

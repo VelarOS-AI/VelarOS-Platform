@@ -41,6 +41,7 @@ import type {
   BrowserPageDiagnosticEntry,
   BrowserPageDiagnosticKind,
   BrowserPageDiagnosticLevel,
+  BrowserPagePreviewFrame,
   BrowserUserActivityKind,
   BrowserViewportOptions,
 } from '../../types/browser'
@@ -97,6 +98,14 @@ export interface BrowserSessionManagerApi {
   setCallbacks(callbacks: ElectronBrowserRuntimeOptions): void
   /** viewport 属于运行时会话状态，同时要推给固定外框内的 renderer 投影。 */
   notifyViewportChanged(sessionId: string, viewport: BrowserViewportOptions): void
+  /**
+   * 截图会临时改动页面画面时请宿主用定格图盖住页面：宿主接了 onPageCaptureFreeze 才取定格图（captureFrame）交过去、
+   * 等它盖好，交回拿掉定格图的函数；宿主没接、取不到图交回 null。宿主迟迟不盖好或出错都照截，顶多看得见页面跳。
+   */
+  freezePageForCapture(
+    sessionId: string,
+    captureFrame: () => Promise<Nullable<BrowserPagePreviewFrame>>
+  ): Promise<Nullable<() => void>>
   /** 暴露待处理浏览器事件 broker，供 runtime 工具层处理 dialog/download/permission。 */
   getPendingEventsBroker(): BrowserPendingEventsBroker
   /** 获取未销毁的会话。 */
@@ -175,6 +184,49 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
   /** viewport 属于运行时会话状态，同时要推给固定外框内的 renderer 投影。 */
   public notifyViewportChanged(sessionId: string, viewport: BrowserViewportOptions): void {
     this.callbacks.onSessionViewportChange?.(sessionId, viewport)
+  }
+
+  /**
+   * 截图会临时改动页面画面时请宿主用定格图盖住页面：宿主接了 onPageCaptureFreeze 才取定格图（captureFrame）交过去、
+   * 等它盖好，交回拿掉定格图的函数；宿主没接、取不到图交回 null。宿主迟迟不盖好或出错都照截，顶多看得见页面跳。
+   */
+  public async freezePageForCapture(
+    sessionId: string,
+    captureFrame: () => Promise<Nullable<BrowserPagePreviewFrame>>
+  ): Promise<Nullable<() => void>> {
+    const freeze = this.callbacks.onPageCaptureFreeze
+    if (!freeze) return null
+
+    let frame: Nullable<BrowserPagePreviewFrame> = null
+    try {
+      frame = await captureFrame()
+    } catch (error) {
+      this.log.debug('取截图定格图失败，不盖了', { sessionId, error: AppError.from(error).message })
+    }
+    if (!frame) return null
+
+    try {
+      await this.timers.withTimeout(
+        BrowserTuning.screenshot.captureFreezeTimeoutMs,
+        () => freeze(sessionId, frame),
+        { label: 'browser.capture.freeze' }
+      )
+    } catch (error) {
+      this.log.debug('宿主没有盖好截图定格图，照常截', {
+        sessionId,
+        error: AppError.from(error).message,
+      })
+    }
+    return () => {
+      void Promise.resolve()
+        .then(() => freeze(sessionId, null))
+        .catch((error: unknown) => {
+          this.log.debug('通知宿主拿掉截图定格图失败', {
+            sessionId,
+            error: AppError.from(error).message,
+          })
+        })
+    }
   }
 
   /** 暴露待处理浏览器事件 broker，供 runtime 工具层处理 dialog/download/permission。 */

@@ -3,6 +3,7 @@
 // 现在按一屏切块截再拼。这里用真的 <webview>（宿主窗口里按模拟视口的大小摆着、再按比例缩放，和 Desktop 舞台一样）
 // 与不显示的后台窗口两种页面，经运行时的 setViewport 与 captureScreenshot 截一张长网格页：每格印着自己行列号的黑白条码，
 // 解码核对每格都在自己的位置上；fixed 顶栏只出现一次、在它此刻所在的位置；截图不滚动页面。
+// 宿主接了 onPageCaptureFreeze 时，界面里的 <webview> 截之前先拿到此刻这一屏的定格图、截完拿到 null；后台窗口不叫。
 // 跑法（先在 packages/velaros 下 bun run build），在 Platform 根：
 //   perl -e 'alarm 240; exec @ARGV' node_modules/electron/dist/Electron.app/Contents/MacOS/Electron packages/velaros/browser/test/probes/electron-full-page-screenshot.probe.mjs
 // 产品里用的 Electron 版本不同时，换成产品仓 node_modules 里的 Electron 再跑一遍。每一项打一行 ✓ 或 ✗，全过退出码 0。
@@ -134,6 +135,9 @@ const checkerOf =
     console.info(`${ok ? '✓' : '✗'} [${label}] ${name}${detail ? `：${detail}` : ''}`)
   }
 
+/** 元素标注框的蓝（rgba(10,132,255,0.88) 叠在按钮上）：蓝为主、红低。 */
+const isLabelBlue = ([red, green, blue]) => blue > 170 && red < 140 && green > 70 && green < 200
+
 /** 格子里只有顶栏盖住的那一行认不出（条码被洋红盖住），其余都要对。 */
 function checkGrid(check, reading, headerRow) {
   const unexpected = reading.wrong.filter((cell) => cell.row !== headerRow)
@@ -178,7 +182,7 @@ async function openWindowStage(url) {
 
 const pageState = (page) =>
   page.executeJavaScript(
-    '({ scrollY: window.scrollY, scrolls: window.__scrolls, innerHeight: window.innerHeight })',
+    '({ scrollY: window.scrollY, scrolls: window.__scrolls, innerWidth: window.innerWidth, innerHeight: window.innerHeight })',
     true
   )
 
@@ -193,7 +197,7 @@ async function shoot(runtime, sessionId, context, options, rows, columns) {
   return { artifact, reading: readGrid(image, artifact.capture, rows, columns) }
 }
 
-async function scenario(runtime, site, workspaceRoot, spec) {
+async function scenario(runtime, site, workspaceRoot, spec, freezes) {
   const check = checkerOf(spec.label)
   const query = new URLSearchParams({
     rows: String(spec.rows),
@@ -253,6 +257,35 @@ async function scenario(runtime, site, workspaceRoot, spec) {
       after.scrolls === before.scrolls && after.scrollY === before.scrollY,
       `滚动事件 ${after.scrolls - before.scrolls} 次，位置 ${before.scrollY} → ${after.scrollY}`
     )
+    const mine = freezes.filter((entry) => entry.sessionId === sessionId)
+    freezes.length = 0
+    if (spec.stage === 'window') {
+      check('后台窗口看不见，不请宿主定格', mine.length === 0, `定格 ${mine.length} 次`)
+    } else {
+      const [freeze, release] = mine
+      const frozen = freeze?.frame
+        ? readGrid(
+            nativeImage.createFromDataURL(freeze.frame.dataUrl),
+            { x: 0, y: spec.scrollY ?? 0, width: before.innerWidth, height: before.innerHeight },
+            spec.rows,
+            spec.columns
+          )
+        : null
+      check(
+        '截之前请宿主用此刻这一屏盖住页面，截完请它拿掉',
+        mine.length === 2 && !!freeze?.frame && release?.frame === null && release.at >= freeze.at,
+        `定格 ${mine.length} 次${freeze?.frame ? `，图 ${freeze.frame.width}×${freeze.frame.height}` : ''}`
+      )
+      check(
+        '定格图就是截之前的那一屏（没有编号框）',
+        !!frozen &&
+          frozen.checked > 0 &&
+          frozen.wrong.filter((cell) => cell.row !== Math.floor((spec.scrollY ?? 0) / 100))
+            .length === 0 &&
+          (!spec.button || !isLabelBlue(frozen.pixel(spec.button[0] + 45, spec.button[1] + 1))),
+        frozen ? `核对 ${frozen.checked} 格，错 ${frozen.wrong.length} 格` : '没有定格图'
+      )
+    }
     if (spec.options.fullPage) {
       check(
         '回执里的视口是截图时用户看到的位置',
@@ -267,7 +300,7 @@ async function scenario(runtime, site, workspaceRoot, spec) {
       const [red, green, blue] = reading.pixel(x + 45, y + 1)
       check(
         '元素标注的框画在按钮所在的页面位置上',
-        blue > 170 && red < 140 && green > 70 && green < 200,
+        isLabelBlue([red, green, blue]),
         `框上的像素 rgb(${red},${green},${blue})`
       )
     }
@@ -391,11 +424,18 @@ app.on('window-all-closed', () => {})
 app.whenReady().then(async () => {
   app.dock?.hide()
   const site = await startSite()
-  const runtime = createElectronBrowserRuntime()
+  const freezes = []
+  const runtime = createElectronBrowserRuntime({
+    // 宿主替身：记下每次定格与拿掉；盖上定格图要一点时间（界面解图、画出来），这里等 30 毫秒再结算。
+    onPageCaptureFreeze: async (sessionId, frame) => {
+      freezes.push({ sessionId, frame, at: Date.now() })
+      if (frame) await new Promise((resolve) => setTimeout(resolve, 30))
+    },
+  })
   const workspaceRoot = mkdtempSync(join(tmpdir(), 'velaros-full-page-probe-'))
   console.info(`Electron ${process.versions.electron}，截图落在 ${workspaceRoot}`)
   try {
-    for (const spec of Scenarios) await scenario(runtime, site, workspaceRoot, spec)
+    for (const spec of Scenarios) await scenario(runtime, site, workspaceRoot, spec, freezes)
   } catch (error) {
     results.push(false)
     console.info(`✗ 探针没跑完：${error.stack}`)

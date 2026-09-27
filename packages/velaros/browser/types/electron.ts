@@ -9,6 +9,7 @@ import type {
 import type {
   BrowserNavigationHistoryRestore,
   BrowserPageDiagnosticEntry,
+  BrowserPagePreviewFrame,
   BrowserUserActivityEvent,
   BrowserViewportOptions,
 } from './browser'
@@ -157,6 +158,14 @@ export interface BrowserRuntimeKernel extends BrowserPageDriverKernel {
   resolveCurrentPageUrl(session: BrowserSession, fallbackUrl: string): string
   /** 把 webview 会话包成 BrowserPageDriver（多态调用面）。 */
   wrapPageDriver(sessionId: string, session: BrowserSession): BrowserPageDriver
+  /**
+   * 截图会临时改动页面画面时请宿主用定格图盖住页面：宿主接了 onPageCaptureFreeze 才取定格图（captureFrame）交过去、
+   * 等它盖好，交回拿掉定格图的函数；宿主没接、取不到图交回 null。
+   */
+  freezePageForCapture(
+    sessionId: string,
+    captureFrame: () => Promise<Nullable<BrowserPagePreviewFrame>>
+  ): Promise<Nullable<() => void>>
 }
 
 /** 单个浏览器会话的主进程状态。 */
@@ -250,6 +259,16 @@ export interface ElectronBrowserRuntimeOptions {
    * 不实现或交回 null，就照旧等界面挂载，超时报 browser-view-not-attached。
    */
   provideBackgroundPage?: (sessionId: string) => Promise<Nullable<BrowserBackgroundPage>>
+  /**
+   * 截图要临时改动页面画面时（带元素编号、区域、整页：编号画进页面里，比一屏大的按一屏切块、每块都要按那一块重画一帧），
+   * 界面里的页面看得见跳动；宿主可以在这段时间用定格图盖住页面。截之前调一次，frame 是此刻这一屏，交回的 Promise
+   * 结算后才开始截（宿主盖好了再结算；迟迟不结算就不等了，照截）；截完（成功、失败或取消）再调一次、frame 为 null，拿掉定格图。
+   * 只对显示在宿主界面里的内嵌页面（`<webview>`）调；不实现就照旧截。
+   */
+  onPageCaptureFreeze?: (
+    sessionId: string,
+    frame: Nullable<BrowserPagePreviewFrame>
+  ) => Promise<void> | void
   onUserActivity?: (activity: BrowserUserActivityEvent) => void
   resolvePermissionRequest?: (input: BrowserPermissionRequest) => boolean
   resolveUnmanagedPermissionRequest?: (input: BrowserUnmanagedPermissionRequest) => boolean

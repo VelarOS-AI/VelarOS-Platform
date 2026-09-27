@@ -158,6 +158,8 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       onEvent: (event: BrowserPagePreviewStreamEvent) => void
     }
   >()
+  /** 正在截会改动页面画面的图的会话：这段时间画中画不转发帧，停在截之前的画面上。 */
+  private readonly capturingSessions = new Set<string>()
 
   constructor(
     private readonly kernel: BrowserRuntimeKernel,
@@ -281,6 +283,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
         retainFrames: false,
         quality,
         onFrame: (captured) => {
+          if (this.capturingSessions.has(sessionId)) return
           const sourceWidth = Math.max(1, captured.width)
           const sourceHeight = Math.max(1, captured.height)
           const scale = Math.min(
@@ -482,10 +485,18 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       : null
 
     const labelOptions = resolveScreenshotElementLabelOptions(options.annotateElements)
+    // 画编号、截区域、截整页都会临时改动页面画面：先请宿主用此刻这一屏盖住界面里的页面，画中画也停在这一帧
+    const disturbsDisplay =
+      !!labelOptions || !!options.region || !!resolveScreenshotFullPageOptions(options.fullPage)
+    let releaseFreeze: Nullable<() => void> = null
     let elementLabels: BrowserScreenshotElementLabel[] = []
     let shouldClearElementLabels = false
 
     try {
+      if (disturbsDisplay) {
+        this.capturingSessions.add(sessionId)
+        releaseFreeze = await this.freezeForCapture(sessionId, session)
+      }
       if (labelOptions) {
         elementLabels = await this.installScreenshotElementLabels(session, labelOptions)
         shouldClearElementLabels = true
@@ -542,7 +553,44 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       if (shouldClearElementLabels) {
         await this.clearScreenshotElementLabels(session)
       }
+      if (disturbsDisplay) {
+        // 页面还原（去掉编号、回到原来的画面）的那一帧要先画出来，再拿掉定格图、放开画中画
+        if (releaseFreeze || this.previewStreams.has(sessionId)) {
+          await this.delay(BrowserTuning.screenshot.captureFreezeReleaseDelayMs)
+        }
+        this.capturingSessions.delete(sessionId)
+        releaseFreeze?.()
+      }
     }
+  }
+
+  /**
+   * 请宿主用此刻这一屏盖住界面里的页面，交回拿掉定格图的函数；只对 `<webview>`（后台窗口看不见，不用盖）。
+   * 宿主没接、页面不在界面里、取不到图交回 null。
+   */
+  private freezeForCapture(
+    sessionId: string,
+    session: BrowserSession
+  ): Promise<Nullable<() => void>> {
+    const webContents = session.webContents
+    if (webContents.isDestroyed() || webContents.getType() !== 'webview')
+      return Promise.resolve(null)
+
+    return this.kernel.freezePageForCapture(sessionId, async () => {
+      const image = await webContents.capturePage()
+      if (image.isEmpty()) return null
+
+      const { width, height } = image.getSize()
+      const jpeg = image.toJPEG(BrowserTuning.screenshot.captureFreezeJpegQuality)
+      return {
+        dataUrl: `data:image/jpeg;base64,${jpeg.toString('base64')}`,
+        width,
+        height,
+        url: webContents.getURL(),
+        title: toNullable(webContents.getTitle()),
+        capturedAt: Date.now(),
+      }
+    })
   }
 
   private async captureExternalScreenshot(
