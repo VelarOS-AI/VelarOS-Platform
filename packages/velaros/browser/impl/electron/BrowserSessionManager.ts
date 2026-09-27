@@ -5,6 +5,8 @@
 //   → `syncSessionSiteContext` 持续跟随导航 → `closeSession` / `dispose` 摘除
 // `waitForSession` 存在是因为**工具调用可能早于 renderer 挂载**：agent 先发 navigate、webview
 // 还没 attach。所以取会话是「等一小会儿」而不是「立即失败」，超时才报错。
+// 界面根本不会挂上来（用户切到了别的对话）时，宿主经 `provideBackgroundPage` 给一个后台页面，这里直接接管；
+// 界面挂载走动作队列，在等的操作正占着队列，所以后台页面必须在等待里接上，不能排队。
 //
 // ## 安全门：权限请求（失败方向）
 // 页面发起的权限请求（摄像头 / 麦克风 / 剪贴板 / 通知…）一律经 `handlePermissionRequest`：
@@ -136,6 +138,8 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
       timeout: TimerLease
     }>
   >()
+  /** 已经在向宿主要后台页面的会话：同一个会话的多个等待者只要一次。 */
+  private readonly backgroundPageRequests = new Set<string>()
   /** Electron Session 是共享对象，下载/权限监听只安装一次。 */
   private readonly instrumentedElectronSessions = new WeakSet<electron.Session>()
   /** 权限 gateway 的反注册函数，runtime 终止时不得留下指向已释放 broker 的 handler。 */
@@ -221,7 +225,42 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
       const waiters = this.attachWaiters.get(sessionId) ?? []
       waiters.push({ resolve, reject, timeout })
       this.attachWaiters.set(sessionId, waiters)
+      this.requestBackgroundPage(sessionId)
     })
+  }
+
+  /** 等了一小段还没有页面挂上来：向宿主要一个后台页面。同一个会话同时只要一次。 */
+  private requestBackgroundPage(sessionId: string): void {
+    const provide = this.callbacks.provideBackgroundPage
+    if (!provide || this.backgroundPageRequests.has(sessionId)) return
+    this.backgroundPageRequests.add(sessionId)
+    this.timers.after(
+      BrowserTuning.session.backgroundPageGraceMs,
+      () => {
+        void this.adoptBackgroundPage(sessionId, provide).finally(() =>
+          this.backgroundPageRequests.delete(sessionId)
+        )
+      },
+      { label: 'browser.session.backgroundPage' }
+    )
+  }
+
+  /** 页面这时已经挂上、或者没人在等了，就不开；宿主交回的页面直接接管，标成不可见。 */
+  private async adoptBackgroundPage(
+    sessionId: string,
+    provide: NonNullable<ElectronBrowserRuntimeOptions['provideBackgroundPage']>
+  ): Promise<void> {
+    if (this.getSession(sessionId) || isEmpty(this.attachWaiters.get(sessionId) ?? [])) return
+    try {
+      const webContents = await provide(sessionId)
+      if (!webContents || webContents.isDestroyed() || this.getSession(sessionId)) return
+      this.attachWebContents(sessionId, webContents).visible = false
+    } catch (error) {
+      this.log.warn('后台页面没开成，照旧等界面挂载', {
+        sessionId,
+        error: AppError.getMessage(error),
+      })
+    }
   }
 
   /** 接管 renderer 创建的 WebContents。 */

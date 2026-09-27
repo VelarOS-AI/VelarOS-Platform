@@ -31,6 +31,8 @@ export const BrowserTuning = Object.freeze({
     recentErrorWindowMs: 300_000,
     /** 等会话的 WebContents attach 完成的缺省毫秒数。 */
     attachTimeoutMs: 5_000,
+    /** 等了这么多毫秒还没有页面挂上来，就向宿主要后台页面（界面挂载走动作队列，在等的操作占着队列时挂不上来）。 */
+    backgroundPageGraceMs: 300,
     /** 等挂起事件时的轮询间隔毫秒数。 */
     pendingEventPollIntervalMs: 50,
   }),
