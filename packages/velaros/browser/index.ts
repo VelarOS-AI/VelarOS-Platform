@@ -77,6 +77,7 @@ export type {
   BrowserSystemPointerMoveOptions,
 } from './types/driver.js'
 export type {
+  BrowserBackgroundPage,
   BrowserPageDriverFactory,
   BrowserPageDriverFactoryInput,
   BrowserPermissionRequest,

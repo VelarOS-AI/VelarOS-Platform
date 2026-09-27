@@ -45,6 +45,7 @@ import type {
   BrowserViewportOptions,
 } from '../../types/browser'
 import {
+  type BrowserBackgroundPage,
   type BrowserPermissionRequestHandler,
   type BrowserSession,
   type BrowserUnmanagedPermissionRequest,
@@ -245,21 +246,45 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
     )
   }
 
-  /** 页面这时已经挂上、或者没人在等了，就不开；宿主交回的页面直接接管，标成不可见。 */
+  /**
+   * 页面这时已经挂上、或者没人在等了，就不开。宿主交回的页面先接管（弹窗、下载、对话框从头就归运行时管）、
+   * 标成不可见，加载完会话的地址再交给在等的操作：它们先摘下来、停掉超时，加载有自己的超时。
+   */
   private async adoptBackgroundPage(
     sessionId: string,
     provide: NonNullable<ElectronBrowserRuntimeOptions['provideBackgroundPage']>
   ): Promise<void> {
     if (this.getSession(sessionId) || isEmpty(this.attachWaiters.get(sessionId) ?? [])) return
+    let page: Nullable<BrowserBackgroundPage>
     try {
-      const webContents = await provide(sessionId)
-      if (!webContents || webContents.isDestroyed() || this.getSession(sessionId)) return
-      this.attachWebContents(sessionId, webContents).visible = false
+      page = await provide(sessionId)
     } catch (error) {
       this.log.warn('后台页面没开成，照旧等界面挂载', {
         sessionId,
         error: AppError.getMessage(error),
       })
+      return
+    }
+    if (!page || page.webContents.isDestroyed() || this.getSession(sessionId)) return
+
+    const waiters = this.attachWaiters.get(sessionId) ?? []
+    this.attachWaiters.delete(sessionId)
+    for (const waiter of waiters) waiter.timeout.cancel()
+    this.attachWebContents(sessionId, page.webContents).visible = false
+    try {
+      await this.pageWaiter.loadUrl(page.webContents, page.url)
+    } catch (error) {
+      // 没加载成也照样交出去：页面上是失败页，操作自己看得到。
+      this.log.warn('后台页面没加载完', {
+        sessionId,
+        url: page.url,
+        error: AppError.getMessage(error),
+      })
+    }
+    const session = this.getSession(sessionId)
+    for (const waiter of waiters) {
+      if (session) waiter.resolve(session)
+      else waiter.reject(new AppError('VALIDATION', '浏览器页面会话已关闭。'))
     }
   }
 

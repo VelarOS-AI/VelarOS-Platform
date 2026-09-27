@@ -182,6 +182,13 @@ export interface BrowserWebAuthnAccountSelectionRequest {
   }>
 }
 
+/** 宿主给后台会话开的页面：新开的空白页，运行时接管后加载 url。 */
+export interface BrowserBackgroundPage {
+  webContents: electron.WebContents
+  /** 会话当前站点的地址。 */
+  url: string
+}
+
 export interface ElectronBrowserRuntimeOptions {
   createPageDriver?: BrowserPageDriverFactory
   externalBrowserLauncher?: LooseOptional<BrowserExternalPageLauncher>
@@ -197,11 +204,11 @@ export interface ElectronBrowserRuntimeOptions {
   onSessionClosed?: (sessionId: string) => void
   /**
    * 有操作要页面、界面却没挂 webview（比如用户切到了别的对话）时，宿主给这个会话开一个后台页面：交回一个
-   * WebContents（与界面 webview 同样的分区与沙箱，可以正在加载会话最后的地址），运行时不经动作队列直接接管、标成不可见，
-   * 在等的操作照常在上面继续；界面之后挂上 webview 会整个换掉它，开的页面由宿主自己关。
+   * 新开的空白 WebContents（与界面 webview 同样的分区与沙箱）和会话当前站点的地址。运行时不经动作队列直接接管、
+   * 标成不可见，加载完这个地址再交给在等的操作；界面之后挂上 webview 会整个换掉它，开的页面由宿主自己关。
    * 不实现或交回 null，就照旧等界面挂载，超时报 browser-view-not-attached。
    */
-  provideBackgroundPage?: (sessionId: string) => Promise<Nullable<electron.WebContents>>
+  provideBackgroundPage?: (sessionId: string) => Promise<Nullable<BrowserBackgroundPage>>
   onUserActivity?: (activity: BrowserUserActivityEvent) => void
   resolvePermissionRequest?: (input: BrowserPermissionRequest) => boolean
   resolveUnmanagedPermissionRequest?: (input: BrowserUnmanagedPermissionRequest) => boolean
