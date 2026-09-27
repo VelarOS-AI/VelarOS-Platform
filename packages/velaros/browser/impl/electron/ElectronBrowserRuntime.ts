@@ -747,8 +747,8 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
         }
       }
 
-      const session = this.sessionManager.getSession(sessionId)
-      if (!session) throw new AppError('NOT_FOUND', `浏览器会话不存在：${sessionId}`)
+      // 和别的读操作一样等页面挂上：界面没挂着网页时宿主会给后台页面，没有才报视图没接入。
+      const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
       const wc = session.webContents
       // getPageState 不注入脚本，只读取 WebContents 已知状态。
       const url = this.getLoadedPageUrl(session) ?? session.url ?? ''
