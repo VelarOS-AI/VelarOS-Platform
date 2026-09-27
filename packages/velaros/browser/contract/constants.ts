@@ -247,17 +247,11 @@ export const BrowserFileLimits = Object.freeze({
   listDepth: 16,
 })
 
-/** 浏览器偏好的合法值闭集与出厂缺省：搜索引擎与自动化后端。加一个引擎只改这里。 */
+/** 浏览器偏好（搜索引擎）的合法值闭集与出厂缺省。加一个引擎只改这里。 */
 export const BrowserSearchEngineIds = Object.freeze(['google', 'bing'] as const)
-
-/** 自动化后端的合法值闭集：内嵌 webview 还是外部浏览器。 */
-export const BrowserAutomationModes = Object.freeze(['webview', 'external'] as const)
 
 /** 出厂缺省搜索引擎。 */
 export const DefaultBrowserSearchEngine = 'google' as const
-
-/** 出厂缺省自动化后端。 */
-export const DefaultBrowserAutomationMode = 'webview' as const
 
 /**
  * 「内嵌浏览器视图没接上」这一失败态的跨层标记（挂在 `AppError.context.reason` 上）。

@@ -83,8 +83,6 @@ describe('浏览器单元的对外承诺', () => {
     expect(browserPreferences.resolveSearchEngineId('bing')).toBe('bing')
     expect(browserPreferences.resolveSearchEngineId('duckduckgo')).toBe('google')
     expect(browserPreferences.resolveSearchEngineId(undefined)).toBe('google')
-    expect(browserPreferences.resolveAutomationMode('external')).toBe('external')
-    expect(browserPreferences.resolveAutomationMode('随便写的')).toBe('webview')
   })
 
   test('INV-7 动作策略按词表判定，没有策略表就是放行', () => {

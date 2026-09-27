@@ -99,7 +99,7 @@ requirePublicTypeContracts(
   'browser/index.ts',
   'browser/contracts.ts',
   'browser/types/browser.ts',
-  ['BrowserActionPolicyConfig', 'BrowserAutomationMode']
+  ['BrowserActionPolicyConfig', 'BrowserSearchEngineId']
 )
 // 浏览器单元的宿主边界：Electron 只许在 impl/electron、utils/electron 与 types/electron.ts 里 import（值和类型都算），
 // 其余源码与宿主无关；不许引产品的宿主路径，也不许引 core 里按具体域命名的公共件。

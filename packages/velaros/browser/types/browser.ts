@@ -62,7 +62,6 @@ export interface BrowserPageState {
 }
 
 export type BrowserSearchEngineId = 'google' | 'bing'
-export type BrowserAutomationMode = 'webview' | 'external'
 
 export interface BrowserActionPolicyConfig {
   /** 没有命中 allow/deny 时的默认策略。 */
