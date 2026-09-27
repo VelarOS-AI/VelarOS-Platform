@@ -81,7 +81,7 @@
       "directory": "packages/velaros",
       "name": "@velaros-ai/velaros",
       "version": "0.6.0",
-      "description": "The capability units the model imports as velaros:* modules and every space mounts with its own port (products assemble the spaces; each unit's ./local entry gives its port on this machine): files (machine files, system space; with the machine file port and a global search for host UIs underneath), images (view pictures within provider limits; with the machine image port, sips on macOS), shell (run commands; with the local machine host underneath: background tasks, interactive consoles, shell selection, process confinement, the Windows process host, and the processes, ports and metrics a host UI shows), sandbox (rehearse in a mirror, then apply; with the local rehearsal sandbox underneath), project (governed project files and code questions: velaros:project and velaros:code, with the project kernel and its transactions underneath, and the ports a project hands to shell, sandbox and images), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), memory (long-term memory: one directory of Markdown files per host-given scope, plus the index a host puts at the start of each session), office (Word, PowerPoint and Excel generation, PDF reading and editing, Word and LaTeX to PDF, document preview and Markdown conversion, with the document engines underneath and the narrow renderer primitives the Document Renderer uses) and browser (velaros:browser to drive and read pages, velaros:devtools for console, network, storage, performance, recording, emulation and user scripts, with the CDP drivers, page engines, Electron session runtime and site workspace underneath). One plain directory per unit, one convention for all.",
+      "description": "The capability units the model imports as velaros:* modules and every space mounts with its own port (products assemble the spaces; each unit's ./local entry gives its port on this machine): files (machine files, system space; with the machine file port and a global search for host UIs underneath), images (view pictures within provider limits; with the machine image port, sips on macOS), shell (run commands; with the local machine host underneath: background tasks, interactive consoles, shell selection, process confinement, the Windows process host, and the processes, ports and metrics a host UI shows), sandbox (rehearse in a mirror, then apply; with the local rehearsal sandbox underneath), project (governed project files and code questions: velaros:project and velaros:code, with the project kernel and its transactions underneath, and the ports a project hands to shell, sandbox and images), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), memory (long-term memory: one directory of Markdown files per host-given scope, plus the index a host puts at the start of each session), office (Word, PowerPoint and Excel generation, PDF reading and editing, Word and LaTeX to PDF, document preview and Markdown conversion, with the document engines underneath and the narrow renderer primitives the Document Renderer uses), browser (velaros:browser to drive and read pages, velaros:devtools for console, network, storage, performance, recording, emulation and user scripts, with the CDP drivers, page engines, Electron session runtime and site workspace underneath) and web (web search and pages read as text in a hidden browser page the host provides, falling back from Google to Bing). One plain directory per unit, one convention for all.",
       "exportSubpaths": [
         ".",
         "./act/agents",
@@ -113,7 +113,9 @@
         "./sandbox/local",
         "./shell",
         "./shell/contracts",
-        "./shell/local"
+        "./shell/local",
+        "./web",
+        "./web/contracts"
       ],
       "repositoryDirectory": "packages/velaros"
     },

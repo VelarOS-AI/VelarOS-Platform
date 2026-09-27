@@ -104,6 +104,14 @@ export const CodeSurfaces = [
     interfaces: ['CdpOperationsApi'],
     templates: 'cdp-template.js',
   },
+  {
+    // 网上查资料：搜索引擎搜、把网页读成文字，都在宿主给的不显示页面里跑；和 velaros:browser 不是一件事（那边是在看得见的页面上动手）
+    namespace: 'web',
+    directory: 'velaros',
+    unit: 'web',
+    interfaces: ['WebOperationsApi'],
+    templates: 'template.js',
+  },
   // ── Act 自管理能力：模型从 velaros:system 导入 goal 成员（聚合包由 act/system 的目录编出），模块身份照旧是 velaros:system-goal
   {
     namespace: 'system-goal',
@@ -262,6 +270,7 @@ export const HostContextTypes = new Set([
   'MemoryOperationContext',
   'OfficeOperationContext',
   'BrowserOperationContext',
+  'WebOperationContext',
   'GoalOperationContext',
   'ModulesOperationContext',
   'StoreOperationContext',

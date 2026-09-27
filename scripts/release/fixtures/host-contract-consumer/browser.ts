@@ -2,5 +2,7 @@
 export { ComputerErrorCodes, ComputerInputLimits } from '@velaros-ai/velaros/computer/contracts'
 export { MemoryLimits, MemoryTypes, VelarMemoryModule } from '@velaros-ai/velaros/memory/contracts'
 export { OfficeErrorCodes, OfficeInputLimits, VelarOfficeModule } from '@velaros-ai/velaros/office/contracts'
+export { VelarWebModule, WebErrorCodes, WebLimits } from '@velaros-ai/velaros/web/contracts'
+export type { WebPageText, WebSearchResults } from '@velaros-ai/velaros/web/contracts'
 export { LanguageServiceIds, CodeQuerySources, DevelopmentCodeLimits, BuiltinExternalLanguageServers } from '@velaros-ai/velaros/project/contracts'
 export type { ExternalLanguageServerSpec, ExternalLanguageDiagnostic, ExternalLanguageStatus, ExternalLanguageLocation, ExternalLanguageHover } from '@velaros-ai/velaros/project/contracts'

@@ -56,7 +56,7 @@ async function open(runtime) {
   return s
 }
 
-test('INV-4 all 12 generated module surfaces / 94 operations use the same strict registry and templates', async (t) => {
+test('INV-4 all 13 generated module surfaces / 96 operations use the same strict registry and templates', async (t) => {
   const f = await storageFixture(t)
   const modules = []
   for (const unit of [
@@ -69,6 +69,7 @@ test('INV-4 all 12 generated module surfaces / 94 operations use the same strict
     'memory',
     'office',
     'browser',
+    'web',
   ]) {
     const exports = await import(`../../../dist/${unit}/contracts.js`)
     for (const surface of Object.values(exports).filter(
@@ -84,10 +85,10 @@ test('INV-4 all 12 generated module surfaces / 94 operations use the same strict
       )
     }
   }
-  assert.equal(modules.length, 12)
+  assert.equal(modules.length, 13)
   assert.equal(
     modules.reduce((n, m) => n + Object.keys(m.operations).length, 0),
-    94
+    96
   )
   const kernel = createOperationRuntime({
     modules,

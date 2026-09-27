@@ -60,5 +60,6 @@ try {
 | [memory](memory/README.md) | `@velaros-ai/velaros/memory` | 长期记忆库：一个作用域一个目录的 Markdown，会话开场的索引 |
 | [office](office/README.md) | `@velaros-ai/velaros/office` | 办公文档 `velaros:office`：Word、PowerPoint、Excel 与 PDF 的生成、读取、转换与预览 |
 | [browser](browser/README.md) | `@velaros-ai/velaros/browser` | 浏览器 `velaros:browser`、`velaros:devtools`、`velaros:cdp`，连同 CDP 驱动与 Electron 会话运行时 |
+| [web](web/README.md) | `@velaros-ai/velaros/web` | 网上查资料 `velaros:web`：搜索引擎搜、把网页读成文字，都在宿主给的不显示页面里跑 |
 
 各单元的子入口（`/contracts` 的可移植数据、`/local` 的本机实现、`/renderer`、`/electron`）见单元 README；模型能 import 的系统操作与可用条件见 [Act 能力目录](act/README.md)。

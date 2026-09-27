@@ -18,6 +18,8 @@ import {
 } from '@velaros-ai/velaros/memory'
 import { projectCapabilityPorts, type ProjectHostPort } from '@velaros-ai/velaros/project'
 import { type LocalShellHostApi, shellCommandPolicy, shellOperations } from '@velaros-ai/velaros/shell'
+import { webOperations, type WebOperationContext, type WebPage, type WebSpacePort } from '@velaros-ai/velaros/web'
+import type { WebPageText, WebSearchResults } from '@velaros-ai/velaros/web/contracts'
 import { createLocalShellHost } from '@velaros-ai/velaros/shell/local'
 
 // 空间由宿主自己装：共用能力的项目端口从 projectCapabilityPorts 取，本机实现从各单元的 `./local` 入口取，再接成代码面的能力端口。
@@ -57,6 +59,14 @@ const memoryStore: MemoryStoreApi = createMemoryStore({ root: '/srv/velaros/memo
 const memoryScope: MemoryScopeApi = memoryStore.scope('project:/srv/project')
 const memoryContext: MemoryOperationContext = { abortSignal: new AbortController().signal, memory: memoryScope }
 void [memoryScope.renderIndex(), memoryStore.listScopes(), memoryOperations.list(memoryContext)]
+
+// 网上查资料在 velaros 的 web 单元里：宿主给不显示的页面与用户的搜索引擎，两个操作交回声明好的结果。
+declare const hiddenPage: WebPage
+const webSpace: WebSpacePort = { openPage: async () => hiddenPage, searchEngine: () => 'bing' }
+const webContext: WebOperationContext = { abortSignal: new AbortController().signal, web: webSpace }
+const searched: Promise<WebSearchResults> = webOperations.search({ query: '发布说明', limit: 5 }, webContext)
+const readPage: Promise<WebPageText> = webOperations.read({ url: 'https://example.com/', maxChars: 2000 }, webContext)
+void [searched, readPage]
 
 // 主循环与正式装配均从声明入口消费，业务能力沿 Kernel 调用。
 declare const loop:ActRunServiceOptions

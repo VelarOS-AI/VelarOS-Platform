@@ -192,6 +192,7 @@ edit 与 inspect 交回完整差量，`velaros:code` 不按条数截，`velaros:
 | `velaros:browser` | open / inspect / screenshot / evaluate / frames / click / fill / press / 键鼠原子（keyDown、mouseMove……）/ goto / waitFor… / download 等 34 个 | — | 客居（前端开发要看渲染） | `@velaros-ai/velaros` 的 `browser/`（CDP 驱动、页面引擎、Electron 会话运行时、站点工作区也在这个单元里；浏览器空间挂它） |
 | `velaros:devtools` | diagnostics / request / zoom / network / startTrace / insight / heapSnapshot / 录屏 / 用户脚本等 18 个 | — | 客居 | 同上，与 `velaros:browser` 共用一个空间端口 |
 | `velaros:cdp` | send / events / waitForEvent / reset：模型自己的一条 CDP 会话（ADR 0012） | — | 客居 | 同上，与 `velaros:browser` 共用一个空间端口 |
+| `velaros:web` | search / read：搜索引擎搜、把网页读成文字 | 宿主给了不显示的页面时挂 | 宿主给了不显示的页面时挂 | `@velaros-ai/velaros` 的 `web/`（页面脚本、跳转链接解开、结果整理与正文切分；浏览器由宿主给） |
 
 **一件能力只有一份实现、一份声明、一份代码模版**，不认识任何空间。空间之间不一样的地方全落在**注入的端口**上：
 
@@ -205,6 +206,7 @@ edit 与 inspect 交回完整差量，`velaros:code` 不按条数截，`velaros:
 | `velaros:memory` | `MemoryScopePort` | 这个会话落在哪个作用域：宿主用 `createMemoryStore({ root }).scope(作用域)` 取一份交进来，作用域字符串由产品定、记忆不解释；会话开场的索引也由宿主用同一份的 `renderIndex()` 放进系统提示词（ADR 0010） |
 | `velaros:office` | `OfficeSpacePort` | `getRootPath`：文档读写落在哪个根里（出了根一律拒绝）；`inspectEnvironment`、`runCommand`：本机有没有 LibreOffice、LaTeX 编译器，外部命令交给谁跑（只收原生 argv）；`locateMarkItDown`：按宿主自己的插件状态回答 MarkItDown 装没装、停没停用 |
 | `velaros:browser`、`velaros:devtools`、`velaros:cdp` | `BrowserSpacePort` | 已经绑好会话与站点的浏览器：宿主拿 Electron 运行时按会话与站点拼它（要登录墙门控就用 `createBrowserLoginGate` 包一层）；站点工作区在哪由它的 `getContext` 回答，浏览器空间另外挂站点工作区上的 `velaros:files` |
+| `velaros:web` | `WebSpacePort` | `openPage`：开一个用户看不到的页面（不落盘的临时会话、关掉后台节流）；`searchEngine`：用户选的搜索引擎；可选的 `resolveRedirect`：把 Google 的 `/goto` 跳转链接问一次换成真实地址 |
 
 **真正是两件事的不硬合。** 本机文件与项目文件看上去都是「读写文件」，其实不是一件事：项目里的文件有项目那一套——
 校验器、带版本防护的事务、撤销账本、改完过校验才落盘；本机上的文件没有这些，

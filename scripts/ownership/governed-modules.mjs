@@ -554,6 +554,31 @@ export const GovernedModules = [
     acceptance: 'browser/spec/acceptance.test.ts',
   },
   {
+    // 能力单元：网上查资料（velaros:web）：搜索引擎搜、把网页读成文字。浏览器由宿主给（不显示的页面），
+    // 这里只有往页面里装地址、跑读取脚本、解跳转链接、整理结果与切分正文，Google 搜不通时换 Bing
+    directory: 'velaros',
+    unit: 'web',
+    name: '@velaros-ai/velaros/web',
+    contract: 'web/contract',
+    types: 'web/types',
+    portable: 'web.ts',
+    impl: 'web/impl',
+    utils: 'web/utils',
+    tuning: 'tuning.ts',
+    // 可移植数据渲染进程也能加载；操作只给 Node 宿主
+    browserSafeEntries: ['contracts.ts'],
+    // 空间端口：search 与 read 经 ctx.web 调它（开不显示的页面、报用户选的搜索引擎）；每个方法都必须有操作在调
+    hostPort: 'WebSpacePort',
+    hostPortField: 'web',
+    surfaceFile: 'web/impl/WebOperations.ts',
+    layers: [
+      // 代码面 web 命名空间的两个操作：入参核对，经端口开页面、装地址、跑页面脚本
+      ['WebOperations.ts'],
+    ],
+    invariants: 'web/spec/invariants.md',
+    acceptance: 'web/spec/acceptance.test.ts',
+  },
+  {
     directory: 'script',
     name: '@velaros-ai/script',
     // Script 执行引擎：检查、精确编辑、隔离执行与 Kernel 能力桥；模型入口由 Velaros 装配
