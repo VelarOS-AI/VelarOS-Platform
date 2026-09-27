@@ -144,8 +144,10 @@ function createPort(engine, partition = Partition, backoff = null) {
           loads.push({ url, at: Date.now() })
           return loadPage(contents, url, loadSignal)
         },
-        evaluate: (expression) => contents.executeJavaScript(expression),
+        // mainFrame 上的当场跑；webContents.executeJavaScript 要等页面停止加载才跑，结果页就得等整页加载完
+        evaluate: (expression) => contents.mainFrame.executeJavaScript(expression),
         url: () => (contents.isDestroyed() ? '' : contents.getURL()),
+        loading: () => !contents.isDestroyed() && contents.isLoadingMainFrame(),
         close: () => {
           open.delete(window)
           if (!window.isDestroyed()) window.destroy()
@@ -196,16 +198,28 @@ text</p></div></li>
 <div id="app" aria-hidden="true"><h1>弹窗后面的正文</h1><p>${'弹窗打开时正文被标成 aria-hidden。'.repeat(8)}</p></div>
 <div role="dialog">接受 Cookie？</div></body></html>`,
   '/jump': `<!doctype html><html><head><title>跳转中</title><script>location.replace('/article')</script></head><body>跳转中……</body></html>`,
+  '/late-jump': `<!doctype html><html><head><title>稍等</title><script>addEventListener('load', () => location.replace('/slow-article'))</script></head><body>正在跳到正文……</body></html>`,
   '/spa': `<!doctype html><html><head><title>单页应用</title></head><body><div id="root">加载中</div><script>
 setTimeout(() => { document.getElementById('root').innerHTML = '<p>骨架……</p>' }, 300)
 setTimeout(() => { document.getElementById('root').innerHTML = '<article><h1>单页应用</h1><p>${'异步渲染出来的正文。'.repeat(10)}</p></article>' }, 700)
 </script></body></html>`,
 }
 
-/** 起一个本地站点，按路径交夹具页。 */
+/** 慢吞吞的正文页：过一秒半才回，加载完之后自己跳过来的页面要等它。 */
+const SlowArticle = `<!doctype html><html><head><title>慢正文</title></head><body><article><h1>慢正文</h1><p>${'一秒半之后才到的正文。'.repeat(6)}</p></article></body></html>`
+
+/** 起一个本地站点，按路径交夹具页；/slow-article 过一秒半才回。 */
 async function startFixtures() {
   const server = http.createServer((request, response) => {
-    const page = Fixtures[new URL(request.url, 'http://localhost').pathname]
+    const path = new URL(request.url, 'http://localhost').pathname
+    if (path === '/slow-article') {
+      setTimeout(() => {
+        response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+        response.end(SlowArticle)
+      }, 1_500)
+      return
+    }
+    const page = Fixtures[path]
     response.writeHead(page ? 200 : 404, { 'content-type': 'text/html; charset=utf-8' })
     response.end(page ?? 'not found')
   })
@@ -290,6 +304,12 @@ async function fixtureSuite(port, origin) {
     spa.text.includes('异步渲染出来的正文') && !spa.text.includes('骨架'),
     `${Date.now() - started} ms，${JSON.stringify(spa.text.slice(0, 40))}`
   )
+  const late = await webOperations.read({ url: `${origin}/late-jump` }, ctx)
+  check(
+    'read 加载完之后页面自己又跳到一个慢页面：等它跳完再读',
+    late.url === `${origin}/slow-article` && late.text.includes('一秒半之后才到的正文'),
+    `${late.url} ${JSON.stringify(late.text.slice(0, 30))}`
+  )
   const sliced = await webOperations.read({ url: `${origin}/article`, maxChars: 10 }, ctx)
   check(
     'read 按字符切段：10 个字符一段，nextOffset 接得上',
@@ -310,11 +330,20 @@ async function fixtureSuite(port, origin) {
 
 // ── 真搜索 ──────────────────────────────────────────────────────
 
+/** 新起一份操作（真钟）：进程里的记忆是空的，像刚启动。 */
+function freshOperations() {
+  return new WebOperations({
+    now: () => Date.now(),
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    timeout: (ms) => AbortSignal.timeout(ms),
+  })
+}
+
 /** 真搜一次：打印用了哪个搜索引擎、几条、前三条标题与耗时。 */
-async function liveSearch(port, query) {
+async function liveSearch(port, query, operations = webOperations) {
   const started = Date.now()
   try {
-    const found = await webOperations.search({ query, limit: 8 }, contextOf(port))
+    const found = await operations.search({ query, limit: 8 }, contextOf(port))
     const ms = Date.now() - started
     check(
       `真搜「${query}」有结果`,
@@ -340,7 +369,7 @@ async function liveSuite() {
   const english = await liveSearch(google.port, 'TypeScript satisfies operator')
   if (chinese?.engine === 'bing')
     info(
-      'Google 搜不通，换成了 Bing；接下来十分钟的搜索直接走 Bing（上面第二次搜索的耗时就是这样来的）'
+      'Google 搜不通，换成了 Bing；接下来 12 小时的搜索直接走 Bing（上面第二次搜索的耗时就是这样来的）'
     )
   const gotos = [chinese, english]
     .flatMap((found) => found?.results ?? [])
@@ -387,10 +416,12 @@ async function googleDownSuite() {
   })
   const directory = mkdtempSync(join(tmpdir(), 'velaros-web-probe-'))
   const backoffPath = join(directory, 'engine-backoff.json')
+  // 新起一份操作：前面真搜时 Google 若已经搜不通，进程里那份记着退避，这里要从头量一次换 Bing
+  const operations = freshOperations()
   try {
     const blocked = createPort('google', GoogleDownPartition, createBackoffFile(backoffPath))
     const started = Date.now()
-    const first = await liveSearch(blocked.port, '北京 故宫 开放时间')
+    const first = await liveSearch(blocked.port, '北京 故宫 开放时间', operations)
     const bingLoad = blocked.loads.find((load) => load.url.startsWith('https://www.bing.com/'))
     const fallbackMs = bingLoad ? bingLoad.at - started : Number.POSITIVE_INFINITY
     check(
@@ -407,7 +438,7 @@ async function googleDownSuite() {
     )
     const before = googleRequests
     const again = Date.now()
-    const second = await liveSearch(blocked.port, 'Rust ownership explained')
+    const second = await liveSearch(blocked.port, 'Rust ownership explained', operations)
     check(
       '记住 Google 打不开：接下来的搜索直接走 Bing，一个 Google 请求都不发',
       second?.engine === 'bing' && googleRequests === before,
@@ -420,11 +451,7 @@ async function googleDownSuite() {
     )
 
     // 像重启之后：新起一份操作、Google 其实打得开的会话，只凭 JSON 文件就跳过 Google
-    const restarted = new WebOperations({
-      now: () => Date.now(),
-      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-      timeout: (ms) => AbortSignal.timeout(ms),
-    })
+    const restarted = freshOperations()
     const fresh = createPort('google', Partition, createBackoffFile(backoffPath))
     const afterRestart = await restarted.search(
       { query: 'Electron session partition', limit: 5 },
@@ -459,7 +486,7 @@ async function run() {
     fixtures.close()
   }
   await liveSuite()
-  // 最后跑：它会让进程记住 Google 打不开，之后十分钟的搜索都直接走 Bing
+  // 最后跑：它用自己新起的操作量换 Bing，不受前面真搜的影响
   await googleDownSuite()
   await hidden.clearStorageData()
 }

@@ -12,6 +12,7 @@ import type { WebPage } from '../contract/requires'
 import { bingLink, googleLink } from '../spec/support'
 import {
   bingTarget,
+  blockedAddress,
   blockedReason,
   engineOrder,
   googleTarget,
@@ -156,6 +157,13 @@ describe('整理结果', () => {
 })
 
 describe('认验证页', () => {
+  test('只看地址：/sorry/ 与同意页认得出，别的站的同名路径不算', () => {
+    expect(blockedAddress('https://www.google.com.hk/sorry/index')).toContain('/sorry/index')
+    expect(blockedAddress('https://consent.google.com/ml')).toContain('consent.google.com')
+    expect(blockedAddress('https://example.com/sorry/index')).toBeNull()
+    expect(blockedAddress('about:blank')).toBeNull()
+  })
+
   test('Google 的 /sorry/ 与同意页看地址就认，认没认出结果都算', () => {
     expect(blockedReason('https://www.google.com/sorry/index?continue=x', '', 3)).toContain(
       '验证页'
@@ -236,8 +244,13 @@ describe('正文', () => {
 
 describe('收页面脚本交回的值', () => {
   test('结果页：不是对象当作什么都没抓到；形状不对的条目丢掉，缺的字段按空算', () => {
-    expect(searchScanOf(null)).toEqual({ hits: [], text: '', noResults: false })
-    expect(searchScanOf('oops')).toEqual({ hits: [], text: '', noResults: false })
+    expect(searchScanOf(null)).toEqual({ hits: [], text: '', noResults: false, ready: 'complete' })
+    expect(searchScanOf('oops')).toEqual({
+      hits: [],
+      text: '',
+      noResults: false,
+      ready: 'complete',
+    })
     expect(
       searchScanOf({
         hits: [{ title: 1, href: 'https://a.example/', snippet: null }, { href: 2 }, 'x', null],
@@ -248,7 +261,9 @@ describe('收页面脚本交回的值', () => {
       hits: [{ title: '', href: 'https://a.example/', snippet: '' }],
       text: '',
       noResults: false,
+      ready: 'complete',
     })
+    expect(searchScanOf({ hits: [], ready: 'loading' }).ready).toBe('loading')
     expect(searchScanOf({ hits: 'nope', noResults: true }).noResults).toBe(true)
   })
 

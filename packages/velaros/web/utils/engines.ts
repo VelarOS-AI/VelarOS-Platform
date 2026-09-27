@@ -150,15 +150,22 @@ export function searchResults(
   return results
 }
 
+/** 看地址就知道被拦了：落在 Google 的 /sorry/ 验证页或 consent.google.com 同意页上；交回一句原因，不是交回 null。 */
+export function blockedAddress(pageUrl: string): Nullable<string> {
+  const url = httpUrl(pageUrl)
+  const sorry = url && isGoogleHost(url.hostname) && url.pathname.startsWith('/sorry/')
+  return url && (sorry || url.hostname === 'consent.google.com')
+    ? `被拦成了验证页或同意页（${url.origin}${url.pathname}）`
+    : null
+}
+
 /**
  * 认出搜索引擎把这次搜索拦了下来：Google 的 /sorry/ 验证页与 consent.google.com 同意页看地址就知道（认没认出结果都算）；
  * 一条结果都没认出来时，再看正文开头有没有「unusual traffic」「异常流量」「人机验证」这类字样。认出来交回一句原因，没有交回 null。
  */
 export function blockedReason(pageUrl: string, text: string, recognized: number): Nullable<string> {
-  const url = httpUrl(pageUrl)
-  const sorry = url && isGoogleHost(url.hostname) && url.pathname.startsWith('/sorry/')
-  if (url && (sorry || url.hostname === 'consent.google.com'))
-    return `被拦成了验证页或同意页（${url.origin}${url.pathname}）`
+  const address = blockedAddress(pageUrl)
+  if (address) return address
   if (recognized > 0) return null
   const marker = BlockedPageText.map((pattern) => pattern.exec(text)?.[0]).find(isNonBlankString)
   return marker ? `被拦成了验证页（页面上写着「${marker}」）` : null

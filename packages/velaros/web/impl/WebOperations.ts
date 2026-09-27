@@ -18,6 +18,7 @@ import type {
   WebRawHit,
   WebReadableScan,
   WebSearchRequest,
+  WebSearchScan,
   WebSettleProbe,
 } from '../types/page.js'
 import type {
@@ -28,6 +29,7 @@ import type {
   WebSearchResults,
 } from '../types/web.js'
 import {
+  blockedAddress,
   blockedReason,
   engineOrder,
   needsResolving,
@@ -48,7 +50,13 @@ import {
   ReadableTextScript,
   SettleProbeScript,
 } from '../utils/page-scripts.js'
-import { closePage, closeWhenOpened, isPdfDocument, untilAborted } from '../utils/pages.js'
+import {
+  closePage,
+  closeWhenOpened,
+  isNavigating,
+  isPdfDocument,
+  untilAborted,
+} from '../utils/pages.js'
 import { readableScanOf, searchScanOf, settleProbeOf } from '../utils/scans.js'
 import { durationText, readableText, textSlice } from '../utils/text.js'
 import { WebTuning } from '../utils/tuning.js'
@@ -199,8 +207,8 @@ export class WebOperations implements WebOperationsApi {
   }
 
   /**
-   * 在开好的页面里搜：装结果页（到点还没加载完的照抓）、抓原始结果、认验证页、整理结果。
-   * 认出了结果、或者搜索引擎明说没有结果，算搜通了；否则交回为什么没搜通。
+   * 在开好的页面里搜：装结果页，结果一出现在 DOM 里就抓（抓到了就叫停剩下的加载），没提前抓到就等加载有了结局再抓
+   * （到点还没加载完的照抓）；再认验证页、整理结果。认出了结果、或者搜索引擎明说没有结果，算搜通了；否则交回为什么没搜通。
    */
   private async scanResults(
     page: WebPage,
@@ -214,21 +222,35 @@ export class WebOperations implements WebOperationsApi {
         : WebTuning.search.bingLoadTimeoutMs
     // 只有 Google 限定多久必须落下文档：打不开的时候连接一直挂着，早点换 Bing；落下之后结果页慢慢出来照等
     const commitMs = engine === 'google' ? WebTuning.search.googleCommitMs : null
-    const loaded = await this.load(
+    const script = engine === 'google' ? GoogleResultsScript : BingResultsScript
+    const stop = new AbortController()
+    const loading = this.load(
       page,
       searchPageUrl(engine, request.query, request.limit),
-      { loadMs: timeoutMs, commitMs },
+      { loadMs: timeoutMs, commitMs, stop: stop.signal },
       ctx
     )
-    if (loaded.kind === 'failed') return { ok: false, reason: `打不开（${loaded.message}）` }
-    if (loaded.kind === 'silent')
-      return { ok: false, reason: `${durationText(commitMs ?? timeoutMs)}没有回应` }
-    // 到点连一个文档都没落下：不往页面里跑脚本了（对没落下文档的页面跑脚本，宿主那边会一直卡着）
-    if (loaded.kind === 'slow' && !landedUrl(page.url()))
-      return { ok: false, reason: `${durationText(timeoutMs)}没加载出来` }
-    const scan = searchScanOf(
-      await this.evaluate(page, engine === 'google' ? GoogleResultsScript : BingResultsScript, ctx)
-    )
+    let early: Nullable<WebSearchScan> = null
+    try {
+      early = await this.earlyResults(
+        page,
+        { engine, script, limit: request.limit, deadlineMs: timeoutMs },
+        loading,
+        ctx
+      )
+    } finally {
+      stop.abort()
+    }
+    const loaded = await loading
+    if (!early) {
+      if (loaded.kind === 'failed') return { ok: false, reason: `打不开（${loaded.message}）` }
+      if (loaded.kind === 'silent')
+        return { ok: false, reason: `${durationText(commitMs ?? timeoutMs)}没有回应` }
+      // 到点连一个文档都没落下：不往页面里跑脚本了（对没落下文档的页面跑脚本，宿主那边会一直卡着）
+      if (loaded.kind !== 'loaded' && !landedUrl(page.url()))
+        return { ok: false, reason: `${durationText(timeoutMs)}没加载出来` }
+    }
+    const scan = early ?? searchScanOf(await this.evaluate(page, script, ctx))
     const hits = await this.resolveRedirects(
       scan.hits.slice(0, request.limit + WebTuning.search.spareHits),
       ctx
@@ -243,6 +265,67 @@ export class WebOperations implements WebOperationsApi {
         loaded.kind === 'slow'
           ? `${durationText(timeoutMs)}没加载完，页面里也没认出搜索结果`
           : '结果页里没认出搜索结果',
+    }
+  }
+
+  /**
+   * 文档落下之后隔一小段看一眼结果页：认出了结果，而且 DOM 已经解析完（readyState 不是 loading）或者条数稳住了一段时间，
+   * 就交回这一眼，不等整页加载完。加载有了结局（加载完、到点、没回应、出错）、页面也没在跳走，就交回 null，照加载的结局来；
+   * 加载完之后页面又自己跳走的（先落一个过渡页），接着看跳过去的那一页，直到加载时限；落在验证页、同意页上的当场交出去。
+   * 一条结果都没有时绝不提前下结论：没搜通只在页面真加载完或到点之后才算。用户取消照样以取消原因失败。
+   */
+  private async earlyResults(
+    page: WebPage,
+    look: { engine: WebSearchEngineId; script: string; limit: number; deadlineMs: number },
+    loading: Promise<WebLoadOutcome>,
+    ctx: WebOperationContext
+  ): Promise<Nullable<WebSearchScan>> {
+    const started = this.clock.now()
+    let settled = false
+    const settling = loading.then(
+      () => {
+        settled = true
+      },
+      () => {
+        settled = true
+      }
+    )
+    let seen = 0
+    let steadySince = started
+    for (;;) {
+      const tick = this.clock.sleep(WebTuning.search.resultsPollMs, ctx.abortSignal)
+      await (settled ? tick : Promise.race([settling, tick]))
+      const expired = this.clock.now() - started >= look.deadlineMs
+      if (settled && (expired || !isNavigating(page))) return null
+      if (!landedUrl(page.url())) continue
+      const scan = await this.peek(page, look.script, ctx)
+      if (!scan) continue
+      // 落在验证页、同意页上：不用再等，这一眼交出去，外面认成被拦
+      if (blockedAddress(page.url())) return scan
+      const found = searchResults(look.engine, scan.hits, look.limit).length
+      const now = this.clock.now()
+      if (found !== seen) {
+        seen = found
+        steadySince = now
+      }
+      const complete = scan.ready !== 'loading'
+      if (found > 0 && (complete || now - steadySince >= WebTuning.search.resultsSteadyMs))
+        return scan
+    }
+  }
+
+  /** 加载途中看一眼结果页：限时，看不成（页面正在跳走、宿主要等加载完才跑脚本）只当还没出来；取消照样以取消原因失败。 */
+  private async peek(
+    page: WebPage,
+    script: string,
+    ctx: WebOperationContext
+  ): Promise<Nullable<WebSearchScan>> {
+    try {
+      return searchScanOf(await this.evaluate(page, script, ctx, WebTuning.search.peekTimeoutMs))
+    } catch (error) {
+      ctx.abortSignal.throwIfAborted()
+      log.debug('peeking at a search page failed', { error: AppError.getMessage(error) })
+      return null
     }
   }
 
@@ -297,30 +380,31 @@ export class WebOperations implements WebOperationsApi {
 
   /**
    * 装一个地址：限时，随时可取消。加载完交回 loaded；到了加载时限还在加载交回 slow（已经出来的内容照读）；
-   * 给了 commitMs 时，到那一刻页面连一个文档都没落下就不再等，交回 silent；宿主报加载出错交回 failed 与宿主的原话；
-   * 用户取消就以取消原因失败。
+   * 给了 commitMs 时，到那一刻页面连一个文档都没落下就不再等，交回 silent；给了 stop 并且它触发了（要的已经抓到了）交回 stopped；
+   * 宿主报加载出错交回 failed 与宿主的原话；用户取消就以取消原因失败。
    */
   private async load(
     page: WebPage,
     url: string,
-    deadlines: { loadMs: number; commitMs: Nullable<number> },
+    options: { loadMs: number; commitMs: Nullable<number>; stop?: AbortSignal },
     ctx: WebOperationContext
   ): Promise<WebLoadOutcome> {
     const silent = new AbortController()
-    const commitCheck = isPresent(deadlines.commitMs)
-      ? this.clock.timeout(deadlines.commitMs)
-      : null
+    const commitCheck = isPresent(options.commitMs) ? this.clock.timeout(options.commitMs) : null
     const checkCommit = (): void => {
       if (!landedUrl(page.url())) silent.abort(new AppError('TIMEOUT', '页面一直没落下文档'))
     }
     commitCheck?.addEventListener('abort', checkCommit, { once: true })
-    const deadline = this.clock.timeout(deadlines.loadMs)
-    const signal = AbortSignal.any([ctx.abortSignal, deadline, silent.signal])
+    const deadline = this.clock.timeout(options.loadMs)
+    const sources = [ctx.abortSignal, deadline, silent.signal]
+    if (options.stop) sources.push(options.stop)
+    const signal = AbortSignal.any(sources)
     try {
       await untilAborted(page.load(url, signal), signal)
       return { kind: 'loaded' }
     } catch (error) {
       ctx.abortSignal.throwIfAborted()
+      if (options.stop?.aborted) return { kind: 'stopped' }
       if (silent.signal.aborted) return { kind: 'silent' }
       if (deadline.aborted) return { kind: 'slow' }
       log.debug('a hidden page failed to load', { error: AppError.getMessage(error) })
@@ -350,7 +434,7 @@ export class WebOperations implements WebOperationsApi {
   }
 
   /**
-   * 等单页应用渲染完：readyState 是 complete、正文长度隔一段时间不变就算完；有上限，到了也不再等。
+   * 等单页应用渲染完：readyState 是 complete、正文长度隔一段时间不变、页面也没在跳走，就算完；有上限，到了也不再等。
    * 看的那一眼读不到（页面正在跳走、脚本超时）只当还没稳，不算失败。
    */
   private async settle(page: WebPage, ctx: WebOperationContext): Promise<void> {
@@ -361,7 +445,8 @@ export class WebOperations implements WebOperationsApi {
       const remaining = WebTuning.read.settleMs - (this.clock.now() - started)
       const probe = await this.probe(page, ctx, Math.max(remaining, WebTuning.read.pollMs))
       const now = this.clock.now()
-      if (probe.ready !== 'complete' || probe.length !== last) {
+      // 页面正在跳走（加载完之后又自己跳的）：旧文档的正文再稳也不算，等最后那一页
+      if (isNavigating(page) || probe.ready !== 'complete' || probe.length !== last) {
         last = probe.length
         stableSince = now
       } else if (now - stableSince >= WebTuning.read.stableMs) return

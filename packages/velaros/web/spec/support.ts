@@ -73,19 +73,26 @@ export interface FakeSite {
   /**
    * load 的结局：缺省加载完；'slow' 文档落下了、再把假钟拨过所有时限，到点还在加载；
    * 'silent' 连一个文档都没落下、假钟拨过所有时限（像打不开的 Google：连接一直挂着）；
+   * 'streaming' 文档马上落下、不拨钟，结果页一边传一边能看（`scans`），到 `finishMs` 才加载完（不给就一直不完，由操作到点撒手）；
    * 'hang' 一直卡着、不拨钟，直到调用方撒手；给一个错误就是宿主报加载出错。
    */
-  load?: 'ok' | 'slow' | 'silent' | 'hang' | Error
+  load?: 'ok' | 'slow' | 'silent' | 'streaming' | 'hang' | Error
+  /** 'streaming' 的页面在假钟几毫秒之后加载完（从装地址那一刻算）。 */
+  finishMs?: number
   /** 装地址时顺手做的事（比如测试在这里按下取消）。 */
   onLoad?: () => void
   /** 跳转之后落在哪个地址；缺省就是装的那个地址。 */
   landed?: string
   /** 结果页脚本交回什么（Bing、Google 的脚本都交它）。 */
   scan?: unknown
+  /** 结果页脚本一次一次看到的东西（加载途中结果一条条传过来），看完了一直重复最后一个；给了它就不用 scan。 */
+  scans?: unknown[]
   /** 读正文的脚本交回什么。 */
   readable?: unknown
   /** 每看一眼渲染之前顺手做的事，参数是第几眼（比如测试在这里按下取消）。 */
   onProbe?: (count: number) => void
+  /** 页面是不是正在跳走（加载完之后又自己跳的），参数是这一页已经跑过几段脚本；不给就是没在跳。 */
+  navigating?: (evaluations: number) => boolean
   /** 等渲染时一眼一眼看到的东西（给一个错误就是那一眼没看成），看完了一直重复最后一眼；缺省是 complete、长度不变。 */
   settle?: Array<{ ready: string; length: number } | Error>
   /** 页面里跑脚本时抛的错。 */
@@ -95,18 +102,19 @@ export interface FakeSite {
 }
 
 /**
- * 假浏览器记下的事：开了几页、关了几页、装过哪些地址（与装的时候假钟几点）、跑过哪几段脚本（按名字）、问过哪些跳转链接，
- * 以及退避记忆被读过几次、写进过什么。
+ * 假浏览器记下的事：开了几页、关了几页、装过哪些地址（与装的时候假钟几点、'streaming' 的页面被叫停时假钟几点）、跑过哪几段脚本（按名字）、问过哪些跳转链接，
+ * 以及退避记忆被读过几次、写进过什么（与写的时候假钟几点）。
  */
 export interface FakeBrowserRecord {
   opened: number
   closed: number
   loads: string[]
   loadedAt: number[]
+  loadsStoppedAt: number[]
   scripts: string[]
   resolved: string[]
   backoffReads: WebSearchEngineId[]
-  backoffWrites: Array<{ engine: WebSearchEngineId; until: number }>
+  backoffWrites: Array<{ engine: WebSearchEngineId; until: number; at: number }>
 }
 
 /** 假的退避记忆：存着的值（按搜索引擎）、读或写的时候抛错。 */
@@ -125,6 +133,35 @@ function scriptName(expression: string): string {
   return 'unknown'
 }
 
+/**
+ * 'streaming' 的加载：不拨钟，操作自己等的时候钟往前走；到 finishMs 加载完，被撒手（叫停、到点、取消）就以撒手的原因失败，
+ * 并记下被叫停的那一刻。
+ */
+function streamingLoad(
+  site: FakeSite,
+  clock: FakeClock,
+  record: FakeBrowserRecord,
+  signal: AbortSignal
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const abandon = (): void => {
+      record.loadsStoppedAt.push(clock.now())
+      reject(signal.reason)
+    }
+    if (signal.aborted) return abandon()
+    signal.addEventListener('abort', abandon, { once: true })
+    if (site.finishMs === undefined) return
+    clock.timeout(site.finishMs).addEventListener(
+      'abort',
+      () => {
+        signal.removeEventListener('abort', abandon)
+        resolve()
+      },
+      { once: true }
+    )
+  })
+}
+
 /** 一页假页面：按装的地址找到那个站，脚本按名字交回站里写好的东西。 */
 function fakePage(
   sites: (url: string) => FakeSite,
@@ -134,6 +171,8 @@ function fakePage(
   let current = 'about:blank'
   let site: FakeSite = {}
   let probes = 0
+  let scanned = 0
+  let evaluations = 0
   let closed = false
   return {
     load: (url, signal) => {
@@ -141,11 +180,15 @@ function fakePage(
       record.loadedAt.push(clock.now())
       site = sites(url)
       probes = 0
+      scanned = 0
+      evaluations = 0
       site.onLoad?.()
       const outcome = site.load ?? 'ok'
       if (outcome instanceof Error) return Promise.reject(outcome)
-      if (outcome === 'ok' || outcome === 'slow') current = site.landed ?? url
+      if (outcome === 'ok' || outcome === 'slow' || outcome === 'streaming')
+        current = site.landed ?? url
       if (outcome === 'ok') return Promise.resolve()
+      if (outcome === 'streaming') return streamingLoad(site, clock, record, signal)
       // 慢的与没回应的：一小步一小步拨钟，直到操作到点撒手（最多拨过所有时限），量得出操作在哪一刻放手
       for (
         let waited = 0;
@@ -162,6 +205,7 @@ function fakePage(
       if (closed) throw new AppError('CLOSED', '页面已经关了')
       const name = scriptName(expression)
       record.scripts.push(name)
+      evaluations += 1
       if (site.evaluateError) throw site.evaluateError
       if (site.evaluateHangs) {
         clock.advance(SlowLoadMs)
@@ -177,11 +221,15 @@ function fakePage(
       }
       if (name === 'readable')
         return (site.readable ?? { title: '', text: '', contentType: 'text/html' }) as T
-      if (name === 'bing' || name === 'google')
-        return (site.scan ?? { hits: [], text: '', noResults: false }) as T
+      if (name === 'bing' || name === 'google') {
+        scanned += 1
+        const scans = site.scans ?? [site.scan ?? { hits: [], text: '', noResults: false }]
+        return scans[Math.min(scanned, scans.length) - 1] as T
+      }
       throw new AppError('VALIDATION', '假页面不认这段脚本')
     },
     url: () => current,
+    loading: () => site.navigating?.(evaluations) ?? false,
     close: () => {
       if (closed) return
       closed = true
@@ -224,6 +272,7 @@ export function webSpace(options: {
     closed: 0,
     loads: [],
     loadedAt: [],
+    loadsStoppedAt: [],
     scripts: [],
     resolved: [],
     backoffReads: [],
@@ -246,7 +295,7 @@ export function webSpace(options: {
         return backoff.stored?.[engine] ?? null
       },
       write: (engine, until) => {
-        record.backoffWrites.push({ engine, until })
+        record.backoffWrites.push({ engine, until, at: clock.now() })
         if (backoff.writeFails) throw new AppError('IO', '退避记忆写不进去')
       },
     }
@@ -305,15 +354,16 @@ export function googleGoto(token: string): string {
   return `https://www.google.com/goto?url=CAES${token}`
 }
 
-/** 一页结果页脚本交回的东西：几条原始结果，正文开头缺省是空的。 */
+/** 一页结果页脚本交回的东西：几条原始结果，正文开头缺省是空的，文档缺省已经加载完。 */
 export function scanOf(
   hits: Array<{ title: string; href: string; snippet?: string }>,
-  extra: { text?: string; noResults?: boolean } = {}
+  extra: { text?: string; noResults?: boolean; ready?: string } = {}
 ) {
   return {
     hits: hits.map((hit) => ({ snippet: '', ...hit })),
     text: extra.text ?? '',
     noResults: extra.noResults ?? false,
+    ready: extra.ready ?? 'complete',
   }
 }
 

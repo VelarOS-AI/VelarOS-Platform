@@ -1,5 +1,6 @@
 /**
- * 在页面里跑的脚本：宿主经 `WebPage.evaluate` 求值，交回可结构化克隆的普通对象。
+ * 在页面里跑的脚本：宿主经 `WebPage.evaluate` 求值，交回可结构化克隆的普通对象。结果页脚本在页面加载途中也会跑（结果一出现就抓），
+ * 所以一并交回 document.readyState，外面据此判断结果传齐了没有。
  * 它们是字符串，不是本单元的代码：只用页面自己的 DOM，不引任何东西；数字从可调参数表拼进去。
  * 页面只抓原始材料（链接、文字），解跳转链接、去重、切分都在外面做，好测也好改；
  * 交回的东西形状可能不对（页面改过全局对象），外面先经 `utils/scans.ts` 收一遍再用。
@@ -28,7 +29,7 @@ export const BingResultsScript = `(() => {
     return { title: clean(link && link.textContent), href: link ? link.href : '', snippet: textOf(snippet) };
   });
   const body = document.body ? String(document.body.innerText || '') : '';
-  return { hits, text: body.slice(0, ${WebTuning.search.probeTextChars}), noResults: !!document.querySelector('#b_results .b_no') };
+  return { hits, text: body.slice(0, ${WebTuning.search.probeTextChars}), noResults: !!document.querySelector('#b_results .b_no'), ready: String(document.readyState) };
 })()`
 
 /**
@@ -50,7 +51,7 @@ export const GoogleResultsScript = `(() => {
     hits.push({ title: clean(heading.textContent), href: link.href, snippet: clean(snippet && snippet.textContent) });
   }
   const body = document.body ? String(document.body.innerText || '') : '';
-  return { hits, text: body.slice(0, ${WebTuning.search.probeTextChars}), noResults: false };
+  return { hits, text: body.slice(0, ${WebTuning.search.probeTextChars}), noResults: false, ready: String(document.readyState) };
 })()`
 
 /** 等渲染时看一眼：文档加载到哪一步、body 的正文现在多少个字符。 */

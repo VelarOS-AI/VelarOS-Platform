@@ -13,9 +13,9 @@ function textField(record: Record<string, unknown>, key: string): string {
   return isString(value) ? value : ''
 }
 
-/** 收结果页脚本交回的值：hits 里只留带字符串链接的条目，text 与 noResults 缺了按空与假算。 */
+/** 收结果页脚本交回的值：hits 里只留带字符串链接的条目，text 与 noResults 缺了按空与假算，ready 缺了按已经加载完算。 */
 export function searchScanOf(value: unknown): WebSearchScan {
-  if (!isPlainObject(value)) return { hits: [], text: '', noResults: false }
+  if (!isPlainObject(value)) return { hits: [], text: '', noResults: false, ready: 'complete' }
   const hits: WebRawHit[] = []
   for (const hit of isArray(value.hits) ? value.hits : []) {
     if (!isPlainObject(hit) || !isString(hit.href)) continue
@@ -29,6 +29,7 @@ export function searchScanOf(value: unknown): WebSearchScan {
     hits,
     text: textField(value, 'text'),
     noResults: isBoolean(value.noResults) && value.noResults,
+    ready: isString(value.ready) ? value.ready : 'complete',
   }
 }
 

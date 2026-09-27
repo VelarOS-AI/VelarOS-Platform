@@ -47,6 +47,18 @@ export function closeWhenOpened(opening: Promise<WebPage>): void {
   })
 }
 
+/** 页面是不是正在跳走（主框架有一次导航在进行）：宿主给了 loading 才问它，没给或问出错都当作没在跳。 */
+export function isNavigating(page: WebPage): boolean {
+  try {
+    return !!page.loading?.()
+  } catch (error) {
+    log.debug('asking whether a hidden page is loading failed', {
+      error: AppError.getMessage(error),
+    })
+    return false
+  }
+}
+
 /** 文档是不是 PDF：浏览器自带的 PDF 阅读器打开的页面，正文里一个字也读不出来。 */
 export function isPdfDocument(contentType: string): boolean {
   return /^application\/pdf\b/iu.test(contentType.trim())

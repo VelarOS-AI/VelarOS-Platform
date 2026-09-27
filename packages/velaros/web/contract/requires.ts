@@ -52,13 +52,22 @@ export interface WebPage {
    * signal 触发时停止加载并尽快失败（本单元按时限触发它，到点之后已经出来的内容照读）。
    */
   load(url: string, signal: AbortSignal): Promise<void>
-  /** 在页面里跑一段表达式（可以是 async IIFE），交回可结构化克隆的值；脚本里抛的错照样抛出来。 */
+  /**
+   * 在页面里跑一段表达式（可以是 async IIFE），交回可结构化克隆的值；脚本里抛的错照样抛出来。
+   * 要当场跑，不等页面加载完：搜索靠它在结果一出现在 DOM 里时就抓。Electron 里用 `webContents.mainFrame.executeJavaScript`——
+   * `webContents.executeJavaScript` 会等页面停止加载才跑，那样也能用，只是结果要等整页加载完才抓得到。
+   */
   evaluate<T>(expression: string): Promise<T>
   /**
    * 当前落下的地址（跳转之后的）。还没落下文档（服务器一个字节都没回来）时是空字符串或 about:blank——
    * 本单元靠这一点分辨 Google 是打不开，还是打得开只是结果页加载得慢。Electron 的 `webContents.getURL()` 就是这样。
    */
   url(): string
+  /**
+   * 可选：主框架是不是正在加载——有一次导航在进行，包括加载完之后页面自己又跳走的那种。Electron 是 `webContents.isLoadingMainFrame()`。
+   * evaluate 当场跑的话，read 等渲染时靠它知道页面正在跳走、还没到最后那一页；不给就只看正文长度稳没稳。
+   */
+  loading?(): boolean
   /** 关掉这一页，释放它占的一切；关过再关什么也不做。 */
   close(): void
 }

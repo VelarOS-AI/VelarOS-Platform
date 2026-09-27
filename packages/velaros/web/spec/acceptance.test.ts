@@ -208,6 +208,155 @@ describe('搜索', () => {
     expect(counted.record.resolved).toHaveLength(2 + WebTuning.search.spareHits)
   })
 
+  test('INV-19 结果一出现在 DOM 里就抓：不等整页加载完、抓到就叫停加载；DOM 还在传时等条数稳住；一条都没有时照旧等加载有了结局；Bing 也一样；验证页照认', async () => {
+    const many = (count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        title: `第 ${index + 1} 条`,
+        href: `https://example.com/${index + 1}`,
+      }))
+    const poll = WebTuning.search.resultsPollMs
+
+    // Google：第一眼还没有，第二眼 3 条（还在传），第三眼 10 条、DOM 解析完——当场用，不等 7 秒后才加载完
+    const streaming = webSpace({
+      sites: sitesOf({
+        google: {
+          load: 'streaming',
+          finishMs: 7_000,
+          scans: [
+            scanOf([], { ready: 'loading' }),
+            scanOf(many(3), { ready: 'loading' }),
+            scanOf(many(10), { ready: 'interactive' }),
+          ],
+        },
+        bing: { scan: BingResults },
+      }),
+    })
+    const start = streaming.clock.now()
+    const found = await streaming.operations.search({ query: '快' }, streaming.context)
+    expect([found.engine, found.results.length]).toEqual(['google', WebLimits.defaultResults])
+    expect(streaming.clock.now() - start).toBe(3 * poll)
+    expect(streaming.record.scripts).toEqual(['google', 'google', 'google'])
+    // 抓到了就叫停剩下的加载，页面照关
+    expect(streaming.record.loadsStoppedAt).toEqual([start + 3 * poll])
+    expect(streaming.record).toMatchObject({ opened: 1, closed: 1 })
+
+    // 文档还在往下传：条数稳住 resultsSteadyMs 才用
+    const steady = webSpace({
+      sites: sitesOf({
+        google: { load: 'streaming', scans: [scanOf(many(3), { ready: 'loading' })] },
+      }),
+    })
+    const steadyStart = steady.clock.now()
+    const three = await steady.operations.search({ query: '稳' }, steady.context)
+    expect([three.engine, three.results.length]).toEqual(['google', 3])
+    expect(steady.clock.now() - steadyStart).toBe(poll + WebTuning.search.resultsSteadyMs)
+
+    // 一条结果都没有：不提前下结论，等页面真加载完再看一次，还是没有才换 Bing
+    const empty = webSpace({
+      sites: sitesOf({
+        google: { load: 'streaming', finishMs: 2_000, scans: [scanOf([], { ready: 'loading' })] },
+        bing: { scan: BingResults },
+      }),
+    })
+    const emptyStart = empty.clock.now()
+    expect((await empty.operations.search({ query: '空' }, empty.context)).engine).toBe('bing')
+    expect(empty.record.loadedAt[1]! - emptyStart).toBeGreaterThanOrEqual(2_000)
+    expect(empty.record.loadsStoppedAt).toEqual([])
+
+    // 一直在传、一直没有结果：到加载时限才下结论
+    const stalled = webSpace({
+      sites: sitesOf({
+        google: { load: 'streaming', scans: [scanOf([], { ready: 'loading' })] },
+        bing: { scan: BingResults },
+      }),
+    })
+    const stalledStart = stalled.clock.now()
+    expect((await stalled.operations.search({ query: '卡' }, stalled.context)).engine).toBe('bing')
+    expect(stalled.record.loadedAt[1]! - stalledStart).toBeGreaterThanOrEqual(
+      WebTuning.search.googleLoadTimeoutMs
+    )
+
+    // Bing 也一样：结果一出现就用
+    const bing = webSpace({
+      engine: 'bing',
+      sites: sitesOf({
+        bing: {
+          load: 'streaming',
+          finishMs: 5_000,
+          scans: [
+            scanOf([{ title: 'Bing 找到的', href: bingLink('https://example.com/from-bing') }], {
+              ready: 'interactive',
+            }),
+          ],
+        },
+      }),
+    })
+    const bingStart = bing.clock.now()
+    const fromBing = await bing.operations.search({ query: 'b' }, bing.context)
+    expect([fromBing.engine, fromBing.results[0]?.url]).toEqual([
+      'bing',
+      'https://example.com/from-bing',
+    ])
+    expect(bing.clock.now() - bingStart).toBe(poll)
+
+    // 加载完之后页面又自己跳走（先落一个过渡页）：不在过渡页上下结论，接着看跳过去的那一页
+    const hopping = webSpace({
+      sites: sitesOf({
+        google: {
+          navigating: (evaluations) => evaluations < 3,
+          scans: [scanOf([]), scanOf([]), scanOf(many(5), { ready: 'interactive' })],
+        },
+        bing: { scan: BingResults },
+      }),
+    })
+    const hopped = await hopping.operations.search({ query: '过渡页' }, hopping.context)
+    expect([hopped.engine, hopped.results.length]).toEqual(['google', 5])
+    // 一直在跳、一直没有结果：看到加载时限为止，再下结论
+    const endless = webSpace({
+      sites: sitesOf({
+        google: { navigating: () => true, scans: [scanOf([])] },
+        bing: { scan: BingResults },
+      }),
+    })
+    const endlessStart = endless.clock.now()
+    expect((await endless.operations.search({ query: '一直跳' }, endless.context)).engine).toBe(
+      'bing'
+    )
+    expect(endless.record.loadedAt[1]! - endlessStart).toBeGreaterThanOrEqual(
+      WebTuning.search.googleLoadTimeoutMs
+    )
+
+    // 跳到了验证页上：不等加载完、不等加载时限，当场换 Bing
+    const sorry = webSpace({
+      sites: sitesOf({
+        google: {
+          load: 'streaming',
+          landed: 'https://www.google.com/sorry/index?continue=x',
+          scans: [
+            scanOf([], { text: 'Our systems have detected unusual traffic', ready: 'loading' }),
+          ],
+        },
+        bing: { scan: BingResults },
+      }),
+    })
+    const sorryStart = sorry.clock.now()
+    expect((await sorry.operations.search({ query: '被拦' }, sorry.context)).engine).toBe('bing')
+    expect(sorry.record.loadedAt[1]! - sorryStart).toBe(poll)
+
+    // 提前抓到的也照样认验证页：落在同意页上的换 Bing
+    const consent = webSpace({
+      sites: sitesOf({
+        google: {
+          load: 'streaming',
+          landed: 'https://consent.google.com/ml?continue=x',
+          scans: [scanOf(many(2), { ready: 'interactive' })],
+        },
+        bing: { scan: BingResults },
+      }),
+    })
+    expect((await consent.operations.search({ query: 'c' }, consent.context)).engine).toBe('bing')
+  })
+
   test('INV-3 Google 搜不通就换 Bing：加载出错、一直没回应、到点没加载完、验证页、同意页、验证字样、认不出结果都算', async () => {
     const failures = {
       加载出错: { load: new AppError('NETWORK', 'net::ERR_CONNECTION_RESET') },
@@ -249,7 +398,12 @@ describe('搜索', () => {
     const start = silent.clock.now()
     const fallback = await silent.operations.search({ query: '打不开' }, silent.context)
     expect(fallback.engine).toBe('bing')
-    expect(silent.record.loadedAt[1]! - start).toBe(WebTuning.search.googleCommitMs)
+    // 假页面在装地址的那一刻就把钟拨到放手为止，操作随后多看的一两眼也算进假钟里；真跑时加载一有结局就换，不多等
+    const fallbackMs = silent.record.loadedAt[1]! - start
+    expect(fallbackMs).toBeGreaterThanOrEqual(WebTuning.search.googleCommitMs)
+    expect(fallbackMs).toBeLessThanOrEqual(
+      WebTuning.search.googleCommitMs + 2 * WebTuning.search.resultsPollMs
+    )
     expect(WebTuning.search.googleCommitMs).toBeLessThan(WebTuning.search.googleLoadTimeoutMs)
 
     // 文档落下了、只是结果页加载得慢：不被落下时限掐掉，到加载时限照抓已经出来的结果
@@ -297,19 +451,21 @@ describe('搜索', () => {
     const googleLoads = () =>
       space.record.loads.filter((url) => url.startsWith('https://www.google.com/')).length
 
-    const failedAt = clock.now()
     expect((await space.operations.search({ query: '一' }, space.context)).engine).toBe('bing')
     expect(googleLoads()).toBe(1)
-    // 搜不通才写，写的是退避到什么时候
-    expect(space.record.backoffWrites).toEqual([
-      { engine: 'google', until: failedAt + WebTuning.search.googleBackoffMs },
+    // 搜不通才写，写的是退避到什么时候：记下失败那一刻起 12 小时
+    expect(space.record.backoffWrites).toHaveLength(1)
+    const written = space.record.backoffWrites[0]!
+    expect([written.engine, written.until - written.at]).toEqual([
+      'google',
+      WebTuning.search.googleBackoffMs,
     ])
-    clock.advance(WebTuning.search.googleBackoffMs - 1)
+    clock.advance(written.until - 1 - clock.now())
     googleUp = true
     expect((await space.operations.search({ query: '二' }, space.context)).engine).toBe('bing')
     expect(googleLoads()).toBe(1)
 
-    clock.advance(1)
+    clock.advance(Math.max(0, written.until - clock.now()))
     expect((await space.operations.search({ query: '三' }, space.context)).engine).toBe('google')
     expect(googleLoads()).toBe(2)
     expect((await space.operations.search({ query: '四' }, space.context)).engine).toBe('google')
@@ -453,6 +609,19 @@ describe('读网页', () => {
     const tickWaited = ticking.clock.now() - tickStart
     expect(tickWaited).toBeGreaterThanOrEqual(WebTuning.read.settleMs)
     expect(tickWaited).toBeLessThan(WebTuning.read.settleMs + WebTuning.read.pollMs * 2)
+
+    // 加载完之后页面自己又跳走：正文再稳也不算，等它跳完（主框架不在加载了）再算稳
+    const jumping = webSpace({
+      sites: sitesOf({
+        pages: { [url]: { ...pageSite('跳完之后的正文'), navigating: (probes) => probes <= 6 } },
+      }),
+    })
+    const jumpStart = jumping.clock.now()
+    expect((await jumping.operations.read({ url }, jumping.context)).text).toBe('跳完之后的正文')
+    // 第一眼在加载完的那一刻，第六眼还在跳：从第六眼（5 个间隔之后）起再稳住一段才读
+    expect(jumping.clock.now() - jumpStart).toBeGreaterThanOrEqual(
+      5 * WebTuning.read.pollMs + WebTuning.read.stableMs
+    )
 
     // 到点还在加载：不等渲染，已经出来的正文照读
     const slow = webSpace({

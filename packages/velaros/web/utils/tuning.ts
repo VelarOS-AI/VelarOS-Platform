@@ -26,6 +26,12 @@ export const WebTuning = Object.freeze({
     googleCommitMs: 4_500,
     /** 等 Google 结果页加载完最多多久，毫秒；到点还没加载完的，已经出来的结果照抓，不算没搜通。 */
     googleLoadTimeoutMs: 8_000,
+    /** 文档落下之后、加载完之前，隔多久看一眼结果出来没有，毫秒；结果一出现就抓，不等整页（图片、脚本）加载完。 */
+    resultsPollMs: 150,
+    /** 文档还在往下传（readyState 还是 loading）时，结果条数要稳住多久才当它传齐了，毫秒；DOM 已经解析完就不用等。 */
+    resultsSteadyMs: 300,
+    /** 加载途中看一眼最多等多久，毫秒：宿主的脚本要等页面加载完才跑的话，不陪它干等，照加载的结局来。 */
+    peekTimeoutMs: 2_000,
     /** 等 Bing 结果页加载多久算超时，毫秒。 */
     bingLoadTimeoutMs: 15_000,
     /** 问宿主把 Google 的 /goto 跳转链接换成真实地址，一批最多等多久，毫秒；问不出来的原样留着。 */

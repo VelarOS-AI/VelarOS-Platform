@@ -25,11 +25,15 @@ export interface WebRawHit {
   snippet: string
 }
 
-/** 结果页脚本交回的东西：抓到的原始结果、正文开头一段（认验证页用）、搜索引擎有没有明说「没有结果」。 */
+/**
+ * 结果页脚本交回的东西：抓到的原始结果、正文开头一段（认验证页用）、搜索引擎有没有明说「没有结果」，
+ * 以及跑脚本那一刻文档加载到哪一步（document.readyState；还是 loading 的，后面可能还有结果没传过来）。
+ */
 export interface WebSearchScan {
   hits: WebRawHit[]
   text: string
   noResults: boolean
+  ready: string
 }
 
 /** 等渲染时看一眼页面：文档加载到哪一步（document.readyState）、正文现在多少个字符。 */
@@ -47,10 +51,14 @@ export interface WebReadableScan {
 
 /**
  * 加载一页的结局：加载完了；到了时限还在加载（已经出来的内容照读）；到了落下时限连一个文档都没落下（打不开，不再等）；
- * 宿主报加载出错（带宿主的原话）。
+ * 我们自己叫停的（要的东西已经抓到了，剩下的不用加载）；宿主报加载出错（带宿主的原话）。
  */
 export type WebLoadOutcome =
-  { kind: 'loaded' } | { kind: 'slow' } | { kind: 'silent' } | { kind: 'failed'; message: string }
+  | { kind: 'loaded' }
+  | { kind: 'slow' }
+  | { kind: 'silent' }
+  | { kind: 'stopped' }
+  | { kind: 'failed'; message: string }
 
 /** 用一个搜索引擎试一次的结局：搜通了交回整理好的结果，搜不通交回一句为什么。 */
 export type WebEngineAttempt =
