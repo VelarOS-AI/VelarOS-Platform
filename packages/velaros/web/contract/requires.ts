@@ -56,6 +56,9 @@ export interface WebPage {
    * 在页面里跑一段表达式（可以是 async IIFE），交回可结构化克隆的值；脚本里抛的错照样抛出来。
    * 要当场跑，不等页面加载完：搜索靠它在结果一出现在 DOM 里时就抓。Electron 里用 `webContents.mainFrame.executeJavaScript`——
    * `webContents.executeJavaScript` 会等页面停止加载才跑，那样也能用，只是结果要等整页加载完才抓得到。
+   * 页面自己的脚本被禁掉时也要跑得了：响应头的 CSP 带 sandbox 又没给 allow-scripts（比如 raw.githubusercontent.com 上的文件），
+   * `mainFrame.executeJavaScript` 以字符串 `'Script not run'` 拒跑，这时改经 `webContents.debugger` 发 DevTools 协议的
+   * `Runtime.evaluate`（returnByValue、awaitPromise）；页面自己的脚本照样不跑，跑的只是本单元读页面的这一段。
    */
   evaluate<T>(expression: string): Promise<T>
   /**

@@ -1,4 +1,4 @@
-/** 正文：把页面的 innerText 收拾干净、按字符切段，以及报错里怎么说一段时长。 */
+/** 正文：把网页的 innerText 收拾干净、纯文本文件原样留着、按字符切段，以及报错里怎么说一段时长。 */
 
 import { clampToCodePointBoundary } from '@velaros-ai/core'
 
@@ -16,6 +16,17 @@ export function readableText(raw: string): string {
     .join('\n')
     .replace(/\n{3,}/gu, '\n\n')
     .trim()
+}
+
+/**
+ * 纯文本文件（源码、Markdown、JSON 这类）的正文：缩进、行内空白、制表符、空行都是内容，原样留着；
+ * 只把换行统一成 \n，去掉开头的空行与末尾的空白（第一行的缩进不动）。
+ */
+export function plainText(raw: string): string {
+  return raw
+    .replace(/\r\n?/gu, '\n')
+    .replace(/^(?:[^\S\n]*\n)+/u, '')
+    .trimEnd()
 }
 
 /**

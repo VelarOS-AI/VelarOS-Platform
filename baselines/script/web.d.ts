@@ -12,7 +12,7 @@ declare module 'velaros:web' {
    */
   export function search(input: WebSearchInput): Promise<WebSearchResults>
 
-  /** 打开一个网页、等它渲染完，读出正文（去掉脚本、导航、页眉页脚、侧栏与表单），按字符分段交回：默认一次 8000 个字符、最多 20000 个字符。
+  /** 打开一个网页、等它渲染完，读出正文（去掉脚本、导航、页眉页脚、侧栏与表单；源码、Markdown、JSON 这类纯文本文件原样读出），按字符分段交回：默认一次 8000 个字符、最多 20000 个字符。
    * 每次 read 都重新打开网页，长网页一次多读一些。
    */
   export function read(input: WebReadInput): Promise<WebPageText>
@@ -44,8 +44,9 @@ declare module 'velaros:web' {
   }
 
   /**
-   * 读出来的一段正文。url 是跳转之后的最终地址，title 是网页标题。
-   * text 是整页正文从 offset 起的一段：行内空白并成一个，段落之间空一行；totalChars 是整页正文一共多少个字符。
+   * 读出来的一段正文。url 是跳转之后的最终地址，title 是网页标题（纯文本文件没有标题，是空字符串）。
+   * text 是整页正文从 offset 起的一段：网页的行内空白并成一个、段落之间空一行；纯文本文件（源码、Markdown、JSON 这类）原样交回，缩进和空行都在。
+   * totalChars 是整页正文一共多少个字符。
    * nextOffset 不是 null 就是还没读完，拿它当 offset 再调一次 read 接着读；是 null 就读到头了。
    */
   interface WebPageText {

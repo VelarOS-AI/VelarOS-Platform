@@ -29,9 +29,15 @@ import {
   ReadableTextScript,
   SettleProbeScript,
 } from '../utils/page-scripts'
-import { closePage, closeWhenOpened, isPdfDocument, untilAborted } from '../utils/pages'
+import {
+  closePage,
+  closeWhenOpened,
+  isPdfDocument,
+  isPlainTextDocument,
+  untilAborted,
+} from '../utils/pages'
 import { readableScanOf, searchScanOf, settleProbeOf } from '../utils/scans'
-import { durationText, readableText, textSlice } from '../utils/text'
+import { durationText, plainText, readableText, textSlice } from '../utils/text'
 import { WebTuning } from '../utils/tuning'
 import { httpUrl, landedUrl } from '../utils/urls'
 
@@ -204,6 +210,14 @@ describe('正文', () => {
     expect(readableText('a\n  \n\t\nb')).toBe('a\n\nb')
   })
 
+  test('纯文本文件原样留着：只统一换行、去掉开头的空行与末尾的空白，第一行的缩进不动', () => {
+    expect(plainText('')).toBe('')
+    expect(plainText(' \n\t\n ')).toBe('')
+    expect(plainText('a\r\nb\rc')).toBe('a\nb\nc')
+    expect(plainText('\n  \n\t\n    x = 1\n\n\n\ty\t \n\n')).toBe('    x = 1\n\n\n\ty')
+    expect(plainText('  x  y\t\tz　w')).toBe('  x  y\t\tz　w')
+  })
+
   test('切段：起点落在代理对中间往前收，终点落在中间往前退，至少前进一个字', () => {
     const text = '😀😀x'
     expect(textSlice(text, 0, 1)).toEqual({ text: '😀', start: 0, nextOffset: 2 })
@@ -228,6 +242,36 @@ describe('正文', () => {
     expect(isPdfDocument(' Application/PDF; charset=binary')).toBe(true)
     expect(isPdfDocument('text/html')).toBe(false)
     expect(isPdfDocument('')).toBe(false)
+  })
+
+  test('纯文本文件按媒体类型认：text/ 下除了 HTML 与 XML 的，加 JSON 与 JavaScript；参数不看', () => {
+    const plain = [
+      'text/plain',
+      ' Text/Plain; charset=utf-8',
+      'text/markdown',
+      'text/x-python',
+      'text/yaml',
+      'text/css',
+      'application/json',
+      'application/ld+json',
+      'application/javascript',
+      'application/x-javascript',
+      'application/ecmascript',
+    ]
+    const other = [
+      'text/html',
+      'TEXT/HTML; charset=gbk',
+      'text/xml',
+      'application/xml',
+      'application/xhtml+xml',
+      'image/svg+xml',
+      'application/pdf',
+      'image/png',
+      'application/octet-stream',
+      '',
+    ]
+    expect(plain.filter((type) => !isPlainTextDocument(type))).toEqual([])
+    expect(other.filter((type) => isPlainTextDocument(type))).toEqual([])
   })
 
   test('网址：只认 http 与 https；落在 about:blank、出错页上的算没落下', () => {

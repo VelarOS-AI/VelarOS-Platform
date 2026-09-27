@@ -658,6 +658,49 @@ describe('读网页', () => {
     })
   })
 
+  test('INV-20 纯文本文件原样交回：缩进、行内空白、制表符、空行都留着，只统一换行、去掉开头的空行与末尾的空白；切段照常', async () => {
+    const url = 'https://raw.example.com/app.py'
+    const source = '\r\n\r\n    def main():\r\n\treturn  1  \r\n\r\n\r\n\r\n# 完\r\n  \r\n'
+    const space = webSpace({
+      sites: sitesOf({
+        pages: { [url]: { readable: { title: '', text: source, contentType: 'text/x-python' } } },
+      }),
+    })
+    const kept = '    def main():\n\treturn  1  \n\n\n\n# 完'
+    expect(await space.operations.read({ url }, space.context)).toEqual({
+      url,
+      title: '',
+      text: kept,
+      offset: 0,
+      totalChars: kept.length,
+      nextOffset: null,
+    })
+    // 切段照 INV-8：从中间接着读，空白一个不少
+    const piece = await space.operations.read({ url, offset: 4, maxChars: 11 }, space.context)
+    expect([piece.text, piece.nextOffset]).toEqual(['def main():', 15])
+
+    // JSON、Markdown、JavaScript、带 charset 的 text/plain 都算纯文本；HTML 与 XML 照网页收拾
+    const text = '  a  b\n\n\n\nc'
+    for (const [contentType, plain] of [
+      ['application/json', true],
+      ['text/markdown', true],
+      ['application/javascript', true],
+      [' Text/Plain; charset=utf-8', true],
+      ['text/html', false],
+      ['application/xhtml+xml', false],
+      ['text/xml', false],
+    ] as const) {
+      const typed = webSpace({
+        sites: sitesOf({ pages: { [url]: { readable: { title: '', text, contentType } } } }),
+      })
+      const read = await typed.operations.read({ url }, typed.context)
+      expect({ contentType, text: read.text }).toEqual({
+        contentType,
+        text: plain ? text : 'a b\n\nc',
+      })
+    }
+  })
+
   test('INV-8 按字符切段：offset 起最多 maxChars 个，缺省与上限按常量表；切口不劈开代理对；读到头 nextOffset 是 null', async () => {
     const url = 'https://example.com/long'
     const body = 'x'.repeat(WebLimits.defaultReadChars + WebLimits.maxReadChars + 5_000)

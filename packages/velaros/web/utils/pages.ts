@@ -63,3 +63,21 @@ export function isNavigating(page: WebPage): boolean {
 export function isPdfDocument(contentType: string): boolean {
   return /^application\/pdf\b/iu.test(contentType.trim())
 }
+
+/**
+ * 文档是不是纯文本文件（源码、Markdown、YAML、JSON 这类）：浏览器把文字原样摆进一个 pre，空白就是内容。
+ * 按媒体类型认，不看参数：text/ 下除了 HTML 与 XML 的都算，另加 JSON 与 JavaScript。
+ */
+export function isPlainTextDocument(contentType: string): boolean {
+  const type = contentType
+    .trim()
+    .toLowerCase()
+    .replace(/\s*;.*$/su, '')
+  if (type === 'text/html' || type === 'text/xml' || type.endsWith('+xml')) return false
+  return (
+    type.startsWith('text/') ||
+    type === 'application/json' ||
+    type.endsWith('+json') ||
+    /^application\/(?:x-)?(?:java|ecma)script$/u.test(type)
+  )
+}

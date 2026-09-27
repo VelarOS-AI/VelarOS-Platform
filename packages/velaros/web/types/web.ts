@@ -51,8 +51,9 @@ export interface WebReadInput {
 
 /**
  * @AgentView
- * 读出来的一段正文。url 是跳转之后的最终地址，title 是网页标题。
- * text 是整页正文从 offset 起的一段：行内空白并成一个，段落之间空一行；totalChars 是整页正文一共多少个字符。
+ * 读出来的一段正文。url 是跳转之后的最终地址，title 是网页标题（纯文本文件没有标题，是空字符串）。
+ * text 是整页正文从 offset 起的一段：网页的行内空白并成一个、段落之间空一行；纯文本文件（源码、Markdown、JSON 这类）原样交回，缩进和空行都在。
+ * totalChars 是整页正文一共多少个字符。
  * nextOffset 不是 null 就是还没读完，拿它当 offset 再调一次 read 接着读；是 null 就读到头了。
  */
 export interface WebPageText {

@@ -1,7 +1,8 @@
 // 真机探针：用仓库里的 Electron 当宿主，照 WebSpacePort 接一个不显示的窗口（show:false、不带 persist: 的临时分区、关掉后台节流），
 // 把 velaros:web 在真浏览器里走一遍：先在本地夹具页上核对页面脚本（Bing、Google 结果页，带导航页眉页脚的文章、整页包在 form 里的老站、
-// 弹窗时正文被标成 aria-hidden 的页面、页面自己跳走、分两步渲染的单页应用），再真搜一次中文、一次英文（用户选 Google：打不开就换 Bing），
-// 读第一条结果，并打印用了哪个搜索引擎、几条结果、前几条标题；最后在一个发往 Google 的请求一律卡住的临时会话里真走一遍换 Bing，
+// 弹窗时正文被标成 aria-hidden 的页面、页面自己跳走、分两步渲染的单页应用，响应头 CSP 带 sandbox、禁了脚本的源码文件与网页），
+// 再真搜一次中文、一次英文（用户选 Google：打不开就换 Bing），读第一条结果与 raw.githubusercontent.com 上的一份 README（禁了脚本的纯文本），
+// 并打印用了哪个搜索引擎、几条结果、前几条标题；最后在一个发往 Google 的请求一律卡住的临时会话里真走一遍换 Bing，
 // 量从开始搜到开始装 Bing 结果页用了多久，并把 12 小时的退避写进一个临时 JSON 文件，再用一份新起的操作（像重启之后）核对它照这份文件跳过 Google。bun test 不跑它。
 // 跑法（先在 packages/velaros 下 bun run build）：
 //   node_modules/electron/dist/Electron.app/Contents/MacOS/Electron packages/velaros/web/test/probes/electron-web.probe.mjs
@@ -62,6 +63,27 @@ async function loadPage(contents, url, signal) {
     await waitForStop(contents, signal)
   } finally {
     signal.removeEventListener('abort', stop)
+  }
+}
+
+/**
+ * 在页面里当场跑：先在主框架上跑。页面禁了脚本（响应头 CSP 带 sandbox）时主框架以字符串 'Script not run' 拒跑，
+ * 改经 DevTools 协议在同一页里求值：按值交回、等 promise；页面自己的脚本照样不跑。
+ */
+async function evaluateInPage(contents, expression) {
+  try {
+    return await contents.mainFrame.executeJavaScript(expression)
+  } catch (error) {
+    if (error !== 'Script not run') throw error
+    if (!contents.debugger.isAttached()) contents.debugger.attach('1.3')
+    const { result, exceptionDetails } = await contents.debugger.sendCommand('Runtime.evaluate', {
+      expression,
+      returnByValue: true,
+      awaitPromise: true,
+    })
+    if (exceptionDetails)
+      throw new Error(exceptionDetails.exception?.description ?? exceptionDetails.text)
+    return result?.value
   }
 }
 
@@ -145,7 +167,7 @@ function createPort(engine, partition = Partition, backoff = null) {
           return loadPage(contents, url, loadSignal)
         },
         // mainFrame 上的当场跑；webContents.executeJavaScript 要等页面停止加载才跑，结果页就得等整页加载完
-        evaluate: (expression) => contents.mainFrame.executeJavaScript(expression),
+        evaluate: (expression) => evaluateInPage(contents, expression),
         url: () => (contents.isDestroyed() ? '' : contents.getURL()),
         loading: () => !contents.isDestroyed() && contents.isLoadingMainFrame(),
         close: () => {
@@ -208,7 +230,25 @@ setTimeout(() => { document.getElementById('root').innerHTML = '<article><h1>单
 /** 慢吞吞的正文页：过一秒半才回，加载完之后自己跳过来的页面要等它。 */
 const SlowArticle = `<!doctype html><html><head><title>慢正文</title></head><body><article><h1>慢正文</h1><p>${'一秒半之后才到的正文。'.repeat(6)}</p></article></body></html>`
 
-/** 起一个本地站点，按路径交夹具页；/slow-article 过一秒半才回。 */
+/** 禁掉页面脚本的响应头：CSP 带 sandbox、没给 allow-scripts，raw.githubusercontent.com 就是这样回的。 */
+const SandboxPolicy = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+
+/**
+ * 禁了脚本的夹具页：路径 → [媒体类型, 内容]。源码文件带 CRLF、制表符、缩进、行尾空白与连着的空行，读出来都要原样在；
+ * 网页里的脚本不该跑（跑了标题就变了），正文照常只读 article。
+ */
+const SandboxedFixtures = {
+  '/raw-code': [
+    'text/plain; charset=utf-8',
+    '\r\n# 源码文件\r\ndef main():\r\n    for i in range(3):\r\n\tprint(i)  \r\n\r\n\r\n\r\nmain()\r\n',
+  ],
+  '/sandboxed-article': [
+    'text/html; charset=utf-8',
+    `<!doctype html><html><head><title>禁了脚本的网页</title></head><body><nav>导航链接</nav><article><h1>沙箱正文</h1><p>${'禁了脚本也读得出的正文。'.repeat(6)}</p></article><footer>版权所有</footer><script>document.title = '脚本跑了'</script></body></html>`,
+  ],
+}
+
+/** 起一个本地站点，按路径交夹具页；/slow-article 过一秒半才回，SandboxedFixtures 里的带 CSP sandbox 回。 */
 async function startFixtures() {
   const server = http.createServer((request, response) => {
     const path = new URL(request.url, 'http://localhost').pathname
@@ -217,6 +257,15 @@ async function startFixtures() {
         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
         response.end(SlowArticle)
       }, 1_500)
+      return
+    }
+    const sandboxed = SandboxedFixtures[path]
+    if (sandboxed) {
+      response.writeHead(200, {
+        'content-type': sandboxed[0],
+        'content-security-policy': SandboxPolicy,
+      })
+      response.end(sandboxed[1])
       return
     }
     const page = Fixtures[path]
@@ -316,6 +365,21 @@ async function fixtureSuite(port, origin) {
     sliced.text.length === 10 && sliced.nextOffset === 10 && sliced.totalChars > 10,
     JSON.stringify(sliced)
   )
+  const code = await webOperations.read({ url: `${origin}/raw-code` }, ctx)
+  check(
+    'read 禁了脚本的源码文件（CSP sandbox）：读得出，缩进、制表符、行尾空白、空行原样，只统一换行、去掉开头的空行与末尾的空白',
+    code.title === '' &&
+      code.text === '# 源码文件\ndef main():\n    for i in range(3):\n\tprint(i)  \n\n\n\nmain()',
+    JSON.stringify(code.text)
+  )
+  const sandboxed = await webOperations.read({ url: `${origin}/sandboxed-article` }, ctx)
+  check(
+    'read 禁了脚本的网页（CSP sandbox）：页面脚本没跑，照样删导航页脚、只读 article',
+    sandboxed.title === '禁了脚本的网页' &&
+      sandboxed.text.startsWith('沙箱正文\n\n禁了脚本也读得出的正文。') &&
+      !/导航|版权/u.test(sandboxed.text),
+    `${sandboxed.title} ${JSON.stringify(sandboxed.text.slice(0, 40))}`
+  )
   try {
     await webOperations.read({ url: 'http://127.0.0.1:9/nothing' }, ctx)
     check('read 连不上的地址抛 WEB_PAGE_UNREACHABLE', false, '竟然读成了')
@@ -393,6 +457,26 @@ async function liveSuite() {
     } catch (error) {
       check('真读第一条结果', false, `${error.code}：${error.message}`)
     }
+  }
+  // raw.githubusercontent.com 的响应头带 CSP sandbox：页面脚本一律不跑，读正文要走 DevTools 协议
+  const rawStarted = Date.now()
+  try {
+    const raw = await webOperations.read(
+      { url: 'https://raw.githubusercontent.com/nodejs/Release/main/README.md', maxChars: 2000 },
+      contextOf(google.port)
+    )
+    check(
+      '真读 raw.githubusercontent.com 上的 README（禁了脚本的纯文本文件）',
+      raw.text.length > 0,
+      `全文 ${raw.totalChars} 个字符，${Date.now() - rawStarted} ms`
+    )
+    info(`开头：${JSON.stringify(raw.text.slice(0, 160))}`)
+  } catch (error) {
+    check(
+      '真读 raw.githubusercontent.com 上的 README（禁了脚本的纯文本文件）',
+      false,
+      `${error.code}：${error.message}`
+    )
   }
   const bing = createPort('bing')
   await liveSearch(bing.port, 'Electron BrowserWindow show false')

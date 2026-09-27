@@ -55,10 +55,11 @@ import {
   closeWhenOpened,
   isNavigating,
   isPdfDocument,
+  isPlainTextDocument,
   untilAborted,
 } from '../utils/pages.js'
 import { readableScanOf, searchScanOf, settleProbeOf } from '../utils/scans.js'
-import { durationText, readableText, textSlice } from '../utils/text.js'
+import { durationText, plainText, readableText, textSlice } from '../utils/text.js'
 import { WebTuning } from '../utils/tuning.js'
 import { httpUrl, landedUrl } from '../utils/urls.js'
 
@@ -88,7 +89,7 @@ export interface WebOperationsApi {
    * @OperationEffect none
    */
   search(input: WebSearchInput, ctx: WebOperationContext): Promise<WebSearchResults>
-  /** @AgentView 打开一个网页、等它渲染完，读出正文（去掉脚本、导航、页眉页脚、侧栏与表单），按字符分段交回：默认一次 8000 个字符、最多 20000 个字符。
+  /** @AgentView 打开一个网页、等它渲染完，读出正文（去掉脚本、导航、页眉页脚、侧栏与表单；源码、Markdown、JSON 这类纯文本文件原样读出），按字符分段交回：默认一次 8000 个字符、最多 20000 个字符。
    * 每次 read 都重新打开网页，长网页一次多读一些。
    * @OperationEffect none
    */
@@ -140,7 +141,10 @@ export class WebOperations implements WebOperationsApi {
       const url = landed ?? request.url
       const scan = await this.readable(page, url, ctx)
       if (isPdfDocument(scan.contentType)) throw pdfPageError(url)
-      const text = readableText(scan.text)
+      // 纯文本文件的空白就是内容（缩进、对齐、空行）：原样留着；网页的 innerText 按排版收拾
+      const text = isPlainTextDocument(scan.contentType)
+        ? plainText(scan.text)
+        : readableText(scan.text)
       if (loaded.kind !== 'loaded' && !text) throw nothingLoadedError(request.url)
       const slice = textSlice(text, request.offset, request.maxChars)
       return {
