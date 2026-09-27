@@ -636,12 +636,15 @@ describe('外部浏览器启动器', () => {
   })
 
   test('三个平台的用户 Chrome 默认配置目录，正式版、Beta、Dev、Canary 的先后', () => {
-    assert.deepEqual(getDefaultUserDataDirCandidates('darwin', { home: '/Users/u', env: {} }), [
-      '/Users/u/Library/Application Support/Google/Chrome',
-      '/Users/u/Library/Application Support/Google/Chrome Beta',
-      '/Users/u/Library/Application Support/Google/Chrome Dev',
-      '/Users/u/Library/Application Support/Google/Chrome Canary',
-    ])
+    assert.deepEqual(
+      getDefaultUserDataDirCandidates('darwin', { home: '/Users/example', env: {} }),
+      [
+        '/Users/example/Library/Application Support/Google/Chrome',
+        '/Users/example/Library/Application Support/Google/Chrome Beta',
+        '/Users/example/Library/Application Support/Google/Chrome Dev',
+        '/Users/example/Library/Application Support/Google/Chrome Canary',
+      ]
+    )
     assert.deepEqual(
       getDefaultUserDataDirCandidates('win32', {
         home: 'C:\\Users\\u',
