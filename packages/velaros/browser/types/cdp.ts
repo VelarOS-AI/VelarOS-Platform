@@ -43,6 +43,8 @@ export interface CdpTraceTransport {
 
 /** electron.WebContents 的最小 debugger 面（避免此文件依赖 electron 类型）。 */
 export interface WebContentsDebuggerLike {
+  /** 页面销毁后再碰 debugger 会同步抛错。 */
+  isDestroyed(): boolean
   debugger: {
     sendCommand(method: string, params?: Record<string, unknown>): Promise<unknown>
     on(

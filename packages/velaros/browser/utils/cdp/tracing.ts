@@ -29,8 +29,12 @@ export function createWebContentsCdpTraceTransport(
   webContents: WebContentsDebuggerLike
 ): CdpTraceTransport {
   return {
-    send: <T = unknown>(method: string, params?: Record<string, unknown>) =>
-      webContents.debugger.sendCommand(method, params) as Promise<T>,
+    // 页面已经销毁时碰 debugger 会同步抛错：改成拒绝，调用方挂的 .catch 才接得住
+    send: <T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> => {
+      if (webContents.isDestroyed())
+        return Promise.reject(new AppError('UNAVAILABLE', `页面已关闭，${method} 发不出去。`))
+      return webContents.debugger.sendCommand(method, params) as Promise<T>
+    },
     onEvent: <T = unknown>(method: string, listener: (params: T) => void) => {
       const handler = (
         _event: unknown,
@@ -44,7 +48,8 @@ export function createWebContentsCdpTraceTransport(
       }
       webContents.debugger.on('message', handler)
       return () => {
-        webContents.debugger.off('message', handler)
+        // 页面销毁时监听已随 debugger 一起没了，再摘会同步抛错
+        if (!webContents.isDestroyed()) webContents.debugger.off('message', handler)
       }
     },
   }
