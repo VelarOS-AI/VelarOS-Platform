@@ -207,10 +207,12 @@ describe('正文', () => {
     expect(textSlice('', 0, 10)).toEqual({ text: '', start: 0, nextOffset: null })
   })
 
-  test('时长：不到一分钟说秒，整分钟说分钟', () => {
+  test('时长：整小时说小时，整分钟说分钟，别的说秒（最多一位小数）', () => {
     expect(durationText(8_000)).toBe('8 秒')
+    expect(durationText(4_500)).toBe('4.5 秒')
     expect(durationText(90_000)).toBe('90 秒')
-    expect(durationText(WebTuning.search.googleRestMs)).toBe('10 分钟')
+    expect(durationText(600_000)).toBe('10 分钟')
+    expect(durationText(WebTuning.search.googleBackoffMs)).toBe('12 小时')
   })
 
   test('PDF 按媒体类型认', () => {

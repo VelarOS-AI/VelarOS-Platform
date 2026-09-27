@@ -30,8 +30,10 @@ export function textSlice(text: string, offset: number, maxChars: number): WebTe
   return { text: text.slice(start, end), start, nextOffset: end < text.length ? end : null }
 }
 
-/** 报错里怎么说一段时长：不到一分钟说几秒，整分钟说几分钟。 */
+/** 报错里怎么说一段时长：整小时说几小时，整分钟说几分钟，别的说几秒（最多带一位小数）。 */
 export function durationText(ms: number): string {
-  const seconds = Math.round(ms / 1000)
-  return seconds >= 60 && seconds % 60 === 0 ? `${seconds / 60} 分钟` : `${seconds} 秒`
+  const seconds = Math.round(ms / 100) / 10
+  if (seconds >= 3600 && seconds % 3600 === 0) return `${seconds / 3600} 小时`
+  if (seconds >= 60 && seconds % 60 === 0) return `${seconds / 60} 分钟`
+  return `${seconds} 秒`
 }

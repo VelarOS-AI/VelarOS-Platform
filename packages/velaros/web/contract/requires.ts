@@ -4,6 +4,7 @@
  * - 空间端口 `WebSpacePort`：开不显示的页面、报用户选的搜索引擎。页面由宿主的无头浏览器给（Electron 里是 show:false 的窗口），
  *   本单元只往页面里装地址、跑读取脚本，用完关掉。
  * - 页面 `WebPage`：端口开出来的一页。
+ * - 搜索引擎退避记忆 `WebEngineBackoff`：可选。宿主存下来（比如一个小 JSON 文件），Google 搜不通之后的退避就能跨重启。
  * - 调用上下文 `WebOperationContext`：宿主分发每一次调用时装好。
  *
  * 这里的每个接口都必须从根入口导出。
@@ -28,6 +29,20 @@ export interface WebSpacePort {
    * 不给就原样交出去（read 照样读得了，浏览器会跟着跳）。请求要和页面在同一个临时会话里，signal 触发时放弃。
    */
   resolveRedirect?(url: string, signal: AbortSignal): Promise<Nullable<string>>
+  /** 可选：搜索引擎退避记忆，宿主存下来就能跨重启；不给就只记在进程里，重启就忘。 */
+  engineBackoff?: WebEngineBackoff
+}
+
+/**
+ * 搜索引擎退避记忆：某个搜索引擎搜不通之后，到什么时候之前的搜索不再先试它（现在只有 Google 会退避）。
+ * 同步读写：宿主启动时把存的读进内存，read 直接交回，write 改内存再自己找时机落盘。每次搜索只 read 一次，只在记下一次搜不通时 write；
+ * 两个方法抛错只记一笔，搜索照常（退回进程里的记忆）。
+ */
+export interface WebEngineBackoff {
+  /** 这个搜索引擎退避到什么时候（毫秒时间戳）；没有记录交回 null。 */
+  read(engine: WebSearchEngineId): Nullable<number>
+  /** 记下这个搜索引擎退避到什么时候（毫秒时间戳）：它刚搜不通。 */
+  write(engine: WebSearchEngineId, until: number): void
 }
 
 /** 端口开出来的一页：装地址、在页面里跑脚本、读当前地址、关掉。 */
@@ -39,7 +54,10 @@ export interface WebPage {
   load(url: string, signal: AbortSignal): Promise<void>
   /** 在页面里跑一段表达式（可以是 async IIFE），交回可结构化克隆的值；脚本里抛的错照样抛出来。 */
   evaluate<T>(expression: string): Promise<T>
-  /** 当前地址（跳转之后的）；还没装地址时是空字符串或 about:blank。 */
+  /**
+   * 当前落下的地址（跳转之后的）。还没落下文档（服务器一个字节都没回来）时是空字符串或 about:blank——
+   * 本单元靠这一点分辨 Google 是打不开，还是打得开只是结果页加载得慢。Electron 的 `webContents.getURL()` 就是这样。
+   */
   url(): string
   /** 关掉这一页，释放它占的一切；关过再关什么也不做。 */
   close(): void

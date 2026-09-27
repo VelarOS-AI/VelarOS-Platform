@@ -60,18 +60,22 @@ export function fakeClock(start = Date.UTC(2026, 8, 27)): FakeClock {
   }
 }
 
-/** 假页面「加载很慢」时一口气拨过去的时长：比哪个时限都长，又远短于记住 Google 搜不通的那十分钟。 */
+/** 假页面「加载很慢」「一直没回应」时最多拨过去的时长：比哪个加载时限都长，又远短于 Google 搜不通之后的退避。 */
 export const SlowLoadMs = 60_000
+
+/** 假页面加载时拨钟的一小步：操作的各个时限都是它的整数倍，量出来的放手时刻正好落在时限上。 */
+const TickMs = 100
 
 // ── 假网页 ──────────────────────────────────────────────────────
 
 /** 一个地址在假浏览器里的样子。 */
 export interface FakeSite {
   /**
-   * load 的结局：缺省加载完；'slow' 把假钟拨过所有时限，到点还在加载；'hang' 一直卡着，直到调用方撒手；
-   * 给一个错误就是宿主报加载出错。
+   * load 的结局：缺省加载完；'slow' 文档落下了、再把假钟拨过所有时限，到点还在加载；
+   * 'silent' 连一个文档都没落下、假钟拨过所有时限（像打不开的 Google：连接一直挂着）；
+   * 'hang' 一直卡着、不拨钟，直到调用方撒手；给一个错误就是宿主报加载出错。
    */
-  load?: 'ok' | 'slow' | 'hang' | Error
+  load?: 'ok' | 'slow' | 'silent' | 'hang' | Error
   /** 装地址时顺手做的事（比如测试在这里按下取消）。 */
   onLoad?: () => void
   /** 跳转之后落在哪个地址；缺省就是装的那个地址。 */
@@ -90,13 +94,26 @@ export interface FakeSite {
   evaluateHangs?: boolean
 }
 
-/** 假浏览器记下的事：开了几页、关了几页、装过哪些地址、跑过哪几段脚本（按名字）、问过哪些跳转链接。 */
+/**
+ * 假浏览器记下的事：开了几页、关了几页、装过哪些地址（与装的时候假钟几点）、跑过哪几段脚本（按名字）、问过哪些跳转链接，
+ * 以及退避记忆被读过几次、写进过什么。
+ */
 export interface FakeBrowserRecord {
   opened: number
   closed: number
   loads: string[]
+  loadedAt: number[]
   scripts: string[]
   resolved: string[]
+  backoffReads: WebSearchEngineId[]
+  backoffWrites: Array<{ engine: WebSearchEngineId; until: number }>
+}
+
+/** 假的退避记忆：存着的值（按搜索引擎）、读或写的时候抛错。 */
+export interface FakeBackoff {
+  stored?: Partial<Record<WebSearchEngineId, number>>
+  readFails?: boolean
+  writeFails?: boolean
 }
 
 /** 认出是哪一段页面脚本。 */
@@ -121,14 +138,21 @@ function fakePage(
   return {
     load: (url, signal) => {
       record.loads.push(url)
+      record.loadedAt.push(clock.now())
       site = sites(url)
       probes = 0
       site.onLoad?.()
       const outcome = site.load ?? 'ok'
       if (outcome instanceof Error) return Promise.reject(outcome)
-      if (outcome !== 'hang') current = site.landed ?? url
+      if (outcome === 'ok' || outcome === 'slow') current = site.landed ?? url
       if (outcome === 'ok') return Promise.resolve()
-      if (outcome === 'slow') clock.advance(SlowLoadMs)
+      // 慢的与没回应的：一小步一小步拨钟，直到操作到点撒手（最多拨过所有时限），量得出操作在哪一刻放手
+      for (
+        let waited = 0;
+        outcome !== 'hang' && !signal.aborted && waited < SlowLoadMs;
+        waited += TickMs
+      )
+        clock.advance(TickMs)
       return new Promise<void>((_, reject) => {
         if (signal.aborted) reject(signal.reason)
         else signal.addEventListener('abort', () => reject(signal.reason), { once: true })
@@ -182,6 +206,7 @@ export function sitesOf(table: {
 /**
  * 一个假的无头浏览器空间：用户选的搜索引擎、站点表、假钟都能按用例换；`openGate` 给了就等它放行才开出页面（宿主开页面很慢）。
  * 给了 `redirects` 才有 resolveRedirect 这个口子：按地址查表，查到字符串就是跳去的地址，查到错误就抛，'hang' 把假钟拨过时限、一直不回，查不到交回 null。
+ * 给了 `backoff` 才有退避记忆：存着的值、读写抛错都能按用例换，读写都记下来。
  * 交回端口、一份用假钟的操作（Google 搜不通的记忆各用例互不串）、调用上下文、代码面宿主装上下文的写法，以及记下的事。
  */
 export function webSpace(options: {
@@ -191,9 +216,19 @@ export function webSpace(options: {
   abortSignal?: AbortSignal
   openGate?: Promise<void>
   redirects?: Record<string, string | Error | 'hang'>
+  backoff?: FakeBackoff
 }) {
   const clock = options.clock ?? fakeClock()
-  const record: FakeBrowserRecord = { opened: 0, closed: 0, loads: [], scripts: [], resolved: [] }
+  const record: FakeBrowserRecord = {
+    opened: 0,
+    closed: 0,
+    loads: [],
+    loadedAt: [],
+    scripts: [],
+    resolved: [],
+    backoffReads: [],
+    backoffWrites: [],
+  }
   const port: WebSpacePort = {
     searchEngine: () => options.engine ?? 'google',
     openPage: async () => {
@@ -201,6 +236,20 @@ export function webSpace(options: {
       record.opened += 1
       return fakePage(options.sites, clock, record)
     },
+  }
+  const backoff = options.backoff
+  if (backoff) {
+    port.engineBackoff = {
+      read: (engine) => {
+        record.backoffReads.push(engine)
+        if (backoff.readFails) throw new AppError('IO', '退避记忆读不出来')
+        return backoff.stored?.[engine] ?? null
+      },
+      write: (engine, until) => {
+        record.backoffWrites.push({ engine, until })
+        if (backoff.writeFails) throw new AppError('IO', '退避记忆写不进去')
+      },
+    }
   }
   const redirects = options.redirects
   if (redirects) {

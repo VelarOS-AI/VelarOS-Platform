@@ -33,20 +33,20 @@ export const webModule = createCapabilityModule({
 })
 ```
 
-宿主的端口大致这样接（Electron 主进程）：`openPage` 开一个 `show: false`、`webPreferences: { partition: '<不带 persist: 的临时名字>', backgroundThrottling: false }` 的窗口，拒掉弹窗与下载；`load` 用 `webContents.loadURL`，signal 触发时 `webContents.stop()`；`evaluate` 用 `webContents.executeJavaScript`；`url` 是 `webContents.getURL()`；`close` 是 `window.destroy()`；可选的 `resolveRedirect` 在同一个会话里用 `net.request({ redirect: 'manual' })` 读 302 的 Location。完整的一份在 `test/probes/electron-web.probe.mjs`。
+宿主的端口大致这样接（Electron 主进程）：`openPage` 开一个 `show: false`、`webPreferences: { partition: '<不带 persist: 的临时名字>', backgroundThrottling: false }` 的窗口，拒掉弹窗与下载；`load` 用 `webContents.loadURL`，signal 触发时 `webContents.stop()`；`evaluate` 用 `webContents.executeJavaScript`；`url` 是 `webContents.getURL()`；`close` 是 `window.destroy()`；可选的 `resolveRedirect` 在同一个会话里用 `net.request({ redirect: 'manual' })` 读 302 的 Location；可选的 `engineBackoff` 启动时把 JSON 文件读进内存，`read` 从内存交回，`write` 改内存再落盘。完整的一份在 `test/probes/electron-web.probe.mjs`。
 
 ## 入口
 
 | 入口 | 运行环境 | 内容 |
 | --- | --- | --- |
-| `@velaros-ai/velaros/web` | Node | `webOperations`、宿主要给的 `WebSpacePort` 与 `WebPage`、调用上下文 `WebOperationContext` |
+| `@velaros-ai/velaros/web` | Node | `webOperations`、宿主要给的 `WebSpacePort`、`WebPage` 与 `WebEngineBackoff`、调用上下文 `WebOperationContext` |
 | `@velaros-ai/velaros/web/contracts` | 任何进程 | 错误码 `WebErrorCodes`、上限 `WebLimits`、入参与结果、模型面 `VelarWebModule` |
 
 ## 约定
 
 - 只经端口碰外面：本单元不发网络请求、不起进程，开页面与（可选的）问跳转都由宿主做。页面要放在不落盘的临时会话里（碰不到用户的 Cookie、登录与浏览记录），用户看不到；要关掉后台节流，不然单页应用渲染不出来。建议给页面一个正常的 Chrome UA（去掉 `Electron/…` 那段），不然搜索引擎更容易把它拦成验证页。
 - 每次尝试开一个新页面，用完在 finally 里 `close`：搜成、搜不通、打不开、超时、取消都一样；撒手之后宿主才开出来的页面也会被关掉。`close` 要能重复调用，抛错只记一笔。
-- 搜索先用 `searchEngine()` 报的那个，搜不通（加载出错、超时、被拦成验证页或同意页、认不出结果）换另一个；Google 搜不通之后十分钟内的搜索直接走 Bing（进程里一份记忆）。两边都搜不了抛 `WEB_SEARCH_FAILED`；Bing 明说没有结果交回空的 results。
+- 搜索先用 `searchEngine()` 报的那个，搜不通（加载出错、超时、被拦成验证页或同意页、认不出结果）换另一个。Google 4.5 秒连一个文档都没落下（打不开时连接一直挂着）就换 Bing，文档落下了只是结果页慢的照等到加载时限。Google 搜不通之后 12 小时内的搜索直接走 Bing：进程里记一份，端口给了 `engineBackoff` 也记在那里（宿主存进一个小 JSON 文件就能跨重启），每次搜索读一次、搜不通才写。两边都搜不了抛 `WEB_SEARCH_FAILED`；Bing 明说没有结果交回空的 results。
 - Bing 的跳转链接在本地解开；Google 现在给的是 `/goto?url=<令牌>`，真实地址只有问一次 Google 才知道：端口给了 `resolveRedirect` 就一批并发问（有时限），不给或问不出来的原样交出去，`read` 照样读得了。
 - `read` 加载完之后等单页应用渲染（有上限），读出 article 或 main（占大半正文时）或整个 body 的 innerText，按字符分段；每次 `read` 都重新打开网页。打不开抛 `WEB_PAGE_UNREACHABLE`，PDF 或读正文的脚本没跑成抛 `WEB_PAGE_UNREADABLE`；到点还在加载但已经有正文的照读。
 - 超时与各种时长在 `utils/tuning.ts`；`WebPage.load` 要把服务端跳转与页面自己跳走算成同一次加载（Electron 的 `loadURL` 遇到页面自己跳走会以 `ERR_ABORTED` 失败，探针里有接法）。

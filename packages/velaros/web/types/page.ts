@@ -45,9 +45,12 @@ export interface WebReadableScan {
   contentType: string
 }
 
-/** 加载一页的结局：加载完了；到了时限还在加载（已经出来的内容照读）；宿主报加载出错（带宿主的原话）。 */
+/**
+ * 加载一页的结局：加载完了；到了时限还在加载（已经出来的内容照读）；到了落下时限连一个文档都没落下（打不开，不再等）；
+ * 宿主报加载出错（带宿主的原话）。
+ */
 export type WebLoadOutcome =
-  { kind: 'loaded' } | { kind: 'slow' } | { kind: 'failed'; message: string }
+  { kind: 'loaded' } | { kind: 'slow' } | { kind: 'silent' } | { kind: 'failed'; message: string }
 
 /** 用一个搜索引擎试一次的结局：搜通了交回整理好的结果，搜不通交回一句为什么。 */
 export type WebEngineAttempt =

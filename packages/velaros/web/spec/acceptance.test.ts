@@ -208,9 +208,10 @@ describe('搜索', () => {
     expect(counted.record.resolved).toHaveLength(2 + WebTuning.search.spareHits)
   })
 
-  test('INV-3 Google 搜不通就换 Bing：加载出错、到点没加载完、验证页、同意页、验证字样、认不出结果都算', async () => {
+  test('INV-3 Google 搜不通就换 Bing：加载出错、一直没回应、到点没加载完、验证页、同意页、验证字样、认不出结果都算', async () => {
     const failures = {
       加载出错: { load: new AppError('NETWORK', 'net::ERR_CONNECTION_RESET') },
+      一直没回应: { load: 'silent' as const },
       到点没加载完: { load: 'slow' as const, landed: 'about:blank' },
       验证页: {
         landed: 'https://www.google.com/sorry/index?continue=x',
@@ -237,8 +238,30 @@ describe('搜索', () => {
         closed: 2,
       })
       // 到点连一个文档都没落下的页面不再跑脚本：宿主那边对它跑脚本会一直卡着
-      if (name === '到点没加载完') expect(space.record.scripts).toEqual(['bing'])
+      if (name === '一直没回应' || name === '到点没加载完')
+        expect(space.record.scripts).toEqual(['bing'])
     }
+
+    // Google 一直没回应：到落下时限就换 Bing，不等加载时限
+    const silent = webSpace({
+      sites: sitesOf({ google: { load: 'silent' }, bing: { scan: BingResults } }),
+    })
+    const start = silent.clock.now()
+    const fallback = await silent.operations.search({ query: '打不开' }, silent.context)
+    expect(fallback.engine).toBe('bing')
+    expect(silent.record.loadedAt[1]! - start).toBe(WebTuning.search.googleCommitMs)
+    expect(WebTuning.search.googleCommitMs).toBeLessThan(WebTuning.search.googleLoadTimeoutMs)
+
+    // 文档落下了、只是结果页加载得慢：不被落下时限掐掉，到加载时限照抓已经出来的结果
+    const late = webSpace({
+      sites: sitesOf({
+        google: { load: 'slow', scan: GoogleResults },
+        bing: { scan: BingResults },
+      }),
+    })
+    const slowGoogle = await late.operations.search({ query: '慢' }, late.context)
+    expect([slowGoogle.engine, slowGoogle.results.length]).toEqual(['google', 2])
+    expect(late.record.loads.some((url) => url.includes('bing.com'))).toBe(false)
 
     // Google 认出了结果：不碰 Bing；正常结果里碰巧有「unusual traffic」也不算被拦
     const fine = webSpace({
@@ -256,12 +279,14 @@ describe('搜索', () => {
     expect(fine.record.loads.some((url) => url.includes('bing.com'))).toBe(false)
   })
 
-  test('INV-4 记住 Google 搜不通：窗口内直接走 Bing、一个 Google 页面都不开；过了窗口再试，搜通了就忘掉；用户选 Bing 时 Bing 搜不通才试 Google', async () => {
+  test('INV-4 记住 Google 搜不通 12 小时：窗口内直接走 Bing、一个 Google 页面都不开；过了窗口再试，搜通了就忘掉；宿主的退避记忆每次搜索读一次、搜不通才写；用户选 Bing 时 Bing 搜不通才试 Google', async () => {
+    expect(WebTuning.search.googleBackoffMs).toBe(12 * 60 * 60 * 1000)
     let googleUp = false
     const sites = sitesOf({ bing: { scan: BingResults } })
     const clock = fakeClock()
     const space = webSpace({
       clock,
+      backoff: {},
       sites: (url) =>
         url.startsWith('https://www.google.com/')
           ? googleUp
@@ -272,9 +297,14 @@ describe('搜索', () => {
     const googleLoads = () =>
       space.record.loads.filter((url) => url.startsWith('https://www.google.com/')).length
 
+    const failedAt = clock.now()
     expect((await space.operations.search({ query: '一' }, space.context)).engine).toBe('bing')
     expect(googleLoads()).toBe(1)
-    clock.advance(WebTuning.search.googleRestMs - 1)
+    // 搜不通才写，写的是退避到什么时候
+    expect(space.record.backoffWrites).toEqual([
+      { engine: 'google', until: failedAt + WebTuning.search.googleBackoffMs },
+    ])
+    clock.advance(WebTuning.search.googleBackoffMs - 1)
     googleUp = true
     expect((await space.operations.search({ query: '二' }, space.context)).engine).toBe('bing')
     expect(googleLoads()).toBe(1)
@@ -284,7 +314,45 @@ describe('搜索', () => {
     expect(googleLoads()).toBe(2)
     expect((await space.operations.search({ query: '四' }, space.context)).engine).toBe('google')
     expect(googleLoads()).toBe(3)
+    // 每次搜索只读一次；搜通了、跳过了都不写
+    expect(space.record.backoffReads).toEqual(['google', 'google', 'google', 'google'])
+    expect(space.record.backoffWrites).toHaveLength(1)
     expect(space.record.opened).toBe(space.record.closed)
+
+    // 重启之后：进程里什么都没记着，宿主存着的退避照样认——还没到期就不开 Google 的页面，到期了照常试
+    const restarted = fakeClock()
+    const remembered = webSpace({
+      clock: restarted,
+      backoff: { stored: { google: restarted.now() + 60_000 } },
+      sites: sitesOf({ google: { scan: GoogleResults }, bing: { scan: BingResults } }),
+    })
+    expect(
+      (await remembered.operations.search({ query: '重启后' }, remembered.context)).engine
+    ).toBe('bing')
+    expect(remembered.record.loads.every((url) => url.startsWith('https://www.bing.com/'))).toBe(
+      true
+    )
+    expect(remembered.record.backoffWrites).toEqual([])
+    const expired = webSpace({
+      backoff: { stored: { google: fakeClock().now() - 1 } },
+      sites: sitesOf({ google: { scan: GoogleResults }, bing: { scan: BingResults } }),
+    })
+    expect((await expired.operations.search({ query: '到期' }, expired.context)).engine).toBe(
+      'google'
+    )
+
+    // 宿主的记忆读不出来、写不进去：只记一笔，照进程里的记忆来，搜索照常
+    const broken = webSpace({
+      backoff: { readFails: true, writeFails: true },
+      sites: sitesOf({
+        google: { load: new AppError('NETWORK', 'net::ERR_CONNECTION_RESET') },
+        bing: { scan: BingResults },
+      }),
+    })
+    expect((await broken.operations.search({ query: '一' }, broken.context)).engine).toBe('bing')
+    expect((await broken.operations.search({ query: '二' }, broken.context)).engine).toBe('bing')
+    expect(broken.record.loads.filter((url) => url.includes('google.com'))).toHaveLength(1)
+    expect(broken.record.backoffWrites).toHaveLength(1)
 
     // 用户选 Bing：Bing 搜通就不碰 Google；Bing 搜不通才试 Google
     const bingFirst = webSpace({
@@ -328,7 +396,7 @@ describe('搜索', () => {
     // Google 还在记忆窗口里：这一次写明没再试它
     const again = await failureOf(space.operations.search({ query: '再搜' }, space.context))
     expect(again.code).toBe(WebErrorCodes.searchFailed)
-    expect(again.message).toContain('Google：10 分钟内搜不通过，这次没再试')
+    expect(again.message).toContain('Google：12 小时内搜不通过，这次没再试')
 
     const nothing = webSpace({
       engine: 'bing',

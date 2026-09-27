@@ -11,4 +11,9 @@ export type { WebOperationsApi } from './contract/provides.js'
 export { webOperations } from './impl/WebOperations.js'
 
 // ── 注入面：宿主要给的东西 ──────────────────────────────────────
-export type { WebOperationContext, WebPage, WebSpacePort } from './contract/requires.js'
+export type {
+  WebEngineBackoff,
+  WebOperationContext,
+  WebPage,
+  WebSpacePort,
+} from './contract/requires.js'

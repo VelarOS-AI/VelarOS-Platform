@@ -1,14 +1,19 @@
 // 真机探针：用仓库里的 Electron 当宿主，照 WebSpacePort 接一个不显示的窗口（show:false、不带 persist: 的临时分区、关掉后台节流），
 // 把 velaros:web 在真浏览器里走一遍：先在本地夹具页上核对页面脚本（Bing、Google 结果页，带导航页眉页脚的文章、整页包在 form 里的老站、
 // 弹窗时正文被标成 aria-hidden 的页面、页面自己跳走、分两步渲染的单页应用），再真搜一次中文、一次英文（用户选 Google：打不开就换 Bing），
-// 读第一条结果，并打印用了哪个搜索引擎、几条结果、前几条标题；最后在一个发往 Google 的请求一律卡住的临时会话里真走一遍换 Bing 与十分钟记忆。bun test 不跑它。
+// 读第一条结果，并打印用了哪个搜索引擎、几条结果、前几条标题；最后在一个发往 Google 的请求一律卡住的临时会话里真走一遍换 Bing，
+// 量从开始搜到开始装 Bing 结果页用了多久，并把 12 小时的退避写进一个临时 JSON 文件，再用一份新起的操作（像重启之后）核对它照这份文件跳过 Google。bun test 不跑它。
 // 跑法（先在 packages/velaros 下 bun run build）：
 //   node_modules/electron/dist/Electron.app/Contents/MacOS/Electron packages/velaros/web/test/probes/electron-web.probe.mjs
 // 不碰用户自己的 Chrome：页面都是 Electron 自己的隐藏窗口，会话只在内存里，跑完就没了。
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import { app, BrowserWindow, net, session } from 'electron'
 
+import { WebOperations } from '../../../dist/web/impl/WebOperations.js'
 import { webOperations } from '../../../dist/web/index.js'
 import {
   BingResultsScript,
@@ -95,9 +100,30 @@ function resolveRedirect(partition, url, signal) {
   })
 }
 
-/** 一份宿主端口：用户选的搜索引擎，开出来的页面都是隐藏窗口；记着开着的窗口，好核对都关掉了。 */
-function createPort(engine, partition = Partition) {
+/**
+ * 退避记忆的宿主写法：启动时把 JSON 文件读进内存，read 从内存交回，write 改内存再落盘。
+ * 文件坏了、不在就当什么都没记着。
+ */
+function createBackoffFile(path) {
+  let saved = {}
+  try {
+    saved = JSON.parse(readFileSync(path, 'utf8'))
+  } catch {
+    saved = {}
+  }
+  return {
+    read: (engine) => (Number.isFinite(saved[engine]) ? saved[engine] : null),
+    write: (engine, until) => {
+      saved = { ...saved, [engine]: until }
+      writeFileSync(path, JSON.stringify(saved))
+    },
+  }
+}
+
+/** 一份宿主端口：用户选的搜索引擎，开出来的页面都是隐藏窗口；记着开着的窗口与每次装地址的时刻，好核对都关掉了、量换 Bing 用了多久。 */
+function createPort(engine, partition = Partition, backoff = null) {
   const open = new Set()
+  const loads = []
   const port = {
     searchEngine: () => engine,
     resolveRedirect: (url, signal) => resolveRedirect(partition, url, signal),
@@ -114,7 +140,10 @@ function createPort(engine, partition = Partition) {
       contents.setWindowOpenHandler(() => ({ action: 'deny' }))
       open.add(window)
       return {
-        load: (url, loadSignal) => loadPage(contents, url, loadSignal),
+        load: (url, loadSignal) => {
+          loads.push({ url, at: Date.now() })
+          return loadPage(contents, url, loadSignal)
+        },
         evaluate: (expression) => contents.executeJavaScript(expression),
         url: () => (contents.isDestroyed() ? '' : contents.getURL()),
         close: () => {
@@ -124,7 +153,8 @@ function createPort(engine, partition = Partition) {
       }
     },
   }
-  return { port, openWindows: () => open.size }
+  if (backoff) port.engineBackoff = backoff
+  return { port, loads, openWindows: () => open.size }
 }
 
 const contextOf = (port) => ({ abortSignal: new AbortController().signal, web: port })
@@ -344,7 +374,10 @@ async function liveSuite() {
   )
 }
 
-/** 打不开 Google 的网络：发往 Google 的请求卡住不回。第一次搜到点换 Bing，之后十分钟内的搜索一个 Google 页面都不开。 */
+/**
+ * 打不开 Google 的网络：发往 Google 的请求卡住不回。第一次搜到 Google 的落下时限就换 Bing（量从开始搜到开始装 Bing 结果页用了多久），
+ * 退避写进一个临时 JSON 文件；之后的搜索一个 Google 请求都不发；再用一份新起的操作（像重启之后，进程里什么都没记着）照这份文件跳过 Google。
+ */
 async function googleDownSuite() {
   const down = session.fromPartition(GoogleDownPartition)
   down.setUserAgent(down.getUserAgent().replace(/\s(?:Electron|electron-web-probe)\/\S+/gu, ''))
@@ -352,23 +385,61 @@ async function googleDownSuite() {
   down.webRequest.onBeforeRequest({ urls: ['*://*.google.com/*', '*://google.com/*'] }, () => {
     googleRequests += 1 // 不回：像被墙时那样一直等
   })
-  const blocked = createPort('google', GoogleDownPartition)
-  const first = await liveSearch(blocked.port, '北京 故宫 开放时间')
-  check('打不开 Google：到点换成 Bing', first?.engine === 'bing', `${first?.engine}`)
-  const before = googleRequests
-  const started = Date.now()
-  const second = await liveSearch(blocked.port, 'Rust ownership explained')
-  check(
-    '记住 Google 打不开：接下来的搜索直接走 Bing，一个 Google 请求都不发',
-    second?.engine === 'bing' && googleRequests === before,
-    `${second?.engine}，${Date.now() - started} ms，Google 请求 ${googleRequests - before} 个`
-  )
-  check(
-    '打不开 Google 那一轮隐藏窗口都关掉了',
-    blocked.openWindows() === 0,
-    `${blocked.openWindows()} 个没关`
-  )
-  await down.clearStorageData()
+  const directory = mkdtempSync(join(tmpdir(), 'velaros-web-probe-'))
+  const backoffPath = join(directory, 'engine-backoff.json')
+  try {
+    const blocked = createPort('google', GoogleDownPartition, createBackoffFile(backoffPath))
+    const started = Date.now()
+    const first = await liveSearch(blocked.port, '北京 故宫 开放时间')
+    const bingLoad = blocked.loads.find((load) => load.url.startsWith('https://www.bing.com/'))
+    const fallbackMs = bingLoad ? bingLoad.at - started : Number.POSITIVE_INFINITY
+    check(
+      '打不开 Google：6 秒以内开始装 Bing 的结果页',
+      first?.engine === 'bing' && fallbackMs <= 6_000,
+      `${first?.engine}，从开始搜到开始装 Bing 用了 ${fallbackMs} ms`
+    )
+    const saved = JSON.parse(readFileSync(backoffPath, 'utf8'))
+    const hours = (saved.google - Date.now()) / 3_600_000
+    check(
+      '退避写进了宿主的 JSON 文件：12 小时',
+      hours > 11.9 && hours <= 12,
+      `${JSON.stringify(saved)}（约 ${hours.toFixed(2)} 小时后到期）`
+    )
+    const before = googleRequests
+    const again = Date.now()
+    const second = await liveSearch(blocked.port, 'Rust ownership explained')
+    check(
+      '记住 Google 打不开：接下来的搜索直接走 Bing，一个 Google 请求都不发',
+      second?.engine === 'bing' && googleRequests === before,
+      `${second?.engine}，${Date.now() - again} ms，Google 请求 ${googleRequests - before} 个`
+    )
+    check(
+      '打不开 Google 那一轮隐藏窗口都关掉了',
+      blocked.openWindows() === 0,
+      `${blocked.openWindows()} 个没关`
+    )
+
+    // 像重启之后：新起一份操作、Google 其实打得开的会话，只凭 JSON 文件就跳过 Google
+    const restarted = new WebOperations({
+      now: () => Date.now(),
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      timeout: (ms) => AbortSignal.timeout(ms),
+    })
+    const fresh = createPort('google', Partition, createBackoffFile(backoffPath))
+    const afterRestart = await restarted.search(
+      { query: 'Electron session partition', limit: 5 },
+      contextOf(fresh.port)
+    )
+    check(
+      '重启之后照 JSON 文件里的退避直接走 Bing',
+      afterRestart.engine === 'bing' &&
+        fresh.loads.every((load) => !load.url.startsWith('https://www.google.com/')),
+      `${afterRestart.engine}，${afterRestart.results.length} 条`
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+    await down.clearStorageData()
+  }
 }
 
 async function run() {

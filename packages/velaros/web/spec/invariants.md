@@ -10,8 +10,8 @@
 | --- | --- | --- | --- |
 | INV-1 | search 按宿主报的用户搜索引擎先搜：结果页地址按搜索引擎拼好（Bing 带上要几条的 `count`），交回 `{ query, engine, results }`，query 是去掉首尾空白后的搜索词，engine 是实际搜成的那个；每次尝试开一个页面、用完关掉 | 测试 | `spec/acceptance.test.ts` |
 | INV-2 | 结果的地址是真实目标：Bing 的 `bing.com/ck/a` 跳转链接把 u 参数去掉「a1」再按 base64url 解开，Google 的 `/url?q=`（或 `url=`）取参数里的地址；解不出 http(s) 地址的、搜索引擎自己的页面（再搜一次、图片、跳转）都丢掉；按地址去重（只差 # 那段的算同一个，留第一条），最多 limit 条（缺省 `WebLimits.defaultResults`、最多 `WebLimits.maxResults`）；标题空着用地址顶上 | 测试 | `spec/acceptance.test.ts` |
-| INV-3 | Google 搜不通就换 Bing，engine 如实写 bing：宿主报加载出错、到点还没加载完又没认出结果、被拦成验证页或同意页（地址在 `/sorry/` 下、`consent.google.com`；没认出结果时正文开头有 unusual traffic、异常流量这类字样）、结果页里认不出一条结果，都算搜不通。Google 认出了结果就不碰 Bing，正常结果里碰巧有那些字样也不算被拦 | 测试 | `spec/acceptance.test.ts` |
-| INV-4 | 记住 Google 搜不通：之后 `WebTuning.search.googleRestMs` 以内的搜索直接走 Bing，一个 Google 页面都不开；过了这段时间再试 Google，搜通了就忘掉。用户选 Bing 时先搜 Bing，搜不通才试 Google（Google 在记忆窗口里就不试） | 测试 | `spec/acceptance.test.ts` |
+| INV-3 | Google 搜不通就换 Bing，engine 如实写 bing：宿主报加载出错、到 `WebTuning.search.googleCommitMs` 连一个文档都没落下（打不开时连接一直挂着，不等加载时限）、到加载时限还没加载完又没认出结果、被拦成验证页或同意页（地址在 `/sorry/` 下、`consent.google.com`；没认出结果时正文开头有 unusual traffic、异常流量这类字样）、结果页里认不出一条结果，都算搜不通。文档落下了只是结果页加载得慢的，不被落下时限掐掉，到加载时限照抓已经出来的结果。Google 认出了结果就不碰 Bing，正常结果里碰巧有那些字样也不算被拦 | 测试 | `spec/acceptance.test.ts` |
+| INV-4 | 记住 Google 搜不通：之后 `WebTuning.search.googleBackoffMs`（12 小时）以内的搜索直接走 Bing，一个 Google 页面都不开；过了这段时间再试 Google，搜通了就忘掉。宿主给了退避记忆（`WebEngineBackoff`）就跨重启：每次搜索读一次，进程里记着的与它存着的取晚的；只在记下一次搜不通时写（退避到什么时候）；读写抛错只记一笔，照进程里的来。用户选 Bing 时先搜 Bing，搜不通才试 Google（Google 在退避里就不试） | 测试 | `spec/acceptance.test.ts` |
 | INV-5 | 两个搜索引擎都搜不了抛 `WEB_SEARCH_FAILED`，message 写着搜的是什么、两边各自为什么没成；搜索引擎明说没有结果（Bing 的 `.b_no`）不算失败，交回空的 results | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | read 在页面加载完之后先等渲染：readyState 是 complete、正文长度 `WebTuning.read.stableMs` 不变才读，最多等 `WebTuning.read.settleMs`；等的时候看不到页面（正在跳走、脚本出错）只当还没稳。到点还在加载的不等渲染，已经出来的正文照读 | 测试 | `spec/acceptance.test.ts` |
 | INV-7 | read 交回的正文收拾过：换行统一成 `\n`，行内连续空白并成一个空格、行首尾不留空白，段落之间正好空一行；url 是跳转之后的最终地址，title 是网页标题 | 测试 | `spec/acceptance.test.ts` |
@@ -24,5 +24,5 @@
 | INV-14 | 代码模版（`template.js`）是日常用法的示例程序（只是示例，模型按需要改写），import 只写一次；它整份照生成的真实声明过类型检查，不嵌进声明，随模型面发布、按需读；每个函数照写法在假浏览器里跑通由 `test/template.test.ts` 核对 | 测试 | `spec/acceptance.test.ts` |
 | INV-15 | 模型面与常量表一致：声明里写的条数、字符数都是 `WebLimits` 里的数；两个操作都声明为没有效果（none）、各只有一个入参；端口、页面、调用上下文与钟都不进模型面 | 测试 | `spec/acceptance.test.ts` |
 | INV-16 | 分工与对外边界不塌：合同、类型、实现、工具函数各在其位，空间端口的每个方法都有操作在调；数字都在常量表或可调参数表里；`./contracts` 入口整条引用链不碰 Node 内置模块 | 门禁 | `check:module-ownership` |
-| INV-17 | 页面脚本在真浏览器里做对：Bing、Google 结果页认得出结果与摘要（去掉摘要前的小标签），读正文时删掉脚本、导航、页眉页脚、侧栏与表单却不删包着大半正文的块，article、main 占大半时只读它；真搜一次中文、一次英文都有结果，Google 的 `/goto` 链接经宿主换成真实地址；发往 Google 的请求一律卡住时到点换成 Bing，之后的搜索一个 Google 请求都不发 | 文字 | |
+| INV-17 | 页面脚本在真浏览器里做对：Bing、Google 结果页认得出结果与摘要（去掉摘要前的小标签），读正文时删掉脚本、导航、页眉页脚、侧栏与表单却不删包着大半正文的块，article、main 占大半时只读它；真搜一次中文、一次英文都有结果，Google 的 `/goto` 链接经宿主换成真实地址；发往 Google 的请求一律卡住时，从开始搜到开始装 Bing 的结果页不超过 6 秒，之后的搜索一个 Google 请求都不发，退避记在宿主的 JSON 文件里 | 文字 | |
 | INV-18 | Google 的 `/goto?url=…` 跳转链接（令牌本地解不开）：宿主给了 `resolveRedirect` 就一批并发各问一次、共用 `WebTuning.search.redirectTimeoutMs` 的时限，换成它跳去的 http(s) 地址之后再去重、截条数；只问要的条数外加 `WebTuning.search.spareHits` 条原始结果里的；宿主没给这个口子、问出错、到点没回、回的不是 http(s) 地址的原样留着（read 照样读得了） | 测试 | `spec/acceptance.test.ts` |

@@ -1,10 +1,11 @@
 /**
  * 网上查资料（`velaros:web`）的操作：`WebOperations` 与整个进程唯一的 `webOperations`。接口 `WebOperationsApi` 在本文件的类上方。
  * 浏览器由宿主经调用上下文里的端口 `WebSpacePort` 给（不显示的页面）；这里往页面里装地址、跑读取脚本，每一页用完都在 finally 里关掉。
- * 实例记着 Google 最近一次搜不通的时刻：之后一段时间的搜索直接走 Bing。整个进程一份，因为网络通不通和哪个空间无关。
+ * 实例记着 Google 退避到什么时候：搜不通之后一段时间的搜索直接走 Bing。整个进程一份，因为网络通不通和哪个空间无关；
+ * 宿主给了退避记忆（`WebEngineBackoff`）就同时记在那里，重启之后还在。
  */
 
-import { isPresent, Log } from '@velaros-ai/core'
+import { isEmpty, isFiniteNumber, isPresent, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
@@ -87,23 +88,26 @@ export interface WebOperationsApi {
 }
 
 export class WebOperations implements WebOperationsApi {
-  /** Google 最近一次搜不通的时刻（毫秒）；从没搜不通过、或者后来又搜通了是 null。 */
-  private googleFailedAt: Nullable<number> = null
+  /** 进程里记着的 Google 退避到什么时候（毫秒时间戳）；从没搜不通过、或者后来又搜通了是 null。 */
+  private googleBackoffUntil: Nullable<number> = null
 
   constructor(private readonly clock: WebOperationsClock) {}
 
   public async search(input: WebSearchInput, ctx: WebOperationContext): Promise<WebSearchResults> {
     ctx.abortSignal.throwIfAborted()
     const request = searchRequest(input)
+    const googleUntil = this.googleBackoff(ctx)
     const failures: WebEngineFailure[] = []
     for (const engine of engineOrder(ctx.web.searchEngine())) {
-      const resting = this.googleResting(engine)
-      if (resting) {
-        failures.push({ engine, reason: resting })
+      if (engine === 'google' && isPresent(googleUntil) && this.clock.now() < googleUntil) {
+        failures.push({
+          engine,
+          reason: `${durationText(WebTuning.search.googleBackoffMs)}内搜不通过，这次没再试`,
+        })
         continue
       }
       const attempt = await this.searchWith(engine, request, ctx)
-      if (engine === 'google') this.googleFailedAt = attempt.ok ? null : this.clock.now()
+      if (engine === 'google') this.noteGoogle(attempt.ok, ctx)
       if (attempt.ok) return { query: request.query, engine, results: attempt.results }
       failures.push({ engine, reason: attempt.reason })
     }
@@ -115,16 +119,21 @@ export class WebOperations implements WebOperationsApi {
     const request = readRequest(input)
     const page = await this.openPage(ctx)
     try {
-      const loaded = await this.load(page, request.url, WebTuning.read.loadTimeoutMs, ctx)
+      const loaded = await this.load(
+        page,
+        request.url,
+        { loadMs: WebTuning.read.loadTimeoutMs, commitMs: null },
+        ctx
+      )
       if (loaded.kind === 'failed') throw loadFailedError(request.url, loaded.message)
       if (loaded.kind === 'loaded') await this.settle(page, ctx)
       const landed = landedUrl(page.url())
-      if (loaded.kind === 'slow' && !landed) throw nothingLoadedError(request.url)
+      if (loaded.kind !== 'loaded' && !landed) throw nothingLoadedError(request.url)
       const url = landed ?? request.url
       const scan = await this.readable(page, url, ctx)
       if (isPdfDocument(scan.contentType)) throw pdfPageError(url)
       const text = readableText(scan.text)
-      if (loaded.kind === 'slow' && !text) throw nothingLoadedError(request.url)
+      if (loaded.kind !== 'loaded' && !text) throw nothingLoadedError(request.url)
       const slice = textSlice(text, request.offset, request.maxChars)
       return {
         url,
@@ -139,11 +148,36 @@ export class WebOperations implements WebOperationsApi {
     }
   }
 
-  /** Google 还在「刚搜不通」的记忆窗口里：交回一句原因（这次跳过它）；不在窗口里、或者问的不是 Google，交回 null。 */
-  private googleResting(engine: WebSearchEngineId): Nullable<string> {
-    if (engine !== 'google' || !isPresent(this.googleFailedAt)) return null
-    if (this.clock.now() - this.googleFailedAt >= WebTuning.search.googleRestMs) return null
-    return `${durationText(WebTuning.search.googleRestMs)}内搜不通过，这次没再试`
+  /**
+   * Google 退避到什么时候：进程里记着的与宿主存着的取晚的那个（每次搜索只问宿主一次）；都没有交回 null。
+   * 宿主的记忆读不出来只记一笔，照进程里的来。
+   */
+  private googleBackoff(ctx: WebOperationContext): Nullable<number> {
+    let stored: Nullable<number> = null
+    try {
+      stored = toNullable(ctx.web.engineBackoff?.read('google'))
+    } catch (error) {
+      log.warn('reading the search engine backoff failed', { error: AppError.getMessage(error) })
+    }
+    const known = [this.googleBackoffUntil, stored].filter(isFiniteNumber)
+    return isEmpty(known) ? null : Math.max(...known)
+  }
+
+  /**
+   * 记下这次 Google 搜没搜通：搜通了就忘掉进程里的退避；搜不通就退避一段时间，宿主给了退避记忆也写进去（写不进去只记一笔）。
+   */
+  private noteGoogle(ok: boolean, ctx: WebOperationContext): void {
+    if (ok) {
+      this.googleBackoffUntil = null
+      return
+    }
+    const until = this.clock.now() + WebTuning.search.googleBackoffMs
+    this.googleBackoffUntil = until
+    try {
+      ctx.web.engineBackoff?.write('google', until)
+    } catch (error) {
+      log.warn('writing the search engine backoff failed', { error: AppError.getMessage(error) })
+    }
   }
 
   /** 用一个搜索引擎搜一次：开一页、抓结果、关页。搜不通交回原因、不抛；只有取消与开不出页面才抛。 */
@@ -178,13 +212,17 @@ export class WebOperations implements WebOperationsApi {
       engine === 'google'
         ? WebTuning.search.googleLoadTimeoutMs
         : WebTuning.search.bingLoadTimeoutMs
+    // 只有 Google 限定多久必须落下文档：打不开的时候连接一直挂着，早点换 Bing；落下之后结果页慢慢出来照等
+    const commitMs = engine === 'google' ? WebTuning.search.googleCommitMs : null
     const loaded = await this.load(
       page,
       searchPageUrl(engine, request.query, request.limit),
-      timeoutMs,
+      { loadMs: timeoutMs, commitMs },
       ctx
     )
     if (loaded.kind === 'failed') return { ok: false, reason: `打不开（${loaded.message}）` }
+    if (loaded.kind === 'silent')
+      return { ok: false, reason: `${durationText(commitMs ?? timeoutMs)}没有回应` }
     // 到点连一个文档都没落下：不往页面里跑脚本了（对没落下文档的页面跑脚本，宿主那边会一直卡着）
     if (loaded.kind === 'slow' && !landedUrl(page.url()))
       return { ok: false, reason: `${durationText(timeoutMs)}没加载出来` }
@@ -258,25 +296,37 @@ export class WebOperations implements WebOperationsApi {
   }
 
   /**
-   * 装一个地址：限时，随时可取消。加载完交回 loaded；到点还在加载交回 slow（已经出来的内容照读）；
-   * 宿主报加载出错交回 failed 与宿主的原话；用户取消就以取消原因失败。
+   * 装一个地址：限时，随时可取消。加载完交回 loaded；到了加载时限还在加载交回 slow（已经出来的内容照读）；
+   * 给了 commitMs 时，到那一刻页面连一个文档都没落下就不再等，交回 silent；宿主报加载出错交回 failed 与宿主的原话；
+   * 用户取消就以取消原因失败。
    */
   private async load(
     page: WebPage,
     url: string,
-    timeoutMs: number,
+    deadlines: { loadMs: number; commitMs: Nullable<number> },
     ctx: WebOperationContext
   ): Promise<WebLoadOutcome> {
-    const deadline = this.clock.timeout(timeoutMs)
-    const signal = AbortSignal.any([ctx.abortSignal, deadline])
+    const silent = new AbortController()
+    const commitCheck = isPresent(deadlines.commitMs)
+      ? this.clock.timeout(deadlines.commitMs)
+      : null
+    const checkCommit = (): void => {
+      if (!landedUrl(page.url())) silent.abort(new AppError('TIMEOUT', '页面一直没落下文档'))
+    }
+    commitCheck?.addEventListener('abort', checkCommit, { once: true })
+    const deadline = this.clock.timeout(deadlines.loadMs)
+    const signal = AbortSignal.any([ctx.abortSignal, deadline, silent.signal])
     try {
       await untilAborted(page.load(url, signal), signal)
       return { kind: 'loaded' }
     } catch (error) {
       ctx.abortSignal.throwIfAborted()
+      if (silent.signal.aborted) return { kind: 'silent' }
       if (deadline.aborted) return { kind: 'slow' }
       log.debug('a hidden page failed to load', { error: AppError.getMessage(error) })
       return { kind: 'failed', message: AppError.getMessage(error) }
+    } finally {
+      commitCheck?.removeEventListener('abort', checkCommit)
     }
   }
 
