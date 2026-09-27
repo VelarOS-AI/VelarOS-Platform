@@ -77,7 +77,8 @@ export const browserModules = [
 - 不替程序折叠：不给上限就按常量表的上限要，结果按 JSON 整份交回，要多少由程序自己切。
 - 截图原图落进站点工作区，压缩图经 `attachImage` 交给模型、不进返回值；不给 `attachImage` 时照样落盘，只是模型看不到图。
 - 站点工作区是硬边界：写只写当前根，读可以回退到历史根，`..`、绝对路径与指到根外的路径一律拒绝；截图、下载、PDF、trace、堆快照、录屏都落在这里。
-- 同一个浏览器会话的动作按会话串行；运行时一个宿主进程一份，状态全在实例上，应用退出时 `dispose()`，外部浏览器随会话关闭一起收。
+- 同一个浏览器会话的动作按会话串行；运行时一个宿主进程一份，状态全在实例上，应用退出时 `dispose()`。
+- 外部浏览器（`launchExternalBrowserPage`）先接用户开着的 Chrome（默认配置目录里有 DevToolsActivePort，即用户在 chrome://inspect/#remote-debugging 打开了远程调试，Chrome 弹窗请用户允许；`preferRunningBrowser: false` 一概不碰），再接 `userDataDir` 上开着的，都没有才拉起。每个浏览器只连一条浏览器级 WebSocket、不用 HTTP 的 /json 端点，每个会话在上面另开一个标签页；关会话只关它的标签页，`hasExternalPage` 回答会话的标签页还在不在（用户关了标签页或退出浏览器就不在）；`dispose()` 断开连接、杀掉自己拉起的浏览器，用户自己的 Chrome 从不关、也不改它的下载行为。
 - 登录墙门控只包 `inspectPage` 与 `captureScreenshot`，每个站点每会话最多问一次，问过之后批准还是拒绝都不再阻塞；拿不到审批通道的宿主必须回 `approved: false`，不能静默放行。
 - 模型的 CDP 会话与宿主那条分开，第一次用到才连；`reset`、`leave`、关会话时断开，它开的域、设的仿真与拦截一并撤掉；被它的 Fetch 拦下 30 秒没人放行的请求由运行时放行。
 - 不给模型的协议会话设闸，隔离靠会话分开；要按用户的开关拦动作，用 `browserActionPolicy.check` 按宿主给的允许与拒绝表裁决。

@@ -7,10 +7,10 @@ import { protocolFailure } from '../../utils/cdp/protocol.js'
 import type { CdpWebSocketTransportApi } from './CdpWebSocketTransport'
 
 /**
- * 外部浏览器上模型自己的一条 CDP 会话：连同一个页面的第二条 WebSocket。
+ * 外部浏览器上模型自己的一条 CDP 会话：同一条浏览器级连接上、挂到这一页的第二条 flatten 会话。
  *
- * Chrome 让一个页面挂多个调试客户端，每条连接各有各的域开关、事件订阅、仿真与 Fetch 拦截，驱动自己那条连接不受影响。
- * 模型在这条连接上 `Target.setAutoAttach`（flatten）挂出来的子会话按 sessionId 路由；连接一关，Chrome 撤掉它做过的一切。
+ * Chrome 让一个页面挂多条会话，每条会话各有各的域开关、事件订阅、仿真与 Fetch 拦截，驱动自己那条会话不受影响。
+ * 模型在这条会话上 `Target.setAutoAttach`（flatten）挂出来的子会话按 sessionId 路由，别的会话发不过去；会话一脱开，Chrome 撤掉它做过的一切。
  */
 export class CdpProtocolChannel implements BrowserProtocolChannel {
   private closed = false

@@ -132,11 +132,15 @@ import type {
 /**
  * 外部浏览器启动器：**接远程浏览器或容器的扩展点**。
  *
- * 谁给、什么时候：不给就用内置的本机 Chrome 启动器；要接别处的浏览器时由宿主创建运行时时传进来。
+ * 谁给、什么时候：不给就用内置的本机启动器（先接用户开着的 Chrome，再接 userDataDir 上开着的，都没有才拉起；
+ * 每个浏览器一条浏览器级 CDP 连接，每次 launch 另开一个标签页）；要接别处的浏览器时由宿主创建运行时时传进来。
+ * 启动器归运行时：运行时 dispose、或经 setOptions 换掉它时调它的 dispose。
  */
 export interface BrowserExternalPageLauncher {
-  /** 拉起（或接上）一个外部浏览器，回一个可用的 page 级 CDP 会话。 */
+  /** 在外部浏览器里给一个会话开一个新标签页，交回挂在这一页上的驱动；交回的 dispose 只关这一页，不关浏览器。 */
   launch(options?: CdpExternalBrowserLaunchOptions): Promise<CdpExternalBrowserSession>
+  /** 收尾：断开连接、收掉启动器自己拉起的浏览器，只是连上的（用户自己的 Chrome）不关；没有要收的可以不实现。 */
+  dispose?(): void
 }
 
 /**
@@ -295,7 +299,7 @@ export interface BrowserPageDriver {
  * 模型自己的一条 CDP 会话：**页面驱动交出来的通道**。
  *
  * 谁给、什么时候：页面驱动的 `openProtocolChannel` 在模型第一次用 `velaros:cdp` 时给。内嵌页面是 debugger 上用
- * `Target.attachToTarget` 连页面自己挂出来的子会话；外部浏览器是连同一个页面的第二条 WebSocket。
+ * `Target.attachToTarget` 连页面自己挂出来的子会话；外部浏览器是同一条浏览器级连接上挂到这一页的第二条 flatten 会话。
  * 这条会话上开关的域、设的仿真与 Fetch 拦截只算在它自己身上，`close` 之后一并撤掉，驱动自己那条会话不受影响。
  */
 export interface BrowserProtocolChannel {

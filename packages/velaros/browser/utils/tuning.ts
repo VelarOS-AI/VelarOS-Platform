@@ -65,10 +65,14 @@ export const BrowserTuning = Object.freeze({
     /** 停止 trace 后等它落完的毫秒数。 */
     traceCompleteTimeoutMs: 30_000,
   }),
-  /** 外部浏览器：拉起 Chrome、等它把调试端口写出来。 */
+  /** 外部浏览器：接上开着的浏览器、拉起 Chrome、等它把调试端口写出来。 */
   externalBrowser: Object.freeze({
-    /** 等外部浏览器可连接的总毫秒数。 */
+    /** 拉起浏览器之后等它写出调试端口的总毫秒数。 */
     launchTimeoutMs: 30_000,
+    /** 连我们自己配置目录上的浏览器（刚拉起的、早先拉起还开着的）：连上并核实最多等多少毫秒。 */
+    connectTimeoutMs: 10_000,
+    /** 连用户自己开着的 Chrome 最多等多少毫秒：Chrome 要弹窗等用户点「允许」，给足用户看清再点的时间。 */
+    userApprovalTimeoutMs: 60_000,
     /** 轮询 DevToolsActivePort 的间隔毫秒数。 */
     pollIntervalMs: 50,
     /** 启动失败重试几次。 */

@@ -12,25 +12,13 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserFrameInfo } from '../../types/browser.js'
 import type { BrowserMouseButton, BrowserPageDiagnosticLevel } from '../../types/browser.js'
-import type { CdpPageFrame, CdpPageFrameTree, CdpPageTargetDescription } from '../../types/cdp.js'
-import type {
-  CdpRuntimeEvaluateResponse,
-  CdpRuntimeRemoteObject,
-  CdpTargetListEntry,
-} from '../../types/cdp.js'
+import type { CdpPageFrame, CdpPageFrameTree } from '../../types/cdp.js'
+import type { CdpRuntimeEvaluateResponse, CdpRuntimeRemoteObject } from '../../types/cdp.js'
 import type {
   BrowserPageDriverFetchResourceOptions,
   BrowserPageDriverScreenshot,
   BrowserPageDriverScreenshotOptions,
 } from '../../types/driver'
-
-/** 从 CDP 的 target 列表条目里读出它的 id。 */
-export function resolveTargetListEntryId(entry: CdpTargetListEntry): Nullable<string> {
-  if (isNonBlankString(entry.id)) return entry.id
-  if (isString(entry.webSocketDebuggerUrl)) return resolveCdpTargetId(entry.webSocketDebuggerUrl)
-
-  return null
-}
 
 /** 剥出 Runtime.evaluate、Runtime.callFunctionOn 回包里的值；脚本抛了没接住的异常就抛 EXECUTION_FAILED，带上异常的原话。 */
 export function readRuntimeEvaluateValue(response: CdpRuntimeEvaluateResponse): unknown {
@@ -177,33 +165,6 @@ export function resolveMouseButton(button: BrowserMouseButton): 'left' | 'middle
   }
 }
 
-/** 从 CDP 的 WebSocket 地址里读出它连的是哪个 target。 */
-export function resolveCdpTargetId(webSocketUrl: string): Nullable<string> {
-  if (!URL.canParse(webSocketUrl)) return null
-
-  const pathname = new URL(webSocketUrl).pathname
-  const targetId = pathname.split('/').at(-1)?.trim() || ''
-  return targetId || null
-}
-
-/** CDP 的标签页描述归一；形状不对就当没有。 */
-export function normalizePageTargetDescription(entry: unknown): Nullable<CdpPageTargetDescription> {
-  if (!isObject(entry)) return null
-
-  const target = entry as CdpTargetListEntry
-  if (target.type !== 'page') return null
-
-  const id = resolveTargetListEntryId(target)
-  if (!id || !isNonBlankString(target.webSocketDebuggerUrl)) return null
-
-  return {
-    id,
-    url: isString(target.url) ? target.url : '',
-    title: isString(target.title) ? target.title : '',
-    webSocketDebuggerUrl: target.webSocketDebuggerUrl,
-  }
-}
-
 /** 把 console 的一组参数拼成一句可读的消息。 */
 export function resolveConsoleMessage(args: unknown): string {
   if (!isArray(args)) return 'console event'
@@ -249,27 +210,6 @@ export function resolveRegionScreenshotInput(options: BrowserPageDriverScreensho
       clipped: width < clip.width || height < clip.height,
     },
   }
-}
-
-/** 从 CDP 的 WebSocket 地址推出它对应的 /json/list 地址。 */
-export function resolveCdpTargetListUrl(webSocketUrl: string): Nullable<string> {
-  if (!URL.canParse(webSocketUrl)) return null
-
-  const url = new URL(webSocketUrl)
-  switch (url.protocol) {
-    case 'ws:':
-      url.protocol = 'http:'
-      break
-    case 'wss:':
-      url.protocol = 'https:'
-      break
-    default:
-      return null
-  }
-  url.pathname = '/json/list'
-  url.search = ''
-  url.hash = ''
-  return url.toString()
 }
 
 /** 框架树顶层那个框架的源；读不出来是 null。 */

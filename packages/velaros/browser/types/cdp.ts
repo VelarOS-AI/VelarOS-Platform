@@ -124,24 +124,43 @@ export interface EncodeScreencastGifOptions {
   maxWidth?: number
 }
 
+/**
+ * 在外部浏览器里开一页的参数。找浏览器的先后：用户自己开着的 Chrome（`preferRunningBrowser`）→ `userDataDir` 上还开着的
+ * → 都没有才拉起一个。接上已经在跑的浏览器时，只管拉起的那几项（可执行文件、命令行参数、环境变量、钥匙串）不起作用。
+ */
 export interface CdpExternalBrowserLaunchOptions {
+  /** 拉起用的可执行文件；不给按平台找本机的 Chrome / Chromium。 */
   executablePath?: LooseOptional<string>
+  /** 用户数据目录：先接这个目录上已经开着的浏览器，没有才在它上面拉起，目录一直留着；不给就拉在启动器自己建、收尾删掉的临时目录上。 */
   userDataDir?: LooseOptional<string>
+  /** 用户数据目录里的哪个配置（`--profile-directory`）。 */
   profileDirectory?: LooseOptional<string>
+  /** 用系统钥匙串，不加 `--use-mock-keychain`；给了 profileDirectory 也按用系统钥匙串算。 */
   useRealKeychain?: LooseOptional<boolean>
+  /** 页面下载先落进哪个目录（整个浏览器共用，按第一次拉起或接上时定）；不给是用户数据目录下的 Downloads。用户自己的 Chrome 不改它的下载行为。 */
   downloadPath?: LooseOptional<string>
+  /** 新标签页打开的地址；不给是 about:blank。 */
   url?: LooseOptional<string>
+  /** 拉起时追加的命令行参数。 */
   args?: LooseOptional<string[]>
+  /** 拉起时追加的环境变量。 */
   env?: LooseOptional<Record<string, string | undefined>>
+  /** 按哪个平台找可执行文件与用户的 Chrome 配置目录；不给是当前进程的平台。 */
   platform?: LooseOptional<NodeJS.Platform>
+  /** 拉起之后等它写出调试端口的毫秒数；不给用 `BrowserTuning.externalBrowser.launchTimeoutMs`。 */
   timeoutMs?: LooseOptional<number>
+  /**
+   * 先接用户自己开着的 Chrome：默认配置目录里有 DevToolsActivePort 的（用户在 chrome://inspect/#remote-debugging 打开了远程调试），
+   * Chrome 会弹窗请用户允许。缺省是；false 时一概不碰用户的 Chrome。
+   */
+  preferRunningBrowser?: LooseOptional<boolean>
 }
 
+/** 一次 launch 在外部浏览器里开的那一页：驱动挂在它上面。 */
 export interface CdpExternalBrowserSession {
+  /** 挂在这一页上的页面驱动。 */
   driver: BrowserPageDriver
-  port: number
-  userDataDir: string
-  webSocketDebuggerUrl: string
+  /** 断开驱动、关掉这一页；浏览器与别的会话照旧，从不关浏览器。 */
   dispose(): void
 }
 
@@ -158,6 +177,8 @@ export interface CdpExternalBrowserChildProcess {
   killed?: boolean
   stderr?: LooseOptional<NodeJS.ReadableStream>
   kill(signal?: NodeJS.Signals | number): boolean
+  /** 进程退出时通知一次（删临时配置目录要等浏览器退干净）；给不了就当场删。 */
+  once?(event: 'exit', listener: () => void): unknown
 }
 
 export type CdpExternalBrowserSpawn = (
@@ -166,16 +187,45 @@ export type CdpExternalBrowserSpawn = (
   options: CdpExternalBrowserSpawnOptions
 ) => CdpExternalBrowserChildProcess
 
+/** Chrome 写在用户数据目录里的 DevToolsActivePort：第一行端口，第二行浏览器级 WebSocket 的路径。 */
 export interface CdpDevToolsActivePort {
   port: number
+  /** `/devtools/browser/<id>`。 */
   browserWebSocketPath: string
 }
 
-export interface CdpTargetDescription {
-  type: string
+/** Target.getTargets 回包里的一条 target（形状照协议，字段存在与否要自己判）。 */
+export interface CdpTargetInfoEntry {
+  targetId?: unknown
+  type?: unknown
+  url?: unknown
+  title?: unknown
+  browserContextId?: unknown
+}
+
+/** Target.getTargets 的回包。 */
+export interface CdpGetTargetsResponse {
+  targetInfos?: unknown
+}
+
+/** Target.createTarget 的回包。 */
+export interface CdpCreateTargetResponse {
+  targetId?: unknown
+}
+
+/** Target.attachToTarget 的回包。 */
+export interface CdpAttachToTargetResponse {
+  sessionId?: unknown
+}
+
+/** 浏览器里的一个标签页：Target.getTargets 里 type 为 page 的一条，归一过。 */
+export interface CdpPageTarget {
+  /** 标签页的 targetId（也是它主框架的 frameId）。 */
+  targetId: string
   url: string
   title: string
-  webSocketDebuggerUrl: string
+  /** 它在哪个浏览器上下文里（每个配置、每个无痕窗口各是一个）；协议没给是空字符串。 */
+  browserContextId: string
 }
 
 export interface CdpChromeStderrDiagnostics {
@@ -201,21 +251,6 @@ export interface CdpBrowserPageDriverTransport {
   ): () => void
   /** 订阅传输关闭；返回取消订阅的函数。 */
   onClose?(listener: () => void): () => void
-}
-
-export interface CdpTargetListEntry {
-  id?: unknown
-  type?: unknown
-  url?: unknown
-  title?: unknown
-  webSocketDebuggerUrl?: unknown
-}
-
-export interface CdpPageTargetDescription {
-  id: string
-  url: string
-  title: string
-  webSocketDebuggerUrl: string
 }
 
 export interface CdpRuntimeEvaluateResponse {
@@ -311,6 +346,7 @@ export interface CdpTargetAttachedEvent {
 
 export interface CdpTargetDetachedEvent {
   sessionId?: unknown
+  targetId?: unknown
 }
 
 export interface CdpDomFrameOwnerResponse {

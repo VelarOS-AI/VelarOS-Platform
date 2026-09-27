@@ -1,20 +1,17 @@
-/** 拉起外部浏览器时用不着实例状态的那部分：候选路径、启动参数、调试端口文件的解析。 */
+/** 找外部浏览器、拉起外部浏览器时用不着实例状态的那部分：候选路径、用户的 Chrome 配置目录、启动参数、调试端口文件的解析。 */
 
-import { join } from 'node:path'
+import { join, posix, win32 } from 'node:path'
 
 import { isPresent } from '@velaros-ai/core'
-import { isEmpty, isNonBlankString, isPlainObject, isString } from '@velaros-ai/core'
+import { isEmpty, isNonBlankString, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
+  CdpDevToolsActivePort,
   CdpExternalBrowserChildProcess,
   CdpExternalBrowserLaunchOptions,
 } from '../../types/cdp.js'
-import type {
-  CdpChromeStderrDiagnostics,
-  CdpExternalBrowserLaunchEnv,
-  CdpTargetDescription,
-} from '../../types/cdp.js'
+import type { CdpChromeStderrDiagnostics, CdpExternalBrowserLaunchEnv } from '../../types/cdp.js'
 import { BrowserTuning } from '../tuning'
 
 /** 判断这次拉起浏览器的失败值不值得再试一次。 */
@@ -119,21 +116,62 @@ export function hasSandboxStderr(lines: string[]): boolean {
   })
 }
 
-/** 解析 CDP 的一条 target 描述；形状不对就当没有。 */
-export function parseTargetEntry(entry: unknown): Nullable<CdpTargetDescription> {
-  if (!isPlainObject(entry)) return null
-  const record = entry
-  if (!isString(record.webSocketDebuggerUrl)) return null
-
-  return {
-    type: isString(record.type) ? record.type : '',
-    url: isString(record.url) ? record.url : '',
-    title: isString(record.title) ? record.title : '',
-    webSocketDebuggerUrl: record.webSocketDebuggerUrl,
+/**
+ * 按平台列出用户自己的 Chrome 的默认用户数据目录，正式版、Beta、Dev、Canary 的先后（与 puppeteer 的 resolveDefaultUserDataDir 同一套）。
+ * 拿不到主目录时不猜：只列还拼得出来的。
+ */
+export function getDefaultUserDataDirCandidates(
+  platform: NodeJS.Platform,
+  runtime: { home: string; env: CdpExternalBrowserLaunchEnv }
+): string[] {
+  const home = runtime.home.trim()
+  if (platform === 'win32') {
+    const localAppData =
+      runtime.env.LOCALAPPDATA?.trim() || (home ? win32.join(home, 'AppData', 'Local') : '')
+    if (!localAppData) return []
+    return ['Chrome', 'Chrome Beta', 'Chrome Dev', 'Chrome SxS'].map((channel) =>
+      win32.join(localAppData, 'Google', channel, 'User Data')
+    )
   }
+  if (platform === 'darwin') {
+    if (!home) return []
+    return ['Chrome', 'Chrome Beta', 'Chrome Dev', 'Chrome Canary'].map((channel) =>
+      posix.join(home, 'Library', 'Application Support', 'Google', channel)
+    )
+  }
+  const configHome =
+    runtime.env.CHROME_CONFIG_HOME?.trim() ||
+    runtime.env.XDG_CONFIG_HOME?.trim() ||
+    (home ? posix.join(home, '.config') : '')
+  if (!configHome) return []
+  return [
+    'google-chrome',
+    'google-chrome-beta',
+    'google-chrome-unstable',
+    'google-chrome-canary',
+  ].map((channel) => posix.join(configHome, channel))
 }
 
-/** 拼一次拉起 Chrome 的完整命令行参数。 */
+/** 用户数据目录里调试端口文件的路径，按那个平台的路径写法拼。 */
+export function devToolsActivePortPath(userDataDir: string, platform: NodeJS.Platform): string {
+  return (platform === 'win32' ? win32 : posix).join(userDataDir, 'DevToolsActivePort')
+}
+
+/** 解析 DevToolsActivePort：第一行端口、第二行浏览器级 WebSocket 路径；缺一行或形状不对（Chrome 写到一半）就当没有。 */
+export function parseDevToolsActivePort(content: string): Nullable<CdpDevToolsActivePort> {
+  const [rawPort = '', rawPath = ''] = content.split(/\r?\n/u).map((line) => line.trim())
+  const port = Number.parseInt(rawPort, 10)
+  if (!Number.isInteger(port) || port <= 0 || port > 65_535) return null
+  if (!rawPath.startsWith('/devtools/browser/')) return null
+  return { port, browserWebSocketPath: rawPath }
+}
+
+/** 浏览器级 WebSocket 的地址：Chrome 的调试端口只听本机回环口。 */
+export function buildBrowserWebSocketUrl(activePort: CdpDevToolsActivePort): string {
+  return `ws://127.0.0.1:${activePort.port}${activePort.browserWebSocketPath}`
+}
+
+/** 拼一次拉起 Chrome 的完整命令行参数。起始页是空白页：每次 launch 都另开自己的标签页，起始页只撑着窗口。 */
 export function buildLaunchArgs(
   userDataDir: string,
   options: CdpExternalBrowserLaunchOptions,
@@ -172,8 +210,7 @@ export function buildLaunchArgs(
   }
   args.push(...(options.args ?? []))
   addLinuxChromeStabilityFlags(args, runtime)
-  const url = options.url?.trim()
-  if (url) args.push(url)
+  args.push('about:blank')
 
   return args
 }

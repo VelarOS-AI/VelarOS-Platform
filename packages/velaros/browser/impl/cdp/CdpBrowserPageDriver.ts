@@ -5,14 +5,16 @@
 // 错误结论——最典型的是以为 `switchPageTarget` 在切换当前实例，实际它新建了一个。
 //
 // ## 两份实现、一条接口
-// `BrowserPageDriver` 有两个实现：本文件（外部浏览器，CDP WebSocket）与
+// `BrowserPageDriver` 有两个实现：本文件（外部浏览器：共用的浏览器级 CDP 连接上这一页的 flatten 会话）与
 // `runtime/ElectronWebContentsBrowserPageDriver`（内嵌 WebContents，`webContents.debugger`）。
 // 上层 engine 只认接口，**新增页面能力必须两边都落**，否则外部/内嵌两种浏览器行为分叉。
 //
 // ## 生命周期与不变量（改这些会破什么）
-//  - **实例绑定 target，不可重绑**：`switchPageTarget` **返回一个新 driver**（对新 target 重新
-//    connect），不是把自己指向新页面。理由：事件订阅、下载表、诊断缓冲全是 per-target 状态，
+//  - **实例绑定 target，不可重绑**：`switchPageTarget` **返回一个新 driver**（经标签页目录在新 target 上
+//    另挂一条会话），不是把自己指向新页面。理由：事件订阅、下载表、诊断缓冲全是 per-target 状态，
 //    就地重绑必然残留上一个 target 的事件。调用方必须替换自己持有的引用。
+//  - **标签页目录是唯一的找页面入口**：列标签页、切过去、给模型单开会话都经 `targets`（浏览器级连接上的
+//    Target 域），不碰 HTTP 的 /json 端点——用户放进来的 Chrome 只开浏览器级 WebSocket。
 //  - **构造即订阅、`dispose` 即退订**：四组订阅（诊断 / 网络 / 下载 / 对话框）在构造函数里一次
 //    装好，退订函数进 `eventUnsubscribers`；transport 关闭会回调 `dispose`——socket 断开与显式
 //    dispose 因此走同一条清理路径，`destroyed` 标志保证幂等。漏退订 = transport 复用时事件串台。
@@ -27,7 +29,6 @@
 // 无泛型的原生驱动返回）。所以每个 `normalize*` 私有方法都必须自己收窄，不能假设字段存在。
 
 import {
-  isArray,
   isEmpty,
   isFiniteNumber,
   isNonBlankString,
@@ -63,7 +64,7 @@ import type {
   CdpFetchResourcePayload,
   CdpJavascriptDialogOpeningEvent,
   CdpLayoutMetricsResponse,
-  CdpPageTargetDescription,
+  CdpPageTarget,
   CdpPrintToPdfResponse,
   CdpRuntimeConsoleAPICalledEvent,
   CdpRuntimeEvaluateResponse,
@@ -72,7 +73,6 @@ import type {
   CdpRuntimeRemoteObject,
   CdpScreencastConsumerOptions,
   CdpScreencastStartOptions,
-  CdpTargetListEntry,
   ScreencastCapturedFrame,
 } from '../../types/cdp.js'
 import type {
@@ -105,17 +105,9 @@ import {
   resolveConsoleLevel,
   resolveConsoleTimestamp,
   resolveMouseButton,
-  resolveTargetListEntryId,
 } from '../../utils/cdp/driver'
-import {
-  normalizePageTargetDescription,
-  resolveConsoleMessage,
-  resolveRegionScreenshotInput,
-} from '../../utils/cdp/driver'
-import { resolveCdpTargetListUrl } from '../../utils/cdp/driver'
-import { resolveCdpTargetId } from '../../utils/cdp/driver.js'
+import { resolveConsoleMessage, resolveRegionScreenshotInput } from '../../utils/cdp/driver'
 import { captureCdpHeapSnapshot } from '../../utils/cdp/tracing.js'
-import { openCdpWebSocket } from '../../utils/cdp/transport.js'
 import {
   clearBrowserDiagnosticEntries,
   takeBrowserDiagnosticWindow,
@@ -130,33 +122,34 @@ import { CdpFrameSessions } from './CdpFrameSessions'
 import { CdpProtocolChannel } from './CdpProtocolChannel'
 import { CdpScreencastRecorder } from './CdpScreencastRecorder'
 import { CdpTraceCollector } from './CdpTraceCollector'
-import {
-  CdpWebSocketTransport,
-  type CdpWebSocketTransportConnectOptions,
-} from './CdpWebSocketTransport'
+import type { CdpWebSocketTransportApi } from './CdpWebSocketTransport'
 
-export interface CdpBrowserPageDriverOptions {
-  transport: CdpBrowserPageDriverTransport
-  initialUrl?: LooseOptional<string>
-  initialTitle?: LooseOptional<string>
-  downloadPath?: LooseOptional<string>
-  targetListUrl?: LooseOptional<string>
-  activeTargetId?: LooseOptional<string>
-  fetch?: LooseOptional<typeof fetch>
-  connectPageDriver?: LooseOptional<
-    (
-      webSocketDebuggerUrl: string,
-      options: CdpBrowserPageDriverConnectOptions
-    ) => Promise<BrowserPageDriver>
-  >
-  onDispose?: LooseOptional<() => void>
+/** 页面驱动所在浏览器的标签页目录：驱动挂在哪一页、还能切到哪些页、怎么在某一页上另挂一条会话。 */
+export interface CdpBrowserPageDriverTargets {
+  /** 驱动自己挂着的那一页。 */
+  targetId: string
+  /** 列出能切过去的标签页。 */
+  list(): Promise<CdpPageTarget[]>
+  /** 在一个标签页上另挂一条会话，交回它的传输；timeoutMs 是这条会话上单条命令等回包的毫秒数。 */
+  attach(
+    targetId: string,
+    options?: { timeoutMs?: LooseOptional<number> }
+  ): Promise<CdpWebSocketTransportApi>
 }
 
-export interface CdpBrowserPageDriverConnectOptions extends CdpWebSocketTransportConnectOptions {
+/** 建一个外部浏览器页面驱动的参数。 */
+export interface CdpBrowserPageDriverOptions {
+  /** 这一页的 CDP 传输：命令、事件与关闭都经它，驱动释放时一并释放。 */
+  transport: CdpBrowserPageDriverTransport
+  /** 这一页眼下的地址（影子状态的初值）。 */
   initialUrl?: LooseOptional<string>
+  /** 这一页眼下的标题。 */
   initialTitle?: LooseOptional<string>
+  /** 浏览器把下载先落在哪个目录（整个浏览器的下载行为由拥有浏览器的一方设好）；不给就不接管下载。 */
   downloadPath?: LooseOptional<string>
-  fetch?: LooseOptional<typeof fetch>
+  /** 所在浏览器的标签页目录；不给就只认这一页：列标签页只有它、切不走、开不了模型的单独会话。 */
+  targets?: LooseOptional<CdpBrowserPageDriverTargets>
+  /** 驱动释放时回调。 */
   onDispose?: LooseOptional<() => void>
 }
 
@@ -180,27 +173,6 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     appendDiagnostic: (entry) => this.appendDiagnostic(entry),
     getCurrentUrl: () => this.currentUrl,
   })
-
-  /** 给同一个浏览器里的另一个 target 连一个兄弟驱动：socket、target 坐标与依赖都沿用本实例的。 */
-  private async connectSiblingDriver(
-    webSocketUrl: string,
-    options: CdpBrowserPageDriverConnectOptions = {}
-  ): Promise<CdpBrowserPageDriver> {
-    const socket = await openCdpWebSocket(webSocketUrl, options)
-    const transport = new CdpWebSocketTransport({ socket, timeoutMs: options.timeoutMs })
-    const driver = new CdpBrowserPageDriver({
-      transport,
-      initialUrl: options.initialUrl,
-      initialTitle: options.initialTitle,
-      downloadPath: options.downloadPath ?? this.options.downloadPath,
-      targetListUrl: resolveCdpTargetListUrl(webSocketUrl),
-      activeTargetId: resolveCdpTargetId(webSocketUrl),
-      fetch: options.fetch ?? this.options.fetch,
-      onDispose: options.onDispose,
-    })
-    await driver.resumeTargetIfWaitingForDebugger()
-    return driver
-  }
 
   constructor(private readonly options: CdpBrowserPageDriverOptions) {
     this.currentUrl = options.initialUrl?.trim() || ''
@@ -251,68 +223,50 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   public async listPageTargets(): Promise<BrowserPageTargetInfo[]> {
-    const targetListUrl = this.options.targetListUrl?.trim()
-    if (!targetListUrl) return [this.buildCurrentPageTarget()]
+    const targets = this.options.targets
+    if (!targets) return [this.buildCurrentPageTarget()]
 
-    const targetFetch = this.options.fetch ?? globalThis.fetch
-    if (!targetFetch) {
-      this.appendDiagnostic({
-        kind: 'network',
-        level: 'warning',
-        message: 'CDP target list 读取失败：当前运行时没有 fetch 能力。',
-        url: toNullable(this.currentUrl),
-        line: null,
-        column: null,
-        code: null,
-        capturedAt: Date.now(),
-        details: { targetListUrl },
-      })
-      return [this.buildCurrentPageTarget()]
-    }
+    const pages = await targets.list()
+    if (!pages.at(0)) return [this.buildCurrentPageTarget()]
 
-    const response = await targetFetch(targetListUrl)
-    if (!response.ok) {
-      this.appendDiagnostic({
-        kind: 'network',
-        level: 'warning',
-        message: `CDP target list 读取失败：${response.status} ${response.statusText}`,
-        url: toNullable(this.currentUrl),
-        line: null,
-        column: null,
-        code: response.status,
-        capturedAt: Date.now(),
-        details: { targetListUrl },
-      })
-      return [this.buildCurrentPageTarget()]
-    }
-
-    const targets = this.normalizeTargetListPayload(await response.json())
-    if (!targets.at(0)) return [this.buildCurrentPageTarget()]
-
-    return targets
+    return pages.map((page) => ({
+      id: page.targetId,
+      type: 'page',
+      url: page.url,
+      title: page.title,
+      active: page.targetId === targets.targetId,
+    }))
   }
 
+  /** 切到同一个浏览器里的另一页：经标签页目录在那一页上另挂一条会话，交回挂在它上面的新驱动（目录沿用，换成那一页）。 */
   public async switchPageTarget(
     options: BrowserSwitchPageTargetOptions
   ): Promise<BrowserPageDriver> {
     const targetId = options.targetId.trim()
     if (!targetId) throw new AppError('VALIDATION', 'CDP page target id 不能为空。')
 
-    const activeTargetId = this.options.activeTargetId?.trim()
-    if (activeTargetId && targetId === activeTargetId) return this
+    const targets = this.options.targets
+    if (!targets)
+      throw new AppError(
+        'VALIDATION',
+        '这个外部浏览器驱动没有标签页目录，只认它自己这一页，切不到别的标签页。'
+      )
+    if (targetId === targets.targetId) return this
 
-    const target = await this.findPageTargetDescription(targetId)
-    const connectPageDriver =
-      this.options.connectPageDriver ??
-      ((webSocketDebuggerUrl: string, connectOptions: CdpBrowserPageDriverConnectOptions) =>
-        this.connectSiblingDriver(webSocketDebuggerUrl, connectOptions))
-
-    return connectPageDriver(target.webSocketDebuggerUrl, {
+    const target = await this.findPageTarget(targetId)
+    const driver = new CdpBrowserPageDriver({
+      transport: await targets.attach(targetId),
       initialUrl: target.url,
       initialTitle: target.title,
       downloadPath: this.options.downloadPath,
-      fetch: this.options.fetch,
+      targets: {
+        targetId,
+        list: () => targets.list(),
+        attach: (id, attachOptions) => targets.attach(id, attachOptions),
+      },
     })
+    await driver.resumeTargetIfWaitingForDebugger()
+    return driver
   }
 
   public async bringToFront(): Promise<void> {
@@ -375,18 +329,16 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     return (await this.frameSessions.evaluateInFrame(frame, script, !!userGesture)) as T
   }
 
-  /** 给模型单开一条 CDP 会话：连同一个页面的第二条 WebSocket（调试地址从 target 列表里取）。 */
+  /** 给模型单开一条 CDP 会话：同一条浏览器连接上、挂到这一页的第二条会话。 */
   public async openProtocolChannel(): Promise<BrowserProtocolChannel> {
-    const activeTargetId = this.options.activeTargetId?.trim()
-    if (!activeTargetId)
+    const targets = this.options.targets
+    if (!targets)
       throw new AppError(
         'VALIDATION',
-        '这个外部浏览器驱动不知道自己是哪个 target，开不了单独的 CDP 会话。'
+        '这个外部浏览器驱动不知道自己挂在哪个标签页上，开不了单独的 CDP 会话。'
       )
-    const target = await this.findPageTargetDescription(activeTargetId)
-    const socket = await openCdpWebSocket(target.webSocketDebuggerUrl, {})
     return new CdpProtocolChannel(
-      new CdpWebSocketTransport({ socket, timeoutMs: BrowserTuning.protocol.commandTimeoutMs })
+      await targets.attach(targets.targetId, { timeoutMs: BrowserTuning.protocol.commandTimeoutMs })
     )
   }
 
@@ -720,75 +672,18 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     return this.destroyed
   }
 
-  private normalizeTargetListPayload(payload: unknown): BrowserPageTargetInfo[] {
-    if (!isArray(payload)) return []
-
-    return payload.map((entry) => this.normalizeTargetListEntry(entry)).filter(isNotNull)
-  }
-
-  private async findPageTargetDescription(targetId: string): Promise<CdpPageTargetDescription> {
-    const targetListUrl = this.options.targetListUrl?.trim()
-    if (!targetListUrl) {
-      throw new AppError(
-        'VALIDATION',
-        '当前 CDP driver 没有 target list URL，无法切换 page target。'
-      )
-    }
-
-    const targetFetch = this.options.fetch ?? globalThis.fetch
-    if (!targetFetch) {
-      throw new AppError(
-        'EXECUTION_FAILED',
-        '当前运行时没有 fetch 能力，无法读取 CDP target list。'
-      )
-    }
-
-    const response = await targetFetch(targetListUrl)
-    if (!response.ok) {
-      throw new AppError(
-        'EXECUTION_FAILED',
-        `CDP target list 读取失败：${response.status} ${response.statusText}`
-      )
-    }
-
-    const payload = await response.json()
-    if (!isArray(payload)) {
-      throw new AppError('EXECUTION_FAILED', 'CDP target list 返回值不是数组。')
-    }
-
-    const target = payload
-      .map((entry) => normalizePageTargetDescription(entry))
-      .find((entry): entry is CdpPageTargetDescription => entry?.id === targetId)
+  /** 在标签页目录里找一页；不在（关了、不在这个浏览器上下文里）抛 NOT_FOUND。 */
+  private async findPageTarget(targetId: string): Promise<CdpPageTarget> {
+    const pages = (await this.options.targets?.list()) ?? []
+    const target = pages.find((entry) => entry.targetId === targetId)
     if (!target) throw new AppError('NOT_FOUND', `CDP page target 不存在：${targetId}`)
 
     return target
   }
 
-  private normalizeTargetListEntry(entry: unknown): Nullable<BrowserPageTargetInfo> {
-    if (!isObject(entry)) return null
-
-    const target = entry as CdpTargetListEntry
-    if (target.type !== 'page') return null
-
-    const id = resolveTargetListEntryId(target)
-    if (!id) return null
-
-    const url = isString(target.url) ? target.url : ''
-    const title = isString(target.title) ? target.title : ''
-    const activeTargetId = this.options.activeTargetId?.trim()
-
-    return {
-      id,
-      type: 'page',
-      url,
-      title,
-      active: activeTargetId ? id === activeTargetId : url === this.currentUrl,
-    }
-  }
-
   private buildCurrentPageTarget(): BrowserPageTargetInfo {
     return {
-      id: this.options.activeTargetId?.trim() || 'current',
+      id: this.options.targets?.targetId || 'current',
       type: 'page',
       url: this.currentUrl,
       title: this.currentTitle,
@@ -872,6 +767,11 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     })
   }
 
+  /**
+   * 接管下载：浏览器把下载按 guid 落进 downloadPath（整个浏览器的下载行为由拥有浏览器的一方在浏览器级会话上设好，
+   * 不在这条会话上设——设它的会话一脱开，Chrome 就把整个上下文的下载行为复原）。这一页的下载经 Page.download* 事件来；
+   * 某条会话自己开了 Browser 级下载事件时同一个下载会报两遍，按 guid 只认一次。
+   */
   private subscribeToDownloadEvents(): void {
     const downloadPath = this.options.downloadPath?.trim()
     if (!downloadPath || !this.options.transport.onEvent) return
@@ -892,28 +792,6 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
         this.recordDownloadProgress(event)
       )
     )
-
-    void this.options.transport
-      .send('Browser.setDownloadBehavior', {
-        behavior: 'allowAndName',
-        downloadPath,
-        eventsEnabled: true,
-      })
-      .catch((error) => {
-        this.appendDiagnostic({
-          kind: 'download',
-          level: 'warning',
-          message: 'CDP 下载事件初始化失败。',
-          url: toNullable(this.currentUrl),
-          line: null,
-          column: null,
-          code: null,
-          capturedAt: Date.now(),
-          details: {
-            error: AppError.from(error).message,
-          },
-        })
-      })
   }
 
   private subscribeToNetworkEvents(): void {
@@ -1034,7 +912,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
 
   private recordDownloadWillBegin(event: CdpDownloadWillBeginEvent): void {
     const downloadPath = this.options.downloadPath?.trim()
-    if (!downloadPath || !isNonBlankString(event.guid)) return
+    if (!downloadPath || !isNonBlankString(event.guid) || this.downloads.has(event.guid)) return
 
     const url = isNonBlankString(event.url) ? event.url : toNullable(this.currentUrl)
     const filename = isNonBlankString(event.suggestedFilename)

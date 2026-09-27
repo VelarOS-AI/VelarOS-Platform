@@ -445,8 +445,10 @@ async function run() {
 
   if (existsSync(ChromePath)) {
     const external = contextOf()
+    // 不碰用户自己开着的 Chrome：只用启动器在临时配置目录上拉起的那个。
     await runtime.launchExternalBrowserPage('external', external, {
       executablePath: ChromePath,
+      preferRunningBrowser: false,
       args: ['--headless=new', '--window-size=1000,700'],
     })
     try {
@@ -457,6 +459,9 @@ async function run() {
   } else {
     console.info(`- 没找到 ${ChromePath}，外部浏览器那一轮跳过`)
   }
+  // 关会话只关它的标签页；拉起的 Chrome 由运行时收尾时杀掉，等它退干净、临时配置目录删掉再退出。
+  runtime.dispose()
+  await sleep(1_000)
   servers.close()
 }
 

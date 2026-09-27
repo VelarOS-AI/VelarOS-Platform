@@ -249,13 +249,18 @@ export interface ElectronBrowserRuntimeApi {
     navigationHistory?: BrowserNavigationHistoryRestore,
     abortSignal?: AbortSignal
   ): Promise<BrowserPageWindowState>
-  /** 启动外部 CDP 浏览器窗口并挂接为当前 session 的页面 driver。 */
+  /**
+   * 在外部浏览器里给这个会话开一个标签页，挂成它的页面驱动：先接用户开着的 Chrome，再接 userDataDir 上开着的，
+   * 都没有才拉起一个；同一个浏览器几个会话共用一条连接，各开各的标签页。关会话只关它的标签页，浏览器留到 dispose。
+   */
   launchExternalBrowserPage(
     sessionId: string,
     context: BrowserSiteContext,
     options?: CdpExternalBrowserLaunchOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserPageWindowState>
+  /** 这个会话眼下有没有活着的外部浏览器页面：浏览器被用户关掉、连接断了都算没有。 */
+  hasExternalPage(sessionId: string): boolean
   /** 接入外部浏览器页面 driver，用于 CDP/远程浏览器路径复用同一页面协议。 */
   attachExternalPageDriver(
     sessionId: string,
@@ -278,7 +283,7 @@ export interface ElectronBrowserRuntimeApi {
   closeSession(sessionId: string): Promise<void>
   /** 关闭当前窗口的全部页面会话，保留 runtime 供重开窗口后继续使用。 */
   closeAllSessions(): void
-  /** 主进程退出时永久释放浏览器 runtime。 */
+  /** 主进程退出时永久释放浏览器 runtime：连外部浏览器启动器一起收（它拉起的浏览器杀掉，只是连上的不关）。 */
   dispose(): void
   /** 截图并保存到浏览器工作区。 */
   captureScreenshot(
@@ -595,7 +600,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
   private readonly pageWaiter = new BrowserPageWaiter()
   /** 当前页面自动化驱动。默认包裹 Electron WebContents，未来可接外部浏览器驱动。 */
   private createPageDriver: BrowserPageDriverFactory
-  /** 外部浏览器启动器，负责启动 Chrome/Chromium 并返回 page-level CDP driver。 */
+  /** 外部浏览器启动器：给会话在外部浏览器里开标签页、交回页面驱动；归运行时，dispose 或被换掉时收掉。 */
   private externalBrowserLauncher: BrowserExternalPageLauncher
   /** 会话和 WebContents 事件管理器。 */
   private readonly sessionManager: BrowserSessionManager
@@ -688,7 +693,12 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     if (options.createPageDriver) {
       this.createPageDriver = options.createPageDriver
     }
-    if (options.externalBrowserLauncher) {
+    if (
+      options.externalBrowserLauncher &&
+      options.externalBrowserLauncher !== this.externalBrowserLauncher
+    ) {
+      // 换下来的启动器没人再用：它拉起的浏览器一并收掉（挂在上面的外部页面随连接断开作废）。
+      this.externalBrowserLauncher.dispose?.()
       this.externalBrowserLauncher = options.externalBrowserLauncher
     }
     if ('systemPointerDriver' in options) {
@@ -1062,7 +1072,11 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
         ...options,
         url: launchUrl,
       })
-      abortSignal?.throwIfAborted()
+      if (abortSignal?.aborted) {
+        // 标签页已经开了：中止了就关掉它再抛，不留一个没人管的标签页。
+        launchSession.dispose()
+        abortSignal.throwIfAborted()
+      }
       const externalSession = this.attachExternalPageDriver(sessionId, launchSession.driver, {
         disposeHost: launchSession.dispose,
       })
@@ -1086,6 +1100,19 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       externalSession.visible = behavior.visible
       return buildExternalWindowState(externalSession)
     })
+  }
+
+  /** 这个会话眼下有没有活着的外部浏览器页面：不进动作队列、不抛；驱动已经作废的顺手收掉。 */
+  public hasExternalPage(sessionId: string): boolean {
+    try {
+      return !!this.getExternalPageSession(sessionId)
+    } catch (error) {
+      this.log.debug('查外部浏览器页面时收尾出错，按没有算', {
+        sessionId,
+        error: AppError.from(error).message,
+      })
+      return false
+    }
   }
 
   /** 接入外部浏览器页面 driver，用于 CDP/远程浏览器路径复用同一页面协议。 */
@@ -1193,8 +1220,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
 
   /** 主进程退出时永久释放浏览器 runtime。 */
   public dispose(): void {
+    // 先关会话（各自关掉自己的标签页），再收启动器：连接断开、我们拉起的浏览器杀掉，用户自己的 Chrome 不关。
     this.closeAllSessions()
     this.sessionManager.dispose()
+    this.externalBrowserLauncher.dispose?.()
   }
 
   private withActivityCallbacks(
