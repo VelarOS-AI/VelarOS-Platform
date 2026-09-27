@@ -290,14 +290,32 @@ export function browserUserScriptPatternMatches(url: string, pattern: string): b
   const protocol = parsed.protocol.slice(0, -1)
   if (scheme !== '*' && scheme !== protocol) return false
   if (scheme === '*' && protocol !== 'http' && protocol !== 'https') return false
+  // 规则里写了端口（本地开发服务常见）就要对上，`*` 是任意端口；没写端口的不看端口
+  const { hostname: hostnamePattern, port: portPattern } = splitHostPattern(hostPattern)
+  if (isNotNull(portPattern) && portPattern !== '*' && portPattern !== effectivePort(parsed))
+    return false
   const host = parsed.hostname.toLowerCase()
   const hostMatches =
-    hostPattern === '*' ||
-    hostPattern === host ||
-    (hostPattern.startsWith('*.') &&
-      (host === hostPattern.slice(2) || host.endsWith(`.${hostPattern.slice(2)}`)))
+    hostnamePattern === '*' ||
+    hostnamePattern === host ||
+    (hostnamePattern.startsWith('*.') &&
+      (host === hostnamePattern.slice(2) || host.endsWith(`.${hostnamePattern.slice(2)}`)))
   if (!hostMatches) return false
   return globMatches(`${parsed.pathname}${parsed.search}${parsed.hash}`, pathPattern)
+}
+
+/** 规则的主机部分拆成主机名与端口；IPv6 的方括号里的冒号不算。没写端口的端口是 null。 */
+function splitHostPattern(hostPattern: string): { hostname: string; port: Nullable<string> } {
+  const colon = hostPattern.lastIndexOf(':')
+  if (colon < 0 || hostPattern.lastIndexOf(']') > colon)
+    return { hostname: hostPattern, port: null }
+  return { hostname: hostPattern.slice(0, colon), port: hostPattern.slice(colon + 1) }
+}
+
+/** 地址实际用的端口：没写的按协议的默认端口。 */
+function effectivePort(url: URL): string {
+  if (url.port) return url.port
+  return url.protocol === 'https:' ? '443' : '80'
 }
 
 /** 一条用户脚本在这个地址上该不该跑：先过 match，再被 exclude 一票否决。 */
