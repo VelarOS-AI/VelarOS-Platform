@@ -3,6 +3,8 @@ export { ComputerErrorCodes, ComputerInputLimits } from '@velaros-ai/velaros/com
 export { MemoryLimits, MemoryTypes, VelarMemoryModule } from '@velaros-ai/velaros/memory/contracts'
 export { OfficeErrorCodes, OfficeInputLimits, VelarOfficeModule } from '@velaros-ai/velaros/office/contracts'
 export { VelarWebModule, WebErrorCodes, WebLimits } from '@velaros-ai/velaros/web/contracts'
+export { SessionsErrorCodes, SessionWorkspaces, VelarSessionsModule } from '@velaros-ai/velaros/sessions/contracts'
+export type { SessionAnswer, SessionPeer } from '@velaros-ai/velaros/sessions/contracts'
 export type { WebPageText, WebSearchResults } from '@velaros-ai/velaros/web/contracts'
 export { LanguageServiceIds, CodeQuerySources, DevelopmentCodeLimits, BuiltinExternalLanguageServers } from '@velaros-ai/velaros/project/contracts'
 export type { ExternalLanguageServerSpec, ExternalLanguageDiagnostic, ExternalLanguageStatus, ExternalLanguageLocation, ExternalLanguageHover } from '@velaros-ai/velaros/project/contracts'

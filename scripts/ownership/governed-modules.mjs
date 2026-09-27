@@ -579,6 +579,30 @@ export const GovernedModules = [
     acceptance: 'web/spec/acceptance.test.ts',
   },
   {
+    // 能力单元：同一个对话里的会话之间交活、传话（velaros:sessions）。会话的一切在宿主那里（这个对话里有谁、开新会话、排队、谁在等谁），
+    // 这里只有模型面与入参核对，核对、规范过的入参经端口交给宿主，结果与错误原样交回
+    directory: 'velaros',
+    unit: 'sessions',
+    name: '@velaros-ai/velaros/sessions',
+    contract: 'sessions/contract',
+    types: 'sessions/types',
+    portable: 'sessions.ts',
+    impl: 'sessions/impl',
+    utils: 'sessions/utils',
+    // 可移植数据渲染进程也能加载；操作只给宿主
+    browserSafeEntries: ['contracts.ts'],
+    // 空间端口：三个操作经 ctx.sessions 调它（已经绑在发问的会话上）；每个方法都必须有操作在调
+    hostPort: 'SessionsSpacePort',
+    hostPortField: 'sessions',
+    surfaceFile: 'sessions/impl/SessionsOperations.ts',
+    layers: [
+      // 代码面 sessions 命名空间的三个操作：查取消、核对入参，交给宿主
+      ['SessionsOperations.ts'],
+    ],
+    invariants: 'sessions/spec/invariants.md',
+    acceptance: 'sessions/spec/acceptance.test.ts',
+  },
+  {
     directory: 'script',
     name: '@velaros-ai/script',
     // Script 执行引擎：检查、精确编辑、隔离执行与 Kernel 能力桥；模型入口由 Velaros 装配

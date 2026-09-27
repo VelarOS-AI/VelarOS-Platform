@@ -112,6 +112,14 @@ export const CodeSurfaces = [
     interfaces: ['WebOperationsApi'],
     templates: 'template.js',
   },
+  {
+    // 同一个对话里的会话之间交活、传话：会话的一切在宿主那里，单元只有模型面与入参核对
+    namespace: 'sessions',
+    directory: 'velaros',
+    unit: 'sessions',
+    interfaces: ['SessionsOperationsApi'],
+    templates: 'template.js',
+  },
   // ── Act 自管理能力：模型从 velaros:system 导入 goal 成员（聚合包由 act/system 的目录编出），模块身份照旧是 velaros:system-goal
   {
     namespace: 'system-goal',
@@ -271,6 +279,7 @@ export const HostContextTypes = new Set([
   'OfficeOperationContext',
   'BrowserOperationContext',
   'WebOperationContext',
+  'SessionsOperationContext',
   'GoalOperationContext',
   'ModulesOperationContext',
   'StoreOperationContext',

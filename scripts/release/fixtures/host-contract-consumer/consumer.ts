@@ -19,6 +19,8 @@ import {
 import { projectCapabilityPorts, type ProjectHostPort } from '@velaros-ai/velaros/project'
 import { type LocalShellHostApi, shellCommandPolicy, shellOperations } from '@velaros-ai/velaros/shell'
 import { webOperations, type WebOperationContext, type WebPage, type WebSpacePort } from '@velaros-ai/velaros/web'
+import { sessionsOperations, type SessionsOperationContext, type SessionsSpacePort } from '@velaros-ai/velaros/sessions'
+import type { SessionAnswer, SessionPeer, SessionTold } from '@velaros-ai/velaros/sessions/contracts'
 import type { WebPageText, WebSearchResults } from '@velaros-ai/velaros/web/contracts'
 import { createLocalShellHost } from '@velaros-ai/velaros/shell/local'
 
@@ -67,6 +69,14 @@ const webContext: WebOperationContext = { abortSignal: new AbortController().sig
 const searched: Promise<WebSearchResults> = webOperations.search({ query: '发布说明', limit: 5 }, webContext)
 const readPage: Promise<WebPageText> = webOperations.read({ url: 'https://example.com/', maxChars: 2000 }, webContext)
 void [searched, readPage]
+
+// 会话之间交活、传话在 velaros 的 sessions 单元里：宿主给绑在发问会话上的端口，三个操作交回宿主的结果。
+declare const sessionsPort: SessionsSpacePort
+const sessionsContext: SessionsOperationContext = { abortSignal: new AbortController().signal, sessions: sessionsPort }
+const peersListed: Promise<SessionPeer[]> = sessionsOperations.list(sessionsContext)
+const answered: Promise<SessionAnswer> = sessionsOperations.ask({ workspace: 'browser', site: 'https://example.com', task: '下单' }, sessionsContext)
+const toldPeer: Promise<SessionTold> = sessionsOperations.tell({ to: 'browser-1', message: '换地址' }, sessionsContext)
+void [peersListed, answered, toldPeer]
 
 // 主循环与正式装配均从声明入口消费，业务能力沿 Kernel 调用。
 declare const loop:ActRunServiceOptions

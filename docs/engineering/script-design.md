@@ -193,6 +193,7 @@ edit 与 inspect 交回完整差量，`velaros:code` 不按条数截，`velaros:
 | `velaros:devtools` | diagnostics / request / zoom / network / startTrace / insight / heapSnapshot / 录屏 / 用户脚本等 18 个 | — | 客居 | 同上，与 `velaros:browser` 共用一个空间端口 |
 | `velaros:cdp` | send / events / waitForEvent / reset：模型自己的一条 CDP 会话（ADR 0012） | — | 客居 | 同上，与 `velaros:browser` 共用一个空间端口 |
 | `velaros:web` | search / read：搜索引擎搜、把网页读成文字 | 宿主给了不显示的页面时挂 | 宿主给了不显示的页面时挂 | `@velaros-ai/velaros` 的 `web/`（页面脚本、跳转链接解开、结果整理与正文切分；浏览器由宿主给） |
+| `velaros:sessions` | list / ask / tell：同一个对话里的会话之间交活、等回答、捎话 | ✓ | ✓ | `@velaros-ai/velaros` 的 `sessions/`（模型面与入参核对；会话、排队、互相等待都在宿主那里） |
 
 **一件能力只有一份实现、一份声明、一份代码模版**，不认识任何空间。空间之间不一样的地方全落在**注入的端口**上：
 
@@ -207,6 +208,7 @@ edit 与 inspect 交回完整差量，`velaros:code` 不按条数截，`velaros:
 | `velaros:office` | `OfficeSpacePort` | `getRootPath`：文档读写落在哪个根里（出了根一律拒绝）；`inspectEnvironment`、`runCommand`：本机有没有 LibreOffice、LaTeX 编译器，外部命令交给谁跑（只收原生 argv）；`locateMarkItDown`：按宿主自己的插件状态回答 MarkItDown 装没装、停没停用 |
 | `velaros:browser`、`velaros:devtools`、`velaros:cdp` | `BrowserSpacePort` | 已经绑好会话与站点的浏览器：宿主拿 Electron 运行时按会话与站点拼它（要登录墙门控就用 `createBrowserLoginGate` 包一层）；站点工作区在哪由它的 `getContext` 回答，浏览器空间另外挂站点工作区上的 `velaros:files` |
 | `velaros:web` | `WebSpacePort` | `openPage`：开一个用户看不到的页面（不落盘的临时会话、关掉后台节流）；`searchEngine`：用户选的搜索引擎；可选的 `resolveRedirect`：把 Google 的 `/goto` 跳转链接问一次换成真实地址 |
+| `velaros:sessions` | `SessionsSpacePort` | 已经绑在发问会话上：`list` 这个对话里有谁，`ask` 交活并等对方这一轮跑完（开新会话、排队、拒绝互相等待都由宿主做），`tell` 捎话不等 |
 
 **真正是两件事的不硬合。** 本机文件与项目文件看上去都是「读写文件」，其实不是一件事：项目里的文件有项目那一套——
 校验器、带版本防护的事务、撤销账本、改完过校验才落盘；本机上的文件没有这些，

@@ -5,7 +5,7 @@
 | INV-1 | 模块发现、脚本调用、上下文提交和重启恢复复用共享主干 | 测试 | test/platform.test.mjs |
 | INV-2 | 文本 observe/execute 与宿主 script 共用程序校验，内部模块及持久源码分页读取共用注册表 | 测试 | test/runtime.test.mjs |
 | INV-3 | 基础契约超窗明确阻塞，截断响应不执行 | 测试 | test/runtime.test.mjs |
-| INV-4 | 13 个生成领域合同与 96 个操作复用同一注册、声明、schema 和调用链 | 测试 | test/platform.test.mjs |
+| INV-4 | 14 个生成领域合同与 99 个操作复用同一注册、声明、schema 和调用链 | 测试 | test/platform.test.mjs |
 | INV-5 | 自动保存脚本可在重启后按当前会话引用执行，源码版本与执行身份分别记录 | 测试 | test/platform.test.mjs |
 | INV-6 | 当前投影包含有效观察、结果租约与分别记录的源码/输出变化；程序状态索引与任务边界同版本，增量发布保持占位唯一和原子回滚 | 测试 | test/program-context.test.mjs、test/context-index.test.mjs |
 | INV-7 | 真实图像持久保存并以图像块经共享编译器发送 | 测试 | test/platform.test.mjs |
