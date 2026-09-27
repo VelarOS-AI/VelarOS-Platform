@@ -174,9 +174,10 @@ void describe('target action 的坐标恢复', () => {
       x: 300,
       y: 220,
     })
-    // 探针截图固定一份覆盖写，且不产出面向模型的压缩图。
+    // 探针截图固定一份覆盖写，不产出面向模型的压缩图，只截视口（标注只标视口里的元素）。
     assert.equal(screenshots[0]?.path, 'artifacts/screenshots/recovery/target-action.png')
     assert.equal(screenshots[0]?.includeModelImage, false)
+    assert.equal(screenshots[0]?.fullPage, false)
   })
 
   void test('截图标注里零尺寸的候选不参与坐标恢复', async () => {

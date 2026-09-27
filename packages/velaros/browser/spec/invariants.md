@@ -22,6 +22,7 @@ INV-12（recipe 与当前站点同源）随 recipe 删掉，可复跑的自动�
 
 ADR 0012 把一半操作换成页面脚本、加上输入原子与 `velaros:cdp` 之后，INV-17～19、21、23 的措辞跟着改（三件能力、删掉的操作不再列），
 INV-24 起是新增的承诺：页面脚本的整份取回与失败码、fill 走真实输入、等待等不到就抛、state 与离站、模型 CDP 会话的隔离与兜底。
+INV-30 是 2026-09-27 新增的：内嵌 `<webview>` 里一次截整页，超出一屏的部分是第一屏反复平铺，改成按一屏切块截再拼。
 
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
@@ -47,3 +48,4 @@ INV-24 起是新增的承诺：页面脚本的整份取回与失败码、fill �
 | INV-27 | state 进了站点时带上标签页与挂着的弹窗、下载、权限；离站（leave）先断开模型的 CDP 会话，它设的仿真与拦截不带到下一个站点 | 测试 | `spec/acceptance.test.ts` |
 | INV-28 | 模型的 CDP 会话与宿主那条分开：模型开关的域、设的仿真与 Fetch 拦截只算在它自己身上，宿主的诊断、录屏与 mock 不受影响，宿主的事件监听不收子会话的事件；只认它自己挂出来的子会话（**未验证**：要真实 Electron，实现测试与真机探针在 `test/core/browser-protocol-sessions.test.ts` 与 ADR 0012 的验证里） | 文字 | |
 | INV-29 | 被模型的 Fetch 拦下、30000 毫秒没人放行的请求由宿主放行，并在事件里记一条 `Velar.requestAutoContinued`；事件序号只增，缓冲只为守住内存、挤掉的条数如实交回（实现测试在 `test/core/browser-protocol-sessions.test.ts`，经空间端口的那一段要真实浏览器） | 文字 | |
+| INV-30 | 整页截图与高过一屏的区域截图是真的页面：按一屏切块、每块经 captureBeyondViewport 截下再拼成一张，每处页面只出现一次；截图不滚动页面、不改版面，fixed 元素与元素标注只在它们此刻所在的位置出现一次；整张图守住像素上限，超了一起降清晰度（**未验证**：要真实 `<webview>`，切块与拼接的实现测试在 `test/runtime/screenshot-tiles.test.ts`，真机探针 `test/probes/electron-full-page-screenshot.probe.mjs`） | 文字 | |

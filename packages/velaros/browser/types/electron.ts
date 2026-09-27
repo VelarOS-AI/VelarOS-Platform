@@ -12,7 +12,11 @@ import type {
   BrowserUserActivityEvent,
   BrowserViewportOptions,
 } from './browser'
-import type { BrowserScreenshotCaptureRegion, BrowserSiteContext } from './browser.js'
+import type {
+  BrowserScreenshotCaptureRegion,
+  BrowserScreenshotRect,
+  BrowserSiteContext,
+} from './browser.js'
 import type { BrowserPageDriverKernel, BrowserPageDriverSession } from './runtime.js'
 import type { BrowserUserActivitySummary } from './session'
 
@@ -58,6 +62,43 @@ export interface BrowserScreenshotDiffFrame {
 export interface BrowserScreenshotImageCapture {
   image: Electron.NativeImage
   capture: BrowserScreenshotCaptureRegion
+}
+
+/** 截图前从页面量到的尺寸，都是页面 CSS 像素。 */
+export interface BrowserScreenshotLayout {
+  /** 能截到的整页宽。 */
+  documentWidth: number
+  /** 能截到的整页高。 */
+  documentHeight: number
+  /** 一次截图最多截多宽（clip 缩放为 1 时）：视口里看得到的内容那么宽，滚动条不算。 */
+  viewWidth: number
+  /** 一次截图最多截多高（clip 缩放为 1 时）。 */
+  viewHeight: number
+}
+
+/** 一块截图区域怎么切：每块的 clip 缩放，与按截取顺序排好的块。 */
+export interface BrowserScreenshotTilePlan {
+  /** 每块 clip 的 scale：1 是页面本来的清晰度，整张图超出像素上限时小于 1。 */
+  clipScale: number
+  /** 切好的块（页面 CSS 像素），从上到下、从左到右，互不重叠、合起来正好铺满要截的区域。 */
+  tiles: BrowserScreenshotRect[]
+}
+
+/** 一块原始位图：每像素四字节，按行紧排，字节顺序与 Electron `toBitmap` 一致。 */
+export interface BrowserScreenshotBitmap {
+  data: Buffer
+  width: number
+  height: number
+}
+
+/** 一块截图往拼接图里拷的位置：拼接图上的矩形，以及源图相对它的整数偏移。 */
+export interface BrowserScreenshotTilePlacement {
+  /** 拼接图上的矩形，像素，左上含、右下不含。 */
+  target: { left: number; top: number; right: number; bottom: number }
+  /** 拼接图的 (x, y) 取源图的 (x + offsetX, y + offsetY)。 */
+  offsetX: number
+  /** 同上，纵向。 */
+  offsetY: number
 }
 
 export type WebContentsListener = (...args: any[]) => void

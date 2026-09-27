@@ -96,6 +96,10 @@ export const BrowserTuning = Object.freeze({
     fullPageMaxWidth: 10_000,
     /** 整页截图的高度上限，像素。 */
     fullPageMaxHeight: 16_000,
+    /** 分块拼接的截图（整页、比一屏大的区域）最多多少像素；超了整张按比例降清晰度，免得长页在主进程里摊开几百兆位图。 */
+    stitchedImageMaxPixels: 32_000_000,
+    /** 分块拼接的截图单边最多多少像素。 */
+    stitchedImageMaxSide: 16_384,
     /** 元素标注最多标几个，超过的不画框。 */
     elementLabelLimit: 40,
     /** 宿主预览帧的宽度上限，像素。 */

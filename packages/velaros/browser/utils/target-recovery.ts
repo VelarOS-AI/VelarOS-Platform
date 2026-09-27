@@ -97,11 +97,12 @@ async function tryCoordinateRecovery(
       // 恢复截图是一次性探针:只用它的 elementLabels 找坐标,图本身没人回看。
       // 固定路径覆盖写,不再每次恢复都往工作区扔一个新文件(带时间戳的老写法会攒满
       // artifacts/screenshots/recovery/);也不要面向模型的压缩图——那会再落一个文件、
-      // 再往回执里塞一份 base64。
+      // 再往回执里塞一份 base64。标注只标视口里的元素，截整页（长页要切十几块）白花时间。
       path: BrowserTargetRecoveryScreenshotPath,
       modelFacing: false,
       includeModelImage: false,
       annotateElements: true,
+      fullPage: false,
     })
   )
   const labels = screenshot.metadata?.elementLabels ?? []

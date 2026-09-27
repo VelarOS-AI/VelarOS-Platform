@@ -4,14 +4,7 @@ import { dirname } from 'node:path'
 
 import electron from 'electron'
 
-import {
-  isNumber,
-  isPlainObject,
-  isString,
-  optionalWhenLazy,
-  toNullable,
-  toOptional,
-} from '@velaros-ai/core'
+import { isNumber, isPlainObject, optionalWhenLazy, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 
@@ -69,6 +62,10 @@ import {
   resolveExternalScreenshotOptions,
 } from '../../utils/electron/screenshot-image'
 import { createElectronScreencastFrameDecoder } from '../../utils/electron/screenshot-image'
+import {
+  captureScreenshotArea,
+  normalizeScreenshotLayout,
+} from '../../utils/electron/screenshot-tiles'
 import { encodeScreencastFramesToGif } from '../../utils/gif.js'
 import {
   clampInteger,
@@ -83,6 +80,7 @@ import { DefaultScreencastStartOptions } from '../cdp/CdpScreencastRecorder'
 import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
 
 import type { BrowserPageWaiter } from './BrowserPageWaiter'
+import { electronDebuggerHolds } from './ElectronDebuggerHolds'
 
 /**
  * 截图域执行体：视口/全页/区域截图、元素标注与图例、模型压缩图、diff 采样、
@@ -501,7 +499,8 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       const { image, capture } = await this.captureBrowserScreenshotImage(
         session,
         metadata,
-        options
+        options,
+        abortSignal
       )
       const imageSize = image.getSize()
       const bytes = image.toPNG()
@@ -604,10 +603,16 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
   private async captureBrowserScreenshotImage(
     session: BrowserSession,
     metadata: BrowserScreenshotMetadata,
-    options: BrowserCaptureScreenshotOptions
+    options: BrowserCaptureScreenshotOptions,
+    abortSignal?: AbortSignal
   ): Promise<BrowserScreenshotImageCapture> {
     if (options.region) {
-      const regionCapture = await this.tryCaptureRegionScreenshot(session, metadata, options.region)
+      const regionCapture = await this.tryCaptureRegionScreenshot(
+        session,
+        metadata,
+        options.region,
+        abortSignal
+      )
       if (regionCapture) return regionCapture
     }
 
@@ -616,7 +621,8 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       const fullPageCapture = await this.tryCaptureFullPageScreenshot(
         session,
         metadata,
-        fullPageOptions
+        fullPageOptions,
+        abortSignal
       )
       if (fullPageCapture) return fullPageCapture
     }
@@ -632,93 +638,68 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
   private async tryCaptureFullPageScreenshot(
     session: BrowserSession,
     metadata: BrowserScreenshotMetadata,
-    options: { maxWidth: number; maxHeight: number }
+    options: { maxWidth: number; maxHeight: number },
+    abortSignal?: AbortSignal
   ): Promise<Nullable<BrowserScreenshotImageCapture>> {
     const webContents = session.webContents
     if (webContents.isDestroyed()) return null
 
-    const wasAttached = webContents.debugger.isAttached()
     try {
-      if (!wasAttached) {
-        webContents.debugger.attach('1.3')
-      }
-
-      const metrics = (await webContents.debugger.sendCommand('Page.getLayoutMetrics')) as {
-        cssContentSize?: { x?: number; y?: number; width?: number; height?: number }
-        contentSize?: { x?: number; y?: number; width?: number; height?: number }
-      }
-      const content = metrics.cssContentSize ?? metrics.contentSize
-      const documentWidth = clampInteger(
-        readFiniteNumber(content?.width),
-        1,
-        32_000,
-        metadata.documentWidth
-      )
-      const documentHeight = clampInteger(
-        readFiniteNumber(content?.height),
-        1,
-        32_000,
-        metadata.documentHeight
-      )
-      const captureWidth = Math.min(documentWidth, options.maxWidth)
-      const captureHeight = Math.min(documentHeight, options.maxHeight)
-      const captured = (await webContents.debugger.sendCommand('Page.captureScreenshot', {
-        format: 'png',
-        fromSurface: true,
-        captureBeyondViewport: true,
-        clip: {
+      return await this.withScreenshotDebugger(webContents, async () => {
+        const layout = normalizeScreenshotLayout(
+          await webContents.debugger.sendCommand('Page.getLayoutMetrics'),
+          metadata
+        )
+        const area = {
           x: 0,
           y: 0,
-          width: captureWidth,
-          height: captureHeight,
-          scale: 1,
-        },
-      })) as { data?: string }
-      if (!isString(captured.data) || !captured.data.trim()) return null
+          width: Math.min(layout.documentWidth, options.maxWidth),
+          height: Math.min(layout.documentHeight, options.maxHeight),
+        }
+        const image = await captureScreenshotArea(
+          webContents,
+          area,
+          layout,
+          metadata.deviceScaleFactor,
+          abortSignal
+        )
+        if (!image) return null
 
-      const image = electron.nativeImage.createFromBuffer(Buffer.from(captured.data, 'base64'))
-      if (image.isEmpty()) return null
-
-      return {
-        image,
-        capture: {
-          mode: 'full-page',
-          coordinateSpace: 'page-css-px',
-          x: 0,
-          y: 0,
-          width: captureWidth,
-          height: captureHeight,
-          documentWidth,
-          documentHeight,
-          viewport: {
-            x: metadata.scrollX,
-            y: metadata.scrollY,
-            width: metadata.viewportWidth,
-            height: metadata.viewportHeight,
+        return {
+          image,
+          capture: {
+            mode: 'full-page',
+            coordinateSpace: 'page-css-px',
+            x: 0,
+            y: 0,
+            width: area.width,
+            height: area.height,
+            documentWidth: layout.documentWidth,
+            documentHeight: layout.documentHeight,
+            viewport: {
+              x: metadata.scrollX,
+              y: metadata.scrollY,
+              width: metadata.viewportWidth,
+              height: metadata.viewportHeight,
+            },
+            clipped: area.width < layout.documentWidth || area.height < layout.documentHeight,
           },
-          clipped: captureWidth < documentWidth || captureHeight < documentHeight,
-        },
-      }
+        }
+      })
     } catch (error) {
+      if (abortSignal?.aborted) throw error
       this.log.debug('截取完整浏览器页面失败，回退当前可视区域截图', {
         error: AppError.from(error).message,
       })
       return null
-    } finally {
-      if (!wasAttached && webContents.debugger.isAttached()) {
-        try {
-          webContents.debugger.detach()
-        } catch (error) {
-          this.log.debug('断开浏览器截图调试器失败', { error: AppError.from(error).message })
-        }
-      }
     }
   }
 
   private async tryCaptureRegionScreenshot(
     session: BrowserSession,
     metadata: BrowserScreenshotMetadata,
-    region: BrowserScreenshotRegionOptions
+    region: BrowserScreenshotRegionOptions,
+    abortSignal?: AbortSignal
   ): Promise<Nullable<BrowserScreenshotImageCapture>> {
     const rect = await resolveScreenshotRegionRect(session, region)
     if (!rect || rect.width <= 0 || rect.height <= 0) return null
@@ -726,58 +707,82 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     const webContents = session.webContents
     if (webContents.isDestroyed()) return null
 
-    const wasAttached = webContents.debugger.isAttached()
     try {
-      if (!wasAttached) {
-        webContents.debugger.attach('1.3')
-      }
-
-      const captureWidth = Math.min(Math.max(1, Math.round(rect.width)), 32_000)
-      const captureHeight = Math.min(Math.max(1, Math.round(rect.height)), 32_000)
-      const captured = (await webContents.debugger.sendCommand('Page.captureScreenshot', {
-        format: 'png',
-        fromSurface: true,
-        captureBeyondViewport: true,
-        clip: {
+      return await this.withScreenshotDebugger(webContents, async () => {
+        const layout = normalizeScreenshotLayout(
+          await webContents.debugger.sendCommand('Page.getLayoutMetrics'),
+          metadata
+        )
+        const area = {
           x: Math.max(0, Math.round(rect.x)),
           y: Math.max(0, Math.round(rect.y)),
-          width: captureWidth,
-          height: captureHeight,
-          scale: 1,
-        },
-      })) as { data?: string }
-      if (!isString(captured.data) || !captured.data.trim()) return null
+          width: Math.min(Math.max(1, Math.round(rect.width)), 32_000),
+          height: Math.min(Math.max(1, Math.round(rect.height)), 32_000),
+        }
+        const image = await captureScreenshotArea(
+          webContents,
+          area,
+          layout,
+          metadata.deviceScaleFactor,
+          abortSignal
+        )
+        if (!image) return null
 
-      const image = electron.nativeImage.createFromBuffer(Buffer.from(captured.data, 'base64'))
-      if (image.isEmpty()) return null
-
-      return {
-        image,
-        capture: {
-          mode: 'region',
-          coordinateSpace: 'page-css-px',
-          x: Math.round(rect.x),
-          y: Math.round(rect.y),
-          width: captureWidth,
-          height: captureHeight,
-          documentWidth: metadata.documentWidth,
-          documentHeight: metadata.documentHeight,
-          viewport: {
-            x: metadata.scrollX,
-            y: metadata.scrollY,
-            width: metadata.viewportWidth,
-            height: metadata.viewportHeight,
+        return {
+          image,
+          capture: {
+            mode: 'region',
+            coordinateSpace: 'page-css-px',
+            x: Math.round(rect.x),
+            y: Math.round(rect.y),
+            width: area.width,
+            height: area.height,
+            documentWidth: metadata.documentWidth,
+            documentHeight: metadata.documentHeight,
+            viewport: {
+              x: metadata.scrollX,
+              y: metadata.scrollY,
+              width: metadata.viewportWidth,
+              height: metadata.viewportHeight,
+            },
+            clipped: area.width < rect.width || area.height < rect.height,
           },
-          clipped: captureWidth < rect.width || captureHeight < rect.height,
-        },
-      }
+        }
+      })
     } catch (error) {
+      if (abortSignal?.aborted) throw error
       this.log.debug('截取浏览器区域截图失败，回退当前可视区域截图', {
         error: AppError.from(error).message,
       })
       return null
+    }
+  }
+
+  /**
+   * 截图要的 debugger 连接：没连着就临时 attach，截完 detach。
+   * 截图途中别处（画中画、录屏、视口覆盖、网络采集、模型的 CDP 会话）挂上了自己的占用，就留着连接，不替它们断掉。
+   */
+  private async withScreenshotDebugger<T>(
+    webContents: Electron.WebContents,
+    run: () => Promise<T>
+  ): Promise<T> {
+    const wasAttached = webContents.debugger.isAttached()
+    if (!wasAttached) {
+      webContents.debugger.attach('1.3')
+    }
+    try {
+      return await run()
     } finally {
-      if (!wasAttached && webContents.debugger.isAttached()) {
+      const heldElsewhere =
+        electronDebuggerHolds.hasPersistentHold(webContents) ||
+        !!electronDebuggerHolds.getScreencast(webContents) ||
+        !!electronDebuggerHolds.getTrace(webContents)
+      if (
+        !wasAttached &&
+        !heldElsewhere &&
+        !webContents.isDestroyed() &&
+        webContents.debugger.isAttached()
+      ) {
         try {
           webContents.debugger.detach()
         } catch (error) {
