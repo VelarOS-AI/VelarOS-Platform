@@ -56,7 +56,7 @@
 
 | INV-45 | 执行展示只来自 Kernel 原始调用与回执；缺失终态保持 pending，外部效果独立表达，参数和结果预览计入追踪总正文预算，身份不受正文截断影响 | 测试 | `test/execution-presentation.test.mjs` |
 
-| INV-46 | 封存请求展示来自完整审计，媒体正文省略且显式标记；缺失计量为 null，截断不改变身份，展示正文计入 trace 总预算，关闭后可无模型读取 | 测试 | `test/request-presentation.test.mjs` |
+| INV-46 | 封存请求展示来自完整审计，媒体正文省略且显式标记；缺失计量为 null，截断不改变身份，常规展示正文计入 trace 总预算，宿主 fullContent 按回合分页保留全文，关闭后可无模型读取 | 测试 | `test/request-presentation.test.mjs` |
 
 | INV-47 | 宿主笔记读写与模型共用版本和上下文投影；移出与恢复只改驻留，冲突不覆盖正文，重开与分页读取不调用模型，关闭后拒绝访问 | 测试 | `test/host-notes.test.mjs` |
 

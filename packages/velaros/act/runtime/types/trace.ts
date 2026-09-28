@@ -161,9 +161,9 @@ export interface ActRequestSummary {
   readonly basis: Nullable<string>
   /** 为输出保留的 token 数。 */
   readonly outputTokens: number
-  /** 有界系统指令。 */
+  /** 系统指令；正文预算模式下可能截断。 */
   readonly system: string
-  /** 有界消息 JSON 文本；截断后不保证可解析。 */
+  /** 消息 JSON 文本；正文预算模式下截断后不保证可解析。 */
   readonly messages: string
   /** 系统指令是否被截断。 */
   readonly systemTruncated: boolean
@@ -227,7 +227,9 @@ export interface ActTraceQuery {
   readonly after?: number
   /** 一页最多请求数，默认 8，上限 32。 */
   readonly limit?: number
-  /** 一页正文字符上限，默认一百万，上限八百万。 */
+  /** 宿主调试展示完整正文；仍按 limit 分页，忽略 maxChars，完整保留文本，图片和字节数据使用占位。 */
+  readonly fullContent?: boolean
+  /** 一页正文字符上限，默认一百万，上限八百万。fullContent 为 true 时不使用。 */
   readonly maxChars?: number
 }
 /** 持久追踪可在支线关闭后读取，活动回合需重读以取得后续回执。 */

@@ -82,3 +82,5 @@ projector.finish() // 交付结束：清掉没接纳的预览
 - `createShellCapabilityModule` 给了 `output`，前台命令跑着时每吐出一段就回调一次，带上会话、`executionId` 与调用 `invocationId`（与追踪里的同名字段相同），宿主据此把运行中的输出画在对应的脚本卡上；回调要快速返回，抛错只记日志、不打断命令。
 - 投影器的 `apply` 收持久事件、按游标去重，`applyLive` 收实时事件、预览不推进游标；交付结束调 `finish()`，重新消费要建新的投影器。
 - `createEventDelivery({ persist, deliver })` 先落盘再严格按 append 顺序交付，落盘可以合批；任何一步失败就停止后续交付，首个错误留给 `append`、`flush`、`close`。
+
+- 宿主调试面板可用 `runtime.trace(sessionId, { limit: 1, fullContent: true })` 按回合分页读取完整文本；图片和字节数据仍显示占位。默认查询按 `maxChars` 限制正文。

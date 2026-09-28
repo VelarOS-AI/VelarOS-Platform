@@ -53,6 +53,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
       after = 0,
       limit = 8,
       maxChars = ActRuntimeTuning.frameChars,
+      fullContent = false,
       sessionId = this.sessionId,
     } = input
     if (
@@ -93,11 +94,11 @@ export class RuntimeTrace implements RuntimeTraceApi {
     )
     const trace = new RuntimeTrace(sessionId, this.storage, this.journal)
     const turns: ActTurnTrace[] = []
-    let remaining = maxChars
+    let remaining = fullContent ? Number.POSITIVE_INFINITY : maxChars
     let cursor = after
     for (const request of requests.slice(0, limit)) {
       if (remaining < 1) break
-      const value = await trace.readSnapshot(request.ref.id, remaining, snapshot)
+      const value = await trace.readSnapshot(request.ref.id, remaining, snapshot, fullContent)
       turns.push(value)
       cursor = request.sequence
       remaining -=
@@ -138,7 +139,8 @@ export class RuntimeTrace implements RuntimeTraceApi {
   private async readSnapshot(
     turnId: string,
     maxChars: number,
-    snapshot: Nullable<ContextState>
+    snapshot: Nullable<ContextState>,
+    fullContent = false
   ): Promise<ActTurnTrace> {
     const records = snapshot?.records ?? []
     const recordById = new Map(records.map((record) => [record.ref.id, record]))
@@ -304,7 +306,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
       )
         select(record)
     let remaining = maxChars
-    const requestSummary = summarizeModelRequest(request, remaining)
+    const requestSummary = summarizeModelRequest(request, remaining, fullContent)
     remaining -= (requestSummary?.system.length ?? 0) + (requestSummary?.messages.length ?? 0)
     const project = async (record: ContextRecord): Promise<ActTraceRecord> => {
       const body = await raw(record)
@@ -335,7 +337,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
       journal.set(executionId, await this.journal.list(this.sessionId, executionId))
     for (const executionId of executions)
       for (const invocation of journal.get(executionId)!) {
-        const summary = summarizeInvocation(invocation, remaining)
+        const summary = summarizeInvocation(invocation, remaining, fullContent)
         remaining -= summary.input.length + summary.output.length
         const rawBody = JSON.stringify(invocation)
         const body = rawBody.slice(0, remaining)

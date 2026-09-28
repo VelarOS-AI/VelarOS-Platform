@@ -153,3 +153,24 @@ test('trace and paginated trace share the total body budget including execution 
   assert.equal(page.turns[0].invocations[0].summary.outputTruncated, true)
   assert.equal(page.turns[0].invocations[0].id, 'call')
 })
+
+test('full invocation presentation retains all input and output text', () => {
+  const input = { command: `${'input\n'.repeat(2000)}INPUT_END` }
+  const value = { result: `${'output\n'.repeat(2000)}OUTPUT_END` }
+  const summary = summarizeInvocation(
+    {
+      prepared: { ...prepared, input },
+      receipt: {
+        outcome: 'succeeded',
+        effect: 'none',
+        value,
+      },
+    },
+    1,
+    true
+  )
+  assert.deepEqual(JSON.parse(summary.input), input)
+  assert.deepEqual(JSON.parse(summary.output), value)
+  assert.equal(summary.inputTruncated, false)
+  assert.equal(summary.outputTruncated, false)
+})

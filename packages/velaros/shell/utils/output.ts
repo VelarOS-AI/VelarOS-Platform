@@ -4,6 +4,7 @@
 
 /** 终端控制序列：CSI（ESC [ … 终止字节）、OSC（ESC ] … BEL 或 ESC \）、选字符集，以及其余两字节的 ESC 序列（ESC 7、ESC = 这类）。 */
 const TerminalControlSequence =
+  // eslint-disable-next-line no-control-regex -- 终端转义序列的语法本身包含 ESC 和 BEL 控制字符。
   /\u001b\[[0-?]*[ -/]*[@-~]|\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)|\u001b[()#][0-9A-Za-z]|\u001b[0-~]/gu
 
 /** 取文本末尾最多 maxChars 个字符，不把代理对拆成两半。 */

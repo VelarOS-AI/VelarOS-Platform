@@ -125,3 +125,23 @@ test('real request summaries share the trace body budget and survive a model-fre
     await reader.close()
   }
 })
+
+test('full request text bypasses summary limits and keeps the media placeholder', () => {
+  const system = `${'系统指令\n'.repeat(2000)}SYSTEM_END`
+  const content = `${'request line\n'.repeat(4000)}MESSAGE_END`
+  const request = {
+    ...audit,
+    providerRequest: {
+      ...audit.providerRequest,
+      system,
+      messages: [...audit.providerRequest.messages, { role: 'user', content }],
+    },
+  }
+  const full = summarizeModelRequest(request, 1, true)
+  assert.equal(full.system, system)
+  assert.equal(JSON.parse(full.messages).at(-1).content, content)
+  assert.equal(full.systemTruncated, false)
+  assert.equal(full.messagesTruncated, false)
+  assert.equal(full.mediaOmitted, true)
+  assert.doesNotMatch(full.messages, /PRIVATE_BINARY|PRIVATE_BYTES/)
+})

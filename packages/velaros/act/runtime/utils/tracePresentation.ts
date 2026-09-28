@@ -10,18 +10,22 @@ import type { InvocationRecord } from '@velaros-ai/kernel'
 
 import type { ActInvocationSummary, ActRequestSummary } from '../types/trace.js'
 
-/** 从权威回执生成有界展示，不解析被裁剪的 JSON，也不推断未结算效果。 */
+/** 从权威回执生成宿主展示，不解析被裁剪的 JSON，也不推断未结算效果。 */
 export function summarizeInvocation(
   record: InvocationRecord,
-  maxChars: number
+  maxChars: number,
+  fullContent = false
 ): ActInvocationSummary {
   const input = JSON.stringify(record.prepared.input) ?? ''
   const output = record.receipt
     ? (JSON.stringify(record.receipt.error ?? record.receipt.value) ?? '')
     : ''
-  const inputLimit = Math.min(2000, Math.floor(maxChars / 2))
+  const inputLimit = fullContent ? input.length : Math.min(2000, Math.floor(maxChars / 2))
   const inputText = input.slice(0, inputLimit)
-  const outputText = output.slice(0, Math.min(6000, maxChars - inputText.length))
+  const outputText = output.slice(
+    0,
+    fullContent ? output.length : Math.min(6000, maxChars - inputText.length)
+  )
   return {
     moduleId: record.prepared.binding.moduleId,
     operation: record.prepared.operation,
@@ -43,10 +47,11 @@ export function childAnswerText(note: unknown): string {
   return isPlainObject(accepted) && isString(accepted.text) ? accepted.text : ''
 }
 
-/** 从完整封存请求提取展示，正文计入调用方预算；二进制不进入宿主展示缓存。 */
+/** 从完整封存请求提取展示；常规模式按预算采样，宿主全文模式保留完整文本；图片和字节数据使用占位。 */
 export function summarizeModelRequest(
   audit: unknown,
-  maxChars: number
+  maxChars: number,
+  fullContent = false
 ): Nullable<ActRequestSummary> {
   if (!isPlainObject(audit) || !isPlainObject(audit.providerRequest)) return null
   const request = audit.providerRequest
@@ -74,8 +79,10 @@ export function summarizeModelRequest(
     },
     2
   )
-  const system = request.system.slice(0, Math.min(8000, Math.floor(maxChars / 4)))
-  const text = messages.slice(0, Math.min(24000, maxChars - system.length))
+  const system = fullContent
+    ? request.system
+    : request.system.slice(0, Math.min(8000, Math.floor(maxChars / 4)))
+  const text = fullContent ? messages : messages.slice(0, Math.min(24000, maxChars - system.length))
   const value = audit.estimate
   const estimate:
     { tokens: number; precision: 'exact' | 'estimate'; basis: Nullable<string> } | undefined =

@@ -215,3 +215,47 @@ test('observation summaries say what a turn registered and which run fed its req
     await runtime.close()
   }
 })
+
+test('full-content pages retain bodies beyond the normal budget and keep pagination', async (t) => {
+  const storage = localContextStorage({ path: ':memory:' })
+  t.after(() => storage.close())
+  const context = createContextRuntime({ sessionId: 'full', storage })
+  const system = `${'s'.repeat(9000)}SYSTEM_END`
+  const content = `${'m'.repeat(30000)}MESSAGE_END`
+  const response = `${'r'.repeat(500_001)}RESPONSE_END`
+  const requests = []
+  for (let turn = 0; turn < 2; turn++) {
+    const request = await context.append({
+      kind: 'audit',
+      title: 'model-request',
+      body: JSON.stringify({
+        runId: 'run',
+        turn,
+        repair: 0,
+        providerRequest: {
+          schemaVersion: 2,
+          model: 'model',
+          system,
+          messages: [{ role: 'user', content }],
+          outputTokens: 4096,
+          requestFingerprint: { id: 'fp' },
+        },
+      }),
+    })
+    requests.push(request)
+    await context.append({ kind: 'assistant', body: response, sources: [request.ref] })
+  }
+  const trace = new RuntimeTrace('full', storage, { list: async () => [] })
+  const bounded = await trace.page({ limit: 1, maxChars: 500 })
+  assert.equal(bounded.turns[0].requestSummary.systemTruncated, true)
+  const first = await trace.page({ limit: 1, fullContent: true, maxChars: 500 })
+  assert.equal(first.turns.length, 1)
+  assert.equal(first.turns[0].requestSummary.system, system)
+  assert.equal(JSON.parse(first.turns[0].requestSummary.messages)[0].content, content)
+  assert.equal(first.turns[0].response.body, response)
+  assert.equal(first.turns[0].response.truncated, false)
+  assert.equal(first.nextAfter, requests[0].sequence)
+  const second = await trace.page({ limit: 1, fullContent: true, after: first.nextAfter })
+  assert.equal(second.turns[0].turnId, requests[1].ref.id)
+  assert.equal(second.nextAfter, null)
+})
