@@ -1023,7 +1023,7 @@ test('INV-17 六个空间在结果租约到期后持续进入真实请求，重�
   assert.equal(frame.stores.active.taskId, taskId)
   assert.deepEqual(frame.results, [])
   assert(!JSON.stringify(frame.stores).includes('body-only-on-read'))
-  assert(f.requests.at(-1).instructions.includes('store.list 的 active 选项分页'))
+  assert(f.requests.at(-1).instructions.includes('store.list({active:true})'))
   await f.restart()
   await submit(f.session)
   assert.equal(frames(f.requests).at(-1).stores.active.total, 6)
