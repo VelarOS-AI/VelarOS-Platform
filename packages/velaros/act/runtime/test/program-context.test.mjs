@@ -12,7 +12,7 @@ import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 import { createRuntime, createShellCapabilityModule } from '../../../dist/act/runtime/index.js'
 import { createLocalShellHost } from '../../../dist/shell/local.js'
 
-import { runtimeFrame } from './support/model-turn.mjs'
+import { modelText, runtimeFrame } from './support/model-turn.mjs'
 import { done, turn } from './support/model-turn.mjs'
 
 const stop = async function* (request) {
@@ -334,7 +334,7 @@ test('ordered observe then execute sees the committed value next round, with one
   assert.equal(f.world.writes, 1)
   assert.equal(f.world.reads, 1)
   assert.equal(JSON.parse(f.frames[1].observation.text).value.default.current, 2)
-  assert.equal(f.frames[1].results[0].remainingTurns, 2)
+  assert.equal(f.frames[1].results[0].remainingTurns, 'segment')
 })
 
 test(
@@ -425,6 +425,134 @@ test('an unavailable observation command backend never falls back to ordinary ex
   success(await submit(f))
   assert.equal(executed, 0)
   assert.match(f.frames[0].observation.text, /宿主没有提供受限/)
+})
+
+test('INV-61 stderr survives stdout-only scripts, receipt grouping and restart without repeating commands', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'shell-feedback-'))
+  const host = createLocalShellHost({ cwd: root })
+  let calls = 0
+  const missing = `scriptact_missing_${crypto.randomUUID().replaceAll('-', '')}`
+  const requests = []
+  const module = createShellCapabilityModule({
+    instanceId: 'feedback-shell',
+    approval: {},
+    shell: {
+      resolveCwd: async () => root,
+      runCommand: (...args) => {
+        calls++
+        return host.runCommand(...args)
+      },
+    },
+  })
+  const f = await fixture(
+    t,
+    async function* (request) {
+      requests.push(request)
+      assert(
+        new RegExp(`(?:${missing}: (?:command )?not found|command not found: ${missing})`).test(
+          modelText(request)
+        ),
+        'missing-command diagnostic must reach the model request'
+      )
+      yield* done(request)
+    },
+    { modules: [module] }
+  )
+  t.after(async () => {
+    await host.dispose()
+    await rm(root, { recursive: true, force: true })
+  })
+  const command = `${missing}; printf 'stdout-kept'`
+  ok(
+    await f.session.execute(
+      {
+        source: `import {run} from 'velaros:shell';import {output} from 'velaros';for(let i=0;i<10;i++){const r=await run({command:${JSON.stringify(command)}});output(r.stdout);}`,
+      },
+      4
+    )
+  )
+  await f.restart()
+  success(await submit(f))
+  assert.equal(calls, 10)
+  const feedback = f.frames[0].mandatory.filter((item) => item.operation === 'velaros:shell.run')
+  assert.equal(feedback.length, 10, 'diagnostic receipts cannot be collapsed into a count')
+  for (const item of feedback) {
+    assert.equal(item.outcome, 'succeeded')
+    assert.equal(item.effect, 'committed')
+    assert.equal(item.code, 'SHELL_STDERR')
+    assert.match(item.detail, /exitCode=0/)
+    assert.match(item.detail, new RegExp(missing))
+    assert(item.detailInHistory, 'complete diagnostics must enter stable history')
+  }
+  assert(
+    !requests[0].compiledPrompt.includes(missing),
+    'dynamic frame keeps state without repeating diagnostic bodies'
+  )
+  const body = requests[0].history.find((item) => item.content.includes('origin=runtime-receipt'))
+  assert(body && body.content.includes(missing))
+  await f.restart()
+  success(await submit(f))
+  assert(
+    requests[1].history.some((item) => item.content === body.content),
+    'reopen preserves exact delivered diagnostics'
+  )
+  assert(!requests[1].compiledPrompt.includes(missing))
+  assert.equal(calls, 10)
+})
+
+test('INV-61 observation diagnostics reach the model independently of selected output and preserve observation health', async (t) => {
+  let calls = 0
+  const module = createShellCapabilityModule({
+    instanceId: 'observe-feedback',
+    approval: {},
+    shell: {
+      resolveCwd: async () => '/test',
+      runObservationCommand: async (command) => {
+        calls++
+        return {
+          command,
+          cwd: '/test',
+          success: true,
+          exitCode: 0,
+          signal: null,
+          stdout: 'selected output',
+          stderr: 'normal progress on stderr',
+          timedOut: false,
+          aborted: false,
+          truncated: false,
+          durationMs: 1,
+          confinement: {
+            mode: 'read-only',
+            enforcement: 'full',
+            backend: 'host',
+            reason: 'test host',
+            writableRoots: [],
+          },
+        }
+      },
+    },
+  })
+  const f = await fixture(
+    t,
+    async function* (request) {
+      assert.match(modelText(request), /normal progress on stderr/)
+      const feedback = runtimeFrame(request).observation.safety[0]
+      assert.equal(feedback.code, 'SHELL_STDERR')
+      assert.equal(feedback.outcome, 'succeeded')
+      assert.equal(feedback.effect, 'unknown')
+      assert.equal(feedback.completed, true)
+      yield* done(request)
+    },
+    { modules: [module] }
+  )
+  await f.session.observe({
+    source:
+      "import {run} from 'velaros:shell';import {output} from 'velaros';const r=await run({command:'fixture'});output(r.stdout);",
+  })
+  success(await submit(f))
+  assert.equal(calls, 1)
+  assert.equal(f.frames[0].observation.collection, 'complete')
+  assert(!f.frames[0].observation.health?.paused)
 })
 
 test('a dangerous command the user rejects records no effect, so the run needs no reconcile', async (t) => {
@@ -546,10 +674,24 @@ test('an unknown world outcome survives expiration of its ordinary result body',
   assert.equal(calls, 1)
 })
 
-test('compiler budget recovery reduces excerpts without rerunning observation or consuming an extra round', async (t) => {
+test('compiler budget recovery counts history and reduces excerpts without rerunning observation or consuming an extra work round', async (t) => {
   const f = await fixture(t)
+  const requests = []
+  const stream = f.model.stream
+  f.model.stream = async function* (request) {
+    requests.push(request)
+    yield* stream(request)
+  }
   f.model.estimate = async (request) => ({
-    tokens: request.materials.reduce((n, x) => n + x.text.length, 0) > 12000 ? 200001 : 1000,
+    tokens:
+      request.materials.reduce((n, x) => n + x.text.length, 0) +
+        request.history.reduce(
+          (n, x) => n + (typeof x.content === 'string' ? x.content.length : 0),
+          0
+        ) >
+      12000
+        ? 200001
+        : 1000,
     precision: 'exact',
     basis: 'bounded test window',
   })
@@ -558,10 +700,13 @@ test('compiler budget recovery reduces excerpts without rerunning observation or
     await f.session.execute({ source: "import {output} from 'velaros';output('x'.repeat(30000));" })
   )
   success(await submit(f))
-  assert.equal(f.frames.length, 1)
+  // 自动整理使用独立工具会话；这里验证根会话没有重复业务回合。
+  const work = requests.filter((request) => runtimeFrame(request).scope.sessionId === 's')
+  assert.equal(work.length, 1)
   assert.equal(f.world.reads, 1)
-  assert(f.frames[0].results[0].truncated)
-  assert(f.frames[0].results[0].text.length < 12000)
+  const frame = runtimeFrame(work[0])
+  assert(frame.results[0].truncated)
+  assert((frame.results[0].text ?? '').length < 12000)
   assert.equal((await f.state()).completedTurns, 1)
 })
 

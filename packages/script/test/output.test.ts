@@ -115,6 +115,145 @@ test('INV-35 list selection keeps final complete items, correct ranges, immutabl
   expect((raw.blocks[0]!.value as unknown[]).length).toBe(100)
 })
 
+test('INV-35 escaped code uses the available display budget without dropping half its complete lines', () => {
+  const lines = Array.from({ length: 800 }, (_, i) => `\tconst value${i} = "source\\path😀";`)
+  for (const edge of ['head', 'tail'] as const) {
+    const raw = capture(lines.join('\n'), {
+      key: 'code',
+      type: 'code',
+      view: { maxChars: 36000, edge },
+    })
+    const before = JSON.stringify(raw)
+    for (const budget of [1800, 6000, 12000]) {
+      const result = scriptOutputs.project(raw, 'ref', budget)
+      const block = result.blocks[0]!
+      expect(result.prompt.length).toBeLessThanOrEqual(budget)
+      expect(result.prompt.length).toBeGreaterThan(budget - 100)
+      expect(block.representation).toBe('excerpt')
+      const shown = block.text.split('\n')
+      expect(shown).toEqual(
+        edge === 'head' ? lines.slice(0, shown.length) : lines.slice(-shown.length)
+      )
+      expect(block.selection).toEqual({
+        shownLines: shown.length,
+        edge,
+        omittedLines: lines.length - shown.length,
+      })
+    }
+    expect(JSON.stringify(raw)).toBe(before)
+  }
+})
+
+test('INV-35 short later blocks return unused display space to earlier complete code lines', () => {
+  const lines = Array.from({ length: 800 }, (_, i) => `\tconst value${i} = "source\\path😀";`)
+  for (const edge of ['head', 'tail'] as const) {
+    const collector = createOutputCollector(ScriptOutputLimits, validateOutputOptions, () => {})
+    collector.output(lines.join('\n'), { key: 'a-code', type: 'code', view: { edge } })
+    collector.output('finished', { key: 'z-status' })
+    const raw = collector.snapshot()
+    const before = JSON.stringify(raw)
+    const result = scriptOutputs.project(raw, 'ref', 6000)
+    expect(result.prompt.length).toBeLessThanOrEqual(6000)
+    expect(result.prompt.length).toBeGreaterThan(5900)
+    expect(result.blocks[1]!.representation).toBe('full')
+    expect(result.blocks[1]!.text).toBe('finished')
+    const code = result.blocks[0]!
+    const shown = code.text.split('\n')
+    expect(shown).toEqual(
+      edge === 'head' ? lines.slice(0, shown.length) : lines.slice(-shown.length)
+    )
+    expect(code.representation).toBe('excerpt')
+    expect(code.pointer).toBe('/output/blocks/0/value')
+    expect(JSON.stringify(raw)).toBe(before)
+  }
+})
+
+test('INV-35 redistributing spare space respects full-only views, explicit caps and reference policy', () => {
+  const collector = createOutputCollector(ScriptOutputLimits, validateOutputOptions, () => {})
+  collector.output('x'.repeat(3200), { key: 'a-full', view: { mode: 'full' } })
+  collector.output('y\n'.repeat(5000), { key: 'b-limited', view: { maxChars: 40 } })
+  collector.output('private body', { key: 'c-reference', view: { mode: 'reference' } })
+  collector.output('ok', { key: 'z-status' })
+  const raw = collector.snapshot()
+  const result = scriptOutputs.project(raw, 'ref', 6000)
+  expect(result.blocks[0]!.representation).toBe('full')
+  expect(result.blocks[0]!.text).toBe('x'.repeat(3200))
+  expect(result.blocks[1]!.text.length).toBeLessThanOrEqual(40)
+  expect(result.blocks[1]!.representation).toBe('excerpt')
+  expect(result.blocks[2]!.bodyIncluded).toBe(false)
+  expect(result.blocks[2]!.reason).toBe('source-policy')
+  expect(result.blocks[3]!.text).toBe('ok')
+  expect(result.prompt.length).toBeLessThanOrEqual(6000)
+  const tight = scriptOutputs.project(raw, 'ref', 1800)
+  expect(tight.blocks[0]!.bodyIncluded).toBe(false)
+  expect(tight.blocks[0]!.reason).toBe('full-unavailable')
+  expect(tight.prompt.length).toBeLessThanOrEqual(1800)
+})
+
+test('INV-35 structured text fields expose complete lines and an exact raw pointer within the shared budget', () => {
+  const lines = Array.from({ length: 600 }, (_, i) => `\tconst value${i} = "source\\path😀";`)
+  for (const edge of ['head', 'tail'] as const) {
+    const raw = capture(
+      { success: true, exitCode: 0, 'out/~text': lines.join('\n'), stderr: '' },
+      { key: 'command', view: { maxChars: 15000, edge } }
+    )
+    const before = JSON.stringify(raw)
+    for (const budget of [1800, 6000, 12000]) {
+      const result = scriptOutputs.project(raw, 'result-ref', budget)
+      const value = JSON.parse(result.blocks[0]!.text)
+      expect(value.success).toBe(true)
+      expect(value.exitCode).toBe(0)
+      expect(value.stderr).toBe('')
+      const field = value['out/~text']
+      expect(field.representation).toBe('excerpt')
+      expect(field.rawRef).toBe('result-ref')
+      expect(field.pointer).toBe('/output/blocks/0/value/out~1~0text')
+      const shown = field.text.split('\n')
+      expect(shown).toEqual(
+        edge === 'head' ? lines.slice(0, shown.length) : lines.slice(-shown.length)
+      )
+      expect(field.selection).toEqual({
+        shownLines: shown.length,
+        omittedLines: lines.length - shown.length,
+        edge,
+      })
+      expect(result.blocks[0]!.representation).toBe('excerpt')
+      expect(result.prompt.length).toBeLessThanOrEqual(budget)
+      expect(result.prompt.length).toBeGreaterThan(budget * 0.85)
+    }
+    expect(JSON.stringify(raw)).toBe(before)
+  }
+})
+
+test('structured text selection keeps indivisible lines as references and respects full mode', () => {
+  const value = { success: false, stdout: 'x'.repeat(20000), stderr: 'failed' }
+  const raw = capture(value, { key: 'command' })
+  const shown = JSON.parse(scriptOutputs.project(raw, 'ref', 1800).blocks[0]!.text)
+  expect(shown.stdout.representation).toBe('reference')
+  expect(shown.stdout.text).toBeUndefined()
+  expect(shown.stderr).toBe('failed')
+  const full = scriptOutputs.project(capture(value, { view: { mode: 'full' } }), 'ref', 1800)
+  expect(full.blocks[0]!.reason).toBe('full-unavailable')
+})
+
+test('structured output shares space between long fields while keeping short diagnostics intact', () => {
+  const value = {
+    success: false,
+    stdout: Array.from({ length: 500 }, (_, i) => `source line ${i}`).join('\n'),
+    stderr: Array.from({ length: 500 }, (_, i) => `error line ${i}`).join('\n'),
+    exitCode: 2,
+  }
+  const result = scriptOutputs.project(capture(value, { key: 'command' }), 'ref', 5000)
+  const shown = JSON.parse(result.blocks[0]!.text)
+  expect(shown.stdout.representation).toBe('excerpt')
+  expect(shown.stderr.representation).toBe('excerpt')
+  expect(shown.stdout.text).toStartWith('source line 0\n')
+  expect(shown.stderr.text).toStartWith('error line 0\n')
+  expect(shown.success).toBe(false)
+  expect(shown.exitCode).toBe(2)
+  expect(result.prompt.length).toBeLessThanOrEqual(5000)
+})
+
 test('code selects lines and long indivisible lines become references, never broken text', () => {
   const raw = capture('one\ntwo\nthree\nfour', {
     key: 'code',

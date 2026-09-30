@@ -17,6 +17,7 @@ import {
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { SystemMembers } from '../../../dist/act/system/contract/constants.js'
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
+import { SystemMemoryOperations } from '../../../dist/act/system/impl/SystemMemoryOperations.js'
 import { SystemCatalog } from '../../../dist/act/system/impl/SystemCatalog.js'
 import { done, turn } from '../../runtime/test/support/model-turn.mjs'
 
@@ -656,4 +657,17 @@ test('INV-3 模型可无参数发现并直接读取有类型的模板与声明',
   assert(result.value.count > 0)
   assert.match(result.value.template, /memory/)
   assert.match(result.value.declarations, /declare module/)
+})
+
+test('field recall refuses a legacy host that ignores its selector while whole archive reads remain compatible', async () => {
+  const page = { text: 'original archive', offset: 0, totalChars: 16 }
+  const ctx = {
+    abortSignal: new AbortController().signal,
+    memory: { readMaterial: async () => page },
+  }
+  const operations = new SystemMemoryOperations()
+  assert.equal(await operations.read({ ref: 'result' }, ctx), page)
+  await assert.rejects(operations.read({ ref: 'result', pointer: '/output/blocks/0/value' }, ctx), {
+    code: 'UNAVAILABLE',
+  })
 })

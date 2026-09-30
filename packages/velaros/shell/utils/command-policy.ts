@@ -428,6 +428,17 @@ function skipPrefixArguments(name: string, tokens: readonly string[], start: num
   return name === 'timeout' ? index + 1 : index
 }
 
+/** command -v / -V 查询命令名称，不执行操作数；只在命令词与 -- 之前读取合法选项。 */
+function isCommandLookup(args: readonly string[]): boolean {
+  let lookup = false
+  for (const argument of args) {
+    if (argument === '--' || !argument.startsWith('-')) break
+    if (!/^-[pvV]+$/.test(argument)) return false
+    lookup ||= /[vV]/.test(argument)
+  }
+  return lookup
+}
+
 /** 读出一段命令里真正执行的那次调用：跳过环境变量赋值、shell 保留字与前缀命令。 */
 function readInvocation(tokens: readonly string[]): Nullable<ShellInvocation> {
   let index = 0
@@ -449,6 +460,8 @@ function readInvocation(tokens: readonly string[]): Nullable<ShellInvocation> {
       }
     }
     const name = commandName(token)
+    if (name === 'command' && isCommandLookup(tokens.slice(index + 1)))
+      return { name, args: tokens.slice(index + 1) }
     if (!CommandPrefixes.has(name)) return { name, args: tokens.slice(index + 1) }
     const next = skipPrefixArguments(name, tokens, index + 1)
     // 前缀命令后面没有别的命令词（`env`、`env -u FOO`），这次调用就是前缀命令本身。
@@ -670,6 +683,23 @@ const FrameworkCommands = new Set([
 
 const ServiceSubcommands = new Set(['dev', 'serve', 'server', 'start', 'watch', 'preview', 's'])
 
+/** Nginx 的检查、帮助、版本与信号命令会退出；带值选项的内容不是开关，包括名为 -t 的配置文件。 */
+function nginxExitsAfterCommand(args: readonly string[]): boolean {
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index] ?? ''
+    if (!argument.startsWith('-') || argument.startsWith('--')) continue
+    for (let offset = 1; offset < argument.length; offset += 1) {
+      const option = argument[offset] ?? ''
+      if ('?hvVtTs'.includes(option)) return true
+      if ('pcegl'.includes(option)) {
+        if (offset === argument.length - 1) index += 1
+        break
+      }
+    }
+  }
+  return false
+}
+
 /** 一条命令是不是会长期驻留：只看命令名和子命令的位置，不在整条文本里找 dev、start 这种词（`cat dev`、`ls start` 不算）；末尾裸 `&` 也算。 */
 function looksLikeLongRunningService(command: string): boolean {
   if (/(^|[^&])&\s*$/.test(command)) return true
@@ -680,7 +710,13 @@ function looksLikeLongRunningService(command: string): boolean {
     const words = invocation.args
       .filter((argument) => !argument.startsWith('-'))
       .map((argument) => argument.toLowerCase())
-    if (LongRunningCommands.has(name)) return true
+    // Redis 显式自行 daemonize 后启动命令会退出；后面的测试仍要在本次调用中等完。
+    if (name === 'redis-server') {
+      const daemonize = invocation.args.lastIndexOf('--daemonize')
+      if (daemonize >= 0 && invocation.args[daemonize + 1] === 'yes') return false
+    }
+    if (LongRunningCommands.has(name))
+      return name !== 'nginx' || !nginxExitsAfterCommand(invocation.args)
     if (name === 'python' || name === 'python3')
       return invocation.args[0] === '-m' && invocation.args[1] === 'http.server'
     if (ScriptRunners.has(name))

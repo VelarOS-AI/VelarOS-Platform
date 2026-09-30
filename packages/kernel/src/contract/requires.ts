@@ -19,6 +19,8 @@ export interface OperationContext {
   recordObservation?(evidence: NonNullable<InvocationReceipt['observation']>): void
   /** 处理器在提交效果后更新事实，随最终回执保存。 */
   recordEffect(effect: InvocationReceipt['effect']): void
+  /** 独立保存领域诊断；重复调用以最新摘要为准，Kernel 限长并冻结，不改变效果与成败。 */
+  recordDiagnostic?(diagnostic: NonNullable<InvocationReceipt['diagnostic']>): void
   /** 把真实图像交给模型；先验证再纳入持久回执。 */
   attach(image: ModelImage): void
 }

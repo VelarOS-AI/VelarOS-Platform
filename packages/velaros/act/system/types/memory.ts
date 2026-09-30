@@ -1,4 +1,4 @@
-import type { ContextRecord, ContextRef } from '@velaros-ai/context'
+import type { ContextContent, ContextRecord, ContextRef } from '@velaros-ai/context'
 import type { MemoryEntry } from '@velaros-ai/velaros/memory'
 
 import type { ScriptRetention } from './results.js'
@@ -32,11 +32,18 @@ export interface MemoryPage {
   readonly items: readonly MemoryListItem[]
   readonly nextAfter: Nullable<number>
 }
-/** @AgentView 按引用读一页原文：ref 是目录里的引用（或它的 id），offset、limit 按 UTF-16 字符算，一页最多 60000 个字符。读取不续租、不重跑脚本。 */
+/** @AgentView 按引用读一页原文：ref 是目录里的引用（或它的 id），offset、limit 按 UTF-16 字符算，一页最多 60000 个字符。读取不续租、不重跑脚本。
+ * 补读执行结果中的字段时传展示给出的 pointer（JSON Pointer，以 / 开头，最多 4096 个字符）；字符串返回原文，其他值返回 JSON，offset 与 limit 针对选中字段。省略 pointer 时读整份归档。
+ */
 export interface MemoryReadInput {
   readonly ref: string | ContextRef
+  readonly pointer?: string
   readonly offset?: number
   readonly limit?: number
+}
+/** @AgentView 读到的一页原文；有 pointer 时 text、offset、totalChars 属于选中字段，record 仍标识完整归档。字符串字段不带 JSON 引号，其他字段为 JSON。 */
+export interface MemoryContent extends ContextContent {
+  readonly pointer?: string
 }
 /** @AgentView 保留一份笔记或执行结果的自动展示：结果按 turns 续租（不给是 task），笔记一直驻留到主动 release。 */
 export interface MemoryRetainInput {
@@ -47,7 +54,7 @@ export interface MemoryRetainInput {
 export interface MemoryReleaseInput {
   readonly ref: string | ContextRef
 }
-/** @AgentView 执行结果续租了：remainingTurns 是还会自动展示多少个成功回合（task 表示到任务结束）；executed 为假，脚本没有重跑。 */
+/** @AgentView 执行结果续租了：remainingTurns 是还会自动展示多少个成功回合，segment 表示到该结果随历史封段，task 表示到任务结束；executed 为假，脚本没有重跑。 */
 export interface ResultRetained {
   readonly ref: string
   readonly remainingTurns: ScriptRetention

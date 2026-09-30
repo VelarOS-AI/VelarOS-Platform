@@ -33,11 +33,13 @@ export type ShellCommandKind = (typeof ShellCommandKinds)[number]
  * 宿主自己的缺省（不给超时用多久）不在这里，在宿主那一侧。
  */
 export const ShellLimits = Object.freeze({
+  /** 命令诊断摘录保留的 stdout 或 stderr 字符数；超出时保留首尾并明确省略。 */
+  diagnosticChars: 1600,
   /** run 的超时最多给多少毫秒。 */
   timeoutMs: 600_000,
   /**
-   * 一条命令的 stdout、stderr，与一条后台任务的输出，各最多留多少字符。**只为守住内存**：输出本来就不进模型的上下文，
-   * 看多少由程序定，所以这里不按「模型读得下」算，按「宿主与隔离进程装得下」算；超出只留末尾（失败现场在尾部）。
+   * 一条命令的 stdout、stderr，与一条后台任务的输出，各最多留多少字符。**只为守住内存**：完整输出由程序筛选，
+   * 有界诊断另外交付，所以这里按「宿主与隔离进程装得下」算；超出只留末尾（失败现场在尾部）。
    */
   outputChars: 5_000_000,
 })

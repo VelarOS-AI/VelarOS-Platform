@@ -93,9 +93,20 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
       throw new AppError('VALIDATION', 'instructions 必须是宿主提供的文本')
     if (
       !isUndefined(options.residentModules) &&
-      !(isArray(options.residentModules) && options.residentModules.every(isString))
+      !(
+        isArray(options.residentModules) &&
+        options.residentModules.every(
+          (entry) =>
+            isString(entry) ||
+            (isPlainObject(entry) &&
+              isString(entry.module) &&
+              Boolean(entry.module.trim()) &&
+              isString(entry.export) &&
+              Boolean(entry.export.trim()))
+        )
+      )
     )
-      throw new AppError('VALIDATION', 'residentModules 必须是模块名列表')
+      throw new AppError('VALIDATION', 'residentModules 必须是模块名或 {module, export} 列表')
     if (!isUndefined(options.environment) && !isFunction(options.environment))
       throw new AppError('VALIDATION', 'environment 必须是返回宿主环境条目的函数')
     let workspace: Optional<string>

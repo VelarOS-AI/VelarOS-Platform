@@ -10,6 +10,7 @@ import { scriptInputCopy } from '../utils/program-context.js'
 import {
   parseDeclaration,
   protocolConfig,
+  protocolDecisionInstructions,
   protocolFailure,
   protocolInstructions,
 } from '../utils/script-protocol.js'
@@ -18,7 +19,7 @@ import { standardModules } from './StandardModules.js'
 
 /** 文本协议使用主循环规定的接收契约。 */
 export interface ScriptTurnDecoderApi {
-  /** 本帧固定的协议说明。 */
+  /** 本帧控制身份与示例；固定语法由 Runtime 放入系统指令。 */
   readonly instructions: string
   /** 重置解析状态，保留标记和输入快照。 */
   reset(): void
@@ -133,7 +134,11 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
         this.header(this.candidate.replace(/\r$/u, ''))
       else this.route(this.candidate)
     }
-    if (this.active) throw protocolFailure('控制段缺少闭合标记', this.active.line)
+    if (this.active)
+      throw protocolFailure(
+        `控制段缺少闭合标记。闭合行必须逐字为：\n${this.marker}\n请核对标记后重新输出完整响应；不能只补闭合行。`,
+        this.active.line
+      )
     this.ended = true
     const blobs: Record<string, string> = Object.create(null)
     for (const record of this.records.filter((record) => record.kind === 'blobs')) {
@@ -229,12 +234,7 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
       else executions.push({ program: parsed.execute!, async: background })
     }
     if (this.requireDecision() && !this.done && isUndefined(observe) && isEmpty(executions))
-      throw protocolFailure(
-        `缺少本轮控制决策：请按当前合同提交 ${this.config.allowed
-          .filter((kind) => kind !== 'blobs')
-          .map((kind) => this.config.names[kind])
-          .join(' / ')} 声明；需要用户回答请通过当前交互工具请求。纯说明文字不会执行工作。`
-      )
+      throw protocolFailure(protocolDecisionInstructions(this.marker, this.config))
     const submission: ScriptProtocolSubmission = { observe, executions }
     const result = { message: this.message, done: this.done, events: this.events }
     if (!isUndefined(this.completion)) Object.assign(result, { completion: this.completion })
@@ -243,7 +243,7 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
   }
 
   private header(line: string): void {
-    if (line === this.marker) {
+    if (line.replace(/ +$/u, '') === this.marker) {
       if (!this.active) throw protocolFailure('闭合标记没有对应的控制段', this.line)
       this.emit({
         type: 'program',
@@ -257,7 +257,11 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
       this.tail = ''
       return
     }
-    if (this.active) throw protocolFailure('请先闭合上一控制段，不能嵌套', this.line)
+    if (this.active)
+      throw protocolFailure(
+        `上一 ${this.config.names[this.active.kind]} 控制段尚未闭合，不能嵌套。闭合行必须逐字为：\n${this.marker}\n下一控制头不能代替闭合行。请先闭合原段，再另起下一控制头，并重新输出完整响应；不能只补闭合行。`,
+        this.line
+      )
     if (this.done) throw protocolFailure('完成声明之后不能再声明控制操作', this.line)
     let declaration
     try {

@@ -1,5 +1,6 @@
 import type {
   ContextContent,
+  ContextFeedback,
   ContextRecord,
   ContextRecordSelection,
   ContextRef,
@@ -18,7 +19,12 @@ import type { WorkspaceEntry, WorkspaceUpdate } from '@velaros-ai/velaros/act/sy
 
 import { WorkspaceLimits } from '../../system/contract/constants.js'
 import type { ContextProjectionPolicy } from '../../system/types/maintenance.js'
-import type { MemoryPage, MemoryQuery, MemoryRetention } from '../../system/types/memory.js'
+import type {
+  MemoryContent,
+  MemoryPage,
+  MemoryQuery,
+  MemoryRetention,
+} from '../../system/types/memory.js'
 import type { ScriptRetention } from '../../system/types/results.js'
 import type {
   ContextMemoryPolicy,
@@ -29,11 +35,15 @@ import type {
 import type { ContextSegment, FoldedGoals, SegmentReason, SegmentStatus } from '../types/segment.js'
 import {
   adjustedWorkspaceShare,
+  memoryCommittedGroups,
+  memoryFeedbackKey,
   memoryPolicy,
   memoryPrompt,
   memoryReference,
+  memoryTaskHistory,
   noteEntry,
 } from '../utils/context-memory.js'
+import { readMaterialField } from '../utils/materials.js'
 import { archivedJson, segmentBase, segmentLedgers, skeletonLine } from '../utils/segment.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
@@ -49,8 +59,9 @@ export interface ContextMemoryApi {
     ref: ContextRef | string,
     offset: Optional<number>,
     limit: Optional<number>,
-    signal: AbortSignal
-  ): Promise<ContextContent>
+    signal: AbortSignal,
+    pointer?: string
+  ): Promise<MemoryContent>
   /** 调整笔记或执行结果驻留，原文不可变。 */
   retainMaterial(
     ref: ContextRef | string,
@@ -401,8 +412,9 @@ export class ContextMemory implements ContextMemoryApi {
     value: ContextRef | string,
     offset: Optional<number>,
     limit: Optional<number>,
-    signal: AbortSignal
-  ): Promise<ContextContent> {
+    signal: AbortSignal,
+    pointer?: string
+  ): Promise<MemoryContent> {
     const ref = isString(value) ? { sessionId: this.id, id: value } : value
     const snapshot = await this.snapshot(signal, [
       { title: 'search:history-reset', latest: true },
@@ -413,6 +425,14 @@ export class ContextMemory implements ContextMemoryApi {
     if (ref.sessionId !== this.id || !record)
       throw new AppError('SCOPE_MISMATCH', '材料引用不在当前任务授权范围')
     await this.fault(ref, signal)
+    if (!isUndefined(pointer)) {
+      if (!/^script:[^:]+:result$/u.test(record.title ?? ''))
+        throw new AppError('VALIDATION', '字段召回仅适用于执行结果归档')
+      const archived = await this.storage.get(this.id, record.objectId)
+      signal.throwIfAborted()
+      if (isNull(archived)) throw new AppError('NOT_FOUND', '执行结果原文不可用')
+      return { record, ...readMaterialField(archived, pointer, offset, limit) }
+    }
     if (record.kind === 'user') return this.context.readInput(ref, { offset, limit })
     if (record.title === 'task:artifact') return this.view.readArtifact(ref, { offset, limit })
     return this.context.read(ref, { offset, limit })
@@ -578,11 +598,31 @@ export class ContextMemory implements ContextMemoryApi {
         (item: { ref: string }) => (sequence.get(item.ref) ?? 0) > reset
       )
     }
+    // 工作帧条数限额只缩减新投影，不撤销段内已经冻结的 segment 正文。
+    // 完整请求仍交给主循环核对容量；封段才一起退役这些结果。
+    const squeezedSegments = frame.squeezed.length
+      ? (await this.programs.state()).leases
+          .filter(
+            (item) =>
+              item.segment &&
+              frame.squeezed.includes(item.ref) &&
+              (sequence.get(item.ref) ?? 0) > reset
+          )
+          .map((item) => ({ ref: item.ref }))
+      : []
     // 一条新历史第一次交付的上限：整帧剩余预算的 recentShare 的一半
     const history = this.policy.recentRecords
       ? await this.recent.project(
           segment,
-          material.results,
+          [
+            ...material.results.map((item: { location?: { executionId: string } }) => ({
+              ...item,
+              feedback: material.mandatory.filter(
+                (feedback: ContextFeedback) => feedback.executionId === item.location?.executionId
+              ),
+            })),
+            ...squeezedSegments,
+          ],
           Math.max(
             1024,
             Math.min(
@@ -599,10 +639,29 @@ export class ContextMemory implements ContextMemoryApi {
         .filter((item) => item.role === 'user' && item.bodyIncluded)
         .map((item) => item.ref)
     )
+    const deliveredFeedback = new Map(
+      history.items.flatMap((item) =>
+        (item.feedback ?? []).map((feedback) => [feedback.fingerprint, item.ref] as const)
+      )
+    )
     material.results = material.results.map((item: Record<string, unknown> & { ref: string }) => {
       if (!inHistory.has(item.ref)) return item
-      const { text: _text, source: _source, ...rest } = item
-      return { ...rest, bodyInHistory: true }
+      // 来源、大小和正文已在稳定历史；帧尾只列租约状态与尚未交付的缺口。
+      // 同一个 ref 仍可经 memory.read 读取完整原文。
+      return {
+        ref: item.ref,
+        remainingTurns: item.remainingTurns,
+        bodyInHistory: true,
+        bodyIncluded: true,
+        ...(item.truncated
+          ? {
+              truncated: true,
+              representation: item.representation,
+              totalChars: item.totalChars,
+              omitted: item.omitted,
+            }
+          : {}),
+      }
     })
     const resultRefs = [
       ...inHistory,
@@ -655,7 +714,9 @@ export class ContextMemory implements ContextMemoryApi {
           (item) => item.key.startsWith('workspace:') && !item.bodyIncluded && !hidden.has(item.ref)
         )
         .map((item) => ({ ref: item.ref, partition: 'workspace' as const })),
-      ...frame.squeezed.map((ref) => ({ ref, partition: 'results' as const })),
+      ...frame.squeezed
+        .filter((ref) => !inHistory.has(ref))
+        .map((ref) => ({ ref, partition: 'results' as const })),
     ]
     const faultPrefix = `context:fault:${segment.id}:`
     const faults =
@@ -692,7 +753,7 @@ export class ContextMemory implements ContextMemoryApi {
           record.sequence > (snapshot.task?.startedSequence ?? 0)
       )
     )
-    // 段起点之前提出的目标已列在底座；本帧尾只放最新的目标和段内新提的目标，并按剩下的条数重新分配篇幅
+    // 段起点之前提出的目标已列在底座；最新和段内新提目标按剩下条数分配正文，按原始顺序进入历史。
     const recentGoals = material.goals.filter(
       (goal: ContextContent) => goal.record.sequence > segment.from
     )
@@ -720,7 +781,9 @@ export class ContextMemory implements ContextMemoryApi {
     }
     const partitions = {
       task: {
-        goals,
+        goals: this.policy.recentRecords
+          ? goals.map((goal: ContextContent) => ({ ...goal, bodyInHistory: true }))
+          : goals,
         folded: { count: material.goals.length - goals.length, through: segment.from },
       },
       workspace: {
@@ -764,13 +827,24 @@ export class ContextMemory implements ContextMemoryApi {
         decision,
         scope: material.scope,
         children: material.children,
-        mandatory: material.mandatory,
+        mandatory: memoryCommittedGroups(
+          material.mandatory.map((item: ContextFeedback) => {
+            const ref = deliveredFeedback.get(memoryFeedbackKey(item))
+            return ref ? { ...item, detailInHistory: ref } : { ...item }
+          })
+        ),
         evidence: material.evidence,
         gaps: material.gaps,
         readSet: material.readSet,
         progress: material.progress,
         programFrame: material.programFrame,
-        jobs: material.jobs,
+        // 已成功且结果在稳定历史里的作业，只在帧尾重复完成状态；活动和失败作业保留完整信息。
+        jobs: material.jobs.map(
+          (job: { executionId: string; status: string; resultRef?: string }) =>
+            job.status === 'succeeded' && job.resultRef && inHistory.has(job.resultRef)
+              ? { executionId: job.executionId, status: job.status, resultRef: job.resultRef }
+              : job
+        ),
         materialStatus: material.materialStatus,
       },
     }
@@ -836,7 +910,7 @@ export class ContextMemory implements ContextMemoryApi {
       images: resetAfterStart ? [] : frame.images,
       history: [
         { role: 'user' as const, content: base, cacheBreakpoint: true },
-        ...history.messages,
+        ...(this.policy.recentRecords ? memoryTaskHistory(goals, history) : history.messages),
       ],
       prompt: memoryPrompt(body),
       segment: status,
@@ -853,17 +927,23 @@ export class ContextMemory implements ContextMemoryApi {
     const cut = await this.recent.cut(segment, this.policy.recentRecords, signal)
     if (isUndefined(cut)) return false
     const sealed = await this.recent.seal(segment.from, cut, signal)
-    // 切点之前产生、租约仍有效的结果留在新段最前面，按原顺序重新交付一次
+    // 封段释放 segment 期限的旧结果；显式轮数和 task 期限继续跨段交付。
     const leases = await this.programs.state()
     const visible = leases.leases
-      .filter((item) => item.task || item.expiresAfter > leases.completedTurns)
+      .filter((item) => item.task || item.segment || item.expiresAfter > leases.completedTurns)
       .map((item) => item.ref)
     const selected = await this.snapshot(
       signal,
       visible.map((refId) => ({ refId }))
     )
     const sequence = new Map(selected?.records.map((record) => [record.ref.id, record.sequence]))
+    const sealedResults = visible.filter((ref) => (sequence.get(ref) ?? Infinity) <= cut)
+    const retired = leases.leases
+      .filter((item) => item.segment && sealedResults.includes(item.ref))
+      .map((item) => item.ref)
+    await this.programs.endSegment(retired, signal)
     const carried = visible
+      .filter((ref) => !retired.includes(ref))
       .filter((ref) => (sequence.get(ref) ?? Infinity) <= cut)
       .sort((a, b) => sequence.get(a)! - sequence.get(b)!)
     // 自动封的一卷只有规则骨架；那一段做了很多事却没改笔记和计划时，留给整理支线补写叙事

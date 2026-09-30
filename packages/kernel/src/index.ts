@@ -193,6 +193,7 @@ export type {
 } from './types/approval.js'
 export type {
   ModelContextStatus,
+  ModelContinuation,
   ModelDriverLimits,
   ModelHistoryMessage,
   ModelImage,

@@ -6,7 +6,9 @@
  * 工作记忆经会话的笔记存储与计划口读写，长期记忆复用 `velaros:memory` 的操作与宿主固定的作用域；上限由各自的存储核对。
  */
 
-import type { ContextContent, TaskCapsule } from '@velaros-ai/context'
+import type { TaskCapsule } from '@velaros-ai/context'
+import { isUndefined } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type {
   MemoryIdInput,
   MemoryRemoved,
@@ -20,6 +22,7 @@ import type { SystemMemoryOperationContext } from '../contract/requires.js'
 import type {
   LongTermMemoryPage,
   LongTermMemoryQuery,
+  MemoryContent,
   MemoryOrganizeIntent,
   MemoryOrganizeReceipt,
   MemoryPage,
@@ -46,7 +49,7 @@ export interface SystemMemoryOperationsWorkingApi {
   /** @AgentView 按引用分页读原文：输入、源码、结果、笔记与材料都用它。
    * @OperationEffect none
    */
-  read(input: MemoryReadInput, ctx: SystemMemoryOperationContext): Promise<ContextContent>
+  read(input: MemoryReadInput, ctx: SystemMemoryOperationContext): Promise<MemoryContent>
   /** @AgentView 改自己的一份笔记，交回它的新版本。
    * @OperationEffect write
    * @OperationModes execute
@@ -119,9 +122,18 @@ export class SystemMemoryOperations implements SystemMemoryOperationsApi {
   public async read(
     input: MemoryReadInput,
     ctx: SystemMemoryOperationContext
-  ): Promise<ContextContent> {
+  ): Promise<MemoryContent> {
     ctx.abortSignal.throwIfAborted()
-    return ctx.memory.readMaterial(input.ref, input.offset, input.limit, ctx.abortSignal)
+    const page = await ctx.memory.readMaterial(
+      input.ref,
+      input.offset,
+      input.limit,
+      ctx.abortSignal,
+      input.pointer
+    )
+    if (!isUndefined(input.pointer) && page.pointer !== input.pointer)
+      throw new AppError('UNAVAILABLE', '当前宿主不支持执行结果字段召回')
+    return page
   }
 
   public async update(

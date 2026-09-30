@@ -54,7 +54,7 @@
     "build:devtools-performance-engine": "bun scripts/browser/buildDevtoolsPerformanceEngine.mjs",
     "typecheck": "node scripts/run-workspace-script.mjs typecheck",
     "test": "node scripts/run-workspace-script.mjs test && bun run test:act-eval",
-    "test:act-eval": "node --test scripts/agent/act-eval.test.mjs scripts/agent/evidence-checkpoints.test.mjs",
+    "test:act-eval": "node --test scripts/agent/act-eval.test.mjs scripts/agent/evidence-checkpoints.test.mjs scripts/agent/harbor/harbor.test.mjs",
     "eval:act": "node scripts/agent/run-act-eval.mjs",
     "//lint": "lint 只报告 error；各包使用所属域的规则。",
     "lint": "eslint . --quiet",

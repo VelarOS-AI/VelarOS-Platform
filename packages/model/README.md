@@ -94,3 +94,8 @@ const ollamaBaseURL = modelCatalog.resolveOllamaBaseURL('http://localhost:11434'
 - `./catalog` 与 `./contracts` 不碰 Node 模块、从不读 `process.env`；根入口带 `node:vm` 与 `node:fs`，渲染进程不能加载。
 - 挂进内核用 `createModelKernelModule({ registry: models.modelAdapterRegistry })`：能力 `velaros.model` 只开 `supports_provider` 一条操作，注册表必须由产品显式交进来。
 - 场景的提示词、schema、超时与回退由产品里的场景 owner 组合，本包只负责 transport、请求策略与输出读取，不为新场景加方法。
+
+- GPT-6 Sol 通过 Responses 传递选中的推理档位，支持最高 `max`；SDK 尚未收录型号时仍按推理模型处理。
+- GPT-6 Sol 将上游历史缓存标记传给 Responses 内容块；先保留调用方显式断点，再用默认隐式模式剩余的三个显式槽选择最近的内部标记。缓存读写量与实际费用以供应商 usage 为准。
+- 原生 Responses 的完整文本输出保留加密推理、原始文本分段及消息阶段，只有同驱动、同供应商型号且正文逐字匹配才以 `store: false` 重放。密文不拼进材料文本，容量按原响应推理用量独立预留（未报告时保守取输出用量或上限），文本密度校准不缩小这部分。
+- 加密推理状态、签名或 `reasoning.context` 被拒时直接保留原错误，不按思考档位不兼容降档重试。

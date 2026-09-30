@@ -18,7 +18,7 @@ system 原来的 INV-23（沙箱里的命令一律受约束）搬去了 `@velaro
 | INV-2 | 递归删除整个目录一律判危险并要求确认，理由写明删的是整个文件夹；删单个文件是日常操作，不打扰用户。要确认的只有成片毁掉、找不回来的：递归/批量删除、清掉未跟踪文件、强推覆盖远端、抹盘格式化这类整机破坏；Git 回退、提权、下载脚本执行交给模型自己把握。只查真会执行的部分：heredoc 写进文件的正文、引号里的文字不算命令，喂给解释器或 shell 的照查 | 测试 | `spec/acceptance.test.ts` |
 | INV-3 | 危险命令的审批请求是高风险、必须用户亲自点、不可按类记忆的确认，确认文案只有一行（在哪、哪一类、命令第一行，太长截断）；操作身份只由去掉首尾空白的命令、工作目录、前台还是后台决定，跨入口一致 | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 根入口与 `./contracts` 的整条引用链不碰 Node 内置模块，渲染进程可以直接加载；本机实现（本机宿主、受约束执行器）的值只在只给 Node 的 `./local` 入口，本机宿主读写的环境变量全部登记在 `ShellEnvironmentVariables` | 门禁 | `check:module-ownership` |
-| INV-5 | 代码面的 `shell` 命名空间是一条真路：模型写的程序 import 生成的 `baselines/script/shell.d.ts` 里的操作、过语法检查，在隔离里经 `shellOperations` 调到空间注入的 `ShellSpacePort`。工作目录由端口解析、不由模型挑（项目那样的端口把越界的 cwd 拒在确认与执行之前，系统那样的收任意目录）；长驻命令自动转后台、不问用户，后台任务按会话登记、按会话查 | 测试 | `spec/acceptance.test.ts` |
+| INV-5 | 代码面的 `shell` 命名空间是一条真路：模型写的程序 import 生成的 `baselines/script/shell.d.ts` 里的操作、过语法检查，在隔离里经 `shellOperations` 调到空间注入的 `ShellSpacePort`。工作目录由端口解析、不由模型挑（项目那样的端口把越界的 cwd 拒在确认与执行之前，系统那样的收任意目录）；长驻命令自动转后台、不问用户，后台任务按会话登记、按会话查。`command -v` / `command -V` 的程序位置查询，以及 Nginx 的配置检查、帮助、版本与信号命令，默认在前台完成，同一次调用返回退出码和输出；Redis 显式 `--daemonize yes` 的启动命令及后续检查也在同次调用等待完成 | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 上限归这件能力自己钳，不靠调用方拦：`run` 的 timeoutMs 超了按上限跑（钳而不拒）。输出**不折叠**：stdout、stderr 与后台任务的输出都整份交给程序，列后台任务不设条数，看多少由程序定；只守内存的上限（`ShellLimits.outputChars`，超出只留末尾并标 truncated）。声明里写的数字与上限表一致 | 测试 | `spec/acceptance.test.ts` |
 | INV-7 | 危险命令每次都要用户亲自确认（高风险、手动、不可记忆），确认文案与风险分类用空间给的口径；被拒时一个进程都不起，拒绝原样抛给程序。只有危险命令要确认：别的命令（长驻的也一样）直接跑，空间也不再加别的授权关。要了交互式却没拿到控制台时回执直说用户输入不了 | 测试 | `spec/acceptance.test.ts` |
 | INV-8 | 代码模版（`template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它**整份照生成的真实声明过类型检查**，不嵌进声明，随模型面发布、按需读（`velaros:system` 的 modules.describe）；在真的空间里把每个函数跑一遍、看交回的是不是它说的样子，由仓库层的 `tests/capabilities/capability-templates.test.ts` 核对（两个空间各一遍） | 测试 | `spec/acceptance.test.ts` |
@@ -33,3 +33,4 @@ system 原来的 INV-23（沙箱里的命令一律受约束）搬去了 `@velaro
 
 | INV-17 | 宿主共享的登录环境支持合并并发读取、按代次刷新、返回独立副本；旧刷新不覆盖新快照。注入同一环境的本机宿主在原生命令与环境体检中使用该快照，工作区释放不关闭借用的环境；环境 owner 释放时中止读取并等待收尾 | 测试 | `spec/acceptance.test.ts` |
 | INV-18 | 宿主前台命令按 UTF-8 写入标准输入并发送 EOF（包括空串）；输入端提前关闭不产生未处理异常，超时继续按受管进程收尾。后台与一次性 stdin 同传时在启动前拒绝。原生命令 env 的 undefined 删除该键，覆盖仅影响本次命令，不修改借用环境快照 | 测试 | `spec/acceptance.test.ts` |
+| INV-19 | 非空 stderr 和失败状态独立输出有界诊断；正常日志不改退出码和成败，长输出保留首尾并标记省略，原始结果保持完整；超时、取消保留真实状态 | 测试 | `spec/acceptance.test.ts` |

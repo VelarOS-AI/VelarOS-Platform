@@ -79,13 +79,16 @@ function checkProgram(value: unknown, label: 'observe' | 'execute'): void {
   if (
     !isUndefined(turns) &&
     turns !== 'task' &&
+    turns !== 'segment' &&
     !(
       Number.isSafeInteger(turns) &&
       (turns as number) >= 1 &&
       (turns as number) <= ScriptLeaseLimits.maxTurns
     )
   )
-    throw submissionInput(`retainTurns 需要 1 到 ${ScriptLeaseLimits.maxTurns} 的整数或 'task'`)
+    throw submissionInput(
+      `retainTurns 需要 1 到 ${ScriptLeaseLimits.maxTurns} 的整数、'segment' 或 'task'`
+    )
 }
 
 /** 一次脚本提交（文本协议解出来的，或宿主直接交来的），按 `ScriptSubmission` 逐项核对：至少有 observe 或 execute。 */

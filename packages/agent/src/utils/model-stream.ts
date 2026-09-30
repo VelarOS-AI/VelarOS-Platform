@@ -48,20 +48,29 @@ export async function* boundedModelStream(
       const delta = result.value
       if (
         !delta ||
-        !['output', 'text', 'reasoning', 'usage', 'error', 'finish'].includes(delta.type)
+        !['output', 'text', 'reasoning', 'continuation', 'usage', 'error', 'finish'].includes(
+          delta.type
+        )
       )
         throw new AppError('PROTOCOL', '模型响应包含契约之外的事件')
       if (delta.type === 'text' && (request.response.type !== 'text' || !isString(delta.text)))
         throw new AppError('PROTOCOL', '模型文本增量不符合响应模式')
       if (delta.type === 'reasoning' && !isString(delta.text))
         throw new AppError('PROTOCOL', '模型思考增量不是文本')
+      if (delta.type === 'continuation') {
+        modelRequestEncoder.continuation(delta.value)
+        if (request.response.type !== 'text' || delta.value.model !== driver.id)
+          throw new AppError('PROTOCOL', '模型延续状态与当前请求不匹配')
+      }
       if (delta.type === 'output' && request.response.type !== 'json')
         throw new AppError('PROTOCOL', '文本模式不能返回结构化响应事件')
       if (delta.type === 'finish' && !['stop', 'length'].includes(delta.reason))
         throw new AppError('PROTOCOL', '模型响应结束原因不符合契约')
       yield delta.type === 'output'
         ? { type: 'output', value: modelRequestEncoder.output(request.response, delta.value) }
-        : delta
+        : delta.type === 'continuation'
+          ? { type: 'continuation', value: modelRequestEncoder.continuation(delta.value) }
+          : delta
     }
   } finally {
     void Promise.resolve(iterator.return?.()).catch(() => {

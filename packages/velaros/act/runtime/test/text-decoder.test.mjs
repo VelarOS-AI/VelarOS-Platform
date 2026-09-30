@@ -55,6 +55,55 @@ test('CRLF, no final newline, blank payload and marker-like lines are unambiguou
   assert.equal(decode(`${block('execute', source)}${marker} done\nmore text`).message, 'more text')
 })
 
+test('INV-66 closing marker permits trailing spaces across stream splits without trimming payload', () => {
+  const payload = `${source}  \n  `
+  for (const ending of ['', '\n', '\r\n']) {
+    for (const spaces of [' ', '   ']) {
+      const response = `${marker} execute()\n${payload}\n${marker}${spaces}${ending}`
+      for (let split = 0; split <= response.length; split++) {
+        const decoder = new ScriptTurnDecoder(marker)
+        const events = [
+          ...decoder.push(response.slice(0, split)),
+          ...decoder.push(response.slice(split)),
+        ]
+        const result = decoder.finish()
+        events.push(...result.events)
+        assert.equal(result.submission.executions[0].program.source, payload)
+        assert.equal(result.message, '')
+        assert.equal(
+          events.filter((event) => event.type === 'program' && event.phase === 'end').length,
+          1
+        )
+        assert.equal(
+          events
+            .filter((event) => event.type === 'program' && event.phase === 'delta')
+            .map((event) => event.text)
+            .join(''),
+          payload
+        )
+      }
+    }
+  }
+  const blob = `${marker} blobs('raw')\n${payload}\n${marker}  \n`
+  assert.equal(
+    decode(blob + block('execute', source)).submission.executions[0].program.blobs.raw,
+    payload
+  )
+  for (const suffix of [' execute()', ' unexpected', ' \t', ' \u00a0']) {
+    assert.throws(() => decode(`${marker} execute()\n${source}\n${marker}${suffix}\n`), {
+      code: 'SCRIPT_PROTOCOL',
+    })
+  }
+  assert.throws(() => decode(`${marker}  \n`), { code: 'SCRIPT_PROTOCOL' })
+  assert.throws(
+    () =>
+      decode(`${marker} execute()\n${source}\n${marker}${' '.repeat(64)}\n`, {
+        maxHeaderChars: 32,
+      }),
+    /预算/
+  )
+})
+
 test('configuration, reference edits, full bundles and immutable host parameters use one decoder', () => {
   const inputs = { target: { path: 'original' } }
   const d = new ScriptTurnDecoder(marker, { names: { execute: 'run', done: 'finish' } }, inputs)
@@ -75,7 +124,7 @@ test('configuration, reference edits, full bundles and immutable host parameters
   assert.deepEqual(
     decode(block('execute({format:"program"})', JSON.stringify(program))).submission.executions[0]
       .program,
-    program
+    { ...program, retainTurns: 'segment' }
   )
 })
 
@@ -143,8 +192,106 @@ test('work decision requirement is checked at finish and respects configured dec
   )
   decoder.push('Continue processing.')
   required = true
-  assert.throws(() => decoder.finish(), /run \/ finish/)
+  assert.throws(
+    () => decoder.finish(),
+    (error) => {
+      assert.equal(error.code, 'SCRIPT_PROTOCOL')
+      assert.match(error.message, /run \/ finish/)
+      assert(error.message.includes(`第一行直接输出：\n${marker} run()`))
+      assert(error.message.includes(`独立一行写闭合标记：\n${marker}`))
+      assert(error.message.includes(`${marker} finish("完成依据")`))
+      assert.doesNotMatch(error.message, /observe|execute|done/)
+      return true
+    }
+  )
   const plain = new ScriptTurnDecoder(marker)
   plain.push('Markdown remains parseable.')
   assert.equal(plain.finish().message, 'Markdown remains parseable.')
+})
+
+test('decision repair only suggests controls allowed in the current scope', () => {
+  const decoder = new ScriptTurnDecoder(marker, { allowed: ['observe'] }, {}, () => true)
+  decoder.push('I will inspect the project.')
+  assert.throws(
+    () => decoder.finish(),
+    (error) => {
+      assert(error.message.includes(`${marker} observe()`))
+      assert.match(error.message, /只读/)
+      assert.doesNotMatch(error.message, /execute|done/)
+      return true
+    }
+  )
+})
+
+test('an incorrect closing marker stays rejected and reports the exact current marker', () => {
+  for (const header of ['execute()', 'blobs("payload")', 'observe()']) {
+    assert.throws(
+      () => decode(`${marker} ${header}\n${source}\n${marker.slice(0, -1)}9\n`),
+      (error) => {
+        assert.equal(error.code, 'SCRIPT_PROTOCOL')
+        assert(error.message.includes(`闭合行必须逐字为：\n${marker}\n`))
+        assert.match(error.message, /重新输出完整响应/)
+        assert.match(error.message, /不能只补闭合行/)
+        return true
+      }
+    )
+  }
+})
+
+test('INV-63 a new header before closure names the active declaration and exact repair boundary', () => {
+  for (const [kind, options] of [
+    ['blobs', {}],
+    ['execute', {}],
+    ['observe', {}],
+    ['blobs', { names: { blobs: 'raw', execute: 'run' } }],
+  ]) {
+    const name = options.names?.[kind] ?? kind
+    const next = options.names?.execute ?? 'execute'
+    const decoder = new ScriptTurnDecoder(marker, options)
+    const text = `${marker} ${name}(${kind === 'blobs' ? '"payload"' : ''})\nPRIVATE_BLOB_BODY\n${marker} ${next}()\n`
+    assert.throws(
+      () => {
+        for (const character of text) decoder.push(character)
+      },
+      (error) => {
+        assert.equal(error.code, 'SCRIPT_PROTOCOL')
+        assert(error.message.includes(`上一 ${name} 控制段`))
+        assert(error.message.includes(`闭合行必须逐字为：\n${marker}\n`))
+        assert.match(error.message, /重新输出完整响应/)
+        assert.match(error.message, /下一控制头不能代替闭合行/)
+        assert(!error.message.includes('PRIVATE_BLOB_BODY'))
+        return true
+      }
+    )
+  }
+  assert(new ScriptTurnDecoder(marker).instructions.includes('blobs 原文结束后也必须'))
+  assert(
+    !new ScriptTurnDecoder(marker, { allowed: ['execute'] }).instructions.includes(
+      '原文结束后也必须'
+    )
+  )
+})
+
+test('normal work instructions begin with an allowed control and honor custom names', () => {
+  for (const [allowed, names, expected] of [
+    [['execute', 'done'], { execute: 'run', done: 'finish' }, 'run'],
+    [['observe'], { observe: 'inspect' }, 'inspect'],
+  ]) {
+    const decoder = new ScriptTurnDecoder(marker, { allowed, names })
+    assert(decoder.instructions.includes(`继续工作时，响应从控制头开始：\n${marker} ${expected}()`))
+    assert.match(decoder.instructions, /省略执行前的进度说明/)
+  }
+  assert.doesNotMatch(
+    new ScriptTurnDecoder(marker, { allowed: ['done'] }).instructions,
+    /继续工作时，响应从控制头开始/
+  )
+})
+
+test('text executions default to segment retention while explicit and host durations take precedence', () => {
+  const program = (header, options) =>
+    decode(block(header, source), options).submission.executions[0].program
+  assert.equal(program('execute').retainTurns, 'segment')
+  assert.equal(program('execute({retain:1})').retainTurns, 1)
+  assert.equal(program('execute', { defaultRetain: 4 }).retainTurns, 4)
+  assert.equal(program('execute({retain:1})', { defaultRetain: 4 }).retainTurns, 1)
 })

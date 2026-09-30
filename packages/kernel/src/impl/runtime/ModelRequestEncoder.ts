@@ -5,11 +5,16 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { ModelRequestEncoderApi } from '../../contract/provides.js'
 import type {
+  ModelContinuation,
   ModelHistoryMessage,
   ModelResponseFormat,
   ModelTurnRequest,
 } from '../../types/model.js'
-import { driverModelMessages, driverModelPrompt } from '../../utils/runtime/model-request.js'
+import {
+  driverModelContinuation,
+  driverModelMessages,
+  driverModelPrompt,
+} from '../../utils/runtime/model-request.js'
 import { immutableOperationJson } from '../../utils/runtime/operation-schema.js'
 
 class ModelRequestEncoder implements ModelRequestEncoderApi {
@@ -57,6 +62,9 @@ class ModelRequestEncoder implements ModelRequestEncoderApi {
 
   public messages(request: ModelTurnRequest): ModelHistoryMessage[] {
     return driverModelMessages(request)
+  }
+  public continuation(value: unknown): ModelContinuation {
+    return driverModelContinuation(value)
   }
   public encode(request: ModelTurnRequest): string {
     return driverModelPrompt(request)

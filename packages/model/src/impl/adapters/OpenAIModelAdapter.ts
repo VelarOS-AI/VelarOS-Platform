@@ -49,7 +49,7 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
             config.reasoningLevel,
             this.reasoningFallback
           ),
-          { sessionKey: true }
+          { sessionKey: true, openaiBreakpoints: /^gpt-6-sol(?:$|-)/i.test(modelId) }
         )
       }
 

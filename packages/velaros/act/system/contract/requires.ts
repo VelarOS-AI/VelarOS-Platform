@@ -12,6 +12,7 @@ import type {
   ContextPatchReceipt,
 } from '../types/maintenance.js'
 import type {
+  MemoryContent,
   MemoryOrganizeIntent,
   MemoryOrganizeReceipt,
   MemoryPage,
@@ -60,8 +61,9 @@ export interface MemoryStore {
     ref: ContextRef | string,
     offset: Optional<number>,
     limit: Optional<number>,
-    signal: AbortSignal
-  ): Promise<ContextContent>
+    signal: AbortSignal,
+    pointer?: string
+  ): Promise<MemoryContent>
   /** 保留或释放当前笔记、执行结果的驻留。 */
   retainMaterial(
     ref: ContextRef | string,

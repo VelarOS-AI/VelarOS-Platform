@@ -38,6 +38,7 @@ export type {
   ContextPatchReceipt,
 } from './types/maintenance.js'
 export type {
+  MemoryContent,
   MemoryListItem,
   MemoryOrganizeIntent,
   MemoryOrganizeReceipt,

@@ -46,7 +46,7 @@ import type { ContextCandidateValidator } from '../../system/contract/requires.j
 import type { StoreSessionApi } from '../../system/impl/StoreSession.js'
 import type { GoalControl, GoalState, GoalUpdate } from '../../system/types/goal.js'
 import type { WorkspaceEntry } from '../../system/types/workspace.js'
-import type { VelarosContextOptions } from '../contract/requires.js'
+import type { VelarosContextOptions, VelarosRuntimeOptions } from '../contract/requires.js'
 import type { RuntimeNoteContent, RuntimeNoteRead, RuntimeNoteRetention } from '../types/memory.js'
 import type { ContextMemoryPolicy } from '../types/memory.js'
 import type { PreparedScript, ScriptProtocolSubmission } from '../types/program.js'
@@ -73,13 +73,14 @@ import type { ActTurnTrace } from '../types/trace.js'
 import { memoryPrompt } from '../utils/context-memory.js'
 import { frameEnvironment } from '../utils/environment.js'
 import { executionOutcome } from '../utils/execution-outcome.js'
-import { runtimeInstructions } from '../utils/model-instructions.js'
+import { residentContracts, runtimeInstructions } from '../utils/model-instructions.js'
 import {
   recoverScriptSubmission,
   scriptControlIdentity,
   stableProgramJson,
 } from '../utils/program-context.js'
-import { protocolConfig } from '../utils/script-protocol.js'
+import { invocationFeedbackDetails } from '../utils/results.js'
+import { protocolConfig, protocolRules } from '../utils/script-protocol.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
 import type { ContextMemoryApi } from './ContextMemory.js'
@@ -141,8 +142,8 @@ export interface RuntimeSessionModelTool {
 export interface RuntimeSessionDependencies {
   /** 主会话的可信宿主产品指令；与运行协议一起编译和归档。 */
   readonly instructions?: string
-  /** 常驻模块：本会话可用的那些把声明与用法示例附进运行说明。 */
-  readonly residentModules?: readonly string[]
+  /** 本会话已授权模块的常驻完整合同或指定导出声明。 */
+  readonly residentModules?: VelarosRuntimeOptions['residentModules']
   /** 宿主环境条目；每帧与当地时间一起进 runtime 分区。 */
   readonly environment?: () => Readonly<Record<string, string>>
   /** 会话全部资源收束后撤回宿主持有的活动句柄。 */
@@ -330,22 +331,18 @@ export class RuntimeSession implements VelarosSession {
       dependencies.memory ?? dependencies.contextOptions?.memory
     )
     const modules = dependencies.allowedModules()
-    const instructions =
-      runtimeInstructions({
-        modules,
-        resident: (dependencies.residentModules ?? [])
-          .filter((module) => modules.includes(module))
-          .map((module) => {
-            const { declarations, template } = dependencies.kernel.describe(module)
-            return { module, declarations, template }
-          }),
-        summary: (module) => dependencies.kernel.describe(module).summary,
-        storeMode: dependencies.stores?.mode,
-        maintain: Boolean(dependencies.maintain),
-        observe: this.config.allowed.includes('observe'),
-      }) +
-      (dependencies.tool?.instructions ? `\n${dependencies.tool.instructions}` : '') +
-      (dependencies.instructions?.trim() ? `\n宿主应用指令：\n${dependencies.instructions}` : '')
+    const instructions = `${runtimeInstructions({
+      modules,
+      resident: residentContracts(modules, dependencies.residentModules, (module) =>
+        dependencies.kernel.describe(module)
+      ),
+      summary: (module) => dependencies.kernel.describe(module).summary,
+      storeMode: dependencies.stores?.mode,
+      maintain: Boolean(dependencies.maintain),
+      observe: this.config.allowed.includes('observe'),
+    })}\n\n${protocolRules(this.config)}${
+      dependencies.tool?.instructions ? `\n${dependencies.tool.instructions}` : ''
+    }${dependencies.instructions?.trim() ? `\n宿主应用指令：\n${dependencies.instructions}` : ''}`
     dependencies.register({
       validateCandidate: async (frame, signal) => {
         signal.throwIfAborted()
@@ -355,7 +352,7 @@ export class RuntimeSession implements VelarosSession {
           this.config,
           dependencies.inputs?.() ?? {}
         )
-        // 与主循环同一布局：协议说明在最后一条消息末尾，系统提示只有运行说明
+        // 与主循环同一布局：固定语法在系统前缀，当前控制身份和示例在帧尾
         const request: ModelTurnRequest = {
           instructions,
           materials: [
@@ -475,7 +472,9 @@ export class RuntimeSession implements VelarosSession {
           visibleExecutions: async () => {
             const state = await this.programs.state()
             return state.leases
-              .filter((item) => item.task || item.expiresAfter > state.completedTurns)
+              .filter(
+                (item) => item.task || item.segment || item.expiresAfter > state.completedTurns
+              )
               .map((item) => item.executionId)
           },
           project: (view, signal, maxChars) => this.project(view, signal, maxChars),
@@ -1566,7 +1565,9 @@ export class RuntimeSession implements VelarosSession {
           ? (await this.dependencies.journal.list(this.id, executionId))
               .filter(
                 (record) =>
-                  record.receipt?.effect !== 'none' || record.receipt?.outcome !== 'succeeded'
+                  record.receipt?.effect !== 'none' ||
+                  record.receipt?.outcome !== 'succeeded' ||
+                  Boolean(record.receipt?.diagnostic)
               )
               .map((record) => ({
                 id: record.prepared.id,
@@ -1579,7 +1580,7 @@ export class RuntimeSession implements VelarosSession {
                       completed: record.receipt.observation.completed,
                     }
                   : {}),
-                code: record.receipt?.error ? record.receipt.error.code : undefined,
+                ...invocationFeedbackDetails(record.receipt),
               }))
           : undefined
       const output = await this.context.append({
@@ -1640,12 +1641,7 @@ export class RuntimeSession implements VelarosSession {
           operation: `${record.prepared.binding.moduleId}.${record.prepared.operation}`,
           outcome: record.receipt?.outcome ?? 'unknown',
           effect: record.receipt?.effect ?? 'unknown',
-          ...(record.receipt?.error
-            ? {
-                code: record.receipt.error.code,
-                detail: record.receipt.error.message.slice(0, 1000),
-              }
-            : {}),
+          ...invocationFeedbackDetails(record.receipt),
         }))
         const failed = Boolean(
           failure ||
@@ -1800,13 +1796,13 @@ export class RuntimeSession implements VelarosSession {
         outcome: resolved?.outcome ?? checked.receipt?.outcome ?? 'unknown',
         effect: resolved?.effect ?? checked.receipt?.effect ?? 'unknown',
         ...(resolved
-          ? { code: 'RECOVERED', detail: resolved.evidence }
-          : checked.receipt?.error
-            ? {
-                code: checked.receipt.error.code,
-                detail: checked.receipt.error.message.slice(0, 1000),
-              }
-            : {}),
+          ? {
+              code: 'RECOVERED',
+              detail: [resolved.evidence, invocationFeedbackDetails(checked.receipt).detail]
+                .filter(Boolean)
+                .join('\n'),
+            }
+          : invocationFeedbackDetails(checked.receipt)),
       })
     }
     for (const old of task.mandatory.filter((item) => item.operation === 'script.execute')) {

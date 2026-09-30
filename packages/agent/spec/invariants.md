@@ -20,9 +20,10 @@
 
 | INV-39 | 输入接纳与消费分别持久化并带宿主身份；消费绑定具体请求，取消保留未消费输入，重启后只消费一次，回执写入失败不派发模型 | 测试 | `spec/acceptance.test.ts` |
 
-| INV-40 | 容量规划按供应商实测用量校准估算（带图请求不取样、超窗拒绝后回到原始估算），按同段同底座的正向增长估计剩余轮数；两次封段过近记为抖动，同一段的整理只跑一次 | 测试 | `test/context-planner.test.ts` |
+| INV-40 | 容量规划按供应商实测用量校准估算（带图或不透明状态的请求不取样、超窗拒绝后回到原始估算），按同段同底座的正向增长估计剩余轮数；两次封段过近记为抖动，同一段的整理只跑一次 | 测试 | `test/context-planner.test.ts` |
 | INV-41 | 每小时模型用量到上限时发 throttled 并等待后继续；用户总上限到了以 waiting 暂停，输入保留给下一次运行 | 测试 | `spec/acceptance.test.ts` |
 | INV-42 | 一段里缺页持续偏高按结构性超载处理：同一段只跑一次压力整理，ContextStatus 给出收紧工作集的建议 | 测试 | `spec/acceptance.test.ts` |
-| INV-43 | 模型的思考摘要作为 reasoning 事件跟在所属 turn 之后交给宿主，只作展示：不进上下文、不落事件账 | 测试 | `spec/acceptance.test.ts` |
+| INV-43 | reasoning 展示事件跟在所属 turn 之后交给宿主，不写入材料或事件账；完整供应商延续状态按 INV-46 独立保存 | 测试 | `spec/acceptance.test.ts` |
 | INV-44 | 同一会话的每个模型请求（含协议修复重发）都带同一个会话缓存键：会话 id 的 SHA-256 前 32 位十六进制，长度与会话 id 无关，碰不到 OpenAI `prompt_cache_key` 64 字符的上限 | 测试 | `spec/acceptance.test.ts` |
-| INV-45 | 模型实测用量随 usage 事件交给宿主：供应商报告了前缀缓存的读写 token 时一并带上，没报告时不带 | 测试 | `spec/acceptance.test.ts` |
+| INV-45 | 模型实测用量随 usage 事件交给宿主并存入 model-response 审计：供应商报告了前缀缓存的读写 token 时一并带上，没报告时不带 | 测试 | `spec/acceptance.test.ts` |
+| INV-46 | 延续状态只在模型完整结束且协议通过后持久化，由已接受响应引用；拒绝、截断、重复或模型身份不匹配的状态不能进入历史，状态持久化失败不得派发脚本；不透明数据不成为宿主展示事件 | 测试 | `spec/acceptance.test.ts` |

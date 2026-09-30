@@ -8,9 +8,10 @@ import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
+import { executionMaterial, projectMaterial } from '../../../dist/act/runtime/utils/materials.js'
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
 
-import { done, marker, turn } from './support/model-turn.mjs'
+import { done, historyEntries, marker, turn } from './support/model-turn.mjs'
 
 const signal = new AbortController().signal
 async function fixture(t, source, modelOverride) {
@@ -109,6 +110,230 @@ const patch = (snapshot, observation) => ({
   summary: 'Reduce logs while preserving current state',
   unresolved: [],
   observation,
+})
+
+test('INV-58 plain output retains bounded code evidence inside large arrays instead of only a receipt shell', () => {
+  const original = {
+    executionId: 'inspect-source',
+    mode: 'execute',
+    checked: true,
+    result: {
+      value: {
+        default: [
+          {
+            sections: [
+              {
+                path: 'source.ts',
+                line: 1,
+                text: `const readableEvidence = 42;\n${'const filler = true;\n'.repeat(1500)}`,
+              },
+            ],
+            issues: [],
+          },
+          { callers: [], count: 0 },
+        ],
+      },
+    },
+    metrics: { durationMs: 10, capabilityCalls: 2 },
+  }
+  const text = JSON.stringify(original)
+  const projected = projectMaterial(text, { sessionId: 's', id: 'raw' }, 12000)
+  const shown = JSON.parse(projected.text)
+  assert.equal(shown.executionId, 'inspect-source')
+  assert.equal(shown.checked, true)
+  assert.deepEqual(shown.metrics, original.metrics)
+  assert.match(projected.text, /const readableEvidence = 42/)
+  assert(projected.omitted.some((pointer) => pointer.startsWith('/result/value/default')))
+  assert(projected.text.length <= 12000)
+  assert.equal(projected.representation, 'excerpt')
+  assert.equal(JSON.stringify(original), text)
+  assert.equal(projected.size.chars, text.length)
+})
+
+test('INV-58 projected fragments preserve JSON validity, source pointers and hard budgets including escaped Unicode', () => {
+  const text = JSON.stringify({
+    'a/b~c': [{ text: '😀"\\\n'.repeat(12000), count: 9 }],
+    state: 'ready',
+  })
+  for (const limit of [0, 1, 200, 512, 1024, 4096, 12000]) {
+    const projected = projectMaterial(text, { sessionId: 's', id: 'raw' }, limit)
+    assert(projected.text.length <= limit)
+    if (projected.text) assert.doesNotThrow(() => JSON.parse(projected.text))
+    assert(projected.omitted.length > 0)
+  }
+  const projected = projectMaterial(text, { sessionId: 's', id: 'raw' }, 12000)
+  assert(projected.omitted.some((pointer) => pointer.startsWith('/a~1b~0c/0/text')))
+  assert.match(projected.text, /"state":"ready"/)
+  const full = projectMaterial('{"small":true}', { sessionId: 's', id: 'small' }, 1000)
+  assert.equal(full.text, '{"small":true}')
+  assert.equal(full.representation, 'full')
+})
+
+test('raw execution material preserves diagnostics, selects actual archive paths, and leaves intact previews stable', () => {
+  const notice = { call: 'export', action: 'truncated', detail: 'legacy limit' }
+  const rawValue = { source: 'const originalEvidence = true;\n'.repeat(2000) }
+  const archived = {
+    result: { value: 'legacy excerpt', notices: [notice], logs: ['diagnostic'] },
+    rawValue,
+  }
+  const before = JSON.stringify(archived)
+  const material = JSON.parse(executionMaterial(archived))
+  assert.deepEqual(material.result, { notices: [notice], logs: ['diagnostic'] })
+  assert.deepEqual(material.rawValue, rawValue)
+  const shown = projectMaterial(JSON.stringify(material), { sessionId: 's', id: 'raw' }, 12000)
+  assert(shown.text.includes('const originalEvidence = true;'))
+  assert(shown.omitted.includes('/rawValue/source'))
+  assert(shown.text.length <= 12000)
+  assert.equal(JSON.stringify(archived), before)
+  const missing = { result: archived.result }
+  assert.deepEqual(JSON.parse(executionMaterial(missing)), missing)
+  const complete = { result: { value: { ok: true } }, rawValue: { ok: true } }
+  assert.deepEqual(JSON.parse(executionMaterial(complete)), { result: complete.result })
+})
+
+test('INV-58 ordinary execute output reaches the next real model request and the full value remains recallable', async (t) => {
+  const f = await fixture(t, "import {output} from 'velaros';output(1)")
+  const result = await f.session.execute({
+    source: `import {output} from 'velaros';output([{path:'source.ts',text:'const nextTurnEvidence = 7;\\n'+'const filler = true;\\n'.repeat(1500)}]);`,
+  })
+  assert.equal(result.checked, true)
+  await f.run()
+  const entry = historyEntries(f.requests[0]).find(
+    (e) => e.origin === 'runtime-execution' && e.ref.id === result.resultRef
+  )
+  assert(entry)
+  assert.match(entry.text, /const nextTurnEvidence = 7/)
+  const raw = await f.programs.read(result.resultRef, 0, 1)
+  const record = JSON.parse(await f.storage.get('root', raw.record.objectId))
+  assert.equal(record.output.blocks[0].value[0].text.split('\n').length, 1502)
+})
+
+test('INV-58 oversized ordinary execution projects its raw archive instead of a clipped legacy preview', async (t) => {
+  const f = await fixture(t, "import {output} from 'velaros';output(1)")
+  const result = await f.session.execute({
+    source: `import {output} from 'velaros';output({success:true,exitCode:0,stdout:Array.from({length:1500},(_,i)=>'const oversizedEvidence'+i+' = "original source";').join('\\n'),stderr:''});`,
+  })
+  assert.equal(result.checked, true)
+  assert.equal(
+    typeof result.result.value,
+    'string',
+    'fixture must exercise the legacy preview limit'
+  )
+  await f.run()
+  const entry = historyEntries(f.requests[0]).find(
+    (item) => item.origin === 'runtime-execution' && item.ref.id === result.resultRef
+  )
+  assert(entry)
+  assert.doesNotThrow(() => JSON.parse(entry.text))
+  assert(
+    entry.text.includes('const oversizedEvidence0 ='),
+    'original source must reach the next request'
+  )
+  assert(
+    entry.text.includes('/output/blocks/0/value/stdout'),
+    'excerpt must point to its actual archived field'
+  )
+  assert(!entry.text.includes('const oversizedEvidence1499 ='), 'display remains bounded')
+  const raw = await f.programs.read(result.resultRef, 0, 1)
+  const archived = JSON.parse(await f.storage.get('root', raw.record.objectId))
+  assert.equal(archived.output.blocks[0].value.stdout.split('\n').length, 1500)
+  assert(
+    archived.output.blocks[0].value.stdout.endsWith(
+      'const oversizedEvidence1499 = "original source";'
+    )
+  )
+  await f.run()
+  const repeated = historyEntries(f.requests[1]).find((item) => item.ref?.id === result.resultRef)
+  assert.equal(repeated.text, entry.text)
+})
+
+test('INV-58 managed code fills its assigned budget before entering stable model history', async (t) => {
+  const f = await fixture(t, "import {output} from 'velaros';output(1)")
+  const lines = Array.from({ length: 800 }, (_, i) => `\tconst value${i} = "source\\path😀";`)
+  const value = lines.join('\n')
+  const result = await f.session.execute({
+    source: `import {output} from 'velaros';output.configure({maxChars:12000});output(${JSON.stringify(value)},{type:'code',view:{maxChars:36000}});`,
+  })
+  assert.equal(result.checked, true)
+  await f.run()
+  const entry = historyEntries(f.requests[0]).find(
+    (item) => item.origin === 'runtime-execution' && item.ref.id === result.resultRef
+  )
+  assert(entry)
+  assert(entry.text.includes(lines[210]), 'code that fits the existing budget must reach the model')
+  assert(!entry.text.includes(lines.at(-1)), 'output remains bounded')
+  await f.run()
+  const repeated = historyEntries(f.requests[1]).find((item) => item.ref?.id === result.resultRef)
+  assert.equal(repeated.text, entry.text, 'delivered history must remain byte stable')
+  const raw = await f.programs.read(result.resultRef, 0, 1)
+  const archived = JSON.parse(await f.storage.get('root', raw.record.objectId))
+  assert.equal(archived.output.blocks[0].value, value, 'full original remains recallable')
+})
+
+test('INV-58 batch display reclaims spare space once and keeps delivered history stable', async (t) => {
+  const f = await fixture(t, "import {output} from 'velaros';output(1)")
+  const lines = Array.from({ length: 800 }, (_, i) => `\tconst value${i} = "source\\path😀";`)
+  const result = await f.session.execute({
+    source: `import {output} from 'velaros';output(${JSON.stringify(lines.join('\n'))},{key:'code',type:'code'});output('finished',{key:'status'});`,
+  })
+  assert.equal(result.checked, true)
+  await f.run()
+  const entry = historyEntries(f.requests[0]).find((item) => item.ref?.id === result.resultRef)
+  assert(entry)
+  assert(entry.text.includes(lines[210]), 'available batch space must expose additional code')
+  assert(entry.text.includes('finished'), 'the other block must remain visible')
+  assert(!entry.text.includes(lines.at(-1)), 'the original display budget still applies')
+  await f.run()
+  const repeated = historyEntries(f.requests[1]).find((item) => item.ref?.id === result.resultRef)
+  assert.equal(repeated.text, entry.text, 'delivered history must remain byte stable')
+  const raw = await f.programs.read(result.resultRef, 0, 1)
+  const archived = JSON.parse(await f.storage.get('root', raw.record.objectId))
+  assert.equal(archived.output.blocks[0].value, lines.join('\n'))
+})
+
+test('INV-58 managed structured text reaches the next request without rereading the source', async (t) => {
+  const f = await fixture(t, "import {output} from 'velaros';output(1)")
+  const lines = Array.from({ length: 600 }, (_, i) => `const structuredEvidence${i} = "value";`)
+  const value = { success: true, exitCode: 0, stdout: lines.join('\n'), stderr: '' }
+  const result = await f.session.execute({
+    source: `import {output} from 'velaros';import {read} from 'test:world';await read();output(${JSON.stringify(value)},{key:'command',view:{maxChars:15000}});`,
+  })
+  assert.equal(result.checked, true)
+  await f.run()
+  const entry = historyEntries(f.requests[0]).find(
+    (item) => item.origin === 'runtime-execution' && item.ref.id === result.resultRef
+  )
+  assert(entry)
+  const shown = JSON.parse(entry.text.slice(entry.text.indexOf('\n{\n') + 1))
+  assert.equal(shown.success, true)
+  assert.equal(shown.exitCode, 0)
+  assert.equal(shown.stdout.representation, 'excerpt')
+  assert(shown.stdout.text.includes(lines[100]))
+  assert(!shown.stdout.text.includes(lines.at(-1)))
+  assert.equal(shown.stdout.pointer, '/output/blocks/0/value/stdout')
+  assert.equal(shown.stdout.rawRef, result.resultRef)
+  const raw = await f.programs.read(result.resultRef, 0, 1)
+  const archived = JSON.parse(await f.storage.get('root', raw.record.objectId))
+  assert.deepEqual(archived.output.blocks[0].value, value)
+  assert.equal(f.reads, 1)
+  const offset = value.stdout.lastIndexOf(lines.at(-1))
+  const recalled = await f.session.execute({
+    source: `import {output} from 'velaros';import {memory} from 'velaros:system';const page=await memory.read(${JSON.stringify({ ref: shown.stdout.rawRef, pointer: shown.stdout.pointer, offset, limit: 4000 })});output(page.text,{key:'tail',type:'code'});`,
+  })
+  assert.equal(recalled.checked, true)
+  assert.equal(recalled.result.failed, undefined)
+  await f.run()
+  const repeated = historyEntries(f.requests[1]).find((item) => item.ref?.id === result.resultRef)
+  assert.equal(repeated.text, entry.text)
+  const recalledEntry = historyEntries(f.requests[1]).find(
+    (item) => item.ref?.id === recalled.resultRef
+  )
+  assert(
+    recalledEntry.text.includes(lines.at(-1)),
+    'the exact missing tail reaches the next model request'
+  )
+  assert.equal(f.reads, 1, 'field recall must not rerun the source operation')
+  assert.deepEqual(JSON.parse(await f.storage.get('root', raw.record.objectId)), archived)
 })
 
 test('INV-22 emergency source edit rerenders archived observation without another read, and next normal round refreshes', async (t) => {

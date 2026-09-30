@@ -57,21 +57,24 @@ class ProviderRequestCompiler implements ProviderRequestCompilerApi {
     await this.verify(providerRequest)
     const raw = await driver.estimate(request)
     const images = raw.images?.tokens ?? 0
+    const opaque = raw.opaqueTokens ?? 0
     if (
       !Number.isSafeInteger(raw.tokens) ||
       raw.tokens < 0 ||
       !Number.isSafeInteger(images) ||
       images < 0 ||
-      images > raw.tokens
+      !Number.isSafeInteger(opaque) ||
+      opaque < 0 ||
+      images + opaque > raw.tokens
     )
       throw new AppError('VALIDATION', '模型驱动返回了无效预算')
-    const measured = { text: raw.tokens - images, images }
-    // 精确计数不需要校准；校准只缩小文本部分，图片仍按驱动给的数
+    const measured = { text: raw.tokens - images - opaque, images, ...(opaque ? { opaque } : {}) }
+    // 精确计数不需要校准；图片和不透明状态容量仍按驱动给的数。
     const estimate =
       calibration && calibration.textRatio < 1 && raw.precision === 'estimate'
         ? {
             ...raw,
-            tokens: Math.ceil(measured.text * calibration.textRatio) + images,
+            tokens: Math.ceil(measured.text * calibration.textRatio) + images + opaque,
             basis: `${raw.basis}；文本部分按实测用量校准 ×${calibration.textRatio.toFixed(3)}`,
           }
         : raw

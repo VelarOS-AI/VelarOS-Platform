@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { scriptPackageCompiler } from '@velaros-ai/script'
+
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { frameEnvironment } from '../../../dist/act/runtime/utils/environment.js'
 
-import { done } from './support/model-turn.mjs'
+import { done, modelText, turn } from './support/model-turn.mjs'
 
 const driver = (stream) => ({
   id: 'instructions-test',
@@ -181,6 +183,135 @@ test('resident modules must be a list of module names', async () => {
   } finally {
     await rm(dataDir, { recursive: true, force: true })
   }
+})
+
+test('INV-67 selected resident operations deliver complete generated types and can execute on the first response', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'runtime-resident-export-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  await writeFile(join(workspace, 'sample.txt'), 'before\n')
+  const frames = []
+  const f = await fixture(t, {
+    workspace,
+    residentModules: [
+      { module: 'velaros:project', export: 'read' },
+      { module: 'velaros:project', export: 'edit' },
+      { module: 'velaros:project', export: 'edit' },
+      { module: 'velaros:not-mounted', export: 'anything' },
+    ],
+    model: driver(async function* (request) {
+      frames.push(request)
+      if (frames.length === 1) {
+        yield turn(request, {
+          execute: {
+            source: `import {read,edit} from 'velaros:project';import {output} from 'velaros';
+const change=await edit({steps:[{action:'replace',path:'sample.txt',oldText:'before',newText:'after'}]});
+output(change);output(await read({files:[{path:'sample.txt'}]}));`,
+          },
+        })
+        yield { type: 'finish', reason: 'stop' }
+      } else yield* done(request)
+    }),
+  })
+  const declarations = f.runtime.describe('velaros:project').declarations
+  const events = []
+  for await (const event of f.session.submit('Change before to after and read the result'))
+    events.push(event)
+  assert.equal(events.at(-1).status, 'completed')
+  assert.equal(frames.length, 2)
+  assert.equal(await readFile(join(workspace, 'sample.txt'), 'utf8'), 'after\n')
+  assert.match(modelText(frames[1]), /after/)
+  const instructions = frames[0].instructions
+  for (const name of ['read', 'edit']) {
+    const selected = scriptPackageCompiler.sliceExport(declarations, 'velaros:project', name)
+    assert.ok(instructions.includes(selected.declarations))
+    assert.equal(instructions.split(`常驻操作 velaros:project.${name} 的声明`).length - 1, 1)
+  }
+  assert.doesNotMatch(instructions, /export function (search|inspect|undo)|velaros:not-mounted/)
+  assert.match(instructions, /本会话还能直接 import 这些模块[^\n]*velaros:project/)
+  assert.equal(frames[1].instructions, instructions)
+  const trace = await f.session.trace(events.find((event) => event.type === 'turn').turnId)
+  assert.ok(trace.request.body.includes('常驻操作 velaros:project.edit'))
+})
+
+test('INV-67 whole resident contracts cover selected duplicates and invalid exports fail before any model request', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'runtime-resident-whole-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  const frames = []
+  const f = await fixture(t, {
+    workspace,
+    residentModules: [
+      { module: 'velaros:project', export: 'edit' },
+      'velaros:project',
+      'velaros:project',
+    ],
+    model: driver(async function* (request) {
+      frames.push(request)
+      yield* done(request)
+    }),
+  })
+  for await (const event of f.session.submit('Ready')) assert.notEqual(event.type, 'error')
+  assert.equal(frames[0].instructions.split('常驻模块 velaros:project 的声明').length - 1, 1)
+  assert.doesNotMatch(frames[0].instructions, /常驻操作 velaros:project/)
+  const invalid = await createRuntime({
+    dataDir: join(f.dataDir, 'invalid'),
+    workspace,
+    agents: false,
+    search: false,
+    memory: false,
+    residentModules: ['velaros:project', { module: 'velaros:project', export: 'nonexistent' }],
+    model: driver(async function* (request) {
+      yield* done(request)
+    }),
+  })
+  try {
+    await assert.rejects(invalid.openSession('invalid'), { code: 'VALIDATION' })
+  } finally {
+    await invalid.close()
+  }
+})
+
+test('INV-67 invalid selected resident configuration is rejected before activation', async () => {
+  for (const value of [
+    null,
+    3,
+    {},
+    { module: 'velaros:project' },
+    { module: '', export: 'edit' },
+    { module: 'velaros:project', export: '' },
+    { module: 'velaros:project', export: ['edit'] },
+  ]) {
+    await assert.rejects(createRuntime({ residentModules: [value] }), { code: 'VALIDATION' })
+  }
+})
+
+test('INV-67 selected resident declarations participate in the real request capacity gate', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'runtime-resident-budget-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  let calls = 0
+  const estimates = []
+  const f = await fixture(t, {
+    workspace,
+    residentModules: [{ module: 'velaros:project', export: 'edit' }],
+    model: {
+      ...driver(async function* (request) {
+        calls++
+        yield* done(request)
+      }),
+      estimate: async (request) => {
+        estimates.push(request.instructions)
+        return {
+          tokens: request.instructions.includes('export function edit(') ? 200000 : 1000,
+          precision: 'exact',
+          basis: 'resident-sensitive',
+        }
+      },
+    },
+  })
+  const events = []
+  for await (const event of f.session.submit('small user input')) events.push(event)
+  assert.equal(calls, 0)
+  assert(estimates.some((text) => text.includes('export function edit(')))
+  assert.equal(events.at(-1).status, 'context_blocked')
 })
 
 test('every frame carries the local clock and host environment entries in runtime.environment', async (t) => {

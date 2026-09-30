@@ -146,7 +146,12 @@ export interface OperationRuntimeApi {
   dispose(): Promise<void>
 }
 
-import type { ModelHistoryMessage, ModelResponseFormat, ModelTurnRequest } from '../types/model.js'
+import type {
+  ModelContinuation,
+  ModelHistoryMessage,
+  ModelResponseFormat,
+  ModelTurnRequest,
+} from '../types/model.js'
 
 /** 中立请求的实际文本编码口，供编译器与供应商适配器共用。 */
 export interface ModelRequestEncoderApi {
@@ -154,6 +159,8 @@ export interface ModelRequestEncoderApi {
   response(request: ModelTurnRequest): ModelResponseFormat
   /** 从同一 schema 校验完整响应，返回不可变 JSON；不执行任何业务动作。 */
   output(format: ModelResponseFormat, value: unknown): unknown
+  /** 验证供应商延续状态的中立封套，不解释其中的供应商数据。 */
+  continuation(value: unknown): ModelContinuation
   /** 编码来源标签与材料；已封存 prompt 保持逐字节一致。 */
   encode(request: ModelTurnRequest): string
   /** 生成编译审计与供应商实际发送共用的多模态消息。 */

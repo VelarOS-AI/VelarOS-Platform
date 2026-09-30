@@ -8,6 +8,7 @@ import {
   ContextPatchLimits,
   GoalLimits,
   MemoryRecallLimits,
+  MemoryReadLimits,
   OrganizeLimits,
   ScriptLeaseLimits,
   StoreProjectionLimits,
@@ -78,6 +79,7 @@ test('INV-20 声明里写给模型的上限与常量表一致', () => {
   documented(VelarSystemMemoryPersistentModule, [
     `through 固定目录快照的结束序号；limit 每页最多 ${WorkspaceLimits.maxPage} 项`,
     `一页最多 ${ContextLimits.readChars} 个字符。读取不续租`,
+    `最多 ${MemoryReadLimits.pointerChars} 个字符`,
     `key 1 到 ${WorkspaceLimits.keyChars} 个字符`,
     `title 最多 ${WorkspaceLimits.titleChars} 个字符，body 最多 ${WorkspaceLimits.bodyChars} 个字符，sources 是它依据的原文引用（最多 ${WorkspaceLimits.sources} 条）`,
     `focus 是接下来要推进的工作（1 到 ${OrganizeLimits.focusChars} 个字符）`,

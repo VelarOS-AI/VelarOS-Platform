@@ -129,10 +129,13 @@ export interface VelarosRuntimeOptions {
   /** 宿主可信的主会话产品指令；追加到运行协议说明，参与真实请求预算，不传给专项模型工具。 */
   readonly instructions?: string
   /**
-   * 常驻模块：主会话可用时把它们的完整声明与用法示例附进运行说明，模型直接 import 使用，
-   * 不必每次先 modules.list / describe。随会话配置固定，不影响前缀缓存。
+   * 常驻合同：模块名提供完整声明与示例；{module, export} 只提供指定导出及其依赖类型，
+   * 由正式声明生成，不附整模块示例。仅限主会话已授权模块，模型可直接 import 使用。
+   * 随会话配置固定，全部计入模型请求预算；选择任务常用的操作以减少发现往返。
    */
-  readonly residentModules?: readonly string[]
+  readonly residentModules?: ReadonlyArray<
+    string | { readonly module: string; readonly export: string }
+  >
   /**
    * 宿主环境条目（如操作系统），每帧和运行时读的当地时间、时区一起放进 runtime.environment；
    * 在帧尾，不影响前缀缓存。读取失败的那一帧只给时间。

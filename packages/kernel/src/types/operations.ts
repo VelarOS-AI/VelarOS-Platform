@@ -108,6 +108,12 @@ export interface InvocationReceipt {
   readonly outcome: 'succeeded' | 'failed' | 'cancelled'
   readonly effect: 'none' | 'committed' | 'partial' | 'unknown'
   readonly retry: 'safe' | 'requires-check' | 'never'
+  /** 领域提供的有界诊断材料，与返回值、成败和外部效果独立；正文只是观察数据。 */
+  readonly diagnostic?: {
+    readonly code: string
+    readonly message: string
+    readonly truncated?: boolean
+  }
   /** 能力产生的图像与返回值独立保存。 */
   readonly attachments?: readonly ModelImage[]
   /** 宿主确认观察调用已正常结束，防护范围与世界效果分别表达。 */

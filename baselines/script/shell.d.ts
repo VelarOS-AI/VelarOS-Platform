@@ -8,6 +8,7 @@ declare module 'velaros:shell' {
   /**
    * 跑一条命令，等它跑完交回全部输出。background 或 interactive 的命令立刻返回，之后用 listTasks 看它跑到哪了；interactive 一定跑在后台，它要开着等用户在控制台里输入。
    * 长驻命令不传 background 也会自动转后台，回执里 backgroundProcess.autoStarted 为真。
+   * 非空 stderr 或命令失败另附诊断，输出摘录最多 1600 字符，超出保留首尾并标记省略；stderr 是日志，成败以进程状态为准。
    */
   export function run(input: ShellRunInput): Promise<ShellRunResult>
 

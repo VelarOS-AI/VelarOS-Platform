@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
-import type { ApprovalPort } from '@velaros-ai/kernel'
+import type { ApprovalPort, InvocationReceipt } from '@velaros-ai/kernel'
 import type { CodeCapabilityPort } from '@velaros-ai/script'
 import {
   codeProgramChecker,
@@ -75,6 +75,50 @@ function resultOf(
     ...overrides,
   }
 }
+
+test('INV-19 独立诊断保留 stderr 和失败状态，日志不改退出码，长输出只摘首尾', async () => {
+  const cases: Array<Partial<ShellCommandResult>> = [
+    {},
+    { stderr: '\u001b[32mprogress 50%\u001b[0m\n' },
+    { success: false, exitCode: 7, stdout: 'test assertion failed\n' },
+    { success: false, exitCode: null, timedOut: true, stderr: 'deadline reached' },
+    { success: false, exitCode: null, aborted: true, signal: 'SIGTERM' },
+    { stderr: `FIRST_DIAGNOSTIC\n${'x'.repeat(20000)}\nLAST_DIAGNOSTIC` },
+  ]
+  for (const overrides of cases) {
+    const f = fakeSpace({ root: '/test', clamp: false })
+    const original = resultOf('fixture', '/test', overrides)
+    f.context.shell.runCommand = async () => original
+    const diagnostics: Array<NonNullable<InvocationReceipt['diagnostic']>> = []
+    f.context.recordDiagnostic = (value) => diagnostics.push(value)
+    const result = await shellOperations.run({ command: 'fixture' }, f.context)
+    for (const key of ['success', 'exitCode', 'timedOut', 'aborted', 'stdout', 'stderr'] as const)
+      expect(result[key]).toEqual(original[key])
+    if (original.success && !original.stderr) {
+      expect(diagnostics).toHaveLength(0)
+      continue
+    }
+    expect(diagnostics).toHaveLength(1)
+    const diagnostic = diagnostics[0]!
+    expect(diagnostic.code).toBe(original.success ? 'SHELL_STDERR' : 'SHELL_COMMAND_FAILED')
+    expect(diagnostic.message).toContain(`exitCode=${original.exitCode}`)
+    expect(diagnostic.message).toContain(`timedOut=${original.timedOut}`)
+    expect(diagnostic.message).toContain(`aborted=${original.aborted}`)
+    expect(diagnostic.message).not.toContain('\u001b')
+    expect(diagnostic.message.length).toBeLessThan(2048)
+    if (original.stderr.length > ShellLimits.diagnosticChars) {
+      expect(diagnostic.truncated).toBe(true)
+      expect(diagnostic.message).toContain('FIRST_DIAGNOSTIC')
+      expect(diagnostic.message).toContain('LAST_DIAGNOSTIC')
+      expect(diagnostic.message).toContain('省略')
+    } else
+      expect(diagnostic.message).toContain(
+        original.stderr
+          ? original.stderr.replaceAll('\u001b[32m', '').replaceAll('\u001b[0m', '')
+          : original.stdout
+      )
+  }
+})
 
 /**
  * 假的空间：把每次端口调用记下来。`clamp` 为真时像项目空间那样把 cwd 钳在根里、越界拒绝；
@@ -461,6 +505,59 @@ describe('危险命令的审批请求', () => {
 })
 
 describe('代码面 shell 命名空间', () => {
+  test('INV-5 Redis 自行 daemonize 后的检查在同一模型调用中返回', async () => {
+    const space = fakeSpace({ root: '/repo', clamp: true })
+    const value = await runModelProgram(
+      space,
+      `import { run } from 'velaros:shell'
+const check = await run({ command: 'redis-server --daemonize yes && redis-cli ping' })
+const service = await run({ command: 'redis-server --daemonize no' })
+export default { exit: check.exitCode, stdout: check.stdout, background: !!check.backgroundProcess, auto: service.backgroundProcess?.autoStarted }`
+    )
+    expect(value).toEqual({ exit: 0, stdout: 'ok\n', background: false, auto: true })
+    expect(space.calls.map((call) => call.options.background)).toEqual([false, true])
+  })
+
+  test.skipIf(process.platform === 'win32')(
+    'INV-5 查询服务程序的位置在同一次调用返回真实输出和退出码',
+    async () => {
+      const root = await scratch('velaros-shell-command-lookup-')
+      const executable = join(root, 'redis-server')
+      const host = createLocalShellHost({ cwd: root })
+      const space = fakeSpace({ root, clamp: false })
+      space.context.shell.runCommand = host.runCommand.bind(host)
+      try {
+        await writeFile(executable, '#!/bin/sh\nprintf unexpected-execution\n')
+        await chmod(executable, 0o755)
+        const result = await shellOperations.run(
+          { command: `command -v '${executable}'; printf 'probe complete\\n'` },
+          space.context
+        )
+        expect(result.backgroundProcess).toBeUndefined()
+        expect(result.exitCode).toBe(0)
+        expect(result.stdout).toBe(`${executable}\nprobe complete\n`)
+        expect(result.stderr).toBe('')
+        expect(result.success).toBe(true)
+      } finally {
+        await host.dispose()
+        await rm(root, { recursive: true, force: true })
+      }
+    }
+  )
+
+  test('INV-5 配置检查在同一次调用返回退出码与输出，后续服务启动仍自动转后台', async () => {
+    const space = fakeSpace({ root: '/repo', clamp: true })
+    const value = await runModelProgram(
+      space,
+      `import { run } from 'velaros:shell'
+const check = await run({ command: 'nginx -t && curl http://127.0.0.1:8080/health' })
+const start = await run({ command: 'nginx -g "daemon off;"' })
+export default { exit: check.exitCode, stdout: check.stdout, background: !!check.backgroundProcess, auto: start.backgroundProcess?.autoStarted }`
+    )
+    expect(value).toEqual({ exit: 0, stdout: 'ok\n', background: false, auto: true })
+    expect(space.calls.map((call) => call.options.background)).toEqual([false, true])
+  })
+
   test('INV-5 一段真程序照生成的声明过检查，在隔离里跑命令、起后台任务、按 taskId 查，只交出筛过的结论', async () => {
     const space = fakeSpace({ root: '/repo', clamp: true })
     const value = await runModelProgram(

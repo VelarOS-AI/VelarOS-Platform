@@ -15,7 +15,12 @@ import type {
 import { estimateRequestInput } from '../../utils/request-estimate.js'
 import { planProviderRetry } from '../../utils/retry.js'
 import { ModelTuning } from '../../utils/tuning.js'
-import { markPromptCacheBreakpoints, withPromptCacheKey } from '../../utils/wire/prompt-cache.js'
+import {
+  responseContinuation,
+  restoreResponseContinuations,
+  usesResponseContinuation,
+} from '../../utils/wire/continuation.js'
+import { withPromptCacheKey } from '../../utils/wire/prompt-cache.js'
 import { readChatCompletionReasoning } from '../../utils/wire/reasoning.js'
 
 class AiSdkModelDriver implements ModelDriver {
@@ -28,7 +33,14 @@ class AiSdkModelDriver implements ModelDriver {
   }
 
   public async estimate(request: ModelTurnRequest): Promise<ModelInputEstimate> {
-    return estimateRequestInput(request)
+    return estimateRequestInput(
+      request,
+      restoreResponseContinuations(
+        modelRequestEncoder.messages(request),
+        this.options.model,
+        this.id
+      )
+    )
   }
 
   public async *stream(
@@ -40,14 +52,25 @@ class AiSdkModelDriver implements ModelDriver {
       const result = streamText({
         model: this.options.model,
         system: request.instructions,
-        messages: markPromptCacheBreakpoints(modelRequestEncoder.messages(request)),
+        messages: restoreResponseContinuations(
+          modelRequestEncoder.messages(request),
+          this.options.model,
+          this.id
+        ).messages,
         maxOutputTokens: request.outputTokens,
         maxRetries: 0,
         // Chat Completions 通道的思考摘要只在原始分块里（见 readChatCompletionReasoning）。
         includeRawChunks: true,
         // 完整 JSON Schema 允许可选字段和动态 input；本地校验是接收门。
         providerOptions: withPromptCacheKey(
-          format.type === 'json' ? { openai: { strictJsonSchema: false } } : undefined,
+          format.type === 'json' || usesResponseContinuation(this.options.model)
+            ? {
+                openai: {
+                  ...(format.type === 'json' ? { strictJsonSchema: false } : {}),
+                  ...(usesResponseContinuation(this.options.model) ? { store: false } : {}),
+                },
+              }
+            : undefined,
           request.cacheKey
         ),
         abortSignal: signal,
@@ -75,6 +98,8 @@ class AiSdkModelDriver implements ModelDriver {
             : undefined,
       })
       let finish: Optional<Extract<ModelTurnDelta, { type: 'finish' }>>
+      let received = ''
+      let continuationTokens = request.outputTokens
       let chars = 0
       let textSegments = 0
       let separator = false
@@ -120,13 +145,20 @@ class AiSdkModelDriver implements ModelDriver {
             separator = false
             endedWithNewline = part.text.endsWith('\n')
           }
-          if (format.type === 'text') yield { type: 'text', text }
+          if (format.type === 'text') {
+            received += text
+            yield { type: 'text', text }
+          }
         }
         if (part.type === 'tool-call' || part.type === 'tool-input-start')
           throw new AppError('PROTOCOL', '供应商返回了本请求未声明的工具调用')
         if (part.type === 'error') throw part.error
         if (part.type === 'abort') throw new AppError('CANCELLED', '供应商响应已中止')
         if (part.type === 'finish') {
+          continuationTokens =
+            part.totalUsage.outputTokenDetails.reasoningTokens ??
+            part.totalUsage.outputTokens ??
+            request.outputTokens
           if (
             !isUndefined(part.totalUsage.inputTokens) &&
             !isUndefined(part.totalUsage.outputTokens)
@@ -149,6 +181,23 @@ class AiSdkModelDriver implements ModelDriver {
         const value = await result.output
         signal.throwIfAborted()
         yield { type: 'output', value }
+      }
+      if (
+        finish.reason === 'stop' &&
+        format.type === 'text' &&
+        usesResponseContinuation(this.options.model)
+      ) {
+        const response = await result.response
+        signal.throwIfAborted()
+        const value = responseContinuation(
+          this.options.model,
+          this.id,
+          response.messages,
+          received,
+          continuationTokens,
+          (await result.providerMetadata)?.openai?.reasoningContext
+        )
+        if (value) yield { type: 'continuation', value }
       }
       yield finish
     } catch (error) {

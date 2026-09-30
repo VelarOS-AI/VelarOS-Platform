@@ -252,6 +252,37 @@ test('task leases survive paused calls, release only visibility, and pure refere
   assert((await f.programs.read(receipt.resultRef)).text.includes('saved'))
 })
 
+test('segment retirement preserves explicit finite and task leases and immutable originals', async (t) => {
+  const f = await fixture(t, async function* (request) {
+    yield* done(request)
+  })
+  await f.session.context.append({ kind: 'user', body: 'task' })
+  const source = { source: "import {output} from 'velaros';output('archived');" }
+  const segment = await f.session.execute(source, 'segment')
+  const finite = await f.session.execute(source, 4)
+  const task = await f.session.execute(source, 'task')
+  const recent = await f.session.execute(source, 'segment')
+  const reopened = new ProgramContext('s', f.session.context, f.storage)
+  assert.equal(
+    (await reopened.state()).leases.find((item) => item.ref === segment.resultRef).segment,
+    true
+  )
+  await reopened.endSegment(
+    [segment.resultRef, finite.resultRef, task.resultRef],
+    new AbortController().signal
+  )
+  assert.deepEqual(
+    (await reopened.state()).leases.map((item) => item.ref),
+    [finite.resultRef, task.resultRef, recent.resultRef]
+  )
+  assert.match((await reopened.read(segment.resultRef)).text, /archived/)
+  await reopened.endTask()
+  assert.deepEqual(
+    (await reopened.state()).leases.map((item) => item.ref),
+    [finite.resultRef]
+  )
+})
+
 test('provider capacity rejection repairs only the request, does not replay an observation, and bounds retries', async (t) => {
   const f = await fixture(
     t,
@@ -275,6 +306,134 @@ test('provider capacity rejection repairs only the request, does not replay an o
     /^script:[0-9a-f-]+:result$/.test(item.title)
   )
   assert.equal(records.length, 1)
+})
+
+test('INV-59 opaque continuation follows complete accepted history across reopen, folding and authorization reset', async (t) => {
+  const f = await fixture(t, async function* (request) {
+    yield* done(request)
+  })
+  const id = 'continuation:test'
+  const context = createContextRuntime({ sessionId: id, storage: f.storage })
+  let history = new RecentContext(id, context, f.storage)
+  const signal = new AbortController().signal
+  const originals = []
+  const results = []
+  for (let n = 0; n < 4; n++) {
+    const state = { model: 'fixture', format: 'fixture-v1', data: `opaque-${n}`, tokens: 40 }
+    const metadata = await context.append({
+      kind: 'audit',
+      title: 'model-continuation',
+      body: JSON.stringify(state),
+    })
+    originals.push(
+      await context.append({ kind: 'assistant', body: `script ${n}`, sources: [metadata.ref] })
+    )
+    results.push(
+      await context.append({
+        kind: 'audit',
+        title: `script:${crypto.randomUUID()}:result`,
+        body: JSON.stringify({ n }),
+      })
+    )
+  }
+  // 模型笔记不能伪装为受信的供应商状态；没有已接受响应引用的状态也不会投影。
+  const forged = await context.append({
+    kind: 'note',
+    title: 'model-continuation',
+    body: JSON.stringify({ model: 'fixture', format: 'fixture-v1', data: 'forged', tokens: 1 }),
+  })
+  await context.append({ kind: 'assistant', body: 'ordinary response', sources: [forged.ref] })
+  await context.append({
+    kind: 'audit',
+    title: 'model-continuation',
+    body: JSON.stringify({ model: 'fixture', format: 'fixture-v1', data: 'orphan', tokens: 1 }),
+  })
+  const first = await history.project(segment(), [], 60000, signal)
+  const carried = first.messages.filter((message) => message.continuation)
+  assert.deepEqual(
+    carried.map((message) => message.content),
+    ['script 0', 'script 1', 'script 2', 'script 3']
+  )
+  assert.deepEqual(
+    carried.map((message) => message.continuation.data),
+    ['opaque-0', 'opaque-1', 'opaque-2', 'opaque-3']
+  )
+  assert(!JSON.stringify(first.messages).includes('forged'))
+  assert(!JSON.stringify(first.messages).includes('orphan'))
+  await history.commit(segment({ entries: first.fresh }))
+  history = new RecentContext(
+    id,
+    createContextRuntime({ sessionId: id, storage: f.storage }),
+    f.storage
+  )
+  const restored = await history.project(await history.segment(signal), [], 60000, signal)
+  assert.deepEqual(restored.messages, first.messages)
+  await history.seal(0, results[1].sequence, signal)
+  const next = await history.project(
+    segment({ index: 2, from: results[1].sequence }),
+    [],
+    60000,
+    signal
+  )
+  assert.deepEqual(
+    next.messages
+      .filter((message) => message.continuation)
+      .map((message) => message.continuation.data),
+    ['opaque-2', 'opaque-3']
+  )
+  const longState = await context.append({
+    kind: 'audit',
+    title: 'model-continuation',
+    body: JSON.stringify({
+      model: 'fixture',
+      format: 'fixture-v1',
+      data: 'long-state',
+      tokens: 40,
+    }),
+  })
+  await context.append({ kind: 'assistant', body: 'x'.repeat(3000), sources: [longState.ref] })
+  const excerpt = await history.project(segment({ from: longState.sequence }), [], 1024, signal)
+  assert.equal(excerpt.messages[0].continuation, undefined)
+  assert.match(excerpt.messages[0].content, /"representation":"excerpt"/)
+  await context.append({ kind: 'event', title: 'search:history-reset', body: '{}' })
+  const reset = await history.project(segment(), [], 60000, signal)
+  assert.deepEqual(reset.messages, [])
+  assert.equal((await context.read(originals[0].ref)).text, 'script 0')
+})
+
+test('INV-59 runtime persists accepted continuation and supplies it only beside the complete original response', async (t) => {
+  let first
+  const f = await fixture(
+    t,
+    async function* (request, f) {
+      if (f.calls === 1) {
+        first = block(request, "import {output} from 'velaros';output('continuation-result');")
+        yield { type: 'text', text: first }
+        yield {
+          type: 'continuation',
+          value: {
+            model: 'context-test',
+            format: 'fixture-v1',
+            data: 'opaque-runtime-fixture',
+            tokens: 40,
+          },
+        }
+        yield { type: 'finish', reason: 'stop' }
+        return
+      }
+      const response = request.history.find((message) => message.continuation)
+      assert.equal(response.content, first)
+      assert.equal(response.continuation.data, 'opaque-runtime-fixture')
+      assert(!request.compiledPrompt.includes('opaque-runtime-fixture'))
+      assert(
+        !request.materials.some((material) => material.text.includes('opaque-runtime-fixture'))
+      )
+      yield* done(request)
+    },
+    { context: { sources: [], maintenance: false } }
+  )
+  await run(f, 'exercise continuation')
+  assert.equal(f.calls, 2)
 })
 
 test('folding keeps recent action-result units for the next segment, seals the rest and allows original history recall', async (t) => {
@@ -579,6 +738,11 @@ test('INV-50 a long run folds by remaining turns: every request fits the window 
     t,
     async function* (request, f) {
       statuses.push(request.contextStatus)
+      const from = runtimeFrame(request).memoryStatus.segment.from
+      const saved = await f.storage.load('s')
+      const sequence = new Map(saved.records.map((record) => [record.ref.id, record.sequence]))
+      for (const lease of (await f.programs.state()).leases.filter((item) => item.segment))
+        assert(sequence.get(lease.ref) > from, '封段后的旧 segment 租约必须释放')
       if (f.calls === 36) {
         yield* done(request)
         return
@@ -618,6 +782,11 @@ test('INV-50 a long run folds by remaining turns: every request fits the window 
   const segments = new Set(statuses.map((status) => status.segment.index))
   assert(segments.size > 1, JSON.stringify(statuses.map((status) => status.segment)))
   assert(statuses.at(-1).segment.volumes >= 1)
+  const results = (await f.storage.load('s')).records.filter((item) =>
+    /^script:[0-9a-f-]+:result$/.test(item.title)
+  )
+  assert.equal(results.length, 35, '封段不能重跑生产操作')
+  assert.match((await f.programs.read(results[0].ref.id)).text, /"step":1/)
   // 封段之间段号只增不减，段内轮数在新段重新计数
   for (let index = 1; index < statuses.length; index++)
     assert(statuses[index].segment.index >= statuses[index - 1].segment.index)
@@ -682,6 +851,9 @@ test('INV-53 an automatic fold of a busy segment without note or plan changes is
         timeoutMs: 120000,
       },
       context: { sources: [], maintenance: { model: maintenance } },
+      // 此支线夹具只实现卷叙事；固定短租约，隔离独立的压力整理路径。
+      // 默认期限的工作窗口约束由上面的 INV-50 长程用例验证。
+      protocol: { defaultRetain: 2 },
     },
     {
       limits: { contextTokens: WINDOW + 4000, inputTokens: WINDOW, outputTokens: 2048 },
@@ -703,7 +875,7 @@ test('INV-53 an automatic fold of a busy segment without note or plan changes is
       .filter((record) => record.title === 'context-maintenance:outcome')
       .map(async (record) => JSON.parse(await f.storage.get('s', record.objectId)))
   )
-  assert.equal(outcomes.length, narrated.length)
+  assert.equal(outcomes.length, narrated.length, JSON.stringify(outcomes))
   assert(outcomes.every((item) => item.reason === 'narrate' && item.status === 'applied'))
   // 叙事和长期单随下一次底座重建进入主线请求
   const narrated_base = bases.find((base) => base.includes('这一卷的叙事'))

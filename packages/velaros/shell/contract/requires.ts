@@ -11,7 +11,7 @@
  * 根入口导出空间端口与调用上下文；本机宿主的配置与约束后端从 `./local` 入口导出。
  */
 
-import type { ApprovalPort } from '@velaros-ai/kernel'
+import type { ApprovalPort, OperationContext } from '@velaros-ai/kernel'
 
 import type { ShellEnvironmentApi } from '../impl/local/ShellEnvironment.js'
 import type {
@@ -86,6 +86,8 @@ export interface ShellSpacePort extends ShellHostPort {
 
 /** 每次调用 `velaros:shell` 时宿主给的上下文。它不是模型能填的入参：宿主分发这次调用时按当前空间装好，生成声明时整个丢掉。 */
 export interface ShellOperationContext {
+  /** 有界命令诊断经调用回执独立交付，脚本筛选 stdout 不会隐藏 stderr 或失败状态。 */
+  recordDiagnostic?: OperationContext['recordDiagnostic']
   /** 仅由宿主受限实现设置，模型输入不能切换。 */
   observation?: boolean
   /** 本次调用的取消信号：用户取消或上层超时时触发，命令也应随之停下。 */

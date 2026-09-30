@@ -5,6 +5,10 @@
  * 不在这里，在 `contract/constants.ts`；类自己固定用的写成类内 `private static readonly`。
  */
 export const KernelTuning = Object.freeze({
+  /** 调用诊断的分类码保留的字符数。 */
+  operationDiagnosticCodeChars: 64,
+  /** 调用诊断的正文保留的字符数。 */
+  operationDiagnosticMessageChars: 2048,
   /** 模块发现缺省每页条数。 */
   modulePageSize: 20,
   /** 启动器：等守护进程发布端点的上限，毫秒。 */

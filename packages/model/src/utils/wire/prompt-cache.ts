@@ -18,7 +18,7 @@ import type { PromptCacheWireOptions } from '../../types/adapters'
  *
  * **不变量（改这里先确认这三条还成立）**：
  * 1. `velaros` 命名空间**绝不能出线**。`applyPromptCacheCallOptions` 在 `doGenerate` 或
- *    `doStream` 前把它整个剥掉并翻译成 `anthropic.cacheControl` 或 `openai.promptCacheKey`；
+ *    `doStream` 前把它整个剥掉并翻译成各线路的 cacheControl、promptCacheBreakpoint 或 promptCacheKey；
  *    漏剥会让服务商收到未知字段并拒绝整次请求。
  * 2. **调用方显式写的线上字段永远赢**。`hasExplicitProviderPromptCacheKey` /
  *    `hasProviderWireCacheControl` 命中时本层不覆盖也不追加——这是"产品默认值不得压过显式意图"。
@@ -37,14 +37,16 @@ const CacheControlField = 'cacheControl'
 export function markPromptCacheBreakpoints(
   messages: readonly ModelHistoryMessage[]
 ): ModelMessage[] {
-  return messages.map(({ cacheBreakpoint, ...message }) =>
-    cacheBreakpoint
+  return messages.map(({ cacheBreakpoint, ...source }) => {
+    const message =
+      source.role === 'assistant' ? { role: source.role, content: source.content } : source
+    return cacheBreakpoint
       ? {
           ...message,
           providerOptions: { [VelarosProviderOptionsKey]: { [PromptCacheBreakpointKey]: true } },
         }
       : message
-  )
+  })
 }
 
 /** 中立请求的会话缓存键写成内部标记，并入调用方已有的供应商选项。 */
@@ -62,7 +64,7 @@ export function applyPromptCacheCallOptions(
   wire: PromptCacheWireOptions
 ): LanguageModelV3CallOptions {
   const providerOptions = applyTopLevelPromptCacheProviderOptions(options.providerOptions, wire)
-  const prompt = applyPromptPromptCacheProviderOptions(options.prompt)
+  const prompt = applyPromptPromptCacheProviderOptions(options.prompt, wire)
   if (providerOptions === options.providerOptions && prompt === options.prompt) return options
 
   return {
@@ -94,13 +96,34 @@ function applyTopLevelPromptCacheProviderOptions(
 
 /** 逐条消息翻译；一条都没变时原样返回，别让上游白白复制一遍 prompt。 */
 function applyPromptPromptCacheProviderOptions(
-  prompt: LanguageModelV3CallOptions['prompt']
+  prompt: LanguageModelV3CallOptions['prompt'],
+  wire: PromptCacheWireOptions
 ): LanguageModelV3CallOptions['prompt'] {
   if (!isArray(prompt)) return prompt
 
+  // 默认隐式缓存占一处写入槽；先保留调用方显式断点，再按余量选最近的内部断点。
+  // 上游可分别标记已退役结果结尾的稳定前缀和历史末尾；当前帧不自动增加断点。
+  const existing = prompt.reduce(
+    (count, message) =>
+      count +
+      (isArray(message.content)
+        ? message.content.filter((part) => hasOpenAiBreakpoint(part.providerOptions)).length
+        : Number(hasOpenAiBreakpoint(message.providerOptions))),
+    0
+  )
+  const boundaries = new Set(
+    wire.openaiBreakpoints && existing < 3
+      ? prompt
+          .flatMap((message, index) =>
+            hasProviderPromptCacheBreakpoint(message.providerOptions) ? [index] : []
+          )
+          .slice(-(3 - existing))
+      : []
+  )
   let changed = false
-  const nextPrompt = prompt.map((message) => {
-    const nextMessage = applyMessagePromptCacheProviderOptions(message)
+  const nextPrompt = prompt.map((message, index) => {
+    const translated = applyMessagePromptCacheProviderOptions(message, wire)
+    const nextMessage = boundaries.has(index) ? withOpenAiBreakpoint(translated) : translated
     changed ||= nextMessage !== message
     return nextMessage
   })
@@ -109,7 +132,10 @@ function applyPromptPromptCacheProviderOptions(
 }
 
 /** 单条消息：剥掉 velaros 断点标记，需要时补上 `anthropic.cacheControl`。 */
-function applyMessagePromptCacheProviderOptions(message: unknown): unknown {
+function applyMessagePromptCacheProviderOptions(
+  message: unknown,
+  wire: PromptCacheWireOptions
+): unknown {
   if (!isPlainObject(message)) return message
 
   const providerOptions = message.providerOptions
@@ -119,7 +145,7 @@ function applyMessagePromptCacheProviderOptions(message: unknown): unknown {
   const strippedOptions = removeVelarosPromptCacheBoundaryProviderOptions(providerOptions)
   let nextProviderOptions = !isEmpty(Object.keys(strippedOptions)) ? strippedOptions : undefined
 
-  if (hasBreakpoint && !hasProviderWireCacheControl(providerOptions)) {
+  if (hasBreakpoint && !wire.openaiBreakpoints && !hasProviderWireCacheControl(providerOptions)) {
     nextProviderOptions = mergeProviderOptionRecord(nextProviderOptions, AnthropicProviderKey, {
       [CacheControlField]: { type: 'ephemeral' },
     })
@@ -131,6 +157,44 @@ function applyMessagePromptCacheProviderOptions(message: unknown): unknown {
     ...message,
     providerOptions: nextProviderOptions,
   }
+}
+
+/** SDK 对 user/assistant 读取内容块选项，对 system 读取消息选项；两者都保留显式意图。 */
+function withOpenAiBreakpoint(message: unknown): unknown {
+  if (!isPlainObject(message)) return message
+  const options = (existing: unknown) =>
+    hasOpenAiBreakpoint(existing)
+      ? existing
+      : mergeProviderOptionRecord(
+          isPlainObject(existing) ? existing : undefined,
+          OpenAiProviderKey,
+          {
+            promptCacheBreakpoint: { mode: 'explicit' },
+          }
+        )
+  if (message.role === 'system')
+    return { ...message, providerOptions: options(message.providerOptions) }
+  if (!isArray(message.content)) return message
+  const index = message.content.reduce<number>(
+    (last, part, i) => (isPlainObject(part) && part.type === 'text' ? i : last),
+    -1
+  )
+  if (index < 0) return message
+  return {
+    ...message,
+    content: message.content.map((part, i) =>
+      i === index && isPlainObject(part)
+        ? { ...part, providerOptions: options(part.providerOptions) }
+        : part
+    ),
+  }
+}
+
+/** 内容块上的 OpenAI 显式断点已经由调用方决定，本层不覆盖。 */
+function hasOpenAiBreakpoint(providerOptions: unknown): boolean {
+  if (!isPlainObject(providerOptions)) return false
+  const openai = providerOptions[OpenAiProviderKey]
+  return isPlainObject(openai) && isPresent(openai.promptCacheBreakpoint)
 }
 
 /** 这条消息上有没有断点：内部标记或已经写好的线上字段都算。 */

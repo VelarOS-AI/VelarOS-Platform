@@ -315,6 +315,7 @@ test('INV-32 长任务连续 80 次状态推进，观察和租约保持有界，
   let previous = -1
   const bodies = []
   const statuses = []
+  let largestFrame
   // 窗口较小，80 轮里会封几次段；观察到的计数跨段仍须逐轮正确
   const driver = {
     id: 'soak',
@@ -329,6 +330,19 @@ test('INV-32 长任务连续 80 次状态推进，观察和租约保持有界，
       const frame = JSON.parse(request.materials[0].text)
       const tag = request.compiledPrompt.match(/当前帧标记：(\S+)。普通/)[1]
       bodies.push(request.materials[0].text.length)
+      if (!largestFrame || request.materials[0].text.length > largestFrame.chars)
+        largestFrame = {
+          chars: request.materials[0].text.length,
+          partitions: Object.fromEntries(
+            Object.entries(frame.partitions).map(([key, value]) => [
+              key,
+              JSON.stringify(value).length,
+            ])
+          ),
+          recentResults: frame.partitions.recent.results.length,
+          historyBodies: frame.partitions.recent.results.filter((item) => item.bodyInHistory)
+            .length,
+        }
       statuses.push(request.contextStatus)
       const block = (name, source) => `${tag} ${name}()\n${source}\n${tag}\n`
       if (calls === 1) {
@@ -396,7 +410,7 @@ test('INV-32 长任务连续 80 次状态推进，观察和租约保持有界，
   assert.equal(previous, 80)
   // 每帧都在窗口内；本帧尾不随轮数变长；中间确实封过段
   assert(statuses.every((status) => status.inputTokens <= status.inputLimit))
-  assert(Math.max(...bodies) < 20000, JSON.stringify({ max: Math.max(...bodies) }))
+  assert(Math.max(...bodies) < 20000, JSON.stringify(largestFrame))
   assert(
     Math.max(...statuses.map((status) => status.segment.index)) >= 2,
     JSON.stringify(statuses.map((status) => status.segment))

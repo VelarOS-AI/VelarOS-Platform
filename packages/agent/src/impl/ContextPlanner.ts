@@ -8,8 +8,11 @@ import { ContextPlanTuning } from '../utils/tuning.js'
 export interface ContextPlannerApi {
   /** 当前的估算校准；没有实测样本时不缩小原始估算。 */
   calibration(): ModelEstimateCalibration
-  /** 记下一次供应商实测的输入用量；带图片的请求不取样。 */
-  measure(measured: { readonly text: number; readonly images: number }, inputTokens: number): void
+  /** 记下一次供应商实测的输入用量；带图片或不透明延续状态的请求不取样。 */
+  measure(
+    measured: { readonly text: number; readonly images: number; readonly opaque?: number },
+    inputTokens: number
+  ): void
   /** 供应商以超窗拒绝：清空校准，回到原始估算。 */
   rejected(): void
   /** 记下一帧的字符密度，用来把 token 窗口换算成投影的字符预算。 */
@@ -51,11 +54,17 @@ export class ContextPlanner implements ContextPlannerApi {
   }
 
   public measure(
-    measured: { readonly text: number; readonly images: number },
+    measured: { readonly text: number; readonly images: number; readonly opaque?: number },
     inputTokens: number
   ) {
-    // 图片的真实开销因供应商而异，只用纯文本请求校准文本部分
-    if (measured.images > 0 || measured.text <= 0 || !(inputTokens > 0)) return
+    // 图片和不透明状态的实际采用量因供应商而异，只用纯文本请求校准文本部分。
+    if (
+      measured.images > 0 ||
+      (measured.opaque ?? 0) > 0 ||
+      measured.text <= 0 ||
+      !(inputTokens > 0)
+    )
+      return
     this.ratios = [...this.ratios, inputTokens / measured.text].slice(
       -ContextPlanTuning.calibrationSamples
     )

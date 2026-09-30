@@ -172,6 +172,7 @@ export function createShellCapabilityModule(
     instanceId: options.instanceId,
     context: (call) => {
       const context: ShellOperationContext = {
+        recordDiagnostic: call.recordDiagnostic,
         shell: options.shell,
         approval: options.approval,
         abortSignal: call.signal,
@@ -190,6 +191,7 @@ export function createShellCapabilityModule(
         let result
         try {
           result = await shellOperations.run(input as ShellRunInput, {
+            recordDiagnostic: call.recordDiagnostic,
             shell: options.shell,
             approval: options.approval,
             abortSignal: call.signal,

@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "model": "gpt-6-sol",
+  "reasoning_effort": "high",
+  "service_tier": "default",
+  "total_budget_usd": 1000,
+  "trial_concurrency": 1,
+  "dataset": "terminal-bench-sample@2.0",
+  "dataset_commit": "7e917f35c281188532772312d4ad91ca9274febc",
+  "agents": ["scriptact", "codex", "terminus-2"],
+  "codex_version": "0.158.0",
+  "development_tasks": ["regex-log", "build-cython-ext", "fix-code-vulnerability"],
+  "validation_tasks": [
+    "chess-best-move",
+    "sqlite-with-gcov",
+    "polyglot-c-py",
+    "qemu-startup",
+    "qemu-alpine-ssh",
+    "log-summary-date-ranges",
+    "configure-git-webserver"
+  ],
+  "stages": [
+    { "name": "integration", "tasks": "development_tasks", "attempts": 1 },
+    { "name": "validation", "tasks": "validation_tasks", "attempts": 1 },
+    { "name": "repeatability", "tasks": "all_sample_tasks", "attempts": 3 },
+    {
+      "name": "harder_terminal_tasks",
+      "dataset": "terminal-bench@2.0",
+      "selection": "freeze a stratified sample before running any candidate"
+    },
+    {
+      "name": "long_horizon_repository_tasks",
+      "dataset": "swebench-pro-v2@v2.0.0",
+      "source": "https://github.com/scaleapi/SWE-bench_Pro-os",
+      "commit": "66f92766bba642462d4bbe5479e83f91f9211862",
+      "selection": "freeze task IDs and dataset revision before agent execution; exclude reference-patch previews recorded during preparation",
+      "protocol": "50-minute agent phase, model endpoint allowlist, authoritative re-grade by replaying the captured patch in a fresh sandbox"
+    },
+    {
+      "name": "hard_long_horizon_tasks",
+      "dataset": "swebench-pro-v2@v2.0.0",
+      "selection": "freeze an independent block from the official HARD-51 subset"
+    }
+  ],
+  "decision_rules": {
+    "primary": "official verifier pass rate over all attempts; infrastructure failures remain visible",
+    "efficiency": "compare latency and cost on the same successfully solved tasks; also report all-attempt spend per success",
+    "escalation": "if quality and efficiency remain indistinguishable, increase independent tasks, repeats, or task difficulty within the shared budget",
+    "acceptance": "validate development fixes on held-out tasks; preserve all old runs; report tradeoffs and uncertainty",
+    "difficulty_controls": "freeze each next task block and candidate fingerprints before execution; keep earlier difficulty bands in the cumulative report; a task used to guide fixes becomes development evidence",
+    "ceiling": "when all agents solve a block, compare common-success latency and cost, then advance to harder or longer tasks if uncertainty still prevents a useful distinction",
+    "floor": "when all agents fail a block, retain it as diagnostic evidence and add intermediate difficulty tasks to locate the capability boundary",
+    "inference": "review complete predeclared blocks rather than stopping at a favorable result; distinguish meaningful tradeoffs from a single overall winner",
+    "budget_exhaustion": "stop new API dispatches; retain unfinished objective and all evidence"
+  }
+}

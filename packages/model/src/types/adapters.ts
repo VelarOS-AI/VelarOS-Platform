@@ -77,6 +77,8 @@ export type ModelCallProviderOptions = NonNullable<LanguageModelV3CallOptions['p
 export interface PromptCacheWireOptions {
   /** 会话缓存键译成 OpenAI 的 `prompt_cache_key` 发出去；不认这个字段的线路只剥掉内部标记。 */
   readonly sessionKey: boolean
+  /** 把稳定历史的末尾标记翻译为 OpenAI Responses 内容块上的显式缓存断点。 */
+  readonly openaiBreakpoints?: boolean
 }
 
 /** 按这一轮的输出上限算 reasoning 选项；这一档不发 reasoning 时返回 null。 */

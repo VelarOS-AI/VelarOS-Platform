@@ -12,3 +12,9 @@ async function example(){
  await retain({ref:note.ref});
  await release({ref:note.ref});
 }
+// ref 和 pointer 取自执行结果展示；offset 按选中字段的字符算。
+async function readResultField(ref,pointer,offset=0){
+ const page=await read({ref,pointer,offset,limit:4000});
+ output({ref:page.record.ref,pointer:page.pointer,offset:page.offset,totalChars:page.totalChars},{key:'range'});
+ output(page.text,{key:'source',type:'code'});
+}

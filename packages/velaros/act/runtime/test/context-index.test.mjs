@@ -295,6 +295,42 @@ test('INV-49 segment history caches immutable result classification, reuses froz
   assert.equal(page.items.length, 1)
 })
 
+test('INV-49 retired-result cache boundary remains reusable while later leases expire', async (t) => {
+  const f = await fixture(t)
+  const recent = new RecentContext('s', f.context, f.storage)
+  const records = []
+  for (let index = 0; index < 4; index++) {
+    await f.context.append({ kind: 'assistant', body: `step ${index}` })
+    records.push(
+      await f.context.append({
+        kind: 'audit',
+        title: `script:${crypto.randomUUID()}:result`,
+        body: JSON.stringify({ mode: 'execute', index }),
+      })
+    )
+  }
+  const leased = records.map((record) => ({ ref: record.ref.id, text: `body ${record.sequence}` }))
+  const first = await recent.project(segment(), leased, 4096, signal())
+  const frozen = segment({ entries: first.fresh })
+  const before = await recent.project(frozen, leased.slice(2), 4096, signal())
+  const after = await recent.project(frozen, leased.slice(3), 4096, signal())
+  const boundaries = (value) =>
+    value.messages.flatMap((message, index) => (message.cacheBreakpoint ? [index] : []))
+  assert.deepEqual(boundaries(first), [7])
+  assert.deepEqual(boundaries(before), [3, 7])
+  assert.deepEqual(boundaries(after), [5, 7])
+  const content = (messages) => messages.map(({ role, content }) => ({ role, content }))
+  assert.deepEqual(content(before.messages.slice(0, 4)), content(after.messages.slice(0, 4)))
+  assert.equal(after.messages[3].role, 'user')
+  assert.match(after.messages[3].content, /lease-expired-or-released/)
+  assert.notEqual(before.messages[5].content, after.messages[5].content)
+  // A retained earlier result can change again; never place the extra prefix
+  // boundary after it merely because newer results have already retired.
+  const retained = await recent.project(frozen, [leased[0], leased[3]], 4096, signal())
+  assert.deepEqual(boundaries(retained), [7])
+  assert.equal(retained.messages[1].content, first.messages[1].content)
+})
+
 test('history classification cache is bounded and a missing body is re-read', async (t) => {
   const f = await fixture(t)
   const count = ActRuntimeTuning.historyClassificationEntries + 2

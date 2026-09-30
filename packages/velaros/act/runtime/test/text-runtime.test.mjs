@@ -11,7 +11,7 @@ import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { modelText } from './support/model-turn.mjs'
-import { runtimeFrame } from './support/model-turn.mjs'
+import { historyEntries, runtimeFrame } from './support/model-turn.mjs'
 import { done, marker } from './support/model-turn.mjs'
 
 const block = (request, head, source = '') =>
@@ -284,6 +284,35 @@ test('explicit observation clear removes the next-frame rerun', async (t) => {
   assertDone(await collect(f))
   assert.equal(f.reads, 1)
   assert.equal(f.frames[1].observation.sourceRef, null)
+})
+
+test('closing marker repair names the same frame and executes the corrected batch only once', async (t) => {
+  let originalMarker
+  const second = "import {write} from 'test:ops';await write('two');"
+  const f = await fixture(t, async function* (request, f) {
+    if (f.calls === 1) {
+      originalMarker = marker(request)
+      yield {
+        type: 'text',
+        text: `${block(request, 'execute()', write)}${originalMarker} execute()\n${second}\n${originalMarker}x\n`,
+      }
+      yield finish
+    } else if (f.calls === 2) {
+      assert.equal(marker(request), originalMarker)
+      assert.deepEqual(f.writes, [])
+      const repair = modelText(request).split('本帧上次响应未通过校验').at(-1)
+      assert(repair.includes(`闭合行必须逐字为：\n${originalMarker}\n`))
+      assert.match(repair, /重新输出完整响应/)
+      yield {
+        type: 'text',
+        text: block(request, 'execute()', write) + block(request, 'execute()', second),
+      }
+      yield finish
+    } else yield* done(request)
+  })
+  assertDone(await collect(f))
+  assert.equal(f.calls, 3)
+  assert.deepEqual(f.writes, ['one', 'two'])
 })
 
 test('work narration without a decision exhausts bounded repair without claiming completion', async (t) => {
@@ -577,10 +606,16 @@ test('raw blob names and nested input keys keep JSON semantics in the isolated r
 test('missing work decision is repaired before a single actual write and completion', async (t) => {
   const f = await fixture(t, async function* (request, f) {
     if (f.calls === 1) {
+      assert(
+        modelText(request).includes(`继续工作时，响应从控制头开始：\n${marker(request)} execute()`)
+      )
       yield { type: 'text', text: 'I will continue the task.' }
       yield finish
     } else if (f.calls === 2) {
       assert.equal(f.writes.length, 0)
+      const repair = modelText(request).split('本帧上次响应未通过校验').at(-1)
+      assert(repair.includes(`第一行直接输出：\n${marker(request)} execute()`))
+      assert(repair.includes(`独立一行写闭合标记：\n${marker(request)}`))
       yield {
         type: 'text',
         text: block(request, 'execute', "import {write} from 'test:ops';await write('recovered');"),
@@ -599,4 +634,236 @@ test('missing work decision is repaired before a single actual write and complet
   )
   assert.equal(decisions[0].status, 'rejected')
   assert.equal(decisions[1].status, 'accepted')
+})
+
+test('INV-60 stable protocol rules survive changing frames and retries with scoped names and input snapshots', async (t) => {
+  const inputs = { target: { value: 'original' } }
+  let system
+  let firstMarker
+  const f = await fixture(
+    t,
+    async function* (request, f) {
+      system ??= request.instructions
+      assert.equal(request.instructions, system)
+      assert.match(system, /sourceRef 可引用已保存的程序/)
+      assert.match(system, /默认 segment/)
+      assert.doesNotMatch(system, /@@s[0-9a-f]+|host:target|host:changed/)
+      assert.doesNotMatch(request.compiledPrompt, /sourceRef 可引用已保存的程序/)
+      const protocol = request.compiledPrompt.split('本帧协议').at(-1)
+      const tag = marker(request)
+      assert(protocol.includes(`${tag} run()`))
+      assert(protocol.includes(`${tag} finish`))
+      assert.doesNotMatch(protocol, /@@s[0-9a-f]+ (?:execute|observe|done)/)
+      if (f.calls === 1) {
+        firstMarker = tag
+        assert.match(protocol, /宿主参数引用：host:target/)
+        delete inputs.target
+        inputs.changed = { value: 'new' }
+        yield { type: 'text', text: `${tag} run()\n${write}\n` }
+      } else if (f.calls === 2) {
+        assert.equal(tag, firstMarker)
+        assert.deepEqual(f.writes, [])
+        assert.match(protocol, /宿主参数引用：host:target/)
+        assert(protocol.includes(`闭合行必须逐字为：\n${tag}`))
+        yield {
+          type: 'text',
+          text: block(
+            request,
+            'run({inputRef:"host:target"})',
+            "import {input} from 'velaros:program';import {write} from 'test:ops';await write(input.value);"
+          ),
+        }
+      } else {
+        assert.notEqual(tag, firstMarker)
+        assert.match(protocol, /宿主参数引用：host:changed/)
+        assert.doesNotMatch(protocol, /host:target/)
+        yield { type: 'text', text: `${tag} finish` }
+      }
+      yield finish
+    },
+    {
+      protocol: {
+        allowed: ['blobs', 'execute', 'done'],
+        names: { execute: 'run', done: 'finish' },
+      },
+      inputs: () => inputs,
+    }
+  )
+  assertDone(await collect(f))
+  assert.equal(f.calls, 3)
+  assert.deepEqual(f.writes, ['original'])
+})
+
+test('INV-63 missing closure between blob and program rejects the whole response and repairs once', async (t) => {
+  let firstMarker
+  const f = await fixture(t, async function* (request, f) {
+    const tag = marker(request)
+    if (f.calls === 1) {
+      firstMarker = tag
+      assert(request.compiledPrompt.includes('blobs 原文结束后也必须'))
+      yield {
+        type: 'text',
+        text: `${block(request, 'execute()', write)}${tag} blobs("payload")\nrecovered\n${tag} execute()\n`,
+      }
+      yield finish
+    } else if (f.calls === 2) {
+      assert.equal(tag, firstMarker)
+      assert.deepEqual(
+        f.writes,
+        [],
+        'earlier valid block cannot execute before the whole response passes'
+      )
+      assert(request.compiledPrompt.includes(`闭合行必须逐字为：\n${tag}\n`))
+      assert.match(request.compiledPrompt, /下一控制头不能代替闭合行/)
+      yield {
+        type: 'text',
+        text:
+          block(request, 'blobs("payload")', 'recovered') +
+          block(
+            request,
+            'execute()',
+            "import {blobs} from 'velaros:program';import {write} from 'test:ops';await write(blobs.payload);"
+          ),
+      }
+      yield finish
+    } else yield* done(request)
+  })
+  assertDone(await collect(f))
+  assert.equal(f.calls, 3)
+  assert.deepEqual(f.writes, ['recovered'])
+})
+
+test('INV-66 trailing closure spaces execute complete blob and program once without a repair call', async (t) => {
+  const payload = 'preserved  \n  '
+  const f = await fixture(t, async function* (request, f) {
+    if (f.calls === 1) {
+      const tag = marker(request)
+      const response = `${tag} blobs("payload")\n${payload}\n${tag}  \r\n${tag} execute()\nimport {blobs} from 'velaros:program';import {write} from 'test:ops';await write(blobs.payload);\n${tag} `
+      for (const char of response) yield { type: 'text', text: char }
+      yield finish
+    } else {
+      assert.deepEqual(f.writes, [payload])
+      yield* done(request)
+    }
+  })
+  assertDone(await collect(f))
+  assert.equal(f.calls, 2)
+  assert.deepEqual(f.writes, [payload])
+})
+
+test('default text executions preserve earlier evidence across investigation and honor explicit release', async (t) => {
+  let firstRef
+  let firstBody
+  const f = await fixture(t, async function* (request, f) {
+    if (f.calls === 2) {
+      const first = historyEntries(request).find((item) => item.origin === 'runtime-execution')
+      firstRef = first.ref.id
+      firstBody = first.text
+    }
+    if (f.calls <= 4) {
+      yield {
+        type: 'text',
+        text: block(
+          request,
+          'execute',
+          "import {output} from 'velaros';import {read} from 'test:ops';output({snapshot:await read()});"
+        ),
+      }
+      yield finish
+    } else if (f.calls === 5) {
+      const first = historyEntries(request).find((item) => item.ref.id === firstRef)
+      assert.equal(first.bodyIncluded, true)
+      assert.equal(first.text, firstBody)
+      assert.equal(f.reads, 4)
+      yield {
+        type: 'text',
+        text: block(
+          request,
+          'execute',
+          `import {memory} from 'velaros:system';await memory.release({ref:${JSON.stringify(firstRef)}});`
+        ),
+      }
+      yield finish
+    } else {
+      assert.equal(
+        historyEntries(request).find((item) => item.ref.id === firstRef).bodyIncluded,
+        false
+      )
+      yield* done(request)
+    }
+  })
+  assertDone(await collect(f))
+  assert.equal(f.reads, 4)
+  assert.match(
+    (await f.session.context.read({ sessionId: 's', id: firstRef })).text,
+    /"snapshot":1/
+  )
+})
+
+test('an explicit eight-exposure result retires without replaying its producer', async (t) => {
+  let firstRef
+  const f = await fixture(t, async function* (request, f) {
+    const results = historyEntries(request).filter((item) => item.origin === 'runtime-execution')
+    if (f.calls === 2) firstRef = results[0].ref.id
+    if (f.calls > 1) {
+      const first = results.find((item) => item.ref.id === firstRef)
+      assert.equal(first.bodyIncluded, f.calls <= 9)
+    }
+    if (f.calls === 10) {
+      yield* done(request)
+      return
+    }
+    yield {
+      type: 'text',
+      text: block(
+        request,
+        'execute({retain:8})',
+        f.calls === 1
+          ? "import {output} from 'velaros';import {read} from 'test:ops';output({snapshot:await read()});"
+          : `import {output} from 'velaros';output({step:${f.calls}});`
+      ),
+    }
+    yield finish
+  })
+  assertDone(await collect(f))
+  assert.equal(f.reads, 1)
+  assert.equal(
+    (await f.programs.state()).leases.some((lease) => lease.ref === firstRef),
+    false
+  )
+})
+
+test('default results keep an append-only history prefix for a segment beyond eight exposures', async (t) => {
+  let prior = []
+  let firstRef
+  const f = await fixture(t, async function* (request, f) {
+    const history = request.history.map(({ role, content }) => ({ role, content }))
+    assert.deepEqual(history.slice(0, prior.length), prior)
+    prior = history
+    if (f.calls === 2)
+      firstRef = historyEntries(request).find((item) => item.origin === 'runtime-execution').ref.id
+    if (f.calls > 1) {
+      assert.equal(
+        historyEntries(request).find((item) => item.ref.id === firstRef).bodyIncluded,
+        true
+      )
+      assert(f.frames.at(-1).results.every((item) => item.remainingTurns === 'segment'))
+    }
+    if (f.calls === 72) yield* done(request)
+    else {
+      yield {
+        type: 'text',
+        text: block(
+          request,
+          'execute()',
+          `import {output} from 'velaros';output({step:${f.calls}});`
+        ),
+      }
+      yield finish
+    }
+  })
+  assertDone(await collect(f))
+  assert.equal(f.calls, 72)
+  assert.equal((await f.programs.state()).leases.length, 0)
+  assert.match((await f.programs.read(firstRef)).text, /"step":1/)
 })

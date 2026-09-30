@@ -275,8 +275,9 @@ export class ActLoop implements ActLoopApi {
           let finish: Optional<Extract<ModelTurnDelta, { type: 'finish' }>>
           let measured = false
           let received = ''
+          let continuation: Optional<Extract<ModelTurnDelta, { type: 'continuation' }>['value']>
           let responseRef: Optional<{ sessionId: string; id: string }>
-          let usage: Optional<{ inputTokens: number; outputTokens: number }>
+          let usage: Optional<Omit<Extract<ModelTurnDelta, { type: 'usage' }>, 'type'>>
           const attemptController = new AbortController()
           const deadline = this.options.frames.deadline?.()
           const attemptSignal = AbortSignal.any([
@@ -305,7 +306,6 @@ export class ActLoop implements ActLoopApi {
               if (delta.type === 'usage') {
                 if (measured) throw new AppError('PROTOCOL', '模型重复返回用量')
                 measured = true
-                usage = { inputTokens: delta.inputTokens, outputTokens: delta.outputTokens }
                 this.planner.measure(compiled.measured, delta.inputTokens)
                 if (!isUndefined(delta.cacheReadTokens) || !isUndefined(delta.cacheWriteTokens))
                   this.cache = {
@@ -319,6 +319,11 @@ export class ActLoop implements ActLoopApi {
                   cache.cacheReadTokens = delta.cacheReadTokens
                 if (!isUndefined(delta.cacheWriteTokens))
                   cache.cacheWriteTokens = delta.cacheWriteTokens
+                usage = {
+                  inputTokens: delta.inputTokens,
+                  outputTokens: delta.outputTokens,
+                  ...cache,
+                }
                 yield {
                   type: 'usage',
                   runId,
@@ -329,6 +334,10 @@ export class ActLoop implements ActLoopApi {
               }
               if (delta.type === 'reasoning' && !isEmpty(delta.text))
                 yield { type: 'reasoning', runId, text: delta.text }
+              if (delta.type === 'continuation') {
+                if (continuation) throw new AppError('PROTOCOL', '模型重复返回延续状态')
+                continuation = delta.value
+              }
               if (delta.type === 'text') {
                 if (isNull(firstTextMs) && !isEmpty(delta.text))
                   firstTextMs = performance.now() - modelStarted
@@ -342,8 +351,24 @@ export class ActLoop implements ActLoopApi {
               throw new AppError('PROTOCOL', '模型响应未完整结束，程序没有执行')
             decoded = decoder.finish()
             for (const preview of decoded.events) yield { ...preview, runId }
+            // 先保存完整状态，再让已接受响应引用它；中断或协议拒绝都不能使状态进入历史。
+            const continuationRecord = continuation
+              ? await this.options.context.append(
+                  {
+                    kind: 'audit',
+                    title: 'model-continuation',
+                    body: JSON.stringify(continuation),
+                    sources: [audit.ref],
+                  },
+                  controller.signal
+                )
+              : undefined
             const accepted = await this.options.context.append(
-              { kind: 'assistant', body: received, sources: [audit.ref] },
+              {
+                kind: 'assistant',
+                body: received,
+                sources: [audit.ref, ...(continuationRecord ? [continuationRecord.ref] : [])],
+              },
               controller.signal
             )
             responseRef = accepted.ref

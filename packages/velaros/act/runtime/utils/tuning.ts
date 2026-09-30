@@ -6,6 +6,8 @@ export const ActRuntimeTuning = Object.freeze({
   deliveryScripts: 16,
   /** 专项工具在 runtime 分区中保留的事实目录上限。 */
   modelToolContextChars: 16000,
+  /** 原始状态中同类成功回执的汇总起点；模型展示另按实际编码大小选择。 */
+  receiptGroupCount: 9,
   /** 同一观察代码连续失败后暂停自动重跑的次数。 */
   observationFailures: 3,
   /** 请求与追踪材料默认字符上限。 */

@@ -11,7 +11,7 @@ declare module 'velaros:system-memory' {
 
   /** 按引用分页读原文：输入、源码、结果、笔记与材料都用它。
    */
-  export function read(input: MemoryReadInput): Promise<ContextContent>
+  export function read(input: MemoryReadInput): Promise<MemoryContent>
 
   /** 改自己的一份笔记，交回它的新版本。
    */
@@ -53,21 +53,19 @@ declare module 'velaros:system-memory' {
     readonly nextAfter: number | null
   }
 
-  /** 按引用读一页原文：ref 是目录里的引用（或它的 id），offset、limit 按 UTF-16 字符算，一页最多 60000 个字符。读取不续租、不重跑脚本。 */
+  /** 按引用读一页原文：ref 是目录里的引用（或它的 id），offset、limit 按 UTF-16 字符算，一页最多 60000 个字符。读取不续租、不重跑脚本。
+   * 补读执行结果中的字段时传展示给出的 pointer（JSON Pointer，以 / 开头，最多 4096 个字符）；字符串返回原文，其他值返回 JSON，offset 与 limit 针对选中字段。省略 pointer 时读整份归档。
+   */
   interface MemoryReadInput {
     readonly ref: string | ContextRef
+    readonly pointer?: string
     readonly offset?: number
     readonly limit?: number
   }
 
-  /**
-   * 读到的一页原文：text 从第 offset 个字符开始（按 UTF-16 算），totalChars 是整份正文的字符数，没读完就从 offset + text.length 接着读。
-   */
-  interface ContextContent {
-    readonly record: ContextRecord
-    readonly text: string
-    readonly totalChars: number
-    readonly offset: number
+  /** 读到的一页原文；有 pointer 时 text、offset、totalChars 属于选中字段，record 仍标识完整归档。字符串字段不带 JSON 引号，其他字段为 JSON。 */
+  interface MemoryContent extends ContextContent {
+    readonly pointer?: string
   }
 
   /**
@@ -154,25 +152,21 @@ declare module 'velaros:system-memory' {
   }
 
   /**
-   * 一份原文的元数据：sequence 是它在会话里的序号，chars 是正文字符数，sources 是它引用的原文，createdAt 是 ISO 时间；正文按 ref 另读。
+   * 读到的一页原文：text 从第 offset 个字符开始（按 UTF-16 算），totalChars 是整份正文的字符数，没读完就从 offset + text.length 接着读。
    */
-  interface ContextRecord {
-    readonly ref: ContextRef
-    readonly sequence: number
-    readonly kind: ContextRecordKind
-    readonly title: string
-    readonly objectId: string
-    readonly chars: number
-    readonly sources: readonly ContextRef[]
-    readonly createdAt: string
+  interface ContextContent {
+    readonly record: ContextRecord
+    readonly text: string
+    readonly totalChars: number
+    readonly offset: number
   }
 
   /**
-   * 执行结果的自动展示期限：成功业务回合数（1 到 32），或者 'task' 表示到任务结束。
+   * 执行结果的自动展示期限：成功业务回合数（1 到 32）；'segment' 保留到该结果随历史封段，'task' 保留到任务结束。主动释放仍立即生效，正文展示受上下文容量约束。
    */
-  type ScriptRetention = number | 'task'
+  type ScriptRetention = number | 'segment' | 'task'
 
-  /** 执行结果续租了：remainingTurns 是还会自动展示多少个成功回合（task 表示到任务结束）；executed 为假，脚本没有重跑。 */
+  /** 执行结果续租了：remainingTurns 是还会自动展示多少个成功回合，segment 表示到该结果随历史封段，task 表示到任务结束；executed 为假，脚本没有重跑。 */
   interface ResultRetained {
     readonly ref: string
     readonly remainingTurns: ScriptRetention
@@ -184,6 +178,20 @@ declare module 'velaros:system-memory' {
     readonly ref: string
     readonly released: true
     readonly executed: false
+  }
+
+  /**
+   * 一份原文的元数据：sequence 是它在会话里的序号，chars 是正文字符数，sources 是它引用的原文，createdAt 是 ISO 时间；正文按 ref 另读。
+   */
+  interface ContextRecord {
+    readonly ref: ContextRef
+    readonly sequence: number
+    readonly kind: ContextRecordKind
+    readonly title: string
+    readonly objectId: string
+    readonly chars: number
+    readonly sources: readonly ContextRef[]
+    readonly createdAt: string
   }
 
   /**

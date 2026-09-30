@@ -161,14 +161,65 @@ function renderBlock(
       if (!selected || !isObject(selected)) return reference('view-budget', selection)
       const entries = Object.entries(selected)
       const share = Math.floor(cap / Math.max(1, entries.length))
-      selected = Object.fromEntries(
+      const fields = Object.fromEntries(
         entries.map(([key, value]) => [
           key,
           JSON.stringify(value).length <= share
             ? value
-            : { representation: 'reference', rawRef: ref, chars: JSON.stringify(value).length },
+            : {
+                representation: 'reference',
+                rawRef: ref,
+                pointer: view.paths
+                  ? undefined
+                  : `${item.pointer}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`,
+                chars: JSON.stringify(value).length,
+              },
         ])
       )
+      // 小字段保留原值，长文本使用剩余预算展示完整行；片段与原值以引用及字段路径区分。
+      const textFields = view.paths
+        ? []
+        : entries.filter(([, value]) => isString(value) && JSON.stringify(value).length > share)
+      for (const [position, [key, value]] of textFields.entries()) {
+        if (!isString(value)) continue
+        const used = stringify(fields).length
+        const fieldCap = used + Math.floor(Math.max(0, cap - used) / (textFields.length - position))
+        const original = fields[key]
+        fields[key] = value
+        if (stringify(fields).length <= fieldCap) continue
+        fields[key] = original
+        let best = original
+        let low = 1
+        let high = Math.min(value.length - 1, cap)
+        while (low <= high) {
+          const mid = Math.floor((low + high) / 2)
+          const rendered = renderBlock(
+            { key, value, chars: JSON.stringify(value).length, options: { type: 'text' } },
+            index,
+            { edge: view.edge },
+            ref,
+            mid,
+            summaries,
+            taskRevision
+          )
+          if (!rendered.bodyIncluded) {
+            low = mid + 1
+            continue
+          }
+          fields[key] = {
+            ...original,
+            representation: 'excerpt',
+            text: rendered.text,
+            selection: rendered.selection,
+          }
+          if (stringify(fields).length <= fieldCap) {
+            best = fields[key]
+            low = mid + 1
+          } else high = mid - 1
+        }
+        fields[key] = best
+      }
+      selected = fields
       text = stringify(selected)
       if (text.length > cap) return reference('view-budget', selection)
     }
@@ -231,18 +282,36 @@ export function projectOutputs(
     blocks.pop()
     omittedBlocks++
   }
-  for (let i = 0; i < blocks.length; i++) {
+  const expand = (i: number, budget: number) => {
     const { block, index, view } = ordered[i]!
-    const remaining = Math.max(0, allocatedChars - encode().length)
-    let budget = block.options.required ? remaining : Math.floor(remaining / (blocks.length - i))
     const previous = blocks[i]!
-    for (let attempt = 0; attempt < 16; attempt++) {
-      blocks[i] = renderBlock(block, index, view, ref, budget, summaries, taskRevision)
-      if (encode().length <= allocatedChars) break
-      blocks[i] = previous
-      budget = Math.floor(budget / 2)
+    blocks[i] = renderBlock(block, index, view, ref, budget, summaries, taskRevision)
+    if (encode().length <= allocatedChars) return
+    // 转义和省略元数据也占预算；在实际编码后的总长内找片段，避免一次减半空出大量空间。
+    let low = 0
+    let high = budget - 1
+    let best = previous
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2)
+      blocks[i] = renderBlock(block, index, view, ref, mid, summaries, taskRevision)
+      if (encode().length <= allocatedChars) {
+        best = blocks[i]!
+        low = mid + 1
+      } else high = mid - 1
     }
+    blocks[i] = best
   }
+  for (let i = 0; i < blocks.length; i++) {
+    const remaining = Math.max(0, allocatedChars - encode().length)
+    expand(
+      i,
+      ordered[i]!.block.options.required ? remaining : Math.floor(remaining / (blocks.length - i))
+    )
+  }
+  // 短块、显式上限与引用卡用不完的份额，按既定优先级返还给尚未完整展示的块。
+  // 保留其他块的现有正文，只在同一全局预算内扩展；原值与展示策略不变。
+  for (let i = 0; i < blocks.length && encode().length < allocatedChars; i++)
+    if (blocks[i]!.representation !== 'full') expand(i, allocatedChars)
   let prompt = encode()
   if (prompt.length > allocatedChars) {
     prompt = ''

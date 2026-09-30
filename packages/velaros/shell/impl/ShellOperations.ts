@@ -20,7 +20,7 @@ import type {
 } from '../types/shell-command.js'
 import { beforeCommand } from '../utils/effects.js'
 import { clampPositive } from '../utils/limits.js'
-import { environmentOf, runResult, taskOf } from '../utils/results.js'
+import { commandDiagnostic, environmentOf, runResult, taskOf } from '../utils/results.js'
 
 import type { ShellCommandApprovalApi } from './ShellCommandApproval.js'
 import { shellCommandApproval } from './ShellCommandApproval.js'
@@ -43,6 +43,7 @@ export interface ShellOperationsApi {
    * @AgentView
    * 跑一条命令，等它跑完交回全部输出。background 或 interactive 的命令立刻返回，之后用 listTasks 看它跑到哪了；interactive 一定跑在后台，它要开着等用户在控制台里输入。
    * 长驻命令不传 background 也会自动转后台，回执里 backgroundProcess.autoStarted 为真。
+   * 非空 stderr 或命令失败另附诊断，输出摘录最多 1600 字符，超出保留首尾并标记省略；stderr 是日志，成败以进程状态为准。
    * @OperationEffect write
    */
   run(input: ShellRunInput, ctx: ShellOperationContext): Promise<ShellRunResult>
@@ -108,6 +109,8 @@ export class ShellOperations implements ShellOperationsApi {
         },
         ctx.abortSignal
       )
+      const diagnostic = commandDiagnostic(result)
+      if (diagnostic) ctx.recordDiagnostic?.(diagnostic)
       if (result.cleanupIncomplete)
         throw new AppError('OBSERVATION_UNSETTLED', '观察命令进程尚未完全收束，必须核对后再继续')
       const shaped = runResult(result)
@@ -149,6 +152,8 @@ export class ShellOperations implements ShellOperationsApi {
       plan.isDangerous,
       ctx.abortSignal
     )
+    const diagnostic = commandDiagnostic(result)
+    if (diagnostic) ctx.recordDiagnostic?.(diagnostic)
     const shaped = runResult(result)
     if (result.backgroundProcess && !isNull(result.backgroundProcess.taskId)) {
       const started: NonNullable<ShellRunResult['backgroundProcess']> = {

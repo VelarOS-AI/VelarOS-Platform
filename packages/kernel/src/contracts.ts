@@ -30,6 +30,7 @@ export type {
 export type * from './types/kernel.js'
 export type {
   ModelContextStatus,
+  ModelContinuation,
   ModelDriverLimits,
   ModelHistoryMessage,
   ModelImage,

@@ -29,7 +29,7 @@ output(state, {
 | --- | --- | --- |
 | text | 字符串 | 选择行段或完整首尾行；单行放不下时使用引用 |
 | code | 代码字符串 | lines 为一基闭区间；保留范围说明，不把半截代码当完整源码 |
-| json | JSON 值 | paths 为 JSON Pointer；缺失路径显式列出；超大字段可以引用化 |
+| json | JSON 值 | paths 为 JSON Pointer；缺失路径显式列出；短字段保留，长文本字段共享剩余预算，以带原值引用、字段路径和完整行范围的 excerpt 展示；完整行放不下时保留引用 |
 | list | 数组 | maxItems 和 edge 选择头部/尾部完整条目，记录总数与范围 |
 | image | Kernel image-data 或带 ref 的对象 | 原生附件与文字引用分开；引用模式可卸载原生图片 |
 | file | 带 ref 的元信息对象 | 展示 name/mediaType/bytes/ref；正文通过已有授权读取入口召回 |

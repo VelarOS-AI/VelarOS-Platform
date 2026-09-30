@@ -57,6 +57,9 @@ export async function shutdown() {
 - 作用域在空间端口：`resolveCwd` 要对越界的目录抛 `PERMISSION`，它排在确认与执行之前；`commandPolicy` 给确认文案里「在哪儿执行」和风险分类，宿主靠 `:dangerous` 后缀认出硬门。
 - 只有成片毁掉、找不回来的危险命令（递归删除目录、清掉未跟踪文件、强推覆盖远端、抹盘格式化这类）经 `approval` 问，确认文案只有一行，每次都问、不可记忆；被拒时一个进程都不起，拒绝原样抛出。别的命令直接跑，长驻命令自动转后台。
 - 命令自己失败（非零退出、超时、取消）不抛错，看回执的 `success`；超时钳到 `ShellLimits.timeoutMs`，输出不折叠，超过 `ShellLimits.outputChars` 只留末尾并标 `truncated`。
+- 挂载到 ScriptAct 时，非空 stderr 与失败状态经 `recordDiagnostic` 独立写入调用回执，即使脚本只输出 stdout，运行时仍能投影诊断。正文最多摘录 `ShellLimits.diagnosticChars` 个字符，保留首尾并明确省略；普通 stderr 日志保持原有成功与退出码，诊断不判断子命令是否成功。
+- `command -v` / `command -V` 的程序位置查询，以及 Nginx 的配置检查、帮助、版本与信号命令，默认等到退出再返回结果；含服务启动的组合命令仍自动转后台，显式 `background` 或 `interactive` 沿用调用方选择。
+- Redis 明确以最后一个 `--daemonize yes` 自行转后台时，启动命令及同一段里的后续检查默认等到退出，直接返回最终输出与退出码；组合命令中另有前台服务时仍按长驻命令处理。
 - 观察模式只跑前台、不危险的命令（否则抛 `OBSERVATION_EFFECT_DENIED`），只走端口的 `runObservationCommand`，端口没给就抛 `OBSERVATION_SHELL_UNAVAILABLE`，不退回普通执行。
 - 挑了本机没有的 `shell` 在起进程之前抛 `VALIDATION`，不换默认 shell 照跑；一个能用的 shell 都找不到抛 `SHELL_UNAVAILABLE`。
 - 后台任务按 `sessionId` 登记和核对归属，不给就不隔离；任务表在本机宿主的内存里，`dispose()` 停掉它起的、还在跑的后台进程。

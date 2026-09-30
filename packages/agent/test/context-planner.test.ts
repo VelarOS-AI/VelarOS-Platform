@@ -12,6 +12,8 @@ test('INV-40 calibration starts at the raw estimate, learns only from text reque
   planner.measure({ text: 10_000, images: 0 }, 2_000)
   // 图片的真实开销因供应商而异，带图请求不取样
   planner.measure({ text: 10_000, images: 2_000 }, 9_000)
+  // 不透明推理状态可能只被供应商部分采用，不能拿它误学成文本密度。
+  planner.measure({ text: 10_000, images: 0, opaque: 5_000 }, 9_000)
   expect(planner.calibration().textRatio).toBeCloseTo(0.3 * ContextPlanTuning.calibrationMargin)
   // 实测比原始估算还大时不放大：原始估算是上界
   planner.measure({ text: 1_000, images: 0 }, 5_000)

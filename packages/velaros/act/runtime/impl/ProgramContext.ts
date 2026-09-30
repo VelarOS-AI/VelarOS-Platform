@@ -32,7 +32,7 @@ import type {
   ScriptProgramVersion,
 } from '../types/runtime.js'
 import type { ScriptSubmissionReceipt } from '../types/session.js'
-import { projectMaterial } from '../utils/materials.js'
+import { executionMaterial, projectMaterial } from '../utils/materials.js'
 import {
   programContentChange,
   programContentText,
@@ -107,7 +107,9 @@ export interface ProgramContextApi {
   }>
   /** 显式释放材料可见性，原始记录保持。 */
   release(ref: string, signal?: AbortSignal): Promise<ResultReleased>
-  /** 结束逻辑任务的 task 期限。 */
+  /** 释放已随历史封段的 segment 租约，不影响显式轮数和 task 租约。 */
+  endSegment(refs: readonly string[], signal: AbortSignal): Promise<void>
+  /** 结束逻辑任务的 segment 和 task 期限。 */
   endTask(): Promise<void>
   /** 历史投影进一步裁剪后，只确认实际携带正文的引用。 */
   delivered(frameId: string, refs: readonly string[], signal: AbortSignal): Promise<void>
@@ -485,6 +487,7 @@ export class ProgramContext implements ProgramContextApi {
   ): Promise<void> {
     if (
       turns !== 'task' &&
+      turns !== 'segment' &&
       (!Number.isSafeInteger(turns) || turns < 1 || turns > ScriptLeaseLimits.maxTurns)
     )
       throw new AppError('VALIDATION', '结果租约超出范围')
@@ -492,14 +495,18 @@ export class ProgramContext implements ProgramContextApi {
       ...state,
       leases: [
         ...state.leases.filter(
-          (item) => (item.task || item.expiresAfter > state.completedTurns) && item.ref !== ref.id
+          (item) =>
+            (item.task || item.segment || item.expiresAfter > state.completedTurns) &&
+            item.ref !== ref.id
         ),
         {
           ref: ref.id,
           sourceRef: source.id,
           executionId,
-          expiresAfter: turns === 'task' ? state.completedTurns : state.completedTurns + turns,
+          expiresAfter:
+            typeof turns === 'number' ? state.completedTurns + turns : state.completedTurns,
           task: turns === 'task' ? true : undefined,
+          segment: turns === 'segment' ? true : undefined,
           leaseId: crypto.randomUUID(),
         },
       ],
@@ -567,8 +574,24 @@ export class ProgramContext implements ProgramContextApi {
     return { ref, released: true as const, executed: false as const }
   }
 
+  public async endSegment(refs: readonly string[], signal: AbortSignal): Promise<void> {
+    const retired = new Set(refs)
+    if (!retired.size) return
+    await this.update(
+      (state) => ({
+        ...state,
+        leases: state.leases.filter((item) => !item.segment || !retired.has(item.ref)),
+      }),
+      [],
+      signal
+    )
+  }
+
   public async endTask(): Promise<void> {
-    await this.update((state) => ({ ...state, leases: state.leases.filter((item) => !item.task) }))
+    await this.update((state) => ({
+      ...state,
+      leases: state.leases.filter((item) => !item.task && !item.segment),
+    }))
   }
 
   public async project(
@@ -594,7 +617,7 @@ export class ProgramContext implements ProgramContextApi {
     const snapshot = selected ? { ...selected.metadata, records: selected.records } : null
     const frameId = crypto.randomUUID()
     const allVisible = state.leases.filter(
-      (item) => item.task || item.expiresAfter > state.completedTurns
+      (item) => item.task || item.segment || item.expiresAfter > state.completedTurns
     )
     const visible = allVisible.slice(-Math.max(1, Math.min(64, Math.floor(maxChars / 768))))
     const excerptChars = Math.max(
@@ -722,16 +745,7 @@ export class ProgramContext implements ProgramContextApi {
               .filter((block) => !block.bodyIncluded)
               .map((block) => block.pointer),
           }
-        : projectMaterial(
-            JSON.stringify({
-              ...archived,
-              dependencies: undefined,
-              output: undefined,
-              rawValue: undefined,
-            }),
-            result.record.ref,
-            excerptChars
-          )
+        : projectMaterial(executionMaterial(archived), result.record.ref, excerptChars)
       for (const block of output?.blocks ?? [])
         if (block.options.required) {
           const rendered = display?.blocks.find((item) => item.key === block.key)
@@ -752,7 +766,11 @@ export class ProgramContext implements ProgramContextApi {
         sourceRef: lease.sourceRef,
         source: sourceText.slice(0, excerptChars),
         sourceTruncated: sourceText.length > excerptChars || source.text.length < source.totalChars,
-        remainingTurns: lease.task ? 'task' : lease.expiresAfter - state.completedTurns,
+        remainingTurns: lease.task
+          ? 'task'
+          : lease.segment
+            ? 'segment'
+            : lease.expiresAfter - state.completedTurns,
         observedAt: result.record.createdAt,
         structuredOutput: display ? true : undefined,
         ...projected,
@@ -1116,6 +1134,7 @@ export class ProgramContext implements ProgramContextApi {
             (sum, item) => sum + item.text.length + item.source.length,
             0
           ),
+          leasedResultSources: results.reduce((sum, item) => sum + item.size.chars, 0),
         },
         largest: results
           .toSorted((a, b) => b.size.chars - a.size.chars)
@@ -1204,7 +1223,7 @@ export class ProgramContext implements ProgramContextApi {
                 ? 0
                 : 1),
           }))
-          .filter((item) => item.task || item.expiresAfter > completedTurns)
+          .filter((item) => item.task || item.segment || item.expiresAfter > completedTurns)
         const jobs = (state.jobs ?? []).filter(
           (job) =>
             ['queued', 'running', 'unknown'].includes(job.status) ||

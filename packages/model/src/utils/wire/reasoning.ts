@@ -29,6 +29,7 @@ const ReasoningCeilings: ReadonlyArray<{
   readonly model: RegExp
   readonly ceiling: ReasoningLevel
 }> = [
+  { model: /(?:^|\/)gpt-6-(?:sol|astra|luna)(?:$|-)/i, ceiling: 'max' },
   { model: /(?:^|\/)gpt-5\.[245](?:-\d{4}-\d{2}-\d{2})?$/i, ceiling: 'xhigh' },
   { model: /(?:^|\/)gpt-5\.1-codex-max(?:$|-)/i, ceiling: 'xhigh' },
   { model: /claude-(?:opus|sonnet|haiku)-(?:4[.-][67]|5)(?:$|\D)/i, ceiling: 'max' },
@@ -37,12 +38,21 @@ const ReasoningCeilings: ReadonlyArray<{
 /** 思考参数被拒时报错里会提到的字样。 */
 const ReasoningRejectionPattern = /reason|effort|think|budget/i
 
+/** 输入状态、签名和上下文策略错误不能靠降低思考档位修复。 */
+const ReasoningStateRejectionPattern =
+  /encrypt|decrypt|signature|reasoning[_. ]context|reasoning.{0,80}item|item.{0,80}reasoning|"param"\s*:\s*"input(?:[.["])/i
+
+/** 只给思考选项做退档；供应商拒绝已归档状态时保留原错误与当前档位。 */
+function rejectedReasoningOption(message: string): boolean {
+  return ReasoningRejectionPattern.test(message) && !ReasoningStateRejectionPattern.test(message)
+}
+
 /** SDK 抛的调用错误是不是因为思考参数被拒：400 / 422，且报错提到思考相关的字段。 */
 export function isReasoningRejection(error: unknown): boolean {
   return (
     APICallError.isInstance(error) &&
     [400, 422].includes(error.statusCode ?? 0) &&
-    ReasoningRejectionPattern.test(`${error.message} ${error.responseBody ?? ''}`)
+    rejectedReasoningOption(`${error.message} ${error.responseBody ?? ''}`)
   )
 }
 
@@ -50,7 +60,7 @@ export function isReasoningRejection(error: unknown): boolean {
 export async function isReasoningRejected(response: Response): Promise<boolean> {
   if (![400, 422].includes(response.status)) return false
   try {
-    return ReasoningRejectionPattern.test(await response.clone().text())
+    return rejectedReasoningOption(await response.clone().text())
   } catch (error) {
     Log.tag('AiSdkModelDriver').debug('读取被拒响应正文失败，按不是思考参数被拒处理', { error })
     return false
@@ -122,6 +132,9 @@ export function createReasoningProviderOptions(
             openai: {
               reasoningEffort: fitReasoningLevel(effective, model),
               reasoningSummary: 'auto',
+              ...(/(?:^|\/)gpt-6-(?:sol|astra|luna)(?:$|-)/i.test(model)
+                ? { forceReasoning: true }
+                : {}),
             },
           }
         : null
@@ -199,7 +212,7 @@ function createAnthropicThinkingOptions(
 
 /** 这个模型名看起来是不是 OpenAI 的推理模型。 */
 function matchesOpenAiReasoningModel(model: string): boolean {
-  return /(?:^|\/)(?:o[34](?:-|$)|gpt-[45]|gpt-oss)/i.test(model)
+  return /(?:^|\/)(?:o[34](?:-|$)|gpt-[456]|gpt-oss)/i.test(model)
 }
 
 /** 这个模型名看起来是不是支持 thinking 的 Claude。 */

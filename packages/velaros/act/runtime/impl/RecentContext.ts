@@ -9,7 +9,8 @@ import { Log } from '@velaros-ai/core'
 import { isNull, isUndefined } from '@velaros-ai/core'
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { ModelHistoryMessage } from '@velaros-ai/kernel'
+import type { ModelContinuation, ModelHistoryMessage } from '@velaros-ai/kernel'
+import { modelRequestEncoder } from '@velaros-ai/kernel'
 
 import { ContextPatchLimits } from '../../system/contract/constants.js'
 import type {
@@ -27,7 +28,7 @@ import type {
   VolumeNarrativeRecord,
   VolumeView,
 } from '../types/segment.js'
-import { memoryOutput } from '../utils/context-memory.js'
+import { memoryFeedbackHistory, memoryOutput } from '../utils/context-memory.js'
 import { programFailure } from '../utils/program-context.js'
 import {
   archivedJson,
@@ -221,6 +222,7 @@ export class RecentContext implements RecentContextApi {
       { kind: 'assistant' },
       { titlePrefix: 'script:', titleSuffix: ':result' },
       ...segment.carried.map((refId) => ({ refId })),
+      { kind: 'audit', title: 'model-continuation' },
     ])
     const reset = this.reset(state)
     const carried = new Set(segment.carried)
@@ -236,12 +238,35 @@ export class RecentContext implements RecentContextApi {
     const messages: ModelHistoryMessage[] = []
     const items: Array<SegmentHistory['items'][number]> = []
     const fresh: SegmentEntry[] = []
+    const continuations = new Map(
+      (state?.records ?? [])
+        .filter(
+          (record) =>
+            record.kind === 'audit' &&
+            record.title === 'model-continuation' &&
+            record.sequence > reset
+        )
+        .map((record) => [record.ref.id, record])
+    )
     let response = ''
     for (const record of candidates) {
       signal.throwIfAborted()
       if (record.kind !== 'assistant' && (await this.observation(record.objectId))) continue
       const role = record.kind === 'assistant' ? ('assistant' as const) : ('user' as const)
       const entry = frozen.get(record.ref.id)
+      const continuationRecord =
+        role === 'assistant'
+          ? record.sources
+              .filter((ref) => ref.sessionId === this.id)
+              .map((ref) => continuations.get(ref.id))
+              .find((item) => item && item.sequence < record.sequence)
+          : undefined
+      let continuation: Optional<ModelContinuation>
+      if (continuationRecord && (!entry || entry.continuation?.id === continuationRecord.ref.id)) {
+        const raw = await this.storage.get(this.id, continuationRecord.objectId)
+        if (isNull(raw)) throw new AppError('NOT_FOUND', '模型延续状态缺失')
+        continuation = modelRequestEncoder.continuation(JSON.parse(raw))
+      }
       const current = leased.get(record.ref.id)
       // 结果的正文只在租约有效时出现；租约到期或释放后这一条改成引用卡，其余逐字复用
       const item = { ref: record.ref.id, sequence: record.sequence, role }
@@ -253,8 +278,15 @@ export class RecentContext implements RecentContextApi {
       if (entry) {
         const content = await this.storage.get(this.id, entry.objectId)
         if (isNull(content)) throw new AppError('NOT_FOUND', '段内冻结的历史正文缺失')
-        messages.push({ role, content })
-        items.push({ ...item, bodyIncluded: true, representation: frozenRepresentation(content) })
+        messages.push(
+          role === 'assistant' && continuation ? { role, content, continuation } : { role, content }
+        )
+        items.push({
+          ...item,
+          bodyIncluded: true,
+          representation: entry.continuation ? 'full' : frozenRepresentation(content),
+          ...(entry.feedback ? { feedback: entry.feedback } : {}),
+        })
         if (role === 'assistant') response = content
         continue
       }
@@ -264,26 +296,54 @@ export class RecentContext implements RecentContextApi {
         role,
         current,
         cap,
-        carried.has(record.ref.id) || !response.includes(current?.source ?? '')
+        carried.has(record.ref.id) || !response.includes(current?.source ?? ''),
+        Boolean(continuation)
       )
       if (!rendered) {
         messages.push({ role, content: historyReference(record) })
         items.push({ ...item, bodyIncluded: false, representation: 'reference' })
         continue
       }
-      const objectId = await this.storage.put(this.id, rendered.content)
+      // 诊断由宿主独立附加，不受脚本 output 筛选；整条放不下时留给当前帧完整展示。
+      const { content, feedback } = memoryFeedbackHistory(
+        rendered.content,
+        current?.feedback ?? [],
+        cap
+      )
+      const delivered = feedback.length ? { feedback } : {}
+      const objectId = await this.storage.put(this.id, content)
+      const completeContinuation = continuation && rendered.representation === 'full'
       fresh.push({
         ref: record.ref.id,
         sequence: record.sequence,
         role,
         objectId,
-        chars: rendered.content.length,
+        chars: content.length,
+        ...delivered,
+        ...(completeContinuation ? { continuation: continuationRecord!.ref } : {}),
       })
-      messages.push({ role, content: rendered.content })
-      items.push({ ...item, bodyIncluded: true, representation: rendered.representation })
-      if (role === 'assistant') response = rendered.content
+      messages.push(
+        role === 'assistant' && completeContinuation
+          ? { role, content, continuation }
+          : { role, content }
+      )
+      items.push({
+        ...item,
+        bodyIncluded: true,
+        representation: rendered.representation,
+        ...delivered,
+      })
+      if (role === 'assistant') response = content
     }
-    // 段内历史的最后一条是可缓存前缀的末尾
+    // 活跃租约到期时会改写结果正文；额外保存其之前已退役结果的前缀。
+    // 选 user 结果的结尾，后续帧仍能通过隐式的早期消息边界查到旧缓存点。
+    const firstLeased = items.findIndex((item) => item.role === 'user' && leased.has(item.ref))
+    const stableBoundary = items
+      .slice(0, firstLeased < 0 ? items.length : firstLeased)
+      .findLastIndex((item) => item.role === 'user')
+    if (stableBoundary >= 0)
+      messages[stableBoundary] = { ...messages[stableBoundary], cacheBreakpoint: true }
+    // 历史末尾另留断点，覆盖没有租约变更的连续请求。
     if (!isEmpty(messages))
       messages[messages.length - 1] = { ...messages.at(-1)!, cacheBreakpoint: true }
     return { messages, items, fresh }
@@ -295,11 +355,14 @@ export class RecentContext implements RecentContextApi {
     role: 'user' | 'assistant',
     current: Optional<SegmentLeasedResult>,
     cap: number,
-    withSource: boolean
+    withSource: boolean,
+    continuation: boolean
   ): Promise<Optional<{ content: string; representation: 'full' | 'excerpt' }>> {
     if (role === 'assistant') {
       const content = await this.context.read(record.ref, { limit: cap })
       const representation = content.totalChars > content.text.length ? 'excerpt' : 'full'
+      if (continuation && representation === 'full')
+        return { content: content.text, representation }
       return {
         content: `${JSON.stringify({
           origin: 'assistant-script',

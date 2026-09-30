@@ -1,4 +1,4 @@
-import type { ContextRef } from '@velaros-ai/context'
+import type { ContextFeedback, ContextRef } from '@velaros-ai/context'
 import type { ModelHistoryMessage } from '@velaros-ai/kernel'
 
 import type { VolumeNarrative } from '../../system/types/history.js'
@@ -12,6 +12,16 @@ export interface SegmentEntry {
   /** 冻结正文所在的存储对象。 */
   readonly objectId: string
   readonly chars: number
+  /** 完整原始 assistant 正文所关联的供应商状态；随本历史条目一起退役。 */
+  readonly continuation?: ContextRef
+  /** 随这条冻结正文完整交付的调用诊断；指纹同时绑定身份、状态、效果与正文。 */
+  readonly feedback?: readonly SegmentFeedback[]
+}
+
+/** 完整诊断的交付身份，防止用旧状态或相同文字的另一条调用替代当前回执。 */
+export interface SegmentFeedback {
+  readonly id: string
+  readonly fingerprint: string
 }
 
 /** 为什么开始新的一段或重建底座。 */
@@ -135,6 +145,7 @@ export interface SegmentHistory {
     readonly role: 'user' | 'assistant'
     readonly bodyIncluded: boolean
     readonly representation: 'full' | 'excerpt' | 'reference'
+    readonly feedback?: readonly SegmentFeedback[]
   }>
   readonly fresh: readonly SegmentEntry[]
 }
@@ -146,4 +157,5 @@ export interface SegmentLeasedResult {
   readonly text?: string
   readonly source?: string
   readonly structuredOutput?: boolean
+  readonly feedback?: readonly ContextFeedback[]
 }

@@ -3,7 +3,9 @@
  */
 
 import { isEmpty, isNotUndefined } from '@velaros-ai/core'
+import type { InvocationReceipt } from '@velaros-ai/kernel'
 
+import { ShellLimits } from '../contract/constants.js'
 import type {
   ShellBackgroundTaskRecord,
   ShellCommandResult,
@@ -14,6 +16,24 @@ import type {
 } from '../types/shell-command.js'
 
 import { plainTerminalText } from './output.js'
+
+/** stderr 是独立的观察材料；不猜日志严重程度，也不把有 stderr 的成功进程改判失败。 */
+export function commandDiagnostic(result: ShellCommandResult): InvocationReceipt['diagnostic'] {
+  if (result.success && !result.stderr.trim()) return undefined
+  const channel = result.stderr.trim() ? 'stderr' : 'stdout'
+  const text = result[channel]
+  const half = ShellLimits.diagnosticChars / 2
+  const truncated = result.truncated || text.length > ShellLimits.diagnosticChars
+  const excerpt =
+    text.length > ShellLimits.diagnosticChars
+      ? `${plainTerminalText(text.slice(0, half))}\n[…省略 ${text.length - ShellLimits.diagnosticChars} 字符…]\n${plainTerminalText(text.slice(-half))}`
+      : plainTerminalText(text)
+  return {
+    code: result.success ? 'SHELL_STDERR' : 'SHELL_COMMAND_FAILED',
+    message: `进程状态：success=${result.success}; exitCode=${result.exitCode}; signal=${result.signal}; timedOut=${result.timedOut}; aborted=${result.aborted}。\n${channel} 观察数据（日志内容不代表整条命令失败；完整结果在调用回执中）：\n${excerpt}`,
+    ...(truncated ? { truncated: true } : {}),
+  }
+}
 
 /** 宿主的完整回执里模型用得上的那几项：命令、目录、成败、退出码与信号、超时与取消、耗时、全部输出。 */
 export function runResult(result: ShellCommandResult): ShellRunResult {

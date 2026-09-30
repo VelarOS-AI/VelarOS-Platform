@@ -42,6 +42,79 @@ describe('前缀命令', () => {
   })
 })
 
+describe('服务检查命令', () => {
+  test('Redis 自行 daemonize 的启动命令等到退出，后续检查直接返回', () => {
+    for (const command of [
+      'redis-server --daemonize yes',
+      'env redis-server redis.conf --port 6399 --daemonize yes && redis-cli ping',
+      'redis-server --daemonize no --daemonize yes',
+    ]) {
+      expect(shellCommandPolicy.analyze(command).shouldStartInBackground).toBe(false)
+    }
+    for (const command of [
+      'redis-server',
+      'redis-server --daemonize no',
+      'redis-server --daemonize yes --daemonize no',
+      'redis-server --daemonize yes && redis-server --port 6399',
+      'redis-server --daemonize yes &',
+    ]) {
+      expect(shellCommandPolicy.analyze(command).shouldStartInBackground).toBe(true)
+    }
+  })
+
+  test('command 的名称查询留在前台，实际执行服务仍转后台', () => {
+    for (const command of [
+      'command -v redis-server || true; command -v redis-cli || true; cat .mocharc.yml',
+      'command -V postgres',
+      'command -pv redis-server',
+      'command -p -V -- nginx',
+      'builtin command -v redis-server',
+      'env command -v redis-server',
+      'command -v env redis-server',
+    ]) {
+      expect(shellCommandPolicy.analyze(command).shouldStartInBackground).toBe(false)
+    }
+    for (const command of [
+      'command redis-server',
+      'command -p redis-server',
+      'command -- redis-server',
+      'command -v redis-server && redis-server',
+    ]) {
+      expect(shellCommandPolicy.analyze(command).shouldStartInBackground).toBe(true)
+    }
+    expect(shellCommandPolicy.analyze('command -p rm -rf directory').isDangerous).toBe(true)
+    expect(shellCommandPolicy.analyze('command -- rm -rf directory').isDangerous).toBe(true)
+  })
+
+  test('Nginx 的配置检查、帮助、版本与信号命令在前台完成', () => {
+    for (const command of [
+      'nginx -t',
+      'nginx -qt',
+      'nginx -T',
+      'nginx -v',
+      'nginx -V',
+      'nginx -h',
+      'nginx -?',
+      'nginx -s reload',
+      'nginx -sreload',
+      'env LANG=C /usr/sbin/nginx -c /tmp/nginx.conf -t',
+      'set -eu\nnginx -t\ncurl http://127.0.0.1:8080/health',
+    ]) {
+      expect(shellCommandPolicy.analyze(command).shouldStartInBackground).toBe(false)
+    }
+    for (const command of [
+      'nginx',
+      'nginx -g "daemon off;"',
+      'nginx -c -t',
+      'nginx -c-t',
+      'nginx -t && nginx -g "daemon off;"',
+      'nginx -t &',
+    ]) {
+      expect(shellCommandPolicy.analyze(command).shouldStartInBackground).toBe(true)
+    }
+  })
+})
+
 describe('并发判定', () => {
   test('optIn（缺省）要求显式 parallel: true；关掉 optIn 时只有显式 parallel: false 才拒绝', () => {
     expect(shellCommandPolicy.isParallelSafe({ command: 'ls', parallel: true })).toBe(true)

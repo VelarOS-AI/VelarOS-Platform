@@ -207,9 +207,15 @@ test('INV-42 persistent faults in a segment run pressure maintenance once and as
   await service.close()
 })
 
-test('INV-45 measured usage reaches the host with the cache reads and writes the provider reported', async () => {
+test('INV-45 measured usage reaches the host and persisted response with reported cache reads and writes', async () => {
   const usageOf = async (usage: Record<string, number>) => {
     const f = runFixture()
+    const decisions: Array<Record<string, unknown>> = []
+    const append = f.context.append.bind(f.context)
+    f.context.append = async (input, signal) => {
+      if (input.title === 'model-response') decisions.push(JSON.parse(input.body))
+      return append(input, signal)
+    }
     f.options.model = {
       ...f.options.model,
       async *stream() {
@@ -222,6 +228,8 @@ test('INV-45 measured usage reaches the host with the cache reads and writes the
     const events = []
     for await (const event of service.submit('work')) events.push(event)
     await service.close()
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0]!.usage).toEqual({ inputTokens: 900, outputTokens: 20, ...usage })
     return events.filter((event) => event.type === 'usage')
   }
   expect(await usageOf({ cacheReadTokens: 600, cacheWriteTokens: 100 })).toEqual([
@@ -243,6 +251,72 @@ test('INV-45 measured usage reaches the host with the cache reads and writes the
     outputTokens: 20,
   })
   expect('cacheReadTokens' in plain!).toBe(false)
+})
+
+test('INV-46 continuation is linked only to an accepted complete response and never emitted to the host', async () => {
+  for (const mode of [
+    'accepted',
+    'rejected',
+    'length',
+    'wrong-model',
+    'duplicate',
+    'write-failed',
+  ]) {
+    const f = runFixture()
+    let executed = 0
+    f.options.execution.invoke = async () => {
+      executed++
+    }
+    const value = {
+      model: mode === 'wrong-model' ? 'other' : 'fixture',
+      format: 'fixture-v1',
+      data: 'opaque-fixture',
+      tokens: 40,
+    }
+    f.options.model = {
+      ...f.options.model,
+      async *stream() {
+        yield { type: 'text', text: 'done' }
+        yield { type: 'continuation', value }
+        if (mode === 'duplicate') yield { type: 'continuation', value }
+        yield { type: 'finish', reason: mode === 'length' ? 'length' : 'stop' }
+      },
+    }
+    if (mode === 'rejected')
+      f.options.protocol = {
+        open: () => ({
+          instructions: 'fixture',
+          reset() {},
+          push: () => [],
+          finish() {
+            throw Error('fixture protocol rejection')
+          },
+        }),
+      }
+    if (mode === 'write-failed') {
+      const append = f.context.append.bind(f.context)
+      f.context.append = async (input, signal) => {
+        if (input.title === 'model-continuation') throw Error('fixture persistence failure')
+        return append(input, signal)
+      }
+    }
+    const service = createActRunService(f.options)
+    const events = []
+    for await (const event of service.submit('fixture')) events.push(event)
+    const state = (await f.store.load('fault'))!
+    const saved = state.records.filter((record) => record.title === 'model-continuation')
+    const accepted = state.records.filter((record) => record.kind === 'assistant')
+    expect(saved.length).toBe(mode === 'accepted' ? 1 : 0)
+    expect(accepted.length).toBe(mode === 'accepted' ? 1 : 0)
+    if (mode === 'accepted') {
+      expect(accepted[0]!.sources).toContainEqual(saved[0]!.ref)
+      expect(JSON.parse((await f.store.get('fault', saved[0]!.objectId))!)).toEqual(value)
+      expect(saved[0]!.sequence).toBeLessThan(accepted[0]!.sequence)
+    }
+    expect(JSON.stringify(events)).not.toContain('opaque-fixture')
+    expect(executed).toBe(0)
+    await service.close()
+  }
 })
 
 test('INV-43 reasoning reaches the host after its turn and never enters the context or the event journal', async () => {

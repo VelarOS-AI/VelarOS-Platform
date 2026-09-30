@@ -90,4 +90,5 @@ await startScriptWorker({ send: postToParent, onMessage: onParentMessage, exit: 
 - 能力调用期间停表，时限只算程序自己的计算；超时回 `TIMEOUT`，`signal` 触发回 `ABORTED`，停下时没落定的调用会被叫停。引擎只记账不回滚。
 - 源码、`blobs`、`input` 超过 `CodeSurfaceLimits` 直接拒（`check` 抛 `TOO_LARGE`，`run` 回 `failed.code` 为 `TOO_LARGE`），不截断照跑；返回值与日志超预算保留结尾，并在 `result.notices` 里说明。
 - `output` 调用时拍 JSON 快照，原值在 `outcome.output`，没调 `output` 时完整返回值在 `outcome.rawValue`；按 key 调展示、重新投影用 `scriptOutputs`，规则见 [脚本输出观察](../../docs/architecture/script-output-observation.md)。
+- 输出展示把转义与目录开销计入整体预算，超出时在该预算内选择完整行或完整条目；短块用不完的份额按既定优先级返还给尚未完整展示的块。结构化结果保留短字段，长文本字段共享剩余预算，片段标明完整行范围与原值 JSON Pointer。块优先级、显式展示上限与原值归档保持各自语义。
 - `nodeSubprocessCodeRunner` 要找得到 Node 可执行文件，在 Electron 里不执行、回 `RUNNER_CRASHED`；`NodeSubprocessRunnerIsReleaseReady` 恒为 `false`，部署环境的隔离边界由宿主验收。

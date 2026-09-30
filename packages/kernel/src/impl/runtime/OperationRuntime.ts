@@ -145,12 +145,26 @@ class OperationRuntime implements OperationRuntimeApi {
               descriptor.effects === 'none' ? 'none' : 'unknown'
             let declaredEffect = false
             let observation: InvocationReceipt['observation']
+            let diagnostic: InvocationReceipt['diagnostic']
             const attachments: ModelImage[] = []
             try {
               const invoke = prepared.mode === 'observe' && observe ? observe : run
               const context = {
                 invocation: prepared,
                 signal,
+                recordDiagnostic: (value: NonNullable<InvocationReceipt['diagnostic']>) => {
+                  if (!value || !isString(value.code) || !isString(value.message))
+                    throw new AppError('VALIDATION', '调用诊断必须包含分类码和文本')
+                  const truncated =
+                    value.truncated ||
+                    value.code.length > KernelTuning.operationDiagnosticCodeChars ||
+                    value.message.length > KernelTuning.operationDiagnosticMessageChars
+                  diagnostic = immutableOperationJson({
+                    code: value.code.slice(0, KernelTuning.operationDiagnosticCodeChars),
+                    message: value.message.slice(0, KernelTuning.operationDiagnosticMessageChars),
+                    ...(truncated ? { truncated: true } : {}),
+                  })
+                },
                 recordObservation: (evidence: NonNullable<InvocationReceipt['observation']>) => {
                   if (
                     prepared.mode !== 'observe' ||
@@ -178,11 +192,12 @@ class OperationRuntime implements OperationRuntimeApi {
                     : prepared.mode === 'observe'
                       ? 'unknown'
                       : 'committed'
-              return { value, effect, attachments, observation }
+              return { value, effect, attachments, observation, diagnostic }
             } catch (error) {
               return {
                 effect,
                 attachments,
+                diagnostic,
                 error: {
                   code: signal.aborted
                     ? 'CANCELLED'
@@ -458,6 +473,7 @@ class OperationRuntime implements OperationRuntimeApi {
         })) as {
           value?: unknown
           observation?: InvocationReceipt['observation']
+          diagnostic?: InvocationReceipt['diagnostic']
           attachments?: readonly ModelImage[]
           effect: InvocationReceipt['effect']
           error?: { code: string; message: string }
@@ -486,6 +502,7 @@ class OperationRuntime implements OperationRuntimeApi {
         if (!error && result.observation)
           Object.assign(receipt, { observation: result.observation })
         if (result.attachments?.length) Object.assign(receipt, { attachments: result.attachments })
+        if (result.diagnostic) Object.assign(receipt, { diagnostic: result.diagnostic })
         if (!isUndefined(value)) Object.assign(receipt, { value })
         if (error) Object.assign(receipt, { error })
       }

@@ -13,3 +13,9 @@ async function example(){
  await release({ref:note.ref});
  output(await organize({focus:'接下来验证当前修改，保留用户约束'})); // scheduled；实际结果见下一帧 memoryStatus.maintenance
 }
+// ref 和 pointer 取自执行结果展示；offset 按选中字段的字符算。
+async function readResultField(ref,pointer,offset=0){
+ const page=await read({ref,pointer,offset,limit:4000});
+ output({ref:page.record.ref,pointer:page.pointer,offset:page.offset,totalChars:page.totalChars},{key:'range'});
+ output(page.text,{key:'source',type:'code'});
+}

@@ -2,6 +2,7 @@
  * model 域的不变量验收：`spec/invariants.md` 里每一条「测试」档的检验器。
  * 用例名以 INV-<编号> 开头，`check:module-ownership` 按这个前缀核对登记表与实现对得上。
  */
+import { APICallError } from '@ai-sdk/provider'
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test'
 import { describe, expect, test } from 'bun:test'
 
@@ -401,6 +402,49 @@ test('INV-14 型号不认思考参数时往下退档重发、退到底不带思�
   expect(efforts).toEqual(['xhigh', 'high', 'high', 'high'])
 })
 
+test('INV-14 invalid encrypted reasoning state is returned without retrying lower effort or changing the remembered level', async () => {
+  for (const message of [
+    'Invalid encrypted_content in reasoning item',
+    'Missing required item following reasoning item',
+    'Unsupported reasoning.context',
+  ]) {
+    const fallback = new ReasoningFallback()
+    const levels: unknown[] = []
+    const error = new APICallError({
+      message,
+      url: 'https://fixture.test',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { message } }),
+    })
+    await expect(
+      fallback.run('fixture', 'high', async (level) => {
+        levels.push(level)
+        throw error
+      })
+    ).rejects.toBe(error)
+    expect(levels).toEqual(['high'])
+    expect(await fallback.run('fixture', 'high', async (level) => level)).toBe('high')
+    const calls: unknown[] = []
+    const fetch = fallback.chatFetch({
+      provider: 'openai-compatible-gateway',
+      level: 'high',
+      fetch: async (_url, init) => {
+        calls.push(JSON.parse(String(init?.body)).reasoning_effort)
+        return Response.json({ error: { message } }, { status: 400 })
+      },
+    })
+    expect(
+      (
+        await fetch('https://fixture.test/chat/completions', {
+          body: JSON.stringify({ model: 'gpt-6-sol', messages: [] }),
+        })
+      ).status
+    ).toBe(400)
+    expect(calls).toEqual(['high'])
+  }
+})
+
 test('INV-15 会话缓存键只发给认它的线路：OpenAI 官方与 OpenRouter 带 prompt_cache_key，Groq、Mistral、DeepSeek 不带', async () => {
   const composition = createModelRuntimeComposition({
     environment: {},
@@ -459,4 +503,140 @@ test('INV-15 会话缓存键只发给认它的线路：OpenAI 官方与 OpenRout
   for (const id of ['groq', 'mistral', 'deepseek'])
     expect(Object.hasOwn(bodies.get(id)!, 'prompt_cache_key')).toBe(false)
   for (const body of bodies.values()) expect(JSON.stringify(body)).not.toContain('velaros')
+})
+
+test('INV-16 GPT-6 Sol 的推理档位经正式 Responses 适配器出线', async () => {
+  const composition = createModelRuntimeComposition({
+    environment: {},
+    providerScripts: { configPaths: [] },
+  })
+  const originalFetch = globalThis.fetch
+  const bodies: Array<Record<string, unknown>> = []
+  globalThis.fetch = (async (input: unknown, init: { body?: unknown }) => {
+    expect(String(input)).toEndWith('/responses')
+    bodies.push(JSON.parse(String(init.body)))
+    return Response.json({ error: { message: 'fixture stop' } }, { status: 400 })
+  }) as typeof fetch
+  try {
+    for (const level of ['high', 'max'] as const) {
+      const factory = composition.agentModelRuntime.createAgentProvider({
+        provider: 'openai',
+        model: 'gpt-6-sol',
+        apiKey: 'sk-test',
+        reasoningLevel: level,
+      })
+      const driver = createAiSdkModelDriver({
+        id: 'sol',
+        model: factory('gpt-6-sol'),
+        limits: { contextTokens: 1050000, inputTokens: 922000, outputTokens: 32768 },
+      })
+      for await (const delta of driver.stream(
+        {
+          instructions: 'spec',
+          materials: [],
+          response: { type: 'text' },
+          mode: 'work',
+          outputTokens: 100,
+        },
+        new AbortController().signal
+      )) {
+        if (delta.type === 'error') break
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+  expect(bodies.map((body) => body.reasoning)).toEqual([
+    { effort: 'high', summary: 'auto' },
+    { effort: 'max', summary: 'auto' },
+  ])
+  for (const body of bodies) {
+    expect(body.model).toBe('gpt-6-sol')
+    expect(body).not.toHaveProperty('temperature')
+  }
+})
+
+test('INV-17 GPT-6 Sol 多处历史断点写入内容块，保留显式断点且不超过缓存槽位', async () => {
+  const composition = createModelRuntimeComposition({
+    environment: {},
+    providerScripts: { configPaths: [] },
+  })
+  const bodies: Array<Record<string, unknown>> = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = (async (_input: unknown, init: { body?: unknown }) => {
+    bodies.push(JSON.parse(String(init.body)))
+    return Response.json({ error: { message: 'fixture stop' } }, { status: 400 })
+  }) as typeof fetch
+  const stable = {
+    role: 'user' as const,
+    content: [{ type: 'text' as const, text: 'stable history' }],
+    providerOptions: { velaros: { promptCacheBreakpoint: true } },
+  }
+  const explicit = {
+    role: 'user' as const,
+    content: [
+      {
+        type: 'text' as const,
+        text: 'caller boundary',
+        providerOptions: { openai: { promptCacheBreakpoint: { mode: 'explicit' } } },
+      },
+    ],
+  }
+  const changing = {
+    role: 'user' as const,
+    content: [{ type: 'text' as const, text: 'current frame' }],
+  }
+  try {
+    const factory = composition.agentModelRuntime.createAgentProvider({
+      provider: 'openai',
+      apiKey: 'sk-test',
+      reasoningLevel: 'high',
+    })
+    for (const model of ['gpt-6-sol', 'gpt-5.5'])
+      await expect(factory(model).doGenerate({ prompt: [stable, changing] })).rejects.toThrow(
+        'fixture stop'
+      )
+    await expect(
+      factory('gpt-6-sol').doGenerate({ prompt: [explicit, explicit, explicit, stable, changing] })
+    ).rejects.toThrow('fixture stop')
+    await expect(
+      factory('gpt-6-sol').doGenerate({ prompt: [stable, stable, stable, changing] })
+    ).rejects.toThrow('fixture stop')
+    await expect(
+      factory('gpt-6-sol').doGenerate({ prompt: [explicit, stable, stable, stable, changing] })
+    ).rejects.toThrow('fixture stop')
+    await expect(
+      factory('gpt-6-sol').doGenerate({ prompt: [stable, stable, stable, stable, changing] })
+    ).rejects.toThrow('fixture stop')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+  const inputs = bodies.map(
+    (body) =>
+      body.input as Array<{ content: Array<{ text: string; prompt_cache_breakpoint?: unknown }> }>
+  )
+  expect(inputs[0][0].content[0].prompt_cache_breakpoint).toEqual({ mode: 'explicit' })
+  expect(inputs[0][1].content[0]).not.toHaveProperty('prompt_cache_breakpoint')
+  expect(JSON.stringify(bodies[1])).not.toContain('prompt_cache_breakpoint')
+  expect(inputs[2].flatMap((m) => m.content).filter((p) => p.prompt_cache_breakpoint)).toHaveLength(
+    3
+  )
+  expect(inputs[2][3].content[0]).not.toHaveProperty('prompt_cache_breakpoint')
+  expect(inputs[3].flatMap((m) => m.content).filter((p) => p.prompt_cache_breakpoint)).toHaveLength(
+    3
+  )
+  expect(inputs[3][2].content[0].prompt_cache_breakpoint).toEqual({ mode: 'explicit' })
+  for (const index of [4, 5]) {
+    expect(
+      inputs[index].flatMap((m) => m.content).filter((p) => p.prompt_cache_breakpoint)
+    ).toHaveLength(3)
+    expect(inputs[index][4].content[0]).not.toHaveProperty('prompt_cache_breakpoint')
+  }
+  expect(inputs[4][0].content[0].prompt_cache_breakpoint).toEqual({ mode: 'explicit' })
+  expect(inputs[4][1].content[0]).not.toHaveProperty('prompt_cache_breakpoint')
+  expect(inputs[5][0].content[0]).not.toHaveProperty('prompt_cache_breakpoint')
+  for (const index of [2, 3])
+    expect(inputs[4][index].content[0].prompt_cache_breakpoint).toEqual({ mode: 'explicit' })
+  expect(stable.content[0]).not.toHaveProperty('providerOptions')
+  for (const body of bodies) expect(JSON.stringify(body)).not.toContain('velaros')
 })

@@ -36,6 +36,11 @@ export const WorkspaceLimits = Object.freeze({
   /** 笔记与材料目录一页最多多少项。 */
   maxPage: 64,
 })
+/** 执行结果字段召回的路径上限，分页额度复用 ContextLimits.readChars。 */
+export const MemoryReadLimits = Object.freeze({
+  /** JSON Pointer 最多多少 UTF-16 字符。 */
+  pointerChars: 4096,
+})
 /** 会话目标对外承诺的上限：goal 成员声明里写的就是这些数（两边一致由验收核对）。 */
 export const GoalLimits = Object.freeze({
   /** 目标描述最多多少字符。 */

@@ -29,7 +29,7 @@
 | INV-27 | 程序数据模块 velaros:program 只导出本次 input 与 blobs，声明和运行时一致；模块模板统一由 velaros:system 的 modules.describe 按授权提供 | 测试 | `spec/acceptance.test.ts` |
 | INV-33 | 附属模块来自提交的 modules，按相对路径解析并在单次运行中只初始化一次；语法诊断包含附属模块路径、行列与代码帧，运行错误可追踪 | 测试 | `spec/acceptance.test.ts` |
 | INV-34 | output 在调用时捕获无环 JSON 快照，原始归档与有界预览分离；失败和中止保留已捕获块，采集问题不能被 catch 隐藏 | 测试 | `test/output.test.ts` |
-| INV-35 | output 展示按类型保留结构和省略范围，正文与目录总量守展示预算；摘要同时匹配原值和任务代次 | 测试 | `test/output.test.ts` |
+| INV-35 | output 展示按类型保留结构和省略范围，正文、转义与目录总量守展示预算；短块用不完的份额按既定优先级返还给尚未完整展示的块，保留其余块已分配的正文及显式上限；超出时在预算内选完整行或条目，结构化结果的长文本字段共享剩余空间并以完整行片段和原值路径呈现；摘要同时匹配原值和任务代次 | 测试 | `test/output.test.ts` |
 | INV-36 | 受限输出编辑只接受真实导入的顶层字面量声明，保持采集和用途不变，不执行脚本 | 测试 | `test/output.test.ts` |
 | INV-37 | output 声明里写的上限与 ScriptOutputLimits 一致，输出校验恰好在这些边界上放行与拒绝 | 测试 | `test/output.test.ts` |
 | INV-39 | 我们自己写的代码模版另走 `typecheck`，照声明做完整类型检查：模版会原样教给模型，写错一个键模型照着写就跟着错。模型交的程序不走这条 | 测试 | `spec/acceptance.test.ts` |

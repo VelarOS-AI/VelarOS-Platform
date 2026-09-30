@@ -56,4 +56,7 @@ if (goal?.status === 'active') await session.controlGoal({ baseRevision: goal.re
 - 不给 `stores` 时主会话在 `session:<id>` 的边界里建自己的空间，返回 `undefined` 就不挂 store；子任务只拿父任务经 `agents.start` 显式交出的权限子集，没有创建权，续跑时重新核对。
 - 目标只在主会话：宿主的 `getGoal`、`updateGoal`、`controlGoal` 与模型的 `goal` 共用一份按版本追加的账本，版本不对抛 `GOAL_CONFLICT`、不合法的状态变化抛 `GOAL_INPUT`；删除只留 `removed` 墓碑，暂停的目标不会因新消息恢复，完成回复也不会自动完成活动目标。
 - 笔记是模型的解释，不能覆盖真实回执；宿主经会话的 `listNotes`、`readNote`、`setNoteResident` 看和调驻留，与模型共用版本，移出上下文不删正文。
+- 执行结果支持按实际曝光轮数、当前上下文段（`segment`）或当前任务（`task`）保留；`memory.retain` 默认任务期限，`release` 立即释放展示。段期限随该结果封入历史卷时退役，原文仍可读取，续租与封段不重跑原脚本。
 - `memory.organize` 只排队：下一次模型请求之前由整理模型按父快照交补丁，补丁先整份校验再按版本发布，失败的不发布、原因带到下一帧；整理只改展示，不重跑业务脚本。`context: { maintenance: false }` 关掉整理。
+
+- `memory.read` 可传展示中的执行结果字段 `pointer`，按该字段的 UTF-16 字符分页；字符串直接返回正文，其他值返回 JSON。响应携带相同 `pointer`，`record` 仍标识完整归档。路径、页长和引用权限均受校验；省略路径时保持整份归档读取，旧宿主收到字段读取会明确报告不支持。

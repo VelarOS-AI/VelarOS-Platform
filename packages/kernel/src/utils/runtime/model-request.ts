@@ -1,13 +1,39 @@
 import { isUndefined } from '@velaros-ai/core'
-import { isEmpty, isString } from '@velaros-ai/core'
+import { isEmpty, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
+  ModelContinuation,
   ModelHistoryMessage,
   ModelImage,
   ModelTurnRequest,
   ModelUserMessage,
 } from '../../types/model.js'
+
+/** 封套有界且可持久化；供应商数据仅由对应驱动解释。 */
+export function driverModelContinuation(value: unknown): ModelContinuation {
+  if (
+    !isPlainObject(value) ||
+    !isString(value.model) ||
+    !value.model ||
+    value.model.length > 4096 ||
+    !isString(value.format) ||
+    !value.format ||
+    value.format.length > 128 ||
+    !isString(value.data) ||
+    !value.data ||
+    value.data.length > 2_000_000 ||
+    !Number.isSafeInteger(value.tokens) ||
+    (value.tokens as number) < 0
+  )
+    throw new AppError('VALIDATION', '模型延续状态封套无效')
+  return Object.freeze({
+    model: value.model,
+    format: value.format,
+    data: value.data,
+    tokens: value.tokens as number,
+  })
+}
 
 /** 来源标签与全文长度一起发送，摘录不会伪装成完整原文或系统规则。 */
 export function driverModelPrompt(request: ModelTurnRequest): string {
@@ -46,6 +72,7 @@ export function driverModelMessages(request: ModelTurnRequest): ModelHistoryMess
   for (const message of history) {
     if (message.role === 'assistant') {
       if (!isString(message.content)) throw new AppError('VALIDATION', 'assistant 历史只能包含文本')
+      if (!isUndefined(message.continuation)) driverModelContinuation(message.continuation)
       continue
     }
     if (message.role !== 'user')

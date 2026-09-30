@@ -16,12 +16,21 @@ export interface ModelUserMessage {
   /** 供应商缓存到这条消息为止的前缀；需要显式断点的供应商使用，其余忽略。 */
   cacheBreakpoint?: boolean
 }
-/** 有序历史消息；脚本响应仍是普通 assistant 文本。 */
+/** 供应商响应的不可解释延续状态；只能随原始完整响应回传给匹配的驱动。 */
+export interface ModelContinuation {
+  readonly model: string
+  readonly format: string
+  readonly data: string
+  /** 供应商用量给出的保守输入容量预留；密文字符数不是 token 数。 */
+  readonly tokens: number
+}
+/** 有序历史消息；脚本响应正文与供应商延续状态分开保存。 */
 export type ModelHistoryMessage =
   | ModelUserMessage
   | {
       role: 'assistant'
       content: string
+      readonly continuation?: ModelContinuation
       /** 供应商缓存到这条消息为止的前缀；需要显式断点的供应商使用，其余忽略。 */
       cacheBreakpoint?: boolean
     }
@@ -105,12 +114,16 @@ export interface ModelInputEstimate {
   readonly basis: string
   /** tokens 中按每张固定数计入的图片部分；按实测用量校准时只校准其余的文本部分。 */
   readonly images?: { readonly count: number; readonly tokens: number }
+  /** 已计入 tokens 的不透明延续状态容量，不能用文本密度缩小。 */
+  readonly opaqueTokens?: number
 }
 /** 流式响应仅传递模型事实；控制状态由 Agent 决定。 */
 export type ModelTurnDelta =
   | { readonly type: 'text'; readonly text: string }
   /** 供应商给的思考摘要增量：只供宿主展示，不进上下文，也不参与协议解码。 */
   | { readonly type: 'reasoning'; readonly text: string }
+  /** 完整响应的供应商状态；Agent 只在响应被接受后持久化，不作为宿主展示事件。 */
+  | { readonly type: 'continuation'; readonly value: ModelContinuation }
   | { readonly type: 'output'; readonly value: unknown }
   | {
       readonly type: 'usage'

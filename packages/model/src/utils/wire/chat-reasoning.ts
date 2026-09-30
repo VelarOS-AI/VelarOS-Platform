@@ -5,7 +5,7 @@ import { fitReasoningLevel, resolveReasoningBudget } from './reasoning'
 
 /** 看起来是推理型号的名字：这些型号走 Chat Completions 时带 `reasoning_effort`。 */
 const ReasoningModelPattern =
-  /(?:^|\/)(?:o[134](?:-|$)|gpt-5|gpt-oss|claude|gemini-(?:2\.5|3)|deepseek|qwen3|qwq|grok|kimi|glm-[45]|doubao-seed)/i
+  /(?:^|\/)(?:o[134](?:-|$)|gpt-[56]|gpt-oss|claude|gemini-(?:2\.5|3)|deepseek|qwen3|qwq|grok|kimi|glm-[45]|doubao-seed)/i
 
 /**
  * 走 Chat Completions 的供应商这一档要写进请求体的思考参数；这一档什么都不写时返回 null。
