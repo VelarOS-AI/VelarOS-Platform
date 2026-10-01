@@ -14,13 +14,13 @@ import {
 } from '@velaros-ai/script'
 
 import { ContextMaintenanceReadLimits } from '../../runtime/contract/constants.js'
+import { ActiveContext } from '../../runtime/impl/ActiveContext.js'
 import { ContextMemory } from '../../runtime/impl/ContextMemory.js'
 import { ContextPatchStore } from '../../runtime/impl/ContextPatchStore.js'
 import { ProgramContext } from '../../runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../runtime/impl/RecentContext.js'
 import { memoryReference } from '../../runtime/utils/context-memory.js'
 import { awaitModelPreparation } from '../../runtime/utils/model-budget.js'
-import { segmentLedgers } from '../../runtime/utils/segment.js'
 import { ContextPatchLimits } from '../contract/constants.js'
 import type { ContextCandidateValidator } from '../contract/requires.js'
 import type {
@@ -72,6 +72,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
   private inputRevision = ''
   private readonly inputPages = new Map<string, ContextContent>()
   private readonly inputVisible = new Map<string, Array<{ start: number; end: number }>>()
+  private cached?: { revision: string; state: ContextState; metadataSignature: string }
   public constructor(
     private readonly id: string,
     private readonly storage: ContextStorage,
@@ -82,7 +83,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     const record = state.records.findLast((item) => item.title === 'script:lease-state')
     const leases = record ? JSON.parse((await this.storage.get(this.id, record.objectId))!) : {}
     const ignored =
-      /^(model-tool:|act:event$|act:state$|model-request$|model-response|context:frame:|context:delivered$|context-maintenance:|script:lease-state$)/u
+      /^(model-tool:|act:event$|act:state$|model-request$|model-response|context:frame:|context:delivered$|context:history-index$|context:history-body$|context:segment-body$|context-maintenance:|script:lease-state$)/u
     const material = {
       records: state.records.filter((item) => !ignored.test(item.title)).map((item) => item.ref.id),
       workingSet: state.workingSet,
@@ -110,9 +111,33 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
 
   private async current(
     snapshot: ContextMaintenanceSnapshot,
-    signal: AbortSignal
+    signal: AbortSignal,
+    full = false
   ): Promise<ContextState> {
     signal.throwIfAborted()
+    if (!full && this.cached?.revision === snapshot.baseRevision && this.storage.selectSnapshot) {
+      const selected = await this.storage.selectSnapshot(this.id, [
+        { after: snapshot.through },
+        { title: 'script:lease-state', latest: true },
+      ])
+      const changes =
+        selected?.records.filter(
+          (record) =>
+            record.sequence > snapshot.through &&
+            !/^(model-tool:|act:event$|act:state$|model-request$|model-response|context:frame:|context:delivered$|context:history-index$|context:history-body$|context:segment-body$|context-maintenance:|script:lease-state$)/u.test(
+              record.title
+            )
+        ) ?? []
+      const metadataSignature = selected
+        ? await this.version({
+            ...selected.metadata,
+            records: selected.records.filter((record) => record.title === 'script:lease-state'),
+          })
+        : ''
+      if (!selected || changes.length || metadataSignature !== this.cached.metadataSignature)
+        throw new AppError('CONTEXT_CONFLICT', '整理期间任务材料已变化，补丁尚未发布')
+      return { ...selected.metadata, records: this.cached.state.records }
+    }
     const state = await this.storage.load(this.id)
     if (!state || (await this.version(state)) !== snapshot.baseRevision)
       throw new AppError('CONTEXT_CONFLICT', '整理期间任务材料已变化，补丁尚未发布')
@@ -126,9 +151,10 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     signal.throwIfAborted()
     if (!Number.isSafeInteger(targetChars) || targetChars < 512)
       throw new AppError('VALIDATION', '整理目标预算无效')
+    const context = createContextRuntime({ sessionId: this.id, storage: this.storage })
+    const active = await new ActiveContext(this.id, context, this.storage).read(signal)
     const state = await this.storage.load(this.id)
     if (!state?.task) throw new AppError('UNAVAILABLE', '整理需要已有任务')
-    const context = createContextRuntime({ sessionId: this.id, storage: this.storage })
     const programs = await new ProgramContext(this.id, context, this.storage).state()
     const protectedRefs = [
       ...(await context.inspect()).protected,
@@ -178,8 +204,16 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     }
     const recent = new RecentContext(this.id, context, this.storage)
     const latest = (await recent.volumes(signal)).at(-1)
-    const narratives = await recent.narratives(signal)
+    const ledgers = await recent.ledgers(signal)
     const baseRevision = await this.version(state)
+    this.cached = {
+      revision: baseRevision,
+      state,
+      metadataSignature: await this.version({
+        ...state,
+        records: state.records.filter((record) => record.title === 'script:lease-state').slice(-1),
+      }),
+    }
     if (this.inputRevision !== baseRevision) {
       this.inputRevision = baseRevision
       this.inputPages.clear()
@@ -194,6 +228,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
       }
     }
     return {
+      active,
       storeRefs: state.task.storeRefs ?? [],
       taskRevision: scriptOutputs.hash([state.task.goals, reset]),
       volume: latest
@@ -206,13 +241,15 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
         : undefined,
       // 最新叙事里的未解事项原样给出，写新叙事时照抄还没解决的；否定尝试只供参照，按卷累积
       ledgers: {
-        negativeAttempts: segmentLedgers(narratives, []).negativeAttempts.items,
-        unresolved: narratives.at(-1)?.narrative.unresolved ?? [],
+        negativeAttempts: ledgers.negativeAttempts.items,
+        unresolved: active.items
+          .filter((item) => item.kind === 'question')
+          .map((item) => item.text),
       },
       observation,
       baseRevision,
       targetChars,
-      through: state.records.length,
+      through: state.records.at(-1)?.sequence ?? 0,
       totalRecords: state.records.length,
       goals: state.task.goals,
       capsule: state.task.capsule,
@@ -301,7 +338,22 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
         `整理目录每页 1–${ContextMaintenanceReadLimits.maxPageItems} 项`
       )
     const state = await this.current(snapshot, signal)
-    const records = state.records.filter(
+    const reset = Math.max(
+      state.task?.startedSequence ?? 0,
+      state.records.findLast((record) => record.title === 'search:history-reset')?.sequence ?? 0
+    )
+    const selected = this.storage.selectSnapshot
+      ? await this.storage.selectSnapshot(this.id, [
+          { after: Math.max(after, reset), through: snapshot.through, first: limit + 1 },
+        ])
+      : undefined
+    const candidates = selected
+      ? selected.records
+      : state.records.filter(
+          (record) => record.sequence > after && record.sequence <= snapshot.through
+        )
+    const scanned = candidates.slice(0, limit)
+    const records = scanned.filter(
       (record) =>
         record.sequence > after &&
         record.sequence <= snapshot.through &&
@@ -310,8 +362,10 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
           record.title
         )
     )
-    const items = records.slice(0, limit)
-    return { items, nextAfter: records.length > limit ? items.at(-1)!.sequence : null }
+    return {
+      items: records,
+      nextAfter: candidates.length > limit ? scanned.at(-1)!.sequence : null,
+    }
   }
 
   public async read(
@@ -364,6 +418,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
             'baseRevision',
             'summary',
             'unresolved',
+            'active',
             'notes',
             'inputs',
             'volume',
@@ -423,7 +478,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     if (patch.releaseResults?.some((ref) => snapshot.protectedRefs.some((item) => item.id === ref)))
       throw new AppError('CONFLICT', '不能释放未决操作的上下文')
     for (let attempt = 0; attempt < 4; attempt++) {
-      const state = await this.current(snapshot, signal)
+      const state = await this.current(snapshot, signal, true)
       const staged = new ContextPatchStore(this.id, this.storage, state)
       const context = createContextRuntime({ sessionId: this.id, storage: staged })
       const programs = new ProgramContext(this.id, context, staged)
@@ -431,6 +486,19 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
       const view = createContextView({ sessionId: this.id, storage: staged, context, sources: [] })
       const memory = new ContextMemory(this.id, context, staged, view, programs, recent)
       try {
+        if (patch.active) {
+          const visible: ContextRef[] = []
+          for (const ref of snapshot.goals) {
+            const original = await context.readInput(ref, { limit: 1 })
+            if (
+              this.inputVisible
+                .get(ref.id)
+                ?.some((range) => range.start === 0 && range.end >= original.totalChars)
+            )
+              visible.push(ref)
+          }
+          await new ActiveContext(this.id, context, staged).apply(patch.active, visible, signal)
+        }
         const previousRecord = state.records.findLast(
           (record) =>
             record.title === 'context:projection-policy' &&

@@ -126,18 +126,15 @@ export function createReasoningProviderOptions(
   const effective = level ?? DefaultReasoningLevel
 
   switch (provider) {
-    case 'openai':
-      return matchesOpenAiReasoningModel(model)
-        ? {
-            openai: {
-              reasoningEffort: fitReasoningLevel(effective, model),
-              reasoningSummary: 'auto',
-              ...(/(?:^|\/)gpt-6-(?:sol|astra|luna)(?:$|-)/i.test(model)
-                ? { forceReasoning: true }
-                : {}),
-            },
-          }
-        : null
+    case 'openai': {
+      if (!matchesOpenAiReasoningModel(model)) return null
+      const openai: Record<string, unknown> = {
+        reasoningEffort: fitReasoningLevel(effective, model),
+        reasoningSummary: 'auto',
+      }
+      if (/(?:^|\/)gpt-6-(?:sol|astra|luna)(?:$|-)/i.test(model)) openai.forceReasoning = true
+      return { openai }
+    }
     case 'anthropic':
       return matchesClaudeReasoningModel(model)
         ? {

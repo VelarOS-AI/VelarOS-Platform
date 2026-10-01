@@ -5,7 +5,11 @@ import { isFalse, isUndefined } from '@velaros-ai/core'
 import { isEmpty, isObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
-import { modelRequestEncoder, type ModelTurnDelta } from '@velaros-ai/kernel'
+import {
+  type ModelHistoryMessage,
+  modelRequestEncoder,
+  type ModelTurnDelta,
+} from '@velaros-ai/kernel'
 import {
   type CompiledModelRequest,
   createProviderRequestCompiler,
@@ -37,6 +41,15 @@ export class ActLoop implements ActLoopApi {
   private readonly planner
   private cache?: { readonly readTokens: number; readonly writeTokens: number }
   private stallBase?: number
+  /**
+   * 上一次被接受请求的实际出线。下一帧的逻辑历史以它的逻辑历史开头时只在其后追加，
+   * 请求成为上一请求的完整延续，只认完整延续的供应商缓存也能复用整段前缀。
+   */
+  private transcript?: {
+    readonly logical: readonly ModelHistoryMessage[]
+    readonly sent: readonly ModelHistoryMessage[]
+    readonly body: string
+  }
 
   public constructor(
     private readonly options: ActLoopOptions & Pick<ActRunServiceOptions, 'sessionId'>
@@ -396,6 +409,18 @@ export class ActLoop implements ActLoopApi {
               controller.signal
             )
             acceptedTurnId = `${audit.ref.id}:${accepted.ref.id}`
+            // 已接受请求的实际出线成为下一帧的前缀；含图片的帧不保留，避免历史图片越积越多。
+            const sent = modelRequestEncoder.messages(compiled.request)
+            this.transcript =
+              this.options.frames.delta &&
+              !sent.some(
+                (message) =>
+                  message.role === 'user' &&
+                  !isString(message.content) &&
+                  message.content.some((part) => part.type === 'image')
+              )
+                ? { logical: frame.logical, sent, body: frame.body }
+                : undefined
             yield {
               type: 'accepted',
               runId,
@@ -474,8 +499,9 @@ export class ActLoop implements ActLoopApi {
               (error as { code?: string }).code === 'CONTEXT_BUDGET' &&
               repair < this.policy.recoveryAttempts
             ) {
-              // 实际超窗说明校准偏小：回到原始估算、封段后重组，再不行就用恢复窗口
+              // 实际超窗说明校准偏小：回到原始估算、封段后重组，再不行就用恢复窗口；保留的旧帧一并放弃
               this.planner.rejected()
+              this.transcript = undefined
               const repaired = await this.frame(controller.signal, decoder.instructions, {
                 provider: true,
                 recovery: repair > 0,
@@ -521,7 +547,7 @@ export class ActLoop implements ActLoopApi {
         if (this.options.control?.pending()) continue
         if (!decoded) throw new AppError('PROTOCOL', '没有可接受的完整响应')
         await this.options.frames.acknowledge(compiled.request, controller.signal)
-        this.planner.accept(compiled.estimate.tokens, frame.segment)
+        this.planner.accept(compiled.estimate.tokens, frame.segment, frame.retained)
         if (!isUndefined(decoded.submission)) {
           yield { type: 'state', runId, status: 'executing' }
           const success = await this.options.execution.invoke(
@@ -702,15 +728,21 @@ export class ActLoop implements ActLoopApi {
         : ''
     // 同一会话每帧同一个缓存键：认它的供应商把这个会话的请求路由到同一处前缀缓存
     const cacheKey = await sessionCacheKey(this.options.sessionId)
+    // 本次组帧只在第一次投影时决定是否沿用上次出线；放弃后同一次组帧里的重组不再沿用
+    let retain = Boolean(frames.delta)
     const compose = async (maxChars: number) => {
       const projected = await frames.project(evidence, signal, maxChars)
       const phase = frames.phase?.() ?? { phase: 'work' as const, instructions: '' }
+      const logical = projected.history ?? []
+      const retained = retain ? this.retained(logical) : undefined
       const request = framedRequest(
         {
-          history: projected.history,
+          history: retained ? retained.history : projected.history,
           instructions: this.options.instructions,
           images: projected.images,
-          compiledPrompt: projected.prompt,
+          compiledPrompt: retained
+            ? frames.delta!(projected.body, retained.body)
+            : projected.prompt,
           materials: [
             {
               ref: evidence.id,
@@ -733,7 +765,15 @@ export class ActLoop implements ActLoopApi {
         this.planner.calibration()
       )
       this.planner.density(requestChars(request), compiled.estimate.tokens)
-      return { segment: projected.segment, phase, request, compiled }
+      return {
+        segment: projected.segment,
+        phase,
+        request,
+        compiled,
+        logical,
+        body: projected.body,
+        retained: Boolean(retained),
+      }
     }
     const fits = (current: Awaited<ReturnType<typeof compose>>) =>
       current.compiled.okToSend && current.compiled.estimate.tokens <= window
@@ -761,8 +801,28 @@ export class ActLoop implements ActLoopApi {
           attempt + 1
         )
     }
-    let current = await compose(repair.recovery ? Math.min(budget, limits.recoveryChars) : budget)
-    let runway = this.planner.runway(current.compiled.estimate.tokens, window)
+    const first = repair.recovery ? Math.min(budget, limits.recoveryChars) : budget
+    let current = await compose(first)
+    let runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
+    retain = current.retained
+    // 保留的旧帧让请求放不下或剩余轮数不足时，先放弃保留、只发逻辑历史与完整帧，再考虑封段
+    if (current.retained && (!fits(current) || runway < this.policy.foldTurns)) {
+      retain = false
+      this.transcript = undefined
+      current = await compose(first)
+      runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
+    }
+    // 仍放不下或剩余轮数不足：先退掉租约已结束的冻结正文（不算封段），不够再封段
+    if (
+      !repair.provider &&
+      (!fits(current) || runway < this.policy.foldTurns) &&
+      (await frames.retire?.(signal))
+    ) {
+      retain = false
+      this.transcript = undefined
+      current = await compose(first)
+      runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
+    }
     // 放不下或剩余轮数不足就封段；剩余不多时遇到章节边界也封段。抖动说明工作集本身装不下，再封也没用
     if (!folded && !repair.provider && !this.planner.thrashing()) {
       const reason = !fits(current)
@@ -775,7 +835,7 @@ export class ActLoop implements ActLoopApi {
       if (reason && (await this.fold(reason, budget, signal))) {
         folded = true
         current = await compose(budget)
-        runway = this.planner.runway(current.compiled.estimate.tokens, window)
+        runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
       }
     }
     // 结构性超载：放不下，或封不了段时剩余不足 foldTurns 轮、封段后剩余仍不足 minTurns 轮，
@@ -803,7 +863,7 @@ export class ActLoop implements ActLoopApi {
     // 仍放不下只剩恢复窗口：基础目标、当前图片和必要运行状态必须装得下
     if (!fits(current)) current = await compose(Math.min(budget, limits.recoveryChars))
     if (!current.compiled.okToSend) return null
-    runway = this.planner.runway(current.compiled.estimate.tokens, window)
+    runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     frames.setPhase(current.phase.phase)
     const tighten =
       '按 memoryStatus.footprint 找占用最大的分区，收紧 observe 的 view，释放不再需要的 task 租约，合并或移出笔记，或把独立的子目标交给子 agent。'
@@ -816,7 +876,7 @@ export class ActLoop implements ActLoopApi {
         ? `工作集本身快装不下了：${tighten}`
         : undefined
     const status = (tokens: number) => {
-      const turns = this.planner.runway(tokens, window)
+      const turns = this.planner.runway(tokens, window, current.retained)
       return {
         mode: frames.mode,
         phase: current.phase.phase,
@@ -838,7 +898,7 @@ export class ActLoop implements ActLoopApi {
           '原文按引用归档；工作笔记是模型解释，引用不代表已读正文。上下文按剩余轮数自动封段，封进卷的历史仍可按引用召回。',
         runway: {
           turns: Math.max(0, Math.floor(turns)),
-          growthPerTurn: this.planner.growth(window),
+          growthPerTurn: this.planner.growth(window, current.retained),
         },
         segment: current.segment
           ? {
@@ -883,7 +943,38 @@ export class ActLoop implements ActLoopApi {
       },
       segment: current.segment,
       repeatedSteps,
+      logical: current.logical,
+      body: current.body,
+      retained: current.retained,
       ...compiled,
+    }
+  }
+
+  /**
+   * 新投影以上次接受请求的逻辑历史开头时，沿用那次的实际出线（含它的最后一条消息）再追加新条目；
+   * 历史被改写（封段、超窗重组等）就返回 undefined，本帧完整重发并重新开始保留。
+   * 沿用部分只在开头和上次请求末尾留缓存断点，需要显式断点的供应商不会因旧标记累积而超限。
+   */
+  private retained(
+    logical: readonly ModelHistoryMessage[]
+  ): Optional<{ history: readonly ModelHistoryMessage[]; body: string }> {
+    const transcript = this.transcript
+    if (!transcript || logical.length < transcript.logical.length) return undefined
+    const identity = ({ cacheBreakpoint: _mark, ...message }: ModelHistoryMessage) =>
+      JSON.stringify(message)
+    for (const [index, message] of transcript.logical.entries())
+      if (identity(message) !== identity(logical[index]!)) return undefined
+    // 断点按本次逻辑历史重新标：它标过的消息照旧，另加上次请求的末尾
+    const marked = new Set(logical.filter((item) => item.cacheBreakpoint).map(identity))
+    const last = transcript.sent.length - 1
+    const sent = transcript.sent.map(({ cacheBreakpoint: _mark, ...message }, index) =>
+      index === last || marked.has(identity(message))
+        ? { ...message, cacheBreakpoint: true }
+        : message
+    )
+    return {
+      history: [...sent, ...logical.slice(transcript.logical.length)],
+      body: transcript.body,
     }
   }
 

@@ -7,7 +7,7 @@ import shutil
 import urllib.request
 from pathlib import Path
 
-from environment import UV_ARCHIVE, UV_SHA256, UV_VERSION
+from runtime_artifacts import UV_ARTIFACTS, UV_VERSION
 
 
 def digest(path):
@@ -18,7 +18,9 @@ def digest(path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--uv-archive", type=Path)
+    parser.add_argument("--libc", choices=["glibc", "musl"], default="glibc")
     args = parser.parse_args()
+    UV_ARCHIVE, UV_SHA256, target = UV_ARTIFACTS[args.libc]
     UV_ARCHIVE.parent.mkdir(parents=True, exist_ok=True)
     if UV_ARCHIVE.exists():
         if digest(UV_ARCHIVE) != UV_SHA256:
@@ -28,7 +30,7 @@ def main():
         if args.uv_archive:
             shutil.copyfile(args.uv_archive, temporary)
         else:
-            url = f"https://github.com/astral-sh/uv/releases/download/{UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz"
+            url = f"https://github.com/astral-sh/uv/releases/download/{UV_VERSION}/uv-x86_64-unknown-linux-{target}.tar.gz"
             with urllib.request.urlopen(url, timeout=60) as response, temporary.open("wb") as target:
                 shutil.copyfileobj(response, target)
         if digest(temporary) != UV_SHA256:

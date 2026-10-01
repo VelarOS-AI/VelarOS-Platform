@@ -128,6 +128,133 @@ class RepositoryReportTests(unittest.TestCase):
             self.assertEqual(trial["end_to_end_seconds"], 50)
             self.assertIsNone(trial["source_verifier_reward"])
 
+    def test_report_preserves_adapter_cost_and_exposes_gateway_authority_without_rewriting_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest, calls = self.fixture(root)
+            source = root / 'source/instance_fixture__one/result.json'
+            result = json.loads(source.read_text())
+            result['agent_result'] = {'cost_usd': .06}
+            source.write_text(json.dumps(result))
+            before = source.read_bytes()
+            trial = summarize_repository(manifest, root, calls)[0]['trials'][0]
+            self.assertEqual(trial['reported_cost_usd'], .06)
+            self.assertEqual(trial['metrics']['known_cost_usd'], .12)
+            self.assertEqual(trial['cost_comparison']['authority'], 'gateway-request-ledger')
+            self.assertEqual(trial['cost_comparison']['reported_minus_gateway_usd'], -.06)
+            self.assertFalse(trial['cost_comparison']['matches'])
+            self.assertEqual(source.read_bytes(), before)
+
+    def timing_fixture(self, root):
+        jobs = root / "jobs"
+        manifest, calls = self.fixture(jobs)
+        campaign = root / "campaign"
+        campaign.mkdir()
+        receipts = {}
+        for phase, job, trial, start, finish in (
+                ("source", "source", "instance_fixture__one", "2026-09-27T23:59:57Z", "2026-09-28T00:00:17Z"),
+                ("replay", "replay", "instance_fixture__two", "2026-09-28T00:00:19Z", "2026-09-28T00:00:54Z")):
+            identity = {"campaignId": "campaign", "candidateId": "candidate", "participantId": "scriptact",
+                        "taskId": "instance_fixture", "attemptId": phase, "jobId": job, "phase": phase}
+            (jobs / job / "request-identity.json").write_text(json.dumps(identity))
+            if phase == "source":
+                calls[0]["identity"] = identity
+            path = campaign / (job + "-dispatch.json")
+            path.write_text(json.dumps({"request_identity": identity, "phase": phase, "attempt": 1,
+                "status": "finished", "started_at": start, "finished_at": finish,
+                "trial_result": str(jobs / job / trial / "result.json")}))
+            receipts[phase] = path
+        return manifest, jobs, calls, receipts
+
+    def test_attempt_wall_includes_dispatch_cleanup_and_gap_without_changing_legacy_span(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest, jobs, calls, receipts = self.timing_fixture(Path(directory))
+            original = {path: path.read_bytes() for path in receipts.values()}
+            trial = summarize_repository(manifest, jobs, calls)[0]["trials"][0]
+            self.assertEqual(trial["end_to_end_seconds"], 50)
+            self.assertEqual(trial["trial_lifecycle_seconds"], 50)
+            self.assertEqual(trial["attempt_wall_seconds"], 57)
+            timing = trial["attempt_timing"]
+            self.assertEqual(timing["source"]["wall_seconds"], 20)
+            self.assertEqual(timing["replay"]["wall_seconds"], 35)
+            self.assertEqual(timing["between_phases_seconds"], 2)
+            self.assertEqual(timing["before_source_trial_seconds"], 3)
+            self.assertEqual(timing["after_replay_trial_seconds"], 4)
+            self.assertEqual({path: path.read_bytes() for path in receipts.values()}, original)
+
+    def test_missing_running_or_blocked_cleanup_cannot_claim_complete_attempt_time(self):
+        for state in ("missing", "partial", "running", "blocked", "missing-finish", "missing-result", "missing-attempt", "missing-identity"):
+            with self.subTest(state=state), tempfile.TemporaryDirectory() as directory:
+                manifest, jobs, calls, receipts = self.timing_fixture(Path(directory))
+                path = receipts["replay"]
+                receipt = json.loads(path.read_text())
+                if state == "missing":
+                    path.unlink()
+                elif state == "partial":
+                    path.write_text('{"writing":')
+                else:
+                    if state == "missing-finish":
+                        receipt.pop("finished_at")
+                    elif state == "missing-result":
+                        receipt.pop("trial_result")
+                    elif state == "missing-attempt":
+                        receipt.pop("attempt")
+                    elif state == "missing-identity":
+                        (jobs / "replay/request-identity.json").unlink()
+                    else:
+                        receipt["status"] = state
+                    path.write_text(json.dumps(receipt))
+                trial = summarize_repository(manifest, jobs, calls)[0]["trials"][0]
+                self.assertIsNone(trial["attempt_wall_seconds"])
+                self.assertEqual(trial["trial_lifecycle_seconds"], 50)
+                self.assertTrue(trial["attempt_timing"]["replay"]["issue"])
+
+    def test_failed_dispatch_with_confirmed_cleanup_still_has_elapsed_time(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest, jobs, calls, receipts = self.timing_fixture(Path(directory))
+            path = receipts["replay"]
+            receipt = json.loads(path.read_text())
+            receipt["status"] = "failed"
+            path.write_text(json.dumps(receipt))
+            trial = summarize_repository(manifest, jobs, calls)[0]["trials"][0]
+            self.assertEqual(trial["attempt_wall_seconds"], 57)
+            self.assertTrue(trial["attempt_timing"]["replay"]["cleanup_confirmed"])
+            receipt["cleanup_error_code"] = "SETTLEMENT_UNKNOWN"
+            path.write_text(json.dumps(receipt))
+            self.assertIsNone(summarize_repository(manifest, jobs, calls)[0]["trials"][0]["attempt_wall_seconds"])
+
+    def test_timing_rejects_other_job_result_identity_or_attempt(self):
+        for changed in ("result", "identity", "attempt"):
+            with self.subTest(changed=changed), tempfile.TemporaryDirectory() as directory:
+                manifest, jobs, calls, receipts = self.timing_fixture(Path(directory))
+                path = receipts["replay"]
+                receipt = json.loads(path.read_text())
+                if changed == "result":
+                    receipt["trial_result"] = str(jobs / "other/result.json")
+                elif changed == "identity":
+                    receipt["request_identity"]["candidateId"] = "other"
+                else:
+                    receipt["attempt"] = 2
+                path.write_text(json.dumps(receipt))
+                with self.assertRaisesRegex(ValueError, "timing"):
+                    summarize_repository(manifest, jobs, calls)
+
+    def test_invalid_or_overlapping_phase_clocks_remain_unknown(self):
+        for start, finish in (("bad", "2026-09-28T00:00:54Z"),
+                              ("2026-09-28T00:00:19", "2026-09-28T00:00:54Z"),
+                              ("2026-09-28T00:00:19Z", "2026-09-28T00:00:18Z"),
+                              ("2026-09-28T00:00:16Z", "2026-09-28T00:00:54Z"),
+                              ("2026-09-28T00:00:19Z", "2026-09-28T00:00:49Z")):
+            with self.subTest(start=start, finish=finish), tempfile.TemporaryDirectory() as directory:
+                manifest, jobs, calls, receipts = self.timing_fixture(Path(directory))
+                path = receipts["replay"]
+                receipt = json.loads(path.read_text())
+                receipt.update({"started_at": start, "finished_at": finish})
+                path.write_text(json.dumps(receipt))
+                trial = summarize_repository(manifest, jobs, calls)[0]["trials"][0]
+                self.assertIsNone(trial["attempt_wall_seconds"])
+                self.assertIsNotNone(trial["attempt_timing"]["issue"])
+
     def test_native_codex_failure_excludes_clean_success_without_rewriting_official_grade(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

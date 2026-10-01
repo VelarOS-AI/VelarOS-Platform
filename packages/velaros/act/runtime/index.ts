@@ -84,6 +84,7 @@ export type {
   ActTurnTrace,
 } from './types/trace.js'
 export type { RuntimeMetric } from './types/trace.js'
+export type { OperationRuntimeCloseOptions, PendingInvocation } from '@velaros-ai/kernel'
 export type { VelarosSearchOptions } from '@velaros-ai/velaros/act/search'
 export type {
   SearchDraft,

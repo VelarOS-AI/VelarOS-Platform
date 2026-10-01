@@ -318,6 +318,7 @@ export function fakeSandboxHost(
     ...options.diff,
   }
   const host: RehearsalSandboxHostPort = {
+    getSandboxRecord: async () => record,
     createSandbox: async (create) => {
       calls.push({ create })
       return {

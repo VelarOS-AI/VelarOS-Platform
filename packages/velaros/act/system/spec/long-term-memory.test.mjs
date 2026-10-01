@@ -111,13 +111,64 @@ test('INV-12 主线长期记忆统一包合同、模板、发现和真实存储�
     (
       await execute(
         f.session,
-        'const [found]= (await memory.recall({id:"release-order"})).items;const {updatedAt,tags,...previous}=found;output(await memory.save({...previous,content:"Verified order"}));'
+        'const [found]= (await memory.recall({id:"release-order"})).items;const {revision,updatedAt,tags,...previous}=found;output(await memory.save({...previous,expectedRevision:revision,content:"Verified order"}));'
       )
     ).value.created,
     false
   )
   assert.deepEqual((await f.store.scope('project:shared').list())[0].tags, ['release'])
 })
+
+for (const organize of [false, true])
+  test(`INV-12 长期记忆公开合同保留版本并按条件保存、删除与拒绝过期写（organize=${organize}）`, async (t) => {
+    const passive = model(async function* (request) {
+      yield* done(request)
+    })
+    const f = await fixture(
+      t,
+      organize ? { model: passive, context: { sources: [], maintenance: { model: passive } } } : {}
+    )
+    const { value, receipt } = await execute(
+      f.session,
+      `
+      const initial=${JSON.stringify(entry('conditional', 'v1'))};
+      const created=await memory.save({...initial,expectedRevision:null});
+      const previous=(await memory.recall({id:initial.id})).items[0];
+      const {revision,updatedAt,...writable}=previous;
+      const updated=await memory.save({...writable,expectedRevision:revision,content:'v2'});
+      let metadataRejected='';
+      try { await memory.save({...previous,expectedRevision:updated.revision}); }
+      catch(error) { metadataRejected=error.message; }
+      const failures=[];
+      for(const attempt of [
+        ()=>memory.save({...initial,expectedRevision:null}),
+        ()=>memory.save({...initial,expectedRevision:revision,content:'stale'}),
+        ()=>memory.remove({id:initial.id,expectedRevision:revision})
+      ]) { try { await attempt(); failures.push('unexpected-success'); } catch(error) { failures.push(error.code); } }
+      const current=(await memory.recall({id:initial.id})).items[0];
+      const removed=await memory.remove({id:initial.id,expectedRevision:updated.revision});
+      const absent=await memory.remove({id:initial.id,expectedRevision:null});
+      output({created,previous,updated,metadataRejected,failures,current,removed,absent});
+    `
+    )
+    assert.match(value.created.revision, /^[a-f0-9]{64}$/)
+    assert.equal(value.created.created, true)
+    assert.equal(value.previous.revision, value.created.revision)
+    assert.equal(value.updated.created, false)
+    assert.notEqual(value.updated.revision, value.created.revision)
+    assert.match(value.metadataRejected, /多了不认识的字段/)
+    assert.deepEqual(value.failures, ['CONFLICT', 'CONFLICT', 'CONFLICT'])
+    assert.equal(value.current.content, 'v2')
+    assert.equal(value.current.revision, value.updated.revision)
+    assert.deepEqual(value.removed, { removed: true })
+    assert.deepEqual(value.absent, { removed: false })
+    const conflicts = (
+      await createContextInvocationJournal(f.storage).list('main', receipt.executionId)
+    ).filter((record) => record.receipt?.error?.code === 'CONFLICT')
+    assert.equal(conflicts.length, 3)
+    assert(conflicts.every((record) => record.receipt.effect === 'none'))
+    assert.equal((await f.store.scope('project:shared').list()).length, 0)
+  })
 
 test('INV-12 作用域在主会话打开时固定，同作用域跨会话与重启召回，任务笔记仍隔离', async (t) => {
   const f = await fixture(t)

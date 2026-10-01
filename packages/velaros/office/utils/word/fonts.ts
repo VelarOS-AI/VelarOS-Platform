@@ -17,9 +17,14 @@ export function resolveWordFontFamilies(
   hostPlatform: NodeJS.Platform = nodePlatform()
 ): WordFontFamilies {
   if (language === 'en-US') return { body: 'Times New Roman', heading: 'Aptos Display' }
-  if (hostPlatform === 'darwin') return { body: 'Arial Unicode MS', heading: 'Arial Unicode MS' }
-  if (hostPlatform === 'win32') return { body: 'Microsoft YaHei', heading: 'Microsoft YaHei' }
-  return { body: 'Noto Sans CJK SC', heading: 'Noto Sans CJK SC' }
+  switch (hostPlatform) {
+    case 'darwin':
+      return { body: 'Arial Unicode MS', heading: 'Arial Unicode MS' }
+    case 'win32':
+      return { body: 'Microsoft YaHei', heading: 'Microsoft YaHei' }
+    default:
+      return { body: 'Noto Sans CJK SC', heading: 'Noto Sans CJK SC' }
+  }
 }
 
 /** 转义写进 fontconfig XML 的目录名。 */

@@ -56,6 +56,8 @@ declare module 'velaros:context-materials' {
     readonly baseRevision: string
     readonly summary: string
     readonly unresolved: readonly string[]
+    /** 逐项更新当前约束/未解事项；只改变模型解释，原始最新用户输入始终优先。 */
+    readonly active?: ActiveContextPatch
     /** 笔记的派生展示；主模型的笔记、计划与结论归主模型维护，这里只改展示。 */
     readonly notes?: readonly ContextNotePresentation[]
     /** 输入摘要：只有完整原文已经进入本支线请求才可替换；只看到引用、片段或元数据时省略，并在 unresolved 里报告缺口。 */
@@ -110,6 +112,29 @@ declare module 'velaros:context-materials' {
   }
 
   /**
+   * 当前状态核对：baseRevision 照抄 snapshot.active.revision；reviewedInput 必须是 snapshot.goals 的最新原始输入，而且全文已进入本整理会话。
+   * changes 最多 64 项，逐条按现有 id 操作；约束只允许用比其原始输入更晚的用户输入作为撤销/取代依据，不能用模型笔记撤销用户约束。
+   * superseded 需要 replacement（1 到 1000 字符）；retracted 仅用于约束；resolved 仅用于未解事项。每项 evidence 至少一段、最多 8 段真实引文。
+   * 这是带来源的模型解释，不是原始用户授权；引文存在也不保证解释正确。仍成立的项不提交变更，未解项省略时继续保留。
+   * additions 用于明确核对后的补充或重开；与 changes 合计最多 64 项。text 为 1 到 1000 字符，每项 evidence 为 1 到 8 段；约束证据必须是全文已读的用户原文。
+   */
+  interface ActiveContextPatch {
+    readonly baseRevision: number
+    readonly reviewedInput: ContextRef
+    readonly additions?: ReadonlyArray<{
+      readonly kind: 'constraint' | 'question'
+      readonly text: string
+      readonly evidence: readonly ActiveContextEvidence[]
+    }>
+    readonly changes: ReadonlyArray<{
+      readonly id: string
+      readonly status: 'superseded' | 'retracted' | 'resolved'
+      readonly replacement?: string
+      readonly evidence: readonly ActiveContextEvidence[]
+    }>
+  }
+
+  /**
    * 一份笔记的派生展示：ref 必须是这份笔记当前版本的引用；summary（1 到 12000 个字符）与 resident 至少给一个；明确要求保留的笔记不能移出自动展示。
    */
   interface ContextNotePresentation {
@@ -160,18 +185,25 @@ declare module 'velaros:context-materials' {
   type ContextRecordKind =
     'user' | 'assistant' | 'tool' | 'event' | 'note' | 'checkpoint' | 'audit'
 
+  /** 一段直接证据：ref 指原文；offset 为 UTF-16 起点；quote 为该位置逐字引文，最多 4000 字符。 */
+  interface ActiveContextEvidence {
+    readonly ref: ContextRef
+    readonly offset: number
+    readonly quote: string
+  }
+
   /**
    * 整份输出的展示预算：maxChars 包括输出目录与省略说明（最多 200000），实际分配由宿主决定；交的放不下时每块只露出一部分，
-   * 结果头里写着这次实际给的 displayChars。要看的内容多（几个大文件、长文），就分几次执行各交一部分。
+   * 显式配置优先于各块 view.maxChars 的申请，0 表示不展示；未配置且没有块申请时使用默认预算。结果头里写着这次实际给的 displayChars。要看的内容多（几个大文件、长文），就分几次执行各交一部分。
    */
   interface ScriptOutputConfig {
     readonly maxChars?: number
   }
 
   /**
-   * 怎么展示（只影响你下一轮看到多少，原值照样完整保存，可以按引用召回）：
+   * 怎么展示（只影响你下一轮看到多少；原值在采集上限内完整保存，可以按引用召回）：
    * mode 默认 auto，按展示预算挑内容；full 要求整个值放得下，放不下就只给引用；reference 只给引用；summary 只展示整理服务已生成、版本匹配的摘要，没有就给引用。
-   * maxChars 本块最多展示多少字符（最多 200000）；lines 是一基闭区间 [起, 止]；maxItems 列表最多展示几项；edge 从头部或尾部选片段；paths 是 JSON Pointer 数组（最多 64 个），只展示这些字段。
+   * maxChars 本块最多展示多少字符（最多 200000）；未 configure 整体预算时，显式正数也申请本块所需的有限展示份额，实际仍受宿主总预算限制，不保证全文。reference/summary 不扩大整体申请；lines 是一基闭区间 [起, 止]；maxItems 列表最多展示几项；edge 从头部或尾部选片段；paths 是 JSON Pointer 数组（最多 64 个），只展示这些字段。
    */
   interface ScriptOutputView {
     readonly mode?: 'auto' | 'full' | 'reference' | 'summary'

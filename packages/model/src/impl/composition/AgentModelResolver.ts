@@ -128,6 +128,8 @@ class AgentModelResolver implements AgentModelResolverApi {
       apiKey,
       baseURL,
       reasoningLevel: selection.reasoningLevel,
+      openaiExplicitCacheBreakpoints:
+        selection.openaiExplicitCacheBreakpoints ?? runtimeConfig.openaiExplicitCacheBreakpoints,
       openRouterConfig: runtimeContext.openRouter,
       adapter,
       resolutionTrace: trace,
@@ -142,6 +144,7 @@ class AgentModelResolver implements AgentModelResolverApi {
     apiKey: string
     baseURL: string
     reasoningLevel?: LooseOptional<ReasoningLevel>
+    openaiExplicitCacheBreakpoints?: boolean
     openRouterConfig: OpenRouterRoutingConfig
     adapter?: LooseOptional<AgentProviderAdapterConfig>
     resolutionTrace: ResolvedAgentModelRuntime['resolutionTrace']
@@ -224,6 +227,7 @@ class AgentModelResolver implements AgentModelResolverApi {
         baseURL: input.baseURL,
         adapter: input.adapter,
         reasoningLevel: toNullable(input.reasoningLevel),
+        openaiExplicitCacheBreakpoints: input.openaiExplicitCacheBreakpoints,
         providerScriptRuntimeMetadata: providerScriptMetadata,
       }),
       providerId: input.providerId,

@@ -259,6 +259,8 @@ export interface ProjectChangeInspection {
  * 已经撤销过的再撤一次也成功（alreadyUndone 为真）。那之后文件又被改过时整个拒绝（CONFLICT_WITH_EXTERNAL_EDIT），一个文件都不动。
  */
 export interface ProjectUndoResult {
+  /** 撤销已完成后的附带诊断。 */
+  notes?: string[]
   changeRef: string
   changedFiles: string[]
   alreadyUndone?: boolean

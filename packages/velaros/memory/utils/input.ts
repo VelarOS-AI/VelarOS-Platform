@@ -3,7 +3,15 @@
  * 不合法就当场拒绝（`VALIDATION`），一个文件都不写、不删；message 写清楚怎么改。
  */
 
-import { isArray, isPlainObject, isPresent, isString, trimmedStringOrEmpty } from '@velaros-ai/core'
+import {
+  isArray,
+  isNull,
+  isPlainObject,
+  isPresent,
+  isString,
+  isUndefined,
+  trimmedStringOrEmpty,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { MemoryLimits, MemoryTypes } from '../contract/constants.js'
@@ -29,6 +37,8 @@ export function saveInput(input: unknown): MemorySaveInput {
     content: contentField(input.content),
   }
   if (isPresent(input.tags)) entry.tags = tagsField(input.tags)
+  const expected = expectedRevisionInput(input)
+  if (!isUndefined(expected)) entry.expectedRevision = expected
   return entry
 }
 
@@ -97,4 +107,16 @@ function tagsField(value: unknown): string[] {
       `一条最多 ${MemoryLimits.tagCount} 个标签，这里有 ${tags.length} 个`
     )
   return tags
+}
+
+/** 条件写入版本：省略沿用无条件语义，null 明确要求目标不存在。 */
+export function expectedRevisionInput(input: unknown): LooseOptional<string> {
+  if (!isPlainObject(input)) throw new AppError('VALIDATION', '记忆操作需要对象入参')
+  const value = input.expectedRevision
+  if (isUndefined(value) || isNull(value)) return value
+  if (isString(value) && /^[a-f0-9]{64}$/.test(value)) return value
+  throw new AppError(
+    'VALIDATION',
+    'expectedRevision 要原样使用 list/save 的 revision；只许新建时用 null'
+  )
 }

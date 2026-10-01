@@ -47,11 +47,12 @@ export function estimateRequestInput(
     responseFormat: format.type === 'json' ? format : undefined,
   })
   const images = { count, tokens: count * ModelTuning.estimate.imageTokens }
-  return {
+  const estimate: ModelInputEstimate = {
     tokens: new TextEncoder().encode(encoded).byteLength + images.tokens + opaqueTokens,
     precision: 'estimate',
     basis: `文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 ${ModelTuning.estimate.imageTokens} token 计；协议误差使用 Agent 的独立余量，非精确 token 计数${opaqueTokens ? '；加密推理状态按原响应的推理用量独立预留，不按密文字符计数' : ''}`,
     images,
-    ...(opaqueTokens ? { opaqueTokens } : {}),
   }
+  if (opaqueTokens) Object.assign(estimate, { opaqueTokens })
+  return estimate
 }

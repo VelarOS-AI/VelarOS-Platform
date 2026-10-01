@@ -1,18 +1,27 @@
 /** 磁盘上的几个小动作：原子写、新建但不覆盖、列目录与读小文件、删文件；「不存在」按正常结果交回，别的错照常抛。 */
 
 import { randomUUID } from 'node:crypto'
-import { readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 
-import { readErrnoCode } from '@velaros-ai/core'
+import { Log, readErrnoCode } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 /** 原子地写一个文件：先写同目录的临时文件再改名，读的人要么看到旧的、要么看到新的，看不到半截。 */
-export async function writeFileAtomically(path: string, content: string): Promise<void> {
+export async function writeFileAtomically(
+  path: string,
+  content: string,
+  signal?: AbortSignal
+): Promise<void> {
   const temporary = `${path}.${randomUUID()}.tmp`
   try {
+    signal?.throwIfAborted()
     await writeFile(temporary, content, 'utf8')
+    signal?.throwIfAborted()
     await rename(temporary, path)
   } finally {
-    await rm(temporary, { force: true })
+    await rm(temporary, { force: true }).catch((error: unknown) => {
+      Log.tag('MemoryFile').warn('temporary cleanup failed', { error })
+    })
   }
 }
 
@@ -57,4 +66,32 @@ export async function removeFileIfExists(path: string): Promise<boolean> {
       throw error
     }
   )
+}
+
+/** 同一磁盘条目的跨实例/进程互斥；冲突立即返回，调用方重读后重试，不自动夺取可能仍活跃的锁。 */
+export async function withMemoryWriteLock<T>(
+  path: string,
+  action: () => Promise<T>,
+  signal?: AbortSignal
+): Promise<T> {
+  signal?.throwIfAborted()
+  const lock = `${path}.lock`
+  try {
+    await mkdir(lock)
+  } catch (error) {
+    if (readErrnoCode(error) === 'EEXIST')
+      throw new AppError(
+        'CONFLICT',
+        '这条记忆正在被修改，或先前进程留下了写锁；确认写者状态后重读并重试'
+      )
+    throw error
+  }
+  try {
+    signal?.throwIfAborted()
+    return await action()
+  } finally {
+    await rm(lock, { recursive: true, force: true }).catch((error: unknown) => {
+      Log.tag('MemoryFile').warn('write lock cleanup failed', { error })
+    })
+  }
 }

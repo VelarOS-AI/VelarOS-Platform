@@ -54,9 +54,14 @@ export class TextPatchStrategy implements PatchStrategy {
 
   public prepare(input: PatchStrategyInput): PreparedPatch[] {
     const op = input.intent.operation
-    if (op.type === 'create_file') return [this.createFilePatch(op, input.snapshot)]
-    if (op.type === 'delete_file') return [this.deleteFilePatch(op, input.snapshot)]
-    if (op.type === 'rename_file') return this.renameFilePatches(op, input.snapshot)
+    switch (op.type) {
+      case 'create_file':
+        return [this.createFilePatch(op, input.snapshot)]
+      case 'delete_file':
+        return [this.deleteFilePatch(op, input.snapshot)]
+      case 'rename_file':
+        return this.renameFilePatches(op, input.snapshot)
+    }
 
     const snap = input.snapshot
     if (!snap) {

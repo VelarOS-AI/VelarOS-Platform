@@ -33,7 +33,7 @@ export interface ProjectCapabilityPortsApi {
    */
   shell(project: ProjectShellHostPort, abortSignal: AbortSignal): ShellSpacePort
   /**
-   * `velaros:sandbox` 的项目端口：源目录钳在项目内（不给就是项目根）；建、看差量、落回、丢弃、镜像里跑命令都交宿主的沙箱，
+   * `velaros:sandbox` 的项目端口：源目录钳在项目内（不给就是项目根）；每次按句柄操作都重新核对当前项目对真实源目录的授权，落回走项目写门；建、看差量、落回、丢弃、镜像里跑命令都交宿主的沙箱，
    * 落回不问人。宿主没给沙箱时，每个操作都明说这台机器上没有演练沙箱（UNAVAILABLE）。
    */
   sandbox(project: ProjectHostPort, abortSignal: AbortSignal): SandboxSurfacePort
@@ -97,13 +97,46 @@ export class ProjectCapabilityPorts implements ProjectCapabilityPortsApi {
     }
     const source = (requested: Optional<string>) =>
       insideProject(project.getRootPath(), requested ?? '.', '沙箱的源目录')
+    const authorize = async (sandboxId: string, signal: AbortSignal) => {
+      signal.throwIfAborted()
+      const host = sandbox()
+      const record = host.getSandboxRecord
+        ? await host.getSandboxRecord(sandboxId, signal)
+        : await host.diffSandbox({ sandboxId, textDiffs: false }, signal)
+      await source(record.source)
+      signal.throwIfAborted()
+      return host
+    }
     return {
-      createSandbox: async (options) =>
-        sandbox().createSandbox({ ...options, source: await source(options?.source) }),
-      diffSandbox: (options) => sandbox().diffSandbox(options),
-      applySandbox: (options) => sandbox().applySandbox(options),
-      discardSandbox: (sandboxId) => sandbox().discardSandbox(sandboxId),
-      runInSandbox: (options, signal) => sandbox().runInSandbox(options, signal ?? abortSignal),
+      createSandbox: async (options, signal = abortSignal) => {
+        const resolved = await source(options?.source)
+        signal.throwIfAborted()
+        return sandbox().createSandbox({ ...options, source: resolved }, signal)
+      },
+      diffSandbox: async (options, signal = abortSignal) => {
+        const host = await authorize(options.sandboxId, signal)
+        return host.diffSandbox(options, signal)
+      },
+      applySandbox: (options, signal = abortSignal) =>
+        this.gate.run(project.getRootPath(), true, signal, async () => {
+          const host = await authorize(options.sandboxId, signal)
+          return host.applySandbox(options, signal)
+        }),
+      discardSandbox: async (sandboxId, signal = abortSignal) => {
+        let host: RehearsalSandboxHostPort
+        try {
+          host = await authorize(sandboxId, signal)
+        } catch (error) {
+          signal.throwIfAborted()
+          if (AppError.from(error).code === 'NOT_FOUND') return { sandboxId, removed: false }
+          throw error
+        }
+        return host.discardSandbox(sandboxId, signal)
+      },
+      runInSandbox: async (options, signal = abortSignal) => {
+        const host = await authorize(options.sandboxId, signal)
+        return host.runInSandbox(options, signal)
+      },
       resolveSource: (requested) => source(requested),
     }
   }

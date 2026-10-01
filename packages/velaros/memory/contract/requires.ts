@@ -26,16 +26,16 @@ export interface MemoryStoreOptions {
 /** 一个作用域里的记忆：读写只落在这个作用域的目录里，别的作用域碰不到。入参在这里核对，不合法就一个文件都不写、不删。 */
 export interface MemoryScopePort {
   /** 这个作用域的全部记忆，含正文，按更新时间从新到旧。 */
-  list: () => Promise<MemoryEntry[]>
-  /** 写一条：id 已有就整条覆盖（tags 不给就沿用原来的，给 [] 才清空），没有就新建；更新时间由记忆库填。 */
-  save: (input: MemorySaveInput) => Promise<MemorySaved>
+  list: (signal?: AbortSignal) => Promise<MemoryEntry[]>
+  /** 写一条：id 已有就整条覆盖（tags 不给就沿用原来的，给 [] 才清空），没有就新建；更新时间由记忆库填。expectedRevision 给版本做条件写，null 只许新建；省略则最后提交覆盖，写锁冲突报 CONFLICT，重读后重试。 */
+  save: (input: MemorySaveInput, signal?: AbortSignal) => Promise<MemorySaved>
   /** 删一条：真删；本来就没有时 removed 为假。 */
-  remove: (input: MemoryIdInput) => Promise<MemoryRemoved>
+  remove: (input: MemoryIdInput, signal?: AbortSignal) => Promise<MemoryRemoved>
 }
 
 /** 每次调用 `velaros:memory` 时宿主给的上下文。它不是模型能填的入参：宿主分发这次调用时按会话的作用域装好，生成声明时整个丢掉。 */
 export interface MemoryOperationContext {
-  /** 本次调用的取消信号：取消之后一个文件都不再读写。 */
+  /** 本次调用的取消信号：准备阶段及提交前核对；已开始的原子提交按实际结果报告。 */
   abortSignal: AbortSignal
   /** 这次调用落在哪个作用域：`store.scope(这个会话的作用域)`。 */
   memory: MemoryScopePort

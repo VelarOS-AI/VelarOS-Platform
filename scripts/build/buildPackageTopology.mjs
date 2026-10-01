@@ -10,6 +10,7 @@ import {
   openSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   readlinkSync,
   renameSync,
   rmSync,
@@ -354,6 +355,52 @@ function parseArgs(argv) {
   return { incremental, list, targets }
 }
 
+// 打包复用构建器的输入/产物指纹，并在整个消费期间持有同一把构建锁。
+export async function withVerifiedPackageBuilds(targets, consume) {
+  const graph = scanPackages()
+  const { external, order } = resolveBuildOrder(
+    graph,
+    targets.map((target) => resolveTargetName(graph, target))
+  )
+  if (external.length)
+    throw new Error(`Cannot verify external build dependencies: ${external.join(', ')}`)
+  const releaseLock = acquireBuildLock()
+  try {
+    const verify = () => {
+      const cache = readBuildCache()
+      const resolvedFingerprints = new Map()
+      const proof = {}
+      for (const node of order) {
+        const dependencies = new Map(
+          node.deps.map((name) => [name, resolvedFingerprints.get(name)])
+        )
+        const inputFingerprint = computePackageInputFingerprint(node, dependencies)
+        const outputFingerprint = computeBuildOutputFingerprint(node)
+        const cached = cache.packages[node.name]
+        if (
+          !node.hasBuild ||
+          !outputFingerprint ||
+          cached?.inputFingerprint !== inputFingerprint ||
+          cached?.outputFingerprint !== outputFingerprint
+        )
+          throw new Error(
+            `Stale or unverified build for ${node.name}; run the package topology build before preparing a candidate`
+          )
+        resolvedFingerprints.set(node.name, inputFingerprint)
+        proof[node.name] = { inputFingerprint, outputFingerprint }
+      }
+      return proof
+    }
+    const proof = verify()
+    const result = await consume(proof)
+    if (JSON.stringify(verify()) !== JSON.stringify(proof))
+      throw new Error('Build inputs or outputs changed while preparing the candidate')
+    return result
+  } finally {
+    releaseLock()
+  }
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2))
   if (options.help) {
@@ -428,9 +475,11 @@ function main() {
   console.log(`完成：构建 ${builtCount} 个包，跳过 ${skippedCount} 个未变化包。`)
 }
 
-try {
-  main()
-} catch (error) {
-  console.error(`拓扑构建失败：${error.message}`)
-  process.exit(1)
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    main()
+  } catch (error) {
+    console.error(`拓扑构建失败：${error.message}`)
+    process.exit(1)
+  }
 }

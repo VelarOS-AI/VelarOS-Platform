@@ -34,7 +34,7 @@ INV-30 是 2026-09-27 新增的：内嵌 `<webview>` 里一次截整页，超出
 | INV-11 | 登录墙门控每个站点每会话最多问一次：问过就记账，之后无论批准还是拒绝都不再阻塞——死锁防护优先于反复征询 | 测试 | `spec/acceptance.test.ts` |
 | INV-13 | `./browser/contracts` 与 `./browser/renderer` 的整条引用链不碰 Node 内置模块，渲染进程可以直接加载 | 门禁 | `check:module-ownership` |
 | INV-15 | 2.5 MB 的 vendor 性能引擎只在真跑 trace 时才加载，且只有 `BrowserPerformanceTraceEngine` 一处加载它 | 门禁 | `check:module-ownership` |
-| INV-16 | 同一个浏览器会话的动作串行：会话动作队列按会话排队，单个动作有占用上限，超时的动作不会把队列钉死（**未验证**：要真实 Electron 会话，留给真机验收） | 文字 | |
+| INV-16 | 同一个浏览器会话的动作串行：会话动作队列按会话排队，调用有等待上限；动作超时但未收束时隔离该会话并拒绝后续动作，clear 取消旧排队者，原动作收束前不复用资源身份。拆卸绕过动作队列，新会话可继续使用；真实 Electron 资源销毁仍需真机验收 | 测试 | `test/core/foundation-queue.test.ts` |
 | INV-17 | 模型面是 `velaros:browser`、`velaros:devtools` 与 `velaros:cdp`：声明从源码生成，随包发布的声明（`VelarBrowserModule`、`VelarDevtoolsModule`、`VelarCdpModule`）与生成物是同一份；空间端口与调用上下文不进模型面，工具时代的工具名、recipe、站点产物与 ADR 0012 删掉的操作都不在；模型写的程序照这份声明调到真实操作 | 测试 | `spec/acceptance.test.ts` |
 | INV-18 | 声明里写给模型的数字就是常量表里的：看页面、输入、页面脚本、等待、诊断、页面条件、截图、性能、用户脚本与模型 CDP 会话的上限与缺省；改常量不改说明（或反过来）过不了验收 | 测试 | `spec/acceptance.test.ts` |
 | INV-19 | 代码模版（`template.js`、`devtools-template.js`、`cdp-template.js`）是日常用法的示例程序（只是示例，模型按需要改写），import 只写一次；整份照生成的真实声明过类型检查，不嵌进声明，随模型面发布、按需读；每个函数照写法跑通由 `test/template.test.ts` 核对 | 测试 | `spec/acceptance.test.ts` |
@@ -49,3 +49,5 @@ INV-30 是 2026-09-27 新增的：内嵌 `<webview>` 里一次截整页，超出
 | INV-28 | 模型的 CDP 会话与宿主那条分开：模型开关的域、设的仿真与 Fetch 拦截只算在它自己身上，宿主的诊断、录屏与 mock 不受影响，宿主的事件监听不收子会话的事件；只认它自己挂出来的子会话（**未验证**：要真实 Electron，实现测试与真机探针在 `test/core/browser-protocol-sessions.test.ts` 与 ADR 0012 的验证里） | 文字 | |
 | INV-29 | 被模型的 Fetch 拦下、30000 毫秒没人放行的请求由宿主放行，并在事件里记一条 `Velar.requestAutoContinued`；事件序号只增，缓冲只为守住内存、挤掉的条数如实交回（实现测试在 `test/core/browser-protocol-sessions.test.ts`，经空间端口的那一段要真实浏览器） | 文字 | |
 | INV-30 | 整页截图与高过一屏的区域截图是真的页面：按一屏切块、每块经 captureBeyondViewport 截下再拼成一张，每处页面只出现一次；截图不滚动页面、不改版面，fixed 元素与元素标注只在它们此刻所在的位置出现一次；整张图守住像素上限，超了一起降清晰度（**未验证**：要真实 `<webview>`，切块与拼接的实现测试在 `test/runtime/screenshot-tiles.test.ts`，真机探针 `test/probes/electron-full-page-screenshot.probe.mjs`） | 文字 | |
+
+2026-09-30 INV-16 明确调用超时与实际动作结算的区别。原放行普通动作可能与迟到动作重叠；当前以世代失效、排队取消及资源复用检查保证互斥。

@@ -11,21 +11,15 @@ import type { ChatProviderId, ProviderScriptRuntimeMetadata } from '../../types/
 import { toPositiveInteger } from '../numbers'
 
 import {
+  findSharedProviderCatalogDefinition,
   listKnownModelContextWindowEntries,
   listOpenRouterCompatibleContextWindowEntries,
 } from './provider-catalogs'
 
 const KnownModelContextWindowEntries = listKnownModelContextWindowEntries()
-const KnownModelContextWindowMap = new Map(KnownModelContextWindowEntries)
 const OpenRouterCompatibleModelContextWindows = new Map(
   listOpenRouterCompatibleContextWindowEntries()
 )
-
-/** 同一家族的模型窗口一致，个别型号没进静态目录时按前缀兜住。 */
-const KnownModelContextWindowFamilies: Array<{ prefix: string; contextWindow: number }> = [
-  { prefix: 'gpt-5', contextWindow: 400_000 },
-  { prefix: 'gpt-4.1', contextWindow: 1_000_000 },
-]
 
 /** 全部静态目录里声明过窗口的模型条目，给对外的只读快照用。 */
 export function getKnownModelContextWindowEntries(): Array<readonly [string, number]> {
@@ -75,36 +69,6 @@ function addCandidate(candidates: string[], seen: Set<string>, value: string): v
   candidates.push(trimmed)
 }
 
-/** 依次按精确名、可选的 OpenRouter 精选表、家族前缀查窗口；查不到返回 null。 */
-function resolveModelContextWindowCandidates(
-  lookupCandidates: readonly string[],
-  includeCompatibleCatalog = false
-): Nullable<number> {
-  if (isEmpty(lookupCandidates)) return null
-
-  for (const candidate of lookupCandidates) {
-    const exactMatch = KnownModelContextWindowMap.get(candidate)
-    if (isNumber(exactMatch)) return exactMatch
-
-    if (includeCompatibleCatalog) {
-      const compatibleMatch = OpenRouterCompatibleModelContextWindows.get(candidate)
-      if (isNumber(compatibleMatch)) return compatibleMatch
-    }
-  }
-
-  for (const candidate of lookupCandidates) {
-    const familyMatch = KnownModelContextWindowFamilies.find(
-      (entry) =>
-        candidate === entry.prefix ||
-        candidate.startsWith(`${entry.prefix}-`) ||
-        candidate.startsWith(`${entry.prefix}.`)
-    )
-    if (familyMatch) return familyMatch.contextWindow
-  }
-
-  return null
-}
-
 /** 把 provider 与模型名一起展开成候选：补上 `provider/model`，Bedrock 与 Vertex 的命名另有映射。 */
 function buildProviderModelLookupCandidates(provider: string, model: string): string[] {
   const candidates: string[] = []
@@ -152,10 +116,27 @@ export function resolveProviderModelContextWindow(
   provider: string,
   model: string
 ): Nullable<number> {
-  return resolveModelContextWindowCandidates(
-    buildProviderModelLookupCandidates(provider, model),
-    true
-  )
+  const normalizedProvider = provider.trim().toLowerCase()
+  const normalizedModel = model.trim().toLowerCase()
+  if (normalizedProvider === 'openrouter')
+    return toNullable(OpenRouterCompatibleModelContextWindows.get(normalizedModel))
+  const source =
+    normalizedProvider === 'vertex'
+      ? 'google'
+      : normalizedProvider === 'bedrock'
+        ? 'anthropic'
+        : normalizedProvider
+  const catalog = findSharedProviderCatalogDefinition(source)
+  if (!catalog) return null
+  // 只有明确的云提供方命名协议做转换；私有别名不剥离后缀或借用其他提供方的窗口。
+  const candidates = ['vertex', 'bedrock'].includes(normalizedProvider)
+    ? buildProviderModelLookupCandidates(normalizedProvider, normalizedModel)
+    : [normalizedModel]
+  for (const candidate of candidates) {
+    const match = catalog.models.find((entry) => entry.id.toLowerCase() === candidate)
+    if (isNumber(match?.contextWindow)) return match.contextWindow
+  }
+  return null
 }
 
 /** provider script 在 `config` 里声明的具体 provider/model 三元组；形状不对时按缺席处理。 */

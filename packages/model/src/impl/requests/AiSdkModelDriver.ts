@@ -13,7 +13,7 @@ import type {
   ModelTurnRequest,
 } from '../../types/driver.js'
 import { estimateRequestInput } from '../../utils/request-estimate.js'
-import { planProviderRetry } from '../../utils/retry.js'
+import { planProviderRetry, providerErrorMessage } from '../../utils/retry.js'
 import { ModelTuning } from '../../utils/tuning.js'
 import {
   responseContinuation,
@@ -22,6 +22,7 @@ import {
 } from '../../utils/wire/continuation.js'
 import { withPromptCacheKey } from '../../utils/wire/prompt-cache.js'
 import { readChatCompletionReasoning } from '../../utils/wire/reasoning.js'
+import { responseTerminalKind, responseTerminalUsage } from '../../utils/wire/stream-terminal.js'
 
 class AiSdkModelDriver implements ModelDriver {
   public readonly id: string
@@ -47,8 +48,14 @@ class AiSdkModelDriver implements ModelDriver {
     request: ModelTurnRequest,
     signal: AbortSignal
   ): AsyncIterable<ModelTurnDelta> {
+    let reportedUsage: Optional<Extract<ModelTurnDelta, { type: 'usage' }>>
+    let usagePublished = false
+    let responseTerminal: Optional<string>
     try {
       const format = modelRequestEncoder.response(request)
+      const openaiOptions: Record<string, boolean> = {}
+      if (format.type === 'json') openaiOptions.strictJsonSchema = false
+      if (usesResponseContinuation(this.options.model)) openaiOptions.store = false
       const result = streamText({
         model: this.options.model,
         system: request.instructions,
@@ -59,16 +66,19 @@ class AiSdkModelDriver implements ModelDriver {
         ).messages,
         maxOutputTokens: request.outputTokens,
         maxRetries: 0,
+        // fullStream 负责交付失败；替换 SDK 默认的原始对象打印，避免把请求数据写进 stderr。
+        onError: ({ error }) => {
+          Log.tag('AiSdkModelDriver').debug('供应商响应流失败', {
+            message: providerErrorMessage(error),
+          })
+        },
         // Chat Completions 通道的思考摘要只在原始分块里（见 readChatCompletionReasoning）。
         includeRawChunks: true,
         // 完整 JSON Schema 允许可选字段和动态 input；本地校验是接收门。
         providerOptions: withPromptCacheKey(
           format.type === 'json' || usesResponseContinuation(this.options.model)
             ? {
-                openai: {
-                  ...(format.type === 'json' ? { strictJsonSchema: false } : {}),
-                  ...(usesResponseContinuation(this.options.model) ? { store: false } : {}),
-                },
+                openai: openaiOptions,
               }
             : undefined,
           request.cacheKey
@@ -111,6 +121,10 @@ class AiSdkModelDriver implements ModelDriver {
       for await (const part of result.fullStream) {
         signal.throwIfAborted()
         if (finish) throw new AppError('PROTOCOL', '供应商在结束响应后继续发送内容')
+        if (part.type === 'raw' && usesResponseContinuation(this.options.model)) {
+          responseTerminal ??= responseTerminalKind(part.rawValue)
+          reportedUsage ??= responseTerminalUsage(part.rawValue)
+        }
         if (part.type === 'reasoning-start' && reasoningChars > 0) reasoningBreak = true
         let reasoning = ''
         if (part.type === 'reasoning-delta' && reasoningSource !== 'raw') {
@@ -162,7 +176,8 @@ class AiSdkModelDriver implements ModelDriver {
           if (
             !isUndefined(part.totalUsage.inputTokens) &&
             !isUndefined(part.totalUsage.outputTokens)
-          )
+          ) {
+            usagePublished = true
             yield {
               type: 'usage',
               inputTokens: part.totalUsage.inputTokens,
@@ -170,6 +185,21 @@ class AiSdkModelDriver implements ModelDriver {
               cacheReadTokens: part.totalUsage.inputTokenDetails.cacheReadTokens,
               cacheWriteTokens: part.totalUsage.inputTokenDetails.cacheWriteTokens,
             }
+          }
+          // Responses SDK 会在普通 EOF 时合成 other；缺失终端是流中断，不能冒充供应商拒绝。
+          if (
+            usesResponseContinuation(this.options.model) &&
+            !responseTerminal &&
+            part.finishReason === 'other' &&
+            isUndefined(part.rawFinishReason)
+          )
+            throw AppError.withFields(
+              'UNAVAILABLE',
+              '供应商响应流中断：未收到 Responses 终端事件',
+              {
+                retryable: true,
+              }
+            )
           if (!['stop', 'length'].includes(part.finishReason))
             throw new AppError('PROTOCOL', `供应商响应未成功结束：${part.finishReason}`)
           finish = { type: 'finish', reason: part.finishReason === 'length' ? 'length' : 'stop' }
@@ -203,12 +233,17 @@ class AiSdkModelDriver implements ModelDriver {
     } catch (error) {
       Log.tag('ActRuntime').debug('AiSdkModelDriver 已进入异常处理或降级分支')
       signal.throwIfAborted()
-      const message = error instanceof Error ? error.message : String(error)
+      if (reportedUsage && !usagePublished) yield reportedUsage
+      const message = providerErrorMessage(error)
       const code =
         /context.{0,30}(?:length|window|limit)|maximum.{0,20}tokens|too many tokens/iu.test(message)
           ? 'context-limit'
           : 'provider'
-      const retry = code === 'provider' ? planProviderRetry(error, { retryIndex: 1 }) : null
+      // completed 后 SDK 仍可能因传输失败而缺失完整延续状态：拒绝执行，也不再生成一份已完成响应。
+      const retry =
+        code === 'provider' && responseTerminal !== 'response.completed'
+          ? planProviderRetry(error, { retryIndex: 1 })
+          : null
       const failure: Extract<ModelTurnDelta, { type: 'error' }> = { type: 'error', code, message }
       if (retry) Object.assign(failure, { retryAfterMs: retry.delayMs })
       yield failure

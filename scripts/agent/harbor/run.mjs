@@ -1,4 +1,4 @@
-import { access, appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { access, appendFile, mkdir, readFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { platform, arch } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -7,14 +7,8 @@ import { pathToFileURL } from 'node:url'
 
 import { createRuntime, createShellCapabilityModule } from '@velaros-ai/velaros'
 import { createLocalShellHost } from '@velaros-ai/velaros/shell/local'
-import { toTrajectory } from './atif.mjs'
-
-async function snapshot(path, value) {
-  const serialized = JSON.stringify(value, null, 2)
-  await writeFile(`${path}.writing`, serialized)
-  await rename(`${path}.writing`, path)
-  return Buffer.byteLength(serialized)
-}
+import { createTraceExporter, snapshot } from './trace-export.mjs'
+import { discoverProjectCommands } from './tool-discovery.mjs'
 
 // 这是正式 Runtime 的无人值守宿主；任务正文直接来自 Harbor，验收由 Harbor 在运行结束后执行。
 export async function runTask({
@@ -29,7 +23,12 @@ export async function runTask({
 }) {
   await mkdir(output, { recursive: true })
   const host = createLocalShellHost({ cwd: workspace })
+  let discovery
   let shellInspection
+  const inspect = async () => {
+    discovery = await discoverProjectCommands(workspace)
+    shellInspection = await host.inspectEnvironment(discovery.commands)
+  }
   const denied = async () => {
     throw new Error('Interactive approval is unavailable in this benchmark run')
   }
@@ -55,7 +54,7 @@ export async function runTask({
       listBackgroundTasks: host.listBackgroundTasks.bind(host),
       refreshShellEnvironment: async () => {
         const result = await host.refreshShellEnvironment()
-        shellInspection = await host.inspectEnvironment()
+        await inspect()
         return result
       },
       terminateBackgroundTask: host.terminateBackgroundTask.bind(host),
@@ -66,60 +65,12 @@ export async function runTask({
     status = 'starting',
     failure = null
   const modelName = model.model ?? model.id
-  const traceExport = { count: 0, totalMs: 0, maxMs: 0, bytesWritten: 0 }
+  let traceExporter
   const cancel = () => session?.cancel()
   process.on('SIGTERM', cancel)
   process.on('SIGINT', cancel)
-  async function exportTrace() {
-    const started = performance.now()
-    const first = await runtime.trace(session.id, { limit: 1, fullContent: true })
-    const readTurns = async (sessionId) => {
-      const traces = []
-      let after = 0
-      do {
-        const page = await runtime.trace(session.id, {
-          sessionId,
-          after,
-          limit: 8,
-          fullContent: true,
-        })
-        traces.push(...page.turns)
-        after = page.nextAfter
-      } while (after !== null)
-      return traces
-    }
-    const traces = await readTurns(session.id)
-    const branches = []
-    for (const binding of first.branches)
-      branches.push({ ...binding, turns: await readTurns(binding.sessionId) })
-    const traceBytes = await snapshot(join(output, 'traces.json'), { traces, branches })
-    const trajectoryBytes = await snapshot(
-      join(output, 'trajectory.json'),
-      toTrajectory({
-        sessionId: session.id,
-        instruction,
-        traces,
-        branches,
-        identity,
-        model: modelName,
-      })
-    )
-    const elapsed = performance.now() - started
-    traceExport.count++
-    traceExport.totalMs += elapsed
-    traceExport.maxMs = Math.max(traceExport.maxMs, elapsed)
-    traceExport.bytesWritten += traceBytes + trajectoryBytes
-    await snapshot(join(output, 'status.json'), {
-      status,
-      failure,
-      model: modelName,
-      mainRequests: traces.length,
-      branchRequests: branches.reduce((sum, branch) => sum + branch.turns.length, 0),
-      traceExport,
-    })
-  }
   try {
-    shellInspection = await host.inspectEnvironment()
+    await inspect()
     runtime = await createRuntime({
       workspace,
       dataDir: join(output, 'state'),
@@ -142,6 +93,9 @@ export async function runTask({
           path: shellInspection.shell.path,
           kind: shellInspection.shell.kind,
           version: shellInspection.shell.version,
+          pathEntries: shellInspection.shell.pathEntries,
+          commands: shellInspection.commands,
+          commandDiscovery: discovery.coverage,
         }),
         shells: JSON.stringify(
           shellInspection.shells.map((shell) => ({
@@ -157,6 +111,14 @@ export async function runTask({
       limits: { turns, timeoutMs, outputTokens: 32768, safetyTokens: 2048 },
     })
     session = await runtime.openSession(`harbor-task-${randomUUID()}`)
+    traceExporter = createTraceExporter({
+      trace: (query) => runtime.trace(session.id, query),
+      output,
+      sessionId: session.id,
+      instruction,
+      identity,
+      model: modelName,
+    })
     for await (const event of session.submit(instruction)) {
       await appendFile(join(output, 'events.jsonl'), JSON.stringify(event) + '\n')
       if (event.type === 'state') {
@@ -168,7 +130,7 @@ export async function runTask({
         failure = 'Agent requested unavailable human input'
         session.cancel()
       }
-      if (event.type === 'turn') await exportTrace()
+      if (event.type === 'turn') await traceExporter.export({ status, failure })
     }
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error)
@@ -176,7 +138,15 @@ export async function runTask({
     session?.cancel()
   } finally {
     try {
-      if (session) await exportTrace()
+      // Settle cancellation and foreground receipts before the authoritative
+      // snapshot; runtime storage remains readable until runtime.close().
+      try {
+        await session?.close()
+      } catch (error) {
+        failure ??= error instanceof Error ? error.message : String(error)
+        status = 'failed'
+      }
+      if (traceExporter) await traceExporter.export({ final: true, status, failure })
       else await snapshot(join(output, 'status.json'), { status, failure })
     } finally {
       await runtime?.close()
@@ -186,6 +156,32 @@ export async function runTask({
     }
   }
   return { status, failure }
+}
+
+// 模型参数从候选身份读取，避免适配器标记与真实请求分叉。
+export function candidateModel(identity, credentials) {
+  if (
+    typeof identity.modelName !== 'string' ||
+    !/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/u.test(identity.modelName) ||
+    !['low', 'medium', 'high'].includes(identity.reasoningEffort)
+  )
+    throw new Error('Candidate model and reasoning effort must be explicitly frozen')
+  if (
+    identity.openaiExplicitCacheBreakpoints !== undefined &&
+    typeof identity.openaiExplicitCacheBreakpoints !== 'boolean'
+  )
+    throw new Error('Candidate OpenAI cache breakpoint capability must be boolean')
+  return {
+    provider: 'openai',
+    model: identity.modelName,
+    apiKey: credentials.apiKey,
+    baseURL: credentials.baseURL,
+    reasoningLevel: identity.reasoningEffort,
+    ...(identity.openaiExplicitCacheBreakpoints === undefined
+      ? {}
+      : { openaiExplicitCacheBreakpoints: identity.openaiExplicitCacheBreakpoints }),
+    limits: { contextTokens: 1050000, inputTokens: 922000, outputTokens: 32768 },
+  }
 }
 
 async function main() {
@@ -210,14 +206,10 @@ async function main() {
     output: resolve(values.output),
     identity,
     isolatedContainer: true,
-    model: {
-      provider: 'openai',
-      model: 'gpt-6-sol',
+    model: candidateModel(identity, {
       apiKey: process.env.OPENAI_API_KEY,
       baseURL: process.env.OPENAI_BASE_URL,
-      reasoningLevel: 'high',
-      limits: { contextTokens: 1050000, inputTokens: 922000, outputTokens: 32768 },
-    },
+    }),
   })
   console.log(JSON.stringify(result))
   process.exitCode = result.status === 'completed' ? 0 : 1

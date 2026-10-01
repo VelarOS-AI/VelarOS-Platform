@@ -13,9 +13,15 @@ from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 from harbor.models.trajectories import Trajectory
 
+from scripts.agent.harbor.bundle_integrity import verify_bundle
+from scripts.agent.harbor.pricing import summarize_usage, validate_pricing
+from scripts.agent.harbor.runtime_artifacts import portable_path, runtime_profile, verify_profile
+from scripts.agent.harbor.trace_artifact import read_trace_artifact
+
 
 class ScriptActOptions(InstalledAgentOptions):
     bundle: str
+    reasoning_effort: str
     runtime_cache: str | None = None
 
 
@@ -23,13 +29,20 @@ class ScriptActAgent(BaseInstalledAgent):
     capabilities = AgentCapabilities(atif=True)
     options_model = ScriptActOptions
 
-    def __init__(self, logs_dir: Path, *, bundle: str, runtime_cache: str | None = None, **kwargs):
+    def __init__(self, logs_dir: Path, *, bundle: str, reasoning_effort: str, runtime_cache: str | None = None, **kwargs):
         self.bundle = Path(bundle).resolve()
         self.runtime_cache = Path(runtime_cache).resolve() if runtime_cache else self.bundle.parent / "runtime-downloads"
-        self.identity = json.loads((self.bundle / "identity.json").read_text())
-        super().__init__(logs_dir=logs_dir, bundle=bundle, runtime_cache=runtime_cache, **kwargs)
-        if self.model_name not in ("openai/gpt-6-sol", "gpt-6-sol"):
-            raise ValueError("This campaign is configured for GPT-6 Sol")
+        self.identity = verify_bundle(self.bundle)
+        super().__init__(logs_dir=logs_dir, bundle=bundle, reasoning_effort=reasoning_effort, runtime_cache=runtime_cache, **kwargs)
+        expected_model = self.identity.get("modelName")
+        if not expected_model or self.model_name not in ("openai/" + expected_model, expected_model):
+            raise ValueError("Requested model differs from the frozen candidate model")
+        if self.identity.get("reasoningEffort") not in ("low", "medium", "high"):
+            raise ValueError("Candidate has no valid frozen reasoning effort")
+        if reasoning_effort != self.identity["reasoningEffort"]:
+            raise ValueError("Requested reasoning effort differs from the frozen candidate reasoning effort")
+        if self.identity.get("pricing") is not None:
+            validate_pricing(self.identity["pricing"], expected_model, reasoning_effort)
 
     @staticmethod
     def name() -> str:
@@ -39,14 +52,16 @@ class ScriptActAgent(BaseInstalledAgent):
         return self.identity["sourceCommit"][:12] + ":" + self.identity["bundleFingerprint"][:12]
 
     async def install(self, environment: BaseEnvironment) -> None:
-        architecture = (await environment.exec(command="uname -m")).stdout.strip()
-        node_arch, bun_arch = {"x86_64": ("x64", "x64"), "aarch64": ("arm64", "aarch64")}[architecture]
-        portable = self.bundle.parent / f"{self.bundle.name}-linux-{node_arch}.tar.gz"
+        profile = await runtime_profile(environment)
+        node_arch = profile["arch"]
+        bun_arch = {"x64": "x64", "arm64": "aarch64"}[node_arch]
+        portable = portable_path(self.bundle, node_arch, profile["libc"])
         if portable.exists():
             metadata = json.loads(portable.with_suffix(".json").read_text())
+            verify_profile(metadata, profile)
             with portable.open("rb") as source:
                 digest = hashlib.file_digest(source, "sha256").hexdigest()
-            if metadata["bundleFingerprint"] != self.identity["bundleFingerprint"] or metadata["sha256"] != digest:
+            if metadata["bundleFingerprint"] != self.identity["bundleFingerprint"] or metadata.get("bundleSealSha256") != self.identity["bundleSeal"]["sha256"] or metadata["sha256"] != digest:
                 raise ValueError("Portable archive does not match this bundle")
             await environment.upload_file(portable, "/tmp/scriptact-agent.tar.gz")
             await self.exec_as_root(environment, command="""
@@ -60,6 +75,8 @@ node/bin/node --input-type=module -e "await import('@velaros-ai/velaros'); await
 """, timeout_sec=180)
             self.identity = {**self.identity, "portable": metadata}
             return
+        if profile["libc"] == "musl":
+            raise ValueError("Prepare the matching musl portable archive before dispatch; online GNU fallback is incompatible")
         await self.ensure_system_dependencies(environment, ("curl", "xz", "unzip", "ca_certificates"))
         await environment.upload_dir(self.bundle, "/opt/velaros-scriptact")
         manifest_path = self.runtime_cache / "manifest.json"
@@ -123,17 +140,23 @@ chmod -R a+rX /opt/velaros-scriptact
         if not path.exists():
             return
         trajectory = Trajectory.model_validate_json(path.read_text())
-        traces = json.loads((self.logs_dir / "traces.json").read_text())
+        traces = read_trace_artifact(self.logs_dir / "traces.json")
         all_turns = traces["traces"] + [turn for branch in traces["branches"] for turn in branch["turns"]]
-        usage = [json.loads(turn["decision"]["body"]).get("usage") for turn in all_turns if turn.get("decision") and turn["decision"].get("body")]
-        if len(usage) == len(all_turns) and usage and all(item and isinstance(item.get("inputTokens"), (int, float)) and isinstance(item.get("outputTokens"), (int, float)) for item in usage):
-            context.n_input_tokens = sum(item["inputTokens"] for item in usage)
-            context.n_output_tokens = sum(item["outputTokens"] for item in usage)
-            if all("cacheReadTokens" in item for item in usage):
-                context.n_cache_tokens = sum(item["cacheReadTokens"] for item in usage)
-                if all("cacheWriteTokens" in item for item in usage):
-                    context.cost_usd = sum((
-                        ((item["inputTokens"] - item["cacheReadTokens"] - item["cacheWriteTokens"]) * 2 + item["cacheReadTokens"] * 0.2 + item["cacheWriteTokens"] * 2.5) * (2 if item["inputTokens"] > 272000 else 1)
-                        + item["outputTokens"] * (15 if item["inputTokens"] > 272000 else 10)
-                    ) / 1_000_000 for item in usage)
-        context.metadata = {"source": self.identity, "runtime": json.loads((self.logs_dir / "status.json").read_text()), "atif_schema": trajectory.schema_version}
+        usages = []
+        for turn in all_turns:
+            decision = turn.get("decision") or {}
+            try:
+                body = json.loads(decision["body"]) if decision.get("body") and not decision.get("truncated") else {}
+                usages.append(body.get("usage") if isinstance(body, dict) else None)
+            except (ValueError, TypeError):
+                usages.append(None)
+        estimate = summarize_usage(usages, self.identity.get("pricing"), self.identity.get("modelName"), self.identity.get("reasoningEffort"))
+        context.n_input_tokens = estimate["input_tokens"]
+        context.n_output_tokens = estimate["output_tokens"]
+        context.n_cache_tokens = estimate["cache_read_tokens"]
+        context.cost_usd = estimate["cost_usd"]
+        context.metadata = {**(context.metadata or {}), "source": self.identity,
+            "runtime": json.loads((self.logs_dir / "status.json").read_text()), "atif_schema": trajectory.schema_version,
+            "cost_estimate": {**estimate, "basis": "runtime usage and frozen candidate pricing",
+                              "pricing_sha256": (self.identity.get("pricing") or {}).get("sha256"),
+                              "authority": "gateway-request-ledger"}}

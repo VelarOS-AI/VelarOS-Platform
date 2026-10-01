@@ -243,6 +243,15 @@ export class RuntimeTrace implements RuntimeTraceApi {
     )
     if (material) {
       const saved = JSON.parse(material.text)
+      // 只关联实际请求选中的帧，容量试探产生的其他帧不代表本次展示预算。
+      if (isString(saved.frameId))
+        select(
+          records.findLast(
+            (record) =>
+              record.title === `context:frame:${saved.frameId}` &&
+              record.sequence < requestRecord.sequence
+          )
+        )
       const frame = saved.partitions
         ? {
             goals: saved.partitions.task.goals,

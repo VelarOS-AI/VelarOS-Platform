@@ -45,6 +45,8 @@ export interface FileEditPlan {
   linked: boolean
   created: boolean
   previous?: LooseOptional<Buffer>
+  /** 本次提交必须核对的原始字节；与长期撤回缓存的大小上限无关。 */
+  baseBytes: Nullable<Buffer>
   bytes: Buffer
   totalLines: number
   baseVersion: Nullable<string>

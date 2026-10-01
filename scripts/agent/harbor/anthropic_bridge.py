@@ -14,6 +14,8 @@ import os
 import time
 from pathlib import Path
 
+from request_identity import authenticate_attempt
+
 os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 os.environ["LITELLM_TELEMETRY"] = "False"
 
@@ -119,7 +121,7 @@ async def until_disconnect(request, operation):
         await asyncio.gather(task, watcher, return_exceptions=True)
 
 
-def create_app(token, upstream, *, upstream_token=None, evidence_path=None):
+def create_app(token, upstream, *, upstream_token=None, evidence_path=None, require_identity=False):
     if not token:
         raise ValueError("A nonempty scoped token is required")
     if importlib.metadata.version("litellm") != "1.103.0":
@@ -131,7 +133,12 @@ def create_app(token, upstream, *, upstream_token=None, evidence_path=None):
         candidate = request.headers.get("x-api-key", "")
         if not candidate and request.headers.get("authorization", "").startswith("Bearer "):
             candidate = request.headers["authorization"][7:]
-        return hmac.compare_digest(candidate.encode(), token.encode())
+        identity = authenticate_attempt(candidate, token)
+        if identity:
+            request.state.attempt_identity = identity
+            request.state.upstream_credential = candidate
+            return True
+        return (not require_identity or request.url.path == "/health") and hmac.compare_digest(candidate.encode(), token.encode())
 
     def record(item):
         if evidence_path:
@@ -155,6 +162,8 @@ def create_app(token, upstream, *, upstream_token=None, evidence_path=None):
     async def messages(request: Request):
         if not authorized(request):
             return error_response(401, "Authentication required", "authentication_error")
+        identity = getattr(request.state, "attempt_identity", None)
+        # The gateway enforces phase policy and records rejected attempts without provider dispatch.
         raw = bytearray()
         async for chunk in request.stream():
             raw.extend(chunk)
@@ -168,7 +177,7 @@ def create_app(token, upstream, *, upstream_token=None, evidence_path=None):
         state["requests"] += 1
         request_id = state["requests"]
         started = time.monotonic()
-        record({"request": request_id, "input_items": len(params["input"]),
+        record({"request": request_id, "identity": identity, "input_items": len(params["input"]),
             "explicit_cache_boundaries": json.dumps(params).count('"prompt_cache_breakpoint":'),
             "max_output_tokens": params["max_output_tokens"], **diagnostics})
 
@@ -176,7 +185,7 @@ def create_app(token, upstream, *, upstream_token=None, evidence_path=None):
             state["active"] += 1
             outcome = "cancelled"
             try:
-                async with AsyncOpenAI(api_key=upstream_token or token, base_url=upstream, max_retries=0,
+                async with AsyncOpenAI(api_key=getattr(request.state, "upstream_credential", None) or upstream_token or token, base_url=upstream, max_retries=0,
                     timeout=httpx.Timeout(900, connect=15), http_client=httpx.AsyncClient(trust_env=False)) as client:
                     response = await client.responses.create(**params)
                     if not params["stream"]:
@@ -255,7 +264,7 @@ def main():
     parser.add_argument("--port", type=int, default=48762)
     args = parser.parse_args()
     token = (args.directory / "gateway-token").read_text().strip()
-    app = create_app(token, "http://127.0.0.1:48761/v1", evidence_path=args.directory / "anthropic-bridge.jsonl")
+    app = create_app(token, "http://127.0.0.1:48761/v1", evidence_path=args.directory / "anthropic-bridge.jsonl", require_identity=True)
     uvicorn.run(app, host="0.0.0.0", port=args.port, access_log=False, log_level="warning")
 
 

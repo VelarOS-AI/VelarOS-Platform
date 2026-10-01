@@ -26,7 +26,7 @@ export interface FileReadInput {
 
 /**
  * @AgentView
- * 一批里某个文件读不了、写不了：只有它这一项是失败，其余文件照常；全部失败时整个调用才报错。path 照传入的原样。
+ * 一批里某个文件读不了：只有它这一项是失败，其余文件照常；全部失败时整个调用才报错。path 照传入的原样。
  * 它和成功那支**没有判别字段**，用 `'error' in file` 分开（`file.error` 在联合上取不到）。
  */
 export interface FileFailure {
@@ -52,7 +52,7 @@ export type FileEditStep =
 
 /**
  * @AgentView
- * 一次最多 1000 步、20 个文件，合成一次改动，全成或全不成。
+ * 一次最多 1000 步、20 个文件，先统一规划再逐文件原子提交；规划失败一个都不写，提交途中失败可能已写入部分文件，错误会点名。
  * 同一个文件接连几步时，后一步按前一步改完的内容算（先 write 新建、再 replace 也行）。
  */
 export interface FileEditInput {
@@ -71,7 +71,7 @@ export interface FileWritten {
  * @AgentView
  * files 是这次写到的每个文件，按第一次写到它的顺序。changeId 是这次改动的号，交给 `undo` 整次撤回。
  * undoable 为 false 时这次改动撤不回（有文件改之前超过 2 MB，原文没留下来）。
- * 任何一步写不下去就整个抛错、一个文件都不写：error.code 是 `FILES_EDIT_UNRESOLVED`（message 逐条写明第几步、为什么：
+ * 规划阶段任何一步写不下去就整个抛错、一个文件都不写：error.code 是 `FILES_EDIT_UNRESOLVED`（message 逐条写明第几步、为什么：
  * 原文找不到的带上最像的几行，出现好几处的带上在第几行）或 `FILES_EDIT_DENIED`（越出空间范围，或文件权限不让写）。写到一半出了意外时，message 点名哪几个已经写进去了、怎么撤回。
  */
 export interface FileEditResult {
@@ -96,8 +96,8 @@ export interface FileUndone {
 
 /**
  * @AgentView
- * 撤回一次改动：那次改的每个文件回到改动前（新建的删掉），全成或全不成。
- * 已经撤回过的再撤一次也成功（alreadyUndone 为真，files 为空）。那之后文件又被改过时整个拒绝（`FILES_UNDO_CONFLICT`），一个文件都不动。
+ * 撤回一次改动：核对当前路径授权、真实目标和版本后，逐项原子恢复原文或删除那次新建的文件；途中失败报告已撤回项，再调用会接着处理剩余项。
+ * 已经撤回过的再撤一次也成功（alreadyUndone 为真，files 为空）。撤回预检发现那之后文件又被改过时整个拒绝（`FILES_UNDO_CONFLICT`），本次一个文件都不动；预检后的竞争或落盘故障可能产生部分撤回，按错误里的实际结果处理。
  */
 export interface FileUndoResult {
   changeId: string

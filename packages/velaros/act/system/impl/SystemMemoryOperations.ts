@@ -94,12 +94,13 @@ export interface SystemMemoryOperationsLongTermApi {
    * @OperationEffect none
    */
   recall(input: LongTermMemoryQuery, ctx: SystemMemoryOperationContext): Promise<LongTermMemoryPage>
-  /** @AgentView 写一条长期记忆：同一个 id 整条覆盖，tags 不给就沿用原来的。
+  /** @AgentView 写一条长期记忆：同一个 id 整条覆盖，tags 不给就沿用原来的。防止过期写时，把 recall/save 的 revision 作为 expectedRevision；null 表示只许新建，省略版本表示最后提交覆盖，冲突报 CONFLICT 后重读再决定。
+   * 从 recall 更新时先解构 const { revision, updatedAt, ...entry } = previous，再 save({ ...entry, content: 新正文, expectedRevision: revision })；revision 与 updatedAt 是读取结果字段，不直接放进写入输入。
    * @OperationEffect write
    * @OperationModes execute
    */
   save(input: MemorySaveInput, ctx: SystemMemoryOperationContext): Promise<MemorySaved>
-  /** @AgentView 删掉一条长期记忆的原文；与 release 只释放当前任务的展示不同。
+  /** @AgentView 删掉一条长期记忆的原文；与 release 只释放当前任务的展示不同。可把 recall/save 的 revision 作为 expectedRevision，只删除该版本；null 要求条目不存在，省略版本删除当前条目，冲突报 CONFLICT。
    * @OperationEffect write
    * @OperationModes execute
    */
@@ -129,10 +130,13 @@ export class SystemMemoryOperations implements SystemMemoryOperationsApi {
       input.offset,
       input.limit,
       ctx.abortSignal,
-      input.pointer
+      input.pointer,
+      input.invocation
     )
     if (!isUndefined(input.pointer) && page.pointer !== input.pointer)
       throw new AppError('UNAVAILABLE', '当前宿主不支持执行结果字段召回')
+    if (!isUndefined(input.invocation) && page.invocation !== input.invocation)
+      throw new AppError('UNAVAILABLE', '当前宿主不支持失败执行的调用回执召回')
     return page
   }
 

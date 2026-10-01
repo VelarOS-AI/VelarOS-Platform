@@ -5,34 +5,43 @@
 ## 模型接口
 
 ```js
-import {output} from 'velaros';
-output.configure({maxChars:16000});
+import { output } from 'velaros'
+output.configure({ maxChars: 16000 })
 // 业务数据读取放在这里，权限和观察模式由原能力链路执行。
-const state = {status:'ready', count:3};
+const state = { status: 'ready', count: 3 }
 output(state, {
-  key:'state', purpose:'持续确认本次任务的当前状态', type:'json', priority:'high',
-  view:{paths:['/status','/count'], maxChars:2000}
-});
+  key: 'state',
+  purpose: '持续确认本次任务的当前状态',
+  type: 'json',
+  priority: 'high',
+  view: { paths: ['/status', '/count'], maxChars: 2000 },
+})
 ```
 
 `output(value)` 保持可用；第二参数提供稳定 key、用途、内容类型、语言、重要程度和展示规则。一次执行中 key 唯一，省略 key 时系统生成当次序号，不把它当作跨源码版本的稳定语义身份。重复 key 是明确错误，即使脚本 catch，采集问题仍进入回执。
 
 `required:true` 需要显式稳定 key，声明本轮决策必须完整可见的原值。Runtime 优先分配这些块；原文、完整原生图片满足要求，摘要、切片、引用或未产出不满足。observe 与尚有租约的 execute 结果都遵守此规则。缺口进入 `runtime.decision.missing`，外部写入及完成被阻止；模型仍能通过系统能力释放不再需要的租约，或修改观察源码。整理工具不能改变 required 声明。
 
+execute 的必需正文可以位于本次请求实际携带的冻结历史中。宿主在完整结构化正文送达时，保存绑定结果 ref、块 key 与原值 contentHash 的内部证明；当前帧仅以仍带完整正文的历史证明核对相同块，避免因重新分配展示预算产生假缺口。摘要、片段、引用卡、退役历史、其他结果或没有证明的旧历史都不能代替完整原值。证明不进入模型提示，不扩容，也不意味着先前读过就永久满足后续请求。
+
 `output.configure` 在第一次输出前调用一次。`maxChars` 是 UTF-16 字符数，整体输出文字目录与正文受其约束，观察源码、其他分区和原生图片由各自预算及最终请求编译器处理。每块 view.maxChars 约束该块正文。源码默认申请 16000，最多申请 200000，实际可用容量取宿主分配与源码申请的较小值。
+
+宿主投影显式记录 `format`。Script 的默认 JSON 格式保持可直接解析；Act 选择 text，由 Script 的同一序列化器计算长度并生成最终输出正文。text 先保留 JSON 基线选中的块及已交付正文，再利用省下的转义空间扩展同批 text/code 块；扩展必须覆盖同一原文的既有 UTF-16 区间。JSON/list 保持基线，块目录、引用、缺口和采集问题独立保留。投影的 `prompt.length` 不超过 `allocatedChars`，整条模型请求仍经过原请求编译器的输入与窗口检查。
+
+Runtime 按格式使用投影文本；旧结构化结果没有格式字段时按 JSON 展开。已冻结历史正文逐字复用，原始捕获归档保持独立。`presentation.actualChars` 表示该次投影格式的实际字符数，不能与原始 JSON 采集量或模型 token 数混用。
 
 原始输出最多 64 块、合计 1000000 个 JSON 字符；这是采集安全边界，和展示预算分开。单份声明最多 4000 字符，嵌套深度最多 64。采集在 output 调用时复制 JSON 值，不运行 getter/toJSON，不接受循环引用、非有限数字或函数。原始值在隔离堆中编码，经受限 IPC 立即交给宿主；后续抛错、计算超时及取消仍保留宿主已收到的块。值本身尚未产生之前的读取和计算仍由原运行预算管理。
 
 ## 类型与展示
 
-| type | value | view 行为 |
-| --- | --- | --- |
-| text | 字符串 | 选择行段或完整首尾行；单行放不下时使用引用 |
-| code | 代码字符串 | lines 为一基闭区间；保留范围说明，不把半截代码当完整源码 |
-| json | JSON 值 | paths 为 JSON Pointer；缺失路径显式列出；短字段保留，长文本字段共享剩余预算，以带原值引用、字段路径和完整行范围的 excerpt 展示；完整行放不下时保留引用 |
-| list | 数组 | maxItems 和 edge 选择头部/尾部完整条目，记录总数与范围 |
-| image | Kernel image-data 或带 ref 的对象 | 原生附件与文字引用分开；引用模式可卸载原生图片 |
-| file | 带 ref 的元信息对象 | 展示 name/mediaType/bytes/ref；正文通过已有授权读取入口召回 |
+| type  | value                             | view 行为                                                                                                                                              |
+| ----- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| text  | 字符串                            | 选择行段或完整首尾行；单行放不下时使用引用                                                                                                             |
+| code  | 代码字符串                        | lines 为一基闭区间；保留范围说明，不把半截代码当完整源码                                                                                               |
+| json  | JSON 值                           | paths 为 JSON Pointer；缺失路径显式列出；短字段保留，长文本字段共享剩余预算，以带原值引用、字段路径和完整行范围的 excerpt 展示；完整行放不下时保留引用 |
+| list  | 数组                              | maxItems 和 edge 选择头部/尾部完整条目，记录总数与范围                                                                                                 |
+| image | Kernel image-data 或带 ref 的对象 | 原生附件与文字引用分开；引用模式可卸载原生图片                                                                                                         |
+| file  | 带 ref 的元信息对象               | 展示 name/mediaType/bytes/ref；正文通过已有授权读取入口召回                                                                                            |
 
 省略 type 时：字符串为 text，数组为 list，其余为 json。类型是模型声明的内容格式，不提升事实可信度。language 是代码语言说明。
 
@@ -55,10 +64,8 @@ ScriptOutputs.describe 提取主源码顶层、直接从 velaros 导入的 outpu
 ```json
 {
   "sourceRef": "当前观察源码引用",
-  "config": {"maxChars":9000},
-  "outputs": [
-    {"key":"state","view":{"paths":["/status"],"maxChars":1000}}
-  ]
+  "config": { "maxChars": 9000 },
+  "outputs": [{ "key": "state", "view": { "paths": ["/status"], "maxChars": 1000 } }]
 }
 ```
 

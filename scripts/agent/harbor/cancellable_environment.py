@@ -20,9 +20,9 @@ def execution_commands(command, directory):
 set -eu
 umask 077
 mkdir -p {quoted}
+trap 'rm -f {quoted}/pid' EXIT
 printf '%s\\n' "$$" > {quoted}/pid
 test ! -e {quoted}/cancelled || exit 125
-trap 'rm -f {quoted}/pid' EXIT
 bash -c {shlex.quote(command)}
 """
     cleanup = f"""
@@ -46,7 +46,15 @@ if test -s {quoted}/pid; then
   kill -KILL -- "-$benchmark_pid" 2>/dev/null || true
 fi
 """
-    return "setsid --wait bash -c " + shlex.quote(body), cleanup
+    # Disable job control so the background child inherits the outer process
+    # group and is not its leader. Both BusyBox and util-linux setsid can then
+    # exec the body without forking. Bash wait preserves its status and output;
+    # BusyBox does not implement util-linux's --wait option.
+    wrapped = (
+        "set +m\nsetsid bash -c " + shlex.quote(body)
+        + ' &\nbenchmark_launcher=$!\nwait "$benchmark_launcher"\n'
+    )
+    return wrapped, cleanup
 
 
 async def cancellable_exec(execute, command, **kwargs):
@@ -66,6 +74,18 @@ async def cancellable_exec(execute, command, **kwargs):
         raise
 
 
+def gateway_health():
+    """Use the launcher's endpoint and attempt credential for the execution barrier."""
+    token_file = os.environ.get("SCRIPTACT_BENCH_TOKEN_FILE")
+    if not token_file:
+        raise RuntimeError("Campaign gateway is required for the execution barrier")
+    token = Path(token_file).read_text().strip()
+    endpoint = os.environ.get("SCRIPTACT_GATEWAY_HEALTH_URL", "http://127.0.0.1:48761/health")
+    request = urllib.request.Request(endpoint, headers={"Authorization": "Bearer " + token})
+    with urllib.request.urlopen(request, timeout=5) as response:
+        return json.load(response)
+
+
 class CancellableBenchmarkDocker(BenchmarkDocker):
     async def start(self, force_build):
         await super().start(force_build)
@@ -73,24 +93,17 @@ class CancellableBenchmarkDocker(BenchmarkDocker):
         if probe.return_code:
             raise RuntimeError("Container cancellation requires Linux setsid and bash")
         self.logger.info("Campaign cancellation adapter SHA-256: %s", hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
-        token_file = os.environ.get("SCRIPTACT_BENCH_TOKEN_FILE")
-        if not token_file:
-            raise RuntimeError("Campaign gateway is required for the execution barrier")
-        token = Path(token_file).read_text().strip()
-        def health():
-            request = urllib.request.Request("http://127.0.0.1:48761/health", headers={"Authorization": "Bearer " + token})
-            with urllib.request.urlopen(request, timeout=5) as response:
-                return json.load(response)
         started = time.monotonic()
         while True:
-            status = await asyncio.to_thread(health)
+            status = await asyncio.to_thread(gateway_health)
             active = status.get("activeUpstreamRequests")
-            if not isinstance(active, int) or active < 0:
-                raise RuntimeError("Gateway must report active upstream requests")
-            if not active:
+            queued = status.get("scheduler", {}).get("queued", 0)
+            if any(type(value) is not int or value < 0 for value in (active, queued)):
+                raise RuntimeError("Gateway must report active and queued upstream requests")
+            if not active and not queued:
                 break
             if time.monotonic() - started >= 300:
-                raise RuntimeError("Previous trial provider accounting did not finish within 300 seconds")
+                raise RuntimeError("Attempt provider accounting did not finish within 300 seconds")
             await asyncio.sleep(0.25)
         self.logger.info("Campaign provider idle barrier seconds: %.6f", time.monotonic() - started)
 

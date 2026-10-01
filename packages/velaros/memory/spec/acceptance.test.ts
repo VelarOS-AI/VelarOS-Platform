@@ -125,10 +125,15 @@ describe('作用域', () => {
     }
     expect(await readdir(root)).toEqual([])
     const longest = 'a'.repeat(MemoryLimits.idChars)
-    expect(await scope.save(entry(longest))).toEqual({ id: longest, created: true })
+    expect(await scope.save(entry(longest))).toEqual({
+      id: longest,
+      created: true,
+      revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+    })
     expect(await scope.save(entry('release-2026-09'))).toEqual({
       id: 'release-2026-09',
       created: true,
+      revision: expect.stringMatching(/^[a-f0-9]{64}$/),
     })
   })
 })
@@ -142,7 +147,11 @@ describe('读写', () => {
       tags: [' 汇报 ', 'Lang', 'lang', ''],
       extra: '不落盘',
     } as MemorySaveInput
-    expect(await scope.save(first)).toEqual({ id: 'reply-style', created: true })
+    expect(await scope.save(first)).toEqual({
+      id: 'reply-style',
+      created: true,
+      revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+    })
     const [saved] = await scope.list()
     expect(saved).toMatchObject({
       id: 'reply-style',
@@ -154,7 +163,11 @@ describe('读写', () => {
 
     expect(
       await scope.save(entry('reply-style', { title: '回复风格（改）', content: '  新的正文  ' }))
-    ).toEqual({ id: 'reply-style', created: false })
+    ).toEqual({
+      id: 'reply-style',
+      created: false,
+      revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+    })
     const listed = await scope.list()
     expect(listed).toHaveLength(1)
     expect(listed[0]).toMatchObject({
@@ -196,6 +209,7 @@ describe('读写', () => {
     expect(await scope.save(entry('tagged', { content: '只改了正文' }))).toEqual({
       id: 'tagged',
       created: false,
+      revision: expect.stringMatching(/^[a-f0-9]{64}$/),
     })
     expect(await tagsOf('tagged')).toEqual(['发版', '提交'])
     await scope.save(entry('tagged', { tags: ['发版'] }))
@@ -287,6 +301,7 @@ describe('读写', () => {
     expect([...byId.keys()].sort()).toEqual(['aliased', 'odd-type', 'plain-note', 'seed'])
     expect(byId.get('plain-note')).toEqual({
       id: 'plain-note',
+      revision: expect.stringMatching(/^[a-f0-9]{64}$/),
       type: 'work',
       title: 'plain-note',
       description: '手写的笔记',
@@ -410,7 +425,11 @@ export const removed = await remove({ id: 'reply-style' })`
     )
     expect(result.failed).toBeUndefined()
     expect(result.value).toEqual({
-      saved: { id: 'reply-style', created: true },
+      saved: {
+        id: 'reply-style',
+        created: true,
+        revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
       titles: ['回复风格'],
       failure: { code: 'VALIDATION', hasMessage: true },
       removed: { removed: true },

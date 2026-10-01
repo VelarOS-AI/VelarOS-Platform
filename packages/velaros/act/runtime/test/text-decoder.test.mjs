@@ -278,12 +278,13 @@ test('normal work instructions begin with an allowed control and honor custom na
     [['observe'], { observe: 'inspect' }, 'inspect'],
   ]) {
     const decoder = new ScriptTurnDecoder(marker, { allowed, names })
-    assert(decoder.instructions.includes(`继续工作时，响应从控制头开始：\n${marker} ${expected}()`))
+    assert.equal(decoder.instructions.split(`\n${marker} ${expected}()\n`).length - 1, 1)
+    assert.doesNotMatch(decoder.instructions, /output\(1\)/)
     assert.match(decoder.instructions, /省略执行前的进度说明/)
   }
   assert.doesNotMatch(
     new ScriptTurnDecoder(marker, { allowed: ['done'] }).instructions,
-    /继续工作时，响应从控制头开始/
+    /继续工作时/
   )
 })
 

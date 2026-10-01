@@ -272,14 +272,7 @@ export interface ElectronBrowserRuntimeApi {
   ): ExternalBrowserPageSession
   /** 隐藏会话但不销毁 WebContents。 */
   hideSession(sessionId: string): Promise<BrowserPageWindowState>
-  /**
-   * 关闭会话并清空队列。
-   *
-   * **先丢队列链，再排拆卸动作**：顺序反过来就是 AGENT-12 那条 brick 的最后一环——
-   * 队头卡了死结时，`closeSession` 自己也排在死结后面，于是「会话卡住 → 关不掉 →
-   * 重开还是那条卡住的队列」，只剩重启应用一条路。拆卸不与在飞动作抢一致性：
-   * WebContents 一销毁，在飞动作本来就会失败退出，而那正是我们要的结果。
-   */
+  /** 拆卸绕过动作队列；旧动作收束前原会话身份保持隔离。 */
   closeSession(sessionId: string): Promise<void>
   /** 关闭当前窗口的全部页面会话，保留 runtime 供重开窗口后继续使用。 */
   closeAllSessions(): void
@@ -1074,6 +1067,12 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
         ...options,
         url: launchUrl,
       })
+      try {
+        this.actionQueue.assertAvailable(sessionId)
+      } catch (error) {
+        launchSession.dispose()
+        throw error
+      }
       if (abortSignal?.aborted) {
         // 标签页已经开了：中止了就关掉它再抛，不留一个没人管的标签页。
         launchSession.dispose()
@@ -1126,6 +1125,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       disposePreviousHost?: LooseOptional<boolean>
     } = {}
   ): ExternalBrowserPageSession {
+    this.actionQueue.assertAvailable(sessionId)
     const previous = this.externalPageSessions.get(sessionId)
     if (previous?.driver !== driver) {
       disposeExternalPageSession(previous, {
@@ -1175,35 +1175,20 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     })
   }
 
-  /**
-   * 关闭会话并清空队列。
-   *
-   * **先丢队列链，再排拆卸动作**：顺序反过来就是 AGENT-12 那条 brick 的最后一环——
-   * 队头卡了死结时，`closeSession` 自己也排在死结后面，于是「会话卡住 → 关不掉 →
-   * 重开还是那条卡住的队列」，只剩重启应用一条路。拆卸不与在飞动作抢一致性：
-   * WebContents 一销毁，在飞动作本来就会失败退出，而那正是我们要的结果。
-   */
+  /** 拆卸绕过动作队列，先撤下并销毁页面；旧动作仍由队列追踪，同一身份在收束前不可重新挂接。 */
   public async closeSession(sessionId: string): Promise<void> {
     this.actionQueue.clear(sessionId)
-    await this.actionQueue.run(sessionId, async () => {
-      this.latestPresentationTargets.delete(sessionId)
-      const externalSession = this.externalPageSessions.get(sessionId)
-      if (externalSession) {
-        disposeExternalPageSession(externalSession)
-        this.externalPageSessions.delete(sessionId)
-      }
-
-      await this.protocolSessions.close(sessionId)
-      const session = this.sessionManager.getSession(sessionId)
-      if (session) {
-        this.interaction.clearPointerState(session.webContents.id)
-      }
-      this.interaction.clearInputState(sessionId)
-      this.sessionManager.closeSession(sessionId)
-    })
-    this.actionQueue.clear(sessionId)
+    this.latestPresentationTargets.delete(sessionId)
+    const externalSession = this.externalPageSessions.get(sessionId)
+    this.externalPageSessions.delete(sessionId)
+    if (externalSession) disposeExternalPageSession(externalSession)
+    const session = this.sessionManager.getSession(sessionId)
+    if (session) this.interaction.clearPointerState(session.webContents.id)
+    this.interaction.clearInputState(sessionId)
+    this.sessionManager.closeSession(sessionId)
     this.activityCoordinator.clearSession(sessionId)
     this.targetRefs.clear(sessionId)
+    await this.protocolSessions.close(sessionId)
   }
 
   /** 关闭当前窗口的全部页面会话，保留 runtime 供重开窗口后继续使用。 */
@@ -1241,6 +1226,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
   }
 
   private getExternalPageSession(sessionId: string): Nullable<ExternalBrowserPageSession> {
+    this.actionQueue.assertAvailable(sessionId)
     const session = this.externalPageSessions.get(sessionId)
     if (!session) return null
     if (session.driver.isDestroyed()) {
@@ -1269,6 +1255,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
   }
 
   private getPageDriver(sessionId: string, session: BrowserSession): BrowserPageDriver {
+    this.actionQueue.assertAvailable(sessionId)
     return this.createPageDriver({
       sessionId,
       webContents: session.webContents,
@@ -2047,7 +2034,9 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     abortSignal?: AbortSignal
   ): Promise<BrowserSession> {
     abortSignal?.throwIfAborted()
+    this.actionQueue.assertAvailable(sessionId)
     const session = await this.sessionManager.waitForSession(sessionId)
+    this.actionQueue.assertAvailable(sessionId)
     session.url = this.getLoadedPageUrl(session) ?? session.url
     return session
   }
@@ -2063,6 +2052,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
 
     const previousUrl = session.url
     const state = await session.driver.navigateTo(targetUrl)
+    this.actionQueue.assertAvailable(sessionId)
     applyExternalPageState(session, state, targetUrl)
     if (session.url && session.url !== previousUrl) {
       this.sessionManager.syncExternalSessionSiteContext(sessionId, session.url)
@@ -2079,6 +2069,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
   ): Promise<BrowserPageDriverState> {
     const previousUrl = session.url
     const state = await session.driver.refreshPageState()
+    this.actionQueue.assertAvailable(sessionId)
     applyExternalPageState(session, state, fallbackUrl)
     if (session.url && session.url !== previousUrl) {
       this.sessionManager.syncExternalSessionSiteContext(sessionId, session.url)
@@ -2095,6 +2086,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     session: ExternalBrowserPageSession,
     inspection: BrowserPageInspection
   ): void {
+    this.actionQueue.assertAvailable(sessionId)
     const previousUrl = session.url
     applyExternalPageState(session, {
       url: inspection.url || session.driver.getURL(),
@@ -2112,6 +2104,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     fallbackUrl?: LooseOptional<string>
   ): void {
     const previousUrl = session.url
+    this.actionQueue.assertAvailable(sessionId)
     const resultRecord = isPlainObject(result) ? result : {}
     applyExternalPageState(
       session,
@@ -2144,6 +2137,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
 
       const previousSessionUrl = session.url
       const state = await session.driver.navigateTo(targetUrl)
+      this.actionQueue.assertAvailable(sessionId)
       applyExternalPageState(session, state, targetUrl)
       if (session.url && session.url !== previousSessionUrl) {
         this.sessionManager.syncExternalSessionSiteContext(sessionId, session.url)
@@ -2157,6 +2151,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       const targetUrl = session.url || session.driver.getURL() || normalizeUrl(context.url)
       const previousSessionUrl = session.url
       const state = await session.driver.navigateTo(targetUrl)
+      this.actionQueue.assertAvailable(sessionId)
       applyExternalPageState(session, state, targetUrl)
       if (session.url && session.url !== previousSessionUrl) {
         this.sessionManager.syncExternalSessionSiteContext(sessionId, session.url)

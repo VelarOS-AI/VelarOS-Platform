@@ -29,9 +29,11 @@ declare module 'velaros:shell' {
   export function stop(input: ShellStopInput): Promise<ShellStopResult>
 
   /**
-   * 一条命令。cwd 不给就是当前空间的根目录，相对路径相对它；越出空间允许的范围在执行之前就拒绝。
+   * 一条命令。cwd 不给就是当前空间的根目录，相对路径相对它；cwd 越出允许范围在执行之前拒绝。
+   * cwd 检查仅限制起始工作目录；命令进程的文件与网络权限以宿主约束策略及回执 confinement 为准。
    * shell 只能填本机有的那几个（环境报告里列着），不填用默认的那个，命令照挑定的 shell 的语法写。
-   * timeoutMs 最多 600000，超了按上限跑。
+   * timeoutMs 是前台命令的执行时限，到期终止进程并返回 timedOut: true；按预计完成时间设置，最多 600000，超了按上限跑。
+   * 需要先返回而让命令继续运行时用 background: true，之后按 backgroundProcess.taskId 用 listTasks 查询同一任务。
    */
   interface ShellRunInput {
     command: string

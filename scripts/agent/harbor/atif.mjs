@@ -67,7 +67,7 @@ export function toTrajectory({ sessionId, instruction, traces, branches = [], id
       source: 'agent',
       message: trace.response?.body ?? '',
       model_name: model,
-      reasoning_effort: 'high',
+      ...(identity.reasoningEffort ? { reasoning_effort: identity.reasoningEffort } : {}),
       ...(usage
         ? {
             metrics: {

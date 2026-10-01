@@ -2,7 +2,7 @@
  * 读是一批文件、写是一串步骤：核对一批的条数，造读的失败条目，把写入计划交给空间落盘，造写的整批失败。
  */
 
-import { isArray, isEmpty, isPlainObject, isString } from '@velaros-ai/core'
+import { isArray, isEmpty, isNull, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { FileErrorCodes } from '../contract/constants.js'
@@ -75,12 +75,13 @@ export function withLinkTarget<T extends { target?: string }>(
   return result
 }
 
-/** 一份计划交给空间落盘的样子：计划时手上有原文的，落盘时核对磁盘上还是它；新建的核对它仍不存在；太大没留原文的只靠计划后那次印记核对。 */
+/** 每份计划都在落盘时核对原始字节；撤回缓存上限不影响并发写保护。 */
 export function writeOfPlan(plan: FileEditPlan): FileWrite {
-  const write: FileWrite = { target: plan.target, bytes: plan.bytes }
-  if (plan.previous) write.expected = { exists: true, bytes: plan.previous }
-  else if (plan.created) write.expected = { exists: false }
-  return write
+  return {
+    target: plan.target,
+    bytes: plan.bytes,
+    expected: isNull(plan.baseBytes) ? { exists: false } : { exists: true, bytes: plan.baseBytes },
+  }
 }
 
 /**

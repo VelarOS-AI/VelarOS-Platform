@@ -1,8 +1,8 @@
 # ScriptAct / Harbor 实测入口
 
-把正式 `createRuntime`、Project 与 Shell 接到 [Harbor](https://docs.harborframework.com/core-concepts/agents/custom-agents) 的任务容器。使用 GPT‑6 Sol high，单任务并发；agent、子任务、重试和对照组共用 1,000 美元费用上限。输出完整原始 trace、ATIF 1.8 轨迹、官方 verifier 结果和费用账。
+把正式 `createRuntime`、Project 与 Shell 接到 [Harbor](https://docs.harborframework.com/core-concepts/agents/custom-agents) 的任务容器。模型、并发、资源和预算由冻结清单约束，当前配置见 [ScriptAct 状态](CURRENT.md)。输出完整原始 trace、ATIF 1.8 轨迹、官方 verifier 结果和请求费用账。
 
-当前执行以 [ScriptAct 修复与 Codex 对照](CURRENT.md) 为准：先修复产品，再做同题小规模验证并复用已有 Codex 成绩。下文保留评测入口的安装与协议说明。
+当前工作以 [ScriptAct 状态](CURRENT.md) 与 [历史执行回顾](RETROSPECTIVE.md) 为准：分析已有记录、修复遗漏并完成本地回归。下文保留评测入口的安装与协议说明。
 
 ## 环境与版本
 
@@ -32,7 +32,13 @@ colima start scriptact-bench --cpus 2 --memory 4 --disk 24 --root-disk 8 --vm-ty
 
 `prepare.mjs --resident-exports shell.run,project.edit` 将指定操作的正式声明及依赖类型放入首轮说明，配置参与候选指纹；完整模块仍可用 `--resident-modules` 指定。主指标是实际任务请求数、耗时与费用；预置说明的字符量与本地合成响应只验证交付行为，不能证明模型会省去查询轮次。
 
-迭代候选必须沿用上一轮依赖锁，例如 `node scripts/agent/harbor/prepare.mjs .velaros-workspace/bench/candidate-v2 --lockfile .velaros-workspace/bench/candidate-v1/bun.lock`。准备脚本用 frozen-lockfile 校验，并在 identity 中记录锁文件 SHA-256。
+迭代候选必须沿用上一轮依赖锁，例如 `node scripts/agent/harbor/prepare.mjs .velaros-workspace/bench/candidate-v2 --model gpt-5.6-sol --reasoning high --pricing .velaros-workspace/bench/parallel-54/model-pricing.json --lockfile .velaros-workspace/bench/candidate-v1/bun.lock`。准备脚本用 frozen-lockfile 校验，并在 identity 中记录锁文件 SHA-256。
+
+`--model` 和 `--reasoning` 必须明确给出。`--pricing <JSON>` 将该模型、推理参数对应的单价与原文件 SHA-256 冻结进候选身份；价格文件使用 `schema:1`，包含 `model`、`reasoning_effort`、`service_tier`、`input`、`cachedInput`、`cacheWriteInput`、`output`、`longThreshold`、`longInputMultiplier`、`longOutputMultiplier`、`unit:"USD per million tokens"`、`source`、`verified_at`。缺少单价或用量分项时，适配器费用保持未知。评测总费用以归属明确的网关请求账本及其每次请求冻结的价格为准，报告保留适配器原始金额和对账差异。
+
+兼容接口的能力应独立声明。`--openai-explicit-cache-breakpoints disabled` 将 `openaiExplicitCacheBreakpoints:false` 冻结进候选及模型连接，阻止内部历史标记翻译成该接口不支持的显式断点；`enabled` 明确启用，省略沿用模型适配器默认能力。原始历史内容和展示策略保持一致。
+
+自定义上游通过网关的 `--upstream-url` 明确授权，必须与私有凭据配置的 API 根一致；清单 `gateway.upstream` 冻结规范化 `baseURL` 及其 SHA-256 `endpointId`。价格文件可声明 `pricingBasis:{kind:"reference_only",source:"价格来源",upstreamBaseURL:"API根"}`，报告将其标为参考估算，实际扣费保持未知。上游 401 会阻断后续请求；更新凭据后验证权限，再使用新的网关实例、账本和批次。
 
 结果租约实验可通过 `prepare.mjs --result-retain task` 使用已有 Runtime 配置，将默认结果保留到逻辑任务结束；也可指定 1 至 32 次曝光。配置写入 identity 并参与 bundle 指纹，旧 bundle 保持原配置。该实验须同时比较缓存写入、上下文峰值、整理调用及任务成绩，不能仅以缓存率评判。
 
@@ -40,9 +46,9 @@ colima start scriptact-bench --cpus 2 --memory 4 --disk 24 --root-disk 8 --vm-ty
 
 ```sh
 node scripts/build/buildPackageTopology.mjs --for @velaros-ai/velaros --incremental
-node scripts/agent/harbor/prepare.mjs
+node scripts/agent/harbor/prepare.mjs .velaros-workspace/bench/candidate-v1 --model gpt-5.6-sol --reasoning high --pricing .velaros-workspace/bench/parallel-54/model-pricing.json
 node --test --test-timeout=15000 scripts/agent/harbor/harbor.test.mjs
-.velaros-workspace/bench/venv/bin/python scripts/agent/harbor/prepare-linux.py --arch x64
+.velaros-workspace/bench/venv/bin/python scripts/agent/harbor/prepare-linux.py --bundle .velaros-workspace/bench/candidate-v1 --arch x64
 .velaros-workspace/bench/venv/bin/python scripts/agent/harbor/prepare-environment.py
 ```
 
@@ -104,7 +110,7 @@ Terminus‑2 使用原生 Chat Completions 模式，每轮发送完整对话。H
 
 [GPT‑6 Sol 官方价格](https://developers.openai.com/api/docs/pricing)为输入 $2/M、缓存读取 $0.20/M、缓存写入 $2.50/M、输出 $10/M；超长上下文采用更高费率。网关每次请求先持久预留 $20，完整 usage 到达后以长上下文保守费率结算预算；缓存字段缺失时按输入全部写缓存计算上界，费用估算保持未知。未知 usage 保留预留额；重启不释放，第二个网关进程不能占有同一本账。费用账的保守占用值与已知实际用量估算分别展示，最终账单以供应商为准。
 
-只接受 `gpt-6-sol`、标准服务档位、Responses / Chat Completions 两个入口；付费托管工具不在此入口开放。网关到供应商使用 HTTPS，容器访问宿主的随机 token 认证入口。费用上限覆盖模型调用；本机环境无需购买云计算资源。
+只接受本批显式冻结的模型、推理力度与标准服务档位，开放 Responses / Chat Completions 两个入口；付费托管工具不在此入口开放。网关到供应商使用 HTTPS，容器访问宿主的随机 token 认证入口。费用上限覆盖模型调用；本机环境无需购买云计算资源。
 
 任务指令由 Harbor 直接传入，运行中不向模型提供隐藏测试或参考答案。容器内允许无人值守命令；CLI 只有在 Linux Docker 容器标记和显式环境标记同时存在时才运行。运行结果是否正确由官方 verifier 决定，模型自行宣布完成不算通过。
 
@@ -114,9 +120,13 @@ Terminus‑2 使用原生 Chat Completions 模式，每轮发送完整对话。H
 
 费用报告按请求中的冻结单价分别汇总普通输入、缓存读取、缓存写入与输出，包含适用的长上下文倍率；输出包含推理 token。缺失 usage 或价格时保持未知，实际零次请求记为零。
 
-费用归属覆盖单并发 trial 从 agent 启动到容器清理结束的窗口；agent 阶段结束后新发起的请求另列 post_agent 指标，继续计入该题总费用。网关完成供应商结算后才派发下一笔模型请求，并记录排队时间；客户端提前断开仍保留结算用量。
+并行仓库对照按签名的 campaign、candidate、participant、task、attempt、job 和 phase 身份归账；历史缺少签名的单并发记录另保留时间窗口口径。agent 阶段结束后新发起的请求另列 post_agent 指标，继续计入该题总费用。网关按全局及每次尝试的并发上限派发、记录排队时间；每个真实上游请求结算后才释放自己的槽位，客户端提前断开仍保留迟到用量。
 
 网关本地请求校验返回 400，预算耗尽返回 429，上游连接异常返回 502，超时返回 504；供应商已返回的 HTTP 响应保留原状态。传输错误记录受限的错误标识与持续时间，缺失 usage 继续保留预算预占。原生执行命令的超时 Bash 必须启用 pipefail，防止 `tee` 掩盖失败。历史 Codex 日志的终止事件另行核对：官方分数与原异常保留，`turn.failed` 或没有正常终止事件的已结束任务不能计作无异常成功。
+
+流时序分别记录首末字节、文本/工具/推理摘要活动、`stream.firstTerminalMs`（首个完整协议终端）、`terminalMs`（当前记录的终端事件）和 `transportEndedMs`（EOF 或中断）。这些都是相对上游派发的单调时钟偏移；完整 SSE 分隔符之前不记录终端，重复终端不覆盖首次时刻，失败仍保留失败。客户端提前完成后，网关继续读取迟到用量，并在真实传输结算后释放请求槽。不能用最后一个文本 delta 代替协议终端，也不能把网关寿命、模型等待和工具执行时长直接相加。
+
+每条请求的 `metadata.wireOptions` 保存网关规范化后的推理上下文、摘要、输出详细度、工具并行及存储选项；省略、null、白名单值和其他值分开表示。`include` 仅记录项数和加密推理开关；终端响应的有效推理上下文另记在 `stream.effectiveReasoningContext`。不记录任意选项字符串、提示正文或凭据；未知值不会被推定为默认值。原始请求参数不因这些观测而改变，历史账本也不补造缺失信息。
 
 仓库清单的 `execution_env` 对源 Agent、重放 Agent 和 verifier 统一生效；与参与方环境冲突时拒绝启动，效率对照也要求该配置相同。本机 Rosetta 的 Go ChaCha20 AVX2 路径已由独立 TLS 探针复现错误，采用 `GODEBUG=cpu.avx2=off` 后官方参考解法和原有补丁验证均通过，见 `campaign/validation-33-rosetta-go-tls-validation.json`。每道新题付费前先用相同镜像、资源及执行环境运行官方参考解法做零模型预检；参考解法仅在隔离验证中执行，不提供给参赛模型。环境修复后的重放使用新 job，保留原分数；源环境不同的效率数据只作补充诊断。
 
@@ -185,11 +195,19 @@ NodeBB 官方镜像原有三个未跟踪的 Redis 数据文件。初始状态回
 
 `repository_probe.py` 准备了零模型 Docker 联测：源容器在真实截止时间取消后采集补丁，三个新容器分别用固定官方 PatchReplayAgent 检查有效、空和损坏补丁。合成 verifier 核对提交过的改动、新增文件、删除和二进制内容，并确认仓库外文件没有随补丁进入新容器。源阶段关闭 verifier。它只使用人工夹具，结果不计入 SWE-bench 成绩；运行入口是 `PYTHONPATH=. .velaros-workspace/bench/venv/bin/python scripts/agent/harbor/repository_probe.py`，要求专用 VM 与费用网关均空闲。
 
-`repository_launch.py --manifest <冻结清单> --attempt <从 1 起的序号>` 执行清单内的一次源任务，再用官方 PatchReplayAgent 启动全新容器判分。源任务关闭 verifier，固定源/重放 job 名称，已有结果拒绝覆盖。每次派发核对任务文件、执行代码、参与者归档、镜像身份、VM CPU/内存和费用余额。任务必须完整检出，冻结文件集合须与数据集原提交的该任务文件集合一致，题目、配置、镜像构建文件和验证入口必须存在；仅有元数据的稀疏检出在调用 Harbor 前明确报错。`--install-only` 只检查正式任务容器中的安装，并要求费用网关请求数不变；`--dry-run` 校验后打印不含凭据的命令。若源任务已结束而重放尚未派发，`--replay-only` 可单独执行已声明的判分阶段。
+`repository_launch.py --manifest <冻结清单> --attempt <从 1 起的序号>` 执行清单内的一次源任务，再用官方 PatchReplayAgent 启动全新容器判分。源任务关闭 verifier，固定源/重放 job 名称，已有结果拒绝覆盖。每次派发核对任务暴露归属、任务文件、执行代码、参与者归档、镜像身份、VM CPU/内存和费用余额。任务必须完整检出，冻结文件集合须与数据集原提交的该任务文件集合一致，题目、配置、镜像构建文件和验证入口必须存在；仅有元数据的稀疏检出在调用 Harbor 前明确报错。`--install-only` 只检查正式任务容器中的安装，并要求费用网关请求数不变；`--dry-run` 校验后打印不含凭据的命令。若源任务已结束而重放尚未派发，`--replay-only` 可单独执行已声明的判分阶段。
+
+新候选冻结前，运行 `python3 scripts/agent/harbor/task_exposure.py --jobs-root .velaros-workspace/bench/jobs --output <新的暴露快照.json>`，从锁定任务和运行元数据采集已观察任务。后续快照用 `--previous <上次快照.json>` 保留手工观察及已归档的作业，人工读过或用于指导修复的任务用可重复的 `--observed-task <完整任务 ID>` 登记。命令只读取元数据，拒绝覆盖旧快照。
+
+新执行清单使用 ISO `frozen_at`，并加入 `evaluation: {schema: 1, roles: {"完整任务 ID": "held_out"}, exposure_snapshot: {file, sha256}}`；`roles` 的值只能是 `held_out` 或 `development`，且必须恰好覆盖本清单安排的任务，`exposure_snapshot` 使用上述命令返回的路径和哈希。暴露快照必须早于候选冻结时间；冻结前已观察的任务只能标为 `development`。派发和报告都会校验快照身份与当前历史元数据，漏记、改时间和重复题冒充留出题均报错。冻结后同一预定组的双方执行不会污染该组的归属。执行文件清单须包含 `task_exposure.py` 与 `runtime_artifacts.py`。
+
+历史清单可以继续生成补充报告；缺少结构化归属的任务标为 `unverified`，独立留出计数为零，成绩、时间、请求数和费用照常保留。原始清单、快照和报告应始终保留。
+
+宿主工具预探测按项目配置选择命令，覆盖根目录与嵌套目录中的 Go、JS 包管理器、Python、Rust、Maven/Gradle 配置。发现最多进入 32 个目录、处理 2048 个条目、深入 3 层；跳过依赖/构建目录和符号链接，不读取或执行配置正文。实际 PATH 命令探测结果连同 `commandDiscovery` 范围一并交付模型。该清单始终是局部发现，未列出的命令保持未知，需要时在执行相关检查的同一脚本中核实项目工具链。刷新 Shell 环境时重新发现；发现代码参与候选包指纹。
 
 当前比较对象为 ScriptAct 与冻结 Codex 0.158.0，均使用 GPT‑6 Sol high，先修复产品缺陷，再运行必要的同题验证。当前冻结清单、实测结果与下一步见 [CURRENT.md](CURRENT.md)。每个新任务在双方派发前封存候选与协议，产品修复另外建立版本记录。修复验证使用事前固定的同题 Codex 原始结果；独立仓库验证沿用原冻结题组，结果按候选版本分别报告。执行协议固定原二十份执行代码、依赖版本、模型档位、CPU/内存、任务时限、官方任务文件与镜像身份。安装预检独立记录且不能调用模型。Docker 29 containerd 存储的 image ID 为 manifest digest，清单同时保存该身份与独立 config digest。
 
-`repository_images.py --manifest <冻结清单> --task <任务 ID> --name <独立证据目录名>` 从宿主通过正常 TLS 获取清单规定的 GHCR 原始内容，校验压缩 blob、配置及解压层摘要，按 [OCI image layout](https://github.com/opencontainers/image-spec/blob/main/image-layout.md) 保留原始 manifest 与内容后导入专用 Docker。下载使用 curl 的 90 秒总时限、进程级兜底、四次重试和精确续传；持续零星收包也会按总时限结束并保留已下载前缀。认证经标准输入传给 curl，默认 TLS 校验，凭证及重定向 URL 不进入参数或错误日志；内容通过完整摘要后才发布到缓存。证据保存下载记录、归档摘要和实际导入身份。运行前及导入前要求模型网关、VM 空闲，检查磁盘余量，成功后回收本次派生归档。此流程只准备原始任务镜像，不修改官方环境或任务文件。`repository_images_test.py` 验证字节级身份保持、损坏/解压摘要不符拒绝、真实本地 HTTP 续传及服务器忽略 Range、持续收包总超时和凭证隔离；真实后续镜像导入结果另记。
+`repository_images.py --manifest <冻结清单> --task <任务 ID> --name <独立证据目录名> --gateway-directory <本批网关目录> --gateway-url <本批本地网关地址>` 从宿主通过正常 TLS 获取清单规定的 GHCR 原始内容，校验压缩 blob、配置及解压层摘要，按 [OCI image layout](https://github.com/opencontainers/image-spec/blob/main/image-layout.md) 保留原始 manifest 与内容后导入专用 Docker。下载使用 curl 的 90 秒总时限、进程级兜底、四次重试和精确续传；持续零星收包也会按总时限结束并保留已下载前缀。认证经标准输入传给 curl，默认 TLS 校验，凭证及重定向 URL 不进入参数或错误日志；内容通过完整摘要后才发布到缓存。证据保存下载记录、归档摘要和实际导入身份。运行前及导入前用显式指定的同一网关地址和目录核对活跃及排队请求，要求整个专用 VM 无容器，并检查磁盘余量，成功后回收本次派生归档。此流程只准备原始任务镜像，不修改官方环境或任务文件。`repository_images_test.py` 验证字节级身份保持、损坏/解压摘要不符拒绝、真实本地 HTTP 续传及服务器忽略 Range、持续收包总超时和凭证隔离；真实后续镜像导入结果另记。
 
 `repository_report.py --manifest <冻结清单> --output <报告.json>` 合并两阶段证据：正确性取新容器官方 reward，保留源运行异常及费用；解题、源任务、重放、verifier 与含间隔的端到端时间分别记录。重放未结束的源任务保留费用而不提前计入成绩。`repository_report_test.py` 验证超时但补丁通过、失败重放、待判分费用和任务身份不一致等情况。
 
@@ -235,3 +253,20 @@ PYTHONPATH=. .velaros-workspace/bench/venv/bin/python scripts/agent/harbor/claud
 看图接入候选用 `prepare.mjs --project-images`，把正式 Runtime 的 `project.images` 开关写入 identity 和指纹，并将 `velaros:images` 作为常驻能力。真实 Runtime 回归确认项目 PNG 以多模态图片进入下一次模型请求。该项独立于结果租约参数，旧 bundle 的能力集合固定；图片相关开发题之外，还需检查常驻声明对文本任务费用、缓存和成绩的影响。
 
 `prepare.mjs --resident-modules none` 将完整声明改为按需查询；也可指定 `project,shell,images` 的子集。此项传给 Runtime 现有 residentModules 配置并纳入 bundle 指纹；已启用的模块仍可通过 modules.describe 查询、import 和调用，图片能力仍由 --project-images 开启。真实 Runtime 回归覆盖项目/Shell/图片查询与图片进入下一轮请求。合成首帧检查中，默认系统提示为 27,737 字符，只有 Shell 常驻为 13,510 字符，全部按需查询为 4,797 字符。这些是字符量，真实 token、额外发现轮次和任务收益须另行付费验证。
+
+## 执行包装器的本地回归
+
+`cancellable_environment.py` 关闭 job control 后启动独立进程会话，由外层 wait 保留退出码；该路径兼容不提供 `--wait` 的 setsid。取消标记检查前注册 PID 清理，提前取消不遗留进程身份。下面的测试只启动本机隔离测试进程，不创建评测任务或调用模型：
+
+```sh
+PYTHONPATH=.:scripts/agent/harbor .velaros-workspace/bench/venv/bin/python -m unittest scripts.agent.harbor.cancellable_environment_test
+```
+
+测试覆盖输出、退出码、管道、提前取消、忽略 TERM 的子进程回收与独立服务保留。旧任务的执行文件摘要仍对应原版本；此本地修复的证据见历史回顾台账。
+
+
+## 当前本地修复
+
+[第 49 轮修复说明](LOCAL-FIXES.md)记录 ABI、增量轨迹、展示范围、编辑候选、工具环境与多目标统计的改动和验收。运行中诊断使用 `trace-progress.jsonl`（provisional），结束时生成 `traces.json` 和完整 `trajectory.json`。新的 [v2 轨迹产物](TRACE-ARTIFACTS.md)把重复调用证据无损保存在同目录 `trace-invocations.jsonl`，通过 JS/Python reader 还原全部原字段；旧原始格式仍可读取。`status.json.traceExport` 统计实体、增量记录及最终快照的累计写入量，`finalSnapshots` 给出完整物化次数；采集计时不直接作为任务加速结论。
+
+musl 容器使用 `prepare-environment.py --libc musl`、`prepare-linux.py --bundle <新目录> --libc musl`、`prepare-codex.py --libc musl` 准备对应产物。新执行清单需冻结 `runtime_artifacts.py`；安装器在请求模型之前校验任务 libc 与归档元数据。Codex 私有 Node 仅用于启动 CLI，项目工具链由任务本身提供。

@@ -14,11 +14,12 @@ declare module 'velaros:system-memory-persistent-local' {
    */
   export function recall(input: LongTermMemoryQuery): Promise<LongTermMemoryPage>
 
-  /** 写一条长期记忆：同一个 id 整条覆盖，tags 不给就沿用原来的。
+  /** 写一条长期记忆：同一个 id 整条覆盖，tags 不给就沿用原来的。防止过期写时，把 recall/save 的 revision 作为 expectedRevision；null 表示只许新建，省略版本表示最后提交覆盖，冲突报 CONFLICT 后重读再决定。
+   * 从 recall 更新时先解构 const { revision, updatedAt, ...entry } = previous，再 save({ ...entry, content: 新正文, expectedRevision: revision })；revision 与 updatedAt 是读取结果字段，不直接放进写入输入。
    */
   export function save(input: MemorySaveInput): Promise<MemorySaved>
 
-  /** 删掉一条长期记忆的原文；与 release 只释放当前任务的展示不同。
+  /** 删掉一条长期记忆的原文；与 release 只释放当前任务的展示不同。可把 recall/save 的 revision 作为 expectedRevision，只删除该版本；null 要求条目不存在，省略版本删除当前条目，冲突报 CONFLICT。
    */
   export function remove(input: MemoryIdInput): Promise<MemoryRemoved>
 
@@ -66,6 +67,8 @@ declare module 'velaros:system-memory-persistent-local' {
    * tags 不给就沿用这条原来的标签（新建的就是没有），给 [] 才清空；给的话最多 8 个，每个最多 32 个字符、不含逗号和换行，存的时候转小写、去重。
    */
   interface MemorySaveInput {
+    /** 不给时最后提交者覆盖；给版本时只改该版本，null 表示只许新建。过期报 CONFLICT。 */
+    expectedRevision?: string | null | undefined
     id: string
     type: MemoryType
     title: string
@@ -76,12 +79,15 @@ declare module 'velaros:system-memory-persistent-local' {
 
   /** 写下了：created 为假，说明覆盖的是已有的那一条。 */
   interface MemorySaved {
+    revision: string
     id: string
     created: boolean
   }
 
   /** 要删的那一条。 */
   interface MemoryIdInput {
+    /** 给版本时只删除该版本；null 表示要求不存在。不给时删除当前条目。 */
+    expectedRevision?: string | null | undefined
     id: string
   }
 
@@ -112,17 +118,27 @@ declare module 'velaros:system-memory-persistent-local' {
 
   /** 按引用读一页原文：ref 是目录里的引用（或它的 id），offset、limit 按 UTF-16 字符算，一页最多 60000 个字符。读取不续租、不重跑脚本。
    * 补读执行结果中的字段时传展示给出的 pointer（JSON Pointer，以 / 开头，最多 4096 个字符）；字符串返回原文，其他值返回 JSON，offset 与 limit 针对选中字段。省略 pointer 时读整份归档。
+   * 脚本失败后，先按 progress.feedback.recovery.index 读取调用索引；invocation 填索引中的 id，ref 仍为该失败脚本结果。此时读的是原始调用回执（outcome/effect/value/error），pointer 针对该回执；省略 pointer 读整份回执。未落定的调用明确不可用，不会重跑。
    */
   interface MemoryReadInput {
     readonly ref: string | ContextRef
+    readonly invocation?: string
     readonly pointer?: string
     readonly offset?: number
     readonly limit?: number
   }
 
-  /** 读到的一页原文；有 pointer 时 text、offset、totalChars 属于选中字段，record 仍标识完整归档。字符串字段不带 JSON 引号，其他字段为 JSON。 */
+  /** 读到的一页原文；有 pointer 时 text、offset、totalChars 属于选中字段，record 仍标识完整归档。字符串字段不带 JSON 引号，其他字段为 JSON。
+   * 补齐必需输出块时，使用 runtime.decision.missing 的 read 输入从 offset 0 读该块，逐页原样 output(page, {key:唯一键,view:{mode:'full'}})。
+   * delivery 是宿主绑定的交付回执，不要改写；只有完整页对象的正文实际完整进入当前模型历史才计入原块的交付证明。
+   * 下一页 offset 为 page.offset + page.text.length；同一块 value pointer 或省略 pointer 的整份归档，只有本次历史中完整页的字符范围连续覆盖全文才核销。
+   * 读取本身、只输出 page.text、局部字段或尚有缺页都不核销原块缺口；展示额度不足时分批交付，原文仍按原引用召回，不自动 release。
+   */
   interface MemoryContent extends ContextContent {
     readonly pointer?: string
+    /** 调用召回回显；此类页不会签发必需输出块的 delivery 证明。 */
+    readonly invocation?: string
+    readonly delivery?: { readonly receipt: ContextRef }
   }
 
   /**
@@ -177,6 +193,8 @@ declare module 'velaros:system-memory-persistent-local' {
 
   /** 一条记忆。tags 是主题标签；updatedAt 是 ISO 时间，字符串直接比大小就是比先后。 */
   interface MemoryEntry {
+    /** 本条内容版本；条件写入时原样作为 expectedRevision。 */
+    revision: string
     id: string
     type: MemoryType
     title: string

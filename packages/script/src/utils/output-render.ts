@@ -1,11 +1,23 @@
 import { createHash } from 'node:crypto'
 
-import { isArray, isEmpty, isObject, isString, stringifyPretty, toOptional } from '@velaros-ai/core'
+import {
+  isArray,
+  isEmpty,
+  isNumber,
+  isObject,
+  isString,
+  isUndefined,
+  stringifyPretty,
+  toOptional,
+} from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { ScriptOutputLimits } from '../contract/constants.js'
 import type {
   ScriptOutputBlock,
   ScriptOutputCapture,
+  ScriptOutputDisplay,
+  ScriptOutputFormat,
   ScriptOutputManifest,
   ScriptOutputPresentation,
   ScriptOutputProjection,
@@ -41,7 +53,8 @@ function renderBlock(
   ref: string,
   budget: number,
   summaries: readonly ScriptOutputSummary[],
-  taskRevision: string
+  taskRevision: string,
+  display?: ScriptOutputDisplay
 ): ScriptOutputPresentation {
   const type =
     block.options.type ?? (isString(block.value) ? 'text' : isArray(block.value) ? 'list' : 'json')
@@ -91,8 +104,22 @@ function renderBlock(
         }
       : reference(summary ? 'summary-budget' : 'summary-unavailable')
   }
+  // 等价编码是宿主能力；选择视图仍按原值解释，不能借此把局部/摘要标成完整。
+  if (
+    display &&
+    display.key === block.key &&
+    display.contentHash === item.contentHash &&
+    !view.paths &&
+    !view.lines &&
+    isUndefined(view.maxItems) &&
+    isUndefined(view.edge)
+  )
+    return display.text.length <= cap
+      ? { ...item, representation: 'full', text: display.text, bodyIncluded: true }
+      : reference('full-unavailable')
   let selected = block.value
   let selection: unknown
+  let stringOffset = 0
   let partial = false
   if (view.paths) {
     const fields = view.paths.map((path) => ({ path, ...selectPointer(selected, path) }))
@@ -104,11 +131,13 @@ function renderBlock(
     const count = Math.min(total, view.maxItems ?? total)
     const start = view.edge === 'tail' ? total - count : 0
     selected = selected.slice(start, start + count)
-    selection = { from: start, shown: count, total }
+    selection = { from: start, shown: count, total, unit: 'items' }
     partial = count < total
   } else if (isString(selected) && view.lines) {
     const lines = selected.split('\n')
     const [start, end] = view.lines
+    stringOffset = lines.slice(0, start - 1).reduce((sum, line) => sum + line.length + 1, 0)
+    stringOffset = Math.min(stringOffset, selected.length)
     selected = lines.slice(start - 1, end).join('\n')
     selection = {
       lines: [start, Math.min(end, lines.length)],
@@ -139,7 +168,12 @@ function renderBlock(
         (selection as { from: number }).from + (view.edge === 'tail' ? values.length - low : 0)
       selected = view.edge === 'tail' ? values.slice(-low) : values.slice(0, low)
       text = stringify(selected)
-      selection = { from: offset, shown: low, total: (block.value as unknown[]).length }
+      selection = {
+        from: offset,
+        shown: low,
+        total: (block.value as unknown[]).length,
+        unit: 'items',
+      }
     } else if (isString(selected) && (type === 'text' || type === 'code')) {
       const lines = selected.split('\n')
       const kept: string[] = []
@@ -151,6 +185,7 @@ function renderBlock(
       }
       if (isEmpty(kept)) return reference('line-exceeds-budget', selection)
       text = (view.edge === 'tail' ? kept.reverse() : kept).join('\n')
+      if (view.edge === 'tail') stringOffset += selected.length - text.length
       selection = {
         ...(selection as object),
         shownLines: kept.length,
@@ -224,6 +259,12 @@ function renderBlock(
       if (text.length > cap) return reference('view-budget', selection)
     }
   }
+  // 字符偏移按存档原文计算，保留缩进和原始 CRLF 宽度；仅凭行号无法安全续读 memory.read。
+  if (partial && isString(block.value) && (type === 'text' || type === 'code') && !view.paths)
+    selection = {
+      ...(selection as object),
+      chars: { from: stringOffset, shown: text.length, total: block.value.length, unit: 'utf16' },
+    }
   return {
     ...item,
     representation: partial ? 'excerpt' : 'full',
@@ -234,18 +275,132 @@ function renderBlock(
   }
 }
 
-/** 全局分配有界文字预算，优先级独立于异步调用完成顺序。 */
+/** 使用同一个编码结果计量并交付；文本正文不再额外加 JSON 转义。 */
+function encodeOutput(
+  blocks: readonly ScriptOutputPresentation[],
+  omittedBlocks: number,
+  allocatedChars: number,
+  issues: readonly string[],
+  format: ScriptOutputFormat
+): string {
+  const metadata = {
+    omittedBlocks,
+    displayChars:
+      omittedBlocks > 0 || blocks.some((block) => block.representation !== 'full')
+        ? allocatedChars
+        : undefined,
+    issues: !isEmpty(issues) ? issues : undefined,
+  }
+  if (format === 'json') return JSON.stringify({ blocks, ...metadata })
+  return [
+    JSON.stringify(metadata),
+    ...blocks.flatMap(({ text, ...block }) => [JSON.stringify(block), ...(text ? [text] : [])]),
+  ].join('\n')
+}
+
+/** 扩展必须覆盖同一原文的既有 UTF-16 区间；没有范围证明时仅接受原文不变。 */
+function preservesOutputBody(
+  previous: ScriptOutputPresentation,
+  next: ScriptOutputPresentation,
+  value: unknown
+): boolean {
+  if (!previous.bodyIncluded) return true
+  if (!next.bodyIncluded) return false
+  if (previous.text === next.text) return true
+  if (!isString(value) || (previous.type !== 'text' && previous.type !== 'code')) return false
+  const range = (block: ScriptOutputPresentation) =>
+    block.representation === 'full'
+      ? { from: 0, shown: value.length }
+      : (block.selection as { chars?: { from: number; shown: number } } | undefined)?.chars
+  const before = range(previous)
+  const after = range(next)
+  return Boolean(
+    before &&
+    after &&
+    after.from <= before.from &&
+    after.from + after.shown >= before.from + before.shown &&
+    value.slice(before.from, before.from + before.shown) === previous.text &&
+    value.slice(after.from, after.from + after.shown) === next.text
+  )
+}
+
+/**
+ * Script 统一解释展示申请。整体显式配置硬覆盖；否则把有效块在各自上限内的实际 JSON 编码合并，
+ * 普通块保留原默认份额。只为确有申请的块渲染正文，不把请求预算当作宿主授权。
+ */
+export function requestOutputBudget(
+  capture: ScriptOutputCapture,
+  manifest?: ScriptOutputManifest,
+  ref = '',
+  displays: readonly ScriptOutputDisplay[] = []
+): { maxChars: number; explicit: boolean } {
+  const config =
+    manifest && Object.hasOwn(manifest.config, 'maxChars') ? manifest.config : capture.config
+  if (!isUndefined(config.maxChars))
+    return {
+      maxChars: Math.max(0, Math.min(config.maxChars, ScriptOutputLimits.maxDisplayChars)),
+      explicit: true,
+    }
+  const requested = capture.blocks.flatMap((block, index) => {
+    const view =
+      manifest?.outputs.find((output) => output.key === block.key)?.view ?? block.options.view ?? {}
+    return isNumber(view.maxChars) &&
+      view.maxChars > 0 &&
+      view.mode !== 'reference' &&
+      view.mode !== 'summary' &&
+      block.options.type !== 'image' &&
+      block.options.type !== 'file'
+      ? [{ block, index, view }]
+      : []
+  })
+  if (requested.length === 0) return { maxChars: ScriptOutputLimits.displayChars, explicit: false }
+  const blocks = requested.map(({ block, index, view }) =>
+    renderBlock(
+      block,
+      index,
+      view,
+      ref,
+      ScriptOutputLimits.maxDisplayChars,
+      [],
+      '',
+      displays.find((item) => item.key === block.key)
+    )
+  )
+  const encoded = encodeOutput(
+    blocks,
+    0,
+    ScriptOutputLimits.maxDisplayChars,
+    capture.issues.slice(0, ScriptOutputLimits.issues),
+    'json'
+  ).length
+  const ordinary = requested.length < capture.blocks.length ? ScriptOutputLimits.displayChars : 0
+  return {
+    maxChars: Math.min(
+      ScriptOutputLimits.maxDisplayChars,
+      Math.max(ScriptOutputLimits.displayChars, encoded + ordinary)
+    ),
+    explicit: true,
+  }
+}
+
+/** 全局分配有界文字预算；text 保留 JSON 基线，只扩展同批文本块。 */
 export function projectOutputs(
   capture: ScriptOutputCapture,
   ref: string,
   maxChars: number,
   manifest?: ScriptOutputManifest,
   summaries: readonly ScriptOutputSummary[] = [],
-  taskRevision = ''
+  taskRevision = '',
+  format: ScriptOutputFormat = 'json',
+  displays: readonly ScriptOutputDisplay[] = []
 ): ScriptOutputProjection {
-  const config =
-    manifest && Object.hasOwn(manifest.config, 'maxChars') ? manifest.config : capture.config
-  const requestedChars = config.maxChars ?? ScriptOutputLimits.displayChars
+  if (format !== 'json' && format !== 'text')
+    throw new AppError('VALIDATION', '输出展示编码必须是 json 或 text')
+  const originalRequest = requestOutputBudget(capture, manifest, ref).maxChars
+  const requestedChars =
+    format === 'text' && displays.length
+      ? Math.max(originalRequest, requestOutputBudget(capture, manifest, ref, displays).maxChars)
+      : originalRequest
   const allocatedChars = Math.max(0, Math.min(requestedChars, maxChars))
   const issues = capture.issues.slice(0, ScriptOutputLimits.issues)
   const ordered = capture.blocks
@@ -253,6 +408,13 @@ export function projectOutputs(
       block,
       index,
       view: manifest?.outputs.find((o) => o.key === block.key)?.view ?? block.options.view ?? {},
+      display:
+        format === 'text'
+          ? displays.find(
+              (item) =>
+                item.key === block.key && item.contentHash === outputContentHash(block.value)
+            )
+          : undefined,
     }))
     .sort(
       (a, b) =>
@@ -263,45 +425,55 @@ export function projectOutputs(
           ? a.block.key.localeCompare(b.block.key, 'en')
           : a.index - b.index)
     )
-  let blocks = ordered.map(({ block, index, view }) =>
-    renderBlock(block, index, { ...view, mode: 'reference' }, ref, 0, summaries, taskRevision)
-  )
-  let omittedBlocks = 0
+  const baseline =
+    format === 'text'
+      ? projectOutputs(capture, ref, maxChars, manifest, summaries, taskRevision)
+      : undefined
+  let blocks = baseline
+    ? [...baseline.blocks]
+    : ordered.map(({ block, index, view }) =>
+        renderBlock(block, index, { ...view, mode: 'reference' }, ref, 0, summaries, taskRevision)
+      )
+  let omittedBlocks = baseline?.omittedBlocks ?? 0
   // 放不下（有块被省略或只露出一部分）时写出这次的展示预算，模型对得上是自己交多了
-  const encode = () =>
-    JSON.stringify({
-      blocks,
-      omittedBlocks,
-      displayChars:
-        omittedBlocks > 0 || blocks.some((block) => block.representation !== 'full')
-          ? allocatedChars
-          : undefined,
-      issues: !isEmpty(issues) ? issues : undefined,
-    })
+  const encode = () => encodeOutput(blocks, omittedBlocks, allocatedChars, issues, format)
   while (!isEmpty(blocks) && encode().length > allocatedChars) {
     blocks.pop()
     omittedBlocks++
   }
   const expand = (i: number, budget: number) => {
-    const { block, index, view } = ordered[i]!
+    const { block, index, view, display } = ordered[i]!
     const previous = blocks[i]!
-    blocks[i] = renderBlock(block, index, view, ref, budget, summaries, taskRevision)
-    if (encode().length <= allocatedChars) return
+    blocks[i] = renderBlock(block, index, view, ref, budget, summaries, taskRevision, display)
+    if (encode().length <= allocatedChars) {
+      if (
+        baseline &&
+        !(display && blocks[i]!.representation === 'full') &&
+        !preservesOutputBody(previous, blocks[i]!, block.value)
+      )
+        blocks[i] = previous
+      return
+    }
     // 转义和省略元数据也占预算；在实际编码后的总长内找片段，避免一次减半空出大量空间。
     let low = 0
     let high = budget - 1
     let best = previous
     while (low <= high) {
       const mid = Math.floor((low + high) / 2)
-      blocks[i] = renderBlock(block, index, view, ref, mid, summaries, taskRevision)
+      blocks[i] = renderBlock(block, index, view, ref, mid, summaries, taskRevision, display)
       if (encode().length <= allocatedChars) {
-        best = blocks[i]!
+        if (
+          !baseline ||
+          (display && blocks[i]!.representation === 'full') ||
+          preservesOutputBody(previous, blocks[i]!, block.value)
+        )
+          best = blocks[i]!
         low = mid + 1
       } else high = mid - 1
     }
     blocks[i] = best
   }
-  for (let i = 0; i < blocks.length; i++) {
+  for (let i = 0; !baseline && i < blocks.length; i++) {
     const remaining = Math.max(0, allocatedChars - encode().length)
     expand(
       i,
@@ -311,12 +483,46 @@ export function projectOutputs(
   // 短块、显式上限与引用卡用不完的份额，按既定优先级返还给尚未完整展示的块。
   // 保留其他块的现有正文，只在同一全局预算内扩展；原值与展示策略不变。
   for (let i = 0; i < blocks.length && encode().length < allocatedChars; i++)
-    if (blocks[i]!.representation !== 'full') expand(i, allocatedChars)
+    if (
+      (blocks[i]!.representation !== 'full' || ordered[i]!.display) &&
+      (!baseline || ordered[i]!.display || blocks[i]!.type === 'text' || blocks[i]!.type === 'code')
+    )
+      expand(i, allocatedChars)
   let prompt = encode()
   if (prompt.length > allocatedChars) {
     prompt = ''
     blocks = []
     omittedBlocks = capture.blocks.length
   }
-  return { blocks, prompt, requestedChars, allocatedChars, omittedBlocks, issues }
+  return { format, blocks, prompt, requestedChars, allocatedChars, omittedBlocks, issues }
+}
+
+/** 只移除已确认交付的正文；同一编码计量，无法缩短时保留原投影。 */
+export function withoutOutputBodies(
+  projection: ScriptOutputProjection,
+  identities: ReadonlyArray<{ key: string; contentHash: string }>
+): ScriptOutputProjection {
+  const blocks = projection.blocks.map((block) =>
+    block.bodyIncluded &&
+    identities.some((item) => item.key === block.key && item.contentHash === block.contentHash)
+      ? {
+          ...block,
+          text: '',
+          representation: 'reference' as const,
+          bodyIncluded: false,
+          reason: 'body-in-history',
+        }
+      : block
+  )
+  if (blocks.every((block, index) => block === projection.blocks[index])) return projection
+  const prompt = encodeOutput(
+    blocks,
+    projection.omittedBlocks,
+    projection.allocatedChars,
+    projection.issues,
+    projection.format
+  )
+  return prompt.length <= projection.prompt.length && prompt.length <= projection.allocatedChars
+    ? { ...projection, blocks, prompt }
+    : projection
 }

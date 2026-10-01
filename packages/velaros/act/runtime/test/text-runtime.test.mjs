@@ -606,9 +606,7 @@ test('raw blob names and nested input keys keep JSON semantics in the isolated r
 test('missing work decision is repaired before a single actual write and completion', async (t) => {
   const f = await fixture(t, async function* (request, f) {
     if (f.calls === 1) {
-      assert(
-        modelText(request).includes(`继续工作时，响应从控制头开始：\n${marker(request)} execute()`)
-      )
+      assert(modelText(request).includes(`\n${marker(request)} execute()\n`))
       yield { type: 'text', text: 'I will continue the task.' }
       yield finish
     } else if (f.calls === 2) {
@@ -806,8 +804,13 @@ test('an explicit eight-exposure result retires without replaying its producer',
     const results = historyEntries(request).filter((item) => item.origin === 'runtime-execution')
     if (f.calls === 2) firstRef = results[0].ref.id
     if (f.calls > 1) {
+      // 八次曝光后租约结束、帧尾不再列出，已冻结的历史正文逐字保留，请求只往后加
       const first = results.find((item) => item.ref.id === firstRef)
-      assert.equal(first.bodyIncluded, f.calls <= 9)
+      assert.equal(first.bodyIncluded, true)
+      assert.equal(
+        runtimeFrame(request).results.some((item) => item.ref === firstRef),
+        f.calls <= 9
+      )
     }
     if (f.calls === 10) {
       yield* done(request)

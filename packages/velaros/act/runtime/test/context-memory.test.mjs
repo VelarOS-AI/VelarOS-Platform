@@ -6,7 +6,7 @@ import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import { nodeSubprocessCodeRunner, scriptOutputs } from '@velaros-ai/script'
 
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
@@ -14,12 +14,96 @@ import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 import {
   memoryCommittedGroups,
+  memoryOutput,
   memoryPrompt,
 } from '../../../dist/act/runtime/utils/context-memory.js'
+import { projectMaterial, readMaterialField } from '../../../dist/act/runtime/utils/materials.js'
 
 import { baseNotes, done, historyEntries, marker, turn } from './support/model-turn.mjs'
 
 const signal = new AbortController().signal
+
+test('INV-58 new and legacy output representations share actual prompt bounds and preserve failure gaps', () => {
+  const value = 'alpha("beta");\n'.repeat(40)
+  const capture = {
+    config: {},
+    issues: [],
+    blocks: [
+      {
+        key: 'sample',
+        value,
+        chars: JSON.stringify(value).length,
+        options: { key: 'sample', type: 'code', view: { mode: 'full' } },
+      },
+    ],
+  }
+  for (const format of ['json', 'text'])
+    for (const cap of [0, 900, 2400]) {
+      const projection = scriptOutputs.project(
+        capture,
+        'source-result',
+        cap,
+        undefined,
+        undefined,
+        undefined,
+        format
+      )
+      const delivered = projection.prompt ? memoryOutput(projection.prompt, format) : ''
+      assert(delivered.length <= cap)
+      if (format === 'text') assert.equal(delivered, projection.prompt)
+      if (format === 'text' && cap === 900) assert(delivered.includes(value))
+      if (format === 'json' && projection.prompt)
+        assert.equal(memoryOutput(projection.prompt), delivered)
+      const missing = projection.blocks[0]?.representation !== 'full'
+      const frame = {
+        partitions: {
+          task: { goals: [] },
+          workspace: { notes: [] },
+          observation: {
+            text: projection.prompt,
+            presentation: { ...(format === 'text' ? { format } : {}), allocatedChars: cap },
+            collectionIssues: ['CAPTURE_FAILURE'],
+          },
+          recent: {
+            results: [
+              {
+                ref: 'source-result',
+                structuredOutput: true,
+                ...(format === 'text' ? { outputFormat: format } : {}),
+                text: projection.prompt,
+              },
+            ],
+          },
+          runtime: {
+            mandatory: [
+              { id: 'failed-call', outcome: 'failed', effect: 'unknown', code: 'DOMAIN_FAILURE' },
+            ],
+            decision: {
+              missing: missing
+                ? [{ ref: 'source-result', key: 'sample', reason: 'required-body-unavailable' }]
+                : [],
+            },
+          },
+        },
+        memoryStatus: {},
+      }
+      const original = JSON.stringify(frame)
+      const prompt = memoryPrompt(original)
+      const empty = structuredClone(frame)
+      empty.partitions.observation.text = ''
+      empty.partitions.recent.results[0].text = ''
+      // 计入两份正文和 recent 输出标签，不把输出 chunk 的上限冒充全帧上限。
+      assert(
+        prompt.length <=
+          memoryPrompt(JSON.stringify(empty)).length + 2 * cap + '当次输出：\n'.length + 1
+      )
+      assert(prompt.includes('CAPTURE_FAILURE'))
+      assert(prompt.includes('DOMAIN_FAILURE'))
+      assert.equal(prompt.includes('required-body-unavailable'), missing)
+      if (delivered) assert.equal(prompt.split(delivered).length - 1, 2)
+      assert.equal(JSON.stringify(frame), original)
+    }
+})
 
 test('committed receipt summaries retain every failed, partial, and unknown outcome', () => {
   const committed = Array.from({ length: 12 }, (_, index) => ({
@@ -337,9 +421,69 @@ async function execute(f, source) {
   return result.result.value?.default
 }
 
+test('selection units recover missing array items and both sides of text through memory.read', async (t) => {
+  const f = await fixture(t)
+  const rows = Array.from({ length: 100 }, (_, id) => ({ id, text: `row ${id} 😀` }))
+  const text = Array.from({ length: 100 }, (_, id) => `\tline ${id} 😀\r`).join('\n')
+  for (const [value, options] of [
+    [rows, { type: 'list', view: { maxItems: 3 } }],
+    [rows, { type: 'list', view: { maxItems: 3, edge: 'tail' } }],
+    [rows, { type: 'list', view: { edge: 'tail' } }],
+    [text, { type: 'code', view: { edge: 'head' } }],
+    [text, { type: 'code', view: { edge: 'tail' } }],
+    [text, { type: 'text', view: { lines: [20, 40] } }],
+  ]) {
+    const result = await f.session.execute({
+      source: `import {output} from 'velaros';output(${JSON.stringify(value)},${JSON.stringify(options)});`,
+    })
+    assert.equal(result.checked, true)
+    const raw = await f.memory.readMaterial(result.resultRef, 0, 60000, signal)
+    const archive = JSON.parse(raw.text)
+    const shown = scriptOutputs.project(archive.output, result.resultRef, 1100).blocks[0]
+    const read = async (pointer, offset, limit) =>
+      execute(
+        f,
+        `import {output} from 'velaros';import {memory} from 'velaros:system';output(await memory.read(${JSON.stringify({ ref: result.resultRef, pointer, offset, limit })}));`
+      )
+    if (Array.isArray(value)) {
+      const { from, shown: count, total, unit } = shown.selection
+      assert.equal(unit, 'items')
+      const index = from > 0 ? from - 1 : from + count
+      assert(index < total)
+      const page = await read(`${shown.pointer}/${index}`, 0, 1000)
+      assert.deepEqual(JSON.parse(page.text), value[index])
+      const materialSource = JSON.stringify({ rows })
+      const material = projectMaterial(
+        materialSource,
+        { sessionId: 's', id: result.resultRef },
+        1000
+      )
+      const excerpt = JSON.parse(material.text).rows
+      assert.equal(excerpt.selection.unit, 'items')
+      const next = readMaterialField(
+        materialSource,
+        `${excerpt.read.pointer}/${excerpt.selection.shown}`,
+        0,
+        1000
+      )
+      assert.deepEqual(JSON.parse(next.text), value[excerpt.selection.shown])
+    } else {
+      const { from, shown: count, total, unit } = shown.selection.chars
+      assert.equal(unit, 'utf16')
+      const before = from > 0 ? (await read(shown.pointer, 0, from)).text : ''
+      const after =
+        from + count < total
+          ? (await read(shown.pointer, from + count, total - from - count)).text
+          : ''
+      assert.equal(before + shown.text + after, value)
+    }
+    assert.deepEqual(await f.memory.readMaterial(result.resultRef, 0, 60000, signal), raw)
+  }
+})
+
 test('archived result fields page original text directly through the actual memory operation', async (t) => {
   const f = await fixture(t)
-  const original = 'prefix😀\n' + 'source line\n'.repeat(7000) + 'tail evidence'
+  const original = `prefix😀\n${'source line\n'.repeat(7000)}tail evidence`
   const result = await f.session.execute({
     source: `import {output} from 'velaros';output({unrelated:'x'.repeat(70000),'a/b~c':'prefix😀\\n'+'source line\\n'.repeat(7000)+'tail evidence'},{key:'source'});`,
   })
@@ -378,19 +522,19 @@ test('archived field selectors validate paths and ranges and only traverse own J
   const prefix = '/output/blocks/0/value'
   const read = (pointer, offset = 0, limit = 60000) =>
     f.memory.readMaterial(result.resultRef, offset, limit, signal, pointer)
-  assert.equal((await read(prefix + '/rows/0/text', 1, 2)).text, '😀')
-  assert.equal((await read(prefix + '/empty')).text, '')
-  assert.equal((await read(prefix + '/nil')).text, 'null')
-  assert.equal((await read(prefix + '/__proto__')).text, 'own data')
-  assert.equal((await read(prefix + '/rows')).text, JSON.stringify(value.rows))
-  for (const pointer of ['', 'output', prefix + '/~2', '/'.repeat(4097)])
+  assert.equal((await read(`${prefix}/rows/0/text`, 1, 2)).text, '😀')
+  assert.equal((await read(`${prefix}/empty`)).text, '')
+  assert.equal((await read(`${prefix}/nil`)).text, 'null')
+  assert.equal((await read(`${prefix}/__proto__`)).text, 'own data')
+  assert.equal((await read(`${prefix}/rows`)).text, JSON.stringify(value.rows))
+  for (const pointer of ['', 'output', `${prefix}/~2`, '/'.repeat(4097)])
     await assert.rejects(read(pointer), { code: 'VALIDATION' })
   for (const pointer of [
-    prefix + '/missing',
-    prefix + '/constructor',
-    prefix + '/rows/01',
-    prefix + '/rows/-',
-    prefix + '/rows/length',
+    `${prefix}/missing`,
+    `${prefix}/constructor`,
+    `${prefix}/rows/01`,
+    `${prefix}/rows/-`,
+    `${prefix}/rows/length`,
   ])
     await assert.rejects(read(pointer), { code: 'NOT_FOUND' })
   for (const [offset, limit] of [
@@ -400,7 +544,7 @@ test('archived field selectors validate paths and ranges and only traverse own J
     [0, -1],
     [5, 1],
   ])
-    await assert.rejects(read(prefix + '/rows/0/text', offset, limit), { code: 'INVALID_RANGE' })
+    await assert.rejects(read(`${prefix}/rows/0/text`, offset, limit), { code: 'INVALID_RANGE' })
 })
 
 test('archived field recall preserves authorization, cancellation and released original results', async (t) => {
@@ -453,23 +597,41 @@ test('INV-65 real model requests retain completed job identities, historical out
       return
     }
     const raw = JSON.parse(request.materials.find((item) => item.origin === 'runtime-view').text)
-    const shown = JSON.parse(request.compiledPrompt.split('分区 runtime：\n')[1].split('\n')[0])
-    assert(shown.jobs.some((job) => job.representation === 'completed-jobs'))
-    const expanded = shown.jobs.flatMap((job) =>
-      job.representation === 'completed-jobs'
-        ? Object.entries(job.results).map(([executionId, resultRef]) => ({
-            executionId,
-            status: job.status,
-            resultRef,
-          }))
-        : [job]
+    // 此前的帧留在对话里，增量帧的列表只列变化条目：按出现顺序合并各帧 runtime 段里展示的作业
+    const sections = modelRequestEncoder
+      .messages(request)
+      .map((item) =>
+        typeof item.content === 'string'
+          ? item.content
+          : item.content.map((part) => part.text ?? '').join('\n')
+      )
+      .flatMap((text) =>
+        text
+          .split('分区 runtime：\n')
+          .slice(1)
+          .map((part) => JSON.parse(part.split('\n')[0]))
+      )
+    const shownJobs = sections.flatMap((section) =>
+      Array.isArray(section.jobs) ? section.jobs : (section.jobs?.changed ?? [])
     )
-    assert.deepEqual(expanded, raw.partitions.runtime.jobs)
+    assert(shownJobs.some((job) => job.representation === 'completed-jobs'))
+    const expanded = new Map(
+      shownJobs.flatMap((job) =>
+        job.representation === 'completed-jobs'
+          ? Object.entries(job.results).map(([executionId, resultRef]) => [
+              executionId,
+              { executionId, status: job.status, resultRef },
+            ])
+          : [[job.executionId, job]]
+      )
+    )
+    const jobs = raw.partitions.runtime.jobs
+    for (const job of jobs) assert.deepEqual(expanded.get(job.executionId), job)
     const results = historyEntries(request).filter(
       (item) => item.origin === 'runtime-execution' && item.bodyIncluded
     )
-    assert.equal(expanded.length, 6)
-    for (const job of expanded) {
+    assert.equal(jobs.length, 6)
+    for (const job of jobs) {
       const result = results.find((item) => item.ref.id === job.resultRef)
       assert(result?.text.includes('job-'), 'the mapped result body must be in actual history')
       const original = await f.session.context.read(
@@ -1287,7 +1449,7 @@ test('INV-50 folding seals older history into a listed volume and the next segme
   assert.equal(await memory.fold('runway', 24000, signal), false)
 })
 
-test('INV-52 the segment base keeps ledgers across volumes and earlier goals while chronological messages carry selected task bodies', async (t) => {
+test('INV-52 current constraints and unresolved items remain separate from immutable history while task bodies stay chronological', async (t) => {
   const f = await fixture(t)
   const programs = new ProgramContext('s', f.session.context, f.storage)
   const recent = new RecentContext('s', f.session.context, f.storage)
@@ -1353,8 +1515,15 @@ test('INV-52 the segment base keeps ledgers across volumes and earlier goals whi
   const frame = await memory.project(await view(), undefined, [], signal, 24000)
   const base = frame.history[0].content
   assert.match(base, /否定尝试[^\n]*："?\["N1"\]/)
-  assert.match(base, /未解问题[^\n]*：\["U1","U2"\]/)
-  assert.match(base, /用户约束[^\n]*：\["只用标准库","keep the API stable"\]/)
+  const active = JSON.parse(frame.body).partitions.task.active
+  assert.deepEqual(
+    active.items.filter((item) => item.kind === 'question').map((item) => item.text),
+    ['U1', 'U2']
+  )
+  assert.deepEqual(
+    active.items.filter((item) => item.kind === 'constraint').map((item) => item.text),
+    ['只用标准库', 'keep the API stable']
+  )
   // 底座保留早期目标首行；选中的新目标正文按序进入历史，帧尾保留当前范围。
   assert.match(base, /Add tests for the parser[\s\S]*Build the parser/)
   assert.doesNotMatch(base, /every detail spelled out|support comments/)
@@ -1371,7 +1540,7 @@ test('INV-52 the segment base keeps ledgers across volumes and earlier goals whi
     )
   )
   assert(!frame.prompt.includes('Now also support comments'))
-  // 未解问题只取最新的叙事；否定尝试跨卷累积、去重，超出条数的只计数并保留出处
+  // 未解事项默认承接，逐项提供关闭证据才退出；否定尝试按有界索引累积。
   const [, newer] = await recent.volumes(signal)
   const attempts = Array.from({ length: 18 }, (_, index) => `X${index}`)
   await recent.narrate(
@@ -1386,14 +1555,21 @@ test('INV-52 the segment base keeps ledgers across volumes and earlier goals whi
   )
   await steps(6)
   assert(await memory.fold('runway', 24000, signal))
-  const next = (await memory.project(await view(), undefined, [], signal, 24000)).history[0].content
+  const nextFrame = await memory.project(await view(), undefined, [], signal, 24000)
+  const next = nextFrame.history[0].content
   const narrative = (await recent.narratives(signal)).at(-1)
   assert(
     next.includes(
-      `：${JSON.stringify(['N2', 'N1', ...attempts.slice(0, 14)])}；另有 4 条没有列出，出处 ${JSON.stringify([narrative.ref])}`
+      `：${JSON.stringify(['N2', 'N1', ...attempts.slice(0, 14)])}；另有 4 条没有列出，出处`
     )
   )
-  assert.match(next, /未解问题[^\n]*：\["U2","U3"\]\n/)
+  assert(next.includes(narrative.ref.id))
+  assert.deepEqual(
+    JSON.parse(nextFrame.body)
+      .partitions.task.active.items.filter((item) => item.kind === 'question')
+      .map((item) => item.text),
+    ['U1', 'U2', 'U3']
+  )
 })
 
 test('INV-54 rereading material squeezed to a reference in the last frame is a fault, and folding adjusts the note share by faults', async (t) => {
@@ -1481,6 +1657,684 @@ async function archiveResult(f, programs, label) {
   return result.ref
 }
 
+test('INV-68 full required blocks in the actual frozen history satisfy a smaller current projection', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const values = ['first required fact\n'.repeat(140), 'second required fact\n'.repeat(130)]
+  const executed = await f.session.execute(
+    {
+      source: `import {output} from 'velaros';output.configure({maxChars:20000});${values.map((value, index) => `output(${JSON.stringify(value)},{key:'required_${index}',type:'text',required:true,view:{mode:'full'}});`).join('')}`,
+    },
+    'task'
+  )
+  assert(executed.checked)
+  const view = (await f.session.view.inspect()).view
+  const first = await f.memory.project(view, undefined, [], signal, 600000)
+  const initial = JSON.parse(first.body)
+  assert.deepEqual(initial.partitions.runtime.decision.missing, [])
+  const original = historyEntries(first).find((entry) => entry.ref?.id === executed.resultRef)
+  assert(original)
+  for (const value of values) assert(original.text.includes(value))
+  await f.memory.acknowledge(initial.frameId, signal)
+  const next = await f.memory.project(view, undefined, [], signal, 20000)
+  assert.deepEqual(JSON.parse(next.body).partitions.runtime.decision.missing, [])
+  const retained = historyEntries(next).find((entry) => entry.ref?.id === executed.resultRef)
+  assert.equal(retained.text, original.text)
+  assert.equal(f.requests.length, 0)
+  assert((await programs.state()).leases.some((lease) => lease.ref === executed.resultRef))
+})
+
+async function archiveRequired(f, programs, values, maxChars = 20000) {
+  const id = crypto.randomUUID()
+  const source = await f.session.context.append({
+    kind: 'audit',
+    title: `script:${id}`,
+    body: JSON.stringify({ source: 'output(1)' }),
+  })
+  const result = await f.session.context.append({
+    kind: 'audit',
+    title: `script:${id}:result`,
+    body: JSON.stringify({
+      mode: 'execute',
+      output: {
+        config: { maxChars },
+        issues: [],
+        blocks: values.map((value, index) => ({
+          key: `required_${index}`,
+          value,
+          chars: JSON.stringify(value).length,
+          options: {
+            key: `required_${index}`,
+            type: 'text',
+            required: true,
+            view: { mode: 'full' },
+          },
+        })),
+      },
+    }),
+    sources: [source.ref],
+  })
+  await programs.add(result.ref, source.ref, id, 'task')
+  return result.ref
+}
+
+function requiredView() {
+  return {
+    id: 'synthetic-required',
+    scope: { sessionId: 's', revision: 0 },
+    goals: [],
+    capsule: {},
+    mandatory: [],
+    evidence: [],
+    gaps: [],
+    readSet: [],
+    progress: { step: 0, repeatedSteps: 0, stalled: false, evidence: [] },
+  }
+}
+
+test('INV-69 required recall transfers whole-block proof only with a fully delivered unchanged page object', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const value = 'source-bound recall evidence\n'.repeat(80)
+  const source = await archiveRequired(f, programs, [value], 512)
+  const before = await f.memory.project(requiredView(), undefined, [], signal, 600000)
+  assert(
+    JSON.parse(before.body).partitions.runtime.decision.missing.some((gap) => gap.ref === source.id)
+  )
+  await f.memory.acknowledge(JSON.parse(before.body).frameId, signal)
+  const page = await f.memory.readMaterial(source, 0, 12000, signal, '/output/blocks/0/value')
+  const carrier = await archiveRequired(f, programs, [page])
+  const after = await f.memory.project(requiredView(), undefined, [], signal, 600000)
+  assert(
+    historyEntries(after)
+      .find((entry) => entry.ref?.id === carrier.id)
+      .text.includes(value.split('\n')[0])
+  )
+  assert.deepEqual(JSON.parse(after.body).partitions.runtime.decision.missing, [])
+  assert(page.delivery?.receipt)
+})
+
+test('INV-69 required recall through a real script reaches the next model request and completion gate', async (t) => {
+  for (const scenario of ['complete', 'partial', 'truncated']) {
+    await t.test(scenario, async (t) => {
+      const f = await fixture(t)
+      const programs = new ProgramContext('s', f.session.context, f.storage)
+      const source = await archiveRequired(
+        f,
+        programs,
+        ['verified synthetic source\n'.repeat(20)],
+        512
+      )
+      const executed = await f.session.execute(
+        {
+          source: `import {output} from 'velaros';import {memory} from 'velaros:system';output.configure({maxChars:${scenario === 'truncated' ? 512 : 12000}});const page=await memory.read({ref:${JSON.stringify(source.id)},pointer:'/output/blocks/0/value',limit:${scenario === 'partial' ? 100 : 12000}});output(page,{key:'recalled',view:{mode:'full'}});`,
+        },
+        'task'
+      )
+      assert(executed.checked)
+      assert(!executed.result?.failed)
+      const events = []
+      for await (const event of f.session.submit('Finish the synthetic task.')) events.push(event)
+      const request = f.requests[0]
+      const frame = JSON.parse(
+        request.materials.find((material) => material.origin === 'runtime-view').text
+      )
+      if (scenario === 'complete') {
+        const shown = historyEntries(request).find((entry) => entry.ref?.id === executed.resultRef)
+        assert(shown)
+        const lines = shown.text.split('\n')
+        assert.equal(JSON.parse(lines[1]).representation, 'full')
+        const header = JSON.parse(lines[2])
+        assert.equal(header.encoding, 'memory-page')
+        const shownPage = { ...header.page, text: lines.slice(3).join('\n') }
+        assert.equal(shownPage.text, 'verified synthetic source\n'.repeat(20))
+        assert.equal(header.textChars, shownPage.text.length)
+        assert.equal(shownPage.offset, 0)
+        assert.equal(shownPage.totalChars, shownPage.text.length)
+        assert(shownPage.delivery.receipt)
+      }
+      assert.equal(
+        frame.partitions.runtime.decision.missing.some((gap) => gap.ref === source.id),
+        scenario !== 'complete'
+      )
+      if (scenario === 'complete') {
+        assert(
+          historyEntries(request).some(
+            (entry) =>
+              entry.ref?.id === executed.resultRef &&
+              entry.text.includes('verified synthetic source')
+          )
+        )
+        assert(events.some((event) => event.type === 'verification' && event.completed))
+      } else {
+        assert(
+          events.some(
+            (event) => event.type === 'verification' && event.reason === 'CONTEXT_REQUIRED'
+          )
+        )
+        const missing = frame.partitions.runtime.decision.missing.find(
+          (gap) => gap.ref === source.id
+        )
+        assert.deepEqual(missing.read, { ref: source.id, pointer: '/output/blocks/0/value' })
+        assert(frame.partitions.runtime.decision.recall.includes('output(page'))
+      }
+    })
+  }
+})
+
+test('INV-69 required recall receipts are bounded metadata and ordinary reads create none', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const note = await f.memory.update(
+    { key: 'memo', baseRevision: 0, body: 'ordinary note' },
+    signal
+  )
+  assert.equal((await f.memory.readMaterial(note.ref, 0, 1000, signal)).delivery, undefined)
+  const ordinary = await archiveResult(f, programs, 'ordinary result')
+  assert.equal((await f.memory.readMaterial(ordinary, 0, 1000, signal)).delivery, undefined)
+  const source = await archiveRequired(f, programs, ['evidence\n'.repeat(1000)], 512)
+  const page = await f.memory.readMaterial(source, 0, 12000, signal, '/output/blocks/0/value')
+  const records = (await f.storage.load('s')).records.filter(
+    (record) => record.title === 'memory:read-delivery'
+  )
+  assert.equal(records.length, 1)
+  assert.equal(records[0].ref.id, page.delivery.receipt.id)
+  assert.deepEqual(records[0].sources, [source])
+  const raw = await f.storage.get('s', records[0].objectId)
+  assert(raw.length < 1000)
+  assert(!raw.includes('evidence'))
+})
+
+test('INV-69 required recall cannot mint current authority from a read interrupted by reset', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const source = await archiveRequired(f, programs, ['authorized evidence\n'.repeat(50)], 512)
+  const original = (await f.storage.load('s')).records.find((record) => record.ref.id === source.id)
+  const get = f.storage.get.bind(f.storage)
+  let reset
+  f.storage.get = async (session, objectId) => {
+    if (!reset && objectId === original.objectId) {
+      reset = true
+      await f.session.context.append({
+        kind: 'audit',
+        title: 'search:history-reset',
+        body: 'concurrent new scope',
+      })
+    }
+    return get(session, objectId)
+  }
+  const page = await f.memory.readMaterial(source, 0, 12000, signal, '/output/blocks/0/value')
+  f.storage.get = get
+  assert(reset)
+  await f.session.context.append({
+    kind: 'user',
+    body: 'Explicitly reattach the same source in the new scope.',
+    sources: [source],
+  })
+  const carrier = await archiveRequired(f, programs, [page])
+  const projected = JSON.parse(
+    (await programs.project(requiredView(), undefined, [], signal, 600000)).body
+  )
+  assert(
+    !projected.results
+      .find((result) => result.ref === carrier.id)
+      .outputProofs.some((proof) => proof.ref === source.id)
+  )
+  // A fresh authorized read in the new scope can provide a new valid proof.
+  const current = await f.memory.readMaterial(source, 0, 12000, signal, '/output/blocks/0/value')
+  const freshCarrier = await archiveRequired(f, programs, [current])
+  const refreshed = JSON.parse(
+    (await programs.project(requiredView(), undefined, [], signal, 600000)).body
+  )
+  assert(
+    refreshed.results
+      .find((result) => result.ref === freshCarrier.id)
+      .outputProofs.some((proof) => proof.ref === source.id)
+  )
+})
+
+test('INV-69 required recall rejects forged, cross-session, changed, nested, bare and truncated carriers', async (t) => {
+  for (const scenario of [
+    'forged',
+    'cross-session',
+    'text',
+    'record',
+    'range',
+    'nested',
+    'bare',
+    'truncated',
+    'partial-pointer',
+    'read-only',
+  ]) {
+    await t.test(scenario, async (t) => {
+      const f = await fixture(t)
+      const programs = new ProgramContext('s', f.session.context, f.storage)
+      const source = await archiveRequired(
+        f,
+        programs,
+        [{ value: 'bound original\n'.repeat(80), status: 'ok' }],
+        512
+      )
+      const pointer =
+        scenario === 'partial-pointer' ? '/output/blocks/0/value/value' : '/output/blocks/0/value'
+      const page = await f.memory.readMaterial(source, 0, 12000, signal, pointer)
+      if (scenario === 'forged') page.delivery.receipt = source
+      if (scenario === 'cross-session') page.delivery.receipt.sessionId = 'other-session'
+      if (scenario === 'text') page.text += 'tampered'
+      if (scenario === 'record') page.record.ref.id = 'other-result'
+      if (scenario === 'range') page.offset = 1
+      if (scenario !== 'read-only')
+        await archiveRequired(
+          f,
+          programs,
+          [scenario === 'bare' ? page.text : scenario === 'nested' ? { page } : page],
+          scenario === 'truncated' ? 512 : 20000
+        )
+      const frame = await f.memory.project(requiredView(), undefined, [], signal, 600000)
+      assert(
+        JSON.parse(frame.body).partitions.runtime.decision.missing.some(
+          (gap) => gap.ref === source.id
+        )
+      )
+    })
+  }
+})
+
+test('INV-69 required recall unions only delivered pages of one complete block or archive representation', async (t) => {
+  for (const pointer of [undefined, '/output/blocks/0/value']) {
+    await t.test(pointer ?? 'whole archive', async (t) => {
+      const f = await fixture(t)
+      const programs = new ProgramContext('s', f.session.context, f.storage)
+      const source = await archiveRequired(
+        f,
+        programs,
+        [{ value: 'Unicode 文本😀\n'.repeat(90), status: 'ok' }],
+        512
+      )
+      const first = await f.memory.readMaterial(source, 0, 700, signal, pointer)
+      const firstCarrier = await archiveRequired(f, programs, [first])
+      let frame = await f.memory.project(requiredView(), undefined, [], signal, 600000)
+      await f.memory.acknowledge(JSON.parse(frame.body).frameId, signal)
+      assert(
+        JSON.parse(frame.body).partitions.runtime.decision.missing.some(
+          (gap) => gap.ref === source.id
+        )
+      )
+      // An overlapping range is allowed, but the one-character hole still blocks completion.
+      const hole = await f.memory.readMaterial(source, 701, 12000, signal, pointer)
+      await archiveRequired(f, programs, [hole])
+      frame = await f.memory.project(requiredView(), undefined, [], signal, 600000)
+      assert(
+        JSON.parse(frame.body).partitions.runtime.decision.missing.some(
+          (gap) => gap.ref === source.id
+        )
+      )
+      const fill = await f.memory.readMaterial(source, 699, 2, signal, pointer)
+      const fillCarrier = await archiveRequired(f, programs, [fill])
+      frame = await f.memory.project(requiredView(), undefined, [], signal, 600000)
+      assert.deepEqual(JSON.parse(frame.body).partitions.runtime.decision.missing, [])
+      await f.memory.acknowledge(JSON.parse(frame.body).frameId, signal)
+      assert(!JSON.stringify(JSON.parse(frame.body).partitions).includes('outputProofs'))
+      await programs.release(fillCarrier.id, signal)
+      frame = await f.memory.project(requiredView(), undefined, [], signal, 600000)
+      assert(
+        JSON.parse(frame.body).partitions.runtime.decision.missing.some(
+          (gap) => gap.ref === source.id
+        )
+      )
+      await programs.release(firstCarrier.id, signal)
+      assert.equal(f.requests.length, 0)
+    })
+  }
+})
+
+test('INV-69 required recall proof follows the actual retained carrier and never changes another source', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const recent = new RecentContext('s', f.session.context, f.storage)
+  const source = await archiveRequired(f, programs, ['original\n'.repeat(90)], 512)
+  const page = await f.memory.readMaterial(source, 0, 12000, signal, '/output/blocks/0/value')
+  const carrier = await archiveRequired(f, programs, [page])
+  const other = await archiveRequired(f, programs, ['original\n'.repeat(90)], 512)
+  const changed = await archiveRequired(f, programs, ['changed\n'.repeat(90)], 512)
+  const frame = await f.memory.project(requiredView(), undefined, [], signal, 600000)
+  const gaps = JSON.parse(frame.body).partitions.runtime.decision.missing
+  assert(!gaps.some((gap) => gap.ref === source.id))
+  assert(gaps.some((gap) => gap.ref === other.id))
+  assert(gaps.some((gap) => gap.ref === changed.id))
+  await f.memory.acknowledge(JSON.parse(frame.body).frameId, signal)
+  const retained = await f.memory.project(requiredView(), undefined, [], signal, 20000)
+  assert(
+    !JSON.parse(retained.body).partitions.runtime.decision.missing.some(
+      (gap) => gap.ref === source.id
+    )
+  )
+  assert.equal(
+    historyEntries(frame).find((entry) => entry.ref?.id === carrier.id).text,
+    historyEntries(retained).find((entry) => entry.ref?.id === carrier.id).text
+  )
+  const segment = await recent.segment(signal)
+  // 租约结束但冻结正文仍在历史里时，证明跟着实际载体保留；退成引用卡后证明随之消失
+  const kept = await recent.project(segment, [], 0, signal)
+  assert(kept.items.some((item) => item.outputProofs?.length))
+  const omitted = await recent.project({ ...segment, entries: [] }, [], 0, signal)
+  assert(!omitted.items.some((item) => item.outputProofs?.length))
+  for (let index = 0; index < 12; index++)
+    await f.session.context.append({ kind: 'assistant', body: `synthetic step ${index}` })
+  assert(await f.memory.fold('runway', 20000, signal))
+  const folded = await f.memory.project(requiredView(), undefined, [], signal, 20000)
+  assert(
+    JSON.parse(folded.body).partitions.runtime.decision.missing.some((gap) => gap.ref === source.id)
+  )
+  await f.session.context.append({
+    kind: 'audit',
+    title: 'search:history-reset',
+    body: 'new authorization epoch',
+  })
+  // Reintroducing the archived page after a reset cannot revive its prior-epoch receipt.
+  await archiveRequired(f, programs, [page])
+  const reset = await f.memory.project(requiredView(), undefined, [], signal, 600000)
+  const resetHistory = await recent.project(
+    await recent.segment(signal),
+    JSON.parse((await programs.project(requiredView(), undefined, [], signal, 600000)).body)
+      .results,
+    600000,
+    signal
+  )
+  assert(
+    resetHistory.items.every((item) => !item.outputProofs?.some((proof) => proof.ref === source.id))
+  )
+  assert(!JSON.stringify(JSON.parse(reset.body).partitions).includes('outputProofs'))
+})
+
+test('INV-68 only matching block proof clears a gap and mixed full/reference output remains honest', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const ref = await archiveRequired(
+    f,
+    programs,
+    ['small fact', 'large evidence\n'.repeat(1000)],
+    2000
+  )
+  const view = requiredView()
+  const first = await f.memory.project(view, undefined, [], signal, 600000)
+  const initial = JSON.parse(first.body)
+  assert.deepEqual(
+    initial.partitions.runtime.decision.missing.map((gap) => gap.key),
+    ['required_1']
+  )
+  await f.memory.acknowledge(initial.frameId, signal)
+  const recent = new RecentContext('s', f.session.context, f.storage)
+  const segment = await recent.segment(signal)
+  const entry = segment.entries.find((item) => item.ref === ref.id)
+  assert.deepEqual(
+    entry.outputProofs.map((proof) => proof.key),
+    ['required_0']
+  )
+  const next = await f.memory.project(view, undefined, [], signal, 1000)
+  assert.deepEqual(
+    JSON.parse(next.body).partitions.runtime.decision.missing.map((gap) => gap.key),
+    ['required_1']
+  )
+  assert(!JSON.stringify(JSON.parse(next.body).partitions).includes('outputProofs'))
+  for (const changed of [
+    { ...entry, outputProofs: undefined },
+    {
+      ...entry,
+      outputProofs: entry.outputProofs.map((proof) => ({ ...proof, ref: 'another-ref' })),
+    },
+    {
+      ...entry,
+      outputProofs: entry.outputProofs.map((proof) => ({ ...proof, contentHash: 'another-hash' })),
+    },
+    {
+      ...entry,
+      outputProofs: entry.outputProofs.map((proof) => ({ ...proof, key: 'another-key' })),
+    },
+  ]) {
+    await recent.commit(
+      {
+        ...segment,
+        entries: segment.entries.map((item) => (item.ref === ref.id ? changed : item)),
+      },
+      signal
+    )
+    const mismatch = await f.memory.project(view, undefined, [], signal, 1000)
+    assert.deepEqual(
+      JSON.parse(mismatch.body).partitions.runtime.decision.missing.map((gap) => gap.key),
+      ['required_0', 'required_1']
+    )
+    assert.equal(
+      historyEntries(mismatch).find((item) => item.ref?.id === ref.id).text,
+      historyEntries(first).find((item) => item.ref?.id === ref.id).text
+    )
+  }
+})
+
+test('INV-68 equal text under another result identity does not satisfy an unseen required block', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const value = 'identical original\n'.repeat(100)
+  const firstRef = await archiveRequired(f, programs, [value])
+  let view = requiredView()
+  const first = await f.memory.project(view, undefined, [], signal, 600000)
+  await f.memory.acknowledge(JSON.parse(first.body).frameId, signal)
+  const secondRef = await archiveRequired(f, programs, [value], 0)
+  view = requiredView()
+  const next = await f.memory.project(view, undefined, [], signal, 600000)
+  const gaps = JSON.parse(next.body).partitions.runtime.decision.missing
+  assert(gaps.some((gap) => gap.ref === secondRef.id))
+  assert(!gaps.some((gap) => gap.ref === firstRef.id))
+  assert(
+    historyEntries(next)
+      .find((item) => item.ref?.id === firstRef.id)
+      .text.includes(value)
+  )
+})
+
+test('INV-68 a matching history block cannot clear a non-display completion requirement', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const recent = new RecentContext('s', f.session.context, f.storage)
+  const memory = new ContextMemory(
+    's',
+    f.session.context,
+    f.storage,
+    f.session.view,
+    programs,
+    recent
+  )
+  const value = 'complete required block\n'.repeat(100)
+  const ref = await archiveRequired(f, programs, [value])
+  const view = requiredView()
+  const first = await memory.project(view, undefined, [], signal, 600000)
+  await memory.acknowledge(JSON.parse(first.body).frameId, signal)
+  const project = programs.project.bind(programs)
+  programs.project = async (...args) => {
+    const result = await project(...args)
+    const body = JSON.parse(result.body)
+    body.decision.missing.push({
+      ref: ref.id,
+      key: 'required_0',
+      contentHash: scriptOutputs.hash(value),
+      reason: 'not-produced',
+    })
+    return { ...result, body: JSON.stringify(body) }
+  }
+  const next = await memory.project(view, undefined, [], signal, 600000)
+  assert.deepEqual(JSON.parse(next.body).partitions.runtime.decision.missing, [
+    { ref: ref.id, key: 'required_0', reason: 'not-produced' },
+  ])
+})
+
+test('INV-68 zero history, released references, folded bodies and authorization reset carry no stale proof', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const recent = new RecentContext('s', f.session.context, f.storage)
+  const value = 'required original\n'.repeat(200)
+  const ref = await archiveRequired(f, programs, [value])
+  const view = requiredView()
+  const first = await f.memory.project(view, undefined, [], signal, 600000)
+  await f.memory.acknowledge(JSON.parse(first.body).frameId, signal)
+  const segment = await recent.segment(signal)
+  assert(segment.entries.find((item) => item.ref === ref.id).outputProofs.length)
+  const noHistory = new ContextMemory(
+    's',
+    f.session.context,
+    f.storage,
+    f.session.view,
+    programs,
+    recent,
+    { recentRecords: 0 }
+  )
+  const omitted = await noHistory.project(view, undefined, [], signal, 20000)
+  assert(
+    JSON.parse(omitted.body).partitions.runtime.decision.missing.some((gap) => gap.ref === ref.id)
+  )
+  assert(!omitted.history.some((message) => message.content.includes(value)))
+  // 租约结束后冻结正文仍逐字在历史里，证明随实际正文保留
+  const kept = await recent.project(segment, [], 2000, signal)
+  assert.equal(kept.items.find((item) => item.ref === ref.id).bodyIncluded, true)
+  // 容量不足退成引用卡后不再带证明
+  const reference = await recent.project(
+    { ...segment, entries: segment.entries.filter((item) => item.ref !== ref.id) },
+    [],
+    2000,
+    signal
+  )
+  const card = reference.items.find((item) => item.ref === ref.id)
+  assert.equal(card.bodyIncluded, false)
+  assert.equal(card.outputProofs, undefined)
+  for (let index = 0; index < 12; index++)
+    await f.session.context.append({ kind: 'assistant', body: `synthetic step ${index}` })
+  assert(await f.memory.fold('runway', 20000, signal))
+  const folded = await f.memory.project(view, undefined, [], signal, 20000)
+  assert(
+    JSON.parse(folded.body).partitions.runtime.decision.missing.some((gap) => gap.ref === ref.id)
+  )
+  assert(!historyEntries(folded).some((entry) => entry.text.includes(value)))
+  await programs.release(ref.id, signal)
+  const released = await recent.project(await recent.segment(signal), [], 2000, signal)
+  assert(released.items.every((item) => !item.outputProofs?.length))
+  await f.session.context.append({
+    kind: 'audit',
+    title: 'search:history-reset',
+    body: 'synthetic authorization boundary',
+  })
+  const reset = await recent.project(segment, [{ ref: ref.id }], 2000, signal)
+  assert(reset.items.every((item) => !item.outputProofs?.length))
+})
+
+test('INV-58 text output leaves frozen legacy history byte-identical and renders new entries directly', async (t) => {
+  const f = await fixture(t)
+  const recent = new RecentContext('s', f.session.context, f.storage)
+  const value = 'alpha("beta");\n'.repeat(40)
+  const capture = {
+    config: {},
+    issues: [],
+    blocks: [
+      {
+        key: 'sample',
+        value,
+        chars: JSON.stringify(value).length,
+        options: { key: 'sample', type: 'code', view: { mode: 'full' } },
+      },
+    ],
+  }
+  const append = async () => {
+    const id = crypto.randomUUID()
+    return f.session.context.append({
+      kind: 'audit',
+      title: `script:${id}:result`,
+      body: JSON.stringify({ mode: 'execute', output: capture }),
+    })
+  }
+  const archived = await append()
+  const base = await f.session.context.append({
+    kind: 'audit',
+    title: 'context:segment-body',
+    body: 'base',
+  })
+  const segment = {
+    id: 'compatibility',
+    index: 1,
+    revision: 1,
+    from: 0,
+    base: { objectId: base.objectId, chars: 4 },
+    carried: [],
+    notes: [],
+    entries: [],
+    objective: '',
+    goals: 1,
+    policy: null,
+    volumes: 0,
+    reason: 'initial',
+    narrate: null,
+  }
+  const legacy = scriptOutputs.project(capture, archived.ref.id, 900)
+  const text = scriptOutputs.project(
+    capture,
+    archived.ref.id,
+    900,
+    undefined,
+    undefined,
+    undefined,
+    'text'
+  )
+  assert.equal(legacy.blocks[0].representation, 'reference')
+  assert.equal(text.blocks[0].representation, 'full')
+  const first = await recent.project(
+    segment,
+    [{ ref: archived.ref.id, structuredOutput: true, text: legacy.prompt }],
+    2400,
+    signal
+  )
+  const frozen = first.messages[0].content
+  assert(frozen.includes(memoryOutput(legacy.prompt)))
+  assert(!frozen.includes(value))
+  const second = await recent.project(
+    { ...segment, entries: first.fresh },
+    [{ ref: archived.ref.id, structuredOutput: true, outputFormat: 'text', text: text.prompt }],
+    2400,
+    signal
+  )
+  assert.equal(second.messages[0].content, frozen)
+  assert.equal(second.fresh.length, 0)
+  const next = await append()
+  const nextProjection = scriptOutputs.project(
+    capture,
+    next.ref.id,
+    900,
+    undefined,
+    undefined,
+    undefined,
+    'text'
+  )
+  const third = await recent.project(
+    { ...segment, entries: first.fresh },
+    [
+      { ref: archived.ref.id, structuredOutput: true, outputFormat: 'text', text: text.prompt },
+      {
+        ref: next.ref.id,
+        structuredOutput: true,
+        outputFormat: 'text',
+        text: nextProjection.prompt,
+      },
+    ],
+    2400,
+    signal
+  )
+  assert.equal(third.messages[0].content, frozen)
+  assert(third.messages[1].content.endsWith(nextProjection.prompt))
+  assert(third.messages[1].content.includes(value))
+  assert(third.messages.every((message) => message.content.length <= 2400))
+  assert.equal(
+    JSON.parse(await f.storage.get('s', archived.objectId)).output.blocks[0].value,
+    value
+  )
+  assert.equal(f.requests.length, 0, 'projection does not start any model request')
+})
+
 test('INV-21 capacity-omitted results do not turn done into an endless refresh loop', async (t) => {
   const f = await fixture(t)
   const programs = new ProgramContext('s', f.session.context, f.storage)
@@ -1560,5 +2414,324 @@ test('zero-history results and current observation render code without extra str
   assert.equal(request.history.length, 1)
   assert.match(request.history[0].content, /runtime-segment-base/)
   const frame = JSON.parse(request.materials[0].text)
-  assert.equal(JSON.parse(frame.partitions.observation.text).blocks[0].text, observed)
+  assert.equal(frame.partitions.observation.presentation.format, 'text')
+  assert.equal(frame.partitions.observation.blocks[0].representation, 'full')
+  assert(frame.partitions.observation.text.endsWith(observed))
+})
+
+test('INV-69 current original bodies are omitted only after same-request cross-carrier full coverage', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const value = 'N_SOURCE_EVIDENCE "unicode界😀"\n'.repeat(90)
+  const source = await archiveRequired(f, programs, [value], 20000)
+  const before = await f.memory.project(requiredView(), undefined, [], signal, 10000)
+  assert(
+    JSON.parse(before.body).partitions.runtime.decision.missing.some((gap) => gap.ref === source.id)
+  )
+  await f.memory.acknowledge(JSON.parse(before.body).frameId, signal)
+  const page = await f.memory.readMaterial(source, 0, 12000, signal, '/output/blocks/0/value')
+  const carrier = await archiveRequired(f, programs, [page], 20000)
+  const after = await f.memory.project(requiredView(), undefined, [], signal, 600000)
+  assert(
+    historyEntries(after)
+      .find((entry) => entry.ref?.id === carrier.id)
+      .text.includes('N_SOURCE_EVIDENCE')
+  )
+  const body = JSON.parse(after.body)
+  assert.deepEqual(body.partitions.runtime.decision.missing, [])
+  const original = body.partitions.recent.results.find((item) => item.ref === source.id)
+  assert(
+    !original.text?.includes('N_SOURCE_EVIDENCE'),
+    'already delivered original body must not repeat in current frame'
+  )
+})
+
+test('INV-69 validated complete page uses bounded verbatim text without JSON escaping again', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const value = '"\\\n'.repeat(1500)
+  const source = await archiveRequired(f, programs, [value], 512)
+  const first = await f.memory.project(requiredView(), undefined, [], signal, 600000)
+  await f.memory.acknowledge(JSON.parse(first.body).frameId, signal)
+  const page = await f.memory.readMaterial(source, 0, 12000, signal, '/output/blocks/0/value')
+  const carrier = await archiveRequired(f, programs, [page], 8000)
+  const after = await f.memory.project(requiredView(), undefined, [], signal, 600000)
+  const entry = historyEntries(after).find((item) => item.ref?.id === carrier.id)
+  assert(
+    entry.text.includes(value),
+    'actual delivered page must carry verbatim original characters'
+  )
+  assert.deepEqual(JSON.parse(after.body).partitions.runtime.decision.missing, [])
+  assert.equal(
+    (await f.memory.readMaterial(source, 0, 12000, signal, '/output/blocks/0/value')).text,
+    value
+  )
+})
+
+test('INV-69 cross-carrier omission preserves other blocks, other refs and selected views', async (t) => {
+  for (const scenario of ['mixed-blocks', 'same-value-other-ref', 'selected-view']) {
+    await t.test(scenario, async (t) => {
+      const f = await fixture(t)
+      const programs = new ProgramContext('s', f.session.context, f.storage)
+      const first = 'COVERED_FIRST "界😀"\n'.repeat(85)
+      const second = 'KEEP_SECOND_NEW_CONTENT\n'.repeat(85)
+      const source = await archiveRequired(f, programs, [first, second], 40000)
+      const other =
+        scenario === 'same-value-other-ref'
+          ? await archiveRequired(f, programs, [first], 40000)
+          : undefined
+      const initial = await f.memory.project(requiredView(), undefined, [], signal, 10000)
+      await f.memory.acknowledge(JSON.parse(initial.body).frameId, signal)
+      const page = await f.memory.readMaterial(source, 0, 12000, signal, '/output/blocks/0/value')
+      await archiveRequired(f, programs, [page], 20000)
+      if (scenario === 'selected-view') {
+        // Host injection isolates an explicitly selected view without mutating the immutable archive.
+        const originalProject = programs.project.bind(programs)
+        programs.project = async (...args) => {
+          const frame = await originalProject(...args)
+          return {
+            ...frame,
+            outputCoverage: frame.outputCoverage.map((item) =>
+              item.ref === source.id ? { ...item, keys: [] } : item
+            ),
+          }
+        }
+      }
+      const recent = new RecentContext('s', f.session.context, f.storage)
+      const memory = new ContextMemory(
+        's',
+        f.session.context,
+        f.storage,
+        f.session.view,
+        programs,
+        recent
+      )
+      const frame = await memory.project(requiredView(), undefined, [], signal, 600000)
+      const body = JSON.parse(frame.body)
+      const shown = body.partitions.recent.results.find((item) => item.ref === source.id)
+      assert.equal(shown.text.includes('COVERED_FIRST'), scenario === 'selected-view')
+      assert(shown.text.includes('KEEP_SECOND_NEW_CONTENT'))
+      assert.equal(
+        shown.bodyInHistory,
+        undefined,
+        'partial coverage cannot claim the entire result is in history'
+      )
+      if (other)
+        assert(
+          body.partitions.recent.results
+            .find((item) => item.ref === other.id)
+            .text.includes('COVERED_FIRST')
+        )
+      for (const hostField of [
+        'outputCoverage',
+        'outputProofs',
+        'materialCoverage',
+        'outputFingerprint',
+      ]) {
+        assert(!frame.prompt.includes(hostField))
+        assert(!JSON.stringify(frame.history).includes(hostField))
+      }
+    })
+  }
+})
+
+test('INV-69 a partial or retired carrier cannot remove newly available current source content', async (t) => {
+  for (const scenario of ['range-hole', 'small-carrier-budget', 'released']) {
+    await t.test(scenario, async (t) => {
+      const f = await fixture(t)
+      const programs = new ProgramContext('s', f.session.context, f.storage)
+      const value = 'KEEP_ORIGINAL_WITHOUT_FULL_COVERAGE\n'.repeat(90)
+      const source = await archiveRequired(f, programs, [value], 20000)
+      const initial = await f.memory.project(requiredView(), undefined, [], signal, 10000)
+      await f.memory.acknowledge(JSON.parse(initial.body).frameId, signal)
+      const page = await f.memory.readMaterial(
+        source,
+        0,
+        scenario === 'range-hole' ? 500 : 12000,
+        signal,
+        '/output/blocks/0/value'
+      )
+      const carrier = await archiveRequired(
+        f,
+        programs,
+        [page],
+        scenario === 'small-carrier-budget' ? 512 : 20000
+      )
+      if (scenario === 'released') await programs.release(carrier.id, signal)
+      const frame = await f.memory.project(requiredView(), undefined, [], signal, 600000)
+      const current = JSON.parse(frame.body).partitions.recent.results.find(
+        (item) => item.ref === source.id
+      )
+      assert(current.text.includes(value))
+      assert.equal(current.bodyInHistory, undefined)
+    })
+  }
+})
+
+/** 增量帧测试用的最小分区材料；只放渲染用到的字段。 */
+function frameBody(overrides = {}) {
+  const base = {
+    schemaVersion: 2,
+    id: 'frame',
+    frameId: 'frame-id',
+    partitions: {
+      task: { active: { revision: 0, items: [] }, goals: [], folded: { count: 0, through: 0 } },
+      workspace: { capsule: {}, notes: [], snapshot: { notes: 0 }, omitted: 0 },
+      observation: { sourceRef: null, source: '', text: '' },
+      recent: { historyState: { segment: 1, records: 2 }, results: [] },
+      runtime: {
+        environment: { os: 'linux x64', shell: 'posix', time: 'T1' },
+        mandatory: [
+          {
+            id: 'call-1',
+            executionId: 'e1',
+            operation: 'shell.run',
+            outcome: 'succeeded',
+            effect: 'none',
+          },
+        ],
+        jobs: [],
+        programFrame: { id: 'p1', completedTurns: 1 },
+      },
+    },
+    memoryStatus: { footprint: { task: 10 }, policy: { recentRecords: 8 }, advice: 'fixed' },
+  }
+  const merged = structuredClone(base)
+  for (const [path, value] of Object.entries(overrides)) {
+    const keys = path.split('.')
+    let target = merged
+    for (const key of keys.slice(0, -1)) target = target[key]
+    target[keys.at(-1)] = value
+  }
+  return JSON.stringify(merged)
+}
+
+test('INV-74 delta frames list only changed partitions, fields and entries against the retained previous frame', () => {
+  const result = (text, extra = {}) => ({
+    ref: 'r1',
+    remainingTurns: 'task',
+    bodyIncluded: true,
+    structuredOutput: true,
+    outputFormat: 'text',
+    source: 'output(read())',
+    text,
+    ...extra,
+  })
+  const previous = frameBody({
+    'partitions.recent.results': [
+      result('{"omittedBlocks":0,"displayChars":900}\n{"key":"a"}\nBODY-A'),
+      { ref: 'r2', remainingTurns: 1, bodyIncluded: true, text: 'OLD-RESULT' },
+    ],
+  })
+  const current = frameBody({
+    'partitions.recent.results': [
+      // 只是整帧余量带来的 displayChars 不同，模型读到的正文相同
+      result('{"omittedBlocks":0,"displayChars":700}\n{"key":"a"}\nBODY-A', { remainingTurns: 3 }),
+      { ref: 'r3', remainingTurns: 2, bodyIncluded: true, text: 'NEW-RESULT' },
+    ],
+    'partitions.recent.historyState': { segment: 1, records: 4 },
+    'partitions.runtime.environment': { os: 'linux x64', shell: 'posix', time: 'T2' },
+    'partitions.runtime.mandatory': [
+      {
+        id: 'call-1',
+        executionId: 'e1',
+        operation: 'shell.run',
+        outcome: 'succeeded',
+        effect: 'none',
+      },
+      {
+        id: 'call-2',
+        executionId: 'e2',
+        operation: 'project.edit',
+        outcome: 'failed',
+        effect: 'none',
+        code: 'TARGET_NOT_FOUND',
+      },
+    ],
+    'partitions.runtime.programFrame': { id: 'p2', completedTurns: 2 },
+    'memoryStatus.footprint': { task: 12 },
+  })
+  const full = memoryPrompt(current)
+  assert.match(full, /^Runtime 本帧工作内存（origin=runtime-view）；/)
+  assert.match(full, /BODY-A/)
+  const delta = memoryPrompt(current, previous)
+  assert.match(delta, /^Runtime 本帧工作内存（origin=runtime-view，增量）/)
+  // 未变的分区和静态说明不再重发
+  assert(!delta.includes('分区 task'))
+  assert(!delta.includes('分区 workspace'))
+  assert(!delta.includes('分区 observation'))
+  assert(!delta.includes('grouped-receipts'))
+  // 同一结果正文相同：只列变化的元数据，不重发源码与正文；新结果完整给出；退出的列出引用
+  assert(!delta.includes('BODY-A'))
+  assert(!delta.includes('output(read())'))
+  assert.match(delta, /"remainingTurns":3/)
+  assert.match(delta, /（当次源码与展示正文同此前帧）/)
+  assert.match(delta, /NEW-RESULT/)
+  assert.match(delta, /退出帧尾展示的结果：\["r2"\]/)
+  // runtime 只列变化字段：环境只剩变化的时间，回执列表只列新增条目并给出总数
+  const runtime = JSON.parse(delta.split('分区 runtime：\n')[1].split('\n')[0])
+  assert.deepEqual(runtime.environment, { time: 'T2' })
+  assert.deepEqual(
+    runtime.mandatory.changed.map((item) => item.id),
+    ['call-2']
+  )
+  assert.equal(runtime.mandatory.total, 2)
+  assert.deepEqual(runtime.programFrame, { id: 'p2', completedTurns: 2 })
+  assert(!Object.hasOwn(runtime, 'jobs'))
+  const status = JSON.parse(delta.split('内存状态：\n')[1].split('\n')[0])
+  assert.deepEqual(status, { footprint: { task: 12 } })
+  // 正文真的变了才重发
+  const changed = frameBody({
+    'partitions.recent.results': [
+      result('{"omittedBlocks":1,"displayChars":700}\n{"key":"a"}\nBODY-B'),
+    ],
+  })
+  assert.match(memoryPrompt(changed, previous), /BODY-B/)
+  // 完全相同的帧只剩说明行
+  assert.equal(memoryPrompt(previous, previous).split('\n').length, 1)
+})
+
+test('INV-74 capacity retire turns expired frozen bodies into reference cards once, never touching leased ones', async (t) => {
+  const f = await fixture(t)
+  const leased = await f.session.execute(
+    { source: "import {output} from 'velaros';output('LEASED-BODY')" },
+    'task'
+  )
+  const expiring = await f.session.execute(
+    { source: "import {output} from 'velaros';output('EXPIRED-BODY')" },
+    1
+  )
+  const view = {
+    id: 'frame',
+    scope: { sessionId: 's', revision: 0 },
+    goals: [],
+    capsule: {},
+    mandatory: [],
+    evidence: [],
+    gaps: [],
+    readSet: [],
+    progress: { step: 0, repeatedSteps: 0, stalled: false, evidence: [] },
+  }
+  const first = JSON.parse((await f.memory.project(view, undefined, [], signal, 100000)).body)
+  await f.memory.acknowledge(first.frameId, signal)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  await programs.consume(first.partitions.runtime.programFrame.id, signal)
+  // 一次曝光后租约结束，冻结正文仍逐字留在历史里
+  const state = await programs.state()
+  assert(!state.leases.some((item) => item.ref === expiring.resultRef))
+  assert(state.leases.some((item) => item.ref === leased.resultRef))
+  const content = async () =>
+    (await f.memory.project(view, undefined, [], signal, 100000)).history
+      .map((message) => message.content)
+      .join('\n')
+  const before = await content()
+  assert.match(before, /LEASED-BODY/)
+  assert.match(before, /EXPIRED-BODY/)
+  // 容量不足时一次性退成引用卡；仍有租约的正文不动，没有可退的就返回 false
+  assert.equal(await f.memory.retire(signal), true)
+  const after = await content()
+  assert.match(after, /LEASED-BODY/)
+  assert(!after.includes('EXPIRED-BODY'))
+  assert.match(after, /lease-expired-or-released/)
+  assert.equal(await f.memory.retire(signal), false)
 })

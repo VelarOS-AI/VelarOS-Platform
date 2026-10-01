@@ -72,7 +72,7 @@ async function createFile(path = '~/bin/hello.sh', text = '#!/bin/sh\necho hello
   return edit({ steps: [{ action: 'write', path, text }] })
 }
 
-// 几个文件里一起换掉一个词：每个文件读一遍、换掉、写回；所有文件合成一次改动，全成或全不成。
+// 几个文件里一起换掉一个词：每个文件读一遍、换掉、写回；所有文件合成一次改动，先统一规划再逐项提交；提交途中失败按报错里的已写文件和撤回号处理。
 async function replaceInFiles(paths = ['~/notes/a.md', '~/notes/b.md'], from = 'oldName', to = 'newName') {
   const { files } = await read({ files: paths.map((path) => ({ path })) })
   const targets = []
@@ -82,7 +82,7 @@ async function replaceInFiles(paths = ['~/notes/a.md', '~/notes/b.md'], from = '
   return { changeId: result.changeId, changed: result.files.map((file) => file.path) }
 }
 
-// 改坏了就整次撤回：changeId 是 edit 结果里的那个号，那次改的文件一起回到改之前。
+// 改坏了就整次撤回：changeId 是 edit 结果里的那个号，逐项恢复那次改动；若中途失败，报错列出已恢复文件，再次 undo 会接着处理。
 async function revert(changeId = 'edit 结果里的 changeId') {
   return undo({ changeId })
 }

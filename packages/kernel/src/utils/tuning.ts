@@ -5,6 +5,8 @@
  * 不在这里，在 `contract/constants.ts`；类自己固定用的写成类内 `private static readonly`。
  */
 export const KernelTuning = Object.freeze({
+  /** 操作关闭的默认观察等待上限，超时后仍在后台收束，毫秒。 */
+  operationCloseTimeoutMs: 5_000,
   /** 调用诊断的分类码保留的字符数。 */
   operationDiagnosticCodeChars: 64,
   /** 调用诊断的正文保留的字符数。 */

@@ -100,6 +100,8 @@ export interface ProgramLeaseState {
   readonly pendingObservation?: string
   readonly pendingDelivered?: ReadonlyArray<{ readonly ref: string; readonly leaseId: string }>
   readonly jobs?: readonly ScriptJob[]
+  /** 本任务里显式释放的结果；它们已冻结的历史正文随下一次投影退成引用卡。 */
+  readonly released?: readonly string[]
   readonly leases: ReadonlyArray<{
     readonly ref: string
     readonly sourceRef: string
@@ -187,5 +189,9 @@ export interface ScriptDecisionBasis {
     readonly key: string
     readonly ref: Nullable<string>
     readonly reason: string
+    /** 必需执行结果块的精确读取入口；原样完整输出返回页才形成来源证明。 */
+    readonly read?: { readonly ref: string; readonly pointer: string }
   }>
+  /** 有可召回的必需执行结果缺口时，说明分页交付的保守边界。 */
+  readonly recall?: string
 }

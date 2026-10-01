@@ -17,7 +17,7 @@ export const BrowserTuning = Object.freeze({
   }),
   /** 会话：动作队列、挂起事件、用户活动、回合上下文。 */
   session: Object.freeze({
-    /** 单个动作独占一条会话队列的上限，毫秒；到点放行队伍，动作本身仍挂着。最后一道网，不是主超时。 */
+    /** 单个动作独占一条会话队列的上限，毫秒；到点结束调用等待并隔离未收束的会话。最后一道网，不是主超时。 */
     actionHoldCapMs: 150_000,
     /** 用户最近一次手动操作之后，多少毫秒之内仍算「用户正在操作」，agent 的动作要让路。 */
     userIdleWindowMs: 1_200,
@@ -43,6 +43,8 @@ export const BrowserTuning = Object.freeze({
   }),
   /** 模型自己那条 CDP 会话：命令超时、读事件、兜住没人放行的拦截。 */
   protocol: Object.freeze({
+    /** 关闭协议连接的最长等待；页面资源先行撤下，迟到的连接不能重新登记。 */
+    closeTimeoutMs: 1_000,
     /** 一条命令最多等多少毫秒回话；模型的命令可能要等页面里的 Promise（awaitPromise），给得比宿主自己的宽。 */
     commandTimeoutMs: 60_000,
     /** 等事件时读缓冲的间隔毫秒数。 */

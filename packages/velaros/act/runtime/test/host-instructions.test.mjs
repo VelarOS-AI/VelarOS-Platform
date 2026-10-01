@@ -8,6 +8,7 @@ import { scriptPackageCompiler } from '@velaros-ai/script'
 
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { frameEnvironment } from '../../../dist/act/runtime/utils/environment.js'
+import { runtimeInstructions } from '../../../dist/act/runtime/utils/model-instructions.js'
 
 import { done, modelText, turn } from './support/model-turn.mjs'
 
@@ -33,6 +34,50 @@ async function fixture(t, options) {
   })
   return { runtime, dataDir, session: await runtime.openSession('main') }
 }
+
+test('domain guidance follows granted capabilities in actual noncoding and project requests', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'runtime-domain-guidance-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  for (const project of [false, true]) {
+    let instructions
+    const f = await fixture(t, {
+      workspace,
+      project,
+      model: driver(async function* (request) {
+        instructions = request.instructions
+        yield* done(request)
+      }),
+    })
+    for await (const event of f.session.submit('请把“今天晴天”翻译成英文。'))
+      assert.notEqual(event.type, 'error')
+    // 程序增量修改协议也合法使用 oldText；这里只检查领域编辑策略。
+    assert.equal(instructions.includes('编辑锚点取自真实读取的原文'), project)
+    assert.equal(instructions.includes('受影响调用方'), project)
+    assert.doesNotMatch(instructions, /实际 PATH|const \{ stdout, \.\.\.status \}/)
+    assert.match(instructions, /总费用/)
+    assert.match(instructions, /unit 为 items/)
+    assert.match(instructions, /from > 0/)
+    assert.match(instructions, /from \+ shown < total/)
+  }
+  for (const modules of [
+    [],
+    ['velaros:files'],
+    ['velaros:shell'],
+    ['velaros:project', 'velaros:shell'],
+  ]) {
+    const instructions = runtimeInstructions({ modules, maintain: false, observe: false })
+    assert.equal(
+      instructions.includes('oldText'),
+      modules.includes('velaros:files') || modules.includes('velaros:project')
+    )
+    assert.equal(instructions.includes('实际 PATH'), modules.includes('velaros:shell'))
+    assert.equal(
+      instructions.includes('const { stdout, ...status }'),
+      modules.includes('velaros:shell')
+    )
+    assert(!instructions.includes('截断后用 memory.read'))
+  }
+})
 
 test('INV-43 trusted host instructions reach actual requests and traces; reopen uses current product settings', async (t) => {
   const frames = []

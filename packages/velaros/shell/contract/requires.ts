@@ -75,7 +75,8 @@ export interface ShellRunCommandHooks {
  * `velaros:shell` 的空间端口：作用域与口径两件事，加上宿主真正跑命令、管后台任务的四件事（`ShellHostPort`）。
  *
  * **空间之间的差别全落在这里**，模型那边因此只有一套说明：系统空间的 cwd 可以是本机任意目录，
- * 项目空间的钳在项目内、越界就拒绝；确认文案与风险分类也各给各的。
+ * 项目空间的 cwd 限在项目内、越界就拒绝；确认文案与风险分类也各给各的。
+ * resolveCwd 不提供进程文件或网络隔离，约束由 LocalShellHostOptions.processConfinement / confinementProvider 实施。
  */
 export interface ShellSpacePort extends ShellHostPort {
   /** 把模型给的 cwd 解析成绝对工作目录：不给就是这个空间的根目录；越出这个空间允许的范围时拒绝（`PERMISSION`），不悄悄钳到根上。 */

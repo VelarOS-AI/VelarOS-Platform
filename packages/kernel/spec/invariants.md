@@ -46,3 +46,15 @@
 | INV-23 | `KernelModulePermissionRequest` 没有 `callerModuleId` 字段 | 类型 | `src/types/kernel.ts::KernelModulePermissionRequest` |
 | INV-24 | 供应商延续状态封套有界并保持为 assistant 历史的独立字段，正文编码不会把不透明数据拼成模型材料 | 测试 | `spec/model-continuation.test.ts` |
 | INV-25 | 调用诊断独立冻结且有界，超长显式标记；成功、处理器失败、输出校验失败均保存诊断，同号重放不重复执行，不据诊断修改成败或效果 | 测试 | `spec/operation-diagnostics.test.ts` |
+
+## INV-26 取消观察与真实生命周期分离
+
+prepare、beforeDispatch、handler、领域 reconcile 即使不响应 signal，也不能让调用方无限等待取消。调用方取消只结束观察；真实调用仍持有身份、锁、模块和日志资源，pending 显示阶段和取消请求。关闭默认有界等待，超时返回 TIMEOUT，后台只在真实收束后回收资源。迟到 committed 写入真实回执，派发前取消不进入 handler。
+
+验证：`spec/operation-lifecycle.test.ts`。
+
+## INV-27 模式合同必须同源
+
+生成合同与挂载运行时的 allowedModes 按有效集合一致；省略等价于 execute 与 observe。非法、空或重复模式集合在装配期拒绝。
+
+验证：`spec/operation-lifecycle.test.ts`。

@@ -11,6 +11,7 @@ import { isArray, isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelContinuation, ModelHistoryMessage } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
+import { scriptOutputs } from '@velaros-ai/script'
 
 import { ContextPatchLimits } from '../../system/contract/constants.js'
 import type {
@@ -20,11 +21,13 @@ import type {
   VolumeNarrative,
 } from '../../system/types/history.js'
 import type {
+  ContextHistoryIndex,
   ContextSegment,
   ContextVolume,
   SegmentEntry,
   SegmentHistory,
   SegmentLeasedResult,
+  SegmentLedgers,
   VolumeNarrativeRecord,
   VolumeView,
 } from '../types/segment.js'
@@ -33,6 +36,7 @@ import { programFailure } from '../utils/program-context.js'
 import {
   archivedJson,
   boundedSkeleton,
+  extendLedger,
   frozenRepresentation,
   historyReference,
   responseProse,
@@ -50,7 +54,9 @@ export interface RecentContextApi {
   volumes(signal: AbortSignal): Promise<readonly VolumeView[]>
   /** 当前授权代次的全部卷叙事，含已并进上一级的卷，按写入顺序。 */
   narratives(signal: AbortSignal): Promise<readonly VolumeNarrativeRecord[]>
-  /** 段内历史：已冻结的逐字复用，新记录按 entryChars 渲染一次，租约失效的结果改成引用卡。 */
+  /** 读取已增量归并的有界长期单，不扫描全部叙事。 */
+  ledgers(signal: AbortSignal): Promise<SegmentLedgers>
+  /** 段内历史：已冻结的逐字复用到封段，新记录按 entryChars 渲染一次，未冻结且租约失效的结果给引用卡。 */
   project(
     segment: ContextSegment,
     results: readonly SegmentLeasedResult[],
@@ -73,6 +79,7 @@ export interface RecentContextApi {
 export class RecentContext implements RecentContextApi {
   private readonly resultModes = new Map<string, boolean>()
   private cacheReset = 0
+  private referencesReady = false
   public constructor(
     private readonly id: string,
     private readonly context: ContextRuntime,
@@ -82,12 +89,86 @@ export class RecentContext implements RecentContextApi {
   private async snapshot(
     selections: Parameters<NonNullable<ContextStorage['selectSnapshot']>>[1]
   ): Promise<Nullable<ContextState>> {
+    await this.migrateReferences()
     if (!this.storage.selectSnapshot) return this.storage.load(this.id)
     const selected = await this.storage.selectSnapshot(this.id, [
       { title: 'search:history-reset', latest: true },
       ...selections,
     ])
     return selected ? { ...selected.metadata, records: selected.records } : null
+  }
+
+  /** 旧 Runtime 的嵌套正文由其 owner 一次性登记；通用存储不解析业务 JSON。 */
+  private async migrateReferences(): Promise<void> {
+    if (this.referencesReady) return
+    const metadata = this.storage.loadMetadata
+      ? await this.storage.loadMetadata(this.id)
+      : this.storage.selectSnapshot
+        ? (await this.storage.selectSnapshot(this.id, []))?.metadata
+        : undefined
+    if (metadata?.objectReferencesVersion === 1) {
+      this.referencesReady = true
+      return
+    }
+    for (let attempt = 0; attempt < 32; attempt++) {
+      const state = await this.storage.load(this.id)
+      if (!state) return
+      if (state.objectReferencesVersion === 1) {
+        this.referencesReady = true
+        return
+      }
+      const protectedObjects = new Set(state.records.map((record) => record.objectId))
+      const append: ContextRecord[] = []
+      for (const record of state.records) {
+        if (
+          record.title !== 'context:segment' &&
+          record.title !== 'context:delivered' &&
+          !record.title.startsWith('context:frame:')
+        )
+          continue
+        const body = await this.storage.get(this.id, record.objectId)
+        if (isNull(body)) throw new AppError('NOT_FOUND', '旧上下文记录缺失，不能确认正文引用完整')
+        const value = JSON.parse(body) as {
+          base?: { objectId: string }
+          entries?: ReadonlyArray<{ objectId: string }>
+          segment?: { fresh?: ReadonlyArray<{ objectId: string }> }
+        }
+        const objects = [
+          value.base?.objectId,
+          ...(value.entries ?? []).map((item) => item.objectId),
+          ...(value.segment?.fresh ?? []).map((item) => item.objectId),
+        ]
+        for (const objectId of objects) {
+          if (!objectId || protectedObjects.has(objectId)) continue
+          const text = await this.storage.get(this.id, objectId)
+          if (isNull(text)) throw new AppError('NOT_FOUND', '旧段正文缺失，引用迁移尚未完成')
+          protectedObjects.add(objectId)
+          append.push({
+            ref: { sessionId: this.id, id: crypto.randomUUID() },
+            sequence: (state.records.at(-1)?.sequence ?? 0) + append.length + 1,
+            kind: 'audit',
+            title: 'context:segment-body',
+            objectId,
+            chars: text.length,
+            sources: [record.ref],
+            createdAt: new Date().toISOString(),
+          })
+        }
+      }
+      const { records, ...prior } = state
+      const next = { ...prior, version: state.version + 1, objectReferencesVersion: 1 as const }
+      const committed = this.storage.compareAndSwapMetadata
+        ? await this.storage.compareAndSwapMetadata(this.id, state.version, next, append)
+        : await this.storage.compareAndSwap(this.id, state.version, {
+            ...next,
+            records: [...records, ...append],
+          })
+      if (committed) {
+        this.referencesReady = true
+        return
+      }
+    }
+    throw new AppError('CONFLICT', '正文引用迁移持续冲突')
   }
 
   private reset(state: Nullable<ContextState>): number {
@@ -133,9 +214,17 @@ export class RecentContext implements RecentContextApi {
       (!isUndefined(input.through) && (!Number.isSafeInteger(input.through) || input.through < 0))
     )
       throw new AppError('VALIDATION', '历史目录范围无效')
+    const boundary = this.reset(await this.snapshot([]))
+    const lower = Math.max(after, boundary)
     const state = await this.snapshot([
-      { kind: 'assistant' },
-      { titlePrefix: 'script:', titleSuffix: ':result' },
+      { kind: 'assistant', after: lower, through: input.through, first: limit + 1 },
+      {
+        titlePrefix: 'script:',
+        titleSuffix: ':result',
+        after: lower,
+        through: input.through,
+        first: limit + 1,
+      },
       { latest: true },
     ])
     signal.throwIfAborted()
@@ -173,27 +262,113 @@ export class RecentContext implements RecentContextApi {
   }
 
   public async volumes(signal: AbortSignal): Promise<readonly VolumeView[]> {
-    signal.throwIfAborted()
-    const state = await this.snapshot([{ title: 'context:volume' }])
-    const reset = this.reset(state)
-    const volumes: Array<{ ref: ContextRef; volume: ContextVolume }> = []
-    for (const record of state?.records ?? [])
-      if (record.title === 'context:volume' && record.sequence > reset)
-        volumes.push({
-          ref: record.ref,
-          volume: JSON.parse((await this.storage.get(this.id, record.objectId))!) as ContextVolume,
-        })
-    const merged = new Set(volumes.flatMap((item) => item.volume.parts?.map((ref) => ref.id) ?? []))
-    // 同一卷写过几次叙事时以最后一次为准
-    const narratives = new Map(
-      (await this.narratives(signal)).map((item) => [item.volume.id, item.narrative])
-    )
-    return volumes
-      .filter((item) => !merged.has(item.ref.id))
-      .sort((a, b) => a.volume.from - b.volume.from)
-      .map((item) =>
-        narratives.has(item.ref.id) ? { ...item, narrative: narratives.get(item.ref.id) } : item
+    return (await this.historyIndex(signal)).volumes
+  }
+
+  public async ledgers(signal: AbortSignal): Promise<SegmentLedgers> {
+    return (await this.historyIndex(signal)).ledgers
+  }
+
+  /** 活动卷目录在同一版本下增量发布，旧历史只在首次建立索引时读取。 */
+  private async historyIndex(signal: AbortSignal): Promise<ContextHistoryIndex> {
+    for (let attempt = 0; attempt < 32; attempt++) {
+      signal.throwIfAborted()
+      const head = await this.snapshot([{ title: 'context:history-index', latest: true }])
+      const reset = this.reset(head)
+      const saved = head?.records.findLast(
+        (item) => item.title === 'context:history-index' && item.sequence > reset
       )
+      const previous: ContextHistoryIndex = saved
+        ? JSON.parse((await this.storage.get(this.id, saved.objectId))!)
+        : {
+            through: reset,
+            reset,
+            volumes: [],
+            ledgers: {
+              negativeAttempts: { items: [], omitted: 0, sources: [] },
+              unresolved: { items: [], omitted: 0, sources: [] },
+              constraints: { items: [], omitted: 0, sources: [] },
+            },
+          }
+      const state = await this.snapshot([
+        { title: 'context:volume', after: previous.through },
+        { title: 'context:volume-narrative', after: previous.through },
+        { latest: true },
+      ])
+      if (!state) return previous
+      if (state.version !== head?.version) continue
+      const records = state.records.filter(
+        (record) =>
+          record.sequence > Math.max(reset, previous.through) &&
+          ['context:volume', 'context:volume-narrative'].includes(record.title)
+      )
+      if (isEmpty(records) && saved) return previous
+      const volumes = new Map(previous.volumes.map((item) => [item.ref.id, item]))
+      let ledgers = previous.ledgers
+      for (const record of records) {
+        const body = JSON.parse((await this.storage.get(this.id, record.objectId))!)
+        if (record.title === 'context:volume') {
+          for (const ref of body.parts ?? []) volumes.delete(ref.id)
+          volumes.set(record.ref.id, { ref: record.ref, volume: body as ContextVolume })
+        } else {
+          const { volume, ...narrative } = body as VolumeNarrative & { volume: ContextRef }
+          const entry = volumes.get(volume.id)
+          if (entry) volumes.set(volume.id, { ...entry, narrative })
+          ledgers = {
+            ...ledgers,
+            negativeAttempts: extendLedger(ledgers.negativeAttempts, [
+              { ref: record.ref, items: narrative.negativeAttempts },
+            ]),
+            unresolved: extendLedger(ledgers.unresolved, [
+              { ref: record.ref, items: narrative.unresolved },
+            ]),
+          }
+        }
+      }
+      const index: ContextHistoryIndex = {
+        reset,
+        through: state.records.at(-1)?.sequence ?? reset,
+        volumes: [...volumes.values()].sort((a, b) => a.volume.from - b.volume.from),
+        ledgers,
+      }
+      const body = JSON.stringify(index)
+      const entry = {
+        ref: { sessionId: this.id, id: crypto.randomUUID() },
+        kind: 'audit' as const,
+        title: 'context:history-index',
+        objectId: await this.storage.put(this.id, body),
+        chars: body.length,
+        sources: index.volumes.map((item) => item.ref),
+        createdAt: new Date().toISOString(),
+      }
+      const { records: _records, ...metadata } = state
+      if (this.storage.compareAndSwapMetadata) {
+        if (
+          await this.storage.compareAndSwapMetadata(
+            this.id,
+            state.version,
+            { ...metadata, version: state.version + 1 },
+            [entry]
+          )
+        )
+          return index
+      } else {
+        const full = await this.storage.load(this.id)
+        if (full?.version !== state.version) continue
+        if (
+          await this.storage.compareAndSwap(this.id, state.version, {
+            ...full,
+            version: state.version + 1,
+            records: [
+              ...full.records,
+              { ...entry, sequence: (full.records.at(-1)?.sequence ?? 0) + 1 },
+            ],
+          })
+        )
+          return index
+      }
+    }
+    throw new AppError('CONFLICT', '活动历史索引持续冲突')
   }
 
   public async narratives(signal: AbortSignal): Promise<readonly VolumeNarrativeRecord[]> {
@@ -219,10 +394,13 @@ export class RecentContext implements RecentContextApi {
   ): Promise<SegmentHistory> {
     signal.throwIfAborted()
     const state = await this.snapshot([
-      { kind: 'assistant' },
-      { titlePrefix: 'script:', titleSuffix: ':result' },
+      { kind: 'assistant', after: segment.from },
+      { titlePrefix: 'script:', titleSuffix: ':result', after: segment.from },
       ...segment.carried.map((refId) => ({ refId })),
-      { kind: 'audit', title: 'model-continuation' },
+      { kind: 'audit', title: 'model-continuation', after: segment.from },
+      ...segment.entries.flatMap((entry) =>
+        entry.continuation ? [{ refId: entry.continuation.id }] : []
+      ),
     ])
     const reset = this.reset(state)
     const carried = new Set(segment.carried)
@@ -238,8 +416,20 @@ export class RecentContext implements RecentContextApi {
     const messages: ModelHistoryMessage[] = []
     const items: Array<SegmentHistory['items'][number]> = []
     const fresh: SegmentEntry[] = []
+    const sourceRefs = [
+      ...new Set(
+        candidates
+          .filter((record) => record.kind === 'assistant')
+          .flatMap((record) =>
+            record.sources.filter((ref) => ref.sessionId === this.id).map((ref) => ref.id)
+          )
+      ),
+    ]
+    const sourceState = !isEmpty(sourceRefs)
+      ? await this.snapshot(sourceRefs.map((refId) => ({ refId })))
+      : null
     const continuations = new Map(
-      (state?.records ?? [])
+      [...(state?.records ?? []), ...(sourceState?.records ?? [])]
         .filter(
           (record) =>
             record.kind === 'audit' &&
@@ -268,9 +458,10 @@ export class RecentContext implements RecentContextApi {
         continuation = modelRequestEncoder.continuation(JSON.parse(raw))
       }
       const current = leased.get(record.ref.id)
-      // 结果的正文只在租约有效时出现；租约到期或释放后这一条改成引用卡，其余逐字复用
+      // 已冻结的条目逐字复用到封段，租约到期或释放只停止帧尾展示：改写已发送的历史会让
+      // 只认完整延续的供应商缓存整段失效。从未冻结的结果只在租约有效时第一次渲染，否则给引用卡。
       const item = { ref: record.ref.id, sequence: record.sequence, role }
-      if (role === 'user' && !current) {
+      if (role === 'user' && !current && !entry) {
         messages.push({ role, content: historyReference(record) })
         items.push({ ...item, bodyIncluded: false, representation: 'reference' })
         continue
@@ -281,12 +472,18 @@ export class RecentContext implements RecentContextApi {
         messages.push(
           role === 'assistant' && continuation ? { role, content, continuation } : { role, content }
         )
-        items.push({
+        const frozenItem: SegmentHistory['items'][number] = {
           ...item,
           bodyIncluded: true,
           representation: entry.continuation ? 'full' : frozenRepresentation(content),
-          ...(entry.feedback ? { feedback: entry.feedback } : {}),
-        })
+        }
+        if (entry.feedback) Object.assign(frozenItem, { feedback: entry.feedback })
+        if (entry.outputProofs) Object.assign(frozenItem, { outputProofs: entry.outputProofs })
+        if (entry.outputFingerprint)
+          Object.assign(frozenItem, { outputFingerprint: entry.outputFingerprint })
+        if (entry.outputViews) Object.assign(frozenItem, { outputViews: entry.outputViews })
+        if (entry.fullMaterial) Object.assign(frozenItem, { fullMaterial: entry.fullMaterial })
+        items.push(frozenItem)
         if (role === 'assistant') response = content
         continue
       }
@@ -310,18 +507,42 @@ export class RecentContext implements RecentContextApi {
         current?.feedback ?? [],
         cap
       )
-      const delivered = feedback.length ? { feedback } : {}
-      const objectId = await this.storage.put(this.id, content)
+      const outputProofs =
+        role === 'user' && current?.structuredOutput
+          ? current.outputProofs?.filter(
+              (proof) => (proof.carrierRef ?? proof.ref) === record.ref.id
+            )
+          : undefined
+      const delivered = {
+        ...(feedback.length ? { feedback } : {}),
+        ...(outputProofs?.length ? { outputProofs } : {}),
+        ...(role === 'user' && current?.structuredOutput && current.outputViews?.length
+          ? { outputViews: current.outputViews }
+          : {}),
+        ...(rendered.outputFingerprint ? { outputFingerprint: rendered.outputFingerprint } : {}),
+        ...(rendered.fullMaterial ? { fullMaterial: rendered.fullMaterial } : {}),
+      }
+      const frozenBody = await this.context.append(
+        {
+          kind: 'audit',
+          title: 'context:history-body',
+          body: content,
+          sources: [record.ref],
+        },
+        signal
+      )
+      const objectId = frozenBody.objectId
       const completeContinuation = continuation && rendered.representation === 'full'
-      fresh.push({
+      const freshEntry: SegmentEntry = {
         ref: record.ref.id,
         sequence: record.sequence,
         role,
         objectId,
         chars: content.length,
         ...delivered,
-        ...(completeContinuation ? { continuation: continuationRecord!.ref } : {}),
-      })
+      }
+      if (completeContinuation) Object.assign(freshEntry, { continuation: continuationRecord!.ref })
+      fresh.push(freshEntry)
       messages.push(
         role === 'assistant' && completeContinuation
           ? { role, content, continuation }
@@ -335,8 +556,8 @@ export class RecentContext implements RecentContextApi {
       })
       if (role === 'assistant') response = content
     }
-    // 活跃租约到期时会改写结果正文；额外保存其之前已退役结果的前缀。
-    // 选 user 结果的结尾，后续帧仍能通过隐式的早期消息边界查到旧缓存点。
+    // 需要显式断点的供应商：在第一个仍有租约的结果之前的 user 结果结尾另留一处断点，
+    // 后续帧仍能通过隐式的早期消息边界查到旧缓存点。
     const firstLeased = items.findIndex((item) => item.role === 'user' && leased.has(item.ref))
     const stableBoundary = items
       .slice(0, firstLeased < 0 ? items.length : firstLeased)
@@ -357,7 +578,14 @@ export class RecentContext implements RecentContextApi {
     cap: number,
     withSource: boolean,
     continuation: boolean
-  ): Promise<Optional<{ content: string; representation: 'full' | 'excerpt' }>> {
+  ): Promise<
+    Optional<{
+      content: string
+      representation: 'full' | 'excerpt'
+      outputFingerprint?: string
+      fullMaterial?: string
+    }>
+  > {
     if (role === 'assistant') {
       const content = await this.context.read(record.ref, { limit: cap })
       const representation = content.totalChars > content.text.length ? 'excerpt' : 'full'
@@ -378,6 +606,7 @@ export class RecentContext implements RecentContextApi {
     const text = current?.text ?? ''
     if (!text || (current?.structuredOutput && text.length > cap)) return undefined
     const output = text.length > cap ? text.slice(0, cap) : text
+    const encoded = current?.structuredOutput ? memoryOutput(output, current.outputFormat) : output
     const representation = output.length === record.chars ? 'full' : 'excerpt'
     return {
       content: [
@@ -392,9 +621,19 @@ export class RecentContext implements RecentContextApi {
         }),
         ...(withSource && current?.source ? ['当次源码：', current.source] : []),
         '当次输出：',
-        current?.structuredOutput ? memoryOutput(output) : output,
+        encoded,
       ].join('\n'),
       representation,
+      outputFingerprint: scriptOutputs.hash([
+        this.id,
+        record.ref.id,
+        current?.sourceRef ?? null,
+        encoded,
+      ]),
+      fullMaterial:
+        !current?.structuredOutput && current?.materialCoverage?.complete && output === text
+          ? current.materialCoverage.identity
+          : undefined,
     }
   }
 
@@ -402,10 +641,10 @@ export class RecentContext implements RecentContextApi {
     signal.throwIfAborted()
     // 只取骨架用得到的记录；任务元数据（写效果回执）随同一读快照返回
     const state = await this.snapshot([
-      { kind: 'user' },
-      { kind: 'assistant' },
-      { titlePrefix: 'script:', titleSuffix: ':result' },
-      { titlePrefix: 'workspace:note:' },
+      { kind: 'user', after: from, through },
+      { kind: 'assistant', after: from, through },
+      { titlePrefix: 'script:', titleSuffix: ':result', after: from, through },
+      { titlePrefix: 'workspace:note:', after: from, through },
     ])
     if (!state) throw new AppError('UNAVAILABLE', '近期记录尚未建立')
     // 授权重置之前的记录不属于本代次，骨架也不收
@@ -584,8 +823,8 @@ export class RecentContext implements RecentContextApi {
   ): Promise<Optional<number>> {
     signal.throwIfAborted()
     const state = await this.snapshot([
-      { kind: 'assistant' },
-      { titlePrefix: 'script:', titleSuffix: ':result' },
+      { kind: 'assistant', after: segment.from },
+      { titlePrefix: 'script:', titleSuffix: ':result', after: segment.from },
     ])
     const reset = this.reset(state)
     const records = []

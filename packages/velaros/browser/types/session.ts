@@ -41,16 +41,18 @@ export interface BrowserSessionActionOptions {
   readonly label?: string
 }
 
-/**
- * 队列名额 —— **把「动作 settle 了」与「名额释放了」拆成两件事**。
- *
- * 这正是本文件的核心判决：上一版拿动作自己的 promise 当队列链，于是
- * 「动作永不 settle」在结构上等价于「会话永久瘫痪」，没有任何一层能插手。
- * 名额独立之后，超时与中止都能在动作还挂着的时候把队伍放行。
- */
+/** 排队名额只在实际动作收束或尚未开始就取消时释放；调用超时与动作完成分开。 */
 export interface BrowserSessionQueueSlot {
   readonly released: Promise<void>
   readonly release: () => void
+}
+
+/** 每个会话的当前队列世代；失效后仍持有未收束动作，直到实际结算。 */
+export interface BrowserSessionQueueState {
+  tail: Promise<unknown>
+  readonly controller: AbortController
+  active: number
+  invalidated: boolean
 }
 
 export interface PendingDialogEntry {

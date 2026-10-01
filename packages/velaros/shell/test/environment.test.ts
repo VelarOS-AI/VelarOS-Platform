@@ -31,6 +31,7 @@ function resolver(load: ShellResolverApi['refreshWindowsEnvironment']): ShellRes
     resolve: (options) => resolved(options?.env ?? {}),
     resolveReady: async (options) => resolved(options?.env ?? {}),
     resolveCommand: async (name) => ({ name, available: false, path: null, kind: null }),
+    inspectPath: async () => [],
   }
 }
 

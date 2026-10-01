@@ -13,6 +13,7 @@ import type { ComputerAvailability, ComputerPermissionStatus } from '../types/co
  */
 export async function requireComputerAvailable(ctx: ComputerOperationContext): Promise<void> {
   const availability = await ctx.computer.ensureAvailable()
+  ctx.abortSignal.throwIfAborted()
   if (availability.available) return
 
   throw new AppError('PERMISSION', unavailableMessage(availability))

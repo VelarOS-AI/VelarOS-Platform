@@ -120,6 +120,8 @@ import type {
   ModulePage,
   ModuleQuery,
   OperationCall,
+  OperationRuntimeCloseOptions,
+  PendingInvocation,
 } from '../types/operations.js'
 
 /** 模块发现、租约与调用共用的运行时。 */
@@ -142,8 +144,12 @@ export interface OperationRuntimeApi {
   release(sessionId: string, moduleId: string): void
   /** 所有入口共用的调用链，返回已经可靠保存的回执。 */
   invoke(call: OperationCall, signal?: AbortSignal): Promise<InvocationReceipt>
-  /** 停止新调用，取消在途操作，回收模块资源。 */
-  dispose(): Promise<void>
+  /** 不含输入的在途身份快照；取消请求不表示实际处理器已结束。 */
+  pending(): readonly PendingInvocation[]
+  /** 停止新调用并请求取消；默认有界等待，TIMEOUT 附带 pending，后台继续收束。 */
+  dispose(options?: OperationRuntimeCloseOptions): Promise<void>
+  /** 发起关闭并等待所有真实操作和模块资源回收；宿主后台使用，不承诺有界完成。 */
+  drain(): Promise<void>
 }
 
 import type {

@@ -33,6 +33,7 @@ import { isEmpty, isString } from '@velaros-ai/core'
 
 import { OfficeErrorCodes } from '../../contract/constants.js'
 import type { OfficeWritten } from '../../types/office.js'
+import type { OfficePreparedOutput } from '../../types/output.js'
 import type { WordSupportPart } from '../../types/word.js'
 import { officeError } from '../errors.js'
 import { writeOfficeFile } from '../paths.js'
@@ -75,8 +76,9 @@ async function readWordZipText(zip: JSZip, path: string): Promise<Nullable<strin
 
 /** 将 fragment docx 的 body 内容追加到已有 docx，并把它引用到的关系、编号与样式一起并过去。 */
 export async function appendWordDocumentBuffer(
-  prepared: { path: string; created: boolean },
-  fragmentBuffer: Buffer
+  prepared: OfficePreparedOutput,
+  fragmentBuffer: Buffer,
+  signal?: AbortSignal
 ): Promise<OfficeWritten> {
   const existingZip = await JSZip.loadAsync(await readFile(prepared.path))
   const fragmentZip = await JSZip.loadAsync(fragmentBuffer)
@@ -141,7 +143,7 @@ export async function appendWordDocumentBuffer(
   )
   existingZip.file(WordDocumentRelsPath, relationshipsXml)
   const mergedBuffer = await existingZip.generateAsync({ type: 'nodebuffer' })
-  return writeOfficeFile(prepared, mergedBuffer)
+  return writeOfficeFile(prepared, mergedBuffer, signal)
 }
 
 /** 提取 document.xml body 中除 sectPr 外的内容。 */

@@ -1,4 +1,4 @@
-import { isFiniteNumber, isNull, isPlainObject, isPresent, toNullable } from '@velaros-ai/core'
+import { isFiniteNumber, isNull, isPlainObject, isTrue, toNullable } from '@velaros-ai/core'
 
 import type {
   ModelPricingCatalog,
@@ -25,6 +25,8 @@ export function findPricingRates(
   return {
     inputPerMillion: entry.inputUsdPerMillion,
     outputPerMillion: entry.outputUsdPerMillion,
+    cacheReadPerMillion: toNullable(entry.cacheReadUsdPerMillion),
+    cacheWritePerMillion: toNullable(entry.cacheWriteUsdPerMillion),
   }
 }
 
@@ -42,61 +44,159 @@ function matchPricingEntry(
   )
 }
 
-/** 把 AI SDK 各版本的 usage 形状归一成本包的账本，顺带按单价算钱。 */
+/** 归一用量并逐个计费分项约价；缺失用量或单价不冒充零费用。 */
 export function normalizeRunUsage(value: unknown, pricing?: ModelPricingRates): ModelRunUsage {
-  const inputTokens =
-    tokenValue(value, ['inputTokens', 'total']) ?? tokenValue(value, ['inputTokens']) ?? 0
-  const outputTokens =
-    tokenValue(value, ['outputTokens', 'total']) ?? tokenValue(value, ['outputTokens']) ?? 0
+  const input = tokenValue(value, ['inputTokens', 'total']) ?? tokenValue(value, ['inputTokens'])
+  const output = tokenValue(value, ['outputTokens', 'total']) ?? tokenValue(value, ['outputTokens'])
+  const inputTokens = input ?? 0
+  const outputTokens = output ?? 0
   const reasoningTokens =
-    tokenValue(value, ['outputTokens', 'reasoning']) ?? tokenValue(value, ['reasoningTokens']) ?? 0
-  const cachedInputTokens =
-    tokenValue(value, ['inputTokens', 'cacheRead']) ?? tokenValue(value, ['cachedInputTokens']) ?? 0
+    tokenValue(value, ['outputTokens', 'reasoning']) ??
+    tokenValue(value, ['outputTokenDetails', 'reasoningTokens']) ??
+    tokenValue(value, ['reasoningTokens']) ??
+    0
+  const cacheRead =
+    tokenValue(value, ['inputTokens', 'cacheRead']) ??
+    tokenValue(value, ['inputTokenDetails', 'cacheReadTokens']) ??
+    tokenValue(value, ['cacheReadTokens']) ??
+    tokenValue(value, ['cachedInputTokens'])
+  const cacheWrite =
+    tokenValue(value, ['inputTokens', 'cacheWrite']) ??
+    tokenValue(value, ['inputTokenDetails', 'cacheWriteTokens']) ??
+    tokenValue(value, ['cacheWriteTokens'])
+  const cachedInputTokens = cacheRead ?? 0
+  const cacheWriteTokens = cacheWrite ?? 0
+  const tokenCoverage = {
+    input: !isNull(input),
+    output: !isNull(output),
+    cacheRead: !isNull(cacheRead),
+    cacheWrite: !isNull(cacheWrite),
+  }
   const totalTokens = tokenValue(value, ['totalTokens']) ?? inputTokens + outputTokens
-  const inputRate = toNullable(pricing?.inputPerMillion)
-  const outputRate = toNullable(pricing?.outputPerMillion)
-  const cost =
-    isNull(inputRate) || isNull(outputRate)
-      ? null
-      : (inputTokens * inputRate + outputTokens * outputRate) / 1_000_000
-  return { inputTokens, outputTokens, reasoningTokens, cachedInputTokens, totalTokens, cost }
+  const validInput =
+    !isNull(input) &&
+    !isNull(cacheRead) &&
+    !isNull(cacheWrite) &&
+    cachedInputTokens + cacheWriteTokens <= inputTokens
+  const consistentBuckets = isNull(input) || cachedInputTokens + cacheWriteTokens <= inputTokens
+  const parts = [
+    price(
+      validInput ? inputTokens - cachedInputTokens - cacheWriteTokens : null,
+      pricing?.inputPerMillion
+    ),
+    price(consistentBuckets ? cacheRead : null, pricing?.cacheReadPerMillion),
+    price(consistentBuckets ? cacheWrite : null, pricing?.cacheWritePerMillion),
+    price(output, pricing?.outputPerMillion),
+  ]
+  const knownCost = parts.reduce<number>((sum, part) => sum + (part ?? 0), 0)
+  const complete = parts.every((part) => !isNull(part))
+  const costCoverage = complete
+    ? 'complete'
+    : parts.some((part) => !isNull(part))
+      ? 'partial'
+      : 'unknown'
+  return {
+    inputTokens,
+    outputTokens,
+    reasoningTokens,
+    cachedInputTokens,
+    cacheWriteTokens,
+    totalTokens,
+    cost: complete ? knownCost : null,
+    knownCost,
+    costCoverage,
+    tokenCoverage,
+  }
 }
 
-/** 已落盘的稳定 usage envelope 归一化；非法/负数 token 失败闭合为 0。 */
+/** 缺席分项为未知；零 token 无需单价。单价必须非负有限。 */
+function price(tokens: Nullable<number>, rate: LooseOptional<number>): Nullable<number> {
+  if (isNull(tokens)) return null
+  if (tokens === 0) return 0
+  return isFiniteNumber(rate) && rate >= 0 ? (tokens * rate) / 1_000_000 : null
+}
+
+/** 旧账本可保留估计数，但只有明确的完整性证据才能恢复完整费用。 */
 export function normalizePersistedUsage(value: Record<string, unknown>): ModelRunUsage {
+  const cost = isFiniteNumber(value.cost) && value.cost >= 0 ? value.cost : null
+  const knownCost =
+    isFiniteNumber(value.knownCost) && value.knownCost >= 0 ? value.knownCost : (cost ?? 0)
+  const costCoverage =
+    value.costCoverage === 'complete' && !isNull(cost)
+      ? 'complete'
+      : value.costCoverage === 'partial' || !isNull(cost) || knownCost > 0
+        ? 'partial'
+        : 'unknown'
+  const reported = isPlainObject(value.tokenCoverage) ? value.tokenCoverage : {}
+  const tokenCoverage = {
+    input: isTrue(reported.input),
+    output: isTrue(reported.output),
+    cacheRead: isTrue(reported.cacheRead),
+    cacheWrite: isTrue(reported.cacheWrite),
+  }
   return {
+    tokenCoverage,
     inputTokens: positiveNumber(value.inputTokens),
     outputTokens: positiveNumber(value.outputTokens),
     reasoningTokens: positiveNumber(value.reasoningTokens),
     cachedInputTokens: positiveNumber(value.cachedInputTokens),
+    cacheWriteTokens: positiveNumber(value.cacheWriteTokens),
     totalTokens: positiveNumber(value.totalTokens),
-    cost: isFiniteNumber(value.cost) && value.cost >= 0 ? value.cost : null,
+    cost: costCoverage === 'complete' ? cost : null,
+    knownCost,
+    costCoverage,
   }
 }
 
-/** 把多次调用的账本合计起来，并记住最后一轮的上下文占用。 */
+/** 合计已知分项；只要有一次费用未知，完整总费用保持 null。 */
 export function summarizeUsage(usages: readonly ModelRunUsage[]): ModelUsageSummary {
   let inputTokens = 0
   let outputTokens = 0
   let reasoningTokens = 0
   let cachedInputTokens = 0
+  let cacheWriteTokens = 0
   let totalTokens = 0
-  let cost: Nullable<number> = null
+  let knownCost = 0
+  let unknownCostRuns = 0
   for (const usage of usages) {
     inputTokens += usage.inputTokens
     outputTokens += usage.outputTokens
     reasoningTokens += usage.reasoningTokens
     cachedInputTokens += usage.cachedInputTokens
+    cacheWriteTokens += usage.cacheWriteTokens ?? 0
     totalTokens += usage.totalTokens
-    if (isPresent(usage.cost)) cost = (cost ?? 0) + usage.cost
+    knownCost += usage.knownCost ?? usage.cost ?? 0
+    if (isNull(usage.cost) || usage.costCoverage !== 'complete') unknownCostRuns++
+  }
+  const complete = usages.length > 0 && unknownCostRuns === 0
+  const tokenCoverage = {
+    input: usages.length > 0 && usages.every((usage) => isTrue(usage.tokenCoverage?.input)),
+    output: usages.length > 0 && usages.every((usage) => isTrue(usage.tokenCoverage?.output)),
+    cacheRead: usages.length > 0 && usages.every((usage) => isTrue(usage.tokenCoverage?.cacheRead)),
+    cacheWrite:
+      usages.length > 0 && usages.every((usage) => isTrue(usage.tokenCoverage?.cacheWrite)),
   }
   return {
     inputTokens,
     outputTokens,
     reasoningTokens,
     cachedInputTokens,
+    cacheWriteTokens,
     totalTokens,
-    cost,
+    cost: complete ? knownCost : null,
+    knownCost,
+    costCoverage: complete
+      ? 'complete'
+      : usages.some(
+            (usage) =>
+              usage.costCoverage === 'complete' ||
+              usage.costCoverage === 'partial' ||
+              !isNull(usage.cost)
+          )
+        ? 'partial'
+        : 'unknown',
+    unknownCostRuns,
+    tokenCoverage,
     runs: usages.length,
     lastContextTokens: usages.at(-1)?.inputTokens ?? 0,
   }

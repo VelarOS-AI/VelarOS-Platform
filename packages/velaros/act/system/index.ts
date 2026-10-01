@@ -30,6 +30,8 @@ export { systemModules } from './impl/SystemModules.js'
 export type { GoalState, GoalStatus, GoalUpdate } from './types/goal.js'
 export type { VolumeNarrative } from './types/history.js'
 export type {
+  ActiveContextEvidence,
+  ActiveContextPatch,
   ContextMaintenancePage,
   ContextMaterialsQuery,
   ContextMaterialsReadInput,

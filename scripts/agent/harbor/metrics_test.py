@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 from metrics import aggregate_trials, agent_metrics, compare_jobs, distribution, environment_evidence, history_cache_metrics, prompt_layout_metrics, request_metrics, tool_environment_diagnostics, trial_infrastructure_issue, verifier_infrastructure_issue
-from report import settlement_tail, summarize, summarize_cohort
+from report import markdown, settlement_tail, summarize, summarize_cohort
 
 
 def call(inputs, cached, cost, written=0):
@@ -16,6 +16,130 @@ def call(inputs, cached, cost, written=0):
 
 
 class MetricsTests(unittest.TestCase):
+    def test_structured_stream_and_transport_failures_remain_distinct_from_http_status_and_usage(self):
+        rows = [call(100, 50, .1),
+                {"status": "http-200-interrupted", "estimatedUsd": None, "usage": None,
+                 "failure": {"causeCode": "ECONNRESET", "message": "PRIVATE_BODY"}},
+                {"status": "unknown", "estimatedUsd": None,
+                 "failure": {"name": "TimeoutError", "message": "PRIVATE_BODY"}},
+                {"status": "http-503", "estimatedUsd": None},
+                {"status": "reserved", "estimatedUsd": None}]
+        result = request_metrics(rows)
+        self.assertEqual(result["request_status_counts"],
+                         {"http-200": 1, "http-200-interrupted": 1, "unknown": 1, "http-503": 1, "reserved": 1})
+        self.assertEqual(result["request_failure_counts"],
+                         {"model_transport_failed": 2, "model_service_unavailable": 1})
+        self.assertEqual(result["transport_failure_code_counts"], {"ECONNRESET": 1, "TimeoutError": 1})
+        self.assertEqual(result["unknown_cost_requests"], 4)
+        self.assertEqual(result["known_cost_usd"], .1)
+        self.assertIsNone(result["input_tokens"])
+        self.assertNotIn("PRIVATE_BODY", json.dumps(result))
+
+    def test_reference_price_is_an_estimate_without_changing_usage_or_legacy_fields(self):
+        original = call(100, 50, .2)
+        reference = {**original, "pricingBasis": {"kind": "reference_only", "source": "official reference rates",
+                                                "upstreamBaseURL": "https://provider.example/v1"}}
+        legacy, measured = request_metrics([original]), request_metrics([reference])
+        self.assertNotIn("pricing_basis", legacy)
+        self.assertNotIn("actual_provider_cost_usd", legacy)
+        self.assertEqual({key: measured[key] for key in legacy}, legacy)
+        self.assertIsNone(measured["actual_provider_cost_usd"])
+        self.assertEqual(measured["pricing_basis"]["kind"], "reference_only")
+        self.assertEqual(measured["pricing_basis"]["interpretation"], "参考价格估算，实际扣费未知")
+        group = measured["pricing_basis"]["groups"][0]
+        self.assertEqual(group["known_estimated_cost_usd"], .2)
+        self.assertEqual(group["upstream_base_url"], "https://provider.example/v1")
+
+    def test_mixed_reference_provider_and_legacy_prices_stay_separate_through_aggregation(self):
+        reference = {**call(100, 50, .2), "pricingBasis": {"kind": "reference_only", "source": "reference"}}
+        provider = {**call(200, 0, .3), "pricingBasis": {"kind": "provider_rates", "source": "provider rates"}}
+        unknown = {"status": "reserved", "estimatedUsd": None, "pricingBasis": reference["pricingBasis"]}
+        legacy = call(50, 0, .4)
+        metrics = request_metrics([reference, provider, unknown, legacy])
+        self.assertEqual(metrics["pricing_basis"]["kind"], "mixed")
+        groups = {group["kind"]: group for group in metrics["pricing_basis"]["groups"]}
+        self.assertEqual(groups["reference_only"]["requests"], 2)
+        self.assertEqual(groups["reference_only"]["unknown_estimate_requests"], 1)
+        self.assertEqual(groups["reference_only"]["known_estimated_cost_usd"], .2)
+        self.assertEqual(groups["provider_rates"]["known_estimated_cost_usd"], .3)
+        self.assertEqual(groups["legacy_unspecified"]["known_estimated_cost_usd"], .4)
+        trials = [{"score": 1, "exception": None, "agent_seconds": 1,
+                   "metrics": request_metrics(rows)} for rows in ([reference, unknown], [provider], [legacy])]
+        combined = aggregate_trials(trials)
+        self.assertEqual(combined["pricing_basis"], metrics["pricing_basis"])
+        self.assertIsNone(combined["actual_provider_cost_usd"])
+        self.assertAlmostEqual(combined["known_cost_usd"], .9)
+        self.assertEqual(request_metrics([provider])["pricing_basis"]["kind"], "provider_rates")
+        self.assertIsNone(request_metrics([provider])["actual_provider_cost_usd"], "rate cards do not prove paid charges")
+
+    def test_comparison_discloses_estimate_basis_and_keeps_failed_attempt_groups(self):
+        def job(name, kind, cost):
+            measured = request_metrics([{**call(100, 50, cost), "pricingBasis": {"kind": kind, "source": name}}])
+            trial = {"task": "same", "score": 1, "exception": None, "agent_seconds": 1, "metrics": measured}
+            return {"job": name, "planned": 1, "completed": 1, "trials": [trial]}
+        reference = job("reference", "reference_only", .2)
+        candidate = job("provider", "provider_rates", .1)
+        candidate["completed_source_usage"] = [candidate["trials"][0], {"agent_seconds": 3,
+            "metrics": request_metrics([{**call(50, 0, .5), "pricingBasis": {
+                "kind": "provider_rates", "source": "provider"}}])}]
+        result = compare_jobs(reference, candidate)
+        self.assertEqual(result["efficiency_cost_basis"], "estimated_costs_not_actual_provider_charges")
+        self.assertEqual(result["pricing_basis"]["kind"], "mixed")
+        self.assertIsNone(result["actual_provider_cost_usd"])
+        self.assertAlmostEqual(result["candidate_over_reference"]["cost_usd"], .5)
+        total = result["completed_attempt_totals"]["candidate"]
+        self.assertEqual(total["pricing_basis"]["groups"][0]["requests"], 2)
+        self.assertAlmostEqual(total["known_cost_usd"], .6)
+        self.assertIsNone(total["actual_provider_cost_usd"])
+
+    def test_report_marks_reference_and_mixed_dollars_as_estimates(self):
+        measured = request_metrics([{**call(100, 50, .2), "pricingBasis": {
+            "kind": "reference_only", "source": "official reference", "upstreamBaseURL": "https://proxy.example"}},
+            {**call(100, 0, .1), "pricingBasis": {"kind": "provider_rates", "source": "provider price sheet"}}])
+        trial = {"task": "synthetic", "score": 1, "exception": None, "agent_seconds": 1, "metrics": measured,
+                 "environment": {}, "infrastructure_issue": None, "post_agent_requests": 0, "agent_metrics": None}
+        job = {"job": "synthetic", "models": ["fixture"], "trials": [trial], "completed": 1, "planned": 1,
+               "aggregate": aggregate_trials([trial]), "configurations": []}
+        text = markdown({"jobs": [job]})
+        self.assertIn("参考价格估算，实际扣费未知", text)
+        self.assertIn("混合依据的总值不代表实际供应商扣费", text)
+        self.assertIn("official reference", text)
+        self.assertIn("provider price sheet", text)
+        self.assertIn("https://proxy.example", text)
+        self.assertIn("已知估算", text)
+        self.assertIn("缓存净节省估算美元", text)
+
+    def test_invalid_explicit_pricing_basis_does_not_silently_become_legacy(self):
+        for basis in (None, {}, {"kind": "actual", "source": "unverified"},
+                      {"kind": "reference_only", "source": ""},
+                      {"kind": "provider_rates", "source": "rates", "upstreamBaseURL": False}):
+            with self.subTest(basis=basis), self.assertRaisesRegex(ValueError, "pricingBasis"):
+                request_metrics([{**call(100, 0, .1), "pricingBasis": basis}])
+
+    def test_program_failures_are_counted_separately_from_successful_kernel_calls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'agent').mkdir()
+            execution = {'executionId': 'same', 'status': 'failed',
+                         'failure': {'code': 'PROGRAM_ERROR', 'message': 'private diagnostic'}, 'durationMs': 50}
+            invocation = {'id': 'call', 'summary': {'status': 'succeeded'}}
+            (root / 'agent/traces.json').write_text(json.dumps({'traces': [
+                {'executions': [execution], 'invocations': [invocation]},
+                {'executions': [execution], 'invocations': [invocation]},
+            ], 'branches': [{'kind': 'child', 'turns': [{'executions': [
+                {'executionId': 'same', 'status': 'succeeded', 'durationMs': 25},
+                {'executionId': 'cancelled', 'status': 'cancelled'},
+                {'executionId': 'unknown'},
+            ]}]}]}))
+            result = agent_metrics(root)
+            self.assertEqual(result['failed_tool_calls'], 0)
+            self.assertEqual(result['script_executions'], 4)
+            self.assertEqual(result['failed_script_executions'], 1)
+            self.assertEqual(result['script_execution_status_counts'],
+                             {'failed': 1, 'succeeded': 1, 'cancelled': 1, 'unknown': 1})
+            self.assertEqual(result['script_failure_codes'], {'PROGRAM_ERROR': 1})
+            self.assertNotIn('private diagnostic', json.dumps(result))
+
     def test_native_tool_layers_keep_nested_operations_separate_and_deduplicated(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -435,6 +559,26 @@ class MetricsTests(unittest.TestCase):
         result = compare_jobs(job, other)
         self.assertEqual(result["jointly_solved_tasks"], 0)
         self.assertIsNone(result["candidate_over_reference"]["agent_seconds"])
+
+    def test_objectives_require_requests_time_and_cost_together_and_keep_failed_sources(self):
+        def job(name, count, seconds, cost):
+            trial = {"task": "same", "score": 1, "exception": None, "agent_seconds": seconds,
+                     "metrics": {"requests": count, "known_cost_usd": cost, "unknown_cost_requests": 0}}
+            return {"job": name, "planned": 1, "completed": 1, "trials": [trial]}
+        reference = job('reference', 10, 100, 1)
+        tradeoff = job('candidate', 5, 101, .8)
+        self.assertEqual(compare_jobs(reference, tradeoff)['efficiency_dominance'], 'tradeoff')
+        better = job('candidate', 5, 80, .8)
+        result = compare_jobs(reference, better)
+        self.assertEqual(result['efficiency_dominance'], 'candidate')
+        self.assertFalse(result['supports_general_superiority'])
+        failed = {"agent_seconds": 50, "metrics": {"requests": 4, "known_cost_usd": .4, "unknown_cost_requests": 1}}
+        better['completed_source_usage'] = [better['trials'][0], failed]
+        totals = compare_jobs(reference, better)['completed_attempt_totals']['candidate']
+        self.assertEqual(totals['model_requests'], 9)
+        self.assertEqual(totals['agent_seconds'], 130)
+        self.assertAlmostEqual(totals['known_cost_usd'], 1.2)
+        self.assertIsNone(totals['cost_usd'])
 
     def test_request_comparison_weights_tasks_and_retains_failed_attempt_calls(self):
         def trial(task, count, score=1):

@@ -21,6 +21,7 @@ export type {
   ScriptOutputCapture,
   ScriptOutputConfig,
   ScriptOutputEdit,
+  ScriptOutputFormat,
   ScriptOutputManifest,
   ScriptOutputOptions,
   ScriptOutputPresentation,

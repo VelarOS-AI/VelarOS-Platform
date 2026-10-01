@@ -10,6 +10,8 @@ export type MemoryType = (typeof MemoryTypes)[number]
 
 /** @AgentView 一条记忆。tags 是主题标签；updatedAt 是 ISO 时间，字符串直接比大小就是比先后。 */
 export interface MemoryEntry {
+  /** @AgentView 本条内容版本；条件写入时原样作为 expectedRevision。 */
+  revision: string
   id: string
   type: MemoryType
   title: string
@@ -25,6 +27,8 @@ export interface MemoryEntry {
  * tags 不给就沿用这条原来的标签（新建的就是没有），给 [] 才清空；给的话最多 8 个，每个最多 32 个字符、不含逗号和换行，存的时候转小写、去重。
  */
 export interface MemorySaveInput {
+  /** @AgentView 不给时最后提交者覆盖；给版本时只改该版本，null 表示只许新建。过期报 CONFLICT。 */
+  expectedRevision?: LooseOptional<string>
   id: string
   type: MemoryType
   title: string
@@ -35,12 +39,15 @@ export interface MemorySaveInput {
 
 /** @AgentView 写下了：created 为假，说明覆盖的是已有的那一条。 */
 export interface MemorySaved {
+  revision: string
   id: string
   created: boolean
 }
 
 /** @AgentView 要删的那一条。 */
 export interface MemoryIdInput {
+  /** @AgentView 给版本时只删除该版本；null 表示要求不存在。不给时删除当前条目。 */
+  expectedRevision?: LooseOptional<string>
   id: string
 }
 

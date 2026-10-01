@@ -25,8 +25,9 @@ export interface FileSpacePort {
    * 把一批写入按给的顺序落盘：bytes 是字节就原子替换（缺失的上级目录一并建好），是 null 就删掉这个文件。
    * 某一项给了 `expected`，落盘时就核对磁盘上还是它（或者仍不存在），不是就那一项不做、抛 `VALIDATION`。
    * 做到一半出错时，已经落盘的在错误的 `context.applied` 里点名（target 列表）。
+   * signal 在每项提交前核对；已完成的项仍按实际结果报告。撤回按当前 locate 的路径授权重新核验，changeId 不授予额外权限，也不绑定会话身份。
    */
-  commit: (writes: readonly FileWrite[]) => Promise<void>
+  commit: (writes: readonly FileWrite[], signal?: AbortSignal) => Promise<void>
 }
 
 /** 每次调用 `velaros:files` 时宿主给的上下文。它不是模型能填的入参：宿主分发这次调用时按当前空间装好，生成声明时整个丢掉。 */

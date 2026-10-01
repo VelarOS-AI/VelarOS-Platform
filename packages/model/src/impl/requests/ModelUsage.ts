@@ -14,7 +14,7 @@ import {
 /**
  * token 账本的归一与合计：把各家 SDK、各个版本的 usage 形状收成本包的一种，顺带按单价算钱。
  *
- * 归一一律闭合为非负整数：账本宁可少算也不能出现负数 token。实例是 `modelUsage`。
+ * 归一一律闭合为非负整数：未知用量与费用保持未知，不把已知分项冒充完整账单。实例是 `modelUsage`。
  */
 export interface ModelUsageApi {
   /** 把 AI SDK 各版本的 usage 形状归一成本包的账本，顺带按单价算钱。 */

@@ -9,6 +9,9 @@ from pathlib import Path
 
 from metrics import compare_jobs, trial_infrastructure_issue
 from report import duration, finish_summary, summarize
+from task_exposure import task_exposure
+from request_identity import validate_identity, verify_unique_attribution
+from tool_metrics import aggregate_tool_usage, tool_usage_markdown
 
 
 def image_selection_coverage(manifest):
@@ -78,6 +81,78 @@ def comparison_manifest(manifest):
     return {**manifest, "participants": participants, "attempts": attempts}
 
 
+def timing_seconds(start, finish):
+    """Receipt wall time requires ordered, timezone-aware clocks; unknown stays unknown."""
+    try:
+        first, last = datetime.datetime.fromisoformat(start), datetime.datetime.fromisoformat(finish)
+        if first.utcoffset() is None or last.utcoffset() is None or last < first:
+            return None
+        return (last - first).total_seconds()
+    except (TypeError, ValueError):
+        return None
+
+
+def dispatch_timing(result_path, result, phase):
+    """Read only the phase receipt bound to this exact job, identity and result."""
+    result_path = Path(result_path).resolve()
+    job = result_path.parent.parent
+    path = job.parent.parent / "campaign" / (job.name + "-dispatch.json")
+    timing = {"receipt": str(path), "status": None, "started_at": None, "finished_at": None,
+              "wall_seconds": None, "cleanup_confirmed": False, "issue": "receipt_missing"}
+    if not path.exists():
+        return timing, None, None
+    try:
+        receipt = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        timing["issue"] = "receipt_incomplete"
+        return timing, None, None
+    identity_path = job / "request-identity.json"
+    if (not identity_path.exists() or not receipt.get("trial_result") or not receipt.get("phase")
+            or type(receipt.get("attempt")) is not int or receipt["attempt"] < 1):
+        timing["issue"] = "receipt_binding_missing"
+        return timing, None, None
+    identity = validate_identity(json.loads(identity_path.read_text()))
+    if (receipt.get("request_identity") != identity or identity["jobId"] != job.name
+            or identity["phase"] != phase or receipt.get("phase") != phase
+            or Path(identity["taskId"]).name != Path(result["task_name"]).name
+            or Path(receipt["trial_result"]).resolve() != result_path):
+        raise ValueError("Dispatch timing identity or result differs from trial")
+    timing.update({key: receipt.get(key) for key in ("status", "started_at", "finished_at")})
+    elapsed = timing_seconds(timing["started_at"], timing["finished_at"])
+    if receipt.get("status") == "blocked" or receipt.get("cleanup_error_code"):
+        timing["issue"] = "cleanup_unconfirmed"
+    elif receipt.get("status") not in ("finished", "failed") or not timing["finished_at"]:
+        timing["issue"] = "dispatch_incomplete"
+    elif (elapsed is None or timing_seconds(timing["started_at"], result.get("started_at")) is None
+          or timing_seconds(result.get("finished_at"), timing["finished_at"]) is None):
+        timing["issue"] = "invalid_or_inconsistent_timestamps"
+    else:
+        timing.update({"wall_seconds": elapsed, "cleanup_confirmed": True, "issue": None})
+    return timing, identity, receipt.get("attempt")
+
+
+def attempt_timing(source_path, source, replay_path, replay):
+    source_time, source_id, source_attempt = dispatch_timing(source_path, source, "source")
+    replay_time, replay_id, replay_attempt = dispatch_timing(replay_path, replay, "replay")
+    if source_id and replay_id:
+        if (any(source_id[key] != replay_id[key] for key in ("campaignId", "candidateId", "participantId", "taskId"))
+                or source_attempt != replay_attempt):
+            raise ValueError("Dispatch timing phases belong to different attempts")
+    complete = source_time["cleanup_confirmed"] and replay_time["cleanup_confirmed"]
+    gap = timing_seconds(source_time["finished_at"], replay_time["started_at"]) if complete else None
+    issue = (source_time["issue"] or replay_time["issue"] or
+             ("overlapping_or_inconsistent_phases" if gap is None else None))
+    wall = timing_seconds(source_time["started_at"], replay_time["finished_at"]) if not issue else None
+    return {"source": source_time, "replay": replay_time, "wall_seconds": wall, "issue": issue,
+        "between_phases_seconds": gap,
+        "before_source_trial_seconds": timing_seconds(source_time["started_at"], source.get("started_at")) if complete else None,
+        "after_replay_trial_seconds": timing_seconds(replay.get("finished_at"), replay_time["finished_at"]) if complete else None,
+        "definitions": {
+            "trial_lifecycle_seconds": "Source trial started_at through replay trial finished_at, including the intervening gap. Legacy end_to_end_seconds is an alias of this boundary.",
+            "attempt_wall_seconds": "Source dispatch receipt started_at through replay receipt finished_at after confirmed cleanup/settlement, including capacity wait and all phase gaps. Excludes controller process startup before the source receipt and report writing after the replay receipt. Unknown unless both receipts match their jobs/results and confirm cleanup.",
+            "phase_wall_seconds": "Each phase receipt started_at through finished_at after confirmed cleanup/settlement. Failed execution with confirmed cleanup remains measurable. Phase spans are not summed across concurrent attempts."}}
+
+
 def merge_trial(source, replay, replay_directory):
     if Path(source["task"]).name != Path(replay["task_name"]).name:
         raise ValueError("Source and replay tasks differ")
@@ -94,6 +169,7 @@ def merge_trial(source, replay, replay_directory):
     if raw_source.get("started_at") and replay.get("finished_at"):
         end_to_end = (datetime.datetime.fromisoformat(replay["finished_at"]) -
                       datetime.datetime.fromisoformat(raw_source["started_at"])).total_seconds()
+    timing = attempt_timing(source["result"], raw_source, replay_directory / "result.json", replay)
     return {**source, "reward": reward, "score": reward if reward is not None else 0,
         "exception": source["exception"] or exception.get("exception_type"),
         "error": source["error"] or exception.get("exception_message"),
@@ -103,6 +179,8 @@ def merge_trial(source, replay, replay_directory):
         "source_trial_seconds": source["trial_seconds"],
         "replay_trial_seconds": duration(replay), "replay_verifier_seconds": duration(replay.get("verifier")),
         "end_to_end_seconds": end_to_end,
+        "trial_lifecycle_seconds": end_to_end,
+        "attempt_wall_seconds": timing["wall_seconds"], "attempt_timing": timing,
         "replay": {"result": str((replay_directory / "result.json").resolve()), "details": replay_info,
             "exception": exception.get("exception_type"), "infrastructure_issue": infrastructure},
         "score_authority": "unmodified official PatchReplayAgent and verifier in a fresh sandbox"}
@@ -129,7 +207,7 @@ def summarize_repository(manifest, jobs_root, requests):
             source = data["trials"][0]
             if Path(source["task"]).name != row["task"]:
                 raise ValueError("Source task differs from frozen task")
-            calls_by_attempt.append({"source_job": row["source_job"], "metrics": source["metrics"]})
+            calls_by_attempt.append({"source_job": row["source_job"], "metrics": source["metrics"], "agent_seconds": source["agent_seconds"]})
             replay_job = jobs_root / row["replay_job"]
             replay_results = list(replay_job.glob("*/result.json"))
             if len(replay_results) > 1:
@@ -143,8 +221,10 @@ def summarize_repository(manifest, jobs_root, requests):
             merged.update({"source_job": row["source_job"], "replay_job": row["replay_job"]})
             trials.append(merged)
         summaries.append(finish_summary({"job": participant, "models": [manifest["model"]],
-            "ungraded_sources": ungraded, "unstarted_sources": unstarted, "completed_source_usage": calls_by_attempt},
+            "ungraded_sources": ungraded, "unstarted_sources": unstarted, "completed_source_usage": calls_by_attempt,
+            "source_tool_usage": aggregate_tool_usage(trials + [item["source"] for item in ungraded])},
             len(planned), trials, pending))
+    verify_unique_attribution(summaries)
     return summaries
 
 
@@ -157,13 +237,15 @@ def main():
     budget = json.loads((root / "campaign/budget.json").read_text())
     manifest = json.loads(args.manifest.read_text())
     selected = comparison_manifest(manifest)
+    exposure = task_exposure(manifest, root / "jobs")
     coverage = image_selection_coverage(manifest)
     jobs = summarize_repository(selected, root / "jobs", budget["requests"])
     report = {"generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "analysis_implementation": {name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
-                                    for name in ("repository_report.py", "report.py", "metrics.py")},
+                                    for name in ("repository_report.py", "report.py", "metrics.py", "task_exposure.py", "request_identity.py", "tool_metrics.py")},
         "manifest": str(args.manifest.resolve()), "definition": manifest, "selected_attempts": selected["attempts"], "jobs": jobs,
         "validation_coverage": coverage,
+        "task_exposure": exposure,
         "campaign": {"limit_usd": budget["limitUsd"], "requests": len(budget["requests"]),
             "estimated_known_cost_usd": sum(row["estimatedUsd"] or 0 for row in budget["requests"]),
             "committed_upper_usd": sum(row["budgetUsd"] for row in budget["requests"]),
@@ -171,7 +253,8 @@ def main():
         "comparisons": [compare_jobs(jobs[0], job) for job in jobs[1:]]}
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     lines = ["# SWE-bench Pro 仓库对照", "",
-        "成绩来自官方补丁重放器在全新容器中的判分。源任务的模型费用、运行异常和解题时间单独保留；重放未结束时成绩待定。完成时间另列源运行、重放及含间隔的端到端时间。"]
+        "成绩来自官方补丁重放器在全新容器中的判分。源任务的模型费用、运行异常和解题时间单独保留；重放未结束时成绩待定。trial 跨阶段耗时从源 trial 开始到 replay trial 结束（含中间空隙）；attempt 完整耗时从源 dispatch receipt 开始到 replay receipt 确认清理结算完成，含排队及阶段空隙。旧 end_to_end_seconds 保留为 trial 跨阶段耗时别名。"]
+    lines += ["", f'任务归属校验：{exposure["status"]}。独立留出题 {len(exposure["independent_held_out_tasks"])}，开发题 {len(exposure["development_tasks"])}，归属未知题 {len(exposure["unknown_tasks"])}。开发题和未知题的结果用于描述与诊断，不计入独立泛化证据。']
     if coverage:
         lines += ["", f'冻结验证组共 {coverage["validation_task_count"]} 题，本清单安排 {coverage["scheduled_task_count"]} 题。已检查 {coverage["checked_image_count"]} 个镜像清单，发现 {len(coverage["image_issues"])} 个获取问题；其余 {len(coverage["unchecked_tasks"])} 题尚未检查。镜像缺口单独保留，不计作 Agent 的成功或失败；本报告成绩仅覆盖当前安排的任务。']
         for issue in coverage["image_issues"]:
@@ -183,8 +266,8 @@ def main():
         requests = sum(row["metrics"]["requests"] for row in job["completed_source_usage"])
         lines.append(f'| {job["job"]} | {job["completed"]}/{job["planned"]} | {job["aggregate"]["successes"]} | {job["aggregate"]["clean_successes"]} | {requests} | ${cost:.6f} | {unknown} |')
     lines += ["", "请求数和费用包含已结束但仍待判分的源任务，包括拒绝、修复和失败的调用；执行中的源任务尚未归入这两列，实时预算占用见 JSON campaign。", "",
-        "| Agent / 已判分任务 | 官方 reward | 异常 | 模型请求数 | 解题秒数 | 模型费用美元 | 重放 verifier 秒数 | 端到端秒数 |",
-        "|---|---:|---|---:|---:|---:|---:|---:|"]
+        "| Agent / 已判分任务 | 官方 reward | 异常 | 模型请求数 | 解题秒数 | 模型费用美元 | 重放 verifier 秒数 | trial 跨阶段秒数 | attempt 完整秒数 |",
+        "|---|---:|---|---:|---:|---:|---:|---:|---:|"]
     def shown(value, digits=2):
         return f"{value:.{digits}f}" if value is not None else "待定"
     for job in jobs:
@@ -192,7 +275,7 @@ def main():
             task = re.sub(r"-[0-9a-f]{40}.*$", "", Path(trial["task"]).name.removeprefix("instance_"))
             label = job["job"] + " / " + task
             cost = trial["metrics"]["known_cost_usd"] if trial["metrics"]["unknown_cost_requests"] == 0 else None
-            lines.append(f'| {label} | {shown(trial["reward"], 0)} | {trial["exception"] or "无"} | {trial["metrics"]["requests"]} | {shown(trial["agent_seconds"])} | {shown(cost, 6)} | {shown(trial["replay_verifier_seconds"])} | {shown(trial["end_to_end_seconds"])} |')
+            lines.append(f'| {label} | {shown(trial["reward"], 0)} | {trial["exception"] or "无"} | {trial["metrics"]["requests"]} | {shown(trial["agent_seconds"])} | {shown(cost, 6)} | {shown(trial["replay_verifier_seconds"])} | {shown(trial["trial_lifecycle_seconds"])} | {shown(trial["attempt_wall_seconds"])} |')
     lines += ["", "| Agent / 已判分任务 | 请求数 | 模型阶段秒数 | 实际输入峰值 token | 缓存命中率 | 缓存写入费用 |",
         "|---|---:|---:|---:|---:|---:|"]
     for job in jobs:
@@ -210,6 +293,7 @@ def main():
         shown = [f'{ratios[key]:.4f}' if ratios[key] is not None else "待定" for key in ("model_requests", "agent_seconds", "cost_usd")]
         lines.append(f'| {comparison["reference"]} → {comparison["candidate"]} | {"是" if comparison["complete"] else "否"} | {comparison["jointly_solved_tasks"]} | {shown[0]} | {shown[1]} | {shown[2]} |')
     lines += ["", "完整请求数和费用含失败尝试，缺失用量保持未知。效率比仅取双方均正常成功的同题，按题等权；小于 1 表示候选在该指标上较低。请求数、完成耗时与总费用逐项比较，单项下降不能代替整体效率结论。缓存、输入/输出/推理、工具错误及上下文指标见 JSON。工具调用按 tool_call_scope 标明层级：ScriptAct 是底层能力操作，ATIF 是外层模型工具调用；Codex 原生命令及文件修改操作另列 native_operations，各层不直接互比。单次任务不能确立总体领先。", ""]
+    lines += tool_usage_markdown(jobs)
     args.output.with_suffix(".md").write_text("\n".join(lines))
     print(json.dumps({"report": str(args.output), "completed": sum(job["completed"] for job in jobs)}))
 

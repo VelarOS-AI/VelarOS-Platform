@@ -26,23 +26,31 @@ describe('Model profiles and usage common layer', () => {
   test('normalizes provider usage and calculates configured price', () => {
     const usage = modelUsage.normalizeRunUsage(
       {
-        inputTokens: { total: 1_000, cacheRead: 200 },
+        inputTokens: { total: 1_000, cacheRead: 200, cacheWrite: 0 },
         outputTokens: { total: 500, reasoning: 100 },
       },
-      { inputPerMillion: 2, outputPerMillion: 4 }
+      { inputPerMillion: 2, outputPerMillion: 4, cacheReadPerMillion: 0.5 }
     )
     expect(usage).toEqual({
       inputTokens: 1_000,
       outputTokens: 500,
       reasoningTokens: 100,
       cachedInputTokens: 200,
+      cacheWriteTokens: 0,
       totalTokens: 1_500,
-      cost: 0.004,
+      cost: 0.0037,
+      knownCost: 0.0037,
+      costCoverage: 'complete',
+      tokenCoverage: { input: true, output: true, cacheRead: true, cacheWrite: true },
     })
-    expect(modelUsage.summarize([usage, { ...usage, cost: null }])).toMatchObject({
+    expect(
+      modelUsage.summarize([usage, { ...usage, cost: null, knownCost: 0, costCoverage: 'unknown' }])
+    ).toMatchObject({
       runs: 2,
       totalTokens: 3_000,
-      cost: 0.004,
+      cost: null,
+      knownCost: 0.0037,
+      unknownCostRuns: 1,
       lastContextTokens: 1_000,
     })
   })

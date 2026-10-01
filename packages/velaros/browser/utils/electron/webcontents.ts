@@ -7,9 +7,14 @@ import { BrowserTuning } from '../tuning'
 
 /** 把鼠标键翻成 CDP 的 buttons 位掩码。 */
 export function cdpMouseButtonsMask(button: BrowserMouseButton): number {
-  if (button === 'right') return 2
-  if (button === 'middle') return 4
-  return 1
+  switch (button) {
+    case 'right':
+      return 2
+    case 'middle':
+      return 4
+    default:
+      return 1
+  }
 }
 
 /** 内嵌页面读诊断的条数钳进合法区间。 */

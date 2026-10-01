@@ -1,6 +1,6 @@
 /**
  * 代码面 `sandbox` 命名空间的五个操作：`SandboxOperations` 与整个进程唯一的 `sandboxOperations`。接口 `SandboxOperationsApi` 在本文件的类上方。
- * 这里只做几件事：把模型给的作用域交给宿主端口解析、要问人的先问（落回、镜像里的危险命令）、调端口、把回执整成模型看的样子——一个文件系统调用都不发，
+ * 这里只做几件事：把模型给的作用域交给宿主端口解析、镜像里的危险命令先问、调端口、把回执整成模型看的样子——一个文件系统调用都不发，
  * 建镜像、跑命令、算差量、落回全在宿主那一侧（本机实现是 `./local` 入口的本机演练沙箱）。
  */
 
@@ -33,7 +33,7 @@ import { rehearsalSandboxRules } from './RehearsalSandboxRules.js'
  * 实现是 `SandboxOperations`，整个进程只有一份（`sandboxOperations`）。
  *
  * @AgentView
- * 演练沙箱：把一个目录镜像出来，命令在镜像里跑、写不到外面；看过差量、用户点头之后才落回源目录。
+ * 演练沙箱：把一个目录镜像出来，命令在镜像里跑、写不到外面；核对差量后调用 apply 落回源目录。
  */
 export interface SandboxOperationsApi {
   /**
@@ -83,7 +83,11 @@ export class SandboxOperations implements SandboxOperationsApi {
     ctx.abortSignal.throwIfAborted()
     // 作用域在端口里：系统空间的实现收任意路径，项目空间的实现钳在项目内、越界就拒绝。
     const source = await ctx.sandbox.resolveSource(input.source)
-    return ctx.sandbox.createSandbox({ source, network: input.network, ignored: input.ignored })
+    ctx.abortSignal.throwIfAborted()
+    return ctx.sandbox.createSandbox(
+      { source, network: input.network, ignored: input.ignored },
+      ctx.abortSignal
+    )
   }
 
   public async run(
@@ -98,6 +102,7 @@ export class SandboxOperations implements SandboxOperationsApi {
     const request = this.rules.prepareRun(id, input.command)
     if (request)
       await ctx.approval.awaitConfirmation(request.message, ctx.abortSignal, request.options)
+    ctx.abortSignal.throwIfAborted()
     // 输出不折叠：跟 velaros:shell 同一个只守内存的上限。
     const outcome = await ctx.sandbox.runInSandbox(
       {
@@ -115,7 +120,7 @@ export class SandboxOperations implements SandboxOperationsApi {
     ctx.abortSignal.throwIfAborted()
     const options: SandboxDiffOptions = { sandboxId: sandboxIdOf(input?.id) }
     if (isArray(input.paths)) options.paths = input.paths
-    return ctx.sandbox.diffSandbox(options)
+    return ctx.sandbox.diffSandbox(options, ctx.abortSignal)
   }
 
   public async apply(
@@ -125,7 +130,11 @@ export class SandboxOperations implements SandboxOperationsApi {
     ctx.abortSignal.throwIfAborted()
     sandboxIdOf(input?.id)
     // 「核对过的就是要落的」：点名的路径按完整的三列核，再把同一个指纹交给宿主，镜像在这之后又变过就整批不落。
-    const changes = await ctx.sandbox.diffSandbox({ sandboxId: input.id, textDiffs: false })
+    const changes = await ctx.sandbox.diffSandbox(
+      { sandboxId: input.id, textDiffs: false },
+      ctx.abortSignal
+    )
+    ctx.abortSignal.throwIfAborted()
     if (!this.rules.prepareApply({ diff: changes, paths: input.paths }))
       return {
         sandboxId: input.id,
@@ -134,11 +143,14 @@ export class SandboxOperations implements SandboxOperationsApi {
         deleted: [],
         skippedGit: changes.gitChanged,
       }
-    return ctx.sandbox.applySandbox({
-      sandboxId: input.id,
-      paths: input.paths,
-      fingerprint: changes.fingerprint,
-    })
+    return ctx.sandbox.applySandbox(
+      {
+        sandboxId: input.id,
+        paths: input.paths,
+        fingerprint: changes.fingerprint,
+      },
+      ctx.abortSignal
+    )
   }
 
   public async discard(
@@ -146,7 +158,7 @@ export class SandboxOperations implements SandboxOperationsApi {
     ctx: SandboxOperationContext
   ): Promise<SandboxDiscardResult> {
     ctx.abortSignal.throwIfAborted()
-    return ctx.sandbox.discardSandbox(sandboxIdOf(input?.id))
+    return ctx.sandbox.discardSandbox(sandboxIdOf(input?.id), ctx.abortSignal)
   }
 }
 

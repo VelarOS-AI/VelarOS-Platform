@@ -40,6 +40,8 @@ export interface AgentProjectStoredTransaction extends Omit<
 }
 
 export interface AgentProjectApplyResult {
+  /** 文件已提交后的附带诊断；不改变 status 与可恢复身份。 */
+  notes?: string[]
   transactionId: string
   changedFiles: string[]
   oldRevisions: Record<string, string>

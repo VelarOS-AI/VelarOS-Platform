@@ -142,7 +142,7 @@ export class OfficeMarkdownOperations implements OfficeMarkdownOperationsApi {
         input.overwrite
       )
       const markdown = await readFile(tempOutputPath, 'utf8')
-      const written = await writeOfficeFile(output, markdown)
+      const written = await writeOfficeFile(output, markdown, input.ctx.abortSignal)
       const limited = truncateMarkdown(markdown, input.maxChars)
       return {
         path: input.inputPath,

@@ -20,7 +20,7 @@ import type {
 } from '../../types/office.js'
 import type { PptxBackground } from '../../types/pptx.js'
 import { officeError } from '../../utils/errors.js'
-import { writeOfficeFile, writtenReceipt } from '../../utils/paths.js'
+import { writeOfficeFile } from '../../utils/paths.js'
 import { normalizePresentationSlides } from '../../utils/presentation/content.js'
 import { addSlideElements } from '../../utils/presentation/elements.js'
 import { buildPresentationTheme } from '../../utils/presentation/templates.js'
@@ -103,14 +103,18 @@ export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
         numbering: buildWordNumbering(),
         sections: [{ children: buildWordChildren({ blocks }) }],
       })
-      return appendWordDocumentBuffer(output, await Packer.toBuffer(fragmentDocument))
+      return appendWordDocumentBuffer(
+        output,
+        await Packer.toBuffer(fragmentDocument),
+        ctx.abortSignal
+      )
     }
     // 新建模式直接构建完整 document；抬头已经写了 title，正文开头同名的一级标题不再写一遍。
     const document = buildWordDocument({
       ...input,
       blocks: withoutRepeatedTitle(blocks, input.title),
     })
-    return writeOfficeFile(output, await Packer.toBuffer(document))
+    return writeOfficeFile(output, await Packer.toBuffer(document), ctx.abortSignal)
   }
 
   public async createPresentation(
@@ -152,8 +156,8 @@ export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
       if (slideInput.notes) slide.addNotes(slideInput.notes)
     }
 
-    await pptx.writeFile({ fileName: output.path })
-    return writtenReceipt(output)
+    const bytes = await pptx.write({ outputType: 'nodebuffer' })
+    return writeOfficeFile(output, bytes as Uint8Array, ctx.abortSignal)
   }
 
   public async createSpreadsheet(
@@ -210,7 +214,7 @@ export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
 
     // ExcelJS 输出 ArrayBuffer，最终转成 Buffer 交给共享写入逻辑。
     const buffer = await workbook.xlsx.writeBuffer()
-    return writeOfficeFile(output, Buffer.from(buffer))
+    return writeOfficeFile(output, Buffer.from(buffer), ctx.abortSignal)
   }
 
   /** 幻灯片背景：颜色与 base64 原样交给 PptxGenJS，图片路径先按工作区根解析成真实路径。 */

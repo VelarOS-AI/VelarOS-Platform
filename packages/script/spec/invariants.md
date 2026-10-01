@@ -4,7 +4,7 @@
 
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
-| INV-1 | 先检查后执行：程序是 JavaScript，执行之前**只查语法**、核对每个 import 都落得到，**不查类型**——类型推断上的挑剔（空数组推成 `never[]`、字面量拓宽）只会把对的程序整轮弹回去；字段名写错读到 undefined，入参形状错由能力按 schema 当场拒绝。没过时程序**一行都不执行**，回的是诊断而不是结果；诊断的行号与模型写的那一行对得上，中间不转译所以行号不会错位 | 测试 | `spec/acceptance.test.ts` |
+| INV-1 | 先检查后执行：程序是 JavaScript，执行之前查语法、核对每个 import 都落得到，并按 INV-41 拦截标准 output 的确定形状矛盾；**不做整体类型检查**——类型推断上的挑剔（空数组推成 `never[]`、字面量拓宽）只会把对的程序整轮弹回去；字段名写错读到 undefined，入参形状错由能力按 schema 当场拒绝。没过时程序**一行都不执行**，回的是诊断而不是结果；诊断的行号与模型写的那一行对得上，中间不转译所以行号不会错位 | 测试 | `spec/acceptance.test.ts` |
 | INV-2 | 程序够不到宿主的环境能力：读写文件、起子进程在隔离里一律失败，程序只能经能力端口做事 | 测试 | `spec/acceptance.test.ts` |
 | INV-3 | 到时必停：超过 `timeoutMs` 的程序一定被终止并回 `TIMEOUT`，死循环也不例外；`signal` 触发时同样停 | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 拒绝是可捕获的异常：能力端口报错在程序里是一个能 `try/catch` 的 throw，不是一份静默的空回执；**拒绝**（用户或策略说了不，码里带 DENIED、PERMISSION）同时进回给模型的 `notices`，程序把异常吞了模型也知道；找不到、不唯一这类是调用自己的结果，程序接得住，不在 `notices` 里再回放；程序正是死在那次拒绝上时 `failed` 已经说了，不重复 | 测试 | `spec/acceptance.test.ts` |
@@ -29,9 +29,27 @@
 | INV-27 | 程序数据模块 velaros:program 只导出本次 input 与 blobs，声明和运行时一致；模块模板统一由 velaros:system 的 modules.describe 按授权提供 | 测试 | `spec/acceptance.test.ts` |
 | INV-33 | 附属模块来自提交的 modules，按相对路径解析并在单次运行中只初始化一次；语法诊断包含附属模块路径、行列与代码帧，运行错误可追踪 | 测试 | `spec/acceptance.test.ts` |
 | INV-34 | output 在调用时捕获无环 JSON 快照，原始归档与有界预览分离；失败和中止保留已捕获块，采集问题不能被 catch 隐藏 | 测试 | `test/output.test.ts` |
-| INV-35 | output 展示按类型保留结构和省略范围，正文、转义与目录总量守展示预算；短块用不完的份额按既定优先级返还给尚未完整展示的块，保留其余块已分配的正文及显式上限；超出时在预算内选完整行或条目，结构化结果的长文本字段共享剩余空间并以完整行片段和原值路径呈现；摘要同时匹配原值和任务代次 | 测试 | `test/output.test.ts` |
+| INV-35 | output 展示按类型保留结构和省略范围，prompt 按所选表示的 UTF-16 总长守展示预算；JSON 默认兼容，显式 text 保留 JSON 基线选中的块和正文，JSON/list 保持基线，text/code 只在同一原文范围覆盖证明下扩展；不靠增加目录准入挤掉原内容，full、引用、失败信息及显式全局上限（含零）优先；未配置全局时，正数 view.maxChars 通过 Script 单一申请接口按有界正文编码和引用目录计量，仍受宿主份额及 200000 总上限约束；无申请、reference 与 summary 保持默认份额；短块用不完的份额按既定优先级返还，超出时选完整行或条目，摘要同时匹配原值和任务代次 | 测试 | `test/output.test.ts` |
 | INV-36 | 受限输出编辑只接受真实导入的顶层字面量声明，保持采集和用途不变，不执行脚本 | 测试 | `test/output.test.ts` |
 | INV-37 | output 声明里写的上限与 ScriptOutputLimits 一致，输出校验恰好在这些边界上放行与拒绝 | 测试 | `test/output.test.ts` |
 | INV-39 | 我们自己写的代码模版另走 `typecheck`，照声明做完整类型检查：模版会原样教给模型，写错一个键模型照着写就跟着错。模型交的程序不走这条 | 测试 | `spec/acceptance.test.ts` |
 
 | INV-28 | 宿主进程注入只改变启动与消息运输；共享父端在预取消、启动/发送故障、终态和中断时回收一次并等待退出，完成后不发送迟到能力回执 | 测试 | `test/subprocess.test.ts` |
+
+## INV-40 原生 ES 模块链接与绑定
+
+源码由 QuickJS 的原生模块系统链接；具名与命名空间 import 保留 live bindings，静态依赖在正文前执行，循环依赖按语言规则链接，顶层 await 会等待依赖完成。附属模块只按本次提供的源文装载一次；能力模块由授权表生成。不得把 import/export 降级成对象快照与顺序函数调用。
+
+验证：`test/module-semantics.test.ts`，原生模块命名空间只读且不可扩展，数据对象仍递归冻结由 INV-27 验证。
+
+## INV-41 标准输出的确定形状矛盾在工具执行前拒绝
+
+执行 `check` 只对真实绑定标准 `velaros.output` 的调用增加窄预检：调用现场普通 options 的 `type` 确定为 text/code 或 list，且值由直接构造、不可变 const 引用或所有条件分支证明为不兼容形状时，返回原始源码位置的 2345 诊断，真实 session 不启动 runner、不调用能力。标准静态 import、别名、命名空间、字面量动态 import 的 const 解构与附属模块遵守同一合同。
+
+可变属性、数组元素、函数返回、结构类型、泛型、any/unknown、混合分支、动态 options、getter/spread/动态键与局部自定义 output 保留既有运行时校验。普通 JavaScript 的其他类型推断不用于拒绝程序；不改输出值、类型选择或采集额度。验证：`test/output.test.ts` 的 INV-41 真实 session 零能力调用反例、合法动态值执行和原有运行时错误回执。
+
+## INV-42 受信宿主完整编码与正文复用
+
+宿主可按原 key/contentHash 提供完整等价文字编码；仅显式 text 展示、无摘要或选择视图时采用。原值、原指纹、原归档与采集上限不变，所有元数据及正文由同一 serializer 计量；放不下保持引用或原基线，不把片段标成 full。模型不能提供此宿主接口。移除已交付正文只匹配相同块身份，保留未匹配正文、引用、问题以及全局与块上限；不修改已冻结投影。
+
+验证：`test/output.test.ts` 的 INV-35 宿主编码、身份与预算反例。

@@ -1,7 +1,16 @@
 import type { LanguageModelV3CallOptions, SharedV3ProviderOptions } from '@ai-sdk/provider'
 import type { ModelMessage } from 'ai'
 
-import { isArray, isEmpty, isPlainObject, isPresent, isString } from '@velaros-ai/core'
+import {
+  isArray,
+  isEmpty,
+  isFalse,
+  isPlainObject,
+  isPresent,
+  isString,
+  optionalWhen,
+} from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { ModelHistoryMessage } from '@velaros-ai/kernel'
 
 import type { PromptCacheWireOptions } from '../../types/adapters'
@@ -22,6 +31,7 @@ import type { PromptCacheWireOptions } from '../../types/adapters'
  *    漏剥会让服务商收到未知字段并拒绝整次请求。
  * 2. **调用方显式写的线上字段永远赢**。`hasExplicitProviderPromptCacheKey` /
  *    `hasProviderWireCacheControl` 命中时本层不覆盖也不追加——这是"产品默认值不得压过显式意图"。
+ *    宿主明确禁用 OpenAI 断点时，手写断点按配置冲突拒绝，不静默改写。
  * 3. **会话缓存键只发给认它的线路**。同样走 OpenAI SDK 的兼容线路未必认 `prompt_cache_key`：
  *    Groq 回 400、Mistral 回 422，整次请求作废。所以适配器用 `PromptCacheWireOptions.sessionKey`
  *    声明认不认，不认的只剥掉内部标记。
@@ -111,6 +121,11 @@ function applyPromptPromptCacheProviderOptions(
         : Number(hasOpenAiBreakpoint(message.providerOptions))),
     0
   )
+  if (isFalse(wire.openaiBreakpoints) && existing > 0)
+    throw new AppError(
+      'VALIDATION',
+      '当前供应商配置禁用 OpenAI 显式缓存断点，与调用方显式断点冲突。'
+    )
   const boundaries = new Set(
     wire.openaiBreakpoints && existing < 3
       ? prompt
@@ -165,13 +180,9 @@ function withOpenAiBreakpoint(message: unknown): unknown {
   const options = (existing: unknown) =>
     hasOpenAiBreakpoint(existing)
       ? existing
-      : mergeProviderOptionRecord(
-          isPlainObject(existing) ? existing : undefined,
-          OpenAiProviderKey,
-          {
-            promptCacheBreakpoint: { mode: 'explicit' },
-          }
-        )
+      : mergeProviderOptionRecord(optionalWhen(isPlainObject, existing), OpenAiProviderKey, {
+          promptCacheBreakpoint: { mode: 'explicit' },
+        })
   if (message.role === 'system')
     return { ...message, providerOptions: options(message.providerOptions) }
   if (!isArray(message.content)) return message

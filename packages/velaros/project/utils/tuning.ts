@@ -168,6 +168,8 @@ export const ProjectTuning = Object.freeze({
     reportedMatches: 10,
     /** 首个分歧行的摘录最多多少字符；超长行以分歧处为中心截窗。 */
     mismatchExcerptChars: 160,
+    /** 零匹配回执中候选区域原文的 UTF-16 字符上限；超出时明确标记截断。 */
+    candidateTextChars: 800,
     /** 找匹配所属的外层行时最多往上看几行。 */
     enclosingLookbackLines: 200,
     /** 外层行的摘录最多多少字符。 */

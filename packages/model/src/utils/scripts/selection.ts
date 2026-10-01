@@ -5,6 +5,7 @@ import {
   isPlainObject,
   isPresent,
   isString,
+  isUndefined,
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
@@ -51,6 +52,9 @@ export function parseProviderSelection(value: unknown): ModelProviderSelection {
     baseURL: optionalString(record.baseURL),
     adapter: parseAdapter(record.adapter),
     reasoningLevel: parseReasoningLevel(record.reasoningLevel),
+    openaiExplicitCacheBreakpoints: parseOpenAiExplicitCacheBreakpoints(
+      record.openaiExplicitCacheBreakpoints
+    ),
   }
 }
 
@@ -107,7 +111,17 @@ function parseRuntimeConfig(value: unknown): AgentProviderRuntimeConfig {
     defaultModel: optionalString(record.defaultModel),
     adapter: parseAdapter(record.adapter),
     providerScript: parseProviderScriptManifest(record.providerScript, provider),
+    openaiExplicitCacheBreakpoints: parseOpenAiExplicitCacheBreakpoints(
+      record.openaiExplicitCacheBreakpoints
+    ),
   }
+}
+
+/** 显式断点是供应商能力配置，缺席保留默认；非布尔值不静默启用或禁用。 */
+function parseOpenAiExplicitCacheBreakpoints(value: unknown): boolean | undefined {
+  if (isUndefined(value)) return undefined
+  if (isBoolean(value)) return value
+  throw new AppError('VALIDATION', 'openaiExplicitCacheBreakpoints 必须是布尔值。')
 }
 
 /**

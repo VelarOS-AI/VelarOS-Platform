@@ -35,7 +35,26 @@ test('package root exposes the store factory and the three operations', async ()
       },
       context
     )
-    assert.deepEqual(saved, { id: 'consumer', created: true })
+    assert.equal(saved.id, 'consumer')
+    assert.equal(saved.created, true)
+    assert.match(saved.revision, /^[a-f0-9]{64}$/)
+    const [existing] = await memoryOperations.list(context)
+    assert.equal(existing.revision, saved.revision)
+    const updated = await memoryOperations.save(
+      { ...existing, content: 'updated', expectedRevision: saved.revision },
+      context
+    )
+    assert.equal(updated.created, false)
+    assert.match(updated.revision, /^[a-f0-9]{64}$/)
+    assert.notEqual(updated.revision, saved.revision)
+    await assert.rejects(
+      memoryOperations.save(
+        { ...existing, content: 'stale', expectedRevision: saved.revision },
+        context
+      ),
+      { code: 'CONFLICT' }
+    )
+    assert.equal((await memoryOperations.list(context))[0].content, 'updated')
     assert.deepEqual(
       (await memoryOperations.list(context)).map((entry) => entry.id),
       ['consumer']

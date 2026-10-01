@@ -68,7 +68,11 @@ class ProviderRequestCompiler implements ProviderRequestCompilerApi {
       images + opaque > raw.tokens
     )
       throw new AppError('VALIDATION', '模型驱动返回了无效预算')
-    const measured = { text: raw.tokens - images - opaque, images, ...(opaque ? { opaque } : {}) }
+    const measured: { text: number; images: number; opaque?: number } = {
+      text: raw.tokens - images - opaque,
+      images,
+    }
+    if (opaque) measured.opaque = opaque
     // 精确计数不需要校准；图片和不透明状态容量仍按驱动给的数。
     const estimate =
       calibration && calibration.textRatio < 1 && raw.precision === 'estimate'

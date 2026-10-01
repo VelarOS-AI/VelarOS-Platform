@@ -219,3 +219,31 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScopedBridgeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_signed_attempt_is_forwarded_without_substitution_by_controller_token(self):
+        from request_identity import attempt_credential
+        identity = dict(campaignId='campaign', candidateId='candidate', participantId='bridge',
+            taskId='task', attemptId='attempt', jobId='job', phase='source')
+        token = attempt_credential(identity, 'controller-fixture')
+        seen = []
+        app = FastAPI()
+
+        @app.post('/v1/responses')
+        async def upstream(request: Request):
+            seen.append(request.headers.get('authorization'))
+            await request.json()
+            return response(2)
+
+        async with serve(app) as upstream_url:
+            bridge = create_app('controller-fixture', upstream_url + '/v1', require_identity=True)
+            async with serve(bridge) as bridge_url:
+                async with httpx.AsyncClient(base_url=bridge_url, trust_env=False) as client:
+                    body = {'model': 'gpt-6-sol', 'max_tokens': 200, 'messages': [{'role': 'user', 'content': 'fixture'}]}
+                    self.assertEqual((await client.post('/v1/messages', headers={'x-api-key': token}, json=body)).status_code, 200)
+                    self.assertEqual(seen, ['Bearer ' + token])
+                    for credential in ('controller-fixture',):
+                        result = await client.post('/v1/messages', headers={'x-api-key': credential}, json=body)
+                        self.assertIn(result.status_code, (401, 403))
+                    self.assertEqual(len(seen), 1)

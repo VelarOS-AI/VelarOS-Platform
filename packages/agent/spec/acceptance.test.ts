@@ -6,6 +6,7 @@ import type { ContextState } from '@velaros-ai/context'
 import type { ContextStorage } from '@velaros-ai/context'
 import { createContextRuntime, createContextView } from '@velaros-ai/context'
 import { AppError } from '@velaros-ai/core/error'
+import { modelRequestEncoder } from '@velaros-ai/kernel'
 
 import type { ActChildSession } from '../src/contract/requires.js'
 import type { ActRunServiceOptions } from '../src/contract/requires.js'
@@ -1117,5 +1118,218 @@ test('failed applied receipt persistence keeps admission truthful and prevents m
     inputId: 'unapplied',
   })
   expect(calls).toBe(0)
+  await service.close()
+})
+
+test('INV-47 retrying an interrupted unaccepted frame resets decoding and never repeats earlier effects', async () => {
+  const f = runFixture()
+  const executed: string[] = []
+  let requests = 0
+  let decoded = 0
+  const rejected = JSON.stringify({
+    message: 'unaccepted fixture',
+    done: false,
+    submission: { code: 'must-not-execute' },
+  })
+  const history: string[] = []
+  f.options.protocol = {
+    open: () => {
+      let text = ''
+      return {
+        instructions: 'fixture',
+        reset() {
+          text = ''
+        },
+        push(delta) {
+          text += delta
+          return []
+        },
+        finish() {
+          decoded++
+          return { ...JSON.parse(text), events: [] }
+        },
+      }
+    },
+  }
+  f.options.model.stream = async function* (request) {
+    history.push(JSON.stringify(request))
+    const index = requests++
+    if (index === 1) {
+      yield { type: 'text', text: rejected }
+      yield {
+        type: 'error',
+        code: 'provider',
+        message: 'fixture transport ended before terminal',
+        retryAfterMs: 0,
+      }
+      return
+    }
+    yield {
+      type: 'text',
+      text: JSON.stringify(
+        index === 3
+          ? { message: 'done', done: true }
+          : {
+              message: 'work',
+              done: false,
+              submission: { code: index === 0 ? 'first' : 'second' },
+            }
+      ),
+    }
+    yield { type: 'usage', inputTokens: 19, outputTokens: 7 }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  f.options.execution.invoke = async (submission) => {
+    executed.push((submission as { code: string }).code)
+  }
+  const service = createActRunService(f.options)
+  const events = []
+  for await (const event of service.submit('work')) events.push(event)
+  expect(requests).toBe(4)
+  expect(decoded).toBe(3)
+  expect(executed).toEqual(['first', 'second'])
+  expect(events.filter((event) => event.type === 'turn')).toHaveLength(4)
+  expect(events.filter((event) => event.type === 'usage')).toHaveLength(3)
+  expect(events.filter((event) => event.type === 'rejected')).toHaveLength(1)
+  expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+  expect(history[2]).toBe(history[1])
+  expect(history.slice(2).some((body) => body.includes('must-not-execute'))).toBe(false)
+  const records = (await f.store.load('fault'))!.records
+  const responses = await Promise.all(
+    records
+      .filter((record) => record.title === 'model-response')
+      .map(async (record) => JSON.parse((await f.store.get('fault', record.objectId))!))
+  )
+  expect(responses.map((response) => response.status)).toEqual([
+    'accepted',
+    'rejected',
+    'accepted',
+    'accepted',
+  ])
+  expect(responses[1]).not.toHaveProperty('usage')
+  const raw = records.find((record) => record.title === 'model-response-raw')!
+  expect(await f.store.get('fault', raw.objectId)).toBe(rejected)
+  const retry = records.find((record) => record.title === 'model-retry')!
+  expect(JSON.parse((await f.store.get('fault', retry.objectId))!)).toMatchObject({
+    attempt: 1,
+    executed: false,
+  })
+  await service.close()
+})
+
+test('INV-47 interrupted response retries are bounded and permanent rejection or cancellation never retries', async () => {
+  for (const mode of ['transient', 'permanent', 'cancelled'] as const) {
+    const f = runFixture()
+    const controller = new AbortController()
+    let calls = 0
+    let executed = 0
+    f.options.execution.invoke = async () => {
+      executed++
+    }
+    f.options.model.stream = async function* () {
+      calls++
+      yield { type: 'text', text: 'complete-looking unaccepted fixture' }
+      if (mode === 'cancelled') controller.abort()
+      yield {
+        type: 'error',
+        code: 'provider',
+        message: 'fixture interrupted',
+        ...(mode === 'permanent' ? {} : { retryAfterMs: 0 }),
+      }
+    }
+    const service = createActRunService(f.options)
+    const events = []
+    for await (const event of service.submit('work', controller.signal)) events.push(event)
+    expect(calls).toBe(mode === 'transient' ? 3 : 1)
+    expect(executed).toBe(0)
+    expect(events.some((event) => event.type === 'accepted')).toBe(false)
+    expect(events.some((event) => event.type === 'usage')).toBe(false)
+    expect(events.at(-1)).toMatchObject({
+      type: 'state',
+      status: mode === 'cancelled' ? 'cancelled' : 'failed',
+    })
+    await service.close()
+  }
+})
+
+test('INV-48 each request continues the previous accepted one: sent frames stay in history, later frames render only changes, rewrites start over', async () => {
+  const f = runFixture()
+  const logical: Array<{ role: 'user' | 'assistant'; content: string; cacheBreakpoint?: boolean }> =
+    [
+      { role: 'user', content: 'segment base', cacheBreakpoint: true },
+      { role: 'user', content: 'task', cacheBreakpoint: true },
+    ]
+  let turn = 0
+  const requests: Array<ReturnType<typeof modelRequestEncoder.messages>> = []
+  const deltas: Array<{ body: string; previous: string }> = []
+  f.options.limits = { ...f.options.limits, turns: 8 }
+  f.options.frames = {
+    ...f.options.frames,
+    async project() {
+      const body = JSON.stringify({ turn, stable: 'same' })
+      return {
+        body,
+        images: [],
+        prompt: `full frame ${turn}`,
+        history: logical.map((message, index) =>
+          index === logical.length - 1 ? { ...message, cacheBreakpoint: true } : message
+        ),
+      }
+    },
+    delta(body, previous) {
+      deltas.push({ body, previous })
+      return `delta frame ${JSON.parse(body).turn}`
+    },
+  }
+  f.options.protocol = {
+    open: () => ({
+      instructions: 'fixture',
+      reset() {},
+      push() {
+        return []
+      },
+      finish() {
+        return turn >= 5
+          ? { message: 'done', done: true, events: [] }
+          : { message: 'work', done: false, submission: { code: 'work' }, events: [] }
+      },
+    }),
+  }
+  f.options.model.stream = async function* (request) {
+    requests.push(modelRequestEncoder.messages(request))
+    yield { type: 'text', text: `response ${turn}` }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  f.options.execution.invoke = async () => {
+    turn++
+    logical.push({ role: 'assistant', content: `response ${turn}` })
+    logical.push({ role: 'user', content: `result ${turn}` })
+    // 第三轮之后改写更早的结果（如容量不足退成引用卡），下一次请求只能完整重发
+    if (turn === 3) logical[3] = { role: 'user', content: 'result 1 reference card' }
+  }
+  const service = createActRunService(f.options)
+  for await (const event of service.submit('work')) expect(typeof event.type).toBe('string')
+  const text = (message: (typeof requests)[number][number]) =>
+    typeof message.content === 'string' ? message.content : JSON.stringify(message.content)
+  const extends_ = (next: (typeof requests)[number], previous: (typeof requests)[number]) =>
+    previous.every((message, index) => text(next[index]!) === text(message))
+  expect(requests).toHaveLength(6)
+  // 第 1 帧完整；第 2、3 帧把上一请求整段原样留在前面，只追加新条目和增量帧
+  expect(text(requests[0]!.at(-1)!)).toContain('full frame 0')
+  for (const index of [1, 2]) {
+    expect(extends_(requests[index]!, requests[index - 1]!)).toBe(true)
+    expect(text(requests[index]!.at(-1)!)).toContain(`delta frame ${index}`)
+  }
+  // 历史被改写后不再沿用，完整重发；之后又从这一次重新开始只往后加
+  expect(extends_(requests[3]!, requests[2]!)).toBe(false)
+  expect(text(requests[3]!.at(-1)!)).toContain('full frame 3')
+  for (const index of [4, 5]) {
+    expect(extends_(requests[index]!, requests[index - 1]!)).toBe(true)
+    expect(text(requests[index]!.at(-1)!)).toContain(`delta frame ${index}`)
+  }
+  expect(deltas.map((item) => JSON.parse(item.previous).turn)).toEqual([0, 1, 3, 4])
+  // 断点只沿用逻辑历史里的标记，另加上一请求的末尾，不随轮数累积
+  const marks = requests.at(-1)!.filter((message) => message.cacheBreakpoint)
+  expect(marks.length).toBeLessThanOrEqual(4)
   await service.close()
 })

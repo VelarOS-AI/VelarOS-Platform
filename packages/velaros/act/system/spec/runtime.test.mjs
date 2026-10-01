@@ -17,8 +17,8 @@ import {
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { SystemMembers } from '../../../dist/act/system/contract/constants.js'
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
-import { SystemMemoryOperations } from '../../../dist/act/system/impl/SystemMemoryOperations.js'
 import { SystemCatalog } from '../../../dist/act/system/impl/SystemCatalog.js'
+import { SystemMemoryOperations } from '../../../dist/act/system/impl/SystemMemoryOperations.js'
 import { done, turn } from '../../runtime/test/support/model-turn.mjs'
 
 const model = (stream) => ({
@@ -62,7 +62,19 @@ test('INV-2 系统命名空间和附属模块共用真实操作身份与输入/b
   const f = await fixture(t)
   const result = await execute(
     f.session,
-    `${prelude}import {input,blobs} from 'velaros:program';import {remember} from './note.js';const note=await remember(input.key,blobs.body);output({note,frozen:Object.isFrozen(system)&&Object.isFrozen(system.memory)});`,
+    `${prelude}
+import * as direct from 'velaros:system-memory';
+import {input,blobs} from 'velaros:program';
+import {remember} from './note.js';
+const note=await remember(input.key,blobs.body);
+const memory=system.memory;
+const update=memory.update;
+let mutationRejected=false;
+try{system.memory={};}catch{mutationRejected=true;}
+let memberMutationRejected=false;
+try{memory.update=()=>{};}catch{memberMutationRejected=true;}
+output({note,namespaceSealed:Object.isSealed(system),namespaceExtensible:Object.isExtensible(system),mutationRejected,memoryUnchanged:system.memory===memory,
+memberSealed:Object.isSealed(memory),memberExtensible:Object.isExtensible(memory),memberMutationRejected,updateUnchanged:memory.update===update,sameNamespace:memory===direct});`,
     {
       input: { key: 'plan' },
       blobs: { body: 'literal ` ${text} \\ 内容' },
@@ -73,7 +85,15 @@ test('INV-2 系统命名空间和附属模块共用真实操作身份与输入/b
     }
   )
   assert.equal(result.value.note.revision, 1)
-  assert.equal(result.value.frozen, true)
+  assert.equal(result.value.namespaceSealed, true)
+  assert.equal(result.value.namespaceExtensible, false)
+  assert.equal(result.value.mutationRejected, true, JSON.stringify(result.value))
+  assert.equal(result.value.memoryUnchanged, true)
+  assert.equal(result.value.memberSealed, true)
+  assert.equal(result.value.memberExtensible, false)
+  assert.equal(result.value.memberMutationRejected, true)
+  assert.equal(result.value.updateUnchanged, true)
+  assert.equal(result.value.sameNamespace, true)
   const journal = await createContextInvocationJournal(f.storage).list('s')
   assert.deepEqual(
     journal.map((item) => [item.prepared.binding.moduleId, item.prepared.operation]),
@@ -668,6 +688,9 @@ test('field recall refuses a legacy host that ignores its selector while whole a
   const operations = new SystemMemoryOperations()
   assert.equal(await operations.read({ ref: 'result' }, ctx), page)
   await assert.rejects(operations.read({ ref: 'result', pointer: '/output/blocks/0/value' }, ctx), {
+    code: 'UNAVAILABLE',
+  })
+  await assert.rejects(operations.read({ ref: 'result', invocation: 'call-id' }, ctx), {
     code: 'UNAVAILABLE',
   })
 })

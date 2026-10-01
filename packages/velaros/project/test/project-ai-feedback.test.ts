@@ -223,7 +223,11 @@ describe('text anchor miss diagnostics', () => {
     // 宿主可能只把 message 转给模型，定位线索必须也在消息里。
     expect(error.message).toContain('文件第 2 行')
     expect(error.message).toContain('反斜杠')
-    expect(error.suggestedNextAction).toContain('第 1–5 行')
+    expect(error.suggestedNextAction).toContain('回执原文')
+    expect(error.details.candidateText).toEqual({
+      text: source.split('\n').slice(0, 3).join('\n'),
+      truncated: false,
+    })
   })
 
   test('reports an indentation difference without applying an indentation-insensitive match', async () => {
@@ -242,6 +246,23 @@ describe('text anchor miss diagnostics', () => {
     })
     expect(error.details.hint).toContain('oldText：4 个空格，文件：2 个空格')
     expect(await readFile(join(root, 'render.ts'), 'utf8')).toBe(source)
+  })
+
+  test('candidate receipt preserves original tabs and CRLF and bounds long candidates', () => {
+    const content =
+      '\tDescribe("getYear", func() {\r\n\t\tIt("parses the year correctly", func() {\r\n'
+    const diagnosis = diagnoseTextMatchMiss(
+      content,
+      'Describe("getYear", func() {\n    It("parses the year correctly", func() {'
+    )
+    expect(diagnosis.causes).toContain('indentation')
+    expect(diagnosis.candidateText).toEqual({ text: content.slice(0, -1), truncated: false })
+    const large = diagnoseTextMatchMiss(
+      `first\n\t${'x'.repeat(2000)}`,
+      `first\n  ${'x'.repeat(2000)}`
+    )
+    expect(large.candidateText?.text.length).toBe(800)
+    expect(large.candidateText?.truncated).toBe(true)
   })
 
   test('keeps indentation strict for whitespace-significant files', async () => {

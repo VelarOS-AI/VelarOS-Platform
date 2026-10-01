@@ -97,6 +97,8 @@ export interface AgentProviderRuntimeConfig {
   defaultModel: string
   providerScript?: LooseOptional<ProviderScriptManifest>
   adapter?: LooseOptional<AgentProviderAdapterConfig>
+  /** OpenAI 显式缓存断点的供应商能力；缺席沿用已知模型默认值，false 禁用，true 显式启用。 */
+  openaiExplicitCacheBreakpoints?: boolean
 }
 
 export interface OpenRouterRoutingConfig {
@@ -169,6 +171,8 @@ export interface ModelProviderSelection {
   baseURL: string
   adapter?: LooseOptional<AgentProviderAdapterConfig>
   reasoningLevel?: LooseOptional<ReasoningLevel>
+  /** OpenAI 显式缓存断点能力；覆盖 provider 运行时配置，缺席沿用已知模型默认值。 */
+  openaiExplicitCacheBreakpoints?: boolean
 }
 
 export interface ModelSelection extends ModelProviderSelection {
@@ -227,10 +231,12 @@ export interface ModelPricingCatalog {
   entries: readonly ModelPricingEntry[]
 }
 
-/** 约价用的单价对；缺席表示这一轮不算钱。 */
+/** 用量约价单价；缺席的计费分项保持未知。 */
 export interface ModelPricingRates {
   readonly inputPerMillion: Nullable<number>
   readonly outputPerMillion: Nullable<number>
+  readonly cacheReadPerMillion?: LooseOptional<number>
+  readonly cacheWritePerMillion?: LooseOptional<number>
 }
 
 /** 一次模型调用的 token 与费用。 */
@@ -239,13 +245,26 @@ export interface ModelRunUsage {
   readonly outputTokens: number
   readonly reasoningTokens: number
   readonly cachedInputTokens: number
+  readonly cacheWriteTokens?: number
   readonly totalTokens: number
+  /** 全部分项可计算时的估计费用；存在未知分项时为 null。 */
   readonly cost: Nullable<number>
+  /** 已知分项小计，不等于未知用量的完整费用。 */
+  readonly knownCost?: number
+  readonly costCoverage?: 'complete' | 'partial' | 'unknown'
+  /** 数值字段缺席时为兼容保留 0；这个证据表区分未知与真实零。 */
+  readonly tokenCoverage?: {
+    readonly input: boolean
+    readonly output: boolean
+    readonly cacheRead: boolean
+    readonly cacheWrite: boolean
+  }
 }
 
 /** 多次调用的合计，外加最后一轮的上下文占用。 */
 export interface ModelUsageSummary extends ModelRunUsage {
   readonly runs: number
+  readonly unknownCostRuns?: number
   readonly lastContextTokens: number
 }
 

@@ -1,7 +1,7 @@
 import type { ContextRef } from '@velaros-ai/context'
 import { ContextLimits } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
-import { isArray, isPlainObject, isString } from '@velaros-ai/core'
+import { isArray, isEmpty, isPlainObject, isString, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { MemoryReadLimits } from '../../system/contract/constants.js'
@@ -51,11 +51,11 @@ export function readMaterialField(
 
 /** 旧预览已截断时，从完整归档生成执行材料；保留诊断与真实字段路径，避免再次裁剪预览。 */
 export function executionMaterial(archived: Readonly<Record<string, unknown>>): string {
-  const result = isPlainObject(archived.result) ? archived.result : undefined
+  const result = optionalWhen(isPlainObject, archived.result)
   const captured =
     isPlainObject(archived.output) &&
     isArray(archived.output.blocks) &&
-    archived.output.blocks.length > 0
+    !isEmpty(archived.output.blocks)
   const truncated =
     result &&
     isArray(result.notices) &&
@@ -79,24 +79,27 @@ export function projectMaterial(text: string, ref: ContextRef, limit: number) {
     chars: text.length,
     unit: 'utf16',
   }
-  const reference = (pointer: string, value: unknown) => ({
-    ref,
-    position: pointer || '/',
-    representation: 'reference',
-    bodyIncluded: false,
-    chars: JSON.stringify(value).length,
-    storedBytes: new TextEncoder().encode(JSON.stringify(value)).byteLength,
-    items: isArray(value) ? value.length : undefined,
-    read: {
+  const reference = (pointer: string, value: unknown) => {
+    const read = {
       module: 'velaros:system',
       export: 'memory',
       operation: 'read',
       ref: ref.id,
-      ...(pointer ? { pointer } : {}),
-      rangeUnit: 'utf16',
-    },
-    reason: 'view-budget',
-  })
+    }
+    if (pointer) Object.assign(read, { pointer })
+    Object.assign(read, { rangeUnit: 'utf16' })
+    return {
+      ref,
+      position: pointer || '/',
+      representation: 'reference',
+      bodyIncluded: false,
+      chars: JSON.stringify(value).length,
+      storedBytes: new TextEncoder().encode(JSON.stringify(value)).byteLength,
+      items: isArray(value) ? value.length : undefined,
+      read,
+      reason: 'view-budget',
+    }
+  }
   if (text.length <= limit)
     return {
       text,
@@ -136,6 +139,12 @@ export function projectMaterial(text: string, ref: ContextRef, limit: number) {
         bodyIncluded: true,
         text: item.slice(0, end),
         selection: { from: 0, shown: end, total: item.length, unit: 'utf16' },
+        read: {
+          ...metadata.read,
+          ...(pointer
+            ? { offset: end, limit: Math.min(ContextLimits.readChars, item.length - end) }
+            : {}),
+        },
       })
       let low = 0
       let high = Math.min(item.length, budget)
@@ -160,7 +169,7 @@ export function projectMaterial(text: string, ref: ContextRef, limit: number) {
         representation: 'excerpt',
         bodyIncluded: true,
         value: values,
-        selection: { from: 0, shown: values.length, total: item.length },
+        selection: { from: 0, shown: values.length, total: item.length, unit: 'items' },
       })
       for (let index = 0; index < item.length; index++) {
         // 预留逗号与 selection 中 shown 位数的增长，所有预算以最终 JSON 长度为准。
@@ -175,7 +184,7 @@ export function projectMaterial(text: string, ref: ContextRef, limit: number) {
           break
         }
       }
-      if (!values.length) return fallback()
+      if (isEmpty(values)) return fallback()
       if (values.length < item.length) omitted.push(pointer || '/')
       return excerpt()
     }

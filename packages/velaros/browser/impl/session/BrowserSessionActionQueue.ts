@@ -1,76 +1,83 @@
-import type { BrowserSessionActionOptions, BrowserSessionQueueSlot } from '../../types/session.js'
-import { executeInTurn } from '../../utils/session'
-import { createQueueSlot } from '../../utils/session'
-import { BrowserTuning } from '../../utils/tuning'
+import { AppError } from '@velaros-ai/core/error'
 
-/**
- * 浏览器会话队列
- * - 同一 session 的所有 WebContents 操作串行执行，避免导航与快照/读取互相打断。
- * - 不同 session 仍可并发。
- * - **任何一个动作都不能永久占住队列**：见 {@link BrowserTuning.session.actionHoldCapMs} 与 {@link BrowserSessionQueueSlot}。
- */
+import type { BrowserSessionActionOptions, BrowserSessionQueueState } from '../../types/session.js'
+import { createQueueSlot, executeInTurn } from '../../utils/session'
+
+/** 每个会话串行；超时只结束调用等待，仍在运行的动作隔离该会话直到真正收束。 */
 export interface BrowserSessionActionQueueApi {
-  /** 写操作：串行排队执行 */
+  /** 同一会话的动作按顺序执行；未收束的超时动作阻止同会话继续派发。 */
   run<T>(
     sessionId: string,
     action: () => Promise<T>,
     options?: BrowserSessionActionOptions
   ): Promise<T>
-  /**
-   * 只读操作仍会访问共享 WebContents，需要跟导航/点击保持顺序。
-   *
-   * 当前实现与 run 行为完全一致；保留独立方法是给未来扩展（如读写锁、并行读）留接口。
-   * 现阶段不要把它当成“可以并发”的标志。
-   */
+  /** 只读动作也访问共享页面，因此遵循同一条串行队列。 */
   runReadOnly<T>(
     sessionId: string,
     action: () => Promise<T>,
     options?: BrowserSessionActionOptions
   ): Promise<T>
-  /**
-   * 丢掉这条会话现有的排队链，**下一次 `run` 立刻开跑**。
-   *
-   * 拆卸路径（`closeSession`）必须走它：清理绝不能排在死结后面，否则「会话卡住 → 关不掉 →
-   * 重开还是那条卡住的队列」，只剩重启应用一条路。已经在排队的旧动作不受影响，
-   * 它们仍按原链等待，并各自被名额上限兜底。
-   */
+  /** 使当前世代失效、拒绝排队者；拆卸在队列外执行。正在运行的旧动作仍占有会话身份。 */
   clear(sessionId: string): void
-  /** 清掉全部会话的状态；运行时收尾时调。 */
+  /** 使全部现有世代失效，独立的新会话仍可使用。 */
   clearAll(): void
+  /** 页面资源重新挂接或查找前核对；旧动作未收束时禁止复用同一身份。 */
+  assertAvailable(sessionId: string): void
 }
 
 class BrowserSessionActionQueue implements BrowserSessionActionQueueApi {
-  /** 每个 session 一条 Promise 链；链上排的是**名额**，不是动作本身。 */
-  private readonly writeQueues = new Map<string, Promise<unknown>>()
+  private readonly states = new Map<string, BrowserSessionQueueState>()
 
-  /** 写操作：串行排队执行 */
-  public run<T>(
+  public async run<T>(
     sessionId: string,
     action: () => Promise<T>,
     options: BrowserSessionActionOptions = {}
   ): Promise<T> {
-    const previous = this.writeQueues.get(sessionId) ?? Promise.resolve()
-    const slot = createQueueSlot()
-    // 前一个 action 即使失败，也不能阻断后续排队操作。
-    // @arch-guard:suspend code-style/forbid-swallowed-errors 理由：这里 catch 的是**前驱**的链，不是调用方那条——前驱的错误已由 executeInTurn 原样抛给它自己的调用方。此处不吞，一次失败就会把整条链变成 rejected，后面所有排队者被连坐，那正是本次要消灭的死结。
-    const tail = previous.catch(() => undefined).then(() => slot.released)
-    this.writeQueues.set(sessionId, tail)
-    void tail.then(() => {
-      if (this.writeQueues.get(sessionId) === tail) {
-        // 只有自己仍是队尾时才清理，避免清掉后来追加的操作。
-        this.writeQueues.delete(sessionId)
+    this.assertAvailable(sessionId)
+    let state = this.states.get(sessionId)
+    if (!state) {
+      state = {
+        tail: Promise.resolve(),
+        controller: new AbortController(),
+        active: 0,
+        invalidated: false,
       }
+      this.states.set(sessionId, state)
+    }
+    const current = state
+    const previous = current.tail
+    const slot = createQueueSlot()
+    const tail = previous.then(() => slot.released)
+    current.tail = tail
+    void tail.then(() => {
+      if (this.states.get(sessionId) === current && current.tail === tail && current.active === 0)
+        this.states.delete(sessionId)
     })
-
-    return executeInTurn(previous, slot, action, options)
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, current.controller.signal])
+      : current.controller.signal
+    try {
+      return await executeInTurn(
+        previous,
+        slot,
+        async () => {
+          signal.throwIfAborted()
+          current.active++
+          try {
+            return await action()
+          } finally {
+            current.active--
+          }
+        },
+        { ...options, signal }
+      )
+    } catch (error) {
+      // 一个已超时但尚未完成的动作不能与下一项共用页面。取消排队者，使所有调用及时得到结果。
+      if (AppError.from(error).code === 'TIMEOUT' && current.active > 0) this.clear(sessionId)
+      throw error
+    }
   }
 
-  /**
-   * 只读操作仍会访问共享 WebContents，需要跟导航/点击保持顺序。
-   *
-   * 当前实现与 run 行为完全一致；保留独立方法是给未来扩展（如读写锁、并行读）留接口。
-   * 现阶段不要把它当成“可以并发”的标志。
-   */
   public runReadOnly<T>(
     sessionId: string,
     action: () => Promise<T>,
@@ -79,19 +86,25 @@ class BrowserSessionActionQueue implements BrowserSessionActionQueueApi {
     return this.run(sessionId, action, options)
   }
 
-  /**
-   * 丢掉这条会话现有的排队链，**下一次 `run` 立刻开跑**。
-   *
-   * 拆卸路径（`closeSession`）必须走它：清理绝不能排在死结后面，否则「会话卡住 → 关不掉 →
-   * 重开还是那条卡住的队列」，只剩重启应用一条路。已经在排队的旧动作不受影响，
-   * 它们仍按原链等待，并各自被名额上限兜底。
-   */
+  public assertAvailable(sessionId: string): void {
+    if (this.states.get(sessionId)?.invalidated)
+      throw new AppError(
+        'CLOSED',
+        '浏览器会话仍有未收束的旧动作，不能复用页面；关闭页面并使用新会话，或等待旧动作完成。'
+      )
+  }
+
   public clear(sessionId: string): void {
-    this.writeQueues.delete(sessionId)
+    const state = this.states.get(sessionId)
+    if (!state) return
+    state.invalidated = true
+    state.controller.abort(new AppError('CLOSED', '浏览器会话已关闭或动作超时，排队动作已取消。'))
+    // 没有运行中的动作时可立即换新世代；旧排队者仍持有已取消的旧 controller，永远不会执行。
+    if (state.active === 0) this.states.delete(sessionId)
   }
 
   public clearAll(): void {
-    this.writeQueues.clear()
+    for (const sessionId of this.states.keys()) this.clear(sessionId)
   }
 }
 

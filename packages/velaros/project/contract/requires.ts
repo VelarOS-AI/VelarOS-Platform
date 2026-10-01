@@ -116,14 +116,14 @@ export interface AgentProjectKernelPort {
   getTransaction(transactionId: string): AgentProjectStoredTransaction | undefined
   /**
    * 提交一个事务：先跑校验（不过抛 VALIDATION_FAILED），再锁住改动的文件写盘；文件在准备之后被外部改过时先试着 rebase，
-   * 接不上抛 BASE_REVISION_MISMATCH。多个文件要么全部写入、要么全部还原；新建的文件在 git 仓库里挂上 intent-to-add。返回每个文件提交前后的 revision。
+   * 接不上抛 BASE_REVISION_MISMATCH。多个文件要么全部写入、要么全部还原；新建的文件在 git 仓库里挂上 intent-to-add。返回每个文件提交前后的 revision；提交后 hook 失败记入 notes，仍返回实际提交结果。signal 在准备完成、首个目标写入前核对，提交开始后保留实际结果。
    */
-  applyEdit(input: ApplyEditInput): Promise<AgentProjectApplyResult>
+  applyEdit(input: ApplyEditInput, signal?: AbortSignal): Promise<AgentProjectApplyResult>
   /**
    * 撤销一个已提交的事务：先核对每个文件仍是提交后的样子（被外部改过就抛 CONFLICT_WITH_EXTERNAL_EDIT，不覆盖），再逆序写回原文、删掉事务新建的文件，
    * 并撤回提交时对 git intent-to-add 的增删；要么全部撤回，要么保持原样。`velaros:project` 的 undo 调它。
    */
-  rollback(input: RollbackInput): Promise<RollbackResult>
+  rollback(input: RollbackInput, signal?: AbortSignal): Promise<RollbackResult>
   /** 内核的状态：项目根（绝对路径）与已登记的校验器 id。工具凭 root 核对当前工作区没有换。 */
   status(): Promise<{ root: string; validators: string[] }>
 }
@@ -164,7 +164,7 @@ export interface ProjectHook {
   event: HookEvent
   /**
    * 事件发生时执行，ctx 里有事件名、内核实例与事件数据（Before 事件是请求，After 事件是结果）。
-   * Before 事件里抛错，这次操作就不做了；After 事件里抛错时操作已经完成（比如文件已经写入），调用仍以这个错误失败。
+   * Before 事件里抛错，这次操作就不做了；AfterApplyEdit / AfterRollback 抛错时文件操作已经完成，错误码与说明记入结果 notes，调用保留实际提交状态。其余 After 事件仍传播原错误。
    */
   run(ctx: HookContext): Promise<void> | void
 }

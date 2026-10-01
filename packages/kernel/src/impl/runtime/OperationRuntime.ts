@@ -2,14 +2,16 @@ import { Ajv, type ValidateFunction } from 'ajv'
 
 import { Log } from '@velaros-ai/core'
 import { isTrue, isUndefined } from '@velaros-ai/core'
-import { isString } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { isArray, isEmpty, isString } from '@velaros-ai/core'
+import { AppError, createAbortError } from '@velaros-ai/core/error'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { KernelVersionAxes } from '../../contract/constants.js'
 import type { OperationRuntimeApi } from '../../contract/provides.js'
 import type {
   InvocationJournal,
   KernelCallableCapabilityOperation,
+  OperationDefinition,
   OperationRuntimeOptions,
 } from '../../contract/requires.js'
 import type { ModelImage } from '../../types/model.js'
@@ -23,6 +25,8 @@ import type {
   ModuleQuery,
   OperationCall,
   OperationDescriptor,
+  OperationRuntimeCloseOptions,
+  PendingInvocation,
   PreparedInvocation,
 } from '../../types/operations.js'
 import { validateModelImages } from '../../utils/runtime/model-request.js'
@@ -47,7 +51,10 @@ class OperationRuntime implements OperationRuntimeApi {
   private readonly leases = new Map<string, Set<string>>()
   private readonly journal: InvocationJournal
   private readonly active = new Map<string, AbortController>()
-  private readonly pending = new Set<Promise<InvocationReceipt>>()
+  private readonly inFlight = new Set<Promise<unknown>>()
+  private readonly phases = new Map<string, PendingInvocation>()
+  private draining?: Promise<void>
+  private readonly settlementFailures: unknown[] = []
   private readonly validators = new Map<
     string,
     { input: ValidateFunction; output: ValidateFunction }
@@ -94,6 +101,14 @@ class OperationRuntime implements OperationRuntimeApi {
       const handlers: Record<string, KernelCallableCapabilityOperation> = Object.create(null)
       for (const [name, operation] of Object.entries(definition.operations)) {
         if (
+          !isUndefined(operation.allowedModes) &&
+          (!isArray(operation.allowedModes) ||
+            isEmpty(operation.allowedModes) ||
+            new Set(operation.allowedModes).size !== operation.allowedModes.length ||
+            operation.allowedModes.some((mode) => !['execute', 'observe'].includes(mode)))
+        )
+          throw new AppError('VALIDATION', '操作模式必须是不重复的 execute/observe 非空集合')
+        if (
           !/^[A-Za-z_$][\w$]*$/u.test(name) ||
           ['constructor', 'prototype', '__proto__'].includes(name)
         )
@@ -116,11 +131,13 @@ class OperationRuntime implements OperationRuntimeApi {
               input: generated.input,
               output: generated.output,
               effects: generated.effects,
+              allowedModes: [...(generated.allowedModes ?? ['execute', 'observe'])].sort(),
             }) !==
               canonicalOperationJson({
                 input: descriptor.input,
                 output: descriptor.output,
                 effects: descriptor.effects,
+                allowedModes: [...(descriptor.allowedModes ?? ['execute', 'observe'])].sort(),
               }))
         )
           throw new AppError('INVARIANT', '生成合同与运行时操作不一致')
@@ -147,6 +164,7 @@ class OperationRuntime implements OperationRuntimeApi {
             let observation: InvocationReceipt['observation']
             let diagnostic: InvocationReceipt['diagnostic']
             const attachments: ModelImage[] = []
+            const startedAt = new Date().toISOString()
             try {
               const invoke = prepared.mode === 'observe' && observe ? observe : run
               const context = {
@@ -159,11 +177,12 @@ class OperationRuntime implements OperationRuntimeApi {
                     value.truncated ||
                     value.code.length > KernelTuning.operationDiagnosticCodeChars ||
                     value.message.length > KernelTuning.operationDiagnosticMessageChars
-                  diagnostic = immutableOperationJson({
+                  const recorded: NonNullable<InvocationReceipt['diagnostic']> = {
                     code: value.code.slice(0, KernelTuning.operationDiagnosticCodeChars),
                     message: value.message.slice(0, KernelTuning.operationDiagnosticMessageChars),
-                    ...(truncated ? { truncated: true } : {}),
-                  })
+                  }
+                  if (truncated) Object.assign(recorded, { truncated: true })
+                  diagnostic = immutableOperationJson(recorded)
                 },
                 recordObservation: (evidence: NonNullable<InvocationReceipt['observation']>) => {
                   if (
@@ -192,12 +211,13 @@ class OperationRuntime implements OperationRuntimeApi {
                     : prepared.mode === 'observe'
                       ? 'unknown'
                       : 'committed'
-              return { value, effect, attachments, observation, diagnostic }
+              return { value, effect, attachments, observation, diagnostic, startedAt }
             } catch (error) {
               return {
                 effect,
                 attachments,
                 diagnostic,
+                startedAt,
                 error: {
                   code: signal.aborted
                     ? 'CANCELLED'
@@ -266,7 +286,7 @@ class OperationRuntime implements OperationRuntimeApi {
     ) => Promise<Nullable<Omit<InvocationReconciliation, 'checkedAt'>>>
   >()
 
-  private readonly preparers = new Map<string, (input: unknown) => unknown | Promise<unknown>>()
+  private readonly preparers = new Map<string, NonNullable<OperationDefinition['prepare']>>()
 
   public start(): Promise<void> {
     if (this.closing) return Promise.reject(new AppError('CLOSED', '运行时已经关闭'))
@@ -324,6 +344,8 @@ class OperationRuntime implements OperationRuntimeApi {
   }
 
   public invoke(call: OperationCall, signal?: AbortSignal): Promise<InvocationReceipt> {
+    if (this.closing) return Promise.reject(new AppError('CLOSED', '运行时已经关闭'))
+    if (signal?.aborted) return Promise.reject(signal.reason ?? createAbortError())
     const frozen = immutableOperationJson(call)
     const id = JSON.stringify([frozen.sessionId, frozen.id])
     const key = canonicalOperationJson(frozen)
@@ -332,21 +354,55 @@ class OperationRuntime implements OperationRuntimeApi {
       return existing.key === key
         ? existing.promise
         : Promise.reject(new AppError('IDEMPOTENCY_CONFLICT', '同一调用号已经绑定其他请求'))
-    const pending = this.dispatch(frozen, signal)
-    this.dispatches.set(id, { key, promise: pending })
-    this.pending.add(pending)
-    void pending
+    const controller = new AbortController()
+    const cancel = (): void => controller.abort(signal?.reason ?? createAbortError())
+    signal?.addEventListener('abort', cancel, { once: true })
+    if (signal?.aborted) cancel()
+    this.active.set(id, controller)
+    this.phases.set(id, {
+      id: frozen.id,
+      sessionId: frozen.sessionId,
+      executionId: frozen.executionId,
+      moduleId: frozen.binding.moduleId,
+      operation: frozen.operation,
+      phase: 'start',
+      cancelRequested: false,
+    })
+    const physical = this.dispatch(frozen, controller.signal)
+    // 只取消调用方的等待。物理处理器与最终 journal.settle 继续持有资源和身份。
+    const observed = awaitOperationRead(physical, controller.signal)
+    this.dispatches.set(id, { key, promise: observed })
+    this.inFlight.add(physical)
+    void physical
       .finally(() => {
-        this.pending.delete(pending)
+        this.inFlight.delete(physical)
         this.dispatches.delete(id)
+        this.active.delete(id)
+        this.phases.delete(id)
+        signal?.removeEventListener('abort', cancel)
       })
       .catch(() => {
-        Log.tag('ActRuntime').debug('OperationRuntime 已进入异常处理或降级分支')
+        Log.tag('ActRuntime').debug('OperationRuntime 调用未能完整结算')
       })
-    return pending
+    return observed
   }
 
-  private async dispatch(call: OperationCall, signal?: AbortSignal): Promise<InvocationReceipt> {
+  private phase(call: OperationCall, phase: PendingInvocation['phase']): void {
+    const id = JSON.stringify([call.sessionId, call.id])
+    const prior = this.phases.get(id)
+    if (prior) this.phases.set(id, { ...prior, phase })
+  }
+
+  public pending(): readonly PendingInvocation[] {
+    return immutableOperationJson(
+      [...this.phases].map(([id, state]) => ({
+        ...state,
+        cancelRequested: !!this.active.get(id)?.signal.aborted,
+      }))
+    )
+  }
+
+  private async dispatch(call: OperationCall, signal: AbortSignal): Promise<InvocationReceipt> {
     await this.start()
     if (signal?.aborted || this.closing) throw new AppError('CANCELLED', '调用已取消')
     const description = this.describe(call.binding.moduleId)
@@ -367,6 +423,7 @@ class OperationRuntime implements OperationRuntimeApi {
         `输入不符合 schema：${describeSchemaErrors(validators.input.errors)}`,
         { effect: 'none' }
       )
+    this.phase(call, 'journal')
     const requestFingerprint = await operationFingerprint({ ...call, input: original })
     const prior = await this.journal.read(call.sessionId, call.id)
     if (prior) {
@@ -388,6 +445,7 @@ class OperationRuntime implements OperationRuntimeApi {
       if (existing.receipt) return immutableOperationJson(existing.receipt)
       throw new AppError('CONFLICT', '调用已派发或需要恢复核对，不能自动重放')
     }
+    const reservedAt = new Date().toISOString()
     const reserved = prepared
     try {
       signal?.throwIfAborted()
@@ -407,7 +465,9 @@ class OperationRuntime implements OperationRuntimeApi {
         )
       }
       const prepare = this.preparers.get(key)
-      const input = prepare ? immutableOperationJson(await prepare(original)) : original
+      this.phase(call, 'prepare')
+      const input = prepare ? immutableOperationJson(await prepare(original, { signal })) : original
+      signal.throwIfAborted()
       if (!validators.input(input))
         throw new AppError(
           'VALIDATION',
@@ -418,15 +478,14 @@ class OperationRuntime implements OperationRuntimeApi {
         input,
         inputFingerprint: await operationFingerprint(input),
       })
-      await this.options.beforeDispatch?.(
-        prepared,
-        description.operations[call.operation]!,
-        signal ?? new AbortController().signal
-      )
+      this.phase(call, 'beforeDispatch')
+      await this.options.beforeDispatch?.(prepared, description.operations[call.operation]!, signal)
+      signal.throwIfAborted()
     } catch (error) {
       Log.tag('ActRuntime').debug('OperationRuntime 已进入异常处理或降级分支')
       const receipt: InvocationReceipt = {
         invocation: reserved,
+        lifecycle: { reservedAt, settledAt: new Date().toISOString() },
         outcome: signal?.aborted ? 'cancelled' : 'failed',
         effect: 'none',
         retry: 'safe',
@@ -439,10 +498,13 @@ class OperationRuntime implements OperationRuntimeApi {
           message: String(error),
         },
       }
-      await this.journal.settle(receipt)
+      this.phase(call, 'settle')
+      await this.settle(receipt)
       return immutableOperationJson(receipt)
     }
+    this.phase(call, 'journal')
     await this.journal.prepare(prepared)
+    const preparedAt = new Date().toISOString()
     const controller = new AbortController()
     const cancel = (): void => controller.abort(signal?.reason)
     signal?.addEventListener('abort', cancel, { once: true })
@@ -452,19 +514,19 @@ class OperationRuntime implements OperationRuntimeApi {
       !this.leases.get(call.sessionId)?.has(call.binding.moduleId)
     )
       controller.abort()
-    const activeKey = `${call.sessionId}/${call.id}`
-    this.active.set(activeKey, controller)
     let receipt: InvocationReceipt
     try {
       if (controller.signal.aborted) {
         receipt = {
           invocation: prepared,
+          lifecycle: { reservedAt, preparedAt, settledAt: new Date().toISOString() },
           outcome: 'cancelled',
           effect: 'none',
           retry: 'safe',
           error: { code: 'CANCELLED', message: '派发前已经取消' },
         }
       } else {
+        this.phase(call, 'handler')
         const result = (await this.kernel.invokeCapability({
           capabilityId: call.binding.moduleId,
           operation: call.operation,
@@ -472,6 +534,7 @@ class OperationRuntime implements OperationRuntimeApi {
           signal: controller.signal,
         })) as {
           value?: unknown
+          startedAt: string
           observation?: InvocationReceipt['observation']
           diagnostic?: InvocationReceipt['diagnostic']
           attachments?: readonly ModelImage[]
@@ -495,6 +558,12 @@ class OperationRuntime implements OperationRuntimeApi {
         }
         receipt = {
           invocation: prepared,
+          lifecycle: {
+            reservedAt,
+            preparedAt,
+            startedAt: result.startedAt,
+            settledAt: new Date().toISOString(),
+          },
           outcome: error ? (controller.signal.aborted ? 'cancelled' : 'failed') : 'succeeded',
           effect: result.effect,
           retry: result.effect === 'none' ? 'safe' : 'requires-check',
@@ -506,18 +575,56 @@ class OperationRuntime implements OperationRuntimeApi {
         if (!isUndefined(value)) Object.assign(receipt, { value })
         if (error) Object.assign(receipt, { error })
       }
-      await this.journal.settle(receipt)
+      this.phase(call, 'settle')
+      await this.settle(receipt)
       return immutableOperationJson(receipt)
     } finally {
-      this.active.delete(activeKey)
       signal?.removeEventListener('abort', cancel)
     }
   }
 
-  public async reconcile(
+  public reconcile(
     sessionId: string,
     id: string,
     signal: AbortSignal = new AbortController().signal
+  ): Promise<Nullable<InvocationRecord>> {
+    if (this.closing) return Promise.reject(new AppError('CLOSED', '运行时已经关闭'))
+    if (signal.aborted) return Promise.reject(signal.reason ?? createAbortError())
+    const controller = new AbortController()
+    const cancel = (): void => controller.abort(signal.reason ?? createAbortError())
+    signal.addEventListener('abort', cancel, { once: true })
+    if (signal.aborted) cancel()
+    const key = JSON.stringify([sessionId, id, 'reconcile', crypto.randomUUID()])
+    this.active.set(key, controller)
+    this.phases.set(key, {
+      id,
+      sessionId,
+      executionId: '',
+      moduleId: '',
+      operation: 'reconcile',
+      phase: 'reconcile',
+      cancelRequested: false,
+    })
+    const physical = this.reconcileRecord(sessionId, id, controller.signal, key)
+    this.inFlight.add(physical)
+    void physical
+      .finally(() => {
+        this.inFlight.delete(physical)
+        this.active.delete(key)
+        this.phases.delete(key)
+        signal.removeEventListener('abort', cancel)
+      })
+      .catch(() => {
+        Log.tag('ActRuntime').debug('OperationRuntime 核对已结束')
+      })
+    return awaitOperationRead(physical, controller.signal)
+  }
+
+  private async reconcileRecord(
+    sessionId: string,
+    id: string,
+    signal: AbortSignal,
+    activeKey: string
   ): Promise<Nullable<InvocationRecord>> {
     signal.throwIfAborted()
     if (this.dispatches.has(JSON.stringify([sessionId, id])))
@@ -526,6 +633,15 @@ class OperationRuntime implements OperationRuntimeApi {
     if (!record || record.reconciliation || (record.receipt && record.receipt.effect !== 'unknown'))
       return record
     const { binding, operation } = record.prepared
+    this.phases.set(activeKey, {
+      id,
+      sessionId,
+      executionId: record.prepared.executionId,
+      moduleId: binding.moduleId,
+      operation,
+      phase: 'reconcile',
+      cancelRequested: signal.aborted,
+    })
     if (
       canonicalOperationJson(this.describe(binding.moduleId).binding) !==
       canonicalOperationJson(binding)
@@ -533,7 +649,7 @@ class OperationRuntime implements OperationRuntimeApi {
       throw new AppError('CONFLICT', '原模块实例已变化，不能用新实例核对旧操作')
     const reconcile = this.reconcilers.get(`${binding.moduleId}/${operation}`)
     if (!reconcile || !this.journal.recordReconciliation) return record
-    const result = await awaitOperationRead(reconcile(record.prepared, signal), signal)
+    const result = await reconcile(record.prepared, signal)
     signal.throwIfAborted()
     if (!result) return record
     if (
@@ -551,12 +667,55 @@ class OperationRuntime implements OperationRuntimeApi {
     return this.journal.read(sessionId, id)
   }
 
-  public async dispose(): Promise<void> {
+  private async settle(receipt: InvocationReceipt): Promise<void> {
+    try {
+      await this.journal.settle(receipt)
+    } catch (error) {
+      // 处理器已真实结束，不能伪造持久化成功；后台失败必须在关闭时可观察。
+      this.settlementFailures.push(error)
+      throw error
+    }
+  }
+
+  public async dispose(options: OperationRuntimeCloseOptions = {}): Promise<void> {
+    const timeoutMs = options.timeoutMs ?? KernelTuning.operationCloseTimeoutMs
+    if (!Number.isFinite(timeoutMs) || timeoutMs < 0)
+      throw new AppError('VALIDATION', '关闭等待时限必须是非负有限数字')
+    const timers = new TimerScope({ name: 'OperationRuntime.close' })
+    let deadline: Optional<AbortSignal>
+    try {
+      await timers.withTimeout(timeoutMs, (signal) => {
+        deadline = signal
+        return this.drain()
+      })
+    } catch (error) {
+      if (deadline?.aborted)
+        throw AppError.withFields('TIMEOUT', '运行时仍在等待真实调用或模块资源收束', {
+          pending: this.pending(),
+        })
+      throw error
+    } finally {
+      timers.dispose()
+    }
+  }
+
+  public drain(): Promise<void> {
     this.closing = true
-    for (const controller of this.active.values()) controller.abort()
-    await Promise.allSettled([...this.pending])
+    for (const controller of this.active.values())
+      controller.abort(createAbortError('运行时正在关闭'))
+    this.draining ??= this.finishClose()
+    return this.draining
+  }
+
+  private async finishClose(): Promise<void> {
+    await Promise.allSettled([...this.inFlight])
     await this.kernel.dispose()
     this.leases.clear()
+    if (!isEmpty(this.settlementFailures))
+      throw new AggregateError(
+        this.settlementFailures,
+        '调用回执持久化失败；保留的意图需要恢复核对'
+      )
   }
 }
 

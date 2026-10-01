@@ -213,12 +213,12 @@ export function validateOperationSchema(
   for (const branch of schema.anyOf ?? []) visit(branch)
 }
 
-/** 只读版本检查必须响应取消；迟到结果不能恢复已经结束的写入资格。 */
+/** 只结束观察方的等待；底层任务和资源仍由生命周期持有者收束，迟到结果不能恢复写入资格。 */
 export async function awaitOperationRead<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
   signal.throwIfAborted()
   let cancel: () => void = () => {}
   const aborted = new Promise<never>((_resolve, reject) => {
-    cancel = () => reject(signal.reason ?? new AppError('CANCELLED', '版本检查已取消'))
+    cancel = () => reject(signal.reason ?? new AppError('CANCELLED', '操作等待已取消'))
     signal.addEventListener('abort', cancel, { once: true })
     if (signal.aborted) cancel()
   })

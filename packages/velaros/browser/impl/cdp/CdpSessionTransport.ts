@@ -104,15 +104,14 @@ export class CdpSessionTransport implements CdpSessionTransportApi {
     }
 
     return new Promise<T>((resolve, reject) => {
-      const abort = (error: AppError): void => reject(error)
-      this.inflight.add(abort)
+      this.inflight.add(reject)
       this.options.connection.send<T>(method, params, target, timeoutMs ?? this.timeoutMs).then(
         (value) => {
-          this.inflight.delete(abort)
+          this.inflight.delete(reject)
           resolve(value)
         },
         (error: unknown) => {
-          this.inflight.delete(abort)
+          this.inflight.delete(reject)
           reject(error)
         }
       )

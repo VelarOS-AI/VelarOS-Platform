@@ -151,6 +151,16 @@ export class LocalContextStorage implements ContextStorage {
   ): Promise<Nullable<ContextRecordSnapshot>> {
     for (const selection of selections) {
       if (
+        [selection.after, selection.through].some(
+          (value) => !isUndefined(value) && (!Number.isSafeInteger(value) || value < 0)
+        ) ||
+        (!isUndefined(selection.first) &&
+          (!Number.isSafeInteger(selection.first) ||
+            selection.first < 1 ||
+            selection.first > ContextLimits.recordPage ||
+            selection.latest ||
+            !isUndefined(selection.last) ||
+            selection.latestPerTitle)) ||
         (!isUndefined(selection.sequence) &&
           (!Number.isSafeInteger(selection.sequence) || selection.sequence < 1)) ||
         (!isUndefined(selection.last) &&
@@ -201,11 +211,21 @@ export class LocalContextStorage implements ContextStorage {
           where.push('sequence=?')
           values.push(selection.sequence)
         }
+        if (!isUndefined(selection.after)) {
+          where.push('sequence>?')
+          values.push(selection.after)
+        }
+        if (!isUndefined(selection.through)) {
+          where.push('sequence<=?')
+          values.push(selection.through)
+        }
         const order = selection.latest
           ? 'DESC LIMIT 1'
           : selection.last
             ? `DESC LIMIT ${selection.last}`
-            : 'ASC'
+            : selection.first
+              ? `ASC LIMIT ${selection.first}`
+              : 'ASC'
         const query = selection.latestPerTitle
           ? `SELECT body FROM context_records WHERE session=? AND sequence IN (SELECT MAX(sequence) FROM context_records WHERE ${where.join(' AND ')} GROUP BY title) ORDER BY sequence`
           : `SELECT body FROM context_records WHERE ${where.join(' AND ')} ORDER BY sequence ${order}`
@@ -406,6 +426,11 @@ export class LocalContextStorage implements ContextStorage {
       const row = this.db.prepare('SELECT version,state FROM sessions WHERE id=?').get(sessionId)
       if (Number(row?.version ?? 0) !== options.expectedVersion)
         throw contextFailure('CONTEXT_CONFLICT', '回收前会话版本已变化。')
+      if (row && JSON.parse(String(row.state)).objectReferencesVersion !== 1)
+        throw contextFailure(
+          'CONTEXT_REFERENCES_UNVERIFIED',
+          '旧会话尚未完成持久正文引用迁移；请先通过所属 Runtime 恢复会话后再回收。'
+        )
       const candidates = this.db
         .prepare(
           'SELECT id FROM objects o WHERE session=? AND touched<? AND NOT EXISTS(SELECT 1 FROM context_records r WHERE r.session=o.session AND r.object_id=o.id)'

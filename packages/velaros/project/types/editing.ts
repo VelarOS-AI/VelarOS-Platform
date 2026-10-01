@@ -24,6 +24,8 @@ export type TextMismatchCause =
 export interface TextMatchMissDiagnosis {
   /** oldText 在文件中最接近的对齐起始行（1-based）；连相近的行都找不到时缺省。 */
   candidateLine?: number
+  /** 候选区域的有界原文；仅供核对，不能证明这是用户要改的位置。 */
+  candidateText?: { text: string; truncated: boolean }
   /** 候选位置从 oldText 第 1 行起、忽略行尾空白与换行符后连续一致的行数。 */
   matchedLines?: number
   oldTextLines: number

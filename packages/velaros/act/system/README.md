@@ -60,3 +60,9 @@ if (goal?.status === 'active') await session.controlGoal({ baseRevision: goal.re
 - `memory.organize` 只排队：下一次模型请求之前由整理模型按父快照交补丁，补丁先整份校验再按版本发布，失败的不发布、原因带到下一帧；整理只改展示，不重跑业务脚本。`context: { maintenance: false }` 关掉整理。
 
 - `memory.read` 可传展示中的执行结果字段 `pointer`，按该字段的 UTF-16 字符分页；字符串直接返回正文，其他值返回 JSON。响应携带相同 `pointer`，`record` 仍标识完整归档。路径、页长和引用权限均受校验；省略路径时保持整份归档读取，旧宿主收到字段读取会明确报告不支持。
+
+执行结果的必需块缺口带有 `runtime.decision.missing[].read` 整块入口。将它传给 `memory.read`，从 `offset: 0` 开始，每页原样 `output(page, {key: 唯一键, view: {mode: 'full'}})`，再按 `page.offset + page.text.length` 续页。`delivery.receipt` 是宿主绑定原文身份、版本及字符范围的回执；只有本次模型请求实际完整携带的页连续覆盖整块，才满足原块的 `required`。省略 pointer 时可分页交付整份结果归档；两种表示的范围分开核对。
+
+可以在同一段 execute 中输出多页，展示预算仍按原合同分配。仅调用 read、只输出 page.text、把 page 嵌套到其他对象、改写页对象、召回局部字段、页再次截断或所需页已退出当前历史，都不产生完整交付证明。初始摘录不参与分页覆盖，释放仍需显式 release。
+
+脚本失败后，`runtime.progress.feedback.recovery.index` 给出该结果的调用索引入口。先 `memory.read(index)`，按索引的 `id` 调用 `memory.read({ref: index.ref, invocation: id})`，即可在同一次 execute 中收集已落定的原始调用回执；大索引与回执均按 offset/limit 分页。`pointer` 此时相对回执根，含 `outcome`、`effect`、`value`、`error`，失败或未知状态保持原样。调用召回不会重新执行，不签发必需输出块的 delivery；未落定回执返回明确不可用。release 和封段不删除召回权，任务授权重置及跨会话限制沿用原文规则。

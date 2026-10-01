@@ -28,11 +28,12 @@ export function commandDiagnostic(result: ShellCommandResult): InvocationReceipt
     text.length > ShellLimits.diagnosticChars
       ? `${plainTerminalText(text.slice(0, half))}\n[…省略 ${text.length - ShellLimits.diagnosticChars} 字符…]\n${plainTerminalText(text.slice(-half))}`
       : plainTerminalText(text)
-  return {
+  const diagnostic: NonNullable<InvocationReceipt['diagnostic']> = {
     code: result.success ? 'SHELL_STDERR' : 'SHELL_COMMAND_FAILED',
     message: `进程状态：success=${result.success}; exitCode=${result.exitCode}; signal=${result.signal}; timedOut=${result.timedOut}; aborted=${result.aborted}。\n${channel} 观察数据（日志内容不代表整条命令失败；完整结果在调用回执中）：\n${excerpt}`,
-    ...(truncated ? { truncated: true } : {}),
   }
+  if (truncated) Object.assign(diagnostic, { truncated: true })
+  return diagnostic
 }
 
 /** 宿主的完整回执里模型用得上的那几项：命令、目录、成败、退出码与信号、超时与取消、耗时、全部输出。 */

@@ -4,7 +4,6 @@
  * 可选地把 HTML 或 PNG 预览写到工作区里；旧版 .doc 先借 LibreOffice 转成临时 .docx。
  */
 
-import { writeFile } from 'node:fs/promises'
 import { extname } from 'node:path'
 
 import { toNullable } from '@velaros-ai/core'
@@ -19,7 +18,7 @@ import type {
 } from '../../types/office.js'
 import type { OfficePreviewKind, ParsedOfficePreview } from '../../types/preview.js'
 import { converterMissingError, officeError } from '../../utils/errors.js'
-import { writtenReceipt } from '../../utils/paths.js'
+import { writeOfficeFile } from '../../utils/paths.js'
 import { OfficeTuning } from '../../utils/tuning.js'
 import type { OfficeDocumentRendererApi } from '../runtime/OfficeDocumentRenderer.js'
 import { officeDocumentRenderer } from '../runtime/OfficeDocumentRenderer.js'
@@ -156,13 +155,13 @@ export class OfficePreviewOperations implements OfficePreviewOperationsApi {
       )
     }
     const prepared = await this.workspace.prepareOutput(ctx, outputPath, extension, overwrite)
-    if (extension === '.html') {
-      await writeFile(prepared.path, html, 'utf8')
-      return writtenReceipt(prepared)
-    }
+    if (extension === '.html') return writeOfficeFile(prepared, html, ctx.abortSignal)
     const image = await this.renderer.renderPreviewPng(parsed)
-    await writeFile(prepared.path, image.buffer)
-    return { ...(await writtenReceipt(prepared)), width: image.width, height: image.height }
+    return {
+      ...(await writeOfficeFile(prepared, image.buffer, ctx.abortSignal)),
+      width: image.width,
+      height: image.height,
+    }
   }
 }
 

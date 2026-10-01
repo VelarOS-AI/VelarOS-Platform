@@ -358,11 +358,10 @@ test('INV-32 长任务连续 80 次状态推进，观察和租约保持有界，
         spaceId ??= id
         assert.equal(id, spaceId)
         if (calls > 2) {
-          const value = JSON.parse(
-            JSON.parse(frame.partitions.observation.text).blocks.find(
-              (item) => item.key === 'counter'
-            ).text
-          ).value
+          assert.equal(frame.partitions.observation.presentation.format, 'text')
+          const lines = frame.partitions.observation.text.split('\n')
+          assert.equal(JSON.parse(lines[1]).key, 'counter')
+          const value = JSON.parse(lines.slice(2).join('\n')).value
           assert.equal(value, calls - 2)
           previous = value
         }

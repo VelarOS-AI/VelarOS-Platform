@@ -79,7 +79,7 @@
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/core/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test test src/platform/spec/acceptance.test.ts src/platform/test src/text-files/spec/acceptance.test.ts src/text-files/test src/path-rules/spec/acceptance.test.ts src/path-rules/test",
+    "test": "bun test test src/platform/spec/acceptance.test.ts src/platform/test src/text-files/spec/acceptance.test.ts src/text-files/test/text-file-io.test.ts src/text-files/test src/path-rules/spec/acceptance.test.ts src/path-rules/test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/core"
   },
   "dependencies": {

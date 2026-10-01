@@ -36,6 +36,7 @@ import {
   newSandboxId,
   readSandboxManifest,
   removeSandboxDirectory,
+  sandboxApplyFailure,
   sandboxBaseDirectory,
   sandboxChangedSinceDiff,
   sandboxDirectoryOf,
@@ -79,7 +80,11 @@ export class LocalSandboxHost implements LocalSandboxHostApi {
     this.baseDir = options.baseDir ?? sandboxBaseDirectory()
   }
 
-  public async createSandbox(options: SandboxCreateOptions = {}): Promise<SandboxRecord> {
+  public async createSandbox(
+    options: SandboxCreateOptions = {},
+    signal?: AbortSignal
+  ): Promise<SandboxRecord> {
+    signal?.throwIfAborted()
     const source = options.source
     // 空间的 resolveSource 已经把源目录解析成绝对路径；这里不替空间猜默认目录，也不拿进程的工作目录去补相对路径。
     if (isUndefined(source) || !isAbsolute(source))
@@ -108,6 +113,7 @@ export class LocalSandboxHost implements LocalSandboxHostApi {
     const directory = join(this.baseDir, id)
     const root = join(directory, 'tree')
     const temp = join(directory, 'tmp')
+    signal?.throwIfAborted()
     await mkdir(directory, { mode: 0o700 })
     await mkdir(root)
     await mkdir(temp)
@@ -148,6 +154,7 @@ export class LocalSandboxHost implements LocalSandboxHostApi {
         join(directory, 'manifest.json'),
         Buffer.from(JSON.stringify(manifest))
       )
+      signal?.throwIfAborted()
       this.entries.set(id, { record, directory, runner })
       log.info('sandbox created', {
         id,
@@ -162,54 +169,84 @@ export class LocalSandboxHost implements LocalSandboxHostApi {
     }
   }
 
-  public async diffSandbox(options: SandboxDiffOptions): Promise<SandboxDiff> {
+  public async getSandboxRecord(sandboxId: string, signal?: AbortSignal): Promise<SandboxRecord> {
+    signal?.throwIfAborted()
+    const entry = await this.resolveEntry(sandboxId)
+    signal?.throwIfAborted()
+    return { ...entry.record }
+  }
+
+  public async diffSandbox(
+    options: SandboxDiffOptions,
+    signal?: AbortSignal
+  ): Promise<SandboxDiff> {
+    signal?.throwIfAborted()
     const entry = await this.resolveEntry(options.sandboxId)
+    signal?.throwIfAborted()
     const manifest = await readSandboxManifest(entry.directory)
     const current = await scanTree(entry.record.root)
     const changes = await diffMirror(manifest, current, {
       paths: options.paths,
       textDiffs: options.textDiffs,
     })
+    signal?.throwIfAborted()
     return { sandboxId: entry.record.id, source: entry.record.source, ...changes }
   }
 
-  public async applySandbox(options: SandboxApplyOptions): Promise<SandboxApplyResult> {
-    const entry = await this.resolveEntry(options.sandboxId)
-    const manifest = await readSandboxManifest(entry.directory)
-    // 落回按完整的三列算，不附文本差量。
-    const changes = await diffMirror(manifest, await scanTree(entry.record.root), {
-      textDiffs: false,
-    })
-    // 落回前核对的那份差量和现在的对不上（核对之后镜像又被改过）：整批不落，让调用方重新 diff 再落。
-    if (isPresent(options.fingerprint) && options.fingerprint !== changes.fingerprint)
-      throw sandboxChangedSinceDiff()
-    const selection = rehearsalSandboxRules.select(changes, options.paths)
-    if (!isEmpty(selection.unknown))
-      throw new AppError(
-        'VALIDATION',
-        `这些路径在沙箱里没有变化：${selection.unknown.slice(0, SandboxTuning.listedPaths).join('、')}`
-      )
-    const applied = await applyMirrorChanges(manifest, selection)
-    log.info('sandbox applied', {
-      id: entry.record.id,
-      created: applied.created.length,
-      modified: applied.modified.length,
-      deleted: applied.deleted.length,
-    })
-    // .git 里的变化差量阶段就已经只汇总不列出，所以这里按差量的 gitChanged 如实报「没落」。
-    return {
-      sandboxId: entry.record.id,
-      ...applied,
-      skippedGit: applied.skippedGit || changes.gitChanged,
+  public async applySandbox(
+    options: SandboxApplyOptions,
+    signal?: AbortSignal
+  ): Promise<SandboxApplyResult> {
+    let committing = false
+    try {
+      signal?.throwIfAborted()
+      const entry = await this.resolveEntry(options.sandboxId)
+      signal?.throwIfAborted()
+      const manifest = await readSandboxManifest(entry.directory)
+      // 落回按完整的三列算，不附文本差量。
+      const changes = await diffMirror(manifest, await scanTree(entry.record.root), {
+        textDiffs: false,
+      })
+      // 落回前核对的那份差量和现在的对不上（核对之后镜像又被改过）：整批不落，让调用方重新 diff 再落。
+      if (isPresent(options.fingerprint) && options.fingerprint !== changes.fingerprint)
+        throw sandboxChangedSinceDiff()
+      const selection = rehearsalSandboxRules.select(changes, options.paths)
+      if (!isEmpty(selection.unknown))
+        throw new AppError(
+          'VALIDATION',
+          `这些路径在沙箱里没有变化：${selection.unknown.slice(0, SandboxTuning.listedPaths).join('、')}`
+        )
+      committing = true
+      const applied = await applyMirrorChanges(manifest, selection, signal, changes.fingerprint)
+      log.info('sandbox applied', {
+        id: entry.record.id,
+        created: applied.created.length,
+        modified: applied.modified.length,
+        deleted: applied.deleted.length,
+      })
+      // .git 里的变化差量阶段就已经只汇总不列出，所以这里按差量的 gitChanged 如实报「没落」。
+      return {
+        sandboxId: entry.record.id,
+        ...applied,
+        skippedGit: applied.skippedGit || changes.gitChanged,
+      }
+    } catch (error) {
+      if (!committing) throw sandboxApplyFailure(error, [])
+      throw error
     }
   }
 
-  public async discardSandbox(sandboxId: string): Promise<SandboxDiscardResult> {
+  public async discardSandbox(
+    sandboxId: string,
+    signal?: AbortSignal
+  ): Promise<SandboxDiscardResult> {
     // 递归删除只许删基目录下面正好一层、不是符号链接的沙箱目录：核对不过就拒绝，这是整仓误删事故的直接教训。
+    signal?.throwIfAborted()
     const real = await sandboxDirectoryOf(this.baseDir, sandboxId)
     // 先停掉镜像里还在跑的进程再删；删成功了才注销，删不掉时沙箱照样登记着，还能再丢一次。
     await this.entries.get(sandboxId)?.runner.dispose()
     const existing = await stat(real).catch(() => null)
+    signal?.throwIfAborted()
     if (existing) await removeSandboxDirectory(real)
     this.entries.delete(sandboxId)
     if (!existing) return { sandboxId, removed: false }
@@ -223,6 +260,7 @@ export class LocalSandboxHost implements LocalSandboxHostApi {
   ): Promise<SandboxCommandOutcome> {
     // 按 id 取登记项：没登记的从清单重新登记；清单读不出来就报错，绝不退回没有约束的执行器。
     const entry = await this.resolveEntry(options.sandboxId)
+    abortSignal?.throwIfAborted()
     const result = await entry.runner.run(
       options.command,
       { timeoutMs: options.timeoutMs, maxOutputChars: options.maxOutputChars },

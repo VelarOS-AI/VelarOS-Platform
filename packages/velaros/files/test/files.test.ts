@@ -81,6 +81,7 @@ function planOf(overrides: Partial<FileEditPlan> = {}): FileEditPlan {
     linked: false,
     created: false,
     previous: Buffer.from('old\n'),
+    baseBytes: Buffer.from('old\n'),
     bytes: Buffer.from('new\n'),
     totalLines: 1,
     baseVersion: 'v-old',
@@ -387,6 +388,7 @@ describe('一步一步改：utils/plan.ts', () => {
       linked: false,
       created: true,
       previous: null,
+      baseBytes: null,
       bytes: Buffer.from('a\nb\n'),
       totalLines: 2,
       baseVersion: null,
@@ -401,6 +403,7 @@ describe('一步一步改：utils/plan.ts', () => {
       linked: false,
       created: false,
       previous: Buffer.from('old\r\n'),
+      baseBytes: Buffer.from('old\r\n'),
       bytes: Buffer.from('new\r\nline\r\n'),
       totalLines: 2,
       baseVersion: fileVersionOf(Buffer.from('old\r\n')),
@@ -539,18 +542,18 @@ describe('一批的小工具：utils/batch.ts', () => {
     expect(batchItems({ steps }, 1, 'edit')).toBe(steps)
   })
 
-  test('落盘时核对什么：留着原文的核对原字节，新建的核对仍不存在，原文没留的不核对（只靠计划后那次印记）', () => {
+  test('落盘始终核对计划原字节，新建核对不存在，撤回缓存缺席不影响核对', () => {
     expect(writeOfPlan(planOf())).toEqual({
       target: '/space/a.txt',
       bytes: Buffer.from('new\n'),
       expected: { exists: true, bytes: Buffer.from('old\n') },
     })
-    expect(writeOfPlan(planOf({ previous: Buffer.alloc(0) }))).toEqual({
+    expect(writeOfPlan(planOf({ previous: Buffer.alloc(0), baseBytes: Buffer.alloc(0) }))).toEqual({
       target: '/space/a.txt',
       bytes: Buffer.from('new\n'),
       expected: { exists: true, bytes: Buffer.alloc(0) },
     })
-    expect(writeOfPlan(planOf({ created: true, previous: null }))).toEqual({
+    expect(writeOfPlan(planOf({ created: true, previous: null, baseBytes: null }))).toEqual({
       target: '/space/a.txt',
       bytes: Buffer.from('new\n'),
       expected: { exists: false },
@@ -558,6 +561,7 @@ describe('一批的小工具：utils/batch.ts', () => {
     expect(writeOfPlan(planOf({ previous: undefined }))).toEqual({
       target: '/space/a.txt',
       bytes: Buffer.from('new\n'),
+      expected: { exists: true, bytes: Buffer.from('old\n') },
     })
   })
 

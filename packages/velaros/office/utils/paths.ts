@@ -1,14 +1,26 @@
 /** 路径与落盘原语：工作区包含判断、扩展名归一、文件探测、产物写出与临时产物定位。 */
 
-import { copyFile, mkdir, readdir, stat, writeFile } from 'node:fs/promises'
+import {
+  chmod,
+  copyFile,
+  link,
+  mkdir,
+  mkdtemp,
+  readdir,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises'
 import { dirname, extname, isAbsolute, join, resolve } from 'node:path'
 
-import { isPlainObject } from '@velaros-ai/core'
+import { isPlainObject, Log, readErrnoCode } from '@velaros-ai/core'
 import { currentPlatform } from '@velaros-ai/core/platform'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 
 import { OfficeErrorCodes } from '../contract/constants.js'
 import type { OfficeWordInput, OfficeWritten } from '../types/office.js'
+import type { OfficePreparedOutput } from '../types/output.js'
 
 import { officeError } from './errors.js'
 
@@ -89,7 +101,7 @@ export async function prepareOfficeOutputPath(
   outputPath: string,
   extension: string,
   overwrite?: boolean
-): Promise<{ path: string; created: boolean }> {
+): Promise<OfficePreparedOutput> {
   const resolvedPath = await normalizeExtensionPath(rootPath, outputPath, extension)
   const existing = await getFileStats(resolvedPath)
   // 目标存在但不是普通文件时拒绝，避免覆盖目录或特殊文件。
@@ -105,27 +117,48 @@ export async function prepareOfficeOutputPath(
   }
   // 父目录不存在时自动创建。
   await mkdir(dirname(resolvedPath), { recursive: true })
-  return { path: resolvedPath, created: !existing }
+  return {
+    path: resolvedPath,
+    created: !existing,
+    rootPath,
+    target: await resolveRealPath(resolvedPath),
+    overwrite: !!overwrite,
+  }
 }
 
 /** 准备 Word 输出路径；appendMode 可在已有 docx 后追加内容，此时不要求 overwrite。 */
 export async function prepareWordDocumentOutputPath(
   rootPath: string,
   input: Pick<OfficeWordInput, 'outputPath' | 'overwrite' | 'appendMode'>
-): Promise<{ path: string; created: boolean; append: boolean }> {
+): Promise<OfficePreparedOutput & { append: boolean }> {
   const resolvedPath = await normalizeExtensionPath(rootPath, input.outputPath, '.docx')
   const existing = await getFileStats(resolvedPath)
   if (existing && !existing.isFile())
     throw officeError('VALIDATION', `目标路径不是文件：${input.outputPath}`)
   await mkdir(dirname(resolvedPath), { recursive: true })
   // appendMode 只在目标文件已存在时生效。
-  if (input.appendMode && existing) return { path: resolvedPath, created: false, append: true }
+  if (input.appendMode && existing)
+    return {
+      path: resolvedPath,
+      created: false,
+      append: true,
+      rootPath,
+      target: await resolveRealPath(resolvedPath),
+      overwrite: true,
+    }
   if (existing && !input.overwrite)
     throw officeError(
       OfficeErrorCodes.outputExists,
       `文件已经在了，要覆盖就传 overwrite: true，要接在后面就传 appendMode: true：${input.outputPath}`
     )
-  return { path: resolvedPath, created: !existing, append: false }
+  return {
+    path: resolvedPath,
+    created: !existing,
+    append: false,
+    rootPath,
+    target: await resolveRealPath(resolvedPath),
+    overwrite: !!input.overwrite,
+  }
 }
 
 /** 解析输入路径并限制允许的扩展名；最终路径仍必须落在工作区内。 */
@@ -173,31 +206,75 @@ export async function getFileStats(
   }
 }
 
-/** 写入一个文件（二进制或文字）并交回写出的回执。 */
-export async function writeOfficeFile(
-  prepared: { path: string; created: boolean },
-  data: Buffer | Uint8Array | string
+/** 完整产物先写同目录临时文件，取消与路径复核通过后再原子发布。 */
+async function publishOfficeOutput(
+  prepared: OfficePreparedOutput,
+  stageContent: (path: string) => Promise<void>,
+  signal?: AbortSignal
 ): Promise<OfficeWritten> {
-  await writeFile(prepared.path, data)
-  return writtenReceipt(prepared)
+  signal?.throwIfAborted()
+  await assertOfficePathInsideProject(prepared.rootPath, prepared.path, prepared.path)
+  if ((await resolveRealPath(prepared.path)) !== prepared.target)
+    throw officeError(
+      OfficeErrorCodes.pathOutsideProject,
+      `输出路径的真实目标已改变：${prepared.path}`
+    )
+  signal?.throwIfAborted()
+  const directory = await mkdtemp(join(dirname(prepared.target), '.velaros-office-'))
+  const staged = join(directory, 'output')
+  try {
+    await stageContent(staged)
+    const bytes = (await stat(staged)).size
+    await assertOfficePathInsideProject(prepared.rootPath, prepared.path, prepared.path)
+    if ((await resolveRealPath(prepared.path)) !== prepared.target)
+      throw officeError(
+        OfficeErrorCodes.pathOutsideProject,
+        `输出路径的真实目标已改变：${prepared.path}`
+      )
+    const existing = await getFileStats(prepared.target)
+    if (existing && !existing.isFile())
+      throw officeError('VALIDATION', `目标路径不是文件：${prepared.path}`)
+    if (prepared.overwrite && existing) await chmod(staged, Number(existing.mode) & 0o777)
+    signal?.throwIfAborted()
+    // link 是原子排他发布：准备之后出现同名文件也不能覆盖。rename 只用于明确授权覆盖的输出。
+    if (prepared.overwrite) await rename(staged, prepared.target)
+    else {
+      try {
+        await link(staged, prepared.target)
+      } catch (error) {
+        if (readErrnoCode(error) === 'EEXIST')
+          throw officeError(
+            OfficeErrorCodes.outputExists,
+            `文件已经在了，要覆盖就传 overwrite: true：${prepared.path}`
+          )
+        throw error
+      }
+    }
+    // 发布完成后保留真实回执，不再用取消信号或额外 stat 推翻已发生的写入。
+    return { path: prepared.path, bytes, created: !prepared.overwrite || !existing }
+  } finally {
+    await rm(directory, { recursive: true, force: true }).catch((error: unknown) => {
+      Log.tag('OfficeOutput').warn('temporary output cleanup failed', { error })
+    })
+  }
+}
+
+/** 写入一个文件（二进制或文字）并交回写出的回执。 */
+export function writeOfficeFile(
+  prepared: OfficePreparedOutput,
+  data: Buffer | Uint8Array | string,
+  signal?: AbortSignal
+): Promise<OfficeWritten> {
+  return publishOfficeOutput(prepared, (path) => writeFile(path, data), signal)
 }
 
 /** 复制临时产物到最终输出路径并交回写出的回执。 */
-export async function copyOfficeOutput(
-  prepared: { path: string; created: boolean },
-  sourcePath: string
+export function copyOfficeOutput(
+  prepared: OfficePreparedOutput,
+  sourcePath: string,
+  signal?: AbortSignal
 ): Promise<OfficeWritten> {
-  await copyFile(sourcePath, prepared.path)
-  return writtenReceipt(prepared)
-}
-
-/** 刚写下的文件的回执：路径、字节数、是不是新建的。 */
-export async function writtenReceipt(prepared: {
-  path: string
-  created: boolean
-}): Promise<OfficeWritten> {
-  const fileStats = await stat(prepared.path)
-  return { path: prepared.path, bytes: fileStats.size, created: prepared.created }
+  return publishOfficeOutput(prepared, (path) => copyFile(sourcePath, path), signal)
 }
 
 /** 在临时目录里查找预期 PDF；找不到时回退任意 PDF 文件。 */

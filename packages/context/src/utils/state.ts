@@ -3,7 +3,12 @@ import { AppError } from '@velaros-ai/core/error'
 import type { ContextRef, ContextState } from '../types/context.js'
 /** 创建尚未有记录的会话。 */
 export function emptyContextState(): ContextState {
-  return { version: 0, records: [], workingSet: { revision: 0, cursor: 0, items: [] } }
+  return {
+    version: 0,
+    objectReferencesVersion: 1,
+    records: [],
+    workingSet: { revision: 0, cursor: 0, items: [] },
+  }
 }
 /** 按引用身份比较，避免对象引用导致重复。 */
 export function sameContextRef(a: ContextRef, b: ContextRef): boolean {

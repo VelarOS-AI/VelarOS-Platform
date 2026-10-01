@@ -14,7 +14,7 @@ import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { modelText } from './support/model-turn.mjs'
-import { historyEntries, runtimeFrame } from './support/model-turn.mjs'
+import { runtimeFrame } from './support/model-turn.mjs'
 import { done, marker, turn } from './support/model-turn.mjs'
 
 /** 段状态的最小形态：第 1 段，还没有冻结条目。 */
@@ -642,9 +642,9 @@ test('INV-16 forty business rounds keep runtime context bounded while leases exp
         completedTurns: frame.programFrame.completedTurns,
       })
       assert.equal(request.contextStatus.mode, 'partitioned')
-      // 段内历史只往后加；过期的结果只剩引用卡，带正文的只有仍在租约里的
+      // 段内历史只往后加；租约已结束的冻结正文在容量不足时一次性退成引用卡，请求始终在窗口内
       assert(
-        historyEntries(request).filter((item) => item.text.length > 1000).length <= 3,
+        requestSize(request) / 4 <= request.contextStatus.inputLimit,
         JSON.stringify(samples.at(-1))
       )
       assert(frame.results.length <= 3, JSON.stringify(samples.at(-1)))
@@ -681,6 +681,15 @@ test('INV-16 forty business rounds keep runtime context bounded while leases exp
         recoveryChars: 6000,
         timeoutMs: 90000,
       },
+    },
+    // 估算与请求大小成正比：过期结果的冻结正文靠容量规划退成引用卡，而不是随轮数累积
+    {
+      limits: { contextTokens: 24000, inputTokens: 20000, outputTokens: 2048 },
+      estimate: async (request) => ({
+        tokens: Math.ceil(requestSize(request) / 4),
+        precision: 'estimate',
+        basis: 'chars/4',
+      }),
     }
   )
   await f.session.observe({
@@ -802,17 +811,22 @@ test('INV-53 an automatic fold of a busy segment without note or plan changes is
       const snapshot = JSON.parse(
         JSON.parse(request.materials[0].text).partitions.task.goals[0].text
       ).snapshot
-      narrated.push(snapshot.volume.ref.id)
+      // 压力整理可能发生在还没有封卷的段里，那时只提交摘要
+      if (snapshot.volume) narrated.push(snapshot.volume.ref.id)
       const patch = {
         baseRevision: snapshot.baseRevision,
         summary: 'Narrated the sealed volume',
         unresolved: [],
-        volume: {
-          summary: `Volume ${snapshot.volume.from + 1}-${snapshot.volume.through} printed step outputs`,
-          evidence: [],
-          unresolved: ['decide the final format'],
-          negativeAttempts: [`printing again after ${snapshot.volume.through}`],
-        },
+        ...(snapshot.volume
+          ? {
+              volume: {
+                summary: `Volume ${snapshot.volume.from + 1}-${snapshot.volume.through} printed step outputs`,
+                evidence: [],
+                unresolved: ['decide the final format'],
+                negativeAttempts: [`printing again after ${snapshot.volume.through}`],
+              },
+            }
+          : {}),
       }
       const part = turn(request, {
         execute: {
@@ -824,11 +838,16 @@ test('INV-53 an automatic fold of a busy segment without note or plan changes is
     },
   }
   const bases = []
+  const activeStates = []
   const statuses = []
   const f = await fixture(
     t,
     async function* (request, f) {
       bases.push(request.history[0].content)
+      activeStates.push(
+        JSON.parse(request.materials.findLast((item) => item.origin === 'runtime-view').text)
+          .partitions.task.active
+      )
       statuses.push(request.contextStatus)
       // 这个窗口下第一次封段在三十轮左右，那一卷有二十多轮
       if (f.calls === 44) {
@@ -851,7 +870,7 @@ test('INV-53 an automatic fold of a busy segment without note or plan changes is
         timeoutMs: 120000,
       },
       context: { sources: [], maintenance: { model: maintenance } },
-      // 此支线夹具只实现卷叙事；固定短租约，隔离独立的压力整理路径。
+      // 此支线会为当前卷交叙事；压力整理也可能先完成该卷，自动补写不得再次请求。
       // 默认期限的工作窗口约束由上面的 INV-50 长程用例验证。
       protocol: { defaultRetain: 2 },
     },
@@ -875,12 +894,27 @@ test('INV-53 an automatic fold of a busy segment without note or plan changes is
       .filter((record) => record.title === 'context-maintenance:outcome')
       .map(async (record) => JSON.parse(await f.storage.get('s', record.objectId)))
   )
-  assert.equal(outcomes.length, narrated.length, JSON.stringify(outcomes))
-  assert(outcomes.every((item) => item.reason === 'narrate' && item.status === 'applied'))
+  assert.equal(
+    outcomes.filter((item) => item.changes?.volume).length,
+    narrated.length,
+    JSON.stringify(outcomes)
+  )
+  assert(outcomes.some((item) => item.reason === 'narrate'))
+  assert(
+    outcomes.every(
+      (item) => ['narrate', 'pressure'].includes(item.reason) && item.status === 'applied'
+    )
+  )
   // 叙事和长期单随下一次底座重建进入主线请求
   const narrated_base = bases.find((base) => base.includes('这一卷的叙事'))
   assert(narrated_base)
   assert.match(narrated_base, /printed step outputs/)
-  assert.match(narrated_base, /未解问题[^\n]*：\["decide the final format"\]/)
+  assert(
+    activeStates.some((active) =>
+      active.items.some(
+        (item) => item.kind === 'question' && item.text === 'decide the final format'
+      )
+    )
+  )
   assert.match(narrated_base, /否定尝试[^\n]*：\["printing again after \d+"/)
 })

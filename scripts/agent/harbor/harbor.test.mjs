@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,7 +7,9 @@ import { test } from 'node:test'
 
 import { BudgetLedger, budgetServer, usageCost } from './budget-proxy.mjs'
 import { toTrajectory } from './atif.mjs'
+import { readTraceArtifact } from './trace-artifact.mjs'
 import { runTask } from './run.mjs'
+import { discoverProjectCommands } from './tool-discovery.mjs'
 import { createLocalShellHost } from '@velaros-ai/velaros/shell/local'
 
 async function directory(t) {
@@ -121,13 +123,18 @@ test('ATIF preserves observation order, real invocation identities and embedded 
     instruction: 'Solve task',
     traces: [trace],
     branches: [{ sessionId: 'child', kind: 'agent', turns: [] }],
-    identity: { sourceCommit: 'commit', bundleFingerprint: 'fingerprint' },
+    identity: {
+      sourceCommit: 'commit',
+      bundleFingerprint: 'fingerprint',
+      reasoningEffort: 'medium',
+    },
     model: 'gpt-6-sol',
   })
   assert.equal(output.steps[1].llm_call_count, 0)
   assert.equal(output.steps[1].tool_calls[0].tool_call_id, 'read')
   assert.equal(output.steps[2].tool_calls[0].tool_call_id, 'write')
   assert.equal(output.steps[2].message, 'original model text')
+  assert.equal(output.steps[2].reasoning_effort, 'medium')
   assert.equal('cached_tokens' in output.steps[2].metrics, false)
   assert.equal(
     output.steps[2].observation.results[1].subagent_trajectory_ref[0].trajectory_id,
@@ -157,6 +164,7 @@ test('gateway validates model before dispatch and settles split SSE usage withou
   })
   await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve))
   const gateway = budgetServer({
+    requireIdentity: false,
     ledger,
     apiKey: 'private-provider-key',
     token: 'campaign-token',
@@ -239,6 +247,7 @@ test('gateway distinguishes upstream transport failures from budget exhaustion a
   })
   await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve))
   const gateway = budgetServer({
+    requireIdentity: false,
     ledger,
     apiKey: 'private-provider-key',
     token: 'campaign-token',
@@ -292,7 +301,12 @@ test('gateway classifies timeouts and keeps sensitive diagnostic text out of rec
       cause: { name: 'Error', code: 'https://fixture-sensitive-diagnostic/' },
     })
   })
-  const gateway = budgetServer({ ledger, apiKey: 'provider-key', token: 'test-token' })
+  const gateway = budgetServer({
+    requireIdentity: false,
+    ledger,
+    apiKey: 'provider-key',
+    token: 'test-token',
+  })
   await new Promise((resolve) => gateway.listen(0, '127.0.0.1', resolve))
   t.after(async () => {
     await new Promise((resolve) => gateway.close(resolve))
@@ -339,6 +353,7 @@ test('gateway finishes upstream accounting before dispatching the next request, 
   })
   await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve))
   const gateway = budgetServer({
+    requireIdentity: false,
     ledger,
     apiKey: 'test-key',
     token: 'test-token',
@@ -383,11 +398,48 @@ test('gateway finishes upstream accounting before dispatching the next request, 
   assert.equal((await health()).activeUpstreamRequests, 0)
 })
 
+test('tool discovery covers alternate and nested configurations within a fixed filesystem budget', async (t) => {
+  const workspace = await directory(t)
+  const outside = await directory(t)
+  for (const path of ['services/api', 'clients/web', 'jvm', 'vendor'])
+    await mkdir(join(workspace, path), { recursive: true })
+  for (const path of [
+    'services/api/requirements-dev.txt',
+    'services/api/setup.cfg',
+    'clients/web/pnpm-lock.yaml',
+    'clients/web/yarn.lock',
+    'jvm/pom.xml',
+    'jvm/build.gradle.kts',
+    'vendor/Cargo.toml',
+  ])
+    await writeFile(join(workspace, path), '')
+  await writeFile(join(outside, 'go.mod'), '')
+  await symlink(outside, join(workspace, 'external'))
+  const found = await discoverProjectCommands(workspace)
+  for (const name of ['python3', 'node', 'pnpm', 'yarn', 'java', 'mvn', 'gradle'])
+    assert(found.commands.includes(name))
+  assert(!found.commands.includes('cargo'))
+  assert(!found.commands.includes('go'))
+  assert.equal(found.coverage.exhaustive, false)
+  const bounded = await discoverProjectCommands(workspace, {
+    maxDepth: 1,
+    maxDirectories: 2,
+    maxEntries: 3,
+  })
+  assert(bounded.coverage.directories <= 2)
+  assert(bounded.coverage.entries <= 3)
+  assert(bounded.coverage.limited)
+  const empty = await discoverProjectCommands(outside, { maxDepth: 0 })
+  assert(empty.commands.includes('go'))
+  assert(!empty.commands.includes('python3'))
+})
+
 test('the first model request reports the shell that the local host will actually execute', async (t) => {
   const workspace = await directory(t)
   const output = await directory(t)
   const host = createLocalShellHost({ cwd: workspace })
-  const inspection = await host.inspectEnvironment()
+  const inspection = await host.inspectEnvironment(['git', 'rg', 'go', 'gofmt'])
+  await writeFile(join(workspace, 'go.mod'), 'module fixture\n')
   await host.dispose()
   let observed = false
   const result = await runTask({
@@ -401,6 +453,14 @@ test('the first model request reports the shell that the local host will actuall
       estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
       async *stream(request) {
         observed = request.compiledPrompt.includes(inspection.shell.path)
+        for (const command of inspection.commands) {
+          assert(request.compiledPrompt.includes(command.name))
+          if (command.path) assert(request.compiledPrompt.includes(command.path))
+        }
+        assert(request.compiledPrompt.includes('pathEntries'))
+        assert(request.compiledPrompt.includes('available'))
+        assert(request.compiledPrompt.includes('commandDiscovery'))
+        assert(request.instructions.includes('其他工具仍待确认'))
         const marker = request.compiledPrompt.match(/当前帧标记：(@@s[\da-f]+)。普通/)[1]
         yield { type: 'text', text: `Ready.\n${marker} done` }
         yield { type: 'usage', inputTokens: 1000, outputTokens: 100 }
@@ -440,7 +500,7 @@ test('a candidate working window reaches real context planning and remains bound
       },
     })
     assert.equal(result.status, 'completed', result.failure)
-    const traces = JSON.parse(await readFile(join(output, 'traces.json'), 'utf8'))
+    const traces = await readTraceArtifact(join(output, 'traces.json'))
     const request = JSON.parse(traces.traces[0].request.body).request
     assert.equal(request.contextStatus.inputLimit, expected)
   }

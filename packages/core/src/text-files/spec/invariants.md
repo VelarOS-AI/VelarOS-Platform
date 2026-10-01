@@ -14,3 +14,4 @@
 | INV-5 | 有界读不会被文件撑爆：超过上限抛 `TEXT_FILE_TOO_LARGE`、不分配超大缓冲，读的过程中变长抛 `TEXT_FILE_EXTERNAL_EDIT`；目录、命名管道这类不是普通文件的抛 `TEXT_FILE_NOT_REGULAR`，命名管道不会把调用卡住 | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 流式读与整读逐字一致：认编码看完整个文件（很长的 ASCII 开头不会让后面的 GB18030 被误当成 UTF-8），被块边界切开的多字节字符不会被切坏 | 测试 | `spec/acceptance.test.ts` |
 | INV-7 | `./contracts` 的整条引用链不碰 Node 内置模块，渲染进程可以直接加载 | 门禁 | `check:module-ownership` |
+| INV-8 | `writeBytes` / `writeText` 可接收取消信号：开始准备和最终 rename 前核对；异步准备期间取消不覆盖目标，清理临时文件；rename 已完成后不因迟到取消推翻提交事实 | 测试 | `test/text-file-io.test.ts` |

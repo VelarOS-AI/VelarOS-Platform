@@ -40,6 +40,8 @@ export interface WorkingSet {
 /** 一次持久化提交的完整元数据，正文独立保存。 */
 export interface ContextState {
   readonly version: number
+  /** 1 表示持久正文均有标准记录引用；旧会话须由原文 owner 补齐引用后才能回收。 */
+  readonly objectReferencesVersion?: 1
   readonly records: readonly ContextRecord[]
   readonly workingSet: WorkingSet
   readonly task?: ContextTaskState
@@ -484,6 +486,12 @@ export interface ContextCompletionResult {
 
 /** 同一快照内的记录选择；字段取交集，各选择结果取并集。 */
 export interface ContextRecordSelection {
+  /** 序号下界，不包含此项；与其他筛选取交集。 */
+  readonly after?: number
+  /** 序号上界，包含此项。 */
+  readonly through?: number
+  /** 返回匹配记录的前 N 项，最多 recordPage 项，不与 last/latest/latestPerTitle 合用。 */
+  readonly first?: number
   /** 精确标题。 */
   readonly title?: string
   /** 按字面匹配的标题前缀。 */

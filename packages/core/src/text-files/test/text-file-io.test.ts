@@ -78,6 +78,42 @@ describe('改名前的第二次核对', () => {
   })
 })
 
+describe('取消边界', () => {
+  test('INV-8 writeBytes 与 writeText 都转交取消信号，已取消时不覆盖原文', async () => {
+    const path = join(root, 'target.txt')
+    await writeFile(path, 'original')
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      textFileIo.writeBytes(path, Buffer.from('bytes'), { signal: controller.signal })
+    ).rejects.toBe(controller.signal.reason)
+    await expect(textFileIo.writeText(path, 'text', { signal: controller.signal })).rejects.toBe(
+      controller.signal.reason
+    )
+    expect(await readFile(path, 'utf8')).toBe('original')
+    expect(await readdir(root)).toEqual(['target.txt'])
+  })
+
+  test('INV-8 异步准备字节期间取消，不创建临时文件也不覆盖目标', async () => {
+    const path = join(root, 'target.txt')
+    await writeFile(path, 'original')
+    const controller = new AbortController()
+    await expect(
+      replaceFileAtomically(
+        path,
+        async () => {
+          await Promise.resolve()
+          controller.abort()
+          return Buffer.from('planned')
+        },
+        { signal: controller.signal }
+      )
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(await readFile(path, 'utf8')).toBe('original')
+    expect(await readdir(root)).toEqual(['target.txt'])
+  })
+})
+
 describe('流式读', () => {
   test('提前结束迭代也会关句柄，之后照常读写', async () => {
     const path = join(root, 'long.txt')

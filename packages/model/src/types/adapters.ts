@@ -22,6 +22,8 @@ export interface ModelAdapterConfig {
   adapter?: LooseOptional<AgentProviderAdapterConfig>
   /** 输入框选的思考力度；adapter 按 provider 能力映射为 reasoning/thinking 参数，缺席时按 medium。 */
   reasoningLevel?: LooseOptional<ReasoningLevel>
+  /** 宿主明确配置的 OpenAI 显式缓存断点能力；缺席使用已知模型默认值。 */
+  openaiExplicitCacheBreakpoints?: boolean
   /** 本地 provider script 已解析的运行时元数据；执行阶段复用它，避免同一轮运行二次解析漂移。 */
   providerScriptRuntimeMetadata?: LooseOptional<ProviderScriptRuntimeMetadata>
 }
@@ -77,7 +79,7 @@ export type ModelCallProviderOptions = NonNullable<LanguageModelV3CallOptions['p
 export interface PromptCacheWireOptions {
   /** 会话缓存键译成 OpenAI 的 `prompt_cache_key` 发出去；不认这个字段的线路只剥掉内部标记。 */
   readonly sessionKey: boolean
-  /** 把稳定历史的末尾标记翻译为 OpenAI Responses 内容块上的显式缓存断点。 */
+  /** true 翻译 OpenAI 断点；false 明确禁用并拒绝手写断点冲突；缺席保留其它线路与显式字段合同。 */
   readonly openaiBreakpoints?: boolean
 }
 

@@ -62,7 +62,8 @@ export interface MemoryStore {
     offset: Optional<number>,
     limit: Optional<number>,
     signal: AbortSignal,
-    pointer?: string
+    pointer?: string,
+    invocation?: string
   ): Promise<MemoryContent>
   /** 保留或释放当前笔记、执行结果的驻留。 */
   retainMaterial(

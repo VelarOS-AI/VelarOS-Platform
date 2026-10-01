@@ -133,9 +133,14 @@ export function saveFileSource(
 /** 把 source: 或 view: 引用解析到它背后的源码快照。 */
 export function resolveFileSource(ctx: ProjectOperationContext, ref: string): SourceRecord {
   const record = get(ctx, ref, ['source:', 'view:'])
-  if (record.kind === 'project-file-source') return record
-  if (record.kind === 'project-file-view') return resolveFileSource(ctx, record.source)
-  throw new ProjectError('INVALID_INPUT', '源码引用无效。', { ref }, ReadForReferenceNextAction)
+  switch (record.kind) {
+    case 'project-file-source':
+      return record
+    case 'project-file-view':
+      return resolveFileSource(ctx, record.source)
+    default:
+      throw new ProjectError('INVALID_INPUT', '源码引用无效。', { ref }, ReadForReferenceNextAction)
+  }
 }
 
 /** 按实际交出去的可见范围签发可编辑视图，返回 view: 引用（就是 fileRef）；传入的不是 source: 引用时先落一份源码快照。 */

@@ -416,11 +416,7 @@ function renderMethod(member, file, printer, wanted, wantedValues) {
 
   const printed = parameters.map((parameter) => printParameter(parameter, file, printer))
   const returns = printer.printNode(ts.EmitHint.Unspecified, member.type, file)
-  const doc = alignDoc(
-    stripModelTag(
-      afterModelTag(sliceWithDoc(member, file).split(`${member.name.text}(`)[0].trimEnd())
-    )
-  )
+  const doc = alignDoc(stripModelTag(afterModelTag(docComment(member, file).trimEnd())))
   return expandBannedAliases(`${doc}\n${member.name.text}(${printed.join(', ')}): ${returns}`)
 }
 
@@ -665,6 +661,23 @@ function generate(surface) {
     wantedValues,
     problems
   )
+
+  // 声明语法正确仍可能把方法吞进注释；按 AST 比对实际函数导出，确保模型面没有静默漏操作。
+  const declaration = ts.createSourceFile('surface.d.ts', text, ts.ScriptTarget.Latest, true)
+  const namespace = declaration.statements.find(ts.isModuleDeclaration)
+  const exportedNames =
+    namespace?.body && ts.isModuleBlock(namespace.body)
+      ? namespace.body.statements
+          .filter(ts.isFunctionDeclaration)
+          .filter((method) =>
+            method.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+          )
+          .map((method) => method.name?.text)
+      : []
+  if (JSON.stringify([...exportedNames].sort()) !== JSON.stringify([...methodNames].sort()))
+    problems.push(
+      `生成声明的函数导出与操作接口不一致：期望 ${methodNames.join(', ')}；实际 ${exportedNames.join(', ')}`
+    )
 
   return {
     text,

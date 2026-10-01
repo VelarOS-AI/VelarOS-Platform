@@ -2,7 +2,8 @@
  * 一次 edit 的规划与提交：规划、交内核准备与提交、编回执。排队的项目资源门在执行类里套，这里不管。
  */
 
-import { isEmpty, isPlainObject, optionalWhen } from '@velaros-ai/core'
+import { isEmpty, isPlainObject, Log, optionalWhen } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { ProjectOperationContext } from '../../contract/requires.js'
 import type { PrepareEditInput } from '../../types/edit.js'
@@ -22,15 +23,17 @@ import { projectCreatedPaths, projectTransactionHasChanges } from './transaction
 /**
  * 规划并提交一次改动：规划是纯计算（版本过期时按原意图重新定位）；计划有写入时由内核准备、校验、提交，不问用户。
  * 计划没有写入（全是已经是目标格式的 recode）时不开事务。
- * 提交失败时丢掉事务，一个文件都没写。
+ * 仅清理尚未提交的失败事务；提交后的诊断保留回执和恢复身份。
  */
 export async function commitProjectEdit(
   steps: ProjectPlanInput['steps'],
   ctx: ProjectOperationContext
 ): Promise<ProjectEditResult> {
+  ctx.abortSignal.throwIfAborted()
   const plan = (await compileProjectEdit({ steps }, projectPlannerResolver(ctx)).catch(
     rethrowNotApplied
   )) as PrepareEditInput
+  ctx.abortSignal.throwIfAborted()
   const recode = optionalWhen(
     isPlainObject,
     plan.metadata?.recode
@@ -54,7 +57,11 @@ export async function commitProjectEdit(
   const kernel = await beforeWrite(() => ctx.project.kernel())
   const prepared = await kernel.prepareEdit(plan).catch(rethrowNotApplied)
   try {
-    const applied = await kernel.applyEdit({ transactionId: prepared.transactionId })
+    ctx.abortSignal.throwIfAborted()
+    const applied = await kernel.applyEdit(
+      { transactionId: prepared.transactionId },
+      ctx.abortSignal
+    )
     const final = kernel.getTransaction(prepared.transactionId) ?? prepared
     const created = projectCreatedPaths(final.patches)
     const receipt: ProjectEditResult = {
@@ -71,14 +78,47 @@ export async function commitProjectEdit(
         Object.entries(applied.oldRevisions).filter(([path]) => !created.has(path))
       ),
       newRevisions: applied.newRevisions,
-      files: await changeWindows(ctx, final.patches, applied.newRevisions),
+      files: [],
       diff: final.diff,
       diffLines: final.changedLines,
+    }
+    if (applied.notes?.length) receipt.notes = [...applied.notes]
+    try {
+      receipt.files = await changeWindows(ctx, final.patches, applied.newRevisions)
+    } catch (error) {
+      const failure = AppError.from(error)
+      Log.tag('ProjectEdit').warn('已提交事务的变更窗口读取失败', {
+        transactionId: prepared.transactionId,
+        changeRef: receipt.changeRef,
+        error,
+      })
+      receipt.notes = [
+        ...(receipt.notes ?? []),
+        `文件已提交；读取变更窗口失败 [${failure.code}] ${failure.message}`,
+      ]
     }
     if (recode) receipt.recode = recode
     return receipt
   } catch (error) {
-    kernel.discardTransaction(prepared.transactionId)
+    const status = kernel.getTransaction(prepared.transactionId)?.status
+    if (status === 'applied' || status === 'rolled_back') {
+      const changeRef = saveReceipt(ctx, 'change', { transactionId: prepared.transactionId })
+      const failure = AppError.from(error)
+      throw new AppError(
+        failure.code,
+        `事务 ${prepared.transactionId} 已${status === 'applied' ? '提交' : '撤销'}，恢复引用 ${changeRef}；附带步骤失败 [${failure.code}] ${failure.message}`,
+        error,
+        { executionOutcome: status, transactionId: prepared.transactionId, changeRef }
+      )
+    }
+    try {
+      kernel.discardTransaction(prepared.transactionId)
+    } catch (cleanupError) {
+      Log.tag('ProjectEdit').warn('failed transaction cleanup failed', {
+        transactionId: prepared.transactionId,
+        error: cleanupError,
+      })
+    }
     throw error
   }
 }

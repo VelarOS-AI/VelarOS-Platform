@@ -3,7 +3,10 @@
  * 解析宽容：人手改过的文件（没有头部、CRLF、BOM、name 与 summary 这类别名、认不出的类别）照样读得出来，解析从不抛错。
  */
 
-import { isBlank } from '@velaros-ai/core'
+import { createHash } from 'node:crypto'
+
+import { isBlank, isNull, isUndefined } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { MemoryLimits, MemoryTypes } from '../contract/constants.js'
 import type { MemoryEntry, MemorySaveInput, MemoryType } from '../types/memory.js'
@@ -99,6 +102,7 @@ export function parseMemoryFile(id: string, raw: string, modifiedAt: Date): Memo
   const updated = Date.parse(fields.get('updated') ?? '')
   return {
     id,
+    revision: memoryRevision(raw),
     type: memoryTypeOf(fields.get('type') ?? ''),
     title: fields.get('title') || id,
     description: fields.get('description') || firstLine(body),
@@ -114,7 +118,10 @@ export function parseMemoryTags(raw: string): string[] {
 }
 
 /** 把一条核对、规整过的记忆写成文件内容：头部五个字段，空一行，再是正文。updatedAt 是这次写入的时刻。 */
-export function serializeMemoryFile(entry: Required<MemorySaveInput>, updatedAt: string): string {
+export function serializeMemoryFile(
+  entry: MemorySaveInput & { tags: string[] },
+  updatedAt: string
+): string {
   return [
     '---',
     `title: ${encodeValue(entry.title)}`,
@@ -202,4 +209,21 @@ function decodeValue(raw: string): string {
 /** 写头部的一个值：会被读歪的（开头是特殊字符或引号、中间有「: 」「 #」）用单引号包起来，里面的单引号连写两遍。 */
 function encodeValue(value: string): string {
   return NeedsQuoting.test(value) ? `'${value.replaceAll("'", "''")}'` : value
+}
+
+/** 原始持久内容的版本，含头部与更新时间；外部编辑也会产生新版本。 */
+export function memoryRevision(raw: string): string {
+  return createHash('sha256').update(raw).digest('hex')
+}
+
+/** 对锁内当前版本核验；省略版本是有意的最后提交覆盖，不暗中合并正文。 */
+export function assertMemoryExpected(
+  previous: Nullable<string>,
+  expected: LooseOptional<string>
+): void {
+  if (!isUndefined(expected) && expected !== (isNull(previous) ? null : memoryRevision(previous)))
+    throw new AppError(
+      'CONFLICT',
+      '记忆已经被别处更新；重新 list 读取最新 revision，再决定如何保存或删除'
+    )
 }

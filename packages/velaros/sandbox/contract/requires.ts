@@ -24,14 +24,16 @@ import type {
  * 本机实现是 `createLocalSandboxHost`；空间给 `velaros:sandbox` 装端口时把它原样接上，自己只补作用域（`SandboxSurfacePort` 的 `resolveSource`）。
  */
 export interface RehearsalSandboxHostPort {
+  /** 只读取得句柄的真实源目录等元数据，供当前空间重新核权；不存在时抛 NOT_FOUND。旧宿主可缺省，空间会用不含正文的 diff 回执核权。 */
+  getSandboxRecord?: (sandboxId: string, signal?: AbortSignal) => Promise<SandboxRecord>
   /** 建沙箱：镜像源目录（gitignore 忽略的目录按 ignored 处理），镜像里的仓库剪掉推送地址；超过上限（数量、文件数、字节）建不出。 */
-  createSandbox: (options?: SandboxCreateOptions) => Promise<SandboxRecord>
+  createSandbox: (options?: SandboxCreateOptions, signal?: AbortSignal) => Promise<SandboxRecord>
   /** 看差量：三列相对路径永远完整，外加新增与修改的文本文件的统一差量；paths 只给这些文件附差量，textDiffs 为 false 时一个都不附。 */
-  diffSandbox: (options: SandboxDiffOptions) => Promise<SandboxDiff>
+  diffSandbox: (options: SandboxDiffOptions, signal?: AbortSignal) => Promise<SandboxDiff>
   /** 落回：只写源目录之内、要么全落要么报清落了哪些；给了 fingerprint 就先核对，镜像在看过差量之后又变过就整批不落；.git 的变化永远不落。 */
-  applySandbox: (options: SandboxApplyOptions) => Promise<SandboxApplyResult>
+  applySandbox: (options: SandboxApplyOptions, signal?: AbortSignal) => Promise<SandboxApplyResult>
   /** 丢弃：只删沙箱基目录之下的镜像；本来就不在时 removed 为 false。 */
-  discardSandbox: (sandboxId: string) => Promise<SandboxDiscardResult>
+  discardSandbox: (sandboxId: string, signal?: AbortSignal) => Promise<SandboxDiscardResult>
   /** 在镜像根里跑一条命令，约束钉在镜像根，写到源目录会失败；命令自己失败写进回执不抛错，abortSignal 触发时尽快停下。 */
   runInSandbox: (
     options: SandboxRunOptions,

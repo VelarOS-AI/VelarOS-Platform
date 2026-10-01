@@ -1,5 +1,5 @@
 /**
- * 编译器那一侧的活：模型交的程序只查语法、核对每个 import 落不落得到，手滑写成 TypeScript 时剥类型；
+ * 编译器那一侧的活：模型交的程序查语法、import 与标准输出的确定类型矛盾，手滑写成 TypeScript 时剥类型；
  * 我们自己写的代码模版另外照声明做完整类型检查（模型交的程序不走那一条）。
  * 全是纯函数，所以不放在类里；`CodeProgramChecker` 只负责按什么顺序用它们。
  */
@@ -11,8 +11,10 @@ import { CodeSurfaceDiagnosticCodes } from '../contract/constants.js'
 import type { CodeProgramDiagnostic } from '../types/script.js'
 
 import { renderDiagnosticFrame } from './diagnostics.js'
+import { readModuleReferences } from './module-form.js'
 import { programForCheck, readCapabilityNamespace } from './program.js'
 import { isRelativeSpecifier, resolveLibraryImport } from './refs.js'
+import { CodeSurfaceTuning } from './tuning.js'
 
 /** 生成出来的能力声明在内存文件系统里的名字。 */
 export const DeclarationFileName = '/velaros.d.ts'
@@ -288,10 +290,296 @@ export function typecheckTemplate(input: {
     .map((diagnostic) => toDiagnostic(diagnostic, fileName))
 }
 
+/** 只拒绝标准 output 已能证明的值/展示类型矛盾；未知值和普通能力参数仍由运行时校验。 */
+export function diagnoseOutputTypes(
+  input: {
+    source: string
+    declarations: string
+    path?: string
+    modules?: Readonly<Record<string, string>>
+  },
+  typescript: boolean
+): CodeProgramDiagnostic[] {
+  const parsed = readProgramFiles(input, typescript)
+  // 没有标准模块导入时无需创建类型分析程序；自定义同名函数不属于此合同。
+  if (
+    !parsed.files.some((file) =>
+      readModuleReferences(file).some(({ specifier }) => specifier.text === 'velaros')
+    )
+  )
+    return []
+  const files = new Map([
+    [DeclarationFileName, input.declarations],
+    ...parsed.files.map((file) => [file.fileName, file.text] as const),
+  ])
+  const options = { ...TemplateCheckOptions, noLib: true }
+  // 模型源码的 reference 也只能落到本次虚拟文件；不继承默认宿主的磁盘读取与路径查询。
+  const host: ts.CompilerHost = {
+    fileExists: (name) => files.has(name),
+    readFile: (name) => files.get(name),
+    directoryExists: (name) =>
+      [...files.keys()].some((file) => file.startsWith(name.endsWith('/') ? name : `${name}/`)),
+    getSourceFile: (name, version) => {
+      const text = files.get(name)
+      return isUndefined(text)
+        ? undefined
+        : ts.createSourceFile(name, text, version, true, typescript ? ts.ScriptKind.TS : undefined)
+    },
+    getDefaultLibFileName: () => '/lib.d.ts',
+    getCurrentDirectory: () => '/',
+    getCanonicalFileName: (name) => name,
+    useCaseSensitiveFileNames: () => true,
+    getNewLine: () => '\n',
+    writeFile: () => {},
+  }
+  const program = ts.createProgram([...files.keys()], options, host)
+  const checker = program.getTypeChecker()
+  const diagnostics: CodeProgramDiagnostic[] = []
+  for (const name of files.keys()) {
+    if (name === DeclarationFileName) continue
+    const file = program.getSourceFile(name)!
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isCallExpression(node) &&
+        node.arguments.length >= 2 &&
+        standardOutputBinding(node.expression, checker)
+      ) {
+        const options = node.arguments[1]!
+        const kinds = outputDisplayKinds(options, checker)
+        const requiresString =
+          kinds.length > 0 && kinds.every((kind) => kind === 'text' || kind === 'code')
+        const requiresList = kinds.length > 0 && kinds.every((kind) => kind === 'list')
+        const value = node.arguments[0]!
+        const values = outputExpressionLeaves(value, checker)
+        const impossible =
+          values &&
+          values.every((leaf) =>
+            requiresString
+              ? !ts.isStringLiteralLike(leaf) && !ts.isTemplateExpression(leaf)
+              : !ts.isArrayLiteralExpression(leaf)
+          )
+        if ((requiresString || requiresList) && impossible) {
+          diagnostics.push(
+            toDiagnostic(
+              {
+                category: ts.DiagnosticCategory.Error,
+                code: 2345,
+                file,
+                start: value.getStart(file),
+                length: value.getWidth(file),
+                messageText: `输出值与声明类型不匹配：${requiresString ? 'text/code 要求字符串' : 'list 要求数组'}；对象或混合结果省略 type，或使用 type="json"。`,
+              },
+              parsed.mainFile
+            )
+          )
+        }
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(file)
+  }
+  return diagnostics
+}
+
+/** 追踪真实导入及不可重赋值的别名，避免把局部同名函数当成标准 output。 */
+function standardOutputBinding(
+  expression: ts.Expression,
+  checker: ts.TypeChecker,
+  seen = new Set<ts.Symbol>()
+): boolean {
+  if (ts.isParenthesizedExpression(expression))
+    return standardOutputBinding(expression.expression, checker, seen)
+  if (ts.isPropertyAccessExpression(expression) && expression.name.text === 'output') {
+    const member = standardModuleOutput(expression.expression, checker)
+    return !!member && standardOutputSymbol(member, checker, seen)
+  }
+  if (ts.isElementAccessExpression(expression)) {
+    const key = expression.argumentExpression
+    const member =
+      ts.isStringLiteralLike(key) && key.text === 'output'
+        ? standardModuleOutput(expression.expression, checker)
+        : undefined
+    return !!member && standardOutputSymbol(member, checker, seen)
+  }
+  const symbol = checker.getSymbolAtLocation(expression)
+  return !!symbol && standardOutputSymbol(symbol, checker, seen)
+}
+
+/** 只认真实模块命名空间，避免把可变对象的同名属性误认成标准导出。 */
+function standardModuleOutput(
+  expression: ts.Expression,
+  checker: ts.TypeChecker,
+  seen = new Set<ts.Symbol>()
+): Optional<ts.Symbol> {
+  if (ts.isParenthesizedExpression(expression) || ts.isAwaitExpression(expression))
+    return standardModuleOutput(expression.expression, checker, seen)
+  if (
+    ts.isCallExpression(expression) &&
+    expression.expression.kind === ts.SyntaxKind.ImportKeyword
+  ) {
+    const specifier = expression.arguments[0]
+    const module =
+      specifier && ts.isStringLiteralLike(specifier) && specifier.text === 'velaros'
+        ? checker.getSymbolAtLocation(specifier)
+        : undefined
+    return module
+      ? checker.getExportsOfModule(module).find((symbol) => symbol.name === 'output')
+      : undefined
+  }
+  if (!ts.isIdentifier(expression)) return undefined
+  const symbol = checker.getSymbolAtLocation(expression)
+  if (!symbol || seen.has(symbol) || seen.size >= CodeSurfaceTuning.outputProofNodes)
+    return undefined
+  seen.add(symbol)
+  for (const declaration of symbol.declarations ?? []) {
+    if (ts.isNamespaceImport(declaration)) {
+      const module = checker.getAliasedSymbol(symbol)
+      return checker.getExportsOfModule(module).find((member) => member.name === 'output')
+    }
+    if (
+      ts.isVariableDeclaration(declaration) &&
+      declaration.initializer &&
+      ts.isVariableDeclarationList(declaration.parent) &&
+      declaration.parent.flags & ts.NodeFlags.Const
+    )
+      return standardModuleOutput(declaration.initializer, checker, seen)
+  }
+  return undefined
+}
+
+/** 符号必须落到标准模块的 output 声明；const 解构只接受已证实的标准模块命名空间。 */
+function standardOutputSymbol(
+  symbol: ts.Symbol,
+  checker: ts.TypeChecker,
+  seen: Set<ts.Symbol>
+): boolean {
+  if (seen.has(symbol) || seen.size >= CodeSurfaceTuning.outputProofNodes) return false
+  seen.add(symbol)
+  if (symbol.flags & ts.SymbolFlags.Alias)
+    return standardOutputSymbol(checker.getAliasedSymbol(symbol), checker, seen)
+  for (const declaration of symbol.declarations ?? []) {
+    if (declaration.getSourceFile().fileName === DeclarationFileName && symbol.name === 'output') {
+      for (let parent: ts.Node | undefined = declaration.parent; parent; parent = parent.parent)
+        if (
+          ts.isModuleDeclaration(parent) &&
+          ts.isStringLiteral(parent.name) &&
+          parent.name.text === 'velaros'
+        )
+          return true
+    }
+    if (
+      ts.isVariableDeclaration(declaration) &&
+      declaration.initializer &&
+      ts.isVariableDeclarationList(declaration.parent) &&
+      declaration.parent.flags & ts.NodeFlags.Const
+    )
+      if (standardOutputBinding(declaration.initializer, checker, seen)) return true
+    if (
+      ts.isBindingElement(declaration) &&
+      !declaration.dotDotDotToken &&
+      !declaration.initializer &&
+      ts.isObjectBindingPattern(declaration.parent)
+    ) {
+      const property = declaration.propertyName ?? declaration.name
+      const variable = declaration.parent.parent
+      if (
+        (ts.isIdentifier(property) || ts.isStringLiteral(property)) &&
+        property.text === 'output' &&
+        ts.isVariableDeclaration(variable) &&
+        variable.initializer &&
+        ts.isVariableDeclarationList(variable.parent) &&
+        variable.parent.flags & ts.NodeFlags.Const
+      ) {
+        const member = standardModuleOutput(variable.initializer, checker)
+        if (member && standardOutputSymbol(member, checker, seen)) return true
+      }
+    }
+  }
+  return false
+}
+
+/** 只读调用现场的普通属性；可变 options、getter、spread 与动态键仍由运行时核对。 */
+function outputDisplayKinds(expression: ts.Expression, checker: ts.TypeChecker): string[] {
+  if (ts.isParenthesizedExpression(expression))
+    return outputDisplayKinds(expression.expression, checker)
+  if (!ts.isObjectLiteralExpression(expression)) return []
+  let value: Optional<ts.Expression>
+  for (const property of expression.properties) {
+    if (ts.isSpreadAssignment(property) || ts.isComputedPropertyName(property.name)) return []
+    if (
+      property.name.getText() !== 'type' &&
+      (!ts.isStringLiteral(property.name) || property.name.text !== 'type')
+    )
+      continue
+    if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) return []
+    value = ts.isPropertyAssignment(property) ? property.initializer : property.name
+  }
+  if (!value) return []
+  const leaves = outputExpressionLeaves(value, checker)
+  return leaves?.every(ts.isStringLiteralLike) ? leaves.map((leaf) => leaf.text) : []
+}
+
+/** 仅凭表达式构造证明值的形状；const 可固定值身份，却不能固定其属性、数组元素或函数返回。 */
+function outputExpressionLeaves(
+  expression: ts.Expression,
+  checker: ts.TypeChecker,
+  cache = new Map<ts.Expression, Optional<ts.Expression[]>>()
+): Optional<ts.Expression[]> {
+  // 共享 const 分支只分析一次；预置未知值同时阻断循环引用，不按路径指数复制叶子。
+  if (cache.has(expression)) return cache.get(expression)
+  if (cache.size >= CodeSurfaceTuning.outputProofNodes) return undefined
+  cache.set(expression, undefined)
+  const read = (): Optional<ts.Expression[]> => {
+    if (ts.isParenthesizedExpression(expression))
+      return outputExpressionLeaves(expression.expression, checker, cache)
+    if (ts.isConditionalExpression(expression)) {
+      const yes = outputExpressionLeaves(expression.whenTrue, checker, cache)
+      const no = outputExpressionLeaves(expression.whenFalse, checker, cache)
+      return yes && no ? [...new Set([...yes, ...no])] : undefined
+    }
+    if (ts.isIdentifier(expression)) {
+      const symbol = checker.getSymbolAtLocation(expression)
+      if (!symbol) return undefined
+      const declaration = symbol.valueDeclaration
+      if (
+        declaration &&
+        ts.isVariableDeclaration(declaration) &&
+        !declaration.type &&
+        ts.isIdentifier(declaration.name) &&
+        declaration.initializer &&
+        ts.isVariableDeclarationList(declaration.parent) &&
+        declaration.parent.flags & ts.NodeFlags.Const
+      )
+        return outputExpressionLeaves(declaration.initializer, checker, cache)
+      return undefined
+    }
+    if (
+      ts.isObjectLiteralExpression(expression) ||
+      ts.isArrayLiteralExpression(expression) ||
+      ts.isStringLiteralLike(expression) ||
+      ts.isTemplateExpression(expression) ||
+      ts.isNumericLiteral(expression) ||
+      ts.isBigIntLiteral(expression) ||
+      ts.isRegularExpressionLiteral(expression) ||
+      ts.isArrowFunction(expression) ||
+      ts.isFunctionExpression(expression) ||
+      ts.isClassExpression(expression) ||
+      [ts.SyntaxKind.NullKeyword, ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword].includes(
+        expression.kind
+      )
+    )
+      return [expression]
+    return undefined
+  }
+  const leaves = read()
+  cache.set(expression, leaves)
+  return leaves
+}
+
 /**
  * 程序连同它 import 到的库里的脚本，各解析一遍；顺手核对每个 import，和 ES 模块链接时一样在执行之前报：
  * 能力模块要在这一轮的声明里、要的名字它得有；相对路径按隔离里的同一套规矩落到库里一份存在的脚本上。
- * 只认顶层的静态 import 与 re-export，和改写进隔离的那一步同一个口径。missing 是落不到的能力模块的命名空间。
+ * 预检静态 import、re-export 与字面量 import()；QuickJS 保留动态求值时机。missing 是落不到的能力模块的命名空间。
  */
 function readProgramFiles(
   input: {
@@ -321,14 +609,12 @@ function readProgramFiles(
   for (let next = pending.shift(); next; next = pending.shift()) {
     const { path, file } = next
     files.push(file)
-    for (const statement of file.statements) {
-      if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) continue
-      const specifier = statement.moduleSpecifier
-      if (!specifier || !ts.isStringLiteral(specifier)) continue
+    for (const { node: statement, specifier } of readModuleReferences(file)) {
       if (!isRelativeSpecifier(specifier.text)) {
         const module = declared.get(specifier.text)
         if (module) {
-          for (const [node, name] of importedNames(statement))
+          const names = ts.isCallExpression(statement) ? [] : importedNames(statement)
+          for (const [node, name] of names)
             if (!module.open && !module.names.has(name))
               problems.push({
                 file,

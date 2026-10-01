@@ -225,11 +225,11 @@ export interface ProjectKernel {
   /** 在事务的暂存内容上跑修复器，把真实的改动转成一次修订；暂存补丁不能干净重放时返回 ok 为假和诊断，什么都不改。 */
   fixTransaction(input: FixInput): Promise<FixResult>
   /** 应用事务：先校验，在写锁里逐个路径核对版本（允许的操作先 rebase 再复核校验）后写盘，任一文件失败就把已写的逆序还原；返回新旧版本。 */
-  applyEdit(input: ApplyEditInput): Promise<ApplyResult>
+  applyEdit(input: ApplyEditInput, signal?: AbortSignal): Promise<ApplyResult>
   /** 校验事务的暂存内容（不给事务时校验当前工作区），合并校验器与适配器的诊断。 */
   validate(input: ValidateInput): Promise<ValidationResult>
   /** 回滚已应用的事务：先确认每个文件仍是应用后的样子、每个补丁都能还原，再逆序写回；文件被外部改过时抛 CONFLICT_WITH_EXTERNAL_EDIT，不覆盖。 */
-  rollback(input: RollbackInput): Promise<RollbackResult>
+  rollback(input: RollbackInput, signal?: AbortSignal): Promise<RollbackResult>
   /** 单个事务或全部事务合并后的 diff、改动文件与变更行数；事务号不存在时抛 INVALID_INPUT。 */
   diff(input?: { transactionId?: string }): Promise<DiffResult>
   /** 读取内存中已暂存/已应用事务；apply 前预检与 amend 路径使用。 */
@@ -887,18 +887,23 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
   }
 
   /** 应用已准备好的事务，并记录新旧 revision。 */
-  public async applyEdit(input: ApplyEditInput): Promise<ApplyResult> {
-    return this.runTransactionCommand(input.transactionId, () => this.applyEditSerialized(input))
+  public async applyEdit(input: ApplyEditInput, signal?: AbortSignal): Promise<ApplyResult> {
+    return this.runTransactionCommand(input.transactionId, () =>
+      this.applyEditSerialized(input, signal)
+    )
   }
 
   /** apply 写盘前的检查：事务状态、校验、路径仍在项目之内，最后加锁。任何一步失败时磁盘都还没被改动。 */
-  private async beginApplyCommand(input: ApplyEditInput) {
+  private async beginApplyCommand(input: ApplyEditInput, signal?: AbortSignal) {
+    signal?.throwIfAborted()
     await this.hooks.emit('BeforeApplyEdit', this, input)
+    signal?.throwIfAborted()
     const tx = this.transactionRepository.get(input.transactionId)
     if (!tx) throw new ProjectError('INVALID_INPUT', `未知事务：${input.transactionId}`)
     const isRestoringRolledBackTransaction = tx.status === 'rolled_back'
     this.transactionStateMachine.assertApplicable(tx)
     const validation = await this.validateSerialized({ transactionId: tx.transactionId })
+    signal?.throwIfAborted()
     if (!validation.ok) throw validationFailed(tx.transactionId, validation)
     // validate 会把可变事务推进到 validated；execution token 必须从校验后的稳定状态开始，
     // 这样 apply 后续失败时仍恢复到现有语义下的 validated，而不是调用前的 prepared。
@@ -908,9 +913,14 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     return { tx, isRestoringRolledBackTransaction, execution, lock }
   }
 
-  private async applyEditSerialized(input: ApplyEditInput): Promise<ApplyResult> {
-    const { tx, isRestoringRolledBackTransaction, execution, lock } =
-      await this.beginApplyCommand(input).catch(rethrowNotApplied)
+  private async applyEditSerialized(
+    input: ApplyEditInput,
+    signal?: AbortSignal
+  ): Promise<ApplyResult> {
+    const { tx, isRestoringRolledBackTransaction, execution, lock } = await this.beginApplyCommand(
+      input,
+      signal
+    ).catch(rethrowNotApplied)
     try {
       const oldRevisions: Record<string, string> = {}
       const newRevisions: Record<string, string> = {}
@@ -1006,6 +1016,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
           async (directory) => (await this.store.snapshot(directory, false)).exists
         )
         this.transactionRecovery.prepareBytePlan(tx, restoreByPath)
+        signal?.throwIfAborted()
         pending = this.beginDurableOperation(tx, 'apply', restoreByPath)
       } catch (error) {
         this.transactionRepository.set(tx.transactionId, transactionBeforePreflight)
@@ -1093,7 +1104,16 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
         gitTrackedFiles: optionalWhen(gitTrackedFiles.length > 0, gitTrackedFiles),
         gitUntrackedFiles: optionalWhen(gitUntrackedFiles.length > 0, gitUntrackedFiles),
       }
-      await this.hooks.emit('AfterApplyEdit', this, result)
+      try {
+        await this.hooks.emit('AfterApplyEdit', this, result)
+      } catch (error) {
+        const failure = AppError.from(error)
+        result.notes = [`文件已提交；AfterApplyEdit 失败 [${failure.code}] ${failure.message}`]
+        this.providers.logger?.warn?.('project.hook.postCommit.failed', {
+          transactionId: tx.transactionId,
+          error,
+        })
+      }
       this.journal.record({
         actor: 'system',
         action: 'apply_edit',
@@ -1163,8 +1183,10 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
   }
 
   /** 回滚已应用事务，并把 apply 对 git intent-to-add 标记的增删一并撤回。 */
-  public async rollback(input: RollbackInput): Promise<RollbackResult> {
-    return this.runTransactionCommand(input.transactionId, () => this.rollbackSerialized(input))
+  public async rollback(input: RollbackInput, signal?: AbortSignal): Promise<RollbackResult> {
+    return this.runTransactionCommand(input.transactionId, () =>
+      this.rollbackSerialized(input, signal)
+    )
   }
 
   /**
@@ -1255,11 +1277,16 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     return this.transactionRecovery.captureApplyRestoreState(tx.changedFiles)
   }
 
-  private async rollbackSerialized(input: RollbackInput): Promise<RollbackResult> {
+  private async rollbackSerialized(
+    input: RollbackInput,
+    signal?: AbortSignal
+  ): Promise<RollbackResult> {
+    signal?.throwIfAborted()
     const { tx, execution, lock } = await this.beginRollbackCommand(input).catch(rethrowNotApplied)
     try {
       const reversed = [...tx.patches].reverse()
       const restoreByPath = await this.prepareRollbackWrites(tx, reversed).catch(rethrowNotApplied)
+      signal?.throwIfAborted()
       const pending = this.beginDurableOperation(tx, 'rollback', restoreByPath)
       const writtenOrder: string[] = []
       const rolledBackRevisions: Record<string, string> = {}
@@ -1332,7 +1359,16 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
         gitUntrackedFiles: optionalWhen(gitUntrackedFiles.length > 0, gitUntrackedFiles),
         gitTrackedFiles: optionalWhen(gitTrackedFiles.length > 0, gitTrackedFiles),
       }
-      await this.hooks.emit('AfterRollback', this, result)
+      try {
+        await this.hooks.emit('AfterRollback', this, result)
+      } catch (error) {
+        const failure = AppError.from(error)
+        result.notes = [`文件已撤销；AfterRollback 失败 [${failure.code}] ${failure.message}`]
+        this.providers.logger?.warn?.('project.hook.postCommit.failed', {
+          transactionId: tx.transactionId,
+          error,
+        })
+      }
       this.journal.record({
         actor: 'system',
         action: 'rollback',

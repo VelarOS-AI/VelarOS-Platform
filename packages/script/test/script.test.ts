@@ -1,4 +1,4 @@
-/** utils 的单元测试：预算裁剪、体量判定、手滑判据、模块改写、底稿编辑、时间线的引用、逐行差量与附属模块路径。不起隔离进程。 */
+/** utils 的单元测试：预算裁剪、体量判定、手滑判据、模块形态、底稿编辑、时间线的引用、逐行差量与附属模块路径。不起隔离进程。 */
 
 import { describe, expect, test } from 'bun:test'
 
@@ -13,7 +13,7 @@ import {
 } from '../src/utils/budget'
 import { declaredModules, isTypeScriptOnlySyntax, sliceModuleExport } from '../src/utils/compiler'
 import { applyProgramEdits } from '../src/utils/edit'
-import { readModuleSpecifiers, rewriteModuleForIsolate } from '../src/utils/module-form'
+import { readModuleSpecifiers } from '../src/utils/module-form'
 import { keepTail, readCapabilityNamespace } from '../src/utils/program'
 import { checkScriptPath, resolveLibraryImport } from '../src/utils/refs'
 import { describeProgramOversize } from '../src/utils/result'
@@ -171,38 +171,6 @@ void describe('模块形态', () => {
     expect(readCapabilityNamespace('velaros:files')).toBe('files')
     expect(readCapabilityNamespace('node:fs')).toBeNull()
   })
-
-  test('改写成隔离能跑的形状时，模型写的那些行一行都不挪——否则抛错的行号就对不上', () => {
-    const source = [
-      "import { read } from 'velaros:demo'",
-      'const r = await read({})',
-      'export default r',
-    ].join('\n')
-    const lines = rewriteModuleForIsolate(source).split('\n')
-    // 原来三行各在原位，交出的那句接在后面
-    expect(lines).toHaveLength(4)
-    expect(lines[0]).toContain('const { read } = __velaros("velaros:demo")')
-    expect(lines[1]).toBe('const r = await read({})')
-    expect(lines[2]).toBe('__exports.default = r;')
-    expect(lines[3]).toContain('return')
-  })
-
-  test('具名导出去掉 export 时换成等长空白，列号也不挪；解构出来的名字一个不漏', () => {
-    const source = [
-      'export const { a, b: [c] } = { a: 1, b: [2] }',
-      'export function f() {}',
-      'const x = 1',
-      'export { x as y }',
-    ].join('\n')
-    const lines = rewriteModuleForIsolate(source).split('\n')
-    expect(lines[0]).toContain('       const { a, b: [c] }')
-    expect(lines[1]).toBe('       function f() {}')
-    expect(lines[3]).toBe('')
-    expect(lines[4]).toContain('__exports["a"] = a;')
-    expect(lines[4]).toContain('__exports["c"] = c;')
-    expect(lines[4]).toContain('__exports["f"] = f;')
-    expect(lines[4]).toContain('__exports["y"] = x;')
-  })
 })
 
 void describe('在底稿上改', () => {
@@ -237,55 +205,10 @@ void describe('在底稿上改', () => {
   })
 })
 
-void describe('库里的脚本改写', () => {
-  test('相对 import 落到库里的路径、等它跑完；能力模块照旧同步取桩', () => {
-    const source = [
-      "import { read } from 'velaros:demo'",
-      "import { parse } from './util.js'",
-      "import * as all from '../shared/all.js'",
-      'export default parse(read)',
-    ].join('\n')
-    const lines = rewriteModuleForIsolate(source, { importer: 'lib/tools/main.js' }).split('\n')
-    expect(lines[0]).toContain('const { read } = __velaros("velaros:demo")')
-    expect(lines[1]).toBe('const { parse } = (await __import("lib/tools/util.js"));')
-    expect(lines[2]).toBe('const all = (await __import("lib/shared/all.js"));')
-    expect(readModuleSpecifiers(source)).toEqual(['velaros:demo', './util.js', '../shared/all.js'])
-  })
-
-  test('转出去的就地取出来、末尾登记；export * 不转 default；库里的脚本总是交整个导出对象', () => {
-    const source = [
-      "export { parse as read } from './util.js'",
-      "export * from './more.js'",
-      "export * as ns from 'velaros:demo'",
-      'export const x = 1',
-    ].join('\n')
-    const output = rewriteModuleForIsolate(source, { importer: 'lib/index.js', library: true })
-    const lines = output.split('\n')
-    expect(lines[0]).toBe(
-      'const __exports = {}; const __reexport0 = (await __import("lib/util.js"));'
-    )
-    expect(lines[1]).toBe('const __reexport1 = (await __import("lib/more.js"));')
-    expect(lines[2]).toBe('const __reexport2 = __velaros("velaros:demo");')
-    expect(lines[4]).toContain("if (name !== 'default') __exports[name] = value;")
-    expect(lines[4]).toContain('__exports["read"] = __reexport0["parse"];')
-    expect(lines[4]).toContain('__exports["ns"] = __reexport2;')
-    expect(lines[4].endsWith('return __exports;')).toBe(true)
-  })
-
-  test('跨几行的 import 换完补足换行，后面每一行的行号都不挪', () => {
-    const source = [
-      'import {',
-      '  read,',
-      '  write,',
-      "} from 'velaros:demo'",
-      'const r = await read({})',
-      'export default r',
-    ].join('\n')
-    const lines = rewriteModuleForIsolate(source).split('\n')
-    expect(lines[0]).toContain('const { read, write } = __velaros("velaros:demo");')
-    expect(lines[4]).toBe('const r = await read({})')
-    expect(lines[5]).toBe('__exports.default = r;')
-  })
+test('静态依赖读取包含 import 与 re-export 并保持首次出现顺序', () => {
+  expect(
+    readModuleSpecifiers("import './a.js'; export * from './b.js'; export {x} from './a.js'")
+  ).toEqual(['./a.js', './b.js'])
 })
 
 void describe('程序附属模块的路径', () => {

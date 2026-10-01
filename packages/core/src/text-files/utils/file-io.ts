@@ -143,8 +143,9 @@ export async function assertBytesOnDisk(
 export async function replaceFileAtomically(
   path: string,
   prepare: (target: string, exists: boolean) => Uint8Array | Promise<Uint8Array>,
-  options: { mode?: number; expected?: ExpectedBytes }
+  options: { mode?: number; expected?: ExpectedBytes; signal?: AbortSignal }
 ): Promise<void> {
+  options.signal?.throwIfAborted()
   if (isPresent(options.mode) && !isPermissionBits(options.mode))
     throw new AppError(
       TextFileErrorCodes.invalidMode,
@@ -169,6 +170,7 @@ export async function replaceFileAtomically(
   if (options.expected) await assertBytesOnDisk(target, options.expected, WriteMismatchMessage)
   // 要写的字节在建临时文件之前算好：编码失败时磁盘上什么都没发生。
   const bytes = await prepare(target, !isUndefined(existing))
+  options.signal?.throwIfAborted()
   const temporary = join(dirname(target), `.velaros-write-${randomUUID()}.tmp`)
   const mode = existing ? existing.mode & 0o777 : options.mode
   // 没有要设的权限时不传 mode：open 按 0o666 建文件，再由 umask 收紧。
@@ -180,6 +182,8 @@ export async function replaceFileAtomically(
     await handle.sync()
     await handle.close()
     if (options.expected) await assertBytesOnDisk(target, options.expected, WriteMismatchMessage)
+    // 全部异步准备（包括最后一次版本核对）已经完成，紧贴真正提交再检查取消。
+    options.signal?.throwIfAborted()
     await rename(temporary, target)
     if (process.platform !== 'win32') await syncDirectory(dirname(target))
   } finally {

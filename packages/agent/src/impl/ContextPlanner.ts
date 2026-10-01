@@ -19,12 +19,12 @@ export interface ContextPlannerApi {
   density(chars: number, tokens: number): void
   /** 窗口对应的投影字符预算；还没有样本时用 ceiling。 */
   chars(window: number, ceiling: number): number
-  /** 每轮增长的估计（token）。 */
-  growth(window: number): number
-  /** 按当前增长，窗口还能再容纳几轮。 */
-  runway(tokens: number, window: number): number
-  /** 一帧已被接受：同一段、同一底座内的正向增长计入样本。 */
-  accept(tokens: number, segment: Optional<ActFrameSegment>): void
+  /** 每轮增长的估计（token）；保留此前帧的布局单独取样。 */
+  growth(window: number, retained?: boolean): number
+  /** 按当前布局的增长，窗口还能再容纳几轮。 */
+  runway(tokens: number, window: number, retained?: boolean): number
+  /** 一帧已被接受：同一段、同一底座、同一布局（是否保留此前的帧）内的正向增长计入样本。 */
+  accept(tokens: number, segment: Optional<ActFrameSegment>, retained?: boolean): void
   /** 因容量封段了一次；与上次封段间隔过短记为抖动。 */
   folded(): void
   /** 最近一次封段离上一次不足 foldTurns 帧，且之后还没跑满 minTurns 帧。 */
@@ -38,8 +38,16 @@ export interface ContextPlannerApi {
 export class ContextPlanner implements ContextPlannerApi {
   private ratios: readonly number[] = []
   private densities: readonly number[] = []
-  private increases: readonly number[] = []
-  private last?: { readonly tokens: number; readonly segment: string; readonly revision: number }
+  private increases: { readonly plain: readonly number[]; readonly retained: readonly number[] } = {
+    plain: [],
+    retained: [],
+  }
+  private last?: {
+    readonly tokens: number
+    readonly segment: string
+    readonly revision: number
+    readonly retained: boolean
+  }
   private sinceFold = Number.POSITIVE_INFINITY
   private shortFold = false
   private spent?: string
@@ -85,29 +93,36 @@ export class ContextPlanner implements ContextPlannerApi {
     return Math.max(1, Math.min(ceiling, Math.floor(window * sorted[sorted.length >> 1]!)))
   }
 
-  public growth(window: number): number {
-    if (isEmpty(this.increases))
-      return Math.max(1, Math.floor(window * ContextPlanTuning.growthSeed))
-    const sorted = [...this.increases].sort((a, b) => a - b)
+  public growth(window: number, retained = false): number {
+    const samples = retained ? this.increases.retained : this.increases.plain
+    if (isEmpty(samples)) return Math.max(1, Math.floor(window * ContextPlanTuning.growthSeed))
+    const sorted = [...samples].sort((a, b) => a - b)
     return Math.max(1, sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.75))]!)
   }
 
-  public runway(tokens: number, window: number): number {
-    return (window - tokens) / this.growth(window)
+  public runway(tokens: number, window: number, retained = false): number {
+    return (window - tokens) / this.growth(window, retained)
   }
 
-  public accept(tokens: number, segment: Optional<ActFrameSegment>): void {
+  public accept(tokens: number, segment: Optional<ActFrameSegment>, retained = false): void {
     this.sinceFold++
     if (
       segment &&
       this.last?.segment === segment.id &&
       this.last.revision === segment.revision &&
+      this.last.retained === retained &&
       tokens > this.last.tokens
     )
-      this.increases = [...this.increases, tokens - this.last.tokens].slice(
-        -ContextPlanTuning.growthSamples
-      )
-    this.last = segment ? { tokens, segment: segment.id, revision: segment.revision } : undefined
+      this.increases = {
+        ...this.increases,
+        [retained ? 'retained' : 'plain']: [
+          ...this.increases[retained ? 'retained' : 'plain'],
+          tokens - this.last.tokens,
+        ].slice(-ContextPlanTuning.growthSamples),
+      }
+    this.last = segment
+      ? { tokens, segment: segment.id, revision: segment.revision, retained }
+      : undefined
   }
 
   public folded(): void {

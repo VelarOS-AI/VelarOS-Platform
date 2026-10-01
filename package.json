@@ -54,7 +54,7 @@
     "build:devtools-performance-engine": "bun scripts/browser/buildDevtoolsPerformanceEngine.mjs",
     "typecheck": "node scripts/run-workspace-script.mjs typecheck",
     "test": "node scripts/run-workspace-script.mjs test && bun run test:act-eval",
-    "test:act-eval": "node --test scripts/agent/act-eval.test.mjs scripts/agent/evidence-checkpoints.test.mjs scripts/agent/harbor/harbor.test.mjs",
+    "test:act-eval": "node --test scripts/agent/act-eval.test.mjs scripts/agent/evidence-checkpoints.test.mjs scripts/agent/harbor/harbor.test.mjs scripts/agent/harbor/trace-export.test.mjs scripts/agent/harbor/request-identity.test.mjs",
     "eval:act": "node scripts/agent/run-act-eval.mjs",
     "//lint": "lint 只报告 error；各包使用所属域的规则。",
     "lint": "eslint . --quiet",
@@ -96,7 +96,7 @@
     "check:release-source": "node --test scripts/release/local-release-identity.test.mjs scripts/release/tar-entry-paths.test.mjs",
     "check:host-contract-consumer": "node scripts/release/check-host-contract-consumer.mjs",
     "generate:script": "node scripts/script/generate-declarations.mjs --write",
-    "check:script": "node --test scripts/script/operation-contracts.test.mjs && node scripts/script/generate-declarations.mjs",
+    "check:script": "node --test scripts/script/operation-contracts.test.mjs scripts/script/generate-declarations.test.mjs && node scripts/script/generate-declarations.mjs",
     "generate:act-catalog": "node scripts/script/act-catalog.mjs --write",
     "check:act-catalog": "node scripts/script/act-catalog.mjs"
   },

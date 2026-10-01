@@ -34,10 +34,11 @@ export function normalizeReadError(err: unknown, path: string): Error {
 export async function writeFileAtomically(
   resolvedPath: string,
   contentBuffer: Buffer,
-  expected?: ExpectedBytes
+  expected?: ExpectedBytes,
+  signal?: AbortSignal
 ): Promise<void> {
   try {
-    await textFileIo.writeBytes(resolvedPath, contentBuffer, expected ? { expected } : {})
+    await textFileIo.writeBytes(resolvedPath, contentBuffer, { expected, signal })
   } catch (err) {
     const code = readErrnoCode(err)
     if (code === 'EACCES' || code === 'EPERM') {
@@ -65,10 +66,13 @@ export async function writeFileAtomically(
  */
 export async function removeFileChecked(
   resolvedPath: string,
-  expected?: ExpectedBytes
+  expected?: ExpectedBytes,
+  signal?: AbortSignal
 ): Promise<void> {
   try {
+    signal?.throwIfAborted()
     if (expected) await textFileIo.assertUnchanged(resolvedPath, expected)
+    signal?.throwIfAborted()
     await unlink(resolvedPath)
   } catch (err) {
     const code = readErrnoCode(err)

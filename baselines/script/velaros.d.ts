@@ -7,6 +7,9 @@ declare module 'velaros' {
 
   /**
    * 交出一个值给下一轮看：按 JSON 保存，对象里值为 undefined 的字段省略，数组里的空位或 undefined 变成 null，只有交出 undefined 本身会报错；一次执行最多 64 块。
+   * 原始 JSON 输出合计最多 1000000 个字符；超限块拒绝采集，不会截断后保存为完整原值。
+   * type 为 text 或 code 时值必须是字符串，list 必须是数组；对象或混合结果省略 type，或用 json。静态可确定的类型矛盾在执行前拒绝，动态未知值在 output 调用时校验。
+   * view 与 configure 只控制展示，不减少原始采集量；调用 output 前由脚本筛选、聚合，或分页分次执行，避免交出超限原值。
    * configure 要在第一次 output 之前调用。
    */
   interface ScriptOutput {
@@ -32,7 +35,7 @@ declare module 'velaros' {
 
   /**
    * 整份输出的展示预算：maxChars 包括输出目录与省略说明（最多 200000），实际分配由宿主决定；交的放不下时每块只露出一部分，
-   * 结果头里写着这次实际给的 displayChars。要看的内容多（几个大文件、长文），就分几次执行各交一部分。
+   * 显式配置优先于各块 view.maxChars 的申请，0 表示不展示；未配置且没有块申请时使用默认预算。结果头里写着这次实际给的 displayChars。要看的内容多（几个大文件、长文），就分几次执行各交一部分。
    */
   interface ScriptOutputConfig {
     readonly maxChars?: number
@@ -44,9 +47,9 @@ declare module 'velaros' {
   type ScriptOutputType = 'text' | 'code' | 'json' | 'list' | 'image' | 'file'
 
   /**
-   * 怎么展示（只影响你下一轮看到多少，原值照样完整保存，可以按引用召回）：
+   * 怎么展示（只影响你下一轮看到多少；原值在采集上限内完整保存，可以按引用召回）：
    * mode 默认 auto，按展示预算挑内容；full 要求整个值放得下，放不下就只给引用；reference 只给引用；summary 只展示整理服务已生成、版本匹配的摘要，没有就给引用。
-   * maxChars 本块最多展示多少字符（最多 200000）；lines 是一基闭区间 [起, 止]；maxItems 列表最多展示几项；edge 从头部或尾部选片段；paths 是 JSON Pointer 数组（最多 64 个），只展示这些字段。
+   * maxChars 本块最多展示多少字符（最多 200000）；未 configure 整体预算时，显式正数也申请本块所需的有限展示份额，实际仍受宿主总预算限制，不保证全文。reference/summary 不扩大整体申请；lines 是一基闭区间 [起, 止]；maxItems 列表最多展示几项；edge 从头部或尾部选片段；paths 是 JSON Pointer 数组（最多 64 个），只展示这些字段。
    */
   interface ScriptOutputView {
     readonly mode?: 'auto' | 'full' | 'reference' | 'summary'

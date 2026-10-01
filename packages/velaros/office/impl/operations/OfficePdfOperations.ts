@@ -4,11 +4,13 @@
  * 外部命令都经 OfficeConverters，缺命令或命令失败时抛带 `OfficeErrorCodes` 的错误。
  */
 
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, extname, join } from 'node:path'
 
 import { degrees, PDFDocument, StandardFonts } from 'pdf-lib'
+
+import { AppError } from '@velaros-ai/core/error'
 
 import { OfficePdfLimits } from '../../contract/constants.js'
 import type { OfficeOperationContext } from '../../contract/requires.js'
@@ -133,7 +135,7 @@ export class OfficePdfOperations implements OfficePdfOperationsApi {
         `${basename(normalizedInputPath, extname(normalizedInputPath))}.pdf`
       )
       if (!generatedPdf) throw missingOutputError('Word 转 PDF ', 'PDF')
-      return await copyOfficeOutput(output, generatedPdf)
+      return await copyOfficeOutput(output, generatedPdf, ctx.abortSignal)
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(
         () => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */
@@ -170,10 +172,12 @@ export class OfficePdfOperations implements OfficePdfOperationsApi {
       input.overwrite
     )
     // 先把源码写到用户可见的位置；即使后续编译失败，也能保留可修复的 .tex 文件。
-    await writeFile(source.path, input.latexSource, 'utf8')
+    await writeOfficeFile(source, input.latexSource, ctx.abortSignal)
 
-    const tempDir = await mkdtemp(join(tmpdir(), 'velaros-office-latex-pdf-'))
+    let tempDir: Nullable<string> = null
     try {
+      ctx.abortSignal.throwIfAborted()
+      tempDir = await mkdtemp(join(tmpdir(), 'velaros-office-latex-pdf-'))
       // 编译产物写入临时目录，成功后再复制到目标路径。
       const commandResults = await this.converters.runLatexCompile({
         ctx,
@@ -201,14 +205,27 @@ export class OfficePdfOperations implements OfficePdfOperationsApi {
       )
       if (!generatedPdf) throw missingOutputError(`用 ${compiler.name} 编译 LaTeX `, 'PDF')
       return {
-        ...(await copyOfficeOutput(output, generatedPdf)),
+        ...(await copyOfficeOutput(output, generatedPdf, ctx.abortSignal)),
         sourcePath: source.path,
         compiler: compiler.name,
       }
-    } finally {
-      await rm(tempDir, { recursive: true, force: true }).catch(
-        () => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */
+    } catch (error) {
+      const failure = AppError.from(error)
+      throw new AppError(
+        failure.code,
+        `${failure.message}；源码已经写入 ${source.path}，PDF 尚未完成`,
+        error,
+        {
+          ...failure.context,
+          executionOutcome: 'applied',
+          applied: [source.path],
+        }
       )
+    } finally {
+      if (tempDir)
+        await rm(tempDir, { recursive: true, force: true }).catch(
+          () => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */
+        )
     }
   }
 
@@ -262,7 +279,7 @@ export class OfficePdfOperations implements OfficePdfOperationsApi {
     })
 
     // 保存新文档并走统一的写出回执。
-    return writeOfficeFile(output, await outputDocument.save())
+    return writeOfficeFile(output, await outputDocument.save(), ctx.abortSignal)
   }
 }
 

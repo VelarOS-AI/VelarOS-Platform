@@ -53,6 +53,7 @@ export class BrowserProtocolSessions implements BrowserProtocolSessionsApi {
 
   private readonly log = Log.tag('BrowserProtocolSessions')
   private readonly sessions = new Map<string, BrowserProtocolSessionState>()
+  private readonly generations = new Map<string, symbol>()
   private readonly opening = new Map<string, Promise<BrowserProtocolSessionState>>()
   private readonly timers = new TimerScope({ name: 'BrowserProtocolSessions' })
   private sweeper: Nullable<TimerLease> = null
@@ -94,16 +95,28 @@ export class BrowserProtocolSessions implements BrowserProtocolSessionsApi {
   }
 
   public async close(sessionId: string): Promise<void> {
-    const state = this.sessions.get(sessionId) ?? (await this.opening.get(sessionId))
+    this.generations.delete(sessionId)
+    this.opening.delete(sessionId)
+    const state = this.sessions.get(sessionId)
     if (!state) return
     this.forget(sessionId, state)
-    await state.channel.close()
+    await this.timers.withTimeout(
+      BrowserTuning.protocol.closeTimeoutMs,
+      () => state.channel.close(),
+      { label: 'browser.protocol.close' }
+    )
   }
 
   public async dispose(): Promise<void> {
-    const sessionIds = [...this.sessions.keys()]
-    await Promise.all(sessionIds.map((sessionId) => this.close(sessionId)))
-    this.timers.dispose()
+    const sessionIds = new Set([...this.sessions.keys(), ...this.opening.keys()])
+    try {
+      await Promise.all([...sessionIds].map((sessionId) => this.close(sessionId)))
+    } finally {
+      if (this.sessions.size === 0) {
+        this.sweeper?.cancel()
+        this.sweeper = null
+      }
+    }
   }
 
   /** 这个浏览器会话的记账；没有就连一条（同一时刻只连一次）。 */
@@ -115,8 +128,10 @@ export class BrowserProtocolSessions implements BrowserProtocolSessionsApi {
     if (existing) return existing
     const pending = this.opening.get(sessionId)
     if (pending) return pending
-    const opened = this.open(sessionId, open).finally(() => {
-      this.opening.delete(sessionId)
+    const generation = Symbol(sessionId)
+    this.generations.set(sessionId, generation)
+    const opened = this.open(sessionId, open, generation).finally(() => {
+      if (this.opening.get(sessionId) === opened) this.opening.delete(sessionId)
     })
     this.opening.set(sessionId, opened)
     return opened
@@ -124,9 +139,20 @@ export class BrowserProtocolSessions implements BrowserProtocolSessionsApi {
 
   private async open(
     sessionId: string,
-    open: () => Promise<BrowserProtocolChannel>
+    open: () => Promise<BrowserProtocolChannel>,
+    generation: symbol
   ): Promise<BrowserProtocolSessionState> {
     const channel = await open()
+    if (this.generations.get(sessionId) !== generation) {
+      void this.timers
+        .withTimeout(BrowserTuning.protocol.closeTimeoutMs, () => channel.close(), {
+          label: 'browser.protocol.retired.close',
+        })
+        .catch((error: unknown) => {
+          this.log.warn('retired protocol channel cleanup failed', { sessionId, error })
+        })
+      throw new AppError('CLOSED', '浏览器会话已关闭，迟到的协议连接已丢弃。')
+    }
     const state: BrowserProtocolSessionState = {
       channel,
       events: [],
@@ -212,6 +238,7 @@ export class BrowserProtocolSessions implements BrowserProtocolSessionsApi {
     if (this.sessions.get(sessionId) !== state) return
     for (const unsubscribe of state.unsubscribe) unsubscribe()
     this.sessions.delete(sessionId)
+    this.generations.delete(sessionId)
     if (this.sessions.size === 0 && this.sweeper) {
       this.timers.cancel(this.sweeper)
       this.sweeper = null

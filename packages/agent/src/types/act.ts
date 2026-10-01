@@ -1,4 +1,5 @@
 import type { ContextProjection } from '@velaros-ai/context'
+import type { ModelHistoryMessage } from '@velaros-ai/kernel'
 import type { CompiledModelRequest } from '@velaros-ai/model'
 
 /** 用户文件的不可变归档引用。 */
@@ -207,4 +208,10 @@ export type ActComposedFrame = {
   readonly segment?: ActFrameSegment
   /** 本次运行里连续没有进展的步数。 */
   readonly repeatedSteps: number
+  /** 投影给出的逻辑历史，出线历史可能在它前面保留了此前的帧。 */
+  readonly logical: readonly ModelHistoryMessage[]
+  /** 本帧运行时材料正文，下一帧据此渲染变化。 */
+  readonly body: string
+  /** 出线历史是否保留了此前的帧；增长只在同一布局之间比较。 */
+  readonly retained: boolean
 } & CompiledModelRequest

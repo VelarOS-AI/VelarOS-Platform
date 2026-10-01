@@ -13,7 +13,6 @@ import type {
   ProjectChangeRecord,
   ProjectChangeRecordInput,
 } from '../../types/change-feed.js'
-import { cloneChange } from '../../utils/transactions/change-records.js'
 
 export abstract class BaseProjectChangeFeed implements ProjectChangeFeedWriter {
   private readonly changes = new Map<string, ProjectChangeRecord>()
@@ -26,22 +25,22 @@ export abstract class BaseProjectChangeFeed implements ProjectChangeFeedWriter {
       throw new AppError('VALIDATION', '变更记录的序号必须严格递增。')
     }
     this.lastSequence = change.sequence
-    this.changes.set(change.transactionId, cloneChange(change))
+    this.changes.set(change.transactionId, structuredClone(change))
   }
 
   /** 把一条新记录落到持久层；落盘的子类实现它，只在内存里的子类不实现。 */
   protected persist?(change: ProjectChangeRecord): void
 
   public record(input: ProjectChangeRecordInput): ProjectChangeRecord {
-    const change: ProjectChangeRecord = cloneChange({
+    const change: ProjectChangeRecord = structuredClone({
       ...input,
       sequence: this.lastSequence + 1,
       updatedAt: Date.now(),
     })
     this.persist?.(change)
     this.hydrate(change)
-    const published = cloneChange(change)
-    for (const listener of this.listeners) listener(cloneChange(published))
+    const published = structuredClone(change)
+    for (const listener of this.listeners) listener(structuredClone(published))
     return published
   }
 
@@ -58,12 +57,12 @@ export abstract class BaseProjectChangeFeed implements ProjectChangeFeedWriter {
       .filter((change) => change.sequence < before)
       .sort((left, right) => right.sequence - left.sequence)
       .slice(0, limit)
-      .map(cloneChange)
+      .map((change) => structuredClone(change))
   }
 
   public get(transactionId: string): ProjectChangeRecord | undefined {
     const change = this.changes.get(transactionId)
-    return change ? cloneChange(change) : undefined
+    return change ? structuredClone(change) : undefined
   }
 
   public subscribe(listener: ProjectChangeListener): () => void {

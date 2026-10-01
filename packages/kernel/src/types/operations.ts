@@ -104,6 +104,14 @@ export interface PreparedInvocation {
 
 /** 最终结果与外部效果独立记录。 */
 export interface InvocationReceipt {
+  /** 通用 Kernel 处理器进入证据，含宿主效果门排队；只有真实收束后才有最终回执。 */
+  readonly lifecycle?: {
+    readonly reservedAt: string
+    readonly preparedAt?: string
+    readonly startedAt?: string
+    /** 最终回执生成时刻；该回执只有 journal.settle 成功后才交给调用方。 */
+    readonly settledAt: string
+  }
   readonly invocation: PreparedInvocation
   readonly outcome: 'succeeded' | 'failed' | 'cancelled'
   readonly effect: 'none' | 'committed' | 'partial' | 'unknown'
@@ -150,4 +158,21 @@ export interface OperationCall {
   readonly binding: ModuleBinding
   readonly operation: string
   readonly input: unknown
+}
+
+/** 已请求取消但尚未真实收束的调用仍属于在途，身份不包含输入或模型内容。 */
+export interface PendingInvocation {
+  readonly id: string
+  readonly sessionId: string
+  readonly executionId: string
+  readonly moduleId: string
+  readonly operation: string
+  readonly phase:
+    'start' | 'journal' | 'prepare' | 'beforeDispatch' | 'handler' | 'settle' | 'reconcile'
+  readonly cancelRequested: boolean
+}
+
+/** 关闭只限制观察方等待；超时后后台继续等待真实收束再回收资源。 */
+export interface OperationRuntimeCloseOptions {
+  readonly timeoutMs?: number
 }

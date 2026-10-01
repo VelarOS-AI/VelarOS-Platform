@@ -6,9 +6,11 @@ import type { CodeCallNotice, ScriptPackageDefinition } from './script.js'
 export interface CodeRunRequest {
   /** 只引用实际授权操作的虚拟包成员。 */
   packages?: readonly ScriptPackageDefinition[]
-  /** 程序正文（函数体）。 */
+  /** 经兼容归一后的原生 JavaScript ES 模块正文；保持用户词法作用域。 */
   source: string
-  /** 程序 import 到的库里的脚本，已经改写成函数体：路径 → 正文。隔离里按路径加载，每个只跑一次。 */
+  /** 主模块在脚本库中的路径；省略时从库根解析相对 import。 */
+  path?: string
+  /** 用户及内部桥 ES 模块：路径 → 正文；由原生链接器按路径加载，每个只初始化一次。 */
   modules: Readonly<Record<string, string>>
   /** 大字符串旁路，按名字注入程序。 */
   blobs: Readonly<Record<string, string>>
@@ -55,7 +57,7 @@ export interface CodeRunOutcome {
   output?: ScriptOutputCapture
   /** 程序是否正常跑完。 */
   ok: boolean
-  /** 程序 `return` 的值。 */
+  /** 模块导出按现有返回合同交出的 JSON 值。 */
   value?: unknown
   /** 程序打的日志，按发生顺序。 */
   logs: string[]

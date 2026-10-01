@@ -47,7 +47,7 @@
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/kernel/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs && bun run generate:schema-snapshot",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test test spec/acceptance.test.ts spec/model-continuation.test.ts spec/operation-diagnostics.test.ts",
+    "test": "bun test test spec/acceptance.test.ts spec/model-continuation.test.ts spec/operation-diagnostics.test.ts spec/operation-lifecycle.test.ts",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/kernel",
     "generate:schema-snapshot": "bun scripts/generate-schema-snapshot.mjs"
   },

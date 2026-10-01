@@ -1,6 +1,8 @@
 /** 可调参数：不是对外承诺，改了不算改契约。对外承诺的上限在 `contract/constants.ts`。 */
 
 export const CodeSurfaceTuning = Object.freeze({
+  /** 单次输出来源证明最多访问多少节点；超过时保留运行时校验，不新增程序拒绝条件。 */
+  outputProofNodes: 256,
   /** 单条日志超过这个长度就先截一刀，免得一行日志顶掉整份预算。 */
   logLineChars: 2_000,
   /** 程序不给 timeoutMs 时用这个；上限仍受 `CodeSurfaceLimits.timeoutMs` 钳制。 */

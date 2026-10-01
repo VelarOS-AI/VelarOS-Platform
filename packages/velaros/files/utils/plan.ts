@@ -167,6 +167,7 @@ export function finishDraft(draft: FileEditDraft): FileEditPlan | FileEditProble
     target: location.target,
     linked: location.linked,
     created: !original,
+    baseBytes: toNullable(original?.buffer),
     bytes,
     totalLines: lineCount(content),
     baseVersion: original ? fileVersionOf(original.buffer) : null,

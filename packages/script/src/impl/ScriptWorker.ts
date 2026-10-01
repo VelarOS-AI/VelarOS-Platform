@@ -15,7 +15,8 @@ import type { ScriptWorkerOptions } from '../contract/requires.js'
 import type { ScriptOutputCapture } from '../types/output.js'
 import type { CodeRunRequest } from '../types/runner.js'
 import type { ScriptWorkerCommand, ScriptWorkerEvent } from '../types/worker.js'
-import { createWorkerBootstrap } from '../utils/worker-program.js'
+import { isRelativeSpecifier, resolveLibraryImport } from '../utils/refs.js'
+import { createWorkerBootstrap, createWorkerModules } from '../utils/worker-program.js'
 
 /** 受信 worker 内部的初始化入口；每个进程只处理一个程序。 */
 export interface ScriptWorkerApi {
@@ -36,6 +37,8 @@ class ScriptWorker implements ScriptWorkerApi {
   private logChars = 0
   private cpuRemaining = Infinity
   private cpuDeadline = Infinity
+  private mainPath = 'program.js'
+  private modulePaths: readonly string[] = []
 
   public constructor(private readonly options: ScriptWorkerOptions) {}
 
@@ -148,13 +151,16 @@ class ScriptWorker implements ScriptWorkerApi {
       ? (error as { message?: unknown; stack?: unknown; code?: unknown })
       : undefined
     let message = String(detail?.message ?? error)
-    const library = /(?:at .*?\()?((?:lib\/)[A-Za-z0-9_./-]+\.js):(\d+)/u.exec(
-      String(detail?.stack)
-    )
-    if (library)
-      message += `（出在库里的 ${library[1]} 第 ${Math.max(1, Number(library[2]) - 1)} 行）`
-    const matched = /program\.js:(\d+)/u.exec(String(detail?.stack))
-    const line = matched ? Number(matched[1]) - 1 : undefined
+    const location = (path: string): Optional<number> => {
+      const matched = new RegExp(
+        `${path.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}:(\\d+)`,
+        'u'
+      ).exec(String(detail?.stack))
+      return matched ? Number(matched[1]) : undefined
+    }
+    const library = this.modulePaths.find((path) => path !== this.mainPath && location(path))
+    if (library) message += `（出在库里的 ${library} 第 ${location(library)} 行）`
+    const line = location(this.mainPath)
     this.finish({
       type: 'done',
       ok: false,
@@ -193,21 +199,43 @@ class ScriptWorker implements ScriptWorkerApi {
       return
     }
     setup.value.dispose()
-    for (const [path, source] of Object.entries(message.modules)) {
-      const compiled = this.vm.evalCode(
-        `globalThis.__libraryFactories[${JSON.stringify(path)}] = async () => {\n${source}\n}`,
-        path
-      )
-      if (compiled.error) {
-        const error = this.readValue(compiled.error)
-        compiled.error.dispose()
-        this.fail(error)
-        return
-      }
-      compiled.value.dispose()
+    this.mainPath = message.path ?? 'program.js'
+    this.modulePaths = Object.keys(message.modules)
+    const synthetic = createWorkerModules(message)
+    // QuickJS 动态导入会丢失 normalizer 抛错并继续加载空名；把拒绝送到 loader，保留原目标诊断。
+    const rejectedModules = new Map<string, string>()
+    const rejectModule = (reason: string): string => {
+      const name = `velaros-internal:rejected-${rejectedModules.size}`
+      rejectedModules.set(name, reason)
+      return name
     }
+    this.runtime.setModuleLoader(
+      (name) => {
+        const rejected = rejectedModules.get(name)
+        if (!isUndefined(rejected)) throw new AppError('NOT_FOUND', rejected)
+        if (name === this.mainPath) return message.source
+        if (Object.hasOwn(synthetic, name)) return synthetic[name]!
+        if (Object.hasOwn(message.modules, name)) return message.modules[name]!
+        throw new AppError('NOT_FOUND', `本次程序没有模块 ${name}`)
+      },
+      (base, name) => {
+        if (!isRelativeSpecifier(name)) {
+          if (Object.hasOwn(synthetic, name)) return name
+          return rejectModule(`本次程序没有授权模块 ${name}`)
+        }
+        const resolved = resolveLibraryImport(base, name)
+        if (!resolved || (resolved !== this.mainPath && !Object.hasOwn(message.modules, resolved)))
+          return rejectModule(`本次程序没有附属模块 ${name}`)
+        return resolved
+      }
+    )
     const evaluated = this.withCpuBudget(() =>
-      this.vm.evalCode(`(async () => {\n${message.source}\n})()`, 'program.js')
+      // 入口只封装命名空间，不传它本身穿过 Promise resolve，避免导出 then 被当作 thenable。
+      this.vm.evalCode(
+        `import * as exports from ${JSON.stringify(`./${this.mainPath}`)}; export { exports };`,
+        'velaros-internal:entry',
+        { type: 'module' }
+      )
     )
     if (evaluated.error) {
       const error = this.readValue(evaluated.error)
@@ -216,7 +244,20 @@ class ScriptWorker implements ScriptWorkerApi {
       return
     }
     const program = evaluated.value
-    void this.withCpuBudget(() => this.vm.resolvePromise(program))
+    void this.withCpuBudget(() => {
+      const state = this.vm.getPromiseState(program)
+      switch (state.type) {
+        case 'fulfilled':
+          return Promise.resolve({
+            value: state.notAPromise ? state.value.dup() : state.value,
+            error: undefined,
+          })
+        case 'rejected':
+          return Promise.resolve({ error: state.error, value: undefined })
+        default:
+          return this.vm.resolvePromise(program)
+      }
+    })
       .then((result) => {
         if (this.finished) {
           if (result.error) result.error.dispose()
@@ -229,7 +270,13 @@ class ScriptWorker implements ScriptWorkerApi {
           this.fail(error)
           return
         }
-        let value = this.readValue(result.value)
+        const { exports } = this.readValue(result.value) as { exports: Record<string, unknown> }
+        const names = Object.keys(exports)
+        let value = isEmpty(names)
+          ? undefined
+          : names.length === 1 && names[0] === 'default'
+            ? exports.default
+            : exports
         result.value.dispose()
         program.dispose()
         const explicit = this.withCpuBudget(() => this.vm.evalCode('__readOutputs()'))

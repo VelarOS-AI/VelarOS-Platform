@@ -1,6 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai'
 
-import { isBlank } from '@velaros-ai/core'
+import { isBlank, optionalWhen } from '@velaros-ai/core'
 
 import type { ModelProviderAdapter } from '../../contract/requires'
 import type {
@@ -11,6 +11,7 @@ import type {
 import type { ChatProviderId } from '../../types/model'
 import { isOpenRouterCompatibleProvider } from '../../utils/catalog/model-selection'
 import { createOpenRouterFetch, normalizeOpenRouterRouting } from '../../utils/wire/openrouter'
+import { createResponsesFetch } from '../../utils/wire/responses-stream.js'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 
 import { languageModelWrappers } from './LanguageModelWrappers'
@@ -39,6 +40,7 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
         const openai = createOpenAI({
           apiKey,
           baseURL,
+          fetch: createResponsesFetch(),
         })
 
         return languageModelWrappers.withPromptCache(
@@ -49,7 +51,18 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
             config.reasoningLevel,
             this.reasoningFallback
           ),
-          { sessionKey: true, openaiBreakpoints: /^gpt-6-sol(?:$|-)/i.test(modelId) }
+          {
+            sessionKey: true,
+            // 官方缓存合同从 GPT-5.6 起支持显式断点；只认已知系列及日期快照，未知别名不猜能力。
+            // https://developers.openai.com/api/docs/guides/prompt-caching
+            openaiBreakpoints:
+              config.openaiExplicitCacheBreakpoints ??
+              optionalWhen(
+                /^gpt-5\.6(?:-(?:sol|terra|luna))?(?:-\d{4}-\d{2}-\d{2})?$/i.test(modelId) ||
+                  /^gpt-6-sol(?:$|-)/i.test(modelId),
+                true
+              ),
+          }
         )
       }
 

@@ -1,7 +1,20 @@
 import { isUndefined } from '@velaros-ai/core'
 import { isArray, isBoolean, isFiniteNumber, isNull, isObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { InvocationReceipt } from '@velaros-ai/kernel'
+import type { InvocationReceipt, InvocationRecord } from '@velaros-ai/kernel'
+
+/** 失败执行只索引已有调用身份与结算状态；正文仍由唯一调用日志保存。 */
+export function failedInvocationRecovery(records: readonly InvocationRecord[]) {
+  return {
+    calls: records.map((record) => ({
+      id: record.prepared.id,
+      operation: `${record.prepared.binding.moduleId}.${record.prepared.operation}`,
+      outcome: record.receipt?.outcome ?? 'unknown',
+      effect: record.receipt?.effect ?? 'unknown',
+      available: record.phase === 'settled' && Boolean(record.receipt),
+    })),
+  }
+}
 
 /** 调用诊断是原始观察材料；错误与诊断均保留，不能靠脚本的 output 筛选将其隐藏。 */
 export function invocationFeedbackDetails(receipt?: InvocationReceipt): {

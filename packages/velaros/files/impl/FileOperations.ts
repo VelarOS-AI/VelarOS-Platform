@@ -91,15 +91,15 @@ export interface FileOperationsApi {
   read(input: FileReadInput, ctx: FileOperationContext): Promise<FileReadResult>
   /**
    * @AgentView
-   * 改文件：按路径一步一步写，write 整份写、replace 把一段原文换掉。**优先一次改完**：几个文件、几处改动都放进 steps，一次成败，成了给一个 changeId。
-   * 定下改法之后、写进去之前文件被别人改过，整次不写（重新提交就是）。
+   * 改文件：按路径一步一步写，write 整份写、replace 把一段原文换掉。**优先一次改完**：几个文件、几处改动都放进 steps；先统一核对计划，成功后给一个 changeId。
+   * 每个文件在落盘时核对原始版本，单个文件原子替换。落盘途中失败可能已有部分写入，报错会点名已写文件及可用的撤回号，先读现状再处理。
    * 路径是管道、设备、套接字，或文件有多个硬链接时不碰。新内容编不成原编码（孤立代理项、GB18030 表示不了的字符）就整次不写。
    * @OperationEffect write
    */
   edit(input: FileEditInput, ctx: FileOperationContext): Promise<FileEditResult>
   /**
    * @AgentView
-   * 撤回一次 edit：那次改的每个文件回到改动前，那次新建的删掉，整次一起。只留最近 50 次改动。
+   * 撤回一次 edit：那次改的每个文件回到改动前，那次新建的删掉。逐项原子提交，途中失败会报告已撤回文件，再调用会接着撤；只留最近 50 次改动。撤回重新核验当前空间对原路径的授权，且真实目标必须一致。
    * @OperationEffect write
    */
   undo(input: FileUndoInput, ctx: FileOperationContext): Promise<FileUndoResult>
@@ -121,6 +121,7 @@ export class FileOperations implements FileOperationsApi {
     // 这个预算保护的是这一侧的内存与 IPC——正文落在程序的变量里，模型看不到它。
     let remaining = FileLimits.readChars
     for (const item of items) {
+      ctx.abortSignal.throwIfAborted()
       try {
         if (remaining <= 0)
           throw new AppError(
@@ -128,9 +129,11 @@ export class FileOperations implements FileOperationsApi {
             `本次调用的 ${FileLimits.readChars} 字符预算已被前面的文件用完，这个文件没有读；另起一次调用再读`
           )
         const result = await this.readOne(item, remaining, ctx)
+        ctx.abortSignal.throwIfAborted()
         remaining -= result.text.length
         files.push(result)
       } catch (error) {
+        ctx.abortSignal.throwIfAborted()
         const failure = AppError.from(error)
         log.debug('one file in a read batch failed', { code: failure.code })
         failed += 1
@@ -154,6 +157,7 @@ export class FileOperations implements FileOperationsApi {
     const brokenPaths = new Set<string>()
     const problems: FileEditProblem[] = []
     for (const [index, step] of steps.entries()) {
+      ctx.abortSignal.throwIfAborted()
       const problem = (
         reason: FileEditProblem['reason'],
         message: string,
@@ -169,6 +173,7 @@ export class FileOperations implements FileOperationsApi {
       const location = await this.locate(parsed.path, ctx).catch((error: unknown) =>
         AppError.from(error)
       )
+      ctx.abortSignal.throwIfAborted()
       if (location instanceof AppError) {
         problems.push(
           problem(location.code === 'PERMISSION' ? 'denied' : 'invalid', location.message)
@@ -186,6 +191,7 @@ export class FileOperations implements FileOperationsApi {
             `edit 一次最多改 ${FileLimits.editFiles} 个文件，steps[${index}] 碰到了第 ${FileLimits.editFiles + 1} 个；分几次调用`
           )
         const opened = await openDraft(index, location)
+        ctx.abortSignal.throwIfAborted()
         if ('reason' in opened) {
           problems.push(opened)
           broken.add(identity)
@@ -228,7 +234,8 @@ export class FileOperations implements FileOperationsApi {
 
     // 第二段：整次交给空间落盘；写进去的记成一次改动，`undo` 凭它的号整次撤回。
     try {
-      await ctx.files.commit(plans.map(writeOfPlan))
+      ctx.abortSignal.throwIfAborted()
+      await ctx.files.commit(plans.map(writeOfPlan), ctx.abortSignal)
     } catch (error) {
       throw commitFailure(error, plans, (applied) => {
         const partial = this.recordChange(applied)
@@ -264,6 +271,19 @@ export class FileOperations implements FileOperationsApi {
         `这次改动撤不回：有文件改之前超过 ${FileLimits.undoBytes} 字节，原文没留下来；要改回去就再 edit 一次`
       )
 
+    // 句柄只定位历史记录；权限仍来自本次调用的路径解析，端口可以由宿主逐次重建。
+    for (const entry of record.entries) {
+      const location = await this.locate(entry.path, ctx)
+      ctx.abortSignal.throwIfAborted()
+      if (
+        fileIdentity(location.target, this.platform.getPlatform()) !==
+        fileIdentity(entry.target, this.platform.getPlatform())
+      )
+        throw new AppError(
+          'PERMISSION',
+          `撤回目标已改变：${entry.path}；当前路径不再指向那次改动的文件`
+        )
+    }
     // 先核对每个文件：还是那次改完的样子的要撤；已经是改之前的样子的（上一次撤回做了一半）跳过；别的就是之后又被改过，整个不撤。
     const pending: Array<{ entry: FileChangeEntry; current: Buffer }> = []
     const conflicts: string[] = []
@@ -288,7 +308,8 @@ export class FileOperations implements FileOperationsApi {
       expected: { exists: true, bytes: current },
     }))
     try {
-      await ctx.files.commit(writes)
+      ctx.abortSignal.throwIfAborted()
+      await ctx.files.commit(writes, ctx.abortSignal)
     } catch (error) {
       const failure = AppError.from(error)
       const applied = isArray(failure.context.applied)
@@ -345,7 +366,9 @@ export class FileOperations implements FileOperationsApi {
         'VALIDATION',
         `range 要行号或 [首行, 末行]（从 1 起，末行不小于首行），这里给的是 ${JSON.stringify(item.range)}`
       )
+    ctx.abortSignal.throwIfAborted()
     const buffer = await readBoundedFile(target, path, FileLimits.fileBytes)
+    ctx.abortSignal.throwIfAborted()
     // 先认文本：内容恰好以 GIF8、%PDF- 开头的文本文件照样是文本；解不出文本的，再看是不是图片或文档，把该怎么办说清楚。
     const decoded = textCodec.decode(buffer)
     const media = decoded ? null : detectMediaType(buffer)

@@ -171,6 +171,7 @@ test('Kernel 调用意图先落盘，失败保留已提交效果，跨重启不�
       assert.equal(writes, 2)
       assert.equal(prepared, 1)
       const reliable = createContextInvocationJournal(reopened)
+      const settlementFailure = new Error('存储暂时离线')
       const broken = createOperationRuntime({
         modules: [definition],
         journal: {
@@ -178,7 +179,7 @@ test('Kernel 调用意图先落盘，失败保留已提交效果，跨重启不�
           prepare: (value) => reliable.prepare(value),
           read: (session, id) => reliable.read(session, id),
           settle: async () => {
-            throw new Error('存储暂时离线')
+            throw settlementFailure
           },
         },
       })
@@ -187,10 +188,18 @@ test('Kernel 调用意图先落盘，失败保留已提交效果，跨重启不�
         await assert.rejects(broken.invoke({ ...call, id: 'uncertain' }), /存储暂时离线/)
         assert.equal(writes, 4)
       } finally {
-        await broken.dispose()
+        await assert.rejects(broken.dispose(), (error) => {
+          assert.ok(error instanceof AggregateError)
+          assert.deepEqual(error.errors, [settlementFailure])
+          return true
+        })
       }
+      const unsettled = await reliable.read('s', 'uncertain')
+      assert.equal(unsettled.phase, 'prepared')
+      assert.equal(unsettled.receipt, undefined)
       await assert.rejects(restarted.invoke({ ...call, id: 'uncertain' }), /不能自动重放/)
       assert.equal(writes, 4)
+      assert.deepEqual(await reliable.read('s', 'uncertain'), unsettled)
     } finally {
       await restarted.dispose()
       await reopened.close()

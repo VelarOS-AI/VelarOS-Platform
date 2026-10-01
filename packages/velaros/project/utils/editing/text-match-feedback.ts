@@ -342,6 +342,16 @@ export function diagnoseTextMatchMiss(content: string, needle: string): TextMatc
             : mismatchCauses(line, fileLines[start + index], index, count)
         )
     )
+  // 读取原始行，保留制表符与 CRLF，避免使用规整后的匹配副本，
+  // 这样已确认的短锚点无需再次读取或输入。
+  const candidate = content
+    .split('\n')
+    .slice(start, start + count)
+    .join('\n')
+  const candidateText = {
+    text: candidate.slice(0, ProjectTuning.editing.candidateTextChars),
+    truncated: candidate.length > ProjectTuning.editing.candidateTextChars,
+  }
   // 宽容口径下仍不相等的第一行才是模型需要修正的分歧。
   const mismatchIndex = needleLines.findIndex(
     (line, index) => !equalUnder(TolerantSteps, line, fileLines[start + index], index, count)
@@ -351,6 +361,7 @@ export function diagnoseTextMatchMiss(content: string, needle: string): TextMatc
     const causes = isEmpty(tolerated) ? ['line_ending' as const] : tolerated
     return {
       candidateLine: start + 1,
+      candidateText,
       matchedLines: count,
       oldTextLines: count,
       causes,
@@ -368,6 +379,7 @@ export function diagnoseTextMatchMiss(content: string, needle: string): TextMatc
   const indent = (line: string) => line.length - line.trimStart().length
   return {
     candidateLine: start + 1,
+    candidateText,
     matchedLines: mismatchIndex,
     oldTextLines: count,
     firstMismatch: {
@@ -395,7 +407,11 @@ export function summarizeTextMatchMiss(diagnosis: TextMatchMissDiagnosis): strin
   return (
     `最接近位置从文件第 ${diagnosis.candidateLine} 行开始，oldText 前 ${diagnosis.matchedLines} 行一致${tolerated}，` +
     `第 ${mismatch.oldTextLine} 行（文件第 ${mismatch.fileLine} 行）出现分歧：${diagnosis.hint}` +
-    `oldText 该行为 ${JSON.stringify(mismatch.expected)}，文件原文为 ${actual}。`
+    `oldText 该行为 ${JSON.stringify(mismatch.expected)}，文件原文为 ${actual}。${
+      diagnosis.candidateText
+        ? `候选区域原文${diagnosis.candidateText.truncated ? '（已截断）' : ''}：${JSON.stringify(diagnosis.candidateText.text)}。`
+        : ''
+    }`
   )
 }
 
@@ -404,6 +420,8 @@ export function textMatchMissNextAction(diagnosis: TextMatchMissDiagnosis): stri
   const mismatch = diagnosis.firstMismatch
   if (!isPresent(diagnosis.candidateLine))
     return '请重新读取目标区域并按原文复制 oldText；不要凭记忆重拼长段文本，只保留能唯一定位的 3–5 行。'
+  if (diagnosis.candidateText && !diagnosis.candidateText.truncated)
+    return '先核对候选区域是否为要修改的位置；确认后直接从回执原文取短锚点，保留缩进与转义。仍会重新校验唯一匹配，不要自动应用相似候选；上下文不足或文件已变化时再局部读取。'
   const focusLine = mismatch?.fileLine ?? diagnosis.candidateLine
   const fromLine = Math.max(1, focusLine - 3)
   const target = mismatch

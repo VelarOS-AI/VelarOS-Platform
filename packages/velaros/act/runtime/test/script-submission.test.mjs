@@ -105,7 +105,10 @@ async function fixture(
 test('one model call publishes observer, executes once and sends fresh context with a leased result', async (t) => {
   const f = await fixture(t, async function* (request, frames) {
     if (frames.length === 1) {
-      yield turn(request, { observe: { source: observe }, execute: { source: execute } })
+      yield turn(request, {
+        observe: { source: observe },
+        execute: { source: execute, retainTurns: 2 },
+      })
       yield { type: 'finish', reason: 'stop' }
     } else yield* done(request)
   })

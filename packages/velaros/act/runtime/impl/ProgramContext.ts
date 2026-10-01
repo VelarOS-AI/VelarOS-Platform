@@ -9,20 +9,31 @@ import type {
   ModelView,
 } from '@velaros-ai/context'
 import { ContextLimits } from '@velaros-ai/context'
-import { isFalse, isNull, toNullable } from '@velaros-ai/core'
+import {
+  isArray,
+  isFalse,
+  isNull,
+  isNumber,
+  isObject,
+  isString,
+  toNullable,
+} from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelImage } from '@velaros-ai/kernel'
 import {
   type CodeProgramRequest,
   type ScriptOutputCapture,
+  type ScriptOutputDisplay,
   type ScriptOutputEdit,
+  type ScriptOutputFormat,
   scriptOutputs,
   type ScriptOutputSummary,
 } from '@velaros-ai/script'
 
 import { ScriptLeaseLimits } from '../../system/contract/constants.js'
 import type { ResultReleased, ResultRetained } from '../../system/types/memory.js'
+import type { MemoryReadDelivery } from '../types/memory.js'
 import type { PreparedScript } from '../types/program.js'
 import type { ScriptRetention } from '../types/results.js'
 import type {
@@ -31,6 +42,11 @@ import type {
   ScriptJob,
   ScriptProgramVersion,
 } from '../types/runtime.js'
+import type {
+  SegmentOutputCoverage,
+  SegmentOutputProof,
+  SegmentOutputView,
+} from '../types/segment.js'
 import type { ScriptSubmissionReceipt } from '../types/session.js'
 import { executionMaterial, projectMaterial } from '../utils/materials.js'
 import {
@@ -104,6 +120,15 @@ export interface ProgramContextApi {
     prompt: string
     /** 租约有效、但因本帧容量放不下而没有列出的结果。 */
     squeezed: readonly string[]
+    /** 只供宿主按当前实际历史逐块核对覆盖，不进入帧正文。 */
+    outputCoverage?: readonly SegmentOutputCoverage[]
+    /** 宿主投影预算；旧注入缺省时保持未知，不进入模型正文。 */
+    budget?: {
+      maxChars: number
+      resultBudgetChars: number
+      excerptChars: number
+      visibleResults: number
+    }
   }>
   /** 显式释放材料可见性，原始记录保持。 */
   release(ref: string, signal?: AbortSignal): Promise<ResultReleased>
@@ -171,6 +196,73 @@ export class ProgramContext implements ProgramContextApi {
     return { metadata, records }
   }
 
+  /** 只接受宿主登记的原样页对象；读取回执自身不是已交付证明。 */
+  private async readDelivery(
+    value: unknown,
+    carrierRef: string,
+    signal: AbortSignal
+  ): Promise<readonly SegmentOutputProof[]> {
+    if (!isObject(value) || isArray(value)) return []
+    const page = value as Record<string, unknown>
+    const delivery = page.delivery as { receipt?: ContextRef } | undefined
+    const receipt = delivery?.receipt
+    if (!receipt || receipt.sessionId !== this.sessionId || !isString(receipt.id)) return []
+    const snapshot = await this.snapshot([
+      { refId: receipt.id },
+      { title: 'search:history-reset', latest: true },
+    ])
+    signal.throwIfAborted()
+    const record = snapshot?.records.find((item) => item.ref.id === receipt.id)
+    const reset = Math.max(
+      snapshot?.metadata.task?.startedSequence ?? 0,
+      snapshot?.records.findLast((item) => item.title === 'search:history-reset')?.sequence ?? 0
+    )
+    if (
+      !record ||
+      record.kind !== 'audit' ||
+      record.title !== 'memory:read-delivery' ||
+      record.sequence <= reset
+    )
+      return []
+    const raw = await this.storage.get(this.sessionId, record.objectId)
+    if (isNull(raw)) return []
+    const bound = JSON.parse(raw) as MemoryReadDelivery
+    const { delivery: _delivery, ...content } = page
+    if (
+      bound.authorizationSequence !== reset ||
+      bound.source.sessionId !== this.sessionId ||
+      scriptOutputs.hash(content) !== bound.pageHash ||
+      !isString(content.text) ||
+      content.text.length !== bound.chars ||
+      content.offset !== bound.offset ||
+      content.totalChars !== bound.totalChars ||
+      content.pointer !== bound.pointer ||
+      !Number.isSafeInteger(bound.offset) ||
+      !Number.isSafeInteger(bound.chars) ||
+      !Number.isSafeInteger(bound.totalChars) ||
+      bound.offset < 0 ||
+      bound.chars < 0 ||
+      bound.offset + bound.chars > bound.totalChars ||
+      !record.sources.some(
+        (source) => source.sessionId === bound.source.sessionId && source.id === bound.source.id
+      )
+    )
+      return []
+    // 回执绑定不可变原块；只把整块 value 或整份归档的同表示范围交给当前历史聚合。
+    return bound.blocks.map((block) => ({
+      ref: bound.source.id,
+      key: block.key,
+      contentHash: block.contentHash,
+      carrierRef,
+      range: {
+        ...(bound.pointer ? { pointer: bound.pointer } : {}),
+        offset: bound.offset,
+        chars: bound.chars,
+        totalChars: bound.totalChars,
+      },
+    }))
+  }
+
   private async readState(snapshot: Nullable<ContextRecordSnapshot>): Promise<ProgramLeaseState> {
     const record = snapshot?.records.findLast(
       (item) => item.kind === 'audit' && item.title === 'script:lease-state'
@@ -204,7 +296,11 @@ export class ProgramContext implements ProgramContextApi {
         ],
         true
       )) ?? {
-        metadata: { version: 0, workingSet: { revision: 0, cursor: 0, items: [] } },
+        metadata: {
+          version: 0,
+          objectReferencesVersion: 1,
+          workingSet: { revision: 0, cursor: 0, items: [] },
+        },
         records: [],
       }
       if (additions.some((item) => snapshot.records.some((old) => old.ref.id === item.ref.id)))
@@ -503,8 +599,7 @@ export class ProgramContext implements ProgramContextApi {
           ref: ref.id,
           sourceRef: source.id,
           executionId,
-          expiresAfter:
-            typeof turns === 'number' ? state.completedTurns + turns : state.completedTurns,
+          expiresAfter: isNumber(turns) ? state.completedTurns + turns : state.completedTurns,
           task: turns === 'task' ? true : undefined,
           segment: turns === 'segment' ? true : undefined,
           leaseId: crypto.randomUUID(),
@@ -567,7 +662,11 @@ export class ProgramContext implements ProgramContextApi {
   public async release(ref: string, signal?: AbortSignal): Promise<ResultReleased> {
     await this.read(ref)
     await this.update(
-      (state) => ({ ...state, leases: state.leases.filter((item) => item.ref !== ref) }),
+      (state) => ({
+        ...state,
+        leases: state.leases.filter((item) => item.ref !== ref),
+        released: [...new Set([...(state.released ?? []), ref])],
+      }),
       [],
       signal
     )
@@ -591,6 +690,7 @@ export class ProgramContext implements ProgramContextApi {
     await this.update((state) => ({
       ...state,
       leases: state.leases.filter((item) => !item.task && !item.segment),
+      released: undefined,
     }))
   }
 
@@ -605,13 +705,27 @@ export class ProgramContext implements ProgramContextApi {
     images: readonly ModelImage[]
     prompt: string
     squeezed: readonly string[]
+    outputCoverage: readonly SegmentOutputCoverage[]
+    budget: {
+      maxChars: number
+      resultBudgetChars: number
+      excerptChars: number
+      visibleResults: number
+    }
   }> {
     const selected = await this.snapshot([
       { title: 'script:lease-state', kind: 'audit', latest: true },
       { title: 'search:history-reset', latest: true },
       { title: 'script:output-summaries', latest: true },
-      { title: 'user:image' },
-      { titlePrefix: 'act:child:' },
+      ...(!isEmpty(view.goals)
+        ? [
+            {
+              title: 'user:image',
+              after: Math.max(0, Math.min(...view.goals.map((goal) => goal.record.sequence)) - 1),
+            },
+          ]
+        : []),
+      { titlePrefix: 'act:child:', latestPerTitle: true },
     ])
     const state = await this.readState(selected)
     const snapshot = selected ? { ...selected.metadata, records: selected.records } : null
@@ -620,10 +734,8 @@ export class ProgramContext implements ProgramContextApi {
       (item) => item.task || item.segment || item.expiresAfter > state.completedTurns
     )
     const visible = allVisible.slice(-Math.max(1, Math.min(64, Math.floor(maxChars / 768))))
-    const excerptChars = Math.max(
-      1,
-      Math.min(ScriptLeaseLimits.resultChars, Math.floor(maxChars / (visible.length + 4) / 2))
-    )
+    const resultBudgetChars = Math.max(1, Math.floor(maxChars / (visible.length + 4) / 2))
+    const excerptChars = Math.min(ScriptLeaseLimits.resultChars, resultBudgetChars)
     const images: ModelImage[] = []
     const reset = Math.max(
       snapshot?.records.findLast((record) => record.title === 'search:history-reset')?.sequence ??
@@ -665,20 +777,29 @@ export class ProgramContext implements ProgramContextApi {
           },
         })
       }
-    const leaseMissing: Array<{ key: string; ref: string; reason: string }> = []
+    const leaseMissing: Array<{
+      key: string
+      ref: string
+      reason: string
+      contentHash: string
+      read: { ref: string; pointer: string }
+    }> = []
     for (const lease of allVisible.filter(
       (item) => !visible.some((current) => current.ref === item.ref)
     )) {
       const result = await this.read(lease.ref, 0, 1)
       const archived = JSON.parse((await this.storage.get(this.sessionId, result.record.objectId))!)
-      for (const block of archived.output?.blocks ?? [])
+      for (const [index, block] of (archived.output?.blocks ?? []).entries())
         if (block.options.required)
           leaseMissing.push({
             key: block.key,
             ref: lease.ref,
             reason: 'required-lease-not-delivered',
+            contentHash: scriptOutputs.hash(block.value),
+            read: { ref: lease.ref, pointer: `/output/blocks/${index}/value` },
           })
     }
+    const outputCoverage: SegmentOutputCoverage[] = []
     const results: Array<
       ReturnType<typeof projectMaterial> & {
         ref: string
@@ -686,6 +807,10 @@ export class ProgramContext implements ProgramContextApi {
         source: string
         sourceTruncated: boolean
         structuredOutput?: boolean
+        outputFormat?: ScriptOutputFormat
+        outputProofs?: readonly SegmentOutputProof[]
+        outputViews?: readonly SegmentOutputView[]
+        materialCoverage?: { identity: string; complete: boolean }
         remainingTurns: ScriptRetention
         observedAt: string
         totalChars: number
@@ -697,7 +822,8 @@ export class ProgramContext implements ProgramContextApi {
     let feedback: Optional<{
       ref: string
       sourceRef: string
-      failure: NonNullable<ReturnType<typeof programFailure>>
+      failure?: NonNullable<ReturnType<typeof programFailure>>
+      recovery?: { index: { ref: string; pointer: string }; selector: 'invocation' }
     }>
     for (const lease of visible) {
       signal.throwIfAborted()
@@ -711,14 +837,52 @@ export class ProgramContext implements ProgramContextApi {
       if (isNull(full)) throw new AppError('NOT_FOUND', '结果归档正文缺失')
       const archived = JSON.parse(full)
       const failure = programFailure(archived)
-      feedback = failure ? { ref: lease.ref, sourceRef: lease.sourceRef, failure } : undefined
+      feedback =
+        failure || archived.recovery?.calls?.length
+          ? {
+              ref: lease.ref,
+              sourceRef: lease.sourceRef,
+              ...(failure ? { failure } : {}),
+              ...(archived.recovery?.calls?.length
+                ? {
+                    recovery: {
+                      index: { ref: lease.ref, pointer: '/recovery/calls' },
+                      selector: 'invocation' as const,
+                    },
+                  }
+                : {}),
+            }
+          : undefined
       const output = archived.output as Optional<ScriptOutputCapture>
       const managed =
         output &&
         (Object.keys(output.config).length ||
           output.blocks.some((block) => Object.keys(block.options).length))
+      const recalled = new Map<string, readonly SegmentOutputProof[]>()
+      const displays: ScriptOutputDisplay[] = []
+      for (const block of output?.blocks ?? []) {
+        const proofs = await this.readDelivery(block.value, lease.ref, signal)
+        if (!proofs.length) continue
+        recalled.set(block.key, proofs)
+        const { text, ...metadata } = block.value as Record<string, unknown> & { text: string }
+        displays.push({
+          key: block.key,
+          contentHash: scriptOutputs.hash(block.value),
+          text: `${JSON.stringify({ encoding: 'memory-page', page: metadata, textChars: text.length })}\n${text}`,
+        })
+      }
+      // 显式展示申请使用本帧给该结果的有限份额；默认输出和源码预览仍保守截取。
       const display = managed
-        ? scriptOutputs.project(output, lease.ref, excerptChars, undefined, summaries, taskRevision)
+        ? scriptOutputs.project(
+            output,
+            lease.ref,
+            scriptOutputs.requestBudget(output).explicit ? resultBudgetChars : excerptChars,
+            undefined,
+            summaries,
+            taskRevision,
+            'text',
+            displays
+          )
         : undefined
       const hasNative =
         display?.blocks.some(
@@ -727,6 +891,7 @@ export class ProgramContext implements ProgramContextApi {
             block.reason === 'native-attachment-required' &&
             archived.outputAttachments?.some((entry: { key: string }) => entry.key === block.key)
         ) && maxChars > 6000
+      const rawMaterial = display ? undefined : executionMaterial(archived)
       const projected = display
         ? {
             text: display.prompt,
@@ -745,8 +910,8 @@ export class ProgramContext implements ProgramContextApi {
               .filter((block) => !block.bodyIncluded)
               .map((block) => block.pointer),
           }
-        : projectMaterial(executionMaterial(archived), result.record.ref, excerptChars)
-      for (const block of output?.blocks ?? [])
+        : projectMaterial(rawMaterial!, result.record.ref, excerptChars)
+      for (const [index, block] of (output?.blocks ?? []).entries())
         if (block.options.required) {
           const rendered = display?.blocks.find((item) => item.key === block.key)
           const native =
@@ -759,8 +924,37 @@ export class ProgramContext implements ProgramContextApi {
               key: block.key,
               ref: lease.ref,
               reason: 'required-body-unavailable',
+              contentHash: scriptOutputs.hash(block.value),
+              read: { ref: lease.ref, pointer: `/output/blocks/${index}/value` },
             })
         }
+      const outputProofs: SegmentOutputProof[] = []
+      for (const block of display?.blocks ?? []) {
+        if (block.representation !== 'full' || !block.bodyIncluded) continue
+        const original = output?.blocks.find((entry) => entry.key === block.key)
+        if (!original) continue
+        if (original.options.required)
+          outputProofs.push({ ref: lease.ref, key: block.key, contentHash: block.contentHash })
+        outputProofs.push(...(recalled.get(block.key) ?? []))
+      }
+      if (display)
+        outputCoverage.push({
+          ref: lease.ref,
+          projection: display,
+          keys: (output?.blocks ?? [])
+            .filter((block) => {
+              const view = block.options.view ?? {}
+              return (
+                view.mode !== 'summary' &&
+                view.mode !== 'reference' &&
+                !view.paths &&
+                !view.lines &&
+                view.maxItems === undefined &&
+                view.edge === undefined
+              )
+            })
+            .map((block) => block.key),
+        })
       results.push({
         ref: lease.ref,
         sourceRef: lease.sourceRef,
@@ -773,6 +967,31 @@ export class ProgramContext implements ProgramContextApi {
             : lease.expiresAfter - state.completedTurns,
         observedAt: result.record.createdAt,
         structuredOutput: display ? true : undefined,
+        outputFormat: display?.format,
+        outputProofs,
+        outputViews: display?.blocks
+          .filter((block) => block.bodyIncluded && block.text)
+          .map((block) => ({
+            key: block.key,
+            fingerprint: scriptOutputs.hash([
+              this.sessionId,
+              lease.ref,
+              lease.sourceRef,
+              display.format,
+              block,
+            ]),
+          })),
+        materialCoverage: rawMaterial
+          ? {
+              identity: scriptOutputs.hash([
+                this.sessionId,
+                lease.ref,
+                lease.sourceRef,
+                rawMaterial,
+              ]),
+              complete: projected.representation === 'full',
+            }
+          : undefined,
         ...projected,
         totalChars: result.totalChars,
         truncated: projected.representation !== 'full',
@@ -861,7 +1080,8 @@ export class ProgramContext implements ProgramContextApi {
           Math.max(excerptChars, Math.floor(maxChars / 2)),
           manifest,
           summaries,
-          taskRevision
+          taskRevision,
+          'text'
         )
       : undefined
     const resultText = presentation ? presentation.prompt : programContentText(current)
@@ -1086,6 +1306,7 @@ export class ProgramContext implements ProgramContextApi {
                 })
               ),
               presentation: {
+                format: presentation.format,
                 requestedChars: presentation.requestedChars,
                 allocatedChars: presentation.allocatedChars,
                 actualChars: presentation.prompt.length,
@@ -1180,6 +1401,8 @@ export class ProgramContext implements ProgramContextApi {
     )
     return {
       body,
+      outputCoverage,
+      budget: { maxChars, resultBudgetChars, excerptChars, visibleResults: visible.length },
       images,
       prompt: '',
       squeezed: allVisible

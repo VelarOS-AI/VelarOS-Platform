@@ -5,6 +5,7 @@ import { Log } from '@velaros-ai/core'
 import { isFalse, isNull, isUndefined } from '@velaros-ai/core'
 import { isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import type {
   ModuleDescription,
   ModulePage,
@@ -12,6 +13,8 @@ import type {
   OperationContext,
   OperationModuleDefinition,
   OperationRuntimeApi,
+  OperationRuntimeCloseOptions,
+  PendingInvocation,
 } from '@velaros-ai/kernel'
 import { createOperationRuntime } from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
@@ -72,11 +75,15 @@ export interface VelarosRuntime {
   modules(query?: ModuleQuery): ModulePage
   /** 查看真实契约，脚本声明与校验同源。 */
   describe(moduleId: string): ModuleDescription
-  /** 取消运行，释放模块和存储；重复关闭安全。 */
-  close(): Promise<void>
+  /** 不含输入的在途调用身份与阶段；已请求取消的调用可能仍在真实执行。 */
+  pending(): readonly PendingInvocation[]
+  /** 有界等待关闭；TIMEOUT 附带 pending/phase，后台真实收束后才释放模块和存储。 */
+  close(options?: OperationRuntimeCloseOptions): Promise<void>
 }
 
 class ComposedRuntime implements VelarosRuntime {
+  private static readonly closeTimeoutMs = 5_000
+  private shutdownPhase: 'openings' | 'sessions' | 'modules' | 'storage' | 'closed' = 'openings'
   private readonly maintenance?: ContextMaintenance
   private readonly taskModels = new Map<string, ModelDriver>()
   private readonly search?: AdvancedSearchApi
@@ -800,31 +807,54 @@ class ComposedRuntime implements VelarosRuntime {
     return this.kernel.describe(moduleId)
   }
 
-  public close(): Promise<void> {
+  public pending(): readonly PendingInvocation[] {
+    return this.kernel.pending()
+  }
+
+  public async close(options: OperationRuntimeCloseOptions = {}): Promise<void> {
+    const timeoutMs = options.timeoutMs ?? ComposedRuntime.closeTimeoutMs
+    if (!Number.isFinite(timeoutMs) || timeoutMs < 0)
+      throw new AppError('VALIDATION', '关闭等待时限必须是非负有限数字')
     this.closing ??= this.shutdown()
-    return this.closing
+    const timers = new TimerScope({ name: 'ComposedRuntime.close' })
+    let deadline: Optional<AbortSignal>
+    try {
+      await timers.withTimeout(timeoutMs, (signal) => {
+        deadline = signal
+        return this.closing!
+      })
+    } catch (error) {
+      if (deadline?.aborted)
+        throw AppError.withFields('TIMEOUT', '运行时尚未完成真实收束，后台继续保留资源', {
+          pending: this.pending(),
+          phase: this.shutdownPhase,
+        })
+      throw error
+    } finally {
+      timers.dispose()
+    }
   }
 
   private async shutdown(): Promise<void> {
     const failures: unknown[] = []
+    // 先向现有会话广播关闭；一个未合作的 opening 或子会话不能延迟其他会话的取消。
+    const sessions = Promise.allSettled([
+      ...(this.agents ? [this.agents.close()] : []),
+      ...[...this.sessions.values()].map((session) => session.close()),
+    ])
     await Promise.allSettled([...this.openings.values()])
-    try {
-      await this.agents?.close()
-    } catch (error) {
-      Log.tag('ActRuntime').debug('ComposedRuntime 已进入异常处理或降级分支')
-      failures.push(error)
-    }
-    for (const result of await Promise.allSettled(
-      [...this.sessions.values()].map((session) => session.close())
-    ))
+    this.shutdownPhase = 'sessions'
+    for (const result of await sessions)
       if (result.status === 'rejected') failures.push(result.reason)
     try {
-      await this.kernel.dispose()
+      this.shutdownPhase = 'modules'
+      await this.kernel.drain()
     } catch (error) {
       Log.tag('ActRuntime').debug('ComposedRuntime 已进入异常处理或降级分支')
       failures.push(error)
     }
     try {
+      this.shutdownPhase = 'storage'
       await this.options.storage.close()
     } catch (error) {
       Log.tag('ActRuntime').debug('ComposedRuntime 已进入异常处理或降级分支')
@@ -836,6 +866,7 @@ class ComposedRuntime implements VelarosRuntime {
     this.stores.clear()
     this.scopes.clear()
     this.taskModels.clear()
+    this.shutdownPhase = 'closed'
     if (!isEmpty(failures))
       throw new AggregateError(failures, 'Runtime 关闭失败；已尝试释放全部资源')
   }

@@ -11,6 +11,8 @@ import type { MemoryOrganizeIntent } from './memory.js'
 
 /** 整理支线看到的只读快照说明；正文按本快照授权的引用读取。 */
 export interface ContextMaintenanceSnapshot {
+  /** 当前有效状态与尚待按最新用户输入核对的状态；历史摘要独立保留。 */
+  readonly active?: ActiveContextState
   /** 本轮主线工作意图与保留要求。 */
   readonly intent?: MemoryOrganizeIntent
   /** 发起请求的稳定身份，自动整理为空。 */
@@ -42,8 +44,8 @@ export interface ContextMaintenanceSnapshot {
     readonly skeleton: string
   }
   /**
-   * 已有的长期单：negativeAttempts 是各卷叙事累积下来试过没用的做法（最新的在前），unresolved 是最新叙事里仍未解决的事项；
-   * 给最新一卷写叙事时，unresolved 里还没解决的要照抄保留，解决了的去掉。
+   * 已有的长期单：negativeAttempts 是各卷叙事累积下来试过没用的做法（最新的在前），unresolved 来自当前状态仍开放的事项；
+   * 省略旧事项不会关闭它，解决时用 active 按 id 附真实证据逐项变更。
    */
   readonly ledgers: {
     readonly negativeAttempts: readonly string[]
@@ -71,6 +73,8 @@ export interface ContextPatch {
   readonly baseRevision: string
   readonly summary: string
   readonly unresolved: readonly string[]
+  /** 逐项更新当前约束/未解事项；只改变模型解释，原始最新用户输入始终优先。 */
+  readonly active?: ActiveContextPatch
   /** 笔记的派生展示；主模型的笔记、计划与结论归主模型维护，这里只改展示。 */
   readonly notes?: readonly ContextNotePresentation[]
   /** 输入摘要：只有完整原文已经进入本支线请求才可替换；只看到引用、片段或元数据时省略，并在 unresolved 里报告缺口。 */
@@ -94,6 +98,56 @@ export interface ContextPatch {
       readonly text: string
     }>
   }
+}
+
+/** 当前状态的一项模型解释；sources 始终指向不可变原文。 */
+export interface ActiveContextItem {
+  readonly id: string
+  readonly kind: 'constraint' | 'question'
+  readonly text: string
+  readonly sources: readonly ContextRef[]
+  readonly origin: 'model-interpretation'
+}
+
+/** 当前任务有效状态的版本；pendingInputs 表示这些原始输入尚未完成逐项核对。 */
+export interface ActiveContextState {
+  readonly revision: number
+  readonly status: 'reviewed' | 'pending-review'
+  readonly items: readonly ActiveContextItem[]
+  readonly pendingInputs: readonly ContextRef[]
+  /** 容量满时尚未导入的历史摘要；关闭已有项后继续导入，不静默丢弃。 */
+  readonly pendingSources: readonly ContextRef[]
+}
+
+/** @AgentView 一段直接证据：ref 指原文；offset 为 UTF-16 起点；quote 为该位置逐字引文，最多 4000 字符。 */
+export interface ActiveContextEvidence {
+  readonly ref: ContextRef
+  readonly offset: number
+  readonly quote: string
+}
+
+/**
+ * @AgentView
+ * 当前状态核对：baseRevision 照抄 snapshot.active.revision；reviewedInput 必须是 snapshot.goals 的最新原始输入，而且全文已进入本整理会话。
+ * changes 最多 64 项，逐条按现有 id 操作；约束只允许用比其原始输入更晚的用户输入作为撤销/取代依据，不能用模型笔记撤销用户约束。
+ * superseded 需要 replacement（1 到 1000 字符）；retracted 仅用于约束；resolved 仅用于未解事项。每项 evidence 至少一段、最多 8 段真实引文。
+ * 这是带来源的模型解释，不是原始用户授权；引文存在也不保证解释正确。仍成立的项不提交变更，未解项省略时继续保留。
+ * additions 用于明确核对后的补充或重开；与 changes 合计最多 64 项。text 为 1 到 1000 字符，每项 evidence 为 1 到 8 段；约束证据必须是全文已读的用户原文。
+ */
+export interface ActiveContextPatch {
+  readonly baseRevision: number
+  readonly reviewedInput: ContextRef
+  readonly additions?: ReadonlyArray<{
+    readonly kind: 'constraint' | 'question'
+    readonly text: string
+    readonly evidence: readonly ActiveContextEvidence[]
+  }>
+  readonly changes: ReadonlyArray<{
+    readonly id: string
+    readonly status: 'superseded' | 'retracted' | 'resolved'
+    readonly replacement?: string
+    readonly evidence: readonly ActiveContextEvidence[]
+  }>
 }
 
 /** @AgentView 补丁通过了校验、已被受理：之后声明完成，宿主在父会话的下一次请求前重新核验版本再发布。 */

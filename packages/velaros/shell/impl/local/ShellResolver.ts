@@ -4,7 +4,7 @@
  */
 
 import { spawn } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { win32 } from 'node:path'
 
 import { isPlainObject, isString, Log, toNullable } from '@velaros-ai/core'
@@ -19,6 +19,7 @@ import type {
   ShellProbeResult,
 } from '../../types/local.js'
 import type { ShellCommandAvailability } from '../../types/shell-command.js'
+import { parseLoginEnvironment } from '../../utils/environment.js'
 import { buildOwnedProcessSpec } from '../../utils/process.js'
 import { detectAvailableShells, readWindowsEnv, uniquePaths } from '../../utils/shells.js'
 import { ShellTuning } from '../../utils/tuning.js'
@@ -44,7 +45,13 @@ export interface ShellResolverApi {
    */
   resolveReady(options?: ResolveShellOptions): Promise<ResolvedShell>
   /** 按这个 shell 自己的查找规则判断一个命令在不在、在哪、是什么（内建命令、批处理、原生程序或脚本）。 */
-  resolveCommand(name: string, shell: ResolvedShell): Promise<ShellCommandAvailability>
+  resolveCommand(
+    name: string,
+    shell: ResolvedShell,
+    cwd?: string
+  ): Promise<ShellCommandAvailability>
+  /** 按真实命令的启动方式和工作目录读取 PATH；只用于报告，不改写后续命令的输入环境。读取失败时拒绝，不以启动前环境代替。 */
+  inspectPath(shell: ResolvedShell, cwd: string): Promise<string[]>
   /**
    * Windows 上重新读取用户和系统环境变量（用户装完软件不用重启应用），合并 PATH 并展开 %VAR%，返回新环境和它的指纹 revision。
    * 其他平台原样返回；读取失败时 refreshed 为 false 并给出原因。返回的环境里去掉了本包自己写的 VELAROS_SHELL_* 标记；
@@ -116,7 +123,8 @@ class ShellResolver implements ShellResolverApi {
 
   public async resolveCommand(
     name: string,
-    shell: ResolvedShell
+    shell: ResolvedShell,
+    cwd?: string
   ): Promise<ShellCommandAvailability> {
     if (shell.kind === 'cmd' && ShellResolver.CmdBuiltins.has(name.trim().toLowerCase()))
       return { name, available: true, path: name.trim(), kind: 'builtin' }
@@ -133,15 +141,26 @@ class ShellResolver implements ShellResolverApi {
           : shell.kind === 'git-bash'
             ? `p=$(command -v ${quoted}) || exit $?; case "$p" in /*) cygpath -w -- "$p" ;; *) printf '%s\\n' "$p" ;; esac`
             : `command -v ${quoted}`
+    const marker = `command-${randomUUID()}`
+    const marked =
+      shell.kind === 'cmd'
+        ? `echo.&echo ${marker}&${command}`
+        : shell.kind === 'pwsh' || shell.kind === 'powershell'
+          ? `[Console]::WriteLine(); Write-Output '${marker}'; ${command}`
+          : `printf '\\n${marker}\\n'; ${command}`
     const result = await this.capture(
-      currentPlatform.getShellCommandSpec(command, {
+      currentPlatform.getShellCommandSpec(marked, {
         shellPath: shell.shellPath,
         kind: shell.kind,
       }),
       shell.env,
-      ShellTuning.shell.probeTimeoutMs
+      ShellTuning.shell.probeTimeoutMs,
+      undefined,
+      cwd
     )
-    const path = result.exitCode === 0 ? result.stdout.trim().split(/\r?\n/)[0] || null : null
+    const lines = result.stdout.split(/\r?\n/)
+    const offset = lines.indexOf(marker)
+    const path = result.exitCode === 0 && offset >= 0 ? lines[offset + 1] || null : null
     return {
       name,
       available: !!path,
@@ -155,6 +174,51 @@ class ShellResolver implements ShellResolverApi {
             : !/[\\/]/.test(path)
               ? 'builtin'
               : 'script',
+    }
+  }
+
+  public async inspectPath(shell: ResolvedShell, cwd: string): Promise<string[]> {
+    const marker = `path-${randomUUID()}`
+    const windows =
+      shell.kind === 'cmd' ||
+      ((shell.kind === 'pwsh' || shell.kind === 'powershell') && currentPlatform.isWindows())
+    const command =
+      shell.kind === 'cmd'
+        ? `echo.&echo ${marker}&if defined PATH (set PATH) else (echo PATH=)&echo ${marker}-end`
+        : shell.kind === 'pwsh' || shell.kind === 'powershell'
+          ? `[Console]::Write([string][char]0 + '${marker}' + [char]0 + 'PATH=' + $env:PATH + [char]0)`
+          : `printf '\\0${marker}\\0PATH=%s\\0' "$PATH"`
+    const result = await this.capture(
+      currentPlatform.getShellCommandSpec(command, {
+        shellPath: shell.shellPath,
+        kind: shell.kind,
+      }),
+      shell.env,
+      ShellTuning.shell.probeTimeoutMs,
+      undefined,
+      cwd
+    )
+    try {
+      if (result.exitCode !== 0 || result.timedOut) throw new AppError('UNAVAILABLE', 'PATH 未知。')
+      let path: string
+      if (shell.kind === 'cmd') {
+        const lines = result.stdout.split(/\r?\n/)
+        const start = lines.indexOf(marker)
+        const end = lines.indexOf(`${marker}-end`, start + 1)
+        if (start < 0 || end <= start) throw new AppError('UNAVAILABLE', 'PATH 输出不完整。')
+        path =
+          lines
+            .slice(start + 1, end)
+            .find((line) => /^path=/i.test(line))
+            ?.slice(5) ?? ''
+      } else {
+        const captured = parseLoginEnvironment(result.stdout, marker)
+        if (!isString(captured.PATH)) throw new AppError('UNAVAILABLE', 'PATH 字段缺失。')
+        path = captured.PATH
+      }
+      return path === '' ? [] : path.split(windows ? ';' : ':')
+    } catch {
+      throw new AppError('UNAVAILABLE', '命令执行环境的 PATH 未能完整读取，当前 PATH 未知。')
     }
   }
 
@@ -300,7 +364,8 @@ class ShellResolver implements ShellResolverApi {
     spec: CommandSpec,
     env: NodeJS.ProcessEnv,
     timeoutMs: number,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    cwd?: string
   ): Promise<{
     exitCode: Nullable<number>
     stdout: string
@@ -311,6 +376,7 @@ class ShellResolver implements ShellResolverApi {
     const ownedSpec = buildOwnedProcessSpec(spec, { env })
     const child = spawn(ownedSpec.spec.file, ownedSpec.spec.args, {
       env,
+      cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
       detached: process.platform !== 'win32',

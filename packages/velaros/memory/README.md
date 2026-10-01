@@ -45,3 +45,5 @@ export const runtime = await createRuntime({ dataDir, memory: (sessionId) => sto
 - 入参超出 `MemoryLimits` 或类别不在 `MemoryTypes` 里抛 `VALIDATION`，一个文件都不写、不删；磁盘本身的错（权限、磁盘满）原样抛出。
 - 没有检索层，运行时也不替你调 `renderIndex()`：宿主在会话开始时调一次放进提示词，整场不变；放不下的只报条数，模型要正文就 `list()` 自己筛。
 - `createRuntime` 不许业务模块占用 `velaros:memory`（`VALIDATION`），长期记忆只走它的 `memory` 选项；`VelarMemoryModule` 留给不经 Act 运行时、直接用代码面或 Kernel 的宿主。
+
+并发修改时，`list`/`save` 的 `revision` 可作为 `save`/`remove` 的 `expectedRevision`；`null` 表示要求目标不存在，过期或同条目写锁冲突报 `CONFLICT`。省略版本时按最后提交者覆盖正文，未提供的标签沿用锁内最新标签。写锁按磁盘条目协调遵守该协议的进程；外部直接编辑器不参与锁。取消在提交前生效，原子提交开始后保留实际结果。

@@ -49,8 +49,8 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 | `system.memory.release` | `execute` | `write` | 释放一份笔记或执行结果的自动展示，原文仍可召回。 |
 | `system.memory.organize` | `execute` | `write` | 声明下一阶段的 focus 与必须保留的引用，安排在下一次模型请求之前整理上下文；只是排队，结果出现在下一帧的 memoryStatus.maintenance。 |
 | `system.memory.recall` | `observe`、`execute` | `none` | 分页召回长期记忆，含正文。 |
-| `system.memory.save` | `execute` | `write` | 写一条长期记忆：同一个 id 整条覆盖，tags 不给就沿用原来的。 |
-| `system.memory.remove` | `execute` | `write` | 删掉一条长期记忆的原文；与 release 只释放当前任务的展示不同。 |
+| `system.memory.save` | `execute` | `write` | 写一条长期记忆：同一个 id 整条覆盖，tags 不给就沿用原来的。防止过期写时，把 recall/save 的 revision 作为 expectedRevision；null 表示只许新建，省略版本表示最后提交覆盖，冲突报 CONFLICT 后重读再决定。 从 recall 更新时先解构 const { revision, updatedAt, ...entry } = previous，再 save({ ...entry, content: 新正文, expectedRevision: revision })；revision 与 updatedAt 是读取结果字段，不直接放进写入输入。 |
+| `system.memory.remove` | `execute` | `write` | 删掉一条长期记忆的原文；与 release 只释放当前任务的展示不同。可把 recall/save 的 revision 作为 expectedRevision，只删除该版本；null 要求条目不存在，省略版本删除当前条目，冲突报 CONFLICT。 |
 | `system.store.list` | `observe`、`execute` | `none` | 分页列出能访问的空间。 |
 | `system.store.keys` | `observe`、`execute` | `none` | 分页列出一个空间里自己能读的对象元数据；正文用 get 读。 |
 | `system.store.get` | `observe`、`execute` | `none` | 读一个对象与它的版本：没建过是 null，删掉的是墓碑。 |

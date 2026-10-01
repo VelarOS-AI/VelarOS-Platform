@@ -84,6 +84,12 @@ export function storageContract(name, fixture) {
     ])
       records.push(await context.append({ kind, title, body: `v${records.length}` }))
     const select = async (selections) => (await storage.selectSnapshot('s', selections)).records
+    assert.deepEqual(await select([{ after: 1, through: 4, first: 2 }]), records.slice(1, 3))
+    assert.deepEqual(
+      await select([{ after: 1, through: 4, kind: 'note', latestPerTitle: true }]),
+      records.slice(1, 3)
+    )
+    assert.deepEqual(await select([{ after: 4, through: 2 }]), [])
     assert.deepEqual(await select([{ titlePrefix: 'note:', kind: 'note', latestPerTitle: true }]), [
       records[1],
       records[2],
@@ -102,6 +108,13 @@ export function storageContract(name, fixture) {
     assert.deepEqual(await select([{ sequence: 999 }]), [])
     for (const input of [
       { sequence: 0 },
+      { after: -1 },
+      { through: 1.5 },
+      { first: 0 },
+      { first: 999999 },
+      { first: 1, latest: true },
+      { first: 1, last: 1 },
+      { first: 1, latestPerTitle: true },
       { sequence: 1.5 },
       { last: 0 },
       { last: 1.5 },

@@ -90,6 +90,8 @@ export const ModelTuning = Object.freeze({
   }),
   /** 流式响应的转发。 */
   stream: Object.freeze({
+    /** Responses 单个 SSE 事件的原始字节上限；超限失败，不截成成功终端。 */
+    responseEventBytes: 16 * 1024 * 1024,
     /** 一条响应最多转给宿主多少字符的思考摘要；超出的部分不再转发，响应照常接收。 */
     reasoningChars: 200_000,
   }),

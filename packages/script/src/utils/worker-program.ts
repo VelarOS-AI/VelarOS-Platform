@@ -184,20 +184,32 @@ export function createWorkerBootstrap(message: CodeRunRequest): string {
       if (!Object.hasOwn(api, namespace)) throw new Error('未挂载模块 ' + name);
       return api[namespace];
     };
-    globalThis.__libraryFactories = Object.create(null);
-    const loaded = new Map();
-    globalThis.__import = (path) => {
-      if (loaded.has(path)) {
-        const entry = loaded.get(path);
-        if (entry.loading) throw new Error('脚本出现循环 import：' + path);
-        return entry.promise;
-      }
-      if (!Object.hasOwn(config.modules, path)) throw new Error('不存在脚本 ' + path);
-      const entry = { loading: true, promise: undefined };
-      loaded.set(path, entry);
-      entry.promise = __libraryFactories[path]();
-      entry.loading = false;
-      return entry.promise;
-    };
   })();`
+}
+
+/** 原生链接器中的合成模块只导出当前能力桥已有的值，不加载宿主文件。 */
+export function createWorkerModules(message: CodeRunRequest): Readonly<Record<string, string>> {
+  const modules: Record<string, string> = Object.create(null)
+  const bridge = (specifier: string, names: readonly string[]): string =>
+    `const api = globalThis.__velaros(${JSON.stringify(specifier)});\n${names
+      .map(
+        (name, index) =>
+          `const value${index} = api[${JSON.stringify(name)}]; export { value${index} as ${name} };`
+      )
+      .join('\n')}`
+  for (const [namespace, operations] of Object.entries(message.operations)) {
+    modules[namespace] = bridge(namespace, operations)
+    if (!namespace.includes(':')) modules[`velaros:${namespace}`] = modules[namespace]!
+  }
+  modules.velaros = bridge('velaros', ['output'])
+  modules['velaros:program'] = bridge('velaros:program', ['input', 'blobs'])
+  for (const pkg of message.packages ?? [])
+    modules[pkg.specifier] = [
+      ...(pkg.specifier === 'velaros' ? [bridge('velaros', ['output'])] : []),
+      ...Object.entries(pkg.exports).map(
+        ([name, target], index) =>
+          `import * as member${index} from ${JSON.stringify(target)}; export { member${index} as ${name} };`
+      ),
+    ].join('\n')
+  return modules
 }

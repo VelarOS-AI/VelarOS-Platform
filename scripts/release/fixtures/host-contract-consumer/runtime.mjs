@@ -54,14 +54,26 @@ async function probeMemoryStore() {
       tags: ['发版'],
       content: '宿主给根目录，按作用域取一份。',
     }, context)
-    assert.deepEqual(saved, { id: 'packed-contract', created: true })
+    assert.equal(typeof saved.revision, 'string')
+    assert.ok(saved.revision.length > 0)
+    assert.deepEqual(saved, { id: 'packed-contract', created: true, revision: saved.revision })
     const [entry] = await memoryOperations.list(context)
     assert.equal(entry.title, '发版夹具')
+    assert.equal(entry.revision, saved.revision)
     assert.deepEqual(entry.tags, ['发版'])
     assert.match(await scope.renderIndex(), /\[发版夹具\]\(packed-contract\)/u)
     assert.deepEqual(await store.scope('project:/srv/other').list(), [])
     assert.deepEqual((await store.listScopes()).map((summary) => [summary.scope, summary.count]), [['project:/srv/packed', 1]])
-    assert.deepEqual(await memoryOperations.remove({ id: 'packed-contract' }, context), { removed: true })
+    const changed = await memoryOperations.save({
+      id: entry.id, type: entry.type, title: entry.title, description: entry.description,
+      tags: entry.tags, content: '已按原版本更新。', expectedRevision: saved.revision,
+    }, context)
+    assert.equal(changed.created, false)
+    assert.notEqual(changed.revision, saved.revision)
+    await assert.rejects(memoryOperations.remove({ id: 'packed-contract', expectedRevision: saved.revision }, context), { code: 'CONFLICT' })
+    assert.equal((await memoryOperations.list(context))[0].revision, changed.revision)
+    assert.equal((await memoryOperations.list(context))[0].content, '已按原版本更新。')
+    assert.deepEqual(await memoryOperations.remove({ id: 'packed-contract', expectedRevision: changed.revision }, context), { removed: true })
   } finally {
     await rm(root, { recursive: true, force: true })
   }

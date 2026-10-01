@@ -43,5 +43,5 @@ export const filesModule = createCapabilityModule({
 
 - 路径解析、越界与落盘都由空间的 `FileSpacePort` 决定；本机端口不设范围，解开符号链接读写真实文件，写是逐个原子替换。
 - `edit` 的几步先在内存里按顺序改好（同一个文件的后一步按前一步改完的算），整次核对再落盘：原文找不到或不唯一、不是文本、编不回原编码这类问题抛 `FILES_EDIT_UNRESOLVED`，越界或没有权限抛 `FILES_EDIT_DENIED`，两种都是一个文件都没写。落盘途中出错时，错误里点名已写的文件并给出撤回用的改动号。
-- `undo` 只在内存里留最近 `FileLimits.undoChanges` 次改动，进程退出就没了；那次改动之后文件又被改过时抛 `FILES_UNDO_CONFLICT`。
+- `undo` 只在内存里留最近 `FileLimits.undoChanges` 次改动，进程退出就没了；每次撤回重新核对当前端口对原路径的授权与真实目标，端口可逐次重建。授权按当前路径判断，changeId 不绑定会话身份；那次改动之后文件又被改过时抛 `FILES_UNDO_CONFLICT`。
 - `read` 一批最多 `FileLimits.readFiles` 个文件，一批里某个文件失败只标记那一项，全部失败才整个报错；`edit` 一次最多 `FileLimits.editSteps` 步、`FileLimits.editFiles` 个文件；单个文件最大 `FileLimits.fileBytes` 字节。

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageName": "@velaros-ai/agent",
-  "acceptedPackageVersion": "9.0.0",
+  "acceptedPackageVersion": "9.1.0",
   "entries": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -10,7 +10,7 @@
         "ActAnswer\ttype\t8b9caf74f5ea3e22bc179d99305f3d8e5713e48ee6cf06b186e33b2b214da8b1",
         "ActChildSession\ttype\td87f890645f88721c1e73eb05f2511f21cad0d58b5877054a4d6e91035bb901d",
         "ActContextPolicy\ttype\t000738397acec929f377aa874a2b2654786bfadfb13d46a0140bd3ae6ca2ecaa",
-        "ActContextPort\ttype\t40088d1d5617c3ca473cb5dcfa6b6d46fd42b41f1505adfbada03eb8cc8fd494",
+        "ActContextPort\ttype\te8f26441c050e2e87b7e41987c0729457aeb59b423faa5460aed841d72dd0aa8",
         "ActDecodedTurn\ttype\t727c814781665a01d4d4112b7f2ae0d890966b74e0c6c04b9053df422adfbe1f",
         "ActEvent\ttype\tdedef3fb4e136d1bc43837336fe4aa109473be8c2f1f89b39115b4ca9042a46d",
         "ActExecutionPort\ttype\t82e0e5e0717e0d7612b5542938a98186e943ed044f3536297212628f496b0b0e",

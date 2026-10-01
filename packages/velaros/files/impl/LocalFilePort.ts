@@ -33,14 +33,16 @@ export class LocalFilePort implements FileSpacePort {
     return { path: resolved, target, linked: target !== resolved }
   }
 
-  public async commit(writes: readonly FileWrite[]): Promise<void> {
+  public async commit(writes: readonly FileWrite[], signal?: AbortSignal): Promise<void> {
     const applied: string[] = []
     for (const write of writes) {
       try {
-        if (isNull(write.bytes)) await removeFileChecked(write.target, write.expected)
+        signal?.throwIfAborted()
+        if (isNull(write.bytes)) await removeFileChecked(write.target, write.expected, signal)
         else {
           await mkdir(dirname(write.target), { recursive: true })
-          await writeFileAtomically(write.target, write.bytes, write.expected)
+          signal?.throwIfAborted()
+          await writeFileAtomically(write.target, write.bytes, write.expected, signal)
         }
         applied.push(write.target)
       } catch (error) {

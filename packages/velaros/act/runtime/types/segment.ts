@@ -1,7 +1,9 @@
 import type { ContextFeedback, ContextRef } from '@velaros-ai/context'
 import type { ModelHistoryMessage } from '@velaros-ai/kernel'
+import type { ScriptOutputFormat, ScriptOutputProjection } from '@velaros-ai/script'
 
 import type { VolumeNarrative } from '../../system/types/history.js'
+import type { ActiveContextItem } from '../../system/types/maintenance.js'
 
 /** 段内一条冻结的历史：第一次随已接受的帧送达时实际发送的正文，同一段后续帧逐字复用。 */
 export interface SegmentEntry {
@@ -12,10 +14,40 @@ export interface SegmentEntry {
   /** 冻结正文所在的存储对象。 */
   readonly objectId: string
   readonly chars: number
+  /** 实际编码输出的宿主指纹，绑定会话、结果和源码；旧历史缺席时不推断表示相同。 */
+  readonly outputFingerprint?: string
+  /** 实际交付的各块展示身份；预算头不属于正文，块的来源、范围和表示仍须完全一致。 */
+  readonly outputViews?: readonly SegmentOutputView[]
+  /** 实际完整交付的非结构化执行材料身份；不用于摘要或选择视图的覆盖。 */
+  readonly fullMaterial?: string
   /** 完整原始 assistant 正文所关联的供应商状态；随本历史条目一起退役。 */
   readonly continuation?: ContextRef
   /** 随这条冻结正文完整交付的调用诊断；指纹同时绑定身份、状态、效果与正文。 */
   readonly feedback?: readonly SegmentFeedback[]
+  /** 该冻结正文里完整交付的必需输出块；旧历史缺席时不推断已交付。 */
+  readonly outputProofs?: readonly SegmentOutputProof[]
+}
+
+/** 宿主确认完整交付的块身份，绑定不可变结果、块名与原值。 */
+export interface SegmentOutputProof {
+  readonly ref: string
+  readonly key: string
+  readonly contentHash: string
+  /** 召回页正文所在的结果；缺席表示原结果直接交付，随该载体历史一起退役。 */
+  readonly carrierRef?: string
+  /** 该完整载体页覆盖的原始字符范围；只合并相同表示和总长的页，不计初始摘录。 */
+  readonly range?: {
+    readonly pointer?: string
+    readonly offset: number
+    readonly chars: number
+    readonly totalChars: number
+  }
+}
+
+/** 宿主绑定同一会话、结果、源码及完整块表示的交付身份；不等于原文覆盖证明。 */
+export interface SegmentOutputView {
+  readonly key: string
+  readonly fingerprint: string
 }
 
 /** 完整诊断的交付身份，防止用旧状态或相同文字的另一条调用替代当前回执。 */
@@ -26,7 +58,15 @@ export interface SegmentFeedback {
 
 /** 为什么开始新的一段或重建底座。 */
 export type SegmentReason =
-  'start' | 'runway' | 'boundary' | 'organize' | 'provider' | 'overflow' | 'renew' | 'rebase'
+  | 'start'
+  | 'runway'
+  | 'boundary'
+  | 'organize'
+  | 'provider'
+  | 'overflow'
+  | 'renew'
+  | 'rebase'
+  | 'retire'
 
 /** 当前段：底座、延续的结果与冻结条目；封段时整体换新，重建底座只换底座。 */
 export interface ContextSegment {
@@ -118,6 +158,23 @@ export interface SegmentLedgers {
   readonly constraints: LedgerList
 }
 
+/** 从不可变历史增量维护的活动目录；through 是已纳入的记录序号。 */
+export interface ContextHistoryIndex {
+  readonly through: number
+  readonly reset: number
+  readonly volumes: readonly VolumeView[]
+  readonly ledgers: SegmentLedgers
+}
+
+/** 活动认识只保存当前项；退出项及其证据保留在不可变 transition 记录。 */
+export interface StoredActiveContext {
+  readonly revision: number
+  readonly through: number
+  readonly reset: number
+  readonly reviewedThrough: number
+  readonly items: readonly ActiveContextItem[]
+}
+
 /** 段起点之前提出的任务目标：底座只列第一行、引用和输入摘要引用，最新的在前。 */
 export interface FoldedGoals {
   readonly items: ReadonlyArray<{
@@ -145,7 +202,13 @@ export interface SegmentHistory {
     readonly role: 'user' | 'assistant'
     readonly bodyIncluded: boolean
     readonly representation: 'full' | 'excerpt' | 'reference'
+    /** 仅对本次确实保留正文的历史条目返回，不能传给模型作为内容。 */
+    readonly outputFingerprint?: string
+    readonly outputViews?: readonly SegmentOutputView[]
+    /** 只随仍保留正文的非结构化历史返回的完整材料证明。 */
+    readonly fullMaterial?: string
     readonly feedback?: readonly SegmentFeedback[]
+    readonly outputProofs?: readonly SegmentOutputProof[]
   }>
   readonly fresh: readonly SegmentEntry[]
 }
@@ -157,5 +220,21 @@ export interface SegmentLeasedResult {
   readonly text?: string
   readonly source?: string
   readonly structuredOutput?: boolean
+  /** 结构化输出的展示编码；旧数据缺席时仍按 JSON 展开。 */
+  readonly outputFormat?: ScriptOutputFormat
   readonly feedback?: readonly ContextFeedback[]
+  /** 当前结构化 prompt 中完整的必需块；只有整份正文实际交付才能冻结。 */
+  readonly outputProofs?: readonly SegmentOutputProof[]
+  /** 当前实际编码中各块正文的身份；只有整个编码进入历史才可冻结。 */
+  readonly outputViews?: readonly SegmentOutputView[]
+  /** 宿主原始执行材料身份和本次投影完整性；结构化展示不提供此证明。 */
+  readonly materialCoverage?: { readonly identity: string; readonly complete: boolean }
+}
+
+/** 当前输出的宿主目录；不写入帧正文，只在同次实际历史确定后核对覆盖。 */
+export interface SegmentOutputCoverage {
+  readonly ref: string
+  readonly projection: ScriptOutputProjection
+  /** 无摘要、路径、行或条目选择的原值展示。 */
+  readonly keys: readonly string[]
 }

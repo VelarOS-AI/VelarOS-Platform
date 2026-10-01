@@ -19,7 +19,8 @@ async function rememberPreference() {
 async function addReason(id = 'reply-in-chinese', reason = '用户明确要求过。') {
   const memory = (await list()).find((entry) => entry.id === id)
   if (!memory) return `没有 ${id} 这一条`
-  await save({ ...memory, content: `${memory.content}\n为什么：${reason}` })
+  const { revision, updatedAt, ...entry } = memory
+  await save({ ...entry, expectedRevision: revision, content: `${entry.content}\n为什么：${reason}` })
   return `给 ${id} 补上了原因`
 }
 

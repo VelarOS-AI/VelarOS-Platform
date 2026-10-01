@@ -262,7 +262,7 @@ describe('办公文档不变量验收', () => {
     expect(await readFile(join(failing.harness.root, 'paper.tex'), 'utf8')).toContain('\\badmacro')
   })
 
-  test('INV-18 写之前就停下的失败标成没有写入，转换跑过之后的失败不标', async () => {
+  test('INV-18 写前失败标成没有写入，转换后失败保留已提交源码与原错误', async () => {
     /** 直接调操作，拿到带上下文的原始错误（代码面只交给程序 code 与 message）。 */
     const raw = async (run: () => Promise<unknown>) => {
       try {
@@ -295,7 +295,7 @@ describe('办公文档不变量验收', () => {
     ])
       expect(failure.context?.executionOutcome, failure.code).toBe('not-applied')
 
-    // LaTeX 编译失败时 .tex 已经写进工作区：不标没有写入，交给运行时按效果未知处理
+    // LaTeX 的源码已写入；即使编译失败，也必须点名真实产物并保留转换错误。
     const failing = await workspace({ availableCommands: ['tectonic'], converters: 'failing' })
     const compile = await raw(() =>
       officeOperations.latexToPdf(
@@ -304,7 +304,12 @@ describe('办公文档不变量验收', () => {
       )
     )
     expect(compile.code).toBe(OfficeErrorCodes.conversionFailed)
-    expect(compile.context?.executionOutcome).toBeUndefined()
+    expect(compile.context?.executionOutcome).toBe('applied')
+    expect(compile.context?.applied).toEqual([join(failing.harness.root, 'paper.tex')])
+    expect(await readFile(join(failing.harness.root, 'paper.tex'), 'utf8')).toContain('\\badmacro')
+    await expect(stat(join(failing.harness.root, 'paper.pdf'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    })
   })
 
   test('INV-19 preview 与 toMarkdown 不给 outputPath 只是读，登记成没有效果', async () => {

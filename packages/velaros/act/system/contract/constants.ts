@@ -132,3 +132,16 @@ export const StoreProjectionLimits = Object.freeze({
   /** 稳定引用中用途说明的字符上限。 */
   descriptionChars: 160,
 })
+/** 当前认知状态的有界变更合同。 */
+export const ActiveContextLimits = Object.freeze({
+  /** 自动驻留的当前项上限；剩余来源保留为待处理。 */
+  items: 256,
+  /** 每份补丁允许的逐项变更数。 */
+  changes: 64,
+  /** 每项变更允许的证据段数。 */
+  evidence: 8,
+  /** 替代项正文的 UTF-16 字符上限。 */
+  textChars: 1000,
+  /** 每段逐字证据的 UTF-16 字符上限。 */
+  quoteChars: 4000,
+})

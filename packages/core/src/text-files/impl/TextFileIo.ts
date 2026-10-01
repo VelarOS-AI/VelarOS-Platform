@@ -31,12 +31,13 @@ export interface TextFileIoApi {
   /**
    * 原子替换一个文件的全部字节，路径是符号链接时写到它指向的普通文件：同目录临时文件 → 写完 fsync → 改名覆盖 → fsync 目录（Windows 不做最后一步）。
    * 已有文件精确恢复它的权限位；新文件用 mode 并精确设上，不给就由 umask 定。给了 expected 时写前、改名前各核对一次磁盘上的字节，对不上抛 externalEdit、什么都不写。
+   * signal 在开始准备及最终 rename 前核对；rename 已完成时保留真实成功，不因迟到取消推翻提交。
    * 已有的不是普通文件或有多个硬链接抛 notRegular；mode 不在 0–0777 抛 invalidMode；上级目录不存在、没有权限这类文件系统错误原样抛出。
    */
   writeBytes(
     path: string,
     bytes: Uint8Array,
-    options?: { mode?: number; expected?: ExpectedBytes }
+    options?: { mode?: number; expected?: ExpectedBytes; signal?: AbortSignal }
   ): Promise<void>
   /**
    * 原子写一段正文：已有文件按它自己的编码（连同 BOM）写，认不出它的编码时抛 notText、不动它；新文件用 fallbackEncoding，缺省 utf8。
@@ -45,7 +46,7 @@ export interface TextFileIoApi {
   writeText(
     path: string,
     content: string,
-    options?: { fallbackEncoding?: TextEncoding; mode?: number }
+    options?: { fallbackEncoding?: TextEncoding; mode?: number; signal?: AbortSignal }
   ): Promise<void>
   /** 在同一个句柄上有界读整个文件：不存在返回 undefined；不是普通文件抛 notRegular；超过 maxBytes 抛 tooLarge，不分配超大缓冲；读的过程中文件变长抛 externalEdit。 */
   readBounded(path: string, maxBytes: number): Promise<Buffer | undefined>
@@ -74,7 +75,7 @@ export class TextFileIo implements TextFileIoApi {
   public async writeBytes(
     path: string,
     bytes: Uint8Array,
-    options: { mode?: number; expected?: ExpectedBytes } = {}
+    options: { mode?: number; expected?: ExpectedBytes; signal?: AbortSignal } = {}
   ): Promise<void> {
     await replaceFileAtomically(path, () => bytes, options)
   }
@@ -82,7 +83,7 @@ export class TextFileIo implements TextFileIoApi {
   public async writeText(
     path: string,
     content: string,
-    options: { fallbackEncoding?: TextEncoding; mode?: number } = {}
+    options: { fallbackEncoding?: TextEncoding; mode?: number; signal?: AbortSignal } = {}
   ): Promise<void> {
     await replaceFileAtomically(
       path,
@@ -91,7 +92,7 @@ export class TextFileIo implements TextFileIoApi {
           content,
           exists ? await this.existingEncoding(target) : (options.fallbackEncoding ?? 'utf8')
         ),
-      { mode: options.mode }
+      { mode: options.mode, signal: options.signal }
     )
   }
 

@@ -3,8 +3,46 @@
 import json
 import re
 import statistics
+from collections import Counter
+
+from tool_metrics import aggregate_tool_usage, atif_operations, operation_statistics, scriptact_operations
+from trace_artifact import read_trace_artifact
 
 COST_COMPONENTS = ("uncached_input", "cached_input", "cache_write", "output")
+TRANSPORT_FAILURE_CODES = frozenset({"ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EPIPE", "ENOTFOUND", "EAI_AGAIN",
+    "UND_ERR_SOCKET", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"})
+
+
+def request_transport_code(call):
+    """Only known structured codes are reportable; arbitrary provider prose is not evidence."""
+    failure = call.get("failure")
+    if not isinstance(failure, dict):
+        return None
+    for field in ("causeCode", "code"):
+        value = failure.get(field)
+        if isinstance(value, str) and value in TRANSPORT_FAILURE_CODES:
+            return value
+    return "TimeoutError" if failure.get("name") == "TimeoutError" else None
+
+
+def request_failure_kind(call):
+    """Classify one gateway outcome, independently of whether an attempt later recovers."""
+    status = call.get("status")
+    match = re.fullmatch(r"http-([1-5]\d\d)(-interrupted)?", status) if isinstance(status, str) else None
+    code = int(match[1]) if match else None
+    if code in (401, 403):
+        return "model_authentication_failed"
+    if code == 429:
+        return "model_rate_limited"
+    if code is not None and code >= 500:
+        return "model_service_unavailable"
+    failure = call.get("failure") or {}
+    if isinstance(failure, dict) and (failure.get("name") == "AbortError" or
+                                      failure.get("code") in ("ABORT_ERR", "UND_ERR_ABORTED")):
+        return None
+    if (match and match[2]) or (status == "unknown" and request_transport_code(call)):
+        return "model_transport_failed"
+    return None
 
 
 def verifier_infrastructure_issue(output):
@@ -68,7 +106,7 @@ def native_codex_operations(directory):
     path = directory / "agent/codex.txt"
     if not path.exists():
         return None
-    thread, observed, completed = None, {}, {}
+    thread, observed, completed, started = None, {}, {}, set()
     with path.open(errors="replace") as stream:
         for line in stream:
             try:
@@ -85,19 +123,36 @@ def native_codex_operations(directory):
                 continue
             item = event.get("item")
             if (not isinstance(item, dict) or not isinstance(item.get("id"), str)
-                    or item.get("type") not in ("command_execution", "file_change")):
+                    or item.get("type") not in ("command_execution", "file_change", "mcp_tool_call", "web_search", "collab_tool_call")):
                 continue
             key = (thread, item["id"])
             # Keep only measurement fields; commands and output may contain credentials.
-            measured = {name: item.get(name) for name in ("type", "exit_code", "status")}
+            measured = {name: item.get(name) for name in ("type", "exit_code", "status", "server", "tool")}
             observed[key] = measured
+            if event["type"] == "item.started":
+                started.add(key)
             if event["type"] == "item.completed":
                 completed[key] = measured
     if not observed:
         return None
     commands = [item for item in completed.values() if item["type"] == "command_execution"]
     changes = [item for item in completed.values() if item["type"] == "file_change"]
+    records = []
+    for key, item in observed.items():
+        terminal = completed.get(key)
+        status = 'pending'
+        if terminal:
+            if terminal['type'] == 'command_execution':
+                code = terminal['exit_code']
+                status = ('succeeded' if code == 0 else 'failed') if type(code) is int else 'unknown'
+            else:
+                status = {'completed': 'succeeded', 'failed': 'failed', 'cancelled': 'cancelled'}.get(terminal['status'], 'unknown')
+        records.append({'id': str(key), 'session_id': key[0], 'execution_id': None,
+            'module': item.get('server') or 'codex-native', 'operation': item.get('tool') or item['type'],
+            'status': status, 'effect': 'unknown', 'started': True if key in started else None,
+            'duration_seconds': None, 'retry_of': None})
     return {"source": "codex_native_jsonl_items",
+            "tool_usage": operation_statistics(records, "codex_native_operations"),
             "completed_by_type": {"command_execution": len(commands), "file_change": len(changes)},
             "pending_items": len(observed.keys() - completed.keys()),
             "failed_command_executions": sum(type(item["exit_code"]) is int and item["exit_code"] != 0 for item in commands),
@@ -113,6 +168,61 @@ def distribution(values):
     return {"count": len(values), "mean": statistics.mean(values),
             "p50": statistics.median(values), "p90": values[max(0, (len(values) * 9 + 9) // 10 - 1)],
             "max": values[-1]}
+
+
+def summarize_pricing_basis(groups):
+    """Group estimates by their frozen basis; a rate card is not a paid invoice."""
+    combined = {}
+    for group in groups:
+        basis = {key: group[key] for key in ("kind", "source", "upstream_base_url") if key in group}
+        key = json.dumps(basis, sort_keys=True)
+        row = combined.setdefault(key, {**basis, "requests": 0,
+            "known_estimated_cost_usd": 0, "unknown_estimate_requests": 0})
+        for field in ("requests", "known_estimated_cost_usd", "unknown_estimate_requests"):
+            row[field] += group[field]
+    rows = [combined[key] for key in sorted(combined)]
+    kind = rows[0]["kind"] if len(rows) == 1 else "mixed"
+    description = {"reference_only": "参考价格估算，实际扣费未知",
+                   "provider_rates": "按供应商费率估算，实际扣费未知"}.get(
+                       kind, "混合价格依据按来源分列；汇总金额仅为估算，实际扣费未知")
+    return {"actual_provider_cost_usd": None, "pricing_basis": {
+        "kind": kind, "groups": rows, "interpretation": description}}
+
+
+def pricing_basis_metrics(calls):
+    """Legacy requests retain their existing shape unless explicit evidence is present."""
+    if not any("pricingBasis" in call for call in calls):
+        return {}
+    groups = []
+    for call in calls:
+        basis = call.get("pricingBasis")
+        if "pricingBasis" in call:
+            if (not isinstance(basis, dict) or basis.get("kind") not in ("reference_only", "provider_rates")
+                    or not isinstance(basis.get("source"), str) or not basis["source"].strip()
+                    or ("upstreamBaseURL" in basis and not isinstance(basis["upstreamBaseURL"], str))):
+                raise ValueError("Invalid request pricingBasis")
+            group = {"kind": basis["kind"], "source": basis["source"]}
+            if "upstreamBaseURL" in basis:
+                group["upstream_base_url"] = basis["upstreamBaseURL"]
+        else:
+            group = {"kind": "legacy_unspecified", "source": "legacy request without pricingBasis"}
+        groups.append({**group, "requests": 1, "known_estimated_cost_usd": call.get("estimatedUsd") or 0,
+                       "unknown_estimate_requests": int(call.get("estimatedUsd") is None)})
+    return summarize_pricing_basis(groups)
+
+
+def aggregate_pricing_basis(metrics):
+    if not any(row.get("pricing_basis") for row in metrics):
+        return {}
+    groups = []
+    for row in metrics:
+        if row.get("pricing_basis"):
+            groups.extend(row["pricing_basis"]["groups"])
+        elif row.get("requests", 0):
+            groups.append({"kind": "legacy_unspecified", "source": "legacy request without pricingBasis",
+                "requests": row["requests"], "known_estimated_cost_usd": row["known_cost_usd"],
+                "unknown_estimate_requests": row["unknown_cost_requests"]})
+    return summarize_pricing_basis(groups)
 
 
 def request_metrics(calls):
@@ -132,6 +242,12 @@ def request_metrics(calls):
         return sum(values) if all(isinstance(v, (int, float)) for v in values) else None
 
     inputs, reads = total("input"), total("read")
+    failure_kinds = [request_failure_kind(call) for call in calls]
+    transport_codes = [request_transport_code(call) for call, kind in zip(calls, failure_kinds)
+                       if kind == "model_transport_failed"]
+    statuses = [call.get("status") if isinstance(call.get("status"), str) and
+                re.fullmatch(r"http-[1-5]\d\d(?:-interrupted)?|reserved|unknown", call["status"])
+                else "unrecognized" for call in calls]
     durations = [c.get("durationMs") for c in calls]
     transport_groups = {"streaming": [], "nonstreaming": [], "unknown": []}
     for call in calls:
@@ -160,6 +276,7 @@ def request_metrics(calls):
             savings.append((row["read"] * (pricing["input"] - pricing["cached"])
                             - row["write"] * (pricing["write"] - pricing["input"])) * multiplier / 1_000_000)
     return {
+        **pricing_basis_metrics(calls),
         "requests": len(calls), "input_tokens": inputs, "output_tokens": total("output"),
         "reasoning_tokens": total("reasoning"), "cache_read_tokens": reads, "cache_write_tokens": total("write"),
         "cache_token_hit_rate": reads / inputs if inputs and reads is not None else None,
@@ -180,6 +297,9 @@ def request_metrics(calls):
         "explicit_cache_breakpoints": distribution([c.get("metadata", {}).get("explicitCacheBreakpoints") for c in calls]),
         "distinct_cache_keys": len({c["metadata"]["cacheKeyHash"] for c in calls if c.get("metadata", {}).get("cacheKeyHash")}) if any("cacheKeyHash" in c.get("metadata", {}) for c in calls) else None,
         "http_error_requests": sum(c["status"] not in ("http-200", "reserved") for c in calls),
+        "request_status_counts": dict(Counter(statuses)),
+        "request_failure_counts": dict(Counter(kind for kind in failure_kinds if kind)),
+        "transport_failure_code_counts": dict(Counter(code for code in transport_codes if code)),
         "unsettled_requests": sum(c["status"] == "reserved" for c in calls),
         "unknown_cost_requests": sum(c.get("estimatedUsd") is None for c in calls),
         "known_cost_usd": sum(c.get("estimatedUsd") or 0 for c in calls),
@@ -307,18 +427,42 @@ def agent_metrics(directory):
         return {"tool_calls": sum(len(s.get("tool_calls") or []) for s in data.get("steps", [])),
                 "tool_call_scope": "atif_model_tool_calls",
                 "native_operations": native_codex_operations(directory),
+                "tool_usage": atif_operations(data),
                 "context": None,
                 "environment_diagnostics": tool_environment_diagnostics([
                     (str(result.get("source_call_id") or f'{step.get("step_id")}-{index}'), result.get("content"))
                     for step in data.get("steps", [])
                     for index, result in enumerate((step.get("observation") or {}).get("results", []))])}
-    data = json.loads(traces_path.read_text())
+    data = read_trace_artifact(traces_path)
     status_path = directory / "agent/status.json"
     status = json.loads(status_path.read_text()) if status_path.exists() else {}
     sessions = [("root", data["traces"])] + [(b.get("kind"), b["turns"]) for b in data.get("branches", [])]
     turns = [t for _, session in sessions for t in session]
-    invocations = {i["id"]: i for t in turns for i in t.get("invocations", [])}
-    executions = {e["executionId"]: e for t in turns for e in t.get("executions", [])}
+    invocations, executions = {}, {}
+    for session_index, (_, session) in enumerate(sessions):
+        for turn in session:
+            for invocation in turn.get("invocations", []):
+                raw = {}
+                if invocation.get("body") and not invocation.get("truncated"):
+                    try:
+                        raw = json.loads(invocation["body"])
+                    except (ValueError, TypeError):
+                        pass
+                session_id = turn.get("sessionId") or (raw.get("prepared") or {}).get("sessionId") or f"session-{session_index}"
+                key = json.dumps([session_id, invocation['id']], separators=(',', ':'))
+                previous = invocations.get(key)
+                # Repeated trace pages may present an older pending snapshot after a settled one.
+                if previous and (previous.get("summary") or {}).get("status") not in (None, "pending") and (invocation.get("summary") or {}).get("status") == "pending":
+                    continue
+                if previous:
+                    prior_status = (previous.get("summary") or {}).get("status")
+                    next_status = (invocation.get("summary") or {}).get("status")
+                    if prior_status not in (None, 'pending') and next_status not in (None, 'pending', prior_status):
+                        raise ValueError("Conflicting terminal invocation evidence")
+                invocations[key] = {**invocation, "sessionId": session_id,
+                    "parsed": raw or (previous or {}).get("parsed", {})}
+            for execution in turn.get("executions", []):
+                executions[(session_index, execution["executionId"])] = execution
     contexts, segments, maintenance = [], [], 0
     result_frames, result_exposures, partial_exposures, reference_exposures = 0, 0, 0, 0
     omitted_results, visible_sizes, source_sizes = set(), [], []
@@ -374,18 +518,27 @@ def agent_metrics(directory):
                 and summary.get("output") and not summary.get("outputTruncated")):
             value = json.loads(summary["output"])
             shell_outputs.append((reference, (value.get("stdout") or "") + "\n" + (value.get("stderr") or "")))
+    execution_statuses = [e.get("status") or "unknown" for e in executions.values()]
+    script_failure_codes = [str((e.get("failure") or {}).get("code") or "unknown")
+                            for e in executions.values() if e.get("status") == "failed"]
     return {
         "turns": len(turns), "branches": len(data.get("branches", [])),
         "harness_trace_export": status.get("traceExport"),
         "environment_diagnostics": tool_environment_diagnostics(shell_outputs),
         "tool_calls": len(invocations),
         "tool_call_scope": "scriptact_host_operations",
+        "tool_usage": scriptact_operations(invocations),
         "failed_tool_calls": sum(s.get("status") == "failed" for s in summaries),
         "failed_shell_commands": sum(s.get("success") is False for s in shell_results),
         "shell_outputs_measured": len(shell_results),
         "shell_commands_with_stderr": sum(bool((s.get("stderr") or "").strip()) for s in shell_results),
         "successful_shell_commands_with_stderr": sum(s.get("success") is True and bool((s.get("stderr") or "").strip()) for s in shell_results),
         "script_executions": len(executions),
+        "script_execution_status_counts": {state: execution_statuses.count(state)
+                                           for state in sorted(set(execution_statuses))},
+        "failed_script_executions": execution_statuses.count("failed"),
+        "script_failure_codes": {code: script_failure_codes.count(code)
+                                 for code in sorted(set(script_failure_codes))},
         "script_seconds_sum": sum((e.get("durationMs") or 0) for e in executions.values()) / 1000,
         "observed_observation_seconds": sum((t.get("timing", {}).get("observationMs") or 0) for t in turns) / 1000,
         "repair_turns": sum((t.get("repair") or 0) > 0 for t in turns),
@@ -439,6 +592,8 @@ def aggregate_trials(trials):
         return sum(values) if values and all(v is not None for v in values) else None
     inputs, reads = sum_known("input_tokens"), sum_known("cache_read_tokens")
     return {
+        **aggregate_pricing_basis(calls),
+        "tool_usage": aggregate_tool_usage(trials),
         "successes": len(successful), "known_cost_usd": cost, "all_cost_known": all_cost_known,
         "clean_successes": sum(not t["exception"] for t in successful),
         "cost_components_usd": {key: component_total(key) for key in COST_COMPONENTS},
@@ -476,6 +631,7 @@ def compare_jobs(reference, candidate):
         for side, trials in (("reference", left[task]), ("candidate", right[task])):
             costs = [t["metrics"]["known_cost_usd"] if t["metrics"]["unknown_cost_requests"] == 0 else None for t in trials]
             row[side] = {"successful_attempts": len(trials),
+                         **aggregate_pricing_basis([t["metrics"] for t in trials]),
                          "model_requests": mean_known([t["metrics"].get("requests") for t in trials]),
                          "agent_seconds": mean_known([t["agent_seconds"] for t in trials]),
                          "cost_usd": mean_known(costs)}
@@ -487,9 +643,39 @@ def compare_jobs(reference, candidate):
     for metric in ("model_requests", "agent_seconds", "cost_usd"):
         denominator, numerator = means["reference"][metric], means["candidate"][metric]
         ratios[metric] = numerator / denominator if denominator and numerator is not None else None
-    return {"reference": reference["job"], "candidate": candidate["job"],
+    def dominance(left, right):
+        pairs = [(left.get(key), right.get(key)) for key in ("model_requests", "agent_seconds", "cost_usd")]
+        if any(a is None or b is None for a, b in pairs):
+            return "unknown"
+        if all(b <= a for a, b in pairs) and any(b < a for a, b in pairs):
+            return "candidate"
+        if all(a <= b for a, b in pairs) and any(a < b for a, b in pairs):
+            return "reference"
+        return "equal" if all(a == b for a, b in pairs) else "tradeoff"
+    for row in rows:
+        row["efficiency_dominance"] = dominance(row["reference"], row["candidate"])
+    def attempt_totals(job):
+        # Include source failures and still-ungraded completed sources. Cached
+        # tokens and successful-only averages cannot replace the full bill.
+        trials = job.get("completed_source_usage", job["trials"])
+        costs = [trial["metrics"]["known_cost_usd"] if not trial["metrics"]["unknown_cost_requests"] else None for trial in trials]
+        seconds = [trial.get("agent_seconds") for trial in trials]
+        counts = [trial["metrics"].get("requests") for trial in trials]
+        return {"completed_attempts": len(trials),
+                **aggregate_pricing_basis([trial["metrics"] for trial in trials]),
+                "model_requests": sum(counts) if all(value is not None for value in counts) else None,
+                "known_cost_usd": sum(trial["metrics"]["known_cost_usd"] for trial in trials),
+                "cost_usd": sum(costs) if all(cost is not None for cost in costs) else None,
+                "agent_seconds": sum(seconds) if all(value is not None for value in seconds) else None}
+    pricing_basis = aggregate_pricing_basis([trial["metrics"] for job in (reference, candidate)
+        for trial in job.get("completed_source_usage", job["trials"])])
+    return {"reference": reference["job"], "candidate": candidate["job"], **pricing_basis,
+            **({"efficiency_cost_basis": "estimated_costs_not_actual_provider_charges"} if pricing_basis else {}),
             "complete": all(j["planned"] is not None and j["completed"] == j["planned"] for j in (reference, candidate)),
             "same_task_set": {t["task"] for t in reference["trials"]} == {t["task"] for t in candidate["trials"]},
             "jointly_solved_tasks": len(rows), "successful_task_means": means,
             "candidate_over_reference": ratios, "tasks": rows,
+            "efficiency_dominance": dominance(means["reference"], means["candidate"]),
+            "completed_attempt_totals": {"reference": attempt_totals(reference), "candidate": attempt_totals(candidate)},
+            "supports_general_superiority": False,
             "interpretation": "descriptive only; conditional on verified success without a runtime exception; task weights equal; small samples do not establish superiority"}

@@ -116,6 +116,30 @@ function ledgerList(
   return { items, omitted, sources }
 }
 
+/** 有界长期单增量：正文保留最新项，省略来源仍可分页回到不可变历史。 */
+export function extendLedger(
+  previous: LedgerList,
+  groups: ReadonlyArray<{ readonly ref: ContextRef; readonly items: readonly string[] }>
+): LedgerList {
+  const next = ledgerList(groups)
+  const seen = new Set(next.items)
+  const items = [...next.items]
+  let omitted = previous.omitted + next.omitted
+  for (const item of previous.items) {
+    if (seen.has(item)) continue
+    seen.add(item)
+    if (items.length < ActRuntimeTuning.ledgerItems) items.push(item)
+    else omitted++
+  }
+  return {
+    items,
+    omitted,
+    sources: [...next.sources, ...groups.map((group) => group.ref), ...previous.sources]
+      .filter((ref, index, all) => all.findIndex((item) => item.id === ref.id) === index)
+      .slice(0, ActRuntimeTuning.ledgerSources),
+  }
+}
+
 /** 一张长期单在底座里的一行；空单不占行。 */
 function ledgerLine(label: string, list: LedgerList): string[] {
   if (isEmpty(list.items)) return []

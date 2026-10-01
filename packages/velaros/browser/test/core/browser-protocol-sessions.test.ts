@@ -157,3 +157,50 @@ void describe('模型的 CDP 会话', () => {
     await sessions.dispose()
   })
 })
+
+void test('closing a pending protocol open is prompt and the late channel cannot replace a new one', async () => {
+  const sessions = new BrowserProtocolSessions()
+  const old = createChannel()
+  const current = createChannel()
+  let release!: (channel: BrowserProtocolChannel) => void
+  const pending = sessions.send(
+    's',
+    () =>
+      new Promise<BrowserProtocolChannel>((resolve) => {
+        release = resolve
+      }),
+    { method: 'Old.command' }
+  )
+  const rejected = assert.rejects(pending, (error: any) => error.code === 'CLOSED')
+  await sessions.close('s')
+  await sessions.send('s', async () => current.channel, { method: 'New.command' })
+  release(old.channel)
+  await rejected
+  await sessions.send(
+    's',
+    async () => {
+      throw new Error('current channel must stay registered')
+    },
+    { method: 'New.again' }
+  )
+  assert.deepEqual(old.sent, [])
+  assert.equal(old.closedTimes(), 1)
+  assert.deepEqual(
+    current.sent.map((item) => item.method),
+    ['New.command', 'New.again']
+  )
+  await sessions.dispose()
+})
+
+void test('protocol sessions can be used again after closing all sessions', async () => {
+  const sessions = new BrowserProtocolSessions()
+  const first = createChannel()
+  const second = createChannel()
+  await sessions.read('s', async () => first.channel, {})
+  await sessions.dispose()
+  await sessions.read('new', async () => second.channel, {})
+  assert.equal(first.closedTimes(), 1)
+  assert.equal(second.closedTimes(), 0)
+  await sessions.dispose()
+  assert.equal(second.closedTimes(), 1)
+})

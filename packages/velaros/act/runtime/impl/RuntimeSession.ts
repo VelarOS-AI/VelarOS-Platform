@@ -79,7 +79,7 @@ import {
   scriptControlIdentity,
   stableProgramJson,
 } from '../utils/program-context.js'
-import { invocationFeedbackDetails } from '../utils/results.js'
+import { failedInvocationRecovery, invocationFeedbackDetails } from '../utils/results.js'
 import { protocolConfig, protocolRules } from '../utils/script-protocol.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
@@ -328,7 +328,8 @@ export class RuntimeSession implements VelarosSession {
       this.view,
       this.programs,
       this.history,
-      dependencies.memory ?? dependencies.contextOptions?.memory
+      dependencies.memory ?? dependencies.contextOptions?.memory,
+      dependencies.journal
     )
     const modules = dependencies.allowedModules()
     const instructions = `${runtimeInstructions({
@@ -449,6 +450,7 @@ export class RuntimeSession implements VelarosSession {
               }
             : undefined,
           fold: (reason, maxChars, signal) => this.memory.fold(reason, maxChars, signal),
+          retire: (signal) => this.memory.retire(signal),
           renew: dependencies.renewRuns
             ? async (maxChars, signal) => {
                 this.runDeadline = Date.now() + dependencies.limits.timeoutMs
@@ -478,6 +480,7 @@ export class RuntimeSession implements VelarosSession {
               .map((item) => item.executionId)
           },
           project: (view, signal, maxChars) => this.project(view, signal, maxChars),
+          delta: (body, previous) => memoryPrompt(body, previous),
           acknowledge: (request, signal) => this.acknowledge(request, signal),
           completion: async (request, signal, claim) => {
             const goal = dependencies.tool ? null : await this.goal.get(signal)
@@ -1560,6 +1563,13 @@ export class RuntimeSession implements VelarosSession {
           )
       const persisted = result?.checked ? { ...result, attachments: undefined } : result
       const dependencies = await this.dependencies.journal.list(this.id, executionId)
+      const recoverable =
+        failure ||
+        !result?.checked ||
+        result.result.failed ||
+        result.result.unsettled?.length ||
+        result.output?.issues.length ||
+        dependencies.some((record) => record.receipt?.outcome !== 'succeeded')
       const observationFeedback =
         mode === 'observe'
           ? (await this.dependencies.journal.list(this.id, executionId))
@@ -1593,6 +1603,8 @@ export class RuntimeSession implements VelarosSession {
           timing: { durationMs },
           attachments: !isEmpty(attachments) ? attachments : undefined,
           observationFeedback: observationFeedback?.length ? observationFeedback : undefined,
+          recovery:
+            recoverable && dependencies.length ? failedInvocationRecovery(dependencies) : undefined,
         }),
         sources: [source.ref],
       })
@@ -1853,8 +1865,12 @@ export class RuntimeSession implements VelarosSession {
           body: JSON.stringify({
             executionId: job.executionId,
             code: 'INTERRUPTED',
+            result: { failed: { code: 'INTERRUPTED', message: '上次执行中断，脚本没有重跑' } },
             effect,
             replayed: false,
+            recovery: failedInvocationRecovery(
+              records.filter((item) => item.prepared.executionId === job.executionId)
+            ),
           }),
           sources: [{ sessionId: id, id: job.sourceRef }],
         })

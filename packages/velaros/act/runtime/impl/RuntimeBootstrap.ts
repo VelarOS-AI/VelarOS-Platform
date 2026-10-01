@@ -10,6 +10,7 @@ import {
   isBoolean,
   isFalse,
   isFunction,
+  isNonBlankString,
   isPlainObject,
   isString,
   isTrue,
@@ -99,10 +100,8 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
           (entry) =>
             isString(entry) ||
             (isPlainObject(entry) &&
-              isString(entry.module) &&
-              Boolean(entry.module.trim()) &&
-              isString(entry.export) &&
-              Boolean(entry.export.trim()))
+              isNonBlankString(entry.module) &&
+              isNonBlankString(entry.export))
         )
       )
     )

@@ -7,8 +7,8 @@ import { ContextMaintenanceReadLimits } from '../../../dist/act/runtime/contract
 import {
   ContextPatchLimits,
   GoalLimits,
-  MemoryRecallLimits,
   MemoryReadLimits,
+  MemoryRecallLimits,
   OrganizeLimits,
   ScriptLeaseLimits,
   StoreProjectionLimits,

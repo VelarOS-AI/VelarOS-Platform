@@ -3,7 +3,7 @@
 // 取消与超时用 `createAbortError` / `createTimeoutError`（都在 @velaros-ai/core/error）。
 // 这道门按语法树找原生 `new Error(...)` / `Error(...)`；字符串与注释里的不算（注入隔离堆的代码片段、模型面模版）。
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -53,7 +53,7 @@ const files = execFileSync(
   { cwd: repositoryRoot, encoding: 'utf8' }
 )
   .split('\n')
-  .filter((file) => file && !NotProductCode.test(file))
+  .filter((file) => file && !NotProductCode.test(file) && existsSync(join(repositoryRoot, file)))
 
 const violations = []
 const exemptionHits = new Map(Exemptions.map((exemption) => [exemption, 0]))

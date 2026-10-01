@@ -7,9 +7,9 @@ import certifi
 
 from harbor.environments.docker.docker import DockerEnvironment
 
-UV_VERSION = "0.7.13"
-UV_SHA256 = "909278eb197c5ed0e9b5f16317d1255270d1f9ea4196e7179ce934d48c4c2545"
-UV_ARCHIVE = Path(__file__).resolve().parents[3] / ".velaros-workspace/bench/runtime-downloads/uv-0.7.13-linux-x64.tar.gz"
+from scripts.agent.harbor.runtime_artifacts import UV_VERSION, UV_ARTIFACTS, runtime_profile
+
+UV_ARCHIVE, UV_SHA256, _ = UV_ARTIFACTS["glibc"]
 
 
 PACKAGE_MIRROR_SETUP = r"""
@@ -49,16 +49,20 @@ printf 'export PATH="$HOME/.local/bin:$PATH"\n' >/root/.local/bin/env
 
 class BenchmarkDocker(DockerEnvironment):
     async def start(self, force_build: bool):
-        if not UV_ARCHIVE.exists() or hashlib.sha256(UV_ARCHIVE.read_bytes()).hexdigest() != UV_SHA256:
-            raise RuntimeError("Run prepare-environment.py to obtain the verified verifier bootstrap")
         await super().start(force_build)
+        profile = await runtime_profile(self)
+        if profile["arch"] != "x64":
+            raise RuntimeError("The frozen UV bootstrap currently requires x64")
+        archive, checksum, _ = UV_ARTIFACTS[profile["libc"]]
+        if not archive.exists() or hashlib.sha256(archive.read_bytes()).hexdigest() != checksum:
+            raise RuntimeError("Run prepare-environment.py --libc " + profile["libc"] + " before dispatch")
         certificates = Path(certifi.where())
         await self.upload_file(certificates, "/tmp/harbor-package-ca.pem")
-        await self.upload_file(UV_ARCHIVE, "/tmp/harbor-uv.tar.gz")
+        await self.upload_file(archive, "/tmp/harbor-uv.tar.gz")
         setup = PACKAGE_MIRROR_SETUP + UV_BOOTSTRAP
         result = await self.exec(command=setup, user="root", timeout_sec=60)
         if result.return_code:
             raise RuntimeError("Shared package mirror configuration failed: " + (result.stderr or ""))
         self.logger.info("Campaign environment setup SHA-256: %s", hashlib.sha256(setup.encode()).hexdigest())
         self.logger.info("Campaign package CA bundle SHA-256: %s", hashlib.sha256(certificates.read_bytes()).hexdigest())
-        self.logger.info("Campaign UV %s archive SHA-256: %s", UV_VERSION, UV_SHA256)
+        self.logger.info("Campaign UV %s archive SHA-256: %s", UV_VERSION, checksum)

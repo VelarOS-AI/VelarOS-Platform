@@ -253,17 +253,21 @@ test('INV-49 segment history caches immutable result classification, reuses froz
   reads = 0
   assert.deepEqual(await recent.project(segment(), leased, 4096, signal()), first)
   assert.equal(reads, 0)
-  // 冻结的条目逐字复用；租约没了的结果改成引用卡，不再重新渲染
+  // 冻结的条目逐字复用到封段；租约结束也不改写已发送的历史，请求前缀保持不变
   const frozen = await recent.project(
     segment({ entries: first.fresh }),
     leased.slice(1),
     4096,
     signal()
   )
-  assert.equal(frozen.messages[1].content, first.messages[1].content)
-  assert.equal(frozen.items[0].bodyIncluded, false)
-  assert.match(frozen.messages[0].content, /lease-expired-or-released/)
+  const content = (messages) => messages.map(({ role, content }) => ({ role, content }))
+  assert.deepEqual(content(frozen.messages), content(first.messages))
+  assert(frozen.items.every((item) => item.bodyIncluded))
   assert.deepEqual(frozen.fresh, [])
+  // 从未冻结、租约又已结束的结果仍只给引用卡
+  const unfrozen = await recent.project(segment(), leased.slice(1), 4096, signal())
+  assert.equal(unfrozen.items[0].bodyIncluded, false)
+  assert.match(unfrozen.messages[0].content, /lease-expired-or-released/)
   const directory = await recent.list({}, signal())
   assert.equal(directory.items.length, 3)
   const tail = await f.context.append({ kind: 'event', title: 'unrelated', body: 'latest event' })
@@ -320,10 +324,11 @@ test('INV-49 retired-result cache boundary remains reusable while later leases e
   assert.deepEqual(boundaries(before), [3, 7])
   assert.deepEqual(boundaries(after), [5, 7])
   const content = (messages) => messages.map(({ role, content }) => ({ role, content }))
-  assert.deepEqual(content(before.messages.slice(0, 4)), content(after.messages.slice(0, 4)))
+  // 租约陆续结束，冻结的结果正文仍逐字保留，整段请求内容不变
+  assert.deepEqual(content(before.messages), content(first.messages))
+  assert.deepEqual(content(after.messages), content(first.messages))
   assert.equal(after.messages[3].role, 'user')
-  assert.match(after.messages[3].content, /lease-expired-or-released/)
-  assert.notEqual(before.messages[5].content, after.messages[5].content)
+  assert.equal(after.messages[3].content, first.messages[3].content)
   // A retained earlier result can change again; never place the extra prefix
   // boundary after it merely because newer results have already retired.
   const retained = await recent.project(frozen, [leased[0], leased[3]], 4096, signal())

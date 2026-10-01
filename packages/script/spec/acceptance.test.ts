@@ -150,20 +150,27 @@ export default r.files.flatMap((f) => f.content.split('\\n')
   })
 
   test('INV-2 程序够不到文件系统与子进程', async () => {
+    for (const specifier of ['node:fs', 'node:child_process']) {
+      const literal = await submit(`await import(${JSON.stringify(specifier)})`)
+      expect(literal.checked).toBe(false)
+      if (literal.checked || !('check' in literal)) throw new Error('字面量应在预检拒绝')
+      expect(literal.check.diagnostics[0]?.message).toContain(specifier)
+    }
     const readFile = await submit(`
-// @ts-ignore 故意绕开声明：验证运行时确实拦得住
-const fs = await import('node:fs')
+// 计算目标绕过静态依赖收集，验证运行时仍拒绝宿主模块。
+const fs = await import(['node', 'fs'].join(':'))
 export default fs.readFileSync('/etc/hosts', 'utf8')`)
     expect(readFile.checked).toBe(true)
     if (!readFile.checked) throw new Error('应当通过检查')
     expect(readFile.result.failed?.code).toBe(CodeSurfaceErrorCodes.programError)
+    expect(readFile.result.failed?.message).toContain('node:fs')
 
     const spawn = await submit(`
-// @ts-ignore 同上
-const cp = await import('node:child_process')
+const cp = await import(['node', 'child_process'].join(':'))
 export default cp.execSync('echo 逃逸').toString()`)
     if (!spawn.checked) throw new Error('应当通过检查')
     expect(spawn.result.failed?.code).toBe(CodeSurfaceErrorCodes.programError)
+    expect(spawn.result.failed?.message).toContain('node:child_process')
   })
 
   test('INV-3 死循环到时必停', async () => {
@@ -654,7 +661,7 @@ describe('程序停下、数据与回执', () => {
     const read = await session.submit({
       program: {
         source:
-          "import * as program from 'velaros:program'\nexport default {keys:Object.keys(program).sort(),input:program.input,blobs:program.blobs,frozen:Object.isFrozen(program)&&Object.isFrozen(program.input.nested)&&Object.isFrozen(program.blobs)}",
+          "import * as program from 'velaros:program'\nexport default {keys:Object.keys(program).sort(),input:program.input,blobs:program.blobs,frozen:!Object.isExtensible(program)&&!Reflect.set(program,'input',null)&&Object.isFrozen(program.input.nested)&&Object.isFrozen(program.blobs)}",
         input,
         blobs,
       },

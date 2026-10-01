@@ -36,6 +36,21 @@ test('growth comes from positive increases inside one segment base and drives th
   expect(planner.runway(97_000, 100_000)).toBe(2)
 })
 
+test('INV-40 growth is sampled per layout: frames that keep earlier frames never inflate the plain runway', () => {
+  const planner = new ContextPlanner({ foldTurns: 2, minTurns: 4 })
+  planner.accept(10_000, segment(), true)
+  planner.accept(14_000, segment(), true)
+  planner.accept(18_000, segment(), true)
+  // 切换布局的那一帧不取样，之后两种布局各自取样
+  planner.accept(12_000, segment())
+  planner.accept(12_500, segment())
+  planner.accept(13_000, segment())
+  expect(planner.growth(100_000, true)).toBe(4_000)
+  expect(planner.growth(100_000)).toBe(500)
+  expect(planner.runway(90_000, 100_000)).toBe(20)
+  expect(planner.runway(90_000, 100_000, true)).toBe(2.5)
+})
+
 test('folds closer than foldTurns frames count as thrashing until minTurns frames pass', () => {
   const planner = new ContextPlanner({ foldTurns: 2, minTurns: 4 })
   planner.folded()

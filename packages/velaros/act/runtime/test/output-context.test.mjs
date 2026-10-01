@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import { nodeSubprocessCodeRunner, scriptOutputs } from '@velaros-ai/script'
 
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
@@ -87,11 +87,25 @@ async function fixture(t, source, modelOverride) {
     storage,
     session,
     programs,
+    memory,
     maintenance,
     initial,
     requests,
     run,
     project,
+    async display(ref, maxChars) {
+      const record = await programs.read(ref, 0, 1)
+      const archived = JSON.parse(await storage.get('root', record.record.objectId))
+      return scriptOutputs.project(
+        archived.output,
+        ref,
+        maxChars,
+        undefined,
+        undefined,
+        undefined,
+        'text'
+      )
+    },
     get reads() {
       return reads
     },
@@ -291,6 +305,487 @@ test('INV-58 batch display reclaims spare space once and keeps delivered history
   assert.equal(archived.output.blocks[0].value, lines.join('\n'))
 })
 
+test('INV-58 explicit batch display uses available frame space and preserves delivered history', async (t) => {
+  const f = await fixture(t, "import {output} from 'velaros';output(1)")
+  const result = await f.session.execute({
+    source: `import {output} from 'velaros';import {read} from 'test:world';await read();
+output.configure({maxChars:70000});
+for(let i=0;i<8;i++){
+ output({success:true,exitCode:0},{key:'source_'+i+'_status',required:true});
+ output('begin_'+i+'\\r\\n'+('source 😀 \\"quoted\\" \\\\path\\r\\n').repeat(45+i*12)+'end_'+i,
+  {key:'source_'+i,type:'code',view:{mode:'full',maxChars:30000}});
+}`,
+  })
+  assert.equal(result.checked, true)
+  const raw = await f.programs.read(result.resultRef, 0, 1)
+  const original = await f.storage.get('root', raw.record.objectId)
+  const archived = JSON.parse(original)
+  const view = (await f.session.view.inspect()).view
+  const frame = JSON.parse((await f.programs.project(view, undefined, [], signal, 700000)).body)
+  const visible = frame.results.find((item) => item.ref === result.resultRef)
+  const displayed = await f.display(result.resultRef, 70000)
+  assert.equal(visible.outputFormat, 'text')
+  assert.equal(visible.text, displayed.prompt)
+  assert.equal(displayed.blocks.length, 16)
+  assert(displayed.blocks.every((block) => block.representation === 'full'))
+  assert(visible.text.length > 12000)
+  assert(visible.text.length <= 70000)
+  assert(visible.source.length <= 12000, 'source previews keep their conservative cap')
+  assert(!frame.decision.missing.some((item) => item.ref === result.resultRef))
+  for (const block of archived.output.blocks)
+    if (typeof block.value === 'string')
+      assert.equal(displayed.blocks.find((item) => item.key === block.key).text, block.value)
+  await f.run()
+  const request = f.requests[0]
+  const entry = historyEntries(request).find((item) => item.ref?.id === result.resultRef)
+  assert(entry)
+  const active = JSON.parse(
+    request.materials.find((item) => item.origin === 'runtime-view').text
+  ).partitions.recent.results.find((item) => item.ref === result.resultRef)
+  assert.equal(active.bodyInHistory, true)
+  assert.equal(active.bodyIncluded, true)
+  assert.equal(active.truncated, undefined)
+  assert.equal(active.text, undefined, 'delivered history is not repeated in the current frame')
+  const actual = await f.display(result.resultRef, 70000)
+  assert.equal(actual.format, 'text')
+  assert.equal(entry.text, actual.prompt)
+  assert(actual.blocks.every((block) => block.representation === 'full'))
+  for (const block of archived.output.blocks)
+    if (typeof block.value === 'string')
+      assert.equal(actual.blocks.find((item) => item.key === block.key).text, block.value)
+  const encoded = JSON.stringify(request)
+  for (let i = 0; i < 8; i++)
+    assert(encoded.includes(`end_${i}`), 'all generated evidence reaches the real request')
+  await f.run()
+  const repeated = historyEntries(f.requests[1]).find((item) => item.ref?.id === result.resultRef)
+  assert.deepEqual(repeated, entry, 'the historical representation remains unchanged')
+  assert.equal(f.reads, 1, 'projection and history never repeat the source operation')
+  assert.equal(await f.storage.get('root', raw.record.objectId), original)
+})
+
+test('INV-58 output requests share finite frame capacity while defaults and zero remain conservative', async (t) => {
+  const f = await fixture(t, "import {output} from 'velaros';output(1)")
+  const outputs = []
+  for (const config of ['{maxChars:200000}', null, '{maxChars:0}']) {
+    const result = await f.session.execute({
+      source: `import {output} from 'velaros';${config ? `output.configure(${config});` : ''}
+output('must remain',{key:'status',required:true});
+output('source 😀 \\"quoted\\" \\\\path\\r\\n'.repeat(5000),{key:'large',type:'code'});`,
+    })
+    assert.equal(result.checked, true)
+    outputs.push(result.resultRef)
+  }
+  const view = (await f.session.view.inspect()).view
+  for (const maxChars of [24000, 120000, 600000]) {
+    const projected = await f.programs.project(view, undefined, [], signal, maxChars)
+    const frame = JSON.parse(projected.body)
+    assert.equal(frame.results.length, 3)
+    const share = Math.floor(maxChars / (frame.results.length + 4) / 2)
+    for (const [index, ref] of outputs.entries()) {
+      const item = frame.results.find((result) => result.ref === ref)
+      const cap = index === 0 ? share : index === 1 ? Math.min(12000, share) : 0
+      assert(item.text.length <= cap)
+      assert(item.source.length <= Math.min(12000, share))
+      if (index === 2) {
+        assert.equal(item.text, '')
+        assert(frame.decision.missing.some((missing) => missing.ref === ref))
+        continue
+      }
+      const display = await f.display(ref, cap)
+      assert.equal(item.outputFormat, 'text')
+      assert.equal(item.text, display.prompt)
+      assert.equal(JSON.parse(item.text.split('\n')[0]).displayChars, cap)
+      assert.equal(display.blocks.find((block) => block.key === 'status').representation, 'full')
+      const large = display.blocks.find((block) => block.key === 'large')
+      assert.equal(large.rawRef, ref)
+      assert.equal(large.pointer, '/output/blocks/1/value')
+      assert.equal(large.selection.chars.unit, 'utf16')
+      assert.equal(large.selection.chars.shown, large.text.length)
+      if (maxChars === 600000 && index === 0) assert(item.text.length > 12000)
+    }
+    assert(frame.results.reduce((sum, result) => sum + result.text.length, 0) <= maxChars / 2)
+  }
+})
+
+test('INV-58 explicit display keeps full and reference policies and required gaps under smaller frames', async (t) => {
+  const f = await fixture(t, "import {output} from 'velaros';output(1)")
+  const result = await f.session.execute({
+    source: `import {output} from 'velaros';output.configure({maxChars:36000});
+output('bounded 😀\\r\\n'.repeat(1600),{key:'required',type:'code',required:true,view:{mode:'full'}});
+output('private to archive',{key:'reference',view:{mode:'reference'}});`,
+  })
+  assert.equal(result.checked, true)
+  const view = (await f.session.view.inspect()).view
+  for (const [maxChars, expected] of [
+    [120000, 'reference'],
+    [400000, 'full'],
+  ]) {
+    const frame = JSON.parse((await f.programs.project(view, undefined, [], signal, maxChars)).body)
+    const item = frame.results.find((entry) => entry.ref === result.resultRef)
+    const display = await f.display(result.resultRef, Math.min(36000, maxChars / 10))
+    assert.equal(item.outputFormat, 'text')
+    assert.equal(item.text, display.prompt)
+    assert(item.text.length <= Math.min(36000, maxChars / 10))
+    assert.equal(display.blocks.find((block) => block.key === 'required').representation, expected)
+    assert.equal(
+      display.blocks.find((block) => block.key === 'reference').representation,
+      'reference'
+    )
+    assert.equal(
+      frame.decision.missing.some((missing) => missing.ref === result.resultRef),
+      expected !== 'full'
+    )
+  }
+})
+
+test('INV-58 explicit block requests use the finite result share and preserve actual delivered history', async (t) => {
+  const f = await fixture(t, "import {output} from 'velaros';output(1)")
+  const values = [
+    { success: true, stdout: `FIRST_BEGIN${'alpha '.repeat(2200)}FIRST_END`, stderr: '' },
+    {
+      success: false,
+      exitCode: 7,
+      stdout: `SECOND_BEGIN${'beta '.repeat(550)}SECOND_END`,
+      stderr: 'diagnostic retained',
+    },
+    { success: true, stdout: `THIRD_BEGIN${'gamma '.repeat(350)}THIRD_END`, stderr: '' },
+  ]
+  const result = await f.session.execute({
+    source: `import {output} from 'velaros';import {read} from 'test:world';await read();
+${values.map((value, index) => `output(${JSON.stringify(value)},{key:'part_${index}',required:true,view:{mode:'full',maxChars:20000}});`).join('\n')}`,
+  })
+  assert.equal(result.checked, true)
+  assert.equal(result.result.failed, undefined)
+  const view = (await f.session.view.inspect()).view
+  const frame = JSON.parse((await f.programs.project(view, undefined, [], signal, 400000)).body)
+  const item = frame.results.find((entry) => entry.ref === result.resultRef)
+  assert.equal(
+    item.representation,
+    'full',
+    'explicit per-block requests must use the existing finite share'
+  )
+  assert.equal(
+    frame.decision.missing.some((entry) => entry.ref === result.resultRef),
+    false
+  )
+  assert(item.text.length > 12000)
+  assert(item.text.length < 24000, 'this case fits the existing history-entry boundary')
+  assert(item.source.length <= 12000, 'source previews retain their separate bound')
+  await f.run()
+  const delivered = historyEntries(f.requests[0]).find(
+    (entry) => entry.ref?.id === result.resultRef
+  )
+  assert(delivered)
+  for (const value of values)
+    assert(delivered.text.includes(value.stdout), 'the model receives every original body')
+  assert(delivered.text.includes('diagnostic retained'))
+  const runtime = JSON.parse(
+    f.requests[0].materials.find((entry) => entry.origin === 'runtime-view').text
+  )
+  assert.equal(runtime.partitions.runtime.decision.missing.length, 0)
+  await f.run()
+  assert.deepEqual(
+    historyEntries(f.requests[1]).find((entry) => entry.ref?.id === result.resultRef),
+    delivered
+  )
+  assert.equal(f.reads, 1)
+  await f.programs.release(result.resultRef, signal)
+  await f.run()
+  const released = historyEntries(f.requests[2]).find((entry) => entry.ref?.id === result.resultRef)
+  assert.equal(released.bodyIncluded, false)
+  const raw = await f.programs.read(result.resultRef, 0, 1)
+  assert.deepEqual(
+    JSON.parse(await f.storage.get('root', raw.record.objectId)).output.blocks.map(
+      (block) => block.value
+    ),
+    values
+  )
+})
+
+test('INV-58 explicit block output beyond history capacity reaches the current frame without stale full proof', async (t) => {
+  const f = await fixture(t, "import {output} from 'velaros';output(1)")
+  const body = `LARGE_BEGIN${'bounded '.repeat(4000)}LARGE_END`
+  const result = await f.session.execute({
+    source: `import {output} from 'velaros';output(${JSON.stringify(body)},{key:'large',required:true,view:{mode:'full',maxChars:40000}});`,
+  })
+  assert.equal(result.checked, true)
+  assert.equal(result.result.failed, undefined)
+  const view = (await f.session.view.inspect()).view
+  for (const [maxChars, full] of [
+    [100000, false],
+    [500000, true],
+    [100000, false],
+  ]) {
+    const frame = JSON.parse((await f.programs.project(view, undefined, [], signal, maxChars)).body)
+    const item = frame.results.find((entry) => entry.ref === result.resultRef)
+    assert.equal(item.representation === 'full', full)
+    assert.equal(
+      frame.decision.missing.some((entry) => entry.ref === result.resultRef),
+      !full
+    )
+    assert(
+      item.text.length <= Math.floor(maxChars / 10),
+      'the pre-existing finite result share remains authoritative'
+    )
+  }
+  await f.run()
+  const request = f.requests[0]
+  const history = historyEntries(request).find((entry) => entry.ref?.id === result.resultRef)
+  assert.equal(history.bodyIncluded, false, 'the 24000-character history cap remains unchanged')
+  const runtime = JSON.parse(
+    request.materials.find((entry) => entry.origin === 'runtime-view').text
+  )
+  const displayed = runtime.partitions.recent.results.find(
+    (entry) => entry.ref === result.resultRef
+  )
+  assert.equal(displayed.bodyInHistory, undefined)
+  assert.equal(displayed.bodyIncluded, true)
+  assert(displayed.text.includes(body), 'the frame fallback actually reaches the model')
+  assert(request.compiledPrompt.includes(body))
+  assert.equal(runtime.partitions.runtime.decision.missing.length, 0)
+})
+
+test('INV-58 explicit block requests remain bounded across multiple leases and explicit total zero', async (t) => {
+  const f = await fixture(t, "import {output} from 'velaros';output(1)")
+  const refs = []
+  for (const config of [null, '{maxChars:0}', '{maxChars:1000}']) {
+    const result = await f.session.execute({
+      source: `import {output} from 'velaros';${config ? `output.configure(${config});` : ''}output('bound '.repeat(2500),{key:'body',required:true,view:{mode:'full',maxChars:20000}});`,
+    })
+    assert.equal(result.checked, true)
+    refs.push(result.resultRef)
+  }
+  const view = (await f.session.view.inspect()).view
+  for (const maxChars of [42000, 700000, 42000]) {
+    const frame = JSON.parse((await f.programs.project(view, undefined, [], signal, maxChars)).body)
+    const share = Math.floor(maxChars / (refs.length + 4) / 2)
+    for (const [index, ref] of refs.entries()) {
+      const item = frame.results.find((entry) => entry.ref === ref)
+      const cap = index === 0 ? share : index === 1 ? 0 : Math.min(1000, share)
+      assert(item.text.length <= cap)
+      assert.equal(
+        frame.decision.missing.some((entry) => entry.ref === ref),
+        index !== 0 || maxChars === 42000
+      )
+      if (index === 1) assert.equal(item.text, '')
+    }
+    assert(frame.results.reduce((total, item) => total + item.text.length, 0) <= maxChars / 2)
+  }
+})
+
+test('INV-58 frozen partial history cannot hide a later full or larger excerpt, including optional blocks', async (t) => {
+  for (const required of [true, false]) {
+    const f = await fixture(t, "import {output} from 'velaros';output(1)")
+    const body = `GROWTH_START\n${Array.from({ length: 1800 }, (_, index) => `line ${index} body\n`).join('')}GROWTH_END`
+    const result = await f.session.execute({
+      source: `import {output} from 'velaros';output('small',{key:'small',required:true,view:{mode:'full',maxChars:1000}});output(${JSON.stringify(body)},{key:'growing',type:'code',required:${required},view:{mode:${JSON.stringify(required ? 'full' : 'auto')},maxChars:40000}});`,
+    })
+    assert.equal(result.checked, true)
+    const view = (await f.session.view.inspect()).view
+    const first = await f.memory.project(view, undefined, [], signal, 120000)
+    const firstFrame = JSON.parse(first.body)
+    const originalHistory = historyEntries(first).find(
+      (entry) => entry.ref?.id === result.resultRef
+    )
+    assert(originalHistory?.bodyIncluded)
+    assert(!originalHistory.text.includes(body))
+    await f.memory.acknowledge(firstFrame.frameId, signal)
+    for (const maxChars of [180000, 600000, 120000]) {
+      const projected = await f.memory.project(view, undefined, [], signal, maxChars)
+      const frame = JSON.parse(projected.body)
+      const current = frame.partitions.recent.results.find(
+        (entry) => entry.ref === result.resultRef
+      )
+      assert.deepEqual(
+        historyEntries(projected).find((entry) => entry.ref?.id === result.resultRef),
+        originalHistory,
+        'the accepted partial history remains byte-for-byte unchanged'
+      )
+      if (maxChars === 600000) {
+        assert(
+          current.text?.includes(body),
+          'newly complete content must reach the current frame when frozen history remains partial'
+        )
+        assert.equal(current.bodyInHistory, undefined)
+        assert.equal(
+          frame.partitions.runtime.decision.missing.some((entry) => entry.ref === result.resultRef),
+          false
+        )
+      } else if (!required && maxChars === 180000) {
+        assert(
+          current.text.length > originalHistory.text.length,
+          'a larger optional excerpt must not be hidden by its older excerpt'
+        )
+      } else if (maxChars === 120000) {
+        assert.equal(
+          current.bodyInHistory,
+          true,
+          'an identical encoded presentation still deduplicates'
+        )
+        assert.equal(
+          frame.partitions.runtime.decision.missing.some((entry) => entry.ref === result.resultRef),
+          required
+        )
+      }
+      assert(!JSON.stringify(frame).includes('outputFingerprint'))
+    }
+  }
+})
+
+test('INV-58 legacy history without presentation fingerprints keeps current content and full required proof', async (t) => {
+  const f = await fixture(t, "import {output} from 'velaros';output(1)")
+  const body = 'original complete evidence '.repeat(550)
+  const result = await f.session.execute({
+    source: `import {output} from 'velaros';output(${JSON.stringify(body)},{key:'body',required:true,view:{mode:'full',maxChars:20000}});`,
+  })
+  const view = (await f.session.view.inspect()).view
+  const first = await f.memory.project(view, undefined, [], signal, 600000)
+  await f.memory.acknowledge(JSON.parse(first.body).frameId, signal)
+  const recent = new RecentContext('root', f.session.context, f.storage)
+  const segment = await recent.segment(signal)
+  const entry = segment.entries.find((item) => item.ref === result.resultRef)
+  assert(entry.outputFingerprint)
+  assert(entry.outputProofs.length)
+  await recent.commit(
+    {
+      ...segment,
+      entries: segment.entries.map((item) => {
+        const legacy = { ...item }
+        delete legacy.outputFingerprint
+        delete legacy.outputViews
+        return legacy
+      }),
+    },
+    signal
+  )
+  for (const maxChars of [600000, 10000]) {
+    const projected = await f.memory.project(view, undefined, [], signal, maxChars)
+    const frame = JSON.parse(projected.body)
+    const current = frame.partitions.recent.results.find((item) => item.ref === result.resultRef)
+    assert.equal(
+      current.bodyInHistory,
+      undefined,
+      'missing legacy fingerprint never asserts entire presentation equivalence'
+    )
+    assert.equal(
+      frame.partitions.runtime.decision.missing.length,
+      0,
+      'the actual retained full history still proves required delivery when current budget shrinks'
+    )
+    assert.deepEqual(historyEntries(projected), historyEntries(first))
+    if (maxChars === 600000) assert(current.text.includes(body))
+    assert(!JSON.stringify(frame).includes('outputFingerprint'))
+  }
+})
+
+test('INV-58 complete raw material in actual history covers a smaller projection but partial history does not', async (t) => {
+  for (const firstChars of [600000, 16000]) {
+    const f = await fixture(t, "import {output} from 'velaros';output(1)")
+    const body = 'raw evidence '.repeat(350)
+    const result = await f.session.execute({
+      source: `import {output} from 'velaros';output(${JSON.stringify(body)});`,
+    })
+    const view = (await f.session.view.inspect()).view
+    const first = await f.memory.project(view, undefined, [], signal, firstChars)
+    await f.memory.acknowledge(JSON.parse(first.body).frameId, signal)
+    const recent = new RecentContext('root', f.session.context, f.storage)
+    const segment = await recent.segment(signal)
+    const entry = segment.entries.find((item) => item.ref === result.resultRef)
+    assert.equal(Boolean(entry.fullMaterial), firstChars === 600000)
+    const next = await f.memory.project(
+      view,
+      undefined,
+      [],
+      signal,
+      firstChars === 600000 ? 16000 : 600000
+    )
+    const frame = JSON.parse(next.body)
+    const current = frame.partitions.recent.results.find((item) => item.ref === result.resultRef)
+    assert.deepEqual(historyEntries(next), historyEntries(first))
+    if (firstChars === 600000) {
+      assert.equal(
+        current.bodyInHistory,
+        true,
+        'complete retained raw material covers a narrower current projection'
+      )
+      assert.equal(current.text, undefined)
+      for (const fullMaterial of [undefined, 'different-source-or-content']) {
+        await recent.commit(
+          {
+            ...segment,
+            entries: segment.entries.map((item) =>
+              item.ref === entry.ref ? { ...item, fullMaterial } : item
+            ),
+          },
+          signal
+        )
+        const unknown = JSON.parse(
+          (await f.memory.project(view, undefined, [], signal, 16000)).body
+        )
+        assert.equal(
+          unknown.partitions.recent.results.find((item) => item.ref === result.resultRef)
+            .bodyInHistory,
+          undefined
+        )
+      }
+    } else {
+      assert.equal(current.bodyInHistory, undefined)
+      assert(current.text.includes(body))
+    }
+    assert(!JSON.stringify(frame).includes('materialCoverage'))
+    assert(!JSON.stringify(frame).includes('fullMaterial'))
+  }
+})
+
+test('INV-58 trace budgets identify only the actual selected frame and stay outside provider text', async (t) => {
+  const f = await fixture(t, "import {output} from 'velaros';output(1)")
+  await f.session.context.append({
+    kind: 'audit',
+    title: 'context:frame:unselected-planning-frame',
+    body: JSON.stringify({ frameId: 'unselected-planning-frame', budget: { maxChars: 1 } }),
+  })
+  await f.run()
+  const request = f.requests[0]
+  const material = JSON.parse(
+    request.materials.find((entry) => entry.origin === 'runtime-view').text
+  )
+  const snapshot = await f.storage.load('root')
+  const requestRecord = snapshot.records.findLast((entry) => entry.title === 'model-request')
+  const selected = snapshot.records.find(
+    (entry) => entry.title === `context:frame:${material.frameId}`
+  )
+  const audit = JSON.parse(await f.storage.get('root', selected.objectId))
+  assert.equal(
+    audit.budget.program.resultBudgetChars,
+    Math.max(
+      1,
+      Math.floor(audit.budget.program.maxChars / (audit.budget.program.visibleResults + 4) / 2)
+    )
+  )
+  assert.equal(
+    audit.budget.program.excerptChars,
+    Math.min(12000, audit.budget.program.resultBudgetChars)
+  )
+  assert(audit.budget.program.maxChars <= audit.budget.maxChars)
+  assert(audit.budget.historyEntryChars <= 24000)
+  await f.session.context.append({
+    kind: 'audit',
+    title: selected.title,
+    body: JSON.stringify({ frameId: material.frameId, budget: { maxChars: -1 } }),
+  })
+  const trace = await f.session.trace(requestRecord.ref.id)
+  const frames = trace.records.filter((entry) => entry.title.startsWith('context:frame:'))
+  assert.equal(frames.length, 1)
+  assert.equal(
+    frames[0].ref.id,
+    selected.ref.id,
+    'neither unselected planning frames nor later records replace the actual request frame'
+  )
+  assert.deepEqual(JSON.parse(frames[0].body).budget, audit.budget)
+  assert(!JSON.stringify(request).includes('resultBudgetChars'))
+  assert(!JSON.stringify(request).includes('historyEntryChars'))
+})
+
 test('INV-58 managed structured text reaches the next request without rereading the source', async (t) => {
   const f = await fixture(t, "import {output} from 'velaros';output(1)")
   const lines = Array.from({ length: 600 }, (_, i) => `const structuredEvidence${i} = "value";`)
@@ -359,20 +854,29 @@ test('INV-22 emergency source edit rerenders archived observation without anothe
   assert.equal(frame.observation.adjustment.executed, false)
   assert.equal(frame.observation.presentation.requestedChars, 3000)
   assert.match(frame.observation.source, /"maxItems":2/)
-  const blocks = JSON.parse(frame.observation.text).blocks
-  assert.deepEqual(
-    JSON.parse(blocks.find((b) => b.key === 'logs').text).map((x) => x.i),
-    [38, 39]
+  assert.equal(frame.observation.presentation.format, 'text')
+  assert.deepEqual(frame.observation.blocks.find((b) => b.key === 'logs').selection, {
+    from: 38,
+    shown: 2,
+    total: 40,
+    unit: 'items',
+  })
+  assert(
+    frame.observation.text.includes(
+      JSON.stringify(
+        [38, 39].map((i) => ({ i, text: 'e'.repeat(100) })),
+        null,
+        2
+      )
+    )
   )
   f.value = 2
   await f.run()
   assert.equal(f.reads, 2)
   const next = JSON.parse(f.requests.at(-1).materials[0].text).partitions.observation
   assert.equal(next.collectedSourceRef, next.presentationSourceRef)
-  assert.equal(
-    JSON.parse(JSON.parse(next.text).blocks.find((b) => b.key === 'state').text).state,
-    2
-  )
+  assert.equal(next.blocks.find((b) => b.key === 'state').representation, 'full')
+  assert(next.text.includes(JSON.stringify({ state: 2 }, null, 2)))
 })
 
 test('INV-23 late invalid metadata keeps source and all other changes unpublished', async (t) => {
@@ -433,17 +937,11 @@ test('summary binds original content and user goal generation; stale or forged s
     signal
   )
   const rendered = await f.project(snap.observation.resultRef)
-  assert.equal(
-    JSON.parse(rendered.observation.text).blocks.find((b) => b.key === 'state').representation,
-    'summary'
-  )
+  assert.equal(rendered.observation.blocks.find((b) => b.key === 'state').representation, 'summary')
   f.value = 2
   await f.run()
   const next = JSON.parse(f.requests.at(-1).materials[0].text).partitions.observation
-  assert.equal(
-    JSON.parse(next.text).blocks.find((b) => b.key === 'state').reason,
-    'summary-unavailable'
-  )
+  assert.equal(next.blocks.find((b) => b.key === 'state').reason, 'summary-unavailable')
 })
 
 test('failure preserves completed blocks and reports missing outputs separately from empty successful values', async (t) => {
@@ -456,7 +954,10 @@ test('failure preserves completed blocks and reports missing outputs separately 
   assert.equal(view.collection, 'partial')
   assert.match(view.failure.message, /read unavailable/)
   assert.deepEqual(view.missingOutputs, [{ key: 'later', status: 'not-produced' }])
-  assert.equal(JSON.parse(view.text).blocks[0].text, '[]')
+  assert.equal(view.presentation.format, 'text')
+  const displayed = await f.display(view.resultRef, 12000)
+  assert.equal(displayed.blocks[0].text, '[]')
+  assert.equal(view.text, displayed.prompt)
 })
 
 test('duplicate managed keys surface a repairable observation failure rather than breaking context assembly', async (t) => {

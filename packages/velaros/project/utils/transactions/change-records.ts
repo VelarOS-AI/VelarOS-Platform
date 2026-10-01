@@ -8,11 +8,6 @@ import type { EditIntent, PreparedPatch } from '../../types/edit.js'
 import { ProjectError } from '../errors.js'
 import { ProjectTuning } from '../tuning.js'
 
-/** 深拷贝一条变更记录：记录进出变更记录时都复制，外面改不到里面存的那份。 */
-export function cloneChange(change: ProjectChangeRecord): ProjectChangeRecord {
-  return structuredClone(change)
-}
-
 /** 判断落盘文件里读出的一行是不是完整的变更记录：事务号、序号、生命周期、意图、补丁、改动文件、差量、风险、版本和时间戳都在。 */
 export function isProjectChangeRecord(value: unknown): value is ProjectChangeRecord {
   if (!isObject(value)) return false

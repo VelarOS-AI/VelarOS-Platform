@@ -36,7 +36,7 @@ export interface ContextRuntime {
   /** 按版本保存理解结果，原文始终保留，摘要是模型解释。 */
   summarizeInput(input: ContextInputSummary, signal?: AbortSignal): Promise<ContextRef>
   /** 为真实目标生成有界正文或摘要，保留可召回元数据。 */
-  projectInput(ref: ContextRef, maxChars: number): Promise<ContextContent>
+  projectInput(ref: ContextRef, maxChars: number, original?: boolean): Promise<ContextContent>
 
   /** 查看当前工作集和始终保留的最新用户输入。 */
   inspect(): Promise<ContextSnapshot>
@@ -280,7 +280,11 @@ export class SessionContext implements ContextRuntime {
     }
   }
 
-  public async projectInput(ref: ContextRef, maxChars: number): Promise<ContextContent> {
+  public async projectInput(
+    ref: ContextRef,
+    maxChars: number,
+    original = false
+  ): Promise<ContextContent> {
     const raw = await this.readInput(ref, {
       limit: Math.max(1, Math.min(ContextLimits.readChars, maxChars)),
     })
@@ -298,7 +302,41 @@ export class SessionContext implements ContextRuntime {
     const summary = entry
       ? await this.read(entry.summary, { limit: ContextLimits.readChars })
       : undefined
-    if (!summary && !manifest && raw.text.length === raw.totalChars) return raw
+    if (original && summary && raw.totalChars > maxChars) {
+      const excerptChars = Math.max(1, Math.min(128, Math.floor(maxChars / 4)))
+      const tail = await this.readInput(ref, {
+        offset: Math.max(excerptChars, raw.totalChars - excerptChars),
+        limit: excerptChars,
+      })
+      return {
+        ...raw,
+        text: JSON.stringify({
+          ref,
+          position: 'user-input',
+          totalChars: raw.totalChars,
+          rangeUnit: 'utf16',
+          representation: 'excerpt-with-summary',
+          partial: true,
+          bodyIncluded: true,
+          files: manifest?.files ?? [],
+          origin: 'user',
+          excerpts: [
+            { offset: 0, text: raw.text.slice(0, excerptChars) },
+            { offset: tail.offset, text: tail.text },
+          ],
+          omittedChars: raw.totalChars - Math.min(excerptChars, raw.text.length) - tail.text.length,
+          historicalInterpretation: {
+            origin: 'model-interpretation',
+            summaryRef: entry!.summary,
+            revision: entry!.revision,
+            intent: JSON.parse(summary.text),
+          },
+          read: { module: 'velaros:system', export: 'memory', operation: 'read', input: { ref } },
+        }),
+      }
+    }
+    const presentation = original ? undefined : summary
+    if (!presentation && !manifest && raw.text.length === raw.totalChars) return raw
     const card = {
       ref,
       position: 'user-input',
@@ -306,13 +344,17 @@ export class SessionContext implements ContextRuntime {
       rangeUnit: 'utf16',
       summaryRevision: entry?.revision ?? 0,
       files: manifest?.files ?? [],
-      representation: summary ? 'summary' : raw.text.length < raw.totalChars ? 'excerpt' : 'full',
-      bodyIncluded: !summary && !isEmpty(raw.text),
-      sentRanges: summary ? [] : [{ offset: raw.offset, limit: raw.text.length }],
-      omittedChars: summary ? raw.totalChars : raw.totalChars - raw.text.length,
+      representation: presentation
+        ? 'summary'
+        : raw.text.length < raw.totalChars
+          ? 'excerpt'
+          : 'full',
+      bodyIncluded: !presentation && !isEmpty(raw.text),
+      sentRanges: presentation ? [] : [{ offset: raw.offset, limit: raw.text.length }],
+      omittedChars: presentation ? raw.totalChars : raw.totalChars - raw.text.length,
       read: { module: 'velaros:system', export: 'memory', operation: 'read', input: { ref } },
-      ...(summary
-        ? { summaryRef: entry!.summary, intent: JSON.parse(summary.text) }
+      ...(presentation
+        ? { summaryRef: entry!.summary, intent: JSON.parse(presentation.text) }
         : { text: raw.text }),
     }
     return { ...raw, text: JSON.stringify(card) }

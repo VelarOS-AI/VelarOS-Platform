@@ -19,7 +19,7 @@ system 原来的 INV-31（系统空间的操作表与模块清单）、INV-35（
 | --- | --- | --- | --- |
 | INV-1 | 核对过的就是要落的：差量的三列永远完整（不按条数截），落回前按完整三列核对点名的路径，再把同一份差量的指纹交给宿主，镜像在这之后又变过就整批不落 | 测试 | `spec/acceptance.test.ts` |
 | INV-2 | 点名了没有变化的路径就拒绝（`VALIDATION`），什么都没写；镜像里什么都没变时三列都是空的 | 测试 | `spec/acceptance.test.ts` |
-| INV-3 | 落回不问用户：审批端口一次都不叫，空间也不再加落回前的授权关（ADR 0009） | 测试 | `spec/acceptance.test.ts` |
+| INV-3 | 落回不问用户：审批端口一次都不叫；空间仍核对当前调用对源目录的路径授权（ADR 0009） | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 根入口与 `./contracts` 的整条引用链不碰 Node 内置模块，渲染进程可以直接加载；本机演练沙箱的值只在只给 Node 的 `./local` 入口 | 门禁 | `check:module-ownership` |
 | INV-5 | 代码面的 `sandbox` 命名空间是一条真路，不是一道恒空的门：模型写的程序 import 生成的 `baselines/script/sandbox.d.ts` 里的操作、过语法检查，在隔离里把 create → run → diff → apply/discard 整条链跑完，回执形状对得上。作用域由宿主注入的端口解析、不由模型挑（project 的实现把越界的 source 拒掉，system 的实现收任意绝对路径） | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 代码模版（`template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它**整份照生成的真实声明过类型检查**，不嵌进声明，随模型面发布、按需读（`velaros:system` 的 modules.describe）。写错的模版会原样教出去，所以不许漂；在真的空间里把每个函数跑一遍、看交回的是不是它说的样子，由仓库层的 `tests/capabilities/capability-templates.test.ts` 核对 | 测试 | `spec/acceptance.test.ts` |
@@ -31,3 +31,5 @@ system 原来的 INV-31（系统空间的操作表与模块清单）、INV-35（
 | INV-12 | 镜像仓库推不出去：镜像里每个仓库（含嵌套仓库、子模块）的每个远端都被改成无效的推送地址，节头写法（CRLF、大小写、尾随空白、旧式 `[remote.x]`）不影响；指向源目录外真实仓库的 `.git` 链接文件不进镜像；网络缺省切断 | 测试 | `spec/acceptance.test.ts` |
 | INV-13 | 落回只落核对过的那份差量：核对之后镜像又变过就整批不落（`SANDBOX_CHANGED`，not-applied） | 测试 | `spec/acceptance.test.ts` |
 | INV-14 | 落回只写在源目录之内、要么全落要么报清落了哪些：上级路径是符号链接或文件（又不在这次删除之列）按冲突整批不落；内容先暂存，拷不全什么都不落；挪到位途中失败在 message 与 context.applied 里点名已落回的路径 | 测试 | `spec/acceptance.test.ts` |
+
+2026-09-30 基础修复：INV-3 明确免人工确认仍要求空间路径核权；项目端口对 diff/run/apply/discard 的已知 ID 每次核对真实源目录，apply 进入项目写门。准备过程可取消，首个目标提交开始后按实际写入报告。新增回归见项目 `test/foundation-safety.test.ts`。

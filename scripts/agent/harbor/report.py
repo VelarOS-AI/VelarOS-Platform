@@ -5,7 +5,10 @@ import datetime
 import json
 from pathlib import Path
 
-from metrics import aggregate_trials, agent_metrics, compare_jobs, environment_evidence, request_metrics, trial_infrastructure_issue
+from metrics import aggregate_trials, agent_metrics, compare_jobs, environment_evidence, pricing_basis_metrics, request_metrics, trial_infrastructure_issue
+from tool_metrics import tool_usage_markdown
+from request_identity import attributed_requests, legacy_requests, validate_request_ledger, verify_unique_attribution
+from pricing import cost_comparison
 
 
 def duration(phase):
@@ -59,6 +62,7 @@ def finish_summary(metadata, planned, trials, pending):
 
 
 def summarize(job, requests, tasks=None):
+    validate_request_ledger(requests)
     config = json.loads((job / "config.json").read_text())
     lock_file = job / "lock.json"
     def selected(task):
@@ -66,6 +70,7 @@ def summarize(job, requests, tasks=None):
     planned = sum(selected(t["task"]) for t in json.loads(lock_file.read_text())["trials"]) if lock_file.exists() else None
     trials = []
     pending = []
+    legacy_windows = []
     for directory in sorted(job.iterdir()):
         if not directory.is_dir() or not (directory / "config.json").exists():
             continue
@@ -87,16 +92,21 @@ def summarize(job, requests, tasks=None):
                          "exception_message": native["message"] or "Codex native log does not confirm successful completion"}
         execution = result.get("agent_execution") or {}
         seconds = None
-        calls = []
+        owned_calls, attribution = attributed_requests(job, directory, result, config, requests)
+        calls = owned_calls if owned_calls is not None else []
         post_agent_calls = []
         if execution.get("started_at") and execution.get("finished_at"):
             start = datetime.datetime.fromisoformat(execution["started_at"])
             finish = datetime.datetime.fromisoformat(execution["finished_at"])
             seconds = (finish - start).total_seconds()
-            # This campaign runs one trial at a time. Container work can outlive
-            # Harbor's agent phase; retain those costs through the trial's teardown.
+            # Historical serial evidence retains its original teardown window.
+            # Signed attempt requests include late provider settlement independently of time.
             trial_finish = datetime.datetime.fromisoformat(result["finished_at"]) if result.get("finished_at") else finish
-            calls = [r for r in requests if start <= datetime.datetime.fromisoformat(r["startedAt"]) <= trial_finish]
+            if owned_calls is None:
+                if any(start < end and begin < trial_finish for begin, end in legacy_windows):
+                    raise ValueError("Overlapping legacy trials have ambiguous request attribution")
+                legacy_windows.append((start, trial_finish))
+                calls = legacy_requests(job, directory, requests, start, trial_finish)
             post_agent_calls = [r for r in calls if datetime.datetime.fromisoformat(r["startedAt"]) > finish]
         context = result.get("agent_result") or {}
         verifier_log = directory / "verifier/test-stdout.txt"
@@ -116,8 +126,10 @@ def summarize(job, requests, tasks=None):
             "setup_seconds": duration(result.get("agent_setup")),
             "verifier_seconds": duration(result.get("verifier")),
             "metrics": request_metrics(calls),
+            "request_attribution": {**attribution, "request_ids": [r["id"] for r in calls if r.get("id")]},
             "agent_metrics": agent_metrics(directory),
             "reported_cost_usd": context.get("cost_usd"),
+            "cost_comparison": cost_comparison(context.get("cost_usd"), calls),
             "gateway_requests": len(calls),
             "gateway_known_cost_usd": sum(r["estimatedUsd"] or 0 for r in calls),
             "gateway_unknown_requests": sum(r["estimatedUsd"] is None for r in calls),
@@ -186,7 +198,29 @@ def summarize_cohort(manifest, jobs_root, requests):
             "configurations": configs, "scope_tasks": sorted(declared),
             "source_jobs": sources, "concurrency": None,
         }, len(declared), trials, pending))
+    verify_unique_attribution(summaries)
     return summaries
+
+
+def pricing_basis_markdown(pricing):
+    """Shared first-read explanation for trial reports and live campaign reports."""
+    if not pricing:
+        return []
+    kinds = {group["kind"] for _, basis in pricing for group in basis["groups"]}
+    explanation = ("参考价格估算，实际扣费未知。" if "reference_only" in kinds
+                   else "按冻结费率估算，实际扣费未知。")
+    lines = [explanation + "美元列、缓存净节省及费用比均表示估算。", "",
+             "价格依据按来源分列；混合依据的总值不代表实际供应商扣费。", "",
+             "| 范围 | 价格依据 | 来源 | 上游 | 请求数 | 已知估算美元 | 未知估算请求 |",
+             "|---|---|---|---|---:|---:|---:|"]
+    labels = {"reference_only": "参考价格估算", "provider_rates": "供应商费率估算",
+              "legacy_unspecified": "历史记录未声明"}
+    def cell(value):
+        return str(value).replace("|", "\\|").replace("\n", " ")
+    for name, basis in pricing:
+        for group in basis["groups"]:
+            lines.append(f'| {cell(name)} | {labels[group["kind"]]} | {cell(group["source"])} | {cell(group.get("upstream_base_url", "—"))} | {group["requests"]} | {group["known_estimated_cost_usd"]:.6f} | {group["unknown_estimate_requests"]} |')
+    return lines
 
 
 def markdown(report):
@@ -212,11 +246,24 @@ def markdown(report):
         seconds = (a["agent_seconds_all_attempts"] or {}).get("p50")
         lower_bound = "≥" if not a["all_cost_known"] else ""
         lines.append(f'| {job["job"]} | {job["completed"]}/{job["planned"]} | {a["successes"]} | {a["model_requests"]} | {number(seconds, 1)} s | {lower_bound}${number(a["known_cost_usd"])} | {number(a["spend_per_success_usd"])} |')
-    lines += ["", "## 费用构成", "", "按每次请求冻结的单价核算，单位为美元；输出包含推理 token。用量或单价缺失时保持未知。", "",
+    lines += ["", "## 费用构成", "", "费用以归属明确的网关请求账本为准，按每次请求冻结的单价核算，单位为美元；输出包含推理 token。用量或单价缺失时保持未知。适配器自报金额保留在 reported_cost_usd，对账依据与差异保留在 cost_comparison。", "",
               "| 批次 | 普通输入 | 缓存读取 | 缓存写入 | 输出 |", "|---|---:|---:|---:|---:|"]
     for job in report["jobs"]:
         part = job["aggregate"]["cost_components_usd"]
         lines.append(f'| {job["job"]} | {number(part["uncached_input"], 4)} | {number(part["cached_input"], 4)} | {number(part["cache_write"], 4)} | {number(part["output"], 4)} |')
+    pricing = [(job["job"], job["aggregate"]["pricing_basis"]) for job in report["jobs"]
+               if job["aggregate"].get("pricing_basis")]
+    if (report.get("campaign") or {}).get("pricing_basis"):
+        pricing.append(("完整账本", report["campaign"]["pricing_basis"]))
+    if pricing:
+        lines[4:4] = pricing_basis_markdown(pricing) + [""]
+    differences = [(job["job"], trial) for job in report["jobs"] for trial in job["trials"]
+                   if (trial.get("cost_comparison") or {}).get("matches") is False]
+    if differences:
+        lines += ["", "| 费用对账 / 任务 | 适配器原值美元 | 网关账本美元 | 原值减网关美元 |", "|---|---:|---:|---:|"]
+        for job, trial in differences:
+            comparison = trial["cost_comparison"]
+            lines.append(f'| {job} / {trial["task"]} | {number(comparison["reported_cost_usd"], 8)} | {number(comparison["gateway_cost_usd"], 8)} | {number(comparison["reported_minus_gateway_usd"], 8)} |')
     lines += ["", "## 逐题证据", "", "| 批次 / 任务 | 分数 | agent 秒 | 已知费用 | 模型调用 | 输入 / 输出 token | 缓存命中率 | 输入峰值 | 异常 |", "|---|---:|---:|---:|---:|---:|---:|---:|---|"]
     for job in report["jobs"]:
         for trial in job["trials"]:
@@ -254,6 +301,10 @@ def markdown(report):
         for environment in environments:
             lines.append(f'  环境记录：`{environment}`')
     lines += ["", "模型请求耗时、首个正文/推理延迟、缓存写入量、上下文整理、工具错误与异常详情见同名 JSON。首包延迟按流式、非流式及未知传输分别统计；非流式首包通常包含整段生成时间，不能当作流式首 token 延迟比较。各 agent 的上下文策略按真实配置记录；缺失的内部指标不填零。", ""]
+    lines += tool_usage_markdown(report["jobs"])
+    if pricing:
+        lines = [line.replace("已知费用", "已知估算").replace("每次成功总摊销美元", "每次成功估算摊销美元")
+                 .replace("缓存净节省美元", "缓存净节省估算美元").replace("| 费用比 |", "| 估算费用比 |") for line in lines]
     return "\n".join(lines)
 
 
@@ -275,6 +326,7 @@ def main():
         "scope_tasks": sorted(cohort["tasks"]) if cohort else sorted(set(args.task)) if args.task else None,
         "cohort": {"manifest": str(args.cohort.resolve()), "definition": cohort} if cohort else None,
         "campaign": {
+            **pricing_basis_metrics(budget["requests"]),
             "limit_usd": budget["limitUsd"],
             "estimated_known_cost_usd": sum(r["estimatedUsd"] or 0 for r in budget["requests"]),
             "committed_upper_usd": sum(r["budgetUsd"] for r in budget["requests"]),
@@ -284,6 +336,7 @@ def main():
         "jobs": summarize_cohort(cohort, root / ".velaros-workspace/bench/jobs", budget["requests"]) if cohort
                 else [summarize(path, budget["requests"], set(args.task) if args.task else None) for path in args.jobs],
     }
+    verify_unique_attribution(report["jobs"])
     report["comparisons"] = [compare_jobs(report["jobs"][0], job) for job in report["jobs"][1:]]
     rendered = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     if args.output:

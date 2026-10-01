@@ -56,3 +56,4 @@ export type {
   PreparedInvocation,
 } from './types/operations.js'
 export type { InvocationReconciliation } from './types/operations.js'
+export type { OperationRuntimeCloseOptions, PendingInvocation } from './types/operations.js'

@@ -7,9 +7,9 @@ export type ScriptOutputType = 'text' | 'code' | 'json' | 'list' | 'image' | 'fi
 /**
  * 只影响展示的声明式规则，不能执行函数或改变采集。
  * @AgentView
- * 怎么展示（只影响你下一轮看到多少，原值照样完整保存，可以按引用召回）：
+ * 怎么展示（只影响你下一轮看到多少；原值在采集上限内完整保存，可以按引用召回）：
  * mode 默认 auto，按展示预算挑内容；full 要求整个值放得下，放不下就只给引用；reference 只给引用；summary 只展示整理服务已生成、版本匹配的摘要，没有就给引用。
- * maxChars 本块最多展示多少字符（最多 200000）；lines 是一基闭区间 [起, 止]；maxItems 列表最多展示几项；edge 从头部或尾部选片段；paths 是 JSON Pointer 数组（最多 64 个），只展示这些字段。
+ * maxChars 本块最多展示多少字符（最多 200000）；未 configure 整体预算时，显式正数也申请本块所需的有限展示份额，实际仍受宿主总预算限制，不保证全文。reference/summary 不扩大整体申请；lines 是一基闭区间 [起, 止]；maxItems 列表最多展示几项；edge 从头部或尾部选片段；paths 是 JSON Pointer 数组（最多 64 个），只展示这些字段。
  */
 export interface ScriptOutputView {
   readonly mode?: 'auto' | 'full' | 'reference' | 'summary'
@@ -40,7 +40,7 @@ export interface ScriptOutputOptions {
  * 整份输出的文字展示预算，图片仍由模型请求预算管理。
  * @AgentView
  * 整份输出的展示预算：maxChars 包括输出目录与省略说明（最多 200000），实际分配由宿主决定；交的放不下时每块只露出一部分，
- * 结果头里写着这次实际给的 displayChars。要看的内容多（几个大文件、长文），就分几次执行各交一部分。
+ * 显式配置优先于各块 view.maxChars 的申请，0 表示不展示；未配置且没有块申请时使用默认预算。结果头里写着这次实际给的 displayChars。要看的内容多（几个大文件、长文），就分几次执行各交一部分。
  */
 export interface ScriptOutputConfig {
   readonly maxChars?: number
@@ -49,6 +49,9 @@ export interface ScriptOutputConfig {
  * `velaros` 里的 output：调用它交出一个值，configure 设整份输出的展示预算。
  * @AgentView
  * 交出一个值给下一轮看：按 JSON 保存，对象里值为 undefined 的字段省略，数组里的空位或 undefined 变成 null，只有交出 undefined 本身会报错；一次执行最多 64 块。
+ * 原始 JSON 输出合计最多 1000000 个字符；超限块拒绝采集，不会截断后保存为完整原值。
+ * type 为 text 或 code 时值必须是字符串，list 必须是数组；对象或混合结果省略 type，或用 json。静态可确定的类型矛盾在执行前拒绝，动态未知值在 output 调用时校验。
+ * view 与 configure 只控制展示，不减少原始采集量；调用 output 前由脚本筛选、聚合，或分页分次执行，避免交出超限原值。
  * configure 要在第一次 output 之前调用。
  */
 export interface ScriptOutput {
@@ -135,8 +138,21 @@ export interface ScriptOutputPresentation {
   /** 降级或缺口说明。 */
   readonly reason?: string
 }
-/** 输出整理的完整结果；prompt 才是计算预算的实际文字。 */
+/** 宿主选择的展示编码；JSON 保持结构化兼容，text 将块正文原样展开。 */
+export type ScriptOutputFormat = 'json' | 'text'
+
+/** 受信宿主提供的完整等价文字编码；绑定原块，不改变归档、类型或内容指纹。 */
+export interface ScriptOutputDisplay {
+  readonly key: string
+  readonly contentHash: string
+  /** 完整值的等价表示；宿主负责校验来源与无损性，Script 只计量并原样交付。 */
+  readonly text: string
+}
+
+/** 输出整理的完整结果；prompt 按 format 编码，其 UTF-16 长度就是展示预算计量。 */
 export interface ScriptOutputProjection {
+  /** prompt 的明确编码，宿主直接发送该文字，不再另行展开。 */
+  readonly format: ScriptOutputFormat
   /** 块目录，可用于结构化审计。 */
   readonly blocks: readonly ScriptOutputPresentation[]
   /** 实际发送的有界文字。 */

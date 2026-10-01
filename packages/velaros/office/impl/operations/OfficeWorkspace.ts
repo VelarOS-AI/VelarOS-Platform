@@ -7,6 +7,7 @@ import { isBlank } from '@velaros-ai/core'
 
 import type { OfficeOperationContext } from '../../contract/requires.js'
 import type { OfficeWordInput } from '../../types/office.js'
+import type { OfficePreparedOutput } from '../../types/output.js'
 import {
   prepareOfficeOutputPath,
   prepareWordDocumentOutputPath,
@@ -31,12 +32,12 @@ export interface OfficeWorkspaceApi {
     outputPath: string,
     extension: string,
     overwrite?: boolean
-  ): Promise<{ path: string; created: boolean }>
+  ): Promise<OfficePreparedOutput>
   /** 准备 Word 输出路径；appendMode 命中已有文件时按追加处理，不要求 overwrite。 */
   prepareWordOutput(
     ctx: OfficeOperationContext,
     input: Pick<OfficeWordInput, 'outputPath' | 'overwrite' | 'appendMode'>
-  ): Promise<{ path: string; created: boolean; append: boolean }>
+  ): Promise<OfficePreparedOutput & { append: boolean }>
   /** 解析输入路径：限制扩展名、确认文件存在，并保证真实路径仍在工作区内。 */
   resolveInput(
     ctx: OfficeOperationContext,
@@ -59,7 +60,7 @@ export class OfficeWorkspace implements OfficeWorkspaceApi {
     outputPath: string,
     extension: string,
     overwrite?: boolean
-  ): Promise<{ path: string; created: boolean }> {
+  ): Promise<OfficePreparedOutput> {
     return prepareOfficeOutputPath(
       this.rootPath(ctx),
       this.userPath(ctx, outputPath),
@@ -71,7 +72,7 @@ export class OfficeWorkspace implements OfficeWorkspaceApi {
   public async prepareWordOutput(
     ctx: OfficeOperationContext,
     input: Pick<OfficeWordInput, 'outputPath' | 'overwrite' | 'appendMode'>
-  ): Promise<{ path: string; created: boolean; append: boolean }> {
+  ): Promise<OfficePreparedOutput & { append: boolean }> {
     return prepareWordDocumentOutputPath(this.rootPath(ctx), {
       ...input,
       outputPath: this.userPath(ctx, input.outputPath),

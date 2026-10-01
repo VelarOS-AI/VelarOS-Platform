@@ -53,6 +53,11 @@ export interface ActContextPort {
   ): Promise<boolean>
   /** 叶子模型工具进入直接交付阶段，不再创建整理支线。 */
   pressure?(): void
+  /**
+   * 容量不足时先于封段调用：把租约已结束、仍在段内历史里的结果正文退成引用卡，不封卷、不算封段抖动；
+   * 请求前缀从第一处改写起失效。没有可退的正文时返回 false。
+   */
+  retire?(signal: AbortSignal): Promise<boolean>
   /** 把段内较早的历史封成一卷、开始新的一段，不调用模型；能封的不足一个响应时返回 false。 */
   fold?(
     reason: 'runway' | 'boundary' | 'overflow' | 'provider' | 'renew',
@@ -92,6 +97,11 @@ export interface ActContextPort {
     /** 分段投影时的段状态。 */
     segment?: ActFrameSegment
   }>
+  /**
+   * 渲染本帧相对上一帧的变化，未列出的沿用上一帧。提供时循环把已发送的帧留在历史里、
+   * 只在其后追加，供应商可复用完整前缀缓存；缺省时每帧完整重发。
+   */
+  delta?(body: string, previous: string): string
   /**
    * 完成前检查实际送达的运行时材料；返回拒绝原因时进入相应恢复路径。
    * `claim` 是本轮 done 声明附带的完成依据，没有附带时缺席。

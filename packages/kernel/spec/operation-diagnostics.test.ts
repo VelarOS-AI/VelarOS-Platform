@@ -104,6 +104,8 @@ test('INV-25 diagnostics survive a later handler or output-validation failure wi
       expect(result.outcome).toBe('failed')
       expect(result.effect).toBe('partial')
       expect(result.error?.code).toBe(failure === 'throw' ? 'UNAVAILABLE' : 'OUTPUT_SCHEMA')
+      expect(result.lifecycle?.startedAt).toBeTruthy()
+      expect(result.lifecycle?.settledAt).toBeTruthy()
       expect(result.diagnostic).toEqual({ code: 'DOMAIN_LOG', message: 'before failure' })
     } finally {
       await runtime.dispose()

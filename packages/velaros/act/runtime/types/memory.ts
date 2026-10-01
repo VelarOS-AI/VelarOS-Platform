@@ -2,6 +2,19 @@ import type { ContextReadStamp, ContextRef } from '@velaros-ai/context'
 
 import type { WorkspaceEntry } from '../../system/types/workspace.js'
 
+/** 宿主登记的原文读取页；只保存身份和哈希，正文仍由原结果保存。 */
+export interface MemoryReadDelivery {
+  /** 读取授权快照的任务/重置水位；并发重置后完成的旧读取不能恢复权限。 */
+  readonly authorizationSequence: number
+  readonly source: ContextRef
+  readonly blocks: ReadonlyArray<{ readonly key: string; readonly contentHash: string }>
+  readonly pointer?: string
+  readonly offset: number
+  readonly chars: number
+  readonly totalChars: number
+  readonly pageHash: string
+}
+
 /** 各分区共享总窗口；份额只控制可裁剪正文，最终请求仍由编译器计量。 */
 export interface ContextMemoryPolicy {
   /** 自动携带的近期记录条数，0–64，主任务默认 8，搜索默认 64。 */
@@ -54,4 +67,29 @@ export interface RuntimeNoteContent {
   readonly totalChars: number
   /** 本页起始位置。 */
   readonly offset: number
+}
+
+/** 帧里一条结果：状态元数据、当次源码（模型看不到时）与展示正文。 */
+export type MemoryFrameResult = Record<string, unknown> & {
+  readonly ref: string
+  readonly text?: string
+  readonly source?: string
+}
+
+/** 一帧按展示口径整理好的各分区；完整帧与增量帧共用。 */
+export interface MemoryFrameDisplay {
+  readonly task: Record<string, unknown>
+  readonly workspace: Record<string, unknown>
+  readonly notes: ReadonlyArray<Record<string, unknown> & { readonly text: string }>
+  readonly observed: Record<string, unknown>
+  readonly source: string
+  readonly output: string
+  readonly recent: {
+    readonly historyState: unknown
+    readonly results: readonly MemoryFrameResult[]
+  }
+  readonly runtime: Record<string, unknown>
+  /** 按条件附加的说明：诊断正文位置与已完成作业的映射。 */
+  readonly notices: { readonly detail: readonly string[]; readonly jobs: readonly string[] }
+  readonly status: Record<string, unknown>
 }

@@ -60,6 +60,7 @@ class MemoryModule implements MemoryModuleApi {
       withoutEffect: (error) =>
         hasErrorCode(error, [
           'VALIDATION',
+          'CONFLICT',
           'MEMORY_INPUT',
           'SCOPE_MISMATCH',
           'WORKSPACE_CONFLICT',

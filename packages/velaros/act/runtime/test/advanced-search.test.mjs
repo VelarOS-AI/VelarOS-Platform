@@ -1406,12 +1406,15 @@ test('INV-33 search keeps runtime evidence after execution output expires and fi
     assert.equal(material.items[0].excerpt, 'logout v1')
     assert.equal(material.items[0].stamp.revision, '1')
     assert.equal(material.items[0].excerptTruncated, false)
-    assert.equal(
-      findEvidence(request),
-      undefined,
-      '结果租约已经退出，可见证据来自 Runtime 事实目录'
+    // 结果租约已经退出帧尾展示（冻结的历史正文保留到容量不足时退卡）；可引用的证据来自 Runtime 事实目录
+    assert(
+      !JSON.parse(request.materials[0].text).partitions.recent.results.some((item) =>
+        JSON.stringify(item).includes('logout v1')
+      ),
+      '结果租约已经退出帧尾展示'
     )
-    assert(request.compiledPrompt.includes(material.items[0].id), '原始模型请求包含同一事实目录')
+    // 此前的帧留在对话里，未变化的事实目录不在本帧增量里重发
+    assert(modelText(request).includes(material.items[0].id), '原始模型请求包含同一事实目录')
     yield {
       type: 'text',
       text: `${block(request, 'execute()', `import {output} from 'velaros';import {report} from 'velaros:evidence';await report(${JSON.stringify({ findings: [{ text: 'logout located after output expiry', evidenceIds: [material.items[0].id] }], gaps: [], nextSteps: [] })});`)}${marker(request)} done`,

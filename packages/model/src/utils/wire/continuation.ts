@@ -1,6 +1,6 @@
 import type { AssistantModelMessage, LanguageModel, ModelMessage } from 'ai'
 
-import { isArray, isPlainObject, isString } from '@velaros-ai/core'
+import { isArray, isPlainObject, isString, isUndefined, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelContinuation, ModelHistoryMessage } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
@@ -9,7 +9,7 @@ import { markPromptCacheBreakpoints } from './prompt-cache.js'
 
 /** 只有原生 Responses 通道接收此格式，兼容 chat 路由不能接收加密状态。 */
 export function usesResponseContinuation(model: LanguageModel): boolean {
-  return typeof model !== 'string' && model.provider === 'openai.responses'
+  return !isString(model) && model.provider === 'openai.responses'
 }
 
 /** 完整响应按 SDK 原始顺序保存文本、阶段与加密推理；不会保存服务端引用代替正文。 */
@@ -21,7 +21,7 @@ export function responseContinuation(
   tokens: number,
   reasoningContext?: unknown
 ): Optional<ModelContinuation> {
-  if (!usesResponseContinuation(model) || typeof model === 'string') return undefined
+  if (!usesResponseContinuation(model) || isString(model)) return undefined
   const message = messages[0]
   if (messages.length !== 1 || message?.role !== 'assistant' || !isArray(message.content))
     throw new AppError('PROTOCOL', 'Responses 延续状态缺少完整 assistant 响应')
@@ -36,7 +36,7 @@ export function responseContinuation(
       model: model.modelId,
       text,
       content,
-      ...(isString(reasoningContext) ? { reasoningContext } : {}),
+      reasoningContext: optionalWhen(isString, reasoningContext),
     }),
     tokens,
   })
@@ -57,7 +57,7 @@ export function restoreResponseContinuations(
       state.model !== id ||
       state.format !== 'openai-responses-v1' ||
       !usesResponseContinuation(model) ||
-      typeof model === 'string'
+      isString(model)
     )
       return message
     let data: unknown
@@ -92,7 +92,7 @@ function responseContent(value: unknown): Exclude<AssistantModelMessage['content
         !isPlainObject(part) ||
         !['text', 'reasoning'].includes(String(part.type)) ||
         !isString(part.text) ||
-        (part.providerOptions !== undefined && !isPlainObject(part.providerOptions))
+        (!isUndefined(part.providerOptions) && !isPlainObject(part.providerOptions))
     )
   )
     throw new AppError('VALIDATION', 'Responses 延续状态包含非文本响应项')

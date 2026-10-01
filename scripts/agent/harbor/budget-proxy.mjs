@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import {
   closeSync,
   existsSync,
@@ -13,6 +13,9 @@ import { createServer } from 'node:http'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
+
+import { authenticateAttempt } from './request-identity.mjs'
+import { RequestScheduler } from './request-scheduler.mjs'
 
 // 官方 Standard 价格（USD / 1M token，2026-09-28），随请求冻结，历史账不重算。
 // https://developers.openai.com/api/docs/pricing
@@ -37,6 +40,74 @@ function isLocalTool(tool) {
 // 只保存有限的错误标识，不把原始错误消息、URL 或凭据写入费用账。
 function safeErrorCode(value) {
   return typeof value === 'string' && /^[A-Za-z0-9_]{1,80}$/.test(value) ? value : null
+}
+
+// 只记录白名单值，区分省略、null 与未知值；不能把任意请求正文混进费用账。
+function observedOption(object, key, allowed) {
+  if (object == null || !Object.hasOwn(object, key)) return { state: 'absent' }
+  const value = object[key]
+  if (value === null) return { state: 'null' }
+  return allowed.includes(value) ? { state: 'value', value } : { state: 'other' }
+}
+
+function observedWireOptions(body) {
+  return {
+    reasoningContext: observedOption(body.reasoning, 'context', [
+      'auto',
+      'current_turn',
+      'all_turns',
+    ]),
+    reasoningSummary: observedOption(body.reasoning, 'summary', ['auto', 'concise', 'detailed']),
+    textVerbosity: observedOption(body.text, 'verbosity', ['low', 'medium', 'high']),
+    parallelToolCalls: observedOption(body, 'parallel_tool_calls', [true, false]),
+    store: observedOption(body, 'store', [true, false]),
+    include: !Object.hasOwn(body, 'include')
+      ? { state: 'absent' }
+      : body.include === null
+        ? { state: 'null' }
+        : Array.isArray(body.include)
+          ? {
+              state: 'value',
+              count: body.include.length,
+              encryptedReasoning: body.include.includes('reasoning.encrypted_content'),
+            }
+          : { state: 'other' },
+  }
+}
+
+// 端点身份只包含 API 根，不允许凭据或请求参数混入地址和账本。
+function upstreamEndpoint(value) {
+  let url
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Error('Invalid upstream URL: an absolute HTTP(S) URL is required')
+  }
+  if (
+    !['https:', 'http:'].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    String(value).includes('?') ||
+    String(value).includes('#')
+  )
+    throw new Error('Invalid upstream URL: credentials, query and fragment are forbidden')
+  const path = url.pathname.replace(/\/+$/, '')
+  url.pathname = path.endsWith('/v1') ? path : `${path}/v1`
+  const baseURL = url.href
+  return Object.freeze({ baseURL, endpointId: createHash('sha256').update(baseURL).digest('hex') })
+}
+
+// CLI 的非默认端点必须显式授权；授权与配置规范化后须指向同一个 API 根。
+export function authorizedUpstream(configuredURL, explicitlyAuthorizedURL) {
+  const configured = upstreamEndpoint(configuredURL)
+  const approved = upstreamEndpoint(explicitlyAuthorizedURL ?? 'https://api.openai.com')
+  if (configured.endpointId !== approved.endpointId)
+    throw new Error(
+      explicitlyAuthorizedURL
+        ? 'Explicit upstream URL must match the configured API root'
+        : 'A non-default API root requires explicit --upstream-url authorization'
+    )
+  return configured.baseURL
 }
 export function usageCost(usage, upperBound = false, pricing = campaignPricing) {
   const input = usage?.input_tokens ?? usage?.prompt_tokens
@@ -63,9 +134,57 @@ export function usageCost(usage, upperBound = false, pricing = campaignPricing) 
 // 每次请求先持久预占 20 美元：高于官方最大上下文和输出在 standard 长上下文费率下的费用。
 // 断流没有 usage 时保留预占；进程重启也不返还。第二个进程不得共用同一本账。
 export class BudgetLedger {
-  constructor(directory, limitUsd = 1000) {
-    if (!Number.isFinite(limitUsd) || limitUsd <= 0 || limitUsd > 1000)
-      throw new Error('Budget must be in (0, 1000] USD')
+  constructor(
+    directory,
+    limitUsd = 1000,
+    {
+      allowLimitChange = false,
+      model = campaignModel,
+      pricing = campaignPricing,
+      pricingRef = 'openai-standard-2026-09-28',
+      reasoningEffort = null,
+      pricingBasis,
+    } = {}
+  ) {
+    if (limitUsd === 'unlimited') limitUsd = null
+    else if (!Number.isFinite(limitUsd) || limitUsd <= 0)
+      throw new Error('Budget must be a positive USD amount or explicit unlimited')
+    if (
+      typeof model !== 'string' ||
+      !model ||
+      typeof pricingRef !== 'string' ||
+      !pricingRef ||
+      Object.keys(campaignPricing).some((key) => !Number.isFinite(pricing[key]) || pricing[key] < 0)
+    )
+      throw new Error('A model and complete frozen pricing reference are required')
+    if (pricingBasis !== undefined) {
+      if (
+        !pricingBasis ||
+        !['reference_only', 'provider_rates'].includes(pricingBasis.kind) ||
+        typeof pricingBasis.source !== 'string' ||
+        !pricingBasis.source.trim()
+      )
+        throw new Error('Invalid pricing basis: kind and source are required')
+      this.pricingBasis = Object.freeze({
+        kind: pricingBasis.kind,
+        source: pricingBasis.source,
+        ...(pricingBasis.upstreamBaseURL !== undefined
+          ? { upstreamBaseURL: upstreamEndpoint(pricingBasis.upstreamBaseURL).baseURL }
+          : {}),
+      })
+    }
+    this.reasoningEffort = reasoningEffort
+    this.model = model
+    this.pricing = Object.freeze({ ...pricing })
+    this.pricingRef = pricingRef
+    this.reservationUsd = Math.max(
+      20,
+      ((pricing.maxInputTokens ?? 1050000) *
+        Math.max(pricing.input, pricing.write) *
+        pricing.longInputMultiplier +
+        128000 * pricing.output * pricing.longOutputMultiplier) /
+        1000000
+    )
     mkdirSync(directory, { recursive: true })
     this.path = join(directory, 'budget.json')
     this.lock = join(directory, 'budget.lock')
@@ -74,43 +193,104 @@ export class BudgetLedger {
       ? JSON.parse(readFileSync(this.path, 'utf8'))
       : { schema: 2, limitUsd, requests: [] }
     if (this.state.limitUsd !== limitUsd) {
-      this.close()
-      throw new Error('Existing campaign budget differs')
+      if (!allowLimitChange) {
+        this.close()
+        throw new Error('Existing campaign budget differs; explicitly authorize a limit change')
+      }
+      this.state.limitHistory ??= []
+      this.state.limitHistory.push({
+        previous: this.state.limitUsd,
+        next: limitUsd,
+        at: new Date().toISOString(),
+      })
+      this.state.limitUsd = limitUsd
     }
+    if (
+      this.state.model &&
+      (this.state.model !== model ||
+        JSON.stringify(this.state.pricing) !== JSON.stringify(pricing) ||
+        this.state.pricingRef !== pricingRef ||
+        JSON.stringify(this.state.pricingBasis ?? null) !==
+          JSON.stringify(this.pricingBasis ?? null) ||
+        (this.state.reasoningEffort ?? null) !== reasoningEffort)
+    ) {
+      this.close()
+      throw new Error('Existing campaign model/pricing differs; use a new ledger directory')
+    }
+    Object.assign(this.state, {
+      schema: 3,
+      model,
+      reasoningEffort,
+      pricing: this.pricing,
+      pricingRef,
+      ...(this.pricingBasis ? { pricingBasis: this.pricingBasis } : {}),
+      budgetMode: limitUsd === null ? 'unlimited' : 'limited',
+    })
     this.save()
   }
   save() {
     writeFileSync(`${this.path}.writing`, JSON.stringify(this.state, null, 2), { mode: 0o600 })
     renameSync(`${this.path}.writing`, this.path)
   }
-  summary() {
+  summary(identity) {
+    const requests = identity
+      ? this.state.requests.filter((item) => item.identity?.attemptId === identity.attemptId)
+      : this.state.requests
     return {
       limitUsd: this.state.limitUsd,
-      model: campaignModel,
-      estimatedKnownUsd: this.state.requests.reduce(
-        (sum, item) => sum + (item.estimatedUsd ?? 0),
-        0
-      ),
-      committedUpperUsd: this.state.requests.reduce((sum, item) => sum + item.budgetUsd, 0),
-      requests: this.state.requests.length,
-      unknownUsage: this.state.requests.filter((item) => item.estimatedUsd === null).length,
+      model: this.model,
+      pricing: this.pricing,
+      reasoningEffort: this.reasoningEffort,
+      pricingRef: this.pricingRef,
+      ...(this.pricingBasis ? { pricingBasis: this.pricingBasis } : {}),
+      budgetMode: this.state.budgetMode,
+      reservationUsd: this.reservationUsd,
+      estimatedKnownUsd: requests.reduce((sum, item) => sum + (item.estimatedUsd ?? 0), 0),
+      committedUpperUsd: requests.reduce((sum, item) => sum + item.budgetUsd, 0),
+      requests: requests.length,
+      unknownUsage: requests.filter((item) => item.estimatedUsd === null).length,
+      rejectedRequests: (this.state.rejectedRequests ?? []).filter(
+        (item) => !identity || item.identity?.attemptId === identity.attemptId
+      ).length,
     }
   }
-  reserve(metadata = {}) {
-    if (this.summary().committedUpperUsd + 20 > this.state.limitUsd)
+  reserve(metadata = {}, identity = null) {
+    if (
+      identity &&
+      this.state.requests.some(
+        (item) =>
+          item.identity?.attemptId === identity.attemptId &&
+          JSON.stringify(item.identity) !== JSON.stringify(identity)
+      )
+    )
+      throw Object.assign(new Error('Attempt identity differs from its frozen accounting owner'), {
+        code: 'ATTEMPT_IDENTITY_CONFLICT',
+      })
+    if (
+      this.state.limitUsd !== null &&
+      this.summary().committedUpperUsd + this.reservationUsd > this.state.limitUsd
+    )
       throw Object.assign(new Error('Campaign budget has insufficient unreserved funds'), {
         code: 'CAMPAIGN_BUDGET_EXHAUSTED',
       })
     const item = {
       id: randomUUID(),
       startedAt: new Date().toISOString(),
-      budgetUsd: 20,
+      budgetUsd: this.reservationUsd,
       estimatedUsd: null,
       usage: null,
       status: 'reserved',
-      model: campaignModel,
-      pricing: campaignPricing,
+      lastByteMs: null,
+      lastOutputMs: null,
+      lastToolInputMs: null,
+      lastReasoningMs: null,
+      model: this.model,
+      pricing: this.pricing,
+      pricingRef: this.pricingRef,
+      ...(this.pricingBasis ? { pricingBasis: this.pricingBasis } : {}),
+      ...(this.state.upstream ? { upstream: this.state.upstream } : {}),
       metadata,
+      ...(identity ? { identity } : {}),
     }
     this.state.requests.push(item)
     this.save()
@@ -127,26 +307,99 @@ export class BudgetLedger {
     }
     this.save()
   }
+  reject(identity, code) {
+    this.state.rejectedRequests ??= []
+    this.state.rejectedRequests.push({ identity, code, at: new Date().toISOString() })
+    this.save()
+  }
   close() {
     closeSync(this.fd)
     unlinkSync(this.lock)
   }
 }
 
-export function budgetServer({ ledger, apiKey, token, upstream = 'https://api.openai.com' }) {
-  let dispatchTail = Promise.resolve()
+export function budgetServer({
+  ledger,
+  apiKey,
+  token,
+  upstream = 'https://api.openai.com',
+  requireIdentity = true,
+  maxConcurrency = 1,
+  perAttemptConcurrency = 1,
+  maxQueue = 64,
+}) {
+  if (ledger.state.limitUsd === null && !requireIdentity)
+    throw new Error('Unlimited campaigns require signed attempt identities')
+  const endpoint = upstreamEndpoint(upstream)
+  if (
+    ledger.pricingBasis?.upstreamBaseURL &&
+    ledger.pricingBasis.upstreamBaseURL !== endpoint.baseURL
+  )
+    throw new Error('Pricing basis upstream differs from the configured API root')
+  if (ledger.state.upstream && ledger.state.upstream.endpointId !== endpoint.endpointId)
+    throw new Error('Existing ledger upstream differs; use a new ledger directory')
+  ledger.state.upstream = endpoint
+  ledger.save()
+  const scheduler = new RequestScheduler({ maxConcurrency, perAttemptConcurrency, maxQueue })
+  const authenticationStopped = new AbortController()
+  let authenticationBlocker = ledger.state.authenticationBlocker ?? null
+  const authenticationError = () =>
+    Object.assign(
+      new Error(
+        'Upstream authentication is blocked; verify new credentials and start a new gateway with a new ledger. Previous tasks are not retried automatically.'
+      ),
+      { code: 'UPSTREAM_AUTHENTICATION_BLOCKED' }
+    )
+  if (authenticationBlocker) authenticationStopped.abort(authenticationError())
+  const blockAuthentication = (requestId) => {
+    if (authenticationBlocker) return
+    authenticationBlocker = Object.freeze({
+      code: 'UPSTREAM_AUTHENTICATION_BLOCKED',
+      upstreamStatus: 401,
+      requestId,
+      at: new Date().toISOString(),
+      scope: 'gateway-upstream-credential',
+      recovery: 'verify_new_credentials_then_start_new_gateway_and_ledger',
+    })
+    // 只唤醒排队等待者，已经派发的 fetch 继续读完并保留真实结算。
+    authenticationStopped.abort(authenticationError())
+    ledger.state.authenticationBlocker = authenticationBlocker
+    ledger.save()
+  }
   let activeUpstreamRequests = 0
+  const activeAttempts = new Map()
   return createServer(async (req, res) => {
-    const supplied = Buffer.from(req.headers.authorization ?? '')
-    const expected = Buffer.from(`Bearer ${token}`)
-    if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+    const access = authenticateAttempt(req.headers.authorization, token)
+    if (!access) {
       res.writeHead(401)
       res.end()
       return
     }
     if (req.method === 'GET' && req.url === '/health') {
       res.setHeader('content-type', 'application/json')
-      res.end(JSON.stringify({ ...ledger.summary(), activeUpstreamRequests }))
+      res.end(
+        JSON.stringify({
+          ...ledger.summary(access.identity),
+          activeUpstreamRequests: access.identity
+            ? (activeAttempts.get(access.identity.attemptId) ?? 0)
+            : activeUpstreamRequests,
+          attribution: requireIdentity ? 'signed-attempt-v1' : 'mixed-legacy-v1',
+          upstream: endpoint,
+          authenticationBlocker,
+          scheduler: scheduler.summary(access.identity?.attemptId),
+        })
+      )
+      return
+    }
+    if (requireIdentity && !access.identity) {
+      res.writeHead(403)
+      res.end(JSON.stringify({ error: 'ATTEMPT_IDENTITY_REQUIRED' }))
+      return
+    }
+    if (access.identity && access.identity.phase !== 'source') {
+      ledger.reject(access.identity, 'MODEL_DISPATCH_NOT_ALLOWED_IN_THIS_PHASE')
+      res.writeHead(403)
+      res.end(JSON.stringify({ error: 'MODEL_DISPATCH_NOT_ALLOWED_IN_THIS_PHASE' }))
       return
     }
     if (req.method !== 'POST' || !['/v1/responses', '/v1/chat/completions'].includes(req.url)) {
@@ -158,8 +411,20 @@ export function budgetServer({ ledger, apiKey, token, upstream = 'https://api.op
       usage = null,
       upstreamStatus = null,
       upstreamStarted,
-      releaseDispatch
+      releaseDispatch,
+      streamState
+    let responseInterruptedByGateway = false
+    const disconnected = new AbortController()
+    const onDisconnect = () => {
+      disconnected.abort()
+      if (reservation && !res.writableFinished && !responseInterruptedByGateway) {
+        reservation.clientDisconnectedAt ??= new Date().toISOString()
+        ledger.save()
+      }
+    }
+    res.once('close', onDisconnect)
     try {
+      if (authenticationBlocker) throw authenticationError()
       const chunks = []
       let size = 0
       for await (const chunk of req) {
@@ -168,8 +433,16 @@ export function budgetServer({ ledger, apiKey, token, upstream = 'https://api.op
         chunks.push(chunk)
       }
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-      if (body.model !== campaignModel)
-        throw new Error(`This campaign only authorizes ${campaignModel}`)
+      if (body.model !== ledger.model)
+        throw new Error(`This campaign only authorizes ${ledger.model}`)
+      if (ledger.reasoningEffort) {
+        const requestedEffort = body.reasoning?.effort ?? body.reasoning_effort
+        if (requestedEffort && requestedEffort !== ledger.reasoningEffort)
+          throw new Error('Reasoning effort differs from the frozen campaign')
+        if (req.url === '/v1/responses')
+          body.reasoning = { ...body.reasoning, effort: ledger.reasoningEffort }
+        else body.reasoning_effort = ledger.reasoningEffort
+      }
       if (body.tools?.some((tool) => !isLocalTool(tool)))
         throw new Error('Hosted paid tools are outside this campaign')
       const limitKey = req.url === '/v1/responses' ? 'max_output_tokens' : 'max_completion_tokens'
@@ -178,100 +451,203 @@ export function budgetServer({ ledger, apiKey, token, upstream = 'https://api.op
         throw new Error('Invalid output limit')
       body[limitKey] = outputLimit
       delete body.max_tokens
+      if (body.service_tier && body.service_tier !== 'default')
+        throw new Error('This pricing snapshot only authorizes the default service tier')
       body.service_tier = 'default'
       body.store = false
       if (body.stream && req.url.endsWith('/chat/completions'))
         body.stream_options = { ...body.stream_options, include_usage: true }
-      // Even after a trial disconnects, its provider request may still be settling.
-      // Serialize actual upstream work across every agent in the campaign.
+      // 槽位绑定真实上游请求；客户端断开仅移除排队者，已派发请求继续结算。
       const queuedAt = performance.now()
-      const preceding = dispatchTail
-      dispatchTail = new Promise((resolve) => {
-        releaseDispatch = resolve
-      })
-      await preceding
+      releaseDispatch = await scheduler.acquire(
+        access.identity?.attemptId ?? 'legacy-controller',
+        AbortSignal.any([disconnected.signal, authenticationStopped.signal])
+      )
       if (res.destroyed) return
-      reservation = ledger.reserve({
-        endpoint: req.url,
-        reasoningEffort: body.reasoning?.effort ?? body.reasoning_effort ?? null,
-        outputLimit,
-        stream: Boolean(body.stream),
-        inputItems: (body.input ?? body.messages)?.length ?? null,
-        cacheKeyHash:
-          typeof body.prompt_cache_key === 'string'
-            ? createHash('sha256').update(body.prompt_cache_key).digest('hex')
+      if (authenticationBlocker) throw authenticationError()
+      reservation = ledger.reserve(
+        {
+          endpoint: req.url,
+          reasoningEffort: body.reasoning?.effort ?? body.reasoning_effort ?? null,
+          outputLimit,
+          serviceTier: body.service_tier,
+          stream: Boolean(body.stream),
+          // 在网关规范化之后观察；仅作比较证据，不改变实际模型请求。
+          wireOptions: observedWireOptions(body),
+          inputItems: (body.input ?? body.messages)?.length ?? null,
+          cacheKeyHash:
+            typeof body.prompt_cache_key === 'string'
+              ? createHash('sha256').update(body.prompt_cache_key).digest('hex')
+              : null,
+          explicitCacheBreakpoints: Array.isArray(body.input)
+            ? body.input.reduce(
+                (count, item) =>
+                  count +
+                  (Array.isArray(item.content)
+                    ? item.content.filter((part) => part.prompt_cache_breakpoint).length
+                    : 0),
+                0
+              )
             : null,
-        explicitCacheBreakpoints: Array.isArray(body.input)
-          ? body.input.reduce(
-              (count, item) =>
-                count +
-                (Array.isArray(item.content)
-                  ? item.content.filter((part) => part.prompt_cache_breakpoint).length
-                  : 0),
-              0
-            )
-          : null,
-      })
+        },
+        access.identity
+      )
       reservation.queueWaitMs = performance.now() - queuedAt
       activeUpstreamRequests++
+      if (access.identity)
+        activeAttempts.set(
+          access.identity.attemptId,
+          (activeAttempts.get(access.identity.attemptId) ?? 0) + 1
+        )
       const started = performance.now()
       upstreamStarted = started
       // 客户端退出后仍读完供应商回执以结算；只记录用量，不把请求正文或凭据写进费用账。
-      const response = await fetch(`${upstream}${req.url}`, {
+      const response = await fetch(`${endpoint.baseURL}${req.url.slice('/v1'.length)}`, {
         method: 'POST',
         headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(15 * 60 * 1000),
       })
       upstreamStatus = response.status
+      if (upstreamStatus === 401) blockAuthentication(reservation.id)
       res.writeHead(response.status, {
         'content-type': response.headers.get('content-type') ?? 'application/json',
         'cache-control': 'no-cache',
       })
+      if (body.stream && response.ok) {
+        streamState = {
+          receivedBytes: 0,
+          events: 0,
+          terminalEvent: null,
+          terminalStatus: null,
+          effectiveReasoningContext: { state: 'unobserved' },
+          firstTerminalMs: null,
+          terminalMs: null,
+          transportEnded: null,
+          transportEndedMs: null,
+        }
+        reservation.stream = streamState
+      }
       let pending = ''
+      let eventData = [],
+        eventName = '',
+        invalidEvent = false
       const decoder = new TextDecoder()
-      const inspect = (text) => {
+      const terminal = (event, status, response) => {
+        const observed = performance.now() - started
+        streamState.firstTerminalMs ??= observed
+        streamState.terminalMs = observed
+        streamState.terminalEvent = event
+        streamState.terminalStatus = status
+        streamState.effectiveReasoningContext = observedOption(response?.reasoning, 'context', [
+          'current_turn',
+          'all_turns',
+        ])
+      }
+      const inspect = (text, event = '') => {
+        if (streamState) {
+          streamState.events++
+          if (text === '[DONE]') {
+            if (
+              req.url.endsWith('/chat/completions') &&
+              !['failed', 'incomplete'].includes(streamState.terminalStatus)
+            ) {
+              terminal('[DONE]', 'completed')
+            }
+            return
+          }
+        }
         try {
           const record = JSON.parse(text)
+          if (streamState) {
+            const type = record?.type ?? event
+            if (type === 'response.failed' || type === 'error' || record?.error) {
+              terminal(type === 'response.failed' ? type : 'error', 'failed', record.response)
+            } else if (type === 'response.incomplete' && streamState.terminalStatus !== 'failed') {
+              terminal(type, 'incomplete', record.response)
+            } else if (
+              type === 'response.completed' &&
+              req.url === '/v1/responses' &&
+              !['failed', 'incomplete'].includes(streamState.terminalStatus)
+            ) {
+              terminal(type, 'completed', record.response)
+            }
+          }
           const delta = record.choices?.[0]?.delta
           if (
-            (record.type === 'response.function_call_arguments.delta' ||
-              record.type === 'response.custom_tool_call_input.delta' ||
-              delta?.tool_calls?.some((call) => call.function?.arguments)) &&
-            reservation.firstToolInputMs === undefined
-          )
-            reservation.firstToolInputMs = performance.now() - started
+            record.type === 'response.function_call_arguments.delta' ||
+            record.type === 'response.custom_tool_call_input.delta' ||
+            delta?.tool_calls?.some((call) => call.function?.arguments)
+          ) {
+            const observed = performance.now() - started
+            reservation.firstToolInputMs ??= observed
+            reservation.lastToolInputMs = observed
+          }
+          if (record.type === 'response.output_text.delta' || delta?.content) {
+            const observed = performance.now() - started
+            reservation.firstOutputMs ??= observed
+            reservation.lastOutputMs = observed
+          }
           if (
-            (record.type === 'response.output_text.delta' || delta?.content) &&
-            reservation.firstOutputMs === undefined
-          )
-            reservation.firstOutputMs = performance.now() - started
-          if (
-            (record.type === 'response.reasoning_summary_text.delta' ||
-              delta?.reasoning_content ||
-              delta?.reasoning) &&
-            reservation.firstReasoningMs === undefined
-          )
-            reservation.firstReasoningMs = performance.now() - started
+            record.type === 'response.reasoning_summary_text.delta' ||
+            delta?.reasoning_content ||
+            delta?.reasoning
+          ) {
+            const observed = performance.now() - started
+            reservation.firstReasoningMs ??= observed
+            reservation.lastReasoningMs = observed
+          }
           if (record.usage) usage = record.usage
           if (record.response?.usage) usage = record.response.usage
         } catch {
-          /* SSE 空行、注释和 [DONE] 不包含 JSON 用量。 */
+          if (streamState) invalidEvent = true
         }
+      }
+      const inspectLine = (line) => {
+        if (line === '') {
+          if (eventData.length) inspect(eventData.join('\n'), eventName)
+          eventData = []
+          eventName = ''
+        } else if (line.startsWith('data:')) eventData.push(line.slice(5).replace(/^ /u, ''))
+        else if (line.startsWith('event:')) eventName = line.slice(6).replace(/^ /u, '')
+      }
+      const consume = (text, final = false) => {
+        pending += text
+        if (!streamState) return
+        let offset = 0
+        for (let index = 0; index < pending.length; index++) {
+          const char = pending[index]
+          if (char !== '\r' && char !== '\n') continue
+          if (char === '\r' && index + 1 === pending.length && !final) break
+          inspectLine(pending.slice(offset, index))
+          if (char === '\r' && pending[index + 1] === '\n') index++
+          offset = index + 1
+        }
+        pending = pending.slice(offset)
       }
       for await (const chunk of response.body) {
-        reservation.firstByteMs ??= performance.now() - started
+        const observed = performance.now() - started
+        reservation.firstByteMs ??= observed
+        if (chunk.byteLength > 0) reservation.lastByteMs = observed
+        if (streamState) streamState.receivedBytes += chunk.byteLength
         if (!res.destroyed) res.write(chunk)
-        pending += decoder.decode(chunk, { stream: true })
-        if (body.stream) {
-          const lines = pending.split('\n')
-          pending = lines.pop()
-          for (const line of lines) if (line.startsWith('data:')) inspect(line.slice(5).trim())
-        }
+        consume(decoder.decode(chunk, { stream: true }))
       }
-      pending += decoder.decode()
-      if (body.stream) {
-        if (pending.startsWith('data:')) inspect(pending.slice(5).trim())
+      consume(decoder.decode(), true)
+      if (streamState) {
+        streamState.transportEnded = 'eof'
+        streamState.transportEndedMs = performance.now() - started
+        // SSE 事件须由空行提交；EOF 尾部的半个事件不能证明模型完整结束。
+        if (invalidEvent || streamState.terminalStatus !== 'completed') {
+          const code = invalidEvent
+            ? 'UPSTREAM_STREAM_INVALID_EVENT'
+            : streamState.terminalStatus === 'failed'
+              ? 'UPSTREAM_STREAM_FAILED'
+              : streamState.terminalStatus === 'incomplete'
+                ? 'UPSTREAM_STREAM_INCOMPLETE'
+                : 'UPSTREAM_STREAM_TRUNCATED'
+          throw Object.assign(new Error('Upstream stream did not complete successfully'), { code })
+        }
       } else inspect(pending)
       reservation.durationMs = performance.now() - started
       ledger.settle(reservation, usage, `http-${upstreamStatus}`)
@@ -290,7 +666,13 @@ export function budgetServer({ ledger, apiKey, token, upstream = 'https://api.op
           failure.causeCode
         )
       const exhausted = failure.code === 'CAMPAIGN_BUDGET_EXHAUSTED'
+      const overloaded = failure.code === 'GATEWAY_QUEUE_FULL'
+      const authenticationBlocked = failure.code === 'UPSTREAM_AUTHENTICATION_BLOCKED'
       if (reservation) {
+        if (streamState) {
+          streamState.transportEnded ??= 'interrupted'
+          streamState.transportEndedMs ??= performance.now() - upstreamStarted
+        }
         reservation.failure = failure
         if (upstreamStarted !== undefined)
           reservation.durationMs = performance.now() - upstreamStarted
@@ -300,8 +682,31 @@ export function budgetServer({ ledger, apiKey, token, upstream = 'https://api.op
           upstreamStatus ? `http-${upstreamStatus}-interrupted` : 'unknown'
         )
       }
-      const status = reservation ? (timedOut ? 504 : 502) : exhausted ? 429 : 400
-      if (!res.headersSent) res.writeHead(status, { 'content-type': 'application/json' })
+      if (!reservation && (access.identity || authenticationBlocked))
+        ledger.reject(
+          access.identity,
+          overloaded
+            ? 'GATEWAY_QUEUE_FULL'
+            : disconnected.signal.aborted
+              ? 'QUEUED_CLIENT_CANCELLED'
+              : (failure.code ?? 'CAMPAIGN_VALIDATION')
+        )
+      const status = reservation
+        ? timedOut
+          ? 504
+          : 502
+        : authenticationBlocked
+          ? 403
+          : exhausted || overloaded
+            ? 429
+            : 400
+      // 已发送 200/SSE 后，普通 JSON 尾巴会被 SSE 客户端忽略并伪装成正常 EOF。
+      if (res.headersSent) {
+        responseInterruptedByGateway = true
+        if (!res.destroyed) res.destroy()
+        return
+      }
+      res.writeHead(status, { 'content-type': 'application/json' })
       if (!res.destroyed)
         res.end(
           JSON.stringify({
@@ -313,21 +718,37 @@ export function budgetServer({ ledger, apiKey, token, upstream = 'https://api.op
                 : error.message,
               type: reservation
                 ? 'upstream_transport'
-                : exhausted
-                  ? 'campaign_budget'
-                  : 'campaign_validation',
+                : authenticationBlocked
+                  ? 'upstream_authentication'
+                  : exhausted
+                    ? 'campaign_budget'
+                    : overloaded
+                      ? 'gateway_capacity'
+                      : 'campaign_validation',
               code: reservation
                 ? timedOut
                   ? 'UPSTREAM_TIMEOUT'
                   : 'UPSTREAM_TRANSPORT'
-                : exhausted
-                  ? 'CAMPAIGN_STOP'
-                  : 'CAMPAIGN_VALIDATION',
+                : authenticationBlocked
+                  ? 'UPSTREAM_AUTHENTICATION_BLOCKED'
+                  : exhausted
+                    ? 'CAMPAIGN_STOP'
+                    : overloaded
+                      ? 'GATEWAY_QUEUE_FULL'
+                      : 'CAMPAIGN_VALIDATION',
             },
           })
         )
     } finally {
-      if (reservation) activeUpstreamRequests--
+      if (reservation) {
+        activeUpstreamRequests--
+        if (access.identity) {
+          const remaining = (activeAttempts.get(access.identity.attemptId) ?? 1) - 1
+          if (remaining) activeAttempts.set(access.identity.attemptId, remaining)
+          else activeAttempts.delete(access.identity.attemptId)
+        }
+      }
+      res.removeListener('close', onDisconnect)
       releaseDispatch?.()
     }
   })
@@ -338,20 +759,72 @@ async function main() {
     options: {
       directory: { type: 'string' },
       'desktop-config': { type: 'string' },
+      'upstream-url': { type: 'string' },
       port: { type: 'string', default: '48761' },
       budget: { type: 'string', default: '1000' },
+      'allow-budget-change': { type: 'boolean', default: false },
+      model: { type: 'string', default: campaignModel },
+      'reasoning-effort': { type: 'string', default: 'high' },
+      'pricing-file': { type: 'string' },
+      'max-concurrency': { type: 'string', default: '1' },
+      'per-attempt-concurrency': { type: 'string', default: '1' },
+      'max-queue': { type: 'string', default: '64' },
     },
   })
   if (!values.directory || !values['desktop-config'])
     throw new Error('--directory and --desktop-config are required')
   const config = JSON.parse(readFileSync(values['desktop-config'], 'utf8')).chat
-  if (new URL(config.baseURL).origin !== 'https://api.openai.com' || !config.apiKey)
-    throw new Error('Expected configured official OpenAI endpoint')
+  const upstream = authorizedUpstream(config.baseURL, values['upstream-url'])
+  if (typeof config.apiKey !== 'string' || !config.apiKey.trim())
+    throw new Error('Configured upstream credentials are required')
   const directory = resolve(values.directory)
-  const ledger = new BudgetLedger(directory, Number(values.budget))
+  const pricingBytes = values['pricing-file'] ? readFileSync(values['pricing-file'], 'utf8') : null
+  const frozenPricing = pricingBytes
+    ? JSON.parse(pricingBytes)
+    : { model: campaignModel, pricing: campaignPricing, reference: 'openai-standard-2026-09-28' }
+  if (frozenPricing.model !== values.model)
+    throw new Error('--model must match the frozen --pricing-file model')
+  if (
+    frozenPricing.reasoning_effort &&
+    frozenPricing.reasoning_effort !== values['reasoning-effort']
+  )
+    throw new Error('Reasoning effort differs from the pricing/model snapshot')
+  const pricing = frozenPricing.pricing ?? {
+    input: frozenPricing.input,
+    cached: frozenPricing.cachedInput,
+    write: frozenPricing.cacheWriteInput,
+    output: frozenPricing.output,
+    longThreshold: frozenPricing.longThreshold,
+    longInputMultiplier: frozenPricing.longInputMultiplier,
+    longOutputMultiplier: frozenPricing.longOutputMultiplier,
+  }
+  const reference = pricingBytes
+    ? `${frozenPricing.source ?? frozenPricing.reference}#sha256=${createHash('sha256').update(pricingBytes).digest('hex')}`
+    : frozenPricing.reference
+  const ledger = new BudgetLedger(
+    directory,
+    values.budget === 'unlimited' ? 'unlimited' : Number(values.budget),
+    {
+      allowLimitChange: values['allow-budget-change'],
+      model: values.model,
+      pricing,
+      pricingRef: reference,
+      reasoningEffort: values['reasoning-effort'],
+      pricingBasis: frozenPricing.pricingBasis,
+    }
+  )
   const token = randomBytes(32).toString('hex')
   writeFileSync(join(directory, 'gateway-token'), token, { mode: 0o600 })
-  const server = budgetServer({ ledger, apiKey: config.apiKey, token })
+  const server = budgetServer({
+    ledger,
+    apiKey: config.apiKey,
+    token,
+    upstream,
+    requireIdentity: true,
+    maxConcurrency: Number(values['max-concurrency']),
+    perAttemptConcurrency: Number(values['per-attempt-concurrency']),
+    maxQueue: Number(values['max-queue']),
+  })
   server.listen(Number(values.port), '0.0.0.0', () =>
     console.log(JSON.stringify({ port: Number(values.port), ...ledger.summary() }))
   )

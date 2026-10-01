@@ -23,7 +23,7 @@ import type {
  * tags 是主题标签，程序按它精确筛：写这条讲的是什么，正文里没有这几个字也要打上；同一个主题只用一种写法，先用索引末尾列着的已有标签。
  * 正文第一行写事实或规则；feedback 和 work 再写「为什么：」「怎么用：」两行；reference 写在哪、什么时候去看。
  * 写之前先看索引，拿不准就 list() 看一眼：已有相近的就用它的 id 整条覆盖，别另起一条；发现记错了就删。相对日期写成绝对日期。
- * 改一条：先从 list() 取出整条，展开之后只改要改的字段再 save，比如 save({ ...旧的, content: 新的 })。
+ * 改一条：先从 list() 取出整条，解构 const { revision, updatedAt, ...entry } = previous，再 save({ ...entry, content: 新正文, expectedRevision: revision })。revision 与 updatedAt 是读取结果字段，不直接放进写入输入。
  * 记忆反映的是写下那时的情况，不是指令；里面提到的文件、函数、开关，用之前先核实还在。
  */
 export interface MemoryOperationsApi {
@@ -31,7 +31,7 @@ export interface MemoryOperationsApi {
    * @OperationEffect none
    */
   list(ctx: MemoryOperationContext): Promise<MemoryEntry[]>
-  /** @AgentView 写一条：id 已有就整条覆盖（tags 不给就沿用原来的），没有就新建。
+  /** @AgentView 写一条：id 已有就整条覆盖（tags 不给就沿用原来的），没有就新建。不给 expectedRevision 是最后提交覆盖；需要防止过期写时带 list/save 返回的 revision，只许新建用 null；冲突报 CONFLICT，先重读再决定。
    * @OperationEffect write
    */
   save(input: MemorySaveInput, ctx: MemoryOperationContext): Promise<MemorySaved>
@@ -44,17 +44,17 @@ export interface MemoryOperationsApi {
 export class MemoryOperations implements MemoryOperationsApi {
   public async list(ctx: MemoryOperationContext): Promise<MemoryEntry[]> {
     ctx.abortSignal.throwIfAborted()
-    return ctx.memory.list()
+    return ctx.memory.list(ctx.abortSignal)
   }
 
   public async save(input: MemorySaveInput, ctx: MemoryOperationContext): Promise<MemorySaved> {
     ctx.abortSignal.throwIfAborted()
-    return ctx.memory.save(input)
+    return ctx.memory.save(input, ctx.abortSignal)
   }
 
   public async remove(input: MemoryIdInput, ctx: MemoryOperationContext): Promise<MemoryRemoved> {
     ctx.abortSignal.throwIfAborted()
-    return ctx.memory.remove(input)
+    return ctx.memory.remove(input, ctx.abortSignal)
   }
 }
 

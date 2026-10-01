@@ -240,6 +240,8 @@ describe('model 不变量验收', () => {
     expect(modelUsage.pricingRates(catalog, 'openai', 'gpt-5.5-latest')).toEqual({
       inputPerMillion: 2,
       outputPerMillion: 8,
+      cacheReadPerMillion: null,
+      cacheWritePerMillion: null,
     })
     expect(modelUsage.pricingRates(catalog, 'anthropic', 'gpt-5.5')).toBeNull()
     expect(

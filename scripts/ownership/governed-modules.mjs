@@ -63,6 +63,7 @@ export const GovernedModules = [
         'SessionGoal.ts',
         'RuntimeSession.ts',
         'ContextMemory.ts',
+        'ActiveContext.ts',
         'ScriptTurnDecoder.ts',
         'McpClientConnection.ts',
         'RuntimeTrace.ts',

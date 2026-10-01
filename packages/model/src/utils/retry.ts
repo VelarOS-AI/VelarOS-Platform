@@ -98,6 +98,11 @@ export function planProviderRetry(
   }
 }
 
+/** SDK 的流失败可能是嵌套数据而非 Error；只取错误文案，不把请求对象串进诊断。 */
+export function providerErrorMessage(error: unknown): string {
+  return collectErrorFacts(error).messages[0] ?? '供应商请求失败'
+}
+
 /** 等一次退避；等待期间被取消就把取消原因抛出去。 */
 export async function waitForRetry(delayMs: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) throw abortError(signal)
@@ -145,7 +150,7 @@ function collectErrorFacts(root: unknown): ModelRetryErrorFacts {
       if (isPresent(value)) queue.push({ value, depth: item.depth + 1 })
     }
   }
-  if (isEmpty(facts.messages)) pushMessage(facts.messages, String(root))
+  if (isEmpty(facts.messages)) pushMessage(facts.messages, '供应商请求失败')
   return facts
 }
 

@@ -35,7 +35,7 @@ export interface OperationDefinition extends OperationDescriptor {
     signal: AbortSignal
   ): Promise<Nullable<Omit<InvocationReconciliation, 'checkedAt'>>>
   /** 显式准备一次输入；准备不得产生外部副作用。 */
-  prepare?(input: unknown): unknown | Promise<unknown>
+  prepare?(input: unknown, context: { readonly signal: AbortSignal }): unknown | Promise<unknown>
   /** 执行已经准备并校验过的参数。 */
   run(input: unknown, context: OperationContext): unknown | Promise<unknown>
 }

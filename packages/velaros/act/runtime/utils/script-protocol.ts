@@ -222,7 +222,7 @@ export function protocolInstructions(
   return [
     `ScriptAct 本帧控制。本次允许声明：${allowed.map((name) => names[name]).join(', ')}；其他声明禁止。当前帧标记：${marker}。普通 Markdown 原样展示。固定语法见系统指令，只使用本帧标记。`,
     program
-      ? `继续工作时，响应从控制头开始：\n${marker} ${names[program]}()\n随后直接写本轮实际需要的${program === 'observe' ? '只读' : ''}程序并闭合控制段，省略执行前的进度说明。结果由下一轮回执确认，再报告发现或完成情况。\n完整格式（源码按任务替换）：\n${marker} ${names[program]}()\nimport {output} from 'velaros';\noutput(1);\n${marker}`
+      ? `继续工作时，响应从下面的控制头开始，在段内编写本轮实际需要的${program === 'observe' ? '只读' : ''}程序，再以闭合行结束。每个实际程序只声明一次；同一响应里重复声明会真实执行多次。省略执行前的进度说明，结果由下一轮回执确认。\n${marker} ${names[program]}()\n// 在这里编写本轮任务程序。\n${marker}`
       : '',
     allowed.includes('blobs') && program
       ? `需要大段原文时可先声明 ${names.blobs}("名称")；${names.blobs} 原文结束后也必须先独立输出闭合行：\n${marker}\n再另起下一控制头。下一控制头不能代替闭合行，每个原文段和程序段分别闭合。`

@@ -4,6 +4,8 @@
  * 校验与撤销账本都在项目内核里，这里只负责把模型的步骤编成事务、把结果写成模型面的样子。
  */
 
+import { optionalWhen } from '@velaros-ai/core'
+
 import type { ProjectOperationContext } from '../../contract/requires.js'
 import type {
   ProjectChangeInput,
@@ -141,9 +143,13 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
       if (transaction.status === 'rolled_back')
         return { changeRef, changedFiles: transaction.changedFiles, alreadyUndone: true }
       const rolled = await this.gate.run(ctx.project.getRootPath(), true, ctx.abortSignal, () =>
-        kernel.rollback({ transactionId })
+        kernel.rollback({ transactionId }, ctx.abortSignal)
       )
-      return { changeRef, changedFiles: rolled.changedFiles }
+      return {
+        changeRef,
+        changedFiles: rolled.changedFiles,
+        notes: optionalWhen(rolled.notes?.length, rolled.notes),
+      }
     } catch (error) {
       throw projectFailure(error)
     }

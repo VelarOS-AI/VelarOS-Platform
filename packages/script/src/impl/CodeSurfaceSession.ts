@@ -3,7 +3,7 @@ import { isUndefined } from '@velaros-ai/core'
 /**
  * 会话层：把一次「模型交了段程序」办完。
  *
- * 顺序是硬的——**先查语法，不过就不执行**：语法错、import 落不到的程序一行都不跑，
+ * 顺序是硬的——**先预检，不过就不执行**：语法错、import 落不到、标准 output 的确定形状矛盾都在执行前拒绝，
  * 免得跑到一半才炸、前面的副作用已经做了。类型不查，字段写错由运行时当场报。
  */
 import { isEmpty, isObject, isString, isTrue } from '@velaros-ai/core'
@@ -27,7 +27,8 @@ import type { GrantedModule, ScriptPackageDefinition } from '../types/script.js'
 import { fitAttachmentsToBudget } from '../utils/budget.js'
 import { foldCalls, settledCall } from '../utils/calls.js'
 import { isRefusal } from '../utils/capability-failure.js'
-import { hasNamedExports, rewriteModuleForIsolate } from '../utils/module-form.js'
+import { stripTypes } from '../utils/compiler.js'
+import { hasNamedExports, normalizeNamespaceReexports } from '../utils/module-form.js'
 import { composeProgramResult, describeProgramOversize } from '../utils/result.js'
 import { CodeSurfaceTuning } from '../utils/tuning.js'
 
@@ -36,7 +37,7 @@ import type { CodeProgramCheckerApi } from './CodeProgramChecker.js'
 /** 代码面会话。 */
 export interface CodeSurfaceSessionApi {
   /**
-   * 办完一次程序：查体量 → 查语法 → 隔离里跑 → 把能力调用转给宿主 → 编成给模型看的结果。
+   * 办完一次程序：查体量 → 语法、import 与标准 output 形状预检 → 隔离里跑 → 把能力调用转给宿主 → 编成给模型看的结果。
    * 程序连同它 import 到的库里的脚本一起检查、一起送进隔离；参数与大段文本原样送进 `velaros:program`。
    */
   submit(input: {
@@ -107,18 +108,23 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     // 交给模型的图：不进程序，也不进文字结果，单独收着，程序跑完跟在结果旁边回去。
     const attachments: CodeAttachment[] = []
     let calls = 0
-    // 隔离里没有模块系统：import 改写成 __velaros(...) 与 __import(...)、导出改写成登记，行数一个不变。
-    const modules = Object.fromEntries(
-      Object.entries(program.modules ?? {}).map(([path, text]) => [
-        path,
-        rewriteModuleForIsolate(text, { importer: path, library: true }),
-      ])
+    // 原生模块链接前仅做类型剥离与引擎 namespace 重导出兼容降级。
+    const normalized = normalizeNamespaceReexports(
+      checked.transpiled ?? source,
+      program.path ?? 'program.js',
+      Object.fromEntries(
+        Object.entries(program.modules ?? {}).map(([path, text]) => [
+          path,
+          checked.wroteTypeScript ? stripTypes(text) : text,
+        ])
+      )
     )
     const executionStartedAt = Date.now()
     const outcome = await this.runner.run(
       {
-        source: rewriteModuleForIsolate(checked.transpiled ?? source, { importer: program.path }),
-        modules,
+        source: normalized.source,
+        path: program.path,
+        modules: normalized.modules,
         blobs: program.blobs ?? {},
         input: program.input,
         operations: this.capabilities.listOperations(),

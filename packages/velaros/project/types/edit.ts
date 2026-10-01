@@ -286,6 +286,8 @@ export interface AmendEditInput {
 }
 
 export interface ApplyResult {
+  /** 文件已提交后的附带诊断；不改变 status 与可恢复身份。 */
+  notes?: string[]
   status: 'applied'
   transactionId: string
   changedFiles: string[]
@@ -305,6 +307,8 @@ export interface RollbackInput {
 }
 
 export interface RollbackResult {
+  /** 文件已提交后的附带诊断；不改变 status 与可恢复身份。 */
+  notes?: string[]
   status: 'rolled_back'
   transactionId: string
   changedFiles: string[]

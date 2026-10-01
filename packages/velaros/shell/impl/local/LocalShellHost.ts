@@ -176,9 +176,14 @@ export class LocalShellHost implements LocalShellHostApi {
 
   public async inspectEnvironment(commands: string[] = []): Promise<ShellEnvironmentInspection> {
     const shell = await this.resolveShell()
-    const commandAvailability = await Promise.all(
-      commands.map((name) => this.shells.resolveCommand(name, shell))
-    )
+    const [path, availability] = await Promise.allSettled([
+      this.shells.inspectPath(shell, this.workingDirectory),
+      Promise.allSettled(
+        commands.map((name) => this.shells.resolveCommand(name, shell, this.workingDirectory))
+      ),
+    ])
+    if (path.status === 'rejected') throw path.reason
+    if (availability.status === 'rejected') throw availability.reason
 
     return {
       os: {
@@ -196,9 +201,12 @@ export class LocalShellHost implements LocalShellHostApi {
         version: shell.version,
         recommendation: shell.recommendation,
         variableCount: Object.keys(shell.env).length,
-        pathEntries: this.platformTools.getPathEntries(shell.env),
+        pathEntries: path.value,
       },
-      commands: commandAvailability,
+      commands: availability.value.map((command) => {
+        if (command.status === 'rejected') throw command.reason
+        return command.value
+      }),
     }
   }
 

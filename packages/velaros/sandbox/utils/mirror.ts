@@ -4,7 +4,7 @@
 
 import { createHash, randomBytes } from 'node:crypto'
 import type { Stats } from 'node:fs'
-import { constants } from 'node:fs'
+import { constants, createReadStream } from 'node:fs'
 import {
   chmod,
   copyFile,
@@ -427,12 +427,19 @@ export async function diffMirror(
     if (path in current) continue
     if (!noteGit(path)) deleted.push(path)
   }
+  const versions = await Promise.all(
+    [...created, ...modified].map(async (path) => [
+      path,
+      await sandboxEntryVersion(join(root, path)),
+    ])
+  )
   const fingerprint = createHash('sha256')
     .update(
       JSON.stringify({
         created: created.map((path) => [path, current[path]]),
         modified: modified.map((path) => [path, current[path]]),
         deleted,
+        versions,
       })
     )
     .digest('hex')
@@ -565,6 +572,22 @@ async function blockingAncestor(
   return null
 }
 
+/** 条目内容与权限的快照；流式散列普通文件，链接只记录链接文字，不跟随到镜像或源根之外。 */
+async function sandboxEntryVersion(path: string): Promise<Nullable<string>> {
+  let stats: Stats
+  try {
+    stats = await lstat(path)
+  } catch (error) {
+    if (readErrnoCode(error) === 'ENOENT') return null
+    throw error
+  }
+  if (stats.isSymbolicLink()) return JSON.stringify(['link', await readlink(path)])
+  if (!stats.isFile()) return JSON.stringify(['other', stats.mode])
+  const digest = createHash('sha256')
+  for await (const chunk of createReadStream(path)) digest.update(chunk)
+  return JSON.stringify(['file', stats.mode & 0o777, digest.digest('hex')])
+}
+
 /** 把镜像里的一个文件或符号链接复制到暂存路径：文件按写时复制并保留权限位，符号链接照原样再建一个。 */
 async function stageEntry(from: string, to: string): Promise<void> {
   const stats = await lstat(from)
@@ -577,15 +600,25 @@ async function stageEntry(from: string, to: string): Promise<void> {
 }
 
 /** 把暂存好的条目原子地挪到目标位置（缺的上级目录补建）；隔着挂载点挪不动时，就在目标旁边复制一份再原子替换。 */
-async function moveIntoPlace(staged: string, target: string): Promise<void> {
+async function moveIntoPlace(
+  staged: string,
+  target: string,
+  verify: () => Promise<void>
+): Promise<void> {
   await mkdir(dirname(target), { recursive: true })
   try {
+    await verify()
     await rename(staged, target)
   } catch (error) {
     if (readErrnoCode(error) !== 'EXDEV') throw error
     const nearby = `${target}.velaros-sandbox-${process.pid}.tmp`
     await stageEntry(staged, nearby)
-    await rename(nearby, target)
+    try {
+      await verify()
+      await rename(nearby, target)
+    } finally {
+      await rm(nearby, { force: true })
+    }
   }
 }
 
@@ -613,10 +646,11 @@ async function removeEmptiedDirectories(
 }
 
 /** 落回途中出错时的报错：一条都还没落回就标 not-applied；落回了一部分就在 message 与 context.applied 里点名已经落回的路径。 */
-function sandboxApplyFailure(error: unknown, applied: readonly string[]): AppError {
+export function sandboxApplyFailure(error: unknown, applied: readonly string[]): AppError {
   const failure = AppError.from(error)
   if (isEmpty(applied))
     return new AppError(failure.code, `落回时出错，源目录里什么都没改：${failure.message}`, error, {
+      ...failure.context,
       executionOutcome: 'not-applied',
     })
   const listed = applied.slice(0, SandboxTuning.listedPaths).join('、')
@@ -636,86 +670,152 @@ function sandboxApplyFailure(error: unknown, applied: readonly string[]): AppErr
  */
 export async function applyMirrorChanges(
   manifest: SandboxManifest,
-  selection: { created: readonly string[]; modified: readonly string[]; deleted: readonly string[] }
+  selection: {
+    created: readonly string[]
+    modified: readonly string[]
+    deleted: readonly string[]
+  },
+  signal?: AbortSignal,
+  fingerprint?: string
 ): Promise<Omit<SandboxApplyResult, 'sandboxId'>> {
-  const { root, source } = manifest.record
-  const outside = (list: readonly string[]): string[] =>
-    list.filter((path) => !isGitInternalPath(path))
-  const created = outside(selection.created)
-  const modified = outside(selection.modified)
-  const deleted = outside(selection.deleted)
-  const skippedGit =
-    created.length + modified.length + deleted.length <
-    selection.created.length + selection.modified.length + selection.deleted.length
-  const deletedSet = new Set(deleted)
-  const removeFirst = new Set<string>()
-  const conflicts: SandboxConflict[] = []
-  // 上级路径：源目录里已经存在的每一级都必须是真目录。是这次要删的文件或链接（镜像把它换成了目录）就先删；否则落回会穿过它写到别处，算冲突。
-  for (const path of [...created, ...modified]) {
-    const blocker = await blockingAncestor(source, path)
-    if (!blocker) continue
-    if (deletedSet.has(blocker.path)) removeFirst.add(blocker.path)
-    else
-      conflicts.push(
-        blocker.link
-          ? {
-              path,
-              reason: 'link',
-              message: `上级路径 ${blocker.path} 在源目录里是符号链接，落回会写到源目录外`,
-            }
-          : {
-              path,
-              reason: 'changed',
-              message: `上级路径 ${blocker.path} 在源目录里是文件，不是目录`,
-            }
-      )
-  }
-  const underRemoved = (path: string): boolean =>
-    [...removeFirst].some((ancestor) => path.startsWith(`${ancestor}/`))
-  for (const [kind, list] of [
-    ['created', created],
-    ['modified', modified],
-    ['deleted', deleted],
-  ] as const) {
-    for (const path of list) {
-      // 上级要先删掉的新增路径，落回时是一个全新的目录，不看源目录里经过那个链接或文件能找到什么。
-      if (kind === 'created' && underRemoved(path)) continue
-      const conflict = await conflictOf(source, manifest, path, kind)
-      if (conflict) conflicts.push(conflict)
-    }
-  }
-  if (!isEmpty(conflicts)) throw sandboxApplyConflict(conflicts)
-
-  // 暂存：新增与覆盖的内容先拷进源目录里的临时目录（同一个文件系统，最后一步是原子的改名），拷不全就什么都不落。
-  const writes = [...created, ...modified]
   const applied: string[] = []
   let stage: Nullable<string> = null
+  const { root, source } = manifest.record
   try {
+    signal?.throwIfAborted()
+    const outside = (list: readonly string[]): string[] =>
+      list.filter((path) => !isGitInternalPath(path))
+    const created = outside(selection.created)
+    const modified = outside(selection.modified)
+    const deleted = outside(selection.deleted)
+    const skippedGit =
+      created.length + modified.length + deleted.length <
+      selection.created.length + selection.modified.length + selection.deleted.length
+    const deletedSet = new Set(deleted)
+    const removeFirst = new Set<string>()
+    const conflicts: SandboxConflict[] = []
+    // 上级路径：源目录里已经存在的每一级都必须是真目录。是这次要删的文件或链接（镜像把它换成了目录）就先删；否则落回会穿过它写到别处，算冲突。
+    for (const path of [...created, ...modified]) {
+      const blocker = await blockingAncestor(source, path)
+      if (!blocker) continue
+      if (deletedSet.has(blocker.path)) removeFirst.add(blocker.path)
+      else
+        conflicts.push(
+          blocker.link
+            ? {
+                path,
+                reason: 'link',
+                message: `上级路径 ${blocker.path} 在源目录里是符号链接，落回会写到源目录外`,
+              }
+            : {
+                path,
+                reason: 'changed',
+                message: `上级路径 ${blocker.path} 在源目录里是文件，不是目录`,
+              }
+        )
+    }
+    const underRemoved = (path: string): boolean =>
+      [...removeFirst].some((ancestor) => path.startsWith(`${ancestor}/`))
+    for (const [kind, list] of [
+      ['created', created],
+      ['modified', modified],
+      ['deleted', deleted],
+    ] as const) {
+      for (const path of list) {
+        // 上级要先删掉的新增路径，落回时是一个全新的目录，不看源目录里经过那个链接或文件能找到什么。
+        if (kind === 'created' && underRemoved(path)) continue
+        const conflict = await conflictOf(source, manifest, path, kind)
+        if (conflict) conflicts.push(conflict)
+      }
+    }
+    if (!isEmpty(conflicts)) throw sandboxApplyConflict(conflicts)
+
+    const kinds = new Map<string, 'created' | 'modified' | 'deleted'>([
+      ...created.map((path) => [path, 'created'] as const),
+      ...modified.map((path) => [path, 'modified'] as const),
+      ...deleted.map((path) => [path, 'deleted'] as const),
+    ])
+    const sourceVersions = new Map<string, Nullable<string>>()
+    for (const path of kinds.keys()) {
+      const blocker = await blockingAncestor(source, path)
+      if (blocker && !removeFirst.has(blocker.path))
+        throw sandboxApplyConflict([
+          { path, reason: 'link', message: '源路径的上级在核对期间改变了' },
+        ])
+      sourceVersions.set(
+        path,
+        underRemoved(path) ? null : await sandboxEntryVersion(join(source, path))
+      )
+    }
+    const mirrorVersions = new Map<string, Nullable<string>>()
+    for (const path of [...created, ...modified])
+      mirrorVersions.set(path, await sandboxEntryVersion(join(root, path)))
+    // 最后一遍全量核对发生在暂存完成之后；随后每项真正 rename/unlink 前再核对本项。
+    const verifySource = async (path: string, beforeRemoval = false): Promise<void> => {
+      const blocker = await blockingAncestor(source, path)
+      if (blocker && !(beforeRemoval && removeFirst.has(blocker.path)))
+        throw sandboxApplyConflict([
+          { path, reason: 'link', message: '源路径的上级在暂存期间改变了' },
+        ])
+      if (beforeRemoval && underRemoved(path)) return
+      const conflict = await conflictOf(source, manifest, path, kinds.get(path)!)
+      if (conflict) throw sandboxApplyConflict([conflict])
+      if ((await sandboxEntryVersion(join(source, path))) !== sourceVersions.get(path))
+        throw sandboxApplyConflict([
+          { path, reason: 'changed', message: '源文件内容在暂存期间改变了' },
+        ])
+    }
+
+    // 暂存：新增与覆盖的内容先拷进源目录里的临时目录（同一个文件系统，最后一步是原子的改名），拷不全就什么都不落。
+    const writes = [...created, ...modified]
     const staged: Array<{ path: string; staged: string }> = []
     if (!isEmpty(writes)) stage = await mkdtemp(join(source, '.velaros-sandbox-'))
     for (const [index, path] of writes.entries()) {
+      signal?.throwIfAborted()
       const stagedPath = join(stage!, String(index))
       await stageEntry(join(root, path), stagedPath)
       staged.push({ path, staged: stagedPath })
     }
+    for (const path of kinds.keys()) await verifySource(path, true)
+    for (const entry of staged) {
+      const expected = mirrorVersions.get(entry.path)
+      if (
+        (await sandboxEntryVersion(entry.staged)) !== expected ||
+        (await sandboxEntryVersion(join(root, entry.path))) !== expected
+      )
+        throw sandboxChangedSinceDiff()
+    }
+    if (fingerprint) {
+      const current = await diffMirror(manifest, await scanTree(root), { textDiffs: false })
+      if (current.fingerprint !== fingerprint) throw sandboxChangedSinceDiff()
+    }
+    signal?.throwIfAborted()
+    const beforeCommit = async (path: string): Promise<void> => {
+      await verifySource(path)
+      // 首次提交前的异步核对也可取消；已有提交则继续收敛并保留真实结果。
+      if (isEmpty(applied)) signal?.throwIfAborted()
+    }
+    // 从首个目标提交开始完成这批操作；不以晚到的取消覆盖已经写入的事实。
     for (const path of removeFirst) {
+      await beforeCommit(path)
       await unlink(join(source, path))
       applied.push(path)
     }
     for (const entry of staged) {
-      await moveIntoPlace(entry.staged, join(source, entry.path))
+      await moveIntoPlace(entry.staged, join(source, entry.path), () => beforeCommit(entry.path))
       applied.push(entry.path)
     }
     for (const path of deleted) {
       if (removeFirst.has(path)) continue
+      await beforeCommit(path)
       await unlink(join(source, path))
       applied.push(path)
     }
+    await removeEmptiedDirectories(root, source, deleted)
+    return { created, modified, deleted, skippedGit }
   } catch (error) {
     throw sandboxApplyFailure(error, applied)
   } finally {
     if (stage) await rm(stage, { recursive: true, force: true })
   }
-  await removeEmptiedDirectories(root, source, deleted)
-  return { created, modified, deleted, skippedGit }
 }
