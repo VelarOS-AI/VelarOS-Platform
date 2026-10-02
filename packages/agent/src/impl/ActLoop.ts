@@ -545,7 +545,8 @@ export class ActLoop implements ActLoopApi {
                   compiledPrompt: `${frame.request.compiledPrompt}\n本帧上次响应未通过校验，任何程序都没有执行。请重新输出完整响应并修复：${message.slice(0, 4000)}`,
                 },
                 this.options.model,
-                this.options.limits.safetyTokens
+                this.options.limits.safetyTokens,
+                this.planner.calibration()
               ),
               controller.signal
             )

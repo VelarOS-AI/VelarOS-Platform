@@ -1539,3 +1539,112 @@ test('INV-48 each request continues the previous accepted one: sent frames stay 
   expect(marks.length).toBeLessThanOrEqual(4)
   await service.close()
 })
+
+test.each(['fits', 'overflow', 'provider-reject', 'timeout', 'abort'] as const)(
+  'INV-50 protocol repair preserves calibrated admission and execution boundaries: %s',
+  async (mode) => {
+    const f = runFixture()
+    const controller = new AbortController()
+    let calls = 0
+    let executed = 0
+    let folded = false
+    let folds = 0
+    let abortTimer: Optional<ReturnType<typeof setTimeout>>
+    const sent: string[] = []
+    f.options.limits = { ...f.options.limits, timeoutMs: mode === 'timeout' ? 100 : 2000 }
+    f.options.model.estimate = async (request) => {
+      const repair = request.compiledPrompt?.includes('本帧上次响应未通过校验')
+      if (repair && (mode === 'timeout' || mode === 'abort')) {
+        if (mode === 'abort') abortTimer = setTimeout(() => controller.abort(), 20)
+        return new Promise(() => {})
+      }
+      return {
+        tokens:
+          folded || executed === 0 ? 1000 : repair ? (mode === 'overflow' ? 120000 : 12020) : 12000,
+        precision: 'estimate',
+        basis: 'synthetic repair estimate',
+      }
+    }
+    f.options.model.stream = async function* (request) {
+      calls++
+      sent.push(request.compiledPrompt!)
+      if (mode === 'provider-reject' && calls === 2) {
+        yield { type: 'error', code: 'context-limit', message: 'synthetic provider rejection' }
+        return
+      }
+      yield { type: 'usage', inputTokens: calls === 1 ? 100 : 1000, outputTokens: 1 }
+      yield { type: 'text', text: calls === 2 ? 'unaccepted response' : 'accepted response' }
+      yield { type: 'finish', reason: 'stop' }
+    }
+    f.options.protocol.open = () => ({
+      instructions: 'synthetic protocol',
+      reset() {},
+      push() {
+        return []
+      },
+      finish() {
+        if (calls === 2) throw new AppError('SCRIPT_PROTOCOL', 'synthetic invalid intent')
+        return executed === 0
+          ? { message: 'work', done: false, submission: { code: 'synthetic work' }, events: [] }
+          : { message: 'done', done: true, events: [] }
+      },
+    })
+    f.options.execution.invoke = async () => {
+      executed++
+    }
+    if (mode === 'provider-reject')
+      f.options.frames.fold = async (reason) => {
+        expect(reason).toBe('provider')
+        folded = true
+        folds++
+        return true
+      }
+    const service = createActRunService(f.options)
+    const started = performance.now()
+    const events = []
+    try {
+      for await (const event of service.submit('synthetic task', controller.signal))
+        events.push(event)
+      const records = (await f.store.load('fault'))!.records
+      const requests = await Promise.all(
+        records
+          .filter((record) => record.title === 'model-request')
+          .map(async (record) => JSON.parse((await f.store.get('fault', record.objectId))!))
+      )
+      const responses = await Promise.all(
+        records
+          .filter((record) => record.title === 'model-response')
+          .map(async (record) => JSON.parse((await f.store.get('fault', record.objectId))!))
+      )
+      // The rejected response cannot be executed or become repair history.
+      expect(executed).toBe(1)
+      expect(sent.every((prompt) => !prompt.includes('unaccepted response'))).toBe(true)
+      expect(requests[1].estimate.tokens).toBe(Math.ceil(12000 * ((100 / 1000) * 1.1)))
+      expect(responses[1].status).toBe('rejected')
+      if (mode !== 'provider-reject')
+        expect(responses[1].usage).toEqual({ inputTokens: 1000, outputTokens: 1 })
+      if (mode === 'fits') {
+        expect(calls).toBe(3)
+        expect(requests[2].estimate.tokens).toBe(Math.ceil(12020 * ((100 / 1000) * 1.1)))
+        expect(requests[2].request.compiledPrompt).toContain('synthetic invalid intent')
+        expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+      } else if (mode === 'overflow') {
+        expect(calls).toBe(2)
+        expect(events.at(-1)).toMatchObject({ type: 'state', status: 'context_blocked' })
+      } else if (mode === 'provider-reject') {
+        expect(calls).toBe(3)
+        expect(folds).toBe(1)
+        expect(requests[2].estimate.basis).not.toContain('校准')
+        expect(responses[1]).not.toHaveProperty('usage')
+        expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+      } else {
+        expect(calls).toBe(2)
+        expect(performance.now() - started).toBeLessThan(1000)
+        expect(events.at(-1)).toMatchObject({ type: 'state', status: 'cancelled' })
+      }
+    } finally {
+      clearTimeout(abortTimer)
+      await service.close()
+    }
+  }
+)
