@@ -72,14 +72,21 @@ async function createFile(path = '~/bin/hello.sh', text = '#!/bin/sh\necho hello
   return edit({ steps: [{ action: 'write', path, text }] })
 }
 
-// 几个文件里一起换掉一个词：每个文件读一遍、换掉、写回；所有文件合成一次改动，先统一规划再逐项提交；提交途中失败按报错里的已写文件和撤回号处理。
+// 几个文件一起替换：一次批量 read、一次 edit；有读取失败时先交回全部失败项，不跳过它们继续修改。
+// 规划失败一个都不写；提交是逐文件原子写入，途中失败按原报错中的已写路径和可用撤回号处理，先 read 现状再决定，不整批重发。
 async function replaceInFiles(paths = ['~/notes/a.md', '~/notes/b.md'], from = 'oldName', to = 'newName') {
-  const { files } = await read({ files: paths.map((path) => ({ path })) })
-  const targets = []
-  for (const file of files) if (!('error' in file) && file.text.includes(from)) targets.push(file)
-  if (!targets.length) return '没有要改的'
-  const result = await edit({ steps: targets.map((file) => ({ action: 'write', path: file.path, text: file.text.replaceAll(from, to) })) })
-  return { changeId: result.changeId, changed: result.files.map((file) => file.path) }
+  const requested = [...new Set(paths)]
+  if (!requested.length) return { status: 'unchanged', changed: [] }
+  const { files } = await read({ files: requested.map((path) => ({ path })) })
+  const gaps = files.filter((file) => 'error' in file)
+  if (gaps.length) return { status: 'blocked', requestedFiles: requested, gaps }
+  /** @type {Array<{ action: 'write', path: string, text: string }>} */
+  const steps = files.flatMap((file) => !('error' in file) && file.text.includes(from)
+    ? [{ action: 'write', path: file.path, text: file.text.replaceAll(from, to) }]
+    : [])
+  if (!steps.length) return { status: 'unchanged', changed: [] }
+  const result = await edit({ steps })
+  return { status: 'committed', changeId: result.changeId, undoable: result.undoable, changed: result.files.map((file) => file.path) }
 }
 
 // 改坏了就整次撤回：changeId 是 edit 结果里的那个号，逐项恢复那次改动；若中途失败，报错列出已恢复文件，再次 undo 会接着处理。

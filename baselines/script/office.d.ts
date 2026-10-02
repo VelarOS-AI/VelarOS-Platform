@@ -1,13 +1,12 @@
+/**
+ * 办公文档：生成 Word、PowerPoint、Excel，读 PDF 的文字、编辑 PDF，Word 转 PDF、LaTeX 编译成 PDF，预览 Office 文档，把文档转成 Markdown。
+ * 路径怎么写、能到哪儿由当前空间决定（环境报告里写着），出了空间的根一律拒绝；目标文件已经在时要传 overwrite: true 才覆盖。
+ * 失败抛的错误带 code：OFFICE_OUTPUT_EXISTS 文件已在、OFFICE_INPUT_MISSING 输入文件不在、OFFICE_PATH_OUTSIDE_PROJECT 出了工作区根、
+ * OFFICE_CONVERTER_MISSING 本机缺 LibreOffice 或 LaTeX 编译器（照 message 告诉用户，不要自己去装）、
+ * OFFICE_CONVERSION_FAILED 外部转换失败（message 里有命令输出的结尾，LaTeX 就照着改源码再编）、OFFICE_MARKITDOWN_UNAVAILABLE 没装 MarkItDown。
+ * 要把 PDF 变成 Word：readPdf 读出文字，再用 createWord 按页写成标题与段落。
+ */
 declare module 'velaros:office' {
-  /**
-   * 办公文档：生成 Word、PowerPoint、Excel，读 PDF 的文字、编辑 PDF，Word 转 PDF、LaTeX 编译成 PDF，预览 Office 文档，把文档转成 Markdown。
-   * 路径怎么写、能到哪儿由当前空间决定（环境报告里写着），出了空间的根一律拒绝；目标文件已经在时要传 overwrite: true 才覆盖。
-   * 失败抛的错误带 code：OFFICE_OUTPUT_EXISTS 文件已在、OFFICE_INPUT_MISSING 输入文件不在、OFFICE_PATH_OUTSIDE_PROJECT 出了工作区根、
-   * OFFICE_CONVERTER_MISSING 本机缺 LibreOffice 或 LaTeX 编译器（照 message 告诉用户，不要自己去装）、
-   * OFFICE_CONVERSION_FAILED 外部转换失败（message 里有命令输出的结尾，LaTeX 就照着改源码再编）、OFFICE_MARKITDOWN_UNAVAILABLE 没装 MarkItDown。
-   * 要把 PDF 变成 Word：readPdf 读出文字，再用 createWord 按页写成标题与段落。
-   */
-
   /** 生成 Word 文档（.docx），或把新内容接在已有文档末尾。
    */
   export function createWord(input: OfficeWordInput): Promise<OfficeWritten>
@@ -36,7 +35,7 @@ declare module 'velaros:office' {
    */
   export function editPdf(input: OfficeEditPdfInput): Promise<OfficeWritten>
 
-  /** 预览 Word、PowerPoint、Excel 文档的结构与正文，检查生成的文档对不对；也可以写出 HTML 或 PNG 预览给人看。
+  /** 预览 Word、PowerPoint、Excel 文档的实际结构与正文；生成之后按产物路径调用可核对能否解析及实际数量。summary 是整份计数，条目受 maxItems 限制、正文另看 contentTruncated；结构解析不等于布局与全部业务内容通过。不给 outputPath 只读，也可以写出 HTML 或 PNG 预览给人看。
    */
   export function preview(input: OfficePreviewInput): Promise<OfficePreview>
 

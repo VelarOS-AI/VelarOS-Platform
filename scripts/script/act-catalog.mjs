@@ -13,6 +13,7 @@ const Destination = fileURLToPath(new URL('../../packages/velaros/act/README.md'
 const Activation = Object.freeze({
   'system-goal': '主会话',
   modules: '默认装配',
+  programs: '具备当前会话程序目录',
   'system-memory-local': '搜索或未启用整理的会话',
   'system-memory': '具备整理模型的主线或业务子任务',
   'system-memory-persistent-local': '主线宿主配置 memory，没有整理模型',
@@ -91,7 +92,7 @@ ${rows.join('\n')}
 \`\`\`js
 import { output } from 'velaros';
 import { modules } from 'velaros:system';
-const usage = await modules.describe({ module: 'velaros:system', export: 'memory' });
+const usage = await modules.describe({ module: 'velaros:system', exports: ['memory'], template: true });
 output(usage.template, { type: 'code' }); // 按需读取模型用法；精确参数见 usage.declarations
 \`\`\`
 

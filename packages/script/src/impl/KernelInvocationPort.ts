@@ -10,7 +10,13 @@ import type {
 } from '../contract/requires.js'
 import { shapeOperationFailure } from '../utils/capability-failure.js'
 
-export class KernelInvocationPort implements CodeCapabilityPort {
+/** 一次正式脚本的授权调用桥与静态挂载事实。 */
+export interface KernelInvocationPortApi extends CodeCapabilityPort {
+  /** 当前可达 import 闭包内已经授权的挂载。 */
+  dependencies(): readonly ModuleBinding[]
+}
+
+export class KernelInvocationPort implements KernelInvocationPortApi {
   private readonly bindings = new Map<string, ModuleBinding>()
   private readonly operations: Readonly<Record<string, readonly string[]>>
   private readonly runtime: OperationRuntimeApi
@@ -42,6 +48,11 @@ export class KernelInvocationPort implements CodeCapabilityPort {
 
   public listOperations(): Readonly<Record<string, readonly string[]>> {
     return this.operations
+  }
+
+  /** 当前程序实际 import 范围内的授权挂载；不会派发操作。 */
+  public dependencies(): readonly ModuleBinding[] {
+    return [...this.bindings.values()]
   }
 
   public async invoke(

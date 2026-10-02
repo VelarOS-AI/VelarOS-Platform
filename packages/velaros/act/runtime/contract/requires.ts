@@ -17,7 +17,7 @@ import type {
   PreparedInvocation,
 } from '@velaros-ai/kernel'
 import type { ModelAdapterConfig, ModelDriver, ModelDriverLimits } from '@velaros-ai/model'
-import type { CodeRunnerApi } from '@velaros-ai/script'
+import type { CodeProgramRequest, CodeRunnerApi } from '@velaros-ai/script'
 import type { WidgetHost } from '@velaros-ai/velaros/act/agents'
 import type { VelarosSearchOptions } from '@velaros-ai/velaros/act/search'
 import type { StoreConfiguration } from '@velaros-ai/velaros/act/system'
@@ -85,6 +85,10 @@ export interface CapabilityModuleOptions<T extends object> {
 /** 宿主只选择实例资源，公共机制由 Velaros 统一装配。 */
 /** 任务事实与只读证据源的配置，宿主装配领域只读源。 */
 export interface VelarosContextOptions {
+  /** 领域拥有的纯快照目录；逐轮真实捕获，只复用相同完整值的固定派生。工作区默认装配 Project files。 */
+  readonly snapshots?: readonly SnapshotObservationProvider[]
+  /** 仅对宿主预登记、完整覆盖依赖的观察启用可靠代次复用；省略时每个业务轮实际采集。 */
+  readonly observation?: ObservationReuseOptions
   /** 独立整理工具；默认复用业务模型驱动，false 时仅使用确定性引用降级。 */
   readonly maintenance?: false | ContextMaintenanceOptions
   /** 五分区工作内存的正文配额和近期记录窗口。 */
@@ -97,6 +101,68 @@ export interface VelarosContextOptions {
   readonly limits?: Partial<ContextViewLimits>
   /** 领域完成验证；省略时明确标为未验证。 */
   readonly completion?: ContextCompletionPort
+}
+
+/** 领域只登记固定纯计划及捕获操作；实际读取仍由授权 Kernel 派发。 */
+export interface SnapshotObservationProvider {
+  /** 领域目录的稳定提供者名称。 */
+  readonly id: string
+  /** 真实捕获所属的授权 Kernel 模块。 */
+  readonly moduleId: string
+  /** 领域固定的完整捕获操作。 */
+  readonly operation: string
+  /** 纯计划与派生代码的内容代次。 */
+  readonly revision: string
+  /** 当前提供者公开的固定计划名；输入从对应领域操作的生成合同发现。 */
+  readonly plans: readonly string[]
+  /** 领域保证只依赖 {plan,capture} 当前值的固定确定性纯程序；不能通过计划注入源码，派生不能调用 Kernel。 */
+  readonly source: string
+  /** 完整核对领域输入，返回可持久化的计划参数。 */
+  prepare(plan: string, input: unknown): unknown
+}
+
+/** 程序目录归档共用正式检查器与当前授权挂载，不运行程序。 */
+export interface ProgramCatalogValidator {
+  /** 使用当前声明检查源码，并返回实际可达 import 的授权挂载。 */
+  validate(program: CodeProgramRequest, signal: AbortSignal): Promise<readonly ModuleBinding[]>
+  /** 当前授权与发布时挂载完全一致可沿用已通过的语法/import 事实；变化则重新检查正文。 */
+  unchanged(dependencies: readonly ModuleBinding[], signal: AbortSignal): Promise<boolean>
+}
+
+/** 观察复用只决定是否采集，不授予读取、写入或完成权限。 */
+export interface ObservationReusePort {
+  /**
+   * 仅给预登记并核对全部有效依赖的指纹返回 versioned；其他程序返回 unknown。
+   * providerId 绑定提供者本次生命周期，token 是可识别 ABA 变化的可靠代次。
+   * 方法只读且必须响应取消；失败或超时转为真实采集，迟到结果不建立基线。
+   */
+  probe(
+    input: {
+      readonly sessionId: string
+      readonly sourceHash: string
+      readonly inputHash: string
+      readonly scopeFingerprint: string
+    },
+    signal: AbortSignal
+  ): Promise<
+    | { readonly kind: 'versioned'; readonly providerId: string; readonly token: string }
+    | { readonly kind: 'unknown'; readonly reason: string }
+  >
+}
+
+/** 宿主保证覆盖权限、可见范围、模块绑定及观察的全部数据依赖。 */
+export interface ObservationReuseOptions {
+  /** 宿主已核查完整程序覆盖范围的可靠版本端口。 */
+  readonly reuse: ObservationReusePort
+  /**
+   * 返回权限与可见范围的可靠代次；未知返回 undefined。Runtime 再绑定当前任务、
+   * 授权重置水位、允许模块及实例代际。范围变更必须推进，不能用路径或静态角色名代替。
+   */
+  scope(sessionId: string, signal: AbortSignal): Promise<Optional<string>>
+  /** 单次范围与代次联合探测上限，缺省 250ms，最大 30000ms。 */
+  readonly probeTimeoutMs?: number
+  /** 最长复用年龄；省略时仅依赖可靠代次，年龄不证明内容未变化。 */
+  readonly maxAgeMs?: number
 }
 
 /** 上下文模型工具的宿主配置，任务数据仍来自已有存储。 */
@@ -129,13 +195,14 @@ export interface VelarosRuntimeOptions {
   /** 宿主可信的主会话产品指令；追加到运行协议说明，参与真实请求预算，不传给专项模型工具。 */
   readonly instructions?: string
   /**
-   * 常驻合同：模块名提供完整声明与示例；{module, export} 只提供指定导出及其依赖类型，
+   * 常驻合同：{module} 提供完整声明与示例；{module, exports} 选择导出及其依赖类型，
    * 由正式声明生成，不附整模块示例。仅限主会话已授权模块，模型可直接 import 使用。
    * 随会话配置固定，全部计入模型请求预算；选择任务常用的操作以减少发现往返。
    */
-  readonly residentModules?: ReadonlyArray<
-    string | { readonly module: string; readonly export: string }
-  >
+  readonly residentModules?: ReadonlyArray<{
+    readonly module: string
+    readonly exports?: readonly string[]
+  }>
   /**
    * 宿主环境条目（如操作系统），每帧和运行时读的当地时间、时区一起放进 runtime.environment；
    * 在帧尾，不影响前缀缓存。读取失败的那一帧只给时间。

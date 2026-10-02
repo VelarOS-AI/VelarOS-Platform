@@ -38,3 +38,4 @@ INV-12（工具 schema 由源码生成）随工具面一起作废，模型面的
 | INV-17 | 代码模版（`template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它整份照生成的真实声明过类型检查，不嵌进声明，随模型面发布、按需读（`velaros:system` 的 modules.describe）；每个函数照写法跑通由 `test/template.test.ts` 核对 | 测试 | `spec/acceptance.test.ts` |
 | INV-18 | 写之前就停下的失败（入参不对、路径越界、目标已在、输入不在、缺转换器或 MarkItDown、Word 追加目标不完整）都标成没有写入（`executionOutcome: 'not-applied'`），运行时据此记成没有效果；转换后的失败保留已知事实：LaTeX 的 .tex 已写时标 applied 并列出源码路径，原转换错误码与原因保留；无法确认的外部副作用不冒称没有效果 | 测试 | `spec/acceptance.test.ts` |
 | INV-19 | preview 与 toMarkdown 声明为写，但不给 outputPath 时只是读：调用上下文给了 `recordEffect` 就登记成没有效果（入参核对之后、做事之前），运行时不把它们算成写入；给了 outputPath 照声明记成写入 | 测试 | `spec/acceptance.test.ts` |
+| INV-20 | 报告与表格模板把原始数据直接交给生成 API，再按真实产物路径解析；输出分别保留写入回执、实际结构计数、条目范围和正文截断，不将结构可解析声明成布局或全部内容验收通过 | 测试 | `spec/acceptance.test.ts` |

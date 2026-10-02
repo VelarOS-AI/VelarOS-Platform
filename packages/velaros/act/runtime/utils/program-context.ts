@@ -16,11 +16,73 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { unifiedLineDiff } from '@velaros-ai/core/utils/textDiff'
+import {
+  type ScriptOutputPresentation,
+  type ScriptOutputProjection,
+  scriptOutputs,
+} from '@velaros-ai/script'
 
 import type { ScriptControlIdentity } from '../types/runtime.js'
+import type { SegmentOutputView } from '../types/segment.js'
 import type { ScriptSubmissionReceipt } from '../types/session.js'
 
 import { ActRuntimeTuning } from './tuning.js'
+
+/** 按实际编码需求返还短结果的空闲份额；总池仍等于原均分份额乘结果数。 */
+export function allocateProgramResultBudgets(
+  demands: readonly number[],
+  equalChars: number
+): readonly number[] {
+  const share = Math.max(0, Math.floor(equalChars))
+  const needs = demands.map((chars) => Math.max(0, Math.ceil(chars)))
+  const budgets = needs.map((chars) => Math.min(chars, share))
+  let remaining = share * needs.length - budgets.reduce((sum, chars) => sum + chars, 0)
+  while (remaining > 0) {
+    const pending = needs.flatMap((chars, index) => (chars > budgets[index]! ? [index] : []))
+    if (isEmpty(pending)) break
+    const extra = Math.max(1, Math.floor(remaining / pending.length))
+    for (const index of pending) {
+      const granted = Math.min(extra, remaining, needs[index]! - budgets[index]!)
+      budgets[index]! += granted
+      remaining -= granted
+      if (!remaining) break
+    }
+  }
+  return budgets
+}
+
+/** 沿用逐块展示身份；实际表示和来源全部一致才允许旧历史覆盖当前正文。 */
+export function programOutputViews(
+  sessionId: string,
+  ref: string,
+  sourceRef: string,
+  projection: ScriptOutputProjection
+): readonly SegmentOutputView[] {
+  return projection.blocks
+    .filter((block) => block.bodyIncluded && block.text)
+    .map((block) => ({
+      key: block.key,
+      fingerprint: scriptOutputs.hash([sessionId, ref, sourceRef, projection.format, block]),
+    }))
+}
+
+/** 覆盖只属于当前实际投影；试投影与最终投影的片段不同则必须分别核对。 */
+export function programCoveredOutputs(
+  sessionId: string,
+  ref: string,
+  sourceRef: string,
+  projection: ScriptOutputProjection,
+  previous: readonly SegmentOutputView[]
+): readonly ScriptOutputPresentation[] {
+  const views = programOutputViews(sessionId, ref, sourceRef, projection)
+  return projection.blocks.filter((block) =>
+    views.some(
+      (view) =>
+        view.key === block.key &&
+        previous.some((entry) => entry.key === view.key && entry.fingerprint === view.fingerprint)
+    )
+  )
+}
 
 /** 从 Runtime 回执提取有限纠错信息，使结果正文引用化后仍能定位最近一次失败。 */
 export function programFailure(value: unknown) {

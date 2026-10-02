@@ -1,18 +1,21 @@
+/**
+ * 项目里的文件：读、列目录、搜源码，以及把几步文件改动合成一个事务。下面这些对每个方法都成立，各自的说明里不再重复：
+ * 路径一律相对项目根（写成项目里的绝对路径也认），出不了项目，经符号链接指到外面的也不行。
+ * 读出来的是连续的正文，带第一行的行号；改的时候按路径写：整份写入，或者把一段原文换成新文。
+ * 改动经事务：一次 edit 全成或全不成，跑项目的校验器，保留文件原来的编码与换行；成了给 changeRef，inspect 看差量、undo 整次撤销。
+ * 项目里的文件都能读能改，不问用户。生成出来的文件（*.generated.*、generated/ 下的这类）也改得动，但下次生成会被覆盖：一般改生成器的输入再重新生成。
+ * 什么都不折叠：read 交回要的整段，list 交回全部条目，search 交回全部命中，edit、inspect 交回完整差量；看多少、筛什么在程序里定。
+ * changeRef 只在本会话里有效，原样用，不能手写。
+ * 失败时 error.code 是原因（INVALID_INPUT、TARGET_NOT_FOUND、AMBIGUOUS_TARGET、NOT_SUPPORTED、PERMISSION_DENIED、超过守内存上限的 SCOPE_VIOLATION……），error.message 写着为什么、下一步怎么办。
+ */
 declare module 'velaros:project' {
-  /**
-   * 项目里的文件：读、列目录、搜源码，以及把几步文件改动合成一个事务。下面这些对每个方法都成立，各自的说明里不再重复：
-   * 路径一律相对项目根（写成项目里的绝对路径也认），出不了项目，经符号链接指到外面的也不行。
-   * 读出来的是连续的正文，带第一行的行号；改的时候按路径写：整份写入，或者把一段原文换成新文。
-   * 改动经事务：一次 edit 全成或全不成，跑项目的校验器，保留文件原来的编码与换行；成了给 changeRef，inspect 看差量、undo 整次撤销。
-   * 项目里的文件都能读能改，不问用户。生成出来的文件（*.generated.*、generated/ 下的这类）也改得动，但下次生成会被覆盖：一般改生成器的输入再重新生成。
-   * 什么都不折叠：read 交回要的整段，list 交回全部条目，search 交回全部命中，edit、inspect 交回完整差量；看多少、筛什么在程序里定。
-   * changeRef 只在本会话里有效，原样用，不能手写。
-   * 失败时 error.code 是原因（INVALID_INPUT、TARGET_NOT_FOUND、AMBIGUOUS_TARGET、NOT_SUPPORTED、PERMISSION_DENIED、超过守内存上限的 SCOPE_VIOLATION……），error.message 写着为什么、下一步怎么办。
-   */
-
-  /** 读项目里的文本文件：交回连续的正文与它第一行的行号。看图用 `velaros:images`，目录用 list。
+  /** 读项目里的文本文件：交回连续的正文与它第一行的行号。批量读取的失败项在 issues；后续改动依赖全部文件时先处理这些缺口，不把返回的 files 当作全部请求都已读。看图用 `velaros:images`，目录用 list。
    */
   export function read(input: ProjectReadInput): Promise<ProjectReadResult>
+
+  /** 捕获声明式 files 纯快照计划：最多 20 个文件、每次捕获 500000 个字符；在同一项目读门内前后完整读取，任何缺失、截断或前后变化都失败。快照只证明此次捕获值相同，不能证明读取期间没有 ABA，也不授予后续写入或跳过 IO。
+   */
+  export function snapshot(input: ProjectSnapshotInput): Promise<ProjectSnapshotCapture>
 
   /** 列项目里的文件和目录，按深度优先的稳定顺序全部交回；.gitignore 忽略的与版本库内部（.git）不列。
    */
@@ -22,7 +25,7 @@ declare module 'velaros:project' {
    */
   export function search(input: ProjectSearchInput): Promise<ProjectSearchResult>
 
-  /** 改项目文件：按路径写整份或换一段原文，steps 按顺序合成一个事务提交。
+  /** 改项目文件：按路径写整份或换一段原文，steps 按顺序合成一个事务提交。相关改动优先放进一次 edit；拆成多次调用时每次各自提交，不能承诺跨调用全成或全不成。
    */
   export function edit(input: ProjectEditInput): Promise<ProjectEditResult>
 
@@ -48,6 +51,29 @@ declare module 'velaros:project' {
   interface ProjectReadResult {
     files: ProjectWindow[]
     issues?: ProjectReadIssue[]
+  }
+
+  /**
+   * 当前项目的固定纯快照计划：files 最多 20 项，key 互不相同；每次捕获正文合计最多 500000 字符。
+   * 每个业务轮仍真实读盘，前后两次捕获一致才完整；同值只允许省掉纯派生和程序运行，不证明期间没有变化。
+   */
+  interface ProjectSnapshotInput {
+    readonly files: readonly ProjectSnapshotEntry[]
+  }
+
+  /**
+   * 领域的真实完整捕获回执。fingerprint 比较此次捕获的值，不是完整变更代次；providerId 绑定当前内核生命周期。
+   * readRequests 是实际文件读取请求数，materialBytes 是捕获正文的 UTF-8 字节数，均包括前后核对；它们不代表底层磁盘的额外内部读取。
+   */
+  interface ProjectSnapshotCapture {
+    readonly providerId: string
+    readonly root: string
+    readonly fingerprint: string
+    readonly complete: true
+    readonly checkedAt: string
+    readonly readRequests: number
+    readonly materialBytes: number
+    readonly value: { readonly files: readonly ProjectSnapshotFile[] }
   }
 
   /**
@@ -177,6 +203,31 @@ declare module 'velaros:project' {
     code: string
     message: string
     next?: string
+  }
+
+  /**
+   * 一个纯快照输出：path 在当前项目内，range 是要捕获的连续行；key 最多 96 字符，purpose 最多 1000 字符。
+   * format 默认 text；json 严格解析正文，pointer 是最多 1024 字符的 JSON Pointer。所有转换只依赖此次捕获的正文。
+   * view 默认 auto；full 请求完整展示，reference 只给引用。required 只用于本阶段确实必需的事实。
+   */
+  interface ProjectSnapshotEntry {
+    readonly path: string
+    readonly range?: ProjectLineRange
+    readonly key: string
+    readonly purpose: string
+    readonly format?: 'text' | 'json'
+    readonly pointer?: string
+    readonly view?: 'auto' | 'full' | 'reference'
+    readonly required?: boolean
+  }
+
+  /** 一份实际读取的连续正文；没有可用作编辑凭据的 fileRef。 */
+  interface ProjectSnapshotFile {
+    readonly path: string
+    readonly revision: string
+    readonly text: string
+    readonly startLine: number
+    readonly totalLines?: number
   }
 
   /** 一个条目：文件或目录。 */

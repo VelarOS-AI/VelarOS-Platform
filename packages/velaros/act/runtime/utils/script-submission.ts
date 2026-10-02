@@ -1,4 +1,4 @@
-import { isArray, isPlainObject, isString, isUndefined } from '@velaros-ai/core'
+import { isArray, isBoolean, isPlainObject, isString, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { CodeProgramEditLimits } from '@velaros-ai/script/contracts'
 
@@ -55,8 +55,18 @@ function checkEdits(value: unknown, label: string): void {
 /** 一段程序：给正文（source），或引用已存档的源码（sourceRef，可带替换）；观察还可以只给替换，改当前那一份。execute 另可声明结果租约。 */
 function checkProgram(value: unknown, label: 'observe' | 'execute'): void {
   if (!isPlainObject(value)) throw submissionInput(`${label} 必须是对象`)
-  const lease = label === 'execute' ? ['retainTurns'] : []
-  if (!isUndefined(value.source)) {
+  const lease = label === 'execute' ? ['retainTurns'] : ['refresh']
+  if (label === 'observe' && !isUndefined(value.refresh) && !isBoolean(value.refresh))
+    throw submissionInput('observe.refresh 必须是布尔值')
+  if (!isUndefined(value.snapshot)) {
+    if (label !== 'observe') throw submissionInput('snapshot 只能用于 observe')
+    checkFields(value, ['snapshot', 'refresh'], label)
+    if (!isPlainObject(value.snapshot)) throw submissionInput('snapshot 必须是对象')
+    checkFields(value.snapshot, ['provider', 'plan', 'input'], 'snapshot')
+    checkText(value.snapshot.provider, 'snapshot.provider', 1, 128)
+    checkText(value.snapshot.plan, 'snapshot.plan', 1, 128)
+    if (!Object.hasOwn(value.snapshot, 'input')) throw submissionInput('snapshot 需要 input')
+  } else if (!isUndefined(value.source)) {
     checkFields(value, ['source', 'modules', 'input', 'blobs', ...lease], label)
     checkText(value.source, `${label}.source`, 1)
     if (!isUndefined(value.modules)) checkStrings(value.modules, `${label}.modules`)
@@ -65,7 +75,7 @@ function checkProgram(value: unknown, label: 'observe' | 'execute'): void {
     checkText(value.sourceRef, `${label}.sourceRef`, 1, 128)
     if (!isUndefined(value.edits)) checkEdits(value.edits, `${label}.edits`)
   } else if (label === 'observe' && !isUndefined(value.edits)) {
-    checkFields(value, ['edits', 'input', 'blobs'], label)
+    checkFields(value, ['edits', 'input', 'blobs', ...lease], label)
     checkEdits(value.edits, `${label}.edits`)
   } else {
     throw submissionInput(

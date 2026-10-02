@@ -1,13 +1,9 @@
+/**
+ * 在对话里给用户显示小部件：图表、示意图、可交互的小工具。用户在界面上直接看到它，小部件里调用 sendPrompt(text)
+ * 会替用户发一句话过来。代码在沙箱里跑，颜色、字体、圆角与 CSS 变量由小部件代码自行定义。
+ * 外部脚本只能从 cdnjs、jsdelivr、unpkg、esm.sh 加载，不能访问网络接口。
+ */
 declare module 'velaros:widget' {
-  /**
-   * 在对话里给用户显示小部件：图表、示意图、可交互的小工具。用户在界面上直接看到它，小部件里调用 sendPrompt(text)
-   * 会替用户发一句话过来。代码在沙箱里跑：颜色、字体跟随界面主题，只用下面这些 CSS 变量——文字 --color-text-*（primary、
-   * secondary、tertiary、info、success、warning、danger），底色 --color-background-*（同样七个），边框 --color-border-*
-   * （primary、secondary、tertiary），字体 --font-sans / --font-serif / --font-mono，圆角 --border-radius-md / lg / xl；
-   * 沙箱里没有别的变量，猜的名字取不到值，填充会变黑、线条会消失。外部脚本只能从 cdnjs、jsdelivr、unpkg、esm.sh 加载，
-   * 不能访问网络接口。
-   */
-
   /** 显示一个小部件，立即返回，不等用户操作。
    */
   export function show(input: WidgetRequest): Promise<null>

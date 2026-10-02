@@ -182,18 +182,26 @@ export interface GrantedModule {
 
 /** 宿主提供的虚拟包；成员只引用已注册模块，不携带代码。 */
 export interface ScriptPackageDefinition {
-  /** 脚本导入名，velaros 为原语包的兼容聚合。 */
+  /** 脚本导入名，velaros 为原语包。 */
   readonly specifier: string
   /** 导出成员名到真实 Kernel 模块身份。 */
   readonly exports: Readonly<Record<string, string>>
 }
 
-/** 从一个模块的声明里切出的一个导出。 */
-export interface ScriptModuleExportSlice {
-  /** 这个导出与它用到的类型，包在 `declare module` 里；模块没有这个名字时为 null。 */
+/** 同次查询的导出共享一份依赖闭包；缺少任何名字时不交付不完整声明。 */
+export interface ScriptModuleExportsSlice {
+  /** 所选导出、传递依赖类型与模块共同规则；名称缺失时为 null。 */
   readonly declarations: Nullable<string>
-  /** 模块导出的值（函数、常量、转出的命名空间），说给找不到导出的模型听。 */
+  /** 模块的真实值导出目录。 */
   readonly exports: readonly string[]
+  /** 未在模块中找到的请求名称。 */
+  readonly missing: readonly string[]
+}
+
+/** 实际模型正文的目录身份，独立于操作 schema 和挂载实例。 */
+export interface ScriptModuleIndex {
+  readonly exports: readonly string[]
+  readonly contentRevision: string
 }
 
 /** 按当前授权编译的包和声明，检查器与执行器共用。 */

@@ -370,6 +370,11 @@ class ComposedRuntime implements VelarosRuntime {
             if (!access) throw new AppError('UNAVAILABLE', '会话尚未打开')
             return access
           },
+          programCatalog: (id) => {
+            const access = this.programAccess.get(id)
+            if (!access) throw new AppError('UNAVAILABLE', '会话尚未打开')
+            return access.programCatalog
+          },
           view: (id) => {
             const view = this.sessions.get(id)?.view
             if (!view) throw new AppError('SESSION_NOT_OPEN', '当前会话尚未打开')
@@ -710,11 +715,7 @@ class ComposedRuntime implements VelarosRuntime {
       id.startsWith('store-material:')
     )
       throw new AppError('CLOSED', '运行时已关闭或会话身份无效')
-    await new RuntimeWorkspaceBinding(
-      this.options.storage,
-      this.options.workspace,
-      this.options.dataDir
-    ).bind(id)
+    await new RuntimeWorkspaceBinding(this.options.storage, this.options.workspace).bind(id)
     if (this.closing) throw new AppError('CLOSED', '运行时已关闭')
     await this.kernel.start()
     if (this.closing) throw new AppError('CLOSED', '运行时已关闭')

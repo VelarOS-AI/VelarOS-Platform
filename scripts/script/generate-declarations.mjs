@@ -572,11 +572,11 @@ function declarationModule(program, specifier, headers, exports, wanted, wantedV
       .map((line) => (line.length > 0 ? `  ${line}` : line))
       .join('\n')
   // 导出的函数排在类型前面：只看得到开头一段时（展示截断），模型先看到有哪些函数、各自做什么，类型往后查。
-  const body = [...headers.map(indented), ...exported.map(indented), ...types.map(indented)].join(
-    '\n\n'
-  )
+  const body = [...exported.map(indented), ...types.map(indented)].join('\n\n')
   // 这份文字就是模型看到的全部：维护者要的说明（谁生成的、怎么重算）写在随包发布的 surface.ts 与这个脚本里，不进来。
-  const text = `declare module '${specifier}' {\n${body}\n}\n`
+  // 共同规则属于模块，不依附首方法；定向交付任何导出都能按模块 JSDoc 原样带上。
+  const moduleDocs = headers.length ? `${headers.join('\n\n')}\n` : ''
+  const text = `${moduleDocs}declare module '${specifier}' {\n${body}\n}\n`
   if (problems.length === 0) {
     const broken = verifyDeclarations(text)
     if (broken.length > 0) {

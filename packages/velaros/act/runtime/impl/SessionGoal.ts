@@ -1,4 +1,8 @@
-import type { ContextRecord, ContextStorage } from '@velaros-ai/context'
+import type {
+  ContextCompletionCommitPort,
+  ContextRecord,
+  ContextStorage,
+} from '@velaros-ai/context'
 import { isNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
@@ -13,6 +17,8 @@ export interface SessionGoalApi {
   update(input: GoalUpdate, signal: AbortSignal): Promise<GoalState>
   /** 宿主专属删除及用户控制。 */
   control(input: GoalControl, signal: AbortSignal): Promise<GoalState>
+  /** 只准备同存储收尾；实际发布由任务完成 CAS 一起执行。 */
+  completion(goal: GoalState, reason: string): ContextCompletionCommitPort
 }
 /** 不依赖工作笔记驻留和单次任务边界的目标账本。 */
 export class SessionGoal implements SessionGoalApi {
@@ -44,6 +50,48 @@ export class SessionGoal implements SessionGoalApi {
   }
   public control(input: GoalControl, signal: AbortSignal) {
     return this.commit(input, signal)
+  }
+  public completion(goal: GoalState, reason: string): ContextCompletionCommitPort {
+    return {
+      binding: { kind: 'goal', id: goal.id, revision: goal.revision },
+      prepare: async (signal) => {
+        const { state, goal: current } = await this.snapshot(signal)
+        if (
+          !state ||
+          current?.id !== goal.id ||
+          current.revision !== goal.revision ||
+          current.status !== 'active'
+        )
+          throw new AppError('GOAL_CONFLICT', '核查期间目标已变化，请按最新目标状态决定是否收尾')
+        const next = goalChange(
+          current,
+          {
+            baseRevision: current.revision,
+            status: 'complete',
+            reason,
+          },
+          Date.now(),
+          current.id
+        )
+        const body = JSON.stringify(next)
+        const objectId = await this.storage.put(this.id, body)
+        signal.throwIfAborted()
+        return {
+          version: state.version,
+          records: [
+            {
+              ref: { sessionId: this.id, id: crypto.randomUUID() },
+              kind: 'audit',
+              title: 'session:goal',
+              objectId,
+              chars: body.length,
+              sources: [],
+              createdAt: new Date(next.updatedAt).toISOString(),
+            },
+          ],
+        }
+      },
+    }
   }
   private async commit(input: GoalUpdate | GoalControl, signal: AbortSignal): Promise<GoalState> {
     for (let attempt = 0; attempt < 32; attempt++) {

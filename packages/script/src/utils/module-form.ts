@@ -4,6 +4,10 @@ import { posix } from 'node:path'
 
 import ts from 'typescript'
 
+import { isUndefined } from '@velaros-ai/core'
+
+import type { CodeProgramRequest } from '../types/script.js'
+
 import { ProgramFileName } from './program.js'
 import { isRelativeSpecifier, resolveLibraryImport } from './refs.js'
 
@@ -90,6 +94,30 @@ export function readModuleSpecifiers(source: string): string[] {
   for (const { specifier } of readModuleReferences(file))
     if (!specifiers.includes(specifier.text)) specifiers.push(specifier.text)
   return specifiers
+}
+
+/** 和检查器一样沿入口与相对 import 遍历可达源码；不把未导入的附属源码当作依赖。 */
+export function readProgramModuleSpecifiers(program: CodeProgramRequest): string[] {
+  const found = new Set<string>()
+  const seen = new Set<string>()
+  const pending: Array<{ path?: string; source: string }> = [
+    { path: program.path, source: program.source },
+  ]
+  if (program.path) seen.add(program.path)
+  for (let next = pending.shift(); next; next = pending.shift()) {
+    for (const specifier of readModuleSpecifiers(next.source)) {
+      if (!isRelativeSpecifier(specifier)) {
+        found.add(specifier)
+        continue
+      }
+      const target = resolveLibraryImport(next.path, specifier)
+      if (!target || seen.has(target)) continue
+      seen.add(target)
+      const source = target === program.path ? program.source : program.modules?.[target]
+      if (!isUndefined(source)) pending.push({ path: target, source })
+    }
+  }
+  return [...found]
 }
 
 /** 按 AST 位置读取可预检的模块引用，包含嵌套函数与未执行分支里的字面量动态导入。 */

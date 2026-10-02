@@ -10,54 +10,75 @@ import type {
 } from '@velaros-ai/context'
 import { ContextLimits } from '@velaros-ai/context'
 import {
-  isArray,
   isFalse,
   isNull,
   isNumber,
-  isObject,
+  isPlainObject,
   isString,
+  isUndefined,
+  Log,
   toNullable,
 } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { ModelImage } from '@velaros-ai/kernel'
+import type { ModelImage, ModuleBinding } from '@velaros-ai/kernel'
 import {
   type CodeProgramRequest,
   type ScriptOutputCapture,
   type ScriptOutputDisplay,
   type ScriptOutputEdit,
   type ScriptOutputFormat,
+  type ScriptOutputProjection,
   scriptOutputs,
   type ScriptOutputSummary,
 } from '@velaros-ai/script'
 
 import { ScriptLeaseLimits } from '../../system/contract/constants.js'
+import type { ProgramCatalogPort } from '../../system/contract/requires.js'
 import type { ResultReleased, ResultRetained } from '../../system/types/memory.js'
+import type {
+  ProgramDescribeInput,
+  ProgramDescriptor,
+  ProgramPage,
+  ProgramPublishInput,
+  ProgramQuery,
+} from '../../system/types/programs.js'
+import type { ProgramCatalogValidator } from '../contract/requires.js'
 import type { MemoryReadDelivery } from '../types/memory.js'
 import type { PreparedScript } from '../types/program.js'
 import type { ScriptRetention } from '../types/results.js'
 import type {
+  ObservationCollection,
   ProgramLeaseState,
   ScriptControlIdentity,
   ScriptJob,
   ScriptProgramVersion,
 } from '../types/runtime.js'
 import type {
+  SegmentEntry,
   SegmentOutputCoverage,
   SegmentOutputProof,
   SegmentOutputView,
 } from '../types/segment.js'
 import type { ScriptSubmissionReceipt } from '../types/session.js'
 import { executionMaterial, projectMaterial } from '../utils/materials.js'
+import { catalogPublication, catalogQuery } from '../utils/program-catalog.js'
 import {
+  allocateProgramResultBudgets,
   programContentChange,
   programContentText,
+  programCoveredOutputs,
   programFailure,
+  programOutputViews,
 } from '../utils/program-context.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
 /** 与 ContextStorage 共用记录的脚本上下文及可见租约。 */
 export interface ProgramContextApi {
+  /** 当前会话源码归档上的持久程序目录；发布仍重新检查当前授权。 */
+  readonly catalog: ProgramCatalogPort
+  /** 保存实际采集或复用决定；仅消耗本次准备时看到的刷新身份。 */
+  observationCollection(collection: ObservationCollection, refresh?: string): Promise<void>
   /** 更新真实观察健康状态；未知效果立即暂停，源码实质修改才能恢复。 */
   observeHealth(
     sourceRef: string,
@@ -113,7 +134,8 @@ export interface ProgramContextApi {
     observation: Optional<ContextRef>,
     images: readonly ModelImage[],
     signal: AbortSignal,
-    maxChars?: number
+    maxChars?: number,
+    retained?: ReadonlyArray<Pick<SegmentEntry, 'ref' | 'outputViews' | 'fullMaterial'>>
   ): Promise<{
     body: string
     images: readonly ModelImage[]
@@ -144,11 +166,167 @@ export interface ProgramContextApi {
 
 /** 程序选择与可见租约使用原有会话审计记录，正文始终按引用召回。 */
 export class ProgramContext implements ProgramContextApi {
+  public readonly catalog: ProgramCatalogPort = {
+    publish: (input, signal) => this.catalogPublish(input, signal),
+    list: (input, signal) => this.catalogList(input, signal),
+    describe: (input, signal) => this.catalogDescribe(input, signal),
+  }
+
   public constructor(
     private readonly sessionId: string,
     private readonly context: ContextRuntime,
-    private readonly storage: ContextStorage
+    private readonly storage: ContextStorage,
+    private readonly catalogValidator?: ProgramCatalogValidator
   ) {}
+
+  private async catalogPublish(
+    request: ProgramPublishInput,
+    signal: AbortSignal
+  ): Promise<ProgramDescriptor> {
+    const input = catalogPublication(request)
+    if (!this.catalogValidator)
+      throw AppError.withFields('UNAVAILABLE', '程序检查端口未装配', { effect: 'none' })
+    const program: CodeProgramRequest = { source: input.source, modules: input.modules }
+    let dependencies: readonly ModuleBinding[]
+    try {
+      dependencies = await this.catalogValidator.validate(program, signal)
+    } catch (error) {
+      const failure = AppError.from(error)
+      throw AppError.withFields(failure.code, failure.message, { effect: 'none' })
+    }
+    const sourceRef = crypto.randomUUID()
+    const descriptor: ProgramDescriptor = {
+      name: input.name,
+      revision: (input.baseRevision ?? 0) + 1,
+      purpose: input.purpose,
+      inputDescription: input.inputDescription,
+      sourceRef,
+      contentRevision: scriptOutputs.hash(program),
+      dependencies,
+    }
+    const additions = [
+      await this.record(`script:${sourceRef}`, JSON.stringify(program), sourceRef),
+      await this.record(
+        `script:version:${sourceRef}`,
+        JSON.stringify({ sourceRef, baseObservation: null, kind: 'execution' }),
+        undefined,
+        [{ sessionId: this.sessionId, id: sourceRef }]
+      ),
+      await this.record(`script:catalog:${sourceRef}`, JSON.stringify(descriptor), undefined, [
+        { sessionId: this.sessionId, id: sourceRef },
+      ]),
+    ]
+    await this.update(
+      (state, reset) => {
+        const catalog = state.programCatalogReset === reset ? state.programCatalog : undefined
+        const previous = catalog?.[input.name]
+        if ((previous?.revision ?? 0) !== (input.baseRevision ?? 0))
+          throw AppError.withFields(
+            'CONFLICT',
+            '程序名称版本已经变化；读取当前 revision 后再发布',
+            { effect: 'none' }
+          )
+        return {
+          ...state,
+          programCatalogReset: reset,
+          programCatalog: { ...catalog, [input.name]: descriptor },
+        }
+      },
+      additions,
+      signal
+    )
+    return descriptor
+  }
+
+  private async catalogAvailable(
+    descriptor: ProgramDescriptor,
+    signal: AbortSignal
+  ): Promise<boolean> {
+    if (!this.catalogValidator) return false
+    try {
+      const snapshot = await this.snapshot([
+        { refId: descriptor.sourceRef },
+        { title: 'search:history-reset', latest: true },
+      ])
+      const source = snapshot?.records.find((item) => item.ref.id === descriptor.sourceRef)
+      const reset = Math.max(
+        snapshot?.metadata.task?.startedSequence ?? 0,
+        snapshot?.records.findLast((item) => item.title === 'search:history-reset')?.sequence ?? 0
+      )
+      if (!source || source.sequence <= reset) return false
+      const material = await this.readProgram(descriptor.sourceRef, 0, 1)
+      if (await this.catalogValidator.unchanged(descriptor.dependencies, signal)) return true
+      const raw = await this.storage.get(this.sessionId, material.record.objectId)
+      if (isNull(raw)) return false
+      await this.catalogValidator.validate(JSON.parse(raw), signal)
+      return true
+    } catch (error) {
+      signal.throwIfAborted()
+      Log.tag('ActRuntime').debug('程序目录项未通过当前授权检查', { error })
+      return false
+    }
+  }
+
+  private async catalogList(input: ProgramQuery, signal: AbortSignal): Promise<ProgramPage> {
+    const { query, offset, limit } = catalogQuery(input)
+    const items: ProgramDescriptor[] = []
+    for (const descriptor of Object.values((await this.state()).programCatalog ?? {})) {
+      signal.throwIfAborted()
+      if (
+        query &&
+        !`${descriptor.name}\n${descriptor.purpose}`.toLowerCase().includes(query.toLowerCase())
+      )
+        continue
+      if (await this.catalogAvailable(descriptor, signal)) items.push(descriptor)
+    }
+    items.sort((a, b) => a.name.localeCompare(b.name))
+    return {
+      items: items.slice(offset, offset + limit),
+      nextOffset: offset + limit < items.length ? offset + limit : null,
+    }
+  }
+
+  private async catalogDescribe(
+    input: ProgramDescribeInput,
+    signal: AbortSignal
+  ): Promise<ProgramDescriptor> {
+    if (
+      !isPlainObject(input) ||
+      Object.keys(input).length !== 1 ||
+      !('name' in input ? isString(input.name) : 'sourceRef' in input && isString(input.sourceRef))
+    )
+      throw new AppError('VALIDATION', 'describe 需要 name 或 sourceRef')
+    let descriptor: Optional<ProgramDescriptor>
+    if ('name' in input) descriptor = (await this.state()).programCatalog?.[input.name]
+    else {
+      const record = (
+        await this.snapshot([{ title: `script:catalog:${input.sourceRef}`, latest: true }])
+      )?.records.findLast((item) => item.title === `script:catalog:${input.sourceRef}`)
+      const raw = record ? await this.storage.get(this.sessionId, record.objectId) : null
+      if (!isNull(raw)) descriptor = JSON.parse(raw)
+    }
+    if (!descriptor || !(await this.catalogAvailable(descriptor, signal)))
+      throw new AppError('NOT_FOUND', '当前授权与重置范围内没有该程序')
+    return descriptor
+  }
+
+  public async observationCollection(
+    collection: ObservationCollection,
+    refresh?: string
+  ): Promise<void> {
+    await this.update((state) =>
+      state.observation === collection.sourceRef
+        ? {
+            ...state,
+            observationCollection: collection,
+            observationRefresh:
+              refresh && state.observationRefresh === refresh
+                ? undefined
+                : state.observationRefresh,
+          }
+        : state
+    )
+  }
 
   public async observeHealth(
     sourceRef: string,
@@ -157,6 +335,7 @@ export class ProgramContext implements ProgramContextApi {
     uncertain: boolean
   ): Promise<void> {
     await this.update((state) => {
+      if (state.observation !== sourceRef) return state
       const previous = state.health?.sourceRef === sourceRef ? state.health : undefined
       const failures = success ? 0 : (previous?.failures ?? 0) + 1
       return {
@@ -180,7 +359,10 @@ export class ProgramContext implements ProgramContextApi {
 
   public async state(): Promise<ProgramLeaseState> {
     return this.readState(
-      await this.snapshot([{ title: 'script:lease-state', kind: 'audit', latest: true }])
+      await this.snapshot([
+        { title: 'script:lease-state', kind: 'audit', latest: true },
+        { title: 'search:history-reset', latest: true },
+      ])
     )
   }
 
@@ -202,8 +384,8 @@ export class ProgramContext implements ProgramContextApi {
     carrierRef: string,
     signal: AbortSignal
   ): Promise<readonly SegmentOutputProof[]> {
-    if (!isObject(value) || isArray(value)) return []
-    const page = value as Record<string, unknown>
+    if (!isPlainObject(value)) return []
+    const page = value
     const delivery = page.delivery as { receipt?: ContextRef } | undefined
     const receipt = delivery?.receipt
     if (!receipt || receipt.sessionId !== this.sessionId || !isString(receipt.id)) return []
@@ -249,18 +431,22 @@ export class ProgramContext implements ProgramContextApi {
     )
       return []
     // 回执绑定不可变原块；只把整块 value 或整份归档的同表示范围交给当前历史聚合。
-    return bound.blocks.map((block) => ({
-      ref: bound.source.id,
-      key: block.key,
-      contentHash: block.contentHash,
-      carrierRef,
-      range: {
-        ...(bound.pointer ? { pointer: bound.pointer } : {}),
-        offset: bound.offset,
-        chars: bound.chars,
-        totalChars: bound.totalChars,
-      },
-    }))
+    return bound.blocks.map((block) => {
+      const pointer: { pointer?: string } = {}
+      if (bound.pointer) pointer.pointer = bound.pointer
+      return {
+        ref: bound.source.id,
+        key: block.key,
+        contentHash: block.contentHash,
+        carrierRef,
+        range: {
+          ...pointer,
+          offset: bound.offset,
+          chars: bound.chars,
+          totalChars: bound.totalChars,
+        },
+      }
+    })
   }
 
   private async readState(snapshot: Nullable<ContextRecordSnapshot>): Promise<ProgramLeaseState> {
@@ -271,11 +457,26 @@ export class ProgramContext implements ProgramContextApi {
       return { completedTurns: 0, leases: [] }
     const body = await this.storage.get(this.sessionId, record.objectId)
     if (isNull(body)) throw new AppError('NOT_FOUND', '程序租约记录缺失')
-    return JSON.parse(body) as ProgramLeaseState
+    const state = JSON.parse(body) as ProgramLeaseState
+    const reset = Math.max(
+      snapshot?.metadata.task?.startedSequence ?? 0,
+      snapshot?.records.findLast((item) => item.title === 'search:history-reset')?.sequence ?? 0
+    )
+    return state.observationSnapshot && state.observationSnapshotReset !== reset
+      ? {
+          ...state,
+          observation: undefined,
+          observationSnapshot: undefined,
+          observationSnapshotReset: undefined,
+          observationRefresh: undefined,
+          observationCollection: undefined,
+          health: undefined,
+        }
+      : state
   }
 
   private async update(
-    change: (state: ProgramLeaseState) => ProgramLeaseState,
+    change: (state: ProgramLeaseState, reset: number) => ProgramLeaseState,
     additions: readonly ContextRecord[] = [],
     signal?: AbortSignal
   ): Promise<void> {
@@ -292,6 +493,7 @@ export class ProgramContext implements ProgramContextApi {
       const snapshot = (await this.snapshot(
         [
           { title: 'script:lease-state', kind: 'audit', latest: true },
+          { title: 'search:history-reset', latest: true },
           ...refs.map((refId) => ({ refId })),
         ],
         true
@@ -313,7 +515,13 @@ export class ProgramContext implements ProgramContextApi {
       )
         throw new AppError('SCRIPT_REF', '提交包含未知或跨会话来源')
       const previous = await this.readState(snapshot)
-      const changed = change(previous)
+      const changed = change(
+        previous,
+        Math.max(
+          snapshot.metadata.task?.startedSequence ?? 0,
+          snapshot.records.findLast((item) => item.title === 'search:history-reset')?.sequence ?? 0
+        )
+      )
       const identities = new Set(previous.leases.map((item) => item.ref))
       const state = {
         ...changed,
@@ -457,7 +665,7 @@ export class ProgramContext implements ProgramContextApi {
     )
     try {
       await this.update(
-        (state) => {
+        (state, reset) => {
           if (activate && toNullable(state.observation) !== control.expectedObservation)
             throw AppError.withFields(
               'SCRIPT_CONFLICT',
@@ -478,14 +686,39 @@ export class ProgramContext implements ProgramContextApi {
             ...(activate
               ? {
                   observation: receipt.observe!.sourceRef,
-                  health:
-                    prepared.some(
-                      (item) =>
-                        item.version?.sourceRef === receipt.observe!.sourceRef &&
-                        item.version?.presentationOnly
-                    ) && state.health
-                      ? { ...state.health, sourceRef: receipt.observe!.sourceRef! }
+                  observationSnapshot: prepared.find(
+                    (item) => item.version?.sourceRef === receipt.observe!.sourceRef
+                  )?.version?.snapshot
+                    ? true
+                    : receipt.observe!.sourceRef === state.observation
+                      ? state.observationSnapshot
                       : undefined,
+                  observationSnapshotReset: prepared.find(
+                    (item) => item.version?.sourceRef === receipt.observe!.sourceRef
+                  )?.version?.snapshot
+                    ? reset
+                    : receipt.observe!.sourceRef === state.observation
+                      ? state.observationSnapshotReset
+                      : undefined,
+                  observationRefresh: receipt.observe!.refresh
+                    ? control.id
+                    : receipt.observe!.sourceRef === state.observation
+                      ? state.observationRefresh
+                      : undefined,
+                  observationCollection:
+                    receipt.observe!.sourceRef === state.observation
+                      ? state.observationCollection
+                      : undefined,
+                  health:
+                    receipt.observe!.sourceRef === state.observation
+                      ? state.health
+                      : prepared.some(
+                            (item) =>
+                              item.version?.sourceRef === receipt.observe!.sourceRef &&
+                              item.version?.presentationOnly
+                          ) && state.health
+                        ? { ...state.health, sourceRef: receipt.observe!.sourceRef! }
+                        : undefined,
                 }
               : {}),
             leases:
@@ -690,6 +923,16 @@ export class ProgramContext implements ProgramContextApi {
     await this.update((state) => ({
       ...state,
       leases: state.leases.filter((item) => !item.task && !item.segment),
+      ...(state.observationSnapshot
+        ? {
+            observation: undefined,
+            observationSnapshot: undefined,
+            observationSnapshotReset: undefined,
+            observationRefresh: undefined,
+            observationCollection: undefined,
+            health: undefined,
+          }
+        : {}),
       released: undefined,
     }))
   }
@@ -699,7 +942,8 @@ export class ProgramContext implements ProgramContextApi {
     observation: Optional<ContextRef>,
     observationImages: readonly ModelImage[],
     signal: AbortSignal,
-    maxChars: number = ActRuntimeTuning.frameChars
+    maxChars: number = ActRuntimeTuning.frameChars,
+    retained: ReadonlyArray<Pick<SegmentEntry, 'ref' | 'outputViews' | 'fullMaterial'>> = []
   ): Promise<{
     body: string
     images: readonly ModelImage[]
@@ -799,6 +1043,86 @@ export class ProgramContext implements ProgramContextApi {
             read: { ref: lease.ref, pointer: `/output/blocks/${index}/value` },
           })
     }
+    const prepared = await Promise.all(
+      visible.map(async (lease) => {
+        signal.throwIfAborted()
+        const [result, source] = await Promise.all([
+          this.read(lease.ref, 0, excerptChars),
+          this.context.read(
+            { sessionId: this.sessionId, id: lease.sourceRef },
+            { limit: ActRuntimeTuning.readChars }
+          ),
+        ])
+        const sourceText = programContentText(source, true)
+        const full = await this.storage.get(this.sessionId, result.record.objectId)
+        if (isNull(full)) throw new AppError('NOT_FOUND', '结果归档正文缺失')
+        const archived = JSON.parse(full)
+        const output = archived.output as Optional<ScriptOutputCapture>
+        const managed = Boolean(
+          output &&
+          (Object.keys(output.config).length ||
+            output.blocks.some((block) => Object.keys(block.options).length))
+        )
+        const recalled = new Map<string, readonly SegmentOutputProof[]>()
+        const displays: ScriptOutputDisplay[] = []
+        for (const block of output?.blocks ?? []) {
+          const proofs = await this.readDelivery(block.value, lease.ref, signal)
+          if (!proofs.length) continue
+          recalled.set(block.key, proofs)
+          const { text, ...metadata } = block.value as Record<string, unknown> & { text: string }
+          displays.push({
+            key: block.key,
+            contentHash: scriptOutputs.hash(block.value),
+            text: `${JSON.stringify({ encoding: 'memory-page', page: metadata, textChars: text.length })}\n${text}`,
+          })
+        }
+        const requested = output ? scriptOutputs.requestBudget(output) : undefined
+        const preferred = managed
+          ? scriptOutputs.project(
+              output!,
+              lease.ref,
+              requested!.explicit ? ActRuntimeTuning.frameChars : excerptChars,
+              undefined,
+              summaries,
+              taskRevision,
+              'text',
+              displays
+            )
+          : undefined
+        // 保留历史来自本次真实候选；重置后的记录、观察结果或不同表示均不覆盖当前输出。
+        const previous =
+          result.record.sequence > reset && archived.mode !== 'observe'
+            ? (retained.find((entry) => entry.ref === lease.ref)?.outputViews ?? [])
+            : []
+        const covered = preferred
+          ? programCoveredOutputs(this.sessionId, lease.ref, lease.sourceRef, preferred, previous)
+          : []
+        const reduced = preferred ? scriptOutputs.withoutBodies(preferred, covered) : undefined
+        const rawMaterial = managed ? undefined : executionMaterial(archived)
+        return {
+          lease,
+          result,
+          source,
+          sourceText,
+          full,
+          archived,
+          output,
+          recalled,
+          displays,
+          preferred,
+          reduced,
+          previous,
+          rawMaterial,
+          demand:
+            reduced?.prompt.length ??
+            projectMaterial(rawMaterial!, result.record.ref, excerptChars).text.length,
+        }
+      })
+    )
+    const resultBudgets = allocateProgramResultBudgets(
+      prepared.map((item) => item.demand),
+      resultBudgetChars
+    )
     const outputCoverage: SegmentOutputCoverage[] = []
     const results: Array<
       ReturnType<typeof projectMaterial> & {
@@ -810,6 +1134,7 @@ export class ProgramContext implements ProgramContextApi {
         outputFormat?: ScriptOutputFormat
         outputProofs?: readonly SegmentOutputProof[]
         outputViews?: readonly SegmentOutputView[]
+        bodyInHistory?: boolean
         materialCoverage?: { identity: string; complete: boolean }
         remainingTurns: ScriptRetention
         observedAt: string
@@ -825,64 +1150,63 @@ export class ProgramContext implements ProgramContextApi {
       failure?: NonNullable<ReturnType<typeof programFailure>>
       recovery?: { index: { ref: string; pointer: string }; selector: 'invocation' }
     }>
-    for (const lease of visible) {
+    for (const [index, item] of prepared.entries()) {
       signal.throwIfAborted()
-      const result = await this.read(lease.ref, 0, excerptChars)
-      const source = await this.context.read(
-        { sessionId: this.sessionId, id: lease.sourceRef },
-        { limit: ActRuntimeTuning.readChars }
-      )
-      const sourceText = programContentText(source, true)
-      const full = await this.storage.get(this.sessionId, result.record.objectId)
-      if (isNull(full)) throw new AppError('NOT_FOUND', '结果归档正文缺失')
-      const archived = JSON.parse(full)
+      const {
+        lease,
+        result,
+        source,
+        sourceText,
+        full,
+        archived,
+        output,
+        recalled,
+        displays,
+        preferred,
+        reduced,
+        previous,
+        rawMaterial,
+      } = item
       const failure = programFailure(archived)
       feedback =
         failure || archived.recovery?.calls?.length
           ? {
               ref: lease.ref,
               sourceRef: lease.sourceRef,
-              ...(failure ? { failure } : {}),
-              ...(archived.recovery?.calls?.length
-                ? {
-                    recovery: {
-                      index: { ref: lease.ref, pointer: '/recovery/calls' },
-                      selector: 'invocation' as const,
-                    },
-                  }
-                : {}),
             }
           : undefined
-      const output = archived.output as Optional<ScriptOutputCapture>
-      const managed =
-        output &&
-        (Object.keys(output.config).length ||
-          output.blocks.some((block) => Object.keys(block.options).length))
-      const recalled = new Map<string, readonly SegmentOutputProof[]>()
-      const displays: ScriptOutputDisplay[] = []
-      for (const block of output?.blocks ?? []) {
-        const proofs = await this.readDelivery(block.value, lease.ref, signal)
-        if (!proofs.length) continue
-        recalled.set(block.key, proofs)
-        const { text, ...metadata } = block.value as Record<string, unknown> & { text: string }
-        displays.push({
-          key: block.key,
-          contentHash: scriptOutputs.hash(block.value),
-          text: `${JSON.stringify({ encoding: 'memory-page', page: metadata, textChars: text.length })}\n${text}`,
-        })
+      if (feedback) {
+        if (failure) feedback.failure = failure
+        if (archived.recovery?.calls?.length)
+          feedback.recovery = {
+            index: { ref: lease.ref, pointer: '/recovery/calls' },
+            selector: 'invocation',
+          }
       }
-      // 显式展示申请使用本帧给该结果的有限份额；默认输出和源码预览仍保守截取。
-      const display = managed
-        ? scriptOutputs.project(
-            output,
-            lease.ref,
-            scriptOutputs.requestBudget(output).explicit ? resultBudgetChars : excerptChars,
-            undefined,
-            summaries,
-            taskRevision,
-            'text',
-            displays
-          )
+      // 按实际编码需求返还同帧结果池的空闲份额；默认输出和源码仍不超过原保守上限。
+      const assigned = resultBudgets[index]!
+      // 短结果按实际编码归账，但保留原展示上限；预算头仍描述本帧真实份额，不把用量当配置。
+      const allowance = Math.max(resultBudgetChars, assigned)
+      const rendered = preferred
+        ? allowance >= reduced!.prompt.length
+          ? preferred
+          : scriptOutputs.project(
+              output!,
+              lease.ref,
+              allowance + Math.max(0, preferred.prompt.length - reduced!.prompt.length),
+              undefined,
+              summaries,
+              taskRevision,
+              'text',
+              displays
+            )
+        : undefined
+      // 需求试投影的覆盖不能借给不同的最终片段；重新核对本帧真实表示的逐块身份。
+      const finalCovered = rendered
+        ? programCoveredOutputs(this.sessionId, lease.ref, lease.sourceRef, rendered, previous)
+        : []
+      const display: Optional<ScriptOutputProjection> = rendered
+        ? scriptOutputs.withoutBodies(rendered, finalCovered, allowance)
         : undefined
       const hasNative =
         display?.blocks.some(
@@ -891,7 +1215,6 @@ export class ProgramContext implements ProgramContextApi {
             block.reason === 'native-attachment-required' &&
             archived.outputAttachments?.some((entry: { key: string }) => entry.key === block.key)
         ) && maxChars > 6000
-      const rawMaterial = display ? undefined : executionMaterial(archived)
       const projected = display
         ? {
             text: display.prompt,
@@ -949,8 +1272,8 @@ export class ProgramContext implements ProgramContextApi {
                 view.mode !== 'reference' &&
                 !view.paths &&
                 !view.lines &&
-                view.maxItems === undefined &&
-                view.edge === undefined
+                isUndefined(view.maxItems) &&
+                isUndefined(view.edge)
               )
             })
             .map((block) => block.key),
@@ -969,18 +1292,21 @@ export class ProgramContext implements ProgramContextApi {
         structuredOutput: display ? true : undefined,
         outputFormat: display?.format,
         outputProofs,
-        outputViews: display?.blocks
-          .filter((block) => block.bodyIncluded && block.text)
-          .map((block) => ({
-            key: block.key,
-            fingerprint: scriptOutputs.hash([
-              this.sessionId,
-              lease.ref,
-              lease.sourceRef,
-              display.format,
-              block,
-            ]),
-          })),
+        outputViews: display
+          ? programOutputViews(this.sessionId, lease.ref, lease.sourceRef, display)
+          : undefined,
+        bodyInHistory:
+          display &&
+          !rendered?.omittedBlocks &&
+          finalCovered.length > 0 &&
+          !display.omittedBlocks &&
+          display.blocks.every((block) =>
+            finalCovered.some(
+              (entry) => entry.key === block.key && entry.contentHash === block.contentHash
+            )
+          )
+            ? true
+            : undefined,
         materialCoverage: rawMaterial
           ? {
               identity: scriptOutputs.hash([
@@ -1249,6 +1575,7 @@ export class ProgramContext implements ProgramContextApi {
       ),
       observation: {
         health: state.health,
+        freshness: state.observationCollection,
         sourceRef: toNullable(state.observation),
         missingRequired,
         source: sourceText.slice(0, excerptChars),
@@ -1378,7 +1705,8 @@ export class ProgramContext implements ProgramContextApi {
         omittedImageReferences: Math.max(0, imageReferences.length - 32),
         observationAction: {
           sourceRef: toNullable(state.observation),
-          adjust: '修改持续观察代码，控制字段、范围、数量及聚合；观察输出来自本轮真实执行',
+          adjust:
+            '修改持续观察代码，控制字段、范围、数量及聚合；采集状态与原采集时间见 observation.freshness 和 observedAt，需要当前状态时用 refresh:true',
         },
       },
     })

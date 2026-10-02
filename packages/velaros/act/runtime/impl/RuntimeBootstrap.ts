@@ -32,8 +32,10 @@ import {
   createProjectCodeQuery,
   createProjectContextSource,
   createProjectKernel,
+  createProjectObservationProvider,
 } from '../../../project/index.js'
 import type { VelarosSearchOptions } from '../../search/index.js'
+import { SystemCatalogLimits } from '../../system/contract/constants.js'
 import {
   ModelToolLimits,
   RuntimeModelLimits,
@@ -90,6 +92,23 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
   public async prepare(options: VelarosRuntimeOptions): Promise<RuntimeBootstrapOptions> {
     const modules = [...(options.modules ?? [])]
     const sources = [...(options.context?.sources ?? [])]
+    const snapshots = [...(options.context?.snapshots ?? [])]
+    if (
+      snapshots.some(
+        (provider) =>
+          !provider ||
+          !isNonBlankString(provider.id) ||
+          !isNonBlankString(provider.moduleId) ||
+          !isNonBlankString(provider.operation) ||
+          !isNonBlankString(provider.revision) ||
+          !isNonBlankString(provider.source) ||
+          !isFunction(provider.prepare) ||
+          !isArray(provider.plans) ||
+          isEmpty(provider.plans) ||
+          provider.plans.some((plan) => !isNonBlankString(plan))
+      )
+    )
+      throw new AppError('VALIDATION', '纯快照提供者需要固定目录、派生源码和领域输入检查口')
     if (!isUndefined(options.instructions) && !isString(options.instructions))
       throw new AppError('VALIDATION', 'instructions 必须是宿主提供的文本')
     if (
@@ -98,14 +117,20 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
         isArray(options.residentModules) &&
         options.residentModules.every(
           (entry) =>
-            isString(entry) ||
-            (isPlainObject(entry) &&
-              isNonBlankString(entry.module) &&
-              isNonBlankString(entry.export))
+            isPlainObject(entry) &&
+            isNonBlankString(entry.module) &&
+            (isUndefined(entry.exports) ||
+              (isArray(entry.exports) &&
+                !isEmpty(entry.exports) &&
+                entry.exports.length <= SystemCatalogLimits.maxExports &&
+                entry.exports.every(isNonBlankString)))
         )
       )
     )
-      throw new AppError('VALIDATION', 'residentModules 必须是模块名或 {module, export} 列表')
+      throw new AppError(
+        'VALIDATION',
+        'residentModules 必须是 {module, exports?} 列表，exports 为非空导出名数组'
+      )
     if (!isUndefined(options.environment) && !isFunction(options.environment))
       throw new AppError('VALIDATION', 'environment 必须是返回宿主环境条目的函数')
     let workspace: Optional<string>
@@ -181,7 +206,10 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
           })
         )
       sources.push(createProjectContextSource({ id: 'project', kernel }))
+      snapshots.push(createProjectObservationProvider())
     }
+    if (new Set(snapshots.map((provider) => provider.id)).size !== snapshots.length)
+      throw new AppError('VALIDATION', '纯快照提供者身份不能重复')
     let model: RuntimeBootstrapOptions['model']
     if (options.model && 'stream' in options.model) model = options.model
     else if (options.model) {
@@ -281,7 +309,7 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
       memory,
       search,
       agents,
-      context: { ...options.context, sources },
+      context: { ...options.context, sources, snapshots },
       limits: {
         ...VelarosRunLimits,
         outputTokens: model ? model.limits.outputTokens : VelarosRunLimits.outputTokens,

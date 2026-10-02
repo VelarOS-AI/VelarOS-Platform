@@ -138,7 +138,7 @@ export interface ScriptOutputPresentation {
   /** 降级或缺口说明。 */
   readonly reason?: string
 }
-/** 宿主选择的展示编码；JSON 保持结构化兼容，text 将块正文原样展开。 */
+/** 宿主选择的展示编码；JSON 保持结构化兼容，text 按实际编码预算展开各类型块正文。 */
 export type ScriptOutputFormat = 'json' | 'text'
 
 /** 受信宿主提供的完整等价文字编码；绑定原块，不改变归档、类型或内容指纹。 */

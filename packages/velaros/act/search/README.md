@@ -59,4 +59,5 @@ for (const branch of page.branches.filter((item) => item.kind === 'search')) {
 - `velaros:search` 给主线与带它的子任务配置；`velaros:evidence` 只在搜索支线里有，只能读来源、不能写，来源能读什么由来源自己的授权定。
 - 搜索的调用与 token 计入同一逻辑任务的总额度，支线深度与并发和子任务共用 `modelTools` 的上限；跑到一半撞上档位上限、超时或模型出错也照样交回报告，`status` 是 `partial` 或 `failed`，`stopReason`、`coverage.limitsHit` 与 `gaps` 说明原因，不抛错。
 - 报告里每条发现都要引用读过的证据；证据带读到的版本，报告与检查点持久保存，`ref` 跨重启可以 `resume` 续查或 `read`；`read` 的 `current` 模式重读选中证据的现状、不调用模型，内容变了如实标出。
+- 模型模板在主线保留报告范围、缺口与续查身份，证据正文按引用召回；刷新页保留每项版本、失败和部分读取标记，用 `offset`、本页条数与 `total` 继续读取。候选摘录只用于选择，实际证据来自 `read`。
 - `searchModule`、`evidenceModule` 是运行时自己用的装配；只有自己拼 Kernel、自带搜索编排的宿主才直接用，传 `SearchHost`、`EvidenceHost`。

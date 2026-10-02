@@ -189,7 +189,10 @@ export function protocolRules(options: ScriptProtocolOptions): string {
       ? `${names.blobs}("名称") 的段内是原始文本，自动注入本响应所有程序的 blobs[名称]，不用转义反引号或插值；名称唯一。尾行前的一次换行是分隔符，需要保留原文末尾换行时在尾行前再加一个空行。`
       : '',
     allowed.includes('observe')
-      ? `${names.observe}(options?) 更新稳定观察程序，每份响应至多一次；观察每个新业务回合运行，只能读取、计算、output，不得产生已知写效果。注释说明持续观察目的。`
+      ? `${names.observe}(options?) 更新稳定观察程序，每份响应至多一次；观察缺省每个新业务回合采集，宿主认可完整依赖的可靠代次时可复用原结果；只能读取、计算、output，不得产生已知写效果。注释说明持续观察目的与退役条件。refresh:true 请求下一正常业务轮真实采集，整份响应接受后才生效，不恢复 paused；需要当前状态时可用 ${names.observe}({sourceRef:"本帧源码引用",refresh:true}) 和空段。`
+      : '',
+    allowed.includes('observe')
+      ? `${names.observe}({snapshot:{provider:"目录中的提供者",plan:"固定计划名",input:{领域输入}}}) 配空段登记纯快照；与 sourceRef、edits、程序正文互斥。输入合同从目录所列领域操作发现。每轮仍真实授权捕获，完整同值只省纯派生/程序运行，不能证明期间没有 ABA，也不授予写入凭据；clear 或逻辑任务结束退役，重启先实际捕获与派生。`
       : '',
     allowed.includes('execute')
       ? `${names.execute}(options?) 运行一次，可多段；默认顺序等待，async:true 后台受理，retain:1..32 控制结果实际曝光次数，retain:"segment" 在段内保留、随历史封段退役，retain:"task" 保留至逻辑任务结束；主动释放立即生效，默认 ${defaultRetain}；租约不保证全文驻留，也不重新执行。后台结果未知时不得重跑整个脚本。`

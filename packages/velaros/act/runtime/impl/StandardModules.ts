@@ -29,6 +29,7 @@ import { evidenceModule, searchModule } from '../../search/index.js'
 import type {
   ContextMaintenanceHost,
   LongTermMemoryHost,
+  ProgramsHost,
   StoreHost,
 } from '../../system/contract/requires.js'
 import { systemModules } from '../../system/index.js'
@@ -47,7 +48,7 @@ import { capabilityModules } from './CapabilityModules.js'
 import type { RuntimeSessionAccess } from './RuntimeSession.js'
 
 /** 标准模块的受控依赖。 */
-export interface StandardModulesHost {
+export interface StandardModulesHost extends ProgramsHost {
   /** 实际子任务配置目录。 */
   readonly agentProfiles: AgentsHost['agentProfiles']
   /** 共享结构化状态端口，复用唯一持久存储。 */
@@ -122,6 +123,13 @@ export function createProjectCapabilityModule(
       project: options.project,
       sessionId: call.invocation.sessionId,
       abortSignal: call.signal,
+      recordSnapshotCompletion: () =>
+        call.recordObservation?.({ completed: true, protection: 'full' }),
+      recordSnapshotMetrics: (metrics) =>
+        call.recordDiagnostic?.({
+          code: 'PROJECT_SNAPSHOT_COST',
+          message: JSON.stringify(metrics),
+        }),
     }),
   })
 }

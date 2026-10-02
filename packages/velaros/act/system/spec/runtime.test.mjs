@@ -115,11 +115,11 @@ test('INV-3 目录集中展示系统包，成员合同和模板可直接检查�
   assert.equal(listing.value.items.length, 1)
   assert.equal(listing.value.nextOffset, null)
   assert.deepEqual(listing.value.items[0].exports, Object.keys(SystemMembers))
-  assert.equal(listing.value.items[0].operations.length, 25)
+  assert.equal(listing.value.items[0].operations.length, 28)
   assert.equal(listing.value.items[0].binding, undefined)
   const result = await execute(
     f.session,
-    `${prelude}output(await system.modules.describe({module:'velaros:system',export:'memory'}));`
+    `${prelude}output(await system.modules.describe({module:'velaros:system',exports: ['memory'],template:true}));`
   )
   assert.equal(result.value.exports.memory.binding.moduleId, 'velaros:system-memory')
   assert.deepEqual(Object.keys(result.value.exports), ['memory'])
@@ -301,9 +301,16 @@ test('INV-7 过滤授权后分页，不出现空页跳过可见能力', async ()
       ['velaros:d']
     )
     assert.equal(next.nextOffset, null)
-    assert.throws(() => catalog.describe('s', 'velaros:a'), { code: 'CAPABILITY_DENIED' })
-    assert.equal(catalog.describe('s', 'velaros:b').template, kernel.describe('velaros:b').template)
-    assert.throws(() => catalog.describe('s', 'velaros:unknown'), { code: 'CAPABILITY_DENIED' })
+    assert.throws(() => catalog.describe('s', { module: 'velaros:a' }), {
+      code: 'CAPABILITY_DENIED',
+    })
+    assert.equal(
+      catalog.describe('s', { module: 'velaros:b' }).template,
+      kernel.describe('velaros:b').template
+    )
+    assert.throws(() => catalog.describe('s', { module: 'velaros:unknown' }), {
+      code: 'CAPABILITY_DENIED',
+    })
   } finally {
     await kernel.dispose()
   }
@@ -357,7 +364,7 @@ test('INV-3 业务模块按导出名读合同：只交回它与它用到的类�
   })
   try {
     const catalog = new SystemCatalog({ kernel: () => kernel, allows: () => true })
-    const write = catalog.describe('s', 'velaros:docs', 'write')
+    const write = catalog.describe('s', { module: 'velaros:docs', exports: ['write'] })
     assert.match(write.declarations, /function write/)
     assert.match(write.declarations, /interface WriteInput/)
     assert.match(write.declarations, /type Block/)
@@ -365,13 +372,108 @@ test('INV-3 业务模块按导出名读合同：只交回它与它用到的类�
     assert.doesNotMatch(write.declarations, /function read/)
     assert.deepEqual(Object.keys(write.operations), ['write'])
     assert.equal(write.specifier, 'velaros:docs')
-    assert.throws(() => catalog.describe('s', 'velaros:docs', 'remove'), {
+    assert.equal(write.template, '')
+    assert.equal(
+      catalog.describe('s', { module: 'velaros:docs', exports: ['write'], template: true })
+        .template,
+      '// docs'
+    )
+    assert.deepEqual(catalog.list('s', {}).items[0].exports, ['write', 'read'])
+    assert.equal(catalog.list('s', {}).items[0].contentRevision, write.contentRevision)
+    const both = catalog.describe('s', {
+      module: 'velaros:docs',
+      exports: ['write', 'read', 'write'],
+    })
+    assert.match(both.declarations, /function write/)
+    assert.match(both.declarations, /function read/)
+    assert.equal(both.declarations.split('interface WriteInput').length, 2)
+    assert.deepEqual(Object.keys(both.operations), ['write', 'read'])
+    assert.equal(both.template, '')
+    assert.equal(both.contentRevision, write.contentRevision)
+    assert.throws(
+      () => catalog.describe('s', { module: 'velaros:docs', exports: ['write', 'absent'] }),
+      {
+        code: 'MODULE_EXPORT',
+      }
+    )
+    assert.throws(() => catalog.describe('s', { module: 'velaros:docs', exports: [] }), {
+      code: 'VALIDATION',
+    })
+    assert.throws(
+      () => catalog.describe('s', { module: 'velaros:docs', exports: Array(65).fill('write') }),
+      { code: 'VALIDATION' }
+    )
+    assert.throws(() => catalog.describe('s', { module: 'velaros:docs', exports: ['remove'] }), {
       code: 'MODULE_EXPORT',
       message: /write、read/,
     })
   } finally {
     await kernel.dispose()
   }
+})
+
+test('INV-22 真实 Project 合同批量交付减少重复模板与依赖，查询不会运行业务', async (t) => {
+  const { VelarProjectModule } = await import('../../../dist/project/contract/surface.js')
+  let businessCalls = 0
+  const kernel = createOperationRuntime({
+    modules: [
+      {
+        binding: {
+          moduleId: VelarProjectModule.specifier,
+          instanceId: 'project-contract',
+          generation: 1,
+          schemaRevision: VelarProjectModule.revision,
+        },
+        summary: 'project',
+        surface: VelarProjectModule,
+        operations: Object.fromEntries(
+          VelarProjectModule.methods.map((name) => [
+            name,
+            {
+              ...VelarProjectModule.operations[name],
+              run: () => {
+                businessCalls++
+                return null
+              },
+            },
+          ])
+        ),
+      },
+    ],
+    journal: {},
+  })
+  t.after(() => kernel.dispose())
+  const catalog = new SystemCatalog({ kernel: () => kernel, allows: () => true })
+  const names = ['list', 'read', 'search', 'edit']
+  const previousShape = names.map((name) => ({
+    declarations: catalog.describe('s', { module: VelarProjectModule.specifier, exports: [name] })
+      .declarations,
+    template: kernel.describe(VelarProjectModule.specifier).template,
+  }))
+  const current = catalog.describe('s', { module: VelarProjectModule.specifier, exports: names })
+  const previousChars = previousShape.reduce(
+    (sum, item) => sum + item.declarations.length + item.template.length,
+    0
+  )
+  assert.ok(
+    current.declarations.length < previousChars,
+    `${current.declarations.length} < ${previousChars}`
+  )
+  assert.equal(current.template, '')
+  assert.equal(current.declarations.split('路径一律相对项目根').length, 2)
+  for (const name of names)
+    assert.match(current.declarations, new RegExp(`export function ${name}\\(`, 'u'))
+  assert.equal(current.declarations.split('interface ProjectReadInput').length, 2)
+  assert.equal(businessCalls, 0)
+  // 对比的是旧返回形状的确定性材料成本；没有生成模型胜率或时间结论。
+  assert.equal(previousShape.length, 4)
+  assert.equal(
+    codeProgramChecker.typecheck({
+      source: "import {read,list,search,edit} from 'velaros:project';",
+      granted: [{ namespace: VelarProjectModule.specifier, declarations: current.declarations }],
+    }).ok,
+    true
+  )
 })
 
 test('INV-8 任意业务包不能占用系统身份或替换系统入口', async () => {
@@ -672,14 +774,14 @@ test('INV-3 模型可无参数发现并直接读取有类型的模板与声明',
   const f = await fixture(t)
   const result = await execute(
     f.session,
-    `${prelude}const page=await system.modules.list();const api=await system.modules.describe({module:'velaros:system',export:'memory'});output({count:page.items.length,template:api.template.slice(0,200),declarations:api.declarations.slice(0,200)});`
+    `${prelude}const page=await system.modules.list();const api=await system.modules.describe({module:'velaros:system',exports: ['memory'],template:true});output({count:page.items.length,template:api.template.slice(0,200),declarations:api.declarations});`
   )
   assert(result.value.count > 0)
   assert.match(result.value.template, /memory/)
   assert.match(result.value.declarations, /declare module/)
 })
 
-test('field recall refuses a legacy host that ignores its selector while whole archive reads remain compatible', async () => {
+test('field recall verifies the host selector receipt and whole archive reads use the same port', async () => {
   const page = { text: 'original archive', offset: 0, totalChars: 16 }
   const ctx = {
     abortSignal: new AbortController().signal,

@@ -90,10 +90,59 @@ test('the last failed completion check stays on the run so hosts can explain how
   assert.equal(p.snapshot().runs.run.verification.reason, 'STALE_VIEW')
 })
 
-test('an end state an older version stored as needs_reconcile reads as failed', () => {
-  const projector = createActEventProjector()
-  projector.applyLive({ type: 'state', runId: 'old', status: 'needs_reconcile' })
-  assert.equal(projector.snapshot().runs.old.status, 'failed')
+test('INV-78 successful domain reports survive terminal states, replay and mutable caller inputs', () => {
+  const report = {
+    scope: '能打开指定产物',
+    checkedAt: new Date().toISOString(),
+    checks: [
+      {
+        label: '打开文件',
+        status: 'passed',
+        artifact: { identity: 'result.docx', revision: 'v2' },
+      },
+    ],
+  }
+  const verification = {
+    type: 'verification',
+    runId: 'run',
+    completed: true,
+    verified: true,
+    reason: '可打开',
+    report,
+  }
+  const live = createActEventProjector()
+  const replay = createActEventProjector()
+  live.applyLive(verification)
+  replay.apply({ sessionId: 'session', runId: 'run', sequence: 1, event: verification })
+  report.checks[0].label = 'changed by caller'
+  const terminal = { type: 'state', runId: 'run', status: 'completed' }
+  live.applyLive(terminal)
+  replay.apply({ sessionId: 'session', runId: 'run', sequence: 2, event: terminal })
+  assert.deepEqual(live.snapshot().runs, replay.snapshot().runs)
+  assert.equal(live.snapshot().runs.run.verificationReport.checks[0].label, '打开文件')
+  assert.equal(live.snapshot().runs.run.verification, undefined)
+  live.snapshot().runs.run.verificationReport.checks.length = 0
+  assert.equal(live.snapshot().runs.run.verificationReport.checks.length, 1)
+})
+
+test('current terminal states keep their identity and ignore late events in live and durable projections', () => {
+  for (const status of ['completed', 'cancelled', 'failed', 'context_blocked']) {
+    const live = createActEventProjector()
+    const replay = createActEventProjector()
+    const events = [
+      { type: 'turn', runId: 'run', turnId: 'turn' },
+      { type: 'text', runId: 'run', text: 'pending' },
+      { type: 'state', runId: 'run', status },
+      { type: 'text', runId: 'run', text: 'late' },
+    ]
+    events.forEach((event, sequence) => {
+      live.applyLive(event)
+      replay.apply({ sessionId: 'session', runId: 'run', sequence: sequence + 1, event })
+    })
+    assert.deepEqual(live.snapshot().runs, replay.snapshot().runs)
+    assert.equal(live.snapshot().runs.run.status, status)
+    assert.equal(live.snapshot().runs.run.preview, '')
+  }
 })
 
 test('duplicate turns cannot count twice or rewind the active preview', () => {

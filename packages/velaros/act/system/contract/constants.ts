@@ -21,6 +21,8 @@ export const LongTermMemoryModuleIds: readonly string[] = Object.freeze([
 ])
 /** 能力发现身份。 */
 export const ModulesModuleId = 'velaros:modules' as const
+/** 可复用程序的发布与发现身份。 */
+export const ProgramsModuleId = 'velaros:programs' as const
 /** 整理会话的固定快照只读能力。 */
 export const ContextMaterialsModuleId = 'velaros:context-materials' as const
 /** 工作笔记与材料目录对外承诺的上限：memory 成员声明里写的就是这些数（两边一致由验收核对）。 */
@@ -91,9 +93,10 @@ export const SystemPackageSpecifier = 'velaros:system' as const
  * 这些身份都不作为业务能力单独列出。
  */
 export const SystemMembers: Readonly<
-  Record<'modules' | 'goal' | 'memory' | 'store', readonly string[]>
+  Record<'modules' | 'goal' | 'memory' | 'store' | 'programs', readonly string[]>
 > = Object.freeze({
   modules: Object.freeze([ModulesModuleId]),
+  programs: Object.freeze([ProgramsModuleId]),
   goal: Object.freeze([GoalModuleId]),
   memory: Object.freeze([
     PersistentMemoryModuleId,
@@ -108,6 +111,22 @@ export const SystemCatalogLimits = Object.freeze({
   /** 默认目录页大小。 */
   page: 20,
   /** 目录单页上限。 */
+  maxPage: 64,
+  /** 同次合同查询最多选多少个导出。 */
+  maxExports: 64,
+})
+
+/** 命名程序的元数据与查询额度；源码检查继续由 Script 引擎负责。 */
+export const ProgramCatalogLimits = Object.freeze({
+  /** 程序名的字符上限。 */
+  nameChars: 96,
+  /** 用途说明的字符上限。 */
+  purposeChars: 2000,
+  /** 参数说明的字符上限。 */
+  inputDescriptionChars: 4000,
+  /** 程序目录的默认页大小。 */
+  page: 20,
+  /** 程序目录的单页上限。 */
   maxPage: 64,
 })
 

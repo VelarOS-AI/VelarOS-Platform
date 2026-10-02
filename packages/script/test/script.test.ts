@@ -5,13 +5,14 @@ import { describe, expect, test } from 'bun:test'
 import { unifiedLineDiff } from '@velaros-ai/core/utils/textDiff'
 
 import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../src/contract/constants'
+import { scriptPackageCompiler } from '../src/impl/ScriptPackageCompiler'
 import {
   enforceResultBudget,
   fitJournalToBudget,
   fitLogsToBudget,
   fitValueToBudget,
 } from '../src/utils/budget'
-import { declaredModules, isTypeScriptOnlySyntax, sliceModuleExport } from '../src/utils/compiler'
+import { declaredModules, isTypeScriptOnlySyntax, sliceModuleExports } from '../src/utils/compiler'
 import { applyProgramEdits } from '../src/utils/edit'
 import { readModuleSpecifiers } from '../src/utils/module-form'
 import { keepTail, readCapabilityNamespace } from '../src/utils/program'
@@ -240,9 +241,8 @@ void describe('逐行差量', () => {
 })
 
 describe('声明切片', () => {
-  const declarations = `declare module 'velaros:demo' {
-  /** 读写一个东西。 */
-
+  const declarations = `/** 读写一个东西。 */
+declare module 'velaros:demo' {
   /** 读一个东西。 */
   export function read(input: ReadInput): Promise<ReadResult>
   /** 写一个东西。 */
@@ -258,7 +258,7 @@ describe('声明切片', () => {
 }`
 
   test('切出一个导出：它自己加上签名传递用到的类型，保持原来的先后与注释', () => {
-    const slice = sliceModuleExport(declarations, 'velaros:demo', 'read')
+    const slice = sliceModuleExports(declarations, 'velaros:demo', ['read'])
     const text = slice.declarations ?? ''
     for (const name of [
       'function read',
@@ -279,20 +279,74 @@ describe('声明切片', () => {
   })
 
   test('要的是类型名时切出这个类型与它用到的类型', () => {
-    const text = sliceModuleExport(declarations, 'velaros:demo', 'ReadInput').declarations ?? ''
+    const text = sliceModuleExports(declarations, 'velaros:demo', ['ReadInput']).declarations ?? ''
     expect(text).toContain('interface ReadInput')
     expect(text).toContain('type Encoding')
     expect(text).not.toContain('function read')
   })
 
-  test('模块里没有这个名字：declarations 为 null，交回它导出的值', () => {
-    expect(sliceModuleExport(declarations, 'velaros:demo', 'remove')).toEqual({
+  test('INV-43 末尾操作切片保留模块共同规则，首操作不重复规则', () => {
+    for (const name of ['read', 'write', 'ReadInput']) {
+      const text = sliceModuleExports(declarations, 'velaros:demo', [name]).declarations ?? ''
+      expect(text.split('/** 读写一个东西。 */')).toHaveLength(2)
+      if (name === 'write') expect(text).not.toContain('/** 读一个东西。 */')
+    }
+    const externalDocs = `/** 所有操作只接受项目内路径。 */\ndeclare module 'velaros:demo' {\n/** 读取。 */\nexport function read(): Promise<void>\n/** 写入。 */\nexport function write(): Promise<void>\n}`
+    const text = sliceModuleExports(externalDocs, 'velaros:demo', ['write']).declarations ?? ''
+    expect(text).toStartWith('/** 所有操作只接受项目内路径。 */')
+    expect(text).not.toContain('/** 读取。 */')
+  })
+
+  test('INV-43 多导出合并闭包、重载和循环类型，每个声明一次，缺失名称不交不完整合同', () => {
+    const combined = declarations.replace(
+      'export interface WriteInput { path: string; data: string }',
+      'export interface WriteInput { path: string; data: string; options?: ReadOptions; cycle?: Cycle }\nexport interface Cycle { next?: Cycle }\nexport function read(input: string): Promise<ReadResult>'
+    )
+    const slice = sliceModuleExports(combined, 'velaros:demo', ['write', 'read', 'write'])
+    const text = slice.declarations ?? ''
+    expect(slice.missing).toEqual([])
+    expect(text.match(/function read/gu)).toHaveLength(2)
+    for (const declaration of [
+      'interface ReadOptions',
+      'type Encoding',
+      'interface Cycle',
+      '读写一个东西。',
+    ])
+      expect(text.split(declaration)).toHaveLength(2)
+    expect(sliceModuleExports(combined, 'velaros:demo', ['read', 'absent'])).toEqual({
       declarations: null,
       exports: ['read', 'write'],
+      missing: ['absent'],
     })
-    expect(sliceModuleExport(declarations, 'velaros:other', 'read')).toEqual({
+  })
+
+  test('INV-43 内容版本覆盖类型文档和模板，真实值导出不混入类型', () => {
+    const first = scriptPackageCompiler.index(declarations, 'velaros:demo', '// example')
+    expect(first.exports).toEqual(['read', 'write'])
+    expect(scriptPackageCompiler.index(declarations, 'velaros:demo', '// example')).toEqual(first)
+    expect(
+      scriptPackageCompiler.index(
+        declarations.replace('读的入参。', '路径相对工作区。'),
+        'velaros:demo',
+        '// example'
+      ).contentRevision
+    ).not.toBe(first.contentRevision)
+    expect(
+      scriptPackageCompiler.index(declarations, 'velaros:demo', '// changed example')
+        .contentRevision
+    ).not.toBe(first.contentRevision)
+  })
+
+  test('模块里没有这个名字：declarations 为 null，交回它导出的值', () => {
+    expect(sliceModuleExports(declarations, 'velaros:demo', ['remove'])).toEqual({
+      declarations: null,
+      exports: ['read', 'write'],
+      missing: ['remove'],
+    })
+    expect(sliceModuleExports(declarations, 'velaros:other', ['read'])).toEqual({
       declarations: null,
       exports: [],
+      missing: ['read'],
     })
   })
 })

@@ -83,7 +83,8 @@ export type {
   GrantedModule,
 } from './types/script.js'
 export type {
-  ScriptModuleExportSlice,
+  ScriptModuleExportsSlice,
+  ScriptModuleIndex,
   ScriptPackageDefinition,
   ScriptPackageSurface,
 } from './types/script.js'

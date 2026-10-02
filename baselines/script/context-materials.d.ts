@@ -1,9 +1,8 @@
+/**
+ * 父会话快照的原文与整理补丁：先 list 看元数据，挑与整理目标相关的近期记录和当前笔记，再按引用 read 少量原文，最后用 submit 交来补丁。
+ * 只能读这次整理授权的快照；读取额度用完后不能再读，直接交付已有结论。
+ */
 declare module 'velaros:context-materials' {
-  /**
-   * 父会话快照的原文与整理补丁：先 list 看元数据，挑与整理目标相关的近期记录和当前笔记，再按引用 read 少量原文，最后用 submit 交来补丁。
-   * 只能读这次整理授权的快照；读取额度用完后不能再读，直接交付已有结论。
-   */
-
   /** 列快照里的原文元数据，不读正文。
    */
   export function list(input: ContextMaterialsQuery): Promise<ContextMaintenancePage>

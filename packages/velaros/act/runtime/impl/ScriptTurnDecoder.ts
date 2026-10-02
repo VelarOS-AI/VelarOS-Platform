@@ -205,7 +205,7 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
         if (!isUndefined(format)) throw protocolFailure('程序载荷格式无效', record.line)
         if ('source' in fields || 'retainTurns' in fields)
           throw protocolFailure('源码放在段内，租期使用 retain', record.line)
-        const reference = 'sourceRef' in fields || 'edits' in fields
+        const reference = 'sourceRef' in fields || 'edits' in fields || 'snapshot' in fields
         if (reference && !isEmpty(record.body))
           throw protocolFailure('引用或编辑模式必须使用空段', record.line)
         program = { ...fields }

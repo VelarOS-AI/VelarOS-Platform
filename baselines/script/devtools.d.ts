@@ -1,11 +1,10 @@
+/**
+ * 开发者工具：读控制台、网络与未处理异常（从页面打开起一直在录），读一次请求的详情与响应体；调缩放、设常驻的网络规则（断网、请求头、拦截、假响应）；
+ * 录性能 trace 看 LCP、INP、CLS 与瓶颈，采堆快照查内存泄漏；录屏合成 GIF；管理进到匹配网站时自动注入的用户脚本。
+ * 都作用在 velaros:browser 当前打开的站点上，没进站点时抛 BROWSER_SITE_NOT_OPEN。trace、堆快照、录屏的产物落在站点工作区。
+ * 页面存储用 velaros:browser 的 evaluate 读；cookie（含 HttpOnly）、视口、时区、地理位置、深浅色这类仿真直接用 velaros:cdp 发命令。
+ */
 declare module 'velaros:devtools' {
-  /**
-   * 开发者工具：读控制台、网络与未处理异常（从页面打开起一直在录），读一次请求的详情与响应体；调缩放、设常驻的网络规则（断网、请求头、拦截、假响应）；
-   * 录性能 trace 看 LCP、INP、CLS 与瓶颈，采堆快照查内存泄漏；录屏合成 GIF；管理进到匹配网站时自动注入的用户脚本。
-   * 都作用在 velaros:browser 当前打开的站点上，没进站点时抛 BROWSER_SITE_NOT_OPEN。trace、堆快照、录屏的产物落在站点工作区。
-   * 页面存储用 velaros:browser 的 evaluate 读；cookie（含 HttpOnly）、视口、时区、地理位置、深浅色这类仿真直接用 velaros:cdp 发命令。
-   */
-
   /** 读诊断：先按种类过滤再取最近的几条，网络条目带 requestId。
    */
   export function diagnostics(input: DevtoolsDiagnosticsInput): Promise<BrowserPageDiagnosticsReadResult>

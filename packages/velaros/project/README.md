@@ -70,11 +70,15 @@ export function closeProject() {
 
 ## 约定
 
+- `snapshot` 共用正式项目读门与内核：一份 files 计划最多 20 项、每次捕获最多 500000 字符，前后两遍都完整且相同才返回纯值；任何缺口或变化都失败。`format:'json'` 与有界 JSON Pointer 只用于固定纯派生，`range` 仍是连续行。捕获给 `value.files`、此次值指纹与内核生命周期身份，不给编辑凭据；不保证读取期间没有 ABA，也不跳过 IO。失败捕获的实际读取请求数与材料字节数可随 Kernel 独立诊断保存。
+- `createProjectObservationProvider()` 登记固定 Project files 计划，真实读取始终由已授权的 `velaros:project.snapshot` 派发。默认 workspace Runtime 自动装配；自己装项目模块时把该提供者放入 `context.snapshots`。完整同值只复用确定性的派生结果，权限、任务、重置、绑定或提供者变化重新核对，阶段结束与重启遵循 Runtime 生命周期。
+
 - 路径按真实路径钳在项目根内，出了项目抛 `PERMISSION_DENIED`；没有读写名单、不问人。同一项目根上写串行、读并发（进程内的项目资源门），项目里的前台命令也排进这扇门。
 - `read`、`search` 交回连续的正文（`text` 带第一行的行号 `startLine`）；`edit` 按路径指文件：`write` 整份写入（没有就新建），`replace` 把唯一的一段原文换掉。读取凭据由 `edit` 自己按路径取，不经调用方的手。
 - 编辑作用在提交那一刻的内容上：`replace` 要换的原文被外部改没了抛 `TARGET_NOT_FOUND`，`write` 整份换掉、不核对读过的版本，被换掉的内容靠这次改动的 `undo` 找回。
 - `changeRef` 按 `sessionId` 签发与核对（不给的调用共用一份），存在进程内存里、有条数上限，进程重启后全部作废。
 - `edit` 的步骤合成一个事务，全成或全不成；失败时一个文件都没写，按 `error.code`（`ProjectErrorCodes` 里的码）分支，第几步、候选与下一步都在 message 里。
+- 模型模板的批量替换先处理 `read.issues`，读取有缺口时保留原请求范围并停止修改；全部读到后一次 `edit` 提交，交回改动路径和 `changeRef`。超过上限需要拆分时，每次提交各自成事务。
 - `undo` 遇到外部改动抛 `CONFLICT_WITH_EXTERNAL_EDIT`、不覆盖，撤过的再撤是幂等成功；可撤销历史按条数和字节预算淘汰，被挤出去的撤销报 `NOT_SUPPORTED`。
 - 读、列、搜不折叠，`ProjectFileLimits` 只为守内存：超了整个失败，批量读里装不下的文件进 `issues`；一个事务缺省最多改 `ProjectPolicyDefaults.maxChangedFilesPerTransaction` 个文件，建内核时用 `corePolicy` 调。
 - 不给 `changeFeed` 时变更记录只在内存里；给了 `transactionStatePath`，重启建内核时恢复中断的提交或回滚，遇到归属不明的改动报 `TRANSACTION_RECOVERY_CONFLICT` 并保留现场。

@@ -5,15 +5,21 @@ import type {
   ScriptControlReceipt,
   ScriptObservationEdit,
   ScriptReferenceProgram,
+  ScriptSnapshotObservation,
 } from './runtime.js'
 
 /** 交来的一段程序正文；存档路径只属于脚本库，提交里没有。 */
 export type ScriptSourceProgram = Omit<CodeProgramRequest, 'path'>
 
+/** 持续观察可在发布时要求下一正常业务轮真实采集。 */
+export type ScriptObservationProgram = (
+  ScriptSourceProgram | ScriptReferenceProgram | ScriptObservationEdit | ScriptSnapshotObservation
+) & { readonly refresh?: boolean }
+
 /** 一次脚本提交；至少包含观察更新或本轮执行。 */
 export type ScriptSubmissionFields = {
   /** 更新持续观察代码；省略时继续使用当前版本。 */
-  readonly observe?: ScriptSourceProgram | ScriptReferenceProgram | ScriptObservationEdit
+  readonly observe?: ScriptObservationProgram
   /** 本轮只运行一次的代码及其结果可见租约。 */
   readonly execute?: (ScriptSourceProgram | ScriptReferenceProgram) & {
     readonly retainTurns?: ScriptRetention

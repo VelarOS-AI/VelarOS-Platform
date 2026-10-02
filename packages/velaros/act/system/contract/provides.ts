@@ -1,5 +1,6 @@
 export type { MemoryModuleApi } from '../impl/MemoryModule.js'
 export type { ModulesModuleApi } from '../impl/ModulesModule.js'
+export type { ProgramsModuleApi } from '../impl/ProgramsModule.js'
 export type { StoreModuleApi } from '../impl/StoreModule.js'
 export type { StoreSessionApi } from '../impl/StoreSession.js'
 export type { SystemModulesApi } from '../impl/SystemModules.js'

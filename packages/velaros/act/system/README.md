@@ -1,6 +1,6 @@
 # @velaros-ai/velaros/act/system
 
-模型的自管理系统包 `velaros:system`：`modules`（发现能力、读合同与用法模板）、`goal`（主会话的目标）、`memory`（任务笔记、计划与材料驻留，装了长期记忆时还有 `recall`、`save`、`remove`）、`store`（跨会话的持久空间与消息）。`createRuntime` 按会话装好它；宿主经运行时配置记忆作用域与空间授权，经会话读写目标与笔记。
+模型的自管理系统包 `velaros:system`：`modules` 发现能力与定向合同，`programs` 发布和发现参数化程序，`goal` 管目标，`memory` 管笔记与材料，`store` 管共享状态。`createRuntime` 按会话装配；宿主固定记忆、空间、程序与来源权限。
 
 ## 用法
 
@@ -51,6 +51,8 @@ if (goal?.status === 'active') await session.controlGoal({ baseRevision: goal.re
 ## 约定
 
 - 宿主一般不直接装：`createRuntime` 按会话挂好这些成员，业务模块不能占用它们的身份；单项装配只给自己拼 Kernel 的宿主用，状态都按调用会话从宿主端口现取。
+- `modules.list` 的真实 `exports` 可直接作为查询名称；`contentRevision` 标识声明与模板正文。`describe({module,exports:['read','edit']})` 同次交回去重的类型闭包与模块共同规则；指定导出默认只给声明，需要整模块示例传 `template:true`。未指定导出保留完整合同。查询与版本号不授予权限，也不代表模型已看到正文。
+- `programs.publish` 检查并归档完整源码与附属模块，不执行；新名称的 `baseRevision` 为 0，更新同名程序带当前名称版本。目录交回不可变 `sourceRef`、源码 `contentRevision` 和发布时依赖身份；后续按正常 `execute({sourceRef,input,blobs})` 复用，每次仍核对当前权限、模式与真实回执。名称、用途和参数说明是作者数据；查询先按授权及任务重置边界过滤，旧版本不会替代当前名称，也不恢复已失效的来源权限。
 - 模型写 `import { modules, goal, memory, store } from 'velaros:system'`；同一会话每个成员只挂一种投影，按装配与授权取第一个可用的，实际操作与可用条件见 [Act 能力目录](../README.md)。
 - `memory(sessionId)` 在主会话打开时固定作用域，模型选不了；搜索、整理与子任务不带长期记忆，要用由主线召回后显式交给它们。`release` 只释放当前任务里的展示、原文仍可召回，`remove` 才删长期记忆的原文。
 - 不给 `stores` 时主会话在 `session:<id>` 的边界里建自己的空间，返回 `undefined` 就不挂 store；子任务只拿父任务经 `agents.start` 显式交出的权限子集，没有创建权，续跑时重新核对。

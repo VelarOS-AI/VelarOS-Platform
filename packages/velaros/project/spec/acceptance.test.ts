@@ -12,7 +12,12 @@ import { join, resolve } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { codeProgramChecker } from '@velaros-ai/script'
+import {
+  codeProgramChecker,
+  createCapabilityPort,
+  createCodeSurfaceSession,
+  nodeSubprocessCodeRunner,
+} from '@velaros-ai/script'
 
 import {
   ProjectCodeLimits,
@@ -38,6 +43,37 @@ const Bom = String.fromCharCode(0xfeff)
 /** 生成的声明所在的目录。 */
 const Baselines = resolve(import.meta.dir, '../../../../baselines/script')
 
+/** 在隔离程序里执行模板组合，记录真实领域操作次数。 */
+async function runTemplate(
+  harness: Awaited<ReturnType<typeof createProjectHarness>>,
+  expression: string
+) {
+  const port = createCapabilityPort(harness.operations)
+  const calls: string[] = []
+  const session = createCodeSurfaceSession({
+    checker: codeProgramChecker,
+    runner: nodeSubprocessCodeRunner,
+    capabilities: {
+      listOperations: () => port.listOperations(),
+      invoke: async (call) => {
+        calls.push(call.operation)
+        return port.invoke(call)
+      },
+    },
+  })
+  const template = await readFile(resolve(import.meta.dir, '../template.js'), 'utf8')
+  const declarations = await readFile(join(Baselines, 'project.d.ts'), 'utf8')
+  const outcome = await session.submit({
+    program: { source: `${template}\nexport default await ${expression}` },
+    granted: [{ namespace: 'project', declarations }],
+    timeoutMs: 20_000,
+  })
+  expect(outcome.checked).toBe(true)
+  if (!outcome.checked) throw new Error('项目模板应通过程序检查')
+  expect(outcome.result.failed).toBeUndefined()
+  return { value: outcome.result.value as any, calls }
+}
+
 let root = ''
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'project-acceptance-'))
@@ -47,7 +83,34 @@ afterEach(async () => {
 })
 
 describe('模型面', () => {
-  test('INV-1 velaros:project 的六个操作与 velaros:code 的两个，声明从源码生成、只放出这些；随包发布的声明与生成物同一份，放出的方法就是能调的那些', async () => {
+  test('INV-42 批量替换模板一次读取一次事务，读取缺口保留请求范围且不提交子集', async () => {
+    await writeFile(join(root, 'a.txt'), 'oldName\n')
+    await writeFile(join(root, 'b.txt'), 'oldName twice oldName\n')
+    const harness = await createProjectHarness(root)
+    const blocked = await runTemplate(
+      harness,
+      "replaceInFiles(['a.txt', 'missing.txt'], 'oldName', 'newName')"
+    )
+    expect(blocked.calls).toEqual(['read'])
+    expect(blocked.value).toMatchObject({
+      status: 'blocked',
+      requestedFiles: ['a.txt', 'missing.txt'],
+    })
+    expect(blocked.value.issues).toHaveLength(1)
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('oldName\n')
+
+    const changed = await runTemplate(
+      harness,
+      "replaceInFiles(['a.txt', 'b.txt', 'a.txt'], 'oldName', 'newName')"
+    )
+    expect(changed.calls).toEqual(['read', 'edit'])
+    expect(changed.value).toMatchObject({ status: 'committed', changedFiles: ['a.txt', 'b.txt'] })
+    expect(changed.value.changeRef).toBeTruthy()
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('newName\n')
+    expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('newName twice newName\n')
+  }, 60_000)
+
+  test('INV-1 velaros:project 的七个操作与 velaros:code 的两个，声明从源码生成、只放出这些；随包发布的声明与生成物同一份，放出的方法就是能调的那些', async () => {
     const { operations } = await createProjectHarness(root)
     expect(Object.keys(operations.project).sort()).toEqual([
       'edit',
@@ -55,6 +118,7 @@ describe('模型面', () => {
       'list',
       'read',
       'search',
+      'snapshot',
       'undo',
     ])
     expect(Object.keys(operations.code).sort()).toEqual(['analyze', 'query'])
@@ -62,7 +126,15 @@ describe('模型面', () => {
     const code = await readFile(join(Baselines, 'code.d.ts'), 'utf8')
     const functions = (text: string) =>
       [...text.matchAll(/export function (\w+)\(/g)].map((match) => match[1]).sort()
-    expect(functions(project)).toEqual(['edit', 'inspect', 'list', 'read', 'search', 'undo'])
+    expect(functions(project)).toEqual([
+      'edit',
+      'inspect',
+      'list',
+      'read',
+      'search',
+      'snapshot',
+      'undo',
+    ])
     expect(functions(code)).toEqual(['analyze', 'query'])
     // 调用上下文与空间端口不进模型面：它们的名字一个都不出现在声明里。
     for (const text of [project, code]) {

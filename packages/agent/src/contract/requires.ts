@@ -102,6 +102,13 @@ export interface ActContextPort {
    * 只在其后追加，供应商可复用完整前缀缓存；缺省时每帧完整重发。
    */
   delta?(body: string, previous: string): string
+  /** 按本次实际选择的历史核对正文覆盖；不改变逻辑历史，容量重组时重新核对。 */
+  reconcile?(
+    body: string,
+    history: readonly ModelHistoryMessage[],
+    previous: Optional<string>,
+    signal: AbortSignal
+  ): Promise<{ body: string; prompt: string }>
   /**
    * 完成前检查实际送达的运行时材料；返回拒绝原因时进入相应恢复路径。
    * `claim` 是本轮 done 声明附带的完成依据，没有附带时缺席。

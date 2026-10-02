@@ -1,13 +1,12 @@
+/**
+ * 浏览器：打开网站、看页面、在页面里跑 JavaScript、真实的鼠标键盘输入、导航与等待、处理弹窗下载与权限、下载与导出。
+ * 先 open 进站点，其余要页面的操作没进站点时抛 BROWSER_SITE_NOT_OPEN。读页面、改 DOM、读 localStorage 用 evaluate；
+ * 要真实输入（事件 isTrusted、:hover、按键的默认行为、富文本编辑器）用 click、fill、press，或者 mouseDown、keyDown 这些原子自己拼。
+ * 元素写法：inspect、标注截图给的 ref（如 @e3:g2，原样传回；新的一次 inspect 或标注截图之后旧 ref 作废），或 CSS selector，或结果里的 target。
+ * 坐标一律是视口 CSS 像素，和截图的 coordinateMap 同一套。站点工作区是这个网站的私有目录：截图、下载、PDF 都落在那里，路径一律相对它，出不去。
+ * 诊断、网络规则、性能、录屏与用户脚本在 velaros:devtools；直接发 CDP 命令在 velaros:cdp。
+ */
 declare module 'velaros:browser' {
-  /**
-   * 浏览器：打开网站、看页面、在页面里跑 JavaScript、真实的鼠标键盘输入、导航与等待、处理弹窗下载与权限、下载与导出。
-   * 先 open 进站点，其余要页面的操作没进站点时抛 BROWSER_SITE_NOT_OPEN。读页面、改 DOM、读 localStorage 用 evaluate；
-   * 要真实输入（事件 isTrusted、:hover、按键的默认行为、富文本编辑器）用 click、fill、press，或者 mouseDown、keyDown 这些原子自己拼。
-   * 元素写法：inspect、标注截图给的 ref（如 @e3:g2，原样传回；新的一次 inspect 或标注截图之后旧 ref 作废），或 CSS selector，或结果里的 target。
-   * 坐标一律是视口 CSS 像素，和截图的 coordinateMap 同一套。站点工作区是这个网站的私有目录：截图、下载、PDF 都落在那里，路径一律相对它，出不去。
-   * 诊断、网络规则、性能、录屏与用户脚本在 velaros:devtools；直接发 CDP 命令在 velaros:cdp。
-   */
-
   /** 打开一个网站并进入它的站点（换网站就再 open 一次，各站点的工作区互不相通）。
    */
   export function open(input: BrowserOpenInput): Promise<BrowserOpened>

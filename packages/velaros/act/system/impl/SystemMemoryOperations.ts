@@ -134,7 +134,7 @@ export class SystemMemoryOperations implements SystemMemoryOperationsApi {
       input.invocation
     )
     if (!isUndefined(input.pointer) && page.pointer !== input.pointer)
-      throw new AppError('UNAVAILABLE', '当前宿主不支持执行结果字段召回')
+      throw new AppError('UNAVAILABLE', '当前宿主不支持材料字段召回')
     if (!isUndefined(input.invocation) && page.invocation !== input.invocation)
       throw new AppError('UNAVAILABLE', '当前宿主不支持失败执行的调用回执召回')
     return page

@@ -7,6 +7,7 @@ import { contextModule } from './ContextModule.js'
 import { goalModule } from './GoalModule.js'
 import { memoryModule } from './MemoryModule.js'
 import { modulesModule } from './ModulesModule.js'
+import { programsModule } from './ProgramsModule.js'
 import { storeModule } from './StoreModule.js'
 
 /** 系统身份与实际合同的唯一装配。 */
@@ -28,6 +29,7 @@ class SystemModules implements SystemModulesApi {
           ]
         : []),
       modulesModule.create(host),
+      ...(host.programCatalog ? [programsModule.create(host)] : []),
       goalModule.create(host),
       memoryModule.create(host, false),
       ...(host.longTermMemory

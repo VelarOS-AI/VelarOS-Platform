@@ -25,7 +25,7 @@ INV-18（读完之后被改过时给出新行号重提）作废、编号不复�
 
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
-| INV-1 | `velaros:project` 有六个操作（read、list、search、edit、inspect、undo）、`velaros:code` 有两个（query、analyze），声明从源码生成、只放出这些，调用上下文与空间端口不进模型面；两件工具随包发布的声明（`VelarProjectModule`、`VelarCodeModule`）与生成物是同一份，放出的方法就是能调的那些 | 测试 | `spec/acceptance.test.ts` |
+| INV-1 | `velaros:project` 有七个操作（read、list、search、edit、inspect、undo、snapshot）、`velaros:code` 有两个（query、analyze），声明从源码生成、只放出这些，调用上下文与空间端口不进模型面；两件工具随包发布的声明（`VelarProjectModule`、`VelarCodeModule`）与生成物是同一份，放出的方法就是能调的那些 | 测试 | `spec/acceptance.test.ts` |
 | INV-2 | 编辑按路径写：write 把正文整份写进一个文件（不存在就新建，上级目录自动建），replace 把文件里唯一的一段原文换成新文；同一次 edit 里对同一个文件接连几步时，后一步按前一步改完的内容算，move 之后按新路径接着改 | 测试 | `spec/acceptance.test.ts` |
 | INV-3 | 编辑作用在提交那一刻的内容上：读取之后外部改了文件的别处，replace 照样成立、外部改动保住；要换的那段原文被外部改没了就整批拒绝（TARGET_NOT_FOUND），一个字节都不写 | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 一次 edit 是一个事务：几个文件、几步全成或全不成；定不下来的那一步在 message 里点名第几步（`steps[i]`） | 测试 | `spec/acceptance.test.ts` |
@@ -61,3 +61,4 @@ INV-18（读完之后被改过时给出新行号重提）作废、编号不复�
 | INV-39 | `./project/contracts` 入口整条引用链不碰 Node 内置模块，渲染进程与浏览器都能加载；语言服务实现、工具函数与内部接口一律不出包 | 门禁 | `check:module-ownership` |
 | INV-40 | 语言查询的注入面只借内核的三个读方法，多一个都借不到：类型上就是对 `AgentProjectKernelPort` 取 `listFiles`、`read`、`listSymbols` 三键的 `Pick` | 类型 | `contract/requires.ts::LanguageReadPort` |
 | INV-41 | 同一份内容搜两遍，交回的一样：命中同分按路径、再按行列排，不跟 ripgrep 多线程交回的次序走（结果进模型上下文，次序抖动既让模型看着乱，也坏了前缀缓存） | 测试 | `spec/acceptance.test.ts` |
+| INV-42 | 批量替换模板先保留完整请求范围，读取有 issues 时交付缺口且不写入子集；成功组合只用一次批量 read 与一次事务 edit，交回真实 changeRef 与改动范围 | 测试 | `spec/acceptance.test.ts` |

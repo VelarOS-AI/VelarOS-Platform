@@ -38,6 +38,7 @@ test('INV-2 runtime exposes one script-context contract and preserves paged sour
     assert.deepEqual(names, [
       'velaros:interaction',
       'velaros:modules',
+      'velaros:programs',
       'velaros:system-goal',
       'velaros:system-memory-local',
       'velaros:system-store',
@@ -480,41 +481,51 @@ test('competing runtime instances atomically bind a new session to only one work
   }
 })
 
-test('existing workspace.json bindings and corrupted bindings fail closed before session activation', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'runtime-workspace-legacy-'))
+test('INV-39 corrupted or duplicated ContextStorage bindings reject session activation', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'runtime-workspace-corrupt-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const workspace = join(root, 'one')
-  const other = join(root, 'two')
   const dataDir = join(root, 'state')
   await mkdir(workspace)
-  await mkdir(other)
   await mkdir(dataDir)
-  await writeFile(
-    join(dataDir, 'workspace.json'),
-    JSON.stringify({ workspace: await realpath(workspace) })
-  )
-  const wrong = await createRuntime({ workspace: other, dataDir, project: false })
+  const initial = await createRuntime({ workspace, dataDir, project: false })
+  for (const id of ['corrupted', 'duplicated']) await initial.openSession(id)
+  await initial.close()
+  const storage = localContextStorage({ path: join(dataDir, 'context.sqlite') })
   try {
-    await assert.rejects(wrong.openSession('main'), { code: 'WORKSPACE_BINDING_MISMATCH' })
+    for (const id of ['corrupted', 'duplicated']) {
+      const state = await storage.load(id)
+      const binding = state.records.find((record) => record.title === 'runtime:workspace')
+      assert(binding)
+      const records = [...state.records]
+      if (id === 'corrupted') {
+        const body = '{broken'
+        const objectId = await storage.put(id, body)
+        records[records.indexOf(binding)] = { ...binding, objectId, chars: body.length }
+      } else {
+        records.push({
+          ...binding,
+          ref: { sessionId: id, id: crypto.randomUUID() },
+          sequence: records.at(-1).sequence + 1,
+        })
+      }
+      assert(
+        await storage.compareAndSwap(id, state.version, {
+          ...state,
+          version: state.version + 1,
+          records,
+        })
+      )
+    }
   } finally {
-    await wrong.close()
+    await storage.close()
   }
-  const correct = await createRuntime({ workspace, dataDir, project: false })
-  await correct.openSession('main')
-  await correct.close()
-  await rm(join(dataDir, 'workspace.json'))
-  const persisted = await createRuntime({ workspace: other, dataDir, project: false })
+  const runtime = await createRuntime({ workspace, dataDir, project: false })
   try {
-    await assert.rejects(persisted.openSession('main'), { code: 'WORKSPACE_BINDING_MISMATCH' })
+    for (const id of ['corrupted', 'duplicated'])
+      await assert.rejects(runtime.openSession(id), { code: 'WORKSPACE_BINDING_MISMATCH' })
   } finally {
-    await persisted.close()
-  }
-  await writeFile(join(dataDir, 'workspace.json'), '{broken')
-  const corrupt = await createRuntime({ workspace, dataDir, project: false })
-  try {
-    await assert.rejects(corrupt.openSession('new'))
-  } finally {
-    await corrupt.close()
+    await runtime.close()
   }
 })
 

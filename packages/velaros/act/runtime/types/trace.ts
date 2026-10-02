@@ -1,6 +1,7 @@
 import type { ContextRecord } from '@velaros-ai/context'
 
 import type { ModelToolBinding } from './model-tools.js'
+import type { ObservationCollection } from './runtime.js'
 
 /** 宿主诊断采样，不含正文、参数或资源路径；阶段可能嵌套，不能相加当作墙钟总耗时。 */
 export interface RuntimeMetric {
@@ -89,8 +90,10 @@ export interface ActObservationRegistration {
   readonly sourceTruncated: boolean
 }
 
-/** 本回合请求发出前运行的那次观察，它的结果进了这一帧；状态与执行同一套判定。 */
+/** 本回合所用的观察；复用与暂停保留原执行身份和原采集时刻。 */
 export interface ActObservationRun {
+  /** collected 才是本轮真实执行；旧记录省略时保持原来的采集语义。 */
+  readonly collection?: ObservationCollection
   /** 运行身份，与 invocations[].executionId 对应。 */
   readonly executionId: string
   /** 还没有结果时是 running；unknown 表示有调用的外部效果未知，需要先核对。 */
@@ -173,6 +176,62 @@ export interface ActRequestSummary {
   readonly mediaOmitted: boolean
 }
 
+/** 请求的真实收束与供应商计数；估算和缺项都不能代替已报告用量。 */
+export interface ActModelAccounting {
+  readonly status: 'settled' | 'inflight' | 'unknown'
+  readonly outcome: Nullable<'accepted' | 'rejected'>
+  readonly finishReason: Nullable<'stop' | 'length'>
+  readonly error: Nullable<{ readonly code: Nullable<string>; readonly message: Nullable<string> }>
+  readonly usage: {
+    readonly coverage: 'known' | 'unknown' | 'inflight'
+    readonly inputTokens: Nullable<number>
+    readonly outputTokens: Nullable<number>
+    readonly cacheReadTokens: Nullable<number>
+    readonly cacheWriteTokens: Nullable<number>
+  }
+}
+
+/** 按 charge ID 去重的费用事实；不同币种、实际费用与参考报价分别累计。 */
+export interface ActVerificationCostSummary {
+  readonly coverage: 'complete' | 'partial' | 'unknown'
+  readonly charges: ReadonlyArray<{
+    readonly id: string
+    readonly kind: 'model' | 'external'
+    readonly currency: string
+    readonly basis: 'actual' | 'reference'
+    readonly amount: Nullable<number>
+  }>
+  readonly totals: ReadonlyArray<{
+    readonly kind: 'model' | 'external'
+    readonly currency: string
+    readonly basis: 'actual' | 'reference'
+    readonly amount: number
+  }>
+  /** 同 ID 费用依据互相冲突时，不任选一份作为完整账单。 */
+  readonly conflictingChargeIds: readonly string[]
+}
+
+/** 一次可信核查的阶段折叠；阶段时间是累计事实，不能相加。 */
+export interface ActVerificationAttemptSummary {
+  readonly attemptId: string
+  readonly taskId: string
+  readonly checkId: string
+  readonly scope: string
+  readonly verifierId: string
+  readonly verifierVersion: string
+  readonly mode: 'executed' | 'reused' | 'probed'
+  readonly status: 'pending' | 'passed' | 'failed' | 'unknown' | 'cancelled'
+  readonly applicability: 'current' | 'historical' | 'unknown'
+  readonly phases: ReadonlyArray<'started' | 'settled' | 'late-result'>
+  readonly startedAt: string
+  readonly settledAt: Nullable<string>
+  readonly durationMs: Nullable<number>
+  readonly probeMs: Nullable<number>
+  readonly runMs: Nullable<number>
+  readonly records: ReadonlyArray<{ readonly sessionId: string; readonly id: string }>
+  readonly cost: ActVerificationCostSummary
+}
+
 /** 一次实际模型请求及其执行证据；缺失部分明确列入 gaps。 */
 export interface ActTurnTrace {
   readonly sessionId: string
@@ -186,6 +245,13 @@ export interface ActTurnTrace {
     readonly contextMs: Nullable<number>
     readonly modelMs: Nullable<number>
     readonly firstTextMs: Nullable<number>
+  }
+  /** usage 的覆盖独立于协议接受状态；已拒绝请求仍可能有实际计数。 */
+  readonly modelAccounting: ActModelAccounting
+  /** started 所在请求序号窗口归属此回合；后来的 settled/late-result 仍连接原 attempt。 */
+  readonly verification: {
+    readonly attempts: readonly ActVerificationAttemptSummary[]
+    readonly cost: ActVerificationCostSummary
   }
   /** 请求审计包含 ProviderRequestCompiler 封存的消息与指纹。 */
   readonly request: ActTraceRecord
@@ -227,11 +293,41 @@ export interface ActTraceQuery {
   readonly after?: number
   /** 一页最多请求数，默认 8，上限 32。 */
   readonly limit?: number
+  /** 会话活动独立按 script:execution 起始记录序号分页，不依赖是否发出了模型请求。 */
+  readonly activityAfter?: number
+  /** 一页最多活动数，默认 8，上限 32；与模型请求分页共用正文预算。 */
+  readonly activityLimit?: number
   /** 宿主调试展示完整正文；仍按 limit 分页，忽略 maxChars，完整保留文本，图片和字节数据使用占位。 */
   readonly fullContent?: boolean
   /** 一页正文字符上限，默认一百万，上限八百万。fullContent 为 true 时不使用。 */
   readonly maxChars?: number
 }
+
+/** 宿主实际开始的一次脚本阶段；原始失败与当前 Kernel 回执分别保留，不互相覆盖。 */
+export interface ActSessionActivityEntry {
+  readonly executionId: string
+  readonly taskId: Nullable<string>
+  readonly mode: Nullable<'execute' | 'observe'>
+  readonly kind: 'snapshot-capture' | 'script-execution' | 'unknown'
+  readonly startedSequence: number
+  readonly startRef: { readonly sessionId: string; readonly id: string }
+  readonly resultRef: Nullable<{ readonly sessionId: string; readonly id: string }>
+  readonly records: readonly ActTraceRecord[]
+  readonly invocations: ActTurnTrace['invocations']
+  readonly gaps: readonly string[]
+}
+
+/** 会话活动不归入尚未发送的模型帧；旧页重读才能取得已开始活动的迟到回执。 */
+export interface ActSessionActivityPage {
+  readonly scope: 'session'
+  readonly sessionId: string
+  readonly entries: readonly ActSessionActivityEntry[]
+  /** 下一页起始记录游标，与模型请求的 nextAfter 分开；无后续起始记录时为 null。 */
+  readonly nextAfter: Nullable<number>
+  /** 仅是 Context 目录快照版本；Kernel journal 逐执行读取，二者不是跨库原子快照。 */
+  readonly snapshotVersion: Nullable<number>
+}
+
 /** 持久追踪可在支线关闭后读取，活动回合需重读以取得后续回执。 */
 export interface ActTracePage {
   /** 宿主请求的根会话。 */
@@ -242,6 +338,21 @@ export interface ActTracePage {
   readonly branches: readonly ModelToolBinding[]
   /** 按请求记录顺序返回。 */
   readonly turns: readonly ActTurnTrace[]
+  /** 首请求前、请求间和无请求的真实执行阶段；独立游标，不增加模型回合数。 */
+  readonly sessionActivity: ActSessionActivityPage
+  /** 模型请求只统计本页；核查费用是指定会话快照的累计总账，同会话各页不可相加。 */
+  readonly accounting: {
+    /** 本页实际返回请求的用量覆盖数量。 */
+    readonly modelRequests: {
+      readonly known: number
+      readonly unknown: number
+      readonly inflight: number
+    }
+    /** 核查总账独立于请求窗口，包含首请求前、终态后及无模型请求的持久事实。 */
+    readonly verificationScope: 'session'
+    /** 同会话按 charge ID 去重；跨快照应取最新总账或继续按 ID 去重，未知保持未知。 */
+    readonly verificationCost: ActVerificationCostSummary
+  }
   /** 有后续请求时的分页游标，否则为 null。 */
   readonly nextAfter: Nullable<number>
   /** 读取开始时的会话快照代次。 */

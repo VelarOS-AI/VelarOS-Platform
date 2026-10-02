@@ -1,5 +1,21 @@
 /** Runtime 的缺省调节参数；宿主显式配置仍优先。 */
 export const ActRuntimeTuning = Object.freeze({
+  /** 常驻能力索引的软字符配额；剩余完整目录从 modules.list 分页读取。 */
+  moduleIndexChars: 4096,
+  /** 当前运行状态的目标字符上限；不可裁剪的事实超过它时明确报告。 */
+  stateChars: 8192,
+  /** 当前状态细节的软预算份额，必要事实仍由最终请求核对。 */
+  stateShare: 0.15,
+  /** 状态裁剪须覆盖引用、统计与归档的额外成本，避免小材料越裁越大。 */
+  stateMinimumSavings: 1024,
+  /** 变化摘要保留的前段；完整补丁按当前状态引用读取。 */
+  statePatchChars: 160,
+  /** 每条细节引用与裁剪标记的保守字符余量。 */
+  stateRecallChars: 256,
+  /** 单项核查诊断的展示上限，避免长身份或产物元数据占满全部诊断配额。 */
+  verificationCheckChars: 512,
+  /** 长核查名称在紧凑诊断中的前段；完整名称按报告引用召回。 */
+  verificationLabelChars: 160,
   /** 宿主笔记正文每页字符上限。 */
   noteReadChars: 32000,
   /** 一次模型工具交付最多附带的已保存脚本数。 */

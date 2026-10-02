@@ -10,6 +10,7 @@ import {
   MemoryReadLimits,
   MemoryRecallLimits,
   OrganizeLimits,
+  ProgramCatalogLimits,
   ScriptLeaseLimits,
   StoreProjectionLimits,
   SystemCatalogLimits,
@@ -22,8 +23,14 @@ import {
   VelarSystemMemoryPersistentModule,
   VelarSystemStoreModule,
 } from '../../../dist/act/system/contract/surface.js'
+import { VelarProgramsModule } from '../../../dist/act/system/contract/surface.js'
 import { contextModule } from '../../../dist/act/system/impl/ContextModule.js'
-import { memoryModule, modulesModule, storeModule } from '../../../dist/act/system/index.js'
+import {
+  memoryModule,
+  modulesModule,
+  programsModule,
+  storeModule,
+} from '../../../dist/act/system/index.js'
 import { MemoryLimits } from '../../../dist/memory/index.js'
 import { verifyModule } from '../../runtime/test/support/module-contract.mjs'
 test('INV-1 memory 的实际操作与模板一致', () =>
@@ -35,6 +42,19 @@ test('INV-1 本地 memory 只生成五个实际操作', () =>
   ))
 test('INV-1 modules 的实际操作与模板一致', () =>
   verifyModule(modulesModule, new URL('../modules-template.js', import.meta.url)))
+test('INV-21 programs 的 TS 合同、实际操作、效果与模板一致', () =>
+  verifyModule(
+    {
+      create: (host) =>
+        programsModule.create({
+          ...host,
+          programCatalog: () => {
+            throw new Error('definition-only fixture')
+          },
+        }),
+    },
+    new URL('../programs-template.js', import.meta.url)
+  ))
 
 test('INV-13 store 完整合同与模板一致', () =>
   verifyModule(storeModule, new URL('../store-template.js', import.meta.url)))
@@ -75,7 +95,18 @@ test('INV-20 声明里写给模型的上限与常量表一致', () => {
   ])
   documented(VelarModulesModule, [
     `limit 默认 ${SystemCatalogLimits.page}、最多 ${SystemCatalogLimits.maxPage}。`,
+    `1 到 ${SystemCatalogLimits.maxExports} 个`,
   ])
+  documented(VelarProgramsModule, [
+    `1 到 ${ProgramCatalogLimits.nameChars} 个字符`,
+    `1 到 ${ProgramCatalogLimits.purposeChars} 个字符`,
+    `最多 ${ProgramCatalogLimits.inputDescriptionChars} 个字符`,
+    `limit 默认 ${ProgramCatalogLimits.page}、最多 ${ProgramCatalogLimits.maxPage}`,
+  ])
+  assert.equal(VelarProgramsModule.operations.publish.effects, 'write')
+  assert.deepEqual(VelarProgramsModule.operations.publish.allowedModes, ['execute'])
+  assert.equal(VelarProgramsModule.operations.list.effects, 'none')
+  assert.equal(VelarProgramsModule.operations.describe.effects, 'none')
   documented(VelarSystemMemoryPersistentModule, [
     `through 固定目录快照的结束序号；limit 每页最多 ${WorkspaceLimits.maxPage} 项`,
     `一页最多 ${ContextLimits.readChars} 个字符。读取不续租`,

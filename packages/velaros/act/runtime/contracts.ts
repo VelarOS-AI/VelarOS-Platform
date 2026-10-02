@@ -27,6 +27,7 @@ export type {
   ScriptReferenceProgram,
 } from './types/runtime.js'
 export type { ScriptProtocolOptions } from './types/runtime.js'
+export type { ObservationCollection } from './types/runtime.js'
 export type {
   ActAgentSummary,
   ActExecutionFailure,

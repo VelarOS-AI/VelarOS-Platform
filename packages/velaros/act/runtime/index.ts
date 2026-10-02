@@ -8,7 +8,11 @@ export type { WorkspaceEntry } from '../system/types/workspace.js'
 export type { ActEventProjectorApi } from './contract/provides.js'
 export type { EventDeliveryApi } from './contract/provides.js'
 export type {
+  ObservationReuseOptions,
+  ObservationReusePort,
+  ProgramCatalogValidator,
   RuntimeModelConfiguration,
+  SnapshotObservationProvider,
   VelarosContextOptions,
   VelarosProjectOptions,
   VelarosRuntimeOptions,
@@ -61,27 +65,39 @@ export type {
   ScriptControlReceipt,
   ScriptObservationEdit,
   ScriptReferenceProgram,
+  ScriptSnapshotObservation,
+  SnapshotObservationPlan,
 } from './types/runtime.js'
 export type { ScriptProtocolOptions } from './types/runtime.js'
+export type { ObservationCollection } from './types/runtime.js'
 export type {
   ScriptExecutionReceipt,
   ScriptSubmission,
   ScriptSubmissionReceipt,
 } from './types/session.js'
-export type { ScriptSourceProgram, ScriptSubmissionFields } from './types/session.js'
+export type {
+  ScriptObservationProgram,
+  ScriptSourceProgram,
+  ScriptSubmissionFields,
+} from './types/session.js'
 export type {
   ActAgentSummary,
   ActExecutionFailure,
   ActExecutionSummary,
   ActInvocationSummary,
+  ActModelAccounting,
   ActObservationRegistration,
   ActObservationRun,
   ActObservationSummary,
   ActRequestSummary,
+  ActSessionActivityEntry,
+  ActSessionActivityPage,
   ActTracePage,
   ActTraceQuery,
   ActTraceRecord,
   ActTurnTrace,
+  ActVerificationAttemptSummary,
+  ActVerificationCostSummary,
 } from './types/trace.js'
 export type { RuntimeMetric } from './types/trace.js'
 export type { OperationRuntimeCloseOptions, PendingInvocation } from '@velaros-ai/kernel'

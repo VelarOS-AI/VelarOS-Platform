@@ -86,6 +86,7 @@ export interface FileOperationsApi {
    * @AgentView
    * 读文本文件：每个文件交回连续的正文与它第一行的行号（给了 range 就只交那几行）。
    * 图片、PDF 与其他二进制文件、目录、设备文件、超过 20 MB 的文件，都算这个文件失败。
+   * 一批里用 'error' in file 区分失败，全部失败才抛错；后续修改依赖全部请求时先处理失败项，不跳过它们继续改成功的那部分。
    * @OperationEffect none
    */
   read(input: FileReadInput, ctx: FileOperationContext): Promise<FileReadResult>
@@ -93,6 +94,7 @@ export interface FileOperationsApi {
    * @AgentView
    * 改文件：按路径一步一步写，write 整份写、replace 把一段原文换掉。**优先一次改完**：几个文件、几处改动都放进 steps；先统一核对计划，成功后给一个 changeId。
    * 每个文件在落盘时核对原始版本，单个文件原子替换。落盘途中失败可能已有部分写入，报错会点名已写文件及可用的撤回号，先读现状再处理。
+   * 保留完整 error.code 与 error.message；提交失败不要整批重发，也不要将一次批量提交当成跨文件事务。
    * 路径是管道、设备、套接字，或文件有多个硬链接时不碰。新内容编不成原编码（孤立代理项、GB18030 表示不了的字符）就整次不写。
    * @OperationEffect write
    */

@@ -4,4 +4,10 @@
  */
 export * from './contract/constants.js'
 export { VelarCodeModule, VelarProjectModule } from './contract/surface.js'
+export type {
+  ProjectSnapshotCapture,
+  ProjectSnapshotEntry,
+  ProjectSnapshotFile,
+  ProjectSnapshotInput,
+} from './types/observation.js'
 export type * from './types/project.js'

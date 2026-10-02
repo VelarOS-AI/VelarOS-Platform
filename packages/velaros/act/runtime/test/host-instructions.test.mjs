@@ -54,7 +54,7 @@ test('domain guidance follows granted capabilities in actual noncoding and proje
     assert.equal(instructions.includes('编辑锚点取自真实读取的原文'), project)
     assert.equal(instructions.includes('受影响调用方'), project)
     assert.doesNotMatch(instructions, /实际 PATH|const \{ stdout, \.\.\.status \}/)
-    assert.match(instructions, /总费用/)
+    assert.match(instructions, /(?:完整|总)费用/)
     assert.match(instructions, /unit 为 items/)
     assert.match(instructions, /from > 0/)
     assert.match(instructions, /from \+ shown < total/)
@@ -175,7 +175,7 @@ test('resident modules put their full contract into the instructions so the mode
   const f = await fixture(t, {
     model,
     workspace,
-    residentModules: ['velaros:project', 'velaros:not-mounted'],
+    residentModules: [{ module: 'velaros:project' }, { module: 'velaros:not-mounted' }],
   })
   for await (const event of f.session.submit('read the readme'))
     assert.notEqual(event.type, 'error')
@@ -197,7 +197,7 @@ test('INV-57 the instructions list every other importable module with its one-li
     model,
     workspace,
     project: { code: true, images: true },
-    residentModules: ['velaros:project'],
+    residentModules: [{ module: 'velaros:project' }],
   })
   for await (const event of f.session.submit('where is greet defined'))
     assert.notEqual(event.type, 'error')
@@ -206,9 +206,10 @@ test('INV-57 the instructions list every other importable module with its one-li
   // 一句简介取自模块声明开头那段说明的第一句
   assert.match(
     index,
-    /velaros:code（问代码，而不是自己读文件猜：定义在哪、谁在用它、改了波及谁、这个文件报什么错）/
+    /velaros:code（问代码，而不是自己读文件猜：定义在哪、谁在用它、改了波及谁、这个文件报什么错，exports: /
   )
-  assert.match(index, /velaros:images（看图：把 PNG、JPEG、GIF、WebP 交到你眼前）/)
+  assert.match(index, /velaros:images（看图：把 PNG、JPEG、GIF、WebP 交到你眼前，exports: /)
+  assert.match(index, /contentRevision: [a-f0-9]{64}/)
   // 常驻的已经整份附在文末，velaros:system 的成员从 velaros:system 导入，都不再列
   assert.doesNotMatch(index, /velaros:project|velaros:modules|velaros:system/)
   // 模块目录的卡片也是这句简介，不是模块名本身
@@ -238,10 +239,10 @@ test('INV-67 selected resident operations deliver complete generated types and c
   const f = await fixture(t, {
     workspace,
     residentModules: [
-      { module: 'velaros:project', export: 'read' },
-      { module: 'velaros:project', export: 'edit' },
-      { module: 'velaros:project', export: 'edit' },
-      { module: 'velaros:not-mounted', export: 'anything' },
+      { module: 'velaros:project', exports: ['read'] },
+      { module: 'velaros:project', exports: ['edit'] },
+      { module: 'velaros:project', exports: ['edit'] },
+      { module: 'velaros:not-mounted', exports: ['anything'] },
     ],
     model: driver(async function* (request) {
       frames.push(request)
@@ -266,16 +267,17 @@ output(change);output(await read({files:[{path:'sample.txt'}]}));`,
   assert.equal(await readFile(join(workspace, 'sample.txt'), 'utf8'), 'after\n')
   assert.match(modelText(frames[1]), /after/)
   const instructions = frames[0].instructions
-  for (const name of ['read', 'edit']) {
-    const selected = scriptPackageCompiler.sliceExport(declarations, 'velaros:project', name)
-    assert.ok(instructions.includes(selected.declarations))
-    assert.equal(instructions.split(`常驻操作 velaros:project.${name} 的声明`).length - 1, 1)
-  }
+  const selected = scriptPackageCompiler.sliceExports(declarations, 'velaros:project', [
+    'read',
+    'edit',
+  ])
+  assert.ok(instructions.includes(selected.declarations))
+  assert.equal(instructions.split('常驻导出 velaros:project（read, edit） 的声明').length - 1, 1)
   assert.doesNotMatch(instructions, /export function (search|inspect|undo)|velaros:not-mounted/)
   assert.match(instructions, /本会话还能直接 import 这些模块[^\n]*velaros:project/)
   assert.equal(frames[1].instructions, instructions)
   const trace = await f.session.trace(events.find((event) => event.type === 'turn').turnId)
-  assert.ok(trace.request.body.includes('常驻操作 velaros:project.edit'))
+  assert.ok(trace.request.body.includes('常驻导出 velaros:project（read, edit）'))
 })
 
 test('INV-67 whole resident contracts cover selected duplicates and invalid exports fail before any model request', async (t) => {
@@ -285,9 +287,9 @@ test('INV-67 whole resident contracts cover selected duplicates and invalid expo
   const f = await fixture(t, {
     workspace,
     residentModules: [
-      { module: 'velaros:project', export: 'edit' },
-      'velaros:project',
-      'velaros:project',
+      { module: 'velaros:project', exports: ['edit'] },
+      { module: 'velaros:project' },
+      { module: 'velaros:project' },
     ],
     model: driver(async function* (request) {
       frames.push(request)
@@ -296,14 +298,17 @@ test('INV-67 whole resident contracts cover selected duplicates and invalid expo
   })
   for await (const event of f.session.submit('Ready')) assert.notEqual(event.type, 'error')
   assert.equal(frames[0].instructions.split('常驻模块 velaros:project 的声明').length - 1, 1)
-  assert.doesNotMatch(frames[0].instructions, /常驻操作 velaros:project/)
+  assert.doesNotMatch(frames[0].instructions, /常驻导出 velaros:project/)
   const invalid = await createRuntime({
     dataDir: join(f.dataDir, 'invalid'),
     workspace,
     agents: false,
     search: false,
     memory: false,
-    residentModules: ['velaros:project', { module: 'velaros:project', export: 'nonexistent' }],
+    residentModules: [
+      { module: 'velaros:project' },
+      { module: 'velaros:project', exports: ['nonexistent'] },
+    ],
     model: driver(async function* (request) {
       yield* done(request)
     }),
@@ -320,10 +325,12 @@ test('INV-67 invalid selected resident configuration is rejected before activati
     null,
     3,
     {},
-    { module: 'velaros:project' },
-    { module: '', export: 'edit' },
-    { module: 'velaros:project', export: '' },
-    { module: 'velaros:project', export: ['edit'] },
+    'velaros:project',
+    { module: '', exports: ['edit'] },
+    { module: 'velaros:project', exports: [''] },
+    { module: 'velaros:project', exports: 'edit' },
+    { module: 'velaros:project', exports: [] },
+    { module: 'velaros:project', exports: Array(65).fill('edit') },
   ]) {
     await assert.rejects(createRuntime({ residentModules: [value] }), { code: 'VALIDATION' })
   }
@@ -336,7 +343,7 @@ test('INV-67 selected resident declarations participate in the real request capa
   const estimates = []
   const f = await fixture(t, {
     workspace,
-    residentModules: [{ module: 'velaros:project', export: 'edit' }],
+    residentModules: [{ module: 'velaros:project', exports: ['edit'] }],
     model: {
       ...driver(async function* (request) {
         calls++
@@ -427,4 +434,34 @@ test('the frame clock writes the zone offset and weekday of the host time zone',
     if (typeof zone === 'string') process.env.TZ = zone
     else delete process.env.TZ
   }
+})
+
+test('large capability indexes keep complete export names and expose omitted directory entries', () => {
+  const modules = [
+    'velaros:modules',
+    'velaros:system-memory-local',
+    ...Array.from({ length: 80 }, (_, id) => `velaros:domain-${id}`),
+  ]
+  const instructions = runtimeInstructions({
+    modules,
+    maintain: false,
+    observe: false,
+    summary: (module) => `${module} 用途说明。`,
+    index: () => ({
+      exports: ['read', 'write', 'completeExportName'],
+      contentRevision: 'a'.repeat(64),
+    }),
+  })
+  const note = instructions
+    .split('\n')
+    .find((line) => line.startsWith('本会话还能直接 import 这些模块'))
+  const entries = [...note.matchAll(/velaros:domain-\d+（[^）]+）/gu)]
+  assert(entries.length > 0 && entries.length < 80)
+  assert(note.length < 4300, '索引配额包含完整条目；目录说明只有固定额外成本')
+  for (const entry of entries) {
+    assert(entry[0].includes('exports: read, write, completeExportName'))
+    assert(entry[0].includes(`contentRevision: ${'a'.repeat(64)}`))
+  }
+  assert(note.includes(`另有 ${80 - entries.length} 个模块`))
+  assert(note.includes('modules.list() 分页读取完整目录'))
 })

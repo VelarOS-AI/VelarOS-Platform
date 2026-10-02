@@ -60,5 +60,5 @@ console.log(page.branches.filter((branch) => branch.kind === 'agent').map((branc
 - 回答回到模型前按问题整理：`ask` 得到 `{ text?, choices?, values?, declined?, reason? }`，字符串当自由作答，问题里没有的选项、字段和类型不对的值丢掉；`confirm` 得到 `{ approved, reason? }`，只有布尔值或带 `approved` 的对象算数，其余回答一律按不同意、原文当理由。
 - 交互的回答不授予任何权限：`confirm` 不代替具体操作的确认；子任务要换配置等它收束后由父任务 `resume`，已用预算保留。
 - 子任务的请求与结果先持久化再唤醒父任务，结果随父任务的下一轮交回；父运行取消时子任务一起取消。
-- 给了 `widgets` 才挂 `velaros:widget`：`show` 只在 execute 里调，核对标题（1 到 200 个字符）与代码（1 到 120000 个字符），高度收进 120 到 900（缺省 400）后带着调用身份交给宿主，立即返回。沙箱、主题变量、`sendPrompt` 回传都由宿主的显示负责。
+- 给了 `widgets` 才挂 `velaros:widget`：`show` 只在 execute 里调，核对标题（1 到 200 个字符）与代码（1 到 120000 个字符），高度收进 120 到 900（缺省 400）后带着调用身份交给宿主，立即返回。颜色、字体、圆角与 CSS 变量由小部件代码自行定义；沙箱与 `sendPrompt` 回传由宿主的显示负责。
 - `agentsModule`、`interactionModule`、`widgetModule` 是运行时自己用的装配；只有自己拼 Kernel 的宿主才直接用，传 `AgentsHost`、`InteractionHost`、`WidgetHost`。

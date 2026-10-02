@@ -23,10 +23,16 @@ import type {
 } from '@velaros-ai/context'
 import { createContextRuntime, createContextView } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
-import { isNull, isUndefined, toNullable, toOptional } from '@velaros-ai/core'
+import { isNull, isUndefined, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 import { isEmpty, isString } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import type { ModelImage, ModelTurnRequest, OperationRuntimeApi } from '@velaros-ai/kernel'
+import { AppError, createTimeoutError } from '@velaros-ai/core/error'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import type {
+  InvocationReceipt,
+  ModelImage,
+  ModelTurnRequest,
+  OperationRuntimeApi,
+} from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
 import { createProviderRequestCompiler } from '@velaros-ai/model'
 import type {
@@ -35,24 +41,34 @@ import type {
   CodeSurfaceOutcome,
   ScriptPackageDefinition,
 } from '@velaros-ai/script'
-import { createKernelScriptSession } from '@velaros-ai/script'
+import { createKernelScriptSession, scriptOutputs, scriptPackageCompiler } from '@velaros-ai/script'
 
 import {
   GoalLimits,
   ScriptLeaseLimits,
   StoreProjectionLimits,
 } from '../../system/contract/constants.js'
-import type { ContextCandidateValidator } from '../../system/contract/requires.js'
+import type {
+  ContextCandidateValidator,
+  ProgramCatalogPort,
+} from '../../system/contract/requires.js'
 import type { StoreSessionApi } from '../../system/impl/StoreSession.js'
 import type { GoalControl, GoalState, GoalUpdate } from '../../system/types/goal.js'
 import type { WorkspaceEntry } from '../../system/types/workspace.js'
-import type { VelarosContextOptions, VelarosRuntimeOptions } from '../contract/requires.js'
+import { ObservationReuseLimits } from '../contract/constants.js'
+import type {
+  SnapshotObservationProvider,
+  VelarosContextOptions,
+  VelarosRuntimeOptions,
+} from '../contract/requires.js'
 import type { RuntimeNoteContent, RuntimeNoteRead, RuntimeNoteRetention } from '../types/memory.js'
 import type { ContextMemoryPolicy } from '../types/memory.js'
 import type { PreparedScript, ScriptProtocolSubmission } from '../types/program.js'
 import type { ScriptRetention } from '../types/results.js'
 import type {
+  ObservationProbe,
   ObservationRegistration,
+  ObservationReuseBaseline,
   RuntimeSubmitOptions,
   ScriptControlIdentity,
   ScriptControlOptions,
@@ -62,9 +78,12 @@ import type {
   ScriptProgramVersion,
   ScriptProtocolOptions,
   ScriptReferenceProgram,
+  SnapshotObservationBaseline,
+  SnapshotObservationCapture,
 } from '../types/runtime.js'
 import type {
   ScriptExecutionReceipt,
+  ScriptObservationProgram,
   ScriptSourceProgram,
   ScriptSubmission,
   ScriptSubmissionReceipt,
@@ -81,6 +100,7 @@ import {
 } from '../utils/program-context.js'
 import { failedInvocationRecovery, invocationFeedbackDetails } from '../utils/results.js'
 import { protocolConfig, protocolRules } from '../utils/script-protocol.js'
+import { completeSnapshot } from '../utils/snapshot-observation.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
 
 import type { ContextMemoryApi } from './ContextMemory.js'
@@ -97,6 +117,8 @@ import { standardModules } from './StandardModules.js'
 
 /** 标准模块持有的源码与结果访问端口。 */
 export interface RuntimeSessionAccess extends ContextCandidateValidator {
+  /** 与本会话源码归档及当前检查器共用的程序目录。 */
+  readonly programCatalog: ProgramCatalogPort
   /** 模型与宿主共用的会话目标。 */
   readonly goal: SessionGoalApi
   /** 父运行的取消权，独立于单次脚本调用。 */
@@ -250,7 +272,7 @@ export interface VelarosSession {
   ): Promise<ScriptSubmissionReceipt>
   /** 宿主观察便捷调用，转交 script({observe}) 并将拒绝回执转成错误。 */
   observe(
-    program: ScriptSourceProgram | ScriptReferenceProgram,
+    program: ScriptObservationProgram,
     signal?: AbortSignal,
     options?: ScriptControlOptions
   ): Promise<ObservationRegistration>
@@ -304,12 +326,30 @@ export class RuntimeSession implements VelarosSession {
   private expectedObservation: Nullable<string> = null
   private observationResult?: ContextRef
   private observationImages: readonly ModelImage[] = []
+  /** 仅当前进程建立的完整成功基线；重启始终先真实采集。 */
+  private observationBaseline?: ObservationReuseBaseline
+  private snapshotBaseline?: SnapshotObservationBaseline
+  private readonly snapshotProviders = new WeakMap<SnapshotObservationProvider, string>()
+  /** 超时端口仍未响应取消时，跟踪到收束并禁止再次派发探测。 */
+  private pendingObservationProbe?: Promise<ObservationProbe>
+  private acceptedDecision?: ScriptDecisionBasis
 
   public constructor(
     public readonly id: string,
     private readonly dependencies: RuntimeSessionDependencies
   ) {
     this.goal = new SessionGoal(id, dependencies.storage)
+    const observation = dependencies.contextOptions?.observation
+    if (
+      observation &&
+      (!Number.isSafeInteger(observation.probeTimeoutMs ?? ObservationReuseLimits.probeTimeoutMs) ||
+        (observation.probeTimeoutMs ?? ObservationReuseLimits.probeTimeoutMs) < 1 ||
+        (observation.probeTimeoutMs ?? ObservationReuseLimits.probeTimeoutMs) >
+          ObservationReuseLimits.maxProbeTimeoutMs ||
+        (!isUndefined(observation.maxAgeMs) &&
+          (!Number.isSafeInteger(observation.maxAgeMs) || observation.maxAgeMs < 1)))
+    )
+      throw new AppError('VALIDATION', '观察复用时限超出范围')
     this.config = protocolConfig(dependencies.protocol)
     this.context = createContextRuntime({ sessionId: id, storage: dependencies.storage })
     this.view = createContextView({
@@ -319,7 +359,39 @@ export class RuntimeSession implements VelarosSession {
       sources: dependencies.contextOptions?.sources ?? [],
       limits: dependencies.contextOptions?.limits,
     })
-    this.programs = new ProgramContext(id, this.context, dependencies.storage)
+    this.programs = new ProgramContext(id, this.context, dependencies.storage, {
+      unchanged: async (bindings, signal) => {
+        signal.throwIfAborted()
+        for (const binding of bindings) {
+          if (!dependencies.allowedModules().includes(binding.moduleId))
+            throw new AppError('PERMISSION', '当前会话已失去程序依赖授权')
+          if (
+            JSON.stringify(dependencies.kernel.bind(id, binding.moduleId)) !==
+            JSON.stringify(binding)
+          )
+            return false
+        }
+        return true
+      },
+      validate: async (program, signal) => {
+        signal.throwIfAborted()
+        const script = createKernelScriptSession({
+          packages: dependencies.packages,
+          allowedModules: dependencies.allowedModules(),
+          runtime: dependencies.kernel,
+          runner: dependencies.runner,
+          sessionId: id,
+          executionId: crypto.randomUUID(),
+          mode: 'execute',
+        })
+        const result = script.check(program)
+        if (!result.ok)
+          throw AppError.withFields('VALIDATION', '程序语法或当前 import 授权检查失败', {
+            diagnostics: result.diagnostics,
+          })
+        return script.dependencies(program)
+      },
+    })
     this.history = new RecentContext(id, this.context, dependencies.storage)
     this.memory = new ContextMemory(
       id,
@@ -338,10 +410,14 @@ export class RuntimeSession implements VelarosSession {
         dependencies.kernel.describe(module)
       ),
       summary: (module) => dependencies.kernel.describe(module).summary,
+      index: (module) => {
+        const description = dependencies.kernel.describe(module)
+        return scriptPackageCompiler.index(description.declarations, module, description.template)
+      },
       storeMode: dependencies.stores?.mode,
       maintain: Boolean(dependencies.maintain),
       observe: this.config.allowed.includes('observe'),
-    })}\n\n${protocolRules(this.config)}${
+    })}\n\n${protocolRules(this.config)}\n${JSON.stringify({ snapshotPlans: (dependencies.contextOptions?.snapshots ?? []).filter((provider) => modules.includes(provider.moduleId)).map((provider) => ({ provider: provider.id, plans: provider.plans, module: provider.moduleId, operation: provider.operation })) })}${
       dependencies.tool?.instructions ? `\n${dependencies.tool.instructions}` : ''
     }${dependencies.instructions?.trim() ? `\n宿主应用指令：\n${dependencies.instructions}` : ''}`
     dependencies.register({
@@ -389,6 +465,7 @@ export class RuntimeSession implements VelarosSession {
         return this.runController.signal
       },
       memory: this.memory,
+      programCatalog: this.programs.catalog,
       goal: this.goal,
       phase: () => this.contextPhase,
       interact: (kind, message, signal, detail) => this.request(kind, message, signal, detail),
@@ -481,6 +558,8 @@ export class RuntimeSession implements VelarosSession {
           },
           project: (view, signal, maxChars) => this.project(view, signal, maxChars),
           delta: (body, previous) => memoryPrompt(body, previous),
+          reconcile: (body, history, previous, signal) =>
+            this.memory.reconcile(body, history, previous, signal),
           acknowledge: (request, signal) => this.acknowledge(request, signal),
           completion: async (request, signal, claim) => {
             const goal = dependencies.tool ? null : await this.goal.get(signal)
@@ -493,9 +572,13 @@ export class RuntimeSession implements VelarosSession {
                   'GOAL_ACTIVE: 目标仍在推进，请继续执行；达成后用 done("完成依据") 收尾，确有阻碍用 goal.update 记录依据',
                 recovery: 'repair',
               }
-            const basis = JSON.parse(
+            const frameBasis = JSON.parse(
               request.materials.findLast((item) => item.origin === 'runtime-view')!.text
             ).partitions.runtime.decision as ScriptDecisionBasis
+            const basis =
+              this.acceptedDecision?.frameId === frameBasis.frameId
+                ? this.acceptedDecision
+                : frameBasis
             // 只读模型工具可随时交付带缺口的成果；证据及补丁仍由专项发布器校验。
             if (basis.missing?.length && !dependencies.tool)
               return {
@@ -505,7 +588,7 @@ export class RuntimeSession implements VelarosSession {
                 recovery: 'repair',
               }
             // 收尾不再按读到的版本核对（ADR 0025）：读完之后世界变了，模型要不要重看由它自己判断。
-            // 其余检查都通过才结束目标：运行被打回时，目标不能已经标成完成。
+            // 领域核查通过后，任务、目标与报告在同一存储 CAS 发布。
             if (active && claim) return this.completeGoal(active, claim, signal)
             return undefined
           },
@@ -542,15 +625,18 @@ export class RuntimeSession implements VelarosSession {
       : false
   }
 
-  /** done 附带完成依据时结束进行中的目标；期间目标被用户改动就重新读一帧再判断。 */
+  /** done 的领域核查与目标收尾一起提交；核查失败、取消或目标变化时保持原目标。 */
   private async completeGoal(
     goal: GoalState,
     reason: string,
     signal: AbortSignal
   ): Promise<Optional<ContextCompletionResult>> {
     try {
-      await this.goal.update({ baseRevision: goal.revision, status: 'complete', reason }, signal)
-      return undefined
+      return await this.view.complete(
+        this.dependencies.contextOptions?.completion,
+        signal,
+        this.goal.completion(goal, reason)
+      )
     } catch (error) {
       if ((error as { code?: string }).code !== 'GOAL_CONFLICT') throw error
       return {
@@ -768,7 +854,7 @@ export class RuntimeSession implements VelarosSession {
   }
 
   public async observe(
-    program: ScriptSourceProgram | ScriptReferenceProgram,
+    program: ScriptObservationProgram,
     signal?: AbortSignal,
     options?: ScriptControlOptions
   ): Promise<ObservationRegistration> {
@@ -967,12 +1053,17 @@ export class RuntimeSession implements VelarosSession {
   }
 
   private async prepareProgram(
-    requested: CodeProgramRequest | ScriptReferenceProgram | ScriptObservationEdit,
+    requested:
+      | CodeProgramRequest
+      | ScriptReferenceProgram
+      | ScriptObservationEdit
+      | ScriptObservationProgram,
     control: ScriptControlIdentity,
     signal: AbortSignal,
     execute: boolean
   ): Promise<PreparedScript> {
-    let program = requested
+    const { refresh, ...requestedProgram } = requested as ScriptObservationProgram
+    let program = requestedProgram
     const active = toNullable((await this.programs.state()).observation)
     const parentRef =
       'sourceRef' in program
@@ -982,7 +1073,25 @@ export class RuntimeSession implements VelarosSession {
           : toOptional(control.expectedObservation)
     let candidate: Optional<CodeProgramRequest>
     let version: Optional<ScriptProgramVersion>
+    let snapshot: ScriptProgramVersion['snapshot']
     try {
+      if ('snapshot' in program) {
+        if (execute) throw new AppError('VALIDATION', '纯快照只能登记到 observe')
+        const requestedSnapshot = program.snapshot
+        const provider = this.dependencies.contextOptions?.snapshots?.find(
+          (item) => item.id === requestedSnapshot.provider
+        )
+        if (!provider || !this.dependencies.allowedModules().includes(provider.moduleId))
+          throw new AppError('PERMISSION', '当前会话没有该纯快照提供者')
+        this.dependencies.kernel.bind(this.id, provider.moduleId)
+        snapshot = {
+          provider: provider.id,
+          plan: requestedSnapshot.plan,
+          input: provider.prepare(requestedSnapshot.plan, requestedSnapshot.input),
+          revision: provider.revision,
+        }
+        program = { source: provider.source, input: { plan: snapshot.input } }
+      }
       if (!('source' in program) && !('sourceRef' in program)) {
         if (execute || !control.expectedObservation)
           throw new AppError('SCRIPT_REF', '当前没有可增量编辑的观察版本，请先提供 source')
@@ -996,6 +1105,13 @@ export class RuntimeSession implements VelarosSession {
           })
         if ('sourceRef' in program) {
           const base = await this.programs.version(program.sourceRef)
+          if (
+            base?.snapshot &&
+            !program.edits &&
+            !Object.hasOwn(program, 'input') &&
+            !Object.hasOwn(program, 'blobs')
+          )
+            snapshot = base.snapshot
           const expected = base?.kind === 'draft' ? base.baseObservation : program.sourceRef
           if ((program.edits || base?.kind === 'draft') && expected !== active)
             throw AppError.withFields('SCRIPT_CONFLICT', '编辑底稿已不是当前观察版本', {
@@ -1021,6 +1137,8 @@ export class RuntimeSession implements VelarosSession {
         candidate = edited.program
       }
       const check = script.check(candidate)
+      if (snapshot && script.dependencies(candidate).length)
+        throw new AppError('VALIDATION', '固定纯快照派生不能调用 Kernel 能力')
       if (!check.ok) {
         version = {
           sourceRef: crypto.randomUUID(),
@@ -1049,7 +1167,9 @@ export class RuntimeSession implements VelarosSession {
       const unchanged = Boolean(
         !historicalSwitch &&
         baseline &&
-        stableProgramJson(baseline) === stableProgramJson(candidate)
+        stableProgramJson(baseline) === stableProgramJson(candidate) &&
+        scriptOutputs.hash(toNullable((await this.programs.version(active!))?.snapshot)) ===
+          scriptOutputs.hash(toNullable(snapshot))
       )
       // 复用一次性源码和重跑观察都不增加编辑版本。
       const reuse =
@@ -1070,6 +1190,7 @@ export class RuntimeSession implements VelarosSession {
               parentRef,
               baseObservation: control.expectedObservation,
               kind: execute ? 'execution' : 'observation',
+              snapshot,
             }
       const edits = 'sourceRef' in program ? program.edits : undefined
       const changes = edits
@@ -1088,6 +1209,7 @@ export class RuntimeSession implements VelarosSession {
           changes,
           executed: false,
           effective: !execute ? ('next-model-turn' as const) : undefined,
+          refresh: !execute && refresh ? true : undefined,
         },
       }
     } catch (error) {
@@ -1128,11 +1250,543 @@ export class RuntimeSession implements VelarosSession {
     this.observationResult = undefined
     this.observationImages = []
     const state = await this.programs.state()
-    if (state.health?.status === 'paused' && state.health.sourceRef === state.observation) {
-      this.observationResult = { sessionId: this.id, id: state.health.lastResult }
+    if (!state.observation) {
+      this.observationBaseline = undefined
+      this.snapshotBaseline = undefined
       return
     }
-    if (state.observation) await this.launch({ sourceRef: state.observation }, signal, 'observe')
+    if (state.health?.status === 'paused' && state.health.sourceRef === state.observation) {
+      this.observationBaseline = undefined
+      this.snapshotBaseline = undefined
+      this.observationResult = { sessionId: this.id, id: state.health.lastResult }
+      const saved = await this.context.read(this.observationResult, { limit: 1 })
+      const raw = await this.dependencies.storage.get(this.id, saved.record.objectId)
+      const executionId = raw ? JSON.parse(raw).executionId : undefined
+      if (executionId)
+        await this.programs.observationCollection({
+          status: 'paused',
+          reason: state.health.reason ?? 'paused',
+          sourceRef: state.observation,
+          resultRef: state.health.lastResult,
+          executionId,
+          observedAt: saved.record.createdAt,
+          ageMs: Math.max(0, Date.now() - Date.parse(saved.record.createdAt)),
+          probeMs: 0,
+        })
+      return
+    }
+    const version = await this.programs.version(state.observation)
+    if (version?.snapshot) {
+      this.observationBaseline = undefined
+      await this.prepareSnapshotObservation(version, state.observationRefresh, signal)
+      return
+    }
+    this.snapshotBaseline = undefined
+    const program = this.dependencies.contextOptions?.observation
+      ? await this.resolveProgram({ sourceRef: state.observation }, signal)
+      : undefined
+    const probeEnabled = Boolean(program)
+    const probeStarted = performance.now()
+    const before: ObservationProbe = program
+      ? await this.probeObservation(program, signal)
+      : { kind: 'unknown', reason: 'collect-every-turn' }
+    let probeMs = probeEnabled ? performance.now() - probeStarted : 0
+    const baseline = this.observationBaseline
+    const maxAge = this.dependencies.contextOptions?.observation?.maxAgeMs
+    const same =
+      baseline &&
+      before.kind === 'versioned' &&
+      baseline.sourceRef === state.observation &&
+      baseline.sourceHash === before.sourceHash &&
+      baseline.inputHash === before.inputHash &&
+      baseline.scopeFingerprint === before.scopeFingerprint &&
+      baseline.providerId === before.providerId &&
+      baseline.token === before.token
+    const ageMs = baseline ? Math.max(0, Date.now() - Date.parse(baseline.observedAt)) : 0
+    let reason = state.observationRefresh
+      ? 'refresh-requested'
+      : before.kind === 'unknown'
+        ? before.reason
+        : !baseline
+          ? 'no-current-process-baseline'
+          : !same
+            ? 'identity-or-version-changed'
+            : !isUndefined(maxAge) && ageMs > maxAge
+              ? 'max-age'
+              : 'stable-version'
+    if (same && program && !state.observationRefresh && (isUndefined(maxAge) || ageMs <= maxAge)) {
+      try {
+        const images = await this.restoreObservationImages(baseline.resultRef, signal)
+        const recheckStarted = performance.now()
+        const recheck = await this.probeObservation(program, signal)
+        probeMs += performance.now() - recheckStarted
+        if (
+          recheck.kind === 'versioned' &&
+          recheck.sourceHash === before.sourceHash &&
+          recheck.inputHash === before.inputHash &&
+          recheck.scopeFingerprint === before.scopeFingerprint &&
+          recheck.providerId === before.providerId &&
+          recheck.token === before.token
+        ) {
+          this.observationResult = { sessionId: this.id, id: baseline.resultRef }
+          this.observationImages = images
+          await this.programs.observationCollection({
+            status: 'reused',
+            reason: 'stable-version',
+            sourceRef: state.observation,
+            resultRef: baseline.resultRef,
+            executionId: baseline.executionId,
+            observedAt: baseline.observedAt,
+            ageMs,
+            probeMs,
+          })
+          return
+        }
+        reason = recheck.kind === 'unknown' ? recheck.reason : 'version-changed-during-restore'
+      } catch (error) {
+        signal.throwIfAborted()
+        if (
+          !['NOT_FOUND', 'OBJECT_MISSING', 'REF_NOT_FOUND'].includes(
+            (error as { code?: string }).code ?? ''
+          )
+        )
+          throw error
+        reason = 'attachment-or-result-unavailable'
+      }
+    }
+    this.observationBaseline = undefined
+    const result = (await this.launch(
+      { sourceRef: state.observation },
+      signal,
+      'observe'
+    )) as ScriptExecutionReceipt
+    const afterStarted = performance.now()
+    const after: ObservationProbe = program
+      ? await this.probeObservation(program, signal)
+      : { kind: 'unknown', reason: 'collect-every-turn' }
+    if (probeEnabled) probeMs += performance.now() - afterStarted
+    const ref = this.observationResult!
+    const saved = await this.context.read(ref, { limit: 1 })
+    const persisted = await this.dependencies.storage.get(this.id, saved.record.objectId)
+    if (isNull(persisted)) throw new AppError('NOT_FOUND', '观察结果缺失')
+    const executionId = JSON.parse(persisted).executionId as string
+    const health = (await this.programs.state()).health
+    const complete =
+      result.checked &&
+      !result.result.failed &&
+      !result.result.unsettled?.length &&
+      !result.output?.issues.length &&
+      health?.sourceRef === state.observation &&
+      health.status === 'healthy'
+    if (
+      complete &&
+      before.kind === 'versioned' &&
+      after.kind === 'versioned' &&
+      before.sourceHash === after.sourceHash &&
+      before.inputHash === after.inputHash &&
+      before.scopeFingerprint === after.scopeFingerprint &&
+      before.providerId === after.providerId &&
+      before.token === after.token
+    ) {
+      this.observationBaseline = {
+        sourceRef: state.observation,
+        sourceHash: after.sourceHash,
+        inputHash: after.inputHash,
+        scopeFingerprint: after.scopeFingerprint,
+        providerId: after.providerId,
+        token: after.token,
+        resultRef: ref.id,
+        executionId,
+        observedAt: saved.record.createdAt,
+      }
+    } else if (!complete) reason = 'collection-incomplete'
+    else if (after.kind === 'unknown') reason = after.reason
+    else if (before.kind === 'versioned') reason = 'version-changed-during-collection'
+    await this.programs.observationCollection(
+      {
+        status: 'collected',
+        reason,
+        sourceRef: state.observation,
+        resultRef: ref.id,
+        executionId,
+        observedAt: saved.record.createdAt,
+        ageMs: Math.max(0, Date.now() - Date.parse(saved.record.createdAt)),
+        probeMs,
+      },
+      state.observationRefresh
+    )
+  }
+
+  private async snapshotIdentity(
+    version: ScriptProgramVersion,
+    signal: AbortSignal
+  ): Promise<string> {
+    const plan = version.snapshot!
+    if ((await this.programs.state()).observation !== version.sourceRef)
+      throw new AppError('CONFLICT', '当前快照观察版本已经变化')
+    const provider = this.dependencies.contextOptions?.snapshots?.find(
+      (item) => item.id === plan.provider
+    )
+    if (!provider || !this.dependencies.allowedModules().includes(provider.moduleId))
+      throw new AppError('PERMISSION', '当前会话没有该纯快照提供者')
+    if (provider.revision !== plan.revision)
+      throw new AppError('UNAVAILABLE', '固定快照计划已经升级，重新登记当前计划')
+    const program = await this.resolveProgram({ sourceRef: version.sourceRef }, signal)
+    if (program.source !== provider.source)
+      throw new AppError('UNAVAILABLE', '固定派生源码已经变化，重新登记当前计划')
+    let incarnation = this.snapshotProviders.get(provider)
+    if (!incarnation) {
+      incarnation = crypto.randomUUID()
+      this.snapshotProviders.set(provider, incarnation)
+    }
+    const snapshot = this.dependencies.storage.selectSnapshot
+      ? await this.dependencies.storage.selectSnapshot(this.id, [
+          { title: 'search:history-reset', latest: true },
+        ])
+      : await this.dependencies.storage.load(this.id)
+    const metadata = snapshot && ('metadata' in snapshot ? snapshot.metadata : snapshot)
+    signal.throwIfAborted()
+    return scriptOutputs.hash({
+      plan,
+      incarnation,
+      source: provider.source,
+      module: this.dependencies.kernel.bind(this.id, provider.moduleId),
+      modules: [...this.dependencies.allowedModules()].sort(),
+      task: metadata?.task?.id,
+      taskStarted: metadata?.task?.startedSequence,
+      reset:
+        snapshot?.records.findLast((item) => item.title === 'search:history-reset')?.sequence ?? 0,
+    })
+  }
+
+  private async prepareSnapshotObservation(
+    version: ScriptProgramVersion,
+    refresh: Optional<string>,
+    signal: AbortSignal
+  ): Promise<void> {
+    const source = { sessionId: this.id, id: version.sourceRef }
+    const captureExecutionId = crypto.randomUUID()
+    const captureStarted = performance.now()
+    await this.context.append(
+      {
+        kind: 'audit',
+        title: `script:execution:${captureExecutionId}`,
+        body: JSON.stringify({
+          executionId: captureExecutionId,
+          taskId: (await this.view.inspect())?.id,
+          mode: 'observe',
+          kind: 'snapshot-capture',
+        }),
+        sources: [source],
+      },
+      signal
+    )
+    let receipt: Optional<InvocationReceipt>
+    let capture: Optional<SnapshotObservationCapture>
+    let failure: Optional<AppError>
+    let identity: Optional<string>
+    try {
+      identity = await this.snapshotIdentity(version, signal)
+      const provider = this.dependencies.contextOptions!.snapshots!.find(
+        (item) => item.id === version.snapshot!.provider
+      )!
+      const input = provider.prepare(version.snapshot!.plan, version.snapshot!.input)
+      receipt = await this.dependencies.kernel.invoke(
+        {
+          mode: 'observe',
+          id: `${captureExecutionId}:1`,
+          sessionId: this.id,
+          executionId: captureExecutionId,
+          binding: this.dependencies.kernel.bind(this.id, provider.moduleId),
+          operation: provider.operation,
+          input,
+        },
+        signal
+      )
+      if (
+        receipt.outcome !== 'succeeded' ||
+        receipt.effect !== 'none' ||
+        !receipt.observation?.completed ||
+        receipt.attachments?.length
+      )
+        throw new AppError(
+          receipt.error?.code ?? 'UNAVAILABLE',
+          receipt.error?.message ?? '快照捕获没有完整收束'
+        )
+      capture = completeSnapshot(receipt.value)
+      if (identity !== (await this.snapshotIdentity(version, signal)))
+        throw new AppError('CONFLICT', '捕获期间快照任务、授权或提供者绑定已经变化')
+    } catch (error) {
+      failure = AppError.from(error)
+      Log.tag('ActRuntime').debug('快照捕获失败，保存领域回执后重新采集', { error })
+    }
+    const captureMs = performance.now() - captureStarted
+    const checkedAt =
+      capture?.checkedAt ?? receipt?.lifecycle?.settledAt ?? new Date().toISOString()
+    const captureResult = await this.context.append({
+      kind: 'audit',
+      title: `script:${captureExecutionId}:result`,
+      body: JSON.stringify({
+        executionId: captureExecutionId,
+        mode: 'observe',
+        kind: 'snapshot-capture',
+        checked: true,
+        capture: optionalWhen(!failure, capture),
+        result: failure ? { failed: { code: failure.code, message: failure.message } } : {},
+        timing: { durationMs: captureMs },
+        invocationId: receipt?.invocation.id,
+        diagnostic: receipt?.diagnostic,
+      }),
+      sources: [source],
+    })
+    let failedCost: Optional<{ readRequests: number; materialBytes: number }>
+    if (receipt?.diagnostic?.code === 'PROJECT_SNAPSHOT_COST') {
+      try {
+        failedCost = JSON.parse(receipt.diagnostic.message)
+      } catch (error) {
+        Log.tag('ActRuntime').debug('快照计量诊断无法解析，保留成本未知', { error })
+      }
+    }
+    const metrics = {
+      captureExecutionId,
+      captureResultRef: captureResult.ref.id,
+      checkedAt,
+      captureMs,
+      readRequests: capture?.readRequests ?? failedCost?.readRequests,
+      materialBytes: capture?.materialBytes ?? failedCost?.materialBytes,
+      deriveMs: 0,
+      derived: false,
+      reused: false,
+    }
+    if (failure || !capture || !identity) {
+      this.snapshotBaseline = undefined
+      this.observationResult = captureResult.ref
+      await this.programs.observeHealth(
+        version.sourceRef,
+        captureResult.ref.id,
+        false,
+        !receipt || receipt.effect !== 'none'
+      )
+      await this.programs.observationCollection(
+        {
+          status: 'collected',
+          reason: 'snapshot-capture-failed',
+          sourceRef: version.sourceRef,
+          resultRef: captureResult.ref.id,
+          executionId: captureExecutionId,
+          observedAt: checkedAt,
+          ageMs: 0,
+          probeMs: 0,
+          snapshot: metrics,
+        },
+        refresh
+      )
+      signal.throwIfAborted()
+      return
+    }
+    const fingerprint = scriptOutputs.hash(capture.value)
+    const baseline = this.snapshotBaseline
+    let reason = refresh
+      ? 'refresh-requested'
+      : !baseline
+        ? 'no-current-process-baseline'
+        : 'snapshot-value-or-identity-changed'
+    if (
+      !refresh &&
+      baseline?.sourceRef === version.sourceRef &&
+      baseline.identity === identity &&
+      baseline.providerId === capture.providerId &&
+      baseline.fingerprint === fingerprint
+    ) {
+      try {
+        const images = await this.restoreObservationImages(baseline.resultRef, signal)
+        if (identity === (await this.snapshotIdentity(version, signal))) {
+          this.observationResult = { sessionId: this.id, id: baseline.resultRef }
+          this.observationImages = images
+          await this.programs.observationCollection({
+            status: 'reused',
+            reason: 'same-complete-snapshot-value',
+            sourceRef: version.sourceRef,
+            resultRef: baseline.resultRef,
+            executionId: baseline.executionId,
+            observedAt: baseline.observedAt,
+            ageMs: Math.max(0, Date.now() - Date.parse(baseline.observedAt)),
+            probeMs: 0,
+            snapshot: { ...metrics, reused: true },
+          })
+          return
+        }
+        throw new AppError('CONFLICT', '恢复派生结果期间快照身份已经变化')
+      } catch (error) {
+        signal.throwIfAborted()
+        if (
+          !['NOT_FOUND', 'OBJECT_MISSING', 'REF_NOT_FOUND'].includes(
+            (error as { code?: string }).code ?? ''
+          )
+        )
+          throw error
+        reason = 'attachment-or-result-unavailable'
+      }
+    }
+    this.snapshotBaseline = undefined
+    const deriveStarted = performance.now()
+    const program = await this.resolveProgram({ sourceRef: version.sourceRef }, signal)
+    const executionId = crypto.randomUUID()
+    const result = await this.perform(
+      { ...program, input: { plan: version.snapshot!.input, capture: capture.value } },
+      signal,
+      'observe',
+      undefined,
+      source,
+      executionId
+    )
+    const deriveMs = performance.now() - deriveStarted
+    const resultRef = this.observationResult!.id
+    const health = (await this.programs.state()).health
+    const complete =
+      result.checked &&
+      !result.result.failed &&
+      !result.result.unsettled?.length &&
+      !result.output?.issues.length &&
+      health?.sourceRef === version.sourceRef &&
+      health.status === 'healthy'
+    if (complete && identity === (await this.snapshotIdentity(version, signal)))
+      this.snapshotBaseline = {
+        sourceRef: version.sourceRef,
+        identity,
+        providerId: capture.providerId,
+        fingerprint,
+        executionId,
+        resultRef,
+        observedAt: checkedAt,
+      }
+    else reason = 'snapshot-derivation-incomplete'
+    await this.programs.observationCollection(
+      {
+        status: 'collected',
+        reason,
+        sourceRef: version.sourceRef,
+        resultRef,
+        executionId,
+        observedAt: checkedAt,
+        ageMs: Math.max(0, Date.now() - Date.parse(checkedAt)),
+        probeMs: 0,
+        snapshot: { ...metrics, deriveMs, derived: true },
+      },
+      refresh
+    )
+  }
+
+  private async probeObservation(
+    program: CodeProgramRequest,
+    signal: AbortSignal
+  ): Promise<ObservationProbe> {
+    const options = this.dependencies.contextOptions?.observation
+    if (!options) return { kind: 'unknown', reason: 'collect-every-turn' }
+    if (this.pendingObservationProbe) return { kind: 'unknown', reason: 'probe-still-settling' }
+    signal.throwIfAborted()
+    const controller = new AbortController()
+    const cancel = (): void => controller.abort(signal.reason ?? this.lifetime.signal.reason)
+    signal.addEventListener('abort', cancel, { once: true })
+    this.lifetime.signal.addEventListener('abort', cancel, { once: true })
+    const timers = new TimerScope({ name: 'RuntimeSession.observationProbe' })
+    timers.after(options.probeTimeoutMs ?? ObservationReuseLimits.probeTimeoutMs, () =>
+      controller.abort(createTimeoutError('观察代次探测超时'))
+    )
+    let onAbort = (): void => {}
+    const aborted = new Promise<ObservationProbe>((resolve) => {
+      onAbort = () => resolve({ kind: 'unknown', reason: 'probe-timeout-or-cancelled' })
+      controller.signal.addEventListener('abort', onAbort, { once: true })
+    })
+    const pending = Promise.resolve()
+      .then(async (): Promise<ObservationProbe> => {
+        const scope = await options.scope(this.id, controller.signal)
+        controller.signal.throwIfAborted()
+        if (!isString(scope) || !scope || scope.length > ObservationReuseLimits.identityChars)
+          return { kind: 'unknown', reason: 'scope-unknown' }
+        const snapshot = this.dependencies.storage.selectSnapshot
+          ? await this.dependencies.storage.selectSnapshot(this.id, [
+              { title: 'search:history-reset', latest: true },
+            ])
+          : await this.dependencies.storage.load(this.id)
+        controller.signal.throwIfAborted()
+        const metadata = snapshot && ('metadata' in snapshot ? snapshot.metadata : snapshot)
+        const modules = [...this.dependencies.allowedModules()]
+          .sort()
+          .map((moduleId) => this.dependencies.kernel.describe(moduleId).binding)
+        const fingerprint = {
+          sourceHash: scriptOutputs.hash({ source: program.source, modules: program.modules }),
+          inputHash: scriptOutputs.hash({ input: program.input, blobs: program.blobs }),
+          scopeFingerprint: scriptOutputs.hash({
+            task: metadata?.task?.id,
+            taskStarted: metadata?.task?.startedSequence,
+            reset:
+              snapshot?.records.findLast((record) => record.title === 'search:history-reset')
+                ?.sequence ?? 0,
+            modules,
+            scope,
+          }),
+        }
+        const result = await options.reuse.probe(
+          { sessionId: this.id, ...fingerprint },
+          controller.signal
+        )
+        controller.signal.throwIfAborted()
+        if (result?.kind !== 'versioned') return { kind: 'unknown', reason: 'dependencies-unknown' }
+        if (
+          !isString(result.providerId) ||
+          !result.providerId ||
+          result.providerId.length > ObservationReuseLimits.identityChars ||
+          !isString(result.token) ||
+          !result.token ||
+          result.token.length > ObservationReuseLimits.identityChars
+        )
+          return { kind: 'unknown', reason: 'version-invalid' }
+        return {
+          kind: 'versioned',
+          ...fingerprint,
+          providerId: result.providerId,
+          token: result.token,
+        }
+      })
+      .catch((): ObservationProbe => ({ kind: 'unknown', reason: 'probe-failed' }))
+    this.pendingObservationProbe = pending
+    void pending.finally(() => {
+      if (this.pendingObservationProbe === pending) this.pendingObservationProbe = undefined
+    })
+    try {
+      const result = await Promise.race([pending, aborted])
+      signal.throwIfAborted()
+      this.lifetime.signal.throwIfAborted()
+      return result
+    } finally {
+      timers.dispose()
+      controller.signal.removeEventListener('abort', onAbort)
+      signal.removeEventListener('abort', cancel)
+      this.lifetime.signal.removeEventListener('abort', cancel)
+    }
+  }
+
+  private async restoreObservationImages(
+    resultRef: string,
+    signal: AbortSignal
+  ): Promise<readonly ModelImage[]> {
+    const ref = { sessionId: this.id, id: resultRef }
+    await this.dependencies.tool?.authorizeReference(ref, signal)
+    const result = await this.context.read(ref, { limit: 1 })
+    const raw = await this.dependencies.storage.get(this.id, result.record.objectId)
+    if (isNull(raw)) throw new AppError('NOT_FOUND', '观察结果缺失')
+    const saved = JSON.parse(raw) as { attachments?: readonly ContextRef[] }
+    const images: ModelImage[] = []
+    for (const attachment of saved.attachments ?? []) {
+      signal.throwIfAborted()
+      await this.dependencies.tool?.authorizeReference(attachment, signal)
+      const record = await this.context.read(attachment, { limit: 1 })
+      const image = await this.dependencies.storage.get(this.id, record.record.objectId)
+      if (isNull(image)) throw new AppError('NOT_FOUND', '观察图像缺失')
+      images.push(JSON.parse(image) as ModelImage)
+    }
+    return images
   }
 
   private async acknowledge(request: ModelTurnRequest, signal: AbortSignal): Promise<void> {
@@ -1143,7 +1797,7 @@ export class RuntimeSession implements VelarosSession {
       this.expectedObservation = toNullable(frame.partitions.observation.sourceRef)
       if (frame.frameId && request.mode !== 'maintenance') {
         await this.programs.consume(frame.frameId, signal)
-        await this.memory.acknowledge(frame.frameId, signal)
+        this.acceptedDecision = await this.memory.acknowledge(frame.frameId, signal, request)
         if (frame.partitions.runtime.stores)
           await this.dependencies.stores?.acknowledge(frame.partitions.runtime.stores)
       }
@@ -1622,6 +2276,7 @@ export class RuntimeSession implements VelarosSession {
           !failure &&
           result?.checked &&
           !result.result.failed &&
+          !result.result.unsettled?.length &&
           !result.output?.issues.length &&
           !observationFeedback?.some((item) => item.outcome !== 'succeeded') &&
           isEmpty(uncertain)
@@ -1733,12 +2388,7 @@ export class RuntimeSession implements VelarosSession {
     const task = await this.view.inspect()
     const children = this.dependencies.agents?.pending(this.id)
       ? []
-      : (await this.currentChildren()).filter(
-          (job) =>
-            ['running', 'waiting'].includes(job.status) ||
-            // 旧版本记下的 needs_reconcile 同样是没收尾的子任务
-            (job.status as string) === 'needs_reconcile'
-        )
+      : (await this.currentChildren()).filter((job) => ['running', 'waiting'].includes(job.status))
     if (
       !this.backgroundFailure &&
       task?.status !== 'executing' &&

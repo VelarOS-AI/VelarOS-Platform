@@ -5,10 +5,10 @@
  */
 import ts from 'typescript'
 
-import { isNotNull, isNull, isUndefined } from '@velaros-ai/core'
+import { isEmpty, isNotNull, isNull, isUndefined } from '@velaros-ai/core'
 
 import { CodeSurfaceDiagnosticCodes } from '../contract/constants.js'
-import type { CodeProgramDiagnostic } from '../types/script.js'
+import type { CodeProgramDiagnostic, ScriptModuleExportsSlice } from '../types/script.js'
 
 import { renderDiagnosticFrame } from './diagnostics.js'
 import { readModuleReferences } from './module-form.js'
@@ -96,15 +96,12 @@ export function declaredModules(
   return modules
 }
 
-/**
- * 从一个模块的声明里切出一个导出（函数或类型；函数的重载一并带上），加上它传递用到的、同一模块里声明的类型；
- * 各条保持原来的先后与注释，外面包回 `declare module`。模块里没有这个名字时 declarations 为 null，exports 给出它导出的值。
- */
-export function sliceModuleExport(
+/** 多导出共享类型闭包与模块共同规则。 */
+export function sliceModuleExports(
   declarations: string,
   specifier: string,
-  name: string
-): { declarations: Nullable<string>; exports: string[] } {
+  names: readonly string[]
+): ScriptModuleExportsSlice {
   const file = ts.createSourceFile(
     DeclarationFileName,
     declarations,
@@ -124,10 +121,15 @@ export function sliceModuleExport(
   for (const statement of body)
     for (const declared of declaredNamesOf(statement))
       byName.set(declared, [...(byName.get(declared) ?? []), statement])
-  if (!byName.has(name)) return { declarations: null, exports }
+  const requested = [...new Set(names)]
+  const missing = requested.filter((name) => !byName.has(name))
+  if (!module || isEmpty(requested) || !isEmpty(missing))
+    return { declarations: null, exports, missing }
+
+  const moduleDocs = file.text.slice(module.getFullStart(), module.getStart(file)).trim()
 
   const picked = new Set<ts.Statement>()
-  const pending = [name]
+  const pending = [...requested]
   for (let next = pending.pop(); !isUndefined(next); next = pending.pop())
     for (const statement of byName.get(next) ?? []) {
       if (picked.has(statement)) continue
@@ -138,7 +140,12 @@ export function sliceModuleExport(
     .filter((statement) => picked.has(statement))
     .map((statement) => statement.getFullText(file).replace(/^\n+/u, ''))
     .join('\n')
-  return { declarations: `declare module '${specifier}' {\n${text}\n}`, exports }
+  const prefix = moduleDocs ? `${moduleDocs}\n` : ''
+  return {
+    declarations: `${prefix}declare module '${specifier}' {\n${text}\n}`,
+    exports,
+    missing,
+  }
 }
 
 /** 一段声明里引用到的类型名：类型引用、extends / implements 的基类型、typeof 的对象（限定名取最左边那段）。 */
@@ -347,8 +354,8 @@ export function diagnoseOutputTypes(
         const options = node.arguments[1]!
         const kinds = outputDisplayKinds(options, checker)
         const requiresString =
-          kinds.length > 0 && kinds.every((kind) => kind === 'text' || kind === 'code')
-        const requiresList = kinds.length > 0 && kinds.every((kind) => kind === 'list')
+          !isEmpty(kinds) && kinds.every((kind) => kind === 'text' || kind === 'code')
+        const requiresList = !isEmpty(kinds) && kinds.every((kind) => kind === 'list')
         const value = node.arguments[0]!
         const values = outputExpressionLeaves(value, checker)
         const impossible =

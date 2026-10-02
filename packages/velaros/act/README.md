@@ -2,7 +2,7 @@
 
 <!-- 由 scripts/script/act-catalog.mjs 从 surfaces.mjs 的登记与生成的模型面写出，不要手改。 -->
 
-当前共 15 种合同投影、90 个投影操作、48 项去重后的用法。系统包 `velaros:system` 有 4 个成员（modules、goal、memory、store），每个成员按宿主装配与会话授权挂上其中一种投影；实际可用项由宿主配置、会话作用域和当前授权决定。
+当前共 16 种合同投影、93 个投影操作、51 项去重后的用法。系统包 `velaros:system` 有 5 个成员（modules、programs、goal、memory、store），每个成员按宿主装配与会话授权挂上其中一种投影；实际可用项由宿主配置、会话作用域和当前授权决定。
 
 | 目录 | 模型操作 | 可用条件 | 使用模板 |
 | --- | --- | --- | --- |
@@ -15,6 +15,7 @@
 | [system/ — system-store-write](system/README.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch`、`publish`、`share`、`set`、`remove` | 获配空间写入范围 | [store-write-template.js](system/store-write-template.js) |
 | [system/ — system-store-read](system/README.md) | `list`、`keys`、`get`、`events`、`read`、`subscribe`、`ack`、`watch` | 共享空间只读授权 | [store-read-template.js](system/store-read-template.js) |
 | [system/ — modules](system/README.md) | `list`、`search`、`describe` | 默认装配 | [modules-template.js](system/modules-template.js) |
+| [system/ — programs](system/README.md) | `publish`、`list`、`describe` | 具备当前会话程序目录 | [programs-template.js](system/programs-template.js) |
 | [system/ — context-materials](system/README.md) | `list`、`read`、`submit` | 整理作用域 | [context-materials-template.js](system/context-materials-template.js) |
 | [agents/ — interaction](agents/README.md) | `ask`、`confirm` | 默认装配 | [interaction-template.js](agents/interaction-template.js) |
 | [agents/ — widget](agents/README.md) | `show` | 宿主配置 widgets | [widget-template.js](agents/widget-template.js) |
@@ -31,7 +32,7 @@
 ```js
 import { output } from 'velaros';
 import { modules } from 'velaros:system';
-const usage = await modules.describe({ module: 'velaros:system', export: 'memory' });
+const usage = await modules.describe({ module: 'velaros:system', exports: ['memory'], template: true });
 output(usage.template, { type: 'code' }); // 按需读取模型用法；精确参数见 usage.declarations
 ```
 
@@ -66,7 +67,10 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 | `system.store.create` | `execute` | `write` | 创建一个独立的持久空间，返回稳定 id；重启之后用 list 找回来。 |
 | `system.modules.list` | `observe`、`execute` | `none` | 分页列出模块，可按 space 只看系统成员或业务能力。 |
 | `system.modules.search` | `observe`、`execute` | `none` | 按关键词找模块：匹配模块名、简介与操作名。 |
-| `system.modules.describe` | `observe`、`execute` | `none` | 读一个模块的合同：完整声明、用法示例与每个操作的说明。 |
+| `system.modules.describe` | `observe`、`execute` | `none` | 读模块或指定导出的合同；exports 可同次读取多个导出及去重的依赖类型，指定导出时示例按 template: true 读取。 |
+| `system.programs.publish` | `execute` | `write` | 检查并发布不可变程序，baseRevision 控制同名更新；语法、import 或版本失败不改变已发布名称。 |
+| `system.programs.list` | `observe`、`execute` | `none` | 列当前会话授权范围内的程序；重置前的程序不因目录查询恢复可见性。 |
+| `system.programs.describe` | `observe`、`execute` | `none` | 读稳定名称的当前版本，或仍可访问的 sourceRef 原版本；只是目录，不重新执行。 |
 | `velaros:context-materials.list` | `execute` | `none` | 列快照里的原文元数据，不读正文。 |
 | `velaros:context-materials.read` | `execute` | `none` | 按快照里的引用读一页父会话原文，正文在 text。 |
 | `velaros:context-materials.submit` | `execute` | `none` | 交来整理补丁：先整份校验，不合格就报错（修正后再交），合格就受理；受理之后声明完成。 |
@@ -83,7 +87,7 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 | `velaros:agents.send` | `execute` | `none` | 给正在跑的子任务发引导。 |
 | `velaros:search.profiles` | `observe`、`execute` | `none` | 列出能选的搜索档位、默认的那个与它们的全部资源上限。 |
 | `velaros:search.search` | `execute` | `none` | 新建或续查一项有界搜索，返回报告。 |
-| `velaros:search.read` | `observe`、`execute` | `none` | 读已发布的报告：snapshot 读当时的原文，current 重读选中证据的现状。 |
+| `velaros:search.read` | `observe`、`execute` | `none` | 读已发布的报告：snapshot 读当时的原文，按 text/offset/totalChars 续读；current 重读选中证据的现状，按条目 offset、items.length 与 total 续读，保留每项 ok、stamp 和 complete，不把本页当全部证据。两种读取都不调用模型。 |
 | `velaros:evidence.query` | `execute` | `none` | 在一个来源里按字面检索候选；source 用本轮实际授权的来源。 |
 | `velaros:evidence.read` | `execute` | `none` | 读一个资源并登记成证据：返回证据 id、原文引用与读到的版本。 |
 | `velaros:evidence.report` | `execute` | `none` | 交付这次搜索的结论；受理之后声明完成。结论不合约定时报错，修正后再交。 |

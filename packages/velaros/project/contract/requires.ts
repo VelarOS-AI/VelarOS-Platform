@@ -418,6 +418,13 @@ export interface ProjectSpacePort {
  * 每次调用 `velaros:project`、`velaros:code` 时空间给的上下文。它不是模型能填的入参：空间分发这次调用时装好，生成声明时整个丢掉。
  */
 export interface ProjectOperationContext {
+  /** 领域确认固定只读捕获已经完整收束，保存观察保护事实。 */
+  recordSnapshotCompletion?(): void
+  /** 失败捕获的真实成本随 Kernel 独立诊断保存；不是业务结果或完整采集证明。 */
+  recordSnapshotMetrics?(metrics: {
+    readonly readRequests: number
+    readonly materialBytes: number
+  }): void
   /** 本次调用的取消信号：用户取消或上层超时时触发；工具在排队与每一步之间核对，宿主的查询也应随之停下。 */
   abortSignal: AbortSignal
   /** 空间端口：项目根、内核与代码查询都经它要。 */

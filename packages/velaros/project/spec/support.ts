@@ -43,6 +43,7 @@ import {
   type ProjectProviders,
   type ProjectReadInput,
   type ProjectSearchInput,
+  type ProjectSnapshotInput,
   type ProjectSpacePort,
 } from '../index'
 
@@ -77,6 +78,8 @@ export async function createProjectHarness(root: string, options: ProjectHarness
   // 空间装配时给两件工具的就是这张表：每次调用交同一份上下文。
   const operations = {
     project: {
+      snapshot: (input: unknown) =>
+        projectFileOperations.snapshot(input as ProjectSnapshotInput, context),
       read: (input: unknown) => projectFileOperations.read(input as ProjectReadInput, context),
       list: (input: unknown) => projectFileOperations.list(input as ProjectListInput, context),
       search: (input: unknown) =>

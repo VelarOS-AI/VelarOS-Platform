@@ -27,7 +27,7 @@ export interface SearchOperationsApi {
    * @OperationModes execute
    */
   search(input: SearchRequest, ctx: SearchOperationContext): Promise<SearchResult>
-  /** @AgentView 读已发布的报告：snapshot 读当时的原文，current 重读选中证据的现状。
+  /** @AgentView 读已发布的报告：snapshot 读当时的原文，按 text/offset/totalChars 续读；current 重读选中证据的现状，按条目 offset、items.length 与 total 续读，保留每项 ok、stamp 和 complete，不把本页当全部证据。两种读取都不调用模型。
    * @OperationEffect none
    */
   read(input: SearchReadInput, ctx: SearchOperationContext): Promise<SearchReadResult>

@@ -23,6 +23,19 @@ export interface ContextMemoryPolicy {
   readonly workspaceShare?: number
   /** 近期记录正文的目标份额，0–0.5。 */
   readonly recentShare?: number
+  /** 当前状态细节按预算裁剪或完整呈现；约束、障碍、身份与原文覆盖始终保持。 */
+  readonly stateDetails?: 'budgeted' | 'full'
+}
+
+/** 当前状态编译的实际展示计量；字符数不是供应商 token 或费用。 */
+export interface DecisionStateProjection {
+  readonly runtime: Record<string, unknown>
+  readonly details: readonly string[]
+  readonly budget: number
+  readonly originalChars: number
+  readonly shownChars: number
+  readonly savedChars: number
+  readonly overBudget: boolean
 }
 
 /** 工作笔记的不可变版本，内容始终标为模型解释。 */
@@ -76,7 +89,7 @@ export type MemoryFrameResult = Record<string, unknown> & {
   readonly source?: string
 }
 
-/** 一帧按展示口径整理好的各分区；完整帧与增量帧共用。 */
+/** 一帧按展示口径整理好的当前状态与可独立读取的原文。 */
 export interface MemoryFrameDisplay {
   readonly task: Record<string, unknown>
   readonly workspace: Record<string, unknown>
@@ -84,6 +97,8 @@ export interface MemoryFrameDisplay {
   readonly observed: Record<string, unknown>
   readonly source: string
   readonly output: string
+  /** 展示中包含原文；引用元数据本身不计作正文。 */
+  readonly outputBodyIncluded: boolean
   readonly recent: {
     readonly historyState: unknown
     readonly results: readonly MemoryFrameResult[]

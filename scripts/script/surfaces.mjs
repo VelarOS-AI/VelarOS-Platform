@@ -192,6 +192,13 @@ export const CodeSurfaces = [
     templates: 'modules-template.js',
   },
   {
+    namespace: 'programs',
+    directory: 'velaros',
+    unit: 'act/system',
+    interfaces: ['ProgramsOperationsApi'],
+    templates: 'programs-template.js',
+  },
+  {
     // 整理会话读父快照：只挂在整理支线上
     namespace: 'context-materials',
     directory: 'velaros',
@@ -282,6 +289,7 @@ export const HostContextTypes = new Set([
   'SessionsOperationContext',
   'GoalOperationContext',
   'ModulesOperationContext',
+  'ProgramsOperationContext',
   'StoreOperationContext',
   'SystemMemoryOperationContext',
   'ContextMaterialsOperationContext',

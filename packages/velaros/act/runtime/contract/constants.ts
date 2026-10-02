@@ -26,6 +26,16 @@ export const ScriptProtocolLimits = Object.freeze({
   concurrency: 4,
 })
 
+/** 可信观察探测的有限时限与身份长度。 */
+export const ObservationReuseLimits = Object.freeze({
+  /** 一次权限范围与版本联合探测的缺省毫秒数。 */
+  probeTimeoutMs: 250,
+  /** 宿主可配置的最大探测毫秒数。 */
+  maxProbeTimeoutMs: 30_000,
+  /** 宿主范围、提供者生命周期及代次身份的字符上限。 */
+  identityChars: 2_048,
+})
+
 /** 主干缺省预算，覆盖模型回合、请求投影和恢复材料。 */
 export const VelarosRunLimits = Object.freeze({
   /** 一次用户运行最多推进的模型回合。 */

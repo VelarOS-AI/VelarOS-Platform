@@ -57,7 +57,10 @@ export const markdown = await asMarkdown()
     )
     expect(outcome.failed).toBeUndefined()
     const values = outcome.value as Record<string, any>
-    expect(values.reportPath).toBe(join(harness.root, 'reports/weekly.docx'))
+    expect(values.reportPath).toMatchObject({
+      written: { path: join(harness.root, 'reports/weekly.docx') },
+      structure: { kind: 'docx', summary: { headings: 2 } },
+    })
     expect(values.word).toMatchObject({ path: join(harness.root, 'docs/spec.docx'), created: true })
     expect(values.appended).toMatchObject({
       path: join(harness.root, 'reports/weekly.docx'),
@@ -68,13 +71,14 @@ export const markdown = await asMarkdown()
       created: true,
     })
     expect(values.sheet).toMatchObject({
-      path: join(harness.root, 'data/sales.xlsx'),
-      created: true,
+      written: { path: join(harness.root, 'data/sales.xlsx'), created: true },
+      structure: { kind: 'xlsx', summary: { sheets: 1 } },
     })
     expect(values.pages).toEqual({ pageCount: 3, firstPage: 'first page text', hasMore: true })
     expect(values.converted).toMatchObject({
-      path: join(harness.root, 'papers/paper.docx'),
-      created: true,
+      written: { path: join(harness.root, 'papers/paper.docx'), created: true },
+      source: { pageCount: 3, convertedPages: [1, 2, 3], hasMore: false },
+      structure: { kind: 'docx' },
     })
     expect(values.exported).toMatchObject({
       path: join(harness.root, 'reports/weekly.pdf'),
@@ -92,8 +96,14 @@ export const markdown = await asMarkdown()
     expect(values.checked).toMatchObject({
       title: '季度回顾',
       summary: { slides: 2 },
-      slides: ['季度回顾', '下季度计划'],
+      slides: [{ title: '季度回顾' }, { title: '下季度计划' }],
     })
-    expect(values.markdown).toEqual({ truncated: false, head: 'manual text' })
+    expect(values.markdown).toEqual({
+      path: 'docs/manual.pdf',
+      pageCount: 1,
+      selectedPages: [1],
+      truncated: false,
+      head: 'manual text',
+    })
   }, 240_000)
 })

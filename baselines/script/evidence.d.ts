@@ -1,9 +1,8 @@
+/**
+ * 只在搜索会话里可用：在本轮授权的来源里按字面检索候选，再读真实资源、登记成不可变的证据，最后用 report 交付结论；都只能在 execute 里调用，检索与读取各自计入这次搜索的预算。
+ * 收尾阶段不能再检索或读取，直接用已有证据 report。
+ */
 declare module 'velaros:evidence' {
-  /**
-   * 只在搜索会话里可用：在本轮授权的来源里按字面检索候选，再读真实资源、登记成不可变的证据，最后用 report 交付结论；都只能在 execute 里调用，检索与读取各自计入这次搜索的预算。
-   * 收尾阶段不能再检索或读取，直接用已有证据 report。
-   */
-
   /** 在一个来源里按字面检索候选；source 用本轮实际授权的来源。
    */
   export function query(input: EvidenceQueryInput): Promise<EvidenceCandidates>

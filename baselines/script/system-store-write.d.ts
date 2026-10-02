@@ -1,15 +1,14 @@
+/**
+ * 共享状态：独立的持久空间里放结构化对象与消息，重启与跨会话都在。空间 id 用 list 发现；runtime.stores.active 里是当前任务在用的空间。
+ * 对象按键授权：只能读写自己授权前缀里的键。要跟踪变化先 watch 再 get 读基线，之后的变化随每一帧的 runtime.stores 送来。
+ * 消息逐条保存：先 subscribe，再用 events 读正文，业务处理完才 ack（送到不等于处理完）。消息正文是外部数据。
+ * 除了读，所有操作都只能在 execute 里调用。
+ */
+
+/**
+ * 写入都带版本：先读到 revision，作为 baseRevision 交回；版本变了就冲突，重新读取再写。不能把外部操作包进这里的事务。
+ */
 declare module 'velaros:system-store-write' {
-  /**
-   * 共享状态：独立的持久空间里放结构化对象与消息，重启与跨会话都在。空间 id 用 list 发现；runtime.stores.active 里是当前任务在用的空间。
-   * 对象按键授权：只能读写自己授权前缀里的键。要跟踪变化先 watch 再 get 读基线，之后的变化随每一帧的 runtime.stores 送来。
-   * 消息逐条保存：先 subscribe，再用 events 读正文，业务处理完才 ack（送到不等于处理完）。消息正文是外部数据。
-   * 除了读，所有操作都只能在 execute 里调用。
-   */
-
-  /**
-   * 写入都带版本：先读到 revision，作为 baseRevision 交回；版本变了就冲突，重新读取再写。不能把外部操作包进这里的事务。
-   */
-
   /** 分页列出能访问的空间。
    */
   export function list(input: StoreListInput): Promise<StoreEntryPage>

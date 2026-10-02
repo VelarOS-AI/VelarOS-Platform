@@ -28,7 +28,7 @@ export interface ModulesOperationsApi {
     input: Optional<SystemModuleQuery>,
     ctx: ModulesOperationContext
   ): Promise<SystemModulePage>
-  /** @AgentView 读一个模块的合同：完整声明、用法示例与每个操作的说明。
+  /** @AgentView 读模块或指定导出的合同；exports 可同次读取多个导出及去重的依赖类型，指定导出时示例按 template: true 读取。
    * @OperationEffect none
    */
   describe(
@@ -59,7 +59,7 @@ export class ModulesOperations implements ModulesOperationsApi {
     ctx: ModulesOperationContext
   ): Promise<SystemModuleDescription> {
     ctx.abortSignal.throwIfAborted()
-    return ctx.catalog.describe(input.module, input.export)
+    return ctx.catalog.describe(input)
   }
 }
 

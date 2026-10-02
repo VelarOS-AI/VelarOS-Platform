@@ -48,6 +48,37 @@ async function workspace(options: Parameters<typeof createHarness>[0] = {}) {
 }
 
 describe('办公文档不变量验收', () => {
+  test('INV-20 生成模板直接流转原始行，解析实际落盘产物并保留检查范围', async () => {
+    const { harness, office } = await workspace()
+    const template = await readFile(new URL('../template.js', import.meta.url), 'utf8')
+    const outcome = await runModelProgram(
+      office,
+      `${template}\nexport default {report:await report('reports/checked.docx'),sheet:await spreadsheetFromRows(Array.from({length:32},(_,i)=>['region-'+i,i]),'data/checked.xlsx')}`
+    )
+    expect(outcome.failed).toBeUndefined()
+    const value = outcome.value as any
+    expect(value.report).toMatchObject({
+      written: { path: join(harness.root, 'reports/checked.docx'), created: true },
+      structure: {
+        kind: 'docx',
+        summary: { headings: 2, tables: 1 },
+        maxItems: 10,
+        contentTruncated: false,
+      },
+    })
+    expect(value.sheet).toMatchObject({
+      written: { path: join(harness.root, 'data/checked.xlsx'), created: true },
+      structure: {
+        kind: 'xlsx',
+        summary: { sheets: 1, previewedSheets: 1 },
+        sheets: [{ name: '销售', rowCount: 33, columnCount: 2 }],
+        maxItems: 10,
+      },
+    })
+    expect((await stat(value.sheet.written.path)).size).toBeGreaterThan(0)
+    expect(value.sheet.structure.sheets[0].rows.length).toBeLessThan(33)
+  }, 120_000)
+
   test('INV-1 读写目标按真实路径都在工作区根内', async () => {
     const { office } = await workspace()
     expect(

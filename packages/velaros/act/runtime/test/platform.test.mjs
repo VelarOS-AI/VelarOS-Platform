@@ -56,7 +56,7 @@ async function open(runtime) {
   return s
 }
 
-test('INV-4 all 14 generated module surfaces / 99 operations use the same strict registry and templates', async (t) => {
+test('INV-4 all 14 generated module surfaces / 100 operations use the same strict registry and templates', async (t) => {
   const f = await storageFixture(t)
   const modules = []
   for (const unit of [
@@ -89,7 +89,7 @@ test('INV-4 all 14 generated module surfaces / 99 operations use the same strict
   assert.equal(modules.length, 14)
   assert.equal(
     modules.reduce((n, m) => n + Object.keys(m.operations).length, 0),
-    99
+    100
   )
   const kernel = createOperationRuntime({
     modules,

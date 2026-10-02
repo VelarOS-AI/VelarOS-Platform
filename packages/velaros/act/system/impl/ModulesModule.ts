@@ -27,7 +27,7 @@ class ModulesModule implements ModulesModuleApi {
         return {
           catalog: {
             list: (query) => catalog.list(sessionId, query),
-            describe: (module, member) => catalog.describe(sessionId, module, member),
+            describe: (input) => catalog.describe(sessionId, input),
           },
           abortSignal: call.signal,
         }

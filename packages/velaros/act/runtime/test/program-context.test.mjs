@@ -7,9 +7,17 @@ import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
 import { AppError } from '@velaros-ai/core/error'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import { nodeSubprocessCodeRunner, scriptOutputs } from '@velaros-ai/script'
 
+import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
+import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
+import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { createRuntime, createShellCapabilityModule } from '../../../dist/act/runtime/index.js'
+import {
+  allocateProgramResultBudgets,
+  programCoveredOutputs,
+  programOutputViews,
+} from '../../../dist/act/runtime/utils/program-context.js'
 import { createLocalShellHost } from '../../../dist/shell/local.js'
 
 import { modelText, runtimeFrame } from './support/model-turn.mjs'
@@ -121,6 +129,187 @@ const observe =
   "import {output} from 'velaros';import {read} from 'test:world';output({current:await read()});"
 const write =
   "import {output} from 'velaros';import {write} from 'test:world';output({written:await write(2)});"
+
+test('INV-58 result demand allocation reuses short shares within the unchanged pool', () => {
+  for (const [demands, share] of [
+    [[200, 14000, 300], 5000],
+    [[12000, 12000, 12000], 4000],
+    [[0, 0, 0], 4000],
+    [[200, 14000, 300], 0],
+    [[600, 200, 600], 300],
+  ]) {
+    const budgets = allocateProgramResultBudgets(demands, share)
+    assert(budgets.every((chars, index) => chars >= 0 && chars <= demands[index]))
+    assert(budgets.reduce((sum, chars) => sum + chars, 0) <= share * demands.length)
+    if (demands.reduce((sum, chars) => sum + chars, 0) <= share * demands.length)
+      assert.deepEqual(budgets, demands)
+  }
+  assert.deepEqual(allocateProgramResultBudgets([200, 14000, 300], 5000), [200, 14000, 300])
+  assert.deepEqual(allocateProgramResultBudgets([12000, 12000, 12000], 4000), [4000, 4000, 4000])
+})
+
+test('INV-58 a preferred partial view cannot cover a different final partial view', () => {
+  const capture = {
+    config: { maxChars: 14000 },
+    issues: [],
+    blocks: [
+      {
+        key: 'a',
+        value: `${'a'.repeat(24)}\n`.repeat(600),
+        options: { key: 'a', type: 'code', view: { maxChars: 1800 } },
+      },
+      {
+        key: 'b',
+        value: 'b'.repeat(4500),
+        options: { key: 'b', type: 'code', view: { maxChars: 9000 } },
+      },
+    ].map((block) => ({ ...block, chars: JSON.stringify(block.value).length })),
+  }
+  const preferred = scriptOutputs.project(
+    capture,
+    'r',
+    14000,
+    undefined,
+    undefined,
+    undefined,
+    'text'
+  )
+  const previous = programOutputViews('s', 'r', 'source', preferred).filter(
+    (view) => view.key === 'a'
+  )
+  const covered = programCoveredOutputs('s', 'r', 'source', preferred, previous)
+  assert.equal(covered.length, 1)
+  const reduced = scriptOutputs.withoutBodies(preferred, covered)
+  for (const assigned of [500, 600]) {
+    const final = scriptOutputs.project(
+      capture,
+      'r',
+      assigned + preferred.prompt.length - reduced.prompt.length,
+      undefined,
+      undefined,
+      undefined,
+      'text'
+    )
+    assert.notEqual(
+      final.blocks.find((block) => block.key === 'a').text,
+      preferred.blocks.find((block) => block.key === 'a').text
+    )
+    const actualCovered = programCoveredOutputs('s', 'r', 'source', final, previous)
+    assert.equal(actualCovered.length, 0, 'key/content hash alone cannot reuse a different range')
+    const shown = scriptOutputs.withoutBodies(final, actualCovered, assigned)
+    assert(!shown.blocks.some((block) => block.reason === 'body-in-history'))
+    assert(shown.prompt.length <= assigned)
+  }
+})
+
+test('INV-58 short result shares permit a complete batch of real recalled pages without increasing the frame budget', async (t) => {
+  const f = await fixture(t)
+  const signal = new AbortController().signal
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const recent = new RecentContext('s', f.session.context, f.storage)
+  const memory = new ContextMemory(
+    's',
+    f.session.context,
+    f.storage,
+    f.session.view,
+    programs,
+    recent
+  )
+  const view = {
+    id: 'result-demand',
+    scope: { sessionId: 's', revision: 0 },
+    goals: [],
+    capsule: {},
+    mandatory: [],
+    evidence: [],
+    gaps: [],
+    readSet: [],
+    progress: { step: 0, repeatedSteps: 0, stalled: false, evidence: [] },
+  }
+  async function archive(values, maxChars, required = false) {
+    const id = crypto.randomUUID()
+    const source = await f.session.context.append({
+      kind: 'audit',
+      title: `script:${id}`,
+      body: JSON.stringify({ source: 'output(synthetic)' }),
+    })
+    const result = await f.session.context.append({
+      kind: 'audit',
+      title: `script:${id}:result`,
+      sources: [source.ref],
+      body: JSON.stringify({
+        mode: 'execute',
+        output: {
+          config: maxChars === undefined ? {} : { maxChars },
+          issues: [],
+          blocks: values.map((value, index) => ({
+            key: `block_${index}`,
+            value,
+            chars: JSON.stringify(value).length,
+            options: {
+              key: `block_${index}`,
+              required,
+              ...(maxChars === undefined ? {} : { view: { mode: 'full', maxChars: 12000 } }),
+            },
+          })),
+        },
+      }),
+    })
+    await programs.add(result.ref, source.ref, id, 'task')
+    return result.ref
+  }
+  const values = ['quote"\\path\n界😀'.repeat(220), 'line\r\n'.repeat(600), 'plain'.repeat(720)]
+  const original = await archive(values, 512, true)
+  const pages = []
+  for (const [index] of values.entries())
+    pages.push(
+      await memory.readMaterial(original, 0, 12000, signal, `/output/blocks/${index}/value`)
+    )
+  const carrier = await archive(pages, 30000, true)
+  const ordinary = await archive(['default line\n'.repeat(4000)], undefined)
+  const hidden = await archive(['explicitly hidden'], 0)
+  for (let index = 0; index < 20; index++) await archive([{ ok: true, index }], 512)
+  const frame = await programs.project(view, undefined, [], signal, 200000)
+  const material = JSON.parse(frame.body)
+  const shown = material.results.find((result) => result.ref === carrier.id)
+  const coverage = frame.outputCoverage.find((result) => result.ref === carrier.id)
+  const defaultResult = material.results.find((result) => result.ref === ordinary.id)
+  assert(defaultResult.text.length <= frame.budget.excerptChars)
+  assert(
+    defaultResult.truncated,
+    'default output must keep its original conservative per-result cap'
+  )
+  assert.equal(material.results.find((result) => result.ref === hidden.id).text, '')
+  assert(coverage.projection.blocks.every((block) => block.representation === 'full'))
+  for (const value of values) assert(shown.text.includes(value))
+  assert(shown.text.length > frame.budget.resultBudgetChars)
+  assert(
+    material.results.reduce((sum, result) => sum + result.text.length, 0) <=
+      frame.budget.resultBudgetChars * frame.budget.visibleResults
+  )
+  assert(!material.decision.missing.some((gap) => gap.ref === carrier.id))
+  const actual = await memory.project(view, undefined, [], signal, 200000)
+  assert.deepEqual(JSON.parse(actual.body).partitions.runtime.decision.missing, [])
+  assert(actual.prompt.length <= 200000)
+  assert.equal(f.frames.length, 0, 'projection and memory reads must not invoke a model')
+  await memory.acknowledge(JSON.parse(actual.body).frameId, signal)
+  const segment = await recent.segment(signal)
+  const retained = await programs.project(view, undefined, [], signal, 200000, segment.entries)
+  const repeated = JSON.parse(retained.body).results.find((result) => result.ref === carrier.id)
+  assert.equal(repeated.bodyInHistory, true)
+  for (const value of values) assert(!repeated.text.includes(value))
+  const unknown = await programs.project(view, undefined, [], signal, 200000, [])
+  const redisplayed = JSON.parse(unknown.body).results.find((result) => result.ref === carrier.id)
+  for (const value of values) assert(redisplayed.text.includes(value))
+  const mismatched = segment.entries.map((entry) => ({
+    ...entry,
+    outputViews: entry.outputViews?.map((view) => ({ ...view, fingerprint: 'different-view' })),
+  }))
+  const changed = await programs.project(view, undefined, [], signal, 200000, mismatched)
+  const unproven = JSON.parse(changed.body).results.find((result) => result.ref === carrier.id)
+  assert.equal(unproven.bodyInHistory, undefined)
+  for (const value of values) assert(unproven.text.includes(value))
+})
 
 test('INV-6 stable observation refreshes; one execution result has exactly two successful visible rounds', async (t) => {
   const f = await fixture(t)

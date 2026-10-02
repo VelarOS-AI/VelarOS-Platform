@@ -44,4 +44,6 @@ export type {
   CodeProgramTargetEdit,
   CompletedCall,
   GrantedModule,
+  ScriptModuleExportsSlice,
+  ScriptModuleIndex,
 } from './types/script.js'

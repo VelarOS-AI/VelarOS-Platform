@@ -17,6 +17,7 @@ export type { ProjectCapabilityPortsApi } from '../impl/operations/ProjectCapabi
 export type { ProjectCodeOperationsApi } from '../impl/operations/ProjectCodeOperations.js'
 export type { ProjectExecutionGateApi } from '../impl/operations/ProjectExecutionGate.js'
 export type { ProjectFileOperationsApi } from '../impl/operations/ProjectFileOperations.js'
+export type { ProjectObservationProviderApi } from '../impl/operations/ProjectObservationProvider.js'
 export type { ProjectVerificationPolicyApi } from '../impl/operations/ProjectVerificationPolicy.js'
 export type { FileProjectChangeFeedApi } from '../impl/persistence/FileProjectChangeFeed.js'
 

@@ -278,6 +278,86 @@ async function runModelProgram(
   return outcome.result.value
 }
 
+test('INV-20 模板保留失败、超时、取消和截断；依赖阶段失败时不执行后续命令', async () => {
+  const template = readFileSync(resolve(UnitRoot, 'template.js'), 'utf8')
+  const space = fakeSpace({ root: '/test', clamp: false })
+  const commands: string[] = []
+  space.context.shell.runCommand = async (command, options) => {
+    commands.push(command)
+    return resultOf(
+      command,
+      options?.cwd ?? '/test',
+      command === 'second'
+        ? {
+            success: false,
+            exitCode: 7,
+            signal: 'SIGTERM',
+            stderr: 'assertion mismatch',
+            aborted: true,
+            truncated: true,
+          }
+        : {}
+    )
+  }
+  const stages = (await runModelProgram(
+    space,
+    `${template}\nexport default await runStages([{label:'first',command:'first'},{label:'second',command:'second'},{label:'third',command:'third'}])`
+  )) as any
+  expect(commands).toEqual(['first', 'second'])
+  expect(stages).toMatchObject({
+    status: 'failed',
+    remaining: ['third'],
+    stages: [
+      { success: true },
+      {
+        success: false,
+        exitCode: 7,
+        signal: 'SIGTERM',
+        aborted: true,
+        truncated: true,
+        tail: 'ok\n\nassertion mismatch',
+      },
+    ],
+  })
+
+  const cases: Array<Partial<ShellCommandResult>> = [
+    { success: false, exitCode: 1, timedOut: true, stderr: 'deadline reached' },
+    { success: false, exitCode: 1, aborted: true, signal: 'SIGTERM', stderr: 'cancelled' },
+    { success: false, exitCode: 7, stderr: 'assertion mismatch', truncated: true },
+  ]
+  for (const original of cases) {
+    space.context.shell.runCommand = async (command, options) =>
+      resultOf(command, options?.cwd ?? '/test', original)
+    const result = (await runModelProgram(
+      space,
+      `${template}\nexport default {filtered:await errorLines('fixture'),matches:await findTodos('.')}`
+    )) as any
+    const expected = resultOf('fixture', '/test', original)
+    for (const key of [
+      'success',
+      'exitCode',
+      'signal',
+      'timedOut',
+      'aborted',
+      'truncated',
+    ] as const) {
+      expect(result.filtered[key]).toEqual(expected[key])
+      expect(result.matches.process[key]).toEqual(expected[key])
+    }
+    expect(result.filtered.count).toBe(0)
+    expect(result.filtered.tail).toBeTruthy()
+    expect(result.matches.status).toBe('failed')
+  }
+  space.context.shell.runCommand = async (command, options) =>
+    resultOf(command, options?.cwd ?? '/test', { success: false, exitCode: 1, stdout: '' })
+  const empty = await runModelProgram(space, `${template}\nexport default await findTodos('.')`)
+  expect(empty).toMatchObject({
+    status: 'no-match',
+    total: 0,
+    process: { exitCode: 1, aborted: false, timedOut: false, truncated: false },
+  })
+}, 120_000)
+
 describe('只读与危险判定', () => {
   test('INV-1 白名单命令一旦带写盘参数，整条掉出只读', () => {
     expect(shellCommandPolicy.isReadOnly('find . -name "*.ts"')).toBe(true)

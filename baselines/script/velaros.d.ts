@@ -1,8 +1,7 @@
+/**
+ * 交出结果。只 output 下一轮真正需要的事实：数据在脚本里先筛选、计算、聚合，读到的全部内容不必都交出来。
+ */
 declare module 'velaros' {
-  /**
-   * 交出结果。只 output 下一轮真正需要的事实：数据在脚本里先筛选、计算、聚合，读到的全部内容不必都交出来。
-   */
-
   export const output: ScriptOutput
 
   /**

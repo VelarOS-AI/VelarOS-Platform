@@ -22,3 +22,5 @@
 | INV-18 | 独立消息只自动投递元数据，处理确认跨重启保存；主题授权与 observe 隔离生效，共享材料按键读取，宿主等待不自动调用模型 | 测试 | spec/store.test.mjs |
 | INV-19 | 主会话目标 get/update 的合同由 TS 接口生成，声明、效果和模板一致，模型合同不提供删除 | 测试 | spec/acceptance.test.mjs |
 | INV-20 | 声明里写给模型的上限与常量表一致，入参核对引用同一份常量 | 测试 | spec/acceptance.test.mjs |
+| INV-21 | 参数化程序的 publish/list/describe 合同、效果与模板同源；发布只检查和归档，执行复用正式 sourceRef 链 | 测试 | spec/acceptance.test.mjs |
+| INV-22 | 真实值导出与正文版本按授权发现；指定操作默认不重复整模块模板，多导出共享依赖闭包与模块共同规则，查询不执行业务 | 测试 | spec/runtime.test.mjs |

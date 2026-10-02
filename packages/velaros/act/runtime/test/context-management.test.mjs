@@ -12,6 +12,7 @@ import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
+import { ActRuntimeTuning } from '../../../dist/act/runtime/utils/tuning.js'
 
 import { modelText } from './support/model-turn.mjs'
 import { runtimeFrame } from './support/model-turn.mjs'
@@ -801,18 +802,24 @@ test('INV-50 a long run folds by remaining turns: every request fits the window 
     assert(statuses[index].segment.index >= statuses[index - 1].segment.index)
 })
 
-test('INV-53 an automatic fold of a busy segment without note or plan changes is narrated once at the next request boundary', async (t) => {
+test('INV-53 automatic folds persist each busy volume narrative once, whether pressure or boundary maintenance supplies it', async (t) => {
   const narrated = []
+  const maintenanceCalls = []
   const maintenance = {
     id: 'narrator',
     limits: { contextTokens: 200000, inputTokens: 180000, outputTokens: 4000 },
     estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
     async *stream(request) {
+      const call = { volume: null }
+      maintenanceCalls.push(call)
       const snapshot = JSON.parse(
         JSON.parse(request.materials[0].text).partitions.task.goals[0].text
       ).snapshot
       // 压力整理可能发生在还没有封卷的段里，那时只提交摘要
-      if (snapshot.volume) narrated.push(snapshot.volume.ref.id)
+      if (snapshot.volume) {
+        call.volume = snapshot.volume.ref.id
+        narrated.push(call.volume)
+      }
       const patch = {
         baseRevision: snapshot.baseRevision,
         summary: 'Narrated the sealed volume',
@@ -849,7 +856,6 @@ test('INV-53 an automatic fold of a busy segment without note or plan changes is
           .partitions.task.active
       )
       statuses.push(request.contextStatus)
-      // 这个窗口下第一次封段在三十轮左右，那一卷有二十多轮
       if (f.calls === 44) {
         yield* done(request)
         return
@@ -883,9 +889,11 @@ test('INV-53 an automatic fold of a busy segment without note or plan changes is
       }),
     }
   )
-  await run(f, 'Keep working in small steps')
+  const events = await run(f, 'Keep working in small steps')
+  assert.equal(events.at(-1).status, 'completed')
+  assert.equal(f.calls, 44)
   assert(statuses.every((status) => status.inputTokens <= statuses[0].inputLimit))
-  // 每卷最多补写一次叙事，补写发生在自动封段之后的下一个请求边界
+  // 调度可先由压力整理交付叙事；后续边界消费自动意图时不得再分配一次模型调用。
   assert(narrated.length >= 1)
   assert.equal(new Set(narrated).size, narrated.length)
   const state = await f.storage.load('s')
@@ -899,12 +907,41 @@ test('INV-53 an automatic fold of a busy segment without note or plan changes is
     narrated.length,
     JSON.stringify(outcomes)
   )
-  assert(outcomes.some((item) => item.reason === 'narrate'))
+  assert.equal(outcomes.length, maintenanceCalls.length, JSON.stringify(outcomes))
+  assert.equal(
+    outcomes.reduce((calls, item) => calls + item.usage.calls, 0),
+    maintenanceCalls.length,
+    'every real maintenance model call is accounted for, including any failed attempt'
+  )
   assert(
     outcomes.every(
-      (item) => ['narrate', 'pressure'].includes(item.reason) && item.status === 'applied'
-    )
+      (item) =>
+        ['narrate', 'pressure'].includes(item.reason) &&
+        item.status === 'applied' &&
+        item.error === null &&
+        item.delivery.status === 'completed'
+    ),
+    JSON.stringify(outcomes)
   )
+  const volumes = await new RecentContext('s', f.session.context, f.storage).volumes(
+    new AbortController().signal
+  )
+  const busy = volumes.filter(
+    (item) => item.volume.turns >= ActRuntimeTuning.narrateTurns && !item.volume.notes.length
+  )
+  assert(busy.length >= 1)
+  for (const item of busy) {
+    assert(item.narrative, `busy sealed volume ${item.ref.id} has no persisted narrative`)
+    assert.equal(
+      maintenanceCalls.filter((call) => call.volume === item.ref.id).length,
+      1,
+      `busy sealed volume ${item.ref.id} must be supplied by exactly one model call`
+    )
+    assert.match(item.narrative.summary, /printed step outputs/)
+  }
+  for (const call of maintenanceCalls.filter((item) => item.volume)) {
+    assert(volumes.some((item) => item.ref.id === call.volume && item.narrative))
+  }
   // 叙事和长期单随下一次底座重建进入主线请求
   const narrated_base = bases.find((base) => base.includes('这一卷的叙事'))
   assert(narrated_base)

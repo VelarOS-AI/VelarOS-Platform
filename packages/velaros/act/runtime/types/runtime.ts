@@ -1,4 +1,40 @@
+import type { ProgramDescriptor } from '../../system/types/programs.js'
+
 import type { ScriptRetention } from './results.js'
+
+/** 领域登记的声明式纯快照计划；input 由指定提供者按固定合同核对。 */
+export interface SnapshotObservationPlan {
+  readonly provider: string
+  readonly plan: string
+  readonly input: unknown
+}
+
+/** 稳定快照观察的公开提交，不接受任意源码或额外运行参数。 */
+export interface ScriptSnapshotObservation {
+  readonly snapshot: SnapshotObservationPlan
+}
+
+/** 领域固定捕获操作的中立完整回执；value 是纯派生唯一可见的当前数据。 */
+export interface SnapshotObservationCapture {
+  readonly complete: true
+  readonly providerId: string
+  readonly fingerprint: string
+  readonly checkedAt: string
+  readonly readRequests: number
+  readonly materialBytes: number
+  readonly value: unknown
+}
+
+/** 纯值派生基线只在当前 RuntimeSession 内有效，重启重新捕获并派生。 */
+export interface SnapshotObservationBaseline {
+  readonly identity: string
+  readonly sourceRef: string
+  readonly fingerprint: string
+  readonly providerId: string
+  readonly executionId: string
+  readonly resultRef: string
+  readonly observedAt: string
+}
 
 /** 按当前会话的自动保存记录再次执行代码，调用会获得新的执行身份。 */
 export interface ScriptReferenceProgram {
@@ -34,6 +70,52 @@ export interface ObservationRegistration extends ScriptControlReceipt {
   readonly executed: false
 }
 
+/** 最新观察的采集决策；实际执行身份和原采集时刻保持不变。 */
+export interface ObservationCollection {
+  readonly status: 'collected' | 'reused' | 'paused'
+  readonly reason: string
+  readonly sourceRef: string
+  readonly resultRef: string
+  readonly executionId: string
+  readonly observedAt: string
+  readonly ageMs: number
+  /** 本轮真实的范围/版本探测耗时；不冒充原脚本运行耗时。 */
+  readonly probeMs: number
+  /** 本轮真实授权捕获与纯派生分别记账；复用仍保留原派生 executionId/resultRef。 */
+  readonly snapshot?: {
+    readonly captureExecutionId: string
+    readonly captureResultRef: string
+    readonly checkedAt: string
+    readonly captureMs: number
+    readonly readRequests?: number
+    readonly materialBytes?: number
+    readonly deriveMs: number
+    readonly derived: boolean
+    readonly reused: boolean
+  }
+}
+
+/** 一次 RuntimeSession 生命周期中的完整成功采集基线，重启后不恢复。 */
+export interface ObservationReuseBaseline {
+  readonly sourceRef: string
+  readonly sourceHash: string
+  readonly inputHash: string
+  readonly scopeFingerprint: string
+  readonly providerId: string
+  readonly token: string
+  readonly resultRef: string
+  readonly executionId: string
+  readonly observedAt: string
+}
+
+/** 有界宿主探测的结果，unknown 决定继续实际采集。 */
+export type ObservationProbe =
+  | (Pick<
+      ObservationReuseBaseline,
+      'sourceHash' | 'inputHash' | 'scopeFingerprint' | 'providerId' | 'token'
+    > & { readonly kind: 'versioned' })
+  | { readonly kind: 'unknown'; readonly reason: string }
+
 /** 宿主固定的控制声明名称与流接收限额。 */
 export interface ScriptProtocolOptions {
   /** 当前运行配置允许的控制声明。 */
@@ -66,6 +148,17 @@ export interface ProgramLeaseState {
   /** 新进入租约集合的结果代次，区分新到达材料与容量省略。 */
   readonly resultsRevision?: number
   readonly observation?: string
+  /** 本任务的纯快照观察随阶段结束退役。 */
+  readonly observationSnapshot?: boolean
+  /** 快照计划所属的任务与授权重置水位；变化后整段计划退役。 */
+  readonly observationSnapshotReset?: number
+  /** 持久名称指向已归档不可变源码；历史版本由独立目录记录召回。 */
+  readonly programCatalog?: Readonly<Record<string, ProgramDescriptor>>
+  /** 目录别名所属的任务与授权重置水位。 */
+  readonly programCatalogReset?: number
+  /** 已接受的强制刷新身份；候选检查和协议修复不发布。 */
+  readonly observationRefresh?: string
+  readonly observationCollection?: ObservationCollection
   /** 持久观察健康记录；旧结果只按原采集时间展示。 */
   readonly health?: {
     readonly sourceRef: string
@@ -143,6 +236,8 @@ export interface ScriptProgramVersion {
   readonly parentRef?: string
   readonly baseObservation: Nullable<string>
   readonly kind: 'observation' | 'execution' | 'draft'
+  /** 可信领域固定计划与提供者版本，不能从执行参数反向恢复。 */
+  readonly snapshot?: SnapshotObservationPlan & { readonly revision: string }
   /** 本版本只更新展示规则，没有重跑采集。 */
   readonly presentationOnly?: boolean
   /** 自动整理的可见理由。 */
@@ -159,6 +254,8 @@ export interface ScriptControlReceipt {
   readonly executionId?: string
   readonly resultRef?: string
   readonly effective?: 'next-model-turn'
+  /** 已接受后请求下一正常业务轮真实采集；不恢复 paused。 */
+  readonly refresh?: boolean
   readonly executed: boolean
   readonly code?: string
   readonly message?: string

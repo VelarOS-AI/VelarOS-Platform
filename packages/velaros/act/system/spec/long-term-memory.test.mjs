@@ -56,6 +56,44 @@ async function execute(session, source) {
   assert(result.checked && !result.result.failed, JSON.stringify(result))
   return { receipt: result, value: result.result.value?.default }
 }
+async function describeMemory(session) {
+  // 只交出断言所需的合同字段；完整 schema 的展示回执受预算限制，不能当作原值读取。
+  return (
+    await execute(
+      session,
+      `const description=await modules.describe({module:'velaros:system',exports: ['memory'],template:true});
+       const member=description.exports.memory;
+       output({binding:member.binding,operations:Object.keys(member.operations),declarations:description.declarations,template:description.template});`
+    )
+  ).value
+}
+async function readOutput(session, receipt) {
+  let text = ''
+  let pages = 0
+  let totalChars
+  do {
+    const page = (
+      await execute(
+        session,
+        `output(await memory.read(${JSON.stringify({
+          ref: receipt.resultRef,
+          pointer: '/output/blocks/0/value',
+          offset: text.length,
+          limit: 4000,
+        })}));`
+      )
+    ).value
+    assert.equal(page.offset, text.length)
+    assert.equal(page.pointer, '/output/blocks/0/value')
+    assert(page.text.length > 0)
+    if (totalChars !== undefined) assert.equal(page.totalChars, totalChars)
+    totalChars = page.totalChars
+    text += page.text
+    pages++
+  } while (text.length < totalChars)
+  assert.equal(text.length, totalChars)
+  return { value: JSON.parse(text), pages }
+}
 async function submit(session, text = 'Continue') {
   const events = []
   for await (const event of session.submit(text)) events.push(event)
@@ -64,19 +102,14 @@ async function submit(session, text = 'Continue') {
 
 test('INV-12 主线长期记忆统一包合同、模板、发现和真实存储一致，纯脚本宿主也能接入', async (t) => {
   const f = await fixture(t)
-  const description = (
-    await execute(
-      f.session,
-      "output(await modules.describe({module:'velaros:system',export:'memory'}));"
-    )
-  ).value
-  const operations = description.exports.memory.operations
-  assert.equal(description.exports.memory.binding.moduleId, PersistentLocalMemoryModuleId)
+  const description = await describeMemory(f.session)
+  const operations = description.operations
+  assert.equal(description.binding.moduleId, PersistentLocalMemoryModuleId)
   assert.deepEqual(
-    Object.keys(operations).sort(),
+    [...operations].sort(),
     ['list', 'read', 'update', 'plan', 'retain', 'release', 'recall', 'save', 'remove'].sort()
   )
-  assert.equal(operations.organize, undefined)
+  assert(!operations.includes('organize'))
   assert.equal(
     codeProgramChecker.typecheck({
       source: description.template,
@@ -118,6 +151,41 @@ test('INV-12 主线长期记忆统一包合同、模板、发现和真实存储�
   )
   assert.deepEqual((await f.store.scope('project:shared').list())[0].tags, ['release'])
 })
+
+for (const organize of [false, true])
+  test(`INV-12 完整记忆合同保存在原始输出并可通过公开分页读取（organize=${organize}）`, async (t) => {
+    const passive = model(async function* (request) {
+      yield* done(request)
+    })
+    const f = await fixture(t, {
+      model: passive,
+      context: { sources: [], maintenance: organize ? { model: passive } : false },
+    })
+    const description = await describeMemory(f.session)
+    const { receipt } = await execute(
+      f.session,
+      "output(await modules.describe({module:'velaros:system',exports: ['memory'],template:true}));"
+    )
+    const recalled = await readOutput(f.session, receipt)
+    assert(recalled.pages > 1, '完整合同应覆盖跨页的 JSON、中文和换行')
+    assert.deepEqual(recalled.value.exports.memory.binding, description.binding)
+    assert.deepEqual(Object.keys(recalled.value.exports.memory.operations), description.operations)
+    assert.equal(recalled.value.declarations, description.declarations)
+    assert.equal(recalled.value.template, description.template)
+    assert.equal(description.operations.includes('organize'), organize)
+    if (typeof receipt.result.value === 'object')
+      assert.deepEqual(
+        receipt.result.value.default,
+        recalled.value,
+        '合同能完整放入兼容展示时内容仍须一致'
+      )
+    else
+      assert.equal(
+        typeof receipt.result.value,
+        'string',
+        '超限兼容展示须明确保留文本，完整合同由原文分页核对'
+      )
+  })
 
 for (const organize of [false, true])
   test(`INV-12 长期记忆公开合同保留版本并按条件保存、删除与拒绝过期写（organize=${organize}）`, async (t) => {
@@ -355,12 +423,7 @@ test('INV-12 宿主授权和既有输入验证保护长期写入，失败回执�
 
 test('INV-12 未装配长期记忆时实际合同隐藏三个操作，重复的业务模块入口有迁移错误', async (t) => {
   const f = await fixture(t, { memory: undefined })
-  const description = (
-    await execute(
-      f.session,
-      'output(await modules.describe({module:"velaros:system",export:"memory"}));'
-    )
-  ).value
+  const description = await describeMemory(f.session)
   assert(!description.declarations.includes('recall'))
   assert(!description.template.includes('savedMemory'))
   const hidden = await f.session.execute({ source: `${prelude}output(await memory.recall({}));` })
@@ -506,14 +569,9 @@ test('INV-12 长期记忆与整理共享主入口，整理模型只读固定材�
     model: main,
     context: { sources: [], maintenance: { model: organizer } },
   })
-  const description = (
-    await execute(
-      f.session,
-      'output(await modules.describe({module:"velaros:system",export:"memory"}));'
-    )
-  ).value
-  assert.equal(Object.keys(description.exports.memory.operations).length, 10)
-  assert.equal(description.exports.memory.binding.moduleId, PersistentMemoryModuleId)
+  const description = await describeMemory(f.session)
+  assert.equal(description.operations.length, 10)
+  assert.equal(description.binding.moduleId, PersistentMemoryModuleId)
   assert.equal(
     codeProgramChecker.typecheck({
       source: description.template,

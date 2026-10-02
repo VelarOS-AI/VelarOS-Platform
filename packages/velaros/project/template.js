@@ -1,6 +1,11 @@
 // velaros:project 的代码模版：日常最常用的几种写法，一段一个函数。只是示例——按你的需要改写、只取其中几行都行，不必照着写。
 // 用的时候把要的那段放进程序，调用它并把要看的导出去，比如 `export default await showFile('src/index.ts')`。
-import { edit, inspect, list, read, search, undo } from 'velaros:project'
+import { edit, inspect, list, read, search, snapshot, undo } from 'velaros:project'
+
+// 捕获当前文件纯值：每次仍真实前后读取；不能把 fingerprint 当作历史变化代次或编辑凭据。
+async function captureConfigs(path = 'package.json') {
+  return snapshot({ files: [{ path, key: 'package', purpose: '当前配置', format: 'json', view: 'full' }] })
+}
 
 // 看一个文件：不给 range 就是整个文件；text 是连续的正文，startLine 是它第一行的行号。
 async function showFile(path = 'src/index.ts') {
@@ -67,13 +72,28 @@ async function renameInFile(path = 'src/service.ts', from = 'oldCall(', to = 'ne
   return edit({ steps: [{ action: 'write', path, text: window.text.replaceAll(from, to) }] })
 }
 
-// 搜到就改（改名）：每个命中的文件读一遍、换掉、写回；所有文件的改动合成一个事务，全成或全不成。
+// 搜到就改（改名）：一次批量读完命中文件，再用一次 edit 提交事务；有读取缺口时先交回缺口，不缩小修改范围。
 async function renameEverywhere(from = 'loadSettings', to = 'readSettings') {
   const { hits } = await search({ query: from, path: 'src' })
   const paths = [...new Set(hits.map((hit) => hit.path))]
-  if (!paths.length) return '没有要改的'
-  const { files } = await read({ files: paths.map((path) => ({ path })) })
-  return edit({ steps: files.map((window) => ({ action: 'write', path: window.path, text: window.text.replaceAll(from, to) })) })
+  if (!paths.length) return { status: 'unchanged', matchedFiles: [] }
+  return replaceInFiles(paths, from, to)
+}
+
+// 指定文件一起替换：全部正文进程序，模型只看真实改动的文件与 changeRef；完整 diff 可用 inspect 召回。
+// 超过 read 或事务上限时按任务的独立范围拆分；多个 edit 各自是事务，不能称为一个整体事务。
+async function replaceInFiles(paths = ['src/a.ts', 'src/b.ts'], from = 'oldName', to = 'newName') {
+  const targets = [...new Set(paths)]
+  if (!targets.length) return { status: 'unchanged', matchedFiles: [] }
+  const { files, issues = [] } = await read({ files: targets.map((path) => ({ path })) })
+  if (issues.length) return { status: 'blocked', requestedFiles: targets, issues }
+  /** @type {Array<{ action: 'write', path: string, text: string }>} */
+  const steps = files
+    .filter((window) => window.text.includes(from))
+    .map((window) => ({ action: 'write', path: window.path, text: window.text.replaceAll(from, to) }))
+  if (!steps.length) return { status: 'unchanged', matchedFiles: [] }
+  const changed = await edit({ steps })
+  return { status: 'committed', changeRef: changed.changeRef, changedFiles: changed.changedFiles, diffLines: changed.diffLines }
 }
 
 // 新建一个文件并在另一个文件里用上它：几步合成一个事务，后一步按前一步改完的内容算。

@@ -3,8 +3,9 @@ import { createHash } from 'node:crypto'
 import {
   isArray,
   isEmpty,
-  isNumber,
+  isFiniteNumber,
   isObject,
+  isPositiveNumber,
   isString,
   isUndefined,
   stringifyPretty,
@@ -298,34 +299,8 @@ function encodeOutput(
   ].join('\n')
 }
 
-/** 扩展必须覆盖同一原文的既有 UTF-16 区间；没有范围证明时仅接受原文不变。 */
-function preservesOutputBody(
-  previous: ScriptOutputPresentation,
-  next: ScriptOutputPresentation,
-  value: unknown
-): boolean {
-  if (!previous.bodyIncluded) return true
-  if (!next.bodyIncluded) return false
-  if (previous.text === next.text) return true
-  if (!isString(value) || (previous.type !== 'text' && previous.type !== 'code')) return false
-  const range = (block: ScriptOutputPresentation) =>
-    block.representation === 'full'
-      ? { from: 0, shown: value.length }
-      : (block.selection as { chars?: { from: number; shown: number } } | undefined)?.chars
-  const before = range(previous)
-  const after = range(next)
-  return Boolean(
-    before &&
-    after &&
-    after.from <= before.from &&
-    after.from + after.shown >= before.from + before.shown &&
-    value.slice(before.from, before.from + before.shown) === previous.text &&
-    value.slice(after.from, after.from + after.shown) === next.text
-  )
-}
-
 /**
- * Script 统一解释展示申请。整体显式配置硬覆盖；否则把有效块在各自上限内的实际 JSON 编码合并，
+ * Script 统一解释展示申请。整体显式配置硬覆盖；否则把数字上限或无上限 full 块的实际 JSON 编码合并，
  * 普通块保留原默认份额。只为确有申请的块渲染正文，不把请求预算当作宿主授权。
  */
 export function requestOutputBudget(
@@ -344,8 +319,8 @@ export function requestOutputBudget(
   const requested = capture.blocks.flatMap((block, index) => {
     const view =
       manifest?.outputs.find((output) => output.key === block.key)?.view ?? block.options.view ?? {}
-    return isNumber(view.maxChars) &&
-      view.maxChars > 0 &&
+    return (isPositiveNumber(view.maxChars) ||
+      (view.mode === 'full' && isUndefined(view.maxChars))) &&
       view.mode !== 'reference' &&
       view.mode !== 'summary' &&
       block.options.type !== 'image' &&
@@ -353,7 +328,7 @@ export function requestOutputBudget(
       ? [{ block, index, view }]
       : []
   })
-  if (requested.length === 0) return { maxChars: ScriptOutputLimits.displayChars, explicit: false }
+  if (isEmpty(requested)) return { maxChars: ScriptOutputLimits.displayChars, explicit: false }
   const blocks = requested.map(({ block, index, view }) =>
     renderBlock(
       block,
@@ -383,7 +358,7 @@ export function requestOutputBudget(
   }
 }
 
-/** 全局分配有界文字预算；text 保留 JSON 基线，只扩展同批文本块。 */
+/** 按实际交付编码分配全局预算；正文、目录与省略说明一起计量。 */
 export function projectOutputs(
   capture: ScriptOutputCapture,
   ref: string,
@@ -425,18 +400,32 @@ export function projectOutputs(
           ? a.block.key.localeCompare(b.block.key, 'en')
           : a.index - b.index)
     )
-  const baseline =
-    format === 'text'
-      ? projectOutputs(capture, ref, maxChars, manifest, summaries, taskRevision)
-      : undefined
-  let blocks = baseline
-    ? [...baseline.blocks]
-    : ordered.map(({ block, index, view }) =>
-        renderBlock(block, index, { ...view, mode: 'reference' }, ref, 0, summaries, taskRevision)
-      )
-  let omittedBlocks = baseline?.omittedBlocks ?? 0
+  let blocks = ordered.map(({ block, index, view }) =>
+    renderBlock(block, index, { ...view, mode: 'reference' }, ref, 0, summaries, taskRevision)
+  )
+  let omittedBlocks = 0
   // 放不下（有块被省略或只露出一部分）时写出这次的展示预算，模型对得上是自己交多了
   const encode = () => encodeOutput(blocks, omittedBlocks, allocatedChars, issues, format)
+  // 短值的完整元数据可能比引用卡更短；按当前整体编码选更小的完整表示后再准入目录。
+  if (format === 'text')
+    for (let i = 0; i < blocks.length; i++) {
+      const { block, index, view, display } = ordered[i]!
+      const complete = renderBlock(
+        block,
+        index,
+        view,
+        ref,
+        allocatedChars,
+        summaries,
+        taskRevision,
+        display
+      )
+      if (complete.representation !== 'full') continue
+      const previous = blocks[i]!
+      const before = encode().length
+      blocks[i] = complete
+      if (encode().length > before) blocks[i] = previous
+    }
   while (!isEmpty(blocks) && encode().length > allocatedChars) {
     blocks.pop()
     omittedBlocks++
@@ -445,15 +434,7 @@ export function projectOutputs(
     const { block, index, view, display } = ordered[i]!
     const previous = blocks[i]!
     blocks[i] = renderBlock(block, index, view, ref, budget, summaries, taskRevision, display)
-    if (encode().length <= allocatedChars) {
-      if (
-        baseline &&
-        !(display && blocks[i]!.representation === 'full') &&
-        !preservesOutputBody(previous, blocks[i]!, block.value)
-      )
-        blocks[i] = previous
-      return
-    }
+    if (encode().length <= allocatedChars) return
     // 转义和省略元数据也占预算；在实际编码后的总长内找片段，避免一次减半空出大量空间。
     let low = 0
     let high = budget - 1
@@ -462,32 +443,26 @@ export function projectOutputs(
       const mid = Math.floor((low + high) / 2)
       blocks[i] = renderBlock(block, index, view, ref, mid, summaries, taskRevision, display)
       if (encode().length <= allocatedChars) {
-        if (
-          !baseline ||
-          (display && blocks[i]!.representation === 'full') ||
-          preservesOutputBody(previous, blocks[i]!, block.value)
-        )
-          best = blocks[i]!
+        best = blocks[i]!
         low = mid + 1
       } else high = mid - 1
     }
     blocks[i] = best
   }
-  for (let i = 0; !baseline && i < blocks.length; i++) {
+  for (let i = 0; i < blocks.length; i++) {
     const remaining = Math.max(0, allocatedChars - encode().length)
     expand(
       i,
-      ordered[i]!.block.options.required ? remaining : Math.floor(remaining / (blocks.length - i))
+      ordered[i]!.block.options.required ||
+        (format === 'text' && ordered[i]!.block.options.priority === 'high')
+        ? remaining
+        : Math.floor(remaining / (blocks.length - i))
     )
   }
   // 短块、显式上限与引用卡用不完的份额，按既定优先级返还给尚未完整展示的块。
   // 保留其他块的现有正文，只在同一全局预算内扩展；原值与展示策略不变。
   for (let i = 0; i < blocks.length && encode().length < allocatedChars; i++)
-    if (
-      (blocks[i]!.representation !== 'full' || ordered[i]!.display) &&
-      (!baseline || ordered[i]!.display || blocks[i]!.type === 'text' || blocks[i]!.type === 'code')
-    )
-      expand(i, allocatedChars)
+    if (blocks[i]!.representation !== 'full' || ordered[i]!.display) expand(i, allocatedChars)
   let prompt = encode()
   if (prompt.length > allocatedChars) {
     prompt = ''
@@ -500,9 +475,12 @@ export function projectOutputs(
 /** 只移除已确认交付的正文；同一编码计量，无法缩短时保留原投影。 */
 export function withoutOutputBodies(
   projection: ScriptOutputProjection,
-  identities: ReadonlyArray<{ key: string; contentHash: string }>
+  identities: ReadonlyArray<{ key: string; contentHash: string }>,
+  maxChars?: number
 ): ScriptOutputProjection {
-  const blocks = projection.blocks.map((block) =>
+  if (!isUndefined(maxChars) && !isFiniteNumber(maxChars))
+    throw new AppError('VALIDATION', '输出引用化的宿主上限必须是有限数字')
+  let blocks = projection.blocks.map((block) =>
     block.bodyIncluded &&
     identities.some((item) => item.key === block.key && item.contentHash === block.contentHash)
       ? {
@@ -514,15 +492,42 @@ export function withoutOutputBodies(
         }
       : block
   )
-  if (blocks.every((block, index) => block === projection.blocks[index])) return projection
-  const prompt = encodeOutput(
-    blocks,
+  const allocatedChars = isUndefined(maxChars)
+    ? projection.allocatedChars
+    : Math.max(0, Math.min(projection.allocatedChars, Math.floor(maxChars)))
+  if (
+    allocatedChars === projection.allocatedChars &&
+    blocks.every((block, index) => block === projection.blocks[index])
+  )
+    return projection
+  let omittedBlocks = projection.omittedBlocks
+  const encode = () =>
+    encodeOutput(blocks, omittedBlocks, allocatedChars, projection.issues, projection.format)
+  let prompt = encode()
+  if (isUndefined(maxChars))
+    return prompt.length <= projection.prompt.length && prompt.length <= allocatedChars
+      ? { ...projection, blocks, prompt }
+      : projection
+  const originalPrompt = encodeOutput(
+    projection.blocks,
     projection.omittedBlocks,
-    projection.allocatedChars,
+    allocatedChars,
     projection.issues,
     projection.format
   )
-  return prompt.length <= projection.prompt.length && prompt.length <= projection.allocatedChars
-    ? { ...projection, blocks, prompt }
-    : projection
+  // 极短正文的引用卡可能更长；原表示仍放得下时保留它，不扩大实际用量或改写相同表示。
+  if (prompt.length > originalPrompt.length && originalPrompt.length <= allocatedChars)
+    return {
+      ...projection,
+      prompt: originalPrompt,
+      allocatedChars,
+    }
+  // 缩减的宿主份额连元数据也放不下时只保留省略计数，不能把剩余块伪称完整交付。
+  while (!isEmpty(blocks) && prompt.length > allocatedChars) {
+    blocks = blocks.slice(0, -1)
+    omittedBlocks++
+    prompt = encode()
+  }
+  if (prompt.length > allocatedChars) prompt = ''
+  return { ...projection, blocks, prompt, allocatedChars, omittedBlocks }
 }

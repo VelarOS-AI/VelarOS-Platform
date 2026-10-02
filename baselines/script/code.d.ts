@@ -1,10 +1,9 @@
+/**
+ * 问代码，而不是自己读文件猜：定义在哪、谁在用它、改了波及谁、这个文件报什么错。
+ * 路径都相对项目根。结果里 `degraded` 不为空时只是候选——按名字找到的符号与引用不等于精确绑定，空诊断也不等于没问题。
+ * 找文本用 `velaros:project` 的 search，读正文用它的 read；这里只回答「代码之间的关系」。
+ */
 declare module 'velaros:code' {
-  /**
-   * 问代码，而不是自己读文件猜：定义在哪、谁在用它、改了波及谁、这个文件报什么错。
-   * 路径都相对项目根。结果里 `degraded` 不为空时只是候选——按名字找到的符号与引用不等于精确绑定，空诊断也不等于没问题。
-   * 找文本用 `velaros:project` 的 search，读正文用它的 read；这里只回答「代码之间的关系」。
-   */
-
   /**
    * 按一个 intent 问：outline / definition / references / callers / callees / imports / importers / impact / diagnostics。
    * 语言服务没装或这个文件它不认时，结果会降级成按名字找到的候选，`degraded` 里说清楚。

@@ -94,6 +94,7 @@ export const GovernedModules = [
     surfaceFile: [
       'act/system/impl/GoalOperations.ts',
       'act/system/impl/ModulesOperations.ts',
+      'act/system/impl/ProgramsOperations.ts',
       'act/system/impl/SystemMemoryOperations.ts',
       'act/system/impl/StoreOperations.ts',
       'act/system/impl/ContextMaterialsOperations.ts',
@@ -103,6 +104,7 @@ export const GovernedModules = [
       [
         'GoalModule.ts',
         'ModulesModule.ts',
+        'ProgramsModule.ts',
         'MemoryModule.ts',
         'ContextModule.ts',
         'StoreModule.ts',
@@ -110,6 +112,7 @@ export const GovernedModules = [
       [
         'GoalOperations.ts',
         'ModulesOperations.ts',
+        'ProgramsOperations.ts',
         'SystemMemoryOperations.ts',
         'StoreOperations.ts',
         'ContextMaterialsOperations.ts',
@@ -175,7 +178,7 @@ export const GovernedModules = [
       ['ContextViewSession.ts', 'LocalContextStorage.ts', 'TurnContextSessionLedgers.ts'],
       [
         'ContextEvidenceBuilder.ts',
-      'ContextVerificationSession.ts',
+        'ContextVerificationSession.ts',
         'SessionContext.ts',
         'ContextInvocationJournal.ts',
         'LocalStoreStorage.ts',

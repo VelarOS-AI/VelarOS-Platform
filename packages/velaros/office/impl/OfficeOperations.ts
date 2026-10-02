@@ -85,7 +85,7 @@ export interface OfficeOperationsApi {
    * @OperationEffect write
    */
   editPdf(input: OfficeEditPdfInput, ctx: OfficeOperationContext): Promise<OfficeWritten>
-  /** @AgentView 预览 Word、PowerPoint、Excel 文档的结构与正文，检查生成的文档对不对；也可以写出 HTML 或 PNG 预览给人看。
+  /** @AgentView 预览 Word、PowerPoint、Excel 文档的实际结构与正文；生成之后按产物路径调用可核对能否解析及实际数量。summary 是整份计数，条目受 maxItems 限制、正文另看 contentTruncated；结构解析不等于布局与全部业务内容通过。不给 outputPath 只读，也可以写出 HTML 或 PNG 预览给人看。
    * @OperationEffect write
    */
   preview(input: OfficePreviewInput, ctx: OfficeOperationContext): Promise<OfficePreview>

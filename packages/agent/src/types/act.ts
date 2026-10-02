@@ -1,4 +1,4 @@
-import type { ContextProjection } from '@velaros-ai/context'
+import type { ContextProjection, ContextVerificationReport } from '@velaros-ai/context'
 import type { ModelHistoryMessage } from '@velaros-ai/kernel'
 import type { CompiledModelRequest } from '@velaros-ai/model'
 
@@ -122,6 +122,8 @@ export type ActRunEvent =
       readonly verified: boolean
       readonly reason: string
       readonly recovery?: 'repair' | 'refresh' | 'input' | 'capacity'
+      /** 领域实际核查的范围与依据；成功、失败和未知项均按真实检查记录。 */
+      readonly report?: ContextVerificationReport
     }
   | { readonly type: 'error'; readonly runId: string; readonly message: string }
   /** 任务到了每小时的模型用量上限：等 retryAfterMs 后自动继续。 */

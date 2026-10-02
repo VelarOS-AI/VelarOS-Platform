@@ -28,7 +28,7 @@ export interface ScriptOutputsApi {
   describe(program: CodeProgramRequest): ScriptOutputManifest
   /** 仅改写展示字段，不运行脚本。 */
   edit(program: CodeProgramRequest, edit: ScriptOutputEdit): CodeProgramRequest
-  /** 对已归档的原值重新展示；默认 JSON，text 在同一上限内保留基线再扩展文本。 */
+  /** 对已归档的原值重新展示；默认 JSON；text 按实际正文与目录总长独立分配同一上限。 */
   project(
     capture: ScriptOutputCapture,
     ref: string,
@@ -39,10 +39,11 @@ export interface ScriptOutputsApi {
     format?: ScriptOutputFormat,
     displays?: readonly ScriptOutputDisplay[]
   ): ScriptOutputProjection
-  /** 宿主确认正文已在同一请求其他位置交付后，按块身份保留引用；其余块与问题不变。 */
+  /** 宿主确认正文已在同一请求其他位置交付后，按块身份保留引用；可选上限只缩减现有份额，计入同一编码的元数据，放不下的块明确省略。 */
   withoutBodies(
     projection: ScriptOutputProjection,
-    identities: ReadonlyArray<{ key: string; contentHash: string }>
+    identities: ReadonlyArray<{ key: string; contentHash: string }>,
+    maxChars?: number
   ): ScriptOutputProjection
   /** 对原始值计算稳定内容指纹。 */
   hash(value: unknown): string
@@ -86,9 +87,10 @@ class ScriptOutputs implements ScriptOutputsApi {
   }
   public withoutBodies(
     projection: ScriptOutputProjection,
-    identities: ReadonlyArray<{ key: string; contentHash: string }>
+    identities: ReadonlyArray<{ key: string; contentHash: string }>,
+    maxChars?: number
   ): ScriptOutputProjection {
-    return withoutOutputBodies(projection, identities)
+    return withoutOutputBodies(projection, identities, maxChars)
   }
   public hash(value: unknown): string {
     return outputContentHash(value)

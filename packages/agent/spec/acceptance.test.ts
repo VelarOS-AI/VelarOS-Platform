@@ -6,6 +6,7 @@ import type { ContextState } from '@velaros-ai/context'
 import type { ContextStorage } from '@velaros-ai/context'
 import { createContextRuntime, createContextView } from '@velaros-ai/context'
 import { AppError } from '@velaros-ai/core/error'
+import type { ModelHistoryMessage } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 
 import type { ActChildSession } from '../src/contract/requires.js'
@@ -102,6 +103,162 @@ test('INV-34 cleanup failure still releases ownership and cannot report a comple
   expect((await service.inspect()).status).toBe('completed')
   await service.close()
 })
+
+test.each([
+  { role: 'user' as const, content: 'same result' },
+  { role: 'user' as const, content: [{ type: 'text' as const, text: 'same result' }] },
+  { role: 'assistant' as const, content: 'same answer' },
+])('retained cache boundaries track each logical occurrence of $role messages', async (message) => {
+  const f = runFixture()
+  const logical: ModelHistoryMessage[] = [
+    { ...message, cacheBreakpoint: true },
+    { ...message, cacheBreakpoint: false },
+  ]
+  let turn = 0
+  const requests: ModelHistoryMessage[][] = []
+  f.options.frames = {
+    ...f.options.frames,
+    async project() {
+      return {
+        body: JSON.stringify({ turn }),
+        images: [],
+        prompt: `full frame ${turn}`,
+        history: logical.map((item) => ({ ...item })),
+      }
+    },
+    delta() {
+      return `delta frame ${turn}`
+    },
+  }
+  f.options.protocol = {
+    open: () => ({
+      instructions: 'fixture',
+      reset() {},
+      push() {
+        return []
+      },
+      finish() {
+        return turn >= 2
+          ? { message: 'done', done: true, events: [] }
+          : { message: 'work', done: false, submission: { code: 'work' }, events: [] }
+      },
+    }),
+  }
+  f.options.model.stream = async function* (request) {
+    requests.push(modelRequestEncoder.messages(request))
+    yield { type: 'text', text: 'accepted' }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  f.options.execution.invoke = async () => {
+    turn++
+    logical.push({ ...message, cacheBreakpoint: false })
+    if (turn === 2) {
+      logical[0] = { ...message, cacheBreakpoint: false }
+      logical[1] = { ...message, cacheBreakpoint: true }
+    }
+  }
+  const service = createActRunService(f.options)
+  for await (const _event of service.submit('work')) {
+    // The fixture runs through the normal acceptance and retained-prefix path.
+  }
+  expect(requests).toHaveLength(3)
+  expect(requests[1]![0]!.cacheBreakpoint).toBe(true)
+  expect(requests[1]![1]!.cacheBreakpoint).toBeUndefined()
+  expect(requests[1]![3]!.cacheBreakpoint).toBe(false)
+  expect(requests[2]![0]!.cacheBreakpoint).toBeUndefined()
+  expect(requests[2]![1]!.cacheBreakpoint).toBe(true)
+  expect(requests[2]![2]!.cacheBreakpoint).toBeUndefined()
+  expect(requests[2]![3]!.cacheBreakpoint).toBeUndefined()
+  expect(requests[2]![4]!.cacheBreakpoint).toBe(true)
+  expect(requests[2]![5]!.cacheBreakpoint).toBe(false)
+  await service.close()
+})
+
+test.each([
+  { fallback: false, repair: false },
+  { fallback: true, repair: false },
+  { fallback: false, repair: true },
+])(
+  'INV-49 final history reconciliation follows retained selection, fallback and acceptance $fallback/$repair',
+  async ({ fallback, repair }) => {
+    const f = runFixture()
+    const logical: ModelHistoryMessage[] = [{ role: 'user', content: 'logical entry' }]
+    let turn = 0
+    let responses = 0
+    let acknowledgements = 0
+    const requests: Array<Parameters<NonNullable<typeof f.options.frames.acknowledge>>[0]> = []
+    const calls: Array<{ previous?: string; retained: boolean; body: string }> = []
+    f.options.frames = {
+      ...f.options.frames,
+      async project() {
+        return {
+          body: JSON.stringify({ turn }),
+          images: [],
+          prompt: 'old prompt',
+          history: logical,
+        }
+      },
+      delta() {
+        return 'old delta'
+      },
+      async reconcile(body, history, previous) {
+        const retained = history.length > logical.length
+        const resolved = JSON.stringify({ ...JSON.parse(body), retained })
+        calls.push({ previous, retained, body: resolved })
+        return { body: resolved, prompt: `actual ${resolved}` }
+      },
+      async acknowledge(request) {
+        acknowledgements++
+        expect(request.compiledPrompt).toContain(request.materials[0]!.text)
+      },
+    }
+    f.options.model.estimate = async (request) => ({
+      tokens: fallback && turn === 1 && (request.history?.length ?? 0) > logical.length ? 9500 : 1,
+      precision: 'exact',
+      basis: 'fixture',
+    })
+    f.options.model.stream = async function* (request) {
+      requests.push(request)
+      responses++
+      yield { type: 'text', text: 'accepted' }
+      yield { type: 'finish', reason: 'stop' }
+    }
+    f.options.protocol.open = () => ({
+      instructions: 'fixture',
+      reset() {},
+      push() {
+        return []
+      },
+      finish() {
+        if (repair && responses === 1)
+          throw new AppError('SCRIPT_PROTOCOL', 'synthetic protocol rejection')
+        return turn === 0
+          ? { message: 'work', done: false, submission: { code: 'work' }, events: [] }
+          : { message: 'done', done: true, events: [] }
+      },
+    })
+    f.options.execution.invoke = async () => {
+      turn++
+    }
+    const service = createActRunService(f.options)
+    try {
+      for await (const _event of service.submit('work')) {
+        /* acceptance path */
+      }
+      expect(acknowledgements).toBe(2)
+      expect(requests).toHaveLength(repair ? 3 : 2)
+      const last = requests.at(-1)!
+      expect(JSON.parse(last.materials[0]!.text).retained).toBe(!fallback)
+      expect(last.compiledPrompt).toContain(last.materials[0]!.text)
+      expect(
+        calls.some((call) => call.previous === requests[0]!.materials[0]!.text && call.retained)
+      ).toBe(true)
+      if (fallback) expect(calls.at(-1)!.previous).toBeUndefined()
+    } finally {
+      await service.close()
+    }
+  }
+)
 
 test('INV-35 accepted event persistence failure prevents execution and leaves a failed recoverable run', async () => {
   const f = runFixture()
@@ -252,6 +409,55 @@ test('INV-45 measured usage reaches the host and persisted response with reporte
     outputTokens: 20,
   })
   expect('cacheReadTokens' in plain!).toBe(false)
+})
+
+test('INV-45 received usage survives simultaneous cancellation in the durable rejected request', async () => {
+  const f = runFixture()
+  const controller = new AbortController()
+  let calls = 0
+  f.options.model = {
+    ...f.options.model,
+    stream: () => ({
+      [Symbol.asyncIterator]: () => ({
+        next() {
+          calls++
+          controller.abort(new DOMException('cancel with measured terminal', 'AbortError'))
+          return Promise.resolve({
+            done: false,
+            value: { type: 'usage' as const, inputTokens: 19, outputTokens: 7, cacheReadTokens: 3 },
+          })
+        },
+        return: async () => ({ done: true, value: undefined }),
+      }),
+    }),
+  }
+  const service = createActRunService(f.options)
+  const events = []
+  try {
+    for await (const event of service.submit('work', controller.signal)) events.push(event)
+    const state = await f.store.load('fault')
+    const request = state!.records.find((record) => record.title === 'model-request')!
+    const response = state!.records.find((record) => record.title === 'model-response')!
+    const body = JSON.parse((await f.store.get('fault', response.objectId))!)
+    expect(calls).toBe(1)
+    expect(body).toMatchObject({
+      status: 'rejected',
+      turnId: request.ref.id,
+      usage: { inputTokens: 19, outputTokens: 7, cacheReadTokens: 3 },
+    })
+    expect(response.sources).toContainEqual(request.ref)
+    expect(events.filter((event) => event.type === 'usage')).toHaveLength(1)
+    expect(events.some((event) => event.type === 'accepted')).toBe(false)
+    expect((await service.inspect()).status).toBe('cancelled')
+    expect(state!.task!.usage).toMatchObject({
+      mainCalls: 1,
+      inputTokens: 19,
+      outputTokens: 7,
+      unmeasuredCalls: 0,
+    })
+  } finally {
+    await service.close()
+  }
 })
 
 test('INV-46 continuation is linked only to an accepted complete response and never emitted to the host', async () => {

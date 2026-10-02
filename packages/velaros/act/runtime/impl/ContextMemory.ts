@@ -1,4 +1,5 @@
 import type {
+  ContextCompletionRecord,
   ContextContent,
   ContextFeedback,
   ContextInvocationJournalApi,
@@ -11,10 +12,11 @@ import type {
   ModelView,
 } from '@velaros-ai/context'
 import { isEmpty } from '@velaros-ai/core'
-import { isFalse, isNull, isUndefined, toNullable } from '@velaros-ai/core'
+import { isFalse, isNull, isTrue, isUndefined, toNullable } from '@velaros-ai/core'
 import { isArray, isBoolean, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { ModelHistoryMessage, ModelImage } from '@velaros-ai/kernel'
+import type { ModelHistoryMessage, ModelImage, ModelTurnRequest } from '@velaros-ai/kernel'
+import { modelRequestEncoder } from '@velaros-ai/kernel'
 import { scriptOutputs } from '@velaros-ai/script'
 import type { WorkspaceEntry, WorkspaceUpdate } from '@velaros-ai/velaros/act/system'
 
@@ -34,6 +36,7 @@ import type {
   RuntimeNoteRead,
   WorkspaceNote,
 } from '../types/memory.js'
+import type { ScriptDecisionBasis } from '../types/runtime.js'
 import type {
   ContextSegment,
   FoldedGoals,
@@ -45,14 +48,20 @@ import type {
 import {
   adjustedWorkspaceShare,
   memoryCommittedGroups,
+  memoryDeliveredOutputs,
   memoryFeedbackKey,
+  memoryMessageKey,
   memoryOutput,
+  memoryOutputRefs,
   memoryPolicy,
   memoryPrompt,
+  memoryProofCarriers,
   memoryReference,
   memoryTaskHistory,
+  memoryVerificationProjection,
   noteEntry,
 } from '../utils/context-memory.js'
+import { decisionStateProjection } from '../utils/decision-state.js'
 import { readMaterialField } from '../utils/materials.js'
 import { segmentBase, skeletonLine } from '../utils/segment.js'
 import { ActRuntimeTuning } from '../utils/tuning.js'
@@ -111,7 +120,18 @@ export interface ContextMemoryApi {
     segment: SegmentStatus
   }>
   /** 只以实际接收成功的快照更新分区变化基线，并冻结本帧新交付的段内历史。 */
-  acknowledge(frameId: string, signal: AbortSignal): Promise<void>
+  acknowledge(
+    frameId: string,
+    signal: AbortSignal,
+    request?: ModelTurnRequest
+  ): Promise<Optional<ScriptDecisionBasis>>
+  /** 最终历史已选择后核对正文证明；候选证明直到接受响应才绑定实际消息。 */
+  reconcile(
+    body: string,
+    history: readonly ModelHistoryMessage[],
+    previous: Optional<string>,
+    signal: AbortSignal
+  ): Promise<{ body: string; prompt: string }>
   /** 把段内较早的历史封成一卷并开始新的一段，不调用模型；能封的不足一个响应时返回 false。 */
   fold(reason: SegmentReason, maxChars: number, signal: AbortSignal): Promise<boolean>
   /**
@@ -445,6 +465,7 @@ export class ContextMemory implements ContextMemoryApi {
       throw new AppError('SCOPE_MISMATCH', '材料引用不在当前任务授权范围')
     await this.fault(ref, signal)
     const result = /^script:[^:]+:result$/u.test(record.title ?? '')
+    const stateDetails = record.title.startsWith('context:decision-state:')
     if (!isUndefined(invocation)) {
       if (!result || !isString(invocation) || !invocation)
         throw new AppError('VALIDATION', '调用召回必须指定失败执行结果及其调用身份')
@@ -484,24 +505,36 @@ export class ContextMemory implements ContextMemoryApi {
       const page = isUndefined(pointer)
         ? readMaterialField(JSON.stringify({ receipt: call.receipt }), '/receipt', offset, limit)
         : readMaterialField(receipt, pointer, offset, limit)
-      return {
+      const content: ContextContent & { pointer?: string; invocation?: string } = {
         record,
         text: page.text,
         offset: page.offset,
         totalChars: page.totalChars,
-        ...(isUndefined(pointer) ? {} : { pointer }),
-        invocation,
       }
+      if (!isUndefined(pointer)) content.pointer = pointer
+      content.invocation = invocation
+      return content
     }
-    if (!isUndefined(pointer) || result) {
-      if (!/^script:[^:]+:result$/u.test(record.title ?? ''))
-        throw new AppError('VALIDATION', '字段召回仅适用于执行结果归档')
+    if (!isUndefined(pointer) || result || stateDetails) {
+      if (!result && !stateDetails)
+        throw new AppError('VALIDATION', '字段召回仅适用于执行结果或当前决策状态归档')
       const archived = await this.storage.get(this.id, record.objectId)
       signal.throwIfAborted()
       if (isNull(archived)) throw new AppError('NOT_FOUND', '执行结果原文不可用')
       const page: MemoryContent = isUndefined(pointer)
         ? await this.context.read(ref, { offset, limit })
         : { record, ...readMaterialField(archived, pointer, offset, limit) }
+      // 状态细节召回定位原文，不签发执行输出的 required 送达证明。
+      if (stateDetails) {
+        const current = await this.snapshot(signal, [
+          { title: 'search:history-reset', latest: true },
+          { kind: 'user' },
+          { refId: ref.id },
+        ])
+        if (!memoryReference(current, ref))
+          throw new AppError('SCOPE_MISMATCH', '召回期间当前决策状态的授权范围已经变化')
+        return page
+      }
       const match = pointer?.match(/^\/output\/blocks\/(0|[1-9]\d*)\/value$/u)
       const blocks = (JSON.parse(archived).output?.blocks ?? []) as Array<{
         key: string
@@ -515,6 +548,8 @@ export class ContextMemory implements ContextMemoryApi {
           : []
       const required = selected.filter((block) => block.options.required)
       if (isEmpty(required)) return page
+      const pointerFields: { pointer?: string } = {}
+      if (!isUndefined(pointer)) pointerFields.pointer = pointer
       const delivery: MemoryReadDelivery = {
         authorizationSequence: Math.max(
           snapshot?.task?.startedSequence ?? 0,
@@ -525,7 +560,7 @@ export class ContextMemory implements ContextMemoryApi {
           key: block.key,
           contentHash: scriptOutputs.hash(block.value),
         })),
-        ...(!isUndefined(pointer) ? { pointer } : {}),
+        ...pointerFields,
         offset: page.offset,
         chars: page.text.length,
         totalChars: page.totalChars,
@@ -613,7 +648,18 @@ export class ContextMemory implements ContextMemoryApi {
     images: readonly ModelImage[],
     signal: AbortSignal,
     maxChars: number
-  ) {
+  ): ReturnType<ContextMemoryApi['project']> {
+    return this.projectFrame(view, observation, images, signal, maxChars, true)
+  }
+
+  private async projectFrame(
+    view: ModelView,
+    observation: Optional<ContextRef>,
+    images: readonly ModelImage[],
+    signal: AbortSignal,
+    maxChars: number,
+    reuseRetained: boolean
+  ): ReturnType<ContextMemoryApi['project']> {
     const active = await new ActiveContext(this.id, this.context, this.storage).read(signal)
     const programState = await this.programs.state()
     const { snapshot, reset, notes } = await this.notes(signal, true, [
@@ -621,6 +667,8 @@ export class ContextMemory implements ContextMemoryApi {
       { title: 'context-maintenance:outcome', latest: true },
       { title: 'context-maintenance:request', latest: true },
       { title: 'context:delivered', latest: true },
+      { titlePrefix: 'task:completion:', latest: true },
+      { titlePrefix: 'context:decision-state:', latest: true },
       ...programState.leases
         .filter(
           (item) => item.task || item.segment || item.expiresAfter > programState.completedTurns
@@ -691,6 +739,70 @@ export class ContextMemory implements ContextMemoryApi {
         ? ('changed' as const)
         : ('unverified' as const)
     const cards = this.noteCards(changed, workspaceBudget, presentation)
+    // 当前身份目录独立于段底座和正文预算；超出展示上限的条目用明确缺口与分页目录召回。
+    const directoryLimit = Math.max(1, Math.min(64, Math.floor(workspaceBudget / 512)))
+    const residentDirectory = {
+      items: residents.slice(0, directoryLimit).map(({ note, record }) => ({
+        key: note.key,
+        revision: note.revision,
+        ref: record.ref,
+        freshness: freshness(note),
+        bodyLocation:
+          snapshotNotes.get(note.key)?.revision === note.revision &&
+          snapshotNotes.get(note.key)?.shown
+            ? 'segment-base'
+            : cards.cards.some((card) => card.key === note.key && card.bodyIncluded)
+              ? 'frame-tail'
+              : 'recall',
+      })),
+      omitted: Math.max(0, residents.length - directoryLimit),
+    }
+    const completionRecord = snapshot?.task?.completionRef
+      ? memoryReference(snapshot, snapshot.task.completionRef)
+      : undefined
+    const completion: Optional<ContextCompletionRecord> = completionRecord
+      ? JSON.parse((await this.storage.get(this.id, completionRecord.objectId))!)
+      : undefined
+    const report = completion?.result.report
+    const verification: Optional<Record<string, unknown>> =
+      completion && completion.taskId === snapshot?.task?.id
+        ? {
+            ref: completionRecord!.ref,
+            taskId: completion.taskId,
+            taskRevision: completion.taskRevision,
+            binding: completion.binding,
+            completed: completion.result.completed,
+            verified: completion.result.verified,
+            counts: Object.fromEntries(
+              ['passed', 'failed', 'unknown'].map((status) => [
+                status,
+                report?.checks.filter((check) => check.status === status).length ?? 0,
+              ])
+            ),
+            checkedAt: report?.checkedAt,
+            checks: [],
+            omittedChecks: report?.checks.length ?? 0,
+          }
+        : undefined
+    if (verification && report) {
+      const applicability = await this.view.completionApplicability(completionRecord!.ref, signal)
+      verification.applicabilityCheckedAt = applicability?.checkedAt
+      // 原核查结果和当前适用性分别计数；细节预算不能把历史证明或未知依赖隐藏成当前成功。
+      verification.applicabilityCounts = Object.fromEntries(
+        ['current', 'historical', 'unknown'].map((status) => [
+          status,
+          report.checks.filter(
+            (_check, index) => (applicability?.checks[index]?.status ?? 'unknown') === status
+          ).length,
+        ])
+      )
+      // 核查摘要只占帧预算的一小份；大范围和产物细节按报告引用回看，修复帧始终留给当前状态。
+      const verificationBudget = Math.min(2048, Math.max(0, Math.floor(maxChars / 40)))
+      Object.assign(
+        verification,
+        memoryVerificationProjection(verification, report, applicability, verificationBudget)
+      )
+    }
     const workspace = cards.cards.map((card, index) => ({
       ...card,
       supersedes: toNullable(snapshotNotes.get(card.key)?.revision),
@@ -698,12 +810,29 @@ export class ContextMemory implements ContextMemoryApi {
     }))
     const base = await this.storage.get(this.id, segment.base.objectId)
     if (isNull(base)) throw new AppError('NOT_FOUND', '段底座正文缺失')
+    const records = new Map(snapshot?.records.map((record) => [record.ref.id, record]) ?? [])
+    // 仅把本次历史仍会保留的冻结执行正文用于额度分配；当前授权与段携入边界同历史读取器。
+    const retained =
+      reuseRetained && this.policy.recentRecords
+        ? segment.entries.filter((entry) => {
+            const record = records.get(entry.ref)
+            return Boolean(
+              entry.role === 'user' &&
+              (entry.outputViews || entry.fullMaterial) &&
+              record &&
+              record.sequence > reset &&
+              (record.sequence > segment.from || segment.carried.includes(entry.ref)) &&
+              /^script:[0-9a-f-]{36}:result$/u.test(record.title)
+            )
+          })
+        : []
     const frame = await this.programs.project(
       view,
       observation,
       images,
       signal,
-      Math.max(1, maxChars - base.length - cards.used)
+      Math.max(1, maxChars - base.length - cards.used),
+      retained
     )
     const material = JSON.parse(frame.body)
     const sequence = new Map(
@@ -753,6 +882,27 @@ export class ContextMemory implements ContextMemoryApi {
           signal
         )
       : { messages: [], items: [], fresh: [] }
+    // 准备期间的授权重置或历史退役可能使预分配所依据的正文失效。
+    // 重新读取当前快照并完整投影一次，恢复正文与额度，不能只撤掉展示标记。
+    if (
+      retained.some(
+        (entry) =>
+          !history.items.some(
+            (item) =>
+              item.ref === entry.ref &&
+              item.role === 'user' &&
+              item.bodyIncluded &&
+              (!entry.fullMaterial || item.fullMaterial === entry.fullMaterial) &&
+              (entry.outputViews ?? []).every((previous) =>
+                item.outputViews?.some(
+                  (current) =>
+                    current.key === previous.key && current.fingerprint === previous.fingerprint
+                )
+              )
+          )
+      )
+    )
+      return this.projectFrame(view, observation, images, signal, maxChars, false)
     // 正文已在段内历史里的结果，本帧尾只留状态与引用；当次源码在产生它的那条响应里
     const inHistory = new Set(
       history.items
@@ -818,6 +968,17 @@ export class ContextMemory implements ContextMemoryApi {
         .filter((item) => item.role === 'user' && item.bodyIncluded && item.outputViews)
         .map((item) => [item.ref, item.outputViews!])
     )
+    const workingProofs = new Map<string, readonly SegmentOutputProof[]>(
+      material.results.map(
+        (item: { ref: string; outputProofs?: readonly SegmentOutputProof[] }) => [
+          item.ref,
+          item.outputProofs ?? [],
+        ]
+      )
+    )
+    const workingTexts = new Map<string, string>(
+      material.results.map((item: { ref: string; text?: string }) => [item.ref, item.text ?? ''])
+    )
     material.results = material.results.map((item: Record<string, unknown> & { ref: string }) => {
       const { outputProofs: _outputProofs, outputViews, materialCoverage, ...displayed } = item
       const coverage = frame.outputCoverage?.find((coverage) => coverage.ref === item.ref)
@@ -859,6 +1020,7 @@ export class ContextMemory implements ContextMemoryApi {
           : text
       const fullMaterial = fullMaterials.get(item.ref)
       if (
+        !isTrue(item.bodyInHistory) &&
         !(
           !item.structuredOutput &&
           fullMaterial &&
@@ -866,10 +1028,10 @@ export class ContextMemory implements ContextMemoryApi {
           fullMaterial === (materialCoverage as { identity: string }).identity
         ) &&
         historyOutputs.get(item.ref) !==
-          scriptOutputs.hash([this.id, item.ref, item.sourceRef ?? null, encoded])
+          scriptOutputs.hash([this.id, item.ref, toNullable(item.sourceRef), encoded])
       )
         return displayed
-      // 同一来源的完整编码表示已经逐字进入历史；局部或旧表示不能遮蔽新增正文。
+      // 同一来源的本次编码表示已经逐字进入历史；表示的截断状态与原值缺口独立保留。
       // 同一个 ref 仍可经 memory.read 读取完整原文。
       return {
         ref: item.ref,
@@ -1042,6 +1204,7 @@ export class ContextMemory implements ContextMemoryApi {
       workspace: {
         capsule: resetAfterStart ? null : material.capsule,
         notes: workspace,
+        residentDirectory,
         snapshot: {
           notes: segment.notes.length,
           shown: segment.notes.filter((item) => item.shown).length,
@@ -1077,6 +1240,7 @@ export class ContextMemory implements ContextMemoryApi {
       },
       runtime: {
         taskId: snapshot?.task?.id,
+        verification,
         decision,
         scope: material.scope,
         children: material.children,
@@ -1101,6 +1265,31 @@ export class ContextMemory implements ContextMemoryApi {
         materialStatus: material.materialStatus,
       },
     }
+    const stateBudget = Math.max(
+      1,
+      Math.min(ActRuntimeTuning.stateChars, Math.floor(maxChars * ActRuntimeTuning.stateShare))
+    )
+    const stateProjection =
+      this.policy.stateDetails === 'budgeted'
+        ? decisionStateProjection(partitions.runtime, active, stateBudget)
+        : undefined
+    // 仅在细节确实可减少时归档原文；原内部帧与正文证明保持完整。
+    let stateRecord: Optional<ContextRecord>
+    if (stateProjection && stateProjection.savedChars > ActRuntimeTuning.stateMinimumSavings) {
+      const title = `context:decision-state:${snapshot?.task?.id ?? 'none'}:${reset}`
+      const detail = JSON.stringify({
+        readSet: partitions.runtime.readSet,
+        evidence: partitions.runtime.evidence,
+        progress: partitions.runtime.progress,
+      })
+      const previous = snapshot?.records.findLast(
+        (record) => record.title === title && record.sequence > reset
+      )
+      stateRecord =
+        previous && (await this.storage.get(this.id, previous.objectId)) === detail
+          ? previous
+          : await this.context.append({ kind: 'audit', title, body: detail }, signal)
+    }
     const footprint = Object.fromEntries(
       Object.entries(partitions).map(([name, value]) => [name, JSON.stringify(value).length])
     )
@@ -1111,6 +1300,21 @@ export class ContextMemory implements ContextMemoryApi {
       partitions,
       memoryStatus: {
         unit: 'utf16',
+        decisionState:
+          stateProjection && (stateRecord || stateProjection.originalChars > stateBudget)
+            ? {
+                ref: stateRecord?.ref,
+                budget: stateBudget,
+                originalChars: stateProjection.originalChars,
+                shownChars: stateRecord
+                  ? stateProjection.shownChars
+                  : stateProjection.originalChars,
+                savedChars: stateRecord ? stateProjection.savedChars : 0,
+                overBudget:
+                  (stateRecord ? stateProjection.shownChars : stateProjection.originalChars) >
+                  stateBudget,
+              }
+            : undefined,
         footprint: { base: base.length, ...footprint },
         segment: {
           ...status,
@@ -1153,6 +1357,34 @@ export class ContextMemory implements ContextMemoryApi {
           budget: { maxChars, program: frame.budget, historyEntryChars },
           entries,
           segment: { id: segment.id, revision: segment.revision, fresh: history.fresh },
+          proof: {
+            authorization: reset,
+            missing: material.decision.missing,
+            history: history.items.flatMap((item, index) =>
+              item.role === 'user' && item.bodyIncluded && item.outputProofs?.length
+                ? [
+                    {
+                      message: memoryMessageKey(history.messages[index]!),
+                      proofs: item.outputProofs,
+                    },
+                  ]
+                : []
+            ),
+            current: material.results.flatMap(
+              (item: { ref: string; text?: string; outputFormat?: string }) => {
+                const proofs = workingProofs.get(item.ref)
+                return item.text && item.text === workingTexts.get(item.ref) && proofs?.length
+                  ? [
+                      {
+                        ref: item.ref,
+                        text: scriptOutputs.hash([item.ref, item.outputFormat, item.text]),
+                        proofs,
+                      },
+                    ]
+                  : []
+              }
+            ),
+          },
           squeezed,
         }),
         sources: [],
@@ -1507,11 +1739,161 @@ export class ContextMemory implements ContextMemoryApi {
     return segment
   }
 
-  public async acknowledge(frameId: string, signal: AbortSignal): Promise<void> {
+  /** 证明始终服从当前授权、段身份和载体释放；不可变原文不靠相同文字重新授权。 */
+  private async authorizedProofs(
+    proofs: readonly SegmentOutputProof[],
+    authorization: number,
+    segment: { id: string; revision: number },
+    signal: AbortSignal
+  ): Promise<readonly SegmentOutputProof[]> {
+    const refs = [...new Set(proofs.flatMap((proof) => [proof.ref, proof.carrierRef ?? proof.ref]))]
+    const state = await this.snapshot(signal, [
+      { title: 'search:history-reset', latest: true },
+      { kind: 'user' },
+      ...refs.map((refId) => ({ refId })),
+    ])
+    const reset = Math.max(
+      state?.task?.startedSequence ?? 0,
+      state?.records.findLast((record) => record.title === 'search:history-reset')?.sequence ?? 0
+    )
+    const current = await this.recent.segment(signal)
+    if (
+      reset !== authorization ||
+      current?.id !== segment.id ||
+      current.revision !== segment.revision
+    )
+      return []
+    const released = new Set((await this.programs.state()).released ?? [])
+    return proofs.filter(
+      (proof) =>
+        !released.has(proof.carrierRef ?? proof.ref) &&
+        memoryReference(state, { sessionId: this.id, id: proof.ref }) &&
+        memoryReference(state, { sessionId: this.id, id: proof.carrierRef ?? proof.ref })
+    )
+  }
+
+  public async reconcile(
+    body: string,
+    history: readonly ModelHistoryMessage[],
+    previous: Optional<string>,
+    signal: AbortSignal
+  ): Promise<{ body: string; prompt: string }> {
+    const projected = JSON.parse(body)
+    const selected = await this.snapshot(signal, [
+      { title: `context:frame:${projected.frameId}`, latest: true },
+      { title: 'context:delivered', latest: true },
+    ])
+    const record = selected?.records.findLast(
+      (item) => item.title === `context:frame:${projected.frameId}`
+    )
+    if (!record) throw new AppError('NOT_FOUND', '待核对的上下文帧尚未登记')
+    const saved = JSON.parse((await this.storage.get(this.id, record.objectId))!)
+    if (!saved.proof) return { body, prompt: memoryPrompt(body, previous) }
+    const delivered = selected?.records.findLast((item) => item.title === 'context:delivered')
+    const accepted = delivered
+      ? JSON.parse((await this.storage.get(this.id, delivered.objectId))!).accepted
+      : undefined
+    const messages = new Set(history.filter((item) => item.role === 'user').map(memoryMessageKey))
+    const compatible =
+      accepted &&
+      accepted.authorization === saved.proof.authorization &&
+      accepted.segment.id === saved.segment.id &&
+      accepted.segment.revision === saved.segment.revision
+    const carriers: Array<{ message: string; proofs: readonly SegmentOutputProof[] }> = []
+    const known = new Set<string>()
+    for (const carrier of [
+      ...saved.proof.history,
+      ...(compatible ? accepted.carriers : []),
+    ] as ReadonlyArray<{ message: string; proofs: readonly SegmentOutputProof[] }>) {
+      if (!messages.has(carrier.message)) continue
+      const identity = scriptOutputs.hash([carrier.message, carrier.proofs])
+      if (known.has(identity)) continue
+      known.add(identity)
+      carriers.push(carrier)
+    }
+    const shown = new Set(memoryOutputRefs(body, previous))
+    const current: SegmentOutputProof[] = []
+    for (const item of projected.partitions.recent.results as ReadonlyArray<{
+      ref: string
+      text?: string
+      outputFormat?: string
+    }>) {
+      if (!shown.has(item.ref) || !item.text) continue
+      const source = saved.proof.current.find(
+        (candidate: { ref: string; text: string }) =>
+          candidate.ref === item.ref &&
+          candidate.text === scriptOutputs.hash([item.ref, item.outputFormat, item.text])
+      )
+      if (source) current.push(...source.proofs)
+    }
+    const permitted = new Set(
+      (
+        await this.authorizedProofs(
+          [...carriers.flatMap((carrier) => carrier.proofs), ...current],
+          saved.proof.authorization,
+          saved.segment,
+          signal
+        )
+      ).map((proof) => JSON.stringify(proof))
+    )
+    const authorized = memoryProofCarriers(carriers)
+      .map((carrier) => ({
+        ...carrier,
+        proofs: carrier.proofs.filter((proof) => permitted.has(JSON.stringify(proof))),
+      }))
+      .filter((carrier) => carrier.proofs.length)
+    const currentProofs = current.filter((proof) => permitted.has(JSON.stringify(proof)))
+    const complete = memoryDeliveredOutputs([
+      ...authorized.flatMap((carrier) => carrier.proofs),
+      ...currentProofs,
+    ])
+    const missing = saved.proof.missing.filter(
+      (item: Partial<SegmentOutputProof> & { reason: string }) =>
+        !['required-body-unavailable', 'required-lease-not-delivered'].includes(item.reason) ||
+        !item.contentHash ||
+        !complete.has(JSON.stringify([item.ref, item.key, item.contentHash]))
+    )
+    projected.partitions.runtime.decision.missing = missing.map(
+      (item: { contentHash?: string }) => {
+        const { contentHash: _contentHash, ...gap } = item
+        return gap
+      }
+    )
+    projected.memoryStatus.footprint.runtime = JSON.stringify(projected.partitions.runtime).length
+    const resolved = JSON.stringify(projected)
+    const prompt = memoryPrompt(resolved, previous)
+    await this.context.append(
+      {
+        kind: 'audit',
+        title: `context:request-proof:${projected.frameId}`,
+        body: JSON.stringify({
+          frameId: projected.frameId,
+          authorization: saved.proof.authorization,
+          segment: { id: saved.segment.id, revision: saved.segment.revision },
+          bodyHash: scriptOutputs.hash(resolved),
+          promptHash: scriptOutputs.hash(prompt),
+          promptChars: prompt.length,
+          carriers: authorized,
+          current: currentProofs,
+          missing: saved.proof.missing,
+        }),
+        sources: [record.ref],
+      },
+      signal
+    )
+    return { body: resolved, prompt }
+  }
+
+  public async acknowledge(
+    frameId: string,
+    signal: AbortSignal,
+    request?: ModelTurnRequest
+  ): Promise<Optional<ScriptDecisionBasis>> {
     const selected = this.storage.selectSnapshot
       ? await this.storage.selectSnapshot(this.id, [
           { title: `context:frame:${frameId}`, latest: true },
           { title: 'context:delivered', latest: true },
+          { title: `context:request-proof:${frameId}`, latest: true },
         ])
       : undefined
     const snapshot = this.storage.selectSnapshot ? selected : await this.storage.load(this.id)
@@ -1521,11 +1903,11 @@ export class ContextMemory implements ContextMemoryApi {
     )
     if (!frame) throw new AppError('NOT_FOUND', '上下文帧尚未登记')
     const previous = snapshot?.records.findLast((record) => record.title === 'context:delivered')
-    if (
+    const duplicate = Boolean(
       previous &&
       JSON.parse((await this.storage.get(this.id, previous.objectId))!).frameId === frameId
     )
-      return
+    if (duplicate && !request) return
     const body = (await this.storage.get(this.id, frame.objectId))!
     // 本帧第一次交付的段内历史从此冻结，同段后续帧逐字复用
     const delivered = JSON.parse(body).segment as Optional<{
@@ -1533,25 +1915,111 @@ export class ContextMemory implements ContextMemoryApi {
       revision: number
       fresh: ContextSegment['entries']
     }>
-    if (delivered?.fresh.length) {
+    if (!duplicate && delivered?.fresh.length) {
       const segment = await this.recent.segment(signal)
       if (segment?.id === delivered.id && segment.revision === delivered.revision) {
+        const fresh = request
+          ? (
+              await Promise.all(
+                delivered.fresh.map(async (entry) => ({
+                  entry,
+                  content: await this.storage.get(this.id, entry.objectId),
+                }))
+              )
+            )
+              .filter(({ entry, content }) =>
+                (request.history ?? []).some(
+                  (message) => message.role === entry.role && message.content === content
+                )
+              )
+              .map(({ entry }) => entry)
+          : delivered.fresh
         const known = new Set(segment.entries.map((entry) => entry.ref))
         await this.recent.commit(
           {
             ...segment,
-            entries: [
-              ...segment.entries,
-              ...delivered.fresh.filter((entry) => !known.has(entry.ref)),
-            ],
+            entries: [...segment.entries, ...fresh.filter((entry) => !known.has(entry.ref))],
           },
           signal
         )
       }
     }
-    await this.context.append(
-      { kind: 'audit', title: 'context:delivered', body, sources: [frame.ref] },
-      signal
+    const proofRecord = snapshot?.records.findLast(
+      (record) => record.title === `context:request-proof:${frameId}`
     )
+    const candidate = proofRecord
+      ? JSON.parse((await this.storage.get(this.id, proofRecord.objectId))!)
+      : undefined
+    let basis: Optional<ScriptDecisionBasis>
+    let accepted
+    if (request && candidate) {
+      const material = request.materials.findLast((item) => item.origin === 'runtime-view')
+      const exact =
+        material &&
+        scriptOutputs.hash(material.text) === candidate.bodyHash &&
+        scriptOutputs.hash(request.compiledPrompt?.slice(0, candidate.promptChars)) ===
+          candidate.promptHash
+      const history = new Set(
+        (request.history ?? []).filter((item) => item.role === 'user').map(memoryMessageKey)
+      )
+      const carriers: Array<{ message: string; proofs: readonly SegmentOutputProof[] }> = []
+      if (exact) {
+        for (const carrier of candidate.carriers as ReadonlyArray<{
+          message: string
+          proofs: readonly SegmentOutputProof[]
+        }>) {
+          if (!history.has(carrier.message)) continue
+          carriers.push(carrier)
+        }
+        const message = modelRequestEncoder.messages(request).at(-1)
+        if (!isEmpty(candidate.current) && message?.role === 'user')
+          carriers.push({ message: memoryMessageKey(message), proofs: candidate.current })
+      }
+      const permitted = new Set(
+        (
+          await this.authorizedProofs(
+            carriers.flatMap((carrier) => carrier.proofs),
+            candidate.authorization,
+            candidate.segment,
+            signal
+          )
+        ).map((proof) => JSON.stringify(proof))
+      )
+      const authorized = memoryProofCarriers(carriers)
+        .map((carrier) => ({
+          ...carrier,
+          proofs: carrier.proofs.filter((proof) => permitted.has(JSON.stringify(proof))),
+        }))
+        .filter((carrier) => carrier.proofs.length)
+      const complete = memoryDeliveredOutputs(authorized.flatMap((carrier) => carrier.proofs))
+      basis = {
+        frameId,
+        missing: candidate.missing
+          .filter(
+            (item: Partial<SegmentOutputProof> & { reason: string }) =>
+              !['required-body-unavailable', 'required-lease-not-delivered'].includes(
+                item.reason
+              ) ||
+              !item.contentHash ||
+              !complete.has(JSON.stringify([item.ref, item.key, item.contentHash]))
+          )
+          .map((item: { contentHash?: string }) => {
+            const { contentHash: _contentHash, ...gap } = item
+            return gap
+          }),
+      }
+      accepted = {
+        authorization: candidate.authorization,
+        segment: candidate.segment,
+        carriers: authorized,
+      }
+    }
+    const acceptedBody = accepted ? JSON.stringify({ ...JSON.parse(body), accepted }) : body
+    if (!previous || (await this.storage.get(this.id, previous.objectId)) !== acceptedBody)
+      await this.context.append(
+        { kind: 'audit', title: 'context:delivered', body: acceptedBody, sources: [frame.ref] },
+        signal
+      )
+    return basis
   }
 }

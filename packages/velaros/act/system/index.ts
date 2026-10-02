@@ -1,5 +1,6 @@
 export type { MemoryModuleApi, ModulesModuleApi, SystemModulesApi } from './contract/provides.js'
 export type { StoreModuleApi, StoreSessionApi } from './contract/provides.js'
+export type { ProgramsModuleApi } from './contract/provides.js'
 export type {
   ContextCandidateValidator,
   ContextMaintenanceHost,
@@ -8,6 +9,9 @@ export type {
   MemorySession,
   MemoryStore,
   ModulesHost,
+  ProgramCatalogPort,
+  ProgramsHost,
+  ProgramsOperationContext,
   SystemHost,
 } from './contract/requires.js'
 export type { StoreHost } from './contract/requires.js'
@@ -25,6 +29,7 @@ export type {
 export type { GoalHost } from './contract/requires.js'
 export { memoryModule } from './impl/MemoryModule.js'
 export { modulesModule } from './impl/ModulesModule.js'
+export { programsModule } from './impl/ProgramsModule.js'
 export { storeModule } from './impl/StoreModule.js'
 export { systemModules } from './impl/SystemModules.js'
 export type { GoalState, GoalStatus, GoalUpdate } from './types/goal.js'
@@ -52,10 +57,18 @@ export type {
 } from './types/memory.js'
 export type {
   SystemModuleCard,
+  SystemModuleDescribeInput,
   SystemModuleDescription,
   SystemModulePage,
   SystemModuleQuery,
 } from './types/modules.js'
+export type {
+  ProgramDescribeInput,
+  ProgramDescriptor,
+  ProgramPage,
+  ProgramPublishInput,
+  ProgramQuery,
+} from './types/programs.js'
 export type { ScriptRetention } from './types/results.js'
 export type { StoreConfiguration, StoreEntry, StoreFrame, StoreGrant } from './types/store.js'
 export type { WorkspaceEntry, WorkspaceUpdate } from './types/workspace.js'

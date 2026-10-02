@@ -73,6 +73,20 @@ export const ProjectFileLimits = Object.freeze({
   recodePaths: 1000,
 })
 
+/** 声明式纯快照计划的公开预算；完整捕获仍逐轮实际读取。 */
+export const ProjectSnapshotLimits = Object.freeze({
+  /** 一份计划最多组合的文件数。 */
+  files: 20,
+  /** 每次前后捕获的正文总字符上限。 */
+  chars: 500_000,
+  /** 输出身份最长字符数。 */
+  keyChars: 96,
+  /** 输出用途最长字符数。 */
+  purposeChars: 1000,
+  /** JSON Pointer 最长字符数。 */
+  pointerChars: 1024,
+})
+
 /** 代码理解能力（`velaros:code` 的 query、analyze）的公开上限与缺省值。 */
 export const ProjectCodeLimits = Object.freeze({
   /** 一次查询最多交回几条结果。只为守住内存：结果不进模型的上下文，看多少由程序定。 */

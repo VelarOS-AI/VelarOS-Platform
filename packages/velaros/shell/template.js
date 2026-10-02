@@ -2,19 +2,37 @@
 // 用的时候把要的那段放进程序，调用它并把要看的导出去，比如 `export default await runTests()`。
 import { listTasks, refreshEnvironment, run, stop } from 'velaros:shell'
 
-// 跑测试：全部输出都在程序里，通过就报一声，失败时只交出最后几十行。命令自己失败不抛错，照 success 判。
-async function runTests(command = 'npm test', cwd = '.') {
-  const result = await run({ command, cwd, timeoutMs: 600000 })
-  if (result.success) return `通过（${result.durationMs} ms）`
-  const output = `${result.stdout}\n${result.stderr}`.trim().split('\n')
-  return { exitCode: result.exitCode, timedOut: result.timedOut, tail: output.slice(-60).join('\n') }
+// 保留真实进程状态：后台任务尚未结束；success、退出码、信号、超时、取消和截断各自表达，日志关键字不改判成败。
+function commandStatus(result) {
+  return { command: result.command, cwd: result.cwd, success: result.success, exitCode: result.exitCode, signal: result.signal,
+    timedOut: result.timedOut, aborted: result.aborted, truncated: result.truncated, durationMs: result.durationMs,
+    backgroundProcess: result.backgroundProcess, confinement: result.confinement, note: result.note }
 }
 
-// 构建、lint 的输出很长时在程序里筛：只交出带 error 的那些行。
+// 跑测试：输出在程序里处理，结果始终保留状态；失败时交出末尾诊断，不把空日志当通过。
+async function runTests(command = 'npm test', cwd = '.') {
+  const result = await run({ command, cwd, timeoutMs: 600000, background: false })
+  const output = `${result.stdout}\n${result.stderr}`.trim().split('\n')
+  return { ...commandStatus(result), tail: result.success && !result.backgroundProcess ? undefined : output.slice(-60).join('\n') }
+}
+
+// 构建、lint 在程序里筛正文；没有 error 字样的失败仍附末尾，保留取消、超时和截断事实。
 async function errorLines(command = 'npm run build', cwd = '.') {
-  const result = await run({ command, cwd })
+  const result = await run({ command, cwd, background: false })
   const errors = `${result.stdout}\n${result.stderr}`.split('\n').filter((line) => /error/i.test(line))
-  return { success: result.success, count: errors.length, errors: errors.slice(0, 50) }
+  return { ...commandStatus(result), count: errors.length, errors: errors.slice(0, 50),
+    tail: !result.success && !errors.length ? `${result.stdout}\n${result.stderr}`.trim().split('\n').slice(-30).join('\n') : undefined }
+}
+
+// 依赖阶段各跑一次，前一步失败或仍在后台就停止；每步保留真实回执，不用最后一条命令的退出码代表整个管道。
+async function runStages(stages = [{ label: '构建', command: 'npm run build' }, { label: '测试', command: 'npm test' }], cwd = '.') {
+  const completed = []
+  for (const stage of stages) {
+    const result = await runTests(stage.command, cwd)
+    completed.push({ label: stage.label, ...result })
+    if (!result.success || result.backgroundProcess) return { status: result.backgroundProcess ? 'running' : 'failed', stages: completed, remaining: stages.slice(completed.length).map((item) => item.label) }
+  }
+  return { status: 'succeeded', stages: completed, remaining: [] }
 }
 
 // 看 git 现在的样子：在哪个分支、改了哪些文件、最近几次提交。几条只读命令可以一起跑。
@@ -24,14 +42,16 @@ async function gitState(cwd = '.') {
     run({ command: 'git status --short', cwd }),
     run({ command: 'git log --oneline -5', cwd }),
   ])
-  return { branch: branch.stdout.trim(), changed: status.stdout.split('\n').filter(Boolean), recent: log.stdout.trim().split('\n').filter(Boolean) }
+  return { branch: branch.stdout.trim(), changed: status.stdout.split('\n').filter(Boolean), recent: log.stdout.trim().split('\n').filter(Boolean),
+    checks: [branch, status, log].map(commandStatus) }
 }
 
-// 在代码里找东西：rg 一行一处「路径:行号:内容」，切开之后按文件数一数再交出去。没命中时 rg 退出码是 1，不算出错。
+// 在目录里找东西：在程序里分组，不用管道把 rg 的失败藏掉；只有完整前台执行的退出码 1 才表示没有匹配。
 async function findTodos(path = '.') {
-  const result = await run({ command: `rg -n -H --no-heading --color never 'TODO|FIXME' "${path}"` })
-  if (result.exitCode === 1) return '没有'
-  if (!result.success) throw new Error(result.stderr)
+  const result = await run({ command: "rg -n -H --no-heading --color never 'TODO|FIXME' .", cwd: path, background: false })
+  const process = commandStatus(result)
+  if (result.exitCode === 1 && !result.timedOut && !result.aborted && !result.signal && !result.backgroundProcess && !result.truncated) return { status: 'no-match', process, total: 0 }
+  if (!result.success || result.backgroundProcess) return { status: result.backgroundProcess ? 'running' : 'failed', process, tail: `${result.stdout}\n${result.stderr}`.trim().slice(-2000) }
   const hits = result.stdout.trim().split('\n').map((line) => {
     const [file, lineNumber, ...rest] = line.split(':')
     return { file, line: Number(lineNumber), text: rest.join(':').trim() }
@@ -39,7 +59,7 @@ async function findTodos(path = '.') {
   /** @type {Record<string, number>} */
   const perFile = {}
   for (const hit of hits) perFile[hit.file] = (perFile[hit.file] ?? 0) + 1
-  return { total: hits.length, perFile, first: hits.slice(0, 20) }
+  return { status: 'matched', process, total: hits.length, totalIsLowerBound: result.truncated, perFile, first: hits.slice(0, 20) }
 }
 
 // 起开发服务器并返回当前快照；后续 execute 中用 taskOutput 查看新输出。
@@ -55,7 +75,7 @@ async function startServer(command = 'npm run dev', cwd = '.') {
 async function taskOutput(taskId = 'run 回执里的 taskId', lines = 30) {
   const [task] = (await listTasks({ taskId })).tasks
   if (!task) return '没有这条任务'
-  return { status: task.status, exitCode: task.exitCode, lastLines: task.output.trim().split('\n').slice(-lines) }
+  return { taskId: task.id, status: task.status, exitCode: task.exitCode, signal: task.signal, finishedAt: task.finishedAt, lastLines: task.output.trim().split('\n').slice(-lines) }
 }
 
 // 停掉后台任务：普通终止停不下来时会抛错，那就强杀。

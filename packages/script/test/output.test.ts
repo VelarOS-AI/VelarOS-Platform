@@ -49,7 +49,210 @@ test('INV-35 text projection uses the sent representation without changing defau
   expect(JSON.stringify(raw)).toBe(before)
 })
 
-test('INV-35 text projection preserves the admitted block set and prior content before using free space', () => {
+test('INV-35 text admits complete JSON and arrays by the actual encoding boundary', () => {
+  const lines = Array.from({ length: 90 }, (_, i) => `\trow ${i}: "界😀" \\path\r`).join('\n')
+  for (const value of [
+    { status: 'ready', lines },
+    Array.from({ length: 40 }, (_, i) => ({ i, text: `"quoted"\\path\n${i}` })),
+    { items: [{ active: true, lines }], count: 1, empty: null },
+  ]) {
+    const raw = {
+      ...capture(value, { key: 'data', required: true, view: { mode: 'full' } }),
+      config: { maxChars: 200000 },
+    }
+    const original = JSON.stringify(raw)
+    const complete = scriptOutputs.project(
+      raw,
+      'raw',
+      200000,
+      undefined,
+      undefined,
+      undefined,
+      'text'
+    )
+    const json = scriptOutputs.project(raw, 'raw', 200000)
+    expect(json.prompt.length).toBeGreaterThan(complete.prompt.length)
+    const budget = complete.prompt.length
+    const projected = scriptOutputs.project(
+      raw,
+      'raw',
+      budget,
+      undefined,
+      undefined,
+      undefined,
+      'text'
+    )
+    expect(projected.blocks[0]!.representation).toBe('full')
+    expect(projected.blocks[0]!.bodyIncluded).toBe(true)
+    expect(JSON.parse(projected.blocks[0]!.text)).toEqual(value)
+    expect(projected.prompt.length).toBe(budget)
+    expect(projected.blocks[0]!.rawRef).toBe(json.blocks[0]!.rawRef)
+    expect(projected.blocks[0]!.pointer).toBe(json.blocks[0]!.pointer)
+    expect(projected.blocks[0]!.contentHash).toBe(json.blocks[0]!.contentHash)
+    expect(scriptOutputs.project(raw, 'raw', budget).blocks[0]!.representation).toBe('reference')
+    const short = scriptOutputs.project(
+      raw,
+      'raw',
+      budget - 1,
+      undefined,
+      undefined,
+      undefined,
+      'text'
+    )
+    expect(short.blocks[0]!.representation).toBe('reference')
+    expect(short.blocks[0]!.bodyIncluded).toBe(false)
+    expect(short.prompt.length).toBeLessThanOrEqual(budget - 1)
+    expect(JSON.stringify(raw)).toBe(original)
+  }
+})
+
+test('INV-35 text admits short complete values when their reference metadata would exceed the budget', () => {
+  for (const value of [{}, null, true, 1, '', { ok: true }]) {
+    const raw = {
+      ...capture(value, { key: 'data', type: 'json', required: true, view: { mode: 'full' } }),
+      config: { maxChars: 200000 },
+    }
+    const complete = scriptOutputs.project(
+      raw,
+      'raw',
+      200000,
+      undefined,
+      undefined,
+      undefined,
+      'text'
+    )
+    const budget = complete.prompt.length
+    const exact = scriptOutputs.project(raw, 'raw', budget, undefined, undefined, undefined, 'text')
+    expect(exact.blocks[0]?.representation).toBe('full')
+    expect(exact.blocks[0]!.bodyIncluded).toBe(true)
+    expect(JSON.parse(exact.blocks[0]!.text)).toEqual(value)
+    expect(exact.prompt).toBe(complete.prompt)
+    const short = scriptOutputs.project(
+      raw,
+      'raw',
+      budget - 1,
+      undefined,
+      undefined,
+      undefined,
+      'text'
+    )
+    expect(short.blocks.every((block) => block.representation !== 'full')).toBe(true)
+    expect(short.prompt.length).toBeLessThanOrEqual(budget - 1)
+  }
+})
+
+test('INV-35 text shares its budget with required and high bodies before ordinary blocks', () => {
+  for (const reverse of [false, true]) {
+    const collector = createOutputCollector(ScriptOutputLimits, validateOutputOptions, () => {})
+    collector.output.configure({ maxChars: 2600 })
+    const blocks = [
+      {
+        value: 'ordinary body '.repeat(4).concat('\n').repeat(200),
+        key: 'low',
+        priority: 'low' as const,
+      },
+      { value: 'normal body '.repeat(4).concat('\n').repeat(200), key: 'normal' },
+      { value: { lines: 'high\n'.repeat(100) }, key: 'high', priority: 'high' as const },
+      { value: { ok: false, reason: 'retain this failure' }, key: 'required', required: true },
+    ]
+    for (const { value, ...options } of reverse ? [...blocks].reverse() : blocks)
+      collector.output(value, {
+        ...options,
+        view: options.key === 'high' ? { mode: 'full' } : undefined,
+      })
+    const raw = collector.snapshot()
+    const result = scriptOutputs.project(raw, 'raw', 2600, undefined, undefined, undefined, 'text')
+    expect(result.blocks.map((block) => block.key)).toEqual(['required', 'high', 'normal', 'low'])
+    expect(result.blocks[0]!.representation).toBe('full')
+    expect(result.blocks[1]!.representation).toBe('full')
+    expect(JSON.parse(result.blocks[1]!.text)).toEqual({ lines: 'high\n'.repeat(100) })
+    expect(result.prompt.length).toBeLessThanOrEqual(2600)
+    for (const block of result.blocks) {
+      const index = raw.blocks.findIndex((source) => source.key === block.key)
+      expect(block.pointer).toBe(`/output/blocks/${index}/value`)
+      expect(block.contentHash).toBe(scriptOutputs.hash(raw.blocks[index]!.value))
+    }
+  }
+})
+
+test('INV-35 paginated memory wrappers fit by actual text encoding with every header counted', () => {
+  const source = JSON.stringify({
+    rows: Array.from({ length: 60 }, (_, i) => `界😀 ${i}: "quote"\n\\path\r`),
+  })
+  const pageSize = Math.ceil(source.length / 3)
+  const recalled: string[] = []
+  for (let offset = 0; offset < source.length; offset += pageSize) {
+    const value = {
+      ref: 'execution:synthetic/result',
+      part: 'output',
+      offset,
+      text: source.slice(offset, offset + pageSize),
+      totalChars: source.length,
+      nextOffset: offset + pageSize < source.length ? offset + pageSize : null,
+    }
+    const raw = {
+      ...capture(value, { key: 'page', required: true, view: { mode: 'full' } }),
+      config: { maxChars: 200000 },
+    }
+    const original = JSON.stringify(raw)
+    const { text: body, ...metadata } = value
+    const display = [
+      {
+        key: 'page',
+        contentHash: scriptOutputs.hash(value),
+        text: `${JSON.stringify({ ...metadata, textChars: body.length })}\n${body}`,
+      },
+    ]
+    for (const encoding of [undefined, display]) {
+      const complete = scriptOutputs.project(
+        raw,
+        'raw',
+        200000,
+        undefined,
+        undefined,
+        undefined,
+        'text',
+        encoding
+      )
+      const budget = complete.prompt.length
+      const result = scriptOutputs.project(
+        raw,
+        'raw',
+        budget,
+        undefined,
+        undefined,
+        undefined,
+        'text',
+        encoding
+      )
+      expect(result.blocks[0]!.representation).toBe('full')
+      expect(result.blocks[0]!.bodyIncluded).toBe(true)
+      expect(result.blocks[0]!.contentHash).toBe(scriptOutputs.hash(value))
+      expect(result.blocks[0]!.pointer).toBe('/output/blocks/0/value')
+      expect(result.prompt.length).toBe(budget)
+      expect(budget).toBeGreaterThan(result.blocks[0]!.text.length)
+      if (!encoding) recalled.push(JSON.parse(result.blocks[0]!.text).text)
+      else expect(result.blocks[0]!.text).toBe(display[0]!.text)
+      const short = scriptOutputs.project(
+        raw,
+        'raw',
+        budget - 1,
+        undefined,
+        undefined,
+        undefined,
+        'text',
+        encoding
+      )
+      expect(short.blocks[0]!.representation).toBe('reference')
+      expect(short.blocks[0]!.bodyIncluded).toBe(false)
+      expect(short.prompt.length).toBeLessThanOrEqual(budget - 1)
+    }
+    expect(JSON.stringify(raw)).toBe(original)
+  }
+  expect(recalled.join('')).toBe(source)
+})
+
+test('INV-35 text projection keeps source identity, selected views and issues within tiny budgets', () => {
   const collector = createOutputCollector(ScriptOutputLimits, validateOutputOptions, () => {})
   const code = Array.from({ length: 80 }, (_, i) => `\t中文🙂 ${i} e\u0301="引用";\r`).join('\n')
   collector.output('low\n'.repeat(300), { key: 'low', type: 'text', priority: 'low' })
@@ -73,34 +276,30 @@ test('INV-35 text projection preserves the admitted block set and prior content 
       undefined,
       'text'
     )
-    expect(text.blocks.map((b) => b.key)).toEqual(legacy.blocks.map((b) => b.key))
-    expect(text.omittedBlocks).toBe(legacy.omittedBlocks)
-    expect(text.issues).toEqual(legacy.issues)
+    expect(legacy.format).toBe('json')
+    expect(text.omittedBlocks).toBe(raw.blocks.length - text.blocks.length)
+    expect(text.issues).toEqual(raw.issues)
     expect(text.prompt.length).toBeLessThanOrEqual(budget)
-    for (const prior of legacy.blocks) {
-      const next = text.blocks.find((b) => b.key === prior.key)!
-      expect(next.rawRef).toBe(prior.rawRef)
-      expect(next.pointer).toBe(prior.pointer)
-      expect(next.contentHash).toBe(prior.contentHash)
-      if (prior.bodyIncluded) expect(next.text).toContain(prior.text)
-      if (prior.representation === 'full') expect(next.representation).toBe('full')
-    }
-    if (budget === 1200) {
-      const before = legacy.blocks.find((b) => b.key === 'high')!
-      const after = text.blocks.find((b) => b.key === 'high')!
-      expect(before.text.length).toBeGreaterThan(0)
-      expect(after.text.length).toBeGreaterThan(before.text.length)
+    if (text.blocks.length) expect(text.blocks[0]!.key).toBe('failure')
+    for (const block of text.blocks) {
+      const index = raw.blocks.findIndex((source) => source.key === block.key)
+      expect(block.rawRef).toBe('archive-reference')
+      expect(block.pointer).toBe(`/output/blocks/${index}/value`)
+      expect(block.contentHash).toBe(scriptOutputs.hash(raw.blocks[index]!.value))
+      if (block.key === 'reference' || block.key === 'zero') expect(block.bodyIncluded).toBe(false)
+      if (block.key === 'failure' && block.bodyIncluded)
+        expect(JSON.parse(block.text)).toEqual(raw.blocks[index]!.value)
     }
   }
 })
 
-test('INV-35 text projection keeps JSON and list baselines and preserves zero-budget issues', () => {
+test('INV-35 text projection preserves JSON structure and array ranges under small budgets', () => {
   for (const value of [
     { ok: false, detail: 'long\n'.repeat(600) },
     Array.from({ length: 80 }, (_, i) => ({ i, value: 'row' })),
   ]) {
     const raw = capture(value, { key: 'data' })
-    for (const budget of [0, 200, 1800, 6000]) {
+    for (const budget of [0, 1, 50, 200, 1800, 6000]) {
       const old = scriptOutputs.project(raw, 'archive', budget)
       const next = scriptOutputs.project(
         raw,
@@ -111,9 +310,22 @@ test('INV-35 text projection keeps JSON and list baselines and preserves zero-bu
         undefined,
         'text'
       )
-      expect(next.blocks).toEqual(old.blocks)
-      expect(next.omittedBlocks).toBe(old.omittedBlocks)
+      expect(next.omittedBlocks).toBe(raw.blocks.length - next.blocks.length)
       expect(next.prompt.length).toBeLessThanOrEqual(budget)
+      for (const block of next.blocks) {
+        expect(block.rawRef).toBe('archive')
+        expect(block.pointer).toBe('/output/blocks/0/value')
+        expect(block.contentHash).toBe(scriptOutputs.hash(value))
+        if (!block.bodyIncluded) continue
+        const shown = JSON.parse(block.text)
+        if (block.representation === 'full') expect(shown).toEqual(value)
+        else if (Array.isArray(value)) {
+          const range = block.selection as { from: number; shown: number; total: number }
+          expect(shown).toEqual(value.slice(range.from, range.from + range.shown))
+          expect(range.total).toBe(value.length)
+        } else expect(shown.ok).toBe(false)
+      }
+      expect(old.format).toBe('json')
     }
   }
   const raw = { ...capture('body', { key: 'body', required: true }), issues: ['capture failed'] }
@@ -946,7 +1158,7 @@ test('INV-35 显式整体配置含零硬覆盖块申请，宿主更小份额仍�
 test('INV-35 无有效块申请保持默认，reference、summary、零上限不扩大申请', () => {
   for (const view of [
     undefined,
-    { mode: 'full' },
+    { mode: 'auto' },
     { maxChars: 0 },
     { mode: 'reference', maxChars: 200000 },
     { mode: 'summary', maxChars: 200000 },
@@ -1027,26 +1239,28 @@ test('INV-35 manifest 有效 view 与整体配置使用同一申请优先级', (
 })
 
 test('INV-35 接近采集上限的64块申请仍受展示总上限约束', () => {
-  const collector = createOutputCollector(ScriptOutputLimits, validateOutputOptions, () => {})
-  for (let i = 0; i < 64; i++)
-    collector.output('x'.repeat(14000), {
-      key: `block-${i}`,
-      view: { mode: 'full', maxChars: 20000 },
-    })
-  const raw = collector.snapshot()
-  expect(raw.blocks.reduce((n, b) => n + b.chars, 0)).toBeLessThanOrEqual(
-    ScriptOutputLimits.rawChars
-  )
-  expect(scriptOutputs.requestBudget(raw).maxChars).toBe(ScriptOutputLimits.maxDisplayChars)
-  const result = scriptOutputs.project(raw, 'ref', 1000000)
-  expect(result.allocatedChars).toBe(ScriptOutputLimits.maxDisplayChars)
-  expect(result.prompt.length).toBeLessThanOrEqual(ScriptOutputLimits.maxDisplayChars)
+  for (const maxChars of [undefined, 20000]) {
+    const collector = createOutputCollector(ScriptOutputLimits, validateOutputOptions, () => {})
+    for (let i = 0; i < 64; i++)
+      collector.output('x'.repeat(14000), {
+        key: `block-${i}`,
+        view: { mode: 'full', maxChars },
+      })
+    const raw = collector.snapshot()
+    expect(raw.blocks.reduce((n, b) => n + b.chars, 0)).toBeLessThanOrEqual(
+      ScriptOutputLimits.rawChars
+    )
+    expect(scriptOutputs.requestBudget(raw).maxChars).toBe(ScriptOutputLimits.maxDisplayChars)
+    const result = scriptOutputs.project(raw, 'ref', 1000000)
+    expect(result.allocatedChars).toBe(ScriptOutputLimits.maxDisplayChars)
+    expect(result.prompt.length).toBeLessThanOrEqual(ScriptOutputLimits.maxDisplayChars)
+  }
 })
 
 test('INV-35 合法 undefined 字段不构成显式整体或块预算', () => {
   const raw = capture('line\n'.repeat(5000), {
     key: 'body',
-    view: { mode: 'full', maxChars: undefined },
+    view: { mode: 'auto', maxChars: undefined },
   })
   for (const [captureValue, manifest] of [
     [raw, undefined],
@@ -1061,6 +1275,116 @@ test('INV-35 合法 undefined 字段不构成显式整体或块预算', () => {
       ScriptOutputLimits.displayChars
     )
   }
+})
+
+test('INV-44 uncapped full requests complete selected encoding before host allocation', () => {
+  for (const value of [
+    'declare function f(x: "界😀"): string;\n'.repeat(900),
+    { declarations: 'quoted "value"\\path\r\n'.repeat(1400), active: true },
+    Array.from({ length: 700 }, (_, index) => ({ index, value: '界😀"\\\n' })),
+  ]) {
+    const raw = capture(value, { key: 'contract', required: true, view: { mode: 'full' } })
+    const original = JSON.stringify(raw)
+    const body = typeof value === 'string' ? value : JSON.stringify(value, null, 2)
+    const request = scriptOutputs.requestBudget(raw, undefined, 'immutable')
+    expect(request.explicit).toBe(true)
+    expect(request.maxChars).toBeGreaterThan(ScriptOutputLimits.displayChars)
+    expect(request.maxChars).toBeGreaterThan(body.length)
+    expect(request.maxChars).toBeLessThanOrEqual(ScriptOutputLimits.maxDisplayChars)
+    for (const format of ['json', 'text'] as const) {
+      const projected = scriptOutputs.project(
+        raw,
+        'immutable',
+        request.maxChars,
+        undefined,
+        undefined,
+        undefined,
+        format
+      )
+      expect(projected.blocks[0]?.representation).toBe('full')
+      expect(projected.blocks[0]?.bodyIncluded).toBe(true)
+      expect(projected.blocks[0]?.text).toBe(body)
+      expect(projected.blocks[0]?.rawRef).toBe('immutable')
+      expect(projected.blocks[0]?.pointer).toBe('/output/blocks/0/value')
+      expect(projected.blocks[0]?.contentHash).toBe(scriptOutputs.hash(value))
+      expect(projected.prompt.length).toBeLessThanOrEqual(request.maxChars)
+      const small = scriptOutputs.project(
+        raw,
+        'immutable',
+        3000,
+        undefined,
+        undefined,
+        undefined,
+        format
+      )
+      expect(small.blocks[0]?.representation).toBe('reference')
+      expect(small.blocks[0]?.bodyIncluded).toBe(false)
+      expect(small.prompt.length).toBeLessThanOrEqual(3000)
+    }
+    expect(JSON.stringify(raw)).toBe(original)
+  }
+})
+
+test('INV-44 full demand retains numeric, selection and automatic presentation boundaries', () => {
+  const value = 'first\n' + 'long line\n'.repeat(2500) + 'last\n'
+  for (const mode of ['auto', 'reference', 'summary'] as const) {
+    const raw = capture(value, { key: 'body', required: true, view: { mode } })
+    expect(scriptOutputs.requestBudget(raw)).toEqual({
+      maxChars: ScriptOutputLimits.displayChars,
+      explicit: false,
+    })
+  }
+  for (const maxChars of [0, 500]) {
+    const raw = capture(value, { key: 'body', view: { mode: 'full', maxChars } })
+    expect(scriptOutputs.project(raw, 'immutable', 200000).blocks[0]?.representation).toBe(
+      'reference'
+    )
+    expect(scriptOutputs.requestBudget(raw).explicit).toBe(maxChars > 0)
+  }
+  const full = capture(value, { key: 'body', view: { mode: 'full' } })
+  for (const maxChars of [0, 2000]) {
+    const configured = { ...full, config: { maxChars } }
+    const manifest = { config: { maxChars }, outputs: [] }
+    expect(scriptOutputs.requestBudget(configured)).toEqual({ maxChars, explicit: true })
+    expect(scriptOutputs.project(configured, 'immutable', 200000).allocatedChars).toBe(maxChars)
+    expect(scriptOutputs.requestBudget(full, manifest)).toEqual({ maxChars, explicit: true })
+    expect(scriptOutputs.project(full, 'immutable', 200000, manifest).allocatedChars).toBe(maxChars)
+  }
+  const selected = capture(
+    { keep: value, other: 'private' },
+    { key: 'body', view: { mode: 'full', paths: ['/keep'] } }
+  )
+  const projected = scriptOutputs.project(
+    selected,
+    'immutable',
+    200000,
+    undefined,
+    undefined,
+    undefined,
+    'text'
+  )
+  expect(scriptOutputs.requestBudget(selected).explicit).toBe(true)
+  expect(projected.blocks[0]?.representation).toBe('reference')
+  expect(projected.blocks[0]?.bodyIncluded).toBe(false)
+  const numericManifest = {
+    config: {},
+    outputs: [{ key: 'body', view: { mode: 'full' as const, maxChars: 500 } }],
+  }
+  expect(
+    scriptOutputs.project(full, 'immutable', 200000, numericManifest).blocks[0]?.representation
+  ).toBe('reference')
+  const fullManifest = {
+    config: {},
+    outputs: [{ key: 'body', view: { mode: 'full' as const } }],
+  }
+  const automatic = capture(value, { key: 'body', required: true })
+  expect(scriptOutputs.requestBudget(automatic).explicit).toBe(false)
+  const requested = scriptOutputs.requestBudget(automatic, fullManifest, 'immutable')
+  expect(requested.explicit).toBe(true)
+  expect(
+    scriptOutputs.project(automatic, 'immutable', requested.maxChars, fullManifest).blocks[0]
+      ?.representation
+  ).toBe('full')
 })
 
 test('INV-35 host full-value text encoding stays bounded and preserves original identity', () => {
@@ -1180,4 +1504,82 @@ test('INV-35 removing delivered bodies preserves unmatched content, issues and e
     expect(after.prompt.length).toBeLessThan(before.prompt.length)
     expect(after.prompt.length).toBeLessThanOrEqual(after.allocatedChars)
   }
+})
+
+test('INV-35 host redistribution counts reference metadata within a reduced existing allocation', () => {
+  const collector = createOutputCollector(ScriptOutputLimits, validateOutputOptions, () => {})
+  collector.output('DELIVERED'.repeat(600), { key: 'first', view: { mode: 'full' } })
+  collector.output('PENDING'.repeat(120), { key: 'second', view: { mode: 'full' } })
+  const raw = { ...collector.snapshot(), issues: ['KEPT_FAILURE'] }
+  for (const format of ['json', 'text'] as const) {
+    const before = scriptOutputs.project(raw, 'r', 16000, undefined, undefined, undefined, format)
+    const identities = [{ key: 'first', contentHash: scriptOutputs.hash('DELIVERED'.repeat(600)) }]
+    const unchanged = scriptOutputs.withoutBodies(before, identities)
+    const fitted = scriptOutputs.withoutBodies(before, identities, unchanged.prompt.length)
+    expect(fitted.prompt.length).toBeLessThanOrEqual(fitted.allocatedChars)
+    expect(fitted.blocks[0]!.reason).toBe('body-in-history')
+    expect(fitted.blocks[1]!.text).toBe(before.blocks[1]!.text)
+    expect(fitted.blocks[1]!.representation).toBe('full')
+    expect(fitted.issues).toEqual(['KEPT_FAILURE'])
+    for (const limit of [0, -20, 2.5, 100, 500]) {
+      const reduced = scriptOutputs.withoutBodies(before, identities, limit)
+      expect(reduced.allocatedChars).toBe(Math.max(0, Math.floor(limit)))
+      expect(reduced.prompt.length).toBeLessThanOrEqual(reduced.allocatedChars)
+      expect(reduced.omittedBlocks + reduced.blocks.length).toBe(before.blocks.length)
+      expect(
+        reduced.blocks.every((block) => block.reason !== 'body-in-history' || block.key === 'first')
+      ).toBe(true)
+    }
+    for (const limit of [NaN, Infinity, -Infinity])
+      expect(() => scriptOutputs.withoutBodies(before, identities, limit)).toThrow('有限数字')
+    expect(scriptOutputs.withoutBodies(before, [])).toBe(before)
+    expect(scriptOutputs.withoutBodies(before, [], before.allocatedChars + 100)).toBe(before)
+    expect(JSON.stringify(raw)).toBe(
+      JSON.stringify({ ...collector.snapshot(), issues: ['KEPT_FAILURE'] })
+    )
+  }
+})
+
+test('INV-35 a longer reference card cannot evict an unmatched body that already fits', () => {
+  const collector = createOutputCollector(ScriptOutputLimits, validateOutputOptions, () => {})
+  collector.output.configure({ maxChars: 1000 })
+  collector.output('x', { key: 'a_short', view: { mode: 'full' } })
+  collector.output('evidence\n'.repeat(1000), { key: 'z_long', type: 'code' })
+  const before = scriptOutputs.project(
+    collector.snapshot(),
+    'r',
+    1000,
+    undefined,
+    undefined,
+    undefined,
+    'text'
+  )
+  const after = scriptOutputs.withoutBodies(
+    before,
+    [{ key: 'a_short', contentHash: scriptOutputs.hash('x') }],
+    1000
+  )
+  expect(before.blocks[1]!.bodyIncluded).toBe(true)
+  expect(after.blocks[1]!.text).toBe(before.blocks[1]!.text)
+  expect(after.blocks[1]!.bodyIncluded).toBe(true)
+  expect(after.prompt.length).toBeLessThanOrEqual(1000)
+  const small = createOutputCollector(ScriptOutputLimits, validateOutputOptions, () => {})
+  small.output('x', { key: 'small', view: { mode: 'full' } })
+  small.output('archived', { key: 'reference', view: { mode: 'reference' } })
+  const original = scriptOutputs.project(
+    small.snapshot(),
+    'r',
+    12000,
+    undefined,
+    undefined,
+    undefined,
+    'text'
+  )
+  const preserved = scriptOutputs.withoutBodies(
+    original,
+    [{ key: 'small', contentHash: scriptOutputs.hash('x') }],
+    12000
+  )
+  expect(preserved.prompt).toBe(original.prompt)
+  expect(preserved.blocks).toEqual(original.blocks)
 })

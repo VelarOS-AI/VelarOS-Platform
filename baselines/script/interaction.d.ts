@@ -1,9 +1,8 @@
+/**
+ * 向用户要信息或确认；在子任务里是向父任务要。调用一直等到对方回答，返回的就是回答。
+ * 回答本身不授予任何权限：写操作照样过各自的检查。模块不用申请，modules.list 里有的直接 import。
+ */
 declare module 'velaros:interaction' {
-  /**
-   * 向用户要信息或确认；在子任务里是向父任务要。调用一直等到对方回答，返回的就是回答。
-   * 回答本身不授予任何权限：写操作照样过各自的检查。模块不用申请，modules.list 里有的直接 import。
-   */
-
   /** 要信息，返回对方的回答；给了 options 或 fields 时对方在卡片上点选或填写。
    */
   export function ask(input: InteractionRequest): Promise<InteractionAnswer>

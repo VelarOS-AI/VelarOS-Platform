@@ -48,6 +48,7 @@ export class ActLoop implements ActLoopApi {
   private transcript?: {
     readonly logical: readonly ModelHistoryMessage[]
     readonly sent: readonly ModelHistoryMessage[]
+    readonly positions: readonly number[]
     readonly body: string
   }
 
@@ -308,7 +309,7 @@ export class ActLoop implements ActLoopApi {
               compiled.request,
               attemptSignal
             )) {
-              controller.signal.throwIfAborted()
+              if (delta.type !== 'usage') controller.signal.throwIfAborted()
               if (finish) throw new AppError('PROTOCOL', '模型在结束响应后继续发送内容')
               if (delta.type === 'error')
                 throw AppError.withFields(
@@ -325,7 +326,6 @@ export class ActLoop implements ActLoopApi {
                     readTokens: delta.cacheReadTokens ?? 0,
                     writeTokens: delta.cacheWriteTokens ?? 0,
                   }
-                await this.options.view.recordUsage(delta.inputTokens, delta.outputTokens)
                 // 供应商报告了前缀缓存的读写才带上，宿主据此按缓存价算钱
                 const cache: { cacheReadTokens?: number; cacheWriteTokens?: number } = {}
                 if (!isUndefined(delta.cacheReadTokens))
@@ -337,6 +337,7 @@ export class ActLoop implements ActLoopApi {
                   outputTokens: delta.outputTokens,
                   ...cache,
                 }
+                await this.options.view.recordUsage(delta.inputTokens, delta.outputTokens)
                 yield {
                   type: 'usage',
                   runId,
@@ -411,6 +412,16 @@ export class ActLoop implements ActLoopApi {
             acceptedTurnId = `${audit.ref.id}:${accepted.ref.id}`
             // 已接受请求的实际出线成为下一帧的前缀；含图片的帧不保留，避免历史图片越积越多。
             const sent = modelRequestEncoder.messages(compiled.request)
+            const previous = this.transcript
+            const positions =
+              frame.retained && previous
+                ? [
+                    ...previous.positions,
+                    ...frame.logical
+                      .slice(previous.logical.length)
+                      .map((_, index) => previous.sent.length + index),
+                  ]
+                : frame.logical.map((_, index) => index)
             this.transcript =
               this.options.frames.delta &&
               !sent.some(
@@ -419,7 +430,7 @@ export class ActLoop implements ActLoopApi {
                   !isString(message.content) &&
                   message.content.some((part) => part.type === 'image')
               )
-                ? { logical: frame.logical, sent, body: frame.body }
+                ? { logical: frame.logical, sent, positions, body: frame.body }
                 : undefined
             yield {
               type: 'accepted',
@@ -715,8 +726,17 @@ export class ActLoop implements ActLoopApi {
       { maxChars: limits.projectionChars, visibleExecutionIds: await frames.visibleExecutions() },
       signal
     )
-    const recovery = this.completionFeedback
-      ? `\n上次完成检查尚未通过：${JSON.stringify(this.completionFeedback)}。先处理原因；修复或补充证据，不要自动重放存在未知效果的脚本。`
+    const completionStatus = this.completionFeedback
+      ? {
+          completed: this.completionFeedback.completed,
+          verified: this.completionFeedback.verified,
+          reason: this.completionFeedback.reason,
+          recovery: this.completionFeedback.recovery,
+          reportAvailable: Boolean(this.completionFeedback.report),
+        }
+      : undefined
+    const recovery = completionStatus
+      ? `\n上次完成检查尚未通过：${JSON.stringify(completionStatus)}。先处理原因；修复或补充证据，不要自动重放存在未知效果的脚本。`
       : ''
     // 本次运行里连续没有进展的步数：从运行开始时的计数起算，用户新的输入之后重新给机会
     const repeated = evidence.progress.repeatedSteps
@@ -735,20 +755,28 @@ export class ActLoop implements ActLoopApi {
       const phase = frames.phase?.() ?? { phase: 'work' as const, instructions: '' }
       const logical = projected.history ?? []
       const retained = retain ? this.retained(logical) : undefined
+      const history = retained ? retained.history : projected.history
+      const reconciled = await frames.reconcile?.(
+        projected.body,
+        history ?? [],
+        retained?.body,
+        signal
+      )
+      const body = reconciled?.body ?? projected.body
       const request = framedRequest(
         {
-          history: retained ? retained.history : projected.history,
+          history,
           instructions: this.options.instructions,
           images: projected.images,
-          compiledPrompt: retained
-            ? frames.delta!(projected.body, retained.body)
-            : projected.prompt,
+          compiledPrompt:
+            reconciled?.prompt ??
+            (retained ? frames.delta!(body, retained.body) : projected.prompt),
           materials: [
             {
               ref: evidence.id,
               origin: 'runtime-view',
-              text: projected.body,
-              totalChars: projected.body.length,
+              text: body,
+              totalChars: body.length,
             },
           ],
           response: { type: 'text' },
@@ -771,7 +799,7 @@ export class ActLoop implements ActLoopApi {
         request,
         compiled,
         logical,
-        body: projected.body,
+        body,
         retained: Boolean(retained),
       }
     }
@@ -953,7 +981,7 @@ export class ActLoop implements ActLoopApi {
   /**
    * 新投影以上次接受请求的逻辑历史开头时，沿用那次的实际出线（含它的最后一条消息）再追加新条目；
    * 历史被改写（封段、超窗重组等）就返回 undefined，本帧完整重发并重新开始保留。
-   * 沿用部分只在开头和上次请求末尾留缓存断点，需要显式断点的供应商不会因旧标记累积而超限。
+   * 断点跟随逻辑条目的实际位置，另保留上次请求末尾；相同内容和插入帧不共享标记。
    */
   private retained(
     logical: readonly ModelHistoryMessage[]
@@ -964,13 +992,13 @@ export class ActLoop implements ActLoopApi {
       JSON.stringify(message)
     for (const [index, message] of transcript.logical.entries())
       if (identity(message) !== identity(logical[index]!)) return undefined
-    // 断点按本次逻辑历史重新标：它标过的消息照旧，另加上次请求的末尾
-    const marked = new Set(logical.filter((item) => item.cacheBreakpoint).map(identity))
+    // 逻辑条目在已发送前缀中的位置不会变；不能按内容匹配，否则重复结果会串标。
+    const marked = new Set(
+      transcript.positions.filter((_, index) => logical[index]?.cacheBreakpoint)
+    )
     const last = transcript.sent.length - 1
     const sent = transcript.sent.map(({ cacheBreakpoint: _mark, ...message }, index) =>
-      index === last || marked.has(identity(message))
-        ? { ...message, cacheBreakpoint: true }
-        : message
+      index === last || marked.has(index) ? { ...message, cacheBreakpoint: true } : message
     )
     return {
       history: [...sent, ...logical.slice(transcript.logical.length)],

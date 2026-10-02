@@ -1,10 +1,9 @@
+/**
+ * 看图：把 PNG、JPEG、GIF、WebP 交到你眼前。路径怎么写、能到哪儿由当前空间决定（环境报告里写着），越界的那一张看不了。
+ * 在上限以内（长边 2000 px、base64 后 5 MB）的图原样给你；超了先压小，要看细节就用 region 单独要那一块。
+ * 文本文件用读文件的能力读；PDF 与其他文档不在这里看。
+ */
 declare module 'velaros:images' {
-  /**
-   * 看图：把 PNG、JPEG、GIF、WebP 交到你眼前。路径怎么写、能到哪儿由当前空间决定（环境报告里写着），越界的那一张看不了。
-   * 在上限以内（长边 2000 px、base64 后 5 MB）的图原样给你；超了先压小，要看细节就用 region 单独要那一块。
-   * 文本文件用读文件的能力读；PDF 与其他文档不在这里看。
-   */
-
   /** 看一批图片（最多 10 张）：图交给你看，返回值里只有尺寸。
    */
   export function view(input: ImageViewInput): Promise<ImageViewResult>

@@ -108,7 +108,7 @@ test('INV-13 唯一 store 成员提供完整空间操作和模板，跨重启保
   const f = await fixture(t)
   const info = await execute(
     f.session,
-    "output(await modules.describe({module:'velaros:system',export:'store'}));"
+    "output(await modules.describe({module:'velaros:system',export:'store',template:true}));"
   )
   assert.deepEqual(Object.keys(info.exports.store.operations).sort(), [
     'ack',

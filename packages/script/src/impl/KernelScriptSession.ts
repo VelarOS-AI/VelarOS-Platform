@@ -1,6 +1,7 @@
 import { isUndefined } from '@velaros-ai/core'
 import { isArray, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import type { ModuleBinding } from '@velaros-ai/kernel'
 
 import { CodeProgramEditLimits, CodeSurfaceErrorCodes } from '../contract/constants.js'
 import type { KernelScriptSessionOptions } from '../contract/requires.js'
@@ -12,7 +13,7 @@ import type {
   CodeProgramTargetEdit,
 } from '../types/script.js'
 import { applyProgramEdits } from '../utils/edit.js'
-import { readModuleSpecifiers } from '../utils/module-form.js'
+import { readModuleSpecifiers, readProgramModuleSpecifiers } from '../utils/module-form.js'
 import { describeProgramOversize } from '../utils/result.js'
 
 import { codeProgramChecker } from './CodeProgramChecker.js'
@@ -26,6 +27,8 @@ export interface KernelScriptSessionApi {
   edit(program: CodeProgramRequest, edits: readonly CodeProgramTargetEdit[]): CodeProgramEditResult
   /** 只检查源码与当前能力声明，不执行任何代码。 */
   check(program: CodeProgramRequest): CodeProgramCheckResult
+  /** 按同一静态 import 与包展开规则读取当前授权挂载，不运行程序。 */
+  dependencies(program: CodeProgramRequest): readonly ModuleBinding[]
   /** 源码与输出有界；初次 import 即取得当前挂载的准确声明。 */
   run(program: CodeProgramRequest, signal?: AbortSignal): Promise<CodeSurfaceOutcome>
 }
@@ -121,6 +124,14 @@ class KernelScriptSession implements KernelScriptSessionApi {
       }))
     )
     return codeProgramChecker.check({ ...program, granted: surface.granted })
+  }
+
+  public dependencies(program: CodeProgramRequest): readonly ModuleBinding[] {
+    const imported = new Set(readProgramModuleSpecifiers(program))
+    for (const pkg of this.options.packages ?? [])
+      if (imported.has(pkg.specifier))
+        for (const target of Object.values(pkg.exports)) imported.add(target)
+    return new KernelInvocationPort(this.options, imported).dependencies()
   }
 
   public run(program: CodeProgramRequest, signal?: AbortSignal): Promise<CodeSurfaceOutcome> {

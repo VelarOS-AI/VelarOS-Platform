@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 
 import { ContextLimits } from '@velaros-ai/context'
+import {
+  codeProgramChecker,
+  createCodeSurfaceSession,
+  nodeSubprocessCodeRunner,
+} from '@velaros-ai/script'
 
 import { SearchLimits } from '../../../dist/act/search/contract/constants.js'
 import {
@@ -15,6 +21,204 @@ test('INV-1 search 的实际操作与模板一致', () =>
   verifyModule(searchModule, new URL('../template.js', import.meta.url)))
 test('INV-1 evidence 的实际操作与模板一致', () =>
   verifyModule(evidenceModule, new URL('../evidence-template.js', import.meta.url)))
+
+/** 模板经真实操作类与隔离程序运行；宿主来源由用例固定，记录各次操作。 */
+async function runTemplate(surface, definition, file, expression) {
+  const calls = []
+  const session = createCodeSurfaceSession({
+    checker: codeProgramChecker,
+    runner: nodeSubprocessCodeRunner,
+    capabilities: {
+      listOperations: () => ({ [surface.namespace]: Object.keys(definition.operations) }),
+      invoke: async ({ operation, input }) => {
+        calls.push({ operation, input })
+        try {
+          return {
+            value: await definition.operations[operation].run(input, {
+              signal: new AbortController().signal,
+              invocation: {
+                id: `call-${calls.length}`,
+                sessionId: 'search',
+                executionId: 'execution',
+              },
+              recordEffect() {},
+            }),
+          }
+        } catch (error) {
+          return { error: { code: error.code ?? 'UNKNOWN', message: error.message } }
+        }
+      },
+    },
+  })
+  const template = await readFile(new URL(file, import.meta.url), 'utf8')
+  const outcome = await session.submit({
+    program: { source: `${template}\nexport default ${expression}` },
+    granted: [{ namespace: surface.namespace, declarations: surface.declarations }],
+    timeoutMs: 20_000,
+  })
+  assert.equal(outcome.checked, true)
+  assert.equal(outcome.result.failed, undefined)
+  return { value: outcome.result.value, calls }
+}
+
+test('INV-3 搜索模板保留局部报告、分页失败项和真实证据版本，不把当前页当全部', async () => {
+  const ref = { sessionId: 'parent', id: 'report' }
+  const stamp = {
+    sourceId: 'docs',
+    resourceId: 'a',
+    revision: '2',
+    contentHash: 'hash-a',
+    observedAt: '2026-10-01T00:00:00.000Z',
+    consistency: 'revision-checkable',
+  }
+  const items = [
+    {
+      id: 'a',
+      ok: true,
+      status: 'current',
+      target: { kind: 'resource', sourceId: 'docs', resourceId: 'a' },
+      text: 'current text',
+      stamp,
+      form: 'excerpt',
+      mediaType: 'text/plain',
+      complete: false,
+    },
+    { id: 'b', ok: false, status: 'missing' },
+    {
+      id: 'c',
+      ok: true,
+      status: 'current',
+      target: { kind: 'resource', sourceId: 'docs', resourceId: 'c' },
+      text: 'last text',
+      stamp: { ...stamp, resourceId: 'c' },
+      form: 'full',
+      mediaType: 'text/plain',
+      complete: true,
+    },
+  ]
+  const published = {
+    ref,
+    searchId: 'search-1',
+    profile: 'quick',
+    status: 'partial',
+    continuation: 'available',
+    stopReason: 'read-budget',
+    findings: [{ text: 'known finding', evidenceIds: ['a'] }],
+    gaps: [{ code: 'LIMIT', detail: 'some sources unread' }],
+    nextSteps: ['continue'],
+    evidence: [
+      {
+        id: 'a',
+        ref: { sessionId: 'search', id: 'evidence-a' },
+        target: items[0].target,
+        stamp,
+        excerpt: 'large excerpt',
+        complete: false,
+      },
+    ],
+    coverage: { sources: ['docs'], queries: ['session'], limitsHit: ['reads'] },
+    usage: { modelCalls: 1, reads: 1 },
+  }
+  const definition = searchModule.create({
+    search: {
+      profileInfo: () => [{ name: 'quick', default: true, limits: {} }],
+      run: async () => published,
+      read: async ({ offset, limit }) => ({
+        mode: 'current',
+        ref,
+        items: items.slice(offset, offset + limit),
+        total: items.length,
+        modelCalled: false,
+      }),
+    },
+  })
+  const result = await runTemplate(
+    VelarSearchModule,
+    definition,
+    '../template.js',
+    `({report:await investigate('session'),first:await currentText(${JSON.stringify(ref)},0,1),second:await currentText(${JSON.stringify(ref)},1,1),last:await currentText(${JSON.stringify(ref)},2,1)})`
+  )
+  assert.equal(result.value.report.status, 'partial')
+  assert.deepEqual(result.value.report.coverage, published.coverage)
+  assert.deepEqual(result.value.report.gaps, published.gaps)
+  assert.equal(result.value.report.evidence[0].excerpt, undefined)
+  assert.deepEqual(result.value.first.items[0].stamp, stamp)
+  assert.equal(result.value.first.items[0].complete, false)
+  assert.equal(result.value.first.nextOffset, 1)
+  assert.deepEqual(result.value.second.items, [{ id: 'b', gap: 'missing' }])
+  assert.equal(result.value.second.nextOffset, 2)
+  assert.equal(result.value.last.nextOffset, null)
+  assert.equal(result.value.last.modelCalled, false)
+  assert.deepEqual(
+    result.calls.map(({ operation }) => operation),
+    ['profiles', 'search', 'read', 'read', 'read']
+  )
+})
+
+test('INV-3 证据组合模板保留真实读取失败与未读候选，preview 不冒充证据', async () => {
+  const candidates = ['a', 'b', 'c'].map((id) => ({
+    id,
+    target: { kind: 'resource', sourceId: 'docs', resourceId: id },
+    preview: `candidate ${id}`,
+    forms: ['full'],
+  }))
+  const stamp = {
+    sourceId: 'docs',
+    resourceId: 'a',
+    revision: '1',
+    contentHash: 'hash-a',
+    observedAt: '2026-10-01T00:00:00.000Z',
+    consistency: 'revision-checkable',
+  }
+  const definition = evidenceModule.create({
+    search: {
+      activation: () => ({
+        query: async (source, query) => ({ source, query, candidates, empty: false }),
+        inspect: async (target) => {
+          if (target.resourceId === 'b')
+            throw Object.assign(new Error('source no longer readable'), { code: 'NOT_FOUND' })
+          return {
+            id: 'read-a',
+            target,
+            ref: { sessionId: 'search', id: 'evidence-a' },
+            excerpt: 'actual body',
+            stamp,
+            complete: false,
+          }
+        },
+      }),
+    },
+  })
+  const result = await runTemplate(
+    VelarEvidenceModule,
+    definition,
+    '../evidence-template.js',
+    "await collect('docs','session',2)"
+  )
+  assert.deepEqual(result.value.evidence, [
+    {
+      id: 'read-a',
+      target: candidates[0].target,
+      ref: { sessionId: 'search', id: 'evidence-a' },
+      text: 'actual body',
+      stamp,
+      complete: false,
+    },
+  ])
+  assert.deepEqual(result.value.gaps, [
+    {
+      candidateId: 'b',
+      target: candidates[1].target,
+      code: 'NOT_FOUND',
+      message: 'source no longer readable',
+    },
+  ])
+  assert.deepEqual(result.value.unread, [{ id: 'c', target: candidates[2].target }])
+  assert.deepEqual(
+    result.calls.map(({ operation }) => operation),
+    ['query', 'read', 'read']
+  )
+})
 
 test('搜索档位目录与调用使用同一组宿主名称，发现的名称可直接用于搜索', async () => {
   const names = ['quick', 'investigate']

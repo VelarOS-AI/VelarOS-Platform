@@ -24,6 +24,8 @@ export type { ProjectExecutionGateApi } from './impl/operations/ProjectExecution
 export { projectExecutionGate } from './impl/operations/ProjectExecutionGate.js'
 export type { ProjectFileOperationsApi } from './impl/operations/ProjectFileOperations.js'
 export { projectFileOperations } from './impl/operations/ProjectFileOperations.js'
+export type { ProjectObservationProviderApi } from './impl/operations/ProjectObservationProvider.js'
+export { createProjectObservationProvider } from './impl/operations/ProjectObservationProvider.js'
 export type { ProjectVerificationPolicyApi } from './impl/operations/ProjectVerificationPolicy.js'
 export { projectVerificationPolicy } from './impl/operations/ProjectVerificationPolicy.js'
 export type { FileProjectChangeFeedApi } from './impl/persistence/FileProjectChangeFeed.js'

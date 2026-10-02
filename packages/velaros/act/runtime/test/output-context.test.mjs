@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
+import { modelRequestEncoder } from '@velaros-ai/kernel'
 import { nodeSubprocessCodeRunner, scriptOutputs } from '@velaros-ai/script'
 
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
@@ -14,7 +15,7 @@ import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMa
 import { done, historyEntries, marker, turn } from './support/model-turn.mjs'
 
 const signal = new AbortController().signal
-async function fixture(t, source, modelOverride) {
+async function fixture(t, source, modelOverride, options = {}) {
   const storage = localContextStorage({ path: ':memory:' })
   const requests = []
   let reads = 0
@@ -55,6 +56,7 @@ async function fixture(t, source, modelOverride) {
         },
       },
     ],
+    ...options,
   })
   t.after(() => runtime.close())
   const session = await runtime.openSession('root')
@@ -124,6 +126,234 @@ const patch = (snapshot, observation) => ({
   summary: 'Reduce logs while preserving current state',
   unresolved: [],
   observation,
+})
+
+test('INV-58 uncapped full demand delivers the whole required body in the next model request', async (t) => {
+  const body = Array.from(
+    { length: 140 },
+    (_, i) => `declare function synthetic_${i}(value: "界😀"): "ok";`
+  ).join('\n')
+  const f = await fixture(t, "import {output} from 'velaros';output('current');", undefined, {
+    limits: { projectionChars: 40000 },
+  })
+  const receipt = await f.session.execute(
+    {
+      source: `import {output} from 'velaros';import {read} from 'test:world';await read();output(${JSON.stringify(body)},{key:'contract',purpose:'Inspect synthetic declarations',required:true,type:'code',view:{mode:'full'}});`,
+    },
+    'task'
+  )
+  assert.equal(receipt.checked, true)
+  assert.equal(receipt.result.failed, undefined)
+  for (let i = 0; i < 5; i++)
+    await f.session.execute(
+      { source: `import {output} from 'velaros';output(${i},{key:'small-${i}'});` },
+      'task'
+    )
+  const record = await f.programs.read(receipt.resultRef, 0, 1)
+  const original = await f.storage.get('root', record.record.objectId)
+  const archived = JSON.parse(original)
+  const projected = await f.programs.project(
+    (await f.session.view.inspect()).view,
+    undefined,
+    [],
+    signal,
+    40000
+  )
+  const material = JSON.parse(projected.body)
+  const result = material.results.find((item) => item.ref === receipt.resultRef)
+  assert.equal(projected.budget.visibleResults, 6)
+  assert(body.length > projected.budget.excerptChars, 'full demand must exceed the default share')
+  assert.equal(result.representation, 'full')
+  assert.equal(result.bodyIncluded, true)
+  assert(result.text.includes(body))
+  assert.equal(result.outputProofs[0].contentHash, scriptOutputs.hash(body))
+  assert.equal(result.outputProofs[0].key, 'contract')
+  assert.equal(archived.output.blocks[0].value, body)
+  await f.run()
+  assert.equal(f.requests.length, 1, 'no recall turn is needed before completing')
+  const request = f.requests[0]
+  const wire = modelRequestEncoder
+    .messages(request)
+    .flatMap((item) => (typeof item.content === 'string' ? [item.content] : []))
+    .join('\n')
+  assert(wire.includes(body), 'all original body characters must reach provider messages')
+  const frame = JSON.parse(request.materials.find((item) => item.origin === 'runtime-view').text)
+  assert.equal(
+    frame.partitions.runtime.decision.missing.some((item) => item.ref === receipt.resultRef),
+    false
+  )
+  assert.equal(f.reads, 1, 'delivery does not repeat the authorized source operation')
+  assert.equal(await f.storage.get('root', record.record.objectId), original)
+})
+
+test('INV-58 uncapped full demand keeps capacity and explicit caps authoritative in real requests', async (t) => {
+  const body = 'whole original\n'.repeat(600)
+  for (const [label, projectionChars, view, config] of [
+    ['insufficient frame capacity', 12000, { mode: 'full' }, undefined],
+    ['numeric block cap', 40000, { mode: 'full', maxChars: 500 }, undefined],
+    ['explicit total zero', 40000, { mode: 'full' }, 0],
+  ])
+    await t.test(label, async (t) => {
+      const f = await fixture(t, "import {output} from 'velaros';output('current');", undefined, {
+        limits: { projectionChars },
+      })
+      const receipt = await f.session.execute(
+        {
+          source: `import {output} from 'velaros';${config === undefined ? '' : `output.configure({maxChars:${config}});`}output(${JSON.stringify(body)},{key:'body',purpose:'Inspect synthetic complete body',required:true,type:'code',view:${JSON.stringify(view)}});`,
+        },
+        'task'
+      )
+      assert.equal(receipt.checked, true)
+      assert.equal(receipt.result.failed, undefined)
+      for (let i = 0; i < 5; i++)
+        await f.session.execute(
+          { source: `import {output} from 'velaros';output(${i},{key:'small-${i}'});` },
+          'task'
+        )
+      const record = await f.programs.read(receipt.resultRef, 0, 1)
+      const original = await f.storage.get('root', record.record.objectId)
+      const archived = JSON.parse(original)
+      const events = []
+      for await (const event of f.session.submit('Continue observing')) events.push(event)
+      assert.equal(events.at(-1).status, 'failed')
+      assert(
+        events.some((event) => event.type === 'verification' && event.reason === 'CONTEXT_REQUIRED')
+      )
+      assert(f.requests.length > 0, 'the bounded projection must reach a real model request')
+      for (const request of f.requests) {
+        const frame = JSON.parse(
+          request.materials.find((item) => item.origin === 'runtime-view').text
+        )
+        const result = frame.partitions.recent.results.find(
+          (item) => item.ref === receipt.resultRef
+        )
+        const history = historyEntries(request).find((item) => item.ref?.id === receipt.resultRef)
+        assert.equal(result.truncated, true)
+        assert.notEqual(result.representation, 'full')
+        assert.equal(
+          history?.outputProofs?.some(
+            (item) => item.ref === receipt.resultRef && item.key === 'body'
+          ) ?? false,
+          false,
+          'a delivered reference card must not carry a full-value proof'
+        )
+        assert(
+          frame.partitions.runtime.decision.missing.some(
+            (item) => item.ref === receipt.resultRef && item.key === 'body'
+          )
+        )
+        const wire = modelRequestEncoder
+          .messages(request)
+          .flatMap((item) => (typeof item.content === 'string' ? [item.content] : []))
+          .join('\n')
+        assert(!wire.includes(body), 'insufficient display must not claim full delivery')
+        // 外层卡片说明当前编码已经送达；逐块元数据和 required 缺口才说明原值是否完整。
+        const deliveredText = result.bodyInHistory ? history.text : result.text
+        assert.equal(typeof deliveredText, 'string')
+        assert(wire.includes(deliveredText), 'the inspected carrier must be in provider messages')
+        if (deliveredText) {
+          const [headerText, blockText] = deliveredText.split('\n')
+          const header = JSON.parse(headerText)
+          const block = JSON.parse(blockText)
+          assert(deliveredText.length <= header.displayChars)
+          assert.equal(block.key, 'body')
+          assert.equal(block.rawRef, receipt.resultRef)
+          assert.equal(block.contentHash, scriptOutputs.hash(body))
+          assert.equal(block.representation, 'reference')
+          assert.equal(block.bodyIncluded, false)
+        }
+        if (config === 0) assert.equal(result.text, '')
+      }
+      assert.equal(archived.output.blocks[0].value, body)
+      assert.equal(archived.output.blocks[0].options.view.maxChars, view.maxChars)
+      assert.equal(await f.storage.get('root', record.record.objectId), original)
+      const recalled = await f.session.execute({
+        source: `import {memory} from 'velaros:system';import {output} from 'velaros';const page=await memory.read({ref:${JSON.stringify(receipt.resultRef)},pointer:'/output/blocks/0/value',offset:0,limit:20000});output(page);`,
+      })
+      const recallRecord = await f.programs.read(recalled.resultRef, 0, 1)
+      const recallArchive = JSON.parse(await f.storage.get('root', recallRecord.record.objectId))
+      assert.equal(recallArchive.result.failed, undefined)
+      assert.equal(recallArchive.output.blocks[0].value.text, body)
+    })
+})
+
+test('INV-58 ordinary JSON text fit reaches sealed provider messages with matching required proof', async (t) => {
+  const value = {
+    state: 1,
+    lines: Array.from({ length: 450 }, (_, i) => `\trow ${i}: "界😀" \\path\r`).join('\n'),
+  }
+  for (const cap of [16000, 9000]) {
+    const f = await fixture(
+      t,
+      `import {output} from 'velaros';import {read} from 'test:world';output.configure({maxChars:${cap}});const state=await read();output({...${JSON.stringify(value)},state},{key:'data',purpose:'inspect synthetic multiline JSON',required:true,view:{mode:'full'}});`
+    )
+    const events = []
+    for await (const event of f.session.submit('Continue observing')) events.push(event)
+    assert.equal(
+      events.at(-1).status,
+      cap === 16000 ? 'completed' : 'failed',
+      JSON.stringify({ cap, events })
+    )
+    if (cap === 9000)
+      assert(
+        events.some((event) => event.type === 'verification' && event.reason === 'CONTEXT_REQUIRED')
+      )
+    const request = f.requests[0]
+    const frame = JSON.parse(request.materials.find((item) => item.origin === 'runtime-view').text)
+    const observed = frame.partitions.observation
+    const record = await f.programs.read(observed.resultRef, 0, 1)
+    const archived = JSON.parse(await f.storage.get('root', record.record.objectId))
+    assert.deepEqual(archived.output.blocks[0].value, value)
+    const actual = scriptOutputs.project(
+      archived.output,
+      observed.resultRef,
+      cap,
+      undefined,
+      undefined,
+      undefined,
+      'text'
+    )
+    const json = scriptOutputs.project(archived.output, observed.resultRef, cap)
+    const block = actual.blocks.find((item) => item.key === 'data')
+    assert.equal(observed.text, actual.prompt)
+    assert.equal(observed.presentation.format, 'text')
+    assert.equal(observed.presentation.allocatedChars, cap)
+    assert.equal(observed.blocks[0].contentHash, scriptOutputs.hash(value))
+    assert.equal(json.blocks[0].representation, 'reference')
+    assert.equal(block.representation, cap === 16000 ? 'full' : 'reference')
+    assert.equal(observed.bodyIncluded, cap === 16000)
+    assert.equal(observed.truncated, cap !== 16000)
+    assert.equal(
+      frame.partitions.runtime.decision.missing.some((item) => item.key === 'data'),
+      cap !== 16000
+    )
+    const messages = modelRequestEncoder.messages(request)
+    const wire = messages
+      .flatMap((item) => (typeof item.content === 'string' ? [item.content] : []))
+      .join('\n')
+    assert(
+      wire.includes(actual.prompt),
+      'the complete actual text encoding reaches provider messages'
+    )
+    if (cap === 16000) {
+      assert.deepEqual(JSON.parse(block.text), value)
+      assert(
+        wire.includes(JSON.stringify(value, null, 2)),
+        'outer request serialization preserves every body character'
+      )
+      const fullJson = scriptOutputs.project(
+        { ...archived.output, config: { maxChars: 200000 } },
+        observed.resultRef,
+        200000
+      )
+      assert(fullJson.prompt.length > cap)
+    } else assert(!wire.includes(JSON.stringify(value, null, 2)))
+    assert.equal(
+      f.reads,
+      f.requests.length,
+      'each business round captures once through its authorized operation'
+    )
+  }
 })
 
 test('INV-58 plain output retains bounded code evidence inside large arrays instead of only a receipt shell', () => {
@@ -381,9 +611,25 @@ output('source 😀 \\"quoted\\" \\\\path\\r\\n'.repeat(5000),{key:'large',type:
     const frame = JSON.parse(projected.body)
     assert.equal(frame.results.length, 3)
     const share = Math.floor(maxChars / (frame.results.length + 4) / 2)
+    const pool = share * frame.results.length
     for (const [index, ref] of outputs.entries()) {
       const item = frame.results.find((result) => result.ref === ref)
-      const cap = index === 0 ? share : index === 1 ? Math.min(12000, share) : 0
+      const cap =
+        index === 0
+          ? JSON.parse(item.text.split('\n')[0]).displayChars
+          : index === 1
+            ? Math.min(12000, share)
+            : 0
+      if (index === 0) {
+        assert(
+          cap >= share,
+          'an explicit request keeps its original share before borrowing spare space'
+        )
+        assert(
+          cap <= Math.min(200000, pool),
+          'borrowing cannot exceed the unchanged result pool or request'
+        )
+      }
       assert(item.text.length <= cap)
       assert(item.source.length <= Math.min(12000, share))
       if (index === 2) {
@@ -393,7 +639,7 @@ output('source 😀 \\"quoted\\" \\\\path\\r\\n'.repeat(5000),{key:'large',type:
       }
       const display = await f.display(ref, cap)
       assert.equal(item.outputFormat, 'text')
-      assert.equal(item.text, display.prompt)
+      assert.equal(scriptOutputs.hash(item.text), scriptOutputs.hash(display.prompt))
       assert.equal(JSON.parse(item.text.split('\n')[0]).displayChars, cap)
       assert.equal(display.blocks.find((block) => block.key === 'status').representation, 'full')
       const large = display.blocks.find((block) => block.key === 'large')
@@ -403,7 +649,7 @@ output('source 😀 \\"quoted\\" \\\\path\\r\\n'.repeat(5000),{key:'large',type:
       assert.equal(large.selection.chars.shown, large.text.length)
       if (maxChars === 600000 && index === 0) assert(item.text.length > 12000)
     }
-    assert(frame.results.reduce((sum, result) => sum + result.text.length, 0) <= maxChars / 2)
+    assert(frame.results.reduce((sum, result) => sum + result.text.length, 0) <= pool)
   }
 })
 
@@ -573,12 +819,16 @@ test('INV-58 explicit block requests remain bounded across multiple leases and e
   }
 })
 
-test('INV-58 frozen partial history cannot hide a later full or larger excerpt, including optional blocks', async (t) => {
-  for (const required of [true, false]) {
+test('INV-58 frozen partial history cannot hide a later full or larger excerpt, including required and optional blocks', async (t) => {
+  for (const [required, mode] of [
+    [true, 'full'],
+    [false, 'auto'],
+    [true, 'auto'],
+  ]) {
     const f = await fixture(t, "import {output} from 'velaros';output(1)")
     const body = `GROWTH_START\n${Array.from({ length: 1800 }, (_, index) => `line ${index} body\n`).join('')}GROWTH_END`
     const result = await f.session.execute({
-      source: `import {output} from 'velaros';output('small',{key:'small',required:true,view:{mode:'full',maxChars:1000}});output(${JSON.stringify(body)},{key:'growing',type:'code',required:${required},view:{mode:${JSON.stringify(required ? 'full' : 'auto')},maxChars:40000}});`,
+      source: `import {output} from 'velaros';output('small',{key:'small',required:true,view:{mode:'full',maxChars:1000}});output(${JSON.stringify(body)},{key:'growing',type:'code',required:${required},view:{mode:${JSON.stringify(mode)},maxChars:40000}});`,
     })
     assert.equal(result.checked, true)
     const view = (await f.session.view.inspect()).view
@@ -611,10 +861,10 @@ test('INV-58 frozen partial history cannot hide a later full or larger excerpt, 
           frame.partitions.runtime.decision.missing.some((entry) => entry.ref === result.resultRef),
           false
         )
-      } else if (!required && maxChars === 180000) {
+      } else if (mode === 'auto' && maxChars === 180000) {
         assert(
           current.text.length > originalHistory.text.length,
-          'a larger optional excerpt must not be hidden by its older excerpt'
+          'a larger excerpt must not be hidden by its older excerpt'
         )
       } else if (maxChars === 120000) {
         assert.equal(
@@ -626,6 +876,8 @@ test('INV-58 frozen partial history cannot hide a later full or larger excerpt, 
           frame.partitions.runtime.decision.missing.some((entry) => entry.ref === result.resultRef),
           required
         )
+        assert.equal(current.truncated, true)
+        assert.equal(current.representation, 'excerpt')
       }
       assert(!JSON.stringify(frame).includes('outputFingerprint'))
     }

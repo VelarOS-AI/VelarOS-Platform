@@ -72,6 +72,7 @@ class ActEventProjector implements ActEventProjectorApi {
               ? { reason: event.reason }
               : { reason: event.reason, recovery: event.recovery },
           }
+      if (event.report) run = { ...run, verificationReport: structuredClone(event.report) }
     }
     // 限速等待与无进展暂停只给提示，状态仍以 state 事件为准
     if (event.type === 'throttled')
@@ -170,8 +171,7 @@ class ActEventProjector implements ActEventProjectorApi {
       run = { ...run, preview: '', failure: event.message, errors: [...run.errors, event.message] }
     }
     if (event.type === 'state') {
-      // 旧版本写下的 needs_reconcile 已经没有这一态：那一轮没做完就停了，按失败展示
-      const status = (event.status as string) === 'needs_reconcile' ? 'failed' : event.status
+      const { status } = event
       const terminal = ['completed', 'cancelled', 'failed', 'context_blocked'].includes(status)
       if (terminal) this.ended.add(event.runId)
       const { notice: _notice, ...rest } = run

@@ -3,11 +3,13 @@ import { AppError } from '@velaros-ai/core/error'
 import { VelarosStandardDeclarations } from '../contract/surface.js'
 import type {
   GrantedModule,
-  ScriptModuleExportSlice,
+  ScriptModuleExportsSlice,
+  ScriptModuleIndex,
   ScriptPackageDefinition,
   ScriptPackageSurface,
 } from '../types/script.js'
-import { sliceModuleExport } from '../utils/compiler.js'
+import { declaredModules, sliceModuleExports } from '../utils/compiler.js'
+import { outputContentHash } from '../utils/output-render.js'
 
 /** 虚拟包的唯一声明与可执行投影编译入口。 */
 export interface ScriptPackageCompilerApi {
@@ -16,8 +18,14 @@ export interface ScriptPackageCompilerApi {
     packages: readonly ScriptPackageDefinition[],
     modules: readonly GrantedModule[]
   ): ScriptPackageSurface
-  /** 从一个模块的声明里切出一个导出（函数或类型）与它用到的类型；没有这个名字时 declarations 为 null。 */
-  sliceExport(declarations: string, specifier: string, name: string): ScriptModuleExportSlice
+  /** 合并多个导出与传递依赖，每个声明及模块共同规则只交付一次。 */
+  sliceExports(
+    declarations: string,
+    specifier: string,
+    names: readonly string[]
+  ): ScriptModuleExportsSlice
+  /** 真实值导出与实际声明、模板的内容版本；不授予能力，也不表示模型已读。 */
+  index(declarations: string, specifier: string, template?: string): ScriptModuleIndex
 }
 
 class ScriptPackageCompiler implements ScriptPackageCompilerApi {
@@ -69,12 +77,19 @@ class ScriptPackageCompiler implements ScriptPackageCompilerApi {
     return { packages: Object.freeze(projected), granted: Object.freeze(granted) }
   }
 
-  public sliceExport(
+  public sliceExports(
     declarations: string,
     specifier: string,
-    name: string
-  ): ScriptModuleExportSlice {
-    return sliceModuleExport(declarations, specifier, name)
+    names: readonly string[]
+  ): ScriptModuleExportsSlice {
+    return sliceModuleExports(declarations, specifier, names)
+  }
+
+  public index(declarations: string, specifier: string, template = ''): ScriptModuleIndex {
+    return Object.freeze({
+      exports: Object.freeze(declaredModules(declarations).get(specifier)?.listed ?? []),
+      contentRevision: outputContentHash([specifier, declarations, template]),
+    })
   }
 }
 

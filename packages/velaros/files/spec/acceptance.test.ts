@@ -95,6 +95,58 @@ function docBefore(anchor: string): string {
 }
 
 describe('写：一次改动一次成败', () => {
+  test('INV-17 批量替换模板保留读取失败范围，成功时一次提交并交回真实撤回能力', async () => {
+    await writeFile(join(root, 'a.txt'), 'oldName\n')
+    await writeFile(join(root, 'b.txt'), 'oldName twice oldName\n')
+    const space = diskSpace({ root, clamp: true })
+    const template = readFileSync(resolve(UnitRoot, 'template.js'), 'utf8')
+    const blocked = await runModelProgram(
+      space,
+      `${template}\nexport default await replaceInFiles(['a.txt', 'missing.txt'], 'oldName', 'newName')`
+    )
+    expect(blocked.failed).toBeUndefined()
+    expect(blocked.value).toMatchObject({
+      status: 'blocked',
+      requestedFiles: ['a.txt', 'missing.txt'],
+      gaps: [{ path: 'missing.txt', error: { code: 'NOT_FOUND' } }],
+    })
+    expect(space.commits).toHaveLength(0)
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('oldName\n')
+
+    const changed = await runModelProgram(
+      space,
+      `${template}\nexport default await replaceInFiles(['a.txt', 'b.txt', 'a.txt'], 'oldName', 'newName')`
+    )
+    expect(changed.failed).toBeUndefined()
+    expect(changed.value).toMatchObject({
+      status: 'committed',
+      undoable: true,
+      changed: ['a.txt', 'b.txt'],
+    })
+    expect(space.commits).toHaveLength(1)
+    expect(space.commits[0]).toHaveLength(2)
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('newName\n')
+    expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('newName twice newName\n')
+
+    await writeFile(join(root, 'a.txt'), 'oldName\n')
+    await writeFile(join(root, 'b.txt'), 'oldName\n')
+    const broken = diskSpace({ root, clamp: true, failOn: (target) => target.endsWith('b.txt') })
+    const partial = await submitModelProgram(
+      broken,
+      `${template}\nlet result; try { result = await replaceInFiles(['a.txt', 'b.txt'], 'oldName', 'newName') } catch (error) { result = { code: error.code, message: error.message } } export default result`
+    )
+    expect(partial.checked).toBe(true)
+    if (!partial.checked) throw new Error('批量替换模板应通过检查')
+    expect(partial.result.failed).toBeUndefined()
+    const originalFailure = partial.rawValue as { code: string; message: string }
+    expect(originalFailure.code).toBe('PLATFORM')
+    expect(originalFailure.message).toContain('已经写入的：a.txt')
+    expect(originalFailure.message).toContain('undo({ changeId:')
+    expect(broken.commits).toHaveLength(1)
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('newName\n')
+    expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('oldName\n')
+  }, 60_000)
+
   test('INV-1 任何一步写不下去就一个文件都不写：code 是 FILES_EDIT_UNRESOLVED，message 逐条写明第几步、为什么（找不到的带上最像的几行，不唯一的带上在第几行）', async () => {
     const space = diskSpace({ root })
     await writeFile(join(root, 'a.txt'), 'alpha\n')

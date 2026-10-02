@@ -1,13 +1,12 @@
+/**
+ * 直接用 Chrome DevTools Protocol（CDP）操作当前页面：发任意命令、读事件。命令在你自己的一条会话上跑，和宿主那条互不影响：
+ * 你开关的域、设的仿真与 Fetch 拦截只算在这条会话上，reset 或 leave 时一并撤掉；会话跨程序保留（上个程序设的深色模式，下个程序里还在）。
+ * 事件从会话建起来之后开始记，要收哪个域的事件先 send 它的 enable（Network.enable、Page.enable）。
+ * 跨源 iframe 与 worker：先 send Target.setAutoAttach（autoAttach、flatten 为真，waitForDebuggerOnStart 为假），Target.attachedToTarget 事件里的 sessionId 填进 session。
+ * 被你用 Fetch 拦下的请求 30000 毫秒没人放行，宿主替你放行，并记一条 Velar.requestAutoContinued 事件。
+ * 一条命令的结果按 JSON 超过 10000000 个字符抛 BROWSER_RESULT_TOO_LARGE。都作用在 velaros:browser 当前打开的站点上，没进站点时抛 BROWSER_SITE_NOT_OPEN。
+ */
 declare module 'velaros:cdp' {
-  /**
-   * 直接用 Chrome DevTools Protocol（CDP）操作当前页面：发任意命令、读事件。命令在你自己的一条会话上跑，和宿主那条互不影响：
-   * 你开关的域、设的仿真与 Fetch 拦截只算在这条会话上，reset 或 leave 时一并撤掉；会话跨程序保留（上个程序设的深色模式，下个程序里还在）。
-   * 事件从会话建起来之后开始记，要收哪个域的事件先 send 它的 enable（Network.enable、Page.enable）。
-   * 跨源 iframe 与 worker：先 send Target.setAutoAttach（autoAttach、flatten 为真，waitForDebuggerOnStart 为假），Target.attachedToTarget 事件里的 sessionId 填进 session。
-   * 被你用 Fetch 拦下的请求 30000 毫秒没人放行，宿主替你放行，并记一条 Velar.requestAutoContinued 事件。
-   * 一条命令的结果按 JSON 超过 10000000 个字符抛 BROWSER_RESULT_TOO_LARGE。都作用在 velaros:browser 当前打开的站点上，没进站点时抛 BROWSER_SITE_NOT_OPEN。
-   */
-
   /** 发一条 CDP 命令，交回协议原样的结果；协议报错抛 BROWSER_PROTOCOL_FAILED，message 是协议给的原话。
    */
   export function send(input: CdpSendInput): Promise<any>

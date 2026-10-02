@@ -20,6 +20,7 @@ import type {
   ProjectSearchResult,
   ProjectUndoResult,
 } from '../../types/files.js'
+import type { ProjectSnapshotCapture, ProjectSnapshotInput } from '../../types/observation.js'
 import { changeRecordOf, changeTransactionOf } from '../../utils/agent/change-records.js'
 import { commitProjectEdit } from '../../utils/agent/edit-commit.js'
 import { changeInput, editInput } from '../../utils/agent/file-input.js'
@@ -30,6 +31,7 @@ import { beforeWrite } from '../../utils/transactions/transaction-errors.js'
 
 import type { ProjectExecutionGateApi } from './ProjectExecutionGate.js'
 import { projectExecutionGate } from './ProjectExecutionGate.js'
+import { ProjectSnapshotCollector } from './ProjectSnapshotCollector.js'
 
 /**
  * @AgentView
@@ -43,10 +45,17 @@ import { projectExecutionGate } from './ProjectExecutionGate.js'
  * 失败时 error.code 是原因（INVALID_INPUT、TARGET_NOT_FOUND、AMBIGUOUS_TARGET、NOT_SUPPORTED、PERMISSION_DENIED、超过守内存上限的 SCOPE_VIOLATION……），error.message 写着为什么、下一步怎么办。
  */
 export interface ProjectFileOperationsApi {
-  /** @AgentView 读项目里的文本文件：交回连续的正文与它第一行的行号。看图用 `velaros:images`，目录用 list。
+  /** @AgentView 读项目里的文本文件：交回连续的正文与它第一行的行号。批量读取的失败项在 issues；后续改动依赖全部文件时先处理这些缺口，不把返回的 files 当作全部请求都已读。看图用 `velaros:images`，目录用 list。
    * @OperationEffect none
    */
   read(input: ProjectReadInput, ctx: ProjectOperationContext): Promise<ProjectReadResult>
+  /** @AgentView 捕获声明式 files 纯快照计划：最多 20 个文件、每次捕获 500000 个字符；在同一项目读门内前后完整读取，任何缺失、截断或前后变化都失败。快照只证明此次捕获值相同，不能证明读取期间没有 ABA，也不授予后续写入或跳过 IO。
+   * @OperationEffect none
+   */
+  snapshot(
+    input: ProjectSnapshotInput,
+    ctx: ProjectOperationContext
+  ): Promise<ProjectSnapshotCapture>
   /** @AgentView 列项目里的文件和目录，按深度优先的稳定顺序全部交回；.gitignore 忽略的与版本库内部（.git）不列。
    * @OperationEffect none
    */
@@ -55,7 +64,7 @@ export interface ProjectFileOperationsApi {
    * @OperationEffect none
    */
   search(input: ProjectSearchInput, ctx: ProjectOperationContext): Promise<ProjectSearchResult>
-  /** @AgentView 改项目文件：按路径写整份或换一段原文，steps 按顺序合成一个事务提交。
+  /** @AgentView 改项目文件：按路径写整份或换一段原文，steps 按顺序合成一个事务提交。相关改动优先放进一次 edit；拆成多次调用时每次各自提交，不能承诺跨调用全成或全不成。
    * @OperationEffect write
    */
   edit(input: ProjectEditInput, ctx: ProjectOperationContext): Promise<ProjectEditResult>
@@ -70,10 +79,18 @@ export interface ProjectFileOperationsApi {
 }
 
 export class ProjectFileOperations implements ProjectFileOperationsApi {
+  private readonly snapshots = new ProjectSnapshotCollector()
   constructor(private readonly gate: ProjectExecutionGateApi) {}
 
   public read(input: ProjectReadInput, ctx: ProjectOperationContext): Promise<ProjectReadResult> {
     return this.guarded(ctx, false, () => readFiles(input, ctx))
+  }
+
+  public snapshot(
+    input: ProjectSnapshotInput,
+    ctx: ProjectOperationContext
+  ): Promise<ProjectSnapshotCapture> {
+    return this.guarded(ctx, false, () => this.snapshots.capture(input, ctx))
   }
 
   public list(input: ProjectListInput, ctx: ProjectOperationContext): Promise<ProjectListResult> {

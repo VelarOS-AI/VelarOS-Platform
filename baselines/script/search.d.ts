@@ -1,9 +1,8 @@
+/**
+ * 有界高级搜索：另起一个只读的搜索模型，在已授权的来源里检索、读证据，交回发现、证据引用与缺口。
+ * search 只能在 execute 里调用；read 读已发布的报告或刷新其中的证据，不调用模型，observe 里也能用。
+ */
 declare module 'velaros:search' {
-  /**
-   * 有界高级搜索：另起一个只读的搜索模型，在已授权的来源里检索、读证据，交回发现、证据引用与缺口。
-   * search 只能在 execute 里调用；read 读已发布的报告或刷新其中的证据，不调用模型，observe 里也能用。
-   */
-
   /** 列出能选的搜索档位、默认的那个与它们的全部资源上限。
    */
   export function profiles(): Promise<SearchProfileInfo[]>
@@ -12,7 +11,7 @@ declare module 'velaros:search' {
    */
   export function search(input: SearchRequest): Promise<SearchResult>
 
-  /** 读已发布的报告：snapshot 读当时的原文，current 重读选中证据的现状。
+  /** 读已发布的报告：snapshot 读当时的原文，按 text/offset/totalChars 续读；current 重读选中证据的现状，按条目 offset、items.length 与 total 续读，保留每项 ok、stamp 和 complete，不把本页当全部证据。两种读取都不调用模型。
    */
   export function read(input: SearchReadInput): Promise<SearchReadResult>
 

@@ -4,6 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { localContextStorage } from '@velaros-ai/context/node'
+import { modelRequestEncoder } from '@velaros-ai/kernel'
+
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 
 import { done, frameText, marker, turn } from './support/model-turn.mjs'
@@ -21,6 +24,46 @@ async function* doneWith(request, reason, message = '') {
 const runtimeGoal = (request) =>
   JSON.parse(request.materials.find((m) => m.origin === 'runtime-view').text).partitions.runtime
     .goal
+
+async function verificationFixture(t, verify, stream, modelOptions = {}) {
+  const dataDir = await mkdtemp(join(tmpdir(), 'goal-verification-'))
+  const path = join(dataDir, 'context.sqlite')
+  const storage = localContextStorage({ path })
+  const runtime = await createRuntime({
+    storage,
+    agents: false,
+    search: false,
+    memory: false,
+    context: { maintenance: false, completion: { verify: (...args) => verify(session, ...args) } },
+    model: {
+      id: 'goal-verification',
+      limits,
+      estimate,
+      ...modelOptions,
+      stream: (request, signal) => stream(session, request, signal),
+    },
+  })
+  const session = await runtime.openSession('goal')
+  await session.context.ingest({ text: '推进指定目标并核查产物' })
+  const goal = await session.updateGoal({ baseRevision: 0, objective: '检查指定产物' })
+  t.after(async () => {
+    await runtime.close()
+    await rm(dataDir, { recursive: true, force: true })
+  })
+  return { runtime, session, storage, path, goal }
+}
+
+const checkReport = (status) => ({
+  scope: '指定产物能否打开',
+  checkedAt: new Date().toISOString(),
+  checks: [
+    {
+      label: '打开产物',
+      status,
+      artifact: { identity: 'result.docx', revision: status === 'passed' ? 'v2' : 'v1' },
+    },
+  ],
+})
 
 async function fixture(t, model) {
   const dataDir = await mkdtemp(join(tmpdir(), 'session-goal-'))
@@ -227,4 +270,224 @@ test('paused goals survive normal submissions and cancellation never completes a
   })
   assert.match(removed.result.failed.message, /status 只能是/)
   assert.equal((await session.getGoal()).status, 'active')
+})
+
+test('INV-78 automatic done waits for domain verification and publishes goal, task and reports in the same CAS', async (t) => {
+  let checks = 0
+  const f = await verificationFixture(
+    t,
+    async (session) => {
+      assert.equal((await session.getGoal()).status, 'active')
+      const verified = ++checks === 2
+      return {
+        verified,
+        reason: verified ? '产物能打开' : '产物损坏',
+        report: checkReport(verified ? 'passed' : 'failed'),
+      }
+    },
+    async function* (_session, request) {
+      yield* doneWith(request, '产物已完成')
+    }
+  )
+  const atomic = f.storage.compareAndSwapMetadata.bind(f.storage)
+  let completedTransactions = 0
+  f.storage.compareAndSwapMetadata = async (id, version, next, append) => {
+    if (
+      append?.some((record) => record.title === 'session:goal') &&
+      next.task?.status === 'completed'
+    ) {
+      completedTransactions++
+      assert(append.some((record) => record.title.startsWith('task:completion:')))
+      assert.equal((await f.session.getGoal()).status, 'active')
+      assert.notEqual((await f.storage.loadMetadata(id)).task.status, 'completed')
+    }
+    return atomic(id, version, next, append)
+  }
+  const events = await Array.fromAsync(f.session.submit('完成并核查'))
+  assert.equal(events.at(-1).status, 'completed')
+  assert.equal(checks, 2)
+  assert.equal(completedTransactions, 1)
+  assert.equal((await f.session.getGoal()).status, 'complete')
+  const state = await f.storage.load('goal')
+  const records = state.records.filter((record) => record.title.startsWith('task:completion:'))
+  assert.equal(records.length, 2)
+  const first = JSON.parse(await f.storage.get('goal', records[0].objectId))
+  const second = JSON.parse(await f.storage.get('goal', records[1].objectId))
+  assert.equal(first.result.completed, false)
+  assert.equal(second.result.verified, true)
+  assert.deepEqual(first.binding, { kind: 'goal', id: f.goal.id, revision: f.goal.revision })
+  assert.deepEqual(second.binding, first.binding)
+  assert.equal(state.task.completionRef.id, records[1].ref.id)
+  await f.runtime.close()
+  const reopened = await createRuntime({
+    storage: localContextStorage({ path: f.path }),
+    agents: false,
+    search: false,
+    memory: false,
+    context: { maintenance: false },
+  })
+  try {
+    const session = await reopened.openSession('goal')
+    const task = await session.view.inspect()
+    assert.equal((await session.getGoal()).status, 'complete')
+    assert.deepEqual(JSON.parse((await session.context.read(task.completionRef)).text), second)
+  } finally {
+    await reopened.close()
+  }
+})
+
+test('INV-78 cancelled or rejected verification leaves the automatic done goal active', async (t) => {
+  for (const cancel of [false, true]) {
+    const f = await verificationFixture(
+      t,
+      async (session) => {
+        assert.equal((await session.getGoal()).status, 'active')
+        if (cancel) session.cancel()
+        return { verified: false, reason: '打开失败', report: checkReport('failed') }
+      },
+      async function* (_session, request) {
+        yield* doneWith(request, '请求收尾')
+      }
+    )
+    const events = await Array.fromAsync(f.session.submit('检查后收尾'))
+    assert.equal(events.at(-1).status, cancel ? 'cancelled' : 'failed')
+    assert.equal((await f.session.getGoal()).status, 'active')
+    assert.notEqual((await f.session.view.inspect()).status, 'completed')
+  }
+})
+
+test('INV-78 a goal replaced between verification and completion CAS cannot inherit the old proof', async (t) => {
+  let modelCalls = 0
+  let checks = 0
+  const f = await verificationFixture(
+    t,
+    async () => {
+      checks++
+      return { verified: true, reason: '旧产物已核查', report: checkReport('passed') }
+    },
+    async function* (session, request) {
+      if (++modelCalls === 2) session.cancel()
+      yield* doneWith(request, '旧目标已完成')
+    }
+  )
+  const atomic = f.storage.compareAndSwapMetadata.bind(f.storage)
+  let changed = false
+  f.storage.compareAndSwapMetadata = async (id, version, next, append) => {
+    if (
+      !changed &&
+      next.task?.status === 'completed' &&
+      append?.some((record) => record.title === 'session:goal')
+    ) {
+      changed = true
+      const old = await f.session.getGoal()
+      await f.session.controlGoal({ baseRevision: old.revision, action: 'cancel' })
+      const cancelled = await f.session.getGoal()
+      await f.session.updateGoal({ baseRevision: cancelled.revision, objective: '新目标' })
+    }
+    return atomic(id, version, next, append)
+  }
+  const events = await Array.fromAsync(f.session.submit('核查旧产物'))
+  assert.equal(
+    events.find((event) => event.type === 'verification').reason.startsWith('GOAL_CHANGED'),
+    true
+  )
+  assert.equal(checks, 1)
+  assert.equal((await f.session.getGoal()).objective, '新目标')
+  assert.equal((await f.session.getGoal()).status, 'active')
+  const state = await f.storage.load('goal')
+  assert.notEqual(state.task.status, 'completed')
+  assert.equal(
+    state.records.some((record) => record.title.startsWith('task:completion:')),
+    false
+  )
+})
+
+test('INV-78 a legal large failed report can recover within a small model window without duplicating raw checks in recovery instructions', async (t) => {
+  let checks = 0
+  const requests = []
+  const report = {
+    scope: 's'.repeat(1900),
+    checkedAt: new Date().toISOString(),
+    checks: Array.from({ length: 4 }, (_, index) => ({
+      label: `${index}${'x'.repeat(999)}`,
+      status: 'failed',
+      artifact: {
+        identity: 'a'.repeat(1900),
+        revision: 'v'.repeat(900),
+        contentHash: 'h'.repeat(900),
+      },
+    })),
+  }
+  const f = await verificationFixture(
+    t,
+    async () => {
+      const verified = ++checks > 1
+      return {
+        verified,
+        reason: verified ? '产物已修复' : '修复指定产物',
+        report: verified ? checkReport('passed') : report,
+      }
+    },
+    async function* (_session, request) {
+      requests.push(request)
+      yield* doneWith(request, '产物已完成')
+    },
+    {
+      limits: { contextTokens: 7500, inputTokens: 6500, outputTokens: 512 },
+      estimate: async (request) => ({
+        tokens: Math.ceil(JSON.stringify(modelRequestEncoder.messages(request)).length / 4),
+        precision: 'exact',
+        basis: 'deterministic-character-window',
+      }),
+    }
+  )
+  const events = await Array.fromAsync(f.session.submit('核查并修复指定产物'))
+  assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+  assert.equal(requests.length, 2)
+  assert.equal(checks, 2)
+  const recovery = requests[1].compiledPrompt.match(/上次完成检查尚未通过：([^。]+)。/)[1]
+  const feedback = JSON.parse(recovery)
+  assert.equal(feedback.reportAvailable, true)
+  assert.equal(Object.hasOwn(feedback, 'report'), false)
+  assert.equal(recovery.includes(report.checks[0].artifact.identity), false)
+  const state = await f.storage.load('goal')
+  const failed = state.records.find((record) => record.title.startsWith('task:completion:'))
+  assert.deepEqual(JSON.parse(await f.storage.get('goal', failed.objectId)).result.report, report)
+  assert.deepEqual(events.find((event) => event.type === 'verification').report, report)
+})
+
+test('INV-78 authorization reset removes old domain report projections while preserving immutable audit facts', async (t) => {
+  let checks = 0
+  let calls = 0
+  const frames = []
+  const report = {
+    scope: 'PRE_RESET_REPORT_MARKER',
+    checkedAt: new Date().toISOString(),
+    checks: [{ label: 'old private diagnostic', status: 'failed' }],
+  }
+  const f = await verificationFixture(
+    t,
+    async () =>
+      ++checks === 1
+        ? { verified: false, reason: 'repair previous result', report }
+        : { verified: true, reason: 'new result checked' },
+    async function* (session, request) {
+      frames.push(JSON.parse(request.materials.find((item) => item.origin === 'runtime-view').text))
+      if (++calls === 2) {
+        await session.context.append({ kind: 'audit', title: 'search:history-reset', body: '{}' })
+        yield turn(request, { execute: { source: 'export const tick = 1;' } })
+        yield { type: 'finish', reason: 'stop' }
+      } else yield* doneWith(request, '按当前授权事实收尾')
+    }
+  )
+  const events = await Array.fromAsync(f.session.submit('按当前授权检查产物'))
+  assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+  assert.equal(frames.length, 3)
+  assert.equal(frames[1].partitions.runtime.verification.scope, report.scope)
+  assert.equal(frames[2].partitions.task.goals.length, 0)
+  assert.equal(frames[2].partitions.runtime.verification, undefined)
+  assert.equal(JSON.stringify(frames[2]).includes(report.scope), false)
+  const state = await f.storage.load('goal')
+  const original = state.records.find((record) => record.title.startsWith('task:completion:'))
+  assert.deepEqual(JSON.parse(await f.storage.get('goal', original.objectId)).result.report, report)
 })

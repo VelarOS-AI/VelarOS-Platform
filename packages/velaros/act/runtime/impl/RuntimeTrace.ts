@@ -4,7 +4,15 @@ import type {
   ContextState,
   ContextStorage,
 } from '@velaros-ai/context'
-import { isNull, isPlainObject, isString, isUndefined, Log, toNullable } from '@velaros-ai/core'
+import {
+  isNull,
+  isPlainObject,
+  isString,
+  isUndefined,
+  Log,
+  toNullable,
+  toOptional,
+} from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
@@ -16,13 +24,22 @@ import type {
   ActExecutionSummary,
   ActObservationRegistration,
   ActObservationRun,
+  ActSessionActivityEntry,
+  ActSessionActivityPage,
   ActTracePage,
   ActTraceQuery,
   ActTraceRecord,
   ActTurnTrace,
+  ActVerificationAttemptSummary,
+  ActVerificationCostSummary,
   TraceChildPhase,
 } from '../types/trace.js'
 import { executionDuration, executionOutcome } from '../utils/execution-outcome.js'
+import {
+  modelAccounting,
+  summarizeVerificationAttempt,
+  summarizeVerificationCosts,
+} from '../utils/trace-accounting.js'
 import {
   childAnswerText,
   summarizeInvocation,
@@ -52,6 +69,8 @@ export class RuntimeTrace implements RuntimeTraceApi {
     const {
       after = 0,
       limit = 8,
+      activityAfter = 0,
+      activityLimit = 8,
       maxChars = ActRuntimeTuning.frameChars,
       fullContent = false,
       sessionId = this.sessionId,
@@ -62,6 +81,11 @@ export class RuntimeTrace implements RuntimeTraceApi {
       !Number.isSafeInteger(limit) ||
       limit < 1 ||
       limit > 32 ||
+      !Number.isSafeInteger(activityAfter) ||
+      activityAfter < 0 ||
+      !Number.isSafeInteger(activityLimit) ||
+      activityLimit < 1 ||
+      activityLimit > 32 ||
       !Number.isSafeInteger(maxChars) ||
       maxChars < 1 ||
       maxChars > 8_000_000
@@ -114,14 +138,129 @@ export class RuntimeTrace implements RuntimeTraceApi {
           0
         ) +
         (value.requestSummary?.system.length ?? 0) +
-        (value.requestSummary?.messages.length ?? 0)
+        (value.requestSummary?.messages.length ?? 0) +
+        value.executions.reduce((sum, item) => sum + item.source.length, 0) +
+        (value.observation.registration?.source.length ?? 0) +
+        (value.observation.run?.source.length ?? 0) +
+        value.agents.reduce((sum, item) => sum + item.task.length + item.answer.length, 0)
     }
+    const sessionActivity = await trace.activitySnapshot(
+      snapshot,
+      activityAfter,
+      activityLimit,
+      Math.max(0, remaining),
+      fullContent
+    )
     return {
       rootSessionId: this.sessionId,
       sessionId,
       branches: bindings.filter((item) => item.rootTaskId === root?.task?.id),
       turns,
+      sessionActivity,
+      accounting: {
+        modelRequests: {
+          known: turns.filter((turn) => turn.modelAccounting.usage.coverage === 'known').length,
+          unknown: turns.filter((turn) => turn.modelAccounting.usage.coverage === 'unknown').length,
+          inflight: turns.filter((turn) => turn.modelAccounting.usage.coverage === 'inflight')
+            .length,
+        },
+        verificationScope: 'session',
+        verificationCost: await this.verificationCost(snapshot),
+      },
       nextAfter: requests.some((record) => record.sequence > cursor) ? cursor : null,
+      snapshotVersion: toNullable(snapshot?.version),
+    }
+  }
+
+  private async activitySnapshot(
+    snapshot: Nullable<ContextState>,
+    after: number,
+    limit: number,
+    maxChars: number,
+    fullContent: boolean
+  ): Promise<ActSessionActivityPage> {
+    const records = snapshot?.records ?? []
+    const starts = records.filter(
+      (record) => record.sequence > after && /^script:execution:[0-9a-f-]{36}$/u.test(record.title)
+    )
+    const entries: ActSessionActivityEntry[] = []
+    let remaining = fullContent ? Number.POSITIVE_INFINITY : maxChars
+    let cursor = after
+    for (const start of starts.slice(0, limit)) {
+      const executionId = start.title.slice('script:execution:'.length)
+      const gaps: string[] = []
+      const startBody = await this.storage.get(this.sessionId, start.objectId)
+      let started: unknown
+      try {
+        started = isNull(startBody) ? undefined : JSON.parse(startBody)
+      } catch (error) {
+        this.log.debug('会话活动起始事实无法解释', {
+          ref: start.ref,
+          error: AppError.getMessage(error),
+        })
+      }
+      const details =
+        isPlainObject(started) && started.executionId === executionId ? started : undefined
+      if (!details) gaps.push(`活动起始事实缺失或无效：${start.ref.id}`)
+      const results = records.filter((record) => record.title === `script:${executionId}:result`)
+      const activityRecords: ActTraceRecord[] = []
+      for (const record of [start, ...results]) {
+        const body =
+          record === start ? startBody : await this.storage.get(this.sessionId, record.objectId)
+        if (isNull(body)) gaps.push(`原文缺失：${record.ref.id}`)
+        const text = isNull(body) ? null : body.slice(0, remaining)
+        remaining -= text?.length ?? 0
+        activityRecords.push({
+          ref: record.ref,
+          sequence: record.sequence,
+          title: record.title,
+          chars: record.chars,
+          body: text,
+          truncated: !isNull(body) && text!.length < body.length,
+          sources: record.sources,
+        })
+      }
+      if (isEmpty(results)) gaps.push(`活动尚无宿主结果：${executionId}`)
+      const invocations: Array<ActTurnTrace['invocations'][number]> = []
+      // 当前 journal 与目录快照分别读取；迟到事实保留在原 executionId，读取不会等待物理 IO。
+      for (const invocation of await this.journal.list(this.sessionId, executionId)) {
+        const summary = summarizeInvocation(invocation, remaining, fullContent)
+        remaining -= summary.input.length + summary.output.length
+        const body = JSON.stringify(invocation)
+        const text = body.slice(0, remaining)
+        remaining -= text.length
+        invocations.push({
+          id: invocation.prepared.id,
+          executionId,
+          chars: body.length,
+          body: text,
+          truncated: text.length < body.length,
+          summary,
+        })
+      }
+      entries.push({
+        executionId,
+        taskId: isString(details?.taskId) ? details.taskId : null,
+        mode: details?.mode === 'execute' || details?.mode === 'observe' ? details.mode : null,
+        kind: !details
+          ? 'unknown'
+          : details.kind === 'snapshot-capture'
+            ? 'snapshot-capture'
+            : 'script-execution',
+        startedSequence: start.sequence,
+        startRef: start.ref,
+        resultRef: toNullable(results.at(-1)?.ref),
+        records: activityRecords,
+        invocations,
+        gaps,
+      })
+      cursor = start.sequence
+    }
+    return {
+      scope: 'session',
+      sessionId: this.sessionId,
+      entries,
+      nextAfter: starts.some((record) => record.sequence > cursor) ? cursor : null,
       snapshotVersion: toNullable(snapshot?.version),
     }
   }
@@ -134,6 +273,45 @@ export class RuntimeTrace implements RuntimeTraceApi {
       throw new AppError('VALIDATION', '回合身份或追踪正文预算无效')
     const snapshot = await this.storage.load(this.sessionId)
     return this.readSnapshot(turnId, maxChars, snapshot)
+  }
+
+  private async verificationCost(
+    snapshot: Nullable<ContextState>
+  ): Promise<ActVerificationCostSummary> {
+    const attempts = new Map<string, Array<{ value: unknown; ref: ContextRecord['ref'] }>>()
+    let incomplete = false
+    for (const record of snapshot?.records ?? []) {
+      if (!record.title.startsWith('task:verification:')) continue
+      const identity = /^(task:verification:.+):(started|settled|late-result)$/u.exec(
+        record.title
+      )?.[1]
+      const body = await this.storage.get(record.ref.sessionId, record.objectId)
+      if (!identity || isNull(body)) {
+        incomplete = true
+        continue
+      }
+      let value: unknown
+      try {
+        value = JSON.parse(body)
+      } catch (error) {
+        incomplete = true
+        this.log.debug('核查总账事实正文无法解释', {
+          ref: record.ref,
+          error: AppError.getMessage(error),
+        })
+        continue
+      }
+      const events = attempts.get(identity) ?? []
+      events.push({ value, ref: record.ref })
+      attempts.set(identity, events)
+    }
+    const costs: ActVerificationCostSummary[] = []
+    for (const events of attempts.values()) {
+      const summary = summarizeVerificationAttempt(events)
+      if (!summary || summary.records.length !== events.length) incomplete = true
+      if (summary) costs.push(summary.cost)
+    }
+    return summarizeVerificationCosts(costs, incomplete)
   }
 
   private async readSnapshot(
@@ -181,6 +359,26 @@ export class RuntimeTrace implements RuntimeTraceApi {
     )
     const decisionBody = decision ? await raw(decision) : null
     const decoded = isNull(decisionBody) ? undefined : JSON.parse(decisionBody)
+    // 没有响应不证明仍在请求；只有当前最后请求、活跃运行和未过期任务租约同时成立才记 inflight。
+    const latestRequest = !records.some(
+      (record) => record.title === 'model-request' && record.sequence > requestRecord.sequence
+    )
+    const stateRecord =
+      !decision && latestRequest
+        ? records.findLast((record) => record.title === 'act:state')
+        : undefined
+    const stateBody = stateRecord ? await raw(stateRecord) : null
+    const activeRun: unknown = isNull(stateBody) ? undefined : JSON.parse(stateBody)
+    const inflight =
+      !decision &&
+      latestRequest &&
+      isPlainObject(activeRun) &&
+      activeRun.id === request.runId &&
+      activeRun.status === 'thinking' &&
+      !!snapshot?.task?.lease &&
+      snapshot.task.lease.expiresAt > Date.now() &&
+      ['executing', 'context-pending', 'view-ready'].includes(snapshot.task.status)
+    const accounting = modelAccounting(decoded, inflight)
     const response =
       decoded?.rawRef?.sessionId === this.sessionId
         ? records.find((record) => record.ref.id === decoded.rawRef.id)
@@ -194,7 +392,11 @@ export class RuntimeTrace implements RuntimeTraceApi {
     // 本回合响应登记的观察，同样取最后一份控制回执
     let registered: Optional<ScriptControlReceipt>
     // 喂进本回合请求的那次观察运行
-    let observed: Optional<{ sourceRef?: string; resultRef?: string }>
+    let observed: Optional<{
+      sourceRef?: string
+      resultRef?: string
+      freshness?: ActObservationRun['collection']
+    }>
     const select = (record: Optional<ContextRecord>) => {
       if (record) selected.add(record.ref.id)
     }
@@ -263,6 +465,16 @@ export class RuntimeTrace implements RuntimeTraceApi {
       observed = frame.observation
       select(byRef(frame.observation?.sourceRef))
       select(byRef(frame.observation?.resultRef))
+      const capture = frame.observation?.freshness?.snapshot
+      if (isString(capture?.captureExecutionId)) {
+        executions.add(capture.captureExecutionId)
+        select(byRef(capture.captureResultRef))
+        select(
+          records.find(
+            (record) => record.title === `script:execution:${capture.captureExecutionId}`
+          )
+        )
+      }
       for (const result of frame.results ?? []) {
         select(byRef(result.ref))
         select(byRef(result.sourceRef))
@@ -289,10 +501,7 @@ export class RuntimeTrace implements RuntimeTraceApi {
           select(record)
           if (
             event.type === 'state' &&
-            // needs_reconcile 是旧版本写下的结束状态
-            ['completed', 'cancelled', 'failed', 'context_blocked', 'needs_reconcile'].includes(
-              event.status
-            )
+            ['completed', 'cancelled', 'failed', 'context_blocked'].includes(event.status)
           )
             boundary = record.sequence + 1
         } else select(record)
@@ -300,10 +509,44 @@ export class RuntimeTrace implements RuntimeTraceApi {
     for (const record of records)
       if (selected.has(record.ref.id)) {
         const match = /^script:([0-9a-f-]{36}):result$/u.exec(record.title)
-        if (match) executions.add(match[1]!)
+        if (
+          match &&
+          !(
+            record.ref.id === observed?.resultRef &&
+            observed.freshness &&
+            observed.freshness.status !== 'collected'
+          )
+        )
+          executions.add(match[1]!)
       }
     for (const record of records)
       if ([...executions].some((id) => record.title === `script:${id}:result`)) select(record)
+    // 核查 attempt 归最初 started 的请求窗口；迟到阶段始终回到原 attempt，不归到当前任务或当前请求。
+    const verification: ActVerificationAttemptSummary[] = []
+    const verificationStarts = records.filter(
+      (record) =>
+        record.title.startsWith('task:verification:') &&
+        record.title.endsWith(':started') &&
+        record.sequence > requestRecord.sequence &&
+        record.sequence < boundary
+    )
+    for (const start of verificationStarts) {
+      const prefix = start.title.slice(0, -'started'.length)
+      const events: Array<{ record: ContextRecord; value: unknown }> = []
+      for (const record of records.filter((item) => item.title.startsWith(prefix))) {
+        const body = await raw(record)
+        events.push({ record, value: isNull(body) ? undefined : JSON.parse(body) })
+      }
+      const summary = summarizeVerificationAttempt(
+        events.map(({ record, value }) => ({ ref: record.ref, value }))
+      )
+      if (!summary) {
+        gaps.push(`核查尝试无法解释：${start.ref.id}`)
+        continue
+      }
+      verification.push(summary)
+      for (const { record } of events) select(record)
+    }
     // 结果的来源链包含真实源码、图片和版本；仅在当前会话内解析。
     for (const id of selected)
       for (const ref of recordById.get(id)!.sources)
@@ -421,11 +664,14 @@ export class RuntimeTrace implements RuntimeTraceApi {
     if (observation && observationId) {
       const saved = await raw(observation)
       const persisted: unknown = isNull(saved) ? undefined : JSON.parse(saved)
+      const receipts =
+        journal.get(observationId) ?? (await this.journal.list(this.sessionId, observationId))
       run = {
+        collection: toOptional(observed?.freshness),
         executionId: observationId,
         ...executionOutcome(
           persisted,
-          (journal.get(observationId) ?? []).map((invocation) => invocation.receipt)
+          receipts.map((invocation) => invocation.receipt)
         ),
         durationMs: executionDuration(persisted),
         ...(await programSource(observed?.sourceRef)),
@@ -516,6 +762,11 @@ export class RuntimeTrace implements RuntimeTraceApi {
         contextMs: toNullable(request.preparation?.contextMs),
         modelMs: toNullable(decoded?.timing?.modelMs),
         firstTextMs: toNullable(decoded?.timing?.firstTextMs),
+      },
+      modelAccounting: accounting,
+      verification: {
+        attempts: verification,
+        cost: summarizeVerificationCosts(verification.map((attempt) => attempt.cost)),
       },
       request: requestTrace,
       requestSummary,

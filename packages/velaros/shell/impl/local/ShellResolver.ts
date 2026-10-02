@@ -2,11 +2,11 @@
  * shell 选择与自检：`ShellResolver` 与整个进程唯一的 `shellResolver`。接口 `ShellResolverApi` 在本文件的类上方。
  * 不出包；只查文件、不跑进程的部分在 `utils/shell.ts`。
  */
-
 import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { win32 } from 'node:path'
 
+import { isEmpty } from '@velaros-ai/core'
 import { isPlainObject, isString, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { currentPlatform } from '@velaros-ai/core/platform'
@@ -216,7 +216,7 @@ class ShellResolver implements ShellResolverApi {
         if (!isString(captured.PATH)) throw new AppError('UNAVAILABLE', 'PATH 字段缺失。')
         path = captured.PATH
       }
-      return path === '' ? [] : path.split(windows ? ';' : ':')
+      return isEmpty(path) ? [] : path.split(windows ? ';' : ':')
     } catch {
       throw new AppError('UNAVAILABLE', '命令执行环境的 PATH 未能完整读取，当前 PATH 未知。')
     }

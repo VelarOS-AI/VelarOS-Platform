@@ -20,10 +20,18 @@ import type {
   MemoryRetention,
 } from '../types/memory.js'
 import type {
+  SystemModuleDescribeInput,
   SystemModuleDescription,
   SystemModulePage,
   SystemModuleQuery,
 } from '../types/modules.js'
+import type {
+  ProgramDescribeInput,
+  ProgramDescriptor,
+  ProgramPage,
+  ProgramPublishInput,
+  ProgramQuery,
+} from '../types/programs.js'
 import type { ScriptRetention } from '../types/results.js'
 import type { WorkspaceEntry, WorkspaceUpdate } from '../types/workspace.js'
 
@@ -80,9 +88,30 @@ export interface ModulesHost {
   kernel(): Pick<OperationRuntimeApi, 'list' | 'describe'>
 }
 /** 系统包共用宿主的两个窄端口。 */
-export interface SystemHost extends GoalHost, ModulesHost {
+export interface SystemHost extends GoalHost, ModulesHost, ProgramsHost {
   /** 持久状态存储可用时装配的共享能力。 */
   readonly stores?: StoreHost
+}
+/** 程序复用只接当前会话的原有归档与权限边界。 */
+export interface ProgramsHost {
+  /** 提供时挂载 programs 成员；数据与语法检查由运行时持有。 */
+  readonly programCatalog?: (sessionId: string) => ProgramCatalogPort
+}
+/** 发布与发现不运行程序；sourceRef 执行继续由正式 Runtime 接受与派发。 */
+export interface ProgramCatalogPort {
+  /** 检查真实源码/import，然后按名称版本 CAS 发布不可变源与目录。 */
+  publish(input: ProgramPublishInput, signal: AbortSignal): Promise<ProgramDescriptor>
+  /** 按当前授权与重置边界过滤后分页。 */
+  list(query: ProgramQuery, signal: AbortSignal): Promise<ProgramPage>
+  /** 当前名称或不可变版本，均重新核对可见性与授权。 */
+  describe(input: ProgramDescribeInput, signal: AbortSignal): Promise<ProgramDescriptor>
+}
+/** programs 的每次调用上下文由宿主固定实际会话。 */
+export interface ProgramsOperationContext {
+  /** 本次真实会话的程序发布与发现端口。 */
+  readonly catalog: ProgramCatalogPort
+  /** 调用取消信号，发布与查询都须响应。 */
+  readonly abortSignal: AbortSignal
 }
 /** 按调用会话解析固定共享空间。 */
 export interface StoreHost {
@@ -149,7 +178,7 @@ export interface ModuleCatalogPort {
   /** 授权与空间筛选后分页。 */
   list(query: SystemModuleQuery): SystemModulePage
   /** 读取包或指定成员的真实合同。 */
-  describe(module: string, member?: string): SystemModuleDescription
+  describe(input: SystemModuleDescribeInput): SystemModuleDescription
 }
 
 /** `velaros:modules` 每次调用的宿主上下文：本会话看得到的模块目录与取消信号。 */
