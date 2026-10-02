@@ -56,12 +56,11 @@ class EgressHelperTest(unittest.TestCase):
             with self.subTest(config=config), self.assertRaises(ValueError):
                 prepare.response_header_timeout(config)
 
-    def test_legacy_v1_identity_remains_readable(self):
+    def test_unknown_protocol_rejects_before_configuration_use(self):
         with tempfile.TemporaryDirectory() as temp:
-            legacy = Path(temp); expected = self.fixture(legacy, timeout='15s', revision=1)
-            before = {str(p): sha(p) for p in (legacy / 'preparation.json', legacy / 'build.json', legacy / 'context/gost.yaml')}
-            self.assertEqual(helper_evidence(legacy), expected)
-            self.assertEqual(before, {p: sha(p) for p in before})
+            directory = Path(temp); self.fixture(directory, revision=99)
+            with self.assertRaisesRegex(ValueError, 'Unknown local network helper protocol'):
+                helper_evidence(directory)
 
     def test_v2_metadata_and_actual_deadline_both_bind(self):
         with tempfile.TemporaryDirectory() as temp:

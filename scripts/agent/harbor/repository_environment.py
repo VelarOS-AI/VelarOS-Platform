@@ -28,10 +28,8 @@ def helper_evidence(directory=HELPER):
     context_hash = docker_build_context_hash(context=context, dockerfile_path=context / "Dockerfile", build_args={}, platform="linux/arm64")
     if files != source["files_sha256"] or context_hash != source["context_hash"]:
         raise ValueError("Local network helper context changed")
-    variants = {"3.3.0": ("gost-stable-v1",), "3.2.6": ("gost-3.2.6-v1", "gost-3.2.6-v2")}
-    protocol = source["protocol"]
-    allowed = variants.get(source["gost_version"], ())
-    variant = next((item for item in allowed if protocol == "local-harbor-" + item), None)
+    variants = {"3.3.0": "gost-stable-v1", "3.2.6": "gost-3.2.6-v2"}
+    variant = variants.get(source["gost_version"])
     image_name = "scriptact-bench:egress-" + str(variant) + "--" + context_hash
     if variant is None or source["protocol"] != "local-harbor-" + variant:
         raise ValueError("Unknown local network helper protocol")
