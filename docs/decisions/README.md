@@ -42,3 +42,7 @@ Accepted records are durable rationale, not a substitute for schemas or executab
 
 - [0024: 模块不用申请](0024-no-capability-requests.md)
 - [0025: 收尾不再按读到的版本核对](0025-no-completion-read-check.md)
+
+- [0026: ScriptAct 当前状态、领域核查与可信观察复用](0026-scriptact-current-state-and-verification.md)
+
+- [0027: ScriptAct 能力发现、预算状态与按范围复用](0027-scriptact-discovery-state-and-scoped-reuse.md)

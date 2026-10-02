@@ -51,7 +51,7 @@ list/read/recall 无写效果，可用于观察。update/plan/retain/release/org
 ```js
 import {output} from 'velaros';
 import {modules} from 'velaros:system';
-const info = await modules.describe({module: 'velaros:system', export: 'memory'});
+const info = await modules.describe({module: 'velaros:system', exports: ['memory']});
 output(info.template);
 ```
 

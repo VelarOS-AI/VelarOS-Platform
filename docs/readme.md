@@ -66,6 +66,12 @@ Host products own their adapters, installation UI, and product-specific policies
 | --- | --- |
 | [Agent integration](architecture/agent-act-consolidation.md) | Loop ownership, injected ports and durable run control |
 | [Code surface design](engineering/script-design.md) | Why the model writes programs, how declarations are generated and how capabilities reach the model |
+| [ScriptAct implementation and evidence](engineering/scriptact-optimization-implementation.md) | Implementation scope, compatibility, frozen comparisons and next directions |
+| [ScriptAct current state decision (ADR 0026)](decisions/0026-scriptact-current-state-and-verification.md) | Current frames, atomic completion and trusted observation coverage |
+| [ScriptAct optimization design](engineering/scriptact-optimization-design.md) | Current working view, capability templates, domain verification, observation reuse and evaluation design |
+| [ScriptAct next generation design](engineering/scriptact-next-generation-design.md) | Priorities, concrete interfaces, domain reuse boundaries and independent validation for the next generation |
+| [ScriptAct next generation evidence](engineering/scriptact-next-generation-implementation.md) | Contract changes, complete mechanism costs, frozen model comparisons and regression diagnosis |
+| [ScriptAct final delivery](engineering/scriptact-next-generation-delivery.md) | Committed implementation, current contracts, final checks and complete original model attempts |
 | [Text protocol](architecture/scriptact-text-protocol.md) | Frames, streaming, blobs, execution and completion |
 | [Result leases](architecture/script-context-leases.md) | Recurring observations and retained one-shot results |
 | [Incremental edits](architecture/script-incremental-edit.md) | Version-bound updates to model-maintained programs |

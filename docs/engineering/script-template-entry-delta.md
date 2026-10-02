@@ -9,7 +9,7 @@
 ```js
 import {output} from 'velaros';
 import {modules} from 'velaros:system';
-const info = await modules.describe({module: 'velaros:system', export: 'memory'});
+const info = await modules.describe({module: 'velaros:system', exports: ['memory']});
 output(info.template);
 ```
 
