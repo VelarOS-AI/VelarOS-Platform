@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
-import { TaskCapsuleLimits } from '../dist/contract/constants.js'
+import { ContextVerificationLimits, TaskCapsuleLimits } from '../dist/contract/constants.js'
 import { createContextRuntime, createContextView } from '../dist/index.js'
 import { localContextStorage } from '../dist/node.js'
 import { checkTaskCapsule } from '../dist/utils/view-input.js'
@@ -317,6 +317,225 @@ test('A23: a verifier result is rejected if the source changes while verificatio
   })
   assert.equal(result.completed, false)
   assert.equal(result.reason, 'STALE_VIEW')
+})
+
+test('INV-15 domain reports preserve failed and unknown checks, original bindings and immutable evidence', async (t) => {
+  const f = await fixture(t)
+  await observe(f)
+  const evidence = await f.context.append({
+    kind: 'tool',
+    body: 'test: failed; remote confirmation unavailable',
+  })
+  const report = {
+    scope: '指定文件的检查与远端确认',
+    checkedAt: new Date().toISOString(),
+    checks: [
+      {
+        label: '文件测试',
+        status: 'failed',
+        evidenceRefs: [evidence.ref],
+        artifact: { identity: 'a.ts', revision: 'v1', contentHash: hash(f.data.text) },
+      },
+      { label: '远端确认', status: 'unknown' },
+    ],
+  }
+  let prepared = 0
+  const commit = {
+    binding: { kind: 'goal', id: 'old-goal', revision: 2 },
+    prepare: async () => {
+      prepared++
+      throw Error('must not finalize a failed check')
+    },
+  }
+  const failed = await f.view.complete(
+    { verify: async () => ({ verified: false, reason: '检查失败', report }) },
+    undefined,
+    commit
+  )
+  assert.equal(failed.completed, false)
+  assert.equal(prepared, 0)
+  const firstRef = (await f.view.inspect()).completionRef
+  const archived = JSON.parse((await f.context.read(firstRef)).text)
+  assert.deepEqual(archived.binding, commit.binding)
+  assert.equal(archived.taskId, (await f.view.inspect()).id)
+  assert.deepEqual(archived.result.report, report)
+  assert.deepEqual(await f.view.readCompletion(), archived)
+  report.checks[0].label = 'later mutable explanation'
+  assert.equal(
+    JSON.parse((await f.context.read(firstRef)).text).result.report.checks[0].label,
+    '文件测试'
+  )
+  const passed = {
+    scope: '指定文件的测试',
+    checkedAt: new Date().toISOString(),
+    checks: [
+      {
+        label: '文件测试',
+        status: 'passed',
+        evidenceRefs: [evidence.ref],
+        artifact: { identity: 'a.ts', revision: 'v2' },
+      },
+    ],
+  }
+  const success = await f.view.complete({
+    verify: async () => ({ verified: true, reason: '测试通过', report: passed }),
+  })
+  assert.equal(success.completed, true)
+  const current = await f.view.inspect()
+  assert.equal(current.verification, 'verified')
+  assert.notEqual(current.completionRef.id, firstRef.id)
+  assert.equal(JSON.parse((await f.context.read(firstRef)).text).result.completed, false)
+  assert.deepEqual(
+    JSON.parse((await f.context.read(current.completionRef)).text).result.report,
+    passed
+  )
+  assert.deepEqual(await f.view.readCompletion(firstRef), archived)
+})
+
+test('INV-15 neutral completion records and report publish with the task in one CAS, retrying unrelated changes without repeating verification', async (t) => {
+  for (const fallback of [false, true]) {
+    const f = await fixture(t)
+    if (fallback)
+      f.options.storage = new Proxy(f.storage, {
+        get(target, key) {
+          if (['loadMetadata', 'compareAndSwapMetadata', 'selectSnapshot'].includes(key))
+            return undefined
+          const value = target[key]
+          return typeof value === 'function' ? value.bind(target) : value
+        },
+      })
+    await observe(f)
+    const original = f.storage[fallback ? 'compareAndSwap' : 'compareAndSwapMetadata'].bind(
+      f.storage
+    )
+    let raced = false
+    f.storage[fallback ? 'compareAndSwap' : 'compareAndSwapMetadata'] = async (...args) => {
+      if (!raced && args[2].task?.status === 'completed') {
+        raced = true
+        await f.context.append({ kind: 'tool', title: 'unrelated', body: 'new event' })
+      }
+      return original(...args)
+    }
+    let preparations = 0
+    let checks = 0
+    const commit = {
+      binding: { kind: 'resource', id: 'completion-target', revision: 1 },
+      prepare: async () => {
+        preparations++
+        const state = await f.storage.load('s')
+        const body = 'finalized target'
+        return {
+          version: state.version,
+          records: [
+            {
+              ref: { sessionId: 's', id: crypto.randomUUID() },
+              kind: 'audit',
+              title: 'domain:complete',
+              objectId: await f.storage.put('s', body),
+              chars: body.length,
+              sources: [],
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        }
+      },
+    }
+    const result = await f.view.complete(
+      {
+        verify: async () => {
+          checks++
+          return {
+            verified: true,
+            reason: 'confirmed',
+            report: {
+              scope: 'specified output',
+              checkedAt: new Date().toISOString(),
+              checks: [{ label: 'output exists', status: 'passed' }],
+            },
+          }
+        },
+      },
+      undefined,
+      commit
+    )
+    assert.equal(result.completed, true)
+    assert.equal(checks, 1)
+    assert.equal(preparations, 2)
+    const state = await f.storage.load('s')
+    assert.equal(state.task.status, 'completed')
+    assert.equal(state.records.filter((record) => record.title === 'domain:complete').length, 1)
+    assert.equal(
+      state.records.filter((record) => record.title.startsWith('task:completion:')).length,
+      1
+    )
+  }
+})
+
+test('INV-15 cancelled finalization and invalid or foreign report evidence cannot publish completion', async (t) => {
+  const f = await fixture(t)
+  await observe(f)
+  const report = {
+    scope: 'test',
+    checkedAt: new Date().toISOString(),
+    checks: [{ label: 'test', status: 'passed' }],
+  }
+  for (const invalid of [
+    {
+      ...report,
+      checks: Array.from({ length: ContextVerificationLimits.checks + 1 }, () => report.checks[0]),
+    },
+    { ...report, scope: 'x'.repeat(ContextVerificationLimits.scopeChars + 1) },
+    {
+      ...report,
+      checks: Array.from({ length: ContextVerificationLimits.checks }, () => ({
+        label: 'x'.repeat(ContextVerificationLimits.labelChars),
+        status: 'passed',
+      })),
+    },
+  ])
+    await assert.rejects(
+      f.view.complete({
+        verify: async () => ({ verified: true, reason: 'claimed', report: invalid }),
+      }),
+      { code: 'VALIDATION' }
+    )
+  await assert.rejects(
+    f.view.complete({
+      verify: async () => ({
+        verified: true,
+        reason: 'claimed',
+        report: {
+          ...report,
+          checks: [
+            { ...report.checks[0], evidenceRefs: [{ sessionId: 'other', id: f.user.ref.id }] },
+          ],
+        },
+      }),
+    }),
+    { code: 'SCOPE_MISMATCH' }
+  )
+  const controller = new AbortController()
+  await assert.rejects(
+    f.view.complete(
+      { verify: async () => ({ verified: true, reason: 'claimed', report }) },
+      controller.signal,
+      {
+        binding: { kind: 'target', id: 'one', revision: 1 },
+        prepare: async () => {
+          controller.abort()
+          return { version: (await f.storage.load('s')).version, records: [] }
+        },
+      }
+    ),
+    { name: 'AbortError' }
+  )
+  const state = await f.storage.load('s')
+  assert.notEqual(state.task.status, 'completed')
+  assert.equal(state.task.completionRef, undefined)
+  assert.equal(
+    state.records.some((record) => record.title.startsWith('task:completion:')),
+    false
+  )
 })
 
 test('A26: observed-only sources disclose weak freshness and never assert a snapshot', async (t) => {

@@ -402,6 +402,8 @@ export interface ContextArtifactProvenance {
   readonly complete: boolean
 }
 export interface ContextTaskState {
+  /** 最近一次领域核查的不可变记录；正文注明原任务、视图和宿主完成对象的版本。 */
+  readonly completionRef?: ContextRef
   /** 当前逻辑任务使用的持久 store ID；由 Runtime 维护，展示时重新核验权限。 */
   readonly storeRefs?: readonly string[]
   /** 已退出自动展示的授权空间；实际访问会重新激活。 */
@@ -482,6 +484,121 @@ export interface ContextCompletionResult {
   readonly reason: string
   /** 未完成时应补读修复、刷新、等待输入或处理容量。 */
   readonly recovery?: 'repair' | 'refresh' | 'input' | 'capacity'
+  /** 领域实际检查的有界范围与原始依据，不把模型的完成主张当作证明。 */
+  readonly report?: ContextVerificationReport
+}
+
+/** 领域检查产生的事实；每项只证明其声明范围，产物再次变化后仍是历史记录。 */
+export interface ContextVerificationReport {
+  readonly scope: string
+  readonly checkedAt: string
+  readonly checks: readonly ContextVerificationCheck[]
+}
+
+/** 单项核查的原始事实；适用性由宿主再次探测，不从历史 passed 推断。 */
+export interface ContextVerificationCheck {
+  readonly label: string
+  readonly status: 'passed' | 'failed' | 'unknown'
+  readonly evidenceRefs?: readonly ContextRef[]
+  readonly artifact?: {
+    readonly identity: string
+    readonly revision?: string
+    readonly contentHash?: string
+  }
+  readonly id?: string
+  readonly scope?: string
+  readonly verifierId?: string
+  readonly verifierVersion?: string
+  readonly checkedAt?: string
+  readonly complete?: boolean
+  readonly artifacts?: readonly ContextVerificationArtifact[]
+  readonly proofRef?: ContextRef
+  readonly reusedFrom?: ContextRef
+  /** 只表示该次可信探测时的适用性；当前适用性通过 completionApplicability 重新判断。 */
+  readonly applicability?: 'current' | 'historical' | 'unknown'
+}
+
+/** 精确产物集合的成员；contentHash 覆盖实际核查范围的全部字节。 */
+export interface ContextVerificationArtifact {
+  readonly identity: string
+  readonly contentHash: string
+  readonly revision?: string
+}
+
+/** 真实费用依据；同一 charge ID 在任务总账中只算一次。 */
+export interface ContextVerificationCost {
+  readonly coverage: 'complete' | 'partial' | 'unknown'
+  readonly charges: ReadonlyArray<{
+    readonly id: string
+    readonly kind: 'model' | 'external'
+    readonly currency: string
+    readonly basis: 'actual' | 'reference'
+    readonly amount?: number
+  }>
+}
+
+/** 可信宿主一次原子探测；token 必须覆盖全部依赖并识别 ABA。 */
+export type ContextVerificationFingerprint =
+  | { readonly status: 'unknown'; readonly cost?: ContextVerificationCost }
+  | {
+      readonly status: 'versioned'
+      readonly providerId: string
+      readonly token: string
+      readonly authorization: string
+      readonly artifacts: readonly ContextVerificationArtifact[]
+      readonly cost?: ContextVerificationCost
+    }
+
+/** 核查尝试的持久事件；started/settled/late-result 共享 attemptId，费用按 charge ID 去重。 */
+export interface ContextVerificationAttempt {
+  readonly attemptId: string
+  readonly taskId: string
+  readonly binding?: ContextCompletionBinding
+  readonly checkId: string
+  readonly scope: string
+  readonly verifierId: string
+  readonly verifierVersion: string
+  readonly authorizationBoundary: string
+  readonly phase: 'started' | 'settled' | 'late-result'
+  readonly mode: 'executed' | 'reused' | 'probed'
+  readonly status: 'pending' | 'passed' | 'failed' | 'unknown' | 'cancelled'
+  readonly startedAt: string
+  readonly settledAt?: string
+  readonly durationMs: number
+  readonly probeMs: number
+  readonly runMs: number
+  readonly check?: ContextVerificationCheck
+  readonly before?: ContextVerificationFingerprint
+  readonly after?: ContextVerificationFingerprint
+  readonly applicability: 'current' | 'historical' | 'unknown'
+  readonly cost: ContextVerificationCost
+}
+
+/** 当前探测对历史证明的解释；原始报告保持不可变。 */
+export interface ContextCompletionApplicability {
+  readonly ref: ContextRef
+  readonly checkedAt: string
+  readonly checks: ReadonlyArray<{
+    readonly id?: string
+    readonly proofRef?: ContextRef
+    readonly status: 'current' | 'historical' | 'unknown'
+  }>
+}
+
+/** 宿主收尾对象的中立身份；Context 不解释所属领域或状态迁移。 */
+export interface ContextCompletionBinding {
+  readonly kind: string
+  readonly id: string
+  readonly revision: number
+}
+
+/** completionRef 指向的不可变核查结果，明确绑定核查开始时的任务与宿主对象。 */
+export interface ContextCompletionRecord {
+  readonly taskId: string
+  readonly taskRevision: number
+  readonly viewId: string
+  readonly binding?: ContextCompletionBinding
+  readonly result: ContextCompletionResult
 }
 
 /** 同一快照内的记录选择；字段取交集，各选择结果取并集。 */

@@ -103,3 +103,24 @@ export const TaskCapsuleLimits = Object.freeze({
   /** 每一条最多多少字符。 */
   itemChars: 1000,
 })
+/** 领域核查报告的有界归档与展示，不扩大原始事实存储额度。 */
+export const ContextVerificationLimits = Object.freeze({
+  /** 范围说明与产物身份的字符上限。 */
+  scopeChars: 2000,
+  /** 单项名称或产物版本的字符上限。 */
+  labelChars: 1000,
+  /** 一个报告的检查项上限。 */
+  checks: 32,
+  /** 每个检查项的证据引用上限。 */
+  evidenceRefs: 8,
+  /** 整份报告的 JSON 字符上限。 */
+  reportChars: 24000,
+  /** 单项核查覆盖的精确产物数量上限。 */
+  artifacts: 32,
+  /** 核查或探测一次返回的费用依据上限。 */
+  charges: 64,
+  /** 一次宿主原子版本探测的最长等待。 */
+  probeMs: 2000,
+  /** 当前 helper 生命周期内保留的完整通过证明上限。 */
+  cachedChecks: 128,
+})

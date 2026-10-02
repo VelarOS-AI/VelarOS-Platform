@@ -1,5 +1,11 @@
 import type { ContextRuntime } from '../impl/SessionContext.js'
-import type { ContextCompletionResult } from '../types/context.js'
+import type {
+  ContextCompletionBinding,
+  ContextCompletionResult,
+  ContextVerificationCheck,
+  ContextVerificationCost,
+  ContextVerificationFingerprint,
+} from '../types/context.js'
 import type {
   ContextMetadata,
   ContextObjectCollection,
@@ -149,7 +155,53 @@ export interface ContextBuildOptions {
 /** 领域验收器只声明其实际检查的结果。 */
 export interface ContextCompletionPort {
   /** 校验当前证据对应的结果；没有此端口时交付保持 unverified。 */
-  verify(view: ModelView, signal: AbortSignal): Promise<Omit<ContextCompletionResult, 'completed'>>
+  verify(
+    view: ModelView,
+    signal: AbortSignal,
+    checks?: ContextVerificationContext
+  ): Promise<Omit<ContextCompletionResult, 'completed'>>
+}
+
+/** 宿主声明的核查；scope 是精确判据/参数身份，probe 必须原子读取全部有效依赖。 */
+export interface ContextVerificationSpec {
+  /** 当前验收器中的稳定检查身份。 */
+  readonly id: string
+  /** 精确业务判据及参数范围，不能只用说明文本代替。 */
+  readonly scope: string
+  /** 提供判据的领域核查器身份。 */
+  readonly verifierId: string
+  /** 核查逻辑或依赖变化时递增的判据版本。 */
+  readonly verifierVersion: string
+  /** 原子读取授权代次、全部产物和可识别 ABA 的变化代次；覆盖未知时返回 unknown。 */
+  probe(signal: AbortSignal): Promise<ContextVerificationFingerprint>
+}
+
+/** 领域执行器的实际检查结果；complete 表示声明范围是否全部检查。 */
+export interface ContextVerificationExecution extends ContextVerificationCheck {
+  /** 本次真实执行是否检查了声明范围的全部要求。 */
+  readonly complete: boolean
+  /** 本次检查产生的真实收费身份与覆盖；零费用需明确报告空的完整清单。 */
+  readonly cost?: ContextVerificationCost
+}
+
+/** 当前任务的核查 helper；只复用通过且完整、前后可信快照一致的检查。 */
+export interface ContextVerificationContext {
+  /** 前后探测匹配时复用原完整通过证明，否则真实执行并持久记录尝试。 */
+  check(
+    spec: ContextVerificationSpec,
+    execute: (signal: AbortSignal) => Promise<ContextVerificationExecution>
+  ): Promise<ContextVerificationCheck>
+}
+
+/** 宿主准备同一存储上的收尾记录；只有领域验收通过后才调用，不产生外部效果。 */
+export interface ContextCompletionCommitPort {
+  /** 核查开始时的宿主对象身份，用于将失败报告也归到原对象。 */
+  readonly binding: ContextCompletionBinding
+  /** 按一致快照核对宿主对象，正文先保存，记录与任务完成一起 CAS；竞争时可以再次调用。 */
+  prepare(signal: AbortSignal): Promise<{
+    readonly version: number
+    readonly records: ReadonlyArray<Omit<ContextRecord, 'sequence'>>
+  }>
 }
 
 /** 环境来源变化通知，订阅失败不影响源事实。 */

@@ -175,6 +175,7 @@ export const GovernedModules = [
       ['ContextViewSession.ts', 'LocalContextStorage.ts', 'TurnContextSessionLedgers.ts'],
       [
         'ContextEvidenceBuilder.ts',
+      'ContextVerificationSession.ts',
         'SessionContext.ts',
         'ContextInvocationJournal.ts',
         'LocalStoreStorage.ts',

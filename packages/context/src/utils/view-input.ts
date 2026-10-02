@@ -1,7 +1,12 @@
-import { isArray, isPlainObject, isString, isUndefined } from '@velaros-ai/core'
+import { isArray, isEmpty, isPlainObject, isString, isUndefined } from '@velaros-ai/core'
 
-import { ContextViewForms, TaskCapsuleLimits, ViewIntentLimits } from '../contract/constants.js'
-import type { TaskCapsule, ViewIntentInput } from '../types/context.js'
+import {
+  ContextVerificationLimits,
+  ContextViewForms,
+  TaskCapsuleLimits,
+  ViewIntentLimits,
+} from '../contract/constants.js'
+import type { ContextVerificationReport, TaskCapsule, ViewIntentInput } from '../types/context.js'
 
 import { contextFailure } from './state.js'
 
@@ -142,4 +147,115 @@ export function checkTaskCapsule(value: unknown): asserts value is Partial<TaskC
     if (!isUndefined(value[key]))
       checkList(value[key], `plan.${key}`, 0, TaskCapsuleLimits.items, item)
   }
+}
+
+/** 核查报告是领域事实，验证形状与体积后才归档，不截断成看似完整的证明。 */
+export function checkVerificationReport(
+  value: unknown
+): asserts value is ContextVerificationReport {
+  const fail = () => {
+    throw contextFailure('VALIDATION', '领域核查报告的形状或大小不符合合同')
+  }
+  const fields = (entry: unknown, allowed: readonly string[]) => {
+    if (!isPlainObject(entry) || Object.keys(entry).some((key) => !allowed.includes(key))) fail()
+  }
+  const text = (entry: unknown, max: number) =>
+    isString(entry) && entry.length > 0 && entry.length <= max
+  fields(value, ['scope', 'checkedAt', 'checks'])
+  const report = value as ContextVerificationReport
+  if (
+    !text(report.scope, ContextVerificationLimits.scopeChars) ||
+    !text(report.checkedAt, 64) ||
+    !Number.isFinite(Date.parse(report.checkedAt)) ||
+    !isArray(report.checks) ||
+    isEmpty(report.checks) ||
+    report.checks.length > ContextVerificationLimits.checks
+  )
+    fail()
+  for (const check of report.checks) {
+    fields(check, [
+      'label',
+      'status',
+      'evidenceRefs',
+      'artifact',
+      'id',
+      'scope',
+      'verifierId',
+      'verifierVersion',
+      'checkedAt',
+      'complete',
+      'artifacts',
+      'proofRef',
+      'reusedFrom',
+      'applicability',
+    ])
+    if (
+      !text(check.label, ContextVerificationLimits.labelChars) ||
+      !['passed', 'failed', 'unknown'].includes(check.status)
+    )
+      fail()
+    for (const key of ['id', 'scope', 'verifierId', 'verifierVersion', 'checkedAt'] as const)
+      if (!isUndefined(check[key]) && !text(check[key], ContextVerificationLimits.scopeChars))
+        fail()
+    if (!isUndefined(check.checkedAt) && !Number.isFinite(Date.parse(check.checkedAt))) fail()
+    if (!isUndefined(check.complete) && ![true, false].includes(check.complete)) fail()
+    if (
+      !isUndefined(check.applicability) &&
+      !['current', 'historical', 'unknown'].includes(check.applicability)
+    )
+      fail()
+    for (const key of ['proofRef', 'reusedFrom'] as const)
+      if (!isUndefined(check[key])) {
+        fields(check[key], ['sessionId', 'id'])
+        if (
+          !text(check[key]!.sessionId, ContextVerificationLimits.labelChars) ||
+          !text(check[key]!.id, ContextVerificationLimits.labelChars)
+        )
+          fail()
+      }
+    if (!isUndefined(check.artifacts)) {
+      if (
+        !isArray(check.artifacts) ||
+        isEmpty(check.artifacts) ||
+        check.artifacts.length > ContextVerificationLimits.artifacts
+      )
+        fail()
+      for (const artifact of check.artifacts) {
+        fields(artifact, ['identity', 'contentHash', 'revision'])
+        if (
+          !text(artifact.identity, ContextVerificationLimits.scopeChars) ||
+          !text(artifact.contentHash, ContextVerificationLimits.scopeChars) ||
+          (!isUndefined(artifact.revision) &&
+            !text(artifact.revision, ContextVerificationLimits.scopeChars))
+        )
+          fail()
+      }
+    }
+    if (!isUndefined(check.evidenceRefs)) {
+      if (
+        !isArray(check.evidenceRefs) ||
+        check.evidenceRefs.length > ContextVerificationLimits.evidenceRefs
+      )
+        fail()
+      for (const ref of check.evidenceRefs) {
+        fields(ref, ['sessionId', 'id'])
+        if (
+          !text(ref.sessionId, ContextVerificationLimits.labelChars) ||
+          !text(ref.id, ContextVerificationLimits.labelChars)
+        )
+          fail()
+      }
+    }
+    if (!isUndefined(check.artifact)) {
+      fields(check.artifact, ['identity', 'revision', 'contentHash'])
+      if (!text(check.artifact.identity, ContextVerificationLimits.scopeChars)) fail()
+      for (const key of ['revision', 'contentHash'] as const)
+        if (
+          !isUndefined(check.artifact[key]) &&
+          !text(check.artifact[key], ContextVerificationLimits.labelChars)
+        )
+          fail()
+    }
+  }
+  if (JSON.stringify(report).length > ContextVerificationLimits.reportChars) fail()
 }
