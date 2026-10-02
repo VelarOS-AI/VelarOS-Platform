@@ -138,6 +138,7 @@ class MetricsTests(unittest.TestCase):
             self.assertEqual(result['script_execution_status_counts'],
                              {'failed': 1, 'succeeded': 1, 'cancelled': 1, 'unknown': 1})
             self.assertEqual(result['script_failure_codes'], {'PROGRAM_ERROR': 1})
+            self.assertIsNone(result['script_seconds_sum'], 'unknown/cancelled execution durations do not prove zero')
             self.assertNotIn('private diagnostic', json.dumps(result))
 
     def test_native_tool_layers_keep_nested_operations_separate_and_deduplicated(self):
@@ -270,7 +271,8 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(result["measured_requests"], 1)
         self.assertEqual(result["unmeasured_requests"], 1)
         self.assertEqual(result["provider_text_chars"]["max"], len("instructionshistory") + len(frame_text))
-        self.assertEqual(result["working_frame_text_chars"]["max"], len(frame_text))
+        self.assertIsNone(result["working_frame_text_chars"], "A similar prefix without current frame identity is not verified SDK delivery")
+        self.assertEqual(result["current_frame"]["unverified_requests"], 1)
         self.assertEqual(result["non_text_blocks"]["max"], 1)
         self.assertEqual(result["raw_partition_json_chars"]["task"]["max"], len('{"goal":"修复"}'))
         self.assertIsNone(prompt_layout_metrics([{"request": None}])["working_frame_text_chars"])
@@ -560,42 +562,64 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(result["jointly_solved_tasks"], 0)
         self.assertIsNone(result["candidate_over_reference"]["agent_seconds"])
 
-    def test_objectives_require_requests_time_and_cost_together_and_keep_failed_sources(self):
-        def job(name, count, seconds, cost):
+    def test_objectives_require_complete_wall_time_and_cost_and_keep_failed_sources(self):
+        def job(name, count, seconds, cost, wall):
             trial = {"task": "same", "score": 1, "exception": None, "agent_seconds": seconds,
+                     "attempt_wall_seconds": wall,
                      "metrics": {"requests": count, "known_cost_usd": cost, "unknown_cost_requests": 0}}
             return {"job": name, "planned": 1, "completed": 1, "trials": [trial]}
-        reference = job('reference', 10, 100, 1)
-        tradeoff = job('candidate', 5, 101, .8)
+        reference = job('reference', 10, 100, 1, 120)
+        tradeoff = job('candidate', 5, 80, .8, 121)
         self.assertEqual(compare_jobs(reference, tradeoff)['efficiency_dominance'], 'tradeoff')
-        better = job('candidate', 5, 80, .8)
+        better = job('candidate', 50, 80, .8, 100)
         result = compare_jobs(reference, better)
         self.assertEqual(result['efficiency_dominance'], 'candidate')
+        self.assertEqual(result['comparison_schema'], 2)
+        self.assertIn('not_actual_complete_task_costs', result['efficiency_dominance_basis'])
+        self.assertEqual(result['actual_complete_task_cost_dominance'], 'unknown')
+        self.assertNotIn('model_requests', result['candidate_over_reference'])
         self.assertFalse(result['supports_general_superiority'])
+        better['trials'][0]['attempt_wall_seconds'] = None
+        unavailable = compare_jobs(reference, better)
+        self.assertIsNone(unavailable['candidate_over_reference']['attempt_wall_seconds'])
+        self.assertEqual(unavailable['efficiency_dominance'], 'unknown')
         failed = {"agent_seconds": 50, "metrics": {"requests": 4, "known_cost_usd": .4, "unknown_cost_requests": 1}}
         better['completed_source_usage'] = [better['trials'][0], failed]
         totals = compare_jobs(reference, better)['completed_attempt_totals']['candidate']
-        self.assertEqual(totals['model_requests'], 9)
+        self.assertEqual(totals['model_requests'], 54)
         self.assertEqual(totals['agent_seconds'], 130)
         self.assertAlmostEqual(totals['known_cost_usd'], 1.2)
         self.assertIsNone(totals['cost_usd'])
 
-    def test_request_comparison_weights_tasks_and_retains_failed_attempt_calls(self):
+    def test_comparison_weights_tasks_retains_raw_counts_and_excludes_infrastructure_faults(self):
         def trial(task, count, score=1):
             return {"task": task, "score": score, "exception": None, "agent_seconds": 10,
+                    "attempt_wall_seconds": 20,
                     "metrics": request_metrics([call(100, 50, .01) for _ in range(count)])}
         left = {"job": "left", "planned": 4, "completed": 4,
                 "trials": [trial("a", 8), trial("a", 12), trial("b", 2), trial("c", 20)]}
         right = {"job": "right", "planned": 3, "completed": 3,
                  "trials": [trial("a", 6), trial("b", 4), trial("c", 1, 0)]}
         result = compare_jobs(left, right)
-        self.assertEqual(result["successful_task_means"]["reference"]["model_requests"], 6)
-        self.assertEqual(result["successful_task_means"]["candidate"]["model_requests"], 5)
-        self.assertAlmostEqual(result["candidate_over_reference"]["model_requests"], 5 / 6)
+        self.assertNotIn("model_requests", result["successful_task_means"]["reference"])
+        self.assertNotIn("model_requests", result["successful_task_means"]["candidate"])
+        self.assertNotIn("model_requests", result["candidate_over_reference"])
+        self.assertEqual(result["candidate_over_reference"]["attempt_wall_seconds"], 1)
+        self.assertAlmostEqual(result["candidate_over_reference"]["cost_usd"], 5 / 6)
         self.assertEqual(aggregate_trials(right["trials"])["model_requests"], 11)
+        self.assertEqual(result["completed_attempt_totals"]["candidate"]["model_requests"], 11)
+        before = result["candidate_over_reference"]
         right["trials"][0]["metrics"]["requests"] = None
-        self.assertIsNone(compare_jobs(left, right)["candidate_over_reference"]["model_requests"])
-        self.assertIsNone(compare_jobs(left, {**right, "trials": []})["candidate_over_reference"]["model_requests"])
+        self.assertEqual(compare_jobs(left, right)["candidate_over_reference"], before)
+        right["trials"][0]["infrastructure_issue"] = "cleanup_unconfirmed"
+        filtered = compare_jobs(left, right)
+        self.assertEqual(filtered["jointly_solved_tasks"], 1)
+        self.assertEqual(filtered["tasks"][0]["task"], "b")
+        right["trials"][0]["metrics"]["requests"] = 6
+        full = aggregate_trials(right["trials"])
+        self.assertEqual(full["successes"], 2)
+        self.assertEqual(full["clean_successes"], 1)
+        self.assertIsNone(compare_jobs(left, {**right, "trials": []})["candidate_over_reference"]["attempt_wall_seconds"])
 
     def test_cache_writes_can_cost_more_than_the_reads_save(self):
         request = call(1000, 100, 1, written=900)
@@ -613,6 +637,8 @@ class MetricsTests(unittest.TestCase):
             metrics = agent_metrics(root)
             self.assertEqual(metrics["repair_turns"], 1)
             self.assertEqual(metrics["context"]["preparation_measurements_missing"], 1)
+            self.assertIsNone(metrics["model_await_seconds_sum"])
+            self.assertIsNone(metrics["observed_observation_seconds"])
 
     def test_outer_body_visibility_does_not_hide_omitted_result_fields(self):
         frame = {"partitions": {"recent": {"results": [
@@ -643,13 +669,145 @@ class MetricsTests(unittest.TestCase):
 
     def test_context_child_calls_are_counted_even_when_their_model_mode_is_work(self):
         turn = {"request": {"body": json.dumps({"request": {"mode": "work"}})}}
+        def timed(milliseconds):
+            return {**turn, "decision": {"body": json.dumps({"status": "accepted", "timing": {"modelMs": milliseconds}})}}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "agent").mkdir()
-            (root / "agent/traces.json").write_text(json.dumps({
-                "traces": [turn], "branches": [{"kind": "context", "turns": [turn, turn]}]
-            }))
-            self.assertEqual(agent_metrics(root)["context"]["maintenance_model_calls"], 2)
+            path = root / "agent/traces.json"
+            path.write_text(json.dumps({"traces": [timed(1000)],
+                "branches": [{"kind": "context", "turns": [timed(2000), timed(3000)]}]}))
+            measured = agent_metrics(root)
+            self.assertEqual(measured["context"]["maintenance_model_calls"], 2)
+            self.assertEqual(measured["model_await_seconds_sum"], 6)
+            path.write_text(json.dumps({"traces": [timed(1000)],
+                "branches": [{"kind": "context", "turns": [timed(2000), turn]}]}))
+            self.assertIsNone(agent_metrics(root)["model_await_seconds_sum"])
+
+
+class CurrentFrameLayoutTests(unittest.TestCase):
+    def fixture(self, delta=False, frame_id="current", history=None):
+        display = ("Runtime 本帧工作内存（origin=runtime-view，增量）；\n变化：{\"list\":[2,1,2]}"
+                   if delta else "Runtime 本帧工作内存（origin=runtime-view）；\n分区 task：{\"goal\":\"修复🧪\"}")
+        protocol = "\n\n本帧协议（宿主生成；控制标记以最后出现的这一段为准）：\n@@synthetic contract"
+        status = {"frameId": frame_id, "phase": "work", "inputTokens": 300}
+        status_text = "\nRuntime ContextStatus:\n" + json.dumps(status, ensure_ascii=False, separators=(",", ":"))
+        frame = {"schemaVersion": 2, "id": frame_id, "frameId": "host-snapshot-" + frame_id,
+                 "partitions": {"task": {}, "runtime": {}}}
+        envelope = {"request": {"compiledPrompt": display + protocol, "contextStatus": status,
+                                 "materials": [{"ref": frame_id, "origin": "runtime-view", "text": json.dumps(frame)}]},
+                    "providerRequest": {"system": "system", "messages": list(history or []) + [
+                        {"role": "user", "content": display + protocol + status_text}]}}
+        return envelope, display, protocol, status_text
+
+    def measure(self, envelope):
+        return prompt_layout_metrics([{"turnId": "synthetic-turn", "request": {"body": json.dumps(envelope)}}])
+
+    def test_full_and_delta_current_delivery_excludes_multiple_historical_full_frames(self):
+        historical, _, _, _ = self.fixture(frame_id="previous")
+        history = historical["providerRequest"]["messages"] * 2 + [{"role": "assistant", "content": "old response"}]
+        for delta in (False, True):
+            with self.subTest(delta=delta):
+                envelope, display, protocol, status = self.fixture(delta=delta, history=history)
+                measured = self.measure(envelope)
+                current = measured["current_frame"]
+                self.assertEqual(measured["working_frame_text_chars"]["max"], len(display))
+                self.assertEqual(current["verified_requests"], 1)
+                self.assertEqual(current["frames"][0]["frame_id"], "current")
+                self.assertEqual(current["frames"][0]["host_frame_id"], "host-snapshot-current")
+                self.assertEqual(current["display_modes"], {"delta" if delta else "full": 1})
+                self.assertEqual(current["protocol_text_chars"]["max"], len(protocol))
+                self.assertEqual(current["context_status_text_chars"]["max"], len(status))
+                self.assertEqual(current["history_text_chars"]["max"], sum(len(row["content"]) for row in history))
+                self.assertEqual(measured["provider_text_chars"]["max"],
+                                 len("system") + current["history_text_chars"]["max"] + len(display + protocol + status))
+
+    def test_reset_uses_the_new_last_frame_without_requiring_old_history_or_accepted_baseline(self):
+        envelope, display, _, _ = self.fixture(frame_id="new-authorization", history=[])
+        measured = self.measure(envelope)
+        self.assertEqual(measured["current_frame"]["frames"][0]["frame_id"], "new-authorization")
+        self.assertEqual(measured["working_frame_text_chars"]["max"], len(display))
+        self.assertEqual(measured["current_frame"]["history_text_chars"]["max"], 0)
+
+    def test_character_units_preserve_non_bmp_and_unpaired_surrogate_text(self):
+        envelope, display, protocol, status = self.fixture()
+        unusual = "🧪\ud800"
+        envelope["request"]["compiledPrompt"] = display + unusual + protocol
+        envelope["providerRequest"]["messages"][-1]["content"] = display + unusual + protocol + status
+        measured = self.measure(envelope)
+        self.assertEqual(measured["character_unit"], "unicode_codepoints")
+        self.assertEqual(measured["working_frame_text_chars"]["max"], len(display) + 2)
+        utf16_units = len((display + unusual).encode("utf-16-le", "surrogatepass")) // 2
+        self.assertGreater(utf16_units, measured["working_frame_text_chars"]["max"])
+
+    def test_missing_or_mismatched_identity_payload_and_protocol_remain_unknown(self):
+        for mode in ("material", "frame_id", "material_ref", "status", "compiled", "sdk", "role", "protocol", "duplicate"):
+            envelope, _, _, _ = self.fixture()
+            if mode == "material": envelope["request"]["materials"] = []
+            if mode == "frame_id": envelope["request"]["contextStatus"]["frameId"] = "older"
+            if mode == "material_ref": envelope["request"]["materials"][0]["ref"] = "older"
+            if mode == "status": envelope["request"].pop("contextStatus")
+            if mode == "compiled": envelope["request"].pop("compiledPrompt")
+            if mode == "sdk": envelope["providerRequest"]["messages"][-1]["content"] += " changed"
+            if mode == "role": envelope["providerRequest"]["messages"][-1]["role"] = "assistant"
+            if mode == "protocol": envelope["request"]["compiledPrompt"] = "unframed text"
+            if mode == "duplicate":
+                content = envelope["providerRequest"]["messages"][-1]["content"]
+                envelope["providerRequest"]["messages"][-1]["content"] = [{"text": content}, {"text": content}]
+            with self.subTest(mode=mode):
+                measured = self.measure(envelope)
+                self.assertIsNone(measured["working_frame_text_chars"])
+                self.assertEqual(measured["current_frame"]["unverified_requests"], 1)
+                self.assertIsNone(measured["current_frame"]["frames"][0]["display_chars"])
+
+    def test_task_text_resembling_runtime_and_old_full_messages_cannot_establish_current_frame(self):
+        envelope, _, _, _ = self.fixture()
+        old = envelope["providerRequest"]["messages"][-1]
+        envelope["providerRequest"]["messages"] = [old, {"role": "user", "content": "Task quotes Runtime 本帧工作内存（origin=runtime-view）"}]
+        measured = self.measure(envelope)
+        self.assertIsNone(measured["working_frame_text_chars"])
+        self.assertEqual(measured["current_frame"]["verified_requests"], 0)
+
+    def test_current_text_blocks_preserve_images_and_other_text_without_inflating_display(self):
+        envelope, display, _, _ = self.fixture(delta=True)
+        actual = envelope["providerRequest"]["messages"][-1]["content"]
+        envelope["providerRequest"]["messages"][-1]["content"] = [
+            {"type": "text", "text": "extra task material"}, {"type": "text", "text": actual},
+            {"type": "image", "data": "not-a-text-character-count"}]
+        measured = self.measure(envelope)
+        self.assertEqual(measured["working_frame_text_chars"]["max"], len(display))
+        self.assertEqual(measured["non_text_blocks"]["max"], 1)
+        self.assertEqual(measured["current_frame"]["other_current_text_chars"]["max"], len("extra task material"))
+
+    def test_malformed_raw_materials_remain_unknown_without_breaking_report_measurement(self):
+        for body in ("not json", "[]", "null", '"text"', '42', '{"partitions": []}', '{"partitions": null}'):
+            envelope, _, _, _ = self.fixture()
+            envelope["request"]["materials"][0]["text"] = body
+            with self.subTest(body=body):
+                measured = self.measure(envelope)
+                self.assertIsNone(measured["working_frame_text_chars"])
+                self.assertEqual(measured["current_frame"]["unverified_requests"], 1)
+                self.assertEqual(measured["raw_partition_json_chars"], {})
+                self.assertEqual(measured["raw_partition_measurement"]["unverified_requests"], 1)
+                self.assertIsNotNone(measured["raw_partition_measurement"]["frames"][0]["reason"])
+                self.assertIsNotNone(measured["provider_text_chars"])
+        valid, _, _, _ = self.fixture()
+        measured = self.measure(valid)
+        self.assertEqual(measured["raw_partition_measurement"]["verified_requests"], 1)
+        self.assertEqual(measured["raw_partition_json_chars"]["task"]["max"], 2)
+
+    def test_ambiguous_and_wrongly_typed_materials_do_not_create_partition_sizes(self):
+        for mode in ("duplicate", "non_dictionary", "wrong_material_list", "wrong_host"):
+            envelope, _, _, _ = self.fixture()
+            if mode == "duplicate": envelope["request"]["materials"] *= 2
+            if mode == "non_dictionary": envelope["request"]["materials"] = ["runtime-view"]
+            if mode == "wrong_material_list": envelope["request"]["materials"] = {"origin": "runtime-view"}
+            if mode == "wrong_host": envelope["request"] = "not a request"
+            with self.subTest(mode=mode):
+                measured = self.measure(envelope)
+                self.assertIsNone(measured["working_frame_text_chars"])
+                self.assertEqual(measured["raw_partition_json_chars"], {})
+                self.assertEqual(measured["raw_partition_measurement"]["unverified_requests"], 1)
 
 
 if __name__ == "__main__":

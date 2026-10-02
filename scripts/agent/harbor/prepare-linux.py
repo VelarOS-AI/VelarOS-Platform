@@ -46,7 +46,9 @@ def main():
             if path.is_symlink() and not path.resolve().is_relative_to(prepared):
                 raise RuntimeError(f"External symlink in portable archive: {path}")
         partial = archive.with_suffix(archive.suffix + ".partial")
-        subprocess.run(["tar", "-czf", str(partial), "-C", str(prepared), "."], check=True, timeout=120)
+        # BSD tar otherwise adds AppleDouble sidecars for macOS metadata to Linux installations.
+        archive_env = {**os.environ, "COPYFILE_DISABLE": "1"}
+        subprocess.run(["tar", "-czf", str(partial), "-C", str(prepared), "."], check=True, timeout=120, env=archive_env)
         os.replace(partial, archive)
     metadata = {"bundleFingerprint": identity["bundleFingerprint"], "bundleSealSha256": identity["bundleSeal"]["sha256"], "arch": args.arch,
                 "sha256": digest(archive), **runtime, "bytes": archive.stat().st_size}

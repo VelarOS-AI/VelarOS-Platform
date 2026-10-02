@@ -1,8 +1,11 @@
 """Select frozen runtimes by the task's actual architecture and libc, before API use."""
 
+import base64
+import binascii
 import hashlib
 import os
 import shutil
+import struct
 import urllib.request
 from pathlib import Path
 
@@ -13,13 +16,74 @@ UV_ARTIFACTS = {
     "glibc": (DOWNLOADS / "uv-0.7.13-linux-x64.tar.gz", "909278eb197c5ed0e9b5f16317d1255270d1f9ea4196e7179ce934d48c4c2545", "gnu"),
     "musl": (DOWNLOADS / "uv-0.7.13-linux-x64-musl.tar.gz", "560bb64e060354e45138d7dd47c8dd48a4f7a349af5520d29cd3c704e79f286c", "musl"),
 }
-RUNTIME_PROFILE = r"""set -eu
+SHELL_PREFIX_BYTES = 65536
+ELF_RUNTIME_INTERPRETERS = {
+    "x64": {
+        "machine": 62,
+        "musl": ("/lib/ld-musl-x86_64.so.1",),
+        "glibc": ("/lib64/ld-linux-x86-64.so.2", "/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2", "/lib/ld-linux-x86-64.so.2"),
+    },
+    "arm64": {
+        "machine": 183,
+        "musl": ("/lib/ld-musl-aarch64.so.1",),
+        "glibc": ("/lib/ld-linux-aarch64.so.1", "/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1", "/lib64/ld-linux-aarch64.so.1"),
+    },
+}
+RUNTIME_PROFILE = rf"""set -eu
 uname -m
-for loader in /lib/ld-musl-*.so.1; do
-  if [ -f "$loader" ]; then printf 'musl\n'; exit 0; fi
-done
-if getconf GNU_LIBC_VERSION >/dev/null 2>&1; then printf 'glibc\n'; else exit 2; fi
+printf 'shell-elf-base64\n'
+dd if=/bin/sh bs={SHELL_PREFIX_BYTES} count=1 2>/dev/null | base64
 """
+
+
+def elf_interpreter(data, arch):
+    """Identify a dynamic shell's ABI from a complete, bounded ELF header/table.
+
+    Callers may supply only a prefix; every byte read must be present in that
+    prefix. Static, malformed, unsupported or ambiguous shells fail closed.
+    Loader-file presence cannot override the executable's actual interpreter.
+    """
+    def invalid():
+        raise ValueError("Unsupported task shell: a verified ELF64 interpreter is required")
+
+    if arch not in ELF_RUNTIME_INTERPRETERS or not isinstance(data, bytes) or len(data) < 64:
+        invalid()
+    if data[:7] != b"\x7fELF\x02\x01\x01":
+        invalid()
+    header = struct.unpack_from("<HHIQQQIHHHHHH", data, 16)
+    kind, machine, version = header[:3]
+    phoff, ehsize, phentsize, phnum = header[4], header[7], header[8], header[9]
+    if kind not in (2, 3) or machine != ELF_RUNTIME_INTERPRETERS[arch]["machine"] or version != 1:
+        invalid()
+    if ehsize != 64 or phentsize != 56 or phoff < 64 or not 0 < phnum < 65535:
+        invalid()
+    if phoff + phentsize * phnum > len(data):
+        invalid()
+    interpreters = []
+    for index in range(phnum):
+        segment = struct.unpack_from("<IIQQQQQQ", data, phoff + index * phentsize)
+        if segment[0] != 3:  # PT_INTERP
+            continue
+        offset, size = segment[2], segment[5]
+        if not 2 <= size <= 4096 or offset + size > len(data):
+            invalid()
+        raw = data[offset:offset + size]
+        if raw[-1:] != b"\0" or b"\0" in raw[:-1]:
+            invalid()
+        try:
+            interpreter = raw[:-1].decode("ascii")
+        except UnicodeDecodeError:
+            invalid()
+        if not interpreter.startswith("/") or ".." in interpreter.split("/"):
+            invalid()
+        interpreters.append(interpreter)
+    if len(interpreters) != 1:
+        invalid()
+    interpreter = interpreters[0]
+    for libc in UV_ARTIFACTS:
+        if interpreter in ELF_RUNTIME_INTERPRETERS[arch][libc]:
+            return {"arch": arch, "libc": libc, "interpreter": interpreter}
+    invalid()
 
 
 def digest(path):
@@ -28,11 +92,20 @@ def digest(path):
 
 
 async def runtime_profile(environment):
-    result = await environment.exec(command=RUNTIME_PROFILE)
-    lines = (result.stdout or "").strip().splitlines()
-    if result.return_code or len(lines) != 2 or lines[0] not in ("x86_64", "aarch64") or lines[1] not in UV_ARTIFACTS:
+    result = await environment.exec(command=RUNTIME_PROFILE, timeout_sec=30)
+    output = result.stdout or ""
+    lines = output.strip().splitlines()
+    if result.return_code or len(output) > SHELL_PREFIX_BYTES * 2 or len(lines) < 3 or lines[0] not in ("x86_64", "aarch64") or lines[1] != "shell-elf-base64":
         raise ValueError("Unsupported task runtime: architecture/libc must be identified before installing an agent")
-    return {"arch": {"x86_64": "x64", "aarch64": "arm64"}[lines[0]], "libc": lines[1]}
+    try:
+        data = base64.b64decode("".join(lines[2:]), validate=True)
+    except (ValueError, binascii.Error):
+        raise ValueError("Unsupported task runtime: invalid bounded shell evidence") from None
+    if len(data) > SHELL_PREFIX_BYTES:
+        raise ValueError("Unsupported task runtime: shell evidence exceeds probe bound")
+    arch = {"x86_64": "x64", "aarch64": "arm64"}[lines[0]]
+    profile = elf_interpreter(data, arch)
+    return {"arch": arch, "libc": profile["libc"]}
 
 
 def portable_path(bundle, arch, libc):

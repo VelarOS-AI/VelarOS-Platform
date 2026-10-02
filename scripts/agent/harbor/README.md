@@ -217,7 +217,7 @@ NodeBB 官方镜像原有三个未跟踪的 Redis 数据文件。初始状态回
 
 `portable_terminus.py` 只处理原生 Terminus 安装兼容：将多级区域 Ubuntu archive 域名映射到同一包源；Ubuntu 20.04 的 tmux 3.0a 使用登录 Bash profile 接收原先五个包源变量，其他发行版使用原生 `new-session -e`。允许的变量限定为已冻结的包下载配置，Terminus 的模型循环、解析和执行逻辑沿用 Harbor。真实 Ansible 容器预检 `sol-repository-development-12-terminus-1-preflight-03.json` 通过、零模型请求，前两次安装故障独立保留。
 
-本机 Docker Hub 连接失败时，单独准备 `local-harbor-gost-3.2.6-v1` 网络 helper。`prepare-egress.py prepare` 要求已下载的官方 GOST 3.2.6 ARM64 归档与 checksums，核对固定 SHA-256，逐字复制 Harbor 0.23.0 的网络策略脚本，并记录缓存 Ubuntu 基础镜像 ID。`build` 只允许在专用 VM 没有运行容器时执行，保存最终镜像 ID、包版本和构建日志；已有证据拒绝覆盖。此 helper 为 ARM64，实际任务仍运行各自固定的 AMD64 镜像。
+本机 Docker Hub 连接失败时，单独准备 `local-harbor-gost-3.2.6-v2` 网络 helper。`prepare-egress.py prepare` 要求已下载的官方 GOST 3.2.6 ARM64 归档与 checksums，核对固定 SHA-256，复制 Harbor 0.23.0 的网络策略脚本，并记录缓存 Ubuntu 基础镜像 ID。redirect handler 显式配置 `readTimeout: 900s`，等待 HTTP 响应头的期限与网关已有请求期限对齐；配置差量、完整内容哈希及镜像身份写入准备证据。`build` 只允许在专用 VM 没有运行容器时执行，保存最终镜像 ID、包版本和构建日志；已有证据拒绝覆盖。此 helper 为 ARM64，实际任务仍运行各自固定的 AMD64 镜像。
 
 ```sh
 .velaros-workspace/bench/venv/bin/python scripts/agent/harbor/prepare-egress.py prepare
@@ -228,7 +228,7 @@ NodeBB 官方镜像原有三个未跟踪的 Redis 数据文件。初始状态回
 
 `RepositoryBenchmarkDocker` 使用冻结 helper 身份和原生 Harbor 策略切换；`network-probe.py` 在真实 Harbor 容器中检查准备阶段可达、agent 白名单、完全禁网和判分阶段恢复可达，连接本地标记服务及费用网关的未认证 health 入口，不调用模型。`qemu-preflight.py` 从原始任务镜像运行有界最小启动，保留退出码及 stderr。两类探针结果独立保存；网络与补丁重放预检完成后，才冻结长程付费批次的最终执行协议。
 
-GOST 3.3.0 的实测在白名单阶段同时拒绝了网关和被禁止的地址，失败证据保留。3.2.6 使用相同 Harbor 网络策略文件，实际四阶段探针通过后成为默认仓库 helper。`--gost-version`、`--directory` 与 `--assets` 可准备独立诊断版本，`network-probe.py --helper-directory <目录>` 指定实际测试的构建；探针保存全部阶段和失败时的代理日志。长程付费任务还需完成干净容器补丁重放预检。
+GOST 3.2.6 redirect handler 的默认响应头期限为 15 秒，正式受控网络上的延迟响应探针已复现断连。v2 配置保留白名单与禁止联网的策略约束，须通过真实延迟响应、阶段切换和取消清理验收；历史 v1 身份继续可核验。`--gost-version`、`--directory` 与 `--assets` 可准备独立诊断版本，`network-probe.py --helper-directory <目录>` 指定实际测试的构建；探针保存全部阶段和失败时的代理日志。长程付费任务还需完成干净容器补丁重放预检。
 
 `portable_claude_code.py` 仅替换 Harbor 原生 Claude Code 适配器的安装阶段：核对官方 Linux x64 归档摘要，在容器中安装固定版本，检查实际版本并记录身份。2.1.283 已通过真实 CLI 的两轮合成响应/工具往返，以及 CLI → GPT 协议桥 → 合成 Responses 的联合预检；本地集成检查不等于已有 Claude Code 跑分。
 

@@ -12,12 +12,14 @@ import tarfile
 from pathlib import Path
 
 import certifi
+import yaml
 from harbor.environments.docker import EGRESS_CONTROL_SIDECAR_CONTEXT_PATH
 from harbor.utils.container_cache import docker_build_context_hash
 
 ROOT = Path(__file__).resolve().parents[3]
 BENCH = ROOT / ".velaros-workspace/bench"
-DIRECTORY = BENCH / "egress/harbor-gost-3.2.6-v1"
+DIRECTORY = BENCH / "egress/harbor-gost-3.2.6-v2"
+HTTP_RESPONSE_HEADER_TIMEOUT_SECONDS = 900
 BASE_ID = "sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3"
 BASE_TAG = "scriptact-bench-egress-base:" + BASE_ID.split(":")[1][:16]
 RELEASES = {
@@ -37,12 +39,31 @@ def timestamp():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
+def response_header_timeout(config):
+    """Keep the network policy intact while bounding the HTTP response-header wait."""
+    if not isinstance(config, dict) or not isinstance(config.get("services"), list):
+        raise ValueError("Expected the official GOST services configuration")
+    changed = 0
+    for service in config["services"]:
+        handler = service.get("handler") if isinstance(service, dict) else None
+        if not isinstance(handler, dict) or handler.get("type") != "red":
+            continue
+        metadata = handler.setdefault("metadata", {})
+        if not isinstance(metadata, dict):
+            raise ValueError("Redirect handler metadata must be an object")
+        metadata["readTimeout"] = str(HTTP_RESPONSE_HEADER_TIMEOUT_SECONDS) + "s"
+        changed += 1
+    if not changed:
+        raise ValueError("Expected a redirect handler in the official GOST configuration")
+    return config
+
+
 def prepare(directory, assets, version="3.2.6"):
     if importlib.metadata.version("harbor") != "0.23.0":
         raise RuntimeError("This helper is frozen against Harbor 0.23.0")
     archive_name = f"gost_{version}_linux_arm64.tar.gz"
     archive_sha, checksums_sha = RELEASES[version]
-    variant = "gost-stable-v1" if version == "3.3.0" else f"gost-{version}-v1"
+    variant = "gost-stable-v1" if version == "3.3.0" else f"gost-{version}-v2"
     if digest(assets / archive_name) != archive_sha or digest(assets / "checksums.txt") != checksums_sha:
         raise ValueError("GOST release asset differs from the official GitHub digest")
     checksums = (assets / "checksums.txt").read_text().splitlines()
@@ -59,6 +80,12 @@ def prepare(directory, assets, version="3.2.6"):
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
         copied[name] = digest(source)
+    config_delta = None
+    if version == "3.2.6":
+        config_path = context / "gost.yaml"
+        config_path.write_text(yaml.safe_dump(response_header_timeout(yaml.safe_load(config_path.read_text())), sort_keys=False))
+        config_delta = {"kind": "redirect_http_response_header_timeout", "seconds": HTTP_RESPONSE_HEADER_TIMEOUT_SECONDS,
+                        "original_harbor_config_sha256": copied["gost.yaml"], "prepared_config_sha256": digest(config_path)}
     with tarfile.open(assets / archive_name) as archive:
         members = [member for member in archive.getmembers() if member.name == "gost" and member.isfile()]
         if len(members) != 1:
@@ -87,8 +114,12 @@ RUN chmod 755 /bin/gost /opt/egress-sidecar/entrypoint.sh /usr/local/bin/network
         "gost_archive_sha256": archive_sha, "gost_checksums_sha256": checksums_sha,
         "base_id": BASE_ID, "base_tag": BASE_TAG, "platform": "linux/arm64",
         "harbor_files_sha256": copied, "files_sha256": files, "context_hash": context_hash,
+        "config_delta": config_delta,
         "image_name": "scriptact-bench:egress-" + variant + "--" + context_hash,
-        "scope": "Explicit local infrastructure variant; agent task images and Harbor network policy are unchanged. Actual network probes and fresh-container patch replay are required before paid repository trials."}
+        "scope": ("Explicit local infrastructure variant. The redirect HTTP response-header deadline is 900 seconds, "
+                  "aligned with the gateway upstream deadline; allowlist, sniffing and task images retain their official semantics. "
+                  "Actual network probes and fresh-container patch replay are required before paid repository trials."
+                  if config_delta else "Explicit local infrastructure variant; agent task images and Harbor network policy are unchanged. Actual network probes and fresh-container patch replay are required before paid repository trials.")}
     (directory / "preparation.json").write_text(json.dumps(evidence, indent=2) + "\n")
     return evidence
 

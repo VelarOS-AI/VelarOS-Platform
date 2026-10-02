@@ -58,7 +58,8 @@ class ParallelCampaignTests(unittest.TestCase):
 
     def campaign(self, root, fixture, launcher=None):
         bench, manifest, manifest_path, plan, plan_path = fixture
-        return Campaign(plan, manifest, manifest_path, sha256(plan_path.read_bytes()), root / "state", bench, launcher, admission_probe=passed_probe)
+        return Campaign(plan, manifest, manifest_path, sha256(plan_path.read_bytes()), root / "state", bench, launcher,
+                        admission_probe=passed_probe, diagnostics_enabled=False)
 
     def phase(self, campaign, index, phase, reward=1, exception=None, wrong_identity=False):
         manifest = campaign.manifest
@@ -108,6 +109,67 @@ class ParallelCampaignTests(unittest.TestCase):
             atomic_json(path, {**plan, "manifest_sha256": sha256(manifest_path.read_bytes())})
             with self.assertRaisesRegex(ValueError, "reasoning effort"):
                 load_plan(path, bench / "jobs")
+
+    def test_diagnostic_launch_failure_never_changes_dispatch_or_accounting(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            campaign = self.campaign(root, self.fixture(root, tasks=("fixture-a",)))
+            campaign.diagnostics_enabled = True
+            campaign.diagnostics_launcher = Mock(side_effect=RuntimeError("PRIVATE_DIAGNOSTIC_SECRET"))
+            launches = []
+            def launch(index, replay_only):
+                launches.append((index, replay_only))
+                self.phase(campaign, index, "source")
+                self.phase(campaign, index, "replay")
+                return 0
+            campaign.launcher = launch
+            ledger_before = (root / "gateway/budget.json").read_bytes()
+            self.assertEqual(campaign.run_batch("integration", root / "gateway/budget.json"), "completed")
+            self.assertEqual(sorted(launches), [(1, False), (2, False)])
+            self.assertEqual(campaign.blocked_queues(), {})
+            self.assertEqual((root / "gateway/budget.json").read_bytes(), ledger_before)
+            logs = (root / "state/diagnostics/controller-events.jsonl").read_text()
+            self.assertIn("diagnostic_launch_failed", logs)
+            self.assertNotIn("PRIVATE_DIAGNOSTIC_SECRET", logs)
+            self.assertEqual(campaign.run_batch("integration", root / "gateway/budget.json"), "completed")
+            self.assertEqual(len(launches), 2)
+
+    def test_source_terminal_diagnostic_starts_before_replay_and_cancel_is_bounded(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            campaign = self.campaign(root, self.fixture(root, tasks=("fixture-a",)))
+            campaign.diagnostics_enabled = True
+            campaign.diagnostic_active = True
+            campaign.observation_started = time.monotonic()
+            process = Mock()
+            process.poll.side_effect = lambda: -9 if process.kill.called else None
+            process.wait.side_effect = lambda **kwargs: -9 if process.kill.called else (_ for _ in ()).throw(subprocess.TimeoutExpired("fixture", kwargs.get("timeout")))
+            campaign.diagnostics_launcher = Mock(return_value=process)
+            self.phase(campaign, 1, "source")
+            campaign.refresh_report(root / "gateway/budget.json")
+            args = campaign.diagnostics_launcher.call_args.args[0]
+            self.assertEqual(args[args.index("--stage") + 1], "source-terminal")
+            self.assertFalse((campaign.bench / "jobs/fixture-a-codex-replay").exists())
+            before = campaign.path.read_bytes()
+            campaign.request_stop(signal.SIGTERM)
+            campaign.finish_diagnostics(root / "gateway/budget.json", cancelled=True)
+            self.assertEqual(campaign.path.read_bytes(), before)
+            process.terminate.assert_called_once()
+            process.kill.assert_called_once()
+            self.assertIsNone(campaign.diagnostic_process)
+            self.assertIn('"status": "unknown"', (root / "state/diagnostics/controller-events.jsonl").read_text())
+
+    def test_missing_diagnostic_receipt_cannot_be_reported_complete(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            campaign = self.campaign(root, self.fixture(root))
+            campaign.diagnostics_enabled = True
+            campaign.diagnostics_launcher = Mock(return_value=Mock(poll=Mock(return_value=0)))
+            campaign.queue_diagnostic("controller-terminal", root / "gateway/budget.json")
+            campaign.poll_diagnostic()
+            events = [json.loads(line) for line in (root / "state/diagnostics/controller-events.jsonl").read_text().splitlines()]
+            self.assertEqual(events[-1]["status"], "unknown")
+            self.assertIsNone(events[-1]["receipt_sha256"])
 
     def test_development_label_does_not_authorize_unexposed_tasks(self):
         with tempfile.TemporaryDirectory() as temporary:

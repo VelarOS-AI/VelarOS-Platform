@@ -5,12 +5,14 @@ import hashlib
 import json
 from pathlib import Path
 
+import yaml
+
 from harbor.utils.container_cache import docker_build_context_hash
 
 from .cancellable_environment import CancellableBenchmarkDocker
 
-HELPER = Path(__file__).resolve().parents[3] / ".velaros-workspace/bench/egress/harbor-gost-3.2.6-v1"
-IMAGE_NAME = "scriptact-bench:egress-gost-3.2.6-v1--cf6b6e66300e4bb9"
+HELPER = Path(__file__).resolve().parents[3] / ".velaros-workspace/bench/egress/harbor-gost-3.2.6-v2"
+IMAGE_NAME = "scriptact-bench:egress-gost-3.2.6-v2--8620e34c530d327a"
 
 
 def helper_evidence(directory=HELPER):
@@ -26,19 +28,34 @@ def helper_evidence(directory=HELPER):
     context_hash = docker_build_context_hash(context=context, dockerfile_path=context / "Dockerfile", build_args={}, platform="linux/arm64")
     if files != source["files_sha256"] or context_hash != source["context_hash"]:
         raise ValueError("Local network helper context changed")
-    variants = {"3.3.0": "gost-stable-v1", "3.2.6": "gost-3.2.6-v1"}
-    variant = variants.get(source["gost_version"])
+    variants = {"3.3.0": ("gost-stable-v1",), "3.2.6": ("gost-3.2.6-v1", "gost-3.2.6-v2")}
+    protocol = source["protocol"]
+    allowed = variants.get(source["gost_version"], ())
+    variant = next((item for item in allowed if protocol == "local-harbor-" + item), None)
     image_name = "scriptact-bench:egress-" + str(variant) + "--" + context_hash
     if variant is None or source["protocol"] != "local-harbor-" + variant:
         raise ValueError("Unknown local network helper protocol")
     if built["image_name"] != image_name or source["image_name"] != image_name or built["platform"] != "linux/arm64":
         raise ValueError("Local network helper identity/platform changed")
+    if variant == "gost-3.2.6-v2":
+        config = yaml.safe_load((context / "gost.yaml").read_text())
+        if not isinstance(config, dict) or not isinstance(config.get("services"), list):
+            raise ValueError("Local network helper response-header configuration changed")
+        handlers = [item.get("handler") for item in config["services"] if isinstance(item, dict)
+                    and isinstance(item.get("handler"), dict) and item["handler"].get("type") == "red"]
+        delta = source.get("config_delta")
+        if (not handlers or any(not isinstance(item.get("metadata"), dict) or item["metadata"].get("readTimeout") != "900s" for item in handlers)
+                or not isinstance(delta, dict) or delta.get("kind") != "redirect_http_response_header_timeout"
+                or delta.get("seconds") != 900
+                or delta.get("original_harbor_config_sha256") != source["harbor_files_sha256"]["gost.yaml"]
+                or delta.get("prepared_config_sha256") != files["gost.yaml"]):
+            raise ValueError("Local network helper response-header deadline proof changed")
     return built
 
 
 class RepositoryBenchmarkDocker(CancellableBenchmarkDocker):
     _EGRESS_CONTROL_SIDECAR_CONTEXT_PATH = HELPER / "context"
-    _EGRESS_CONTROL_SIDECAR_DOCKER_NAME = "scriptact-bench:egress-gost-3.2.6-v1"
+    _EGRESS_CONTROL_SIDECAR_DOCKER_NAME = "scriptact-bench:egress-gost-3.2.6-v2"
     _EGRESS_CONTROL_KERNEL_PROBE_IMAGE = IMAGE_NAME
 
     async def _ensure_egress_control_sidecar_image_built(self):

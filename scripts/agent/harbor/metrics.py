@@ -1,6 +1,7 @@
 """Comparable measurements from provider usage and native agent evidence."""
 
 import json
+import math
 import re
 import statistics
 from collections import Counter
@@ -359,9 +360,87 @@ def history_cache_metrics(turns):
             "lease_retirements": retirements, "unchanged_prefix_chars": distribution(prefix_chars)}
 
 
+def current_frame_layout(request, provider):
+    """Bind the archived host frame to its recorded compiled provider payload.
+
+    The framing strings belong to the Runtime renderer/compiler contract. Payload
+    text or historical messages cannot establish the current frame's identity.
+    Frozen-renderer semantic equivalence is verified separately by trace audits.
+    """
+    unknown = {"state": "unverified", "frame_id": None, "host_frame_id": None, "display": None,
+               "display_chars": None, "protocol_chars": None, "context_status_chars": None,
+               "current_message_chars": None, "other_current_text_chars": None, "history_chars": None}
+
+    def missing(reason):
+        return {**unknown, "reason": reason}
+
+    def texts(content):
+        if isinstance(content, str):
+            return [content]
+        if isinstance(content, list):
+            return [part["text"] for part in content if isinstance(part, dict) and isinstance(part.get("text"), str)]
+        return []
+
+    if not isinstance(request, dict) or not isinstance(provider, dict):
+        return missing("host_or_provider_request_missing")
+    materials = request.get("materials")
+    materials = [item for item in materials if isinstance(item, dict) and item.get("origin") == "runtime-view"] if isinstance(materials, list) else []
+    if len(materials) != 1 or not isinstance(materials[0].get("text"), str):
+        return missing("unique_runtime_material_missing")
+    try:
+        frame = json.loads(materials[0]["text"])
+    except (ValueError, TypeError):
+        return missing("runtime_material_invalid")
+    status = request.get("contextStatus")
+    frame_id = frame.get("id") if isinstance(frame, dict) else None
+    host_frame_id = frame.get("frameId") if isinstance(frame, dict) else None
+    if (not isinstance(frame_id, str) or not frame_id or not isinstance(host_frame_id, str) or not host_frame_id
+            or materials[0].get("ref") != frame_id or not isinstance(frame.get("partitions"), dict)
+            or not isinstance(status, dict) or status.get("frameId") != frame_id):
+        return missing("current_frame_identity_missing_or_mismatched")
+    compiled = request.get("compiledPrompt")
+    messages = provider.get("messages")
+    if (not isinstance(compiled, str) or not compiled or not isinstance(messages, list) or not messages
+            or not isinstance(messages[-1], dict) or messages[-1].get("role") != "user"):
+        return missing("final_sdk_user_message_or_compiled_prompt_missing")
+    delimiter = "\n\n本帧协议（宿主生成；控制标记以最后出现的这一段为准）：\n"
+    split = compiled.rfind(delimiter)
+    if split < 0 or not compiled[split + len(delimiter):]:
+        return missing("host_protocol_boundary_missing")
+    display = compiled[:split]
+    if display.startswith("Runtime 本帧工作内存（origin=runtime-view，增量）"):
+        mode = "delta"
+    elif display.startswith("Runtime 本帧工作内存（origin=runtime-view）"):
+        mode = "full"
+    else:
+        return missing("runtime_renderer_format_unknown")
+    suffix = "\nRuntime ContextStatus:\n"
+    last_texts = texts(messages[-1].get("content"))
+    matches = []
+    for text in last_texts:
+        if not text.startswith(compiled + suffix):
+            continue
+        try:
+            observed_status = json.loads(text[len(compiled + suffix):])
+        except (ValueError, TypeError):
+            continue
+        if json.dumps(observed_status, sort_keys=True, ensure_ascii=False) == json.dumps(status, sort_keys=True, ensure_ascii=False):
+            matches.append(text)
+    if len(matches) != 1:
+        return missing("recorded_final_provider_payload_missing_or_ambiguous")
+    actual = matches[0]
+    message_chars = sum(map(len, last_texts))
+    return {"state": "verified", "frame_id": frame_id, "host_frame_id": host_frame_id, "display": mode, "reason": None,
+            "display_chars": len(display), "protocol_chars": len(compiled) - split,
+            "context_status_chars": len(actual) - len(compiled), "current_message_chars": message_chars,
+            "other_current_text_chars": message_chars - len(actual),
+            "history_chars": sum(len(text) for message in messages[:-1] if isinstance(message, dict)
+                                 for text in texts(message.get("content")))}
+
+
 def prompt_layout_metrics(turns):
     """Count recorded prompt text separately from raw frame partitions and tokens."""
-    provider_sizes, frame_sizes, other_blocks, partitions = [], [], [], {}
+    provider_sizes, current_frames, system_sizes, other_blocks, partitions, partition_frames = [], [], [], [], {}, []
     continuation_items, continuation_chars, continuation_tokens, continuation_modes = [], [], [], set()
     def text_parts(content):
         if isinstance(content, str):
@@ -391,21 +470,50 @@ def prompt_layout_metrics(turns):
             except (ValueError, TypeError, KeyError, AttributeError):
                 pass
         texts, unknown = text_parts(provider.get("system"))
+        system_sizes.append(sum(map(len, texts)))
         for message in provider["messages"]:
             parts, count = text_parts(message.get("content"))
             texts.extend(parts)
             unknown += count
         provider_sizes.append(sum(map(len, texts)))
         other_blocks.append(unknown)
-        frame_sizes.append(sum(len(part) for part in texts if part.startswith("Runtime 本帧工作内存（origin=runtime-view）")))
-        for material in (request.get("request") or {}).get("materials", []):
-            if material.get("origin") != "runtime-view":
-                continue
-            frame = json.loads(material["text"])
-            for name, value in frame.get("partitions", {}).items():
+        current = current_frame_layout(request.get("request"), provider)
+        current_frames.append({"turn_id": turn.get("turnId"), **current})
+        host = request.get("request")
+        materials = host.get("materials") if isinstance(host, dict) else None
+        runtime = [item for item in materials if isinstance(item, dict) and item.get("origin") == "runtime-view"] if isinstance(materials, list) else []
+        raw_partitions, partition_reason = None, "unique_runtime_material_missing"
+        if len(runtime) == 1 and isinstance(runtime[0].get("text"), str):
+            try:
+                frame = json.loads(runtime[0]["text"])
+                if isinstance(frame, dict) and isinstance(frame.get("partitions"), dict):
+                    raw_partitions, partition_reason = frame["partitions"], None
+                else:
+                    partition_reason = "runtime_partitions_shape_invalid"
+            except (ValueError, TypeError):
+                partition_reason = "runtime_material_invalid"
+        partition_frames.append({"turn_id": turn.get("turnId"),
+                                 "state": "verified" if raw_partitions is not None else "unverified",
+                                 "reason": partition_reason})
+        if raw_partitions is not None:
+            for name, value in raw_partitions.items():
                 partitions.setdefault(name, []).append(len(json.dumps(value, ensure_ascii=False, separators=(",", ":"))))
     return {"measured_requests": len(provider_sizes), "unmeasured_requests": len(turns) - len(provider_sizes),
-            "provider_text_chars": distribution(provider_sizes), "working_frame_text_chars": distribution(frame_sizes),
+            "character_unit": "unicode_codepoints",
+            "provider_text_chars": distribution(provider_sizes),
+            "working_frame_text_chars": distribution([frame["display_chars"] for frame in current_frames]),
+            "current_frame": {"verified_requests": sum(frame["state"] == "verified" for frame in current_frames),
+                              "unverified_requests": sum(frame["state"] != "verified" for frame in current_frames),
+                              "evidence_scope": "recorded_compiled_provider_payload",
+                              "display_modes": dict(Counter(frame["display"] for frame in current_frames if frame["state"] == "verified")),
+                              "protocol_text_chars": distribution([frame["protocol_chars"] for frame in current_frames]),
+                              "context_status_text_chars": distribution([frame["context_status_chars"] for frame in current_frames]),
+                              "current_message_text_chars": distribution([frame["current_message_chars"] for frame in current_frames]),
+                              "other_current_text_chars": distribution([frame["other_current_text_chars"] for frame in current_frames]),
+                              "history_text_chars": distribution([frame["history_chars"] for frame in current_frames]),
+                              "frames": current_frames,
+                              "interpretation": "Character counts use Python Unicode codepoints, while Runtime display/result budgets use JavaScript UTF-16 code units. Current display, host protocol, ContextStatus and prior recorded provider message text are separate. Only exact identity-bound compiled provider payloads enter these distributions; unverified frames remain null. This archived compiler snapshot does not alone prove SDK wire delivery or upstream acceptance. Frozen-renderer equivalence and accepted decisions/usage are checked separately."},
+            "system_text_chars": distribution(system_sizes),
             "non_text_blocks": distribution(other_blocks),
             "continuation": {"history_items": distribution(continuation_items),
                              "serialized_chars": distribution(continuation_chars),
@@ -413,6 +521,10 @@ def prompt_layout_metrics(turns):
                              "prior_response_reasoning_contexts": sorted(continuation_modes),
                              "interpretation": "Archived continuation metadata and driver capacity reservation, not separately billed tokens or proof every item was used by the provider."},
             "raw_partition_json_chars": {name: distribution(sizes) for name, sizes in partitions.items()},
+            "raw_partition_measurement": {"verified_requests": sum(frame["state"] == "verified" for frame in partition_frames),
+                                          "unverified_requests": sum(frame["state"] != "verified" for frame in partition_frames),
+                                          "frames": partition_frames,
+                                          "interpretation": "Only valid archived runtime objects with dictionary partitions enter compact JSON character measurements. Missing, malformed or ambiguous materials retain unverified reasons and no inferred size."},
             "interpretation": "Recorded Unicode character counts, not token estimates. Raw partition JSON differs from rendered prompt text; non-text payload size is not measured."}
 
 
@@ -504,6 +616,12 @@ def agent_metrics(directory):
         return sum(values) if all(isinstance(v, (int, float)) for v in values) else None
     rejected_ms = rejection_total("timing", "modelMs")
     all_rejected_ms = rejection_total("timing", "modelMs", all_rejected)
+    model_ms = [(json.loads(turn["decision"]["body"]).get("timing") or {}).get("modelMs")
+                if (turn.get("decision") or {}).get("body") else None for turn in turns]
+    def seconds_sum(values):
+        return sum(values) / 1000 if all(
+            type(value) in (int, float) and math.isfinite(value) and value >= 0 for value in values) else None
+    model_seconds = seconds_sum(model_ms) if model_ms else None
     rejection_codes = [str((r.get("error") or {}).get("code", "unknown")) for r in all_rejected]
     response_bodies = [t["response"]["body"] for t in turns
                        if (t.get("response") or {}).get("body") and not t["response"].get("truncated")]
@@ -524,6 +642,7 @@ def agent_metrics(directory):
     return {
         "turns": len(turns), "branches": len(data.get("branches", [])),
         "harness_trace_export": status.get("traceExport"),
+        "model_await_seconds_sum": model_seconds,
         "environment_diagnostics": tool_environment_diagnostics(shell_outputs),
         "tool_calls": len(invocations),
         "tool_call_scope": "scriptact_host_operations",
@@ -539,8 +658,8 @@ def agent_metrics(directory):
         "failed_script_executions": execution_statuses.count("failed"),
         "script_failure_codes": {code: script_failure_codes.count(code)
                                  for code in sorted(set(script_failure_codes))},
-        "script_seconds_sum": sum((e.get("durationMs") or 0) for e in executions.values()) / 1000,
-        "observed_observation_seconds": sum((t.get("timing", {}).get("observationMs") or 0) for t in turns) / 1000,
+        "script_seconds_sum": seconds_sum([execution.get("durationMs") for execution in executions.values()]),
+        "observed_observation_seconds": seconds_sum([(turn.get("timing") or {}).get("observationMs") for turn in turns]),
         "repair_turns": sum((t.get("repair") or 0) > 0 for t in turns),
         "protocol_rejections": len(rejected),
         "protocol_rejection_model_seconds": rejected_ms / 1000 if rejected_ms is not None else None,
@@ -595,7 +714,8 @@ def aggregate_trials(trials):
         **aggregate_pricing_basis(calls),
         "tool_usage": aggregate_tool_usage(trials),
         "successes": len(successful), "known_cost_usd": cost, "all_cost_known": all_cost_known,
-        "clean_successes": sum(not t["exception"] for t in successful),
+        "complete_task_cost_usd": None,
+        "clean_successes": sum(not t["exception"] and not t.get("infrastructure_issue") for t in successful),
         "cost_components_usd": {key: component_total(key) for key in COST_COMPONENTS},
         "spend_per_success_usd": cost / len(successful) if all_cost_known and successful else None,
         "agent_seconds_all_attempts": distribution([t["agent_seconds"] for t in trials]),
@@ -609,15 +729,18 @@ def aggregate_trials(trials):
 
 
 def compare_jobs(reference, candidate):
-    """Use equal task weights and only jointly solved tasks for efficiency.
+    """Compare time and complete model-cost estimates on jointly solved tasks.
 
     All attempts remain in each job's aggregate. Successful-attempt efficiency
     is conditional evidence, not a replacement for reliability or total spend.
+    Request counts remain accounting data, outside comparison means/ratios.
     """
+    metrics = ("agent_seconds", "attempt_wall_seconds", "cost_usd")
+
     def successful_by_task(job):
         grouped = {}
         for trial in job["trials"]:
-            if trial["score"] == 1 and not trial["exception"]:
+            if trial["score"] == 1 and not trial["exception"] and not trial.get("infrastructure_issue"):
                 grouped.setdefault(trial["task"], []).append(trial)
         return grouped
 
@@ -632,19 +755,19 @@ def compare_jobs(reference, candidate):
             costs = [t["metrics"]["known_cost_usd"] if t["metrics"]["unknown_cost_requests"] == 0 else None for t in trials]
             row[side] = {"successful_attempts": len(trials),
                          **aggregate_pricing_basis([t["metrics"] for t in trials]),
-                         "model_requests": mean_known([t["metrics"].get("requests") for t in trials]),
                          "agent_seconds": mean_known([t["agent_seconds"] for t in trials]),
+                         "attempt_wall_seconds": mean_known([t.get("attempt_wall_seconds") for t in trials]),
                          "cost_usd": mean_known(costs)}
         rows.append(row)
     means = {side: {metric: mean_known([r[side][metric] for r in rows])
-                    for metric in ("model_requests", "agent_seconds", "cost_usd")}
+                    for metric in metrics}
              for side in ("reference", "candidate")}
     ratios = {}
-    for metric in ("model_requests", "agent_seconds", "cost_usd"):
+    for metric in metrics:
         denominator, numerator = means["reference"][metric], means["candidate"][metric]
         ratios[metric] = numerator / denominator if denominator and numerator is not None else None
     def dominance(left, right):
-        pairs = [(left.get(key), right.get(key)) for key in ("model_requests", "agent_seconds", "cost_usd")]
+        pairs = [(left.get(key), right.get(key)) for key in metrics]
         if any(a is None or b is None for a, b in pairs):
             return "unknown"
         if all(b <= a for a, b in pairs) and any(b < a for a, b in pairs):
@@ -669,7 +792,9 @@ def compare_jobs(reference, candidate):
                 "agent_seconds": sum(seconds) if all(value is not None for value in seconds) else None}
     pricing_basis = aggregate_pricing_basis([trial["metrics"] for job in (reference, candidate)
         for trial in job.get("completed_source_usage", job["trials"])])
-    return {"reference": reference["job"], "candidate": candidate["job"], **pricing_basis,
+    return {"comparison_schema": 2, "reference": reference["job"], "candidate": candidate["job"], **pricing_basis,
+            "efficiency_dominance_basis": "reference_model_cost_estimates_and_recorded_times_not_actual_complete_task_costs",
+            "actual_complete_task_cost_dominance": "unknown",
             **({"efficiency_cost_basis": "estimated_costs_not_actual_provider_charges"} if pricing_basis else {}),
             "complete": all(j["planned"] is not None and j["completed"] == j["planned"] for j in (reference, candidate)),
             "same_task_set": {t["task"] for t in reference["trials"]} == {t["task"] for t in candidate["trials"]},
@@ -678,4 +803,4 @@ def compare_jobs(reference, candidate):
             "efficiency_dominance": dominance(means["reference"], means["candidate"]),
             "completed_attempt_totals": {"reference": attempt_totals(reference), "candidate": attempt_totals(candidate)},
             "supports_general_superiority": False,
-            "interpretation": "descriptive only; conditional on verified success without a runtime exception; task weights equal; small samples do not establish superiority"}
+            "interpretation": "descriptive only; conditional on verified success without runtime or infrastructure faults; task weights equal; missing complete attempt time is not replaced by agent time; costs require every attributed request estimate and do not prove actual complete task charges; requests/ids/retries remain accounting data only; small samples do not establish superiority"}

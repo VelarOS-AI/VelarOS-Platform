@@ -20,20 +20,24 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from collections import Counter
 from pathlib import Path
 
 from metrics import compare_jobs, request_failure_kind, request_metrics, request_transport_code, trial_infrastructure_issue
-from report import codex_execution_status, finish_summary, pricing_basis_markdown, summarize
+from report import codex_execution_status, context_diagnostics_markdown, finish_summary, pricing_basis_markdown, summarize
 from repository_report import merge_trial
 from request_identity import validate_identity, validate_request_ledger, verify_unique_attribution
 from task_exposure import task_exposure
 from tool_metrics import aggregate_tool_usage
 from resource_leases import ResourceLeases
 from worker_admission import admission_session, scope_for
+from campaign_diagnostics import no_symlinks, safe_failure, write_new
 
 ROOT = Path(__file__).resolve().parents[3]
 BENCH = ROOT / ".velaros-workspace/bench"
+DIAGNOSTIC_RUN_SECONDS = 120
+DIAGNOSTIC_CLOSE_SECONDS = 5
 
 
 def now():
@@ -352,7 +356,8 @@ def repository_snapshot(manifest, manifest_hash, bench, requests, request_failur
 
 
 class Campaign:
-    def __init__(self, plan, manifest, manifest_path, plan_hash, directory, bench=BENCH, launcher=None, admission_probe=None):
+    def __init__(self, plan, manifest, manifest_path, plan_hash, directory, bench=BENCH, launcher=None, admission_probe=None,
+                 diagnostics_enabled=True, diagnostics_launcher=None):
         self.plan, self.manifest, self.manifest_path = plan, manifest, Path(manifest_path)
         self.plan_hash, self.directory, self.bench = plan_hash, Path(directory), Path(bench)
         self.manifest_hash = plan["manifest_sha256"]
@@ -364,6 +369,15 @@ class Campaign:
         self.launcher_processes = {}
         self.launcher_lock = threading.Lock()
         self.cancelled_launchers = set()
+        self.diagnostics_enabled = diagnostics_enabled
+        self.diagnostics_launcher = diagnostics_launcher or subprocess.Popen
+        self.diagnostic_process = None
+        self.diagnostic_pending = None
+        self.diagnostic_sources = set()
+        self.diagnostic_active = False
+        self.observation_started = None
+        self.source_observed = None
+        self.diagnostic_wait_seconds = 0.
         self.path = self.directory / "checkpoint.json"
         if self.path.exists():
             self.state = read_json(self.path)
@@ -532,28 +546,191 @@ class Campaign:
         basis = report["all_attempt_requests"].get("pricing_basis")
         pricing = pricing_basis_markdown([("全部尝试", basis)] if basis else [])
         lines = ["# 并行开发批次", "", f'模型 `{report["model"]}`；推理档位 `{report["reasoning_effort"]}`。', "",
-                 "开发证据不支持独立泛化结论。请求与费用覆盖失败、运行中和迟到结算；官方 reward 单独保留。", ""]
+                 "先看官方质量与运行稳定性，再看完整耗时和费用。开发证据不支持独立泛化结论。费用覆盖失败、运行中和迟到结算；未知用量与实际完整扣费保持未知。原始请求、身份和重试计数保留在 JSON 归账与故障审计中。", ""]
         if pricing:
             lines += pricing + [""]
         known_label, unknown_label = ("已知估算美元", "未知估算请求") if pricing else ("已知美元", "未知费用请求")
-        lines += [f"| 尝试 | 参与者 / 任务 | 状态 | reward | 请求 | {known_label} | {unknown_label} | 未结算 |",
-                  "|---|---|---|---:|---:|---:|---:|---:|"]
+        lines += [f"| 尝试 | 参与者 / 任务 | 状态 | 官方 reward | agent 秒 | 完整 attempt 秒 | {known_label} | 实际完整费用美元 | {unknown_label} | 未结算 |",
+                  "|---|---|---|---:|---:|---:|---:|---:|---:|---:|"]
+        trials_by_source = {trial["source_job"]: trial for job in jobs for trial in job["trials"]}
+        source_usage = {source["source_job"]: source for job in jobs for source in job["completed_source_usage"]}
+        def shown_seconds(value):
+            return f"{value:.6f}" if value is not None else "未知"
+
         for item in attempts:
             metrics, state = item["metrics"], item["state"]
-            lines.append(f'| {item["index"]} | {item["participant"]} / {item["task"]} | {state["status"]} | {state.get("reward", "待定")} | {metrics["requests"]} | {metrics["known_cost_usd"]:.6f} | {metrics["unknown_cost_requests"]} | {item["unsettled_requests"]} |')
+            trial = trials_by_source.get(item["source_job"], {})
+            source = source_usage.get(item["source_job"], {})
+            lines.append(f'| {item["index"]} | {item["participant"]} / {item["task"]} | {state["status"]} | {state.get("reward", "待定")} | {shown_seconds(source.get("agent_seconds"))} | {shown_seconds(trial.get("attempt_wall_seconds"))} | {metrics["known_cost_usd"]:.6f} | {shown_seconds(trial.get("complete_task_cost_usd"))} | {metrics["unknown_cost_requests"]} | {item["unsettled_requests"]} |')
         lines += ["", "trial 跨阶段耗时：源 trial 开始到 replay trial 结束，含中间空隙；旧 end_to_end_seconds 保留此口径。attempt 完整耗时：源 dispatch receipt 开始到 replay receipt 确认清理结算完成，含容量排队和所有阶段空隙。receipt 身份、结果路径或清理终态未确认时保持未知；不包含首个 receipt 之前的 controller 启动及最后 receipt 之后的报告写入。并发 attempt 的时间不能相加作为批次墙钟时间。", "",
                   "| 参与者 / 已判分任务 | 源解题秒数 | trial 跨阶段秒数 | attempt 完整秒数 |",
                   "|---|---:|---:|---:|"]
-        def shown_seconds(value):
-            return f"{value:.6f}" if value is not None else "未知"
         for job in jobs:
             for trial in job["trials"]:
                 lines.append(f'| {job["job"]} / {trial["task"]} | {shown_seconds(trial["agent_seconds"])} | {shown_seconds(trial["trial_lifecycle_seconds"])} | {shown_seconds(trial["attempt_wall_seconds"])} |')
+        lines += context_diagnostics_markdown(jobs)
+        lines += ["", "| 固定参考 → 候选 | 两组完成 | 共同正常成功题数 | agent 耗时比 | 完整 attempt 耗时比 | 模型费估算比 |",
+                  "|---|---|---:|---:|---:|---:|"]
+        for comparison in report["comparisons"]:
+            ratios = comparison["candidate_over_reference"]
+            values = [shown_seconds(ratios[key]) for key in ("agent_seconds", "attempt_wall_seconds", "cost_usd")]
+            lines.append(f'| {comparison["reference"]} → {comparison["candidate"]} | {"是" if comparison["complete"] else "否"} | {comparison["jointly_solved_tasks"]} | ' + " | ".join(values) + " |")
+        lines += ["", "共同成功比较按题等权，并排除运行及基础设施异常；缺少完整 attempt 耗时保持未知。费用比只表示完整用量的模型费估算，参考估价的 dominance 不代表实际完整任务费用优势。"]
         lines += ["", "详细时间、上下文、缓存和分层工具次数见 report.json 的 jobs/trials；运行中请求见 attempts。", "",
                   f'当前阻断队列：`{json.dumps(report["blocked_queues"], ensure_ascii=False)}`。', "",
                   "问题列表保留症状与证据；未经诊断不自动推断或合并根因。"]
         (self.directory / "report.md").write_text("\n".join(lines) + "\n")
         self.save()
+        completed_sources = {item["source_job"] for job in jobs for item in job["completed_source_usage"]}
+        if self.diagnostic_active and completed_sources - self.diagnostic_sources:
+            self.diagnostic_sources.update(completed_sources)
+            self.source_observed = time.monotonic()
+            self.queue_diagnostic("source-terminal", budget_path)
+
+    def diagnostic_event(self, value):
+        """Auxiliary status never changes the paid checkpoint or queue decisions."""
+        try:
+            directory = no_symlinks(self.directory / "diagnostics")
+            directory.mkdir(parents=True, exist_ok=True)
+            path = no_symlinks(directory / "controller-events.jsonl")
+            with path.open("a") as stream:
+                stream.write(json.dumps({"at": now(), **value}, allow_nan=False) + "\n")
+        except (OSError, ValueError):
+            # Even an unavailable diagnostic sink cannot interrupt launcher cleanup.
+            pass
+
+    def queue_diagnostic(self, stage, budget_path):
+        if not self.diagnostics_enabled or self.stop_requested.is_set():
+            return
+        self.diagnostic_pending = (stage, Path(budget_path))
+        self.poll_diagnostic()
+
+    def stop_diagnostic(self, reason):
+        entry = self.diagnostic_process
+        if entry is None:
+            return
+        process = entry["process"]
+        verified = process.poll() is not None
+        try:
+            if not verified:
+                process.terminate()
+                try:
+                    process.wait(timeout=.1)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=1)
+                verified = True
+        except (OSError, subprocess.TimeoutExpired):
+            # Retain unknown physical completion rather than inventing success.
+            pass
+        entry["log"].close()
+        self.diagnostic_event({"run_id": entry["run_id"], "stage": entry["stage"],
+            "status": "unknown", "reason": reason, "exit_verified": verified,
+            "observed_seconds": time.monotonic() - entry["started"]})
+        self.diagnostic_process = None if verified else entry
+        if not verified:
+            self.diagnostic_pending = None
+
+    def poll_diagnostic(self):
+        entry = self.diagnostic_process
+        if entry is not None:
+            code = entry["process"].poll()
+            if code is not None:
+                entry["log"].close()
+                status, receipt_hash = "unknown", None
+                try:
+                    receipt_path = no_symlinks(self.directory / "diagnostics/invocations" / entry["run_id"] / "receipt.json")
+                    raw = receipt_path.read_bytes()
+                    receipt = json.loads(raw)
+                    if (code == 0 and receipt.get("run_id") == entry["run_id"]
+                            and receipt.get("stage") == entry["stage"]
+                            and receipt.get("status") in {"complete", "partial"}):
+                        status, receipt_hash = receipt["status"], sha256(raw)
+                except (OSError, ValueError, TypeError):
+                    pass
+                self.diagnostic_event({"run_id": entry["run_id"], "stage": entry["stage"],
+                    "status": status, "exit_code": code, "receipt_sha256": receipt_hash,
+                    "observed_seconds": time.monotonic() - entry["started"]})
+                self.diagnostic_process = None
+            elif time.monotonic() - entry["started"] >= DIAGNOSTIC_RUN_SECONDS:
+                self.stop_diagnostic("diagnostic_deadline")
+        if self.diagnostic_process is not None or self.diagnostic_pending is None:
+            return
+        if self.stop_requested.is_set():
+            self.diagnostic_pending = None
+            return
+        stage, budget_path = self.diagnostic_pending
+        self.diagnostic_pending = None
+        stream = None
+        try:
+            run_id = uuid.uuid4().hex
+            root = no_symlinks(self.directory / "diagnostics")
+            invocation = no_symlinks(root / "invocations" / run_id)
+            invocation.mkdir(parents=True)
+            current = time.monotonic()
+            timing = {"source_seconds": None, "replay_seconds": None, "integration_seconds": None,
+                "controller_observation_seconds": current - self.observation_started if self.observation_started is not None else None,
+                "source_terminal_observed_after_seconds": self.source_observed - self.observation_started
+                    if self.source_observed is not None and self.observation_started is not None else None,
+                "replay_observation_after_last_source_seconds": current - self.source_observed
+                    if stage == "controller-terminal" and self.source_observed is not None else None,
+                "waiting_seconds": self.diagnostic_wait_seconds,
+                "interpretation": "Monotonic controller observation windows, not historical source/replay stage durations."}
+            timing_path = invocation / "workflow-timing.json"
+            write_new(timing_path, timing)
+            resources = self.plan.get("diagnostics", {}).get("resource_paths", [])
+            command = [sys.executable, str(Path(__file__).with_name("campaign_diagnostics.py")),
+                "--manifest", str(self.manifest_path), "--state-dir", str(self.directory),
+                "--bench", str(self.bench), "--budget", str(budget_path), "--output-root", str(root),
+                "--stage", stage, "--run-id", run_id, "--workflow-timing", str(timing_path)]
+            for path in resources:
+                command.extend(["--resource", str(path)])
+            stream = (invocation / "diagnostic.log").open("x")
+            # Only this read-only process is cancellable here. Never target the
+            # paid launcher, Harbor, gateway, worker VM or a process group.
+            process = self.diagnostics_launcher(command, cwd=ROOT, stdout=stream,
+                stderr=subprocess.DEVNULL, start_new_session=True)
+            self.diagnostic_process = {"process": process, "log": stream, "run_id": run_id,
+                "stage": stage, "started": current}
+            self.diagnostic_event({"run_id": run_id, "stage": stage, "status": "pending"})
+        except Exception as error:
+            if stream is not None:
+                stream.close()
+            self.diagnostic_event({"stage": stage, "status": "unknown",
+                "failure": safe_failure(error, "diagnostic_launch_failed")})
+
+    def finish_diagnostics(self, budget_path, *, cancelled=False):
+        """Finite close, including cancellation; no executor/atexit wait exists."""
+        self.diagnostic_active = False
+        if not self.diagnostics_enabled:
+            return
+        if cancelled or self.stop_requested.is_set():
+            self.diagnostic_pending = None
+            self.stop_diagnostic("controller_cancelled_or_failed")
+            return
+        self.queue_diagnostic("controller-terminal", budget_path)
+        started = time.monotonic()
+        deadline = started + DIAGNOSTIC_CLOSE_SECONDS
+        while (self.diagnostic_process is not None or self.diagnostic_pending is not None) and time.monotonic() < deadline:
+            if self.stop_requested.is_set():
+                self.diagnostic_pending = None
+                break
+            self.poll_diagnostic()
+            if self.diagnostic_process is not None:
+                try:
+                    self.diagnostic_process["process"].wait(timeout=min(.1, max(0., deadline - time.monotonic())))
+                except subprocess.TimeoutExpired:
+                    pass
+        self.diagnostic_wait_seconds += time.monotonic() - started
+        self.poll_diagnostic()
+        if self.diagnostic_process is not None:
+            self.stop_diagnostic("controller_close_deadline")
+        if self.diagnostic_pending is not None:
+            self.diagnostic_event({"stage": self.diagnostic_pending[0], "status": "unknown",
+                "reason": "controller_close_deadline_before_launch"})
+            self.diagnostic_pending = None
+        self.diagnostic_event({"stage": "controller-close", "waiting_seconds": self.diagnostic_wait_seconds,
+            "unfinished_diagnostic": self.diagnostic_process is not None})
 
     def run_batch(self, batch_id, budget_path):
         with self.cancellation_signals():
@@ -571,7 +748,11 @@ class Campaign:
                     for index in indices if self.state["attempts"][str(index)]["status"] in {"pending", "replay_ready"}
                     and "*" not in blocked and self.manifest["attempts"][index - 1]["participant"] not in blocked}
         if not eligible or self.stop_requested.is_set():
-            return self._run_admitted_batch(batch_id, indices, budget_path)
+            try:
+                return self._run_admitted_batch(batch_id, indices, budget_path)
+            except BaseException:
+                self.finish_diagnostics(budget_path, cancelled=True)
+                raise
         leases = ResourceLeases(self.bench / "campaign/resource-leases", self.manifest["resource_pool"])
         scope = scope_for(self.manifest, self.manifest_hash, eligible, owner=str(self.directory.resolve()),
                           batch_id=batch_id, plan_sha256=self.plan_hash, kind="batch")
@@ -582,6 +763,7 @@ class Campaign:
             try:
                 return self._run_admitted_batch(batch_id, indices, budget_path)
             except BaseException:
+                self.finish_diagnostics(budget_path, cancelled=True)
                 # ThreadPool context has joined workers; ambiguous checkpoint
                 # completion still requires explicit physical reconciliation.
                 if any(self.state["attempts"][str(i)]["status"] in {"dispatching", "uncertain", "identity_failed"} for i in indices):
@@ -591,6 +773,8 @@ class Campaign:
                 self.admission = None
 
     def _run_admitted_batch(self, batch_id, indices, budget_path):
+        self.diagnostic_active = True
+        self.observation_started = time.monotonic()
         self.state["batches"][batch_id] = {"started_at": now(), "status": "running"}
         self.save()
         running = {}
@@ -599,6 +783,7 @@ class Campaign:
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.plan["workers"]) as pool:
             try:
                 while True:
+                    self.poll_diagnostic()
                     if self.stop_requested.is_set():
                         if not interrupted:
                             interrupted = True
@@ -610,6 +795,8 @@ class Campaign:
                                 self.state["attempts"][str(index)]["cancellation_requested_at"] = now()
                             self.save()
                         self.cancel_launchers()
+                        self.diagnostic_pending = None
+                        self.stop_diagnostic("controller_cancelled")
                     blocked = self.blocked_queues()
                     for index in indices:
                         if self.stop_requested.is_set() or len(running) >= self.plan["workers"] or "*" in blocked:
@@ -656,6 +843,7 @@ class Campaign:
         if interrupted:
             self.state["batches"][batch_id]["interruption"]["launcher_attempts"] = sorted(self.cancelled_launchers)
         self.save()
+        self.finish_diagnostics(budget_path, cancelled=interrupted)
         return self.state["batches"][batch_id]["status"]
 
 

@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 from metrics import compare_jobs, trial_infrastructure_issue
-from report import duration, finish_summary, summarize
+from report import complete_attempt_seconds, context_diagnostics_markdown, duration, finish_summary, summarize
 from task_exposure import task_exposure
 from request_identity import validate_identity, verify_unique_attribution
 from tool_metrics import aggregate_tool_usage, tool_usage_markdown
@@ -259,40 +259,34 @@ def main():
         lines += ["", f'冻结验证组共 {coverage["validation_task_count"]} 题，本清单安排 {coverage["scheduled_task_count"]} 题。已检查 {coverage["checked_image_count"]} 个镜像清单，发现 {len(coverage["image_issues"])} 个获取问题；其余 {len(coverage["unchecked_tasks"])} 题尚未检查。镜像缺口单独保留，不计作 Agent 的成功或失败；本报告成绩仅覆盖当前安排的任务。']
         for issue in coverage["image_issues"]:
             lines += ["", f'镜像问题：`{issue["task"]}`，状态 `{issue["status"]}`，HTTP `{issue.get("http_status", "未知")}`，注册表错误 `{", ".join(issue.get("registry_error_codes", [])) or "未提供"}`。']
-    lines += ["", "| Agent | 判分完成/计划 | 通过 | 无异常通过 | 已结束源任务请求数 | 已结束源任务已知费用 | 未知费用请求 |", "|---|---:|---:|---:|---:|---:|---:|"]
+    def shown(value, digits=2):
+        return f"{value:.{digits}f}" if value is not None else "待定"
+
+    lines += ["", "| Agent | 判分完成/计划 | 官方通过 | 正常通过 | 已判分 agent 秒中位数 | 已判分完整 attempt 秒中位数 | 已结束源任务已知模型费估算美元 | 未知估算请求 | 实际完整费用美元 |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for job in jobs:
         cost = sum(row["metrics"]["known_cost_usd"] for row in job["completed_source_usage"])
         unknown = sum(row["metrics"]["unknown_cost_requests"] for row in job["completed_source_usage"])
-        requests = sum(row["metrics"]["requests"] for row in job["completed_source_usage"])
-        lines.append(f'| {job["job"]} | {job["completed"]}/{job["planned"]} | {job["aggregate"]["successes"]} | {job["aggregate"]["clean_successes"]} | {requests} | ${cost:.6f} | {unknown} |')
-    lines += ["", "请求数和费用包含已结束但仍待判分的源任务，包括拒绝、修复和失败的调用；执行中的源任务尚未归入这两列，实时预算占用见 JSON campaign。", "",
-        "| Agent / 已判分任务 | 官方 reward | 异常 | 模型请求数 | 解题秒数 | 模型费用美元 | 重放 verifier 秒数 | trial 跨阶段秒数 | attempt 完整秒数 |",
+        seconds = (job["aggregate"]["agent_seconds_all_attempts"] or {}).get("p50")
+        wall = (complete_attempt_seconds(job["trials"]) or {}).get("p50")
+        lines.append(f'| {job["job"]} | {job["completed"]}/{job["planned"]} | {job["aggregate"]["successes"]} | {job["aggregate"]["clean_successes"]} | {shown(seconds)} | {shown(wall)} | {cost:.6f} | {unknown} | {shown(job["aggregate"].get("complete_task_cost_usd"), 6)} |')
+    lines += ["", "先看官方质量与运行稳定性，再看完整耗时和费用。已知模型费估算包含已结束但仍待判分的源任务及失败调用，未知用量不补零；实际完整扣费未获证据时保持未知。执行中的源任务和实时预算占用见 JSON campaign。", "",
+        "| Agent / 已判分任务 | 官方 reward | 异常 | 解题秒数 | 模型费估算美元 | 实际完整费用美元 | 重放 verifier 秒数 | trial 跨阶段秒数 | attempt 完整秒数 |",
         "|---|---:|---|---:|---:|---:|---:|---:|---:|"]
-    def shown(value, digits=2):
-        return f"{value:.{digits}f}" if value is not None else "待定"
     for job in jobs:
         for trial in job["trials"]:
             task = re.sub(r"-[0-9a-f]{40}.*$", "", Path(trial["task"]).name.removeprefix("instance_"))
             label = job["job"] + " / " + task
             cost = trial["metrics"]["known_cost_usd"] if trial["metrics"]["unknown_cost_requests"] == 0 else None
-            lines.append(f'| {label} | {shown(trial["reward"], 0)} | {trial["exception"] or "无"} | {trial["metrics"]["requests"]} | {shown(trial["agent_seconds"])} | {shown(cost, 6)} | {shown(trial["replay_verifier_seconds"])} | {shown(trial["trial_lifecycle_seconds"])} | {shown(trial["attempt_wall_seconds"])} |')
-    lines += ["", "| Agent / 已判分任务 | 请求数 | 模型阶段秒数 | 实际输入峰值 token | 缓存命中率 | 缓存写入费用 |",
-        "|---|---:|---:|---:|---:|---:|"]
-    for job in jobs:
-        for trial in job["trials"]:
-            task = re.sub(r"-[0-9a-f]{40}.*$", "", Path(trial["task"]).name.removeprefix("instance_"))
-            metrics = trial["metrics"]
-            hit = metrics["cache_token_hit_rate"]
-            hit_text = f"{hit:.2%}" if hit is not None else "待定"
-            lines.append(f'| {job["job"]} / {task} | {metrics["requests"]} | {shown(metrics["model_request_seconds_sum"])} | {shown(metrics["peak_input_tokens"], 0)} | {hit_text} | {shown(metrics["cost_components_usd"]["cache_write"], 6)} |')
+            lines.append(f'| {label} | {shown(trial["reward"], 0)} | {trial["exception"] or trial["infrastructure_issue"] or "无"} | {shown(trial["agent_seconds"])} | {shown(cost, 6)} | {shown(trial.get("complete_task_cost_usd"), 6)} | {shown(trial["replay_verifier_seconds"])} | {shown(trial["trial_lifecycle_seconds"])} | {shown(trial["attempt_wall_seconds"])} |')
+    lines += context_diagnostics_markdown(jobs)
     lines += ["", "模型阶段、工具执行与轨迹导出采用不同测量边界，不能直接相加为解题时间。任务完整 ID、原始结果路径和所有费用分项保存在 JSON。", "",
-        "| 固定参考 → 候选 | 两组完成 | 共同正常成功题数 | 候选/参考模型请求数 | 候选/参考解题耗时 | 候选/参考模型费用 |",
+        "| 固定参考 → 候选 | 两组完成 | 共同正常成功题数 | 候选/参考解题耗时 | 候选/参考完整 attempt 耗时 | 候选/参考模型费估算 |",
         "|---|---|---:|---:|---:|---:|"]
     for comparison in report["comparisons"]:
         ratios = comparison["candidate_over_reference"]
-        shown = [f'{ratios[key]:.4f}' if ratios[key] is not None else "待定" for key in ("model_requests", "agent_seconds", "cost_usd")]
-        lines.append(f'| {comparison["reference"]} → {comparison["candidate"]} | {"是" if comparison["complete"] else "否"} | {comparison["jointly_solved_tasks"]} | {shown[0]} | {shown[1]} | {shown[2]} |')
-    lines += ["", "完整请求数和费用含失败尝试，缺失用量保持未知。效率比仅取双方均正常成功的同题，按题等权；小于 1 表示候选在该指标上较低。请求数、完成耗时与总费用逐项比较，单项下降不能代替整体效率结论。缓存、输入/输出/推理、工具错误及上下文指标见 JSON。工具调用按 tool_call_scope 标明层级：ScriptAct 是底层能力操作，ATIF 是外层模型工具调用；Codex 原生命令及文件修改操作另列 native_operations，各层不直接互比。单次任务不能确立总体领先。", ""]
+        values = [f'{ratios[key]:.4f}' if ratios[key] is not None else "待定" for key in ("agent_seconds", "attempt_wall_seconds", "cost_usd")]
+        lines.append(f'| {comparison["reference"]} → {comparison["candidate"]} | {"是" if comparison["complete"] else "否"} | {comparison["jointly_solved_tasks"]} | {values[0]} | {values[1]} | {values[2]} |')
+    lines += ["", "费用含失败尝试，缺失用量保持未知。效率比仅取双方均正常成功且无基础设施异常的同题，按题等权；完整 attempt 耗时缺失时不以 agent 耗时代替。模型费估算比不代表实际完整扣费。原始请求、身份和重试计数仅用于 JSON 归账及故障审计。工具调用按 tool_call_scope 标明层级：ScriptAct 是底层能力操作，ATIF 是外层模型工具调用；Codex 原生命令及文件修改操作另列 native_operations，各层不直接互比。单次任务不能确立总体领先。", ""]
     lines += tool_usage_markdown(jobs)
     args.output.with_suffix(".md").write_text("\n".join(lines))
     print(json.dumps({"report": str(args.output), "completed": sum(job["completed"] for job in jobs)}))

@@ -5,7 +5,7 @@ import datetime
 import json
 from pathlib import Path
 
-from metrics import aggregate_trials, agent_metrics, compare_jobs, environment_evidence, pricing_basis_metrics, request_metrics, trial_infrastructure_issue
+from metrics import aggregate_trials, agent_metrics, compare_jobs, distribution, environment_evidence, pricing_basis_metrics, request_metrics, trial_infrastructure_issue
 from tool_metrics import tool_usage_markdown
 from request_identity import attributed_requests, legacy_requests, validate_request_ledger, verify_unique_attribution
 from pricing import cost_comparison
@@ -126,6 +126,7 @@ def summarize(job, requests, tasks=None):
             "setup_seconds": duration(result.get("agent_setup")),
             "verifier_seconds": duration(result.get("verifier")),
             "metrics": request_metrics(calls),
+            "complete_task_cost_usd": None,
             "request_attribution": {**attribution, "request_ids": [r["id"] for r in calls if r.get("id")]},
             "agent_metrics": agent_metrics(directory),
             "reported_cost_usd": context.get("cost_usd"),
@@ -211,24 +212,66 @@ def pricing_basis_markdown(pricing):
                    else "按冻结费率估算，实际扣费未知。")
     lines = [explanation + "美元列、缓存净节省及费用比均表示估算。", "",
              "价格依据按来源分列；混合依据的总值不代表实际供应商扣费。", "",
-             "| 范围 | 价格依据 | 来源 | 上游 | 请求数 | 已知估算美元 | 未知估算请求 |",
-             "|---|---|---|---|---:|---:|---:|"]
+             "| 范围 | 价格依据 | 来源 | 上游 | 已知估算美元 | 未知估算请求 |",
+             "|---|---|---|---|---:|---:|"]
     labels = {"reference_only": "参考价格估算", "provider_rates": "供应商费率估算",
               "legacy_unspecified": "历史记录未声明"}
     def cell(value):
         return str(value).replace("|", "\\|").replace("\n", " ")
     for name, basis in pricing:
         for group in basis["groups"]:
-            lines.append(f'| {cell(name)} | {labels[group["kind"]]} | {cell(group["source"])} | {cell(group.get("upstream_base_url", "—"))} | {group["requests"]} | {group["known_estimated_cost_usd"]:.6f} | {group["unknown_estimate_requests"]} |')
+            lines.append(f'| {cell(name)} | {labels[group["kind"]]} | {cell(group["source"])} | {cell(group.get("upstream_base_url", "—"))} | {group["known_estimated_cost_usd"]:.6f} | {group["unknown_estimate_requests"]} |')
+    return lines
+
+
+def complete_attempt_seconds(trials):
+    """A complete wall-time distribution requires every measured attempt receipt."""
+    values = [trial.get("attempt_wall_seconds") for trial in trials]
+    return distribution(values) if values and all(value is not None for value in values) else None
+
+
+def context_diagnostics_markdown(jobs):
+    """Render token and nested-duration diagnostics independently of outcome scores."""
+    def shown(value, digits=3):
+        return "未知" if value is None else f"{value:.{digits}f}"
+
+    def tool_seconds(usage):
+        if usage is None:
+            return None
+        rows = usage.get("operations", [])
+        if any(row.get("duration_unknown") or not row.get("duration_seconds") for row in rows):
+            return None
+        return sum(row["duration_seconds"]["sum"] for row in rows)
+
+    lines = ["", "| Agent / 已判分任务 | 输入 token | 输出 token | 其中推理 token | 缓存读取 token | 缓存写入 token | 输入峰值 token |",
+             "|---|---:|---:|---:|---:|---:|---:|"]
+    for job in jobs:
+        for trial in job["trials"]:
+            metrics = trial["metrics"]
+            values = [shown(metrics.get(key), 0) for key in (
+                "input_tokens", "output_tokens", "reasoning_tokens", "cache_read_tokens", "cache_write_tokens", "peak_input_tokens")]
+            lines.append(f'| {job["job"]} / {trial["task"]} | ' + " | ".join(values) + " |")
+    lines += ["", "| Agent / 已判分任务 | 模型 await 累计秒 | 网关请求生命周期累计秒 | 脚本执行累计秒 | Kernel 操作累计秒 | 原生操作累计秒 | 观察阶段累计秒 |",
+              "|---|---:|---:|---:|---:|---:|---:|"]
+    for job in jobs:
+        for trial in job["trials"]:
+            agent = trial.get("agent_metrics") or {}
+            usage = agent.get("tool_usage")
+            kernel = tool_seconds(usage) if (usage or {}).get("scope") == "scriptact_kernel_invocations" else None
+            native = tool_seconds((agent.get("native_operations") or {}).get("tool_usage"))
+            values = [agent.get("model_await_seconds_sum"), trial["metrics"].get("model_request_seconds_sum"), agent.get("script_seconds_sum"),
+                      kernel, native, agent.get("observed_observation_seconds")]
+            lines.append(f'| {job["job"]} / {trial["task"]} | ' + " | ".join(shown(value) for value in values) + " |")
+    lines += ["", "输出包含推理子集，缓存与 token 仅用于诊断。网关生命周期可能包含迟到结算和重叠；Kernel、原生操作可能位于脚本或外层工具之内，各层累计耗时不能相加为完整耗时。未记录的层级保持未知。"]
     return lines
 
 
 def markdown(report):
     models = ", ".join(sorted({model for job in report["jobs"] for model in job["models"]}))
     lines = ["# ScriptAct 评测", "", f"实际模型：{models}。推理档位与并发以原始 config.json、网关请求 metadata 为准。", "",
-             "官方判分与运行异常分别保留，无判分的尝试计零。模型请求数、完成耗时和整次任务费用是效率指标，请求数与费用包含失败尝试。缓存命中率为读取缓存 token 总量 / 输入 token 总量，用于诊断。空缺表示数据不足。小样本结果不代表总体领先。", "",
-             "| 批次 | 完成/计划 | 通过 | 模型请求总数 | agent 耗时中位数 | 已知费用 | 每次成功总摊销美元 |",
-             "|---|---:|---:|---:|---:|---:|---:|"]
+             "先看官方质量与运行稳定性，再看完整端到端耗时和整次任务费用。官方判分与运行异常分别保留，无判分的尝试计零。费用含失败尝试；用量或实际扣费未知时保持未知。缓存与 token 用于诊断，原始请求、身份与重试计数用于归账和故障审计。小样本结果不代表总体领先。", "",
+             "| 批次 | 完成/计划 | 官方通过 | 正常通过 | agent 秒中位数 | 完整 attempt 秒中位数 | 已知模型费估算美元 | 每次成功摊销估算美元 | 实际完整费用美元 |",
+             "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
     if report.get("scope_tasks"):
         lines.insert(4, "本表限定预先声明的任务组：" + ", ".join(report["scope_tasks"]) + "。其他任务仍保留在全量报告与原始 job 中。")
         lines.insert(5, "")
@@ -244,8 +287,9 @@ def markdown(report):
     for job in report["jobs"]:
         a = job["aggregate"]
         seconds = (a["agent_seconds_all_attempts"] or {}).get("p50")
+        wall = (complete_attempt_seconds(job["trials"]) or {}).get("p50")
         lower_bound = "≥" if not a["all_cost_known"] else ""
-        lines.append(f'| {job["job"]} | {job["completed"]}/{job["planned"]} | {a["successes"]} | {a["model_requests"]} | {number(seconds, 1)} s | {lower_bound}${number(a["known_cost_usd"])} | {number(a["spend_per_success_usd"])} |')
+        lines.append(f'| {job["job"]} | {job["completed"]}/{job["planned"]} | {a["successes"]} | {a["clean_successes"]} | {number(seconds, 1)} | {number(wall, 1)} | {lower_bound}{number(a["known_cost_usd"])} | {number(a["spend_per_success_usd"])} | {number(a.get("complete_task_cost_usd"))} |')
     lines += ["", "## 费用构成", "", "费用以归属明确的网关请求账本为准，按每次请求冻结的单价核算，单位为美元；输出包含推理 token。用量或单价缺失时保持未知。适配器自报金额保留在 reported_cost_usd，对账依据与差异保留在 cost_comparison。", "",
               "| 批次 | 普通输入 | 缓存读取 | 缓存写入 | 输出 |", "|---|---:|---:|---:|---:|"]
     for job in report["jobs"]:
@@ -264,24 +308,25 @@ def markdown(report):
         for job, trial in differences:
             comparison = trial["cost_comparison"]
             lines.append(f'| {job} / {trial["task"]} | {number(comparison["reported_cost_usd"], 8)} | {number(comparison["gateway_cost_usd"], 8)} | {number(comparison["reported_minus_gateway_usd"], 8)} |')
-    lines += ["", "## 逐题证据", "", "| 批次 / 任务 | 分数 | agent 秒 | 已知费用 | 模型调用 | 输入 / 输出 token | 缓存命中率 | 输入峰值 | 异常 |", "|---|---:|---:|---:|---:|---:|---:|---:|---|"]
+    lines += ["", "## 逐题证据", "", "| 批次 / 任务 | 官方分数 | 异常 | agent 秒 | 完整 attempt 秒 | 已知模型费估算美元 | 实际完整费用美元 |", "|---|---:|---|---:|---:|---:|---:|"]
     for job in report["jobs"]:
         for trial in job["trials"]:
             m = trial["metrics"]
-            hit = m["cache_token_hit_rate"]
             issue = trial["infrastructure_issue"] or trial["exception"] or "—"
             if trial["post_agent_requests"]:
                 issue += f'; agent 阶段结束后仍有 {trial["post_agent_requests"]} 次请求'
             diagnostics = ((trial.get("agent_metrics") or {}).get("environment_diagnostics") or {}).get("issues", [])
             for diagnostic in diagnostics:
                 issue += '; 工具回执观察到 ' + diagnostic["kind"]
-            lines.append(f'| {job["job"]} / {trial["task"]} | {trial["score"]} | {number(trial["agent_seconds"], 1)} | ${number(m["known_cost_usd"])} | {m["requests"]} | {m["input_tokens"]} / {m["output_tokens"]} | {number(hit * 100 if hit is not None else None, 1)}% | {m["peak_input_tokens"]} | {issue} |')
+            lower_bound = "≥" if m["unknown_cost_requests"] else ""
+            lines.append(f'| {job["job"]} / {trial["task"]} | {trial["score"]} | {issue} | {number(trial["agent_seconds"], 1)} | {number(trial.get("attempt_wall_seconds"), 1)} | {lower_bound}{number(m["known_cost_usd"])} | {number(trial.get("complete_task_cost_usd"))} |')
     if report.get("comparisons"):
-        lines += ["", "## 共同成功任务的效率", "", "只比较双方判分通过且无运行异常的尝试，按任务等权，重复尝试先在题内取均值。比值为后者 / 前者，小于 1 表示后者在该指标上较低；须同时看上面的全部判分、异常、请求数和总成本。请求数、耗时与费用逐项比较，单项下降不能代替整体效率结论。", "",
-                  "| 前者 → 后者 | 批次完整 | 共同成功题数 | 请求数比 | 耗时比 | 费用比 |", "|---|---|---:|---:|---:|---:|"]
+        lines += ["", "## 共同成功任务的效率", "", "只比较双方判分通过且无运行或基础设施异常的尝试，按任务等权，重复尝试先在题内取均值。比值为后者 / 前者，小于 1 表示后者在该指标上较低；须同时看全部判分、异常和完整费用。缺少完整 attempt 耗时不以 agent 耗时代替；费用比要求全部请求估算已知，估算不代表实际完整扣费。", "",
+                  "| 前者 → 后者 | 批次完整 | 共同成功题数 | agent 耗时比 | 完整 attempt 耗时比 | 模型费估算比 |", "|---|---|---:|---:|---:|---:|"]
         for comparison in report["comparisons"]:
             ratios = comparison["candidate_over_reference"]
-            lines.append(f'| {comparison["reference"]} → {comparison["candidate"]} | {comparison["complete"]} | {comparison["jointly_solved_tasks"]} | {number(ratios.get("model_requests"))} | {number(ratios["agent_seconds"])} | {number(ratios["cost_usd"])} |')
+            lines.append(f'| {comparison["reference"]} → {comparison["candidate"]} | {comparison["complete"]} | {comparison["jointly_solved_tasks"]} | {number(ratios["agent_seconds"])} | {number(ratios.get("attempt_wall_seconds"))} | {number(ratios["cost_usd"])} |')
+    lines += context_diagnostics_markdown(report["jobs"])
     lines += ["", "## 缓存与上下文", "", "工作帧记录实际提示中的文本字符数；图片等非文本负载另计块数，字符数不等于 token。各分区原始 JSON 大小保留在 JSON 报告中。", "", "| 批次 / 任务 | 缓存读 / 写 token | 缓存净节省美元 | 实际上下文输入限制 | 工作帧峰值字符 | 维护 / 封段 | 协议修复 | 未知费用请求 |", "|---|---:|---:|---|---:|---:|---:|---:|"]
     for job in report["jobs"]:
         for trial in job["trials"]:
@@ -292,7 +337,7 @@ def markdown(report):
             transitions = context.get("observed_segment_transitions")
             frame_chars = ((context.get("prompt_layout") or {}).get("working_frame_text_chars") or {}).get("max")
             lines.append(f'| {job["job"]} / {trial["task"]} | {number(m["cache_read_tokens"], 0)} / {number(m["cache_write_tokens"], 0)} | {number(m["cache_net_savings_usd"])} | {limits} | {number(frame_chars, 0)} | {number(maintenance, 0)} / {number(transitions, 0)} | {number(agent.get("repair_turns"), 0)} | {m["unknown_cost_requests"]} |')
-    lines += ["", "工具调用按 JSON 的 tool_call_scope 标明层级：ScriptAct 为底层能力操作，ATIF 为外层模型工具调用；Codex 原生命令及文件修改操作另列 native_operations，各层不直接互比。完整模型请求数由网关计量。", "", "## 运行配置", ""]
+    lines += ["", "工具调用按 JSON 的 tool_call_scope 标明层级：ScriptAct 为底层能力操作，ATIF 为外层模型工具调用；Codex 原生命令及文件修改操作另列 native_operations，各层不直接互比。原始请求计数由网关计量并保留在 JSON 归账审计中。", "", "## 运行配置", ""]
     for job in report["jobs"]:
         lines.append(f'- {job["job"]}：`{json.dumps(job["configurations"], ensure_ascii=False)}`')
         if job.get("source_jobs"):
