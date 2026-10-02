@@ -33,7 +33,7 @@ export function createResponsesFetch(fetchImpl?: OpenAIModelFetch): OpenAIModelF
 /** 按 SSE 空行分帧，保留原始字节；终端后的传输清理不阻塞 SDK 的正常 flush。 */
 function terminalBody(
   body: ReadableStream<Uint8Array>,
-  signal?: Nullable<AbortSignal>
+  signal: LooseOptional<AbortSignal>
 ): ReadableStream<Uint8Array> {
   const reader = body.getReader()
   let buffer = new Uint8Array(1024)

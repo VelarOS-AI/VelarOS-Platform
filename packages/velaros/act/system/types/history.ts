@@ -1,14 +1,5 @@
 import type { ContextRef } from '@velaros-ai/context'
 
-/** 改造前的单一历史检查点；只在旧会话迁移时读取，内容转成第 1 卷的叙事。 */
-export interface HistoryCheckpoint {
-  readonly baseThrough: number
-  readonly through: number
-  readonly summary: string
-  readonly evidence: readonly ContextRef[]
-  readonly unresolved: readonly string[]
-  readonly negativeAttempts: readonly string[]
-}
 /** 搜索历史目录的有界序号范围；through 可固定跨页上界。 */
 export interface HistoryListRequest {
   readonly after?: number

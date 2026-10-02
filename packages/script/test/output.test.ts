@@ -1326,7 +1326,7 @@ test('INV-44 uncapped full requests complete selected encoding before host alloc
 })
 
 test('INV-44 full demand retains numeric, selection and automatic presentation boundaries', () => {
-  const value = 'first\n' + 'long line\n'.repeat(2500) + 'last\n'
+  const value = `first\n${'long line\n'.repeat(2500)}last\n`
   for (const mode of ['auto', 'reference', 'summary'] as const) {
     const raw = capture(value, { key: 'body', required: true, view: { mode } })
     expect(scriptOutputs.requestBudget(raw)).toEqual({

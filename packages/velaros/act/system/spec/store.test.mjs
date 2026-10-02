@@ -108,7 +108,7 @@ test('INV-13 唯一 store 成员提供完整空间操作和模板，跨重启保
   const f = await fixture(t)
   const info = await execute(
     f.session,
-    "output(await modules.describe({module:'velaros:system',export:'store',template:true}));"
+    "output(await modules.describe({module:'velaros:system',exports:['store'],template:true}));"
   )
   assert.deepEqual(Object.keys(info.exports.store.operations).sort(), [
     'ack',
@@ -166,7 +166,7 @@ test('INV-13 多主线显式共享，未授权空间不可发现；只读投影�
   await reader.context.append({ kind: 'user', body: 'read' })
   const result = await execute(
     reader,
-    "output({value:await store.get({store:currentStore,key:'public/x'}),list:await store.keys({store:currentStore}),info:await modules.describe({module:'velaros:system',export:'store'})});"
+    "output({value:await store.get({store:currentStore,key:'public/x'}),list:await store.keys({store:currentStore}),info:await modules.describe({module:'velaros:system',exports:['store']})});"
   )
   assert.equal(result.value.value, 1)
   assert.deepEqual(

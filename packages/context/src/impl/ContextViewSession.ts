@@ -28,7 +28,12 @@ import type {
   ViewIntentInput,
 } from '../types/context.js'
 import type { ContextTaskMutation } from '../types/runtime.js'
-import { contextFailure, emptyContextState, sameContextRef } from '../utils/state.js'
+import {
+  contextFailure,
+  emptyContextMetadata,
+  emptyContextState,
+  sameContextRef,
+} from '../utils/state.js'
 import { hourlyRetryMs, recentHourlyTokens, rolledHourly } from '../utils/usage.js'
 import { awaitContextOperation, readContextTask, resolveViewLimits } from '../utils/view.js'
 import { checkTaskCapsule, checkVerificationReport, checkViewIntent } from '../utils/view-input.js'
@@ -819,10 +824,7 @@ export class ContextViewSession implements ContextViewApi {
         : undefined
       const full = incremental ? undefined : await storage.load(sessionId)
       const state = incremental
-        ? ((await storage.loadMetadata!(sessionId)) ?? {
-            version: 0,
-            workingSet: { revision: 0, cursor: 0, items: [] },
-          })
+        ? ((await storage.loadMetadata!(sessionId)) ?? emptyContextMetadata())
         : (full ?? emptyContextState())
       if (prepared && prepared.version !== state.version) continue
       let task = mutation.apply(state.task ? readContextTask(state.task) : undefined)

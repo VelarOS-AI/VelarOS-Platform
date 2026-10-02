@@ -102,35 +102,37 @@ test('foundation: active history selection is independent of sealed history size
   assert(Math.max(...counts) <= 2, `selected ${counts} records for only two active messages`)
 })
 
-test('foundation: legacy collection fails closed until the runtime migrates nested references', async (t) => {
+test('foundation: unverified persistent references fail closed without rewriting or collecting objects', async (t) => {
   const f = await setup(t)
-  await f.context.append({ kind: 'user', body: 'legacy session' })
-  const objectId = await f.storage.put('s', 'legacy stable prefix')
+  await f.context.append({ kind: 'user', body: 'Unverified persistent state' })
+  const body = 'Unregistered persistent prefix'
+  const objectId = await f.storage.put('s', body)
   await f.context.append({
     kind: 'audit',
     title: 'context:segment',
-    body: JSON.stringify({
-      base: { objectId, chars: 20 },
-      entries: [],
-      from: 0,
-    }),
+    body: JSON.stringify({ base: { objectId, chars: body.length }, entries: [], from: 0 }),
   })
   const state = await f.storage.load('s')
-  const { objectReferencesVersion, ...legacy } = state
+  const { objectReferencesVersion, ...unverified } = state
   assert.equal(objectReferencesVersion, 1)
-  await f.storage.compareAndSwap('s', state.version, { ...legacy, version: state.version + 1 })
-  await assert.rejects(
-    f.storage.collect('s', { expectedVersion: state.version + 1, before: 0, dryRun: false }),
-    { code: 'CONTEXT_REFERENCES_UNVERIFIED' }
-  )
-  await f.recent.segment(signal())
-  const migrated = await f.storage.load('s')
-  assert.equal(migrated.objectReferencesVersion, 1)
-  assert(migrated.records.some((record) => record.objectId === objectId))
-  assert.deepEqual(
-    await f.storage.collect('s', { expectedVersion: migrated.version, before: 0, dryRun: false }),
-    { candidates: 0, deleted: 0 }
-  )
+  await f.storage.compareAndSwap('s', state.version, { ...unverified, version: state.version + 1 })
+  const saved = await f.storage.load('s')
+  const db = new DatabaseSync(f.path)
+  db.prepare('UPDATE objects SET touched=? WHERE session=?').run(Date.now() - 7_200_000, 's')
+  db.close()
+  const options = { expectedVersion: saved.version, before: Date.now() - 3_700_000, dryRun: false }
+  await assert.rejects(f.storage.collect('s', options), { code: 'CONTEXT_REFERENCES_UNVERIFIED' })
+  await assert.rejects(f.recent.segment(signal()), { code: 'CONTEXT_REFERENCES_UNVERIFIED' })
+  await assert.rejects(f.recent.currentBoundary(signal()), {
+    code: 'CONTEXT_REFERENCES_UNVERIFIED',
+  })
+  assert.deepEqual(await f.storage.load('s'), saved)
+  assert.equal(await f.storage.get('s', objectId), body)
+  const reopened = await f.reopen()
+  await assert.rejects(reopened.recent.segment(signal()), { code: 'CONTEXT_REFERENCES_UNVERIFIED' })
+  await assert.rejects(f.storage.collect('s', options), { code: 'CONTEXT_REFERENCES_UNVERIFIED' })
+  assert.deepEqual(await f.storage.load('s'), saved)
+  assert.equal(await f.storage.get('s', objectId), body)
 })
 
 test('foundation: current constraints retire by later user evidence without changing history or resurrecting on summary refresh', async (t) => {

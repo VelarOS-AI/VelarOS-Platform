@@ -1612,7 +1612,7 @@ export class ContextMemory implements ContextMemoryApi {
   ): Promise<ContextSegment> {
     const segment = await this.recent.segment(signal)
     if (!segment) {
-      const from = await this.recent.migrate(signal)
+      const from = await this.recent.currentBoundary(signal)
       return this.start(
         { index: 1, revision: 0, from, carried: [], entries: [], reason: 'start' },
         maxChars,

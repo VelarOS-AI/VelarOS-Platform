@@ -598,6 +598,7 @@ test('a frozen task-retention candidate keeps accepted receipt history stable ac
   for (const defaultRetain of [2, 'task']) {
     let calls = 0
     const receipts = []
+    const currentResults = []
     const result = await runTask({
       workspace: await directory(t),
       output: await directory(t),
@@ -609,6 +610,10 @@ test('a frozen task-retention candidate keeps accepted receipt history stable ac
         limits: { contextTokens: 128000, inputTokens: 110000, outputTokens: 12000 },
         estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
         async *stream(request) {
+          const frame = JSON.parse(
+            request.materials.find((material) => material.origin === 'runtime-view').text
+          )
+          currentResults.push(frame.partitions.recent.results)
           const marker = request.compiledPrompt.match(/当前帧标记：(@@s[\da-f]+)。普通/)[1]
           const receipt = request.history.find(
             (message) =>
@@ -630,11 +635,36 @@ test('a frozen task-retention candidate keeps accepted receipt history stable ac
     })
     assert.equal(result.status, 'completed', result.failure)
     assert.equal(calls, 4)
-    histories.push(receipts)
+    histories.push({ receipts, currentResults })
   }
-  assert.equal(JSON.parse(histories[0].at(-1).split('\n')[0]).bodyIncluded, false)
-  assert.equal(JSON.parse(histories[1].at(-1).split('\n')[0]).bodyIncluded, true)
-  assert.equal(histories[1][0], histories[1].at(-1))
+  for (const { receipts, currentResults } of histories) {
+    assert.equal(receipts.length, 3)
+    const header = JSON.parse(receipts[0].split('\n')[0])
+    assert.equal(header.bodyIncluded, true)
+    const body = JSON.parse(receipts[0].split('\n当次输出：\n')[1])
+    assert.equal(body.result.value.default, 1)
+    // Expiry changes the current lease; it never rewrites an already accepted history body.
+    assert(receipts.every((receipt) => receipt === receipts[0]))
+    assert(currentResults[1].some((result) => result.ref === header.ref.id))
+  }
+  const firstRef = (history) => JSON.parse(history.receipts[0].split('\n')[0]).ref.id
+  assert.deepEqual(
+    histories[0].currentResults
+      .slice(1, 3)
+      .map(
+        (results) => results.find((result) => result.ref === firstRef(histories[0])).remainingTurns
+      ),
+    [2, 1]
+  )
+  assert.equal(
+    histories[0].currentResults.at(-1).some((result) => result.ref === firstRef(histories[0])),
+    false
+  )
+  for (const results of histories[1].currentResults.slice(1))
+    assert.equal(
+      results.find((result) => result.ref === firstRef(histories[1])).remainingTurns,
+      'task'
+    )
 })
 
 test('an image-enabled candidate delivers project images as multimodal model input', async (t) => {
@@ -706,9 +736,9 @@ test('a discovery-only candidate keeps project, shell and images available witho
         if (calls === 3) assert(request.images.some((image) => image.data === png))
         const scripts = [
           `import {modules} from 'velaros:system'; import {output} from 'velaros';
-const project = await modules.describe({module:'velaros:project',export:'read'});
-const shell = await modules.describe({module:'velaros:shell',export:'run'});
-const images = await modules.describe({module:'velaros:images',export:'view'});
+const project = await modules.describe({module:'velaros:project',exports:['read']});
+const shell = await modules.describe({module:'velaros:shell',exports:['run']});
+const images = await modules.describe({module:'velaros:images',exports:['view']});
 if (!project.declarations || !shell.declarations || !images.declarations) throw 'Discovery failed';
 output({marker:'DISCOVERY_OK',images:images.declarations});`,
           "import {view} from 'velaros:images'; await view({files:[{path:'pixel.png'}]});",

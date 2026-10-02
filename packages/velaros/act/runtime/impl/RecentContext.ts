@@ -5,7 +5,7 @@ import type {
   ContextState,
   ContextStorage,
 } from '@velaros-ai/context'
-import { Log } from '@velaros-ai/core'
+import { Log, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 import { isNull, isUndefined } from '@velaros-ai/core'
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -15,7 +15,6 @@ import { scriptOutputs } from '@velaros-ai/script'
 
 import { ContextPatchLimits } from '../../system/contract/constants.js'
 import type {
-  HistoryCheckpoint,
   HistoryListRequest,
   HistoryPage,
   VolumeNarrative,
@@ -71,15 +70,14 @@ export interface RecentContextApi {
   commit(segment: ContextSegment, signal: AbortSignal): Promise<void>
   /** 封段切点：最近 keep 条记录（至少最近两个响应及其结果）留给新段，返回切点序号；能封的不足一个响应时返回 undefined。 */
   cut(segment: ContextSegment, keep: number, signal: AbortSignal): Promise<Optional<number>>
-  /** 本授权代次第一段的起点；改造前留下的历史检查点转成第 1 卷，起点从它之后开始。 */
-  migrate(signal: AbortSignal): Promise<number>
+  /** 当前任务与授权代次的段起点；只读取当前元数据。 */
+  currentBoundary(signal: AbortSignal): Promise<number>
 }
 
 /** 近期分区只投影已落盘响应和回执，整理不会重放脚本。 */
 export class RecentContext implements RecentContextApi {
   private readonly resultModes = new Map<string, boolean>()
   private cacheReset = 0
-  private referencesReady = false
   public constructor(
     private readonly id: string,
     private readonly context: ContextRuntime,
@@ -89,86 +87,23 @@ export class RecentContext implements RecentContextApi {
   private async snapshot(
     selections: Parameters<NonNullable<ContextStorage['selectSnapshot']>>[1]
   ): Promise<Nullable<ContextState>> {
-    await this.migrateReferences()
-    if (!this.storage.selectSnapshot) return this.storage.load(this.id)
-    const selected = await this.storage.selectSnapshot(this.id, [
-      { title: 'search:history-reset', latest: true },
-      ...selections,
-    ])
-    return selected ? { ...selected.metadata, records: selected.records } : null
-  }
-
-  /** 旧 Runtime 的嵌套正文由其 owner 一次性登记；通用存储不解析业务 JSON。 */
-  private async migrateReferences(): Promise<void> {
-    if (this.referencesReady) return
-    const metadata = this.storage.loadMetadata
-      ? await this.storage.loadMetadata(this.id)
-      : this.storage.selectSnapshot
-        ? (await this.storage.selectSnapshot(this.id, []))?.metadata
-        : undefined
-    if (metadata?.objectReferencesVersion === 1) {
-      this.referencesReady = true
-      return
-    }
-    for (let attempt = 0; attempt < 32; attempt++) {
-      const state = await this.storage.load(this.id)
-      if (!state) return
-      if (state.objectReferencesVersion === 1) {
-        this.referencesReady = true
-        return
-      }
-      const protectedObjects = new Set(state.records.map((record) => record.objectId))
-      const append: ContextRecord[] = []
-      for (const record of state.records) {
-        if (
-          record.title !== 'context:segment' &&
-          record.title !== 'context:delivered' &&
-          !record.title.startsWith('context:frame:')
-        )
-          continue
-        const body = await this.storage.get(this.id, record.objectId)
-        if (isNull(body)) throw new AppError('NOT_FOUND', '旧上下文记录缺失，不能确认正文引用完整')
-        const value = JSON.parse(body) as {
-          base?: { objectId: string }
-          entries?: ReadonlyArray<{ objectId: string }>
-          segment?: { fresh?: ReadonlyArray<{ objectId: string }> }
-        }
-        const objects = [
-          value.base?.objectId,
-          ...(value.entries ?? []).map((item) => item.objectId),
-          ...(value.segment?.fresh ?? []).map((item) => item.objectId),
-        ]
-        for (const objectId of objects) {
-          if (!objectId || protectedObjects.has(objectId)) continue
-          const text = await this.storage.get(this.id, objectId)
-          if (isNull(text)) throw new AppError('NOT_FOUND', '旧段正文缺失，引用迁移尚未完成')
-          protectedObjects.add(objectId)
-          append.push({
-            ref: { sessionId: this.id, id: crypto.randomUUID() },
-            sequence: (state.records.at(-1)?.sequence ?? 0) + append.length + 1,
-            kind: 'audit',
-            title: 'context:segment-body',
-            objectId,
-            chars: text.length,
-            sources: [record.ref],
-            createdAt: new Date().toISOString(),
-          })
-        }
-      }
-      const { records, ...prior } = state
-      const next = { ...prior, version: state.version + 1, objectReferencesVersion: 1 as const }
-      const committed = this.storage.compareAndSwapMetadata
-        ? await this.storage.compareAndSwapMetadata(this.id, state.version, next, append)
-        : await this.storage.compareAndSwap(this.id, state.version, {
-            ...next,
-            records: [...records, ...append],
-          })
-      if (committed) {
-        this.referencesReady = true
-        return
-      }
-    }
-    throw new AppError('CONFLICT', '正文引用迁移持续冲突')
+    const selected = this.storage.selectSnapshot
+      ? await this.storage.selectSnapshot(this.id, [
+          { title: 'search:history-reset', latest: true },
+          ...selections,
+        ])
+      : null
+    const state = this.storage.selectSnapshot
+      ? selected
+        ? { ...selected.metadata, records: selected.records }
+        : null
+      : await this.storage.load(this.id)
+    if (state && state.objectReferencesVersion !== 1)
+      throw new AppError(
+        'CONTEXT_REFERENCES_UNVERIFIED',
+        '持久正文引用格式未确认，不能读取段历史或回收对象。'
+      )
+    return state
   }
 
   private reset(state: Nullable<ContextState>): number {
@@ -514,13 +449,14 @@ export class RecentContext implements RecentContextApi {
             )
           : undefined
       const delivered = {
-        ...(feedback.length ? { feedback } : {}),
-        ...(outputProofs?.length ? { outputProofs } : {}),
-        ...(role === 'user' && current?.structuredOutput && current.outputViews?.length
-          ? { outputViews: current.outputViews }
-          : {}),
-        ...(rendered.outputFingerprint ? { outputFingerprint: rendered.outputFingerprint } : {}),
-        ...(rendered.fullMaterial ? { fullMaterial: rendered.fullMaterial } : {}),
+        feedback: optionalWhen(feedback.length, feedback),
+        outputProofs: optionalWhen(outputProofs?.length, outputProofs),
+        outputViews: optionalWhen(
+          role === 'user' && current?.structuredOutput && current.outputViews?.length,
+          current?.outputViews
+        ),
+        outputFingerprint: toOptional(rendered.outputFingerprint),
+        fullMaterial: toOptional(rendered.fullMaterial),
       }
       const frozenBody = await this.context.append(
         {
@@ -627,7 +563,7 @@ export class RecentContext implements RecentContextApi {
       outputFingerprint: scriptOutputs.hash([
         this.id,
         record.ref.id,
-        current?.sourceRef ?? null,
+        toNullable(current?.sourceRef),
         encoded,
       ]),
       fullMaterial:
@@ -847,54 +783,10 @@ export class RecentContext implements RecentContextApi {
     return responses.some((record) => record.sequence <= through) ? through : undefined
   }
 
-  public async migrate(signal: AbortSignal): Promise<number> {
+  public async currentBoundary(signal: AbortSignal): Promise<number> {
     signal.throwIfAborted()
-    const state = await this.snapshot([
-      { title: 'search:history-checkpoint', latest: true },
-      { title: 'context:volume', latest: true },
-    ])
-    const reset = this.reset(state)
-    const record = state?.records.findLast(
-      (item) => item.title === 'search:history-checkpoint' && item.sequence > reset
-    )
-    if (!record) return reset
-    const checkpoint = JSON.parse(
-      (await this.storage.get(this.id, record.objectId))!
-    ) as HistoryCheckpoint
-    // 已经迁移过（本代次已有卷）就不再重复写
-    if (!state?.records.some((item) => item.title === 'context:volume' && item.sequence > reset)) {
-      const volume: ContextVolume = {
-        level: 1,
-        from: Math.max(reset, checkpoint.baseThrough),
-        through: checkpoint.through,
-        turns: 0,
-        results: 0,
-        failures: 0,
-        effects: 0,
-        notes: [],
-        inputs: 0,
-        skeleton: '',
-      }
-      const sealed = await this.context.append(
-        { kind: 'checkpoint', title: 'context:volume', body: JSON.stringify(volume), sources: [] },
-        signal
-      )
-      await this.context.append(
-        {
-          kind: 'checkpoint',
-          title: 'context:volume-narrative',
-          body: JSON.stringify({
-            volume: sealed.ref,
-            summary: checkpoint.summary,
-            evidence: checkpoint.evidence,
-            unresolved: checkpoint.unresolved,
-            negativeAttempts: checkpoint.negativeAttempts,
-          }),
-          sources: [sealed.ref, record.ref],
-        },
-        signal
-      )
-    }
-    return Math.max(reset, checkpoint.through)
+    const state = await this.snapshot([])
+    signal.throwIfAborted()
+    return this.reset(state)
   }
 }

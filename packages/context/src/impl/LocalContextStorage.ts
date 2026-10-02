@@ -429,7 +429,7 @@ export class LocalContextStorage implements ContextStorage {
       if (row && JSON.parse(String(row.state)).objectReferencesVersion !== 1)
         throw contextFailure(
           'CONTEXT_REFERENCES_UNVERIFIED',
-          '旧会话尚未完成持久正文引用迁移；请先通过所属 Runtime 恢复会话后再回收。'
+          '持久正文引用格式未确认，禁止回收对象。'
         )
       const candidates = this.db
         .prepare(

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 
-import { createOperationRuntime } from '@velaros-ai/kernel'
 import type { InvocationJournal, InvocationRecord } from '@velaros-ai/kernel'
+import { createOperationRuntime } from '@velaros-ai/kernel'
 
 import { codeProgramChecker } from '../src/impl/CodeProgramChecker'
 import { createCodeSurfaceSession } from '../src/impl/CodeSurfaceSession'

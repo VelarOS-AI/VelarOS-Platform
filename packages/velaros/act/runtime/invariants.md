@@ -16,7 +16,7 @@
 | INV-12 | 任意流分片和原文边界得到相同解析，未知声明或未闭合段不派发；工作指令从本帧允许的控制头开始，缺少工作决策时，修复提示给出当前帧标记及本作用域允许的控制头；未闭合提示给出精确闭合行并要求完整重发，修复后整批只执行一次 | 测试 | test/text-decoder.test.mjs、test/text-runtime.test.mjs |
 | INV-13 | 多执行身份独立；异步按额度调度；done 等待结果；取消及恢复不盲重放 | 测试 | test/text-runtime.test.mjs |
 | INV-14 | 用户图片、冻结宿主参数与原文在真实 runner / provider 编码中保真 | 测试 | test/text-runtime.test.mjs |
-| INV-15 | 段、卷与历史目录遵守当前授权代次；封卷留下最近响应，被封的原文仍可分页召回；卷写入后不再修改，目录逐级合并且条数有界；不可变结果分类缓存有界、重置换代清空、正文缺失不缓存；旧检查点只迁移一次 | 测试 | test/context-management.test.mjs、test/context-index.test.mjs |
+| INV-15 | 段、卷与历史目录遵守当前授权代次；封卷留下最近响应，被封的原文仍可分页召回；卷写入后不再修改，目录逐级合并且条数有界；不可变结果分类缓存有界、重置换代清空、正文缺失不缓存 | 测试 | test/context-management.test.mjs、test/context-index.test.mjs |
 | INV-16 | 长轮次 Runtime 视图不无界累积过期结果：租约结束的冻结正文在容量不足时一次性退成引用卡，每个请求都在窗口内；释放租约仍可召回不可变原文 | 测试 | test/context-management.test.mjs |
 | INV-17 | 搜索关闭前保持 claim 和能力范围；清理逐项尝试，失败可见；父租约释放前等待搜索与子模型账务结算 | 测试 | test/advanced-search.test.mjs |
 | INV-18 | 所有正式会话使用同一五分区组装器；历史正文只发送一次，结果关联源码和原生图像保持可用；各投影阶段可用一致索引快照且不改写历史 | 测试 | test/context-memory.test.mjs、test/context-index.test.mjs |

@@ -20,6 +20,7 @@ export class RuntimeWorkspaceBinding implements RuntimeWorkspaceBindingApi {
     for (;;) {
       const state = (await this.storage.load(sessionId)) ?? {
         version: 0,
+        objectReferencesVersion: 1,
         records: [],
         workingSet: { revision: 0, cursor: 0, items: [] },
       }

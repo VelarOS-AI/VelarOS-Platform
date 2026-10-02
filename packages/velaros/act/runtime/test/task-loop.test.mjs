@@ -75,7 +75,6 @@ for (const defect of ['artifact', 'protection']) {
     const snapshots = []
     const requests = []
     let checks = 0
-    let runtime
     t.after(async () => {
       await runtime?.close()
       await host.dispose()
@@ -92,7 +91,7 @@ for (const defect of ['artifact', 'protection']) {
       })
       return result
     }
-    runtime = await createRuntime({
+    const runtime = await createRuntime({
       workspace: project,
       dataDir: join(root, 'state'),
       runner: nodeSubprocessCodeRunner,
@@ -278,8 +277,7 @@ test('task opt-in body delivery checks accepted request text, then repairs a ref
   })
   const checks = []
   const requests = []
-  let runtime
-  runtime = await createRuntime({
+  const runtime = await createRuntime({
     workspace: project,
     dataDir: join(root, 'state'),
     runner: nodeSubprocessCodeRunner,

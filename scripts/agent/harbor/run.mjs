@@ -78,9 +78,9 @@ export async function runTask({
       project: identity?.runtimeOptions?.project,
       modules: [shell],
       residentModules: identity?.runtimeOptions?.residentModules ?? [
-        'velaros:project',
-        'velaros:shell',
-        ...(identity?.runtimeOptions?.project?.images ? ['velaros:images'] : []),
+        { module: 'velaros:project' },
+        { module: 'velaros:shell' },
+        ...(identity?.runtimeOptions?.project?.images ? [{ module: 'velaros:images' }] : []),
       ],
       memory: false,
       modelTools: { concurrency: 1 },

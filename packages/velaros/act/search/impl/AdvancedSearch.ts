@@ -354,6 +354,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
     // 跨连接 CAS 占位，崩溃的活动在期限前不重放。
     const snapshot = (await this.dependencies.storage.load(sessionId)) ?? {
       version: 0,
+      objectReferencesVersion: 1 as const,
       records: [],
       workingSet: { revision: 0, cursor: 0, items: [] },
     }

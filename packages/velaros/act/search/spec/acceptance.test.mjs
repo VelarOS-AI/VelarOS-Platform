@@ -2,18 +2,22 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 
-import { ContextLimits } from '@velaros-ai/context'
+import { ContextLimits, createContextRuntime } from '@velaros-ai/context'
+import { localContextStorage } from '@velaros-ai/context/node'
+import { AppError } from '@velaros-ai/core/error'
 import {
   codeProgramChecker,
   createCodeSurfaceSession,
   nodeSubprocessCodeRunner,
 } from '@velaros-ai/script'
 
+import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { SearchLimits } from '../../../dist/act/search/contract/constants.js'
 import {
   VelarEvidenceModule,
   VelarSearchModule,
 } from '../../../dist/act/search/contract/surface.js'
+import { AdvancedSearch } from '../../../dist/act/search/impl/AdvancedSearch.js'
 import { evidenceModule, searchModule } from '../../../dist/act/search/index.js'
 import { verifyModule } from '../../runtime/test/support/module-contract.mjs'
 
@@ -21,6 +25,59 @@ test('INV-1 search 的实际操作与模板一致', () =>
   verifyModule(searchModule, new URL('../template.js', import.meta.url)))
 test('INV-1 evidence 的实际操作与模板一致', () =>
   verifyModule(evidenceModule, new URL('../evidence-template.js', import.meta.url)))
+
+test('新搜索首次持久化采用当前正文引用格式，不依赖历史迁移', async (t) => {
+  const storage = localContextStorage({ path: ':memory:' })
+  t.after(() => storage.close())
+  let sessionId
+  const search = new AdvancedSearch({
+    storage,
+    evidence: { sources: () => [] },
+    options: {
+      defaultProfile: 'public',
+      profiles: {
+        public: {
+          modelCalls: 2,
+          modelTokens: 120000,
+          finalizationTokens: 20000,
+          timeoutMs: 20000,
+          callTimeoutMs: 2000,
+          finalizationMs: 3000,
+          outputTokens: 2048,
+          projectionChars: 48000,
+          sourceQueries: 8,
+          candidates: 32,
+          reads: 8,
+          readBytes: 64000,
+        },
+      },
+    },
+    parentDeadline: () => undefined,
+    view: () => ({ inspect: async () => ({ revision: 1 }) }),
+    tools: {
+      begin: async (id) => {
+        sessionId = id
+        throw new AppError('UNAVAILABLE', '公开夹具在持久占位后停止')
+      },
+    },
+  })
+  await assert.rejects(
+    search.run(
+      { query: 'public initial state' },
+      {
+        invocation: { sessionId: 'parent', id: 'claim', executionId: 'execution' },
+        signal: new AbortController().signal,
+      }
+    ),
+    { code: 'UNAVAILABLE' }
+  )
+  const state = await storage.load(sessionId)
+  assert.equal(state.objectReferencesVersion, 1)
+  assert(state.records.some((record) => record.title === 'search:state'))
+  const context = createContextRuntime({ storage, sessionId })
+  const recent = new RecentContext(sessionId, context, storage)
+  assert.equal(await recent.currentBoundary(new AbortController().signal), 0)
+})
 
 /** 模板经真实操作类与隔离程序运行；宿主来源由用例固定，记录各次操作。 */
 async function runTemplate(surface, definition, file, expression) {

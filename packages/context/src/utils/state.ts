@@ -1,14 +1,17 @@
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ContextRef, ContextState } from '../types/context.js'
-/** 创建尚未有记录的会话。 */
-export function emptyContextState(): ContextState {
+import type { ContextMetadata, ContextRef, ContextState } from '../types/context.js'
+/** 创建当前格式的初始会话元数据；完整状态和增量写入共用这份初值。 */
+export function emptyContextMetadata(): ContextMetadata {
   return {
     version: 0,
     objectReferencesVersion: 1,
-    records: [],
     workingSet: { revision: 0, cursor: 0, items: [] },
   }
+}
+/** 创建尚未有记录的会话。 */
+export function emptyContextState(): ContextState {
+  return { ...emptyContextMetadata(), records: [] }
 }
 /** 按引用身份比较，避免对象引用导致重复。 */
 export function sameContextRef(a: ContextRef, b: ContextRef): boolean {

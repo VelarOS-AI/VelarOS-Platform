@@ -69,7 +69,7 @@ if (values['resident-modules'] !== undefined) {
     throw new Error(
       '--resident-modules must be none or unique project,shell,images names; images requires --project-images'
     )
-  runtimeOptions.residentModules = modules.map((name) => `velaros:${name}`)
+  runtimeOptions.residentModules = modules.map((name) => ({ module: `velaros:${name}` }))
 }
 if (values['resident-exports'] !== undefined) {
   const names = values['resident-exports'].split(',')
@@ -83,7 +83,7 @@ if (values['resident-exports'] !== undefined) {
     )
   runtimeOptions.residentModules = [
     ...(runtimeOptions.residentModules ?? []),
-    ...selected.map((match) => ({ module: `velaros:${match[1]}`, export: match[2] })),
+    ...selected.map((match) => ({ module: `velaros:${match[1]}`, exports: [match[2]] })),
   ]
 }
 if (values['working-window'] !== undefined) {

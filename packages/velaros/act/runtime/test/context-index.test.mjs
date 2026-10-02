@@ -66,9 +66,27 @@ for (const mode of ['indexed', 'fallback', 'read-only-index', 'legacy-selector']
       t.mock.method(f.storage, 'load', () => {
         throw Error('unexpected full snapshot')
       })
+    const sourceRef = crypto.randomUUID()
+    await f.programs.publish(
+      [
+        {
+          program: { source: 'export default 1;' },
+          version: { sourceRef, kind: 'observation', baseObservation: null, reason: 'first' },
+        },
+      ],
+      { id: crypto.randomUUID(), fingerprint: 'register-real-observer', expectedObservation: null },
+      {
+        status: 'completed',
+        executed: false,
+        observe: { status: 'updated', sourceRef, executed: false },
+      },
+      true,
+      false,
+      signal()
+    )
     await Promise.all([
-      f.programs.observeHealth('source', 'one', false, false),
-      f.programs.observeHealth('source', 'two', false, false),
+      f.programs.observeHealth(sourceRef, 'one', false, false),
+      f.programs.observeHealth(sourceRef, 'two', false, false),
     ])
     assert.equal((await f.programs.state()).health.failures, 2)
     const control = { id: crypto.randomUUID(), fingerprint: 'same', expectedObservation: null }
@@ -479,40 +497,28 @@ for (const mode of ['indexed', 'fallback', 'read-only-index', 'legacy-selector']
     await recent.narrate(fresh, { ...narrative, evidence: [next[0].ref] }, signal())
   })
 
-test('an old history checkpoint becomes the first volume once and the first segment starts after it', async (t) => {
+test('current history boundary follows task and authorization metadata without converting persisted checkpoints', async (t) => {
   const f = await fixture(t)
   const recent = new RecentContext('s', f.context, f.storage)
-  const pairs = []
-  for (let i = 0; i < 3; i++) {
-    await f.context.append({ kind: 'assistant', body: `response ${i}` })
-    pairs.push(
-      await f.context.append({
-        kind: 'audit',
-        title: `script:${crypto.randomUUID()}:result`,
-        body: '{}',
-      })
-    )
-  }
-  assert.equal(await recent.migrate(signal()), 0)
-  await f.context.append({
+  assert.equal(await recent.currentBoundary(signal()), 0)
+  const checkpoint = await f.context.append({
     kind: 'checkpoint',
     title: 'search:history-checkpoint',
-    body: JSON.stringify({
-      baseThrough: 0,
-      through: pairs[0].sequence,
-      summary: 'old summary',
-      evidence: [pairs[0].ref],
-      unresolved: ['open'],
-      negativeAttempts: ['tried'],
-    }),
+    body: 'Opaque persisted checkpoint: no layout parsing',
   })
-  assert.equal(await recent.migrate(signal()), pairs[0].sequence)
-  assert.equal(await recent.migrate(signal()), pairs[0].sequence)
-  const volumes = await recent.volumes(signal())
-  assert.equal(volumes.length, 1)
-  assert.equal(volumes[0].volume.through, pairs[0].sequence)
-  assert.equal(volumes[0].volume.skeleton, '')
-  assert.deepEqual(volumes[0].narrative.negativeAttempts, ['tried'])
+  const saved = await f.storage.load('s')
+  assert.equal(await recent.currentBoundary(signal()), 0)
+  assert.deepEqual(await f.storage.load('s'), saved)
+  assert.equal(
+    await f.storage.get('s', checkpoint.objectId),
+    'Opaque persisted checkpoint: no layout parsing'
+  )
+  const reset = await f.context.append({
+    kind: 'audit',
+    title: 'search:history-reset',
+    body: 'Current authorization',
+  })
+  assert.equal(await recent.currentBoundary(signal()), reset.sequence)
 })
 
 test('the volume directory merges the oldest volumes a level up and stays bounded', async (t) => {

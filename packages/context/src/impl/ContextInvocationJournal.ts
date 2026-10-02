@@ -10,6 +10,7 @@ import type {
 import type { ContextStorage } from '../contract/requires.js'
 import type { ContextState } from '../types/context.js'
 import { journalKey, journalState } from '../utils/journal.js'
+import { emptyContextMetadata, emptyContextState } from '../utils/state.js'
 
 /** 用上下文对象存储兑现 Kernel 的持久化调用契约。 */
 export interface ContextInvocationJournalApi {
@@ -154,10 +155,7 @@ class ContextInvocationJournal implements ContextInvocationJournalApi {
         this.storage.compareAndSwapMetadata &&
         this.storage.records
       ) {
-        const state = (await this.storage.loadMetadata(key)) ?? {
-          version: 0,
-          workingSet: { revision: 0, cursor: 0, items: [] },
-        }
+        const state = (await this.storage.loadMetadata(key)) ?? emptyContextMetadata()
         if (!isEmpty((await this.storage.records(key, { refId: id, limit: 1 })).items)) return
         const entry = {
           ref: { sessionId, id },
@@ -179,11 +177,7 @@ class ContextInvocationJournal implements ContextInvocationJournalApi {
           return
         continue
       }
-      const state = (await this.storage.load(key)) ?? {
-        version: 0,
-        records: [],
-        workingSet: { revision: 0, cursor: 0, items: [] },
-      }
+      const state = (await this.storage.load(key)) ?? emptyContextState()
       if (state.records.some((record) => record.ref.id === id)) return
       const entry = {
         ref: { sessionId, id },

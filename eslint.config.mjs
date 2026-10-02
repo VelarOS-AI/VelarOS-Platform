@@ -106,6 +106,7 @@ export default [
   {
     ignores: [
       '**/.git/**',
+      '.velaros-workspace/**',
       '**/node_modules/**',
       '**/dist/**',
       '**/out/**',

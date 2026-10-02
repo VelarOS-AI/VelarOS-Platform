@@ -40,7 +40,7 @@ export interface WorkingSet {
 /** 一次持久化提交的完整元数据，正文独立保存。 */
 export interface ContextState {
   readonly version: number
-  /** 1 表示持久正文均有标准记录引用；旧会话须由原文 owner 补齐引用后才能回收。 */
+  /** 当前格式固定为 1，持久正文均须登记标准记录引用；未确认该格式的状态禁止回收。 */
   readonly objectReferencesVersion?: 1
   readonly records: readonly ContextRecord[]
   readonly workingSet: WorkingSet
