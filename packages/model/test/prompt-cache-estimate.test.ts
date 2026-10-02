@@ -167,6 +167,402 @@ test('the driver sends cache markers and reports cache reads and writes', async 
   expect(seen[0].prompt.at(-1).providerOptions).toBeUndefined()
 })
 
+test('automatic OpenAI boundaries use remaining slots without selecting an existing or unsupported endpoint', () => {
+  const marked = (text: string) => ({
+    role: 'user',
+    content: [{ type: 'text', text }],
+    providerOptions: { velaros: { promptCacheBreakpoint: true } },
+  })
+  for (const last of [
+    {
+      ...marked('explicit endpoint'),
+      content: [
+        {
+          type: 'text',
+          text: 'explicit endpoint',
+          providerOptions: { openai: { promptCacheBreakpoint: { mode: 'explicit' } } },
+        },
+      ],
+    },
+    {
+      ...marked('image endpoint'),
+      content: [
+        { type: 'file', mediaType: 'image/png', data: new URL('https://offline.invalid/image') },
+      ],
+    },
+  ]) {
+    const stable = last.content[0]?.type === 'file' ? ['old', 'middle', 'new'] : ['old', 'new']
+    const options = { prompt: [...stable.map(marked), last] } as never
+    const snapshot = JSON.stringify(options)
+    const translated = applyPromptCacheCallOptions(options, {
+      sessionKey: true,
+      openaiBreakpoints: true,
+    })
+    for (const message of translated.prompt.slice(0, stable.length))
+      expect(message).toMatchObject({
+        content: [{ providerOptions: { openai: { promptCacheBreakpoint: { mode: 'explicit' } } } }],
+      })
+    expect(JSON.stringify(options)).toBe(snapshot)
+  }
+})
+
+test('message cache translation strips the internal namespace and respects a false marker', () => {
+  for (const openaiBreakpoints of [true, false, undefined]) {
+    const options = {
+      providerOptions: { velaros: { promptCacheKey: 'session', internal: 'private' } },
+      prompt: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'marked' }],
+          providerOptions: { velaros: { promptCacheBreakpoint: true, internal: 'private' } },
+        },
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'unmarked' }],
+          providerOptions: {
+            velaros: { promptCacheBreakpoint: false, internal: 'private' },
+            other: { keep: 'caller' },
+          },
+        },
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'internal-only' }],
+          providerOptions: { velaros: { internal: 'private' }, other: { keep: 'caller' } },
+        },
+      ],
+    } as never
+    const snapshot = JSON.stringify(options)
+    const translated = applyPromptCacheCallOptions(options, { sessionKey: true, openaiBreakpoints })
+    expect(JSON.stringify(translated)).not.toContain('velaros')
+    expect(translated.prompt[1]?.providerOptions).toEqual({ other: { keep: 'caller' } })
+    expect(translated.prompt[2]?.providerOptions).toEqual({ other: { keep: 'caller' } })
+    expect(JSON.stringify(options)).toBe(snapshot)
+  }
+})
+
+/** 原生 Anthropic 适配器和实际 SDK 出线校验；所有 fetch 都由本地夹具截获。 */
+async function captureAnthropicCacheWire(options: readonly unknown[]) {
+  const composition = createModelRuntimeComposition({
+    environment: {},
+    providerScripts: { configPaths: [] },
+  })
+  const bodies: Array<{
+    cache_control?: unknown
+    tools?: Array<{ name: string; cache_control?: unknown }>
+    system?: Array<{ text: string; cache_control?: unknown }>
+    messages: Array<{ content: Array<{ type: string; text?: string; cache_control?: unknown }> }>
+  }> = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = (async (input: unknown, init: { body?: unknown }) => {
+    expect(String(input)).toBe('https://offline.invalid/v1/messages')
+    bodies.push(JSON.parse(String(init.body)))
+    return Response.json(
+      {
+        type: 'error',
+        error: { type: 'invalid_request_error', message: 'offline Anthropic cache fixture' },
+      },
+      { status: 400 }
+    )
+  }) as typeof fetch
+  try {
+    const factory = composition.agentModelRuntime.createAgentProvider({
+      provider: 'anthropic',
+      apiKey: 'offline-fixture',
+      baseURL: 'https://offline.invalid/v1',
+      reasoningLevel: 'low',
+    })
+    for (const request of options)
+      await expect(factory('claude-sonnet-4-5').doGenerate(request as never)).rejects.toThrow(
+        'offline Anthropic cache fixture'
+      )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+  return bodies
+}
+
+const anthropicControl = { type: 'ephemeral' }
+const anthropicMarked = (text: string) => ({
+  role: 'user',
+  content: [{ type: 'text', text }],
+  providerOptions: { velaros: { promptCacheBreakpoint: true } },
+})
+
+test('Anthropic native budget preserves the stable opening and latest accepted prefix without losing caller boundaries', async () => {
+  const [canonical, caller] = await captureAnthropicCacheWire([
+    {
+      prompt: ['base', 'goal', 'stable-result', 'history-end', 'accepted-frame'].map(
+        anthropicMarked
+      ),
+    },
+    {
+      prompt: [
+        ...['base', 'goal', 'stable-result', 'history-end'].map(anthropicMarked),
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'caller-explicit' }],
+          providerOptions: { anthropic: { cacheControl: anthropicControl } },
+        },
+      ],
+    },
+  ])
+  const marked = (body: typeof canonical) =>
+    body!.messages
+      .flatMap((m) => m.content)
+      .filter((p) => p.cache_control)
+      .map((p) => p.text)
+  expect(marked(canonical)).toEqual(['base', 'stable-result', 'history-end', 'accepted-frame'])
+  expect(marked(caller)).toEqual(['base', 'stable-result', 'history-end', 'caller-explicit'])
+})
+
+test('Anthropic reserves explicit tool, system and content endpoints and deduplicates a shadowed message option', async () => {
+  const request = {
+    tools: [
+      {
+        type: 'function',
+        name: 'caller-tool',
+        inputSchema: { type: 'object', properties: {} },
+        providerOptions: { anthropic: { cacheControl: anthropicControl } },
+      },
+    ],
+    prompt: [
+      {
+        role: 'system',
+        content: 'caller-system',
+        providerOptions: { anthropic: { cache_control: anthropicControl } },
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: 'caller-part',
+            providerOptions: { anthropic: { cacheControl: anthropicControl } },
+          },
+        ],
+        providerOptions: { anthropic: { cacheControl: anthropicControl } },
+      },
+      ...['base', 'goal', 'stable-result', 'history-end', 'accepted-frame'].map(anthropicMarked),
+    ],
+  }
+  const snapshot = JSON.stringify(request)
+  const [body] = await captureAnthropicCacheWire([request])
+  expect(body?.tools?.[0]?.cache_control).toEqual(anthropicControl)
+  expect(body?.system?.[0]?.cache_control).toEqual(anthropicControl)
+  expect(
+    body?.messages
+      .flatMap((m) => m.content)
+      .filter((p) => p.cache_control)
+      .map((p) => p.text)
+  ).toEqual(['caller-part', 'accepted-frame'])
+  expect(JSON.stringify(request)).toBe(snapshot)
+})
+
+test('Anthropic tool-result part, output and final message options share one actual block endpoint', async () => {
+  const output = (text: string) => ({
+    type: 'content',
+    value: [
+      { type: 'text', text, providerOptions: { anthropic: { cache_control: anthropicControl } } },
+    ],
+  })
+  const request = {
+    prompt: [
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'one',
+            toolName: 'fixture',
+            output: {
+              ...output('shadowed-output'),
+              providerOptions: { anthropic: { cacheControl: anthropicControl } },
+            },
+            providerOptions: { anthropic: { cacheControl: anthropicControl } },
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'two',
+            toolName: 'fixture',
+            output: output('nested-output'),
+          },
+        ],
+        providerOptions: { anthropic: { cacheControl: anthropicControl } },
+      },
+      ...['base', 'middle', 'accepted-frame'].map(anthropicMarked),
+    ],
+  }
+  const snapshot = JSON.stringify(request)
+  const [body] = await captureAnthropicCacheWire([request])
+  const blocks = body!.messages.flatMap((m) => m.content).filter((p) => p.cache_control)
+  expect(blocks).toHaveLength(4)
+  expect(blocks.map((p) => p.type)).toEqual(['tool_result', 'tool_result', 'text', 'text'])
+  expect(blocks.filter((p) => p.type === 'text').map((p) => p.text)).toEqual([
+    'base',
+    'accepted-frame',
+  ])
+  expect(JSON.stringify(request)).toBe(snapshot)
+})
+
+test('Anthropic top-level automatic caching reserves one native slot and caller excess fails before sending', async () => {
+  const top = { anthropic: { cacheControl: anthropicControl } }
+  const [body] = await captureAnthropicCacheWire([
+    {
+      providerOptions: top,
+      prompt: ['base', 'goal', 'stable', 'accepted-frame'].map(anthropicMarked),
+    },
+  ])
+  expect(body?.cache_control).toEqual(anthropicControl)
+  expect(
+    body?.messages
+      .flatMap((m) => m.content)
+      .filter((p) => p.cache_control)
+      .map((p) => p.text)
+  ).toEqual(['base', 'stable', 'accepted-frame'])
+  for (const automatic of [false, true]) {
+    const options = {
+      ...(automatic ? { providerOptions: top } : {}),
+      prompt: Array.from({ length: automatic ? 4 : 5 }, (_, i) => ({
+        role: 'user',
+        content: [{ type: 'text', text: `caller-${i}` }],
+        providerOptions: { anthropic: { cacheControl: anthropicControl } },
+      })),
+    } as never
+    const snapshot = JSON.stringify(options)
+    expect(() =>
+      applyPromptCacheCallOptions(options, { sessionKey: false, anthropicBreakpointLimit: 4 })
+    ).toThrow('超过本线路 4')
+    expect(JSON.stringify(options)).toBe(snapshot)
+  }
+})
+
+test('Anthropic automatic marks respect caller TTL order without upgrading the internal cache lifetime', async () => {
+  const long = { type: 'ephemeral', ttl: '1h' }
+  const [explicit, automatic] = await captureAnthropicCacheWire([
+    {
+      prompt: [
+        anthropicMarked('base'),
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'long-caller' }],
+          providerOptions: { anthropic: { cacheControl: long } },
+        },
+        anthropicMarked('accepted-frame'),
+      ],
+    },
+    {
+      providerOptions: { anthropic: { cacheControl: long } },
+      prompt: ['base', 'accepted-frame'].map(anthropicMarked),
+    },
+  ])
+  expect(
+    explicit?.messages
+      .flatMap((m) => m.content)
+      .filter((p) => p.cache_control)
+      .map((p) => ({ text: p.text, control: p.cache_control }))
+  ).toEqual([
+    { text: 'long-caller', control: long },
+    { text: 'accepted-frame', control: anthropicControl },
+  ])
+  expect(automatic?.cache_control).toEqual(long)
+  expect(automatic?.messages.flatMap((m) => m.content).filter((p) => p.cache_control)).toEqual([])
+})
+
+test('Anthropic TTL allocation follows hoisted and inline system wire order rather than source indexes', async () => {
+  const long = { type: 'ephemeral', ttl: '1h' }
+  const markedSystem = (content: string) => ({
+    role: 'system',
+    content,
+    providerOptions: { velaros: { promptCacheBreakpoint: true } },
+  })
+  const callerSystem = {
+    role: 'system',
+    content: 'inline-long',
+    providerOptions: { anthropic: { cacheControl: long } },
+  }
+  const [hoisted, inline] = await captureAnthropicCacheWire([
+    {
+      prompt: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'user-long' }],
+          providerOptions: { anthropic: { cacheControl: long } },
+        },
+        markedSystem('late-hoisted'),
+      ],
+    },
+    {
+      prompt: [
+        markedSystem('top-system'),
+        anthropicMarked('early-user'),
+        callerSystem,
+        anthropicMarked('accepted-frame'),
+      ],
+    },
+  ])
+  expect(hoisted?.system?.map((p) => ({ text: p.text, control: p.cache_control }))).toEqual([
+    { text: 'late-hoisted', control: undefined },
+  ])
+  expect(
+    hoisted?.messages
+      .flatMap((m) => m.content)
+      .filter((p) => p.cache_control)
+      .map((p) => ({ text: p.text, control: p.cache_control }))
+  ).toEqual([{ text: 'user-long', control: long }])
+  expect(inline?.system?.map((p) => ({ text: p.text, control: p.cache_control }))).toEqual([
+    { text: 'top-system', control: undefined },
+  ])
+  expect(
+    inline?.messages
+      .flatMap((m) => m.content)
+      .filter((p) => p.cache_control)
+      .map((p) => ({ text: p.text, control: p.cache_control }))
+  ).toEqual([
+    { text: 'inline-long', control: long },
+    { text: 'accepted-frame', control: anthropicControl },
+  ])
+})
+
+test('Anthropic rejects explicit non-cacheable endpoints while canonical invalid endpoints consume no native slots', async () => {
+  const [body] = await captureAnthropicCacheWire([
+    {
+      prompt: [
+        anthropicMarked('base'),
+        {
+          role: 'assistant',
+          content: [{ type: 'reasoning', text: 'thinking' }],
+          providerOptions: { velaros: { promptCacheBreakpoint: true } },
+        },
+        anthropicMarked('accepted-frame'),
+      ],
+    },
+  ])
+  expect(
+    body?.messages
+      .flatMap((m) => m.content)
+      .filter((p) => p.cache_control)
+      .map((p) => p.text)
+  ).toEqual(['base', 'accepted-frame'])
+  for (const content of [
+    [],
+    [{ type: 'reasoning', text: 'thinking' }],
+    [{ type: 'text', text: '' }],
+  ]) {
+    const options = {
+      prompt: [
+        {
+          role: 'assistant',
+          content,
+          providerOptions: { anthropic: { cacheControl: anthropicControl } },
+        },
+      ],
+    } as never
+    expect(() =>
+      applyPromptCacheCallOptions(options, { sessionKey: false, anthropicBreakpointLimit: 4 })
+    ).toThrow('没有可缓存内容块落点')
+  }
+})
+
 interface OpenAiCacheWire {
   model: string
   prompt_cache_key?: string

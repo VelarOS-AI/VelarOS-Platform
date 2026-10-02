@@ -3,6 +3,7 @@ import { createAnthropic } from '@ai-sdk/anthropic'
 import type { ModelProviderAdapter } from '../../contract/requires'
 import type { LanguageModelFactory, ModelAdapterConfig } from '../../types/adapters'
 import type { ChatProviderId } from '../../types/model'
+import { ModelPromptCacheProtocolLimits } from '../../utils/tuning'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 
 import { languageModelWrappers } from './LanguageModelWrappers'
@@ -29,7 +30,11 @@ class AnthropicModelAdapter extends ModelAdapter implements ModelProviderAdapter
           modelId,
           config.reasoningLevel,
           this.reasoningFallback
-        )
+        ),
+        {
+          sessionKey: false,
+          anthropicBreakpointLimit: ModelPromptCacheProtocolLimits.anthropicBreakpoints,
+        }
       )
   }
 }

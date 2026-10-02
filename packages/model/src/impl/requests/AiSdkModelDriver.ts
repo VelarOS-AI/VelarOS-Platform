@@ -22,6 +22,7 @@ import {
 } from '../../utils/wire/continuation.js'
 import { withPromptCacheKey } from '../../utils/wire/prompt-cache.js'
 import { readChatCompletionReasoning } from '../../utils/wire/reasoning.js'
+import { awaitModelStreamValue } from '../../utils/wire/stream-cancel.js'
 import { responseTerminalKind, responseTerminalUsage } from '../../utils/wire/stream-terminal.js'
 
 class AiSdkModelDriver implements ModelDriver {
@@ -51,6 +52,7 @@ class AiSdkModelDriver implements ModelDriver {
     let reportedUsage: Optional<Extract<ModelTurnDelta, { type: 'usage' }>>
     let usagePublished = false
     let responseTerminal: Optional<string>
+    let iterator: Optional<AsyncIterator<unknown>>
     try {
       const format = modelRequestEncoder.response(request)
       const openaiOptions: Record<string, boolean> = {}
@@ -118,13 +120,36 @@ class AiSdkModelDriver implements ModelDriver {
       let reasoningSource: Optional<'parts' | 'raw'>
       let reasoningChars = 0
       let reasoningBreak = false
-      for await (const part of result.fullStream) {
-        signal.throwIfAborted()
-        if (finish) throw new AppError('PROTOCOL', '供应商在结束响应后继续发送内容')
+      const parts = result.fullStream[Symbol.asyncIterator]()
+      iterator = parts
+      for (;;) {
+        const next = await awaitModelStreamValue(parts.next(), signal)
+        if (next.done) break
+        const part = next.value
+        // 先保存已到达的供应商事实；取消不能抹掉终端里明确报告的用量。
         if (part.type === 'raw' && usesResponseContinuation(this.options.model)) {
           responseTerminal ??= responseTerminalKind(part.rawValue)
           reportedUsage ??= responseTerminalUsage(part.rawValue)
         }
+        if (
+          part.type === 'finish' &&
+          !reportedUsage &&
+          !isUndefined(part.totalUsage.inputTokens) &&
+          !isUndefined(part.totalUsage.outputTokens)
+        )
+          reportedUsage = {
+            type: 'usage',
+            inputTokens: part.totalUsage.inputTokens,
+            outputTokens: part.totalUsage.outputTokens,
+            cacheReadTokens: part.totalUsage.inputTokenDetails.cacheReadTokens,
+            cacheWriteTokens: part.totalUsage.inputTokenDetails.cacheWriteTokens,
+          }
+        if (reportedUsage && !usagePublished) {
+          usagePublished = true
+          yield reportedUsage
+        }
+        signal.throwIfAborted()
+        if (finish) throw new AppError('PROTOCOL', '供应商在结束响应后继续发送内容')
         if (part.type === 'reasoning-start' && reasoningChars > 0) reasoningBreak = true
         let reasoning = ''
         if (part.type === 'reasoning-delta' && reasoningSource !== 'raw') {
@@ -173,19 +198,6 @@ class AiSdkModelDriver implements ModelDriver {
             part.totalUsage.outputTokenDetails.reasoningTokens ??
             part.totalUsage.outputTokens ??
             request.outputTokens
-          if (
-            !isUndefined(part.totalUsage.inputTokens) &&
-            !isUndefined(part.totalUsage.outputTokens)
-          ) {
-            usagePublished = true
-            yield {
-              type: 'usage',
-              inputTokens: part.totalUsage.inputTokens,
-              outputTokens: part.totalUsage.outputTokens,
-              cacheReadTokens: part.totalUsage.inputTokenDetails.cacheReadTokens,
-              cacheWriteTokens: part.totalUsage.inputTokenDetails.cacheWriteTokens,
-            }
-          }
           // Responses SDK 会在普通 EOF 时合成 other；缺失终端是流中断，不能冒充供应商拒绝。
           if (
             usesResponseContinuation(this.options.model) &&
@@ -208,7 +220,7 @@ class AiSdkModelDriver implements ModelDriver {
       signal.throwIfAborted()
       if (!finish) throw new AppError('PROTOCOL', '供应商没有返回完整结束标记')
       if (finish.reason === 'stop' && format.type === 'json') {
-        const value = await result.output
+        const value = await awaitModelStreamValue(result.output, signal)
         signal.throwIfAborted()
         yield { type: 'output', value }
       }
@@ -217,7 +229,7 @@ class AiSdkModelDriver implements ModelDriver {
         format.type === 'text' &&
         usesResponseContinuation(this.options.model)
       ) {
-        const response = await result.response
+        const response = await awaitModelStreamValue(result.response, signal)
         signal.throwIfAborted()
         const value = responseContinuation(
           this.options.model,
@@ -225,15 +237,18 @@ class AiSdkModelDriver implements ModelDriver {
           response.messages,
           received,
           continuationTokens,
-          (await result.providerMetadata)?.openai?.reasoningContext
+          (await awaitModelStreamValue(result.providerMetadata, signal))?.openai?.reasoningContext
         )
         if (value) yield { type: 'continuation', value }
       }
       yield finish
     } catch (error) {
       Log.tag('ActRuntime').debug('AiSdkModelDriver 已进入异常处理或降级分支')
+      if (reportedUsage && !usagePublished) {
+        usagePublished = true
+        yield reportedUsage
+      }
       signal.throwIfAborted()
-      if (reportedUsage && !usagePublished) yield reportedUsage
       const message = providerErrorMessage(error)
       const code =
         /context.{0,30}(?:length|window|limit)|maximum.{0,20}tokens|too many tokens/iu.test(message)
@@ -247,6 +262,11 @@ class AiSdkModelDriver implements ModelDriver {
       const failure: Extract<ModelTurnDelta, { type: 'error' }> = { type: 'error', code, message }
       if (retry) Object.assign(failure, { retryAfterMs: retry.delayMs })
       yield failure
+    } finally {
+      // 清理不等待不合作的供应商；return 的迟到失败也不能变成未处理拒绝。
+      void Promise.resolve(iterator?.return?.()).catch(() => {
+        Log.tag('AiSdkModelDriver').debug('供应商响应流清理未正常结束')
+      })
     }
   }
 }

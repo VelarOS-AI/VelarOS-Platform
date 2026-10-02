@@ -194,3 +194,84 @@ test('INV-19 empty Responses EOF is a missing terminal, while malformed SSE rema
     false
   )
 })
+
+test('INV-19 cancellation after a raw terminal preserves its usage once and accepts no response', async () => {
+  const controller = new AbortController()
+  const model = createOpenAI({
+    apiKey: 'fixture-only',
+    fetch: async () =>
+      new Response(
+        new ReadableStream({
+          start(stream) {
+            stream.enqueue(
+              new TextEncoder().encode(
+                [...prefix, { type: 'response.completed', response: { usage } }]
+                  .map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`)
+                  .join('')
+              )
+            )
+          },
+          cancel() {
+            return new Promise<void>(() => {})
+          },
+        }),
+        { headers: { 'content-type': 'text/event-stream' } }
+      ),
+  })('fixture')
+  const driver = createAiSdkModelDriver({
+    id: 'openai/fixture',
+    model,
+    limits: { contextTokens: 32000, inputTokens: 30000, outputTokens: 1000 },
+  })
+  const events: ModelTurnDelta[] = []
+  await expect(
+    (async () => {
+      for await (const event of driver.stream(request, controller.signal)) {
+        events.push(event)
+        if (event.type === 'usage')
+          controller.abort(new DOMException('fixture cancel', 'AbortError'))
+      }
+    })()
+  ).rejects.toThrow('fixture cancel')
+  expect(events.filter((event) => event.type === 'usage')).toEqual([
+    { type: 'usage', inputTokens: 19, outputTokens: 7, cacheReadTokens: 3 },
+  ])
+  expect(events.some((event) => ['finish', 'continuation', 'error'].includes(event.type))).toBe(
+    false
+  )
+}, 1000)
+
+test('INV-19 cancellation does not await an uncooperative stream and missing terminal usage stays unknown', async () => {
+  const controller = new AbortController()
+  let opened: () => void = () => {}
+  const ready = new Promise<void>((resolve) => {
+    opened = resolve
+  })
+  const model = createOpenAI({
+    apiKey: 'fixture-only',
+    fetch: async () => {
+      opened()
+      return new Response(
+        new ReadableStream({
+          cancel() {
+            return new Promise<void>(() => {})
+          },
+        }),
+        { headers: { 'content-type': 'text/event-stream' } }
+      )
+    },
+  })('fixture')
+  const driver = createAiSdkModelDriver({
+    id: 'openai/fixture',
+    model,
+    limits: { contextTokens: 32000, inputTokens: 30000, outputTokens: 1000 },
+  })
+  const events: ModelTurnDelta[] = []
+  const pending = (async () => {
+    for await (const event of driver.stream(request, controller.signal)) events.push(event)
+  })()
+  await ready
+  controller.abort(new DOMException('fixture pending cancel', 'AbortError'))
+  await expect(pending).rejects.toThrow('fixture pending cancel')
+  expect(events).toEqual([])
+}, 1000)

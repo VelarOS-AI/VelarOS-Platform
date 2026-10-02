@@ -1,3 +1,9 @@
+/** 内部供应商协议上限，不是宿主可配置的产品参数，也不从包入口导出。 */
+export const ModelPromptCacheProtocolLimits = Object.freeze({
+  /** 原生 Anthropic Messages 请求的缓存槽上限；显式点与顶层自动缓存共用。 */
+  anthropicBreakpoints: 4,
+})
+
 /** model 包内可调的数字：超时、缓存、预算与截断长度，按用途分组，改这里一处就够。 */
 export const ModelTuning = Object.freeze({
   /** 远端模型目录发现。 */

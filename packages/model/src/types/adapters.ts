@@ -81,6 +81,8 @@ export interface PromptCacheWireOptions {
   readonly sessionKey: boolean
   /** true 翻译 OpenAI 断点；false 明确禁用并拒绝手写断点冲突；缺席保留其它线路与显式字段合同。 */
   readonly openaiBreakpoints?: boolean
+  /** 原生 Anthropic 线路的总断点预算；先保留调用方实际落点，再为内部标记分配余量。 */
+  readonly anthropicBreakpointLimit?: number
 }
 
 /** 按这一轮的输出上限算 reasoning 选项；这一档不发 reasoning 时返回 null。 */
