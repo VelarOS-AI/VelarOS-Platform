@@ -1,4 +1,4 @@
-import { isPlainObject, isString } from '@velaros-ai/core'
+import { isPlainObject, isString, isTrue, Log } from '@velaros-ai/core'
 import { AppError, createAbortError } from '@velaros-ai/core/error'
 
 import type { OpenAIModelFetch } from '../../types/adapters.js'
@@ -13,7 +13,7 @@ export function createResponsesFetch(fetchImpl?: OpenAIModelFetch): OpenAIModelF
     const response = await (fetchImpl ?? globalThis.fetch)(input, init)
     const url = input instanceof Request ? input.url : String(input)
     if (
-      readJsonRequestBody(init)?.stream !== true ||
+      !isTrue(readJsonRequestBody(init)?.stream) ||
       !response.ok ||
       !response.body ||
       response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() !==
@@ -33,7 +33,7 @@ export function createResponsesFetch(fetchImpl?: OpenAIModelFetch): OpenAIModelF
 /** 按 SSE 空行分帧，保留原始字节；终端后的传输清理不阻塞 SDK 的正常 flush。 */
 function terminalBody(
   body: ReadableStream<Uint8Array>,
-  signal?: AbortSignal | null
+  signal?: Nullable<AbortSignal>
 ): ReadableStream<Uint8Array> {
   const reader = body.getReader()
   let buffer = new Uint8Array(1024)
@@ -48,12 +48,18 @@ function terminalBody(
     // cancel 可以抛错、拒绝或永不完成；协议终端已经完整交付时不再改变响应事实。
     if (cancel) {
       try {
-        void reader.cancel(reason).catch(() => {})
-      } catch {}
+        void reader.cancel(reason).catch(() => {
+          Log.tag('ModelStream').debug('Responses 终态后的传输取消未完成')
+        })
+      } catch {
+        Log.tag('ModelStream').debug('Responses 终态后的传输清理未完成')
+      }
     }
     try {
       reader.releaseLock()
-    } catch {}
+    } catch {
+      Log.tag('ModelStream').debug('Responses 终态后的传输清理未完成')
+    }
   }
   const append = (part: Uint8Array) => {
     if (length + part.byteLength > ModelTuning.stream.responseEventBytes)
@@ -142,6 +148,7 @@ function terminalBody(
           if (emitted) return
         }
       } catch (error) {
+        Log.tag('ModelStream').debug('Responses SSE 读取进入异常分支')
         if (settled) return
         settled = true
         controller.error(error)
@@ -169,6 +176,7 @@ function isResponseTerminalEvent(event: Uint8Array, firstEvent: boolean): boolea
     const record: unknown = JSON.parse(data.join('\n'))
     return isPlainObject(record) && isString(responseTerminalKind(record))
   } catch {
+    Log.tag('ModelStream').debug('SSE data 不是 JSON，原字节继续交由 SDK 处理')
     return false
   }
 }
