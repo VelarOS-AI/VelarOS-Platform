@@ -460,8 +460,9 @@ test('the first model request reports the shell that the local host will actuall
         assert(request.compiledPrompt.includes('pathEntries'))
         assert(request.compiledPrompt.includes('available'))
         assert(request.compiledPrompt.includes('commandDiscovery'))
-        assert(request.instructions.includes('其他工具仍待确认'))
-        const marker = request.compiledPrompt.match(/当前帧标记：(@@s[\da-f]+)。普通/)[1]
+        assert.match(request.instructions, /工具未知时在同一命令检测/u)
+        assert.match(request.instructions, /命令存在不保证选项兼容/u)
+        const marker = request.compiledPrompt.match(/当前帧标记：(@@s[0-9a-z]+)。普通/)[1]
         yield { type: 'text', text: `Ready.\n${marker} done` }
         yield { type: 'usage', inputTokens: 1000, outputTokens: 100 }
         yield { type: 'finish', reason: 'stop' }
@@ -492,7 +493,7 @@ test('a candidate working window reaches real context planning and remains bound
         limits: { contextTokens: 128000, inputTokens: 110000, outputTokens: 12000 },
         estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
         async *stream(request) {
-          const marker = request.compiledPrompt.match(/当前帧标记：(@@s[\da-f]+)。普通/)[1]
+          const marker = request.compiledPrompt.match(/当前帧标记：(@@s[0-9a-z]+)。普通/)[1]
           yield { type: 'text', text: `Ready.\n${marker} done` }
           yield { type: 'usage', inputTokens: 1000, outputTokens: 100 }
           yield { type: 'finish', reason: 'stop' }
@@ -521,7 +522,7 @@ test(
       estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
       async *stream(request) {
         cacheKeys.add(request.cacheKey)
-        const marker = request.compiledPrompt.match(/当前帧标记：(@@s[\da-f]+)。普通/)[1]
+        const marker = request.compiledPrompt.match(/当前帧标记：(@@s[0-9a-z]+)。普通/)[1]
         calls++
         yield {
           type: 'text',
@@ -578,7 +579,7 @@ test(
         ...model,
         async *stream(request) {
           nextCacheKey = request.cacheKey
-          const marker = request.compiledPrompt.match(/当前帧标记：(@@s[\da-f]+)。普通/)[1]
+          const marker = request.compiledPrompt.match(/当前帧标记：(@@s[0-9a-z]+)。普通/)[1]
           yield { type: 'text', text: `Done.\n${marker} done` }
           yield { type: 'usage', inputTokens: 1000, outputTokens: 10 }
           yield { type: 'finish', reason: 'stop' }
@@ -614,7 +615,7 @@ test('a frozen task-retention candidate keeps accepted receipt history stable ac
             request.materials.find((material) => material.origin === 'runtime-view').text
           )
           currentResults.push(frame.partitions.recent.results)
-          const marker = request.compiledPrompt.match(/当前帧标记：(@@s[\da-f]+)。普通/)[1]
+          const marker = request.compiledPrompt.match(/当前帧标记：(@@s[0-9a-z]+)。普通/)[1]
           const receipt = request.history.find(
             (message) =>
               message.role === 'user' && message.content.startsWith('{"origin":"runtime-execution"')
@@ -684,7 +685,7 @@ test('an image-enabled candidate delivers project images as multimodal model inp
       limits: { contextTokens: 128000, inputTokens: 110000, outputTokens: 12000 },
       estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
       async *stream(request) {
-        const marker = request.compiledPrompt.match(/当前帧标记：(@@s[\da-f]+)。普通/)[1]
+        const marker = request.compiledPrompt.match(/当前帧标记：(@@s[0-9a-z]+)。普通/)[1]
         calls++
         if (calls === 2) assert(request.images.some((image) => image.data === png))
         yield {
@@ -723,7 +724,7 @@ test('a discovery-only candidate keeps project, shell and images available witho
       limits: { contextTokens: 128000, inputTokens: 110000, outputTokens: 12000 },
       estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'test' }),
       async *stream(request) {
-        const marker = request.compiledPrompt.match(/当前帧标记：(@@s[\da-f]+)。普通/)[1]
+        const marker = request.compiledPrompt.match(/当前帧标记：(@@s[0-9a-z]+)。普通/)[1]
         calls++
         if (calls === 1) {
           assert(!request.instructions.includes('常驻模块 velaros:'))

@@ -1,5 +1,7 @@
 /** Runtime 的缺省调节参数；宿主显式配置仍优先。 */
 export const ActRuntimeTuning = Object.freeze({
+  /** 随机帧身份默认取八位十六进制；与既有身份冲突时逐位延长。 */
+  frameMarkerChars: 8,
   /** 常驻能力索引的软字符配额；剩余完整目录从 modules.list 分页读取。 */
   moduleIndexChars: 4096,
   /** 当前运行状态的目标字符上限；不可裁剪的事实超过它时明确报告。 */

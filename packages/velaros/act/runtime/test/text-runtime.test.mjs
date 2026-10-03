@@ -273,6 +273,68 @@ test('protocol repair reuses the frame and does not rerun stable observation', a
   assert.equal(f.frames[0].programFrame.id, f.frames[1].programFrame.id)
 })
 
+test('INV-84 short random markers reject a prior frame before dispatch and preserve same-frame repair', async (t) => {
+  const tags = []
+  const f = await fixture(t, async function* (request, f) {
+    const tag = marker(request)
+    tags.push(tag)
+    assert.match(tag, /^@@s[0-9a-f]{8}$/u)
+    if (f.calls === 1) {
+      yield { type: 'text', text: block(request, 'execute()', write) }
+      yield finish
+    } else if (f.calls === 2) {
+      assert.notEqual(tag, tags[0])
+      yield {
+        type: 'text',
+        text: `${tags[0]} execute()\nimport {write} from 'test:ops';await write('stale');\n${tags[0]}\n`,
+      }
+      yield finish
+    } else {
+      assert.deepEqual(f.writes, ['one'])
+      if (f.calls === 3) assert.equal(tag, tags[1])
+      yield* done(request)
+    }
+  })
+  assertDone(await collect(f))
+  assert.equal(f.calls, 3)
+  assert.deepEqual(f.writes, ['one'])
+  const trace = await f.runtime.trace('s', { fullContent: true })
+  assert.equal(trace.turns[1].requestSummary.system, trace.turns[0].requestSummary.system)
+  assert.equal(trace.turns[1].repair, 0)
+  assert.equal(trace.turns[2].repair, 1)
+})
+
+test('INV-84 short marker collisions extend after a persistent session is reopened', async (t) => {
+  const tags = []
+  const f = await fixture(t, async function* (request) {
+    tags.push(marker(request))
+    yield* done(request)
+  })
+  t.mock.method(crypto, 'getRandomValues', (values) => {
+    assert(values instanceof Uint32Array)
+    assert.equal(values.length, 4)
+    values.set([0x12345678, 0, 0, 0])
+    return values
+  })
+  assertDone(await collect(f))
+  assert.equal(tags[0], '@@s12345678')
+  await f.session.close()
+  const next = await f.runtime.openSession('s')
+  assert.notEqual(next, f.session)
+  f.session = next
+  assertDone(await collect(f))
+  assert.equal(tags[1], '@@s123456780')
+  assertDone(await collect(f))
+  assert.equal(tags[2], '@@s1234567800')
+  const state = await f.storage.load('s')
+  assert.deepEqual(
+    state.records
+      .filter((record) => record.title.startsWith('runtime:frame-marker:'))
+      .map((record) => record.title.slice('runtime:frame-marker:'.length)),
+    tags
+  )
+})
+
 test('explicit observation clear removes the next-frame rerun', async (t) => {
   const f = await fixture(t, async function* (request, f) {
     if (f.calls === 1) {
@@ -645,13 +707,13 @@ test('INV-60 stable protocol rules survive changing frames and retries with scop
       assert.equal(request.instructions, system)
       assert.match(system, /sourceRef 可引用已保存的程序/)
       assert.match(system, /默认 segment/)
-      assert.doesNotMatch(system, /@@s[0-9a-f]+|host:target|host:changed/)
+      assert.doesNotMatch(system, /@@s[0-9a-z]+|host:target|host:changed/)
       assert.doesNotMatch(request.compiledPrompt, /sourceRef 可引用已保存的程序/)
       const protocol = request.compiledPrompt.split('本帧协议').at(-1)
       const tag = marker(request)
       assert(protocol.includes(`${tag} run()`))
       assert(protocol.includes(`${tag} finish`))
-      assert.doesNotMatch(protocol, /@@s[0-9a-f]+ (?:execute|observe|done)/)
+      assert.doesNotMatch(protocol, /@@s[0-9a-z]+ (?:execute|observe|done)/)
       if (f.calls === 1) {
         firstMarker = tag
         assert.match(protocol, /宿主参数引用：host:target/)

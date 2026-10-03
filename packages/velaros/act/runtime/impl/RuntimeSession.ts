@@ -310,6 +310,11 @@ export class RuntimeSession implements VelarosSession {
   private runController?: AbortController
   /** 本次运行收到的输入（提交与运行中的追加引导）；帧里不在其中的目标来自此前的运行。 */
   private readonly runInputs = new Set<string>()
+  /** 短标记按会话登记，重开句柄也不复用已发出的控制身份。 */
+  private static readonly frameMarkerRecordPrefix = 'runtime:frame-marker:'
+  private readonly frameMarkers = new Set<string>()
+  private frameMarkersReady?: Promise<void>
+  private preparedFrameMarker?: string
   /** 本次运行待建立的目标；第一次读取目标之前写入。 */
   private goalSeed?: string
   private contextPhase: 'work' | 'maintenance' | 'finalizing' = 'work'
@@ -424,8 +429,9 @@ export class RuntimeSession implements VelarosSession {
       validateCandidate: async (frame, signal) => {
         signal.throwIfAborted()
         if (!dependencies.model) return
+        await this.restoreFrameMarkers(signal)
         const decoder = new ScriptTurnDecoder(
-          `${this.config.markerPrefix}${crypto.randomUUID().replaceAll('-', '')}`,
+          this.createFrameMarker(),
           this.config,
           dependencies.inputs?.() ?? {}
         )
@@ -482,16 +488,18 @@ export class RuntimeSession implements VelarosSession {
         limits: dependencies.limits,
         instructions,
         protocol: {
-          open: () =>
-            new ScriptTurnDecoder(
-              `${this.config.markerPrefix}${crypto.randomUUID().replaceAll('-', '')}`,
+          open: () => {
+            if (!this.preparedFrameMarker) throw new AppError('INVARIANT', '本帧控制身份尚未登记')
+            return new ScriptTurnDecoder(
+              this.preparedFrameMarker,
               this.config,
               dependencies.inputs?.() ?? {},
               () =>
                 this.jobs.size === 0 &&
                 this.finalizers.size === 0 &&
                 !dependencies.agents?.pending(id)
-            ),
+            )
+          },
         },
         execution: {
           pending: () =>
@@ -547,7 +555,19 @@ export class RuntimeSession implements VelarosSession {
             if (!dependencies.tool && (status === 'completed' || status === 'cancelled'))
               await this.programs.endTask()
           },
-          prepare: (signal) => this.prepareObservation(signal),
+          prepare: async (signal) => {
+            await this.restoreFrameMarkers(signal)
+            this.preparedFrameMarker = this.createFrameMarker()
+            await this.context.append(
+              {
+                kind: 'audit',
+                title: `${RuntimeSession.frameMarkerRecordPrefix}${this.preparedFrameMarker}`,
+                body: this.preparedFrameMarker,
+              },
+              signal
+            )
+            await this.prepareObservation(signal)
+          },
           visibleExecutions: async () => {
             const state = await this.programs.state()
             return state.leases
@@ -609,6 +629,40 @@ export class RuntimeSession implements VelarosSession {
           },
         },
       })
+  }
+
+  /** 只读身份索引，不恢复完整模型请求；候选验收不得写入正式状态。 */
+  private async restoreFrameMarkers(signal: AbortSignal): Promise<void> {
+    this.frameMarkersReady ??= (async () => {
+      const storage = this.dependencies.storage
+      const snapshot = storage.selectSnapshot
+        ? await storage.selectSnapshot(this.id, [
+            { titlePrefix: RuntimeSession.frameMarkerRecordPrefix, kind: 'audit' },
+          ])
+        : await storage.load(this.id)
+      for (const record of snapshot?.records ?? [])
+        if (
+          record.kind === 'audit' &&
+          record.title.startsWith(RuntimeSession.frameMarkerRecordPrefix)
+        )
+          this.frameMarkers.add(record.title.slice(RuntimeSession.frameMarkerRecordPrefix.length))
+    })()
+    await this.frameMarkersReady
+    signal.throwIfAborted()
+  }
+
+  /** 每帧随机取样，短前缀冲突才延长；解析始终逐字核对整段身份。 */
+  private createFrameMarker(): string {
+    const value = Array.from(crypto.getRandomValues(new Uint32Array(4)), (word) =>
+      word.toString(16).padStart(ActRuntimeTuning.frameMarkerChars, '0')
+    ).join('')
+    for (let length = ActRuntimeTuning.frameMarkerChars; length <= value.length; length++) {
+      const marker = `${this.config.markerPrefix}${value.slice(0, length)}`
+      if (this.frameMarkers.has(marker)) continue
+      this.frameMarkers.add(marker)
+      return marker
+    }
+    throw new AppError('CONFLICT', '随机帧控制身份持续冲突')
   }
 
   /** 本任务是否有等待处理的整理请求。 */

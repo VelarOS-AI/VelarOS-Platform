@@ -185,6 +185,104 @@ test('resident modules put their full contract into the instructions so the mode
   assert.doesNotMatch(frames[0].instructions, /velaros:not-mounted/)
 })
 
+test('INV-85 resident declarations execute immediately and templates remain discoverable without changing the cached prefix', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'runtime-resident-template-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  await writeFile(join(workspace, 'sample.txt'), 'before\n')
+  const frames = []
+  const widgets = []
+  const f = await fixture(t, {
+    workspace,
+    widgets: { show: async (widget) => widgets.push(widget) },
+    residentModules: [{ module: 'velaros:project' }, { module: 'velaros:widget' }],
+    model: driver(async function* (request) {
+      frames.push(request)
+      for (const module of ['velaros:project', 'velaros:widget']) {
+        const description = f.runtime.describe(module)
+        assert(request.instructions.includes(description.declarations))
+        assert(!request.instructions.includes(description.template))
+      }
+      if (frames.length === 1) {
+        yield turn(request, {
+          execute: {
+            source: `import {read,edit} from 'velaros:project';import {show} from 'velaros:widget';import {output} from 'velaros';
+output(await edit({steps:[{action:'replace',path:'sample.txt',oldText:'before',newText:'after'}]}));
+output(await read({files:[{path:'sample.txt'}]}));
+await show({title:'Result',code:'<svg xmlns="http://www.w3.org/2000/svg"><text>after</text></svg>'});`,
+          },
+        })
+        yield { type: 'finish', reason: 'stop' }
+      } else if (frames.length === 2) {
+        assert.match(modelText(request), /after/)
+        assert.equal(widgets.length, 1)
+        yield turn(request, {
+          execute: {
+            source:
+              "import {modules} from 'velaros:system';import {output} from 'velaros';output((await modules.describe({module:'velaros:project',exports:['edit'],template:true})).template,{type:'code'});",
+          },
+        })
+        yield { type: 'finish', reason: 'stop' }
+      } else {
+        assert.equal(frames.length, 3)
+        assert(modelText(request).includes(f.runtime.describe('velaros:project').template))
+        yield* done(request)
+      }
+    }),
+  })
+  const events = []
+  for await (const event of f.session.submit(
+    'Change before to after, show it, then read the edit example'
+  ))
+    events.push(event)
+  assert.equal(events.at(-1).status, 'completed')
+  assert.equal(await readFile(join(workspace, 'sample.txt'), 'utf8'), 'after\n')
+  assert.equal(widgets.length, 1)
+  assert.match(widgets[0].code, /after/)
+  assert(frames.every((frame) => frame.instructions === frames[0].instructions))
+  const trace = await f.runtime.trace('main', { fullContent: true })
+  assert(
+    trace.turns.every((turn) => turn.requestSummary.system === trace.turns[0].requestSummary.system)
+  )
+})
+
+test('INV-85 explicit resident templates merge once for whole and selected declarations', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'runtime-resident-template-explicit-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  for (const residentModules of [
+    [{ module: 'velaros:project', template: false }],
+    [
+      { module: 'velaros:project', template: false },
+      { module: 'velaros:project', exports: ['edit'], template: true },
+      { module: 'velaros:project', template: true },
+    ],
+    [{ module: 'velaros:project', exports: ['edit'], template: true }],
+  ]) {
+    let instructions
+    const f = await fixture(t, {
+      workspace,
+      residentModules,
+      model: driver(async function* (request) {
+        instructions = request.instructions
+        yield* done(request)
+      }),
+    })
+    for await (const event of f.session.submit('Ready')) assert.notEqual(event.type, 'error')
+    const template = f.runtime.describe('velaros:project').template
+    assert.equal(
+      instructions.split(template).length - 1,
+      Number(residentModules.some((entry) => entry.template))
+    )
+  }
+})
+
+test('INV-85 resident template flags reject nonboolean configuration before activation', async () => {
+  for (const template of [null, 'true', 1, {}, []])
+    await assert.rejects(
+      createRuntime({ residentModules: [{ module: 'velaros:project', template }] }),
+      { code: 'VALIDATION' }
+    )
+})
+
 test('INV-57 the instructions list every other importable module with its one-line summary', async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), 'runtime-importable-'))
   t.after(() => rm(workspace, { recursive: true, force: true }))

@@ -24,8 +24,10 @@ export function residentContracts(
   template?: string
 }> {
   const selected = new Map<string, Nullable<Set<string>>>()
+  const templates = new Set<string>()
   for (const entry of configured ?? []) {
     if (!available.includes(entry.module)) continue
+    if (entry.template) templates.add(entry.module)
     if (entry.exports) {
       const slice = scriptPackageCompiler.sliceExports(
         describe(entry.module).declarations,
@@ -44,12 +46,12 @@ export function residentContracts(
   }
   return [...selected].map(([module, names]) => {
     const description = describe(module)
-    if (isNull(names))
-      return { module, declarations: description.declarations, template: description.template }
+    const template = templates.has(module) ? description.template : undefined
+    if (isNull(names)) return { module, declarations: description.declarations, template }
     const exports = [...names]
     const slice = scriptPackageCompiler.sliceExports(description.declarations, module, exports)
     if (isNull(slice.declarations)) throw new AppError('INVARIANT', '常驻导出的已验证声明缺失')
-    return { module, exports, declarations: slice.declarations }
+    return { module, exports, declarations: slice.declarations, template }
   })
 }
 
@@ -97,7 +99,7 @@ export function runtimeInstructions(options: {
   const has = (module: string) => options.modules.includes(module)
   const memory = SystemMembers.memory.some(has)
   const resident = options.resident ?? []
-  // 常驻类型与示例在文末；系统成员统一从 velaros:system 导入。
+  // 常驻类型与显式启用的示例在文末；系统成员统一从 velaros:system 导入。
   const listed = new Set([
     ...resident.filter((item) => isUndefined(item.exports)).map((item) => item.module),
     ...Object.values(SystemMembers).flat(),
@@ -141,11 +143,10 @@ export function runtimeInstructions(options: {
     memory
       ? [
           importableNote,
-          '文末已有的常驻合同可直接使用；其他操作按 exports 查询 declarations，所需依赖类型一并返回；示例按需查看 template。只输出所需的声明或示例，整份 describe 还含 schema 等目录元数据：',
-          '同一模块的已知操作用 exports 合并查询，依赖类型只返回一次；指定操作默认只交声明，需要整模块示例时传 template: true。已有同内容版本合同可以直接复用，版本号与引用不表示已读正文。',
+          '文末常驻声明可直接 import；其余操作用 exports 合并查询，依赖类型去重。需要示例时传 template: true，只输出 contract.template；需要声明时只输出 contract.declarations，避免附带 schema 等目录元数据。同内容版本可复用，版本号或引用不表示已读正文：',
           '```js',
           "import { output } from 'velaros';",
-          "import { modules, memory } from 'velaros:system';",
+          "import { modules } from 'velaros:system';",
           "const contract = await modules.describe({ module: 'velaros:system', exports: ['memory'] });",
           '// 查询其他模块时替换 module；exports 填真实导出名数组。',
           "output(contract.declarations, { type: 'code' });",
@@ -183,7 +184,7 @@ export function runtimeInstructions(options: {
       ? '搜索示例：execute 中调用 search；profiles 选配置，resume 传上一报告的 ref 继续调查。read({mode:"current",…}) 刷新证据。参数查模块模板。'
       : '',
     has('velaros:shell')
-      ? "使用环境里已给出的命令可用性与实际 PATH；命令存在不代表当前实现支持某个选项，已确认兼容的用法可复用，其他工具仍待确认。必要工具不可用时先在同一脚本定位项目配置的工具链，再执行依赖它的检查；环境缺失导致失败时保留诊断并核对必要验证范围。代码命令回执拆分示例：const { stdout, ...status } = result; output(status, { key: 'status' }); output(stdout, { key: 'source', type: 'code' }); 普通正文用 type: 'text'。Shell 命令按 runtime.environment.shell 的实际语法编写；posix /bin/sh 使用明确的文件列表，不能假设支持 Bash 花括号展开。工具可用性未知时，在同一命令中检测并选择可用的查找方式或使用已授予的项目搜索能力。多阶段读取和验证保留关键阶段的退出状态与诊断，可分步核对或采用当前 shell 已确认支持的方式；管道整体退出码不能证明每个阶段成功。检查 success、exitCode 和 stderr 后再执行依赖步骤；stderr 也可能是进度或警告，按退出语义和诊断判断。空 stdout 与命令错误不能作无匹配证明，正常材料与必要诊断按本轮决策需求分别交付。"
+      ? "按 runtime.environment.shell、环境中的命令可用性与实际 PATH 编写命令；命令存在不保证选项兼容，已确认的用法可复用。posix /bin/sh 使用明确的文件列表，不假定支持 Bash 花括号展开。工具未知时在同一命令检测并选择可用查找方式，或用已授予的项目搜索；必要工具缺失先定位项目配置的工具链，保留诊断并核对验证范围。多阶段或管道保留关键阶段的退出状态与诊断，整体退出码不能证明各阶段成功。检查 success、exitCode、stderr 后再执行依赖步骤；stderr 按退出语义区分诊断与进度，空 stdout 或命令错误不证明无匹配。代码命令回执拆分示例：const { stdout, ...status } = result; output(status, { key: 'status' }); output(stdout, { key: 'source', type: 'code' }); 普通正文用 type: 'text'，材料与必要诊断按当前决策需求交付。"
       : '',
     has('velaros:agents')
       ? '子任务示例：start({task:"独立子任务"}) → wait → reply / resume；均在 execute 中运行。继承当前能力与权限；profiles 列配置，runtime.children 列状态与待回答请求。'

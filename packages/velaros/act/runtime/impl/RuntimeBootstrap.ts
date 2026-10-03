@@ -119,6 +119,7 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
           (entry) =>
             isPlainObject(entry) &&
             isNonBlankString(entry.module) &&
+            (isUndefined(entry.template) || isBoolean(entry.template)) &&
             (isUndefined(entry.exports) ||
               (isArray(entry.exports) &&
                 !isEmpty(entry.exports) &&
@@ -129,7 +130,7 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
     )
       throw new AppError(
         'VALIDATION',
-        'residentModules 必须是 {module, exports?} 列表，exports 为非空导出名数组'
+        'residentModules 必须是 {module, exports?, template?} 列表，exports 为非空导出名数组，template 为布尔值'
       )
     if (!isUndefined(options.environment) && !isFunction(options.environment))
       throw new AppError('VALIDATION', 'environment 必须是返回宿主环境条目的函数')

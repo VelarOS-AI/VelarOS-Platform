@@ -55,6 +55,33 @@ test('CRLF, no final newline, blank payload and marker-like lines are unambiguou
   assert.equal(decode(`${block('execute', source)}${marker} done\nmore text`).message, 'more text')
 })
 
+test('eight-digit and archived markers preserve exact matching across stream splits', () => {
+  for (const tag of [
+    '@@s1a2b3c4d',
+    '@@s00000000',
+    '@@s123456780',
+    '@@s3w5e11264sgsf',
+    '@@s02d79a2765954e4aa16f1931a268b184',
+    '@@scope_1a2b3c4d',
+  ]) {
+    const options = tag.startsWith('@@scope_') ? { markerPrefix: '@@scope_' } : {}
+    const response = `${tag} execute()\n${source}\n${tag}\n${tag} done\nVerified.`
+    for (let split = 0; split <= response.length; split++) {
+      const decoder = new ScriptTurnDecoder(tag, options)
+      decoder.push(response.slice(0, split))
+      decoder.push(response.slice(split))
+      const result = decoder.finish()
+      assert.equal(result.done, true)
+      assert.equal(result.message, 'Verified.')
+      assert.equal(result.submission.executions[0].program.source, source)
+    }
+    const wrong = `${tag.slice(0, -1)}${tag.endsWith('a') ? 'b' : 'a'}`
+    const decoder = new ScriptTurnDecoder(tag, options)
+    decoder.push(`${tag} execute()\n${source}\n${wrong}\n`)
+    assert.throws(() => decoder.finish(), /控制段缺少闭合标记/u)
+  }
+})
+
 test('INV-66 closing marker permits trailing spaces across stream splits without trimming payload', () => {
   const payload = `${source}  \n  `
   for (const ending of ['', '\n', '\r\n']) {
