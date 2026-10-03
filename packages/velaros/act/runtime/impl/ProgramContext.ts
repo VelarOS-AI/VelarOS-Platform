@@ -10,6 +10,7 @@ import type {
 } from '@velaros-ai/context'
 import { ContextLimits } from '@velaros-ai/context'
 import {
+  isArray,
   isFalse,
   isNull,
   isNumber,
@@ -382,9 +383,12 @@ export class ProgramContext implements ProgramContextApi {
   private async readDelivery(
     value: unknown,
     carrierRef: string,
-    signal: AbortSignal
+    signal: AbortSignal,
+    beforeSequence?: number,
+    depth = 0
   ): Promise<readonly SegmentOutputProof[]> {
-    if (!isPlainObject(value)) return []
+    // 每一步还必须回到更早的不可变源记录；有界遍历对异常宿主链保守停止。
+    if (!isPlainObject(value) || depth >= 32) return []
     const page = value
     const delivery = page.delivery as { receipt?: ContextRef } | undefined
     const receipt = delivery?.receipt
@@ -403,7 +407,8 @@ export class ProgramContext implements ProgramContextApi {
       !record ||
       record.kind !== 'audit' ||
       record.title !== 'memory:read-delivery' ||
-      record.sequence <= reset
+      record.sequence <= reset ||
+      (!isUndefined(beforeSequence) && record.sequence >= beforeSequence)
     )
       return []
     const raw = await this.storage.get(this.sessionId, record.objectId)
@@ -431,7 +436,7 @@ export class ProgramContext implements ProgramContextApi {
     )
       return []
     // 回执绑定不可变原块；只把整块 value 或整份归档的同表示范围交给当前历史聚合。
-    return bound.blocks.map((block) => {
+    const proofs: SegmentOutputProof[] = bound.blocks.map((block) => {
       const pointer: { pointer?: string } = {}
       if (bound.pointer) pointer.pointer = bound.pointer
       return {
@@ -447,6 +452,57 @@ export class ProgramContext implements ProgramContextApi {
         },
       }
     })
+    // 只从整块 value 的原样归档取出下一页，不解析模型生成的 JSON 或裸正文。
+    const match = bound.pointer?.match(/^\/output\/blocks\/(0|[1-9]\d*)\/value$/u)
+    if (!match || bound.offset !== 0 || bound.chars !== bound.totalChars) return proofs
+    const sourceSnapshot = await this.snapshot([
+      { refId: bound.source.id },
+      { title: 'search:history-reset', latest: true },
+    ])
+    signal.throwIfAborted()
+    const sourceRecord = sourceSnapshot?.records.find(
+      (item) => item.ref.id === bound.source.id && item.ref.sessionId === this.sessionId
+    )
+    const sourceReset = Math.max(
+      sourceSnapshot?.metadata.task?.startedSequence ?? 0,
+      sourceSnapshot?.records.findLast((item) => item.title === 'search:history-reset')?.sequence ??
+        0
+    )
+    if (
+      !sourceRecord ||
+      sourceRecord.kind !== 'audit' ||
+      !/^script:[^:]+:result$/u.test(sourceRecord.title) ||
+      sourceRecord.sequence >= record.sequence ||
+      sourceReset !== reset
+    )
+      return proofs
+    const source = await this.storage.get(this.sessionId, sourceRecord.objectId)
+    signal.throwIfAborted()
+    if (isNull(source)) return proofs
+    const archived = JSON.parse(source)
+    const block =
+      isPlainObject(archived.output) && isArray(archived.output.blocks)
+        ? archived.output.blocks[Number(match[1])]
+        : undefined
+    if (
+      !isPlainObject(block) ||
+      !isPlainObject(block.value) ||
+      !bound.blocks.some(
+        (item) => item.key === block.key && item.contentHash === scriptOutputs.hash(block.value)
+      ) ||
+      content.text !== JSON.stringify(block.value)
+    )
+      return proofs
+    proofs.push(
+      ...(await this.readDelivery(
+        block.value,
+        carrierRef,
+        signal,
+        sourceRecord.sequence,
+        depth + 1
+      ))
+    )
+    return proofs
   }
 
   private async readState(snapshot: Nullable<ContextRecordSnapshot>): Promise<ProgramLeaseState> {

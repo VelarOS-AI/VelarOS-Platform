@@ -2079,6 +2079,160 @@ function requiredView() {
   }
 }
 
+test('INV-75 authenticated page lineage preserves original debt only when delivery or provenance is incomplete', async (t) => {
+  const values = [
+    ['unicode', '可信来源😀\n'.repeat(120)],
+    [
+      'object',
+      { rows: Array.from({ length: 35 }, (_, index) => ({ index, label: `异质-${index}-Δ` })) },
+    ],
+  ]
+  const cases = [
+    ...values.map(([name, value]) => ({ name: `complete-${name}`, value, complete: true })),
+    { name: 'complete-chain', value: values[0][1], complete: true },
+    ...[
+      'clipped-carrier',
+      'unsigned-inner',
+      'partial-outer',
+      'partial-inner',
+      'changed-inner',
+      'changed-source',
+      'wrong-pointer',
+      'forward-receipt',
+      'receipt-cycle-to-carrier',
+    ].map((name) => ({ name, value: values[0][1], complete: false })),
+  ]
+  for (const scenario of cases) {
+    await t.test(scenario.name, async (t) => {
+      const f = await fixture(t)
+      const programs = new ProgramContext('s', f.session.context, f.storage)
+      const source = await archiveRequired(f, programs, [scenario.value], 512)
+      const pointer = '/output/blocks/0/value'
+      const page = await f.memory.readMaterial(
+        source,
+        0,
+        scenario.name === 'partial-inner' ? 200 : 12000,
+        signal,
+        pointer
+      )
+      if (scenario.name === 'unsigned-inner') delete page.delivery
+      if (scenario.name === 'changed-inner') page.text += 'changed'
+      const firstCarrier = await archiveRequired(f, programs, [page], 512)
+      const originalGet = f.storage.get.bind(f.storage)
+      if (scenario.name === 'changed-source') {
+        const record = (await f.session.context.read(source)).record
+        f.storage.get = async (sessionId, objectId) => {
+          const text = await originalGet(sessionId, objectId)
+          if (objectId !== record.objectId) return text
+          const changed = JSON.parse(text)
+          changed.output.blocks[0].value += 'changed-version'
+          return JSON.stringify(changed)
+        }
+      }
+      if (['forward-receipt', 'receipt-cycle-to-carrier'].includes(scenario.name)) {
+        const later = await f.memory.readMaterial(source, 0, 12000, signal, pointer)
+        const record = (await f.session.context.read(firstCarrier)).record
+        f.storage.get = async (sessionId, objectId) => {
+          const text = await originalGet(sessionId, objectId)
+          if (objectId !== record.objectId) return text
+          const changed = JSON.parse(text)
+          changed.output.blocks[0].value.delivery =
+            scenario.name === 'forward-receipt' ? later.delivery : { receipt: firstCarrier }
+          return JSON.stringify(changed)
+        }
+      }
+      let recalled = await f.memory.readMaterial(
+        firstCarrier,
+        0,
+        scenario.name === 'partial-outer' ? 200 : 12000,
+        signal,
+        scenario.name === 'wrong-pointer' ? `${pointer}/text` : pointer
+      )
+      if (scenario.name === 'complete-chain') {
+        const middle = await archiveRequired(f, programs, [recalled], 512)
+        recalled = await f.memory.readMaterial(middle, 0, 12000, signal, pointer)
+      }
+      const lastCarrier = await archiveRequired(
+        f,
+        programs,
+        [recalled],
+        scenario.name === 'clipped-carrier' ? 512 : 20000,
+        false
+      )
+      const projected = await f.memory.project(requiredView(), undefined, [], signal, 600000)
+      const frame = JSON.parse(projected.body)
+      const missing = frame.partitions.runtime.decision.missing.some(
+        (item) => item.ref === source.id
+      )
+      assert.equal(missing, !scenario.complete)
+      if (scenario.complete) {
+        const shown = historyEntries(projected).find((entry) => entry.ref.id === lastCarrier.id)
+        assert(shown)
+        assert(shown.text.includes('memory-page'))
+        // The same accepted provider carrier must satisfy the actual completion gate.
+        const events = []
+        for await (const event of f.session.submit('Finish the synthetic page-lineage task.'))
+          events.push(event)
+        assert.equal(f.requests.length, 1)
+        const accepted = JSON.parse(
+          f.requests[0].materials.find((material) => material.origin === 'runtime-view').text
+        )
+        assert(!accepted.partitions.runtime.decision.missing.some((item) => item.ref === source.id))
+        assert(events.some((event) => event.type === 'verification' && event.completed))
+      }
+    })
+  }
+})
+
+test('INV-75 authenticated page lineage rejects stale or foreign inner receipts behind a valid outer page', async (t) => {
+  for (const scenario of ['cross-session', 'task-reset', 'search-reset']) {
+    await t.test(scenario, async (t) => {
+      const f = await fixture(t)
+      const programs = new ProgramContext('s', f.session.context, f.storage)
+      const value = '同内容不能转移来源权限😀\n'.repeat(50)
+      const original = await archiveRequired(f, programs, [value], 512)
+      const pointer = '/output/blocks/0/value'
+      const inner = await f.memory.readMaterial(original, 0, 12000, signal, pointer)
+      let target = original
+      if (scenario === 'cross-session') inner.delivery.receipt.sessionId = 'foreign-session'
+      else {
+        if (scenario === 'task-reset') {
+          const input = await f.session.context.append({
+            kind: 'user',
+            body: 'A new synthetic task',
+          })
+          await f.session.view.end()
+          await f.session.view.begin(input.ref, signal, 'new')
+        } else {
+          await f.session.context.append({
+            kind: 'audit',
+            title: 'search:history-reset',
+            body: 'The host changes the authorization epoch',
+          })
+        }
+        target = await archiveRequired(f, programs, [value], 512)
+      }
+      const firstCarrier = await archiveRequired(f, programs, [inner], 512)
+      const outer = await f.memory.readMaterial(firstCarrier, 0, 12000, signal, pointer)
+      assert(outer.delivery?.receipt)
+      assert.equal(outer.offset, 0)
+      assert.equal(outer.text.length, outer.totalChars)
+      const lastCarrier = await archiveRequired(f, programs, [outer], 20000, false)
+      const projected = await programs.project(requiredView(), undefined, [], signal, 600000)
+      const shown = JSON.parse(projected.body).results.find((item) => item.ref === lastCarrier.id)
+      // The current, authentic complete outer page is accepted by readDelivery;
+      // only the nested receipt is rejected by its own session/epoch check.
+      assert(shown.outputProofs.some((proof) => proof.ref === firstCarrier.id))
+      assert(!shown.outputProofs.some((proof) => proof.ref === original.id))
+      const frame = JSON.parse(
+        (await f.memory.project(requiredView(), undefined, [], signal, 600000)).body
+      )
+      assert(frame.partitions.runtime.decision.missing.some((item) => item.ref === target.id))
+      assert.equal(f.requests.length, 0)
+    })
+  }
+})
+
 function acceptedMemoryRequest(frame) {
   return {
     compiledPrompt: frame.prompt,

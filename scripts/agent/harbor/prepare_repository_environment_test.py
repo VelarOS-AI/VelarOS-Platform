@@ -132,6 +132,8 @@ class FakeDocker:
         if argv[0] == "create":
             if self.failure == "create_timeout":
                 raise subprocess.TimeoutExpired("docker create", 60)
+            if self.failure == "create_cancelled":
+                raise KeyboardInterrupt
             self.owner = next(value.split("=", 1)[1] for value in argv if value.startswith("velaros.bench.metadata-owner="))
             self.alive = True
             return ("short" if self.failure == "short_id" else self.cid).encode()
@@ -303,8 +305,8 @@ class PreparationTests(unittest.TestCase):
             prep.shell_interpreter(duplicated)
 
     def test_unknown_create_and_cleanup_leave_blocked_epoch_and_retained_failure(self):
-        for failure in ("create_timeout", "short_id", "rm_timeout", "wrong_removed_id"):
-            with self.subTest(failure=failure), self.fixture.patched(), self.assertRaises((ValueError, subprocess.TimeoutExpired)):
+        for failure in ("create_timeout", "create_cancelled", "short_id", "rm_timeout", "wrong_removed_id"):
+            with self.subTest(failure=failure), self.fixture.patched(), self.assertRaises((ValueError, subprocess.TimeoutExpired, KeyboardInterrupt)):
                 self.run_overlay(failure=failure)
             state = json.loads((self.fixture.bench / "campaign/resource-leases/resources.json").read_text())
             self.assertEqual(state["admission"]["status"], "blocked")
@@ -312,6 +314,47 @@ class PreparationTests(unittest.TestCase):
             self.assertFalse((self.fixture.output / "environment-ready.json").exists())
             shutil_remove(self.fixture.output)
             shutil_remove(self.fixture.bench / "campaign/resource-leases")
+
+    def test_cold_create_has_bounded_deadline_without_relaxing_metadata_reads(self):
+        with self.fixture.patched():
+            inputs = prep.local_inputs(self.fixture.args)
+            self.fixture.output.mkdir()
+            docker = prep.DockerMetadata(inputs, {})
+            response = SimpleNamespace(returncode=0, stdout=b"opaque result", stderr=b"")
+            with patch.object(prep.subprocess, "run", return_value=response) as run:
+                for operation, seconds in (("create", 600), ("inspect", 60), ("rm", 60)):
+                    docker.command([operation, "opaque"], effect=operation != "inspect")
+                    self.assertEqual(run.call_args.kwargs["timeout"], seconds)
+                    self.assertEqual(docker.commands[-1]["deadline_seconds"], seconds)
+
+    def test_expired_create_retains_unknown_effect_without_retry_or_raw_output(self):
+        with self.fixture.patched():
+            inputs = prep.local_inputs(self.fixture.args)
+            self.fixture.output.mkdir()
+            docker = prep.DockerMetadata(inputs, {})
+            error = subprocess.TimeoutExpired("docker create", 600, output=b"private output", stderr=b"private error")
+            with patch.object(prep.subprocess, "run", side_effect=error) as run, self.assertRaises(subprocess.TimeoutExpired):
+                docker.command(["create", "opaque"], effect=True)
+            self.assertEqual(run.call_count, 1)
+            receipt = prep.read(self.fixture.output / "command-001-receipt.json")
+            self.assertEqual(receipt["status"], "effect_settlement_unknown")
+            self.assertEqual(receipt["deadline_seconds"], 600)
+            self.assertNotIn("private", json.dumps(receipt))
+
+    def test_cli_termination_unwinds_execution_and_restores_previous_handler(self):
+        args = SimpleNamespace(disk_headroom_mib=4096, agent_budget_seconds=100, source_phase_seconds=120,
+                               expected_source_sha256=None, execute=True)
+        previous = object()
+        def terminate(inputs, args):
+            handler = handlers.call_args.args[1]
+            handler(prep.signal.SIGTERM, None)
+        with patch.object(prep, "parser") as parser, patch.object(prep, "local_inputs", return_value={}), \
+             patch.object(prep.signal, "signal", return_value=previous) as handlers, \
+             patch.object(prep, "execute", side_effect=terminate), self.assertRaises(KeyboardInterrupt):
+            parser.return_value.parse_args.return_value = args
+            prep.main([])
+        self.assertEqual(handlers.call_count, 2)
+        self.assertIs(handlers.call_args.args[1], previous)
 
     def test_publication_binds_current_baseline_abi_and_derived_full_plan_capacity(self):
         with self.fixture.patched():

@@ -15,6 +15,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import tarfile
@@ -33,6 +34,10 @@ LOADERS = {
     "glibc": ("/lib64/ld-linux-x86-64.so.2", "/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"),
 }
 SHA256 = re.compile(r"[a-f0-9]{64}")
+METADATA_COMMAND_SECONDS = 60
+# Creating the first writable overlay of an imported image can materialize its
+# filesystem. Keep that bounded operation separate from small metadata reads.
+CREATE_COMMAND_SECONDS = 600
 
 
 def require(condition, message):
@@ -246,12 +251,14 @@ class DockerMetadata:
 
     def command(self, argv, *, effect=False):
         index = len(self.commands) + 1
-        record = {"argv": self.cli + argv, "started_at": now(), "effect_possible": effect}
+        timeout = CREATE_COMMAND_SECONDS if argv[0] == "create" else METADATA_COMMAND_SECONDS
+        record = {"argv": self.cli + argv, "started_at": now(), "effect_possible": effect,
+                  "deadline_seconds": timeout}
         self.commands.append(record)
         write_evidence(self.inputs["output"] / f"command-{index:03}-intent.json", record)
         try:
             result = subprocess.run(self.cli + argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    timeout=60, env=self.env, cwd=ROOT)
+                                    timeout=timeout, env=self.env, cwd=ROOT)
             record.update(finished_at=now(), exit_code=result.returncode,
                           stdout_bytes=len(result.stdout), stdout_sha256=hashlib.sha256(result.stdout).hexdigest(),
                           stderr_bytes=len(result.stderr), stderr_sha256=hashlib.sha256(result.stderr).hexdigest())
@@ -562,7 +569,15 @@ def main(argv=None):
                   "manifest_sha256": inputs["manifest_sha256"], "import_result_sha256": digest(inputs["import_path"]),
                   "baseline": inputs["baseline"], "ABI": None}
     else:
-        result = execute(inputs, args)
+        # Let cancellation unwind the effect/cleanup handlers and persist an
+        # uncertain daemon outcome. Killing the CLI does not settle its request.
+        def cancelled(_number, _frame):
+            raise KeyboardInterrupt
+        previous = signal.signal(signal.SIGTERM, cancelled)
+        try:
+            result = execute(inputs, args)
+        finally:
+            signal.signal(signal.SIGTERM, previous)
     print(json.dumps(result))
     return result
 

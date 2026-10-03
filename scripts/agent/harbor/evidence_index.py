@@ -130,21 +130,96 @@ def _jsonl(raw):
 
 
 def _cli_events(raw):
-    """CLI stdout may have plain startup notices before its JSON event stream."""
+    """Separate structured CLI events from merged diagnostics, without exporting prose.
+
+    A malformed object/array candidate is invalid evidence, not a diagnostic line.
+    Keep every diagnostic's location/hash even if another line invalidates the stream.
+    """
+    rows, prefix, diagnostics, invalid, errors = [], [], [], [], []
     if raw and not raw.endswith(b"\n"):
-        raise ValueError("incomplete_cli_tail")
-    rows, prefix = [], []
-    for line in raw.splitlines():
+        invalid.append({"reason": "incomplete_cli_tail", "line": len(raw.splitlines())})
+    for number, line in enumerate(raw.splitlines(), 1):
         if not line.strip():
             continue
-        if not rows and not line.lstrip().startswith(b"{"):
-            prefix.append(line)
+        location = {"line": number, "size_bytes": len(line), "sha256": _digest(line)}
+        try:
+            value = json.loads(line)
+        except (ValueError, UnicodeError):
+            if line.lstrip().startswith((b"{", b"[")):
+                invalid.append({**location, "reason": "cli_json_candidate_invalid"})
+                continue
+            diagnostics.append({**location, "position": "interleaved" if rows else "prefix"})
+            if not rows:
+                prefix.append(line)
             continue
-        value = json.loads(line)
-        if not isinstance(value, dict):
-            raise ValueError("cli_object_required")
+        if not isinstance(value, dict) or not isinstance(value.get("type"), str):
+            invalid.append({**location, "reason": "cli_event_object_required"})
+            continue
+        item = value.get("item")
+        if value["type"] in ("error", "turn.failed") or (value["type"] == "item.completed" and isinstance(item, dict)
+                and (item.get("status") in ("failed", "cancelled") or type(item.get("exit_code")) is int and item["exit_code"] != 0)):
+            errors.append({**location, "event_type": value["type"]})
         rows.append(value)
-    return rows, {"prefix_text_lines": len(prefix), "prefix_text_sha256": _digest(b"\n".join(prefix)) if prefix else None}
+    return rows, {"prefix_text_lines": len(prefix), "prefix_text_sha256": _digest(b"\n".join(prefix)) if prefix else None,
+        "diagnostic_text_lines": len(diagnostics), "interleaved_text_lines": sum(row["position"] == "interleaved" for row in diagnostics),
+        "diagnostic_records": diagnostics, "invalid_records": invalid,
+        "error_event_records": errors, "error_event_count": len(errors),
+        "state": "unknown" if invalid else "verified"}
+
+
+def _cli_lifecycle(events):
+    """Require complete turns for the exact CLI threads; tool failures stay visible."""
+    threads, current, observations = {}, None, {"error_events": [], "failed_turns": []}
+    event_types = {"thread.started", "turn.started", "turn.completed", "turn.failed",
+                   "item.started", "item.updated", "item.completed", "error"}
+    for number, event in enumerate(events):
+        kind = event["type"]
+        if kind not in event_types:
+            raise ValueError("native_cli_event_type_unknown")
+        if kind == "thread.started":
+            current = event.get("thread_id")
+            if not isinstance(current, str) or not current or current in threads:
+                raise ValueError("native_cli_thread_identity_invalid")
+            threads[current] = {"open": False, "started_turns": 0, "terminal_turns": 0, "pending_items": []}
+            continue
+        explicit = event.get("thread_id")
+        if "thread_id" in event and (not isinstance(explicit, str) or explicit not in threads):
+            raise ValueError("native_cli_event_thread_mismatch")
+        owner = explicit if explicit is not None else current
+        if kind == "error":
+            observations["error_events"].append({"event_index": number, "thread_id": owner,
+                "event_sha256": _digest(_canonical(event))})
+            continue
+        if owner not in threads:
+            raise ValueError("native_cli_event_without_thread")
+        state = threads[owner]
+        if kind == "turn.started":
+            if state["open"]:
+                raise ValueError("native_cli_turn_already_active")
+            state["open"] = True
+            state["started_turns"] += 1
+        elif kind in ("turn.completed", "turn.failed"):
+            if not state["open"] or state["pending_items"]:
+                raise ValueError("native_cli_terminal_without_start")
+            state["open"] = False
+            state["terminal_turns"] += 1
+            if kind == "turn.failed":
+                observations["failed_turns"].append({"event_index": number, "thread_id": owner,
+                    "event_sha256": _digest(_canonical(event))})
+        else:
+            item = event.get("item")
+            if (not state["open"] or not isinstance(item, dict) or not isinstance(item.get("id"), str)
+                    or not item["id"] or not isinstance(item.get("type"), str) or not item["type"]):
+                raise ValueError("native_cli_item_shape_or_turn_invalid")
+            if kind == "item.started":
+                if item["id"] in state["pending_items"]:
+                    raise ValueError("native_cli_item_already_active")
+                state["pending_items"].append(item["id"])
+            elif kind == "item.completed" and item["id"] in state["pending_items"]:
+                state["pending_items"].remove(item["id"])
+    if not threads or any(state["open"] or not state["terminal_turns"] for state in threads.values()):
+        raise ValueError("native_cli_turn_terminal_missing")
+    return {"threads": threads, **observations}
 
 
 def _trace(index, agent, phase):
@@ -213,11 +288,13 @@ def _native(index, agent, phase):
     if raw is None:
         return
     try:
-        events, preamble = _cli_events(raw)
-        phase["native_cli_format"] = preamble
-        threads = {event["thread_id"] for event in events if event.get("type") == "thread.started" and isinstance(event.get("thread_id"), str)}
-        if not threads:
-            raise ValueError("native_cli_thread_identity_missing")
+        events, format_metadata = _cli_events(raw)
+        phase["native_cli_format"] = format_metadata
+        if format_metadata["state"] != "verified":
+            raise ValueError("native_cli_jsonl_invalid")
+        lifecycle = _cli_lifecycle(events)
+        phase["native_cli_lifecycle"] = lifecycle
+        threads = set(lifecycle["threads"])
     except (ValueError, UnicodeError):
         item.update(state="unknown", reason="native_cli_jsonl_or_thread_invalid")
         index.issue("native_cli_jsonl_or_thread_invalid", artifact_id=item["artifact_id"])
@@ -251,6 +328,14 @@ def _native(index, agent, phase):
                     if session_id not in threads:
                         native.update(state="excluded", reason="session_not_in_bound_cli_threads")
                         continue
+                    for number, row in enumerate(rows):
+                        if number and row.get("type") == "session_meta":
+                            raise ValueError("duplicate_native_session_header")
+                        payload = row.get("payload")
+                        if not isinstance(payload, dict):
+                            raise ValueError("native_session_payload_invalid")
+                        if any("thread_id" in value and value["thread_id"] != session_id for value in (row, payload)):
+                            raise ValueError("native_session_thread_mismatch")
                     if session_id in headers:
                         if headers[session_id] != native["sha256"]:
                             raise ValueError("conflicting_native_session_exports")

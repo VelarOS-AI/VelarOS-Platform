@@ -62,7 +62,8 @@ export interface ShellRunInput {
 
 /**
  * @AgentView
- * 一条命令的回执。success 只看退出码为 0 且没有超时、没有被取消：命令自己失败是正常回执、不抛错，照 success 判。
+ * 一条命令的回执。前台 success 要求退出码为 0、没有超时、取消或未完成清理；后台 success 只确认进程启动，此时 exitCode 为 null，不表示任务完成。
+ * 有限后台任务用 listTasks 核对 status 为 exited 且 exitCode 为 0，再确认任务成功；命令自己失败是正常回执、不抛错。
  * stdout、stderr 是全部输出，看多少、筛什么在程序里定；只有超过 5000000 字符时才只留末尾，truncated 为真。
  * 命令进了后台时立刻返回，backgroundProcess 是那条后台任务；要了 interactive 却没拿到控制台时，note 说明怎么改成不用输入的写法。
  */
@@ -165,7 +166,8 @@ export interface ShellInfo {
 // ── 命令回执 ────────────────────────────────────────────────────
 
 /**
- * 宿主跑完一条命令交回的完整回执（界面与本机宿主都用它）。`success` 只看退出码为 0 且没有超时、没有被取消：命令自己失败是正常回执、不抛错。
+ * 宿主交回的命令回执（界面与本机宿主都用它）。前台 success 要求退出码为 0、没有超时、取消或未完成清理；后台 success 只确认进程启动，此时 exitCode 为 null，不表示任务完成。
+ * 后台任务的完成与最终退出码由任务记录确认；命令自己失败是正常回执、不抛错。
  * stdout、stderr 超过 maxOutputChars 时**只留末尾**（失败现场在尾部），truncated 为真。模型看到的是从它整出来的 `ShellRunResult`。
  */
 export interface ShellCommandResult {

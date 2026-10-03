@@ -6,7 +6,7 @@ import shutil
 import tempfile
 import unittest
 
-from evidence_index import BENCH, collect_campaign_evidence
+from evidence_index import BENCH, _cli_events, collect_campaign_evidence
 from parallel_campaign import phase_identity
 
 PRIVATE = "secret-payload-never-exported"
@@ -63,6 +63,7 @@ class EvidenceIndexTest(unittest.TestCase):
                 else:
                     (trial / "agent/codex.txt").write_text('Reading additional input from stdin...\n' +
                         json.dumps({"type": "thread.started", "thread_id": "bound-thread"}) + '\n' +
+                        json.dumps({"type": "turn.started"}) + '\n' +
                         json.dumps({"type": "turn.completed"}) + '\n')
                     native = trial / "agent/sessions/2026/01/01/native.jsonl"
                     native.parent.mkdir(parents=True)
@@ -167,6 +168,117 @@ class EvidenceIndexTest(unittest.TestCase):
         for tail in ('{"type":\n', '{"type":"turn.completed"}'):
             cli.write_text(json.dumps({"type": "thread.started", "thread_id": "bound-thread"}) + '\n' + tail)
             self.assertEqual(self.collect()["status"], "partial")
+
+    def test_interleaved_diagnostics_and_continuations_keep_locations_without_payload(self):
+        cli = self.trials[2, "source"] / "agent/codex.txt"
+        lines = ['startup notice ' + PRIVATE,
+                 json.dumps({"type": "thread.started", "thread_id": "bound-thread"}),
+                 json.dumps({"type": "turn.started"}),
+                 '\x1b[31m arbitrary diagnostic ' + PRIVATE,
+                 '    continuation ' + PRIVATE,
+                 json.dumps({"type": "item.completed", "item": {"id": "failed-tool", "type": "command_execution", "exit_code": 7, "status": "failed"}}),
+                 json.dumps({"type": "turn.completed"}), 'late stderr ' + PRIVATE]
+        cli.write_text('\n'.join(lines) + '\n')
+        index = self.collect()
+        self.assertEqual(index["status"], "complete")
+        phase = index["attempts"][1]["phases"]["source"]
+        metadata = phase["native_cli_format"]
+        self.assertEqual(metadata["diagnostic_text_lines"], 4)
+        self.assertEqual(metadata["interleaved_text_lines"], 3)
+        self.assertEqual([row["line"] for row in metadata["diagnostic_records"]], [1, 4, 5, 8])
+        self.assertEqual(metadata["diagnostic_records"][1]["sha256"], hashlib.sha256(lines[3].encode()).hexdigest())
+        self.assertEqual(metadata["error_event_count"], 1)
+        self.assertEqual(metadata["error_event_records"][0]["line"], 6)
+        self.assertEqual(len(phase["native_sources"]), 1)
+        self.assertNotIn(PRIVATE, json.dumps(index))
+
+    def test_damaged_json_candidates_and_non_event_objects_remain_unknown(self):
+        cli = self.trials[2, "source"] / "agent/codex.txt"
+        prefix = cli.read_text()
+        for candidate in ('{"type":', '[{"type":"error"}', '[1,2]', '{"level":"error"}', '{"type":7}'):
+            with self.subTest(candidate=candidate):
+                cli.write_text(prefix + 'diagnostic ' + PRIVATE + '\n' + candidate + '\n')
+                index = self.collect()
+                self.assertEqual(index["status"], "partial")
+                metadata = index["attempts"][1]["phases"]["source"]["native_cli_format"]
+                self.assertEqual(metadata["state"], "unknown")
+                self.assertEqual(metadata["diagnostic_text_lines"], 2)
+                self.assertEqual(len(metadata["invalid_records"]), 1)
+                self.assertNotIn(PRIVATE, json.dumps(index))
+
+    def test_cli_turn_identity_shape_and_terminal_are_not_guessed(self):
+        cli = self.trials[2, "source"] / "agent/codex.txt"
+        good = [{'type': 'thread.started', 'thread_id': 'bound-thread'}, {'type': 'turn.started'}]
+        cases = [good, good + [{'type': 'turn.completed', 'thread_id': 'foreign'}],
+                 good + [{'type': 'item.completed', 'item': []}, {'type': 'turn.completed'}],
+                 good + [{'type': 'turn.completed'}, {'type': 'thread.started', 'thread_id': 'other'}],
+                 good + [{'type': 'item.started', 'item': {'id': 'unfinished', 'type': 'command_execution'}}, {'type': 'turn.completed'}],
+                 [good[0], {'type': 'turn.completed'}], good + [{'type': 'future.unknown'}, {'type': 'turn.completed'}]]
+        for events in cases:
+            with self.subTest(events=events):
+                cli.write_text('\n'.join(json.dumps(event) for event in events) + '\n')
+                self.assertEqual(self.collect()["status"], "partial")
+
+    def test_structured_cli_errors_are_retained_even_when_later_turn_recovers(self):
+        cli = self.trials[2, "source"] / "agent/codex.txt"
+        events = [{'type': 'thread.started', 'thread_id': 'bound-thread'}, {'type': 'turn.started'},
+                  {'type': 'error', 'message': PRIVATE}, {'type': 'turn.failed', 'error': {'message': PRIVATE}},
+                  {'type': 'turn.started'}, {'type': 'turn.completed'}]
+        cli.write_text('\n'.join(json.dumps(event) for event in events) + '\n')
+        index = self.collect()
+        self.assertEqual(index["status"], "complete")
+        lifecycle = index["attempts"][1]["phases"]["source"]["native_cli_lifecycle"]
+        self.assertEqual(len(lifecycle["error_events"]), 1)
+        self.assertEqual(len(lifecycle["failed_turns"]), 1)
+        self.assertEqual(lifecycle["threads"]["bound-thread"]["terminal_turns"], 2)
+        self.assertNotIn(PRIVATE, json.dumps(index))
+
+    def test_missing_and_cross_thread_native_exports_cannot_be_complete(self):
+        native = self.trials[2, "source"] / "agent/sessions/2026/01/01/native.jsonl"
+        original = native.read_text()
+        native.unlink()
+        self.assertEqual(self.collect()["status"], "partial")
+        for row in ({'type': 'event_msg', 'payload': {'thread_id': 'foreign'}},
+                    {'type': 'session_meta', 'payload': {'id': 'bound-thread'}}):
+            with self.subTest(row=row):
+                native.write_text(original + json.dumps(row) + '\n')
+                self.assertEqual(self.collect()["status"], "partial")
+
+    def test_native_header_explicit_thread_identity_must_agree_with_session(self):
+        native = self.trials[2, "source"] / "agent/sessions/2026/01/01/native.jsonl"
+        original = [json.loads(line) for line in native.read_text().splitlines()]
+        for position in ('row', 'payload'):
+            for value in ('foreign', None, 7, ['bound-thread']):
+                with self.subTest(position=position, value=value):
+                    rows = json.loads(json.dumps(original))
+                    owner = rows[0] if position == 'row' else rows[0]['payload']
+                    owner['thread_id'] = value
+                    native.write_text('\n'.join(json.dumps(row) for row in rows) + '\n')
+                    index = self.collect()
+                    self.assertEqual(index['status'], 'partial')
+                    self.assertEqual(index['attempts'][1]['phases']['source']['native_sources'], [])
+                    artifact = next(row for row in index['artifacts'] if row['role'] == 'codex_native_session_jsonl')
+                    self.assertEqual(artifact['state'], 'unknown')
+                    self.assertEqual(artifact['reason'], 'native_session_integrity_or_identity_invalid')
+        original[0]['thread_id'] = 'bound-thread'
+        original[0]['payload']['thread_id'] = 'bound-thread'
+        native.write_text('\n'.join(json.dumps(row) for row in original) + '\n')
+        valid = self.collect()
+        self.assertEqual(valid['status'], 'complete')
+        self.assertEqual(len(valid['attempts'][1]['phases']['source']['native_sources']), 1)
+
+    def test_cli_reader_reports_all_diagnostics_when_a_later_candidate_is_damaged(self):
+        lines = ['before', '{"type":"thread.started","thread_id":"bound-thread"}',
+                 'middle', '{"type":', 'continuation', '{"type":"turn.completed"}',
+                 json.dumps({'type': 'error', 'message': PRIVATE})]
+        events, metadata = _cli_events(('\n'.join(lines) + '\n').encode())
+        self.assertEqual(metadata["state"], "unknown")
+        self.assertEqual([row["line"] for row in metadata["diagnostic_records"]], [1, 3, 5])
+        self.assertEqual(metadata["invalid_records"][0]["line"], 4)
+        self.assertEqual(len(events), 3)
+        self.assertEqual(metadata["error_event_count"], 1)
+        self.assertEqual(metadata["error_event_records"][0]["line"], 7)
+        self.assertNotIn(PRIVATE, json.dumps(metadata))
 
     def test_ledger_replay_duplicate_and_wrong_model_are_blockers(self):
         for mode in ("replay", "duplicate", "model"):

@@ -1,8 +1,30 @@
 # ScriptAct 与 Codex 对照：当前状态
 
-**本轮已收尾，按用户要求暂停。** U 的同题评测、账本结算和本轮零模型修复验收均完成；持续推进等待用户明确继续。默认网络 helper 已升级为独立封存的 GOST 3.2.6 v2，修复响应头等待约 15 秒就断开的通用故障：原受控网络四路全部失败，新配置四路等待 20 秒后全部完成，PUBLIC 四路完成；同 IP 的 Host 白名单拒绝、禁止联网和客户端取消/物理结算分别通过。7 项离线回归、模块所有权及 diff 检查通过。最终验收 `transport-client-disconnect-54u/repair-validation/final-validation.json`，SHA `884f3fb913f9d20c4cf69633213079150ad00f67ee0d96f482190db810e5d7b5`；两个控制夹具失败原件保留。取消在客户端约 524ms 结束、synthetic 请求约 2s 物理结束，网关关闭标记仍为空，取消向上游传播和独立的 73.695s ECONNRESET 原因保持未知。
+第13道固定开发题Flipt（X）已完成并结算，按用户要求暂停。双方官方reward=1；ScriptAct/Codex解题999.602/1080.342秒，ScriptAct快7.47%；完整attempt1275.247/1411.205秒，快9.63%。参考费ScriptAct完整$1.869456，Codex已知$1.6896304另2笔未知；完整费用比较与实际扣费未知。84新增请求全部物理结束，旧3205条/148未知完整保留，累计3289/150。四阶段租约、批次准入、容器、控制器85975和采样85976已释放或退出，子agent均已停止。报告 `analysis-54x/REPORT-v1.md`、汇总SHA `767850b2180da9fa3011506ea3e9f29b75691ca515e2d4e38ea9acc3d1e4f724`、根结算SHA `8f73f38f9e811f2ee3d6f0a62aa746989cbf775e1e7dc9d86383a0f9efea5eb4`。
 
-同题版本比较工具补齐所选四方的实际模型/推理强度、固定控制组配置/二进制身份和比较配置 SHA 守卫，16 项回归及三个独立反例通过；根实际 CLI 的 `version-regression-54u/result-v3.json` 与原结果逐字相同。下一道开发题 Tutanota 镜像、实际 glibc 环境和容量准备已保存，恢复时仍需按新网络身份冻结清单、安装、零模型 Oracle 与新鲜准入。账本仍为 250 条/13 条历史未知、全物理终态，本轮修复付费增量 0；容器、在途、队列、租约及维护准入清空。当前改动不构成新的整题提速或总体领先证据。统一收尾见 `round-close-54u/REPORT.md`。
+X完整轨迹显示SDK等待343.756秒、14脚本648.989秒；最长定向Go测试473.725秒正常结束。28底层操作为shell12/read12/edit1/describe1/release2，全部返回成功，命令3次语义失败。Codex外层65状态unknown、原生命令25（8非零）及文件修改6；重叠期间实际有修改与重验，3次主动Ctrl-C已核对。ScriptAct第11轮明确被CONTEXT_REQUIRED阻塞；跨直接页与嵌套部分页的完整范围在历史重组后仍可能欠账，私有证明与生命周期接点尚未零模型复现，保留为待确认问题。16帧segment1/volumes0，重组不是fold。当前等待用户恢复。
+
+第 12 道固定开发题 Proton（W）已完成并结算，双方官方 reward=1。ScriptAct / Codex 解题 **634.993 / 604.879 秒**，完整 attempt **1123.526 / 1092.740 秒**，ScriptAct 分别慢 **4.98% / 2.82%**。参考模型费为 ScriptAct 已知 **$0.652084**另 1 笔未知、Codex完整 **$0.8559144**；完整费用比较与第三方实际扣费未知。48 条新增请求全部物理结束，原3157/147全行及旧文档投影保持，累计3205/148；控制器75500/采样75501退出，四阶段租约、整批准入与容器已释放。汇总 `analysis-54w/paired-summary-v2.json` SHA `9dbf671d0713c2737ff4229daf8c094b625f354b48a5c5597ac6218a4f7e2459`，根结算 SHA `90e443db7e43316875013854dc0547c5cebced2c8ce1f05cddfa8bb82b4417f9`。
+
+W完整轨迹：ScriptAct SDK等待272.227秒、9脚本346.959秒（1个超原始采集预算的PROGRAM_ERROR），19kernel为shell16/describe1/read1/edit1，底层返回全部成功、命令3次非零。Codex外层exec36状态unknown、原生命令30（4非零）/文件修改1；重叠143.236秒主要包含轮询，不能直接归因提速。后台/异步与输出筛选合同已实际展示；本题无嵌套页修复触发。一次HTTP200体流ECONNRESET用量未知，同Node67秒静默/心跳对照均通过，真实生产原因仍未知。独审确认后台success文案把启动与执行完成混淆，已最小修正手写源并正式生成声明；7项相关Shell回归、生成器、所有权、Node24正式构建与候选独审均通过。行为、采集上限和模型配置保持；W未使用后台任务，本修复的整题提速尚未知。第13道固定开发题Flipt的21层镜像导入与实际glibc环境检查均通过，所有准备容器及维护资源已释放，零模型请求；X正式配对已完成结算，当前按用户要求暂停。
+
+X使用冻结候选 `bundle-foundation-54x-sol`，指纹 `95ea3a0a1baf2befb9ca05e66727d681df05c4df79b8f361f3de612bdc54073e`；清单SHA `f65946d879fbe43f7556ae014c1057dd273ac21c2f694e84a1c9e42dfaef05dd`、执行计划SHA `144255cfe74171bfe89e32dfedacfe978b8373a234745e1365cb382339febbce`。实际glibc环境、双方安装、零模型官方Oracle、宿主构建与独审均通过；本轮后台合同修复未触发，不能归因整题提速。已完成冻结输入保持，运行状态入口 `parallel-54/active-campaign.json` 已记录用户暂停。
+
+第 11 道预登记开发题 Tutanota（V2）**双方官方 reward=1，已完成并结算**。ScriptAct / Codex 解题 **429.067 / 490.365 秒**，完整 attempt **606.039 / 658.849 秒**，ScriptAct 分别快 **12.50% / 8.02%**。ScriptAct 参考模型费已知 **$0.7965536**、另 1 笔未知；Codex 完整参考费 **$1.1700136**。完整费用比较未知，第三方实际扣费未知。一题开发成绩不能证明总体领先，当前嵌套材料修复在该任务中 `trigger_not_exercised`，不能归因提速。完整轨迹与分层统计见 `analysis-54v2/REPORT-v2.md`、`paired-summary-v2.json`，汇总 SHA `91884e148dcd620795f305e418a459252799d7b8a174754a07bf31cd3653bf3f`。
+
+完整原始材料通过有效嵌套读取页交付、但原材料 required 缺口仍未解除的问题已复现并修复；沿不可变宿主签名页逐层核验，保持展示预算、缓存断点与完成标准。完整上下文模块 121/121（含专项 17 项）、其他 Runtime 592/592、Provider/MCP/计量 40/40、轨迹与报告 67/67，共 820 项不同检查通过；5 项同输入实际 Runtime 对照中，完整嵌套材料缺口 1→0，裁剪、无签名、跨会话与重置负例仍正确阻塞。全上下文补验在配对启动后由宿主零模型执行，独立凭据保留时间边界。候选验收 `candidate-54v-preparation/root-validation-v2.json` SHA `cf13b984958dd25300d9f3ba2da57a0244a87d15dd5dd686ec300cdb4c9b3634`。
+
+全 46 条新请求物理结束，原 3111 条/146 未知全行及整文档投影保持，累计 3157/147；旧网关 53/0 保留。四阶段租约与整批准入释放，控制器 54644、采样 54645 退出，容器、在途与队列为 0。根结算 `settlement-audit-54v2/root-validation.json` SHA `9781441707e1e9d865cb1776281e1d13f7b3f02c214b91dc01c85f16bcbd4817`；四个主容器 Docker 配置均 1 CPU/4 GiB，配置证据不能表述为 kernel 配额证明。
+
+真实轨迹暴露通用观察器问题：Codex 普通诊断文本夹在 JSON 事件中时，旧索引变成 partial。独审定位原生 session 首行显式 thread 与 payload.id 冲突可 false complete，已补修所有行的一致性。20 项读取器、7 项消费测试、4 组独审边界及所有权检查通过，真实 V2 正式索引 complete；新版完整 report 与原 report 字节相同，诊断与错误保留。根集成 `analysis-54v2/codex/evidence-index-repair/root-integration-v3.json` SHA `0b6e3d4db02c0ab5266b3cf420c3811314cfd3980f7fec4a133ff9a85c38a773`。**W 配对已通过正式环境准入并完成结算**，已完成成绩保持。原始日志、旧 partial、新回放和全部失败凭据分版本保留。
+
+第 12 道冻结开发题为独立 Proton 任务 `caf10ba…`。精确镜像 `326504a…` 已导入，26层及diffId验证；实际 `/bin/sh` ELF PT_INTERP 证明 musl。首次容器创建约119.786秒，旧60秒客户端超时后daemon仍迟到完成；精确never-started容器已清理并正式结算。通用准备器将create限定600秒、其他元数据60秒，TERM转取消保留未知effect阻塞，17回归与5独立边界通过。419个已终态历史JSON透明无损压缩，原路径完整字节/SHA保持，观察宿主净增约2.01GiB；全部执行记录、账本、恢复压缩层保持。第三次正式环境发布 `execution-v3/result.json` SHA `40c9f795414bf393e7187d1937d1ef20032df5ef64e9ac9f77d6b9cb528352bf` 已通过，宿主25.95GiB/VM29.67GiB，24GiB标准不变，模型新增0。候选W复用V产品并绑定修复后观察器与准备器，`candidate-54w-validation/root-validation-v2.json` SHA `9be2d950c475840100cfe47c734ac1f00b2acb0deb499d409697c8bc0a8a7d8a`；双方安装、零模型官方Oracle及新冻结准入均通过，W源任务与官方重放已结算，旧失败凭据全部保留。
+
+通用冻结器绑定 376 个 installed Harbor 源码与运行资产，覆盖实际资源生产、策略、factory/trial 和 Compose 合并链。V2 正式清单 SHA `9bc90ab2640052b7354cbced0bd23d81801f867019d1afa5b1318a9bd7d1a29f`，执行计划 SHA `0c694e65ee6210dac9a3d32fd016d3f5a56f456c3d325476c63584797e269342`；启动验收 SHA `1d86ee9b40934f8ccffdd166a338df4da3adafdc3c0f4297d299ebf14bfecb66`。下批按修复后读者与实际环境冻结新身份，已完成冻结输入保持。
+
+优化按稳定性、官方质量、端到端时间及完整费用验收；请求数量、上下文、缓存和各层工具/模块计数用于诊断。ScriptAct 外层 API 工具 0、Runtime 脚本 9（1 失败）、kernel 35（shell32/memory1/project2）、命令非零退出 2；Codex 外层 exec34（该层状态未知）、原生命令26（3失败）、文件修改5成功，exec 正文中静态操作名出现数另列，不能将不同层相加或直接排名。两次 ScriptAct 约65秒等待有持续模型输出，另一次预响应连接重置用量未知；生产断流仍未完整归因。独立验证保持隔离，实况见 `.velaros-workspace/bench/parallel-54/active-campaign.json`。
+
+2026-10-01 及此前已完成的官方配对与修复记录如下。
 
 候选 **U 的同题再验证已完成并结算**：Element Web 双方官方 reward=1，ScriptAct / Codex 解题 **285.998 / 286.956 秒**、完整 attempt **404.053 / 404.102 秒**；ScriptAct完整参考模型费 **$0.655288**，Codex已知小计 **$0.2188448**另有1笔用量未知，实际扣费未知。相对T2，ScriptAct输入下降17.07%、参考费下降12.08%，自身解题反而慢12.485秒（4.56%）。本轮没有触发原超容量正文载体缺陷（`trigger_not_exercised`），不能将当前接近持平或重复读消失归因本补丁；双方均有已恢复的transport问题。通用缺陷的零模型回归仍通过，候选保持封存。报告 `analysis-54u/REPORT.md`，汇总 SHA `39c058fac92e906d935c53454ba4b88506500f8d7a0613cefa2d4430a57c1298`。原227条/12未知逐字保留，23新增全物理结束、1新增未知，累计250/13；四阶段租约及准入释放，控制器11663与采样11664退出，容器与网关空闲的时间绑定证据见 `settlement-audit-54u/final-settlement.json`，SHA `246f140b9a63de89c72e61602af312aeeed90d01528332b8550af3c3e20bd95d`。模型、上游及资源保持，继续按固定同题性能回归与完整关键路径诊断推进。
 
