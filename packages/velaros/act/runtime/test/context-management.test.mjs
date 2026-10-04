@@ -927,7 +927,10 @@ test('INV-53 automatic folds persist each busy volume narrative once, whether pr
     new AbortController().signal
   )
   const busy = volumes.filter(
-    (item) => item.volume.turns >= ActRuntimeTuning.narrateTurns && !item.volume.notes.length
+    (item) =>
+      (item.volume.turns >= ActRuntimeTuning.narrateTurns ||
+        item.volume.results >= ActRuntimeTuning.narrateResults) &&
+      !item.volume.notes.length
   )
   assert(busy.length >= 1)
   for (const item of busy) {

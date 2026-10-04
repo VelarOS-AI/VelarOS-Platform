@@ -64,6 +64,8 @@ export const ActRuntimeTuning = Object.freeze({
   foldedGoals: 16,
   /** 自动封的一卷至少这么多轮、期间又没改笔记和计划，就让整理支线补写叙事。 */
   narrateTurns: 6,
+  /** 少轮多操作同样需要叙事：一卷实际执行结果达到此数时也触发。 */
+  narrateResults: 6,
   /** 一段里某个分区缺页达到这么多次，封段时按它调整笔记份额。 */
   shareFaults: 2,
   /** 笔记份额每次调整的幅度。 */

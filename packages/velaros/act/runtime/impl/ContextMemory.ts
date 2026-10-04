@@ -1444,7 +1444,8 @@ export class ContextMemory implements ContextMemoryApi {
     const narrate =
       reason !== 'organize' &&
       volume &&
-      volume.turns >= ActRuntimeTuning.narrateTurns &&
+      (volume.turns >= ActRuntimeTuning.narrateTurns ||
+        volume.results >= ActRuntimeTuning.narrateResults) &&
       isEmpty(volume.notes) &&
       (selected?.task?.capsule?.nextObjective ?? '') === segment.objective
         ? sealed

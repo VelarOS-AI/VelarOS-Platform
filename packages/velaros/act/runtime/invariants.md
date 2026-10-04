@@ -66,7 +66,7 @@
 | INV-50 | 封段不调用模型：切点之前封成卷并释放其 segment 租约，最近记录和显式跨段租约继续交付；按剩余轮数触发，长跑中每帧都在窗口内，观察结果跨段保持正确，原文可召回且生产操作不重跑 | 测试 | `test/context-memory.test.mjs`、`test/context-management.test.mjs` |
 | INV-51 | 主线到回合或墙钟上限时封段续跑、发 renewed，运行不结束；墙钟到点后再过一个周期仍没走到轮边界就照旧取消；本次运行连续没有进展时先提示、再要求反思、到 9 步暂停等用户，新的输入重新起算 | 测试 | `test/act-run.test.mjs` |
 | INV-52 | 段底座保留否定尝试和历史目标；当前约束与未解事项以带版本的活动状态进入本帧，尚未核对的新用户输入明确标 pending-review；未解项默认承接，约束撤销/取代只接受完整读过的较新用户原文证据，旧原文与摘要保持不变；最新用户输入继续按原文交付 | 测试 | `test/context-memory.test.mjs`、`test/foundation-context.test.mjs` |
-| INV-53 | 自动封成的一卷至少六轮、那一段又没改笔记和计划时，下一个请求边界由整理支线补写叙事，每卷最多一次、不认领显式整理请求；叙事和长期单随下一次底座重建进入请求 | 测试 | `test/context-management.test.mjs` |
+| INV-53 | 自动封成的一卷至少六轮或六份实际执行结果、那一段又没改笔记和计划时，下一个请求边界由整理支线补写叙事，每卷最多一次、不认领显式整理请求；叙事和长期单随下一次底座重建进入请求 | 测试 | `test/context-memory.test.mjs`、`test/context-management.test.mjs` |
 | INV-54 | 读回上一帧因容量不够只给了引用的笔记或没排进本帧的租约结果记一次缺页（同一帧同一份只记一次，派生展示主动移出的不算）；封段时按缺页调整下一段的笔记份额，没有缺页就回落到宿主配置 | 测试 | `test/context-memory.test.mjs` |
 | INV-55 | 写操作失败时，错误（或它 cause 链里的任一层）带着「没有写入」约定标记——`effect: 'none'` 或 `executionOutcome: 'not-applied'`——就记成没有效果；两样都不认的写失败仍是效果未知。标准项目装配经领域回调确认 patch 的 blocked、无变化与实际写入，普通返回数据不能冒充效果证明 | 测试 | `test/platform.test.mjs` |
 | INV-56 | 工作区项目可以另挂 velaros:code 与 velaros:images：都用运行时自己的项目内核；看图钳在项目里，出了项目那一张报 PERMISSION；没有代码图谱后端时语言服务照常答、图谱类分析报 UNAVAILABLE；不给 project 选项时两件都不挂 | 测试 | test/platform.test.mjs |

@@ -1985,6 +1985,64 @@ test('INV-50 folding seals older history into a listed volume and the next segme
   assert.equal(await memory.fold('runway', 24000, signal), false)
 })
 
+test('INV-53 batched execution gets a volume narrative even when it uses few model turns', async (t) => {
+  for (const { label, results, reason, note, expected } of [
+    { label: 'many results in one response', results: 6, reason: 'runway', expected: true },
+    { label: 'small batch', results: 5, reason: 'runway', expected: false },
+    { label: 'explicit organization', results: 6, reason: 'organize', expected: false },
+    {
+      label: 'progress already recorded',
+      results: 6,
+      reason: 'runway',
+      note: true,
+      expected: false,
+    },
+  ])
+    await t.test(label, async (t) => {
+      const f = await fixture(t)
+      const programs = new ProgramContext('s', f.session.context, f.storage)
+      const recent = new RecentContext('s', f.session.context, f.storage)
+      const view = {
+        id: 'batch-frame',
+        scope: { sessionId: 's', revision: 0 },
+        goals: [],
+        capsule: {},
+        mandatory: [],
+        evidence: [],
+        gaps: [],
+        readSet: [],
+        progress: { step: 0, repeatedSteps: 0, stalled: false, evidence: [] },
+      }
+      await f.memory.project(view, undefined, [], signal, 24000)
+      await f.session.context.append({
+        kind: 'assistant',
+        body: 'Read independent sources in one batch.',
+      })
+      for (let index = 0; index < results; index++)
+        await archiveResult(f, programs, `source-${index}`)
+      if (note)
+        await f.session.context.append({
+          kind: 'audit',
+          title: 'workspace:note:progress',
+          body: JSON.stringify({
+            key: 'progress',
+            revision: 1,
+            body: 'Current findings are recorded.',
+          }),
+        })
+      // 最近窗口留在下一段；批量执行整体进入将被压缩的那一卷。
+      for (let index = 0; index < 8; index++)
+        await f.session.context.append({ kind: 'assistant', body: `Recent progress ${index}` })
+      assert(await f.memory.fold(reason, 24000, signal))
+      const [sealed] = await recent.volumes(signal)
+      assert.equal(sealed.volume.turns, 1)
+      assert.equal(sealed.volume.results, results)
+      assert.deepEqual(await f.memory.narration(signal), expected ? sealed.ref : null)
+      assert.equal(await f.memory.narration(signal), null, 'the automatic intent is consumed once')
+      assert.equal(f.requests.length, 0, 'folding records an intent without invoking a model')
+    })
+})
+
 test('INV-52 current constraints and unresolved items remain separate from immutable history while task bodies stay chronological', async (t) => {
   const f = await fixture(t)
   const programs = new ProgramContext('s', f.session.context, f.storage)
