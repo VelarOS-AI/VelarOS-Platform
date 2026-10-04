@@ -1,4 +1,3 @@
-import { Log } from '@velaros-ai/core'
 import { toNullable } from '@velaros-ai/core'
 import { isEmpty, isObject, isPlainObject, isString } from '@velaros-ai/core'
 import { unifiedLineDiff } from '@velaros-ai/core/utils/textDiff'
@@ -38,20 +37,20 @@ export function contextTextChange(
         return JSON.stringify({ checked: parsed.checked, result })
       }
     } catch {
-      Log.tag('ActRuntime').debug(
-        'progress 已进入异常处理或降级分支'
-      ) /* 不完整 JSON 片段直接展示，恢复依然使用原记录。 */
+      // 普通文本和不完整 JSON 片段直接比较，恢复依然使用原记录。
     }
     return value.text
   }
+  const beforeText = text(before)
+  const afterText = text(after)
   const complete =
     (!before || before.text.length === before.totalChars) &&
     (!after || after.text.length === after.totalChars)
   const changed = complete
-    ? text(before) !== text(after)
+    ? beforeText !== afterText
     : before?.record.objectId !== after?.record.objectId
   const patch = changed
-    ? unifiedLineDiff(text(before), text(after), {
+    ? unifiedLineDiff(beforeText, afterText, {
         from: before?.record.ref.id ?? 'empty',
         to: after?.record.ref.id ?? 'empty',
         editLimit: ContextTuning.diffEdits,
