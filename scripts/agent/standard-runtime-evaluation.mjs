@@ -25,6 +25,28 @@ const suiteText = await readFile(
 )
 const suite = JSON.parse(suiteText)
 const freeze = JSON.parse(await readFile(join(output, 'suite-freeze.json'), 'utf8'))
+if (freeze.evaluatorSha256)
+  assert.equal(
+    createHash('sha256')
+      .update(await readFile(import.meta.filename))
+      .digest('hex'),
+    freeze.evaluatorSha256,
+    'The evaluator must remain frozen'
+  )
+const variants = freeze.variants ?? [
+  { id: 'baseline', node: false },
+  { id: 'standard', node: true },
+]
+assert.ok(Array.isArray(variants) && variants.length >= 2)
+assert.equal(new Set(variants.map((variant) => variant.id)).size, variants.length)
+assert.ok(
+  variants.every(
+    (variant) => /^[a-z][a-z0-9-]*$/u.test(variant.id) && typeof variant.node === 'boolean'
+  )
+)
+const nativeVariants = new Set(
+  variants.filter((variant) => variant.node).map((variant) => variant.id)
+)
 assert.equal(
   createHash('sha256').update(suiteText).digest('hex'),
   freeze.suiteSha256,
@@ -84,7 +106,7 @@ async function preflight(variant) {
       search: false,
       modules: [shellCapability(createShellCapabilityModule, projectCapabilityPorts, shell, cwd)],
       storage: localContextStorage({ path: join(directory, 'state.sqlite') }),
-      ...(variant === 'standard'
+      ...(nativeVariants.has(variant)
         ? { node: createShellNodeEnvironment({ cwd, directory: join(directory, 'node'), shell }) }
         : {}),
     })
@@ -94,10 +116,9 @@ async function preflight(variant) {
       body: 'Verify real shell execution before evaluating the model',
     })
     const call = `await run({command:${JSON.stringify(`node -e "process.stdout.write('preflight-shell-ok')"`)},background:false})`
-    const source =
-      variant === 'baseline'
-        ? `import {run} from 'velaros:shell'; export default ${call};`
-        : `import {readFile} from 'node:fs/promises';import {join} from 'node:path';import {pathToFileURL} from 'node:url';const dir=process.env.VELAROS_HOST_DIR;const item=JSON.parse(await readFile(join(dir,'index.json'),'utf8')).find(x=>x.module==='velaros:shell');const {run}=await import(pathToFileURL(join(dir,item.client)));console.log(JSON.stringify(${call}));`
+    const source = !nativeVariants.has(variant)
+      ? `import {run} from 'velaros:shell'; export default ${call};`
+      : `import {readFile} from 'node:fs/promises';import {join} from 'node:path';import {pathToFileURL} from 'node:url';const dir=process.env.VELAROS_HOST_DIR;const item=JSON.parse(await readFile(join(dir,'index.json'),'utf8')).find(x=>x.module==='velaros:shell');const {run}=await import(pathToFileURL(join(dir,item.client)));console.log(JSON.stringify(${call}));`
     const result = await session.execute({ source })
     assert.equal(result.checked, true, JSON.stringify(result))
     assert.equal(result.result.failed, undefined, JSON.stringify(result))
@@ -220,7 +241,7 @@ async function runCase(variant, spec, repetition) {
         { module: 'velaros:interaction' },
         { module: 'velaros:widget' },
       ],
-      ...(variant === 'standard'
+      ...(nativeVariants.has(variant)
         ? { node: createShellNodeEnvironment({ cwd, directory: join(directory, 'node'), shell }) }
         : {}),
       environment: () => ({ cwd }),
@@ -243,6 +264,8 @@ async function runCase(variant, spec, repetition) {
   try {
     for (const [file, value] of Object.entries(spec.expected ?? {}))
       assert.deepEqual(JSON.parse(await readFile(join(cwd, file), 'utf8')), value)
+    for (const file of spec.unchanged ?? [])
+      assert.equal(await readFile(join(cwd, file), 'utf8'), spec.files[file], `${file} changed`)
     if (spec.requiresHost) assert.ok(hostCalls.length)
     if (spec.grade)
       await exec(
@@ -308,11 +331,10 @@ async function runCase(variant, spec, repetition) {
   console.log(JSON.stringify(result))
 }
 
-for (const variant of ['baseline', 'standard']) await preflight(variant)
+for (const { id } of variants) await preflight(id)
 for (let repetition = 0; repetition < repetitions; repetition++)
   for (const [index, spec] of suite.cases.filter((item) => item.split === split).entries()) {
-    for (const variant of (index + repetition) % 2
-      ? ['standard', 'baseline']
-      : ['baseline', 'standard'])
-      await runCase(variant, spec, repetition)
+    const offset = (index + repetition) % variants.length
+    for (const variant of [...variants.slice(offset), ...variants.slice(0, offset)])
+      await runCase(variant.id, spec, repetition)
   }

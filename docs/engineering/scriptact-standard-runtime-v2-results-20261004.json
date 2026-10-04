@@ -1,0 +1,1342 @@
+{
+  "study": "standard-runtime-v2-20261004",
+  "recordedAt": "2026-10-04T10:12:26.833558+00:00",
+  "evidenceDirectory": ".velaros-workspace/bench/standard-runtime-v2-20261004",
+  "environment": {
+    "node": "v24.15.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "configuration": {
+    "model": "gpt-5.6-sol",
+    "reasoning": "high",
+    "maxOutputTokens": 12000,
+    "pricing": "reference only; input $4/M, output $20/M; cache discounts excluded"
+  },
+  "limits": {
+    "modelRequestsPerRun": 8,
+    "timeoutMsPerRun": 240000
+  },
+  "acceptance": "Independent artifact grading and completed runtime status must both pass; all 36 attempts retained.",
+  "usagePolicy": "Unknown usage stays null. Token and reference-cost comparisons use only pairs with complete usage on both sides. Reference prices exclude cache discounts and do not represent billed cost.",
+  "baselineCommit": "7c22624778d3fbe31a86257402c0aa0787867b80",
+  "previousCommit": "d0f9ccda02644d18e825703217fa7adf82050d71",
+  "freeze": {
+    "suite": "scripts/agent/standard-runtime-v2-validation-cases.json",
+    "suiteSha256": "7ded63a11335e6b6513d05ac144ada6189de7d51ed2e74588c592b490cf3d678",
+    "evaluatorSha256": "09c5ebf6c7640f51fa0273956651aeb528230b609a8b70209afdc3a7dd221bd1",
+    "split": "validation",
+    "repetitions": 2,
+    "variants": [
+      {
+        "id": "baseline",
+        "node": false,
+        "manifestSha256": "3bb55af9839267f5982414b6fe5cebb75693550becbf11aee5b0471c7a4f7557",
+        "files": 5350
+      },
+      {
+        "id": "previous",
+        "node": true,
+        "manifestSha256": "71cd005bc90785720d56c332c51b3c2e7c9cd4bfde7db2a0efd96ef29ca09b0a",
+        "files": 5375
+      },
+      {
+        "id": "standard",
+        "node": true,
+        "manifestSha256": "7a2710a02aae23238a4c27e2795501265c31a33d3a9503bcc12b07bf7b470a66",
+        "files": 5380
+      }
+    ]
+  },
+  "postRunVerification": {
+    "verifiedAt": "2026-10-04T10:10:18.142516+00:00",
+    "suiteSha256": "7ded63a11335e6b6513d05ac144ada6189de7d51ed2e74588c592b490cf3d678",
+    "evaluatorSha256": "09c5ebf6c7640f51fa0273956651aeb528230b609a8b70209afdc3a7dd221bd1",
+    "snapshots": [
+      {
+        "variant": "baseline",
+        "manifestSha256": "3bb55af9839267f5982414b6fe5cebb75693550becbf11aee5b0471c7a4f7557",
+        "verifiedFiles": 5350,
+        "unchanged": true,
+        "workspaceDependenciesIsolated": true
+      },
+      {
+        "variant": "previous",
+        "manifestSha256": "71cd005bc90785720d56c332c51b3c2e7c9cd4bfde7db2a0efd96ef29ca09b0a",
+        "verifiedFiles": 5375,
+        "unchanged": true,
+        "workspaceDependenciesIsolated": true
+      },
+      {
+        "variant": "standard",
+        "manifestSha256": "7a2710a02aae23238a4c27e2795501265c31a33d3a9503bcc12b07bf7b470a66",
+        "verifiedFiles": 5380,
+        "unchanged": true,
+        "workspaceDependenciesIsolated": true
+      }
+    ],
+    "changedProductionFilesMatchingSnapshot": [
+      "packages/script/src/impl/NodeCodeRunner.ts",
+      "packages/script/src/utils/node-client.ts",
+      "packages/velaros/act/runtime/impl/RuntimeSession.ts",
+      "packages/velaros/act/runtime/invariants.md",
+      "packages/velaros/act/runtime/types/memory.ts",
+      "packages/velaros/act/runtime/utils/context-memory.ts",
+      "packages/velaros/act/runtime/utils/node-instructions.ts",
+      "packages/velaros/act/runtime/utils/node-context.ts"
+    ],
+    "dependencyLockfileDelta": "none"
+  },
+  "shellPreflights": {
+    "baseline": true,
+    "previous": true,
+    "standard": true
+  },
+  "projectionReplay": {
+    "summary": {
+      "frames": 35,
+      "previousChars": 150025,
+      "currentChars": 66346,
+      "reduction": 0.5577670388268622
+    },
+    "rows": [
+      {
+        "case": "acceptance-acceptance-host-0-standard",
+        "turn": 0,
+        "previousChars": 3385,
+        "currentChars": 1184
+      },
+      {
+        "case": "acceptance-acceptance-host-0-standard",
+        "turn": 1,
+        "previousChars": 3928,
+        "currentChars": 1718
+      },
+      {
+        "case": "acceptance-acceptance-host-0-standard",
+        "turn": 2,
+        "previousChars": 4317,
+        "currentChars": 1961
+      },
+      {
+        "case": "acceptance-acceptance-host-0-standard",
+        "turn": 3,
+        "previousChars": 4830,
+        "currentChars": 2326
+      },
+      {
+        "case": "acceptance-acceptance-host-1-standard",
+        "turn": 0,
+        "previousChars": 3385,
+        "currentChars": 1184
+      },
+      {
+        "case": "acceptance-acceptance-host-1-standard",
+        "turn": 1,
+        "previousChars": 3928,
+        "currentChars": 1718
+      },
+      {
+        "case": "acceptance-acceptance-host-1-standard",
+        "turn": 2,
+        "previousChars": 4317,
+        "currentChars": 1961
+      },
+      {
+        "case": "acceptance-acceptance-host-1-standard",
+        "turn": 3,
+        "previousChars": 4829,
+        "currentChars": 2326
+      },
+      {
+        "case": "acceptance-acceptance-ledger-0-standard",
+        "turn": 0,
+        "previousChars": 3387,
+        "currentChars": 1186
+      },
+      {
+        "case": "acceptance-acceptance-ledger-0-standard",
+        "turn": 1,
+        "previousChars": 3930,
+        "currentChars": 1720
+      },
+      {
+        "case": "acceptance-acceptance-ledger-0-standard",
+        "turn": 2,
+        "previousChars": 4319,
+        "currentChars": 1963
+      },
+      {
+        "case": "acceptance-acceptance-ledger-0-standard",
+        "turn": 3,
+        "previousChars": 4653,
+        "currentChars": 2153
+      },
+      {
+        "case": "acceptance-acceptance-ledger-0-standard",
+        "turn": 4,
+        "previousChars": 4948,
+        "currentChars": 2301
+      },
+      {
+        "case": "acceptance-acceptance-ledger-1-standard",
+        "turn": 0,
+        "previousChars": 3387,
+        "currentChars": 1186
+      },
+      {
+        "case": "acceptance-acceptance-ledger-1-standard",
+        "turn": 1,
+        "previousChars": 3930,
+        "currentChars": 1720
+      },
+      {
+        "case": "acceptance-acceptance-ledger-1-standard",
+        "turn": 2,
+        "previousChars": 4319,
+        "currentChars": 1963
+      },
+      {
+        "case": "acceptance-acceptance-ledger-1-standard",
+        "turn": 3,
+        "previousChars": 5376,
+        "currentChars": 2510
+      },
+      {
+        "case": "acceptance-acceptance-ledger-1-standard",
+        "turn": 4,
+        "previousChars": 5354,
+        "currentChars": 2707
+      },
+      {
+        "case": "acceptance-acceptance-ledger-1-standard",
+        "turn": 5,
+        "previousChars": 5874,
+        "currentChars": 2798
+      },
+      {
+        "case": "acceptance-acceptance-ledger-1-standard",
+        "turn": 6,
+        "previousChars": 5925,
+        "currentChars": 2995
+      },
+      {
+        "case": "acceptance-acceptance-memo-0-standard",
+        "turn": 0,
+        "previousChars": 3385,
+        "currentChars": 1184
+      },
+      {
+        "case": "acceptance-acceptance-memo-0-standard",
+        "turn": 1,
+        "previousChars": 3928,
+        "currentChars": 1718
+      },
+      {
+        "case": "acceptance-acceptance-memo-0-standard",
+        "turn": 2,
+        "previousChars": 4315,
+        "currentChars": 1961
+      },
+      {
+        "case": "acceptance-acceptance-memo-0-standard",
+        "turn": 3,
+        "previousChars": 4651,
+        "currentChars": 2151
+      },
+      {
+        "case": "acceptance-acceptance-memo-1-standard",
+        "turn": 0,
+        "previousChars": 3385,
+        "currentChars": 1184
+      },
+      {
+        "case": "acceptance-acceptance-memo-1-standard",
+        "turn": 1,
+        "previousChars": 3928,
+        "currentChars": 1718
+      },
+      {
+        "case": "acceptance-acceptance-memo-1-standard",
+        "turn": 2,
+        "previousChars": 4315,
+        "currentChars": 1961
+      },
+      {
+        "case": "acceptance-acceptance-memo-1-standard",
+        "turn": 3,
+        "previousChars": 4651,
+        "currentChars": 2151
+      },
+      {
+        "case": "acceptance-acceptance-package-0-standard",
+        "turn": 0,
+        "previousChars": 3388,
+        "currentChars": 1187
+      },
+      {
+        "case": "acceptance-acceptance-package-0-standard",
+        "turn": 1,
+        "previousChars": 3931,
+        "currentChars": 1721
+      },
+      {
+        "case": "acceptance-acceptance-package-0-standard",
+        "turn": 2,
+        "previousChars": 4320,
+        "currentChars": 1964
+      },
+      {
+        "case": "acceptance-acceptance-package-1-standard",
+        "turn": 0,
+        "previousChars": 3388,
+        "currentChars": 1187
+      },
+      {
+        "case": "acceptance-acceptance-package-1-standard",
+        "turn": 1,
+        "previousChars": 4481,
+        "currentChars": 1900
+      },
+      {
+        "case": "acceptance-acceptance-package-1-standard",
+        "turn": 2,
+        "previousChars": 4624,
+        "currentChars": 2268
+      },
+      {
+        "case": "acceptance-acceptance-package-1-standard",
+        "turn": 3,
+        "previousChars": 5014,
+        "currentChars": 2511
+      }
+    ]
+  },
+  "aggregates": {
+    "baseline": {
+      "runs": 12,
+      "artifactPassed": 12,
+      "completed": 12,
+      "accepted": 12,
+      "requests": 50,
+      "elapsedMs": 1000644,
+      "medianElapsedMs": 75792.0,
+      "completeUsageRuns": 8,
+      "systemCharsRange": [
+        29225,
+        29371
+      ],
+      "meanRequests": 4.1667,
+      "meanElapsedMs": 83387.0
+    },
+    "previous": {
+      "runs": 12,
+      "artifactPassed": 12,
+      "completed": 12,
+      "accepted": 12,
+      "requests": 47,
+      "elapsedMs": 749949,
+      "medianElapsedMs": 52672.5,
+      "completeUsageRuns": 11,
+      "systemCharsRange": [
+        674,
+        685
+      ],
+      "meanRequests": 3.9167,
+      "meanElapsedMs": 62495.75
+    },
+    "standard": {
+      "runs": 12,
+      "artifactPassed": 12,
+      "completed": 12,
+      "accepted": 12,
+      "requests": 48,
+      "elapsedMs": 980939,
+      "medianElapsedMs": 54063.0,
+      "completeUsageRuns": 10,
+      "systemCharsRange": [
+        649,
+        660
+      ],
+      "meanRequests": 4.0,
+      "meanElapsedMs": 81744.92
+    }
+  },
+  "pairedComparisons": {
+    "baselineToStandard": {
+      "allPairs": 12,
+      "completeUsagePairs": 6,
+      "completeUsageKeys": [
+        {
+          "case": "content-manifest",
+          "repetition": 0
+        },
+        {
+          "case": "content-manifest",
+          "repetition": 1
+        },
+        {
+          "case": "host-availability",
+          "repetition": 0
+        },
+        {
+          "case": "immutable-migration",
+          "repetition": 1
+        },
+        {
+          "case": "installed-statistics",
+          "repetition": 1
+        },
+        {
+          "case": "stdin-cli",
+          "repetition": 0
+        }
+      ],
+      "missingUsageKeys": [
+        {
+          "case": "bounded-async",
+          "repetition": 0
+        },
+        {
+          "case": "bounded-async",
+          "repetition": 1
+        },
+        {
+          "case": "host-availability",
+          "repetition": 1
+        },
+        {
+          "case": "immutable-migration",
+          "repetition": 0
+        },
+        {
+          "case": "installed-statistics",
+          "repetition": 0
+        },
+        {
+          "case": "stdin-cli",
+          "repetition": 1
+        }
+      ],
+      "before": {
+        "inputTokens": 589751,
+        "outputTokens": 14647,
+        "referenceCostUncachedUSD": 2.651944
+      },
+      "after": {
+        "inputTokens": 183321,
+        "outputTokens": 10823,
+        "referenceCostUncachedUSD": 0.949744
+      },
+      "changePercent": {
+        "inputTokens": -68.9155,
+        "outputTokens": -26.1077,
+        "referenceCostUncachedUSD": -64.1869
+      },
+      "elapsedMsChangePercent": -1.9692,
+      "requestsChangePercent": -4.0,
+      "elapsedPairsFaster": 7
+    },
+    "previousToStandard": {
+      "allPairs": 12,
+      "completeUsagePairs": 9,
+      "completeUsageKeys": [
+        {
+          "case": "bounded-async",
+          "repetition": 0
+        },
+        {
+          "case": "bounded-async",
+          "repetition": 1
+        },
+        {
+          "case": "content-manifest",
+          "repetition": 0
+        },
+        {
+          "case": "content-manifest",
+          "repetition": 1
+        },
+        {
+          "case": "host-availability",
+          "repetition": 0
+        },
+        {
+          "case": "host-availability",
+          "repetition": 1
+        },
+        {
+          "case": "immutable-migration",
+          "repetition": 0
+        },
+        {
+          "case": "immutable-migration",
+          "repetition": 1
+        },
+        {
+          "case": "installed-statistics",
+          "repetition": 1
+        }
+      ],
+      "missingUsageKeys": [
+        {
+          "case": "installed-statistics",
+          "repetition": 0
+        },
+        {
+          "case": "stdin-cli",
+          "repetition": 0
+        },
+        {
+          "case": "stdin-cli",
+          "repetition": 1
+        }
+      ],
+      "before": {
+        "inputTokens": 375877,
+        "outputTokens": 20752,
+        "referenceCostUncachedUSD": 1.918548
+      },
+      "after": {
+        "inputTokens": 340528,
+        "outputTokens": 21149,
+        "referenceCostUncachedUSD": 1.785092
+      },
+      "changePercent": {
+        "inputTokens": -9.4044,
+        "outputTokens": 1.9131,
+        "referenceCostUncachedUSD": -6.9561
+      },
+      "elapsedMsChangePercent": 30.8008,
+      "requestsChangePercent": 2.1277,
+      "elapsedPairsFaster": 5
+    }
+  },
+  "byCase": {
+    "stdin-cli": {
+      "baseline": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 6,
+        "elapsedMs": 109821
+      },
+      "previous": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 8,
+        "elapsedMs": 84775
+      },
+      "standard": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 6,
+        "elapsedMs": 129905
+      }
+    },
+    "content-manifest": {
+      "baseline": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 11,
+        "elapsedMs": 174738
+      },
+      "previous": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 4,
+        "elapsedMs": 74428
+      },
+      "standard": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 4,
+        "elapsedMs": 74132
+      }
+    },
+    "bounded-async": {
+      "baseline": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 10,
+        "elapsedMs": 267739
+      },
+      "previous": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 9,
+        "elapsedMs": 124841
+      },
+      "standard": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 10,
+        "elapsedMs": 273732
+      }
+    },
+    "installed-statistics": {
+      "baseline": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 7,
+        "elapsedMs": 121204
+      },
+      "previous": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 9,
+        "elapsedMs": 119420
+      },
+      "standard": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 10,
+        "elapsedMs": 153986
+      }
+    },
+    "host-availability": {
+      "baseline": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 7,
+        "elapsedMs": 129572
+      },
+      "previous": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 8,
+        "elapsedMs": 84809
+      },
+      "standard": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 7,
+        "elapsedMs": 85572
+      }
+    },
+    "immutable-migration": {
+      "baseline": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 9,
+        "elapsedMs": 197570
+      },
+      "previous": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 9,
+        "elapsedMs": 261676
+      },
+      "standard": {
+        "runs": 2,
+        "accepted": 2,
+        "requests": 11,
+        "elapsedMs": 263612
+      }
+    }
+  },
+  "modelStreamErrors": [
+    {
+      "variant": "previous",
+      "case": "stdin-cli",
+      "repetition": 0,
+      "turn": 4,
+      "code": "provider",
+      "category": "ECONNRESET",
+      "retryAfterMs": 2000,
+      "runAccepted": true
+    },
+    {
+      "variant": "baseline",
+      "case": "bounded-async",
+      "repetition": 0,
+      "turn": 3,
+      "code": "provider",
+      "category": "ECONNRESET",
+      "retryAfterMs": 2000,
+      "runAccepted": true
+    },
+    {
+      "variant": "standard",
+      "case": "installed-statistics",
+      "repetition": 0,
+      "turn": 5,
+      "code": "provider",
+      "category": "terminated",
+      "retryAfterMs": 2000,
+      "runAccepted": true
+    },
+    {
+      "variant": "baseline",
+      "case": "immutable-migration",
+      "repetition": 0,
+      "turn": 4,
+      "code": "provider",
+      "category": "terminated",
+      "retryAfterMs": 2000,
+      "runAccepted": true
+    },
+    {
+      "variant": "standard",
+      "case": "stdin-cli",
+      "repetition": 1,
+      "turn": 1,
+      "code": "provider",
+      "category": "ECONNRESET",
+      "retryAfterMs": 2000,
+      "runAccepted": true
+    },
+    {
+      "variant": "baseline",
+      "case": "bounded-async",
+      "repetition": 1,
+      "turn": 1,
+      "code": "provider",
+      "category": "ECONNRESET",
+      "retryAfterMs": 2000,
+      "runAccepted": true
+    },
+    {
+      "variant": "baseline",
+      "case": "host-availability",
+      "repetition": 1,
+      "turn": 2,
+      "code": "provider",
+      "category": "ECONNRESET",
+      "retryAfterMs": 2000,
+      "runAccepted": true
+    }
+  ],
+  "results": [
+    {
+      "variant": "baseline",
+      "case": "stdin-cli",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 3,
+      "elapsedMs": 40305,
+      "inputTokens": 64375,
+      "outputTokens": 1417,
+      "referenceCostUncachedUSD": 0.28584,
+      "systemChars": 29225,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "stdin-cli",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "elapsedMs": 57386,
+      "inputTokens": null,
+      "outputTokens": null,
+      "referenceCostUncachedUSD": null,
+      "systemChars": 674,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "stdin-cli",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 2,
+      "elapsedMs": 28063,
+      "inputTokens": 13218,
+      "outputTokens": 800,
+      "referenceCostUncachedUSD": 0.068872,
+      "systemChars": 649,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "content-manifest",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 2,
+      "elapsedMs": 38115,
+      "inputTokens": 16344,
+      "outputTokens": 1830,
+      "referenceCostUncachedUSD": 0.101976,
+      "systemChars": 681,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "content-manifest",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 2,
+      "elapsedMs": 43070,
+      "inputTokens": 14175,
+      "outputTokens": 1789,
+      "referenceCostUncachedUSD": 0.09248,
+      "systemChars": 656,
+      "hostCalls": 0
+    },
+    {
+      "variant": "baseline",
+      "case": "content-manifest",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 6,
+      "elapsedMs": 97283,
+      "inputTokens": 169566,
+      "outputTokens": 4051,
+      "referenceCostUncachedUSD": 0.759284,
+      "systemChars": 29225,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "bounded-async",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 63758,
+      "inputTokens": 34795,
+      "outputTokens": 2923,
+      "referenceCostUncachedUSD": 0.19764,
+      "systemChars": 653,
+      "hostCalls": 0
+    },
+    {
+      "variant": "baseline",
+      "case": "bounded-async",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "elapsedMs": 132074,
+      "inputTokens": null,
+      "outputTokens": null,
+      "referenceCostUncachedUSD": null,
+      "systemChars": 29225,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "bounded-async",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 60960,
+      "inputTokens": 43084,
+      "outputTokens": 2976,
+      "referenceCostUncachedUSD": 0.231856,
+      "systemChars": 678,
+      "hostCalls": 0
+    },
+    {
+      "variant": "baseline",
+      "case": "installed-statistics",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 3,
+      "elapsedMs": 47075,
+      "inputTokens": 66693,
+      "outputTokens": 1982,
+      "referenceCostUncachedUSD": 0.306412,
+      "systemChars": 29225,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "installed-statistics",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "elapsedMs": 71461,
+      "inputTokens": 61710,
+      "outputTokens": 2217,
+      "referenceCostUncachedUSD": 0.29118,
+      "systemChars": 685,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "installed-statistics",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 6,
+      "elapsedMs": 109618,
+      "inputTokens": null,
+      "outputTokens": null,
+      "referenceCostUncachedUSD": null,
+      "systemChars": 660,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "host-availability",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 46133,
+      "inputTokens": 46665,
+      "outputTokens": 1809,
+      "referenceCostUncachedUSD": 0.22284,
+      "systemChars": 682,
+      "hostCalls": 1
+    },
+    {
+      "variant": "standard",
+      "case": "host-availability",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 41783,
+      "inputTokens": 39287,
+      "outputTokens": 1462,
+      "referenceCostUncachedUSD": 0.186388,
+      "systemChars": 657,
+      "hostCalls": 1
+    },
+    {
+      "variant": "baseline",
+      "case": "host-availability",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 3,
+      "elapsedMs": 28204,
+      "inputTokens": 64839,
+      "outputTokens": 1061,
+      "referenceCostUncachedUSD": 0.280576,
+      "systemChars": 29371,
+      "hostCalls": 1
+    },
+    {
+      "variant": "standard",
+      "case": "immutable-migration",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "elapsedMs": 64058,
+      "inputTokens": 41252,
+      "outputTokens": 2864,
+      "referenceCostUncachedUSD": 0.222288,
+      "systemChars": 659,
+      "hostCalls": 0
+    },
+    {
+      "variant": "baseline",
+      "case": "immutable-migration",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 6,
+      "elapsedMs": 149473,
+      "inputTokens": null,
+      "outputTokens": null,
+      "referenceCostUncachedUSD": null,
+      "systemChars": 29225,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "immutable-migration",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "elapsedMs": 204026,
+      "inputTokens": 64677,
+      "outputTokens": 3565,
+      "referenceCostUncachedUSD": 0.330008,
+      "systemChars": 684,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "stdin-cli",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 3,
+      "elapsedMs": 27389,
+      "inputTokens": 26707,
+      "outputTokens": 1013,
+      "referenceCostUncachedUSD": 0.127088,
+      "systemChars": 674,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "stdin-cli",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 101842,
+      "inputTokens": null,
+      "outputTokens": null,
+      "referenceCostUncachedUSD": null,
+      "systemChars": 649,
+      "hostCalls": 0
+    },
+    {
+      "variant": "baseline",
+      "case": "stdin-cli",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 3,
+      "elapsedMs": 69516,
+      "inputTokens": 64846,
+      "outputTokens": 1448,
+      "referenceCostUncachedUSD": 0.288344,
+      "systemChars": 29225,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "content-manifest",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 2,
+      "elapsedMs": 31062,
+      "inputTokens": 13861,
+      "outputTokens": 1461,
+      "referenceCostUncachedUSD": 0.084664,
+      "systemChars": 656,
+      "hostCalls": 0
+    },
+    {
+      "variant": "baseline",
+      "case": "content-manifest",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "elapsedMs": 77455,
+      "inputTokens": 126085,
+      "outputTokens": 2670,
+      "referenceCostUncachedUSD": 0.55774,
+      "systemChars": 29225,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "content-manifest",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 2,
+      "elapsedMs": 36313,
+      "inputTokens": 16265,
+      "outputTokens": 1717,
+      "referenceCostUncachedUSD": 0.0994,
+      "systemChars": 681,
+      "hostCalls": 0
+    },
+    {
+      "variant": "baseline",
+      "case": "bounded-async",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "elapsedMs": 135665,
+      "inputTokens": null,
+      "outputTokens": null,
+      "referenceCostUncachedUSD": null,
+      "systemChars": 29225,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "bounded-async",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "elapsedMs": 63881,
+      "inputTokens": 59097,
+      "outputTokens": 2755,
+      "referenceCostUncachedUSD": 0.291488,
+      "systemChars": 678,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "bounded-async",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 6,
+      "elapsedMs": 209974,
+      "inputTokens": 68580,
+      "outputTokens": 3868,
+      "referenceCostUncachedUSD": 0.35168,
+      "systemChars": 653,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "installed-statistics",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 47959,
+      "inputTokens": 42446,
+      "outputTokens": 2082,
+      "referenceCostUncachedUSD": 0.211424,
+      "systemChars": 685,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "installed-statistics",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 44368,
+      "inputTokens": 36236,
+      "outputTokens": 1741,
+      "referenceCostUncachedUSD": 0.179764,
+      "systemChars": 660,
+      "hostCalls": 0
+    },
+    {
+      "variant": "baseline",
+      "case": "installed-statistics",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 74129,
+      "inputTokens": 98718,
+      "outputTokens": 3566,
+      "referenceCostUncachedUSD": 0.466192,
+      "systemChars": 29225,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "host-availability",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 3,
+      "elapsedMs": 43789,
+      "inputTokens": 25798,
+      "outputTokens": 1471,
+      "referenceCostUncachedUSD": 0.132612,
+      "systemChars": 657,
+      "hostCalls": 1
+    },
+    {
+      "variant": "baseline",
+      "case": "host-availability",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 101368,
+      "inputTokens": null,
+      "outputTokens": null,
+      "referenceCostUncachedUSD": null,
+      "systemChars": 29371,
+      "hostCalls": 1
+    },
+    {
+      "variant": "previous",
+      "case": "host-availability",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 38676,
+      "inputTokens": 45174,
+      "outputTokens": 1474,
+      "referenceCostUncachedUSD": 0.210176,
+      "systemChars": 682,
+      "hostCalls": 1
+    },
+    {
+      "variant": "baseline",
+      "case": "immutable-migration",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 3,
+      "elapsedMs": 48097,
+      "inputTokens": 66168,
+      "outputTokens": 1882,
+      "referenceCostUncachedUSD": 0.302312,
+      "systemChars": 29225,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "immutable-migration",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 57650,
+      "inputTokens": 42125,
+      "outputTokens": 2544,
+      "referenceCostUncachedUSD": 0.21938,
+      "systemChars": 684,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "immutable-migration",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 6,
+      "elapsedMs": 199554,
+      "inputTokens": 66544,
+      "outputTokens": 3570,
+      "referenceCostUncachedUSD": 0.337576,
+      "systemChars": 659,
+      "hostCalls": 0
+    }
+  ],
+  "engineeringChecks": {
+    "platformFullBuildTypesLintFormatTests": "passed",
+    "platformFinalChangeBuildAndNativeTests": {
+      "passed": 13,
+      "failed": 0
+    },
+    "platformOwnershipAndRemainingGates": "passed",
+    "platformFullCheck": "failed at existing dependency security audit",
+    "platformDependencyAudit": {
+      "high": 11,
+      "moderate": 13,
+      "low": 3
+    },
+    "dependencyLockfilesChanged": false,
+    "desktopCheck": "passed",
+    "desktopTestFiles": {
+      "passed": 200,
+      "failed": 0
+    }
+  },
+  "limitations": [
+    "One model configuration on macOS arm64; six tasks and two repeats per variant.",
+    "Service stream interruptions and standard API misuse are included in requests and elapsed time.",
+    "Same-frame projection replay measures frame characters, not end-to-end token use or latency.",
+    "This suite is now observed; later optimization claims need new independent tasks."
+  ],
+  "executionAnomalies": [
+    {
+      "variant": "previous",
+      "case": "immutable-migration",
+      "repetition": 0,
+      "category": "async execFile input option left child stdin open",
+      "programWaitMsApproximately": 120000,
+      "recovery": "spawn with stdin.end, verified resulting file and completed",
+      "includedInMetrics": true
+    },
+    {
+      "variant": "standard",
+      "case": "bounded-async",
+      "repetition": 1,
+      "category": "async execFile input option left child stdin open",
+      "programWaitMsApproximately": 120000,
+      "recovery": "spawn with stdin.end, verified resulting file and completed",
+      "includedInMetrics": true
+    },
+    {
+      "variant": "standard",
+      "case": "immutable-migration",
+      "repetition": 1,
+      "category": "async execFile input option left child stdin open",
+      "programWaitMsApproximately": 120000,
+      "recovery": "spawn with stdin.end, verified resulting file and completed",
+      "includedInMetrics": true
+    }
+  ]
+}

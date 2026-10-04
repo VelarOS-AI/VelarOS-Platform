@@ -91,6 +91,8 @@ export type MemoryFrameResult = Record<string, unknown> & {
 
 /** 一帧按展示口径整理好的当前状态与可独立读取的原文。 */
 export interface MemoryFrameDisplay {
+  /** 标准 Node 会话使用精简状态展示；完整帧与交付凭据保持同一来源。 */
+  readonly presentation?: 'node'
   readonly task: Record<string, unknown>
   readonly workspace: Record<string, unknown>
   readonly notes: ReadonlyArray<Record<string, unknown> & { readonly text: string }>

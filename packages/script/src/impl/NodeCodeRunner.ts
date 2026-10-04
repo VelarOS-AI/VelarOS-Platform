@@ -21,7 +21,11 @@ import { NodeExecutionLimits } from '../contract/constants.js'
 import type { CodeRunnerApi, NodeCodeRunnerOptions } from '../contract/requires.js'
 import type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
 import { shapeOperationFailure } from '../utils/capability-failure.js'
-import { nodeCapabilityClient } from '../utils/node-client.js'
+import {
+  nodeCapabilityBridge,
+  nodeCapabilityClient,
+  nodeCapabilityDeclarations,
+} from '../utils/node-client.js'
 
 /** 一次标准 Node 程序；宿主端口承担操作系统权限与进程树所有权。 */
 class NodeCodeRunner implements CodeRunnerApi {
@@ -171,6 +175,7 @@ class NodeCodeRunner implements CodeRunnerApi {
       directory = await mkdtemp(join(this.options.directory, 'node-'))
       const catalog = join(directory, 'host')
       await mkdir(catalog, { mode: 0o700 })
+      await writeFile(join(catalog, 'bridge.mjs'), nodeCapabilityBridge(), { mode: 0o600 })
       const index: Array<{
         module: string
         summary: string
@@ -179,7 +184,7 @@ class NodeCodeRunner implements CodeRunnerApi {
         operations: readonly string[]
       }> = []
       for (const [namespace, operations] of Object.entries(request.operations)) {
-        const name = `${index.length}-${namespace.replace(/[^a-zA-Z0-9_-]/gu, '-')}`
+        const name = `host-${encodeURIComponent(namespace)}`
         const client = `${name}.mjs`
         const documentation = `${name}.d.ts`
         await writeFile(join(catalog, client), nodeCapabilityClient(namespace, operations), {
@@ -187,7 +192,10 @@ class NodeCodeRunner implements CodeRunnerApi {
         })
         await writeFile(
           join(catalog, documentation),
-          request.host?.modules[namespace]?.declarations ?? '',
+          nodeCapabilityDeclarations(
+            request.host?.modules[namespace]?.declarations ?? '',
+            namespace
+          ),
           { mode: 0o600 }
         )
         index.push({

@@ -1,0 +1,208 @@
+{
+  "description": "Frozen independent validation across process stdin, byte fidelity, async concurrency, installed libraries, host calls and immutable migration.",
+  "cases": [
+    {
+      "id": "stdin-cli",
+      "split": "validation",
+      "prompt": "使用 tools/group-stdin.mjs 现有命令行程序处理 payload.json：它从标准输入读取 JSON，输出聚合结果。实际运行该程序，将标准输出保存为 stdin-report.json 并验证；保持输入和现有程序不变。",
+      "files": {
+        "tools/group-stdin.mjs": "import {appendFile} from 'node:fs/promises';\nlet raw=''; for await (const chunk of process.stdin) raw+=chunk;\nconst rows=JSON.parse(raw); const groups=new Map();\nfor(const row of rows) groups.set(row.key,(groups.get(row.key)??0)+row.points);\nawait appendFile('.cli-used','run\\n');\nconsole.log(JSON.stringify([...groups].sort(([a],[b])=>a<b?-1:a>b?1:0).map(([key,points])=>({key,points}))));\n",
+        "payload.json": "[{\"key\": \"west\", \"points\": 3}, {\"key\": \"east\", \"points\": 0}, {\"key\": \"west\", \"points\": -7}, {\"key\": \"east\", \"points\": 9}]"
+      },
+      "expected": {
+        "stdin-report.json": [
+          {
+            "key": "east",
+            "points": 9
+          },
+          {
+            "key": "west",
+            "points": -4
+          }
+        ]
+      },
+      "grade": "assert.match(await readFile('.cli-used','utf8'),/run/); assert.equal(await readFile('tools/group-stdin.mjs','utf8'),\"import {appendFile} from 'node:fs/promises';\\nlet raw=''; for await (const chunk of process.stdin) raw+=chunk;\\nconst rows=JSON.parse(raw); const groups=new Map();\\nfor(const row of rows) groups.set(row.key,(groups.get(row.key)??0)+row.points);\\nawait appendFile('.cli-used','run\\\\n');\\nconsole.log(JSON.stringify([...groups].sort(([a],[b])=>a<b?-1:a>b?1:0).map(([key,points])=>({key,points}))));\\n\");",
+      "unchanged": ["tools/group-stdin.mjs", "payload.json"]
+    },
+    {
+      "id": "content-manifest",
+      "split": "validation",
+      "prompt": "递归扫描 input，生成 manifest.json：仅收集 .txt 普通文件，跳过名为 .cache 的目录；每项恰好 {path,bytes,sha256}，path 是相对 input 的正斜杠路径，bytes 是原始 UTF-8 文件字节数，sha256 是原始字节的十六进制摘要。按 path 的 Unicode 码点顺序排序。保持所有输入不变并验证。",
+      "files": {
+        "input/说明.txt": "你好\n",
+        "input/sub folder/a.txt": "a\r\nb\r\n",
+        "input/empty.txt": "",
+        "input/sub folder/keep.md": "markdown\n",
+        "input/.cache/cached.txt": "ignore cache",
+        "input/other.json": "{}"
+      },
+      "expected": {
+        "manifest.json": [
+          {
+            "path": "empty.txt",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "path": "sub folder/a.txt",
+            "bytes": 6,
+            "sha256": "58055bdcc73787eb88c78d36f0b4939e9c5dc1c3ad17e25cc85a6833cf1a0cab"
+          },
+          {
+            "path": "说明.txt",
+            "bytes": 7,
+            "sha256": "4e0826721642ed8e3a27e7147538ac7b7013a08fe5ae343a8ef09749b7e5790f"
+          }
+        ]
+      },
+      "grade": "const original={\"input/说明.txt\": \"你好\\n\", \"input/sub folder/a.txt\": \"a\\r\\nb\\r\\n\", \"input/empty.txt\": \"\", \"input/sub folder/keep.md\": \"markdown\\n\", \"input/.cache/cached.txt\": \"ignore cache\", \"input/other.json\": \"{}\"};for(const [p,v] of Object.entries(original))assert.equal(await readFile(p,\"utf8\"),v);",
+      "unchanged": [
+        "input/说明.txt",
+        "input/sub folder/a.txt",
+        "input/empty.txt",
+        "input/sub folder/keep.md",
+        "input/.cache/cached.txt",
+        "input/other.json"
+      ]
+    },
+    {
+      "id": "bounded-async",
+      "split": "validation",
+      "prompt": "修复 map-limit.mjs 的 mapLimit(items,limit,fn)。它是 async 函数：limit 必须为正整数，否则抛 RangeError；每个输入调用 fn(value,index)，同时在途数量不超过 limit，返回值按输入顺序排列；空数组返回 []；某次回调失败后不再启动新回调，并向调用者报告该错误。允许已经开始的回调结束。不得修改输入数组。请验证乱序完成、错误和边界。",
+      "files": {
+        "map-limit.mjs": "export async function mapLimit(items,limit,fn){return Promise.all(items.map(fn));}\n"
+      },
+      "grade": "const {mapLimit}=await import('./map-limit.mjs');\nlet active=0,peak=0; const input=Object.freeze([11,7,3,5,0,2]);\nconst out=await mapLimit(input,2,async(v,i)=>{peak=Math.max(peak,++active);await new Promise(r=>setTimeout(r,(6-i)*2));active--;return [v*3,i]});\nassert.deepEqual(out,input.map((v,i)=>[v*3,i]));assert.equal(peak,2);assert.deepEqual(await mapLimit([],1,()=>{}),[]);\nfor(const bad of [0,-1,1.5,NaN,Infinity]) await assert.rejects(mapLimit([],bad,()=>{}),RangeError);\nconst boom=new Error('independent-failure');let starts=0;\nawait assert.rejects(mapLimit([0,1,2,3,4],2,async(v)=>{starts++;if(v===0)throw boom;await new Promise(r=>setTimeout(r,10));return v}),e=>e===boom);\nawait new Promise(r=>setTimeout(r,20));assert.ok(starts<=2);\n"
+    },
+    {
+      "id": "installed-statistics",
+      "split": "validation",
+      "prompt": "工作区已经安装 reading-statistics 包。读取 readings.json，按 sensor 分组，过滤 weight<=0 的记录，然后实际调用包导出的 weightedMean(rows) 计算每组均值，写入 weighted.json。顶层数组按 sensor 字典序排序，每项恰好 {sensor,count,mean}；原始组全部保留，无有效记录时 count=0、mean=null。不要修改输入或依赖，并验证结果。",
+      "files": {
+        "node_modules/reading-statistics/package.json": "{\"name\": \"reading-statistics\", \"type\": \"module\", \"exports\": \"./index.mjs\"}",
+        "node_modules/reading-statistics/index.mjs": "import {appendFileSync} from 'node:fs';\nexport function weightedMean(rows){appendFileSync('.statistics-used','call\\n');if(!rows.length)return null;let total=0,weight=0;for(const row of rows){if(!(row.weight>0))throw new Error('weight');total+=row.value*row.weight;weight+=row.weight}return total/weight}\n",
+        "readings.json": "[{\"sensor\": \"wind\", \"value\": 10, \"weight\": 1}, {\"sensor\": \"wind\", \"value\": 4, \"weight\": 3}, {\"sensor\": \"rain\", \"value\": 2, \"weight\": 2}, {\"sensor\": \"rain\", \"value\": 8, \"weight\": 2}, {\"sensor\": \"rain\", \"value\": 99, \"weight\": 0}, {\"sensor\": \"idle\", \"value\": 3, \"weight\": -2}]"
+      },
+      "expected": {
+        "weighted.json": [
+          {
+            "sensor": "idle",
+            "count": 0,
+            "mean": null
+          },
+          {
+            "sensor": "rain",
+            "count": 2,
+            "mean": 5
+          },
+          {
+            "sensor": "wind",
+            "count": 2,
+            "mean": 5.5
+          }
+        ]
+      },
+      "grade": "assert.match(await readFile('.statistics-used','utf8'),/call/);assert.equal(await readFile('node_modules/reading-statistics/index.mjs','utf8'),\"import {appendFileSync} from 'node:fs';\\nexport function weightedMean(rows){appendFileSync('.statistics-used','call\\\\n');if(!rows.length)return null;let total=0,weight=0;for(const row of rows){if(!(row.weight>0))throw new Error('weight');total+=row.value*row.weight;weight+=row.weight}return total/weight}\\n\");",
+      "unchanged": [
+        "node_modules/reading-statistics/package.json",
+        "node_modules/reading-statistics/index.mjs",
+        "readings.json"
+      ]
+    },
+    {
+      "id": "host-availability",
+      "split": "validation",
+      "prompt": "通过应用宿主实际查询同组会话，生成 availability.json。对象恰好 {selfId,available,counts}：selfId 是 self 会话 id；available 只含正在运行且非 self、workspace 为 project 或 system 的会话，每项恰好 {id,workspace}，按 workspace 再按 id 字典序排序；counts 恰好 {project,system}，统计 available。查询必须来自真实宿主能力并验证文件。",
+      "files": {},
+      "sessions": [
+        {
+          "id": "self-7",
+          "self": true,
+          "workspace": "project",
+          "running": true,
+          "title": "here",
+          "root": "/workspace/self-7",
+          "site": null
+        },
+        {
+          "id": "p3",
+          "self": false,
+          "workspace": "project",
+          "running": true,
+          "title": "three",
+          "root": "/workspace/p3",
+          "site": null
+        },
+        {
+          "id": "p1",
+          "self": false,
+          "workspace": "project",
+          "running": true,
+          "title": "one",
+          "root": "/workspace/p1",
+          "site": null
+        },
+        {
+          "id": "p2",
+          "self": false,
+          "workspace": "project",
+          "running": false,
+          "title": "two",
+          "root": "/workspace/p2",
+          "site": null
+        },
+        {
+          "id": "b9",
+          "self": false,
+          "workspace": "browser",
+          "running": true,
+          "title": "browser",
+          "root": null,
+          "site": "https://example.com"
+        },
+        {
+          "id": "s4",
+          "self": false,
+          "workspace": "system",
+          "running": true,
+          "title": "system",
+          "root": null,
+          "site": null
+        }
+      ],
+      "requiresHost": true,
+      "expected": {
+        "availability.json": {
+          "selfId": "self-7",
+          "available": [
+            {
+              "id": "p1",
+              "workspace": "project"
+            },
+            {
+              "id": "p3",
+              "workspace": "project"
+            },
+            {
+              "id": "s4",
+              "workspace": "system"
+            }
+          ],
+          "counts": {
+            "project": 2,
+            "system": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "immutable-migration",
+      "split": "validation",
+      "prompt": "实现 migrate.mjs 中导出的 migrate(config)：返回新配置且不修改输入。若 connection 是普通对象，把其中 server 字段迁移为 endpoint；若 endpoint 已存在则保留它，迁移后去掉 connection.server；connection.timeout 缺席时设为 30，显式的 0 或 null 必须保留。connection 缺席时保持配置原样。其他字段原样保留，重复迁移结果不变。请验证冻结输入、字段优先级、缺席值与幂等性。",
+      "files": {
+        "migrate.mjs": "export function migrate(config){config.connection.endpoint=config.connection.server;config.connection.timeout=30;delete config.connection.server;return config;}\n"
+      },
+      "grade": "const {migrate}=await import('./migrate.mjs');\nfor(const [input,expected] of [\n[{name:'x',server:'outside',connection:{server:'https://a',timeout:0,flags:['a']}},{name:'x',server:'outside',connection:{endpoint:'https://a',timeout:0,flags:['a']}}],\n[{connection:{server:'old',endpoint:'new',timeout:null}},{connection:{endpoint:'new',timeout:null}}],\n[{connection:{server:'x'}},{connection:{endpoint:'x',timeout:30}}],\n[{connection:{}},{connection:{timeout:30}}],\n[{enabled:false,version:0},{enabled:false,version:0}]\n]){const before=structuredClone(input);const freeze=x=>{if(x&&typeof x==='object'){Object.values(x).forEach(freeze);Object.freeze(x)}return x};freeze(input);const result=migrate(input);assert.deepEqual(result,expected);assert.notEqual(result,input);assert.deepEqual(input,before);assert.deepEqual(migrate(result),result)}\n"
+    }
+  ]
+}

@@ -769,6 +769,7 @@ export class RuntimeSession implements VelarosSession {
       Math.max(1, maxChars - extra)
     )
     const frame = JSON.parse(projected.body)
+    if (this.dependencies.node) frame.presentation = 'node'
     frame.partitions.runtime = { environment, ...frame.partitions.runtime }
     // 同一任务里此前运行的输入只作上文，模型据此只回应本次运行的新请求
     frame.partitions.task.goals = frame.partitions.task.goals.map(

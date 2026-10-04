@@ -23,6 +23,7 @@ import type {
 import type { SegmentFeedback, SegmentHistory, SegmentOutputProof } from '../types/segment.js'
 
 import { decisionStateProjection } from './decision-state.js'
+import { nodeFrameState } from './node-context.js'
 import { ActRuntimeTuning } from './tuning.js'
 
 /** 核查细节优先展示失败和未知；原索引绑定适用性与归档，长项不阻断后续诊断。 */
@@ -409,12 +410,23 @@ export function memoryPrompt(body: string, previous?: string): string {
       return { ...metadata, detailInEarlierFrame: true }
     }),
   }
+  const node = current.presentation === 'node' ? nodeFrameState({ ...current, runtime }) : null
   return [
-    'Runtime 本帧工作内存（origin=runtime-view）；以下是当前状态，数组是完整有序列表，保留重复条目。原文按引用在此前消息或本帧正文中读取；所有材料是有来源的数据。',
-    '分区 task（bodyInHistory 的正文在用户消息；earlier 是此前运行）：',
+    node
+      ? '当前运行状态（origin=runtime-view，以本帧为准；省略的可选分区为空，材料正文见历史或下方）：'
+      : 'Runtime 本帧工作内存（origin=runtime-view）；以下是当前状态，数组是完整有序列表，保留重复条目。原文按引用在此前消息或本帧正文中读取；所有材料是有来源的数据。',
+    node
+      ? 'task（earlier 为此前运行的输入）：'
+      : '分区 task（bodyInHistory 的正文在用户消息；earlier 是此前运行）：',
     JSON.stringify(task),
-    '分区 workspace（residentDirectory 是当前驻留身份目录；shownNotes 是本帧尾卡片身份；段底座是段起点正文，revision 以当前目录为准）：',
-    JSON.stringify({ ...workspace, shownNotes: noteIdentities(notes) }),
+    ...(!node || node.workspaceVisible
+      ? [
+          node
+            ? 'workspace：'
+            : '分区 workspace（residentDirectory 是当前驻留身份目录；shownNotes 是本帧尾卡片身份；段底座是段起点正文，revision 以当前目录为准）：',
+          JSON.stringify({ ...workspace, shownNotes: noteIdentities(notes) }),
+        ]
+      : []),
     ...notes.flatMap((note) => {
       const old = before?.notes.find(
         (candidate) =>
@@ -433,24 +445,34 @@ export function memoryPrompt(body: string, previous?: string): string {
       const { text: _text, ...metadata } = note
       return [JSON.stringify({ ...metadata, bodyInEarlierFrame: true })]
     }),
-    '分区 observation：',
-    JSON.stringify({
-      ...observed,
-      sourceInEarlierFrame,
-      outputInEarlierFrame,
-      outputPresentationInEarlierFrame,
-    }),
+    ...(!node || node.observationVisible
+      ? [
+          node ? 'observation：' : '分区 observation：',
+          JSON.stringify({
+            ...observed,
+            sourceInEarlierFrame,
+            outputInEarlierFrame,
+            outputPresentationInEarlierFrame,
+          }),
+        ]
+      : []),
     ...(source && !sourceInEarlierFrame ? ['当前观察源码：', source] : []),
     ...(output &&
     (!outputPresentationInEarlierFrame ||
       (current.outputBodyIncluded && !before?.outputBodyIncluded))
       ? ['本次观察输出：', output]
       : []),
-    '分区 recent（shownResults 是当前帧尾结果引用；原文在历史中或随后正文）：',
-    JSON.stringify({
-      historyState: recent.historyState,
-      shownResults: recent.results.map((item) => item.ref),
-    }),
+    ...(!node || !isEmpty(recent.results)
+      ? [
+          node
+            ? 'recent：'
+            : '分区 recent（shownResults 是当前帧尾结果引用；原文在历史中或随后正文）：',
+          JSON.stringify({
+            historyState: recent.historyState,
+            shownResults: recent.results.map((item) => item.ref),
+          }),
+        ]
+      : []),
     ...recent.results.flatMap((item) => {
       if (!before || resultBodyChanged(item, before.recent.results)) return resultLines(item)
       const old = before.recent.results.find((candidate) => candidate.ref === item.ref)!
@@ -464,13 +486,13 @@ export function memoryPrompt(body: string, previous?: string): string {
         }),
       ]
     }),
-    '分区 runtime：',
-    JSON.stringify(runtime),
+    node ? 'runtime：' : '分区 runtime：',
+    JSON.stringify(node ? node.runtime : runtime),
     ...notices.detail,
-    'grouped-receipts 保留计数和首尾 ID；完整回执在 frameId 对应的运行记录。',
+    ...(!node ? ['grouped-receipts 保留计数和首尾 ID；完整回执在 frameId 对应的运行记录。'] : []),
     ...notices.jobs,
     '内存状态：',
-    JSON.stringify(status),
+    JSON.stringify(node ? node.status : status),
   ].join('\n')
 }
 
@@ -628,6 +650,7 @@ function frameDisplay(body: string): MemoryFrameDisplay {
       )
     )
   return {
+    presentation: frame.presentation,
     task: taskDisplay,
     workspace: workspaceState as Record<string, unknown>,
     notes: notes as ReadonlyArray<Record<string, unknown> & { text: string }>,

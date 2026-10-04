@@ -12,6 +12,7 @@ import {
   createShellCapabilityModule,
   createShellNodeEnvironment,
 } from '../../../dist/act/runtime/index.js'
+import { memoryPrompt } from '../../../dist/act/runtime/utils/context-memory.js'
 import { projectCapabilityPorts } from '../../../dist/project/index.js'
 import { createLocalShellHost } from '../../../dist/shell/local.js'
 
@@ -263,8 +264,115 @@ test('runtime delivers native output to the next model turn with a small standar
   for await (const event of session.submit('Print and check native-output-739.')) void event
   assert.equal(requests.length, 2)
   assert.ok(requests[0].instructions.length < 2200, requests[0].instructions)
+  const originalFrame = JSON.parse(
+    requests[0].materials.find((item) => item.origin === 'runtime-view').text
+  )
+  assert.equal(originalFrame.presentation, 'node')
+  assert.ok(originalFrame.partitions.observation.read)
+  const ordinaryFrame = structuredClone(originalFrame)
+  delete ordinaryFrame.presentation
+  const compact = memoryPrompt(JSON.stringify(originalFrame))
+  const full = memoryPrompt(JSON.stringify(ordinaryFrame))
+  assert.ok(compact.length < full.length * 0.55, `${compact.length}/${full.length}`)
+  assert.doesNotMatch(compact, /workspace：|observation：|observationAction|workspaceShare/)
+  assert.match(requests[0].compiledPrompt, /当前运行状态/)
+
+  const recovery = structuredClone(originalFrame)
+  const state = recovery.partitions.runtime
+  state.mandatory = [
+    {
+      id: 'failed',
+      operation: 'host.write',
+      outcome: 'failed',
+      effect: 'partial',
+      detail: 'recover-this-partial-write',
+    },
+    {
+      id: 'unknown',
+      operation: 'host.send',
+      outcome: 'failed',
+      effect: 'unknown',
+      detail: 'verify-before-retrying',
+    },
+  ]
+  state.jobs = [{ executionId: 'pending-job', status: 'running' }]
+  state.goal = { status: 'blocked', objective: 'goal-must-remain', revision: 0 }
+  state.progress.stalled = true
+  state.decision.missing = [{ ref: 'missing-page', reason: 'required-body-unavailable' }]
+  state.children = [
+    { id: 'child', done: false },
+    { id: 'child', done: false },
+  ]
+  state.modelTool = {
+    payload: { emptyArray: [], emptyObject: {}, zero: 0, off: false, missing: null },
+  }
+  recovery.partitions.observation.safety = ['observation-protection-missing']
+  recovery.partitions.workspace.capsule.nextObjective = 'workspace-objective'
+  const recovered = memoryPrompt(JSON.stringify(recovery))
+  for (const important of [
+    'recover-this-partial-write',
+    'verify-before-retrying',
+    'pending-job',
+    'goal-must-remain',
+    'missing-page',
+    'observation-protection-missing',
+    'workspace-objective',
+  ])
+    assert.ok(recovered.includes(important), important)
+  const projectedState = JSON.parse(recovered.split('runtime：\n')[1].split('\n')[0])
+  assert.deepEqual(projectedState.children, state.children)
+  assert.deepEqual(projectedState.modelTool, state.modelTool)
+  assert.equal(projectedState.goal.revision, 0)
+  assert.equal(projectedState.progress.stalled, true)
   assert.match(JSON.stringify(requests[1]), /native-output-739/)
   assert.equal((await session.inspect()).status, 'completed')
+})
+
+test('host filenames remain stable across catalog order and declarations are ordinary file modules', async (t) => {
+  const f = await fixture(t)
+  const runner = createNodeCodeRunner(f.node)
+  const declaration = `/** 通用宿主约束。 */ declare module 'example:host' {
+    export interface Item { readonly value: number; }
+    /** 读取实际值。 */ export function read(input: {id: string}): Promise<Item>;
+  }`
+  const source = `
+    import {readFile,readdir} from 'node:fs/promises'; import {join} from 'node:path';
+    const root=process.env.VELAROS_HOST_DIR;
+    const files=await readdir(root);
+    const docs=await readFile(join(root,files.find(name=>name.includes('example')&&name.endsWith('.d.ts'))),'utf8');
+    const index=JSON.parse(await readFile(join(root,'index.json'),'utf8'));
+    const client=await readFile(join(root,index.find(item=>item.module==='example:host').client),'utf8');
+    console.log(JSON.stringify({index,docs,client}));
+  `
+  const catalogs = []
+  for (const operations of [
+    { 'example:host': ['read'], 'example-host': ['read'] },
+    { 'example-host': ['read'], 'example:host': ['read'] },
+  ]) {
+    const result = await runner.run(
+      {
+        ...request(source, 10000, operations),
+        host: {
+          sessionId: 'catalog',
+          executionId: 'catalog',
+          modules: { 'example:host': { summary: 'example', declarations: declaration } },
+        },
+      },
+      noCalls,
+      () => {}
+    )
+    assert.equal(result.ok, true, JSON.stringify(result))
+    const data = JSON.parse(result.process.stdout)
+    assert.match(data.docs, /export function read/)
+    assert.match(data.docs, /export interface Item/)
+    assert.match(data.docs, /通用宿主约束|读取实际值/)
+    assert.doesNotMatch(data.docs, /declare module/)
+    assert.match(data.client, /import .*bridge\.mjs/)
+    assert.doesNotMatch(data.client, /node:http|VELAROS_HOST_TOKEN/)
+    assert.equal(new Set(data.index.map((item) => item.client)).size, 2)
+    catalogs.push(data.index.find((item) => item.module === 'example:host').client)
+  }
+  assert.equal(catalogs[0], catalogs[1])
 })
 
 test(
