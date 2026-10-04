@@ -306,7 +306,7 @@ const driver = (
 const finish = { type: 'finish', reason: 'stop' }
 const execute = (request, source) => ({
   type: 'text',
-  text: `${request.compiledPrompt.match(/当前帧标记：(\S+)。普通/)[1]} execute()\n${source}\n${request.compiledPrompt.match(/当前帧标记：(\S+)。普通/)[1]}`,
+  text: `${request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]} execute()\n${source}\n${request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]}`,
 })
 const snapshotOf = (request) =>
   JSON.parse(JSON.parse(request.materials[0].text).partitions.task.goals[0].text).snapshot
@@ -318,7 +318,7 @@ async function* deliverPatch(request, extra = {}) {
   )
   yield {
     ...part,
-    text: `${part.text}\n${request.compiledPrompt.match(/当前帧标记：(\S+)。普通/)[1]} done`,
+    text: `${part.text}\n${request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]} done`,
   }
   yield finish
 }
@@ -473,12 +473,12 @@ test('maintenance has only fixed-snapshot reads and cannot discover or import sy
       calls++
       assert(!request.instructions.includes('memory.organize'))
       assert(!request.instructions.includes('modules.describe'))
-      assert.match(request.instructions, /declare module ["']velaros:context-materials/)
+      assert.match(request.instructions, /index.json/)
       if (calls === 1) {
         yield execute(request, "import {modules} from 'velaros:system';await modules.list({});")
         yield finish
       } else if (calls === 2) {
-        assert.match(JSON.stringify(request), /SCRIPT_CHECK/)
+        assert.match(JSON.stringify(request), /velaros:system|PERMISSION/)
         yield execute(
           request,
           "import {output} from 'velaros';import {list,read} from 'velaros:context-materials';const page=await list({limit:1});if(page.items.length)output((await read({ref:page.items[0].ref,limit:1000})).text);else output(page);"
@@ -494,10 +494,11 @@ test('maintenance has only fixed-snapshot reads and cannot discover or import sy
   assert(receipt.checked)
   await runTool(f)
   assert.equal(calls, 3)
-  await assert.rejects(
-    f.session.execute({ source: "import {list} from 'velaros:context-materials';await list({});" }),
-    { code: 'SCRIPT_CHECK' }
-  )
+  const denied = await f.session.execute({
+    source: "import {list} from 'velaros:context-materials';await list({});",
+  })
+  assert(denied.result.failed)
+  assert.match(denied.result.process.stderr, /velaros:context-materials/)
 })
 
 test('last maintenance call directly delivers a partial patch with gaps and no recursive maintenance', async (t) => {
@@ -877,7 +878,7 @@ test('organize plus done delivers the actual outcome in another main request bef
       if (++calls === 1) {
         yield {
           type: 'text',
-          text: `${execute(request, "import {memory} from 'velaros:system';await memory.organize({focus:'Verify next steps'});").text}\n${request.compiledPrompt.match(/当前帧标记：(\S+)。普通/)[1]} done`,
+          text: `${execute(request, "import {memory} from 'velaros:system';await memory.organize({focus:'Verify next steps'});").text}\n${request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]} done`,
         }
         yield finish
       } else {

@@ -1,0 +1,94 @@
+{
+  "description": "Independent host-capability validation after identifying an invalid SessionPeer fixture in the original v3 suite. Candidate and evaluator remain frozen. New data and predicate, validated against actual Kernel on both variants before model runs.",
+  "cases": [
+    {
+      "id": "host-workspace-queue",
+      "split": "validation",
+      "prompt": "通过宿主能力查询真实会话列表，与 tiers.json 的映射关联。将正在运行、非自身、workspace 为 project 且具有等级映射的会话写入 queue.json；每项仅含 {id,label,tier}，label 保留 title 的原值（包括 null），按 tier 升序、同等级按 id 升序。输入文件保持原样，写入后验证。",
+      "files": {
+        "tiers.json": "{\"proj-z\": 3, \"proj-a\": 3, \"proj-q\": 1, \"self-p\": 0, \"web-b\": 2, \"sys-x\": 4, \"unknown\": -1}"
+      },
+      "expected": {
+        "queue.json": [
+          {
+            "id": "proj-a",
+            "label": null,
+            "tier": 3
+          },
+          {
+            "id": "proj-z",
+            "label": "航海",
+            "tier": 3
+          }
+        ]
+      },
+      "unchanged": ["tiers.json"],
+      "sessions": [
+        {
+          "id": "proj-z",
+          "workspace": "project",
+          "title": "航海",
+          "root": "/workspace/proj-z",
+          "site": null,
+          "running": true,
+          "self": false
+        },
+        {
+          "id": "proj-a",
+          "workspace": "project",
+          "title": null,
+          "root": "/workspace/proj-a",
+          "site": null,
+          "running": true,
+          "self": false
+        },
+        {
+          "id": "proj-q",
+          "workspace": "project",
+          "title": "queued",
+          "root": "/workspace/proj-q",
+          "site": null,
+          "running": false,
+          "self": false
+        },
+        {
+          "id": "self-p",
+          "workspace": "project",
+          "title": "own",
+          "root": "/workspace/self-p",
+          "site": null,
+          "running": true,
+          "self": true
+        },
+        {
+          "id": "web-b",
+          "workspace": "browser",
+          "title": "外部",
+          "root": null,
+          "site": "https://example.test/",
+          "running": true,
+          "self": false
+        },
+        {
+          "id": "sys-x",
+          "workspace": "system",
+          "title": "terminal",
+          "root": null,
+          "site": null,
+          "running": true,
+          "self": false
+        },
+        {
+          "id": "proj-free",
+          "workspace": "project",
+          "title": "no tier",
+          "root": "/workspace/proj-free",
+          "site": null,
+          "running": true,
+          "self": false
+        }
+      ],
+      "requiresHost": true
+    }
+  ]
+}

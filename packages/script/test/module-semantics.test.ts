@@ -312,7 +312,10 @@ test('INV-40 动态字面量能力进入统一绑定，计算模块名不扩大�
       ['settled', 'succeeded'],
     ])
     const denied = await run("const proof=await import('velaros:proof'); await proof.read()", [])
-    expect(denied).toEqual({ checked: false, needsModules: ['proof'] })
+    expect(denied.checked).toBe(true)
+    if (!denied.checked) throw new Error('Node 链接时验证权限')
+    expect(denied.result.failed).toBeDefined()
+    expect(calls).toBe(1)
     const computed = await run(
       "const target='velaros:'+'proof'; let message=''; try {await import(target)} catch(error){message=error.message}; export default message",
       []
@@ -367,7 +370,7 @@ test('INV-40 动态字面量路径在任何能力副作用前预检并保留目�
   expect(calls).toBe(0)
 })
 
-test('INV-40 计算的非法路径可 catch 且不会退回空名或绕过相对路径边界', async () => {
+test('INV-40 原生动态导入加载标准库，缺失模块可 catch 并保留目标路径', async () => {
   const session = createCodeSurfaceSession({
     checker: codeProgramChecker,
     runner: nodeSubprocessCodeRunner,
@@ -385,9 +388,9 @@ test('INV-40 计算的非法路径可 catch 且不会退回空名或绕过相对
   if (!result.checked) throw new Error('计算目标在运行时核对')
   expect(result.result.failed).toBeUndefined()
   expect(result.rawValue).toEqual([
-    expect.stringContaining('node:fs'),
-    expect.stringContaining('./missing.js'),
-    expect.stringContaining('../../escape.js'),
+    'opened',
+    expect.stringContaining('missing.js'),
+    expect.stringContaining('escape.js'),
     expect.stringContaining('hidden.js'),
   ])
 })

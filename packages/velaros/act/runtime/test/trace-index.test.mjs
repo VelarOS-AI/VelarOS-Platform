@@ -169,6 +169,7 @@ test('observation summaries say what a turn registered and which run fed its req
     search: false,
     memory: false,
     context: { maintenance: false },
+    protocol: { allowed: ['shell', 'execute', 'observe', 'done'] },
     model: {
       id: 'trace-observation',
       limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 4096 },
@@ -189,7 +190,13 @@ test('observation summaries say what a turn registered and which run fed its req
       if (event.type === 'turn') turns.push(event.turnId)
     const [first, second, last] = await Promise.all(turns.map((id) => session.trace(id)))
     assert.deepEqual(first.observation, {
-      registration: { status: 'updated', failure: null, source: watch, sourceTruncated: false },
+      registration: {
+        status: 'updated',
+        failure: null,
+        source: watch,
+        sourceTruncated: false,
+        language: 'node',
+      },
       run: null,
     })
     // 没过检查的观察登记不上，原因与没过检查的执行同一套；这一回合的帧仍由原来的观察喂

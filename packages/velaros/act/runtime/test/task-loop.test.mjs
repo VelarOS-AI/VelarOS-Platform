@@ -171,7 +171,7 @@ for (const defect of ['artifact', 'protection']) {
           const round = requests.length
           if (round === 1) {
             assert.match(modelText(request), /Repair double and publish the repair status/)
-            assert.match(request.instructions + modelText(request), /velaros:shell/)
+            assert.match(request.instructions + modelText(request), /Shell 和 Node/)
             yield turn(
               request,
               program(

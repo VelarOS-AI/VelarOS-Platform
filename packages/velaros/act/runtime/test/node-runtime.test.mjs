@@ -477,7 +477,7 @@ test('business children inherit an explicitly enabled Node scope and retain thei
       estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
       async *stream(req) {
         const marker = req.compiledPrompt.match(/(@@s\w+) execute/)[1]
-        assert.match(req.instructions, /真实 Node/)
+        assert.match(req.instructions, /Shell 和 Node/)
         yield {
           type: 'text',
           text:
@@ -521,4 +521,137 @@ test('business children inherit an explicitly enabled Node scope and retain thei
   assert.equal(await readFile(join(f.cwd, 'child-proof.txt'), 'utf8'), 'child node')
   assert.ok(identities.includes('parent'))
   assert.equal(new Set(identities).size, 2)
+})
+
+test('Shell source is decoded directly, persisted with its language and reusable by sourceRef', async (t) => {
+  const f = await fixture(t)
+  const runtime = await createRuntime({
+    node: f.node,
+    project: false,
+    agents: false,
+    search: false,
+    memory: false,
+    storage: localContextStorage({ path: join(f.root, 'shell.sqlite') }),
+  })
+  t.after(() => runtime.close())
+  const session = await runtime.openSession('shell-owner')
+  await session.context.append({ kind: 'user', body: 'Write a literal file using shell' })
+  const receipt = await session.execute({
+    language: 'shell',
+    source: "cat <<'EOF' > literal.txt\n$literal `quoted` 中文\nEOF\ncat literal.txt",
+  })
+  assert.equal(receipt.result.failed, undefined, JSON.stringify(receipt))
+  assert.equal(await readFile(join(f.cwd, 'literal.txt'), 'utf8'), '$literal `quoted` 中文\n')
+  const repeated = await session.execute({ sourceRef: receipt.sourceRef })
+  assert.equal(repeated.result.process.stdout, '$literal `quoted` 中文\n')
+})
+
+test('custom modules import by name and denied static imports run no earlier mutation', async (t) => {
+  const f = await fixture(t)
+  const runner = createNodeCodeRunner(f.node)
+  const calls = []
+  const result = await runner.run(
+    request(
+      "import {read} from 'app:record';const same=await import('app:record');console.log(read===same.read, await read({key:'k'}));",
+      10000,
+      { 'app:record': ['read'] }
+    ),
+    async (call) => {
+      calls.push(call)
+      return { value: 42 }
+    },
+    () => {}
+  )
+  assert.equal(result.ok, true, JSON.stringify(result))
+  assert.equal(result.process.stdout.trim(), 'true 42')
+  assert.equal(calls.length, 1)
+  const denied = await runner.run(
+    request(
+      "import {writeFile} from 'node:fs/promises';import {read} from 'velaros:ungranted';await writeFile('should-not-exist','bad');"
+    ),
+    noCalls,
+    () => {}
+  )
+  assert.equal(denied.error.code, 'PERMISSION')
+  assert.match(denied.error.message, /velaros:ungranted/)
+  await assert.rejects(readFile(join(f.cwd, 'should-not-exist')), { code: 'ENOENT' })
+})
+
+test('read-only Node uses the same standard library and capability bridge with protected writes and network', async (t) => {
+  const f = await fixture(t)
+  await writeFile(join(f.cwd, 'readable.txt'), '42')
+  const { createServer } = await import('node:net')
+  const server = createServer((socket) => socket.end())
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  t.after(() => new Promise((resolve) => server.close(resolve)))
+  const port = server.address().port
+  const runner = createNodeCodeRunner(f.node)
+  const result = await runner.run(
+    {
+      ...request(
+        `
+    import {readFile,writeFile} from 'node:fs/promises';
+    import {connect} from 'node:net';
+    import {read} from 'app:record';import {output} from 'velaros';
+    let writeDenied=false;try {await writeFile('blocked.txt','bad')} catch {writeDenied=true}
+    const networkDenied=await new Promise(resolve=>{const s=connect({host:'127.0.0.1',port:${port}});s.on('connect',()=>{s.destroy();resolve(false)});s.on('error',()=>resolve(true));});
+    output({node:process.versions.node, text:await readFile('readable.txt','utf8'), value:await read(),writeDenied,networkDenied});
+  `,
+        10000,
+        { 'app:record': ['read'] }
+      ),
+      mode: 'observe',
+    },
+    async () => ({ value: 7 }),
+    () => {}
+  )
+  assert.equal(result.ok, true, JSON.stringify(result))
+  const data = result.output.blocks[0].value
+  assert.match(data.node, /^\d+\./)
+  assert.deepEqual(
+    { ...data, node: undefined },
+    { node: undefined, text: '42', value: 7, writeDenied: true, networkDenied: true }
+  )
+  assert.equal(result.process.confinement.mode, 'read-only')
+  await assert.rejects(readFile(join(f.cwd, 'blocked.txt')), { code: 'ENOENT' })
+})
+
+test('runtime observation uses real Node and retains structured input and output', async (t) => {
+  const f = await fixture(t)
+  let observed = ''
+  const model = {
+    id: 'native-observe',
+    limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 2000 },
+    estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+    async *stream(req) {
+      observed = JSON.parse(req.materials.find((item) => item.origin === 'runtime-view').text)
+        .partitions.observation.text
+      const marker = req.compiledPrompt.match(/(@@s\w+) execute/)[1]
+      yield { type: 'text', text: `${marker} done\nVerified.` }
+      yield { type: 'finish', reason: 'stop' }
+    },
+  }
+  const runtime = await createRuntime({
+    node: f.node,
+    model,
+    context: { maintenance: false },
+    project: false,
+    agents: false,
+    search: false,
+    memory: false,
+    storage: localContextStorage({ path: join(f.root, 'observe.sqlite') }),
+  })
+  t.after(() => runtime.close())
+  const session = await runtime.openSession('native-observe')
+  await session.context.append({ kind: 'user', body: 'Observe with Node' })
+  const published = await session.observe({
+    source:
+      "import {input} from 'velaros:program';import {output} from 'velaros';output({node:typeof process.versions.node,value:input.value})",
+    input: { value: 42 },
+  })
+  assert.equal(published.status, 'updated', JSON.stringify(published))
+  for await (const event of session.submit('Verify the observation')) void event
+  assert.equal((await session.inspect()).status, 'completed')
+  assert.match(observed, /42/)
+  assert.match(observed, /string/)
 })

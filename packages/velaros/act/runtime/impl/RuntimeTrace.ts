@@ -613,12 +613,15 @@ export class RuntimeTrace implements RuntimeTraceApi {
     // 程序记录里的源码，按本页剩下的正文预算截取；记录读不出源码时记一处缺口，不让整页读取失败
     const programSource = async (
       ref: Optional<string>
-    ): Promise<Pick<ActExecutionSummary, 'source' | 'sourceTruncated'>> => {
+    ): Promise<Pick<ActExecutionSummary, 'source' | 'sourceTruncated' | 'language'>> => {
       const program = ref && recordById.get(ref) ? await raw(recordById.get(ref)!) : null
       let text: unknown = ''
+      let language: 'node' | 'shell' = 'node'
       if (!isNull(program))
         try {
-          text = (JSON.parse(program) as { source?: unknown }).source
+          const data = JSON.parse(program) as { source?: unknown; language?: unknown }
+          text = data.source
+          if (data.language === 'shell') language = 'shell'
         } catch (error) {
           this.log.debug('程序记录读不出源码', { ref, error: AppError.getMessage(error) })
           gaps.push(`程序记录读不出源码：${ref}`)
@@ -626,7 +629,11 @@ export class RuntimeTrace implements RuntimeTraceApi {
       const full = isString(text) ? text : ''
       const source = full.slice(0, Math.max(0, remaining))
       remaining -= source.length
-      return { source, sourceTruncated: source.length < full.length }
+      return {
+        source,
+        sourceTruncated: source.length < full.length,
+        language,
+      }
     }
     const summaries: ActExecutionSummary[] = []
     for (const [position, item] of dispatched.entries()) {

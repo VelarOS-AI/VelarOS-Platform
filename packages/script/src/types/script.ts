@@ -27,8 +27,10 @@ export interface CodeProgramEdit {
  * 走 `blobs` 只有一层；脚本里按名字引用（`blobs.patch`）。
  */
 export interface CodeProgramRequest {
+  /** 默认 Node.js ESM；shell 将正文直接交给宿主命令解释器。 */
+  language?: 'node' | 'shell'
   /**
-   * 脚本正文，是一个 **JavaScript ES 模块**：`import` 拿能力，顶层 `await` 直接用，`export` 交出答案。
+   * Node 正文是 **JavaScript ES 模块**：支持普通 `import`、顶层 `await` 与 `export`；shell 正文是原始命令。
    *
    * 写 JavaScript 而不是 TypeScript：执行之前只查语法、核对每个 import 落得到，不查类型；
    * 字段名拼错、入参形状错由运行时当场报（能力的入参按 schema 校验，写错的那次调用不生效）。
@@ -231,6 +233,11 @@ export type CodeProgramEditResult =
 
 /** 标准 Node 子进程的宿主请求。 */
 export interface NodeProcessRequest {
+  /** 宿主生成的 Node 启动正文；source 保持原文用于审批与归档。 */
+  readonly bootstrap?: string
+  readonly language?: 'node' | 'shell'
+  /** 宿主选择的权限，不由模型源码决定。 */
+  readonly mode?: 'execute' | 'observe'
   readonly source: string
   readonly cwd: string
   /** 仅本次进程的能力桥地址、凭据与目录。 */

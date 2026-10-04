@@ -29,7 +29,7 @@ import { fitAttachmentsToBudget } from '../utils/budget.js'
 import { foldCalls, settledCall } from '../utils/calls.js'
 import { isRefusal } from '../utils/capability-failure.js'
 import { stripTypes } from '../utils/compiler.js'
-import { hasNamedExports, normalizeNamespaceReexports } from '../utils/module-form.js'
+import { hasNamedExports } from '../utils/module-form.js'
 import { composeProgramResult, describeProgramOversize } from '../utils/result.js'
 import { CodeSurfaceTuning } from '../utils/tuning.js'
 
@@ -52,6 +52,7 @@ export interface CodeSurfaceSessionApi {
     packages?: readonly ScriptPackageDefinition[]
     timeoutMs?: number
     host?: CodeRunRequest['host']
+    mode?: CodeRunRequest['mode']
     signal?: AbortSignal
   }): Promise<CodeSurfaceOutcome>
 }
@@ -70,6 +71,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     packages?: readonly ScriptPackageDefinition[]
     timeoutMs?: number
     host?: CodeRunRequest['host']
+    mode?: CodeRunRequest['mode']
     signal?: AbortSignal
   }): Promise<CodeSurfaceOutcome> {
     const { program } = input
@@ -81,9 +83,14 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
         result: { failed: { code: CodeSurfaceErrorCodes.tooLarge, message: oversized } },
       }
 
-    // 非常驻能力必须先导入才能用：import 了没授权的模块时**一行都不执行**，只回缺的命名空间（needsModules），不附签名；
-    // 找不到模块的诊断在这里换成命名空间名单，其余诊断留给下面的检查。
-    const target = { source, granted: input.granted, path: program.path, modules: program.modules }
+    // 显式合同检查器可提前返回缺失的能力；原生 Node 的模块绑定由执行器处理。
+    const target = {
+      language: program.language,
+      source,
+      granted: input.granted,
+      path: program.path,
+      modules: program.modules,
+    }
     const missing = this.checker.missingModules(target)
     if (!isEmpty(missing)) return { checked: false, needsModules: missing }
 
@@ -111,24 +118,22 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     // 交给模型的图：不进程序，也不进文字结果，单独收着，程序跑完跟在结果旁边回去。
     const attachments: CodeAttachment[] = []
     let calls = 0
-    // 原生模块链接前仅做类型剥离与引擎 namespace 重导出兼容降级。
-    const normalized =
-      this.runner.environment === 'node'
-        ? { source, modules: program.modules ?? {} }
-        : normalizeNamespaceReexports(
-            checked.transpiled ?? source,
-            program.path ?? 'program.js',
-            Object.fromEntries(
-              Object.entries(program.modules ?? {}).map(([path, text]) => [
-                path,
-                checked.wroteTypeScript ? stripTypes(text) : text,
-              ])
-            )
-          )
+    // 宿主显式选择的兼容检查器可剥离类型，模块链接交给 Node。
+    const normalized = {
+      source: checked.transpiled ?? source,
+      modules: Object.fromEntries(
+        Object.entries(program.modules ?? {}).map(([path, text]) => [
+          path,
+          checked.wroteTypeScript ? stripTypes(text) : text,
+        ])
+      ),
+    }
     const executionStartedAt = Date.now()
     const outcome = await this.runner.run(
       {
         host: input.host,
+        mode: input.mode,
+        language: program.language,
         source: normalized.source,
         path: program.path,
         modules: normalized.modules,

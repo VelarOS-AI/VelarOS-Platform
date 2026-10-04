@@ -12,7 +12,7 @@ import { runActEvaluationBatch } from './act-eval-batch.mjs'
 const limits = { contextTokens: 200000, inputTokens: 180000, outputTokens: 4096 }
 /** 本帧会变的协议与阶段说明在最后一条消息末尾（系统提示在会话内不变）。 */
 const frameText = (request) => request.compiledPrompt ?? ''
-const marker = (request) => frameText(request).match(/当前帧标记：(\S+)。普通/u)[1]
+const marker = (request) => frameText(request).match(/当前帧标记：(@@\w+)。/u)[1]
 const block = (request, kind, source) =>
   `${marker(request)} ${kind}()\n${source}\n${marker(request)}`
 const model = (stream) => ({
@@ -286,7 +286,7 @@ test('cooperation workload verifies the persisted child write, exact message ack
         code = `import {output} from 'velaros';import {submit} from 'velaros:context-materials';output(await submit(${JSON.stringify({ baseRevision: snapshot.baseRevision, summary: 'Keep the verified total and task goal', unresolved: [] })}));`
         yield { type: 'text', text: block(request, 'execute', code) }
       }
-    } else if (!request.instructions.includes('velaros:agents')) {
+    } else if (frame(request).partitions.runtime.scope.sessionId !== 'evaluation') {
       if (++child === 1) {
         const id = frame(request).partitions.runtime.stores.active.items[0].id
         code = `import {store} from 'velaros:system';import {read} from 'velaros:project';import {output} from 'velaros';const f=(await read({files:[{path:'orders.json'}]})).files[0];const numbers=JSON.parse(f.text);output(await store.set({store:${JSON.stringify(id)},key:'result/summary',baseRevision:0,value:{total:numbers.reduce((a,b)=>a+b,0),count:numbers.length},event:{topic:'result/ready',value:{ready:true}}}));`
@@ -497,7 +497,7 @@ test('reconciliation advances four actual source versions through the same child
           ),
         }
       }
-    } else if (!request.instructions.includes('velaros:agents')) {
+    } else if (frame(request).partitions.runtime.scope.sessionId !== 'evaluation') {
       child++
       const goal = view.partitions.task.goals.at(-1).record.ref.id
       if (!seenGoals.has(goal)) {

@@ -27,6 +27,9 @@ export interface ShellProcessConfinementPolicy {
   writeRoots?: readonly string[]
   /** false 时同时切断网络；缺省只治理文件副作用。 */
   network?: boolean
+  /** 宿主为当前进程批准的本机能力桥。 */
+  ipcSocket?: string
+  outputFile?: string
 }
 
 export interface ShellProcessConfinementRequest {

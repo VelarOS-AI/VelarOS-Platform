@@ -1,0 +1,144 @@
+{
+  "description": "Frozen fresh comparison of Shell + Node with the preceding Node environment: data semantics, exit capture, installed ESM package, host discovery, source repair, exact byte delivery.",
+  "cases": [
+    {
+      "id": "event-reducer",
+      "split": "validation",
+      "prompt": "处理 events.jsonl：按每条事件的 seq 从小到大应用；相同 seq 按文件先后应用。set 替换该 id 的完整 value，delete 删除 id，最后生成 state.json（对象，以 id 为键）。保留 false、0、空字符串和 __proto__ 这样的普通数据键；保持输入不变，并验证结果。",
+      "files": {
+        "events.jsonl": "{\"seq\": 3, \"op\": \"set\", \"id\": \"a\", \"value\": {\"n\": 0}}\n{\"seq\": 1, \"op\": \"set\", \"id\": \"gone\", \"value\": true}\n{\"seq\": 4, \"op\": \"delete\", \"id\": \"gone\"}\n{\"seq\": 2, \"op\": \"set\", \"id\": \"__proto__\", \"value\": {\"safe\": true}}\n{\"seq\": 3, \"op\": \"set\", \"id\": \"a\", \"value\": false}\n{\"seq\": 5, \"op\": \"set\", \"id\": \"empty\", \"value\": \"\"}\n"
+      },
+      "expected": {
+        "state.json": {
+          "__proto__": {
+            "safe": true
+          },
+          "a": false,
+          "empty": ""
+        }
+      },
+      "unchanged": ["events.jsonl"]
+    },
+    {
+      "id": "exit-capture",
+      "split": "validation",
+      "prompt": "依次实际运行 tools/probe.mjs 两次：第一组参数为 ok 和 args.json[0]，第二组为 warn 和 args.json[1]。保存 report.json，数组每项严格为 {exitCode,stdout,stderr}；stdout/stderr 保留原文，不额外添加换行。第二个命令的非零退出也是需要采集的结果。保持输入与工具不变并验证。",
+      "files": {
+        "tools/probe.mjs": "import {appendFile} from 'node:fs/promises';\nconst [kind,arg]=process.argv.slice(2);await appendFile('.invoked',JSON.stringify([kind,arg])+'\\n');\nprocess.stdout.write(JSON.stringify({kind,arg}));if(kind==='warn'){process.stderr.write('warning: '+arg);process.exitCode=7;}\n",
+        "args.json": "[\"$HOME `literal`\", \"空 格 \\\"quote\\\"\"]"
+      },
+      "expected": {
+        "report.json": [
+          {
+            "exitCode": 0,
+            "stdout": "{\"kind\":\"ok\",\"arg\":\"$HOME `literal`\"}",
+            "stderr": ""
+          },
+          {
+            "exitCode": 7,
+            "stdout": "{\"kind\":\"warn\",\"arg\":\"空 格 \\\"quote\\\"\"}",
+            "stderr": "warning: 空 格 \"quote\""
+          }
+        ]
+      },
+      "unchanged": ["tools/probe.mjs", "args.json"],
+      "grade": "assert.deepEqual((await readFile('.invoked','utf8')).trim().split('\\n').map(JSON.parse),[['ok','$HOME `literal`'],['warn','空 格 \\\"quote\\\"']]);"
+    },
+    {
+      "id": "package-ranges",
+      "split": "validation",
+      "prompt": "使用项目已安装的 @fixture/ranges 包的 merge 函数处理 ranges.json。创建可重复运行的 merge-ranges.mjs，读取输入并生成 merged.json；实际执行两次，确保结果稳定。不要修改输入、包或 package.json。",
+      "files": {
+        "package.json": "{\"type\":\"module\"}",
+        "node_modules/@fixture/ranges/package.json": "{\"name\":\"@fixture/ranges\",\"type\":\"module\",\"exports\":\"./index.js\"}",
+        "node_modules/@fixture/ranges/index.js": "import {appendFileSync} from 'node:fs';\nexport const merge = ranges => {appendFileSync('.merged','used\\n'); const out=[];for(const [a,b] of [...ranges].sort((x,y)=>x[0]-y[0])){const last=out.at(-1);if(last&&a<=last[1])last[1]=Math.max(last[1],b);else out.push([a,b]);}return out;};\n",
+        "ranges.json": "[[9,12],[0,2],[2,4],[10,10],[-3,-1],[7,8]]"
+      },
+      "expected": {
+        "merged.json": [
+          [-3, -1],
+          [0, 4],
+          [7, 8],
+          [9, 12]
+        ]
+      },
+      "unchanged": [
+        "package.json",
+        "node_modules/@fixture/ranges/package.json",
+        "node_modules/@fixture/ranges/index.js",
+        "ranges.json"
+      ],
+      "grade": "assert((await readFile('.merged','utf8')).trim().split('\\n').length>=2);assert.match(await readFile('merge-ranges.mjs','utf8'),/@fixture\\/ranges/);"
+    },
+    {
+      "id": "host-priorities",
+      "split": "validation",
+      "prompt": "查询宿主当前会话列表，与 priorities.json 按 id 关联。只保留 running 且有优先级的会话，生成 active.json，条目严格为 {id,title,priority}，按 priority 降序、相同优先级按 id 升序。必须使用宿主实际返回的列表，保持本地输入不变并验证。",
+      "files": {
+        "priorities.json": "{\"case-a\":2,\"case-b\":9,\"case-c\":5,\"missing\":10}"
+      },
+      "expected": {
+        "active.json": [
+          {
+            "id": "case-c",
+            "title": "Gamma",
+            "priority": 5
+          },
+          {
+            "id": "case-a",
+            "title": "Alpha",
+            "priority": 2
+          }
+        ]
+      },
+      "unchanged": ["priorities.json"],
+      "sessions": [
+        {
+          "id": "case-b",
+          "title": "Beta",
+          "status": "idle"
+        },
+        {
+          "id": "case-a",
+          "title": "Alpha",
+          "status": "running"
+        },
+        {
+          "id": "case-c",
+          "title": "Gamma",
+          "status": "running"
+        }
+      ],
+      "requiresHost": true
+    },
+    {
+      "id": "module-repair",
+      "split": "validation",
+      "prompt": "修复 lib/unique.mjs 的 uniqueLast：按每个值最后一次出现的位置保留去重结果，严格区分 0、false 和空字符串，输入数组不变。保留导出函数名，实际运行 check.mjs 验证。不要修改 check.mjs。",
+      "files": {
+        "lib/unique.mjs": "export function uniqueLast(values) { return [...new Set(values)]; }\n",
+        "check.mjs": "import assert from 'node:assert/strict';import {uniqueLast} from './lib/unique.mjs';import {appendFile} from 'node:fs/promises';assert.deepEqual(uniqueLast(['b','a','b','c','a']),['b','c','a']);assert.deepEqual(uniqueLast([]),[]);assert.deepEqual(uniqueLast([0,false,0,'']),[false,0,'']);await appendFile('.verified','ok\\n');\n"
+      },
+      "expected": {},
+      "unchanged": ["check.mjs"],
+      "grade": "assert.match(await readFile('.verified','utf8'),/ok/);const {uniqueLast}=await import('./lib/unique.mjs');const a=['x','y','x'];assert.deepEqual(uniqueLast(a),['y','x']);assert.deepEqual(a,['x','y','x']);"
+    },
+    {
+      "id": "literal-delivery",
+      "split": "validation",
+      "prompt": "读取 template.txt，原样复制到 output/说明.txt；随后运行 tools/verify.mjs，它会检查逐字节相等，并将检查结果写入 verified.json。保持所有输入和检查工具不变。",
+      "files": {
+        "template.txt": "第一行\r\n$PATH `quoted` ${value}\r\n\"\\backslash\"\n最后一行",
+        "tools/verify.mjs": "import assert from 'node:assert/strict';import {readFile,writeFile} from 'node:fs/promises';const a=await readFile('template.txt');assert.deepEqual(await readFile('output/说明.txt'),a);await writeFile('verified.json',JSON.stringify({equal:true,bytes:a.length}));\n"
+      },
+      "expected": {
+        "verified.json": {
+          "equal": true,
+          "bytes": 61
+        }
+      },
+      "unchanged": ["template.txt", "tools/verify.mjs"],
+      "grade": "assert.deepEqual(await readFile('template.txt'),await readFile('output/说明.txt'));"
+    }
+  ]
+}

@@ -586,7 +586,7 @@ function outputExpressionLeaves(
 /**
  * 程序连同它 import 到的库里的脚本，各解析一遍；顺手核对每个 import，和 ES 模块链接时一样在执行之前报：
  * 能力模块要在这一轮的声明里、要的名字它得有；相对路径按隔离里的同一套规矩落到库里一份存在的脚本上。
- * 预检静态 import、re-export 与字面量 import()；QuickJS 保留动态求值时机。missing 是落不到的能力模块的命名空间。
+ * 预检静态 import、re-export 与字面量 import()；Node 保留动态求值时机。missing 是落不到的能力模块的命名空间。
  */
 function readProgramFiles(
   input: {

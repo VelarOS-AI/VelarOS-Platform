@@ -5,8 +5,10 @@ import { NodeEnvironmentVariables, NodeExecutionLimits } from '../contract/const
 /** 每次执行共享一个标准 ESM 传输模块，短期凭据只从当前子进程环境读取。 */
 export function nodeCapabilityBridge(): string {
   return `import {request} from 'node:http';
-export const invoke = (namespace, operation, input) => new Promise((resolve, reject) => {
-  const req = request({socketPath:process.env[${JSON.stringify(NodeEnvironmentVariables.socket.name)}], path:'/', method:'POST', headers:{authorization:'Bearer '+process.env[${JSON.stringify(NodeEnvironmentVariables.token.name)}], 'content-type':'application/json'}}, res => {
+const sockets = new Set();
+export const releaseCalls = () => { for (const socket of sockets) socket.unref(); };
+export const send = (path, input) => new Promise((resolve, reject) => {
+  const req = request({socketPath:process.env[${JSON.stringify(NodeEnvironmentVariables.socket.name)}], path, method:'POST', headers:{authorization:'Bearer '+process.env[${JSON.stringify(NodeEnvironmentVariables.token.name)}], 'content-type':'application/json'}}, res => {
     let body = '', size = 0;
     res.setEncoding('utf8');
     res.on('data', chunk => { size += Buffer.byteLength(chunk); if (size > ${NodeExecutionLimits.responseBytes}) res.destroy(); else body += chunk; });
@@ -18,9 +20,14 @@ export const invoke = (namespace, operation, input) => new Promise((resolve, rej
       else resolve(result.value);
     } catch (error) { reject(error); } });
   });
+  if (path === '/') req.on('socket', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });
   req.on('error', reject);
-  req.end(JSON.stringify({namespace, operation, input}));
+  req.end(JSON.stringify(input));
 });
+export const invoke = async (namespace, operation, input) => {
+  try {return await send('/', {namespace, operation, input});}
+  catch(error) {throw Object.assign(new globalThis.Error(error.message, {cause:error}), {code:error.code});}
+};
 `
 }
 

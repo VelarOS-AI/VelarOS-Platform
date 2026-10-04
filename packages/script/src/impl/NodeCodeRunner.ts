@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { closeSync, openSync, writeSync } from 'node:fs'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -17,7 +17,7 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import { NodeExecutionLimits } from '../contract/constants.js'
+import { NodeExecutionLimits, ScriptOutputLimits } from '../contract/constants.js'
 import type { CodeRunnerApi, NodeCodeRunnerOptions } from '../contract/requires.js'
 import type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
 import { shapeOperationFailure } from '../utils/capability-failure.js'
@@ -26,12 +26,19 @@ import {
   nodeCapabilityClient,
   nodeCapabilityDeclarations,
 } from '../utils/node-client.js'
+import { nodeProgramSource } from '../utils/node-program.js'
+import { createOutputCollector, validateOutputOptions } from '../utils/output-capture.js'
+import { describeChildExit } from '../utils/process-error.js'
 
 /** 一次标准 Node 程序；宿主端口承担操作系统权限与进程树所有权。 */
 class NodeCodeRunner implements CodeRunnerApi {
   public readonly environment = 'node' as const
 
   public constructor(private readonly options: NodeCodeRunnerOptions) {}
+
+  public get cwd(): string {
+    return this.options.cwd
+  }
 
   public async run(
     request: CodeRunRequest,
@@ -48,11 +55,12 @@ class NodeCodeRunner implements CodeRunnerApi {
     if (!Number.isFinite(request.timeoutMs) || request.timeoutMs <= 0)
       return failure('TIMEOUT', '需要有限的执行时限。')
     if (
-      !isEmpty(Object.keys(request.modules)) ||
-      !isEmpty(Object.keys(request.blobs)) ||
-      !isUndefined(request.input)
+      request.language === 'shell' &&
+      (!isUndefined(request.input) ||
+        !isEmpty(Object.keys(request.modules)) ||
+        !isEmpty(Object.keys(request.blobs)))
     )
-      return failure('PROGRAM_ERROR', '标准 Node 程序通过普通文件读写模块、参数和跨轮状态。')
+      return failure('VALIDATION', 'Shell 程序使用命令正文和普通文件传递数据')
     const controller = new AbortController()
     const cancel = () => controller.abort(signal?.reason)
     signal?.addEventListener('abort', cancel, { once: true })
@@ -70,6 +78,33 @@ class NodeCodeRunner implements CodeRunnerApi {
     let timedOut = false
     let calls = 0
     const pending = new Set<number>()
+    let pendingAtStop: number[] | undefined
+    controller.signal.addEventListener(
+      'abort',
+      () => {
+        pendingAtStop ??= [...pending]
+      },
+      { once: true }
+    )
+    const output = createOutputCollector(ScriptOutputLimits, validateOutputOptions, () => {})
+    let value: unknown
+    let programError: CodeRunOutcome['error']
+    let outputFile: string | undefined
+    const outputIssues: string[] = []
+    const collectOutput = async () => {
+      if (!outputFile) return
+      if ((await stat(outputFile)).size > NodeExecutionLimits.outputBytes)
+        throw new AppError('TOO_LARGE', '结构化输出超过采集上限')
+      for (const line of (await readFile(outputFile, 'utf8')).split('\n').filter(Boolean)) {
+        const event = JSON.parse(line)
+        if (event.config) output.output.configure(event.config)
+        if (event.block) output.output(event.block.value, event.block.options)
+        if (event.issue) {
+          outputIssues.push(String(event.issue))
+          programError = { code: 'PROGRAM_ERROR', message: String(event.issue) }
+        }
+      }
+    }
     const arm = () => {
       if (stopping || controller.signal.aborted) return
       started = performance.now()
@@ -111,14 +146,14 @@ class NodeCodeRunner implements CodeRunnerApi {
         stopping ||
         controller.signal.aborted ||
         incoming.method !== 'POST' ||
-        incoming.url !== '/' ||
+        !['/', '/result'].includes(incoming.url ?? '') ||
         incoming.headers.authorization !== `Bearer ${token}`
       ) {
         reply(403, { error: { code: 'PERMISSION', message: '当前执行没有此能力桥授权。' } })
         incoming.resume()
         return
       }
-      if (++calls > NodeExecutionLimits.calls || pending.size >= 32) {
+      if (incoming.url === '/' && (++calls > NodeExecutionLimits.calls || pending.size >= 32)) {
         reply(429, { error: { code: 'LIMIT', message: '能力调用超过本次预算。' } })
         incoming.resume()
         return
@@ -142,6 +177,29 @@ class NodeCodeRunner implements CodeRunnerApi {
           input = JSON.parse(body)
         } catch {
           reply(400, { error: { code: 'VALIDATION', message: '需要 JSON 请求。' } })
+          return
+        }
+        if (incoming.url !== '/' && isPlainObject(input)) {
+          try {
+            if (incoming.url === '/result') {
+              if (JSON.stringify(input).length > ScriptOutputLimits.rawChars)
+                throw new AppError('TOO_LARGE', '程序返回值超过归档上限')
+              value = input.value
+              if (isPlainObject(input.error))
+                programError = {
+                  code: String(input.error.code),
+                  message: String(input.error.message),
+                  line: optionalWhen(
+                    Number.isSafeInteger(input.error.line),
+                    Number(input.error.line)
+                  ),
+                }
+            }
+            reply(200, {})
+          } catch (error) {
+            programError = shapeOperationFailure(error)
+            reply(400, { error: programError })
+          }
           return
         }
         if (
@@ -172,7 +230,7 @@ class NodeCodeRunner implements CodeRunnerApi {
     try {
       controller.signal.throwIfAborted()
       await mkdir(this.options.directory, { recursive: true, mode: 0o700 })
-      directory = await mkdtemp(join(this.options.directory, 'node-'))
+      directory = await realpath(await mkdtemp(join(this.options.directory, 'node-')))
       const catalog = join(directory, 'host')
       await mkdir(catalog, { mode: 0o700 })
       await writeFile(join(catalog, 'bridge.mjs'), nodeCapabilityBridge(), { mode: 0o600 })
@@ -183,10 +241,12 @@ class NodeCodeRunner implements CodeRunnerApi {
         documentation: string
         operations: readonly string[]
       }> = []
+      const clients: Record<string, string> = Object.create(null)
       for (const [namespace, operations] of Object.entries(request.operations)) {
         const name = `host-${encodeURIComponent(namespace)}`
         const client = `${name}.mjs`
         const documentation = `${name}.d.ts`
+        clients[namespace] = client
         await writeFile(join(catalog, client), nodeCapabilityClient(namespace, operations), {
           mode: 0o600,
         })
@@ -210,7 +270,10 @@ class NodeCodeRunner implements CodeRunnerApi {
       const socket =
         process.platform === 'win32'
           ? `\\\\.\\pipe\\velaros-node-${randomUUID()}`
-          : join((socketDirectory = await mkdtemp(join(tmpdir(), 'vn-'))), 'rpc.sock')
+          : join(
+              (socketDirectory = await realpath(await mkdtemp(join(tmpdir(), 'vn-')))),
+              'rpc.sock'
+            )
       await new Promise<void>((resolve, reject) => {
         server.once('error', reject)
         server.listen(socket, () => {
@@ -222,13 +285,22 @@ class NodeCodeRunner implements CodeRunnerApi {
       const logPath = join(directory, 'output.log')
       log = openSync(logPath, 'wx', 0o600)
       controller.signal.throwIfAborted()
+      outputFile = join(directory, 'output.ndjson')
+      await writeFile(outputFile, '', { mode: 0o600 })
       const processRequest = {
         source: request.source,
+        language: request.language,
+        mode: request.mode,
+        bootstrap:
+          request.language === 'shell'
+            ? undefined
+            : await nodeProgramSource(request, catalog, this.options.cwd, clients),
         cwd: this.options.cwd,
         sessionId: request.host?.sessionId,
         executionId: request.host?.executionId,
         environment: {
           VELAROS_HOST_DIR: catalog,
+          VELAROS_OUTPUT_FILE: outputFile,
           VELAROS_HOST_SOCKET: socket,
           VELAROS_HOST_TOKEN: token,
         },
@@ -257,10 +329,16 @@ class NodeCodeRunner implements CodeRunnerApi {
         },
         controller.signal
       )
+      try {
+        await collectOutput()
+      } catch (error) {
+        Log.tag('NodeCodeRunner').caught('结构化输出归档校验失败', error)
+        programError = shapeOperationFailure(error)
+      }
       const code =
         timedOut || result.timedOut
           ? 'TIMEOUT'
-          : logTruncated
+          : logTruncated || /heap out of memory|Allocation failed/u.test(result.stderr)
             ? 'TOO_LARGE'
             : signal?.aborted || result.aborted
               ? 'ABORTED'
@@ -272,11 +350,28 @@ class NodeCodeRunner implements CodeRunnerApi {
         !controller.signal.aborted &&
         !result.aborted &&
         !result.timedOut &&
-        !result.cleanupIncomplete
+        !result.cleanupIncomplete &&
+        !programError
+      const snapshot = output.snapshot()
+      const captured = { ...snapshot, issues: [...snapshot.issues, ...outputIssues] }
+      if (!isEmpty(captured.blocks))
+        value = {
+          default:
+            captured.blocks.length === 1
+              ? captured.blocks[0]!.value
+              : captured.blocks.map((block) => block.value),
+        }
       return {
         ok,
+        value,
+        output:
+          !isEmpty(captured.blocks) ||
+          !isEmpty(captured.issues) ||
+          !isEmpty(Object.keys(captured.config))
+            ? captured
+            : undefined,
         logs: [],
-        pendingCalls: [...pending],
+        pendingCalls: pendingAtStop ?? [...pending],
         process: {
           ...result,
           stdout: result.stdout.slice(-NodeExecutionLimits.previewChars),
@@ -286,15 +381,21 @@ class NodeCodeRunner implements CodeRunnerApi {
           logTruncated,
           launched: true,
         },
-        error: optionalWhen(!ok, {
-          code,
-          message: `Node 执行失败：${code}；exitCode=${result.exitCode}；signal=${result.signal ?? 'none'}。查看 stderr 与 ${logPath}。`,
-        }),
+        error: optionalWhen(
+          !ok,
+          programError ??
+            (/heap out of memory|Allocation failed/u.test(result.stderr)
+              ? describeChildExit(result.exitCode, result.stderr)
+              : {
+                  code,
+                  message: `${request.language === 'shell' ? 'Shell' : 'Node'} 执行失败：${code}；exitCode=${result.exitCode}；signal=${result.signal ?? 'none'}。查看 stderr 与 ${logPath}。`,
+                })
+        ),
       }
     } catch (error) {
       return {
         ...failure(signal?.aborted ? 'ABORTED' : shapeOperationFailure(error).code, String(error)),
-        pendingCalls: [...pending],
+        pendingCalls: pendingAtStop ?? [...pending],
       }
     } finally {
       stopping = true

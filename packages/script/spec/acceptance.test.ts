@@ -149,28 +149,22 @@ export default r.files.flatMap((f) => f.content.split('\\n')
     ])
   })
 
-  test('INV-2 程序够不到文件系统与子进程', async () => {
-    for (const specifier of ['node:fs', 'node:child_process']) {
-      const literal = await submit(`await import(${JSON.stringify(specifier)})`)
-      expect(literal.checked).toBe(false)
-      if (literal.checked || !('check' in literal)) throw new Error('字面量应在预检拒绝')
-      expect(literal.check.diagnostics[0]?.message).toContain(specifier)
-    }
-    const readFile = await submit(`
-// 计算目标绕过静态依赖收集，验证运行时仍拒绝宿主模块。
-const fs = await import(['node', 'fs'].join(':'))
-export default fs.readFileSync('/etc/hosts', 'utf8')`)
-    expect(readFile.checked).toBe(true)
-    if (!readFile.checked) throw new Error('应当通过检查')
-    expect(readFile.result.failed?.code).toBe(CodeSurfaceErrorCodes.programError)
-    expect(readFile.result.failed?.message).toContain('node:fs')
-
-    const spawn = await submit(`
-const cp = await import(['node', 'child_process'].join(':'))
-export default cp.execSync('echo 逃逸').toString()`)
-    if (!spawn.checked) throw new Error('应当通过检查')
-    expect(spawn.result.failed?.code).toBe(CodeSurfaceErrorCodes.programError)
-    expect(spawn.result.failed?.message).toContain('node:child_process')
+  test('INV-2 Node 标准库与子进程使用宿主授权范围', async () => {
+    const result = await nodeSubprocessCodeRunner.run(
+      {
+        source:
+          "import {readFile} from 'node:fs/promises';import {spawnSync} from 'node:child_process';export default [typeof readFile,spawnSync(process.execPath,['-e','process.stdout.write(String(6*7))'],{encoding:'utf8'}).stdout]",
+        operations: {},
+        modules: {},
+        blobs: {},
+        input: undefined,
+        timeoutMs: 5000,
+      },
+      async () => ({}),
+      () => {}
+    )
+    expect(result.ok).toBe(true)
+    expect(result.value).toEqual(['function', '42'])
   })
 
   test('INV-3 死循环到时必停', async () => {
@@ -180,22 +174,22 @@ export default cp.execSync('echo 逃逸').toString()`)
     expect(outcome.result.failed?.code).toBe(CodeSurfaceErrorCodes.timeout)
   })
 
-  test('INV-3 在等待能力的同时死循环也会耗尽 CPU 预算', async () => {
+  test('INV-3 阻塞事件循环时仍由宿主终止进程', async () => {
     const outcome = await submit(
       "import { hang } from 'velaros:demo'; void hang({tag:'cpu-wait'}); while(true){}",
       { timeoutMs: 300 }
     )
     if (!outcome.checked) throw new Error('应当通过检查')
     expect(outcome.result.failed?.code).toBe(CodeSurfaceErrorCodes.timeout)
-    expect(hangAborted).toContain('cpu-wait')
+    expect(outcome.result.completed).toBeUndefined() // 事件循环阻塞前尚未派发的 I/O 不记作已执行
   }, 5_000)
 
-  test('INV-2 Function 构造器不能取得宿主网络或进程，运行之间隔离全局状态', async () => {
+  test('INV-2 Node 原生全局可用，运行之间隔离全局状态', async () => {
     const first = await submit(
       "export default Function('globalThis.testMark=1;return [typeof fetch,typeof WebSocket,typeof process,typeof require]')()"
     )
     if (!first.checked) throw new Error('应当通过检查')
-    expect(first.result.value).toEqual(['undefined', 'undefined', 'undefined', 'undefined'])
+    expect(first.result.value).toEqual(['function', 'function', 'object', 'undefined'])
     const second = await submit("export default Function('return typeof testMark')()")
     if (!second.checked) throw new Error('应当通过检查')
     expect(second.result.value).toBe('undefined')
@@ -550,7 +544,7 @@ export default 1`)
     const after = await submit('export default "先交"\nconsole.log("后面也跑了")')
     if (!after.checked) throw new Error('应当通过检查')
     expect(after.result.value).toBe('先交')
-    expect(after.result.logs).toEqual(['后面也跑了'])
+    expect(after.result.process?.stdout.trim()).toBe('后面也跑了')
 
     const thrown = await submit(
       'export const a = 1\nexport default a\nthrow new Error("第三行炸了")'
@@ -744,7 +738,9 @@ describe('程序编辑与附属模块', () => {
     expect(outcome.checked).toBe(true)
     if (!outcome.checked) throw new Error('应当通过检查')
     expect(outcome.result.value).toEqual([3, 6])
-    expect(outcome.result.logs?.filter((line) => line.includes('module-once'))).toHaveLength(1)
+    expect(
+      outcome.result.process?.stdout.split('\n').filter((line) => line.includes('module-once'))
+    ).toHaveLength(1)
     const checked = codeProgramChecker.check({
       ...program,
       modules: { ...program.modules, 'lib/value.js': 'export const n = (3;' },

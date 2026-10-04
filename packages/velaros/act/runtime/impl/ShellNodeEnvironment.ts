@@ -1,10 +1,13 @@
+import { AppError } from '@velaros-ai/core/error'
 import type {
   NodeCodeRunnerOptions,
   NodeProcessRequest,
   NodeProcessResult,
 } from '@velaros-ai/script'
-import { NodeExecutionLimits } from '@velaros-ai/script'
+import { NodeEnvironmentVariables, nodeExecutable, NodeExecutionLimits } from '@velaros-ai/script'
 
+import type { ShellRunCommandHooks } from '../../../shell/contract/requires.js'
+import type { ShellRunCommandOptions } from '../../../shell/types/shell-command.js'
 import type { ShellNodeEnvironmentOptions } from '../contract/requires.js'
 
 /** 经工作区命令宿主运行标准 Node 的适配器。 */
@@ -41,34 +44,42 @@ class ShellNodeEnvironment implements ShellNodeEnvironmentApi {
     signal: AbortSignal
   ): Promise<NodeProcessResult> {
     signal.throwIfAborted()
-    const result = await this.options.shell.runCommand(
-      'Node.js',
-      {
-        cwd: request.cwd,
-        sessionId: request.sessionId,
-        stdin: request.source,
-        // 本轮执行时钟由 Node runner 管理，在等待宿主交互时停表。
-        timeoutMs: null,
-        maxOutputChars: NodeExecutionLimits.previewChars,
-        onOutput: (text) => {
-          onOutput(text)
-          if (request.sessionId && request.executionId)
-            this.options.output?.({
-              sessionId: request.sessionId,
-              executionId: request.executionId,
-              invocationId: `${request.executionId}:node`,
-              text,
-            })
-        },
-        nativeCommand: {
-          file: this.options.executable ?? process.execPath,
-          args: ['--input-type=module', '--max-old-space-size=512'],
-          env: { ...this.options.environment, ...request.environment },
-        },
+    const shell = request.language === 'shell'
+    const executable = shell ? undefined : (this.options.executable ?? nodeExecutable.resolve())
+    if (!shell && !executable) throw new AppError('UNAVAILABLE', '宿主需要提供 Node.js 执行文件')
+    const command = shell ? request.source : 'Node.js'
+    const options: ShellRunCommandOptions & ShellRunCommandHooks = {
+      cwd: request.cwd,
+      sessionId: request.sessionId,
+      stdin: shell ? undefined : (request.bootstrap ?? request.source),
+      timeoutMs: null,
+      maxOutputChars: NodeExecutionLimits.previewChars,
+      environment: { ...this.options.environment, ...request.environment },
+      ipcSocket: request.environment[NodeEnvironmentVariables.socket.name],
+      outputFile: request.environment[NodeEnvironmentVariables.output.name],
+      onOutput: (text) => {
+        onOutput(text)
+        if (request.sessionId && request.executionId)
+          this.options.output?.({
+            sessionId: request.sessionId,
+            executionId: request.executionId,
+            invocationId: `${request.executionId}:${shell ? 'shell' : 'node'}`,
+            text,
+          })
       },
-      false,
-      signal
-    )
+      nativeCommand: shell
+        ? undefined
+        : {
+            file: executable!,
+            args: ['--input-type=module', '--max-old-space-size=512'],
+          },
+    }
+    if (request.mode === 'observe' && !this.options.shell.runObservationCommand)
+      throw new AppError('UNAVAILABLE', '宿主没有提供只读进程执行口')
+    const result =
+      request.mode === 'observe'
+        ? await this.options.shell.runObservationCommand!(command, options, signal)
+        : await this.options.shell.runCommand(command, options, false, signal)
     return {
       exitCode: result.exitCode,
       signal: result.signal,

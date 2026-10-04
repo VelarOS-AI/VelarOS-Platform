@@ -29,7 +29,7 @@ const Exemptions = [
   {
     pattern: /^packages\/script\/src\/utils\/output-capture\.ts$/,
     file: true,
-    reason: '整段经 toString() 注入 QuickJS 隔离堆，隔离堆里没有 core',
+    reason: '整段经 toString() 注入 Node 子进程，生成的模块不依赖宿主 core 安装位置',
   },
   {
     pattern: /\/native\/build\.mjs$/,

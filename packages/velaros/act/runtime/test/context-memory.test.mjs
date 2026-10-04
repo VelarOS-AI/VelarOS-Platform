@@ -1318,7 +1318,7 @@ test('INV-36 the latest script diagnostic survives body omission and clears afte
         })
         yield { type: 'finish', reason: 'stop' }
       } else if (call === 2) {
-        assert(!frame.partitions.recent.results.at(-1).text.includes("')' expected"))
+        assert(frame.partitions.recent.results.at(-1).ref)
         const feedback = frame.partitions.runtime.progress.feedback
         assert.equal(feedback.failure.code, 'SCRIPT_CHECK')
         assert(feedback.failure.draftRef)

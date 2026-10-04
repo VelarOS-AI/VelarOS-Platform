@@ -1,7 +1,6 @@
-/** Node 宿主查找受信 worker 所需的执行文件与包内入口。 */
+/** 解析宿主的原生 Node 执行文件。 */
 
 import { existsSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import { delimiter, join } from 'node:path'
 
 import { isUndefined } from '@velaros-ai/core'
@@ -25,9 +24,4 @@ export function resolveNodeExecutable(): Nullable<string> {
     if (existsSync(candidate)) return candidate
   }
   return null
-}
-
-/** 解析包内受信 worker 的入口路径；程序正文只走 IPC。 */
-export function resolveChildPath(): string {
-  return createRequire(import.meta.url).resolve('../../bin/script-child.mjs')
 }

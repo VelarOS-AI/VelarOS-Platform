@@ -46,7 +46,11 @@ async function fixture(t, stream, options = {}) {
   const register = (program) =>
     f.registered.add(
       JSON.stringify({
-        sourceHash: scriptOutputs.hash({ source: program.source, modules: program.modules }),
+        sourceHash: scriptOutputs.hash({
+          source: program.source,
+          modules: program.modules,
+          language: program.language ?? 'node',
+        }),
         inputHash: scriptOutputs.hash({ input: program.input, blobs: program.blobs }),
       })
     )
@@ -57,6 +61,7 @@ async function fixture(t, stream, options = {}) {
       return f.scope
     },
     reuse: {
+      coversNativeIO: true,
       async probe(input, signal) {
         f.probes.push(input)
         if (
@@ -168,6 +173,20 @@ const next = async function* (request) {
 }
 const completed = (events) =>
   assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+
+test('Node collects again unless the registered provider explicitly covers native I/O', async (t) => {
+  const f = await fixture(t, async function* (request, state) {
+    if (state.calls < 3) yield* next(request)
+    else yield* done(request)
+  })
+  delete f.observation.reuse.coversNativeIO
+  completed(await collect(f))
+  assert.equal(f.reads, 3)
+  assert.equal(f.probes.length, 0)
+  assert.ok(
+    f.frames.every((frame) => frame.observation.freshness.reason === 'native-process-dependencies')
+  )
+})
 
 test('stable reliable generation reduces actual Runtime observations with original identities and precise traces', async (t) => {
   async function run(disabled) {

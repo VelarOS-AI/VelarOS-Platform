@@ -1,13 +1,20 @@
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import type { CodeRunnerApi } from '../contract/requires.js'
 import type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
+import { executeNativeNode } from '../utils/native-process.js'
 
-import { NodeScriptProcess } from './NodeScriptProcess.js'
-import { createSubprocessCodeRunner } from './SubprocessCodeRunner.js'
+import { createNodeCodeRunner } from './NodeCodeRunner.js'
 
 /** Node 宿主使用同一共享运行器，仅提供子进程通信与回收。 */
 class NodeSubprocessCodeRunner implements CodeRunnerApi {
-  private readonly runner = createSubprocessCodeRunner({
-    launch: (events) => new NodeScriptProcess(events),
+  public readonly environment = 'node' as const
+  public readonly cwd = process.cwd()
+  private readonly runner = createNodeCodeRunner({
+    cwd: process.cwd(),
+    directory: join(tmpdir(), `velaros-script-${process.pid}`),
+    execute: executeNativeNode,
   })
 
   public run(

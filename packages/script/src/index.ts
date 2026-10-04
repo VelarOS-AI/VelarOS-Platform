@@ -19,12 +19,6 @@ export type {
   CodeSurfaceEventSink,
 } from './contract/requires.js'
 export type { KernelScriptSessionOptions } from './contract/requires.js'
-export type {
-  ScriptProcess,
-  ScriptProcessEvents,
-  ScriptWorkerOptions,
-  SubprocessCodeRunnerOptions,
-} from './contract/requires.js'
 export type { NodeCodeRunnerOptions } from './contract/requires.js'
 export { createCapabilityPort } from './impl/CapabilityOperationPort.js'
 export type { CodeProgramCheckerApi } from './impl/CodeProgramChecker.js'
@@ -33,6 +27,8 @@ export type { CodeSurfaceSessionApi } from './impl/CodeSurfaceSession.js'
 export { createCodeSurfaceSession } from './impl/CodeSurfaceSession.js'
 export { createKernelScriptSession } from './impl/KernelScriptSession.js'
 export { createNodeCodeRunner } from './impl/NodeCodeRunner.js'
+export type { NodeExecutableApi } from './impl/NodeExecutable.js'
+export { nodeExecutable } from './impl/NodeExecutable.js'
 export {
   nodeSubprocessCodeRunner,
   NodeSubprocessRunnerIsReleaseReady,
@@ -40,7 +36,6 @@ export {
 export type { ScriptOutputsApi } from './impl/ScriptOutputs.js'
 export { scriptOutputs } from './impl/ScriptOutputs.js'
 export { scriptPackageCompiler } from './impl/ScriptPackageCompiler.js'
-export { createSubprocessCodeRunner } from './impl/SubprocessCodeRunner.js'
 export type {
   CapabilityNamespaceOperations,
   CapabilityOperation,
@@ -92,4 +87,3 @@ export type {
   ScriptPackageSurface,
 } from './types/script.js'
 export type { NodeProcessReceipt, NodeProcessRequest, NodeProcessResult } from './types/script.js'
-export type { ScriptWorkerCommand, ScriptWorkerEvent } from './types/worker.js'

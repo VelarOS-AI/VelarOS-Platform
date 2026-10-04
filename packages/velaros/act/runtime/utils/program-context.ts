@@ -143,11 +143,17 @@ export function programContentChange(
 ): { changed: boolean; patch: string; truncated: boolean; purpose: 'change-summary' } {
   const comparable = (content: Optional<ContextContent>): string => {
     const text = programContentText(content, source)
-    if (source && content)
+    if (content)
       try {
-        const { source: _source, ...configuration } = JSON.parse(content.text)
-        if (!isEmpty(Object.keys(configuration)))
-          return `${text}\n// modules / input / blobs\n${stringifyPretty(configuration)}`
+        const data = JSON.parse(content.text)
+        if (source) {
+          const { source: _source, ...configuration } = data
+          if (!isEmpty(Object.keys(configuration)))
+            return `${text}\n// modules / input / blobs\n${stringifyPretty(configuration)}`
+        } else if (isPlainObject(data.result) && isPlainObject(data.result.process)) {
+          const { logPath: _logPath, ...process } = data.result.process
+          return stringifyPretty({ ...data.result, process })
+        }
       } catch {
         Log.tag('ActRuntime').debug(
           'program-context 已进入异常处理或降级分支'

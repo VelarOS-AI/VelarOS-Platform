@@ -168,6 +168,8 @@ class KernelScriptSession implements KernelScriptSessionApi {
         program,
         signal,
         granted: [],
+        packages: this.options.packages,
+        mode: this.options.mode,
         host: { sessionId: this.options.sessionId, executionId: this.options.executionId, modules },
       })
     }

@@ -152,6 +152,8 @@ export async function runActEvaluation({
     workspace: root,
     dataDir: join(directory, 'state'),
     model,
+    // 该工作负载显式验收持续观察，按宿主合同开放观察声明。
+    protocol: { allowed: ['shell', 'observe', 'blobs', 'execute', 'done'] },
     agents: workload?.modelTools ?? false,
     search: workload?.modelTools ?? false,
     context: {

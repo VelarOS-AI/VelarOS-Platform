@@ -99,7 +99,7 @@ import { memoryPrompt } from '../utils/context-memory.js'
 import { frameEnvironment } from '../utils/environment.js'
 import { executionOutcome } from '../utils/execution-outcome.js'
 import { residentContracts, runtimeInstructions } from '../utils/model-instructions.js'
-import { nodeHostModules, nodeRuntimeInstructions } from '../utils/node-instructions.js'
+import { nodeRuntimeInstructions } from '../utils/node-instructions.js'
 import {
   recoverScriptSubmission,
   scriptControlIdentity,
@@ -369,8 +369,16 @@ export class RuntimeSession implements VelarosSession {
       ? createNodeCodeRunner(dependencies.node)
       : dependencies.runner
     this.config = protocolConfig(
-      dependencies.node
-        ? { ...dependencies.protocol, presentation: 'node', allowed: ['execute', 'done'] }
+      this.executionRunner.environment === 'node'
+        ? {
+            ...dependencies.protocol,
+            presentation: 'node',
+            allowed:
+              dependencies.protocol?.allowed ??
+              (dependencies.node
+                ? ['shell', 'execute', 'done']
+                : ['shell', 'observe', 'blobs', 'execute', 'done']),
+          }
         : dependencies.protocol
     )
     this.context = createContextRuntime({ sessionId: id, storage: dependencies.storage })
@@ -399,9 +407,7 @@ export class RuntimeSession implements VelarosSession {
         signal.throwIfAborted()
         const script = createKernelScriptSession({
           packages: dependencies.packages,
-          allowedModules: dependencies.node
-            ? nodeHostModules(dependencies.allowedModules())
-            : dependencies.allowedModules(),
+          allowedModules: dependencies.allowedModules(),
           runtime: dependencies.kernel,
           runner: this.executionRunner,
           sessionId: id,
@@ -429,8 +435,10 @@ export class RuntimeSession implements VelarosSession {
     )
     const modules = dependencies.allowedModules()
     const instructions = `${
-      dependencies.node
-        ? nodeRuntimeInstructions(dependencies.node.cwd)
+      this.executionRunner.environment === 'node'
+        ? nodeRuntimeInstructions(
+            this.executionRunner.cwd ?? dependencies.node?.cwd ?? process.cwd()
+          )
         : runtimeInstructions({
             modules,
             resident: residentContracts(modules, dependencies.residentModules, (module) =>
@@ -1203,10 +1211,7 @@ export class RuntimeSession implements VelarosSession {
       }
       const script = createKernelScriptSession({
         packages: this.dependencies.packages,
-        allowedModules:
-          execute && this.dependencies.node
-            ? nodeHostModules(this.dependencies.allowedModules())
-            : this.dependencies.allowedModules(),
+        allowedModules: this.dependencies.allowedModules(),
         runtime: this.dependencies.kernel,
         runner: execute ? this.executionRunner : this.dependencies.runner,
         sessionId: this.id,
@@ -1772,6 +1777,8 @@ export class RuntimeSession implements VelarosSession {
   ): Promise<ObservationProbe> {
     const options = this.dependencies.contextOptions?.observation
     if (!options) return { kind: 'unknown', reason: 'collect-every-turn' }
+    if (this.dependencies.runner.environment === 'node' && !options.reuse.coversNativeIO)
+      return { kind: 'unknown', reason: 'native-process-dependencies' }
     if (this.pendingObservationProbe) return { kind: 'unknown', reason: 'probe-still-settling' }
     signal.throwIfAborted()
     const controller = new AbortController()
@@ -1804,7 +1811,11 @@ export class RuntimeSession implements VelarosSession {
           .sort()
           .map((moduleId) => this.dependencies.kernel.describe(moduleId).binding)
         const fingerprint = {
-          sourceHash: scriptOutputs.hash({ source: program.source, modules: program.modules }),
+          sourceHash: scriptOutputs.hash({
+            source: program.source,
+            modules: program.modules,
+            language: program.language ?? 'node',
+          }),
           inputHash: scriptOutputs.hash({ input: program.input, blobs: program.blobs }),
           scopeFingerprint: scriptOutputs.hash({
             task: metadata?.task?.id,
@@ -2273,10 +2284,7 @@ export class RuntimeSession implements VelarosSession {
     try {
       const session = createKernelScriptSession({
         packages: this.dependencies.packages,
-        allowedModules:
-          mode === 'execute' && this.dependencies.node
-            ? nodeHostModules(this.dependencies.allowedModules())
-            : this.dependencies.allowedModules(),
+        allowedModules: this.dependencies.allowedModules(),
         runtime: this.dependencies.kernel,
         runner: mode === 'execute' ? this.executionRunner : this.dependencies.runner,
         sessionId: this.id,

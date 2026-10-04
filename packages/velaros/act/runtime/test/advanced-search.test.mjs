@@ -224,9 +224,9 @@ test('INV-29 search reuses ScriptAct, ordered history, shared storage and parent
   const manifest = JSON.parse((await f.session.context.read(delivery.ref)).text)
   assert.deepEqual(manifest.artifacts, delivery.artifacts)
   // 原始共享源码仍须显式提交，并受调用者的模块集合约束。
-  await assert.rejects(f.session.execute({ source: JSON.parse(saved).source }), {
-    code: 'SCRIPT_CHECK',
-  })
+  const denied = await f.session.execute({ source: JSON.parse(saved).source })
+  assert(denied.result.failed)
+  assert.match(denied.result.process.stderr, /velaros:evidence/)
   assert.equal(f.reads, 1)
 })
 

@@ -142,7 +142,7 @@ test('INV-4 all 14 generated module surfaces / 102 operations use the same stric
   assert.equal(dispatched, 0)
 })
 
-test('INV-1 real Project and Files operations run through QuickJS, shared receipts and v2 materialization', async (t) => {
+test('INV-1 real Project and Files operations run through Node, shared receipts and v2 materialization', async (t) => {
   const f = await storageFixture(t)
   await writeFile(join(f.root, 'a.txt'), 'one\n')
   const kernel = await createProjectKernel({ root: f.root })
@@ -624,7 +624,7 @@ test('INV-7 real image capability persists attachments and sends them as images 
   assert.equal(JSON.parse(content.text).data, data)
 })
 
-test('QuickJS data codecs preserve UTF-8 and binary roundtrips without host objects', async (t) => {
+test('Node data codecs preserve UTF-8 and binary roundtrips without host objects', async (t) => {
   const f = await storageFixture(t)
   const runtime = await createRuntime({
     storage: f.storage,

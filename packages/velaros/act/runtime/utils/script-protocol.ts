@@ -107,13 +107,16 @@ export function protocolConfig(options: ScriptProtocolOptions = {}) {
     blobs: 'blobs',
     observe: 'observe',
     execute: 'execute',
+    shell: 'shell',
     done: 'done',
     ...options.names,
   }
   if (
-    Object.keys(names).some((key) => !['blobs', 'observe', 'execute', 'done'].includes(key)) ||
+    Object.keys(names).some(
+      (key) => !['blobs', 'observe', 'execute', 'shell', 'done'].includes(key)
+    ) ||
     Object.values(names).some((name) => !isString(name) || !/^[A-Za-z_$][\w$]*$/u.test(name)) ||
-    new Set(Object.values(names)).size !== 4
+    new Set(Object.values(names)).size !== 5
   )
     throw protocolFailure('协议声明名称必须合法且唯一')
   for (const name of Object.values(names))
@@ -134,7 +137,7 @@ export function protocolConfig(options: ScriptProtocolOptions = {}) {
     limits.concurrency > 16
   )
     throw protocolFailure('协议预算超出范围')
-  const allowed = options.allowed ?? ['blobs', 'observe', 'execute', 'done']
+  const allowed = options.allowed ?? ['blobs', 'observe', 'execute', 'shell', 'done']
   if (
     !allowed.length ||
     new Set(allowed).size !== allowed.length ||
@@ -195,7 +198,18 @@ export function protocolDecisionInstructions(
 export function protocolRules(options: ScriptProtocolOptions): string {
   const { names, maxBlocks, allowed, defaultRetain } = protocolConfig(options)
   if (options.presentation === 'node')
-    return `继续工作时，用本帧标记后的 ${names.execute}() 开始一段 JavaScript，以独立一行的同一标记闭合；结果在下一轮返回。完成后使用单行 ${names.done}("完成依据")，随后写答复。每个响应提交一个执行或完成决定。`
+    return [
+      `用本帧标记后的 ${names.execute}() 开始 Node.js ESM${allowed.includes('shell') ? `，或 ${names.shell}() 开始 Shell 命令` : ''}；以独立一行的同一标记闭合，结果在下一轮返回。完成后使用单行 ${names.done}("完成依据")，随后写答复。`,
+      allowed.includes('observe')
+        ? `${names.observe}() 注册持续只读 Node 观察；可通过普通程序参数提供 input、blobs 或 sourceRef。`
+        : '',
+      allowed.includes('blobs')
+        ? `${names.blobs}("名称") 的闭合段绑定原文，可从 velaros:program 导入 blobs。`
+        : '',
+      '执行选项通过头部对象传入；async:true 后台执行，inputRef 引用宿主参数，sourceRef 复用已保存程序（段内留空）。每个实际程序只提交一次。',
+    ]
+      .filter(Boolean)
+      .join('\n')
   const hasProgram = allowed.includes('observe') || allowed.includes('execute')
   return [
     'ScriptAct 固定协议。你在响应中输出 JS 程序段，宿主 Runtime 真实执行并在下一轮返回回执；模型接口的原生工具列表可以为空，实际能力由脚本模块合同提供。当前标记、允许声明和完整示例见最后一条消息末尾的「本帧协议」。',
@@ -233,7 +247,20 @@ export function protocolInstructions(
 ): string {
   const { names, allowed } = protocolConfig(options)
   if (options.presentation === 'node')
-    return `本轮执行：\n${marker} ${names.execute}()\n// 普通 Node.js 代码\n${marker}\n任务完成：\n${marker} ${names.done}("完成依据")\n面向用户的答复。`
+    return [
+      `当前帧标记：${marker}。允许：${allowed.map((kind) => names[kind]).join(', ')}。`,
+      allowed.includes('shell')
+        ? `Shell：\n${marker} ${names.shell}()\n# Shell 命令\n${marker}`
+        : '',
+      `Node：\n${marker} ${names.execute}()\n// Node.js ESM\n${marker}\n任务完成：\n${marker} ${names.done}("完成依据")\n面向用户的答复。`,
+      !isEmpty(Object.keys(inputs))
+        ? `宿主参数：${Object.keys(inputs)
+            .map((name) => `host:${name}`)
+            .join(', ')}。`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
   const program = allowed.includes('execute')
     ? 'execute'
     : allowed.includes('observe')

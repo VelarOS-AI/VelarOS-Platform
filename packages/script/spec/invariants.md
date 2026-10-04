@@ -4,18 +4,18 @@
 
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
-| INV-1 | 先检查后执行：程序是 JavaScript，执行之前查语法、核对每个 import 都落得到，并按 INV-41 拦截标准 output 的确定形状矛盾；**不做整体类型检查**——类型推断上的挑剔（空数组推成 `never[]`、字面量拓宽）只会把对的程序整轮弹回去；字段名写错读到 undefined，入参形状错由能力按 schema 当场拒绝。没过时程序**一行都不执行**，回的是诊断而不是结果；诊断的行号与模型写的那一行对得上，中间不转译所以行号不会错位 | 测试 | `spec/acceptance.test.ts` |
-| INV-2 | 程序够不到宿主的环境能力：读写文件、起子进程在隔离里一律失败，程序只能经能力端口做事 | 测试 | `spec/acceptance.test.ts` |
+| INV-1 | Node 程序先检查 JavaScript 语法，模块由原生链接器检查；显式合同检查器另可核对每个 import 都落得到，并按 INV-41 拦截标准 output 的确定形状矛盾；**不做整体类型检查**——类型推断上的挑剔（空数组推成 `never[]`、字面量拓宽）只会把对的程序整轮弹回去；字段名写错读到 undefined，入参形状错由能力按 schema 当场拒绝。语法预检失败时程序一行都不执行并返回诊断；原生模块链接失败通过执行回执交付，动态 import 按 Node 的实际执行顺序处理；诊断行号与提交源码对应 | 测试 | `spec/acceptance.test.ts` |
+| INV-2 | 程序使用真实 Node 标准库与子进程；操作系统权限由宿主进程端口约束，自定义包仍逐次经过 Kernel 授权 | 测试 | `spec/acceptance.test.ts` |
 | INV-3 | 到时必停：超过 `timeoutMs` 的程序一定被终止并回 `TIMEOUT`，死循环也不例外；`signal` 触发时同样停 | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 拒绝是可捕获的异常：能力端口报错在程序里是一个能 `try/catch` 的 throw，不是一份静默的空回执；**拒绝**（用户或策略说了不，码里带 DENIED、PERMISSION）同时进回给模型的 `notices`，程序把异常吞了模型也知道；找不到、不唯一这类是调用自己的结果，程序接得住，不在 `notices` 里再回放；程序正是死在那次拒绝上时 `failed` 已经说了，不重复 | 测试 | `spec/acceptance.test.ts` |
-| INV-5 | 隔离运行器使用 QuickJS WASM 与显式能力桥；发布认证标记 `NodeSubprocessRunnerIsReleaseReady` 保持 false，由宿主完成部署隔离验收 | 测试 | `spec/acceptance.test.ts` |
+| INV-5 | 执行器使用真实 Node 与按需导入的能力包；发布认证标记 `NodeSubprocessRunnerIsReleaseReady` 保持 false，由宿主完成部署隔离验收 | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 大字符串走 `blobs` 不进源码：含反引号、`${`、反斜杠、引号的内容原样送达程序，只过一层转义 | 测试 | `spec/acceptance.test.ts` |
 | INV-7 | 超预算不静默：返回值与日志超过上限时按**结尾**保留（失败现场在尾部），并在 `notices` 里说清省略了多少 | 测试 | `spec/acceptance.test.ts` |
 | INV-8 | 程序源码与 blobs 超过体量上限一律拒，不截断后照跑——半截程序跑出来的结果比不跑更坏 | 测试 | `spec/acceptance.test.ts` |
-| INV-9 | 隔离必须自证才接活：QuickJS guest 中的 process、require、fetch 与 WebSocket 均不可达；Node 默认运行器不会把 Electron 误作 Node，Electron 须注入其宿主进程 | 测试 | `spec/acceptance.test.ts` |
-| INV-10 | 手滑写了 TypeScript 不废掉一整轮：整份诊断都落在「这个语法只能在 TypeScript 文件里用」那一族时，按 TypeScript 再解析一遍（真语法错照样拦），剥掉类型照跑，并在 `notices` 里告诉模型下次直接写 JavaScript | 测试 | `spec/acceptance.test.ts` |
+| INV-9 | Node 标准全局可用，每轮创建独立进程；Node 默认运行器不会把 Electron 误作 Node，Electron 须注入实际 Node 进程口 | 测试 | `spec/acceptance.test.ts` |
+| INV-10 | 显式选择兼容合同检查器时，TypeScript 程序可剥离类型执行：整份诊断都落在「这个语法只能在 TypeScript 文件里用」那一族时，按 TypeScript 再解析一遍（真语法错照样拦），剥掉类型照跑，并在 `notices` 里告诉模型下次直接写 JavaScript | 测试 | `spec/acceptance.test.ts` |
 | INV-11 | `KernelScriptSession.edit` 按同一底稿精确替换：定位唯一、不重叠，主源码与附属模块全成或全不成；失败返回 SCRIPT_EDIT 和索引，原程序不变 | 测试 | `spec/acceptance.test.ts` |
-| INV-12 | 诊断必须带代码帧：出错那一行连同一个指向出错列的插字符一起给出。只回行列号等于让模型靠数行定位，而数行是它最不准的事之一 | 测试 | `spec/acceptance.test.ts` |
+| INV-12 | 语法预检诊断必须带代码帧：出错那一行连同一个指向出错列的插字符一起给出。只回行列号等于让模型靠数行定位，而数行是它最不准的事之一 | 测试 | `spec/acceptance.test.ts` |
 | INV-13 | 宿主只提供本次授权能力的声明；程序引用未提供的能力时先拒绝执行并报告缺失命名空间；import 了不是能力模块的名字、库里没有的脚本、或者能力模块没有的导出名，和 ES 模块链接时一样在执行之前给出诊断（导出名照声明核对，诊断里列出它实际导出什么）；Kernel 会话按本次导入获取挂载声明，能力权限仍由 Kernel 校验 | 测试 | `spec/acceptance.test.ts` |
 | INV-15 | **我们发明的东西要导入，语言自带的不动**：`input` 与 `blobs` 走恒常可用的 `velaros:program` 模块，不做隐形全局——隐形全局是只有提示词告诉过模型才知道的暗知识；`console` 是 JavaScript 自带的，不动。`velaros:program` 由引擎提供 | 测试 | `spec/acceptance.test.ts` |
 | INV-16 | 没跑完就交账：程序中止、超时或抛错时，**已经落定的能力调用逐条回给模型**（连着的同名同结果折成一条带 `times`），跑完了不给。这是**账**不是事务——不承诺回滚（跑过的命令回滚不了），承诺**知道**：工具面里中断落在两次调用之间、天然干净，程序里落在执行中途，副作用是真的，只回一个 `ABORTED` 等于让模型对着三个字瞎猜 | 测试 | `spec/acceptance.test.ts` |
@@ -34,11 +34,11 @@
 | INV-37 | output 声明里写的上限与 ScriptOutputLimits 一致，输出校验恰好在这些边界上放行与拒绝 | 测试 | `test/output.test.ts` |
 | INV-39 | 我们自己写的代码模版另走 `typecheck`，照声明做完整类型检查：模版会原样教给模型，写错一个键模型照着写就跟着错。模型交的程序不走这条 | 测试 | `spec/acceptance.test.ts` |
 
-| INV-28 | 宿主进程注入只改变启动与消息运输；共享父端在预取消、启动/发送故障、终态和中断时回收一次并等待退出，完成后不发送迟到能力回执 | 测试 | `test/subprocess.test.ts` |
+| INV-28 | 宿主进程口承担平台约束与进程树回收；审批拒绝和预取消不启动进程，进程收束失败不能报告成功，异常及超时保留输出 | 测试 | `test/subprocess.test.ts` |
 
 ## INV-40 原生 ES 模块链接与绑定
 
-源码由 QuickJS 的原生模块系统链接；具名与命名空间 import 保留 live bindings，静态依赖在正文前执行，循环依赖按语言规则链接，顶层 await 会等待依赖完成。附属模块只按本次提供的源文装载一次；能力模块由授权表生成。不得把 import/export 降级成对象快照与顺序函数调用。
+源码由 Node 的原生 ESM 系统链接；具名与命名空间 import 保留 live bindings，静态依赖在正文前执行，循环依赖按语言规则链接，顶层 await 会等待依赖完成。附属模块只按本次提供的源文装载一次；能力模块由授权表生成。不得把 import/export 降级成对象快照与顺序函数调用。
 
 验证：`test/module-semantics.test.ts`，原生模块命名空间只读且不可扩展，数据对象仍递归冻结由 INV-27 验证。
 

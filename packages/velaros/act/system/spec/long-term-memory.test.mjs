@@ -344,7 +344,7 @@ test('INV-12 recall 支持正文检索、精确 ID 和有界分页，不自动�
   assert.equal(rest.nextOffset, null)
   assert.equal(new Set([...first.items, ...rest.items].map((item) => item.id)).size, 5)
   await submit(f.session)
-  assert.match(requests[0].instructions, /memory.recall/)
+  assert.match(requests[0].instructions, /index.json/)
   assert(!JSON.stringify(requests[0]).includes('secret-not-automatically-loaded'))
 })
 
@@ -533,7 +533,7 @@ test('INV-12 长期记忆与整理共享主入口，整理模型只读固定材�
     toolCalls++
     assert(!request.instructions.includes('memory.recall'))
     assert(!request.instructions.includes('memory.save'))
-    assert.match(request.instructions, /velaros:context-materials/)
+    assert.match(request.instructions, /index.json/)
     const snapshot = JSON.parse(
       JSON.parse(request.materials[0].text).partitions.task.goals[0].text
     ).snapshot
@@ -549,8 +549,8 @@ test('INV-12 长期记忆与整理共享主入口，整理模型只读固定材�
     yield { type: 'finish', reason: 'stop' }
   })
   const main = model(async function* (request) {
-    assert.match(request.instructions, /memory.recall/)
-    assert.match(request.instructions, /memory.organize/)
+    assert.match(request.instructions, /index.json/)
+    assert.match(request.instructions, /按需/)
     if (++mainCalls === 1) {
       yield {
         type: 'text',

@@ -15,10 +15,10 @@ import {
 import { declaredModules, isTypeScriptOnlySyntax, sliceModuleExports } from '../src/utils/compiler'
 import { applyProgramEdits } from '../src/utils/edit'
 import { readModuleSpecifiers } from '../src/utils/module-form'
+import { describeChildExit } from '../src/utils/process-error'
 import { keepTail, readCapabilityNamespace } from '../src/utils/program'
 import { checkScriptPath, resolveLibraryImport } from '../src/utils/refs'
 import { describeProgramOversize } from '../src/utils/result'
-import { describeChildExit } from '../src/utils/runner-bridge'
 import { CodeSurfaceTuning } from '../src/utils/tuning'
 
 void describe('预算裁剪', () => {

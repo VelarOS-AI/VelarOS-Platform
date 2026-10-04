@@ -10,6 +10,11 @@ export const NodeEnvironmentVariables = Object.freeze({
     direction: 'output',
     description: '本次执行可读取的宿主能力目录。',
   },
+  output: {
+    name: 'VELAROS_OUTPUT_FILE',
+    direction: 'output',
+    description: '本次执行的有界结构化输出归档文件。',
+  },
   socket: {
     name: 'VELAROS_HOST_SOCKET',
     direction: 'output',
@@ -24,10 +29,12 @@ export const NodeEnvironmentVariables = Object.freeze({
 
 /** 标准进程与宿主桥的内存、磁盘预算。 */
 export const NodeExecutionLimits = Object.freeze({
-  /** 单次调用参数的 UTF-8 字节上限。 */
-  requestBytes: 2 * 1024 * 1024,
+  /** 单次能力参数上限；覆盖大文本合同与 JSON 转义，最终仍由领域核验数据预算。 */
+  requestBytes: 128 * 1024 * 1024,
+  /** 结构化 JSON 归档的 UTF-8 字节上限，覆盖多字节文本与元数据。 */
+  outputBytes: 8 * 1024 * 1024,
   /** 单次能力结果的 UTF-8 字节上限。 */
-  responseBytes: 16 * 1024 * 1024,
+  responseBytes: 128 * 1024 * 1024,
   /** 单次程序输出归档的字节上限。 */
   logBytes: 16 * 1024 * 1024,
   /** stdout 与 stderr 各自可见的字符上限。 */

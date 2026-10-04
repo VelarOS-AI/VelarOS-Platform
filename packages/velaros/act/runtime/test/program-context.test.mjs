@@ -433,12 +433,11 @@ test('observation cannot renew leases or nest the system execution entry', async
   success(await submit(f))
   assert.match(f.frames[0].observation.text, /不允许调用/)
   assert.equal((await f.state()).leases[0].expiresAfter, 2)
-  await assert.rejects(
-    f.session.observe({
-      source: `import {execute} from 'velaros:script';await execute({source:${JSON.stringify(write)}});`,
-    }),
-    { code: 'OBSERVATION_CHECK' }
-  )
+  await f.session.observe({
+    source: `import {execute} from 'velaros:script';await execute({source:${JSON.stringify(write)}});`,
+  })
+  success(await submit(f))
+  assert.match(f.frames.at(-1).observation.text, /velaros:script|PERMISSION/)
   assert.equal(f.world.writes, 1)
 })
 

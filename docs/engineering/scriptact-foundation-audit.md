@@ -77,7 +77,7 @@ P1 表示应在对应能力成为正式评测/长期运行基线前处理；P2 �
 
 两个当前源码 QuickJS 探针都检查成功且无诊断：库导出 `let n=0` 和 `bump()`，调用 bump 后读取 n，Script 得到 0、原生 ESM 得到 1；正文先赋值再出现静态 import，Script 与原生 ESM 的最终值分别为 1 和 2。纯函数/常量辅助模块通常不受这两个例子影响；没有证据显示隔离逃逸。
 
-证据：[程序合同](../../packages/script/src/types/script.ts#L31)、[模块改写](../../packages/script/src/utils/module-form.ts#L85)、[库执行](../../packages/script/src/utils/worker-program.ts#L189)。探针及 Node 对照在 `execution/minimal-repro.ts`、`repro-results.jsonl`、`native-esm-results.jsonl`。
+证据：[程序合同](../../packages/script/src/types/script.ts#L31)、[模块改写](../../packages/script/src/utils/module-form.ts#L85)、[审核时的库执行](https://github.com/VelarOS-AI/VelarOS-Platform/blob/86bd823ca4dfe4f2db0859ab75ad851e46ee03bb/packages/script/src/utils/worker-program.ts#L189)。探针及 Node 对照在 `execution/minimal-repro.ts`、`repro-results.jsonl`、`native-esm-results.jsonl`。
 
 建议先评估 QuickJS 原生模块链接，通过受控的合成模块继续接入原能力桥。若确实只支持子集，应在合同与检查器同时定义并拒绝无法保证的语义。验收包含 live binding、静态依赖顺序、re-export、namespace、顶层 await、循环依赖的明确支持/拒绝矩阵；支持项与原生 JS 做差分测试。
 

@@ -57,7 +57,7 @@ async function submit(session) {
 }
 const prelude = "import {output} from 'velaros';import * as system from 'velaros:system';"
 
-// 使用真实 QuickJS、Kernel 与 ContextStorage，验证包入口没有另起执行路径。
+// 使用真实 Node、Kernel 与 ContextStorage，验证包入口没有另起执行路径。
 test('INV-2 系统命名空间和附属模块共用真实操作身份与输入/blob通道', async (t) => {
   const f = await fixture(t)
   const result = await execute(

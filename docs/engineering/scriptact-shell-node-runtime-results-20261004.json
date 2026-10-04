@@ -1,0 +1,532 @@
+{
+  "study": "shell-node-runtime-v3-20261004",
+  "recordedAt": "2026-10-04T11:49:55.266425+00:00",
+  "environment": {
+    "node": "v24.15.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "configuration": {
+    "model": "gpt-5.6-sol",
+    "reasoning": "high",
+    "maxOutputTokens": 12000,
+    "pricing": "reference only; input $4/M, output $20/M; cache discounts excluded"
+  },
+  "limits": {
+    "modelRequestsPerRun": 8,
+    "timeoutMsPerRun": 240000
+  },
+  "acceptance": "Independent artifact grading and completed runtime status must both pass. All 14 attempts retained; the two host-priorities attempts are invalid due to a SessionPeer fixture schema error.",
+  "usagePolicy": "Unknown usage remains null; token and reference cost comparisons use only valid cases with complete usage on both sides. Fixed prices exclude cache discounts and are not actual billed cost.",
+  "previousCommit": "d38eee1066537a7a26d5dab7b9d1a61c52f3844c",
+  "freezes": [
+    {
+      "evidenceDirectory": ".velaros-workspace/bench/standard-runtime-v3-20261004",
+      "freeze": {
+        "createdAt": "2026-10-04T11:31:17.446898+00:00",
+        "suite": "scripts/agent/standard-runtime-v3-validation-cases.json",
+        "suiteSha256": "0299f7d81608a2d8109051e9882dc3ab501b6682c79d1e2de0a2f0eb1fd6588a",
+        "evaluatorSha256": "09c5ebf6c7640f51fa0273956651aeb528230b609a8b70209afdc3a7dd221bd1",
+        "variants": [
+          {
+            "id": "previous",
+            "node": true,
+            "manifestSha256": "7a2710a02aae23238a4c27e2795501265c31a33d3a9503bcc12b07bf7b470a66",
+            "files": 5380
+          },
+          {
+            "id": "standard",
+            "node": true,
+            "manifestSha256": "ae25d74f9202b4fe8851de6f261af76ca5909db460d6a196c4be34d419b9fd4f",
+            "files": 5735
+          }
+        ],
+        "referenceGradesPassed": 6,
+        "repetitions": 1,
+        "description": "Fresh 6-case paired comparison, rotated order, old frozen v2 Node vs Shell + Node v3. Each case run once per variant; no optimization on measured outcomes."
+      },
+      "suiteAndEvaluatorUnchanged": true
+    },
+    {
+      "evidenceDirectory": ".velaros-workspace/bench/standard-runtime-v3-host-20261004",
+      "freeze": {
+        "createdAt": "2026-10-04T11:44:06.682914+00:00",
+        "suite": "scripts/agent/standard-runtime-v3-host-validation-cases.json",
+        "suiteSha256": "4b21c1edd7fe3abe80c8c53f35579fca169075c2b51225002819880c055148e7",
+        "evaluatorSha256": "09c5ebf6c7640f51fa0273956651aeb528230b609a8b70209afdc3a7dd221bd1",
+        "variants": [
+          {
+            "id": "previous",
+            "node": true,
+            "manifestSha256": "7a2710a02aae23238a4c27e2795501265c31a33d3a9503bcc12b07bf7b470a66",
+            "files": 5380
+          },
+          {
+            "id": "standard",
+            "node": true,
+            "manifestSha256": "ae25d74f9202b4fe8851de6f261af76ca5909db460d6a196c4be34d419b9fd4f",
+            "files": 5735
+          }
+        ],
+        "repetitions": 1,
+        "referenceGradesPassed": 1,
+        "hostPreflightPassed": [
+          "previous",
+          "standard"
+        ],
+        "description": "Fresh independent host task after invalid fixture diagnosis; same frozen product candidate and evaluator; invalid original results remain archived."
+      },
+      "suiteAndEvaluatorUnchanged": true
+    }
+  ],
+  "snapshotVerification": [
+    {
+      "variant": "previous",
+      "filesVerified": 5380,
+      "internalLinksVerified": 16,
+      "workingTreeChangesAfterFreeze": null
+    },
+    {
+      "variant": "standard",
+      "filesVerified": 5735,
+      "internalLinksVerified": 17,
+      "workingTreeChangesAfterFreeze": [
+        "packages/script/spec/invariants.md",
+        "packages/script/src/impl/CodeSurfaceSession.ts",
+        "packages/script/src/types/script.ts",
+        "packages/script/src/utils/node-program.ts"
+      ]
+    }
+  ],
+  "sourceAfterFreeze": {
+    "semanticChange": "isUndefined(request.input) replaces request.input === undefined using the verified identical Core predicate for the style gate",
+    "documentationOnly": [
+      "packages/script/src/impl/CodeSurfaceSession.ts",
+      "packages/script/src/types/script.ts",
+      "packages/script/spec/invariants.md"
+    ],
+    "revalidated": "Script 164/164, typecheck, lint, contracts and module ownership; no product behavior was tuned to measured outcomes."
+  },
+  "invalidCases": [
+    {
+      "case": "host-priorities",
+      "variants": [
+        "previous",
+        "standard"
+      ],
+      "reason": "Fixture supplied status and omitted required SessionPeer workspace/root/site/running/self fields; actual Kernel rejected OUTPUT_SCHEMA in both variants. Original record and hashes preserved.",
+      "replacement": "host-workspace-queue uses independent data and predicate, passed actual Kernel SessionPeer checks on both frozen variants and reference grading before model dispatch."
+    }
+  ],
+  "validSummaries": {
+    "previous": {
+      "runs": 6,
+      "artifactPassed": 5,
+      "completed": 5,
+      "successful": 5,
+      "requests": 25,
+      "elapsedMs": 547350,
+      "completeUsageRuns": 5,
+      "systemCharsRange": [
+        652,
+        665
+      ]
+    },
+    "standard": {
+      "runs": 6,
+      "artifactPassed": 6,
+      "completed": 6,
+      "successful": 6,
+      "requests": 26,
+      "elapsedMs": 204381,
+      "completeUsageRuns": 5,
+      "systemCharsRange": [
+        717,
+        730
+      ]
+    }
+  },
+  "validComparison": {
+    "cases": [
+      "exit-capture",
+      "module-repair",
+      "literal-delivery",
+      "host-workspace-queue"
+    ],
+    "inputTokens": {
+      "previous": 109390,
+      "standard": 120867,
+      "deltaPercent": 10.491818264923669
+    },
+    "outputTokens": {
+      "previous": 5785,
+      "standard": 3969,
+      "deltaPercent": -31.39152981849611
+    },
+    "referenceCostUncachedUSD": {
+      "previous": 0.55326,
+      "standard": 0.562848,
+      "deltaPercent": 1.7330007591367602
+    },
+    "requests": {
+      "previous": 25,
+      "standard": 26,
+      "deltaPercent": 4.0000000000000036
+    },
+    "elapsedMs": {
+      "previous": 547350,
+      "standard": 204381,
+      "deltaPercent": -62.65990682378734
+    }
+  },
+  "originalAllAttemptSummaries": {
+    "previous": {
+      "runs": 6,
+      "artifactPassed": 4,
+      "completed": 4,
+      "successful": 4,
+      "requests": 29,
+      "elapsedMs": 594128,
+      "completeUsageRuns": 5,
+      "systemCharsRange": [
+        652,
+        656
+      ]
+    },
+    "standard": {
+      "runs": 6,
+      "artifactPassed": 5,
+      "completed": 5,
+      "successful": 5,
+      "requests": 29,
+      "elapsedMs": 244054,
+      "completeUsageRuns": 5,
+      "systemCharsRange": [
+        717,
+        721
+      ]
+    }
+  },
+  "results": [
+    {
+      "variant": "previous",
+      "case": "event-reducer",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 39203,
+      "inputTokens": 33335,
+      "outputTokens": 1522,
+      "referenceCostUncachedUSD": 0.16378,
+      "systemChars": 653,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "event-reducer",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 39287,
+      "inputTokens": null,
+      "outputTokens": null,
+      "referenceCostUncachedUSD": null,
+      "systemChars": 718,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "exit-capture",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 36351,
+      "inputTokens": 29054,
+      "outputTokens": 1425,
+      "referenceCostUncachedUSD": 0.144716,
+      "systemChars": 717,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "exit-capture",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 3,
+      "elapsedMs": 33706,
+      "inputTokens": 22609,
+      "outputTokens": 1390,
+      "referenceCostUncachedUSD": 0.118236,
+      "systemChars": 652,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "package-ranges",
+      "split": "validation",
+      "repetition": 0,
+      "passed": false,
+      "completed": false,
+      "status": "cancelled",
+      "requests": 8,
+      "elapsedMs": 240026,
+      "inputTokens": null,
+      "outputTokens": null,
+      "referenceCostUncachedUSD": null,
+      "systemChars": 654,
+      "gradeError": "SyntaxError: Unexpected non-whitespace character after JSON at position 93 (line 18 column 2)",
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "package-ranges",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 6,
+      "elapsedMs": 44596,
+      "inputTokens": 51599,
+      "outputTokens": 1560,
+      "referenceCostUncachedUSD": 0.237596,
+      "systemChars": 719,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "host-priorities",
+      "split": "validation",
+      "repetition": 0,
+      "passed": false,
+      "completed": false,
+      "status": "cancelled",
+      "requests": 8,
+      "elapsedMs": 79323,
+      "inputTokens": 108990,
+      "outputTokens": 2971,
+      "referenceCostUncachedUSD": 0.49538,
+      "systemChars": 720,
+      "gradeError": "Error: ENOENT: no such file or directory, open '<repository>/.velaros-workspace/bench/standard-runtime-v3-20261004/runs/validation-host-priorities-0-standard/workspace/active.json'",
+      "hostCalls": 1
+    },
+    {
+      "variant": "previous",
+      "case": "host-priorities",
+      "split": "validation",
+      "repetition": 0,
+      "passed": false,
+      "completed": false,
+      "status": "cancelled",
+      "requests": 8,
+      "elapsedMs": 95252,
+      "inputTokens": 124750,
+      "outputTokens": 3050,
+      "referenceCostUncachedUSD": 0.56,
+      "systemChars": 655,
+      "gradeError": "Error: ENOENT: no such file or directory, open '<repository>/.velaros-workspace/bench/standard-runtime-v3-20261004/runs/validation-host-priorities-0-previous/workspace/active.json'",
+      "hostCalls": 1
+    },
+    {
+      "variant": "previous",
+      "case": "module-repair",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 170536,
+      "inputTokens": 34285,
+      "outputTokens": 1819,
+      "referenceCostUncachedUSD": 0.17352,
+      "systemChars": 653,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "module-repair",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 27382,
+      "inputTokens": 27940,
+      "outputTokens": 793,
+      "referenceCostUncachedUSD": 0.12762,
+      "systemChars": 718,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "literal-delivery",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 3,
+      "elapsedMs": 17115,
+      "inputTokens": 18670,
+      "outputTokens": 316,
+      "referenceCostUncachedUSD": 0.081,
+      "systemChars": 721,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "literal-delivery",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 2,
+      "elapsedMs": 15405,
+      "inputTokens": 12987,
+      "outputTokens": 600,
+      "referenceCostUncachedUSD": 0.063948,
+      "systemChars": 656,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "host-workspace-queue",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "elapsedMs": 48474,
+      "inputTokens": 39509,
+      "outputTokens": 1976,
+      "referenceCostUncachedUSD": 0.197556,
+      "systemChars": 665,
+      "hostCalls": 2
+    },
+    {
+      "variant": "standard",
+      "case": "host-workspace-queue",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "elapsedMs": 39650,
+      "inputTokens": 45203,
+      "outputTokens": 1435,
+      "referenceCostUncachedUSD": 0.209512,
+      "systemChars": 730,
+      "hostCalls": 1
+    }
+  ],
+  "anomalies": [
+    {
+      "variant": "standard",
+      "case": "event-reducer",
+      "request": 1,
+      "type": "provider-error",
+      "detail": "terminated"
+    },
+    {
+      "variant": "standard",
+      "case": "event-reducer",
+      "request": 1,
+      "type": "missing-usage"
+    },
+    {
+      "variant": "previous",
+      "case": "package-ranges",
+      "request": 8,
+      "type": "missing-usage"
+    }
+  ],
+  "shellUsage": [
+    {
+      "variant": "previous",
+      "case": "event-reducer",
+      "shellBlocks": 0
+    },
+    {
+      "variant": "standard",
+      "case": "event-reducer",
+      "shellBlocks": 0
+    },
+    {
+      "variant": "standard",
+      "case": "exit-capture",
+      "shellBlocks": 1
+    },
+    {
+      "variant": "previous",
+      "case": "exit-capture",
+      "shellBlocks": 0
+    },
+    {
+      "variant": "previous",
+      "case": "package-ranges",
+      "shellBlocks": 0
+    },
+    {
+      "variant": "standard",
+      "case": "package-ranges",
+      "shellBlocks": 4
+    },
+    {
+      "variant": "standard",
+      "case": "host-priorities",
+      "shellBlocks": 3
+    },
+    {
+      "variant": "previous",
+      "case": "host-priorities",
+      "shellBlocks": 0
+    },
+    {
+      "variant": "previous",
+      "case": "module-repair",
+      "shellBlocks": 0
+    },
+    {
+      "variant": "standard",
+      "case": "module-repair",
+      "shellBlocks": 1
+    },
+    {
+      "variant": "standard",
+      "case": "literal-delivery",
+      "shellBlocks": 1
+    },
+    {
+      "variant": "previous",
+      "case": "literal-delivery",
+      "shellBlocks": 0
+    },
+    {
+      "variant": "previous",
+      "case": "host-workspace-queue",
+      "shellBlocks": 0
+    },
+    {
+      "variant": "standard",
+      "case": "host-workspace-queue",
+      "shellBlocks": 2
+    }
+  ]
+}

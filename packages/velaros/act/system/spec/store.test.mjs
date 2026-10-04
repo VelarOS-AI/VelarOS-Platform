@@ -537,12 +537,11 @@ test('INV-13 提交成功而调用回执丢失时，Kernel 从持久提交证据
 })
 test('INV-15 显式关闭时 store 同时退出发现、声明与执行', async (t) => {
   const f = await fixture(t, { stores: () => undefined })
-  await assert.rejects(
-    f.session.execute({
-      source: "import {store} from 'velaros:system';await store.get({store:currentStore,key:'x'});",
-    }),
-    { code: 'SCRIPT_CHECK' }
-  )
+  const denied = await f.session.execute({
+    source: "import {store} from 'velaros:system';await store.get({store:currentStore,key:'x'});",
+  })
+  assert(denied.result.failed)
+  assert.match(denied.result.process.stderr, /does not provide an export named 'store'/)
   const listing = await f.session.execute({
     source:
       "import {output} from 'velaros';import {modules} from 'velaros:system';output(await modules.list({space:'system'}));",
@@ -710,10 +709,11 @@ test('INV-16 模型创建多个同名空间，相同键互不影响；observe �
   assert.match(frame.observation.text, /A/)
   assert.match(frame.observation.text, /B/)
   assert.equal((await execute(f.session, 'output(await store.list({}));')).items.length, 3)
-  await assert.rejects(
-    f.session.execute({ source: "import {state} from 'velaros:system';state.get({key:'x'});" }),
-    { code: 'SCRIPT_CHECK' }
-  )
+  const denied = await f.session.execute({
+    source: "import {state} from 'velaros:system';state.get({key:'x'});",
+  })
+  assert(denied.result.failed)
+  assert.match(denied.result.process.stderr, /does not provide an export named 'state'/)
 })
 test('INV-16 observe 不能创建空间；归档立即阻止新读取且目录撤回', async (t) => {
   const f = await fixture(t)
@@ -1023,7 +1023,7 @@ test('INV-17 六个空间在结果租约到期后持续进入真实请求，重�
   assert.equal(frame.stores.active.taskId, taskId)
   assert.deepEqual(frame.results, [])
   assert(!JSON.stringify(frame.stores).includes('body-only-on-read'))
-  assert(f.requests.at(-1).instructions.includes('store.list({active:true})'))
+  assert(f.requests.at(-1).instructions.includes('index.json'))
   await f.restart()
   await submit(f.session)
   assert.equal(frames(f.requests).at(-1).stores.active.total, 6)

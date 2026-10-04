@@ -1,6 +1,4 @@
-/** 静态读取模块依赖与导出形态；执行和链接由 QuickJS 原生模块系统负责。 */
-
-import { posix } from 'node:path'
+/** 静态读取模块依赖与导出形态；执行和链接由 Node 原生模块系统负责。 */
 
 import ts from 'typescript'
 
@@ -10,60 +8,6 @@ import type { CodeProgramRequest } from '../types/script.js'
 
 import { ProgramFileName } from './program.js'
 import { isRelativeSpecifier, resolveLibraryImport } from './refs.js'
-
-/**
- * 当前 QuickJS 的 `export * as` 会暴露可写命名空间绑定；按 AST 转为经过独立桥模块的原生重导出。
- * 用户词法域不增加局部变量，direct eval 也观察不到桥内绑定；链接、live binding、循环与求值仍交给引擎。
- */
-export function normalizeNamespaceReexports(
-  source: string,
-  path: string,
-  modules: Readonly<Record<string, string>>
-): { source: string; modules: Record<string, string> } {
-  const normalized = { ...modules }
-  const occupied = new Set([path, ...Object.keys(modules)])
-  let serial = 0
-  const rewrite = (body: string, importer: string): string => {
-    const file = ts.createSourceFile(importer, body, ts.ScriptTarget.ES2022, true)
-    let result = body
-    for (const node of [...file.statements].reverse()) {
-      if (
-        !ts.isExportDeclaration(node) ||
-        !node.exportClause ||
-        !ts.isNamespaceExport(node.exportClause) ||
-        !node.moduleSpecifier ||
-        !ts.isStringLiteral(node.moduleSpecifier)
-      )
-        continue
-      const specifier = node.moduleSpecifier.text
-      const target = isRelativeSpecifier(specifier)
-        ? resolveLibraryImport(importer, specifier)
-        : specifier
-      // 可达模块已通过预检；不可达源码里的非法路径保留原样，不把它改成新的可访问路径。
-      if (!target) continue
-      let bridge: string
-      do bridge = `_velaros_namespace_${serial++}.js`
-      while (occupied.has(bridge))
-      occupied.add(bridge)
-      const bridgeTarget = isRelativeSpecifier(specifier) ? `./${target}` : target
-      const attributes = node.attributes ? ` ${node.attributes.getText(file)}` : ''
-      normalized[bridge] =
-        `import * as value from ${JSON.stringify(bridgeTarget)}${attributes}; export { value as default };`
-      const relative = posix.relative(posix.dirname(importer), bridge)
-      const reference = isRelativeSpecifier(relative) ? relative : `./${relative}`
-      const replacement = `export { default as ${node.exportClause.name.getText(file)} } from ${JSON.stringify(reference)};`
-      result =
-        result.slice(0, node.getStart(file)) +
-        replacement +
-        '\n'.repeat(node.getText(file).split('\n').length - 1) +
-        result.slice(node.end)
-    }
-    return result
-  }
-  for (const [modulePath, text] of Object.entries(modules))
-    normalized[modulePath] = rewrite(text, modulePath)
-  return { source: rewrite(source, path), modules: normalized }
-}
 
 /**
  * 程序有没有具名导出（`export const x`、`export function f`、`export { a }`，不算 `export default`）。

@@ -4,6 +4,7 @@ import { isEmpty } from '@velaros-ai/core'
 
 import type { CodeProgramCheckResult, GrantedModule } from '../types/script.js'
 import { rejectWithDiagnostics } from '../utils/budget.js'
+import { renderDiagnosticFrame } from '../utils/diagnostics.js'
 
 import type { CodeProgramCheckerApi } from './CodeProgramChecker.js'
 
@@ -14,9 +15,11 @@ export interface NodeProgramCheckerApi extends CodeProgramCheckerApi {}
 class NodeProgramChecker implements NodeProgramCheckerApi {
   public check(input: {
     source: string
+    language?: 'node' | 'shell'
     granted: readonly GrantedModule[]
     modules?: Readonly<Record<string, string>>
   }): CodeProgramCheckResult {
+    if (input.language === 'shell') return { ok: true }
     const file = ts.createSourceFile(
       'program.js',
       input.source,
@@ -53,15 +56,9 @@ class NodeProgramChecker implements NodeProgramCheckerApi {
         message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
         line: point.line + 1,
         column: point.character + 1,
+        frame: renderDiagnosticFrame(input.source, point.line + 1, point.character + 1),
       }
     })
-    if (!isEmpty(Object.keys(input.modules ?? {})))
-      diagnostics.push({
-        code: 90001,
-        message: '将可复用模块保存为工作目录中的普通文件，并使用 Node import。',
-        line: 1,
-        column: 1,
-      })
     return !isEmpty(diagnostics) ? rejectWithDiagnostics(diagnostics) : { ok: true }
   }
 
@@ -71,6 +68,7 @@ class NodeProgramChecker implements NodeProgramCheckerApi {
 
   public typecheck(input: {
     source: string
+    language?: 'node' | 'shell'
     granted: readonly GrantedModule[]
   }): CodeProgramCheckResult {
     return this.check(input)

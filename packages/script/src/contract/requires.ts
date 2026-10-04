@@ -11,7 +11,6 @@ import type { CodeAttachment } from '../types/outcome.js'
 import type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
 import type { CodeCallNotice, ScriptPackageDefinition } from '../types/script.js'
 import type { NodeProcessRequest, NodeProcessResult } from '../types/script.js'
-import type { ScriptWorkerCommand, ScriptWorkerEvent } from '../types/worker.js'
 
 /** 标准 Node 环境由宿主提供进程边界；必须沿用该工作区的审批、沙箱和进程树回收。 */
 export interface NodeCodeRunnerOptions {
@@ -27,44 +26,6 @@ export interface NodeCodeRunnerOptions {
     onOutput: (text: string) => void,
     signal: AbortSignal
   ): Promise<NodeProcessResult>
-}
-
-/** 宿主创建一次受信隔离进程时接收的事件端口。 */
-export interface ScriptProcessEvents {
-  /** 受信进程的 V8 堆上限，单位 MB；guest 另有 QuickJS 堆限额。 */
-  readonly heapMb: number
-  /** 收到 worker 的一条完整消息。 */
-  onMessage(message: unknown): void
-  /** 启动、IPC 或进程运行失败。 */
-  onError(error: unknown): void
-  /** 宿主确认进程已退出，并已交付收取的 stderr；空值表示被信号终止。 */
-  onExit(code: Nullable<number>): void
-  /** 有界错误诊断的原始文本片段。 */
-  onStderr(text: string): void
-}
-
-/** 宿主独占的单次执行进程；不得在多次程序之间复用。 */
-export interface ScriptProcess {
-  /** 投递消息；失败须抛出或拒绝，不能静默丢弃。 */
-  send(message: ScriptWorkerCommand): void | Promise<void>
-  /** 终止进程、解绑宿主监听并等待退出；重复调用返回同一回执。 */
-  terminate(): void | Promise<void>
-}
-
-/** 共享运行器只注入宿主进程创建，不承担 Electron 或 Node 环境判断。 */
-export interface SubprocessCodeRunnerOptions {
-  /** 同步建立进程与监听；返回前到达的消息由运行器保留。 */
-  launch(events: ScriptProcessEvents): ScriptProcess
-}
-
-/** 受信 worker 的宿主通信口；模型程序无法取得这些对象。 */
-export interface ScriptWorkerOptions {
-  /** 投递一条事件；失败须抛出或拒绝。 */
-  send(message: ScriptWorkerEvent): void | Promise<void>
-  /** 订阅父进程命令，返回解除订阅函数。 */
-  onMessage(listener: (message: ScriptWorkerCommand) => void): () => void
-  /** 初始化或通信故障时立即退出；正常完成由父进程统一回收。 */
-  exit(code: number): void
 }
 
 /** 同一 Kernel 上的一次脚本会话配置。 */
@@ -157,17 +118,19 @@ export interface CodeSurfaceEventSink {
 /**
  * 隔离运行器：会话要一个，装配时给。
  *
- * 当前 NodeSubprocessCodeRunner 在子进程内用 QuickJS WASM 执行 guest；宿主 I/O 只能通过显式能力桥。
+ * 执行器运行真实 Node.js；操作系统权限由宿主进程端口负责，应用能力通过会话授权桥访问。
  * 模型程序、检查和能力分发共用这一注入面，宿主仍须验证自己的部署隔离边界。
  */
 export interface CodeRunnerApi {
-  /** 显式选择标准 Node 语义；省略时维持受限能力环境。 */
+  /** 当前执行器使用的工作目录，供宿主说明环境。 */
+  readonly cwd?: string
+  /** 标准 Node 语义；自定义测试执行器可省略。 */
   readonly environment?: 'node'
   /**
    * 在隔离环境里跑一段程序。
    *
-   * 受限环境只开放能力桥；node 环境开放宿主批准的操作系统范围。
-   * 源码通过进程通道传递；两种环境都必须执行时限、取消和进程回收。
+   * Node 环境开放宿主批准的操作系统范围。
+   * 源码通过进程通道传递；必须执行时限、取消和进程回收。
    */
   run(
     request: CodeRunRequest,

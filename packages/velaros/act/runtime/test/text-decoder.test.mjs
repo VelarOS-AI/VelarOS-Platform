@@ -11,6 +11,17 @@ const decode = (text, options = {}, inputs = {}) => {
   return d.finish()
 }
 const source = "import {output} from 'velaros';output(1);"
+test('Shell accepts plain command text and rejects unsupported program payload fields', () => {
+  for (const field of [{ input: {} }, { modules: {} }, { blobs: {} }, { sourceRef: 'saved' }])
+    assert.throws(
+      () => decode(block(`shell(${JSON.stringify(field)})`, field.sourceRef ? '' : 'pwd')),
+      /Shell|shell/
+    )
+  assert.deepEqual(decode(block('execute({sourceRef:"saved"})')).submission.executions[0].program, {
+    sourceRef: 'saved',
+    retainTurns: 'segment',
+  })
+})
 test('INV-86 stalled protocol-exterior whitespace is bounded across chunks without touching payload', () => {
   const limit = 32
   const program = block('execute', source)
@@ -415,4 +426,17 @@ test('text executions default to segment retention while explicit and host durat
   assert.equal(program('execute({retain:1})').retainTurns, 1)
   assert.equal(program('execute', { defaultRetain: 4 }).retainTurns, 4)
   assert.equal(program('execute({retain:1})', { defaultRetain: 4 }).retainTurns, 1)
+})
+
+test('shell control preserves literal command text and emits a shell preview', () => {
+  const decoder = new ScriptTurnDecoder('@@s_shell', {
+    presentation: 'node',
+    allowed: ['shell', 'execute', 'done'],
+  })
+  const source = "cat <<'EOF'\n$literal `quoted`\nEOF"
+  const events = decoder.push(`@@s_shell shell()\n${source}\n@@s_shell`)
+  const decoded = decoder.finish()
+  assert.equal(decoded.submission.executions[0].program.language, 'shell')
+  assert.equal(decoded.submission.executions[0].program.source, source)
+  assert.ok(events.some((event) => event.type === 'program' && event.kind === 'shell'))
 })

@@ -477,7 +477,13 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
    */
   private async prepare(
     command: string,
-    { shell: kind, nativeCommand }: ShellRunCommandOptions,
+    {
+      shell: kind,
+      nativeCommand,
+      environment: processEnvironment,
+      ipcSocket,
+      outputFile,
+    }: ShellRunCommandOptions,
     signal?: AbortSignal
   ): Promise<PreparedShellCommand> {
     const {
@@ -503,9 +509,9 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     const commandSpec = nativeCommand
       ? buildNativeCommandSpec(nativeCommand, shell)
       : { ...platformTools.getShellCommandSpec(command, shell), env: shell.env }
-    const env = { ...commandSpec.env, ...extraEnv }
+    const env = { ...commandSpec.env, ...extraEnv, ...processEnvironment }
     const confined = buildConfinedSpawnSpec(
-      { spec: commandSpec, policy: confinement },
+      { spec: commandSpec, policy: { ...confinement, ipcSocket, outputFile } },
       { platform, env, provider: confinementProvider, tempDir: confinementTempDir ?? tmpdir() }
     )
     const owned = buildOwnedProcessSpec(confined.spec, { platform, env })

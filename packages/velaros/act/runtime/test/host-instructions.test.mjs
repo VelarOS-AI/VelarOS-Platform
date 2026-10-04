@@ -4,8 +4,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { scriptPackageCompiler } from '@velaros-ai/script'
-
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { frameEnvironment } from '../../../dist/act/runtime/utils/environment.js'
 import { runtimeInstructions } from '../../../dist/act/runtime/utils/model-instructions.js'
@@ -35,7 +33,7 @@ async function fixture(t, options) {
   return { runtime, dataDir, session: await runtime.openSession('main') }
 }
 
-test('domain guidance follows granted capabilities in actual noncoding and project requests', async (t) => {
+test('base instructions stay small while authorized packages are discoverable on demand', async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), 'runtime-domain-guidance-'))
   t.after(() => rm(workspace, { recursive: true, force: true }))
   for (const project of [false, true]) {
@@ -48,38 +46,15 @@ test('domain guidance follows granted capabilities in actual noncoding and proje
         yield* done(request)
       }),
     })
-    for await (const event of f.session.submit('请把“今天晴天”翻译成英文。'))
+    for await (const event of f.session.submit('Translate 今天晴天.'))
       assert.notEqual(event.type, 'error')
-    assert.equal(instructions.includes('项目编辑用 read/search 的 target'), project)
-    assert.equal(instructions.includes('受影响调用方'), project)
-    assert.doesNotMatch(instructions, /实际 PATH|const \{ stdout, \.\.\.status \}/)
-    assert.match(instructions, /(?:完整|总)费用/)
-    assert.match(instructions, /unit 为 items/)
-    assert.match(instructions, /from > 0/)
-    assert.match(instructions, /from \+ shown < total/)
-  }
-  for (const modules of [
-    [],
-    ['velaros:files'],
-    ['velaros:shell'],
-    ['velaros:project', 'velaros:shell'],
-    ['velaros:project', 'velaros:files'],
-  ]) {
-    const instructions = runtimeInstructions({ modules, maintain: false, observe: false })
-    assert.equal(
-      instructions.includes('oldText'),
-      modules.includes('velaros:files') && !modules.includes('velaros:project')
-    )
-    assert.equal(
-      instructions.includes('项目编辑用 read/search 的 target'),
-      modules.includes('velaros:project')
-    )
-    assert.equal(instructions.includes('实际 PATH'), modules.includes('velaros:shell'))
-    assert.equal(
-      instructions.includes('const { stdout, ...status }'),
-      modules.includes('velaros:shell')
-    )
-    assert(!instructions.includes('截断后用 memory.read'))
+    assert.match(instructions, /Shell 和 Node/)
+    assert.match(instructions, /index.json/)
+    assert(instructions.length < 1800)
+    const result = await f.session.execute({
+      source: `import {readFile} from 'node:fs/promises'; const catalog=JSON.parse(await readFile(process.env.VELAROS_HOST_DIR+'/index.json','utf8')); export default catalog.some(item=>item.module==='velaros:project');`,
+    })
+    assert.equal(result.result.value, project)
   }
 })
 
@@ -121,8 +96,8 @@ output({status:change.status,changeRef:change.changeRef,files:change.changedFile
   for await (const event of f.session.submit('Update the six related status files atomically.'))
     assert.notEqual(event.type, 'error', JSON.stringify(event))
   assert.equal(frames.length, 2)
-  assert.match(frames[0].instructions, /项目编辑用 read\/search 的 target/)
-  assert.match(frames[0].instructions, /export function patch/)
+  assert.match(frames[0].instructions, /index.json/)
+  assert.doesNotMatch(frames[0].instructions, /export function patch/)
   for (const [name, original] of originals)
     assert.equal(
       await readFile(join(workspace, name), 'utf8'),
@@ -140,8 +115,7 @@ test('INV-43 trusted host instructions reach actual requests and traces; reopen 
   const events = []
   for await (const event of f.session.submit('user-text-only')) events.push(event)
   assert.match(frames[0].instructions, /host-language-first/)
-  assert.ok(frames[0].instructions.includes('[报告](file:///workspace/report%20final.pdf)'))
-  assert.ok(frames[0].instructions.includes('[文档](https://example.com/docs)'))
+  assert.match(frames[0].instructions, /Shell 和 Node/)
   assert.match(frames[0].compiledPrompt, /当前帧标记/)
   const turn = events.find((event) => event.type === 'turn')
   const trace = await f.session.trace(turn.turnId)
@@ -215,7 +189,7 @@ test('invalid host instruction configuration is rejected before runtime activati
   await assert.rejects(createRuntime({ instructions: { text: 'invalid' } }), /instructions/)
 })
 
-test('resident modules put their full contract into the instructions so the model can skip describe', async (t) => {
+test('legacy resident hints leave complete contracts in the on-demand directory', async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), 'runtime-resident-'))
   t.after(() => rm(workspace, { recursive: true, force: true }))
   const frames = []
@@ -231,12 +205,12 @@ test('resident modules put their full contract into the instructions so the mode
   for await (const event of f.session.submit('read the readme'))
     assert.notEqual(event.type, 'error')
   const declarations = f.runtime.describe('velaros:project').declarations
-  assert.match(frames[0].instructions, /常驻模块 velaros:project 的声明/)
-  assert.ok(frames[0].instructions.includes(declarations))
+  assert.match(frames[0].instructions, /index.json/)
+  assert.ok(!frames[0].instructions.includes(declarations))
   assert.doesNotMatch(frames[0].instructions, /velaros:not-mounted/)
 })
 
-test('INV-85 resident declarations execute immediately and templates remain discoverable without changing the cached prefix', async (t) => {
+test('INV-85 packages execute by name and templates remain discoverable with a stable instruction prefix', async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), 'runtime-resident-template-'))
   t.after(() => rm(workspace, { recursive: true, force: true }))
   await writeFile(join(workspace, 'sample.txt'), 'before\n')
@@ -250,7 +224,7 @@ test('INV-85 resident declarations execute immediately and templates remain disc
       frames.push(request)
       for (const module of ['velaros:project', 'velaros:widget']) {
         const description = f.runtime.describe(module)
-        assert(request.instructions.includes(description.declarations))
+        assert(!request.instructions.includes(description.declarations))
         assert(!request.instructions.includes(description.template))
       }
       if (frames.length === 1) {
@@ -296,7 +270,7 @@ await show({title:'Result',code:'<svg xmlns="http://www.w3.org/2000/svg"><text>a
   )
 })
 
-test('INV-85 explicit resident templates merge once for whole and selected declarations', async (t) => {
+test('INV-85 template hints keep instructions small for whole and selected package declarations', async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), 'runtime-resident-template-explicit-'))
   t.after(() => rm(workspace, { recursive: true, force: true }))
   for (const residentModules of [
@@ -319,10 +293,7 @@ test('INV-85 explicit resident templates merge once for whole and selected decla
     })
     for await (const event of f.session.submit('Ready')) assert.notEqual(event.type, 'error')
     const template = f.runtime.describe('velaros:project').template
-    assert.equal(
-      instructions.split(template).length - 1,
-      Number(residentModules.some((entry) => entry.template))
-    )
+    assert.equal(instructions.split(template).length - 1, 0)
   }
 })
 
@@ -334,38 +305,27 @@ test('INV-85 resident template flags reject nonboolean configuration before acti
     )
 })
 
-test('INV-57 the instructions list every other importable module with its one-line summary', async (t) => {
+test('INV-57 the on-demand catalog contains every authorized package and complete declarations', async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), 'runtime-importable-'))
   t.after(() => rm(workspace, { recursive: true, force: true }))
-  const frames = []
-  const model = driver(async function* (request) {
-    frames.push(request)
-    yield* done(request)
+  const f = await fixture(t, { workspace, project: { code: true, images: true } })
+  await f.session.context.append({ kind: 'user', body: 'Inspect authorized packages' })
+  const result = await f.session.execute({
+    source: `
+    import {readFile} from 'node:fs/promises'; import {join} from 'node:path';
+    const dir=process.env.VELAROS_HOST_DIR; const entries=JSON.parse(await readFile(join(dir,'index.json'),'utf8'));
+    export default await Promise.all(['velaros:project','velaros:code','velaros:images'].map(async name=>{
+      const entry=entries.find(item=>item.module===name);
+      const types=await readFile(join(dir,entry.documentation),'utf8');
+      return {name,summary:entry.summary,types:types.includes('export function')};
+    }));`,
   })
-  const f = await fixture(t, {
-    model,
-    workspace,
-    project: { code: true, images: true },
-    residentModules: [{ module: 'velaros:project' }],
-  })
-  for await (const event of f.session.submit('where is greet defined'))
-    assert.notEqual(event.type, 'error')
-  const index = /本会话还能直接 import 这些模块[^\n]*/u.exec(frames[0].instructions)?.[0]
-  assert.ok(index, frames[0].instructions)
-  // 一句简介取自模块声明开头那段说明的第一句
-  assert.match(
-    index,
-    /velaros:code（问代码，而不是自己读文件猜：定义在哪、谁在用它、改了波及谁、这个文件报什么错，exports: /
-  )
-  assert.match(index, /velaros:images（看图：把 PNG、JPEG、GIF、WebP 交到你眼前，exports: /)
-  assert.match(index, /contentRevision: [a-f0-9]{64}/)
-  // 常驻的已经整份附在文末，velaros:system 的成员从 velaros:system 导入，都不再列
-  assert.doesNotMatch(index, /velaros:project|velaros:modules|velaros:system/)
-  // 模块目录的卡片也是这句简介，不是模块名本身
-  assert.equal(
-    f.runtime.describe('velaros:images').summary,
-    '看图：把 PNG、JPEG、GIF、WebP 交到你眼前。'
-  )
+  assert.equal(result.result.failed, undefined, JSON.stringify(result))
+  assert.equal(result.result.value.length, 3)
+  for (const item of result.result.value) {
+    assert(item.types)
+    assert.equal(item.summary, f.runtime.describe(item.name).summary)
+  }
 })
 
 test('resident modules must be a list of module names', async () => {
@@ -380,7 +340,7 @@ test('resident modules must be a list of module names', async () => {
   }
 })
 
-test('INV-67 selected resident operations deliver complete generated types and can execute on the first response', async (t) => {
+test('INV-67 selected package hints allow execution on the first response without loading types into instructions', async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), 'runtime-resident-export-'))
   t.after(() => rm(workspace, { recursive: true, force: true }))
   await writeFile(join(workspace, 'sample.txt'), 'before\n')
@@ -407,7 +367,6 @@ output(change);output(await read({files:[{path:'sample.txt'}]}));`,
       } else yield* done(request)
     }),
   })
-  const declarations = f.runtime.describe('velaros:project').declarations
   const events = []
   for await (const event of f.session.submit('Change before to after and read the result'))
     events.push(event)
@@ -415,21 +374,12 @@ output(change);output(await read({files:[{path:'sample.txt'}]}));`,
   assert.equal(frames.length, 2)
   assert.equal(await readFile(join(workspace, 'sample.txt'), 'utf8'), 'after\n')
   assert.match(modelText(frames[1]), /after/)
-  const instructions = frames[0].instructions
-  const selected = scriptPackageCompiler.sliceExports(declarations, 'velaros:project', [
-    'read',
-    'edit',
-  ])
-  assert.ok(instructions.includes(selected.declarations))
-  assert.equal(instructions.split('常驻导出 velaros:project（read, edit） 的声明').length - 1, 1)
-  assert.doesNotMatch(instructions, /export function (search|inspect|undo)|velaros:not-mounted/)
-  assert.match(instructions, /本会话还能直接 import 这些模块[^\n]*velaros:project/)
-  assert.equal(frames[1].instructions, instructions)
-  const trace = await f.session.trace(events.find((event) => event.type === 'turn').turnId)
-  assert.ok(trace.request.body.includes('常驻导出 velaros:project（read, edit）'))
+  assert.match(frames[0].instructions, /index.json/)
+  assert.doesNotMatch(frames[0].instructions, /export function (read|edit)/)
+  assert.equal(frames[1].instructions, frames[0].instructions)
 })
 
-test('INV-67 whole resident contracts cover selected duplicates and invalid exports fail before any model request', async (t) => {
+test('INV-67 duplicate legacy package hints do not duplicate instructions or restrict real imports', async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), 'runtime-resident-whole-'))
   t.after(() => rm(workspace, { recursive: true, force: true }))
   const frames = []
@@ -446,7 +396,7 @@ test('INV-67 whole resident contracts cover selected duplicates and invalid expo
     }),
   })
   for await (const event of f.session.submit('Ready')) assert.notEqual(event.type, 'error')
-  assert.equal(frames[0].instructions.split('常驻模块 velaros:project 的声明').length - 1, 1)
+  assert.equal(frames[0].instructions.split('常驻模块 velaros:project 的声明').length - 1, 0)
   assert.doesNotMatch(frames[0].instructions, /常驻导出 velaros:project/)
   const invalid = await createRuntime({
     dataDir: join(f.dataDir, 'invalid'),
@@ -463,7 +413,13 @@ test('INV-67 whole resident contracts cover selected duplicates and invalid expo
     }),
   })
   try {
-    await assert.rejects(invalid.openSession('invalid'), { code: 'VALIDATION' })
+    const session = await invalid.openSession('invalid')
+    await session.context.append({ kind: 'user', body: 'Check invalid package export' })
+    const result = await session.execute({
+      source: "import {nonexistent} from 'velaros:project'; nonexistent();",
+    })
+    assert(result.result.failed)
+    assert.match(result.result.process.stderr, /nonexistent/)
   } finally {
     await invalid.close()
   }
@@ -485,7 +441,7 @@ test('INV-67 invalid selected resident configuration is rejected before activati
   }
 })
 
-test('INV-67 selected resident declarations participate in the real request capacity gate', async (t) => {
+test('INV-67 on-demand package declarations leave the default request capacity available', async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), 'runtime-resident-budget-'))
   t.after(() => rm(workspace, { recursive: true, force: true }))
   let calls = 0
@@ -510,9 +466,9 @@ test('INV-67 selected resident declarations participate in the real request capa
   })
   const events = []
   for await (const event of f.session.submit('small user input')) events.push(event)
-  assert.equal(calls, 0)
-  assert(estimates.some((text) => text.includes('export function edit(')))
-  assert.equal(events.at(-1).status, 'context_blocked')
+  assert.equal(calls, 1)
+  assert(estimates.every((text) => !text.includes('export function edit(')))
+  assert.equal(events.at(-1).status, 'completed')
 })
 
 test('every frame carries the local clock and host environment entries in runtime.environment', async (t) => {
@@ -532,7 +488,7 @@ test('every frame carries the local clock and host environment entries in runtim
   assert(Math.abs(Date.parse(environment.time) - Date.now()) < 60_000)
   assert.match(environment.localTime, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [A-Z][a-z]+day$/)
   assert.equal(environment.timezone, Intl.DateTimeFormat().resolvedOptions().timeZone)
-  assert.match(frames[0].instructions, /runtime\.environment/)
+  assert.match(frames[0].instructions, /Shell 和 Node/)
 })
 
 test('a failing host environment drops only its own entries and the run goes on', async (t) => {

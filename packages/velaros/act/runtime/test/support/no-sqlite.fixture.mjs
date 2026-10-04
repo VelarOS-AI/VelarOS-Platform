@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { getBuiltinModule } from 'node:process'
 
 import { localContextStorage } from '@velaros-ai/context/node'
+import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import { volatileStorageBackend } from '../../../../../context/test/support/storage-contract.mjs'
 import { createRuntime } from '../../../../dist/act/runtime/index.js'
@@ -52,6 +53,7 @@ try {
     },
   }
   runtime = await createRuntime({
+    runner: nodeSubprocessCodeRunner,
     workspace,
     dataDir,
     storage: await backend.open(),
@@ -79,6 +81,7 @@ try {
   const persisted = await storage.load('main')
   assert(persisted.records.some((record) => record.kind === 'user'))
   runtime = await createRuntime({
+    runner: nodeSubprocessCodeRunner,
     workspace,
     dataDir,
     storage,

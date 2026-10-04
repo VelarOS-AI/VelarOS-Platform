@@ -348,6 +348,12 @@ export interface ShellEnvironmentRefreshResult {
 
 /** 宿主跑一条命令时的可选项：run 的入参，工作目录已由空间端口解析成绝对路径。 */
 export interface ShellRunCommandOptions {
+  /** 宿主为当前进程注入的环境。 */
+  environment?: Readonly<Record<string, string | undefined>>
+  /** 宿主能力桥的单个本机套接字；不开放外部网络。 */
+  ipcSocket?: string
+  /** 本次进程的宿主输出文件。 */
+  outputFile?: string
   /** 绝对工作目录。 */
   cwd?: string
   /** null 仅供宿主自管时钟使用，必须同时提供取消信号。 */

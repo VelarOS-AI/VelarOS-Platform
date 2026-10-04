@@ -23,9 +23,11 @@ export class KernelInvocationPort implements KernelInvocationPortApi {
   private readonly sessionId: string
   private readonly executionId: string
   private calls = 0
+  private readonly imported: ReadonlySet<string>
   private readonly mode: 'execute' | 'observe'
 
   public constructor(options: KernelScriptSessionOptions, imported: ReadonlySet<string>) {
+    this.imported = imported
     this.mode = options.mode ?? 'execute'
     this.runtime = options.runtime
     this.sessionId = options.sessionId
@@ -52,7 +54,10 @@ export class KernelInvocationPort implements KernelInvocationPortApi {
 
   /** 当前程序实际 import 范围内的授权挂载；不会派发操作。 */
   public dependencies(): readonly ModuleBinding[] {
-    return [...this.bindings.values()]
+    return [...this.bindings.values()].filter(
+      (binding) =>
+        this.imported.has(binding.moduleId) || this.imported.has(`velaros:${binding.moduleId}`)
+    )
   }
 
   public async invoke(

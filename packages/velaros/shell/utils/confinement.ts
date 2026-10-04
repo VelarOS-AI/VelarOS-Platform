@@ -108,6 +108,8 @@ export function buildSeatbeltProfile(
     `(deny mach-lookup (global-name ${quoteSeatbeltString('com.apple.cfprefsd.daemon')}) (global-name ${quoteSeatbeltString('com.apple.cfprefsd.agent')}))`,
     '(deny appleevent-send)',
   ]
+  if (policy.outputFile)
+    forms.push(`(allow file-write* (literal ${quoteSeatbeltString(policy.outputFile)}))`)
   const roots = uniqueRoots(policy, options.tempDir)
   if (!isEmpty(roots)) {
     forms.push(
@@ -116,7 +118,13 @@ export function buildSeatbeltProfile(
         .join(' ')})`
     )
   }
-  if (isFalse(policy.network)) forms.push('(deny network*)')
+  if (isFalse(policy.network)) {
+    forms.push('(deny network*)')
+    if (policy.ipcSocket)
+      forms.push(
+        `(allow network-outbound (remote unix-socket (literal ${quoteSeatbeltString(policy.ipcSocket)}))) (allow file-write* (literal ${quoteSeatbeltString(policy.ipcSocket)}))`
+      )
+  }
   return forms.join(' ')
 }
 
@@ -142,6 +150,7 @@ export function buildBubblewrapSpec(
   for (const root of uniqueRoots(policy, options.tempDir)) {
     if (existsSync(root)) args.push('--bind', root, root)
   }
+  if (policy.outputFile) args.push('--bind', policy.outputFile, policy.outputFile)
   args.push('--', spec.file, ...spec.args)
   return { file: options.bubblewrapPath ?? DefaultBubblewrapPath, args }
 }

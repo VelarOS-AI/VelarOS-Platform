@@ -733,10 +733,10 @@ test('INV-60 stable protocol rules survive changing frames and retries with scop
     async function* (request, f) {
       system ??= request.instructions
       assert.equal(request.instructions, system)
-      assert.match(system, /sourceRef 可引用已保存的程序/)
-      assert.match(system, /默认 segment/)
+      assert.match(system, /sourceRef 复用已保存程序/)
+      assert.match(system, /每个实际程序只提交一次/)
       assert.doesNotMatch(system, /@@s[0-9a-z]+|host:target|host:changed/)
-      assert.doesNotMatch(request.compiledPrompt, /sourceRef 可引用已保存的程序/)
+      assert.doesNotMatch(request.compiledPrompt, /sourceRef 复用已保存程序/)
       const protocol = request.compiledPrompt.split('本帧协议').at(-1)
       const tag = marker(request)
       assert(protocol.includes(`${tag} run()`))
@@ -744,14 +744,14 @@ test('INV-60 stable protocol rules survive changing frames and retries with scop
       assert.doesNotMatch(protocol, /@@s[0-9a-z]+ (?:execute|observe|done)/)
       if (f.calls === 1) {
         firstMarker = tag
-        assert.match(protocol, /宿主参数引用：host:target/)
+        assert.match(protocol, /宿主参数：host:target/)
         delete inputs.target
         inputs.changed = { value: 'new' }
         yield { type: 'text', text: `${tag} run()\n${write}\n` }
       } else if (f.calls === 2) {
         assert.equal(tag, firstMarker)
         assert.deepEqual(f.writes, [])
-        assert.match(protocol, /宿主参数引用：host:target/)
+        assert.match(protocol, /宿主参数：host:target/)
         assert(protocol.includes(`闭合行必须逐字为：\n${tag}`))
         yield {
           type: 'text',
@@ -763,7 +763,7 @@ test('INV-60 stable protocol rules survive changing frames and retries with scop
         }
       } else {
         assert.notEqual(tag, firstMarker)
-        assert.match(protocol, /宿主参数引用：host:changed/)
+        assert.match(protocol, /宿主参数：host:changed/)
         assert.doesNotMatch(protocol, /host:target/)
         yield { type: 'text', text: `${tag} finish` }
       }
@@ -788,7 +788,7 @@ test('INV-63 missing closure between blob and program rejects the whole response
     const tag = marker(request)
     if (f.calls === 1) {
       firstMarker = tag
-      assert(request.compiledPrompt.includes('blobs 原文结束后也必须'))
+      assert(request.instructions.includes('闭合段绑定原文'))
       yield {
         type: 'text',
         text: `${block(request, 'execute()', write)}${tag} blobs("payload")\nrecovered\n${tag} execute()\n`,

@@ -14,7 +14,7 @@ async function probeRuntime(){
  const model={id:'packed-model',limits:{contextTokens:128000,inputTokens:110000,outputTokens:4096},estimate:async()=>({tokens:1000,precision:'estimate',basis:'fixture'}),async *stream(request){
   calls++
   if(hold){started();await new Promise(()=>{})}
-  const marker=request.compiledPrompt.match(/当前帧标记：(\S+)。普通/u)[1]
+  const marker=request.compiledPrompt.match(/当前帧标记：(@@\w+)。/u)[1]
   yield {type:'text',text:`packed complete\n${marker} done`};yield {type:'finish',reason:'stop'}
  }}
  const runtime=await createRuntime({workspace,dataDir:join(root,'data'),model,agents:false,search:false})

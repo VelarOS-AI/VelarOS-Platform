@@ -1,6 +1,6 @@
 import { Log } from '@velaros-ai/core'
 import { toNullable } from '@velaros-ai/core'
-import { isEmpty, isObject, isString } from '@velaros-ai/core'
+import { isEmpty, isObject, isPlainObject, isString } from '@velaros-ai/core'
 import { unifiedLineDiff } from '@velaros-ai/core/utils/textDiff'
 
 import type {
@@ -28,8 +28,15 @@ export function contextTextChange(
           parsed.source +
           ('modules' in parsed ? `\n// modules\n${JSON.stringify(parsed.modules)}` : '')
         )
-      if (parsed && isObject(parsed) && 'checked' in parsed && 'result' in parsed)
-        return JSON.stringify({ checked: parsed.checked, result: parsed.result })
+      if (parsed && isObject(parsed) && 'checked' in parsed && 'result' in parsed) {
+        let result = parsed.result
+        if (isPlainObject(result) && isPlainObject(result.process)) {
+          // 日志归档地址标识本次执行；比较进展时保留实际输出与退出事实。
+          const { logPath: _logPath, ...process } = result.process
+          result = { ...result, process }
+        }
+        return JSON.stringify({ checked: parsed.checked, result })
+      }
     } catch {
       Log.tag('ActRuntime').debug(
         'progress 已进入异常处理或降级分支'

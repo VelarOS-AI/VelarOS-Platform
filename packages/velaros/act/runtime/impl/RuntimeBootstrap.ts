@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { mkdir, realpath, stat } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, sep } from 'node:path'
 
 import type { ActRunLimits } from '@velaros-ai/agent'
@@ -22,7 +23,7 @@ import type { OperationModuleDefinition } from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
 import { createAiSdkModelDriver, createModelRuntimeComposition } from '@velaros-ai/model'
 import type { CodeRunnerApi } from '@velaros-ai/script'
-import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
+import { createNodeCodeRunner, nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import { createLocalImagePort } from '../../../images/local.js'
 import type { MemoryScopePort } from '../../../memory/index.js'
@@ -34,6 +35,7 @@ import {
   createProjectKernel,
   createProjectObservationProvider,
 } from '../../../project/index.js'
+import { createLocalShellHost } from '../../../shell/local.js'
 import type { VelarosSearchOptions } from '../../search/index.js'
 import { SystemCatalogLimits } from '../../system/contract/constants.js'
 import {
@@ -48,6 +50,7 @@ import type {
   VelarosRuntimeOptions,
 } from '../contract/requires.js'
 
+import { createShellNodeEnvironment } from './ShellNodeEnvironment.js'
 import {
   createProjectCapabilityModule,
   createProjectCodeModule,
@@ -244,6 +247,24 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
         limits,
       })
     }
+    const node =
+      options.node ??
+      (!options.runner
+        ? createShellNodeEnvironment({
+            cwd: workspace ?? process.cwd(),
+            directory: join(dataDir ?? tmpdir(), 'velaros-node'),
+            shell: createLocalShellHost({ cwd: workspace ?? process.cwd() }),
+          })
+        : undefined)
+    const observationNode =
+      node ??
+      (options.runner === nodeSubprocessCodeRunner
+        ? createShellNodeEnvironment({
+            cwd: workspace ?? process.cwd(),
+            directory: join(dataDir ?? tmpdir(), 'velaros-node'),
+            shell: createLocalShellHost({ cwd: workspace ?? process.cwd() }),
+          })
+        : undefined)
     const defaults = Boolean(options.workspace || (options.model && !('stream' in options.model)))
     const search = isFalse(options.search)
       ? undefined
@@ -275,7 +296,7 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
               profiles: {
                 worker: {
                   model,
-                  node: Boolean(options.node),
+                  node: Boolean(node),
                   modules: [
                     ...modules.map((module) => module.binding.moduleId),
                     ...(search ? ['velaros:search'] : []),
@@ -287,7 +308,7 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
             }
           : undefined
     if (isTrue(options.agents) && !agents) throw new AppError('VALIDATION', '启用子任务需要模型')
-    if (!options.node && Object.values(agents?.profiles ?? {}).some((profile) => profile.node))
+    if (!node && Object.values(agents?.profiles ?? {}).some((profile) => profile.node))
       throw new AppError('VALIDATION', '子任务的标准 Node 范围需要宿主先给父任务提供 Node 环境')
     const scope = createHash('sha256')
       .update(workspace ?? dataDir ?? 'injected')
@@ -309,7 +330,15 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
       storage,
       model,
       modules,
-      runner: options.runner ?? nodeSubprocessCodeRunner,
+      node,
+      runner: observationNode
+        ? createNodeCodeRunner({
+            cwd: observationNode.cwd,
+            directory: observationNode.directory,
+            execute: (request, output, signal) =>
+              observationNode.execute({ ...request, mode: 'observe' }, output, signal),
+          })
+        : (options.runner ?? nodeSubprocessCodeRunner),
       memory,
       search,
       agents,

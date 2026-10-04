@@ -4,7 +4,7 @@
   "velaros": {
     "platform": "0.6"
   },
-  "description": "Code surface for capability spaces: the model writes a JavaScript ES module that imports generated capability declarations, the program's syntax and imports are checked before it runs, and it executes in an isolated process whose only reachable capabilities are the host operations it calls back into.",
+  "description": "Shell and native Node.js execution with on-demand capability packages, bounded output and host-owned process permissions.",
   "license": "Apache-2.0",
   "author": "VelarOS",
   "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/script#readme",
@@ -31,15 +31,10 @@
     "./contracts": {
       "types": "./dist/contracts.d.ts",
       "import": "./dist/contracts.js"
-    },
-    "./worker": {
-      "types": "./dist/worker.d.ts",
-      "import": "./dist/worker.js"
     }
   },
   "files": [
     "dist",
-    "bin",
     "README.md"
   ],
   "scripts": {
@@ -52,7 +47,6 @@
   "dependencies": {
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
-    "quickjs-emscripten": "0.32.0",
     "typescript": "^5.7.0",
     "zod": "^4.3.6"
   },

@@ -135,6 +135,8 @@ export interface ProgramCatalogValidator {
 
 /** 观察复用只决定是否采集，不授予读取、写入或完成权限。 */
 export interface ObservationReusePort {
+  /** 明确覆盖已登记程序的原生文件、网络、进程与环境依赖；省略时 Node 每轮重新采集。 */
+  readonly coversNativeIO?: boolean
   /**
    * 仅给预登记并核对全部有效依赖的指纹返回 versioned；其他程序返回 unknown。
    * providerId 绑定提供者本次生命周期，token 是可识别 ABA 变化的可靠代次。
@@ -256,7 +258,7 @@ export interface VelarosRuntimeOptions {
   readonly storage?: ContextStorage
   /** 显式注入隔离执行器。 */
   readonly runner?: CodeRunnerApi
-  /** 标准 Node 业务执行环境；维护与观察仍使用受限 runner。 */
+  /** Shell 与 Node 执行环境；内部观察和维护复用该环境的只读进程口。 */
   readonly node?: NodeCodeRunnerOptions
   /** 宿主挂载的领域模块；标准模块由运行时提供。 */
   readonly modules?: readonly OperationModuleDefinition[]

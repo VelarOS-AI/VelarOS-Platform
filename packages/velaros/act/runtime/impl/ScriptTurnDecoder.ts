@@ -46,13 +46,13 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
   private completion?: string
   private ended = false
   private records: Array<{
-    kind: 'blobs' | 'observe' | 'execute'
+    kind: 'blobs' | 'observe' | 'execute' | 'shell'
     args: readonly unknown[]
     body: string
     line: number
   }> = []
   private active?: {
-    kind: 'blobs' | 'observe' | 'execute'
+    kind: 'blobs' | 'observe' | 'execute' | 'shell'
     args: readonly unknown[]
     body: string
     line: number
@@ -226,10 +226,23 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
         program.blobs = { ...(program.blobs as Optional<Record<string, string>>), ...blobs }
       }
       let parsed: ScriptSubmission
-      if (record.kind === 'execute' && (!isUndefined(retain) || this.config.defaultRetain !== 2))
+      if (record.kind === 'shell') {
+        if (!isString(program.source))
+          throw protocolFailure(
+            'shell 需要命令正文；已存程序使用 execute({sourceRef})',
+            record.line
+          )
+        program.language = 'shell'
+      }
+      if (
+        ['execute', 'shell'].includes(record.kind) &&
+        (!isUndefined(retain) || this.config.defaultRetain !== 2)
+      )
         program.retainTurns = retain ?? program.retainTurns ?? this.config.defaultRetain
       try {
-        parsed = standardModules.parseScript({ [record.kind]: program })
+        parsed = standardModules.parseScript({
+          [record.kind === 'shell' ? 'execute' : record.kind]: program,
+        })
       } catch (error) {
         throw protocolFailure(error instanceof Error ? error.message : String(error), record.line)
       }

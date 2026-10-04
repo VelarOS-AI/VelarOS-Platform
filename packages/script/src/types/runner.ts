@@ -4,6 +4,8 @@ import type { CodeCallNotice, NodeProcessReceipt, ScriptPackageDefinition } from
 
 /** 交给运行器的一次任务。 */
 export interface CodeRunRequest {
+  readonly language?: 'node' | 'shell'
+  readonly mode?: 'execute' | 'observe'
   /** 标准环境的能力文档与执行身份，由宿主提供。 */
   host?: {
     readonly sessionId: string

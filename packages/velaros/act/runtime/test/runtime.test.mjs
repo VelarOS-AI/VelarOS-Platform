@@ -334,7 +334,7 @@ test('INV-32 长任务连续 80 次状态推进，观察和租约保持有界，
     async *stream(request) {
       calls++
       const frame = JSON.parse(request.materials[0].text)
-      const tag = request.compiledPrompt.match(/当前帧标记：(\S+)。普通/)[1]
+      const tag = request.compiledPrompt.match(/当前帧标记：(@@\w+)。/)[1]
       bodies.push(request.materials[0].text.length)
       if (!largestFrame || request.materials[0].text.length > largestFrame.chars)
         largestFrame = {
@@ -395,6 +395,7 @@ test('INV-32 长任务连续 80 次状态推进，观察和租约保持有界，
   }
   const runtime = await createRuntime({
     dataDir: root,
+    runner: nodeSubprocessCodeRunner,
     model: driver,
     memory: false,
     context: { maintenance: false },
