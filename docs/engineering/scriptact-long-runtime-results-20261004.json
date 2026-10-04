@@ -1,0 +1,1742 @@
+{
+  "schema": 1,
+  "evidence": "development attempts and two frozen independent holdouts; per-attempt qualifications apply",
+  "attempts": [
+    {
+      "attempt": "rich-01",
+      "schema": 1,
+      "at": "2026-10-04T14:26:19.126Z",
+      "taskId": "rich-ascii-decorations",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": {
+        "createdAt": "2026-10-04T14:01:44.406197+00:00",
+        "reason": "Post-run ATIF export required sourceCommit, which this controller omitted; preserve completed original execution and recover only its evidence and grading before the untouched Codex run.",
+        "terminalStatus": "completed",
+        "startedAt": 1791121310735,
+        "finishedAt": 1791122172989,
+        "timingSource": {
+          "start": "controller activity started",
+          "finish": "persisted final runtime state",
+          "record": {
+            "sessionId": "development",
+            "id": "128db043"
+          }
+        },
+        "files": {
+          "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/run.mjs": {
+            "originalSha256": "86b26284bd696ff2e827d305d335a8e98820da9edae47f9905017bc838faa7b2",
+            "sha256": "e0578d9f1814ba249994bbef239b4bd2fdbe3ac4c1f0f4b214a45a5530fc412c"
+          }
+        }
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "startedAt": 1791121310735,
+            "finishedAt": 1791122172989,
+            "solveMs": 862254,
+            "evaluatorRecovery": "Post-run ATIF export required sourceCommit, which this controller omitted; preserve completed original execution and recover only its evidence and grading before the untouched Codex run.",
+            "timingSource": {
+              "start": "controller activity started",
+              "finish": "persisted final runtime state",
+              "record": {
+                "sessionId": "development",
+                "id": "128db043"
+              }
+            }
+          },
+          "accounting": {
+            "requests": 74,
+            "requestStatuses": {
+              "http-200": 71,
+              "unknown": 1,
+              "http-200-interrupted": 2
+            },
+            "measuredRequests": 71,
+            "missingUsageRequests": 3,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 841495,
+            "knownOutputTokens": 19378,
+            "knownCachedInputTokens": 299904,
+            "knownCacheRatio": 0.35639427447578415,
+            "pricedRequests": 71,
+            "knownReferenceUsd": 2.6738855999999993,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 37,
+            "failed": 21,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "21 failed, 37 passed in 0.18s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[bar]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-text]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-nested]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[status]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[traceback]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-1]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-2]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-3]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-7]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-19]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[spinner]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_reusable_objects_do_not_leak_mode",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+            ]
+          },
+          "regression": {
+            "exitCode": 1,
+            "passed": 854,
+            "failed": 1,
+            "skipped": 25,
+            "errors": 0,
+            "summary": "1 failed, 854 passed, 25 skipped in 3.70s",
+            "failures": [
+              "FAILED tests/test_box.py::test_box_substitute_for_different_box_ascii_encoding"
+            ]
+          },
+          "passed": false,
+          "changedFiles": 1,
+          "createdFiles": 0,
+          "changeSummary": "12\t5\trich/console.py\n",
+          "created": "",
+          "execution": {
+            "mainRequests": 21,
+            "branchRequests": 53,
+            "requestOwners": {
+              "development": 21,
+              "context:7d651f1e-8da5-466e-81d7-137f28464735": 9,
+              "context:d6660fd0-c27f-4169-86e2-c363a059ed84": 7,
+              "context:9212b397-6a00-430a-a74d-f6606293164d": 9,
+              "context:c8c92506-bdfc-4ef0-bf2b-9c9d91e71f82": 9,
+              "context:fcc65006-8eca-4bcb-8a93-748953dc8720": 2,
+              "context:287194b3-d6f2-4c7a-8e2a-9ec3ccd84e9c": 8,
+              "context:efef0881-4705-4161-8f0d-f0f78a55a8f4": 9
+            },
+            "contextSegments": 7,
+            "nativeRequests": 21,
+            "textProtocolRequests": 53,
+            "originalPromptInFinalRequest": true
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791122511560,
+            "finishedAt": 1791123878248,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a10738-9705-7c32-9ba9-9ec691911a32",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 254,
+            "solveMs": 1366688
+          },
+          "accounting": {
+            "requests": 198,
+            "requestStatuses": {
+              "http-200": 192,
+              "http-200-interrupted": 6
+            },
+            "measuredRequests": 192,
+            "missingUsageRequests": 6,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 4675882,
+            "knownOutputTokens": 68023,
+            "knownCachedInputTokens": 3834368,
+            "knownCacheRatio": 0.8200309588650868,
+            "pricedRequests": 192,
+            "knownReferenceUsd": 6.260263200000003,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 57,
+            "failed": 1,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "1 failed, 57 passed in 0.14s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 855,
+            "failed": 0,
+            "skipped": 25,
+            "errors": 0,
+            "summary": "855 passed, 25 skipped in 3.67s",
+            "failures": []
+          },
+          "passed": false,
+          "changedFiles": 27,
+          "createdFiles": 0,
+          "changeSummary": "34\t0\tdocs/source/console.rst\n13\t0\trich/bar.py\n23\t4\trich/console.py\n24\t1\trich/layout.py\n5\t3\trich/markdown.py\n4\t2\trich/pretty.py\n1\t1\trich/progress.py\n4\t4\trich/rule.py\n42\t4\trich/spinner.py\n13\t5\trich/syntax.py\n9\t3\trich/traceback.py\n29\t0\ttests/test_bar.py\n19\t0\ttests/test_block_bar.py\n68\t0\ttests/test_console.py\n16\t0\ttests/test_inspect.py\n11\t0\ttests/test_layout.py\n35\t0\ttests/test_markdown.py\n13\t0\ttests/test_panel.py\n18\t0\ttests/test_pretty.py\n14\t0\ttests/test_progress.py\n14\t0\ttests/test_rule.py\n33\t0\ttests/test_spinner.py\n10\t0\ttests/test_status.py\n25\t0\ttests/test_syntax.py\n50\t1\ttests/test_table.py\n35\t0\ttests/test_traceback.py\n14\t0\ttests/test_tree.py\n",
+          "created": "",
+          "execution": {
+            "rootThreadId": "01a10738-9705-7c32-9ba9-9ec691911a32",
+            "compactions": 7,
+            "childAgentDispatches": 3,
+            "source": "/Users/mac/.codex/sessions/2026/10/04/rollout-2026-10-04T22-01-51-01a10738-9705-7c32-9ba9-9ec691911a32.jsonl"
+          }
+        }
+      },
+      "measurementLimitations": [
+        "ScriptAct used formal Runtime with a directly constructed SDK model. Product provider composition was bypassed; request wires lack session cache keys and explicit breakpoints. These attempts do not establish production cache or complete cost parity."
+      ]
+    },
+    {
+      "attempt": "rich-02",
+      "schema": 1,
+      "at": "2026-10-04T14:50:59.300Z",
+      "taskId": "rich-ascii-decorations",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 52,
+            "startedAt": 1791124636079,
+            "solveMs": 633297
+          },
+          "accounting": {
+            "requests": 52,
+            "requestStatuses": {
+              "http-200": 50,
+              "http-200-interrupted": 1,
+              "unknown": 1
+            },
+            "measuredRequests": 50,
+            "missingUsageRequests": 2,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 609386,
+            "knownOutputTokens": 16897,
+            "knownCachedInputTokens": 143616,
+            "knownCacheRatio": 0.23567328425661238,
+            "pricedRequests": 50,
+            "knownReferenceUsd": 2.2584664000000005,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 39,
+            "failed": 19,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "19 failed, 39 passed in 0.16s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[bar]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-text]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-nested]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[status]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-1]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-2]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-3]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-7]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-19]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[spinner]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_reusable_objects_do_not_leak_mode",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 855,
+            "failed": 0,
+            "skipped": 25,
+            "errors": 0,
+            "summary": "855 passed, 25 skipped in 3.75s",
+            "failures": []
+          },
+          "passed": false,
+          "changedFiles": 3,
+          "createdFiles": 0,
+          "changeSummary": "21\t4\trich/console.py\n1\t1\trich/syntax.py\n16\t0\ttests/test_console.py\n",
+          "created": "",
+          "execution": {
+            "mainRequests": 19,
+            "branchRequests": 33,
+            "requestOwners": {
+              "development": 19,
+              "context:de5c8d96-b449-4dc8-b890-191f6f336302": 6,
+              "context:01f40c71-677e-4c55-b6e6-09882a105d4f": 10,
+              "context:7441f217-e71c-4f1c-a647-5d72f4050586": 4,
+              "context:304ee1cc-45fb-49b5-92f9-3f5a510361a6": 4,
+              "context:a016f9c4-3bee-4e55-9d49-48f381b9aeec": 4,
+              "context:0d8e3bdd-4d44-4258-9eb5-feff170c6dab": 5
+            },
+            "contextSegments": 7,
+            "nativeRequests": 52,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        }
+      },
+      "measurementLimitations": [
+        "ScriptAct used formal Runtime with a directly constructed SDK model. Product provider composition was bypassed; request wires lack session cache keys and explicit breakpoints. These attempts do not establish production cache or complete cost parity."
+      ]
+    },
+    {
+      "attempt": "rich-03",
+      "schema": 1,
+      "at": "2026-10-04T15:27:51.501Z",
+      "taskId": "rich-ascii-decorations",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 126,
+            "startedAt": 1791126105231,
+            "solveMs": 1525466
+          },
+          "accounting": {
+            "requests": 126,
+            "requestStatuses": {
+              "http-200": 121,
+              "unknown": 2,
+              "http-200-interrupted": 3
+            },
+            "measuredRequests": 121,
+            "missingUsageRequests": 5,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1603692,
+            "knownOutputTokens": 37877,
+            "knownCachedInputTokens": 445696,
+            "knownCacheRatio": 0.2779187025937649,
+            "pricedRequests": 121,
+            "knownReferenceUsd": 5.5678024000000015,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 48,
+            "failed": 10,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "10 failed, 48 passed in 0.21s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[traceback]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 855,
+            "failed": 0,
+            "skipped": 25,
+            "errors": 0,
+            "summary": "855 passed, 25 skipped in 3.95s",
+            "failures": []
+          },
+          "passed": false,
+          "changedFiles": 5,
+          "createdFiles": 1,
+          "changeSummary": "24\t0\tdocs/source/console.rst\n9\t0\trich/bar.py\n23\t2\trich/console.py\n1\t1\trich/markdown.py\n6\t6\trich/spinner.py\n",
+          "created": "tests/test_ascii_only.py\n",
+          "execution": {
+            "mainRequests": 29,
+            "branchRequests": 97,
+            "requestOwners": {
+              "development": 29,
+              "context:681aeccf-9a16-42dd-8b65-9ac183eedb8e": 14,
+              "context:6a22341b-c650-42df-bec5-0ae0f0f35b26": 11,
+              "context:2b7903c4-35e5-42b8-9a45-02b38e16ab1f": 11,
+              "context:778b5089-07ef-4c49-8c9e-f26d2d76837e": 4,
+              "context:30e49eaa-d670-42a7-98dd-c7cc836536f2": 13,
+              "context:b7a8d829-8316-4384-bb26-41583a4fd7f0": 11,
+              "context:5bab0edb-4208-4ccf-9b0d-71af9c46131d": 4,
+              "context:805d0b41-712c-47cb-8198-23144b09e634": 6,
+              "context:39578f78-f143-4ae9-9aa6-4573e3ccd8d4": 4,
+              "context:97df6ebb-0c27-400f-9302-75ff174f23d0": 6,
+              "context:7364c7e0-6322-407b-9b46-5a2f610e2243": 13
+            },
+            "contextSegments": 10,
+            "nativeRequests": 126,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        }
+      },
+      "measurementLimitations": [
+        "ScriptAct used formal Runtime with a directly constructed SDK model. Product provider composition was bypassed; request wires lack session cache keys and explicit breakpoints. These attempts do not establish production cache or complete cost parity."
+      ]
+    },
+    {
+      "attempt": "rich-04",
+      "schema": 1,
+      "at": "2026-10-04T15:52:40.696Z",
+      "taskId": "rich-ascii-decorations",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 39,
+            "startedAt": 1791128451430,
+            "solveMs": 546454
+          },
+          "accounting": {
+            "requests": 39,
+            "requestStatuses": {
+              "http-200": 38,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 38,
+            "missingUsageRequests": 1,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 670459,
+            "knownOutputTokens": 14728,
+            "knownCachedInputTokens": 158464,
+            "knownCacheRatio": 0.23635151441027713,
+            "pricedRequests": 38,
+            "knownReferenceUsd": 2.4059256,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 48,
+            "failed": 10,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "10 failed, 48 passed in 0.15s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[traceback]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 855,
+            "failed": 0,
+            "skipped": 25,
+            "errors": 0,
+            "summary": "855 passed, 25 skipped in 3.68s",
+            "failures": []
+          },
+          "passed": false,
+          "changedFiles": 6,
+          "createdFiles": 0,
+          "changeSummary": "20\t0\tdocs/source/console.rst\n7\t0\trich/bar.py\n21\t4\trich/console.py\n1\t1\trich/markdown.py\n8\t6\trich/spinner.py\n41\t1\ttests/test_console.py\n",
+          "created": "",
+          "execution": {
+            "mainRequests": 16,
+            "branchRequests": 23,
+            "requestOwners": {
+              "development": 16,
+              "context:09a5e5d5-b234-475b-8b20-cea6c58706f9": 13,
+              "context:e5eacca7-a07c-402e-9fb7-ed01f8b868bc": 10
+            },
+            "contextSegments": 2,
+            "nativeRequests": 39,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        }
+      },
+      "measurementLimitations": [
+        "ScriptAct used formal Runtime with a directly constructed SDK model. Product provider composition was bypassed; request wires lack session cache keys and explicit breakpoints. These attempts do not establish production cache or complete cost parity."
+      ]
+    },
+    {
+      "attempt": "rich-05",
+      "schema": 1,
+      "at": "2026-10-04T16:37:45.602Z",
+      "taskId": "rich-ascii-decorations",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 101,
+            "startedAt": 1791130618397,
+            "solveMs": 463695
+          },
+          "accounting": {
+            "requests": 101,
+            "requestStatuses": {
+              "http-200": 99,
+              "unknown": 1,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 99,
+            "missingUsageRequests": 2,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1793717,
+            "knownOutputTokens": 35226,
+            "knownCachedInputTokens": 387328,
+            "knownCacheRatio": 0.21593595868244544,
+            "pricedRequests": 99,
+            "knownReferenceUsd": 6.4850072,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 57,
+            "failed": 1,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "1 failed, 57 passed in 0.19s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-05/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 855,
+            "failed": 0,
+            "skipped": 25,
+            "errors": 0,
+            "summary": "855 passed, 25 skipped in 3.82s",
+            "failures": []
+          },
+          "passed": false,
+          "changedFiles": 17,
+          "createdFiles": 2,
+          "changeSummary": "32\t0\tdocs/source/console.rst\n10\t0\trich/bar.py\n5\t1\trich/columns.py\n21\t4\trich/console.py\n2\t0\trich/layout.py\n3\t3\trich/markdown.py\n4\t2\trich/pretty.py\n1\t1\trich/progress.py\n10\t5\trich/rule.py\n33\t5\trich/spinner.py\n13\t5\trich/syntax.py\n3\t1\trich/table.py\n9\t3\trich/traceback.py\n8\t0\ttests/test_columns.py\n23\t0\ttests/test_console.py\n15\t0\ttests/test_rule.py\n21\t0\ttests/test_table.py\n",
+          "created": "tests/test_ascii_only.py\ntests/test_ascii_only_textual.py\n",
+          "execution": {
+            "mainRequests": 16,
+            "branchRequests": 85,
+            "requestOwners": {
+              "development": 16,
+              "agent:development:be08654a": 13,
+              "agent:development:6cda5684": 19,
+              "agent:development:807dda04": 20,
+              "agent:development:c3fcf11a": 23,
+              "context:d4189987-8c34-41ac-83a1-decab5b20f76": 1,
+              "context:10e24dbd-4383-4ca7-ba62-f6a8c2e406ed": 1,
+              "context:64a93908-30ef-4df1-832c-65dafafb91da": 1,
+              "context:d0a547bd-aaa0-4ffd-9faf-82e0949f29ce": 5,
+              "context:24e9dccb-f91d-439a-9ce8-f5a09e137b68": 1,
+              "context:1830cb5c-6429-497e-8018-27259b7b73c2": 1
+            },
+            "contextSegments": 6,
+            "nativeRequests": 101,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791131088932,
+            "finishedAt": 1791131515345,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a107bb-785e-7352-85c0-8861639d70ed",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 140,
+            "solveMs": 426414
+          },
+          "accounting": {
+            "requests": 123,
+            "requestStatuses": {
+              "http-200": 120,
+              "http-200-interrupted": 2,
+              "unknown": 1
+            },
+            "measuredRequests": 120,
+            "missingUsageRequests": 3,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 2898079,
+            "knownOutputTokens": 41071,
+            "knownCachedInputTokens": 2428800,
+            "knownCacheRatio": 0.8380723920914509,
+            "pricedRequests": 120,
+            "knownReferenceUsd": 3.670055999999998,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 57,
+            "failed": 1,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "1 failed, 57 passed in 0.13s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-05/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 855,
+            "failed": 0,
+            "skipped": 25,
+            "errors": 0,
+            "summary": "855 passed, 25 skipped in 3.64s",
+            "failures": []
+          },
+          "passed": false,
+          "changedFiles": 26,
+          "createdFiles": 0,
+          "changeSummary": "44\t0\tdocs/source/console.rst\n13\t0\trich/bar.py\n16\t4\trich/console.py\n26\t1\trich/layout.py\n3\t3\trich/markdown.py\n4\t2\trich/pretty.py\n35\t6\trich/progress.py\n4\t4\trich/rule.py\n8\t6\trich/spinner.py\n13\t5\trich/syntax.py\n8\t3\trich/traceback.py\n7\t0\ttests/test_bar.py\n23\t0\ttests/test_console.py\n16\t0\ttests/test_inspect.py\n22\t0\ttests/test_layout.py\n37\t0\ttests/test_markdown.py\n22\t0\ttests/test_panel.py\n21\t0\ttests/test_pretty.py\n17\t0\ttests/test_progress.py\n17\t0\ttests/test_rule.py\n52\t0\ttests/test_spinner.py\n17\t0\ttests/test_status.py\n36\t0\ttests/test_syntax.py\n42\t1\ttests/test_table.py\n23\t0\ttests/test_traceback.py\n18\t0\ttests/test_tree.py\n",
+          "created": "",
+          "execution": {
+            "rootThreadId": "01a107bb-785e-7352-85c0-8861639d70ed",
+            "compactions": 4,
+            "childAgentDispatches": 3,
+            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T00-24-49-01a107bb-785e-7352-85c0-8861639d70ed.jsonl"
+          }
+        }
+      },
+      "measurementLimitations": [
+        "ScriptAct used formal Runtime with a directly constructed SDK model. Product provider composition was bypassed; request wires lack session cache keys and explicit breakpoints. These attempts do not establish production cache or complete cost parity."
+      ]
+    },
+    {
+      "attempt": "rich-06",
+      "schema": 1,
+      "at": "2026-10-04T16:52:54.028Z",
+      "taskId": "rich-ascii-decorations",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "failed",
+            "failure": "prompt_cache_breakpoint is not supported on this model",
+            "requestCount": 1,
+            "startedAt": 1791132697068,
+            "solveMs": 2237
+          },
+          "accounting": {
+            "requests": 1,
+            "requestStatuses": {
+              "http-400": 1
+            },
+            "measuredRequests": 0,
+            "missingUsageRequests": 1,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 0,
+            "knownOutputTokens": 0,
+            "knownCachedInputTokens": 0,
+            "knownCacheRatio": null,
+            "pricedRequests": 0,
+            "knownReferenceUsd": 0,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 0,
+            "failed": 58,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "58 failed in 0.26s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[None-utf-8]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[None-utf-16]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[None-ascii]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[None-cp1252]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[True-utf-8]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[True-utf-16]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[True-ascii]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[True-cp1252]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[False-utf-8]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[False-utf-16]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[False-ascii]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[False-cp1252]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_local_option_copy",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[table]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[panel]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-title]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[tree]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[progress-partial]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[progress-complete]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[progress-pulse]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[bar]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-text]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-nested]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[status]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[traceback]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[pretty]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[layout]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-19]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-1]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-2]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-3]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-7]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-19]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[progress-1]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[progress-2]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[progress-3]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[progress-7]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[progress-19]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[ASCII]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[SQUARE]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[ROUNDED]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[HEAVY]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[DOUBLE]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[HORIZONTALS]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[table]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[markdown]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[spinner]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[traceback]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_reusable_objects_do_not_leak_mode",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 855,
+            "failed": 0,
+            "skipped": 25,
+            "errors": 0,
+            "summary": "855 passed, 25 skipped in 3.89s",
+            "failures": []
+          },
+          "passed": false,
+          "changedFiles": 0,
+          "createdFiles": 0,
+          "changeSummary": "",
+          "created": "",
+          "execution": {
+            "mainRequests": 1,
+            "branchRequests": 0,
+            "requestOwners": {
+              "development": 1
+            },
+            "contextSegments": 1,
+            "nativeRequests": 1,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        }
+      },
+      "measurementLimitations": [
+        "Provider rejected explicit cache breakpoints on the first request. No task execution occurred; missing usage remains unknown."
+      ]
+    },
+    {
+      "attempt": "rich-07",
+      "schema": 1,
+      "at": "2026-10-04T17:10:08.288Z",
+      "taskId": "rich-ascii-decorations",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 194,
+            "startedAt": 1791132944455,
+            "solveMs": 829186
+          },
+          "accounting": {
+            "requests": 194,
+            "requestStatuses": {
+              "http-200": 191,
+              "http-200-interrupted": 1,
+              "unknown": 2
+            },
+            "measuredRequests": 191,
+            "missingUsageRequests": 3,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 3125898,
+            "knownOutputTokens": 59457,
+            "knownCachedInputTokens": 1000960,
+            "knownCacheRatio": 0.32021518296502316,
+            "pricedRequests": 191,
+            "knownReferenceUsd": 10.089276000000007,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 57,
+            "failed": 1,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "1 failed, 57 passed in 0.15s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-07/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 855,
+            "failed": 0,
+            "skipped": 25,
+            "errors": 0,
+            "summary": "855 passed, 25 skipped in 3.75s",
+            "failures": []
+          },
+          "passed": false,
+          "changedFiles": 29,
+          "createdFiles": 0,
+          "changeSummary": "32\t0\tdocs/source/console.rst\n10\t0\tdocs/source/pretty.rst\n8\t0\trich/bar.py\n15\t4\trich/console.py\n28\t5\trich/layout.py\n3\t3\trich/markdown.py\n4\t2\trich/pretty.py\n17\t6\trich/progress.py\n4\t4\trich/rule.py\n9\t5\trich/spinner.py\n13\t5\trich/syntax.py\n9\t3\trich/traceback.py\n14\t0\ttests/test_bar.py\n7\t0\ttests/test_block_bar.py\n15\t0\ttests/test_box.py\n23\t0\ttests/test_console.py\n9\t0\ttests/test_inspect.py\n13\t0\ttests/test_layout.py\n25\t0\ttests/test_markdown.py\n16\t0\ttests/test_panel.py\n7\t0\ttests/test_pretty.py\n19\t0\ttests/test_progress.py\n28\t0\ttests/test_rule.py\n9\t0\ttests/test_spinner.py\n11\t0\ttests/test_status.py\n18\t0\ttests/test_syntax.py\n22\t1\ttests/test_table.py\n15\t0\ttests/test_traceback.py\n17\t0\ttests/test_tree.py\n",
+          "created": "",
+          "execution": {
+            "mainRequests": 18,
+            "branchRequests": 176,
+            "requestOwners": {
+              "development": 18,
+              "agent:development:e87a552c": 29,
+              "agent:development:45f1d76b": 18,
+              "agent:development:b70ec72a": 12,
+              "agent:development:729346c8": 16,
+              "context:911945e3-92a5-4acc-a66e-8cbd36aa66bf": 8,
+              "context:16154496-cf99-4022-9f87-f55a9dcab5f6": 9,
+              "context:8af5a7dc-e081-41ce-99ca-e77e7224c7b4": 6,
+              "context:a9fc7bf1-2347-45dd-af28-001f1b0ef7ed": 5,
+              "context:c884212e-4666-4d3d-a4fc-55229f7f117e": 8,
+              "context:953b2efc-a1e3-4e0e-89c9-6b7d85154653": 4,
+              "context:c3d48bbb-f196-4205-9095-88d58d346450": 8,
+              "context:094808ca-6150-4fb3-a7c7-68eeb33a4aa5": 4,
+              "context:f2aa4872-a360-44b9-9a49-8a90e608ee61": 8,
+              "context:68ca3740-ba21-4a3b-b761-9dcc9b3ef2ca": 4,
+              "context:50a88b16-877c-4a25-ae3f-f2c6f47d6f21": 7,
+              "context:03637598-8146-4040-8860-3aec20a53c4b": 4,
+              "context:6778533e-5fbf-4052-85f0-bf65a06d4e0f": 4,
+              "context:3940acdd-d979-4881-9c64-23ab572e4f6a": 5,
+              "context:2d1e8ada-d9ce-4fd1-bfa3-dd8160f9b44a": 4,
+              "context:45c8c6b9-3468-4e72-be8c-219d6d42bd69": 4,
+              "context:98563830-ca48-41b1-9f42-15f9cf269b37": 3,
+              "context:d630e410-cc9d-4113-a8a3-510d677e8d94": 6
+            },
+            "contextSegments": 2,
+            "nativeRequests": 194,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        }
+      }
+    },
+    {
+      "attempt": "markdown-04",
+      "schema": 1,
+      "at": "2026-10-04T17:24:21.319Z",
+      "taskId": "markdown-generated-class-prefix",
+      "split": "holdout",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 22,
+            "startedAt": 1791133845991,
+            "solveMs": 245646
+          },
+          "accounting": {
+            "requests": 22,
+            "requestStatuses": {
+              "http-200": 22
+            },
+            "measuredRequests": 22,
+            "missingUsageRequests": 0,
+            "tokenCoverage": "complete",
+            "knownInputTokens": 439475,
+            "knownOutputTokens": 9162,
+            "knownCachedInputTokens": 104576,
+            "knownCacheRatio": 0.23795665282439274,
+            "pricedRequests": 22,
+            "knownReferenceUsd": 1.5646664,
+            "totalReferenceUsd": 1.5646664,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 54,
+            "failed": 5,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "5 failed, 54 passed in 0.12s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[footnotes-doc-]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[footnotes-_reader2-]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[hilite-fallback-doc-]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[hilite-fallback-_reader2-]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_explicit_classes_raw_html_and_literals_keep_their_spelling"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 906,
+            "failed": 0,
+            "skipped": 132,
+            "errors": 0,
+            "summary": "OK (skipped=132)",
+            "failures": []
+          },
+          "passed": false,
+          "changedFiles": 14,
+          "createdFiles": 1,
+          "changeSummary": "4\t0\tdocs/extensions/admonition.md\n5\t0\tdocs/extensions/code_hilite.md\n5\t0\tdocs/extensions/fenced_code_blocks.md\n5\t0\tdocs/extensions/footnotes.md\n5\t0\tdocs/extensions/toc.md\n4\t0\tdocs/extensions/wikilinks.md\n23\t0\tdocs/reference.md\n10\t0\tmarkdown/core.py\n2\t2\tmarkdown/extensions/admonition.py\n2\t0\tmarkdown/extensions/codehilite.py\n3\t1\tmarkdown/extensions/fenced_code.py\n4\t4\tmarkdown/extensions/footnotes.py\n4\t4\tmarkdown/extensions/toc.py\n1\t1\tmarkdown/extensions/wikilinks.py\n",
+          "created": "tests/test_class_prefix.py\n",
+          "execution": {
+            "mainRequests": 22,
+            "branchRequests": 0,
+            "requestOwners": {
+              "development": 22
+            },
+            "contextSegments": 1,
+            "nativeRequests": 22,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          },
+          "correctedAcceptance": {
+            "passed": 57,
+            "failed": 2,
+            "errors": 0,
+            "skipped": 0,
+            "exitCode": 1,
+            "evidence": "markdown-04/grading-correction-01/scriptact.json"
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791134094575,
+            "finishedAt": 1791134560699,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a107e9-5517-7751-8503-446728d1caeb",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 151,
+            "solveMs": 466124
+          },
+          "accounting": {
+            "requests": 107,
+            "requestStatuses": {
+              "http-200": 102,
+              "unknown": 5
+            },
+            "measuredRequests": 102,
+            "missingUsageRequests": 5,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 2374399,
+            "knownOutputTokens": 34625,
+            "knownCachedInputTokens": 2036352,
+            "knownCacheRatio": 0.8576283935429555,
+            "pricedRequests": 102,
+            "knownReferenceUsd": 2.8592287999999995,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 56,
+            "failed": 3,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "3 failed, 56 passed in 0.11s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[hilite-fallback-doc-]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[hilite-fallback-_reader2-]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_explicit_classes_raw_html_and_literals_keep_their_spelling"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 906,
+            "failed": 0,
+            "skipped": 132,
+            "errors": 0,
+            "summary": "OK (skipped=132)",
+            "failures": []
+          },
+          "passed": false,
+          "changedFiles": 22,
+          "createdFiles": 1,
+          "changeSummary": "5\t0\tdocs/extensions/admonition.md\n7\t0\tdocs/extensions/code_hilite.md\n6\t0\tdocs/extensions/extra.md\n4\t0\tdocs/extensions/fenced_code_blocks.md\n4\t0\tdocs/extensions/footnotes.md\n6\t0\tdocs/extensions/toc.md\n6\t1\tdocs/extensions/wikilinks.md\n69\t0\tdocs/reference.md\n19\t0\tmarkdown/core.py\n8\t5\tmarkdown/extensions/admonition.py\n26\t7\tmarkdown/extensions/codehilite.py\n4\t9\tmarkdown/extensions/fenced_code.py\n9\t5\tmarkdown/extensions/footnotes.py\n4\t4\tmarkdown/extensions/toc.py\n1\t1\tmarkdown/extensions/wikilinks.py\n36\t0\ttests/test_apis.py\n24\t0\ttests/test_extensions.py\n27\t0\ttests/test_syntax/extensions/test_admonition.py\n29\t0\ttests/test_syntax/extensions/test_code_hilite.py\n39\t0\ttests/test_syntax/extensions/test_fenced_code.py\n25\t0\ttests/test_syntax/extensions/test_footnotes.py\n34\t0\ttests/test_syntax/extensions/test_toc.py\n",
+          "created": "tests/test_class_prefix.py\n",
+          "execution": {
+            "rootThreadId": "01a107e9-5517-7751-8503-446728d1caeb",
+            "compactions": 3,
+            "childAgentDispatches": 3,
+            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T01-14-54-01a107e9-5517-7751-8503-446728d1caeb.jsonl"
+          },
+          "correctedAcceptance": {
+            "passed": 59,
+            "failed": 0,
+            "errors": 0,
+            "skipped": 0,
+            "exitCode": 0,
+            "evidence": "markdown-04/grading-correction-01/codex.json"
+          }
+        }
+      },
+      "gradingCorrection": {
+        "schema": 1,
+        "at": "2026-10-04T17:28:23.897806+00:00",
+        "reason": [
+          "codehilite fallback language class is generated by Python-Markdown, covered by the original ownership requirement",
+          "paragraph attributes require a separate line in upstream Python-Markdown; original fixture did not produce three asserted classes"
+        ],
+        "originalGraderSha256": "b0ec702ff3f8a2b0e910e6078e3b2ceb264f81bd6984c7f5d5e2a461782f6589",
+        "correctedGraderSha256": "6fe450e3633215a60fc2bff83e96610ac2b86ef51a6e2ae5e34b04d4d2d47fb7",
+        "modelRerun": false,
+        "originalResultsPreserved": true,
+        "scope": "all frozen task cases replayed against both original judge copies; no participant code changed"
+      },
+      "qualifications": {
+        "scriptactObservedCompaction": false,
+        "codexObservedCompaction": true,
+        "longRunPair": false,
+        "reason": "ScriptAct completed without context maintenance; independent multi-file task only",
+        "gradingCorrectionAfterModelRun": true
+      }
+    },
+    {
+      "attempt": "rich-08",
+      "schema": 1,
+      "at": "2026-10-04T17:50:56.524Z",
+      "taskId": "rich-ascii-decorations",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": {
+        "createdAt": "2026-10-04T17:35:51.095149+00:00",
+        "reason": "ScriptAct completed, then the post-run dependency lock check detected added style tools. Preserve its execution environment and original grades; restore the frozen dependency environment before regrading the unchanged artifact and running Codex for the first time.",
+        "terminalStatus": "completed",
+        "startedAt": 1791134716008,
+        "finishedAt": 1791135248291,
+        "timingSource": {
+          "start": "original solve.startedAt",
+          "finish": "original solve.startedAt + solve.solveMs"
+        },
+        "files": {},
+        "originalArtifacts": {
+          "controller.log": "2683f6ef33d326137e8cdaf64025b387976e65e7603b3d89c9c946736d998a01",
+          "scriptact/solve.json": "6a10830bcc6b689fe431ea6880da378da5f91e39941401d47d0d33efd81ccabf",
+          "scriptact/grade.json": "2b79bef55af8fbaf2d9bf96bd59668897c5e3182c1a4976ca18f6c8072cc91db",
+          "scriptact/acceptance.json": "90a7e728ed387a05a5b44a4f477fff6a99fcb18e459157c11b72b2e835bcb879",
+          "scriptact/regression.json": "26dfcc2674be7c122ea2a1f01e721c3db7d6f6c03bdf37721636b213b318a1b1",
+          "scriptact/trajectory.json": "ec749a59d3cdbb3a38d409dd938395b868ec643ee587baca68d6a21de7dc2868"
+        },
+        "preservedExecutionEnvironment": "/private/tmp/vlr-UDeg7T/python-scriptact-completed",
+        "dependencyRestoredFrom": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/python",
+        "restoredDependencySha256": "0d44cb8d7e2a9eeb28e0fe01a775c5b579141f046fed3d0dc62519bf23e519d2",
+        "modelRerun": false
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "startedAt": 1791134716008,
+            "finishedAt": 1791135248291,
+            "solveMs": 532283,
+            "evaluatorRecovery": "ScriptAct completed, then the post-run dependency lock check detected added style tools. Preserve its execution environment and original grades; restore the frozen dependency environment before regrading the unchanged artifact and running Codex for the first time.",
+            "timingSource": {
+              "start": "original solve.startedAt",
+              "finish": "original solve.startedAt + solve.solveMs"
+            }
+          },
+          "accounting": {
+            "requests": 47,
+            "requestStatuses": {
+              "http-200": 45,
+              "unknown": 2
+            },
+            "measuredRequests": 45,
+            "missingUsageRequests": 2,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 874913,
+            "knownOutputTokens": 16449,
+            "knownCachedInputTokens": 339072,
+            "knownCacheRatio": 0.387549390625125,
+            "pricedRequests": 45,
+            "knownReferenceUsd": 2.6079728,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 54,
+            "failed": 4,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "4 failed, 54 passed in 0.17s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[traceback]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 855,
+            "failed": 0,
+            "skipped": 25,
+            "errors": 0,
+            "summary": "855 passed, 25 skipped in 3.71s",
+            "failures": []
+          },
+          "passed": false,
+          "changedFiles": 10,
+          "createdFiles": 1,
+          "changeSummary": "20\t0\tdocs/source/console.rst\n12\t0\trich/bar.py\n20\t4\trich/console.py\n6\t4\trich/markdown.py\n16\t2\trich/progress.py\n1\t1\trich/progress_bar.py\n4\t4\trich/rule.py\n6\t5\trich/spinner.py\n12\t4\trich/syntax.py\n7\t3\trich/traceback.py\n",
+          "created": "tests/test_ascii_only.py\n",
+          "execution": {
+            "mainRequests": 16,
+            "branchRequests": 31,
+            "requestOwners": {
+              "development": 16,
+              "agent:development:bc5c0bcc": 24,
+              "context:9aa972ef-b4e3-4bf9-be33-02a87ad53103": 7
+            },
+            "contextSegments": 2,
+            "nativeRequests": 47,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791135358762,
+            "finishedAt": 1791136103067,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a107fc-9f65-7b31-bb51-77edef81df49",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 175,
+            "solveMs": 744305
+          },
+          "accounting": {
+            "requests": 159,
+            "requestStatuses": {
+              "http-200": 151,
+              "http-200-interrupted": 5,
+              "unknown": 3
+            },
+            "measuredRequests": 151,
+            "missingUsageRequests": 8,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 3562930,
+            "knownOutputTokens": 56849,
+            "knownCachedInputTokens": 2854784,
+            "knownCacheRatio": 0.8012461653751266,
+            "pricedRequests": 151,
+            "knownReferenceUsd": 5.111477599999999,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 57,
+            "failed": 1,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "1 failed, 57 passed in 0.14s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 855,
+            "failed": 0,
+            "skipped": 25,
+            "errors": 0,
+            "summary": "855 passed, 25 skipped in 3.73s",
+            "failures": []
+          },
+          "passed": false,
+          "changedFiles": 28,
+          "createdFiles": 0,
+          "changeSummary": "37\t0\tdocs/source/console.rst\n4\t1\trich/bar.py\n22\t4\trich/console.py\n24\t1\trich/layout.py\n5\t3\trich/markdown.py\n4\t2\trich/pretty.py\n34\t2\trich/progress.py\n2\t2\trich/progress_bar.py\n4\t4\trich/rule.py\n8\t6\trich/spinner.py\n13\t5\trich/syntax.py\n10\t3\trich/traceback.py\n12\t0\ttests/test_bar.py\n8\t0\ttests/test_block_bar.py\n92\t0\ttests/test_console.py\n25\t0\ttests/test_inspect.py\n28\t0\ttests/test_layout.py\n22\t2\ttests/test_markdown.py\n22\t0\ttests/test_panel.py\n26\t0\ttests/test_pretty.py\n9\t0\ttests/test_progress.py\n18\t0\ttests/test_rule.py\n26\t0\ttests/test_spinner.py\n14\t0\ttests/test_status.py\n35\t0\ttests/test_syntax.py\n35\t1\ttests/test_table.py\n48\t0\ttests/test_traceback.py\n17\t0\ttests/test_tree.py\n",
+          "created": "",
+          "execution": {
+            "rootThreadId": "01a107fc-9f65-7b31-bb51-77edef81df49",
+            "compactions": 3,
+            "childAgentDispatches": 3,
+            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T01-35-58-01a107fc-9f65-7b31-bb51-77edef81df49.jsonl"
+          }
+        }
+      },
+      "qualifications": {
+        "kind": "development",
+        "scriptactObservedCompaction": true,
+        "scriptactMaintenanceBranches": 1,
+        "scriptactMaintenanceApplied": 1,
+        "scriptactMaintenanceCalls": 7,
+        "scriptactBusinessChildren": 1,
+        "scriptactChildSegments": 3,
+        "timingLimitations": [
+          "Some transport diagnostics and short host checks ran concurrently",
+          "Same task repeatedly used for development; delegation counts varied between candidates"
+        ]
+      }
+    },
+    {
+      "attempt": "httpx-03",
+      "schema": 1,
+      "at": "2026-10-04T18:36:20.766Z",
+      "taskId": "httpx-decoded-response-body-limit",
+      "split": "holdout",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": false,
+        "knownFailures": [
+          "tests.test_timeouts::test_write_timeout[trio]"
+        ],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 65,
+            "startedAt": 1791137383495,
+            "solveMs": 825543
+          },
+          "accounting": {
+            "requests": 65,
+            "requestStatuses": {
+              "http-200": 64,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 64,
+            "missingUsageRequests": 1,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1296242,
+            "knownOutputTokens": 26662,
+            "knownCachedInputTokens": 450432,
+            "knownCacheRatio": 0.3474906691806005,
+            "pricedRequests": 64,
+            "knownReferenceUsd": 4.0966528,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 88,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "88 passed in 0.23s",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 1,
+            "passed": 1416,
+            "failed": 1,
+            "skipped": 1,
+            "errors": 0,
+            "summary": "1 failed, 1416 passed, 1 skipped in 3.40s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": false,
+              "knownFailures": [
+                "tests.test_timeouts::test_write_timeout[trio]"
+              ],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 7,
+          "createdFiles": 1,
+          "changeSummary": "10\t0\tdocs/exceptions.md\n27\t0\tdocs/quickstart.md\n1\t0\thttpx/__init__.py\n18\t0\thttpx/_api.py\n119\t4\thttpx/_client.py\n14\t0\thttpx/_exceptions.py\n50\t14\thttpx/_models.py\n",
+          "created": "tests/test_response_size_limits.py\n",
+          "execution": {
+            "mainRequests": 44,
+            "branchRequests": 21,
+            "requestOwners": {
+              "development": 44,
+              "context:25f06bec-b46e-4685-b06a-d65bb21e48d3": 6,
+              "context:5edb17fc-eb92-44e1-b9d8-1b8a0141d727": 7,
+              "context:4fc26fd7-a2bb-4d48-9579-faa9d49a1c4f": 8
+            },
+            "contextSegments": 4,
+            "nativeRequests": 65,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791138216340,
+            "finishedAt": 1791138911047,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a10828-39fc-7a03-8bb9-807fa3d0733e",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 221,
+            "solveMs": 694707
+          },
+          "accounting": {
+            "requests": 129,
+            "requestStatuses": {
+              "http-200": 123,
+              "http-200-interrupted": 2,
+              "unknown": 4
+            },
+            "measuredRequests": 123,
+            "missingUsageRequests": 6,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 3004244,
+            "knownOutputTokens": 40408,
+            "knownCachedInputTokens": 2522880,
+            "knownCacheRatio": 0.8397720025404062,
+            "pricedRequests": 123,
+            "knownReferenceUsd": 3.742768000000001,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 88,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "88 passed in 0.22s",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 1,
+            "passed": 1416,
+            "failed": 1,
+            "skipped": 1,
+            "errors": 0,
+            "summary": "1 failed, 1416 passed, 1 skipped in 3.48s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": false,
+              "knownFailures": [
+                "tests.test_timeouts::test_write_timeout[trio]"
+              ],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 9,
+          "createdFiles": 1,
+          "changeSummary": "132\t1\tdocs/advanced/resource-limits.md\n2\t2\tdocs/api.md\n4\t0\tdocs/exceptions.md\n5\t0\tdocs/quickstart.md\n1\t0\thttpx/__init__.py\n20\t0\thttpx/_api.py\n120\t7\thttpx/_client.py\n23\t0\thttpx/_exceptions.py\n65\t5\thttpx/_models.py\n",
+          "created": "tests/test_response_limits.py\n",
+          "execution": {
+            "rootThreadId": "01a10828-39fc-7a03-8bb9-807fa3d0733e",
+            "compactions": 5,
+            "childAgentDispatches": 3,
+            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T02-23-36-01a10828-39fc-7a03-8bb9-807fa3d0733e.jsonl"
+          }
+        }
+      },
+      "qualifications": {
+        "candidate": "candidate-v8-753808b77619",
+        "firstPaidHoldout": true,
+        "longRunObservedCompaction": true,
+        "runtimeOnly": true,
+        "sourceCommit": "26d48e0634e6ee9cdc0533996db289ce4b430177",
+        "preexistingRegressionFailure": "tests.test_timeouts::test_write_timeout[trio] with the frozen Trio ResourceWarning fingerprint",
+        "noNewRegressionsBoth": true,
+        "maintenance": [
+          {
+            "parent": "development",
+            "status": "applied",
+            "reason": "narrate",
+            "sessionId": "context:25f06bec-b46e-4685-b06a-d65bb21e48d3",
+            "unresolved": [
+              "完成 Client/AsyncClient 构造器、build_request、request、stream、send、全部便利方法和顶层 API 的 max_response_bytes 参数传播、校验及优先级语义。",
+              "在响应钩子、重定向、认证和已缓冲 transport Response 逃逸前绑定有效策略；确认临时 send 覆盖不修改原 Request.extensions，并保持每个响应独立计数。",
+              "补齐聚焦测试与集成测试，覆盖同步/异步、精确边界、显式 None、压缩与 flush、Unicode、raw 旁路、关闭行为、钩子、重定向和认证；再运行完整测试及格式/类型检查。",
+              "更新 API docstrings、异常参考和用户文档。目前材料中没有任何测试、格式检查、类型检查或完整套件运行结果。"
+            ]
+          },
+          {
+            "parent": "development",
+            "status": "applied",
+            "reason": "narrate",
+            "sessionId": "context:5edb17fc-eb92-44e1-b9d8-1b8a0141d727",
+            "unresolved": [
+              "修复并测试已预缓冲 Response 的限制执行，包含 stream=True；最新 MockTransport 复现显示 4 字节 body 在 limit=3 时仍逃逸。",
+              "补齐 Client/AsyncClient 的 build_request、stream、send、全部 convenience methods，以及顶层 request、stream 和 convenience API 的参数签名与传播；验证 omitted、None、request extension、send override 优先级和不修改调用方 extensions。",
+              "系统验证 Response 计数与生命周期：精确边界、零值、重复读取、任意 chunk_size、文本/行、raw 绕过、压缩和 flush、关闭底层流、重定向、认证、hooks、同步异步并发隔离。",
+              "添加聚焦单元和集成测试，更新 API docstrings、异常参考及用户文档，并运行格式、类型检查和完整 pytest；目前只记录到 35 项核心 client 测试通过，完整套件未执行。"
+            ]
+          },
+          {
+            "parent": "development",
+            "status": "applied",
+            "reason": "narrate",
+            "sessionId": "context:4fc26fd7-a2bb-4d48-9579-faa9d49a1c4f",
+            "unresolved": [
+              "重新运行严格 mypy、ruff/格式检查和完整 pytest，确认最后一轮类型标注与 `httpx.__all__` 修复没有新回归；分别报告用户给出的 Trio write-timeout 基线 ResourceWarning。",
+              "核对最终 diff 与公开签名，确认所有同步/异步客户端、send/build_request/stream、HTTP 便利方法和顶层 API 均完整传播参数，并确认文档构建或标记无误。",
+              "现有集中测试覆盖核心验证、优先级、预缓冲、流式、压缩、Unicode、hooks、关闭与 raw bypass；仍需以完整套件最终结果确认 redirects/auth 及各内置 transport 等要求没有遗漏。"
+            ]
+          }
+        ],
+        "requirementsGaps": {
+          "both": "Only a new centralized test module; requested existing test-module updates are absent",
+          "scriptact": "Documentation examples include undefined process and a top-level async fragment; Codex provides fuller runnable examples"
+        },
+        "timingConfounds": "Short host checks and independent fixture preparation overlapped parts of the run",
+        "completeCostsKnown": false,
+        "naturalAdvancedSearchObserved": false
+      }
+    }
+  ],
+  "transportDiagnostics": {
+    "scope": "controlled transport diagnosis only; no task implementation or product benefit measurement",
+    "runs": [
+      {
+        "run": "probe-6304ce75-4def-4107-91c3-d77f7c7a904f",
+        "requests": 10,
+        "rows": [
+          {
+            "arm": "tool-payload",
+            "round": 1,
+            "input": 7302,
+            "output": 136,
+            "cached": 0,
+            "written": 0,
+            "referenceUsd": 0.031928
+          },
+          {
+            "arm": "tool-payload",
+            "round": 2,
+            "input": 10163,
+            "output": 40,
+            "cached": 7040,
+            "written": 0,
+            "referenceUsd": 0.016108
+          },
+          {
+            "arm": "tool-payload",
+            "round": 3,
+            "input": 12933,
+            "output": 37,
+            "cached": 9856,
+            "written": 0,
+            "referenceUsd": 0.016990400000000003
+          },
+          {
+            "arm": "tool-payload",
+            "round": 4,
+            "input": 15695,
+            "output": 36,
+            "cached": 12672,
+            "written": 0,
+            "referenceUsd": 0.0178808
+          },
+          {
+            "arm": "tool-payload",
+            "round": 5,
+            "input": 18435,
+            "output": 40,
+            "cached": 15488,
+            "written": 0,
+            "referenceUsd": 0.0187832
+          },
+          {
+            "arm": "user-payload",
+            "round": 1,
+            "input": 7288,
+            "output": 127,
+            "cached": 0,
+            "written": 0,
+            "referenceUsd": 0.031692
+          },
+          {
+            "arm": "user-payload",
+            "round": 2,
+            "input": 10143,
+            "output": 40,
+            "cached": 7040,
+            "written": 0,
+            "referenceUsd": 0.016028
+          },
+          {
+            "arm": "user-payload",
+            "round": 3,
+            "input": 12926,
+            "output": 36,
+            "cached": 9856,
+            "written": 0,
+            "referenceUsd": 0.0169424
+          },
+          {
+            "arm": "user-payload",
+            "round": 4,
+            "input": 15726,
+            "output": 37,
+            "cached": 12672,
+            "written": 0,
+            "referenceUsd": 0.0180248
+          },
+          {
+            "arm": "user-payload",
+            "round": 5,
+            "input": 18474,
+            "output": 36,
+            "cached": 15488,
+            "written": 0,
+            "referenceUsd": 0.0188592
+          }
+        ]
+      },
+      {
+        "run": "probe-97aa6849-d9ca-4ccd-8910-0d36798845fb",
+        "requests": 12,
+        "rows": [
+          {
+            "arm": "tool-payload",
+            "round": 1,
+            "input": 7247,
+            "output": 18,
+            "cached": 0,
+            "written": 0,
+            "referenceUsd": 0.029348
+          },
+          {
+            "arm": "tool-payload",
+            "round": 2,
+            "input": 9965,
+            "output": 18,
+            "cached": 7040,
+            "written": 0,
+            "referenceUsd": 0.014876
+          },
+          {
+            "arm": "tool-payload",
+            "round": 3,
+            "input": 12716,
+            "output": 18,
+            "cached": 9728,
+            "written": 0,
+            "referenceUsd": 0.0162032
+          },
+          {
+            "arm": "tool-payload",
+            "round": 4,
+            "input": 15452,
+            "output": 18,
+            "cached": 12416,
+            "written": 0,
+            "referenceUsd": 0.0174704
+          },
+          {
+            "arm": "tool-payload",
+            "round": 5,
+            "input": 18181,
+            "output": 18,
+            "cached": 15232,
+            "written": 0,
+            "referenceUsd": 0.0182488
+          },
+          {
+            "arm": "tool-payload",
+            "round": 6,
+            "input": 20890,
+            "output": 18,
+            "cached": 17920,
+            "written": 0,
+            "referenceUsd": 0.019408
+          },
+          {
+            "arm": "user-payload",
+            "round": 1,
+            "input": 7221,
+            "output": 18,
+            "cached": 4096,
+            "written": 0,
+            "referenceUsd": 0.0144984
+          },
+          {
+            "arm": "user-payload",
+            "round": 2,
+            "input": 9968,
+            "output": 18,
+            "cached": 6912,
+            "written": 0,
+            "referenceUsd": 0.0153488
+          },
+          {
+            "arm": "user-payload",
+            "round": 3,
+            "input": 12693,
+            "output": 18,
+            "cached": 9728,
+            "written": 0,
+            "referenceUsd": 0.0161112
+          },
+          {
+            "arm": "user-payload",
+            "round": 4,
+            "input": 15400,
+            "output": 18,
+            "cached": 12416,
+            "written": 0,
+            "referenceUsd": 0.0172624
+          },
+          {
+            "arm": "user-payload",
+            "round": 5,
+            "input": 18147,
+            "output": 18,
+            "cached": 15104,
+            "written": 0,
+            "referenceUsd": 0.0185736
+          },
+          {
+            "arm": "user-payload",
+            "round": 6,
+            "input": 20896,
+            "output": 18,
+            "cached": 17920,
+            "written": 0,
+            "referenceUsd": 0.019432
+          }
+        ]
+      },
+      {
+        "run": "replay-9d9b8e36-92c0-429e-b8fc-df2e2fd52f94",
+        "requests": 4,
+        "rows": [
+          {
+            "arm": null,
+            "round": "1-1",
+            "input": 18726,
+            "output": 309,
+            "cached": 4352,
+            "written": 0,
+            "referenceUsd": 0.0654168
+          },
+          {
+            "arm": null,
+            "round": "1-2",
+            "input": 18726,
+            "output": 240,
+            "cached": 0,
+            "written": 0,
+            "referenceUsd": 0.079704
+          },
+          {
+            "arm": null,
+            "round": "2-1",
+            "input": 26530,
+            "output": 235,
+            "cached": 18560,
+            "written": 0,
+            "referenceUsd": 0.044004
+          },
+          {
+            "arm": null,
+            "round": "2-2",
+            "input": 26530,
+            "output": 210,
+            "cached": 26368,
+            "written": 0,
+            "referenceUsd": 0.015395200000000001
+          }
+        ]
+      }
+    ],
+    "requests": 26,
+    "knownReferenceUsd": 0.6245376,
+    "unknownUsage": 0,
+    "finding": "Both synthetic message layouts retained prefix reuse, including opaque reasoning. Replayed real inputs also eventually hit, after misses of undetermined cause. These probes do not establish the cause of the low cache ratio in real tasks."
+  }
+}

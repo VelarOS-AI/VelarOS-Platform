@@ -1,0 +1,31 @@
+{
+  "id": "httpx-decoded-response-body-limit",
+  "split": "holdout",
+  "repository": "https://github.com/encode/httpx.git",
+  "commit": "26d48e0634e6ee9cdc0533996db289ce4b430177",
+  "environment": {
+    "project": "httpx",
+    "python": "python-httpx",
+    "acceptance": "test_httpx_response_limit_acceptance.py",
+    "regression": [
+      "tests"
+    ],
+    "preserve": [
+      "tests",
+      "pyproject.toml"
+    ],
+    "baselineFailure": "unexpected keyword argument 'max_response_bytes'",
+    "baselineIssues": [
+      {
+        "test": "tests.test_timeouts::test_write_timeout[trio]",
+        "contains": [
+          "pytest.PytestUnraisableExceptionWarning",
+          "ResourceWarning: Async generator 'httpx._content.ByteStream.__aiter__' was garbage collected before it had been exhausted."
+        ],
+        "source": "https://github.com/encode/httpx/issues/3597",
+        "reason": "The unchanged full suite has one Trio async-generator cleanup ResourceWarning during the upload write-timeout test; all other 1416 tests pass and one is skipped"
+      }
+    ]
+  },
+  "prompt": "Implement complete, opt-in decoded response body limits throughout HTTPX. Applications should be able to bound buffered downloads and decoded streaming without losing the existing synchronous/asynchronous API symmetry. This is a public library feature spanning client configuration, request construction and dispatch, response reading, exceptions, documentation and tests.\n\nPublic API: Client and AsyncClient accept max_response_bytes=None and expose the configured value. A limit is None (unlimited) or a nonnegative int; bool and other non-integer values raise TypeError, negative ints raise ValueError. Preserve existing behavior by default. Add max_response_bytes to both clients' request, stream, build_request, send and every HTTP convenience method, and to the top-level request, stream and HTTP convenience functions. Omitted per-call values inherit the client or built request setting, while explicit None disables a client default. build_request records its resolved value in the request's max_response_bytes extension; send uses that extension when present, otherwise its own client's default, and an explicit send override takes precedence for that dispatch without mutating the original request extensions. Do not mutate a caller-supplied extensions dictionary. Validate before any transport is called.\n\nExport ResponseTooLarge as a RequestError subclass. It carries limit, received and the associated Request; received is the number of decoded bytes observed when the limit is first crossed. Its message should explain the exceeded limit. Enforce the limit after content decompression and before text decoding and output chunking, including decoder flush output. Bytes already delivered below the limit may remain delivered; never yield the chunk that would cross the limit or continue reading subsequent chunks after the error. Zero allows an empty body. Count UTF-8 and other encoded content by bytes, not Unicode characters. Closing the response and releasing its underlying stream on overflow must work for both sync and async code.\n\nAll ordinary decoded consumers must agree: read/aread, iter_bytes/aiter_bytes with any chunk_size, text and line iterators, and eager client requests. Repeated reads of a successfully buffered body are idempotent. A transport may return an already buffered Response; it must still be checked before it escapes send, including stream=True. Preserve the wire-level semantics of iter_raw/aiter_raw: these explicit raw consumers bypass this decoded-size option, and document that boundary. Do not use Content-Length as a decoded-size substitute: absent, incorrect or compressed lengths must not bypass or incorrectly trigger the check. gzip, deflate, optional brotli and zstd, stacked encodings, decoder finalization and Unicode text should behave consistently.\n\nApply the effective policy to each individual response in redirect and authentication flows, including intermediate bodies drained by HTTPX; reset byte accounting for each response and stop the flow on overflow. Response hooks must observe a response with its policy already active, so reading in a hook enforces the same limit. Work across built-in and custom transports, including MockTransport, WSGI and ASGI; enforce this at HTTPX's own response/client boundary. Unrelated clients, requests and concurrent async operations must remain independent. Keep existing streaming lifecycle, cancellation and error context behavior intact. Do not add a process-global limit, filter final strings, rewrite dependency code or force whole-body buffering to check a streaming limit.\n\nAdd focused tests in the relevant existing modules plus integration tests for both sync and async APIs, all precedence cases, validation, exact boundaries, repeated reads, close behavior, already-buffered responses, redirects, auth, hooks, compressed streams and Unicode. Update API docstrings, exception reference and user documentation with runnable synchronous/asynchronous and streaming examples, inheritance/None semantics, decompressed-byte accounting and the raw-iterator boundary. Preserve supported Python versions, type signatures and coding conventions. Run the full project test suite and applicable formatting/type checks, fixing regressions introduced by the feature. Complete the entire feature and report implementation and verification concisely. Make ordinary implementation choices autonomously."
+}

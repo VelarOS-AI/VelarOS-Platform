@@ -1,0 +1,45 @@
+{
+  "id": "networkx-export-attribute-projection",
+  "split": "holdout",
+  "repository": "https://github.com/networkx/networkx.git",
+  "commit": "2acf1590f82757c01a57b81b8c5dfb79e60aa416",
+  "environment": {
+    "project": "networkx",
+    "python": "python-networkx",
+    "acceptance": "test_networkx_attribute_filter_acceptance.py",
+    "regression": [
+      "networkx"
+    ],
+    "preserve": [
+      "networkx/algorithms/approximation/tests",
+      "networkx/algorithms/assortativity/tests",
+      "networkx/algorithms/bipartite/tests",
+      "networkx/algorithms/centrality/tests",
+      "networkx/algorithms/coloring/tests",
+      "networkx/algorithms/community/tests",
+      "networkx/algorithms/components/tests",
+      "networkx/algorithms/connectivity/tests",
+      "networkx/algorithms/flow/tests",
+      "networkx/algorithms/isomorphism/tests",
+      "networkx/algorithms/link_analysis/tests",
+      "networkx/algorithms/minors/tests",
+      "networkx/algorithms/operators/tests",
+      "networkx/algorithms/shortest_paths/tests",
+      "networkx/algorithms/tests",
+      "networkx/algorithms/traversal/tests",
+      "networkx/algorithms/tree/tests",
+      "networkx/classes/tests",
+      "networkx/drawing/tests",
+      "networkx/generators/tests",
+      "networkx/linalg/tests",
+      "networkx/readwrite/json_graph/tests",
+      "networkx/readwrite/tests",
+      "networkx/tests",
+      "networkx/utils/tests",
+      "pyproject.toml",
+      "networkx/conftest.py"
+    ],
+    "baselineFailure": "attribute_filter"
+  },
+  "prompt": "Add a consistent, opt-in attribute projection policy to NetworkX's graph exporters. Applications should be able to export graph topology and a selected set of public attributes without copying or mutating their source graph. This feature must work across the actual serializers, not as a separate export utility.\n\nAdd a keyword-only attribute_filter=None parameter to node_link_data, adjacency_data, cytoscape_data, tree_data, generate_gml, write_gml, generate_graphml, write_graphml (including both write_graphml_xml and write_graphml_lxml), generate_gexf and write_gexf. GraphMLWriter, GraphMLWriterLxml and GEXFWriter also accept the policy at construction and use it for graphs added later. Keep current positional arguments, decorators, backend dispatch and aliases compatible.\n\nThe policy is None or a Mapping whose only allowed keys are graph, node and edge. Each value is None or an iterable of string attribute names. None and an omitted scope mean unrestricted attributes in that scope; an empty iterable excludes all user attributes in that scope. An empty mapping behaves like None. A string/bytes value is not an iterable of names for this API. Reject a non-mapping policy, an invalid scope value or a non-string name with TypeError, and an unknown scope with ValueError. Normalize each provided iterable once so generators work for all nodes and edges, and never mutate the caller's policy or attribute dictionaries. The policy applies to the attribute names before any format-specific name conversion.\n\nApply this consistently at the graph, node and edge attribute serialization points. Formats continue exporting only the attributes and structures they normally support. Required structural identifiers, source/target endpoints, multigraph edge keys, directedness, tree child structure, schema declarations and format bookkeeping must remain valid when every scope is empty. Preserve custom structural-name parameters in the JSON formats. GEXF graph mode/time-format bookkeeping remains valid. Optional user metadata such as labels, weights, viz data and arbitrary properties follows the selected scope; when a format requires a structural label or ID, use its normal fallback if an excluded optional attribute supplied it. GraphML's explicitly requested edge_id_from_attribute still selects the structural edge ID even if that attribute is excluded from the edge data payload.\n\nHandle graph-level node_default and edge_default dictionaries according to their respective node/edge policies, so excluded defaults cannot leak into GraphML or GEXF declarations. These are format configuration, not an unrestricted route around the filter. Excluded attributes must be discarded before unsupported-value validation, numeric inference, key registration or value conversion; an excluded object-valued attribute must not make a valid filtered XML export fail. Keep existing value types for attributes that remain. Do not filter final JSON/XML strings, mask values globally, mutate then restore the graph, or make a full graph copy just to remove attributes. A shared small policy-normalization helper is appropriate, while serializers retain their format-specific responsibilities and existing streaming behavior.\n\nCover Graph, DiGraph, MultiGraph and MultiDiGraph wherever each existing exporter supports them; self-loops, parallel edges, isolates, graph views, Unicode values and consecutive exports with different policies must work without cross-export state. Generator functions, file writers, compressed paths supported by the existing decorators, pure-Python GraphML, lxml GraphML, and reusable writer objects must agree. Tree export retains its existing directed-tree restrictions. The default must remain fully backward compatible.\n\nAdd focused tests in the relevant existing serializer test modules and an integration test covering cross-format parity, graph immutability, None/missing/empty policies, invalid policies, one-shot allowlist iterables, reserved structural fields, defaults, unsupported excluded values, writer-object reuse and file/generator parity. Update all affected public docstrings and the read/write documentation with runnable examples and the distinction between topology and selected attributes. Run the full available project suite and appropriate formatting checks, fix introduced regressions, and report remaining limitations accurately. Complete the feature throughout the listed interfaces, making routine implementation choices autonomously."
+}
