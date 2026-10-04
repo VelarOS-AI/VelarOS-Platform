@@ -210,6 +210,6 @@ Node 的模型展示省略空运行时分区与内部统计，完整帧继续用
 
 ## INV-88 原生 Shell 与 Node 工具的完整接纳
 
-支持原生工具的 Node 业务会话声明 shell/node，参数合同由 NativeExecutionInput 正式类型生成。完整模型响应结束并验收全部调用后才执行任何动作；响应中断、重复身份或任意非法参数不产生前序效果。调用与持久回执按 executionId 配对，assistant 原文与配对记录保持来源绑定；完整历史可恢复供应商工具消息，摘录或退卡只交中立文本。取消、重启和跨轮接续不重放已接受源码，能力授权与真实失败保持原有边界。原生执行采用宿主 `protocol.defaultRetain`，与文本执行共用 segment、task 和有限曝光期限；模型参数继续只有 code。
+支持原生工具的 Node 业务会话声明 shell/node，参数合同由 NativeExecutionInput 正式类型生成。完整模型响应结束并验收全部调用后才执行任何动作；响应中断、重复身份或任意非法参数不产生前序效果。调用与持久回执按 executionId 配对，assistant 原文与配对记录保持来源绑定；完整响应仍在历史时，同批已展示结果正文通过 toolResult 绑定相应调用，标准驱动将正文原样交回且不重复发送，逻辑历史与交付证明保持一致。响应摘录或退卡只交中立文本。取消、重启和跨轮接续不重放已接受源码，能力授权与真实失败保持原有边界。原生执行采用宿主 `protocol.defaultRetain`，与文本执行共用 segment、task 和有限曝光期限；模型参数继续只有 code。
 
 验证：`test/node-runtime.test.mjs` 的原生 Shell/Node、跨存储重开、完整响应拒绝与取消恢复；Model `test/native-tools.test.ts` 的 Responses/Chat 往返、调用回执拒绝、截断与工具指纹。

@@ -44,7 +44,7 @@
 | INV-21 | 更新器：大小与 SHA-256 核对通过才落位，安装经原子改名，健康检查失败回滚指针 | 测试 | `spec/acceptance.test.ts` |
 | INV-22 | 模块 API 版本、协议版本只从常量表引用，不复制数字 | 门禁 | `check:kernel-arch` |
 | INV-23 | `KernelModulePermissionRequest` 没有 `callerModuleId` 字段 | 类型 | `src/types/kernel.ts::KernelModulePermissionRequest` |
-| INV-24 | 供应商延续状态封套有界并保持为 assistant 历史的独立字段，正文编码不会把不透明数据拼成模型材料 | 测试 | `spec/model-continuation.test.ts` |
+| INV-24 | 供应商延续状态封套有界并保持为 assistant 历史的独立字段，正文编码不会把不透明数据拼成模型材料；原生结果正文的可选绑定只匹配前一条 assistant 的真实调用，拒绝重复、越界、错名和非文本正文，逻辑历史与原文保持完整 | 测试 | `spec/model-continuation.test.ts` |
 | INV-25 | 调用诊断独立冻结且有界，超长显式标记；成功、处理器失败、输出校验失败均保存诊断，同号重放不重复执行，不据诊断修改成败或效果 | 测试 | `spec/operation-diagnostics.test.ts` |
 
 ## INV-26 取消观察与真实生命周期分离

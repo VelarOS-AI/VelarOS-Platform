@@ -550,6 +550,27 @@ export class RecentContext implements RecentContextApi {
       if (message?.role !== 'assistant' || items[index]?.representation !== 'full') continue
       if (message.content !== native.body) continue
       messages[index] = { ...message, toolExchange: native.exchange }
+      const nextAssistant = items.findIndex(
+        (item, next) => next > index && item.role === 'assistant'
+      )
+      for (const result of native.exchange.results) {
+        if (!isPlainObject(result.output) || !isString(result.output.resultRef)) continue
+        const resultRef = result.output.resultRef
+        const outputIndex = items.findIndex(
+          (item, next) =>
+            next > index &&
+            (nextAssistant < 0 || next < nextAssistant) &&
+            item.ref === resultRef &&
+            item.role === 'user' &&
+            item.bodyIncluded
+        )
+        const output = messages[outputIndex]
+        if (output?.role !== 'user' || !isString(output.content)) continue
+        messages[outputIndex] = {
+          ...output,
+          toolResult: { callId: result.id, toolName: result.name },
+        }
+      }
     }
     // 需要显式断点的供应商：在第一个仍有租约的结果之前的 user 结果结尾另留一处断点，
     // 后续帧仍能通过隐式的早期消息边界查到旧缓存点。

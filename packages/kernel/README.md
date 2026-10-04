@@ -149,3 +149,4 @@ await client.dispose()
 - 远程节点装配顺序固定：`createRemoteNodeClient(...).connect()` 拿清单 → `createRemoteNodeProjection` 投影成本地代理模块 → `createRemoteNodeIsolationAdapter` 作为 `isolationAdapters` 交给内核，再登记投影出的模块；清单变更时从投影起整份重来。
 - 远程调用失败先看错误的 `resultUnknown`：为真表示调用已经上线却拿不到终态，重试可能造成第二次副作用。
 - `ModelContinuation` 把供应商延续状态与 assistant 正文分开传递；`modelRequestEncoder.continuation` 核对有界封套，具体格式由对应模型驱动解释。
+- `ModelUserMessage.toolResult` 可将宿主展示的纯文本绑定到前一条 assistant 原生调用；编码器核对调用身份、名称和唯一性，标准模型驱动将正文放入工具回包，原逻辑历史仍可用于容量和交付核验。

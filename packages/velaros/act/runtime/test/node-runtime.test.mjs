@@ -336,6 +336,12 @@ test('native Shell/Node calls execute after acceptance and recover matched histo
   assert(!events.some((event) => event.type === 'error'), JSON.stringify(events))
   assert.deepEqual(JSON.parse(await readFile(join(f.cwd, 'answer.json'), 'utf8')), { answer: 42 })
   assert.equal(requests[2].history.filter((message) => message.toolExchange).length, 2)
+  const nodeResult = requests[2].history.find(
+    (message) => message.toolResult?.callId === 'call_node'
+  )
+  assert(nodeResult, 'the delivered output must identify its native tool call')
+  assert.equal(nodeResult.toolResult.toolName, 'node')
+  assert.match(nodeResult.content, /42/)
   const nodeSource = requests[2].history.find(
     (message) => message.toolExchange?.calls[0]?.id === 'call_node'
   ).toolExchange.calls[0].input.code
@@ -358,6 +364,10 @@ test('native Shell/Node calls execute after acceptance and recover matched histo
   for await (const event of session.submit('确认收到')) assert.notEqual(event.type, 'error')
   assert(
     requests.at(-1).history.some((message) => message.toolExchange?.calls[0]?.id === 'call_node')
+  )
+  assert(
+    requests.at(-1).history.some((message) => message.toolResult?.callId === 'call_node'),
+    'the binding must be reconstructed after reopening the session'
   )
 })
 

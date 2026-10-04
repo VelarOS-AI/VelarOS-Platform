@@ -50,9 +50,22 @@ export function restoreResponseContinuations(
   id: string
 ): { messages: ModelMessage[]; opaqueTokens: number } {
   let opaqueTokens = 0
-  const restored = markPromptCacheBreakpoints(messages).flatMap((base, index): ModelMessage[] => {
+  const marked = markPromptCacheBreakpoints(messages)
+  const restored = marked.flatMap((base, index): ModelMessage[] => {
     const source = messages[index]!
+    if (source.role === 'user' && source.toolResult) return []
     const exchange = source.role === 'assistant' ? source.toolExchange : undefined
+    const bodies = new Map<string, { content: string; index: number }>()
+    if (exchange)
+      for (let next = index + 1; next < messages.length; next++) {
+        const following = messages[next]!
+        if (following.role === 'assistant') break
+        if (following.toolResult && isString(following.content))
+          bodies.set(following.toolResult.callId, { content: following.content, index: next })
+      }
+    const breakpoint = [...bodies.values()]
+      .reverse()
+      .find((item) => messages[item.index]?.cacheBreakpoint)
     let message: ModelMessage = exchange
       ? {
           ...base,
@@ -74,11 +87,14 @@ export function restoreResponseContinuations(
             message,
             {
               role: 'tool',
+              ...(breakpoint ? { providerOptions: marked[breakpoint.index]!.providerOptions } : {}),
               content: exchange.results.map((item) => ({
                 type: 'tool-result',
                 toolCallId: item.id,
                 toolName: item.name,
-                output: { type: 'json', value: item.output as JSONValue },
+                output: bodies.has(item.id)
+                  ? { type: 'text', value: bodies.get(item.id)!.content }
+                  : { type: 'json', value: item.output as JSONValue },
               })),
             },
           ]

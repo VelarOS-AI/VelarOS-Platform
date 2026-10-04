@@ -15,6 +15,8 @@ export interface ModelUserMessage {
     | Array<{ type: 'text'; text: string } | { type: 'image'; image: string; mediaType: string }>
   /** 供应商缓存到这条消息为止的前缀；需要显式断点的供应商使用，其余忽略。 */
   cacheBreakpoint?: boolean
+  /** 本文是前一条 assistant 原生调用的结果展示；驱动将原样正文放入对应工具回包。 */
+  readonly toolResult?: { readonly callId: string; readonly toolName: string }
 }
 /** 供应商响应的不可解释延续状态；只能随原始完整响应回传给匹配的驱动。 */
 export interface ModelContinuation {

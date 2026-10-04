@@ -103,4 +103,5 @@ const ollamaBaseURL = modelCatalog.resolveOllamaBaseURL('http://localhost:11434'
 - 内置 OpenAI Responses 收齐 `response.completed`、`response.incomplete` 或 `response.failed` 的完整 SSE 事件后结束 SDK 输入，由 SDK 按原有规则生成 usage、continuation 和最终状态；不再等待连接的无关尾流。正文原字节保持，只在终端以 CR 结束时补 LF，形成等价 SSE 分隔符。半帧和普通文本完成事件不算响应终端，单个事件超过 16 MiB 时明确失败；取消清理失败或悬挂不能改变已完整交付的终端事实。
 
 - `createAiSdkModelDriver` 声明 `nativeTools: true`，将 `response.type: 'tools'` 的正式 schema 交给 SDK，完整调用以 `tool-call` 事件返回；执行由上层完整响应验收后派发。配对的 `toolExchange` 以供应商原生 assistant/tool 消息回传，调用与回执身份、数量和顺序必须相符。请求快照与指纹包含工具定义。
+- 历史正文的 `toolResult` 标记将已展示文本直接绑定到前一条 assistant 的调用。标准驱动将原样正文放入对应工具回包，保留缓存断点并只发送一次；没有绑定正文的调用继续使用归档回执。逻辑历史、原文与容量编译仍由宿主维护。
 - `ModelInputEstimate.composition` 给出估算编码文本的 UTF-8 字节分项：系统指令、工具、assistant 历史、user 历史、工具回执、当前材料和包装；各项相加等于 total。图片和不透明推理另外预留容量，费用继续使用供应商真实用量。

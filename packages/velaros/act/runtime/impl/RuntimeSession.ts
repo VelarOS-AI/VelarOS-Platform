@@ -2044,7 +2044,7 @@ export class RuntimeSession implements VelarosSession {
         const execution = receipt?.executions?.find(
           (item) => item.executionId === identities[index]
         )
-        // 详细输出已由现有结果记录送达；工具回执只传真实状态和归档引用，避免复制输出。
+        // 持久回执保存状态和归档身份；组帧时按已展示正文绑定工具回包，避免在此复制大输出。
         const output =
           execution && 'resultRef' in execution
             ? {

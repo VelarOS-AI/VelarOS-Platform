@@ -51,8 +51,11 @@ export function markPromptCacheBreakpoints(
   messages: readonly ModelHistoryMessage[]
 ): ModelMessage[] {
   return messages.map(({ cacheBreakpoint, ...source }) => {
-    const message =
-      source.role === 'assistant' ? { role: source.role, content: source.content } : source
+    let message: ModelMessage
+    if (source.role === 'user') {
+      const { toolResult: _toolResult, ...user } = source
+      message = user
+    } else message = { role: source.role, content: source.content }
     return cacheBreakpoint
       ? {
           ...message,

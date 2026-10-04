@@ -114,15 +114,27 @@ export function driverModelMessages(request: ModelTurnRequest): ModelHistoryMess
   validateModelImages(images)
   const history = structuredClone(request.history ?? [])
   const allImages = [...images]
+  let pendingResults = new Map<string, ModelToolCall>()
   for (const message of history) {
     if (message.role === 'assistant') {
+      pendingResults = new Map()
       if (!isString(message.content)) throw new AppError('VALIDATION', 'assistant 历史只能包含文本')
       if (!isUndefined(message.continuation)) driverModelContinuation(message.continuation)
-      if (!isUndefined(message.toolExchange)) driverModelToolExchange(message.toolExchange)
+      if (!isUndefined(message.toolExchange))
+        pendingResults = new Map(
+          driverModelToolExchange(message.toolExchange).calls.map((call) => [call.id, call])
+        )
       continue
     }
     if (message.role !== 'user')
       throw new AppError('VALIDATION', '历史角色必须为 user 或 assistant')
+    if (!isUndefined(message.toolResult)) {
+      const binding = message.toolResult
+      const call = isPlainObject(binding) ? pendingResults.get(binding.callId) : undefined
+      if (!call || call.name !== binding.toolName || !isString(message.content))
+        throw new AppError('VALIDATION', '工具结果正文必须与前一条响应的调用唯一配对')
+      pendingResults.delete(call.id)
+    }
     if (isString(message.content)) continue
     for (const part of message.content) {
       if (part.type === 'text') {
