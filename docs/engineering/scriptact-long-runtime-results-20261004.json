@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "evidence": "development attempts and four frozen independent holdouts; per-attempt qualifications apply",
+  "evidence": "development attempts and five frozen independent holdouts; per-attempt qualifications apply",
   "attempts": [
     {
       "attempt": "rich-01",
@@ -2438,6 +2438,168 @@
             "nativeRequests": 36,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          }
+        }
+      }
+    },
+    {
+      "attempt": "jinja-01",
+      "schema": 1,
+      "at": "2026-10-04T22:00:00.966Z",
+      "taskId": "jinja-render-lifecycle-observer",
+      "scriptactSessionId": "scriptact-5d8e0e82-e52a-43fc-96c7-a7fe0ff06861",
+      "candidateId": "candidate-v12-592be6dc6b1b",
+      "candidateSourceCommit": "3ad7813b92231f0f3e2845d6e919e38c90a9f3fe",
+      "candidateSourceDirty": false,
+      "split": "holdout",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 25,
+            "startedAt": 1791149800923,
+            "solveMs": 420646
+          },
+          "accounting": {
+            "requests": 25,
+            "requestStatuses": {
+              "http-200": 24,
+              "unknown": 1
+            },
+            "measuredRequests": 24,
+            "missingUsageRequests": 1,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 481092,
+            "knownOutputTokens": 14013,
+            "knownCachedInputTokens": 163584,
+            "knownCacheRatio": 0.3400264398493427,
+            "pricedRequests": 24,
+            "knownReferenceUsd": 1.6157256,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 73,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "73 passed in 0.10s",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 909,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "909 passed in 0.83s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": true,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 4,
+          "createdFiles": 1,
+          "changeSummary": "33\t0\tdocs/api.rst\n1\t0\tsrc/jinja2/__init__.py\n141\t37\tsrc/jinja2/environment.py\n30\t13\tsrc/jinja2/nativetypes.py\n",
+          "created": "tests/test_render_observer.py\n",
+          "execution": {
+            "mainRequests": 22,
+            "branchRequests": 3,
+            "requestOwners": {
+              "scriptact-5d8e0e82-e52a-43fc-96c7-a7fe0ff06861": 22,
+              "context:219736d8-6666-4168-9fb9-ab2e43c00860": 3
+            },
+            "contextSegments": 2,
+            "nativeRequests": 25,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791150225403,
+            "finishedAt": 1791151184276,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a108df-7826-7a53-b05f-0c1a84a2ed72",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 193,
+            "solveMs": 958873
+          },
+          "accounting": {
+            "requests": 61,
+            "requestStatuses": {
+              "http-200": 58,
+              "http-200-interrupted": 3
+            },
+            "measuredRequests": 58,
+            "missingUsageRequests": 3,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1371651,
+            "knownOutputTokens": 36890,
+            "knownCachedInputTokens": 1051264,
+            "knownCacheRatio": 0.7664223625397423,
+            "pricedRequests": 58,
+            "knownReferenceUsd": 2.4398535999999997,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 73,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "73 passed in 0.12s",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 909,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "909 passed in 0.87s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": true,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 11,
+          "createdFiles": 0,
+          "changeSummary": "64\t1\tdocs/api.rst\n1\t0\tsrc/jinja2/__init__.py\n173\t30\tsrc/jinja2/environment.py\n34\t18\tsrc/jinja2/nativetypes.py\n201\t0\ttests/test_api.py\n113\t0\ttests/test_async.py\n18\t0\ttests/test_debug.py\n22\t0\ttests/test_imports.py\n20\t0\ttests/test_loader.py\n14\t0\ttests/test_nativetypes.py\n12\t0\ttests/test_security.py\n",
+          "created": "",
+          "execution": {
+            "rootThreadId": "01a108df-7826-7a53-b05f-0c1a84a2ed72",
+            "compactions": 8,
+            "childAgentDispatches": 0,
+            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T05-43-45-01a108df-7826-7a53-b05f-0c1a84a2ed72.jsonl"
           }
         }
       }
