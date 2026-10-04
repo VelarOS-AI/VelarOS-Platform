@@ -113,6 +113,8 @@ export interface CompletedCall {
  * 返回值没了，日志是唯一能说明「走到哪一步、拿到了什么」的东西。
  */
 export interface CodeProgramResult {
+  /** 标准 Node 执行的退出状态与有界输出。 */
+  process?: NodeProcessReceipt
   /**
    * 程序导出的东西：只有 `export default` 时就是它；有具名导出时是 `{ default?, 名字: 值… }`（跟 `import * as m` 同形）。
    * 什么都没导出、或者没跑完时没有这一格。
@@ -226,3 +228,39 @@ export type CodeProgramEditResult =
       readonly message: string
       readonly editIndex?: number
     }
+
+/** 标准 Node 子进程的宿主请求。 */
+export interface NodeProcessRequest {
+  readonly source: string
+  readonly cwd: string
+  /** 仅本次进程的能力桥地址、凭据与目录。 */
+  readonly environment: Readonly<Record<string, string>>
+  /** 调用身份由 Kernel 会话写入，子任务不能冒用父会话。 */
+  readonly sessionId?: string
+  readonly executionId?: string
+}
+
+/** 宿主在进程及其后代收束之后返回的真实结果。 */
+export interface NodeProcessResult {
+  readonly exitCode: Nullable<number>
+  readonly signal: Nullable<string>
+  readonly stdout: string
+  readonly stderr: string
+  readonly aborted?: boolean
+  readonly timedOut?: boolean
+  readonly cleanupIncomplete?: boolean
+  readonly truncated?: boolean
+  readonly confinement?: {
+    readonly mode: string
+    readonly enforcement: string
+    readonly reason: string
+  }
+}
+
+/** 包含失败现场的模型回执；进程成功退出不代替任务验收。 */
+export interface NodeProcessReceipt extends NodeProcessResult {
+  readonly launched: boolean
+  readonly logPath: string
+  readonly logBytes: number
+  readonly logTruncated: boolean
+}

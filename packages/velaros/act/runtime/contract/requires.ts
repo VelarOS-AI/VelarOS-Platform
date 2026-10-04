@@ -17,14 +17,18 @@ import type {
   PreparedInvocation,
 } from '@velaros-ai/kernel'
 import type { ModelAdapterConfig, ModelDriver, ModelDriverLimits } from '@velaros-ai/model'
-import type { CodeProgramRequest, CodeRunnerApi } from '@velaros-ai/script'
+import type { CodeProgramRequest, CodeRunnerApi, NodeCodeRunnerOptions } from '@velaros-ai/script'
 import type { WidgetHost } from '@velaros-ai/velaros/act/agents'
 import type { VelarosSearchOptions } from '@velaros-ai/velaros/act/search'
 import type { StoreConfiguration } from '@velaros-ai/velaros/act/system'
 import type { ImageSpacePort } from '@velaros-ai/velaros/images'
 import type { MemoryScopePort } from '@velaros-ai/velaros/memory'
 import type { ProjectCodeIndexApi, ProjectSpacePort } from '@velaros-ai/velaros/project'
-import type { ShellOperationContext, ShellSpacePort } from '@velaros-ai/velaros/shell'
+import type {
+  ShellHostPort,
+  ShellOperationContext,
+  ShellSpacePort,
+} from '@velaros-ai/velaros/shell'
 
 import type { McpClientConnectionApi } from '../impl/McpClientConnection.js'
 import type { McpToolDescriptor, McpTransportKind } from '../types/mcp.js'
@@ -252,12 +256,32 @@ export interface VelarosRuntimeOptions {
   readonly storage?: ContextStorage
   /** 显式注入隔离执行器。 */
   readonly runner?: CodeRunnerApi
+  /** 标准 Node 业务执行环境；维护与观察仍使用受限 runner。 */
+  readonly node?: NodeCodeRunnerOptions
   /** 宿主挂载的领域模块；标准模块由运行时提供。 */
   readonly modules?: readonly OperationModuleDefinition[]
   /** 使用共享驱动接入模型；纯脚本宿主可以不给。 */
   readonly model?: ModelDriver | RuntimeModelConfiguration
   /** 覆盖明确的回合和上下文预算。 */
   readonly limits?: Partial<ActRunLimits>
+}
+
+/** 通过已授权的 Shell 宿主启动标准 Node 业务进程。 */
+export interface ShellNodeEnvironmentOptions {
+  /** 标准进程的绝对工作目录。 */
+  readonly cwd: string
+  /** 执行日志与能力目录的宿主存储位置。 */
+  readonly directory: string
+  /** 沿用当前工作区授权与约束的命令宿主。 */
+  readonly shell: ShellHostPort
+  /** 真实 Node 可执行文件；Electron 宿主提供随产品分发的独立 Node 路径。 */
+  readonly executable?: string
+  /** 本次原生进程的宿主环境覆盖。 */
+  readonly environment?: Readonly<Record<string, string | undefined>>
+  /** 在启动前审批本次源码，拒绝时不派发。 */
+  readonly authorize?: NodeCodeRunnerOptions['authorize']
+  /** 宿主脚本卡使用本次执行身份显示实时输出。 */
+  readonly output?: (output: ShellInvocationOutput) => void
 }
 
 /** 在同一 Kernel 注册 Shell 的正常执行及受限观察实现。 */
@@ -332,6 +356,8 @@ export interface McpConnectionOptions {
  * 写入与共享空间跟父任务一样，不用另外授权。
  */
 export interface AgentProfile {
+  /** 显式继承父任务的标准 Node 操作系统范围；能力目录仍受 modules 白名单约束。 */
+  readonly node?: boolean
   /** 给主模型选择配置时看的任务用途。 */
   readonly description?: string
   /** 子任务模型总额度；仍受全部祖先的剩余总额约束。 */

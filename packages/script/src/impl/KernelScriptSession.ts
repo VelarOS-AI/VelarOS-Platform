@@ -19,6 +19,7 @@ import { describeProgramOversize } from '../utils/result.js'
 import { codeProgramChecker } from './CodeProgramChecker.js'
 import { createCodeSurfaceSession } from './CodeSurfaceSession.js'
 import { KernelInvocationPort } from './KernelInvocationPort.js'
+import { nodeProgramChecker } from './NodeProgramChecker.js'
 import { scriptPackageCompiler } from './ScriptPackageCompiler.js'
 
 /** 在同一个 Kernel 上检查并运行脚本的入口。 */
@@ -109,6 +110,8 @@ class KernelScriptSession implements KernelScriptSessionApi {
   public check(program: CodeProgramRequest): CodeProgramCheckResult {
     const oversized = describeProgramOversize(program.source, program.blobs, program.input)
     if (oversized) throw new AppError(CodeSurfaceErrorCodes.tooLarge, oversized)
+    if (this.options.runner.environment === 'node')
+      return nodeProgramChecker.check({ ...program, granted: [] })
     const imported = new Set(
       [program.source, ...Object.values(program.modules ?? {})].flatMap(readModuleSpecifiers)
     )
@@ -147,6 +150,27 @@ class KernelScriptSession implements KernelScriptSessionApi {
       if (imported.has(pkg.specifier))
         for (const target of Object.values(pkg.exports)) imported.add(target)
     const port = new KernelInvocationPort(this.options, imported)
+    if (this.options.runner.environment === 'node') {
+      const modules = Object.fromEntries(
+        Object.keys(port.listOperations()).map((namespace) => {
+          const description = this.options.runtime.describe(namespace)
+          return [
+            namespace,
+            { summary: description.summary, declarations: description.declarations },
+          ]
+        })
+      )
+      return createCodeSurfaceSession({
+        checker: nodeProgramChecker,
+        runner: this.options.runner,
+        capabilities: port,
+      }).submit({
+        program,
+        signal,
+        granted: [],
+        host: { sessionId: this.options.sessionId, executionId: this.options.executionId, modules },
+      })
+    }
     const surface = scriptPackageCompiler.compile(
       this.options.packages ?? [],
       Object.keys(port.listOperations()).map((namespace) => ({

@@ -1,4 +1,5 @@
 /** 批量定位：正文连续展示，工具计算边界，歧义明确交给调用方选择。 */
+import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { ProjectFileLimits } from '../../contract/constants.js'
@@ -29,13 +30,11 @@ import { loadSelection, saveSelection, selectionRef } from './selection-refs.js'
 
 /** 定位失败保持原因码与下一步；取消或未知宿主故障不冒充普通缺口。 */
 function issueAt(error: unknown, index: number): ProjectSelectIssue {
-  if (error instanceof ProjectError)
-    return {
-      index,
-      code: error.reason,
-      message: error.message,
-      ...(error.suggestedNextAction ? { next: error.suggestedNextAction } : {}),
-    }
+  if (error instanceof ProjectError) {
+    const issue: ProjectSelectIssue = { index, code: error.reason, message: error.message }
+    if (error.suggestedNextAction) issue.next = error.suggestedNextAction
+    return issue
+  }
   if (error instanceof AppError && ['PERMISSION', 'NOT_FOUND', 'VALIDATION'].includes(error.code))
     return {
       index,
@@ -164,7 +163,7 @@ export async function selectSources(
               span.end <= record.end
           )
       } else spans = matchSpans(source, record, request.match)
-      if (!spans.length)
+      if (isEmpty(spans))
         throw new ProjectError(
           'TARGET_NOT_FOUND',
           '在指定范围内没有精确目标。',
@@ -233,9 +232,12 @@ export async function selectSources(
           message: `找到 ${found.length} 个精确目标，请明确选择候选 target。`,
           candidates: found,
         })
+      // @arch-guard:suspend code-style/require-error-logging 理由：已知领域异常转为 issues 回执；issueAt 将未知异常重抛。
     } catch (error) {
       issues.push(issueAt(error, index))
     }
   }
-  return { targets, ...(issues.length ? { issues } : {}) }
+  const result: ProjectSelectResult = { targets }
+  if (!isEmpty(issues)) result.issues = issues
+  return result
 }

@@ -62,6 +62,10 @@ export interface ActExecutionFailure {
 
 /** 本回合响应派发的一段 execute；状态由持久结果与调用回执推出，宿主不必解析内部记录。 */
 export interface ActExecutionSummary {
+  /** 原生进程的退出状态、日志路径与有界输出；与 Kernel 调用回执分开。 */
+  readonly processOutput?: string
+  /** 原生进程输出是否被本页正文预算裁剪。 */
+  readonly processOutputTruncated?: boolean
   /** 执行身份，与 invocations[].executionId 对应。 */
   readonly executionId: string
   /** 在本回合响应的 execute 声明里排第几，从 0 起；同一回合的第几个 execute 程序事件与它对应。 */

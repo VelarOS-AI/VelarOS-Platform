@@ -41,4 +41,4 @@
 
 下一份执行清单必须纳入 `runtime_artifacts.py` 和全部改动的执行文件，新的 bundle 会纳入 `trace-export.mjs`。旧清单、bundle 和原始成绩对应原版本。
 
-本地验收：90 项输出/编辑测试、129 项 Runtime 测试、30 项受控评测宿主测试、59 项 Python 回归，共 308 项通过；包构建、模块所有权、生成合同、Act 目录和错误构造检查通过。证据目录为 [retrospective-49](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-49)，关键记录为 `abi-probe.json`、`trace-replay.json`、`unknown-usage-audit.json`、`review.json`、`final-checks.json`。
+本地验收：90 项输出/编辑测试、129 项 Runtime 测试、30 项受控评测宿主测试、59 项 Python 回归，共 308 项通过；包构建、模块所有权、生成合同、Act 目录和错误构造检查通过。证据目录为 retrospective-49（`.velaros-workspace/bench/retrospective-49`），关键记录为 `abi-probe.json`、`trace-replay.json`、`unknown-usage-audit.json`、`review.json`、`final-checks.json`。

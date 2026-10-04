@@ -1,8 +1,30 @@
 # @velaros-ai/script
 
-模型写的 JavaScript 程序在这里检查、精确编辑和隔离运行：先查 JavaScript 语法、核对每个 import 都在当前能力声明里，没过一行不执行（类型不查，字段写错由运行时当场报）；过了就在 QuickJS 子进程里跑，每次能力调用都经同一个 Kernel 的权限、效果分类与回执。给装配会话的宿主用；模型面的 `script` 入口、源码版本与结果租约由 `@velaros-ai/velaros` 装配。
+JavaScript 执行、语法检查与 Kernel 能力桥。宿主可配置标准 Node 环境，让模型使用标准库、工作区依赖和普通文件；受限维护任务使用 QuickJS 能力环境。两种环境共用调用授权、取消与有界结果。
 
 ## 用法
+
+标准 Node 由宿主注入已授权的进程端口：
+
+```ts
+import { createKernelScriptSession, createNodeCodeRunner, type NodeCodeRunnerOptions } from '@velaros-ai/script'
+import type { OperationRuntimeApi } from '@velaros-ai/kernel'
+
+declare const host: NodeCodeRunnerOptions
+declare const kernel: OperationRuntimeApi
+const session = createKernelScriptSession({
+  runtime: kernel, runner: createNodeCodeRunner(host),
+  sessionId: 'main', executionId: crypto.randomUUID(),
+})
+const result = await session.run({ source: `import {readdir} from 'node:fs/promises'; console.log(await readdir('.'));` })
+if (result.checked) console.log(result.result.process)
+```
+
+宿主的 `execute` 必须通过已批准的沙箱启动 Node ESM，把源码写入 stdin，并在取消时回收进程树。`authorize` 在程序计时前完成审批。能力目录由生成声明产生，地址通过 `VELAROS_HOST_DIR` 提供；客户端调用逐次经过 Kernel。输出最多归档 16 MiB，达到上限即停止；结果提供有界 stdout/stderr、退出码、日志路径，失败时同样保留。
+
+Node 标准库的文件和网络操作由操作系统范围约束，宿主批准的是整段程序。Kernel 的逐操作审批适用于能力桥调用；任意 Node 语句的效果不能由静态语法检查推断。需要逐条能力审计的受控任务由宿主选择受限执行器。
+
+受限能力环境的使用方式：
 
 ```ts
 import type { OperationRuntimeApi } from '@velaros-ai/kernel'

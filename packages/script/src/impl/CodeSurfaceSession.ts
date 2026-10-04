@@ -22,6 +22,7 @@ import type {
   CodeSurfaceEventSink,
 } from '../contract/requires.js'
 import type { CodeAttachment, CodeSurfaceOutcome } from '../types/outcome.js'
+import type { CodeRunRequest } from '../types/runner.js'
 import type { CodeCallNotice, CodeProgramRequest, CompletedCall } from '../types/script.js'
 import type { GrantedModule, ScriptPackageDefinition } from '../types/script.js'
 import { fitAttachmentsToBudget } from '../utils/budget.js'
@@ -50,6 +51,7 @@ export interface CodeSurfaceSessionApi {
     /** 宿主编译的包投影，与 granted 同源。 */
     packages?: readonly ScriptPackageDefinition[]
     timeoutMs?: number
+    host?: CodeRunRequest['host']
     signal?: AbortSignal
   }): Promise<CodeSurfaceOutcome>
 }
@@ -67,6 +69,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     granted: readonly GrantedModule[]
     packages?: readonly ScriptPackageDefinition[]
     timeoutMs?: number
+    host?: CodeRunRequest['host']
     signal?: AbortSignal
   }): Promise<CodeSurfaceOutcome> {
     const { program } = input
@@ -109,19 +112,23 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     const attachments: CodeAttachment[] = []
     let calls = 0
     // 原生模块链接前仅做类型剥离与引擎 namespace 重导出兼容降级。
-    const normalized = normalizeNamespaceReexports(
-      checked.transpiled ?? source,
-      program.path ?? 'program.js',
-      Object.fromEntries(
-        Object.entries(program.modules ?? {}).map(([path, text]) => [
-          path,
-          checked.wroteTypeScript ? stripTypes(text) : text,
-        ])
-      )
-    )
+    const normalized =
+      this.runner.environment === 'node'
+        ? { source, modules: program.modules ?? {} }
+        : normalizeNamespaceReexports(
+            checked.transpiled ?? source,
+            program.path ?? 'program.js',
+            Object.fromEntries(
+              Object.entries(program.modules ?? {}).map(([path, text]) => [
+                path,
+                checked.wroteTypeScript ? stripTypes(text) : text,
+              ])
+            )
+          )
     const executionStartedAt = Date.now()
     const outcome = await this.runner.run(
       {
+        host: input.host,
         source: normalized.source,
         path: program.path,
         modules: normalized.modules,
@@ -130,7 +137,10 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
         operations: this.capabilities.listOperations(),
         packages: input.packages,
         timeoutMs: Math.min(
-          input.timeoutMs ?? CodeSurfaceTuning.defaultTimeoutMs,
+          input.timeoutMs ??
+            (this.runner.environment === 'node'
+              ? CodeSurfaceLimits.timeoutMs
+              : CodeSurfaceTuning.defaultTimeoutMs),
           CodeSurfaceLimits.timeoutMs
         ),
       },

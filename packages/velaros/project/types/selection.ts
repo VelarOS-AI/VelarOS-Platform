@@ -55,7 +55,7 @@ export interface ProjectPatchEdit {
 /** @AgentView 增量修正失败计划的一项：index 是原始 edits 的下标；edit 为 null 明确移除此项，其余项不变。 */
 export interface ProjectPatchAmendment {
   index: number
-  edit: ProjectPatchEdit | null
+  edit: Nullable<ProjectPatchEdit>
 }
 
 /** @AgentView 一次最多 1000 项，同文件各项基于同一原文一次拼接，整个批次一个事务，缺省最多 100 个文件。receipt 缺省 summary；full 获取完整差量和变更窗口。blocked 的 planRef 可用 amendments 修正，无需重新发送正确项；版本冲突必须重新定位，不自动模糊应用。 */
@@ -120,6 +120,6 @@ export interface ProjectStructureSpan {
 
 /** 未提交的可增量修正计划；null 保留原下标。 */
 export interface ProjectPatchDraft {
-  edits: Array<ProjectPatchEdit | null>
+  edits: Array<Nullable<ProjectPatchEdit>>
   receipt: 'summary' | 'full'
 }

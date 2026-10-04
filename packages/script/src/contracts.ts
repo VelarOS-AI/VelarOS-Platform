@@ -47,3 +47,4 @@ export type {
   ScriptModuleExportsSlice,
   ScriptModuleIndex,
 } from './types/script.js'
+export type { NodeProcessReceipt, NodeProcessRequest, NodeProcessResult } from './types/script.js'

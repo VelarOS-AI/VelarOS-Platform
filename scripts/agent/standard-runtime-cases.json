@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "dev-money",
+      "split": "development",
+      "prompt": "修复 money.mjs 的 sumAmounts：输入为带正负号的十进制金额字符串，返回精确的整数分总额；0.1 与 0.20 应得到 30。保留导出名，验证负数和空列表。",
+      "files": {
+        "money.mjs": "export function sumAmounts(values) { return values.reduce((sum,value)=>sum+Number(value),0)*100 }\n"
+      },
+      "grade": "const {sumAmounts:f}=await import('./money.mjs'); assert.equal(f(['0.1','0.20']),30); assert.equal(f(['12.34','-0.34','-1.01']),1099); assert.equal(f([]),0); assert.equal(f(Array(1000).fill('0.01')),1000);"
+    },
+    {
+      "id": "dev-csv",
+      "split": "development",
+      "prompt": "读取 input.csv，按 team 汇总 amount（整数分）；忽略 status=void 的行。输出 totals.json，按 team 的 Unicode 码点顺序排序，内容为 [{team,totalCents}]。CSV 中的引号、逗号和字段内换行都有效，请正确处理。",
+      "files": {
+        "input.csv": "team,amount,status\n\"A, East\",120,ok\nB,75,ok\n\"A, East\",-20,ok\nB,999,void\n\"C\nWest\",40,ok\n\"C\nWest\",2,ok\n"
+      },
+      "expected": {
+        "totals.json": [
+          {
+            "team": "A, East",
+            "totalCents": 100
+          },
+          {
+            "team": "B",
+            "totalCents": 75
+          },
+          {
+            "team": "C\nWest",
+            "totalCents": 42
+          }
+        ]
+      }
+    },
+    {
+      "id": "holdout-unicode",
+      "split": "holdout",
+      "prompt": "遍历 data 目录下所有 JSON 文件（包括子目录），合并其 records 数组。相同 id 保留 updatedAt 较新的记录；相同时保留 source 字典序较小的记录。按 id 升序输出 records.json，不改动原文件。",
+      "files": {
+        "data/中文 空格.json": "{\"records\": [{\"id\": \"b\", \"updatedAt\": \"2026-01-02T00:00:00Z\", \"source\": \"z\", \"value\": 1}, {\"id\": \"a\", \"updatedAt\": \"2026-01-01T00:00:00Z\", \"source\": \"m\", \"value\": 2}]}",
+        "data/sub/second.json": "{\"records\": [{\"id\": \"b\", \"updatedAt\": \"2026-01-02T00:00:00Z\", \"source\": \"a\", \"value\": 3}, {\"id\": \"a\", \"updatedAt\": \"2026-01-03T00:00:00Z\", \"source\": \"z\", \"value\": 4}]}"
+      },
+      "expected": {
+        "records.json": [
+          {
+            "id": "a",
+            "updatedAt": "2026-01-03T00:00:00Z",
+            "source": "z",
+            "value": 4
+          },
+          {
+            "id": "b",
+            "updatedAt": "2026-01-02T00:00:00Z",
+            "source": "a",
+            "value": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "holdout-package",
+      "split": "holdout",
+      "prompt": "工作区已有 @fixture/rolling 包。按其文档，用该包计算 numbers.json 的窗口为 3 的滚动均值，输出 result.json。必须实际调用已安装包，不重新实现算法。",
+      "files": {
+        "numbers.json": "[2,4,6,8,10,12]",
+        "node_modules/@fixture/rolling/package.json": "{\"name\":\"@fixture/rolling\",\"type\":\"module\",\"exports\":\"./index.mjs\"}",
+        "node_modules/@fixture/rolling/README.md": "rolling(values, width) returns complete trailing window averages. ESM named export.",
+        "node_modules/@fixture/rolling/index.mjs": "import {writeFileSync} from 'node:fs'; export function rolling(values,width){writeFileSync('.package-used','yes'); return values.slice(width-1).map((_,i)=>values.slice(i,i+width).reduce((a,b)=>a+b,0)/width)}"
+      },
+      "expected": {
+        "result.json": [4, 6, 8, 10]
+      },
+      "grade": "assert.equal(await readFile('.package-used','utf8'),'yes');"
+    },
+    {
+      "id": "holdout-pool",
+      "split": "holdout",
+      "prompt": "修复 pool.mjs 的 mapLimit(items, limit, fn)，在不超过 limit 的前提下并发处理，返回与输入顺序一致的结果。limit 必须是正整数，否则拒绝。fn 失败时让调用拒绝，并停止启动新任务。保留导出签名并用实际运行验证。",
+      "files": {
+        "pool.mjs": "export async function mapLimit(items,limit,fn){const result=[]; for (const item of items) result.push(await fn(item)); return result}\n"
+      },
+      "grade": "const {mapLimit}=await import('./pool.mjs'); let active=0,max=0; assert.deepEqual(await mapLimit([3,1,2,4],2,async n=>{max=Math.max(max,++active);await new Promise(r=>setTimeout(r,n*12));active--;return n*10}),[30,10,20,40]);assert.equal(max,2);await assert.rejects(()=>mapLimit([1],0,async x=>x));let count=0;await assert.rejects(()=>mapLimit([1,2,3,4],1,async()=>{count++;throw Error('fail')}));assert.equal(count,1);assert.deepEqual(await mapLimit([],2,async x=>x),[]);"
+    },
+    {
+      "id": "holdout-host",
+      "split": "holdout",
+      "prompt": "读取应用宿主提供的同组会话列表，把正在运行且不是当前会话的项目会话写到 peers.json，只保留 id/title，按 id 升序排序。通过宿主能力查询真实列表，并验证文件。",
+      "files": {},
+      "sessions": [
+        {
+          "id": "z2",
+          "title": "文档",
+          "workspace": "project",
+          "root": "/fictional/z2",
+          "site": null,
+          "running": true,
+          "self": false
+        },
+        {
+          "id": "self",
+          "title": "当前",
+          "workspace": "project",
+          "root": null,
+          "site": null,
+          "running": true,
+          "self": true
+        },
+        {
+          "id": "a1",
+          "title": "构建",
+          "workspace": "project",
+          "root": "/fictional/a1",
+          "site": null,
+          "running": true,
+          "self": false
+        },
+        {
+          "id": "b2",
+          "title": "网站",
+          "workspace": "browser",
+          "root": null,
+          "site": null,
+          "running": true,
+          "self": false
+        },
+        {
+          "id": "c3",
+          "title": "空闲",
+          "workspace": "project",
+          "root": null,
+          "site": null,
+          "running": false,
+          "self": false
+        }
+      ],
+      "expected": {
+        "peers.json": [
+          {
+            "id": "a1",
+            "title": "构建"
+          },
+          {
+            "id": "z2",
+            "title": "文档"
+          }
+        ]
+      },
+      "requiresHost": true
+    }
+  ]
+}

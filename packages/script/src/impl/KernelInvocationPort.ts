@@ -36,7 +36,7 @@ export class KernelInvocationPort implements KernelInvocationPortApi {
       const page = this.runtime.list({ offset })
       for (const item of page.items) {
         const id = item.binding.moduleId
-        if (!imported.has(id)) continue
+        if (options.runner.environment !== 'node' && !imported.has(id)) continue
         if (options.allowedModules && !options.allowedModules.includes(id)) continue
         this.bindings.set(id, this.runtime.bind(this.sessionId, id))
         operations[id] = Object.freeze([...item.operations])

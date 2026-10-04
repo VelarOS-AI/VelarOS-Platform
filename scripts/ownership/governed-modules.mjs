@@ -69,6 +69,7 @@ export const GovernedModules = [
         'RuntimeTrace.ts',
         'RecentContext.ts',
         'StandardModules.ts',
+        'ShellNodeEnvironment.ts',
         'RuntimeBootstrap.ts',
         'RuntimeWorkspaceBinding.ts',
         'EventDelivery.ts',
@@ -609,6 +610,7 @@ export const GovernedModules = [
   },
   {
     directory: 'script',
+    environmentTable: 'NodeEnvironmentVariables',
     name: '@velaros-ai/script',
     // Script 执行引擎：检查、精确编辑、隔离执行与 Kernel 能力桥；模型入口由 Velaros 装配
     contract: 'src/contract',
@@ -624,7 +626,12 @@ export const GovernedModules = [
       ['KernelScriptSession.ts', 'ScriptPackageCompiler.ts', 'ScriptOutputs.ts'],
       ['CodeSurfaceSession.ts'],
       // 执行前的检查与隔离运行器
-      ['CodeProgramChecker.ts', 'NodeSubprocessCodeRunner.ts'],
+      [
+        'CodeProgramChecker.ts',
+        'NodeProgramChecker.ts',
+        'NodeCodeRunner.ts',
+        'NodeSubprocessCodeRunner.ts',
+      ],
       ['SubprocessCodeRunner.ts', 'ScriptWorker.ts', 'NodeScriptProcess.ts'],
       // 能力转发：操作表与 Kernel 调用统一转换成脚本端口
       ['CapabilityOperationPort.ts', 'KernelInvocationPort.ts'],

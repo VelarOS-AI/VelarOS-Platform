@@ -3,6 +3,39 @@
  * 这里的数字是**对外承诺**（模型看得到、宿主按它排期），可调参数在 `utils/tuning.ts`。
  */
 
+/** 标准 Node 子进程的宿主桥环境变量。 */
+export const NodeEnvironmentVariables = Object.freeze({
+  directory: {
+    name: 'VELAROS_HOST_DIR',
+    direction: 'output',
+    description: '本次执行可读取的宿主能力目录。',
+  },
+  socket: {
+    name: 'VELAROS_HOST_SOCKET',
+    direction: 'output',
+    description: '本次执行连接的本机能力桥地址。',
+  },
+  token: {
+    name: 'VELAROS_HOST_TOKEN',
+    direction: 'output',
+    description: '本次执行的短期能力桥凭据。',
+  },
+})
+
+/** 标准进程与宿主桥的内存、磁盘预算。 */
+export const NodeExecutionLimits = Object.freeze({
+  /** 单次调用参数的 UTF-8 字节上限。 */
+  requestBytes: 2 * 1024 * 1024,
+  /** 单次能力结果的 UTF-8 字节上限。 */
+  responseBytes: 16 * 1024 * 1024,
+  /** 单次程序输出归档的字节上限。 */
+  logBytes: 16 * 1024 * 1024,
+  /** stdout 与 stderr 各自可见的字符上限。 */
+  previewChars: 24_000,
+  /** 单次执行最多派发的能力调用数。 */
+  calls: 200,
+})
+
 /** 代码面的错误码；模型与宿主都按码判断，不按报错文字。 */
 export const CodeSurfaceErrorCodes = Object.freeze({
   /** 程序自己抛了。 */

@@ -1,4 +1,6 @@
 /** 连续窗口签发独立目标，不连续的窗口不能把中间没显示的源码授予编辑。 */
+import { isEmpty, isUndefined } from '@velaros-ai/core'
+
 import type { ProjectOperationContext } from '../../contract/requires.js'
 import type { ProjectWindow } from '../../types/files.js'
 import type { ProjectSourceWindow } from '../../types/source-window.js'
@@ -23,7 +25,7 @@ export async function editableProjectWindows(
         const start = source.lines[item.startLine - 1]?.start
         const endLine = item.startLine + item.text.split('\n').length - 1
         const end = source.lines[endLine - 1]?.end
-        if (start === undefined || end === undefined || window.lines.length === 0) continue
+        if (isUndefined(start) || isUndefined(end) || isEmpty(window.lines)) continue
         const whole = start === 0 && end === view.content.length && item.startLine === 1
         item.target = saveSelection(
           ctx,

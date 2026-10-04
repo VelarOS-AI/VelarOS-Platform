@@ -51,6 +51,7 @@ export function composeProgramResult(
   named = false
 ): CodeProgramResult {
   const result: CodeProgramResult = {}
+  if (outcome.process) result.process = outcome.process
   // 程序停下时还没落定的调用：跑完了也可能有（发出去没 await），副作用可能做了一半，一律列出。
   if (!isEmpty(unsettled)) result.unsettled = [...unsettled]
   const logs = fitLogsToBudget(outcome.logs, notices)

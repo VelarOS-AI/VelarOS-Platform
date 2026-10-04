@@ -95,7 +95,12 @@ test('INV-3 基础契约放不进窗口时明确阻塞；截断响应不执行�
     for await (const event of session.submit('仍需保留的用户输入')) events.push(event)
     assert.equal(events.at(-1).status, 'context_blocked')
     assert.equal(requests, 0)
-    assert.equal((await session.context.search({ query: '仍需保留' })).items.length, 1)
+    assert.equal(
+      (await session.context.search({ query: '仍需保留' })).items.filter(
+        (hit) => hit.kind === 'user'
+      ).length,
+      1
+    )
   } finally {
     await runtime.close()
   }

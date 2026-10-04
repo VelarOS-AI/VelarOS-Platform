@@ -12,6 +12,25 @@ import type { ActExecutionFailure, ActExecutionSummary } from '../types/trace.js
 
 const CancelledCodes = ['CANCELLED', 'ABORTED']
 
+/** 从持久进程回执生成输出详情；日志路径优先，成功退出不推断文件效果。 */
+export function executionProcessOutput(result: unknown): string | undefined {
+  if (
+    !isPlainObject(result) ||
+    !isPlainObject(result.result) ||
+    !isPlainObject(result.result.process)
+  )
+    return undefined
+  const process = result.result.process
+  return JSON.stringify({
+    exitCode: process.exitCode,
+    signal: process.signal,
+    logPath: process.logPath,
+    truncated: process.truncated,
+    stderr: process.stderr,
+    stdout: process.stdout,
+  })
+}
+
 /**
  * 一次执行的落定状态，由它的持久结果和调用回执推出；运行时记任务状态、追踪给宿主摘要都走这里。
  * 没有结果就还在运行；结果或调用回执里有未知效果（或调用没有回执）时是 unknown，要先核对，

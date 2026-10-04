@@ -204,10 +204,23 @@ export function rejectWithDiagnostics(
  * 各通道都有自己的上限，正常情况下走不到这里；它存在是为了**将来**——
  * 哪条通道加了新东西、忘了设上限，回到模型那里的仍然不超过这个数。
  */
-export function enforceResultBudget(result: CodeProgramResult): CodeProgramResult {
+export function enforceResultBudget(input: CodeProgramResult): CodeProgramResult {
+  let result = input
   const fits = (candidate: CodeProgramResult): boolean =>
     JSON.stringify(candidate).length <= CodeSurfaceLimits.resultChars
   if (fits(result)) return result
+  if (result.process) {
+    result = {
+      ...result,
+      process: {
+        ...result.process,
+        stdout: result.process.stdout.slice(-4000),
+        stderr: result.process.stderr.slice(-4000),
+        truncated: true,
+      },
+    }
+    if (fits(result)) return result
+  }
   const dropped = (what: string): CodeCallNotice[] => [
     {
       call: 'program',

@@ -1,0 +1,157 @@
+{
+  "version": 2,
+  "provenance": "Final frozen acceptance suite after repairing evaluator host binding; previous development and holdout traces retained as invalid comparison data.",
+  "cases": [
+    {
+      "id": "acceptance-ledger",
+      "split": "acceptance",
+      "prompt": "递归读取 input 目录内扩展名为 .jsonl 的文件，空行忽略。每行是 {account,cents,void}；仅累计 void=false 的整数 cents。输出 summary.json，顶层必须是数组，每项恰好 {account,totalCents,count}，按 account 的 Unicode 码点升序排序。不要改动输入文件；运行程序并核对汇总。",
+      "files": {
+        "input/一 月.jsonl": "{\"account\":\"B\",\"cents\":108,\"void\":false}\n\n{\"account\":\"A\",\"cents\":21,\"void\":false}\n{\"account\":\"B\",\"cents\":999,\"void\":true}\n",
+        "input/sub dir/二.jsonl": "{\"account\":\"A\",\"cents\":-6,\"void\":false}\n{\"account\":\"C\",\"cents\":0,\"void\":false}\n{\"account\":\"B\",\"cents\":42,\"void\":false}\n",
+        "input/ignore.txt": "not JSON"
+      },
+      "expected": {
+        "summary.json": [
+          {
+            "account": "A",
+            "totalCents": 15,
+            "count": 2
+          },
+          {
+            "account": "B",
+            "totalCents": 150,
+            "count": 2
+          },
+          {
+            "account": "C",
+            "totalCents": 0,
+            "count": 1
+          }
+        ]
+      },
+      "grade": "assert.equal(await readFile('input/ignore.txt','utf8'),'not JSON');assert.equal(await readFile('input/一 月.jsonl','utf8'),'{\"account\":\"B\",\"cents\":108,\"void\":false}\\n\\n{\"account\":\"A\",\"cents\":21,\"void\":false}\\n{\"account\":\"B\",\"cents\":999,\"void\":true}\\n');"
+    },
+    {
+      "id": "acceptance-package",
+      "split": "acceptance",
+      "prompt": "工作区已安装 @fixture/buckets。阅读其 README，实际调用该包，将 readings.json 按宽度 5 分桶，保存 buckets.json，JSON 形状直接使用包的返回值。输入包含负数，必须用已有包计算并实际验证产物。",
+      "files": {
+        "readings.json": "[-7,-5,-1,0,1,4,5,9,10]",
+        "node_modules/@fixture/buckets/package.json": "{\"name\":\"@fixture/buckets\",\"type\":\"module\",\"exports\":\"./index.mjs\"}",
+        "node_modules/@fixture/buckets/README.md": "Named ESM export bucketCounts(values, width): returns [{start,count}] ordered numerically by start. Bucket interval is [start,start+width). Width is a positive integer.",
+        "node_modules/@fixture/buckets/index.mjs": "import {writeFileSync} from 'node:fs'; export function bucketCounts(values,width){writeFileSync('.buckets-used','called');const counts=new Map();for(const n of values){const s=Math.floor(n/width)*width;counts.set(s,(counts.get(s)||0)+1)}return [...counts].sort((a,b)=>a[0]-b[0]).map(([start,count])=>({start,count}))}"
+      },
+      "expected": {
+        "buckets.json": [
+          {
+            "start": -10,
+            "count": 1
+          },
+          {
+            "start": -5,
+            "count": 2
+          },
+          {
+            "start": 0,
+            "count": 3
+          },
+          {
+            "start": 5,
+            "count": 2
+          },
+          {
+            "start": 10,
+            "count": 1
+          }
+        ]
+      },
+      "grade": "assert.equal(await readFile('.buckets-used','utf8'),'called');"
+    },
+    {
+      "id": "acceptance-memo",
+      "split": "acceptance",
+      "prompt": "修复 memo.mjs 的 memoizeAsync(fn)：返回一个只接收一个 string key 的异步函数。同 key 的并发请求必须复用一次 fn 调用，成功结果要缓存（包括 undefined 和 0）；失败结果不能缓存，后续可重试。不同 key 独立。保留导出名，实际运行测试证明这些行为。",
+      "files": {
+        "memo.mjs": "export function memoizeAsync(fn) { const cache=new Map(); return async key=>{if(cache.get(key))return cache.get(key);const result=await fn(key);cache.set(key,result);return result} }\n"
+      },
+      "grade": "const {memoizeAsync}=await import('./memo.mjs');let calls=0;const f=memoizeAsync(async key=>{calls++;await new Promise(r=>setTimeout(r,8));return key==='zero'?0:key==='empty'?undefined:key.toUpperCase()});assert.deepEqual(await Promise.all([f('a'),f('a'),f('b')]),['A','A','B']);assert.equal(calls,2);await f('a');assert.equal(calls,2);await f('zero');await f('zero');assert.equal(calls,3);await f('empty');await f('empty');assert.equal(calls,4);let attempts=0;const g=memoizeAsync(async()=>{if(++attempts===1)throw Error('retry');return 9});await assert.rejects(()=>g('x'),/retry/);assert.equal(await g('x'),9);assert.equal(attempts,2);"
+    },
+    {
+      "id": "acceptance-host",
+      "split": "acceptance",
+      "prompt": "通过应用宿主查询同组会话，排除当前 self 会话，把其余会话按 workspace 分组。输出 groups.json，顶层是数组，每项恰好 {workspace,total,running,ids}，ids 是排序后的会话 id 数组，running 是运行中的数量；组按 workspace 字典序排序。列表必须实际从宿主能力获取，然后验证文件。",
+      "files": {},
+      "sessions": [
+        {
+          "id": "p9",
+          "title": "服务端",
+          "workspace": "project",
+          "root": "/fixture/p9",
+          "site": null,
+          "running": true,
+          "self": false
+        },
+        {
+          "id": "p2",
+          "title": "界面",
+          "workspace": "project",
+          "root": "/fixture/p2",
+          "site": null,
+          "running": false,
+          "self": false
+        },
+        {
+          "id": "here",
+          "title": "当前",
+          "workspace": "system",
+          "root": null,
+          "site": null,
+          "running": true,
+          "self": true
+        },
+        {
+          "id": "b4",
+          "title": "文档网页",
+          "workspace": "browser",
+          "root": null,
+          "site": "https://example.com",
+          "running": false,
+          "self": false
+        },
+        {
+          "id": "s1",
+          "title": "本机任务",
+          "workspace": "system",
+          "root": null,
+          "site": null,
+          "running": true,
+          "self": false
+        }
+      ],
+      "expected": {
+        "groups.json": [
+          {
+            "workspace": "browser",
+            "total": 1,
+            "running": 0,
+            "ids": ["b4"]
+          },
+          {
+            "workspace": "project",
+            "total": 2,
+            "running": 1,
+            "ids": ["p2", "p9"]
+          },
+          {
+            "workspace": "system",
+            "total": 1,
+            "running": 1,
+            "ids": ["s1"]
+          }
+        ]
+      },
+      "requiresHost": true
+    }
+  ]
+}

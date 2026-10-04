@@ -9,7 +9,7 @@ import { spawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 
-import { isFalse, isUndefined, Log, optionalWhen, toNullable } from '@velaros-ai/core'
+import { isFalse, isNull, isUndefined, Log, optionalWhen, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/core/platform'
 import { shortReferenceId } from '@velaros-ai/core/utils/shortReferenceId'
@@ -191,6 +191,8 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     abortSignal?: AbortSignal
   ): Promise<ShellCommandResult> {
     abortSignal?.throwIfAborted()
+    if (isNull(options.timeoutMs) && !abortSignal)
+      throw new AppError('VALIDATION', '宿主自管执行时限必须提供取消信号。')
     // 工作目录不存在时 spawn 会报成找不到 shell，先核对一次，报错才指向真正的原因。
     if (options.background && !isUndefined(options.stdin))
       throw new AppError('VALIDATION', '前台标准输入不能与后台命令一起使用。')
@@ -226,7 +228,9 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
       })
     }
     const result = await this.runInForeground(prepared, cwd, {
-      timeoutMs: options.timeoutMs ?? ShellTuning.command.timeoutMs,
+      timeoutMs: isNull(options.timeoutMs)
+        ? undefined
+        : (options.timeoutMs ?? ShellTuning.command.timeoutMs),
       maxOutputChars: options.maxOutputChars ?? ShellTuning.command.outputChars,
       stdin: options.stdin,
       onOutput: options.onOutput,
@@ -519,7 +523,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     prepared: PreparedShellCommand,
     cwd: string,
     options: {
-      timeoutMs: number
+      timeoutMs?: number
       maxOutputChars: number
       stdin?: string
       onOutput?: (text: string) => void

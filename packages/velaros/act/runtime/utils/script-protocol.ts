@@ -97,6 +97,7 @@ export function protocolConfig(options: ScriptProtocolOptions = {}) {
           'defaultRetain',
           'names',
           'markerPrefix',
+          'presentation',
           ...Object.keys(ScriptProtocolLimits),
         ].includes(key)
     )
@@ -148,7 +149,18 @@ export function protocolConfig(options: ScriptProtocolOptions = {}) {
     (!Number.isSafeInteger(defaultRetain) || defaultRetain < 1 || defaultRetain > 32)
   )
     throw protocolFailure('缺省租约无效')
-  return scriptInputCopy({ names, markerPrefix, ...limits, allowed, defaultRetain })
+  if (!isUndefined(options.presentation) && options.presentation !== 'node')
+    throw protocolFailure('执行说明配置无效')
+  const configured = {
+    names,
+    markerPrefix,
+    ...limits,
+    allowed,
+    defaultRetain,
+  }
+  // JSON 合同要求缺席字段不出现；undefined 不是可持久化的参数。
+  if (options.presentation) Object.assign(configured, { presentation: options.presentation })
+  return scriptInputCopy(configured)
 }
 
 /** 缺少决策时，直接给出本帧可用的控制头，避免修复继续停留在进度说明。 */
@@ -182,6 +194,8 @@ export function protocolDecisionInstructions(
 /** 会话内不变的完整语法进入稳定前缀；帧标记与宿主输入引用只由帧尾提供。 */
 export function protocolRules(options: ScriptProtocolOptions): string {
   const { names, maxBlocks, allowed, defaultRetain } = protocolConfig(options)
+  if (options.presentation === 'node')
+    return `继续工作时，用本帧标记后的 ${names.execute}() 开始一段 JavaScript，以独立一行的同一标记闭合；结果在下一轮返回。完成后使用单行 ${names.done}("完成依据")，随后写答复。每个响应提交一个执行或完成决定。`
   const hasProgram = allowed.includes('observe') || allowed.includes('execute')
   return [
     'ScriptAct 固定协议。你在响应中输出 JS 程序段，宿主 Runtime 真实执行并在下一轮返回回执；模型接口的原生工具列表可以为空，实际能力由脚本模块合同提供。当前标记、允许声明和完整示例见最后一条消息末尾的「本帧协议」。',
@@ -218,6 +232,8 @@ export function protocolInstructions(
   inputs: Readonly<Record<string, unknown>>
 ): string {
   const { names, allowed } = protocolConfig(options)
+  if (options.presentation === 'node')
+    return `本轮执行：\n${marker} ${names.execute}()\n// 普通 Node.js 代码\n${marker}\n任务完成：\n${marker} ${names.done}("完成依据")\n面向用户的答复。`
   const program = allowed.includes('execute')
     ? 'execute'
     : allowed.includes('observe')

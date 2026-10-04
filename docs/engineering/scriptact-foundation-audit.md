@@ -2,7 +2,7 @@
 
 日期：2026-09-30。轮次：52。本文保留审核时的证据与判断；当前修复及验收状态见 [根基审核修复总报告](scriptact-foundation-fixes.md)。
 
-审核基线为 `/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform` 的 `main`，HEAD `86bd823ca4dfe4f2db0859ab75ad851e46ee03bb`，包含审核开始时已有的未提交修改。此前修复并未仅按 HEAD 审查。本轮只增加报告和离线证据，产品修改另行实施。
+审核基线为 `VelarOS-Platform` 的 `main`，HEAD `86bd823ca4dfe4f2db0859ab75ad851e46ee03bb`，包含审核开始时已有的未提交修改。此前修复并未仅按 HEAD 审查。本轮只增加报告和离线证据，产品修改另行实施。
 
 ## 1. 总体判断
 
@@ -77,7 +77,7 @@ P1 表示应在对应能力成为正式评测/长期运行基线前处理；P2 �
 
 两个当前源码 QuickJS 探针都检查成功且无诊断：库导出 `let n=0` 和 `bump()`，调用 bump 后读取 n，Script 得到 0、原生 ESM 得到 1；正文先赋值再出现静态 import，Script 与原生 ESM 的最终值分别为 1 和 2。纯函数/常量辅助模块通常不受这两个例子影响；没有证据显示隔离逃逸。
 
-证据：[程序合同](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/script/src/types/script.ts:31)、[模块改写](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/script/src/utils/module-form.ts:85)、[库执行](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/script/src/utils/worker-program.ts:189)。探针及 Node 对照在 `execution/minimal-repro.ts`、`repro-results.jsonl`、`native-esm-results.jsonl`。
+证据：[程序合同](../../packages/script/src/types/script.ts#L31)、[模块改写](../../packages/script/src/utils/module-form.ts#L85)、[库执行](../../packages/script/src/utils/worker-program.ts#L189)。探针及 Node 对照在 `execution/minimal-repro.ts`、`repro-results.jsonl`、`native-esm-results.jsonl`。
 
 建议先评估 QuickJS 原生模块链接，通过受控的合成模块继续接入原能力桥。若确实只支持子集，应在合同与检查器同时定义并拒绝无法保证的语义。验收包含 live binding、静态依赖顺序、re-export、namespace、顶层 await、循环依赖的明确支持/拒绝矩阵；支持项与原生 JS 做差分测试。
 
@@ -87,7 +87,7 @@ ContextMemory 单独保存底座正文，RecentContext 单独保存冻结正文�
 
 真实 SQLite 探针中，2 个仍被活动段使用的对象被删除，下一次组帧报 `NOT_FOUND / 段底座正文缺失`。GC 默认预演、版本检查和一小时宽限期均存在；宿主没有实际执行 collect 时，不会仅因本缺口自动发生删除。
 
-证据：[底座保存](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/impl/ContextMemory.ts:1192)、[冻结历史](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/impl/RecentContext.ts:314)、[回收判据](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/context/src/impl/LocalContextStorage.ts:409)。
+证据：[底座保存](../../packages/velaros/act/runtime/impl/ContextMemory.ts#L1192)、[冻结历史](../../packages/velaros/act/runtime/impl/RecentContext.ts#L314)、[回收判据](../../packages/context/src/impl/LocalContextStorage.ts#L409)。
 
 建议选择显式强引用边，或让这些正文拥有标准 ContextRecord，由上层使用 ContextRef；记录发布与引用边必须原子提交。所有后端遵守同一存活性合同。验收要覆盖 GC 后重开、逐字前缀恢复、失败 CAS 的孤儿回收、并发写入和已有数据的明确处理，不能只延长宽限期。
 
@@ -100,7 +100,7 @@ ContextMemory 单独保存底座正文，RecentContext 单独保存冻结正文�
 
 这是**持有有效旧 ID，且当前范围已不同**时的缺陷，不是无须身份即可操作任意资源。当前 Desktop 抽样中 files 只挂在系统会话，项目会话使用 project 内核；也没有在该文件发现演练 sandbox 挂载。因此本报告没有证明当前 Desktop 项目隔离已被这两条路径穿透。Platform 公共受限端口和多项目宿主的合同仍不成立。每项目创建一个默认 sandbox host 也不足以证明隔离，因为持久 manifest/默认目录可以共享。
 
-证据：[undo](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/files/impl/FileOperations.ts:249)、[全局账](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/files/impl/FileOperations.ts:389)、[sandbox 项目端口](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/project/impl/operations/ProjectCapabilityPorts.ts:98)、[Desktop 装配](/Users/mac/Desktop/VelarOS/projects/VelarOS-Desktop/src/main/application/runtime/WorkspaceSession.ts:195)。执行组已独立复核，见 `execution/cross-review.md`。
+证据：[undo](../../packages/velaros/files/impl/FileOperations.ts#L249)、[全局账](../../packages/velaros/files/impl/FileOperations.ts#L389)、[sandbox 项目端口](../../packages/velaros/project/impl/operations/ProjectCapabilityPorts.ts#L98)、Desktop 装配（`VelarOS-Desktop/src/main/application/runtime/WorkspaceSession.ts#L195`）。执行组已独立复核，见 `execution/cross-review.md`。
 
 建议资源句柄统一绑定 scope/resource identity/generation；每次恢复、应用和撤销验证当前授权与规范路径。领域 owner 持有资源身份，宿主提供策略，Kernel 保留调用身份。测试交叉两项目、授权收窄、重启、符号链接变化和合法同范围恢复；不要靠增加随机 ID 长度处理授权问题。
 
@@ -108,7 +108,7 @@ ContextMemory 单独保存底座正文，RecentContext 单独保存冻结正文�
 
 files 独立于 project 的事务引擎。大于 2 MiB 的旧正文不留在 undo 账中，`writeOfPlan` 因而不传 expected；准备结束到实际落盘之间若有外部修改，会被静默覆盖。小文件对照会传 expected 并正确拒绝。探针分别得到 `external-change` 保留和被替换为 `planned` 的结果。
 
-证据：[保留条件](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/files/utils/plan.ts:177)、[提交前提](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/files/utils/batch.ts:79)。已有的早期指纹检查不能替代提交边界的校验；当前单 Runtime 写闸门也管不到外部编辑器和其他 Runtime。
+证据：[保留条件](../../packages/velaros/files/utils/plan.ts#L177)、[提交前提](../../packages/velaros/files/utils/batch.ts#L79)。已有的早期指纹检查不能替代提交边界的校验；当前单 Runtime 写闸门也管不到外部编辑器和其他 Runtime。
 
 建议所有大小都保留版本/摘要前提，撤销正文另按保留预算处理；提交端落实冲突检测与原子替换，并如实限定对不合作外部进程的保证。验收围绕阈值上下、编码/换行、创建/删除、跨实例和准备后外部修改，不能只修一个大文件样例。
 
@@ -118,7 +118,7 @@ files 独立于 project 的事务引擎。大于 2 MiB 的旧正文不留在 und
 
 领域方面，files.edit 在异步定位后、sandbox.apply 在 diff 后、computer.typeText 在 ensureAvailable 后，已发生取消仍进入副作用。探针使用可控端口，不操作真实桌面。这里能在提交前合作停止，应补复查和端口级 signal，而不是把它们与不可中断的已提交操作混淆。
 
-证据：[Kernel prepare](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/kernel/src/impl/runtime/OperationRuntime.ts:410)、[dispose](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/kernel/src/impl/runtime/OperationRuntime.ts:554)、[写闸门](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/impl/ComposedRuntime.ts:637)、[files 提交](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/files/impl/FileOperations.ts:229)。
+证据：[Kernel prepare](../../packages/kernel/src/impl/runtime/OperationRuntime.ts#L410)、[dispose](../../packages/kernel/src/impl/runtime/OperationRuntime.ts#L554)、[写闸门](../../packages/velaros/act/runtime/impl/ComposedRuntime.ts#L637)、[files 提交](../../packages/velaros/files/impl/FileOperations.ts#L229)。
 
 建议定义：可合作取消、可物理终止、无法确认停止的执行类型；区分 prepared/started/committed/settled，并传播 deadline/signal。无法确认停止时保持在途/unknown 事实、隔离冲突资源，并让关闭流程在有界时间报告未收束任务。**不得简单 Promise.race 超时后释放写锁。** 已真实提交的迟到成功仍应记录 committed，不能伪装成取消且无效果。
 
@@ -128,7 +128,7 @@ files 独立于 project 的事务引擎。大于 2 MiB 的旧正文不留在 und
 
 合法的 AfterApplyEdit hook 抛错时，文件已经写入。上层 `commitProjectEdit` 的 catch 却无条件 discardTransaction，随后抛出“只能丢弃尚未应用的事务”，遮蔽最初错误，并未返回 changeRef。真实探针中 note.txt 已从 before 变成 after。
 
-证据：[提交及 hook](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/project/impl/kernel/LocalProjectKernel.ts:1044)、[统一 catch](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/project/utils/agent/edit-commit.ts:58)。Kernel 会保守表达未知效果，这避免凭空声称没有写入，但领域层已有的精确提交事实仍然丢失。
+证据：[提交及 hook](../../packages/velaros/project/impl/kernel/LocalProjectKernel.ts#L1044)、[统一 catch](../../packages/velaros/project/utils/agent/edit-commit.ts#L58)。Kernel 会保守表达未知效果，这避免凭空声称没有写入，但领域层已有的精确提交事实仍然丢失。
 
 建议把准备失败、提交失败、提交成功后的 hook/展示失败分开；先持久化 transactionId、变更身份与提交结果，再执行后处理。后处理失败保留诊断和已提交回执。验收 hook 抛错、回执展示失败、持久化失败与恢复，确保不会重放已经生效的修改。
 
@@ -136,7 +136,7 @@ files 独立于 project 的事务引擎。大于 2 MiB 的旧正文不留在 und
 
 `prepareOfficeOutputPath` 检查不存在后返回 path/created，`overwrite:false` 不再保留到最终写出。准备与写出之间另一工作者创建同名文件，普通 writeFile 仍覆盖它。该反例已实际复现。
 
-证据：[准备](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/office/utils/paths.ts:87)、同文件的 `writeOfficeFile`。现有真实路径校验会阻止静态越界；本次复现的是覆盖语义竞态，没有声称已完成符号链接竞态攻击验证。
+证据：[准备](../../packages/velaros/office/utils/paths.ts#L87)、同文件的 `writeOfficeFile`。现有真实路径校验会阻止静态越界；本次复现的是覆盖语义竞态，没有声称已完成符号链接竞态攻击验证。
 
 建议最终提交使用带覆盖策略和版本前提的原子发布：不覆盖时使用独占创建/等价机制，替换已有文档时校验版本。转换临时文件与最终提交分别表达结果。验收同名并发创建、允许覆盖、追加、取消和转换后发布失败。
 
@@ -144,7 +144,7 @@ files 独立于 project 的事务引擎。大于 2 MiB 的旧正文不留在 und
 
 RecentContext.project 查询全部 assistant、script result 和 continuation，之后才按 segment.from 筛选；volumes/narratives 也加载历史正文。固定只投递 2 条消息，100 条历史返回 100 条记录，1000 条历史返回 1000 条记录。请求 token 有界，不能据此推出本地 CPU、内存和组帧延迟有界。
 
-证据：[历史选择](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/impl/RecentContext.ts:221)、[卷查询](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/impl/RecentContext.ts:175)、[长期目标](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/docs/architecture/long-running-context.md:7)。未测得真实生产延迟，结论限定为访问复杂度。
+证据：[历史选择](../../packages/velaros/act/runtime/impl/RecentContext.ts#L221)、[卷查询](../../packages/velaros/act/runtime/impl/RecentContext.ts#L175)、[长期目标](../../docs/architecture/long-running-context.md#L7)。未测得真实生产延迟，结论限定为访问复杂度。
 
 反证：appendRecord 是增量追加，全量 CAS 只 upsert changed，任务/预算还有 metadata CAS 快径。因此不是所有写入都重写整表。
 
@@ -154,7 +154,7 @@ RecentContext.project 查询全部 assistant、script result 和 continuation，
 
 原始输入和历史摘要应忠实保留当时内容，但当前活动约束不能仅是历史约束字符串的并集。同任务先要求 A、随后纠正 B，探针的长期单仍列 `Use package B` 和 `Use package A`，没有哪个已经失效的结构化状态。
 
-证据：[汇总](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/impl/ContextMemory.ts:1147)、[账本投影](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/utils/segment.ts:76)。新输入按时间排序、当前运行目标提示和 task:new 已有保护，所以不是“用户无法纠正”，也没有真实模型误遵循旧约束的结论。风险在于系统把冲突解释长期交给模型重复完成。
+证据：[汇总](../../packages/velaros/act/runtime/impl/ContextMemory.ts#L1147)、[账本投影](../../packages/velaros/act/runtime/utils/segment.ts#L76)。新输入按时间排序、当前运行目标提示和 task:new 已有保护，所以不是“用户无法纠正”，也没有真实模型误遵循旧约束的结论。风险在于系统把冲突解释长期交给模型重复完成。
 
 建议历史记录保持不可变，当前意图另以稳定 ID、来源输入、active/superseded/retracted 和版本表达；未解项与关键决定也应有承接/关闭依据。用户纠正、撤销、恢复旧要求和整理模型误抽取，均需跨封段与重启的验收。模型提取仍是不确定解释，不能获得高于原始用户输入的权限。
 
@@ -162,15 +162,15 @@ RecentContext.project 查询全部 assistant、script result 和 continuation，
 
 公共 Kernel 挂载入口只比较 surface 与运行定义的 input/output/effects，遗漏 allowedModes。生成 surface 明确 execute-only，运行定义漏字段并提供 observe 时，构造与 observe 调用都成功。内建 CapabilityModules 原样透传生成 descriptor，有保护；本项影响手工/扩展模块装配。
 
-证据：[一致性检查](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/kernel/src/impl/runtime/OperationRuntime.ts:115)、[模式检查](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/kernel/src/impl/runtime/OperationRuntime.ts:395)。建议规范化后统一比较，构造阶段拒绝差异；不用另设第二份权限名单。
+证据：[一致性检查](../../packages/kernel/src/impl/runtime/OperationRuntime.ts#L115)、[模式检查](../../packages/kernel/src/impl/runtime/OperationRuntime.ts#L395)。建议规范化后统一比较，构造阶段拒绝差异；不用另设第二份权限名单。
 
-同源生成还存在语义盲点：[files 的 AgentView](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/files/impl/FileOperations.ts:94) 概述“一次成败”，实际 LocalFilePort 逐文件提交并支持 partial；[sandbox 的 AgentView](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/sandbox/impl/SandboxOperations.ts:36) 承诺 apply 要用户点头，当前 apply 行为与产品规则是直接执行。生成器会忠实复制这些错误承诺。应在 TS 文档中准确区分批次预检、单文件原子提交和部分完成，按当前 apply 行为更新说明，再重新生成；故障注入结果必须与模型所见承诺一致。
+同源生成还存在语义盲点：[files 的 AgentView](../../packages/velaros/files/impl/FileOperations.ts#L94) 概述“一次成败”，实际 LocalFilePort 逐文件提交并支持 partial；[sandbox 的 AgentView](../../packages/velaros/sandbox/impl/SandboxOperations.ts#L36) 承诺 apply 要用户点头，当前 apply 行为与产品规则是直接执行。生成器会忠实复制这些错误承诺。应在 TS 文档中准确区分批次预检、单文件原子提交和部分完成，按当前 apply 行为更新说明，再重新生成；故障注入结果必须与模型所见承诺一致。
 
 ### F11：并发前必须换掉按时间归账
 
 当前 report.py 明确假设单任务运行，按执行开始至试验结束的时间窗筛共享请求。主 agent 构造两个重叠任务、两次总价 $3 的合成调用，report.summarize 给每个任务都分配 2 次、$3，合计变成 4 次、$6。
 
-证据：[归属逻辑](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/report.py:92)、`root/overlap-accounting-repro.json`。这是并发扩展的确定阻断项；当前串行约束是反证，不能据此宣称历史串行账已经重复。
+证据：[归属逻辑](../../scripts/agent/harbor/report.py#L92)、`root/overlap-accounting-repro.json`。这是并发扩展的确定阻断项；当前串行约束是反证，不能据此宣称历史串行账已经重复。
 
 建议把 campaign/candidate/participant/task/attempt/session/request 身份贯通网关、容器、子请求、重试和迟到结算；身份由控制器绑定，不能靠模型提供。明细只能归属一次，未归属保持未知并阻止生成“完整成本”结论。安装检查也按本尝试身份核对，不能比较共享全局计数。
 
@@ -178,7 +178,7 @@ RecentContext.project 查询全部 assistant、script result 和 continuation，
 
 已有 Trace 保留 moduleId、operation、调用身份及效果；metrics 已区分 ScriptAct 底层操作与 Codex ATIF 外层调用。当前聚合主要是总工具数、失败数和 Shell 子项，尚没有用户要求的完整模块/操作汇总；RuntimeMetric 也只有 storage/effect 阶段，不能直接充当全工具计数账。
 
-证据：[Trace 合同](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/types/trace.ts:34)、[现有聚合](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/metrics.py:299)、[诊断口](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/impl/RuntimeDiagnostics.ts:72)。
+证据：[Trace 合同](../../packages/velaros/act/runtime/types/trace.ts#L34)、[现有聚合](../../scripts/agent/harbor/metrics.py#L299)、[诊断口](../../packages/velaros/act/runtime/impl/RuntimeDiagnostics.ts#L72)。
 
 建议保留原始调用账，以稳定调用身份去重，分别统计声明/发现、脚本执行、实际底层操作；记录 queued/started/rejected/succeeded/failed/cancelled/pending、时间、重试及子会话归属。一个 execute 调五个操作，应分别计为 1 和 5。并行耗时总和与整题墙钟分列；整轮模型费用只记一次。每条记录保留原始证据位置，汇总可从明细重建。重复读取必须结合对象、范围和版本判断，不能把同名工具多次调用直接当浪费。
 
@@ -188,7 +188,7 @@ RecentContext.project 查询全部 assistant、script result 和 continuation，
 
 费用：Platform Model 的通用 usage 仅含总输入/输出费率；summary 对未知 cost 跳过，能返回部分已知金额却没有完整度。探针的 2 次调用合计 2200 tokens，一次 cost 0.0024、另一次 null，汇总仍是 cost 0.0024。Harbor gateway 另有缓存读写与未知请求统计，本项不表示历史 benchmark 费用因此算错。
 
-证据：[容量回退](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/model/src/utils/catalog/context-windows.ts:24)、[费用归一与汇总](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/model/src/utils/usage.ts:58)。建议能力返回 value/source/confidence 和精确端点/模型身份；费用返回 estimated/partial/complete、定价版本和各 token 维度。未知不能伪装为零或确定能力。新评测先冻结所用模型的明确能力与价格合同。
+证据：[容量回退](../../packages/model/src/utils/catalog/context-windows.ts#L24)、[费用归一与汇总](../../packages/model/src/utils/usage.ts#L58)。建议能力返回 value/source/confidence 和精确端点/模型身份；费用返回 estimated/partial/complete、定价版本和各 token 维度。未知不能伪装为零或确定能力。新评测先冻结所用模型的明确能力与价格合同。
 
 ### 其他需要明确边界的设计风险
 
@@ -198,7 +198,7 @@ RecentContext.project 查询全部 assistant、script result 和 continuation，
 | 浏览器超时释放队列但旧 action 可能继续 | browser `runWithHoldCap` 会释放槽位以避免死锁，超时本身不物理取消旧 Promise | 会话代次/目标身份应阻止旧动作恢复后污染新状态；需 Electron/CDP 假后端迟到动作验证。本轮静态发现，未复现真实浏览器交错事故 |
 | 长期记忆同 ID 并行更新是最后写入获胜 | MemoryScope 读 tags 后原子替换，防半文件，但没有 revision/CAS；当前覆盖合同不承诺自动合并 | 多 agent 共享同 scope/id 时明确接受覆盖或使用 CAS/串行更新；验证 save/save 与 save/remove。当前不能按缺少合并能力宣称数据已经丢失 |
 
-来源：[Shell 默认模式](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/shell/impl/local/LocalShellHost.ts:149)、[浏览器等待](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/browser/utils/session.ts:105)、[长期记忆写入](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/memory/impl/MemoryScope.ts:56)。这些风险应按实际启用的能力进入验收，不能以抽样未见异常代替证明。
+来源：[Shell 默认模式](../../packages/velaros/shell/impl/local/LocalShellHost.ts#L149)、[浏览器等待](../../packages/velaros/browser/utils/session.ts#L105)、[长期记忆写入](../../packages/velaros/memory/impl/MemoryScope.ts#L56)。这些风险应按实际启用的能力进入验收，不能以抽样未见异常代替证明。
 
 ## 4. 应当保留的核心设计
 
@@ -258,10 +258,10 @@ Kernel signal/receipt 与存储引用接口先固定，再分派依赖该接口�
 
 主证据索引：
 
-- [执行内核报告](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/foundation-audit-52/execution/REPORT.md)；含原生 ESM 对照、取消挂起与模式漂移。
-- [上下文与模型报告](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/foundation-audit-52/context/context-audit.md)；含 GC、查询量、活动约束、能力回退和费用探针。
-- [工具模块报告](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/foundation-audit-52/modules/MODULES-AUDIT.md)与 `modules/probes.ts`、`modules/probe-results.json`；含真实本地文件/沙箱反例及受控端口反例。
-- [架构门禁记录](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/foundation-audit-52/root/gates.json)、[并发归账反例](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/foundation-audit-52/root/overlap-accounting-repro.json)。
+- 执行内核报告（`.velaros-workspace/bench/foundation-audit-52/execution/REPORT.md`）；含原生 ESM 对照、取消挂起与模式漂移。
+- 上下文与模型报告（`.velaros-workspace/bench/foundation-audit-52/context/context-audit.md`）；含 GC、查询量、活动约束、能力回退和费用探针。
+- 工具模块报告（`.velaros-workspace/bench/foundation-audit-52/modules/MODULES-AUDIT.md`）与 `modules/probes.ts`、`modules/probe-results.json`；含真实本地文件/沙箱反例及受控端口反例。
+- 架构门禁记录（`.velaros-workspace/bench/foundation-audit-52/root/gates.json`）、并发归账反例（`.velaros-workspace/bench/foundation-audit-52/root/overlap-accounting-repro.json`）。
 
 未完成范围：完整 ECMAScript 一致性、所有存储后端和崩溃切点、远程 Kernel/MCP/Mods 信任边界、真实浏览器/桌面/办公依赖端到端、Windows 与 Linux 的全部隔离实现、真实模型长程意图保持。这些需要明确验收矩阵；本报告不将抽样审核扩大为全系统正确性证明。
 

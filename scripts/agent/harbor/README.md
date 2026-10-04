@@ -73,7 +73,7 @@ GHCR 在缺少 OCI 索引 Accept 类型时也可能返回 `404 / MANIFEST_UNKNOW
 ```sh
 node scripts/agent/harbor/budget-proxy.mjs \
   --directory .velaros-workspace/bench/campaign \
-  --desktop-config /Users/mac/Desktop/VelarOS/projects/VelarOS-Desktop/.velaros/data/config/settings.json \
+  --desktop-config ../VelarOS-Desktop/.velaros/data/config/settings.json \
   --budget 1000
 ```
 

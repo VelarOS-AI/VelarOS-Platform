@@ -1,9 +1,17 @@
+/** 进程执行请求、回执与能力调用约定。 */
 import type { ScriptOutputCapture } from './output.js'
-/** 隔离进程中的 QuickJS 执行请求、回执与能力调用约定。 */
-import type { CodeCallNotice, ScriptPackageDefinition } from './script.js'
+import type { CodeCallNotice, NodeProcessReceipt, ScriptPackageDefinition } from './script.js'
 
 /** 交给运行器的一次任务。 */
 export interface CodeRunRequest {
+  /** 标准环境的能力文档与执行身份，由宿主提供。 */
+  host?: {
+    readonly sessionId: string
+    readonly executionId: string
+    readonly modules: Readonly<
+      Record<string, { readonly summary: string; readonly declarations: string }>
+    >
+  }
   /** 只引用实际授权操作的虚拟包成员。 */
   packages?: readonly ScriptPackageDefinition[]
   /** 经兼容归一后的原生 JavaScript ES 模块正文；保持用户词法作用域。 */
@@ -51,6 +59,8 @@ export type CodeRunDispatch = (
 
 /** 运行器跑完一次的产物；宿主再把它编成给模型看的结果。 */
 export interface CodeRunOutcome {
+  /** 标准进程输出在成功、失败、取消时都保留。 */
+  process?: NodeProcessReceipt
   /** 程序停止瞬间仍在等待能力回执的调用编号；回收期间的迟到回执不改变此快照。 */
   pendingCalls?: readonly number[]
   /** 即使程序失败，也保留调用时已采集的输出。 */

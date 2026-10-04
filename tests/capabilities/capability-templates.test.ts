@@ -171,7 +171,15 @@ async function runShellTemplate(space: Space, cwd: string): Promise<Record<strin
 
 /** shell 模版在任何一个空间里都该交回的样子。 */
 function expectShellResults(values: Record<string, any>): void {
-  expect(values.passed).toMatch(/^通过（\d+ ms）$/)
+  expect(values.passed).toMatchObject({
+    success: true,
+    exitCode: 0,
+    signal: null,
+    timedOut: false,
+    aborted: false,
+    truncated: false,
+  })
+  expect(values.passed.durationMs).toBeGreaterThanOrEqual(0)
   expect(values.failed).toMatchObject({ exitCode: 1, timedOut: false })
   expect(values.failed.tail).toContain('AssertionError: expected 1 to equal 2')
   expect(values.errors).toMatchObject({ success: false, count: 2 })
@@ -183,9 +191,13 @@ function expectShellResults(values: Record<string, any>): void {
   expect(values.git.changed.join('\n')).toContain('README.md')
   expect(values.git.recent).toHaveLength(1)
   expect(values.git.recent[0]).toEndWith(' init')
-  expect(values.todos).toMatchObject({ total: 2, perFile: { 'src/a.ts': 1, 'src/b.ts': 1 } })
-  expect(values.todos.first[0]).toMatchObject({
-    file: 'src/a.ts',
+  expect(values.todos).toMatchObject({
+    status: 'matched',
+    total: 2,
+    perFile: { './a.ts': 1, './b.ts': 1 },
+  })
+  expect(values.todos.first).toContainEqual({
+    file: './a.ts',
     line: 2,
     text: '// TODO: handle empty input',
   })

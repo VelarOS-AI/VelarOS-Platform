@@ -118,6 +118,8 @@ export type ObservationProbe =
 
 /** 宿主固定的控制声明名称与流接收限额。 */
 export interface ScriptProtocolOptions {
+  /** 宿主选择面向标准 Node 的精简执行说明。 */
+  readonly presentation?: 'node'
   /** 当前运行配置允许的控制声明。 */
   readonly allowed?: ReadonlyArray<'blobs' | 'observe' | 'execute' | 'done'>
   /** 文本协议一次执行的缺省可见期限，默认随历史封段退役；仍受展示预算约束。 */

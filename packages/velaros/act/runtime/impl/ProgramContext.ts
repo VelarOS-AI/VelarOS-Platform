@@ -1127,7 +1127,7 @@ export class ProgramContext implements ProgramContextApi {
         const displays: ScriptOutputDisplay[] = []
         for (const block of output?.blocks ?? []) {
           const proofs = await this.readDelivery(block.value, lease.ref, signal)
-          if (!proofs.length) continue
+          if (isEmpty(proofs)) continue
           recalled.set(block.key, proofs)
           const { text, ...metadata } = block.value as Record<string, unknown> & { text: string }
           displays.push({

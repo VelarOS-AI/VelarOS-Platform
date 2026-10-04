@@ -1,4 +1,6 @@
 /** 已确认的目标绑定到实际交付范围；模型提供的说明字段不参与定位。 */
+import { isObject, isString } from '@velaros-ai/core'
+
 import type { ProjectOperationContext } from '../../contract/requires.js'
 import type { ProjectSourceCoordinates } from '../../types/editing.js'
 import type { ProjectFileView } from '../../types/file-refs.js'
@@ -11,13 +13,12 @@ import { loadFileView, readReceipt, saveReceipt } from './file-refs.js'
 
 /** 只取签发身份，路径、偏移、kind 等客户端说明字段不能改变绑定。 */
 export function selectionRef(value: unknown): string {
-  const ref =
-    typeof value === 'string'
-      ? value
-      : value && typeof value === 'object' && 'ref' in value
-        ? value.ref
-        : undefined
-  if (typeof ref !== 'string' || !/^target:[a-f0-9]{8}$/.test(ref))
+  const ref = isString(value)
+    ? value
+    : value && isObject(value) && 'ref' in value
+      ? value.ref
+      : undefined
+  if (!isString(ref) || !/^target:[a-f0-9]{8}$/.test(ref))
     throw new ProjectError(
       'INVALID_INPUT',
       'target 要 select/read 返回的对象或 target: 加 8 位引用。'
@@ -57,14 +58,15 @@ export function saveSelection(
     kind,
     lines,
     coverage,
-    ...(label ? { label } : {}),
   }
-  return {
+  if (label) record.label = label
+  const result: ProjectSelection = {
     ref: saveReceipt(ctx, 'target', record),
     path: view.path,
     kind,
-    ...(label ? { label } : {}),
   }
+  if (label) result.label = label
+  return result
 }
 
 /** 身份来自本会话、本项目；复核存储中的范围，陈旧版本在提交时另行核对。 */

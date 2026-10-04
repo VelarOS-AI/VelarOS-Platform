@@ -42,7 +42,12 @@ import type {
   CodeSurfaceOutcome,
   ScriptPackageDefinition,
 } from '@velaros-ai/script'
-import { createKernelScriptSession, scriptOutputs, scriptPackageCompiler } from '@velaros-ai/script'
+import {
+  createKernelScriptSession,
+  createNodeCodeRunner,
+  scriptOutputs,
+  scriptPackageCompiler,
+} from '@velaros-ai/script'
 
 import {
   GoalLimits,
@@ -94,6 +99,7 @@ import { memoryPrompt } from '../utils/context-memory.js'
 import { frameEnvironment } from '../utils/environment.js'
 import { executionOutcome } from '../utils/execution-outcome.js'
 import { residentContracts, runtimeInstructions } from '../utils/model-instructions.js'
+import { nodeHostModules, nodeRuntimeInstructions } from '../utils/node-instructions.js'
 import {
   recoverScriptSubmission,
   scriptControlIdentity,
@@ -163,6 +169,8 @@ export interface RuntimeSessionModelTool {
 
 /** 会话由运行时注入的共享实例。 */
 export interface RuntimeSessionDependencies {
+  /** 显式授权的标准业务执行环境。 */
+  readonly node?: VelarosRuntimeOptions['node']
   /** 主会话的可信宿主产品指令；与运行协议一起编译和归档。 */
   readonly instructions?: string
   /** 本会话已授权模块的常驻完整合同或指定导出声明。 */
@@ -339,6 +347,7 @@ export class RuntimeSession implements VelarosSession {
   /** 超时端口仍未响应取消时，跟踪到收束并禁止再次派发探测。 */
   private pendingObservationProbe?: Promise<ObservationProbe>
   private acceptedDecision?: ScriptDecisionBasis
+  private readonly executionRunner: CodeRunnerApi
 
   public constructor(
     public readonly id: string,
@@ -356,7 +365,14 @@ export class RuntimeSession implements VelarosSession {
           (!Number.isSafeInteger(observation.maxAgeMs) || observation.maxAgeMs < 1)))
     )
       throw new AppError('VALIDATION', '观察复用时限超出范围')
-    this.config = protocolConfig(dependencies.protocol)
+    this.executionRunner = dependencies.node
+      ? createNodeCodeRunner(dependencies.node)
+      : dependencies.runner
+    this.config = protocolConfig(
+      dependencies.node
+        ? { ...dependencies.protocol, presentation: 'node', allowed: ['execute', 'done'] }
+        : dependencies.protocol
+    )
     this.context = createContextRuntime({ sessionId: id, storage: dependencies.storage })
     this.view = createContextView({
       sessionId: id,
@@ -383,9 +399,11 @@ export class RuntimeSession implements VelarosSession {
         signal.throwIfAborted()
         const script = createKernelScriptSession({
           packages: dependencies.packages,
-          allowedModules: dependencies.allowedModules(),
+          allowedModules: dependencies.node
+            ? nodeHostModules(dependencies.allowedModules())
+            : dependencies.allowedModules(),
           runtime: dependencies.kernel,
-          runner: dependencies.runner,
+          runner: this.executionRunner,
           sessionId: id,
           executionId: crypto.randomUUID(),
           mode: 'execute',
@@ -410,20 +428,28 @@ export class RuntimeSession implements VelarosSession {
       dependencies.journal
     )
     const modules = dependencies.allowedModules()
-    const instructions = `${runtimeInstructions({
-      modules,
-      resident: residentContracts(modules, dependencies.residentModules, (module) =>
-        dependencies.kernel.describe(module)
-      ),
-      summary: (module) => dependencies.kernel.describe(module).summary,
-      index: (module) => {
-        const description = dependencies.kernel.describe(module)
-        return scriptPackageCompiler.index(description.declarations, module, description.template)
-      },
-      storeMode: dependencies.stores?.mode,
-      maintain: Boolean(dependencies.maintain),
-      observe: this.config.allowed.includes('observe'),
-    })}\n\n${protocolRules(this.config)}\n${JSON.stringify({ snapshotPlans: (dependencies.contextOptions?.snapshots ?? []).filter((provider) => modules.includes(provider.moduleId)).map((provider) => ({ provider: provider.id, plans: provider.plans, module: provider.moduleId, operation: provider.operation })) })}${
+    const instructions = `${
+      dependencies.node
+        ? nodeRuntimeInstructions(dependencies.node.cwd)
+        : runtimeInstructions({
+            modules,
+            resident: residentContracts(modules, dependencies.residentModules, (module) =>
+              dependencies.kernel.describe(module)
+            ),
+            summary: (module) => dependencies.kernel.describe(module).summary,
+            index: (module) => {
+              const description = dependencies.kernel.describe(module)
+              return scriptPackageCompiler.index(
+                description.declarations,
+                module,
+                description.template
+              )
+            },
+            storeMode: dependencies.stores?.mode,
+            maintain: Boolean(dependencies.maintain),
+            observe: this.config.allowed.includes('observe'),
+          })
+    }\n\n${protocolRules(this.config)}\n${dependencies.node ? '' : JSON.stringify({ snapshotPlans: (dependencies.contextOptions?.snapshots ?? []).filter((provider) => modules.includes(provider.moduleId)).map((provider) => ({ provider: provider.id, plans: provider.plans, module: provider.moduleId, operation: provider.operation })) })}${
       dependencies.tool?.instructions ? `\n${dependencies.tool.instructions}` : ''
     }${dependencies.instructions?.trim() ? `\n宿主应用指令：\n${dependencies.instructions}` : ''}`
     dependencies.register({
@@ -1176,9 +1202,12 @@ export class RuntimeSession implements VelarosSession {
       }
       const script = createKernelScriptSession({
         packages: this.dependencies.packages,
-        allowedModules: this.dependencies.allowedModules(),
+        allowedModules:
+          execute && this.dependencies.node
+            ? nodeHostModules(this.dependencies.allowedModules())
+            : this.dependencies.allowedModules(),
         runtime: this.dependencies.kernel,
-        runner: this.dependencies.runner,
+        runner: execute ? this.executionRunner : this.dependencies.runner,
         sessionId: this.id,
         executionId: control.id,
         mode: execute ? 'execute' : 'observe',
@@ -2243,9 +2272,12 @@ export class RuntimeSession implements VelarosSession {
     try {
       const session = createKernelScriptSession({
         packages: this.dependencies.packages,
-        allowedModules: this.dependencies.allowedModules(),
+        allowedModules:
+          mode === 'execute' && this.dependencies.node
+            ? nodeHostModules(this.dependencies.allowedModules())
+            : this.dependencies.allowedModules(),
         runtime: this.dependencies.kernel,
-        runner: this.dependencies.runner,
+        runner: mode === 'execute' ? this.executionRunner : this.dependencies.runner,
         sessionId: this.id,
         executionId,
         mode,
@@ -2376,14 +2408,19 @@ export class RuntimeSession implements VelarosSession {
           result.result.unsettled?.length ||
           feedback.some((item) => item.outcome !== 'succeeded')
         )
-        const effect = feedback.some((item) => item.effect === 'unknown')
-          ? 'unknown'
-          : failed &&
-              feedback.some((item) => item.effect === 'committed' || item.effect === 'partial')
-            ? 'partial'
-            : feedback.some((item) => item.effect === 'committed')
-              ? 'committed'
-              : 'none'
+        const effect =
+          result?.checked && result.result.process?.launched
+            ? failed
+              ? 'partial'
+              : 'committed'
+            : feedback.some((item) => item.effect === 'unknown')
+              ? 'unknown'
+              : failed &&
+                  feedback.some((item) => item.effect === 'committed' || item.effect === 'partial')
+                ? 'partial'
+                : feedback.some((item) => item.effect === 'committed')
+                  ? 'committed'
+                  : 'none'
         feedback.push({
           id: executionId,
           executionId,

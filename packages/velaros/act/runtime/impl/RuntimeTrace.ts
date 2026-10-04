@@ -34,7 +34,11 @@ import type {
   ActVerificationCostSummary,
   TraceChildPhase,
 } from '../types/trace.js'
-import { executionDuration, executionOutcome } from '../utils/execution-outcome.js'
+import {
+  executionDuration,
+  executionOutcome,
+  executionProcessOutput,
+} from '../utils/execution-outcome.js'
 import {
   modelAccounting,
   summarizeVerificationAttempt,
@@ -139,7 +143,10 @@ export class RuntimeTrace implements RuntimeTraceApi {
         ) +
         (value.requestSummary?.system.length ?? 0) +
         (value.requestSummary?.messages.length ?? 0) +
-        value.executions.reduce((sum, item) => sum + item.source.length, 0) +
+        value.executions.reduce(
+          (sum, item) => sum + item.source.length + (item.processOutput?.length ?? 0),
+          0
+        ) +
         (value.observation.registration?.source.length ?? 0) +
         (value.observation.run?.source.length ?? 0) +
         value.agents.reduce((sum, item) => sum + item.task.length + item.answer.length, 0)
@@ -636,11 +643,17 @@ export class RuntimeTrace implements RuntimeTraceApi {
         (journal.get(item.executionId) ?? []).map((invocation) => invocation.receipt)
       )
       const ref = item.sourceRef ?? ('draftRef' in item ? item.draftRef : undefined)
+      const processText = executionProcessOutput(persisted)
+      const processOutput = processText?.slice(0, Math.max(0, Math.min(6000, remaining)))
+      remaining -= processOutput?.length ?? 0
       summaries.push({
         executionId: item.executionId,
         position,
         ...outcome,
         durationMs: rejected ? null : executionDuration(persisted),
+        ...(isUndefined(processText)
+          ? {}
+          : { processOutput, processOutputTruncated: processOutput!.length < processText.length }),
         ...(await programSource(ref)),
       })
     }

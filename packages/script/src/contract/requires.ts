@@ -10,7 +10,24 @@ import type { OperationRuntimeApi } from '@velaros-ai/kernel'
 import type { CodeAttachment } from '../types/outcome.js'
 import type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
 import type { CodeCallNotice, ScriptPackageDefinition } from '../types/script.js'
+import type { NodeProcessRequest, NodeProcessResult } from '../types/script.js'
 import type { ScriptWorkerCommand, ScriptWorkerEvent } from '../types/worker.js'
+
+/** 标准 Node 环境由宿主提供进程边界；必须沿用该工作区的审批、沙箱和进程树回收。 */
+export interface NodeCodeRunnerOptions {
+  /** 已授权的绝对工作目录，也是原生 ESM/npm 解析起点。 */
+  readonly cwd: string
+  /** 宿主持有的归档目录，进程只需读取其中的能力目录。 */
+  readonly directory: string
+  /** 在计时与启动前完成本次源码的宿主审批；拒绝时不得启动进程。 */
+  authorize?(request: NodeProcessRequest, signal: AbortSignal): Promise<void>
+  /** 启动真实 Node，将 source 作为 ESM 标准输入；signal 必须终止并回收进程树。 */
+  execute(
+    request: NodeProcessRequest,
+    onOutput: (text: string) => void,
+    signal: AbortSignal
+  ): Promise<NodeProcessResult>
+}
 
 /** 宿主创建一次受信隔离进程时接收的事件端口。 */
 export interface ScriptProcessEvents {
@@ -144,11 +161,13 @@ export interface CodeSurfaceEventSink {
  * 模型程序、检查和能力分发共用这一注入面，宿主仍须验证自己的部署隔离边界。
  */
 export interface CodeRunnerApi {
+  /** 显式选择标准 Node 语义；省略时维持受限能力环境。 */
+  readonly environment?: 'node'
   /**
    * 在隔离环境里跑一段程序。
    *
-   * 实现必须保证三件事：程序拿不到宿主的任何环境能力；到 `timeoutMs` 一定停；
-   * `signal` 触发时尽快停。程序**不落盘**——源码经通道送进去，落盘等于凭空多一个可读文件。
+   * 受限环境只开放能力桥；node 环境开放宿主批准的操作系统范围。
+   * 源码通过进程通道传递；两种环境都必须执行时限、取消和进程回收。
    */
   run(
     request: CodeRunRequest,

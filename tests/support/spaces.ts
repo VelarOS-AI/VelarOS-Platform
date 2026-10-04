@@ -31,8 +31,11 @@ import type {
   ProjectEditInput,
   ProjectHostPort,
   ProjectListInput,
+  ProjectPatchInput,
   ProjectReadInput,
   ProjectSearchInput,
+  ProjectSelectInput,
+  ProjectSnapshotInput,
 } from '../../packages/velaros/project/index'
 import {
   projectCapabilityPorts,
@@ -230,12 +233,18 @@ export function projectSpace(input: { resolveCall: Resolve<ProjectSpaceCall> }):
     ],
     operations: {
       project: {
+        snapshot: async (input, context) =>
+          projectFileOperations.snapshot(input as ProjectSnapshotInput, await toolContext(context)),
         read: async (input, context) =>
           projectFileOperations.read(input as ProjectReadInput, await toolContext(context)),
         list: async (input, context) =>
           projectFileOperations.list(input as ProjectListInput, await toolContext(context)),
         search: async (input, context) =>
           projectFileOperations.search(input as ProjectSearchInput, await toolContext(context)),
+        select: async (input, context) =>
+          projectFileOperations.select(input as ProjectSelectInput, await toolContext(context)),
+        patch: async (input, context) =>
+          projectFileOperations.patch(input as ProjectPatchInput, await toolContext(context)),
         edit: async (input, context) =>
           projectFileOperations.edit(input as ProjectEditInput, await toolContext(context)),
         inspect: async (input, context) =>

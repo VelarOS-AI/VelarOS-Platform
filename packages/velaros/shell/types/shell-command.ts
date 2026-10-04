@@ -350,7 +350,8 @@ export interface ShellEnvironmentRefreshResult {
 export interface ShellRunCommandOptions {
   /** 绝对工作目录。 */
   cwd?: string
-  timeoutMs?: number
+  /** null 仅供宿主自管时钟使用，必须同时提供取消信号。 */
+  timeoutMs?: LooseOptional<number>
   background?: boolean
   /**
    * 交互式：命令要向用户要输入（口令、y/n、菜单选项）时为真，必须和 `background` 一起用。

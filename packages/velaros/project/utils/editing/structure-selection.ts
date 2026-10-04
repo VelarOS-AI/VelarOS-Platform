@@ -1,6 +1,8 @@
 /** 准确语法树只负责定位；保留原始文本，不经 AST 重打印。 */
 import * as ts from 'typescript'
 
+import { isEmpty } from '@velaros-ai/core'
+
 import type { ProjectStructureSpan } from '../../types/selection.js'
 import type { JsTsParsedSource, PythonSyntaxNode } from '../../types/syntax.js'
 import { ProjectError } from '../errors.js'
@@ -25,7 +27,7 @@ function blockSpan(content: string, start: number, end: number): { start: number
 /** JS/TS 的完整限定声明名；嵌套函数和重载各保留自己的边界。 */
 function jsTsStructures(path: string, content: string): ProjectStructureSpan[] {
   const root = parseJsTsSource(path, content) as JsTsParsedSource
-  if (root.parseDiagnostics.length)
+  if (!isEmpty(root.parseDiagnostics))
     throw new ProjectError(
       'NOT_SUPPORTED',
       '源码有语法错误，不能绑定结构边界；请先用 match 或 read 的文本目标修复。'

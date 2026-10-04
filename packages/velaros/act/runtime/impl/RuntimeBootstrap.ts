@@ -275,6 +275,7 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
               profiles: {
                 worker: {
                   model,
+                  node: Boolean(options.node),
                   modules: [
                     ...modules.map((module) => module.binding.moduleId),
                     ...(search ? ['velaros:search'] : []),
@@ -286,6 +287,8 @@ class RuntimeBootstrap implements RuntimeBootstrapApi {
             }
           : undefined
     if (isTrue(options.agents) && !agents) throw new AppError('VALIDATION', '启用子任务需要模型')
+    if (!options.node && Object.values(agents?.profiles ?? {}).some((profile) => profile.node))
+      throw new AppError('VALIDATION', '子任务的标准 Node 范围需要宿主先给父任务提供 Node 环境')
     const scope = createHash('sha256')
       .update(workspace ?? dataDir ?? 'injected')
       .digest('hex')

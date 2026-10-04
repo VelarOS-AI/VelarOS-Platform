@@ -1,6 +1,7 @@
 /** 已绑定目标批量拼接：各文件共享原始坐标，复用现有规划器和事务提交，不逐项写盘。 */
 import { randomUUID } from 'node:crypto'
 
+import { isEmpty, isNumber, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ProjectOperationContext } from '../../contract/requires.js'
@@ -22,14 +23,13 @@ import { loadSelection } from './selection-refs.js'
 
 /** 定位阶段只有已知领域失败可汇总；取消、未知宿主故障必须抛回调用方。 */
 function patchIssue(error: unknown, index?: number): ProjectPatchIssue {
-  if (error instanceof ProjectError)
-    return {
-      ...(index !== undefined ? { index } : {}),
-      code: error.reason,
-      message: error.message,
-      ...(error.details ? { details: error.details } : {}),
-      ...(error.suggestedNextAction ? { next: error.suggestedNextAction } : {}),
-    }
+  if (error instanceof ProjectError) {
+    const issue: ProjectPatchIssue = { code: error.reason, message: error.message }
+    if (!isUndefined(index)) issue.index = index
+    if (error.details) issue.details = error.details
+    if (error.suggestedNextAction) issue.next = error.suggestedNextAction
+    return issue
+  }
   throw error
 }
 
@@ -90,6 +90,7 @@ export async function patchSelections(
       )
       group.indices.push(index)
       groups.set(view.path, group)
+      // @arch-guard:suspend code-style/require-error-logging 理由：已知领域异常转为 issues 回执；patchIssue 将未知异常重抛。
     } catch (error) {
       issues.push(patchIssue(error, index))
     }
@@ -113,17 +114,17 @@ export async function patchSelections(
           mode: 'edit',
         },
       })
+      // @arch-guard:suspend code-style/require-error-logging 理由：已知领域异常转为 issues 回执；patchIssue 将未知异常重抛。
     } catch (error) {
       const issue = patchIssue(error)
       const at = issue.details?.editIndex
-      if (typeof at === 'number') issue.index = indices[at]
+      if (isNumber(at)) issue.index = indices[at]
       const other = issue.details?.conflictsWith
-      if (typeof other === 'number')
-        issue.details = { ...issue.details, conflictsWithIndex: indices[other] }
+      if (isNumber(other)) issue.details = { ...issue.details, conflictsWithIndex: indices[other] }
       issues.push(issue)
     }
   }
-  if (issues.length) return blocked(ctx, draft, issues)
+  if (!isEmpty(issues)) return blocked(ctx, draft, issues)
   let result
   try {
     result = await commitPreparedProjectEdit(plan, ctx, draft.receipt === 'full')

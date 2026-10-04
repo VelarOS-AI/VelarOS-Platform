@@ -5,7 +5,8 @@ Act 运行时：把模型、脚本执行、Kernel 与上下文存储装成一条
 ## 用法
 
 ```ts
-import { createRuntime } from '@velaros-ai/velaros'
+import { createRuntime, createShellNodeEnvironment } from '@velaros-ai/velaros'
+import { createLocalShellHost } from '@velaros-ai/velaros/shell/local'
 
 // 宿主给：模型凭据，项目目录与状态目录（都是绝对路径，状态目录在项目之外），以及怎么问用户
 declare const apiKey: string
@@ -13,7 +14,9 @@ declare const projectRoot: string
 declare const stateDir: string
 declare function askUser(message: string): Promise<string>
 
+const shell = createLocalShellHost({cwd:projectRoot, processConfinement:{mode:'workspace-write',workspaceRoot:projectRoot}})
 const runtime = await createRuntime({
+  node: createShellNodeEnvironment({cwd:projectRoot, directory:`${stateDir}/node`, shell}),
   workspace: projectRoot,
   dataDir: stateDir,
   model: { provider: 'openai', model: 'your-model', baseURL: 'https://api.openai.com/v1', apiKey },
@@ -33,6 +36,7 @@ try {
   if (status !== 'completed') console.warn('运行没有完成：', status)
 } finally {
   await runtime.close()
+  await shell.dispose()
 }
 ```
 
@@ -52,6 +56,8 @@ for await (const event of liveEvents) {
 }
 projector.finish() // 交付结束：清掉没接纳的预览
 ```
+
+标准 Node 主会话采用精简执行说明，通过普通文件发现应用能力。默认业务子任务继承 Node；自定义 `AgentProfile` 使用 `node: true` 显式继承操作系统范围，能力目录同时遵守 `modules`。维护和观察继续使用受限执行器。审批由 `createShellNodeEnvironment.authorize` 处理，能力调用还经过 `createRuntime.authorize`；Shell 的实际约束证据会随 Node 回执返回。
 
 ## 入口
 

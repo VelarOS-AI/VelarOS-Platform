@@ -8,6 +8,7 @@ export {
 } from './contract/constants.js'
 export { CodeProgramEditLimits } from './contract/constants.js'
 export { ScriptOutputLimits } from './contract/constants.js'
+export { NodeEnvironmentVariables, NodeExecutionLimits } from './contract/constants.js'
 export type { KernelScriptSessionApi } from './contract/provides.js'
 export type { ScriptPackageCompilerApi } from './contract/provides.js'
 export type {
@@ -24,12 +25,14 @@ export type {
   ScriptWorkerOptions,
   SubprocessCodeRunnerOptions,
 } from './contract/requires.js'
+export type { NodeCodeRunnerOptions } from './contract/requires.js'
 export { createCapabilityPort } from './impl/CapabilityOperationPort.js'
 export type { CodeProgramCheckerApi } from './impl/CodeProgramChecker.js'
 export { codeProgramChecker } from './impl/CodeProgramChecker.js'
 export type { CodeSurfaceSessionApi } from './impl/CodeSurfaceSession.js'
 export { createCodeSurfaceSession } from './impl/CodeSurfaceSession.js'
 export { createKernelScriptSession } from './impl/KernelScriptSession.js'
+export { createNodeCodeRunner } from './impl/NodeCodeRunner.js'
 export {
   nodeSubprocessCodeRunner,
   NodeSubprocessRunnerIsReleaseReady,
@@ -88,4 +91,5 @@ export type {
   ScriptPackageDefinition,
   ScriptPackageSurface,
 } from './types/script.js'
+export type { NodeProcessReceipt, NodeProcessRequest, NodeProcessResult } from './types/script.js'
 export type { ScriptWorkerCommand, ScriptWorkerEvent } from './types/worker.js'

@@ -503,6 +503,7 @@ class ComposedRuntime implements VelarosRuntime {
     let session: VelarosSession
     try {
       session = new RuntimeSession(job.sessionId, {
+        node: profile.node ? this.options.node : undefined,
         environment: this.options.environment,
         maintain: this.allows(job.sessionId, MemoryModuleId)
           ? (input, signal) => this.maintenance!.maintain(job.sessionId, input, signal)
@@ -741,6 +742,7 @@ class ComposedRuntime implements VelarosRuntime {
         this.tools.root(id)
         if (this.options.model) this.taskModels.set(id, this.options.model)
         session = new RuntimeSession(id, {
+          node: this.options.node,
           instructions: this.options.instructions,
           residentModules: this.options.residentModules,
           environment: this.options.environment,

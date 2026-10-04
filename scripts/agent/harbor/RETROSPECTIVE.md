@@ -52,11 +52,11 @@ ScriptAct 去重后有 1,165 次宿主操作、795 次脚本执行、22 次协�
 
 ## 可复用的数据
 
-- [187 次试次完整索引 CSV](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-48/all-trials.csv)：请求、费用、未知用量、时间、上下文峰值、缓存、脚本与协议指标，源/重放分别保留。
-- [机器可读问题台账与证据哈希](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-48/review.json)；[原始结果与轨迹覆盖索引](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-48/inventory.json)。
-- [去重后的执行问题信号](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-48/execution-signals.json)：按 job、trial、execution、invocation 定位，保存摘要与哈希而非模型思考内容。
-- [逐试次完整指标](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-48/trial-metrics.json)；[518 份 campaign 记录索引](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-48/campaign-index.json)。
-- [只读扫描脚本](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-48/scan.py)；[沿用现有口径重算指标的脚本](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-48/account.py)。
+- 187 次试次完整索引 CSV（`.velaros-workspace/bench/retrospective-48/all-trials.csv`）：请求、费用、未知用量、时间、上下文峰值、缓存、脚本与协议指标，源/重放分别保留。
+- 机器可读问题台账与证据哈希（`.velaros-workspace/bench/retrospective-48/review.json`）；原始结果与轨迹覆盖索引（`.velaros-workspace/bench/retrospective-48/inventory.json`）。
+- 去重后的执行问题信号（`.velaros-workspace/bench/retrospective-48/execution-signals.json`）：按 job、trial、execution、invocation 定位，保存摘要与哈希而非模型思考内容。
+- 逐试次完整指标（`.velaros-workspace/bench/retrospective-48/trial-metrics.json`）；518 份 campaign 记录索引（`.velaros-workspace/bench/retrospective-48/campaign-index.json`）。
+- 只读扫描脚本（`.velaros-workspace/bench/retrospective-48/scan.py`）；沿用现有口径重算指标的脚本（`.velaros-workspace/bench/retrospective-48/account.py`）。
 
 95 个源试次中，有些是被取消或零模型预检，不意味着 95 次已完成付费测评。84 次试次关联到账本请求；未关联请求的记录不能据此宣称历史费用为零。源码仓库任务的源阶段不判分，CSV 的原始空分必须结合重放阅读。
 
@@ -68,9 +68,9 @@ ScriptAct 去重后有 1,165 次宿主操作、795 次脚本执行、22 次协�
 
 改为关闭 job control 后启动独立会话，并由外层 wait 保留前台输出和退出码。4 项 POSIX 进程组测试通过；这是本地兼容验证，Alpine 整体安装仍见 R03。
 
-实现与回归：[cancellable_environment.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/cancellable_environment.py)、[cancellable_environment_test.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/cancellable_environment_test.py)。
+实现与回归：[cancellable_environment.py](../../../scripts/agent/harbor/cancellable_environment.py)、[cancellable_environment_test.py](../../../scripts/agent/harbor/cancellable_environment_test.py)。
 
-证据：[validation-44-setup-reproduction.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-44-setup-reproduction.json)、[cancellation-before.log](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-48/cancellation-before.log)、[regressions-final.log](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-48/regressions-final.log)。
+证据：validation-44-setup-reproduction.json（`.velaros-workspace/bench/campaign/validation-44-setup-reproduction.json`）、cancellation-before.log（`.velaros-workspace/bench/retrospective-48/cancellation-before.log`）、regressions-final.log（`.velaros-workspace/bench/retrospective-48/regressions-final.log`）。
 
 ### R02 · 预先取消时留下陈旧 PID 文件
 
@@ -78,9 +78,9 @@ ScriptAct 去重后有 1,165 次宿主操作、795 次脚本执行、22 次协�
 
 在写 PID 和检查取消标记之前注册清理；本地断言确认命令不启动、退出码保留且 pid 删除。
 
-实现与回归：[cancellable_environment.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/cancellable_environment.py)、[cancellable_environment_test.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/cancellable_environment_test.py)。
+实现与回归：[cancellable_environment.py](../../../scripts/agent/harbor/cancellable_environment.py)、[cancellable_environment_test.py](../../../scripts/agent/harbor/cancellable_environment_test.py)。
 
-证据：[cancelled-pid-before.log](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-48/cancelled-pid-before.log)、[regressions-final.log](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-48/regressions-final.log)。
+证据：cancelled-pid-before.log（`.velaros-workspace/bench/retrospective-48/cancelled-pid-before.log`）、regressions-final.log（`.velaros-workspace/bench/retrospective-48/regressions-final.log`）。
 
 ### R03 · Alpine 与 GNU 运行时 ABI 不兼容
 
@@ -88,9 +88,9 @@ ScriptAct 去重后有 1,165 次宿主操作、795 次脚本执行、22 次协�
 
 后续须统一选择兼容的 UV/Node 与原生依赖并冻结双方相同环境；本轮保持现有镜像、包和成绩。R01 不等于整条 Alpine 安装链已修复。
 
-实现与回归：[environment.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/environment.py)、[prepare-linux.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/prepare-linux.py)、[prepare-codex.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/prepare-codex.py)。
+实现与回归：[environment.py](../../../scripts/agent/harbor/environment.py)、[prepare-linux.py](../../../scripts/agent/harbor/prepare-linux.py)、[prepare-codex.py](../../../scripts/agent/harbor/prepare-codex.py)。
 
-证据：[validation-44-setup-reproduction.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-44-setup-reproduction.json)。
+证据：validation-44-setup-reproduction.json（`.velaros-workspace/bench/campaign/validation-44-setup-reproduction.json`）。
 
 ### R04 · 截断后重读与归档补读采用不足
 
@@ -98,9 +98,9 @@ ScriptAct 去重后有 1,165 次宿主操作、795 次脚本执行、22 次协�
 
 已保留预算内投影、字段读取与诊断；下一步用旧轨迹定位缺口、已交付范围和源文件变化，区分必要重读与冗余。不能把展示增加或调用减少直接当作整题收益。
 
-实现与回归：[materials.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/utils/materials.ts)、[ContextMemory.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/impl/ContextMemory.ts)、[output-render.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/script/src/utils/output-render.ts)。
+实现与回归：[materials.ts](../../../packages/velaros/act/runtime/utils/materials.ts)、[ContextMemory.ts](../../../packages/velaros/act/runtime/impl/ContextMemory.ts)、[output-render.ts](../../../packages/script/src/utils/output-render.ts)。
 
-证据：[field-read-47-offline-replay.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/field-read-47-offline-replay.json)、[validation-47-read-behavior.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-47-read-behavior.json)、[validation-43-output-budget-offline.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-43-output-budget-offline.json)。
+证据：field-read-47-offline-replay.json（`.velaros-workspace/bench/campaign/field-read-47-offline-replay.json`）、validation-47-read-behavior.json（`.velaros-workspace/bench/campaign/validation-47-read-behavior.json`）、validation-43-output-budget-offline.json（`.velaros-workspace/bench/campaign/validation-43-output-budget-offline.json`）。
 
 ### R05 · 单次模型回复重复提交相同程序和示例占位程序
 
@@ -108,9 +108,9 @@ ScriptAct 去重后有 1,165 次宿主操作、795 次脚本执行、22 次协�
 
 优先审查控制示例的重复和可复制占位内容；改变引导需离线验收。不能自动去重有副作用的脚本，也不能将这 2.754 秒推广为整题可节省量。
 
-实现与回归：[script-protocol.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/utils/script-protocol.ts)、[ScriptTurnDecoder.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/impl/ScriptTurnDecoder.ts)。
+实现与回归：[script-protocol.ts](../../../packages/velaros/act/runtime/utils/script-protocol.ts)、[ScriptTurnDecoder.ts](../../../packages/velaros/act/runtime/impl/ScriptTurnDecoder.ts)。
 
-证据：[validation-46-scriptact-final-diagnosis.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-46-scriptact-final-diagnosis.json)。
+证据：validation-46-scriptact-final-diagnosis.json（`.velaros-workspace/bench/campaign/validation-46-scriptact-final-diagnosis.json`）。
 
 ### R06 · 编辑依据不精确造成拒绝和重试
 
@@ -118,9 +118,9 @@ ScriptAct 去重后有 1,165 次宿主操作、795 次脚本执行、22 次协�
 
 问题在路径/唯一锚点/原始空白的选择与使用；保留精确匹配及事务保护。用实际候选与前序可见代码核对，不采用模糊自动写入。
 
-实现与回归：[text-match-feedback.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/project/utils/editing/text-match-feedback.ts)、[project-edit.test.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/project/test/project-edit.test.ts)。
+实现与回归：[text-match-feedback.ts](../../../packages/velaros/project/utils/editing/text-match-feedback.ts)、[project-edit.test.ts](../../../packages/velaros/project/test/project-edit.test.ts)。
 
-证据：[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-repository-validation-40-scriptact-1/instance_future-architect__vuls__xTPWiHH/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-repository-validation-41-scriptact-1/instance_future-architect__vuls__LX4zapu/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-repository-validation-46-scriptact-1/instance_navidrome__navidrome-e1__Fumsy7w/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-repository-validation-47-scriptact-1/instance_navidrome__navidrome-e1__DSyTCq6/agent/traces.json)。
+证据：traces.json（`.velaros-workspace/bench/jobs/sol-repository-validation-40-scriptact-1/instance_future-architect__vuls__xTPWiHH/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-repository-validation-41-scriptact-1/instance_future-architect__vuls__LX4zapu/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-repository-validation-46-scriptact-1/instance_navidrome__navidrome-e1__Fumsy7w/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-repository-validation-47-scriptact-1/instance_navidrome__navidrome-e1__DSyTCq6/agent/traces.json`）。
 
 ### R07 · 工具不存在或不在实际 PATH 的探查成本
 
@@ -128,9 +128,9 @@ ScriptAct 去重后有 1,165 次宿主操作、795 次脚本执行、22 次协�
 
 离线核对真实 Shell 环境、工作目录、工具可用性和后续成功调用；优先减少失败后再问模型的往返，不向通用运行时硬编码某道题的工具路径。
 
-实现与回归：[ShellOperations.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/shell/impl/ShellOperations.ts)、[run.mjs](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/run.mjs)。
+实现与回归：[ShellOperations.ts](../../../packages/velaros/shell/impl/ShellOperations.ts)、[run.mjs](../../../scripts/agent/harbor/run.mjs)。
 
-证据：[validation-39-go-path-diagnosis.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-39-go-path-diagnosis.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-repository-validation-40-scriptact-1/instance_future-architect__vuls__xTPWiHH/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-repository-validation-47-scriptact-1/instance_navidrome__navidrome-e1__DSyTCq6/agent/traces.json)。
+证据：validation-39-go-path-diagnosis.json（`.velaros-workspace/bench/campaign/validation-39-go-path-diagnosis.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-repository-validation-40-scriptact-1/instance_future-architect__vuls__xTPWiHH/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-repository-validation-47-scriptact-1/instance_navidrome__navidrome-e1__DSyTCq6/agent/traces.json`）。
 
 ### R08 · 验证范围过大或重复验证
 
@@ -138,9 +138,9 @@ ScriptAct 去重后有 1,165 次宿主操作、795 次脚本执行、22 次协�
 
 将每条验证命令关联到前一次代码变化和验证目的；保留必要检查及失败费用，扩大范围需要具体依据。
 
-实现与回归：[model-instructions.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/utils/model-instructions.ts)。
+实现与回归：[model-instructions.ts](../../../packages/velaros/act/runtime/utils/model-instructions.ts)。
 
-证据：[validation-38-scriptact-final-diagnosis.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-38-scriptact-final-diagnosis.json)、[validation-39-scriptact-final-diagnosis.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-39-scriptact-final-diagnosis.json)、[validation-41-scriptact-final-diagnosis.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-41-scriptact-final-diagnosis.json)。
+证据：validation-38-scriptact-final-diagnosis.json（`.velaros-workspace/bench/campaign/validation-38-scriptact-final-diagnosis.json`）、validation-39-scriptact-final-diagnosis.json（`.velaros-workspace/bench/campaign/validation-39-scriptact-final-diagnosis.json`）、validation-41-scriptact-final-diagnosis.json（`.velaros-workspace/bench/campaign/validation-41-scriptact-final-diagnosis.json`）。
 
 ### R09 · 每轮重复导出全量轨迹
 
@@ -148,9 +148,9 @@ ScriptAct 去重后有 1,165 次宿主操作、795 次脚本执行、22 次协�
 
 后续可设计增量记录与完整终态快照；先保证崩溃恢复、实时诊断和最终逐字段一致。各计时区间可能重叠，不能简单从墙钟中扣除导出时间。
 
-实现与回归：[run.mjs](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/run.mjs)。
+实现与回归：[run.mjs](../../../scripts/agent/harbor/run.mjs)。
 
-证据：[trace-export-29-audit.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/trace-export-29-audit.json)、[validation-33-scriptact-final-diagnosis.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-33-scriptact-final-diagnosis.json)。
+证据：trace-export-29-audit.json（`.velaros-workspace/bench/campaign/trace-export-29-audit.json`）、validation-33-scriptact-final-diagnosis.json（`.velaros-workspace/bench/campaign/validation-33-scriptact-final-diagnosis.json`）。
 
 ### R10 · 能力发现合同的额外往返
 
@@ -158,9 +158,9 @@ ScriptAct 去重后有 1,165 次宿主操作、795 次脚本执行、22 次协�
 
 已有实现和真实程序回归。保持完整类型与权限边界；指定操作的局部优势不代表所有任务都应常驻更多合同。
 
-实现与回归：[StandardModules.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/impl/StandardModules.ts)、[host-instructions.test.mjs](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/test/host-instructions.test.mjs)。
+实现与回归：[StandardModules.ts](../../../packages/velaros/act/runtime/impl/StandardModules.ts)、[host-instructions.test.mjs](../../../packages/velaros/act/runtime/test/host-instructions.test.mjs)。
 
-证据：[selected-contracts-28-local-validation.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/selected-contracts-28-local-validation.json)。
+证据：selected-contracts-28-local-validation.json（`.velaros-workspace/bench/campaign/selected-contracts-28-local-validation.json`）。
 
 ### R11 · 控制段缺失、未闭合与行尾空格导致协议重试
 
@@ -168,9 +168,9 @@ ScriptAct 去重后有 1,165 次宿主操作、795 次脚本执行、22 次协�
 
 固定协议前缀、明确闭合边界、完成控制先行和尾空格兼容已有实现与回归；继续保留拒绝整批后只执行一次的语义。重复合法段另列 R05。
 
-实现与回归：[ScriptTurnDecoder.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/impl/ScriptTurnDecoder.ts)、[script-protocol.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/utils/script-protocol.ts)、[text-runtime.test.mjs](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/test/text-runtime.test.mjs)。
+实现与回归：[ScriptTurnDecoder.ts](../../../packages/velaros/act/runtime/impl/ScriptTurnDecoder.ts)、[script-protocol.ts](../../../packages/velaros/act/runtime/utils/script-protocol.ts)、[text-runtime.test.mjs](../../../packages/velaros/act/runtime/test/text-runtime.test.mjs)。
 
-证据：[blob-boundary-22-repair.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/blob-boundary-22-repair.json)、[completion-first-29-local-validation.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/completion-first-29-local-validation.json)。
+证据：blob-boundary-22-repair.json（`.velaros-workspace/bench/campaign/blob-boundary-22-repair.json`）、completion-first-29-local-validation.json（`.velaros-workspace/bench/campaign/completion-first-29-local-validation.json`）。
 
 ### R12 · 短租约退役改写历史正文
 
@@ -178,9 +178,9 @@ ScriptAct 去重后有 1,165 次宿主操作、795 次脚本执行、22 次协�
 
 segment 租约与冻结历史已有修复。显式释放是允许的状态变化，不能为了命中率取消释放或无条件保留所有正文。
 
-实现与回归：[RecentContext.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/impl/RecentContext.ts)、[ProgramContext.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/impl/ProgramContext.ts)、[context-memory.test.mjs](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/test/context-memory.test.mjs)。
+实现与回归：[RecentContext.ts](../../../packages/velaros/act/runtime/impl/RecentContext.ts)、[ProgramContext.ts](../../../packages/velaros/act/runtime/impl/ProgramContext.ts)、[context-memory.test.mjs](../../../packages/velaros/act/runtime/test/context-memory.test.mjs)。
 
-证据：[scriptact-codex-segment-01.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/scriptact-codex-segment-01.json)、[sol-repository-repair-17-scriptact-1-history-diagnosis.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/sol-repository-repair-17-scriptact-1-history-diagnosis.json)。
+证据：scriptact-codex-segment-01.json（`.velaros-workspace/bench/campaign/scriptact-codex-segment-01.json`）、sol-repository-repair-17-scriptact-1-history-diagnosis.json（`.velaros-workspace/bench/campaign/sol-repository-repair-17-scriptact-1-history-diagnosis.json`）。
 
 ### R13 · 任务正文与稳定协议反复进入动态帧
 
@@ -188,9 +188,9 @@ segment 租约与冻结历史已有修复。显式释放是允许的状态变化
 
 已有任务顺序、授权重置、封段和重启回归；本轮不改缓存容量。
 
-实现与回归：[context-memory.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/utils/context-memory.ts)、[context-memory.test.mjs](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/test/context-memory.test.mjs)。
+实现与回归：[context-memory.ts](../../../packages/velaros/act/runtime/utils/context-memory.ts)、[context-memory.test.mjs](../../../packages/velaros/act/runtime/test/context-memory.test.mjs)。
 
-证据：[task-history-22-local-validation.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/task-history-22-local-validation.json)、[context-task-prefix-audit-21.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/context-task-prefix-audit-21.json)。
+证据：task-history-22-local-validation.json（`.velaros-workspace/bench/campaign/task-history-22-local-validation.json`）、context-task-prefix-audit-21.json（`.velaros-workspace/bench/campaign/context-task-prefix-audit-21.json`）。
 
 ### R14 · 只输出 stdout 时丢失 stderr 和失败诊断
 
@@ -198,9 +198,9 @@ segment 租约与冻结历史已有修复。显式释放是允许的状态变化
 
 Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错误线索。
 
-实现与回归：[OperationRuntime.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/kernel/src/impl/runtime/OperationRuntime.ts)、[results.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/shell/utils/results.ts)、[operation-diagnostics.test.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/kernel/spec/operation-diagnostics.test.ts)。
+实现与回归：[OperationRuntime.ts](../../../packages/kernel/src/impl/runtime/OperationRuntime.ts)、[results.ts](../../../packages/velaros/shell/utils/results.ts)、[operation-diagnostics.test.ts](../../../packages/kernel/spec/operation-diagnostics.test.ts)。
 
-证据：[command-feedback-20-local-validation.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/command-feedback-20-local-validation.json)。
+证据：command-feedback-20-local-validation.json（`.velaros-workspace/bench/campaign/command-feedback-20-local-validation.json`）。
 
 ### R15 · 完整诊断和成功状态在工作帧反复展开
 
@@ -208,9 +208,9 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 失败、未知/部分效果和新增诊断继续单列；以完整尝试指标评价收益。
 
-实现与回归：[context-memory.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/utils/context-memory.ts)、[context-memory.test.mjs](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/act/runtime/test/context-memory.test.mjs)。
+实现与回归：[context-memory.ts](../../../packages/velaros/act/runtime/utils/context-memory.ts)、[context-memory.test.mjs](../../../packages/velaros/act/runtime/test/context-memory.test.mjs)。
 
-证据：[diagnostic-history-24-local-validation.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/diagnostic-history-24-local-validation.json)、[sol-repository-repair-26-diagnosis.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/sol-repository-repair-26-diagnosis.json)。
+证据：diagnostic-history-24-local-validation.json（`.velaros-workspace/bench/campaign/diagnostic-history-24-local-validation.json`）、sol-repository-repair-26-diagnosis.json（`.velaros-workspace/bench/campaign/sol-repository-repair-26-diagnosis.json`）。
 
 ### R16 · 模型续接、推理档位与缓存计费字段的链路完整性
 
@@ -218,9 +218,9 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 保留完整原始响应所对应的续接状态，费用按请求价格快照计算；不能伪造历史 reasoning 或把输出中的 reasoning token 再计费。
 
-实现与回归：[continuation.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/model/src/utils/wire/continuation.ts)、[continuation.test.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/model/spec/continuation.test.ts)、[acceptance.test.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/model/spec/acceptance.test.ts)、[model-continuation.test.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/kernel/spec/model-continuation.test.ts)。
+实现与回归：[continuation.ts](../../../packages/model/src/utils/wire/continuation.ts)、[continuation.test.ts](../../../packages/model/spec/continuation.test.ts)、[acceptance.test.ts](../../../packages/model/spec/acceptance.test.ts)、[model-continuation.test.ts](../../../packages/kernel/spec/model-continuation.test.ts)。
 
-证据：[scriptact-codex-continuation-01.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/scriptact-codex-continuation-01.json)、[REPORT.md](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/REPORT.md)。
+证据：scriptact-codex-continuation-01.json（`.velaros-workspace/bench/campaign/scriptact-codex-continuation-01.json`）、[REPORT.md](../../../scripts/agent/harbor/REPORT.md)。
 
 ### R17 · 超时后的容器进程与账本请求仍继续
 
@@ -228,9 +228,9 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 保留历史失败和全部费用。通用取消链已有修复，本轮补齐 BusyBox 与提前取消边界；最终格式/范围回归通过。
 
-实现与回归：[cancellable_environment.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/cancellable_environment.py)、[budget-proxy.mjs](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/budget-proxy.mjs)、[report.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/report.py)。
+实现与回归：[cancellable_environment.py](../../../scripts/agent/harbor/cancellable_environment.py)、[budget-proxy.mjs](../../../scripts/agent/harbor/budget-proxy.mjs)、[report.py](../../../scripts/agent/harbor/report.py)。
 
-证据：[cancellation-probe-20260928T120108Z.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/cancellation-probe-20260928T120108Z.json)、[execution-protocol-amendment-01.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/execution-protocol-amendment-01.json)。
+证据：cancellation-probe-20260928T120108Z.json（`.velaros-workspace/bench/campaign/cancellation-probe-20260928T120108Z.json`）、execution-protocol-amendment-01.json（`.velaros-workspace/bench/campaign/execution-protocol-amendment-01.json`）。
 
 ### R18 · 两笔历史请求的最终用量未知
 
@@ -238,9 +238,9 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 维持未知标记和预占；没有服务商结算证据时不能清零、猜测费用或把该尝试当作费用完整样本。
 
-实现与回归：[budget-proxy.mjs](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/budget-proxy.mjs)、[metrics.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/metrics.py)。
+实现与回归：[budget-proxy.mjs](../../../scripts/agent/harbor/budget-proxy.mjs)、[metrics.py](../../../scripts/agent/harbor/metrics.py)。
 
-证据：[before.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-48/before.json)、[trial-metrics.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-48/trial-metrics.json)。
+证据：before.json（`.velaros-workspace/bench/retrospective-48/before.json`）、trial-metrics.json（`.velaros-workspace/bench/retrospective-48/trial-metrics.json`）。
 
 ### R19 · Codex 原生失败被 Bash 管道吞掉
 
@@ -248,9 +248,9 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 原 reward 与原异常分别保留，评测成功必须同时有官方正确性与正常原生终态。
 
-实现与回归：[repository_agents.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/repository_agents.py)、[report.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/report.py)、[repository_test.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/repository_test.py)。
+实现与回归：[repository_agents.py](../../../scripts/agent/harbor/repository_agents.py)、[report.py](../../../scripts/agent/harbor/report.py)、[repository_test.py](../../../scripts/agent/harbor/repository_test.py)。
 
-证据：[validation-31-codex-terminal-failure-diagnosis.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-31-codex-terminal-failure-diagnosis.json)、[validation-32-harness-validation.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-32-harness-validation.json)。
+证据：validation-31-codex-terminal-failure-diagnosis.json（`.velaros-workspace/bench/campaign/validation-31-codex-terminal-failure-diagnosis.json`）、validation-32-harness-validation.json（`.velaros-workspace/bench/campaign/validation-32-harness-validation.json`）。
 
 ### R20 · 旧 Codex WebSocket 握手回退开销
 
@@ -258,9 +258,9 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 现有传输配置已修复。保留旧耗时并标注协议差异，不能用当前配置冒充历史公平环境。
 
-实现与回归：[portable_codex.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/portable_codex.py)、[repository_report.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/repository_report.py)。
+实现与回归：[portable_codex.py](../../../scripts/agent/harbor/portable_codex.py)、[repository_report.py](../../../scripts/agent/harbor/repository_report.py)。
 
-证据：[validation-32-transport-validation.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-32-transport-validation.json)。
+证据：validation-32-transport-validation.json（`.velaros-workspace/bench/campaign/validation-32-transport-validation.json`）。
 
 ### R21 · 镜像初始未跟踪文件导致补丁捕获错误
 
@@ -268,9 +268,9 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 已有真实仓库回归与同镜像历史证据，保持 HEAD/index/原文件和原始失败记录。
 
-实现与回归：[repository_agents.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/repository_agents.py)、[repository_test.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/repository_test.py)。
+实现与回归：[repository_agents.py](../../../scripts/agent/harbor/repository_agents.py)、[repository_test.py](../../../scripts/agent/harbor/repository_test.py)。
 
-证据：[validation-35-initial-state-validation.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-35-initial-state-validation.json)。
+证据：validation-35-initial-state-validation.json（`.velaros-workspace/bench/campaign/validation-35-initial-state-validation.json`）。
 
 ### R22 · 一次性 Shell 命令被误判为常驻服务
 
@@ -278,9 +278,9 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 命令策略已有分类修复和真实 Shell 回归，真实前台服务及显式后台语义保留。
 
-实现与回归：[command-policy.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/shell/utils/command-policy.ts)、[shell-command.test.ts](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/velaros/shell/test/shell-command.test.ts)。
+实现与回归：[command-policy.ts](../../../packages/velaros/shell/utils/command-policy.ts)、[shell-command.test.ts](../../../packages/velaros/shell/test/shell-command.test.ts)。
 
-证据：[validation-36-scriptact-final-diagnosis.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-36-scriptact-final-diagnosis.json)、[validation-37-scriptact-final-diagnosis.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-37-scriptact-final-diagnosis.json)。
+证据：validation-36-scriptact-final-diagnosis.json（`.velaros-workspace/bench/campaign/validation-36-scriptact-final-diagnosis.json`）、validation-37-scriptact-final-diagnosis.json（`.velaros-workspace/bench/campaign/validation-37-scriptact-final-diagnosis.json`）。
 
 ### R23 · 图片能力没有接入评测宿主
 
@@ -288,9 +288,9 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 现有图片装配和真实请求验收保留；该任务已成为开发证据，单题改善不等于泛化结论。
 
-实现与回归：[run.mjs](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/run.mjs)、[harbor.test.mjs](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/harbor.test.mjs)。
+实现与回归：[run.mjs](../../../scripts/agent/harbor/run.mjs)、[harbor.test.mjs](../../../scripts/agent/harbor/harbor.test.mjs)。
 
-证据：[images-development-01.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/images-development-01.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-development-10-images-scriptact/build-cython-ext__bAMkXMi/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-development-10-images-scriptact/chess-best-move__6cZ77VT/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-development-10-images-scriptact/fix-code-vulnerability__8Jhyhdq/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-development-10-images-scriptact/regex-log__HsnaSwS/agent/traces.json)。
+证据：images-development-01.json（`.velaros-workspace/bench/campaign/images-development-01.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-development-10-images-scriptact/build-cython-ext__bAMkXMi/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-development-10-images-scriptact/chess-best-move__6cZ77VT/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-development-10-images-scriptact/fix-code-vulnerability__8Jhyhdq/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-development-10-images-scriptact/regex-log__HsnaSwS/agent/traces.json`）。
 
 ### R24 · 环境准备、镜像解析和在线安装的不稳定性
 
@@ -298,9 +298,9 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 已知修复保留，最新 Alpine ABI 缺口单列 R03。准备失败与代码能力分开，不改官方时限或抹去原失败。
 
-实现与回归：[prepare-linux.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/prepare-linux.py)、[repository_resolve.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/repository_resolve.py)、[repository_images.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/repository_images.py)。
+实现与回归：[prepare-linux.py](../../../scripts/agent/harbor/prepare-linux.py)、[repository_resolve.py](../../../scripts/agent/harbor/repository_resolve.py)、[repository_images.py](../../../scripts/agent/harbor/repository_images.py)。
 
-证据：[validation-31-index-resolution-validation.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-31-index-resolution-validation.json)、[validation-34-recovery-validation.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-34-recovery-validation.json)。
+证据：validation-31-index-resolution-validation.json（`.velaros-workspace/bench/campaign/validation-31-index-resolution-validation.json`）、validation-34-recovery-validation.json（`.velaros-workspace/bench/campaign/validation-34-recovery-validation.json`）。
 
 ### R25 · Rosetta 下 Go TLS 错误污染官方判分
 
@@ -308,9 +308,9 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 共享环境配置已有修复；两方历史源环境不同的记录继续单列，不能据此宣称严格效率领先。
 
-实现与回归：[repository_launch.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/repository_launch.py)、[repository_report.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/repository_report.py)。
+实现与回归：[repository_launch.py](../../../scripts/agent/harbor/repository_launch.py)、[repository_report.py](../../../scripts/agent/harbor/repository_report.py)。
 
-证据：[validation-33-rosetta-go-tls-validation.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-33-rosetta-go-tls-validation.json)、[validation-32-teleport-codex-replay-avx2-off.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-32-teleport-codex-replay-avx2-off.json)。
+证据：validation-33-rosetta-go-tls-validation.json（`.velaros-workspace/bench/campaign/validation-33-rosetta-go-tls-validation.json`）、validation-32-teleport-codex-replay-avx2-off.json（`.velaros-workspace/bench/campaign/validation-32-teleport-codex-replay-avx2-off.json`）。
 
 ### R26 · QEMU 架构问题和排障能力仍交织
 
@@ -318,9 +318,9 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 保留环境症状与策略差距两个维度，不将失败全归因于模型或环境。当前只能分析旧启动与恢复序列，环境消歧尚不完整。
 
-实现与回归：[metrics.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/metrics.py)。
+实现与回归：[metrics.py](../../../scripts/agent/harbor/metrics.py)。
 
-证据：[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-07-scriptact/chess-best-move__eowBVug/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-07-scriptact/configure-git-webserver__MEamfuh/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-07-scriptact/log-summary-date-ranges__4pFUFgr/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-07-scriptact/polyglot-c-py__HUPrHLJ/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-07-scriptact/qemu-alpine-ssh__bDXXvay/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-07-scriptact/qemu-startup__ccNEwMu/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-07-scriptact/sqlite-with-gcov__qza2aFi/agent/traces.json)、[result.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-08-codex-recovery/chess-best-move__4BLT65j/result.json)、[result.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-08-codex-recovery/polyglot-c-py__L6uhdEG/result.json)、[result.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-08-codex-recovery/qemu-alpine-ssh__6B9gEZ5/result.json)、[result.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-08-codex-recovery/qemu-startup__BuqsM4t/result.json)、[result.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-08-codex-recovery/sqlite-with-gcov__KC4sGuP/result.json)。
+证据：traces.json（`.velaros-workspace/bench/jobs/sol-validation-07-scriptact/chess-best-move__eowBVug/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-validation-07-scriptact/configure-git-webserver__MEamfuh/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-validation-07-scriptact/log-summary-date-ranges__4pFUFgr/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-validation-07-scriptact/polyglot-c-py__HUPrHLJ/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-validation-07-scriptact/qemu-alpine-ssh__bDXXvay/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-validation-07-scriptact/qemu-startup__ccNEwMu/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-validation-07-scriptact/sqlite-with-gcov__qza2aFi/agent/traces.json`）、result.json（`.velaros-workspace/bench/jobs/sol-validation-08-codex-recovery/chess-best-move__4BLT65j/result.json`）、result.json（`.velaros-workspace/bench/jobs/sol-validation-08-codex-recovery/polyglot-c-py__L6uhdEG/result.json`）、result.json（`.velaros-workspace/bench/jobs/sol-validation-08-codex-recovery/qemu-alpine-ssh__6B9gEZ5/result.json`）、result.json（`.velaros-workspace/bench/jobs/sol-validation-08-codex-recovery/qemu-startup__BuqsM4t/result.json`）、result.json（`.velaros-workspace/bench/jobs/sol-validation-08-codex-recovery/sqlite-with-gcov__KC4sGuP/result.json`）。
 
 ### R27 · Git 服务题说明与隐藏判分假设不一致
 
@@ -328,9 +328,9 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 保留官方零分与适用范围限制；不将隐藏测试假设写进通用提示或产品逻辑。
 
-实现与回归：[metrics.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/metrics.py)。
+实现与回归：[metrics.py](../../../scripts/agent/harbor/metrics.py)。
 
-证据：[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-07-scriptact/chess-best-move__eowBVug/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-07-scriptact/configure-git-webserver__MEamfuh/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-07-scriptact/log-summary-date-ranges__4pFUFgr/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-07-scriptact/polyglot-c-py__HUPrHLJ/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-07-scriptact/qemu-alpine-ssh__bDXXvay/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-07-scriptact/qemu-startup__ccNEwMu/agent/traces.json)、[traces.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/jobs/sol-validation-07-scriptact/sqlite-with-gcov__qza2aFi/agent/traces.json)、[REPORT.md](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/REPORT.md)。
+证据：traces.json（`.velaros-workspace/bench/jobs/sol-validation-07-scriptact/chess-best-move__eowBVug/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-validation-07-scriptact/configure-git-webserver__MEamfuh/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-validation-07-scriptact/log-summary-date-ranges__4pFUFgr/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-validation-07-scriptact/polyglot-c-py__HUPrHLJ/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-validation-07-scriptact/qemu-alpine-ssh__bDXXvay/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-validation-07-scriptact/qemu-startup__ccNEwMu/agent/traces.json`）、traces.json（`.velaros-workspace/bench/jobs/sol-validation-07-scriptact/sqlite-with-gcov__qza2aFi/agent/traces.json`）、[REPORT.md](../../../scripts/agent/harbor/REPORT.md)。
 
 ### R28 · 单题反复修复与候选版本变化不足以证明整体领先
 
@@ -338,9 +338,9 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 按当前暂停评测的要求，仅用现有记录建立版本/任务/环境矩阵；保持预注册参考和全尝试费用，不择优拼接总胜率。
 
-实现与回归：[repository_report.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/repository_report.py)、[COHORT.md](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/COHORT.md)。
+实现与回归：[repository_report.py](../../../scripts/agent/harbor/repository_report.py)、[COHORT.md](../../../scripts/agent/harbor/COHORT.md)。
 
-证据：[validation-41-scriptact-final-diagnosis.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-41-scriptact-final-diagnosis.json)、[validation-47-scriptact-final-diagnosis.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/campaign/validation-47-scriptact-final-diagnosis.json)。
+证据：validation-41-scriptact-final-diagnosis.json（`.velaros-workspace/bench/campaign/validation-41-scriptact-final-diagnosis.json`）、validation-47-scriptact-final-diagnosis.json（`.velaros-workspace/bench/campaign/validation-47-scriptact-final-diagnosis.json`）。
 
 ### R29 · 工具次数的层级口径不一致
 
@@ -348,9 +348,9 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 本轮读取25份 native日志，沿用线程范围去重；次数按各自层级保留，不把一个批处理当作一次底层操作。
 
-实现与回归：[metrics.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/metrics.py)、[metrics_test.py](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/metrics_test.py)。
+实现与回归：[metrics.py](../../../scripts/agent/harbor/metrics.py)、[metrics_test.py](../../../scripts/agent/harbor/metrics_test.py)。
 
-证据：[REPORT.md](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/harbor/REPORT.md)、[trial-metrics.json](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-48/trial-metrics.json)。
+证据：[REPORT.md](../../../scripts/agent/harbor/REPORT.md)、trial-metrics.json（`.velaros-workspace/bench/retrospective-48/trial-metrics.json`）。
 
 ## 验证与适用范围
 
@@ -360,4 +360,4 @@ Kernel 独立诊断回执与 Shell 有界诊断保留，成功聚合也保留错
 
 优先顺序：先闭合取消/环境兼容缺口；再基于旧记录逐项分析读取和编辑依据；然后处理工具探查、验证范围与日志导出。当前阶段不新增付费任务，也不据局部修复宣称整题效率改善。
 
-终验：[零新增调用与原始记录完整性证明](/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/retrospective-48/final-checks.json)。1620 次请求与费用账前后相同，267 份结果/轨迹文件和 518 份 campaign JSON 摘要逐一核对未变。
+终验：零新增调用与原始记录完整性证明（`.velaros-workspace/bench/retrospective-48/final-checks.json`）。1620 次请求与费用账前后相同，267 份结果/轨迹文件和 518 份 campaign JSON 摘要逐一核对未变。
