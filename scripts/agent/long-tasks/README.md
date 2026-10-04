@@ -4,9 +4,9 @@
 
 ## 用法
 
-先准备任务 JSON 指定的源码提交和独占 Python 环境，并用 `scripts/agent/freeze-standard-runtime.mjs` 保存候选。`prepare.mjs <campaign-directory> <attempt-id> <candidate-name> [paired|scriptact] [task-file.json]` 执行零模型基线检查、确认新功能验收拒绝原项目、预检终态导出，再冻结任务、候选和评测脚本。默认执行配对；`scriptact` 用于单独复测开发候选。
+先准备任务 JSON 指定的源码提交和独占 Python 环境，并用 `scripts/agent/freeze-standard-runtime.mjs` 保存候选。`prepare.mjs <campaign-directory> <attempt-id> <candidate-name> [paired|scriptact] [task-file.json] [development]` 执行零模型基线检查、确认新功能验收拒绝原项目、预检终态导出，再冻结任务、候选和评测脚本。默认执行配对；`scriptact` 用于单独复测开发候选。重复使用已经看过结果的独立任务时，最后加 `development`，冻结清单与汇总随之标为开发复测，原任务文件保持首次定义。
 
-任务文件位于本目录，`environment` 指定 campaign/sources 下的项目目录、campaign 下的 Python 环境、独立验收文件、原项目回归路径和评分前恢复的文件/目录。`regressionRunner` 选择项目原有的 pytest 或 unittest；验收独立运行，统计同时保留 stderr 中的 unittest 结果。准备阶段分别复制评分环境和两个参与者的执行环境，重建 venv 激活脚本并重定位 Python 命令入口；执行中可以安装缺少的开发工具，双方从相同依赖起步，最终依赖单独记录，评分环境始终冻结。支持根包与 `src` 布局；`baselineFailure` 声明新功能在原项目上的预期失败，预检不符时不开始付费运行。原项目测试在独立基线副本执行。评分恢复支持分散在源码包中的测试目录，逐层检查父目录并拒绝经过代理创建的链接，保留相邻实现文件的真实改动。
+任务文件位于本目录，`environment` 指定 campaign/sources 下的项目目录、campaign 下的 Python 环境、独立验收文件、原项目回归路径和评分前恢复的文件/目录。`regressionRunner` 选择项目原有的 pytest 或 unittest，unittest 可用 `regressionPattern` 指定项目原有的文件匹配模式；验收独立运行，统计同时保留 stderr 中的 unittest 结果。准备阶段分别复制评分环境和两个参与者的执行环境，重建 venv 激活脚本并重定位 Python 命令入口；执行中可以安装缺少的开发工具，双方从相同依赖起步，最终依赖单独记录，评分环境始终冻结。支持根包与 `src` 布局；`baselineFailure` 声明新功能在原项目上的预期失败，预检不符时不开始付费运行。原项目测试在独立基线副本执行。评分恢复支持分散在源码包中的测试目录，逐层检查父目录并拒绝经过代理创建的链接，保留相邻实现文件的真实改动。
 
 上游存在可复现的基线故障时，`baselineIssues` 可在模型运行前声明精确测试身份、错误指纹、原因和公开来源。预检必须复现全部声明；完整测试照常执行，原始退出码和失败数保留。pytest 的 JUnit 记录用于核对原测试清单，新错误、同名不同错误、丢失用例和新增跳过都会判为回归。报告分别给出完整套件通过与相对基线无新增回归；双方任务附加相同基线说明。
 

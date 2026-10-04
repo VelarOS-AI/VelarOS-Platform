@@ -32,6 +32,10 @@ assert.ok(!process.argv[5] || ['scriptact', 'paired'].includes(process.argv[5]))
 assert.match(taskFile, /^[a-zA-Z0-9][a-zA-Z0-9_-]*\.json$/u)
 const taskPath = join(import.meta.dirname, taskFile)
 const task = JSON.parse(await readFile(taskPath, 'utf8'))
+if (process.argv[7]) {
+  assert.equal(process.argv[7], 'development')
+  task.split = 'development'
+}
 const environment = taskEnvironment(task)
 const output = join(campaign, attemptId)
 await mkdir(output)
@@ -81,13 +85,19 @@ await writeFile(join(output, 'baseline.log'), baselineRegression.stdout + baseli
 if (environment.regressionRunner === 'pytest') {
   baselineRegression.cases = await readPytestReport(python, baselineReport)
   baselineRegression.verdict = regressionVerdict(baselineRegression, environment.baselineIssues)
-} else
+} else {
+  const count = Number(
+    `${baselineRegression.stdout}\n${baselineRegression.stderr}`.match(
+      /Ran (\d+) tests? in/u
+    )?.[1] ?? 0
+  )
   baselineRegression.verdict = {
-    baselineCompatible: baselineRegression.exitCode === 0,
-    suitePassed: baselineRegression.exitCode === 0,
+    baselineCompatible: baselineRegression.exitCode === 0 && count > 0,
+    suitePassed: baselineRegression.exitCode === 0 && count > 0,
     knownFailures: [],
-    unexpected: [],
+    unexpected: count > 0 ? [] : ['unittest did not discover any tests'],
   }
+}
 await writeFile(join(output, 'baseline.json'), JSON.stringify(baselineRegression, null, 2))
 assert(
   baselineRegression.verdict.baselineCompatible,
@@ -235,7 +245,7 @@ const manifest = {
   },
   files,
 }
-await cp(taskPath, join(output, 'task.json'))
+await writeFile(join(output, 'task.json'), JSON.stringify(task, null, 2) + '\n')
 await writeFile(join(output, 'freeze.json'), JSON.stringify(manifest, null, 2), {
   flag: 'wx',
   mode: 0o600,

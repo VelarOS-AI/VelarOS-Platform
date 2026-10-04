@@ -8,6 +8,7 @@ import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
+import { VelarContextMaterialsModule } from '../../../dist/act/system/contract/surface.js'
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
 
 import { done } from './support/model-turn.mjs'
@@ -348,6 +349,7 @@ test('context maintenance publishes a validated native Node patch in one model r
   let mainCalls = 0
   let toolCalls = 0
   const main = driver(async function* (request) {
+    assert(!request.instructions.includes(VelarContextMaterialsModule.declarations))
     if (++mainCalls === 1) {
       yield execute(
         request,
@@ -362,6 +364,10 @@ test('context maintenance publishes a validated native Node patch in one model r
       assert.equal(request.response.type, 'tools')
       assert.match(request.compiledPrompt, /当前运行状态/)
       assert.doesNotMatch(request.instructions, /snapshotPlans/)
+      assert(
+        request.instructions.includes(VelarContextMaterialsModule.declarations),
+        'the invoked maintenance tool receives its generated contract before its first response'
+      )
       assert.deepEqual(
         request.response.tools.map((tool) => tool.name),
         ['node']

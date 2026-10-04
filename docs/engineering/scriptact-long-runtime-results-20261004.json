@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "evidence": "development attempts and two frozen independent holdouts; per-attempt qualifications apply",
+  "evidence": "development attempts and three frozen independent holdouts; per-attempt qualifications apply",
   "attempts": [
     {
       "attempt": "rich-01",
@@ -1476,6 +1476,267 @@
         "completeCostsKnown": false,
         "naturalAdvancedSearchObserved": false
       }
+    },
+    {
+      "attempt": "networkx-01",
+      "schema": 1,
+      "at": "2026-10-04T19:06:08.081Z",
+      "taskId": "networkx-export-attribute-projection",
+      "split": "holdout",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 29,
+            "startedAt": 1791139588555,
+            "solveMs": 416231
+          },
+          "accounting": {
+            "requests": 29,
+            "requestStatuses": {
+              "http-200": 28,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 28,
+            "missingUsageRequests": 1,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 540829,
+            "knownOutputTokens": 14465,
+            "knownCachedInputTokens": 249984,
+            "knownCacheRatio": 0.46222373430418856,
+            "pricedRequests": 28,
+            "knownReferenceUsd": 1.5526736000000003,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 100,
+            "failed": 1,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "1 failed, 100 passed in 0.35s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/networkx-01/harness/agent/long-tasks/test_networkx_attribute_filter_acceptance.py::test_public_signatures_keep_the_new_option_keyword_only"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 4971,
+            "failed": 0,
+            "skipped": 275,
+            "errors": 0,
+            "summary": "4971 passed, 275 skipped in 24.82s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 8,
+          "createdFiles": 2,
+          "changeSummary": "26\t0\tdoc/reference/readwrite/index.rst\n62\t13\tnetworkx/readwrite/gexf.py\n21\t3\tnetworkx/readwrite/gml.py\n93\t21\tnetworkx/readwrite/graphml.py\n12\t5\tnetworkx/readwrite/json_graph/adjacency.py\n11\t5\tnetworkx/readwrite/json_graph/cytoscape.py\n14\t4\tnetworkx/readwrite/json_graph/node_link.py\n15\t3\tnetworkx/readwrite/json_graph/tree.py\n",
+          "created": "networkx/readwrite/_attr_filter.py\nnetworkx/readwrite/tests/test_attribute_filter.py\n",
+          "execution": {
+            "mainRequests": 24,
+            "branchRequests": 5,
+            "requestOwners": {
+              "development": 24,
+              "context:c4c2eee6-440d-4a43-ae3f-7d6190401a02": 5
+            },
+            "contextSegments": 3,
+            "nativeRequests": 29,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791140033993,
+            "finishedAt": 1791140692470,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a10843-f618-78b2-adf1-a4ec44cbe7a4",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 169,
+            "solveMs": 658477
+          },
+          "accounting": {
+            "requests": 123,
+            "requestStatuses": {
+              "http-200": 120,
+              "http-200-interrupted": 3
+            },
+            "measuredRequests": 120,
+            "missingUsageRequests": 3,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 2953983,
+            "knownOutputTokens": 40330,
+            "knownCachedInputTokens": 2605440,
+            "knownCacheRatio": 0.8820091381703957,
+            "pricedRequests": 120,
+            "knownReferenceUsd": 3.242948000000001,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 101,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "101 passed in 0.35s",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 4971,
+            "failed": 0,
+            "skipped": 275,
+            "errors": 0,
+            "summary": "4971 passed, 275 skipped in 27.33s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": true,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 15,
+          "createdFiles": 2,
+          "changeSummary": "35\t0\tdoc/reference/readwrite/index.rst\n73\t18\tnetworkx/readwrite/gexf.py\n37\t7\tnetworkx/readwrite/gml.py\n68\t20\tnetworkx/readwrite/graphml.py\n22\t5\tnetworkx/readwrite/json_graph/adjacency.py\n23\t7\tnetworkx/readwrite/json_graph/cytoscape.py\n29\t4\tnetworkx/readwrite/json_graph/node_link.py\n21\t0\tnetworkx/readwrite/json_graph/tests/test_adjacency.py\n23\t0\tnetworkx/readwrite/json_graph/tests/test_cytoscape.py\n44\t0\tnetworkx/readwrite/json_graph/tests/test_node_link.py\n25\t0\tnetworkx/readwrite/json_graph/tests/test_tree.py\n19\t3\tnetworkx/readwrite/json_graph/tree.py\n47\t3\tnetworkx/readwrite/tests/test_gexf.py\n93\t0\tnetworkx/readwrite/tests/test_gml.py\n46\t0\tnetworkx/readwrite/tests/test_graphml.py\n",
+          "created": "networkx/readwrite/_attribute_filter.py\nnetworkx/readwrite/tests/test_attribute_filter.py\n",
+          "execution": {
+            "rootThreadId": "01a10843-f618-78b2-adf1-a4ec44cbe7a4",
+            "compactions": 4,
+            "childAgentDispatches": 3,
+            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T02-53-54-01a10843-f618-78b2-adf1-a4ec44cbe7a4.jsonl"
+          }
+        }
+      },
+      "qualifications": [
+        "First participant exposure to NetworkX task; candidate-v9 frozen before execution.",
+        "ScriptAct missed keyword-only signatures and existing test module updates; automated score is not complete delivery.",
+        "Both retained all 4971 original passing cases and 275 baseline optional-dependency skips.",
+        "Complete reference costs are unknown: one ScriptAct and three Codex requests lack usage.",
+        "Brief host checks and fixture preparation overlapped; timing is observational rather than isolated."
+      ]
+    },
+    {
+      "attempt": "networkx-02",
+      "schema": 1,
+      "at": "2026-10-04T19:16:15.946Z",
+      "taskId": "networkx-export-attribute-projection",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 24,
+            "startedAt": 1791140784184,
+            "solveMs": 425792
+          },
+          "accounting": {
+            "requests": 24,
+            "requestStatuses": {
+              "unknown": 1,
+              "http-200": 22,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 22,
+            "missingUsageRequests": 2,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 461525,
+            "knownOutputTokens": 13408,
+            "knownCachedInputTokens": 167168,
+            "knownCacheRatio": 0.36220789773035045,
+            "pricedRequests": 22,
+            "knownReferenceUsd": 1.5124551999999998,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 101,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "101 passed in 0.37s",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 4971,
+            "failed": 0,
+            "skipped": 275,
+            "errors": 0,
+            "summary": "4971 passed, 275 skipped in 24.75s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": true,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 8,
+          "createdFiles": 2,
+          "changeSummary": "24\t0\tdoc/reference/readwrite/index.rst\n18\t14\tnetworkx/readwrite/gexf.py\n8\t6\tnetworkx/readwrite/gml.py\n37\t18\tnetworkx/readwrite/graphml.py\n7\t5\tnetworkx/readwrite/json_graph/adjacency.py\n9\t7\tnetworkx/readwrite/json_graph/cytoscape.py\n7\t4\tnetworkx/readwrite/json_graph/node_link.py\n5\t3\tnetworkx/readwrite/json_graph/tree.py\n",
+          "created": "networkx/readwrite/_attribute_filter.py\nnetworkx/readwrite/tests/test_attribute_filter.py\n",
+          "execution": {
+            "mainRequests": 24,
+            "branchRequests": 0,
+            "requestOwners": {
+              "development": 24
+            },
+            "contextSegments": 3,
+            "nativeRequests": 24,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        }
+      },
+      "qualifications": [
+        "Repeated NetworkX task, explicitly frozen as development.",
+        "No maintenance session was invoked; this run does not measure the v10 maintenance-contract change.",
+        "All 101 feature cases and 4971 original tests passed, with 275 baseline skips; existing serializer test modules were not extended.",
+        "Complete reference cost unknown because two requests lack usage."
+      ]
     }
   ],
   "transportDiagnostics": {

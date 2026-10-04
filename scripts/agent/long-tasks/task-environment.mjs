@@ -39,6 +39,11 @@ export function taskEnvironment(task) {
     preserve,
     baselineFailure,
   }
+  if (value.regressionPattern !== undefined) {
+    assert.equal(regressionRunner, 'unittest')
+    assert.match(value.regressionPattern, /^[a-zA-Z0-9_*?][a-zA-Z0-9_.*?-]*\.py$/u)
+    result.regressionPattern = value.regressionPattern
+  }
   if (value.baselineIssues !== undefined) {
     validateBaselineIssues(value.baselineIssues, regressionRunner)
     result.baselineIssues = value.baselineIssues
@@ -73,7 +78,14 @@ export async function restoreTaskPaths(source, destination, paths) {
 // 使用项目自身的回归测试入口；新功能验收单独使用 pytest。
 export function regressionArguments(environment, report) {
   return environment.regressionRunner === 'unittest'
-    ? ['-m', 'unittest', 'discover', '-s', environment.regression[0]]
+    ? [
+        '-m',
+        'unittest',
+        'discover',
+        '-s',
+        environment.regression[0],
+        ...(environment.regressionPattern ? ['-p', environment.regressionPattern] : []),
+      ]
     : [
         '-m',
         'pytest',

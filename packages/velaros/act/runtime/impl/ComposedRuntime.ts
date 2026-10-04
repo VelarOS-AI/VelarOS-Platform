@@ -161,11 +161,15 @@ class ComposedRuntime implements VelarosRuntime {
         model: (id) => this.taskModels.get(id),
         open: async (id, model, tool, profile) => {
           this.scopes.set(id, { kind: 'context' })
+          const materials = this.kernel.describe(ContextMaterialsModuleId)
           const session = new RuntimeSession(id, {
             environment: options.environment,
             packages: [this.systemPackage(id)],
             allowedModules: () => this.allowedModuleIds(id),
-            tool,
+            tool: {
+              ...tool,
+              instructions: `本会话材料合同：\n${materials.declarations}`,
+            },
             memory: { recentRecords: 32, recentShare: 0.4 },
             protocol: {
               ...options.protocol,
