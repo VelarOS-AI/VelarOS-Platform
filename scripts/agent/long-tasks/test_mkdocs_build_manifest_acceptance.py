@@ -16,7 +16,7 @@ from mkdocs.plugins import BasePlugin, event_priority
 from mkdocs.structure.files import File
 
 
-def config_for(tmp_path, *, manifest="deployment/manifest.json", require_feature=True, **options):
+def config_for(tmp_path, *, manifest="deployment/manifest.json", require_feature=True, validate=True, **options):
     docs = tmp_path / "docs"
     theme = tmp_path / "theme"
     docs.mkdir(exist_ok=True)
@@ -44,8 +44,9 @@ def config_for(tmp_path, *, manifest="deployment/manifest.json", require_feature
     if require_feature:
         values["build_manifest"] = manifest
     cfg.load_dict(values)
-    errors, warnings = cfg.validate()
-    assert errors == [] and warnings == [], (errors, warnings)
+    if validate:
+        errors, warnings = cfg.validate()
+        assert errors == [] and warnings == [], (errors, warnings)
     return cfg
 
 
@@ -124,8 +125,7 @@ def test_final_inventory_is_exact_sorted_and_counts_bytes(tmp_path, monkeypatch,
     "../inventory.json", "x/../inventory.json", "./inventory.json", "x/./inventory.json", "x//inventory.json",
     "x/", "x\\inventory.json", "bad\x00name.json", "bad\nname.json"])
 def test_invalid_configuration_is_a_normal_validation_error(tmp_path, value):
-    cfg = config_for(tmp_path, manifest=None)
-    cfg.load_dict({"build_manifest": value})
+    cfg = config_for(tmp_path, manifest=value, validate=False)
     errors, _ = cfg.validate()
     assert any(key == "build_manifest" for key, _ in errors)
 

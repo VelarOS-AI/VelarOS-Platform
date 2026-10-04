@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "evidence": "development attempts and three frozen independent holdouts; per-attempt qualifications apply",
+  "evidence": "development attempts and four frozen independent holdouts; per-attempt qualifications apply",
   "attempts": [
     {
       "attempt": "rich-01",
@@ -1736,6 +1736,393 @@
         "No maintenance session was invoked; this run does not measure the v10 maintenance-contract change.",
         "All 101 feature cases and 4971 original tests passed, with 275 baseline skips; existing serializer test modules were not extended.",
         "Complete reference cost unknown because two requests lack usage."
+      ]
+    },
+    {
+      "attempt": "mkdocs-01",
+      "schema": 1,
+      "at": "2026-10-04T19:57:36.506Z",
+      "taskId": "mkdocs-deployment-manifest",
+      "split": "holdout",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 35,
+            "startedAt": 1791141589261,
+            "solveMs": 446150
+          },
+          "accounting": {
+            "requests": 35,
+            "requestStatuses": {
+              "http-200": 34,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 34,
+            "missingUsageRequests": 1,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 689640,
+            "knownOutputTokens": 13867,
+            "knownCachedInputTokens": 244224,
+            "knownCacheRatio": 0.35413259091700017,
+            "pricedRequests": 34,
+            "knownReferenceUsd": 2.1566936,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 35,
+            "failed": 24,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "24 failed, 35 passed in 0.60s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[False]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[True]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[0]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[1]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[value4]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[value5]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[/tmp/inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[C:\\\\inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[C:inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[../inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/../inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[./inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/./inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x//inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x\\\\inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[bad\\x00name.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[bad\\nname.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[missing]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[added]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[path]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[size]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[digest]"
+            ]
+          },
+          "regression": {
+            "exitCode": 1,
+            "passed": 719,
+            "failed": 1,
+            "skipped": 4,
+            "errors": 0,
+            "summary": "FAILED (failures=1, skipped=4)",
+            "failures": [
+              "FAIL: test_correct_events_registered (tests.plugin_tests.TestPluginCollection.test_correct_events_registered)"
+            ]
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 10,
+          "createdFiles": 0,
+          "changeSummary": "22\t0\tdocs/dev-guide/plugins.md\n9\t0\tdocs/user-guide/cli.md\n14\t0\tdocs/user-guide/configuration.md\n7\t0\tmkdocs/__main__.py\n112\t1\tmkdocs/commands/build.py\n20\t0\tmkdocs/config/defaults.py\n11\t0\tmkdocs/plugins.py\n26\t1\tmkdocs/tests/build_tests.py\n24\t0\tmkdocs/tests/config/config_tests.py\n17\t0\tmkdocs/tests/plugin_tests.py\n",
+          "created": "",
+          "execution": {
+            "mainRequests": 32,
+            "branchRequests": 3,
+            "requestOwners": {
+              "development": 32,
+              "context:50b443f9-cbd3-4d93-ab1f-2891c9b3f632": 3
+            },
+            "contextSegments": 2,
+            "nativeRequests": 35,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true,
+            "maintenance": {
+              "sessions": 1,
+              "applied": 1,
+              "requests": 3,
+              "firstRequestHasGeneratedContract": true
+            }
+          },
+          "correctedAcceptance": {
+            "exitCode": 1,
+            "passed": 54,
+            "failed": 5,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "5 failed, 54 passed in 0.50s",
+            "failures": [
+              "FAILED ../../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/grading-correction-01/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[missing]",
+              "FAILED ../../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/grading-correction-01/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[added]",
+              "FAILED ../../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/grading-correction-01/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[path]",
+              "FAILED ../../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/grading-correction-01/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[size]",
+              "FAILED ../../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/grading-correction-01/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[digest]"
+            ],
+            "evidence": "mkdocs-01/grading-correction-01/scriptact.acceptance.json"
+          },
+          "adaptedRegression": {
+            "exitCode": 0,
+            "passed": 720,
+            "failed": 0,
+            "skipped": 4,
+            "errors": 0,
+            "summary": "OK (skipped=4)",
+            "failures": [],
+            "evidence": "mkdocs-01/grading-correction-02/scriptact.regression-adapted.json"
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791142048150,
+            "finishedAt": 1791143830740,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a10862-b1b4-77b0-add1-6b54cddf009c",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 444,
+            "solveMs": 1782591
+          },
+          "accounting": {
+            "requests": 121,
+            "requestStatuses": {
+              "http-200": 117,
+              "http-200-interrupted": 3,
+              "unknown": 1
+            },
+            "measuredRequests": 117,
+            "missingUsageRequests": 4,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 2767060,
+            "knownOutputTokens": 63413,
+            "knownCachedInputTokens": 2126976,
+            "knownCacheRatio": 0.7686772242018605,
+            "pricedRequests": 117,
+            "knownReferenceUsd": 4.679386400000002,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 40,
+            "failed": 19,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "19 failed, 40 passed in 0.56s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[False]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[True]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[0]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[1]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[value4]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[value5]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[/tmp/inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[C:\\\\inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[C:inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[../inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/../inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[./inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/./inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x//inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x\\\\inventory.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[bad\\x00name.json]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[bad\\nname.json]"
+            ]
+          },
+          "regression": {
+            "exitCode": 1,
+            "passed": 703,
+            "failed": 17,
+            "skipped": 4,
+            "errors": 0,
+            "summary": "FAILED (failures=17, skipped=4)",
+            "failures": [
+              "FAIL: test_build_defaults (tests.cli_tests.CLITests.test_build_defaults)",
+              "FAIL: test_build_no_directory_urls (tests.cli_tests.CLITests.test_build_no_directory_urls)",
+              "FAIL: test_build_site_dir (tests.cli_tests.CLITests.test_build_site_dir)",
+              "FAIL: test_build_strict (tests.cli_tests.CLITests.test_build_strict)",
+              "FAIL: test_build_theme (tests.cli_tests.CLITests.test_build_theme)",
+              "FAIL: test_build_use_directory_urls (tests.cli_tests.CLITests.test_build_use_directory_urls)",
+              "FAIL: test_serve_default (tests.cli_tests.CLITests.test_serve_default)",
+              "FAIL: test_serve_dev_addr (tests.cli_tests.CLITests.test_serve_dev_addr)",
+              "FAIL: test_serve_dirtyreload (tests.cli_tests.CLITests.test_serve_dirtyreload)",
+              "FAIL: test_serve_livereload (tests.cli_tests.CLITests.test_serve_livereload)",
+              "FAIL: test_serve_no_directory_urls (tests.cli_tests.CLITests.test_serve_no_directory_urls)",
+              "FAIL: test_serve_no_livereload (tests.cli_tests.CLITests.test_serve_no_livereload)",
+              "FAIL: test_serve_strict (tests.cli_tests.CLITests.test_serve_strict)",
+              "FAIL: test_serve_theme (tests.cli_tests.CLITests.test_serve_theme)",
+              "FAIL: test_serve_use_directory_urls (tests.cli_tests.CLITests.test_serve_use_directory_urls)",
+              "FAIL: test_serve_watch_theme (tests.cli_tests.CLITests.test_serve_watch_theme)",
+              "FAIL: test_correct_events_registered (tests.plugin_tests.TestPluginCollection.test_correct_events_registered)"
+            ]
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 11,
+          "createdFiles": 2,
+          "changeSummary": "32\t0\tdocs/dev-guide/plugins.md\n14\t0\tdocs/user-guide/cli.md\n34\t0\tdocs/user-guide/configuration.md\n12\t0\tmkdocs/__main__.py\n15\t0\tmkdocs/commands/build.py\n21\t0\tmkdocs/config/config_options.py\n3\t0\tmkdocs/config/defaults.py\n20\t0\tmkdocs/plugins.py\n35\t0\tmkdocs/tests/cli_tests.py\n34\t0\tmkdocs/tests/config/config_tests.py\n19\t0\tmkdocs/tests/plugin_tests.py\n",
+          "created": "mkdocs/build_manifest.py\nmkdocs/tests/build_manifest_tests.py\n",
+          "execution": {
+            "rootThreadId": "01a10862-b1b4-77b0-add1-6b54cddf009c",
+            "compactions": 15,
+            "childAgentDispatches": 0,
+            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T03-27-28-01a10862-b1b4-77b0-add1-6b54cddf009c.jsonl"
+          },
+          "correctedAcceptance": {
+            "exitCode": 0,
+            "passed": 59,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "59 passed in 0.49s",
+            "failures": [],
+            "evidence": "mkdocs-01/grading-correction-01/codex.acceptance.json"
+          },
+          "adaptedRegression": {
+            "exitCode": 0,
+            "passed": 720,
+            "failed": 0,
+            "skipped": 4,
+            "errors": 0,
+            "summary": "OK (skipped=4)",
+            "failures": [],
+            "evidence": "mkdocs-01/grading-correction-02/codex.regression-adapted.json"
+          }
+        }
+      },
+      "gradingCorrections": [
+        {
+          "schema": 1,
+          "preparedAt": 1791142532.4626062,
+          "originalFrozenFilesChanged": false,
+          "participantCodeChanged": false,
+          "modelsRerun": false,
+          "reason": "MkDocs Config.validate converts theme into a Theme object and stops at the first field error. Revalidating that object prevents reaching build_manifest; construct raw config once per invalid value instead.",
+          "verification": "On the original ScriptAct artifact, false and ../manifest.json yield theme errors only on revalidation, but build_manifest ValidationError on a fresh config. A valid manifest has no fresh-config error.",
+          "graderHashes": {
+            "original": "174f9d05259a643abfea5b113f3090f6596892e6cbc316e9353cae2edca5ea1e",
+            "corrected": "5c1942d6fe8b2e209ef601c55ef22ae0a95896da433105b45104f2c667c4b5d2"
+          },
+          "regressionAdaptation": {
+            "reason": "The required normal build_manifest plugin event necessarily adds an empty event registry entry. The frozen existing test asserts an exact old dictionary. Add exactly this one expected key and rerun all original 724 tests in separate copies; preserve raw suite result.",
+            "test": "tests.plugin_tests.TestPluginCollection.test_correct_events_registered",
+            "originalHash": "6b39bd59d42b51780d133e76294fea7ec01d1d86b47d641b90f84c4f3afe0230",
+            "adaptedHash": "9484d086ff0fb48e73f3ab545921309ae2bf90b6cf79d3f5549e709b2d85fa3f",
+            "removedAssertions": 0,
+            "omittedTests": 0
+          }
+        },
+        {
+          "schema": 1,
+          "at": 1791143989.265055,
+          "originalFrozenFilesChanged": false,
+          "participantCodeChanged": false,
+          "modelsRerun": false,
+          "inherits": "grading-correction-01",
+          "reason": "Sixteen frozen CLI tests assert exact mocked keyword dictionaries. Codex forwards build_manifest=None while ScriptAct omits it; unchanged serve forwards to the unchanged load_config, which filters None options before validating. Both pass the real YAML preservation, override, initial serve and reload acceptance tests. Normalize only this absent-or-None argument while preserving every original assertion and running all 724 tests.",
+          "originalHash": "3931d59f88dbcdae3eb3be0b62730900bbeb28403e232be1bb2d3c4a0ee8018c",
+          "adaptedHash": "68ae7455aec78255f414afee91427a8bb4410e705094912c5eb7330364c495a7",
+          "targetTests": [
+            "test_build_defaults",
+            "test_build_no_directory_urls",
+            "test_build_site_dir",
+            "test_build_strict",
+            "test_build_theme",
+            "test_build_use_directory_urls",
+            "test_serve_default",
+            "test_serve_dev_addr",
+            "test_serve_dirtyreload",
+            "test_serve_livereload",
+            "test_serve_no_directory_urls",
+            "test_serve_no_livereload",
+            "test_serve_strict",
+            "test_serve_theme",
+            "test_serve_use_directory_urls",
+            "test_serve_watch_theme"
+          ],
+          "assertionGuardTests": [
+            {
+              "case": "absent",
+              "accepted": true,
+              "expected": true
+            },
+            {
+              "case": "none",
+              "accepted": true,
+              "expected": true
+            },
+            {
+              "case": "non-null",
+              "accepted": false,
+              "expected": false
+            },
+            {
+              "case": "false",
+              "accepted": false,
+              "expected": false
+            },
+            {
+              "case": "other-value",
+              "accepted": false,
+              "expected": false
+            },
+            {
+              "case": "extra-argument",
+              "accepted": false,
+              "expected": false
+            },
+            {
+              "case": "multiple",
+              "accepted": false,
+              "expected": false
+            },
+            {
+              "case": "positional",
+              "accepted": false,
+              "expected": false
+            },
+            {
+              "case": "not-called",
+              "accepted": false,
+              "expected": false
+            }
+          ],
+          "unchangedBehaviorSources": {
+            "mkdocs/config/base.py": {
+              "baseline": "5e1af02b4a3a859be3000973c4d1be1e9c26b088e2f10c813052e92c7648684e",
+              "scriptact": "5e1af02b4a3a859be3000973c4d1be1e9c26b088e2f10c813052e92c7648684e",
+              "codex": "5e1af02b4a3a859be3000973c4d1be1e9c26b088e2f10c813052e92c7648684e"
+            },
+            "mkdocs/commands/serve.py": {
+              "baseline": "54600af69a25048d416227716a0619b43650f3a287b1cdab47119d12d618791d",
+              "scriptact": "54600af69a25048d416227716a0619b43650f3a287b1cdab47119d12d618791d",
+              "codex": "54600af69a25048d416227716a0619b43650f3a287b1cdab47119d12d618791d"
+            }
+          },
+          "featureGraderHash": "5c1942d6fe8b2e209ef601c55ef22ae0a95896da433105b45104f2c667c4b5d2",
+          "removedTests": 0,
+          "removedAssertions": 0
+        }
+      ],
+      "qualifications": [
+        "First participant exposure to MkDocs task, using frozen candidate-v10.",
+        "Original acceptance and regression results remain unchanged. Both original artifacts were fully regraded with the documented corrections and adapters.",
+        "ScriptAct passed 54/59 behavioral cases; five failures share a real aliasing defect in the plugin inventory validation baseline. Codex passed 59/59.",
+        "All 724 original unittest cases were executed with two transparent expectation adaptations: one new event key and sixteen exact mock calls accepting the new option as absent or None. Both yielded 720 passes and four baseline skips.",
+        "ScriptAct applied one three-request maintenance episode. Codex compacted fifteen times. Neither dispatched business child agents; ScriptAct did not invoke advanced search.",
+        "Complete reference costs unknown: one ScriptAct request and four Codex requests lack usage.",
+        "Brief local checks, regrading of the finished ScriptAct artifact, and later-task preflight overlapped with Codex. Timing is observational rather than isolated."
       ]
     }
   ],
