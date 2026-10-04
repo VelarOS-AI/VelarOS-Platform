@@ -308,6 +308,29 @@ test('selected snapshots keep one version while another connection commits betwe
   )
 })
 
+test('input recall retains compatibility with archived fixed-width chunks', async (t) => {
+  const storage = localContextStorage({ path: await fixture(t) })
+  t.after(() => storage.close())
+  const context = createContextRuntime({ sessionId: 'legacy', storage })
+  const a = await context.append({
+    kind: 'audit',
+    title: 'user:text-chunk',
+    body: 'x'.repeat(8000000),
+  })
+  const b = await context.append({ kind: 'audit', title: 'user:text-chunk', body: '旧😀尾' })
+  const chunks = [a.ref, b.ref]
+  const input = await context.append({
+    kind: 'user',
+    title: 'user:manifest',
+    body: JSON.stringify({ chars: a.chars + b.chars, chunks, files: [] }),
+    sources: chunks,
+  })
+  assert.equal(
+    (await context.readInput(input.ref, { offset: 7999998, limit: 30 })).text,
+    'xx旧😀尾'
+  )
+})
+
 for (const mode of ['indexed', 'selection-only', 'fallback'])
   test(`${mode}: input recall preserves attachment membership and chunk boundaries without unrelated bodies`, async (t) => {
     const storage = localContextStorage({ path: await fixture(t) })
@@ -331,7 +354,7 @@ for (const mode of ['indexed', 'selection-only', 'fallback'])
     const otherInput = await context.ingest({
       files: [{ ref: unrelated.ref, name: 'other', mediaType: 'text/plain' }],
     })
-    const text = `${'a'.repeat(8000000)}中😀文`
+    const text = `${'a'.repeat(7999999)}😀中😀文`
     const input = await context.ingest({
       text,
       files: [{ ref: file.ref, name: 'file', mediaType: 'text/plain' }],
@@ -357,6 +380,11 @@ for (const mode of ['indexed', 'selection-only', 'fallback'])
     assert.equal((await context.readInput(file.ref, { offset: 3, limit: 7 })).text, 'achment')
     const restored = await context.readInput(input.ref, { offset: 7999996, limit: 32 })
     assert.equal(restored.text, text.slice(7999996))
+    for (const offset of [7999998, 7999999, 8000000, 8000001, text.length]) {
+      const page = await context.readInput(input.ref, { offset, limit: 2 })
+      assert.equal(page.text, text.slice(offset, offset + 2))
+      assert.equal(page.totalChars, text.length)
+    }
     const projected = JSON.parse((await context.projectInput(input.ref, 100)).text)
     assert.equal(projected.intent.summary, 'preserved intent')
     assert.equal(projected.summaryRevision, 1)

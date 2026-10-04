@@ -151,19 +151,29 @@ export class SessionContext implements ContextRuntime {
     if (!input.files?.length && text.length <= ContextLimits.objectChars)
       return this.append({ kind: 'user', body: text }, signal)
     const chunks: ContextRef[] = []
-    for (let offset = 0; offset < text.length; offset += ContextLimits.objectChars)
+    for (let offset = 0; offset < text.length;) {
+      let end = Math.min(text.length, offset + ContextLimits.objectChars)
+      // UTF-8 存储不能分别保存一个代理对的两半；分块边界保留完整字符。
+      if (
+        end < text.length &&
+        /[\uD800-\uDBFF]/u.test(text[end - 1]!) &&
+        /[\uDC00-\uDFFF]/u.test(text[end]!)
+      )
+        end--
       chunks.push(
         (
           await this.append(
             {
               kind: 'audit',
               title: 'user:text-chunk',
-              body: text.slice(offset, offset + ContextLimits.objectChars),
+              body: text.slice(offset, end),
             },
             signal
           )
         ).ref
       )
+      offset = end
+    }
     return this.append(
       {
         kind: 'user',
@@ -211,20 +221,30 @@ export class SessionContext implements ContextRuntime {
     ) as { chars: number; chunks: ContextRef[] }
     const offset = boundedInteger(range.offset ?? 0, manifest.chars)
     const limit = boundedInteger(range.limit ?? ContextLimits.readChars, ContextLimits.readChars)
+    const expected = Math.min(limit, manifest.chars - offset)
     let text = ''
-    for (let cursor = offset; cursor < Math.min(manifest.chars, offset + limit);) {
-      const chunk = manifest.chunks[Math.floor(cursor / ContextLimits.objectChars)]!
+    let cursor = 0
+    for (const chunk of manifest.chunks) {
+      if (text.length === expected) break
+      // 原始记录已有字符数；兼容固定宽度的旧分块，也支持避开代理对的新边界。
+      const record = await this.reference(chunk)
+      const end = cursor + record.chars
+      if (end <= offset) {
+        cursor = end
+        continue
+      }
+      const start = Math.max(0, offset - cursor)
+      const chars = Math.min(expected - text.length, record.chars - start)
       const content = await this.read(chunk, {
-        offset: cursor % ContextLimits.objectChars,
-        limit: Math.min(
-          limit - text.length,
-          ContextLimits.objectChars - (cursor % ContextLimits.objectChars)
-        ),
+        offset: start,
+        limit: chars,
       })
-      if (isEmpty(content.text)) throw contextFailure('OBJECT_MISSING', '输入归档分块不完整')
+      if (content.totalChars !== record.chars || content.text.length !== chars)
+        throw contextFailure('OBJECT_MISSING', '输入归档分块不完整')
       text += content.text
-      cursor += content.text.length
+      cursor = end
     }
+    if (text.length !== expected) throw contextFailure('OBJECT_MISSING', '输入归档分块不完整')
     return { ...raw, text, offset, totalChars: manifest.chars }
   }
 

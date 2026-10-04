@@ -57,8 +57,8 @@ test('large archived input is fully streamed through page and storage boundaries
   const text =
     'a'.repeat(ContextLimits.readChars - 1) +
     '😀' +
-    '中文'.repeat(ContextLimits.objectChars / 2) +
-    '\nfinal requirement'
+    '中'.repeat(ContextLimits.objectChars - ContextLimits.readChars - 2) +
+    '🧭\nfinal requirement'
   const f = await storedTask(t, text)
   const controller = new AbortController()
   const result = await f.materials.open(f.job, controller.signal)

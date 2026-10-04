@@ -2240,6 +2240,109 @@
         "Six maintenance sessions used 23 requests (3,4,4,4,4,4). Lower per-session request count did not reduce whole-task requests or latency.",
         "Complete reference cost unknown because three requests lack usage."
       ]
+    },
+    {
+      "attempt": "httpx-06",
+      "schema": 1,
+      "at": "2026-10-04T20:58:59.857Z",
+      "taskId": "httpx-decoded-response-body-limit",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": false,
+        "knownFailures": [
+          "tests.test_timeouts::test_write_timeout[trio]"
+        ],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 59,
+            "startedAt": 1791146627175,
+            "solveMs": 882382
+          },
+          "accounting": {
+            "requests": 59,
+            "requestStatuses": {
+              "http-200": 57,
+              "unknown": 1,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 57,
+            "missingUsageRequests": 2,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1172838,
+            "knownOutputTokens": 28411,
+            "knownCachedInputTokens": 356480,
+            "knownCacheRatio": 0.303946495594447,
+            "pricedRequests": 57,
+            "knownReferenceUsd": 3.9762440000000003,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 88,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "88 passed in 0.21s",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 1,
+            "passed": 1416,
+            "failed": 1,
+            "skipped": 1,
+            "errors": 0,
+            "summary": "1 failed, 1416 passed, 1 skipped in 3.64s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": false,
+              "knownFailures": [
+                "tests.test_timeouts::test_write_timeout[trio]"
+              ],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 7,
+          "createdFiles": 2,
+          "changeSummary": "45\t1\tdocs/advanced/resource-limits.md\n4\t0\tdocs/exceptions.md\n1\t0\thttpx/__init__.py\n18\t0\thttpx/_api.py\n118\t3\thttpx/_client.py\n14\t0\thttpx/_exceptions.py\n65\t12\thttpx/_models.py\n",
+          "created": "test\ntests/test_response_limits.py\n",
+          "execution": {
+            "mainRequests": 46,
+            "branchRequests": 13,
+            "requestOwners": {
+              "development": 46,
+              "context:1144c6a2-658b-49df-87eb-58d49ef1b525": 5,
+              "context:fa135da3-7937-4947-8d61-9034dcc2b8af": 4,
+              "context:894c7ca0-267c-4c89-bfc0-a2d3839144bc": 4
+            },
+            "contextSegments": 5,
+            "nativeRequests": 59,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        }
+      },
+      "qualifications": [
+        "Repeated HTTPX task, explicitly frozen as development; ScriptAct only.",
+        "All 88 feature checks passed; original regression retains the exact frozen Trio baseline failure, with no new failures.",
+        "No business child was dispatched, so this run does not exercise the v11 parent-task material transfer.",
+        "Three maintenance sessions applied their patches and consumed 13 requests (5,4,4), including one request without a complete response.",
+        "Task takes 6.89 percent longer than v8 and 27.01 percent longer than the original Codex comparator; repeated-run variability prevents causal attribution.",
+        "Complete reference cost unknown because two requests lack usage."
+      ]
     }
   ],
   "transportDiagnostics": {
