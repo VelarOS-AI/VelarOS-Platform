@@ -1,12 +1,21 @@
 #!/usr/bin/env node
 // 从指定 checkout 保存独立包快照；工作区包重定向到快照，外部依赖保持精确安装版本。
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { cp, mkdir, readdir, readFile, realpath, symlink, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
 const source = resolve(process.argv[2] ?? '.')
 const destination = resolve(process.argv[3])
+const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
+  cwd: source,
+  encoding: 'utf8',
+}).trim()
+const sourceDirty = Boolean(
+  execFileSync('git', ['status', '--porcelain'], { cwd: source, encoding: 'utf8' }).trim()
+)
+assert.match(sourceCommit, /^[0-9a-f]{40,64}$/u)
 await mkdir(destination)
 const packages = new Map()
 for (const directory of await readdir(join(source, 'packages'), { withFileTypes: true })) {
@@ -75,6 +84,10 @@ await hash(join(destination, 'packages'))
 assert.ok(Object.keys(files).length)
 await writeFile(
   join(destination, 'manifest.json'),
-  JSON.stringify({ source, createdAt: new Date().toISOString(), files }, null, 2)
+  JSON.stringify(
+    { source, sourceCommit, sourceDirty, createdAt: new Date().toISOString(), files },
+    null,
+    2
+  )
 )
 console.log(JSON.stringify({ snapshot: destination, files: Object.keys(files).length }))

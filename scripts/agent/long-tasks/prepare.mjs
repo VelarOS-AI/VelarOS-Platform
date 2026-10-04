@@ -163,10 +163,10 @@ const modelWirePreflight = await verifyCampaignDriver(
   await import(pathToFileURL(join(candidate, 'packages/model/dist/index.js'))),
   providerCapabilities
 )
-files[join(candidate, 'manifest.json')] = hash(await readFile(join(candidate, 'manifest.json')))
-const candidateSourceCommit = (
-  await execute('git', ['rev-parse', 'HEAD'], { cwd: root })
-).stdout.trim()
+const candidateManifest = await readFile(join(candidate, 'manifest.json'), 'utf8')
+files[join(candidate, 'manifest.json')] = hash(candidateManifest)
+const candidateIdentity = JSON.parse(candidateManifest)
+const candidateSourceCommit = candidateIdentity.sourceCommit ?? 'unknown'
 const candidateId = `${candidateName}-${files[join(candidate, 'manifest.json')].slice(0, 12)}`
 // 在任何付费请求前覆盖终态导出的身份要求。
 assert.equal(
@@ -201,6 +201,7 @@ const manifest = {
   candidate,
   candidateId,
   candidateSourceCommit,
+  candidateSourceDirty: candidateIdentity.sourceDirty ?? null,
   scriptactSessionId: `scriptact-${randomUUID()}`,
   modelWirePreflight,
   providerCapabilities,
