@@ -5,7 +5,7 @@
  * 路径都相对项目根、钳在项目内；数据都经项目内核取。排队用的项目资源门在执行类里套，这里不管。
  */
 
-import { isAbsolute, relative, resolve } from 'node:path'
+import { dirname, isAbsolute, relative, resolve } from 'node:path'
 
 import { isEmpty, isString, isUndefined, Log } from '@velaros-ai/core'
 
@@ -27,7 +27,8 @@ import { ProjectError } from '../errors.js'
 import { listInput, readInput, searchInput } from './file-input.js'
 import { executeAgentProjectSearch, isAgentProjectError, readAgentFile } from './kernel-port.js'
 import { projectRelativePath } from './ports.js'
-import { presentFileRead, presentFileSpans, toProjectWindows } from './source-window.js'
+import { presentFileRead, presentFileSpans } from './source-window.js'
+import { editableProjectWindows } from './window-targets.js'
 
 const log = Log.tag('ProjectFileReads')
 
@@ -64,12 +65,13 @@ function beyondReadLimit(file: ProjectReadItem, remaining: number): ProjectError
  */
 export async function readFiles(
   input: unknown,
-  ctx: ProjectOperationContext
+  ctx: ProjectOperationContext,
+  readChars: number = ProjectFileLimits.readChars
 ): Promise<ProjectReadResult> {
   ctx.abortSignal.throwIfAborted()
   const files = readInput(input)
   const kernel = await ctx.project.kernel()
-  let remaining: number = ProjectFileLimits.readChars
+  let remaining: number = readChars
   const windows: ProjectSourceWindow[] = []
   const issues: ProjectReadIssue[] = []
   for (const file of files) {
@@ -86,7 +88,7 @@ export async function readFiles(
       issues.push(issueOf(file.path, error))
     }
   }
-  const read: ProjectReadResult = { files: windows.flatMap(toProjectWindows) }
+  const read: ProjectReadResult = { files: await editableProjectWindows(ctx, windows) }
   if (!isEmpty(issues)) read.issues = issues
   return read
 }
@@ -184,7 +186,8 @@ function hitSpans(
     const file = files.get(key) ?? { path: hit.path, revision: hit.revision, spans: [] }
     file.spans.push({
       startLine: Math.max(1, hit.range.startLine - contextLines),
-      endLine: hit.range.endLine + contextLines,
+      endLine:
+        hit.range.endLine + Math.min(contextLines, Number.MAX_SAFE_INTEGER - hit.range.endLine),
     })
     files.set(key, file)
   }
@@ -192,7 +195,7 @@ function hitSpans(
     const merged: LineSpan[] = []
     for (const span of file.spans.sort((a, b) => a.startLine - b.startLine)) {
       const last = merged.at(-1)
-      if (last && span.startLine <= last.endLine + 1)
+      if (last && span.startLine - 1 <= last.endLine)
         last.endLine = Math.max(last.endLine, span.endLine)
       else merged.push({ ...span })
     }
@@ -201,41 +204,91 @@ function hitSpans(
   return [...files.values()]
 }
 
+/** 计量合并后的连续正文：Unicode 字符逐个计数，相邻行的换行计一次，分开的窗口没有隐藏正文。 */
+function searchWindowCharacters(window: ProjectSourceWindow, remaining: number): number {
+  let chars = 0
+  let previousLine = 0
+  for (const [line, text] of window.lines) {
+    if (previousLine > 0 && previousLine + 1 === line) chars++
+    for (let offset = 0; offset < text.length; offset++) {
+      if (text.codePointAt(offset)! > 0xffff) offset++
+      chars++
+      if (chars > remaining) return chars
+    }
+    if (chars > remaining) return chars
+    previousLine = line
+  }
+  return chars
+}
+
 /**
  * search：字面文本或正则，交回全部命中；每个命中的文件整份读一次，命中所在的行（连同前后 contextLines 行）合成连续正文的窗口。
- * 命中超过守内存的上限时整个调用失败。搜完之后文件又被改了的，命中照样给位置和 snippet，只是没有窗口。
+ * 命中或合并后的正文超过守内存的上限时整个调用失败。搜完之后文件又被改了的，命中照样给位置和 snippet，只是没有窗口。
  */
 export async function searchFiles(
   raw: unknown,
-  ctx: ProjectOperationContext
+  ctx: ProjectOperationContext,
+  searchChars: number = ProjectFileLimits.searchChars
 ): Promise<ProjectSearchResult> {
   ctx.abortSignal.throwIfAborted()
   const input = searchInput(raw)
   const root = resolve(ctx.project.getRootPath())
   const path = isString(input.path) ? await projectRelativePath(ctx, input.path) : ''
   const kernel = await ctx.project.kernel()
+  const target = path ? await kernel.stat({ path }) : undefined
+  ctx.abortSignal.throwIfAborted()
+  if (target && !target.exists)
+    throw new ProjectError(
+      'TARGET_NOT_FOUND',
+      `${path} 不存在。`,
+      { path },
+      '核对路径，或搜索上级目录。'
+    )
+  if (target && target.kind !== 'directory' && target.kind !== 'file')
+    throw new ProjectError(
+      'INVALID_INPUT',
+      `${path} 不是普通文件或目录。`,
+      { path },
+      '搜索项目内的文本文件或目录。'
+    )
+  const patternBase = target?.kind === 'file' ? dirname(path) : path
   const result = await executeAgentProjectSearch(kernel, {
     query: input.query,
     path: path || undefined,
-    include: scopeListPatterns(root, path, input.include),
-    exclude: scopeListPatterns(root, path, input.exclude),
+    include: scopeListPatterns(root, patternBase, input.include),
+    exclude: scopeListPatterns(root, patternBase, input.exclude),
     regex: input.regex,
     caseSensitive: input.caseSensitive,
   })
   const windows: ProjectSourceWindow[] = []
+  let remaining = searchChars
   for (const file of hitSpans(
     result.hits,
     input.contextLines ?? ProjectFileLimits.searchContextLinesDefault
   )) {
     ctx.abortSignal.throwIfAborted()
+    let window: ProjectSourceWindow
     try {
-      windows.push(await presentFileSpans(ctx, file.path, file.revision, file.spans))
+      window = await presentFileSpans(ctx, file.path, file.revision, file.spans)
     } catch (error) {
+      ctx.abortSignal.throwIfAborted()
+      if (isAgentProjectError(error, 'SCOPE_VIOLATION')) throw error
       // 搜完之后文件又被改了：命中的位置照样给，窗口要重读。
       log.debug('命中处的窗口读不到', { path: file.path, error: String(error) })
+      continue
     }
+    const chars = searchWindowCharacters(window, remaining)
+    if (chars > remaining)
+      throw new ProjectError(
+        'SCOPE_VIOLATION',
+        `搜索的连续正文超过一次 search 的 ${searchChars} 个 Unicode 字符上限，这次什么都没交回。`,
+        { path: file.path, remaining, maxChars: searchChars },
+        '减小 contextLines，或收窄 query、path、include；需要更多原文时用 read 带 range 分段读取。'
+      )
+    remaining -= chars
+    windows.push(window)
   }
-  const files = windows.flatMap(toProjectWindows)
+  const files = await editableProjectWindows(ctx, windows)
   const inWindow = (hit: { path: string; revision?: string }) =>
     windows.some((window) => window.path === hit.path && window.revision === hit.revision)
   const searched: ProjectSearchResult = {

@@ -91,5 +91,6 @@ await startScriptWorker({ send: postToParent, onMessage: onParentMessage, exit: 
 - 能力调用期间停表，时限只算程序自己的计算；超时回 `TIMEOUT`，`signal` 触发回 `ABORTED`，停下时没落定的调用会被叫停。引擎只记账不回滚。
 - 源码、`blobs`、`input` 超过 `CodeSurfaceLimits` 直接拒（`check` 抛 `TOO_LARGE`，`run` 回 `failed.code` 为 `TOO_LARGE`），不截断照跑；返回值与日志超预算保留结尾，并在 `result.notices` 里说明。
 - `output` 调用时拍 JSON 快照，原值在 `outcome.output`，没调 `output` 时完整返回值在 `outcome.rawValue`；按 key 调展示、重新投影用 `scriptOutputs`，规则见 [脚本输出观察](../../docs/architecture/script-output-observation.md)。
+- 展示目录的 `totalChars` 与字段引用的 `chars` 按 JSON Pointer 召回正文的 UTF-16 长度计算：字符串为解码原文，其他值为紧凑 JSON。采集计量 `block.chars` 仍按原 JSON 编码大小计算；分页使用读取回执的 `offset + text.length`，到该页 `totalChars` 停止。
 - 输出展示按实际交付编码把正文、目录、问题与省略说明计入整体预算；默认 JSON 保持结构化表示，text 对所有类型独立选择能完整放下的正文。未配置整体上限时，显式 `view.mode: 'full'` 且无数字块上限，按完整选中表示的有界编码申请份额，再由宿主分配；放不下仍交引用。`required` 的自动视图、数字块上限（含零）、整体配置、引用、摘要及选择视图保持原语义。text 在共享份额中先分配 required 和 high，再分配普通块；超出时在该预算内选择完整行或完整条目；短块用不完的份额按既定优先级返还给尚未完整展示的块。结构化结果保留短字段，长文本字段共享剩余预算，片段标明完整行范围与原值 JSON Pointer。块优先级、显式展示上限与原值归档保持各自语义。
 - `nodeSubprocessCodeRunner` 要找得到 Node 可执行文件，在 Electron 里不执行、回 `RUNNER_CRASHED`；`NodeSubprocessRunnerIsReleaseReady` 恒为 `false`，部署环境的隔离边界由宿主验收。

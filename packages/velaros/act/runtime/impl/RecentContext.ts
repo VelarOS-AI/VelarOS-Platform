@@ -5,6 +5,7 @@ import type {
   ContextState,
   ContextStorage,
 } from '@velaros-ai/context'
+import { createContextReference } from '@velaros-ai/context'
 import { Log, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 import { isNull, isUndefined } from '@velaros-ai/core'
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
@@ -169,7 +170,8 @@ export class RecentContext implements RecentContextApi {
       (record) =>
         record.sequence > Math.max(after, resetAfter) &&
         record.sequence <= through &&
-        (record.kind === 'assistant' || /^script:[0-9a-f-]{36}:result$/u.test(record.title))
+        (record.kind === 'assistant' ||
+          /^script:(?:[a-f0-9]{8}|[0-9a-f-]{36}):result$/u.test(record.title))
     )
     const page = records.slice(0, limit)
     return {
@@ -268,7 +270,7 @@ export class RecentContext implements RecentContextApi {
       }
       const body = JSON.stringify(index)
       const entry = {
-        ref: { sessionId: this.id, id: crypto.randomUUID() },
+        ref: await createContextReference(this.storage, this.id),
         kind: 'audit' as const,
         title: 'context:history-index',
         objectId: await this.storage.put(this.id, body),
@@ -343,7 +345,8 @@ export class RecentContext implements RecentContextApi {
       (record) =>
         record.sequence > reset &&
         (record.sequence > segment.from || carried.has(record.ref.id)) &&
-        (record.kind === 'assistant' || /^script:[0-9a-f-]{36}:result$/u.test(record.title))
+        (record.kind === 'assistant' ||
+          /^script:(?:[a-f0-9]{8}|[0-9a-f-]{36}):result$/u.test(record.title))
     )
     const frozen = new Map(segment.entries.map((entry) => [entry.ref, entry]))
     const leased = new Map(results.map((result) => [result.ref, result]))
@@ -658,7 +661,7 @@ export class RecentContext implements RecentContextApi {
         turns++
         const prose = responseProse((await this.storage.get(this.id, record.objectId)) ?? '')
         lines.push(`模型 #${record.sequence}：${skeletonLine(prose ?? '（只有程序段）')}`)
-      } else if (/^script:[0-9a-f-]{36}:result$/u.test(record.title)) {
+      } else if (/^script:(?:[a-f0-9]{8}|[0-9a-f-]{36}):result$/u.test(record.title)) {
         const body = archivedJson(await this.storage.get(this.id, record.objectId)) as {
           mode?: unknown
           output?: { blocks?: unknown }
@@ -767,7 +770,10 @@ export class RecentContext implements RecentContextApi {
     for (const record of state?.records ?? []) {
       if (
         record.sequence <= Math.max(reset, segment.from) ||
-        !(record.kind === 'assistant' || /^script:[0-9a-f-]{36}:result$/u.test(record.title)) ||
+        !(
+          record.kind === 'assistant' ||
+          /^script:(?:[a-f0-9]{8}|[0-9a-f-]{36}):result$/u.test(record.title)
+        ) ||
         (record.kind !== 'assistant' && (await this.observation(record.objectId)))
       )
         continue

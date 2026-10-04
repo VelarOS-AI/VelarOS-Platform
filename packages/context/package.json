@@ -31,7 +31,7 @@
   "scripts": {
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/normalize-package-declarations.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun run build && node --test test/context.test.mjs test/views.test.mjs test/storage-index.test.mjs test/store.test.mjs test/storage-contract.test.mjs && bun test test/turnContextStateSource.test.ts test/verification.test.ts",
+    "test": "bun run build && node --test test/context.test.mjs test/views.test.mjs test/storage-index.test.mjs test/store.test.mjs test/storage-contract.test.mjs test/short-references.test.mjs && bun test test/turnContextStateSource.test.ts test/verification.test.ts",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/context",
     "clean": "rm -rf dist"
   },

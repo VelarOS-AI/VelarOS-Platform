@@ -23,6 +23,8 @@ const OpenRouterCompatibleModelCatalog: ProviderModelDefinition[] = [
   { id: 'anthropic/claude-sonnet-4.5', contextWindow: 200_000 },
   { id: '~openai/gpt-latest', contextWindow: 1_050_000 },
   { id: '~openai/gpt-mini-latest', contextWindow: 400_000 },
+  { id: 'openai/gpt-5.6-sol', contextWindow: 1_050_000 },
+  { id: 'openai/gpt-5.6', contextWindow: 1_050_000 },
   { id: 'openai/gpt-5.5-pro', contextWindow: 1_050_000 },
   { id: 'openai/gpt-5.5', contextWindow: 1_050_000 },
   { id: 'openai/gpt-5.4-pro', contextWindow: 1_050_000 },
@@ -290,6 +292,9 @@ const sharedProviderCatalogs = [
     provider: 'openai',
     defaultModel: 'gpt-5.5',
     models: [
+      // 官方窗口规格与公开别名：https://developers.openai.com/api/docs/models/gpt-5.6-sol
+      { id: 'gpt-5.6-sol', contextWindow: 1_050_000 },
+      { id: 'gpt-5.6', contextWindow: 1_050_000 },
       { id: 'gpt-5.5', contextWindow: 1_050_000 },
       { id: 'gpt-5.4', contextWindow: 1_050_000 },
       { id: 'gpt-5.2-codex', contextWindow: 400_000 },

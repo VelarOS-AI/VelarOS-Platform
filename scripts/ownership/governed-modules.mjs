@@ -184,7 +184,7 @@ export const GovernedModules = [
         'LocalStoreStorage.ts',
         'TurnContextLedger.ts',
       ],
-      ['EvidenceAccess.ts', 'TurnContextAppendHub.ts'],
+      ['EvidenceAccess.ts', 'TurnContextAppendHub.ts', 'ContextReferenceAllocator.ts'],
     ],
     browserSafeEntries: ['index.ts', 'contracts.ts'],
     invariants: 'spec/invariants.md',

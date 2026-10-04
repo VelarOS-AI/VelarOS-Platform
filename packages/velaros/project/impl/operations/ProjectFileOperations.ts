@@ -21,12 +21,20 @@ import type {
   ProjectUndoResult,
 } from '../../types/files.js'
 import type { ProjectSnapshotCapture, ProjectSnapshotInput } from '../../types/observation.js'
+import type {
+  ProjectPatchInput,
+  ProjectPatchResult,
+  ProjectSelectInput,
+  ProjectSelectResult,
+} from '../../types/selection.js'
 import { changeRecordOf, changeTransactionOf } from '../../utils/agent/change-records.js'
 import { commitProjectEdit } from '../../utils/agent/edit-commit.js'
 import { changeInput, editInput } from '../../utils/agent/file-input.js'
 import { listEntries, readFiles, searchFiles } from '../../utils/agent/file-reads.js'
 import { planPathSteps } from '../../utils/agent/path-steps.js'
 import { projectFailure } from '../../utils/agent/ports.js'
+import { patchSelections } from '../../utils/agent/selection-patch.js'
+import { selectSources } from '../../utils/agent/selection-reads.js'
 import { beforeWrite } from '../../utils/transactions/transaction-errors.js'
 
 import type { ProjectExecutionGateApi } from './ProjectExecutionGate.js'
@@ -37,10 +45,10 @@ import { ProjectSnapshotCollector } from './ProjectSnapshotCollector.js'
  * @AgentView
  * 项目里的文件：读、列目录、搜源码，以及把几步文件改动合成一个事务。下面这些对每个方法都成立，各自的说明里不再重复：
  * 路径一律相对项目根（写成项目里的绝对路径也认），出不了项目，经符号链接指到外面的也不行。
- * 读出来的是连续的正文，带第一行的行号；改的时候按路径写：整份写入，或者把一段原文换成新文。
+ * 读出来的是连续正文；read 的 target 或 select 确认的结构/片段直接传给 patch，只给新正文、不数行、不抄旧块。路径 edit 也可用。
  * 改动经事务：一次 edit 全成或全不成，跑项目的校验器，保留文件原来的编码与换行；成了给 changeRef，inspect 看差量、undo 整次撤销。
  * 项目里的文件都能读能改，不问用户。生成出来的文件（*.generated.*、generated/ 下的这类）也改得动，但下次生成会被覆盖：一般改生成器的输入再重新生成。
- * 什么都不折叠：read 交回要的整段，list 交回全部条目，search 交回全部命中，edit、inspect 交回完整差量；看多少、筛什么在程序里定。
+ * read 交回要的整段，list 全部条目，search 全部命中；patch 缺省摘要，edit、inspect 完整差量；看多少、筛什么在程序里定。
  * changeRef 只在本会话里有效，原样用，不能手写。
  * 失败时 error.code 是原因（INVALID_INPUT、TARGET_NOT_FOUND、AMBIGUOUS_TARGET、NOT_SUPPORTED、PERMISSION_DENIED、超过守内存上限的 SCOPE_VIOLATION……），error.message 写着为什么、下一步怎么办。
  */
@@ -60,10 +68,19 @@ export interface ProjectFileOperationsApi {
    * @OperationEffect none
    */
   list(input: ProjectListInput, ctx: ProjectOperationContext): Promise<ProjectListResult>
-  /** @AgentView 按字面文本或正则搜项目源码，交回全部命中与命中处连同前后几行的正文。
+  /** @AgentView 按字面文本或正则搜项目源码，交回全部命中与连续正文。contextLines 为每处前后各带的行数，缺省 1，接受非负安全整数；窗口止于文件边界，相交或相邻的窗口合并。合并后的正文总量不超过 20000000 个 Unicode 字符；超限减小 contextLines、收窄范围或用 read 带 range 分段读取。
    * @OperationEffect none
    */
   search(input: ProjectSearchInput, ctx: ProjectOperationContext): Promise<ProjectSearchResult>
+  /** @AgentView 精确定位函数/方法等结构或作用域中的字面片段；返回连续原文和工具绑定的目标。歧义明确选择候选，issues 未解决时不要提交成功子集。
+   * @OperationEffect none
+   */
+  select(input: ProjectSelectInput, ctx: ProjectOperationContext): Promise<ProjectSelectResult>
+  /** @AgentView 批量编辑 read/select 的目标：新块或片段一次拼接、整批事务提交。缺省摘要，完整 diff 用 inspect。blocked 明确未写入，并可用 planRef/amendments 只修正问题项；取消或写入状态不明仍抛错。
+   * @OperationEffect write
+   * @OperationModes execute
+   */
+  patch(input: ProjectPatchInput, ctx: ProjectOperationContext): Promise<ProjectPatchResult>
   /** @AgentView 改项目文件：按路径写整份或换一段原文，steps 按顺序合成一个事务提交。相关改动优先放进一次 edit；拆成多次调用时每次各自提交，不能承诺跨调用全成或全不成。
    * @OperationEffect write
    */
@@ -118,6 +135,26 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
     } catch (error) {
       throw projectFailure(error)
     }
+  }
+
+  public select(
+    input: ProjectSelectInput,
+    ctx: ProjectOperationContext
+  ): Promise<ProjectSelectResult> {
+    return this.guarded(ctx, false, () => selectSources(input, ctx))
+  }
+
+  public patch(
+    input: ProjectPatchInput,
+    ctx: ProjectOperationContext
+  ): Promise<ProjectPatchResult> {
+    return this.guarded(ctx, true, async () => {
+      const result = await patchSelections(input, ctx)
+      ctx.recordWriteOutcome?.(
+        result.status === 'applied' && result.changed ? 'applied' : 'not-applied'
+      )
+      return result
+    })
   }
 
   public async inspect(

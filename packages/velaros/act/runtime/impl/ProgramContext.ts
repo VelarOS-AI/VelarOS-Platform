@@ -8,6 +8,7 @@ import type {
   ContextStorage,
   ModelView,
 } from '@velaros-ai/context'
+import { createContextReference } from '@velaros-ai/context'
 import { ContextLimits } from '@velaros-ai/context'
 import {
   isArray,
@@ -195,7 +196,7 @@ export class ProgramContext implements ProgramContextApi {
       const failure = AppError.from(error)
       throw AppError.withFields(failure.code, failure.message, { effect: 'none' })
     }
-    const sourceRef = crypto.randomUUID()
+    const sourceRef = (await createContextReference(this.storage, this.sessionId)).id
     const descriptor: ProgramDescriptor = {
       name: input.name,
       revision: (input.baseRevision ?? 0) + 1,
@@ -621,14 +622,17 @@ export class ProgramContext implements ProgramContextApi {
   private async record(
     title: string,
     body: string,
-    id: string = crypto.randomUUID(),
+    id: Optional<string> = undefined,
     sources: readonly ContextRef[] = []
   ): Promise<ContextRecord> {
     if (body.length > ContextLimits.objectChars)
       throw new AppError('TOO_LARGE', '程序记录超过上下文对象限制')
     const objectId = await this.storage.put(this.sessionId, body)
     return {
-      ref: { sessionId: this.sessionId, id },
+      ref: {
+        sessionId: this.sessionId,
+        id: id ?? (await createContextReference(this.storage, this.sessionId)).id,
+      },
       sequence: 0,
       kind: 'audit',
       title,
@@ -815,7 +819,7 @@ export class ProgramContext implements ProgramContextApi {
     ) as CodeProgramRequest
     const program = scriptOutputs.edit(original, edit)
     if (program.source === original.source) return sourceRef
-    const next = crypto.randomUUID()
+    const next = (await createContextReference(this.storage, this.sessionId)).id
     const id = crypto.randomUUID()
     const version: ScriptProgramVersion = {
       sourceRef: next,
@@ -913,7 +917,7 @@ export class ProgramContext implements ProgramContextApi {
       { sessionId: this.sessionId, id: ref },
       { offset, limit }
     )
-    if (result.record.kind !== 'audit' || !/^script:[0-9a-f-]{36}$/u.test(result.record.title))
+    if (result.record.kind !== 'audit' || result.record.title !== `script:${ref}`)
       throw new AppError('SCRIPT_REF', '引用不是当前会话保存的脚本版本')
     return result
   }
@@ -929,7 +933,7 @@ export class ProgramContext implements ProgramContextApi {
     )
     if (
       result.record.kind !== 'audit' ||
-      !/^script:[0-9a-f-]{36}:result$/u.test(result.record.title)
+      !/^script:(?:[a-f0-9]{8}|[0-9a-f-]{36}):result$/u.test(result.record.title)
     )
       throw new AppError('RESULT_REF', '引用不是当前会话的执行结果')
     return result
@@ -1029,7 +1033,7 @@ export class ProgramContext implements ProgramContextApi {
     ])
     const state = await this.readState(selected)
     const snapshot = selected ? { ...selected.metadata, records: selected.records } : null
-    const frameId = crypto.randomUUID()
+    const frameId = (await createContextReference(this.storage, this.sessionId)).id
     const allVisible = state.leases.filter(
       (item) => item.task || item.segment || item.expiresAfter > state.completedTurns
     )

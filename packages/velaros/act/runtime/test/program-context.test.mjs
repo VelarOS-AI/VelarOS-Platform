@@ -26,6 +26,36 @@ import { done, turn } from './support/model-turn.mjs'
 const stop = async function* (request) {
   yield* done(request)
 }
+
+test('saved programs and results accept short identities and exact historical identities', async (t) => {
+  const f = await fixture(t)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  for (const id of ['01234567', '12345678-1234-4321-8321-123456789abc']) {
+    const body = JSON.stringify({ source: 'export default 1' })
+    await f.storage.appendRecord('s', {
+      ref: { sessionId: 's', id },
+      kind: 'audit',
+      title: `script:${id}`,
+      objectId: await f.storage.put('s', body),
+      chars: body.length,
+      sources: [],
+      createdAt: new Date().toISOString(),
+    })
+    assert.equal((await programs.readProgram(id)).text, body)
+    const result = await f.session.context.append({
+      kind: 'audit',
+      title: `script:${id}:result`,
+      body: 'saved result',
+    })
+    assert.equal((await programs.read(result.ref.id)).text, 'saved result')
+    const falseSource = await f.session.context.append({
+      kind: 'audit',
+      title: `script:${id}`,
+      body: 'another record',
+    })
+    await assert.rejects(programs.readProgram(falseSource.ref.id), { code: 'SCRIPT_REF' })
+  }
+})
 async function fixture(t, stream = stop, extra = {}) {
   const root = await mkdtemp(join(tmpdir(), 'program-context-'))
   const path = join(root, 'state.sqlite')

@@ -43,7 +43,7 @@ INV-18（读完之后被改过时给出新行号重提）作废、编号不复�
 | INV-20 | 程序看得到的只有 `error.code` 与 `error.message`：code 是 `ProjectErrorCodes` 的原因码，details 里的位置（第几步）、候选、诊断、改完之后的预览与下一步都写进 message | 测试 | `spec/acceptance.test.ts` |
 | INV-22 | 两份代码模版（`template.js`、`code-template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它们整份照生成的真实声明过类型检查，不嵌进声明，随模型面发布、按需读（`velaros:system` 的 modules.describe）；在真的空间里把每个函数跑一遍、看交回的是不是它说的样子，由仓库层的 `tests/capabilities/capability-templates.test.ts` 核对 | 测试 | `spec/acceptance.test.ts` |
 | INV-23 | 行号照 `wc -l` 数，和 `velaros:files` 一样：结尾换行之后那个零宽的行不算进 totalLines（空文件是 0 行），越出行数的说明也照它数；读到文件末尾的窗口，正文结尾的换行照原样在，整份读回来原样 write 回去不多一行也不少一行；停在空行上的范围照样交出那一空行 | 测试 | `spec/acceptance.test.ts` |
-| INV-24 | 什么都不折叠，看多少由程序定：read 交回要的整段（不给 range 就是整个文件，没有续读），list 交回全部条目（不给 depth 就是整棵树，没有分页），search 交回全部命中、每个命中的文件一段命中处（连同前后几行）的连续正文，edit 与 inspect 交回完整差量，`velaros:code` 不按条数截；只有守内存的上限（`ProjectFileLimits.readChars`、`listEntries`、`searchHits`，`ProjectCodeLimits.results`），超了明说（SCOPE_VIOLATION，或宿主标的 coverage.truncated），不交回一部分冒充全部 | 测试 | `spec/acceptance.test.ts` |
+| INV-24 | read 交回要的整段，list 全部条目，search 全部命中及连续正文；search.contextLines 接受非负安全整数，窗口止于文件边界、重叠或相邻窗口合并，按合并后的正文总量守内存；edit、inspect 交回完整差量，patch 缺省摘要、full 返回完整差量，完整审计保留；超限明确报错，不交回一部分冒充全部 | 测试 | `spec/acceptance.test.ts`、`spec/selection-acceptance.test.ts`、`test/search-context.test.ts` |
 | INV-25 | 声明里写给模型的上限就是常量表 `ProjectFileLimits`、`ProjectCodeLimits` 与缺省策略里的数：改常量不改说明（或反过来）过不了验收 | 测试 | `spec/acceptance.test.ts` |
 | INV-26 | 项目里的危险命令每次都由用户亲自确认（高风险、手动、不可记忆，确认文案说「当前项目」，风险分类 `project-command:dangerous`）；被拒时抛错、一个进程都不起；别的命令（会改项目的、长驻的也一样）不问，直接跑，输出原样交回 | 测试 | `spec/acceptance.test.ts` |
 | INV-27 | 命令的工作目录与演练沙箱的源目录按解开符号链接后的真实路径钳在项目之内：出了项目在问用户之前就拒绝（`PERMISSION`），一个进程都不起、什么都不镜像；项目里的交给宿主时是解析好的绝对路径 | 测试 | `spec/acceptance.test.ts` |
@@ -61,4 +61,11 @@ INV-18（读完之后被改过时给出新行号重提）作废、编号不复�
 | INV-39 | `./project/contracts` 入口整条引用链不碰 Node 内置模块，渲染进程与浏览器都能加载；语言服务实现、工具函数与内部接口一律不出包 | 门禁 | `check:module-ownership` |
 | INV-40 | 语言查询的注入面只借内核的三个读方法，多一个都借不到：类型上就是对 `AgentProjectKernelPort` 取 `listFiles`、`read`、`listSymbols` 三键的 `Pick` | 类型 | `contract/requires.ts::LanguageReadPort` |
 | INV-41 | 同一份内容搜两遍，交回的一样：命中同分按路径、再按行列排，不跟 ripgrep 多线程交回的次序走（结果进模型上下文，次序抖动既让模型看着乱，也坏了前缀缓存） | 测试 | `spec/acceptance.test.ts` |
-| INV-42 | 批量替换模板先保留完整请求范围，读取有 issues 时交付缺口且不写入子集；成功组合只用一次批量 read 与一次事务 edit，交回真实 changeRef 与改动范围 | 测试 | `spec/acceptance.test.ts` |
+| INV-42 | 批量替换模板先保留完整请求范围，读取有 issues 或没有可编辑目标时交付缺口且不写入子集；成功组合只用一次批量 read 与一次事务 patch，交回真实 changeRef 与改动范围 | 测试 | `spec/acceptance.test.ts` |
+| INV-43 | select 由明确解析后端绑定完整声明，保留连续源码、缩进、注释和装饰器；同名、嵌套与重载提供候选，不自动选中；坐标不由模型计算 | 测试 | `spec/selection-acceptance.test.ts` |
+| INV-44 | 文本与坏语法通过明确文本目标修复；目标只授权实际返回的连续区间，断开的窗口不能跨过隐藏间隙；相似度不会授予写入位置 | 测试 | `spec/selection-acceptance.test.ts` |
+| INV-45 | 目标绑定会话、项目和原始正文版本；误抄、跨域与陈旧目标拒绝，目标之外的正文变化同样冲突；客户端说明字段不能篡改位置 | 测试 | `spec/selection-acceptance.test.ts` |
+| INV-46 | 目标边界不拆 UTF-16 字符或 CRLF，不规范化 Unicode；编码、BOM、换行与未改区域保留，空文件、EOF 和整行/片段各有确定语义 | 测试 | `spec/selection-acceptance.test.ts` |
+| INV-47 | 同文件目标在同一原始坐标上一次拼接，同点插入按输入顺序，重叠拒绝；整批仅在全部定位、权限、版本与验证通过后提交 | 测试 | `spec/selection-acceptance.test.ts` |
+| INV-48 | 独立定位问题汇总，明确未提交时保留 planRef；增量修正保留原下标，完整批次重新验证；提交后计划不可重放，取消或未知写入状态不假装 blocked | 测试 | `spec/selection-acceptance.test.ts` |
+| INV-49 | 一千处选区不会因每处复制源码视图而耗尽账本；一次事务每文件一个补丁，摘要不传源码，完整差量和整次撤销可用 | 测试 | `spec/selection-acceptance.test.ts` |

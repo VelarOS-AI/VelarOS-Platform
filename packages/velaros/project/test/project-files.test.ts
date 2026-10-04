@@ -9,6 +9,8 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
+import { textCodec } from '@velaros-ai/core/text-files'
+
 import { ProjectFileLimits, ProjectPolicyDefaults } from '../contract/constants'
 import { projectSourceLines } from '../utils/agent/source-window'
 
@@ -57,11 +59,12 @@ describe('read 的窗口', () => {
     const { call } = await projectToolFixture({ root })
     const window = await readOne(call, 'a.txt', [2])
     expect(window).toMatchObject({ path: 'a.txt', startLine: 2, text: 'second', totalLines: 3 })
-    // 窗口里只有模型面的字段：没有整份正文、内部的源码快照引用，也没有编辑凭据。
+    // 连续正文仍只显示请求范围；工具目标不含偏移或完整源快照，只授权该范围。
     expect(Object.keys(window).sort()).toEqual([
       'path',
       'revision',
       'startLine',
+      'target',
       'text',
       'totalLines',
     ])
@@ -487,6 +490,66 @@ describe('list', () => {
 })
 
 describe('search', () => {
+  test('点名文件只搜该文件；快后端与回退、带 glob 字符的文件名和旧编码得到相同命中', async () => {
+    await mkdir(join(root, 'data'), { recursive: true })
+    await writeFile(join(root, 'data/focus[1].txt'), 'before\nneedle here\nafter\n')
+    await writeFile(join(root, 'data/legacy.txt'), textCodec.encode('needle 中文\n', 'utf16le'))
+    await writeFile(join(root, 'data/other.txt'), 'needle unrelated\n')
+    for (const enableRipgrepSearch of [true, false]) {
+      const { call } = await projectToolFixture({ root, corePolicy: { enableRipgrepSearch } })
+      for (const path of ['data/focus[1].txt', 'data/legacy.txt']) {
+        const found = await call('project', 'search', { path, query: 'needle', contextLines: 1 })
+        expect(found.hits.map((hit: { path: string }) => hit.path)).toEqual([path])
+        expect(found.files).toHaveLength(1)
+        expect(found.files[0].text).toContain('needle')
+        const included = await call('project', 'search', {
+          path,
+          query: 'needle',
+          include: ['*.txt'],
+        })
+        expect(included.hits).toHaveLength(1)
+        expect(
+          (await call('project', 'search', { path, query: 'needle', exclude: ['*.txt'] })).hits
+        ).toEqual([])
+        expect((await call('project', 'search', { path, query: 'absent' })).hits).toEqual([])
+      }
+      expect(
+        (await failureOf(call('project', 'search', { path: 'data/missing.txt', query: 'needle' })))
+          .code
+      ).toBe('TARGET_NOT_FOUND')
+    }
+  })
+  test('点名搜索沿用根内授权与明确的 gitignore 选择，不绕过过滤', async () => {
+    await mkdir(join(root, 'data'), { recursive: true })
+    await writeFile(join(root, '.gitignore'), 'data/hidden.txt\n')
+    await writeFile(join(root, 'data/hidden.txt'), 'needle\n')
+    for (const enableRipgrepSearch of [true, false]) {
+      const { call, kernel } = await projectToolFixture({
+        root,
+        corePolicy: { enableRipgrepSearch },
+      })
+      expect(
+        (await call('project', 'search', { path: 'data/hidden.txt', query: 'needle' })).hits
+      ).toHaveLength(1)
+      expect(
+        (await kernel.search({ root: 'data/hidden.txt', query: 'needle', excludeGitignored: true }))
+          .hits
+      ).toEqual([])
+      expect(
+        (
+          await kernel.search({
+            root: 'data/hidden.txt',
+            query: 'needle',
+            excludeGitignored: false,
+          })
+        ).hits
+      ).toHaveLength(1)
+      expect(
+        (await failureOf(call('project', 'search', { path: '../outside.txt', query: 'needle' })))
+          .code
+      ).toBe('PERMISSION_DENIED')
+    }
+  })
   test('字面与正则都搜得到；命中处的窗口是连续的原文，照着写 oldText 就能改', async () => {
     await writeFile(join(root, 'a.txt'), 'first\nneedle A\nsecond\nneedle B\nend\n')
     const { call } = await projectToolFixture({ root })

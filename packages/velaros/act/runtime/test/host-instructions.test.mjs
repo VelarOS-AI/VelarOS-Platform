@@ -50,8 +50,7 @@ test('domain guidance follows granted capabilities in actual noncoding and proje
     })
     for await (const event of f.session.submit('请把“今天晴天”翻译成英文。'))
       assert.notEqual(event.type, 'error')
-    // 程序增量修改协议也合法使用 oldText；这里只检查领域编辑策略。
-    assert.equal(instructions.includes('编辑锚点取自真实读取的原文'), project)
+    assert.equal(instructions.includes('项目编辑用 read/search 的 target'), project)
     assert.equal(instructions.includes('受影响调用方'), project)
     assert.doesNotMatch(instructions, /实际 PATH|const \{ stdout, \.\.\.status \}/)
     assert.match(instructions, /(?:完整|总)费用/)
@@ -64,11 +63,16 @@ test('domain guidance follows granted capabilities in actual noncoding and proje
     ['velaros:files'],
     ['velaros:shell'],
     ['velaros:project', 'velaros:shell'],
+    ['velaros:project', 'velaros:files'],
   ]) {
     const instructions = runtimeInstructions({ modules, maintain: false, observe: false })
     assert.equal(
       instructions.includes('oldText'),
-      modules.includes('velaros:files') || modules.includes('velaros:project')
+      modules.includes('velaros:files') && !modules.includes('velaros:project')
+    )
+    assert.equal(
+      instructions.includes('项目编辑用 read/search 的 target'),
+      modules.includes('velaros:project')
     )
     assert.equal(instructions.includes('实际 PATH'), modules.includes('velaros:shell'))
     assert.equal(
@@ -77,6 +81,53 @@ test('domain guidance follows granted capabilities in actual noncoding and proje
     )
     assert(!instructions.includes('截断后用 memory.read'))
   }
+})
+
+test('project batch transformations reuse actual read targets and preserve source formatting', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'runtime-bound-batch-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  const originals = new Map([
+    ['main.py', 'def status():\n\t"""pending 🌈"""\n\treturn "pending"\n'],
+    ['main.ts', 'export const status = "pending"\r\n\r\n// 🌈\r\n'],
+    ['main.json', '{\n  "status": "pending",\n  "path": "C:\\\\temp"\n}\n'],
+    ['main.md', '# pending\n\n\n    pending 🌈\n'],
+    ['other.py', "class Status:\n\n    state = 'pending'\n\n"],
+    ['other.ts', '// pending\nexport const mark = `pending`;\n'],
+  ])
+  for (const [name, text] of originals) await writeFile(join(workspace, name), text)
+  const paths = [...originals.keys()]
+  const frames = []
+  const f = await fixture(t, {
+    workspace,
+    residentModules: [{ module: 'velaros:project', exports: ['read', 'patch'] }],
+    model: driver(async function* (request) {
+      frames.push(request)
+      if (frames.length === 1) {
+        yield turn(request, {
+          execute: {
+            source: `import {read,patch} from 'velaros:project';import {output} from 'velaros';
+const files=${JSON.stringify(paths)}.map(path=>({path}));
+const current=await read({files});
+if(current.issues?.length||current.files.some(file=>!file.target))throw Error('Incomplete source targets');
+const change=await patch({edits:current.files.map(file=>({target:file.target,text:file.text.replaceAll('pending','ready')}))});
+if(change.status!=='applied')throw Error(JSON.stringify(change));
+output({status:change.status,changeRef:change.changeRef,files:change.changedFiles});`,
+          },
+        })
+        yield { type: 'finish', reason: 'stop' }
+      } else yield* done(request)
+    }),
+  })
+  for await (const event of f.session.submit('Update the six related status files atomically.'))
+    assert.notEqual(event.type, 'error', JSON.stringify(event))
+  assert.equal(frames.length, 2)
+  assert.match(frames[0].instructions, /项目编辑用 read\/search 的 target/)
+  assert.match(frames[0].instructions, /export function patch/)
+  for (const [name, original] of originals)
+    assert.equal(
+      await readFile(join(workspace, name), 'utf8'),
+      original.replaceAll('pending', 'ready')
+    )
 })
 
 test('INV-43 trusted host instructions reach actual requests and traces; reopen uses current product settings', async (t) => {

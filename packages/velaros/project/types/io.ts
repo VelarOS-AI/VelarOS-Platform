@@ -89,6 +89,7 @@ export interface FileListEntry {
 export interface SearchInput {
   /** 默认按字面量文本搜索；regex 为 true 时按正则解释。 */
   query: string
+  /** 项目内的一个文件或目录；不提供时搜索整个项目。 */
   root?: string
   include?: string[]
   exclude?: string[]

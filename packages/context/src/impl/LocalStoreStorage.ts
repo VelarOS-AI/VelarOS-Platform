@@ -4,6 +4,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import { isUndefined, toNullable } from '@velaros-ai/core'
 import { isArray, isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { shortReferenceId } from '@velaros-ai/core/utils/shortReferenceId'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { StoreLimits } from '../contract/constants.js'
@@ -43,6 +44,7 @@ export class LocalStoreStorage implements StoreStorage {
     private readonly lifetime: AbortSignal
   ) {
     db.exec(`CREATE TABLE IF NOT EXISTS store_event_heads(store TEXT PRIMARY KEY,head INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS store_reference_ids(scope TEXT NOT NULL,id TEXT NOT NULL,PRIMARY KEY(scope,id));
 CREATE TABLE IF NOT EXISTS store_events(store TEXT NOT NULL,sequence INTEGER NOT NULL,id TEXT NOT NULL,topic TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(store,sequence),UNIQUE(store,id));
 CREATE TABLE IF NOT EXISTS store_subscriptions(store TEXT NOT NULL,consumer TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(store,consumer));
 CREATE TABLE IF NOT EXISTS store_event_acks(store TEXT NOT NULL,consumer TEXT NOT NULL,id TEXT NOT NULL,PRIMARY KEY(store,consumer,id));
@@ -86,7 +88,7 @@ CREATE TABLE IF NOT EXISTS store_creations(scope TEXT NOT NULL,owner TEXT NOT NU
       )
       if (count >= StoreLimits.stores) throw storeFailure('STORE_LIMIT', '创建者空间额度已满')
       const store: StoreDescriptor = {
-        id: crypto.randomUUID(),
+        id: this.referenceId('catalog'),
         name: input.name,
         description: input.description ?? '',
         owner: input.owner,
@@ -589,7 +591,7 @@ CREATE TABLE IF NOT EXISTS store_creations(scope TEXT NOT NULL,owner TEXT NOT NU
   private appendEvent(store: string, topic: string, value: string, actor: string): StoreEvent {
     const sequence = this.eventHead(store) + 1
     const next: StoreEvent = {
-      id: crypto.randomUUID(),
+      id: this.referenceId(`events:${store}`),
       sequence,
       topic,
       value: JSON.parse(value),
@@ -613,6 +615,18 @@ CREATE TABLE IF NOT EXISTS store_creations(scope TEXT NOT NULL,owner TEXT NOT NU
       )
       .run(store, store)
     return next
+  }
+  private referenceId(scope: string): string {
+    const claim = this.db.prepare('INSERT OR IGNORE INTO store_reference_ids(scope,id) VALUES(?,?)')
+    return shortReferenceId((id) => {
+      const existing =
+        scope === 'catalog'
+          ? this.db.prepare('SELECT 1 FROM store_catalog WHERE id=?').get(id)
+          : this.db
+              .prepare('SELECT 1 FROM store_events WHERE store=? AND id=?')
+              .get(scope.slice('events:'.length), id)
+      return Boolean(existing) || Number(claim.run(scope, id).changes) === 0
+    })
   }
   private subscription(store: string, consumer: string): Nullable<StoreSubscription> {
     const row = this.db

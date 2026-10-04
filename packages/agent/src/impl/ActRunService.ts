@@ -1,3 +1,4 @@
+import { createContextReference } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
 import { isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -260,7 +261,7 @@ class ActRunService implements ActRunServiceApi {
       throw new AppError('UNAVAILABLE', '交互需要活动运行')
     signal.throwIfAborted()
     const request: ActInteraction = {
-      id: crypto.randomUUID(),
+      id: (await createContextReference(this.options.storage, this.options.sessionId)).id,
       runId: this.runId,
       kind,
       message,

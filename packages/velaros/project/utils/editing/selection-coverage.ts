@@ -57,6 +57,36 @@ export function visibleWindows(
   return merged
 }
 
+/** 工具计算的字符选区仍需复核覆盖和字符边界；不跨不可见间隙，不拆 UTF-16 字符或 CRLF。 */
+export function assertVisibleSpan(
+  view: ProjectEditView,
+  source: ProjectSourceCoordinates,
+  start: number,
+  end: number,
+  windows: readonly OffsetWindow[] = visibleWindows(view, source)
+): void {
+  // 复用可见范围的严格边界校验，而非另写一套 Unicode/换行规则。
+  visibleWindows(
+    {
+      ...view,
+      coverage: [
+        {
+          startOffset: start,
+          endOffset: end,
+          startLine: sourceLineAt(source, start),
+          endLine: sourceLineAt(source, end),
+          completeLines: false,
+        },
+      ],
+    },
+    source
+  )
+  if (!windows.some((window) => window.start <= start && end <= window.end))
+    throw new ProjectError('SCOPE_VIOLATION', '目标超出了实际返回的连续源码范围。', {
+      path: view.path,
+    })
+}
+
 /** 核对 [startLine, endLine] 每一行都在 fileRef 实际显示过的范围里（complete 为 true 时要求整行显示）；缺了就按越界拒绝。 */
 export function assertVisibleLines(
   view: ProjectEditView,

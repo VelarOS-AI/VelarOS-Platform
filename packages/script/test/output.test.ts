@@ -33,6 +33,27 @@ function capture(value: unknown, options = {}) {
   return collector.snapshot()
 }
 
+test('pointer recall sizes count decoded UTF-16 strings independently of JSON capture size', () => {
+  const values = [
+    '',
+    '\t"source\\path"\r\n界😀\u0301'.repeat(600),
+    { text: 'quoted\n"text"' },
+    [true, 3, null],
+  ]
+  for (const value of values) {
+    for (const type of [undefined, 'json'] as const) {
+      const raw = capture(value, { type, view: { mode: 'reference' } })
+      const before = JSON.stringify(raw)
+      const projected = scriptOutputs.project(raw, 'source-ref', 2000)
+      expect(projected.blocks[0]!.totalChars).toBe(
+        typeof value === 'string' ? value.length : JSON.stringify(value).length
+      )
+      expect(raw.blocks[0]!.chars).toBe(JSON.stringify(value).length)
+      expect(JSON.stringify(raw)).toBe(before)
+    }
+  }
+})
+
 test('INV-35 text projection uses the sent representation without changing default JSON or full semantics', () => {
   const value = 'alpha("beta");\n'.repeat(40)
   const raw = capture(value, { key: 'sample', type: 'code', view: { mode: 'full' } })
@@ -755,6 +776,7 @@ test('INV-35 structured text fields expose complete lines and an exact raw point
       expect(field.representation).toBe('excerpt')
       expect(field.rawRef).toBe('result-ref')
       expect(field.pointer).toBe('/output/blocks/0/value/out~1~0text')
+      expect(field.chars).toBe(lines.join('\n').length)
       const shown = field.text.split('\n')
       expect(shown).toEqual(
         edge === 'head' ? lines.slice(0, shown.length) : lines.slice(-shown.length)

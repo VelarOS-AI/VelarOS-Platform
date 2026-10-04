@@ -64,6 +64,11 @@ export function normalizeFilterList(values: LooseOptional<readonly string[]>): s
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))]
 }
 
+/** 列举与点名搜索共用项目的忽略判定，保留 git 与本地规则的同一回退语义。 */
+export function projectIgnorePolicy(root: string, command: CommandProvider) {
+  return createIgnorePolicy(root, { gitCheckIgnore: gitCheckIgnoreWith(command) })
+}
+
 /**
  * 按路径、include、exclude、深度与条数列出文件和目录：一层层读目录，每层条目的 gitignore 判定合成一次 git check-ignore
  * （git 不可用时按逐级累积的本地 .gitignore 规则判断）；版本库内部、被忽略、被排除或宿主不想列的目录不再深入，输出按深度优先、满 maxFiles 即止。
@@ -86,9 +91,7 @@ export async function listProjectFiles(
   const startDir = startAccess.abs
   const startRel = startAccess.rel || '.'
   // 忽略判定交给公共件：一次列举一份策略，读过的 .gitignore 与「git 还能不能用」都记在它里面。
-  const ignorePolicy = createIgnorePolicy(dependencies.root, {
-    gitCheckIgnore: gitCheckIgnoreWith(dependencies.command),
-  })
+  const ignorePolicy = projectIgnorePolicy(dependencies.root, dependencies.command)
 
   const requestsGitignoreExclusion = input.excludeGitignored ?? true
   const startIgnored =

@@ -5,6 +5,8 @@
  * 只放类型；怎么读、怎么改在 `impl/operations/ProjectFileOperations.ts`。
  */
 
+import type { ProjectSelection } from './selection.js'
+
 // ── 读 ──────────────────────────────────────────────────────────
 
 /** @AgentView 行号或连续闭区间：`51`、`[51]`、`[42, 45]`，末行不小于首行。 */
@@ -39,6 +41,8 @@ export interface ProjectWindow {
   /** 整个文件有几行，数法和 `wc -l` 一样：结尾那个换行不算多出一行，空文件是 0 行。 */
   totalLines?: number
   note?: string
+  /** 工具绑定的可编辑目标；可传给 select 的 within 或 patch。只读、无可见正文或版本不能确认时不给。 */
+  target?: ProjectSelection
 }
 
 /** @AgentView 批量读时没读到的一个文件：code 是原因（TARGET_NOT_FOUND 不存在、NOT_SUPPORTED 是目录或二进制、PERMISSION_DENIED 不许读、SCOPE_VIOLATION 装不下……），next 是下一步。 */
@@ -87,7 +91,9 @@ export interface ProjectListResult {
 /**
  * @AgentView
  * 搜源码。query 缺省按字面、不区分大小写匹配：regex 为真按正则，caseSensitive 为真区分大小写；字面模式下 `|` 没有「或」的意思。
- * path 只搜这个目录（缺省是整个项目），include、exclude 是 glob、写法同 list（`*.ts` 是 path 下所有 .ts）；contextLines 每处前后各带几行，缺省 1、最多 10。
+ * path 可点名一个文件或目录（缺省是整个项目）；点名文件只搜该文件，include、exclude 相对其上级目录；目录的 glob 写法同 list（`*.ts` 是 path 下所有 .ts）。不存在的 path 明确报错。
+ * contextLines 每处前后各带几行，缺省 1，接受非负安全整数；窗口止于文件边界，相交或相邻的窗口合并，正文不重复。
+ * 合并后的正文总量不超过 20000000 个 Unicode 字符；超限整个调用失败，减小 contextLines、收窄范围或用 read 带 range 分段读取。
  * 交回全部命中；超过 5000 处时整个调用失败（只为守住内存），收窄 query、path 或 include 再搜。
  */
 export interface ProjectSearchInput {
@@ -174,6 +180,13 @@ export interface ProjectEditInput {
  * range 选整行、match 选一段唯一的原文，两者都只认 fileRef 覆盖到的内容。按路径的 replace 步在这里是一处 match 替换。
  */
 export type ProjectContentEdit =
+  | { op: 'replace'; span: { start: number; end: number; lines: boolean }; text: string }
+  | {
+      op: 'insert'
+      span: { start: number; end: number; lines: boolean }
+      side: 'before' | 'after'
+      text: string
+    }
   | { op: 'replace'; range?: ProjectLineRange; match?: string; text: string }
   | {
       op: 'insert'
@@ -223,6 +236,7 @@ export interface ProjectRecodeReceipt {
  * oldRevisions 不含新建的文件。notes 是补充说明（比如什么都没改）。
  */
 export interface ProjectEditResult {
+  /** 带 change: 前缀的 8 位十六进制引用，原样传给 inspect 或 undo。 */
   changeRef: string
   /** 内核里这次事务的号：界面拿它当这次改动的标识，你用 changeRef 就够了。 */
   transactionId: string

@@ -70,7 +70,8 @@ function renderBlock(
     bodyIncluded: false,
     rawRef: ref,
     pointer: `/output/blocks/${index}/value`,
-    totalChars: block.chars,
+    // pointer 召回字符串时返回解码原文，采集用的 JSON 字符数另保存在 block.chars。
+    totalChars: isString(block.value) ? block.value.length : block.chars,
     totalItems: isArray(block.value) ? block.value.length : undefined,
   }
   const reference = (reason: string, selection?: unknown) => ({
@@ -208,7 +209,7 @@ function renderBlock(
                 pointer: view.paths
                   ? undefined
                   : `${item.pointer}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`,
-                chars: JSON.stringify(value).length,
+                chars: isString(value) ? value.length : JSON.stringify(value).length,
               },
         ])
       )

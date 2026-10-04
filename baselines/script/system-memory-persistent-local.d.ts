@@ -218,6 +218,7 @@ declare module 'velaros:system-memory-persistent-local' {
    */
   interface ContextRef {
     readonly sessionId: string
+    /** 新记录签发 8 位十六进制引用，按会话精确查找；历史身份继续按原值读取。 */
     readonly id: string
   }
 

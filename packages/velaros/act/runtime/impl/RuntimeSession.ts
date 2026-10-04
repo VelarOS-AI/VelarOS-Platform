@@ -21,6 +21,7 @@ import type {
   ContextViewApi,
   ModelView,
 } from '@velaros-ai/context'
+import { createContextReference } from '@velaros-ai/context'
 import { createContextRuntime, createContextView } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
 import { isNull, isUndefined, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
@@ -1195,7 +1196,7 @@ export class RuntimeSession implements VelarosSession {
         throw new AppError('VALIDATION', '固定纯快照派生不能调用 Kernel 能力')
       if (!check.ok) {
         version = {
-          sourceRef: crypto.randomUUID(),
+          sourceRef: (await createContextReference(this.dependencies.storage, this.id)).id,
           parentRef,
           baseObservation: control.expectedObservation,
           kind: 'draft',
@@ -1235,7 +1236,7 @@ export class RuntimeSession implements VelarosSession {
         ? active!
         : reuse
           ? (program as ScriptReferenceProgram).sourceRef
-          : crypto.randomUUID()
+          : (await createContextReference(this.dependencies.storage, this.id)).id
       version =
         unchanged || reuse
           ? undefined
@@ -1278,7 +1279,11 @@ export class RuntimeSession implements VelarosSession {
       const ref = active ?? (candidate && parentRef ? parentRef : undefined)
       const fallback = ref ? undefined : { source: '/* 控制调用在执行前被拒绝。 */' }
       const fallbackVersion = fallback
-        ? { sourceRef: crypto.randomUUID(), baseObservation: active, kind: 'draft' as const }
+        ? {
+            sourceRef: (await createContextReference(this.dependencies.storage, this.id)).id,
+            baseObservation: active,
+            kind: 'draft' as const,
+          }
         : undefined
       return {
         program: fallback,

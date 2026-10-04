@@ -9,7 +9,11 @@ import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
 import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
-import { executionMaterial, projectMaterial } from '../../../dist/act/runtime/utils/materials.js'
+import {
+  executionMaterial,
+  projectMaterial,
+  readMaterialField,
+} from '../../../dist/act/runtime/utils/materials.js'
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
 
 import { done, historyEntries, marker, turn } from './support/model-turn.mjs'
@@ -411,6 +415,44 @@ test('INV-58 projected fragments preserve JSON validity, source pointers and har
   const full = projectMaterial('{"small":true}', { sessionId: 's', id: 'small' }, 1000)
   assert.equal(full.text, '{"small":true}')
   assert.equal(full.representation, 'full')
+})
+
+test('projected pointer sizes drive exact recall loops for escaped strings and JSON values', () => {
+  const values = [
+    '\t"source\\path"\r\n界😀\u0301'.repeat(1800),
+    Array.from({ length: 400 }, (_, i) => ({ i, text: '"\\\n😀' })),
+  ]
+  for (const value of values) {
+    const archived = JSON.stringify({ 'source/~': value, status: 'ready' })
+    const projected = projectMaterial(archived, { sessionId: 's', id: 'ref' }, 800)
+    const shown = JSON.parse(projected.text)['source/~']
+    assert(shown.read.pointer)
+    const expected = typeof value === 'string' ? value : JSON.stringify(value)
+    assert.equal(shown.chars, expected.length)
+    let text = ''
+    let offset = 0
+    while (offset < shown.chars) {
+      const page = readMaterialField(
+        archived,
+        shown.read.pointer,
+        offset,
+        Math.min(257, shown.chars - offset)
+      )
+      assert(page.text.length > 0)
+      assert.equal(page.totalChars, shown.chars)
+      text += page.text
+      offset += page.text.length
+    }
+    assert.equal(text, expected)
+    assert.equal(projected.size.chars, archived.length)
+    assert(projected.text.length <= 800)
+  }
+  const rootArchive = JSON.stringify(values[0])
+  const rootShown = JSON.parse(
+    projectMaterial(rootArchive, { sessionId: 's', id: 'ref' }, 800).text
+  )
+  assert.equal(rootShown.chars, rootArchive.length)
+  assert.equal(rootShown.read.pointer, undefined)
 })
 
 test('raw execution material preserves diagnostics, selects actual archive paths, and leaves intact previews stable', () => {

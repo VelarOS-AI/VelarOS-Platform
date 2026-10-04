@@ -418,6 +418,8 @@ export interface ProjectSpacePort {
  * 每次调用 `velaros:project`、`velaros:code` 时空间给的上下文。它不是模型能填的入参：空间分发这次调用时装好，生成声明时整个丢掉。
  */
 export interface ProjectOperationContext {
+  /** 领域确认写操作的实际效果；正常返回的 blocked 或无变化也必须记成未写入，不能由客户端结果字段决定。 */
+  recordWriteOutcome?(outcome: 'applied' | 'not-applied'): void
   /** 领域确认固定只读捕获已经完整收束，保存观察保护事实。 */
   recordSnapshotCompletion?(): void
   /** 失败捕获的真实成本随 Kernel 独立诊断保存；不是业务结果或完整采集证明。 */

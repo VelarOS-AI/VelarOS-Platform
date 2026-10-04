@@ -39,6 +39,7 @@ import { awaitContextOperation, readContextTask, resolveViewLimits } from '../ut
 import { checkTaskCapsule, checkVerificationReport, checkViewIntent } from '../utils/view-input.js'
 
 import { ContextEvidenceBuilder } from './ContextEvidenceBuilder.js'
+import { createContextReference } from './ContextReferenceAllocator.js'
 import { ContextVerificationSession } from './ContextVerificationSession.js'
 
 /** 绑定会话的任务检查点与证据视图，不另持有工具、模型或数据库。 */
@@ -182,7 +183,7 @@ export class ContextViewSession implements ContextViewApi {
     const content = await this.options.context.read(goal)
     if (content.record.kind !== 'user')
       throw contextFailure('TASK_GOAL', '只有原始用户记录可以成为任务目标')
-    const id = crypto.randomUUID()
+    const id = (await createContextReference(this.options.storage, this.options.sessionId)).id
     await this.change(
       {
         apply: (current) => {
@@ -315,7 +316,7 @@ export class ContextViewSession implements ContextViewApi {
       intent.target.selector.end < intent.target.selector.start
     )
       throw contextFailure('VIEW_SCHEMA', '行范围终点不能早于起点')
-    const id = crypto.randomUUID()
+    const id = (await createContextReference(this.options.storage, this.options.sessionId)).id
     const task = await this.change(
       {
         apply: (current) => {
@@ -686,7 +687,7 @@ export class ContextViewSession implements ContextViewApi {
         signal
       )
       record = {
-        ref: { sessionId: this.options.sessionId, id: crypto.randomUUID() },
+        ref: await createContextReference(this.options.storage, this.options.sessionId),
         kind: 'audit',
         title: `task:completion:${task.id ?? 'legacy'}`,
         objectId,
@@ -839,7 +840,7 @@ export class ContextViewSession implements ContextViewApi {
         const body = JSON.stringify(state.task)
         const objectId = await storage.put(sessionId, body)
         append.push({
-          ref: { sessionId, id: crypto.randomUUID() },
+          ref: await createContextReference(storage, sessionId),
           kind: 'audit',
           title: `task:archive:${state.task.id ?? 'legacy'}`,
           objectId,

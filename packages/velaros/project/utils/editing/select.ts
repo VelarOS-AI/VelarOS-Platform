@@ -16,7 +16,12 @@ import { ProjectTuning } from '../tuning.js'
 import { normalizeProjectLineRange } from './line-range.js'
 import { insertionLineText, replacementLineText } from './line-text.js'
 import { exactMatchCandidates, matchesElsewhere, missingMatchCandidates } from './match-feedback.js'
-import { assertVisibleLines, intersectWindows, visibleWindows } from './selection-coverage.js'
+import {
+  assertVisibleLines,
+  assertVisibleSpan,
+  intersectWindows,
+  visibleWindows,
+} from './selection-coverage.js'
 import {
   createProjectSourceCoordinates,
   logicalSourceOffset,
@@ -99,12 +104,38 @@ export function selectProjectMutations(
           kind: 'insert',
         }
       }
-      if (isUndefined(edit.range) && isUndefined(edit.match))
+      if (!('span' in edit) && isUndefined(edit.range) && isUndefined(edit.match))
         throw new ProjectError('INVALID_INPUT', '编辑需要 range 或 match。')
       if (edit.op === 'insert' && edit.side !== 'before' && edit.side !== 'after')
         throw new ProjectError('INVALID_INPUT', '定位插入需要 side:before 或 after。')
       if (edit.op === 'replace' && 'side' in edit)
         throw new ProjectError('INVALID_INPUT', 'replace 不接受 side。')
+      if ('span' in edit) {
+        if ('range' in edit || 'match' in edit)
+          throw new ProjectError('INVALID_INPUT', '工具绑定的 span 不能与 range、match 混用。')
+        const { start, end, lines } = edit.span
+        assertVisibleSpan(view, source, start, end, allWindows)
+        if (edit.op === 'replace')
+          return {
+            start,
+            end,
+            editIndex,
+            kind: 'replace',
+            text: lines
+              ? replacementLineText(source, start, end, edit.text)
+              : normalizePhysicalNewlines(edit.text, sourceNewlineAt(source, start, end)),
+          }
+        const offset = edit.side === 'before' ? start : end
+        return {
+          start: offset,
+          end: offset,
+          editIndex,
+          kind: 'insert',
+          text: lines
+            ? insertionLineText(source, offset, edit.text)
+            : normalizePhysicalNewlines(edit.text, sourceNewlineAt(source, start, end)),
+        }
+      }
       let windows = allWindows
       let start = 0
       let end = view.content.length

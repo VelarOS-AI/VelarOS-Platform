@@ -4,6 +4,7 @@ import type {
   ContextViewApi,
   EvidenceAccessApi,
 } from '@velaros-ai/context'
+import { createContextReference } from '@velaros-ai/context'
 import { createContextRuntime } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
 import { toNullable } from '@velaros-ai/core'
@@ -202,7 +203,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
       )
         throw new AppError('SEARCH_STALE', '搜索激活已被新的状态替代')
       const record = {
-        ref: { sessionId: state.sessionId, id: crypto.randomUUID() },
+        ref: await createContextReference(this.dependencies.storage, state.sessionId),
         sequence: snapshot.records.length + 1,
         kind: 'audit' as const,
         title: 'search:state',
@@ -296,7 +297,9 @@ export class AdvancedSearch implements AdvancedSearchApi {
     const parent = this.dependencies.view(call.invocation.sessionId)
     const task = await parent.inspect()
     if (!task) throw new AppError('UNAVAILABLE', '搜索需要父任务')
-    const searchId = previous?.state.id ?? crypto.randomUUID()
+    const searchId =
+      previous?.state.id ??
+      (await createContextReference(this.dependencies.storage, call.invocation.sessionId)).id
     const sessionId = `search:${call.invocation.sessionId}:${searchId}`
     const context = createContextRuntime({ sessionId, storage: this.dependencies.storage })
     const activationId = call.invocation.id
@@ -368,7 +371,7 @@ export class AdvancedSearch implements AdvancedSearchApi {
       throw new AppError('CHECKPOINT_STALE', '搜索检查点已经变化')
     const objectId = await this.dependencies.storage.put(sessionId, JSON.stringify(state))
     const claim = {
-      ref: { sessionId, id: crypto.randomUUID() },
+      ref: await createContextReference(this.dependencies.storage, sessionId),
       sequence: snapshot.records.length + 1,
       kind: 'audit' as const,
       title: 'search:state',

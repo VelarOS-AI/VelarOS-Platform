@@ -1,5 +1,6 @@
 import type { ModelToolDelivery } from '@velaros-ai/agent'
 import type { ContextStorage, ContextViewApi } from '@velaros-ai/context'
+import { createContextReference } from '@velaros-ai/context'
 import { createContextRuntime } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
 import { isNull } from '@velaros-ai/core'
@@ -412,7 +413,7 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
       const body = JSON.stringify(binding)
       const objectId = await this.options.storage.put(binding.rootSessionId, body)
       const record = {
-        ref: { sessionId: binding.rootSessionId, id: crypto.randomUUID() },
+        ref: await createContextReference(this.options.storage, binding.rootSessionId),
         sequence: snapshot.records.length + 1,
         kind: 'audit' as const,
         title,
@@ -448,7 +449,7 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
       const objectId = await this.options.storage.put(binding.rootSessionId, body)
       const record = {
         ...previous,
-        ref: { sessionId: binding.rootSessionId, id: crypto.randomUUID() },
+        ref: await createContextReference(this.options.storage, binding.rootSessionId),
         sequence: snapshot.records.length + 1,
         objectId,
         chars: body.length,

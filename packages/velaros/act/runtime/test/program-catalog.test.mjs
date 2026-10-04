@@ -114,6 +114,7 @@ test('INV-81 default model programs surface publishes without executing then reu
   const before = f.runs
   const described = valid(await f.session.execute(request('describe', { name: 'increase' })))
   assert.equal(described.sourceRef, first.sourceRef)
+  assert.match(first.sourceRef, /^[a-f0-9]{8}$/)
   assert.equal(f.runs, before + 1, 'directory query only runs the querying script')
   for (const value of [4, 19])
     assert.equal(

@@ -2,11 +2,18 @@
  * 语法层的中间形状：内核符号表的原始条目、还没贴上语言 id 的记录，以及 Python 语法树节点。
  * 都只在包内流动，不出包。
  */
+import type * as ts from 'typescript'
+
 import type {
   LanguageExportRecord,
   LanguageImportRecord,
   LanguageSymbolRecord,
 } from './language.js'
+
+/** TypeScript 解析器实际返回的语法诊断，结构定位须拒绝恢复解析的坏语法。 */
+export interface JsTsParsedSource extends ts.SourceFile {
+  readonly parseDiagnostics: readonly ts.Diagnostic[]
+}
 
 /** 项目内核符号表里的一条原始记录：字段大多可缺，语言服务补齐后才成为 `LanguageSymbolRecord`。 */
 export interface KernelSymbol {

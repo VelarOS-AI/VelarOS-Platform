@@ -1,4 +1,5 @@
 import type { ContextRecord, ContextStorage } from '@velaros-ai/context'
+import { createContextReference } from '@velaros-ai/context'
 import { isEmpty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
@@ -38,7 +39,7 @@ export class RuntimeWorkspaceBinding implements RuntimeWorkspaceBindingApi {
       }
       objectId ??= await this.storage.put(sessionId, body)
       const record: ContextRecord = {
-        ref: { sessionId, id: crypto.randomUUID() },
+        ref: await createContextReference(this.storage, sessionId),
         sequence: state.records.length + 1,
         kind: 'audit',
         title: 'runtime:workspace',

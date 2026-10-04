@@ -1,11 +1,13 @@
 /**
  * 文件引用：源码快照（source:）、可编辑视图（view:，就是 fileRef）与改动回执（change:）的签发与解析。
- * 引用是记录的内容哈希。记录按会话存在进程内存里，每个会话有条数与字符数上限，最久没用的先出；进程重启后引用全部作废，重读就是。
+ * 引用采用带类型前缀的 8 位短身份，完整内容哈希用于记录校验。记录按会话存在进程内存里，每个会话有条数与字符数上限，最久没用的先出；进程重启后引用全部作废，重读就是。
  * 解析时核对会话与项目根。
  */
 
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
+
+import { shortReferenceId } from '@velaros-ai/core/utils/shortReferenceId'
 
 import type { ProjectOperationContext } from '../../contract/requires.js'
 import type {
@@ -21,6 +23,8 @@ import { ProjectTuning } from '../tuning.js'
 
 /** 每个会话一份记录；会话按最近使用排序，超了从最久没用的那个整份丢掉。 */
 const sessions = new Map<string, RefSession>()
+/** 进程内已签发的短身份保留轻量墓碑；会话和正文淘汰后也不能复用。 */
+const issuedReferences = new Set<string>()
 
 /** 引用不可用时的下一步：模型只能原样用签发出来的引用，缺了就去读，不能自己拼。 */
 const ReadForReferenceNextAction = '重新提交这次 edit。'
@@ -34,7 +38,13 @@ function sessionOf(ctx: ProjectOperationContext): RefSession {
     sessions.set(key, found)
     return found
   }
-  const created: RefSession = { records: new Map(), chars: 0 }
+  const created: RefSession = {
+    records: new Map(),
+    aliases: new Map(),
+    references: new Map(),
+    consumed: new Set(),
+    chars: 0,
+  }
   sessions.set(key, created)
   while (sessions.size > ProjectTuning.refs.sessions) sessions.delete(sessions.keys().next().value!)
   return created
@@ -45,7 +55,7 @@ export function projectContentRevision(content: string): string {
   return createHash('sha256').update(content, 'utf8').digest('hex')
 }
 
-/** 存一条记录，返回「前缀 + 记录的内容哈希」形式的引用；同样的记录再存一次只是挪到最近。 */
+/** 存一条记录，签发带类型前缀的 8 位引用；完整哈希用于内容身份，同样记录复用原引用。 */
 function put(ctx: ProjectOperationContext, value: RefRecord, prefix: string): string {
   const serialized = JSON.stringify(value)
   const hash = projectContentRevision(serialized)
@@ -66,23 +76,37 @@ function put(ctx: ProjectOperationContext, value: RefRecord, prefix: string): st
     session.records.delete(oldest)
     session.chars -= entry.chars
   }
-  return `${prefix}${hash}`
+  let reference = session.references.get(hash)
+  if (!reference) {
+    reference = shortReferenceId(
+      (id) => issuedReferences.has(id),
+      (attempt) => (attempt === 0 ? hash : projectContentRevision(`${hash}:${attempt}`)).slice(0, 8)
+    )
+    session.aliases.set(reference, hash)
+    session.references.set(hash, reference)
+    issuedReferences.add(reference)
+  }
+  return `${prefix}${reference}`
 }
 
 /** 按引用取回记录：格式不对、这个会话里没有（别的会话签发的，或者已经挤出去了）时抛 INVALID_INPUT。 */
 function get(ctx: ProjectOperationContext, ref: string, prefixes: readonly string[]): RefRecord {
   const prefix = prefixes.find((candidate) => ref.startsWith(candidate))
-  const hash = prefix ? ref.slice(prefix.length) : ''
-  if (!prefix || !/^[a-f0-9]{64}$/.test(hash)) {
+  const identity = prefix ? ref.slice(prefix.length) : ''
+  if (!prefix || !/^(?:[a-f0-9]{8}|[a-f0-9]{64})$/.test(identity)) {
     throw new ProjectError(
       'INVALID_INPUT',
-      `${JSON.stringify(ref.slice(0, 80))} 不是签发出来的引用（${prefixes.join(' / ')} 加 64 位十六进制），不能手写或改写。`,
+      `${JSON.stringify(ref.slice(0, 80))} 不是签发出来的引用（${prefixes.join(' / ')} 加 8 位十六进制），不能手写或改写。`,
       { ref: ref.slice(0, 80) },
       ReadForReferenceNextAction
     )
   }
   const session = sessionOf(ctx)
-  const entry = session.records.get(hash)
+  // 旧回执按完整身份精确解析；短引用只按已签发映射解析，不做模糊前缀匹配。
+  const hash = identity.length === 8 ? session.aliases.get(identity) : identity
+  const entry = hash ? session.records.get(hash) : undefined
+  if (hash && session.consumed.has(hash))
+    throw new ProjectError('INVALID_INPUT', '这个计划已提交，不能重复应用。', { ref })
   if (!entry) {
     throw new ProjectError(
       'INVALID_INPUT',
@@ -91,8 +115,8 @@ function get(ctx: ProjectOperationContext, ref: string, prefixes: readonly strin
       ReadForReferenceNextAction
     )
   }
-  session.records.delete(hash)
-  session.records.set(hash, entry)
+  session.records.delete(hash!)
+  session.records.set(hash!, entry)
   return entry.record
 }
 
@@ -250,4 +274,14 @@ export function readReceipt(ctx: ProjectOperationContext, kind: string, ref: str
       next
     )
   return (record as ReceiptRecord).value
+}
+
+/** 提交成功后消费失败计划；墓碑随会话留存，正文淘汰也不能再次提交同一计划。 */
+export function consumeReceipt(ctx: ProjectOperationContext, kind: string, ref: string): void {
+  // 调用方在写盘前已通过 readReceipt 核对根和会话。提交后即使正文因预算淘汰，仍能消费原身份，避免把已提交的结果报成失败。
+  const identity = ref.slice(kind.length + 1)
+  const session = sessionOf(ctx)
+  const hash = identity.length === 8 ? session.aliases.get(identity) : identity
+  if (!hash) throw new ProjectError('INVALID_INPUT', '要消费的计划身份不属于本会话。', { ref })
+  session.consumed.add(hash)
 }

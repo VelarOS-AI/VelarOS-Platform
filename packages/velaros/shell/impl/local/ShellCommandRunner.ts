@@ -6,13 +6,13 @@
  */
 
 import { spawn } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 
 import { isFalse, isUndefined, Log, optionalWhen, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/core/platform'
+import { shortReferenceId } from '@velaros-ai/core/utils/shortReferenceId'
 
 import { ShellLimits } from '../../contract/constants.js'
 import type {
@@ -175,6 +175,7 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
   })
 
   private readonly tasks = new Map<string, ShellBackgroundTaskRecord>()
+  private readonly issuedTaskIds = new Set<string>()
   private readonly executions = new Map<string, ManagedShellProcess>()
   private readonly consoles = new Map<string, ShellConsoleBuffer>()
   private readonly options: ShellCommandRunnerOptions
@@ -603,7 +604,8 @@ export class ShellCommandRunner implements ShellCommandRunnerApi {
     const { platformTools } = this.options
     const { sessionId, interactive } = options
     const terminal = interactive ? this.options.terminal : undefined
-    const taskId = randomUUID()
+    const taskId = shortReferenceId((id) => this.issuedTaskIds.has(id))
+    this.issuedTaskIds.add(taskId)
     // 控制台缓冲在挂输出监听之前就建好，进程一启动就吐的输出不会丢。
     if (interactive) this.consoles.set(taskId, { buffer: '', produced: 0, watchers: new Set() })
     let recentOutput = ''

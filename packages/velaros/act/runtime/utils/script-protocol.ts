@@ -128,6 +128,7 @@ export function protocolConfig(options: ScriptProtocolOptions = {}) {
     Object.values(limits).some((value) => !Number.isSafeInteger(value) || value < 1) ||
     limits.maxChars > 2_000_000 ||
     limits.maxHeaderChars > 65_536 ||
+    limits.maxIdleWhitespaceChars > 2_000_000 ||
     limits.maxBlocks > 128 ||
     limits.concurrency > 16
   )
@@ -223,7 +224,7 @@ export function protocolInstructions(
       ? 'observe'
       : undefined
   return [
-    `ScriptAct 本帧控制。本次允许声明：${allowed.map((name) => names[name]).join(', ')}；其他声明禁止。当前帧标记：${marker}。普通 Markdown 原样展示。固定语法见系统指令，只使用本帧标记。`,
+    `ScriptAct 本帧控制。本次允许声明：${allowed.map((name) => names[name]).join(', ')}；其他声明禁止。当前帧标记：${marker}。普通 Markdown 展示范围：首个控制头前的进度与 done 后的答复；控制段之间及闭合后的文字只保留在审计原文中。固定语法见系统指令，只使用本帧标记。`,
     program
       ? `继续工作时，响应从下面的控制头开始，在段内编写本轮实际需要的${program === 'observe' ? '只读' : ''}程序，再以闭合行结束。每个实际程序只声明一次；同一响应里重复声明会真实执行多次。省略执行前的进度说明，结果由下一轮回执确认。\n${marker} ${names[program]}()\n// 在这里编写本轮任务程序。\n${marker}`
       : '',

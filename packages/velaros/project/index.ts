@@ -216,6 +216,20 @@ export type {
   ProjectIntelligenceSymbol,
   ProjectRuntimeProviders,
 } from './types/provider.js'
+export type {
+  ProjectEditSummary,
+  ProjectPatchAmendment,
+  ProjectPatchEdit,
+  ProjectPatchInput,
+  ProjectPatchIssue,
+  ProjectPatchResult,
+  ProjectSelectedSource,
+  ProjectSelectInput,
+  ProjectSelection,
+  ProjectSelectIssue,
+  ProjectSelectResult,
+  ProjectSelectTarget,
+} from './types/selection.js'
 export type { FileAttributes, FileSnapshot, ProjectSnapshot } from './types/snapshot.js'
 export type { ResolvedTarget, ResolveTargetInput, ResolveTargetResult } from './types/target.js'
 export type {

@@ -1,7 +1,7 @@
 /**
  * 内核的查询面：`ProjectQueries`。接口 `ProjectQueriesApi` 与构造参数 `ProjectQueriesDependencies` 在本文件的类上方。
  */
-import { isEmpty, isNotNull, isObject, isUndefined, optionalWhen } from '@velaros-ai/core'
+import { isEmpty, isNotNull, isObject, isTrue, isUndefined, optionalWhen } from '@velaros-ai/core'
 
 import type { FileAdapter } from '../../contract/requires.js'
 import type { ProjectSymbol } from '../../types/adapter.js'
@@ -24,6 +24,7 @@ import type { CorePolicy } from '../../types/policy.js'
 import type { ProjectRuntimeProviders } from '../../types/provider.js'
 import type { FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
 import type { ResolvedTarget, ResolveTargetInput, ResolveTargetResult } from '../../types/target.js'
+import { projectIgnorePolicy } from '../../utils/files/file-listing.js'
 import {
   capInsertionOrderedMap,
   compareSearchHits,
@@ -33,6 +34,7 @@ import {
   uniqueSymbols,
 } from '../../utils/files/queries.js'
 import { searchWithRipgrep } from '../../utils/files/ripgrep.js'
+import { matchesAny } from '../../utils/glob.js'
 import { id } from '../../utils/id.js'
 import { clampSnippet } from '../../utils/search-snippet.js'
 import { ProjectTuning } from '../../utils/tuning.js'
@@ -301,6 +303,28 @@ export class ProjectQueries implements ProjectQueriesApi {
   }
 
   private async searchFilePaths(processed: SearchInput): Promise<string[]> {
+    if (processed.root) {
+      const target = await this.dependencies.store.stat({ path: processed.root })
+      if (target.kind !== 'directory') {
+        if (target.kind !== 'file') return []
+        if (
+          (processed.include &&
+            !isEmpty(processed.include) &&
+            !matchesAny(target.path, processed.include)) ||
+          matchesAny(target.path, resolveSearchExcludeGlobs(processed))
+        )
+          return []
+        if (
+          isTrue(processed.excludeGitignored) &&
+          (await projectIgnorePolicy(
+            this.dependencies.root,
+            this.dependencies.providers.command
+          ).shouldSkip(target.absolutePath, false))
+        )
+          return []
+        return [target.path]
+      }
+    }
     const entries = await this.dependencies.store.listFiles({
       path: processed.root,
       include: processed.include,

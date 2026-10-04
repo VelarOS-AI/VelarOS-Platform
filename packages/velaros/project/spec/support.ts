@@ -40,9 +40,11 @@ import {
   type ProjectHostPort,
   type ProjectListInput,
   type ProjectOperationContext,
+  type ProjectPatchInput,
   type ProjectProviders,
   type ProjectReadInput,
   type ProjectSearchInput,
+  type ProjectSelectInput,
   type ProjectSnapshotInput,
   type ProjectSpacePort,
 } from '../index'
@@ -81,6 +83,9 @@ export async function createProjectHarness(root: string, options: ProjectHarness
       snapshot: (input: unknown) =>
         projectFileOperations.snapshot(input as ProjectSnapshotInput, context),
       read: (input: unknown) => projectFileOperations.read(input as ProjectReadInput, context),
+      select: (input: unknown) =>
+        projectFileOperations.select(input as ProjectSelectInput, context),
+      patch: (input: unknown) => projectFileOperations.patch(input as ProjectPatchInput, context),
       list: (input: unknown) => projectFileOperations.list(input as ProjectListInput, context),
       search: (input: unknown) =>
         projectFileOperations.search(input as ProjectSearchInput, context),

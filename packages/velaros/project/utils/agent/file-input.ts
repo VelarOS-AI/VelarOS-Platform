@@ -130,13 +130,15 @@ export function searchInput(input: unknown): ProjectSearchInput {
   const caseSensitive = flag(value.caseSensitive, 'caseSensitive')
   if (!isUndefined(regex)) search.regex = regex
   if (!isUndefined(caseSensitive)) search.caseSensitive = caseSensitive
-  const contextLines = integer(
-    value.contextLines,
-    'contextLines',
-    0,
-    ProjectFileLimits.searchContextLines
-  )
-  if (!isUndefined(contextLines)) search.contextLines = contextLines
+  if (!isUndefined(value.contextLines)) {
+    if (
+      !isNumber(value.contextLines) ||
+      !Number.isSafeInteger(value.contextLines) ||
+      value.contextLines < 0
+    )
+      throw invalid(`contextLines 要非负安全整数，这里给的是 ${JSON.stringify(value.contextLines)}`)
+    search.contextLines = value.contextLines
+  }
   return search
 }
 

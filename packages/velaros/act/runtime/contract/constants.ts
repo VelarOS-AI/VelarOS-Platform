@@ -20,6 +20,8 @@ export const ScriptProtocolLimits = Object.freeze({
   maxChars: 512_000,
   /** 单条控制头字符上限。 */
   maxHeaderChars: 32_768,
+  /** 控制段闭合后、下一有效内容前的连续空白上限；不限制段内原文。 */
+  maxIdleWhitespaceChars: 4_096,
   /** 单次响应声明块上限。 */
   maxBlocks: 32,
   /** 后台脚本默认并发数。 */

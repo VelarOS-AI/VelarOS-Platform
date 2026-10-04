@@ -61,14 +61,20 @@ export const ProjectFileLimits = Object.freeze({
   listEntries: 100_000,
   /** search 一次最多多少处命中，同样只为守住内存：超了整个调用失败，收窄 query、path 或 include 再搜。 */
   searchHits: 5_000,
-  /** search 每处命中前后最多各带几行。 */
-  searchContextLines: 10,
+  /** search 合并重叠窗口后，一次交回的正文总共最多多少 Unicode 字符；超了整个调用失败。 */
+  searchChars: 20_000_000,
   /** search 不给 contextLines 时每处命中前后各带几行。 */
   searchContextLinesDefault: 1,
   /** edit 一次最多几步。 */
   steps: 1000,
   /** 一步 edit 里最多几处编辑。 */
   editsPerFile: 1000,
+  /** select 一次最多定位的目标数。 */
+  selectTargets: 1000,
+  /** 一次 select 的独立源码文件数上限。 */
+  selectFiles: 100,
+  /** 歧义项最多返回的完整候选数，超出时要求收窄。 */
+  selectionCandidates: 20,
   /** 一个 recode 步骤最多转换几个文件。 */
   recodePaths: 1000,
 })

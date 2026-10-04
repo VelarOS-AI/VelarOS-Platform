@@ -184,7 +184,10 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
       let resultRef: Nullable<string> = null
       let capture: Optional<ScriptOutputCapture>
       for (const record of [...state.records].reverse())
-        if (record.sequence > reset && /^script:[0-9a-f-]{36}:result$/u.test(record.title)) {
+        if (
+          record.sequence > reset &&
+          /^script:(?:[a-f0-9]{8}|[0-9a-f-]{36}):result$/u.test(record.title)
+        ) {
           const value = JSON.parse((await this.storage.get(this.id, record.objectId))!)
           if (value.mode === 'observe') {
             resultRef = record.ref.id

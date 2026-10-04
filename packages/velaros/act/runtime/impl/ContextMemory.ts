@@ -11,6 +11,7 @@ import type {
   ContextViewApi,
   ModelView,
 } from '@velaros-ai/context'
+import { createContextReference } from '@velaros-ai/context'
 import { isEmpty } from '@velaros-ai/core'
 import { isFalse, isNull, isTrue, isUndefined, toNullable } from '@velaros-ai/core'
 import { isArray, isBoolean, isString } from '@velaros-ai/core'
@@ -286,7 +287,7 @@ export class ContextMemory implements ContextMemoryApi {
       const body = JSON.stringify(note)
       const objectId = await this.storage.put(this.id, body)
       const record: ContextRecord = {
-        ref: { sessionId: this.id, id: crypto.randomUUID() },
+        ref: await createContextReference(this.storage, this.id),
         sequence: (snapshot.records.at(-1)?.sequence ?? 0) + 1,
         kind: 'note',
         title: `workspace:note:${input.key}`,
@@ -1071,7 +1072,7 @@ export class ContextMemory implements ContextMemoryApi {
     if (decision.missing.some((item: { read?: unknown }) => item.read))
       Object.assign(decision, {
         recall:
-          '必需输出补齐：用 missing[].read 作为 memory.read 输入，从 offset 0 按 offset + page.text.length 分页至 totalChars；每页原样 output(page, {key:唯一键,view:{mode:"full"}})。可在一次 execute 中逐页输出；只有本次模型历史实际完整保留的页连续覆盖该表示全文才满足。局部字段、裸 page.text、未展示完的页与初始摘录不计入覆盖；展示额度不足时分批读取，不自动 release。',
+          '必需输出补齐：用 missing[].read 作为 memory.read 输入，从 offset 0 开始；每页以 page.offset + page.text.length 续读，到该页返回的 page.totalChars 停止。每页原样 output(page, {key:唯一键,view:{mode:"full"}})。可在一次 execute 中逐页输出；只有本次模型历史实际完整保留的页连续覆盖该表示全文才满足。局部字段、裸 page.text、未展示完的页与初始摘录不计入覆盖；展示额度不足时分批读取，不自动 release。',
       })
     await this.programs.delivered(material.programFrame.id, resultRefs, signal)
     const entries = [
@@ -1710,7 +1711,7 @@ export class ContextMemory implements ContextMemoryApi {
       signal
     )
     const segment: ContextSegment = {
-      id: input.id ?? crypto.randomUUID(),
+      id: input.id ?? (await createContextReference(this.storage, this.id)).id,
       index: input.index,
       revision: input.revision,
       from: input.from,

@@ -29,7 +29,7 @@
 | INV-27 | 程序数据模块 velaros:program 只导出本次 input 与 blobs，声明和运行时一致；模块模板统一由 velaros:system 的 modules.describe 按授权提供 | 测试 | `spec/acceptance.test.ts` |
 | INV-33 | 附属模块来自提交的 modules，按相对路径解析并在单次运行中只初始化一次；语法诊断包含附属模块路径、行列与代码帧，运行错误可追踪 | 测试 | `spec/acceptance.test.ts` |
 | INV-34 | output 在调用时捕获无环 JSON 快照，原始归档与有界预览分离；失败和中止保留已捕获块，采集问题不能被 catch 隐藏 | 测试 | `test/output.test.ts` |
-| INV-35 | output 展示按类型保留结构和省略范围，prompt 按所选表示的 UTF-16 总长守展示预算；JSON 默认兼容；text 对所有类型按实际编码独立选择正文，头部、目录、问题与省略说明均计入总预算，短完整值以实际更小的完整表示准入目录，共享份额先分配 required/high，再分配普通块；原值、内容指纹和归档身份不受编码影响，full、引用、选择视图及显式全局上限（含零）保持约定；未配置全局时，正数 view.maxChars 或 INV-44 的无数字上限 full 通过 Script 单一申请接口按有界正文编码和引用目录计量，仍受宿主份额及 200000 总上限约束；无申请、reference 与 summary 保持默认份额；短块用不完的份额按既定优先级返还，超出时选完整行或条目，摘要同时匹配原值和任务代次 | 测试 | `test/output.test.ts` |
+| INV-35 | output 展示按类型保留结构和省略范围，prompt 按所选表示的 UTF-16 总长守展示预算；JSON 默认兼容；text 对所有类型按实际编码独立选择正文，头部、目录、问题与省略说明均计入总预算，短完整值以实际更小的完整表示准入目录，共享份额先分配 required/high，再分配普通块；原值、内容指纹和归档身份不受编码影响，召回目录的字符数与选中字段的 UTF-16 正文一致，采集 JSON 计量另计，full、引用、选择视图及显式全局上限（含零）保持约定；未配置全局时，正数 view.maxChars 或 INV-44 的无数字上限 full 通过 Script 单一申请接口按有界正文编码和引用目录计量，仍受宿主份额及 200000 总上限约束；无申请、reference 与 summary 保持默认份额；短块用不完的份额按既定优先级返还，超出时选完整行或条目，摘要同时匹配原值和任务代次 | 测试 | `test/output.test.ts` |
 | INV-36 | 受限输出编辑只接受真实导入的顶层字面量声明，保持采集和用途不变，不执行脚本 | 测试 | `test/output.test.ts` |
 | INV-37 | output 声明里写的上限与 ScriptOutputLimits 一致，输出校验恰好在这些边界上放行与拒绝 | 测试 | `test/output.test.ts` |
 | INV-39 | 我们自己写的代码模版另走 `typecheck`，照声明做完整类型检查：模版会原样教给模型，写错一个键模型照着写就跟着错。模型交的程序不走这条 | 测试 | `spec/acceptance.test.ts` |

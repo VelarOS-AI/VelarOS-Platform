@@ -1,6 +1,7 @@
 import type { ActDecodedTurn, ActPreview } from '@velaros-ai/agent'
 import { isTrue, isUndefined } from '@velaros-ai/core'
 import { isBoolean, isEmpty, isObject, isPlainObject, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { GoalLimits } from '../../system/contract/constants.js'
 import type { ScriptProtocolSubmission } from '../types/program.js'
@@ -38,6 +39,7 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
   private candidate = ''
   private line = 1
   private chars = 0
+  private idleWhitespaceChars = 0
   private message = ''
   private done = false
   /** done 声明附带的完成依据。 */
@@ -80,6 +82,7 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
     this.candidate = ''
     this.line = 1
     this.chars = 0
+    this.idleWhitespaceChars = 0
     this.message = ''
     this.done = false
     this.completion = undefined
@@ -243,6 +246,7 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
   }
 
   private header(line: string): void {
+    this.idleWhitespaceChars = 0
     if (line.replace(/ +$/u, '') === this.marker) {
       if (!this.active) throw protocolFailure('闭合标记没有对应的控制段', this.line)
       this.emit({
@@ -294,6 +298,24 @@ export class ScriptTurnDecoder implements ScriptTurnDecoderApi {
 
   private route(text: string): void {
     if (!this.active) {
+      // 仅检查真实闭合段后的协议外空白，源码、blobs 及控制头按各自预算完整接收。
+      // 使用终止错误而非可修复语法错误：取消后上游用量可能尚未结算，不能自动重发。
+      if (this.done || !isEmpty(this.records))
+        for (const char of text) {
+          this.idleWhitespaceChars = /\s/u.test(char) ? this.idleWhitespaceChars + 1 : 0
+          if (this.idleWhitespaceChars > this.config.maxIdleWhitespaceChars)
+            throw AppError.withFields(
+              'PROTOCOL',
+              '模型在闭合控制段后持续输出空白，响应已停止，程序没有执行',
+              {
+                condition: 'scriptact-idle-whitespace',
+                limit: this.config.maxIdleWhitespaceChars,
+              }
+            )
+        }
+      // 控制段后的散文没有公开回复身份；原文仍由主循环完整审计，合法程序照常受理。
+      // 只展示首个控制前的进度和 done 后的答复，不按内容猜测或再花一轮修复。
+      if (!this.done && !isEmpty(this.records)) return
       this.message += text
       this.emit({ type: 'text', text })
       return

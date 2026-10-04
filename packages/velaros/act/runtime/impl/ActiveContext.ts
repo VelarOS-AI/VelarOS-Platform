@@ -7,6 +7,7 @@ import type {
   ContextState,
   ContextStorage,
 } from '@velaros-ai/context'
+import { createContextReference } from '@velaros-ai/context'
 import { isArray, isEmpty, isString, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
@@ -115,7 +116,7 @@ export class ActiveContext implements ActiveContextApi {
     const append: Array<Omit<ContextRecord, 'sequence'>> = []
     for (const item of bodies)
       append.push({
-        ref: { sessionId: this.id, id: crypto.randomUUID() },
+        ref: await createContextReference(this.storage, this.id),
         kind: 'audit',
         title: item.title,
         objectId: await this.storage.put(this.id, item.body),
@@ -312,7 +313,7 @@ export class ActiveContext implements ActiveContextApi {
       if (
         kind === 'question' &&
         record.kind !== 'user' &&
-        !/^script:[0-9a-f-]{36}:result$/u.test(record.title)
+        !/^script:(?:[a-f0-9]{8}|[0-9a-f-]{36}):result$/u.test(record.title)
       )
         throw new AppError('PERMISSION', '未解事项只能依据用户原文或真实执行结果变更')
       if (
@@ -396,7 +397,7 @@ export class ActiveContext implements ActiveContextApi {
       let replacement: ActiveContextItem | undefined
       if (change.status === 'superseded') {
         replacement = {
-          id: `${prior.kind}:${crypto.randomUUID()}`,
+          id: `${prior.kind}:${(await createContextReference(this.storage, this.id)).id}`,
           kind: prior.kind,
           text: change.replacement!,
           sources,
@@ -423,7 +424,7 @@ export class ActiveContext implements ActiveContextApi {
         throw new AppError('VALIDATION', '新增当前项无效')
       const sources = await this.evidence(state, item.kind, item.evidence, visibleInputs)
       const added: ActiveContextItem = {
-        id: `${item.kind}:${crypto.randomUUID()}`,
+        id: `${item.kind}:${(await createContextReference(this.storage, this.id)).id}`,
         kind: item.kind,
         text: item.text,
         sources,

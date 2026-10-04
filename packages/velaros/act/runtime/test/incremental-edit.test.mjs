@@ -161,7 +161,11 @@ test('observe edits publish atomically; no-op and automatic observation reruns r
   await f.submit()
   assert.equal(f.frames[0].observation.resultSourceRef, v2.sourceRef)
   assert.match(f.frames[0].observation.text, /"default": 2/)
-  assert.equal((await f.records()).filter((r) => /^script:[0-9a-f-]{36}$/.test(r.title)).length, 2)
+  assert.equal(
+    (await f.records()).filter((r) => /^script:(?:[a-f0-9]{8}|[0-9a-f-]{36})$/.test(r.title))
+      .length,
+    2
+  )
   const same = await f.session.observe({
     sourceRef: v2.sourceRef,
     edits: [{ oldText: 'count = 2', newText: 'count = 2' }],

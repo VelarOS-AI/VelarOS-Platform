@@ -93,7 +93,8 @@ export function projectMaterial(text: string, ref: ContextRef, limit: number) {
       position: pointer || '/',
       representation: 'reference',
       bodyIncluded: false,
-      chars: JSON.stringify(value).length,
+      // 带 pointer 的字符串召回为解码原文；根引用仍读取完整 JSON 归档。
+      chars: pointer && isString(value) ? value.length : JSON.stringify(value).length,
       storedBytes: new TextEncoder().encode(JSON.stringify(value)).byteLength,
       items: isArray(value) ? value.length : undefined,
       read,

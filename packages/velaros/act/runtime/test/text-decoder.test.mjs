@@ -11,8 +11,101 @@ const decode = (text, options = {}, inputs = {}) => {
   return d.finish()
 }
 const source = "import {output} from 'velaros';output(1);"
+test('INV-86 stalled protocol-exterior whitespace is bounded across chunks without touching payload', () => {
+  const limit = 32
+  const program = block('execute', source)
+  for (const size of [1, 2, 7, 64]) {
+    const decoder = new ScriptTurnDecoder(marker, { maxIdleWhitespaceChars: limit })
+    decoder.push(program)
+    const whitespace = ' \t\r\n\u2003'.repeat(8)
+    assert.throws(
+      () => {
+        for (let at = 0; at < whitespace.length; at += size)
+          decoder.push(whitespace.slice(at, at + size))
+      },
+      (error) => error.code === 'PROTOCOL' && error.condition === 'scriptact-idle-whitespace'
+    )
+    decoder.reset()
+    decoder.push(program + ' '.repeat(limit))
+    assert.equal(decoder.finish().submission.executions[0].program.source, source)
+  }
+  const rawWhitespace = ' '.repeat(4097)
+  const response = block('blobs("spacing")', rawWhitespace) + block('execute', source)
+  const value = decode(response, { maxIdleWhitespaceChars: limit })
+  assert.equal(value.submission.executions[0].program.blobs.spacing, rawWhitespace)
+  assert.equal(
+    decode(`${program + ' '.repeat(limit)}audit text\n${program}`, {
+      maxIdleWhitespaceChars: limit,
+    }).submission.executions.length,
+    2
+  )
+  assert.equal(
+    decode(`${program + ' '.repeat(limit - 1)}\n${marker} done()\nAnswer`, {
+      maxIdleWhitespaceChars: limit,
+    }).message,
+    'Answer'
+  )
+  const programWithSpacing = `${source}\nconst spacing = "${rawWhitespace}";`
+  assert.throws(
+    () =>
+      decode(`${marker} done()\nAnswer\n${' '.repeat(limit)}`, {
+        maxIdleWhitespaceChars: limit,
+      }),
+    (error) => error.code === 'PROTOCOL' && error.condition === 'scriptact-idle-whitespace'
+  )
+  assert.equal(
+    decode(block('execute', programWithSpacing), {
+      maxIdleWhitespaceChars: limit,
+    }).submission.executions[0].program.source,
+    programWithSpacing
+  )
+})
 const raw = 'const message = `Hello, ${name}`;\n```js\n"quote" \\ backslash\n```\n'
 const text = `Before\n\`\`\`js\nexecute()\n\`\`\`\n${block('blobs("payload")', raw)}${block('observe', source)}${block('execute({async:true, retain:1, input:{x:[1,true,null]}})', source)}After\n${marker} done()\nFinished.`
+
+test('post-program commentary stays in the raw response while progress and explicit final answers remain public', () => {
+  for (const tag of ['@@s12345678', '@@s02d79a2765954e4aa16f1931a268b184']) {
+    const program = `${tag} execute()\n${source}\n${tag}\n`
+    for (const ending of ['', `${tag} done()\nVerified answer.`]) {
+      const response = `I will inspect the files.\n${program}Unconfirmed post-program commentary.\n${ending}`
+      for (let split = 0; split <= response.length; split++) {
+        const decoder = new ScriptTurnDecoder(tag)
+        const events = [
+          ...decoder.push(response.slice(0, split)),
+          ...decoder.push(response.slice(split)),
+        ]
+        const result = decoder.finish()
+        events.push(...result.events)
+        const publicText = `I will inspect the files.\n${ending ? 'Verified answer.' : ''}`
+        assert.equal(result.message, publicText, `split ${split}`)
+        assert.equal(
+          events
+            .filter((event) => event.type === 'text')
+            .map((event) => event.text)
+            .join(''),
+          publicText
+        )
+        assert.equal(result.submission.executions[0].program.source, source)
+        assert.equal(result.done, !!ending)
+      }
+    }
+  }
+})
+
+test('inter-program commentary never becomes a reply or changes blob and observer payloads', () => {
+  const response = `${block('blobs("payload")', raw)}Unconfirmed blob commentary.\n${block('observe', source)}Unconfirmed observer commentary.\n${block('execute', source)}Unconfirmed execution commentary.`
+  const decoder = new ScriptTurnDecoder(marker)
+  const events = [...response].flatMap((char) => decoder.push(char))
+  const result = decoder.finish()
+  events.push(...result.events)
+  assert.equal(result.message, '')
+  assert.equal(
+    events.some((event) => event.type === 'text'),
+    false
+  )
+  assert.equal(result.submission.observe.source, source)
+  assert.equal(result.submission.executions[0].program.blobs.payload, raw)
+})
 
 test('INV-12 every stream split preserves Markdown, opaque payload and program preview exactly', () => {
   const expected = decode(text)

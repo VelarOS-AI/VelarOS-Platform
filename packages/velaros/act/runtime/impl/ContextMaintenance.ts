@@ -1,4 +1,5 @@
 import type { ContextContent, ContextRecord, ContextRef, ContextStorage } from '@velaros-ai/context'
+import { createContextReference } from '@velaros-ai/context'
 import { createContextRuntime } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
 import { isUndefined, toNullable } from '@velaros-ai/core'
@@ -143,7 +144,8 @@ export class ContextMaintenance implements ContextMaintenanceApi {
         preserve.some((ref) => !ref || ref.sessionId !== id || !memoryReference(state, ref))
       )
         throw new AppError('SCOPE_MISMATCH', '保留引用不在当前任务授权范围或数量超限')
-      const requestId = pending?.requestId ?? crypto.randomUUID()
+      const requestId =
+        pending?.requestId ?? (await createContextReference(this.dependencies.storage, id)).id
       const request = {
         requestId,
         taskId: state.task.id,
@@ -154,7 +156,7 @@ export class ContextMaintenance implements ContextMaintenanceApi {
       const body = JSON.stringify(request)
       const objectId = await this.dependencies.storage.put(id, body)
       const next: ContextRecord = {
-        ref: { sessionId: id, id: crypto.randomUUID() },
+        ref: await createContextReference(this.dependencies.storage, id),
         sequence: state.records.length + 1,
         kind: 'audit',
         title: 'context-maintenance:request',
@@ -210,7 +212,7 @@ export class ContextMaintenance implements ContextMaintenanceApi {
       const body = JSON.stringify({ ...request, status: 'consumed' })
       const objectId = await this.dependencies.storage.put(id, body)
       const consumed: ContextRecord = {
-        ref: { sessionId: id, id: crypto.randomUUID() },
+        ref: await createContextReference(this.dependencies.storage, id),
         sequence: state.records.length + 1,
         kind: 'audit',
         title: 'context-maintenance:request',

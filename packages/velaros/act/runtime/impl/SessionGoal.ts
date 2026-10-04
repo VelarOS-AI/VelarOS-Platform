@@ -3,6 +3,7 @@ import type {
   ContextRecord,
   ContextStorage,
 } from '@velaros-ai/context'
+import { createContextReference } from '@velaros-ai/context'
 import { isNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
@@ -80,7 +81,7 @@ export class SessionGoal implements SessionGoalApi {
           version: state.version,
           records: [
             {
-              ref: { sessionId: this.id, id: crypto.randomUUID() },
+              ref: await createContextReference(this.storage, this.id),
               kind: 'audit',
               title: 'session:goal',
               objectId,
@@ -97,11 +98,16 @@ export class SessionGoal implements SessionGoalApi {
     for (let attempt = 0; attempt < 32; attempt++) {
       const { state, goal } = await this.snapshot(signal)
       if (!state) throw new AppError('GOAL_INPUT', '先登记用户输入，再建立目标')
-      const next = goalChange(goal, input, Date.now(), crypto.randomUUID())
+      const next = goalChange(
+        goal,
+        input,
+        Date.now(),
+        (await createContextReference(this.storage, this.id)).id
+      )
       const body = JSON.stringify(next)
       const objectId = await this.storage.put(this.id, body)
       const record: ContextRecord = {
-        ref: { sessionId: this.id, id: crypto.randomUUID() },
+        ref: await createContextReference(this.storage, this.id),
         sequence: (state.records.at(-1)?.sequence ?? 0) + 1,
         kind: 'audit',
         title: 'session:goal',

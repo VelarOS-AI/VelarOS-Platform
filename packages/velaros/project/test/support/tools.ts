@@ -25,6 +25,7 @@ import type {
   ProjectSearchInput,
 } from '../../types/files'
 import type { ProjectCodeQuery } from '../../types/project'
+import type { ProjectPatchInput, ProjectSelectInput } from '../../types/selection'
 
 /** 建两件项目工具的测试夹具：内核按 root 建，空间端口的每一件都可以按用例换掉。 */
 export async function projectToolFixture(options: {
@@ -63,6 +64,8 @@ export async function projectToolFixture(options: {
       read: (input) => projectFileOperations.read(input as ProjectReadInput, context),
       list: (input) => projectFileOperations.list(input as ProjectListInput, context),
       search: (input) => projectFileOperations.search(input as ProjectSearchInput, context),
+      select: (input) => projectFileOperations.select(input as ProjectSelectInput, context),
+      patch: (input) => projectFileOperations.patch(input as ProjectPatchInput, context),
       edit: (input) => projectFileOperations.edit(input as ProjectEditInput, context),
       inspect: (input) => projectFileOperations.inspect(input as ProjectChangeInput, context),
       undo: (input) => projectFileOperations.undo(input as ProjectChangeInput, context),

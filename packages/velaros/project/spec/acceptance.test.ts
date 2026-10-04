@@ -103,21 +103,56 @@ describe('模型面', () => {
       harness,
       "replaceInFiles(['a.txt', 'b.txt', 'a.txt'], 'oldName', 'newName')"
     )
-    expect(changed.calls).toEqual(['read', 'edit'])
+    expect(changed.calls).toEqual(['read', 'patch'])
     expect(changed.value).toMatchObject({ status: 'committed', changedFiles: ['a.txt', 'b.txt'] })
     expect(changed.value.changeRef).toBeTruthy()
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('newName\n')
     expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('newName twice newName\n')
   }, 60_000)
 
-  test('INV-1 velaros:project 的七个操作与 velaros:code 的两个，声明从源码生成、只放出这些；随包发布的声明与生成物同一份，放出的方法就是能调的那些', async () => {
+  test('INV-43 结构改写模板精确绑定 Python 方法，INV-48 增量模板只修正问题项', async () => {
+    await writeFile(
+      join(root, 'cache.py'),
+      'class Cache:\n    def load(self, key):\n        return "old"\n\n# keep\n'
+    )
+    const harness = await createProjectHarness(root)
+    const rewritten = await runTemplate(
+      harness,
+      `rewriteSymbol('cache.py', 'Cache.load', '    def load(self, key):\\n        return "new"')`
+    )
+    expect(rewritten.calls).toEqual(['select', 'patch'])
+    expect(rewritten.value.status).toBe('applied')
+    expect(await readFile(join(root, 'cache.py'), 'utf8')).toBe(
+      'class Cache:\n    def load(self, key):\n        return "new"\n\n# keep\n'
+    )
+
+    const amended = await runTemplate(
+      harness,
+      `(async () => {
+      const found = await select({ targets: [{ path: 'cache.py', match: '"new"' }] })
+      const blocked = await patch({ edits: [
+        { target: found.targets[0].target, text: '"final"' },
+        { target: found.targets[0].target, text: '"overlap"' }
+      ] })
+      if (blocked.status !== 'blocked') throw Error('Expected a blocked plan')
+      return amendPatch(blocked.planRef, 1, null)
+    })()`
+    )
+    expect(amended.calls).toEqual(['select', 'patch', 'patch'])
+    expect(amended.value.status).toBe('applied')
+    expect(await readFile(join(root, 'cache.py'), 'utf8')).toContain('return "final"')
+  }, 60_000)
+
+  test('INV-1 velaros:project 的九个操作与 velaros:code 的两个，声明从源码生成、只放出这些；随包发布的声明与生成物同一份，放出的方法就是能调的那些', async () => {
     const { operations } = await createProjectHarness(root)
     expect(Object.keys(operations.project).sort()).toEqual([
       'edit',
       'inspect',
       'list',
+      'patch',
       'read',
       'search',
+      'select',
       'snapshot',
       'undo',
     ])
@@ -130,8 +165,10 @@ describe('模型面', () => {
       'edit',
       'inspect',
       'list',
+      'patch',
       'read',
       'search',
+      'select',
       'snapshot',
       'undo',
     ])
@@ -489,7 +526,8 @@ describe('不折叠', () => {
       `数字最多 ${ProjectFileLimits.listDepth}`,
       `超过 ${ProjectFileLimits.listEntries} 条`,
       `超过 ${ProjectFileLimits.searchHits} 处`,
-      `缺省 ${ProjectFileLimits.searchContextLinesDefault}、最多 ${ProjectFileLimits.searchContextLines}`,
+      `缺省 ${ProjectFileLimits.searchContextLinesDefault}，接受非负安全整数`,
+      `不超过 ${ProjectFileLimits.searchChars} 个 Unicode 字符`,
       `一次最多 ${ProjectFileLimits.steps} 步`,
       `展开后一次最多 ${ProjectFileLimits.recodePaths} 个`,
       `缺省最多改 ${ProjectPolicyDefaults.maxChangedFilesPerTransaction} 个文件`,

@@ -1,6 +1,6 @@
 // velaros:project 的代码模版：日常最常用的几种写法，一段一个函数。只是示例——按你的需要改写、只取其中几行都行，不必照着写。
 // 用的时候把要的那段放进程序，调用它并把要看的导出去，比如 `export default await showFile('src/index.ts')`。
-import { edit, inspect, list, read, search, snapshot, undo } from 'velaros:project'
+import { edit, inspect, list, patch, read, search, select, snapshot, undo } from 'velaros:project'
 
 // 捕获当前文件纯值：每次仍真实前后读取；不能把 fingerprint 当作历史变化代次或编辑凭据。
 async function captureConfigs(path = 'package.json') {
@@ -13,14 +13,22 @@ async function showFile(path = 'src/index.ts') {
   return window.text
 }
 
-// 看一个函数：先 search 找到它在哪个文件哪一行，再只读那附近几十行。
+// 查到文件后按准确声明定位完整函数，不估算结束行；结果里的 target 可直接用于 patch。
 async function showFunction(name = 'loadSettings', path = 'src') {
   const { hits } = await search({ query: `function ${name}`, path })
   const hit = hits[0]
   if (!hit?.range) return `没找到 function ${name}`
-  const start = hit.range.startLine
-  const [window] = (await read({ files: [{ path: hit.path, range: [start, start + 40] }] })).files
-  return { path: hit.path, startLine: window.startLine, text: window.text }
+  const found = await select({ targets: [{ path: hit.path, symbol: name }] })
+  if (found.issues?.length) return found
+  const target = found.targets[0]
+  return { path: target.target.path, target: target.target, startLine: target.startLine, text: target.text }
+}
+
+// 改函数/方法只写完整新块（包含该层缩进与装饰器）；同名结果必须明确选择候选。
+async function rewriteSymbol(path = 'src/cache.py', symbol = 'Cache.load', text = '    def load(self, key):\n        return self.items.get(key)') {
+  const found = await select({ targets: [{ path, symbol }] })
+  if (found.issues?.length) return found
+  return patch({ edits: [{ target: found.targets[0].target, text }] })
 }
 
 // 一次读几个文件（配置、入口）：读不到的不在 files 里，在 issues 里各带原因和下一步。
@@ -50,10 +58,12 @@ async function whereUsed(query = 'useSettings') {
   return { total: hits.length, perFile }
 }
 
-// 改一处：把一段原文换成新文，oldText 照读到的原文写、在文件里要唯一（出现好几处就多带几行上下文）。
+// 改一处：短原文只负责定位；正文只交新片段。歧义返回候选，不能自动挑第一处。
 async function replaceOnce(path = 'src/config.ts', oldText = 'const retries = 3', newText = 'const retries = 5') {
   try {
-    return await edit({ steps: [{ action: 'replace', path, oldText, newText }] })
+    const found = await select({ targets: [{ path, match: oldText }] })
+    if (found.issues?.length) return found.issues[0]
+    return await patch({ edits: [{ target: found.targets[0].target, text: newText }] })
   } catch (error) {
     // error.code：TARGET_NOT_FOUND 是没找到（message 里有最接近的原文），AMBIGUOUS_TARGET 是有好几处。
     return { code: error.code, message: error.message }
@@ -65,11 +75,12 @@ async function writeFile(path = 'src/cache.ts', text = 'export const cache = new
   return edit({ steps: [{ action: 'write', path, text }] })
 }
 
-// 全文替换：先 read 整个文件，在程序里 replaceAll，再 write 整份写回。
+// 同一程序复用读取目标，在程序里计算全文变换；提交前仍核对读取版本。
 async function renameInFile(path = 'src/service.ts', from = 'oldCall(', to = 'newCall(') {
   const [window] = (await read({ files: [{ path }] })).files
   if (!window.text.includes(from)) return `没找到 ${from}`
-  return edit({ steps: [{ action: 'write', path, text: window.text.replaceAll(from, to) }] })
+  if (!window.target) return { status: 'blocked', reason: window.note ?? '这个窗口没有编辑目标' }
+  return patch({ edits: [{ target: window.target, text: window.text.replaceAll(from, to) }] })
 }
 
 // 搜到就改（改名）：一次批量读完命中文件，再用一次 edit 提交事务；有读取缺口时先交回缺口，不缩小修改范围。
@@ -81,19 +92,26 @@ async function renameEverywhere(from = 'loadSettings', to = 'readSettings') {
 }
 
 // 指定文件一起替换：全部正文进程序，模型只看真实改动的文件与 changeRef；完整 diff 可用 inspect 召回。
-// 超过 read 或事务上限时按任务的独立范围拆分；多个 edit 各自是事务，不能称为一个整体事务。
+// 超过 read 或事务上限时按独立范围拆分；多个 patch 各自是事务。
 async function replaceInFiles(paths = ['src/a.ts', 'src/b.ts'], from = 'oldName', to = 'newName') {
   const targets = [...new Set(paths)]
   if (!targets.length) return { status: 'unchanged', matchedFiles: [] }
   const { files, issues = [] } = await read({ files: targets.map((path) => ({ path })) })
   if (issues.length) return { status: 'blocked', requestedFiles: targets, issues }
-  /** @type {Array<{ action: 'write', path: string, text: string }>} */
-  const steps = files
-    .filter((window) => window.text.includes(from))
-    .map((window) => ({ action: 'write', path: window.path, text: window.text.replaceAll(from, to) }))
-  if (!steps.length) return { status: 'unchanged', matchedFiles: [] }
-  const changed = await edit({ steps })
+  const unavailable = files.filter((window) => !window.target)
+  if (unavailable.length) return { status: 'blocked', requestedFiles: targets, issues: unavailable.map((window) => ({ path: window.path, code: 'NOT_SUPPORTED', message: window.note ?? '没有编辑目标' })) }
+  const edits = files.flatMap((window) => window.target && window.text.includes(from)
+    ? [{ target: window.target, text: window.text.replaceAll(from, to) }]
+    : [])
+  if (!edits.length) return { status: 'unchanged', matchedFiles: [] }
+  const changed = await patch({ edits })
+  if (changed.status !== 'applied') return changed
   return { status: 'committed', changeRef: changed.changeRef, changedFiles: changed.changedFiles, diffLines: changed.diffLines }
+}
+
+// blocked 保留原下标，只修正问题项；任何未修正问题或版本变化都会继续拒绝整批。
+async function amendPatch(planRef, index, edit) {
+  return patch({ planRef, amendments: [{ index, edit }] })
 }
 
 // 新建一个文件并在另一个文件里用上它：几步合成一个事务，后一步按前一步改完的内容算。

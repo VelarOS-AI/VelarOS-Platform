@@ -1,6 +1,6 @@
 /**
  * 文件引用的记录：源码快照、可编辑视图（fileRef）与改动回执。
- * 记录按会话存在进程内存里，引用是记录的内容哈希；只在包内用，模型只见到引用字符串。
+ * 记录按会话存在进程内存里，完整哈希校验记录，8 位短身份定位记录；只在包内用，模型只见到引用字符串。
  */
 
 /** 一段可见范围：从哪个偏移到哪个偏移、第几行到第几行，是不是整行。 */
@@ -55,5 +55,10 @@ export type RefRecord = SourceRecord | ViewRecord | ReceiptRecord
 /** 一个会话的引用记录：按最近使用排序，另记着总字符数（超了从最旧的删起）。 */
 export interface RefSession {
   records: Map<string, { record: RefRecord; chars: number }>
+  /** 短引用至完整内容身份；记录淘汰后仍占用，防止旧引用误命中新记录。 */
+  aliases: Map<string, string>
+  references: Map<string, string>
+  /** 已消费的失败计划，轻量墓碑防止重放。 */
+  consumed: Set<string>
   chars: number
 }

@@ -137,6 +137,7 @@ describe('交互式命令的控制台', () => {
 
         const taskId = started.backgroundProcess?.taskId
         expect(taskId).toBeTruthy()
+        expect(taskId).toMatch(/^[a-f0-9]{8}$/)
         expect(started.backgroundProcess?.console).toMatchObject({
           taskId,
           channel: 'pipe',

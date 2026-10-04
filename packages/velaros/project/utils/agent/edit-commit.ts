@@ -33,6 +33,15 @@ export async function commitProjectEdit(
   const plan = (await compileProjectEdit({ steps }, projectPlannerResolver(ctx)).catch(
     rethrowNotApplied
   )) as PrepareEditInput
+  return commitPreparedProjectEdit(plan, ctx)
+}
+
+/** 复用同一事务内核提交已完成定位的计划；摘要请求不读取和构造不需要的变更窗口，原始差量仍在事务账本中。 */
+export async function commitPreparedProjectEdit(
+  plan: PrepareEditInput,
+  ctx: ProjectOperationContext,
+  includeWindows = true
+): Promise<ProjectEditResult> {
   ctx.abortSignal.throwIfAborted()
   const recode = optionalWhen(
     isPlainObject,
@@ -84,7 +93,8 @@ export async function commitProjectEdit(
     }
     if (applied.notes?.length) receipt.notes = [...applied.notes]
     try {
-      receipt.files = await changeWindows(ctx, final.patches, applied.newRevisions)
+      if (includeWindows)
+        receipt.files = await changeWindows(ctx, final.patches, applied.newRevisions)
     } catch (error) {
       const failure = AppError.from(error)
       Log.tag('ProjectEdit').warn('已提交事务的变更窗口读取失败', {

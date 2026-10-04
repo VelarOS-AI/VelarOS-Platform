@@ -1,4 +1,4 @@
-import { createContextRuntime } from '@velaros-ai/context'
+import { createContextReference, createContextRuntime } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -83,7 +83,7 @@ class AgentSupervisor implements AgentSupervisorApi {
           .map((r) => r.title)
       ).size
       if (count >= this.options.maxChildren) throw new AppError('LIMIT', '父任务子会话额度耗尽')
-      const id = crypto.randomUUID()
+      const id = (await createContextReference(this.options.storage, parent)).id
       const job: AgentJob = {
         id,
         parentSessionId: parent,

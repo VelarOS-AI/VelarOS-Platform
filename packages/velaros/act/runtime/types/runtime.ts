@@ -130,6 +130,8 @@ export interface ScriptProtocolOptions {
   readonly maxChars?: number
   /** 单个控制头最大字符数。 */
   readonly maxHeaderChars?: number
+  /** 控制段闭合后的连续空白上限；超过后终止响应，不自动重发。 */
+  readonly maxIdleWhitespaceChars?: number
   /** 一份响应允许的有载荷声明数量。 */
   readonly maxBlocks?: number
   /** 会话后台执行并发上限，所有任务共享。 */

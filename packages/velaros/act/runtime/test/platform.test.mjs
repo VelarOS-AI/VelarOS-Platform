@@ -9,7 +9,11 @@ import { localContextStorage } from '@velaros-ai/context/node'
 import { createOperationRuntime } from '@velaros-ai/kernel'
 import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
-import { createCapabilityModule, createRuntime } from '../../../dist/act/runtime/index.js'
+import {
+  createCapabilityModule,
+  createProjectCapabilityModule,
+  createRuntime,
+} from '../../../dist/act/runtime/index.js'
 import { fileOperations, VelarFilesModule } from '../../../dist/files/index.js'
 import { createLocalFilePort } from '../../../dist/files/local.js'
 import {
@@ -56,7 +60,7 @@ async function open(runtime) {
   return s
 }
 
-test('INV-4 all 14 generated module surfaces / 100 operations use the same strict registry and templates', async (t) => {
+test('INV-4 all 14 generated module surfaces / 102 operations use the same strict registry and templates', async (t) => {
   const f = await storageFixture(t)
   const modules = []
   for (const unit of [
@@ -89,7 +93,7 @@ test('INV-4 all 14 generated module surfaces / 100 operations use the same stric
   assert.equal(modules.length, 14)
   assert.equal(
     modules.reduce((n, m) => n + Object.keys(m.operations).length, 0),
-    100
+    102
   )
   const kernel = createOperationRuntime({
     modules,
@@ -280,6 +284,103 @@ test('INV-55 write failures marked as not applied are recorded without an effect
   assert.equal(lost.effect, 'unknown')
 })
 
+test('INV-55 bound patches record blocked and unchanged results as none, and real changes as committed', async (t) => {
+  const f = await storageFixture(t)
+  await writeFile(join(f.root, 'a.txt'), 'one\n')
+  const projectKernel = await createProjectKernel({ root: f.root })
+  const project = {
+    getRootPath: () => f.root,
+    kernel: async () => projectKernel,
+    queryCode: async () => ({}),
+  }
+  const runtime = createOperationRuntime({
+    modules: [createProjectCapabilityModule({ instanceId: f.root, project })],
+    journal: createContextInvocationJournal(f.storage),
+  })
+  f.cleanup.push(() => runtime.dispose())
+  await runtime.start()
+  const binding = runtime.bind('s', 'velaros:project')
+  const call = (id, operation, input) =>
+    runtime.invoke({
+      id,
+      sessionId: 's',
+      executionId: 'e',
+      mode: 'execute',
+      binding,
+      operation,
+      input,
+    })
+  const refused = await call('missing-patch', 'patch', {
+    edits: [{ target: 'target:00000000', text: 'bad' }],
+  })
+  assert.equal(refused.outcome, 'succeeded')
+  assert.equal(refused.value.status, 'blocked')
+  assert.equal(refused.effect, 'none')
+  assert.equal(await readFile(join(f.root, 'a.txt'), 'utf8'), 'one\n')
+
+  const selected = await call('select', 'select', { targets: [{ path: 'a.txt', match: 'one' }] })
+  assert.equal(selected.effect, 'none')
+  const target = selected.value.targets[0].target
+  const unchanged = await call('unchanged-patch', 'patch', { edits: [{ target, text: 'one' }] })
+  assert.equal(unchanged.value.status, 'applied')
+  assert.equal(unchanged.value.changed, false)
+  assert.equal(unchanged.effect, 'none')
+
+  const applied = await call('real-patch', 'patch', { edits: [{ target, text: 'two' }] })
+  assert.equal(applied.value.status, 'applied')
+  assert.equal(applied.effect, 'committed')
+  assert.equal('diff' in applied.value, false)
+  assert.equal(await readFile(join(f.root, 'a.txt'), 'utf8'), 'two\n')
+  const reverted = await call('undo-patch', 'undo', { changeRef: applied.value.changeRef })
+  assert.equal(reverted.effect, 'committed')
+  assert.equal(await readFile(join(f.root, 'a.txt'), 'utf8'), 'one\n')
+})
+
+test('INV-56 bound Python editing, draft amendment, inspection and undo run through the actual workspace ScriptAct chain', async (t) => {
+  const f = await storageFixture(t)
+  const workspace = join(f.root, 'workspace')
+  await mkdir(workspace)
+  const original =
+    'class Cache:\r\n    def load(self, key):\r\n        return "原文🙂"\r\n\r\n# 尾部保留\r\n'
+  await writeFile(join(workspace, 'cache.py'), original)
+  const runtime = await createRuntime({ storage: f.storage, workspace })
+  f.cleanup.push(() => runtime.close())
+  const session = await open(runtime)
+  const receipt = await session.execute({
+    source: `
+    import { select, patch, inspect, undo } from 'velaros:project';
+    const found = await select({ targets: [{ path: 'cache.py', symbol: 'Cache.load' }] });
+    if (found.issues?.length || !found.targets[0]) throw Error('Selection failed');
+    const target = found.targets[0].target;
+    const blocked = await patch({ edits: [
+      { target, text: '    def load(self, key):\\n        return "更新🙂"' },
+      { target, text: 'overlap' }
+    ] });
+    if (blocked.status !== 'blocked') throw Error('Overlap must not write');
+    const changed = await patch({ planRef: blocked.planRef, amendments: [{ index: 1, edit: null }] });
+    if (changed.status !== 'applied') throw Error('Amendment must apply');
+    const full = await inspect({ changeRef: changed.changeRef });
+    const reverted = await undo({ changeRef: changed.changeRef });
+    export default { target, blocked, changed, full, reverted };
+  `,
+  })
+  ok(receipt)
+  const result = receipt.result.value
+  assert.match(result.target.ref, /^target:[a-f0-9]{8}$/)
+  assert.equal(result.blocked.executionOutcome, 'not-applied')
+  assert.equal('diff' in result.changed, false)
+  assert.match(result.full.diff, /更新🙂/)
+  assert.deepEqual(result.reverted.changedFiles, ['cache.py'])
+  assert.equal(await readFile(join(workspace, 'cache.py'), 'utf8'), original)
+  const state = await session.view.inspect()
+  const patches = state.mandatory.filter((r) => r.operation === 'velaros:project.patch')
+  assert.equal(patches.length, 2)
+  assert.deepEqual(
+    patches.map((r) => r.effect),
+    ['none', 'committed']
+  )
+})
+
 test('project evidence accepts the shared source candidate range through one hundred', async (t) => {
   const f = await storageFixture(t)
   await writeFile(
@@ -352,12 +453,12 @@ test('normalization keeps committed effects visible, respects explicit partial e
   const surface = {
     specifier: 'test:normalize',
     namespace: 'normalize',
-    methods: ['void', 'partial', 'bad'],
+    methods: ['void', 'partial', 'bad', 'spoof'],
     declarations: '',
     template: '',
     revision: '1',
     operations: Object.fromEntries(
-      ['void', 'partial', 'bad'].map((name) => [
+      ['void', 'partial', 'bad', 'spoof'].map((name) => [
         name,
         { summary: name, input: { type: 'null' }, output: {}, effects: 'write', hasInput: false },
       ])
@@ -373,6 +474,7 @@ test('normalization keeps committed effects visible, respects explicit partial e
         return { optional: undefined, value: 2 }
       },
       bad: () => new Date(),
+      spoof: () => ({ status: 'blocked', executionOutcome: 'not-applied' }),
     },
     context: (call) => call,
   })
@@ -400,6 +502,8 @@ test('normalization keeps committed effects visible, respects explicit partial e
   const bad = await call('bad')
   assert.equal(bad.outcome, 'failed')
   assert.equal(bad.effect, 'committed')
+  const spoof = await call('spoof')
+  assert.equal(spoof.effect, 'committed')
 })
 
 test('INV-56 a workspace project can also mount velaros:code and velaros:images on the runtime kernel', async (t) => {

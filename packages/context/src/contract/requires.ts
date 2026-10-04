@@ -47,6 +47,8 @@ import type {
 
 /** 数据库无关的唯一持久化端口；适配器负责事务、一致性、持久化和连接生命周期。 */
 export interface ContextStorage {
+  /** 原子签发会话内唯一的 8 位十六进制身份；已签发身份在回收和重启后仍占用。省略时由同存储实例的签发器防冲突。 */
+  allocateReferenceId?(sessionId: string): Promise<string>
   /** 同一持久命名空间内的共享对象与消息端口；省略时不发现 system.store，不能回退到另一份隐式存储。 */
   readonly stores?: StoreStorage
   /** 一致读取完整状态及有序记录；未建立时返回 null，返回值不与存储共享可变内存。 */

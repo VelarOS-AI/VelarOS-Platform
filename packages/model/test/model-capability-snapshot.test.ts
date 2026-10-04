@@ -68,6 +68,30 @@ function createScriptRuntime(metadataBody: string, listBody: string) {
 }
 
 describe('动态目录与运行时能力快照', () => {
+  test('GPT-5.6 exact public IDs use the documented window when the endpoint lists IDs only', async () => {
+    for (const model of ['gpt-5.6-sol', 'gpt-5.6']) {
+      for (const upstreamWindow of [undefined, 65_536]) {
+        const composition = createModelRuntimeComposition({
+          providerScripts: { configPaths: [] },
+          providerCatalog: {
+            fetch: async () =>
+              Response.json({ data: [{ id: model, context_length: upstreamWindow }] }),
+          },
+        })
+        const request = {
+          provider: 'openai' as const,
+          model,
+          apiKey: 'fixture-key',
+          baseURL: 'https://fixture.invalid/v1',
+        }
+        const runtime = await composition.agentModelResolver.resolve(request, {
+          providerRuntimeConfigs: [{ ...request, enabled: true }],
+          openRouter: { useFreeModelsForDebug: false },
+        })
+        expect(runtime.contextWindow).toBe(upstreamWindow ?? 1_050_000)
+      }
+    }
+  })
   test('完整显式 metadata 不查询悬挂目录，具体 config 的显式窗口优先', async () => {
     for (const metadata of [
       '{contextWindow:4096,inputModalities:["text"]}',

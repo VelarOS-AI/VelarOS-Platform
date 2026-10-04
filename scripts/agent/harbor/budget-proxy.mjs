@@ -75,6 +75,30 @@ function observedWireOptions(body) {
   }
 }
 
+// 配对共用的生成资源必须显式冻结；没有策略的历史网关保持原请求语义。
+export function normalizedGenerationPolicy(value) {
+  if (value == null) return null
+  if (
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).sort().join(',') !==
+      'maxOutputTokens,reasoningContext,reasoningSummary,textVerbosity' ||
+    !Number.isSafeInteger(value.maxOutputTokens) ||
+    value.maxOutputTokens < 1 ||
+    value.maxOutputTokens > 128000 ||
+    !['auto', 'current_turn', 'all_turns'].includes(value.reasoningContext) ||
+    !['auto', 'concise', 'detailed'].includes(value.reasoningSummary) ||
+    !['low', 'medium', 'high'].includes(value.textVerbosity)
+  )
+    throw new Error('Invalid frozen generation policy')
+  return Object.freeze({
+    maxOutputTokens: value.maxOutputTokens,
+    reasoningContext: value.reasoningContext,
+    reasoningSummary: value.reasoningSummary,
+    textVerbosity: value.textVerbosity,
+  })
+}
+
 // 端点身份只包含 API 根，不允许凭据或请求参数混入地址和账本。
 function upstreamEndpoint(value) {
   let url
@@ -327,7 +351,16 @@ export function budgetServer({
   maxConcurrency = 1,
   perAttemptConcurrency = 1,
   maxQueue = 64,
+  generationPolicy = null,
 }) {
+  generationPolicy = normalizedGenerationPolicy(generationPolicy)
+  if (
+    ledger.state.requests.length &&
+    JSON.stringify(normalizedGenerationPolicy(ledger.state.generationPolicy)) !==
+      JSON.stringify(generationPolicy)
+  )
+    throw new Error('Existing ledger generation policy differs; use a new ledger directory')
+  ledger.state.generationPolicy = generationPolicy
   if (ledger.state.limitUsd === null && !requireIdentity)
     throw new Error('Unlimited campaigns require signed attempt identities')
   const endpoint = upstreamEndpoint(upstream)
@@ -383,10 +416,16 @@ export function budgetServer({
           activeUpstreamRequests: access.identity
             ? (activeAttempts.get(access.identity.attemptId) ?? 0)
             : activeUpstreamRequests,
+          activeModelDiscoveryRequests: (ledger.state.discoveryRequests ?? []).filter(
+            (item) =>
+              item.status === 'running' &&
+              (!access.identity || item.identity?.attemptId === access.identity.attemptId)
+          ).length,
           attribution: requireIdentity ? 'signed-attempt-v1' : 'mixed-legacy-v1',
           upstream: endpoint,
           authenticationBlocker,
           scheduler: scheduler.summary(access.identity?.attemptId),
+          generationPolicy,
         })
       )
       return
@@ -394,6 +433,49 @@ export function budgetServer({
     if (requireIdentity && !access.identity) {
       res.writeHead(403)
       res.end(JSON.stringify({ error: 'ATTEMPT_IDENTITY_REQUIRED' }))
+      return
+    }
+    // 原生客户端在模型请求前读取远端目录。只读发现单列记账，不能冒充模型用量或放宽付费模型。
+    if (req.method === 'GET' && req.url === '/v1/models') {
+      const record = {
+        id: 'discovery-' + randomUUID(),
+        identity: access.identity,
+        startedAt: new Date().toISOString(),
+        status: 'running',
+      }
+      ledger.state.discoveryRequests ??= []
+      ledger.state.discoveryRequests.push(record)
+      ledger.save()
+      try {
+        if (authenticationBlocker) throw authenticationError()
+        const response = await fetch(endpoint.baseURL + '/models', {
+          headers: { authorization: 'Bearer ' + apiKey },
+          signal: AbortSignal.timeout(30_000),
+        })
+        record.upstreamStatus = response.status
+        if (response.status === 401) blockAuthentication(record.id)
+        if (!response.ok) {
+          record.status = 'failed'
+          res.writeHead(response.status, { 'content-type': 'application/json' })
+          res.end(JSON.stringify({ error: 'UPSTREAM_MODEL_DISCOVERY_FAILED' }))
+        } else {
+          const value = await response.json()
+          if (!Array.isArray(value.data)) throw new Error('Invalid upstream model catalog')
+          const data = value.data.filter((model) => model?.id === ledger.model)
+          record.status = 'completed'
+          record.modelCount = data.length
+          res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+          res.end(JSON.stringify({ object: 'list', data }))
+        }
+      } catch (error) {
+        record.status = 'failed'
+        record.errorCode = safeErrorCode(error.code) ?? 'MODEL_DISCOVERY_FAILED'
+        if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: record.errorCode }))
+      } finally {
+        record.endedAt = new Date().toISOString()
+        ledger.save()
+      }
       return
     }
     if (access.identity && access.identity.phase !== 'source') {
@@ -445,10 +527,28 @@ export function budgetServer({
       }
       if (body.tools?.some((tool) => !isLocalTool(tool)))
         throw new Error('Hosted paid tools are outside this campaign')
+      const clientWireOptions = generationPolicy ? observedWireOptions(body) : undefined
       const limitKey = req.url === '/v1/responses' ? 'max_output_tokens' : 'max_completion_tokens'
-      const outputLimit = body[limitKey] ?? body.max_tokens ?? 32768
-      if (!Number.isInteger(outputLimit) || outputLimit < 1 || outputLimit > 128000)
+      const requestedOutputLimit = body[limitKey] ?? body.max_tokens ?? 32768
+      if (
+        !Number.isInteger(requestedOutputLimit) ||
+        requestedOutputLimit < 1 ||
+        requestedOutputLimit > 128000
+      )
         throw new Error('Invalid output limit')
+      if (generationPolicy && req.url !== '/v1/responses')
+        throw new Error('Frozen generation policy requires the Responses endpoint')
+      const outputLimit = generationPolicy
+        ? Math.min(requestedOutputLimit, generationPolicy.maxOutputTokens)
+        : requestedOutputLimit
+      if (generationPolicy) {
+        body.reasoning = {
+          ...body.reasoning,
+          context: generationPolicy.reasoningContext,
+          summary: generationPolicy.reasoningSummary,
+        }
+        body.text = { ...body.text, verbosity: generationPolicy.textVerbosity }
+      }
       body[limitKey] = outputLimit
       delete body.max_tokens
       if (body.service_tier && body.service_tier !== 'default')
@@ -470,6 +570,7 @@ export function budgetServer({
           endpoint: req.url,
           reasoningEffort: body.reasoning?.effort ?? body.reasoning_effort ?? null,
           outputLimit,
+          ...(generationPolicy ? { requestedOutputLimit, clientWireOptions } : {}),
           serviceTier: body.service_tier,
           stream: Boolean(body.stream),
           // 在网关规范化之后观察；仅作比较证据，不改变实际模型请求。
@@ -766,6 +867,7 @@ async function main() {
       model: { type: 'string', default: campaignModel },
       'reasoning-effort': { type: 'string', default: 'high' },
       'pricing-file': { type: 'string' },
+      'generation-policy-file': { type: 'string' },
       'max-concurrency': { type: 'string', default: '1' },
       'per-attempt-concurrency': { type: 'string', default: '1' },
       'max-queue': { type: 'string', default: '64' },
@@ -824,6 +926,9 @@ async function main() {
     maxConcurrency: Number(values['max-concurrency']),
     perAttemptConcurrency: Number(values['per-attempt-concurrency']),
     maxQueue: Number(values['max-queue']),
+    generationPolicy: values['generation-policy-file']
+      ? JSON.parse(readFileSync(values['generation-policy-file'], 'utf8'))
+      : null,
   })
   server.listen(Number(values.port), '0.0.0.0', () =>
     console.log(JSON.stringify({ port: Number(values.port), ...ledger.summary() }))

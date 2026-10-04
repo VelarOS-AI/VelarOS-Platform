@@ -27,6 +27,8 @@ import {
   sameContextRef,
 } from '../utils/state.js'
 
+import { createContextReference } from './ContextReferenceAllocator.js'
+
 /** 会话的上下文权威。 */
 export interface ContextRuntime {
   /** 保存原始用户输入，超大文本分块归档，附件保留引用。 */
@@ -100,7 +102,7 @@ export class SessionContext implements ContextRuntime {
     signal?.throwIfAborted()
     if (!isString(input.body) || input.body.length > ContextLimits.objectChars)
       throw contextFailure('OBJECT_TOO_LARGE', '正文必须在单对象上限以内。')
-    const ref = { sessionId: this.options.sessionId, id: crypto.randomUUID() }
+    const ref = await createContextReference(this.options.storage, this.options.sessionId)
     const objectId = await this.options.storage.put(this.options.sessionId, input.body)
     const entry = {
       ref,

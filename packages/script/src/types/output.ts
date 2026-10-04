@@ -129,7 +129,7 @@ export interface ScriptOutputPresentation {
   readonly rawRef: string
   /** 原始归档中的 JSON Pointer。 */
   readonly pointer: string
-  /** 原始快照字符数。 */
+  /** pointer 召回正文的 UTF-16 长度：字符串为解码原文，其他值为紧凑 JSON；采集大小另计。 */
   readonly totalChars: number
   /** 列表原始条数。 */
   readonly totalItems?: number

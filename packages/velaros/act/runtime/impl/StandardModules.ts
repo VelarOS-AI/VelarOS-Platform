@@ -123,6 +123,8 @@ export function createProjectCapabilityModule(
       project: options.project,
       sessionId: call.invocation.sessionId,
       abortSignal: call.signal,
+      recordWriteOutcome: (outcome) =>
+        call.recordEffect(outcome === 'applied' ? 'committed' : 'none'),
       recordSnapshotCompletion: () =>
         call.recordObservation?.({ completed: true, protection: 'full' }),
       recordSnapshotMetrics: (metrics) =>

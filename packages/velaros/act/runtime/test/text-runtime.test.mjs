@@ -17,6 +17,29 @@ import { done, marker } from './support/model-turn.mjs'
 const block = (request, head, source = '') =>
   `${marker(request)} ${head}\n${source}${source ? '\n' : ''}${marker(request)}\n`
 const finish = { type: 'finish', reason: 'stop' }
+test('INV-86 a whitespace-stalled response performs no write and starts no repair request', async (t) => {
+  const f = await fixture(t, async function* (request) {
+    yield {
+      type: 'text',
+      text: block(request, 'execute', "import {write} from 'test:ops';await write('unsafe');"),
+    }
+    yield { type: 'text', text: ' '.repeat(4096) }
+    yield { type: 'text', text: '\n' }
+    yield { type: 'usage', inputTokens: 1000, outputTokens: 1100 }
+    yield finish
+  })
+  const events = await collect(f)
+  assert.equal(f.calls, 1)
+  assert.deepEqual(f.writes, [])
+  assert(events.some((event) => event.type === 'error' && /持续输出空白/u.test(event.message)))
+  const trace = await f.runtime.trace('s', { fullContent: true })
+  assert.equal(trace.turns.length, 1)
+  assert.equal(trace.turns[0].executions.length, 0)
+  const decision = JSON.parse(trace.turns[0].decision.body)
+  assert.equal(decision.status, 'rejected')
+  assert(!decision.usage)
+  assert(trace.turns[0].response.body.endsWith(`${' '.repeat(4096)}\n`))
+})
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 async function until(check) {
   const deadline = Date.now() + 4000
@@ -168,8 +191,13 @@ test('INV-14 opaque blobs and host input arrive unchanged and frozen inside the 
       .filter((event) => event.type === 'text')
       .map((event) => event.text)
       .join(''),
-    'Before\nAfter\n'
+    'Before\n'
   )
+  const stored = await f.storage.load('s')
+  const response = stored.records.find((record) => record.title === 'model-response')
+  const decision = JSON.parse(await f.storage.get('s', response.objectId))
+  assert.equal(decision.decoded.message, 'Before\n')
+  assert.match((await f.session.context.read(decision.rawRef)).text, /After\n$/)
   assert.match(f.frames[1].results[0].text, /"frozen":true/)
   assert.match(f.frames[1].results[0].text, /result.txt/)
 })

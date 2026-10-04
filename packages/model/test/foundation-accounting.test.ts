@@ -12,6 +12,12 @@ import {
 } from '../src/utils/usage'
 
 test('unknown model family aliases do not acquire a guessed context window', () => {
+  for (const model of ['gpt-5.6-sol', 'gpt-5.6']) {
+    expect(resolveProviderModelContextWindow('openai', model)).toBe(1_050_000)
+    expect(resolveProviderModelContextWindow('openrouter', `openai/${model}`)).toBe(1_050_000)
+    expect(resolveProviderModelContextWindow('openai', `${model}-private-8k`)).toBeNull()
+    expect(resolveProviderModelContextWindow('custom', model)).toBeNull()
+  }
   for (const name of [
     'gpt-5-private-8k',
     'gpt-5.99-unregistered',

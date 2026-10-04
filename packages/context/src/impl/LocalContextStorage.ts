@@ -4,6 +4,7 @@ import { getBuiltinModule } from 'node:process'
 import type { DatabaseSync } from 'node:sqlite'
 
 import { isEmpty, isFalse, isUndefined } from '@velaros-ai/core'
+import { shortReferenceId } from '@velaros-ai/core/utils/shortReferenceId'
 
 import { ContextLimits } from '../contract/constants.js'
 import type { StoreStorage } from '../contract/requires.js'
@@ -47,6 +48,9 @@ export class LocalContextStorage implements ContextStorage {
       this.db.exec(
         "CREATE INDEX IF NOT EXISTS context_records_kind ON context_records(session,json_extract(body,'$.kind'),sequence)"
       )
+      this.db.exec(
+        'CREATE TABLE IF NOT EXISTS context_reference_ids(session TEXT NOT NULL,id TEXT NOT NULL,PRIMARY KEY(session,id))'
+      )
       this.stores = new LocalStoreStorage(this.db, this.lifetime.signal)
     } catch (error) {
       try {
@@ -78,6 +82,12 @@ export class LocalContextStorage implements ContextStorage {
       this.db.exec('ROLLBACK')
       throw error
     }
+  }
+  public async allocateReferenceId(sessionId: string): Promise<string> {
+    const claim = this.db.prepare(
+      'INSERT OR IGNORE INTO context_reference_ids(session,id) SELECT ?,? WHERE NOT EXISTS(SELECT 1 FROM context_records WHERE session=? AND id=?)'
+    )
+    return shortReferenceId((id) => Number(claim.run(sessionId, id, sessionId, id).changes) === 0)
   }
   public async compareAndSwap(
     sessionId: string,

@@ -30,6 +30,7 @@ export type {
 } from './contract/requires.js'
 export type { StoreStorage } from './contract/requires.js'
 export { createContextInvocationJournal } from './impl/ContextInvocationJournal.js'
+export { createContextReference } from './impl/ContextReferenceAllocator.js'
 export { createContextView } from './impl/ContextViewSession.js'
 export { createEvidenceAccess } from './impl/EvidenceAccess.js'
 export { createContextRuntime } from './impl/SessionContext.js'
