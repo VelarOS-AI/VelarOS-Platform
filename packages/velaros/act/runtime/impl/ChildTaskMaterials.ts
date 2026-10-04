@@ -9,11 +9,15 @@ import { isNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ParentTaskSnapshot, ParentTaskSource } from '../types/parent-task.js'
+import { ActRuntimeTuning } from '../utils/tuning.js'
 
 /** 子运行独占的原文快照，只在该运行存活期间提供普通文件入口。 */
 export interface ChildTaskMaterialsApi {
-  /** 固定当前父任务的全部原始输入，返回普通文件索引和可归档的来源清单。 */
-  open(job: AgentJob, signal: AbortSignal): Promise<{ path: string; snapshot: ParentTaskSnapshot }>
+  /** 固定父任务原始输入，返回完整文件索引、来源清单和共享预算内的输入摘录。 */
+  open(
+    job: AgentJob,
+    signal: AbortSignal
+  ): Promise<{ path: string; snapshot: ParentTaskSnapshot; preview: string }>
   /** 子运行收束后删除其独占快照；重复清理安全。 */
   close(): Promise<void>
 }
@@ -38,6 +42,10 @@ export class ChildTaskMaterials implements ChildTaskMaterialsApi {
     const context = createContextRuntime({ sessionId: job.parentSessionId, storage: this.storage })
     const records = new Map(state.records.map((record) => [record.ref.id, record]))
     const goals: Array<ParentTaskSnapshot['goals'][number]> = []
+    const previews: string[] = []
+    const previewChars = Math.floor(
+      ActRuntimeTuning.parentTaskPreviewChars / Math.max(1, state.task.goals.length)
+    )
     let nextFile = 0
     const copy = async (ref: ContextRef, user: boolean): Promise<ParentTaskSource> => {
       signal.throwIfAborted()
@@ -49,6 +57,7 @@ export class ChildTaskMaterials implements ChildTaskMaterialsApi {
       const hash = createHash('sha256')
       let chars = 0
       let tail = ''
+      let preview = ''
       try {
         for (;;) {
           signal.throwIfAborted()
@@ -66,6 +75,8 @@ export class ChildTaskMaterials implements ChildTaskMaterialsApi {
             text = text.slice(0, -1)
           }
           const bytes = Buffer.from(text)
+          if (user && preview.length < previewChars)
+            preview += text.slice(0, previewChars - preview.length)
           hash.update(bytes)
           await file.writeFile(bytes)
           if (chars >= part.totalChars) break
@@ -73,6 +84,7 @@ export class ChildTaskMaterials implements ChildTaskMaterialsApi {
       } finally {
         await file.close()
       }
+      if (user) previews.push(preview)
       return { ref, objectId: record.objectId, path, chars, sha256: hash.digest('hex') }
     }
     try {
@@ -110,7 +122,25 @@ export class ChildTaskMaterials implements ChildTaskMaterialsApi {
       }
       const path = join(this.directory, 'index.json')
       await writeFile(path, JSON.stringify(snapshot), { flag: 'wx', mode: 0o400, signal })
-      return { path, snapshot }
+      const headers = goals.map(
+        (source, index) => `父输入 ${index + 1}，全文 ${source.chars} 字符，文件 ${source.path}：\n`
+      )
+      const omitted = '\n[原文未完，按上述文件路径补读]'
+      const remaining =
+        ActRuntimeTuning.parentTaskPreviewChars -
+        headers.join('\n\n').length -
+        omitted.length * goals.length
+      const share = Math.floor(Math.max(0, remaining) / Math.max(1, goals.length))
+      const preview =
+        remaining < 0
+          ? ''
+          : goals
+              .map((source, index) => {
+                const text = previews[index]!.slice(0, share).replace(/[\uD800-\uDBFF]$/u, '')
+                return `${headers[index]}${text}${text.length < source.chars ? omitted : ''}`
+              })
+              .join('\n\n')
+      return { path, snapshot, preview }
     } catch (error) {
       try {
         await this.close()

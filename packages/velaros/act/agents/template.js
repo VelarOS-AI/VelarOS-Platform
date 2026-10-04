@@ -3,7 +3,7 @@
 import { profiles, start, resume, status, wait, cancel, send, reply } from 'velaros:agents'
 // observe / execute：看宿主给的配置、模块与预算；不选 profile 时 start 用第一个。
 async function availableProfiles() { return profiles() }
-// execute：子任务继承能力与权限；task 写完整目标、约束和交付要求，materials 附上需要的原文引用。
+// execute：task 写清分工、约束和交付要求；Node 子任务自带父输入摘录，materials 可补充其他原文引用。
 async function dispatch(materials) { return start({task:'只读调查启动失败的原因，返回已验证的复现步骤、相关文件位置及未查清的问题。',materials}) }
 // observe / execute：读取句柄状态。
 async function progress(id) { return status({id}) }

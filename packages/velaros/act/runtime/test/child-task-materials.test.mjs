@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
@@ -10,6 +10,7 @@ import { localContextStorage } from '@velaros-ai/context/node'
 
 import { ChildTaskMaterials } from '../../../dist/act/runtime/impl/ChildTaskMaterials.js'
 import { createRuntime, createShellNodeEnvironment } from '../../../dist/act/runtime/index.js'
+import { ActRuntimeTuning } from '../../../dist/act/runtime/utils/tuning.js'
 import { createLocalShellHost } from '../../../dist/shell/local.js'
 
 import { modelText } from './support/model-turn.mjs'
@@ -54,11 +55,9 @@ async function storedTask(t, text = 'current requirement') {
 }
 
 test('large archived input is fully streamed through page and storage boundaries with exact Unicode and provenance', async (t) => {
-  const text =
-    'a'.repeat(ContextLimits.readChars - 1) +
-    '😀' +
-    '中'.repeat(ContextLimits.objectChars - ContextLimits.readChars - 2) +
-    '🧭\nfinal requirement'
+  const text = `${'a'.repeat(ContextLimits.readChars - 1)}😀${'中'.repeat(
+    ContextLimits.objectChars - ContextLimits.readChars - 2
+  )}🧭\nfinal requirement`
   const f = await storedTask(t, text)
   const controller = new AbortController()
   const result = await f.materials.open(f.job, controller.signal)
@@ -79,6 +78,38 @@ test('stale task identity cannot export a new task and leaves no files', async (
     { code: 'CONFLICT' }
   )
   assert.deepEqual(await readdir(f.root), [])
+})
+
+test('parent input previews share a bounded budget, retain later corrections and point to full Unicode originals', async (t) => {
+  const first = `${'初始约束 😀'.repeat(2400)} ORIGINAL_TAIL`
+  const f = await storedTask(t, first)
+  const correction = '使用新的 JSON 格式，保留业务 API。'
+  const input = await f.context.ingest({ text: correction })
+  await f.view.appendGoal(input.ref)
+  const result = await f.materials.open(f.job, new AbortController().signal)
+  assert.equal(typeof result.preview, 'string')
+  assert(result.preview.length <= ActRuntimeTuning.parentTaskPreviewChars)
+  assert(result.preview.includes('初始约束'))
+  assert(result.preview.includes(correction))
+  assert(result.preview.includes('原文未完'))
+  assert(!result.preview.includes('ORIGINAL_TAIL'))
+  assert(!result.preview.includes('\uFFFD'))
+  assert.equal(Buffer.from(result.preview).toString('utf8'), result.preview)
+  assert(result.preview.indexOf('初始约束') < result.preview.indexOf(correction))
+  for (const source of result.snapshot.goals) assert(result.preview.includes(source.path))
+  assert.equal(await readFile(result.snapshot.goals[0].path, 'utf8'), first)
+  assert.equal(await readFile(result.snapshot.goals[1].path, 'utf8'), correction)
+})
+
+test('a preview ending inside a surrogate pair always retains whole characters', async (t) => {
+  for (const prefix of ['', 'a']) {
+    const f = await storedTask(t, prefix + '😀'.repeat(6000))
+    const result = await f.materials.open(f.job, new AbortController().signal)
+    assert(result.preview.length <= ActRuntimeTuning.parentTaskPreviewChars)
+    assert(result.preview.includes('😀'))
+    assert(result.preview.includes('原文未完'))
+    assert.equal(Buffer.from(result.preview).toString('utf8'), result.preview)
+  }
 })
 
 test('cancellation while reading and missing input objects clean up the partial snapshot', async (t) => {
@@ -151,6 +182,7 @@ test('Node child reads original parent inputs and attachments from ordinary file
   const storage = localContextStorage({ path: ':memory:' })
   const manifests = []
   const paths = []
+  const initialRequests = []
   let mainCalls = 0
   let childCalls = 0
   let childSession
@@ -166,6 +198,7 @@ test('Node child reads original parent inputs and attachments from ordinary file
       childSession = manifest.childSessionId
       manifests.push(manifest)
       assert.equal(manifest.goals.length, childCalls === 1 ? 1 : 2)
+      initialRequests.push({ text: modelText(request), instructions: request.instructions })
       assert.equal(await readFile(manifest.goals[0].path, 'utf8'), original)
       assert.equal(await readFile(manifest.goals[0].attachments[0].path, 'utf8'), 'attached-data')
       if (childCalls > 1) assert.equal(await readFile(manifest.goals[1].path, 'utf8'), correction)
@@ -230,9 +263,19 @@ test('Node child reads original parent inputs and attachments from ordinary file
   }))
     assert.notEqual(event.type, 'error')
   assert.equal(childCalls, 2)
+  assert(
+    initialRequests[0].text.includes(original),
+    'the first child request must carry parent requirements'
+  )
+  assert(initialRequests[0].text.includes('Implement only the parser.'))
+  assert(!initialRequests[0].instructions.includes(original), 'parent input remains task data')
   await assert.rejects(readFile(paths[0]), { code: 'ENOENT' })
   for await (const event of parent.submit(correction)) assert.notEqual(event.type, 'error')
   assert.equal(childCalls, 4)
+  assert(initialRequests[1].text.includes(original))
+  assert(initialRequests[1].text.includes(correction))
+  assert(initialRequests[1].text.includes('Update the parser for the new requirements.'))
+  assert(!initialRequests[1].instructions.includes(correction))
   assert.notEqual(paths[0], paths[1])
   assert.equal(manifests[0].parentTaskId, manifests[1].parentTaskId)
   assert.equal(dirname(manifests[0].goals[0].path), dirname(paths[0]))

@@ -514,7 +514,7 @@ class ComposedRuntime implements VelarosRuntime {
         environment: this.options.environment,
         parentTask: parentTask?.path,
         instructions: parentTask
-          ? '你负责本次派发指定的范围。环境中的 parentTask 是派发时父任务原始输入的文件索引；goals 按输入顺序列出原文和附件 path，按需用 Shell 或 node:fs 读取。'
+          ? '你负责本次派发指定的范围，父任务输入用于核对相关要求。环境中的 parentTask 是原始输入的文件索引；goals 按输入顺序列出原文和附件 path，摘录有缺口时用 Shell 或 node:fs 补读。'
           : undefined,
         maintain: this.allows(job.sessionId, MemoryModuleId)
           ? (input, signal) => this.maintenance!.maintain(job.sessionId, input, signal)
@@ -611,11 +611,19 @@ class ComposedRuntime implements VelarosRuntime {
       throw error
     }
     return {
-      submit: (value: Parameters<typeof session.submit>[0], runSignal?: AbortSignal) =>
-        session.submit(
-          !isEmpty(files) ? { ...(isString(value) ? { text: value } : value), files } : value,
+      submit: (value: Parameters<typeof session.submit>[0], runSignal?: AbortSignal) => {
+        const submission = isString(value) ? { text: value } : value
+        return session.submit(
+          {
+            ...submission,
+            text: parentTask?.preview
+              ? `${submission.text}\n\n父任务原始输入（用于核对本次分工的要求）：\n${parentTask.preview}`
+              : submission.text,
+            ...(!isEmpty(files) ? { files } : {}),
+          },
           AbortSignal.any([activity.signal, ...(runSignal ? [runSignal] : [])])
-        ),
+        )
+      },
       answer: (value: Parameters<typeof session.answer>[0]) => session.answer(value),
       steer: (value: Parameters<typeof session.steer>[0]) => session.steer(value),
       cancel: () => session.cancel(),

@@ -30,7 +30,7 @@
 | INV-26 | continue 累计任务身份和配额；new 归档并切换驻留状态，未决效果阻止切换 | 测试 | `test/task-lifecycle.test.mjs`、`test/model-tools.test.mjs` |
 | INV-27 | 观察健康状态持久化，重复失败或未知效果暂停自动重跑；源码修复后才能恢复 | 测试 | `test/task-lifecycle.test.mjs` |
 | INV-28 | 完成拒绝按恢复类别有界推进；效果不明的操作（包括子任务的）不挡写入、完成与任务切换；上次中断的执行在下一轮开始前自动按日志收拾，不重跑脚本 | 测试 | `test/completion-recovery.test.mjs`、`test/act-children.test.mjs`、`test/task-loop.test.mjs` |
-| INV-29 | 搜索、子任务、整理使用统一交付清单；共享材料保留原始指纹，Node 子任务可按普通文件读取当前父任务输入快照，续跑更新且收束清理；源码复用经过调用者自身校验与权限 | 测试 | `test/advanced-search.test.mjs`、`test/model-tools.test.mjs`、`test/context-maintenance.test.mjs`、`test/child-task-materials.test.mjs` |
+| INV-29 | 搜索、子任务、整理使用统一交付清单；共享材料保留原始指纹，Node 子任务派发正文携带共享预算内的父输入原文摘录，按输入顺序保留补充，标明缺口并保持 Unicode 完整，全文与附件按普通文件读取；续跑更新且收束清理；源码复用经过调用者自身校验与权限 | 测试 | `test/advanced-search.test.mjs`、`test/model-tools.test.mjs`、`test/context-maintenance.test.mjs`、`test/child-task-materials.test.mjs` |
 
 | INV-30 | 声明式入口复用唯一主干；路径与重复挂载在执行前校验；关闭重开与初始化重试恢复持久状态 | 测试 | `test/runtime.test.mjs`、`test/task-loop.test.mjs` |
 | INV-31 | 支线关闭后仍可分页读取真实请求及回执；跨根归属拒绝，正文截断明确 | 测试 | `test/act-children.test.mjs` |
