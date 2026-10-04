@@ -1,4 +1,4 @@
-import { isEmpty } from '@velaros-ai/core'
+import { isArray } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelDriver, ModelTurnRequest } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
@@ -47,11 +47,14 @@ class ProviderRequestCompiler implements ProviderRequestCompilerApi {
       messages,
       outputTokens: request.outputTokens,
       responseFormat,
+      tools:
+        request.response.type === 'tools'
+          ? request.response.tools.map((tool) => encodeProviderRequestAuditValue(tool))
+          : [],
     }
     const providerRequest: ProviderRequestSnapshot = {
       schemaVersion: 2,
       ...data,
-      tools: [],
       requestFingerprint: await requestFingerprint(data),
     }
     await this.verify(providerRequest)
@@ -90,7 +93,8 @@ class ProviderRequestCompiler implements ProviderRequestCompilerApi {
   public async verify(snapshot: ProviderRequestSnapshot): Promise<void> {
     if (
       snapshot.schemaVersion !== 2 ||
-      !isEmpty(snapshot.tools) ||
+      !isArray(snapshot.tools) ||
+      snapshot.tools.length > 32 ||
       !Number.isSafeInteger(snapshot.outputTokens) ||
       snapshot.outputTokens < 1 ||
       JSON.stringify(snapshot.requestFingerprint) !==

@@ -28,6 +28,8 @@ export interface ModelToolActivationOptions {
 
 /** 搜索和上下文维护共用的软收尾、硬上限及计费控制。 */
 export interface ModelToolActivationApi extends ModelDriver {
+  /** 继承实际模型的原生工具传输能力。 */
+  readonly nativeTools: boolean
   /** 真实模型身份。 */
   readonly id: string
   /** 当前阶段可用于编译请求的窗口，收尾阶段受已预留额度约束。 */
@@ -70,6 +72,9 @@ export class ModelToolActivation implements ModelToolActivationApi {
       contextTokens: Math.min(limits.contextTokens, available),
       inputTokens: Math.min(limits.inputTokens, available),
     }
+  }
+  public get nativeTools(): boolean {
+    return Boolean(this.options.model.nativeTools)
   }
   private readonly lifetime = new AbortController()
   public readonly signal = this.lifetime.signal

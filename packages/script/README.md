@@ -22,9 +22,9 @@ if (result.checked) console.log(result.result.process)
 
 每个会话执行一次程序。`language: 'shell'` 将正文直接交给 Shell；省略语言时运行 Node.js ESM，支持顶层 await。stdout、stderr、退出状态和有界日志路径随结果返回。跨轮状态与复用脚本使用普通文件。
 
-`VELAROS_HOST_DIR/index.json` 提供当前授权包的名称、用途和 `.d.ts` 路径。模型按需读取正式类型合同，然后使用包名导入，例如 `import {list} from 'velaros:sessions'`。原生 Node 负责标准库、npm、文件导入与模块绑定；能力包由当前授权表生成，每次调用经 Kernel 校验。
+`VELAROS_HOST_DIR/index.json` 提供当前授权包的名称、用途、操作名和合同路径。`operationDirectory` 下每个操作的 `.d.ts` 由正式声明生成，包含用途、签名、依赖类型、共同规则和调用示例；读取所需文件后按包名导入，例如 `import {list} from 'velaros:sessions'`。原生 Node 负责标准库、npm、文件导入与模块绑定；能力包由当前授权表生成，每次调用经 Kernel 校验。
 
-宿主 `execute(request, onOutput, signal)` 在 Node 模式下将 `request.bootstrap ?? request.source` 作为 ESM 标准输入，在 Shell 模式下执行 `request.source`。`source` 始终保留审批原文。`mode: 'observe'` 需要实际只读进程口；不可用时拒绝启动。Platform 的 `createShellNodeEnvironment` 复用 Shell 宿主的跨平台约束、输出与进程树回收，Desktop 提供随产品分发的真实 Node。
+宿主 `execute(request, onOutput, signal)` 在 Node 模式下执行 `request.entrypoint`，在 Shell 模式下执行 `request.source`；未提供入口文件的兼容宿主可将 `request.bootstrap ?? request.source` 作为 ESM 标准输入。`source` 始终保留审批原文。进程环境将所选 Node 的目录置于 PATH 首位，并在保留原 NODE_OPTIONS 的基础上追加 `--import request.preload`；Shell 中的 `node file.mjs`、`execFile` 与 `fork` 因而继承本次能力包解析。入口与预加载只写入子进程环境，能力凭据的作用域和取消边界仍是本次执行。`mode: 'observe'` 需要实际只读进程口；不可用时拒绝启动。Platform 的 `createShellNodeEnvironment` 复用 Shell 宿主的跨平台约束、输出与进程树回收，Desktop 提供随产品分发的真实 Node。
 
 需要结构化归档时，按需导入 `velaros` 的 `output`；内部参数可从 `velaros:program` 的 `input`、`blobs` 读取。`output` 同步保存有界 JSON 快照，在异常、取消和超时后保留已经完成的输出。宿主观察进程只额外获得本次输出文件和本机会话桥的访问权限。每次执行使用独立目录与凭据。
 

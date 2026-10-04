@@ -9,6 +9,7 @@ import type { AiSdkDriverOptions, ModelDriver } from '../../contract/requires.js
 import type {
   ModelDriverLimits,
   ModelInputEstimate,
+  ModelToolCall,
   ModelTurnDelta,
   ModelTurnRequest,
 } from '../../types/driver.js'
@@ -26,6 +27,7 @@ import { awaitModelStreamValue } from '../../utils/wire/stream-cancel.js'
 import { responseTerminalKind, responseTerminalUsage } from '../../utils/wire/stream-terminal.js'
 
 class AiSdkModelDriver implements ModelDriver {
+  public readonly nativeTools = true
   public readonly id: string
   public readonly limits: ModelDriverLimits
 
@@ -68,6 +70,15 @@ class AiSdkModelDriver implements ModelDriver {
         ).messages,
         maxOutputTokens: request.outputTokens,
         maxRetries: 0,
+        tools:
+          format.type === 'tools'
+            ? Object.fromEntries(
+                format.tools.map((tool) => [
+                  tool.name,
+                  { description: tool.description, inputSchema: jsonSchema(tool.schema) },
+                ])
+              )
+            : undefined,
         // fullStream 负责交付失败；替换 SDK 默认的原始对象打印，避免把请求数据写进 stderr。
         onError: ({ error }) => {
           Log.tag('AiSdkModelDriver').debug('供应商响应流失败', {
@@ -111,6 +122,7 @@ class AiSdkModelDriver implements ModelDriver {
       })
       let finish: Optional<Extract<ModelTurnDelta, { type: 'finish' }>>
       let received = ''
+      const calls: ModelToolCall[] = []
       let continuationTokens = request.outputTokens
       let chars = 0
       let textSegments = 0
@@ -166,7 +178,7 @@ class AiSdkModelDriver implements ModelDriver {
           reasoningChars += text.length
           yield { type: 'reasoning', text }
         }
-        if (part.type === 'text-start' && format.type === 'text') {
+        if (part.type === 'text-start' && format.type !== 'json') {
           // Responses 可把说明和正式答复放在不同消息里；消息边界不能把两行粘成一行。
           separator = chars > 0 && !endedWithNewline
           Log.tag('AiSdkModelDriver').debug('接收模型文本分段', {
@@ -176,21 +188,38 @@ class AiSdkModelDriver implements ModelDriver {
         }
         if (part.type === 'text-delta') {
           const text =
-            (format.type === 'text' && separator && !isEmpty(part.text) ? '\n' : '') + part.text
+            (format.type !== 'json' && separator && !isEmpty(part.text) ? '\n' : '') + part.text
           chars += text.length
-          if (chars > (format.type === 'text' ? 2_000_000 : 512_000))
+          if (chars > (format.type !== 'json' ? 2_000_000 : 512_000))
             throw new AppError('LIMIT', '模型响应超过协议上限')
           if (!isEmpty(part.text)) {
             separator = false
             endedWithNewline = part.text.endsWith('\n')
           }
-          if (format.type === 'text') {
+          if (format.type !== 'json') {
             received += text
             yield { type: 'text', text }
           }
         }
-        if (part.type === 'tool-call' || part.type === 'tool-input-start')
+        if (
+          (part.type === 'tool-call' || part.type === 'tool-input-start') &&
+          format.type !== 'tools'
+        )
           throw new AppError('PROTOCOL', '供应商返回了本请求未声明的工具调用')
+        if (part.type === 'tool-call') {
+          if (
+            format.type !== 'tools' ||
+            !format.tools.some((tool) => tool.name === part.toolName) ||
+            part.providerExecuted
+          )
+            throw new AppError('PROTOCOL', '供应商返回了本请求未声明的工具调用')
+          const call = { id: part.toolCallId, name: part.toolName, input: part.input }
+          chars += JSON.stringify(call).length
+          if (chars > 2_000_000 || calls.length >= 32)
+            throw new AppError('LIMIT', '模型工具调用超过协议上限')
+          calls.push(call)
+          yield { type: 'tool-call', value: call }
+        }
         if (part.type === 'error') throw part.error
         if (part.type === 'abort') throw new AppError('CANCELLED', '供应商响应已中止')
         if (part.type === 'finish') {
@@ -212,7 +241,11 @@ class AiSdkModelDriver implements ModelDriver {
                 retryable: true,
               }
             )
-          if (!['stop', 'length'].includes(part.finishReason))
+          if (
+            !['stop', 'length', ...(format.type === 'tools' ? ['tool-calls'] : [])].includes(
+              part.finishReason
+            )
+          )
             throw new AppError('PROTOCOL', `供应商响应未成功结束：${part.finishReason}`)
           finish = { type: 'finish', reason: part.finishReason === 'length' ? 'length' : 'stop' }
         }
@@ -226,7 +259,7 @@ class AiSdkModelDriver implements ModelDriver {
       }
       if (
         finish.reason === 'stop' &&
-        format.type === 'text' &&
+        format.type !== 'json' &&
         usesResponseContinuation(this.options.model)
       ) {
         const response = await awaitModelStreamValue(result.response, signal)
@@ -237,7 +270,8 @@ class AiSdkModelDriver implements ModelDriver {
           response.messages,
           received,
           continuationTokens,
-          (await awaitModelStreamValue(result.providerMetadata, signal))?.openai?.reasoningContext
+          (await awaitModelStreamValue(result.providerMetadata, signal))?.openai?.reasoningContext,
+          calls
         )
         if (value) yield { type: 'continuation', value }
       }

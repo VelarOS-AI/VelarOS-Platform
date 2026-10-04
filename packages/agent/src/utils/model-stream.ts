@@ -1,5 +1,5 @@
 import { Log } from '@velaros-ai/core'
-import { isString, isUndefined } from '@velaros-ai/core'
+import { isPlainObject, isString, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelDriver, ModelTurnDelta, ModelTurnRequest } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
@@ -52,9 +52,16 @@ export async function* boundedModelStream(
       if (delta?.type !== 'usage') signal.throwIfAborted()
       if (
         !delta ||
-        !['output', 'text', 'reasoning', 'continuation', 'usage', 'error', 'finish'].includes(
-          delta.type
-        )
+        ![
+          'output',
+          'text',
+          'tool-call',
+          'reasoning',
+          'continuation',
+          'usage',
+          'error',
+          'finish',
+        ].includes(delta.type)
       )
         throw new AppError('PROTOCOL', '模型响应包含契约之外的事件')
       if (
@@ -68,15 +75,23 @@ export async function* boundedModelStream(
           (delta.cacheReadTokens ?? 0) + (delta.cacheWriteTokens ?? 0) > delta.inputTokens)
       )
         throw new AppError('PROTOCOL', '模型用量不符合实际计数契约')
-      if (delta.type === 'text' && (request.response.type !== 'text' || !isString(delta.text)))
+      if (delta.type === 'text' && (request.response.type === 'json' || !isString(delta.text)))
         throw new AppError('PROTOCOL', '模型文本增量不符合响应模式')
       if (delta.type === 'reasoning' && !isString(delta.text))
         throw new AppError('PROTOCOL', '模型思考增量不是文本')
       if (delta.type === 'continuation') {
         modelRequestEncoder.continuation(delta.value)
-        if (request.response.type !== 'text' || delta.value.model !== driver.id)
+        if (request.response.type === 'json' || delta.value.model !== driver.id)
           throw new AppError('PROTOCOL', '模型延续状态与当前请求不匹配')
       }
+      if (
+        delta.type === 'tool-call' &&
+        (request.response.type !== 'tools' ||
+          !isPlainObject(delta.value) ||
+          !isString(delta.value.id) ||
+          !isString(delta.value.name))
+      )
+        throw new AppError('PROTOCOL', '模型工具调用与当前请求不匹配')
       if (delta.type === 'output' && request.response.type !== 'json')
         throw new AppError('PROTOCOL', '文本模式不能返回结构化响应事件')
       if (delta.type === 'finish' && !['stop', 'length'].includes(delta.reason))

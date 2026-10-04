@@ -1,3 +1,5 @@
+import { delimiter, dirname } from 'node:path'
+
 import { AppError } from '@velaros-ai/core/error'
 import type {
   NodeCodeRunnerOptions,
@@ -45,16 +47,23 @@ class ShellNodeEnvironment implements ShellNodeEnvironmentApi {
   ): Promise<NodeProcessResult> {
     signal.throwIfAborted()
     const shell = request.language === 'shell'
-    const executable = shell ? undefined : (this.options.executable ?? nodeExecutable.resolve())
-    if (!shell && !executable) throw new AppError('UNAVAILABLE', '宿主需要提供 Node.js 执行文件')
+    const executable = this.options.executable ?? nodeExecutable.resolve()
+    if (!executable) throw new AppError('UNAVAILABLE', '宿主需要提供 Node.js 执行文件')
+    const environment = { ...this.options.environment, ...request.environment }
+    environment.PATH = [dirname(executable), environment.PATH ?? process.env.PATH]
+      .filter(Boolean)
+      .join(delimiter)
+    if (request.preload)
+      environment.NODE_OPTIONS =
+        `${environment.NODE_OPTIONS ?? process.env.NODE_OPTIONS ?? ''} --import ${JSON.stringify(request.preload)}`.trim()
     const command = shell ? request.source : 'Node.js'
     const options: ShellRunCommandOptions & ShellRunCommandHooks = {
       cwd: request.cwd,
       sessionId: request.sessionId,
-      stdin: shell ? undefined : (request.bootstrap ?? request.source),
+      stdin: shell || request.entrypoint ? undefined : (request.bootstrap ?? request.source),
       timeoutMs: null,
       maxOutputChars: NodeExecutionLimits.previewChars,
-      environment: { ...this.options.environment, ...request.environment },
+      environment,
       ipcSocket: request.environment[NodeEnvironmentVariables.socket.name],
       outputFile: request.environment[NodeEnvironmentVariables.output.name],
       onOutput: (text) => {
@@ -71,7 +80,10 @@ class ShellNodeEnvironment implements ShellNodeEnvironmentApi {
         ? undefined
         : {
             file: executable!,
-            args: ['--input-type=module', '--max-old-space-size=512'],
+            args: [
+              '--max-old-space-size=512',
+              ...(request.entrypoint ? [request.entrypoint] : ['--input-type=module']),
+            ],
           },
     }
     if (request.mode === 'observe' && !this.options.shell.runObservationCommand)

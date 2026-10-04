@@ -156,6 +156,7 @@ import type {
   ModelContinuation,
   ModelHistoryMessage,
   ModelResponseFormat,
+  ModelToolExchange,
   ModelTurnRequest,
 } from '../types/model.js'
 
@@ -167,6 +168,8 @@ export interface ModelRequestEncoderApi {
   output(format: ModelResponseFormat, value: unknown): unknown
   /** 验证供应商延续状态的中立封套，不解释其中的供应商数据。 */
   continuation(value: unknown): ModelContinuation
+  /** 校验完整且有界的调用往返，禁止缺失或重复的工具结果。 */
+  toolExchange(value: unknown): ModelToolExchange
   /** 编码来源标签与材料；已封存 prompt 保持逐字节一致。 */
   encode(request: ModelTurnRequest): string
   /** 生成编译审计与供应商实际发送共用的多模态消息。 */

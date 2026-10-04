@@ -1,14 +1,59 @@
 import { isUndefined } from '@velaros-ai/core'
-import { isEmpty, isPlainObject, isString } from '@velaros-ai/core'
+import { isArray, isEmpty, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
   ModelContinuation,
   ModelHistoryMessage,
   ModelImage,
+  ModelToolCall,
+  ModelToolExchange,
+  ModelToolResult,
   ModelTurnRequest,
   ModelUserMessage,
 } from '../../types/model.js'
+
+import { immutableOperationJson } from './operation-schema.js'
+
+/** 调用和回执作为一组保存，不能在截断或恢复时变成孤立工具消息。 */
+export function driverModelToolExchange(value: unknown): ModelToolExchange {
+  if (
+    !isPlainObject(value) ||
+    !isString(value.text) ||
+    !isArray(value.calls) ||
+    !isArray(value.results) ||
+    isEmpty(value.calls) ||
+    value.calls.length > 32 ||
+    value.calls.length !== value.results.length ||
+    JSON.stringify(value).length > 2_000_000
+  )
+    throw new AppError('VALIDATION', '模型工具往返无效或超出容量')
+  const ids = new Set<string>()
+  const calls: ModelToolCall[] = []
+  const results: ModelToolResult[] = []
+  for (const [index, call] of value.calls.entries()) {
+    const result = value.results[index]
+    if (
+      !isPlainObject(call) ||
+      !isString(call.id) ||
+      !call.id ||
+      call.id.length > 256 ||
+      ids.has(call.id) ||
+      !isString(call.name) ||
+      !/^[a-zA-Z0-9_-]{1,64}$/u.test(call.name) ||
+      !Object.hasOwn(call, 'input') ||
+      !isPlainObject(result) ||
+      result.id !== call.id ||
+      result.name !== call.name ||
+      !Object.hasOwn(result, 'output')
+    )
+      throw new AppError('VALIDATION', '模型工具调用与结果未逐一配对')
+    ids.add(call.id)
+    calls.push({ id: call.id, name: call.name, input: call.input })
+    results.push({ id: call.id, name: call.name, output: result.output })
+  }
+  return immutableOperationJson({ text: value.text, calls, results })
+}
 
 /** 封套有界且可持久化；供应商数据仅由对应驱动解释。 */
 export function driverModelContinuation(value: unknown): ModelContinuation {
@@ -73,6 +118,7 @@ export function driverModelMessages(request: ModelTurnRequest): ModelHistoryMess
     if (message.role === 'assistant') {
       if (!isString(message.content)) throw new AppError('VALIDATION', 'assistant 历史只能包含文本')
       if (!isUndefined(message.continuation)) driverModelContinuation(message.continuation)
+      if (!isUndefined(message.toolExchange)) driverModelToolExchange(message.toolExchange)
       continue
     }
     if (message.role !== 'user')

@@ -8,9 +8,9 @@ import type {
 import { createContextReference } from '@velaros-ai/context'
 import { Log, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 import { isNull, isUndefined } from '@velaros-ai/core'
-import { isArray, isEmpty, isString } from '@velaros-ai/core'
+import { isArray, isEmpty, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { ModelContinuation, ModelHistoryMessage } from '@velaros-ai/kernel'
+import type { ModelContinuation, ModelHistoryMessage, ModelToolExchange } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 import { scriptOutputs } from '@velaros-ai/script'
 
@@ -335,6 +335,7 @@ export class RecentContext implements RecentContextApi {
       { titlePrefix: 'script:', titleSuffix: ':result', after: segment.from },
       ...segment.carried.map((refId) => ({ refId })),
       { kind: 'audit', title: 'model-continuation', after: segment.from },
+      { kind: 'audit', title: 'model-tool-exchange', after: segment.from },
       ...segment.entries.flatMap((entry) =>
         entry.continuation ? [{ refId: entry.continuation.id }] : []
       ),
@@ -377,6 +378,42 @@ export class RecentContext implements RecentContextApi {
         .map((record) => [record.ref.id, record])
     )
     let response = ''
+    let responsePrograms: readonly string[] = []
+    const nativeResponses = new Map<string, { exchange: ModelToolExchange; body: string }>()
+    for (const record of state?.records ?? []) {
+      if (
+        record.kind !== 'audit' ||
+        record.title !== 'model-tool-exchange' ||
+        record.sequence <= reset
+      )
+        continue
+      const source = record.sources.find((ref) => ref.sessionId === this.id)
+      if (
+        !source ||
+        !candidates.some(
+          (item) =>
+            item.ref.id === source.id &&
+            item.kind === 'assistant' &&
+            item.sequence < record.sequence
+        )
+      )
+        continue
+      const raw = await this.storage.get(this.id, record.objectId)
+      if (isNull(raw)) throw new AppError('NOT_FOUND', '原生工具往返记录缺失')
+      const exchange = modelRequestEncoder.toolExchange(JSON.parse(raw))
+      nativeResponses.set(source.id, {
+        exchange,
+        body: JSON.stringify({ text: exchange.text, calls: exchange.calls }),
+      })
+    }
+    const programs = (ref: string, content: string): readonly string[] => {
+      const native = nativeResponses.get(ref)
+      return native?.body === content
+        ? native.exchange.calls.flatMap((call) =>
+            isPlainObject(call.input) && isString(call.input.code) ? [call.input.code] : []
+          )
+        : []
+    }
     for (const record of candidates) {
       signal.throwIfAborted()
       if (record.kind !== 'assistant' && (await this.observation(record.objectId))) continue
@@ -413,7 +450,10 @@ export class RecentContext implements RecentContextApi {
         const frozenItem: SegmentHistory['items'][number] = {
           ...item,
           bodyIncluded: true,
-          representation: entry.continuation ? 'full' : frozenRepresentation(content),
+          representation:
+            entry.continuation || nativeResponses.get(record.ref.id)?.body === content
+              ? 'full'
+              : frozenRepresentation(content),
         }
         if (entry.feedback) Object.assign(frozenItem, { feedback: entry.feedback })
         if (entry.outputProofs) Object.assign(frozenItem, { outputProofs: entry.outputProofs })
@@ -422,7 +462,10 @@ export class RecentContext implements RecentContextApi {
         if (entry.outputViews) Object.assign(frozenItem, { outputViews: entry.outputViews })
         if (entry.fullMaterial) Object.assign(frozenItem, { fullMaterial: entry.fullMaterial })
         items.push(frozenItem)
-        if (role === 'assistant') response = content
+        if (role === 'assistant') {
+          response = content
+          responsePrograms = programs(record.ref.id, content)
+        }
         continue
       }
       // 当次源码只在模型看不到它时附上：延续结果的那条响应已封进卷，edits/sourceRef 产生的源码不在响应里
@@ -431,8 +474,10 @@ export class RecentContext implements RecentContextApi {
         role,
         current,
         cap,
-        carried.has(record.ref.id) || !response.includes(current?.source ?? ''),
-        Boolean(continuation)
+        carried.has(record.ref.id) ||
+          (!response.includes(current?.source ?? '') &&
+            !responsePrograms.includes(current?.source ?? '')),
+        Boolean(continuation) || nativeResponses.has(record.ref.id)
       )
       if (!rendered) {
         messages.push({ role, content: historyReference(record) })
@@ -493,7 +538,18 @@ export class RecentContext implements RecentContextApi {
         representation: rendered.representation,
         ...delivered,
       })
-      if (role === 'assistant') response = content
+      if (role === 'assistant') {
+        response = content
+        responsePrograms = programs(record.ref.id, content)
+      }
+    }
+    // 只有完整原文仍在本段中才恢复原生往返；压缩后的历史按普通资料发送。
+    for (const [ref, native] of nativeResponses) {
+      const index = items.findIndex((item) => item.ref === ref)
+      const message = messages[index]
+      if (message?.role !== 'assistant' || items[index]?.representation !== 'full') continue
+      if (message.content !== native.body) continue
+      messages[index] = { ...message, toolExchange: native.exchange }
     }
     // 需要显式断点的供应商：在第一个仍有租约的结果之前的 user 结果结尾另留一处断点，
     // 后续帧仍能通过隐式的早期消息边界查到旧缓存点。

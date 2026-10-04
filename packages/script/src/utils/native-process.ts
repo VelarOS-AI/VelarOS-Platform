@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { delimiter, dirname } from 'node:path'
 
 import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -22,13 +23,23 @@ export function executeNativeNode(
       '此执行需要宿主提供支持当前平台和权限范围的 Shell / Node 进程端口'
     )
   const shell = request.language === 'shell'
+  const environment = { ...process.env, ...request.environment }
+  environment.PATH = [dirname(node), environment.PATH].filter(Boolean).join(delimiter)
+  if (request.preload)
+    environment.NODE_OPTIONS =
+      `${environment.NODE_OPTIONS ?? ''} --import ${JSON.stringify(request.preload)}`.trim()
   return new Promise((resolve, reject) => {
     const child = spawn(
       shell ? (process.env.SHELL ?? '/bin/sh') : node,
-      shell ? ['-c', request.source] : ['--input-type=module', '--max-old-space-size=512'],
+      shell
+        ? ['-c', request.source]
+        : [
+            '--max-old-space-size=512',
+            ...(request.entrypoint ? [request.entrypoint] : ['--input-type=module']),
+          ],
       {
         cwd: request.cwd,
-        env: { ...process.env, ...request.environment },
+        env: environment,
         detached: true,
         stdio: ['pipe', 'pipe', 'pipe'],
       }
@@ -92,6 +103,6 @@ export function executeNativeNode(
           aborted: signal.aborted,
         })
     })
-    child.stdin.end(shell ? undefined : (request.bootstrap ?? request.source))
+    child.stdin.end(shell || request.entrypoint ? undefined : (request.bootstrap ?? request.source))
   })
 }

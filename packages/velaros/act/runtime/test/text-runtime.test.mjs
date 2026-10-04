@@ -926,11 +926,20 @@ test('an explicit eight-exposure result retires without replaying its producer',
   )
 })
 
-test('default results keep an append-only history prefix for a segment beyond eight exposures', async (t) => {
+test('default results preserve the durable history while cumulative runtime frames stay bounded', async (t) => {
   let prior = []
   let firstRef
+  let discardedFrames = false
+  let previousFrames = 0
   const f = await fixture(t, async function* (request, f) {
-    const history = request.history.map(({ role, content }) => ({ role, content }))
+    const stateFrames = request.history.filter((message) =>
+      /^(?:Runtime 本帧工作内存|当前运行状态)/u.test(message.content)
+    )
+    if (stateFrames.length < previousFrames) discardedFrames = true
+    previousFrames = stateFrames.length
+    const history = request.history
+      .filter((message) => !/^(?:Runtime 本帧工作内存|当前运行状态)/u.test(message.content))
+      .map(({ role, content }) => ({ role, content }))
     assert.deepEqual(history.slice(0, prior.length), prior)
     prior = history
     if (f.calls === 2)
@@ -957,6 +966,7 @@ test('default results keep an append-only history prefix for a segment beyond ei
   })
   assertDone(await collect(f))
   assert.equal(f.calls, 72)
+  assert(discardedFrames, 'accumulated transient frames must periodically yield to durable history')
   assert.equal((await f.programs.state()).leases.length, 0)
   assert.match((await f.programs.read(firstRef)).text, /"step":1/)
 })

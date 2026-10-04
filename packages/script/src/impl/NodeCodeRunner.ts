@@ -25,6 +25,7 @@ import {
   nodeCapabilityBridge,
   nodeCapabilityClient,
   nodeCapabilityDeclarations,
+  nodeOperationDeclarations,
 } from '../utils/node-client.js'
 import { nodeProgramSource } from '../utils/node-program.js'
 import { createOutputCollector, validateOutputOptions } from '../utils/output-capture.js'
@@ -240,12 +241,28 @@ class NodeCodeRunner implements CodeRunnerApi {
         client: string
         documentation: string
         operations: readonly string[]
+        operationDirectory?: string
       }> = []
       const clients: Record<string, string> = Object.create(null)
       for (const [namespace, operations] of Object.entries(request.operations)) {
         const name = `host-${encodeURIComponent(namespace)}`
         const client = `${name}.mjs`
         const documentation = `${name}.d.ts`
+        const operationDirectory = `${name}-operations`
+        const operationDocs = nodeOperationDeclarations(
+          request.host?.modules[namespace]?.declarations ?? '',
+          namespace,
+          operations
+        )
+        if (!isEmpty(Object.keys(operationDocs))) {
+          await mkdir(join(catalog, operationDirectory), { mode: 0o700 })
+          for (const [operation, text] of Object.entries(operationDocs))
+            await writeFile(
+              join(catalog, operationDirectory, `${encodeURIComponent(operation)}.d.ts`),
+              text,
+              { mode: 0o600 }
+            )
+        }
         clients[namespace] = client
         await writeFile(join(catalog, client), nodeCapabilityClient(namespace, operations), {
           mode: 0o600,
@@ -264,6 +281,10 @@ class NodeCodeRunner implements CodeRunnerApi {
           client,
           documentation,
           operations,
+          operationDirectory: optionalWhen(
+            !isEmpty(Object.keys(operationDocs)),
+            operationDirectory
+          ),
         })
       }
       await writeFile(join(catalog, 'index.json'), stringifyPretty(index), { mode: 0o600 })
@@ -287,14 +308,14 @@ class NodeCodeRunner implements CodeRunnerApi {
       controller.signal.throwIfAborted()
       outputFile = join(directory, 'output.ndjson')
       await writeFile(outputFile, '', { mode: 0o600 })
+      const program = await nodeProgramSource(request, catalog, this.options.cwd, clients)
       const processRequest = {
         source: request.source,
         language: request.language,
         mode: request.mode,
-        bootstrap:
-          request.language === 'shell'
-            ? undefined
-            : await nodeProgramSource(request, catalog, this.options.cwd, clients),
+        bootstrap: request.language === 'shell' ? undefined : program.bootstrap,
+        preload: program.preload,
+        entrypoint: request.language === 'shell' ? undefined : program.entrypoint,
         cwd: this.options.cwd,
         sessionId: request.host?.sessionId,
         executionId: request.host?.executionId,

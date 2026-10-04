@@ -8,15 +8,17 @@ export async function requestFingerprint(
   input: Pick<
     ProviderRequestSnapshot,
     'model' | 'system' | 'messages' | 'responseFormat' | 'outputTokens'
-  >
+  > &
+    Partial<Pick<ProviderRequestSnapshot, 'tools'>>
 ): Promise<ProviderRequestFingerprint> {
   const systemHash = await shortHash(input.system)
   const messageHash = await shortHash(JSON.stringify(input.messages))
   const responseFormatHash = isUndefined(input.responseFormat)
     ? undefined
     : await shortHash(JSON.stringify(input.responseFormat))
+  const toolsHash = input.tools?.length ? await shortHash(JSON.stringify(input.tools)) : undefined
   const prefixHash = await shortHash(
-    JSON.stringify({ model: input.model, systemHash, responseFormatHash })
+    JSON.stringify({ model: input.model, systemHash, responseFormatHash, toolsHash })
   )
   return {
     id: await shortHash(
@@ -26,5 +28,6 @@ export async function requestFingerprint(
     messageHash,
     prefixHash,
     responseFormatHash,
+    toolsHash,
   }
 }

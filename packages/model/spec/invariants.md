@@ -40,3 +40,5 @@
 | INV-19 | Responses 缺少终端的 EOF 保留部分正文、用量未知并标为可恢复中断；终端已报告用量在后续失败时仍保留，真实失败文案和拒绝原因不被笼统 other 覆盖 | 测试 | `test/stream-interruption.test.ts` |
 
 | INV-20 | 内置 OpenAI Responses 收到完整 completed/incomplete/failed SSE 终端后向 SDK 正常 EOF，usage、continuation 和错误仍由 SDK 校验；只将终端尾 CR 补 LF 为等价分隔符，不等待无关传输尾流；单事件原始字节上限 16 MiB，超限失败，半帧不算成功，取消清理不阻塞终端 | 测试 | `test/responses-terminal.test.ts` |
+
+| INV-21 | 原生工具定义参与请求快照与指纹，驱动只交付完整且已声明的调用；Responses 与 Chat 的调用/回执逐一匹配，延续状态不能隐藏额外动作；请求估算文本的 UTF-8 字节分项可加总，真实用量独立记录 | 测试 | `test/native-tools.test.ts` |

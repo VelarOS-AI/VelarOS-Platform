@@ -1,6 +1,10 @@
 import ts from 'typescript'
 
+import { isEmpty } from '@velaros-ai/core'
+
 import { NodeEnvironmentVariables, NodeExecutionLimits } from '../contract/constants.js'
+
+import { sliceModuleExports } from './compiler.js'
 
 /** 每次执行共享一个标准 ESM 传输模块，短期凭据只从当前子进程环境读取。 */
 export function nodeCapabilityBridge(): string {
@@ -66,4 +70,38 @@ export function nodeCapabilityDeclarations(declarations: string, namespace: stri
       return statement.getFullText(file)
     })
     .join('\n')
+}
+
+/** 从同一声明切出操作及传递类型闭包；注释和签名逐字保留，不另写能力文档。 */
+export function nodeOperationDeclarations(
+  declarations: string,
+  namespace: string,
+  operations: readonly string[]
+): Readonly<Record<string, string>> {
+  const flattened = nodeCapabilityDeclarations(declarations, namespace)
+  const file = ts.createSourceFile(
+    'operations.d.ts',
+    flattened,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS
+  )
+  const docs: Record<string, string> = Object.create(null)
+  for (const name of operations) {
+    const methods = file.statements.filter(
+      (statement): statement is ts.FunctionDeclaration =>
+        ts.isFunctionDeclaration(statement) && statement.name?.text === name
+    )
+    if (isEmpty(methods)) continue
+    const selected = sliceModuleExports(declarations, namespace, [name]).declarations
+    if (!selected) continue
+    const method = methods[0]!
+    const required = method.parameters.filter(
+      (parameter) => !parameter.questionToken && !parameter.initializer
+    )
+    const args = required.map((parameter) => parameter.name.getText(file)).join(', ')
+    const example = `/** 调用示例${!isEmpty(required) ? '（参数按上述声明填写）' : ''}：\n * import * as capability from ${JSON.stringify(namespace)};\n * console.log(await capability[${JSON.stringify(name)}](${args}));\n */`
+    docs[name] = `${nodeCapabilityDeclarations(selected, namespace)}\n\n${example}\n`
+  }
+  return docs
 }

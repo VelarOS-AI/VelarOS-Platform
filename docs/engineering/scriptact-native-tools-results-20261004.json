@@ -1,0 +1,3842 @@
+{
+  "model": "gpt-5.6-sol",
+  "reasoning": "high",
+  "maxOutputTokens": 12000,
+  "pricing": "reference only; input $4/M, output $20/M; cache discounts excluded",
+  "freeze": {
+    "createdAt": "2026-10-04T12:52:17.179411+00:00",
+    "purpose": "Independent validation of native Shell/Node tools, inherited imports, operation docs and bounded context",
+    "suiteSha256": "9ee06050a0ab95b9056b9819666528e9de1c9b4f70f0ee3fd73b226d79d28f84",
+    "evaluatorSha256": "f33a360d13636077cd922c9fc1cb48f4ea4838f1bcab8522a6d7b8527a541551",
+    "footprintSha256": "643b903b7d4d8d8c6ae375f03eeaf1d20db4ecb8a975fcb4fca569367412cc0d",
+    "repetitions": 2,
+    "variants": [
+      {
+        "id": "previous",
+        "node": true,
+        "manifestSha256": "460336564f8f09ffe7d5042d11e99c51f994862f3e606c3ba71cba1b091ecd7b"
+      },
+      {
+        "id": "standard",
+        "node": true,
+        "manifestSha256": "5a99169986163ffa47b08a3268ed2298c305f0509ee2814555fdf7e0bab05d98"
+      }
+    ]
+  },
+  "totals": {
+    "previous": {
+      "attempts": 12,
+      "passedAndCompleted": 12,
+      "artifactPassed": 12,
+      "completed": 12,
+      "firstTurnExecuted": 0,
+      "requests": 71,
+      "elapsedMs": 1029350,
+      "medianElapsedMs": 74454.5,
+      "completeUsageAttempts": 8,
+      "pairedUsageCases": 8,
+      "pairedInputTokens": 469303,
+      "pairedOutputTokens": 18187,
+      "pairedReferenceCostUncachedUSD": 2.240952,
+      "systemCharsRange": [
+        707,
+        717
+      ]
+    },
+    "standard": {
+      "attempts": 12,
+      "passedAndCompleted": 12,
+      "artifactPassed": 12,
+      "completed": 12,
+      "firstTurnExecuted": 12,
+      "requests": 59,
+      "elapsedMs": 628656,
+      "medianElapsedMs": 55613.0,
+      "completeUsageAttempts": 12,
+      "pairedUsageCases": 8,
+      "pairedInputTokens": 392526,
+      "pairedOutputTokens": 14947,
+      "pairedReferenceCostUncachedUSD": 1.8690440000000001,
+      "systemCharsRange": [
+        578,
+        588
+      ]
+    }
+  },
+  "attempts": [
+    {
+      "variant": "previous",
+      "case": "quoted-stock",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "firstTurnExecuted": false,
+      "elapsedMs": 67098,
+      "inputTokens": 41185,
+      "outputTokens": 2451,
+      "referenceCostUncachedUSD": 0.21376,
+      "systemChars": 710,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "quoted-stock",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "firstTurnExecuted": true,
+      "elapsedMs": 58855,
+      "inputTokens": 34034,
+      "outputTokens": 2442,
+      "referenceCostUncachedUSD": 0.184976,
+      "systemChars": 581,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "url-index",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "firstTurnExecuted": true,
+      "elapsedMs": 39136,
+      "inputTokens": 41858,
+      "outputTokens": 1201,
+      "referenceCostUncachedUSD": 0.191452,
+      "systemChars": 578,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "url-index",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "firstTurnExecuted": false,
+      "elapsedMs": 42654,
+      "inputTokens": 28784,
+      "outputTokens": 1379,
+      "referenceCostUncachedUSD": 0.142716,
+      "systemChars": 707,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "stable-queue-repair",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 6,
+      "firstTurnExecuted": false,
+      "elapsedMs": 129789,
+      "inputTokens": null,
+      "outputTokens": null,
+      "referenceCostUncachedUSD": null,
+      "systemChars": 717,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "stable-queue-repair",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "firstTurnExecuted": true,
+      "elapsedMs": 56602,
+      "inputTokens": 53344,
+      "outputTokens": 2179,
+      "referenceCostUncachedUSD": 0.256956,
+      "systemChars": 588,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "installed-transform",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "firstTurnExecuted": true,
+      "elapsedMs": 35607,
+      "inputTokens": 46229,
+      "outputTokens": 1237,
+      "referenceCostUncachedUSD": 0.209656,
+      "systemChars": 588,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "installed-transform",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "firstTurnExecuted": false,
+      "elapsedMs": 38365,
+      "inputTokens": 39220,
+      "outputTokens": 1341,
+      "referenceCostUncachedUSD": 0.1837,
+      "systemChars": 717,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "host-saved-and-fork",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 7,
+      "firstTurnExecuted": false,
+      "elapsedMs": 91363,
+      "inputTokens": 84605,
+      "outputTokens": 2959,
+      "referenceCostUncachedUSD": 0.3976,
+      "systemChars": 717,
+      "hostCalls": 2
+    },
+    {
+      "variant": "standard",
+      "case": "host-saved-and-fork",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "firstTurnExecuted": true,
+      "elapsedMs": 43313,
+      "inputTokens": 54986,
+      "outputTokens": 1690,
+      "referenceCostUncachedUSD": 0.253744,
+      "systemChars": 588,
+      "hostCalls": 2
+    },
+    {
+      "variant": "standard",
+      "case": "long-log-audit",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "firstTurnExecuted": true,
+      "elapsedMs": 56531,
+      "inputTokens": 55630,
+      "outputTokens": 2170,
+      "referenceCostUncachedUSD": 0.26592,
+      "systemChars": 583,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "long-log-audit",
+      "split": "validation",
+      "repetition": 0,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 6,
+      "firstTurnExecuted": false,
+      "elapsedMs": 61859,
+      "inputTokens": 65163,
+      "outputTokens": 2273,
+      "referenceCostUncachedUSD": 0.306112,
+      "systemChars": 712,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "quoted-stock",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 4,
+      "firstTurnExecuted": true,
+      "elapsedMs": 64423,
+      "inputTokens": 33593,
+      "outputTokens": 2209,
+      "referenceCostUncachedUSD": 0.178552,
+      "systemChars": 581,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "quoted-stock",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "firstTurnExecuted": false,
+      "elapsedMs": 65679,
+      "inputTokens": 41257,
+      "outputTokens": 2401,
+      "referenceCostUncachedUSD": 0.213048,
+      "systemChars": 710,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "url-index",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "firstTurnExecuted": false,
+      "elapsedMs": 116745,
+      "inputTokens": null,
+      "outputTokens": null,
+      "referenceCostUncachedUSD": null,
+      "systemChars": 707,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "url-index",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "firstTurnExecuted": true,
+      "elapsedMs": 45528,
+      "inputTokens": 44383,
+      "outputTokens": 1477,
+      "referenceCostUncachedUSD": 0.207072,
+      "systemChars": 578,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "stable-queue-repair",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 6,
+      "firstTurnExecuted": true,
+      "elapsedMs": 66479,
+      "inputTokens": 63572,
+      "outputTokens": 2251,
+      "referenceCostUncachedUSD": 0.299308,
+      "systemChars": 588,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "stable-queue-repair",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 6,
+      "firstTurnExecuted": false,
+      "elapsedMs": 65857,
+      "inputTokens": 55492,
+      "outputTokens": 2466,
+      "referenceCostUncachedUSD": 0.271288,
+      "systemChars": 717,
+      "hostCalls": 0
+    },
+    {
+      "variant": "previous",
+      "case": "installed-transform",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 7,
+      "firstTurnExecuted": false,
+      "elapsedMs": 127546,
+      "inputTokens": null,
+      "outputTokens": null,
+      "referenceCostUncachedUSD": null,
+      "systemChars": 717,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "installed-transform",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "firstTurnExecuted": true,
+      "elapsedMs": 48886,
+      "inputTokens": 45827,
+      "outputTokens": 1215,
+      "referenceCostUncachedUSD": 0.207608,
+      "systemChars": 588,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "host-saved-and-fork",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "firstTurnExecuted": true,
+      "elapsedMs": 54695,
+      "inputTokens": 62624,
+      "outputTokens": 1747,
+      "referenceCostUncachedUSD": 0.285436,
+      "systemChars": 588,
+      "hostCalls": 2
+    },
+    {
+      "variant": "previous",
+      "case": "host-saved-and-fork",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 8,
+      "firstTurnExecuted": false,
+      "elapsedMs": 81811,
+      "inputTokens": 113597,
+      "outputTokens": 2917,
+      "referenceCostUncachedUSD": 0.512728,
+      "systemChars": 717,
+      "hostCalls": 2
+    },
+    {
+      "variant": "previous",
+      "case": "long-log-audit",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 7,
+      "firstTurnExecuted": false,
+      "elapsedMs": 140584,
+      "inputTokens": null,
+      "outputTokens": null,
+      "referenceCostUncachedUSD": null,
+      "systemChars": 712,
+      "hostCalls": 0
+    },
+    {
+      "variant": "standard",
+      "case": "long-log-audit",
+      "split": "validation",
+      "repetition": 1,
+      "passed": true,
+      "completed": true,
+      "status": "completed",
+      "requests": 5,
+      "firstTurnExecuted": true,
+      "elapsedMs": 58601,
+      "inputTokens": 49045,
+      "outputTokens": 2243,
+      "referenceCostUncachedUSD": 0.24104,
+      "systemChars": 583,
+      "hostCalls": 0
+    }
+  ],
+  "requestDiagnostics": [
+    {
+      "case": "quoted-stock",
+      "repetition": 0,
+      "variant": "previous",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5747,
+            "outputTokens": 271,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5901,
+            "outputTokens": 127,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 7346,
+            "outputTokens": 1037,
+            "cacheReadTokens": 5760,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 9937,
+            "outputTokens": 649,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 12254,
+            "outputTokens": 367,
+            "cacheReadTokens": 9728,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "quoted-stock",
+      "repetition": 0,
+      "variant": "standard",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5690,
+            "outputTokens": 189,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 7952,
+            "outputTokens": 1326,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 9061,
+            "outputTokens": 652,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 11331,
+            "outputTokens": 275,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "url-index",
+      "repetition": 0,
+      "variant": "standard",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5675,
+            "outputTokens": 131,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 7403,
+            "outputTokens": 82,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 7812,
+            "outputTokens": 380,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 9586,
+            "outputTokens": 441,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 11382,
+            "outputTokens": 167,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "url-index",
+      "repetition": 0,
+      "variant": "previous",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5748,
+            "outputTokens": 132,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5908,
+            "outputTokens": 126,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 7318,
+            "outputTokens": 905,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 9810,
+            "outputTokens": 216,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "stable-queue-repair",
+      "repetition": 0,
+      "variant": "previous",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5767,
+            "outputTokens": 102,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": null,
+          "errors": [
+            {
+              "type": "error",
+              "code": "provider",
+              "message": "terminated",
+              "retryAfterMs": 2000
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5927,
+            "outputTokens": 168,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 7650,
+            "outputTokens": 1078,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 10303,
+            "outputTokens": 199,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 6,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 12276,
+            "outputTokens": 298,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "stable-queue-repair",
+      "repetition": 0,
+      "variant": "standard",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5698,
+            "outputTokens": 216,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 8614,
+            "outputTokens": 231,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 10316,
+            "outputTokens": 1055,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 13081,
+            "outputTokens": 198,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 15635,
+            "outputTokens": 479,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "installed-transform",
+      "repetition": 0,
+      "variant": "standard",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5666,
+            "outputTokens": 166,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 7877,
+            "outputTokens": 187,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 8736,
+            "outputTokens": 419,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 10791,
+            "outputTokens": 232,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 13159,
+            "outputTokens": 233,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "installed-transform",
+      "repetition": 0,
+      "variant": "previous",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5732,
+            "outputTokens": 177,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5892,
+            "outputTokens": 189,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 7401,
+            "outputTokens": 320,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 9128,
+            "outputTokens": 379,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 11067,
+            "outputTokens": 276,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "host-saved-and-fork",
+      "repetition": 0,
+      "variant": "previous",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5776,
+            "outputTokens": 108,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5936,
+            "outputTokens": 160,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 8527,
+            "outputTokens": 142,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 11163,
+            "outputTokens": 902,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 14913,
+            "outputTokens": 395,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 6,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 17533,
+            "outputTokens": 716,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 7,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 20757,
+            "outputTokens": 536,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "host-saved-and-fork",
+      "repetition": 0,
+      "variant": "standard",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5721,
+            "outputTokens": 126,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 8721,
+            "outputTokens": 180,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 11339,
+            "outputTokens": 750,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 13677,
+            "outputTokens": 294,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 15528,
+            "outputTokens": 340,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "long-log-audit",
+      "repetition": 0,
+      "variant": "standard",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5688,
+            "outputTokens": 198,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 8628,
+            "outputTokens": 295,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 11475,
+            "outputTokens": 654,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 13819,
+            "outputTokens": 733,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 16020,
+            "outputTokens": 290,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "long-log-audit",
+      "repetition": 0,
+      "variant": "previous",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5750,
+            "outputTokens": 152,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5913,
+            "outputTokens": 289,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 8827,
+            "outputTokens": 285,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 10806,
+            "outputTokens": 707,
+            "cacheReadTokens": 5760,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 14951,
+            "outputTokens": 522,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 6,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 18916,
+            "outputTokens": 318,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "quoted-stock",
+      "repetition": 1,
+      "variant": "standard",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5690,
+            "outputTokens": 147,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 7919,
+            "outputTokens": 1128,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 8820,
+            "outputTokens": 586,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 11164,
+            "outputTokens": 348,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "quoted-stock",
+      "repetition": 1,
+      "variant": "previous",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5748,
+            "outputTokens": 107,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5905,
+            "outputTokens": 122,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 7328,
+            "outputTokens": 1147,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 10055,
+            "outputTokens": 725,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 12221,
+            "outputTokens": 300,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "url-index",
+      "repetition": 1,
+      "variant": "previous",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5744,
+            "outputTokens": 214,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": null,
+          "errors": [
+            {
+              "type": "error",
+              "code": "provider",
+              "message": "Cannot connect to API: read ECONNRESET",
+              "retryAfterMs": 2000
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5901,
+            "outputTokens": 189,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 7473,
+            "outputTokens": 716,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 9615,
+            "outputTokens": 226,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "url-index",
+      "repetition": 1,
+      "variant": "standard",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5678,
+            "outputTokens": 159,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 7946,
+            "outputTokens": 400,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 8355,
+            "outputTokens": 363,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 10044,
+            "outputTokens": 414,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 12360,
+            "outputTokens": 141,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "stable-queue-repair",
+      "repetition": 1,
+      "variant": "standard",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5703,
+            "outputTokens": 190,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 8022,
+            "outputTokens": 160,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 8911,
+            "outputTokens": 1181,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 11630,
+            "outputTokens": 138,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 13787,
+            "outputTokens": 190,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 6,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 15519,
+            "outputTokens": 392,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "stable-queue-repair",
+      "repetition": 1,
+      "variant": "previous",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5760,
+            "outputTokens": 136,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5920,
+            "outputTokens": 237,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 7776,
+            "outputTokens": 237,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 9568,
+            "outputTokens": 1001,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 12144,
+            "outputTokens": 489,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 6,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 14324,
+            "outputTokens": 366,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "installed-transform",
+      "repetition": 1,
+      "variant": "previous",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5724,
+            "outputTokens": 211,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5884,
+            "outputTokens": 191,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 7375,
+            "outputTokens": 322,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 9125,
+            "outputTokens": 269,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": null,
+          "errors": [
+            {
+              "type": "error",
+              "code": "provider",
+              "message": "terminated",
+              "retryAfterMs": 2000
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 10797,
+            "outputTokens": 524,
+            "cacheReadTokens": 8960,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 7,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 12961,
+            "outputTokens": 257,
+            "cacheReadTokens": 5760,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "installed-transform",
+      "repetition": 1,
+      "variant": "standard",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5656,
+            "outputTokens": 171,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 7890,
+            "outputTokens": 191,
+            "cacheReadTokens": 5504,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 8753,
+            "outputTokens": 376,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 10759,
+            "outputTokens": 258,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 12769,
+            "outputTokens": 219,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "host-saved-and-fork",
+      "repetition": 1,
+      "variant": "standard",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5712,
+            "outputTokens": 183,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 9269,
+            "outputTokens": 204,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 13619,
+            "outputTokens": 611,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 15838,
+            "outputTokens": 397,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 18186,
+            "outputTokens": 352,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "host-saved-and-fork",
+      "repetition": 1,
+      "variant": "previous",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5790,
+            "outputTokens": 162,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5953,
+            "outputTokens": 159,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 8503,
+            "outputTokens": 209,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 11207,
+            "outputTokens": 749,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 14810,
+            "outputTokens": 289,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 6,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 18072,
+            "outputTokens": 154,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 7,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 22094,
+            "outputTokens": 890,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 8,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 27168,
+            "outputTokens": 305,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "long-log-audit",
+      "repetition": 1,
+      "variant": "previous",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5754,
+            "outputTokens": 100,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5914,
+            "outputTokens": 149,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 7491,
+            "outputTokens": 426,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": null,
+          "errors": [
+            {
+              "type": "error",
+              "code": "provider",
+              "message": "terminated",
+              "retryAfterMs": 2000
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 9447,
+            "outputTokens": 688,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 6,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 11567,
+            "outputTokens": 657,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 7,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 14001,
+            "outputTokens": 225,
+            "cacheReadTokens": 4224,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case": "long-log-audit",
+      "repetition": 1,
+      "variant": "standard",
+      "requests": [
+        {
+          "index": 1,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 5683,
+            "outputTokens": 195,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 2,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 8243,
+            "outputTokens": 307,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 3,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 9381,
+            "outputTokens": 769,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 4,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 11629,
+            "outputTokens": 704,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        },
+        {
+          "index": 5,
+          "usage": {
+            "type": "usage",
+            "inputTokens": 14109,
+            "outputTokens": 268,
+            "cacheReadTokens": 4352,
+            "cacheWriteTokens": 0
+          },
+          "errors": []
+        }
+      ]
+    }
+  ],
+  "pairedUsageTasks": [
+    {
+      "case": "quoted-stock",
+      "repetition": 0
+    },
+    {
+      "case": "url-index",
+      "repetition": 0
+    },
+    {
+      "case": "installed-transform",
+      "repetition": 0
+    },
+    {
+      "case": "host-saved-and-fork",
+      "repetition": 0
+    },
+    {
+      "case": "long-log-audit",
+      "repetition": 0
+    },
+    {
+      "case": "quoted-stock",
+      "repetition": 1
+    },
+    {
+      "case": "stable-queue-repair",
+      "repetition": 1
+    },
+    {
+      "case": "host-saved-and-fork",
+      "repetition": 1
+    }
+  ],
+  "footprint": {
+    "rounds": 24,
+    "measure": "UTF-8 serialized runtime request bytes; mock driver, no provider tokens or latency claim",
+    "results": [
+      {
+        "variant": "previous",
+        "executions": 24,
+        "requests": 25,
+        "sumRequestBytes": 2094010,
+        "last": {
+          "requestBytes": 188139,
+          "transientStateBytes": 125410,
+          "transientStateFrames": 24
+        },
+        "frames": [
+          {
+            "requestBytes": 3900,
+            "transientStateBytes": 0,
+            "transientStateFrames": 0
+          },
+          {
+            "requestBytes": 8401,
+            "transientStateBytes": 2028,
+            "transientStateFrames": 1
+          },
+          {
+            "requestBytes": 13229,
+            "transientStateBytes": 4592,
+            "transientStateFrames": 2
+          },
+          {
+            "requestBytes": 18403,
+            "transientStateBytes": 7490,
+            "transientStateFrames": 3
+          },
+          {
+            "requestBytes": 23842,
+            "transientStateBytes": 10713,
+            "transientStateFrames": 4
+          },
+          {
+            "requestBytes": 29546,
+            "transientStateBytes": 14175,
+            "transientStateFrames": 5
+          },
+          {
+            "requestBytes": 35514,
+            "transientStateBytes": 17877,
+            "transientStateFrames": 6
+          },
+          {
+            "requestBytes": 41746,
+            "transientStateBytes": 21818,
+            "transientStateFrames": 7
+          },
+          {
+            "requestBytes": 48242,
+            "transientStateBytes": 25998,
+            "transientStateFrames": 8
+          },
+          {
+            "requestBytes": 55001,
+            "transientStateBytes": 30417,
+            "transientStateFrames": 9
+          },
+          {
+            "requestBytes": 62029,
+            "transientStateBytes": 35075,
+            "transientStateFrames": 10
+          },
+          {
+            "requestBytes": 69320,
+            "transientStateBytes": 39974,
+            "transientStateFrames": 11
+          },
+          {
+            "requestBytes": 76875,
+            "transientStateBytes": 45112,
+            "transientStateFrames": 12
+          },
+          {
+            "requestBytes": 84694,
+            "transientStateBytes": 50489,
+            "transientStateFrames": 13
+          },
+          {
+            "requestBytes": 92777,
+            "transientStateBytes": 56105,
+            "transientStateFrames": 14
+          },
+          {
+            "requestBytes": 101124,
+            "transientStateBytes": 61960,
+            "transientStateFrames": 15
+          },
+          {
+            "requestBytes": 109737,
+            "transientStateBytes": 68054,
+            "transientStateFrames": 16
+          },
+          {
+            "requestBytes": 118614,
+            "transientStateBytes": 74387,
+            "transientStateFrames": 17
+          },
+          {
+            "requestBytes": 127755,
+            "transientStateBytes": 80959,
+            "transientStateFrames": 18
+          },
+          {
+            "requestBytes": 137160,
+            "transientStateBytes": 87770,
+            "transientStateFrames": 19
+          },
+          {
+            "requestBytes": 146829,
+            "transientStateBytes": 94820,
+            "transientStateFrames": 20
+          },
+          {
+            "requestBytes": 156760,
+            "transientStateBytes": 102109,
+            "transientStateFrames": 21
+          },
+          {
+            "requestBytes": 166957,
+            "transientStateBytes": 109637,
+            "transientStateFrames": 22
+          },
+          {
+            "requestBytes": 177416,
+            "transientStateBytes": 117404,
+            "transientStateFrames": 23
+          },
+          {
+            "requestBytes": 188139,
+            "transientStateBytes": 125410,
+            "transientStateFrames": 24
+          }
+        ]
+      },
+      {
+        "variant": "standard",
+        "executions": 24,
+        "requests": 25,
+        "sumRequestBytes": 845102,
+        "last": {
+          "requestBytes": 57277,
+          "transientStateBytes": 5375,
+          "transientStateFrames": 2
+        },
+        "frames": [
+          {
+            "requestBytes": 4199,
+            "transientStateBytes": 0,
+            "transientStateFrames": 0
+          },
+          {
+            "requestBytes": 8831,
+            "transientStateBytes": 1850,
+            "transientStateFrames": 1
+          },
+          {
+            "requestBytes": 8903,
+            "transientStateBytes": 0,
+            "transientStateFrames": 0
+          },
+          {
+            "requestBytes": 13930,
+            "transientStateBytes": 2613,
+            "transientStateFrames": 1
+          },
+          {
+            "requestBytes": 12777,
+            "transientStateBytes": 0,
+            "transientStateFrames": 0
+          },
+          {
+            "requestBytes": 17784,
+            "transientStateBytes": 2640,
+            "transientStateFrames": 1
+          },
+          {
+            "requestBytes": 16600,
+            "transientStateBytes": 0,
+            "transientStateFrames": 0
+          },
+          {
+            "requestBytes": 21607,
+            "transientStateBytes": 2641,
+            "transientStateFrames": 1
+          },
+          {
+            "requestBytes": 26591,
+            "transientStateBytes": 5373,
+            "transientStateFrames": 2
+          },
+          {
+            "requestBytes": 22333,
+            "transientStateBytes": 0,
+            "transientStateFrames": 0
+          },
+          {
+            "requestBytes": 27348,
+            "transientStateBytes": 2641,
+            "transientStateFrames": 1
+          },
+          {
+            "requestBytes": 32341,
+            "transientStateBytes": 5374,
+            "transientStateFrames": 2
+          },
+          {
+            "requestBytes": 37334,
+            "transientStateBytes": 8107,
+            "transientStateFrames": 3
+          },
+          {
+            "requestBytes": 42326,
+            "transientStateBytes": 10840,
+            "transientStateFrames": 4
+          },
+          {
+            "requestBytes": 31926,
+            "transientStateBytes": 0,
+            "transientStateFrames": 0
+          },
+          {
+            "requestBytes": 36942,
+            "transientStateBytes": 2642,
+            "transientStateFrames": 1
+          },
+          {
+            "requestBytes": 41935,
+            "transientStateBytes": 5375,
+            "transientStateFrames": 2
+          },
+          {
+            "requestBytes": 46928,
+            "transientStateBytes": 8108,
+            "transientStateFrames": 3
+          },
+          {
+            "requestBytes": 51919,
+            "transientStateBytes": 10841,
+            "transientStateFrames": 4
+          },
+          {
+            "requestBytes": 56912,
+            "transientStateBytes": 13574,
+            "transientStateFrames": 5
+          },
+          {
+            "requestBytes": 61905,
+            "transientStateBytes": 16307,
+            "transientStateFrames": 6
+          },
+          {
+            "requestBytes": 66896,
+            "transientStateBytes": 19040,
+            "transientStateFrames": 7
+          },
+          {
+            "requestBytes": 47272,
+            "transientStateBytes": 0,
+            "transientStateFrames": 0
+          },
+          {
+            "requestBytes": 52286,
+            "transientStateBytes": 2642,
+            "transientStateFrames": 1
+          },
+          {
+            "requestBytes": 57277,
+            "transientStateBytes": 5375,
+            "transientStateFrames": 2
+          }
+        ]
+      }
+    ],
+    "documents": [
+      {
+        "module": "velaros:sessions",
+        "operation": "list",
+        "fullBytes": 4143,
+        "operationBytes": 1997
+      },
+      {
+        "module": "velaros:sessions",
+        "operation": "ask",
+        "fullBytes": 4143,
+        "operationBytes": 2909
+      },
+      {
+        "module": "velaros:sessions",
+        "operation": "tell",
+        "fullBytes": 4143,
+        "operationBytes": 1814
+      },
+      {
+        "module": "velaros:code",
+        "operation": "query",
+        "fullBytes": 5490,
+        "operationBytes": 4732
+      },
+      {
+        "module": "velaros:code",
+        "operation": "analyze",
+        "fullBytes": 5490,
+        "operationBytes": 3767
+      },
+      {
+        "module": "velaros:project",
+        "operation": "read",
+        "fullBytes": 20160,
+        "operationBytes": 4448
+      },
+      {
+        "module": "velaros:project",
+        "operation": "snapshot",
+        "fullBytes": 20160,
+        "operationBytes": 4135
+      },
+      {
+        "module": "velaros:project",
+        "operation": "list",
+        "fullBytes": 20160,
+        "operationBytes": 2590
+      },
+      {
+        "module": "velaros:project",
+        "operation": "search",
+        "fullBytes": 20160,
+        "operationBytes": 5048
+      },
+      {
+        "module": "velaros:project",
+        "operation": "select",
+        "fullBytes": 20160,
+        "operationBytes": 3987
+      },
+      {
+        "module": "velaros:project",
+        "operation": "patch",
+        "fullBytes": 20160,
+        "operationBytes": 6639
+      },
+      {
+        "module": "velaros:project",
+        "operation": "edit",
+        "fullBytes": 20160,
+        "operationBytes": 6474
+      },
+      {
+        "module": "velaros:project",
+        "operation": "inspect",
+        "fullBytes": 20160,
+        "operationBytes": 2133
+      },
+      {
+        "module": "velaros:project",
+        "operation": "undo",
+        "fullBytes": 20160,
+        "operationBytes": 2312
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "open",
+        "fullBytes": 37533,
+        "operationBytes": 3541
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "leave",
+        "fullBytes": 37533,
+        "operationBytes": 1271
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "state",
+        "fullBytes": 37533,
+        "operationBytes": 4431
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "show",
+        "fullBytes": 37533,
+        "operationBytes": 2121
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "switchTab",
+        "fullBytes": 37533,
+        "operationBytes": 2102
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "inspect",
+        "fullBytes": 37533,
+        "operationBytes": 6690
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "screenshot",
+        "fullBytes": 37533,
+        "operationBytes": 8009
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "evaluate",
+        "fullBytes": 37533,
+        "operationBytes": 2275
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "frames",
+        "fullBytes": 37533,
+        "operationBytes": 1685
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "click",
+        "fullBytes": 37533,
+        "operationBytes": 6655
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "fill",
+        "fullBytes": 37533,
+        "operationBytes": 6362
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "hover",
+        "fullBytes": 37533,
+        "operationBytes": 5987
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "insertText",
+        "fullBytes": 37533,
+        "operationBytes": 1706
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "press",
+        "fullBytes": 37533,
+        "operationBytes": 2134
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "keyDown",
+        "fullBytes": 37533,
+        "operationBytes": 1797
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "keyUp",
+        "fullBytes": 37533,
+        "operationBytes": 1781
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "mouseMove",
+        "fullBytes": 37533,
+        "operationBytes": 1922
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "mouseDown",
+        "fullBytes": 37533,
+        "operationBytes": 1903
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "mouseUp",
+        "fullBytes": 37533,
+        "operationBytes": 1899
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "wheel",
+        "fullBytes": 37533,
+        "operationBytes": 1992
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "drag",
+        "fullBytes": 37533,
+        "operationBytes": 3647
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "upload",
+        "fullBytes": 37533,
+        "operationBytes": 2922
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "goto",
+        "fullBytes": 37533,
+        "operationBytes": 1945
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "back",
+        "fullBytes": 37533,
+        "operationBytes": 1720
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "forward",
+        "fullBytes": 37533,
+        "operationBytes": 1726
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "reload",
+        "fullBytes": 37533,
+        "operationBytes": 1733
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "waitForFunction",
+        "fullBytes": 37533,
+        "operationBytes": 2284
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "waitForLoad",
+        "fullBytes": 37533,
+        "operationBytes": 2857
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "waitForEvent",
+        "fullBytes": 37533,
+        "operationBytes": 2137
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "handleDialog",
+        "fullBytes": 37533,
+        "operationBytes": 1783
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "handleDownload",
+        "fullBytes": 37533,
+        "operationBytes": 1880
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "handlePermission",
+        "fullBytes": 37533,
+        "operationBytes": 1703
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "download",
+        "fullBytes": 37533,
+        "operationBytes": 2080
+      },
+      {
+        "module": "velaros:browser",
+        "operation": "savePdf",
+        "fullBytes": 37533,
+        "operationBytes": 1710
+      },
+      {
+        "module": "velaros:cdp",
+        "operation": "send",
+        "fullBytes": 3393,
+        "operationBytes": 1873
+      },
+      {
+        "module": "velaros:cdp",
+        "operation": "events",
+        "fullBytes": 3393,
+        "operationBytes": 2113
+      },
+      {
+        "module": "velaros:cdp",
+        "operation": "waitForEvent",
+        "fullBytes": 3393,
+        "operationBytes": 2000
+      },
+      {
+        "module": "velaros:cdp",
+        "operation": "reset",
+        "fullBytes": 3393,
+        "operationBytes": 1313
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "diagnostics",
+        "fullBytes": 22831,
+        "operationBytes": 5915
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "request",
+        "fullBytes": 22831,
+        "operationBytes": 3319
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "zoom",
+        "fullBytes": 22831,
+        "operationBytes": 1633
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "network",
+        "fullBytes": 22831,
+        "operationBytes": 2547
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "startTrace",
+        "fullBytes": 22831,
+        "operationBytes": 2865
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "stopTrace",
+        "fullBytes": 22831,
+        "operationBytes": 2025
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "insight",
+        "fullBytes": 22831,
+        "operationBytes": 1520
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "heapSnapshot",
+        "fullBytes": 22831,
+        "operationBytes": 1569
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "startRecording",
+        "fullBytes": 22831,
+        "operationBytes": 1523
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "stopRecording",
+        "fullBytes": 22831,
+        "operationBytes": 1777
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "userScripts",
+        "fullBytes": 22831,
+        "operationBytes": 4844
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "readUserScript",
+        "fullBytes": 22831,
+        "operationBytes": 4975
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "createUserScript",
+        "fullBytes": 22831,
+        "operationBytes": 5706
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "updateUserScript",
+        "fullBytes": 22831,
+        "operationBytes": 5310
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "enableUserScript",
+        "fullBytes": 22831,
+        "operationBytes": 5131
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "enableUserScripts",
+        "fullBytes": 22831,
+        "operationBytes": 5039
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "moveUserScript",
+        "fullBytes": 22831,
+        "operationBytes": 5092
+      },
+      {
+        "module": "velaros:devtools",
+        "operation": "deleteUserScript",
+        "fullBytes": 22831,
+        "operationBytes": 5021
+      },
+      {
+        "module": "velaros:web",
+        "operation": "search",
+        "fullBytes": 3701,
+        "operationBytes": 2407
+      },
+      {
+        "module": "velaros:web",
+        "operation": "read",
+        "fullBytes": 3701,
+        "operationBytes": 2590
+      },
+      {
+        "module": "velaros:files",
+        "operation": "read",
+        "fullBytes": 7914,
+        "operationBytes": 3740
+      },
+      {
+        "module": "velaros:files",
+        "operation": "edit",
+        "fullBytes": 7914,
+        "operationBytes": 3888
+      },
+      {
+        "module": "velaros:files",
+        "operation": "undo",
+        "fullBytes": 7914,
+        "operationBytes": 2342
+      },
+      {
+        "module": "velaros:shell",
+        "operation": "run",
+        "fullBytes": 8800,
+        "operationBytes": 5846
+      },
+      {
+        "module": "velaros:shell",
+        "operation": "refreshEnvironment",
+        "fullBytes": 8800,
+        "operationBytes": 1819
+      },
+      {
+        "module": "velaros:shell",
+        "operation": "listTasks",
+        "fullBytes": 8800,
+        "operationBytes": 2550
+      },
+      {
+        "module": "velaros:shell",
+        "operation": "stop",
+        "fullBytes": 8800,
+        "operationBytes": 1366
+      }
+    ]
+  },
+  "encodedEstimates": [
+    {
+      "variant": "previous",
+      "measure": "encoded UTF-8 request text from the respective ModelDriver estimate; no images or opaque tokens",
+      "sum": 2113374,
+      "first": 4601,
+      "last": 188917,
+      "estimates": [
+        {
+          "tokens": 4601,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 9178,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 14006,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 19180,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 24619,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 30323,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 36291,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 42523,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 49019,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 55778,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 62807,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 70098,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 77653,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 85472,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 93555,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 101902,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 110515,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 119392,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 128533,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 137938,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 147607,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 157538,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 167735,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 178194,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "tokens": 188917,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        }
+      ]
+    },
+    {
+      "variant": "standard",
+      "measure": "encoded UTF-8 request text from the respective ModelDriver estimate; no images or opaque tokens",
+      "sum": 791139,
+      "first": 4933,
+      "last": 52129,
+      "estimates": [
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 0,
+            "userHistory": 1000,
+            "toolResults": 0,
+            "current": 2078,
+            "framing": 45,
+            "total": 4933
+          },
+          "tokens": 4933,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 334,
+            "userHistory": 4302,
+            "toolResults": 221,
+            "current": 2677,
+            "framing": 49,
+            "total": 9393
+          },
+          "tokens": 9393,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 668,
+            "userHistory": 3265,
+            "toolResults": 442,
+            "current": 2943,
+            "framing": 51,
+            "total": 9179
+          },
+          "tokens": 9179,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 1002,
+            "userHistory": 7433,
+            "toolResults": 663,
+            "current": 3071,
+            "framing": 55,
+            "total": 14034
+          },
+          "tokens": 14034,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 1336,
+            "userHistory": 5534,
+            "toolResults": 884,
+            "current": 2974,
+            "framing": 57,
+            "total": 12595
+          },
+          "tokens": 12595,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 1670,
+            "userHistory": 9674,
+            "toolResults": 1105,
+            "current": 3072,
+            "framing": 61,
+            "total": 17392
+          },
+          "tokens": 17392,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 2004,
+            "userHistory": 7744,
+            "toolResults": 1326,
+            "current": 2975,
+            "framing": 63,
+            "total": 15922
+          },
+          "tokens": 15922,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 2338,
+            "userHistory": 11885,
+            "toolResults": 1547,
+            "current": 3072,
+            "framing": 67,
+            "total": 20719
+          },
+          "tokens": 20719,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 2672,
+            "userHistory": 16062,
+            "toolResults": 1768,
+            "current": 3072,
+            "framing": 71,
+            "total": 25455
+          },
+          "tokens": 25455,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 3006,
+            "userHistory": 11059,
+            "toolResults": 1989,
+            "current": 2975,
+            "framing": 72,
+            "total": 20911
+          },
+          "tokens": 20911,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 3343,
+            "userHistory": 15201,
+            "toolResults": 2211,
+            "current": 3073,
+            "framing": 76,
+            "total": 25714
+          },
+          "tokens": 25714,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 3680,
+            "userHistory": 19380,
+            "toolResults": 2433,
+            "current": 3073,
+            "framing": 80,
+            "total": 30456
+          },
+          "tokens": 30456,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 4017,
+            "userHistory": 23559,
+            "toolResults": 2655,
+            "current": 3073,
+            "framing": 84,
+            "total": 35198
+          },
+          "tokens": 35198,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 4354,
+            "userHistory": 27737,
+            "toolResults": 2877,
+            "current": 3073,
+            "framing": 88,
+            "total": 39939
+          },
+          "tokens": 39939,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 4691,
+            "userHistory": 16587,
+            "toolResults": 3099,
+            "current": 2976,
+            "framing": 87,
+            "total": 29250
+          },
+          "tokens": 29250,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 5028,
+            "userHistory": 20730,
+            "toolResults": 3321,
+            "current": 3073,
+            "framing": 91,
+            "total": 34053
+          },
+          "tokens": 34053,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 5365,
+            "userHistory": 24909,
+            "toolResults": 3543,
+            "current": 3073,
+            "framing": 95,
+            "total": 38795
+          },
+          "tokens": 38795,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 5702,
+            "userHistory": 29088,
+            "toolResults": 3765,
+            "current": 3073,
+            "framing": 99,
+            "total": 43537
+          },
+          "tokens": 43537,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 6039,
+            "userHistory": 33265,
+            "toolResults": 3987,
+            "current": 3073,
+            "framing": 103,
+            "total": 48277
+          },
+          "tokens": 48277,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 6376,
+            "userHistory": 37444,
+            "toolResults": 4209,
+            "current": 3073,
+            "framing": 107,
+            "total": 53019
+          },
+          "tokens": 53019,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 6713,
+            "userHistory": 41623,
+            "toolResults": 4431,
+            "current": 3073,
+            "framing": 111,
+            "total": 57761
+          },
+          "tokens": 57761,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 7050,
+            "userHistory": 45800,
+            "toolResults": 4653,
+            "current": 3073,
+            "framing": 115,
+            "total": 62501
+          },
+          "tokens": 62501,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 7387,
+            "userHistory": 25429,
+            "toolResults": 4875,
+            "current": 2976,
+            "framing": 111,
+            "total": 42588
+          },
+          "tokens": 42588,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 7724,
+            "userHistory": 29570,
+            "toolResults": 5097,
+            "current": 3073,
+            "framing": 115,
+            "total": 47389
+          },
+          "tokens": 47389,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        },
+        {
+          "composition": {
+            "unit": "utf8-bytes",
+            "system": 1009,
+            "tools": 801,
+            "assistantHistory": 8061,
+            "userHistory": 33747,
+            "toolResults": 5319,
+            "current": 3073,
+            "framing": 119,
+            "total": 52129
+          },
+          "tokens": 52129,
+          "precision": "estimate",
+          "basis": "文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 2000 token 计；协议误差使用 Agent 的独立余量，非精确 token 计数",
+          "images": {
+            "count": 0,
+            "tokens": 0
+          }
+        }
+      ]
+    }
+  ],
+  "documentStats": {
+    "operationCount": 79,
+    "fullModuleReadBytes": 1971845,
+    "perOperationReadBytes": 249033
+  },
+  "importProbe": [
+    {
+      "variant": "previous",
+      "cases": [
+        {
+          "name": "direct",
+          "passed": true,
+          "hostCalls": 1,
+          "result": {
+            "ok": true,
+            "logs": [],
+            "pendingCalls": [],
+            "process": {
+              "exitCode": 0,
+              "signal": null,
+              "stdout": "{\"answer\":42}\n",
+              "stderr": "",
+              "aborted": false,
+              "timedOut": false,
+              "cleanupIncomplete": false,
+              "truncated": false,
+              "confinement": {
+                "mode": "danger-full-access",
+                "enforcement": "none",
+                "backend": "none",
+                "reason": "explicit-danger-full-access",
+                "writableRoots": []
+              },
+              "logPath": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/previous/node/node-DRHQ3N/output.log",
+              "logBytes": 14,
+              "logTruncated": false,
+              "launched": true
+            }
+          }
+        },
+        {
+          "name": "shell-file",
+          "passed": false,
+          "hostCalls": 0,
+          "result": {
+            "ok": false,
+            "logs": [],
+            "pendingCalls": [],
+            "process": {
+              "exitCode": 1,
+              "signal": null,
+              "stdout": "",
+              "stderr": "node:internal/modules/esm/load:195\n    throw new ERR_UNSUPPORTED_ESM_URL_SCHEME(parsed, schemes);\n          ^\n\nError [ERR_UNSUPPORTED_ESM_URL_SCHEME]: Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. Received protocol 'test:'\n    at throwIfUnsupportedURLScheme (node:internal/modules/esm/load:195:11)\n    at defaultLoadSync (node:internal/modules/esm/load:142:3)\n    at #loadAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:776:12)\n    at #loadSync (node:internal/modules/esm/loader:796:49)\n    at ModuleLoader.load (node:internal/modules/esm/loader:762:26)\n    at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:504:31)\n    at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:555:36)\n    at afterResolve (node:internal/modules/esm/loader:603:52)\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:609:12)\n    at ModuleJob.syncLink (node:internal/modules/esm/module_job:162:33) {\n  code: 'ERR_UNSUPPORTED_ESM_URL_SCHEME'\n}\n\nNode.js v24.15.0\n",
+              "aborted": false,
+              "timedOut": false,
+              "cleanupIncomplete": false,
+              "truncated": false,
+              "confinement": {
+                "mode": "danger-full-access",
+                "enforcement": "none",
+                "backend": "none",
+                "reason": "explicit-danger-full-access",
+                "writableRoots": []
+              },
+              "logPath": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/previous/node/node-D42F4C/output.log",
+              "logBytes": 1054,
+              "logTruncated": false,
+              "launched": true
+            },
+            "error": {
+              "code": "PROGRAM_ERROR",
+              "message": "Shell 执行失败：PROGRAM_ERROR；exitCode=1；signal=none。查看 stderr 与 /Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/previous/node/node-D42F4C/output.log。"
+            }
+          }
+        },
+        {
+          "name": "fork",
+          "passed": false,
+          "hostCalls": 0,
+          "result": {
+            "ok": false,
+            "logs": [],
+            "pendingCalls": [],
+            "process": {
+              "exitCode": 1,
+              "signal": null,
+              "stdout": "",
+              "stderr": "node:internal/modules/esm/resolve:982\n    if (getOptionValue('--input-type')) { throw new ERR_INPUT_TYPE_NOT_ALLOWED(); }\n                                                ^\n\nError [ERR_INPUT_TYPE_NOT_ALLOWED]: --input-type can only be used with string input via --eval, --print, or STDIN\n    at defaultResolve (node:internal/modules/esm/resolve:982:49)\n    at #cachedDefaultResolve (node:internal/modules/esm/loader:697:20)\n    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:714:38)\n    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:746:52)\n    at #resolve (node:internal/modules/esm/loader:679:17)\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:599:35)\n    at node:internal/modules/esm/loader:628:32\n    at TracingChannel.tracePromise (node:diagnostics_channel:362:14)\n    at ModuleLoader.import (node:internal/modules/esm/loader:624:21)\n    at node:internal/modules/run_main:162:35 {\n  code: 'ERR_INPUT_TYPE_NOT_ALLOWED'\n}\n\nNode.js v24.15.0\nError: exit 1\n    at ChildProcess.<anonymous> (file:///Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/previous/workspace/__velaros_program__.mjs:1:252)\n    at ChildProcess.emit (node:events:509:28)\n    at ChildProcess._handle.onexit (node:internal/child_process:295:12)\n",
+              "aborted": false,
+              "timedOut": false,
+              "cleanupIncomplete": false,
+              "truncated": false,
+              "confinement": {
+                "mode": "danger-full-access",
+                "enforcement": "none",
+                "backend": "none",
+                "reason": "explicit-danger-full-access",
+                "writableRoots": []
+              },
+              "logPath": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/previous/node/node-BOTD27/output.log",
+              "logBytes": 1347,
+              "logTruncated": false,
+              "launched": true
+            },
+            "error": {
+              "code": "PROGRAM_ERROR",
+              "message": "exit 1",
+              "line": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "variant": "standard",
+      "cases": [
+        {
+          "name": "direct",
+          "passed": true,
+          "hostCalls": 1,
+          "result": {
+            "ok": true,
+            "logs": [],
+            "pendingCalls": [],
+            "process": {
+              "exitCode": 0,
+              "signal": null,
+              "stdout": "{\"answer\":42}\n",
+              "stderr": "",
+              "aborted": false,
+              "timedOut": false,
+              "cleanupIncomplete": false,
+              "truncated": false,
+              "confinement": {
+                "mode": "danger-full-access",
+                "enforcement": "none",
+                "backend": "none",
+                "reason": "explicit-danger-full-access",
+                "writableRoots": []
+              },
+              "logPath": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/standard/node/node-HeQwJN/output.log",
+              "logBytes": 14,
+              "logTruncated": false,
+              "launched": true
+            }
+          }
+        },
+        {
+          "name": "shell-file",
+          "passed": true,
+          "hostCalls": 1,
+          "result": {
+            "ok": true,
+            "logs": [],
+            "pendingCalls": [],
+            "process": {
+              "exitCode": 0,
+              "signal": null,
+              "stdout": "{\"answer\":42}\n",
+              "stderr": "",
+              "aborted": false,
+              "timedOut": false,
+              "cleanupIncomplete": false,
+              "truncated": false,
+              "confinement": {
+                "mode": "danger-full-access",
+                "enforcement": "none",
+                "backend": "none",
+                "reason": "explicit-danger-full-access",
+                "writableRoots": []
+              },
+              "logPath": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/standard/node/node-cVTMzP/output.log",
+              "logBytes": 14,
+              "logTruncated": false,
+              "launched": true
+            }
+          }
+        },
+        {
+          "name": "fork",
+          "passed": true,
+          "hostCalls": 1,
+          "result": {
+            "ok": true,
+            "logs": [],
+            "pendingCalls": [],
+            "process": {
+              "exitCode": 0,
+              "signal": null,
+              "stdout": "{\"answer\":42}\n",
+              "stderr": "",
+              "aborted": false,
+              "timedOut": false,
+              "cleanupIncomplete": false,
+              "truncated": false,
+              "confinement": {
+                "mode": "danger-full-access",
+                "enforcement": "none",
+                "backend": "none",
+                "reason": "explicit-danger-full-access",
+                "writableRoots": []
+              },
+              "logPath": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/standard/node/node-sOd3nd/output.log",
+              "logBytes": 14,
+              "logTruncated": false,
+              "launched": true
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "sourceAfterFreeze": {
+    "productionChanges": [],
+    "testRegistrationChanges": [
+      "packages/model/package.json",
+      "packages/model/test/native-tools.test.ts"
+    ]
+  },
+  "limitations": [
+    "One model and six tasks, each repeated twice; no cross-model generalization.",
+    "Elapsed times are observations; the first four attempts overlapped local regression checks.",
+    "Reference cost uses only matched attempts with complete provider usage and excludes cache discounts; not an actual invoice.",
+    "Single-operation documentation comparison assumes one operation is needed per lookup."
+  ]
+}

@@ -7,6 +7,10 @@ export const AgentTuning = Object.freeze({
 })
 /** 上下文规划的缺省值；宿主经 frames.policy 覆盖前四项。 */
 export const ContextPlanTuning = Object.freeze({
+  /** 历次运行状态超过实质历史的半数且大于此值时，重新物化当前帧。 */
+  retainedStateChars: 4_096,
+  /** 累计状态相对实质历史的最大字符比例，超限时重建当前帧。 */
+  retainedStateRatio: 0.5,
   /** 剩余不足这么多轮就封段。 */
   foldTurns: 2,
   /** 剩余不足这么多轮、又处在章节边界时封段。 */

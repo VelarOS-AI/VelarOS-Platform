@@ -31,6 +31,8 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import type {
   InvocationReceipt,
   ModelImage,
+  ModelToolCall,
+  ModelToolResult,
   ModelTurnRequest,
   OperationRuntimeApi,
 } from '@velaros-ai/kernel'
@@ -112,6 +114,7 @@ import { ActRuntimeTuning } from '../utils/tuning.js'
 
 import type { ContextMemoryApi } from './ContextMemory.js'
 import { ContextMemory } from './ContextMemory.js'
+import { NativeTurnDecoder } from './NativeTurnDecoder.js'
 import type { ProgramContextApi } from './ProgramContext.js'
 import { ProgramContext } from './ProgramContext.js'
 import type { RecentContextApi } from './RecentContext.js'
@@ -434,6 +437,9 @@ export class RuntimeSession implements VelarosSession {
       dependencies.journal
     )
     const modules = dependencies.allowedModules()
+    const nativeTools = Boolean(
+      dependencies.node && dependencies.model?.nativeTools && !dependencies.protocol?.allowed
+    )
     const instructions = `${
       this.executionRunner.environment === 'node'
         ? nodeRuntimeInstructions(
@@ -457,7 +463,7 @@ export class RuntimeSession implements VelarosSession {
             maintain: Boolean(dependencies.maintain),
             observe: this.config.allowed.includes('observe'),
           })
-    }\n\n${protocolRules(this.config)}\n${dependencies.node ? '' : JSON.stringify({ snapshotPlans: (dependencies.contextOptions?.snapshots ?? []).filter((provider) => modules.includes(provider.moduleId)).map((provider) => ({ provider: provider.id, plans: provider.plans, module: provider.moduleId, operation: provider.operation })) })}${
+    }\n\n${nativeTools ? '' : protocolRules(this.config)}\n${dependencies.node ? '' : JSON.stringify({ snapshotPlans: (dependencies.contextOptions?.snapshots ?? []).filter((provider) => modules.includes(provider.moduleId)).map((provider) => ({ provider: provider.id, plans: provider.plans, module: provider.moduleId, operation: provider.operation })) })}${
       dependencies.tool?.instructions ? `\n${dependencies.tool.instructions}` : ''
     }${dependencies.instructions?.trim() ? `\n宿主应用指令：\n${dependencies.instructions}` : ''}`
     dependencies.register({
@@ -465,11 +471,13 @@ export class RuntimeSession implements VelarosSession {
         signal.throwIfAborted()
         if (!dependencies.model) return
         await this.restoreFrameMarkers(signal)
-        const decoder = new ScriptTurnDecoder(
-          this.createFrameMarker(),
-          this.config,
-          dependencies.inputs?.() ?? {}
-        )
+        const decoder = nativeTools
+          ? new NativeTurnDecoder()
+          : new ScriptTurnDecoder(
+              this.createFrameMarker(),
+              this.config,
+              dependencies.inputs?.() ?? {}
+            )
         // 与主循环同一布局：固定语法在系统前缀，当前控制身份和示例在帧尾
         const request: ModelTurnRequest = {
           instructions,
@@ -484,7 +492,7 @@ export class RuntimeSession implements VelarosSession {
           compiledPrompt: `${frame.prompt}\n\n${decoder.instructions}`,
           history: frame.history,
           images: frame.images,
-          response: { type: 'text' },
+          response: 'response' in decoder ? decoder.response : { type: 'text' },
           mode: 'work',
           outputTokens: Math.min(
             dependencies.limits.outputTokens,
@@ -524,6 +532,7 @@ export class RuntimeSession implements VelarosSession {
         instructions,
         protocol: {
           open: () => {
+            if (nativeTools) return new NativeTurnDecoder()
             if (!this.preparedFrameMarker) throw new AppError('INVARIANT', '本帧控制身份尚未登记')
             return new ScriptTurnDecoder(
               this.preparedFrameMarker,
@@ -549,8 +558,8 @@ export class RuntimeSession implements VelarosSession {
               await this.stopPrograms()
             }
           },
-          invoke: (input, signal, acceptedTurnId) =>
-            this.invokeBatch(input as ScriptProtocolSubmission, signal, acceptedTurnId),
+          invoke: (input, signal, acceptedTurnId, calls) =>
+            this.invokeBatch(input as ScriptProtocolSubmission, signal, acceptedTurnId, calls),
         },
         frames: {
           maintain: dependencies.maintain
@@ -1994,6 +2003,56 @@ export class RuntimeSession implements VelarosSession {
   }
 
   private async invokeBatch(
+    input: ScriptProtocolSubmission,
+    signal: AbortSignal,
+    acceptedTurnId: string,
+    calls: readonly ModelToolCall[] = []
+  ): Promise<boolean | { succeeded: boolean; results: readonly ModelToolResult[] }> {
+    const control = scriptControlIdentity(
+      this.id,
+      acceptedTurnId,
+      'script-batch',
+      input,
+      this.expectedObservation
+    )
+    const identities = input.executions.map((execution, index) => {
+      const { retainTurns: _retain, ...program } = execution.program
+      return scriptControlIdentity(
+        this.id,
+        `${acceptedTurnId}:${index}`,
+        'execute',
+        program,
+        this.expectedObservation
+      ).id
+    })
+    const succeeded = await this.executeBatch(input, signal, acceptedTurnId)
+    if (!calls.length) return succeeded
+    const receipt = await this.programs.receipt(control)
+    return {
+      succeeded,
+      results: calls.map((call, index) => {
+        const execution = receipt?.executions?.find(
+          (item) => item.executionId === identities[index]
+        )
+        // 详细输出已由现有结果记录送达；工具回执只传真实状态和归档引用，避免复制输出。
+        const output =
+          execution && 'resultRef' in execution
+            ? {
+                status: 'recorded',
+                resultRef: execution.resultRef,
+                executionId: execution.executionId,
+              }
+            : {
+                status: receipt?.status ?? 'unknown',
+                receipt: toNullable(execution),
+                effect: receipt && !receipt.executed ? 'none' : 'unknown',
+              }
+        return { id: call.id, name: call.name, output }
+      }),
+    }
+  }
+
+  private async executeBatch(
     input: ScriptProtocolSubmission,
     signal: AbortSignal,
     acceptedTurnId: string

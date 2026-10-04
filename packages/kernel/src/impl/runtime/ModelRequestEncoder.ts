@@ -1,6 +1,6 @@
 import { Ajv, type ValidateFunction } from 'ajv'
 
-import { isString } from '@velaros-ai/core'
+import { isArray, isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ModelRequestEncoderApi } from '../../contract/provides.js'
@@ -8,12 +8,14 @@ import type {
   ModelContinuation,
   ModelHistoryMessage,
   ModelResponseFormat,
+  ModelToolExchange,
   ModelTurnRequest,
 } from '../../types/model.js'
 import {
   driverModelContinuation,
   driverModelMessages,
   driverModelPrompt,
+  driverModelToolExchange,
 } from '../../utils/runtime/model-request.js'
 import { immutableOperationJson } from '../../utils/runtime/operation-schema.js'
 
@@ -24,6 +26,20 @@ class ModelRequestEncoder implements ModelRequestEncoderApi {
     const response = request.response
     if (response?.type === 'text' && Object.keys(response).length === 1)
       return Object.freeze({ type: 'text' })
+    if (
+      response?.type === 'tools' &&
+      isArray(response.tools) &&
+      !isEmpty(response.tools) &&
+      response.tools.length <= 32
+    ) {
+      const names = new Set<string>()
+      for (const tool of response.tools) {
+        this.response({ ...request, response: { type: 'json', ...tool } })
+        if (names.has(tool.name)) throw new AppError('VALIDATION', '工具名称重复')
+        names.add(tool.name)
+      }
+      return immutableOperationJson(response)
+    }
     if (
       !response ||
       response.type !== 'json' ||
@@ -36,7 +52,7 @@ class ModelRequestEncoder implements ModelRequestEncoderApi {
   }
 
   public output(format: ModelResponseFormat, value: unknown): unknown {
-    if (format.type === 'text') {
+    if (format.type !== 'json') {
       if (!isString(value)) throw new AppError('VALIDATION', '文本响应必须是字符串')
       return value
     }
@@ -65,6 +81,9 @@ class ModelRequestEncoder implements ModelRequestEncoderApi {
   }
   public continuation(value: unknown): ModelContinuation {
     return driverModelContinuation(value)
+  }
+  public toolExchange(value: unknown): ModelToolExchange {
+    return driverModelToolExchange(value)
   }
   public encode(request: ModelTurnRequest): string {
     return driverModelPrompt(request)

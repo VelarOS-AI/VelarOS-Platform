@@ -24,6 +24,30 @@ export interface ModelContinuation {
   /** 供应商用量给出的保守输入容量预留；密文字符数不是 token 数。 */
   readonly tokens: number
 }
+/** 供应商中立的可调用入口；业务入参来自正式合同生成的 schema。 */
+export interface ModelToolDefinition {
+  readonly name: string
+  readonly description: string
+  readonly schema: Readonly<Record<string, unknown>>
+}
+/** 完整接收的调用，尚未授权执行。 */
+export interface ModelToolCall {
+  readonly id: string
+  readonly name: string
+  readonly input: unknown
+}
+/** 宿主执行记录交回的结果；必须与被接受的调用身份逐一配对。 */
+export interface ModelToolResult {
+  readonly id: string
+  readonly name: string
+  readonly output: unknown
+}
+/** 已落盘的完整调用往返；正文保持原样，编译器可原子退回文本历史。 */
+export interface ModelToolExchange {
+  readonly text: string
+  readonly calls: readonly ModelToolCall[]
+  readonly results: readonly ModelToolResult[]
+}
 /** 有序历史消息；脚本响应正文与供应商延续状态分开保存。 */
 export type ModelHistoryMessage =
   | ModelUserMessage
@@ -31,6 +55,7 @@ export type ModelHistoryMessage =
       role: 'assistant'
       content: string
       readonly continuation?: ModelContinuation
+      readonly toolExchange?: ModelToolExchange
       /** 供应商缓存到这条消息为止的前缀；需要显式断点的供应商使用，其余忽略。 */
       cacheBreakpoint?: boolean
     }
@@ -75,6 +100,11 @@ export interface ModelMaterial {
 /** 供应商中立的响应格式；业务含义由装配层定义。 */
 export type ModelResponseFormat =
   | {
+      /** 标准工具调用与普通文本答复；完整响应的接收门负责执行。 */
+      readonly type: 'tools'
+      readonly tools: readonly ModelToolDefinition[]
+    }
+  | {
       /** 原生 JSON 响应模式。 */
       readonly type: 'json'
       /** 稳定的协议名称，不代表可调用工具。 */
@@ -109,6 +139,18 @@ export interface ModelTurnRequest {
 }
 /** 编码后预算；估算必须说明口径。 */
 export interface ModelInputEstimate {
+  /** 可相加的发送结构文本字节，不冒充供应商 token；图像和密文容量单列。 */
+  readonly composition?: {
+    readonly unit: 'utf8-bytes'
+    readonly system: number
+    readonly tools: number
+    readonly assistantHistory: number
+    readonly userHistory: number
+    readonly toolResults: number
+    readonly current: number
+    readonly framing: number
+    readonly total: number
+  }
   readonly tokens: number
   readonly precision: 'exact' | 'estimate'
   readonly basis: string
@@ -120,6 +162,7 @@ export interface ModelInputEstimate {
 /** 流式响应仅传递模型事实；控制状态由 Agent 决定。 */
 export type ModelTurnDelta =
   | { readonly type: 'text'; readonly text: string }
+  | { readonly type: 'tool-call'; readonly value: ModelToolCall }
   /** 供应商给的思考摘要增量：只供宿主展示，不进上下文，也不参与协议解码。 */
   | { readonly type: 'reasoning'; readonly text: string }
   /** 完整响应的供应商状态；Agent 只在响应被接受后持久化，不作为宿主展示事件。 */

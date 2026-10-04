@@ -321,6 +321,7 @@ export class ModelToolRuntime implements ModelToolRuntimeApi {
       get limits() {
         return driver.limits
       },
+      nativeTools: driver.nativeTools,
       estimate: (request) => driver.estimate(request),
       stream: (request, signal) => this.stream(sessionId, driver, request, signal),
     }

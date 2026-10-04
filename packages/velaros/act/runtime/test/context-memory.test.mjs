@@ -2308,7 +2308,28 @@ test('INV-75 full recalled carriers beyond the logical entry cap reach actual ac
         return JSON.stringify(copy)
       }
       const accepted = modelRequestEncoder.messages(first).at(-1)
-      assert(f.requests[1].history.some((message) => identity(message) === identity(accepted)))
+      if (!f.requests[1].history.some((message) => identity(message) === identity(accepted))) {
+        // 暂态帧超过开销阈值时重建；超出逻辑条目上限的正文必须完整重新出线。
+        const next = JSON.parse(
+          f.requests[1].materials.find((item) => item.origin === 'runtime-view').text
+        )
+        const delivered = next.partitions.recent.results.find(
+          (item) => item.ref === executed.resultRef
+        )
+        assert.equal(delivered.representation, 'full')
+        assert.equal(delivered.truncated, false)
+        assert.equal(delivered.text, carrier.text)
+        assert(
+          modelRequestEncoder
+            .messages(f.requests[1])
+            .some(
+              (message) =>
+                typeof message.content === 'string' &&
+                (message.content.includes(carrier.text) ||
+                  message.content.includes(JSON.stringify(carrier.text).slice(1, -1)))
+            )
+        )
+      }
       for (const request of f.requests) {
         const frame = JSON.parse(
           request.materials.find((item) => item.origin === 'runtime-view').text

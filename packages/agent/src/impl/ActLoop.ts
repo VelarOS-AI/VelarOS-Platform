@@ -8,6 +8,7 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import {
   type ModelHistoryMessage,
   modelRequestEncoder,
+  type ModelToolCall,
   type ModelTurnDelta,
 } from '@velaros-ai/kernel'
 import {
@@ -16,7 +17,7 @@ import {
   modelProviderRetry,
 } from '@velaros-ai/model'
 
-import type { ActLoopOptions, ActRunServiceOptions } from '../contract/requires.js'
+import type { ActLoopOptions, ActRunServiceOptions, ActTurnDecoder } from '../contract/requires.js'
 import type { ActComposedFrame, ActDecodedTurn, ActInput, ActRunEvent } from '../types/act.js'
 import { sessionCacheKey } from '../utils/cache-key.js'
 import { framedRequest, requestChars } from '../utils/frame-prompt.js'
@@ -199,7 +200,7 @@ export class ActLoop implements ActLoopApi {
         for (let refresh = 0; refresh < 3; refresh++)
           try {
             frame = await boundedModelOperation(
-              this.frame(controller.signal, decoder.instructions),
+              this.frame(controller.signal, decoder),
               controller.signal
             )
             break
@@ -228,6 +229,9 @@ export class ActLoop implements ActLoopApi {
         const contextMs = performance.now() - projectionStarted
         let decoded: Optional<ActDecodedTurn>
         let acceptedTurnId = ''
+        let acceptedCalls: readonly ModelToolCall[] = []
+        let acceptedText = ''
+        let acceptedResponseRef: Optional<{ sessionId: string; id: string }>
         for (let repair = 0; repair <= Math.max(2, this.policy.recoveryAttempts); repair++) {
           decoder.reset()
           // 每小时用量到上限：等窗口释放后继续；用户总上限到了：暂停等用户，不算失败
@@ -289,6 +293,9 @@ export class ActLoop implements ActLoopApi {
           let finish: Optional<Extract<ModelTurnDelta, { type: 'finish' }>>
           let measured = false
           let received = ''
+          const calls: ModelToolCall[] = []
+          const rawResponse = (): string =>
+            !isEmpty(calls) ? JSON.stringify({ text: received, calls }) : received
           let continuation: Optional<Extract<ModelTurnDelta, { type: 'continuation' }>['value']>
           let responseRef: Optional<{ sessionId: string; id: string }>
           let usage: Optional<Omit<Extract<ModelTurnDelta, { type: 'usage' }>, 'type'>>
@@ -358,10 +365,16 @@ export class ActLoop implements ActLoopApi {
                 received += delta.text
                 for (const preview of decoder.push(delta.text)) yield { ...preview, runId }
               }
+              if (delta.type === 'tool-call') {
+                calls.push(delta.value)
+                if (!decoder.acceptTool) throw new AppError('PROTOCOL', '当前协议没有声明原生工具')
+                if (isNull(firstTextMs)) firstTextMs = performance.now() - modelStarted
+                for (const preview of decoder.acceptTool(delta.value)) yield { ...preview, runId }
+              }
               if (delta.type === 'finish') finish = delta
             }
             modelMs = performance.now() - modelStarted
-            if (!finish || finish.reason !== 'stop' || !received)
+            if (!finish || finish.reason !== 'stop' || (!received && isEmpty(calls)))
               throw new AppError('PROTOCOL', '模型响应未完整结束，程序没有执行')
             decoded = decoder.finish()
             for (const preview of decoded.events) yield { ...preview, runId }
@@ -380,7 +393,7 @@ export class ActLoop implements ActLoopApi {
             const accepted = await this.options.context.append(
               {
                 kind: 'assistant',
-                body: received,
+                body: rawResponse(),
                 sources: [audit.ref, ...(continuationRecord ? [continuationRecord.ref] : [])],
               },
               controller.signal
@@ -410,6 +423,9 @@ export class ActLoop implements ActLoopApi {
               controller.signal
             )
             acceptedTurnId = `${audit.ref.id}:${accepted.ref.id}`
+            acceptedCalls = calls
+            acceptedText = received
+            acceptedResponseRef = accepted.ref
             // 已接受请求的实际出线成为下一帧的前缀；含图片的帧不保留，避免历史图片越积越多。
             const sent = modelRequestEncoder.messages(compiled.request)
             const previous = this.transcript
@@ -448,7 +464,7 @@ export class ActLoop implements ActLoopApi {
                 await this.options.context.append({
                   kind: 'audit',
                   title: 'model-response-raw',
-                  body: received,
+                  body: rawResponse(),
                   sources: [audit.ref],
                 })
               ).ref
@@ -513,7 +529,7 @@ export class ActLoop implements ActLoopApi {
               // 实际超窗说明校准偏小：回到原始估算、封段后重组，再不行就用恢复窗口；保留的旧帧一并放弃
               this.planner.rejected()
               this.transcript = undefined
-              const repaired = await this.frame(controller.signal, decoder.instructions, {
+              const repaired = await this.frame(controller.signal, decoder, {
                 provider: true,
                 recovery: repair > 0,
               })
@@ -565,9 +581,29 @@ export class ActLoop implements ActLoopApi {
           const success = await this.options.execution.invoke(
             decoded.submission,
             controller.signal,
-            acceptedTurnId
+            acceptedTurnId,
+            acceptedCalls
           )
-          if (isFalse(success) || !decoded.done) continue
+          if (!isEmpty(acceptedCalls)) {
+            if (!isObject(success) || !('results' in success))
+              throw new AppError('INVARIANT', '原生工具执行缺少对应回执')
+            const exchange = modelRequestEncoder.toolExchange({
+              text: acceptedText,
+              calls: acceptedCalls,
+              results: success.results,
+            })
+            await this.options.context.append(
+              {
+                kind: 'audit',
+                title: 'model-tool-exchange',
+                body: JSON.stringify(exchange),
+                sources: [acceptedResponseRef!],
+              },
+              controller.signal
+            )
+          }
+          if (isFalse(success) || (isObject(success) && !success.succeeded) || !decoded.done)
+            continue
           await this.options.frames.prepare(controller.signal)
           await this.options.view.build(
             {
@@ -710,11 +746,12 @@ export class ActLoop implements ActLoopApi {
 
   private async frame(
     signal: AbortSignal,
-    protocolInstructions: string,
+    decoder: ActTurnDecoder,
     repair: { provider: boolean; recovery: boolean } = { provider: false, recovery: false },
     attempt = 0
   ): Promise<Nullable<ActComposedFrame>> {
     const { model, limits, frames, view } = this.options
+    const protocolInstructions = decoder.instructions
     const maintenanceSignal = AbortSignal.any([
       signal,
       ...(this.options.control ? [this.options.control.turnSignal()] : []),
@@ -780,7 +817,7 @@ export class ActLoop implements ActLoopApi {
               totalChars: body.length,
             },
           ],
-          response: { type: 'text' },
+          response: decoder.response ?? { type: 'text' },
           mode: phase.phase === 'maintenance' ? 'maintenance' : 'work',
           outputTokens,
           cacheKey,
@@ -825,7 +862,7 @@ export class ActLoop implements ActLoopApi {
       )
         return this.frame(
           signal,
-          protocolInstructions,
+          decoder,
           { provider: false, recovery: repair.recovery },
           attempt + 1
         )
@@ -881,7 +918,7 @@ export class ActLoop implements ActLoopApi {
       if (attempt > 0 && segment) this.planner.exhaust(segment)
       if (attempt === 0 && !(segment && this.planner.exhausted(segment)) && frames.maintain) {
         if (await frames.maintain({ reason: 'pressure', targetChars: target }, maintenanceSignal))
-          return this.frame(signal, protocolInstructions, repair, attempt + 1)
+          return this.frame(signal, decoder, repair, attempt + 1)
         if (segment) this.planner.exhaust(segment)
       }
       if (!fits(current)) {
@@ -993,6 +1030,23 @@ export class ActLoop implements ActLoopApi {
       JSON.stringify(message)
     for (const [index, message] of transcript.logical.entries())
       if (identity(message) !== identity(logical[index]!)) return undefined
+    // 运行状态随请求累积会比任务、源码和结果更大；达到开销阈值时从权威投影重建。
+    const logicalChars = transcript.logical.reduce(
+      (sum, message) => sum + identity(message).length,
+      0
+    )
+    const retainedChars = transcript.sent.reduce(
+      (sum, message) => sum + identity(message).length,
+      0
+    )
+    if (
+      retainedChars - logicalChars >
+      Math.max(
+        ContextPlanTuning.retainedStateChars,
+        logicalChars * ContextPlanTuning.retainedStateRatio
+      )
+    )
+      return undefined
     // 逻辑条目在已发送前缀中的位置不会变；不能按内容匹配，否则重复结果会串标。
     const marked = new Set(
       transcript.positions.filter((_, index) => logical[index]?.cacheBreakpoint)

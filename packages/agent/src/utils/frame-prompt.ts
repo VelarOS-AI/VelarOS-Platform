@@ -11,7 +11,7 @@ const FrameHeading = '本帧协议（宿主生成；控制标记以最后出现�
 export function framedRequest(request: ModelTurnRequest, frame: string): ModelTurnRequest {
   return {
     ...request,
-    compiledPrompt: `${modelRequestEncoder.encode(request)}\n\n${FrameHeading}\n${frame}`,
+    compiledPrompt: `${modelRequestEncoder.encode(request)}\n\n${request.response.type === 'tools' ? '本轮执行要求：' : FrameHeading}\n${frame}`,
   }
 }
 
@@ -19,6 +19,7 @@ export function framedRequest(request: ModelTurnRequest, frame: string): ModelTu
 export function requestChars(request: ModelTurnRequest): number {
   return (
     request.instructions.length +
+    (request.response.type === 'tools' ? JSON.stringify(request.response.tools).length : 0) +
     (request.compiledPrompt?.length ?? 0) +
     (request.history ?? []).reduce(
       (sum, message) =>

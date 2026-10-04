@@ -55,9 +55,6 @@ assert.equal(
 const modelId = 'gpt-5.6-sol'
 const require = createRequire(join(output, 'standard/packages/model/package.json'))
 const { createOpenAI } = await import(pathToFileURL(require.resolve('@ai-sdk/openai')))
-const { createAiSdkModelDriver } = await import(
-  pathToFileURL(join(output, 'standard/packages/model/dist/index.js'))
-)
 const exec = promisify(execFile)
 const results = []
 const importAt = (variant, path) => import(pathToFileURL(join(output, variant, 'packages', path)))
@@ -88,13 +85,19 @@ async function preflight(variant) {
   const directory = join(output, 'preflight', variant)
   const cwd = join(directory, 'workspace')
   await mkdir(cwd, { recursive: true })
-  const { createRuntime, createShellCapabilityModule, createShellNodeEnvironment } = await importAt(
-    variant,
-    'velaros/dist/act/runtime/index.js'
-  )
+  const {
+    createRuntime,
+    createShellCapabilityModule,
+    createShellNodeEnvironment,
+    createCapabilityModule,
+  } = await importAt(variant, 'velaros/dist/act/runtime/index.js')
   const { projectCapabilityPorts } = await importAt(variant, 'velaros/dist/project/index.js')
   const { createLocalShellHost } = await importAt(variant, 'velaros/dist/shell/local.js')
   const { localContextStorage } = await importAt(variant, 'context/dist/node.js')
+  const { sessionsOperations } = await importAt(variant, 'velaros/dist/sessions/index.js')
+  const { VelarSessionsModule } = await importAt(variant, 'velaros/dist/sessions/contracts.js')
+  const hostCases = suite.cases.filter((item) => item.split === split && item.sessions)
+  let peers = hostCases[0]?.sessions ?? []
   const shell = createLocalShellHost({ cwd })
   let runtime
   try {
@@ -104,7 +107,22 @@ async function preflight(variant) {
       agents: false,
       memory: false,
       search: false,
-      modules: [shellCapability(createShellCapabilityModule, projectCapabilityPorts, shell, cwd)],
+      modules: [
+        shellCapability(createShellCapabilityModule, projectCapabilityPorts, shell, cwd),
+        ...(hostCases.length
+          ? [
+              createCapabilityModule({
+                surface: VelarSessionsModule,
+                implementation: sessionsOperations,
+                instanceId: 'fixture-preflight',
+                context: (call) => ({
+                  abortSignal: call.signal,
+                  sessions: { list: async () => peers },
+                }),
+              }),
+            ]
+          : []),
+      ],
       storage: localContextStorage({ path: join(directory, 'state.sqlite') }),
       ...(nativeVariants.has(variant)
         ? { node: createShellNodeEnvironment({ cwd, directory: join(directory, 'node'), shell }) }
@@ -127,9 +145,23 @@ async function preflight(variant) {
       JSON.stringify(result)
     )
     assert.match(JSON.stringify(result), /preflight-shell-ok/)
+    // 夹具经过两侧真实 Kernel 的输出合同；错误夹具在任何付费请求前失败。
+    for (const spec of hostCases) {
+      peers = spec.sessions
+      const host = await session.execute({
+        source: "import {list} from 'velaros:sessions'; console.log(JSON.stringify(await list()))",
+      })
+      assert.equal(host.checked, true, `${variant}/${spec.id}: ${JSON.stringify(host)}`)
+      assert.equal(host.result.failed, undefined, `${variant}/${spec.id}: ${JSON.stringify(host)}`)
+      assert.deepEqual(JSON.parse(host.result.process.stdout.trim()), peers)
+    }
     await writeFile(
       join(directory, 'result.json'),
-      JSON.stringify({ passed: true, result }, null, 2)
+      JSON.stringify(
+        { passed: true, result, validatedHostCases: hostCases.map((spec) => spec.id) },
+        null,
+        2
+      )
     )
     console.log(JSON.stringify({ preflight: variant, passed: true }))
   } finally {
@@ -160,6 +192,7 @@ async function runCase(variant, spec, repetition) {
   const { projectCapabilityPorts } = await importAt(variant, 'velaros/dist/project/index.js')
   const { sessionsOperations } = await importAt(variant, 'velaros/dist/sessions/index.js')
   const { VelarSessionsModule } = await importAt(variant, 'velaros/dist/sessions/contracts.js')
+  const { createAiSdkModelDriver } = await importAt(variant, 'model/dist/index.js')
   const shell = createLocalShellHost({ cwd })
   const abort = new AbortController()
   const deadline = setTimeout(() => abort.abort(Error('evaluation deadline')), 240_000)
@@ -185,6 +218,7 @@ async function runCase(variant, spec, repetition) {
   const turns = []
   const model = {
     id: driver.id,
+    nativeTools: driver.nativeTools,
     limits: driver.limits,
     estimate: (request) => driver.estimate(request),
     async *stream(request, signal) {
@@ -192,7 +226,12 @@ async function runCase(variant, spec, repetition) {
         abort.abort(Error('request limit'))
         return
       }
-      const turn = { request, deltas: [], started: Date.now() }
+      const turn = {
+        request,
+        estimate: await driver.estimate(request),
+        deltas: [],
+        started: Date.now(),
+      }
       turns.push(turn)
       for await (const delta of driver.stream(request, signal)) {
         turn.deltas.push(delta)
@@ -262,11 +301,20 @@ async function runCase(variant, spec, repetition) {
   let passed = true,
     gradeError
   try {
-    for (const [file, value] of Object.entries(spec.expected ?? {}))
-      assert.deepEqual(JSON.parse(await readFile(join(cwd, file), 'utf8')), value)
+    const assertArtifacts = async () => {
+      for (const [file, value] of Object.entries(spec.expected ?? {}))
+        assert.deepEqual(JSON.parse(await readFile(join(cwd, file), 'utf8')), value)
+    }
+    await assertArtifacts()
+    // 独立重跑交付的标准脚本，防止仅写死验收产物而没有可复用程序。
+    for (const script of spec.rerun ?? []) {
+      assert(script.endsWith('.mjs') && !script.includes('..'))
+      await exec(process.execPath, [script], { cwd, timeout: 10000, maxBuffer: 64000 })
+      await assertArtifacts()
+    }
     for (const file of spec.unchanged ?? [])
       assert.equal(await readFile(join(cwd, file), 'utf8'), spec.files[file], `${file} changed`)
-    if (spec.requiresHost) assert.ok(hostCalls.length)
+    if (spec.requiresHost) assert.ok(hostCalls.length >= (spec.minimumHostCalls ?? 1))
     if (spec.grade)
       await exec(
         process.execPath,
@@ -298,6 +346,13 @@ async function runCase(variant, spec, repetition) {
     completed: status === 'completed',
     status: status ?? null,
     requests: turns.length,
+    firstTurnExecuted: (() => {
+      const start = events.findIndex((event) => event.type === 'turn')
+      const next = events.findIndex((event, index) => index > start && event.type === 'turn')
+      return events
+        .slice(start, next < 0 ? undefined : next)
+        .some((event) => event.type === 'state' && event.status === 'executing')
+    })(),
     elapsedMs,
     inputTokens,
     outputTokens,
@@ -331,7 +386,22 @@ async function runCase(variant, spec, repetition) {
   console.log(JSON.stringify(result))
 }
 
-for (const { id } of variants) await preflight(id)
+for (const { id, manifestSha256 } of variants) {
+  const manifestText = await readFile(join(output, id, 'manifest.json'), 'utf8')
+  if (manifestSha256)
+    assert.equal(createHash('sha256').update(manifestText).digest('hex'), manifestSha256)
+  for (const [path, digest] of Object.entries(JSON.parse(manifestText).files)) {
+    assert(path.startsWith('packages/') && !path.split('/').includes('..'))
+    assert.equal(
+      createHash('sha256')
+        .update(await readFile(join(output, id, path)))
+        .digest('hex'),
+      digest,
+      `${id}/${path} changed after freezing`
+    )
+  }
+  await preflight(id)
+}
 for (let repetition = 0; repetition < repetitions; repetition++)
   for (const [index, spec] of suite.cases.filter((item) => item.split === split).entries()) {
     const offset = (index + repetition) % variants.length

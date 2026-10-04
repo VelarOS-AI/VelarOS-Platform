@@ -41,6 +41,178 @@ const noCalls = async () => {
   throw Error('unexpected host call')
 }
 
+test('native Shell/Node calls execute after acceptance and recover matched history from storage', async (t) => {
+  const f = await fixture(t)
+  const requests = []
+  let turn = 0
+  const model = {
+    id: 'native-fixture',
+    nativeTools: true,
+    limits: { contextTokens: 128000, inputTokens: 120000, outputTokens: 4000 },
+    estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+    async *stream(request) {
+      requests.push(request)
+      assert.equal(request.response.type, 'tools')
+      assert.deepEqual(
+        request.response.tools.map((tool) => tool.name),
+        ['shell', 'node']
+      )
+      turn++
+      if (turn === 1)
+        yield {
+          type: 'tool-call',
+          value: { id: 'call_shell', name: 'shell', input: { code: "printf '7' > input.txt" } },
+        }
+      else if (turn === 2) {
+        assert.equal(request.history.filter((message) => message.toolExchange).length, 1)
+        yield {
+          type: 'tool-call',
+          value: {
+            id: 'call_node',
+            name: 'node',
+            input: {
+              code: "import {readFile,writeFile} from 'node:fs/promises'; const n=Number(await readFile('input.txt','utf8')); await writeFile('answer.json',JSON.stringify({answer:n*6})); console.log(n*6)",
+            },
+          },
+        }
+      } else yield { type: 'text', text: '文件已生成并检查。' }
+      yield { type: 'finish', reason: 'stop' }
+    },
+  }
+  const options = {
+    node: f.node,
+    model,
+    project: false,
+    agents: false,
+    search: false,
+    memory: false,
+    storage: localContextStorage({ path: join(f.root, 'native.sqlite') }),
+    context: { maintenance: false },
+    limits: { turns: 6, outputTokens: 4000, timeoutMs: 20000 },
+  }
+  let runtime = await createRuntime(options)
+  t.after(() => runtime.close())
+  let session = await runtime.openSession('native')
+  const events = []
+  for await (const event of session.submit('生成 answer.json')) events.push(event)
+  assert(!events.some((event) => event.type === 'error'), JSON.stringify(events))
+  assert.deepEqual(JSON.parse(await readFile(join(f.cwd, 'answer.json'), 'utf8')), { answer: 42 })
+  assert.equal(requests[2].history.filter((message) => message.toolExchange).length, 2)
+  const nodeSource = requests[2].history.find(
+    (message) => message.toolExchange?.calls[0]?.id === 'call_node'
+  ).toolExchange.calls[0].input.code
+  assert(
+    !requests[2].history.some(
+      (message) => message.role === 'user' && message.content.includes(nodeSource)
+    ),
+    'native call source is already present in assistant history'
+  )
+  assert(events.some((event) => event.type === 'program' && event.kind === 'shell'))
+  const trace = await runtime.trace('native', { fullContent: true })
+  assert.equal(trace.turns[0].executions[0].language, 'shell')
+  assert.equal(trace.turns[1].executions[0].language, 'node')
+  await runtime.close()
+  runtime = await createRuntime({
+    ...options,
+    storage: localContextStorage({ path: join(f.root, 'native.sqlite') }),
+  })
+  session = await runtime.openSession('native')
+  for await (const event of session.submit('确认收到')) assert.notEqual(event.type, 'error')
+  assert(
+    requests.at(-1).history.some((message) => message.toolExchange?.calls[0]?.id === 'call_node')
+  )
+})
+
+test('native response with a later invalid tool input performs no earlier write', async (t) => {
+  const f = await fixture(t)
+  let turn = 0
+  const runtime = await createRuntime({
+    node: f.node,
+    project: false,
+    agents: false,
+    search: false,
+    memory: false,
+    storage: localContextStorage({ path: join(f.root, 'invalid-native.sqlite') }),
+    context: { maintenance: false },
+    model: {
+      id: 'invalid-native',
+      nativeTools: true,
+      limits: { contextTokens: 128000, inputTokens: 120000, outputTokens: 4000 },
+      estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+      async *stream() {
+        if (++turn === 1) {
+          yield {
+            type: 'tool-call',
+            value: { id: 'a', name: 'shell', input: { code: 'touch forbidden.txt' } },
+          }
+          yield {
+            type: 'tool-call',
+            value: { id: 'b', name: 'node', input: { wrong: 'console.log(1)' } },
+          }
+        } else yield { type: 'text', text: '结束。' }
+        yield { type: 'finish', reason: 'stop' }
+      },
+    },
+  })
+  t.after(() => runtime.close())
+  const session = await runtime.openSession('invalid')
+  for await (const event of session.submit('测试完整响应接收'))
+    assert(!(event.type === 'state' && event.status === 'failed'), JSON.stringify(event))
+  await assert.rejects(readFile(join(f.cwd, 'forbidden.txt')), { code: 'ENOENT' })
+  const trace = await runtime.trace('invalid', { fullContent: true })
+  assert.equal(trace.turns[0].executions.length, 0)
+  assert.match(trace.turns[0].response.body, /forbidden.txt/)
+})
+
+test('cancelling a later native model turn preserves the completed call and never replays its write', async (t) => {
+  const f = await fixture(t)
+  const controller = new AbortController()
+  let turn = 0
+  const requests = []
+  const runtime = await createRuntime({
+    node: f.node,
+    project: false,
+    agents: false,
+    search: false,
+    memory: false,
+    storage: localContextStorage({ path: join(f.root, 'cancel-native.sqlite') }),
+    context: { maintenance: false },
+    model: {
+      id: 'cancel-native',
+      nativeTools: true,
+      limits: { contextTokens: 128000, inputTokens: 120000, outputTokens: 4000 },
+      estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+      async *stream(request) {
+        requests.push(request)
+        if (++turn === 1)
+          yield {
+            type: 'tool-call',
+            value: {
+              id: 'write_once',
+              name: 'shell',
+              input: { code: "printf 'once\\n' >> effects.txt" },
+            },
+          }
+        else if (turn === 2) {
+          controller.abort()
+          return
+        } else yield { type: 'text', text: '已核对先前的执行结果。' }
+        yield { type: 'finish', reason: 'stop' }
+      },
+    },
+  })
+  t.after(() => runtime.close())
+  const session = await runtime.openSession('cancel')
+  const events = []
+  for await (const event of session.submit('执行一次', controller.signal)) events.push(event)
+  assert(events.some((event) => event.type === 'state' && event.status === 'cancelled'))
+  for await (const event of session.submit('继续确认')) assert.notEqual(event.type, 'error')
+  assert.equal(await readFile(join(f.cwd, 'effects.txt'), 'utf8'), 'once\n')
+  assert(
+    requests.at(-1).history.some((message) => message.toolExchange?.calls[0].id === 'write_once')
+  )
+})
+
 test('discovered host shell owns background tasks across separate Node executions', async (t) => {
   const f = await fixture(t)
   const runtime = await createRuntime({

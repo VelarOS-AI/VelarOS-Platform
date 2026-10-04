@@ -10,6 +10,9 @@ import type {
   ModelDriver,
   ModelHistoryMessage,
   ModelImage,
+  ModelResponseFormat,
+  ModelToolCall,
+  ModelToolResult,
   ModelTurnRequest,
 } from '@velaros-ai/kernel'
 
@@ -23,12 +26,16 @@ import type {
 
 /** 一帧固定协议的增量接收器，校验失败时不授权执行。 */
 export interface ActTurnDecoder {
+  /** 本帧在供应商侧声明的传输格式；缺省使用文本。 */
+  readonly response?: ModelResponseFormat
   /** 本帧固定的协议说明及标记，计入实际请求预算。 */
   readonly instructions: string
   /** 清空接收状态，修复时保留同一帧的协议与参数快照。 */
   reset(): void
   /** 接收原始文本并返回正文或程序预览。 */
   push(text: string): readonly ActPreview[]
+  /** 完整参数只生成预览；finish 接受整份响应后主循环才会执行。 */
+  acceptTool?(call: ModelToolCall): readonly ActPreview[]
   /** 正常生成结束后校验所有段并生成控制意图。 */
   finish(): ActDecodedTurn
 }
@@ -42,7 +49,12 @@ export interface ActExecutionPort {
   /** 取消并收束本次任务尚未结束的程序。 */
   stop(): Promise<void>
   /** 执行并记录回执；acceptedTurnId 由宿主绑定到已持久化的响应。 */
-  invoke(input: unknown, signal: AbortSignal, acceptedTurnId: string): Promise<void | boolean>
+  invoke(
+    input: unknown,
+    signal: AbortSignal,
+    acceptedTurnId: string,
+    calls?: readonly ModelToolCall[]
+  ): Promise<void | boolean | { succeeded: boolean; results: readonly ModelToolResult[] }>
 }
 /** 上下文策略独立于协议解码和执行调度。 */
 export interface ActContextPort {
@@ -99,7 +111,8 @@ export interface ActContextPort {
   }>
   /**
    * 渲染本帧相对上一帧的变化，未列出的沿用上一帧。提供时循环把已发送的帧留在历史里、
-   * 只在其后追加，供应商可复用完整前缀缓存；缺省时每帧完整重发。
+   * 在暂态开销阈值内只在其后追加，供应商可复用完整前缀缓存；重建时核对实际正文覆盖。
+   * 缺省时每帧完整重发。
    */
   delta?(body: string, previous: string): string
   /** 按本次实际选择的历史核对正文覆盖；不改变逻辑历史，容量重组时重新核对。 */

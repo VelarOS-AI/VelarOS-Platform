@@ -1,8 +1,8 @@
-import type { AssistantModelMessage, LanguageModel, ModelMessage } from 'ai'
+import type { AssistantModelMessage, JSONValue, LanguageModel, ModelMessage } from 'ai'
 
 import { isArray, isPlainObject, isString, isUndefined, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { ModelContinuation, ModelHistoryMessage } from '@velaros-ai/kernel'
+import type { ModelContinuation, ModelHistoryMessage, ModelToolCall } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 
 import { markPromptCacheBreakpoints } from './prompt-cache.js'
@@ -19,13 +19,14 @@ export function responseContinuation(
   messages: readonly ModelMessage[],
   text: string,
   tokens: number,
-  reasoningContext?: unknown
+  reasoningContext?: unknown,
+  calls: readonly ModelToolCall[] = []
 ): Optional<ModelContinuation> {
   if (!usesResponseContinuation(model) || isString(model)) return undefined
   const message = messages[0]
   if (messages.length !== 1 || message?.role !== 'assistant' || !isArray(message.content))
     throw new AppError('PROTOCOL', 'Responses 延续状态缺少完整 assistant 响应')
-  const content = responseContent(message.content)
+  const content = responseContent(message.content, calls)
   if (responseText(content) !== text)
     throw new AppError('PROTOCOL', 'Responses 延续状态与响应正文不一致')
   return modelRequestEncoder.continuation({
@@ -49,8 +50,39 @@ export function restoreResponseContinuations(
   id: string
 ): { messages: ModelMessage[]; opaqueTokens: number } {
   let opaqueTokens = 0
-  const restored = markPromptCacheBreakpoints(messages).map((message, index) => {
+  const restored = markPromptCacheBreakpoints(messages).flatMap((base, index): ModelMessage[] => {
     const source = messages[index]!
+    const exchange = source.role === 'assistant' ? source.toolExchange : undefined
+    let message: ModelMessage = exchange
+      ? {
+          ...base,
+          role: 'assistant',
+          content: [
+            ...(exchange.text ? [{ type: 'text' as const, text: exchange.text }] : []),
+            ...exchange.calls.map((call) => ({
+              type: 'tool-call' as const,
+              toolCallId: call.id,
+              toolName: call.name,
+              input: call.input,
+            })),
+          ],
+        }
+      : base
+    const result = (): ModelMessage[] =>
+      exchange
+        ? [
+            message,
+            {
+              role: 'tool',
+              content: exchange.results.map((item) => ({
+                type: 'tool-result',
+                toolCallId: item.id,
+                toolName: item.name,
+                output: { type: 'json', value: item.output as JSONValue },
+              })),
+            },
+          ]
+        : [message]
     const state = source.role === 'assistant' ? source.continuation : undefined
     if (
       !state ||
@@ -59,7 +91,7 @@ export function restoreResponseContinuations(
       !usesResponseContinuation(model) ||
       isString(model)
     )
-      return message
+      return result()
     let data: unknown
     try {
       data = JSON.parse(state.data)
@@ -70,32 +102,52 @@ export function restoreResponseContinuations(
     if (
       data.provider !== model.provider ||
       data.model !== model.modelId ||
-      data.text !== source.content
+      data.text !== (exchange?.text ?? source.content)
     )
-      return message
-    const content = responseContent(data.content)
+      return result()
+    const content = responseContent(data.content, exchange?.calls)
     if (responseText(content) !== data.text)
       throw new AppError('VALIDATION', 'Responses 延续状态正文被改写')
     opaqueTokens += state.tokens
-    return { ...message, role: 'assistant' as const, content }
+    message = { ...message, role: 'assistant' as const, content }
+    return result()
   })
   return { messages: restored, opaqueTokens }
 }
 
-/** ScriptAct 文本协议不允许把工具调用或其他供应商动作藏在延续状态里重放。 */
-function responseContent(value: unknown): Exclude<AssistantModelMessage['content'], string> {
+/** 供应商状态中的调用必须与已接收调用逐一相同；不接受隐藏动作。 */
+function responseContent(
+  value: unknown,
+  calls: readonly ModelToolCall[] = []
+): Exclude<AssistantModelMessage['content'], string> {
   if (
     !isArray(value) ||
     !value.length ||
     value.some(
       (part) =>
         !isPlainObject(part) ||
-        !['text', 'reasoning'].includes(String(part.type)) ||
-        !isString(part.text) ||
+        (!['text', 'reasoning'].includes(String(part.type)) && part.type !== 'tool-call') ||
+        (part.type !== 'tool-call' && !isString(part.text)) ||
         (!isUndefined(part.providerOptions) && !isPlainObject(part.providerOptions))
     )
   )
     throw new AppError('VALIDATION', 'Responses 延续状态包含非文本响应项')
+  const actions = value.filter(
+    (part): part is Record<string, unknown> => isPlainObject(part) && part.type === 'tool-call'
+  )
+  if (
+    actions.length !== calls.length ||
+    actions.some((part, index) => {
+      const call = calls[index]!
+      return (
+        part.toolCallId !== call.id ||
+        part.toolName !== call.name ||
+        part.providerExecuted ||
+        JSON.stringify(part.input) !== JSON.stringify(call.input)
+      )
+    })
+  )
+    throw new AppError('VALIDATION', 'Responses 延续状态包含未接收的工具调用')
   return structuredClone(value) as Exclude<AssistantModelMessage['content'], string>
 }
 

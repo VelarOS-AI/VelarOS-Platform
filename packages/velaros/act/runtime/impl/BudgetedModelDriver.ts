@@ -13,6 +13,8 @@ import { reservedModelStream } from '../utils/model-budget.js'
 
 /** 与 Kernel 驱动一致，附加父任务预算的内部驱动。 */
 export interface BudgetedModelDriverApi extends ModelDriver {
+  /** 继承实际模型的原生工具传输能力。 */
+  readonly nativeTools: boolean
   /** 取消迟到派发，等待已开始的父预算结算。 */
   close(): Promise<void>
   /** 真实模型身份。 */
@@ -27,6 +29,9 @@ export interface BudgetedModelDriverApi extends ModelDriver {
 
 /** 子调用在真实发送前原子预留父预算，续跑沿用同一总账。 */
 export class BudgetedModelDriver implements BudgetedModelDriverApi {
+  public get nativeTools(): boolean {
+    return Boolean(this.options.model.nativeTools)
+  }
   public readonly id: string
   private readonly lifetime = new AbortController()
   private readonly accounting = new Set<Promise<void>>()

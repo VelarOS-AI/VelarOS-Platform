@@ -485,6 +485,8 @@ import type {
 
 /** 主干依赖的中立模型驱动；供应商编码与使用量归驱动负责。 */
 export interface ModelDriver {
+  /** 支持完整的原生工具往返；未声明的自定义驱动使用文本协议。 */
+  readonly nativeTools?: boolean
   /** 请求所用的模型身份。 */
   readonly id: string
   /** 模型独立的输入、输出和总窗口限制。 */

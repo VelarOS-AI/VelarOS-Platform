@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -31,6 +31,73 @@ async function fixture(run: (cwd: string, directory: string) => Promise<void>) {
 }
 
 describe('INV-28 宿主 Node 进程注入与回收', () => {
+  test('Shell 文件、Node 子进程和并发孙进程继承同一授权包，磁盘脚本保持原生解析', () =>
+    fixture(async (root, directory) => {
+      const cwd = join(root, '有 空格')
+      await mkdir(cwd)
+      await writeFile(
+        join(cwd, 'saved.mjs'),
+        "import {read} from 'velaros:demo'; console.log(JSON.stringify(await read({from:'file'})))"
+      )
+      await writeFile(
+        join(cwd, '__velaros_program__.mjs'),
+        "import {read} from 'velaros:demo'; console.log(JSON.stringify(await read({from:'disk'})))"
+      )
+      await writeFile(
+        join(cwd, 'fork.mjs'),
+        "import {read} from 'velaros:demo'; process.send(await read({from:'fork'}))"
+      )
+      const runner = createNodeCodeRunner({ cwd, directory, execute: executeNativeNode })
+      const calls: unknown[] = []
+      const dispatch = async (call: { input: unknown }) => {
+        calls.push(call.input)
+        return { value: call.input }
+      }
+      const shell = await runner.run(
+        request('node saved.mjs', {
+          language: 'shell',
+          input: undefined,
+          operations: { demo: ['read'] },
+        }),
+        dispatch,
+        log
+      )
+      expect(shell).toMatchObject({ ok: true })
+      expect(shell.process?.stdout).toContain('file')
+      const children = await runner.run(
+        request(
+          "import {execFile} from 'node:child_process'; import {promisify} from 'node:util'; await Promise.all(['saved.mjs','__velaros_program__.mjs'].map(async file=>console.log((await promisify(execFile)(process.execPath,[file])).stdout)))",
+          { operations: { demo: ['read'] }, timeoutMs: 3000 }
+        ),
+        dispatch,
+        log
+      )
+      expect(children.ok).toBe(true)
+      expect(children.process?.stdout).toContain('disk')
+      expect(calls.map((value) => JSON.stringify(value)).sort()).toEqual([
+        '{"from":"disk"}',
+        '{"from":"file"}',
+        '{"from":"file"}',
+      ])
+      const forked = await runner.run(
+        request(
+          "import {fork} from 'node:child_process'; const child=fork('fork.mjs'); await new Promise((resolve,reject)=>{child.on('message', value=>console.log(JSON.stringify(value)));child.on('exit',code=>code ? reject(new Error(String(code))) : resolve());child.on('error',reject)})",
+          { operations: { demo: ['read'] }, timeoutMs: 3000 }
+        ),
+        dispatch,
+        log
+      )
+      expect(forked).toMatchObject({ ok: true })
+      expect(forked.process?.stdout).toContain('fork')
+      const denied = await runner.run(
+        request('node saved.mjs', { language: 'shell', input: undefined }),
+        dispatch,
+        log
+      )
+      expect(denied.ok).toBe(false)
+      expect(denied.process?.stderr).toContain('PERMISSION')
+      expect(calls.length).toBe(4)
+    }))
   test('预取消和审批拒绝均不启动进程', () =>
     fixture(async (cwd, directory) => {
       let launches = 0

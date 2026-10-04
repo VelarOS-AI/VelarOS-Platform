@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 
 import ts from 'typescript'
 import { createHash } from 'node:crypto'
-import { operationContract } from './operation-contracts.mjs'
+import { operationContract, operationSchema } from './operation-contracts.mjs'
 
 import { GovernedModules } from '../ownership/governed-modules.mjs'
 
@@ -829,6 +829,33 @@ function findStrayTags(marked) {
 }
 
 let failed = false
+// 执行入口是传输合同，单独从类型生成；不将它注册成可 import 的应用能力。
+if (!OutputOption) {
+  const path = resolve(RepoRoot, 'packages/velaros/act/runtime/types/native-tools.ts')
+  const program = ts.createProgram([path], { target: ts.ScriptTarget.ESNext, strict: true })
+  const declaration = program
+    .getSourceFile(path)
+    .statements.find(
+      (node) => ts.isInterfaceDeclaration(node) && node.name.text === 'NativeExecutionInput'
+    )
+  const checker = program.getTypeChecker()
+  const generatedSchema = operationSchema(checker, checker.getTypeAtLocation(declaration))
+  const schema = generatedSchema.$ref
+    ? {
+        ...generatedSchema.definitions[generatedSchema.$ref.slice('#/definitions/'.length)],
+        definitions: generatedSchema.definitions,
+      }
+    : generatedSchema
+  const target = resolve(RepoRoot, 'packages/velaros/act/runtime/contract/surface.ts')
+  const text = `${SurfaceFileHeader}\n\n/** Shell 与 Node 的正式入参合同。 */\nexport const NativeExecutionSchema = ${JSON.stringify(schema)} as const\n`
+  if (!ts.sys.fileExists(target) || readFileSync(target, 'utf8') !== text) {
+    if (ShouldWrite) writeFileSync(target, text)
+    else {
+      failed = true
+      process.stdout.write('✗ 原生执行入口 schema 与正式类型不一致；运行 bun run generate:script\n')
+    }
+  }
+}
 const marked = new Set()
 const generated = new Map()
 for (const surface of CodeSurfaces) {

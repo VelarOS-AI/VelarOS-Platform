@@ -235,6 +235,10 @@ export type CodeProgramEditResult =
 export interface NodeProcessRequest {
   /** 宿主生成的 Node 启动正文；source 保持原文用于审批与归档。 */
   readonly bootstrap?: string
+  /** 能力加载器的 file URL；宿主追加到 NODE_OPTIONS 的 --import，供普通 Node 后代继承。 */
+  readonly preload?: string
+  /** 宿主生成的启动文件；使用文件入口使 fork 可以直接继承普通 Node 参数。 */
+  readonly entrypoint?: string
   readonly language?: 'node' | 'shell'
   /** 宿主选择的权限，不由模型源码决定。 */
   readonly mode?: 'execute' | 'observe'

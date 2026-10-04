@@ -65,6 +65,7 @@ export const GovernedModules = [
         'ContextMemory.ts',
         'ActiveContext.ts',
         'ScriptTurnDecoder.ts',
+        'NativeTurnDecoder.ts',
         'McpClientConnection.ts',
         'RuntimeTrace.ts',
         'RecentContext.ts',

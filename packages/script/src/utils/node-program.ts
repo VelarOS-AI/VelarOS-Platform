@@ -38,7 +38,7 @@ export async function nodeProgramSource(
   catalog: string,
   cwd: string,
   capabilities: Readonly<Record<string, string>>
-): Promise<string> {
+): Promise<{ bootstrap: string; preload: string; entrypoint: string }> {
   const specifiers: Record<string, string> = Object.create(null)
   const sources: Record<string, string> = Object.create(null)
   const url = (path: string) => pathToFileURL(path).href
@@ -96,6 +96,25 @@ export const blobs = freeze(JSON.parse(${JSON.stringify(JSON.stringify(request.b
     )
     specifiers[pkg.specifier] = url(join(catalog, file))
   }
+  const loader = join(catalog, 'loader.mjs')
+  await writeFile(
+    loader,
+    `const specifiers = JSON.parse(${JSON.stringify(JSON.stringify(specifiers))});
+export async function resolve(specifier, context, nextResolve) {
+  if (Object.hasOwn(specifiers, specifier)) return {url:specifiers[specifier], shortCircuit:true};
+  if (specifier.startsWith('velaros:')) throw Object.assign(new Error('当前会话未授权包 '+specifier), {code:'PERMISSION'});
+  return nextResolve(specifier, context);
+}
+`,
+    { mode: 0o600 }
+  )
+  const preload = url(join(catalog, 'preload.mjs'))
+  await writeFile(
+    join(catalog, 'preload.mjs'),
+    `import {register} from 'node:module'; register(${JSON.stringify(url(loader))}, import.meta.url);\n`,
+    { mode: 0o600 }
+  )
+  // 子进程只继承能力解析；本轮虚拟源码不遮蔽磁盘上同路径的普通脚本。
   const entry = url(resolve(cwd, request.path ?? '__velaros_program__.mjs'))
   sources[entry] = request.source
   for (const [path, source] of Object.entries(request.modules)) {
@@ -103,15 +122,12 @@ export const blobs = freeze(JSON.parse(${JSON.stringify(JSON.stringify(request.b
     if (Object.hasOwn(sources, target)) throw new AppError('CONFLICT', `程序模块路径冲突：${path}`)
     sources[target] = source
   }
-  const loader = join(catalog, 'loader.mjs')
+  const programLoader = join(catalog, 'program-loader.mjs')
   await writeFile(
-    loader,
+    programLoader,
     `
-const specifiers = JSON.parse(${JSON.stringify(JSON.stringify(specifiers))});
 const sources = JSON.parse(${JSON.stringify(JSON.stringify(sources))});
 export async function resolve(specifier, context, nextResolve) {
-  if (Object.hasOwn(specifiers, specifier)) return {url:specifiers[specifier], shortCircuit:true};
-  if (specifier.startsWith('velaros:')) throw Object.assign(new Error('当前会话未授权包 '+specifier), {code:'PERMISSION'});
   if (specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('file:')) {
     const target = new URL(specifier, context.parentURL).href;
     if (Object.hasOwn(sources, target)) return {url:target, shortCircuit:true};
@@ -129,9 +145,10 @@ export async function load(url, context, nextLoad) {
   await writeFile(wrapper, `import * as exports from ${JSON.stringify(entry)}; export {exports};`, {
     mode: 0o600,
   })
-  return `import {register} from 'node:module';
+  const bootstrap = `import {register} from 'node:module';
+import ${JSON.stringify(preload)};
 import {send,releaseCalls} from ${JSON.stringify(url(join(catalog, 'bridge.mjs')))};
-register(${JSON.stringify(url(loader))}, import.meta.url);
+register(${JSON.stringify(url(programLoader))}, import.meta.url);
 try {
   const {exports} = await import(${JSON.stringify(url(wrapper))});
   const names = Object.keys(exports);
@@ -147,4 +164,7 @@ try {
   process.exitCode = 1;
 } finally { releaseCalls(); }
 `
+  const entrypoint = join(catalog, 'bootstrap.mjs')
+  await writeFile(entrypoint, bootstrap, { mode: 0o600 })
+  return { bootstrap, preload, entrypoint }
 }

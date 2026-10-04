@@ -14,6 +14,7 @@ export interface ProviderRequestFingerprint {
   readonly messageHash: string
   readonly prefixHash: string
   readonly responseFormatHash?: string
+  readonly toolsHash?: string
 }
 /** 实际模型请求的可重建审计快照。 */
 export interface ProviderRequestSnapshot {
@@ -21,7 +22,7 @@ export interface ProviderRequestSnapshot {
   readonly model: string
   readonly system: string
   readonly messages: ProviderRequestAuditValue
-  readonly tools: readonly []
+  readonly tools: readonly ProviderRequestAuditValue[]
   readonly responseFormat?: ProviderRequestAuditValue
   readonly outputTokens: number
   readonly requestFingerprint: ProviderRequestFingerprint
