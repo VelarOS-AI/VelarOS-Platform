@@ -363,7 +363,8 @@ export class ContextMaintenance implements ContextMaintenanceApi {
     const state = new ContextMaintenanceState(
       parentId,
       this.dependencies.storage,
-      this.dependencies.preview(parentId)
+      this.dependencies.preview(parentId),
+      input.reason === 'narrate' ? 'volume' : 'current'
     )
     const targetChars = input.targetChars
     const base = await state.snapshot(targetChars, signal)

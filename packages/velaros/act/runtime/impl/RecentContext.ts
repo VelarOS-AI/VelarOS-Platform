@@ -787,11 +787,24 @@ export class RecentContext implements RecentContextApi {
     ])
     const reset = this.reset(state)
     const records = (state?.records ?? []).filter((record) => record.sequence > reset)
-    if (!records.some((record) => record.title === 'context:volume' && record.ref.id === volume.id))
+    const sealed = records.find(
+      (record) => record.title === 'context:volume' && record.ref.id === volume.id
+    )
+    if (volume.sessionId !== this.id || !sealed)
       throw new AppError('NOT_FOUND', '要写叙事的卷不在当前授权代次')
-    for (const ref of narrative.evidence)
-      if (ref.sessionId !== this.id || !records.some((record) => record.ref.id === ref.id))
+    const through = (
+      JSON.parse((await this.storage.get(this.id, sealed.objectId))!) as ContextVolume
+    ).through
+    for (const ref of narrative.evidence) {
+      const evidence = records.find((record) => record.ref.id === ref.id)
+      if (ref.sessionId !== this.id || !evidence)
         throw new AppError('PERMISSION', '旧材料需要在当前授权范围内重新获取')
+      if (evidence.sequence > through)
+        throw new AppError(
+          'CONTEXT_NARRATIVE_RANGE',
+          `卷叙事只能依据序号 ${through} 及以前的原文；后续工作保留在当前记录中`
+        )
+    }
     const record = await this.context.append(
       {
         kind: 'checkpoint',

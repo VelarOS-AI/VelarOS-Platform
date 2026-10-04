@@ -72,12 +72,14 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
   private inputRevision = ''
   private readonly inputPages = new Map<string, ContextContent>()
   private readonly inputVisible = new Map<string, Array<{ start: number; end: number }>>()
-  private readonly recentPages: ContextContent[] = []
+  private readonly recentPages = new Map<string, ContextContent>()
+  private readonly recentVisible = new Map<string, Array<{ start: number; end: number }>>()
   private cached?: { revision: string; state: ContextState; metadataSignature: string }
   public constructor(
     private readonly id: string,
     private readonly storage: ContextStorage,
-    private readonly preview?: ContextCandidateValidator
+    private readonly preview?: ContextCandidateValidator,
+    private readonly scope: 'current' | 'volume' = 'current'
   ) {}
 
   private async version(state: ContextState): Promise<string> {
@@ -222,7 +224,8 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
       this.inputRevision = baseRevision
       this.inputPages.clear()
       this.inputVisible.clear()
-      this.recentPages.length = 0
+      this.recentPages.clear()
+      this.recentVisible.clear()
       for (const ref of state.task.goals) {
         const page = await context.readInput(ref, {
           limit: ContextMaintenanceReadLimits.maxPageChars,
@@ -233,6 +236,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
         .filter(
           (record) =>
             record.sequence > Math.max(reset, latest?.volume.from ?? 0) &&
+            (this.scope !== 'volume' || !latest || record.sequence <= latest.volume.through) &&
             (record.kind === 'assistant' ||
               /^script:(?:[a-f0-9]{8}|[0-9a-f-]{36}):result$/u.test(record.title) ||
               record.title.startsWith('workspace:note:')) &&
@@ -245,7 +249,8 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
       )
       for (const record of records) {
         signal.throwIfAborted()
-        this.recentPages.push(await context.read(record.ref, { limit }))
+        const page = await context.read(record.ref, { limit })
+        this.recentPages.set(`${record.ref.id}:${page.offset}`, page)
       }
     }
     return {
@@ -309,7 +314,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     }
     if (JSON.stringify(result).length > maxChars) return undefined
     if (snapshot.baseRevision !== this.inputRevision) return result
-    const inputBudget = isEmpty(this.recentPages) ? maxChars : Math.floor(maxChars / 2)
+    const inputBudget = this.recentPages.size === 0 ? maxChars : Math.floor(maxChars / 2)
     const pages = [...this.inputPages.values()].reverse().map((page) => {
       let start = page.offset
       let end = page.offset + page.text.length
@@ -357,32 +362,61 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
         continue
       inputs.push(item)
     }
-    const history = [...this.recentPages].reverse()
-    for (let index = 0; index < history.length; index++) {
-      const page = history[index]!
-      const budget = Math.floor(
-        (maxChars - JSON.stringify(result).length) / (history.length - index)
-      )
+    const history = [...this.recentPages.values()].reverse().map((page) => {
+      let start = page.offset
+      let end = page.offset + page.text.length
+      for (const range of this.recentVisible.get(page.record.ref.id) ?? []) {
+        if (range.start <= start) start = Math.max(start, range.end)
+        else {
+          end = Math.min(end, range.start)
+          break
+        }
+      }
+      return { page, start, end }
+    })
+    const unreadHistory = history.filter(({ start, end }) => start < end)
+    const selectedHistory = isEmpty(unreadHistory)
+      ? history.map(({ page }) => ({
+          page,
+          start: page.offset,
+          end: page.offset + page.text.length,
+        }))
+      : unreadHistory
+    for (const { page, start, end } of selectedHistory) {
+      const text = page.text.slice(start - page.offset, end - page.offset)
       const item = {
         ref: page.record.ref,
         sequence: page.record.sequence,
         kind: page.record.kind,
         title: page.record.title,
-        offset: page.offset,
+        offset: start,
         totalChars: page.totalChars,
-        text: page.text,
-        nextOffset:
-          page.offset + page.text.length < page.totalChars ? page.offset + page.text.length : null,
+        text,
+        nextOffset: start + text.length < page.totalChars ? start + text.length : null,
       }
-      while (item.text && JSON.stringify(item).length + 1 > budget) {
-        item.text = item.text.slice(0, Math.floor(item.text.length / 2))
-        item.nextOffset =
-          item.offset + item.text.length < item.totalChars ? item.offset + item.text.length : null
+      let lower = 0
+      let upper = text.length
+      while (lower < upper) {
+        const length = Math.ceil((lower + upper) / 2)
+        const candidate = {
+          ...item,
+          text: text.slice(0, length),
+          nextOffset: start + length < page.totalChars ? start + length : null,
+        }
+        if (JSON.stringify({ ...result, recent: [...recent, candidate] }).length <= maxChars)
+          lower = length
+        else upper = length - 1
       }
-      if (JSON.stringify({ ...result, recent: [...recent, item] }).length > maxChars) continue
+      item.text = text.slice(0, lower)
+      item.nextOffset = start + lower < page.totalChars ? start + lower : null
+      if (
+        (!item.text && page.totalChars) ||
+        JSON.stringify({ ...result, recent: [...recent, item] }).length > maxChars
+      )
+        continue
       recent.push(item)
     }
-    recent.reverse()
+    recent.sort((left, right) => left.sequence - right.sequence || left.offset - right.offset)
     return result
   }
 
@@ -390,6 +424,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     const value = material as Optional<{
       baseRevision: string
       inputs: Array<{ ref: ContextRef; offset: number; totalChars: number; text: string }>
+      recent?: Array<{ ref: ContextRef; offset: number; totalChars: number; text: string }>
     }>
     if (
       !value ||
@@ -397,31 +432,37 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
       snapshot.baseRevision !== this.inputRevision
     )
       return
-    for (const input of value.inputs) {
-      const page = [...this.inputPages.values()].find(
-        (page) =>
-          page.record.ref.id === input.ref.id &&
-          input.offset >= page.offset &&
-          input.offset + input.text.length <= page.offset + page.text.length &&
-          page.text.slice(
-            input.offset - page.offset,
-            input.offset - page.offset + input.text.length
-          ) === input.text
-      )
-      if (!page || input.ref.sessionId !== this.id || input.totalChars !== page.totalChars) continue
-      const ranges = this.inputVisible.get(input.ref.id) ?? []
-      const range = { start: input.offset, end: input.offset + input.text.length }
-      if (!ranges.some((prior) => prior.start <= range.start && prior.end >= range.end)) {
-        const merged = [...ranges, range]
-          .sort((a, b) => a.start - b.start)
-          .reduce<Array<{ start: number; end: number }>>((all, current) => {
-            const previous = all.at(-1)
-            if (previous && previous.end >= current.start)
-              previous.end = Math.max(previous.end, current.end)
-            else all.push({ ...current })
-            return all
-          }, [])
-        this.inputVisible.set(input.ref.id, merged)
+    for (const [items, pages, visible] of [
+      [value.inputs, this.inputPages, this.inputVisible],
+      [value.recent ?? [], this.recentPages, this.recentVisible],
+    ] as const) {
+      for (const input of items) {
+        const page = [...pages.values()].find(
+          (page) =>
+            page.record.ref.id === input.ref.id &&
+            input.offset >= page.offset &&
+            input.offset + input.text.length <= page.offset + page.text.length &&
+            page.text.slice(
+              input.offset - page.offset,
+              input.offset - page.offset + input.text.length
+            ) === input.text
+        )
+        if (!page || input.ref.sessionId !== this.id || input.totalChars !== page.totalChars)
+          continue
+        const ranges = visible.get(input.ref.id) ?? []
+        const range = { start: input.offset, end: input.offset + input.text.length }
+        if (!ranges.some((prior) => prior.start <= range.start && prior.end >= range.end)) {
+          const merged = [...ranges, range]
+            .sort((a, b) => a.start - b.start)
+            .reduce<Array<{ start: number; end: number }>>((all, current) => {
+              const previous = all.at(-1)
+              if (previous && previous.end >= current.start)
+                previous.end = Math.max(previous.end, current.end)
+              else all.push({ ...current })
+              return all
+            }, [])
+          visible.set(input.ref.id, merged)
+        }
       }
     }
   }
@@ -491,6 +532,13 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
       ? context.readInput(ref, { offset, limit })
       : context.read(ref, { offset, limit }))
     if (record.kind === 'user') this.inputPages.set(`${ref.id}:${page.offset}`, page)
+    else {
+      const key = `${ref.id}:${page.offset}`
+      this.recentPages.delete(key)
+      this.recentPages.set(key, page)
+      // 显式召回表示模型需要再次看到这一页；历史曝光不能替代本次交付。
+      this.recentVisible.delete(ref.id)
+    }
     return page
   }
 

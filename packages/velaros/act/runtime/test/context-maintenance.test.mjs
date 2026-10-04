@@ -552,6 +552,114 @@ test('maintenance facts include bounded recent original records with recall rang
   assert.deepEqual(f.state.material(fresh, 8000).recent, [])
 })
 
+test('automatic narration preloads the sealed interval and rejects evidence from later work', async (t) => {
+  const f = await fixture(t)
+  const first = await f.session.context.append({ kind: 'assistant', body: 'Inspect the adapter' })
+  const last = await f.session.context.append({ kind: 'assistant', body: 'Inspection is complete' })
+  const recent = new RecentContext('root', f.session.context, f.storage)
+  const volume = await recent.seal(first.sequence - 1, last.sequence, signal)
+  const next = await f.session.context.append({
+    kind: 'assistant',
+    body: 'Next I will implement the adapter and run the tests',
+  })
+  const state = new ContextMaintenanceState('root', f.storage, undefined, 'volume')
+  const snapshot = await state.snapshot(8000, signal)
+  const facts = state.material(snapshot, 8000)
+  assert.deepEqual(
+    facts.recent.map((page) => page.ref.id),
+    [first.ref.id, last.ref.id]
+  )
+  assert.equal(snapshot.volume.ref.id, volume.id)
+  const narrative = {
+    summary: 'Implementation is planned',
+    evidence: [next.ref],
+    unresolved: ['Implement the adapter'],
+    negativeAttempts: [],
+  }
+  await assert.rejects(state.apply(snapshot, patch(snapshot, { volume: narrative }), signal), {
+    code: 'CONTEXT_NARRATIVE_RANGE',
+  })
+  assert(
+    !(await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
+  )
+  await recent.narrate(
+    volume,
+    {
+      ...narrative,
+      summary: 'Inspected the adapter',
+      evidence: [f.input.ref, first.ref, last.ref],
+    },
+    signal
+  )
+  const current = new ContextMaintenanceState('root', f.storage)
+  const currentSnapshot = await current.snapshot(8000, signal)
+  assert(current.material(currentSnapshot, 8000).recent.some((page) => page.ref.id === next.ref.id))
+})
+
+test('small maintenance facts deliver readable recent pages and advance only accepted ranges', async (t) => {
+  const f = await fixture(t)
+  for (let i = 0; i < 20; i++)
+    await f.session.context.append({ kind: 'assistant', body: `Earlier observation ${i}` })
+  const original = `Implementation is pending. ${'Quoted "fact"\\path 中文. '.repeat(40)}`
+  const latest = await f.session.context.append({ kind: 'assistant', body: original })
+  const snapshot = await f.state.snapshot(8000, signal)
+  const collected = []
+  for (let turn = 0; turn < 30; turn++) {
+    const material = f.state.material(snapshot, 1000)
+    assert(JSON.stringify(material).length <= 1000)
+    assert.deepEqual(f.state.material(snapshot, 1000), material)
+    assert(material.recent.length > 0)
+    assert(material.recent.every((page) => page.text.length > 0))
+    const page = material.recent.find((item) => item.ref.id === latest.ref.id)
+    assert(page, 'the most recent unread page must remain available')
+    assert.equal(page.offset, collected.join('').length)
+    assert.equal(page.text, original.slice(page.offset, page.offset + page.text.length))
+    collected.push(page.text)
+    f.state.acknowledge(snapshot, {
+      ...material,
+      recent: material.recent.map((item) => ({ ...item, text: 'forged text' })),
+    })
+    assert.deepEqual(f.state.material(snapshot, 1000).recent, material.recent)
+    f.state.acknowledge(snapshot, material)
+    if (page.nextOffset === null) break
+  }
+  assert.equal(collected.join(''), original)
+  const later = f.state.material(snapshot, 1000)
+  assert(later.recent.some((page) => page.ref.id !== latest.ref.id))
+})
+
+test('explicit non-input recall enters maintenance facts at its exact range and resets with the task', async (t) => {
+  const f = await fixture(t)
+  const record = await f.session.context.append({
+    kind: 'assistant',
+    body: `${'x'.repeat(4000)}The operation was read-only; implementation and verification are pending.`,
+  })
+  for (let i = 0; i < 40; i++)
+    await f.session.context.append({ kind: 'assistant', body: `Later observation ${i}` })
+  const snapshot = await f.state.snapshot(8000, signal)
+  assert(!f.state.material(snapshot, 2000).recent.some((page) => page.ref.id === record.ref.id))
+  const recalled = await f.state.read(snapshot, record.ref, 4000, 1000, signal)
+  const material = f.state.material(snapshot, 2000)
+  const delivered = material.recent.find((page) => page.ref.id === record.ref.id)
+  assert(delivered, 'successful recall must have a direct model-visible material route')
+  assert.equal(delivered.offset, 4000)
+  assert.equal(delivered.text, recalled.text)
+  assert.equal(delivered.totalChars, recalled.totalChars)
+  assert.equal(delivered.nextOffset, null)
+  f.state.acknowledge(snapshot, material)
+  await f.state.read(snapshot, record.ref, 4000, 1000, signal)
+  assert.equal(
+    f.state.material(snapshot, 2000).recent.find((page) => page.ref.id === record.ref.id)?.text,
+    recalled.text,
+    'an explicit recall must remain visible even when that range was delivered earlier'
+  )
+  await f.session.view.end('completed')
+  const input = await f.session.context.append({ kind: 'user', body: 'Start a separate task' })
+  await f.session.view.begin(input.ref, signal, 'new')
+  const fresh = await f.state.snapshot(8000, signal)
+  assert.deepEqual(f.state.material(fresh, 2000).recent, [])
+})
+
 test('native maintenance publishes a validated final-call patch without another model request', async (t) => {
   let calls = 0
   const maintenance = {
