@@ -1508,9 +1508,61 @@ test('the parent model budget validator rejects a fully staged candidate before 
     state.apply(snap, { ...patch(snap), notes: [{ ref: note.ref, summary: 'candidate' }] }, signal),
     { code: 'CONTEXT_BUDGET' }
   )
-  assert.equal(previews, 1)
+  assert.equal(previews, 2)
   assert.equal(f.reads, 1)
   assert(
     !(await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
+  )
+})
+
+test('an oversized maintenance candidate uses the parent recovery projection before rejecting the patch', async (t) => {
+  const f = await fixture(
+    t,
+    `import {output} from 'velaros';import {read} from 'test:world';
+await read();
+output({value:'required-state'},{key:'critical',required:true,view:{mode:'full'}});
+`
+  )
+  await f.run()
+  await f.session.execute({ source: "console.log('optional-detail-'.repeat(2000))" }, 'task')
+  const candidates = []
+  const state = new ContextMaintenanceState('root', f.storage, {
+    recoveryChars: 3000,
+    validateCandidate: async (candidate) => {
+      const frame = JSON.parse(candidate.body)
+      const content = JSON.stringify(
+        modelRequestEncoder.messages({
+          instructions: 'Parent instructions',
+          history: candidate.history,
+          compiledPrompt: candidate.prompt,
+          response: { type: 'text' },
+        })
+      )
+      candidates.push({ frame, chars: content.length })
+      assert.match(content, /required-state/)
+      assert.deepEqual(frame.partitions.runtime.decision.missing, [])
+      assert.match(candidate.history[0].content, /candidate/)
+      if (content.length > 16000)
+        throw Object.assign(Error('input budget'), {
+          code: 'CONTEXT_BUDGET',
+          sizes: candidates.map((c) => c.chars),
+        })
+    },
+  })
+  const note = await f.note()
+  const snap = await state.snapshot(64000, signal)
+  const input = { ...patch(snap), notes: [{ ref: note.ref, summary: 'candidate' }] }
+  await state.validate(snap, input, signal)
+  assert.equal(candidates.length, 2, JSON.stringify(candidates.map((c) => c.chars)))
+  assert(candidates[0].chars > 16000)
+  assert(candidates[1].chars <= 16000)
+  assert(
+    !(await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
+  )
+  await state.apply(snap, input, signal)
+  assert.equal(candidates.length, 4)
+  assert.equal(f.reads, 1, 'candidate preparation must not execute the observation again')
+  assert(
+    (await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
   )
 })

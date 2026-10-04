@@ -144,6 +144,8 @@ export interface ContextMaintenanceHost {
 }
 /** 整理候选通过真实父模型编译器后才发布。 */
 export interface ContextCandidateValidator {
+  /** 父循环在容量不足时使用的原文投影上限；候选只在超窗后本地重投影一次。 */
+  readonly recoveryChars?: number
   /** 验证五分区和原生附件，不运行脚本。 */
   validateCandidate(
     frame: {

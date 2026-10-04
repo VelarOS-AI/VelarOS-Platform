@@ -26,7 +26,7 @@
 | INV-22 | 输出整理修改源码中的声明式 view 与预算，按同一 CAS 发布；本轮复用原始结果，采集与展示版本分别可见，下一正常轮才刷新 | 测试 | `test/output-context.test.mjs` |
 | INV-23 | 原始块、失效摘要、缺失输出和原生图片有独立状态；源码或用户变化拒绝旧补丁，失败补丁不留下部分元数据 | 测试 | `test/output-context.test.mjs` |
 | INV-24 | 读到的资源版本不进帧、不挡写入、也不打回收尾（ADR 0025）：帧里的 decision 只有收尾要等的缺口；资源是不是变了由各领域写入时自己的版本核对管；Kernel 的读取凭据照旧可以核验（伪造、撤权、换代） | 测试 | `test/decision-basis.test.mjs` |
-| INV-25 | required 输出没完整可见时收尾要等它补齐（写入照常）；整理候选先校验再 CAS，取消阻止迟到发布；派生展示在任务内保留，策略变化重建段底座；整理没解决的超载同段不再重复 | 测试 | `test/decision-basis.test.mjs`、`test/context-maintenance.test.mjs`、`test/output-context.test.mjs` |
+| INV-25 | required 输出没完整可见时收尾要等它补齐（写入照常）；整理候选先校验再 CAS，超窗只按父循环恢复预算本地重投影一次并重新核对必需材料、目标与容量，取消阻止迟到发布；派生展示在任务内保留，策略变化重建段底座；整理没解决的超载同段不再重复 | 测试 | `test/decision-basis.test.mjs`、`test/context-maintenance.test.mjs`、`test/output-context.test.mjs` |
 | INV-26 | continue 累计任务身份和配额；new 归档并切换驻留状态，未决效果阻止切换 | 测试 | `test/task-lifecycle.test.mjs`、`test/model-tools.test.mjs` |
 | INV-27 | 观察健康状态持久化，重复失败或未知效果暂停自动重跑；源码修复后才能恢复 | 测试 | `test/task-lifecycle.test.mjs` |
 | INV-28 | 完成拒绝按恢复类别有界推进；效果不明的操作（包括子任务的）不挡写入、完成与任务切换；上次中断的执行在下一轮开始前自动按日志收拾，不重跑脚本 | 测试 | `test/completion-recovery.test.mjs`、`test/act-children.test.mjs`、`test/task-loop.test.mjs` |

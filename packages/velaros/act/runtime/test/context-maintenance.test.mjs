@@ -92,6 +92,59 @@ test('cancelling a stalled candidate validator returns promptly and a late resul
   assert.equal((await state.snapshot(8000, signal)).baseRevision, snapshot.baseRevision)
 })
 
+test('cancelling recovery validation cannot publish a late candidate or change the parent revision', async (t) => {
+  const f = await fixture(t)
+  const entered = Promise.withResolvers()
+  const late = Promise.withResolvers()
+  let previews = 0
+  const state = new ContextMaintenanceState('root', f.storage, {
+    recoveryChars: 3000,
+    validateCandidate: () => {
+      if (++previews === 1)
+        return Promise.reject(Object.assign(Error('window'), { code: 'CONTEXT_BUDGET' }))
+      entered.resolve()
+      return late.promise
+    },
+  })
+  const snapshot = await state.snapshot(8000, signal)
+  const controller = new AbortController()
+  const pending = state.apply(snapshot, patch(snapshot), controller.signal)
+  await entered.promise
+  controller.abort()
+  await assert.rejects(pending, { name: 'AbortError' })
+  late.resolve()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(previews, 2)
+  assert.equal((await state.snapshot(8000, signal)).baseRevision, snapshot.baseRevision)
+  assert(
+    !(await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
+  )
+})
+
+for (const code of ['CONTEXT_CONFLICT', 'CANCELLED', 'CONTEXT_BUDGET'])
+  test(`candidate preparation preserves ${code} and does not retry an unavailable recovery path`, async (t) => {
+    const f = await fixture(t)
+    const error = Object.assign(Error(code), { code })
+    let previews = 0
+    const state = new ContextMaintenanceState('root', f.storage, {
+      recoveryChars: code === 'CONTEXT_BUDGET' ? 8000 : 3000,
+      validateCandidate: async () => {
+        previews++
+        throw error
+      },
+    })
+    const snapshot = await state.snapshot(8000, signal)
+    await assert.rejects(
+      state.apply(snapshot, patch(snapshot), signal),
+      (caught) => caught === error
+    )
+    assert.equal(previews, 1)
+    assert.equal((await state.snapshot(8000, signal)).baseRevision, snapshot.baseRevision)
+    assert(
+      !(await f.storage.load('root')).records.some((r) => r.title === 'context:projection-policy')
+    )
+  })
+
 test('derived note presentations persist for the task through a rebuilt base and a new task starts clean', async (t) => {
   const f = await fixture(t)
   const note = await f.memory.update(

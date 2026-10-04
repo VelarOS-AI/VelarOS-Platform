@@ -13,7 +13,7 @@ import {
   type ScriptOutputSummary,
 } from '@velaros-ai/script'
 
-import { ContextMaintenanceReadLimits } from '../../runtime/contract/constants.js'
+import { ContextMaintenanceReadLimits, VelarosRunLimits } from '../../runtime/contract/constants.js'
 import { ActiveContext } from '../../runtime/impl/ActiveContext.js'
 import { ContextMemory } from '../../runtime/impl/ContextMemory.js'
 import { ContextPatchStore } from '../../runtime/impl/ContextPatchStore.js'
@@ -821,34 +821,52 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
             images.push(JSON.parse((await staged.get(this.id, attachment.record.objectId))!))
           }
         }
-        const candidate = await memory.project(
-          { ...currentView, goals },
-          observationRef,
-          images,
-          signal,
-          snapshot.targetChars
-        )
-        const frame = JSON.parse(candidate.body)
-        if (!isEmpty(frame.partitions.runtime.decision.missing))
-          throw new AppError('CONTEXT_REQUIRED', '整理候选缺失必需观察正文，补丁未发布')
         for (const ref of snapshot.intent?.preserve ?? [])
           if (ref.sessionId !== this.id || !memoryReference(state, ref))
             throw new AppError('PERMISSION', '明确保留材料已不在当前授权范围')
-        // 段起点之前提出的目标折叠在段底座里，其余的必须出现在本帧尾
-        const task = frame.partitions.task as {
-          goals: ReadonlyArray<{ record: { ref: ContextRef } }>
-          folded: { through: number }
-        }
-        if (
-          goals.some(
-            (goal) =>
-              goal.record.sequence > task.folded.through &&
-              !task.goals.some((item) => item.record.ref.id === goal.record.ref.id)
+        let maxChars = snapshot.targetChars
+        for (;;) {
+          const candidate = await memory.project(
+            { ...currentView, goals },
+            observationRef,
+            images,
+            signal,
+            maxChars
           )
-        )
-          throw new AppError('NOT_FOUND', '整理候选丢失任务目标')
-        if (this.preview)
-          await awaitModelPreparation(this.preview.validateCandidate(candidate, signal), signal)
+          const frame = JSON.parse(candidate.body)
+          if (!isEmpty(frame.partitions.runtime.decision.missing))
+            throw new AppError('CONTEXT_REQUIRED', '整理候选缺失必需观察正文，补丁未发布')
+          // 段起点之前提出的目标折叠在段底座里，其余的必须出现在本帧尾。
+          const task = frame.partitions.task as {
+            goals: ReadonlyArray<{ record: { ref: ContextRef } }>
+            folded: { through: number }
+          }
+          if (
+            goals.some(
+              (goal) =>
+                goal.record.sequence > task.folded.through &&
+                !task.goals.some((item) => item.record.ref.id === goal.record.ref.id)
+            )
+          )
+            throw new AppError('NOT_FOUND', '整理候选丢失任务目标')
+          try {
+            if (this.preview)
+              await awaitModelPreparation(this.preview.validateCandidate(candidate, signal), signal)
+            break
+          } catch (error) {
+            const recoveryChars = this.preview?.recoveryChars ?? VelarosRunLimits.recoveryChars
+            if (
+              (error as { code?: string })?.code !== 'CONTEXT_BUDGET' ||
+              !Number.isSafeInteger(recoveryChars) ||
+              recoveryChars < 1 ||
+              recoveryChars >= maxChars
+            )
+              throw error
+            // 与父循环同样收紧可选原文；不调用模型、不重跑观察、不释放结果。
+            // 收紧后的候选仍须满足原文证明和实际父模型容量，失败则整组不发布。
+            maxChars = recoveryChars
+          }
+        }
         if (!publish) {
           await this.current(snapshot, signal)
           return report.ref

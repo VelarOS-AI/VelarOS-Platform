@@ -2703,6 +2703,111 @@
           }
         }
       }
+    },
+    {
+      "attempt": "rich-11",
+      "schema": 1,
+      "at": "2026-10-04T22:29:13.892Z",
+      "taskId": "rich-ascii-decorations",
+      "scriptactSessionId": "scriptact-417d0040-a3ba-4ae9-845a-64e32fc8af36",
+      "candidateId": "candidate-v14-13fcb55284eb",
+      "candidateSourceCommit": "690c6e55ac27488247b0a5b75e73d8d39b90f63d",
+      "candidateSourceDirty": false,
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 82,
+            "startedAt": 1791151946956,
+            "solveMs": 942325
+          },
+          "accounting": {
+            "requests": 82,
+            "requestStatuses": {
+              "http-200": 81,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 81,
+            "missingUsageRequests": 1,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1580658,
+            "knownOutputTokens": 37372,
+            "knownCachedInputTokens": 469504,
+            "knownCacheRatio": 0.2970307302401911,
+            "pricedRequests": 81,
+            "knownReferenceUsd": 5.3798576,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 54,
+            "failed": 4,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "4 failed, 54 passed in 0.18s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-11/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-11/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-11/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-11/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 855,
+            "failed": 0,
+            "skipped": 25,
+            "errors": 0,
+            "summary": "855 passed, 25 skipped in 3.91s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 9,
+          "createdFiles": 0,
+          "changeSummary": "32\t0\tdocs/source/console.rst\n9\t0\trich/bar.py\n21\t4\trich/console.py\n2\t2\trich/markdown.py\n1\t1\trich/progress_bar.py\n4\t4\trich/rule.py\n7\t6\trich/spinner.py\n1\t1\trich/syntax.py\n26\t0\ttests/test_console.py\n",
+          "created": "",
+          "execution": {
+            "mainRequests": 37,
+            "branchRequests": 45,
+            "requestOwners": {
+              "scriptact-417d0040-a3ba-4ae9-845a-64e32fc8af36": 37,
+              "context:c2b5d54a-5993-4004-81fa-078a2169ab87": 6,
+              "context:fe16d88b-7041-413b-9522-a8d8b65b1da1": 7,
+              "context:a3bab8a1-a8cc-46f0-88a8-c503a22b6944": 4,
+              "context:26efd276-d768-4cb6-8750-bdc48a5ec0e4": 6,
+              "context:ea2baccb-a10e-451c-bb25-8cedf3857a9b": 4,
+              "context:f4311f93-6d5c-42ca-b1a5-4ac41a057765": 6,
+              "context:5e329dea-8e0e-430c-8b6b-316050371a07": 6,
+              "context:87f2faf1-2874-4324-af53-8af26b236b01": 3,
+              "context:735e1240-fb8a-4a6b-bbb7-f3164a648c2c": 3
+            },
+            "contextSegments": 13,
+            "nativeRequests": 82,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        }
+      }
     }
   ],
   "transportDiagnostics": {

@@ -475,6 +475,7 @@ export class RuntimeSession implements VelarosSession {
       dependencies.tool?.instructions ? `\n${dependencies.tool.instructions}` : ''
     }${dependencies.instructions?.trim() ? `\n宿主应用指令：\n${dependencies.instructions}` : ''}`
     dependencies.register({
+      recoveryChars: dependencies.limits.recoveryChars,
       validateCandidate: async (frame, signal) => {
         signal.throwIfAborted()
         if (!dependencies.model) return
