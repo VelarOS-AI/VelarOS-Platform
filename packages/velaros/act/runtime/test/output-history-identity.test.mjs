@@ -84,6 +84,24 @@ async function archive(f, blocks, maxChars = 40000, issues = []) {
   return result.ref
 }
 
+async function archiveRaw(f, stdout, short = true) {
+  const uuid = crypto.randomUUID()
+  const id = short ? uuid.slice(0, 8) : uuid
+  const source = await f.session.context.append({
+    kind: 'audit',
+    title: `script:${id}`,
+    body: JSON.stringify({ source: 'inspect synthetic files' }),
+  })
+  const result = await f.session.context.append({
+    kind: 'audit',
+    title: `script:${id}:result`,
+    sources: [source.ref],
+    body: JSON.stringify({ mode: 'execute', result: { process: { stdout, exitCode: 0 } } }),
+  })
+  await f.programs.add(result.ref, source.ref, id, 'task')
+  return result.ref
+}
+
 async function project(f, chars, acknowledge = false) {
   const frame = await f.memory.project(f.view, undefined, [], signal, chars)
   if (acknowledge) await f.memory.acknowledge(JSON.parse(frame.body).frameId, signal)
@@ -107,6 +125,43 @@ function assertNoInternalProof(frame) {
   for (const text of [frame.prompt, JSON.stringify(frame.history)])
     assert(!text.includes('outputViews'), 'Internal display proof must not enter model text')
 }
+
+test('INV-69 reference-only raw results stay eligible for later body delivery', async (t) => {
+  const f = await fixture(t)
+  const body = 'READABLE_AFTER_CAPACITY_RECOVERS\n'.repeat(100)
+  const ref = await archiveRaw(f, body)
+  const first = await project(f, 1100, true)
+  assert.equal(current(first, ref).bodyIncluded, false)
+  const segment = await f.recent.segment(signal)
+  assert(!segment.entries.some((entry) => entry.ref === ref.id))
+  const next = await project(f, 30000, true)
+  assert(retained(next, ref).text.includes(body.replaceAll('\n', '\\n')))
+  assert.equal(current(next, ref).bodyInHistory, true)
+})
+
+test('INV-69 retained raw output returns its budget to fresh results for both reference formats', async (t) => {
+  for (const short of [true, false]) {
+    const f = await fixture(t)
+    const refs = []
+    for (let index = 0; index < 3; index++)
+      refs.push(await archiveRaw(f, `older-${index}:${'x'.repeat(6500)}`, short))
+    const first = await project(f, 100000, true)
+    for (const ref of refs) assert.equal(current(first, ref).bodyInHistory, true)
+    const body = Array.from(
+      { length: 100 },
+      (_, i) => `line ${i}: const freshEvidence = '${'y'.repeat(30)}'`
+    ).join('\n')
+    const fresh = await archiveRaw(f, body, short)
+    const next = await project(f, 24000)
+    for (const ref of refs) {
+      assert.equal(retained(next, ref).text, retained(first, ref).text)
+      assert.equal(current(next, ref).bodyInHistory, true)
+    }
+    assert(retained(next, fresh).text.includes('line 99: const freshEvidence'))
+    assert.equal(current(next, fresh).bodyInHistory, true)
+    assertNoInternalProof(next)
+  }
+})
 
 test('INV-69 equal multi-block bodies survive budget changes only once in retained history', async (t) => {
   const f = await fixture(t)
@@ -198,7 +253,7 @@ test('INV-69 growing output ranges preserve new body while removing only the unc
     { value: stable },
     { value: growing, options: { view: { mode: 'auto' } } },
   ])
-  const first = await project(f, 50000, true)
+  const first = await project(f, 10000, true)
   const frozen = retained(first, ref)
   assert(frozen.text.includes(stable))
   assert(frozen.text.includes('GROWING_RANGE_0'))
@@ -320,9 +375,14 @@ test('INV-69 history excluded from the current request cannot suppress a previou
 
 test('INV-69 equal page text with different ranges cannot prove full original delivery', async (t) => {
   const f = await fixture(t)
-  const value = '0123456789'.repeat(300)
-  const original = await archive(f, [{ value, options: { required: true } }])
-  await project(f, 10000, true)
+  const value = '0123456789'.repeat(1000)
+  const original = await archive(f, [
+    { value, options: { required: true } },
+    { value: 'INITIAL_ANCHOR' },
+  ])
+  const first = await project(f, 6000, true)
+  assert(retained(first, original)?.bodyIncluded)
+  assert(JSON.parse(first.body).partitions.runtime.decision.missing.length)
   const firstPage = await f.memory.readMaterial(original, 0, 100, signal, '/output/blocks/0/value')
   const secondPage = await f.memory.readMaterial(
     original,
@@ -350,7 +410,7 @@ test('INV-69 a newly available full block cannot be hidden by an older reference
   const stable = 'OLDER_DELIVERED_BLOCK\n'.repeat(10)
   const added = 'NEWLY_AVAILABLE_BODY\n'.repeat(160)
   const ref = await archive(f, [{ value: stable }, { value: added }])
-  const first = await project(f, 12000, true)
+  const first = await project(f, 3000, true)
   const frozen = retained(first, ref)
   assert(frozen.text.includes(stable))
   assert(!frozen.text.includes('NEWLY_AVAILABLE_BODY'))
@@ -380,7 +440,7 @@ test('INV-69 legacy frozen history without per-block delivery evidence remains c
     { ...segment, entries: segment.entries.map((item) => (item === entry ? legacyEntry : item)) },
     signal
   )
-  const second = await project(f, 150000)
+  const second = await project(f, 30000)
   assert.equal(retained(second, ref).text, frozen.text)
   assert(
     current(second, ref).text.includes(value),

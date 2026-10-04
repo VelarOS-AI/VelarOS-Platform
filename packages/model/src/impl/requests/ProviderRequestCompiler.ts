@@ -34,6 +34,9 @@ class ProviderRequestCompiler implements ProviderRequestCompilerApi {
       throw new AppError('VALIDATION', '无效模型预留预算')
     if (calibration && !(calibration.textRatio > 0 && calibration.textRatio <= 1))
       throw new AppError('VALIDATION', '估算校准比必须在 0 到 1 之间')
+    const overhead = calibration?.overheadTokens ?? 0
+    if (!Number.isSafeInteger(overhead) || overhead < 0)
+      throw new AppError('VALIDATION', '估算固定开销必须是非负整数')
     const request = structuredClone({ ...input, compiledPrompt: modelRequestEncoder.encode(input) })
     request.response = modelRequestEncoder.response(request)
     const messages = encodeProviderRequestAuditValue(modelRequestEncoder.messages(request))
@@ -81,8 +84,11 @@ class ProviderRequestCompiler implements ProviderRequestCompilerApi {
       calibration && calibration.textRatio < 1 && raw.precision === 'estimate'
         ? {
             ...raw,
-            tokens: Math.ceil(measured.text * calibration.textRatio) + images + opaque,
-            basis: `${raw.basis}；文本部分按实测用量校准 ×${calibration.textRatio.toFixed(3)}`,
+            tokens:
+              Math.min(measured.text, Math.ceil(measured.text * calibration.textRatio + overhead)) +
+              images +
+              opaque,
+            basis: `${raw.basis}；文本部分按实测用量校准 ×${calibration.textRatio.toFixed(3)}${overhead ? ` + ${overhead} 固定开销` : ''}`,
           }
         : raw
     const okToSend =

@@ -58,6 +58,34 @@ test('base instructions stay small while authorized packages are discoverable on
   }
 })
 
+test('Node hints expose only available collaboration and search capabilities without their contracts', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'runtime-capability-hints-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  await writeFile(join(workspace, 'entry.ts'), 'export const value = 1\n')
+  for (const agents of [false, true]) {
+    for (const search of [false, true]) {
+      let instructions
+      const f = await fixture(t, {
+        workspace,
+        project: { code: true },
+        agents,
+        search,
+        model: driver(async function* (request) {
+          instructions = request.instructions
+          yield* done(request)
+        }),
+      })
+      for await (const event of f.session.submit('Explain the current task.'))
+        assert.notEqual(event.type, 'error')
+      assert.equal(instructions.includes('velaros:agents'), agents)
+      assert.equal(instructions.includes('velaros:search'), search)
+      assert(!instructions.includes('velaros:context-materials'))
+      assert.doesNotMatch(instructions, /export function|AgentStartInput|SearchRequest/)
+      assert(instructions.length < 1800)
+    }
+  }
+})
+
 test('project batch transformations reuse actual read targets and preserve source formatting', async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), 'runtime-bound-batch-'))
   t.after(() => rm(workspace, { recursive: true, force: true }))

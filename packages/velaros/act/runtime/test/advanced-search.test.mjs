@@ -230,6 +230,91 @@ test('INV-29 search reuses ScriptAct, ordered history, shared storage and parent
   assert.equal(f.reads, 1)
 })
 
+test('advanced search uses native Node calls with evidence ownership and report validation intact', async (t) => {
+  const f = await fixture(t, async function* (request, f) {
+    assert.equal(request.response.type, 'tools')
+    assert.deepEqual(
+      request.response.tools.map((tool) => tool.name),
+      ['node']
+    )
+    if (f.calls === 1) {
+      yield {
+        type: 'tool-call',
+        value: {
+          id: 'read',
+          name: 'node',
+          input: {
+            code: `import {read} from 'velaros:evidence'; import {output} from 'velaros'; output(await read({target:${JSON.stringify(target)}}));`,
+          },
+        },
+      }
+    } else if (f.calls === 2) {
+      const evidence = findEvidence(request)
+      assert(evidence)
+      yield {
+        type: 'tool-call',
+        value: {
+          id: 'report',
+          name: 'node',
+          input: {
+            code: `import {report} from 'velaros:evidence'; await report(${JSON.stringify({ findings: [{ text: 'logout located', evidenceIds: [evidence.id] }], gaps: [], nextSteps: [] })});`,
+          },
+        },
+      }
+    } else assert.fail('A validated native report should complete without another model request')
+    yield finish
+  })
+  f.model.nativeTools = true
+  const report = await search(f)
+  assert.equal(report.status, 'completed', JSON.stringify(report))
+  assert.equal(f.calls, 2)
+  assert.equal(f.reads, 1)
+  assert.equal(report.evidence.length, 1)
+  assert.equal(report.findings[0].text, 'logout located')
+  assert(f.frames[1].history.some((message) => message.toolExchange?.calls[0]?.id === 'read'))
+})
+
+for (const valid of [true, false])
+  test(`native final search delivery requires a validated report: valid=${valid}`, async (t) => {
+    const f = await fixture(t, async function* (request, f) {
+      assert(f.calls <= 2)
+      if (f.calls === 2) assert.equal(request.contextStatus.phase, 'finalizing')
+      const evidence = JSON.parse(request.materials[0].text).partitions.runtime.modelTool.items[0]
+      if (f.calls === 2) assert(evidence?.id)
+      yield {
+        type: 'tool-call',
+        value: {
+          id: `step-${f.calls}`,
+          name: 'node',
+          input: {
+            code:
+              f.calls === 1
+                ? `import {read} from 'velaros:evidence'; console.log(await read({target:${JSON.stringify(target)}}));`
+                : `import {report} from 'velaros:evidence'; await report(${JSON.stringify({ findings: [{ text: 'verified finding', evidenceIds: [valid ? evidence.id : 'unread-evidence'] }], gaps: [], nextSteps: [] })});`,
+          },
+        },
+      }
+      yield finish
+    })
+    f.model.nativeTools = true
+    await f.runtime.close()
+    f.runtime = await createRuntime({
+      ...f.config,
+      storage: localContextStorage({ path: f.path }),
+      search: {
+        model: f.model,
+        defaultProfile: 'standard',
+        profiles: { standard: { ...profile, modelCalls: 2 } },
+      },
+    })
+    f.session = await f.runtime.openSession('main')
+    const report = await search(f)
+    assert.equal(f.calls, 2)
+    assert.equal(report.status, valid ? 'completed' : 'partial', JSON.stringify(report))
+    assert.equal(report.findings.length, valid ? 1 : 0)
+    assert.equal(f.reads, 1)
+  })
+
 test('observe cannot start search through an alias and no model/source cost is incurred', async (t) => {
   const f = await fixture(t, researcher)
   const frames = []

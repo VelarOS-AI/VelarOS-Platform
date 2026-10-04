@@ -5,21 +5,75 @@ import { ContextPlanTuning } from '../src/utils/tuning.js'
 
 const segment = (id = 'a', revision = 0) => ({ id, index: 1, revision, volumes: 0, turns: 0 })
 
-test('INV-40 calibration starts at the raw estimate, learns only from text requests and resets on rejection', () => {
+test('INV-40 calibration starts conservatively, ignores images and resets on rejection', () => {
   const planner = new ContextPlanner({ foldTurns: 2, minTurns: 4 })
   expect(planner.calibration()).toEqual({ textRatio: 1 })
   planner.measure({ text: 10_000, images: 0 }, 3_000)
   planner.measure({ text: 10_000, images: 0 }, 2_000)
   // 图片的真实开销因供应商而异，带图请求不取样
   planner.measure({ text: 10_000, images: 2_000 }, 9_000)
-  // 不透明推理状态可能只被供应商部分采用，不能拿它误学成文本密度。
-  planner.measure({ text: 10_000, images: 0, opaque: 5_000 }, 9_000)
   expect(planner.calibration().textRatio).toBeCloseTo(0.3 * ContextPlanTuning.calibrationMargin)
   // 实测比原始估算还大时不放大：原始估算是上界
   planner.measure({ text: 1_000, images: 0 }, 5_000)
   expect(planner.calibration()).toEqual({ textRatio: 1 })
   planner.rejected()
   expect(planner.calibration()).toEqual({ textRatio: 1 })
+})
+
+test('INV-40 continuation requests keep learning without subtracting uncertain opaque usage', () => {
+  const planner = new ContextPlanner({ foldTurns: 2, minTurns: 4 })
+  planner.measure({ text: 10_000, images: 0 }, 7_000)
+  planner.measure({ text: 10_000, images: 0, opaque: 5_000 }, 9_000)
+  // 全部实测用量作为文本上界；即使状态计入输入，也不减去未经确认的状态估算。
+  expect(planner.calibration().textRatio).toBeCloseTo(0.9 * ContextPlanTuning.calibrationMargin)
+  for (let i = 0; i < ContextPlanTuning.calibrationSamples; i++)
+    planner.measure({ text: 20_000, images: 0, opaque: 6_000 }, 8_000)
+  expect(planner.calibration().textRatio).toBeCloseTo(0.4 * ContextPlanTuning.calibrationMargin)
+  planner.measure({ text: 10_000, images: 0, opaque: 5_000 }, 12_000)
+  expect(planner.calibration()).toEqual({ textRatio: 1 })
+  planner.rejected()
+  expect(planner.calibration()).toEqual({ textRatio: 1 })
+})
+
+test('INV-40 separate fixed overhead from text growth while covering the measured samples', () => {
+  const planner = new ContextPlanner({ foldTurns: 2, minTurns: 4 })
+  planner.measure({ text: 10_000, images: 0 }, 6_500)
+  expect(planner.calibration().textRatio).toBeCloseTo(0.65 * ContextPlanTuning.calibrationMargin)
+  planner.measure({ text: 30_000, images: 0, opaque: 400 }, 11_500)
+  const learned = planner.calibration()
+  expect(learned.textRatio).toBeCloseTo(0.25 * ContextPlanTuning.calibrationMargin)
+  expect(learned.overheadTokens).toBe(4_400)
+  // 在更长材料上仍高于实际线性用量，但不会将短首轮的密度乘在全部源码上。
+  const prediction = 60_000 * learned.textRatio + learned.overheadTokens!
+  expect(prediction).toBeCloseTo(20_900)
+  expect(prediction).toBeGreaterThan(19_000)
+  planner.rejected()
+  expect(planner.calibration()).toEqual({ textRatio: 1 })
+})
+
+test('INV-40 changing content density raises the envelope above every measured sample', () => {
+  const planner = new ContextPlanner({ foldTurns: 2, minTurns: 4 })
+  const samples = [
+    { text: 10_000, input: 3_500 },
+    { text: 30_000, input: 9_000 },
+    { text: 18_000, input: 13_000 },
+  ]
+  for (const sample of samples) planner.measure({ text: sample.text, images: 0 }, sample.input)
+  const learned = planner.calibration()
+  for (const sample of samples)
+    expect(sample.text * learned.textRatio + (learned.overheadTokens ?? 0)).toBeGreaterThanOrEqual(
+      sample.input * ContextPlanTuning.calibrationMargin
+    )
+})
+
+test('INV-40 flat or negative text growth retains the conservative ratio estimate', () => {
+  for (const second of [6_000, 5_000]) {
+    const planner = new ContextPlanner({ foldTurns: 2, minTurns: 4 })
+    planner.measure({ text: 10_000, images: 0 }, 6_000)
+    planner.measure({ text: 20_000, images: 0 }, second)
+    expect(planner.calibration().textRatio).toBeCloseTo(0.6 * ContextPlanTuning.calibrationMargin)
+    expect(planner.calibration().overheadTokens).toBeUndefined()
+  }
 })
 
 test('growth comes from positive increases inside one segment base and drives the runway', () => {
@@ -51,6 +105,35 @@ test('INV-40 growth is sampled per layout: frames that keep earlier frames never
   expect(planner.runway(90_000, 100_000, true)).toBe(2.5)
 })
 
+test.each([false, true])(
+  'INV-40 observed input growth is independent of a changing admission estimate: retained=%s',
+  (retained) => {
+    const planner = new ContextPlanner({ foldTurns: 2, minTurns: 4 })
+    planner.accept(10_000, segment(), retained, 5_000)
+    planner.accept(19_000, segment(), retained, 5_500)
+    expect(planner.growth(32_000, retained)).toBe(500)
+    planner.accept(14_000, segment(), retained, 6_100)
+    expect(planner.growth(32_000, retained)).toBe(600)
+    // 预警仍使用当前完整请求的容量估算；真实读取突增也继续收紧剩余轮数。
+    expect(planner.runway(20_000, 32_000, retained)).toBe(20)
+    planner.accept(27_000, segment(), retained, 21_100)
+    expect(planner.runway(27_000, 32_000, retained)).toBeLessThan(1)
+  }
+)
+
+test('INV-40 missing usage never mixes measured and estimated growth samples', () => {
+  const planner = new ContextPlanner({ foldTurns: 2, minTurns: 4 })
+  planner.accept(10_000, segment(), false, 2_000)
+  planner.accept(19_000, segment())
+  expect(planner.growth(32_000)).toBe(32_000 * ContextPlanTuning.growthSeed)
+  planner.accept(19_700, segment())
+  expect(planner.growth(32_000)).toBe(700)
+  planner.accept(24_000, segment(), false, 5_000)
+  expect(planner.growth(32_000)).toBe(700)
+  planner.accept(24_300, segment(), false, 5_200)
+  expect(planner.growth(32_000)).toBe(700)
+})
+
 test('folds closer than foldTurns frames count as thrashing until minTurns frames pass', () => {
   const planner = new ContextPlanner({ foldTurns: 2, minTurns: 4 })
   planner.folded()
@@ -61,6 +144,26 @@ test('folds closer than foldTurns frames count as thrashing until minTurns frame
   for (let frame = 0; frame < 4; frame++) planner.accept(1_000, segment('c'))
   expect(planner.thrashing()).toBe(false)
 })
+
+test.each([false, true])(
+  'INV-40 a closed burst does not keep a new low-growth segment under pressure: retained=%s',
+  (retained) => {
+    const planner = new ContextPlanner({ foldTurns: 2, minTurns: 4 })
+    planner.measure({ text: 30_000, images: 0 }, 10_000)
+    const calibration = planner.calibration()
+    planner.accept(4_000, segment('large-read'), retained)
+    planner.accept(16_000, segment('large-read'), retained)
+    expect(planner.runway(16_000, 32_000, retained)).toBeLessThan(2)
+    planner.folded()
+    planner.accept(7_000, segment('edits'), retained)
+    planner.accept(7_600, segment('edits'), retained)
+    expect(planner.runway(7_600, 32_000, retained)).toBeGreaterThan(20)
+    expect(planner.calibration()).toEqual(calibration)
+    // 新段真的又出现大读取时，规划仍会收紧；发送容量门始终独立执行。
+    planner.accept(25_000, segment('edits'), retained)
+    expect(planner.runway(25_000, 32_000, retained)).toBeLessThan(1)
+  }
+)
 
 test('maintenance that did not help is spent for its segment only', () => {
   const planner = new ContextPlanner({ foldTurns: 2, minTurns: 4 })

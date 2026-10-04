@@ -37,7 +37,6 @@ import type {
   OperationRuntimeApi,
 } from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
-import { createProviderRequestCompiler } from '@velaros-ai/model'
 import type {
   CodeProgramRequest,
   CodeRunnerApi,
@@ -152,6 +151,8 @@ export interface RuntimeSessionAccess extends ContextCandidateValidator {
 
 /** 单一职责模型工具复用普通会话，只注入专项阶段、材料边界与结果校验。 */
 export interface RuntimeSessionModelTool {
+  /** 已通过专项校验的产物可在原生调用执行成功后交付。 */
+  deliveryReady?(): boolean
   /** 专项的固定说明（如能力合同），会话内不变，进入系统提示。 */
   readonly instructions?: string
   /** 叶子会话容量预警时直接进入交付阶段。 */
@@ -438,12 +439,17 @@ export class RuntimeSession implements VelarosSession {
     )
     const modules = dependencies.allowedModules()
     const nativeTools = Boolean(
-      dependencies.node && dependencies.model?.nativeTools && !dependencies.protocol?.allowed
+      this.executionRunner.environment === 'node' &&
+      dependencies.model?.nativeTools &&
+      this.config.allowed.includes('execute') &&
+      this.config.allowed.includes('done')
     )
     const instructions = `${
       this.executionRunner.environment === 'node'
         ? nodeRuntimeInstructions(
-            this.executionRunner.cwd ?? dependencies.node?.cwd ?? process.cwd()
+            this.executionRunner.cwd ?? dependencies.node?.cwd ?? process.cwd(),
+            this.config.allowed.includes('shell'),
+            modules
           )
         : runtimeInstructions({
             modules,
@@ -463,7 +469,7 @@ export class RuntimeSession implements VelarosSession {
             maintain: Boolean(dependencies.maintain),
             observe: this.config.allowed.includes('observe'),
           })
-    }\n\n${nativeTools ? '' : protocolRules(this.config)}\n${dependencies.node ? '' : JSON.stringify({ snapshotPlans: (dependencies.contextOptions?.snapshots ?? []).filter((provider) => modules.includes(provider.moduleId)).map((provider) => ({ provider: provider.id, plans: provider.plans, module: provider.moduleId, operation: provider.operation })) })}${
+    }\n\n${nativeTools ? '' : protocolRules(this.config)}\n${this.executionRunner.environment === 'node' ? '' : JSON.stringify({ snapshotPlans: (dependencies.contextOptions?.snapshots ?? []).filter((provider) => modules.includes(provider.moduleId)).map((provider) => ({ provider: provider.id, plans: provider.plans, module: provider.moduleId, operation: provider.operation })) })}${
       dependencies.tool?.instructions ? `\n${dependencies.tool.instructions}` : ''
     }${dependencies.instructions?.trim() ? `\n宿主应用指令：\n${dependencies.instructions}` : ''}`
     dependencies.register({
@@ -472,24 +478,27 @@ export class RuntimeSession implements VelarosSession {
         if (!dependencies.model) return
         await this.restoreFrameMarkers(signal)
         const decoder = nativeTools
-          ? new NativeTurnDecoder()
+          ? new NativeTurnDecoder(this.config)
           : new ScriptTurnDecoder(
               this.createFrameMarker(),
               this.config,
               dependencies.inputs?.() ?? {}
             )
+        const candidate = JSON.parse(frame.body)
+        if (this.executionRunner.environment === 'node') candidate.presentation = 'node'
+        const body = JSON.stringify(candidate)
         // 与主循环同一布局：固定语法在系统前缀，当前控制身份和示例在帧尾
         const request: ModelTurnRequest = {
           instructions,
           materials: [
             {
-              ref: JSON.parse(frame.body).id,
+              ref: candidate.id,
               origin: 'runtime-view',
-              text: frame.body,
-              totalChars: frame.body.length,
+              text: body,
+              totalChars: body.length,
             },
           ],
-          compiledPrompt: `${frame.prompt}\n\n${decoder.instructions}`,
+          compiledPrompt: `${memoryPrompt(body)}\n\n${decoder.instructions}`,
           history: frame.history,
           images: frame.images,
           response: 'response' in decoder ? decoder.response : { type: 'text' },
@@ -499,14 +508,8 @@ export class RuntimeSession implements VelarosSession {
             dependencies.model.limits.outputTokens
           ),
         }
-        const checked = await createProviderRequestCompiler().compileModelTurn(
-          request,
-          dependencies.model,
-          dependencies.limits.safetyTokens
-        )
-        signal.throwIfAborted()
-        if (!checked.okToSend)
-          throw new AppError('CONTEXT_BUDGET', '整理候选仍超过实际模型窗口，补丁未发布')
+        if (!this.agent) throw new AppError('UNAVAILABLE', '上下文验收需要模型运行服务')
+        await this.agent.validateContext(request, signal)
       },
       context: this.context,
       runSignal: () => {
@@ -532,7 +535,7 @@ export class RuntimeSession implements VelarosSession {
         instructions,
         protocol: {
           open: () => {
-            if (nativeTools) return new NativeTurnDecoder()
+            if (nativeTools) return new NativeTurnDecoder(this.config)
             if (!this.preparedFrameMarker) throw new AppError('INVARIANT', '本帧控制身份尚未登记')
             return new ScriptTurnDecoder(
               this.preparedFrameMarker,
@@ -562,6 +565,7 @@ export class RuntimeSession implements VelarosSession {
             this.invokeBatch(input as ScriptProtocolSubmission, signal, acceptedTurnId, calls),
         },
         frames: {
+          deliveryReady: () => Boolean(dependencies.tool?.deliveryReady?.()),
           maintain: dependencies.maintain
             ? async (input, signal) => {
                 if (input.reason === 'boundary') {
@@ -767,7 +771,7 @@ export class RuntimeSession implements VelarosSession {
     )
     signal.throwIfAborted()
     const tool = this.dependencies.tool?.material?.(
-      Math.min(ActRuntimeTuning.modelToolContextChars, Math.floor(maxChars / 4))
+      Math.min(ActRuntimeTuning.modelToolContextChars, Math.floor(maxChars / 2))
     )
     if (!this.dependencies.tool && this.goalSeed) await this.seedGoal(this.goalSeed, signal)
     const currentGoal = this.dependencies.tool ? null : await this.goal.get(signal)
@@ -786,7 +790,7 @@ export class RuntimeSession implements VelarosSession {
       Math.max(1, maxChars - extra)
     )
     const frame = JSON.parse(projected.body)
-    if (this.dependencies.node) frame.presentation = 'node'
+    if (this.executionRunner.environment === 'node') frame.presentation = 'node'
     frame.partitions.runtime = { environment, ...frame.partitions.runtime }
     // 同一任务里此前运行的输入只作上文，模型据此只回应本次运行的新请求
     frame.partitions.task.goals = frame.partitions.task.goals.map(

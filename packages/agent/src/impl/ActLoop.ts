@@ -10,6 +10,7 @@ import {
   modelRequestEncoder,
   type ModelToolCall,
   type ModelTurnDelta,
+  type ModelTurnRequest,
 } from '@velaros-ai/kernel'
 import {
   type CompiledModelRequest,
@@ -30,6 +31,8 @@ import { ContextPlanner } from './ContextPlanner.js'
 export interface ActLoopApi {
   /** 推进一次输入，暂停或终止时返回。 */
   submit(input: string | ActInput, signal?: AbortSignal): AsyncIterable<ActRunEvent>
+  /** 使用当前运行的校准、窗口与输出预留，核对候选上下文，不调用模型。 */
+  validateContext(request: ModelTurnRequest, signal: AbortSignal): Promise<void>
   /** 取消当前运行。 */
   cancel(): void
 }
@@ -87,6 +90,24 @@ export class ActLoop implements ActLoopApi {
     for (const value of Object.values(options.model.limits))
       if (!Number.isSafeInteger(value) || value < 1)
         throw new AppError('VALIDATION', '模型必须声明有效窗口限制')
+  }
+
+  public async validateContext(request: ModelTurnRequest, signal: AbortSignal): Promise<void> {
+    const validationSignal = this.controller
+      ? AbortSignal.any([signal, this.controller.signal])
+      : signal
+    validationSignal.throwIfAborted()
+    const compiled = await boundedModelOperation(
+      this.compiler.compileModelTurn(
+        request,
+        this.options.model,
+        this.options.limits.safetyTokens,
+        this.planner.calibration()
+      ),
+      validationSignal
+    )
+    if (!compiled.okToSend || compiled.estimate.tokens > this.capacity().window)
+      throw new AppError('CONTEXT_BUDGET', '候选上下文超过当前运行的模型输入窗口')
   }
 
   public cancel(): void {
@@ -230,6 +251,7 @@ export class ActLoop implements ActLoopApi {
         let decoded: Optional<ActDecodedTurn>
         let acceptedTurnId = ''
         let acceptedCalls: readonly ModelToolCall[] = []
+        let acceptedInputTokens: Optional<number>
         let acceptedText = ''
         let acceptedResponseRef: Optional<{ sessionId: string; id: string }>
         for (let repair = 0; repair <= Math.max(2, this.policy.recoveryAttempts); repair++) {
@@ -424,6 +446,7 @@ export class ActLoop implements ActLoopApi {
             )
             acceptedTurnId = `${audit.ref.id}:${accepted.ref.id}`
             acceptedCalls = calls
+            acceptedInputTokens = usage?.inputTokens
             acceptedText = received
             acceptedResponseRef = accepted.ref
             // 已接受请求的实际出线成为下一帧的前缀；含图片的帧不保留，避免历史图片越积越多。
@@ -575,7 +598,13 @@ export class ActLoop implements ActLoopApi {
         if (this.options.control?.pending()) continue
         if (!decoded) throw new AppError('PROTOCOL', '没有可接受的完整响应')
         await this.options.frames.acknowledge(compiled.request, controller.signal)
-        this.planner.accept(compiled.estimate.tokens, frame.segment, frame.retained)
+        this.planner.accept(
+          compiled.estimate.tokens,
+          frame.segment,
+          frame.retained,
+          acceptedInputTokens
+        )
+        let done = decoded.done
         if (!isUndefined(decoded.submission)) {
           yield { type: 'state', runId, status: 'executing' }
           const success = await this.options.execution.invoke(
@@ -602,8 +631,20 @@ export class ActLoop implements ActLoopApi {
               controller.signal
             )
           }
-          if (isFalse(success) || (isObject(success) && !success.succeeded) || !decoded.done)
-            continue
+          if (isFalse(success) || (isObject(success) && !success.succeeded)) continue
+          if (!done && !isEmpty(acceptedCalls) && this.options.frames.deliveryReady?.()) {
+            await this.options.context.append(
+              {
+                kind: 'audit',
+                title: 'execution-completion',
+                body: JSON.stringify({ turnId: acceptedTurnId, reason: 'validated-delivery' }),
+                sources: [acceptedResponseRef!],
+              },
+              controller.signal
+            )
+            done = true
+          }
+          if (!done) continue
           await this.options.frames.prepare(controller.signal)
           await this.options.view.build(
             {
@@ -619,7 +660,7 @@ export class ActLoop implements ActLoopApi {
           await this.options.execution.wait(controller.signal)
           continue
         }
-        if (!decoded.done) {
+        if (!done) {
           yielded = true
           yield { type: 'state', runId, status: 'waiting' }
           return
@@ -906,7 +947,7 @@ export class ActLoop implements ActLoopApi {
     }
     // 结构性超载：放不下，或封不了段时剩余不足 foldTurns 轮、封段后剩余仍不足 minTurns 轮，
     // 或本段缺页持续偏高（笔记和结果本身挤不下）。
-    // 主线交给整理支线一次；放不下时叶子工具直接进入交付阶段
+    // 主线交给整理支线一次；叶子工具先收紧展示，仍放不下才进入交付阶段
     const short = runway < (folded ? this.policy.minTurns : this.policy.foldTurns)
     const faults = current.segment?.faults ?? 0
     const faulting =
@@ -922,15 +963,17 @@ export class ActLoop implements ActLoopApi {
         if (segment) this.planner.exhaust(segment)
       }
       if (!fits(current)) {
-        frames.pressure?.()
-        current = await compose(budget)
+        current = await compose(Math.min(budget, limits.recoveryChars))
+        if (!fits(current)) {
+          frames.pressure?.()
+          current = await compose(budget)
+        }
       }
     }
     // 仍放不下只剩恢复窗口：基础目标、当前图片和必要运行状态必须装得下
     if (!fits(current)) current = await compose(Math.min(budget, limits.recoveryChars))
     if (!current.compiled.okToSend) return null
     runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
-    frames.setPhase(current.phase.phase)
     const tighten =
       '按 memoryStatus.footprint 找占用最大的分区，收紧 observe 的 view，释放不再需要的 task 租约，合并或移出笔记，或把独立的子目标交给子 agent。'
     const overload = faulting
@@ -985,19 +1028,31 @@ export class ActLoop implements ActLoopApi {
             : undefined,
       }
     }
-    let compiled = current.compiled
-    let tokens = compiled.estimate.tokens
-    for (let count = 0; count < 3; count++) {
-      compiled = await this.compiler.compileModelTurn(
-        { ...current.request, contextStatus: status(tokens) },
-        model,
-        limits.safetyTokens,
-        this.planner.calibration()
-      )
-      if (compiled.estimate.tokens === tokens) break
-      tokens = compiled.estimate.tokens
+    const finalize = async () => {
+      let compiled = current.compiled
+      let tokens = compiled.estimate.tokens
+      for (let count = 0; count < 3; count++) {
+        compiled = await this.compiler.compileModelTurn(
+          { ...current.request, contextStatus: status(tokens) },
+          model,
+          limits.safetyTokens,
+          this.planner.calibration()
+        )
+        if (compiled.estimate.tokens === tokens) break
+        tokens = compiled.estimate.tokens
+      }
+      return compiled
+    }
+    let compiled = await finalize()
+    // 状态说明也是实际请求的一部分；追加后越界仍先收紧投影，再判断容量受阻。
+    if (!compiled.okToSend) {
+      retain = false
+      this.transcript = undefined
+      current = await compose(Math.min(budget, limits.recoveryChars))
+      compiled = await finalize()
     }
     if (!compiled.okToSend) return null
+    frames.setPhase(current.phase.phase)
     if (!(await view.validate(evidence, signal)))
       throw new AppError('STALE_VIEW', '发送前证据版本发生变化')
     return {

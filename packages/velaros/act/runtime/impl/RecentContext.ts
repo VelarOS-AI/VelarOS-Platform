@@ -7,7 +7,7 @@ import type {
 } from '@velaros-ai/context'
 import { createContextReference } from '@velaros-ai/context'
 import { Log, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
-import { isNull, isUndefined } from '@velaros-ai/core'
+import { isFalse, isNull, isUndefined } from '@velaros-ai/core'
 import { isArray, isEmpty, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelContinuation, ModelHistoryMessage, ModelToolExchange } from '@velaros-ai/kernel'
@@ -599,8 +599,8 @@ export class RecentContext implements RecentContextApi {
       }
     }
     const text = current?.text ?? ''
-    if (!text || (current?.structuredOutput && text.length > cap)) return undefined
-    const output = text.length > cap ? text.slice(0, cap) : text
+    if (!text || isFalse(current?.bodyIncluded) || text.length > cap) return undefined
+    const output = text
     const encoded = current?.structuredOutput ? memoryOutput(output, current.outputFormat) : output
     const representation = output.length === record.chars ? 'full' : 'excerpt'
     return {

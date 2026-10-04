@@ -16,7 +16,7 @@ import type {
 
 /**
  * @AgentView
- * 父会话快照的原文与整理补丁：先 list 看元数据，挑与整理目标相关的近期记录和当前笔记，再按引用 read 少量原文，最后用 submit 交来补丁。
+ * 父会话快照的原文与整理补丁：runtime.modelTool 已提供用户原文和近期记录，可直接依据它们整理；有缺口时按已有引用 read，查更早的材料时 list，最后用 submit 交来补丁。
  * 只能读这次整理授权的快照；读取额度用完后不能再读，直接交付已有结论。
  */
 export interface ContextMaterialsOperationsApi {
@@ -36,7 +36,7 @@ export interface ContextMaterialsOperationsApi {
     input: ContextMaterialsReadInput,
     ctx: ContextMaterialsOperationContext
   ): Promise<ContextContent>
-  /** @AgentView 交来整理补丁：先整份校验，不合格就报错（修正后再交），合格就受理；受理之后声明完成。
+  /** @AgentView 交来整理补丁：先整份校验，不合格就报错（修正后再交），合格就受理；原生调用成功后宿主完成交付，文本协议继续声明完成。
    * @OperationEffect none
    * @OperationModes execute
    */

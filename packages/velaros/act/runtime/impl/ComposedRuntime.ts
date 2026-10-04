@@ -247,6 +247,7 @@ class ComposedRuntime implements VelarosRuntime {
             packages: [this.systemPackage(id)],
             allowedModules: () => this.allowedModuleIds(id),
             tool: {
+              deliveryReady: () => activation.deliveryReady(),
               instructions: `本会话证据合同：\n${evidence.declarations}`,
               pressure: () => activation.pressure(),
               deadline: () => activation.deadline(),

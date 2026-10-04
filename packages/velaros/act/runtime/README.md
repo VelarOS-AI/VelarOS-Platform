@@ -57,7 +57,7 @@ for await (const event of liveEvents) {
 projector.finish() // 交付结束：清掉没接纳的预览
 ```
 
-标准 Node 主会话采用精简执行说明。支持原生工具的模型驱动直接收到 `shell({code})` 与 `node({code})`；普通文本承载进度和最终答复。整份响应完成且调用校验通过后统一派发，调用和真实回执持久配对，重开会话继续恢复。自定义文本驱动及显式受限协议沿用文本控制段。应用能力通过 `$VELAROS_HOST_DIR/index.json` 与按操作生成的 `.d.ts` 文件发现，保存的脚本和 Node 子进程使用同一包名导入。默认业务子任务继承 Node；自定义 `AgentProfile` 使用 `node: true` 显式继承操作系统范围，能力目录同时遵守 `modules`。维护和观察继续使用受限执行器。审批由 `createShellNodeEnvironment.authorize` 处理，能力调用还经过 `createRuntime.authorize`；Shell 的实际约束证据会随 Node 回执返回。
+标准 Node 会话采用精简执行说明。支持原生工具的模型驱动在允许 execute 和 done 的作用域使用原生调用：主会话提供 `shell({code})` 与 `node({code})`，上下文整理和高级搜索提供受限执行器上的 `node({code})`。入口遵守当前 allowed、maxChars 和 maxBlocks；普通文本承载进度和最终答复。整份响应完成且调用校验通过后统一派发，调用和真实回执持久配对，重开会话继续恢复。自定义文本驱动沿用文本控制段。应用能力通过 `$VELAROS_HOST_DIR/index.json` 与按操作生成的 `.d.ts` 文件发现，保存的脚本和 Node 子进程使用同一包名导入。默认业务子任务继承 Node；自定义 `AgentProfile` 使用 `node: true` 显式继承操作系统范围，能力目录同时遵守 `modules`。维护和观察继续使用受限执行器。审批由 `createShellNodeEnvironment.authorize` 处理，能力调用还经过 `createRuntime.authorize`；Shell 的实际约束证据会随 Node 回执返回。
 
 ## 入口
 
@@ -68,6 +68,8 @@ projector.finish() // 交付结束：清掉没接纳的预览
 | `@velaros-ai/velaros/renderer` | 任何进程，含渲染进程 | 事件投影 `createActEventProjector` 与展示快照 `ActPresentation` |
 
 ## 约定
+
+- Node 的基础说明只在当前可用时提示子任务、深入搜索与整理包的用途，操作合同按需读取。整理的用户输入与近期工作原文直接进入有界事实区，缺口附原文引用和续页位置；只有实际送达的完整用户输入才能支持约束改写。合法整理补丁与搜索报告在原生调用成功后进入普通完成核查，无需另发一次模型确认。
 
 - 文本协议的控制段闭合后的连续协议外空白默认最多 4096 个字符，可用 `protocol.maxIdleWhitespaceChars` 调整；超限保存失败原文、停止本次接收并取消，不接受部分程序、不自动重发。源码和 blobs 原文按完整响应预算接收。未结算的上游用量保持未知。
 
@@ -115,6 +117,7 @@ projector.finish() // 交付结束：清掉没接纳的预览
 - Trace 的 `accounting.modelRequests` 只统计本页请求；`verificationScope: 'session'` 表示核查费用是该会话快照内持久 attempt 的累计总账，包含首请求前、运行终态后和无模型请求的 probe。回合关联只用于定位。同会话各页的总账不可相加，跨快照取最新总账或按 charge ID 去重；未知覆盖保持未知，参考报价与实际收费分开。
 - `onMetric` 只收不含正文的计量，回调要快速返回，抛错不影响业务结果。
 - 普通执行输出超过展示预算时，保留带来源位置和范围的数组前段、文本片段；小元数据只占实际大小，余量用于正文。旧版结果预览已经截断时，从归档 output 或 rawValue 生成展示，诊断保留，引用指向实际原值字段。完整原值可按引用召回；展示片段不代表已读全文，也不会重新执行脚本。
+- 根引用卡明确标记 `bodyIncluded: false`，不冻结为已交付结果；容量恢复后正文可以进入历史。已完整保留的普通输出将预算留给新结果，短引用和旧 UUID 引用按同一身份核对，图片附件仍单独交付。
 - `createShellCapabilityModule` 给了 `output`，前台命令跑着时每吐出一段就回调一次，带上会话、`executionId` 与调用 `invocationId`（与追踪里的同名字段相同），宿主据此把运行中的输出画在对应的脚本卡上；回调要快速返回，抛错只记日志、不打断命令。
 - 调用回执里的有界 `diagnostic` 独立投影成观察材料：执行放在对应回执的 `code/detail`，观察放在 `observation.safety`，并保留调用身份。脚本只输出 stdout 也能看到 Shell 诊断；成功回执合并保留带诊断的条目，效果、成败和可见租约仍按原始事实处理。
 - 执行结果首次进入段内历史时，在该条正文剩余额度内附上完整调用诊断并冻结；当前帧继续列身份、状态、错误码和效果，完全匹配的诊断正文通过 `detailInHistory` 指向历史。状态或正文变化、未知效果、容量不足、旧历史未记录诊断交付或关闭历史时，当前帧仍完整交付诊断。审计保留全部正文，重启逐字复用，租约释放、到期、封段和授权重置遵循结果的可见边界。

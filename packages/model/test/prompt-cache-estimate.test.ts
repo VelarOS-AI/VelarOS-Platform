@@ -76,6 +76,35 @@ test('calibration shrinks only the text part and admits by the calibrated estima
     )
 })
 
+test('fixed calibration overhead retains image and continuation reserves and never exceeds the raw bound', async () => {
+  const compiler = createProviderRequestCompiler()
+  const raw = { tokens: 13_000, images: { count: 1, tokens: 2_000 }, opaqueTokens: 1_000 }
+  const driver = estimate(raw, 6_500)
+  const calibrated = await compiler.compileModelTurn(base, driver, 0, {
+    textRatio: 0.3,
+    overheadTokens: 500,
+  })
+  expect(calibrated.estimate.tokens).toBe(6_500)
+  expect(calibrated.okToSend).toBe(true)
+  expect(calibrated.measured).toEqual({ text: 10_000, images: 2_000, opaque: 1_000 })
+  expect(calibrated.estimate.basis).toContain('500 固定开销')
+  const capped = await compiler.compileModelTurn(base, driver, 0, {
+    textRatio: 0.3,
+    overheadTokens: 50_000,
+  })
+  expect(capped.estimate.tokens).toBe(13_000)
+  expect(capped.okToSend).toBe(false)
+  const exact = estimate({ ...raw, precision: 'exact' }, 6_500)
+  expect(
+    (await compiler.compileModelTurn(base, exact, 0, { textRatio: 0.3, overheadTokens: 500 }))
+      .estimate.tokens
+  ).toBe(13_000)
+  for (const overheadTokens of [-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY])
+    await expect(
+      compiler.compileModelTurn(base, driver, 0, { textRatio: 0.3, overheadTokens })
+    ).rejects.toThrow('固定开销')
+})
+
 test('neutral breakpoints and cache keys become provider wire fields on the way out; the key only on lines that accept it', () => {
   const messages = markPromptCacheBreakpoints([
     { role: 'user', content: 'segment base', cacheBreakpoint: true },

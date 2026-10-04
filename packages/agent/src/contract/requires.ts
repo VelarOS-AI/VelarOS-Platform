@@ -58,6 +58,8 @@ export interface ActExecutionPort {
 }
 /** 上下文策略独立于协议解码和执行调度。 */
 export interface ActContextPort {
+  /** 专项原生工具的最终产物已受理；成功执行后可进入普通完成核查。缺省仍由模型声明完成。 */
+  deliveryReady?(): boolean
   /** 安全轮边界的独立整理口；不执行业务脚本、不消费业务租约。 */
   maintain?(
     input: { reason: 'boundary' | 'pressure' | 'provider'; targetChars: number },

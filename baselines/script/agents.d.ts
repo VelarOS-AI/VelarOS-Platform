@@ -48,6 +48,7 @@ declare module 'velaros:agents' {
 
   /**
    * 派发子任务：task 写清楚要它完成什么；它直接继承你的能力与权限（模块、写入、共享空间），不用另外声明。
+   * 新会话从 task 和显式 materials 开始；task 写完整目标、约束和交付要求，并行编辑时明确负责的文件。
    * profile 可省，省略就用宿主给的第一个配置（profiles() 里能看到）；materials 把已有原文引用复制给它（最多 32 条）。
    */
   interface AgentStart {

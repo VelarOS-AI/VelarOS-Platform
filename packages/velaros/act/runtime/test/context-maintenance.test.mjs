@@ -344,6 +344,194 @@ async function runTool(f, input = 'work') {
   return events
 }
 
+test('context maintenance publishes a validated native Node patch in one model request', async (t) => {
+  let mainCalls = 0
+  let toolCalls = 0
+  const main = driver(async function* (request) {
+    if (++mainCalls === 1) {
+      yield execute(
+        request,
+        "import {memory} from 'velaros:system'; await memory.organize({focus:'Keep verified progress'});"
+      )
+      yield finish
+    } else yield* done(request)
+  })
+  const maintenance = {
+    ...driver(async function* (request) {
+      toolCalls++
+      assert.equal(request.response.type, 'tools')
+      assert.match(request.compiledPrompt, /当前运行状态/)
+      assert.doesNotMatch(request.instructions, /snapshotPlans/)
+      assert.deepEqual(
+        request.response.tools.map((tool) => tool.name),
+        ['node']
+      )
+      assert.equal(toolCalls, 1)
+      yield {
+        type: 'tool-call',
+        value: {
+          id: 'patch',
+          name: 'node',
+          input: {
+            code: `import {submit} from 'velaros:context-materials'; console.log(await submit(${JSON.stringify(patch(snapshotOf(request)))}));`,
+          },
+        },
+      }
+      yield finish
+    }),
+    nativeTools: true,
+  }
+  const f = await setupTool(t, main, maintenance)
+  await runTool(f)
+  assert.equal(mainCalls, 2)
+  assert.equal(toolCalls, 1)
+  const state = await f.storage.load('root')
+  assert(state.records.some((record) => record.title === 'context-maintenance:applied'))
+})
+
+test('maintenance facts include bounded recent original records with recall ranges and respect task reset', async (t) => {
+  const f = await fixture(t)
+  const plan = await f.session.context.append({
+    kind: 'assistant',
+    body: 'Plan to examine the adapter',
+  })
+  await f.session.execute({ source: "console.log('Verification has not run; adapter was read')" })
+  await f.session.context.append({
+    kind: 'audit',
+    title: 'model-request',
+    body: 'private request metadata',
+  })
+  const snapshot = await f.state.snapshot(8000, signal)
+  const material = f.state.material(snapshot, 8000)
+  assert(JSON.stringify(material).length <= 8000)
+  assert(material.recent.some((page) => page.ref.id === plan.ref.id))
+  assert(material.recent.some((page) => page.text.includes('Verification has not run')))
+  assert(!JSON.stringify(material).includes('private request metadata'))
+  assert.deepEqual(
+    material.recent.map((page) => page.sequence),
+    material.recent.map((page) => page.sequence).sort((a, b) => a - b)
+  )
+  for (const page of material.recent) {
+    const original = await f.session.context.read(page.ref, {
+      offset: page.offset,
+      limit: Math.max(1, page.text.length),
+    })
+    assert.equal(page.text, original.text.slice(0, page.text.length))
+    assert.equal(page.totalChars, original.totalChars)
+    assert.equal(page.nextOffset, page.text.length < page.totalChars ? page.text.length : null)
+  }
+  await f.session.view.end('completed')
+  const input = await f.session.context.append({ kind: 'user', body: 'A separate authorized task' })
+  await f.session.view.begin(input.ref, signal, 'new')
+  const fresh = await f.state.snapshot(8000, signal)
+  assert.deepEqual(f.state.material(fresh, 8000).recent, [])
+})
+
+test('native maintenance publishes a validated final-call patch without another model request', async (t) => {
+  let calls = 0
+  const maintenance = {
+    ...driver(async function* (request) {
+      calls++
+      assert(calls <= 2)
+      if (calls === 2) assert.equal(request.contextStatus.phase, 'finalizing')
+      yield {
+        type: 'tool-call',
+        value: {
+          id: `step-${calls}`,
+          name: 'node',
+          input: {
+            code:
+              calls === 1
+                ? "console.log('Review the supplied snapshot')"
+                : `import {submit} from 'velaros:context-materials'; console.log(await submit(${JSON.stringify(patch(snapshotOf(request), { unresolved: ['Verify remaining work'] }))}));`,
+          },
+        },
+      }
+      yield finish
+    }),
+    nativeTools: true,
+  }
+  const f = await setupTool(
+    t,
+    driver(async function* (request) {
+      yield* done(request)
+    }),
+    maintenance,
+    { context: { sources: [], maintenance: { model: maintenance, profile: { modelCalls: 2 } } } }
+  )
+  await f.session.execute({
+    source:
+      "import {memory} from 'velaros:system'; await memory.organize({focus:'Review progress'});",
+  })
+  await runTool(f)
+  assert.equal(calls, 2)
+  const state = await f.storage.load('root')
+  assert(state.records.some((record) => record.title === 'context-maintenance:applied'))
+  const record = state.records.findLast((record) => record.title === 'context-maintenance:outcome')
+  const outcome = JSON.parse(await f.storage.get('root', record.objectId))
+  assert.equal(outcome.status, 'applied')
+  assert.equal(outcome.error, null)
+})
+
+test('native maintenance recovers an oversized initial projection and can read before submitting', async (t) => {
+  let calls = 0
+  let recovered = false
+  const maintenance = {
+    ...driver(
+      async function* (request) {
+        calls++
+        assert.equal(request.contextStatus.phase, 'work')
+        assert(calls <= 2)
+        if (calls === 2) assert.match(JSON.stringify(request.history), /items/)
+        yield {
+          type: 'tool-call',
+          value: {
+            id: `recover-${calls}`,
+            name: 'node',
+            input: {
+              code:
+                calls === 1
+                  ? "import {list} from 'velaros:context-materials'; console.log(await list({limit:8}));"
+                  : `import {submit} from 'velaros:context-materials'; console.log(await submit(${JSON.stringify(patch(snapshotOf(request)))}));`,
+            },
+          },
+        }
+        yield finish
+      },
+      async (request) => {
+        const small = request.materials[0].text.length < 12000
+        if (small) recovered = true
+        return {
+          tokens: small || calls > 0 ? 1000 : 100000,
+          precision: 'exact',
+          basis: 'fixture: initial full projection exceeds the window',
+        }
+      }
+    ),
+    nativeTools: true,
+  }
+  const f = await setupTool(
+    t,
+    driver(async function* (request) {
+      yield* done(request)
+    }),
+    maintenance
+  )
+  await f.session.context.append({ kind: 'assistant', body: 'Verified records\n'.repeat(1500) })
+  await f.session.execute({
+    source:
+      "import {memory} from 'velaros:system'; await memory.organize({focus:'Review progress'});",
+  })
+  await runTool(f)
+  assert.equal(recovered, true)
+  assert.equal(calls, 2)
+  const state = await f.storage.load('root')
+  const record = state.records.findLast((item) => item.title === 'context-maintenance:outcome')
+  const outcome = JSON.parse(await f.storage.get('root', record.objectId))
+  assert.equal(outcome.status, 'applied')
+  assert.equal(outcome.error, null)
+})
+
 test('explicit context request runs a separate leaf at a safe boundary; scripts and observer are not replayed', async (t) => {
   let mainCalls = 0
   let toolCalls = 0
@@ -1137,7 +1325,34 @@ test('a maintenance patch error is corrected within the same leaf before publica
   )
   const outcomes = state.records.filter((record) => record.title === 'context-maintenance:outcome')
   assert.equal(outcomes.length, 1)
-  assert.equal(JSON.parse(await f.storage.get('root', outcomes[0].objectId)).status, 'applied')
+  const outcome = JSON.parse(await f.storage.get('root', outcomes[0].objectId))
+  assert.equal(outcome.status, 'applied')
+  assert.equal(outcome.error, null, 'a repaired intermediate error is not a terminal failure')
+})
+
+test('successful maintenance clears a recovered protocol error from its terminal outcome', async (t) => {
+  let calls = 0
+  const f = await setupTool(
+    t,
+    driver(done),
+    driver(async function* (request) {
+      if (++calls === 1) {
+        yield { type: 'text', text: 'I will organize the provided evidence.' }
+        yield finish
+      } else yield* deliverPatch(request)
+    })
+  )
+  await f.session.execute({
+    source:
+      "import {memory} from 'velaros:system'; await memory.organize({focus:'Preserve the goal'});",
+  })
+  await runTool(f)
+  assert.equal(calls, 2)
+  const state = await f.storage.load('root')
+  const record = state.records.findLast((record) => record.title === 'context-maintenance:outcome')
+  const outcome = JSON.parse(await f.storage.get('root', record.objectId))
+  assert.equal(outcome.status, 'applied')
+  assert.equal(outcome.error, null)
 })
 
 test('read-only maintenance can deliver a validated patch while its own old preview is unavailable', async (t) => {
@@ -1207,6 +1422,71 @@ test('input summaries require original pages in the model facts, not a successfu
   assert.equal((await f.storage.load('root')).inputSummaries?.length ?? 0, 0)
   await f.state.apply(snapshot, candidate, signal)
   assert.equal((await f.storage.load('root')).inputSummaries[0].revision, 1)
+})
+
+test('maintenance input preloading uses its own reading budget when the parent target is small', async (t) => {
+  const f = await fixture(t)
+  const original = `${'Review the implementation. '.repeat(150)}Preserve the final condition.`
+  const input = await f.session.context.append({ kind: 'user', body: original })
+  await f.session.view.end('completed')
+  await f.session.view.begin(input.ref)
+  const snapshot = await f.state.snapshot(8000, signal)
+  const material = f.state.material(snapshot, 8000)
+  assert.equal(material.inputs.find((item) => item.ref.id === input.ref.id)?.text, original)
+  f.state.acknowledge(snapshot, material)
+  await f.state.validate(
+    snapshot,
+    patch(snapshot, {
+      active: {
+        baseRevision: snapshot.active.revision,
+        reviewedInput: input.ref,
+        changes: [],
+      },
+    }),
+    signal
+  )
+})
+
+test('small maintenance facts advance acknowledged input ranges and identify the remaining page', async (t) => {
+  const f = await fixture(t)
+  const original = `${'Data "quoted"\\with\\slashes 中文. '.repeat(60)}Final condition.`
+  const input = await f.session.context.append({ kind: 'user', body: original })
+  await f.session.view.end('completed')
+  await f.session.view.begin(input.ref)
+  const snapshot = await f.state.snapshot(8000, signal)
+  const collected = []
+  for (let turn = 0; turn < 16; turn++) {
+    const material = f.state.material(snapshot, 750)
+    assert(JSON.stringify(material).length <= 750)
+    assert.deepEqual(f.state.material(snapshot, 750), material)
+    const page = material.inputs.find((item) => item.ref.id === input.ref.id)
+    assert(page)
+    assert.equal(page.offset, collected.join('').length)
+    assert.equal(page.text, original.slice(page.offset, page.offset + page.text.length))
+    assert.equal(
+      page.nextOffset,
+      page.offset + page.text.length < original.length ? page.offset + page.text.length : null
+    )
+    collected.push(page.text)
+    f.state.acknowledge(snapshot, material)
+    if (page.nextOffset === null) break
+  }
+  assert.equal(collected.join(''), original)
+  await f.state.validate(
+    snapshot,
+    patch(snapshot, {
+      inputs: [
+        {
+          ref: input.ref,
+          baseRevision: 0,
+          summary: 'Data reviewed',
+          constraints: [],
+          unresolved: [],
+        },
+      ],
+    }),
+    signal
+  )
 })
 
 test('input summary coverage joins actual pages, respects fact budgets and resets with the snapshot', async (t) => {

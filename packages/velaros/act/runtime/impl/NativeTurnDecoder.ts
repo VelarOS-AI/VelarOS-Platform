@@ -8,36 +8,48 @@ import {
 } from '@velaros-ai/kernel'
 
 import { GoalLimits } from '../../system/contract/constants.js'
-import { ScriptProtocolLimits } from '../contract/constants.js'
 import { NativeExecutionSchema } from '../contract/surface.js'
 import type { NativeExecutionInput } from '../types/native-tools.js'
+import type { ScriptProtocolOptions } from '../types/runtime.js'
+import { protocolConfig } from '../utils/script-protocol.js'
 
 /** 普通工具调用只描述程序，执行仍经过完整响应接收和持久化门。 */
 export interface NativeTurnDecoderApi extends ActTurnDecoder {}
 
 export class NativeTurnDecoder implements NativeTurnDecoderApi {
-  public readonly instructions =
-    '通过 shell 执行命令，通过 node 执行 JavaScript ESM。检查执行结果后继续；任务完成时用普通文本答复。'
-  public readonly response: ModelResponseFormat = {
-    type: 'tools',
-    tools: [
-      {
-        name: 'shell',
-        description: '在工作目录执行 Shell 命令，返回输出、退出码和日志路径。',
-        schema: NativeExecutionSchema,
-      },
-      {
-        name: 'node',
-        description:
-          '在工作目录执行 Node.js ESM，支持顶层 await、标准库、项目依赖和按需导入的应用能力。console.log 返回输出。',
-        schema: NativeExecutionSchema,
-      },
-    ],
-  }
+  public readonly instructions: string
+  public readonly response: ModelResponseFormat
+  private readonly config
   private text = ''
   private calls: ModelToolCall[] = []
   private chars = 0
   private ended = false
+
+  public constructor(options: ScriptProtocolOptions = {}) {
+    this.config = protocolConfig(options)
+    const shell = this.config.allowed.includes('shell')
+    this.instructions = `${shell ? '通过 shell 执行命令，' : ''}通过 node 执行 JavaScript ESM。检查执行结果后继续；任务完成时用普通文本答复。`
+    this.response = {
+      type: 'tools',
+      tools: [
+        ...(shell
+          ? [
+              {
+                name: 'shell',
+                description: '在工作目录执行 Shell 命令，返回输出、退出码和日志路径。',
+                schema: NativeExecutionSchema,
+              },
+            ]
+          : []),
+        {
+          name: 'node',
+          description:
+            '在工作目录执行 Node.js ESM，支持顶层 await、标准库、项目依赖和按需导入的应用能力。console.log 返回输出。',
+          schema: NativeExecutionSchema,
+        },
+      ],
+    }
+  }
 
   public reset(): void {
     this.text = ''
@@ -55,11 +67,11 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
   public acceptTool(call: ModelToolCall): readonly ActPreview[] {
     this.consume(JSON.stringify(call).length)
     if (
-      !['shell', 'node'].includes(call.name) ||
+      !(call.name === 'node' || (call.name === 'shell' && this.config.allowed.includes('shell'))) ||
       !call.id ||
       call.id.length > 256 ||
       this.calls.some((item) => item.id === call.id) ||
-      this.calls.length >= ScriptProtocolLimits.maxBlocks
+      this.calls.length >= this.config.maxBlocks
     )
       throw new AppError('SCRIPT_PROTOCOL', '原生执行入口或调用身份无效')
     let input: NativeExecutionInput
@@ -109,7 +121,7 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
   private consume(chars: number): void {
     if (this.ended) throw new AppError('SCRIPT_PROTOCOL', '完整响应只能接收一次')
     this.chars += chars
-    if (this.chars > ScriptProtocolLimits.maxChars)
+    if (this.chars > this.config.maxChars)
       throw new AppError('SCRIPT_PROTOCOL', '响应超过协议字符预算')
   }
 }

@@ -6,7 +6,7 @@ import type { ContextState } from '@velaros-ai/context'
 import type { ContextStorage } from '@velaros-ai/context'
 import { createContextRuntime, createContextView } from '@velaros-ai/context'
 import { AppError } from '@velaros-ai/core/error'
-import type { ModelHistoryMessage } from '@velaros-ai/kernel'
+import type { ModelHistoryMessage, ModelTurnRequest } from '@velaros-ai/kernel'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 
 import type { ActChildSession } from '../src/contract/requires.js'
@@ -75,6 +75,250 @@ function runFixture() {
   return { store, context, view, options }
 }
 
+test('INV-40 accepted provider usage drives growth while calibrated admission remains independent', async () => {
+  const f = runFixture()
+  const requests: ModelTurnRequest[] = []
+  f.options.frames.project = async () => ({
+    body: '{}',
+    images: [],
+    segment: { id: 'one-segment', index: 1, revision: 0, volumes: 0, turns: requests.length },
+  })
+  f.options.model.estimate = async () => ({
+    tokens: 5_000,
+    precision: 'estimate',
+    basis: 'fixture',
+  })
+  f.options.model.stream = async function* (request) {
+    requests.push(request)
+    yield { type: 'usage', inputTokens: 1_000 + requests.length * 200, outputTokens: 1 }
+    yield { type: 'text', text: 'accepted' }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  f.options.protocol.open = () => ({
+    instructions: 'fixture',
+    reset() {},
+    push() {
+      return []
+    },
+    finish() {
+      return requests.length >= 3
+        ? { message: 'done', done: true, events: [] }
+        : { message: 'work', done: false, submission: { code: 'work' }, events: [] }
+    },
+  })
+  const service = createActRunService(f.options)
+  const events = []
+  try {
+    for await (const event of service.submit('complete three steps')) events.push(event)
+    expect(requests).toHaveLength(3)
+    expect(requests[2]!.contextStatus?.runway?.growthPerTurn).toBe(200)
+    expect(requests[2]!.contextStatus?.inputTokens).toBeGreaterThan(1_400)
+    expect(events.some((event) => event.type === 'state' && event.status === 'completed')).toBe(
+      true
+    )
+  } finally {
+    await service.close()
+  }
+})
+
+test.each(['fits', 'window', 'provider', 'exact', 'abort', 'timeout'] as const)(
+  'INV-51 candidate admission uses the live calibration and obeys capacity and cancellation: %s',
+  async (mode) => {
+    const f = runFixture()
+    let calls = 0
+    let checked = 0
+    let executed = 0
+    let outcome = ''
+    f.options.frames.policy = { windowTokens: 2000 }
+    f.options.limits = { ...f.options.limits, timeoutMs: mode === 'timeout' ? 100 : 2000 }
+    f.options.model.estimate = async (request) => {
+      if (request.compiledPrompt?.includes('candidate')) {
+        checked++
+        if (mode === 'timeout') return new Promise(() => {})
+        return {
+          tokens: mode === 'window' ? 19_000 : mode === 'exact' ? 3000 : 12_000,
+          precision: mode === 'exact' ? 'exact' : 'estimate',
+          basis: 'candidate fixture',
+        }
+      }
+      return { tokens: 1000, precision: 'estimate', basis: 'live fixture' }
+    }
+    f.options.model.stream = async function* () {
+      calls++
+      yield { type: 'usage', inputTokens: 100, outputTokens: 1 }
+      yield { type: 'text', text: 'accepted' }
+      yield { type: 'finish', reason: 'stop' }
+    }
+    f.options.protocol.open = () => ({
+      instructions: 'fixture',
+      reset() {},
+      push() {
+        return []
+      },
+      finish() {
+        return executed
+          ? { message: 'done', done: true, events: [] }
+          : { message: 'work', done: false, submission: { code: 'work' }, events: [] }
+      },
+    })
+    const candidate: ModelTurnRequest = {
+      instructions: 'candidate',
+      materials: [],
+      compiledPrompt: 'candidate body',
+      images: [],
+      response: { type: 'text' },
+      mode: 'work',
+      outputTokens: mode === 'provider' ? 9000 : 100,
+    }
+    const service = createActRunService(f.options)
+    const signal = mode === 'abort' ? AbortSignal.abort() : new AbortController().signal
+    await expect(service.validateContext(candidate, signal)).rejects.toMatchObject({
+      code: 'UNAVAILABLE',
+    })
+    f.options.execution.invoke = async () => {
+      executed++
+      try {
+        await service.validateContext(candidate, signal)
+        outcome = 'accepted'
+      } catch (error) {
+        outcome = (error as Error).name === 'AbortError' ? 'cancelled' : (error as AppError).code
+      }
+    }
+    const events = []
+    try {
+      for await (const event of service.submit('work')) events.push(event)
+      expect(executed).toBe(1)
+      expect(checked).toBe(mode === 'abort' ? 0 : 1)
+      expect(outcome).toBe(
+        mode === 'fits'
+          ? 'accepted'
+          : mode === 'abort' || mode === 'timeout'
+            ? 'cancelled'
+            : 'CONTEXT_BUDGET'
+      )
+      // 验收本身不派发模型；取消只作用于候选时主循环仍可继续。
+      expect(calls).toBe(mode === 'timeout' ? 1 : 2)
+      expect(events.at(-1)).toMatchObject({
+        type: 'state',
+        status: mode === 'timeout' ? 'cancelled' : 'completed',
+      })
+      await expect(service.validateContext(candidate, signal)).rejects.toMatchObject({
+        code: 'UNAVAILABLE',
+      })
+    } finally {
+      await service.close()
+    }
+  }
+)
+
+test('INV-51 adding final context status retries a smaller projection before blocking', async () => {
+  const f = runFixture()
+  let calls = 0
+  const budgets: number[] = []
+  f.options.frames.project = async (_view, _signal, maxChars) => {
+    budgets.push(maxChars)
+    return { body: maxChars > 1000 ? 'full' : 'compact', images: [] }
+  }
+  f.options.model.estimate = async (request) => ({
+    tokens: request.materials[0]?.text === 'compact' ? 1000 : request.contextStatus ? 9100 : 8990,
+    precision: 'exact',
+    basis: 'final status boundary',
+  })
+  f.options.model.stream = async function* (request) {
+    calls++
+    expect(request.materials[0]?.text).toBe('compact')
+    expect(request.contextStatus).toBeDefined()
+    yield { type: 'text', text: 'done' }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  const service = createActRunService(f.options)
+  const events = []
+  try {
+    for await (const event of service.submit('work')) events.push(event)
+    expect(calls).toBe(1)
+    expect(budgets).toContain(1000)
+    expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+  } finally {
+    await service.close()
+  }
+})
+
+test.each(['ready', 'not-ready', 'execution-failed', 'verification-rejected', 'pending'] as const)(
+  'INV-52 native host delivery obeys execution and ordinary completion gates: %s',
+  async (mode) => {
+    const f = runFixture()
+    let calls = 0
+    let checks = 0
+    let readyChecks = 0
+    let pending = false
+    f.options.frames.deliveryReady = () => {
+      readyChecks++
+      return mode !== 'not-ready'
+    }
+    f.options.frames.completion = async () => {
+      checks++
+      return mode === 'verification-rejected'
+        ? { completed: false, verified: false, reason: 'not verified', recovery: 'input' }
+        : { completed: true, verified: true }
+    }
+    f.options.protocol.open = () => ({
+      instructions: 'native fixture',
+      response: {
+        type: 'tools',
+        tools: [{ name: 'node', description: 'fixture', schema: { type: 'object' } }],
+      },
+      reset() {},
+      push() {
+        return []
+      },
+      acceptTool() {
+        return []
+      },
+      finish() {
+        return calls === 1
+          ? { message: '', done: false, submission: { code: 'deliver' }, events: [] }
+          : { message: 'done', done: true, events: [] }
+      },
+    })
+    f.options.model.stream = async function* () {
+      calls++
+      if (calls === 1) yield { type: 'tool-call', value: { id: 'report', name: 'node', input: {} } }
+      else yield { type: 'text', text: 'done' }
+      yield { type: 'finish', reason: 'stop' }
+    }
+    f.options.execution.invoke = async () => {
+      pending = mode === 'pending'
+      return {
+        succeeded: mode !== 'execution-failed',
+        results: [{ id: 'report', name: 'node', output: { recorded: true } }],
+      }
+    }
+    f.options.execution.pending = () => pending
+    f.options.execution.wait = async () => {
+      pending = false
+    }
+    const service = createActRunService(f.options)
+    const events = []
+    try {
+      for await (const event of service.submit('work')) events.push(event)
+      expect(calls).toBe(mode === 'ready' || mode === 'verification-rejected' ? 1 : 2)
+      expect(readyChecks).toBe(mode === 'execution-failed' ? 0 : 1)
+      expect(checks).toBe(1)
+      expect(events.at(-1)).toMatchObject({
+        type: 'state',
+        status: mode === 'verification-rejected' ? 'waiting' : 'completed',
+      })
+      const records = (await f.store.load('fault'))!.records
+      expect(records.filter((record) => record.title === 'model-tool-exchange')).toHaveLength(1)
+      expect(records.filter((record) => record.title === 'execution-completion')).toHaveLength(
+        mode === 'execution-failed' || mode === 'not-ready' ? 0 : 1
+      )
+    } finally {
+      await service.close()
+    }
+  }
+)
+
 test('INV-34 cleanup failure still releases ownership and cannot report a completed run', async () => {
   const f = runFixture()
   let ended = 0
@@ -103,6 +347,48 @@ test('INV-34 cleanup failure still releases ownership and cannot report a comple
   expect((await service.inspect()).status).toBe('completed')
   await service.close()
 })
+
+test.each(['fits', 'needs-finalization'] as const)(
+  'INV-53 a leaf tries smaller evidence before reserving its last delivery request: %s',
+  async (mode) => {
+    const f = runFixture()
+    let finalizing = false
+    let calls = 0
+    f.options.frames.policy = { windowTokens: 2000 }
+    f.options.frames.pressure = () => {
+      finalizing = true
+    }
+    f.options.frames.phase = () => ({ phase: finalizing ? 'finalizing' : 'work', instructions: '' })
+    f.options.frames.project = async (_view, _signal, maxChars) => ({
+      body: JSON.stringify({ size: maxChars <= 1000 ? 'small' : 'large' }),
+      images: [],
+    })
+    f.options.model.estimate = async (request) => ({
+      tokens:
+        finalizing || (mode === 'fits' && request.materials[0]!.text.includes('small'))
+          ? 100
+          : 50000,
+      precision: 'exact',
+      basis: 'bounded leaf evidence',
+    })
+    f.options.model.stream = async function* (request) {
+      calls++
+      expect(request.contextStatus?.phase).toBe(mode === 'fits' ? 'work' : 'finalizing')
+      yield { type: 'text', text: 'completed' }
+      yield { type: 'finish', reason: 'stop' }
+    }
+    const events = []
+    const service = createActRunService(f.options)
+    try {
+      for await (const event of service.submit('summarize the supplied records')) events.push(event)
+      expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+      expect(calls).toBe(1)
+      expect(finalizing).toBe(mode === 'needs-finalization')
+    } finally {
+      await service.close()
+    }
+  }
+)
 
 test.each([
   { role: 'user' as const, content: 'same result' },
@@ -1625,7 +1911,11 @@ test.each(['fits', 'overflow', 'provider-reject', 'timeout', 'abort'] as const)(
         expect(responses[1].usage).toEqual({ inputTokens: 1000, outputTokens: 1 })
       if (mode === 'fits') {
         expect(calls).toBe(3)
-        expect(requests[2].estimate.tokens).toBe(Math.ceil(12020 * ((100 / 1000) * 1.1)))
+        // Both provider usages count, including the protocol-rejected response.
+        // The learned growth is 900 / 11000 with a separately rounded fixed reserve.
+        const slope = (1000 - 100) / (12000 - 1000)
+        const overhead = Math.ceil((100 - slope * 1000) * 1.1)
+        expect(requests[2].estimate.tokens).toBe(Math.ceil(12020 * slope * 1.1 + overhead))
         expect(requests[2].request.compiledPrompt).toContain('synthetic invalid intent')
         expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
       } else if (mode === 'overflow') {

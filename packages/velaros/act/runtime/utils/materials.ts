@@ -123,6 +123,7 @@ export function projectMaterial(text: string, ref: ContextRef, limit: number) {
       omitted: ['/'],
     }
   }
+  let rootReference = false
   const shrink = (item: unknown, pointer: string, budget: number): unknown => {
     if (JSON.stringify(item).length <= budget) return item
     const metadata = reference(pointer, item)
@@ -130,6 +131,7 @@ export function projectMaterial(text: string, ref: ContextRef, limit: number) {
     const fallback = () => {
       omitted.splice(before)
       omitted.push(pointer || '/')
+      if (!pointer) rootReference = true
       return metadata
     }
     // 保留有界原文及其准确来源；不让一个大字符串把整层数组变成只有引用的回执。
@@ -228,5 +230,11 @@ export function projectMaterial(text: string, ref: ContextRef, limit: number) {
       size,
       omitted: ['/'],
     }
-  return { text: projected, representation: 'excerpt' as const, bodyIncluded: true, size, omitted }
+  return {
+    text: projected,
+    representation: rootReference ? ('reference' as const) : ('excerpt' as const),
+    bodyIncluded: !rootReference,
+    size,
+    omitted,
+  }
 }

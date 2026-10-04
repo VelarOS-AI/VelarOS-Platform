@@ -417,6 +417,16 @@ test('INV-58 projected fragments preserve JSON validity, source pointers and har
   assert.equal(full.representation, 'full')
 })
 
+test('INV-58 a root reference card never claims to include execution output', () => {
+  const text = JSON.stringify({ result: { stdout: 'diagnostic '.repeat(60) }, checked: true })
+  const projected = projectMaterial(text, { sessionId: 's', id: 'a1b2c3d4' }, 416)
+  assert.equal(JSON.parse(projected.text).reason, 'view-budget')
+  assert.equal(projected.representation, 'reference')
+  assert.equal(projected.bodyIncluded, false)
+  assert.deepEqual(projected.omitted, ['/'])
+  assert(projected.text.length <= 416)
+})
+
 test('projected pointer sizes drive exact recall loops for escaped strings and JSON values', () => {
   const values = [
     '\t"source\\path"\r\n界😀\u0301'.repeat(1800),
@@ -652,24 +662,24 @@ output('source 😀 \\"quoted\\" \\\\path\\r\\n'.repeat(5000),{key:'large',type:
     const projected = await f.programs.project(view, undefined, [], signal, maxChars)
     const frame = JSON.parse(projected.body)
     assert.equal(frame.results.length, 3)
-    const share = Math.floor(maxChars / (frame.results.length + 4) / 2)
+    const share = Math.floor(maxChars / frame.results.length / 2)
     const pool = share * frame.results.length
     for (const [index, ref] of outputs.entries()) {
       const item = frame.results.find((result) => result.ref === ref)
       const cap =
         index === 0
-          ? JSON.parse(item.text.split('\n')[0]).displayChars
+          ? (JSON.parse(item.text.split('\n')[0]).displayChars ?? 200000)
           : index === 1
             ? Math.min(12000, share)
             : 0
       if (index === 0) {
         assert(
-          cap >= share,
-          'an explicit request keeps its original share before borrowing spare space'
+          cap >= Math.min(share, 200000),
+          'an explicit request receives its share up to its requested ceiling'
         )
         assert(
           cap <= Math.min(200000, pool),
-          'borrowing cannot exceed the unchanged result pool or request'
+          'borrowing cannot exceed the finite result pool or request'
         )
       }
       assert(item.text.length <= cap)
@@ -682,13 +692,16 @@ output('source 😀 \\"quoted\\" \\\\path\\r\\n'.repeat(5000),{key:'large',type:
       const display = await f.display(ref, cap)
       assert.equal(item.outputFormat, 'text')
       assert.equal(scriptOutputs.hash(item.text), scriptOutputs.hash(display.prompt))
-      assert.equal(JSON.parse(item.text.split('\n')[0]).displayChars, cap)
+      const displayChars = JSON.parse(item.text.split('\n')[0]).displayChars
+      if (displayChars !== undefined) assert.equal(displayChars, cap)
       assert.equal(display.blocks.find((block) => block.key === 'status').representation, 'full')
       const large = display.blocks.find((block) => block.key === 'large')
       assert.equal(large.rawRef, ref)
       assert.equal(large.pointer, '/output/blocks/1/value')
-      assert.equal(large.selection.chars.unit, 'utf16')
-      assert.equal(large.selection.chars.shown, large.text.length)
+      if (large.representation === 'excerpt') {
+        assert.equal(large.selection.chars.unit, 'utf16')
+        assert.equal(large.selection.chars.shown, large.text.length)
+      } else assert.equal(large.representation, 'full')
       if (maxChars === 600000 && index === 0) assert(item.text.length > 12000)
     }
     assert(frame.results.reduce((sum, result) => sum + result.text.length, 0) <= pool)
@@ -705,15 +718,15 @@ output('private to archive',{key:'reference',view:{mode:'reference'}});`,
   assert.equal(result.checked, true)
   const view = (await f.session.view.inspect()).view
   for (const [maxChars, expected] of [
-    [120000, 'reference'],
+    [24000, 'reference'],
     [400000, 'full'],
   ]) {
     const frame = JSON.parse((await f.programs.project(view, undefined, [], signal, maxChars)).body)
     const item = frame.results.find((entry) => entry.ref === result.resultRef)
-    const display = await f.display(result.resultRef, Math.min(36000, maxChars / 10))
+    const display = await f.display(result.resultRef, Math.min(36000, maxChars / 2))
     assert.equal(item.outputFormat, 'text')
     assert.equal(item.text, display.prompt)
-    assert(item.text.length <= Math.min(36000, maxChars / 10))
+    assert(item.text.length <= Math.min(36000, maxChars / 2))
     assert.equal(display.blocks.find((block) => block.key === 'required').representation, expected)
     assert.equal(
       display.blocks.find((block) => block.key === 'reference').representation,
@@ -800,9 +813,9 @@ test('INV-58 explicit block output beyond history capacity reaches the current f
   assert.equal(result.result.failed, undefined)
   const view = (await f.session.view.inspect()).view
   for (const [maxChars, full] of [
-    [100000, false],
+    [20000, false],
     [500000, true],
-    [100000, false],
+    [20000, false],
   ]) {
     const frame = JSON.parse((await f.programs.project(view, undefined, [], signal, maxChars)).body)
     const item = frame.results.find((entry) => entry.ref === result.resultRef)
@@ -812,8 +825,8 @@ test('INV-58 explicit block output beyond history capacity reaches the current f
       !full
     )
     assert(
-      item.text.length <= Math.floor(maxChars / 10),
-      'the pre-existing finite result share remains authoritative'
+      item.text.length <= Math.floor(maxChars / 2),
+      'the finite result share remains authoritative'
     )
   }
   await f.run()
@@ -844,16 +857,16 @@ test('INV-58 explicit block requests remain bounded across multiple leases and e
     refs.push(result.resultRef)
   }
   const view = (await f.session.view.inspect()).view
-  for (const maxChars of [42000, 700000, 42000]) {
+  for (const maxChars of [18000, 700000, 18000]) {
     const frame = JSON.parse((await f.programs.project(view, undefined, [], signal, maxChars)).body)
-    const share = Math.floor(maxChars / (refs.length + 4) / 2)
+    const share = Math.floor(maxChars / refs.length / 2)
     for (const [index, ref] of refs.entries()) {
       const item = frame.results.find((entry) => entry.ref === ref)
       const cap = index === 0 ? share : index === 1 ? 0 : Math.min(1000, share)
       assert(item.text.length <= cap)
       assert.equal(
         frame.decision.missing.some((entry) => entry.ref === ref),
-        index !== 0 || maxChars === 42000
+        index !== 0 || maxChars === 18000
       )
       if (index === 1) assert.equal(item.text, '')
     }
@@ -874,7 +887,7 @@ test('INV-58 frozen partial history cannot hide a later full or larger excerpt, 
     })
     assert.equal(result.checked, true)
     const view = (await f.session.view.inspect()).view
-    const first = await f.memory.project(view, undefined, [], signal, 120000)
+    const first = await f.memory.project(view, undefined, [], signal, 24000)
     const firstFrame = JSON.parse(first.body)
     const originalHistory = historyEntries(first).find(
       (entry) => entry.ref?.id === result.resultRef
@@ -882,7 +895,7 @@ test('INV-58 frozen partial history cannot hide a later full or larger excerpt, 
     assert(originalHistory?.bodyIncluded)
     assert(!originalHistory.text.includes(body))
     await f.memory.acknowledge(firstFrame.frameId, signal)
-    for (const maxChars of [180000, 600000, 120000]) {
+    for (const maxChars of [36000, 600000, 24000]) {
       const projected = await f.memory.project(view, undefined, [], signal, maxChars)
       const frame = JSON.parse(projected.body)
       const current = frame.partitions.recent.results.find(
@@ -903,12 +916,12 @@ test('INV-58 frozen partial history cannot hide a later full or larger excerpt, 
           frame.partitions.runtime.decision.missing.some((entry) => entry.ref === result.resultRef),
           false
         )
-      } else if (mode === 'auto' && maxChars === 180000) {
+      } else if (mode === 'auto' && maxChars === 36000) {
         assert(
           current.text.length > originalHistory.text.length,
           'a larger excerpt must not be hidden by its older excerpt'
         )
-      } else if (maxChars === 120000) {
+      } else if (maxChars === 24000) {
         assert.equal(
           current.bodyInHistory,
           true,
@@ -973,7 +986,7 @@ test('INV-58 legacy history without presentation fingerprints keeps current cont
 })
 
 test('INV-58 complete raw material in actual history covers a smaller projection but partial history does not', async (t) => {
-  for (const firstChars of [600000, 16000]) {
+  for (const firstChars of [600000, 4000]) {
     const f = await fixture(t, "import {output} from 'velaros';output(1)")
     const body = 'raw evidence '.repeat(350)
     const result = await f.session.execute({
@@ -991,7 +1004,7 @@ test('INV-58 complete raw material in actual history covers a smaller projection
       undefined,
       [],
       signal,
-      firstChars === 600000 ? 16000 : 600000
+      firstChars === 600000 ? 4000 : 600000
     )
     const frame = JSON.parse(next.body)
     const current = frame.partitions.recent.results.find((item) => item.ref === result.resultRef)
@@ -1013,9 +1026,7 @@ test('INV-58 complete raw material in actual history covers a smaller projection
           },
           signal
         )
-        const unknown = JSON.parse(
-          (await f.memory.project(view, undefined, [], signal, 16000)).body
-        )
+        const unknown = JSON.parse((await f.memory.project(view, undefined, [], signal, 4000)).body)
         assert.equal(
           unknown.partitions.recent.results.find((item) => item.ref === result.resultRef)
             .bodyInHistory,
@@ -1053,7 +1064,9 @@ test('INV-58 trace budgets identify only the actual selected frame and stay outs
     audit.budget.program.resultBudgetChars,
     Math.max(
       1,
-      Math.floor(audit.budget.program.maxChars / (audit.budget.program.visibleResults + 4) / 2)
+      Math.floor(
+        audit.budget.program.maxChars / Math.max(1, audit.budget.program.visibleResults) / 2
+      )
     )
   )
   assert.equal(

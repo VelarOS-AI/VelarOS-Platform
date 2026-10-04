@@ -150,7 +150,7 @@ export interface ActiveContextPatch {
   }>
 }
 
-/** @AgentView 补丁通过了校验、已被受理：之后声明完成，宿主在父会话的下一次请求前重新核验版本再发布。 */
+/** @AgentView 补丁通过校验后受理；原生调用成功后宿主完成交付，文本协议继续声明完成。宿主在父会话的下一次请求前重新核验版本再发布。 */
 export interface ContextPatchReceipt {
   readonly accepted: true
   readonly baseRevision: string

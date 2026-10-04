@@ -216,6 +216,8 @@ export interface SegmentHistory {
 /** 段内历史要渲染的结果：ProgramContext 渲染好的当前租约正文。 */
 export interface SegmentLeasedResult {
   readonly ref: string
+  /** 引用卡不含结果正文，不能作为已交付历史冻结。 */
+  readonly bodyIncluded?: boolean
   readonly sourceRef?: string
   readonly text?: string
   readonly source?: string

@@ -944,7 +944,7 @@ test('INV-65 real model requests retain completed job identities, historical out
       )
       .flatMap((text) =>
         text
-          .split('分区 runtime：\n')
+          .split(/(?:分区 )?runtime：\n/u)
           .slice(1)
           .map((part) => JSON.parse(part.split('\n')[0]))
       )
@@ -1179,7 +1179,14 @@ test('INV-62 task text stays once in a stable chronological prefix while the fra
     )
     assert.equal(taskMessage.role, 'user')
     assert.equal(taskMessage.cacheBreakpoint, true)
-    const history = request.history.map(({ role, content }) => ({ role, content }))
+    // 暂态运行帧达到开销阈值会重建；任务、响应和工具结果的逻辑历史仍保持前缀。
+    const history = request.history
+      .filter(
+        (item) =>
+          typeof item.content !== 'string' ||
+          !/^(?:当前运行状态|Runtime 本帧工作内存)/u.test(item.content)
+      )
+      .map(({ role, content }) => ({ role, content }))
     assert.deepEqual(history.slice(0, prior.length), prior)
     prior = history
     const goal = JSON.parse(request.materials[0].text).partitions.task.goals.at(-1)
@@ -2859,7 +2866,7 @@ test('INV-68 only matching block proof clears a gap and mixed full/reference out
     entry.outputProofs.map((proof) => proof.key),
     ['required_0']
   )
-  const next = await f.memory.project(view, undefined, [], signal, 1000)
+  const next = await f.memory.project(view, undefined, [], signal, 256)
   assert.deepEqual(
     JSON.parse(next.body).partitions.runtime.decision.missing.map((gap) => gap.key),
     ['required_1']
@@ -2887,7 +2894,7 @@ test('INV-68 only matching block proof clears a gap and mixed full/reference out
       },
       signal
     )
-    const mismatch = await f.memory.project(view, undefined, [], signal, 1000)
+    const mismatch = await f.memory.project(view, undefined, [], signal, 256)
     assert.deepEqual(
       JSON.parse(mismatch.body).partitions.runtime.decision.missing.map((gap) => gap.key),
       ['required_0', 'required_1']
@@ -2975,7 +2982,7 @@ test('INV-68 zero history, released references, folded bodies and authorization 
     recent,
     { recentRecords: 0 }
   )
-  const omitted = await noHistory.project(view, undefined, [], signal, 20000)
+  const omitted = await noHistory.project(view, undefined, [], signal, 4000)
   assert(
     JSON.parse(omitted.body).partitions.runtime.decision.missing.some((gap) => gap.ref === ref.id)
   )
@@ -2996,7 +3003,7 @@ test('INV-68 zero history, released references, folded bodies and authorization 
   for (let index = 0; index < 12; index++)
     await f.session.context.append({ kind: 'assistant', body: `synthetic step ${index}` })
   assert(await f.memory.fold('runway', 20000, signal))
-  const folded = await f.memory.project(view, undefined, [], signal, 20000)
+  const folded = await f.memory.project(view, undefined, [], signal, 4000)
   assert(
     JSON.parse(folded.body).partitions.runtime.decision.missing.some((gap) => gap.ref === ref.id)
   )
@@ -3212,7 +3219,7 @@ test('INV-69 current original bodies are omitted only after same-request cross-c
   const programs = new ProgramContext('s', f.session.context, f.storage)
   const value = 'N_SOURCE_EVIDENCE "unicode界😀"\n'.repeat(90)
   const source = await archiveRequired(f, programs, [value], 20000)
-  const before = await f.memory.project(requiredView(), undefined, [], signal, 10000)
+  const before = await f.memory.project(requiredView(), undefined, [], signal, 2000)
   assert(
     JSON.parse(before.body).partitions.runtime.decision.missing.some((gap) => gap.ref === source.id)
   )
@@ -3261,15 +3268,22 @@ test('INV-69 cross-carrier omission preserves other blocks, other refs and selec
     await t.test(scenario, async (t) => {
       const f = await fixture(t)
       const programs = new ProgramContext('s', f.session.context, f.storage)
-      const first = 'COVERED_FIRST "界😀"\n'.repeat(85)
-      const second = 'KEEP_SECOND_NEW_CONTENT\n'.repeat(85)
-      const source = await archiveRequired(f, programs, [first, second], 40000)
+      const first = 'COVERED_FIRST "界😀"\n'.repeat(300)
+      const second = 'KEEP_SECOND_NEW_CONTENT\n'.repeat(300)
+      // Freeze a real short body while the required large blocks remain unavailable.
+      const source = await archiveRequired(f, programs, [first, second, 'INITIAL_ANCHOR'], 40000)
       const other =
         scenario === 'same-value-other-ref'
-          ? await archiveRequired(f, programs, [first], 40000)
+          ? await archiveRequired(f, programs, [first, 'OTHER_INITIAL_ANCHOR'], 40000)
           : undefined
       const initial = await f.memory.project(requiredView(), undefined, [], signal, 10000)
+      assert(
+        JSON.parse(initial.body).partitions.runtime.decision.missing.some(
+          (gap) => gap.ref === source.id
+        )
+      )
       await f.memory.acknowledge(JSON.parse(initial.body).frameId, signal)
+      assert(historyEntries(initial).find((entry) => entry.ref?.id === source.id)?.bodyIncluded)
       const page = await f.memory.readMaterial(source, 0, 12000, signal, '/output/blocks/0/value')
       await archiveRequired(f, programs, [page], 20000)
       if (scenario === 'selected-view') {
@@ -3328,10 +3342,16 @@ test('INV-69 a partial or retired carrier cannot remove newly available current 
     await t.test(scenario, async (t) => {
       const f = await fixture(t)
       const programs = new ProgramContext('s', f.session.context, f.storage)
-      const value = 'KEEP_ORIGINAL_WITHOUT_FULL_COVERAGE\n'.repeat(90)
-      const source = await archiveRequired(f, programs, [value], 20000)
-      const initial = await f.memory.project(requiredView(), undefined, [], signal, 10000)
+      const value = 'KEEP_ORIGINAL_WITHOUT_FULL_COVERAGE\n'.repeat(300)
+      const source = await archiveRequired(f, programs, [value, 'INITIAL_ANCHOR'], 20000)
+      const initial = await f.memory.project(requiredView(), undefined, [], signal, 6000)
+      assert(
+        JSON.parse(initial.body).partitions.runtime.decision.missing.some(
+          (gap) => gap.ref === source.id
+        )
+      )
       await f.memory.acknowledge(JSON.parse(initial.body).frameId, signal)
+      assert(historyEntries(initial).find((entry) => entry.ref?.id === source.id)?.bodyIncluded)
       const page = await f.memory.readMaterial(
         source,
         0,

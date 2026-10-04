@@ -7,6 +7,7 @@ import { test } from 'node:test'
 import { localContextStorage } from '@velaros-ai/context/node'
 import { createNodeCodeRunner } from '@velaros-ai/script'
 
+import { NativeTurnDecoder } from '../../../dist/act/runtime/impl/NativeTurnDecoder.js'
 import {
   createRuntime,
   createShellCapabilityModule,
@@ -40,6 +41,151 @@ const request = (source, timeoutMs = 10_000, operations = {}) => ({
 const noCalls = async () => {
   throw Error('unexpected host call')
 }
+
+test('native Node calls preserve a restricted runner and expose only the allowed entry', async (t) => {
+  const f = await fixture(t)
+  await writeFile(join(f.cwd, 'input.txt'), 'read-only-source')
+  const modes = []
+  const runner = createNodeCodeRunner({
+    ...f.node,
+    execute: (request, output, signal) => {
+      modes.push('observe')
+      return f.node.execute({ ...request, mode: 'observe' }, output, signal)
+    },
+  })
+  let turn = 0
+  const runtime = await createRuntime({
+    runner,
+    protocol: { allowed: ['blobs', 'execute', 'done'], defaultRetain: 'task' },
+    project: false,
+    agents: false,
+    search: false,
+    memory: false,
+    context: { maintenance: false },
+    storage: localContextStorage({ path: join(f.root, 'restricted.sqlite') }),
+    model: {
+      id: 'restricted-native',
+      nativeTools: true,
+      limits: { contextTokens: 128000, inputTokens: 120000, outputTokens: 4000 },
+      estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+      async *stream(request) {
+        assert.equal(request.response.type, 'tools')
+        assert.match(request.compiledPrompt, /当前运行状态/)
+        assert.doesNotMatch(request.compiledPrompt, /Runtime 本帧工作内存/)
+        assert.doesNotMatch(request.instructions, /snapshotPlans/)
+        assert.deepEqual(
+          request.response.tools.map((tool) => tool.name),
+          ['node']
+        )
+        if (++turn === 1)
+          yield {
+            type: 'tool-call',
+            value: {
+              id: 'read',
+              name: 'node',
+              input: {
+                code: "import {readFile} from 'node:fs/promises'; console.log(await readFile('input.txt','utf8'))",
+              },
+            },
+          }
+        else if (turn === 2) {
+          assert(request.history.some((message) => message.toolExchange?.calls[0]?.id === 'read'))
+          yield {
+            type: 'tool-call',
+            value: {
+              id: 'write',
+              name: 'node',
+              input: {
+                code: "import {writeFile} from 'node:fs/promises'; await writeFile('input.txt','changed')",
+              },
+            },
+          }
+        } else yield { type: 'text', text: '已读取来源，写入受到宿主的只读限制。' }
+        yield { type: 'finish', reason: 'stop' }
+      },
+    },
+  })
+  t.after(() => runtime.close())
+  const session = await runtime.openSession('restricted')
+  for await (const event of session.submit('验证只读来源和写入限制'))
+    assert.notEqual(event.type, 'error')
+  assert.deepEqual(modes, ['observe', 'observe'])
+  assert.equal(await readFile(join(f.cwd, 'input.txt'), 'utf8'), 'read-only-source')
+  const trace = await runtime.trace('restricted', { fullContent: true })
+  assert.equal(trace.turns[0].executions[0].status, 'succeeded')
+  assert.equal(trace.turns[1].executions[0].status, 'failed')
+})
+
+test('native decoder rejects ungranted Shell and honors configured response budgets', () => {
+  const decoder = new NativeTurnDecoder({ allowed: ['execute', 'done'], maxBlocks: 1 })
+  assert.throws(
+    () => decoder.acceptTool({ id: 'shell', name: 'shell', input: { code: 'true' } }),
+    /原生执行入口/
+  )
+  decoder.reset()
+  decoder.acceptTool({ id: 'one', name: 'node', input: { code: 'console.log(1)' } })
+  assert.throws(
+    () => decoder.acceptTool({ id: 'two', name: 'node', input: { code: 'console.log(2)' } }),
+    /原生执行入口/
+  )
+  assert.throws(() => new NativeTurnDecoder({ maxChars: 8 }).push('ninechars'), /超过协议字符预算/)
+})
+
+test('fresh native output shares unused result capacity and reaches the next request intact', async (t) => {
+  const f = await fixture(t)
+  const source = Array.from(
+    { length: 120 },
+    (_, index) => `const value${index} = "source-${index}";`
+  ).join('\n')
+  await writeFile(join(f.cwd, 'source.txt'), source)
+  let turn = 0
+  const runtime = await createRuntime({
+    node: f.node,
+    project: false,
+    agents: false,
+    search: false,
+    memory: false,
+    context: { maintenance: false },
+    limits: { projectionChars: 26000 },
+    storage: localContextStorage({ path: join(f.root, 'output.sqlite') }),
+    model: {
+      id: 'native-output-capacity',
+      nativeTools: true,
+      limits: { contextTokens: 65536, inputTokens: 32768, outputTokens: 12000 },
+      estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+      async *stream(request) {
+        if (++turn === 1) {
+          for (let index = 0; index < 5; index++)
+            yield {
+              type: 'tool-call',
+              value: {
+                id: `output-${index}`,
+                name: 'shell',
+                input: { code: index === 0 ? 'cat source.txt' : `printf 'receipt-${index}'` },
+              },
+            }
+        } else {
+          const messages = request.history.filter((message) => message.role === 'user')
+          const outputs = messages.flatMap((message) => {
+            const marker = '当次输出：\n'
+            const start = message.content.indexOf(marker)
+            return start < 0 ? [] : [JSON.parse(message.content.slice(start + marker.length))]
+          })
+          assert(outputs.some((output) => output.result?.process?.stdout === source))
+          for (let index = 1; index < 5; index++)
+            assert(outputs.some((output) => output.result?.process?.stdout === `receipt-${index}`))
+          yield { type: 'text', text: '已读取完整源码与同批回执。' }
+        }
+        yield { type: 'finish', reason: 'stop' }
+      },
+    },
+  })
+  t.after(() => runtime.close())
+  const session = await runtime.openSession('output')
+  for await (const event of session.submit('读取文件并核对全部源码。'))
+    assert.notEqual(event.type, 'error')
+  assert.equal(turn, 2)
+})
 
 test('native Shell/Node calls execute after acceptance and recover matched history from storage', async (t) => {
   const f = await fixture(t)

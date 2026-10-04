@@ -2,6 +2,7 @@ import { createContextReference } from '@velaros-ai/context'
 import { Log } from '@velaros-ai/core'
 import { isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import type { ModelTurnRequest } from '@velaros-ai/kernel'
 
 import type { ActRunServiceOptions } from '../contract/requires.js'
 import type {
@@ -23,6 +24,8 @@ import { ActLoop } from './ActLoop.js'
 export interface ActRunServiceApi {
   /** 领运行权并推进输入；input 表示持久接纳，input-applied 绑定实际请求，input-retained 表示结束时仍未消费。消费方关闭迭代时收束执行。 */
   submit(input: string | ActInput, signal?: AbortSignal): AsyncIterable<ActRunEvent>
+  /** 以活动运行的容量策略验收候选上下文，不推进回合或调用模型。 */
+  validateContext(request: ModelTurnRequest, signal: AbortSignal): Promise<void>
   /** 归档并在下一轮递交运行中补充，抢占尚未派发的模型响应。 */
   steer(input: string | ActInput): Promise<void>
   /** 创建可由宿主回答的交互，取消会拒绝等待。 */
@@ -63,6 +66,12 @@ class ActRunService implements ActRunServiceApi {
   private inputWrites: Promise<void> = Promise.resolve()
   private steering = 0
   public constructor(private readonly options: ActRunServiceOptions) {}
+
+  public async validateContext(request: ModelTurnRequest, signal: AbortSignal): Promise<void> {
+    if (!this.loop || !this.active || this.closed)
+      throw new AppError('UNAVAILABLE', '上下文验收需要活动运行')
+    await this.loop.validateContext(request, signal)
+  }
 
   public async *submit(input: string | ActInput, signal?: AbortSignal): AsyncIterable<ActRunEvent> {
     if (this.closed || this.active) throw new AppError('CLOSED', '会话已关闭或已有活动运行')

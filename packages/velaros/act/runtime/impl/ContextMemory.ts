@@ -823,7 +823,7 @@ export class ContextMemory implements ContextMemoryApi {
               record &&
               record.sequence > reset &&
               (record.sequence > segment.from || segment.carried.includes(entry.ref)) &&
-              /^script:[0-9a-f-]{36}:result$/u.test(record.title)
+              /^script:(?:[a-f0-9]{8}|[0-9a-f-]{36}):result$/u.test(record.title)
             )
           })
         : []
@@ -859,12 +859,16 @@ export class ContextMemory implements ContextMemoryApi {
           )
           .map((item) => ({ ref: item.ref }))
       : []
-    // 一条新历史第一次交付的上限：整帧剩余预算的 recentShare 的一半
+    // 已在当前结果池内分配的正文完整进入历史，避免把合法 JSON 再切成半截。
+    // 普通历史保留 recentShare 的基准；整体请求仍由模型输入预算核对。
     const historyEntryChars = Math.max(
       1024,
       Math.min(
         ActRuntimeTuning.segmentEntryChars,
-        Math.floor((Math.max(1, maxChars - base.length) * this.policy.recentShare) / 2)
+        Math.max(
+          Math.floor((Math.max(1, maxChars - base.length) * this.policy.recentShare) / 2),
+          ...material.results.map((item: { text?: string }) => item.text?.length ?? 0)
+        )
       )
     )
     const history = this.policy.recentRecords

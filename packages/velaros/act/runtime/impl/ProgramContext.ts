@@ -1038,7 +1038,7 @@ export class ProgramContext implements ProgramContextApi {
       (item) => item.task || item.segment || item.expiresAfter > state.completedTurns
     )
     const visible = allVisible.slice(-Math.max(1, Math.min(64, Math.floor(maxChars / 768))))
-    const resultBudgetChars = Math.max(1, Math.floor(maxChars / (visible.length + 4) / 2))
+    const resultBudgetChars = Math.max(1, Math.floor(maxChars / Math.max(1, visible.length) / 2))
     const excerptChars = Math.min(ScriptLeaseLimits.resultChars, resultBudgetChars)
     const images: ModelImage[] = []
     const reset = Math.max(
@@ -1159,6 +1159,18 @@ export class ProgramContext implements ProgramContextApi {
           : []
         const reduced = preferred ? scriptOutputs.withoutBodies(preferred, covered) : undefined
         const rawMaterial = managed ? undefined : executionMaterial(archived)
+        const materialIdentity = rawMaterial
+          ? scriptOutputs.hash([this.sessionId, lease.ref, lease.sourceRef, rawMaterial])
+          : undefined
+        const rawInHistory = Boolean(
+          materialIdentity &&
+          result.record.sequence > reset &&
+          archived.mode !== 'observe' &&
+          !archived.attachments?.length &&
+          retained.some(
+            (entry) => entry.ref === lease.ref && entry.fullMaterial === materialIdentity
+          )
+        )
         return {
           lease,
           result,
@@ -1173,9 +1185,12 @@ export class ProgramContext implements ProgramContextApi {
           reduced,
           previous,
           rawMaterial,
-          demand:
-            reduced?.prompt.length ??
-            projectMaterial(rawMaterial!, result.record.ref, excerptChars).text.length,
+          materialIdentity,
+          rawInHistory,
+          demand: rawInHistory
+            ? 0
+            : (reduced?.prompt.length ??
+              Math.min(ScriptLeaseLimits.resultChars, rawMaterial!.length)),
         }
       })
     )
@@ -1226,6 +1241,8 @@ export class ProgramContext implements ProgramContextApi {
         reduced,
         previous,
         rawMaterial,
+        materialIdentity,
+        rawInHistory,
       } = item
       const failure = programFailure(archived)
       feedback =
@@ -1243,7 +1260,7 @@ export class ProgramContext implements ProgramContextApi {
             selector: 'invocation',
           }
       }
-      // 按实际编码需求返还同帧结果池的空闲份额；默认输出和源码仍不超过原保守上限。
+      // 短回执的余量交给需要正文的结果；同帧总池与默认单结果上限保持有界。
       const assigned = resultBudgets[index]!
       // 短结果按实际编码归账，但保留原展示上限；预算头仍描述本帧真实份额，不把用量当配置。
       const allowance = Math.max(resultBudgetChars, assigned)
@@ -1293,7 +1310,11 @@ export class ProgramContext implements ProgramContextApi {
               .filter((block) => !block.bodyIncluded)
               .map((block) => block.pointer),
           }
-        : projectMaterial(rawMaterial!, result.record.ref, excerptChars)
+        : projectMaterial(
+            rawMaterial!,
+            result.record.ref,
+            rawInHistory ? 0 : Math.min(ScriptLeaseLimits.resultChars, allowance)
+          )
       for (const [index, block] of (output?.blocks ?? []).entries())
         if (block.options.required) {
           const rendered = display?.blocks.find((item) => item.key === block.key)
@@ -1356,25 +1377,21 @@ export class ProgramContext implements ProgramContextApi {
           ? programOutputViews(this.sessionId, lease.ref, lease.sourceRef, display)
           : undefined,
         bodyInHistory:
-          display &&
-          !rendered?.omittedBlocks &&
-          finalCovered.length > 0 &&
-          !display.omittedBlocks &&
-          display.blocks.every((block) =>
-            finalCovered.some(
-              (entry) => entry.key === block.key && entry.contentHash === block.contentHash
-            )
-          )
+          rawInHistory ||
+          (display &&
+            !rendered?.omittedBlocks &&
+            finalCovered.length > 0 &&
+            !display.omittedBlocks &&
+            display.blocks.every((block) =>
+              finalCovered.some(
+                (entry) => entry.key === block.key && entry.contentHash === block.contentHash
+              )
+            ))
             ? true
             : undefined,
         materialCoverage: rawMaterial
           ? {
-              identity: scriptOutputs.hash([
-                this.sessionId,
-                lease.ref,
-                lease.sourceRef,
-                rawMaterial,
-              ]),
+              identity: materialIdentity!,
               complete: projected.representation === 'full',
             }
           : undefined,
@@ -1780,7 +1797,9 @@ export class ProgramContext implements ProgramContextApi {
         pendingVisible: currentRefs,
         pendingDelivered: visible
           .filter((item) =>
-            results.some((result) => result.ref === item.ref && result.bodyIncluded)
+            results.some(
+              (result) => result.ref === item.ref && (result.bodyIncluded || result.bodyInHistory)
+            )
           )
           .map((item) => ({ ref: item.ref, leaseId: item.leaseId ?? item.ref })),
       }),

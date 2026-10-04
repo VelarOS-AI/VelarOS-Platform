@@ -35,6 +35,10 @@ import { SearchTuning } from '../utils/tuning.js'
 
 /** 当前搜索的宿主控制状态。 */
 export interface SearchActivationApi extends ModelDriver {
+  /** 当前报告已通过结构与证据引用校验。 */
+  deliveryReady(): boolean
+  /** 沿用底层驱动的原生工具能力。 */
+  readonly nativeTools: boolean
   /** 真实模型身份。 */
   readonly id: string
   /** 模型真实容量限制。 */
@@ -108,6 +112,9 @@ export interface SearchActivationDependencies {
 /** 单次搜索的共享驱动预算和真实来源访问，不另建模型循环。 */
 export class SearchActivation implements SearchActivationApi {
   public readonly id: string
+  public get nativeTools(): boolean {
+    return this.control.nativeTools
+  }
   public get limits() {
     return this.control.limits
   }
@@ -363,6 +370,10 @@ export class SearchActivation implements SearchActivationApi {
     this.state = { ...this.state, evidence: [...this.state.evidence, evidence] }
     await this.dependencies.save(this.state)
     return evidence
+  }
+
+  public deliveryReady(): boolean {
+    return Boolean(this.draft)
   }
 
   public async report(draft: SearchDraft, signal: AbortSignal): Promise<SearchReportReceipt> {

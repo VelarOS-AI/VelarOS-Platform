@@ -73,7 +73,7 @@ output(usage.template, { type: 'code' }); // 按需读取模型用法；精确�
 | `system.programs.describe` | `observe`、`execute` | `none` | 读稳定名称的当前版本，或仍可访问的 sourceRef 原版本；只是目录，不重新执行。 |
 | `velaros:context-materials.list` | `execute` | `none` | 列快照里的原文元数据，不读正文。 |
 | `velaros:context-materials.read` | `execute` | `none` | 按快照里的引用读一页父会话原文，正文在 text。 |
-| `velaros:context-materials.submit` | `execute` | `none` | 交来整理补丁：先整份校验，不合格就报错（修正后再交），合格就受理；受理之后声明完成。 |
+| `velaros:context-materials.submit` | `execute` | `none` | 交来整理补丁：先整份校验，不合格就报错（修正后再交），合格就受理；原生调用成功后宿主完成交付，文本协议继续声明完成。 |
 | `velaros:interaction.ask` | `execute` | `none` | 要信息，返回对方的回答；给了 options 或 fields 时对方在卡片上点选或填写。 |
 | `velaros:interaction.confirm` | `execute` | `none` | 要确认，返回对方是否同意及不同意的理由；它不代替具体操作的权限校验。 |
 | `velaros:widget.show` | `execute` | `none` | 显示一个小部件，立即返回，不等用户操作。 |
