@@ -181,6 +181,8 @@ export interface RuntimeSessionDependencies {
   readonly residentModules?: VelarosRuntimeOptions['residentModules']
   /** 宿主环境条目；每帧与当地时间一起进 runtime 分区。 */
   readonly environment?: () => Readonly<Record<string, string>>
+  /** 当前子运行可按普通文件读取的父任务输入快照入口。 */
+  readonly parentTask?: string
   /** 会话全部资源收束后撤回宿主持有的活动句柄。 */
   closed?(): void
   /** 固定授权的持久状态及订阅交付。 */
@@ -776,7 +778,10 @@ export class RuntimeSession implements VelarosSession {
     if (!this.dependencies.tool && this.goalSeed) await this.seedGoal(this.goalSeed, signal)
     const currentGoal = this.dependencies.tool ? null : await this.goal.get(signal)
     const goal = currentGoal?.status === 'removed' ? null : currentGoal
-    const environment = frameEnvironment(this.dependencies.environment)
+    const environment = {
+      ...frameEnvironment(this.dependencies.environment),
+      ...(this.dependencies.parentTask ? { parentTask: this.dependencies.parentTask } : {}),
+    }
     const extra =
       JSON.stringify(environment).length +
       (goal ? JSON.stringify(goal).length : 0) +

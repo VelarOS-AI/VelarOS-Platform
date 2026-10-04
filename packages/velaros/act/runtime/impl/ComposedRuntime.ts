@@ -51,6 +51,7 @@ import type { VelarosRuntimeOptions } from '../contract/requires.js'
 import type { ActTracePage, ActTraceQuery } from '../types/trace.js'
 
 import { BudgetedModelDriver } from './BudgetedModelDriver.js'
+import { ChildTaskMaterials } from './ChildTaskMaterials.js'
 import { ContextMaintenance } from './ContextMaintenance.js'
 import { EffectScheduler } from './EffectScheduler.js'
 import { ModelToolRuntime } from './ModelToolRuntime.js'
@@ -500,11 +501,21 @@ class ComposedRuntime implements VelarosRuntime {
       parent: activity.budget,
       signal: activity.signal,
     })
+    const materials =
+      profile.node && this.options.node
+        ? new ChildTaskMaterials(this.options.storage, this.options.node.directory)
+        : undefined
     let session: VelarosSession
+    let parentTask: Optional<Awaited<ReturnType<ChildTaskMaterials['open']>>>
     try {
+      parentTask = await materials?.open(job, activity.signal)
       session = new RuntimeSession(job.sessionId, {
         node: profile.node ? this.options.node : undefined,
         environment: this.options.environment,
+        parentTask: parentTask?.path,
+        instructions: parentTask
+          ? '你负责本次派发指定的范围。环境中的 parentTask 是派发时父任务原始输入的文件索引；goals 按输入顺序列出原文和附件 path，按需用 Shell 或 node:fs 读取。'
+          : undefined,
         maintain: this.allows(job.sessionId, MemoryModuleId)
           ? (input, signal) => this.maintenance!.maintain(job.sessionId, input, signal)
           : undefined,
@@ -529,7 +540,11 @@ class ComposedRuntime implements VelarosRuntime {
         register: (access) => this.programAccess.set(job.sessionId, access),
       })
     } catch (error) {
-      const settled = await Promise.allSettled([model.close(), activity.close()])
+      const settled = await Promise.allSettled([
+        model.close(),
+        activity.close(),
+        materials?.close(),
+      ])
       this.programAccess.delete(job.sessionId)
       this.scopes.delete(job.sessionId)
       this.stores.delete(job.sessionId)
@@ -543,6 +558,12 @@ class ComposedRuntime implements VelarosRuntime {
     this.sessions.set(job.sessionId, session)
     const files: ActInputFile[] = []
     try {
+      if (parentTask)
+        await session.context.append({
+          kind: 'audit',
+          title: 'shared:parent-task',
+          body: JSON.stringify(parentTask.snapshot),
+        })
       for (const ref of input?.materials ?? []) {
         if (ref.sessionId !== job.parentSessionId)
           throw new AppError('VALIDATION', '只能分享父任务已经持有的原文')
@@ -572,6 +593,7 @@ class ComposedRuntime implements VelarosRuntime {
       }
     } catch (error) {
       const cleanup = await Promise.allSettled([session.close(), model.close()])
+      cleanup.push(...(await Promise.allSettled([materials?.close()])))
       try {
         await activity.close()
       } finally {
@@ -599,6 +621,7 @@ class ComposedRuntime implements VelarosRuntime {
       cancel: () => session.cancel(),
       close: async () => {
         const results = await Promise.allSettled([session.close(), model.close()])
+        results.push(...(await Promise.allSettled([materials?.close()])))
         this.sessions.delete(job.sessionId)
         this.programAccess.delete(job.sessionId)
         this.scopes.delete(job.sessionId)

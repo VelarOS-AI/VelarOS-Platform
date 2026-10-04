@@ -2124,6 +2124,122 @@
         "Complete reference costs unknown: one ScriptAct request and four Codex requests lack usage.",
         "Brief local checks, regrading of the finished ScriptAct artifact, and later-task preflight overlapped with Codex. Timing is observational rather than isolated."
       ]
+    },
+    {
+      "attempt": "httpx-05",
+      "schema": 1,
+      "at": "2026-10-04T20:27:45.022Z",
+      "taskId": "httpx-decoded-response-body-limit",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": false,
+        "knownFailures": [
+          "tests.test_timeouts::test_write_timeout[trio]"
+        ],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 111,
+            "startedAt": 1791144213691,
+            "solveMs": 1269899
+          },
+          "accounting": {
+            "requests": 111,
+            "requestStatuses": {
+              "http-200": 108,
+              "http-200-interrupted": 1,
+              "unknown": 2
+            },
+            "measuredRequests": 108,
+            "missingUsageRequests": 3,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 2124418,
+            "knownOutputTokens": 43602,
+            "knownCachedInputTokens": 834176,
+            "knownCacheRatio": 0.39266095467087925,
+            "pricedRequests": 108,
+            "knownReferenceUsd": 6.366678400000002,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 79,
+            "failed": 9,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "9 failed, 79 passed in 0.59s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[get-async]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[head-async]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[options-async]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[post-async]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[put-async]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[patch-async]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[delete-async]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_build_request_send_precedence_and_caller_extensions[async]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_already_buffered_transport_is_checked_before_stream_send_returns[async]"
+            ]
+          },
+          "regression": {
+            "exitCode": 1,
+            "passed": 1416,
+            "failed": 1,
+            "skipped": 1,
+            "errors": 0,
+            "summary": "1 failed, 1416 passed, 1 skipped in 3.29s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": false,
+              "knownFailures": [
+                "tests.test_timeouts::test_write_timeout[trio]"
+              ],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 7,
+          "createdFiles": 2,
+          "changeSummary": "39\t1\tdocs/advanced/resource-limits.md\n3\t0\tdocs/exceptions.md\n1\t0\thttpx/__init__.py\n18\t0\thttpx/_api.py\n127\t12\thttpx/_client.py\n14\t0\thttpx/_exceptions.py\n73\t8\thttpx/_models.py\n",
+          "created": "test\ntests/client/test_response_limits.py\n",
+          "execution": {
+            "mainRequests": 27,
+            "branchRequests": 84,
+            "requestOwners": {
+              "development": 27,
+              "context:72b0c98b-0d96-438f-89c9-559a63d02666": 3,
+              "agent:development:b2377ab8": 61,
+              "context:94333855-9ffc-42e7-bb12-572c55adc961": 4,
+              "context:9d25b6b6-1fc2-4928-987e-00a093b8d3dd": 4,
+              "context:5159361b-a19c-4b27-864f-dae671e33d1a": 4,
+              "context:03b207cd-4f4f-4d36-b6d1-02146475c819": 4,
+              "context:5556ff9c-6bad-4f91-ba97-ec7342e4e976": 4
+            },
+            "contextSegments": 4,
+            "nativeRequests": 111,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        }
+      },
+      "qualifications": [
+        "Repeated HTTPX task, explicitly frozen as development; ScriptAct only.",
+        "Feature acceptance 79/88, with nine failures from synchronous close in the asynchronous buffered-response path. Original regression retains the frozen Trio baseline failure with no new failures.",
+        "One business child was dispatched and resumed; its first request did not contain the full original parent requirement. This is a material-delivery gap, not proof that it caused the final functional error.",
+        "Six maintenance sessions used 23 requests (3,4,4,4,4,4). Lower per-session request count did not reduce whole-task requests or latency.",
+        "Complete reference cost unknown because three requests lack usage."
+      ]
     }
   ],
   "transportDiagnostics": {

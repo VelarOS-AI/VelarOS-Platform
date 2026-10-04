@@ -73,6 +73,7 @@ export const GovernedModules = [
         'ShellNodeEnvironment.ts',
         'RuntimeBootstrap.ts',
         'RuntimeWorkspaceBinding.ts',
+        'ChildTaskMaterials.ts',
         'EventDelivery.ts',
         'EffectScheduler.ts',
         'RuntimeDiagnostics.ts',
