@@ -255,19 +255,29 @@ export class ContextMaintenance implements ContextMaintenanceApi {
     input: ContextMaterialsReadInput,
     signal: AbortSignal
   ): Promise<ContextContent> {
-    return this.explore(id, signal, (state, snapshot, remainingChars) =>
-      state.read(
-        snapshot,
-        input.ref,
-        input.offset ?? 0,
-        Math.min(
-          input.limit ?? ContextMaintenanceReadLimits.pageChars,
-          ContextMaintenanceReadLimits.maxPageChars,
-          remainingChars
-        ),
-        signal
+    return this.explore(id, signal, async (state, snapshot, remainingChars) => {
+      const offset = input.offset ?? 0
+      const limit = Math.min(
+        input.limit ?? ContextMaintenanceReadLimits.pageChars,
+        ContextMaintenanceReadLimits.maxPageChars,
+        remainingChars
       )
-    )
+      if (input.ref.sessionId === id) {
+        // 整理请求本身也可能被窗口截断；当前请求原文经同一读取额度补齐。
+        // 本会话的执行结果、审计与其他会话仍不属于这个读取范围。
+        const local = this.dependencies.storage.loadMetadata
+          ? await this.dependencies.storage.loadMetadata(id)
+          : await this.dependencies.storage.load(id)
+        signal.throwIfAborted()
+        if (!local?.task?.goals.some((ref) => ref.id === input.ref.id && ref.sessionId === id))
+          throw new AppError('SCOPE_MISMATCH', '引用不是本次整理请求或授权的父快照材料')
+        return createContextRuntime({
+          sessionId: id,
+          storage: this.dependencies.storage,
+        }).readInput(input.ref, { offset, limit })
+      }
+      return state.read(snapshot, input.ref, offset, limit, signal)
+    })
   }
   public async submitPatch(
     id: string,

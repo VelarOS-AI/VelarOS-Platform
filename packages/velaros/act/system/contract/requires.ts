@@ -133,7 +133,7 @@ export interface ContextMaintenanceHost {
     query: ContextMaterialsQuery,
     signal: AbortSignal
   ): Promise<ContextMaintenancePage>
-  /** 按快照引用读取父会话原文页。 */
+  /** 按引用读取当前整理请求或父快照的原文页。 */
   readMaterial(
     id: string,
     input: ContextMaterialsReadInput,
@@ -227,7 +227,7 @@ export interface StoreOperationContext {
 export interface ContextMaterialsPort {
   /** 快照目录分页。 */
   list(query: ContextMaterialsQuery, signal: AbortSignal): Promise<ContextMaintenancePage>
-  /** 按快照引用读取原文页。 */
+  /** 按引用读取当前整理请求或父快照的原文页。 */
   read(input: ContextMaterialsReadInput, signal: AbortSignal): Promise<ContextContent>
   /** 交来整理补丁。 */
   submit(patch: ContextPatch, signal: AbortSignal): Promise<ContextPatchReceipt>

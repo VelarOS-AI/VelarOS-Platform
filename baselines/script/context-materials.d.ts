@@ -1,13 +1,13 @@
 /**
  * 父会话快照的原文与整理补丁：runtime.modelTool 已提供用户原文和近期记录，可直接依据它们整理；有缺口时按已有引用 read，查更早的材料时 list，最后用 submit 交来补丁。
- * 只能读这次整理授权的快照；读取额度用完后不能再读，直接交付已有结论。
+ * 可读本次整理请求原文和授权的父快照；读取额度用完后不能再读，直接交付已有结论。
  */
 declare module 'velaros:context-materials' {
   /** 列快照里的原文元数据，不读正文。
    */
   export function list(input: ContextMaterialsQuery): Promise<ContextMaintenancePage>
 
-  /** 按快照里的引用读一页父会话原文，正文在 text。
+  /** 按引用读取本次整理请求或父快照原文的一页，正文在 text。
    */
   export function read(input: ContextMaterialsReadInput): Promise<ContextContent>
 
@@ -29,7 +29,7 @@ declare module 'velaros:context-materials' {
     readonly nextAfter: number | null
   }
 
-  /** 按快照里的引用读一页父会话原文：offset、limit 按 UTF-16 字符算，一页最多 32000 个字符，还受本次整理剩下的读取额度限制。 */
+  /** 读取本次整理请求或父快照原文的一页：offset、limit 按 UTF-16 字符算，一页最多 32000 个字符，还受本次整理剩下的读取额度限制。 */
   interface ContextMaterialsReadInput {
     readonly ref: ContextRef
     readonly offset?: number

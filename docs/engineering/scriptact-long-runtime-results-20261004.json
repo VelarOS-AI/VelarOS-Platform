@@ -2808,6 +2808,126 @@
           }
         }
       }
+    },
+    {
+      "attempt": "rich-12",
+      "schema": 1,
+      "at": "2026-10-04T22:51:42.581Z",
+      "taskId": "rich-ascii-decorations",
+      "scriptactSessionId": "scriptact-1c4c870a-1062-4f2a-8d8a-cc56d548ee24",
+      "candidateId": "candidate-v15-3c94d7cdc1df",
+      "candidateSourceCommit": "e122e138edc23967a467c95d3a37415e484f8097",
+      "candidateSourceDirty": false,
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "context_blocked",
+            "failure": null,
+            "requestCount": 167,
+            "startedAt": 1791153414237,
+            "solveMs": 787046
+          },
+          "accounting": {
+            "requests": 167,
+            "requestStatuses": {
+              "http-200": 161,
+              "http-200-interrupted": 5,
+              "unknown": 1
+            },
+            "measuredRequests": 161,
+            "missingUsageRequests": 6,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 3042713,
+            "knownOutputTokens": 63624,
+            "knownCachedInputTokens": 1021056,
+            "knownCacheRatio": 0.33557420630864626,
+            "pricedRequests": 161,
+            "knownReferenceUsd": 9.767530400000002,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 52,
+            "failed": 6,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "6 failed, 52 passed in 0.19s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 855,
+            "failed": 0,
+            "skipped": 25,
+            "errors": 0,
+            "summary": "855 passed, 25 skipped in 3.92s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 22,
+          "createdFiles": 0,
+          "changeSummary": "12\t0\tdocs/source/pretty.rst\n8\t1\trich/__init__.py\n12\t0\trich/bar.py\n23\t6\trich/console.py\n20\t2\trich/layout.py\n3\t3\trich/markdown.py\n8\t1\trich/pretty.py\n28\t7\trich/progress.py\n1\t1\trich/progress_bar.py\n19\t4\trich/spinner.py\n1\t1\trich/syntax.py\n6\t3\trich/traceback.py\n11\t0\ttests/test_block_bar.py\n7\t0\ttests/test_inspect.py\n16\t0\ttests/test_layout.py\n16\t0\ttests/test_markdown.py\n5\t0\ttests/test_pretty.py\n11\t0\ttests/test_progress.py\n19\t0\ttests/test_spinner.py\n14\t0\ttests/test_status.py\n13\t0\ttests/test_syntax.py\n16\t0\ttests/test_traceback.py\n",
+          "created": "",
+          "execution": {
+            "mainRequests": 31,
+            "branchRequests": 136,
+            "requestOwners": {
+              "scriptact-1c4c870a-1062-4f2a-8d8a-cc56d548ee24": 31,
+              "agent:scriptact-1c4c870a-1062-4f2a-8d8a-cc56d548ee24:0a601d72": 8,
+              "agent:scriptact-1c4c870a-1062-4f2a-8d8a-cc56d548ee24:3ecaa880": 19,
+              "agent:scriptact-1c4c870a-1062-4f2a-8d8a-cc56d548ee24:736e9057": 19,
+              "agent:scriptact-1c4c870a-1062-4f2a-8d8a-cc56d548ee24:cccedb66": 23,
+              "context:4d686568-6261-4ee7-8f35-7e23e6b943dd": 4,
+              "context:effb9de1-16d1-4a27-b957-787cb81cf1b6": 4,
+              "context:21ac0da0-2d70-4f96-8fee-7e63eb399750": 3,
+              "context:17a074a6-9251-42f9-a38d-015fad216655": 3,
+              "context:572c05d5-23f0-40b2-b3f8-db58486aef36": 1,
+              "context:89f5cf8f-19ee-4ad6-baa3-b37b0327c5d4": 3,
+              "context:39ba6eda-6587-49ba-9134-7ad424062068": 5,
+              "context:6e2473e0-65c8-4088-b513-0f1acbd10d49": 5,
+              "context:1fc3d49c-7723-4da0-aae2-529dd52d6e26": 7,
+              "context:3d77f7eb-ec44-42d4-85a9-a7b1fea92858": 4,
+              "context:474b2149-5051-4a97-b559-e496db3ebb9f": 3,
+              "context:1ac6d12d-e0b4-47b1-b005-71d01d17aa6b": 7,
+              "context:e9a0e1d3-98c9-4df0-b793-adb3270e9466": 5,
+              "context:ac03c601-aaa2-42bc-8312-0966bddeea8d": 3,
+              "context:94305308-0d78-4a06-a252-cda275f5a6e7": 3,
+              "context:cf08276f-174b-43f3-ae89-9bcdf1424c73": 4,
+              "context:4ae768e6-61ce-4fa3-895a-aba9ce156493": 3
+            },
+            "contextSegments": 9,
+            "nativeRequests": 167,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": false
+          }
+        }
+      }
     }
   ],
   "transportDiagnostics": {

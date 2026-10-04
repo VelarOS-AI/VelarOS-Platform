@@ -186,7 +186,7 @@ export interface ContextMaterialsQuery {
   readonly limit?: number
 }
 
-/** @AgentView 按快照里的引用读一页父会话原文：offset、limit 按 UTF-16 字符算，一页最多 32000 个字符，还受本次整理剩下的读取额度限制。 */
+/** @AgentView 读取本次整理请求或父快照原文的一页：offset、limit 按 UTF-16 字符算，一页最多 32000 个字符，还受本次整理剩下的读取额度限制。 */
 export interface ContextMaterialsReadInput {
   readonly ref: ContextRef
   readonly offset?: number

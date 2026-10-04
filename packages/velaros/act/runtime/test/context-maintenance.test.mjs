@@ -398,6 +398,72 @@ async function runTool(f, input = 'work') {
   return events
 }
 
+test('a truncated maintenance request remains pageable through the available read operation', async (t) => {
+  let calls = 0
+  const marker = 'COMPLETE_REQUEST_RECALLED'
+  const maintenance = {
+    ...driver(
+      async function* (request) {
+        calls++
+        const frame = JSON.parse(request.materials[0].text)
+        const goal = frame.partitions.task.goals[0]
+        let code
+        if (calls === 1) {
+          assert(goal.text.length < goal.totalChars)
+          assert(!goal.text.includes(marker))
+          const local = await f.storage.load(goal.record.ref.sessionId)
+          const audit = local.records.find((record) => record.kind === 'audit')
+          assert(audit)
+          code = `import {read} from 'velaros:context-materials';
+const ref=${JSON.stringify(goal.record.ref)};
+const first=await read({ref,offset:0,limit:1500});
+const next=await read({ref,offset:1500,limit:32000});
+const original=JSON.parse(first.text+next.text);
+if(!original.snapshot.intent.focus.includes(${JSON.stringify(marker)}) || first.text.length+next.text.length!==first.totalChars) throw Error('incomplete request');
+for(const ref of [${JSON.stringify(audit.ref)},{sessionId:'unrelated',id:'secret'}]) {
+ let denied=false; try {await read({ref})} catch(error) {if(error.code!=='SCOPE_MISMATCH')throw error;denied=true} if(!denied)throw Error('unexpected access');
+}`
+        } else {
+          assert.equal(calls, 2)
+          const local = await f.storage.load(goal.record.ref.sessionId)
+          const result = local.records.findLast((record) => /^script:.*:result$/.test(record.title))
+          assert(result)
+          const archived = JSON.parse(
+            await f.storage.get(goal.record.ref.sessionId, result.objectId)
+          )
+          assert.equal(archived.result.failed, undefined, JSON.stringify(archived.result.failed))
+          code = `import {submit} from 'velaros:context-materials';console.log(await submit(${JSON.stringify({ baseRevision: frame.partitions.runtime.modelTool.baseRevision, summary: 'Recovered the complete maintenance request.', unresolved: [] })}));`
+        }
+        yield {
+          type: 'tool-call',
+          value: { id: `request-read-${calls}`, name: 'node', input: { code } },
+        }
+        yield finish
+      },
+      async (request) => {
+        const goal = JSON.parse(request.materials[0].text).partitions.task.goals[0]
+        return {
+          tokens: calls || goal.text.length < goal.totalChars ? 1000 : 100000,
+          precision: 'exact',
+          basis: 'force the initial request into recovery projection',
+        }
+      }
+    ),
+    nativeTools: true,
+  }
+  const f = await setupTool(t, driver(done), maintenance)
+  await f.session.execute({
+    source: `import {memory} from 'velaros:system';await memory.organize({focus:${JSON.stringify('f'.repeat(900) + marker + 'g'.repeat(900))}});`,
+  })
+  await runTool(f)
+  const state = await f.storage.load('root')
+  const record = state.records.findLast((r) => r.title === 'context-maintenance:outcome')
+  const outcome = JSON.parse(await f.storage.get('root', record.objectId))
+  assert.equal(calls, 2, JSON.stringify({ error: outcome.error, status: outcome.status }))
+  assert.equal(outcome.status, 'applied', outcome.error)
+  assert.equal(outcome.error, null)
+})
+
 test('context maintenance publishes a validated native Node patch in one model request', async (t) => {
   let mainCalls = 0
   let toolCalls = 0
