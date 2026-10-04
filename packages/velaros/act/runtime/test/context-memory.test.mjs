@@ -1157,6 +1157,120 @@ test('INV-64 zero history, absent result bodies, and oversized diagnostics keep 
   }
 })
 
+test('INV-74 maintenance narratives reuse an identified retained frame while current unresolved work stays explicit', () => {
+  for (const presentation of [undefined, 'node']) {
+    const summary = 'NARRATIVE_UNIQUE: verified implementation facts. '.repeat(20)
+    const unresolved = ['PENDING_UNIQUE: inspect the remaining boundary. '.repeat(8)]
+    const report = { sessionId: 's', id: 'report-one' }
+    const frame = {
+      presentation,
+      partitions: {
+        task: { goals: [] },
+        workspace: { notes: [] },
+        observation: {},
+        recent: { results: [] },
+        runtime: { mandatory: [] },
+      },
+      memoryStatus: {
+        maintenance: {
+          origin: 'model-interpretation',
+          summary,
+          unresolved: [...unresolved, ...unresolved],
+          report,
+          active: true,
+          lastAttempt: {
+            status: 'applied',
+            error: null,
+            report,
+            unresolved: [...unresolved, ...unresolved],
+            ref: { sessionId: 's', id: 'outcome-one' },
+            futureField: { zero: 0, empty: [], flag: false },
+          },
+        },
+      },
+    }
+    const original = JSON.stringify(frame)
+    const displayed = (previous) =>
+      JSON.parse(memoryPrompt(original, previous).split('内存状态：\n')[1]).maintenance
+    const first = displayed()
+    assert.equal(first.summary, summary)
+    assert.deepEqual(first.unresolved, frame.memoryStatus.maintenance.unresolved)
+    assert.equal(first.lastAttempt.unresolved, undefined)
+    assert.equal(first.lastAttempt.unresolvedInCurrentState, true)
+    assert.deepEqual(first.lastAttempt.futureField, { zero: 0, empty: [], flag: false })
+    const retained = displayed(original)
+    assert.equal(retained.summary, undefined)
+    assert.equal(retained.summaryInEarlierFrame, true)
+    assert.deepEqual(retained.unresolved, frame.memoryStatus.maintenance.unresolved)
+    assert.deepEqual(retained.lastAttempt, first.lastAttempt)
+    assert.equal(displayed().summary, summary, 'a rebuilt history delivers the full narrative')
+    assert.equal(JSON.stringify(frame), original, 'audit data remains complete')
+  }
+})
+
+test('INV-74 maintenance narrative identity and current failures survive presentation deduplication', () => {
+  const frame = {
+    partitions: {
+      task: { goals: [] },
+      workspace: { notes: [] },
+      observation: {},
+      recent: { results: [] },
+      runtime: { mandatory: [] },
+    },
+    memoryStatus: {
+      maintenance: {
+        origin: 'model-interpretation',
+        summary: 'Keep the complete narrative and its identity. '.repeat(20),
+        unresolved: ['Current pending work. '.repeat(20)],
+        report: { sessionId: 's', id: 'report-one' },
+        active: true,
+      },
+    },
+  }
+  const original = JSON.stringify(frame)
+  for (const change of [
+    (value) => {
+      value.report.id = 'other-report'
+    },
+    (value) => {
+      value.report.sessionId = 'other-session'
+    },
+    (value) => {
+      delete value.report
+    },
+    (value) => {
+      value.origin = 'other-origin'
+    },
+    (value) => {
+      value.summary += ' New verified fact.'
+    },
+  ]) {
+    const prior = structuredClone(frame)
+    change(prior.memoryStatus.maintenance)
+    const shown = JSON.parse(memoryPrompt(original, JSON.stringify(prior)).split('内存状态：\n')[1])
+    assert.equal(shown.maintenance.summary, frame.memoryStatus.maintenance.summary)
+    assert.equal(shown.maintenance.summaryInEarlierFrame, undefined)
+  }
+  const changed = structuredClone(frame)
+  changed.memoryStatus.maintenance.lastAttempt = {
+    status: 'failed',
+    error: 'Snapshot changed while applying the patch.',
+    report: null,
+    unresolved: ['Read the new source before retrying.'],
+  }
+  changed.memoryStatus.maintenance.pending = { focus: 'Keep the pending request', preserve: [] }
+  const prompt = memoryPrompt(JSON.stringify(changed), original)
+  const shown = JSON.parse(prompt.split('内存状态：\n')[1]).maintenance
+  assert.equal(shown.summaryInEarlierFrame, true)
+  assert.deepEqual(shown.unresolved, changed.memoryStatus.maintenance.unresolved)
+  assert.deepEqual(shown.lastAttempt, changed.memoryStatus.maintenance.lastAttempt)
+  assert.deepEqual(shown.pending, changed.memoryStatus.maintenance.pending)
+  const anonymous = structuredClone(frame)
+  delete anonymous.memoryStatus.maintenance.report
+  const body = JSON.stringify(anonymous)
+  assert(memoryPrompt(body, body).includes(anonymous.memoryStatus.maintenance.summary))
+})
+
 test('INV-62 task text stays once in a stable chronological prefix while the frame carries current scope', async (t) => {
   const task =
     'TASK_BODY_UNIQUE: inspect the parser, preserve public API, and verify changes.\nKeep exact newlines and "quotes".'
@@ -1653,6 +1767,74 @@ test('INV-20 independent capacity maintenance derives parent note presentation w
   )
   assert.equal(results.filter((item) => item.mode === 'observe').length, 1)
   assert.equal(results.filter((item) => item.mode === 'execute').length, 0)
+})
+
+test('INV-74 actual requests retain maintenance narrative provenance through continued execution', async (t) => {
+  const summary = 'MAINTENANCE_NARRATIVE_ORIGINAL: the source was inspected. '.repeat(8)
+  const unresolved = ['Review the remaining integration boundary. '.repeat(6)]
+  let maintenanceCalls = 0
+  let reused = 0
+  const maintenance = {
+    id: 'maintenance',
+    limits: { contextTokens: 200000, inputTokens: 180000, outputTokens: 4096 },
+    estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+    async *stream(request) {
+      maintenanceCalls++
+      const snapshot = JSON.parse(
+        JSON.parse(request.materials[0].text).partitions.task.goals[0].text
+      ).snapshot
+      const patch = { baseRevision: snapshot.baseRevision, summary, unresolved }
+      const part = turn(request, {
+        execute: {
+          source: `import {submit} from 'velaros:context-materials';await submit(${JSON.stringify(patch)});`,
+        },
+      })
+      yield { ...part, text: `${part.text}\n${marker(request)} done` }
+      yield { type: 'finish', reason: 'stop' }
+    },
+  }
+  const f = await fixture(
+    t,
+    async function* (request, call) {
+      if (call === 1) {
+        yield { type: 'error', code: 'context-limit', message: 'capacity exceeded' }
+        return
+      }
+      const actual = modelRequestEncoder
+        .messages(request)
+        .map((item) =>
+          typeof item.content === 'string' ? item.content : JSON.stringify(item.content)
+        )
+      assert.equal(actual.join('\n').split(summary).length - 1, 1)
+      const state = JSON.parse(request.materials[0].text).memoryStatus.maintenance
+      assert.equal(state.summary, summary, 'the authoritative frame keeps the complete narrative')
+      assert.deepEqual(state.unresolved, unresolved)
+      if (request.compiledPrompt.includes('"summaryInEarlierFrame":true')) {
+        reused++
+        assert(request.history.some((item) => item.content.includes?.(summary)))
+        assert(!request.compiledPrompt.includes(summary))
+      } else assert(request.compiledPrompt.includes(summary))
+      assert(request.compiledPrompt.includes(unresolved[0]), 'pending work remains in this frame')
+      if (call === 6) yield* done(request)
+      else {
+        yield turn(request, {
+          execute: {
+            source: `import {output} from 'velaros';output('continued step ${call}');`,
+          },
+        })
+        yield { type: 'finish', reason: 'stop' }
+      }
+    },
+    { context: { sources: [], maintenance: { model: maintenance } } }
+  )
+  await f.session.execute(
+    { source: `import {output} from 'velaros';output('${'retained source '.repeat(600)}');` },
+    'task'
+  )
+  await run(f, 'Continue the implementation and verification after inspecting the source.')
+  assert.equal(maintenanceCalls, 1)
+  assert.equal(f.requests.length, 6)
+  assert(reused > 0, 'at least one real accepted prefix must exercise narrative reuse')
 })
 
 test('business children always own a scoped workspace even without world capabilities', async (t) => {

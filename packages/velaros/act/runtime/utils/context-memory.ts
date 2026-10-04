@@ -410,7 +410,14 @@ export function memoryPrompt(body: string, previous?: string): string {
       return { ...metadata, detailInEarlierFrame: true }
     }),
   }
-  const node = current.presentation === 'node' ? nodeFrameState({ ...current, runtime }) : null
+  const memoryStatus = {
+    ...status,
+    maintenance: maintenanceDisplay(status.maintenance, before?.status.maintenance),
+  }
+  const node =
+    current.presentation === 'node'
+      ? nodeFrameState({ ...current, runtime, status: memoryStatus })
+      : null
   return [
     node
       ? '当前运行状态（origin=runtime-view，以本帧为准；省略的可选分区为空，材料正文见历史或下方）：'
@@ -492,8 +499,49 @@ export function memoryPrompt(body: string, previous?: string): string {
     ...(!node ? ['grouped-receipts 保留计数和首尾 ID；完整回执在 frameId 对应的运行记录。'] : []),
     ...notices.jobs,
     '内存状态：',
-    JSON.stringify(node ? node.status : status),
+    JSON.stringify(node ? node.status : memoryStatus),
   ].join('\n')
+}
+
+/** 整理叙事按报告身份复用已保留的帧；当前待办、失败与请求继续完整展示。 */
+function maintenanceDisplay(current: unknown, previous: unknown): unknown {
+  if (!isPlainObject(current)) return current
+  const display = { ...current }
+  const identified =
+    isPlainObject(current.report) &&
+    isString(current.report.sessionId) &&
+    Boolean(current.report.sessionId) &&
+    isString(current.report.id) &&
+    Boolean(current.report.id)
+  if (
+    identified &&
+    isPlainObject(previous) &&
+    same(current.report, previous.report) &&
+    current.origin === previous.origin &&
+    isString(current.summary) &&
+    Boolean(current.summary) &&
+    current.summary === previous.summary
+  ) {
+    const { summary: _summary, ...metadata } = display
+    const compact = { ...metadata, summaryInEarlierFrame: true }
+    if (JSON.stringify(compact).length < JSON.stringify(display).length) {
+      delete display.summary
+      display.summaryInEarlierFrame = true
+    }
+  }
+  const last = current.lastAttempt
+  if (
+    identified &&
+    isPlainObject(last) &&
+    same(current.report, last.report) &&
+    isArray(current.unresolved) &&
+    same(current.unresolved, last.unresolved)
+  ) {
+    const { unresolved: _unresolved, ...metadata } = last
+    const compact = { ...metadata, unresolvedInCurrentState: true }
+    if (JSON.stringify(compact).length < JSON.stringify(last).length) display.lastAttempt = compact
+  }
+  return display
 }
 
 /** 消息正文身份忽略缓存标记，仍绑定角色、原样内容与延续状态。 */
