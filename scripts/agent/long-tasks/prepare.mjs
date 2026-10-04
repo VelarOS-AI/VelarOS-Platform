@@ -2,7 +2,7 @@
 // 先验收执行环境与独立评分器，再冻结候选、任务和工具；本步骤不请求模型。
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { cp, mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -201,6 +201,7 @@ const manifest = {
   candidate,
   candidateId,
   candidateSourceCommit,
+  scriptactSessionId: `scriptact-${randomUUID()}`,
   modelWirePreflight,
   providerCapabilities,
   model: 'gpt-5.6-sol',

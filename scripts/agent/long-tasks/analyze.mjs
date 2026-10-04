@@ -209,6 +209,7 @@ async function main() {
     schema: 1,
     at: new Date().toISOString(),
     taskId: manifest.task.id,
+    scriptactSessionId: manifest.scriptactSessionId ?? 'development',
     split: manifest.task.split,
     model: manifest.model,
     contextTokens: manifest.contextTokens,

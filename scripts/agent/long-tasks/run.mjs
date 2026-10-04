@@ -26,6 +26,7 @@ import {
 const execute = promisify(execFile)
 const directory = resolve(process.argv[2])
 const manifest = JSON.parse(await readFile(join(directory, 'freeze.json'), 'utf8'))
+const scriptactSessionId = manifest.scriptactSessionId ?? 'development'
 const environment = taskEnvironment(manifest.task)
 assert.deepEqual(environment, manifest.environment)
 assert.equal(
@@ -265,7 +266,7 @@ async function scriptAct({ workspace, output, apiKey, baseURL, signal, python, p
         safetyTokens: 4096,
       },
     })
-    session = await runtime.openSession('development')
+    session = await runtime.openSession(scriptactSessionId)
     exporter = createTraceExporter({
       trace: (query) => runtime.trace(session.id, query),
       output,
@@ -313,7 +314,7 @@ if (recovery) {
   await snapshot(
     join(output, 'trajectory.json'),
     toTrajectory({
-      sessionId: 'development',
+      sessionId: scriptactSessionId,
       instruction: manifest.executionEnvironments?.scriptact?.prompt ?? manifest.prompt,
       ...trace,
       identity,

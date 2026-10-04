@@ -2343,6 +2343,104 @@
         "Task takes 6.89 percent longer than v8 and 27.01 percent longer than the original Codex comparator; repeated-run variability prevents causal attribution.",
         "Complete reference cost unknown because two requests lack usage."
       ]
+    },
+    {
+      "attempt": "rich-09",
+      "schema": 1,
+      "at": "2026-10-04T21:08:28.785Z",
+      "taskId": "rich-ascii-decorations",
+      "scriptactSessionId": "development",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 36,
+            "startedAt": 1791147555756,
+            "solveMs": 483792
+          },
+          "accounting": {
+            "requests": 36,
+            "requestStatuses": {
+              "http-200": 35,
+              "unknown": 1
+            },
+            "measuredRequests": 35,
+            "missingUsageRequests": 1,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 671210,
+            "knownOutputTokens": 14605,
+            "knownCachedInputTokens": 228736,
+            "knownCacheRatio": 0.340781573576079,
+            "pricedRequests": 35,
+            "knownReferenceUsd": 2.1534904,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 50,
+            "failed": 8,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "8 failed, 50 passed in 0.21s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[None-utf-16]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 855,
+            "failed": 0,
+            "skipped": 25,
+            "errors": 0,
+            "summary": "855 passed, 25 skipped in 3.92s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 7,
+          "createdFiles": 1,
+          "changeSummary": "28\t0\tdocs/source/console.rst\n11\t0\trich/bar.py\n27\t4\trich/console.py\n2\t2\trich/markdown.py\n5\t6\trich/spinner.py\n1\t1\trich/syntax.py\n11\t3\trich/traceback.py\n",
+          "created": "tests/test_ascii_only.py\n",
+          "execution": {
+            "mainRequests": 33,
+            "branchRequests": 3,
+            "requestOwners": {
+              "development": 33,
+              "context:9eed7302-761c-44a7-a275-13f142fba004": 3
+            },
+            "contextSegments": 3,
+            "nativeRequests": 36,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        }
+      }
     }
   ],
   "transportDiagnostics": {
