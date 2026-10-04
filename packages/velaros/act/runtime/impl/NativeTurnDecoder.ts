@@ -110,7 +110,11 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
             submission: {
               executions: this.calls.map((call) => ({
                 async: false,
-                program: { language: call.name, source: (call.input as NativeExecutionInput).code },
+                program: {
+                  language: call.name,
+                  source: (call.input as NativeExecutionInput).code,
+                  retainTurns: this.config.defaultRetain,
+                },
               })),
             },
           }),

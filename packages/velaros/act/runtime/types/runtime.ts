@@ -122,7 +122,7 @@ export interface ScriptProtocolOptions {
   readonly presentation?: 'node'
   /** 当前运行配置允许的控制声明。 */
   readonly allowed?: ReadonlyArray<'blobs' | 'observe' | 'execute' | 'shell' | 'done'>
-  /** 文本协议一次执行的缺省可见期限，默认随历史封段退役；仍受展示预算约束。 */
+  /** 模型发起执行的缺省可见期限，文本与原生工具共用；默认随历史封段退役，仍受展示预算约束。 */
   readonly defaultRetain?: ScriptRetention
   /** 每帧随机标记的前缀，只接受 @@ 后的字母数字下划线。 */
   readonly markerPrefix?: string

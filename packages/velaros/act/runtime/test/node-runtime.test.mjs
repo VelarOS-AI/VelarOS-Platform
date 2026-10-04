@@ -8,6 +8,7 @@ import { localContextStorage } from '@velaros-ai/context/node'
 import { createNodeCodeRunner } from '@velaros-ai/script'
 
 import { NativeTurnDecoder } from '../../../dist/act/runtime/impl/NativeTurnDecoder.js'
+import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import {
   createRuntime,
   createShellCapabilityModule,
@@ -129,6 +130,97 @@ test('native decoder rejects ungranted Shell and honors configured response budg
     /原生执行入口/
   )
   assert.throws(() => new NativeTurnDecoder({ maxChars: 8 }).push('ninechars'), /超过协议字符预算/)
+})
+
+test('INV-10 native executions honor the common segment, task and finite retention policy', () => {
+  for (const duration of [undefined, 'segment', 'task', 1, 2, 32]) {
+    const decoder = new NativeTurnDecoder(duration === undefined ? {} : { defaultRetain: duration })
+    for (const name of ['shell', 'node'])
+      decoder.acceptTool({ id: name, name, input: { code: name === 'shell' ? 'true' : '1' } })
+    assert.deepEqual(
+      decoder.finish().submission.executions.map((execution) => execution.program.retainTurns),
+      [duration ?? 'segment', duration ?? 'segment']
+    )
+  }
+})
+
+test('INV-10 native result leases survive their configured scope without re-execution', async (t) => {
+  for (const duration of [undefined, 'task', 4])
+    await t.test(String(duration ?? 'segment'), async (t) => {
+      const f = await fixture(t)
+      const payload = 'original output retained across subsequent editing steps'
+      await writeFile(join(f.cwd, 'source.txt'), payload)
+      const storage = localContextStorage({ path: join(f.root, 'retention.sqlite') })
+      const id = 'retention'
+      const requests = []
+      let turn = 0
+      const runtime = await createRuntime({
+        node: f.node,
+        protocol: duration === undefined ? {} : { defaultRetain: duration },
+        project: false,
+        agents: false,
+        search: false,
+        memory: false,
+        context: { maintenance: false },
+        storage,
+        model: {
+          id: 'native-retention',
+          nativeTools: true,
+          limits: { contextTokens: 128000, inputTokens: 120000, outputTokens: 4000 },
+          estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+          async *stream(request) {
+            requests.push(request)
+            if (++turn <= 5)
+              yield {
+                type: 'tool-call',
+                value: {
+                  id: `step-${turn}`,
+                  name: turn % 2 ? 'shell' : 'node',
+                  input: {
+                    code:
+                      turn % 2
+                        ? 'cat source.txt; printf x >> calls.txt'
+                        : "import {readFile,appendFile} from 'node:fs/promises'; console.log(await readFile('source.txt','utf8')); await appendFile('calls.txt','x')",
+                  },
+                },
+              }
+            else yield { type: 'text', text: '已核对全部步骤。' }
+            yield { type: 'finish', reason: 'stop' }
+          },
+        },
+      })
+      t.after(() => runtime.close())
+      const session = await runtime.openSession(id)
+      for await (const event of session.submit('逐步读取材料并保留原输出。'))
+        assert.notEqual(event.type, 'error')
+      assert.equal(turn, 6)
+      const frames = requests.map((request) =>
+        JSON.parse(request.materials.find((item) => item.origin === 'runtime-view').text)
+      )
+      const firstRef = frames[1].partitions.recent.results[0].ref
+      assert.equal(frames[1].partitions.recent.results[0].remainingTurns, duration ?? 'segment')
+      for (const frame of frames.slice(1, 5))
+        assert(frame.partitions.recent.results.some((result) => result.ref === firstRef))
+      const finalResults = frames.at(-1).partitions.recent.results
+      assert.equal(
+        finalResults.some((result) => result.ref === firstRef),
+        duration !== 4
+      )
+      if (duration !== 4)
+        assert.equal(
+          finalResults.find((result) => result.ref === firstRef).remainingTurns,
+          duration ?? 'segment'
+        )
+      const original = requests[1].history.find((message) =>
+        message.content.includes(payload)
+      ).content
+      assert(requests.at(-1).history.some((message) => message.content === original))
+      assert.equal(await readFile(join(f.cwd, 'calls.txt'), 'utf8'), 'xxxxx')
+      const programs = new ProgramContext(id, session.context, storage)
+      const leases = (await programs.state()).leases
+      assert(leases.every((lease) => !lease.segment && !lease.task))
+      assert.match((await programs.read(firstRef)).text, /original output retained/)
+    })
 })
 
 test('fresh native output shares unused result capacity and reaches the next request intact', async (t) => {

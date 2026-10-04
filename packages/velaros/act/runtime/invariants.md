@@ -11,7 +11,7 @@
 | INV-7 | 真实图像持久保存并以图像块经共享编译器发送 | 测试 | test/platform.test.mjs |
 | INV-8 | 精确编辑全成或全不成，检查失败保存可修复草稿，旧观察基线不得覆盖新版本 | 测试 | test/incremental-edit.test.mjs |
 | INV-9 | 同次提交全部候选先检查，源码、观察更新和执行占位原子提交；重试不重复执行，未决状态要求核对 | 测试 | test/incremental-edit.test.mjs |
-| INV-10 | 有限结果租约只按本帧实际投递且身份相同的租约消费，分页读取与续租不会重新执行原脚本；文本执行默认 segment 期限，结果随历史封段时退役，显式期限优先，主动释放立即生效，任务结束释放 segment 与 task 租约 | 测试 | test/program-context.test.mjs、test/text-decoder.test.mjs、test/text-runtime.test.mjs、test/context-management.test.mjs |
+| INV-10 | 有限结果租约只按本帧实际投递且身份相同的租约消费，分页读取与续租不会重新执行原脚本；文本与原生执行共用宿主缺省期限，默认 segment，结果随历史封段时退役，显式期限优先，主动释放立即生效，任务结束释放 segment 与 task 租约 | 测试 | test/program-context.test.mjs、test/text-decoder.test.mjs、test/text-runtime.test.mjs、test/node-runtime.test.mjs、test/context-management.test.mjs |
 | INV-11 | 观察增量编辑默认绑定本轮展示版本；合并提交检查失败不改变观察或执行世界操作 | 测试 | test/script-submission.test.mjs |
 | INV-12 | 任意流分片和原文边界得到相同解析，未知声明或未闭合段不派发；工作指令从本帧允许的控制头开始，缺少工作决策时，修复提示给出当前帧标记及本作用域允许的控制头；未闭合提示给出精确闭合行并要求完整重发，修复后整批只执行一次 | 测试 | test/text-decoder.test.mjs、test/text-runtime.test.mjs |
 | INV-13 | 多执行身份独立；异步按额度调度；done 等待结果；取消及恢复不盲重放 | 测试 | test/text-runtime.test.mjs |
@@ -210,6 +210,6 @@ Node 的模型展示省略空运行时分区与内部统计，完整帧继续用
 
 ## INV-88 原生 Shell 与 Node 工具的完整接纳
 
-支持原生工具的 Node 业务会话声明 shell/node，参数合同由 NativeExecutionInput 正式类型生成。完整模型响应结束并验收全部调用后才执行任何动作；响应中断、重复身份或任意非法参数不产生前序效果。调用与持久回执按 executionId 配对，assistant 原文与配对记录保持来源绑定；完整历史可恢复供应商工具消息，摘录或退卡只交中立文本。取消、重启和跨轮接续不重放已接受源码，能力授权与真实失败保持原有边界。
+支持原生工具的 Node 业务会话声明 shell/node，参数合同由 NativeExecutionInput 正式类型生成。完整模型响应结束并验收全部调用后才执行任何动作；响应中断、重复身份或任意非法参数不产生前序效果。调用与持久回执按 executionId 配对，assistant 原文与配对记录保持来源绑定；完整历史可恢复供应商工具消息，摘录或退卡只交中立文本。取消、重启和跨轮接续不重放已接受源码，能力授权与真实失败保持原有边界。原生执行采用宿主 `protocol.defaultRetain`，与文本执行共用 segment、task 和有限曝光期限；模型参数继续只有 code。
 
 验证：`test/node-runtime.test.mjs` 的原生 Shell/Node、跨存储重开、完整响应拒绝与取消恢复；Model `test/native-tools.test.ts` 的 Responses/Chat 往返、调用回执拒绝、截断与工具指纹。
