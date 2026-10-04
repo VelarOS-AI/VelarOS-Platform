@@ -930,8 +930,8 @@ export class ActLoop implements ActLoopApi {
       current = await compose(first)
       runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     }
-    // 放不下或剩余轮数不足就封段；剩余不多时遇到章节边界也封段。抖动说明工作集本身装不下，再封也没用
-    if (!folded && !repair.provider && !this.planner.thrashing()) {
+    // 抖动只抑制预测性的提前封段；实际超窗仍尝试回收已可封存的历史，每次组帧最多成功封一次。
+    if (!folded && !repair.provider && (!fits(current) || !this.planner.thrashing())) {
       const reason = !fits(current)
         ? ('overflow' as const)
         : runway < this.policy.foldTurns

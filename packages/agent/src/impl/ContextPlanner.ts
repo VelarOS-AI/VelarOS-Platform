@@ -32,7 +32,7 @@ export interface ContextPlannerApi {
   ): void
   /** 封段后重新学习增长；与上次封段间隔过短仍记为抖动，容量校准保留。 */
   folded(): void
-  /** 最近一次封段离上一次不足 foldTurns 帧，且之后还没跑满 minTurns 帧。 */
+  /** 最近封段间隔不足 foldTurns、之后未满 minTurns 帧；仅抑制预测性封段，实际超窗仍可回收历史。 */
   thrashing(): boolean
   /** 这一段已经整理过一次仍然不够：同段不再整理，等下次封段。 */
   exhaust(segment: string): void

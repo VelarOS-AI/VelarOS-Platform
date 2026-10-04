@@ -121,6 +121,76 @@ test('INV-40 accepted provider usage drives growth while calibrated admission re
   }
 })
 
+test.each(['overflow', 'forecast', 'irreducible'] as const)(
+  'INV-40 fold cooldown preserves forecasting stability without blocking actual overflow: %s',
+  async (mode) => {
+    const f = runFixture()
+    let calls = 0
+    let folds = 0
+    let foldAttempts = 0
+    let executed = 0
+    let pressure = 0
+    f.options.frames.policy = { windowTokens: 2000 }
+    f.options.frames.project = async () => ({
+      body: '{}',
+      images: [],
+      segment: { id: `segment-${folds}`, index: folds, revision: 0, volumes: folds, turns: 3 },
+    })
+    f.options.frames.fold = async (reason) => {
+      foldAttempts++
+      expect(reason).toBe(folds < 2 ? 'runway' : 'overflow')
+      if (folds === 2 && mode === 'irreducible') return false
+      folds++
+      return true
+    }
+    f.options.frames.maintain = async ({ reason }) => {
+      if (reason === 'pressure') pressure++
+      return false
+    }
+    f.options.model.estimate = async () => ({
+      tokens: calls <= folds ? 1000 : calls < 3 || mode === 'forecast' ? 1930 : 10000,
+      precision: 'exact',
+      basis: 'one accepted frame between folds followed by actual capacity pressure',
+    })
+    f.options.model.stream = async function* () {
+      calls++
+      yield { type: 'text', text: 'accepted' }
+      yield { type: 'finish', reason: 'stop' }
+    }
+    f.options.protocol.open = () => ({
+      instructions: 'fixture',
+      reset() {},
+      push() {
+        return []
+      },
+      finish() {
+        return calls >= 4
+          ? { message: 'done', done: true, events: [] }
+          : { message: 'work', done: false, submission: { code: 'work' }, events: [] }
+      },
+    })
+    f.options.execution.invoke = async () => {
+      executed++
+    }
+    const service = createActRunService(f.options)
+    const events = []
+    try {
+      for await (const event of service.submit('Complete the ongoing edits')) events.push(event)
+      expect(executed).toBe(3)
+      expect(calls).toBe(mode === 'irreducible' ? 3 : 4)
+      expect(folds).toBe(mode === 'overflow' ? 3 : 2)
+      expect(foldAttempts).toBe(mode === 'forecast' ? 2 : 3)
+      expect(pressure).toBe(mode === 'overflow' ? 0 : 1)
+      expect(events.at(-1)).toMatchObject({
+        type: 'state',
+        status: mode === 'irreducible' ? 'context_blocked' : 'completed',
+      })
+    } finally {
+      await service.close()
+    }
+  }
+)
+
 test.each(['fits', 'window', 'provider', 'exact', 'abort', 'timeout'] as const)(
   'INV-51 candidate admission uses the live calibration and obeys capacity and cancellation: %s',
   async (mode) => {
