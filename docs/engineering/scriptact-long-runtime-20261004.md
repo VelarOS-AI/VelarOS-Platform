@@ -1469,3 +1469,13 @@ Shell/Node 独立副本 513/513，其中六项新增测试单独通过；lint、
 先在旧构建上运行新增回归，四项关键检查失败；实现后完整 Runtime 套件 782/782 通过。随后补充的新主帧断言、最终源码格式调整经直接叙事 34/34 核验。覆盖真实 audit 结果、Unicode 长输入多页、唯一 UTF-16 引文、用户约束保留、旧卷/后续卷、跨会话、助手自述、伪造/歧义引文、重复项、关闭又新增同一事项、输入/结果截断，以及整理期间的新用户输入、授权重置与并发 active 版本变化。版本变化拒绝整组发布。构建、velaros 类型检查、定向 lint/格式、错误构造、模块所有权与差异检查通过；日志位于 context-diagnostics/narrative-resolution-*。
 
 本次合同差量：产品公开 API 和 TS 生成的 ContextPatch 操作合同继续使用同一定义；内部直接叙事响应增加从该合同派生的可选 active.changes 投影，模型不填写宿主版本和偏移。Runtime README 与 INV-52/53 同步明确每卷新增问题、持久活动集合、有执行证据的关闭、完整用户原文交付和原子发布。主循环 Shell/Node 使用说明保持精简。改动是通用上下文机制，没有任务名称、仓库或参考答案分支；付费收益须由新冻结候选的后续实验验证，全部 Chai v38 结果继续对应原冻结实现。
+
+## v39 独立验证登记
+
+干净提交 edcd82946e25adddcfb4c506f5c6c26b3bff2579 冻结为 candidate-v39-e7d1f9296093，共 5404 文件全部逐一核对哈希；相对 v38 变化限于 Runtime 两份实现及 README、不变量和对应构建产物，共十一项。证据为 context-diagnostics/candidate-v39-freeze-proof.json。
+
+按需配对 cheerio-02 与 Shell/Node 对照 cheerio-shell-node-02 分别准备于 /private/tmp/vlr-CmnoSS、/private/tmp/vlr-28WUmx。两份构建均通过，原项目 757/757；原文、评分器、逐例基线、依赖和恢复路径实现与已准备但从未执行的 cheerio-01 相同，能力对照另核对同一候选身份和生成配置。v39-validation-plan.json 在付费前登记三方顺序：先按需 ScriptAct、再 Codex，控制器完整退出后再 Shell/Node。cheerio-01 的原冻结文件保持，另附 scheduling-note-v39。正式评分器的既有正负控制与 21 路径恢复证明继续适用于相同哈希。
+
+上一 Chai Shell/Node 控制器以 0 完整退出后，cheerio-02 于 20:33:56.492 UTC 首次请求模型。启动证据 v39-start-evidence.json 核对预登记时间、计划/冻结哈希、前序终态和串行执行。只读 observe-narrative-resolution.mjs 按请求记录统计自动整理的 active 材料、拟关闭事项与持久实际关闭，另保留失败整理、原文送达和完整费用核对；关闭计数本身不证明语义正确或性能收益。本节只登记执行与验证口径，终态前不填收益结论。
+
+本次差量为冻结、预登记和执行记录，产品公开合同保持 edcd8294 定义，模块所有权与差异检查作为文档交付门禁。新候选的质量、稳定性和费用验收继续按现有停止门槛执行。
