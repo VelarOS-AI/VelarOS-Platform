@@ -4191,6 +4191,192 @@
           }
         }
       }
+    },
+    {
+      "attempt": "pygments-01",
+      "schema": 1,
+      "at": "2026-10-05T02:31:36.196Z",
+      "taskId": "pygments-line-number-labels",
+      "scriptactSessionId": "scriptact-97e50489-b520-477a-a96e-5f5899570ba3",
+      "candidateId": "candidate-v21-38c2a4f10876",
+      "candidateSourceCommit": "cbf6e992a40084f976c50928b2cfa8362a81dd99",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "split": "holdout",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 52,
+            "startedAt": 1791166143360,
+            "solveMs": 742430
+          },
+          "accounting": {
+            "requests": 52,
+            "requestStatuses": {
+              "http-200-interrupted": 2,
+              "http-200": 50
+            },
+            "measuredRequests": 50,
+            "missingUsageRequests": 2,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1015098,
+            "knownOutputTokens": 21703,
+            "knownCachedInputTokens": 340224,
+            "knownCacheRatio": 0.3351636984803438,
+            "pricedRequests": 50,
+            "knownReferenceUsd": 3.269645600000001,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 61,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "61 passed in 0.36s",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 5175,
+            "failed": 0,
+            "skipped": 16,
+            "errors": 0,
+            "summary": "5175 passed, 16 skipped in 6.62s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": true,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 9,
+          "createdFiles": 1,
+          "changeSummary": "10\t0\tdoc/docs/cmdline.rst\n24\t0\tdoc/docs/formatters.rst\n6\t1\tpygments/formatter.py\n8\t2\tpygments/formatters/groff.py\n10\t4\tpygments/formatters/html.py\n8\t2\tpygments/formatters/rtf.py\n6\t2\tpygments/formatters/svg.py\n4\t1\tpygments/formatters/terminal.py\n4\t1\tpygments/formatters/terminal256.py\n",
+          "created": "tests/test_lineno_labels.py\n",
+          "changeAccounting": {
+            "baseline": "59046a6aed2487d53f1c79e95da3a589887b565a",
+            "head": "59046a6aed2487d53f1c79e95da3a589887b565a",
+            "source": "recorded-baseline",
+            "changedFiles": 9,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 34,
+            "branchRequests": 18,
+            "requestOwners": {
+              "scriptact-97e50489-b520-477a-a96e-5f5899570ba3": 34,
+              "context:a440eb25-182e-432b-b028-ed3533075de4": 2,
+              "context:751eb37f-532b-4e08-8d73-8ca53e11ef2f": 2,
+              "context:a5293c3c-72bc-4b7d-9953-aa9320ad336d": 6,
+              "context:b49009ce-c155-49b1-a35d-6d61dcb11b69": 6,
+              "context:1bc65f44-f89b-4ada-9b89-51bfd59f9b9f": 2
+            },
+            "contextSegments": 12,
+            "nativeRequests": 52,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791166899495,
+            "finishedAt": 1791167460878,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a109dd-e54f-7d11-b87a-1ff87aeb0b1a",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 143,
+            "solveMs": 561384
+          },
+          "accounting": {
+            "requests": 94,
+            "requestStatuses": {
+              "http-200": 92,
+              "unknown": 1,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 92,
+            "missingUsageRequests": 2,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 2183373,
+            "knownOutputTokens": 29407,
+            "knownCachedInputTokens": 1846912,
+            "knownCacheRatio": 0.8458985248970285,
+            "pricedRequests": 92,
+            "knownReferenceUsd": 2.672748799999999,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 61,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "61 passed in 0.39s",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 5175,
+            "failed": 0,
+            "skipped": 16,
+            "errors": 0,
+            "summary": "5175 passed, 16 skipped in 6.49s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": true,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 17,
+          "createdFiles": 1,
+          "changeSummary": "5\t0\tdoc/docs/cmdline.rst\n26\t0\tdoc/docs/formatters.rst\n8\t3\tdoc/docs/quickstart.rst\n14\t1\tpygments/formatter.py\n8\t2\tpygments/formatters/groff.py\n10\t4\tpygments/formatters/html.py\n12\t2\tpygments/formatters/rtf.py\n6\t2\tpygments/formatters/svg.py\n4\t1\tpygments/formatters/terminal.py\n4\t1\tpygments/formatters/terminal256.py\n34\t1\ttests/test_basic_api.py\n8\t0\ttests/test_cmdline.py\n20\t0\ttests/test_groff_formatter.py\n44\t1\ttests/test_html_formatter.py\n22\t0\ttests/test_html_formatter_linenos_elements.py\n60\t1\ttests/test_rtf_formatter.py\n28\t1\ttests/test_terminal_formatter.py\n",
+          "created": "tests/test_svg_formatter.py\n",
+          "changeAccounting": {
+            "baseline": "5e623ac5a7164148362204b371a57ac64048cc44",
+            "head": "5e623ac5a7164148362204b371a57ac64048cc44",
+            "source": "recorded-baseline",
+            "changedFiles": 17,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "rootThreadId": "01a109dd-e54f-7d11-b87a-1ff87aeb0b1a",
+            "compactions": 4,
+            "childAgentDispatches": 3,
+            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T10-21-39-01a109dd-e54f-7d11-b87a-1ff87aeb0b1a.jsonl"
+          }
+        }
+      }
     }
   ],
   "transportDiagnostics": {
