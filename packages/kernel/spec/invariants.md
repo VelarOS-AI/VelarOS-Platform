@@ -58,3 +58,9 @@ prepare、beforeDispatch、handler、领域 reconcile 即使不响应 signal，�
 生成合同与挂载运行时的 allowedModes 按有效集合一致；省略等价于 execute 与 observe。非法、空或重复模式集合在装配期拒绝。
 
 验证：`spec/operation-lifecycle.test.ts`。
+
+## INV-28 自动历史管理的模型状态
+
+声明 automaticHistory 的容量报告保留完整宿主诊断，编码到模型的状态只包含模式、阶段、自动归档说明以及当前过载与停滞；输入段余量不作为模型任务预算展示。原始请求及用户材料不修改，work、maintenance、finalizing 阶段保持原值。声明缺省时兼容完整报告编码。
+
+验证：`spec/model-continuation.test.ts`。

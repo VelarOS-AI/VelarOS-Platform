@@ -68,3 +68,62 @@ test('native result bodies bind once to the preceding response and preserve the 
   ])
     expect(() => encode(invalid)).toThrow('工具结果正文必须与前一条响应的调用唯一配对')
 })
+
+test('INV-28 automatic history exposes actionable controls while capacity diagnostics stay on the request', () => {
+  for (const phase of ['work', 'maintenance', 'finalizing'] as const) {
+    const contextStatus = {
+      mode: 'partitioned' as const,
+      phase,
+      frameId: 'current-frame',
+      automaticHistory: true as const,
+      pressure: 'critical' as const,
+      inputTokens: 32760,
+      precision: 'exact' as const,
+      basis: 'fixture',
+      inputLimit: 32768,
+      outputReserve: 12000,
+      safetyReserve: 4096,
+      remainingTokens: 8,
+      advice: 'capacity diagnostic',
+      runway: { turns: 0, growthPerTurn: 2500 },
+      segment: { index: 7, turns: 8, volumes: 6 },
+      cache: { readTokens: 16000, writeTokens: 0 },
+      overload: 'Reduce oversized working material',
+      stall: { repeatedSteps: 3, advice: 'Change the repeated unsuccessful step' },
+    }
+    const original = structuredClone(contextStatus)
+    const request: ModelTurnRequest = {
+      instructions: 'Complete the user task.',
+      materials: [{ ref: 'original', origin: 'user', text: 'Original task and constraints' }],
+      response: { type: 'text' },
+      mode: 'work',
+      outputTokens: 12000,
+      contextStatus,
+    }
+    const body = modelRequestEncoder.messages(request).at(-1)!.content as string
+    const notice = JSON.parse(body.split('Runtime ContextStatus:\n')[1]!)
+    expect(notice.phase).toBe(phase)
+    expect(notice.mode).toBe('partitioned')
+    expect(notice.history).toContain('自动')
+    expect(notice.overload).toBe(contextStatus.overload)
+    expect(notice.stall).toEqual(contextStatus.stall)
+    for (const key of [
+      'pressure',
+      'inputTokens',
+      'inputLimit',
+      'outputReserve',
+      'remainingTokens',
+      'runway',
+      'cache',
+      'basis',
+      'segment',
+    ])
+      expect(notice).not.toHaveProperty(key)
+    expect(body).toContain('Original task and constraints')
+    expect(contextStatus).toEqual(original)
+    const { automaticHistory: _automaticHistory, ...manual } = contextStatus
+    const legacy = modelRequestEncoder.messages({ ...request, contextStatus: manual }).at(-1)!
+      .content as string
+    expect(JSON.parse(legacy.split('Runtime ContextStatus:\n')[1]!)).toEqual(manual)
+  }
+})

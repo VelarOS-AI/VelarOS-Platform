@@ -3,6 +3,7 @@ import { isArray, isEmpty, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
+  ModelContextStatus,
   ModelContinuation,
   ModelHistoryMessage,
   ModelImage,
@@ -14,6 +15,19 @@ import type {
 } from '../../types/model.js'
 
 import { immutableOperationJson } from './operation-schema.js'
+
+/** 自动历史管理的容量指标留在宿主；模型只承担当前工作集与执行停滞的处理。 */
+function contextStatusView(status: ModelContextStatus) {
+  return status.automaticHistory
+    ? {
+        mode: status.mode,
+        phase: status.phase,
+        history: '宿主按容量自动封存历史，已归档正文可按引用召回。',
+        ...(status.overload ? { overload: status.overload } : {}),
+        ...(status.stall ? { stall: status.stall } : {}),
+      }
+    : status
+}
 
 /** 调用和回执作为一组保存，不能在截断或恢复时变成孤立工具消息。 */
 export function driverModelToolExchange(value: unknown): ModelToolExchange {
@@ -155,7 +169,7 @@ export function driverModelMessages(request: ModelTurnRequest): ModelHistoryMess
   const prompt =
     driverModelPrompt(request) +
     (request.contextStatus
-      ? `\nRuntime ContextStatus:\n${JSON.stringify(request.contextStatus)}`
+      ? `\nRuntime ContextStatus:\n${JSON.stringify(contextStatusView(request.contextStatus))}`
       : '')
   if (!images.length) return [...history, { role: 'user', content: prompt }]
   const content: Exclude<ModelUserMessage['content'], string> = [{ type: 'text', text: prompt }]

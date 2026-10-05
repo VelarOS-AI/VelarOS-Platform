@@ -66,6 +66,8 @@ export interface ModelContextStatus {
   readonly mode: 'partitioned' | 'runtime-view' | 'incremental-history'
   readonly phase: 'work' | 'maintenance' | 'finalizing'
   readonly frameId: string
+  /** 宿主自动封存历史；模型只接收阶段和可操作状态，完整容量报告供宿主计量与审计。 */
+  readonly automaticHistory?: true
   readonly pressure: 'normal' | 'warning' | 'critical'
   readonly inputTokens: number
   readonly precision: 'exact' | 'estimate'
@@ -73,9 +75,10 @@ export interface ModelContextStatus {
   readonly inputLimit: number
   readonly outputReserve: number
   readonly safetyReserve: number
+  /** 当前请求输入窗余量；输出额度与整任务期限独立。 */
   readonly remainingTokens: number
   readonly advice: string
-  /** 按每轮增长估计还能再跑几轮；不足时主循环封段。 */
+  /** 按增长估计当前输入段还能容纳的轮数；自动封段由宿主规划。 */
   readonly runway?: { readonly turns: number; readonly growthPerTurn: number }
   /** 当前段：段号、段内响应数、底座里的卷数。 */
   readonly segment?: { readonly index: number; readonly turns: number; readonly volumes: number }

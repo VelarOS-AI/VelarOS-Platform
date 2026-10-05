@@ -1009,7 +1009,7 @@ export class ActLoop implements ActLoopApi {
     if (!fits(current)) return null
     runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     const tighten =
-      '按 memoryStatus.footprint 找占用最大的分区，收紧 observe 的 view，释放不再需要的 task 租约，合并或移出笔记，或把独立的子目标交给子 agent。'
+      '缩小当前工作集，把已确认的结论保留为简短笔记，按需读取大段原文，避免反复展示整份材料。'
     const overload = faulting
       ? `本段已经 ${faults} 次读回上一帧因容量不够只给了引用的材料，工作集本身装不下：${tighten}`
       : (folded ||
@@ -1024,6 +1024,7 @@ export class ActLoop implements ActLoopApi {
         mode: frames.mode,
         phase: current.phase.phase,
         frameId: evidence.id,
+        ...(frames.fold ? { automaticHistory: true as const } : {}),
         pressure:
           turns < this.policy.foldTurns
             ? ('critical' as const)
@@ -1038,7 +1039,7 @@ export class ActLoop implements ActLoopApi {
         safetyReserve: limits.safetyTokens,
         remainingTokens: Math.max(0, window - tokens),
         advice:
-          '原文按引用归档；工作笔记是模型解释，引用不代表已读正文。上下文按剩余轮数自动封段，封进卷的历史仍可按引用召回。',
+          '原文按引用归档；工作笔记是模型解释，引用不代表已读正文。输入段容量与输出额度分开计量，封存的历史可按引用召回。',
         runway: {
           turns: Math.max(0, Math.floor(turns)),
           growthPerTurn: this.planner.growth(window, current.retained),

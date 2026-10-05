@@ -803,6 +803,8 @@ test('INV-42 fitting requests expose repeated material gaps to the main model wi
   // 缺页是工作集提示，实际容量仍足够，不另起一条模型工作流。
   expect(reasons.filter((reason) => reason === 'pressure')).toEqual([])
   expect(overloads.at(-1)).toMatch(/3 次读回/)
+  expect(overloads.at(-1)).toContain('按需读取大段原文')
+  expect(overloads.at(-1)).not.toContain('observe')
   await service.close()
 })
 
@@ -2091,7 +2093,12 @@ test.each(['available', 'forecast', 'capacity'] as const)(
       if (mode !== 'capacity') {
         expect(second.slice(0, first.length)).toEqual(first)
         expect(requests[1]!.compiledPrompt).not.toContain(evidence)
-        if (mode === 'forecast') expect(requests[1]!.contextStatus?.runway?.turns).toBe(1)
+        if (mode === 'forecast') {
+          expect(requests[1]!.contextStatus?.runway?.turns).toBe(1)
+          expect(requests[1]!.contextStatus?.automaticHistory).toBe(true)
+          expect(JSON.stringify(second)).not.toContain('remainingTokens')
+          expect(JSON.stringify(second)).not.toContain('growthPerTurn')
+        }
       } else {
         expect(second.slice(0, first.length)).not.toEqual(first)
         expect(requests[1]!.compiledPrompt).toContain(evidence)
