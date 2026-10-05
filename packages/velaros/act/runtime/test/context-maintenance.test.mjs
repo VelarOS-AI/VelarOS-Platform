@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
+import { createAiSdkModelDriver } from '@velaros-ai/model'
 import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
 import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
@@ -410,7 +411,6 @@ test('a truncated maintenance request remains pageable through the available rea
         let code
         if (calls === 1) {
           assert(goal.text.length < goal.totalChars)
-          assert(!goal.text.includes(marker))
           const local = await f.storage.load(goal.record.ref.sessionId)
           const audit = local.records.find((record) => record.kind === 'audit')
           assert(audit)
@@ -763,6 +763,93 @@ test('native maintenance recovers an oversized initial projection and can read b
   const outcome = JSON.parse(await f.storage.get('root', record.objectId))
   assert.equal(outcome.status, 'applied')
   assert.equal(outcome.error, null)
+})
+
+test('native maintenance locally sizes its initial evidence using the standard provider estimate', async (t) => {
+  const original = 'Review every batch and preserve each original constraint. '.repeat(40)
+  const estimator = createAiSdkModelDriver({
+    id: 'offline-sizing',
+    model: {
+      specificationVersion: 'v3',
+      provider: 'openai.responses',
+      modelId: 'offline-sizing',
+      supportedUrls: {},
+    },
+    limits: { contextTokens: 65536, inputTokens: 32768, outputTokens: 8192 },
+  })
+  let calls = 0
+  let estimates = 0
+  let firstInputChars = 0
+  const maintenance = {
+    id: estimator.id,
+    nativeTools: true,
+    limits: estimator.limits,
+    estimate: async (request) => {
+      estimates++
+      return estimator.estimate(request)
+    },
+    async *stream(request) {
+      calls++
+      const facts = JSON.parse(request.materials[0].text).partitions.runtime.modelTool
+      const input = facts.inputs.find((item) => item.text.startsWith('Review every batch'))
+      firstInputChars = input?.text.length ?? 0
+      assert.equal(
+        input?.text,
+        original,
+        'the complete original fits in the locally resized first request'
+      )
+      assert.equal(request.contextStatus.phase, 'work')
+      assert((await estimator.estimate(request)).tokens <= 32768)
+      const candidate = {
+        baseRevision: facts.baseRevision,
+        summary: 'Preserved the complete input.',
+        unresolved: [],
+        inputs: [
+          {
+            ref: input.ref,
+            baseRevision: 0,
+            summary: 'Review every batch',
+            constraints: ['Preserve each original constraint'],
+            unresolved: [],
+          },
+        ],
+      }
+      yield {
+        type: 'tool-call',
+        value: {
+          id: 'sized-delivery',
+          name: 'node',
+          input: {
+            code: `import {submit} from 'velaros:context-materials'; console.log(await submit(${JSON.stringify(candidate)}));`,
+          },
+        },
+      }
+      yield finish
+    },
+  }
+  const f = await setupTool(t, driver(done), maintenance)
+  await f.session.context.append({
+    kind: 'assistant',
+    body: 'Observed the imported batch; verification remains pending. '.repeat(800),
+  })
+  await f.session.execute({
+    source:
+      "import {memory} from 'velaros:system'; await memory.organize({focus:'Preserve verified progress'});",
+  })
+  await runTool(f, original)
+  const state = await f.storage.load('root')
+  const record = state.records.findLast((item) => item.title === 'context-maintenance:outcome')
+  const outcome = JSON.parse(await f.storage.get('root', record.objectId))
+  assert.equal(outcome.status, 'applied', outcome.error)
+  assert.equal(calls, 1)
+  t.diagnostic(
+    JSON.stringify({
+      modelCalls: calls,
+      localEstimates: estimates,
+      firstInputChars,
+      originalChars: original.length,
+    })
+  )
 })
 
 test('explicit context request runs a separate leaf at a safe boundary; scripts and observer are not replayed', async (t) => {

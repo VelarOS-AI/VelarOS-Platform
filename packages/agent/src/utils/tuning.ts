@@ -31,6 +31,8 @@ export const ContextPlanTuning = Object.freeze({
   growthSeed: 0.04,
   /** 字符密度取最近多少帧。 */
   densitySamples: 8,
+  /** 已找到可发送的恢复投影后，最多本地试算几次较大正文。 */
+  projectionAttempts: 4,
   /** 本次运行连续没有进展这么多步，ContextStatus 给出停滞提示。 */
   stallNotice: 3,
   /** 连续没有进展这么多步，本帧尾加反思说明。 */

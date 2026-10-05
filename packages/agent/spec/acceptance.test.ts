@@ -460,6 +460,91 @@ test.each(['fits', 'needs-finalization'] as const)(
   }
 )
 
+test.each(['linear', 'stepped', 'mandatory-overflow', 'status-overflow', 'cancel'] as const)(
+  'INV-53 bounded local projection keeps usable evidence and enforces the final work window: %s',
+  async (mode) => {
+    const f = runFixture()
+    const controller = new AbortController()
+    const sent: ModelTurnRequest[] = []
+    const projections: number[] = []
+    let maintained = 0
+    let acknowledged = 0
+    let finalizing = false
+    f.options.frames.policy = { windowTokens: 3000 }
+    f.options.frames.project = async (_view, _signal, maxChars) => {
+      projections.push(maxChars)
+      return {
+        body: JSON.stringify({
+          required: 'Keep all original conditions',
+          evidence: 'x'.repeat(maxChars),
+        }),
+        images: [],
+      }
+    }
+    f.options.frames.acknowledge = async () => {
+      acknowledged++
+    }
+    f.options.frames.maintain = async ({ reason }) => {
+      if (reason === 'pressure') maintained++
+      return false
+    }
+    f.options.frames.pressure = () => {
+      finalizing = true
+    }
+    f.options.frames.phase = () => ({ phase: finalizing ? 'finalizing' : 'work', instructions: '' })
+    f.options.model.estimate = async (request) => {
+      const chars = JSON.parse(request.materials[0]!.text).evidence.length
+      if (mode === 'cancel' && chars > 1000 && chars < 10000) {
+        controller.abort()
+        return new Promise(() => {})
+      }
+      return {
+        tokens:
+          mode === 'mandatory-overflow'
+            ? 4000
+            : 400 +
+              Math.ceil(chars / 3) +
+              (mode === 'stepped' && chars > 5000 ? 3000 : 0) +
+              (mode === 'status-overflow' && request.contextStatus ? 1400 : 0),
+        precision: 'exact',
+        basis: 'mandatory prefix and bounded optional evidence',
+      }
+    }
+    f.options.model.stream = async function* (request) {
+      sent.push(request)
+      yield { type: 'text', text: 'complete' }
+      yield { type: 'finish', reason: 'stop' }
+    }
+    const service = createActRunService(f.options)
+    const events = []
+    try {
+      for await (const event of service.submit('Use the supplied facts', controller.signal))
+        events.push(event)
+      expect(projections.length).toBeLessThanOrEqual(12)
+      if (mode === 'mandatory-overflow' || mode === 'cancel') {
+        expect(sent).toHaveLength(0)
+        expect(acknowledged).toBe(0)
+        expect(events.at(-1)).toMatchObject({
+          type: 'state',
+          status: mode === 'cancel' ? 'cancelled' : 'context_blocked',
+        })
+      } else {
+        expect(sent).toHaveLength(1)
+        expect(acknowledged).toBe(1)
+        const payload = JSON.parse(sent[0]!.materials[0]!.text)
+        expect(payload.required).toBe('Keep all original conditions')
+        expect((await f.options.model.estimate(sent[0]!)).tokens).toBeLessThanOrEqual(3000)
+        if (mode !== 'status-overflow') expect(payload.evidence.length).toBeGreaterThan(4000)
+        expect(finalizing).toBe(false)
+        expect(maintained).toBe(0)
+        expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+      }
+    } finally {
+      await service.close()
+    }
+  }
+)
+
 test.each([
   { role: 'user' as const, content: 'same result' },
   { role: 'user' as const, content: [{ type: 'text' as const, text: 'same result' }] },

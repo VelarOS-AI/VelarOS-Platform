@@ -871,7 +871,6 @@ export class ActLoop implements ActLoopApi {
         limits.safetyTokens,
         this.planner.calibration()
       )
-      this.planner.density(requestChars(request), compiled.estimate.tokens)
       return {
         segment: projected.segment,
         phase,
@@ -884,6 +883,34 @@ export class ActLoop implements ActLoopApi {
     }
     const fits = (current: Awaited<ReturnType<typeof compose>>) =>
       current.compiled.okToSend && current.compiled.estimate.tokens <= window
+    // 恢复预算是兜底。先验证最小投影，再有界试算能容纳的较大正文，避免直接截掉仍可交付的材料。
+    // 试算不调用模型、不确认送达；最终重建选中的投影，所有状态仍按它核对。
+    const recoverProjection = async () => {
+      let lower = Math.min(budget, limits.recoveryChars)
+      let upper = budget
+      let best = await compose(lower)
+      if (!fits(best) || repair.recovery || upper <= lower) return best
+      const desired = Math.max(
+        best.compiled.estimate.tokens,
+        window - this.policy.minTurns * this.planner.growth(window, best.retained)
+      )
+      let last = lower
+      for (
+        let count = 0;
+        count < ContextPlanTuning.projectionAttempts && upper - lower > 1;
+        count++
+      ) {
+        signal.throwIfAborted()
+        last = Math.floor((lower + upper) / 2)
+        const candidate = await compose(last)
+        if (fits(candidate) && candidate.compiled.estimate.tokens <= desired) {
+          lower = last
+          best = candidate
+        } else upper = last
+      }
+      signal.throwIfAborted()
+      return last === lower ? best : compose(lower)
+    }
     // 整理支线的目标：给结构性超载留出 minTurns 轮的增长
     const target = Math.max(
       512,
@@ -945,7 +972,11 @@ export class ActLoop implements ActLoopApi {
         runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
       }
     }
-    // 结构性超载：放不下，或封不了段时剩余不足 foldTurns 轮、封段后剩余仍不足 minTurns 轮，
+    if (!fits(current) && current.phase.phase !== 'finalizing') {
+      current = await recoverProjection()
+      runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
+    }
+    // 结构性超载：本地收紧后放不下，或封不了段时剩余不足 foldTurns 轮、封段后剩余仍不足 minTurns 轮，
     // 或本段缺页持续偏高（笔记和结果本身挤不下）。
     // 主线交给整理支线一次；叶子工具先收紧展示，仍放不下才进入交付阶段
     const short = runway < (folded ? this.policy.minTurns : this.policy.foldTurns)
@@ -972,7 +1003,7 @@ export class ActLoop implements ActLoopApi {
     }
     // 仍放不下只剩恢复窗口：基础目标、当前图片和必要运行状态必须装得下
     if (!fits(current)) current = await compose(Math.min(budget, limits.recoveryChars))
-    if (!current.compiled.okToSend) return null
+    if (!fits(current)) return null
     runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     const tighten =
       '按 memoryStatus.footprint 找占用最大的分区，收紧 observe 的 view，释放不再需要的 task 租约，合并或移出笔记，或把独立的子目标交给子 agent。'
@@ -1045,13 +1076,15 @@ export class ActLoop implements ActLoopApi {
     }
     let compiled = await finalize()
     // 状态说明也是实际请求的一部分；追加后越界仍先收紧投影，再判断容量受阻。
-    if (!compiled.okToSend) {
+    if (!compiled.okToSend || compiled.estimate.tokens > window) {
       retain = false
       this.transcript = undefined
       current = await compose(Math.min(budget, limits.recoveryChars))
       compiled = await finalize()
     }
-    if (!compiled.okToSend) return null
+    if (!compiled.okToSend || compiled.estimate.tokens > window) return null
+    // 只从选中的完整请求学习字符密度，本地探测不挤占后续帧的样本。
+    this.planner.density(requestChars(compiled.request), compiled.estimate.tokens)
     frames.setPhase(current.phase.phase)
     if (!(await view.validate(evidence, signal)))
       throw new AppError('STALE_VIEW', '发送前证据版本发生变化')
