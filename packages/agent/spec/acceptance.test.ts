@@ -180,7 +180,7 @@ test.each(['overflow', 'forecast', 'irreducible'] as const)(
       expect(calls).toBe(mode === 'irreducible' ? 3 : 4)
       expect(folds).toBe(mode === 'overflow' ? 3 : 2)
       expect(foldAttempts).toBe(mode === 'forecast' ? 2 : 3)
-      expect(pressure).toBe(mode === 'overflow' ? 0 : 1)
+      expect(pressure).toBe(mode === 'irreducible' ? 1 : 0)
       expect(events.at(-1)).toMatchObject({
         type: 'state',
         status: mode === 'irreducible' ? 'context_blocked' : 'completed',
@@ -780,7 +780,7 @@ test('INV-41 a run waits out the hourly model limit and continues; the total cap
   await service.close()
 })
 
-test('INV-42 persistent faults in a segment run pressure maintenance once and ask the model to tighten its working set', async () => {
+test('INV-42 fitting requests expose repeated material gaps to the main model without allocating paid maintenance', async () => {
   const f = runFixture()
   const reasons: string[] = []
   const overloads: Array<string | undefined> = []
@@ -800,10 +800,44 @@ test('INV-42 persistent faults in a segment run pressure maintenance once and as
   }
   const service = createActRunService(f.options)
   for await (const event of service.submit('work')) expect(typeof event.type).toBe('string')
-  // 同一段只整理一次，之后照常给出收紧建议
-  expect(reasons.filter((reason) => reason === 'pressure')).toEqual(['pressure'])
+  // 缺页是工作集提示，实际容量仍足够，不另起一条模型工作流。
+  expect(reasons.filter((reason) => reason === 'pressure')).toEqual([])
   expect(overloads.at(-1)).toMatch(/3 次读回/)
   await service.close()
+})
+
+test('INV-42 a low forecast with a fitting request does not dispatch pressure maintenance', async () => {
+  const f = runFixture()
+  const reasons: string[] = []
+  const requests: ModelTurnRequest[] = []
+  f.options.frames.policy = { windowTokens: 2000 }
+  f.options.model.estimate = async () => ({
+    tokens: 1930,
+    precision: 'exact',
+    basis: 'fits with little forecast runway',
+  })
+  f.options.frames.fold = async () => false
+  f.options.frames.maintain = async ({ reason }) => {
+    reasons.push(reason)
+    return false
+  }
+  f.options.model.stream = async function* (request) {
+    requests.push(request)
+    yield { type: 'text', text: 'done' }
+    yield { type: 'finish', reason: 'stop' }
+  }
+  const service = createActRunService(f.options)
+  try {
+    const events = []
+    for await (const event of service.submit('Finish the current check')) events.push(event)
+    expect(requests).toHaveLength(1)
+    expect(reasons.filter((reason) => reason === 'pressure')).toEqual([])
+    expect(requests[0]!.contextStatus?.inputTokens).toBe(1930)
+    expect(requests[0]!.contextStatus?.runway?.turns).toBe(0)
+    expect(events.at(-1)).toMatchObject({ type: 'state', status: 'completed' })
+  } finally {
+    await service.close()
+  }
 })
 
 test('INV-45 measured usage reaches the host and persisted response with reported cache reads and writes', async () => {

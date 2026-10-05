@@ -976,15 +976,13 @@ export class ActLoop implements ActLoopApi {
       current = await recoverProjection()
       runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     }
-    // 结构性超载：本地收紧后放不下，或封不了段时剩余不足 foldTurns 轮、封段后剩余仍不足 minTurns 轮，
-    // 或本段缺页持续偏高（笔记和结果本身挤不下）。
-    // 主线交给整理支线一次；叶子工具先收紧展示，仍放不下才进入交付阶段
-    const short = runway < (folded ? this.policy.minTurns : this.policy.foldTurns)
+    // 本地重组后仍放不下才调用额外整理模型。预测余量和重复缺页留作当前帧提示，
+    // 不把尚可执行的主线变成另一条付费工作流；显式整理仍在请求边界处理。
     const faults = current.segment?.faults ?? 0
     const faulting =
       faults >= ContextPlanTuning.faultCount &&
       faults * ContextPlanTuning.faultTurns >= (current.segment?.turns ?? 0)
-    if ((!fits(current) || short || faulting) && current.phase.phase !== 'finalizing') {
+    if (!fits(current) && current.phase.phase !== 'finalizing') {
       // 同一段只整理一次：整理过仍不够，就不再每轮重复，等下次封段
       const segment = current.segment?.id
       if (attempt > 0 && segment) this.planner.exhaust(segment)

@@ -1197,7 +1197,7 @@ test('explicit context request runs a separate leaf at a safe boundary; scripts 
   assert.equal(JSON.parse(await f.storage.get('root', binding.objectId)).status, 'closed')
 })
 
-test('a frame about to overflow delegates to maintenance before the first business request and preserves native user images', async (t) => {
+test('a frame exceeding capacity delegates to maintenance before the first business request and preserves native user images', async (t) => {
   let mainCalls = 0
   let toolCalls = 0
   const main = driver(
@@ -1213,9 +1213,9 @@ test('a frame about to overflow delegates to maintenance before the first busine
       )
       yield* done(request)
     },
-    // 窗口 90000：89000 剩余不足两轮，又没有可封的历史，交给整理支线
+    // 窗口 90000：95000 确实超窗，本地重组后仍装不下才交给整理支线。
     async (request) => ({
-      tokens: JSON.stringify(request).includes('model-interpretation') ? 1000 : 89000,
+      tokens: JSON.stringify(request).includes('model-interpretation') ? 1000 : 95000,
       precision: 'exact',
       basis: 'fixture',
     })
@@ -1238,7 +1238,7 @@ test('a frame about to overflow delegates to maintenance before the first busine
   assert.equal(toolCalls, 1)
 })
 
-test('verified pressure capacity avoids repeated maintenance across successful business turns', async (t) => {
+test('fitting large notes permit successful business turns without paid pressure maintenance', async (t) => {
   let mainCalls = 0
   let toolCalls = 0
   const main = driver(
@@ -1270,7 +1270,9 @@ test('verified pressure capacity avoids repeated maintenance across successful b
   })
   await runTool(f)
   assert.equal(mainCalls, 3)
-  assert.equal(toolCalls, 1)
+  assert.equal(toolCalls, 0)
+  const state = await f.storage.load('root')
+  assert.equal(state.records.filter((r) => r.title === 'workspace:note:large').length, 1)
 })
 
 test('maintenance has only fixed-snapshot reads and cannot discover or import system management', async (t) => {
@@ -1469,6 +1471,10 @@ test('failed maintenance falls back to reference projection and is not retried o
       yield* done(request, 'could not produce a patch')
     })
   )
+  await f.session.execute({
+    source:
+      "import {memory} from 'velaros:system';await memory.organize({focus:'Review the available evidence'});",
+  })
   await runTool(f)
   assert.equal(mainCalls, 1)
   assert.equal(toolCalls, 1)
@@ -1816,7 +1822,7 @@ test('automatic pressure and a fresh organize request do not inherit an already 
       yield* done(request)
     },
     async () => ({
-      tokens: pressure && !relieved ? 85000 : 1000,
+      tokens: pressure && !relieved ? 95000 : 1000,
       precision: 'exact',
       basis: 'pressure boundary',
     })
