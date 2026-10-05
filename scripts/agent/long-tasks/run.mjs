@@ -23,6 +23,7 @@ import {
   restoreTaskPaths,
   taskEnvironment,
 } from './task-environment.mjs'
+import { workspaceChanges } from './workspace-changes.mjs'
 
 const execute = promisify(execFile)
 const directory = resolve(process.argv[2])
@@ -115,6 +116,7 @@ async function copySource(destination) {
     ],
     { cwd: destination }
   )
+  return (await execute('git', ['rev-parse', 'HEAD'], { cwd: destination })).stdout.trim()
 }
 
 async function check(command, args, cwd, name, output) {
@@ -182,10 +184,12 @@ async function grade(workspace, output) {
     regression.verdict = result.verdict
     await snapshot(join(output, 'regression.json'), result)
   }
-  const diff = await execute('git', ['diff', '--numstat'], { cwd: workspace })
-  const untracked = await execute('git', ['ls-files', '--others', '--exclude-standard'], {
-    cwd: workspace,
-  })
+  const baseline = await readFile(join(output, 'workspace-baseline.json'), 'utf8')
+    .then(JSON.parse)
+    .catch((error) => {
+      if (error.code === 'ENOENT') return null
+      throw error
+    })
   return {
     acceptance,
     regression,
@@ -194,8 +198,7 @@ async function grade(workspace, output) {
     featureCompleteWithoutNewRegressions:
       acceptance.exitCode === 0 &&
       (regression.verdict?.baselineCompatible ?? regression.exitCode === 0),
-    changed: diff.stdout,
-    created: untracked.stdout,
+    ...(await workspaceChanges(workspace, baseline?.commit)),
   }
 }
 
@@ -368,7 +371,8 @@ try {
       'Participant must start with the frozen dependencies'
     )
     const workspace = join(manifest.taskRoot, participant, environment.project)
-    await copySource(workspace)
+    const baseline = await copySource(workspace)
+    await snapshot(join(output, 'workspace-baseline.json'), { commit: baseline })
     const apiKey = attemptCredential(
       {
         campaignId: 'long-runtime-20261004',

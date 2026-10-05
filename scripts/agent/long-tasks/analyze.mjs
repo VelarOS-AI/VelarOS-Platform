@@ -2,8 +2,10 @@
 // 汇总各层的原始证据；未知用量与参考报价不转换成完整账单。
 import { cp, readFile, readdir, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+
+import { workspaceChanges } from './workspace-changes.mjs'
 
 export function summarizeRequests(requests) {
   const measured = requests.filter((request) =>
@@ -124,6 +126,28 @@ async function main() {
     const output = join(directory, participant)
     const solve = await json(join(output, 'solve.json'))
     const grade = await json(join(output, 'grade.json'))
+    const baseline = await json(join(output, 'workspace-baseline.json')).catch((error) => {
+      if (error.code === 'ENOENT') return null
+      throw error
+    })
+    // 老控制器只统计未暂存 diff；原始评分文件保持原样，单独附上起点核对结果。
+    const changes = grade.changeAccounting
+      ? grade
+      : await workspaceChanges(
+          join(
+            manifest.taskRoot,
+            participant,
+            manifest.environment?.project ?? basename(manifest.source)
+          ),
+          baseline?.commit
+        ).catch((error) => ({
+          ...grade,
+          changeAccounting: {
+            source: 'legacy-grade-only',
+            includesCommittedChanges: false,
+            error: String(error),
+          },
+        }))
     results[participant] = {
       solve,
       accounting: summarizeRequests(
@@ -137,10 +161,15 @@ async function main() {
       passed: grade.passed,
       featureCompleteWithoutNewRegressions:
         grade.featureCompleteWithoutNewRegressions ?? grade.passed,
-      changedFiles: grade.changed.trim() ? grade.changed.trim().split('\n').length : 0,
-      createdFiles: grade.created.trim() ? grade.created.trim().split('\n').length : 0,
-      changeSummary: grade.changed,
-      created: grade.created,
+      changedFiles:
+        changes.changeAccounting.changedFiles ??
+        (changes.changed.trim() ? changes.changed.trim().split('\n').length : 0),
+      createdFiles:
+        changes.changeAccounting.createdFiles ??
+        (changes.created.trim() ? changes.created.trim().split('\n').length : 0),
+      changeSummary: changes.changed,
+      created: changes.created,
+      changeAccounting: changes.changeAccounting,
     }
   }
   const requests = []

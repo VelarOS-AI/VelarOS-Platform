@@ -132,6 +132,15 @@
             "nativeRequests": 21,
             "textProtocolRequests": 53,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "dab6720697c6b3ed98ad9929469dd8d3a147b2ef",
+            "head": "dab6720697c6b3ed98ad9929469dd8d3a147b2ef",
+            "source": "verified-historical-root",
+            "changedFiles": 1,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         },
         "codex": {
@@ -197,6 +206,15 @@
             "compactions": 7,
             "childAgentDispatches": 3,
             "source": "/Users/mac/.codex/sessions/2026/10/04/rollout-2026-10-04T22-01-51-01a10738-9705-7c32-9ba9-9ec691911a32.jsonl"
+          },
+          "changeAccounting": {
+            "baseline": "691dddb7079bc80db536b9073f772945b3980273",
+            "head": "691dddb7079bc80db536b9073f772945b3980273",
+            "source": "verified-historical-root",
+            "changedFiles": 27,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       },
@@ -301,6 +319,15 @@
             "nativeRequests": 52,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "43d675268b0275d4f23fe7bead83846e60d1ecac",
+            "head": "43d675268b0275d4f23fe7bead83846e60d1ecac",
+            "source": "verified-historical-root",
+            "changedFiles": 3,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       },
@@ -401,6 +428,15 @@
             "nativeRequests": 126,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "5b25739388246e7cb4b69be0bdcf3e9d3b5c00b2",
+            "head": "5b25739388246e7cb4b69be0bdcf3e9d3b5c00b2",
+            "source": "verified-historical-root",
+            "changedFiles": 5,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       },
@@ -491,6 +527,15 @@
             "nativeRequests": 39,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "4d515a1240cf526ab23662f43c39b54c4d55d35d",
+            "head": "4d515a1240cf526ab23662f43c39b54c4d55d35d",
+            "source": "verified-historical-root",
+            "changedFiles": 6,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       },
@@ -581,6 +626,15 @@
             "nativeRequests": 101,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "5bbfc61abebb2d6b0e27ce94ea149329d095a983",
+            "head": "5bbfc61abebb2d6b0e27ce94ea149329d095a983",
+            "source": "verified-historical-root",
+            "changedFiles": 17,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         },
         "codex": {
@@ -647,6 +701,15 @@
             "compactions": 4,
             "childAgentDispatches": 3,
             "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T00-24-49-01a107bb-785e-7352-85c0-8861639d70ed.jsonl"
+          },
+          "changeAccounting": {
+            "baseline": "d123057dc723c21e1579e57ac73153b443991195",
+            "head": "d123057dc723c21e1579e57ac73153b443991195",
+            "source": "verified-historical-root",
+            "changedFiles": 26,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       },
@@ -782,6 +845,15 @@
             "nativeRequests": 1,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "1b4661363293b3d0ab7b49022fc7aae4e244da7f",
+            "head": "1b4661363293b3d0ab7b49022fc7aae4e244da7f",
+            "source": "verified-historical-root",
+            "changedFiles": 0,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       },
@@ -884,6 +956,15 @@
             "nativeRequests": 194,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "51e6f6cf7c871e4d4d8ae32ca5c1c0e7ff2cfe05",
+            "head": "51e6f6cf7c871e4d4d8ae32ca5c1c0e7ff2cfe05",
+            "source": "verified-historical-root",
+            "changedFiles": 29,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       }
@@ -971,6 +1052,15 @@
             "skipped": 0,
             "exitCode": 1,
             "evidence": "markdown-04/grading-correction-01/scriptact.json"
+          },
+          "changeAccounting": {
+            "baseline": "9491e6a1d7f93a7759b68f446df20af3d6cd113a",
+            "head": "9491e6a1d7f93a7759b68f446df20af3d6cd113a",
+            "source": "verified-historical-root",
+            "changedFiles": 14,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         },
         "codex": {
@@ -1046,6 +1136,15 @@
             "skipped": 0,
             "exitCode": 0,
             "evidence": "markdown-04/grading-correction-01/codex.json"
+          },
+          "changeAccounting": {
+            "baseline": "a3d5bc256a96e4457b54f7d299d5efb9c9b2ee07",
+            "head": "a3d5bc256a96e4457b54f7d299d5efb9c9b2ee07",
+            "source": "verified-historical-root",
+            "changedFiles": 22,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       },
@@ -1174,6 +1273,15 @@
             "nativeRequests": 47,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "0b62b3407ed5197998f2f47ef5ed01be7d22dd90",
+            "head": "0b62b3407ed5197998f2f47ef5ed01be7d22dd90",
+            "source": "verified-historical-root",
+            "changedFiles": 10,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         },
         "codex": {
@@ -1240,6 +1348,15 @@
             "compactions": 3,
             "childAgentDispatches": 3,
             "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T01-35-58-01a107fc-9f65-7b31-bb51-77edef81df49.jsonl"
+          },
+          "changeAccounting": {
+            "baseline": "b7e40cd9dd4b4c9b9b26d3af118342900699e49e",
+            "head": "b7e40cd9dd4b4c9b9b26d3af118342900699e49e",
+            "source": "verified-historical-root",
+            "changedFiles": 28,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       },
@@ -1347,6 +1464,15 @@
             "nativeRequests": 65,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "160a231e3555bbb68d69c9261c8333bf74a2d567",
+            "head": "160a231e3555bbb68d69c9261c8333bf74a2d567",
+            "source": "verified-historical-root",
+            "changedFiles": 7,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         },
         "codex": {
@@ -1420,6 +1546,15 @@
             "compactions": 5,
             "childAgentDispatches": 3,
             "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T02-23-36-01a10828-39fc-7a03-8bb9-807fa3d0733e.jsonl"
+          },
+          "changeAccounting": {
+            "baseline": "bf34588667ba3ae837ca17baef2c9c156a731ec9",
+            "head": "bf34588667ba3ae837ca17baef2c9c156a731ec9",
+            "source": "verified-historical-root",
+            "changedFiles": 9,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       },
@@ -1563,6 +1698,15 @@
             "nativeRequests": 29,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "c446ad6f22f31e21bbade8d612f1d096d00e1ed2",
+            "head": "c446ad6f22f31e21bbade8d612f1d096d00e1ed2",
+            "source": "verified-historical-root",
+            "changedFiles": 8,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         },
         "codex": {
@@ -1633,6 +1777,15 @@
             "compactions": 4,
             "childAgentDispatches": 3,
             "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T02-53-54-01a10843-f618-78b2-adf1-a4ec44cbe7a4.jsonl"
+          },
+          "changeAccounting": {
+            "baseline": "2022975a331ce47edb596059ddea76b1f18c6b3e",
+            "head": "2022975a331ce47edb596059ddea76b1f18c6b3e",
+            "source": "verified-historical-root",
+            "changedFiles": 15,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       },
@@ -1728,6 +1881,15 @@
             "nativeRequests": 24,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "c036a8fd1aacdb3f5cdd73b8bcde8dbf2b3b3a2d",
+            "head": "c036a8fd1aacdb3f5cdd73b8bcde8dbf2b3b3a2d",
+            "source": "verified-historical-root",
+            "changedFiles": 8,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       },
@@ -1875,6 +2037,15 @@
             "summary": "OK (skipped=4)",
             "failures": [],
             "evidence": "mkdocs-01/grading-correction-02/scriptact.regression-adapted.json"
+          },
+          "changeAccounting": {
+            "baseline": "4cbb6575c3fa53aaedd33d471f841f49c4cb2dbb",
+            "head": "4cbb6575c3fa53aaedd33d471f841f49c4cb2dbb",
+            "source": "verified-historical-root",
+            "changedFiles": 10,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         },
         "codex": {
@@ -1998,6 +2169,15 @@
             "summary": "OK (skipped=4)",
             "failures": [],
             "evidence": "mkdocs-01/grading-correction-02/codex.regression-adapted.json"
+          },
+          "changeAccounting": {
+            "baseline": "df42b80c443d136bd020c5e67cdb680abd24c14f",
+            "head": "df42b80c443d136bd020c5e67cdb680abd24c14f",
+            "source": "verified-historical-root",
+            "changedFiles": 11,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       },
@@ -2230,6 +2410,15 @@
             "nativeRequests": 111,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "c1a366b58fe58764b11c1bc2a50c715fd3d6a989",
+            "head": "c1a366b58fe58764b11c1bc2a50c715fd3d6a989",
+            "source": "verified-historical-root",
+            "changedFiles": 7,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       },
@@ -2332,6 +2521,15 @@
             "nativeRequests": 59,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "c294c5b32a6f1ff498ea7e8e46d19485d9bb4360",
+            "head": "c294c5b32a6f1ff498ea7e8e46d19485d9bb4360",
+            "source": "verified-historical-root",
+            "changedFiles": 7,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       },
@@ -2438,6 +2636,15 @@
             "nativeRequests": 36,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "6aea558d035f3042e33ee2d2cb90ad14602aa1cc",
+            "head": "6aea558d035f3042e33ee2d2cb90ad14602aa1cc",
+            "source": "verified-historical-root",
+            "changedFiles": 7,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       }
@@ -2530,6 +2737,15 @@
             "nativeRequests": 25,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "83b75a5c96a80c52aefb015c6051cbe5ac2fb7e2",
+            "head": "83b75a5c96a80c52aefb015c6051cbe5ac2fb7e2",
+            "source": "verified-historical-root",
+            "changedFiles": 4,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         },
         "codex": {
@@ -2600,6 +2816,15 @@
             "compactions": 8,
             "childAgentDispatches": 0,
             "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T05-43-45-01a108df-7826-7a53-b05f-0c1a84a2ed72.jsonl"
+          },
+          "changeAccounting": {
+            "baseline": "10b179d3e4f4265301495953c7b44ccb308c66c5",
+            "head": "10b179d3e4f4265301495953c7b44ccb308c66c5",
+            "source": "verified-historical-root",
+            "changedFiles": 11,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       }
@@ -2700,6 +2925,15 @@
             "nativeRequests": 19,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "dd562a0da1b864b3db9597fa80e47e367ed0c028",
+            "head": "dd562a0da1b864b3db9597fa80e47e367ed0c028",
+            "source": "verified-historical-root",
+            "changedFiles": 8,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       }
@@ -2805,6 +3039,15 @@
             "nativeRequests": 82,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "473dadf134f5a5112160803c2afa2dd8840b34bf",
+            "head": "473dadf134f5a5112160803c2afa2dd8840b34bf",
+            "source": "verified-historical-root",
+            "changedFiles": 9,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       }
@@ -2925,6 +3168,15 @@
             "nativeRequests": 167,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": false
+          },
+          "changeAccounting": {
+            "baseline": "220ad3f50737ed6b488116f0023e77f6516ff395",
+            "head": "220ad3f50737ed6b488116f0023e77f6516ff395",
+            "source": "verified-historical-root",
+            "changedFiles": 22,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       }
@@ -3053,6 +3305,15 @@
             "nativeRequests": 146,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "fd15da79f2ef3ce6dba4f89bd8038b9c48b138cd",
+            "head": "fd15da79f2ef3ce6dba4f89bd8038b9c48b138cd",
+            "source": "verified-historical-root",
+            "changedFiles": 16,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         },
         "codex": {
@@ -3126,6 +3387,15 @@
             "compactions": 11,
             "childAgentDispatches": 0,
             "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T07-24-40-01a1093b-de76-77f0-8e1d-3d742b356d12.jsonl"
+          },
+          "changeAccounting": {
+            "baseline": "31f158ad81233783050c940eeac9832acb4cf95d",
+            "head": "31f158ad81233783050c940eeac9832acb4cf95d",
+            "source": "verified-historical-root",
+            "changedFiles": 16,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         }
       }
@@ -3227,6 +3497,15 @@
             "nativeRequests": 28,
             "textProtocolRequests": 0,
             "originalPromptInFinalRequest": true
+          },
+          "changeAccounting": {
+            "baseline": "d06c07c12a4217720e2ece72db3af56c0c4eb997",
+            "head": "d06c07c12a4217720e2ece72db3af56c0c4eb997",
+            "source": "verified-historical-root",
+            "changedFiles": 11,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
           }
         },
         "codex": {
@@ -3300,6 +3579,216 @@
             "compactions": 6,
             "childAgentDispatches": 3,
             "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T08-00-35-01a1095c-bf0b-7561-87d7-e29cef892223.jsonl"
+          },
+          "changeAccounting": {
+            "baseline": "8d77025ec43230dad4ca6f2a15ea247a4046ee35",
+            "head": "8d77025ec43230dad4ca6f2a15ea247a4046ee35",
+            "source": "verified-historical-root",
+            "changedFiles": 27,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          }
+        }
+      }
+    },
+    {
+      "attempt": "httpx-07",
+      "schema": 1,
+      "at": "2026-10-05T01:03:43.695Z",
+      "taskId": "httpx-decoded-response-body-limit",
+      "scriptactSessionId": "scriptact-866e4d59-3213-4dcc-af7e-a68de11635f1",
+      "candidateId": "candidate-v19-4bf2d6280259",
+      "candidateSourceCommit": "666c18dfd6a862b4da6547c540a08b8361b36d91",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": false,
+        "knownFailures": [
+          "tests.test_timeouts::test_write_timeout[trio]"
+        ],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 101,
+            "startedAt": 1791159802055,
+            "solveMs": 1249800
+          },
+          "accounting": {
+            "requests": 101,
+            "requestStatuses": {
+              "http-200-interrupted": 2,
+              "http-200": 98,
+              "unknown": 1
+            },
+            "measuredRequests": 98,
+            "missingUsageRequests": 3,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1943427,
+            "knownOutputTokens": 37713,
+            "knownCachedInputTokens": 619392,
+            "knownCacheRatio": 0.3187112250678827,
+            "pricedRequests": 98,
+            "knownReferenceUsd": 6.298156800000002,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 85,
+            "failed": 3,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "3 failed, 85 passed in 0.25s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-07/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_public_api_and_exception[sync]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-07/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_public_api_and_exception[async]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-07/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_top_level_convenience_passes_limit[delete]"
+            ]
+          },
+          "regression": {
+            "exitCode": 1,
+            "passed": 1416,
+            "failed": 1,
+            "skipped": 1,
+            "errors": 0,
+            "summary": "1 failed, 1416 passed, 1 skipped in 3.44s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": false,
+              "knownFailures": [
+                "tests.test_timeouts::test_write_timeout[trio]"
+              ],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 7,
+          "createdFiles": 1,
+          "changeSummary": "50\t1\tdocs/advanced/resource-limits.md\n3\t0\tdocs/exceptions.md\n1\t0\thttpx/__init__.py\n16\t0\thttpx/_api.py\n126\t2\thttpx/_client.py\n14\t0\thttpx/_exceptions.py\n77\t25\thttpx/_models.py\n",
+          "created": "tests/client/test_response_limits.py\n",
+          "changeAccounting": {
+            "baseline": "63d3cc28126654e47d46de1f04aa762278ccb067",
+            "head": "63d3cc28126654e47d46de1f04aa762278ccb067",
+            "source": "verified-historical-root",
+            "changedFiles": 7,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 18,
+            "branchRequests": 83,
+            "requestOwners": {
+              "scriptact-866e4d59-3213-4dcc-af7e-a68de11635f1": 18,
+              "context:f92c2bff-d626-4403-88ee-66e2826cb4de": 6,
+              "agent:scriptact-866e4d59-3213-4dcc-af7e-a68de11635f1:1ce5bcfd": 47,
+              "context:4af76eef-62b1-463b-ba63-edcfec65ab11": 5,
+              "context:58f8fa11-911f-44df-87e6-f099911391f7": 7,
+              "context:5f019c64-d832-4289-a40e-d7969bdc7d47": 4,
+              "context:c7c6ae5a-1c85-40ef-b8dc-9154a40b46d9": 4,
+              "context:ada422d2-9e58-4a71-8a5f-5a54b173a51d": 2,
+              "context:8fb07f91-d547-45ce-b77e-0c98b81c6483": 4,
+              "context:f4768bb4-c31d-4e84-8125-8baef75e9f1a": 4
+            },
+            "contextSegments": 5,
+            "nativeRequests": 101,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791161059220,
+            "finishedAt": 1791161678273,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a10984-c7c2-7430-b80c-3f3d8cbb4011",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 115,
+            "solveMs": 619053
+          },
+          "accounting": {
+            "requests": 158,
+            "requestStatuses": {
+              "http-200": 154,
+              "unknown": 3,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 154,
+            "missingUsageRequests": 4,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 3717077,
+            "knownOutputTokens": 44470,
+            "knownCachedInputTokens": 3280256,
+            "knownCacheRatio": 0.8824826604345296,
+            "pricedRequests": 154,
+            "knownReferenceUsd": 3.948786400000002,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 88,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "88 passed in 0.21s",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 1,
+            "passed": 1416,
+            "failed": 1,
+            "skipped": 1,
+            "errors": 0,
+            "summary": "1 failed, 1416 passed, 1 skipped in 3.29s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": false,
+              "knownFailures": [
+                "tests.test_timeouts::test_write_timeout[trio]"
+              ],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 7,
+          "createdFiles": 3,
+          "changeSummary": "4\t0\tdocs/exceptions.md\n1\t0\thttpx/__init__.py\n20\t0\thttpx/_api.py\n123\t7\thttpx/_client.py\n22\t0\thttpx/_exceptions.py\n97\t9\thttpx/_models.py\n1\t0\tmkdocs.yml\n",
+          "created": "docs/advanced/response-body-limits.md\ntest\ntests/test_response_body_limits.py\n",
+          "changeAccounting": {
+            "baseline": "ebd4c348e6ed747de752642f9d7f2c7bbf840df9",
+            "head": "df9696581145f2bf93939e064adb103b2c2b8bc4",
+            "source": "verified-historical-root",
+            "changedFiles": 7,
+            "createdFiles": 3,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "rootThreadId": "01a10984-c7c2-7430-b80c-3f3d8cbb4011",
+            "compactions": 2,
+            "childAgentDispatches": 3,
+            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T08-44-19-01a10984-c7c2-7430-b80c-3f3d8cbb4011.jsonl"
           }
         }
       }
