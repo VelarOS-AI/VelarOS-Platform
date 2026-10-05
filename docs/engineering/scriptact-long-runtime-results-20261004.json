@@ -7606,6 +7606,406 @@
           "timingOutsideOriginalSolve": true
         }
       }
+    },
+    {
+      "attempt": "async-02",
+      "schema": 1,
+      "at": "2026-10-05T14:55:01.256Z",
+      "taskId": "async-per-call-collection-cancellation",
+      "scriptactSessionId": "scriptact-d693ddc7-20db-4838-b01b-973dc205f663",
+      "candidateId": "candidate-v34-d8a7f01673aa",
+      "candidateSourceCommit": "4e2093bc613e0c1451383425dc80ac7f54d52996",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "scriptactTaskMode": "goal",
+      "split": "holdout",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 57,
+            "goal": {
+              "id": "2e1d222b",
+              "revision": 2,
+              "objective": "Add per-call AbortSignal cancellation throughout Async.js's collection APIs. Applications need to cancel one collection traversal while it waits for user-owned work, preserve concurrent traversals, and keep callback and Promise usage consistent. Implement and document the feature in maintained lib/ source, the public collection entry points, regression tests and an executable example. Rebuild dist/async.js from maintained source.\n\nCover all 33 functions in these 11 families, including each family's ordinary, Limit and Series variants: each, eachOf, map, concat, filter, reject, detect, some, every, mapValues and groupBy. Their existing public aliases must expose identical behavior. Add an optional options argument immediately after the iteratee and before the optional final callback: for example map(coll, iteratee, options?, callback?), mapLimit(coll, limit, iteratee, options?, callback?) and mapSeries(coll, iteratee, options?, callback?). Preserve every existing signature without options, including callback(false) silent cancellation. Explicit undefined options also use defaults. Each function must retain its existing iteratee arguments, collection support, return/result shapes, order and concurrency rules.\n\nOptions must be a non-null, non-array object. options.signal may be undefined or a duck-typed AbortSignal with a boolean aborted and callable addEventListener/removeEventListener methods. Invalid options/signals must deliver a TypeError through the final callback, or reject the returned Promise when the callback is omitted, before reading the collection or invoking user work. Callback usage must continue to return without creating an exposed Promise; Promise usage must return a Promise. Callback iteratees and native async functions must both work.\n\nIf already aborted, settle before reading collection entries, acquiring an iterator or starting an iteratee. Later abortion promptly calls the final callback with an Error named AbortError, or rejects with that error, even while an iteratee callback or an async iterator's next() is indefinitely pending. Set that error's cause to signal.reason when the reason is not undefined, preserving identity and falsy values. Cancellation does not cancel already-started application work. Stop launching new iteratees or pulling new iterator values; callbacks and next() results arriving after cancellation must not restart traversal, mutate an already-delivered partial result, settle twice or produce an unhandled rejection.\n\nFor a synchronous or asynchronous iterator already acquired by the traversal, invoke its return() at most once on signal cancellation when present. Observe a Promise returned by return() so a rejection cannot become unhandled, and settle cancellation without waiting for iterator cleanup. Exceptions from cleanup must not replace the AbortError. Do not acquire an iterator merely to close an already-aborted operation.\n\nDetach the abort listener on successful completion, ordinary failure, early-result completion, signal cancellation and existing callback(false) silent cancellation. Silent cancellation still does not invoke the final callback or settle the operation's Promise. Ordinary Error instances retain identity. Preserve the existing treatment of other iteratee error values in callback and Promise APIs. Traversals remain independent when they overlap or start reentrantly from another iteratee, including when they share a signal. Keep the core implementation usable in browsers with duck-typed signals and without Node-only context modules or a global AbortController. The source entry points, individual function modules, CommonJS distribution and browser UMD distribution must agree.\n\nAdd focused tests covering the public signature matrix, each family and variant, aliases, array/object/sync-iterable/async-iterable paths, pre-abort and in-flight abortion, listener and iterator cleanup, callback(false), late completions, order and concurrency, ordinary errors, concurrent/reentrant isolation and browser compatibility. Update the affected API documentation and add a runnable example demonstrating cancellation while retaining another operation. Run the original Node test suite, the project's ESLint checks and the example. Rebuild the distribution using node node_modules/rollup/dist/bin/rollup lib/index.js --file dist/async.js --format umd --name async. Finish with accurate implementation and validation results. Make routine implementation choices autonomously.",
+              "status": "complete",
+              "reason": "Implemented AbortSignal options across all 33 collection variants and aliases, documented every public module, added focused regression coverage and executable example, rebuilt dist/async.js with the specified Rollup command. Validation passed: full Node suite 730 passing, project ESLint clean, example successful, git diff --check clean, and rebuilt CommonJS/browser UMD cancellation smoke tests passed.",
+              "createdAt": 1791207655201,
+              "updatedAt": 1791209544718
+            },
+            "goalSnapshotError": null,
+            "startedAt": 1791207655018,
+            "solveMs": 1915615
+          },
+          "build": {
+            "exitCode": 0,
+            "output": "build.json"
+          },
+          "accounting": {
+            "requests": 57,
+            "requestStatuses": {
+              "http-200-interrupted": 4,
+              "http-200": 53
+            },
+            "measuredRequests": 53,
+            "missingUsageRequests": 4,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1178632,
+            "knownOutputTokens": 25298,
+            "knownCachedInputTokens": 371072,
+            "knownCacheRatio": 0.31483278919968233,
+            "pricedRequests": 53,
+            "knownReferenceUsd": 3.8846288,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 165,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "165 passed, 0 failed, 0 skipped, 0 errors",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 690,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "690 passed, 0 failed, 0 skipped",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": true,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 35,
+          "createdFiles": 2,
+          "changeSummary": "284\t38\tdist/async.js\n4\t1\tlib/concat.js\n4\t1\tlib/concatLimit.js\n4\t1\tlib/concatSeries.js\n4\t1\tlib/detect.js\n4\t1\tlib/detectLimit.js\n4\t1\tlib/detectSeries.js\n4\t1\tlib/each.js\n4\t1\tlib/eachLimit.js\n4\t1\tlib/eachOf.js\n4\t1\tlib/eachOfLimit.js\n4\t1\tlib/eachOfSeries.js\n4\t1\tlib/eachSeries.js\n4\t1\tlib/every.js\n4\t1\tlib/everyLimit.js\n4\t1\tlib/everySeries.js\n4\t1\tlib/filter.js\n4\t1\tlib/filterLimit.js\n4\t1\tlib/filterSeries.js\n6\t1\tlib/groupBy.js\n4\t1\tlib/groupByLimit.js\n6\t1\tlib/groupBySeries.js\n145\t1\tlib/internal/awaitify.js\n4\t1\tlib/map.js\n4\t1\tlib/mapLimit.js\n4\t1\tlib/mapSeries.js\n6\t1\tlib/mapValues.js\n4\t1\tlib/mapValuesLimit.js\n6\t1\tlib/mapValuesSeries.js\n4\t1\tlib/reject.js\n4\t1\tlib/rejectLimit.js\n4\t1\tlib/rejectSeries.js\n4\t1\tlib/some.js\n4\t1\tlib/someLimit.js\n4\t1\tlib/someSeries.js\n",
+          "created": "examples/cancel-collection.js\ntest/abortSignal.js\n",
+          "changeAccounting": {
+            "baseline": "2a276acd122a4b66aadeb2ae71de853a59f0adb1",
+            "head": "2a276acd122a4b66aadeb2ae71de853a59f0adb1",
+            "source": "recorded-baseline",
+            "changedFiles": 35,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 52,
+            "branchRequests": 5,
+            "requestOwners": {
+              "scriptact-d693ddc7-20db-4838-b01b-973dc205f663": 52,
+              "context:92f32381-a68e-4e95-9b85-dbfe44009cdb": 1,
+              "context:5c3a937a-3f8e-4443-b27d-3aa73e142683": 1,
+              "context:f2649455-1f25-444b-852a-732b9a2b7646": 1,
+              "context:77fc73c4-e438-4628-9474-ce655ec2fc1b": 1,
+              "context:24241e60-b0c7-47bd-8b6f-61adda78fa53": 1
+            },
+            "contextSegments": 15,
+            "nativeRequests": 52,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 5,
+            "originalPromptInFinalRequest": true
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791209610223,
+            "finishedAt": 1791211630760,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a10c69-9c10-7523-8eeb-04ee9ddcc20f",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 242,
+            "solveMs": 2020537
+          },
+          "build": {
+            "exitCode": 0,
+            "output": "build.json"
+          },
+          "accounting": {
+            "requests": 112,
+            "requestStatuses": {
+              "http-200": 109,
+              "unknown": 1,
+              "http-200-interrupted": 2
+            },
+            "measuredRequests": 109,
+            "missingUsageRequests": 3,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 2638357,
+            "knownOutputTokens": 53247,
+            "knownCachedInputTokens": 2180224,
+            "knownCacheRatio": 0.8263567060864015,
+            "pricedRequests": 109,
+            "knownReferenceUsd": 3.7695615999999985,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 132,
+            "failed": 33,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "132 passed, 33 failed, 0 skipped, 0 errors",
+            "failures": [
+              "not ok 2 - each: callback cancellation settles while work is retained",
+              "not ok 6 - eachLimit: callback cancellation settles while work is retained",
+              "not ok 10 - eachSeries: callback cancellation settles while work is retained",
+              "not ok 14 - eachOf: callback cancellation settles while work is retained",
+              "not ok 18 - eachOfLimit: callback cancellation settles while work is retained",
+              "not ok 22 - eachOfSeries: callback cancellation settles while work is retained",
+              "not ok 26 - map: callback cancellation settles while work is retained",
+              "not ok 30 - mapLimit: callback cancellation settles while work is retained",
+              "not ok 34 - mapSeries: callback cancellation settles while work is retained",
+              "not ok 38 - concat: callback cancellation settles while work is retained",
+              "not ok 42 - concatLimit: callback cancellation settles while work is retained",
+              "not ok 46 - concatSeries: callback cancellation settles while work is retained",
+              "not ok 50 - filter: callback cancellation settles while work is retained",
+              "not ok 54 - filterLimit: callback cancellation settles while work is retained",
+              "not ok 58 - filterSeries: callback cancellation settles while work is retained",
+              "not ok 62 - reject: callback cancellation settles while work is retained",
+              "not ok 66 - rejectLimit: callback cancellation settles while work is retained",
+              "not ok 70 - rejectSeries: callback cancellation settles while work is retained",
+              "not ok 74 - detect: callback cancellation settles while work is retained",
+              "not ok 78 - detectLimit: callback cancellation settles while work is retained",
+              "not ok 82 - detectSeries: callback cancellation settles while work is retained",
+              "not ok 86 - some: callback cancellation settles while work is retained",
+              "not ok 90 - someLimit: callback cancellation settles while work is retained",
+              "not ok 94 - someSeries: callback cancellation settles while work is retained",
+              "not ok 98 - every: callback cancellation settles while work is retained",
+              "not ok 102 - everyLimit: callback cancellation settles while work is retained",
+              "not ok 106 - everySeries: callback cancellation settles while work is retained",
+              "not ok 110 - mapValues: callback cancellation settles while work is retained",
+              "not ok 114 - mapValuesLimit: callback cancellation settles while work is retained",
+              "not ok 118 - mapValuesSeries: callback cancellation settles while work is retained",
+              "not ok 122 - groupBy: callback cancellation settles while work is retained",
+              "not ok 126 - groupByLimit: callback cancellation settles while work is retained",
+              "not ok 130 - groupBySeries: callback cancellation settles while work is retained"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 690,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "690 passed, 0 failed, 0 skipped",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 44,
+          "createdFiles": 3,
+          "changeSummary": "22\t0\tREADME.md\n407\t442\tdist/async.js\n64\t0\tintro.md\n6\t4\tlib/concat.js\n6\t4\tlib/concatLimit.js\n6\t4\tlib/concatSeries.js\n6\t4\tlib/detect.js\n6\t4\tlib/detectLimit.js\n6\t4\tlib/detectSeries.js\n6\t4\tlib/each.js\n6\t4\tlib/eachLimit.js\n52\t25\tlib/eachOf.js\n7\t4\tlib/eachOfLimit.js\n6\t4\tlib/eachOfSeries.js\n6\t4\tlib/eachSeries.js\n6\t4\tlib/every.js\n6\t4\tlib/everyLimit.js\n6\t4\tlib/everySeries.js\n6\t4\tlib/filter.js\n6\t4\tlib/filterLimit.js\n6\t4\tlib/filterSeries.js\n8\t2\tlib/groupBy.js\n6\t4\tlib/groupByLimit.js\n8\t2\tlib/groupBySeries.js\n32\t2\tlib/internal/asyncEachOfLimit.js\n53\t0\tlib/internal/awaitify.js\n2\t2\tlib/internal/createTester.js\n40\t5\tlib/internal/eachOfLimit.js\n8\t8\tlib/internal/filter.js\n3\t1\tlib/internal/iterator.js\n3\t3\tlib/internal/map.js\n2\t2\tlib/internal/reject.js\n6\t4\tlib/map.js\n6\t4\tlib/mapLimit.js\n6\t4\tlib/mapSeries.js\n8\t2\tlib/mapValues.js\n7\t5\tlib/mapValuesLimit.js\n8\t2\tlib/mapValuesSeries.js\n6\t4\tlib/reject.js\n6\t4\tlib/rejectLimit.js\n6\t4\tlib/rejectSeries.js\n6\t4\tlib/some.js\n6\t4\tlib/someLimit.js\n6\t4\tlib/someSeries.js\n",
+          "created": "examples/collection-cancellation.js\nlib/internal/abort.js\ntest/abortSignalCollections.js\n",
+          "changeAccounting": {
+            "baseline": "832c9df4f364d9d868a4e8e660c16f703f1ecaa1",
+            "head": "832c9df4f364d9d868a4e8e660c16f703f1ecaa1",
+            "source": "recorded-baseline",
+            "changedFiles": 44,
+            "createdFiles": 3,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "rootThreadId": "01a10c69-9c10-7523-8eeb-04ee9ddcc20f",
+            "compactions": 6,
+            "childAgentDispatches": 3,
+            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T22-13-30-01a10c69-9c10-7523-8eeb-04ee9ddcc20f.jsonl"
+          }
+        }
+      },
+      "deliveryReview": {
+        "scriptact": {
+          "reviewedAt": "2026-10-05T14:27:55.032Z",
+          "workspace": "/private/tmp/async-delivery-review-bt61q7/scriptact",
+          "status": "partial",
+          "testDelivery": {
+            "authoredCases": 40,
+            "location": "test/abortSignal.js",
+            "suite": {
+              "exitCode": 0,
+              "passed": 730,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "730 passed, 0 failed, 0 skipped",
+              "failures": []
+            },
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            },
+            "mutation": {
+              "rule": "Preserve abort and silent-cancellation cleanup but omit listener removal on ordinary completion or error.",
+              "control": {
+                "exitCode": 0,
+                "passed": 40,
+                "failed": 0,
+                "skipped": 0,
+                "errors": 0,
+                "summary": "40 passed, 0 failed, 0 skipped",
+                "failures": []
+              },
+              "mutated": {
+                "exitCode": 0,
+                "passed": 40,
+                "failed": 0,
+                "skipped": 0,
+                "errors": 0,
+                "summary": "40 passed, 0 failed, 0 skipped",
+                "failures": []
+              },
+              "hits": 40,
+              "external": {
+                "exitCode": 1,
+                "passed": 0,
+                "failed": 4,
+                "skipped": 0,
+                "errors": 0,
+                "summary": "0 passed, 4 failed, 0 skipped, 0 errors",
+                "failures": [
+                  "not ok 1 - ordinary errors retain identity and remove listeners",
+                  "not ok 2 - detectSeries: early completion removes its listener",
+                  "not ok 3 - someSeries: early completion removes its listener",
+                  "not ok 4 - everySeries: early completion removes its listener"
+                ]
+              }
+            },
+            "remaining": "New tests cover the 33-entry pre-abort matrix and selected cancellation paths, but do not detect ordinary-completion/error listener leaks. Browser, reentrant, synchronous iterator and full active signature/alias matrices have no focused new assertions."
+          },
+          "documentation": {
+            "all33EntrypointsDocumentOptions": true,
+            "example": "examples/cancel-collection.js"
+          },
+          "buildExitCode": 0,
+          "lintExitCode": 0,
+          "example": {
+            "path": "examples/cancel-collection.js",
+            "exitCode": 0
+          },
+          "sourceArtifactsChanged": false,
+          "timingOutsideOriginalSolve": true,
+          "originalMetricsSha256": {
+            "solve.json": "4cd1f6962a745081e2c655c38ccd777ca21fbc9d79ed7215093ae37d5afc87ae",
+            "grade.json": "b47cc5b05c5622e3c0964fbc11e0e2bac2d8251911930c6e96b341854194d176",
+            "acceptance.json": "348c3ce8e965b32c433a8b3ce4d2a8ae07e98cf93447444962292ada67c78b38",
+            "regression.json": "c8d0be76b22c1fb2328f611279e11c6f92e35d19d790db9d956c66a0f6cb1ecf"
+          }
+        },
+        "codex": {
+          "reviewedAt": "2026-10-05T14:59:46.067Z",
+          "workspace": "/private/tmp/async-delivery-review-XLUtTl/codex",
+          "status": "partial",
+          "testDelivery": {
+            "authoredCases": 79,
+            "location": "test/abortSignalCollections.js",
+            "suite": {
+              "exitCode": 0,
+              "passed": 769,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "769 passed, 0 failed, 0 skipped",
+              "failures": []
+            },
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            },
+            "remaining": "The new late-completion test calls each retained callback once. The frozen acceptance matrix also calls it again after cancellation; the second call throws before the cancellation guard in onlyOnce, causing one failure in each of the 33 public variants. This is one repeated-late-callback boundary, not 33 independent root causes. Browser behavior has no committed dedicated regression case."
+          },
+          "lateCallbackProbe": {
+            "finalCalls": 1,
+            "lateErrors": [
+              null,
+              "Callback was already called."
+            ],
+            "remainingListeners": 0
+          },
+          "documentation": {
+            "paths": [
+              "README.md",
+              "intro.md"
+            ],
+            "publicEntrypointsDocumented": 33
+          },
+          "buildExitCode": 0,
+          "lintExitCode": 0,
+          "example": {
+            "path": "examples/collection-cancellation.js",
+            "exitCode": 0
+          },
+          "sourceArtifactsChanged": false,
+          "timingOutsideOriginalSolve": true,
+          "originalMetricsSha256": {
+            "solve.json": "d898b0a17982f7c4f4d00e9853491c95e10ca765037773da8e35c2cdd39722fe",
+            "grade.json": "74bdd5b2761b01461fd36961018d3e53ec3541d4a0b39fb37aaa4bb65121d70a",
+            "acceptance.json": "c2251791596ea6da77baa2b968f3462574cd37e4fd41a92928af9a984948191d",
+            "regression.json": "fb8e9521cf027ab632283239bfcf47b9bb846874c3f039e5e4089a2ab0a07ee1"
+          }
+        }
+      },
+      "capabilityUsage": {
+        "scriptact": {
+          "available": true,
+          "complete": true,
+          "rootTurns": 52,
+          "branchTurns": 5,
+          "uniqueCalls": 2,
+          "traceGaps": 0,
+          "missingSummaries": 0,
+          "operations": [
+            {
+              "moduleId": "velaros:system-goal",
+              "operation": "get",
+              "status": "succeeded",
+              "count": 1
+            },
+            {
+              "moduleId": "velaros:system-goal",
+              "operation": "update",
+              "status": "succeeded",
+              "count": 1
+            }
+          ]
+        }
+      }
     }
   ],
   "transportDiagnostics": {
