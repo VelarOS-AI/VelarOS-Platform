@@ -1722,6 +1722,56 @@ test('small maintenance facts advance acknowledged input ranges and identify the
   )
 })
 
+test('overlapping recalled pages share one fact range and preserve complete input and recent evidence', async (t) => {
+  const f = await fixture(t)
+  const original = 'Review "quoted" paths\\and 中文 🧪. '.repeat(90)
+  const observed = 'Observed output: 中文 "result" with exact spacing. '.repeat(60)
+  const input = await f.session.context.append({ kind: 'user', body: original })
+  await f.session.view.end('completed')
+  await f.session.view.begin(input.ref)
+  const recent = await f.session.context.append({ kind: 'assistant', body: observed })
+  const snapshot = await f.state.snapshot(8000, signal)
+  for (const ref of [input.ref, recent.ref]) {
+    await f.state.read(snapshot, ref, 300, 900, signal)
+    await f.state.read(snapshot, ref, 600, 900, signal)
+  }
+  const candidate = patch(snapshot, {
+    inputs: [
+      { ref: input.ref, baseRevision: 0, summary: 'Reviewed', constraints: [], unresolved: [] },
+    ],
+  })
+  await assert.rejects(f.state.validate(snapshot, candidate, signal), {
+    code: 'CONTEXT_INPUT_UNSEEN',
+  })
+  const assertRanges = (material) => {
+    for (const [items, ref, text] of [
+      [material.inputs, input.ref, original],
+      [material.recent, recent.ref, observed],
+    ]) {
+      const pages = items
+        .filter((item) => item.ref.id === ref.id)
+        .sort((a, b) => a.offset - b.offset)
+      for (const [index, page] of pages.entries()) {
+        assert.equal(page.text, text.slice(page.offset, page.offset + page.text.length))
+        if (index)
+          assert(
+            pages[index - 1].offset + pages[index - 1].text.length <= page.offset,
+            'fact pages must not repeat source ranges'
+          )
+      }
+      assert.equal(pages.map((page) => page.text).join(''), text)
+    }
+  }
+  const material = f.state.material(snapshot, 16000)
+  assert(JSON.stringify(material).length <= 16000)
+  assert.deepEqual(f.state.material(snapshot, 16000), material)
+  assertRanges(material)
+  f.state.acknowledge(snapshot, material)
+  await f.state.validate(snapshot, candidate, signal)
+  // 全部送达后的常驻回显也必须去重；编译不能改变范围确认。
+  assertRanges(f.state.material(snapshot, 16000))
+})
+
 test('input summary coverage joins actual pages, respects fact budgets and resets with the snapshot', async (t) => {
   const f = await fixture(t)
   const input = await f.session.context.append({

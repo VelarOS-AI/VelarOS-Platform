@@ -29,6 +29,7 @@ import type {
   ContextPatch,
   ContextProjectionPolicy,
 } from '../types/maintenance.js'
+import { contextMaterialPages } from '../utils/context-materials.js'
 
 /** 父会话快照与结构化补丁的原子发布。 */
 export interface ContextMaintenanceStateApi {
@@ -315,23 +316,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
     if (JSON.stringify(result).length > maxChars) return undefined
     if (snapshot.baseRevision !== this.inputRevision) return result
     const inputBudget = this.recentPages.size === 0 ? maxChars : Math.floor(maxChars / 2)
-    const pages = [...this.inputPages.values()].reverse().map((page) => {
-      let start = page.offset
-      let end = page.offset + page.text.length
-      for (const range of this.inputVisible.get(page.record.ref.id) ?? []) {
-        if (range.start <= start) start = Math.max(start, range.end)
-        else {
-          end = Math.min(end, range.start)
-          break
-        }
-      }
-      return { page, start, end }
-    })
-    const unread = pages.filter(({ start, end }) => start < end)
-    const selected = isEmpty(unread)
-      ? pages.map(({ page }) => ({ page, start: page.offset, end: page.offset + page.text.length }))
-      : unread
-    for (const { page, start, end } of selected) {
+    for (const { page, start, end } of contextMaterialPages(this.inputPages, this.inputVisible)) {
       const text = page.text.slice(start - page.offset, end - page.offset)
       const item = {
         ref: page.record.ref,
@@ -362,27 +347,7 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
         continue
       inputs.push(item)
     }
-    const history = [...this.recentPages.values()].reverse().map((page) => {
-      let start = page.offset
-      let end = page.offset + page.text.length
-      for (const range of this.recentVisible.get(page.record.ref.id) ?? []) {
-        if (range.start <= start) start = Math.max(start, range.end)
-        else {
-          end = Math.min(end, range.start)
-          break
-        }
-      }
-      return { page, start, end }
-    })
-    const unreadHistory = history.filter(({ start, end }) => start < end)
-    const selectedHistory = isEmpty(unreadHistory)
-      ? history.map(({ page }) => ({
-          page,
-          start: page.offset,
-          end: page.offset + page.text.length,
-        }))
-      : unreadHistory
-    for (const { page, start, end } of selectedHistory) {
+    for (const { page, start, end } of contextMaterialPages(this.recentPages, this.recentVisible)) {
       const text = page.text.slice(start - page.offset, end - page.offset)
       const item = {
         ref: page.record.ref,
