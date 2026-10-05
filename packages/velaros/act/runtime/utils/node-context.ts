@@ -1,4 +1,4 @@
-import { isArray, isEmpty, isPlainObject } from '@velaros-ai/core'
+import { isArray, isEmpty, isPlainObject, isString } from '@velaros-ai/core'
 
 import type { MemoryFrameDisplay } from '../types/memory.js'
 
@@ -29,6 +29,7 @@ export function nodeFrameState(frame: MemoryFrameDisplay) {
     } = materialStatus
     runtime.materialStatus = visibility
   }
+  if (isArray(runtime.children)) runtime.children = runtime.children.map(nodeChildState)
   const {
     footprint: _footprint,
     policy: _policy,
@@ -64,6 +65,27 @@ export function nodeFrameState(frame: MemoryFrameDisplay) {
     runtime: nodeStateValues(runtime),
     status: nodeStateValues(status),
   }
+}
+
+/** 子任务的状态与交付入口保持当前值；不可变产物目录按清单引用读取，避免每轮重复脚本身份。 */
+function nodeChildState(child: unknown): unknown {
+  if (!isPlainObject(child) || !isPlainObject(child.delivery)) return child
+  const delivery = child.delivery
+  const ref = delivery.ref
+  if (
+    !isPlainObject(ref) ||
+    !isString(ref.sessionId) ||
+    !ref.sessionId ||
+    !isString(ref.id) ||
+    !ref.id ||
+    !isArray(delivery.artifacts)
+  )
+    return child
+  const { artifacts, ...metadata } = delivery
+  const summary = { ...metadata, artifactCount: artifacts.length, artifactsInManifest: true }
+  return JSON.stringify(summary).length < JSON.stringify(delivery).length
+    ? { ...child, delivery: summary }
+    : child
 }
 
 /** 只省略运行时直属的空分区；不遍历业务负载，空值、数组顺序和重复项保持原样。 */

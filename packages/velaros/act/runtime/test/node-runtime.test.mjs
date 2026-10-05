@@ -1069,14 +1069,16 @@ test('native syntax errors do not execute an earlier file mutation', async (t) =
 
 test('business children inherit an explicitly enabled Node scope and retain their own process identity', async (t) => {
   const identities = []
+  let manifest
   const f = await fixture(t, { output: (value) => identities.push(value.sessionId) })
-  function driver(source) {
+  function driver(source, inspect) {
     let calls = 0
     return {
       id: 'child-native',
       limits: { contextTokens: 100000, inputTokens: 90000, outputTokens: 2000 },
       estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
       async *stream(req) {
+        inspect?.(req)
         const marker = req.compiledPrompt.match(/(@@s\w+) execute/)[1]
         assert.match(req.instructions, /Shell 和 Node/)
         yield {
@@ -1098,7 +1100,18 @@ test('business children inherit an explicitly enabled Node scope and retain thei
     context: { maintenance: false },
     storage: localContextStorage({ path: join(f.root, 'child.sqlite') }),
     model: driver(
-      `import {readFile} from 'node:fs/promises';import {pathToFileURL} from 'node:url';const dir=process.env.VELAROS_HOST_DIR;const index=JSON.parse(await readFile(dir+'/index.json','utf8'));const api=await import(pathToFileURL(dir+'/'+index.find(item=>item.module==='velaros:agents').client));const job=await api.start({task:'write child proof',profile:'worker'});console.log(await api.wait({id:job.id}));`
+      `import {readFile} from 'node:fs/promises';import {pathToFileURL} from 'node:url';const dir=process.env.VELAROS_HOST_DIR;const index=JSON.parse(await readFile(dir+'/index.json','utf8'));const api=await import(pathToFileURL(dir+'/'+index.find(item=>item.module==='velaros:agents').client));const job=await api.start({task:'write child proof',profile:'worker'});console.log(await api.wait({id:job.id}));`,
+      (req) => {
+        const frame = JSON.parse(req.materials.find((item) => item.origin === 'runtime-view').text)
+        const delivery = frame.partitions.runtime.children?.[0]?.delivery
+        if (!delivery) return
+        manifest = delivery
+        const displayed = JSON.parse(req.compiledPrompt.split('runtime：\n')[1].split('\n')[0])
+        assert.equal(displayed.children[0].delivery.artifactCount, delivery.artifacts.length)
+        assert.equal(displayed.children[0].delivery.artifactsInManifest, true)
+        assert.equal(displayed.children[0].delivery.artifacts, undefined)
+        assert.deepEqual(displayed.children[0].delivery.ref, delivery.ref)
+      }
     ),
     agents: {
       concurrency: 1,
@@ -1122,6 +1135,13 @@ test('business children inherit an explicitly enabled Node scope and retain thei
   assert.equal(await readFile(join(f.cwd, 'child-proof.txt'), 'utf8'), 'child node')
   assert.ok(identities.includes('parent'))
   assert.equal(new Set(identities).size, 2)
+  assert(manifest?.artifacts.length > 0)
+  const recalled = await session.execute({
+    source: `import {memory} from 'velaros:system';console.log(JSON.stringify(JSON.parse((await memory.read({ref:${JSON.stringify(manifest.ref)}})).text).artifacts));`,
+  })
+  assert.equal(recalled.checked, true)
+  assert.equal(recalled.result.process.exitCode, 0)
+  assert.deepEqual(JSON.parse(recalled.result.process.stdout), manifest.artifacts)
 })
 
 test('Shell source is decoded directly, persisted with its language and reusable by sourceRef', async (t) => {
@@ -1255,4 +1275,79 @@ test('runtime observation uses real Node and retains structured input and output
   assert.equal((await session.inspect()).status, 'completed')
   assert.match(observed, /42/)
   assert.match(observed, /string/)
+})
+
+test('native child status keeps actionable delivery metadata and recalls the immutable artifact manifest on demand', () => {
+  const artifacts = Array.from({ length: 16 }, (_, index) => ({
+    kind: index % 2 ? 'script' : 'evidence',
+    ref: { sessionId: 'parent', id: `artifact-${index}` },
+    objectId: String(index).padStart(64, '0'),
+  }))
+  // 重复项是原清单的一部分，展示数量不能去重或改写归档。
+  artifacts.push(artifacts[0])
+  const delivery = {
+    schemaVersion: 1,
+    kind: 'agent',
+    sessionId: 'child',
+    parentTaskId: 'task',
+    status: 'partial',
+    payload: { sessionId: 'parent', id: 'report' },
+    artifacts,
+    omittedScripts: 4,
+    continuation: { operation: 'agents.resume', input: { id: 'child-job' } },
+    ref: { sessionId: 'parent', id: 'manifest' },
+    future: { empty: [], zero: 0, off: false, absent: null },
+  }
+  const frame = {
+    presentation: 'node',
+    partitions: {
+      task: { goals: [] },
+      workspace: { notes: [] },
+      observation: {},
+      recent: { results: [] },
+      runtime: {
+        mandatory: [],
+        children: [{ id: 'child-job', status: 'failed', error: 'check remaining work', delivery }],
+      },
+    },
+    memoryStatus: {},
+  }
+  const original = JSON.stringify(frame)
+  const shown = JSON.parse(memoryPrompt(original).split('runtime：\n')[1].split('\n')[0])
+  const metadata = { ...delivery }
+  delete metadata.artifacts
+  assert.deepEqual(shown.children, [
+    {
+      ...frame.partitions.runtime.children[0],
+      delivery: { ...metadata, artifactCount: artifacts.length, artifactsInManifest: true },
+    },
+  ])
+  assert.equal(JSON.stringify(frame), original)
+  const legacy = structuredClone(frame)
+  delete legacy.presentation
+  const full = JSON.parse(
+    memoryPrompt(JSON.stringify(legacy)).split('分区 runtime：\n')[1].split('\n')[0]
+  )
+  assert.deepEqual(full.children, frame.partitions.runtime.children)
+  for (const change of [
+    (value) => {
+      delete value.ref
+    },
+    (value) => {
+      value.ref.id = ''
+    },
+    (value) => {
+      value.ref.sessionId = ''
+    },
+    (value) => {
+      value.artifacts = []
+    },
+  ]) {
+    const changed = structuredClone(frame)
+    change(changed.partitions.runtime.children[0].delivery)
+    const display = JSON.parse(
+      memoryPrompt(JSON.stringify(changed)).split('runtime：\n')[1].split('\n')[0]
+    )
+    assert.deepEqual(display.children, changed.partitions.runtime.children)
+  }
 })
