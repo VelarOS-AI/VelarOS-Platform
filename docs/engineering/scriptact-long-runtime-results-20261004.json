@@ -11971,6 +11971,352 @@
         "independentPair": false,
         "qualification": "Single development execution per capability arm; not a new independent pair or isolated change attribution. Full reference cost remains unknown when usage is missing."
       }
+    },
+    {
+      "attempt": "mocha-09",
+      "schema": 1,
+      "at": "2026-10-05T19:21:45.989Z",
+      "taskId": "mocha-instance-reporter-streams",
+      "scriptactSessionId": "scriptact-5645ae85-9df4-443a-8815-121716ad6995",
+      "candidateId": "candidate-v38-89b4303b4e76",
+      "candidateSourceCommit": "ff49ff40c2ba78103e0292a91ed650dc31c38644",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "scriptactTaskMode": "goal",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 71,
+            "goal": {
+              "id": "dee48f57",
+              "revision": 2,
+              "objective": "Add instance-local writable output streams throughout Mocha's built-in text reporters. Applications embedding Mocha need two concurrent runs in the same Node process to write independent reports without replacing process.stdout or console methods. Implement this as a maintained public feature across Base, spec, dot, list, min, progress, landing, nyan, tap, doc, markdown, json, json-stream and xunit. Preserve existing default behavior and existing reporter helper APIs.\n\nPublic API: accept a stream option in reporter options, including new Mocha({reporter, reporterOption: {stream}}), the supported reporterOptions alias, and mocha.reporter(name, {stream}). Direct reporter constructors must accept both existing options.reporterOption and options.reporterOptions forms. A missing or undefined stream keeps existing output behavior. An explicitly supplied stream must be a non-null object with a callable write method; reject other values with TypeError mentioning stream during reporter construction, before output or registration of reporter event listeners. A duck-typed writable object is sufficient; do not require inheritance from a Node class. Call write with its original receiver and preserve thrown write errors. Do not end, close or destroy the caller's stream. A false write return must not stop subsequent report events.\n\nEvery report byte must go to the selected stream: headings, test results, pending and failure output, error stacks and diffs, epilogues, generated documents, machine-readable events, and terminal control sequences. Reporter construction and interleaved event delivery must not redirect other reporter instances or mutate process.stdout, process.stderr, console methods, Base.consoleLog, Base.cursor or other shared Base output helpers. Existing static helpers must remain usable with their original default behavior. Preserve JSON/JSON-stream document schemas, TAP versions, XML escaping and all test statistics. Base's instance epilogue must obey the selected destination as well.\n\nFor an explicit stream, use its isTTY property to decide whether to emit terminal cursor, erase and movement commands. A non-TTY explicit stream receives plain report text without terminal control sequences; a TTY destination keeps interactive behavior even when the process stdout is redirected. Use a positive finite stream.columns value for width-sensitive reporters, falling back to the existing standard width when absent or invalid; never fail or construct negative array lengths for a very narrow valid destination. Keep existing explicit color configuration compatible. Default output without a stream must remain compatible with the original reporters, including browser fallbacks.\n\nJSON and XUnit retain their existing reporter output-file option and lifecycle. When a valid explicit stream and a truthy output-file option are both supplied, reject the conflicting options with TypeError mentioning stream and output before writing, creating directories or opening a file. Without stream, file output keeps its current behavior. With stream only, XUnit's done callback still runs once with the original failure count and leaves the caller's stream open.\n\nAdd focused tests across the affected reporters and the public Mocha configuration routes. Cover interleaved runs with separate destinations, default compatibility, pass/fail/pending output, formatting and Unicode, both option aliases, invalid sinks, write receiver and errors, caller-owned lifecycle, terminal and nonterminal streams, width boundaries, and JSON/XUnit conflicts and file output. Document the option and show a runnable embedding example with two destinations. Run the repository's reporter, unit and node-unit suites plus available source/style checks, fixing regressions caused by the feature. Finish with a concise implementation and verification report. Make routine implementation choices autonomously.",
+              "status": "complete",
+              "reason": "Implemented instance-local streams across Base and all requested built-in reporters, including aliases, validation timing, TTY/width behavior, output conflicts, lifecycle, docs, and focused coverage. Verified focused stream tests (22 passing), all reporter tests (168 passing), unit+node-unit (1095 passing, 3 pending), lint:code, lint:markdown, and git diff --check. A serial integration options/plugins shard completed with only two unrelated Node 24 ESM loader expectation failures; the watch suite exceeded the 120-second executor after its first 26 tests passed.",
+              "createdAt": 1791226439997,
+              "updatedAt": 1791227935306
+            },
+            "goalSnapshotError": null,
+            "startedAt": 1791226439822,
+            "solveMs": 1504445
+          },
+          "accounting": {
+            "requests": 71,
+            "requestStatuses": {
+              "http-200": 68,
+              "http-200-interrupted": 2,
+              "unknown": 1
+            },
+            "measuredRequests": 68,
+            "missingUsageRequests": 3,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1478193,
+            "knownOutputTokens": 27157,
+            "knownCachedInputTokens": 614912,
+            "knownCacheRatio": 0.41598898114116356,
+            "pricedRequests": 68,
+            "knownReferenceUsd": 4.242228800000001,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 53,
+            "failed": 3,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "53 passed, 3 failed, 0 skipped, 0 errors",
+            "failures": [
+              "not ok 29 - min: explicit destination controls terminal mode false",
+              "not ok 33 - progress: explicit destination controls terminal mode false",
+              "not ok 37 - nyan: explicit destination controls terminal mode false"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 1241,
+            "failed": 0,
+            "skipped": 3,
+            "errors": 0,
+            "summary": "1241 passed, 0 failed, 3 skipped",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 15,
+          "createdFiles": 1,
+          "changeSummary": "38\t0\tdocs/index.md\n71\t12\tlib/reporters/base.js\n13\t12\tlib/reporters/doc.js\n13\t11\tlib/reporters/dot.js\n7\t7\tlib/reporters/json-stream.js\n12\t6\tlib/reporters/json.js\n13\t10\tlib/reporters/landing.js\n8\t9\tlib/reporters/list.js\n4\t3\tlib/reporters/markdown.js\n3\t2\tlib/reporters/min.js\n32\t26\tlib/reporters/nyan.js\n13\t14\tlib/reporters/progress.js\n7\t8\tlib/reporters/spec.js\n25\t25\tlib/reporters/tap.js\n24\t7\tlib/reporters/xunit.js\n",
+          "created": "test/reporters/stream.spec.js\n",
+          "changeAccounting": {
+            "baseline": "5dfacbd39953c12a515414478f01bd2a51705bb6",
+            "head": "5dfacbd39953c12a515414478f01bd2a51705bb6",
+            "source": "recorded-baseline",
+            "changedFiles": 15,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 62,
+            "branchRequests": 9,
+            "requestOwners": {
+              "scriptact-5645ae85-9df4-443a-8815-121716ad6995": 62,
+              "context:e56c0c15-ed48-4151-baf6-77b277d908aa": 4,
+              "context:951914b4-ff4e-413e-80c2-787a19b4022e": 1,
+              "context:bab8d955-2226-42dd-93c8-349e5a00de92": 1,
+              "context:bfc4b7f1-5540-45bf-aa2b-d80c95348dd2": 1,
+              "context:01dfcd3c-a610-40af-9186-fa6fba94a6ee": 1,
+              "context:a0519542-9217-4f8e-bbed-11edcaec07c0": 1
+            },
+            "contextSegments": 24,
+            "nativeRequests": 66,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 5,
+            "originalPromptInFinalRequest": true
+          },
+          "capabilityUsage": {
+            "available": true,
+            "complete": true,
+            "rootTurns": 62,
+            "branchTurns": 9,
+            "uniqueCalls": 10,
+            "traceGaps": 0,
+            "missingSummaries": 0,
+            "operations": [
+              {
+                "moduleId": "velaros:context-materials",
+                "operation": "list",
+                "status": "succeeded",
+                "count": 2
+              },
+              {
+                "moduleId": "velaros:context-materials",
+                "operation": "read",
+                "status": "succeeded",
+                "count": 5
+              },
+              {
+                "moduleId": "velaros:context-materials",
+                "operation": "submit",
+                "status": "succeeded",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:system-goal",
+                "operation": "get",
+                "status": "succeeded",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:system-goal",
+                "operation": "update",
+                "status": "succeeded",
+                "count": 1
+              }
+            ]
+          },
+          "deliveryReview": {
+            "at": "2026-10-05T19:24:23.645Z",
+            "workspace": "/private/tmp/mocha09-delivery-review-RcCUis/mocha",
+            "status": "partial",
+            "regression": {
+              "exitCode": 0,
+              "passed": 1266,
+              "failed": 0,
+              "skipped": 3,
+              "errors": 0,
+              "summary": "1266 passed, 0 failed, 3 skipped",
+              "failures": []
+            },
+            "authoredTests": {
+              "exitCode": 0,
+              "passed": 25,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "25 passed, 0 failed, 0 skipped",
+              "failures": []
+            },
+            "lint": {
+              "code": 0,
+              "markdown": 0
+            },
+            "example": {
+              "location": "docs/index.md",
+              "exitCode": 0,
+              "isolationVerified": true,
+              "suppliedByReviewer": "Two minimal application test files and a package link; the documented JavaScript snippet is unmodified."
+            },
+            "review": {
+              "sourceArchitecture": "Instance write, consoleLog, cursor and width functions are added to Base and maintained reporters route output through them. Static Base helpers remain available; no global stdout/console replacement is introduced in the changed implementation.",
+              "featureFailure": "Three frozen checks fail for non-TTY explicit streams. Min emits clear/position escapes directly through instance write; Progress emits erase directly; Nyan movement helpers bypass the isTTY decision. This is incomplete reporter-specific terminal handling, not a controller failure.",
+              "testCoverage": "New tests validate invalid stream construction across fourteen reporters, direct aliases, Base terminal/width properties, narrow Nyan behavior, Spec interleaving, write receiver/error identity, JSON lifecycle, public option routes and JSON/XUnit conflicts. Actual non-TTY output across terminal reporters is not asserted. Passing Base.cursor tests do not cover direct reporter escapes.",
+              "documentation": "The public guide documents stream shape, aliases, terminal/width behavior, caller ownership and file conflicts. Its two-stream embedding snippet executes with reviewer-supplied application fixtures and keeps the two outputs isolated."
+            },
+            "originalArtifactsUnchanged": true,
+            "artifactSha256": {
+              "solve.json": "44721e493e6e3cbcb24f8ce9b7419f978fb8308250122085ae6a02bf5b752f26",
+              "grade.json": "abe1cfe6fa9db3d9bb04bd17440f32de0d85341137276edd65d787d2eaf9ae5d",
+              "acceptance.json": "c46fec386b6fdf0664bc8a6319d4e765bf42a1cfa6177449934b44ff07120fc9",
+              "regression.json": "1174b00acd0d6ce165540b94d494eacdd7bbf492cbba4102b95d23449c2ab348"
+            },
+            "metricsSha256": "62a22e89b08b17f711e31c9bda82a80363b13077d376c0bbfdf9e01409b73585",
+            "browserReview": {
+              "at": "2026-10-05T19:30:37.268Z",
+              "buildExitCode": 0,
+              "classicBrowserBundleLoadsWithoutNodeGlobals": true,
+              "specReporterExplicitStream": true,
+              "unicodePreserved": true,
+              "writeReceiverPreserved": true,
+              "scope": "VM smoke of generated browser bundle and one Spec reporter; not the full browser test matrix.",
+              "proof": "/private/tmp/mocha09-delivery-review-RcCUis/browser-smoke.json",
+              "proofSha256": "e11281ea5dd79e5a981add97a58701808538b047f8bcd206b2bf2a3ebf6750f1"
+            }
+          },
+          "executionReview": {
+            "at": "2026-10-05T19:37:04.312Z",
+            "branches": [
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 4
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              }
+            ],
+            "rootMaintenanceOutcomes": [
+              {
+                "sequence": 1726,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              },
+              {
+                "sequence": 1968,
+                "status": "failed",
+                "reason": "narrate",
+                "error": "Upstream request failed"
+              },
+              {
+                "sequence": 2229,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              },
+              {
+                "sequence": 2422,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              },
+              {
+                "sequence": 2747,
+                "status": "failed",
+                "reason": "narrate",
+                "error": "terminated"
+              },
+              {
+                "sequence": 2955,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              }
+            ],
+            "executions": 120,
+            "statuses": {
+              "succeeded": 89,
+              "failed": 28,
+              "cancelled": 3
+            },
+            "failureCodes": {
+              "PROGRAM_ERROR": 24,
+              "TIMEOUT": 4
+            },
+            "maxConsecutiveFailuresPerSession": 5,
+            "maxSameSourceConsecutiveFailures": 1,
+            "modelErrorCodes": {
+              "MODEL_PROVIDER": 1,
+              "CONTEXT_MAINTENANCE": 2
+            },
+            "moduleErrors": [],
+            "traceGaps": 0,
+            "capabilityComplete": true,
+            "interpretation": "Four shell executions reached the 120-second timeout. The first sampled timeout was the integration test command. Twenty-four program errors and three cancelled queued executions remain counted. The longest failed-execution streak is five; maximum identical-source streak is one. These counts alone do not distinguish all development failures from framework faults or establish semantic non-repetition. Three provider/context-maintenance model failures were followed by further requests. The final feature and delivery result is partial."
+          },
+          "inputReview": {
+            "at": "2026-10-05T19:21:46.049Z",
+            "attempt": "mocha-09",
+            "candidateId": "candidate-v38-89b4303b4e76",
+            "observedMainRequests": 62,
+            "originalInHistory": 62,
+            "fullLatestInput": 62,
+            "userMessageChanges": 0,
+            "originalIdentities": 1,
+            "inputLimits": [
+              32768
+            ],
+            "compiledOverLimit": 0,
+            "measuredOverLimit": 0,
+            "measuredRequests": 61,
+            "knownInput": 1322265,
+            "knownCached": 583680,
+            "maximumSegmentIndex": 24,
+            "incompleteFileCount": 0,
+            "evidence": "context-diagnostics/mocha-09-input-final.json",
+            "evidenceSha256": "0c9801938a690c5a16ffe5edcca1be236abb002d0a2e13ce5b9efc5e64ba6952",
+            "controllerTerminalAtObservation": true,
+            "interpretation": "All observed main requests retained the complete original user message and latest original input projection. Compiled estimates and measured actual usage both stayed within the frozen input limit. This is observed context-preservation evidence, not isolated causality for quality, latency, cache hits or complete cost."
+          }
+        }
+      },
+      "developmentComparison": {
+        "previousScriptactReference": "mocha-05:scriptact",
+        "commonCodexReference": "mocha-01:codex",
+        "independentPair": false,
+        "qualification": "Same task and frozen grader, with combined v34-to-v38 development changes. The original Codex reference shares the task; ScriptAct has since changed from request to goal mode. Full reference cost is unknown for all three runs because some requests lack usage."
+      }
     }
   ],
   "transportDiagnostics": {
