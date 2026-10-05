@@ -6,6 +6,7 @@ import { test } from 'node:test'
 
 import { DefaultContextViewLimits } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
+import { createAiSdkModelDriver, createModelRuntimeComposition } from '@velaros-ai/model'
 import { createNodeCodeRunner } from '@velaros-ai/script'
 
 import { NativeTurnDecoder } from '../../../dist/act/runtime/impl/NativeTurnDecoder.js'
@@ -43,6 +44,120 @@ const request = (source, timeoutMs = 10_000, operations = {}) => ({
 const noCalls = async () => {
   throw Error('unexpected host call')
 }
+
+test('provider code-only stream failures retry through the real SDK without repeating native Node effects', async (t) => {
+  const f = await fixture(t)
+  const bodies = []
+  t.mock.method(globalThis, 'fetch', async (_url, init) => {
+    bodies.push(JSON.parse(init.body))
+    const index = bodies.length
+    assert(index <= 4)
+    const parts = [
+      {
+        type: 'response.created',
+        response: { id: `resp_${index}`, created_at: 1, model: 'fixture' },
+      },
+    ]
+    if (index < 4) {
+      const text = index === 1 ? 'a' : index === 2 ? 'unaccepted' : 'b'
+      const input = JSON.stringify({
+        code: `import {appendFile} from 'node:fs/promises'; await appendFile('effects.txt',${JSON.stringify(text)});`,
+      })
+      const item = {
+        type: 'function_call',
+        id: `fc_${index}`,
+        call_id: `call_${index}`,
+        name: 'node',
+      }
+      parts.push(
+        { type: 'response.output_item.added', output_index: 0, item: { ...item, arguments: '' } },
+        {
+          type: 'response.function_call_arguments.delta',
+          item_id: item.id,
+          output_index: 0,
+          delta: input,
+        },
+        {
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: { ...item, arguments: input, status: 'completed' },
+        }
+      )
+    } else
+      parts.push(
+        {
+          type: 'response.output_item.added',
+          output_index: 0,
+          item: { type: 'message', id: 'msg_done' },
+        },
+        {
+          type: 'response.output_text.delta',
+          item_id: 'msg_done',
+          delta: 'Both requested writes are complete.',
+        },
+        {
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: { type: 'message', id: 'msg_done' },
+        }
+      )
+    parts.push(
+      index === 2
+        ? {
+            type: 'response.failed',
+            sequence_number: 4,
+            response: { error: { code: 'upstream_error', message: 'stream_read_error' } },
+          }
+        : {
+            type: 'response.completed',
+            response: { usage: { input_tokens: 100, output_tokens: 20 } },
+          }
+    )
+    return new Response(parts.map((part) => `data: ${JSON.stringify(part)}\n\n`).join(''), {
+      headers: { 'content-type': 'text/event-stream' },
+    })
+  })
+  const composition = createModelRuntimeComposition({
+    environment: {},
+    providerScripts: { configPaths: [] },
+  })
+  const provider = composition.agentModelRuntime.createAgentProvider({
+    provider: 'openai',
+    apiKey: 'offline',
+    baseURL: 'https://offline.invalid/v1',
+  })
+  const model = createAiSdkModelDriver({
+    id: 'openai/fixture',
+    model: provider('fixture'),
+    limits: { contextTokens: 128000, inputTokens: 120000, outputTokens: 4000 },
+  })
+  const runtime = await createRuntime({
+    node: f.node,
+    project: false,
+    agents: false,
+    search: false,
+    memory: false,
+    context: { maintenance: false },
+    storage: localContextStorage({ path: join(f.root, 'provider-retry.sqlite') }),
+    model,
+  })
+  t.after(() => runtime.close())
+  const session = await runtime.openSession('provider-retry')
+  const events = []
+  for await (const event of session.submit('Append a and then b to effects.txt exactly once.'))
+    events.push(event)
+  assert.equal(events.at(-1).status, 'completed')
+  assert.equal(bodies.length, 4)
+  assert.equal(events.filter((event) => event.type === 'rejected').length, 1)
+  assert.equal(events.filter((event) => event.type === 'usage').length, 3)
+  assert.equal(await readFile(join(f.cwd, 'effects.txt'), 'utf8'), 'ab')
+  assert.deepEqual(bodies[2], bodies[1])
+  assert(!JSON.stringify(bodies.slice(2)).includes('unaccepted'))
+  const trace = await runtime.trace('provider-retry', { fullContent: true })
+  assert.equal(trace.turns.length, 4)
+  assert.equal(trace.turns[1].executions.length, 0)
+  assert.equal(trace.turns.flatMap((turn) => turn.executions).length, 2)
+})
 
 for (const reportUsage of [false, true])
   test(`native execution survives suspended model waiting with usage=${reportUsage}`, async (t) => {

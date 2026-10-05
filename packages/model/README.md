@@ -100,6 +100,7 @@ const ollamaBaseURL = modelCatalog.resolveOllamaBaseURL('http://localhost:11434'
 - 原生 Responses 的完整文本输出保留加密推理、原始文本分段及消息阶段，只有同驱动、同供应商型号且正文逐字匹配才以 `store: false` 重放。密文不拼进材料文本，容量按原响应推理用量独立预留（未报告时保守取输出用量或上限），文本密度校准不缩小这部分。
 - 请求编译的会话估算校准支持 `textRatio` 与可选固定开销 `overheadTokens`，结果以原始文本估算为上限；精确计数、图片和不透明状态的预留独立处理。固定开销必须是非负安全整数。驱动已标记 `calibration: 'provider-usage'` 的实测校准估算保持原值，避免再次缩小。
 - 加密推理状态、签名或 `reasoning.context` 被拒时直接保留原错误，不按思考档位不兼容降档重试。
+- 供应商重试分类同时读取结构化错误码和仅含一个机器码的诊断；已知的流读取、服务暂不可用和限流错误可交给调用方有限重试，鉴权、参数、额度等永久错误与取消优先。普通句子中提到某个错误码不改变分类，未知错误保留失败；重试资格不代表响应已被接受或可以执行其中的调用。
 - 内置 OpenAI Responses 收齐 `response.completed`、`response.incomplete` 或 `response.failed` 的完整 SSE 事件后结束 SDK 输入，由 SDK 按原有规则生成 usage、continuation 和最终状态；不再等待连接的无关尾流。正文原字节保持，只在终端以 CR 结束时补 LF，形成等价 SSE 分隔符。半帧和普通文本完成事件不算响应终端，单个事件超过 16 MiB 时明确失败；取消清理失败或悬挂不能改变已完整交付的终端事实。
 
 - `createAiSdkModelDriver` 声明 `nativeTools: true`，将 `response.type: 'tools'` 的正式 schema 交给 SDK，完整调用以 `tool-call` 事件返回；执行由上层完整响应验收后派发。配对的 `toolExchange` 以供应商原生 assistant/tool 消息回传，调用与回执身份、数量和顺序必须相符。请求快照与指纹包含工具定义。

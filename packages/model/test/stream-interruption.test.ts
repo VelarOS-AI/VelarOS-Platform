@@ -118,6 +118,35 @@ test('INV-19 a failed terminal retains its measured usage and exact provider mes
   expect(events.some((event) => ['finish', 'continuation'].includes(event.type))).toBe(false)
 })
 
+test('INV-19 failed Responses terminals preserve code-based retry decisions, usage and unaccepted output', async () => {
+  for (const [code, message, retryable] of [
+    ['stream_read_error', 'stream_read_error', true],
+    ['server_error', 'opaque temporary failure', true],
+    ['unknown_provider_code', 'stream_read_error', true],
+    ['invalid_api_key', 'opaque provider failure', false],
+    ['invalid_request_error', 'stream_read_error', false],
+    ['insufficient_quota', 'stream_read_error', false],
+    ['unknown_provider_code', 'opaque provider failure', false],
+  ] as const) {
+    const events = await collect([
+      ...prefix,
+      {
+        type: 'response.failed',
+        sequence_number: 4,
+        response: { error: { code, message }, usage },
+      },
+    ])
+    expect(events.filter((event) => event.type === 'text')).toEqual([
+      { type: 'text', text: partial },
+    ])
+    expect(events.filter((event) => event.type === 'usage')).toHaveLength(1)
+    expect(events.at(-1)).toMatchObject({ type: 'error', code: 'provider', message })
+    if (retryable) expect(events.at(-1)).toHaveProperty('retryAfterMs', expect.any(Number))
+    else expect(events.at(-1)).not.toHaveProperty('retryAfterMs')
+    expect(events.some((event) => ['finish', 'continuation'].includes(event.type))).toBe(false)
+  }
+})
+
 test('INV-19 usage from a received completed terminal survives a later socket reset without accepting or regenerating the response', async () => {
   const events = await collect(
     [...prefix, { type: 'response.completed', response: { usage } }],

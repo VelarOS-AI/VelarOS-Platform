@@ -28,6 +28,27 @@ const NetworkErrorCodes = new Set([
   'EAI_AGAIN',
   'UND_ERR_CONNECT_TIMEOUT',
   'UND_ERR_SOCKET',
+  'STREAM_READ_ERROR',
+])
+
+/** HTTP 成功建立流后，供应商仍可用机器码报告暂时服务故障。 */
+const ProviderErrorCodes = new Set([
+  'SERVER_ERROR',
+  'INTERNAL_SERVER_ERROR',
+  'SERVICE_UNAVAILABLE',
+  'OVERLOADED_ERROR',
+])
+
+/** 机器码比笼统的错误文案或 retryable 提示更精确，永久失败优先。 */
+const PermanentErrorCodes = new Set([
+  'INVALID_API_KEY',
+  'AUTHENTICATION_ERROR',
+  'INVALID_REQUEST_ERROR',
+  'VALIDATION_FAILED',
+  'CONTEXT_LENGTH_EXCEEDED',
+  'MODEL_NOT_FOUND',
+  'PERMISSION_DENIED',
+  'INSUFFICIENT_QUOTA',
 ])
 
 /** 一看就不该重试的失败：鉴权、入参、上下文超长、模型不存在。 */
@@ -51,6 +72,7 @@ export function planProviderRetry(
   const lower = facts.messages.join(' ').toLowerCase()
   if (
     isPermanentFailure(lower) ||
+    [...facts.codes].some((code) => PermanentErrorCodes.has(code)) ||
     facts.codes.has('ABORT_ERR') ||
     [...facts.statuses].some(
       (status) => status >= 400 && status < 500 && ![408, 409, 425, 429].includes(status)
@@ -60,6 +82,7 @@ export function planProviderRetry(
 
   const rateLimited =
     facts.statuses.has(429) ||
+    facts.codes.has('RATE_LIMIT_EXCEEDED') ||
     includesAny(lower, ['rate limit', 'too many requests', 'resource exhausted'])
   const network =
     [...facts.codes].some((code) => NetworkErrorCodes.has(code)) ||
@@ -75,6 +98,7 @@ export function planProviderRetry(
       'unexpected eof',
     ])
   const provider =
+    [...facts.codes].some((code) => ProviderErrorCodes.has(code)) ||
     [...facts.statuses].some(
       (status) => status === 408 || status === 409 || status === 425 || status >= 500
     ) ||
@@ -128,7 +152,7 @@ function collectErrorFacts(root: unknown): ModelRetryErrorFacts {
     if (item.depth > 4 || !isPresent(item.value) || seen.has(item.value)) continue
     seen.add(item.value)
     if (isString(item.value)) {
-      pushMessage(facts.messages, item.value)
+      collectMessage(facts, item.value)
       continue
     }
     if (!isObject(item.value)) continue
@@ -139,10 +163,11 @@ function collectErrorFacts(root: unknown): ModelRetryErrorFacts {
     }
     const code = Reflect.get(record, 'code')
     if (isString(code)) facts.codes.add(code.toUpperCase())
+    if (Reflect.get(record, 'name') === 'AbortError') facts.codes.add('ABORT_ERR')
     if (isTrue(Reflect.get(record, 'isRetryable')) || isTrue(Reflect.get(record, 'retryable')))
       facts.retryable = true
     const message = Reflect.get(record, 'message')
-    if (isString(message)) pushMessage(facts.messages, message)
+    if (isString(message)) collectMessage(facts, message)
     mergeHeaders(facts.headers, Reflect.get(record, 'headers'))
     mergeHeaders(facts.headers, Reflect.get(record, 'responseHeaders'))
     for (const key of ['cause', 'data', 'error', 'lastError', 'response']) {
@@ -150,7 +175,7 @@ function collectErrorFacts(root: unknown): ModelRetryErrorFacts {
       if (isPresent(value)) queue.push({ value, depth: item.depth + 1 })
     }
   }
-  if (isEmpty(facts.messages)) pushMessage(facts.messages, '供应商请求失败')
+  if (isEmpty(facts.messages)) collectMessage(facts, '供应商请求失败')
   return facts
 }
 
@@ -196,10 +221,11 @@ function retryMessage(kind: ModelProviderRetryDecision['kind'], message?: string
   return '服务商暂时不可用'
 }
 
-/** 把一条失败文案压成一行并去重后收进表。 */
-function pushMessage(messages: string[], value: string): void {
+/** 保留原诊断；完整文案只有一个机器码时，也交给同一白名单分类，不从普通句子猜代码。 */
+function collectMessage(facts: ModelRetryErrorFacts, value: string): void {
   const compact = value.replace(/\s+/gu, ' ').trim()
-  if (compact && !messages.includes(compact)) messages.push(compact)
+  if (compact && !facts.messages.includes(compact)) facts.messages.push(compact)
+  if (/^[a-z][a-z0-9_]*$/iu.test(compact)) facts.codes.add(compact.toUpperCase())
 }
 
 /** 文本里有没有出现名单里的任意一条。 */

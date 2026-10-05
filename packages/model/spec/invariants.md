@@ -37,7 +37,7 @@
 | INV-17 | GPT-6 Sol 将上游内部缓存断点译为 Responses 内容块断点；先保留调用方已有断点，再按剩余槽位选择最近的内部标记，默认隐式模式下不突破三个显式缓存槽 | 测试 | `spec/acceptance.test.ts` |
 | INV-18 | 原生 Responses 完整文本响应的加密推理和消息阶段按原顺序保存；仅同驱动、同供应商型号和完整原文匹配时以 store=false 重放，截断响应不发布状态，密文不按文本字节计费估算且其容量不受文本校准缩小 | 测试 | `spec/continuation.test.ts` |
 
-| INV-19 | Responses 缺少终端的 EOF 保留部分正文、用量未知并标为可恢复中断；终端已报告用量在后续失败时仍保留，真实失败文案和拒绝原因不被笼统 other 覆盖 | 测试 | `test/stream-interruption.test.ts` |
+| INV-19 | Responses 缺少终端的 EOF 保留部分正文、用量未知并标为可恢复中断；失败终端按明确的瞬时机器码或仅含机器码的诊断给出有限重试资格，永久错误码和取消优先，未知错误不猜测；终端已报告用量在后续失败时仍保留，真实失败文案和拒绝原因不被笼统 other 覆盖 | 测试 | `test/stream-interruption.test.ts` |
 
 | INV-20 | 内置 OpenAI Responses 收到完整 completed/incomplete/failed SSE 终端后向 SDK 正常 EOF，usage、continuation 和错误仍由 SDK 校验；只将终端尾 CR 补 LF 为等价分隔符，不等待无关传输尾流；单事件原始字节上限 16 MiB，超限失败，半帧不算成功，取消清理不阻塞终端 | 测试 | `test/responses-terminal.test.ts` |
 

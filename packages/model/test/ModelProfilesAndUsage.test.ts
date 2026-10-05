@@ -109,3 +109,71 @@ test('provider retry reads native Error causes and respects permanent authorizat
     )
   ).toBeNull()
 })
+
+test('provider retry classifies structured and code-only transient failures without guessing unknown codes', () => {
+  for (const [code, kind] of [
+    ['stream_read_error', 'network'],
+    ['ECONNRESET', 'network'],
+    ['server_error', 'provider'],
+    ['internal_server_error', 'provider'],
+    ['service_unavailable', 'provider'],
+    ['overloaded_error', 'provider'],
+    ['rate_limit_exceeded', 'rate-limit'],
+  ] as const) {
+    for (const failure of [
+      code,
+      { message: code },
+      { response: { error: { code, message: 'opaque provider failure' } } },
+      new Error('request failed', { cause: { data: { error: { code } } } }),
+    ])
+      expect(modelProviderRetry.plan(failure, { retryIndex: 1 })?.kind).toBe(kind)
+  }
+  for (const failure of [
+    'unknown_provider_code',
+    { code: 'unknown_provider_code' },
+    { message: 'An example mentions stream_read_error, without identifying this failure.' },
+    { request: { error: { code: 'stream_read_error' } } },
+  ])
+    expect(modelProviderRetry.plan(failure, { retryIndex: 1 })).toBeNull()
+})
+
+test('permanent provider codes take precedence over transient hints and generic error messages', () => {
+  for (const code of [
+    'invalid_api_key',
+    'authentication_error',
+    'invalid_request_error',
+    'validation_failed',
+    'context_length_exceeded',
+    'model_not_found',
+    'permission_denied',
+    'insufficient_quota',
+  ]) {
+    for (const detail of [{ code, message: 'opaque failure' }, { message: code }])
+      expect(
+        modelProviderRetry.plan(
+          {
+            status: 503,
+            retryable: true,
+            message: 'stream_read_error',
+            response: { error: detail },
+          },
+          { retryIndex: 1 }
+        )
+      ).toBeNull()
+  }
+  expect(
+    modelProviderRetry.plan(
+      { code: 'ABORT_ERR', cause: { code: 'server_error' } },
+      { retryIndex: 1 }
+    )
+  ).toBeNull()
+  expect(
+    modelProviderRetry.plan(new DOMException('stream_read_error', 'AbortError'), { retryIndex: 1 })
+  ).toBeNull()
+  expect(
+    modelProviderRetry.plan(
+      { status: 403, error: { code: 'stream_read_error' } },
+      { retryIndex: 1 }
+    )
+  ).toBeNull()
+})
