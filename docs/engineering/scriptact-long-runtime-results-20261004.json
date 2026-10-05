@@ -13058,6 +13058,602 @@
         "independentPair": false,
         "qualification": "Same v38 candidate, task, frozen grader, dependencies, goal mode and model generation settings as chai-04. Capability availability is the configured difference; individual runs remain stochastic. This is a development replay using the common Chai Codex reference, not another independent pair. Full cost is unknown for all three runs because some requests lack usage."
       }
+    },
+    {
+      "attempt": "cheerio-02",
+      "schema": 1,
+      "at": "2026-10-05T20:56:58.906Z",
+      "taskId": "cheerio-document-mutation-subscriptions",
+      "scriptactSessionId": "scriptact-c38d2af1-e2b0-4d61-92e5-1526afb70d79",
+      "candidateId": "candidate-v39-e7d1f9296093",
+      "candidateSourceCommit": "edcd82946e25adddcfb4c506f5c6c26b3bff2579",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "scriptactTaskMode": "goal",
+      "split": "holdout",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 25,
+            "goal": {
+              "id": "c990d41a",
+              "revision": 2,
+              "objective": "Add maintained document mutation subscriptions to Cheerio for applications that need to update a preview or invalidate derived data after a sequence of DOM edits. Every loaded CheerioAPI returned by the main, slim and browser entry points must expose observeChanges(listener), returning an idempotent unsubscribe function. The listener receives an array of change records synchronously after the outermost public mutating Cheerio call has finished applying its DOM changes. Registering a listener does not emit an initial snapshot. Reject a non-function listener with TypeError. Preserve the existing DOM behavior, node identities, fluent return values, overloads, getters, callback arguments and exception behavior of the existing APIs. Export the public CheerioChangeRecord discriminated union type through the main, slim and browser type entry points. Both ES module and CommonJS package entries must retain the feature.\n\nObserve the tree rooted at that loaded API's original Document, including all connected descendants. An attribute record has type 'attribute', target (the actual Element), name, oldValue and newValue; an absent attribute is null. A children record has type 'children', target (the actual parent node), oldChildren and newChildren (arrays of actual child node references in their original order). These arrays describe that parent's children immediately before and after the whole outer call. Coalesce all changes to the same attribute or parent within that call. Emit nothing for an attribute whose final value equals its starting value, or a parent whose child-node identity sequence is unchanged. An empty batch is never delivered. Do not serialize, clone or replace target nodes for notification.\n\nIntegrate all public DOM mutation paths in the maintained source: attr/removeAttr, prop when it changes attributes, addClass/removeClass/toggleClass, css, val, append/prepend and appendTo/prependTo, before/after and insertBefore/insertAfter, remove/empty/replaceWith, html/text, wrap/wrapInner/wrapAll/unwrap. Preserve string, array, Cheerio and node operands, multiple targets, callback setters, HTML fragments, XML case sensitivity, and document-root mutations. Internal delegation between these methods belongs to the same outer operation and must not send duplicate intermediate batches. Getter calls, traversal, serialization, clone construction and data-cache operations must not send changes unless a user callback explicitly performs a real connected DOM mutation. Direct mutation through raw node objects is outside this API's observation contract.\n\nSubscriptions follow the owning Document tree, not the last factory used. A move between two loaded documents notifies the source of its removals and the destination of its additions. Newly inserted clones appear as their actual distinct nodes. Edits made while a node is detached do not notify its former or eventual document; inserting it notifies the destination parent. Removing a subtree reports its parent's child change, without synthesizing changes to the removed subtree's unchanged descendants. Once reattached, its later edits notify the current owner. A selection containing nodes from more than one subscribed document must update each owner's subscriptions independently.\n\nAll listeners registered for a document at the start of delivery receive independent record and array snapshots with the same actual node references. A listener cannot change another listener's record metadata by modifying its own batch. Registering the same function twice creates two independent subscriptions. Subscription additions or removals during a delivery affect subsequent batches, not the listener snapshot for the current batch. Changes caused by a listener are queued and delivered after the current batch reaches its remaining listeners, without recursively calling listeners. Reentrant edits on another document also retain their owning subscriptions.\n\nIf a mutator's callback throws after some DOM changes were applied, dispatch records for the committed changes and rethrow that original exception. If a listener throws, continue the current batch to its other listeners and leave committed DOM changes intact; restore dispatch state so future mutations work, then throw the first listener exception. A mutator exception takes precedence over a listener exception. Queued reentrant changes must still be delivered before the outer call returns or throws. Unsubscribing all listeners should stop notification work for that document.\n\nImplement observation in the maintained load and mutation paths, with shared bookkeeping as appropriate. Keep browser and slim builds usable. Do not monkey-patch public prototypes at runtime, replace shared DOM-library exports, intercept all nodes with proxies, evaluate copied source, or compare/serialize the entire document before and after every API call. Capture only affected attributes or parent child lists; ordinary reads should not walk the whole document to discover whether something changed. State must belong to the observed documents and subscriptions rather than a currently active global document.\n\nAdd focused tests across the mutation families, no-ops and getters, callback setters and partial failures, moving and cloning nodes across documents, detached edits and reattachment, XML and fragments, independent listeners, unsubscribe timing, reentrancy and listener exceptions. Update public documentation and include a runnable example that subscribes to two documents, performs several kinds of edits, moves a node between them, and unsubscribes. Run the original Vitest suite, the project's lint/type checks, rebuild the normal/slim/browser outputs, and execute the example. Report accurate implementation and validation results. Make routine implementation choices autonomously.",
+              "status": "complete",
+              "reason": "Implemented document-owned observeChanges across maintained mutation paths with independent subscriptions, coalescing, cross-document ownership, reentrant delivery, and exception handling. Added focused tests, docs, and a runnable two-document example. Verification passed: full Vitest 15 files/763 tests with required undici preload; npm run lint including Prettier and TypeScript; npm run build for normal/slim/browser; ESM and CommonJS main/slim runtime smoke checks; browser/ESM/CJS declaration export checks; example execution; git diff --check.",
+              "createdAt": 1791232436404,
+              "updatedAt": 1791232801498
+            },
+            "goalSnapshotError": null,
+            "startedAt": 1791232436264,
+            "solveMs": 372204
+          },
+          "build": {
+            "exitCode": 0,
+            "output": "build.json"
+          },
+          "accounting": {
+            "requests": 25,
+            "requestStatuses": {
+              "http-200": 24,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 24,
+            "missingUsageRequests": 1,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 503949,
+            "knownOutputTokens": 11467,
+            "knownCachedInputTokens": 212608,
+            "knownCacheRatio": 0.42188396048012794,
+            "pricedRequests": 24,
+            "knownReferenceUsd": 1.4797471999999996,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 272,
+            "failed": 18,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "272 passed, 18 failed, 0 skipped, 0 errors",
+            "failures": [
+              "not ok 29 - main: wrapAll",
+              "not ok 30 - main: unwrap",
+              "not ok 50 - main: falsy thrown values retain identity across mutation and listener failures",
+              "not ok 77 - slim: wrapAll",
+              "not ok 78 - slim: unwrap",
+              "not ok 98 - slim: falsy thrown values retain identity across mutation and listener failures",
+              "not ok 125 - browser: wrapAll",
+              "not ok 126 - browser: unwrap",
+              "not ok 146 - browser: falsy thrown values retain identity across mutation and listener failures",
+              "not ok 173 - browser slim: wrapAll",
+              "not ok 174 - browser slim: unwrap",
+              "not ok 194 - browser slim: falsy thrown values retain identity across mutation and listener failures",
+              "not ok 221 - CommonJS main: wrapAll",
+              "not ok 222 - CommonJS main: unwrap",
+              "not ok 242 - CommonJS main: falsy thrown values retain identity across mutation and listener failures",
+              "not ok 269 - CommonJS slim: wrapAll",
+              "not ok 270 - CommonJS slim: unwrap",
+              "not ok 290 - CommonJS slim: falsy thrown values retain identity across mutation and listener failures"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 763,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "763 passed, 0 failed, 0 skipped, 0 errors",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": false,
+              "suitePassed": false,
+              "knownFailures": [],
+              "unexpected": [
+                "Unexpected test inventory: src/observe.spec.ts::observeChanges validates, subscribes independently, coalesces, and unsubscribes::1",
+                "Unexpected test inventory: src/observe.spec.ts::observeChanges reports actual child identities and ignores getters and no-ops::1",
+                "Unexpected test inventory: src/observe.spec.ts::observeChanges tracks moves, detached edits, and reattachment by owning document::1",
+                "Unexpected test inventory: src/observe.spec.ts::observeChanges finishes partial failures and isolates listener snapshots::1",
+                "Unexpected test inventory: src/observe.spec.ts::observeChanges queues reentrant edits and snapshots listeners per delivery::1",
+                "Unexpected test inventory: src/observe.spec.ts::observeChanges honors XML attribute case and fragment roots::1"
+              ]
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 4,
+          "createdFiles": 3,
+          "changeSummary": "52\t5\tsrc/cheerio.ts\n7\t0\tsrc/load.ts\n1\t0\tsrc/types.ts\n18\t0\twebsite/docs/basics/manipulation.md\n",
+          "created": "examples/observe-changes.mjs\nsrc/observe.spec.ts\nsrc/observe.ts\n",
+          "changeAccounting": {
+            "baseline": "197176e5dc6436ea8c9b77596e46161fe90032dc",
+            "head": "197176e5dc6436ea8c9b77596e46161fe90032dc",
+            "source": "recorded-baseline",
+            "changedFiles": 4,
+            "createdFiles": 3,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 24,
+            "branchRequests": 1,
+            "requestOwners": {
+              "scriptact-c38d2af1-e2b0-4d61-92e5-1526afb70d79": 24,
+              "context:fb11294e-dbe6-4181-b429-52dbb6b8a1df": 1
+            },
+            "contextSegments": 8,
+            "nativeRequests": 24,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 1,
+            "originalPromptInFinalRequest": true
+          },
+          "capabilityUsage": {
+            "available": true,
+            "complete": true,
+            "rootTurns": 24,
+            "branchTurns": 1,
+            "uniqueCalls": 2,
+            "traceGaps": 0,
+            "missingSummaries": 0,
+            "operations": [
+              {
+                "moduleId": "velaros:system-goal",
+                "operation": "get",
+                "status": "succeeded",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:system-goal",
+                "operation": "update",
+                "status": "succeeded",
+                "count": 1
+              }
+            ]
+          },
+          "deliveryReview": {
+            "at": "2026-10-05T20:49:08.838Z",
+            "workspace": "/private/tmp/cheerio02-scriptact-review-lKK4FW/cheerio",
+            "status": "partial",
+            "regression": {
+              "exitCode": 0,
+              "passed": 763,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "763 passed, 0 failed, 0 skipped, 0 errors",
+              "failures": []
+            },
+            "authoredTests": {
+              "exitCode": 0,
+              "passed": 6,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "6 passed, 0 failed, 0 skipped, 0 errors",
+              "failures": []
+            },
+            "lint": {
+              "javascript": 0,
+              "formatting": 0,
+              "types": 0
+            },
+            "build": 0,
+            "example": {
+              "path": "examples/observe-changes.mjs",
+              "exitCode": 0
+            },
+            "frozenBrowserAndTypes": {
+              "publicTypeConsumer": true,
+              "browserBundle": true,
+              "scope": "Frozen grader: six package-entry behavioral matrices, TypeScript consumers and a browser IIFE without Node globals. The private review rebuilds all maintained outputs; these two pass flags refer to original frozen grader evidence."
+            },
+            "locality": {
+              "descendants": 400,
+              "beforeSubscription": {
+                "value": "yes",
+                "unrelatedAttributeReads": 0
+              },
+              "subscribed": {
+                "value": "yes",
+                "unrelatedAttributeReads": 1200
+              },
+              "afterUnsubscribe": {
+                "value": "yes",
+                "unrelatedAttributeReads": 0
+              },
+              "notifications": 0,
+              "interpretation": "A single parent attribute getter reads unrelated descendant attributes through notification capture. Capturing selected subtrees exceeds the task requirement to capture only affected attributes/parent lists. The existing prototype assembly alone is not used as an architecture failure criterion."
+            },
+            "review": {
+              "sourceArchitecture": "The maintained Cheerio method assembly wraps public mutators in mutation(), which recursively snapshots selections and arguments before calling the existing API. Subscription ownership uses a WeakMap by Document; synchronous transaction and delivery queues are shared. The recursive capture includes getters and performs tree traversal even without subscribers.",
+              "featureAcceptance": "272 of 290 frozen checks pass. Twelve raw wrapAll/unwrap failures repeat across six entries and depend on the separate temporal-ownership oracle audit. Six failures independently confirm that falsy thrown values are swallowed. The private locality probe also confirms unrelated descendant scanning, including after unsubscribe. Original regression cases pass; the frozen inventory verdict rejects six added passing tests and is corrected separately without altering raw artifacts.",
+              "testCoverage": "Six authored tests cover several attributes/append operations, selected copied listener snapshots, detach/reattach, reentrancy, exception objects, XML and fragments. Many mutation families and falsy thrown values are uncovered. The locality probe independently checks the explicit affected-data and getter requirement.",
+              "documentation": "The public manipulation guide documents subscription records, synchronous batches, unsubscribe and raw-node exclusions; the executable example uses two documents, several mutations and a cross-document move."
+            },
+            "originalArtifactsUnchanged": true,
+            "artifactSha256": {
+              "solve.json": "302f36a8ccda8d4eb7d2743680dc063b21bf7dc4e106663e9ce3690841db7c2e",
+              "grade.json": "7bee1c084f620d9b417666a149c035a4a9e14460271cb916799a62fb0b2d853f",
+              "acceptance.json": "6292069f01676a885ec23d57c19d6a3cbfc3f5d7112d1c117177134a2d0644e7",
+              "regression.json": "f4695b987cae35b1dc19daa8cb23847b277310ba36c8375540c2533b3877b7fb"
+            },
+            "localityTraversal": {
+              "baseline": {
+                "descendants": 400,
+                "beforeSubscription": {
+                  "value": "yes",
+                  "unrelatedAttributeReads": 0,
+                  "unrelatedChildrenReads": 0
+                },
+                "subscribed": {
+                  "value": "yes",
+                  "unrelatedAttributeReads": 0,
+                  "unrelatedChildrenReads": 0
+                },
+                "afterUnsubscribe": {
+                  "value": "yes",
+                  "unrelatedAttributeReads": 0,
+                  "unrelatedChildrenReads": 0
+                },
+                "notifications": 0
+              },
+              "delivered": {
+                "descendants": 400,
+                "beforeSubscription": {
+                  "value": "yes",
+                  "unrelatedAttributeReads": 0,
+                  "unrelatedChildrenReads": 400
+                },
+                "subscribed": {
+                  "value": "yes",
+                  "unrelatedAttributeReads": 1200,
+                  "unrelatedChildrenReads": 1200
+                },
+                "afterUnsubscribe": {
+                  "value": "yes",
+                  "unrelatedAttributeReads": 0,
+                  "unrelatedChildrenReads": 400
+                },
+                "notifications": 0
+              },
+              "interpretation": "With the same 400 descendant fixture, the original parent attribute getter touches no descendant attributes or child arrays. Delivered code reads 400 unrelated child arrays even before subscription and after all listeners unsubscribe, plus 1200 unrelated attribute reads while subscribed. Only private node accessors are instrumented; source and frozen artifacts stay unchanged."
+            },
+            "metricsSha256": "3c73d8416ff58304f358abd15eef9c76d60e8044c1bcf1955bf6f3c4d552e074",
+            "originalMetricsUnchanged": true,
+            "regressionInventoryCorrection": {
+              "evidence": "evaluation-corrections/regression-added-tests/report.json",
+              "originalBaselineCompatible": false,
+              "correctedBaselineCompatible": true,
+              "baselineCases": 757,
+              "additionalPassingCases": 6,
+              "interpretation": "Evaluator correction only; no new model execution or product gain."
+            }
+          },
+          "executionReview": {
+            "at": "2026-10-05T21:15:43.585Z",
+            "executions": 37,
+            "statuses": {
+              "succeeded": 33,
+              "failed": 4
+            },
+            "languages": {
+              "shell": 36,
+              "node": 1
+            },
+            "failureCodes": {
+              "PROGRAM_ERROR": 4
+            },
+            "maxConsecutiveFailuresPerSession": 1,
+            "maxSameSourceConsecutiveFailures": 1,
+            "modelErrorCodes": {
+              "MODEL_PROVIDER": 1
+            },
+            "moduleErrors": [],
+            "traceGaps": 0,
+            "capabilityComplete": true,
+            "rootMaintenanceOutcomes": [
+              {
+                "sequence": 842,
+                "status": "applied",
+                "reason": "narrate",
+                "errorCode": null
+              }
+            ],
+            "interpretation": "Four isolated program errors and one provider error remain accounted; no failed module operations or trace gaps were observed. This does not establish the absence of all system defects. Delivered behavior and architecture remain partial."
+          },
+          "inputReview": {
+            "at": "2026-10-05T20:41:42.871Z",
+            "attempt": "cheerio-02",
+            "candidateId": "candidate-v39-e7d1f9296093",
+            "observedMainRequests": 24,
+            "originalInHistory": 23,
+            "fullLatestInput": 23,
+            "userMessageChanges": 2,
+            "originalIdentities": 1,
+            "inputLimits": [
+              32768
+            ],
+            "compiledOverLimit": 0,
+            "measuredOverLimit": 0,
+            "measuredRequests": 23,
+            "knownInput": 482709,
+            "knownCached": 212608,
+            "maximumSegmentIndex": 8,
+            "incompleteFileCount": 0,
+            "evidence": ".velaros-workspace/bench/long-runtime-20261004/context-diagnostics/cheerio-02-input-scriptact-final.json",
+            "evidenceSha256": "28d665874155cde6b38ae07f357635a2f39edd1576fa8b35db00b2197f58e46a",
+            "controllerTerminalAtArchive": true,
+            "interpretation": "23 of 24 main requests retained the complete original input; one capacity projection shortened it before restoration. Estimates and known usage remain within 32768."
+          },
+          "resolutionReview": {
+            "at": "2026-10-05T20:41:42.804Z",
+            "attempt": "cheerio-02",
+            "candidateId": "candidate-v39-e7d1f9296093",
+            "directNarrations": 1,
+            "narrationsWithActiveState": 1,
+            "requestedClosures": 0,
+            "appliedClosures": 0,
+            "maximumActiveItems": 6,
+            "latestActiveItems": 6,
+            "outcomes": {
+              "applied": 1
+            },
+            "incompleteRequestFiles": 0,
+            "existingQuestionOpportunities": 0,
+            "evidence": ".velaros-workspace/bench/long-runtime-20261004/context-diagnostics/cheerio-02-resolution-scriptact-final.json",
+            "evidenceSha256": "7df3eeac539512631c0b70c9e72f135df62b9608fa22efa32587a5c0ba9700b8",
+            "interpretation": "The one direct narration starts without existing questions. Optional closure schema is accepted, but this run provides no existing-question closure opportunity and no measured closure benefit."
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791232837558,
+            "finishedAt": 1791233722617,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a10dcc-07df-79d3-a6b1-2aed9dff6747",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 183,
+            "solveMs": 885059
+          },
+          "build": {
+            "exitCode": 0,
+            "output": "build.json"
+          },
+          "accounting": {
+            "requests": 141,
+            "requestStatuses": {
+              "http-200": 138,
+              "unknown": 2,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 138,
+            "missingUsageRequests": 3,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 3334035,
+            "knownOutputTokens": 59707,
+            "knownCachedInputTokens": 2655360,
+            "knownCacheRatio": 0.796440349306471,
+            "pricedRequests": 138,
+            "knownReferenceUsd": 4.970984000000002,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 278,
+            "failed": 12,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "278 passed, 12 failed, 0 skipped, 0 errors",
+            "failures": [
+              "not ok 29 - main: wrapAll",
+              "not ok 30 - main: unwrap",
+              "not ok 77 - slim: wrapAll",
+              "not ok 78 - slim: unwrap",
+              "not ok 125 - browser: wrapAll",
+              "not ok 126 - browser: unwrap",
+              "not ok 173 - browser slim: wrapAll",
+              "not ok 174 - browser slim: unwrap",
+              "not ok 221 - CommonJS main: wrapAll",
+              "not ok 222 - CommonJS main: unwrap",
+              "not ok 269 - CommonJS slim: wrapAll",
+              "not ok 270 - CommonJS slim: unwrap"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 776,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "776 passed, 0 failed, 0 skipped, 0 errors",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": false,
+              "suitePassed": false,
+              "knownFailures": [],
+              "unexpected": [
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges is exposed by the normal and slim loaders and validates listeners::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges does not emit an initial snapshot and unsubscribe is idempotent::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges reports and coalesces attribute mutations while suppressing net no-ops::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges reports child lists once per parent with actual node references::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges covers replacement, content, and wrapping mutation families::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges does not report getters, traversal, serialization, cloning, or detached edits::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges follows ownership across detach, reattachment, and document moves::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges notifies both owners when a connected node moves between documents::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges uses distinct inserted clones for multiple targets::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges gives duplicate subscriptions independent record snapshots::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges isolates record metadata and child arrays between listeners::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges snapshots subscriptions and queues reentrant mutations::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges defers subscriptions added during delivery until the next batch::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges tracks mixed-document selections and cross-document reentrancy::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges delivers committed callback changes before rethrowing the callback error::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges continues after listener errors and restores delivery state::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges gives a mutator error precedence over a listener error::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges observes insertion aliases and fragment roots::1",
+                "Unexpected test inventory: src/observe-changes.spec.ts::observeChanges preserves XML attribute names and observes document-root mutations::1"
+              ]
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 5,
+          "createdFiles": 4,
+          "changeSummary": "130\t74\tsrc/api/attributes.ts\n10\t6\tsrc/api/css.ts\n274\t238\tsrc/api/manipulation.ts\n9\t0\tsrc/load.ts\n7\t0\tsrc/types.ts\n",
+          "created": "examples/observe-changes.mjs\nsrc/observe-changes.spec.ts\nsrc/observe.ts\nwebsite/docs/basics/observing-changes.md\n",
+          "changeAccounting": {
+            "baseline": "9636fd153ee84ad233a858d5586b9b108d8c8f9f",
+            "head": "9636fd153ee84ad233a858d5586b9b108d8c8f9f",
+            "source": "recorded-baseline",
+            "changedFiles": 5,
+            "createdFiles": 4,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "rootThreadId": "01a10dcc-07df-79d3-a6b1-2aed9dff6747",
+            "compactions": 7,
+            "childAgentDispatches": 3,
+            "source": "/Users/mac/.codex/sessions/2026/10/06/rollout-2026-10-06T04-40-37-01a10dcc-07df-79d3-a6b1-2aed9dff6747.jsonl"
+          },
+          "deliveryReview": {
+            "at": "2026-10-05T21:04:41.566Z",
+            "workspace": "/private/tmp/cheerio02-codex-review-qPwqaK/cheerio",
+            "status": "partial",
+            "regression": {
+              "exitCode": 0,
+              "passed": 776,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "776 passed, 0 failed, 0 skipped, 0 errors",
+              "failures": []
+            },
+            "authoredTests": {
+              "exitCode": 0,
+              "passed": 19,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "19 passed, 0 failed, 0 skipped, 0 errors",
+              "failures": []
+            },
+            "lint": {
+              "javascript": 0,
+              "formatting": 0,
+              "types": 0
+            },
+            "build": 0,
+            "example": {
+              "path": "examples/observe-changes.mjs",
+              "exitCode": 0
+            },
+            "frozenBrowserAndTypes": {
+              "publicTypeConsumer": true,
+              "browserBundle": true,
+              "scope": "Frozen grader: six package-entry behavioral matrices, TypeScript consumers and a browser IIFE without Node globals. The private review rebuilds all maintained outputs; these two pass flags refer to original frozen grader evidence."
+            },
+            "locality": {
+              "descendants": 400,
+              "beforeSubscription": {
+                "value": "yes",
+                "unrelatedAttributeReads": 0
+              },
+              "subscribed": {
+                "value": "yes",
+                "unrelatedAttributeReads": 0
+              },
+              "afterUnsubscribe": {
+                "value": "yes",
+                "unrelatedAttributeReads": 0
+              },
+              "notifications": 0,
+              "interpretation": "The parent attribute getter performs no unrelated descendant attribute reads with or without a subscription. Source review confirms local attribute/parent captures in maintained mutation paths; no recursive document snapshot or prototype interception was found."
+            },
+            "review": {
+              "sourceArchitecture": "Maintained attribute, CSS and manipulation paths invoke explicit local capture operations within shared outer mutation transactions. A WeakMap stores Document subscription owners; pending maps keep each owner separate and queued listener deliveries are copied. Getter paths bypass capture. Capture records are finalized after the transaction; wrapAll/unwrap records require the separate oracle-boundary review.",
+              "featureAcceptance": "278 of 290 frozen checks pass. Twelve raw failures repeat wrapAll/unwrap across six entries. Both are under semantic-oracle audit because the snapshot oracle excludes targets absent at either outer boundary despite observable mutation while connected. Raw scores remain immutable and do not establish a complete delivered result. Full original regression remains compatible.",
+              "testCoverage": "Nineteen authored tests cover normal/slim loaders, input validation, no-ops, attributes, child identity snapshots, wrapping/content replacements, moves, clones, detached edits, listener ownership/copies/timing, reentrancy, exception precedence, XML and document roots. Some family checks assert presence rather than an exhaustive exact record list. Frozen tests independently exercise package entry matrices and falsy exceptions.",
+              "documentation": "A dedicated public guide describes synchronous batches, actual node identities, ownership, unsubscribe, reentrancy and the public union type. Its linked executable example uses two documents, several mutation kinds, a cross-document move and unsubscribe."
+            },
+            "originalArtifactsUnchanged": true,
+            "artifactSha256": {
+              "solve.json": "aee79756e4a834aa6a1e6277a2ff828d437733987956a221745902d5cdc7fcfb",
+              "grade.json": "e5e3709402e2fb495068b4cca89a4ef6ebbf195b7e5f5bac4ecb72930108f113",
+              "acceptance.json": "9b3f0ebcd9be6c135d866575d5ba62767f25a21ff2c55888d37dbd69a6227fef",
+              "regression.json": "117556c15078f83679ea1bb1eb6654b2460fbac346eb29a7d6d20bd9f42b0616"
+            },
+            "metricsSha256": "3c73d8416ff58304f358abd15eef9c76d60e8044c1bcf1955bf6f3c4d552e074",
+            "originalMetricsUnchanged": true,
+            "regressionInventoryCorrection": {
+              "evidence": "evaluation-corrections/regression-added-tests/report.json",
+              "originalBaselineCompatible": false,
+              "correctedBaselineCompatible": true,
+              "baselineCases": 757,
+              "additionalPassingCases": 19,
+              "interpretation": "Evaluator correction only; no new model execution or product gain."
+            }
+          }
+        }
+      },
+      "comparisonEligible": false,
+      "comparisonExclusion": {
+        "at": "2026-10-05T21:15:43.585Z",
+        "kind": "document-mutation-temporal-ownership",
+        "evidence": ".velaros-workspace/bench/long-runtime-20261004/context-diagnostics/cheerio-boundary-oracle-proof.json",
+        "evidenceSha256": "2cde235738201548a961a05e364b287828f7ba6d41b36d3be33b773ff4bc2cfa",
+        "comparisonExcludedAttempts": [
+          "cheerio-02"
+        ],
+        "rawResultsPreserved": true,
+        "disputedFrozenChecksPerParticipant": 12,
+        "reason": "The boundary-intersection oracle omits parents mutated while connected if absent at either outer boundary. Original-project wrapAll/unwrap probes confirm this temporal behavior; the prompt does not specify the intersection rule. An independent detach-edit-reattach probe also demonstrates that this algorithm can include detached-only attribute edits. Preserve raw scores; do not equate disputed failures with agent defects or retroactively declare success.",
+        "distinctConfirmedScriptActDefects": [
+          "Falsy exception propagation",
+          "Unrelated subtree capture on getters and after unsubscribe"
+        ],
+        "nextPaidCapabilityReplay": {
+          "attempt": "cheerio-shell-node-02",
+          "state": "unstarted-deferred",
+          "evidence": ".velaros-workspace/bench/long-runtime-20261004/cheerio-shell-node-02/scheduling-note-oracle-audit.json"
+        }
+      },
+      "regressionInventoryCorrection": {
+        "at": "2026-10-05T21:15:43.585Z",
+        "kind": "added-passing-regression-tests",
+        "auditedParticipantsWithFrozenCases": 62,
+        "historicalParticipantsWithoutFrozenCases": 17,
+        "affectedAttempts": [
+          "cheerio-02"
+        ],
+        "affectedParticipants": [
+          "scriptact",
+          "codex"
+        ],
+        "evidence": ".velaros-workspace/bench/long-runtime-20261004/cheerio-02/evaluation-corrections/regression-added-tests/report.json",
+        "evidenceSha256": "c20ef8e949c9f8dfe73f06fd01e414266028c59b49cc10ec33205072023bc677",
+        "originalRecordsUnchanged": true,
+        "reason": "The task requires added tests. File-level preservation leaves these tests in Vitest discovery. The original exact-inventory check rejected passing additions despite every original frozen case still passing. Accept passing added cases while rejecting missing, renamed, duplicate, failed, errored or newly skipped cases.",
+        "effect": "Both original regression suites are compatible under corrected inventory semantics. Raw scores remain stored and the attempt remains excluded due to its separate behavioral oracle audit."
+      }
     }
   ],
   "transportDiagnostics": {
@@ -13349,6 +13945,45 @@
         "shelljs-01"
       ],
       "reason": "The initial participant copy rewrote tracked relative symlinks, unlike the original baseline clone. Preserve all raw results and known costs; exclude these attempts from effective quality/time/cost parity claims until correctly isolated evaluation."
+    },
+    {
+      "at": "2026-10-05T21:15:43.585Z",
+      "kind": "document-mutation-temporal-ownership",
+      "evidence": ".velaros-workspace/bench/long-runtime-20261004/context-diagnostics/cheerio-boundary-oracle-proof.json",
+      "evidenceSha256": "2cde235738201548a961a05e364b287828f7ba6d41b36d3be33b773ff4bc2cfa",
+      "comparisonExcludedAttempts": [
+        "cheerio-02"
+      ],
+      "rawResultsPreserved": true,
+      "disputedFrozenChecksPerParticipant": 12,
+      "reason": "The boundary-intersection oracle omits parents mutated while connected if absent at either outer boundary. Original-project wrapAll/unwrap probes confirm this temporal behavior; the prompt does not specify the intersection rule. An independent detach-edit-reattach probe also demonstrates that this algorithm can include detached-only attribute edits. Preserve raw scores; do not equate disputed failures with agent defects or retroactively declare success.",
+      "distinctConfirmedScriptActDefects": [
+        "Falsy exception propagation",
+        "Unrelated subtree capture on getters and after unsubscribe"
+      ],
+      "nextPaidCapabilityReplay": {
+        "attempt": "cheerio-shell-node-02",
+        "state": "unstarted-deferred",
+        "evidence": ".velaros-workspace/bench/long-runtime-20261004/cheerio-shell-node-02/scheduling-note-oracle-audit.json"
+      }
+    },
+    {
+      "at": "2026-10-05T21:15:43.585Z",
+      "kind": "added-passing-regression-tests",
+      "auditedParticipantsWithFrozenCases": 62,
+      "historicalParticipantsWithoutFrozenCases": 17,
+      "affectedAttempts": [
+        "cheerio-02"
+      ],
+      "affectedParticipants": [
+        "scriptact",
+        "codex"
+      ],
+      "evidence": ".velaros-workspace/bench/long-runtime-20261004/cheerio-02/evaluation-corrections/regression-added-tests/report.json",
+      "evidenceSha256": "c20ef8e949c9f8dfe73f06fd01e414266028c59b49cc10ec33205072023bc677",
+      "originalRecordsUnchanged": true,
+      "reason": "The task requires added tests. File-level preservation leaves these tests in Vitest discovery. The original exact-inventory check rejected passing additions despite every original frozen case still passing. Accept passing added cases while rejecting missing, renamed, duplicate, failed, errored or newly skipped cases.",
+      "effect": "Both original regression suites are compatible under corrected inventory semantics. Raw scores remain stored and the attempt remains excluded due to its separate behavioral oracle audit."
     }
   ]
 }

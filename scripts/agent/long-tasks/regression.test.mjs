@@ -41,7 +41,7 @@ test('same test with a different failure, new failures, missing tests and extra 
     [pass, { ...fail, outcomes: [{ ...fail.outcomes[0], kind: 'error' }] }],
     [fail, { ...pass, outcomes: fail.outcomes }],
     [fail],
-    [pass, fail, { ...pass, id: 'unexpected::test' }],
+    [pass, fail, { id: 'new::test', outcomes: [{ kind: 'skipped' }] }],
     [fail, { ...pass, outcomes: [{ kind: 'skipped', message: 'skip', text: '' }] }],
     [pass, fail, fail],
   ])
@@ -56,6 +56,34 @@ test('same test with a different failure, new failures, missing tests and extra 
     )
   assert.equal(regressionVerdict({ exitCode: 0, cases: [] }).baselineCompatible, false)
   assert.equal(regressionVerdict({ exitCode: 1, cases: [pass] }).baselineCompatible, false)
+})
+
+test('passing added tests preserve the original inventory without masking missing or failed cases', () => {
+  const added = { id: 'tests.feature::new_behavior', outcomes: [] }
+  const original = [pass, { ...fail, outcomes: [] }]
+  const result = { exitCode: 0, cases: [...original, added] }
+  const snapshot = structuredClone(result)
+  assert.deepEqual(regressionVerdict(result, [], original), {
+    baselineCompatible: true,
+    suitePassed: true,
+    knownFailures: [],
+    unexpected: [],
+  })
+  assert.deepEqual(result, snapshot)
+  assert.equal(
+    regressionVerdict({ exitCode: 1, cases: [pass, fail, added] }, [issue], [pass, fail])
+      .baselineCompatible,
+    true
+  )
+  for (const cases of [
+    [pass, added],
+    [...original, { ...added, outcomes: fail.outcomes }],
+    [...original, { ...added, outcomes: [{ kind: 'error', message: 'setup failed', text: '' }] }],
+    [...original, { ...added, outcomes: [{ kind: 'skipped' }] }],
+    [...original, added, added],
+  ]) {
+    assert.equal(regressionVerdict({ exitCode: 0, cases }, [], original).baselineCompatible, false)
+  }
 })
 
 test('baseline exceptions require a unique test, concrete fingerprint and public source', () => {

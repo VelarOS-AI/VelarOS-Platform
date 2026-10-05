@@ -24,7 +24,7 @@ print(json.dumps(cases))`,
   return JSON.parse(stdout)
 }
 
-// 已知问题必须在付费前逐例冻结，不能放行新失败、同名不同错误或丢失的测试。
+// 已知问题必须在付费前逐例冻结；新增通过用例可保留，原用例缺失、新失败与新增跳过仍拒绝。
 export function regressionVerdict(result, issues = [], baseline) {
   const cases = result.cases ?? []
   const failures = []
@@ -51,12 +51,11 @@ export function regressionVerdict(result, issues = [], baseline) {
     const original = new Map(baseline.map((item) => [item.id, item]))
     for (const item of cases) {
       const before = original.get(item.id)
-      if (!before) failures.push(`Unexpected test inventory: ${item.id}`)
-      else if (
+      if (
         item.outcomes.some((value) => value.kind === 'skipped') &&
-        !before.outcomes.some((value) => value.kind === 'skipped')
+        !before?.outcomes.some((value) => value.kind === 'skipped')
       )
-        failures.push(`Previously executed test skipped: ${item.id}`)
+        failures.push(`${before ? 'Previously executed test' : 'New test'} skipped: ${item.id}`)
     }
     for (const id of original.keys()) if (!seen.has(id)) failures.push(`Missing test: ${id}`)
   } else {
