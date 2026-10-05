@@ -16,6 +16,7 @@ import { toTrajectory } from '../harbor/atif.mjs'
 import { runCodex } from '../native-desktop/codex.mjs'
 import { campaignModelDriver } from './model-driver.mjs'
 import { readPytestReport, regressionVerdict } from './regression.mjs'
+import { runtimeCapabilityOptions } from './runtime-capabilities.mjs'
 import {
   pythonTaskPath,
   regressionArguments,
@@ -26,6 +27,7 @@ import {
 const execute = promisify(execFile)
 const directory = resolve(process.argv[2])
 const manifest = JSON.parse(await readFile(join(directory, 'freeze.json'), 'utf8'))
+const capabilities = runtimeCapabilityOptions(manifest.scriptactCapabilities)
 const scriptactSessionId = manifest.scriptactSessionId ?? 'development'
 const environment = taskEnvironment(manifest.task)
 assert.deepEqual(environment, manifest.environment)
@@ -248,9 +250,7 @@ async function scriptAct({ workspace, output, apiKey, baseURL, signal, python, p
       dataDir: join(output, 'state'),
       model,
       memory: false,
-      project: { code: true },
-      agents: true,
-      search: true,
+      ...capabilities,
       node: createShellNodeEnvironment({
         cwd: workspace,
         directory: join(output, 'node'),

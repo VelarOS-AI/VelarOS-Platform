@@ -213,6 +213,7 @@ async function main() {
     candidateId: manifest.candidateId,
     candidateSourceCommit: manifest.candidateSourceCommit,
     candidateSourceDirty: manifest.candidateSourceDirty ?? null,
+    scriptactCapabilities: manifest.scriptactCapabilities ?? 'on-demand',
     split: manifest.task.split,
     model: manifest.model,
     contextTokens: manifest.contextTokens,

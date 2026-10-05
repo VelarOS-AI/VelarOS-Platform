@@ -11,6 +11,7 @@ import { promisify } from 'node:util'
 import { toTrajectory } from '../harbor/atif.mjs'
 import { verifyCampaignDriver } from './model-driver.mjs'
 import { readPytestReport, regressionVerdict } from './regression.mjs'
+import { runtimeCapabilityOptions } from './runtime-capabilities.mjs'
 import {
   createExecutionEnvironments,
   pythonTaskPath,
@@ -26,6 +27,8 @@ const attemptId = process.argv[3] ?? 'rich-01'
 const candidateName = process.argv[4] ?? 'candidate-v1'
 const participants = process.argv[5] === 'scriptact' ? ['scriptact'] : ['scriptact', 'codex']
 const taskFile = process.argv[6] ?? 'rich-ascii-task.json'
+const scriptactCapabilities = process.argv[8] ?? 'on-demand'
+runtimeCapabilityOptions(scriptactCapabilities)
 assert.match(attemptId, /^[a-zA-Z0-9-]+$/u)
 assert.match(candidateName, /^[a-zA-Z0-9-]+$/u)
 assert.ok(!process.argv[5] || ['scriptact', 'paired'].includes(process.argv[5]))
@@ -203,6 +206,7 @@ const manifest = {
   candidateSourceCommit,
   candidateSourceDirty: candidateIdentity.sourceDirty ?? null,
   scriptactSessionId: `scriptact-${randomUUID()}`,
+  scriptactCapabilities,
   modelWirePreflight,
   providerCapabilities,
   model: 'gpt-5.6-sol',
@@ -216,7 +220,9 @@ const manifest = {
     kind: task.split,
     longRunRequiresObservedCompaction: true,
     source:
-      'formal Runtime and model provider composition with Node, project code, search, child agents, default context maintenance',
+      scriptactCapabilities === 'on-demand'
+        ? 'formal Runtime and model provider composition with Shell/Node, on-demand project code, search, child agents, default context maintenance'
+        : 'formal Runtime and model provider composition with Shell/Node, core runtime controls and default context maintenance',
     limitations: [
       'Task is newly authored and frozen on a real upstream project; model training exposure is unknown',
       'Runtime host comparison; this attempt does not exercise Desktop renderer integration',
