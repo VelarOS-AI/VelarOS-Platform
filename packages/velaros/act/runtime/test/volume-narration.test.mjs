@@ -6,7 +6,10 @@ import { localContextStorage } from '@velaros-ai/context/node'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
+import { ActiveContext } from '../../../dist/act/runtime/impl/ActiveContext.js'
 import { ContextMaintenance } from '../../../dist/act/runtime/impl/ContextMaintenance.js'
+import { ContextMemory } from '../../../dist/act/runtime/impl/ContextMemory.js'
+import { ProgramContext } from '../../../dist/act/runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { RuntimeTrace } from '../../../dist/act/runtime/impl/RuntimeTrace.js'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
@@ -15,20 +18,21 @@ import {
   volumeNarrationPatch,
 } from '../../../dist/act/runtime/utils/volume-narration.js'
 import { VelarContextMaterialsModule } from '../../../dist/act/system/contract/surface.js'
+import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
 
 const signal = new AbortController().signal
-async function fixture(t, respond) {
+async function fixture(t, respond, inputBody = 'Change the serializer; preserve the public API.') {
   const storage = localContextStorage({ path: ':memory:' })
   const runtime = await createRuntime({ storage, runner: nodeSubprocessCodeRunner, modules: [] })
   t.after(() => runtime.close())
   const session = await runtime.openSession('root')
   const input = await session.context.append({
     kind: 'user',
-    body: 'Change the serializer; preserve the public API.',
+    body: inputBody,
   })
   await session.view.begin(input.ref)
   const result = await session.context.append({
-    kind: 'tool',
+    kind: 'audit',
     title: 'script:12345678:result',
     body: JSON.stringify({
       process: { exitCode: 1, stdout: 'Test failed: escaped separator', stderr: '' },
@@ -322,12 +326,13 @@ test('cancelling a stalled summary estimate returns promptly and a late estimate
   assert.equal((await f.recent.volumes(signal)).at(-1).narrative, undefined)
 })
 
-test('narration projects the generated contract and retains existing unresolved facts', () => {
+test('narration projects the generated contracts and keeps per-volume findings separate from current state', () => {
   const response = volumeNarrationFormat(VelarContextMaterialsModule.operations.submit.input)
   assert.deepEqual(Object.keys(response.schema.properties), [
     'summary',
     'unresolved',
     'negativeAttempts',
+    'active',
   ])
   assert.deepEqual(response.schema.required, ['summary', 'unresolved', 'negativeAttempts'])
   assert.deepEqual(response.schema.properties.unresolved, {
@@ -343,9 +348,373 @@ test('narration projects the generated contract and retains existing unresolved 
     },
     []
   )
-  assert.deepEqual(result.volume.unresolved, [
-    'Still investigate the data loss',
-    'Run integration tests',
-  ])
+  assert.deepEqual(result.volume.unresolved, ['Run integration tests'])
   assert.deepEqual(Object.keys(result), ['baseRevision', 'summary', 'unresolved', 'volume'])
+  const active = response.schema.properties.active
+  assert.deepEqual(Object.keys(active.properties), ['changes'])
+  assert.deepEqual(active.required, ['changes'])
+  assert.deepEqual(Object.keys(active.properties.changes.items.properties), ['id', 'evidence'])
+  assert.deepEqual(
+    Object.keys(active.properties.changes.items.properties.evidence.items.properties),
+    ['ref', 'quote']
+  )
 })
+
+async function nextVolume(f, unresolved, body = 'PASS Ω: serializer round-trip', kind = 'audit') {
+  await f.recent.narrate(
+    f.volume,
+    {
+      summary: 'Earlier work still needed verification.',
+      unresolved,
+      negativeAttempts: [],
+      evidence: [f.result.ref],
+    },
+    signal
+  )
+  const result = await f.session.context.append({
+    kind,
+    title: 'script:abcdef12:result',
+    body,
+  })
+  await f.recent.seal(f.response.sequence, result.sequence, signal)
+  return result
+}
+
+test('automatic narration resolves a witnessed question atomically and preserves other questions and user constraints', async (t) => {
+  const f = await fixture(t, async function* (request) {
+    const material = JSON.parse(request.materials[0].text)
+    const question = material.active.items.find((item) => item.text === 'Verify the serializer')
+    const result = material.records.find(
+      (record) => record.text === 'PASS Ω: serializer round-trip'
+    )
+    yield {
+      type: 'output',
+      value: {
+        summary: 'The round-trip execution passed. Integration verification remains open.',
+        unresolved: ['Verify streaming cancellation'],
+        negativeAttempts: [],
+        active: {
+          changes: [
+            {
+              id: question.id,
+              evidence: [{ ref: result.ref, quote: 'PASS Ω: serializer round-trip' }],
+            },
+          ],
+        },
+      },
+    }
+    yield { type: 'finish', reason: 'stop' }
+  })
+  await f.session.context.summarizeInput({
+    ref: f.input.ref,
+    baseRevision: 0,
+    summary: 'Change the serializer.',
+    constraints: ['Preserve the public API'],
+    unresolved: [],
+  })
+  const result = await nextVolume(f, ['Verify the serializer', 'Run integration tests'])
+  const old = (await f.recent.volumes(signal))[0].narrative
+  assert.equal(
+    await f.maintenance.maintain('root', { reason: 'narrate', targetChars: 12000 }, signal),
+    true
+  )
+  const current = await new ActiveContext('root', f.session.context, f.storage).read(signal)
+  assert.deepEqual(
+    new Set(current.items.map((item) => item.text)),
+    new Set(['Preserve the public API', 'Run integration tests', 'Verify streaming cancellation'])
+  )
+  assert.equal(current.status, 'reviewed')
+  const memory = new ContextMemory(
+    'root',
+    f.session.context,
+    f.storage,
+    f.session.view,
+    new ProgramContext('root', f.session.context, f.storage),
+    f.recent
+  )
+  const frame = await memory.project(
+    {
+      id: 'frame',
+      scope: { sessionId: 'root', revision: 0 },
+      goals: [await f.session.context.projectInput(f.input.ref, 6000)],
+      capsule: {},
+      mandatory: [],
+      evidence: [],
+      gaps: [],
+      readSet: [],
+      progress: { step: 0, repeatedSteps: 0, stalled: false, evidence: [] },
+    },
+    undefined,
+    [],
+    signal,
+    24000
+  )
+  assert.deepEqual(JSON.parse(frame.body).partitions.task.active.items, current.items)
+  assert.equal(f.requests.length, 1)
+  assert.equal(f.opened(), 0)
+  const volumes = await f.recent.volumes(signal)
+  assert.deepEqual(volumes[0].narrative, old)
+  assert.deepEqual(volumes.at(-1).narrative.unresolved, ['Verify streaming cancellation'])
+  const state = await f.storage.load('root')
+  const transition = state.records.findLast(
+    (record) => record.title === 'context:active-transition'
+  )
+  const details = JSON.parse(await f.storage.get('root', transition.objectId))
+  assert.equal(details.transitions[0].status, 'resolved')
+  assert.deepEqual(details.transitions[0].evidence, [
+    { ref: result.ref, offset: 0, quote: 'PASS Ω: serializer round-trip' },
+  ])
+  assert.equal(
+    (await f.session.context.readInput(f.input.ref, { limit: 1000 })).text,
+    'Change the serializer; preserve the public API.'
+  )
+})
+
+test('automatic narration preserves omitted current questions without copying the entire backlog into each volume', async (t) => {
+  const f = await fixture(t, async function* () {
+    yield {
+      type: 'output',
+      value: {
+        summary: 'Checked one current stage.',
+        unresolved: ['Check the next stage'],
+        negativeAttempts: [],
+      },
+    }
+    yield { type: 'finish', reason: 'stop' }
+  })
+  const prior = Array.from({ length: 32 }, (_, i) => `Pending check ${i}`)
+  await nextVolume(f, prior)
+  assert.equal(
+    await f.maintenance.maintain('root', { reason: 'narrate', targetChars: 12000 }, signal),
+    true
+  )
+  const current = await new ActiveContext('root', f.session.context, f.storage).read(signal)
+  assert.deepEqual(
+    current.items.map((item) => item.text),
+    [...prior, 'Check the next stage']
+  )
+  assert.deepEqual((await f.recent.volumes(signal)).at(-1).narrative.unresolved, [
+    'Check the next stage',
+  ])
+})
+
+test('direct narration acknowledges every fully sent input page before applying a resolution', async (t) => {
+  const body = '用户需求 Ω😀\n'.repeat(4300)
+  const f = await fixture(
+    t,
+    async function* (request) {
+      const material = JSON.parse(request.materials[0].text)
+      const question = material.active.items.find((item) => item.kind === 'question')
+      const result = material.records.find((record) => record.text === 'prefix 😀\nPASS Ω\nsuffix')
+      yield {
+        type: 'output',
+        value: {
+          summary: 'The requested check passed.',
+          unresolved: [],
+          negativeAttempts: [],
+          active: {
+            changes: [{ id: question.id, evidence: [{ ref: result.ref, quote: 'PASS Ω' }] }],
+          },
+        },
+      }
+      yield { type: 'finish', reason: 'stop' }
+    },
+    body
+  )
+  f.model.limits.inputTokens = 96000
+  f.model.limits.contextTokens = 108000
+  await nextVolume(f, ['Verify Unicode output'], 'prefix 😀\nPASS Ω\nsuffix')
+  assert.equal(
+    await f.maintenance.maintain('root', { reason: 'narrate', targetChars: 12000 }, signal),
+    true
+  )
+  assert.equal(f.opened(), 0)
+  assert.equal(
+    (await new ActiveContext('root', f.session.context, f.storage).read(signal)).items.length,
+    0
+  )
+  const state = await f.storage.load('root')
+  const record = state.records.findLast((item) => item.title === 'context:active-transition')
+  const transition = JSON.parse(await f.storage.get('root', record.objectId))
+  assert.equal(transition.transitions[0].evidence[0].offset, 'prefix 😀\n'.length)
+})
+
+for (const fault of [
+  'constraint',
+  'foreign-reference',
+  'invented-quote',
+  'ambiguous-quote',
+  'assistant-evidence',
+  'repeated-id',
+  'extra-field',
+  'resolved-and-open',
+  'prior-volume',
+  'later-volume',
+])
+  test(`automatic resolution rejects ${fault} without partially publishing the narrative or current state`, async (t) => {
+    const f = await fixture(t, async function* (request) {
+      const material = JSON.parse(request.materials[0].text)
+      const question = material.active.items.find(
+        (item) => item.kind === (fault === 'constraint' ? 'constraint' : 'question')
+      )
+      const result = material.records.find(
+        (record) => record.text === 'PASS Ω: serializer round-trip'
+      )
+      const change = { id: question.id, evidence: [{ ref: result.ref, quote: 'PASS Ω' }] }
+      if (fault === 'prior-volume')
+        change.evidence = [{ ref: f.result.ref, quote: 'Test failed: escaped separator' }]
+      if (fault === 'later-volume') change.evidence[0].ref = later.ref
+      if (fault === 'foreign-reference')
+        change.evidence[0].ref = { ...result.ref, sessionId: 'foreign' }
+      if (fault === 'invented-quote') change.evidence[0].quote = 'INVENTED_VALIDATION_RESULT'
+      if (fault === 'ambiguous-quote') change.evidence[0].quote = 'r'
+      if (fault === 'assistant-evidence') assert.equal(result.kind, 'assistant')
+      const active = { changes: fault === 'repeated-id' ? [change, change] : [change] }
+      if (fault === 'extra-field') active.baseRevision = material.active.revision
+      yield {
+        type: 'output',
+        value: {
+          summary: 'THIS_NARRATIVE_MUST_NOT_PUBLISH',
+          unresolved: fault === 'resolved-and-open' ? ['Verify the serializer'] : [],
+          negativeAttempts: [],
+          active,
+        },
+      }
+      yield { type: 'finish', reason: 'stop' }
+    })
+    await f.session.context.summarizeInput({
+      ref: f.input.ref,
+      baseRevision: 0,
+      summary: 'Change the serializer.',
+      constraints: ['Preserve the public API'],
+      unresolved: [],
+    })
+    const result = await nextVolume(
+      f,
+      ['Verify the serializer'],
+      'PASS Ω: serializer round-trip',
+      fault === 'assistant-evidence' ? 'assistant' : 'audit'
+    )
+    const later =
+      fault === 'later-volume'
+        ? await f.session.context.append({
+            kind: 'audit',
+            title: 'script:1234abcd:result',
+            body: 'PASS Ω: later work',
+          })
+        : undefined
+    assert.equal(
+      await f.maintenance.maintain('root', { reason: 'narrate', targetChars: 12000 }, signal),
+      false
+    )
+    const current = await new ActiveContext('root', f.session.context, f.storage).read(signal)
+    assert.deepEqual(
+      new Set(current.items.map((item) => item.text)),
+      new Set(['Preserve the public API', 'Verify the serializer'])
+    )
+    assert.equal((await f.recent.volumes(signal)).at(-1).narrative, undefined)
+    assert.equal(
+      (await f.session.context.read(result.ref, { limit: 1000 })).text,
+      'PASS Ω: serializer round-trip'
+    )
+    assert.equal(f.requests.length, 1)
+  })
+
+for (const fault of ['partial-result', 'partial-input', 'missing-input'])
+  test(`automatic resolution requires complete delivered records: ${fault}`, async (t) => {
+    const f = await fixture(t, complete)
+    const result = await nextVolume(f, ['Verify the serializer'])
+    const snapshot = await new ContextMaintenanceState('root', f.storage).snapshot(24000, signal)
+    const input = await f.session.context.read(f.input.ref, {
+      limit: fault === 'partial-input' ? 4 : 1000,
+    })
+    const output = await f.session.context.read(result.ref, {
+      limit: fault === 'partial-result' ? 4 : 1000,
+    })
+    const value = {
+      summary: 'The serializer check passed.',
+      unresolved: [],
+      negativeAttempts: [],
+      active: {
+        changes: [
+          {
+            id: snapshot.active.items[0].id,
+            evidence: [{ ref: result.ref, quote: 'PASS' }],
+          },
+        ],
+      },
+    }
+    assert.throws(
+      () =>
+        volumeNarrationPatch(
+          snapshot,
+          value,
+          [result.ref],
+          [...(fault === 'missing-input' ? [] : [input]), output]
+        ),
+      { code: fault === 'partial-result' ? 'PERMISSION' : 'CONTEXT_INPUT_UNSEEN' }
+    )
+  })
+
+for (const change of ['user-input', 'authorization-reset', 'active-revision'])
+  test(`a concurrent ${change} invalidates automatic closure and narrative publication together`, async (t) => {
+    const f = await fixture(t, async function* (request) {
+      const material = JSON.parse(request.materials[0].text)
+      const question = material.active.items.find((item) => item.kind === 'question')
+      const result = material.records.find(
+        (record) => record.text === 'PASS Ω: serializer round-trip'
+      )
+      if (change === 'user-input')
+        await f.session.context.append({
+          kind: 'user',
+          body: 'The validation requirements have changed.',
+        })
+      else if (change === 'authorization-reset')
+        await f.session.context.append({ kind: 'audit', title: 'search:history-reset', body: '{}' })
+      else
+        await new ActiveContext('root', f.session.context, f.storage).apply(
+          {
+            baseRevision: material.active.revision,
+            reviewedInput: f.input.ref,
+            changes: [],
+          },
+          [f.input.ref],
+          signal
+        )
+      yield {
+        type: 'output',
+        value: {
+          summary: 'STALE_NARRATIVE_MUST_NOT_PUBLISH',
+          unresolved: [],
+          negativeAttempts: [],
+          active: {
+            changes: [{ id: question.id, evidence: [{ ref: result.ref, quote: 'PASS Ω' }] }],
+          },
+        },
+      }
+      yield { type: 'finish', reason: 'stop' }
+    })
+    await nextVolume(f, ['Verify the serializer'])
+    await assert.rejects(
+      f.maintenance.maintain('root', { reason: 'narrate', targetChars: 12000 }, signal),
+      {
+        code: 'STALE_VIEW',
+      }
+    )
+    const state = await f.storage.load('root')
+    for (const record of state.records.filter(
+      (item) => item.title === 'context:active-transition'
+    )) {
+      const transition = JSON.parse(await f.storage.get('root', record.objectId))
+      assert.equal(
+        transition.transitions.length,
+        0,
+        'the concurrent review cannot silently close any question'
+      )
+    }
+    assert.equal(
+      state.records.filter((item) => item.title === 'context:volume-narrative').length,
+      1
+    )
+    assert.equal(f.closed(), 1)
+  })

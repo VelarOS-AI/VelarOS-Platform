@@ -1,12 +1,16 @@
-import type { ContextRef } from '@velaros-ai/context'
-import { isArray, isPlainObject, isString } from '@velaros-ai/core'
+import type { ContextContent, ContextRef } from '@velaros-ai/context'
+import { isArray, isPlainObject, isString, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelResponseFormat } from '@velaros-ai/kernel'
 
-import { ContextPatchLimits } from '../../system/contract/constants.js'
-import type { ContextMaintenanceSnapshot, ContextPatch } from '../../system/types/maintenance.js'
+import { ActiveContextLimits, ContextPatchLimits } from '../../system/contract/constants.js'
+import type {
+  ActiveContextPatch,
+  ContextMaintenanceSnapshot,
+  ContextPatch,
+} from '../../system/types/maintenance.js'
 
-/** 摘要格式只投影已生成的卷叙事合同，版本与引用由宿主绑定。 */
+/** 摘要与事项核对均投影生成合同；版本、状态和引文偏移由宿主绑定。 */
 export function volumeNarrationFormat(
   schema: Readonly<Record<string, unknown>>
 ): ModelResponseFormat {
@@ -17,15 +21,42 @@ export function volumeNarrationFormat(
     required: string[]
   }
   const fields = ['summary', 'unresolved', 'negativeAttempts']
+  const active = schemaFields(
+    expandSchema((root.properties as Record<string, unknown>).active, definitions),
+    ['changes']
+  )
+  const changes = active.properties.changes as Record<string, unknown>
+  const change = schemaFields(changes.items, ['id', 'evidence'])
+  const evidence = change.properties.evidence as Record<string, unknown>
+  change.properties.evidence = {
+    ...evidence,
+    items: schemaFields(evidence.items, ['ref', 'quote']),
+  }
+  active.properties.changes = { ...changes, items: change }
   return {
     type: 'json',
     name: 'volume_narrative',
-    description: '已封历史的事实摘要、未解事项与失败尝试',
+    description: '已封历史的事实摘要、新未解事项、失败尝试与有证据的事项解决',
     schema: {
       ...volume,
-      properties: Object.fromEntries(fields.map((key) => [key, volume.properties[key]])),
+      properties: {
+        ...Object.fromEntries(fields.map((key) => [key, volume.properties[key]])),
+        active,
+      },
       required: volume.required.filter((key) => fields.includes(key)),
     },
+  }
+}
+
+/** 只选择生成对象中模型需填写的字段，其余必填元数据由宿主从已读快照补齐。 */
+function schemaFields(value: unknown, fields: readonly string[]) {
+  if (!isPlainObject(value) || !isPlainObject(value.properties) || !isArray(value.required))
+    throw new AppError('INVARIANT', '自动叙事所需生成合同无效')
+  const properties = value.properties
+  return {
+    ...value,
+    properties: Object.fromEntries(fields.map((key) => [key, properties[key]])),
+    required: value.required.filter((key) => isString(key) && fields.includes(key)),
   }
 }
 
@@ -40,16 +71,17 @@ function expandSchema(value: unknown, definitions: Readonly<Record<string, unkno
   )
 }
 
-/** 自动叙事只生成卷内容；既有未解事项继续保留，原始输入与当前状态不由这条路径改写。 */
+/** 卷内新发现与持久当前事项分开；事项只按完整可见的真实执行证据逐项解决。 */
 export function volumeNarrationPatch(
   snapshot: ContextMaintenanceSnapshot,
   value: unknown,
-  evidence: readonly ContextRef[]
+  evidence: readonly ContextRef[],
+  records: readonly ContextContent[] = []
 ): ContextPatch {
   if (
     !isPlainObject(value) ||
     Object.keys(value).some(
-      (key) => !['summary', 'unresolved', 'negativeAttempts'].includes(key)
+      (key) => !['summary', 'unresolved', 'negativeAttempts', 'active'].includes(key)
     ) ||
     !isString(value.summary) ||
     !value.summary.trim() ||
@@ -63,15 +95,27 @@ export function volumeNarrationPatch(
     )
   )
     throw new AppError('VALIDATION', '自动卷叙事格式或大小无效')
-  const unresolved = [
-    ...new Set([...snapshot.ledgers.unresolved, ...(value.unresolved as string[])]),
-  ]
-  if (unresolved.length > ContextPatchLimits.unresolved)
-    throw new AppError('LIMIT', '自动卷叙事的未解事项超限，需要逐项整理')
+  const active = narrationActive(snapshot, value.active, records)
+  const unresolved = [...new Set(value.unresolved as string[])]
+  if (active) {
+    const closed = new Set(active.changes.map((item) => item.id))
+    const remaining = new Set(
+      snapshot
+        .active!.items.filter((item) => item.kind === 'question' && !closed.has(item.id))
+        .map((item) => item.text)
+    )
+    if (
+      snapshot.active!.items.some(
+        (item) => closed.has(item.id) && !remaining.has(item.text) && unresolved.includes(item.text)
+      )
+    )
+      throw new AppError('VALIDATION', '同一事项不能同时解决并作为新的未解事项发布')
+  }
   return {
     baseRevision: snapshot.baseRevision,
     summary: value.summary,
     unresolved,
+    ...(active ? { active } : {}),
     volume: {
       summary: value.summary,
       unresolved,
@@ -79,4 +123,87 @@ export function volumeNarrationPatch(
       evidence,
     },
   }
+}
+
+/** 模型只选已有未解项及逐字见证；宿主校验卷边界、真实结果和唯一引文后绑定原子补丁。 */
+function narrationActive(
+  snapshot: ContextMaintenanceSnapshot,
+  value: unknown,
+  records: readonly ContextContent[]
+): Optional<ActiveContextPatch> {
+  if (isUndefined(value)) return
+  if (
+    !snapshot.active ||
+    !snapshot.volume ||
+    !isPlainObject(value) ||
+    Object.keys(value).some((key) => key !== 'changes') ||
+    !isArray(value.changes) ||
+    value.changes.length > ActiveContextLimits.changes
+  )
+    throw new AppError('VALIDATION', '自动叙事的当前事项核对无效')
+  const latest = snapshot.goals.at(-1)
+  const complete = (page: ContextContent) =>
+    page.offset === 0 && page.text.length === page.totalChars
+  if (
+    !latest ||
+    !records.some(
+      (page) =>
+        page.record.kind === 'user' &&
+        page.record.ref.sessionId === latest.sessionId &&
+        page.record.ref.id === latest.id &&
+        complete(page)
+    )
+  )
+    throw new AppError('CONTEXT_INPUT_UNSEEN', '自动核对事项前必须完整交付最新用户原文')
+  const ids = new Set<string>()
+  const changes: Array<ActiveContextPatch['changes'][number]> = []
+  for (const item of value.changes) {
+    if (
+      !isPlainObject(item) ||
+      Object.keys(item).some((key) => !['id', 'evidence'].includes(key)) ||
+      !isString(item.id) ||
+      ids.has(item.id) ||
+      !snapshot.active.items.some((prior) => prior.id === item.id && prior.kind === 'question') ||
+      !isArray(item.evidence) ||
+      !item.evidence.length ||
+      item.evidence.length > ActiveContextLimits.evidence
+    )
+      throw new AppError('VALIDATION', '自动叙事只能逐项解决现有未解事项')
+    ids.add(item.id)
+    const witnesses: Array<ActiveContextPatch['changes'][number]['evidence'][number]> = []
+    for (const proof of item.evidence) {
+      if (
+        !isPlainObject(proof) ||
+        Object.keys(proof).some((key) => !['ref', 'quote'].includes(key)) ||
+        !isPlainObject(proof.ref) ||
+        Object.keys(proof.ref).some((key) => !['sessionId', 'id'].includes(key)) ||
+        !isString(proof.ref.sessionId) ||
+        !isString(proof.ref.id) ||
+        !isString(proof.quote) ||
+        !proof.quote.trim() ||
+        proof.quote.length > ActiveContextLimits.quoteChars
+      )
+        throw new AppError('VALIDATION', '自动叙事的执行见证无效')
+      const ref = proof.ref
+      const page = records.find(
+        (page) => page.record.ref.sessionId === ref.sessionId && page.record.ref.id === ref.id
+      )
+      if (
+        !page ||
+        !complete(page) ||
+        page.record.ref.sessionId !== latest.sessionId ||
+        !['audit', 'tool'].includes(page.record.kind) ||
+        !/^script:(?:[a-f0-9]{8}|[0-9a-f-]{36}):result$/u.test(page.record.title) ||
+        page.record.sequence <= snapshot.volume.from ||
+        page.record.sequence > snapshot.volume.through
+      )
+        throw new AppError('PERMISSION', '自动叙事的见证必须来自本卷完整已读的真实执行结果')
+      const offset = page.text.indexOf(proof.quote)
+      if (offset < 0 || page.text.includes(proof.quote, offset + 1))
+        throw new AppError('CONFLICT', '自动叙事引文须唯一匹配执行原文；请包含足够上下文')
+      witnesses.push({ ref: page.record.ref, offset, quote: proof.quote })
+    }
+    changes.push({ id: item.id, status: 'resolved', evidence: witnesses })
+  }
+  return { baseRevision: snapshot.active.revision, reviewedInput: latest, changes }
 }
