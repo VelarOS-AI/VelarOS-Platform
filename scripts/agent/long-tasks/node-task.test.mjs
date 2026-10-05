@@ -6,13 +6,16 @@ import { test } from 'node:test'
 
 import {
   copyNodeDependencies,
+  jestReport,
   mochaReport,
   nodeDependencyState,
   nodeTestSummary,
+  nodeRegressionReport,
 } from './node-task.mjs'
 import { regressionVerdict } from './regression.mjs'
 import {
   acceptanceArguments,
+  applyTaskEnvironment,
   regressionArguments,
   taskEnvironment,
   taskPrompt,
@@ -58,6 +61,127 @@ test('Node task selects native Node commands and leaves Python declarations unch
     { regressionRunner: 'shell' },
   ])
     assert.throws(() => taskEnvironment({ environment: { ...config, ...invalid } }))
+})
+
+test('Jest task freezes its API entry and shared terminal environment without changing defaults', () => {
+  const environment = taskEnvironment({
+    environment: {
+      ...config,
+      regressionRunner: 'jest-json',
+      regressionEntry: 'node_modules/jest/build/index.js',
+      regression: ['tests'],
+      processEnvironment: { NO_COLOR: null, TZ: 'UTC' },
+    },
+  })
+  const [runner, ...args] = regressionArguments(environment)
+  assert.equal(runner, join(import.meta.dirname, 'jest-runner.mjs'))
+  assert.deepEqual(args, ['node_modules/jest/build/index.js', 'tests'])
+  const env = { NO_COLOR: '1', TZ: 'before', PATH: 'unchanged' }
+  applyTaskEnvironment(environment, env)
+  assert.deepEqual(env, { TZ: 'UTC', PATH: 'unchanged' })
+  applyTaskEnvironment(taskEnvironment({ environment: config }), env)
+  assert.deepEqual(env, { TZ: 'UTC', PATH: 'unchanged' })
+  for (const processEnvironment of [{ PATH: 'override' }, { NO_COLOR: true }, [], null])
+    assert.throws(() => taskEnvironment({ environment: { ...config, processEnvironment } }))
+})
+
+test('Jest reports preserve failures, skips, repeated names and suite errors with exact inventories', () => {
+  const item = (fullName, status = 'passed') => ({
+    fullName,
+    status,
+    failureMessages: status === 'failed' ? ['failure'] : [],
+  })
+  function result(assertions, { message = '', status, exitCode } = {}) {
+    const counts = { passed: 0, failed: 0, pending: 0, todo: 0 }
+    for (const row of assertions) counts[row.status]++
+    const failed = Boolean(counts.failed || message)
+    const raw = {
+      wasInterrupted: false,
+      success: !failed,
+      numPassedTests: counts.passed,
+      numFailedTests: counts.failed,
+      numPendingTests: counts.pending,
+      numTodoTests: counts.todo,
+      numTotalTests: assertions.length,
+      numTotalTestSuites: 1,
+      numPassedTestSuites: failed ? 0 : 1,
+      numFailedTestSuites: failed ? 1 : 0,
+      numPendingTestSuites: 0,
+      numRuntimeErrorTestSuites: message ? 1 : 0,
+      testResults: [
+        {
+          name: '/repo/tests/a.js',
+          status: status ?? (failed ? 'failed' : 'passed'),
+          message,
+          assertionResults: assertions,
+        },
+      ],
+    }
+    return { exitCode: exitCode ?? (failed ? 1 : 0), stdout: JSON.stringify(raw) }
+  }
+  const original = result([
+    item('same'),
+    item('same'),
+    item('todo', 'todo'),
+    item('pending', 'pending'),
+  ])
+  const base = jestReport(original, '/repo')
+  assert.equal(base.summary.passed, 2)
+  assert.equal(base.summary.skipped, 2)
+  assert.equal(new Set(base.cases.map((c) => c.id)).size, 4)
+  assert(regressionVerdict({ ...original, ...base }).suitePassed)
+  assert.deepEqual(nodeRegressionReport(original, '/repo', 'jest-json'), base)
+  for (const changed of [
+    result([
+      item('same'),
+      item('same', 'failed'),
+      item('todo', 'todo'),
+      item('pending', 'pending'),
+    ]),
+    result([
+      item('same'),
+      item('same', 'pending'),
+      item('todo', 'todo'),
+      item('pending', 'pending'),
+    ]),
+    result([item('same'), item('todo', 'todo'), item('pending', 'pending')]),
+  ])
+    assert(
+      !regressionVerdict({ ...changed, ...jestReport(changed, '/repo') }, [], base.cases)
+        .suitePassed
+    )
+  for (const rows of [[], [item('passes before hook failure')]]) {
+    const hook = result(rows, { message: 'suite setup or teardown failed' })
+    const parsed = jestReport(hook, '/repo')
+    assert.equal(parsed.summary.errors, 1)
+    assert(!regressionVerdict({ ...hook, ...parsed }).suitePassed)
+  }
+  const empty = result([])
+  assert(!regressionVerdict({ ...empty, ...jestReport(empty, '/repo') }).suitePassed)
+  const skippedRaw = JSON.parse(result([item('entire skipped suite', 'pending')]).stdout)
+  skippedRaw.numPassedTestSuites = 0
+  skippedRaw.numPendingTestSuites = 1
+  skippedRaw.testResults[0].status = 'skipped'
+  const skippedSuite = jestReport({ exitCode: 0, stdout: JSON.stringify(skippedRaw) }, '/repo')
+  assert.equal(skippedSuite.summary.skipped, 1)
+  assert.equal(skippedSuite.summary.errors, 0)
+  for (const patch of [
+    { numPassedTests: 9 },
+    { numTotalTests: 9 },
+    { numTotalTestSuites: 9 },
+    { wasInterrupted: true },
+  ])
+    assert.throws(() =>
+      jestReport(
+        { ...original, stdout: JSON.stringify({ ...JSON.parse(original.stdout), ...patch }) },
+        '/repo'
+      )
+    )
+  assert.throws(() => jestReport({ ...original, stdout: original.stdout.slice(0, -1) }, '/repo'))
+  assert.throws(() =>
+    jestReport({ ...original, stdout: original.stdout + original.stdout }, '/repo')
+  )
+  assert.throws(() => nodeRegressionReport(original, '/repo', 'unknown'))
 })
 
 test('Node dependency copies isolate both participants and judges and detect content or permission drift', async (t) => {

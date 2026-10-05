@@ -16,7 +16,7 @@ export function taskEnvironment(task) {
   const regressionRunner = value.regressionRunner ?? 'pytest'
   const node = value.runtime === 'node'
   assert(value.runtime === undefined || node)
-  assert((node ? ['mocha-json'] : ['pytest', 'unittest']).includes(regressionRunner))
+  assert((node ? ['mocha-json', 'jest-json'] : ['pytest', 'unittest']).includes(regressionRunner))
   if (regressionRunner === 'unittest') assert.equal(regression.length, 1)
   for (const name of node ? [project] : [project, python])
     assert.match(name, /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/u)
@@ -60,11 +60,39 @@ export function taskEnvironment(task) {
     assert.match(value.regressionPattern, /^[a-zA-Z0-9_*?][a-zA-Z0-9_.*?-]*\.py$/u)
     result.regressionPattern = value.regressionPattern
   }
+  if (value.processEnvironment !== undefined) {
+    assert(value.processEnvironment && typeof value.processEnvironment === 'object')
+    assert(!Array.isArray(value.processEnvironment))
+    for (const [name, setting] of Object.entries(value.processEnvironment)) {
+      assert(
+        [
+          'NO_COLOR',
+          'FORCE_COLOR',
+          'CLICOLOR',
+          'CLICOLOR_FORCE',
+          'TERM',
+          'TZ',
+          'LANG',
+          'LC_ALL',
+        ].includes(name)
+      )
+      assert(setting === null || typeof setting === 'string')
+    }
+    result.processEnvironment = { ...value.processEnvironment }
+  }
   if (value.baselineIssues !== undefined) {
     validateBaselineIssues(value.baselineIssues, regressionRunner)
     result.baselineIssues = value.baselineIssues
   }
   return result
+}
+
+// 只应用任务显式冻结的终端与区域设置，参与者和评分进程继承相同环境。
+export function applyTaskEnvironment(environment, target = process.env) {
+  for (const [name, setting] of Object.entries(environment.processEnvironment ?? {})) {
+    if (setting === null) delete target[name]
+    else target[name] = setting
+  }
 }
 
 // 原项目测试可能分散在源码包中；逐层检查目标父目录，拒绝沿代理创建的链接写出评分副本。
@@ -94,7 +122,13 @@ export async function restoreTaskPaths(source, destination, paths) {
 // 使用项目自身的回归测试入口；新功能验收单独使用 pytest。
 export function regressionArguments(environment, report) {
   if (environment.runtime === 'node')
-    return [environment.regressionEntry, '--reporter', 'json', ...environment.regression]
+    return environment.regressionRunner === 'jest-json'
+      ? [
+          join(import.meta.dirname, 'jest-runner.mjs'),
+          environment.regressionEntry,
+          ...environment.regression,
+        ]
+      : [environment.regressionEntry, '--reporter', 'json', ...environment.regression]
   return environment.regressionRunner === 'unittest'
     ? [
         '-m',

@@ -5,7 +5,7 @@ import { homedir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { mochaReport, nodeTestSummary } from './node-task.mjs'
+import { nodeRegressionReport, nodeTestSummary } from './node-task.mjs'
 import { workspaceChanges } from './workspace-changes.mjs'
 
 export function requestOwner(request) {
@@ -80,10 +80,10 @@ export function pytestSummary(result) {
 }
 
 export function regressionSummary(result, runner) {
-  if (runner === 'mocha-json') {
+  if (['mocha-json', 'jest-json'].includes(runner)) {
     try {
       return {
-        ...(result.summary ?? mochaReport(result, '').summary),
+        ...(result.summary ?? nodeRegressionReport(result, '', runner).summary),
         ...(result.verdict ? { verdict: result.verdict } : {}),
       }
     } catch (error) {

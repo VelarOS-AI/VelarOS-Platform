@@ -150,6 +150,103 @@ export function mochaReport(result, workspace) {
   }
 }
 
+// Jest JSON 使用逐项结果核对总数；收集和钩子故障必须保留为独立失败。
+export function jestReport(result, workspace) {
+  const report = JSON.parse(result.stdout)
+  assert.equal(report.wasInterrupted, false, 'Jest run was interrupted')
+  assert.equal(typeof report.success, 'boolean')
+  assert(Array.isArray(report.testResults))
+  const counts = { passed: 0, failed: 0, pending: 0, todo: 0 }
+  const suites = { passed: 0, failed: 0, pending: 0 }
+  const cases = []
+  const occurrences = new Map()
+  let errors = 0
+  for (const suite of report.testResults) {
+    assert.equal(typeof suite.name, 'string')
+    assert(['passed', 'failed', 'skipped'].includes(suite.status))
+    suites[suite.status === 'skipped' ? 'pending' : suite.status]++
+    assert(Array.isArray(suite.assertionResults))
+    for (const item of suite.assertionResults) {
+      assert(Object.hasOwn(counts, item.status), 'Unknown Jest assertion status')
+      assert.equal(typeof item.fullName, 'string')
+      assert(Array.isArray(item.failureMessages))
+      counts[item.status]++
+      const name = `${relative(workspace, suite.name)}::${item.fullName}`
+      const occurrence = (occurrences.get(name) ?? 0) + 1
+      occurrences.set(name, occurrence)
+      cases.push({
+        id: `${name}::${occurrence}`,
+        outcomes:
+          item.status === 'passed'
+            ? []
+            : [
+                {
+                  kind: item.status === 'failed' ? 'failure' : 'skipped',
+                  message: item.failureMessages.join('\n'),
+                  text: item.failureMessages.join('\n'),
+                },
+              ],
+      })
+    }
+    const failing = suite.assertionResults.filter((item) => item.status === 'failed')
+    assert(suite.status !== 'passed' || !failing.length, 'Passed Jest suite contains failures')
+    assert(
+      suite.status !== 'skipped' ||
+        suite.assertionResults.every((item) => ['pending', 'todo'].includes(item.status)),
+      'Skipped Jest suite contains executed assertions'
+    )
+    if (suite.status === 'failed' && !failing.length) {
+      errors++
+      cases.push({
+        id: `${relative(workspace, suite.name)}::[suite error]`,
+        outcomes: [{ kind: 'error', message: suite.message ?? '', text: suite.message ?? '' }],
+      })
+    }
+  }
+  for (const [key, count] of Object.entries(counts)) {
+    const name = key[0].toUpperCase() + key.slice(1)
+    assert.equal(report[`num${name}Tests`], count, `Jest ${key} count does not match inventory`)
+  }
+  for (const [key, count] of Object.entries(suites)) {
+    const name = key[0].toUpperCase() + key.slice(1)
+    assert.equal(report[`num${name}TestSuites`], count)
+  }
+  assert.equal(report.numTotalTestSuites, report.testResults.length)
+  assert(
+    Number.isSafeInteger(report.numRuntimeErrorTestSuites) && report.numRuntimeErrorTestSuites >= 0
+  )
+  assert(report.numRuntimeErrorTestSuites <= suites.failed)
+  errors = Math.max(errors, report.numRuntimeErrorTestSuites)
+  assert.equal(
+    report.numTotalTests,
+    Object.values(counts).reduce((a, b) => a + b, 0)
+  )
+  assert(!report.success || (!counts.failed && !errors), 'Jest success contradicts failures')
+  assert(
+    report.success || counts.failed || errors || result.exitCode !== 0,
+    'Unsuccessful Jest report'
+  )
+  return {
+    cases,
+    summary: {
+      exitCode: result.exitCode,
+      passed: counts.passed,
+      failed: counts.failed,
+      skipped: counts.pending + counts.todo,
+      errors,
+      summary: `${counts.passed} passed, ${counts.failed} failed, ${counts.pending + counts.todo} skipped, ${errors} errors`,
+      failures: cases
+        .filter((item) => item.outcomes.some((o) => o.kind !== 'skipped'))
+        .map((item) => item.id),
+    },
+  }
+}
+
+export function nodeRegressionReport(result, workspace, runner) {
+  assert(['mocha-json', 'jest-json'].includes(runner), 'Unknown Node regression reporter')
+  return runner === 'jest-json' ? jestReport(result, workspace) : mochaReport(result, workspace)
+}
+
 // Node 自带测试器的 TAP 尾部是固定计数；崩溃或无测试不能被当作验收成功。
 export function nodeTestSummary(result) {
   const text = result.stdout ?? ''

@@ -12,7 +12,7 @@ import { toTrajectory } from '../harbor/atif.mjs'
 import { verifyCampaignDriver } from './model-driver.mjs'
 import {
   copyNodeDependencies,
-  mochaReport,
+  nodeRegressionReport,
   nodeDependencyState,
   nodeTestSummary,
 } from './node-task.mjs'
@@ -21,6 +21,7 @@ import { runtimeCapabilityOptions, runtimeSubmissionOptions } from './runtime-ca
 import {
   createExecutionEnvironments,
   acceptanceArguments,
+  applyTaskEnvironment,
   pythonTaskPath,
   regressionArguments,
   taskEnvironment,
@@ -49,6 +50,7 @@ if (process.argv[7]) {
   task.split = 'development'
 }
 const environment = taskEnvironment(task)
+applyTaskEnvironment(environment)
 const node = environment.runtime === 'node' ? process.execPath : undefined
 const output = join(campaign, attemptId)
 await mkdir(output)
@@ -98,7 +100,10 @@ try {
 }
 await writeFile(join(output, 'baseline.log'), baselineRegression.stdout + baselineRegression.stderr)
 if (node) {
-  Object.assign(baselineRegression, mochaReport(baselineRegression, baselineSource))
+  Object.assign(
+    baselineRegression,
+    nodeRegressionReport(baselineRegression, baselineSource, environment.regressionRunner)
+  )
   baselineRegression.verdict = regressionVerdict(baselineRegression)
 } else if (environment.regressionRunner === 'pytest') {
   baselineRegression.cases = await readPytestReport(python, baselineReport)

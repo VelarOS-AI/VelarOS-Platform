@@ -17,7 +17,7 @@ import { runCodex } from '../native-desktop/codex.mjs'
 import { campaignModelDriver } from './model-driver.mjs'
 import {
   copyNodeDependencies,
-  mochaReport,
+  nodeRegressionReport,
   nodeDependencyState,
   nodeTestSummary,
 } from './node-task.mjs'
@@ -26,6 +26,7 @@ import { runtimeCapabilityOptions, runtimeSubmissionOptions } from './runtime-ca
 import {
   pythonTaskPath,
   acceptanceArguments,
+  applyTaskEnvironment,
   bindPythonCheckout,
   regressionArguments,
   restoreTaskPaths,
@@ -41,6 +42,7 @@ const submission = runtimeSubmissionOptions(manifest.scriptactTaskMode, manifest
 const scriptactSessionId = manifest.scriptactSessionId ?? 'development'
 const environment = taskEnvironment(manifest.task)
 assert.deepEqual(environment, manifest.environment)
+applyTaskEnvironment(environment)
 assert.equal(
   import.meta.filename,
   manifest.controller ?? import.meta.filename,
@@ -192,7 +194,8 @@ async function grade(workspace, output) {
   if (environment.runtime === 'node' || environment.regressionRunner === 'pytest') {
     const result = JSON.parse(await readFile(join(output, 'regression.json'), 'utf8'))
     try {
-      if (environment.runtime === 'node') Object.assign(result, mochaReport(result, judge))
+      if (environment.runtime === 'node')
+        Object.assign(result, nodeRegressionReport(result, judge, environment.regressionRunner))
       else result.cases = await readPytestReport(manifest.python, join(output, 'regression.xml'))
       result.verdict = regressionVerdict(
         result,

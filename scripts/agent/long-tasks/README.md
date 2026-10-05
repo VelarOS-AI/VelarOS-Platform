@@ -14,7 +14,9 @@
 
 使用准备结果中的 `controller` 路径执行 `node <controller> <attempt-directory>`。控制器从尝试独立副本导入评测依赖，运行前后核对文件哈希和 Python 依赖。`analyze.mjs <attempt-directory>` 汇总最终验收、请求、上下文和费用覆盖率。
 
-Node 项目声明 `runtime: "node"`、`regressionRunner: "mocha-json"` 和项目自身的 `regressionEntry`，回归路径可包含项目测试器支持的 glob；独立验收使用本目录中的 `test_*.mjs` 与 Node 自带测试器。campaign/sources 中先安装完整依赖，准备、执行、评分分别复制 node_modules 实体目录，参与者可以在自己的副本安装工具。冻结身份包含 Node 二进制与版本、依赖文件内容和权限、相对链接；链接限于任务副本内部。评分恢复冻结依赖及原测试。Mocha JSON 的逐例结果用于检查原测试清单与新增跳过，hook 失败同样计入；Node TAP 的测试总数、失败和取消分别记录，空套件不能通过。原 Python 任务清单和运行语义兼容。
+Node 项目声明 `runtime: "node"`、`regressionRunner: "mocha-json"` 或 `"jest-json"` 和项目自身的 `regressionEntry`，回归路径可包含项目测试器支持的 glob；独立验收使用本目录中的 `test_*.mjs` 与 Node 自带测试器。Mocha 指向 CLI 文件，Jest 指向提供 runCLI 的包入口（如 `node_modules/jest/build/index.js`），冻结适配脚本调用 API 并保留普通 Node 进程 argv，避免测试器参数被应用解析。campaign/sources 中先安装完整依赖，准备、执行、评分分别复制 node_modules 实体目录，参与者可以在自己的副本安装工具。冻结身份包含 Node 二进制与版本、依赖文件内容和权限、相对链接；链接限于任务副本内部。评分恢复冻结依赖及原测试。Mocha/Jest JSON 的逐例结果用于检查原测试清单与新增跳过，收集和 hook 失败同样计入；Node TAP 的测试总数、失败和取消分别记录，空套件不能通过。原 Python 任务清单和运行语义兼容。
+
+`environment.processEnvironment` 可显式冻结终端颜色和区域变量，值为字符串或 null（清除该变量），准备与执行控制器在启动参与者及评分进程前应用相同设置。可配置 NO_COLOR、FORCE_COLOR、CLICOLOR、CLICOLOR_FORCE、TERM、TZ、LANG 与 LC_ALL；省略时保留原环境。它用于记录项目基线所需条件，不能在付费之后调整以放行失败。
 
 Python 参与者启动前，私有 venv 的 `.pth` 绑定其工作区的 `src` 与根目录，普通 Python、命令入口和 Node 派生的 Python 都优先使用当前源码。绑定只写入独占环境，拒绝系统 Python，路径记录在 `source-binding.json`。冻结评分环境继续由每次验收的 `PYTHONPATH` 指向对应评分副本。
 
