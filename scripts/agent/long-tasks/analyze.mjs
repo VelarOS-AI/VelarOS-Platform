@@ -7,6 +7,14 @@ import { pathToFileURL } from 'node:url'
 
 import { workspaceChanges } from './workspace-changes.mjs'
 
+export function requestOwner(request) {
+  const material = request.materials[0]
+  const frame = JSON.parse(material.text)
+  if (material.origin === 'context-narration' && frame.kind === 'context-narration')
+    return typeof frame.sessionId === 'string' ? frame.sessionId : 'unknown'
+  return frame.partitions?.task?.goals?.[0]?.record?.ref?.sessionId ?? 'unknown'
+}
+
 export function summarizeRequests(requests) {
   const measured = requests.filter((request) =>
     ['input_tokens', 'output_tokens'].every(
@@ -181,8 +189,7 @@ async function main() {
   const mainRequests = requests.filter((request) => request.request.cacheKey === rootKey)
   const owners = {}
   for (const request of requests) {
-    const frame = JSON.parse(request.request.materials[0].text)
-    const session = frame.partitions.task.goals[0]?.record?.ref?.sessionId ?? 'unknown'
+    const session = requestOwner(request.request)
     owners[session] = (owners[session] ?? 0) + 1
   }
   results.scriptact.execution = {
@@ -195,6 +202,9 @@ async function main() {
     nativeRequests: requests.filter((request) => request.request.response.type === 'tools').length,
     textProtocolRequests: requests.filter((request) => request.request.response.type === 'text')
       .length,
+    structuredNarrationRequests: requests.filter(
+      (request) => request.request.materials[0]?.origin === 'context-narration'
+    ).length,
     originalPromptInFinalRequest: JSON.stringify(mainRequests.at(-1).request.history).includes(
       JSON.stringify(manifest.executionEnvironments?.scriptact?.prompt ?? manifest.prompt).slice(
         1,

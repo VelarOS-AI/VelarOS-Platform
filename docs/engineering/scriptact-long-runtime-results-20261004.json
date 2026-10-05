@@ -4488,6 +4488,319 @@
           }
         }
       }
+    },
+    {
+      "attempt": "pygments-02",
+      "schema": 1,
+      "at": "2026-10-05T03:32:40.594Z",
+      "taskId": "pygments-line-number-labels",
+      "scriptactSessionId": "scriptact-a2230bf1-0b32-423b-8e57-721562e62dd8",
+      "candidateId": "candidate-v23-ea4f872603ac",
+      "candidateSourceCommit": "ad275a0e52556660faad3e3e3a6ad39ea87d405f",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 81,
+            "startedAt": 1791168977120,
+            "solveMs": 969405
+          },
+          "accounting": {
+            "requests": 81,
+            "requestStatuses": {
+              "http-200": 78,
+              "http-200-interrupted": 2,
+              "unknown": 1
+            },
+            "measuredRequests": 78,
+            "missingUsageRequests": 3,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1571852,
+            "knownOutputTokens": 27072,
+            "knownCachedInputTokens": 524672,
+            "knownCacheRatio": 0.33379223998188123,
+            "pricedRequests": 78,
+            "knownReferenceUsd": 4.940028800000001,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 61,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "61 passed in 0.33s",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 5175,
+            "failed": 0,
+            "skipped": 16,
+            "errors": 0,
+            "summary": "5175 passed, 16 skipped in 6.50s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": true,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 8,
+          "createdFiles": 2,
+          "changeSummary": "16\t0\tdoc/docs/formatters.rst\n9\t1\tpygments/formatter.py\n7\t2\tpygments/formatters/groff.py\n6\t4\tpygments/formatters/html.py\n5\t0\tpygments/formatters/rtf.py\n4\t2\tpygments/formatters/svg.py\n2\t1\tpygments/formatters/terminal.py\n2\t1\tpygments/formatters/terminal256.py\n",
+          "created": ".venv\ntests/test_lineno_affixes.py\n",
+          "changeAccounting": {
+            "baseline": "8034d893d61fd77e56bdb400ecd4fccf444fe830",
+            "head": "8034d893d61fd77e56bdb400ecd4fccf444fe830",
+            "source": "recorded-baseline",
+            "changedFiles": 8,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 22,
+            "branchRequests": 59,
+            "requestOwners": {
+              "scriptact-a2230bf1-0b32-423b-8e57-721562e62dd8": 22,
+              "context:bd6318de-a322-4612-9564-2d84f083cfde": 6,
+              "agent:scriptact-a2230bf1-0b32-423b-8e57-721562e62dd8:6c5f45b7": 25,
+              "context:d83b5327-a554-41ce-afb4-67a28962443d": 7,
+              "context:a6dd8154-db7a-47a8-9374-2981e6492216": 3,
+              "context:8b995188-e590-423d-9f33-6b1ade093d40": 3,
+              "context:b00330c3-372b-47c0-903a-7988fe3dd4cc": 6,
+              "context:4cb07d25-8a74-476c-9a12-6743e8f3b527": 2,
+              "context:fe4e3d51-9348-400a-8aa4-bde42588bef9": 7
+            },
+            "contextSegments": 10,
+            "nativeRequests": 81,
+            "textProtocolRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791169961018,
+            "finishedAt": 1791170957461,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a10a0c-9c70-7671-a03f-15252535c2cf",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 205,
+            "solveMs": 996444
+          },
+          "accounting": {
+            "requests": 67,
+            "requestStatuses": {
+              "http-200": 64,
+              "http-200-interrupted": 3
+            },
+            "measuredRequests": 64,
+            "missingUsageRequests": 3,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1557272,
+            "knownOutputTokens": 33896,
+            "knownCachedInputTokens": 1217152,
+            "knownCacheRatio": 0.7815924257290955,
+            "pricedRequests": 64,
+            "knownReferenceUsd": 2.5252608,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 61,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "61 passed in 0.32s",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 5175,
+            "failed": 0,
+            "skipped": 16,
+            "errors": 0,
+            "summary": "5175 passed, 16 skipped in 6.20s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": true,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 15,
+          "createdFiles": 1,
+          "changeSummary": "5\t0\tdoc/docs/cmdline.rst\n5\t3\tdoc/docs/quickstart.rst\n10\t1\tpygments/formatter.py\n12\t2\tpygments/formatters/groff.py\n12\t4\tpygments/formatters/html.py\n12\t3\tpygments/formatters/rtf.py\n14\t2\tpygments/formatters/svg.py\n8\t1\tpygments/formatters/terminal.py\n11\t1\tpygments/formatters/terminal256.py\n38\t2\ttests/test_basic_api.py\n7\t0\ttests/test_cmdline.py\n18\t0\ttests/test_groff_formatter.py\n24\t0\ttests/test_html_formatter.py\n25\t0\ttests/test_rtf_formatter.py\n22\t1\ttests/test_terminal_formatter.py\n",
+          "created": "tests/test_svg_formatter.py\n",
+          "changeAccounting": {
+            "baseline": "343e0cf248aba3903cf44d75c90eb97fa01ff490",
+            "head": "343e0cf248aba3903cf44d75c90eb97fa01ff490",
+            "source": "recorded-baseline",
+            "changedFiles": 15,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "rootThreadId": "01a10a0c-9c70-7671-a03f-15252535c2cf",
+            "compactions": 8,
+            "childAgentDispatches": 0,
+            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T11-12-41-01a10a0c-9c70-7671-a03f-15252535c2cf.jsonl"
+          }
+        }
+      }
+    },
+    {
+      "attempt": "rich-18",
+      "schema": 1,
+      "at": "2026-10-05T03:51:10.975Z",
+      "taskId": "rich-ascii-decorations",
+      "scriptactSessionId": "scriptact-3627a3c5-c86e-49ca-9797-154346d51f05",
+      "candidateId": "candidate-v24-85280a8ddc7d",
+      "candidateSourceCommit": "5c8662440be54af0153a3340e4489aa5c9f33b9a",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 127,
+            "startedAt": 1791171163710,
+            "solveMs": 986311
+          },
+          "accounting": {
+            "requests": 127,
+            "requestStatuses": {
+              "http-200": 121,
+              "http-200-interrupted": 5,
+              "unknown": 1
+            },
+            "measuredRequests": 121,
+            "missingUsageRequests": 6,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 2515420,
+            "knownOutputTokens": 38109,
+            "knownCachedInputTokens": 879360,
+            "knownCacheRatio": 0.34958774280239485,
+            "pricedRequests": 121,
+            "knownReferenceUsd": 7.658164,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 53,
+            "failed": 5,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "5 failed, 53 passed in 0.18s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 855,
+            "failed": 0,
+            "skipped": 25,
+            "errors": 0,
+            "summary": "855 passed, 25 skipped in 3.91s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 17,
+          "createdFiles": 0,
+          "changeSummary": "24\t0\tdocs/source/console.rst\n11\t0\trich/bar.py\n23\t10\trich/console.py\n5\t4\trich/markdown.py\n24\t7\trich/progress.py\n1\t1\trich/progress_bar.py\n8\t4\trich/spinner.py\n1\t1\trich/syntax.py\n7\t3\trich/traceback.py\n7\t1\ttests/test_block_bar.py\n34\t0\ttests/test_console.py\n62\t20\ttests/test_markdown.py\n9\t1\ttests/test_progress.py\n17\t0\ttests/test_spinner.py\n17\t0\ttests/test_syntax.py\n10\t17\ttests/test_table.py\n16\t0\ttests/test_traceback.py\n",
+          "created": "",
+          "changeAccounting": {
+            "baseline": "d8811430bb8afe90e8fee0b8121157b326f26df2",
+            "head": "d8811430bb8afe90e8fee0b8121157b326f26df2",
+            "source": "recorded-baseline",
+            "changedFiles": 17,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 35,
+            "branchRequests": 92,
+            "requestOwners": {
+              "scriptact-3627a3c5-c86e-49ca-9797-154346d51f05": 35,
+              "agent:scriptact-3627a3c5-c86e-49ca-9797-154346d51f05:6bd45586": 9,
+              "agent:scriptact-3627a3c5-c86e-49ca-9797-154346d51f05:5d560c43": 22,
+              "agent:scriptact-3627a3c5-c86e-49ca-9797-154346d51f05:fb3e5e8c": 11,
+              "agent:scriptact-3627a3c5-c86e-49ca-9797-154346d51f05:2afeaa1b": 11,
+              "context:710a8f32-1e25-46ad-bd90-e5b1f2015d4b": 5,
+              "context:b1ada037-ce3a-4bf6-83e4-c3d80f24ac8c": 2,
+              "context:633dcf10-746d-4c2f-83e7-9868ed633484": 6,
+              "context:ce36e6fc-c84f-40a7-b104-f220a023cd19": 1,
+              "context:53b444e5-4739-4133-a089-0fe6e5507c39": 2,
+              "context:239e7d4b-1f92-4ff3-8330-572296369940": 3,
+              "context:c69efa5b-3400-4d58-9e01-f741d2d21cf3": 2,
+              "context:76cae317-83b0-47ed-83e5-0f008b4f71cf": 2,
+              "context:431cb9e5-6619-46cd-834f-0a22fdfe7c11": 5,
+              "context:6198e843-754c-4655-be65-087299711413": 2,
+              "context:49be69d0-f564-4be6-8dd3-a1845fbe1a2f": 9
+            },
+            "contextSegments": 18,
+            "nativeRequests": 127,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        }
+      }
     }
   ],
   "transportDiagnostics": {

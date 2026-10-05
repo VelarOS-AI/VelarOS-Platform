@@ -8,8 +8,33 @@ import {
   findCodexRollout,
   pytestSummary,
   regressionSummary,
+  requestOwner,
   summarizeRequests,
 } from './analyze.mjs'
+
+test('request attribution counts direct narration alongside normal runtime sessions', () => {
+  const normal = {
+    materials: [
+      {
+        origin: 'runtime-view',
+        text: JSON.stringify({
+          partitions: { task: { goals: [{ record: { ref: { sessionId: 'root' } } }] } },
+        }),
+      },
+    ],
+  }
+  const narration = {
+    materials: [
+      {
+        origin: 'context-narration',
+        text: JSON.stringify({ kind: 'context-narration', sessionId: 'context:child' }),
+      },
+    ],
+  }
+  assert.equal(requestOwner(normal), 'root')
+  assert.equal(requestOwner(narration), 'context:child')
+  assert.equal(requestOwner({ materials: [{ origin: 'runtime-view', text: '{}' }] }), 'unknown')
+})
 
 test('rollout discovery covers host dates across midnight and ignores other threads', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'rollout-dates-'))
