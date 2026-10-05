@@ -14,15 +14,23 @@ export function taskEnvironment(task) {
   assert(value && typeof value === 'object', 'Task must declare its frozen environment')
   const { project, python, acceptance, regression, preserve, baselineFailure } = value
   const regressionRunner = value.regressionRunner ?? 'pytest'
-  assert(['pytest', 'unittest'].includes(regressionRunner))
+  const node = value.runtime === 'node'
+  assert(value.runtime === undefined || node)
+  assert((node ? ['mocha-json'] : ['pytest', 'unittest']).includes(regressionRunner))
   if (regressionRunner === 'unittest') assert.equal(regression.length, 1)
-  for (const name of [project, python]) assert.match(name, /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/u)
-  assert.match(acceptance, /^test_[a-zA-Z0-9_]+\.py$/u)
+  for (const name of node ? [project] : [project, python])
+    assert.match(name, /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/u)
+  assert.match(acceptance, node ? /^test_[a-zA-Z0-9_]+\.mjs$/u : /^test_[a-zA-Z0-9_]+\.py$/u)
   for (const paths of [regression, preserve]) {
     assert(Array.isArray(paths) && paths.length > 0)
     for (const path of paths) {
       assert.equal(typeof path, 'string')
-      assert.match(path, /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/u)
+      assert.match(
+        path,
+        node && paths === regression
+          ? /^[a-zA-Z0-9_.*?-]+(?:\/[a-zA-Z0-9_.*?-]+)*$/u
+          : /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/u
+      )
       assert(!path.split('/').some((part) => ['.', '..', '.git'].includes(part)))
       assert(!path.startsWith('-'))
     }
@@ -32,12 +40,20 @@ export function taskEnvironment(task) {
   assert(baselineFailure.length > 0)
   const result = {
     project,
-    python,
+    ...(node ? { runtime: 'node', regressionEntry: value.regressionEntry } : { python }),
     acceptance,
     regression,
     regressionRunner,
     preserve,
     baselineFailure,
+  }
+  if (node) {
+    assert.equal(python, undefined)
+    assert.match(value.regressionEntry, /^[a-zA-Z0-9][a-zA-Z0-9_-]*(?:\/[a-zA-Z0-9_-]+)*\.js$/u)
+    assert(
+      !preserve.some((path) => path.split('/')[0] === 'node_modules'),
+      'Node dependencies have a separate frozen restoration'
+    )
   }
   if (value.regressionPattern !== undefined) {
     assert.equal(regressionRunner, 'unittest')
@@ -77,6 +93,8 @@ export async function restoreTaskPaths(source, destination, paths) {
 
 // 使用项目自身的回归测试入口；新功能验收单独使用 pytest。
 export function regressionArguments(environment, report) {
+  if (environment.runtime === 'node')
+    return [environment.regressionEntry, '--reporter', 'json', ...environment.regression]
   return environment.regressionRunner === 'unittest'
     ? [
         '-m',
@@ -96,6 +114,12 @@ export function regressionArguments(environment, report) {
         ...(report ? ['--junitxml', report] : []),
         ...environment.regression,
       ]
+}
+
+export function acceptanceArguments(environment, grader) {
+  return environment.runtime === 'node'
+    ? ['--test', '--test-reporter=tap', grader]
+    : ['-m', 'pytest', '-q', '--tb=short', '-p', 'no:cacheprovider', grader]
 }
 
 // 同时支持根包和 src 布局；验收副本优先于环境中安装的项目包。
@@ -128,9 +152,13 @@ export async function createExecutionEnvironments({ source, taskRoot, participan
 }
 
 // 环境路径是双方唯一不同的任务附加信息；原始任务文本逐字保留。
-export function taskPrompt(task, python) {
+export function taskPrompt(task, executable) {
   const baseline = task.environment?.baselineIssues
     ?.map((issue) => `${issue.test}: ${issue.reason} (${issue.source}).`)
     .join(' ')
-  return `${task.prompt}\n\nEnvironment: the repository checkout is your current working directory. Use ${python} for Python and pytest; the project's runtime and test dependencies are installed. This Python environment is private to your run; install any missing development tools there. Make source edits only inside this checkout. Do not inspect evaluation infrastructure, other attempts, private state or hidden acceptance tests. Use the development tools available to you and coordinate independent work if useful.${baseline ? `\n\nKnown unchanged-baseline failures: ${baseline} Run the complete suite and report these separately from any new failures. Keep the original tests and warning policy intact.` : ''}`
+  const tools =
+    task.environment?.runtime === 'node'
+      ? `Use ${executable} for Node.js; npm and the project's runtime and test dependencies are installed. The checkout's node_modules directory is private to your run; install any missing development tools there.`
+      : `Use ${executable} for Python and pytest; the project's runtime and test dependencies are installed. This Python environment is private to your run; install any missing development tools there.`
+  return `${task.prompt}\n\nEnvironment: the repository checkout is your current working directory. ${tools} Make source edits only inside this checkout. Do not inspect evaluation infrastructure, other attempts, private state or hidden acceptance tests. Use the development tools available to you and coordinate independent work if useful.${baseline ? `\n\nKnown unchanged-baseline failures: ${baseline} Run the complete suite and report these separately from any new failures. Keep the original tests and warning policy intact.` : ''}`
 }

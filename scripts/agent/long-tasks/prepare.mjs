@@ -10,10 +10,17 @@ import { promisify } from 'node:util'
 
 import { toTrajectory } from '../harbor/atif.mjs'
 import { verifyCampaignDriver } from './model-driver.mjs'
+import {
+  copyNodeDependencies,
+  mochaReport,
+  nodeDependencyState,
+  nodeTestSummary,
+} from './node-task.mjs'
 import { readPytestReport, regressionVerdict } from './regression.mjs'
 import { runtimeCapabilityOptions } from './runtime-capabilities.mjs'
 import {
   createExecutionEnvironments,
+  acceptanceArguments,
   pythonTaskPath,
   regressionArguments,
   taskEnvironment,
@@ -40,6 +47,7 @@ if (process.argv[7]) {
   task.split = 'development'
 }
 const environment = taskEnvironment(task)
+const node = environment.runtime === 'node' ? process.execPath : undefined
 const output = join(campaign, attemptId)
 await mkdir(output)
 const taskRoot = await mkdtemp('/private/tmp/vlr-')
@@ -55,13 +63,15 @@ assert.equal(
   (await execute('git', ['rev-parse', 'HEAD'], { cwd: source })).stdout.trim(),
   task.commit
 )
-await cp(join(campaign, environment.python), join(taskRoot, 'python'), { recursive: true })
-const python = join(taskRoot, 'python/bin/python')
+if (node) await copyNodeDependencies(join(campaign, 'sources', environment.project), source)
+else await cp(join(campaign, environment.python), join(taskRoot, 'python'), { recursive: true })
+const python = node ? undefined : join(taskRoot, 'python/bin/python')
+const executable = node ?? python
 const originalGrader = join(import.meta.dirname, environment.acceptance)
-const baselineArgs = ['-m', 'pytest', '-q', '--tb=short', '-p', 'no:cacheprovider']
 // 原项目测试可以生成文件；只在独立基线副本执行，冻结源码保持逐字不变。
 const baselineSource = join(taskRoot, 'baseline', environment.project)
 await execute('git', ['clone', '-q', '--no-hardlinks', source, baselineSource])
+if (node) await copyNodeDependencies(source, baselineSource)
 const env = {
   ...process.env,
   PYTHONPATH: pythonTaskPath(baselineSource),
@@ -70,7 +80,7 @@ const env = {
 const baselineReport = join(output, 'baseline.xml')
 let baselineRegression
 try {
-  const result = await execute(python, regressionArguments(environment, baselineReport), {
+  const result = await execute(executable, regressionArguments(environment, baselineReport), {
     cwd: baselineSource,
     env,
     timeout: 180000,
@@ -85,7 +95,10 @@ try {
   }
 }
 await writeFile(join(output, 'baseline.log'), baselineRegression.stdout + baselineRegression.stderr)
-if (environment.regressionRunner === 'pytest') {
+if (node) {
+  Object.assign(baselineRegression, mochaReport(baselineRegression, baselineSource))
+  baselineRegression.verdict = regressionVerdict(baselineRegression)
+} else if (environment.regressionRunner === 'pytest') {
   baselineRegression.cases = await readPytestReport(python, baselineReport)
   baselineRegression.verdict = regressionVerdict(baselineRegression, environment.baselineIssues)
 } else {
@@ -108,7 +121,7 @@ assert(
 )
 let baselineRejected = false
 try {
-  await execute(python, [...baselineArgs, originalGrader], {
+  await execute(executable, acceptanceArguments(environment, originalGrader), {
     cwd: baselineSource,
     env,
     timeout: 180000,
@@ -116,6 +129,10 @@ try {
   })
 } catch (error) {
   assert.equal(error.code, 1, 'Acceptance checks must fail assertions, not collection or setup')
+  if (node) {
+    const summary = nodeTestSummary({ exitCode: error.code, stdout: error.stdout })
+    assert(summary.failed > 0 && summary.errors === 0, 'Node acceptance must report failing tests')
+  }
   assert(
     error.stdout.includes(environment.baselineFailure),
     'Unchanged source must fail the declared feature checks'
@@ -127,14 +144,23 @@ assert.ok(baselineRejected, 'The unchanged project must not pass the new feature
 const codex =
   '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex'
 const codexVersion = (await execute(codex, ['--version'])).stdout.trim()
-const dependencyLock = (await execute(python, ['-m', 'pip', 'freeze'])).stdout
-await writeFile(join(output, 'python-requirements.txt'), dependencyLock)
-const executionEnvironments = await createExecutionEnvironments({
-  source: join(taskRoot, 'python'),
-  taskRoot,
-  participants,
-  task,
-})
+const dependencyLock = node
+  ? await nodeDependencyState(source, node)
+  : (await execute(python, ['-m', 'pip', 'freeze'])).stdout
+await writeFile(
+  join(output, node ? 'node-dependencies.json' : 'python-requirements.txt'),
+  node ? JSON.stringify(dependencyLock, null, 2) : dependencyLock
+)
+const executionEnvironments = node
+  ? Object.fromEntries(
+      participants.map((participant) => [participant, { node, prompt: taskPrompt(task, node) }])
+    )
+  : await createExecutionEnvironments({
+      source: join(taskRoot, 'python'),
+      taskRoot,
+      participants,
+      task,
+    })
 const pricing = JSON.parse(
   await readFile(
     join(root, '.velaros-workspace/bench/parallel-54/model-pricing-hedgeho9-sol-reference.json'),
@@ -195,6 +221,7 @@ const manifest = {
   taskRoot,
   source,
   python,
+  node,
   grader,
   codex,
   codexVersion,
@@ -228,7 +255,7 @@ const manifest = {
       'Runtime host comparison; this attempt does not exercise Desktop renderer integration',
     ],
   },
-  prompt: taskPrompt(task, python),
+  prompt: taskPrompt(task, executable),
   credentials: join(root, '.velaros-workspace/bench/parallel-54/provider-hedgeho9-private.json'),
   accounting: {
     model: pricing.model,

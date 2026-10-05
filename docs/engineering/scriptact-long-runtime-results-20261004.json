@@ -5301,6 +5301,142 @@
           }
         }
       }
+    },
+    {
+      "attempt": "click-02",
+      "schema": 1,
+      "at": "2026-10-05T05:43:10.816Z",
+      "taskId": "click-context-local-translations",
+      "scriptactSessionId": "scriptact-70aa9b7a-257e-483c-a523-96b8c574d3a8",
+      "candidateId": "candidate-v28-08394be9231d",
+      "candidateSourceCommit": "8a3a0ad37ab16df953767bc6bdcb157147977fd9",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 20,
+            "startedAt": 1791178345486,
+            "solveMs": 331175
+          },
+          "accounting": {
+            "requests": 20,
+            "requestStatuses": {
+              "http-200": 19,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 19,
+            "missingUsageRequests": 1,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 378233,
+            "knownOutputTokens": 6041,
+            "knownCachedInputTokens": 166400,
+            "knownCacheRatio": 0.439940459981017,
+            "pricedRequests": 19,
+            "knownReferenceUsd": 1.0347120000000003,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 30,
+            "failed": 31,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "31 failed, 30 passed in 0.21s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_context_settings_and_nested_command_inheritance",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type0-bad-{value!r} is not a valid {number_type}.]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type1-bad-{value!r} is not a valid {number_type}.]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type2-bad-{value!r} is not a valid boolean.]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type3-bad-{value!r} is not a valid UUID.]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type4-9-{value} is not in the range {range}.]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type5-9-{value} is not in the range {range}.]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type6-bad-None]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type7-bad-None]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type8-bad-None]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type9-bad-None]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type10-value10-None]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_file_errors_translate_before_filename_interpolation[path]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_file_errors_translate_before_filename_interpolation[file]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_suggestions_use_explicit_context_and_plural_count[1]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_suggestions_use_explicit_context_and_plural_count[2]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_exception_wrappers_keep_creation_context_after_scope_exit[click]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_exception_wrappers_keep_creation_context_after_scope_exit[usage]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_exception_wrappers_keep_creation_context_after_scope_exit[bad]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_exception_wrappers_keep_creation_context_after_scope_exit[missing]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_exception_wrappers_keep_creation_context_after_scope_exit[file]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parser_diagnostics_are_translated[args0-No such option:]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parser_diagnostics_are_translated[args1-Option '--flag' does not take a value.]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parser_diagnostics_are_translated[args2-Option '--pair' requires 2 arguments.]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parser_diagnostics_are_translated[args3-Option '--number' requires an argument.]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parser_diagnostics_are_translated[args4-Got unexpected extra argument]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_version_decorator_is_deferred_and_keeps_custom_templates[False]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_editor_errors_keep_context_through_late_display[False]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_editor_errors_keep_context_through_late_display[True]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_nested_contexts_restore_the_previous_language",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parallel_contexts_do_not_change_process_translations"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 627,
+            "failed": 0,
+            "skipped": 22,
+            "errors": 0,
+            "summary": "627 passed, 22 skipped, 1 xfailed in 0.52s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 9,
+          "createdFiles": 1,
+          "changeSummary": "1\t1\tsrc/click/_termui_impl.py\n37\t2\tsrc/click/core.py\n1\t1\tsrc/click/decorators.py\n2\t2\tsrc/click/exceptions.py\n1\t1\tsrc/click/formatting.py\n2\t2\tsrc/click/parser.py\n1\t1\tsrc/click/shell_completion.py\n1\t1\tsrc/click/termui.py\n2\t2\tsrc/click/types.py\n",
+          "created": "src/click/_localization.py\n",
+          "changeAccounting": {
+            "baseline": "b2acef7ce4c450f20aa53bf1708f93fbfa0fd0eb",
+            "head": "b2acef7ce4c450f20aa53bf1708f93fbfa0fd0eb",
+            "source": "recorded-baseline",
+            "changedFiles": 9,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 14,
+            "branchRequests": 6,
+            "requestOwners": {
+              "scriptact-70aa9b7a-257e-483c-a523-96b8c574d3a8": 14,
+              "context:44a034d4-ff31-4654-b37b-af10e401b2ed": 3,
+              "context:cff42f08-ea4d-4717-b537-cd8edf43e4e2": 3
+            },
+            "contextSegments": 3,
+            "nativeRequests": 20,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        }
+      }
     }
   ],
   "transportDiagnostics": {

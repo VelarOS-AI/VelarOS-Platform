@@ -15,10 +15,17 @@ import { readTraceArtifact } from '../harbor/trace-artifact.mjs'
 import { toTrajectory } from '../harbor/atif.mjs'
 import { runCodex } from '../native-desktop/codex.mjs'
 import { campaignModelDriver } from './model-driver.mjs'
+import {
+  copyNodeDependencies,
+  mochaReport,
+  nodeDependencyState,
+  nodeTestSummary,
+} from './node-task.mjs'
 import { readPytestReport, regressionVerdict } from './regression.mjs'
 import { runtimeCapabilityOptions } from './runtime-capabilities.mjs'
 import {
   pythonTaskPath,
+  acceptanceArguments,
   regressionArguments,
   restoreTaskPaths,
   taskEnvironment,
@@ -83,10 +90,12 @@ async function verifyFrozen() {
     (await execute('git', ['status', '--porcelain'], { cwd: manifest.source })).stdout.trim(),
     ''
   )
-  assert.equal(
-    (await execute(manifest.python, ['-m', 'pip', 'freeze'])).stdout,
+  assert.deepEqual(
+    environment.runtime === 'node'
+      ? await nodeDependencyState(manifest.source, manifest.node)
+      : (await execute(manifest.python, ['-m', 'pip', 'freeze'])).stdout,
     manifest.dependencyLock,
-    'Frozen Python dependencies changed'
+    'Frozen task dependencies changed'
   )
 }
 
@@ -99,8 +108,15 @@ const activity = async (value) => {
 async function copySource(destination) {
   await cp(manifest.source, destination, {
     recursive: true,
-    filter: (path) => !['.git', '.pytest_cache', '__pycache__'].includes(path.split('/').at(-1)),
+    filter: (path) =>
+      ![
+        '.git',
+        '.pytest_cache',
+        '__pycache__',
+        ...(environment.runtime === 'node' ? ['node_modules'] : []),
+      ].includes(path.split('/').at(-1)),
   })
+  if (environment.runtime === 'node') await copyNodeDependencies(manifest.source, destination)
   await execute('git', ['init', '-q'], { cwd: destination })
   await execute('git', ['add', '.'], { cwd: destination })
   await execute(
@@ -147,27 +163,35 @@ async function grade(workspace, output) {
   const judge = join(manifest.taskRoot, `judge-${output.split('/').at(-1)}`)
   await cp(workspace, judge, {
     recursive: true,
-    filter: (path) => !['.git', '.pytest_cache', '__pycache__'].includes(path.split('/').at(-1)),
+    filter: (path) =>
+      ![
+        '.git',
+        '.pytest_cache',
+        '__pycache__',
+        ...(environment.runtime === 'node' ? ['node_modules'] : []),
+      ].includes(path.split('/').at(-1)),
   })
   await restoreTaskPaths(manifest.source, judge, environment.preserve)
+  if (environment.runtime === 'node') await copyNodeDependencies(manifest.source, judge)
   const acceptance = await check(
-    manifest.python,
-    ['-m', 'pytest', '-q', '--tb=short', '-p', 'no:cacheprovider', manifest.grader],
+    manifest.node ?? manifest.python,
+    acceptanceArguments(environment, manifest.grader),
     judge,
     'acceptance',
     output
   )
   const regression = await check(
-    manifest.python,
+    manifest.node ?? manifest.python,
     regressionArguments(environment, join(output, 'regression.xml')),
     judge,
     'regression',
     output
   )
-  if (environment.regressionRunner === 'pytest') {
+  if (environment.runtime === 'node' || environment.regressionRunner === 'pytest') {
     const result = JSON.parse(await readFile(join(output, 'regression.json'), 'utf8'))
     try {
-      result.cases = await readPytestReport(manifest.python, join(output, 'regression.xml'))
+      if (environment.runtime === 'node') Object.assign(result, mochaReport(result, judge))
+      else result.cases = await readPytestReport(manifest.python, join(output, 'regression.xml'))
       result.verdict = regressionVerdict(
         result,
         environment.baselineIssues,
@@ -190,19 +214,27 @@ async function grade(workspace, output) {
       if (error.code === 'ENOENT') return null
       throw error
     })
+  const acceptanceSummary =
+    environment.runtime === 'node'
+      ? nodeTestSummary(JSON.parse(await readFile(join(output, 'acceptance.json'), 'utf8')))
+      : null
+  const acceptancePassed =
+    acceptance.exitCode === 0 &&
+    (!acceptanceSummary ||
+      (acceptanceSummary.passed > 0 &&
+        acceptanceSummary.errors === 0 &&
+        acceptanceSummary.failed === 0))
   return {
     acceptance,
     regression,
-    passed:
-      acceptance.exitCode === 0 && (regression.verdict?.suitePassed ?? regression.exitCode === 0),
+    passed: acceptancePassed && (regression.verdict?.suitePassed ?? regression.exitCode === 0),
     featureCompleteWithoutNewRegressions:
-      acceptance.exitCode === 0 &&
-      (regression.verdict?.baselineCompatible ?? regression.exitCode === 0),
+      acceptancePassed && (regression.verdict?.baselineCompatible ?? regression.exitCode === 0),
     ...(await workspaceChanges(workspace, baseline?.commit)),
   }
 }
 
-async function scriptAct({ workspace, output, apiKey, baseURL, signal, python, prompt }) {
+async function scriptAct({ workspace, output, apiKey, baseURL, signal, python, node, prompt }) {
   const host = createLocalShellHost({ cwd: workspace })
   let runtime,
     session,
@@ -261,7 +293,7 @@ async function scriptAct({ workspace, output, apiKey, baseURL, signal, python, p
       }),
       modelTools: { concurrency: manifest.concurrency },
       context: { policy: { windowTokens: manifest.inputWindowTokens } },
-      environment: () => ({ cwd: workspace, python }),
+      environment: () => ({ cwd: workspace, ...(node ? { node } : { python }) }),
       limits: {
         turns: manifest.maxRequests ?? 10000,
         timeoutMs: manifest.timeoutMs,
@@ -364,14 +396,16 @@ try {
     await verifyFrozen()
     const output = join(directory, participant)
     await mkdir(output)
-    const { python, prompt } = manifest.executionEnvironments?.[participant] ?? manifest
-    assert.equal(
-      (await execute(python, ['-m', 'pip', 'freeze'])).stdout,
+    const { python, node, prompt } = manifest.executionEnvironments?.[participant] ?? manifest
+    const workspace = join(manifest.taskRoot, participant, environment.project)
+    const baseline = await copySource(workspace)
+    assert.deepEqual(
+      node
+        ? await nodeDependencyState(workspace, node)
+        : (await execute(python, ['-m', 'pip', 'freeze'])).stdout,
       manifest.dependencyLock,
       'Participant must start with the frozen dependencies'
     )
-    const workspace = join(manifest.taskRoot, participant, environment.project)
-    const baseline = await copySource(workspace)
     await snapshot(join(output, 'workspace-baseline.json'), { commit: baseline })
     const apiKey = attemptCredential(
       {
@@ -390,7 +424,7 @@ try {
     const signal = AbortSignal.any([cancellation.signal, AbortSignal.timeout(manifest.timeoutMs)])
     const result =
       participant === 'scriptact'
-        ? await scriptAct({ workspace, output, apiKey, baseURL, signal, python, prompt })
+        ? await scriptAct({ workspace, output, apiKey, baseURL, signal, python, node, prompt })
         : await runCodex({
             executable: manifest.codex,
             workspace,
@@ -406,12 +440,17 @@ try {
           })
     const solveMs = Date.now() - startedAt
     await snapshot(join(output, 'solve.json'), { ...result, startedAt, solveMs })
-    const installed = await execute(python, ['-m', 'pip', 'freeze']).then(
-      (value) => ({ finalDependencies: value.stdout }),
+    const installed = await (
+      node
+        ? nodeDependencyState(workspace, node)
+        : execute(python, ['-m', 'pip', 'freeze']).then((value) => value.stdout)
+    ).then(
+      (value) => ({ finalDependencies: value }),
       (error) => ({ finalDependencies: null, inspectionError: redact(error) })
     )
     await snapshot(join(output, 'execution-environment.json'), {
       python,
+      node,
       initialDependencies: manifest.dependencyLock,
       ...installed,
     })

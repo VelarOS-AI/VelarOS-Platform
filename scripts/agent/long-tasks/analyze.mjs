@@ -5,6 +5,7 @@ import { homedir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { mochaReport, nodeTestSummary } from './node-task.mjs'
 import { workspaceChanges } from './workspace-changes.mjs'
 
 export function requestOwner(request) {
@@ -79,6 +80,25 @@ export function pytestSummary(result) {
 }
 
 export function regressionSummary(result, runner) {
+  if (runner === 'mocha-json') {
+    try {
+      return {
+        ...(result.summary ?? mochaReport(result, '').summary),
+        ...(result.verdict ? { verdict: result.verdict } : {}),
+      }
+    } catch (error) {
+      return {
+        exitCode: result.exitCode,
+        passed: 0,
+        failed: 0,
+        skipped: 0,
+        errors: 1,
+        summary: String(error),
+        failures: [],
+        ...(result.verdict ? { verdict: result.verdict } : {}),
+      }
+    }
+  }
   if (runner !== 'unittest')
     return {
       ...pytestSummary(result),
@@ -161,7 +181,9 @@ async function main() {
       accounting: summarizeRequests(
         budget.requests.filter((request) => request.identity.participantId === participant)
       ),
-      acceptance: pytestSummary(await json(join(output, 'acceptance.json'))),
+      acceptance: (manifest.environment?.runtime === 'node' ? nodeTestSummary : pytestSummary)(
+        await json(join(output, 'acceptance.json'))
+      ),
       regression: regressionSummary(
         await json(join(output, 'regression.json')),
         manifest.environment?.regressionRunner
