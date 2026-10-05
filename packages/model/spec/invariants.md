@@ -41,4 +41,4 @@
 
 | INV-20 | 内置 OpenAI Responses 收到完整 completed/incomplete/failed SSE 终端后向 SDK 正常 EOF，usage、continuation 和错误仍由 SDK 校验；只将终端尾 CR 补 LF 为等价分隔符，不等待无关传输尾流；单事件原始字节上限 16 MiB，超限失败，半帧不算成功，取消清理不阻塞终端 | 测试 | `test/responses-terminal.test.ts` |
 
-| INV-21 | 原生工具定义参与请求快照与指纹，驱动只交付完整且已声明的调用；Responses 与 Chat 的调用/回执逐一匹配，已绑定的结果正文原样进入工具回包并只发送一次，保留缓存断点，未绑定时使用原回执；延续状态不能隐藏额外动作；请求估算文本的 UTF-8 字节分项可加总，真实用量独立记录 | 测试 | `test/native-tools.test.ts` |
+| INV-21 | 原生工具定义参与请求快照与指纹，驱动只交付完整且已声明的调用；Responses 与 Chat 的调用/回执逐一匹配，已绑定的结果正文原样进入工具回包并只发送一次，保留缓存断点，未绑定时使用原回执；延续状态不能隐藏额外动作；请求估算文本的 UTF-8 字节分项可加总。已知编码的路由用无图真实输入校准 BPE 与附加开销，编译器不二次缩小；超窗重置且旧代迟到用量不恢复校准，真实用量独立记录 | 测试 | `test/native-tools.test.ts`、`test/input-estimator.test.ts` |

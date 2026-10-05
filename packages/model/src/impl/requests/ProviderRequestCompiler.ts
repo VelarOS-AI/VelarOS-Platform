@@ -81,7 +81,10 @@ class ProviderRequestCompiler implements ProviderRequestCompilerApi {
     if (opaque) measured.opaque = opaque
     // 精确计数不需要校准；图片和不透明状态容量仍按驱动给的数。
     const estimate =
-      calibration && calibration.textRatio < 1 && raw.precision === 'estimate'
+      calibration &&
+      calibration.textRatio < 1 &&
+      raw.precision === 'estimate' &&
+      raw.calibration !== 'provider-usage'
         ? {
             ...raw,
             tokens:

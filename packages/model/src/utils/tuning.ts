@@ -91,6 +91,10 @@ export const ModelTuning = Object.freeze({
   }),
   /** 请求输入的保守估算。 */
   estimate: Object.freeze({
+    /** BPE 文本和同一路由实测附加开销的共同余量。 */
+    calibrationMargin: 1.1,
+    /** 每个模型驱动保留的最新无图输入样本数量；只存数字。 */
+    calibrationSamples: 32,
     /** 每张图片按多少 token 计：主流供应商把图片缩到一两千 token 以内，取上沿；base64 字节数与真实开销无关。 */
     imageTokens: 2_000,
   }),

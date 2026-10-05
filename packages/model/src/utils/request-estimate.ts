@@ -1,19 +1,21 @@
-import type { ModelMessage } from 'ai'
+import type { LanguageModel, ModelMessage } from 'ai'
 
 import { isString } from '@velaros-ai/core'
 import { modelRequestEncoder } from '@velaros-ai/kernel'
 
 import type { ModelInputEstimate, ModelTurnRequest } from '../types/driver.js'
+import type { ModelTextEncoding } from '../types/requests.js'
 
 import { ModelTuning } from './tuning.js'
 
 /**
- * 按实际发送内容给出不会偏小的输入估算：文本取 UTF-8 字节数（一个 token 至少占一个字节），
- * 图片每张按固定数计。真实用量由调用方用供应商回报校准。
+ * 计量实际发送内容：默认文本取 UTF-8 字节数，也可由驱动提供校准后的文本计数；
+ * 图片与不透明状态独立预留，真实用量继续取供应商回报。
  */
 export function estimateRequestInput(
   request: ModelTurnRequest,
-  restored?: { messages: readonly ModelMessage[]; opaqueTokens: number }
+  restored?: { messages: readonly ModelMessage[]; opaqueTokens: number },
+  textCounter?: (text: string, bytes: number) => number
 ): ModelInputEstimate {
   const format = modelRequestEncoder.response(request)
   const sent = restored?.messages ?? modelRequestEncoder.messages(request)
@@ -81,11 +83,31 @@ export function estimateRequestInput(
   const images = { count, tokens: count * ModelTuning.estimate.imageTokens }
   const estimate: ModelInputEstimate = {
     composition,
-    tokens: new TextEncoder().encode(encoded).byteLength + images.tokens + opaqueTokens,
+    tokens:
+      (textCounter?.(encoded, composition.total) ?? composition.total) +
+      images.tokens +
+      opaqueTokens,
     precision: 'estimate',
     basis: `文本按实际发送内容的 UTF-8 字节保守估算，图片每张按 ${ModelTuning.estimate.imageTokens} token 计；协议误差使用 Agent 的独立余量，非精确 token 计数${opaqueTokens ? '；加密推理状态按原响应的推理用量独立预留，不按密文字符计数' : ''}`,
     images,
   }
   if (opaqueTokens) Object.assign(estimate, { opaqueTokens })
   return estimate
+}
+
+/** 路由与型号均已知才用公开编码映射；私有别名与其他供应商继续使用字节估算。 */
+export function modelTextEncoding(model: LanguageModel): Optional<ModelTextEncoding> {
+  if (isString(model) || !['openai.responses', 'openai.chat'].includes(model.provider))
+    return undefined
+  const name = model.modelId
+  // 映射依据 OpenAI tiktoken/model.py；前缀覆盖该系列的带日期版本。
+  if (
+    /^(?:gpt-5|gpt-4\.1(?:-|$)|gpt-4\.5-|(?:chat)?gpt-4o(?:-|$)|o1(?:-|$)|o3(?:-|$)|o4-mini(?:-|$))/u.test(
+      name
+    )
+  )
+    return 'o200k_base'
+  if (/^(?:gpt-4(?:-|$)|gpt-3\.5(?:$|-turbo(?:-|$))|gpt-35-turbo(?:-|$))/u.test(name))
+    return 'cl100k_base'
+  return undefined
 }

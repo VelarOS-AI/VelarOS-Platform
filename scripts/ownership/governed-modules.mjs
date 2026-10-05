@@ -715,6 +715,18 @@ export const GovernedModules = [
     tuning: 'tuning.ts',
     // 根入口的装配链带 node:vm / node:fs，渲染进程只能加载可移植数据与目录逻辑
     browserSafeEntries: ['contracts.ts', 'catalog.ts'],
+    lazyImports: [
+      {
+        specifier: 'gpt-tokenizer/encoding/o200k_base',
+        file: 'src/impl/requests/ModelInputEstimator.ts',
+        reason: '只在匹配的供应商型号第一次计量时加载 BPE 词表',
+      },
+      {
+        specifier: 'gpt-tokenizer/encoding/cl100k_base',
+        file: 'src/impl/requests/ModelInputEstimator.ts',
+        reason: '只在匹配的供应商型号第一次计量时加载 BPE 词表',
+      },
+    ],
     environmentTable: 'ModelEnvironmentVariables',
     layers: [
       // 装配、解析、内核能力；通用请求客户端与产品共用机制（两组互不引用）

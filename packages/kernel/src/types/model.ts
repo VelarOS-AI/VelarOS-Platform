@@ -141,6 +141,8 @@ export interface ModelTurnRequest {
 }
 /** 编码后预算；估算必须说明口径。 */
 export interface ModelInputEstimate {
+  /** 驱动已用同一路由实测输入校准；调用者保留该估算，不再次用会话样本缩小。 */
+  readonly calibration?: 'provider-usage'
   /** 可相加的发送结构文本字节，不冒充供应商 token；图像和密文容量单列。 */
   readonly composition?: {
     readonly unit: 'utf8-bytes'

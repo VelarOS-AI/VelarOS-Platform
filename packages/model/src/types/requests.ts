@@ -1,6 +1,18 @@
 import type { FlexibleSchema, generateText, Output as AiOutput, streamText, ToolSet } from 'ai'
 
+import type { ModelInputEstimate } from '@velaros-ai/kernel'
+
 import type { ModelRequestOptions } from './model'
+
+/** 文本编码名只在已知供应商与模型系列匹配时使用。 */
+export type ModelTextEncoding = 'o200k_base' | 'cl100k_base'
+
+/** 本次请求的计量样本；只保留数字，实际发送后才可用于供应商开销校准。 */
+export interface ModelInputSample {
+  readonly estimate: ModelInputEstimate
+  readonly textTokens?: number
+  readonly generation: number
+}
 
 export type ModelRequestGenerateTextInput<
   TOutput extends ModelRequestOutput = ModelRequestTextOutput,

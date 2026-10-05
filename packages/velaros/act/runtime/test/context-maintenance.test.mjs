@@ -765,6 +765,120 @@ test('native maintenance recovers an oversized initial projection and can read b
   assert.equal(outcome.error, null)
 })
 
+test('shared provider usage lets maintenance deliver the full original in its first native request', async (t) => {
+  const original = 'Review all source batches and preserve every original constraint. '.repeat(90)
+  let activeRequest
+  let mainCalls = 0
+  let maintenanceCalls = 0
+  let firstInputChars = 0
+  const standard = createAiSdkModelDriver({
+    id: 'offline-shared-input-estimator',
+    model: {
+      specificationVersion: 'v3',
+      provider: 'openai.chat',
+      modelId: 'gpt-4o',
+      supportedUrls: {},
+      async doStream() {
+        const frame = JSON.parse(activeRequest.materials[0].text)
+        const facts = frame.partitions.runtime.modelTool
+        let code
+        if (facts) {
+          maintenanceCalls++
+          const input = facts.inputs.find((item) => item.text.startsWith('Review all source'))
+          firstInputChars = input?.text.length ?? 0
+          assert.equal(
+            input?.text,
+            original,
+            'shared route calibration preserves the complete first input'
+          )
+          assert.equal(maintenanceCalls, 1)
+          const candidate = {
+            baseRevision: facts.baseRevision,
+            summary: 'Preserved the complete input and its pending review.',
+            unresolved: ['Review source batches'],
+            inputs: [
+              {
+                ref: input.ref,
+                baseRevision: 0,
+                summary: 'Review all source batches',
+                constraints: ['Preserve every original constraint'],
+                unresolved: ['Review source batches'],
+              },
+            ],
+          }
+          code = `import {submit} from 'velaros:context-materials';console.log(await submit(${JSON.stringify(candidate)}));`
+        } else if (++mainCalls === 1) {
+          code =
+            "import {memory} from 'velaros:system';console.log('Observed source records; verification remains pending. '.repeat(1200));await memory.organize({focus:'Preserve the complete task'});"
+        }
+        const chunks = [
+          { type: 'stream-start', warnings: [] },
+          ...(code
+            ? [
+                {
+                  type: 'tool-call',
+                  toolCallId: `call-${mainCalls}-${maintenanceCalls}`,
+                  toolName: 'node',
+                  input: JSON.stringify({ code }),
+                },
+              ]
+            : [
+                { type: 'text-start', id: 't' },
+                { type: 'text-delta', id: 't', delta: 'Finished the fixture.' },
+                { type: 'text-end', id: 't' },
+              ]),
+          {
+            type: 'finish',
+            finishReason: {
+              unified: code ? 'tool-calls' : 'stop',
+              raw: code ? 'tool_calls' : 'stop',
+            },
+            usage: {
+              inputTokens: {
+                total: facts ? 12000 : 6000,
+                noCache: facts ? 12000 : 6000,
+                cacheRead: 0,
+                cacheWrite: 0,
+              },
+              outputTokens: { total: 100, text: 100, reasoning: 0 },
+            },
+          },
+        ]
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              chunks.forEach((part) => controller.enqueue(part))
+              controller.close()
+            },
+          }),
+        }
+      },
+    },
+    limits: { contextTokens: 65536, inputTokens: 32768, outputTokens: 8192 },
+  })
+  const shared = {
+    id: standard.id,
+    nativeTools: true,
+    limits: standard.limits,
+    estimate: (request) => standard.estimate(request),
+    stream(request, signal) {
+      activeRequest = request
+      return standard.stream(request, signal)
+    },
+  }
+  const f = await setupTool(t, shared, shared)
+  await runTool(f, original)
+  const state = await f.storage.load('root')
+  const record = state.records.findLast((item) => item.title === 'context-maintenance:outcome')
+  const outcome = JSON.parse(await f.storage.get('root', record.objectId))
+  t.diagnostic(
+    JSON.stringify({ mainCalls, maintenanceCalls, firstInputChars, originalChars: original.length })
+  )
+  assert.equal(outcome.status, 'applied', outcome.error)
+  assert.equal(mainCalls, 2)
+  assert.equal(maintenanceCalls, 1)
+})
+
 test('native maintenance locally sizes its initial evidence using the standard provider estimate', async (t) => {
   const original = 'Review every batch and preserve each original constraint. '.repeat(40)
   const estimator = createAiSdkModelDriver({

@@ -13,7 +13,7 @@ import type {
   ModelTurnDelta,
   ModelTurnRequest,
 } from '../../types/driver.js'
-import { estimateRequestInput } from '../../utils/request-estimate.js'
+import type { ModelInputSample } from '../../types/requests.js'
 import { planProviderRetry, providerErrorMessage } from '../../utils/retry.js'
 import { ModelTuning } from '../../utils/tuning.js'
 import {
@@ -26,18 +26,26 @@ import { readChatCompletionReasoning } from '../../utils/wire/reasoning.js'
 import { awaitModelStreamValue } from '../../utils/wire/stream-cancel.js'
 import { responseTerminalKind, responseTerminalUsage } from '../../utils/wire/stream-terminal.js'
 
+import { ModelInputEstimator } from './ModelInputEstimator.js'
+
 class AiSdkModelDriver implements ModelDriver {
   public readonly nativeTools = true
   public readonly id: string
   public readonly limits: ModelDriverLimits
+  private readonly inputEstimator: ModelInputEstimator
 
   public constructor(private readonly options: AiSdkDriverOptions) {
     this.id = options.id
     this.limits = Object.freeze({ ...options.limits })
+    this.inputEstimator = new ModelInputEstimator(options.model)
   }
 
   public async estimate(request: ModelTurnRequest): Promise<ModelInputEstimate> {
-    return estimateRequestInput(
+    return (await this.inputSample(request)).estimate
+  }
+
+  private inputSample(request: ModelTurnRequest): Promise<ModelInputSample> {
+    return this.inputEstimator.prepare(
       request,
       restoreResponseContinuations(
         modelRequestEncoder.messages(request),
@@ -55,7 +63,10 @@ class AiSdkModelDriver implements ModelDriver {
     let usagePublished = false
     let responseTerminal: Optional<string>
     let iterator: Optional<AsyncIterator<unknown>>
+    let sample: Optional<ModelInputSample>
     try {
+      sample = await this.inputSample(request)
+      signal.throwIfAborted()
       const format = modelRequestEncoder.response(request)
       const openaiOptions: Record<string, boolean> = {}
       if (format.type === 'json') openaiOptions.strictJsonSchema = false
@@ -158,6 +169,7 @@ class AiSdkModelDriver implements ModelDriver {
           }
         if (reportedUsage && !usagePublished) {
           usagePublished = true
+          this.inputEstimator.record(sample, reportedUsage.inputTokens)
           yield reportedUsage
         }
         signal.throwIfAborted()
@@ -280,6 +292,7 @@ class AiSdkModelDriver implements ModelDriver {
       Log.tag('ActRuntime').debug('AiSdkModelDriver 已进入异常处理或降级分支')
       if (reportedUsage && !usagePublished) {
         usagePublished = true
+        if (sample) this.inputEstimator.record(sample, reportedUsage.inputTokens)
         yield reportedUsage
       }
       signal.throwIfAborted()
@@ -288,6 +301,7 @@ class AiSdkModelDriver implements ModelDriver {
         /context.{0,30}(?:length|window|limit)|maximum.{0,20}tokens|too many tokens/iu.test(message)
           ? 'context-limit'
           : 'provider'
+      if (code === 'context-limit') this.inputEstimator.reset()
       // completed 后 SDK 仍可能因传输失败而缺失完整延续状态：拒绝执行，也不再生成一份已完成响应。
       const retry =
         code === 'provider' && responseTerminal !== 'response.completed'

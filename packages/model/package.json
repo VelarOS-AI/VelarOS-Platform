@@ -45,18 +45,19 @@
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/model/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
     "test:kernel-module": "bun test test/kernel-module.test.ts",
-    "test": "bun run build && bun test test test/native-tools.test.ts test/stream-interruption.test.ts test/responses-terminal.test.ts spec/acceptance.test.ts spec/continuation.test.ts",
+    "test": "bun run build && bun test test test/native-tools.test.ts test/input-estimator.test.ts test/stream-interruption.test.ts test/responses-terminal.test.ts spec/acceptance.test.ts spec/continuation.test.ts",
     "prepack": "bun run build"
   },
   "dependencies": {
-    "@types/json-schema": "7.0.15",
     "@ai-sdk/anthropic": "^3.0.71",
     "@ai-sdk/google": "^3.0.64",
     "@ai-sdk/openai": "^3.0.53",
     "@ai-sdk/provider": "3.0.8",
+    "@types/json-schema": "7.0.15",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
-    "ai": "^6.0.168"
+    "ai": "^6.0.168",
+    "gpt-tokenizer": "3.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",
