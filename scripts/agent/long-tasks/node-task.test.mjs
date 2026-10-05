@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -31,6 +31,57 @@ const config = {
   preserve: ['test', 'package.json', 'package-lock.json'],
   baselineFailure: 'output must use stream',
 }
+
+test('report inventories identify the same tests through physical and aliased workspace paths', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'regression-paths-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const physical = join(root, 'physical')
+  const alias = join(root, 'alias')
+  await mkdir(join(physical, 'tests'), { recursive: true })
+  await writeFile(join(physical, 'tests/a.js'), '// original test')
+  const canonical = await realpath(physical)
+  await symlink(canonical, alias)
+  const item = { file: join(canonical, 'tests/a.js'), fullTitle: 'a test', err: {} }
+  const mocha = {
+    stats: { tests: 1, passes: 1, failures: 0, pending: 0 },
+    tests: [item],
+    passes: [item],
+    failures: [],
+    pending: [],
+  }
+  const jest = {
+    success: true,
+    wasInterrupted: false,
+    numTotalTestSuites: 1,
+    numPassedTestSuites: 1,
+    numFailedTestSuites: 0,
+    numPendingTestSuites: 0,
+    numRuntimeErrorTestSuites: 0,
+    numTotalTests: 1,
+    numPassedTests: 1,
+    numFailedTests: 0,
+    numPendingTests: 0,
+    numTodoTests: 0,
+    testResults: [
+      {
+        name: item.file,
+        status: 'passed',
+        message: '',
+        assertionResults: [{ fullName: item.fullTitle, status: 'passed', failureMessages: [] }],
+      },
+    ],
+  }
+  for (const [runner, report] of [
+    ['mocha-json', mocha],
+    ['jest-json', jest],
+  ]) {
+    const result = { exitCode: 0, stdout: JSON.stringify(report) }
+    const original = nodeRegressionReport(result, canonical, runner)
+    const aliased = nodeRegressionReport(result, alias, runner)
+    assert.deepEqual(aliased.cases, original.cases)
+    assert(regressionVerdict({ ...result, ...aliased }, [], original.cases).suitePassed)
+  }
+})
 
 test('Node task selects native Node commands and leaves Python declarations unchanged', () => {
   const environment = taskEnvironment({ environment: config })

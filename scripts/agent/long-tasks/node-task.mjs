@@ -1,12 +1,25 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { constants, createReadStream } from 'node:fs'
+import { constants, createReadStream, realpathSync } from 'node:fs'
 import { cp, lstat, readFile, readdir, readlink } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 
 const execute = promisify(execFile)
+
+// 真实路径与工作区别名必须指向同一份用例清单；未落盘的报告夹具按字面路径处理。
+function regressionFile(workspace, file) {
+  const canonical = (path) => {
+    try {
+      return realpathSync(path)
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+      return resolve(path)
+    }
+  }
+  return relative(canonical(workspace || '.'), canonical(resolve(workspace, file)))
+}
 
 // 依赖指纹包含文件内容、执行权限和链接原文；链接只能指向本任务副本内部。
 export async function nodeDependencyState(workspace, node) {
@@ -115,7 +128,7 @@ export function mochaReport(result, workspace) {
   const occurrences = new Map()
   function nextId(item) {
     assert.equal(typeof item.fullTitle, 'string')
-    const name = `${item.file ? relative(workspace, item.file) : ''}::${item.fullTitle}`
+    const name = `${item.file ? regressionFile(workspace, item.file) : ''}::${item.fullTitle}`
     const occurrence = (occurrences.get(name) ?? 0) + 1
     occurrences.set(name, occurrence)
     return `${name}::${occurrence}`
@@ -171,7 +184,7 @@ export function jestReport(result, workspace) {
       assert.equal(typeof item.fullName, 'string')
       assert(Array.isArray(item.failureMessages))
       counts[item.status]++
-      const name = `${relative(workspace, suite.name)}::${item.fullName}`
+      const name = `${regressionFile(workspace, suite.name)}::${item.fullName}`
       const occurrence = (occurrences.get(name) ?? 0) + 1
       occurrences.set(name, occurrence)
       cases.push({
@@ -198,7 +211,7 @@ export function jestReport(result, workspace) {
     if (suite.status === 'failed' && !failing.length) {
       errors++
       cases.push({
-        id: `${relative(workspace, suite.name)}::[suite error]`,
+        id: `${regressionFile(workspace, suite.name)}::[suite error]`,
         outcomes: [{ kind: 'error', message: suite.message ?? '', text: suite.message ?? '' }],
       })
     }
