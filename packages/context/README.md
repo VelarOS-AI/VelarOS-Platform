@@ -88,7 +88,7 @@ await view.end()
 - 引用只在所属会话里解析，跨会话抛 `SCOPE_MISMATCH`；正文缺失抛 `OBJECT_MISSING`，不拿空串顶替；`project` 超预算抛 `CONTEXT_BUDGET`，不隐式压缩，最新一条用户输入与工作集之后到达的新事件总会带上。
 - 用户输入、工具结果这类事实只由宿主 `append`，模型经 `write` 只能写笔记与检查点；工作集提交从下一次模型请求起生效，原文从不删除。
 - 超长用户输入按完整 Unicode 字符分块归档，分页位置仍使用 UTF-16 字符数；读回依据归档记录的实际长度定位，也兼容固定宽度的既有分块。
-- 证据视图一个会话同时只有一个租约持有者（否则 `TASK_BUSY`），租约时长见 `DefaultContextViewLimits.leaseMs`，长等待期间 `renew`；效果不明的操作照实留在结算事实里，不挡下一步也不挡交付。上次执行中断时 `begin` 抛 `TASK_INTERRUPTED`，先把按持久日志收拾出的事实用 `recover` 合入。
+- 证据视图一个会话同时只有一个租约持有者（否则 `TASK_BUSY`），租约时长见 `DefaultContextViewLimits.leaseMs`，长等待期间 `renew`。宿主休眠使租约到期时，原所有者仍须在同一存储 CAS 中验证身份后续期；检查点更新可在同次提交续期，世界写入前先保证租约有效并重验执行身份。接管竞争由 CAS 决定，被替换、撤销或已结束的所有权不能续期；效果不明的操作照实留在结算事实里，不挡下一步也不挡交付。上次执行中断时 `begin` 抛 `TASK_INTERRUPTED`，先把按持久日志收拾出的事实用 `recover` 合入。
 - `build` 只从 `ContextSourcePort` 真实读取，发布前核对版本与授权（不过抛 `STALE_VIEW`）；发送前还要 `validate`；没给 `ContextCompletionPort` 时 `complete` 的结果始终是未验证。
 - 领域验收器可返回有界 `report`，逐项声明核查范围、时间、通过/失败/未知、证据引用与实际产物版本；`ContextVerificationLimits` 规定上限。报告归档后由 `readCompletion()` 读取当前任务的最近 `ContextCompletionRecord`，`readCompletion(ref)` 按 `inspect().completionRef` 等引用回看历史报告；失败报告也保留原任务与宿主对象身份，不把模型的完成主张当作核查。产物变化后旧报告保持原时刻的事实。
 - 宿主验收器可使用 `verify(view, signal, checks)` 的可选第三参数，按 `checks.check(spec, execute)` 复用完整通过的单项检查。`spec` 声明精确判据范围、核查器身份/版本，并原子探测完整产物指纹、授权与能识别 ABA 的变化代次；前后匹配才复用。未知探测仍实际核查，失败或部分覆盖不缓存。缓存属于当前视图实例，重开需实际核查；旧两参数验收器保持可用。

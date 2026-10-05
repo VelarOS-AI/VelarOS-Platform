@@ -276,6 +276,121 @@ test('A16/A17: competing leases, stale build publication and cancellation fail c
   await assert.rejects(f.view.startStep('late'), { code: 'LEASE_LOST' })
 })
 
+test('INV-4: the unchanged owner renews after suspended time without changing task evidence', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 0 })
+  const f = await fixture(t)
+  await observe(f)
+  const before = await f.view.inspect()
+  t.mock.timers.tick(f.view.limits.leaseMs + 650_000)
+  await f.view.renew()
+  const after = await f.view.inspect()
+  assert.deepEqual({ ...after, lease: before.lease }, before)
+  assert.equal(after.lease.id, before.lease.id)
+  assert(after.lease.expiresAt > Date.now())
+  assert.equal(await f.view.validate(before.view), true)
+})
+
+test('INV-4: delayed usage and execution continuations renew the same owner before continuing', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 0 })
+  const f = await fixture(t)
+  await f.view.reserveModel('main', 120)
+  t.mock.timers.tick(f.view.limits.leaseMs + 1)
+  await f.view.recordUsage(50, 10)
+  await f.view.startStep('continued')
+  const before = await f.view.inspect()
+  t.mock.timers.tick(f.view.limits.leaseMs + 1)
+  await f.view.assertCanWrite('continued')
+  const after = await f.view.inspect()
+  assert.deepEqual(after.activeExecutions, before.activeExecutions)
+  assert.equal(after.executionId, 'continued')
+  assert(after.lease.expiresAt > Date.now())
+  assert.equal(after.usage.mainCalls, 1)
+  assert.equal(after.usage.inputTokens, 50)
+  t.mock.timers.tick(f.view.limits.leaseMs + 1)
+  await f.view.settle([])
+  assert.equal((await f.view.inspect()).status, 'context-pending')
+})
+
+test('INV-4: a different owner taking over an expired lease fences the old run', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 0 })
+  const f = await fixture(t)
+  t.mock.timers.tick(f.view.limits.leaseMs + 1)
+  const other = createContextView(f.options)
+  const lease = await other.begin(f.user.ref)
+  await assert.rejects(f.view.renew(), { code: 'LEASE_LOST' })
+  await assert.rejects(f.view.startStep('stale'), { code: 'LEASE_LOST' })
+  assert.equal((await other.inspect()).lease.id, lease)
+  await other.startStep('current')
+  await other.assertCanWrite('current')
+})
+
+test('INV-4: renewal losing a compare-and-swap race cannot overwrite the new owner', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 0 })
+  const f = await fixture(t)
+  t.mock.timers.tick(f.view.limits.leaseMs + 1)
+  const entered = Promise.withResolvers()
+  const release = Promise.withResolvers()
+  t.after(() => release.resolve())
+  const original = f.storage.compareAndSwapMetadata.bind(f.storage)
+  let intercept = true
+  t.mock.method(f.storage, 'compareAndSwapMetadata', async (...args) => {
+    if (intercept) {
+      intercept = false
+      entered.resolve()
+      await release.promise
+    }
+    return original(...args)
+  })
+  const renewal = f.view.renew().then(
+    () => null,
+    (error) => error
+  )
+  assert.equal(
+    await Promise.race([entered.promise.then(() => true), renewal.then(() => false)]),
+    true
+  )
+  const other = createContextView(f.options)
+  const lease = await other.begin(f.user.ref)
+  release.resolve()
+  assert.equal((await renewal).code, 'LEASE_LOST')
+  assert.equal((await other.inspect()).lease.id, lease)
+  await other.startStep('winner')
+  await other.assertCanWrite('winner')
+  await assert.rejects(f.view.assertCanWrite('winner'), { code: 'LEASE_LOST' })
+})
+
+test('INV-4: recovery revokes an interrupted execution before another owner begins', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 0 })
+  const f = await fixture(t)
+  await f.view.startStep('interrupted')
+  t.mock.timers.tick(f.view.limits.leaseMs + 1)
+  const other = createContextView(f.options)
+  await assert.rejects(other.begin(f.user.ref), { code: 'TASK_INTERRUPTED' })
+  await other.recover([])
+  await assert.rejects(f.view.renew(), { code: 'LEASE_LOST' })
+  await assert.rejects(f.view.assertCanWrite('interrupted'), { code: 'LEASE_LOST' })
+  const lease = await other.begin(f.user.ref)
+  assert.equal((await other.inspect()).lease.id, lease)
+})
+
+test('INV-4: aborted renewal and terminal or revoked ownership do not restart a task', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 0 })
+  const f = await fixture(t)
+  t.mock.timers.tick(f.view.limits.leaseMs + 1)
+  const before = await f.view.inspect()
+  const signal = AbortSignal.abort(new Error('caller stopped'))
+  await assert.rejects(f.view.renew(signal), signal.reason)
+  assert.deepEqual(await f.view.inspect(), before)
+  await f.view.renew()
+  await f.view.build({ maxChars: 12000 })
+  assert.equal((await f.view.complete()).completed, true)
+  t.mock.timers.tick(f.view.limits.leaseMs + 1)
+  await assert.rejects(f.view.renew(), { code: 'TASK_TERMINAL' })
+  await f.view.end('cancelled')
+  await assert.rejects(f.view.renew(), { code: 'LEASE_LOST' })
+  assert.equal((await f.view.inspect()).status, 'completed')
+})
+
 test('A12: required goals never silently truncate, acceptance is explicit', async (t) => {
   const f = await fixture(t)
   await assert.rejects(f.view.build({ maxChars: 4 }), { code: 'CONTEXT_BUDGET' })

@@ -4,6 +4,7 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { DefaultContextViewLimits } from '@velaros-ai/context'
 import { localContextStorage } from '@velaros-ai/context/node'
 import { createNodeCodeRunner } from '@velaros-ai/script'
 
@@ -42,6 +43,58 @@ const request = (source, timeoutMs = 10_000, operations = {}) => ({
 const noCalls = async () => {
   throw Error('unexpected host call')
 }
+
+for (const reportUsage of [false, true])
+  test(`native execution survives suspended model waiting with usage=${reportUsage}`, async (t) => {
+    const f = await fixture(t)
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() })
+    let calls = 0
+    const runtime = await createRuntime({
+      node: f.node,
+      project: false,
+      agents: false,
+      search: false,
+      memory: false,
+      context: { maintenance: false },
+      storage: localContextStorage({ path: join(f.root, 'resume.sqlite') }),
+      model: {
+        id: 'suspended-native',
+        nativeTools: true,
+        limits: { contextTokens: 128000, inputTokens: 120000, outputTokens: 4000 },
+        estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+        async *stream() {
+          calls++
+          t.mock.timers.tick(DefaultContextViewLimits.leaseMs + 650_000)
+          if (reportUsage) yield { type: 'usage', inputTokens: 100, outputTokens: 20 }
+          if (calls === 1)
+            yield {
+              type: 'tool-call',
+              value: {
+                id: 'append-once',
+                name: 'node',
+                input: {
+                  code: "import {appendFile} from 'node:fs/promises'; await appendFile('effects.txt','x'); console.log('written')",
+                },
+              },
+            }
+          else yield { type: 'text', text: 'The one requested write completed.' }
+          yield { type: 'finish', reason: 'stop' }
+        },
+      },
+    })
+    t.after(() => runtime.close())
+    const session = await runtime.openSession('resume')
+    const events = []
+    for await (const event of session.submit('Append x exactly once to effects.txt.'))
+      events.push(event)
+    assert.deepEqual(
+      events.filter((event) => event.type === 'error'),
+      []
+    )
+    assert(events.some((event) => event.type === 'state' && event.status === 'completed'))
+    assert.equal(calls, 2)
+    assert.equal(await readFile(join(f.cwd, 'effects.txt'), 'utf8'), 'x')
+  })
 
 test('native Node calls preserve a restricted runner and expose only the allowed entry', async (t) => {
   const f = await fixture(t)

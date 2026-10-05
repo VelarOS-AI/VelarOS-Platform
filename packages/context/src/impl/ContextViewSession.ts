@@ -101,9 +101,9 @@ export interface ContextViewApi {
   build(options: ContextBuildOptions, signal?: AbortSignal): Promise<ModelView>
   /** 发送前复核任务、范围和资源版本。 */
   validate(view: ModelView, signal?: AbortSignal): Promise<boolean>
-  /** 世界写入前核对当前执行身份；资源是不是变了由各领域写入时自己的版本核对管。 */
+  /** 世界写入前核对当前执行与有效租约；到期先原子续期，资源版本由领域写入核对。 */
   assertCanWrite(executionId: string, signal?: AbortSignal): Promise<void>
-  /** 在模型或后台任务等待时续期当前所有权，失去所有权则失败。 */
+  /** 通过 CAS 续期仍匹配的所有权，包括宿主休眠造成的到期；被替换、撤销或终态则失败。 */
   renew(signal?: AbortSignal): Promise<void>
   /** 为主模型或搜索、整理会话预占调用与 token 预算。 */
   reserveModel(role: 'main' | 'context', tokens: number): Promise<void>
@@ -540,8 +540,15 @@ export class ContextViewSession implements ContextViewApi {
     signal: AbortSignal = new AbortController().signal
   ): Promise<void> {
     signal.throwIfAborted()
-    const task = this.executing(toOptional(await this.inspect()), executionId)
+    let task = this.executing(toOptional(await this.inspect()), executionId)
+    if (task.lease!.expiresAt <= Date.now()) {
+      await this.renew(signal)
+      task = this.executing(toOptional(await this.inspect()), executionId)
+      if (task.lease!.expiresAt <= Date.now())
+        throw contextFailure('LEASE_LOST', '世界写入前任务租约再次到期')
+    }
     if (task.executionId !== executionId) throw contextFailure('LEASE_LOST', '操作不属于当前执行')
+    signal.throwIfAborted()
   }
 
   public async renew(signal?: AbortSignal): Promise<void> {
@@ -779,13 +786,9 @@ export class ContextViewSession implements ContextViewApi {
     if (this.leaseId === owner) this.leaseId = undefined
   }
 
+  /** 所有权身份必须匹配；检查点更新在同次 CAS 续期，世界写入另行确认有效期。 */
   private owned(task: Optional<ContextTaskState>): ContextTaskState {
-    if (
-      !task ||
-      !this.leaseId ||
-      task.lease?.id !== this.leaseId ||
-      task.lease.expiresAt <= Date.now()
-    )
+    if (!task || !this.leaseId || task.lease?.id !== this.leaseId)
       throw contextFailure('LEASE_LOST', '当前运行不持有有效任务租约')
     if (['completed', 'cancelled', 'failed'].includes(task.status))
       throw contextFailure('TASK_TERMINAL', '任务已经结束')
