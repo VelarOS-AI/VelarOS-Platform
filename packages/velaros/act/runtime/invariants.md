@@ -118,6 +118,8 @@ Runtime 在完整容量与剩余轮数允许时把上一次被接受请求的实
 
 整理叙事仅在报告引用、来源与摘要逐字相同且实际历史保留上一帧时复用，标明 `summaryInEarlierFrame`；历史重建或身份、内容变化则完整重发。当前待办每帧保留原有顺序与重复项，同一报告末次结果中的相同待办可在编码更短时以 `unresolvedInCurrentState` 指向当前列表；失败、未知字段、待处理请求与原始审计完整保留。
 
+Node 当前待办可在编码更短时用 `{textAt: "/task/active/items/0/text"}` 这样的标准 JSON Pointer 共享同帧 `task.active.items` 中逐字相同的正文。正文必须实际显示在当前帧，当前项身份须无歧义，指针随当前次序重算；待办顺序与重复次数保持，先前帧、身份歧义、正文变化或缺失不能支持引用。其他待办、失败、来源与未知字段原样显示。此展示共享不改变持久当前项、原始整理报告、任务权限、证据或历史；模型看到的每个引用均可在同帧还原为完整待办正文。
+
 整理材料仅在相同父快照版本、原文引用、总长度与已交付范围逐字匹配时复用；当前范围须完整包含在先前正文中，以 `shownChars` 和 `bodyInEarlierFrame` 标记。范围元数据、续页位置、数组顺序和其他字段继续呈现，历史重建后重新交付完整正文；原始审计和发布时的输入完整性检查保持完整。
 
 验证：`test/context-memory.test.mjs` 的当前状态、身份目录、正文连续性、整理报告复用与退卡用例；`test/context-management.test.mjs` 的 INV-16/50/53 长程窗口与封段；`test/context-index.test.mjs` 和 `test/text-runtime.test.mjs` 的冻结复用与释放；Agent `spec/acceptance.test.ts` 的 INV-48。

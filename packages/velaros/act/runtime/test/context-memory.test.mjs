@@ -1272,6 +1272,206 @@ test('INV-74 maintenance narrative identity and current failures survive present
   assert(memoryPrompt(body, body).includes(anonymous.memoryStatus.maintenance.summary))
 })
 
+test('INV-74 Node unresolved work shares exact current task bodies with order and duplicates intact', () => {
+  const alpha = 'ALPHA_CURRENT_WORK: verify the remaining public entry points. '.repeat(8)
+  const beta = 'BETA_CURRENT_WORK: preserve cancellation and concurrent task isolation. '.repeat(8)
+  const missing = 'MISSING_CURRENT_WORK: inspect a boundary without an active item. '.repeat(8)
+  const report = { sessionId: 's', id: 'report-current' }
+  const frame = {
+    presentation: 'node',
+    partitions: {
+      task: {
+        goals: [],
+        active: {
+          revision: 7,
+          items: [
+            { id: 'b', kind: 'question', text: beta, sources: [report] },
+            { id: 'a', kind: 'question', text: alpha, sources: [report] },
+            { id: 'short', text: 'short' },
+          ],
+          pendingInputs: [{ sessionId: 's', id: 'new-input' }],
+        },
+      },
+      workspace: { notes: [] },
+      observation: {},
+      recent: { results: [] },
+      runtime: { mandatory: [] },
+    },
+    memoryStatus: {
+      maintenance: {
+        origin: 'model-interpretation',
+        report,
+        active: true,
+        summary: 'Verified facts remain separate from pending work.',
+        unresolved: [alpha, 'short', beta, alpha, missing],
+        pending: { focus: 'Inspect the new user input', preserve: [report] },
+        lastAttempt: {
+          status: 'applied',
+          report,
+          error: null,
+          unresolved: [alpha, 'short', beta, alpha, missing],
+        },
+        futureField: { empty: [], flag: false, count: 0 },
+      },
+    },
+  }
+  const body = JSON.stringify(frame)
+  for (const previous of [undefined, body]) {
+    const prompt = memoryPrompt(body, previous)
+    const task = JSON.parse(prompt.split('task（earlier 为此前运行的输入）：\n')[1].split('\n')[0])
+    const shown = JSON.parse(prompt.split('内存状态：\n')[1]).maintenance
+    assert.deepEqual(task.active, frame.partitions.task.active)
+    assert.deepEqual(shown.unresolved, [
+      { textAt: '/task/active/items/1/text' },
+      'short',
+      { textAt: '/task/active/items/0/text' },
+      { textAt: '/task/active/items/1/text' },
+      missing,
+    ])
+    assert.deepEqual(
+      shown.unresolved.map((item) =>
+        typeof item === 'string'
+          ? item
+          : item.textAt
+              .slice(1)
+              .split('/')
+              .reduce((value, key) => value[key], { task })
+      ),
+      frame.memoryStatus.maintenance.unresolved
+    )
+    assert.equal(prompt.split(alpha).length - 1, 1)
+    assert.equal(prompt.split(beta).length - 1, 1)
+    assert.equal(shown.lastAttempt.unresolvedInCurrentState, true)
+    assert.deepEqual(shown.pending, frame.memoryStatus.maintenance.pending)
+    assert.deepEqual(shown.futureField, frame.memoryStatus.maintenance.futureField)
+    assert.deepEqual(shown.report, report)
+  }
+  assert.equal(JSON.stringify(frame), body)
+})
+
+test('INV-74 Node unresolved references depend on current positions and current literal bodies', () => {
+  const text = 'CURRENT_LITERAL_BODY: complete the remaining checks before delivery. '.repeat(10)
+  const frame = {
+    presentation: 'node',
+    partitions: {
+      task: { goals: [], active: { items: [{ id: 'item-old', text }] } },
+      workspace: { notes: [] },
+      observation: {},
+      recent: { results: [] },
+      runtime: { mandatory: [] },
+    },
+    memoryStatus: { maintenance: { unresolved: [text] } },
+  }
+  const old = JSON.stringify(frame)
+  const shown = (value, previous) =>
+    JSON.parse(memoryPrompt(JSON.stringify(value), previous).split('内存状态：\n')[1]).maintenance
+  const replacement = structuredClone(frame)
+  replacement.partitions.task.active.items[0].id = 'item-new'
+  assert.deepEqual(shown(replacement, old).unresolved, [{ textAt: '/task/active/items/0/text' }])
+  for (const items of [[], [{ id: 'item-old', text: 'Different current work' }]]) {
+    const current = structuredClone(frame)
+    current.partitions.task.active.items = items
+    assert.deepEqual(
+      shown(current, old).unresolved,
+      [text],
+      'retained history cannot supply the body'
+    )
+    assert.deepEqual(shown(current).unresolved, [text], 'rebuilding history keeps unmatched work')
+  }
+  const reordered = structuredClone(frame)
+  reordered.partitions.task.active.items = [
+    { id: 'extra', text: 'Extra work' },
+    { id: 'item-old', text },
+  ]
+  assert.deepEqual(shown(reordered, old).unresolved, [{ textAt: '/task/active/items/1/text' }])
+})
+
+test('INV-74 Node unresolved work remains literal for ambiguous or malformed current items', () => {
+  const text =
+    'UNAMBIGUOUS_CURRENT_WORK: inspect the actual output and keep the required source. '.repeat(8)
+  for (const items of [
+    undefined,
+    {},
+    [null],
+    [{ id: '', text }],
+    [{ id: 7, text }],
+    [{ id: 'a', text: { value: text } }],
+    [
+      { id: 'a', text },
+      { id: 'a', text },
+    ],
+    [
+      { id: 'a', text },
+      { id: 'a', text: 'Other current work' },
+    ],
+  ]) {
+    const maintenance = {
+      unresolved: [text, text, '', null, { future: 'value' }],
+      lastAttempt: { status: 'failed', error: 'Current failure', unresolved: ['Failure detail'] },
+      pending: { focus: 'New work' },
+    }
+    const frame = {
+      presentation: 'node',
+      partitions: {
+        task: { goals: [], active: { items } },
+        workspace: { notes: [] },
+        observation: {},
+        recent: { results: [] },
+        runtime: { mandatory: [] },
+      },
+      memoryStatus: { maintenance },
+    }
+    const body = JSON.stringify(frame)
+    const shown = JSON.parse(memoryPrompt(body, body).split('内存状态：\n')[1]).maintenance
+    assert.deepEqual(shown, maintenance)
+    assert.equal(JSON.stringify(frame), body)
+  }
+})
+
+test('INV-74 Node unresolved sharing preserves legacy presentation, short bodies and future fields', () => {
+  const text = 'LONG_CURRENT_WORK: preserve every current requirement and its evidence. '.repeat(8)
+  for (const presentation of [undefined, 'node']) {
+    const maintenance = {
+      unresolved: ['tiny', text, { future: 'original' }],
+      lastAttempt: { status: 'failed', error: 'Different report failed', unresolved: [text] },
+    }
+    const frame = {
+      presentation,
+      partitions: {
+        task: {
+          goals: [],
+          active: {
+            items: [
+              { id: 'long', text },
+              { id: 'short', text: 'tiny' },
+            ],
+          },
+        },
+        workspace: { notes: [] },
+        observation: {},
+        recent: { results: [] },
+        runtime: { mandatory: [] },
+      },
+      memoryStatus: { maintenance },
+    }
+    const shown = JSON.parse(
+      memoryPrompt(JSON.stringify(frame)).split('内存状态：\n')[1]
+    ).maintenance
+    assert.deepEqual(shown.lastAttempt, maintenance.lastAttempt)
+    assert.deepEqual(
+      shown.unresolved,
+      presentation === 'node'
+        ? ['tiny', { textAt: '/task/active/items/0/text' }, { future: 'original' }]
+        : maintenance.unresolved
+    )
+    frame.memoryStatus.maintenance = { future: 'value' }
+    assert.deepEqual(
+      JSON.parse(memoryPrompt(JSON.stringify(frame)).split('内存状态：\n')[1]).maintenance,
+      { future: 'value' }
+    )
+  }
+})
+
 test('INV-62 task text stays once in a stable chronological prefix while the frame carries current scope', async (t) => {
   const task =
     'TASK_BODY_UNIQUE: inspect the parser, preserve public API, and verify changes.\nKeep exact newlines and "quotes".'

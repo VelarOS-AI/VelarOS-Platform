@@ -81,6 +81,8 @@ export function nodeFrameState(frame: MemoryFrameDisplay) {
     segment: _segment,
     ...status
   } = frame.status
+  if (isPlainObject(frame.task.active) && isPlainObject(status.maintenance))
+    status.maintenance = nodeMaintenanceState(status.maintenance, frame.task.active.items)
   const capsule = frame.workspace.capsule
   const directory = frame.workspace.residentDirectory
   const snapshot = frame.workspace.snapshot
@@ -109,6 +111,34 @@ export function nodeFrameState(frame: MemoryFrameDisplay) {
     runtime: nodeStateValues(runtime),
     status: nodeStateValues(status),
   }
+}
+
+/** 同帧待办共享当前项的完整正文；JSON Pointer 随当前次序重算，重复项与未匹配正文保持。 */
+function nodeMaintenanceState(maintenance: unknown, items: unknown): unknown {
+  if (!isPlainObject(maintenance) || !isArray(maintenance.unresolved) || !isArray(items))
+    return maintenance
+  const identities = new Set<string>()
+  const bodies = new Map<string, number>()
+  for (const [index, item] of items.entries()) {
+    if (
+      !isPlainObject(item) ||
+      !isString(item.id) ||
+      !item.id ||
+      !isString(item.text) ||
+      identities.has(item.id)
+    )
+      return maintenance
+    identities.add(item.id)
+    if (!bodies.has(item.text)) bodies.set(item.text, index)
+  }
+  const unresolved = maintenance.unresolved.map((text) => {
+    if (!isString(text) || !text) return text
+    const index = bodies.get(text)
+    if (index === undefined) return text
+    const reference = { textAt: `/task/active/items/${index}/text` }
+    return JSON.stringify(reference).length < JSON.stringify(text).length ? reference : text
+  })
+  return { ...maintenance, unresolved }
 }
 
 /** 子任务的状态与交付入口保持当前值；不可变产物目录按清单引用读取，避免每轮重复脚本身份。 */
