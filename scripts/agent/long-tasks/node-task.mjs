@@ -6,6 +6,8 @@ import { cp, lstat, readFile, readdir, readlink } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 
+import { avaReport } from './ava-report.mjs'
+
 const execute = promisify(execFile)
 
 // 基线、参与者初始副本与评分副本使用同一冻结构建入口，产物始终从对应源码重建。
@@ -278,7 +280,11 @@ export function jestReport(result, workspace) {
 }
 
 export function nodeRegressionReport(result, workspace, runner) {
-  assert(['mocha-json', 'jest-json'].includes(runner), 'Unknown Node regression reporter')
+  assert(
+    ['mocha-json', 'jest-json', 'ava-tap'].includes(runner),
+    'Unknown Node regression reporter'
+  )
+  if (runner === 'ava-tap') return avaReport(result)
   return runner === 'jest-json' ? jestReport(result, workspace) : mochaReport(result, workspace)
 }
 

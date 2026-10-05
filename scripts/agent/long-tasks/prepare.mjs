@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { cp, mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
@@ -21,6 +21,7 @@ import { readPytestReport, regressionVerdict } from './regression.mjs'
 import { runtimeCapabilityOptions, runtimeSubmissionOptions } from './runtime-capabilities.mjs'
 import {
   createExecutionEnvironments,
+  createTaskRoot,
   acceptanceArguments,
   applyTaskEnvironment,
   pythonTaskPath,
@@ -55,7 +56,7 @@ applyTaskEnvironment(environment)
 const node = environment.runtime === 'node' ? process.execPath : undefined
 const output = join(campaign, attemptId)
 await mkdir(output)
-const taskRoot = await mkdtemp('/private/tmp/vlr-')
+const taskRoot = await createTaskRoot()
 const source = join(taskRoot, 'source', environment.project)
 await execute('git', [
   'clone',

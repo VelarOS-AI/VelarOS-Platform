@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { test } from 'node:test'
@@ -8,6 +8,7 @@ import { promisify } from 'node:util'
 
 import {
   createExecutionEnvironments,
+  createTaskRoot,
   bindPythonCheckout,
   pythonTaskPath,
   regressionArguments,
@@ -23,6 +24,26 @@ const environment = {
   preserve: ['tests', 'pyproject.toml'],
   baselineFailure: 'Feature is not implemented',
 }
+
+test('new task roots use the process ownership without changing their parent directory', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'velaros-task-parent-'))
+  const before = await stat(parent)
+  try {
+    const root = await createTaskRoot(join(parent, 'isolated-'))
+    const created = await stat(root)
+    assert(created.isDirectory())
+    if (typeof process.getuid === 'function') {
+      assert.equal(created.uid, process.getuid())
+      assert.equal(created.gid, process.getgid())
+    }
+    const after = await stat(parent)
+    assert.equal(after.uid, before.uid)
+    assert.equal(after.gid, before.gid)
+    assert.equal(after.mode, before.mode)
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
 
 test('task configuration supports different repositories and src imports without changing the evaluator', () => {
   assert.deepEqual(taskEnvironment({ environment }), { ...environment, regressionRunner: 'pytest' })

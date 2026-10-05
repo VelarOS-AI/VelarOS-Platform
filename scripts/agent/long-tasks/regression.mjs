@@ -74,7 +74,7 @@ export function regressionVerdict(result, issues = [], baseline) {
 
 export function validateBaselineIssues(issues, runner) {
   assert(Array.isArray(issues))
-  if (issues.length) assert(['pytest', 'mocha-json', 'jest-json'].includes(runner))
+  if (issues.length) assert(['pytest', 'mocha-json', 'jest-json', 'ava-tap'].includes(runner))
   const names = new Set()
   for (const issue of issues) {
     assert.equal(typeof issue.test, 'string')

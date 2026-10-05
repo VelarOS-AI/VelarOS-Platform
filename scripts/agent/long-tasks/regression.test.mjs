@@ -59,7 +59,7 @@ test('same test with a different failure, new failures, missing tests and extra 
 })
 
 test('baseline exceptions require a unique test, concrete fingerprint and public source', () => {
-  for (const runner of ['pytest', 'mocha-json', 'jest-json'])
+  for (const runner of ['pytest', 'mocha-json', 'jest-json', 'ava-tap'])
     validateBaselineIssues([issue], runner)
   for (const issues of [[issue, issue], [{ ...issue, contains: [] }], [{ ...issue, source: '' }]])
     assert.throws(() => validateBaselineIssues(issues, 'pytest'))

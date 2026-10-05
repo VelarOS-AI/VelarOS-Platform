@@ -1,12 +1,35 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { cp, lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import {
+  chown,
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises'
 import { delimiter, join } from 'node:path'
 import { promisify } from 'node:util'
 
 import { validateBaselineIssues } from './regression.mjs'
 
 const execute = promisify(execFile)
+
+// 独占工作根使用执行用户的组；BSD 临时目录的继承组不能改变项目权限测试的语义。
+export async function createTaskRoot(prefix = '/private/tmp/vlr-') {
+  const directory = await mkdtemp(prefix)
+  try {
+    if (typeof process.getuid === 'function' && typeof process.getgid === 'function')
+      await chown(directory, process.getuid(), process.getgid())
+    return directory
+  } catch (error) {
+    await rm(directory, { recursive: true, force: true })
+    throw error
+  }
+}
 
 // 评测项目、依赖环境和验收命令在请求模型之前固定；这里只接受工作区内相对路径。
 export function taskEnvironment(task) {
@@ -16,7 +39,11 @@ export function taskEnvironment(task) {
   const regressionRunner = value.regressionRunner ?? 'pytest'
   const node = value.runtime === 'node'
   assert(value.runtime === undefined || node)
-  assert((node ? ['mocha-json', 'jest-json'] : ['pytest', 'unittest']).includes(regressionRunner))
+  assert(
+    (node ? ['mocha-json', 'jest-json', 'ava-tap'] : ['pytest', 'unittest']).includes(
+      regressionRunner
+    )
+  )
   if (regressionRunner === 'unittest') assert.equal(regression.length, 1)
   for (const name of node ? [project] : [project, python])
     assert.match(name, /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/u)
@@ -139,6 +166,12 @@ export async function restoreTaskPaths(source, destination, paths) {
 
 // 使用项目自身的回归测试入口；新功能验收单独使用 pytest。
 export function regressionArguments(environment, report) {
+  if (environment.runtime === 'node' && environment.regressionRunner === 'ava-tap')
+    return [
+      join(import.meta.dirname, 'ava-runner.mjs'),
+      environment.regressionEntry,
+      ...environment.regression,
+    ]
   if (environment.runtime === 'node')
     return environment.regressionRunner === 'jest-json'
       ? [

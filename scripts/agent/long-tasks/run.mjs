@@ -173,6 +173,7 @@ async function grade(workspace, output) {
   const judge = join(manifest.taskRoot, `judge-${output.split('/').at(-1)}`)
   await cp(workspace, judge, {
     recursive: true,
+    verbatimSymlinks: true,
     filter: (path) =>
       ![
         '.git',
