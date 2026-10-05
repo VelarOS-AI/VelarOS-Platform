@@ -5933,6 +5933,196 @@
         "modelsRerun": 0,
         "artifactChanges": 0
       }
+    },
+    {
+      "attempt": "fs-extra-01",
+      "schema": 1,
+      "at": "2026-10-05T08:06:07.781Z",
+      "taskId": "fs-extra-cooperative-cancellation",
+      "scriptactSessionId": "scriptact-b53807fc-80df-42a8-b749-02be838fbb06",
+      "candidateId": "candidate-v30-9e237f2d18f3",
+      "candidateSourceCommit": "0276de59623472048cf356ff3ac23c5c18b1fece",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "split": "holdout",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 44,
+            "startedAt": 1791183505934,
+            "solveMs": 1433671
+          },
+          "accounting": {
+            "requests": 44,
+            "requestStatuses": {
+              "http-200": 37,
+              "http-503": 3,
+              "http-200-interrupted": 4
+            },
+            "measuredRequests": 37,
+            "missingUsageRequests": 7,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 785566,
+            "knownOutputTokens": 18082,
+            "knownCachedInputTokens": 317696,
+            "knownCacheRatio": 0.4044166880949532,
+            "pricedRequests": 37,
+            "knownReferenceUsd": 2.3601984000000007,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 71,
+            "failed": 2,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "71 passed, 2 failed, 0 skipped, 0 errors",
+            "failures": [
+              "not ok 28 - ensureSymlink: live signals preserve success and leave no listeners",
+              "not ok 61 - emptyDir waits for a native removal already submitted"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 745,
+            "failed": 0,
+            "skipped": 8,
+            "errors": 0,
+            "summary": "745 passed, 0 failed, 8 skipped",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 24,
+          "createdFiles": 3,
+          "changeSummary": "1\t0\tdocs/copy.md\n2\t1\tdocs/emptyDir.md\n2\t1\tdocs/ensureDir.md\n2\t1\tdocs/ensureFile.md\n3\t1\tdocs/ensureLink.md\n4\t1\tdocs/ensureSymlink.md\n1\t0\tdocs/move.md\n1\t0\tdocs/outputFile.md\n1\t0\tdocs/outputJson.md\n1\t0\tdocs/readJson.md\n3\t1\tdocs/remove.md\n1\t0\tdocs/writeJson.md\n51\t27\tlib/copy/copy.js\n20\t10\tlib/empty/index.js\n31\t24\tlib/ensure/file.js\n27\t20\tlib/ensure/link.js\n47\t34\tlib/ensure/symlink.js\n23\t2\tlib/json/jsonfile.js\n8\t2\tlib/json/output-json.js\n5\t5\tlib/mkdirs/make-dir.js\n26\t17\tlib/move/move.js\n12\t7\tlib/output-file/index.js\n8\t4\tlib/remove/index.js\n31\t11\tlib/util/async.js\n",
+          "created": "docs/abort-signals.md\nlib/__tests__/abort.test.js\nlib/util/abort.js\n",
+          "changeAccounting": {
+            "baseline": "a940f219faa453f6b16cfe237215ec2acce45716",
+            "head": "a940f219faa453f6b16cfe237215ec2acce45716",
+            "source": "recorded-baseline",
+            "changedFiles": 24,
+            "createdFiles": 3,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 42,
+            "branchRequests": 2,
+            "requestOwners": {
+              "scriptact-b53807fc-80df-42a8-b749-02be838fbb06": 42,
+              "context:59517476-3743-441d-bab7-232fdaa49c39": 1,
+              "context:0bba358f-bf30-413f-8c8a-c5be75e0e909": 1
+            },
+            "contextSegments": 16,
+            "nativeRequests": 42,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 2,
+            "originalPromptInFinalRequest": true
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791184958117,
+            "finishedAt": 1791187510940,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a10af1-72c6-7d80-a1ba-c612cbebe697",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 311,
+            "solveMs": 2552823
+          },
+          "accounting": {
+            "requests": 74,
+            "requestStatuses": {
+              "http-200": 69,
+              "unknown": 3,
+              "http-200-interrupted": 2
+            },
+            "measuredRequests": 69,
+            "missingUsageRequests": 5,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1686403,
+            "knownOutputTokens": 39949,
+            "knownCachedInputTokens": 1364352,
+            "knownCacheRatio": 0.8090308188493498,
+            "pricedRequests": 69,
+            "knownReferenceUsd": 2.632924799999999,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 72,
+            "failed": 1,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "72 passed, 1 failed, 0 skipped, 0 errors",
+            "failures": [
+              "not ok 53 - arbitrary cancellation reasons preserve identity"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 745,
+            "failed": 0,
+            "skipped": 8,
+            "errors": 0,
+            "summary": "745 passed, 0 failed, 8 skipped",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 25,
+          "createdFiles": 2,
+          "changeSummary": "26\t0\tdocs/copy.md\n5\t1\tdocs/emptyDir.md\n3\t1\tdocs/ensureDir.md\n5\t1\tdocs/ensureFile.md\n5\t1\tdocs/ensureLink.md\n6\t1\tdocs/ensureSymlink.md\n3\t0\tdocs/move.md\n3\t0\tdocs/outputFile.md\n3\t0\tdocs/outputJson.md\n3\t0\tdocs/readJson.md\n5\t1\tdocs/remove.md\n3\t0\tdocs/writeJson.md\n64\t37\tlib/copy/copy.js\n27\t9\tlib/empty/index.js\n30\t23\tlib/ensure/file.js\n27\t20\tlib/ensure/link.js\n44\t33\tlib/ensure/symlink.js\n34\t2\tlib/json/jsonfile.js\n8\t3\tlib/json/output-json.js\n8\t5\tlib/mkdirs/make-dir.js\n28\t16\tlib/move/move.js\n11\t5\tlib/output-file/index.js\n24\t2\tlib/remove/index.js\n8\t10\tlib/util/async.js\n9\t0\ttest.mjs\n",
+          "created": "lib/__tests__/abort.test.js\nlib/util/abort.js\n",
+          "changeAccounting": {
+            "baseline": "d3ee6a91ef428ba5480c16443d15dc2f4c71efb6",
+            "head": "d3ee6a91ef428ba5480c16443d15dc2f4c71efb6",
+            "source": "recorded-baseline",
+            "changedFiles": 25,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "rootThreadId": "01a10af1-72c6-7d80-a1ba-c612cbebe697",
+            "compactions": 8,
+            "childAgentDispatches": 0,
+            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T15-22-38-01a10af1-72c6-7d80-a1ba-c612cbebe697.jsonl"
+          }
+        }
+      }
     }
   ],
   "transportDiagnostics": {
