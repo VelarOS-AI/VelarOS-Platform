@@ -1327,3 +1327,13 @@ INV-19 与模型 README 同步明确这项恢复承诺。没有新增公开 API�
 按正式 trace、会话内执行身份及最新回合快照核对 Mocha、Markdown-it 两配置、Async.js 两配置，共 387 次执行，其中 341 次成功、46 次 PROGRAM_ERROR；40 次失败有完整数值非零退出码，其余受保存输出范围限制。最长连续五次出现在 Async.js，五份脚本不同，期间持续修改实现和探针，最终该次功能为 165/165；全同源码连续失败最长一次。此统计不能排除语义重复，也没有构成与 Codex 的同口径失败率比较。
 
 六份诊断轨迹（含初始隔离错误的 ShellJS 首次尝试）均无 trace 缺口；该 ShellJS 仅供诊断，不进入有效统计。模型供应商错误和上下文维护错误单独保留，terminated 文案来自流中断，不能仅据分类名判断为整理逻辑故障。证据为 recent-execution-health.json。本轮依据最终明确的机器码中止修复通用分类器，没有依据普通编程命令失败次数增加提示词或控制逻辑。
+
+## v37 冻结与下一轮验证登记
+
+修复以干净提交 `884d874a9bee9c7b99df654d3ac760f32ff65690` 冻结，标识为 `candidate-v37-2c2bb69bd829`，共 5404 个文件。与 v36 包快照相比，仅 model 的重试源码、README、构建 JS 和两份映射共五个文件不同；产品其他包逐文件哈希一致，证明为 candidate-v37-freeze-proof.json。
+
+于 17:57:19 UTC 登记 v37-validation-plan.json，顺序为正在执行的 v35 shelljs-02 完整配对，然后 shelljs-03、shelljs-shell-node-03、chai-03 配对、chai-shell-node-03、mocha-08。五份新尝试逐一完成原项目与拒绝原版的新功能验收：ShellJS 两配置各 614 passed 与 7 skipped、Chai 两配置各 507/507、Mocha 1241 passed 与 3 pending。工作根依次为 /private/tmp/vlr-DMmnRf、/private/tmp/vlr-1u6Pus、/private/tmp/vlr-3zFrdy、/private/tmp/vlr-1KYqDt、/private/tmp/vlr-Xz18Wx。付费控制器保持串行，每个配对先 ScriptAct 后 Codex。
+
+两组能力配置分别核对 15 个候选、模型、限额、环境、费用字段；新旧版本核对 12 个共同字段及能力配置。六组比较的完整原始需求、评分器 SHA、逐例基线和四个依赖身份字段一致。登记时五份新尝试、四份被替换的排队尝试以及 Chai 首批均没有真实网关账本、运行日志、活动、事件或终态记录；旧冻结文件和旧计划保持，另加独立 scheduling-note-v37。队列依据为 queue-after-stream-repair.json。
+
+ShellJS 两配置均为 development，使用 shelljs-02 的 Codex 作共同参照，不增加独立任务或配对数；v35→v37 包含 task 快照复用和瞬时码分类两项变化，不能分别归因。Chai 尚无付费执行，on-demand 配对维持 holdout，Shell/Node 复测为 development。Mocha v34→v37 为组合优化的开发复测。各配置只有一次执行，须保留模型随机性的限制；完整费用仍要求所有请求用量，未知部分保持未知。本次冻结、基线和登记没有调用模型。
