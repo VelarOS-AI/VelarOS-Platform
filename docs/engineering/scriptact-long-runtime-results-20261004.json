@@ -11331,6 +11331,646 @@
           }
         }
       }
+    },
+    {
+      "attempt": "shelljs-03",
+      "schema": 1,
+      "at": "2026-10-05T18:41:01.875Z",
+      "taskId": "shelljs-independent-working-directory-instances",
+      "scriptactSessionId": "scriptact-75e7b710-b56d-4565-9e74-cea5780c8e58",
+      "candidateId": "candidate-v37-2c2bb69bd829",
+      "candidateSourceCommit": "884d874a9bee9c7b99df654d3ac760f32ff65690",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "scriptactTaskMode": "goal",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 211,
+            "goal": {
+              "id": "d065c0f6",
+              "revision": 2,
+              "objective": "Add independent ShellJS instances for applications that coordinate several working directories in one Node process. Implement shell.create(options?) as a maintained public API, integrate it throughout the built-in commands and ShellString pipelines, and add regression tests, documentation and a runnable example. Keep the existing default export and its existing process-wide behavior compatible.\n\nA new instance exposes the ordinary built-in command API, ShellString, config, env, error(), errorCode() and create(). options is an optional non-null, non-array object with optional cwd, config and env fields. cwd must be a nonempty string naming an existing directory; missing cwd snapshots the parent's current directory at creation. Relative cwd is resolved against the parent directory. Creating from the default export uses the real process directory as the parent; creating from another instance uses that instance's directory. Invalid option types throw TypeError; missing or nondirectory cwd throws before creating an instance or changing any state. Explicit undefined uses defaults.\n\nEach instance owns its current and previous directory, directory stack, command error state, configuration and environment. Snapshot the parent's config and env and apply supplied overrides; objects are independent, including config.globOptions, and caller-owned options remain unchanged. config and env overrides must be non-null, non-array objects when supplied. Changes to one instance, the parent or the real process environment after creation must not leak into another instance. config.reset() restores the existing ShellJS configuration defaults for that instance. Existing config options and set flags retain their meaning. The instance's env is used by its child commands and cd('-') keeps its previous directory there without changing process.env. cd() still uses the ordinary home-directory behavior.\n\nResolve relative filesystem operands and wildcard expansion against the instance current directory throughout cat, chmod, cp, find, grep, head, ln, ls, mkdir, mv, rm, sed, sort, tail, test, touch, uniq, to and toEnd. Preserve flags, arrays, wildcard ordering, recursive traversal, symbolic-link target text, filename prefixes, relative output spelling and ShellString stdout/stderr/code semantics. Literal text, patterns, replacements, command arguments and piped data must retain their ordinary meaning. Absolute paths continue to work. cd, pwd, dirs, pushd and popd act only on the owning instance, including invalid paths and directory-stack flags. which resolves relative PATH entries against the instance directory and uses that instance's environment.\n\nexec and cmd default to the instance cwd and env. An explicit command cwd is resolved relative to that instance and applies only to that invocation; an explicit env continues to use the command's existing override semantics. Preserve sync exec, async exec callbacks, returned child handles, stdout/stderr, exit codes and existing options. Async exec must capture its directory and environment when dispatched, so later cd/env changes and simultaneous commands on another instance cannot affect it.\n\nA ShellString returned by an instance, or made with instance.ShellString, keeps that instance for later pipeable methods, to, toEnd and exec/cmd. Pipe operations use that instance's directory at the time the pipe method is invoked, even if another instance or the default export ran in between. Ordinary string/array conversions, flags, return types and command error handling remain compatible. Detached instance command methods must remain bound to their owner. Error/fatal/configuration state must stay isolated after successful commands, failures and reentrant callbacks such as sed's replacement function.\n\nInstance commands must never temporarily change the process working directory, replace shared Node builtins, clear shared require caches or evaluate copies of module source. Use maintained command implementations and explicit instance context so ordinary application code and callbacks always observe the real process cwd and builtins. Preserve custom-plugin and global.js behavior of the default export; this feature requires the built-in command set on new instances.\n\nAdd focused tests across command families and flags, array/glob/absolute operands, directory-stack and previous-directory behavior, error/config/env isolation, nested creation, delayed and detached ShellString pipelines, simultaneous async execution, reentrant command callbacks and coexistence with the default export. Update public API documentation and add an executable example using two directories concurrently. Run the original AVA suite, npm run lint and the example, and report accurate implementation and validation results. Make routine implementation choices autonomously.",
+              "status": "complete",
+              "reason": "Implemented shell.create and integrated per-instance cwd/config/env/error/directory-stack context across built-ins, ShellString pipelines, exec/cmd, and which while preserving the default export. Added regression tests, README documentation, and executable examples/two-directories.js. Final integrated-tree verification: full AVA run 630 tests / 623 pass / 7 skip / 0 fail; npm test passed including posttest lint; standalone npm run lint passed; example passed; focused create tests passed; git diff --check passed; no conflict markers or diagnostic artifacts; all three delegated tasks completed and were integrated.",
+              "createdAt": 1791223444321,
+              "updatedAt": 1791225068556
+            },
+            "goalSnapshotError": null,
+            "startedAt": 1791223444174,
+            "solveMs": 1653608
+          },
+          "accounting": {
+            "requests": 211,
+            "requestStatuses": {
+              "http-200": 206,
+              "http-200-interrupted": 5
+            },
+            "measuredRequests": 206,
+            "missingUsageRequests": 5,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 4531217,
+            "knownOutputTokens": 64203,
+            "knownCachedInputTokens": 1473408,
+            "knownCacheRatio": 0.3251682715703088,
+            "pricedRequests": 206,
+            "knownReferenceUsd": 14.104659199999993,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 55,
+            "failed": 1,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "55 passed, 1 failed, 0 skipped, 0 errors",
+            "failures": [
+              "not ok 42 - fatal errors, set flags and config reset are isolated"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 614,
+            "failed": 0,
+            "skipped": 7,
+            "errors": 0,
+            "summary": "614 passed, 0 failed, 7 skipped, 0 errors",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 24,
+          "createdFiles": 2,
+          "changeSummary": "27\t0\tREADME.md\n251\t0\tshell.js\n4\t3\tsrc/cat.js\n6\t2\tsrc/chmod.js\n14\t2\tsrc/common.js\n9\t2\tsrc/cp.js\n3\t2\tsrc/find.js\n3\t2\tsrc/grep.js\n5\t4\tsrc/head.js\n11\t5\tsrc/ln.js\n11\t10\tsrc/ls.js\n5\t4\tsrc/mkdir.js\n7\t1\tsrc/mv.js\n11\t7\tsrc/rm.js\n4\t3\tsrc/sed.js\n4\t3\tsrc/sort.js\n4\t3\tsrc/tail.js\n1\t0\tsrc/test.js\n3\t2\tsrc/to.js\n3\t2\tsrc/toEnd.js\n5\t4\tsrc/touch.js\n7\t5\tsrc/uniq.js\n10\t6\tsrc/which.js\n29\t0\ttest/which.js\n",
+          "created": "examples/two-directories.js\ntest/create.js\n",
+          "changeAccounting": {
+            "baseline": "8c795a86b9db89a8602bd82cca96ac183072dd97",
+            "head": "deba7b8e3aebfadf64de7fa2459e0101080f2139",
+            "source": "recorded-baseline",
+            "changedFiles": 24,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 120,
+            "branchRequests": 91,
+            "requestOwners": {
+              "scriptact-75e7b710-b56d-4565-9e74-cea5780c8e58": 120,
+              "agent:scriptact-75e7b710-b56d-4565-9e74-cea5780c8e58:c455d604": 25,
+              "agent:scriptact-75e7b710-b56d-4565-9e74-cea5780c8e58:657e6b83": 28,
+              "agent:scriptact-75e7b710-b56d-4565-9e74-cea5780c8e58:a31f7f81": 21,
+              "context:8232da0a-0517-4f85-8ece-67c62a06c0a3": 5,
+              "context:3fca9339-79cf-4364-8313-4b599650bb0b": 1,
+              "context:2684ce43-4eac-416c-aa97-8594a3249e41": 1,
+              "context:d7d2e8dc-d3f2-41a7-b3db-c922bd0c2bc6": 1,
+              "context:b8272ac5-9426-4188-bed4-ba825378cee4": 1,
+              "context:62bb7b28-af26-4907-b878-99397881349d": 1,
+              "context:d4046efb-f9cb-411e-8597-39dc716d99e5": 1,
+              "context:4f00d864-fcb7-4d4e-971e-94b46e5a519e": 1,
+              "context:e426e9a0-355f-4459-a87b-f4c06c99c5d0": 4,
+              "context:f72a3f2e-99a0-4b57-b623-0657dbffed04": 1
+            },
+            "contextSegments": 69,
+            "nativeRequests": 203,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 8,
+            "originalPromptInFinalRequest": true
+          },
+          "capabilityUsage": {
+            "available": true,
+            "complete": true,
+            "rootTurns": 120,
+            "branchTurns": 91,
+            "uniqueCalls": 66,
+            "traceGaps": 0,
+            "missingSummaries": 0,
+            "operations": [
+              {
+                "moduleId": "velaros:agents",
+                "operation": "profiles",
+                "status": "succeeded",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:agents",
+                "operation": "resume",
+                "status": "succeeded",
+                "count": 3
+              },
+              {
+                "moduleId": "velaros:agents",
+                "operation": "send",
+                "status": "failed",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:agents",
+                "operation": "start",
+                "status": "succeeded",
+                "count": 3
+              },
+              {
+                "moduleId": "velaros:agents",
+                "operation": "status",
+                "status": "succeeded",
+                "count": 12
+              },
+              {
+                "moduleId": "velaros:agents",
+                "operation": "wait",
+                "status": "succeeded",
+                "count": 3
+              },
+              {
+                "moduleId": "velaros:context-materials",
+                "operation": "list",
+                "status": "succeeded",
+                "count": 9
+              },
+              {
+                "moduleId": "velaros:context-materials",
+                "operation": "read",
+                "status": "succeeded",
+                "count": 9
+              },
+              {
+                "moduleId": "velaros:context-materials",
+                "operation": "submit",
+                "status": "succeeded",
+                "count": 2
+              },
+              {
+                "moduleId": "velaros:system-goal",
+                "operation": "get",
+                "status": "succeeded",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:system-goal",
+                "operation": "update",
+                "status": "succeeded",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:system-memory",
+                "operation": "read",
+                "status": "succeeded",
+                "count": 21
+              }
+            ]
+          },
+          "deliveryReview": {
+            "at": "2026-10-05T18:47:38.267Z",
+            "workspace": "/private/tmp/shelljs03-delivery-review-WK67gh/scriptact",
+            "status": "partial",
+            "regression": {
+              "exitCode": 0,
+              "passed": 623,
+              "failed": 0,
+              "skipped": 7,
+              "errors": 0,
+              "summary": "623 passed, 0 failed, 7 skipped, 0 errors",
+              "failures": []
+            },
+            "authoredTests": 9,
+            "authoredTestFiles": [
+              "test/create.js",
+              "test/which.js"
+            ],
+            "lint": {
+              "exitCode": 0,
+              "elapsedMs": 1041
+            },
+            "example": {
+              "exitCode": 0,
+              "elapsedMs": 107
+            },
+            "setFlags": {
+              "fatal": false,
+              "noglob": false,
+              "otherFatal": false,
+              "defaultFatal": false
+            },
+            "review": {
+              "sourceArchitecture": "Existing filesystem command modules use explicit cwd through common state during synchronous dispatch; wrappers restore state/config afterwards, and exec/cmd copy cwd/env before dispatch. No process directory switching or shared Node builtin replacement was found. The task permits an internal synchronous context selector. Directory-stack and cd behavior is separately implemented on each instance.",
+              "featureFailure": "The sole frozen feature failure is set flag persistence. set(-e)/set(-f) mutate common.config, which the instance wrapper restores without copying changes back to instance.config. Both independently probed flags remain false. This is a delivered task implementation defect, not evidence of a Runtime execution failure.",
+              "testCoverage": "Seven create tests and two which tests cover validation, selected file operations, nested snapshots, basic stack/detached cd, delayed pipelines, touch/uniq, actual in-flight exec cwd/env snapshots and relative/empty PATH. Most changed command families, set/fatal isolation, reentrant callbacks, simultaneous async commands, array/absolute operands and broader stack flags lack authored focused assertions. The async test hardcodes /usr/local/bin/node; it passes on this host but is not portable.",
+              "documentation": "README and source API comments document creation options, independent state and nesting. Pipeline ownership, detached commands and async dispatch snapshots are not described. A runnable two-directory concurrent example is supplied and checked separately."
+            },
+            "originalArtifactsUnchanged": true,
+            "artifactSha256": {
+              "solve.json": "a4c3a667cf670f1855cc89dc42ec4512c52205c06177dd45a593fd0ed3387f94",
+              "grade.json": "30d0fe690943f0e6618b2e38324df66611168c4fa8280b7eced1543726dd4bdb",
+              "acceptance.json": "bdce757f52fb6be709d33df9711bfd9763710d99edd90922e10d1b4c6e6a7ddb",
+              "regression.json": "e6a6f9a058c5282452b82e0947d2e736b0c5a15b1476eeeb616e35b71eecec3a"
+            },
+            "metricsSha256": "012267fed7ac6367ec980c9a6e1d0052841f9ff1e7d9f03fabc18a6565122e8f"
+          },
+          "executionReview": {
+            "at": "2026-10-05T18:57:06.164Z",
+            "branches": [
+              {
+                "kind": "agent",
+                "status": "closed",
+                "turns": 28
+              },
+              {
+                "kind": "agent",
+                "status": "closed",
+                "turns": 25
+              },
+              {
+                "kind": "agent",
+                "status": "closed",
+                "turns": 21
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 5
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 4
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              }
+            ],
+            "moduleFailures": [
+              {
+                "moduleId": "velaros:agents",
+                "operation": "send",
+                "status": "failed",
+                "effect": "none",
+                "code": "UNAVAILABLE",
+                "message": "子运行尚未就绪或已经结束"
+              }
+            ],
+            "rootMaintenanceOutcomes": [
+              {
+                "sequence": 957,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              },
+              {
+                "sequence": 4120,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              },
+              {
+                "sequence": 5345,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              },
+              {
+                "sequence": 6314,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              },
+              {
+                "sequence": 7235,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              },
+              {
+                "sequence": 7880,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              }
+            ],
+            "executions": 337,
+            "statuses": {
+              "succeeded": 314,
+              "failed": 23
+            },
+            "failureCodes": {
+              "PROGRAM_ERROR": 21,
+              "UNAVAILABLE": 1,
+              "INPUT_SCHEMA": 1
+            },
+            "maxConsecutiveFailuresPerSession": 2,
+            "maxSameSourceConsecutiveFailures": 1,
+            "interpretation": "Closed child sessions are lifecycle evidence, not proof of semantic success. Distinct failing programs may be task development; byte-distinct code does not rule out semantic repetition. Known provider failures are separately retained. Independent feature and delivery verdicts remain authoritative."
+          }
+        }
+      },
+      "developmentComparison": {
+        "sameCandidateCapabilityArm": "shelljs-shell-node-03",
+        "commonCodexReference": "shelljs-02:codex",
+        "independentPair": false,
+        "qualification": "Single development execution per capability arm; not a new independent pair or isolated change attribution. Full reference cost remains unknown when usage is missing."
+      }
+    },
+    {
+      "attempt": "shelljs-shell-node-03",
+      "schema": 1,
+      "at": "2026-10-05T18:51:53.124Z",
+      "taskId": "shelljs-independent-working-directory-instances",
+      "scriptactSessionId": "scriptact-e23d09db-be58-4526-9c13-05e76d44f9d9",
+      "candidateId": "candidate-v37-2c2bb69bd829",
+      "candidateSourceCommit": "884d874a9bee9c7b99df654d3ac760f32ff65690",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "shell-node",
+      "scriptactTaskMode": "goal",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 49,
+            "goal": {
+              "id": "f8fcf46b",
+              "revision": 2,
+              "objective": "Add independent ShellJS instances for applications that coordinate several working directories in one Node process. Implement shell.create(options?) as a maintained public API, integrate it throughout the built-in commands and ShellString pipelines, and add regression tests, documentation and a runnable example. Keep the existing default export and its existing process-wide behavior compatible.\n\nA new instance exposes the ordinary built-in command API, ShellString, config, env, error(), errorCode() and create(). options is an optional non-null, non-array object with optional cwd, config and env fields. cwd must be a nonempty string naming an existing directory; missing cwd snapshots the parent's current directory at creation. Relative cwd is resolved against the parent directory. Creating from the default export uses the real process directory as the parent; creating from another instance uses that instance's directory. Invalid option types throw TypeError; missing or nondirectory cwd throws before creating an instance or changing any state. Explicit undefined uses defaults.\n\nEach instance owns its current and previous directory, directory stack, command error state, configuration and environment. Snapshot the parent's config and env and apply supplied overrides; objects are independent, including config.globOptions, and caller-owned options remain unchanged. config and env overrides must be non-null, non-array objects when supplied. Changes to one instance, the parent or the real process environment after creation must not leak into another instance. config.reset() restores the existing ShellJS configuration defaults for that instance. Existing config options and set flags retain their meaning. The instance's env is used by its child commands and cd('-') keeps its previous directory there without changing process.env. cd() still uses the ordinary home-directory behavior.\n\nResolve relative filesystem operands and wildcard expansion against the instance current directory throughout cat, chmod, cp, find, grep, head, ln, ls, mkdir, mv, rm, sed, sort, tail, test, touch, uniq, to and toEnd. Preserve flags, arrays, wildcard ordering, recursive traversal, symbolic-link target text, filename prefixes, relative output spelling and ShellString stdout/stderr/code semantics. Literal text, patterns, replacements, command arguments and piped data must retain their ordinary meaning. Absolute paths continue to work. cd, pwd, dirs, pushd and popd act only on the owning instance, including invalid paths and directory-stack flags. which resolves relative PATH entries against the instance directory and uses that instance's environment.\n\nexec and cmd default to the instance cwd and env. An explicit command cwd is resolved relative to that instance and applies only to that invocation; an explicit env continues to use the command's existing override semantics. Preserve sync exec, async exec callbacks, returned child handles, stdout/stderr, exit codes and existing options. Async exec must capture its directory and environment when dispatched, so later cd/env changes and simultaneous commands on another instance cannot affect it.\n\nA ShellString returned by an instance, or made with instance.ShellString, keeps that instance for later pipeable methods, to, toEnd and exec/cmd. Pipe operations use that instance's directory at the time the pipe method is invoked, even if another instance or the default export ran in between. Ordinary string/array conversions, flags, return types and command error handling remain compatible. Detached instance command methods must remain bound to their owner. Error/fatal/configuration state must stay isolated after successful commands, failures and reentrant callbacks such as sed's replacement function.\n\nInstance commands must never temporarily change the process working directory, replace shared Node builtins, clear shared require caches or evaluate copies of module source. Use maintained command implementations and explicit instance context so ordinary application code and callbacks always observe the real process cwd and builtins. Preserve custom-plugin and global.js behavior of the default export; this feature requires the built-in command set on new instances.\n\nAdd focused tests across command families and flags, array/glob/absolute operands, directory-stack and previous-directory behavior, error/config/env isolation, nested creation, delayed and detached ShellString pipelines, simultaneous async execution, reentrant command callbacks and coexistence with the default export. Update public API documentation and add an executable example using two directories concurrently. Run the original AVA suite, npm run lint and the example, and report accurate implementation and validation results. Make routine implementation choices autonomously.",
+              "status": "complete",
+              "reason": "Implemented independent ShellJS instances, instance-aware built-ins and ShellString pipelines, isolated cwd/config/env/error/directory-stack state, async exec snapshots, documentation, focused regression tests, and an executable concurrent example. Final npm test passed 618 tests with 7 skips and its lint post-hook passed; the example also ran successfully with two independent outputs.",
+              "createdAt": 1791225670099,
+              "updatedAt": 1791226203581
+            },
+            "goalSnapshotError": null,
+            "startedAt": 1791225670002,
+            "solveMs": 543393
+          },
+          "accounting": {
+            "requests": 49,
+            "requestStatuses": {
+              "http-200": 48,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 48,
+            "missingUsageRequests": 1,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1036503,
+            "knownOutputTokens": 16746,
+            "knownCachedInputTokens": 435456,
+            "knownCacheRatio": 0.4201203469743937,
+            "pricedRequests": 48,
+            "knownReferenceUsd": 2.9132904,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 42,
+            "failed": 14,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "42 passed, 14 failed, 0 skipped, 0 errors",
+            "failures": [
+              "not ok 22 - ls relative and structured output preserve names",
+              "not ok 23 - find recursive output preserves relative prefixes",
+              "not ok 26 - relative write command mkdir",
+              "not ok 28 - relative write command chmod",
+              "not ok 31 - relative write command rm",
+              "not ok 33 - relative write command ln hard",
+              "not ok 34 - relative write command ln symbolic",
+              "not ok 37 - cp and rm recursive glob paths remain local",
+              "not ok 40 - directory stacks and stack flags remain separate",
+              "not ok 42 - fatal errors, set flags and config reset are isolated",
+              "not ok 52 - cmd uses instance cwd and environment",
+              "not ok 53 - cmd explicit cwd is relative to the instance and invocation-local",
+              "not ok 54 - cmd ShellString piping keeps the owner and data",
+              "not ok 56 - exec stderr and nonzero status remain ordinary and isolated"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 614,
+            "failed": 0,
+            "skipped": 7,
+            "errors": 0,
+            "summary": "614 passed, 0 failed, 7 skipped, 0 errors",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 28,
+          "createdFiles": 2,
+          "changeSummary": "23\t0\tREADME.md\n65\t0\tshell.js\n1\t1\tsrc/cat.js\n7\t5\tsrc/cd.js\n1\t1\tsrc/chmod.js\n67\t12\tsrc/common.js\n1\t1\tsrc/cp.js\n14\t12\tsrc/dirs.js\n1\t1\tsrc/exec-child.js\n5\t5\tsrc/exec.js\n1\t1\tsrc/grep.js\n1\t1\tsrc/head.js\n1\t1\tsrc/ln.js\n1\t1\tsrc/ls.js\n1\t1\tsrc/mkdir.js\n1\t1\tsrc/mv.js\n1\t1\tsrc/pwd.js\n1\t1\tsrc/rm.js\n1\t1\tsrc/sed.js\n1\t1\tsrc/sort.js\n1\t1\tsrc/tail.js\n1\t1\tsrc/tempdir.js\n1\t1\tsrc/test.js\n1\t1\tsrc/to.js\n1\t1\tsrc/toEnd.js\n1\t1\tsrc/touch.js\n1\t1\tsrc/uniq.js\n4\t4\tsrc/which.js\n",
+          "created": "examples/multiple-instances.js\ntest/create.js\n",
+          "changeAccounting": {
+            "baseline": "47e13b01314cb35d111b8e0635bfbf17ec75a4ee",
+            "head": "47e13b01314cb35d111b8e0635bfbf17ec75a4ee",
+            "source": "recorded-baseline",
+            "changedFiles": 28,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 47,
+            "branchRequests": 2,
+            "requestOwners": {
+              "scriptact-e23d09db-be58-4526-9c13-05e76d44f9d9": 47,
+              "context:778f435e-7db8-46d0-a81d-bbbe136d27ed": 1,
+              "context:d44b11d8-355c-4a60-9070-eab952e64b51": 1
+            },
+            "contextSegments": 21,
+            "nativeRequests": 47,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 2,
+            "originalPromptInFinalRequest": true
+          },
+          "capabilityUsage": {
+            "available": true,
+            "complete": true,
+            "rootTurns": 47,
+            "branchTurns": 2,
+            "uniqueCalls": 2,
+            "traceGaps": 0,
+            "missingSummaries": 0,
+            "operations": [
+              {
+                "moduleId": "velaros:system-goal",
+                "operation": "get",
+                "status": "succeeded",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:system-goal",
+                "operation": "update",
+                "status": "succeeded",
+                "count": 1
+              }
+            ]
+          },
+          "deliveryReview": {
+            "at": "2026-10-05T18:55:02.836Z",
+            "workspace": "/private/tmp/shelljs-bare03-review-zFjFHL/scriptact",
+            "status": "partial",
+            "regression": {
+              "exitCode": 0,
+              "passed": 618,
+              "failed": 0,
+              "skipped": 7,
+              "errors": 0,
+              "summary": "618 passed, 0 failed, 7 skipped, 0 errors",
+              "failures": []
+            },
+            "authoredTests": 4,
+            "authoredTestFiles": [
+              "test/create.js"
+            ],
+            "lint": {
+              "exitCode": 0,
+              "elapsedMs": 1244
+            },
+            "example": {
+              "exitCode": 0,
+              "elapsedMs": 60
+            },
+            "recursive": {
+              "lsContains": false,
+              "findContains": false,
+              "processCwdUnchanged": true
+            },
+            "review": {
+              "sourceArchitecture": "Maintained commands use AsyncLocalStorage context and a local filesystem proxy. Shared Node builtin objects are not replaced and process.chdir is limited to the default-context branch. A local proxy is permitted by this task; the behavior of incomplete command integration is graded independently.",
+              "featureFailure": "Fourteen frozen feature checks fail. Two recursive ls/find failures are reproduced on an unmodified private copy: ls calls fast-glob without the instance cwd, and find delegates recursion to that path. The filesystem proxy does not supply cwd to this separate dependency. This is one shared cause, not two independently counted architecture defects.",
+              "testCoverage": "Four tests cover selected state/config/environment isolation, basic nested/detached methods and ShellString ownership, actual in-flight exec cwd/env snapshots and a few invalid options. They do not provide broad command-family, recursive, flag/array/absolute, set/fatal, stack, reentrant or simultaneous-execution coverage requested by the task. Tests and example hardcode /usr/local/bin/node and pass only under that host assumption.",
+              "documentation": "README describes independent state, options, nested relative cwd, ShellString/detached ownership and points to a concurrent example. Detailed async dispatch snapshot and explicit invocation cwd/env behavior are not explained. Source API comments only give a short create description."
+            },
+            "originalArtifactsUnchanged": true,
+            "artifactSha256": {
+              "solve.json": "1d077e16925bbcc2453a8c336f93db90c06e9e2b61663ef0aa3b978309c7fb67",
+              "grade.json": "de94b2bfd5019942c7b0031d7496965c0eb3df862cbbcc917f6242493d5e8826",
+              "acceptance.json": "01e9e2e2a32d45847f9bd9a76442b6b53201540177a9fc59cd28991a0a9b3bf4",
+              "regression.json": "e6a6f9a058c5282452b82e0947d2e736b0c5a15b1476eeeb616e35b71eecec3a"
+            },
+            "metricsSha256": "3c1770339d0d0e0f3492ad92703b9f883586539136c38b46a4bd26d3d7723705"
+          },
+          "executionReview": {
+            "at": "2026-10-05T18:57:06.209Z",
+            "branches": [
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              }
+            ],
+            "moduleFailures": [],
+            "rootMaintenanceOutcomes": [
+              {
+                "sequence": 1390,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              },
+              {
+                "sequence": 2287,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              }
+            ],
+            "executions": 69,
+            "statuses": {
+              "succeeded": 59,
+              "failed": 10
+            },
+            "failureCodes": {
+              "PROGRAM_ERROR": 10
+            },
+            "maxConsecutiveFailuresPerSession": 2,
+            "maxSameSourceConsecutiveFailures": 1,
+            "interpretation": "Closed child sessions are lifecycle evidence, not proof of semantic success. Distinct failing programs may be task development; byte-distinct code does not rule out semantic repetition. Known provider failures are separately retained. Independent feature and delivery verdicts remain authoritative."
+          }
+        }
+      },
+      "developmentComparison": {
+        "sameCandidateCapabilityArm": "shelljs-03",
+        "commonCodexReference": "shelljs-02:codex",
+        "independentPair": false,
+        "qualification": "Single development execution per capability arm; not a new independent pair or isolated change attribution. Full reference cost remains unknown when usage is missing."
+      }
     }
   ],
   "transportDiagnostics": {
