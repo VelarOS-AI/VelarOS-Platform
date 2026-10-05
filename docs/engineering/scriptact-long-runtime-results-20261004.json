@@ -6245,6 +6245,203 @@
           }
         }
       }
+    },
+    {
+      "attempt": "commander-01",
+      "schema": 1,
+      "at": "2026-10-05T10:15:45.688Z",
+      "taskId": "commander-command-message-translation",
+      "scriptactSessionId": "scriptact-afa49134-e330-4285-bd25-0bdc958d442c",
+      "candidateId": "candidate-v31-7eed83a96230",
+      "candidateSourceCommit": "db9f7d1c212b742784606d00f8dcc8150ac0b3c1",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "scriptactTaskMode": "goal",
+      "split": "holdout",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 59,
+            "goal": {
+              "id": "e60560ce",
+              "revision": 2,
+              "objective": "Add command-scoped translation of Commander's built-in human-facing help and parse errors. Multiple independent command trees must use different translations in the same process, with no changes to process globals or shared prototypes. Maintain the feature across Command, Help, Option, Argument, suggestion generation, CommonJS/ESM exports, TypeScript declarations, documentation and tests.\n\nPublic API: Command.configureI18n({translate}) returns the command for chaining. translate is a synchronous function (key, values) => string | undefined. Its returned string is the complete replacement for that built-in message; undefined keeps the existing English fallback. Validate configuration and reject invalid settings or non-string non-undefined returns with TypeError. Callback exceptions propagate unchanged. configureI18n() returns the effective configuration. configureI18n(null) explicitly selects English defaults on that command and its inheriting subtree. A command with no local configuration dynamically inherits the nearest configured ancestor, including commands added before configuration, commands attached with addCommand, implicit help, and later parent configuration changes. Local overrides remain independent. Repeated parse and help calls must not retain stale language or mutate option/argument metadata.\n\nUse these stable translation keys and value shapes (empty object means no values):\n{\n  \"help.usage\": {},\n  \"help.arguments\": {},\n  \"help.options\": {},\n  \"help.globalOptions\": {},\n  \"help.commands\": {},\n  \"help.helpDescription\": {},\n  \"help.versionDescription\": {},\n  \"help.default\": {\n    \"value\": \"string\"\n  },\n  \"help.choices\": {\n    \"values\": \"string[]\"\n  },\n  \"help.preset\": { \"value\": \"string\" },\n  \"help.env\": {\n    \"name\": \"string\"\n  },\n  \"error.missingArgument\": {\n    \"name\": \"string\"\n  },\n  \"error.optionMissingArgument\": {\n    \"flags\": \"string\"\n  },\n  \"error.mandatoryOption\": {\n    \"flags\": \"string\"\n  },\n  \"error.unknownOption\": {\n    \"flag\": \"string\"\n  },\n  \"error.unknownCommand\": {\n    \"name\": \"string\"\n  },\n  \"error.excessArguments\": {\n    \"expected\": \"number\",\n    \"received\": \"number\",\n    \"command\": \"string\"\n  },\n  \"error.conflictingOptions\": {\n    \"option\": \"string\",\n    \"conflictingOption\": \"string\"\n  },\n  \"error.invalidOptionArgument\": {\n    \"flags\": \"string\",\n    \"value\": \"string\",\n    \"message\": \"string\"\n  },\n  \"error.invalidArgument\": {\n    \"name\": \"string\",\n    \"value\": \"string\",\n    \"message\": \"string\"\n  },\n  \"error.invalidEnvOption\": {\n    \"name\": \"string\",\n    \"value\": \"string\",\n    \"message\": \"string\"\n  },\n  \"error.invalidChoice\": {\n    \"value\": \"string\",\n    \"choices\": \"string[]\"\n  },\n  \"error.suggestion\": {\n    \"candidates\": \"string[]\"\n  }\n}\n\nhelp.default.value and help.preset.value are the existing display text (including JSON quoting or the supplied default-value description). help.choices.values and error.invalidChoice.choices contain the raw choice strings. error.excessArguments.command is the diagnostic command's name().\n\nFor help, translate built-in headings, the default help/version descriptions, and the built-in default/choices/preset/env annotations at render time. Preserve caller-provided command, argument and option descriptions, custom group headings, usage text, help/version descriptions, help text callbacks, option flags, names, values and action output verbatim. Translate only default group labels, even when custom labels happen to equal the English defaults. Configured help styles, wrapping, sorting, global-option sections, before/after help hooks and custom Help subclasses must remain usable. Default output must be byte-for-byte compatible.\n\nFor errors, apply the keys to the existing missing-argument, missing-option-value, mandatory-option, unknown-option, unknown-command, excess-arguments, conflicts, invalid parsed argument/option/environment value, and built-in choices paths. Keep original CommanderError codes, exit codes, exitOverride behavior, outputError routing, parse/parseAsync behavior, option-value sources, implications and conflict selection. The conflicting-options values identify the same option flags or environment variable names selected by the existing diagnostic. Values passed to callbacks are detached data: modifications must not alter parser choices, defaults or command configuration. A user-supplied InvalidArgumentError message remains verbatim inside any translated built-in wrapper; a built-in choices error is translated with error.invalidChoice first. Suggestions translate separately from the unknown-name error using the actual suggested candidates; preserve suggestion enable/disable behavior and the same candidate selection. Command.error custom message text remains unchanged. Built-in error and help output must use the command that owns the diagnostic, so nested commands and different roots cannot leak languages.\n\nAdd tests spanning direct Command, Option and Argument construction, fluent configuration, nested/attached commands, defaults and later overrides, helpInformation/outputHelp/help commands, both parse forms, choices/default/env annotations, diagnostics and suggestions, custom messages/hooks, and callback failures. Add TypeScript and ESM coverage and a runnable two-language example. Run all original Jest tests, the existing type checks and relevant style checks, fixing feature regressions. Finish with implementation and validation results. Make routine implementation choices autonomously.",
+              "status": "complete",
+              "reason": "Implemented the command-scoped i18n API and all specified help/error keys across Command, Help, Option, Argument, and suggestions; added typings, documentation, comprehensive tests, and a runnable two-language example. Validation passed: npm run test-all (111 suites, 1,371 tests), ESM import test, JS/TS type checks, ESLint, Prettier, git diff --check, and direct execution of examples/i18n.js.",
+              "createdAt": 1791191345800,
+              "updatedAt": 1791192556005
+            },
+            "goalSnapshotError": null,
+            "startedAt": 1791191345661,
+            "solveMs": 1231044
+          },
+          "accounting": {
+            "requests": 59,
+            "requestStatuses": {
+              "http-200": 57,
+              "unknown": 1,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 57,
+            "missingUsageRequests": 2,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1283549,
+            "knownOutputTokens": 17641,
+            "knownCachedInputTokens": 350080,
+            "knownCacheRatio": 0.2727437752668577,
+            "pricedRequests": 57,
+            "knownReferenceUsd": 4.2267280000000005,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 56,
+            "failed": 1,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "56 passed, 1 failed, 0 skipped, 0 errors",
+            "failures": [
+              "not ok 40 - diagnostic routes option conflict without changing its error code"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 1365,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "1365 passed, 0 failed, 0 skipped, 0 errors",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 8,
+          "createdFiles": 2,
+          "changeSummary": "22\t0\tReadme.md\n3\t1\tlib/argument.js\n126\t16\tlib/command.js\n2\t0\tlib/error.js\n83\t14\tlib/help.js\n5\t1\tlib/option.js\n13\t3\tlib/suggestSimilar.js\n9\t0\ttypings/index.d.ts\n",
+          "created": "examples/i18n.js\ntests/command.i18n.test.js\n",
+          "changeAccounting": {
+            "baseline": "eb844bef286d42a1d25e41bafd3da3252ade0dd6",
+            "head": "eb844bef286d42a1d25e41bafd3da3252ade0dd6",
+            "source": "recorded-baseline",
+            "changedFiles": 8,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 57,
+            "branchRequests": 2,
+            "requestOwners": {
+              "scriptact-afa49134-e330-4285-bd25-0bdc958d442c": 57,
+              "context:83458e83-9be5-4bd6-bb26-81c110c56ef8": 1,
+              "context:23e5f0f3-cbf1-4382-8e1a-848b9334f6c9": 1
+            },
+            "contextSegments": 33,
+            "nativeRequests": 57,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 2,
+            "originalPromptInFinalRequest": true
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": null,
+            "signal": "SIGTERM",
+            "startedAt": 1791192597898,
+            "finishedAt": 1791195297934,
+            "timedOut": true,
+            "cancelled": true,
+            "inputError": null,
+            "threadId": "01a10b66-05b7-7783-8712-42ae694fd680",
+            "terminalComplete": false,
+            "diagnosticLines": 0,
+            "eventCount": 259,
+            "solveMs": 2700036
+          },
+          "accounting": {
+            "requests": 74,
+            "requestStatuses": {
+              "http-200": 68,
+              "http-200-interrupted": 6
+            },
+            "measuredRequests": 68,
+            "missingUsageRequests": 6,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1701652,
+            "knownOutputTokens": 45597,
+            "knownCachedInputTokens": 1185664,
+            "knownCacheRatio": 0.6967723130228742,
+            "pricedRequests": 68,
+            "knownReferenceUsd": 3.450157599999999,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 57,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "57 passed, 0 failed, 0 skipped, 0 errors",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 1365,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "1365 passed, 0 failed, 0 skipped, 0 errors",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": true,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 8,
+          "createdFiles": 1,
+          "changeSummary": "3\t0\tlib/argument.js\n138\t23\tlib/command.js\n80\t22\tlib/help.js\n3\t0\tlib/option.js\n12\t2\tlib/suggestSimilar.js\n9\t0\ttests/esm-imports-test.mjs\n57\t0\ttypings/index.d.ts\n16\t0\ttypings/index.test-d.ts\n",
+          "created": "tests/command.i18n.test.js\n",
+          "changeAccounting": {
+            "baseline": "986f61c2f7f7193a88dd6f1b171d27af725ec9f1",
+            "head": "986f61c2f7f7193a88dd6f1b171d27af725ec9f1",
+            "source": "recorded-baseline",
+            "changedFiles": 8,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "rootThreadId": "01a10b66-05b7-7783-8712-42ae694fd680",
+            "compactions": 13,
+            "childAgentDispatches": 0,
+            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T17-29-57-01a10b66-05b7-7783-8712-42ae694fd680.jsonl"
+          }
+        }
+      }
     }
   ],
   "transportDiagnostics": {
