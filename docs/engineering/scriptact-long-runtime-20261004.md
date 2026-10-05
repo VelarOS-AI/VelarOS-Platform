@@ -1193,3 +1193,27 @@ Shell/Node 本次补齐了两项功能，同时较 on-demand 多 95.24% 请求�
 `shelljs-01` 于 13:54:07 UTC 冻结为 v35 的 holdout 配对，`candidate-v35-b46944da061c`、sourceDirty=false，goal 与 on-demand 模式，工作根 `/private/tmp/vlr-txRSV3`。最终评分器 SHA 为 `2c430aee7e4521057d7cad5752f8ad1e9af7b1e6e541b3a58427ed58f13b96e1`，与正向/变异控制一致；准备器重新独立验证原测试通过及原版被功能验收拒绝。`shelljs-plan.json` 在首次请求前登记为 Async.js on-demand 配对、Async.js Shell/Node 配置之后的下一组，先 ScriptAct 后 Codex，保持串行。当前尚无该任务或 v35 的付费收益结论。
 
 本轮任务与评测差量的 Node 语法、定向 Prettier、模块所有权和差异检查通过。当前仅登记后续独立验证，尚未达到最终候选的整体质量、稳定性和完整费用验收条件。
+
+## 能力调用的完整历史核对
+
+通过正式 trace 读取器重新核对已完成的 43 次尝试，包括旧内联产物、主线和全部支线；现代产物先验证正文哈希、会话与调用引用，再按 `(sessionId, invocationId)` 去重。43 次均可完整解码，调用摘要缺失与轨迹缺口均为零。11 次尝试出现业务子任务调用，合计成功 start 31 次、失败 start 3 次；高级搜索和 Project/code 操作均为零。该清单跨任务、候选和开发复测，只证明实际使用情况，不把调用数量解释为质量提升。
+
+最初只读分离 blob 的检查只能覆盖 35 次，现已由支持两种产物格式的读取器替代，初次结果单独保留。汇总器新增 `capabilityUsage`，缺失文件标 unknown，缺失摘要和轨迹缺口标 incomplete，损坏的哈希或跨会话引用继续拒绝。测试覆盖跨会话同 ID、重复快照、失败和取消、缺失证据、内联/引用产物一致性与损坏拒绝；连同分析器和 trace 导出共 11/11。新读取器与独立清单在 43 次历史上的操作计数逐项一致，原始证据保持，证明文件为 `capability-inventory-reader-proof.json`。
+
+另外复验六项既有真实 Runtime 链路，全部通过：Node 直接调用搜索、主模型调用与报告回传、持久搜索恢复、父调用取消、受限原生执行范围、Node 子任务身份继承。证据在 `v35-capability-chain-check.log`。这些是预设模型响应的集成回归，尚不构成模型自然选择高级搜索的证据。评测差量只增加统计与证据检查，产品公开 API、提示词、模块操作和冻结候选保持。
+
+## Async.js 首侧交付与缓存诊断
+
+`async-02` 的 ScriptAct v34 于 14:12:53 UTC 正常结束，status=completed、goal=complete、failure=null。新增功能 165/165、原项目 690/690、构建退出 0；修改 35 个已有文件、新建两个文件。57 次请求、1915.615 秒，主线 52 次、15 个上下文段，五次直接叙事，最终请求保留完整原始需求。真实模块调用仅有 goal.get 与 goal.update，业务子任务和高级搜索调用为零。Codex 于 14:13:30 UTC 接续执行；首侧结果保存在 `scriptact-partial-diagnostic.json`，尚不写成完整配对结论。
+
+53/57 次有用量，输入 1178632、输出 25298、缓存输入 371072（31.48%），参考小计 $3.8846288；四次 HTTP 200 流中断缺用量，完整费用未知。独立交付副本重新构建并运行新增测试，共 730/730，新增 40 项；项目 lint 与 `examples/cancel-collection.js` 均退出 0，33 个入口均补充 options/signal 文档。新增测试主要覆盖 33 个入口的预取消与部分活动取消路径。私有变异保留 abort 和 silent-cancellation 清理，仅使正常完成/错误时不移除监听器；变异实际执行 40 次，新增 40 项仍全过，四项外部清理检查失败。因此测试交付复核为 partial，原实现的 165/165 功能分数保持。复核仅改动独立副本，原执行与评分四份文件的哈希逐项保持。
+
+对 Markdown-it on-demand、Shell/Node 与 Async.js 三份冻结请求，使用原 v34 正式 SDK 在断网替身下重建请求，仅保存结构计数和指纹。完整沿用上一请求前缀的主线调用，其已知缓存占比分别为 79.24%、81.03%、78.29%；同段重组为 18.48%、18.63%、17.22%；换段为 19.01%、21.05%、20.82%。这是既有真实用量按重建结构分组，存在输入量、执行阶段和模型行为差异，不是独立因果实验，也不等同于潜在节省。断点能力在原清单中均为 false，正式重建保持该配置；没有重新请求供应商或改动付费轨迹。数据为 `recent-prefix-audit.json`，后续优先核对当前状态重复与组帧增长对前缀保留的影响。
+
+## ShellJS 能力配置预登记补充
+
+`shelljs-shell-node-01` 于 14:10:03 UTC 冻结，候选同为 v35，goal、development、仅 ScriptAct，工作根 `/private/tmp/vlr-PZN8h4`。与 `shelljs-01` 的 15 个候选/模型/限额/环境/费用字段、原始需求、评分器及四个依赖身份字段全部一致。于 14:25:04 UTC 在两组均无执行日志、终态文件和 `gateway/budget.json` 时写入 `shelljs-capability-plan.json`；此前队列计划原样保留，新的检查明确使用实际网关账本路径。
+
+执行顺序继续为 Async.js 配对、Async.js Shell/Node、ShellJS 配对、ShellJS Shell/Node，同一配对先 ScriptAct 后 Codex。Shell/Node 复测使用同题 Codex 作共同参照，保持 development，不新增配对或独立任务计数；正式实现结构、测试覆盖、文档和可执行示例单独复核。该配置尚无付费结果。
+
+本轮分析器与证据统计的定向格式检查、模块所有权和差异检查通过。相关 11 项回归在格式整理后再次通过；六项 Runtime 能力回归和 43 次历史一致性核对分别保留原日志。

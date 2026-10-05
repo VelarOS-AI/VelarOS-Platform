@@ -5,6 +5,7 @@ import { homedir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { readCapabilityUsage } from './capability-usage.mjs'
 import { nodeRegressionReport, nodeTestSummary } from './node-task.mjs'
 import { workspaceChanges } from './workspace-changes.mjs'
 
@@ -235,6 +236,9 @@ async function main() {
       )
     ),
   }
+  results.scriptact.capabilityUsage = await readCapabilityUsage(
+    join(directory, 'scriptact/traces.json')
+  )
   if (results.codex) {
     const events = (await readFile(join(directory, 'codex/codex.jsonl'), 'utf8'))
       .trim()

@@ -14,6 +14,8 @@
 
 使用准备结果中的 `controller` 路径执行 `node <controller> <attempt-directory>`。控制器从尝试独立副本导入评测依赖，运行前后核对文件哈希和 Python 依赖。`analyze.mjs <attempt-directory>` 汇总最终验收、请求、上下文和费用覆盖率。
 
+能力使用由完整主线与支线 trace 汇总，按会话和调用身份去重，分别记录模块、操作和最终记录的状态。读取器兼容内联历史与带哈希的引用产物，引用身份或正文校验失败时拒绝汇总；缺失文件、缺失摘要与轨迹缺口保持未知或不完整。`capabilityUsage` 计数只表示真实模块调用，不与 Shell/Node 执行次数相加，也不把可用接口或替身模型测试算作自然使用收益。
+
 Node 项目声明 `runtime: "node"`、`regressionRunner: "mocha-json"`、`"jest-json"` 或 `"ava-tap"` 和项目自身的 `regressionEntry`，回归路径可包含项目测试器支持的 glob；独立验收使用本目录中的 `test_*.mjs` 与 Node 自带测试器。Mocha 与 AVA 指向项目自身 CLI 文件，AVA 保留普通参数并提供 npm 风格的本地工具路径；Jest 指向提供 runCLI 的包入口（如 `node_modules/jest/build/index.js`），冻结适配脚本调用 API 并保留普通 Node 进程 argv，避免测试器参数被应用解析。campaign/sources 中先安装完整依赖，准备、执行、评分分别复制 node_modules 实体目录，参与者可以在自己的副本安装工具。冻结身份包含 Node 二进制与版本、依赖文件内容和权限、相对链接；链接限于任务副本内部。评分恢复冻结依赖及原测试。Mocha/Jest JSON 与 AVA 官方 TAP 的逐例结果用于检查原测试清单与新增跳过。AVA 核对逐项编号、尾部计划和所有计数，缺失报告、矛盾统计、worker 崩溃或异常进程退出不能通过。收集和 hook 失败同样计入；Node TAP 的测试总数、失败和取消分别记录，空套件不能通过。原 Python 任务清单和运行语义兼容。
 
 `environment.processEnvironment` 可显式冻结终端颜色和区域变量，值为字符串或 null（清除该变量），准备与执行控制器在启动参与者及评分进程前应用相同设置。可配置 NO_COLOR、FORCE_COLOR、CLICOLOR、CLICOLOR_FORCE、TERM、TZ、LANG 与 LC_ALL；省略时保留原环境。它用于记录项目基线所需条件，不能在付费之后调整以放行失败。
