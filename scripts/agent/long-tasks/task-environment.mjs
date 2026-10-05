@@ -11,7 +11,7 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises'
-import { basename, delimiter, join } from 'node:path'
+import { basename, delimiter, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
 import { validateBaselineIssues } from './regression.mjs'
@@ -40,9 +40,10 @@ export function taskEnvironment(task) {
   const node = value.runtime === 'node'
   assert(value.runtime === undefined || node)
   assert(
-    (node ? ['mocha-json', 'jest-json', 'ava-tap'] : ['pytest', 'unittest']).includes(
-      regressionRunner
-    )
+    (node
+      ? ['mocha-json', 'jest-json', 'ava-tap', 'vitest-json']
+      : ['pytest', 'unittest']
+    ).includes(regressionRunner)
   )
   if (regressionRunner === 'unittest') assert.equal(regression.length, 1)
   for (const name of node ? [project] : [project, python])
@@ -93,6 +94,17 @@ export function taskEnvironment(task) {
     assert(Array.isArray(value.build.args))
     assert(value.build.args.every((arg) => typeof arg === 'string' && !arg.includes('\0')))
     result.build = { entry: value.build.entry, args: [...value.build.args] }
+  }
+  if (value.regressionPreloads !== undefined) {
+    assert(node, 'Regression preloads require a Node task')
+    assert(Array.isArray(value.regressionPreloads) && value.regressionPreloads.length > 0)
+    for (const path of value.regressionPreloads) {
+      assert.equal(typeof path, 'string')
+      assert.match(path, /^node_modules\/[a-zA-Z0-9_@.-]+(?:\/[a-zA-Z0-9_.-]+)*\.[cm]?js$/u)
+      assert(!path.split('/').some((part) => ['.', '..'].includes(part)))
+    }
+    assert.equal(new Set(value.regressionPreloads).size, value.regressionPreloads.length)
+    result.regressionPreloads = [...value.regressionPreloads]
   }
   if (value.regressionPattern !== undefined) {
     assert.equal(regressionRunner, 'unittest')
@@ -179,22 +191,20 @@ export async function restoreTaskPaths(source, destination, paths) {
   }
 }
 
-// 使用项目自身的回归测试入口；新功能验收单独使用 pytest。
+// 使用项目自身的回归测试入口；新功能验收使用独立测试器。
 export function regressionArguments(environment, report) {
-  if (environment.runtime === 'node' && environment.regressionRunner === 'ava-tap')
-    return [
-      join(import.meta.dirname, 'ava-runner.mjs'),
-      environment.regressionEntry,
-      ...environment.regression,
+  if (environment.runtime === 'node') {
+    const runner = { 'ava-tap': 'ava', 'jest-json': 'jest', 'vitest-json': 'vitest' }[
+      environment.regressionRunner
     ]
-  if (environment.runtime === 'node')
-    return environment.regressionRunner === 'jest-json'
+    return runner
       ? [
-          join(import.meta.dirname, 'jest-runner.mjs'),
+          join(import.meta.dirname, `${runner}-runner.mjs`),
           environment.regressionEntry,
           ...environment.regression,
         ]
       : [environment.regressionEntry, '--reporter', 'json', ...environment.regression]
+  }
   return environment.regressionRunner === 'unittest'
     ? [
         '-m',
@@ -214,6 +224,21 @@ export function regressionArguments(environment, report) {
         ...(report ? ['--junitxml', report] : []),
         ...environment.regression,
       ]
+}
+
+// NODE_OPTIONS 同时传到测试器派生的 worker；不改变构建、验收或控制器自身的依赖装配。
+export function regressionEnvironment(environment, base = process.env, workspace = process.cwd()) {
+  const result = { ...base }
+  if (environment.regressionPreloads?.length)
+    result.NODE_OPTIONS = [
+      base.NODE_OPTIONS,
+      ...environment.regressionPreloads.map(
+        (path) => `--require=${JSON.stringify(resolve(workspace, path))}`
+      ),
+    ]
+      .filter(Boolean)
+      .join(' ')
+  return result
 }
 
 export function acceptanceArguments(environment, grader) {
@@ -279,5 +304,8 @@ export function taskPrompt(task, executable) {
     task.environment?.runtime === 'node'
       ? `Use ${executable} for Node.js; npm and the project's runtime and test dependencies are installed. The checkout's node_modules directory is private to your run; install any missing development tools there.`
       : `Use ${executable} for Python and pytest; the project's runtime and test dependencies are installed. This Python environment is private to your run; install any missing development tools there.`
-  return `${task.prompt}\n\nEnvironment: the repository checkout is your current working directory. ${tools} Make source edits only inside this checkout. Do not inspect evaluation infrastructure, other attempts, private state or hidden acceptance tests. Use the development tools available to you and coordinate independent work if useful.${baseline ? `\n\nKnown unchanged-baseline failures: ${baseline} Run the complete suite and report these separately from any new failures. Keep the original tests and warning policy intact.` : ''}`
+  const preloads = task.environment?.regressionPreloads?.length
+    ? ` For project tests, set NODE_OPTIONS to preload ${task.environment.regressionPreloads.join(', ')} with --require and each file's absolute path in this checkout; this keeps test workers on the project's dependency versions.`
+    : ''
+  return `${task.prompt}\n\nEnvironment: the repository checkout is your current working directory. ${tools}${preloads} Make source edits only inside this checkout. Do not inspect evaluation infrastructure, other attempts, private state or hidden acceptance tests. Use the development tools available to you and coordinate independent work if useful.${baseline ? `\n\nKnown unchanged-baseline failures: ${baseline} Run the complete suite and report these separately from any new failures. Keep the original tests and warning policy intact.` : ''}`
 }

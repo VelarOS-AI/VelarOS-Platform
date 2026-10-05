@@ -31,6 +31,7 @@ import {
   bindPythonCheckout,
   copyTaskWorkspace,
   regressionArguments,
+  regressionEnvironment,
   restoreTaskPaths,
   taskEnvironment,
 } from './task-environment.mjs'
@@ -137,14 +138,14 @@ async function copySource(destination, output) {
   return (await execute('git', ['rev-parse', 'HEAD'], { cwd: destination })).stdout.trim()
 }
 
-async function check(command, args, cwd, name, output) {
+async function check(command, args, cwd, name, output, processEnvironment = process.env) {
   let result
   try {
     const value = await execute(command, args, {
       cwd,
       timeout: 180000,
       maxBuffer: 8_000_000,
-      env: { ...process.env, PYTHONPATH: pythonTaskPath(cwd), PYTHONDONTWRITEBYTECODE: '1' },
+      env: { ...processEnvironment, PYTHONPATH: pythonTaskPath(cwd), PYTHONDONTWRITEBYTECODE: '1' },
     })
     result = { exitCode: 0, stdout: value.stdout, stderr: value.stderr }
   } catch (error) {
@@ -180,7 +181,8 @@ async function grade(workspace, output) {
     regressionArguments(environment, join(output, 'regression.xml')),
     judge,
     'regression',
-    output
+    output,
+    regressionEnvironment(environment, process.env, judge)
   )
   if (environment.runtime === 'node' || environment.regressionRunner === 'pytest') {
     const result = JSON.parse(await readFile(join(output, 'regression.json'), 'utf8'))

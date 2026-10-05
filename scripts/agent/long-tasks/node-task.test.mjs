@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { promisify } from 'node:util'
 
 import {
   buildNodeProject,
@@ -18,6 +20,7 @@ import {
   acceptanceArguments,
   applyTaskEnvironment,
   regressionArguments,
+  regressionEnvironment,
   taskEnvironment,
   taskPrompt,
 } from './task-environment.mjs'
@@ -32,6 +35,87 @@ const config = {
   preserve: ['test', 'package.json', 'package-lock.json'],
   baselineFailure: 'output must use stream',
 }
+
+test('Node regression preloads use frozen local dependencies and appear in both task environments', () => {
+  const task = {
+    prompt: 'Update the project.',
+    environment: {
+      ...config,
+      regressionRunner: 'vitest-json',
+      regressionEntry: 'node_modules/vitest/dist/node.js',
+      regressionPreloads: ['node_modules/undici/index.js'],
+    },
+  }
+  const environment = taskEnvironment(task)
+  const args = regressionArguments(environment)
+  assert(args[0].endsWith('/vitest-runner.mjs'))
+  assert.equal(args[1], 'node_modules/vitest/dist/node.js')
+  const base = { NODE_OPTIONS: '--enable-source-maps', UNRELATED: 'same' }
+  assert.deepEqual(regressionEnvironment(environment, base, '/project root'), {
+    NODE_OPTIONS: '--enable-source-maps --require="/project root/node_modules/undici/index.js"',
+    UNRELATED: 'same',
+  })
+  assert.equal(base.NODE_OPTIONS, '--enable-source-maps')
+  assert.deepEqual(regressionEnvironment(config, base), base)
+  assert.match(
+    taskPrompt(task, '/node'),
+    /NODE_OPTIONS.*node_modules\/undici\/index.js.*absolute path/u
+  )
+  task.environment.regressionPreloads.push('node_modules/another/index.js')
+  assert.equal(environment.regressionPreloads.length, 1)
+  for (const values of [
+    [],
+    ['../outside.js'],
+    ['/tmp/outside.js'],
+    ['node_modules/../outside.js'],
+    ['node_modules/a.js', 'node_modules/a.js'],
+  ])
+    assert.throws(() => taskEnvironment({ environment: { ...config, regressionPreloads: values } }))
+  assert.throws(() =>
+    taskEnvironment({
+      environment: {
+        project: 'python',
+        python: 'python',
+        acceptance: 'test_example.py',
+        regression: ['test'],
+        preserve: ['test'],
+        baselineFailure: 'missing',
+        regressionPreloads: ['node_modules/a.js'],
+      },
+    })
+  )
+})
+
+test('Node regression preloads survive a worker changing cwd and paths containing spaces', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'node preload '))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(join(root, 'node_modules/frozen-preload'), { recursive: true })
+  await mkdir(join(root, 'worker'))
+  await writeFile(
+    join(root, 'node_modules/frozen-preload/index.cjs'),
+    'globalThis.fixturePreloaded = true'
+  )
+  const environment = taskEnvironment({
+    environment: {
+      ...config,
+      regressionPreloads: ['node_modules/frozen-preload/index.cjs'],
+    },
+  })
+  const code = `
+    const { execFileSync } = require('node:child_process');
+    if (globalThis.fixturePreloaded !== true) process.exit(4);
+    const output = execFileSync(process.execPath, ['-p', 'globalThis.fixturePreloaded'], {
+      cwd: require('node:path').join(process.cwd(), 'worker'), encoding: 'utf8'
+    });
+    process.stdout.write(output);
+  `
+  const output = await promisify(execFile)(process.execPath, ['-e', code], {
+    cwd: root,
+    env: regressionEnvironment(environment, process.env, root),
+    timeout: 10000,
+  })
+  assert.equal(output.stdout.trim(), 'true')
+})
 
 test('Node baseline declarations preserve actual failures and reject changed fingerprints or skipped tests', () => {
   const known = {

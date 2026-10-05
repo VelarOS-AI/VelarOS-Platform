@@ -27,6 +27,7 @@ import {
   applyTaskEnvironment,
   pythonTaskPath,
   regressionArguments,
+  regressionEnvironment,
   taskEnvironment,
   taskPrompt,
 } from './task-environment.mjs'
@@ -94,7 +95,7 @@ let baselineRegression
 try {
   const result = await execute(executable, regressionArguments(environment, baselineReport), {
     cwd: baselineSource,
-    env,
+    env: regressionEnvironment(environment, env, baselineSource),
     timeout: 180000,
     maxBuffer: 8_000_000,
   })

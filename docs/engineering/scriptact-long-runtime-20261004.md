@@ -1292,3 +1292,16 @@ v36 以干净提交 `d910b29a88617893aca978dbf4c693326800fa7e` 于 15:57:05 UTC 
 `chai-02` 与 `chai-shell-node-02` 同为 v35，分别保留 holdout 与 development 分类，工作根 `/private/tmp/vlr-YxL6dN`、`/private/tmp/vlr-QeJ1zx`；原项目分别复验 507/507，任务、评分、依赖与相同配置字段保持。首次模型调用前的双配置登记为 chai-repaired-capability-plan.json。`mocha-07` 继续使用 v36、goal、on-demand、development，原项目 1241 passed、3 pending；与未启动的 mocha-06 相同产品、任务、评分、依赖和原测试清单，由 mocha07-plan.json 单独登记。
 
 当前付费控制器只运行 shelljs-02，先 ScriptAct 后 Codex；其后依次为 shelljs-shell-node-02、chai-02 配对、chai-shell-node-02、mocha-07。完整工作根、冻结时刻与状态保存在 queue-after-copy-repair.json。四份原未启动尝试添加独立 scheduling-note，冻结内容保持；事故尝试的执行与费用保留。这些重建步骤没有调用模型，付费重跑结果另行登记。
+
+
+## Vitest 任务环境与独立基线验证
+
+为后续独立项目补齐 Vitest 评测入口，使用项目自带 startVitest API 和官方任务树记录逐例结果、套件错误、未处理异常、完成次数和取消状态。Vitest 2.0.5 的原 JSON 汇总把部分跳过项算入通过，且不完整表达未处理异常，因此适配器按任务状态自行计数。父套件初始化失败时，未执行的子用例保留身份并标为错误；未知/运行中状态、重复文件、不完整或取消报告均拒绝。空测试返回后的上下文显式关闭，失败与未处理异常令进程返回非零，普通测试诊断保存在 stderr。
+
+真实 Vitest 八组控制覆盖通过与同名用例、skip/todo、断言失败、收集失败、beforeAll、afterAll、未处理 Promise 异常、worker 退出和空发现；这些行为组合分别落在八个隔离目录。通过组为 2 passed、2 skipped，其余七组均为退出码 1 且不能通过回归判定。首次控制暴露 beforeAll 后缺结果的子用例和空发现的上下文清理问题，修复前的记录保存在 vitest-real-controls-initial 与 vitest-real-controls-before-close；最终证据为 vitest-real-controls.json。原 API 曾在有未处理异常时返回 0，正式适配器按其错误表返回失败，保留原错误证据。
+
+Node 任务增加可选的 regressionPreloads，只接受冻结 node_modules 内的相对 JS 路径。准备与评分把它解析为各自工作区内的绝对路径，通过 NODE_OPTIONS 传给测试进程及 worker；双方任务说明给出相同的原生 Node 方法。跨 cwd 派生进程及含空格目录经过真实子进程检查，现有 16 份任务的环境、任务附加文本和回归参数逐项保持。预加载仅作用于原测试进程，原构建和独立验收继续使用自己的冻结配置。
+
+Cheerio v1.0.0 源码仍为 50b5d5ce49f7863ed70c82dad2652bc8cb147859。独立根 /private/tmp/cheerio-baseline-xMRpyX/cheerio 内原构建通过，证实最初构建受 Platform 父目录 bun-types 干扰。三个原 HTTP 测试失败来自 Node 内置与锁定 Undici 的 dispatcher 混用；测试器及 worker 预加载项目 Undici 后，757/757 原测试通过，原始源码保持干净，两次成功记录的逐例身份和结果相等。最终原始结果为 cheerio-final-baseline.json，证明为 cheerio-baseline-proof.json；准备没有请求模型，Cheerio 任务与功能评分器尚待定义及冻结。
+
+本轮仅调整评测适配、环境合同及说明，产品候选、公开 API、模型操作、生成声明和提示词保持。38/38 定向回归、模块所有权、定向格式和差异检查通过；16 份旧任务兼容证明为 vitest-existing-task-compatibility.json。现有已冻结付费队列使用各自控制器，ShellJS 修复后的配对继续执行，结果应在完整退出与独立交付复核后登记。这些准备与检查提高评测可信度，不计作产品质量、时间或费用收益。

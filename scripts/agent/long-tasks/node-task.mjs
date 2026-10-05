@@ -7,6 +7,7 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 
 import { avaReport } from './ava-report.mjs'
+import { vitestReport } from './vitest-report.mjs'
 
 const execute = promisify(execFile)
 
@@ -281,10 +282,11 @@ export function jestReport(result, workspace) {
 
 export function nodeRegressionReport(result, workspace, runner) {
   assert(
-    ['mocha-json', 'jest-json', 'ava-tap'].includes(runner),
+    ['mocha-json', 'jest-json', 'ava-tap', 'vitest-json'].includes(runner),
     'Unknown Node regression reporter'
   )
   if (runner === 'ava-tap') return avaReport(result)
+  if (runner === 'vitest-json') return vitestReport(result)
   return runner === 'jest-json' ? jestReport(result, workspace) : mochaReport(result, workspace)
 }
 
