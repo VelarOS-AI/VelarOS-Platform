@@ -1389,3 +1389,5 @@ Shell/Node 独立副本新增四项测试，共 618 passed 与 7 skipped；lint�
 18:53:01 UTC 登记 v38-validation-plan.json：先 mocha-09（development、仅 ScriptAct），再 chai-04（holdout 配对，先 ScriptAct 后 Codex），最后 chai-shell-node-04（development）。三份工作根为 /private/tmp/vlr-AwmcHc、/private/tmp/vlr-07c0NR、/private/tmp/vlr-nWCv4u。Mocha 原项目 1241 passed 与 3 skipped，Chai 两份均 507/507，新功能验收都拒绝原版。四组新旧/能力对照核对完整原文、评分器、逐例基线与依赖身份；待替换的三份 v37 任务和全部较早 Chai 准备均无付费或执行标记，旧计划和冻结文件保持，另存 scheduling-note-v38。
 
 已完成的 v37 ShellJS 两侧保持同候选对照；新的执行队列为 queue-after-input-priority.json。Shell/Node 控制器完整退出后，串行启动 mocha-09，启动证据为 v38-start-evidence.json。Mocha 与首次 Codex 对照的原文和评分器相同；ScriptAct 从早期 request 改为 goal 及后续 v34→v38 变化均属于组合开发证据。Chai 尚无付费执行，继续保留独立验证身份。本轮尚无 v38 的实际质量、耗时或完整成本结论。
+
+v37 的进一步只读诊断显示，按需配置主线 120 次中仅 20 次完整延续上一请求前缀，同段重建 31 次、换段 68 次；69 个段中有 63 次 overflow、五次 runway。Shell/Node 分别为 14 次完整延续、十二次同段重建、二十次换段，其中十五次 overflow、五次 runway。可见正文按 o200k 计量，按需配置的历史工具结果累计 942908 BPE、当前帧 467511、段底座 233606；对应 Shell/Node 为 362106、119513、73444。字段独立计量不可简单相加，也不包含不透明状态及供应商封装，不能作为账单。证据为 v37-shelljs-prefix-loss.json 与 v37-shelljs-input-cost-audit.json。后续优化应同时检验输出规模、容量重建与协作开销；本轮保持 v38 的冻结任务和候选稳定，先取得开发回归与独立验证结果。
