@@ -7,9 +7,9 @@ export const AgentTuning = Object.freeze({
 })
 /** 上下文规划的缺省值；宿主经 frames.policy 覆盖前四项。 */
 export const ContextPlanTuning = Object.freeze({
-  /** 剩余不足这么多轮就封段。 */
+  /** 无可延续的可发送前缀时，剩余不足这么多轮就封段；也是严重预警阈值。 */
   foldTurns: 2,
-  /** 剩余不足这么多轮、又处在章节边界时封段。 */
+  /** 无可延续的可发送前缀时，剩余不足这么多轮且处在章节边界就封段。 */
   boundaryTurns: 8,
   /** 封段后剩余仍不足这么多轮，算结构性超载。 */
   minTurns: 4,

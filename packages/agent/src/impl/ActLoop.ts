@@ -939,17 +939,18 @@ export class ActLoop implements ActLoopApi {
     let current = await compose(first)
     let runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     retain = current.retained
-    // 保留的旧帧让请求放不下或剩余轮数不足时，先放弃保留、只发逻辑历史与完整帧，再考虑封段
-    if (current.retained && (!fits(current) || runway < this.policy.foldTurns)) {
+    // 已接受的前缀能完整发送就继续沿用；预测增长只作预警，不提前改写已交付事实。
+    // 真实放不下时先重建逻辑历史与完整帧，再考虑退卡和封段。
+    if (current.retained && !fits(current)) {
       retain = false
       this.transcript = undefined
       current = await compose(first)
       runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     }
-    // 仍放不下或剩余轮数不足：先退掉租约已结束的冻结正文（不算封段），不够再封段
+    // 无可延续前缀时仍按剩余轮数规划；已保留的完整请求仅在实际超窗时回收。
     if (
       !repair.provider &&
-      (!fits(current) || runway < this.policy.foldTurns) &&
+      (!fits(current) || (!current.retained && runway < this.policy.foldTurns)) &&
       (await frames.retire?.(signal))
     ) {
       retain = false
@@ -958,7 +959,11 @@ export class ActLoop implements ActLoopApi {
       runway = this.planner.runway(current.compiled.estimate.tokens, window, current.retained)
     }
     // 抖动只抑制预测性的提前封段；实际超窗仍尝试回收已可封存的历史，每次组帧最多成功封一次。
-    if (!folded && !repair.provider && (!fits(current) || !this.planner.thrashing())) {
+    if (
+      !folded &&
+      !repair.provider &&
+      (!fits(current) || (!current.retained && !this.planner.thrashing()))
+    ) {
       const reason = !fits(current)
         ? ('overflow' as const)
         : runway < this.policy.foldTurns
@@ -1116,7 +1121,7 @@ export class ActLoop implements ActLoopApi {
       JSON.stringify(message)
     for (const [index, message] of transcript.logical.entries())
       if (identity(message) !== identity(logical[index]!)) return undefined
-    // 帧里也有首次交付的事实正文；是否需要重建由完整请求的容量与剩余轮数统一判断。
+    // 帧里也有首次交付的事实正文；只在完整请求放不下时重建，避免预测突增提前打断前缀。
     // 逻辑条目在已发送前缀中的位置不会变；不能按内容匹配，否则重复结果会串标。
     const marked = new Set(
       transcript.positions.filter((_, index) => logical[index]?.cacheBreakpoint)

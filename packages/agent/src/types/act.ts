@@ -149,9 +149,9 @@ export interface ActRunLimits {
 
 /** 按剩余轮数规划上下文：什么时候封段、什么时候算结构性超载，以及有界恢复。 */
 export interface ActContextPolicy {
-  /** 剩余不足这么多轮就封段，默认 2。 */
+  /** 无可延续的可发送前缀且剩余不足这么多轮时封段；同时作为严重预警阈值，默认 2。 */
   readonly foldTurns?: number
-  /** 剩余不足这么多轮、又处在章节边界时封段，默认 8。 */
+  /** 无可延续的可发送前缀、剩余不足这么多轮且处在章节边界时封段，默认 8。 */
   readonly boundaryTurns?: number
   /** 封段后剩余仍不足这么多轮，算结构性超载，默认 4。 */
   readonly minTurns?: number

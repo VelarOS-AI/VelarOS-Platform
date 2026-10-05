@@ -2015,7 +2015,7 @@ test('INV-48 each request continues the previous accepted one: sent frames stay 
   await service.close()
 })
 
-test.each(['available', 'capacity'] as const)(
+test.each(['available', 'forecast', 'capacity'] as const)(
   'INV-48 large delivered material retains the accepted prefix until actual capacity requires rebuilding: %s',
   async (mode) => {
     const f = runFixture()
@@ -2023,6 +2023,7 @@ test.each(['available', 'capacity'] as const)(
     const evidence = 'Preserve the supplied evidence and its exact contents.\n'.repeat(160)
     const requests: ModelTurnRequest[] = []
     let turn = 0
+    let reclaimed = 0
     f.options.frames = {
       ...f.options.frames,
       async project() {
@@ -2036,12 +2037,22 @@ test.each(['available', 'capacity'] as const)(
       delta() {
         return `Current step ${turn}; evidence is in the retained history.`
       },
+      async retire() {
+        reclaimed++
+        return false
+      },
+      async fold() {
+        reclaimed++
+        return false
+      },
     }
     f.options.model.estimate = async (request) => ({
       tokens:
         mode === 'capacity' && turn === 1 && (request.history?.length ?? 0) > logical.length
           ? 9500
-          : 2000,
+          : mode === 'forecast' && turn === 1
+            ? 8500
+            : 2000,
       precision: 'exact',
       basis: 'bounded evidence with a capacity change',
     })
@@ -2072,13 +2083,15 @@ test.each(['available', 'capacity'] as const)(
         // Exercise acceptance, retention, admission, and normal completion together.
       }
       expect(requests).toHaveLength(3)
+      expect(reclaimed).toBe(0)
       const contents = (request: ModelTurnRequest) =>
         modelRequestEncoder.messages(request).map(({ role, content }) => ({ role, content }))
       const first = contents(requests[0]!)
       const second = contents(requests[1]!)
-      if (mode === 'available') {
+      if (mode !== 'capacity') {
         expect(second.slice(0, first.length)).toEqual(first)
         expect(requests[1]!.compiledPrompt).not.toContain(evidence)
+        if (mode === 'forecast') expect(requests[1]!.contextStatus?.runway?.turns).toBe(1)
       } else {
         expect(second.slice(0, first.length)).not.toEqual(first)
         expect(requests[1]!.compiledPrompt).toContain(evidence)
