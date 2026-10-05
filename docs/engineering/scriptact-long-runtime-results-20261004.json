@@ -6442,6 +6442,143 @@
           }
         }
       }
+    },
+    {
+      "attempt": "mocha-04",
+      "schema": 1,
+      "at": "2026-10-05T10:45:26.186Z",
+      "taskId": "mocha-instance-reporter-streams",
+      "scriptactSessionId": "scriptact-f240936a-c26e-42ab-a8e0-d369952ebc47",
+      "candidateId": "candidate-v32-4e1acc3015ae",
+      "candidateSourceCommit": "e6f0d4b390a2538b9b574faabece421feed48920",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "scriptactTaskMode": "goal",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "cancelled",
+            "failure": "当前运行不持有有效任务租约",
+            "requestCount": 40,
+            "goal": {
+              "id": "a28dab9a",
+              "revision": 1,
+              "objective": "Add instance-local writable output streams throughout Mocha's built-in text reporters. Applications embedding Mocha need two concurrent runs in the same Node process to write independent reports without replacing process.stdout or console methods. Implement this as a maintained public feature across Base, spec, dot, list, min, progress, landing, nyan, tap, doc, markdown, json, json-stream and xunit. Preserve existing default behavior and existing reporter helper APIs.\n\nPublic API: accept a stream option in reporter options, including new Mocha({reporter, reporterOption: {stream}}), the supported reporterOptions alias, and mocha.reporter(name, {stream}). Direct reporter constructors must accept both existing options.reporterOption and options.reporterOptions forms. A missing or undefined stream keeps existing output behavior. An explicitly supplied stream must be a non-null object with a callable write method; reject other values with TypeError mentioning stream during reporter construction, before output or registration of reporter event listeners. A duck-typed writable object is sufficient; do not require inheritance from a Node class. Call write with its original receiver and preserve thrown write errors. Do not end, close or destroy the caller's stream. A false write return must not stop subsequent report events.\n\nEvery report byte must go to the selected stream: headings, test results, pending and failure output, error stacks and diffs, epilogues, generated documents, machine-readable events, and terminal control sequences. Reporter construction and interleaved event delivery must not redirect other reporter instances or mutate process.stdout, process.stderr, console methods, Base.consoleLog, Base.cursor or other shared Base output helpers. Existing static helpers must remain usable with their original default behavior. Preserve JSON/JSON-stream document schemas, TAP versions, XML escaping and all test statistics. Base's instance epilogue must obey the selected destination as well.\n\nFor an explicit stream, use its isTTY property to decide whether to emit terminal cursor, erase and movement commands. A non-TTY explicit stream receives plain report text without terminal control sequences; a TTY destination keeps interactive behavior even when the process stdout is redirected. Use a positive finite stream.columns value for width-sensitive reporters, falling back to the existing standard width when absent or invalid; never fail or construct negative array lengths for a very narrow valid destination. Keep existing explicit color configuration compatible. Default output without a stream must remain compatible with the original reporters, including browser fallbacks.\n\nJSON and XUnit retain their existing reporter output-file option and lifecycle. When a valid explicit stream and a truthy output-file option are both supplied, reject the conflicting options with TypeError mentioning stream and output before writing, creating directories or opening a file. Without stream, file output keeps its current behavior. With stream only, XUnit's done callback still runs once with the original failure count and leaves the caller's stream open.\n\nAdd focused tests across the affected reporters and the public Mocha configuration routes. Cover interleaved runs with separate destinations, default compatibility, pass/fail/pending output, formatting and Unicode, both option aliases, invalid sinks, write receiver and errors, caller-owned lifecycle, terminal and nonterminal streams, width boundaries, and JSON/XUnit conflicts and file output. Document the option and show a runnable embedding example with two destinations. Run the repository's reporter, unit and node-unit suites plus available source/style checks, fixing regressions caused by the feature. Finish with a concise implementation and verification report. Make routine implementation choices autonomously.",
+              "status": "active",
+              "reason": "",
+              "createdAt": 1791195373844,
+              "updatedAt": 1791195373844
+            },
+            "goalSnapshotError": null,
+            "startedAt": 1791195373686,
+            "solveMs": 1646384
+          },
+          "accounting": {
+            "requests": 40,
+            "requestStatuses": {
+              "http-200": 38,
+              "http-200-interrupted": 2
+            },
+            "measuredRequests": 38,
+            "missingUsageRequests": 2,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 796037,
+            "knownOutputTokens": 17289,
+            "knownCachedInputTokens": 298624,
+            "knownCacheRatio": 0.3751383415595004,
+            "pricedRequests": 38,
+            "knownReferenceUsd": 2.4548816,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 49,
+            "failed": 7,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "49 passed, 7 failed, 0 skipped, 0 errors",
+            "failures": [
+              "not ok 13 - landing: interleaved streams keep all output and lifecycle local",
+              "not ok 29 - min: explicit destination controls terminal mode false",
+              "not ok 35 - landing: explicit destination controls terminal mode false",
+              "not ok 36 - landing: explicit destination controls terminal mode true",
+              "not ok 37 - nyan: explicit destination controls terminal mode false",
+              "not ok 41 - landing: narrow destinations do not crash",
+              "not ok 44 - landing: destination width changes interactive layout"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 1241,
+            "failed": 0,
+            "skipped": 3,
+            "errors": 0,
+            "summary": "1241 passed, 0 failed, 3 skipped",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 14,
+          "createdFiles": 0,
+          "changeSummary": "108\t16\tlib/reporters/base.js\n13\t16\tlib/reporters/doc.js\n11\t10\tlib/reporters/dot.js\n7\t6\tlib/reporters/json-stream.js\n20\t9\tlib/reporters/json.js\n6\t6\tlib/reporters/landing.js\n8\t8\tlib/reporters/list.js\n4\t3\tlib/reporters/markdown.js\n3\t2\tlib/reporters/min.js\n39\t25\tlib/reporters/nyan.js\n21\t14\tlib/reporters/progress.js\n8\t7\tlib/reporters/spec.js\n35\t29\tlib/reporters/tap.js\n25\t9\tlib/reporters/xunit.js\n",
+          "created": "",
+          "changeAccounting": {
+            "baseline": "c600dfbe09b3db1bc76f54309ac3001bae33e19e",
+            "head": "c600dfbe09b3db1bc76f54309ac3001bae33e19e",
+            "source": "recorded-baseline",
+            "changedFiles": 14,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 34,
+            "branchRequests": 6,
+            "requestOwners": {
+              "scriptact-f240936a-c26e-42ab-a8e0-d369952ebc47": 34,
+              "context:702791d5-3029-4504-bf67-b5f872042f19": 3,
+              "context:fa69686d-713d-45b2-a1cb-bb00fb786afe": 1,
+              "context:a88e5ae2-c4a4-49da-9885-b62728bd382c": 1,
+              "context:2009921c-39a3-46d6-a7d2-54dd803ff5d6": 1
+            },
+            "contextSegments": 11,
+            "nativeRequests": 37,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 3,
+            "originalPromptInFinalRequest": true
+          }
+        }
+      },
+      "environmentIncident": {
+        "kind": "host-sleep",
+        "sleepStartedAt": "2026-10-05T10:32:46Z",
+        "wokeAt": "2026-10-05T10:43:36Z",
+        "sleepSeconds": 650,
+        "source": "pmset -g log",
+        "powerReason": "Low Power Sleep",
+        "executionResult": "cancelled after expiry of the execution lease",
+        "taskResult": "partial artifact from interrupted run",
+        "timingComparisonValid": false,
+        "note": "Keep the observed solve time and all requests; do not subtract sleep to synthesize an uninterrupted result."
+      }
     }
   ],
   "transportDiagnostics": {
