@@ -1630,3 +1630,7 @@ bb7f25fc 提交的评测器分别准备 fs-extra-esm-01 与 fs-extra-esm-shell-n
 fs-extra-esm-v41-validation-plan.json 于 23:10:02.562 UTC、所有计费标记出现前登记三臂顺序：先 ScriptAct 按需，再同任务 Codex，最后 Shell/Node ScriptAct 共用该 Codex 参照。前两臂构成一个新配对，第三臂不另增加独立配对。三个执行位置均预先准备和校验，整套原文、评分器、控制证明和文件哈希固定；付费结果出现后不调整验收。
 
 前序 chai-06 控制器已经完整退出 0。控制器 60109 于 23:10:36.583 UTC 发出本组首个 ScriptAct 请求；顺序及预登记时间证明为 fs-extra-esm-v41-start-evidence.json。目前是实际运行阶段，尚无本任务终态分数、收益或完整费用结论。独立交付复核和真实上下文维护资格仍须在参与者完成后核对。公开产品合同保持 v41，后续按同一原始结果累计成功率、请求、耗时和包含失败请求的费用。
+
+最低运行版本的独立环境已补齐。Node 14.14.0 的 macOS x64 归档从官方发布目录取得，并核对[官方 SHA-256 清单](https://nodejs.org/download/release/v14.14.0/SHASUMS256.txt)，二进制身份另存 fs-extra-esm-node14-runtime.json。原项目与独立迁移控制在该版本均通过 745 项原测试、保留原八项跳过，原 ESM 套件也通过。额外探针在原包的两个入口、控制的四个源/发布入口上验证别名身份、Promise、回调和同步操作；同一旧运行环境的根 API 均为 144 项，额外 API 为 44 项。此处按该版本原项目比较，不能用 Node 24 的 149 项清单直接判旧版运行环境失败。
+
+复核使用独占 TMPDIR，避免原项目按固定临时子目录运行的测试干扰当前付费任务。证明为 context-diagnostics/fs-extra-esm-node14-controls-proof.json。这只确认原项目和私有正控制可用于最低版本交付复核，参与者的最终产物仍待同样核对；已冻结模型执行和 54 项验收继续使用原 Node 24 配置。
