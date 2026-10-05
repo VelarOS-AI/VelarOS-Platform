@@ -75,7 +75,7 @@ projector.finish() // 交付结束：清掉没接纳的预览
 
 - 文本协议的控制段闭合后的连续协议外空白默认最多 4096 个字符，可用 `protocol.maxIdleWhitespaceChars` 调整；超限保存失败原文、停止本次接收并取消，不接受部分程序、不自动重发。源码和 blobs 原文按完整响应预算接收。未结算的上游用量保持未知。
 
-- 请求前缀由完整容量与剩余轮数管理。实际历史保留时，相同父快照的整理原文按引用与精确范围复用，当前页身份和缺口仍完整显示；历史重建后重新交付正文，审计与发布检查继续使用完整材料。
+- 请求前缀由完整容量与剩余轮数管理。有序历史开头的用户输入先于段摘要，封段可继续复用其原文前缀；后续用户输入仍与响应、结果按原始顺序交付。实际历史保留时，相同父快照的整理原文按引用与精确范围复用，当前页身份和缺口仍完整显示；历史重建后重新交付正文，审计与发布检查继续使用完整材料。
 
 - 文本协议的模型正文展示首个控制头前的进度和 `done` 后的答复。程序、原文或观察段闭合之后的普通文字只保留在完整审计原文中；它不改变控制决策，也不会额外请求模型重写。
 - 默认工作区提供 Project `files` 纯快照计划目录。模型用 `observe({snapshot:{provider:"project",plan:"files",input:{files:[{path:"package.json",key:"package",purpose:"本阶段配置",format:"json",view:"full"}]}}})` 配空段登记，宿主用 `session.observe({snapshot:{provider:'project',plan:'files',input:{files:[{path:'package.json',key:'package',purpose:'本阶段配置',format:'json'}]}}})`。每个业务轮经授权 Kernel 前后真实捕获；完整同值只省固定纯派生及 VM 运行，IO 不跳过。内容指纹不证明历史代次或期间没有 ABA，也不是编辑凭据；任意源码 observe 的可靠代次条件保持。clear、逻辑任务完成或取消退役，重启先重新捕获与派生；refresh 只在接受后生效且不恢复 paused。

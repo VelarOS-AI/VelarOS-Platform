@@ -24,10 +24,19 @@ export async function* done(request, message = '') {
   yield { type: 'finish', reason: 'stop' }
 }
 
-/** 段底座（请求的第一条历史消息）里的笔记卡片元数据；正文在卡片的下一行。 */
+/** 从真实历史中按宿主段标识读取底座，不依赖用户输入的条数。 */
+export function baseText(request) {
+  return (
+    request.history?.find(
+      (message) =>
+        typeof message.content === 'string' && message.content.startsWith('Runtime 段底座（')
+    )?.content ?? ''
+  )
+}
+
+/** 段底座里的笔记卡片元数据；正文在卡片的下一行。 */
 export function baseNotes(request) {
-  const base = request.history?.[0]?.content
-  if (typeof base !== 'string') return []
+  const base = baseText(request)
   return base.split('\n').flatMap((line) => {
     if (!line.startsWith('{"key":')) return []
     try {

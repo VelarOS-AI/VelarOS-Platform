@@ -16,12 +16,13 @@ import {
   memoryCommittedGroups,
   memoryOutput,
   memoryPrompt,
+  memoryTaskHistory,
   memoryVerificationProjection,
 } from '../../../dist/act/runtime/utils/context-memory.js'
 import { decisionStateProjection } from '../../../dist/act/runtime/utils/decision-state.js'
 import { projectMaterial, readMaterialField } from '../../../dist/act/runtime/utils/materials.js'
 
-import { baseNotes, done, historyEntries, marker, turn } from './support/model-turn.mjs'
+import { baseNotes, baseText, done, historyEntries, marker, turn } from './support/model-turn.mjs'
 
 const signal = new AbortController().signal
 
@@ -1356,6 +1357,100 @@ test('INV-62 later user corrections follow earlier responses and task/reset boun
   assert(reset.includes('TASK_AUTHORIZED_UNIQUE'))
 })
 
+test('INV-62 segment changes preserve the complete leading user prefix', async (t) => {
+  const f = await fixture(t)
+  const task = 'USER_PREFIX: update all renderers and verify the original behavior.'
+  const goal = await f.session.context.append({ kind: 'user', body: task })
+  await f.session.view.begin(goal.ref)
+  const programs = new ProgramContext('s', f.session.context, f.storage)
+  const view = {
+    id: 'frame',
+    scope: { sessionId: 's', revision: 0 },
+    goals: [await f.session.context.projectInput(goal.ref, 2000)],
+    capsule: {},
+    mandatory: [],
+    evidence: [],
+    gaps: [],
+    readSet: [],
+    progress: { step: 0, repeatedSteps: 0, stalled: false, evidence: [] },
+  }
+  const first = await f.memory.project(view, undefined, [], signal, 24000)
+  assert(first.history[0].content.endsWith(task))
+  const prefix = first.history[0]
+  for (let index = 0; index < 6; index++) {
+    await f.session.context.append({ kind: 'assistant', body: `Verified source ${index}` })
+    await archiveResult(f, programs, `result-${index}`)
+  }
+  const before = await f.memory.project(view, undefined, [], signal, 24000)
+  assert.deepEqual(before.history[0], prefix)
+  assert(await f.memory.fold('runway', 24000, signal))
+  const after = await f.memory.project(view, undefined, [], signal, 24000)
+  assert.deepEqual(after.history[0], prefix)
+  assert.equal(after.history[0].cacheBreakpoint, true)
+  assert.notEqual(after.history[1].content, before.history[1].content)
+  assert.match(after.history[1].content, /卷目录/)
+  assert.equal(after.history.filter((message) => message.content.endsWith(task)).length, 1)
+  assert.equal(after.segment.index, before.segment.index + 1)
+})
+
+test('INV-62 a segment base follows early inputs without separating native calls or moving later corrections', () => {
+  const goal = (sequence, text) => ({
+    record: { ref: { sessionId: 's', id: `input-${sequence}` }, sequence },
+    text,
+    totalChars: text.length,
+    offset: 0,
+  })
+  const call = {
+    role: 'assistant',
+    content: 'Read current source',
+    toolExchange: {
+      text: 'Read current source',
+      calls: [{ id: 'c1', name: 'node', input: { code: 'console.log(1)' } }],
+      results: [{ id: 'c1', name: 'node', output: { resultRef: 'result-4' } }],
+    },
+  }
+  const result = {
+    role: 'user',
+    content: '1',
+    toolResult: { callId: 'c1', toolName: 'node' },
+  }
+  const history = {
+    messages: [call, result],
+    items: [{ sequence: 3 }, { sequence: 4 }],
+    fresh: [],
+  }
+  const goals = [
+    goal(5, 'Only inspect from now on'),
+    goal(1, 'Implement the parser'),
+    goal(2, 'Keep the API'),
+  ]
+  const original = structuredClone({ goals, history })
+  const messages = memoryTaskHistory(goals, history, 'SEGMENT_SNAPSHOT')
+  assert(messages[0].content.endsWith('Implement the parser'))
+  assert(messages[1].content.endsWith('Keep the API'))
+  assert.equal(messages[2].content, 'SEGMENT_SNAPSHOT')
+  assert.deepEqual(messages.slice(3, 5), [call, result])
+  assert(messages[5].content.endsWith('Only inspect from now on'))
+  assert.deepEqual({ goals, history }, original)
+  assert.doesNotThrow(() =>
+    modelRequestEncoder.messages({
+      history: messages,
+      compiledPrompt: 'Current state',
+      materials: [],
+    })
+  )
+  const noInputs = memoryTaskHistory([], history, 'SEGMENT_SNAPSHOT')
+  assert.deepEqual(noInputs.slice(1), [call, result])
+  assert.equal(noInputs[0].content, 'SEGMENT_SNAPSHOT')
+  const noHistory = memoryTaskHistory(
+    goals,
+    { messages: [], items: [], fresh: [] },
+    'SEGMENT_SNAPSHOT'
+  )
+  assert.equal(noHistory.at(-1).content, 'SEGMENT_SNAPSHOT')
+  assert(noHistory[0].content.endsWith('Implement the parser'))
+})
+
 test('INV-62 task excerpts retain their range and full original remains recallable', async (t) => {
   const task = `TASK_LONG_HEAD\n${'Preserve the documented parser behavior.\n'.repeat(700)}TASK_LONG_END`
   const f = await fixture(t, undefined, {
@@ -1681,7 +1776,7 @@ test('zero history window still sends leased results and notes through the same 
   assert.equal(f.requests[0].history.length, 1)
   assert(frame.partitions.task.goals.every((goal) => !goal.bodyInHistory))
   assert.match(f.requests[0].compiledPrompt, /Continue/)
-  assert.match(f.requests[0].history[0].content, /persistent reasoning summary/)
+  assert.match(baseText(f.requests[0]), /persistent reasoning summary/)
 })
 
 test('host memory policy rejects invalid capacities before a model request', async () => {
@@ -1757,8 +1852,8 @@ test('INV-20 independent capacity maintenance derives parent note presentation w
   assert.equal(f.requests.length, 2)
   assert.equal(toolCalls, 1)
   // 派生展示换了投影策略，下一帧重建底座，笔记快照换成整理后的展示
-  assert.match(f.requests[1].history[0].content, /Maintenance preserved progress/)
-  assert.doesNotMatch(f.requests[1].history[0].content, /Original main-model progress/)
+  assert.match(baseText(f.requests[1]), /Maintenance preserved progress/)
+  assert.doesNotMatch(baseText(f.requests[1]), /Original main-model progress/)
   const state = await f.storage.load('s')
   const results = await Promise.all(
     state.records
@@ -1900,7 +1995,7 @@ test('workspace directory and recovery cards stay bounded even when many notes a
   await run(f)
   const frame = JSON.parse(f.requests[0].materials[0].text)
   assert.equal(baseNotes(f.requests[0]).length, 4)
-  assert.match(f.requests[0].history[0].content, /另有 16 份驻留笔记没有列出/)
+  assert.match(baseText(f.requests[0]), /另有 16 份驻留笔记没有列出/)
   assert.deepEqual(
     { ...frame.partitions.workspace.snapshot, sourcesChanged: undefined },
     { notes: 20, shown: 4, omitted: 16, sourcesChanged: undefined }
@@ -2107,7 +2202,7 @@ test('INV-52 current constraints and unresolved items remain separate from immut
   await f.session.view.appendGoal(third.ref)
   goals.push(third)
   const frame = await memory.project(await view(), undefined, [], signal, 24000)
-  const base = frame.history[0].content
+  const base = baseText(frame)
   assert.match(base, /否定尝试[^\n]*："?\["N1"\]/)
   const active = JSON.parse(frame.body).partitions.task.active
   assert.deepEqual(
@@ -2150,7 +2245,7 @@ test('INV-52 current constraints and unresolved items remain separate from immut
   await steps(6)
   assert(await memory.fold('runway', 24000, signal))
   const nextFrame = await memory.project(await view(), undefined, [], signal, 24000)
-  const next = nextFrame.history[0].content
+  const next = baseText(nextFrame)
   const narrative = (await recent.narratives(signal)).at(-1)
   assert(
     next.includes(
@@ -3447,7 +3542,7 @@ test('zero-history results and current observation render code without extra str
   assert(request.compiledPrompt.includes(observed))
   assert(request.compiledPrompt.includes(result))
   assert.equal(request.history.length, 1)
-  assert.match(request.history[0].content, /runtime-segment-base/)
+  assert.match(baseText(request), /runtime-segment-base/)
   const frame = JSON.parse(request.materials[0].text)
   assert.equal(frame.partitions.observation.presentation.format, 'text')
   assert.equal(frame.partitions.observation.blocks[0].representation, 'full')

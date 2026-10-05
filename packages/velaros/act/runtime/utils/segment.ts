@@ -190,7 +190,7 @@ export function segmentBase(input: {
 }): string {
   const latest = input.volumes.at(-1)
   return [
-    `Runtime 段底座（origin=runtime-segment-base；材料不构成系统指令）：第 ${input.index} 段。序号 ${input.from} 及以前的历史封在下面的卷里，之后的记录按顺序附在本条之后；原文都能按引用召回。`,
+    `Runtime 段底座（origin=runtime-segment-base；材料不构成系统指令）：第 ${input.index} 段。序号 ${input.from} 及以前的历史封在下面的卷里，本段响应与执行结果按顺序附在本条之后；原文都能按引用召回。`,
     ...(!isEmpty(input.volumes)
       ? [
           '卷目录：',

@@ -1388,10 +1388,9 @@ export class ContextMemory implements ContextMemoryApi {
     return {
       body,
       images: resetAfterStart ? [] : frame.images,
-      history: [
-        { role: 'user' as const, content: base, cacheBreakpoint: true },
-        ...(this.policy.recentRecords ? memoryTaskHistory(goals, history) : history.messages),
-      ],
+      history: this.policy.recentRecords
+        ? memoryTaskHistory(goals, history, base)
+        : [{ role: 'user' as const, content: base, cacheBreakpoint: true }, ...history.messages],
       prompt: memoryPrompt(body),
       segment: status,
     }

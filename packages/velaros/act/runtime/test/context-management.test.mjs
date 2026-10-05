@@ -14,7 +14,7 @@ import { RecentContext } from '../../../dist/act/runtime/impl/RecentContext.js'
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { ActRuntimeTuning } from '../../../dist/act/runtime/utils/tuning.js'
 
-import { modelText } from './support/model-turn.mjs'
+import { baseText, modelText } from './support/model-turn.mjs'
 import { runtimeFrame } from './support/model-turn.mjs'
 import { done, marker, turn } from './support/model-turn.mjs'
 
@@ -854,7 +854,7 @@ test('INV-53 automatic folds persist each busy volume narrative once, whether pr
   const f = await fixture(
     t,
     async function* (request, f) {
-      bases.push(request.history[0].content)
+      bases.push(baseText(request))
       activeStates.push(
         JSON.parse(request.materials.findLast((item) => item.origin === 'runtime-view').text)
           .partitions.task.active

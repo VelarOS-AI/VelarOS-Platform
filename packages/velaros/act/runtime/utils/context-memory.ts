@@ -359,18 +359,21 @@ export function memoryCommittedGroups(
   )
 }
 
-/** 用户输入正文按原始序号与响应、回执合并；当前运行归属留在帧尾，避免改写先前消息。 */
+/** 用户输入按原始序号与响应、回执合并；段底座跟在开头的用户输入之后，使封段保留这些原文的前缀。 */
 export function memoryTaskHistory(
   goals: readonly ContextContent[],
-  history: SegmentHistory
+  history: SegmentHistory,
+  base: string
 ): readonly ModelHistoryMessage[] {
-  return [
+  const ordered = [
     ...history.messages.map((message, index) => ({
       sequence: history.items[index]!.sequence,
+      input: false,
       message,
     })),
     ...goals.map(({ record, text, totalChars, offset }) => ({
       sequence: record.sequence,
+      input: true,
       message: {
         role: 'user' as const,
         content: [
@@ -381,9 +384,14 @@ export function memoryTaskHistory(
         cacheBreakpoint: true,
       },
     })),
+  ].sort((a, b) => a.sequence - b.sequence)
+  const first = ordered.findIndex((item) => !item.input)
+  const boundary = first < 0 ? ordered.length : first
+  return [
+    ...ordered.slice(0, boundary).map((item) => item.message),
+    { role: 'user', content: base, cacheBreakpoint: true },
+    ...ordered.slice(boundary).map((item) => item.message),
   ]
-    .sort((a, b) => a.sequence - b.sequence)
-    .map((item) => item.message)
 }
 
 /** 当前状态每帧独立列全；冻结历史承载未变的原文，正文只在首次或变化时附上。 */

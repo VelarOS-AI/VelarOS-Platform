@@ -16,7 +16,7 @@ import {
 } from '../../../dist/act/runtime/utils/materials.js'
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
 
-import { done, historyEntries, marker, turn } from './support/model-turn.mjs'
+import { baseText, done, historyEntries, marker, turn } from './support/model-turn.mjs'
 
 const signal = new AbortController().signal
 async function fixture(t, source, modelOverride, options = {}) {
@@ -1498,7 +1498,7 @@ test('the parent model budget validator rejects a fully staged candidate before 
   const state = new ContextMaintenanceState('root', f.storage, {
     validateCandidate: async (candidate) => {
       previews++
-      assert.match(candidate.history[0].content, /candidate/)
+      assert.match(baseText(candidate), /candidate/)
       throw Object.assign(Error('input budget'), { code: 'CONTEXT_BUDGET' })
     },
   })
@@ -1541,7 +1541,7 @@ output({value:'required-state'},{key:'critical',required:true,view:{mode:'full'}
       candidates.push({ frame, chars: content.length })
       assert.match(content, /required-state/)
       assert.deepEqual(frame.partitions.runtime.decision.missing, [])
-      assert.match(candidate.history[0].content, /candidate/)
+      assert.match(baseText(candidate), /candidate/)
       if (content.length > 16000)
         throw Object.assign(Error('input budget'), {
           code: 'CONTEXT_BUDGET',

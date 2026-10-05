@@ -6,7 +6,7 @@ import { test } from 'node:test'
 
 import { createRuntime } from '../../../dist/act/runtime/index.js'
 
-import { baseNotes, done } from './support/model-turn.mjs'
+import { baseNotes, baseText, done } from './support/model-turn.mjs'
 
 async function fixture(t) {
   const dataDir = await mkdtemp(join(tmpdir(), 'host-notes-'))
@@ -60,7 +60,7 @@ test('INV-47 host archive/restore uses the model note version and changes the ne
   await run(f.session)
   // 段起点的驻留笔记在段底座里
   assert(baseNotes(f.frames.at(-1)).some((note) => note.key === 'plan' && note.bodyIncluded))
-  assert.match(f.frames.at(-1).history[0].content, /HOST-NOTE-CONTENT-UNIQUE/)
+  assert.match(baseText(f.frames.at(-1)), /HOST-NOTE-CONTENT-UNIQUE/)
   const archived = await f.session.setNoteResident({
     key: 'plan',
     baseRevision: 1,
@@ -79,7 +79,7 @@ test('INV-47 host archive/restore uses the model note version and changes the ne
   )
   await run(f.session)
   // 移出驻留后下一帧重建底座，笔记不再出现
-  assert.doesNotMatch(f.frames.at(-1).history[0].content, /HOST-NOTE-CONTENT-UNIQUE/)
+  assert.doesNotMatch(baseText(f.frames.at(-1)), /HOST-NOTE-CONTENT-UNIQUE/)
   assert(!baseNotes(f.frames.at(-1)).some((note) => note.key === 'plan'))
   await f.runtime.close()
   const runtime = await createRuntime(f.options)

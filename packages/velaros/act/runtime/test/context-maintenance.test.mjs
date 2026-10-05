@@ -13,7 +13,7 @@ import { createRuntime } from '../../../dist/act/runtime/index.js'
 import { VelarContextMaterialsModule } from '../../../dist/act/system/contract/surface.js'
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
 
-import { done } from './support/model-turn.mjs'
+import { baseText, done } from './support/model-turn.mjs'
 
 const signal = new AbortController().signal
 async function fixture(t, options = {}) {
@@ -163,7 +163,7 @@ test('derived note presentations persist for the task through a rebuilt base and
   )
   const view = await f.session.view.preview({ maxChars: 16000 }, signal)
   const before = await memory.project(view, undefined, [], signal, 16000)
-  assert.match(before.history[0].content, /x{2400}/)
+  assert.match(baseText(before), /x{2400}/)
   const snapshot = await f.state.snapshot(8000, signal)
   await f.state.apply(
     snapshot,
@@ -176,12 +176,12 @@ test('derived note presentations persist for the task through a rebuilt base and
   // 策略换了就重建底座：同一段、底座版本加一，笔记快照换成派生展示
   assert.equal(first.segment.index, before.segment.index)
   assert.equal(first.segment.revision, before.segment.revision + 1)
-  assert.match(first.history[0].content, /Temporary summary/)
-  assert.doesNotMatch(first.history[0].content, /x{2400}/)
+  assert.match(baseText(first), /Temporary summary/)
+  assert.doesNotMatch(baseText(first), /x{2400}/)
   await f.programs.consume(frame.frameId, signal)
   const later = await memory.project(view, undefined, [], signal, 16000)
   assert.equal(JSON.parse(later.body).memoryStatus.maintenance.active, true)
-  assert.equal(later.history[0].content, first.history[0].content)
+  assert.equal(baseText(later), baseText(first))
   const input = await f.session.context.append({ kind: 'user', body: 'Independent task' })
   await f.session.view.end('completed')
   await f.session.view.begin(input.ref, signal, 'new')
@@ -194,7 +194,7 @@ test('derived note presentations persist for the task through a rebuilt base and
     16000
   )
   assert.equal(fresh.segment.index, 1)
-  assert.match(fresh.history[0].content, /y{2400}/)
+  assert.match(baseText(fresh), /y{2400}/)
   assert.equal(JSON.parse(fresh.body).memoryStatus.maintenance, undefined)
 })
 
@@ -1645,11 +1645,11 @@ test('derived note display preserves the primary version and expires when the pr
   const view = await f.session.view.preview({ maxChars: 16000 }, signal)
   let projected = await f.memory.project(view, undefined, [], signal, 16000)
   let frame = JSON.parse(projected.body)
-  const card = projected.history[0].content
+  const card = baseText(projected)
     .split('\n')
     .find((line) => line.includes('"key":"progress"'))
   assert.equal(JSON.parse(card).representation, 'summary')
-  assert.match(projected.history[0].content, /Short derived presentation/)
+  assert.match(baseText(projected), /Short derived presentation/)
   assert.equal(frame.memoryStatus.maintenance.notes, undefined)
   assert.equal(
     JSON.parse((await f.memory.readMaterial(note.ref, 0, 60000, signal)).text).body,
