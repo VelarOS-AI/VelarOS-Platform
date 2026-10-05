@@ -640,7 +640,9 @@ export class RuntimeSession implements VelarosSession {
                 completed: false,
                 verified: false,
                 reason:
-                  'GOAL_ACTIVE: 目标仍在推进，请继续执行；达成后用 done("完成依据") 收尾，确有阻碍用 goal.update 记录依据',
+                  request.response.type === 'tools'
+                    ? 'GOAL_ACTIVE: 目标仍在推进，请继续完成剩余工作；达成或确有阻碍时，按需导入 velaros:system 的 goal，读取当前版本后更新状态和依据。'
+                    : 'GOAL_ACTIVE: 目标仍在推进，请继续执行；达成后用 done("完成依据") 收尾，确有阻碍用 goal.update 记录依据',
                 recovery: 'repair',
               }
             const frameBasis = JSON.parse(

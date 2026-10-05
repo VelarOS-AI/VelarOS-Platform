@@ -22,7 +22,7 @@ import {
   nodeTestSummary,
 } from './node-task.mjs'
 import { readPytestReport, regressionVerdict } from './regression.mjs'
-import { runtimeCapabilityOptions } from './runtime-capabilities.mjs'
+import { runtimeCapabilityOptions, runtimeSubmissionOptions } from './runtime-capabilities.mjs'
 import {
   pythonTaskPath,
   acceptanceArguments,
@@ -37,6 +37,7 @@ const execute = promisify(execFile)
 const directory = resolve(process.argv[2])
 const manifest = JSON.parse(await readFile(join(directory, 'freeze.json'), 'utf8'))
 const capabilities = runtimeCapabilityOptions(manifest.scriptactCapabilities)
+const submission = runtimeSubmissionOptions(manifest.scriptactTaskMode, manifest.task.prompt)
 const scriptactSessionId = manifest.scriptactSessionId ?? 'development'
 const environment = taskEnvironment(manifest.task)
 assert.deepEqual(environment, manifest.environment)
@@ -242,7 +243,9 @@ async function scriptAct({ workspace, output, apiKey, baseURL, signal, python, n
     exporter,
     requestCount = 0,
     status = 'starting',
-    failure = null
+    failure = null,
+    goal = null,
+    goalSnapshotError = null
   await mkdir(join(output, 'requests'))
   const transport = globalThis.fetch
   globalThis.fetch = async (url, init) => {
@@ -311,7 +314,7 @@ async function scriptAct({ workspace, output, apiKey, baseURL, signal, python, n
       identity,
       model: manifest.model,
     })
-    for await (const event of session.submit(prompt, signal)) {
+    for await (const event of session.submit(prompt, signal, submission)) {
       await appendFile(join(output, 'events.jsonl'), JSON.stringify(event) + '\n')
       if (event.type === 'state') status = event.status
       if (event.type === 'error') failure = event.message
@@ -327,6 +330,13 @@ async function scriptAct({ workspace, output, apiKey, baseURL, signal, python, n
   } finally {
     globalThis.fetch = transport
     try {
+      if (manifest.scriptactTaskMode === 'goal' && session) {
+        try {
+          goal = await session.getGoal()
+        } catch (error) {
+          goalSnapshotError = redact(error)
+        }
+      }
       await session?.close()
       await exporter?.export({ final: true, status, failure })
     } finally {
@@ -334,7 +344,12 @@ async function scriptAct({ workspace, output, apiKey, baseURL, signal, python, n
       await host.dispose()
     }
   }
-  return { status, failure, requestCount }
+  return {
+    status,
+    failure,
+    requestCount,
+    ...(manifest.scriptactTaskMode === 'goal' ? { goal, goalSnapshotError } : {}),
+  }
 }
 
 await verifyFrozen()

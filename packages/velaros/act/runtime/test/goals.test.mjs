@@ -179,6 +179,83 @@ test('done with a completion reason ends the active goal in the same reply', asy
   assert(!events.some((e) => e.type === 'error'), JSON.stringify(events))
 })
 
+test('INV-48 native final text preserves an active goal until an explicit goal operation', async (t) => {
+  for (const reply of [
+    '阶段成果已保存，仍有后续工作。',
+    'All requested work is complete.',
+    '当前状态说明。',
+  ]) {
+    await t.test(reply, async (t) => {
+      const frames = []
+      const model = {
+        id: 'native-goal-control',
+        limits,
+        estimate,
+        nativeTools: true,
+        async *stream(request) {
+          frames.push(request)
+          assert.equal(request.response.type, 'tools')
+          if (frames.length === 2) {
+            assert.equal(runtimeGoal(request).status, 'active')
+            assert(request.compiledPrompt.includes('GOAL_ACTIVE'))
+            yield {
+              type: 'tool-call',
+              value: {
+                id: 'complete-goal-explicitly',
+                name: 'node',
+                input: {
+                  code: "import {goal} from 'velaros:system'; const current = await goal.get(); await goal.update({baseRevision: current.revision, status: 'complete', reason: '已核对全部交付与验证结果'});",
+                },
+              },
+            }
+          } else yield { type: 'text', text: reply }
+          yield { type: 'finish', reason: 'stop' }
+        },
+      }
+      const { session } = await fixture(t, model)
+      await session.updateGoal({ baseRevision: 0, objective: '持续完成用户授权的工作' })
+      const events = await Array.fromAsync(session.submit('继续推进'))
+      assert.equal(frames.length, 3, JSON.stringify(events))
+      assert.equal(runtimeGoal(frames[0]).status, 'active')
+      assert.equal(runtimeGoal(frames[2]).status, 'complete')
+      assert.equal((await session.getGoal()).reason, '已核对全部交付与验证结果')
+      assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+      assert(!events.some((event) => event.type === 'error'), JSON.stringify(events))
+    })
+  }
+})
+
+test('native replies finish ordinary tasks and preserve paused goals', async (t) => {
+  for (const paused of [false, true]) {
+    await t.test(paused ? 'paused goal' : 'ordinary task', async (t) => {
+      let calls = 0
+      const model = {
+        id: 'native-ordinary-reply',
+        limits,
+        estimate,
+        nativeTools: true,
+        async *stream(request) {
+          calls++
+          assert.equal(request.response.type, 'tools')
+          yield { type: 'text', text: '已回答当前问题。' }
+          yield { type: 'finish', reason: 'stop' }
+        },
+      }
+      const { session } = await fixture(t, model)
+      if (paused) {
+        const goal = await session.updateGoal({ baseRevision: 0, objective: '用户暂停的工作' })
+        await session.controlGoal({ baseRevision: goal.revision, action: 'pause' })
+      }
+      const events = await Array.fromAsync(session.submit('回答当前问题'))
+      assert.equal(calls, 1)
+      assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
+      const goal = await session.getGoal()
+      if (paused) assert.equal(goal.status, 'paused')
+      else assert.equal(goal, null)
+    })
+  }
+})
+
 test('a goal passed with submit is set before the first frame, clipped to the objective limit', async (t) => {
   const frames = []
   const model = {

@@ -17,7 +17,7 @@ import {
   nodeTestSummary,
 } from './node-task.mjs'
 import { readPytestReport, regressionVerdict } from './regression.mjs'
-import { runtimeCapabilityOptions } from './runtime-capabilities.mjs'
+import { runtimeCapabilityOptions, runtimeSubmissionOptions } from './runtime-capabilities.mjs'
 import {
   createExecutionEnvironments,
   acceptanceArguments,
@@ -36,12 +36,14 @@ const participants = process.argv[5] === 'scriptact' ? ['scriptact'] : ['scripta
 const taskFile = process.argv[6] ?? 'rich-ascii-task.json'
 const scriptactCapabilities = process.argv[8] ?? 'on-demand'
 runtimeCapabilityOptions(scriptactCapabilities)
+const scriptactTaskMode = process.argv[9] ?? 'request'
 assert.match(attemptId, /^[a-zA-Z0-9-]+$/u)
 assert.match(candidateName, /^[a-zA-Z0-9-]+$/u)
 assert.ok(!process.argv[5] || ['scriptact', 'paired'].includes(process.argv[5]))
 assert.match(taskFile, /^[a-zA-Z0-9][a-zA-Z0-9_-]*\.json$/u)
 const taskPath = join(import.meta.dirname, taskFile)
 const task = JSON.parse(await readFile(taskPath, 'utf8'))
+runtimeSubmissionOptions(scriptactTaskMode, task.prompt)
 if (process.argv[7]) {
   assert.equal(process.argv[7], 'development')
   task.split = 'development'
@@ -234,6 +236,7 @@ const manifest = {
   candidateSourceDirty: candidateIdentity.sourceDirty ?? null,
   scriptactSessionId: `scriptact-${randomUUID()}`,
   scriptactCapabilities,
+  scriptactTaskMode,
   modelWirePreflight,
   providerCapabilities,
   model: 'gpt-5.6-sol',

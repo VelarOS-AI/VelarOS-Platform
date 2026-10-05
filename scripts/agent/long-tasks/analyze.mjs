@@ -275,6 +275,7 @@ async function main() {
     candidateSourceCommit: manifest.candidateSourceCommit,
     candidateSourceDirty: manifest.candidateSourceDirty ?? null,
     scriptactCapabilities: manifest.scriptactCapabilities ?? 'on-demand',
+    scriptactTaskMode: manifest.scriptactTaskMode ?? 'request',
     split: manifest.task.split,
     model: manifest.model,
     contextTokens: manifest.contextTokens,

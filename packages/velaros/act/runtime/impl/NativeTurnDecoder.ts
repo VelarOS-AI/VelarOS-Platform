@@ -7,7 +7,6 @@ import {
   type ModelToolCall,
 } from '@velaros-ai/kernel'
 
-import { GoalLimits } from '../../system/contract/constants.js'
 import { NativeExecutionSchema } from '../contract/surface.js'
 import type { NativeExecutionInput } from '../types/native-tools.js'
 import type { ScriptProtocolOptions } from '../types/runtime.js'
@@ -104,9 +103,8 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
     return {
       message: this.text,
       done: isEmpty(this.calls),
-      ...(isEmpty(this.calls)
-        ? { completion: this.text.trim().slice(0, GoalLimits.reasonChars) }
-        : {
+      ...(!isEmpty(this.calls)
+        ? {
             submission: {
               executions: this.calls.map((call) => ({
                 async: false,
@@ -117,7 +115,8 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
                 },
               })),
             },
-          }),
+          }
+        : {}),
       events: [],
     }
   }
