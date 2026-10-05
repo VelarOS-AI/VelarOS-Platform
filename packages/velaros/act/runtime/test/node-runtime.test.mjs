@@ -371,6 +371,187 @@ test('native Shell/Node calls execute after acceptance and recover matched histo
   )
 })
 
+test('native independent calls retain a failed command and execute the remaining checks once', async (t) => {
+  for (const name of ['shell', 'node'])
+    await t.test(name, async (t) => {
+      const f = await fixture(t)
+      const requests = []
+      const runtime = await createRuntime({
+        node: f.node,
+        project: false,
+        agents: false,
+        search: false,
+        memory: false,
+        context: { maintenance: false },
+        storage: localContextStorage({ path: join(f.root, 'independent.sqlite') }),
+        model: {
+          id: 'independent-native',
+          nativeTools: true,
+          limits: { contextTokens: 128000, inputTokens: 120000, outputTokens: 4000 },
+          estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+          async *stream(request) {
+            requests.push(request)
+            if (requests.length === 1) {
+              yield {
+                type: 'tool-call',
+                value: {
+                  id: 'failed-check',
+                  name,
+                  input: { code: name === 'shell' ? 'exit 7' : "throw new Error('check failed')" },
+                },
+              }
+              yield {
+                type: 'tool-call',
+                value: {
+                  id: 'node-check',
+                  name: 'node',
+                  input: {
+                    code: "import {appendFile} from 'node:fs/promises';await appendFile('checks.txt','node-once\\n');console.log('node checked')",
+                  },
+                },
+              }
+              yield {
+                type: 'tool-call',
+                value: {
+                  id: 'shell-check',
+                  name: 'shell',
+                  input: { code: "printf 'shell-once\\n' >> checks.txt; printf 'shell checked'" },
+                },
+              }
+            } else yield { type: 'text', text: '一项命令失败，另两项检查均已完成。' }
+            yield { type: 'finish', reason: 'stop' }
+          },
+        },
+      })
+      t.after(() => runtime.close())
+      const session = await runtime.openSession('independent')
+      const events = []
+      for await (const event of session.submit('执行三项独立检查')) events.push(event)
+      assert.equal(events.at(-1).status, 'completed')
+      assert.equal(requests.length, 2)
+      assert.equal(await readFile(join(f.cwd, 'checks.txt'), 'utf8'), 'node-once\nshell-once\n')
+      const exchange = requests[1].history.find((message) => message.toolExchange).toolExchange
+      assert.deepEqual(
+        exchange.results.map((result) => result.id),
+        ['failed-check', 'node-check', 'shell-check']
+      )
+      const failed = requests[1].history.find(
+        (message) => message.toolResult?.callId === 'failed-check'
+      )
+      assert.match(failed.content, /PROGRAM_ERROR/)
+      assert.match(failed.content, new RegExp(`"exitCode":${name === 'shell' ? 7 : 1}`, 'u'))
+      const trace = await runtime.trace('independent', { fullContent: true })
+      assert.deepEqual(
+        trace.turns[0].executions.map((execution) => execution.status),
+        ['failed', 'succeeded', 'succeeded']
+      )
+    })
+})
+
+test('native abnormal process termination stops later calls', async (t) => {
+  for (const [name, flags] of [
+    ['timeout', { timedOut: true }],
+    ['cleanup', { cleanupIncomplete: true }],
+    ['signal', { signal: 'SIGKILL' }],
+    ['host-error', null],
+  ])
+    await t.test(name, async (t) => {
+      const f = await fixture(t)
+      let dispatches = 0
+      let turns = 0
+      const runtime = await createRuntime({
+        node: {
+          ...f.node,
+          execute: async () => {
+            dispatches++
+            if (!flags) throw Error('host unavailable')
+            return { exitCode: 7, signal: null, stdout: '', stderr: 'host termination', ...flags }
+          },
+        },
+        project: false,
+        agents: false,
+        search: false,
+        memory: false,
+        context: { maintenance: false },
+        storage: localContextStorage({ path: join(f.root, 'abnormal.sqlite') }),
+        model: {
+          id: 'abnormal-native',
+          nativeTools: true,
+          limits: { contextTokens: 128000, inputTokens: 120000, outputTokens: 4000 },
+          estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+          async *stream() {
+            if (++turns === 1)
+              for (const id of ['first', 'later'])
+                yield { type: 'tool-call', value: { id, name: 'shell', input: { code: 'true' } } }
+            else yield { type: 'text', text: '执行环境中断，后续调用已取消。' }
+            yield { type: 'finish', reason: 'stop' }
+          },
+        },
+      })
+      t.after(() => runtime.close())
+      const session = await runtime.openSession('abnormal')
+      for await (const event of session.submit('核对终止状态')) assert.notEqual(event.type, 'error')
+      assert.equal(dispatches, 1)
+      const trace = await runtime.trace('abnormal', { fullContent: true })
+      assert.deepEqual(
+        trace.turns[0].executions.map((execution) => execution.status),
+        ['failed', 'cancelled']
+      )
+    })
+})
+
+test('cancelling a native batch during its first process prevents later calls', async (t) => {
+  const f = await fixture(t)
+  const controller = new AbortController()
+  let started = 0
+  let turns = 0
+  const runtime = await createRuntime({
+    node: {
+      ...f.node,
+      execute: (request, output, signal) =>
+        f.node.execute(
+          request,
+          (chunk) => {
+            output(chunk)
+            if (chunk.includes('first-started')) {
+              started++
+              controller.abort()
+            }
+          },
+          signal
+        ),
+    },
+    project: false,
+    agents: false,
+    search: false,
+    memory: false,
+    context: { maintenance: false },
+    storage: localContextStorage({ path: join(f.root, 'cancel-batch.sqlite') }),
+    model: {
+      id: 'cancel-native-batch',
+      nativeTools: true,
+      limits: { contextTokens: 128000, inputTokens: 120000, outputTokens: 4000 },
+      estimate: async () => ({ tokens: 1000, precision: 'exact', basis: 'fixture' }),
+      async *stream() {
+        assert.equal(++turns, 1)
+        for (const [id, code] of [
+          ['first', "printf 'first-started'; sleep 5; exit 7"],
+          ['later', "printf 'must not run' > later.txt"],
+        ])
+          yield { type: 'tool-call', value: { id, name: 'shell', input: { code } } }
+        yield { type: 'finish', reason: 'stop' }
+      },
+    },
+  })
+  t.after(() => runtime.close())
+  const session = await runtime.openSession('cancel-batch')
+  const events = []
+  for await (const event of session.submit('运行后取消', controller.signal)) events.push(event)
+  assert.equal(started, 1)
+  assert.equal(events.at(-1).status, 'cancelled')
+  await assert.rejects(readFile(join(f.cwd, 'later.txt')), { code: 'ENOENT' })
+})
+
 test('native response with a later invalid tool input performs no earlier write', async (t) => {
   const f = await fixture(t)
   let turn = 0

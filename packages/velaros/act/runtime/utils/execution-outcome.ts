@@ -12,6 +12,28 @@ import type { ActExecutionFailure, ActExecutionSummary } from '../types/trace.js
 
 const CancelledCodes = ['CANCELLED', 'ABORTED']
 
+/** 已退出且回收完成的普通程序错误；取消、限额、宿主故障与未落定调用继续中止后续派发。 */
+export function isCompletedProcessFailure(result: unknown): boolean {
+  if (!isPlainObject(result) || result.checked !== true || !isPlainObject(result.result))
+    return false
+  const value = result.result
+  const process = value.process
+  return (
+    isPlainObject(value.failed) &&
+    value.failed.code === 'PROGRAM_ERROR' &&
+    isPlainObject(process) &&
+    process.launched === true &&
+    Number.isInteger(process.exitCode) &&
+    process.exitCode !== 0 &&
+    process.signal === null &&
+    !process.timedOut &&
+    !process.aborted &&
+    !process.cleanupIncomplete &&
+    process.logTruncated === false &&
+    (!value.unsettled || (isArray(value.unsettled) && isEmpty(value.unsettled)))
+  )
+}
+
 /** 从持久进程回执生成输出详情；日志路径优先，成功退出不推断文件效果。 */
 export function executionProcessOutput(result: unknown): string | undefined {
   if (

@@ -28,7 +28,7 @@ export class NativeTurnDecoder implements NativeTurnDecoderApi {
   public constructor(options: ScriptProtocolOptions = {}) {
     this.config = protocolConfig(options)
     const shell = this.config.allowed.includes('shell')
-    this.instructions = `${shell ? '通过 shell 执行命令，' : ''}通过 node 执行 JavaScript ESM。检查执行结果后继续；任务完成时用普通文本答复。`
+    this.instructions = `${shell ? '通过 shell 执行命令，' : ''}通过 node 执行 JavaScript ESM。普通非零退出不取消其他调用；依赖步骤放在同一次调用里。检查执行结果后继续；任务完成时用普通文本答复。`
     this.response = {
       type: 'tools',
       tools: [

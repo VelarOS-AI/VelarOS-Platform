@@ -98,7 +98,7 @@ import type {
 import type { ActTurnTrace } from '../types/trace.js'
 import { memoryPrompt } from '../utils/context-memory.js'
 import { frameEnvironment } from '../utils/environment.js'
-import { executionOutcome } from '../utils/execution-outcome.js'
+import { executionOutcome, isCompletedProcessFailure } from '../utils/execution-outcome.js'
 import { residentContracts, runtimeInstructions } from '../utils/model-instructions.js'
 import { nodeRuntimeInstructions } from '../utils/node-instructions.js'
 import {
@@ -2035,7 +2035,7 @@ export class RuntimeSession implements VelarosSession {
         this.expectedObservation
       ).id
     })
-    const succeeded = await this.executeBatch(input, signal, acceptedTurnId)
+    const succeeded = await this.executeBatch(input, signal, acceptedTurnId, calls.length > 0)
     if (!calls.length) return succeeded
     const receipt = await this.programs.receipt(control)
     return {
@@ -2065,7 +2065,8 @@ export class RuntimeSession implements VelarosSession {
   private async executeBatch(
     input: ScriptProtocolSubmission,
     signal: AbortSignal,
-    acceptedTurnId: string
+    acceptedTurnId: string,
+    nativeCalls = false
   ): Promise<boolean> {
     const control = scriptControlIdentity(
       this.id,
@@ -2182,7 +2183,8 @@ export class RuntimeSession implements VelarosSession {
             await this.programs.job({ ...job, status, resultRef: outcome.resultRef })
             if (failure) {
               failed = true
-              controller.abort(new AppError('CANCELLED', '本批程序失败'))
+              if (!nativeCalls || status !== 'failed' || !isCompletedProcessFailure(outcome))
+                controller.abort(new AppError('CANCELLED', '本批程序失败'))
             }
           } catch (error) {
             Log.tag('ActRuntime').debug('RuntimeSession 已进入异常处理或降级分支')
