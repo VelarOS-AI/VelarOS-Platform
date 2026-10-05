@@ -21,7 +21,13 @@ import { VelarContextMaterialsModule } from '../../../dist/act/system/contract/s
 import { ContextMaintenanceState } from '../../../dist/act/system/impl/ContextMaintenanceState.js'
 
 const signal = new AbortController().signal
-async function fixture(t, respond, inputBody = 'Change the serializer; preserve the public API.') {
+async function fixture(
+  t,
+  respond,
+  inputBody = 'Change the serializer; preserve the public API.',
+  profile,
+  observeDelta
+) {
   const storage = localContextStorage({ path: ':memory:' })
   const runtime = await createRuntime({ storage, runner: nodeSubprocessCodeRunner, modules: [] })
   t.after(() => runtime.close())
@@ -70,6 +76,7 @@ async function fixture(t, respond, inputBody = 'Change the serializer; preserve 
   }
   const maintenance = new ContextMaintenance({
     storage,
+    options: profile ? { profile } : undefined,
     preview: () => undefined,
     model: () => model,
     tools: {
@@ -91,7 +98,10 @@ async function fixture(t, respond, inputBody = 'Change the serializer; preserve 
         estimate: (request) => driver.estimate(request),
         async *stream(request, signal) {
           queued++
-          yield* driver.stream(request, signal)
+          for await (const delta of driver.stream(request, signal)) {
+            observeDelta?.(delta)
+            yield delta
+          }
         },
       }),
       deliver: async (_, id, kind, payload) => ({ sessionId: id, kind, payload }),
@@ -718,3 +728,169 @@ for (const change of ['user-input', 'authorization-reset', 'active-revision'])
     )
     assert.equal(f.closed(), 1)
   })
+
+test('automatic narration retries a classified transient response with separate accounting and no partial publication', async (t) => {
+  let calls = 0
+  const f = await fixture(t, async function* () {
+    if (++calls === 1) {
+      yield { type: 'text', text: '{"summary":"unaccepted partial' }
+      yield { type: 'usage', inputTokens: 1100, outputTokens: 10 }
+      yield { type: 'error', code: 'provider', message: 'Temporary disconnect', retryAfterMs: 0 }
+    } else yield* complete()
+  })
+  assert.equal(
+    await f.maintenance.maintain('root', { reason: 'narrate', targetChars: 12000 }, signal),
+    true
+  )
+  assert.equal(f.requests.length, 2)
+  assert.deepEqual(f.requests[0], f.requests[1], 'retry keeps the same fixed evidence and format')
+  assert.deepEqual(f.usage, [
+    [1100, 10],
+    [1200, 80],
+  ])
+  assert.equal(f.reservations.filter((value) => value > 0).length, 3)
+  assert.equal(f.closed(), 1)
+  assert.equal(f.opened(), 0)
+  const narrative = (await f.recent.volumes(signal)).at(-1).narrative
+  assert.equal(narrative.summary, 'The separator test failed; the fix is still pending.')
+  const trace = await new RuntimeTrace(
+    f.requests[0].cacheKey,
+    f.storage,
+    createContextInvocationJournal(f.storage)
+  ).page()
+  assert.deepEqual(
+    trace.turns.map((turn) => turn.modelAccounting.outcome),
+    ['rejected', 'accepted']
+  )
+  assert.deepEqual(trace.accounting.modelRequests, { known: 2, unknown: 0, inflight: 0 })
+  const state = await f.storage.load(f.requests[0].cacheKey)
+  const retries = state.records.filter((record) => record.title === 'model-retry')
+  assert.equal(retries.length, 1)
+  const retry = JSON.parse(await f.storage.get(f.requests[0].cacheKey, retries[0].objectId))
+  assert.equal(retry.executed, false)
+  assert.equal(retry.attempt, 1)
+})
+
+test('transient narration retries stop at a fixed limit and keep every missing usage unknown', async (t) => {
+  const f = await fixture(t, async function* () {
+    yield { type: 'error', code: 'provider', message: 'Unavailable', retryAfterMs: 0 }
+  })
+  assert.equal(
+    await f.maintenance.maintain('root', { reason: 'narrate', targetChars: 12000 }, signal),
+    false
+  )
+  assert.equal(f.requests.length, 3)
+  assert.equal((await f.recent.volumes(signal)).at(-1).narrative, undefined)
+  assert.deepEqual(f.usage, [])
+  const trace = await new RuntimeTrace(
+    f.requests[0].cacheKey,
+    f.storage,
+    createContextInvocationJournal(f.storage)
+  ).page()
+  assert.deepEqual(trace.accounting.modelRequests, { known: 0, unknown: 3, inflight: 0 })
+  assert(trace.turns.every((turn) => turn.modelAccounting.outcome === 'rejected'))
+})
+
+for (const error of [
+  { code: 'provider', message: 'Authentication rejected' },
+  { code: 'provider', message: 'Invalid delay', retryAfterMs: -1 },
+  { code: 'provider', message: 'Invalid delay', retryAfterMs: Infinity },
+  { code: 'context-limit', message: 'Input exceeds context', retryAfterMs: 0 },
+])
+  test(`automatic narration does not retry ${error.code}: ${String(error.retryAfterMs)}`, async (t) => {
+    const f = await fixture(t, async function* () {
+      yield { type: 'error', ...error }
+    })
+    assert.equal(
+      await f.maintenance.maintain('root', { reason: 'narrate', targetChars: 12000 }, signal),
+      false
+    )
+    assert.equal(f.requests.length, 1)
+    assert.equal((await f.recent.volumes(signal)).at(-1).narrative, undefined)
+  })
+
+test('cancellation during narration backoff prevents the next model request', async (t) => {
+  const cancel = new AbortController()
+  const f = await fixture(t, async function* () {
+    setTimeout(() => cancel.abort(), 20)
+    yield { type: 'error', code: 'provider', message: 'Temporary disconnect', retryAfterMs: 5000 }
+  })
+  await assert.rejects(
+    f.maintenance.maintain('root', { reason: 'narrate', targetChars: 12000 }, cancel.signal),
+    { name: 'AbortError' }
+  )
+  assert.equal(f.requests.length, 1)
+  assert(cancel.signal.aborted)
+  assert.equal(f.closed(), 1)
+  assert.equal((await f.recent.volumes(signal)).at(-1).narrative, undefined)
+})
+
+test('narration retries still obey the activation call limit', async (t) => {
+  const f = await fixture(
+    t,
+    async function* () {
+      yield { type: 'error', code: 'provider', message: 'Temporary disconnect', retryAfterMs: 0 }
+    },
+    undefined,
+    { modelCalls: 2 }
+  )
+  assert.equal(
+    await f.maintenance.maintain('root', { reason: 'narrate', targetChars: 12000 }, signal),
+    false
+  )
+  assert.equal(f.requests.length, 2)
+  assert.equal(f.closed(), 1)
+  assert.equal((await f.recent.volumes(signal)).at(-1).narrative, undefined)
+})
+
+test('a new parent input between retry attempts still rejects the entire narrative publication', async (t) => {
+  let calls = 0
+  const f = await fixture(t, async function* () {
+    if (++calls === 1) {
+      yield { type: 'error', code: 'provider', message: 'Temporary disconnect', retryAfterMs: 0 }
+    } else {
+      await f.session.context.append({
+        kind: 'user',
+        body: 'Use the revised requirements instead.',
+      })
+      yield* complete()
+    }
+  })
+  await assert.rejects(
+    f.maintenance.maintain('root', { reason: 'narrate', targetChars: 12000 }, signal),
+    { code: 'STALE_VIEW' }
+  )
+  assert.equal(f.requests.length, 2)
+  assert.equal((await f.recent.volumes(signal)).at(-1).narrative, undefined)
+  assert.equal(f.closed(), 1)
+})
+
+test('narration preserves final usage delivered during cancellation without retrying or publishing', async (t) => {
+  const cancel = new AbortController()
+  const f = await fixture(
+    t,
+    async function* () {
+      yield { type: 'text', text: '{"summary":"partial' }
+      yield { type: 'usage', inputTokens: 900, outputTokens: 7 }
+    },
+    undefined,
+    undefined,
+    (delta) => {
+      if (delta.type === 'usage') cancel.abort()
+    }
+  )
+  await assert.rejects(
+    f.maintenance.maintain('root', { reason: 'narrate', targetChars: 12000 }, cancel.signal),
+    { name: 'AbortError' }
+  )
+  assert.equal(f.requests.length, 1)
+  assert.deepEqual(f.usage, [[900, 7]])
+  assert.equal((await f.recent.volumes(signal)).at(-1).narrative, undefined)
+  const trace = await new RuntimeTrace(
+    f.requests[0].cacheKey,
+    f.storage,
+    createContextInvocationJournal(f.storage)
+  ).page()
+  assert.deepEqual(trace.accounting.modelRequests, { known: 1, unknown: 0, inflight: 0 })
+  assert.equal(trace.turns[0].modelAccounting.outcome, 'rejected')
+})

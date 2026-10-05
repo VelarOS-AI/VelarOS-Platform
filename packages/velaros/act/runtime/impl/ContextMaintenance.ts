@@ -7,7 +7,7 @@ import { isArray, isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelTurnDelta } from '@velaros-ai/kernel'
 import type { ModelDriver } from '@velaros-ai/model'
-import { createProviderRequestCompiler } from '@velaros-ai/model'
+import { createProviderRequestCompiler, modelProviderRetry } from '@velaros-ai/model'
 
 import {
   ActiveContextLimits,
@@ -455,115 +455,149 @@ export class ContextMaintenance implements ContextMaintenanceApi {
     )
     if (!compiled.okToSend) return
     const context = createContextRuntime({ sessionId: id, storage: this.dependencies.storage })
-    const audit = await context.append(
-      {
-        kind: 'audit',
-        title: 'model-request',
-        body: JSON.stringify({
-          runId: id,
-          turn: 1,
-          repair: 0,
-          model: model.id,
-          estimate: compiled.estimate,
-          providerRequest: compiled.providerRequest,
-          request: compiled.request,
-        }),
-      },
-      signal
-    )
-    let text = ''
-    let output: unknown
-    let receivedOutput = false
-    let finish: Optional<Extract<ModelTurnDelta, { type: 'finish' }>>
-    let usage: Optional<Extract<ModelTurnDelta, { type: 'usage' }>>
-    let patch: Optional<ContextPatch>
-    let failure: unknown
-    const started = performance.now()
-    try {
-      for await (const delta of model.stream(compiled.request, signal)) {
-        signal.throwIfAborted()
-        if (finish) throw new AppError('PROTOCOL', '自动卷叙事结束后仍收到内容')
-        if (delta.type === 'text') {
-          text += delta.text
-          if (text.length > ContextPatchLimits.patchChars)
-            throw new AppError('LIMIT', '自动卷叙事响应过大')
-        } else if (delta.type === 'output') {
-          if (receivedOutput) throw new AppError('PROTOCOL', '自动卷叙事重复返回结构化内容')
-          receivedOutput = true
-          output = delta.value
-        } else if (delta.type === 'usage') usage = delta
-        else if (delta.type === 'error') throw new AppError('CONTEXT_MAINTENANCE', delta.message)
-        else if (delta.type === 'tool-call')
-          throw new AppError('PROTOCOL', '自动卷叙事不能执行工具调用')
-        else if (delta.type === 'finish') {
-          finish = delta
-          if (delta.reason !== 'stop') throw new AppError('PROTOCOL', '自动卷叙事没有完整结束')
-        }
-      }
+    for (let repair = 0; ; repair++) {
       signal.throwIfAborted()
-      if (!finish) throw new AppError('PROTOCOL', '自动卷叙事没有完整结束')
-      const parentId = snapshot.volume.ref.sessionId
-      const boundary = await new RecentContext(
-        parentId,
-        createContextRuntime({ sessionId: parentId, storage: this.dependencies.storage }),
-        this.dependencies.storage
-      ).currentBoundary(signal)
-      patch = volumeNarrationPatch(
-        snapshot,
-        output ?? JSON.parse(text),
-        records
-          .filter(
-            (page) =>
-              page.record.sequence > boundary && page.record.sequence <= snapshot.volume!.through
-          )
-          .map((page) => page.record.ref),
-        records
+      const audit = await context.append(
+        {
+          kind: 'audit',
+          title: 'model-request',
+          body: JSON.stringify({
+            runId: id,
+            turn: repair + 1,
+            repair,
+            model: model.id,
+            estimate: compiled.estimate,
+            providerRequest: compiled.providerRequest,
+            request: compiled.request,
+          }),
+        },
+        signal
       )
-      // 只有完整请求已获完整响应后才确认正文送达；逐页核对可覆盖长输入拼接的全部范围。
-      const delivered = (page: ContextContent) => ({
-        ref: page.record.ref,
-        offset: page.offset,
-        totalChars: page.totalChars,
-        text: page.text,
-      })
-      activity.state.acknowledge(snapshot, {
-        baseRevision: snapshot.baseRevision,
-        inputs: pages.filter((page) => page.record.kind === 'user').map(delivered),
-        recent: pages.filter((page) => page.record.kind !== 'user').map(delivered),
-      })
-      return patch
-    } catch (error) {
-      failure = error
-      throw error
-    } finally {
-      // 与交互式维护共用模型追踪格式；取消和拒绝也保留已知用量，缺失用量继续为未知。
-      const raw = await context.append({
-        kind: patch ? 'assistant' : 'audit',
-        title: 'context-narration:response',
-        body: patch && receivedOutput ? JSON.stringify(output) : text,
-        sources: [audit.ref],
-      })
-      await context.append({
-        kind: 'audit',
-        title: 'model-response',
-        sources: [audit.ref, raw.ref],
-        body: JSON.stringify({
-          runId: id,
-          turnId: audit.ref.id,
-          status: patch ? 'accepted' : 'rejected',
-          timing: { modelMs: performance.now() - started, firstTextMs: null },
-          finish,
-          usage,
-          rawRef: raw.ref,
-          error: failure
-            ? {
-                code: (failure as { code?: string }).code,
-                message: failure instanceof Error ? failure.message : String(failure),
-              }
-            : undefined,
-          decoded: patch ? { message: patch.summary, done: true } : undefined,
-        }),
-      })
+      let text = ''
+      let output: unknown
+      let receivedOutput = false
+      let finish: Optional<Extract<ModelTurnDelta, { type: 'finish' }>>
+      let usage: Optional<Extract<ModelTurnDelta, { type: 'usage' }>>
+      let patch: Optional<ContextPatch>
+      let failure: unknown
+      let retryDelay = 0
+      const started = performance.now()
+      try {
+        for await (const delta of model.stream(compiled.request, signal)) {
+          if (delta.type !== 'usage') signal.throwIfAborted()
+          if (finish) throw new AppError('PROTOCOL', '自动卷叙事结束后仍收到内容')
+          if (delta.type === 'text') {
+            text += delta.text
+            if (text.length > ContextPatchLimits.patchChars)
+              throw new AppError('LIMIT', '自动卷叙事响应过大')
+          } else if (delta.type === 'output') {
+            if (receivedOutput) throw new AppError('PROTOCOL', '自动卷叙事重复返回结构化内容')
+            receivedOutput = true
+            output = delta.value
+          } else if (delta.type === 'usage') usage = delta
+          else if (delta.type === 'error')
+            throw AppError.withFields(
+              delta.code === 'context-limit' ? 'CONTEXT_BUDGET' : 'MODEL_PROVIDER',
+              delta.message,
+              { retryAfterMs: delta.retryAfterMs }
+            )
+          else if (delta.type === 'tool-call')
+            throw new AppError('PROTOCOL', '自动卷叙事不能执行工具调用')
+          else if (delta.type === 'finish') {
+            finish = delta
+            if (delta.reason !== 'stop') throw new AppError('PROTOCOL', '自动卷叙事没有完整结束')
+          }
+        }
+        signal.throwIfAborted()
+        if (!finish) throw new AppError('PROTOCOL', '自动卷叙事没有完整结束')
+        const parentId = snapshot.volume.ref.sessionId
+        const boundary = await new RecentContext(
+          parentId,
+          createContextRuntime({ sessionId: parentId, storage: this.dependencies.storage }),
+          this.dependencies.storage
+        ).currentBoundary(signal)
+        patch = volumeNarrationPatch(
+          snapshot,
+          output ?? JSON.parse(text),
+          records
+            .filter(
+              (page) =>
+                page.record.sequence > boundary && page.record.sequence <= snapshot.volume!.through
+            )
+            .map((page) => page.record.ref),
+          records
+        )
+        // 只有完整请求已获完整响应后才确认正文送达；逐页核对可覆盖长输入拼接的全部范围。
+        const delivered = (page: ContextContent) => ({
+          ref: page.record.ref,
+          offset: page.offset,
+          totalChars: page.totalChars,
+          text: page.text,
+        })
+        activity.state.acknowledge(snapshot, {
+          baseRevision: snapshot.baseRevision,
+          inputs: pages.filter((page) => page.record.kind === 'user').map(delivered),
+          recent: pages.filter((page) => page.record.kind !== 'user').map(delivered),
+        })
+        return patch
+      } catch (error) {
+        failure = error
+        const fault = error as Nullable<{ code?: string; retryAfterMs?: number }> | undefined
+        const delay = fault?.retryAfterMs
+        if (
+          signal.aborted ||
+          fault?.code !== 'MODEL_PROVIDER' ||
+          !Number.isFinite(delay) ||
+          delay! < 0 ||
+          repair >= ActRuntimeTuning.narrationRetries
+        )
+          throw error
+        retryDelay = Math.min(ActRuntimeTuning.narrationRetryMaxMs, delay! * 2 ** repair)
+      } finally {
+        // 与交互式维护共用模型追踪格式；取消和拒绝也保留已知用量，缺失用量继续为未知。
+        const raw = await context.append({
+          kind: patch ? 'assistant' : 'audit',
+          title: 'context-narration:response',
+          body: patch && receivedOutput ? JSON.stringify(output) : text,
+          sources: [audit.ref],
+        })
+        await context.append({
+          kind: 'audit',
+          title: 'model-response',
+          sources: [audit.ref, raw.ref],
+          body: JSON.stringify({
+            runId: id,
+            turnId: audit.ref.id,
+            status: patch ? 'accepted' : 'rejected',
+            timing: { modelMs: performance.now() - started, firstTextMs: null },
+            finish,
+            usage,
+            rawRef: raw.ref,
+            error: failure
+              ? {
+                  code: (failure as { code?: string }).code,
+                  message: failure instanceof Error ? failure.message : String(failure),
+                }
+              : undefined,
+            decoded: patch ? { message: patch.summary, done: true } : undefined,
+          }),
+        })
+      }
+      // 未接受的摘要没有发布效果；每次重试仍经过活动及祖先预算，失败响应先完整记账。
+      await context.append(
+        {
+          kind: 'event',
+          title: 'model-retry',
+          body: JSON.stringify({
+            turnId: audit.ref.id,
+            attempt: repair + 1,
+            executed: false,
+            delayMs: retryDelay,
+          }),
+        },
+        signal
+      )
+      await modelProviderRetry.wait(retryDelay, signal)
     }
   }
 

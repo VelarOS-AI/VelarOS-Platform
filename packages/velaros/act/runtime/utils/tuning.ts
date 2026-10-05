@@ -68,6 +68,10 @@ export const ActRuntimeTuning = Object.freeze({
   narrateTurns: 6,
   /** 少轮多操作同样需要叙事：一卷实际执行结果达到此数时也触发。 */
   narrateResults: 6,
+  /** 直接叙事仅对供应商明确标记的瞬时故障重试，活动预算与取消继续优先。 */
+  narrationRetries: 2,
+  /** 直接叙事沿用供应商等待时间并退避，单次等待不超过此毫秒数。 */
+  narrationRetryMaxMs: 30_000,
   /** 一段里某个分区缺页达到这么多次，封段时按它调整笔记份额。 */
   shareFaults: 2,
   /** 笔记份额每次调整的幅度。 */
