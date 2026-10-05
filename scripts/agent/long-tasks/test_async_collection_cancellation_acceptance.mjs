@@ -153,6 +153,7 @@ async function prompt(promise) {
 
 function abortError(error, reason) {
   assert.equal(error?.name, 'AbortError', 'Per-call cancellation must be available')
+  assert.equal(Object.prototype.toString.call(error), '[object Error]')
   assert.equal(typeof error.message, 'string')
   if (reason !== undefined) assert.equal(error.cause, reason)
   return true

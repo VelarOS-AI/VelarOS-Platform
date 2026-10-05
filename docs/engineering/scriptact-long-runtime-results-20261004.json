@@ -6928,6 +6928,162 @@
           "limitation": "The mutation is applied only in an independent review copy. The timed-out participant artifact and its 64/64 external feature result remain unchanged."
         }
       }
+    },
+    {
+      "attempt": "mocha-05",
+      "schema": 1,
+      "at": "2026-10-05T12:35:41.365Z",
+      "taskId": "mocha-instance-reporter-streams",
+      "scriptactSessionId": "scriptact-2adfc47f-bc0b-413b-a30a-580d26e7dc7c",
+      "candidateId": "candidate-v34-d8a7f01673aa",
+      "candidateSourceCommit": "4e2093bc613e0c1451383425dc80ac7f54d52996",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "scriptactTaskMode": "goal",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 88,
+            "goal": {
+              "id": "f555a80f",
+              "revision": 2,
+              "objective": "Add instance-local writable output streams throughout Mocha's built-in text reporters. Applications embedding Mocha need two concurrent runs in the same Node process to write independent reports without replacing process.stdout or console methods. Implement this as a maintained public feature across Base, spec, dot, list, min, progress, landing, nyan, tap, doc, markdown, json, json-stream and xunit. Preserve existing default behavior and existing reporter helper APIs.\n\nPublic API: accept a stream option in reporter options, including new Mocha({reporter, reporterOption: {stream}}), the supported reporterOptions alias, and mocha.reporter(name, {stream}). Direct reporter constructors must accept both existing options.reporterOption and options.reporterOptions forms. A missing or undefined stream keeps existing output behavior. An explicitly supplied stream must be a non-null object with a callable write method; reject other values with TypeError mentioning stream during reporter construction, before output or registration of reporter event listeners. A duck-typed writable object is sufficient; do not require inheritance from a Node class. Call write with its original receiver and preserve thrown write errors. Do not end, close or destroy the caller's stream. A false write return must not stop subsequent report events.\n\nEvery report byte must go to the selected stream: headings, test results, pending and failure output, error stacks and diffs, epilogues, generated documents, machine-readable events, and terminal control sequences. Reporter construction and interleaved event delivery must not redirect other reporter instances or mutate process.stdout, process.stderr, console methods, Base.consoleLog, Base.cursor or other shared Base output helpers. Existing static helpers must remain usable with their original default behavior. Preserve JSON/JSON-stream document schemas, TAP versions, XML escaping and all test statistics. Base's instance epilogue must obey the selected destination as well.\n\nFor an explicit stream, use its isTTY property to decide whether to emit terminal cursor, erase and movement commands. A non-TTY explicit stream receives plain report text without terminal control sequences; a TTY destination keeps interactive behavior even when the process stdout is redirected. Use a positive finite stream.columns value for width-sensitive reporters, falling back to the existing standard width when absent or invalid; never fail or construct negative array lengths for a very narrow valid destination. Keep existing explicit color configuration compatible. Default output without a stream must remain compatible with the original reporters, including browser fallbacks.\n\nJSON and XUnit retain their existing reporter output-file option and lifecycle. When a valid explicit stream and a truthy output-file option are both supplied, reject the conflicting options with TypeError mentioning stream and output before writing, creating directories or opening a file. Without stream, file output keeps its current behavior. With stream only, XUnit's done callback still runs once with the original failure count and leaves the caller's stream open.\n\nAdd focused tests across the affected reporters and the public Mocha configuration routes. Cover interleaved runs with separate destinations, default compatibility, pass/fail/pending output, formatting and Unicode, both option aliases, invalid sinks, write receiver and errors, caller-owned lifecycle, terminal and nonterminal streams, width boundaries, and JSON/XUnit conflicts and file output. Document the option and show a runnable embedding example with two destinations. Run the repository's reporter, unit and node-unit suites plus available source/style checks, fixing regressions caused by the feature. Finish with a concise implementation and verification report. Make routine implementation choices autonomously.",
+              "status": "complete",
+              "reason": "Implemented instance-local reporter streams across Base and all requested built-in reporters; added validation, TTY/width handling, output-file conflicts, typings, docs, runnable concurrent example, and focused tests. Verified reporter suite (110 passing), complete unit/node-unit run (1095 passing, 3 pending), code and Markdown lint, TypeScript declarations, git diff check, and the embedding example.",
+              "createdAt": 1791201342783,
+              "updatedAt": 1791203658908
+            },
+            "goalSnapshotError": null,
+            "startedAt": 1791201342637,
+            "solveMs": 2337603
+          },
+          "accounting": {
+            "requests": 88,
+            "requestStatuses": {
+              "http-200": 82,
+              "unknown": 3,
+              "http-200-interrupted": 3
+            },
+            "measuredRequests": 82,
+            "missingUsageRequests": 6,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1847946,
+            "knownOutputTokens": 26462,
+            "knownCachedInputTokens": 589696,
+            "knownCacheRatio": 0.31910889171003914,
+            "pricedRequests": 82,
+            "knownReferenceUsd": 5.798118400000001,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 52,
+            "failed": 4,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "52 passed, 4 failed, 0 skipped, 0 errors",
+            "failures": [
+              "not ok 29 - min: explicit destination controls terminal mode false",
+              "not ok 33 - progress: explicit destination controls terminal mode false",
+              "not ok 35 - landing: explicit destination controls terminal mode false",
+              "not ok 37 - nyan: explicit destination controls terminal mode false"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 1241,
+            "failed": 0,
+            "skipped": 3,
+            "errors": 0,
+            "summary": "1241 passed, 0 failed, 3 skipped",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 17,
+          "createdFiles": 1,
+          "changeSummary": "23\t0\tdocs/index.md\n90\t13\tlib/reporters/base.js\n13\t12\tlib/reporters/doc.js\n13\t10\tlib/reporters/dot.js\n4\t10\tlib/reporters/json-stream.js\n8\t4\tlib/reporters/json.js\n17\t16\tlib/reporters/landing.js\n7\t8\tlib/reporters/list.js\n4\t3\tlib/reporters/markdown.js\n3\t2\tlib/reporters/min.js\n32\t25\tlib/reporters/nyan.js\n15\t13\tlib/reporters/progress.js\n7\t7\tlib/reporters/spec.js\n41\t27\tlib/reporters/tap.js\n13\t5\tlib/reporters/xunit.js\n16\t1\tlib/types.d.ts\n78\t0\ttest/reporters/base.spec.js\n",
+          "created": "example/reporter-streams.js\n",
+          "changeAccounting": {
+            "baseline": "da629e227f427a648d651c7b76c2d7dd18648426",
+            "head": "da629e227f427a648d651c7b76c2d7dd18648426",
+            "source": "recorded-baseline",
+            "changedFiles": 17,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 84,
+            "branchRequests": 4,
+            "requestOwners": {
+              "scriptact-2adfc47f-bc0b-413b-a30a-580d26e7dc7c": 84,
+              "context:8da5b86b-ba6d-4579-b744-e22039c20315": 1,
+              "context:cf27fe76-8998-40ea-95d2-8943d3b0d049": 1,
+              "context:5568b9cb-95b2-488a-a26e-24aebaafafa3": 1,
+              "context:73b89e9d-e3a1-483f-a396-249c79d67089": 1
+            },
+            "contextSegments": 43,
+            "nativeRequests": 84,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 4,
+            "originalPromptInFinalRequest": true
+          }
+        }
+      },
+      "deliveryReview": {
+        "scriptact": {
+          "reviewedAt": "2026-10-05T12:45:31.116Z",
+          "workspace": "/private/tmp/mocha05-delivery-review-XE7H7V",
+          "status": "partial",
+          "testDelivery": {
+            "authoredCases": 4,
+            "location": "test/reporters/base.spec.js",
+            "suite": {
+              "exitCode": 0,
+              "passed": 1245,
+              "failed": 0,
+              "skipped": 3,
+              "errors": 0,
+              "summary": "1245 passed, 0 failed, 3 skipped",
+              "failures": []
+            },
+            "coverage": [
+              "option aliases and writer receiver",
+              "invalid stream before listener registration",
+              "write error identity",
+              "Base terminal and width properties"
+            ],
+            "remaining": "Reporter-specific terminal behavior, distinct concurrent reporter destinations and legacy overlap are not asserted by the four new cases."
+          },
+          "example": {
+            "path": "example/reporter-streams.js",
+            "exitCode": 0
+          },
+          "sourceArtifactsChanged": false,
+          "timingOutsideOriginalSolve": true
+        }
+      }
     }
   ],
   "transportDiagnostics": {
