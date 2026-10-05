@@ -13959,6 +13959,778 @@
         "independentPair": false,
         "qualification": "Same frozen task, grader, dependencies, goal mode and generation settings for v38 versus v39. No automatic closure was exercised, so lower observed requests/time/known cost cannot be causally attributed to closure. The original Codex reference shares the task but predates the ScriptAct request-to-goal change. Missing usage leaves complete cost unknown."
       }
+    },
+    {
+      "attempt": "chai-05",
+      "schema": 1,
+      "at": "2026-10-05T21:58:41.259Z",
+      "taskId": "chai-isolated-assertion-instances",
+      "scriptactSessionId": "scriptact-cf9bb3c6-722b-4409-a103-3840a7dcf0f8",
+      "candidateId": "candidate-v40-5e31403740e5",
+      "candidateSourceCommit": "3cc6fb54a3b0558148336479086f2ad4a47bf953",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "scriptactTaskMode": "goal",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 50,
+            "goal": {
+              "id": "0bef4242",
+              "revision": 2,
+              "objective": "Add maintained independent assertion instances to Chai. Test runners and embedded applications need to configure assertions and install plugins for one project while other projects and the default Chai exports keep their own behavior in the same JavaScript realm. Export a synchronous create(options?) factory from the source entry point and the generated chai.js ESM bundle. Each returned instance must provide expect, assert, Assertion, AssertionError, util, a mutable config object, and use(plugin). Preserve the established signatures, assertion behavior and fluent chaining of these APIs. The existing top-level exports, direct public source-module imports, and default should interface must continue working.\n\nEach instance starts with Chai's built-in configuration defaults, plus options.config overrides. Changes to the default exported config must not affect a newly created instance's defaults. Each instance owns its configuration, Assertion constructor/prototype, plugin registry and util namespace. Mutable proxyExcludedKeys arrays must be copied, including supplied override arrays. Preserve supplied function identity for deepEqual. Creating instances must not mutate the options/config objects or plugin array. Undefined options, config and plugins use defaults. Reject null, array or primitive options/config bags and non-array plugins or non-function plugin entries with TypeError. Validate the complete input before invoking any plugin. Configuration overrides use the existing documented config fields.\n\nAll six current configuration properties must work in their owning instance: includeStack, showDiff, truncateThreshold, useProxy, proxyExcludedKeys and deepEqual. Carry ownership through expect and assert, direct new instance.Assertion(...), property and method chains, chainable methods, nested assertions, and the configuration-dependent public utilities such as inspect, objDisplay, getMessage and proxify. Functions detached from an instance, such as const expect = instance.expect or const display = instance.util.objDisplay, must keep their owning instance. Retained assertion chains must keep their origin when another instance is used between their creation and final assertion, including across an await. Configuration reads should retain the timing semantics of the existing APIs; the deepEqual flag can retain the comparator captured when the assertion was constructed. Deprecated Assertion.includeStack/showDiff accessors must refer to the owning instance's configuration. Keep AssertionError compatible with the existing exported constructor.\n\nuse(plugin) must return that same instance, call plugin(instance, instance.util), and run each plugin function once per instance. A function used by the default exports or another instance remains independently installable. options.plugins installs plugins in order before returning the instance. A throwing plugin must remain retryable. Plugins must be able to add and overwrite properties, methods and chainable methods with the established Assertion and util extension APIs. Core assertions and plugin-created chains must use the correct Assertion constructor and config. Plugins added before or after other instances are created must remain local to their owner. Built-in default assertions must remain available on every instance.\n\nOverlapping asynchronous consumers and reentrant assertions using different instances must stay independent. Implement instance ownership in the maintained lib/ modules, with reusable factories or explicit instance dependencies as appropriate. Keep the core usable in browsers. Global activation/switching of configuration or prototypes, Node-only context modules, module cache tricks, VM or worker isolation, evaluation of source strings, and vendored copies of generated bundles do not satisfy the implementation requirement. Generated chai.js remains build output of the maintained source.\n\nAdd focused regression tests covering configuration isolation, copied inputs/defaults, both assertion interfaces, direct and nested chains, detached functions, retained chains across awaits, reentrant calls, every extension/overwrite form, per-instance plugin identity, plugin failure/retry, the default exports and browser bundle behavior. Update public documentation and add a runnable example using two independently configured/plugin-extended instances concurrently. Run the original Node suite, the project's JavaScript lint and formatting checks, rebuild the ESM bundle, and run the example. The standard Node suite can be run with node node_modules/mocha/bin/mocha.js --require ./test/bootstrap/index.js 'test/*.js'; rebuild with node node_modules/esbuild/bin/esbuild --bundle --format=esm --keep-names --outfile=chai.js index.js. Finish with accurate implementation and validation results. Make routine implementation choices autonomously.",
+              "status": "complete",
+              "reason": "Implemented maintained per-instance Chai factory and ownership across assertions, utilities, configuration, and plugins; added focused Node/browser bundle regressions, documentation, and concurrent example. Verified 515 Node tests, 514 Chromium tests, project lint/format checks, bundle rebuild/export smoke test, and runnable example.",
+              "createdAt": 1791236623146,
+              "updatedAt": 1791237197438
+            },
+            "goalSnapshotError": null,
+            "startedAt": 1791236622950,
+            "solveMs": 583526
+          },
+          "build": {
+            "exitCode": 0,
+            "output": "build.json"
+          },
+          "accounting": {
+            "requests": 50,
+            "requestStatuses": {
+              "http-200": 50
+            },
+            "measuredRequests": 50,
+            "missingUsageRequests": 0,
+            "tokenCoverage": "complete",
+            "knownInputTokens": 1030655,
+            "knownOutputTokens": 24748,
+            "knownCachedInputTokens": 422912,
+            "knownCacheRatio": 0.4103332346905609,
+            "pricedRequests": 50,
+            "knownReferenceUsd": 3.0950968,
+            "totalReferenceUsd": 3.0950968,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 75,
+            "failed": 2,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "75 passed, 2 failed, 0 skipped, 0 errors",
+            "failures": [
+              "not ok 25 - source: plugins added to default and existing instances do not enter new instances",
+              "not ok 63 - bundle: plugins added to default and existing instances do not enter new instances"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 507,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "507 passed, 0 failed, 0 skipped",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 17,
+          "createdFiles": 3,
+          "changeSummary": "36\t14\tREADME.md\n115\t44\tlib/chai.js\n19\t10\tlib/chai/assertion.js\n3924\t3922\tlib/chai/core/assertions.js\n3263\t3215\tlib/chai/interface/assert.js\n21\t22\tlib/chai/interface/expect.js\n11\t2\tlib/chai/utils/addChainableMethod.js\n4\t2\tlib/chai/utils/addMethod.js\n7\t2\tlib/chai/utils/addProperty.js\n4\t4\tlib/chai/utils/getMessage.js\n4\t2\tlib/chai/utils/inspect.js\n2\t2\tlib/chai/utils/isProxyEnabled.js\n6\t3\tlib/chai/utils/objDisplay.js\n6\t2\tlib/chai/utils/overwriteChainableMethod.js\n8\t2\tlib/chai/utils/overwriteMethod.js\n7\t2\tlib/chai/utils/overwriteProperty.js\n4\t3\tlib/chai/utils/proxify.js\n",
+          "created": "examples/independent-instances.js\ntest/bundle.js\ntest/instances.js\n",
+          "changeAccounting": {
+            "baseline": "8d0ab315b774953a25053f111fd1721be01dc879",
+            "head": "8d0ab315b774953a25053f111fd1721be01dc879",
+            "source": "recorded-baseline",
+            "changedFiles": 17,
+            "createdFiles": 3,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 45,
+            "branchRequests": 5,
+            "requestOwners": {
+              "scriptact-cf9bb3c6-722b-4409-a103-3840a7dcf0f8": 45,
+              "context:10b27c0b-3234-42df-b8c4-beb60febe546": 1,
+              "context:09298b9c-f66d-4297-93b7-bd7665e5a64c": 1,
+              "context:e47ed615-9ffd-49fa-8da1-c22808973ef0": 1,
+              "context:f0a109e8-ed20-4a5b-a65e-e92dc187d077": 1,
+              "context:a2d4c09d-196c-43bf-af7a-5ff9a0773eb4": 1
+            },
+            "contextSegments": 18,
+            "nativeRequests": 45,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 5,
+            "originalPromptInFinalRequest": true
+          },
+          "capabilityUsage": {
+            "available": true,
+            "complete": true,
+            "rootTurns": 45,
+            "branchTurns": 5,
+            "uniqueCalls": 2,
+            "traceGaps": 0,
+            "missingSummaries": 0,
+            "operations": [
+              {
+                "moduleId": "velaros:system-goal",
+                "operation": "get",
+                "status": "succeeded",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:system-goal",
+                "operation": "update",
+                "status": "succeeded",
+                "count": 1
+              }
+            ]
+          },
+          "deliveryReview": {
+            "at": "2026-10-05T22:00:21.128Z",
+            "workspace": "/private/tmp/chai05-scriptact-review-V8RH6c/chai",
+            "status": "partial",
+            "regression": {
+              "exitCode": 0,
+              "passed": 515,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "515 passed, 0 failed, 0 skipped",
+              "failures": []
+            },
+            "authoredTests": {
+              "exitCode": 0,
+              "passed": 8,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "8 passed, 0 failed, 0 skipped",
+              "failures": []
+            },
+            "lint": {
+              "javascript": 0,
+              "formatting": 0
+            },
+            "build": 0,
+            "example": {
+              "path": "examples/independent-instances.js",
+              "exitCode": 0
+            },
+            "browserReview": {
+              "buildExitCode": 0,
+              "passed": true,
+              "scope": "Private IIFE bundle smoke without Node globals: two instances, retained chain, local plugin. Full frozen source/ESM feature grader remains authoritative."
+            },
+            "review": {
+              "sourceArchitecture": "Maintained modules use reusable assertion/interface installers and owner configuration in utilities. OwnedAssertion extends the mutable default Assertion, so installing built-in assertions again does not isolate inherited default-plugin descriptors.",
+              "featureFailure": "The frozen source and bundle checks both reject default-plugin leakage into a new instance. The maintained factory subclasses Assertion and invokes installAssertions; no independent prototype root is created.",
+              "testCoverage": "Seven source tests cover selected configuration/copying, interfaces, retained async chains, reentrant assertions, extension/overwrite forms, plugin identity/retry, validation and default exports. One generated ESM test checks factory exports and truncateThreshold. Default plugins installed before create, every individual configuration field, should compatibility and browser execution are not all covered by these authored tests; the separate browser smoke only proves its stated scope.",
+              "documentation": "README adds independent-instance usage, configuration and plugin ownership notes and an executable concurrent example. Independent execution and the frozen grader determine correctness of those claims."
+            },
+            "originalArtifactsUnchanged": true,
+            "artifactSha256": {
+              "solve.json": "06ddf8453b3b74dd998ec2a24027b1db6d918d0293ebe77f405da5e82eb9d7c2",
+              "grade.json": "6bf17c026f54cf516fb5667c6e423e0a9e108300994a6e73003a8a56a9aea27b",
+              "acceptance.json": "1f9063cee48b0e709575eddac68a20f309cf5cfec349b35c7e5b54f3008b300f",
+              "regression.json": "df6e15230089ec7820005dab4ed5b8135ab160758e6d70f121e8ebb0ca55dc0f"
+            },
+            "metricsSha256": "7cb8f4ba280081096704020aa69934a9ac5425c500136ea4209922a1d859cb07",
+            "originalMetricsUnchanged": true
+          },
+          "executionReview": {
+            "at": "2026-10-05T22:01:19.251Z",
+            "executions": 84,
+            "statuses": {
+              "succeeded": 76,
+              "failed": 8
+            },
+            "languages": {
+              "shell": 83,
+              "node": 1
+            },
+            "failureCodes": {
+              "PROGRAM_ERROR": 8
+            },
+            "maxConsecutiveFailuresPerSession": 2,
+            "maxSameSourceConsecutiveFailures": 1,
+            "modelErrorCodes": {
+              "CONFLICT": 2,
+              "PERMISSION": 1
+            },
+            "moduleErrors": [],
+            "traceGaps": 0,
+            "capabilityComplete": true,
+            "rootMaintenanceOutcomes": [
+              {
+                "sequence": 1875,
+                "status": "applied",
+                "reason": "narrate",
+                "errorCode": null
+              },
+              {
+                "sequence": 2014,
+                "status": "failed",
+                "reason": "narrate",
+                "errorCode": null
+              },
+              {
+                "sequence": 2139,
+                "status": "failed",
+                "reason": "narrate",
+                "errorCode": null
+              },
+              {
+                "sequence": 2416,
+                "status": "applied",
+                "reason": "narrate",
+                "errorCode": null
+              },
+              {
+                "sequence": 2557,
+                "status": "failed",
+                "reason": "narrate",
+                "errorCode": null
+              }
+            ],
+            "evidence": ".velaros-workspace/bench/long-runtime-20261004/context-diagnostics/chai05-execution-health.json",
+            "evidenceSha256": "d5af497f055f6c289c87ccc147ab31b828f94477c7d9926d1b588664f0b7e475",
+            "interpretation": "Program failures, provider failures and narration validation failures remain distinct. Complete accounting means reported usage covers every billable request; it does not imply delivery correctness."
+          },
+          "inputReview": {
+            "at": "2026-10-05T22:01:19.140Z",
+            "attempt": "chai-05",
+            "candidateId": "candidate-v40-5e31403740e5",
+            "observedMainRequests": 45,
+            "originalInHistory": 44,
+            "fullLatestInput": 44,
+            "userMessageChanges": 2,
+            "originalIdentities": 1,
+            "inputLimits": [
+              32768
+            ],
+            "compiledOverLimit": 0,
+            "measuredOverLimit": 0,
+            "measuredRequests": 45,
+            "knownInput": 925113,
+            "knownCached": 422912,
+            "maximumSegmentIndex": 18,
+            "incompleteFileCount": 0,
+            "evidence": ".velaros-workspace/bench/long-runtime-20261004/context-diagnostics/chai-05-input-final.json",
+            "evidenceSha256": "76e0de39208d53139bd49f177e89fbda7b28aa31cd093652c9f657288a280e0a",
+            "controllerTerminalAtObservation": true,
+            "interpretation": "Read-only frozen main-request audit; complete original input and capacity projections are counted independently of model claims and delivery quality."
+          },
+          "resolutionReview": {
+            "at": "2026-10-05T22:01:19.089Z",
+            "attempt": "chai-05",
+            "candidateId": "candidate-v40-5e31403740e5",
+            "directNarrations": 5,
+            "narrationsWithActiveState": 5,
+            "requestedClosures": 10,
+            "appliedClosures": 0,
+            "maximumActiveItems": 10,
+            "latestActiveItems": 10,
+            "outcomes": {
+              "applied": 2,
+              "failed": 3
+            },
+            "incompleteRequestFiles": 0,
+            "existingQuestionOpportunities": 4,
+            "evidence": ".velaros-workspace/bench/long-runtime-20261004/context-diagnostics/chai-05-resolution-final.json",
+            "evidenceSha256": "27105156c338dc59fe24d5180109422f6a3067458daf14e9cf1a22daf7ab7ab2",
+            "interpretation": "Actual persisted closures only; rejected responses are not counted as applied. Later validator replay is diagnosis, not this frozen candidate performance."
+          }
+        }
+      },
+      "developmentComparison": {
+        "previousScriptactReference": "chai-04:scriptact",
+        "commonCodexReference": "chai-04:codex",
+        "sameCandidateCapabilityReference": "chai-shell-node-05:scriptact",
+        "independentPair": false,
+        "qualification": "Frozen development task, grader, dependencies, goal mode and generation policy retained. v38 to v40 combines closure and transient retry changes. on-demand versus shell-node shares v40. One stochastic sample cannot establish causal improvement or generalization. Unknown usage in older references remains unknown."
+      }
+    },
+    {
+      "attempt": "chai-shell-node-05",
+      "schema": 1,
+      "at": "2026-10-05T22:06:50.625Z",
+      "taskId": "chai-isolated-assertion-instances",
+      "scriptactSessionId": "scriptact-2f990770-59a5-4d08-9ce9-e0c6cc841333",
+      "candidateId": "candidate-v40-5e31403740e5",
+      "candidateSourceCommit": "3cc6fb54a3b0558148336479086f2ad4a47bf953",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "shell-node",
+      "scriptactTaskMode": "goal",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 36,
+            "goal": {
+              "id": "108858e5",
+              "revision": 2,
+              "objective": "Add maintained independent assertion instances to Chai. Test runners and embedded applications need to configure assertions and install plugins for one project while other projects and the default Chai exports keep their own behavior in the same JavaScript realm. Export a synchronous create(options?) factory from the source entry point and the generated chai.js ESM bundle. Each returned instance must provide expect, assert, Assertion, AssertionError, util, a mutable config object, and use(plugin). Preserve the established signatures, assertion behavior and fluent chaining of these APIs. The existing top-level exports, direct public source-module imports, and default should interface must continue working.\n\nEach instance starts with Chai's built-in configuration defaults, plus options.config overrides. Changes to the default exported config must not affect a newly created instance's defaults. Each instance owns its configuration, Assertion constructor/prototype, plugin registry and util namespace. Mutable proxyExcludedKeys arrays must be copied, including supplied override arrays. Preserve supplied function identity for deepEqual. Creating instances must not mutate the options/config objects or plugin array. Undefined options, config and plugins use defaults. Reject null, array or primitive options/config bags and non-array plugins or non-function plugin entries with TypeError. Validate the complete input before invoking any plugin. Configuration overrides use the existing documented config fields.\n\nAll six current configuration properties must work in their owning instance: includeStack, showDiff, truncateThreshold, useProxy, proxyExcludedKeys and deepEqual. Carry ownership through expect and assert, direct new instance.Assertion(...), property and method chains, chainable methods, nested assertions, and the configuration-dependent public utilities such as inspect, objDisplay, getMessage and proxify. Functions detached from an instance, such as const expect = instance.expect or const display = instance.util.objDisplay, must keep their owning instance. Retained assertion chains must keep their origin when another instance is used between their creation and final assertion, including across an await. Configuration reads should retain the timing semantics of the existing APIs; the deepEqual flag can retain the comparator captured when the assertion was constructed. Deprecated Assertion.includeStack/showDiff accessors must refer to the owning instance's configuration. Keep AssertionError compatible with the existing exported constructor.\n\nuse(plugin) must return that same instance, call plugin(instance, instance.util), and run each plugin function once per instance. A function used by the default exports or another instance remains independently installable. options.plugins installs plugins in order before returning the instance. A throwing plugin must remain retryable. Plugins must be able to add and overwrite properties, methods and chainable methods with the established Assertion and util extension APIs. Core assertions and plugin-created chains must use the correct Assertion constructor and config. Plugins added before or after other instances are created must remain local to their owner. Built-in default assertions must remain available on every instance.\n\nOverlapping asynchronous consumers and reentrant assertions using different instances must stay independent. Implement instance ownership in the maintained lib/ modules, with reusable factories or explicit instance dependencies as appropriate. Keep the core usable in browsers. Global activation/switching of configuration or prototypes, Node-only context modules, module cache tricks, VM or worker isolation, evaluation of source strings, and vendored copies of generated bundles do not satisfy the implementation requirement. Generated chai.js remains build output of the maintained source.\n\nAdd focused regression tests covering configuration isolation, copied inputs/defaults, both assertion interfaces, direct and nested chains, detached functions, retained chains across awaits, reentrant calls, every extension/overwrite form, per-instance plugin identity, plugin failure/retry, the default exports and browser bundle behavior. Update public documentation and add a runnable example using two independently configured/plugin-extended instances concurrently. Run the original Node suite, the project's JavaScript lint and formatting checks, rebuild the ESM bundle, and run the example. The standard Node suite can be run with node node_modules/mocha/bin/mocha.js --require ./test/bootstrap/index.js 'test/*.js'; rebuild with node node_modules/esbuild/bin/esbuild --bundle --format=esm --keep-names --outfile=chai.js index.js. Finish with accurate implementation and validation results. Make routine implementation choices autonomously.",
+              "status": "complete",
+              "reason": "Implemented maintained per-instance Chai factory and ownership across config, util, Assertion, expect/assert, chains, and plugins; exported create from source and rebuilt chai.js. Added focused regression tests, documentation, and concurrent example. Validation: full Node suite 511 passing; Prettier passed; ESLint 0 errors (18 warnings); example passed; rebuilt bundle import/create smoke test passed.",
+              "createdAt": 1791237538191,
+              "updatedAt": 1791237872568
+            },
+            "goalSnapshotError": null,
+            "startedAt": 1791237538082,
+            "solveMs": 339767
+          },
+          "build": {
+            "exitCode": 0,
+            "output": "build.json"
+          },
+          "accounting": {
+            "requests": 36,
+            "requestStatuses": {
+              "http-200": 36
+            },
+            "measuredRequests": 36,
+            "missingUsageRequests": 0,
+            "tokenCoverage": "complete",
+            "knownInputTokens": 764280,
+            "knownOutputTokens": 14480,
+            "knownCachedInputTokens": 357504,
+            "knownCacheRatio": 0.4677657403046004,
+            "pricedRequests": 36,
+            "knownReferenceUsd": 2.0597056,
+            "totalReferenceUsd": 2.0597056,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 77,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "77 passed, 0 failed, 0 skipped, 0 errors",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 507,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "507 passed, 0 failed, 0 skipped",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": true,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 11,
+          "createdFiles": 3,
+          "changeSummary": "34\t14\tREADME.md\n1\t0\tlib/chai.js\n130\t125\tlib/chai/assertion.js\n3929\t3920\tlib/chai/core/assertions.js\n3253\t3201\tlib/chai/interface/assert.js\n1\t2\tlib/chai/utils/addChainableMethod.js\n1\t2\tlib/chai/utils/addMethod.js\n1\t2\tlib/chai/utils/addProperty.js\n2\t3\tlib/chai/utils/overwriteChainableMethod.js\n1\t2\tlib/chai/utils/overwriteMethod.js\n1\t2\tlib/chai/utils/overwriteProperty.js\n",
+          "created": "examples/independent-instances.js\nlib/chai/create.js\ntest/create.js\n",
+          "changeAccounting": {
+            "baseline": "7c4a1b005b4c94d9a504c1ed866d10289835b07f",
+            "head": "7c4a1b005b4c94d9a504c1ed866d10289835b07f",
+            "source": "recorded-baseline",
+            "changedFiles": 11,
+            "createdFiles": 3,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 34,
+            "branchRequests": 2,
+            "requestOwners": {
+              "scriptact-2f990770-59a5-4d08-9ce9-e0c6cc841333": 34,
+              "context:10780cbf-6824-44d5-8ff7-2bec0b7369c8": 1,
+              "context:0ccff4fc-86a8-49bf-98fb-ecd69e5a04ba": 1
+            },
+            "contextSegments": 13,
+            "nativeRequests": 34,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 2,
+            "originalPromptInFinalRequest": true
+          },
+          "capabilityUsage": {
+            "available": true,
+            "complete": true,
+            "rootTurns": 34,
+            "branchTurns": 2,
+            "uniqueCalls": 2,
+            "traceGaps": 0,
+            "missingSummaries": 0,
+            "operations": [
+              {
+                "moduleId": "velaros:system-goal",
+                "operation": "get",
+                "status": "succeeded",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:system-goal",
+                "operation": "update",
+                "status": "succeeded",
+                "count": 1
+              }
+            ]
+          },
+          "deliveryReview": {
+            "at": "2026-10-05T22:08:16.624Z",
+            "workspace": "/private/tmp/chai05-bare-review-u6fn1V/chai",
+            "status": "partial",
+            "regression": {
+              "exitCode": 0,
+              "passed": 511,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "511 passed, 0 failed, 0 skipped",
+              "failures": []
+            },
+            "authoredTests": {
+              "exitCode": 0,
+              "passed": 4,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "4 passed, 0 failed, 0 skipped",
+              "failures": []
+            },
+            "publicSignatures": {
+              "scope": "Independent standard expect.fail signature comparison against unchanged default interface; not an added official grader case.",
+              "cases": 10,
+              "passed": 4,
+              "failed": 6,
+              "rows": [
+                {
+                  "entry": "index.js",
+                  "case": 0,
+                  "passed": true,
+                  "expected": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "expect.fail()"
+                  },
+                  "actual": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "expect.fail()"
+                  }
+                },
+                {
+                  "entry": "index.js",
+                  "case": 1,
+                  "passed": false,
+                  "expected": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "custom"
+                  },
+                  "actual": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "custom",
+                    "actual": "custom"
+                  }
+                },
+                {
+                  "entry": "index.js",
+                  "case": 2,
+                  "passed": false,
+                  "expected": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "expect.fail()"
+                  },
+                  "actual": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "expect.fail()",
+                    "actual": 0
+                  }
+                },
+                {
+                  "entry": "index.js",
+                  "case": 3,
+                  "passed": false,
+                  "expected": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "expect.fail()",
+                    "actual": "actual",
+                    "expected": "expected"
+                  },
+                  "actual": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "actual",
+                    "actual": "actual",
+                    "expected": "expected"
+                  }
+                },
+                {
+                  "entry": "index.js",
+                  "case": 4,
+                  "passed": true,
+                  "expected": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "custom",
+                    "actual": "a",
+                    "expected": "b",
+                    "operator": "==="
+                  },
+                  "actual": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "custom",
+                    "actual": "a",
+                    "expected": "b",
+                    "operator": "==="
+                  }
+                },
+                {
+                  "entry": "chai.js",
+                  "case": 0,
+                  "passed": true,
+                  "expected": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "expect.fail()"
+                  },
+                  "actual": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "expect.fail()"
+                  }
+                },
+                {
+                  "entry": "chai.js",
+                  "case": 1,
+                  "passed": false,
+                  "expected": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "custom"
+                  },
+                  "actual": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "custom",
+                    "actual": "custom"
+                  }
+                },
+                {
+                  "entry": "chai.js",
+                  "case": 2,
+                  "passed": false,
+                  "expected": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "expect.fail()"
+                  },
+                  "actual": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "expect.fail()",
+                    "actual": 0
+                  }
+                },
+                {
+                  "entry": "chai.js",
+                  "case": 3,
+                  "passed": false,
+                  "expected": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "expect.fail()",
+                    "actual": "actual",
+                    "expected": "expected"
+                  },
+                  "actual": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "actual",
+                    "actual": "actual",
+                    "expected": "expected"
+                  }
+                },
+                {
+                  "entry": "chai.js",
+                  "case": 4,
+                  "passed": true,
+                  "expected": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "custom",
+                    "actual": "a",
+                    "expected": "b",
+                    "operator": "==="
+                  },
+                  "actual": {
+                    "threw": true,
+                    "name": "AssertionError",
+                    "message": "custom",
+                    "actual": "a",
+                    "expected": "b",
+                    "operator": "==="
+                  }
+                }
+              ]
+            },
+            "lint": {
+              "javascript": 0,
+              "formatting": 0
+            },
+            "build": 0,
+            "example": {
+              "path": "examples/independent-instances.js",
+              "exitCode": 0
+            },
+            "browserReview": {
+              "buildExitCode": 0,
+              "passed": true,
+              "scope": "Private IIFE bundle smoke without Node globals: two instances, retained chain, local plugin. Full frozen source/ESM feature grader remains authoritative."
+            },
+            "review": {
+              "sourceArchitecture": "Maintained modules expose createAssertion, installAssertions and createAssert factories. Independent constructors avoid the mutable default prototype. create.js locally implements configuration-dependent util functions and expect.fail, duplicating some established API behavior.",
+              "featureFailure": "Frozen feature tests pass 77/77. Independent public-signature comparison separately checks expect.fail argument semantics against the original default interface; passing the finite feature grader is not whole-task delivery proof.",
+              "testCoverage": "Four authored tests cover selected configuration/copying, input validation, detached calls, retained async chains, plugin extensions/overwrites and retry. They omit dedicated coverage for all six config fields, reentrant different-instance calls, direct public module imports and generated browser behavior. The reviewer browser smoke is independent and does not count as authored coverage.",
+              "documentation": "README adds independent-instance usage, configuration and plugin ownership notes and an executable concurrent example. Independent execution and the frozen grader determine correctness of those claims."
+            },
+            "originalArtifactsUnchanged": true,
+            "artifactSha256": {
+              "solve.json": "c3ce03c4d67a07355c471d59150b05e17175300c4a05453e26583677923fb5c1",
+              "grade.json": "a2e2b076fe376e960c0a66118cdff8c57745c639b19f16da31746c3260f59601",
+              "acceptance.json": "f12f3b6167def5e3b6c6cde46b793bfa573c273437576aad09bbabb45ac4d3c4",
+              "regression.json": "d2b06b50804d0c8e20f0d4721757b1678e87af9aa260adb247897fa4572a33c9"
+            },
+            "metricsSha256": "8b34a722df7a3a63843fb9af5f99e897bca004a6cf390ec4450cc13a1eff5cf7",
+            "originalMetricsUnchanged": true
+          },
+          "executionReview": {
+            "at": "2026-10-05T22:08:37.067Z",
+            "executions": 61,
+            "statuses": {
+              "succeeded": 54,
+              "failed": 7
+            },
+            "languages": {
+              "shell": 60,
+              "node": 1
+            },
+            "failureCodes": {
+              "PROGRAM_ERROR": 7
+            },
+            "maxConsecutiveFailuresPerSession": 2,
+            "maxSameSourceConsecutiveFailures": 1,
+            "modelErrorCodes": {},
+            "moduleErrors": [],
+            "traceGaps": 0,
+            "capabilityComplete": true,
+            "rootMaintenanceOutcomes": [
+              {
+                "sequence": 940,
+                "status": "applied",
+                "reason": "narrate",
+                "errorCode": null
+              },
+              {
+                "sequence": 1662,
+                "status": "applied",
+                "reason": "narrate",
+                "errorCode": null
+              }
+            ],
+            "evidence": ".velaros-workspace/bench/long-runtime-20261004/context-diagnostics/chai05-bare-execution-health.json",
+            "evidenceSha256": "ca61db55f5da345abf8d9e1bc5c75fd55485e8b1da7a3586c54966b0cedb604e",
+            "interpretation": "Program failures, provider failures and narration validation failures remain distinct. Complete accounting means reported usage covers every billable request; it does not imply delivery correctness."
+          },
+          "inputReview": {
+            "at": "2026-10-05T22:08:36.964Z",
+            "attempt": "chai-shell-node-05",
+            "candidateId": "candidate-v40-5e31403740e5",
+            "observedMainRequests": 34,
+            "originalInHistory": 34,
+            "fullLatestInput": 34,
+            "userMessageChanges": 0,
+            "originalIdentities": 1,
+            "inputLimits": [
+              32768
+            ],
+            "compiledOverLimit": 0,
+            "measuredOverLimit": 0,
+            "measuredRequests": 34,
+            "knownInput": 720140,
+            "knownCached": 348800,
+            "maximumSegmentIndex": 13,
+            "incompleteFileCount": 0,
+            "evidence": ".velaros-workspace/bench/long-runtime-20261004/context-diagnostics/chai-shell-node-05-input-final.json",
+            "evidenceSha256": "0526f8b91e73a7c513ff0de5c411bd3fe9de0bd8e8cf8be109a92ac7501123c5",
+            "controllerTerminalAtObservation": true,
+            "interpretation": "Read-only frozen main-request audit; complete original input and capacity projections are counted independently of model claims and delivery quality."
+          },
+          "resolutionReview": {
+            "at": "2026-10-05T22:08:36.919Z",
+            "attempt": "chai-shell-node-05",
+            "candidateId": "candidate-v40-5e31403740e5",
+            "directNarrations": 2,
+            "narrationsWithActiveState": 2,
+            "requestedClosures": 0,
+            "appliedClosures": 0,
+            "maximumActiveItems": 11,
+            "latestActiveItems": 11,
+            "outcomes": {
+              "applied": 2
+            },
+            "incompleteRequestFiles": 0,
+            "existingQuestionOpportunities": 1,
+            "evidence": ".velaros-workspace/bench/long-runtime-20261004/context-diagnostics/chai-shell-node-05-resolution-final.json",
+            "evidenceSha256": "8d84fa47ee090552cad02db1230e9b7e2903268c4a8812eb80db0c0cfebe29b1",
+            "interpretation": "Actual persisted closures only; rejected responses are not counted as applied. Later validator replay is diagnosis, not this frozen candidate performance."
+          }
+        }
+      },
+      "developmentComparison": {
+        "previousScriptactReference": "chai-shell-node-04:scriptact",
+        "commonCodexReference": "chai-04:codex",
+        "sameCandidateCapabilityReference": "chai-05:scriptact",
+        "independentPair": false,
+        "qualification": "Frozen development task, grader, dependencies, goal mode and generation policy retained. v38 to v40 combines closure and transient retry changes. on-demand versus shell-node shares v40. One stochastic sample cannot establish causal improvement or generalization. Unknown usage in older references remains unknown."
+      }
     }
   ],
   "transportDiagnostics": {

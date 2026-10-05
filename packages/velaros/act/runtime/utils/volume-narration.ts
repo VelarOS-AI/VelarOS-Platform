@@ -125,7 +125,77 @@ export function volumeNarrationPatch(
   }
 }
 
-/** 模型只选已有未解项及逐字见证；宿主校验卷边界、真实结果和唯一引文后绑定原子补丁。 */
+/** 只有本卷完整可见的同会话执行结果可作为自动关闭事项的见证。 */
+export function narrationWitness(
+  snapshot: ContextMaintenanceSnapshot,
+  page: ContextContent
+): boolean {
+  return (
+    !!snapshot.volume &&
+    page.offset === 0 &&
+    page.text.length === page.totalChars &&
+    page.record.ref.sessionId === snapshot.goals.at(-1)?.sessionId &&
+    ['audit', 'tool'].includes(page.record.kind) &&
+    /^script:(?:[a-f0-9]{8}|[0-9a-f-]{36}):result$/u.test(page.record.title) &&
+    page.record.sequence > snapshot.volume.from &&
+    page.record.sequence <= snapshot.volume.through
+  )
+}
+
+/** 原文和一层 JSON 字符串值共用唯一匹配；见证最终保存不可变原文的 UTF-16 区间。 */
+function narrationQuote(text: string, quote: string) {
+  const spans = new Map<number, number>()
+  for (let start = text.indexOf(quote); start >= 0; start = text.indexOf(quote, start + 1)) {
+    spans.set(start, start + quote.length)
+    if (spans.size > 1) break
+  }
+  let json = false
+  try {
+    JSON.parse(text)
+    json = true
+  } catch {
+    // 普通执行文本只能按原文引用，不猜测其中的转义含义。
+  }
+  if (json && spans.size < 2) {
+    for (const token of text.matchAll(/"(?:[^"\\]|\\[\s\S])*"/gu)) {
+      const start = token.index
+      const source = token[0]
+      if (/^\s*:/u.test(text.slice(start + source.length))) continue
+      const decoded = JSON.parse(source) as string
+      if (!decoded.includes(quote)) continue
+      const offsets = [start + 1]
+      for (let index = 1; index < source.length - 1;) {
+        index += source[index] === '\\' ? (source[index + 1] === 'u' ? 6 : 2) : 1
+        offsets.push(start + index)
+      }
+      for (
+        let index = decoded.indexOf(quote);
+        index >= 0;
+        index = decoded.indexOf(quote, index + 1)
+      ) {
+        const from = offsets[index]!
+        const through = offsets[index + quote.length]!
+        if (spans.has(from) && spans.get(from) !== through)
+          throw new AppError('CONFLICT', '自动叙事引文在原文与 JSON 值中存在歧义')
+        spans.set(from, through)
+        if (spans.size > 1) break
+      }
+      if (spans.size > 1) break
+    }
+  }
+  if (spans.size !== 1)
+    throw new AppError(
+      'CONFLICT',
+      '自动叙事引文须唯一匹配执行原文或 JSON 字符串值；请包含足够上下文'
+    )
+  const [offset, end] = spans.entries().next().value!
+  const original = text.slice(offset, end)
+  if (original.length > ActiveContextLimits.quoteChars)
+    throw new AppError('VALIDATION', '自动叙事引文对应的执行原文超过长度上限')
+  return { offset, quote: original }
+}
+
+/** 模型只选已有未解项及执行见证；宿主校验来源和唯一引文后绑定原子补丁。 */
 function narrationActive(
   snapshot: ContextMaintenanceSnapshot,
   value: unknown,
@@ -188,20 +258,9 @@ function narrationActive(
       const page = records.find(
         (page) => page.record.ref.sessionId === ref.sessionId && page.record.ref.id === ref.id
       )
-      if (
-        !page ||
-        !complete(page) ||
-        page.record.ref.sessionId !== latest.sessionId ||
-        !['audit', 'tool'].includes(page.record.kind) ||
-        !/^script:(?:[a-f0-9]{8}|[0-9a-f-]{36}):result$/u.test(page.record.title) ||
-        page.record.sequence <= snapshot.volume.from ||
-        page.record.sequence > snapshot.volume.through
-      )
+      if (!page || !narrationWitness(snapshot, page))
         throw new AppError('PERMISSION', '自动叙事的见证必须来自本卷完整已读的真实执行结果')
-      const offset = page.text.indexOf(proof.quote)
-      if (offset < 0 || page.text.includes(proof.quote, offset + 1))
-        throw new AppError('CONFLICT', '自动叙事引文须唯一匹配执行原文；请包含足够上下文')
-      witnesses.push({ ref: page.record.ref, offset, quote: proof.quote })
+      witnesses.push({ ref: page.record.ref, ...narrationQuote(page.text, proof.quote) })
     }
     changes.push({ id: item.id, status: 'resolved', evidence: witnesses })
   }

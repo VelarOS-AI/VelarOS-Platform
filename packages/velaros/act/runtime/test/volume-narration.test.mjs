@@ -549,6 +549,184 @@ test('direct narration acknowledges every fully sent input page before applying 
   assert.equal(transition.transitions[0].evidence[0].offset, 'prefix 😀\n'.length)
 })
 
+for (const [name, body, quote, rawQuote] of [
+  [
+    'decoded process output',
+    JSON.stringify({
+      label: '😀',
+      process: { stdout: 'before\nPASS "Ω😀"\tC:\\tmp\r\nend', exitCode: 0 },
+    }),
+    'PASS "Ω😀"\tC:\\tmp\r\nend',
+    String.raw`PASS \"Ω😀\"\tC:\\tmp\r\nend`,
+  ],
+  [
+    'alternate Unicode and slash escapes',
+    String.raw`{"stdout":"before\n\u0050ASS\u0020\u03a9\uD83D\uDE00\/end"}`,
+    'PASS Ω😀/end',
+    String.raw`\u0050ASS\u0020\u03a9\uD83D\uDE00\/end`,
+  ],
+  [
+    'nested control characters and lone surrogate',
+    JSON.stringify([{ stdout: 'PASS \b\f\u0000\ud800' }]),
+    'PASS \b\f\u0000\ud800',
+    String.raw`PASS \b\f\u0000\ud800`,
+  ],
+  [
+    'literal JSON structure',
+    '{"process":{"exitCode":0,"stdout":"done"}}',
+    '"exitCode":0',
+    '"exitCode":0',
+  ],
+  ['plain output', 'before 😀\nPASS "Ω"\nafter', 'PASS "Ω"', 'PASS "Ω"'],
+  ['same raw and decoded span', '{"stdout":"before PASS Ω after"}', 'PASS Ω', 'PASS Ω'],
+])
+  test(`automatic narration binds ${name} to its exact original UTF-16 span`, async (t) => {
+    const f = await fixture(t, async function* (request) {
+      const material = JSON.parse(request.materials[0].text)
+      const question = material.active.items.find((item) => item.kind === 'question')
+      const result = material.records.find((record) => record.text === body)
+      yield {
+        type: 'output',
+        value: {
+          summary: 'The output check passed.',
+          unresolved: [],
+          negativeAttempts: [],
+          active: { changes: [{ id: question.id, evidence: [{ ref: result.ref, quote }] }] },
+        },
+      }
+      yield { type: 'finish', reason: 'stop' }
+    })
+    const result = await nextVolume(f, ['Verify output'], body)
+    assert.equal(
+      await f.maintenance.maintain('root', { reason: 'narrate', targetChars: 12000 }, signal),
+      true
+    )
+    const material = JSON.parse(f.requests[0].materials[0].text)
+    const shown = material.records.find((record) => record.text === body)
+    assert.equal(shown.canWitness, true)
+    for (const record of material.records.filter((record) => record.canWitness)) {
+      assert(['audit', 'tool'].includes(record.kind))
+      assert.match(record.title, /^script:.*:result$/u)
+      assert(record.sequence > material.volume.from && record.sequence <= material.volume.through)
+    }
+    assert(material.records.some((record) => record.kind === 'user' && !record.canWitness))
+    assert.equal(
+      (await new ActiveContext('root', f.session.context, f.storage).read(signal)).items.length,
+      0
+    )
+    const state = await f.storage.load('root')
+    const transition = state.records.findLast(
+      (record) => record.title === 'context:active-transition'
+    )
+    const details = JSON.parse(await f.storage.get('root', transition.objectId))
+    assert.deepEqual(details.transitions[0].evidence, [
+      { ref: result.ref, offset: body.indexOf(rawQuote), quote: rawQuote },
+    ])
+    assert.equal((await f.session.context.read(result.ref, { limit: 12000 })).text, body)
+    assert.equal(f.requests.length, 1)
+  })
+
+test('decoded evidence cannot bypass source authority or partially close another question', async (t) => {
+  const body = JSON.stringify({ stdout: 'PASS\nround-trip' })
+  const f = await fixture(t, async function* (request) {
+    const material = JSON.parse(request.materials[0].text)
+    const result = material.records.find((record) => record.text === body)
+    const input = material.records.find((record) => record.kind === 'user')
+    assert.equal(input.canWitness, undefined)
+    yield {
+      type: 'output',
+      value: {
+        summary: 'THIS_NARRATIVE_MUST_NOT_PUBLISH',
+        unresolved: [],
+        negativeAttempts: [],
+        active: {
+          changes: [
+            {
+              id: material.active.items[0].id,
+              evidence: [{ ref: result.ref, quote: 'PASS\nround-trip' }],
+            },
+            {
+              id: material.active.items[1].id,
+              evidence: [{ ref: input.ref, quote: 'public API' }],
+            },
+          ],
+        },
+      },
+    }
+    yield { type: 'finish', reason: 'stop' }
+  })
+  await nextVolume(f, ['Verify output', 'Verify API'], body)
+  assert.equal(
+    await f.maintenance.maintain('root', { reason: 'narrate', targetChars: 12000 }, signal),
+    false
+  )
+  assert.deepEqual(
+    (await new ActiveContext('root', f.session.context, f.storage).read(signal)).items.map(
+      (item) => item.text
+    ),
+    ['Verify output', 'Verify API']
+  )
+  assert.equal((await f.recent.volumes(signal)).at(-1).narrative, undefined)
+})
+
+for (const [name, body, quote] of [
+  [
+    'duplicate decoded values',
+    String.raw`{"stdout":"PASS\nOK","stderr":"PASS\u000AOK"}`,
+    'PASS\nOK',
+  ],
+  [
+    'raw and decoded ambiguity',
+    JSON.stringify({ stdout: 'line\n', stderr: 'line\\n' }),
+    String.raw`line\n`,
+  ],
+  ['escaped plain text', String.raw`output: PASS\nOK`, 'PASS\nOK'],
+  ['malformed JSON', String.raw`{"stdout":"PASS\nOK"`, 'PASS\nOK'],
+  ['separate string values', '{"stdout":"PASS","stderr":"OK"}', 'PASS\nOK'],
+  ['decoded property name', String.raw`{"PASS\nOK":true}`, 'PASS\nOK'],
+  [
+    'recursive decoding',
+    JSON.stringify({ stdout: JSON.stringify({ result: 'PASS\nOK' }) }),
+    'PASS\nOK',
+  ],
+  [
+    'expanded quote limit',
+    JSON.stringify({ stdout: `P${'\n'.repeat(3999)}` }),
+    `P${'\n'.repeat(3999)}`,
+  ],
+])
+  test(`automatic narration rejects ${name} without publishing any closure or narrative`, async (t) => {
+    const f = await fixture(t, async function* (request) {
+      const material = JSON.parse(request.materials[0].text)
+      const result = material.records.find((record) => record.text === body)
+      yield {
+        type: 'output',
+        value: {
+          summary: 'THIS_NARRATIVE_MUST_NOT_PUBLISH',
+          unresolved: [],
+          negativeAttempts: [],
+          active: {
+            changes: [{ id: material.active.items[0].id, evidence: [{ ref: result.ref, quote }] }],
+          },
+        },
+      }
+      yield { type: 'finish', reason: 'stop' }
+    })
+    await nextVolume(f, ['Verify output'], body)
+    assert.equal(
+      await f.maintenance.maintain('root', { reason: 'narrate', targetChars: 24000 }, signal),
+      false
+    )
+    assert.deepEqual(
+      (await new ActiveContext('root', f.session.context, f.storage).read(signal)).items.map(
+        (item) => item.text
+      ),
+      ['Verify output']
+    )
+    assert.equal((await f.recent.volumes(signal)).at(-1).narrative, undefined)
+    assert.equal(f.requests.length, 1)
+  })
+
 for (const fault of [
   'constraint',
   'foreign-reference',
