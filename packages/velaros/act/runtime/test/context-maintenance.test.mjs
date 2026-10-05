@@ -524,6 +524,7 @@ async function runTool(f, input = 'work') {
 
 test('a truncated maintenance request remains pageable through the available read operation', async (t) => {
   let calls = 0
+  const estimates = []
   const marker = 'COMPLETE_REQUEST_RECALLED'
   const maintenance = {
     ...driver(
@@ -565,6 +566,7 @@ for(const ref of [${JSON.stringify(audit.ref)},{sessionId:'unrelated',id:'secret
       },
       async (request) => {
         const goal = JSON.parse(request.materials[0].text).partitions.task.goals[0]
+        estimates.push({ shown: goal.text.length, total: goal.totalChars, calls })
         return {
           tokens: calls || goal.text.length < goal.totalChars ? 1000 : 100000,
           precision: 'exact',
@@ -576,13 +578,19 @@ for(const ref of [${JSON.stringify(audit.ref)},{sessionId:'unrelated',id:'secret
   }
   const f = await setupTool(t, driver(done), maintenance)
   await f.session.execute({
-    source: `import {memory} from 'velaros:system';await memory.organize({focus:${JSON.stringify('f'.repeat(900) + marker + 'g'.repeat(900))}});`,
+    source: `import {memory} from 'velaros:system';await memory.plan({decisions:Array.from({length:8},(_,index)=>index+': '+'context '.repeat(110))});await memory.organize({focus:${JSON.stringify('f'.repeat(900) + marker + 'g'.repeat(900))}});`,
   })
   await runTool(f)
   const state = await f.storage.load('root')
   const record = state.records.findLast((r) => r.title === 'context-maintenance:outcome')
   const outcome = JSON.parse(await f.storage.get('root', record.objectId))
-  assert.equal(calls, 2, JSON.stringify({ error: outcome.error, status: outcome.status }))
+  assert.equal(
+    calls,
+    2,
+    JSON.stringify({ error: outcome.error, status: outcome.status, estimates })
+  )
+  assert(estimates.some((item) => item.calls === 0 && item.shown === item.total))
+  assert(estimates.some((item) => item.calls === 0 && item.shown < item.total))
   assert.equal(outcome.status, 'applied', outcome.error)
   assert.equal(outcome.error, null)
 })

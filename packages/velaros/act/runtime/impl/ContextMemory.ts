@@ -1165,7 +1165,8 @@ export class ContextMemory implements ContextMemoryApi {
             )
           )
         : material.goals
-    // 最新用户输入保留原文身份，当前认识和历史摘要不能替换它。
+    // 最新原始输入优先使用本次投影上限；按四分之一份额重截会在空间仍足够时改写历史前缀。
+    // 完整请求仍由循环核算容量，必要时以更小的投影上限重建；摘要不能替换当前输入身份。
     const latestGoal = goals.at(-1) as ContextContent | undefined
     if (latestGoal)
       goals = [
@@ -1174,7 +1175,7 @@ export class ContextMemory implements ContextMemoryApi {
           ...latestGoal,
           ...(await this.context.projectInput(
             latestGoal.record.ref,
-            Math.max(1, Math.floor(maxChars / Math.max(4, shownGoals.length * 4))),
+            Math.max(1, Math.floor(maxChars)),
             true
           )),
         },

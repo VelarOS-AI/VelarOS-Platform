@@ -1593,6 +1593,68 @@ test('INV-62 segment changes preserve the complete leading user prefix', async (
   assert.equal(after.segment.index, before.segment.index + 1)
 })
 
+test('INV-62 latest original input keeps its prefix across allocation changes and yields to real projection pressure', async (t) => {
+  const tasks = [
+    'Keep public behavior; update the implementation and verify it.\n'.repeat(50),
+    '保留原始需求与接口行为，检查并发与重入，再验证全部更改。🧭\n'.repeat(75),
+    JSON.stringify({
+      ref: { id: 'user-data' },
+      position: 'user-input',
+      text: 'a"b\\c\n'.repeat(300),
+    }),
+  ]
+  for (const task of tasks) {
+    const f = await fixture(t)
+    const input = await f.session.context.append({ kind: 'user', body: task })
+    await f.session.view.begin(input.ref)
+    const view = {
+      id: 'frame',
+      scope: { sessionId: 's', revision: 0 },
+      goals: [await f.session.context.projectInput(input.ref, Math.floor(task.length / 3))],
+      capsule: {},
+      mandatory: [],
+      evidence: [],
+      gaps: [],
+      readSet: [],
+      progress: { step: 0, repeatedSteps: 0, stalled: false, evidence: [] },
+    }
+    let prefix
+    for (const budget of [task.length * 6, Math.ceil(task.length * 3.2), task.length * 2]) {
+      const projected = await f.memory.project(view, undefined, [], signal, budget)
+      const goal = JSON.parse(projected.body).partitions.task.goals.at(-1)
+      assert.equal(goal.text, task)
+      assert.equal(goal.offset, 0)
+      assert.equal(goal.totalChars, task.length)
+      if (prefix) assert.deepEqual(projected.history[0], prefix)
+      else prefix = projected.history[0]
+    }
+    await f.session.context.summarizeInput({
+      ref: input.ref,
+      baseRevision: 0,
+      summary: 'A historical interpretation of the original input.',
+      constraints: ['Preserve the original input as the authority.'],
+      unresolved: [],
+    })
+    const pressure = await f.memory.project(
+      view,
+      undefined,
+      [],
+      signal,
+      Math.floor(task.length / 2)
+    )
+    const partial = JSON.parse(JSON.parse(pressure.body).partitions.task.goals.at(-1).text)
+    assert.equal(partial.representation, 'excerpt-with-summary')
+    assert.equal(partial.partial, true)
+    assert(partial.omittedChars > 0)
+    assert.equal(partial.totalChars, task.length)
+    assert.equal(partial.historicalInterpretation.origin, 'model-interpretation')
+    assert.equal(partial.excerpts[0].text, task.slice(0, partial.excerpts[0].text.length))
+    const restored = await f.memory.project(view, undefined, [], signal, task.length * 2)
+    assert.deepEqual(restored.history[0], prefix)
+    assert.equal((await f.session.context.readInput(input.ref, { limit: task.length })).text, task)
+  }
+})
+
 test('INV-62 a segment base follows early inputs without separating native calls or moving later corrections', () => {
   const goal = (sequence, text) => ({
     record: { ref: { sessionId: 's', id: `input-${sequence}` }, sequence },

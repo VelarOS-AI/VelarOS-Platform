@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { test } from 'node:test'
 
 import {
+  ContextLimits,
   createContextInvocationJournal,
   createContextRuntime,
   createContextView,
@@ -18,6 +19,51 @@ async function fixture(t) {
   return join(dir, 'context.sqlite')
 }
 const empty = { version: 0, records: [], workingSet: { revision: 0, cursor: 0, items: [] } }
+
+test('original input projection keeps its interpretation and tail when the read page is smaller than the caller budget', async (t) => {
+  const path = await fixture(t)
+  const storage = localContextStorage({ path })
+  t.after(() => storage.close())
+  const context = createContextRuntime({ sessionId: 's', storage })
+  const original = `FIRST_CONSTRAINT\n${'材料😀\n'.repeat(ContextLimits.readChars / 4)}\nLAST_CONSTRAINT`
+  for (const withAttachment of [false, true]) {
+    const file = withAttachment ? await context.append({ kind: 'audit', body: 'attachment' }) : null
+    const input = await context.ingest({
+      text: original,
+      ...(file
+        ? { files: [{ ref: file.ref, name: 'reference.txt', mediaType: 'text/plain' }] }
+        : {}),
+    })
+    await context.summarizeInput({
+      ref: input.ref,
+      baseRevision: 0,
+      summary: 'Keep the first and last constraints.',
+      constraints: ['FIRST_CONSTRAINT', 'LAST_CONSTRAINT'],
+      unresolved: [],
+    })
+    for (const budget of [
+      original.length * 2,
+      ContextLimits.readChars,
+      Math.floor(original.length / 3),
+    ]) {
+      const projected = JSON.parse((await context.projectInput(input.ref, budget, true)).text)
+      assert.equal(projected.representation, 'excerpt-with-summary')
+      assert.equal(projected.partial, true)
+      assert.equal(projected.totalChars, original.length)
+      assert(projected.omittedChars > 0)
+      assert.equal(projected.historicalInterpretation.origin, 'model-interpretation')
+      assert.equal(projected.historicalInterpretation.revision, 1)
+      for (const excerpt of projected.excerpts)
+        assert.equal(
+          excerpt.text,
+          original.slice(excerpt.offset, excerpt.offset + excerpt.text.length)
+        )
+      assert(projected.excerpts[0].text.includes('FIRST_CONSTRAINT'))
+      assert(projected.excerpts.at(-1).text.includes('LAST_CONSTRAINT'))
+      assert.equal(projected.files.length, withAttachment ? 1 : 0)
+    }
+  }
+})
 
 test('task accounting avoids full history and task replacement archives atomically', async (t) => {
   const path = await fixture(t)

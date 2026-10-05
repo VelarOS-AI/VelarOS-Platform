@@ -87,6 +87,7 @@ await view.end()
 - `ContextStorage` 是唯一事实，`ContextRuntime` 不缓存：同一会话可以开多个实例，`replace` 靠存储的 CAS 定胜负，输的一方抛 `CONTEXT_CONFLICT`，重新 `inspect` 后再提交（`append` 自己重试，不会冲突）。
 - 引用只在所属会话里解析，跨会话抛 `SCOPE_MISMATCH`；正文缺失抛 `OBJECT_MISSING`，不拿空串顶替；`project` 超预算抛 `CONTEXT_BUDGET`，不隐式压缩，最新一条用户输入与工作集之后到达的新事件总会带上。
 - 用户输入、工具结果这类事实只由宿主 `append`，模型经 `write` 只能写笔记与检查点；工作集提交从下一次模型请求起生效，原文从不删除。
+- 当前用户输入的完整性按实际读取范围判断。正文受单页上限限制且已有摘要时，保留头尾摘录和标为模型解释的历史摘要；较大的调用方预算不等同于已读取完整正文，原文继续按引用分页召回。
 - 超长用户输入按完整 Unicode 字符分块归档，分页位置仍使用 UTF-16 字符数；读回依据归档记录的实际长度定位，也兼容固定宽度的既有分块。
 - 证据视图一个会话同时只有一个租约持有者（否则 `TASK_BUSY`），租约时长见 `DefaultContextViewLimits.leaseMs`，长等待期间 `renew`。宿主休眠使租约到期时，原所有者仍须在同一存储 CAS 中验证身份后续期；检查点更新可在同次提交续期，世界写入前先保证租约有效并重验执行身份。接管竞争由 CAS 决定，被替换、撤销或已结束的所有权不能续期；效果不明的操作照实留在结算事实里，不挡下一步也不挡交付。上次执行中断时 `begin` 抛 `TASK_INTERRUPTED`，先把按持久日志收拾出的事实用 `recover` 合入。
 - `build` 只从 `ContextSourcePort` 真实读取，发布前核对版本与授权（不过抛 `STALE_VIEW`）；发送前还要 `validate`；没给 `ContextCompletionPort` 时 `complete` 的结果始终是未验证。

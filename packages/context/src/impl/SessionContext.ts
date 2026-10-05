@@ -324,7 +324,7 @@ export class SessionContext implements ContextRuntime {
     const summary = entry
       ? await this.read(entry.summary, { limit: ContextLimits.readChars })
       : undefined
-    if (original && summary && raw.totalChars > maxChars) {
+    if (original && summary && raw.text.length < raw.totalChars) {
       const excerptChars = Math.max(1, Math.min(128, Math.floor(maxChars / 4)))
       const tail = await this.readInput(ref, {
         offset: Math.max(excerptChars, raw.totalChars - excerptChars),
