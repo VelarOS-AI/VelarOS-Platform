@@ -19,7 +19,7 @@ import { ContextMemory } from '../../runtime/impl/ContextMemory.js'
 import { ContextPatchStore } from '../../runtime/impl/ContextPatchStore.js'
 import { ProgramContext } from '../../runtime/impl/ProgramContext.js'
 import { RecentContext } from '../../runtime/impl/RecentContext.js'
-import { memoryReference } from '../../runtime/utils/context-memory.js'
+import { memoryMaterialKind, memoryReference } from '../../runtime/utils/context-memory.js'
 import { awaitModelPreparation } from '../../runtime/utils/model-budget.js'
 import { ContextPatchLimits } from '../contract/constants.js'
 import type { ContextCandidateValidator } from '../contract/requires.js'
@@ -454,29 +454,32 @@ export class ContextMaintenanceState implements ContextMaintenanceStateApi {
       state.task?.startedSequence ?? 0,
       state.records.findLast((record) => record.title === 'search:history-reset')?.sequence ?? 0
     )
-    const selected = this.storage.selectSnapshot
-      ? await this.storage.selectSnapshot(this.id, [
-          { after: Math.max(after, reset), through: snapshot.through, first: limit + 1 },
-        ])
-      : undefined
-    const candidates = selected
-      ? selected.records
-      : state.records.filter(
-          (record) => record.sequence > after && record.sequence <= snapshot.through
-        )
-    const scanned = candidates.slice(0, limit)
-    const records = scanned.filter(
-      (record) =>
-        record.sequence > after &&
-        record.sequence <= snapshot.through &&
-        Boolean(memoryReference(state, record.ref)) &&
-        !/^(model-tool:|act:event$|act:state$|model-request$|model-response|context:frame:|context:delivered$|context-maintenance:)/u.test(
-          record.title
-        )
+    const reattached = new Set(
+      state.records
+        .filter((record) => record.sequence > reset && record.kind === 'user')
+        .flatMap((record) => record.sources.map((ref) => JSON.stringify([ref.sessionId, ref.id])))
     )
+    // current 已核对冻结快照；按可读工作材料计页，内部审计不消耗模型翻页次数。
+    const records = []
+    for (const record of state.records) {
+      signal.throwIfAborted()
+      if (
+        record.sequence <= after ||
+        record.sequence > snapshot.through ||
+        (record.sequence <= reset &&
+          !reattached.has(JSON.stringify([record.ref.sessionId, record.ref.id]))) ||
+        (!memoryMaterialKind(record, record.sequence <= reset) &&
+          !['context:volume', 'context:volume-narrative'].includes(record.title)) ||
+        !memoryReference(state, record.ref)
+      )
+        continue
+      records.push(record)
+      if (records.length > limit) break
+    }
+    const page = records.slice(0, limit)
     return {
-      items: records,
-      nextAfter: candidates.length > limit ? scanned.at(-1)!.sequence : null,
+      items: page,
+      nextAfter: records.length > limit ? page.at(-1)!.sequence : null,
     }
   }
 

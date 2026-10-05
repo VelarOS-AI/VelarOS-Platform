@@ -816,14 +816,21 @@ export class RecentContext implements RecentContextApi {
     const through = (
       JSON.parse((await this.storage.get(this.id, sealed.objectId))!) as ContextVolume
     ).through
+    const available = new Map(records.map((record) => [record.ref.id, record]))
+    const invalid = narrative.evidence.filter(
+      (ref) => ref.sessionId !== this.id || !available.has(ref.id)
+    )
+    if (!isEmpty(invalid))
+      throw new AppError(
+        'PERMISSION',
+        `卷叙事 evidence 中这些引用不在当前授权范围：${JSON.stringify(invalid)}；请使用当前快照提供的引用`
+      )
     for (const ref of narrative.evidence) {
-      const evidence = records.find((record) => record.ref.id === ref.id)
-      if (ref.sessionId !== this.id || !evidence)
-        throw new AppError('PERMISSION', '旧材料需要在当前授权范围内重新获取')
+      const evidence = available.get(ref.id)!
       if (evidence.sequence > through)
         throw new AppError(
           'CONTEXT_NARRATIVE_RANGE',
-          `卷叙事只能依据序号 ${through} 及以前的原文；后续工作保留在当前记录中`
+          `卷叙事 evidence 的引用 ${JSON.stringify(ref)} 超过卷末序号 ${through}；后续工作保留在当前记录中`
         )
     }
     const record = await this.context.append(

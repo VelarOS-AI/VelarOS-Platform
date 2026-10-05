@@ -3,7 +3,7 @@
  * 可读本次整理请求原文和授权的父快照；读取额度用完后不能再读，直接交付已有结论。
  */
 declare module 'velaros:context-materials' {
-  /** 列快照里的原文元数据，不读正文。
+  /** 按工作材料分页列用户输入、回复、源码、结果、笔记和历史卷的元数据，不读正文。
    */
   export function list(input: ContextMaterialsQuery): Promise<ContextMaintenancePage>
 

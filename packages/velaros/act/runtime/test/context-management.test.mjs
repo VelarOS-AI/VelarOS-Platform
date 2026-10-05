@@ -567,7 +567,11 @@ test('history reset starts a new volume generation and excludes revoked history 
   }
   await assert.rejects(
     history.narrate(volume, { ...narrative, evidence: [pairs[0].ref] }, signal),
-    /旧材料/
+    (error) => {
+      assert.equal(error.code, 'PERMISSION')
+      assert(error.message.includes(JSON.stringify(pairs[0].ref)))
+      return true
+    }
   )
   await history.narrate(volume, narrative, signal)
   const [current] = await history.volumes(signal)

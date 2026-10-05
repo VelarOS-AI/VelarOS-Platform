@@ -871,6 +871,23 @@ function same(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
+/** 工作材料目录的共同分类；当前代次重新附上的旧材料按输入发现。 */
+export function memoryMaterialKind(record: ContextRecord, reattached = false) {
+  return record.title.startsWith('workspace:note:')
+    ? 'notes'
+    : record.kind === 'user' || reattached
+      ? 'inputs'
+      : record.title === `script:${record.ref.id}` || record.title === 'shared:script'
+        ? 'programs'
+        : /^script:.*:result$/u.test(record.title)
+          ? 'results'
+          : record.kind === 'note' || record.title === 'model-tool:delivery'
+            ? 'artifacts'
+            : record.kind === 'assistant'
+              ? 'history'
+              : null
+}
+
 /** 授权当前代次的原文，以及用户在当前代次明确重新附上的材料。 */
 export function memoryReference(state: Nullable<ContextState>, ref: ContextRef) {
   const reset = Math.max(

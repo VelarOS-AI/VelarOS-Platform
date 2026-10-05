@@ -302,6 +302,128 @@ test('maintenance reads are paged and tied to the fixed parent snapshot', async 
   })
 })
 
+for (const indexed of [true, false])
+  test(`maintenance catalog fills pages with working materials across noisy internal history: indexed=${indexed}`, async (t) => {
+    const f = await fixture(t)
+    if (!indexed) f.storage.selectSnapshot = undefined
+    const expected = [f.input]
+    for (let batch = 0; batch < 3; batch++) {
+      for (let index = 0; index < 35; index++)
+        await f.session.context.append({
+          kind: 'audit',
+          title: [
+            'act:event',
+            'script:lease-state',
+            'context:frame:internal',
+            'model-continuation',
+            'runtime:frame-marker:internal',
+          ][index % 5],
+          body: '{}',
+        })
+      expected.push(
+        await f.session.context.append({ kind: 'assistant', body: `Observed batch ${batch}` })
+      )
+      expected.push(
+        await f.session.context.append({
+          kind: 'audit',
+          title: `script:execution-${batch}:result`,
+          body: `Result ${batch}`,
+        })
+      )
+    }
+    const note = await f.note()
+    const snapshot = await f.state.snapshot(8000, signal)
+    let after = 0
+    const ids = []
+    let pages = 0
+    for (;;) {
+      const page = await f.state.list(snapshot, after, 2, signal)
+      pages++
+      assert(page.items.length > 0, 'internal records cannot consume a visible page')
+      for (const record of page.items) {
+        assert(record.sequence > after)
+        assert(!/^(act:|runtime:|model-|context:frame:|script:lease-state$)/u.test(record.title))
+        ids.push(record.ref.id)
+        assert.equal(
+          (await f.state.read(snapshot, record.ref, 0, 100, signal)).record.ref.id,
+          record.ref.id
+        )
+      }
+      if (page.nextAfter === null) break
+      assert.equal(page.items.length, 2)
+      assert.equal(page.nextAfter, page.items.at(-1).sequence)
+      after = page.nextAfter
+    }
+    assert.deepEqual(ids, [...expected.map((record) => record.ref.id), note.ref.id])
+    assert.equal(pages, 4)
+    assert.deepEqual(await f.state.list(snapshot, snapshot.through, 2, signal), {
+      items: [],
+      nextAfter: null,
+    })
+    await f.session.context.append({
+      kind: 'user',
+      body: 'Changed authorization and task requirements',
+    })
+    await assert.rejects(f.state.list(snapshot, 0, 2, signal), { code: 'CONTEXT_CONFLICT' })
+  })
+
+test('maintenance catalog respects task resets and explicit reattachment of an old input', async (t) => {
+  const f = await fixture(t)
+  const prior = await f.session.context.append({ kind: 'user', body: 'Old unrelated task' })
+  await f.session.context.append({ kind: 'audit', title: 'search:history-reset', body: '{}' })
+  const current = await f.session.context.append({
+    kind: 'user',
+    body: 'Read the attached original',
+    sources: [f.input.ref],
+  })
+  await f.session.view.appendGoal(current.ref)
+  const snapshot = await f.state.snapshot(8000, signal)
+  const page = await f.state.list(snapshot, 0, 64, signal)
+  assert(page.items.some((record) => record.ref.id === f.input.ref.id))
+  assert(page.items.some((record) => record.ref.id === current.ref.id))
+  assert(!page.items.some((record) => record.ref.id === prior.ref.id))
+  await assert.rejects(f.state.read(snapshot, prior.ref, 0, 100, signal), {
+    code: 'SCOPE_MISMATCH',
+  })
+})
+
+test('volume narrative rejection identifies every invalid evidence reference without publishing', async (t) => {
+  const f = await fixture(t)
+  const sealed = await f.session.context.append({
+    kind: 'checkpoint',
+    title: 'context:volume',
+    body: JSON.stringify({ from: 0, through: f.input.sequence, skeleton: 'Fixture evidence' }),
+  })
+  const recent = new RecentContext('root', f.session.context, f.storage)
+  const invalid = [
+    { sessionId: 'root', id: 'missing-one' },
+    { sessionId: 'other', id: f.input.ref.id },
+    { sessionId: 'root', id: 'missing-two' },
+  ]
+  const narrative = {
+    summary: 'Observed work',
+    unresolved: [],
+    negativeAttempts: [],
+    evidence: [f.input.ref, ...invalid],
+  }
+  await assert.rejects(recent.narrate(sealed.ref, narrative, signal), (error) => {
+    assert.equal(error.code, 'PERMISSION')
+    for (const ref of invalid) assert(error.message.includes(JSON.stringify(ref)))
+    return true
+  })
+  assert(
+    !(await f.storage.load('root')).records.some(
+      (record) => record.title === 'context:volume-narrative'
+    )
+  )
+  const receipt = await recent.narrate(
+    sealed.ref,
+    { ...narrative, evidence: [f.input.ref] },
+    signal
+  )
+  assert(receipt.id)
+})
+
 test('observation display policy applies to fresh results each turn and reports original references', async (t) => {
   const requests = []
   const model = {

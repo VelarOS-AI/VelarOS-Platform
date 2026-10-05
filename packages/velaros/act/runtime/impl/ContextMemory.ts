@@ -51,6 +51,7 @@ import {
   memoryCommittedGroups,
   memoryDeliveredOutputs,
   memoryFeedbackKey,
+  memoryMaterialKind,
   memoryMessageKey,
   memoryOutput,
   memoryOutputRefs,
@@ -413,19 +414,7 @@ export class ContextMemory implements ContextMemoryApi {
           !reattached.has(JSON.stringify([record.ref.sessionId, record.ref.id])))
       )
         continue
-      const kind = record.title.startsWith('workspace:note:')
-        ? 'notes'
-        : record.kind === 'user' || record.sequence <= reset
-          ? 'inputs'
-          : record.title === `script:${record.ref.id}` || record.title === 'shared:script'
-            ? 'programs'
-            : /^script:.*:result$/u.test(record.title)
-              ? 'results'
-              : record.kind === 'note' || record.title === 'model-tool:delivery'
-                ? 'artifacts'
-                : record.kind === 'assistant'
-                  ? 'history'
-                  : null
+      const kind = memoryMaterialKind(record, record.sequence <= reset)
       if (
         !kind ||
         (input.kind &&
