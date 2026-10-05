@@ -1067,6 +1067,8 @@ Markdown-it 14.1.0 固定在 `0fe7ccb4b7f30236fb05f623be6924961d296d3d`。完整
 
 新任务是按实例配置 URL 转换，在 inline/reference/autolink/linkify 的链接与图片路径中携带真实环境、保持引用复用与重入隔离，并支持常规 Token、自定义渲染器和构建后的 CommonJS/browser 入口。59 项独立验收中，原版 1 passed、58 failed，私有行为适配器 59/59；漏掉引用路径、漏掉输出 URL 验证、保留首次环境三种变异分别失败 7、5、2 项。行为适配器的原项目仍为 934 passed 与同一项已知失败，无新增回归。适配器只用于零模型评分控制，不进入参与者工作区；结果在 `markdown-it-controls-summary.json`。该任务在 v34 产品冻结后定义，尚未调用模型。
 
+正式准备首次因 Rollup 的 Node CLI 没有扩展名被构建入口校验拒绝，在创建尝试和调用模型前结束。构建入口现在与原测试入口一致，接受冻结 node_modules 内的普通 Node CLI 路径，保留路径字符、父目录跳转、依赖边界和 Node 直接执行方式；真实构建控制改用无扩展名入口，同时核对源码重建、字面参数与非零退出。初次失败日志为 `markdown-it01-prepare.log`，34 项评测与模块所有权检查再次通过。
+
 ## Nunjucks 的交付覆盖核对
 
 ScriptAct 的功能 64/64 与原项目 417 passed、1 pending 保持。对最终产物另建独立副本，连同 Agent 新增测试完整运行得到 422 passed、1 pending，新增五项均通过；这次核对在完成后进行，保存在 `scriptact-authored-tests.json`，不替换原始评测时间或 Agent 报告的 420 passing。

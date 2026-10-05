@@ -61,10 +61,7 @@ export function taskEnvironment(task) {
     assert(value.build && typeof value.build === 'object' && !Array.isArray(value.build))
     assert(Object.keys(value.build).every((name) => ['entry', 'args'].includes(name)))
     assert.equal(typeof value.build.entry, 'string')
-    assert.match(
-      value.build.entry,
-      /^node_modules\/[a-zA-Z0-9_@.-]+(?:\/[a-zA-Z0-9_.-]+)*\.(?:js|cjs|mjs)$/u
-    )
+    assert.match(value.build.entry, /^node_modules\/[a-zA-Z0-9_@.-]+(?:\/[a-zA-Z0-9_.-]+)*$/u)
     assert(!value.build.entry.split('/').some((part) => ['.', '..'].includes(part)))
     assert(Array.isArray(value.build.args))
     assert(value.build.args.every((arg) => typeof arg === 'string' && !arg.includes('\0')))

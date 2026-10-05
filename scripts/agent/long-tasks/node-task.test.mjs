@@ -112,7 +112,7 @@ test('Node project builds regenerate current sources with literal arguments and 
   await mkdir(join(root, 'fixtures/fixture-pkg'), { recursive: true })
   await writeFile(join(root, 'fixtures/fixture-pkg/index.js'), "module.exports = 'fixture-module'")
   await writeFile(
-    join(root, 'node_modules/frozen-builder/build.cjs'),
+    join(root, 'node_modules/frozen-builder/build'),
     `
     const fs = require('node:fs');
     const [source, target, literal] = process.argv.slice(2);
@@ -126,7 +126,7 @@ test('Node project builds regenerate current sources with literal arguments and 
     environment: {
       ...config,
       build: {
-        entry: 'node_modules/frozen-builder/build.cjs',
+        entry: 'node_modules/frozen-builder/build',
         args: ['source.txt', 'generated.txt', '$(literal) `text`'],
       },
       processEnvironment: { NODE_PATH: 'fixtures' },

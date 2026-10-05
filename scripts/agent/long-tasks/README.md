@@ -22,7 +22,7 @@ Node 任务还可冻结相对各自工作区的 `NODE_PATH`，用于原项目的
 
 Mocha/Jest 的 `baselineIssues` 与 pytest 使用同一套逐例合同：首次模型调用前复现精确用例身份和错误指纹，保留原失败计数与退出码。评分时允许相同已知失败或实际修复，新错误、指纹变化、缺失用例和新增跳过仍判为回归；原套件全过与相对基线无新增回归分别记录。
 
-需要构建的 Node 项目可声明 `environment.build: {entry, args}`：entry 指向冻结 node_modules 中的 JavaScript 构建入口，args 按原样作为参数交给同一个 Node 可执行文件。基线、参与者初始副本和恢复原测试与依赖后的评分副本分别构建，日志单独保留。初始构建失败时停止该参与者的模型派发；评分构建失败时完整验收仍保留，但最终交付判为失败。省略 build 的任务保持原有步骤。
+需要构建的 Node 项目可声明 `environment.build: {entry, args}`：entry 指向冻结 node_modules 中的 JavaScript 构建入口，也支持无扩展名的 Node CLI，args 按原样作为参数交给同一个 Node 可执行文件。基线、参与者初始副本和恢复原测试与依赖后的评分副本分别构建，日志单独保留。初始构建失败时停止该参与者的模型派发；评分构建失败时完整验收仍保留，但最终交付判为失败。省略 build 的任务保持原有步骤。
 
 Python 参与者启动前，私有 venv 的 `.pth` 绑定其工作区的 `src` 与根目录，普通 Python、命令入口和 Node 派生的 Python 都优先使用当前源码。绑定只写入独占环境，拒绝系统 Python，路径记录在 `source-binding.json`。冻结评分环境继续由每次验收的 `PYTHONPATH` 指向对应评分副本。
 
