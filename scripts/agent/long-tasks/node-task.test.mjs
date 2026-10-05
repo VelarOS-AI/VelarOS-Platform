@@ -103,6 +103,10 @@ test('Mocha reports preserve failures, skips and inventory; malformed and empty 
     ),
     parsed
   )
+  assert.deepEqual(
+    mochaReport({ ...result, stdout: `<xml>diagnostic</xml>${result.stdout}cleanup` }, '/repo'),
+    parsed
+  )
   const escaped = { ...pass, fullTitle: 'quoted " and nested } { text \\ remain intact' }
   const escapedReport = JSON.stringify(
     {
@@ -117,6 +121,18 @@ test('Mocha reports preserve failures, skips and inventory; malformed and empty 
   )
   assert.equal(
     mochaReport({ exitCode: 0, stdout: `log\n${escapedReport}` }, '/repo').summary.passed,
+    1
+  )
+  const nested = { ...pass, err: { diagnostic: { stats: { count: 1 } } } }
+  const nestedReport = JSON.stringify({
+    stats: { tests: 1, passes: 1, failures: 0, pending: 0 },
+    tests: [nested],
+    passes: [nested],
+    pending: [],
+    failures: [],
+  })
+  assert.equal(
+    mochaReport({ exitCode: 0, stdout: `log${nestedReport}` }, '/repo').summary.passed,
     1
   )
   assert.throws(() =>
