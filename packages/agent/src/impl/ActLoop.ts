@@ -1118,23 +1118,7 @@ export class ActLoop implements ActLoopApi {
       JSON.stringify(message)
     for (const [index, message] of transcript.logical.entries())
       if (identity(message) !== identity(logical[index]!)) return undefined
-    // 运行状态随请求累积会比任务、源码和结果更大；达到开销阈值时从权威投影重建。
-    const logicalChars = transcript.logical.reduce(
-      (sum, message) => sum + identity(message).length,
-      0
-    )
-    const retainedChars = transcript.sent.reduce(
-      (sum, message) => sum + identity(message).length,
-      0
-    )
-    if (
-      retainedChars - logicalChars >
-      Math.max(
-        ContextPlanTuning.retainedStateChars,
-        logicalChars * ContextPlanTuning.retainedStateRatio
-      )
-    )
-      return undefined
+    // 帧里也有首次交付的事实正文；是否需要重建由完整请求的容量与剩余轮数统一判断。
     // 逻辑条目在已发送前缀中的位置不会变；不能按内容匹配，否则重复结果会串标。
     const marked = new Set(
       transcript.positions.filter((_, index) => logical[index]?.cacheBreakpoint)

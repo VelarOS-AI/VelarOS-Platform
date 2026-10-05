@@ -1293,7 +1293,7 @@ test('INV-62 task text stays once in a stable chronological prefix while the fra
     )
     assert.equal(taskMessage.role, 'user')
     assert.equal(taskMessage.cacheBreakpoint, true)
-    // 暂态运行帧达到开销阈值会重建；任务、响应和工具结果的逻辑历史仍保持前缀。
+    // 容量不足时重建当前帧；任务、响应和工具结果的逻辑历史仍保持前缀。
     const history = request.history
       .filter(
         (item) =>
@@ -3728,6 +3728,80 @@ test('INV-74 current state is self-contained while unchanged result and observat
   assert.match(updated, /CHANGED-OBSERVATION/)
   assert.match(updated, /CHANGED-RESULT/)
   assert.match(updated, /CHANGED-DIAGNOSTIC/)
+})
+
+test('INV-74 retained maintenance material reuses only matching delivered ranges and rematerializes on rebuild', () => {
+  const original = 'Exact material including 😀, quotes " and newlines\n'.repeat(80)
+  const page = {
+    ref: { sessionId: 'parent', id: 'input' },
+    offset: 0,
+    totalChars: original.length,
+    text: original,
+    nextOffset: null,
+  }
+  const material = {
+    kind: 'context-maintenance',
+    baseRevision: 'snapshot-one',
+    inputs: [page],
+    recent: [{ ...page, ref: { sessionId: 'parent', id: 'receipt' }, sequence: 5 }],
+    future: { empty: [], zero: 0, flag: false },
+  }
+  const body = (value) => frameBody({ 'partitions.runtime.modelTool': value })
+  const current = body(material)
+  const shown = section(memoryPrompt(current, current), 'runtime').modelTool
+  assert.equal(shown.inputs[0].text, undefined)
+  assert.equal(shown.inputs[0].bodyInEarlierFrame, true)
+  assert.equal(shown.inputs[0].shownChars, original.length)
+  assert.equal(shown.recent[0].bodyInEarlierFrame, true)
+  assert.deepEqual(shown.future, material.future)
+  assert.equal(section(memoryPrompt(current), 'runtime').modelTool.inputs[0].text, original)
+  assert.equal(JSON.parse(current).partitions.runtime.modelTool.inputs[0].text, original)
+  const partial = structuredClone(material)
+  partial.inputs[0] = { ...page, offset: 10, text: original.slice(10, 100), nextOffset: 100 }
+  assert.equal(
+    section(memoryPrompt(body(partial), current), 'runtime').modelTool.inputs[0].shownChars,
+    90
+  )
+  for (const change of [
+    (value) => {
+      value.baseRevision = 'snapshot-two'
+    },
+    (value) => {
+      value.kind = 'other-tool'
+    },
+    (value) => {
+      value.inputs[0].ref.sessionId = 'another-parent'
+    },
+    (value) => {
+      value.inputs[0].ref.id = 'another-input'
+    },
+    (value) => {
+      value.inputs[0].totalChars++
+    },
+    (value) => {
+      value.inputs[0].text = ''
+    },
+    (value) => {
+      value.inputs[0].text = 'CHANGED'
+    },
+    (value) => {
+      value.inputs[0].offset = original.length
+    },
+  ]) {
+    const changed = structuredClone(material)
+    change(changed)
+    const delivered = section(memoryPrompt(body(changed), current), 'runtime').modelTool.inputs[0]
+    assert.equal(delivered.text, changed.inputs[0].text)
+    assert.equal(delivered.bodyInEarlierFrame, undefined)
+  }
+  const gap = structuredClone(material)
+  gap.inputs[0].offset = 20
+  gap.inputs[0].text = original.slice(20)
+  assert.equal(
+    section(memoryPrompt(current, body(gap)), 'runtime').modelTool.inputs[0].text,
+    original,
+    'a partial prior page does not replace a full current page'
+  )
 })
 
 test('INV-74 reference-only materials never claim delivery and source delivery is distinct from output', () => {

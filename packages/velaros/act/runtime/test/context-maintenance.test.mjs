@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { localContextStorage } from '@velaros-ai/context/node'
+import { modelRequestEncoder } from '@velaros-ai/kernel'
 import { createAiSdkModelDriver } from '@velaros-ai/model'
 import { nodeSubprocessCodeRunner } from '@velaros-ai/script'
 
@@ -877,6 +878,72 @@ test('shared provider usage lets maintenance deliver the full original in its fi
   assert.equal(outcome.status, 'applied', outcome.error)
   assert.equal(mainCalls, 2)
   assert.equal(maintenanceCalls, 1)
+})
+
+test('native maintenance preserves large accepted evidence through the next request and publishes a grounded patch', async (t) => {
+  const original = 'Review all source batches and preserve every original constraint. '.repeat(90)
+  let previous
+  let calls = 0
+  const maintenance = {
+    ...driver(async function* (request) {
+      calls++
+      const facts = JSON.parse(request.materials[0].text).partitions.runtime.modelTool
+      const input = facts.inputs.find((item) => item.text === original)
+      assert(input, 'the audit frame keeps the complete original')
+      const sent = modelRequestEncoder.messages(request).map(({ role, content }) => ({
+        role,
+        content,
+      }))
+      const visible = sent.map((message) => message.content).join('\n')
+      assert.equal(visible.split(original).length, 2, 'the actual model request contains it once')
+      if (previous) {
+        assert.deepEqual(sent.slice(0, previous.length), previous)
+        assert(!request.compiledPrompt.includes(original))
+        assert.match(request.compiledPrompt, /bodyInEarlierFrame/)
+      }
+      previous = sent
+      const candidate = {
+        baseRevision: facts.baseRevision,
+        summary: 'Kept the supplied constraints and the pending review.',
+        unresolved: ['Review source batches'],
+        inputs: [
+          {
+            ref: input.ref,
+            baseRevision: 0,
+            summary: 'Review all source batches',
+            constraints: ['Preserve every original constraint'],
+            unresolved: ['Review source batches'],
+          },
+        ],
+      }
+      yield {
+        type: 'tool-call',
+        value: {
+          id: `retained-material-${calls}`,
+          name: 'node',
+          input: {
+            code:
+              calls === 1
+                ? "console.log('Verified the supplied original constraints.');"
+                : `import {submit} from 'velaros:context-materials';console.log(await submit(${JSON.stringify(candidate)}));`,
+          },
+        },
+      }
+      yield finish
+    }),
+    nativeTools: true,
+  }
+  const f = await setupTool(t, driver(done), maintenance)
+  await f.session.execute({
+    source:
+      "import {memory} from 'velaros:system';await memory.organize({focus:'Preserve original constraints'});",
+  })
+  await runTool(f, original)
+  const state = await f.storage.load('root')
+  const record = state.records.findLast((item) => item.title === 'context-maintenance:outcome')
+  const outcome = JSON.parse(await f.storage.get('root', record.objectId))
+  assert.equal(outcome.status, 'applied', outcome.error)
+  assert.equal(calls, 2)
 })
 
 test('native maintenance locally sizes its initial evidence using the standard provider estimate', async (t) => {

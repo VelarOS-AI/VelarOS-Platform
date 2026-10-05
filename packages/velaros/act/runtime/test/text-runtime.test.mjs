@@ -126,6 +126,7 @@ async function fixture(t, stream, extra = {}) {
     runtime,
     session,
     storage,
+    model,
     programs: new ProgramContext('s', session.context, storage),
   })
   t.after(async () => {
@@ -926,7 +927,7 @@ test('an explicit eight-exposure result retires without replaying its producer',
   )
 })
 
-test('default results preserve the durable history while cumulative runtime frames stay bounded', async (t) => {
+test('default results preserve the durable history while cumulative runtime frames stay within actual capacity', async (t) => {
   let prior = []
   let firstRef
   let discardedFrames = false
@@ -964,9 +965,22 @@ test('default results preserve the durable history while cumulative runtime fram
       yield finish
     }
   })
+  // 用随真实出线增长的计量验证容量边界；固定 1000 token 的替身无法触发实际容量回收。
+  f.model.limits = { contextTokens: 100000, inputTokens: 80000, outputTokens: 4000 }
+  f.model.estimate = async (request) => ({
+    tokens: Math.ceil(
+      JSON.stringify({
+        instructions: request.instructions,
+        history: request.history,
+        prompt: request.compiledPrompt,
+      }).length / 4
+    ),
+    precision: 'exact',
+    basis: 'deterministic serialized request size',
+  })
   assertDone(await collect(f))
   assert.equal(f.calls, 72)
-  assert(discardedFrames, 'accumulated transient frames must periodically yield to durable history')
+  assert(discardedFrames, 'capacity pressure must rebuild the current authoritative history')
   assert.equal((await f.programs.state()).leases.length, 0)
   assert.match((await f.programs.read(firstRef)).text, /"step":1/)
 })

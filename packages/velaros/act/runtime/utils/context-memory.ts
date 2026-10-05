@@ -7,7 +7,15 @@ import type {
   ContextVerificationReport,
 } from '@velaros-ai/context'
 import type { ContextRecord } from '@velaros-ai/context'
-import { isArray, isEmpty, isPlainObject, isString, isTrue, toNullable } from '@velaros-ai/core'
+import {
+  isArray,
+  isEmpty,
+  isNumber,
+  isPlainObject,
+  isString,
+  isTrue,
+  toNullable,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ModelHistoryMessage } from '@velaros-ai/kernel'
 import type { ScriptOutputFormat } from '@velaros-ai/script'
@@ -399,7 +407,7 @@ export function memoryPrompt(body: string, previous?: string): string {
   const outputInEarlierFrame = Boolean(
     outputPresentationInEarlierFrame && current.outputBodyIncluded && before?.outputBodyIncluded
   )
-  const runtime = {
+  const runtime: Record<string, unknown> = {
     ...current.runtime,
     mandatory: (current.runtime.mandatory as ReadonlyArray<Record<string, unknown>>).map((item) => {
       const old = (
@@ -410,6 +418,11 @@ export function memoryPrompt(body: string, previous?: string): string {
       return { ...metadata, detailInEarlierFrame: true }
     }),
   }
+  if (current.runtime.modelTool)
+    runtime.modelTool = maintenanceMaterialDisplay(
+      current.runtime.modelTool,
+      before?.runtime.modelTool
+    )
   const memoryStatus = {
     ...status,
     maintenance: maintenanceDisplay(status.maintenance, before?.status.maintenance),
@@ -501,6 +514,70 @@ export function memoryPrompt(body: string, previous?: string): string {
     '内存状态：',
     JSON.stringify(node ? node.status : memoryStatus),
   ].join('\n')
+}
+
+/** 同一父快照的整理正文复用实际保留的已交付区间；当前页身份、范围和缺口独立列全。 */
+function maintenanceMaterialDisplay(current: unknown, previous: unknown): unknown {
+  if (
+    !isPlainObject(current) ||
+    current.kind !== 'context-maintenance' ||
+    !isString(current.baseRevision) ||
+    !current.baseRevision ||
+    !isPlainObject(previous) ||
+    current.kind !== previous.kind ||
+    current.baseRevision !== previous.baseRevision
+  )
+    return current
+  const result = { ...current }
+  for (const key of ['inputs', 'recent']) {
+    const pages = current[key]
+    const earlier = previous[key]
+    if (!isArray(pages) || !isArray(earlier)) continue
+    result[key] = pages.map((page) => {
+      if (
+        !isPlainObject(page) ||
+        !isPlainObject(page.ref) ||
+        !isString(page.ref.sessionId) ||
+        !page.ref.sessionId ||
+        !isString(page.ref.id) ||
+        !page.ref.id ||
+        !isString(page.text) ||
+        !page.text ||
+        !isNumber(page.offset) ||
+        !Number.isSafeInteger(page.offset) ||
+        page.offset < 0 ||
+        !isNumber(page.totalChars) ||
+        !Number.isSafeInteger(page.totalChars) ||
+        page.offset + page.text.length > page.totalChars
+      )
+        return page
+      const { offset, text, totalChars, ...metadata } = page
+      const found = earlier.some(
+        (old) =>
+          isPlainObject(old) &&
+          same(page.ref, old.ref) &&
+          totalChars === old.totalChars &&
+          isString(old.text) &&
+          isNumber(old.offset) &&
+          Number.isSafeInteger(old.offset) &&
+          old.offset >= 0 &&
+          old.offset + old.text.length <= totalChars &&
+          offset >= old.offset &&
+          offset + text.length <= old.offset + old.text.length &&
+          old.text.slice(offset - old.offset, offset - old.offset + text.length) === text
+      )
+      if (!found) return page
+      const compact = {
+        ...metadata,
+        offset,
+        totalChars,
+        shownChars: text.length,
+        bodyInEarlierFrame: true,
+      }
+      return JSON.stringify(compact).length < JSON.stringify(page).length ? compact : page
+    })
+  }
+  return result
 }
 
 /** 整理叙事按报告身份复用已保留的帧；当前待办、失败与请求继续完整展示。 */

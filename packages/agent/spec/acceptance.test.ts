@@ -1981,6 +1981,87 @@ test('INV-48 each request continues the previous accepted one: sent frames stay 
   await service.close()
 })
 
+test.each(['available', 'capacity'] as const)(
+  'INV-48 large delivered material retains the accepted prefix until actual capacity requires rebuilding: %s',
+  async (mode) => {
+    const f = runFixture()
+    const logical: ModelHistoryMessage[] = [{ role: 'user', content: 'Read the evidence' }]
+    const evidence = 'Preserve the supplied evidence and its exact contents.\n'.repeat(160)
+    const requests: ModelTurnRequest[] = []
+    let turn = 0
+    f.options.frames = {
+      ...f.options.frames,
+      async project() {
+        return {
+          body: JSON.stringify({ evidence, turn }),
+          prompt: evidence,
+          images: [],
+          history: [...logical],
+        }
+      },
+      delta() {
+        return `Current step ${turn}; evidence is in the retained history.`
+      },
+    }
+    f.options.model.estimate = async (request) => ({
+      tokens:
+        mode === 'capacity' && turn === 1 && (request.history?.length ?? 0) > logical.length
+          ? 9500
+          : 2000,
+      precision: 'exact',
+      basis: 'bounded evidence with a capacity change',
+    })
+    f.options.model.stream = async function* (request) {
+      requests.push(request)
+      yield { type: 'text', text: 'accepted' }
+      yield { type: 'finish', reason: 'stop' }
+    }
+    f.options.protocol.open = () => ({
+      instructions: 'fixture',
+      reset() {},
+      push() {
+        return []
+      },
+      finish() {
+        return turn >= 2
+          ? { message: 'done', done: true, events: [] }
+          : { message: 'work', done: false, submission: { code: 'work' }, events: [] }
+      },
+    })
+    f.options.execution.invoke = async () => {
+      logical.push({ role: 'assistant', content: `accepted ${turn++}` })
+      logical.push({ role: 'user', content: `result ${turn}` })
+    }
+    const service = createActRunService(f.options)
+    try {
+      for await (const _event of service.submit('Read the evidence and complete two steps')) {
+        // Exercise acceptance, retention, admission, and normal completion together.
+      }
+      expect(requests).toHaveLength(3)
+      const contents = (request: ModelTurnRequest) =>
+        modelRequestEncoder.messages(request).map(({ role, content }) => ({ role, content }))
+      const first = contents(requests[0]!)
+      const second = contents(requests[1]!)
+      if (mode === 'available') {
+        expect(second.slice(0, first.length)).toEqual(first)
+        expect(requests[1]!.compiledPrompt).not.toContain(evidence)
+      } else {
+        expect(second.slice(0, first.length)).not.toEqual(first)
+        expect(requests[1]!.compiledPrompt).toContain(evidence)
+      }
+      expect(contents(requests[2]!).slice(0, second.length)).toEqual(second)
+      for (const request of requests) {
+        expect(
+          JSON.stringify(contents(request)).split(JSON.stringify(evidence).slice(1, -1))
+        ).toHaveLength(2)
+        expect((await f.options.model.estimate(request)).tokens).toBeLessThanOrEqual(9000)
+      }
+    } finally {
+      await service.close()
+    }
+  }
+)
+
 test.each(['fits', 'overflow', 'provider-reject', 'timeout', 'abort'] as const)(
   'INV-50 protocol repair preserves calibrated admission and execution boundaries: %s',
   async (mode) => {
