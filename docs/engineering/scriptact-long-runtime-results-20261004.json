@@ -5300,7 +5300,8 @@
             "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T13-01-26-01a10a70-2fdb-7281-b673-64b0332a73e8.jsonl"
           }
         }
-      }
+      },
+      "executionEnvironmentQualification": "The frozen execution venv contains installed Click 8.1.8; the src checkout requires explicit source-path selection. A misleading smoke failure from importing that installation is confirmed in click-02; exact impact on click-01 is not established. Grading uses source-first PYTHONPATH and is unchanged."
     },
     {
       "attempt": "click-02",
@@ -5436,7 +5437,8 @@
             "originalPromptInFinalRequest": true
           }
         }
-      }
+      },
+      "executionEnvironmentQualification": "The frozen execution venv contains installed Click 8.1.8; the src checkout requires explicit source-path selection. A misleading smoke failure from importing that installation is confirmed in click-02; exact impact on click-01 is not established. Grading uses source-first PYTHONPATH and is unchanged."
     }
   ],
   "transportDiagnostics": {

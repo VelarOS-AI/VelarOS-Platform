@@ -8,6 +8,7 @@ import { promisify } from 'node:util'
 
 import {
   createExecutionEnvironments,
+  bindPythonCheckout,
   pythonTaskPath,
   regressionArguments,
   restoreTaskPaths,
@@ -139,4 +140,56 @@ test('participant Python commands install only into their own environment while 
   } finally {
     await rm(root, { recursive: true, force: true })
   }
+})
+
+test('participant imports use its checkout even when a different project version is installed', async (t) => {
+  const execute = promisify(execFile)
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-source-binding-')))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const source = join(root, 'frozen')
+  await execute('python3', ['-m', 'venv', '--without-pip', source])
+  const site = (
+    await execute(join(source, 'bin/python'), [
+      '-c',
+      "import sysconfig; print(sysconfig.get_path('purelib'))",
+    ])
+  ).stdout.trim()
+  await writeFile(join(site, 'shadow_fixture.py'), "value = 'installed'\n")
+  const environments = await createExecutionEnvironments({
+    source,
+    taskRoot: root,
+    participants: ['scriptact', 'codex'],
+    task: { prompt: 'Work in the checkout.' },
+  })
+  for (const [participant, value] of Object.entries(environments)) {
+    const workspace = join(root, participant, 'project')
+    await mkdir(join(workspace, 'src'), { recursive: true })
+    await mkdir(join(workspace, 'tools'))
+    await writeFile(join(workspace, 'src/shadow_fixture.py'), `value = '${participant}'\n`)
+    const before = await execute(
+      value.python,
+      ['-c', 'import shadow_fixture; print(shadow_fixture.value)'],
+      { cwd: workspace }
+    )
+    assert.equal(before.stdout.trim(), 'installed')
+    const binding = await bindPythonCheckout(value.python, workspace)
+    assert(binding.file.startsWith(join(root, `python-${participant}`)))
+    // 换到子目录仍能看到源码，且更换工作区后不会去另一个参与者的检出中导入。
+    const after = await execute(
+      process.execPath,
+      [
+        '-e',
+        `const {execFileSync}=require('node:child_process');process.stdout.write(execFileSync(process.argv[1],['-c','import shadow_fixture; print(shadow_fixture.value); print(shadow_fixture.__file__)']));`,
+        value.python,
+      ],
+      { cwd: join(workspace, 'tools') }
+    )
+    assert.equal(after.stdout.trim(), `${participant}\n${join(workspace, 'src/shadow_fixture.py')}`)
+  }
+  const original = await execute(join(source, 'bin/python'), [
+    '-c',
+    'import shadow_fixture; print(shadow_fixture.value)',
+  ])
+  assert.equal(original.stdout.trim(), 'installed')
+  await assert.rejects(bindPythonCheckout('python3', root), /private virtual environment/u)
 })

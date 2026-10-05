@@ -127,6 +127,25 @@ export function pythonTaskPath(workspace) {
   return [join(workspace, 'src'), workspace].join(delimiter)
 }
 
+// 给独占 venv 绑定当前检出；所有入口（含 Node 派生的 Python）都优先读取本次源码。
+export async function bindPythonCheckout(python, workspace) {
+  const result = await execute(python, [
+    '-c',
+    `import json, pathlib, sys, sysconfig
+workspace = pathlib.Path(sys.argv[1]).resolve(strict=True)
+prefix = pathlib.Path(sys.prefix).resolve()
+site = pathlib.Path(sysconfig.get_path('purelib')).resolve()
+if sys.prefix == sys.base_prefix or prefix not in site.parents:
+    raise RuntimeError('Source binding requires a private virtual environment')
+paths = [str(workspace / 'src'), str(workspace)]
+target = site / '00-velaros-task-source.pth'
+target.write_text('import sys; sys.path[:0] = ' + repr(paths) + '\\n', encoding='utf-8')
+print(json.dumps(dict(file=str(target), paths=paths)))`,
+    workspace,
+  ])
+  return JSON.parse(result.stdout)
+}
+
 // 执行可安装缺少的工具；每个参与者独占环境，评分继续使用原始冻结环境。
 export async function createExecutionEnvironments({ source, taskRoot, participants, task }) {
   const environments = {}

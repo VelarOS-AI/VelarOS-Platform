@@ -26,6 +26,7 @@ import { runtimeCapabilityOptions } from './runtime-capabilities.mjs'
 import {
   pythonTaskPath,
   acceptanceArguments,
+  bindPythonCheckout,
   regressionArguments,
   restoreTaskPaths,
   taskEnvironment,
@@ -399,6 +400,8 @@ try {
     const { python, node, prompt } = manifest.executionEnvironments?.[participant] ?? manifest
     const workspace = join(manifest.taskRoot, participant, environment.project)
     const baseline = await copySource(workspace)
+    const sourceBinding = python ? await bindPythonCheckout(python, workspace) : null
+    if (sourceBinding) await snapshot(join(output, 'source-binding.json'), sourceBinding)
     assert.deepEqual(
       node
         ? await nodeDependencyState(workspace, node)
@@ -451,6 +454,7 @@ try {
     await snapshot(join(output, 'execution-environment.json'), {
       python,
       node,
+      sourceBinding,
       initialDependencies: manifest.dependencyLock,
       ...installed,
     })
