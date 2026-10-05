@@ -21,7 +21,7 @@ export interface ModelInputEstimatorApi {
 export class ModelInputEstimator implements ModelInputEstimatorApi {
   private readonly encoding?: ModelTextEncoding
   private counter?: Promise<(text: string) => number>
-  private overheads: readonly number[] = []
+  private samples: ReadonlyArray<{ text: number; input: number }> = []
   private generation = 0
 
   public constructor(model: LanguageModel) {
@@ -45,18 +45,17 @@ export class ModelInputEstimator implements ModelInputEstimatorApi {
       )
     const counter = await this.counter
     let textTokens: Optional<number>
-    const calibrated = Boolean(counter && this.overheads.length && generation === this.generation)
-    const overhead = Math.max(0, ...this.overheads)
+    const calibrated = Boolean(counter && this.samples.length && generation === this.generation)
     const estimate = estimateRequestInput(request, restored, (text, bytes) => {
       textTokens = counter?.(text)
       return calibrated
-        ? Math.ceil((textTokens! + overhead) * ModelTuning.estimate.calibrationMargin)
+        ? Math.ceil(this.textBound(textTokens!) * ModelTuning.estimate.calibrationMargin)
         : bytes
     })
     if (calibrated)
       Object.assign(estimate, {
         calibration: 'provider-usage',
-        basis: `文本按 ${this.encoding} 计量，同一路由 ${this.overheads.length} 份实测输入校准额外开销并保留余量；图片与不透明状态独立预留，非供应商精确计数`,
+        basis: `文本按 ${this.encoding} 计量，同一路由 ${this.samples.length} 份实测输入校准开销上界；已见长度内比较增长与固定开销并保留余量，图片与不透明状态独立预留，非供应商精确计数`,
       })
     return { estimate, textTokens, generation }
   }
@@ -70,14 +69,37 @@ export class ModelInputEstimator implements ModelInputEstimatorApi {
       inputTokens <= 0
     )
       return
-    // 不透明状态可能只被部分计入，不从真实输入中扣除；额外开销保留为上界。
-    this.overheads = [...this.overheads, Math.max(0, inputTokens - sample.textTokens)].slice(
+    // 不透明状态可能只被部分计入，不从真实输入中扣除；两种拟合都覆盖完整实测输入。
+    this.samples = [...this.samples, { text: sample.textTokens, input: inputTokens }].slice(
       -ModelTuning.estimate.calibrationSamples
     )
   }
 
   public reset(): void {
     this.generation++
-    this.overheads = []
+    this.samples = []
+  }
+
+  /** 已见长度范围内比较两种覆盖全部样本的上界；范围外沿用固定开销，不外推增长趋势。 */
+  private textBound(text: number): number {
+    const samples = this.samples
+    const fixed = text + Math.max(0, ...samples.map((sample) => sample.input - sample.text))
+    if (
+      text < Math.min(...samples.map((sample) => sample.text)) ||
+      text > Math.max(...samples.map((sample) => sample.text))
+    )
+      return fixed
+    const textMean = samples.reduce((sum, sample) => sum + sample.text, 0) / samples.length
+    const inputMean = samples.reduce((sum, sample) => sum + sample.input, 0) / samples.length
+    const variance = samples.reduce((sum, sample) => sum + (sample.text - textMean) ** 2, 0)
+    if (!variance) return fixed
+    const slope =
+      samples.reduce(
+        (sum, sample) => sum + (sample.text - textMean) * (sample.input - inputMean),
+        0
+      ) / variance
+    if (!(slope > 0) || !Number.isFinite(slope)) return fixed
+    const overhead = Math.max(0, ...samples.map((sample) => sample.input - slope * sample.text))
+    return Math.min(fixed, Math.max(text, slope * text + overhead))
   }
 }

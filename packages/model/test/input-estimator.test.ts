@@ -105,6 +105,47 @@ test('a new child request reuses actual route overhead and admits complete sourc
   expect(JSON.stringify(child)).toBe(snapshot)
 })
 
+test('route calibration bounds input growth without charging every request the largest observed overhead', async () => {
+  const f = fixture()
+  const actual = (value: ModelTurnRequest) => Math.ceil(f.textTokens(value) * 1.5 + 1200)
+  const samples = [200, 2000, 800].map((size) => request('const item = 1;\n'.repeat(size)))
+  for (const value of samples) await f.send(value, actual(value))
+  const target = request('const item = 1;\n'.repeat(1200), 'independent-child')
+  const maximumOverhead = Math.max(...samples.map((value) => actual(value) - f.textTokens(value)))
+  const snapshot = JSON.stringify(target)
+  const estimate = await f.driver.estimate(target)
+  expect(estimate.tokens).toBeGreaterThanOrEqual(actual(target))
+  expect(estimate.tokens).toBeLessThan(f.textTokens(target) + maximumOverhead)
+  for (const value of samples)
+    expect((await f.driver.estimate(value)).tokens).toBeGreaterThanOrEqual(actual(value))
+  expect(JSON.stringify(target)).toBe(snapshot)
+})
+
+test('growth calibration keeps the fixed upper bound outside observed input sizes', async () => {
+  const f = fixture()
+  const samples = [200, 900].map((size) => request('body '.repeat(size)))
+  const usage = samples.map((value) => Math.ceil(f.textTokens(value) * 1.4 + 600))
+  for (const [index, value] of samples.entries()) await f.send(value, usage[index]!)
+  const maximumOverhead = Math.max(
+    ...samples.map((value, index) => usage[index]! - f.textTokens(value))
+  )
+  for (const size of [10, 1800]) {
+    const value = request('body '.repeat(size))
+    expect((await f.driver.estimate(value)).tokens).toBeGreaterThanOrEqual(
+      f.textTokens(value) + maximumOverhead
+    )
+  }
+})
+
+test('unusual intermediate samples remain covered by the calibrated envelope', async () => {
+  const f = fixture()
+  const samples = [100, 1600, 500, 950].map((size) => request('render(value);\n'.repeat(size)))
+  const usage = samples.map((value, index) => f.textTokens(value) + (index === 2 ? 2400 : 400))
+  for (const [index, value] of samples.entries()) await f.send(value, usage[index]!)
+  for (const [index, value] of samples.entries())
+    expect((await f.driver.estimate(value)).tokens).toBeGreaterThanOrEqual(usage[index]!)
+})
+
 test('provider overflow resets learned route estimates and missing usage never seeds them', async () => {
   const f = fixture()
   const value = request('Investigate and report only verified facts. '.repeat(200))
