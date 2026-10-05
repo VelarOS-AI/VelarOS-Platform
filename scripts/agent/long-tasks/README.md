@@ -18,6 +18,10 @@ Node 项目声明 `runtime: "node"`、`regressionRunner: "mocha-json"` 或 `"jes
 
 `environment.processEnvironment` 可显式冻结终端颜色和区域变量，值为字符串或 null（清除该变量），准备与执行控制器在启动参与者及评分进程前应用相同设置。可配置 NO_COLOR、FORCE_COLOR、CLICOLOR、CLICOLOR_FORCE、TERM、TZ、LANG 与 LC_ALL；省略时保留原环境。它用于记录项目基线所需条件，不能在付费之后调整以放行失败。
 
+Node 任务还可冻结相对各自工作区的 `NODE_PATH`，用于原项目的模块夹具，路径不接受绝对位置或父目录跳转。Node 回归入口同时支持普通脚本和没有扩展名的 Node CLI。
+
+需要构建的 Node 项目可声明 `environment.build: {entry, args}`：entry 指向冻结 node_modules 中的 JavaScript 构建入口，args 按原样作为参数交给同一个 Node 可执行文件。基线、参与者初始副本和恢复原测试与依赖后的评分副本分别构建，日志单独保留。初始构建失败时停止该参与者的模型派发；评分构建失败时完整验收仍保留，但最终交付判为失败。省略 build 的任务保持原有步骤。
+
 Python 参与者启动前，私有 venv 的 `.pth` 绑定其工作区的 `src` 与根目录，普通 Python、命令入口和 Node 派生的 Python 都优先使用当前源码。绑定只写入独占环境，拒绝系统 Python，路径记录在 `source-binding.json`。冻结评分环境继续由每次验收的 `PYTHONPATH` 指向对应评分副本。
 
 Mocha 原始 stdout 可同时包含测试诊断和一个完整 JSON reporter 文档。解析器按 JSON 字符串与括号边界提取该文档，再核对计数和原测试清单；多个报告、截断报告、缺失报告和不一致统计保持失败。原始 stdout/stderr 始终保存，诊断文本不充当测试结果。

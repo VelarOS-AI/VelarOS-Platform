@@ -11,6 +11,7 @@ import { promisify } from 'node:util'
 import { toTrajectory } from '../harbor/atif.mjs'
 import { verifyCampaignDriver } from './model-driver.mjs'
 import {
+  buildNodeProject,
   copyNodeDependencies,
   nodeRegressionReport,
   nodeDependencyState,
@@ -82,6 +83,11 @@ const env = {
   PYTHONDONTWRITEBYTECODE: '1',
 }
 const baselineReport = join(output, 'baseline.xml')
+const baselineBuild = await buildNodeProject(environment, baselineSource, node, env)
+if (baselineBuild) {
+  await writeFile(join(output, 'baseline-build.json'), JSON.stringify(baselineBuild, null, 2))
+  assert.equal(baselineBuild.exitCode, 0, 'The original project build must pass before a paid run')
+}
 let baselineRegression
 try {
   const result = await execute(executable, regressionArguments(environment, baselineReport), {

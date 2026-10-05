@@ -178,6 +178,7 @@ async function main() {
         }))
     results[participant] = {
       solve,
+      ...(grade.build ? { build: grade.build } : {}),
       accounting: summarizeRequests(
         budget.requests.filter((request) => request.identity.participantId === participant)
       ),

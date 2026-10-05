@@ -999,3 +999,11 @@ Node 当前状态现将这部分重复目标表示为 `objectiveInInput`，包�
 剩余失败是 `error.conflictingOptions` 收到 `option '--left'`、`option '--right'` 英文包装，而任务要求原始 flags `--left`、`--right`。同一完成产物的独立只读调用再次复现，既有错误码保持 `commander.conflictingOption`；评分器及产物均未修改，见 `scriptact-conflict-review.json`。57/59 次有用量，输入 1283549、输出 17641、缓存 350080（27.27%），已知参考小计 $4.226728；两次缺用量，完整费用未知，见 `scriptact-partial-diagnostic.json`。
 
 另将已结束的三轮真实网关请求区间取并集，与执行时长对齐，见 `context-diagnostics/gateway-duration-attribution.json`。Mocha 目标模式的 2572.634 秒中有 2493.247 秒位于网关请求区间，约 96.91%；其 7 次缺用量请求累计约 416.34 秒，包含连接重置和 503。网关区间包含供应商处理、传输和排队，区间之外还包含工具执行与调度，因此不能把它们分别直接称为模型计算或 Runtime 开销。原请求与完整费用未知的结论保持；未据此修改重试与超时策略。
+
+## Node 项目构建与夹具路径
+
+为独立模板任务准备 Nunjucks 3.2.4，源提交 `86a77f49da4779d55414d8337e1a4d7ec7582da5`，依赖在独占源码目录安装并跳过安装脚本。原始 Node 测试包含依赖转译产物的 CLI 检查；完成项目原有 Babel 构建并设置 `NODE_PATH=tests/test-node-pkgs` 后，417 passed、1 pending。缺少构建时的两项 CLI 失败、缺少模块路径时的三项 loader 失败分别保留。这些是零模型执行环境诊断，尚无该项目的 Agent 运行或功能评分。
+
+评测新增可选 Node build 声明，冻结依赖中的脚本入口和参数在基线、参与者初始副本、恢复原测试与依赖后的评分副本分别执行。参数直接传给 Node，构建输出单独存档；初始构建失败停止付费派发，评分构建失败始终阻止最终通过，验收与回归原始输出仍保留。Node 任务可显式配置相对工作区的 NODE_PATH，回归入口支持无扩展名的标准 Node CLI。原配置缺省行为不变，产品候选和当前运行的控制器不变。
+
+真实子进程回归核对源码变化后重新生成产物、参数保留字面值、工作区夹具解析及非零构建失败；非法入口、父目录跳转、Python 配置混用均拒绝。长任务评测 33 项通过。用正式 helper 在 Nunjucks 再次执行原构建与全部原测试，417 passed、1 pending，清单共 418 项；首个 helper 控制将旧版 Mocha 的无扩展名入口误写为 mocha.js，失败原记录保持，修正后的入口经过同一配置校验。数据在 `context-diagnostics/nunjucks-formal-build-control.json`、`nunjucks-formal-build-control02.json`。本差量只扩展评测，不新增公开模型操作。

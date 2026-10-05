@@ -16,6 +16,7 @@ import { toTrajectory } from '../harbor/atif.mjs'
 import { runCodex } from '../native-desktop/codex.mjs'
 import { campaignModelDriver } from './model-driver.mjs'
 import {
+  buildNodeProject,
   copyNodeDependencies,
   nodeRegressionReport,
   nodeDependencyState,
@@ -109,7 +110,7 @@ const activity = async (value) => {
   console.log(JSON.stringify(event))
 }
 
-async function copySource(destination) {
+async function copySource(destination, output) {
   await cp(manifest.source, destination, {
     recursive: true,
     filter: (path) =>
@@ -121,6 +122,11 @@ async function copySource(destination) {
       ].includes(path.split('/').at(-1)),
   })
   if (environment.runtime === 'node') await copyNodeDependencies(manifest.source, destination)
+  const build = await buildNodeProject(environment, destination, manifest.node)
+  if (build) {
+    await snapshot(join(output, 'initial-build.json'), build)
+    assert.equal(build.exitCode, 0, 'The frozen project build must pass before a participant runs')
+  }
   await execute('git', ['init', '-q'], { cwd: destination })
   await execute('git', ['add', '.'], { cwd: destination })
   await execute(
@@ -177,6 +183,8 @@ async function grade(workspace, output) {
   })
   await restoreTaskPaths(manifest.source, judge, environment.preserve)
   if (environment.runtime === 'node') await copyNodeDependencies(manifest.source, judge)
+  const build = await buildNodeProject(environment, judge, manifest.node)
+  if (build) await snapshot(join(output, 'build.json'), build)
   const acceptance = await check(
     manifest.node ?? manifest.python,
     acceptanceArguments(environment, manifest.grader),
@@ -230,11 +238,17 @@ async function grade(workspace, output) {
         acceptanceSummary.errors === 0 &&
         acceptanceSummary.failed === 0))
   return {
+    ...(build ? { build: { exitCode: build.exitCode, output: 'build.json' } } : {}),
     acceptance,
     regression,
-    passed: acceptancePassed && (regression.verdict?.suitePassed ?? regression.exitCode === 0),
+    passed:
+      (!build || build.exitCode === 0) &&
+      acceptancePassed &&
+      (regression.verdict?.suitePassed ?? regression.exitCode === 0),
     featureCompleteWithoutNewRegressions:
-      acceptancePassed && (regression.verdict?.baselineCompatible ?? regression.exitCode === 0),
+      (!build || build.exitCode === 0) &&
+      acceptancePassed &&
+      (regression.verdict?.baselineCompatible ?? regression.exitCode === 0),
     ...(await workspaceChanges(workspace, baseline?.commit)),
   }
 }
@@ -417,7 +431,7 @@ try {
     await mkdir(output)
     const { python, node, prompt } = manifest.executionEnvironments?.[participant] ?? manifest
     const workspace = join(manifest.taskRoot, participant, environment.project)
-    const baseline = await copySource(workspace)
+    const baseline = await copySource(workspace, output)
     const sourceBinding = python ? await bindPythonCheckout(python, workspace) : null
     if (sourceBinding) await snapshot(join(output, 'source-binding.json'), sourceBinding)
     assert.deepEqual(

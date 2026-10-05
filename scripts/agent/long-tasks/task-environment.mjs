@@ -49,11 +49,26 @@ export function taskEnvironment(task) {
   }
   if (node) {
     assert.equal(python, undefined)
-    assert.match(value.regressionEntry, /^[a-zA-Z0-9][a-zA-Z0-9_-]*(?:\/[a-zA-Z0-9_-]+)*\.js$/u)
+    assert.match(value.regressionEntry, /^[a-zA-Z0-9][a-zA-Z0-9_@.-]*(?:\/[a-zA-Z0-9_@.-]+)*$/u)
+    assert(!value.regressionEntry.split('/').some((part) => ['.', '..', '.git'].includes(part)))
     assert(
       !preserve.some((path) => path.split('/')[0] === 'node_modules'),
       'Node dependencies have a separate frozen restoration'
     )
+  }
+  if (value.build !== undefined) {
+    assert(node, 'Project builds are declared for Node tasks')
+    assert(value.build && typeof value.build === 'object' && !Array.isArray(value.build))
+    assert(Object.keys(value.build).every((name) => ['entry', 'args'].includes(name)))
+    assert.equal(typeof value.build.entry, 'string')
+    assert.match(
+      value.build.entry,
+      /^node_modules\/[a-zA-Z0-9_@.-]+(?:\/[a-zA-Z0-9_.-]+)*\.(?:js|cjs|mjs)$/u
+    )
+    assert(!value.build.entry.split('/').some((part) => ['.', '..'].includes(part)))
+    assert(Array.isArray(value.build.args))
+    assert(value.build.args.every((arg) => typeof arg === 'string' && !arg.includes('\0')))
+    result.build = { entry: value.build.entry, args: [...value.build.args] }
   }
   if (value.regressionPattern !== undefined) {
     assert.equal(regressionRunner, 'unittest')
@@ -74,9 +89,15 @@ export function taskEnvironment(task) {
           'TZ',
           'LANG',
           'LC_ALL',
+          ...(node ? ['NODE_PATH'] : []),
         ].includes(name)
       )
       assert(setting === null || typeof setting === 'string')
+      if (name === 'NODE_PATH' && setting !== null)
+        for (const path of setting.split(delimiter)) {
+          assert.match(path, /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/u)
+          assert(!path.split('/').some((part) => ['.', '..'].includes(part)))
+        }
     }
     result.processEnvironment = { ...value.processEnvironment }
   }
@@ -87,7 +108,7 @@ export function taskEnvironment(task) {
   return result
 }
 
-// 只应用任务显式冻结的终端与区域设置，参与者和评分进程继承相同环境。
+// 只应用任务显式冻结的环境；Node 夹具模块路径相对各自工作区，参与者和评分配置相同。
 export function applyTaskEnvironment(environment, target = process.env) {
   for (const [name, setting] of Object.entries(environment.processEnvironment ?? {})) {
     if (setting === null) delete target[name]

@@ -8,6 +8,28 @@ import { promisify } from 'node:util'
 
 const execute = promisify(execFile)
 
+// 基线、参与者初始副本与评分副本使用同一冻结构建入口，产物始终从对应源码重建。
+export async function buildNodeProject(environment, workspace, node, env = process.env) {
+  if (!environment.build) return null
+  try {
+    const result = await execute(node, [environment.build.entry, ...environment.build.args], {
+      cwd: workspace,
+      env,
+      timeout: 180000,
+      maxBuffer: 8_000_000,
+    })
+    return { exitCode: 0, stdout: result.stdout, stderr: result.stderr, timedOut: false }
+  } catch (error) {
+    return {
+      exitCode: error.code ?? null,
+      stdout: error.stdout ?? '',
+      stderr: error.stderr ?? '',
+      error: String(error),
+      timedOut: error.killed ?? false,
+    }
+  }
+}
+
 // 真实路径与工作区别名必须指向同一份用例清单；未落盘的报告夹具按字面路径处理。
 function regressionFile(workspace, file) {
   const canonical = (path) => {

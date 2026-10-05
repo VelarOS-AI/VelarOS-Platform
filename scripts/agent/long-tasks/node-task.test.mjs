@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import {
+  buildNodeProject,
   copyNodeDependencies,
   jestReport,
   mochaReport,
@@ -31,6 +32,86 @@ const config = {
   preserve: ['test', 'package.json', 'package-lock.json'],
   baselineFailure: 'output must use stream',
 }
+
+test('Node project builds regenerate current sources with literal arguments and report compiler failures', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'node-build-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(join(root, 'node_modules/frozen-builder'), { recursive: true })
+  await mkdir(join(root, 'fixtures/fixture-pkg'), { recursive: true })
+  await writeFile(join(root, 'fixtures/fixture-pkg/index.js'), "module.exports = 'fixture-module'")
+  await writeFile(
+    join(root, 'node_modules/frozen-builder/build.cjs'),
+    `
+    const fs = require('node:fs');
+    const [source, target, literal] = process.argv.slice(2);
+    const body = fs.readFileSync(source, 'utf8');
+    if (body === 'FAIL') { console.error('compiler rejected source'); process.exit(7); }
+    fs.writeFileSync(target, body.toUpperCase());
+    console.log(JSON.stringify({ fixture: require('fixture-pkg'), literal }));
+  `
+  )
+  const environment = taskEnvironment({
+    environment: {
+      ...config,
+      build: {
+        entry: 'node_modules/frozen-builder/build.cjs',
+        args: ['source.txt', 'generated.txt', '$(literal) `text`'],
+      },
+      processEnvironment: { NODE_PATH: 'fixtures' },
+    },
+  })
+  const env = { ...process.env }
+  applyTaskEnvironment(environment, env)
+  for (const source of ['original source', 'updated source']) {
+    await writeFile(join(root, 'source.txt'), source)
+    const result = await buildNodeProject(environment, root, process.execPath, env)
+    assert.equal(result.exitCode, 0, result.stderr)
+    assert.equal(await readFile(join(root, 'generated.txt'), 'utf8'), source.toUpperCase())
+    assert.deepEqual(JSON.parse(result.stdout), {
+      fixture: 'fixture-module',
+      literal: '$(literal) `text`',
+    })
+  }
+  await writeFile(join(root, 'source.txt'), 'FAIL')
+  const failure = await buildNodeProject(environment, root, process.execPath, env)
+  assert.equal(failure.exitCode, 7)
+  assert.match(failure.stderr, /compiler rejected source/)
+  assert.equal(failure.timedOut, false)
+  assert.equal(await buildNodeProject(config, 'absent-workspace', 'unavailable-node'), null)
+})
+
+test('Node builds and fixture module paths are explicitly frozen and stay within their environment', () => {
+  for (const build of [
+    null,
+    [],
+    { entry: '../build.js', args: [] },
+    { entry: 'scripts/build.js', args: [] },
+    { entry: 'node_modules/../build.js', args: [] },
+    { entry: 'node_modules/build.js', args: '--eval' },
+    { entry: 'node_modules/build.js', args: [null] },
+    { entry: 'node_modules/build.js', args: ['nul\0'] },
+  ])
+    assert.throws(() => taskEnvironment({ environment: { ...config, build } }))
+  for (const NODE_PATH of ['', '.', '../outside', '/absolute', 'fixtures/../outside'])
+    assert.throws(() =>
+      taskEnvironment({ environment: { ...config, processEnvironment: { NODE_PATH } } })
+    )
+  const python = {
+    ...config,
+    runtime: undefined,
+    python: 'python-env',
+    regressionRunner: 'pytest',
+    acceptance: 'test_example.py',
+  }
+  assert.throws(() =>
+    taskEnvironment({ environment: { ...python, processEnvironment: { NODE_PATH: 'fixtures' } } })
+  )
+  assert.throws(() =>
+    taskEnvironment({
+      environment: { ...python, build: { entry: 'node_modules/build.js', args: [] } },
+    })
+  )
+})
 
 test('report inventories identify the same tests through physical and aliased workspace paths', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'regression-paths-'))
@@ -92,6 +173,10 @@ test('Node task selects native Node commands and leaves Python declarations unch
     'json',
     'test/**/*.spec.js',
   ])
+  const extensionless = taskEnvironment({
+    environment: { ...config, regressionEntry: 'node_modules/mocha/bin/mocha' },
+  })
+  assert.equal(regressionArguments(extensionless)[0], 'node_modules/mocha/bin/mocha')
   assert.deepEqual(acceptanceArguments(environment, '/frozen/test.mjs'), [
     '--test',
     '--test-reporter=tap',
