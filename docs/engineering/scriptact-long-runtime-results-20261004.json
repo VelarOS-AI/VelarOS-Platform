@@ -8231,6 +8231,2770 @@
           ]
         }
       }
+    },
+    {
+      "attempt": "shelljs-01",
+      "schema": 1,
+      "at": "2026-10-05T16:43:11.312Z",
+      "taskId": "shelljs-independent-working-directory-instances",
+      "scriptactSessionId": "scriptact-3f552c2e-116c-480e-b9e9-6002a9fdac10",
+      "candidateId": "candidate-v35-b46944da061c",
+      "candidateSourceCommit": "eafc4e073332a12e1b8e20f85e2d4bd93e50146a",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "scriptactTaskMode": "goal",
+      "split": "holdout",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "cases": [
+          {
+            "id": "ava::cat › no paths given::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cat › nonexistent file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cat › directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cat › simple::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cat › multiple files::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cat › multiple files, array syntax::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cat › glob::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cat › without EOF::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cat › empty::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cat › simple with numbers::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cat › simple twelve lines file with numbers::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cat › multiple with numbers::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cat › simple numbers without EOF::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cat › multiple numbers without EOF::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cd › nonexistent directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cd › file not dir::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cd › no previous dir::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cd › relative path::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cd › absolute path::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cd › previous directory (-)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cd › cd + other commands::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cd › Tilde expansion::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cd › Goes to home directory if no arguments are passed::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › invalid permissions::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › Basic usage with octal codes::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › symbolic mode::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › symbolic mode, without group::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › Test setuid::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › Test setgid::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › Test sticky bit::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › Test directories::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › Test recursion::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › Test symbolic links w/ recursion - WARNING: *nix only::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › Test combinations::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › multiple symbolic modes::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › multiple symbolic modes #2::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › multiple symbolic modes #3::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › u+rw::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › u+wx::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › Multiple symbolic modes at once::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › u+rw,g+wx::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › u-x,g+rw::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › a-rwx,u+rw::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › Numeric modes::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::chmod › Make sure chmod succeeds for a variety of octal codes::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › cmd exits gracefully if we cannot find the execPath::1",
+            "outcomes": [
+              {
+                "kind": "skipped",
+                "message": "cmd › cmd exits gracefully if we cannot find the execPath",
+                "text": ""
+              }
+            ]
+          },
+          {
+            "id": "ava::cmd › no callback::1",
+            "outcomes": [
+              {
+                "kind": "skipped",
+                "message": "cmd › no callback",
+                "text": ""
+              }
+            ]
+          },
+          {
+            "id": "ava::cmd › callback as 2nd argument::1",
+            "outcomes": [
+              {
+                "kind": "skipped",
+                "message": "cmd › callback as 2nd argument",
+                "text": ""
+              }
+            ]
+          },
+          {
+            "id": "ava::cmd › callback as end argument::1",
+            "outcomes": [
+              {
+                "kind": "skipped",
+                "message": "cmd › callback as end argument",
+                "text": ""
+              }
+            ]
+          },
+          {
+            "id": "ava::cmd › callback as 3rd argument (silent:true)::1",
+            "outcomes": [
+              {
+                "kind": "skipped",
+                "message": "cmd › callback as 3rd argument (silent:true)",
+                "text": ""
+              }
+            ]
+          },
+          {
+            "id": "ava::cmd › command that fails::1",
+            "outcomes": [
+              {
+                "kind": "skipped",
+                "message": "cmd › command that fails",
+                "text": ""
+              }
+            ]
+          },
+          {
+            "id": "ava::cmd › no args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › unknown command::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › config.fatal and unknown command::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › check if stdout goes to output::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › check if stderr goes to output::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › check if stdout + stderr go to output::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › check exit code::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › interaction with cd::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › no need to escape quotes::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › commands can contain newlines::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › does not expand shell-style variables::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › does not expand windows-style variables::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › caret character is passed through to the command::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › cannot inject multiple commands::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › supports globbing by default::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › globbing respects config.noglob::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › set cwd::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › command fails silently with non-zero status::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › set maxBuffer (very small)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › set timeout option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › check process.env works::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cmd › cmd returns a ShellString::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › too few args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › should be a list::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › parseOptions (invalid option in options object)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › parseOptions (without a hyphen in the string)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › parseOptions (opt is not a string/object)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › parseOptions (map is not an object)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › parseOptions (errorOptions is not an object)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › parseOptions (unrecognized string option)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › parseOptions (unrecognized option in Object)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › parseOptions (invalid type)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › convertErrorOutput: no args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › convertErrorOutput: input must be a vanilla string::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › convertErrorOutput: nothing to convert::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › convertErrorOutput: does not change forward slash::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › convertErrorOutput: changes backslashes to forward slashes::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › single file, array syntax::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › multiple file, glob syntax, * for file name::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › multiple file, glob syntax, * for directory name::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › multiple file, glob syntax, ** for directory name::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › broken links still expand::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › empty array::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › empty string::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › non-string::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › common.buffer returns buffer::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › common.buffer with explicit length::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › common.buffer with different config.bufLength::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › common.parseOptions (normal case)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › common.parseOptions (with mutually-negating options)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › common.parseOptions (the last of the conflicting options should hold)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › common.parseOptions using an object to hold options::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › common.parseOptions throws when passed a string not starting with \"-\"::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › common.parseOptions allows long options::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › common.parseOptions allows long options with values::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › common.parseOptions throws for unknown long option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › common.parseOptions with -- argument::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › Some basic tests on the ShellString type::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › Commands that fail will still output error messages to stderr::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › execPath value makes sense::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › Changing shell.config.execPath does not modify process::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::common › CommandError is a subclass of Error::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.globOptions expands \"?\" in folder path by default::1",
+            "outcomes": [
+              {
+                "kind": "skipped",
+                "message": "config › config.globOptions expands \"?\" in folder path by default",
+                "text": ""
+              }
+            ]
+          },
+          {
+            "id": "ava::config › config.silent is false by default::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.silent can be set to true::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.silent can be set to false::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.fatal = false::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.fatal = true::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.fatal = false with an exec() failure returns, does not throw::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.fatal = true with an exec() failure includes a .code on the Error::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.globOptions expands directories by default::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.globOptions handles non-wildcards by default::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.globOptions expands \"?\" symbol by default::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.globOptions expands \"*\" in multiple path segments by default::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.globOptions respects cwd::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.globOptions respects dot::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.globOptions respects ignore::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.globOptions respects absolute::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.globOptions respects nodir::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.globOptions respects mark::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.globOptions respects nobrace::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.globOptions respects noglobstar::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.globOptions respects noext::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.globOptions respects nocase::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::config › config.globOptions respects matchBase::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › no args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › no destination::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › only an option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › invalid option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › invalid option #2::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › source does not exist::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › multiple sources do not exist::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › too many sources::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › too many sources #2::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › empty string source::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › dest already exists::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › -nR does not overwrite an existing file at the destination::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › -n does not overwrite an existing file if the destination is a directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › -f by default::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › -f (explicitly)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › simple - to dir::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › simple - to file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › simple - file list::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › simple - file list, array syntax::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › -f option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › glob::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › wildcard::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › recursive, with regular files::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › omit directory if missing recursive flag::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › recursive, nothing exists::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › recursive, nothing exists, source ends in \"/\"::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › recursive, globbing regular files with extension::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › recursive, copying one regular file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › recursive, everything exists, no force flag::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › -R implies to not follow links::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › Missing -R implies -L::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › recursive, everything exists, with force flag::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › recursive, creates dest dir since it's only one level deep::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › recursive, does *not* create dest dir since it's too deep::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › recursive, copies entire directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › recursive, with trailing slash, does the exact same::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › preserve mode bits by default for file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › Make sure hidden files are copied recursively::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › no-recursive will copy regular files only::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › -R implies -P::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › -Ru respects the -u flag recursively (don't update newer file)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › -Ru respects the -u flag recursively (update older file)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › using -P explicitly works::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › using -PR on a link to a folder does not follow the link::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › -L overrides -P for copying directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › Recursive, copies entire directory with no symlinks and -L option does not cause change in behavior::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › -u flag won't overwrite newer files::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › -u flag does overwrite older files::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › -u flag works even if it's not overwriting a file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › -u flag works correctly recursively::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › using -R on a link to a folder *does* follow the link::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › Without -R, -L is implied::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › -L explicitly works::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › using -LR does not imply -P::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › using -LR also works recursively on directories containing links::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › -L always overrides a -P::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › Make sure max depth does not limit shallow directory structures::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › Test max depth.::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › cp -L follows symlinks::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › Test with recursive option and symlinks.::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › recursive, with a non-normalized path::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › copy file to same path::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › copy file to same directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › copy multiple files to same location::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › should not overwrite recently created files::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › should not overwrite recently created files (in recursive Mode)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › should not overwrite recently created files (not give error no-force mode)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › cp -R should be able to copy a readonly src. issue #98; (Non window platforms only)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › cp -p should preserve mode, ownership, and timestamp (regular file)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › cp -p should preserve mode, ownership, and timestamp (directory)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::cp › cp -p should preserve mode, ownership, and timestamp (symlink)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::dirs › no arguments::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::dirs › Single items::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::dirs › Clearing items::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::echo › simple test with defaults::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::echo › allow arguments to begin with a hyphen::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::echo › using null as an explicit argument doesn't crash the function::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::echo › -e option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::echo › piping to a file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::echo › -n option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::echo › -ne option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::echo › -en option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::echo › -en option with escaped characters::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::echo › piping to a file with -n::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::echo › stderr with unrecognized options is empty::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::env › existing variables::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::env › variables are exported::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › no args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › unknown command::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › config.fatal and unknown command::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › options.fatal = true and unknown command::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › exec exits gracefully if we cannot find the execPath::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › exec-child.js should not be imported::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › check if stdout goes to output::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › check if stderr goes to output::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › check if stdout + stderr go to output::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › check if stdout + stderr should not be printed to console if silent::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › check exit code::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › interaction with cd::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › check quotes escaping::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › set cwd::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › set maxBuffer (very small)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › set timeout option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › check process.env works::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › set shell option (TODO: add tests for Windows)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › exec returns a ShellString::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › encoding option works::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › options.fatal = false and unknown command::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › no callback::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › callback as 2nd argument::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › callback as end argument::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › callback as 3rd argument (silent:true)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › command that fails::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exec › encoding option works with async::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exit › exit with success status code::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exit › exit without explicit code should be success::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exit › exit with failure status code::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::exit › exit correctly sets the shell.errorCode()::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::find › no args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::find › current path::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::find › simple path::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::find › multiple paths - comma::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::find › multiple paths - array::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::find › nonexistent path::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::find › -L flag, folder is symlinked::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::global › env is exported::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::global › cat::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::global › rm::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::global › String.prototype is modified for global require::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › no args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › too few args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › no such file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › if at least one file is missing, this should be an error::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › multiple files, one doesn't exist, one doesn't match::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -A option, negative value::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -B option, negative value::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -C option, negative value::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › basic::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -v option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › matches one line::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › multiple files::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › multiple files, array syntax::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › multiple files, glob syntax, * for file name::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › multiple files, glob syntax, * for directory name::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › multiple files, double-star glob::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › one file, * in regex::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › one file, * in string-regex::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › one file, * in regex, make sure * is not globbed::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › one file, * in string-regex, make sure * is not globbed::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › one file, pattern doesn't match::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -l option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -i option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -n option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › the pattern looks like an option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -B option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -B option, -n option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -A option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -A option, -B option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -A option, -B option, -n option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -C option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -C option, small value::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -C option, large value::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -C option, add line separators::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::grep › -C option, -n option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::head › no args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::head › file does not exist::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::head › directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::head › simple::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::head › multiple files::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::head › multiple files, array syntax::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::head › reading more lines than are in the file (no trailing newline)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::head › reading more lines than are in the file (with trailing newline)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::head › Globbed file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::head › With '-n <num>' option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::head › With '{-n: <num>}' option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::head › negative values (-num) are the same as (numLines - num)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::head › right-hand side of a pipe::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ln › no args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ln › too few args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ln › only an option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ln › destination already exists::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ln › non-existent source::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ln › non-existent source (-sf)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ln › non-existent source (-f)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ln › basic usage::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ln › With glob::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ln › -s option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ln › Symbolic link directory test::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ln › To current directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ln › -f option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ln › -sf option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ln › Abspath regression::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ln › Relative regression::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › no such file or dir::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › it's ok to use no arguments::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › root directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › no args provides the correct result::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › simple arg::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › simple arg, with a trailing slash::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › simple arg, a file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › no args, -A option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › no args, deprecated -a option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › wildcard, very simple::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › wildcard, simple::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › wildcard, simple, with -d::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › wildcard, hidden only::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › wildcard, mid-file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › wildcard, mid-file with dot (should escape dot for regex)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › one file that exists, one that doesn't::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › one file that exists, one that doesn't (other order)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › wildcard, should not do partial matches::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › wildcard, all files with extension::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › wildcard, with additional path::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › wildcard for both paths::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › wildcard for both paths, array::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › recursive, no path::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › recursive, path given::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › -RA flag, path given::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › -RA flag, symlinks are not followed::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › -RAL flag, follows symlinks::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › -L flag, path is symlink::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › follow links to directories by default::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › -Rd works like -d::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › directory option, single arg::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › directory option, single arg with trailing '/'::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › directory option, multiple args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › directory option, globbed arg::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › long option, single file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › long option, glob files::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › long option, directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › long option, directory, recursive (and windows converts slashes)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › still lists broken links::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › Test new ShellString-like attributes::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › No trailing newline for ls() on empty directories::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › Check stderr field::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::ls › non-normalized paths are still ok with -R::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › no args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › dir already exists::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › Can't overwrite a broken link::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › root path does not exist::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › try to overwrite file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › try to overwrite file, with -p::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › try to make a subdirectory of a file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › Check for invalid permissions::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › basic usage::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › multiple dirs::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › one dir exists, the other does not::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › -p flag::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › -p flag: multiple dirs::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › -p flag: multiple dirs, array syntax::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › -p flag: subdirectory already exists::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › -p flag: create directory in subdirectory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › globbed dir::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mkdir › non-normalized paths are still ok with -p::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › no args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › one arg::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › option only::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › option not supported::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › source does not exist::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › sources do not exist::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › too many sources (dest is file)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › -n is no-force/no-clobber::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › -n option with a directory as the destination::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › -f is the default behavior::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › -fn is the same as -n::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › too many sources (exist, but dest is file)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › can't use wildcard when dest is file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › handles self OK::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › one source::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › two sources::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › two sources, array style::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › wildcard::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › dest exists, but -f given::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › should not overwrite recently created files::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::mv › should not overwrite recently created files (not give error no-force mode)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pipe › commands like `rm` cannot be on the right side of pipes::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pipe › piping to cat() should return roughly the same thing::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pipe › piping ls() into cat() converts to a string-like object::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pipe › grep works in a pipe::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pipe › multiple pipes work::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pipe › Equivalent to a simple grep() test case::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pipe › Equivalent to a simple sed() test case::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pipe › Sort a file by frequency of each line::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pipe › Synchronous exec::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pipe › Asynchronous exec::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::plugin › Unable to register a plugin with unknown options::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::plugin › Unable to register a plugin with wrong option types::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::plugin › All plugin utils exist::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::plugin › The plugin does not exist before it's registered::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::plugin › Register the plugin::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::plugin › The plugin exists after registering::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::plugin › The command fails for invalid options::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::plugin › The command succeeds for normal calls::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::plugin › The command parses options::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::plugin › The command supports globbing by default::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::plugin › Plugins are also compatible with shelljs/global::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::plugin › Plugins can be added as methods to ShellStrings::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::plugin › Plugins can signal errors::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::plugin › Plugins can change the prefix::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::plugin › Plugins can continue from errors::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::plugin › Cannot overwrite an existing command::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::popd › basic usage::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::popd › two directories on the stack::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::popd › three directories on the stack::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::popd › Valid by index::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::popd › Using +1 option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::popd › Using -0 option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::popd › Using -1 option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::popd › Using -n option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::popd › Popping an empty stack::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::popd › Test that rootDir is not stored::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::popd › quiet mode off::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::popd › quiet mode on::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › Push valid directories::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › Two directories::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › Three directories::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › Four directories::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › Push stuff around with positive indices::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › +1 option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › +2 option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › +3 option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › +4 option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › Push stuff around with negative indices::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › -1 option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › -2 option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › -3 option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › -4 option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › Push without changing directory or resolving paths::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › Using the -n option with a non-empty stack::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › Push invalid directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › Push without args swaps top two directories when stack length is 2::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › Push without args swaps top two directories for larger stacks::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › Pushing with no args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › Push without arguments invalid when stack is empty::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › quiet mode off::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pushd › quiet mode on::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pwd › initial directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::pwd › after changing directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › no args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › file does not exist::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › cannot delete a directory without recursive flag::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › only an option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › invalid option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › file does not exist, but -f specified::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › directory does not exist, but -fr specified::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › directory does not exist, but *only -f* specified::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › file (in fake dir) does not exist, but -f specified::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › dir (in fake dir) does not exist, but -fr specified::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › simple rm::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › recursive dir removal: -r option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › -R option does the same thing::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › recursive dir removal - absolute path::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › wildcard::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › recursive dir removal::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › recursive dir removal #2::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › recursive dir removal - array-syntax::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › removal of a read-only file (unforced)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › removal of a read-only file (forced)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › removal of a tree containing read-only files (unforced)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › removal of a tree containing read-only files (forced)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › removal of a sub-tree containing read-only and hidden files - glob::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › removal of a sub-tree containing read-only and hidden files - without glob::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › remove symbolic link to a dir::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › rm -rf on a symbolic link to a dir deletes its contents::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › remove broken symbolic link::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › recursive dir removal, for non-normalized path::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::rm › remove fifo::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › no arguments::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › only one argument::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › only two arguments::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › no such file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › if at least one file is missing, this should be an error::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › search with a string::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › search with a regex::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › replace with a number instead of a string::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › replace using a function::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › -i option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › make sure * in regex is not globbed::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › make sure * in string-regex is not globbed::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › make sure * in regex is not globbed (matches something)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › make sure * in string-regex is not globbed (matches something)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › multiple file names::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › array of file names (and try it out with a simple regex)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › multiple file names, with in-place-replacement::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › glob file names, with in-place-replacement::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sed › empty file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::set › initial values::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::set › default behavior::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::set › set -e::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::set › set -v::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::set › set -ev::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::set › set -e, set +e::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::set › set -f::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sort › no args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sort › file does not exist::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sort › directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sort › simple::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sort › simple #2::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sort › multiple files::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sort › multiple files, array syntax::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sort › Globbed file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sort › With '-n' option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sort › With '-r' option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::sort › With '-rn' option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::tail › no args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::tail › file does not exist::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::tail › directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::tail › simple::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::tail › multiple files::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::tail › multiple files, array syntax::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::tail › reading more lines than are in the file (no trailing newline)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::tail › reading more lines than are in the file (with trailing newline)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::tail › globbed file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::tail › with '-n <num>' option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::tail › with '-n +<num>' option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::tail › with '{-n: <num>}' option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::tail › with '{-n: +<num>}' option::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::tail › negative values are the same as positive values::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::tempdir › basic usage::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::tempdir › cache::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › no expression given::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › bad expression::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › bad expression #2::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › no file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › -e option succeeds for files::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › -e option fails if it does not exist::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › -d option succeeds for a directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › -f option fails for a directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › -L option fails for a directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › -d option fails for a file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › -f option succeeds for a file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › -L option fails for a file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › test command is not globbed::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › -d option fails for a link::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › -f option succeeds for a link::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › -L option succeeds for a symlink::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › -L option works for broken symlinks::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::test › -L option fails for missing files::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::to › Normal strings don't have '.to()' anymore::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::to › no file argument::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::to › cannot write to a non-existent directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::to › can be chained::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::to › With a glob::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::toEnd › Normal strings don't have '.toEnd()' anymore::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::toEnd › missing file argument::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::toEnd › cannot write to a non-existent directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::toEnd › creates a new file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::toEnd › can be chained::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::toEnd › With a glob::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::touch › should handle args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::touch › arguments must be strings::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::touch › exits without error when trying to touch a directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::touch › creates new files::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::touch › does not create a file if told not to::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::touch › handles globs correctly::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::touch › errors if reference file is not found::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::touch › uses a reference file for mtime::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::touch › accepts -d flag::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::touch › accepts long option (--date)::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::touch › sets mtime and atime by default::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::touch › does not set mtime if told not to::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::touch › does not set atime if told not to::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::touch › multiple files::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::touch › file array::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::touch › touching broken link creates a new file::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::uniq › no args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::uniq › file does not exist::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::uniq › directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::uniq › output directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::uniq › file does not exist with output directory::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::uniq › uniq file1::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::uniq › uniq -i file2::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::uniq › with glob character::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::uniq › uniq file1 file2::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::uniq › cat file1 |uniq::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::uniq › uniq -c file1::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::uniq › uniq -d file1::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::which › no args::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::which › command does not exist in the path::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::which › basic usage::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::which › Windows can search with or without a .exe extension::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::which › Searching with -a flag returns an array::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::which › Searching with -a flag for not existing command returns an empty array::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::which › Searching with -a flag returns an array with first item equals to the regular search::1",
+            "outcomes": []
+          },
+          {
+            "id": "ava::which › None executable files does not appear in the result list::1",
+            "outcomes": []
+          }
+        ],
+        "verdict": {
+          "baselineCompatible": true,
+          "suitePassed": true,
+          "knownFailures": [],
+          "unexpected": []
+        }
+      },
+      "expectedParticipants": [
+        "scriptact",
+        "codex"
+      ],
+      "missingParticipants": [
+        "codex"
+      ],
+      "comparisonEligible": false,
+      "evaluatorInterruption": {
+        "at": "2026-10-05T16:37:33.148Z",
+        "kind": "evaluator-workspace-isolation-failure",
+        "controllerExitCode": 1,
+        "stage": "after-scriptact-grading-before-codex",
+        "sourceStatus": "D test/resources/rm/a_dir/a_file",
+        "sourceLink": "a_dir",
+        "participantLink": "/private/tmp/vlr-txRSV3/source/shelljs/test/resources/rm/a_dir",
+        "missingSourceFile": "test/resources/rm/a_dir/a_file",
+        "originalBlobSha256": "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1",
+        "originalArtifacts": {
+          "scriptact/solve.json": "5a040e6c36cffa45eb40088fd28ab6f1485841a9c28ac948c4055a3dba88bd7a",
+          "scriptact/grade.json": "2f2ba3906016d4c10d60b8a52af0fdf529cda8fa19eafe94c57b5ad88e30bfe4",
+          "scriptact/acceptance.json": "af1d5c7ed6fb8e48bce3e317a18d84df0dc7d42b89419697e6c329b9bd8beb5e",
+          "scriptact/regression.json": "e198918fb95e831d44209f0ae9e6483450508851bbcbb5e0e061ab548885cc82",
+          "gateway/budget.json": "e695805310211787d6a2b7f91b51cf68b4721258e84cd743d4a519c2f15331ac",
+          "run.log": "717d01279859701e67e66578f7e109528696fb694bfd8512011ae332e338ab65"
+        },
+        "comparisonEligible": false,
+        "reason": "The participant copy used fs.cp without verbatimSymlinks. Its relative repository link was rewritten to the frozen source; ordinary upstream rm tests deleted a frozen fixture. The original baseline clone did not exercise the participant copy path. Runtime output and all paid accounting remain original."
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "cancelled",
+            "failure": "The operation was aborted due to timeout",
+            "requestCount": 125,
+            "goal": {
+              "id": "742e3b85",
+              "revision": 1,
+              "objective": "Add independent ShellJS instances for applications that coordinate several working directories in one Node process. Implement shell.create(options?) as a maintained public API, integrate it throughout the built-in commands and ShellString pipelines, and add regression tests, documentation and a runnable example. Keep the existing default export and its existing process-wide behavior compatible.\n\nA new instance exposes the ordinary built-in command API, ShellString, config, env, error(), errorCode() and create(). options is an optional non-null, non-array object with optional cwd, config and env fields. cwd must be a nonempty string naming an existing directory; missing cwd snapshots the parent's current directory at creation. Relative cwd is resolved against the parent directory. Creating from the default export uses the real process directory as the parent; creating from another instance uses that instance's directory. Invalid option types throw TypeError; missing or nondirectory cwd throws before creating an instance or changing any state. Explicit undefined uses defaults.\n\nEach instance owns its current and previous directory, directory stack, command error state, configuration and environment. Snapshot the parent's config and env and apply supplied overrides; objects are independent, including config.globOptions, and caller-owned options remain unchanged. config and env overrides must be non-null, non-array objects when supplied. Changes to one instance, the parent or the real process environment after creation must not leak into another instance. config.reset() restores the existing ShellJS configuration defaults for that instance. Existing config options and set flags retain their meaning. The instance's env is used by its child commands and cd('-') keeps its previous directory there without changing process.env. cd() still uses the ordinary home-directory behavior.\n\nResolve relative filesystem operands and wildcard expansion against the instance current directory throughout cat, chmod, cp, find, grep, head, ln, ls, mkdir, mv, rm, sed, sort, tail, test, touch, uniq, to and toEnd. Preserve flags, arrays, wildcard ordering, recursive traversal, symbolic-link target text, filename prefixes, relative output spelling and ShellString stdout/stderr/code semantics. Literal text, patterns, replacements, command arguments and piped data must retain their ordinary meaning. Absolute paths continue to work. cd, pwd, dirs, pushd and popd act only on the owning instance, including invalid paths and directory-stack flags. which resolves relative PATH entries against the instance directory and uses that instance's environment.\n\nexec and cmd default to the instance cwd and env. An explicit command cwd is resolved relative to that instance and applies only to that invocation; an explicit env continues to use the command's existing override semantics. Preserve sync exec, async exec callbacks, returned child handles, stdout/stderr, exit codes and existing options. Async exec must capture its directory and environment when dispatched, so later cd/env changes and simultaneous commands on another instance cannot affect it.\n\nA ShellString returned by an instance, or made with instance.ShellString, keeps that instance for later pipeable methods, to, toEnd and exec/cmd. Pipe operations use that instance's directory at the time the pipe method is invoked, even if another instance or the default export ran in between. Ordinary string/array conversions, flags, return types and command error handling remain compatible. Detached instance command methods must remain bound to their owner. Error/fatal/configuration state must stay isolated after successful commands, failures and reentrant callbacks such as sed's replacement function.\n\nInstance commands must never temporarily change the process working directory, replace shared Node builtins, clear shared require caches or evaluate copies of module source. Use maintained command implementations and explicit instance context so ordinary application code and callbacks always observe the real process cwd and builtins. Preserve custom-plugin and global.js behavior of the default export; this feature requires the built-in command set on new instances.\n\nAdd focused tests across command families and flags, array/glob/absolute operands, directory-stack and previous-directory behavior, error/config/env isolation, nested creation, delayed and detached ShellString pipelines, simultaneous async execution, reentrant command callbacks and coexistence with the default export. Update public API documentation and add an executable example using two directories concurrently. Run the original AVA suite, npm run lint and the example, and report accurate implementation and validation results. Make routine implementation choices autonomously.",
+              "status": "active",
+              "reason": "",
+              "createdAt": 1791214722959,
+              "updatedAt": 1791214722959
+            },
+            "goalSnapshotError": null,
+            "startedAt": 1791214722818,
+            "solveMs": 2701017
+          },
+          "accounting": {
+            "requests": 125,
+            "requestStatuses": {
+              "http-200": 117,
+              "http-200-interrupted": 3,
+              "unknown": 5
+            },
+            "measuredRequests": 117,
+            "missingUsageRequests": 8,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 2597260,
+            "knownOutputTokens": 32891,
+            "knownCachedInputTokens": 1007488,
+            "knownCacheRatio": 0.3879041759392591,
+            "pricedRequests": 117,
+            "knownReferenceUsd": 7.4199031999999985,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 56,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "56 passed, 0 failed, 0 skipped, 0 errors",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 1,
+            "passed": 610,
+            "failed": 4,
+            "skipped": 7,
+            "errors": 0,
+            "summary": "610 passed, 4 failed, 7 skipped, 0 errors",
+            "failures": [
+              "ava::ls › -RA flag, symlinks are not followed::1",
+              "ava::ls › -RAL flag, follows symlinks::1",
+              "ava::ls › -L flag, path is symlink::1",
+              "ava::ls › follow links to directories by default::1"
+            ]
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 27,
+          "createdFiles": 2,
+          "changeSummary": "29\t0\tREADME.md\n50\t0\tshell.js\n1\t1\tsrc/cat.js\n11\t5\tsrc/cd.js\n2\t3\tsrc/chmod.js\n8\t0\tsrc/cmd.js\n107\t34\tsrc/common.js\n1\t1\tsrc/cp.js\n17\t17\tsrc/dirs.js\n4\t3\tsrc/exec.js\n1\t1\tsrc/grep.js\n1\t1\tsrc/head.js\n4\t4\tsrc/ln.js\n2\t1\tsrc/ls.js\n2\t2\tsrc/mkdir.js\n2\t2\tsrc/mv.js\n1\t1\tsrc/pwd.js\n1\t1\tsrc/rm.js\n1\t1\tsrc/sed.js\n1\t1\tsrc/sort.js\n1\t1\tsrc/tail.js\n1\t1\tsrc/test.js\n1\t1\tsrc/to.js\n1\t1\tsrc/toEnd.js\n1\t1\tsrc/touch.js\n1\t1\tsrc/uniq.js\n5\t5\tsrc/which.js\n",
+          "created": "examples/two-directories.js\ntest/create.js\n",
+          "changeAccounting": {
+            "baseline": "eb8168bb8e670c3196144e7c8cdb956afd4deab1",
+            "head": "eb8168bb8e670c3196144e7c8cdb956afd4deab1",
+            "source": "recorded-baseline",
+            "changedFiles": 27,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 47,
+            "structuredNarrationRequests": 2,
+            "contextSegments": 13,
+            "businessChildRequests": 66,
+            "contextBranchRequests": 12,
+            "originalPromptInFinalRequest": true
+          },
+          "capabilityUsage": {
+            "available": true,
+            "complete": true,
+            "rootTurns": 47,
+            "branchTurns": 78,
+            "uniqueCalls": 19,
+            "traceGaps": 0,
+            "missingSummaries": 0,
+            "operations": [
+              {
+                "moduleId": "velaros:agents",
+                "operation": "profiles",
+                "status": "succeeded",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:agents",
+                "operation": "resume",
+                "status": "succeeded",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:agents",
+                "operation": "start",
+                "status": "succeeded",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:agents",
+                "operation": "wait",
+                "status": "succeeded",
+                "count": 2
+              },
+              {
+                "moduleId": "velaros:context-materials",
+                "operation": "list",
+                "status": "succeeded",
+                "count": 4
+              },
+              {
+                "moduleId": "velaros:context-materials",
+                "operation": "read",
+                "status": "succeeded",
+                "count": 7
+              },
+              {
+                "moduleId": "velaros:context-materials",
+                "operation": "submit",
+                "status": "succeeded",
+                "count": 2
+              },
+              {
+                "moduleId": "velaros:system-memory",
+                "operation": "read",
+                "status": "succeeded",
+                "count": 1
+              }
+            ]
+          }
+        }
+      },
+      "postSolveIsolationRecheck": {
+        "at": "2026-10-05T16:38:00.888Z",
+        "root": "/private/tmp/shelljs-isolation-control-6i9hQd",
+        "oldDefaultCopyReproducedSourceDeletion": true,
+        "newSharedCopyKeptSourceBytes": true,
+        "sourceRestoredByteForByte": true,
+        "sourceStatusCleanAfterEveryCheck": true,
+        "paidArtifactsUnchanged": true,
+        "rows": [
+          {
+            "name": "original",
+            "workspace": "/private/tmp/shelljs-isolation-control-6i9hQd/original",
+            "summary": {
+              "exitCode": 0,
+              "passed": 614,
+              "failed": 0,
+              "skipped": 7,
+              "errors": 0,
+              "summary": "614 passed, 0 failed, 7 skipped, 0 errors",
+              "failures": []
+            }
+          },
+          {
+            "name": "scriptact",
+            "workspace": "/private/tmp/shelljs-isolation-control-6i9hQd/scriptact",
+            "summary": {
+              "exitCode": 0,
+              "passed": 614,
+              "failed": 0,
+              "skipped": 7,
+              "errors": 0,
+              "summary": "614 passed, 0 failed, 7 skipped, 0 errors",
+              "failures": []
+            }
+          }
+        ]
+      }
     }
   ],
   "transportDiagnostics": {
@@ -8493,5 +11257,35 @@
     "knownReferenceUsd": 0.6245376,
     "unknownUsage": 0,
     "finding": "Both synthetic message layouts retained prefix reuse, including opaque reasoning. Replayed real inputs also eventually hit, after misses of undetermined cause. These probes do not establish the cause of the low cache ratio in real tasks."
-  }
+  },
+  "evaluationAudits": [
+    {
+      "at": "2026-10-05T16:43:11.317Z",
+      "kind": "workspace-copy-symlink-fidelity",
+      "evidence": ".velaros-workspace/bench/long-runtime-20261004/context-diagnostics/workspace-symlink-audit.json",
+      "auditedAttempts": 46,
+      "rewrittenLinks": [
+        {
+          "attempt": "commander-01",
+          "participants": {
+            "scriptact": 3,
+            "codex": 3
+          },
+          "sourceModified": false
+        },
+        {
+          "attempt": "shelljs-01",
+          "participants": {
+            "scriptact": 8
+          },
+          "sourceModified": true
+        }
+      ],
+      "comparisonExcludedAttempts": [
+        "commander-01",
+        "shelljs-01"
+      ],
+      "reason": "The initial participant copy rewrote tracked relative symlinks, unlike the original baseline clone. Preserve all raw results and known costs; exclude these attempts from effective quality/time/cost parity claims until correctly isolated evaluation."
+    }
+  ]
 }

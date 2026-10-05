@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import { appendFile, cp, mkdir, readFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
@@ -29,6 +29,7 @@ import {
   acceptanceArguments,
   applyTaskEnvironment,
   bindPythonCheckout,
+  copyTaskWorkspace,
   regressionArguments,
   restoreTaskPaths,
   taskEnvironment,
@@ -111,16 +112,7 @@ const activity = async (value) => {
 }
 
 async function copySource(destination, output) {
-  await cp(manifest.source, destination, {
-    recursive: true,
-    filter: (path) =>
-      ![
-        '.git',
-        '.pytest_cache',
-        '__pycache__',
-        ...(environment.runtime === 'node' ? ['node_modules'] : []),
-      ].includes(path.split('/').at(-1)),
-  })
+  await copyTaskWorkspace(manifest.source, destination, environment.runtime)
   if (environment.runtime === 'node') await copyNodeDependencies(manifest.source, destination)
   const build = await buildNodeProject(environment, destination, manifest.node)
   if (build) {
@@ -171,17 +163,7 @@ async function check(command, args, cwd, name, output) {
 async function grade(workspace, output) {
   // 验收复制真实产物；原项目测试从冻结源码恢复，防止删测试制造通过。
   const judge = join(manifest.taskRoot, `judge-${output.split('/').at(-1)}`)
-  await cp(workspace, judge, {
-    recursive: true,
-    verbatimSymlinks: true,
-    filter: (path) =>
-      ![
-        '.git',
-        '.pytest_cache',
-        '__pycache__',
-        ...(environment.runtime === 'node' ? ['node_modules'] : []),
-      ].includes(path.split('/').at(-1)),
-  })
+  await copyTaskWorkspace(workspace, judge, environment.runtime)
   await restoreTaskPaths(manifest.source, judge, environment.preserve)
   if (environment.runtime === 'node') await copyNodeDependencies(manifest.source, judge)
   const build = await buildNodeProject(environment, judge, manifest.node)

@@ -22,6 +22,7 @@ import { runtimeCapabilityOptions, runtimeSubmissionOptions } from './runtime-ca
 import {
   createExecutionEnvironments,
   createTaskRoot,
+  copyTaskWorkspace,
   acceptanceArguments,
   applyTaskEnvironment,
   pythonTaskPath,
@@ -76,7 +77,7 @@ const executable = node ?? python
 const originalGrader = join(import.meta.dirname, environment.acceptance)
 // 原项目测试可以生成文件；只在独立基线副本执行，冻结源码保持逐字不变。
 const baselineSource = join(taskRoot, 'baseline', environment.project)
-await execute('git', ['clone', '-q', '--no-hardlinks', source, baselineSource])
+await copyTaskWorkspace(source, baselineSource, environment.runtime)
 if (node) await copyNodeDependencies(source, baselineSource)
 const env = {
   ...process.env,

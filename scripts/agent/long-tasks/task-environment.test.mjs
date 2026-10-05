@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readlink,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { test } from 'node:test'
@@ -9,6 +19,7 @@ import { promisify } from 'node:util'
 import {
   createExecutionEnvironments,
   createTaskRoot,
+  copyTaskWorkspace,
   bindPythonCheckout,
   pythonTaskPath,
   regressionArguments,
@@ -24,6 +35,39 @@ const environment = {
   preserve: ['tests', 'pyproject.toml'],
   baselineFailure: 'Feature is not implemented',
 }
+
+test('workspace copies preserve relative and dangling links without writing back into earlier copies', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'velaros-copy-isolation-'))
+  try {
+    const source = join(directory, 'source')
+    const participant = join(directory, 'participant')
+    const judge = join(directory, 'judge')
+    await mkdir(join(source, 'fixtures/data'), { recursive: true })
+    await writeFile(join(source, 'fixtures/data/file'), 'original')
+    await symlink('data', join(source, 'fixtures/link'))
+    await symlink('missing', join(source, 'fixtures/dangling'))
+    for (const name of ['.git', '.pytest_cache', '__pycache__', 'node_modules']) {
+      await mkdir(join(source, name))
+      await writeFile(join(source, name, 'marker'), name)
+    }
+    await copyTaskWorkspace(source, participant, 'node')
+    await copyTaskWorkspace(participant, judge, 'node')
+    for (const copy of [participant, judge]) {
+      assert.equal(await readlink(join(copy, 'fixtures/link')), 'data')
+      assert.equal(await readlink(join(copy, 'fixtures/dangling')), 'missing')
+      assert.equal(await readFile(join(copy, 'fixtures/link/file'), 'utf8'), 'original')
+      for (const name of ['.git', '.pytest_cache', '__pycache__', 'node_modules'])
+        await assert.rejects(stat(join(copy, name)), { code: 'ENOENT' })
+    }
+    await writeFile(join(participant, 'fixtures/link/file'), 'participant')
+    await rm(join(judge, 'fixtures/link/file'))
+    assert.equal(await readFile(join(source, 'fixtures/data/file'), 'utf8'), 'original')
+    assert.equal(await readFile(join(participant, 'fixtures/data/file'), 'utf8'), 'participant')
+    await assert.rejects(stat(join(judge, 'fixtures/data/file')), { code: 'ENOENT' })
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
 
 test('new task roots use the process ownership without changing their parent directory', async () => {
   const parent = await mkdtemp(join(tmpdir(), 'velaros-task-parent-'))

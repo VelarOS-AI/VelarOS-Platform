@@ -11,7 +11,7 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises'
-import { delimiter, join } from 'node:path'
+import { basename, delimiter, join } from 'node:path'
 import { promisify } from 'node:util'
 
 import { validateBaselineIssues } from './regression.mjs'
@@ -138,6 +138,21 @@ export function applyTaskEnvironment(environment, target = process.env) {
     if (setting === null) delete target[name]
     else target[name] = setting
   }
+}
+
+// 基线、参与者和评分副本共用同一复制语义；相对链接保持相对，不能被改写回冻结源。
+export async function copyTaskWorkspace(source, destination, runtime) {
+  await cp(source, destination, {
+    recursive: true,
+    verbatimSymlinks: true,
+    filter: (path) =>
+      ![
+        '.git',
+        '.pytest_cache',
+        '__pycache__',
+        ...(runtime === 'node' ? ['node_modules'] : []),
+      ].includes(basename(path)),
+  })
 }
 
 // 原项目测试可能分散在源码包中；逐层检查目标父目录，拒绝沿代理创建的链接写出评分副本。
