@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "evidence": "development attempts and five frozen independent holdouts; per-attempt qualifications apply",
+  "evidence": "Development attempts and frozen independent holdouts; per-attempt qualifications apply.",
   "attempts": [
     {
       "attempt": "rich-01",
@@ -5104,6 +5104,200 @@
             "textProtocolRequests": 0,
             "structuredNarrationRequests": 6,
             "originalPromptInFinalRequest": true
+          }
+        }
+      }
+    },
+    {
+      "attempt": "click-01",
+      "schema": 1,
+      "at": "2026-10-05T05:32:03.221Z",
+      "taskId": "click-context-local-translations",
+      "scriptactSessionId": "scriptact-8babc1ee-1c4b-452f-a9f9-def5611d00c9",
+      "candidateId": "candidate-v27-3826d30e858c",
+      "candidateSourceCommit": "fd2772a7fdcf644c4daeea0d7d49d4e255bd864b",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "split": "holdout",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 59,
+            "startedAt": 1791175796581,
+            "solveMs": 686542
+          },
+          "accounting": {
+            "requests": 59,
+            "requestStatuses": {
+              "http-200": 58,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 58,
+            "missingUsageRequests": 1,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 1263296,
+            "knownOutputTokens": 19683,
+            "knownCachedInputTokens": 373888,
+            "knownCacheRatio": 0.2959623081209788,
+            "pricedRequests": 58,
+            "knownReferenceUsd": 4.1008472,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 58,
+            "failed": 3,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "3 failed, 58 passed in 0.07s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_help_uses_context_templates_and_preserves_application_text[A]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_help_uses_context_templates_and_preserves_application_text[\\u8bed\\u8a00]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_version_decorator_is_deferred_and_keeps_custom_templates[False]"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 627,
+            "failed": 0,
+            "skipped": 22,
+            "errors": 0,
+            "summary": "627 passed, 22 skipped, 1 xfailed in 0.62s",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 11,
+          "createdFiles": 4,
+          "changeSummary": "2\t0\tdocs/api.rst\n1\t0\tdocs/index.rst\n1\t1\tsrc/click/_termui_impl.py\n82\t20\tsrc/click/core.py\n7\t5\tsrc/click/decorators.py\n30\t16\tsrc/click/exceptions.py\n3\t2\tsrc/click/formatting.py\n13\t7\tsrc/click/parser.py\n1\t1\tsrc/click/shell_completion.py\n1\t1\tsrc/click/termui.py\n18\t15\tsrc/click/types.py\n",
+          "created": "docs/i18n.rst\nexamples/context-i18n.py\nsrc/click/_i18n.py\ntests/test_i18n.py\n",
+          "changeAccounting": {
+            "baseline": "734199cb49e803ec3fc45e8c37ef585ec4f61aa6",
+            "head": "734199cb49e803ec3fc45e8c37ef585ec4f61aa6",
+            "source": "recorded-baseline",
+            "changedFiles": 11,
+            "createdFiles": 4,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 58,
+            "branchRequests": 1,
+            "requestOwners": {
+              "scriptact-8babc1ee-1c4b-452f-a9f9-def5611d00c9": 58,
+              "context:9b485bf4-9abf-446e-bb80-06427a484280": 1
+            },
+            "contextSegments": 33,
+            "nativeRequests": 58,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 1,
+            "originalPromptInFinalRequest": true
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791176486827,
+            "finishedAt": 1791178274907,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a10a70-2fdb-7281-b673-64b0332a73e8",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 281,
+            "solveMs": 1788080
+          },
+          "accounting": {
+            "requests": 259,
+            "requestStatuses": {
+              "http-200": 249,
+              "http-200-interrupted": 6,
+              "unknown": 4
+            },
+            "measuredRequests": 249,
+            "missingUsageRequests": 10,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 5969887,
+            "knownOutputTokens": 89494,
+            "knownCachedInputTokens": 5064960,
+            "knownCacheRatio": 0.8484180688847209,
+            "pricedRequests": 249,
+            "knownReferenceUsd": 7.4355720000000005,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 59,
+            "failed": 2,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "2 failed, 59 passed in 0.07s",
+            "failures": [
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_completion_setup_uses_current_context[3.2.0]",
+              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_completion_setup_uses_current_context[unknown]"
+            ]
+          },
+          "regression": {
+            "exitCode": 1,
+            "passed": 626,
+            "failed": 1,
+            "skipped": 22,
+            "errors": 0,
+            "summary": "1 failed, 626 passed, 22 skipped, 1 xfailed in 0.48s",
+            "failures": [
+              "FAILED tests/test_shell_completion.py::test_full_source[bash] - AssertionErro..."
+            ],
+            "verdict": {
+              "baselineCompatible": false,
+              "suitePassed": false,
+              "knownFailures": [],
+              "unexpected": [
+                "Unexpected failure: tests.test_shell_completion::test_full_source[bash]"
+              ]
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 18,
+          "createdFiles": 2,
+          "changeSummary": "10\t0\tCHANGES.rst\n1\t0\tdocs/index.rst\n13\t2\tsrc/click/_termui_impl.py\n101\t26\tsrc/click/core.py\n27\t7\tsrc/click/decorators.py\n39\t23\tsrc/click/exceptions.py\n3\t2\tsrc/click/formatting.py\n21\t7\tsrc/click/parser.py\n10\t5\tsrc/click/shell_completion.py\n17\t6\tsrc/click/termui.py\n42\t22\tsrc/click/types.py\n116\t0\ttests/test_context.py\n62\t0\ttests/test_options.py\n25\t0\ttests/test_parser.py\n34\t1\ttests/test_shell_completion.py\n65\t0\ttests/test_termui.py\n18\t0\ttests/test_testing.py\n66\t0\ttests/test_types.py\n",
+          "created": "docs/localization.rst\nsrc/click/_gettext.py\n",
+          "changeAccounting": {
+            "baseline": "e45095132d8bd175bbeb93754635fd67efc009ae",
+            "head": "e45095132d8bd175bbeb93754635fd67efc009ae",
+            "source": "recorded-baseline",
+            "changedFiles": 18,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "rootThreadId": "01a10a70-2fdb-7281-b673-64b0332a73e8",
+            "compactions": 8,
+            "childAgentDispatches": 3,
+            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T13-01-26-01a10a70-2fdb-7281-b673-64b0332a73e8.jsonl"
           }
         }
       }
