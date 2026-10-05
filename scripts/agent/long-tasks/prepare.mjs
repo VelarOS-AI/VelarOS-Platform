@@ -200,6 +200,11 @@ async function collect(directory) {
   }
 }
 await collect(resolve(import.meta.dirname, '..'))
+// 独立包验收复用仓库的受控打包器；与评分器一起复制并登记哈希，冻结后不读取工作树。
+const packHelper = join(output, 'harness/release/safe-package-pack.mjs')
+await mkdir(dirname(packHelper), { recursive: true })
+await cp(join(root, 'scripts/release/safe-package-pack.mjs'), packHelper)
+files[packHelper] = hash(await readFile(packHelper))
 files[codex] = hash(await readFile(codex))
 const candidate = join(campaign, candidateName)
 // 本 campaign 的兼容供应商在 rich-06 首次请求明确拒绝显式断点；会话键继续使用。

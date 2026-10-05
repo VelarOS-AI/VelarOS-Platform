@@ -1,0 +1,37 @@
+{
+  "id": "fs-extra-maintained-esm-migration",
+  "split": "holdout",
+  "repository": "https://github.com/jprichardson/node-fs-extra.git",
+  "commit": "1e223d3b1e26b7ebef7f402acf0e3b5533cc5833",
+  "environment": {
+    "runtime": "node",
+    "project": "fs-extra-esm",
+    "acceptance": "test_fs_extra_esm_acceptance.mjs",
+    "regressionRunner": "mocha-json",
+    "regressionEntry": "test.js",
+    "regression": ["lib"],
+    "preserve": [
+      "test.js",
+      "test.mjs",
+      "lib/__tests__",
+      "lib/copy/__tests__",
+      "lib/empty/__tests__",
+      "lib/ensure/__tests__",
+      "lib/fs/__tests__",
+      "lib/json/__tests__",
+      "lib/mkdirs/__tests__",
+      "lib/move/__tests__",
+      "lib/output-file/__tests__",
+      "lib/path-exists/__tests__",
+      "lib/remove/__tests__",
+      "lib/util/__tests__"
+    ],
+    "baselineFailure": "Maintained native ESM source must exist",
+    "build": {
+      "entry": "scripts/build.mjs",
+      "args": [],
+      "optional": true
+    }
+  },
+  "prompt": "Migrate fs-extra's maintained implementation to native ECMAScript modules while preserving its existing CommonJS and ESM package interfaces. This is a repository-wide source/build/publication migration, not a new filesystem feature. Keep the established API, graceful-fs integration, Promise and Node-style callback forms, synchronous helpers, aliases, error behavior, supported Node range and runtime dependency set compatible.\n\nMove every production module currently under lib/ into a corresponding maintained src/ module. Preserve the directory responsibilities and relative layout; the current lib/esm.mjs maps to src/esm.js. src/index.js must be a directly importable native ESM source entry exposing the existing root API as its default export. src/esm.js must provide the same named/default fs-extra-only exports as the current fs-extra/esm entry. Use an explicit ESM package boundary, standard imports/exports and explicit relative module paths. Internal source imports must resolve within src/. Runtime CommonJS loaders, createRequire, evaluation of source strings, implementation embedded in data strings, wrappers that delegate back to generated lib/, or a second hand-maintained CommonJS implementation do not satisfy the migration. External CommonJS dependencies may be imported normally.\n\nProvide a self-contained Node build entry at scripts/build.mjs and expose it as npm run build. Generate all production lib/ files from src/, including the existing CommonJS module paths and lib/esm.mjs. Mark generated files clearly. Keep original tests and fixtures under lib/**/__tests__ intact. The build must work when all generated production lib files are absent, be deterministic across repeated builds, and actually reflect source edits rather than restoring a stored copy of the old output. Compiling modules separately is allowed. esbuild 0.19.10 is preinstalled as development tooling; declare tooling used by the build as development dependencies, and preserve the existing runtime dependency set. Build from the current checkout only.\n\nPublished consumers must keep require('fs-extra'), default import from 'fs-extra', and named/default import from 'fs-extra/esm' working. Preserve which APIs each entry exposes. Existing method and alias identities shared by the published CommonJS and ESM interfaces must remain shared, rather than loading independent filesystem adapter copies. Preserve the existing internal CommonJS paths needed by the unchanged repository tests. Keep the explicit package export boundary, existing package identity, version and engines. Include maintained src/, generated runtime files and the build entry in the package; exclude tests and fixtures. A packed package installed in an independent consumer must work without its checkout, build-time dependencies or references to external source paths.\n\nAdd focused maintained tests for native source imports, published CommonJS/ESM interoperability, function/alias identity, Promise/callback/synchronous operations, unchanged errors and graceful-fs integration. Cover clean rebuilds, source-to-output propagation, repeat-build determinism and isolated package consumption. Update contributor/build/release documentation and provide a runnable example exercising the supported package entries. Run the full original Node and ESM suites, lint, build and the new checks. Preserve original test files and report any remaining limitations accurately. Make routine implementation choices autonomously."
+}
