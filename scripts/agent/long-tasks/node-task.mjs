@@ -15,6 +15,14 @@ const execute = promisify(execFile)
 export async function buildNodeProject(environment, workspace, node, env = process.env) {
   if (!environment.build) return null
   try {
+    if (environment.build.optional) {
+      try {
+        await lstat(join(workspace, environment.build.entry))
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error
+        return { exitCode: 0, stdout: '', stderr: '', timedOut: false, skipped: true }
+      }
+    }
     const result = await execute(node, [environment.build.entry, ...environment.build.args], {
       cwd: workspace,
       env,

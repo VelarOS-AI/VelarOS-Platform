@@ -87,13 +87,18 @@ export function taskEnvironment(task) {
   if (value.build !== undefined) {
     assert(node, 'Project builds are declared for Node tasks')
     assert(value.build && typeof value.build === 'object' && !Array.isArray(value.build))
-    assert(Object.keys(value.build).every((name) => ['entry', 'args'].includes(name)))
+    assert(Object.keys(value.build).every((name) => ['entry', 'args', 'optional'].includes(name)))
     assert.equal(typeof value.build.entry, 'string')
-    assert.match(value.build.entry, /^node_modules\/[a-zA-Z0-9_@.-]+(?:\/[a-zA-Z0-9_.-]+)*$/u)
-    assert(!value.build.entry.split('/').some((part) => ['.', '..'].includes(part)))
+    assert.match(value.build.entry, /^[a-zA-Z0-9_][a-zA-Z0-9_@.-]*(?:\/[a-zA-Z0-9_@.-]+)*$/u)
+    assert(!value.build.entry.split('/').some((part) => ['.', '..', '.git'].includes(part)))
     assert(Array.isArray(value.build.args))
     assert(value.build.args.every((arg) => typeof arg === 'string' && !arg.includes('\0')))
-    result.build = { entry: value.build.entry, args: [...value.build.args] }
+    assert(value.build.optional === undefined || typeof value.build.optional === 'boolean')
+    result.build = {
+      entry: value.build.entry,
+      args: [...value.build.args],
+      ...(value.build.optional === undefined ? {} : { optional: value.build.optional }),
+    }
   }
   if (value.regressionPreloads !== undefined) {
     assert(node, 'Regression preloads require a Node task')

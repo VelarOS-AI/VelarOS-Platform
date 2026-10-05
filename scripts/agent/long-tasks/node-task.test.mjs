@@ -36,6 +36,66 @@ const config = {
   baselineFailure: 'output must use stream',
 }
 
+test('optional project build hooks distinguish an unchanged baseline from a failed delivered build', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'long-task-build '))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  const environment = taskEnvironment({
+    environment: {
+      ...config,
+      build: { entry: 'scripts/build.mjs', args: ['argument with spaces'], optional: true },
+    },
+  })
+  const baseline = await buildNodeProject(environment, workspace, process.execPath)
+  assert.equal(baseline.exitCode, 0)
+  assert.equal(baseline.skipped, true)
+  await mkdir(join(workspace, 'scripts'))
+  await writeFile(
+    join(workspace, 'scripts/build.mjs'),
+    `import {writeFileSync} from 'node:fs'; writeFileSync('built.json', JSON.stringify(process.argv.slice(2)))`
+  )
+  const built = await buildNodeProject(environment, workspace, process.execPath)
+  assert.equal(built.exitCode, 0)
+  assert.notEqual(built.skipped, true)
+  assert.deepEqual(JSON.parse(await readFile(join(workspace, 'built.json'), 'utf8')), [
+    'argument with spaces',
+  ])
+  await writeFile(join(workspace, 'scripts/build.mjs'), 'process.exit(7)')
+  const failed = await buildNodeProject(environment, workspace, process.execPath)
+  assert.equal(failed.exitCode, 7)
+  assert.notEqual(failed.skipped, true)
+  await rm(join(workspace, 'scripts/build.mjs'))
+  const required = await buildNodeProject(
+    { ...environment, build: { ...environment.build, optional: false } },
+    workspace,
+    process.execPath
+  )
+  assert.notEqual(required.exitCode, 0)
+  assert.notEqual(required.skipped, true)
+  await symlink('missing.mjs', join(workspace, 'scripts/build.mjs'))
+  const brokenLink = await buildNodeProject(environment, workspace, process.execPath)
+  assert.notEqual(brokenLink.exitCode, 0)
+  assert.notEqual(brokenLink.skipped, true)
+})
+
+test('project build hooks remain explicit bounded workspace paths', () => {
+  for (const entry of [
+    '/outside.mjs',
+    '../outside.mjs',
+    'scripts/../../outside.mjs',
+    '.git/hooks/check',
+    '-argument.mjs',
+  ])
+    assert.throws(() =>
+      taskEnvironment({ environment: { ...config, build: { entry, args: [], optional: true } } })
+    )
+  for (const optional of ['true', 1, null])
+    assert.throws(() =>
+      taskEnvironment({
+        environment: { ...config, build: { entry: 'scripts/build.mjs', args: [], optional } },
+      })
+    )
+})
+
 test('Node regression preloads use frozen local dependencies and appear in both task environments', () => {
   const task = {
     prompt: 'Update the project.',
@@ -241,13 +301,17 @@ test('Node builds and fixture module paths are explicitly frozen and stay within
     null,
     [],
     { entry: '../build.js', args: [] },
-    { entry: 'scripts/build.js', args: [] },
     { entry: 'node_modules/../build.js', args: [] },
     { entry: 'node_modules/build.js', args: '--eval' },
     { entry: 'node_modules/build.js', args: [null] },
     { entry: 'node_modules/build.js', args: ['nul\0'] },
   ])
     assert.throws(() => taskEnvironment({ environment: { ...config, build } }))
+  assert.deepEqual(
+    taskEnvironment({ environment: { ...config, build: { entry: 'scripts/build.js', args: [] } } })
+      .build,
+    { entry: 'scripts/build.js', args: [] }
+  )
   for (const NODE_PATH of ['', '.', '../outside', '/absolute', 'fixtures/../outside'])
     assert.throws(() =>
       taskEnvironment({ environment: { ...config, processEnvironment: { NODE_PATH } } })
