@@ -1056,3 +1056,19 @@ ModelInputEstimator 现在保留最近 32 份无图样本的文本量与真实�
 六个 Context 用例覆盖休眠后证据不变、迟到用量与执行继续、接管者获胜、刻意阻塞 CAS 的竞争、恢复清理和取消/终态。两个真实 Runtime 用例在模型等待中推进时间，分别有和没有供应商用量，再执行真实 Node 文件追加；修复后均正常完成，两次模型替身调用，副作用恰好一次。旧冻结 v33 的同用例均失败，原始输出保留。这是恢复机制的回归证明，不合成扣除睡眠后的付费耗时，也不代表整场任务必定通过。
 
 Context 全套 89 passed、4 skipped，Agent 验收/规划/流与完成核查 102 passed，原生执行、目标、上下文维护和文本执行 277 passed，共 468 passed、4 skipped。构建、类型、定向 lint、格式、模块所有权、错误构造与差异检查通过。证据在 `context-diagnostics/lease-resume-*.log`，旧实现和修复后结果分别留存。当前运行的 Nunjucks 仍使用原冻结 v32；本轮源码将在后续候选中独立冻结。
+
+恢复修复提交为 `4e2093bc613e0c1451383425dc80ac7f54d52996`；完整 Velaros 依赖拓扑构建后，干净源码冻结为 `candidate-v34-d8a7f01673aa`，5404 个文件。`mocha-05` 使用该候选、原题评分、development 与 goal 模式，原项目预检通过，工作根 `/private/tmp/vlr-O248Z9`。它在当前 Nunjucks 配对完成后串行启动。
+
+## Node 原测试的精确已知失败与 Markdown-it 独立任务
+
+Markdown-it 14.1.0 固定在 `0fe7ccb4b7f30236fb05f623be6924961d296d3d`。完整构建成功，原项目 934 passed、1 failed。失败来自原测试实时读取 cmark master 文件，并与发布时记录的 MD5 比较；当前 `1633762d9cf8c609ca0ca88fed01d6ec` 与记录的 `80e12450752e4667b3656fa2cd12e9d5` 不同，所有本地 pathological 解析用例继续执行。原始日志和独立取回的指纹保存在 `markdown-it-baseline-tests.json` 与 `markdown-it-reference-drift.json`；公开依据是 [原测试](https://github.com/markdown-it/markdown-it/blob/14.1.0/test/pathological.mjs)。安装时先尝试 npm ci，原项目没有可用锁文件，改为安装依赖后冻结完整依赖目录；两次安装日志保持。
+
+评测将已有逐例 baselineIssues 合同扩展到 Mocha/Jest 的结构化报告，并在 Node 预检真正传入声明。精确用例身份、原错误指纹、理由与公开来源均在模型调用前冻结；准备时必须复现，评分时允许同一已知故障或实际修复。错误指纹变化、额外故障、缺失用例和新增跳过仍失败，原失败计数与退出码保留。新增 Node 报告链路测试覆盖这些边界，相关评测 34 项通过，语法、格式、模块所有权与差异检查通过。产品公开 API 和模型操作继续由 v34 定义。
+
+新任务是按实例配置 URL 转换，在 inline/reference/autolink/linkify 的链接与图片路径中携带真实环境、保持引用复用与重入隔离，并支持常规 Token、自定义渲染器和构建后的 CommonJS/browser 入口。59 项独立验收中，原版 1 passed、58 failed，私有行为适配器 59/59；漏掉引用路径、漏掉输出 URL 验证、保留首次环境三种变异分别失败 7、5、2 项。行为适配器的原项目仍为 934 passed 与同一项已知失败，无新增回归。适配器只用于零模型评分控制，不进入参与者工作区；结果在 `markdown-it-controls-summary.json`。该任务在 v34 产品冻结后定义，尚未调用模型。
+
+## Nunjucks 的交付覆盖核对
+
+ScriptAct 的功能 64/64 与原项目 417 passed、1 pending 保持。对最终产物另建独立副本，连同 Agent 新增测试完整运行得到 422 passed、1 pending，新增五项均通过；这次核对在完成后进行，保存在 `scriptact-authored-tests.json`，不替换原始评测时间或 Agent 报告的 420 passing。
+
+五项新增测试覆盖普通入口、非法参数、异步 filter 取消、并发缓存模板与等待 loader，仍没有完成原需求明确列出的 extension、继承/import、异步循环、预编译、重入和 legacy overlap 的专项回归覆盖。请求 57、59 曾承诺补上，之后没有相应编辑就给出了最终答复。记录为交付完整性缺口；外部功能通过和目标状态 complete 不能替代这部分交付。首个普通最终答复在请求 51，显式目标更新在 54，最终答复在 60；首帧入口提示没有消除末尾发现与登记过程，后续读操作也没有完成新增测试承诺。

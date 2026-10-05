@@ -110,7 +110,7 @@ if (node) {
     baselineRegression,
     nodeRegressionReport(baselineRegression, baselineSource, environment.regressionRunner)
   )
-  baselineRegression.verdict = regressionVerdict(baselineRegression)
+  baselineRegression.verdict = regressionVerdict(baselineRegression, environment.baselineIssues)
 } else if (environment.regressionRunner === 'pytest') {
   baselineRegression.cases = await readPytestReport(python, baselineReport)
   baselineRegression.verdict = regressionVerdict(baselineRegression, environment.baselineIssues)

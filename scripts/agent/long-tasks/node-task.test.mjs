@@ -33,6 +33,78 @@ const config = {
   baselineFailure: 'output must use stream',
 }
 
+test('Node baseline declarations preserve actual failures and reject changed fingerprints or skipped tests', () => {
+  const known = {
+    test: 'test/reference.mjs::reference checksum::1',
+    contains: ['checksum changed', 'old=aaa new=bbb'],
+    reason: 'The upstream reference changed after the release',
+    source: 'https://example.invalid/reference/source',
+  }
+  const environment = taskEnvironment({ environment: { ...config, baselineIssues: [known] } })
+  const passed = { file: '/workspace/test/plain.mjs', fullTitle: 'ordinary behavior', err: {} }
+  const failed = {
+    file: '/workspace/test/reference.mjs',
+    fullTitle: 'reference checksum',
+    err: { message: 'checksum changed: old=aaa new=bbb', stack: 'original failure stack' },
+  }
+  const document = {
+    stats: { tests: 2, passes: 1, failures: 1, pending: 0 },
+    tests: [passed, failed],
+    passes: [passed],
+    failures: [failed],
+    pending: [],
+  }
+  const raw = { exitCode: 1, stdout: JSON.stringify(document), stderr: '' }
+  const baseline = {
+    ...raw,
+    ...nodeRegressionReport(raw, '/workspace', environment.regressionRunner),
+  }
+  const verdict = regressionVerdict(baseline, environment.baselineIssues)
+  assert.equal(verdict.baselineCompatible, true)
+  assert.equal(verdict.suitePassed, false)
+  assert.equal(baseline.summary.failed, 1)
+  assert.equal(baseline.exitCode, 1)
+  assert.deepEqual(verdict.knownFailures, [known.test])
+  for (const altered of [
+    { ...failed, err: { message: 'checksum changed: old=aaa new=ccc' } },
+    { ...failed, fullTitle: 'different failing test' },
+  ]) {
+    const result = {
+      exitCode: 1,
+      stdout: JSON.stringify({ ...document, tests: [passed, altered], failures: [altered] }),
+    }
+    assert.equal(
+      regressionVerdict(
+        { ...result, ...nodeRegressionReport(result, '/workspace', environment.regressionRunner) },
+        [known],
+        baseline.cases
+      ).baselineCompatible,
+      false
+    )
+  }
+  assert.equal(
+    regressionVerdict(
+      {
+        exitCode: 0,
+        cases: baseline.cases.map((item) =>
+          item.id === known.test ? { ...item, outcomes: [{ kind: 'skipped', message: '' }] } : item
+        ),
+      },
+      [known],
+      baseline.cases
+    ).baselineCompatible,
+    false
+  )
+  assert.equal(
+    regressionVerdict(
+      { exitCode: 0, cases: baseline.cases.map((item) => ({ ...item, outcomes: [] })) },
+      [known],
+      baseline.cases
+    ).suitePassed,
+    true
+  )
+})
+
 test('Node project builds regenerate current sources with literal arguments and report compiler failures', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'node-build-'))
   t.after(() => rm(root, { recursive: true, force: true }))
