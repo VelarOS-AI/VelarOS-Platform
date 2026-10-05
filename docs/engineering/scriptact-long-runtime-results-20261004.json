@@ -12317,6 +12317,747 @@
         "independentPair": false,
         "qualification": "Same task and frozen grader, with combined v34-to-v38 development changes. The original Codex reference shares the task; ScriptAct has since changed from request to goal mode. Full reference cost is unknown for all three runs because some requests lack usage."
       }
+    },
+    {
+      "attempt": "chai-04",
+      "schema": 1,
+      "at": "2026-10-05T20:13:30.481Z",
+      "taskId": "chai-isolated-assertion-instances",
+      "scriptactSessionId": "scriptact-ae9f5012-a2c0-45e2-a2e0-9a4b37267be7",
+      "candidateId": "candidate-v38-89b4303b4e76",
+      "candidateSourceCommit": "ff49ff40c2ba78103e0292a91ed650dc31c38644",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "scriptactTaskMode": "goal",
+      "split": "holdout",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 108,
+            "goal": {
+              "id": "cbba7384",
+              "revision": 2,
+              "objective": "Add maintained independent assertion instances to Chai. Test runners and embedded applications need to configure assertions and install plugins for one project while other projects and the default Chai exports keep their own behavior in the same JavaScript realm. Export a synchronous create(options?) factory from the source entry point and the generated chai.js ESM bundle. Each returned instance must provide expect, assert, Assertion, AssertionError, util, a mutable config object, and use(plugin). Preserve the established signatures, assertion behavior and fluent chaining of these APIs. The existing top-level exports, direct public source-module imports, and default should interface must continue working.\n\nEach instance starts with Chai's built-in configuration defaults, plus options.config overrides. Changes to the default exported config must not affect a newly created instance's defaults. Each instance owns its configuration, Assertion constructor/prototype, plugin registry and util namespace. Mutable proxyExcludedKeys arrays must be copied, including supplied override arrays. Preserve supplied function identity for deepEqual. Creating instances must not mutate the options/config objects or plugin array. Undefined options, config and plugins use defaults. Reject null, array or primitive options/config bags and non-array plugins or non-function plugin entries with TypeError. Validate the complete input before invoking any plugin. Configuration overrides use the existing documented config fields.\n\nAll six current configuration properties must work in their owning instance: includeStack, showDiff, truncateThreshold, useProxy, proxyExcludedKeys and deepEqual. Carry ownership through expect and assert, direct new instance.Assertion(...), property and method chains, chainable methods, nested assertions, and the configuration-dependent public utilities such as inspect, objDisplay, getMessage and proxify. Functions detached from an instance, such as const expect = instance.expect or const display = instance.util.objDisplay, must keep their owning instance. Retained assertion chains must keep their origin when another instance is used between their creation and final assertion, including across an await. Configuration reads should retain the timing semantics of the existing APIs; the deepEqual flag can retain the comparator captured when the assertion was constructed. Deprecated Assertion.includeStack/showDiff accessors must refer to the owning instance's configuration. Keep AssertionError compatible with the existing exported constructor.\n\nuse(plugin) must return that same instance, call plugin(instance, instance.util), and run each plugin function once per instance. A function used by the default exports or another instance remains independently installable. options.plugins installs plugins in order before returning the instance. A throwing plugin must remain retryable. Plugins must be able to add and overwrite properties, methods and chainable methods with the established Assertion and util extension APIs. Core assertions and plugin-created chains must use the correct Assertion constructor and config. Plugins added before or after other instances are created must remain local to their owner. Built-in default assertions must remain available on every instance.\n\nOverlapping asynchronous consumers and reentrant assertions using different instances must stay independent. Implement instance ownership in the maintained lib/ modules, with reusable factories or explicit instance dependencies as appropriate. Keep the core usable in browsers. Global activation/switching of configuration or prototypes, Node-only context modules, module cache tricks, VM or worker isolation, evaluation of source strings, and vendored copies of generated bundles do not satisfy the implementation requirement. Generated chai.js remains build output of the maintained source.\n\nAdd focused regression tests covering configuration isolation, copied inputs/defaults, both assertion interfaces, direct and nested chains, detached functions, retained chains across awaits, reentrant calls, every extension/overwrite form, per-instance plugin identity, plugin failure/retry, the default exports and browser bundle behavior. Update public documentation and add a runnable example using two independently configured/plugin-extended instances concurrently. Run the original Node suite, the project's JavaScript lint and formatting checks, rebuild the ESM bundle, and run the example. The standard Node suite can be run with node node_modules/mocha/bin/mocha.js --require ./test/bootstrap/index.js 'test/*.js'; rebuild with node node_modules/esbuild/bin/esbuild --bundle --format=esm --keep-names --outfile=chai.js index.js. Finish with accurate implementation and validation results. Make routine implementation choices autonomously.",
+              "status": "complete",
+              "reason": "Implemented maintained independent Chai instances with owner-scoped config, Assertion/prototype, utilities, interfaces, and plugin registries; added validation, docs, concurrent example, and focused regressions. Verified full Node suite at 513 passing, focused suite at 6 passing, npm lint and formatting checks clean, ESM bundle rebuilt and directly imported with create/legacy exports and isolation checks, example passed, and git diff --check passed.",
+              "createdAt": 1791228117136,
+              "updatedAt": 1791229301972
+            },
+            "goalSnapshotError": null,
+            "startedAt": 1791228116997,
+            "solveMs": 1195300
+          },
+          "build": {
+            "exitCode": 0,
+            "output": "build.json"
+          },
+          "accounting": {
+            "requests": 108,
+            "requestStatuses": {
+              "http-200": 105,
+              "unknown": 1,
+              "http-200-interrupted": 2
+            },
+            "measuredRequests": 106,
+            "missingUsageRequests": 2,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 2444574,
+            "knownOutputTokens": 35945,
+            "knownCachedInputTokens": 969856,
+            "knownCacheRatio": 0.3967382456002559,
+            "pricedRequests": 106,
+            "knownReferenceUsd": 7.005714399999999,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 75,
+            "failed": 2,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "75 passed, 2 failed, 0 skipped, 0 errors",
+            "failures": [
+              "not ok 25 - source: plugins added to default and existing instances do not enter new instances",
+              "not ok 63 - bundle: plugins added to default and existing instances do not enter new instances"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 507,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "507 passed, 0 failed, 0 skipped",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 18,
+          "createdFiles": 2,
+          "changeSummary": "34\t14\tREADME.md\n138\t0\tlib/chai.js\n17\t9\tlib/chai/assertion.js\n154\t27\tlib/chai/core/assertions.js\n650\t183\tlib/chai/interface/assert.js\n3\t0\tlib/chai/interface/expect.js\n4\t3\tlib/chai/utils/addChainableMethod.js\n1\t1\tlib/chai/utils/addMethod.js\n7\t2\tlib/chai/utils/addProperty.js\n5\t3\tlib/chai/utils/getMessage.js\n5\t2\tlib/chai/utils/inspect.js\n3\t2\tlib/chai/utils/isProxyEnabled.js\n7\t3\tlib/chai/utils/objDisplay.js\n4\t2\tlib/chai/utils/overwriteChainableMethod.js\n1\t1\tlib/chai/utils/overwriteMethod.js\n14\t4\tlib/chai/utils/overwriteProperty.js\n5\t4\tlib/chai/utils/proxify.js\n2\t2\tlib/chai/utils/transferFlags.js\n",
+          "created": "examples/independent-instances.js\ntest/independent-instances.js\n",
+          "changeAccounting": {
+            "baseline": "b13b5fb15544ea894c47cafbb325dfafaaf831f3",
+            "head": "b13b5fb15544ea894c47cafbb325dfafaaf831f3",
+            "source": "recorded-baseline",
+            "changedFiles": 18,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 101,
+            "branchRequests": 7,
+            "requestOwners": {
+              "scriptact-ae9f5012-a2c0-45e2-a2e0-9a4b37267be7": 101,
+              "context:850253c4-eccb-4bb3-9db7-6dda3a85200b": 1,
+              "context:d82e887a-606e-41bc-b8bb-b8b6cec8d64a": 1,
+              "context:b163b457-8184-4486-8fe6-9fd775733281": 1,
+              "context:b7f8916a-b457-4a80-b947-55f1fb603e8d": 1,
+              "context:f45bfe8f-5f4f-4330-a9a8-883193fa1e7a": 1,
+              "context:4c57ff37-61dc-4c7f-8bc7-a09ab42aaa4a": 1,
+              "context:ab849320-1201-4d60-be6a-e6fd861691b5": 1
+            },
+            "contextSegments": 40,
+            "nativeRequests": 101,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 7,
+            "originalPromptInFinalRequest": true
+          },
+          "capabilityUsage": {
+            "available": true,
+            "complete": true,
+            "rootTurns": 101,
+            "branchTurns": 7,
+            "uniqueCalls": 2,
+            "traceGaps": 0,
+            "missingSummaries": 0,
+            "operations": [
+              {
+                "moduleId": "velaros:system-goal",
+                "operation": "get",
+                "status": "succeeded",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:system-goal",
+                "operation": "update",
+                "status": "succeeded",
+                "count": 1
+              }
+            ]
+          },
+          "deliveryReview": {
+            "at": "2026-10-05T19:45:43.932Z",
+            "workspace": "/private/tmp/chai04-scriptact-review-Py7lNS/chai",
+            "status": "partial",
+            "regression": {
+              "exitCode": 0,
+              "passed": 513,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "513 passed, 0 failed, 0 skipped",
+              "failures": []
+            },
+            "authoredTests": {
+              "exitCode": 0,
+              "passed": 6,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "6 passed, 0 failed, 0 skipped",
+              "failures": []
+            },
+            "lint": {
+              "javascript": 0,
+              "formatting": 0
+            },
+            "build": 0,
+            "example": {
+              "path": "examples/independent-instances.js",
+              "exitCode": 0
+            },
+            "browserReview": {
+              "buildExitCode": 0,
+              "passed": true,
+              "scope": "Private IIFE bundle smoke without Node globals: two instances, retained chain, local plugin. Full frozen source/ESM feature grader remains authoritative."
+            },
+            "review": {
+              "sourceArchitecture": "Maintained modules carry Assertion ownership and instance config through public utilities and assertion interfaces. InstanceAssertion extends the default Assertion and reinstalls chainable descriptors. This retains prototype inheritance from the mutable default assertion prototype.",
+              "featureFailure": "Both frozen source and generated-bundle checks reject a default plugin leaking into a subsequently created instance. The factory inherits Assertion.prototype and copies its current chainable descriptors; independent plugin registration lists alone cannot isolate this inherited surface.",
+              "testCoverage": "Six authored tests cover selected input validation/copying, detached interfaces, retained async chains, reentrant calls, local plugin identity/retry, and extension/overwrite forms. They do not add a plugin to the default export before creating a new instance, and do not provide dedicated assertions for every configuration property and browser bundle behavior requested by the task.",
+              "documentation": "README adds independent-instance usage, configuration and plugin ownership notes and an executable concurrent example. Independent execution and the frozen grader determine correctness of those claims."
+            },
+            "originalArtifactsUnchanged": true,
+            "artifactSha256": {
+              "solve.json": "0a4662c278d0581f2cb93d367fe6aa09adca31dfe8a985153836ebb7d1f474f4",
+              "grade.json": "6d0a76e7500c86de4bf94b26e74f2db9ac8af3838fd9faaa35d804f183ac2246",
+              "acceptance.json": "99c0cd9893b38f9f0359f2a1a971294cd1e68bf128994201b73992b524386d3f",
+              "regression.json": "c7492c4bd0fbbb79aa952cc11454f30725eee2b56b72e6b2f217f1f8d6b4829d"
+            },
+            "metricsSha256": "31b8b4b12c93008b2467bd8a426a78586c74a38a94d23781a4581cc78813d9fa",
+            "originalMetricsUnchanged": true
+          },
+          "executionReview": {
+            "at": "2026-10-05T20:24:01.960Z",
+            "branches": [
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              }
+            ],
+            "rootMaintenanceOutcomes": [
+              {
+                "sequence": 1203,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              },
+              {
+                "sequence": 1713,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              },
+              {
+                "sequence": 2217,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              },
+              {
+                "sequence": 3150,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              },
+              {
+                "sequence": 3736,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              },
+              {
+                "sequence": 5211,
+                "status": "failed",
+                "reason": "narrate",
+                "error": "自动卷叙事的未解事项超限，需要逐项整理"
+              },
+              {
+                "sequence": 5466,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              }
+            ],
+            "executions": 144,
+            "statuses": {
+              "succeeded": 127,
+              "failed": 17
+            },
+            "failureCodes": {
+              "PROGRAM_ERROR": 17
+            },
+            "maxConsecutiveFailuresPerSession": 3,
+            "maxSameSourceConsecutiveFailures": 1,
+            "modelErrorCodes": {
+              "MODEL_PROVIDER": 2,
+              "LIMIT": 1
+            },
+            "moduleErrors": [],
+            "traceGaps": 0,
+            "capabilityComplete": true,
+            "interpretation": "All 17 failed executions are program errors. Longest failure streak is three, byte-identical complete-source failure streak is one. Counts do not by themselves prove a framework defect or absence of semantic repetition. Two provider errors and a limit error remain accounted. Feature delivery is partial."
+          },
+          "inputReview": {
+            "at": "2026-10-05T19:47:47.451Z",
+            "attempt": "chai-04",
+            "candidateId": "candidate-v38-89b4303b4e76",
+            "observedMainRequests": 101,
+            "originalInHistory": 98,
+            "fullLatestInput": 98,
+            "userMessageChanges": 6,
+            "originalIdentities": 1,
+            "inputLimits": [
+              32768
+            ],
+            "compiledOverLimit": 0,
+            "measuredOverLimit": 0,
+            "measuredRequests": 99,
+            "knownInput": 2296275,
+            "knownCached": 957184,
+            "maximumSegmentIndex": 40,
+            "incompleteFileCount": 0,
+            "evidence": "context-diagnostics/chai-04-input-scriptact-final.json",
+            "evidenceSha256": "b1a14d2967236c19fdd3d389718852089d0e96bcc92e6e5491491f69f632e092",
+            "controllerTerminalAtObservation": true,
+            "interpretation": "98 of 101 main requests retained complete original input; three recovery projections were shorter with references preserved. Estimates and measured usage stayed within the frozen input limit. No isolated causal performance claim."
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791229329366,
+            "finishedAt": 1791230903823,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a10d96-8009-7b70-bfa7-658feb9c99af",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 356,
+            "solveMs": 1574457
+          },
+          "build": {
+            "exitCode": 0,
+            "output": "build.json"
+          },
+          "accounting": {
+            "requests": 98,
+            "requestStatuses": {
+              "http-200": 94,
+              "unknown": 2,
+              "http-200-interrupted": 2
+            },
+            "measuredRequests": 94,
+            "missingUsageRequests": 4,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 2296361,
+            "knownOutputTokens": 55792,
+            "knownCachedInputTokens": 1727616,
+            "knownCacheRatio": 0.7523277045725825,
+            "pricedRequests": 94,
+            "knownReferenceUsd": 4.081866400000001,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 77,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "77 passed, 0 failed, 0 skipped, 0 errors",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 507,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "507 passed, 0 failed, 0 skipped",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": true,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 20,
+          "createdFiles": 4,
+          "changeSummary": "57\t14\tREADME.md\n98\t55\tlib/chai.js\n174\t168\tlib/chai/assertion.js\n9\t1\tlib/chai/config.js\n3929\t3920\tlib/chai/core/assertions.js\n3262\t3215\tlib/chai/interface/assert.js\n46\t43\tlib/chai/interface/expect.js\n214\t210\tlib/chai/interface/should.js\n10\t3\tlib/chai/utils/addChainableMethod.js\n9\t3\tlib/chai/utils/addMethod.js\n9\t3\tlib/chai/utils/addProperty.js\n4\t0\tlib/chai/utils/compareByInspect.js\n4\t0\tlib/chai/utils/getMessage.js\n4\t0\tlib/chai/utils/inspect.js\n4\t0\tlib/chai/utils/isProxyEnabled.js\n4\t0\tlib/chai/utils/objDisplay.js\n9\t3\tlib/chai/utils/overwriteChainableMethod.js\n9\t3\tlib/chai/utils/overwriteMethod.js\n9\t3\tlib/chai/utils/overwriteProperty.js\n9\t0\tlib/chai/utils/proxify.js\n",
+          "created": "examples/independent-instances.js\nlib/chai/utils/factory.js\ntest/instances-bundle.js\ntest/instances.js\n",
+          "changeAccounting": {
+            "baseline": "ac86fee6b32f2621e9ec63bc2eeeeabed76eb6a6",
+            "head": "ac86fee6b32f2621e9ec63bc2eeeeabed76eb6a6",
+            "source": "recorded-baseline",
+            "changedFiles": 20,
+            "createdFiles": 4,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "rootThreadId": "01a10d96-8009-7b70-bfa7-658feb9c99af",
+            "compactions": 14,
+            "childAgentDispatches": 0,
+            "source": "/Users/mac/.codex/sessions/2026/10/06/rollout-2026-10-06T03-42-09-01a10d96-8009-7b70-bfa7-658feb9c99af.jsonl"
+          },
+          "deliveryReview": {
+            "at": "2026-10-05T20:15:32.899Z",
+            "workspace": "/private/tmp/chai04-codex-review-pZK1H3/chai",
+            "status": "complete",
+            "regression": {
+              "exitCode": 0,
+              "passed": 517,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "517 passed, 0 failed, 0 skipped",
+              "failures": []
+            },
+            "authoredTests": {
+              "exitCode": 0,
+              "passed": 10,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "10 passed, 0 failed, 0 skipped",
+              "failures": []
+            },
+            "lint": {
+              "javascript": 0,
+              "formatting": 0
+            },
+            "build": 0,
+            "example": {
+              "path": "examples/independent-instances.js",
+              "exitCode": 0
+            },
+            "browserReview": {
+              "buildExitCode": 0,
+              "passed": true,
+              "scope": "Private IIFE bundle smoke without Node globals: two instances, retained chain, local plugin. Full frozen source/ESM feature grader remains authoritative."
+            },
+            "review": {
+              "sourceArchitecture": "Maintained configuration, assertion, utility and interface factories construct independent owners and install built-ins for each instance. The implementation does not use global activation, Node-only context, VM isolation or generated-bundle copies.",
+              "featureAcceptance": "All 77 frozen source/bundle checks and 507 frozen original tests pass. The private delivery review rebuilds from maintained source before running the authored-inclusive suite.",
+              "testCoverage": "Ten authored tests cover complete instance APIs, copied defaults and supplied inputs, validation before plugins, each config property, detached and retained async chains, nested/reentrant assertions, extension and overwrite forms, plugin identity/order/failure/retry, deprecated/default behavior and the generated bundle. The independent browser smoke covers Node-global-free execution.",
+              "documentation": "README describes independent ownership, built-ins and plugin registration, detached functions and links to an executable two-instance concurrent example."
+            },
+            "originalArtifactsUnchanged": true,
+            "artifactSha256": {
+              "solve.json": "938635b245f311f3ef9bb8089f8e4f20cde62a689da3f54d6faea481ff62f952",
+              "grade.json": "c80bae7797ea1807155b9b6531d2b9e71553a6cc9b16a88f31c60f7bbdd0e077",
+              "acceptance.json": "42e0aeb5a8063f9ad23b49c399a200455e73564bf5fb82e76996ca14bab2a6e6",
+              "regression.json": "183eb6920797f13733121f6916c496b96ef6e5500500625ac5bddbde255b429f"
+            },
+            "metricsSha256": "31b8b4b12c93008b2467bd8a426a78586c74a38a94d23781a4581cc78813d9fa",
+            "originalMetricsUnchanged": true
+          }
+        }
+      }
+    },
+    {
+      "attempt": "chai-shell-node-04",
+      "schema": 1,
+      "at": "2026-10-05T20:25:30.853Z",
+      "taskId": "chai-isolated-assertion-instances",
+      "scriptactSessionId": "scriptact-9f865606-6ca1-4fc2-84eb-819dae4f69e7",
+      "candidateId": "candidate-v38-89b4303b4e76",
+      "candidateSourceCommit": "ff49ff40c2ba78103e0292a91ed650dc31c38644",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "shell-node",
+      "scriptactTaskMode": "goal",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 40,
+            "goal": {
+              "id": "fa030ebf",
+              "revision": 2,
+              "objective": "Add maintained independent assertion instances to Chai. Test runners and embedded applications need to configure assertions and install plugins for one project while other projects and the default Chai exports keep their own behavior in the same JavaScript realm. Export a synchronous create(options?) factory from the source entry point and the generated chai.js ESM bundle. Each returned instance must provide expect, assert, Assertion, AssertionError, util, a mutable config object, and use(plugin). Preserve the established signatures, assertion behavior and fluent chaining of these APIs. The existing top-level exports, direct public source-module imports, and default should interface must continue working.\n\nEach instance starts with Chai's built-in configuration defaults, plus options.config overrides. Changes to the default exported config must not affect a newly created instance's defaults. Each instance owns its configuration, Assertion constructor/prototype, plugin registry and util namespace. Mutable proxyExcludedKeys arrays must be copied, including supplied override arrays. Preserve supplied function identity for deepEqual. Creating instances must not mutate the options/config objects or plugin array. Undefined options, config and plugins use defaults. Reject null, array or primitive options/config bags and non-array plugins or non-function plugin entries with TypeError. Validate the complete input before invoking any plugin. Configuration overrides use the existing documented config fields.\n\nAll six current configuration properties must work in their owning instance: includeStack, showDiff, truncateThreshold, useProxy, proxyExcludedKeys and deepEqual. Carry ownership through expect and assert, direct new instance.Assertion(...), property and method chains, chainable methods, nested assertions, and the configuration-dependent public utilities such as inspect, objDisplay, getMessage and proxify. Functions detached from an instance, such as const expect = instance.expect or const display = instance.util.objDisplay, must keep their owning instance. Retained assertion chains must keep their origin when another instance is used between their creation and final assertion, including across an await. Configuration reads should retain the timing semantics of the existing APIs; the deepEqual flag can retain the comparator captured when the assertion was constructed. Deprecated Assertion.includeStack/showDiff accessors must refer to the owning instance's configuration. Keep AssertionError compatible with the existing exported constructor.\n\nuse(plugin) must return that same instance, call plugin(instance, instance.util), and run each plugin function once per instance. A function used by the default exports or another instance remains independently installable. options.plugins installs plugins in order before returning the instance. A throwing plugin must remain retryable. Plugins must be able to add and overwrite properties, methods and chainable methods with the established Assertion and util extension APIs. Core assertions and plugin-created chains must use the correct Assertion constructor and config. Plugins added before or after other instances are created must remain local to their owner. Built-in default assertions must remain available on every instance.\n\nOverlapping asynchronous consumers and reentrant assertions using different instances must stay independent. Implement instance ownership in the maintained lib/ modules, with reusable factories or explicit instance dependencies as appropriate. Keep the core usable in browsers. Global activation/switching of configuration or prototypes, Node-only context modules, module cache tricks, VM or worker isolation, evaluation of source strings, and vendored copies of generated bundles do not satisfy the implementation requirement. Generated chai.js remains build output of the maintained source.\n\nAdd focused regression tests covering configuration isolation, copied inputs/defaults, both assertion interfaces, direct and nested chains, detached functions, retained chains across awaits, reentrant calls, every extension/overwrite form, per-instance plugin identity, plugin failure/retry, the default exports and browser bundle behavior. Update public documentation and add a runnable example using two independently configured/plugin-extended instances concurrently. Run the original Node suite, the project's JavaScript lint and formatting checks, rebuild the ESM bundle, and run the example. The standard Node suite can be run with node node_modules/mocha/bin/mocha.js --require ./test/bootstrap/index.js 'test/*.js'; rebuild with node node_modules/esbuild/bin/esbuild --bundle --format=esm --keep-names --outfile=chai.js index.js. Finish with accurate implementation and validation results. Make routine implementation choices autonomously.",
+              "status": "complete",
+              "reason": "Implemented independent Chai instances and rebuilt the ESM bundle. Verified the requested Node suite (513 passing), Chromium browser suite (512 passing), lint (0 errors; warnings only), Prettier check, bundle build, and concurrent example.",
+              "createdAt": 1791231247684,
+              "updatedAt": 1791231784519
+            },
+            "goalSnapshotError": null,
+            "startedAt": 1791231247550,
+            "solveMs": 547038
+          },
+          "build": {
+            "exitCode": 0,
+            "output": "build.json"
+          },
+          "accounting": {
+            "requests": 40,
+            "requestStatuses": {
+              "http-200": 39,
+              "http-200-interrupted": 1
+            },
+            "measuredRequests": 39,
+            "missingUsageRequests": 1,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 838855,
+            "knownOutputTokens": 16129,
+            "knownCachedInputTokens": 358528,
+            "knownCacheRatio": 0.42740163675486226,
+            "pricedRequests": 39,
+            "knownReferenceUsd": 2.3872992000000006,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 77,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "77 passed, 0 failed, 0 skipped, 0 errors",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 507,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "507 passed, 0 failed, 0 skipped",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": true,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 18,
+          "createdFiles": 2,
+          "changeSummary": "37\t14\tREADME.md\n112\t2\tlib/chai.js\n133\t126\tlib/chai/assertion.js\n6\t1\tlib/chai/config.js\n3929\t3920\tlib/chai/core/assertions.js\n3253\t3202\tlib/chai/interface/assert.js\n46\t43\tlib/chai/interface/expect.js\n10\t3\tlib/chai/utils/addChainableMethod.js\n3\t3\tlib/chai/utils/addMethod.js\n3\t3\tlib/chai/utils/addProperty.js\n4\t4\tlib/chai/utils/getMessage.js\n8\t2\tlib/chai/utils/inspect.js\n2\t2\tlib/chai/utils/isProxyEnabled.js\n3\t3\tlib/chai/utils/objDisplay.js\n9\t3\tlib/chai/utils/overwriteChainableMethod.js\n9\t3\tlib/chai/utils/overwriteMethod.js\n9\t3\tlib/chai/utils/overwriteProperty.js\n4\t3\tlib/chai/utils/proxify.js\n",
+          "created": "examples/instances.js\ntest/create.js\n",
+          "changeAccounting": {
+            "baseline": "ffe531d63ff28f0686f82457eee18163fa3f63f5",
+            "head": "ffe531d63ff28f0686f82457eee18163fa3f63f5",
+            "source": "recorded-baseline",
+            "changedFiles": 18,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 37,
+            "branchRequests": 3,
+            "requestOwners": {
+              "scriptact-9f865606-6ca1-4fc2-84eb-819dae4f69e7": 37,
+              "context:89d0cc8e-fdc0-4b7d-bdb6-21ae29cf0f09": 1,
+              "context:86b6a5a0-30d1-4158-99b0-3c9c1490b8ed": 1,
+              "context:3b759865-695c-4bc7-a24d-c1bbd65c2e25": 1
+            },
+            "contextSegments": 14,
+            "nativeRequests": 37,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 3,
+            "originalPromptInFinalRequest": true
+          },
+          "capabilityUsage": {
+            "available": true,
+            "complete": true,
+            "rootTurns": 37,
+            "branchTurns": 3,
+            "uniqueCalls": 1,
+            "traceGaps": 0,
+            "missingSummaries": 0,
+            "operations": [
+              {
+                "moduleId": "velaros:system-goal",
+                "operation": "update",
+                "status": "succeeded",
+                "count": 1
+              }
+            ]
+          },
+          "deliveryReview": {
+            "at": "2026-10-05T20:27:02.233Z",
+            "workspace": "/private/tmp/chai04-bare-review-tn91Xm/chai",
+            "status": "partial",
+            "regression": {
+              "exitCode": 0,
+              "passed": 513,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "513 passed, 0 failed, 0 skipped",
+              "failures": []
+            },
+            "authoredTests": {
+              "exitCode": 0,
+              "passed": 6,
+              "failed": 0,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "6 passed, 0 failed, 0 skipped",
+              "failures": []
+            },
+            "lint": {
+              "javascript": 0,
+              "formatting": 0
+            },
+            "build": 0,
+            "example": {
+              "path": "examples/instances.js",
+              "exitCode": 0
+            },
+            "browserReview": {
+              "buildExitCode": 0,
+              "passed": true,
+              "scope": "Private IIFE bundle smoke without Node globals: two instances, retained chain, local plugin. Full frozen source/ESM feature grader remains authoritative."
+            },
+            "review": {
+              "sourceArchitecture": "Maintained configuration defaults, Assertion and interface factories create local owners. Public utility wrappers bind local config and Assertion dependencies. Built-ins are installed per owner. No global activation, Node-only context, VM isolation or generated-bundle copies were found in production code.",
+              "featureAcceptance": "All 77 frozen source and ESM bundle checks and 507 original regression tests pass. The independent copy rebuilds from source before authored-inclusive tests.",
+              "testCoverage": "Six authored tests cover copied config inputs and defaults, validation before plugin invocation, detached utilities and expect, direct/nested/retained async chains, extension/overwrite forms, plugin identity/failure/retry and reentrancy. They do not independently cover every configuration property, default-plugin-before-new-instance order or the generated browser bundle, as requested. Delivery review remains partial despite full frozen feature acceptance.",
+              "documentation": "README describes local config and plugin ownership, built-in defaults, validation, detached and retained chains, and links to a two-instance executable example. Browser smoke is separate from the authored test coverage."
+            },
+            "originalArtifactsUnchanged": true,
+            "artifactSha256": {
+              "solve.json": "d667d14715373404c82ba710418d68c6145d83d6ca984b6a749804440943b874",
+              "grade.json": "43da6c745581b3f5b7a76d88ea2de32233e2ddff506ac3a40c1c5bf651783a2c",
+              "acceptance.json": "9c3a2d8e9200ebafd0341cab26fc90e49447529e4131eec62e5d6ca8dea2f91a",
+              "regression.json": "6c6fb64f0aa84fd165bc4b385221a1d29c697a41274e0402d234ef126150939c"
+            },
+            "metricsSha256": "316a16fd42b6f0f670889095a32a92eba87691c1a9a144b7b282252547bfcbdb",
+            "originalMetricsUnchanged": true
+          },
+          "executionReview": {
+            "at": "2026-10-05T20:28:18.633Z",
+            "branches": [
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              },
+              {
+                "kind": "context",
+                "status": "closed",
+                "turns": 1
+              }
+            ],
+            "rootMaintenanceOutcomes": [
+              {
+                "sequence": 1098,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              },
+              {
+                "sequence": 1603,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              },
+              {
+                "sequence": 1919,
+                "status": "applied",
+                "reason": "narrate",
+                "error": null
+              }
+            ],
+            "executions": 61,
+            "statuses": {
+              "succeeded": 58,
+              "failed": 3
+            },
+            "failureCodes": {
+              "PROGRAM_ERROR": 3
+            },
+            "maxConsecutiveFailuresPerSession": 1,
+            "maxSameSourceConsecutiveFailures": 1,
+            "modelErrorCodes": {
+              "MODEL_PROVIDER": 1
+            },
+            "moduleErrors": [],
+            "traceGaps": 0,
+            "capabilityComplete": true,
+            "interpretation": "Three program errors remain counted, with a maximum failed-execution streak of one. One provider error was followed by recovery. These counts alone do not establish semantic non-repetition or absence of all framework faults. Frozen feature acceptance passes; authored test coverage makes delivery review partial."
+          },
+          "inputReview": {
+            "at": "2026-10-05T20:27:21.512Z",
+            "attempt": "chai-shell-node-04",
+            "candidateId": "candidate-v38-89b4303b4e76",
+            "observedMainRequests": 37,
+            "originalInHistory": 36,
+            "fullLatestInput": 36,
+            "userMessageChanges": 2,
+            "originalIdentities": 1,
+            "inputLimits": [
+              32768
+            ],
+            "compiledOverLimit": 0,
+            "measuredOverLimit": 0,
+            "measuredRequests": 36,
+            "knownInput": 766077,
+            "knownCached": 350080,
+            "maximumSegmentIndex": 14,
+            "incompleteFileCount": 0,
+            "evidence": "context-diagnostics/chai-shell-node-04-input-final.json",
+            "evidenceSha256": "f0a930acf96820b8275324e6ade48e88e26be46d3c7e5cab51f0728886dcc6a0",
+            "controllerTerminalAtObservation": true,
+            "interpretation": "36 of 37 main requests retained complete original input; one capacity recovery projection was shorter with references retained. Estimates and measured input usage stayed within the frozen limit. This is observed context evidence, not isolated causal performance evidence."
+          }
+        }
+      },
+      "developmentComparison": {
+        "previousScriptactReference": "chai-04:scriptact",
+        "commonCodexReference": "chai-04:codex",
+        "independentPair": false,
+        "qualification": "Same v38 candidate, task, frozen grader, dependencies, goal mode and model generation settings as chai-04. Capability availability is the configured difference; individual runs remain stochastic. This is a development replay using the common Chai Codex reference, not another independent pair. Full cost is unknown for all three runs because some requests lack usage."
+      }
     }
   ],
   "transportDiagnostics": {
