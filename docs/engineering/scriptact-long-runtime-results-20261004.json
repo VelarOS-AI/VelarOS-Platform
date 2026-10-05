@@ -7297,6 +7297,115 @@
             "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T20-46-39-01a10c1a-1942-7423-bddf-2f88716585d3.jsonl"
           }
         }
+      },
+      "deliveryReview": {
+        "scriptact": {
+          "reviewedAt": "2026-10-05T13:22:33.084Z",
+          "workspace": "/private/tmp/markdown-it-delivery-review-TUvXSr/scriptact",
+          "status": "partial",
+          "testDelivery": {
+            "authoredCases": 5,
+            "location": "test/url-transform.mjs",
+            "suite": {
+              "exitCode": 1,
+              "passed": 939,
+              "failed": 1,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "939 passed, 1 failed, 0 skipped",
+              "failures": [
+                "test/pathological.mjs::Pathological sequences speed Cmark verify original source crc::1"
+              ]
+            },
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": false,
+              "knownFailures": [
+                "test/pathological.mjs::Pathological sequences speed Cmark verify original source crc::1"
+              ],
+              "unexpected": []
+            },
+            "remaining": "The resource-path case omits scheme-based linkification and does not assert displayed automatic-link text; both corresponding external checks fail."
+          },
+          "buildExitCode": 0,
+          "lintExitCode": 0,
+          "example": {
+            "path": "support/url-transform-example.mjs",
+            "exitCode": 0
+          },
+          "sourceArtifactsChanged": false,
+          "timingOutsideOriginalSolve": true
+        },
+        "codex": {
+          "reviewedAt": "2026-10-05T13:22:42.036Z",
+          "workspace": "/private/tmp/markdown-it-delivery-review-TUvXSr/codex",
+          "status": "partial",
+          "testDelivery": {
+            "authoredCases": 12,
+            "location": "test/url-transform.mjs",
+            "suite": {
+              "exitCode": 1,
+              "passed": 946,
+              "failed": 1,
+              "skipped": 0,
+              "errors": 0,
+              "summary": "946 passed, 1 failed, 0 skipped",
+              "failures": [
+                "test/pathological.mjs::Pathological sequences speed Cmark verify original source crc::1"
+              ]
+            },
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": false,
+              "knownFailures": [
+                "test/pathological.mjs::Pathological sequences speed Cmark verify original source crc::1"
+              ],
+              "unexpected": []
+            },
+            "mutation": {
+              "rule": "With urlTransform enabled, display the transformed href as scheme-link text.",
+              "control": {
+                "exitCode": 0,
+                "passed": 12,
+                "failed": 0,
+                "skipped": 0,
+                "errors": 0,
+                "summary": "12 passed, 0 failed, 0 skipped",
+                "failures": []
+              },
+              "mutated": {
+                "exitCode": 0,
+                "passed": 12,
+                "failed": 0,
+                "skipped": 0,
+                "errors": 0,
+                "summary": "12 passed, 0 failed, 0 skipped",
+                "failures": []
+              },
+              "hits": 1,
+              "external": {
+                "exitCode": 1,
+                "passed": 0,
+                "failed": 1,
+                "skipped": 0,
+                "errors": 0,
+                "summary": "0 passed, 1 failed, 0 skipped, 0 errors",
+                "failures": [
+                  "not ok 1 - automatic links preserve their displayed text while destinations change"
+                ]
+              }
+            },
+            "remaining": "The authored tests cover scheme links but allow their displayed text to change; the isolated mutation executes and the new tests still pass."
+          },
+          "buildExitCode": 0,
+          "lintExitCode": 0,
+          "example": {
+            "path": "examples/url-transform.mjs",
+            "exitCode": 0
+          },
+          "sourceArtifactsChanged": false,
+          "timingOutsideOriginalSolve": true
+        }
       }
     }
   ],
