@@ -10995,6 +10995,342 @@
           }
         ]
       }
+    },
+    {
+      "attempt": "shelljs-02",
+      "schema": 1,
+      "at": "2026-10-05T18:03:48.725Z",
+      "taskId": "shelljs-independent-working-directory-instances",
+      "scriptactSessionId": "scriptact-03ac3d19-7344-4d17-b52c-9933d2e98834",
+      "candidateId": "candidate-v35-b46944da061c",
+      "candidateSourceCommit": "eafc4e073332a12e1b8e20f85e2d4bd93e50146a",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "scriptactTaskMode": "goal",
+      "split": "development",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "failed",
+            "failure": "stream_read_error",
+            "requestCount": 100,
+            "goal": {
+              "id": "d912f5c1",
+              "revision": 1,
+              "objective": "Add independent ShellJS instances for applications that coordinate several working directories in one Node process. Implement shell.create(options?) as a maintained public API, integrate it throughout the built-in commands and ShellString pipelines, and add regression tests, documentation and a runnable example. Keep the existing default export and its existing process-wide behavior compatible.\n\nA new instance exposes the ordinary built-in command API, ShellString, config, env, error(), errorCode() and create(). options is an optional non-null, non-array object with optional cwd, config and env fields. cwd must be a nonempty string naming an existing directory; missing cwd snapshots the parent's current directory at creation. Relative cwd is resolved against the parent directory. Creating from the default export uses the real process directory as the parent; creating from another instance uses that instance's directory. Invalid option types throw TypeError; missing or nondirectory cwd throws before creating an instance or changing any state. Explicit undefined uses defaults.\n\nEach instance owns its current and previous directory, directory stack, command error state, configuration and environment. Snapshot the parent's config and env and apply supplied overrides; objects are independent, including config.globOptions, and caller-owned options remain unchanged. config and env overrides must be non-null, non-array objects when supplied. Changes to one instance, the parent or the real process environment after creation must not leak into another instance. config.reset() restores the existing ShellJS configuration defaults for that instance. Existing config options and set flags retain their meaning. The instance's env is used by its child commands and cd('-') keeps its previous directory there without changing process.env. cd() still uses the ordinary home-directory behavior.\n\nResolve relative filesystem operands and wildcard expansion against the instance current directory throughout cat, chmod, cp, find, grep, head, ln, ls, mkdir, mv, rm, sed, sort, tail, test, touch, uniq, to and toEnd. Preserve flags, arrays, wildcard ordering, recursive traversal, symbolic-link target text, filename prefixes, relative output spelling and ShellString stdout/stderr/code semantics. Literal text, patterns, replacements, command arguments and piped data must retain their ordinary meaning. Absolute paths continue to work. cd, pwd, dirs, pushd and popd act only on the owning instance, including invalid paths and directory-stack flags. which resolves relative PATH entries against the instance directory and uses that instance's environment.\n\nexec and cmd default to the instance cwd and env. An explicit command cwd is resolved relative to that instance and applies only to that invocation; an explicit env continues to use the command's existing override semantics. Preserve sync exec, async exec callbacks, returned child handles, stdout/stderr, exit codes and existing options. Async exec must capture its directory and environment when dispatched, so later cd/env changes and simultaneous commands on another instance cannot affect it.\n\nA ShellString returned by an instance, or made with instance.ShellString, keeps that instance for later pipeable methods, to, toEnd and exec/cmd. Pipe operations use that instance's directory at the time the pipe method is invoked, even if another instance or the default export ran in between. Ordinary string/array conversions, flags, return types and command error handling remain compatible. Detached instance command methods must remain bound to their owner. Error/fatal/configuration state must stay isolated after successful commands, failures and reentrant callbacks such as sed's replacement function.\n\nInstance commands must never temporarily change the process working directory, replace shared Node builtins, clear shared require caches or evaluate copies of module source. Use maintained command implementations and explicit instance context so ordinary application code and callbacks always observe the real process cwd and builtins. Preserve custom-plugin and global.js behavior of the default export; this feature requires the built-in command set on new instances.\n\nAdd focused tests across command families and flags, array/glob/absolute operands, directory-stack and previous-directory behavior, error/config/env isolation, nested creation, delayed and detached ShellString pipelines, simultaneous async execution, reentrant command callbacks and coexistence with the default export. Update public API documentation and add an executable example using two directories concurrently. Run the original AVA suite, npm run lint and the example, and report accurate implementation and validation results. Make routine implementation choices autonomously.",
+              "status": "active",
+              "reason": "",
+              "createdAt": 1791219131790,
+              "updatedAt": 1791219131790
+            },
+            "goalSnapshotError": null,
+            "startedAt": 1791219131639,
+            "solveMs": 2254449
+          },
+          "accounting": {
+            "requests": 100,
+            "requestStatuses": {
+              "http-200": 96,
+              "unknown": 2,
+              "http-200-interrupted": 2
+            },
+            "measuredRequests": 96,
+            "missingUsageRequests": 4,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 2045854,
+            "knownOutputTokens": 32626,
+            "knownCachedInputTokens": 796928,
+            "knownCacheRatio": 0.3895331729439149,
+            "pricedRequests": 96,
+            "knownReferenceUsd": 5.9669952,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 49,
+            "failed": 7,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "49 passed, 7 failed, 0 skipped, 0 errors",
+            "failures": [
+              "not ok 22 - ls relative and structured output preserve names",
+              "not ok 24 - grep file-name output preserves relative operands",
+              "not ok 28 - relative write command chmod",
+              "not ok 40 - directory stacks and stack flags remain separate",
+              "not ok 52 - cmd uses instance cwd and environment",
+              "not ok 53 - cmd explicit cwd is relative to the instance and invocation-local",
+              "not ok 54 - cmd ShellString piping keeps the owner and data"
+            ]
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 614,
+            "failed": 0,
+            "skipped": 7,
+            "errors": 0,
+            "summary": "614 passed, 0 failed, 7 skipped, 0 errors",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 12,
+          "createdFiles": 3,
+          "changeSummary": "19\t0\tREADME.md\n9\t0\tshell.js\n7\t5\tsrc/cd.js\n95\t26\tsrc/common.js\n2\t2\tsrc/cp.js\n15\t9\tsrc/dirs.js\n1\t1\tsrc/echo.js\n10\t10\tsrc/exec.js\n1\t1\tsrc/grep.js\n1\t1\tsrc/pwd.js\n1\t1\tsrc/set.js\n6\t5\tsrc/which.js\n",
+          "created": "examples/independent-instances.js\nsrc/instance.js\ntest/create.js\n",
+          "changeAccounting": {
+            "baseline": "b708c59551d3cb7e0206bcf6cccef87367216e6a",
+            "head": "b708c59551d3cb7e0206bcf6cccef87367216e6a",
+            "source": "recorded-baseline",
+            "changedFiles": 12,
+            "createdFiles": 3,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 46,
+            "branchRequests": 54,
+            "requestOwners": {
+              "scriptact-03ac3d19-7344-4d17-b52c-9933d2e98834": 46,
+              "agent:scriptact-03ac3d19-7344-4d17-b52c-9933d2e98834:a67fcdde": 35,
+              "context:5ecc6d4e-59b7-4d4d-ad09-7c5ba18e0633": 7,
+              "context:60639cf9-42b9-46fe-ab7f-06d19388b87f": 5,
+              "context:73725c97-60d3-4b48-8b72-eb861dae0ba7": 6,
+              "context:30ebf8b0-9146-4191-9cd8-6c3785067b6e": 1
+            },
+            "contextSegments": 23,
+            "nativeRequests": 99,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 1,
+            "originalPromptInFinalRequest": true
+          },
+          "capabilityUsage": {
+            "available": true,
+            "complete": true,
+            "rootTurns": 46,
+            "branchTurns": 54,
+            "uniqueCalls": 50,
+            "traceGaps": 0,
+            "missingSummaries": 0,
+            "operations": [
+              {
+                "moduleId": "velaros:agents",
+                "operation": "profiles",
+                "status": "succeeded",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:agents",
+                "operation": "resume",
+                "status": "succeeded",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:agents",
+                "operation": "start",
+                "status": "succeeded",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:agents",
+                "operation": "wait",
+                "status": "succeeded",
+                "count": 2
+              },
+              {
+                "moduleId": "velaros:context-materials",
+                "operation": "list",
+                "status": "succeeded",
+                "count": 12
+              },
+              {
+                "moduleId": "velaros:context-materials",
+                "operation": "read",
+                "status": "succeeded",
+                "count": 29
+              },
+              {
+                "moduleId": "velaros:context-materials",
+                "operation": "submit",
+                "status": "failed",
+                "count": 1
+              },
+              {
+                "moduleId": "velaros:context-materials",
+                "operation": "submit",
+                "status": "succeeded",
+                "count": 3
+              }
+            ]
+          },
+          "deliveryReview": {
+            "at": "2026-10-05T17:45:21.663Z",
+            "workspace": "/private/tmp/shelljs02-delivery-review-PdSYqI/scriptact",
+            "status": "partial",
+            "regression": {
+              "exitCode": 0,
+              "passed": 621,
+              "failed": 0,
+              "skipped": 7,
+              "errors": 0,
+              "summary": "621 passed, 0 failed, 7 skipped, 0 errors",
+              "failures": []
+            },
+            "authoredTests": 7,
+            "lint": {
+              "exitCode": 0,
+              "elapsedMs": 1072
+            },
+            "example": {
+              "exitCode": 0,
+              "elapsedMs": 47
+            },
+            "review": {
+              "sourceArchitecture": "Maintained command modules plus AsyncLocalStorage and instance-bound wrappers. No process.cwd switching or shared builtin replacement was found in instance dispatch. Default process.chdir remains in the default-context branch.",
+              "testCoverage": "Seven authored cases cover configuration, selected files, exec, symlinks and one stack flag. The async environment is mutated only after awaiting completion, so that test does not verify in-flight dispatch snapshots. Most command families, structured ls/grep output, chmod and cmd have no new focused cases. Seven frozen feature checks remain failed.",
+              "documentation": "README documents independent state, nested relative cwd and the concurrent example; shell.js lists cwd/config/env options. Detailed pipeline ownership, detached calls and async snapshot behavior are not documented."
+            },
+            "originalArtifactsUnchanged": true
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791221412779,
+            "finishedAt": 1791223363682,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a10d1d-b3d0-7b32-b936-1cf558bb511a",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 306,
+            "solveMs": 1950903
+          },
+          "accounting": {
+            "requests": 183,
+            "requestStatuses": {
+              "http-200": 176,
+              "unknown": 2,
+              "http-200-interrupted": 5
+            },
+            "measuredRequests": 176,
+            "missingUsageRequests": 7,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 4139429,
+            "knownOutputTokens": 83092,
+            "knownCachedInputTokens": 3220736,
+            "knownCacheRatio": 0.778062868091227,
+            "pricedRequests": 176,
+            "knownReferenceUsd": 6.624906399999995,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 56,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "56 passed, 0 failed, 0 skipped, 0 errors",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 614,
+            "failed": 0,
+            "skipped": 7,
+            "errors": 0,
+            "summary": "614 passed, 0 failed, 7 skipped, 0 errors",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": true,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 28,
+          "createdFiles": 2,
+          "changeSummary": "55\t0\tREADME.md\n16\t0\tshell.js\n4\t3\tsrc/cat.js\n15\t6\tsrc/cd.js\n20\t14\tsrc/chmod.js\n5\t0\tsrc/cmd.js\n179\t46\tsrc/common.js\n22\t15\tsrc/cp.js\n14\t12\tsrc/dirs.js\n9\t6\tsrc/exec.js\n3\t2\tsrc/find.js\n3\t2\tsrc/grep.js\n5\t4\tsrc/head.js\n6\t5\tsrc/ln.js\n11\t10\tsrc/ls.js\n6\t5\tsrc/mkdir.js\n14\t10\tsrc/mv.js\n1\t1\tsrc/pwd.js\n6\t7\tsrc/rm.js\n4\t3\tsrc/sed.js\n4\t3\tsrc/sort.js\n4\t3\tsrc/tail.js\n4\t3\tsrc/test.js\n3\t2\tsrc/to.js\n3\t2\tsrc/toEnd.js\n5\t4\tsrc/touch.js\n10\t4\tsrc/uniq.js\n6\t5\tsrc/which.js\n",
+          "created": "examples/independent-instances.js\ntest/create.js\n",
+          "changeAccounting": {
+            "baseline": "48c7a619527a1b96c91629e525ed7662528f993e",
+            "head": "48c7a619527a1b96c91629e525ed7662528f993e",
+            "source": "recorded-baseline",
+            "changedFiles": 28,
+            "createdFiles": 2,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "rootThreadId": "01a10d1d-b3d0-7b32-b936-1cf558bb511a",
+            "compactions": 12,
+            "childAgentDispatches": 3,
+            "source": "/Users/mac/.codex/sessions/2026/10/06/rollout-2026-10-06T01-30-12-01a10d1d-b3d0-7b32-b936-1cf558bb511a.jsonl"
+          },
+          "deliveryReview": {
+            "at": "2026-10-05T18:05:45.468Z",
+            "workspace": "/private/tmp/shelljs02-codex-delivery-review-CEqezN/codex",
+            "status": "partial",
+            "regression": {
+              "exitCode": 0,
+              "passed": 626,
+              "failed": 0,
+              "skipped": 7,
+              "errors": 0,
+              "summary": "626 passed, 0 failed, 7 skipped, 0 errors",
+              "failures": []
+            },
+            "authoredTests": 12,
+            "lint": {
+              "exitCode": 0,
+              "elapsedMs": 1289
+            },
+            "example": {
+              "exitCode": 0,
+              "elapsedMs": 63
+            },
+            "review": {
+              "sourceArchitecture": "Maintained command implementations use instance-owned contexts selected and restored around synchronous dispatch; async exec copies cwd/env before spawning. Command wrappers and ShellStrings bind the owner. Instance paths do not temporarily change process cwd, replace shared Node builtins, evaluate source or clear shared caches. The task does not prohibit the internal synchronous context selector.",
+              "testCoverage": "Twelve authored tests cover validation, independent snapshots, nested creation, errors, detached commands, delayed pipelines, exec/cmd, in-flight async snapshots, simultaneous execution, plugins, reentrant sed, selected globs and directory-stack flags. Several changed command families, including chmod, cp, mv, rm, find, ln and touch, have no instance-specific authored tests.",
+              "documentation": "README and generated API documentation describe create, independent state, nested cwd, relative file/command behavior, retained ShellString ownership and per-command cwd. The executable concurrent example is included. Detailed async snapshot and detached-command behavior are not documented."
+            },
+            "originalArtifactSha256": {
+              "solve.json": "c6bdf5e1a4f2a3ebd19762f21c21c713311da94fc226528f60da3ae327b5018a",
+              "grade.json": "2a0563e21db26bfb6f3e62849f28675fdd75b2042815fe072d9da0d3e18df5da",
+              "acceptance.json": "a0fde97317e66bd048dd668c9308974ff0e9239d7acde2988ca3cec25de1402b",
+              "regression.json": "e6a6f9a058c5282452b82e0947d2e736b0c5a15b1476eeeb616e35b71eecec3a"
+            },
+            "originalArtifactsUnchanged": true,
+            "coverageProbe": {
+              "file": "codex-delivery-coverage-probe.json",
+              "authoredSuitePassed": 626,
+              "externalFailed": 1,
+              "originalArtifactsUnchanged": true
+            }
+          }
+        }
+      }
     }
   ],
   "transportDiagnostics": {
