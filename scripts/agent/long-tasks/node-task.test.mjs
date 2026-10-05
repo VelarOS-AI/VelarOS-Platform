@@ -96,6 +96,34 @@ test('Mocha reports preserve failures, skips and inventory; malformed and empty 
   }
   const result = { exitCode: 0, stdout: JSON.stringify(raw) }
   const parsed = mochaReport(result, '/repo')
+  assert.deepEqual(
+    mochaReport(
+      { ...result, stdout: `Diagnostic before tests\n${result.stdout}\ncleanup done\n` },
+      '/repo'
+    ),
+    parsed
+  )
+  const escaped = { ...pass, fullTitle: 'quoted " and nested } { text \\ remain intact' }
+  const escapedReport = JSON.stringify(
+    {
+      stats: { tests: 1, passes: 1, failures: 0, pending: 0 },
+      tests: [escaped],
+      passes: [escaped],
+      pending: [],
+      failures: [],
+    },
+    null,
+    2
+  )
+  assert.equal(
+    mochaReport({ exitCode: 0, stdout: `log\n${escapedReport}` }, '/repo').summary.passed,
+    1
+  )
+  assert.throws(() =>
+    mochaReport({ ...result, stdout: `${result.stdout}\n${result.stdout}` }, '/repo')
+  )
+  assert.throws(() => mochaReport({ ...result, stdout: result.stdout.slice(0, -1) }, '/repo'))
+  assert.throws(() => mochaReport({ ...result, stdout: `${result.stdout}\n{"stats":` }, '/repo'))
   assert.equal(parsed.summary.passed, 1)
   assert.equal(parsed.summary.skipped, 1)
   assert(regressionVerdict({ ...result, ...parsed }).suitePassed)

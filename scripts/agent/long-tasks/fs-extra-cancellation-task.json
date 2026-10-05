@@ -1,0 +1,33 @@
+{
+  "id": "fs-extra-cooperative-cancellation",
+  "split": "holdout",
+  "repository": "https://github.com/jprichardson/node-fs-extra.git",
+  "commit": "1e223d3b1e26b7ebef7f402acf0e3b5533cc5833",
+  "environment": {
+    "runtime": "node",
+    "project": "fs-extra",
+    "acceptance": "test_fs_extra_cancellation_acceptance.mjs",
+    "regressionRunner": "mocha-json",
+    "regressionEntry": "test.js",
+    "regression": ["lib"],
+    "preserve": [
+      "package.json",
+      "test.js",
+      "test.mjs",
+      "lib/__tests__",
+      "lib/copy/__tests__",
+      "lib/empty/__tests__",
+      "lib/ensure/__tests__",
+      "lib/fs/__tests__",
+      "lib/json/__tests__",
+      "lib/mkdirs/__tests__",
+      "lib/move/__tests__",
+      "lib/output-file/__tests__",
+      "lib/path-exists/__tests__",
+      "lib/remove/__tests__",
+      "lib/util/__tests__"
+    ],
+    "baselineFailure": "pre-aborted operation must reject with the original reason"
+  },
+  "prompt": "Add cooperative AbortSignal cancellation across fs-extra's maintained asynchronous helpers. Applications need to cancel a directory import, generated-file batch or migration while retaining predictable filesystem state. Implement the feature consistently across copy, move, remove, emptyDir, ensureFile/createFile, ensureLink/createLink, ensureSymlink/createSymlink, ensureDir/mkdirs/mkdirp, outputFile, readJson/readJSON, writeJson/writeJSON and outputJson/outputJSON. Both Promise and Node-style callback forms and the CommonJS and ESM entry points must support it. Keep the existing supported Node version, graceful-fs integration and synchronous behavior.\n\nPublic API: existing option objects gain an optional signal property. Helpers that currently have no options accept options immediately before the optional callback: remove(path, options?, callback?), emptyDir(path, options?, callback?), ensureFile(path, options?, callback?) and ensureLink(src, dest, options?, callback?). ensureSymlink(src, dest, options?, callback?) accepts {type, signal} while preserving the existing type-string and omitted-type forms. Existing encoding strings for outputFile and JSON helpers and numeric directory modes stay valid. Existing copy filter shorthand, all documented options, callback arguments and return values stay compatible. Missing or undefined signal keeps current behavior. A supplied signal must be a non-null object with boolean aborted and callable addEventListener/removeEventListener; otherwise asynchronously reject or invoke the callback once with TypeError mentioning signal. Do not mutate the signal or install global cancellation state.\n\nIf already aborted, reject with signal.reason by identity whenever reason is not undefined (including arbitrary object or primitive reasons). When reason is unavailable, use an Error with name AbortError and code ABORT_ERR. Check this before filesystem I/O, directory creation, path inspection, JSON serialization or user filters. Callback and Promise APIs must use the same error. Cancellation must not be mistaken for missing paths, an ignored ensure error or a readJson({throws:false}) parse failure. Concurrent operations with different signals must remain independent. Remove any listeners installed by the implementation when that operation settles, including success and ordinary failure.\n\nCancellation is cooperative: check between asynchronous steps, after awaiting a copy filter and before scheduling further filesystem work. A single already-started filesystem operation may finish; do not claim to interrupt native I/O and do not roll back completed changes. Recursive copy must propagate cancellation through directories, files, links and timestamp/permission work. Stop launching new work after observing cancellation, close directory iterators and wait for all work already started by the operation to settle before returning its cancellation. Do not leave background mutations or unhandled rejections after the outer callback/Promise settles. emptyDir must preserve the directory itself and similarly settle any removals already in flight. move must propagate the signal through overwrite handling and the EXDEV copy/remove fallback; if copying is cancelled, preserve the source instead of removing it. remove may finish one native recursive rm already submitted, but must not start it for an already-aborted operation.\n\noutputFile, JSON output and ensure helpers must check cancellation between parent creation/path checks and the following writes or links. JSON read/write wrappers must preserve serialization options, custom fs integration, throws:false and alias behavior, while reporting cancellation distinctly; a pre-aborted write must not call toJSON or a replacer. Keep native filesystem errors intact when cancellation has not occurred. Synchronous APIs and asynchronous calls without signal remain compatible with the original project.\n\nAdd maintained tests spanning the public forms, aliases, default compatibility, pre-abort side effects, invalid signals, custom reasons, concurrent independent operations, cancellation during a filter or filesystem step, EXDEV source preservation, listener cleanup and settled in-flight work. Update the relevant API documentation with runnable Promise and callback examples, the cooperative semantics and partial-result behavior. Run the project's original unit tests, ESM checks and lint, repairing regressions caused by this feature. Finish with a concise implementation and verification report. Make routine implementation choices autonomously."
+}

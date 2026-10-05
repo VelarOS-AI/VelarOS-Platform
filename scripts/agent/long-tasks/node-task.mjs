@@ -59,9 +59,30 @@ export async function copyNodeDependencies(source, destination) {
   })
 }
 
+// 项目测试可向 stdout 打印诊断；只提取一个完整的官方 JSON reporter 文档。
+function mochaDocument(stdout) {
+  const starts = [...stdout.matchAll(/^\{\s*"stats"\s*:/gmu)]
+  assert.equal(starts.length, 1, 'Expected one complete Mocha JSON report')
+  const start = starts[0].index
+  let depth = 0
+  let quoted = false
+  let escaped = false
+  for (let index = start; index < stdout.length; index++) {
+    const char = stdout[index]
+    if (quoted) {
+      if (escaped) escaped = false
+      else if (char === '\\') escaped = true
+      else if (char === '"') quoted = false
+    } else if (char === '"') quoted = true
+    else if (char === '{') depth++
+    else if (char === '}' && --depth === 0) return JSON.parse(stdout.slice(start, index + 1))
+  }
+  assert.fail('Incomplete Mocha JSON report')
+}
+
 // 使用 Mocha 的完整 JSON 报告核对计数与逐例清单，拒绝空套件、矛盾统计和遗漏用例。
 export function mochaReport(result, workspace) {
-  const report = JSON.parse(result.stdout)
+  const report = mochaDocument(result.stdout)
   const outcomes = new Map()
   for (const [field, kind] of [
     ['passes', null],

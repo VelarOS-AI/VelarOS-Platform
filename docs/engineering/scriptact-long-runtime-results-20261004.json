@@ -5439,6 +5439,209 @@
         }
       },
       "executionEnvironmentQualification": "The frozen execution venv contains installed Click 8.1.8; the src checkout requires explicit source-path selection. A misleading smoke failure from importing that installation is confirmed in click-02; exact impact on click-01 is not established. Grading uses source-first PYTHONPATH and is unchanged."
+    },
+    {
+      "attempt": "mocha-01",
+      "schema": 1,
+      "at": "2026-10-05T06:34:59.182Z",
+      "taskId": "mocha-instance-reporter-streams",
+      "scriptactSessionId": "scriptact-4c42320d-1c3c-4c3c-b288-6da76905ad38",
+      "candidateId": "candidate-v29-b700b1821199",
+      "candidateSourceCommit": "3fb4ec36034d5f8a9ff0becea9068e35a633378f",
+      "candidateSourceDirty": false,
+      "scriptactCapabilities": "on-demand",
+      "split": "holdout",
+      "model": "gpt-5.6-sol",
+      "contextTokens": 65536,
+      "inputWindowTokens": 32768,
+      "evaluatorRecovery": null,
+      "baselineRegression": {
+        "baselineCompatible": true,
+        "suitePassed": true,
+        "knownFailures": [],
+        "unexpected": []
+      },
+      "results": {
+        "scriptact": {
+          "solve": {
+            "status": "completed",
+            "failure": null,
+            "requestCount": 15,
+            "startedAt": 1791179884386,
+            "solveMs": 416984
+          },
+          "accounting": {
+            "requests": 15,
+            "requestStatuses": {
+              "http-200": 13,
+              "http-503": 1,
+              "unknown": 1
+            },
+            "measuredRequests": 13,
+            "missingUsageRequests": 2,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 246595,
+            "knownOutputTokens": 5178,
+            "knownCachedInputTokens": 129792,
+            "knownCacheRatio": 0.5263367059348324,
+            "pricedRequests": 13,
+            "knownReferenceUsd": 0.6226888,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 1,
+            "passed": 40,
+            "failed": 16,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "40 passed, 16 failed, 0 skipped, 0 errors",
+            "failures": [
+              "not ok 7 - list: interleaved streams keep all output and lifecycle local",
+              "not ok 15 - nyan: interleaved streams keep all output and lifecycle local",
+              "not ok 17 - tap: interleaved streams keep all output and lifecycle local",
+              "not ok 25 - json-stream: interleaved streams keep all output and lifecycle local",
+              "not ok 27 - xunit: interleaved streams keep all output and lifecycle local",
+              "not ok 31 - list: explicit destination controls terminal mode false",
+              "not ok 32 - list: explicit destination controls terminal mode true",
+              "not ok 35 - landing: explicit destination controls terminal mode false",
+              "not ok 37 - nyan: explicit destination controls terminal mode false",
+              "not ok 38 - nyan: explicit destination controls terminal mode true",
+              "not ok 42 - nyan: narrow destinations do not crash",
+              "not ok 47 - json-stream: write exceptions retain identity",
+              "not ok 48 - xunit: write exceptions retain identity",
+              "not ok 49 - tap: write exceptions retain identity",
+              "not ok 52 - xunit: explicit file and stream conflict before filesystem changes",
+              "not ok 53 - xunit: existing file output remains supported"
+            ]
+          },
+          "regression": {
+            "exitCode": 7,
+            "passed": 0,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 1,
+            "summary": "SyntaxError: Unexpected token 's', \"some-line\" is not valid JSON",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": false,
+              "suitePassed": false,
+              "knownFailures": [],
+              "unexpected": [
+                "SyntaxError: Unexpected token 's', \"some-line\" is not valid JSON"
+              ]
+            }
+          },
+          "passed": false,
+          "featureCompleteWithoutNewRegressions": false,
+          "changedFiles": 13,
+          "createdFiles": 0,
+          "changeSummary": "69\t10\tlib/reporters/base.js\n13\t12\tlib/reporters/doc.js\n9\t9\tlib/reporters/dot.js\n1\t1\tlib/reporters/json-stream.js\n7\t4\tlib/reporters/json.js\n7\t7\tlib/reporters/landing.js\n5\t5\tlib/reporters/list.js\n4\t3\tlib/reporters/markdown.js\n3\t2\tlib/reporters/min.js\n13\t13\tlib/reporters/progress.js\n7\t7\tlib/reporters/spec.js\n1\t1\tlib/reporters/tap.js\n8\t8\tlib/reporters/xunit.js\n",
+          "created": "",
+          "changeAccounting": {
+            "baseline": "5020465ae9a550ce0b6265b03bf0ee860ff96a8d",
+            "head": "5020465ae9a550ce0b6265b03bf0ee860ff96a8d",
+            "source": "recorded-baseline",
+            "changedFiles": 13,
+            "createdFiles": 0,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "mainRequests": 15,
+            "branchRequests": 0,
+            "requestOwners": {
+              "scriptact-4c42320d-1c3c-4c3c-b288-6da76905ad38": 15
+            },
+            "contextSegments": 5,
+            "nativeRequests": 15,
+            "textProtocolRequests": 0,
+            "structuredNarrationRequests": 0,
+            "originalPromptInFinalRequest": true
+          }
+        },
+        "codex": {
+          "solve": {
+            "code": 0,
+            "signal": null,
+            "startedAt": 1791180348162,
+            "finishedAt": 1791181762518,
+            "timedOut": false,
+            "cancelled": false,
+            "inputError": null,
+            "threadId": "01a10aab-1b31-7ec0-a9b0-1205527b6ad5",
+            "terminalComplete": true,
+            "diagnosticLines": 0,
+            "eventCount": 131,
+            "solveMs": 1414356
+          },
+          "accounting": {
+            "requests": 146,
+            "requestStatuses": {
+              "http-200": 129,
+              "http-200-interrupted": 4,
+              "unknown": 7,
+              "http-503": 6
+            },
+            "measuredRequests": 129,
+            "missingUsageRequests": 17,
+            "tokenCoverage": "partial",
+            "knownInputTokens": 3223700,
+            "knownOutputTokens": 47331,
+            "knownCachedInputTokens": 2812416,
+            "knownCacheRatio": 0.8724186493780438,
+            "pricedRequests": 129,
+            "knownReferenceUsd": 3.716722400000001,
+            "totalReferenceUsd": null,
+            "costBasis": "frozen-reference-pricing; not a provider invoice"
+          },
+          "acceptance": {
+            "exitCode": 0,
+            "passed": 56,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "summary": "56 passed, 0 failed, 0 skipped, 0 errors",
+            "failures": []
+          },
+          "regression": {
+            "exitCode": 0,
+            "passed": 1241,
+            "failed": 0,
+            "skipped": 3,
+            "errors": 0,
+            "summary": "1241 passed, 0 failed, 3 skipped",
+            "failures": [],
+            "verdict": {
+              "baselineCompatible": true,
+              "suitePassed": true,
+              "knownFailures": [],
+              "unexpected": []
+            }
+          },
+          "passed": true,
+          "featureCompleteWithoutNewRegressions": true,
+          "changedFiles": 19,
+          "createdFiles": 1,
+          "changeSummary": "43\t0\tdocs/index.md\n83\t16\tlib/reporters/base.js\n13\t24\tlib/reporters/doc.js\n14\t10\tlib/reporters/dot.js\n8\t6\tlib/reporters/json-stream.js\n14\t3\tlib/reporters/json.js\n10\t6\tlib/reporters/landing.js\n8\t6\tlib/reporters/list.js\n4\t3\tlib/reporters/markdown.js\n4\t2\tlib/reporters/min.js\n36\t26\tlib/reporters/nyan.js\n20\t11\tlib/reporters/progress.js\n8\t7\tlib/reporters/spec.js\n40\t31\tlib/reporters/tap.js\n30\t9\tlib/reporters/xunit.js\n18\t1\tlib/types.d.ts\n19\t0\ttest/reporters/json.spec.js\n75\t0\ttest/reporters/xunit.spec.js\n16\t4\ttest/unit/mocha.spec.js\n",
+          "created": "test/reporters/stream.spec.js\n",
+          "changeAccounting": {
+            "baseline": "2fb047dfda70d2b53d1925f5437bee243082e657",
+            "head": "2fb047dfda70d2b53d1925f5437bee243082e657",
+            "source": "recorded-baseline",
+            "changedFiles": 19,
+            "createdFiles": 1,
+            "includesCommittedChanges": true,
+            "scope": "baseline tracked changes and all non-ignored created paths"
+          },
+          "execution": {
+            "rootThreadId": "01a10aab-1b31-7ec0-a9b0-1205527b6ad5",
+            "compactions": 4,
+            "childAgentDispatches": 3,
+            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T14-05-48-01a10aab-1b31-7ec0-a9b0-1205527b6ad5.jsonl"
+          }
+        }
+      }
     }
   ],
   "transportDiagnostics": {
