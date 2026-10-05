@@ -1,0 +1,44 @@
+{
+  "id": "cheerio-document-mutation-subscriptions",
+  "split": "holdout",
+  "repository": "https://github.com/cheeriojs/cheerio.git",
+  "commit": "50b5d5ce49f7863ed70c82dad2652bc8cb147859",
+  "environment": {
+    "runtime": "node",
+    "project": "cheerio",
+    "acceptance": "test_cheerio_mutation_acceptance.mjs",
+    "regressionRunner": "vitest-json",
+    "regressionEntry": "node_modules/vitest/dist/node.js",
+    "regression": ["src"],
+    "regressionPreloads": ["node_modules/undici/index.js"],
+    "preserve": [
+      "src/__fixtures__/fixtures.ts",
+      "src/__tests__/deprecated.spec.ts",
+      "src/__tests__/xml.spec.ts",
+      "src/api/attributes.spec.ts",
+      "src/api/css.spec.ts",
+      "src/api/extract.spec.ts",
+      "src/api/forms.spec.ts",
+      "src/api/manipulation.spec.ts",
+      "src/api/traversing.spec.ts",
+      "src/cheerio.spec.ts",
+      "src/index.spec.ts",
+      "src/load.spec.ts",
+      "src/parse.spec.ts",
+      "src/static.spec.ts",
+      "src/utils.spec.ts",
+      "package.json",
+      "package-lock.json",
+      ".eslintrc.json",
+      ".gitignore",
+      "tsconfig.json",
+      "vitest.config.ts"
+    ],
+    "build": {
+      "entry": "node_modules/tshy/dist/esm/index.js",
+      "args": []
+    },
+    "baselineFailure": "Document mutation subscriptions must be available"
+  },
+  "prompt": "Add maintained document mutation subscriptions to Cheerio for applications that need to update a preview or invalidate derived data after a sequence of DOM edits. Every loaded CheerioAPI returned by the main, slim and browser entry points must expose observeChanges(listener), returning an idempotent unsubscribe function. The listener receives an array of change records synchronously after the outermost public mutating Cheerio call has finished applying its DOM changes. Registering a listener does not emit an initial snapshot. Reject a non-function listener with TypeError. Preserve the existing DOM behavior, node identities, fluent return values, overloads, getters, callback arguments and exception behavior of the existing APIs. Export the public CheerioChangeRecord discriminated union type through the main, slim and browser type entry points. Both ES module and CommonJS package entries must retain the feature.\n\nObserve the tree rooted at that loaded API's original Document, including all connected descendants. An attribute record has type 'attribute', target (the actual Element), name, oldValue and newValue; an absent attribute is null. A children record has type 'children', target (the actual parent node), oldChildren and newChildren (arrays of actual child node references in their original order). These arrays describe that parent's children immediately before and after the whole outer call. Coalesce all changes to the same attribute or parent within that call. Emit nothing for an attribute whose final value equals its starting value, or a parent whose child-node identity sequence is unchanged. An empty batch is never delivered. Do not serialize, clone or replace target nodes for notification.\n\nIntegrate all public DOM mutation paths in the maintained source: attr/removeAttr, prop when it changes attributes, addClass/removeClass/toggleClass, css, val, append/prepend and appendTo/prependTo, before/after and insertBefore/insertAfter, remove/empty/replaceWith, html/text, wrap/wrapInner/wrapAll/unwrap. Preserve string, array, Cheerio and node operands, multiple targets, callback setters, HTML fragments, XML case sensitivity, and document-root mutations. Internal delegation between these methods belongs to the same outer operation and must not send duplicate intermediate batches. Getter calls, traversal, serialization, clone construction and data-cache operations must not send changes unless a user callback explicitly performs a real connected DOM mutation. Direct mutation through raw node objects is outside this API's observation contract.\n\nSubscriptions follow the owning Document tree, not the last factory used. A move between two loaded documents notifies the source of its removals and the destination of its additions. Newly inserted clones appear as their actual distinct nodes. Edits made while a node is detached do not notify its former or eventual document; inserting it notifies the destination parent. Removing a subtree reports its parent's child change, without synthesizing changes to the removed subtree's unchanged descendants. Once reattached, its later edits notify the current owner. A selection containing nodes from more than one subscribed document must update each owner's subscriptions independently.\n\nAll listeners registered for a document at the start of delivery receive independent record and array snapshots with the same actual node references. A listener cannot change another listener's record metadata by modifying its own batch. Registering the same function twice creates two independent subscriptions. Subscription additions or removals during a delivery affect subsequent batches, not the listener snapshot for the current batch. Changes caused by a listener are queued and delivered after the current batch reaches its remaining listeners, without recursively calling listeners. Reentrant edits on another document also retain their owning subscriptions.\n\nIf a mutator's callback throws after some DOM changes were applied, dispatch records for the committed changes and rethrow that original exception. If a listener throws, continue the current batch to its other listeners and leave committed DOM changes intact; restore dispatch state so future mutations work, then throw the first listener exception. A mutator exception takes precedence over a listener exception. Queued reentrant changes must still be delivered before the outer call returns or throws. Unsubscribing all listeners should stop notification work for that document.\n\nImplement observation in the maintained load and mutation paths, with shared bookkeeping as appropriate. Keep browser and slim builds usable. Do not monkey-patch public prototypes at runtime, replace shared DOM-library exports, intercept all nodes with proxies, evaluate copied source, or compare/serialize the entire document before and after every API call. Capture only affected attributes or parent child lists; ordinary reads should not walk the whole document to discover whether something changed. State must belong to the observed documents and subscriptions rather than a currently active global document.\n\nAdd focused tests across the mutation families, no-ops and getters, callback setters and partial failures, moving and cloning nodes across documents, detached edits and reattachment, XML and fragments, independent listeners, unsubscribe timing, reentrancy and listener exceptions. Update public documentation and include a runnable example that subscribes to two documents, performs several kinds of edits, moves a node between them, and unsubscribes. Run the original Vitest suite, the project's lint/type checks, rebuild the normal/slim/browser outputs, and execute the example. Report accurate implementation and validation results. Make routine implementation choices autonomously."
+}
