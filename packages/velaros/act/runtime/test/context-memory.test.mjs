@@ -1318,7 +1318,7 @@ test('INV-74 Node unresolved work shares exact current task bodies with order an
   const body = JSON.stringify(frame)
   for (const previous of [undefined, body]) {
     const prompt = memoryPrompt(body, previous)
-    const task = JSON.parse(prompt.split('task（earlier 为此前运行的输入）：\n')[1].split('\n')[0])
+    const task = nodeTaskSnapshot(prompt, previous ? [memoryPrompt(previous)] : [])
     const shown = JSON.parse(prompt.split('内存状态：\n')[1]).maintenance
     assert.deepEqual(task.active, frame.partitions.task.active)
     assert.deepEqual(shown.unresolved, [
@@ -1339,8 +1339,8 @@ test('INV-74 Node unresolved work shares exact current task bodies with order an
       ),
       frame.memoryStatus.maintenance.unresolved
     )
-    assert.equal(prompt.split(alpha).length - 1, 1)
-    assert.equal(prompt.split(beta).length - 1, 1)
+    assert.equal(prompt.split(alpha).length - 1, previous ? 0 : 1)
+    assert.equal(prompt.split(beta).length - 1, previous ? 0 : 1)
     assert.equal(shown.lastAttempt.unresolvedInCurrentState, true)
     assert.deepEqual(shown.pending, frame.memoryStatus.maintenance.pending)
     assert.deepEqual(shown.futureField, frame.memoryStatus.maintenance.futureField)
@@ -3948,6 +3948,129 @@ function frameBody(overrides = {}) {
   }
   return JSON.stringify(merged)
 }
+
+/** 仅从实际展示过的完整快照恢复未变任务，不能借用原始内部帧。 */
+function nodeTaskSnapshot(prompt, history = []) {
+  const heading = 'task（earlier 为此前运行的输入）：\n'
+  if (!prompt.includes(heading))
+    assert(prompt.includes('task：与本次请求中最近的完整 task 相同（内容、状态和顺序均未变）。'))
+  const snapshot = [...history, prompt].findLast((item) => item.includes(heading))
+  assert(snapshot, 'the actual request must retain a complete task snapshot')
+  return JSON.parse(snapshot.split(heading)[1].split('\n')[0])
+}
+
+test('INV-74 Node task reuse retains a complete snapshot while current runtime failures change', () => {
+  const task = {
+    goals: [],
+    active: {
+      revision: 4,
+      items: [
+        {
+          id: 'work',
+          text: 'Check every public entry point and preserve its behavior. '.repeat(12),
+        },
+      ],
+      status: 'running',
+      pendingInputs: [{ sessionId: 's', id: 'input' }],
+    },
+    future: { zero: 0, empty: [], value: null, flag: false },
+  }
+  const body = frameBody({ presentation: 'node', 'partitions.task': task })
+  const history = [memoryPrompt(body)]
+  let previous = body
+  for (const failure of ['FIRST_FAILURE', 'SECOND_FAILURE', 'THIRD_FAILURE']) {
+    const current = frameBody({
+      presentation: 'node',
+      'partitions.task': task,
+      'partitions.runtime.mandatory': [{ id: failure, outcome: 'failed', code: 'CONFLICT' }],
+      'partitions.runtime.gaps': [{ reason: failure }],
+    })
+    const prompt = memoryPrompt(current, previous)
+    assert(!prompt.includes(task.active.items[0].text))
+    assert.deepEqual(nodeTaskSnapshot(prompt, history), task)
+    const runtime = JSON.parse(prompt.split('runtime：\n')[1].split('\n')[0])
+    assert.equal(runtime.mandatory[0].id, failure)
+    assert.deepEqual(runtime.gaps, [{ reason: failure }])
+    history.push(prompt)
+    previous = current
+  }
+  assert.deepEqual(JSON.parse(body).partitions.task, task)
+})
+
+test('INV-74 Node task changes always send a full snapshot including removals and ordered duplicates', () => {
+  const task = {
+    goals: [],
+    active: {
+      revision: 4,
+      status: 'running',
+      items: [
+        { id: 'a', text: 'FIRST_TASK_BODY '.repeat(30) },
+        { id: 'b', text: 'SECOND_TASK_BODY '.repeat(30) },
+        { id: 'a', text: 'FIRST_TASK_BODY '.repeat(30) },
+      ],
+      pendingInputs: [{ sessionId: 's', id: 'pending' }],
+    },
+    future: { 'x/~': [0, null, false] },
+  }
+  const original = frameBody({ presentation: 'node', 'partitions.task': task })
+  for (const change of [
+    (value) => {
+      value.active.items.splice(1, 1)
+    },
+    (value) => {
+      ;[value.active.items[0], value.active.items[1]] = [
+        value.active.items[1],
+        value.active.items[0],
+      ]
+    },
+    (value) => {
+      value.active.items[0].text += ' corrected'
+    },
+    (value) => {
+      value.active.items = []
+    },
+    (value) => {
+      value.active.status = 'complete'
+    },
+    (value) => {
+      value.active.revision++
+    },
+    (value) => {
+      value.active.pendingInputs = []
+    },
+    (value) => {
+      value.future['x/~'] = [false, null, 0]
+    },
+    (value) => {
+      delete value.future
+    },
+  ]) {
+    const current = structuredClone(task)
+    change(current)
+    const prompt = memoryPrompt(
+      frameBody({ presentation: 'node', 'partitions.task': current }),
+      original
+    )
+    assert(prompt.includes('task（earlier 为此前运行的输入）：\n'))
+    assert.deepEqual(nodeTaskSnapshot(prompt), current)
+  }
+  assert.deepEqual(JSON.parse(original).partitions.task, task)
+})
+
+test('INV-74 Node task reuse requires retained Node history and a substantial repeated body', () => {
+  const task = {
+    goals: [],
+    active: { items: [{ id: 'item', text: 'FULL_TASK_BODY '.repeat(40) }] },
+  }
+  const node = frameBody({ presentation: 'node', 'partitions.task': task })
+  const legacy = frameBody({ 'partitions.task': task })
+  assert(memoryPrompt(node, node).includes('task：与本次请求中最近的完整 task 相同'))
+  for (const previous of [undefined, legacy])
+    assert.deepEqual(nodeTaskSnapshot(memoryPrompt(node, previous)), task)
+  assert.deepEqual(section(memoryPrompt(legacy, node), 'task'), task)
+  const small = frameBody({ presentation: 'node', 'partitions.task': { goals: [] } })
+  assert.deepEqual(nodeTaskSnapshot(memoryPrompt(small, small)), { goals: [] })
+})
 
 // 当前决定仅靠最新状态可恢复；未变的正文仍由保留的历史消息承载。
 function section(prompt, name) {

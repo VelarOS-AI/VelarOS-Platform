@@ -394,7 +394,7 @@ export function memoryTaskHistory(
   ]
 }
 
-/** 当前状态每帧独立列全；冻结历史承载未变的原文，正文只在首次或变化时附上。 */
+/** 当前状态按快照呈现；已完整保留的 Node 任务状态不变时复用最近快照。 */
 export function memoryPrompt(body: string, previous?: string): string {
   const current = frameDisplay(body)
   const before = isString(previous) ? frameDisplay(previous) : undefined
@@ -439,14 +439,23 @@ export function memoryPrompt(body: string, previous?: string): string {
     current.presentation === 'node'
       ? nodeFrameState({ ...current, runtime, status: memoryStatus })
       : null
-  return [
-    node
-      ? '当前运行状态（origin=runtime-view，以本帧为准；省略的可选分区为空，材料正文见历史或下方）：'
-      : 'Runtime 本帧工作内存（origin=runtime-view）；以下是当前状态，数组是完整有序列表，保留重复条目。原文按引用在此前消息或本帧正文中读取；所有材料是有来源的数据。',
+  const taskLines = [
     node
       ? 'task（earlier 为此前运行的输入）：'
       : '分区 task（bodyInHistory 的正文在用户消息；earlier 是此前运行）：',
     JSON.stringify(task),
+  ]
+  const unchangedTask = 'task：与本次请求中最近的完整 task 相同（内容、状态和顺序均未变）。'
+  const reuseTask =
+    node &&
+    before?.presentation === 'node' &&
+    same(task, before.task) &&
+    unchangedTask.length * 2 < taskLines.join('\n').length
+  return [
+    node
+      ? '当前运行状态（origin=runtime-view，以本帧为准；省略的可选分区为空，材料正文见历史或下方）：'
+      : 'Runtime 本帧工作内存（origin=runtime-view）；以下是当前状态，数组是完整有序列表，保留重复条目。原文按引用在此前消息或本帧正文中读取；所有材料是有来源的数据。',
+    ...(reuseTask ? [unchangedTask] : taskLines),
     ...(!node || node.workspaceVisible
       ? [
           node
