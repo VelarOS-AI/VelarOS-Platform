@@ -1,6 +1,50 @@
-import { isArray, isEmpty, isPlainObject, isString } from '@velaros-ai/core'
+import { isArray, isEmpty, isNumber, isPlainObject, isString } from '@velaros-ai/core'
 
 import type { MemoryFrameDisplay } from '../types/memory.js'
+
+/** 目标正文已逐字存在于本次用户历史时只列其范围；状态与依据仍取当前目标。 */
+export function nodeGoalState(goal: unknown, inputs: readonly unknown[]): unknown {
+  if (
+    !isPlainObject(goal) ||
+    !isString(goal.objective) ||
+    !goal.objective ||
+    Object.hasOwn(goal, 'objectiveInInput')
+  )
+    return goal
+  for (const input of inputs) {
+    if (
+      !isPlainObject(input) ||
+      input.bodyInHistory !== true ||
+      !isString(input.text) ||
+      !isNumber(input.offset) ||
+      !Number.isSafeInteger(input.offset) ||
+      input.offset < 0 ||
+      !isNumber(input.totalChars) ||
+      !Number.isSafeInteger(input.totalChars) ||
+      input.offset + input.text.length > input.totalChars ||
+      !isPlainObject(input.record) ||
+      !isPlainObject(input.record.ref) ||
+      !isString(input.record.ref.sessionId) ||
+      !input.record.ref.sessionId ||
+      !isString(input.record.ref.id) ||
+      !input.record.ref.id
+    )
+      continue
+    const start = input.text.indexOf(goal.objective)
+    if (start < 0) continue
+    const { objective, ...metadata } = goal
+    const compact = {
+      ...metadata,
+      objectiveInInput: {
+        ref: input.record.ref,
+        offset: input.offset + start,
+        chars: objective.length,
+      },
+    }
+    if (JSON.stringify(compact).length < JSON.stringify(goal).length) return compact
+  }
+  return goal
+}
 
 /** 标准环境只展示影响下一步的状态；完整内部帧仍用于授权、恢复和审计。 */
 export function nodeFrameState(frame: MemoryFrameDisplay) {

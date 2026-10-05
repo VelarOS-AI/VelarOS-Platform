@@ -627,7 +627,7 @@ export class RuntimeSession implements VelarosSession {
               )
               .map((item) => item.executionId)
           },
-          project: (view, signal, maxChars) => this.project(view, signal, maxChars),
+          project: (view, signal, maxChars) => this.project(view, signal, maxChars, nativeTools),
           delta: (body, previous) => memoryPrompt(body, previous),
           reconcile: (body, history, previous, signal) =>
             this.memory.reconcile(body, history, previous, signal),
@@ -769,7 +769,12 @@ export class RuntimeSession implements VelarosSession {
     )
   }
 
-  private async project(view: ModelView, signal: AbortSignal, maxChars: number) {
+  private async project(
+    view: ModelView,
+    signal: AbortSignal,
+    maxChars: number,
+    nativeTools: boolean
+  ) {
     const stores = await this.dependencies.stores?.frame(
       Math.max(1, Math.min(8, Math.floor(maxChars / 4000))),
       Math.min(StoreProjectionLimits.activeChars, Math.floor(maxChars / 4))
@@ -781,6 +786,13 @@ export class RuntimeSession implements VelarosSession {
     if (!this.dependencies.tool && this.goalSeed) await this.seedGoal(this.goalSeed, signal)
     const currentGoal = this.dependencies.tool ? null : await this.goal.get(signal)
     const goal = currentGoal?.status === 'removed' ? null : currentGoal
+    const goalControl =
+      nativeTools && goal?.status === 'active'
+        ? {
+            module: 'velaros:system-goal',
+            completion: '持续目标仍为 active；收尾前按需读取当前版本，显式更新状态与依据后答复。',
+          }
+        : undefined
     const environment = {
       ...frameEnvironment(this.dependencies.environment),
       ...(this.dependencies.parentTask ? { parentTask: this.dependencies.parentTask } : {}),
@@ -788,6 +800,7 @@ export class RuntimeSession implements VelarosSession {
     const extra =
       JSON.stringify(environment).length +
       (goal ? JSON.stringify(goal).length : 0) +
+      (goalControl ? JSON.stringify(goalControl).length : 0) +
       (stores ? JSON.stringify(stores).length : 0) +
       (tool ? JSON.stringify(tool).length : 0)
     const projected = await this.memory.project(
@@ -806,6 +819,7 @@ export class RuntimeSession implements VelarosSession {
         this.runInputs.has(goal.record.ref.id) ? goal : { ...goal, earlier: true }
     )
     if (goal) frame.partitions.runtime.goal = goal
+    if (goalControl) frame.partitions.runtime.goalControl = goalControl
     if (stores) frame.partitions.runtime.stores = stores
     if (tool) frame.partitions.runtime.modelTool = tool
     frame.memoryStatus.footprint.runtime = JSON.stringify(frame.partitions.runtime).length

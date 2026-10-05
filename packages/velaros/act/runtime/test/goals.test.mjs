@@ -237,6 +237,10 @@ test('native replies finish ordinary tasks and preserve paused goals', async (t)
         async *stream(request) {
           calls++
           assert.equal(request.response.type, 'tools')
+          assert.equal(
+            JSON.parse(request.compiledPrompt.split('runtime：\n')[1].split('\n')[0]).goalControl,
+            undefined
+          )
           yield { type: 'text', text: '已回答当前问题。' }
           yield { type: 'finish', reason: 'stop' }
         },
@@ -254,6 +258,57 @@ test('native replies finish ordinary tasks and preserve paused goals', async (t)
       else assert.equal(goal, null)
     })
   }
+})
+
+test('INV-48 native goal completion is discoverable from the first actual request without repeating the objective', async (t) => {
+  const objective = '逐项实现所有公开入口，核验行为并保留可复现的验证结果。\n'.repeat(20).trim()
+  let calls = 0
+  const model = {
+    id: 'native-goal-input-projection',
+    limits,
+    estimate,
+    nativeTools: true,
+    async *stream(request) {
+      calls++
+      const raw = runtimeGoal(request)
+      const displayed = JSON.parse(request.compiledPrompt.split('runtime：\n')[1].split('\n')[0])
+      const shown = displayed.goal
+      assert.equal(raw.objective, objective)
+      assert.equal(shown.objective, undefined)
+      assert(shown.objectiveInInput.ref.id)
+      const visible = modelRequestEncoder
+        .messages(request)
+        .map((message) => message.content)
+        .join('\n')
+      assert.equal(visible.split(objective).length - 1, 1)
+      if (calls === 1) {
+        assert.equal(displayed.goalControl.module, 'velaros:system-goal')
+        assert.match(displayed.goalControl.completion, /显式更新状态与依据/)
+        yield {
+          type: 'tool-call',
+          value: {
+            id: 'explicit-completion',
+            name: 'node',
+            input: {
+              code: "import * as goal from 'velaros:system-goal'; const current=await goal.get(); await goal.update({baseRevision:current.revision,status:'complete',reason:'交付和验证已核对'});",
+            },
+          },
+        }
+      } else {
+        assert.equal(raw.status, 'complete')
+        assert.equal(displayed.goalControl, undefined)
+        yield { type: 'text', text: '完成。' }
+      }
+      yield { type: 'finish', reason: 'stop' }
+    },
+  }
+  const { session } = await fixture(t, model)
+  const events = await Array.fromAsync(
+    session.submit(`本次需求：\n${objective}\n按此执行。`, undefined, { goal: objective })
+  )
+  assert.equal(calls, 2, JSON.stringify(events))
+  assert.equal((await session.getGoal()).status, 'complete')
+  assert.equal(events.at(-1).status, 'completed', JSON.stringify(events))
 })
 
 test('a goal passed with submit is set before the first frame, clipped to the objective limit', async (t) => {

@@ -31,7 +31,7 @@ import type {
 import type { SegmentFeedback, SegmentHistory, SegmentOutputProof } from '../types/segment.js'
 
 import { decisionStateProjection } from './decision-state.js'
-import { nodeFrameState } from './node-context.js'
+import { nodeFrameState, nodeGoalState } from './node-context.js'
 import { ActRuntimeTuning } from './tuning.js'
 
 /** 核查细节优先展示失败和未知；原索引绑定适用性与归档，长项不阻断后续诊断。 */
@@ -744,6 +744,8 @@ function frameDisplay(body: string): MemoryFrameDisplay {
     2
   )
   let runtimeDisplay: Record<string, unknown> = { ...runtime, mandatory }
+  if (frame.presentation === 'node' && Object.hasOwn(runtime, 'goal'))
+    runtimeDisplay.goal = nodeGoalState(runtime.goal, task.goals)
   if (
     isPlainObject(frame.memoryStatus.decisionState) &&
     isPlainObject(frame.memoryStatus.decisionState.ref)

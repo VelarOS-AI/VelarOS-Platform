@@ -929,6 +929,96 @@ test('runtime delivers native output to the next model turn with a small standar
   assert.equal((await session.inspect()).status, 'completed')
 })
 
+test('INV-87 native goal text reuses only an exact delivered user input range', () => {
+  const objective = '保持完整目标，包括多行文本、Unicode 和重复要求。\n'.repeat(20)
+  const prefix = '本页前文：'
+  const input = {
+    record: { ref: { sessionId: 'session', id: 'input' }, sequence: 1 },
+    text: `${prefix}${objective}本页后文`,
+    offset: 12,
+    totalChars: 2000,
+    bodyInHistory: true,
+  }
+  const goal = {
+    id: 'goal',
+    revision: 3,
+    objective,
+    status: 'active',
+    reason: '',
+    future: { empty: [], off: false, zero: 0, absent: null },
+  }
+  const frame = {
+    presentation: 'node',
+    partitions: {
+      task: { goals: [input] },
+      workspace: { notes: [] },
+      observation: {},
+      recent: { results: [] },
+      runtime: { mandatory: [], goal },
+    },
+    memoryStatus: {},
+  }
+  const display = (value) =>
+    JSON.parse(memoryPrompt(JSON.stringify(value)).split('runtime：\n')[1].split('\n')[0]).goal
+  const original = JSON.stringify(frame)
+  const metadata = { ...goal }
+  delete metadata.objective
+  assert.deepEqual(display(frame), {
+    ...metadata,
+    objectiveInInput: {
+      ref: input.record.ref,
+      offset: input.offset + prefix.length,
+      chars: objective.length,
+    },
+  })
+  assert.equal(JSON.stringify(frame), original)
+  for (const change of [
+    (value) => {
+      value.partitions.task.goals[0].bodyInHistory = false
+    },
+    (value) => {
+      value.partitions.task.goals[0].text = objective.slice(0, -1)
+    },
+    (value) => {
+      value.partitions.task.goals[0].offset = -1
+    },
+    (value) => {
+      delete value.partitions.task.goals[0].offset
+    },
+    (value) => {
+      value.partitions.task.goals[0].record.ref.id = ''
+    },
+    (value) => {
+      value.partitions.task.goals[0].totalChars = 15
+    },
+    (value) => {
+      value.partitions.runtime.goal.objective += '新的要求'
+    },
+    (value) => {
+      value.partitions.runtime.goal.objective = '保持'
+    },
+    (value) => {
+      value.partitions.runtime.goal.objectiveInInput = { future: true }
+    },
+  ]) {
+    const current = structuredClone(frame)
+    change(current)
+    assert.deepEqual(display(current), current.partitions.runtime.goal)
+  }
+  const updated = structuredClone(frame)
+  updated.partitions.runtime.goal.status = 'blocked'
+  updated.partitions.runtime.goal.reason = '等待用户提供材料'
+  assert.equal(display(updated).reason, '等待用户提供材料')
+  assert.equal(display(updated).status, 'blocked')
+  const legacy = structuredClone(frame)
+  delete legacy.presentation
+  assert.deepEqual(
+    JSON.parse(memoryPrompt(JSON.stringify(legacy)).split('分区 runtime：\n')[1].split('\n')[0])
+      .goal,
+    goal
+  )
+})
+
 test('host filenames remain stable across catalog order and declarations are ordinary file modules', async (t) => {
   const f = await fixture(t)
   const runner = createNodeCodeRunner(f.node)
