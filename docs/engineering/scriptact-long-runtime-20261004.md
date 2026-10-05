@@ -1074,3 +1074,13 @@ Markdown-it 14.1.0 固定在 `0fe7ccb4b7f30236fb05f623be6924961d296d3d`。完整
 ScriptAct 的功能 64/64 与原项目 417 passed、1 pending 保持。对最终产物另建独立副本，连同 Agent 新增测试完整运行得到 422 passed、1 pending，新增五项均通过；这次核对在完成后进行，保存在 `scriptact-authored-tests.json`，不替换原始评测时间或 Agent 报告的 420 passing。
 
 五项新增测试覆盖普通入口、非法参数、异步 filter 取消、并发缓存模板与等待 loader，仍没有完成原需求明确列出的 extension、继承/import、异步循环、预编译、重入和 legacy overlap 的专项回归覆盖。请求 57、59 曾承诺补上，之后没有相应编辑就给出了最终答复。记录为交付完整性缺口；外部功能通过和目标状态 complete 不能替代这部分交付。首个普通最终答复在请求 51，显式目标更新在 54，最终答复在 60；首帧入口提示没有消除末尾发现与登记过程，后续读操作也没有完成新增测试承诺。
+
+独立副本中的示例实际退出 0，文档五个入口与取消用法已核对。结构化交付复核保存为 `scriptact-delivery-review-result.json`，status=partial，与外部功能评分分别保存。
+
+## v34 后续能力配置对照与容量复核
+
+Markdown-it 两种配置在该任务第一次调用模型前分别冻结。`markdown-it-01` 为首次独立 on-demand 配对，工作根 `/private/tmp/vlr-Jb5q3Y`；`markdown-it-shell-node-01` 为单 ScriptAct 的预先声明配置对照，工作根 `/private/tmp/vlr-eSQhvj`，保守标为 development。两者都是干净源 `4e2093bc` 的 v34、goal 模式，15 个模型/候选/环境/费用配置字段和原始任务正文一致，准备阶段均复现同一项原测试已知失败，独立功能验收拒绝原版。配置差量只涉及 project/code、agents 与 search；核心控制和上下文维护保持。
+
+计划于 11:45:58 UTC 写入 `markdown-it-capability-plan.json`，当时两个尝试均未创建模型计量账本。执行顺序为 Nunjucks 配对结束、Mocha v34 开发复测、Markdown-it on-demand 的 ScriptAct/Codex 配对、Markdown-it Shell/Node 业务配置。第二配置与同题 Codex 只作共同参照，不伪称多出一个完整配对，也不计作第二个独立任务。单次配置比较仍受模型随机性和实际宿主环境影响，按完整交付、请求、时间与完整费用分别判读。
+
+新增 Nunjucks 只读回放用真实冻结 v32/v34 估算器，继续按原请求开始与结束顺序记录用量；未调整增长规则。44 个有用量的主请求估算 1100376→1059159（−3.75%）；全部 58 个有用量的主线/支线请求均无低估，最小估算/实际输入约 1.093。数据为 `route-growth-nunjucks-replay.json`。它新增容量机制证据，原模型输入、产物与费用保持，不把估算下降当作账单收益。
