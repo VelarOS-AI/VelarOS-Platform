@@ -1284,3 +1284,11 @@ v36 以干净提交 `d910b29a88617893aca978dbf4c693326800fa7e` 于 15:57:05 UTC 
 对已有 45 次尝试与本次共 46 次，逐一比较冻结 Git 源与参与者起点提交中的符号链接原文。只有 Commander 与 ShellJS 含受影响的跟踪链接：Commander 两侧各三条，ShellJS 首侧八条，其余 44 次没有跟踪链接。Commander 冻结源当前仍干净，但初始副本已偏离冻结输入；总表通过独立 evaluationAudits 注明 Commander 与本次 ShellJS 从有效质量、耗时和费用持平判断中排除，历史原记录逐项保持。总表仍有 23 个配对记录，扣除这次识别出的 Commander 输入偏差后为 22 个待按其余条件验收的配对记录，不能把记录数当作有效达标数。
 
 后续将从相同产品候选、任务和评分器重新准备独立工作区，采用修复后的通用评测器，并在调用模型前重新核对基线和冻结。现有未启动尝试保留为原预登记证据，不直接修改其冻结脚本。Cheerio 源码已固定到 v1.0.0 的 50b5d5ce49f7863ed70c82dad2652bc8cb147859，锁定依赖安装完成；零模型准备发现宿主父目录类型污染与 Node/Undici 基线兼容问题，初次记录保留，尚无该项目任务、评分器或模型调用。
+
+## 隔离修复后的冻结队列
+
+修复提交为 `d9f75a12`。`shelljs-02` 与 `shelljs-shell-node-02` 继续使用干净 v35，均保守标为 development；工作根分别为 `/private/tmp/vlr-59a9LG` 与 `/private/tmp/vlr-tbVvuA`。原项目各复验 614 passed、7 skipped，15 个候选/模型/环境/费用字段、完整原始需求、评分器与依赖身份一致，原测试逐项清单也与首次冻结一致。`shelljs-repaired-capability-plan.json` 在两侧均无账本或运行记录时登记；之后启动配对首侧。实际参与者起点提交的八条符号链接已与冻结源逐字核对，相对路径全部保持，证据在 workspace-copy-proof.json。
+
+`chai-02` 与 `chai-shell-node-02` 同为 v35，分别保留 holdout 与 development 分类，工作根 `/private/tmp/vlr-YxL6dN`、`/private/tmp/vlr-QeJ1zx`；原项目分别复验 507/507，任务、评分、依赖与相同配置字段保持。首次模型调用前的双配置登记为 chai-repaired-capability-plan.json。`mocha-07` 继续使用 v36、goal、on-demand、development，原项目 1241 passed、3 pending；与未启动的 mocha-06 相同产品、任务、评分、依赖和原测试清单，由 mocha07-plan.json 单独登记。
+
+当前付费控制器只运行 shelljs-02，先 ScriptAct 后 Codex；其后依次为 shelljs-shell-node-02、chai-02 配对、chai-shell-node-02、mocha-07。完整工作根、冻结时刻与状态保存在 queue-after-copy-repair.json。四份原未启动尝试添加独立 scheduling-note，冻结内容保持；事故尝试的执行与费用保留。这些重建步骤没有调用模型，付费重跑结果另行登记。
