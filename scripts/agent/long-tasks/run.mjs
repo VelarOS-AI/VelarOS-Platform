@@ -14,6 +14,7 @@ import { createTraceExporter, snapshot } from '../harbor/trace-export.mjs'
 import { readTraceArtifact } from '../harbor/trace-artifact.mjs'
 import { toTrajectory } from '../harbor/atif.mjs'
 import { runCodex } from '../native-desktop/codex.mjs'
+import { runCapturedCommand } from './command-output.mjs'
 import { campaignModelDriver } from './model-driver.mjs'
 import {
   buildNodeProject,
@@ -139,24 +140,11 @@ async function copySource(destination, output) {
 }
 
 async function check(command, args, cwd, name, output, processEnvironment = process.env) {
-  let result
-  try {
-    const value = await execute(command, args, {
-      cwd,
-      timeout: 180000,
-      maxBuffer: 8_000_000,
-      env: { ...processEnvironment, PYTHONPATH: pythonTaskPath(cwd), PYTHONDONTWRITEBYTECODE: '1' },
-    })
-    result = { exitCode: 0, stdout: value.stdout, stderr: value.stderr }
-  } catch (error) {
-    result = {
-      exitCode: error.code ?? null,
-      stdout: error.stdout ?? '',
-      stderr: error.stderr ?? '',
-      error: redact(error),
-      timedOut: error.killed ?? false,
-    }
-  }
+  const result = await runCapturedCommand(command, args, {
+    cwd,
+    env: { ...processEnvironment, PYTHONPATH: pythonTaskPath(cwd), PYTHONDONTWRITEBYTECODE: '1' },
+  })
+  if (result.error) result.error = redact(result.error)
   await snapshot(join(output, name + '.json'), result)
   return { exitCode: result.exitCode, output: name + '.json' }
 }

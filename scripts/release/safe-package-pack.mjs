@@ -303,6 +303,7 @@ export async function runGuardedCommand({
   operation = command,
   timeoutMs = 120_000,
   stdio = 'pipe',
+  signal: abortSignal,
 } = {}) {
   if (typeof command !== 'string' || command.trim() === '') {
     throw new TypeError('command must be a non-empty string')
@@ -319,8 +320,22 @@ export async function runGuardedCommand({
   if (typeof stdio !== 'string' && !Array.isArray(stdio)) {
     throw new TypeError('stdio must be a child_process stdio string or array')
   }
+  if (
+    abortSignal !== undefined &&
+    (typeof abortSignal?.aborted !== 'boolean' ||
+      typeof abortSignal?.addEventListener !== 'function' ||
+      typeof abortSignal?.removeEventListener !== 'function')
+  ) {
+    throw new TypeError('signal must be an AbortSignal')
+  }
 
   const resolvedCwd = await resolveExistingDirectory(cwd, 'cwd')
+  if (abortSignal?.aborted) {
+    throw Object.assign(new Error(`${operation} was aborted before starting`), {
+      name: 'AbortError',
+      cancelled: true,
+    })
+  }
 
   let child
   try {
@@ -339,6 +354,7 @@ export async function runGuardedCommand({
     const stderrChunks = []
     let settled = false
     let timedOut = false
+    let aborted = false
     let forwardedSignal
     let terminationPromise
     let timeoutHandle
@@ -355,6 +371,7 @@ export async function runGuardedCommand({
     const removeLifecycleHandlers = () => {
       removeSignalHandlers()
       process.removeListener('exit', onExit)
+      abortSignal?.removeEventListener('abort', onAbort)
     }
     const finish = (callback, value) => {
       if (settled) return
@@ -366,6 +383,29 @@ export async function runGuardedCommand({
     const terminate = () => {
       terminationPromise ??= terminateProcessGroup(child)
       return terminationPromise
+    }
+    const onAbort = () => {
+      if (settled || aborted || timedOut || forwardedSignal) return
+      aborted = true
+      clearTimeout(timeoutHandle)
+      void terminate().then(
+        () =>
+          finish(
+            reject,
+            Object.assign(new Error(`${operation} was aborted`), {
+              name: 'AbortError',
+              cancelled: true,
+            })
+          ),
+        (error) =>
+          finish(
+            reject,
+            Object.assign(
+              new Error(`${operation} was aborted, and cleanup failed: ${errorMessage(error)}`),
+              { name: 'AbortError', cancelled: true }
+            )
+          )
+      )
     }
     const forwardParentSignal = (signal) => {
       if (forwardedSignal || settled) return
@@ -420,7 +460,7 @@ export async function runGuardedCommand({
     })
 
     child.once('close', (code, signal) => {
-      if (settled || timedOut || forwardedSignal || closing) return
+      if (settled || timedOut || aborted || forwardedSignal || closing) return
       closing = true
       clearTimeout(timeoutHandle)
       void (async () => {
@@ -436,7 +476,7 @@ export async function runGuardedCommand({
           return
         }
 
-        if (settled || timedOut || forwardedSignal) return
+        if (settled || timedOut || aborted || forwardedSignal) return
 
         const stdout = outputText(stdoutChunks)
         const stderr = outputText(stderrChunks)
@@ -446,14 +486,9 @@ export async function runGuardedCommand({
         }
         finish(
           reject,
-          new Error(
-            commandFailureMessage({
-              operation,
-              code,
-              signal,
-              stdout,
-              stderr,
-            })
+          Object.assign(
+            new Error(commandFailureMessage({ operation, code, signal, stdout, stderr })),
+            { code, signal }
           )
         )
       })()
@@ -465,20 +500,28 @@ export async function runGuardedCommand({
         .then(({ forced }) => {
           finish(
             reject,
-            new Error(
-              `${operation} timed out after ${timeoutMs} ms; ${processCollectionLabel()} ${child.pid ?? 'unknown'} was stopped with ${terminationDescription(forced)}`
+            Object.assign(
+              new Error(
+                `${operation} timed out after ${timeoutMs} ms; ${processCollectionLabel()} ${child.pid ?? 'unknown'} was stopped with ${terminationDescription(forced)}`
+              ),
+              { timedOut: true }
             )
           )
         })
         .catch((error) => {
           finish(
             reject,
-            new Error(
-              `${operation} timed out after ${timeoutMs} ms, and cleanup failed: ${errorMessage(error)}`
+            Object.assign(
+              new Error(
+                `${operation} timed out after ${timeoutMs} ms, and cleanup failed: ${errorMessage(error)}`
+              ),
+              { timedOut: true }
             )
           )
         })
     }, timeoutMs)
+    abortSignal?.addEventListener('abort', onAbort, { once: true })
+    if (abortSignal?.aborted) onAbort()
   })
 }
 

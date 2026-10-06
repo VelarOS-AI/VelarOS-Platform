@@ -36,6 +36,22 @@ const config = {
   baselineFailure: 'output must use stream',
 }
 
+test('project checks retain a complete large report when a Node process exits immediately', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'long-task-report-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  await writeFile(
+    join(workspace, 'report.cjs'),
+    `process.stdout.write(JSON.stringify({ data: 'x'.repeat(4_000_000) })); process.exit(0)`
+  )
+  const result = await buildNodeProject(
+    { ...config, build: { entry: 'report.cjs', args: [] } },
+    workspace,
+    process.execPath
+  )
+  assert.equal(result.exitCode, 0)
+  assert.equal(JSON.parse(result.stdout).data.length, 4_000_000)
+})
+
 test('optional project build hooks distinguish an unchanged baseline from a failed delivered build', async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), 'long-task-build '))
   t.after(() => rm(workspace, { recursive: true, force: true }))

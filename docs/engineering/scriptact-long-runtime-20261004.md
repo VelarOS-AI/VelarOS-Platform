@@ -1660,3 +1660,15 @@ Codex 根会话记录五次 compaction、三次成功子任务创建、七条子
 独立复核期间，Codex 的 Mocha 进程退出 0，却通过管道只采集到部分 JSON。原冻结报告完整通过。相同普通 Node 程序在 stdout.write 后立即退出，管道只保留 65536 字节，直接文件描述符取得完整 4000011 字节；证明为 context-diagnostics/node-exit-capture-proof.json。独立复核改用文件描述符后，原回归完整通过，首次采集故障保留，原 solve、功能评分、回归和 metrics 哈希均未改写。这是复核采集故障，不计作参与者代码失败。
 
 本次差量是新的冻结结果与独立交付证据归档；Runtime 公开合同沿用 v41。归档证明为 fs-extra-esm-01-v41-aggregate-append-proof.json、fs-extra-esm-shell-node-01-v41-aggregate-append-proof.json，交付复核和上下文审计分别保存在各 attempt 与 context-diagnostics。质量缺口、完整费用和后续未见项目验证仍须进入最终门槛。
+
+## 评测命令的完整报告采集
+
+通过现有 buildNodeProject 入口新增最小回归：普通 Node 进程写出 4,000,011 字节 JSON 后主动 exit(0)。旧实现先运行，因只保留 65536 字节而解析失败。新采集器让构建、准备阶段的基线/负控制和评分命令把 stdout/stderr 写入各自独占文件；程序主动退出时同步保存输出，守护器完成进程组回收后再读取。完整报告取得 4,000,011 字节，原失败日志保留。
+
+单流保留上限继续为 8,000,000 字节，命令超时继续为 180 秒。文件增长每 20ms 观察一次，超限通过 AbortSignal 触发已有进程组回收；退出后再核对大小，超限结果保持失败并保留实际退出状态（不可知则为 null）。采集上限约束保留内容，轮询与清理期间可能存在短暂写入超量，不能将其表述为文件系统硬配额。共享守护器新增可选取消信号，并在异常上提供数值退出码/信号或 timedOut，原有失败消息和回收机制沿用。
+
+最终 57 项相关检查全部通过，覆盖大体积 Unicode 双流、立即退出、非零状态、缺失程序、信号终止、超时、持续刷日志后回收、上限边界、并发隔离，以及既有环境/回归/分析器和安全打包测试。显式 lint、格式、模块所有权、错误构造与打包边界检查通过。最终无付费预检 capture-preflight-03 的 209 项 harness 身份逐一核对，原项目回归 745 passed、8 skipped，原迁移负控制 13 passed、41 failed；从冻结采集器实际导入运行，大报告完整、退出 7 仍报告 7。
+
+第一次无付费预检 capture-preflight-01 保留一项原项目权限用例超时。诊断时独占 TMPDIR 由 shell 的 mktemp 建在系统根下，继承 gid 0，而执行用户是 gid 20。原 fs-extra 对文件复制保留组，对新建目标目录则继承其父目录组；目录探针分别复现 20→0 和 20→20，因而最初只检查文件的探针不足以解释该用例。诊断目录改用已有 createTaskRoot 的 uid/gid 规则后，capture-preflight-02 与最终 -03 均通过原回归。此次环境失配属于独立预检，不更改此前三份参与者评分，也没有调用模型重做任务。
+
+证明与完整日志为 context-diagnostics/report-capture-validation-proof.json 及其哈希引用。三组 solve、功能评分、回归、build 和 metrics 再次核对保持。差量仅为评测采集入口及共享命令守护器的可选取消/结构化状态，Runtime 的 Shell/Node、按需模块与模型提示继续沿用 v41。该修复提升测量可靠性，不能记作请求数、耗时或模型费用收益。

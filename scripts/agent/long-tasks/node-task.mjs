@@ -7,6 +7,7 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 
 import { avaReport } from './ava-report.mjs'
+import { runCapturedCommand } from './command-output.mjs'
 import { vitestReport } from './vitest-report.mjs'
 
 const execute = promisify(execFile)
@@ -23,13 +24,12 @@ export async function buildNodeProject(environment, workspace, node, env = proce
         return { exitCode: 0, stdout: '', stderr: '', timedOut: false, skipped: true }
       }
     }
-    const result = await execute(node, [environment.build.entry, ...environment.build.args], {
+    return await runCapturedCommand(node, [environment.build.entry, ...environment.build.args], {
       cwd: workspace,
       env,
       timeout: 180000,
       maxBuffer: 8_000_000,
     })
-    return { exitCode: 0, stdout: result.stdout, stderr: result.stderr, timedOut: false }
   } catch (error) {
     return {
       exitCode: error.code ?? null,

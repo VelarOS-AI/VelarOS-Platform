@@ -9,6 +9,7 @@ import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 
 import { toTrajectory } from '../harbor/atif.mjs'
+import { runCapturedCommand } from './command-output.mjs'
 import { verifyCampaignDriver } from './model-driver.mjs'
 import {
   buildNodeProject,
@@ -91,22 +92,11 @@ if (baselineBuild) {
   await writeFile(join(output, 'baseline-build.json'), JSON.stringify(baselineBuild, null, 2))
   assert.equal(baselineBuild.exitCode, 0, 'The original project build must pass before a paid run')
 }
-let baselineRegression
-try {
-  const result = await execute(executable, regressionArguments(environment, baselineReport), {
-    cwd: baselineSource,
-    env: regressionEnvironment(environment, env, baselineSource),
-    timeout: 180000,
-    maxBuffer: 8_000_000,
-  })
-  baselineRegression = { exitCode: 0, stdout: result.stdout, stderr: result.stderr }
-} catch (error) {
-  baselineRegression = {
-    exitCode: error.code ?? null,
-    stdout: error.stdout ?? '',
-    stderr: error.stderr ?? '',
-  }
-}
+const baselineRegression = await runCapturedCommand(
+  executable,
+  regressionArguments(environment, baselineReport),
+  { cwd: baselineSource, env: regressionEnvironment(environment, env, baselineSource) }
+)
 await writeFile(join(output, 'baseline.log'), baselineRegression.stdout + baselineRegression.stderr)
 if (node) {
   Object.assign(
@@ -136,25 +126,35 @@ assert(
   'The frozen baseline must match its declared issues before a paid run'
 )
 let baselineRejected = false
-try {
-  await execute(executable, acceptanceArguments(environment, originalGrader), {
+const acceptanceBaseline = await runCapturedCommand(
+  executable,
+  acceptanceArguments(environment, originalGrader),
+  {
     cwd: baselineSource,
     env,
     timeout: 180000,
     maxBuffer: 8_000_000,
-  })
-} catch (error) {
-  assert.equal(error.code, 1, 'Acceptance checks must fail assertions, not collection or setup')
+  }
+)
+if (acceptanceBaseline.exitCode !== 0) {
+  assert.equal(
+    acceptanceBaseline.exitCode,
+    1,
+    'Acceptance checks must fail assertions, not collection or setup'
+  )
   if (node) {
-    const summary = nodeTestSummary({ exitCode: error.code, stdout: error.stdout })
+    const summary = nodeTestSummary(acceptanceBaseline)
     assert(summary.failed > 0 && summary.errors === 0, 'Node acceptance must report failing tests')
   }
   assert(
-    error.stdout.includes(environment.baselineFailure),
+    acceptanceBaseline.stdout.includes(environment.baselineFailure),
     'Unchanged source must fail the declared feature checks'
   )
   baselineRejected = true
-  await writeFile(join(output, 'acceptance-baseline.log'), error.stdout + error.stderr)
+  await writeFile(
+    join(output, 'acceptance-baseline.log'),
+    acceptanceBaseline.stdout + acceptanceBaseline.stderr
+  )
 }
 assert.ok(baselineRejected, 'The unchanged project must not pass the new feature checks')
 const codex =
