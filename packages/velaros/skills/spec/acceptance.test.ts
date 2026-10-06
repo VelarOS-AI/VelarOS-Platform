@@ -19,7 +19,13 @@ import {
 } from '@velaros-ai/script'
 
 import type { SkillDependencyInstaller } from '../contract/requires'
-import { createSkillRegistry, skillCapabilityModules } from '../index'
+import {
+  createSkillRegistry,
+  skillCapabilityModules,
+  type SkillRegistryApi,
+  type SkillsOperationContext,
+  skillsOperations,
+} from '../index'
 
 const roots: string[] = []
 afterEach(async () => {
@@ -39,6 +45,14 @@ async function fixture(installer: SkillDependencyInstaller = { install: async ()
       lock: createExclusiveSqliteLock(() => new Database(join(store, 'lock.sqlite'))),
     })
   return { root, store, registry: create(), create }
+}
+
+async function selectAll(registry: SkillRegistryApi) {
+  return (await registry.list()).map((item) => ({
+    name: item.manifest.name,
+    generation: item.generation,
+    grants: item.manifest.contribution.capabilities.map((capability) => capability.module),
+  }))
 }
 
 async function source(
@@ -107,7 +121,7 @@ test('INV-1 纯说明目录和标准 npm 包使用相同安装索引，来源目
     { directory: await source(f.root, 'numbers') },
     new AbortController().signal
   )
-  const lease = await f.registry.acquire()
+  const lease = await f.registry.acquire(await selectAll(f.registry))
   expect(lease.environment.skills.map((item) => item.name).sort()).toEqual([
     'numbers',
     'review-guide',
@@ -147,12 +161,12 @@ test('INV-2 升级与卸载保留旧环境文件，租约释放后才能回收',
     { directory: await source(f.root, 'numbers') },
     new AbortController().signal
   )
-  const old = await f.registry.acquire()
+  const old = await f.registry.acquire(await selectAll(f.registry))
   await f.registry.install(
     { directory: await source(f.root, 'numbers', '2.0.0') },
     new AbortController().signal
   )
-  const current = await f.registry.acquire()
+  const current = await f.registry.acquire(await selectAll(f.registry))
   expect(current.environment.id).not.toBe(old.environment.id)
   expect(old.environment.packages[0]!.version).toBe('1.0.0')
   await f.registry.remove('numbers')
@@ -164,7 +178,7 @@ test('INV-2 升级与卸载保留旧环境文件，租约释放后才能回收',
   await current.release()
 })
 
-test('INV-3 安装不隐式授予能力，停用、撤权和升级立即使旧授权失效', async () => {
+test('INV-3 安装不激活 Skill，会话选择与能力授权互不影响，升级使旧代次失效', async () => {
   const f = await fixture()
   const module = 'skill:example'
   const directory = await source(f.root, 'example', '1.0.0', {
@@ -175,19 +189,36 @@ test('INV-3 安装不隐式授予能力，停用、撤权和升级立即使旧�
     '/** @OperationEffect none */ export function read(): Promise<string>;'
   )
   const record = await f.registry.install({ directory }, new AbortController().signal)
+  const empty = await f.registry.acquire()
+  const readonly = await f.registry.acquire([
+    { name: 'example', generation: record.generation, grants: [] },
+  ])
+  const authorized = await f.registry.acquire([
+    { name: 'example', generation: record.generation, grants: [module] },
+  ])
+  expect(empty.environment.skills).toHaveLength(0)
+  expect(readonly.environment.skills[0]!.capabilities).toEqual([])
+  expect(authorized.environment.skills[0]!.capabilities).toEqual([module])
+  expect(
+    await skillCapabilityModules.create({
+      registry: f.registry,
+      lease: readonly,
+      node: await nodeOptions(f.root),
+    })
+  ).toHaveLength(0)
+  await expect(
+    f.registry.acquire([
+      { name: 'example', generation: record.generation, grants: ['skill:unknown'] },
+    ])
+  ).rejects.toThrow('未知')
+  await f.registry.install({ directory }, new AbortController().signal)
+  await expect(
+    f.registry.acquire([{ name: 'example', generation: record.generation, grants: [] }])
+  ).rejects.toThrow('重新选择')
   await expect(f.registry.assertGranted('example', record.generation, module)).rejects.toThrow(
     '授权已失效'
   )
-  await f.registry.configure('example', { enabled: true, grants: [module] })
-  await f.registry.assertGranted('example', record.generation, module)
-  await f.registry.configure('example', { enabled: false, grants: [module] })
-  await expect(f.registry.assertGranted('example', record.generation, module)).rejects.toThrow(
-    '授权已失效'
-  )
-  await f.registry.configure('example', { enabled: true, grants: [] })
-  await expect(f.registry.assertGranted('example', record.generation, module)).rejects.toThrow(
-    '授权已失效'
-  )
+  await Promise.all([empty.release(), readonly.release(), authorized.release()])
 })
 
 test('INV-4 越界链接、无效 Node 版本和安装后篡改都明确失败', async () => {
@@ -209,7 +240,7 @@ test('INV-4 越界链接、无效 Node 版本和安装后篡改都明确失败',
   await writeFile(join(directory, 'package.json'), JSON.stringify(manifest))
   const installed = await f.registry.install({ directory }, new AbortController().signal)
   await writeFile(join(installed.directory, 'index.mjs'), 'export const tampered = true')
-  await expect(f.registry.acquire()).rejects.toThrow('安装收据不符')
+  await expect(f.registry.acquire(await selectAll(f.registry))).rejects.toThrow('安装收据不符')
 })
 
 test('INV-5 公开包冲突不会覆盖另一个 Skill 的版本', async () => {
@@ -231,13 +262,12 @@ test('INV-5 公开包冲突不会覆盖另一个 Skill 的版本', async () => {
     const manifest = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8'))
     manifest.dependencies = { common: '1.0.0' }
     await writeFile(join(directory, 'package.json'), JSON.stringify(manifest))
-    if (name === 'first') await f.registry.install({ directory }, new AbortController().signal)
-    else
-      await expect(f.registry.install({ directory }, new AbortController().signal)).rejects.toThrow(
-        '已由 first 提供'
-      )
+    await f.registry.install({ directory }, new AbortController().signal)
   }
-  expect((await f.registry.list()).map((skill) => skill.manifest.name)).toEqual(['first'])
+  expect((await f.registry.list()).map((skill) => skill.manifest.name)).toEqual(['first', 'second'])
+  const selected = await selectAll(f.registry)
+  await expect(f.registry.acquire(selected)).rejects.toThrow('已由 first 提供')
+  for (const item of selected) await (await f.registry.acquire([item])).release()
 })
 
 test('INV-2 两个注册实例从当前索引发布，互不丢失已安装包', async () => {
@@ -260,7 +290,7 @@ test('INV-2 环境中的 ESM、CJS、子路径与保存脚本在真实 Node 进�
     { directory: await source(f.root, 'numbers') },
     new AbortController().signal
   )
-  const lease = await f.registry.acquire()
+  const lease = await f.registry.acquire(await selectAll(f.registry))
   const cwd = join(f.root, 'workspace')
   await mkdir(cwd)
   await writeFile(join(cwd, 'saved.cjs'), "console.log(require('numbers/detail').version)")
@@ -301,7 +331,7 @@ test('INV-2 环境中的 ESM、CJS、子路径与保存脚本在真实 Node 进�
   await lease.release()
 })
 
-test('INV-3 第三方能力经过真实 Kernel 和独立 Node，撤权后既有客户端不能继续调用', async () => {
+test('INV-3 第三方能力经过真实 Kernel 和独立 Node，卸载后既有客户端不能继续调用', async () => {
   const f = await fixture()
   const module = 'skill:calculator'
   const directory = await source(f.root, 'calculator', '1.0.0', {
@@ -315,8 +345,8 @@ test('INV-3 第三方能力经过真实 Kernel 和独立 Node，撤权后既有�
     join(directory, 'api.d.ts'),
     '/** 计算二倍并返回进程身份。\n * @OperationEffect none\n */\nexport function double(input: {value:number}): Promise<{value:number;pid:number}>;\n/** @OperationEffect none */\nexport function optional(input?: {value:number}): Promise<number>;\n/** @OperationEffect none */\nexport function nothing(): Promise<void>;\n/** @OperationEffect none */\nexport function nullable(input: {value:number}|null): Promise<boolean>;'
   )
-  await f.registry.install({ directory, grants: [module] }, new AbortController().signal)
-  const lease = await f.registry.acquire()
+  await f.registry.install({ directory }, new AbortController().signal)
+  const lease = await f.registry.acquire(await selectAll(f.registry))
   const node = await nodeOptions(f.root)
   const modules = await skillCapabilityModules.create({ registry: f.registry, lease, node })
   const records = new Map<string, InvocationRecord>()
@@ -375,7 +405,7 @@ test('INV-3 第三方能力经过真实 Kernel 和独立 Node，撤权后既有�
       expect(value.result.failed).toBeUndefined()
       expect(value.rawValue).toBe(expected)
     }
-    await f.registry.configure('calculator', { enabled: true, grants: [] })
+    await f.registry.remove('calculator')
     const denied = await run('denied')
     expect(denied.checked).toBe(true)
     if (!denied.checked) throw new Error('source should parse')
@@ -395,13 +425,15 @@ test('INV-4 冻结的环境事实不可修改，替换环境链接后禁止复�
     { directory: await source(f.root, 'numbers') },
     new AbortController().signal
   )
-  const lease = await f.registry.acquire()
+  const lease = await f.registry.acquire(await selectAll(f.registry))
   expect(Object.isFrozen(lease.environment.packages[0])).toBe(true)
   expect(Object.isFrozen(lease.skills[0]?.manifest.contribution)).toBe(true)
   const target = join(lease.environment.packages[0]!.directory, 'node_modules/numbers')
   await rm(target)
   await symlink(f.root, target, 'junction')
-  await expect(f.registry.acquire()).rejects.toThrow('环境包目标已被修改')
+  await expect(f.registry.acquire(await selectAll(f.registry))).rejects.toThrow(
+    '环境包目标已被修改'
+  )
   await lease.release()
 })
 
@@ -439,7 +471,7 @@ test('INV-2 两个实例并发发布只保留完整安装，冲突后可重试�
     'first',
     'second',
   ])
-  const lease = await f.registry.acquire()
+  const lease = await f.registry.acquire(await selectAll(f.registry))
   expect(lease.environment.packages).toHaveLength(2)
   await lease.release()
 })
@@ -499,11 +531,8 @@ test('INV-1 说明、标准包和组合 Skill 经真实 Node 发现并调用独�
     manifest.dependencies = { semver: '7.8.5' }
     manifest.agentSkill.packages = ['semver']
     await writeFile(join(combined, 'package.json'), JSON.stringify(manifest))
-    await f.registry.install(
-      { directory: combined, grants: ['skill:team-directory'] },
-      new AbortController().signal
-    )
-    const lease = await f.registry.acquire()
+    await f.registry.install({ directory: combined }, new AbortController().signal)
+    const lease = await f.registry.acquire(await selectAll(f.registry))
     const node = { ...(await nodeOptions(f.root)), runtime: lease.environment }
     const modules = await skillCapabilityModules.create({ registry: f.registry, lease, node })
     const provider = modules[0]!
@@ -568,4 +597,77 @@ test('INV-1 说明、标准包和组合 Skill 经真实 Node 发现并调用独�
       server.close((error) => (error ? rejectClose(error) : resolveClose()))
     )
   }
+})
+
+test('INV-6 内置规范、示例和管理操作按需加载，校验只读，写入受宿主确认且通知订阅者', async () => {
+  const f = await fixture()
+  const lease = await f.registry.acquire()
+  let allowed = false
+  let notifications = 0
+  const effects: string[] = []
+  const release = f.registry.subscribe(() => {
+    notifications++
+  })
+  const ctx: SkillsOperationContext = {
+    registry: f.registry,
+    lease,
+    cwd: f.root,
+    sourceScope: 'workspace',
+    abortSignal: new AbortController().signal,
+    authorize: async () => {
+      if (!allowed) throw new Error('host denied')
+    },
+    recordEffect: (effect) => {
+      effects.push(effect)
+    },
+  }
+  const guide = await skillsOperations.guide(undefined, ctx)
+  expect(guide.content).toContain('agentSkill')
+  const example = await skillsOperations.guide({ topic: 'example' }, ctx)
+  const directory = join(f.root, 'demo')
+  await mkdir(directory)
+  for (const [file, content] of Object.entries(example.files))
+    await writeFile(join(directory, file), content)
+  expect((await skillsOperations.validate({ directory: './demo' }, ctx)).name).toBe('guided-review')
+  expect(await Bun.file(join(directory, 'package.json')).exists()).toBe(false)
+  await expect(skillsOperations.install({ directory }, ctx)).rejects.toThrow('host denied')
+  expect(await f.registry.list()).toEqual([])
+  expect(notifications).toBe(0)
+  allowed = true
+  const installed = await skillsOperations.install({ directory }, ctx)
+  expect(installed.available).toBe(false)
+  expect(notifications).toBe(1)
+  await expect(skillsOperations.load({ name: 'guided-review' }, ctx)).rejects.toThrow(
+    '未被本轮选择'
+  )
+  const selected = await f.registry.acquire(await selectAll(f.registry))
+  const loaded = await skillsOperations.load({ name: 'guided-review' }, { ...ctx, lease: selected })
+  expect(loaded.instructions).toContain('基于证据的代码审查')
+  expect(loaded.skill.available).toBe(true)
+  const outside = await fixture()
+  await symlink(outside.root, join(f.root, 'escape'))
+  await expect(skillsOperations.validate({ directory: 'escape' }, ctx)).rejects.toThrow(
+    '越过安装目录'
+  )
+  await skillsOperations.remove({ name: 'guided-review' }, ctx)
+  expect(notifications).toBe(2)
+  expect(effects).toContain('committed')
+  release()
+  await Promise.all([lease.release(), selected.release()])
+})
+
+test('INV-6 v1 安装索引迁移保留包内容，默认环境为空', async () => {
+  const f = await fixture()
+  const record = await f.registry.install(
+    { directory: await source(f.root, 'legacy') },
+    new AbortController().signal
+  )
+  await writeFile(
+    join(f.store, 'index.json'),
+    JSON.stringify({ version: 1, revision: 1, skills: [{ ...record, enabled: true, grants: [] }] })
+  )
+  expect(await f.registry.list()).toEqual([record])
+  const empty = await f.registry.acquire()
+  expect(empty.environment.skills).toEqual([])
+  await empty.release()
 })

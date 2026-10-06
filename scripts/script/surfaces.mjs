@@ -13,6 +13,13 @@
 
 export const CodeSurfaces = [
   {
+    namespace: 'skills',
+    directory: 'velaros',
+    unit: 'skills',
+    interfaces: ['SkillsOperationsApi'],
+    templates: 'template.js',
+  },
+  {
     namespace: 'images',
     directory: 'velaros',
     unit: 'images',
@@ -257,6 +264,7 @@ export const StandardSurfaces = [
  * 登记在这里而不是靠猜，是因为丢错一个参数模型就会写出调不通的程序。
  */
 export const HostContextTypes = new Set([
+  'SkillsOperationContext',
   'ImageOperationContext',
   'SandboxOperationContext',
   'ProjectOperationContext',

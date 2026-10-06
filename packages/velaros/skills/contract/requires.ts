@@ -2,6 +2,8 @@ import type { ExclusiveSqliteLockApi } from '@velaros-ai/core/utils/ExclusiveSql
 import type { NodeCodeRunnerOptions, NodeRuntimePackage } from '@velaros-ai/script'
 import type { ShellHostPort } from '@velaros-ai/velaros/execution'
 
+import type { SkillMutation } from '../types/skills.js'
+
 import type { SkillEnvironmentLease, SkillRegistryApi } from './provides.js'
 
 /** 包管理器由宿主选择，安装在独立暂存目录并返回完整锁文件。 */
@@ -44,4 +46,22 @@ export interface SkillCapabilityModuleOptions {
   readonly lease: SkillEnvironmentLease
   /** 第三方代码使用同一受控 Node 执行口。 */
   readonly node: NodeCodeRunnerOptions
+}
+
+/** 模型管理模块的调用上下文；每轮固定租约，权限决策由宿主注入。 */
+export interface SkillsOperationContext {
+  /** 本次调用的取消信号。 */
+  readonly abortSignal: AbortSignal
+  /** 本机安装库的唯一服务。 */
+  readonly registry: SkillRegistryApi
+  /** 当前会话已选择的环境租约。 */
+  readonly lease: SkillEnvironmentLease
+  /** 相对来源路径的解析根。 */
+  readonly cwd: string
+  /** 沙箱开启时，来源目录和真实符号链接必须在工作区内。 */
+  readonly sourceScope: 'workspace' | 'unrestricted'
+  /** 写入前交给宿主确认；拒绝时抛错，安装脚本不能自行放宽此策略。 */
+  authorize(mutation: SkillMutation, signal: AbortSignal): Promise<void>
+  /** 确认和校验失败记为 none；依赖脚本执行期间记为 unknown，成功发布记为 committed。 */
+  recordEffect(effect: 'none' | 'committed' | 'unknown'): void
 }

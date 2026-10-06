@@ -85,7 +85,7 @@ const InstalledManifest = z
 
 const Index = z
   .object({
-    version: z.literal(1),
+    version: z.literal(2),
     revision: z.number().int().nonnegative(),
     skills: z.array(
       z
@@ -93,8 +93,6 @@ const Index = z
           manifest: InstalledManifest,
           generation: z.string().uuid(),
           directory: z.string(),
-          enabled: z.boolean(),
-          grants: z.array(z.string()),
           installedAt: z.string().datetime(),
         })
         .strict()
@@ -123,7 +121,24 @@ export function skillInstructionsManifest(source: string): unknown {
 
 /** 索引格式在磁盘边界核验，不接受额外行为或未声明字段。 */
 export function parseSkillIndex(value: unknown): SkillIndex {
-  const parsed = Index.safeParse(value)
+  // 迁移已持久化的 v1 索引：安装内容保留，会话加载由显式选择负责。
+  let source = value
+  if (isObject(value) && 'version' in value && value.version === 1) {
+    const legacy = Index.extend({
+      version: z.literal(1),
+      skills: z.array(
+        Index.shape.skills.element.extend({ enabled: z.boolean(), grants: z.array(z.string()) })
+      ),
+    }).safeParse(value)
+    if (!legacy.success)
+      throw new AppError('VALIDATION', `Skill 安装索引无效：${legacy.error.message}`)
+    source = {
+      ...legacy.data,
+      version: 2,
+      skills: legacy.data.skills.map(({ enabled: _enabled, grants: _grants, ...record }) => record),
+    }
+  }
+  const parsed = Index.safeParse(source)
   if (!parsed.success)
     throw new AppError('VALIDATION', `Skill 安装索引无效：${parsed.error.message}`)
   if (
@@ -131,7 +146,6 @@ export function parseSkillIndex(value: unknown): SkillIndex {
     parsed.data.skills.length
   )
     throw new AppError('CONFLICT', 'Skill 安装索引存在重复身份')
-  for (const skill of parsed.data.skills) checkSkillGrants(skill.manifest, skill.grants)
   return parsed.data
 }
 

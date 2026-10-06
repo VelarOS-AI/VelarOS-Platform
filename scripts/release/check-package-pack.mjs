@@ -4,6 +4,8 @@ import { mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
+import { CodeSurfaces } from '../script/surfaces.mjs'
+
 import { runGuardedCommand, safePackPackage } from './safe-package-pack.mjs'
 
 const repositoryRoot = path.resolve(import.meta.dirname, '../..')
@@ -28,24 +30,17 @@ const requiredPackageFiles = new Map([
     'velaros',
     [
       'package/office/vendor/pptxgenjs/pptxgen.es.js',
-      ...[
-        'system/modules-template.js',
-        'system/programs-template.js',
-        'system/results-template.js',
-        'system/execution-template.js',
-        'system/template.js',
-        'system/context-template.js',
-        'system/context-materials-template.js',
-        'system/workspace-template.js',
-        'system/task-template.js',
-        'system/history-template.js',
-        'system/inputs-template.js',
-        'system/artifacts-template.js',
-        'search/template.js',
-        'search/evidence-template.js',
-        'agents/template.js',
-        'agents/interaction-template.js',
-      ].map((file) => `package/dist/act/${file}`),
+      ...new Set(
+        CodeSurfaces.filter(
+          (surface) => surface.directory === 'velaros' && surface.unit.startsWith('act/')
+        ).flatMap((surface) =>
+          [surface.templates].flat().map((file) => `package/dist/${surface.unit}/${file}`)
+        )
+      ),
+      ...(await readdir(path.join(repositoryRoot, 'packages/velaros/skills/resources'))).map(
+        (file) => `package/dist/skills/resources/${file}`
+      ),
+      'package/dist/skills/contract/surface.js',
       'package/browser/vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs',
     ],
   ],

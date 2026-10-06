@@ -176,6 +176,7 @@
     "execution/native",
     "office/vendor",
     "browser/vendor",
+    "skills/resources",
     "node_modules"
   ],
   "scripts": {

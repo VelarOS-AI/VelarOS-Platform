@@ -4,6 +4,7 @@
 | --- | --- | --- | --- |
 | INV-1 | 纯说明与 npm 贡献安装为同一类包，失败不修改当前索引。 | 测试 | `spec/acceptance.test.ts` |
 | INV-2 | 环境锁定安装代次，升级和卸载不破坏持有租约的文件。 | 测试 | `spec/acceptance.test.ts` |
-| INV-3 | 未授权、已停用或版本失效的宿主能力不得执行。 | 测试 | `spec/acceptance.test.ts` |
+| INV-3 | 安装不自动加载；能力授权只属于所选会话，卸载或升级阻止旧代次后续调用。 | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 文件越界、清单损坏和内容篡改必须显式失败。 | 测试 | `spec/acceptance.test.ts` |
-| INV-5 | 同名公开依赖和能力的冲突在环境装配前明确失败。 | 测试 | `spec/acceptance.test.ts` |
+| INV-5 | 不同 Skill 可以分别安装；同次选择的公开依赖和能力冲突在环境装配时明确失败。 | 测试 | `spec/acceptance.test.ts` |
+| INV-6 | 开发规范与示例从 velaros:skills 按需查询；校验只读、写操作经宿主确认、成功变更通知订阅者；旧索引迁移不自动加载。 | 测试 | `spec/acceptance.test.ts` |

@@ -1,5 +1,7 @@
 /** 安装与发现的格式版本由收据显式记录。 */
 export const SkillLimits = Object.freeze({
+  /** 单次会话允许选择的 Skill 数量。 */
+  selection: 64,
   /** 单份清单或声明最多读取的字节数。 */
   manifestBytes: 1024 * 1024,
   /** 单个安装文件的字节上限。 */

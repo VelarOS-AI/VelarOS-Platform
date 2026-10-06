@@ -17,7 +17,7 @@ export interface SkillPackageFilesApi {
   /** 将来源的发布文件复制到新目录，隔离现有依赖和版本库。 */
   copy(source: string, destination: string, signal?: AbortSignal): Promise<void>
   /** 读取标准清单或适配纯说明目录，并核验资源入口与 Node 版本。 */
-  manifest(directory: string, nodeVersion: string): Promise<SkillManifest>
+  manifest(directory: string, nodeVersion: string, materialize?: boolean): Promise<SkillManifest>
   /** 为安装后的全部文件生成内容散列。 */
   receipt(directory: string, manifest: SkillManifest): Promise<SkillReceipt>
   /** 当前内容必须逐项匹配安装收据。 */
@@ -50,17 +50,22 @@ export class SkillPackageFiles implements SkillPackageFilesApi {
     })
   }
 
-  public async manifest(directory: string, nodeVersion: string): Promise<SkillManifest> {
+  public async manifest(
+    directory: string,
+    nodeVersion: string,
+    materialize = false
+  ): Promise<SkillManifest> {
     let value: unknown
     try {
       value = JSON.parse(await readSkillText(join(directory, 'package.json')))
     } catch (error) {
       if (!isObject(error) || !('code' in error) || error.code !== 'ENOENT') throw error
       value = skillInstructionsManifest(await readSkillText(join(directory, 'SKILL.md')))
-      await writeFile(join(directory, 'package.json'), stringifyPretty(value), {
-        mode: 0o600,
-        flag: 'wx',
-      })
+      if (materialize)
+        await writeFile(join(directory, 'package.json'), stringifyPretty(value), {
+          mode: 0o600,
+          flag: 'wx',
+        })
     }
     const manifest = parseSkillManifest(value)
     if (manifest.node && !satisfies(nodeVersion, manifest.node))

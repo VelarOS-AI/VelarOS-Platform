@@ -51,10 +51,17 @@ export const GovernedModules = [
     impl: 'skills/impl',
     utils: 'skills/utils',
     layers: [
-      ['SkillRegistry.ts', 'SkillCapabilityModules.ts', 'NpmSkillInstaller.ts'],
+      [
+        'SkillRegistry.ts',
+        'SkillCapabilityModules.ts',
+        'NpmSkillInstaller.ts',
+        'SkillsOperations.ts',
+      ],
       ['SkillPackageFiles.ts'],
     ],
     browserSafeEntries: ['contracts.ts'],
+    surfaceFile: 'skills/impl/SkillsOperations.ts',
+    assets: ['resources'],
     invariants: 'skills/spec/invariants.md',
     acceptance: 'skills/spec/acceptance.test.ts',
   },

@@ -11,15 +11,23 @@ import {
 } from 'node:fs/promises'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 
-import { isEmpty, isObject } from '@velaros-ai/core'
+import { isEmpty, isObject, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
 import { createKeyedSerialQueue } from '@velaros-ai/core/utils/KeyedSerialQueue'
 import type { NodeRuntimeEnvironment, NodeRuntimePackage } from '@velaros-ai/script'
 
+import { SkillLimits } from '../contract/constants.js'
 import type { SkillEnvironmentLease } from '../contract/provides.js'
 import type { SkillRegistryOptions } from '../contract/requires.js'
-import type { SkillIndex, SkillInstallRequest, SkillRecord } from '../types/skills.js'
+import type {
+  SkillActivation,
+  SkillIndex,
+  SkillInstallRequest,
+  SkillManifest,
+  SkillRecord,
+  SkillSelection,
+} from '../types/skills.js'
 import {
   checkSkillGrants,
   freezeSkillData,
@@ -33,20 +41,19 @@ import { SkillPackageFiles } from './SkillPackageFiles.js'
 
 /** Skill 安装、授权和不可变环境的唯一所有者。 */
 export interface SkillRegistryApi {
-  /** 读取当前持久索引，包括停用的 Skill。 */
+  /** 读取本机安装库的当前持久索引。 */
   list(): Promise<readonly SkillRecord[]>
+  /** 静态核验源目录、清单、资源和能力合同；不安装依赖、不执行代码、不修改来源。 */
+  validate(directory: string, signal: AbortSignal): Promise<SkillManifest>
+  /** 订阅本注册处成功发布的变更；通知失败不回滚已经落盘的结果。 */
+  subscribe(listener: () => void): () => void
   /** 完成依赖准备与内容验证后原子发布新安装版本。 */
   install(request: SkillInstallRequest, signal: AbortSignal): Promise<SkillRecord>
-  /** 原子调整启用状态和宿主能力授权。 */
-  configure(
-    name: string,
-    configuration: { enabled: boolean; grants: readonly string[] }
-  ): Promise<SkillRecord>
   /** 从后续环境移除 Skill，已有执行文件由租约保护。 */
   remove(name: string): Promise<void>
-  /** 验证内容并固定当前启用的 Skill，返回会话持有的租约。 */
-  acquire(names?: readonly string[]): Promise<SkillEnvironmentLease>
-  /** 每次宿主调用重新检查当前安装代次、启用状态与授权。 */
+  /** 验证内容并固定显式选择的 Skill；默认空环境，授权仅属于该租约。 */
+  acquire(selection?: readonly SkillSelection[]): Promise<SkillEnvironmentLease>
+  /** 每次宿主调用重新检查当前安装代次与能力声明；授权来自所选租约。 */
   assertGranted(name: string, generation: string, module: string): Promise<void>
   /** 回收未安装且没有活跃租约使用的版本和环境。 */
   collect(): Promise<readonly string[]>
@@ -57,6 +64,8 @@ class SkillRegistry implements SkillRegistryApi {
   private readonly files = new SkillPackageFiles()
   private readonly queue = createKeyedSerialQueue()
   private readonly root: string
+  private readonly listeners = new Set<() => void>()
+  private readonly log = Log.tag('SkillRegistry')
 
   public constructor(private readonly options: SkillRegistryOptions) {
     if (!isAbsolute(options.directory)) throw new AppError('VALIDATION', 'Skill 存储需要绝对目录')
@@ -65,6 +74,21 @@ class SkillRegistry implements SkillRegistryApi {
 
   public async list(): Promise<readonly SkillRecord[]> {
     return (await this.readIndex()).skills
+  }
+
+  public async validate(directory: string, signal: AbortSignal): Promise<SkillManifest> {
+    signal.throwIfAborted()
+    await skillInventory(directory, true, signal)
+    const manifest = await this.files.manifest(directory, this.options.nodeVersion)
+    signal.throwIfAborted()
+    return manifest
+  }
+
+  public subscribe(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
   }
 
   public async install(request: SkillInstallRequest, signal: AbortSignal): Promise<SkillRecord> {
@@ -77,9 +101,7 @@ class SkillRegistry implements SkillRegistryApi {
     try {
       const directory = join(staging, 'package')
       await this.files.copy(request.directory, directory, signal)
-      const manifest = await this.files.manifest(directory, this.options.nodeVersion)
-      const grants = request.grants ?? []
-      checkSkillGrants(manifest, grants)
+      const manifest = await this.files.manifest(directory, this.options.nodeVersion, true)
       if (!isEmpty(Object.keys(manifest.dependencies)))
         await this.options.installer.install(
           directory,
@@ -100,13 +122,10 @@ class SkillRegistry implements SkillRegistryApi {
       return await this.locked(async () => {
         signal.throwIfAborted()
         const index = await this.readIndex()
-        const previous = index.skills.find((skill) => skill.manifest.name === manifest.name)
         const record: SkillRecord = {
           manifest,
           generation,
           directory: join(final, 'package'),
-          enabled: request.enabled ?? previous?.enabled ?? true,
-          grants: request.grants ?? [],
           installedAt: new Date().toISOString(),
         }
         const skills = [
@@ -116,8 +135,7 @@ class SkillRegistry implements SkillRegistryApi {
         await mkdir(dirname(final), { recursive: true, mode: 0o700 })
         await rename(staging, final)
         try {
-          await this.checkComposition(skills)
-          await this.writeIndex({ version: 1, revision: index.revision + 1, skills })
+          await this.writeIndex({ version: 2, revision: index.revision + 1, skills })
           published = true
           return record
         } finally {
@@ -127,27 +145,6 @@ class SkillRegistry implements SkillRegistryApi {
     } finally {
       if (!published) await rm(staging, { recursive: true, force: true })
     }
-  }
-
-  public async configure(
-    name: string,
-    configuration: { enabled: boolean; grants: readonly string[] }
-  ): Promise<SkillRecord> {
-    return this.locked(async () => {
-      const index = await this.readIndex()
-      const current = index.skills.find((skill) => skill.manifest.name === name)
-      if (!current) throw new AppError('NOT_FOUND', `Skill 未安装：${name}`)
-      checkSkillGrants(current.manifest, configuration.grants)
-      const record = {
-        ...current,
-        enabled: configuration.enabled,
-        grants: [...configuration.grants],
-      }
-      const skills = index.skills.map((skill) => (skill.manifest.name === name ? record : skill))
-      await this.checkComposition(skills)
-      await this.writeIndex({ ...index, revision: index.revision + 1, skills })
-      return record
-    })
   }
 
   public async remove(name: string): Promise<void> {
@@ -163,14 +160,21 @@ class SkillRegistry implements SkillRegistryApi {
     })
   }
 
-  public async acquire(names?: readonly string[]): Promise<SkillEnvironmentLease> {
+  public async acquire(selection: readonly SkillSelection[] = []): Promise<SkillEnvironmentLease> {
     return this.locked(async () => {
       const index = await this.readIndex()
-      const skills = index.skills.filter(
-        (skill) => skill.enabled && (!names || names.includes(skill.manifest.name))
-      )
-      if (names?.some((name) => !skills.some((skill) => skill.manifest.name === name)))
-        throw new AppError('NOT_FOUND', '所选 Skill 未安装或未启用')
+      if (selection.length > SkillLimits.selection)
+        throw new AppError('LIMIT', '本轮选择的 Skill 数量超过上限')
+      if (new Set(selection.map((item) => item.name)).size !== selection.length)
+        throw new AppError('VALIDATION', 'Skill 选择包含重复名称')
+      const skills: SkillActivation[] = selection.map((item) => {
+        const record = index.skills.find((skill) => skill.manifest.name === item.name)
+        if (!record) throw new AppError('NOT_FOUND', `Skill 未安装：${item.name}`)
+        if (record.generation !== item.generation)
+          throw new AppError('CONFLICT', `Skill 已升级，请重新选择：${item.name}`)
+        checkSkillGrants(record.manifest, item.grants)
+        return { ...record, grants: [...item.grants] }
+      })
       for (const skill of skills) {
         const receipt = parseSkillReceipt(
           JSON.parse(await readFile(join(dirname(skill.directory), 'receipt.json'), 'utf8'))
@@ -245,7 +249,11 @@ class SkillRegistry implements SkillRegistryApi {
 
   public async assertGranted(name: string, generation: string, module: string): Promise<void> {
     const current = (await this.readIndex()).skills.find((skill) => skill.manifest.name === name)
-    if (!current?.enabled || current.generation !== generation || !current.grants.includes(module))
+    if (
+      !current ||
+      current.generation !== generation ||
+      !current.manifest.contribution.capabilities.some((item) => item.module === module)
+    )
       throw new AppError('PERMISSION', `Skill 能力授权已失效：${module}`)
   }
 
@@ -291,7 +299,7 @@ class SkillRegistry implements SkillRegistryApi {
   }
 
   private async checkComposition(
-    skills: readonly SkillRecord[]
+    skills: readonly SkillActivation[]
   ): Promise<ReadonlyArray<{ name: string; version: string; path: string; skill?: string }>> {
     const packages = new Map<
       string,
@@ -304,7 +312,7 @@ class SkillRegistry implements SkillRegistryApi {
         version: pkg.version,
         path: join(pkg.directory, 'node_modules', pkg.name),
       })
-    for (const skill of skills.filter((skill) => skill.enabled)) {
+    for (const skill of skills) {
       for (const module of skill.grants) {
         if (capabilities.has(module)) throw new AppError('CONFLICT', `Skill 能力名冲突：${module}`)
         capabilities.add(module)
@@ -320,7 +328,7 @@ class SkillRegistry implements SkillRegistryApi {
           )
             throw new AppError(
               'CONFLICT',
-              `环境中的 ${name} 已由 ${previous.skill ?? '基础环境'} 提供；请选择独立环境或停用冲突 Skill`
+              `环境中的 ${name} 已由 ${previous.skill ?? '基础环境'} 提供；请调整本次会话的 Skill 选择`
             )
           continue
         }
@@ -341,7 +349,7 @@ class SkillRegistry implements SkillRegistryApi {
       content = await readFile(join(this.root, 'index.json'), 'utf8')
     } catch (error) {
       if (isObject(error) && 'code' in error && error.code === 'ENOENT')
-        return { version: 1, revision: 0, skills: [] }
+        return { version: 2, revision: 0, skills: [] }
       throw error
     }
     const index = parseSkillIndex(JSON.parse(content))
@@ -353,6 +361,13 @@ class SkillRegistry implements SkillRegistryApi {
 
   private async writeIndex(index: SkillIndex): Promise<void> {
     await writeJsonFileAtomically(join(this.root, 'index.json'), index, { mode: 0o600 })
+    for (const listener of this.listeners) {
+      try {
+        listener()
+      } catch (error) {
+        this.log.warn('Skill 变更已保存，订阅通知失败', error)
+      }
+    }
   }
 
   private async locked<T>(operation: () => Promise<T>): Promise<T> {
