@@ -3647,7 +3647,7 @@
                 "reason": "explicit-danger-full-access",
                 "writableRoots": []
               },
-              "logPath": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/previous/node/node-DRHQ3N/output.log",
+              "logPath": "${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/previous/node/node-DRHQ3N/output.log",
               "logBytes": 14,
               "logTruncated": false,
               "launched": true
@@ -3678,14 +3678,14 @@
                 "reason": "explicit-danger-full-access",
                 "writableRoots": []
               },
-              "logPath": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/previous/node/node-D42F4C/output.log",
+              "logPath": "${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/previous/node/node-D42F4C/output.log",
               "logBytes": 1054,
               "logTruncated": false,
               "launched": true
             },
             "error": {
               "code": "PROGRAM_ERROR",
-              "message": "Shell 执行失败：PROGRAM_ERROR；exitCode=1；signal=none。查看 stderr 与 /Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/previous/node/node-D42F4C/output.log。"
+              "message": "Shell 执行失败：PROGRAM_ERROR；exitCode=1；signal=none。查看 stderr 与 ${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/previous/node/node-D42F4C/output.log。"
             }
           }
         },
@@ -3701,7 +3701,7 @@
               "exitCode": 1,
               "signal": null,
               "stdout": "",
-              "stderr": "node:internal/modules/esm/resolve:982\n    if (getOptionValue('--input-type')) { throw new ERR_INPUT_TYPE_NOT_ALLOWED(); }\n                                                ^\n\nError [ERR_INPUT_TYPE_NOT_ALLOWED]: --input-type can only be used with string input via --eval, --print, or STDIN\n    at defaultResolve (node:internal/modules/esm/resolve:982:49)\n    at #cachedDefaultResolve (node:internal/modules/esm/loader:697:20)\n    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:714:38)\n    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:746:52)\n    at #resolve (node:internal/modules/esm/loader:679:17)\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:599:35)\n    at node:internal/modules/esm/loader:628:32\n    at TracingChannel.tracePromise (node:diagnostics_channel:362:14)\n    at ModuleLoader.import (node:internal/modules/esm/loader:624:21)\n    at node:internal/modules/run_main:162:35 {\n  code: 'ERR_INPUT_TYPE_NOT_ALLOWED'\n}\n\nNode.js v24.15.0\nError: exit 1\n    at ChildProcess.<anonymous> (file:///Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/previous/workspace/__velaros_program__.mjs:1:252)\n    at ChildProcess.emit (node:events:509:28)\n    at ChildProcess._handle.onexit (node:internal/child_process:295:12)\n",
+              "stderr": "node:internal/modules/esm/resolve:982\n    if (getOptionValue('--input-type')) { throw new ERR_INPUT_TYPE_NOT_ALLOWED(); }\n                                                ^\n\nError [ERR_INPUT_TYPE_NOT_ALLOWED]: --input-type can only be used with string input via --eval, --print, or STDIN\n    at defaultResolve (node:internal/modules/esm/resolve:982:49)\n    at #cachedDefaultResolve (node:internal/modules/esm/loader:697:20)\n    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:714:38)\n    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:746:52)\n    at #resolve (node:internal/modules/esm/loader:679:17)\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:599:35)\n    at node:internal/modules/esm/loader:628:32\n    at TracingChannel.tracePromise (node:diagnostics_channel:362:14)\n    at ModuleLoader.import (node:internal/modules/esm/loader:624:21)\n    at node:internal/modules/run_main:162:35 {\n  code: 'ERR_INPUT_TYPE_NOT_ALLOWED'\n}\n\nNode.js v24.15.0\nError: exit 1\n    at ChildProcess.<anonymous> (file://${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/previous/workspace/__velaros_program__.mjs:1:252)\n    at ChildProcess.emit (node:events:509:28)\n    at ChildProcess._handle.onexit (node:internal/child_process:295:12)\n",
               "aborted": false,
               "timedOut": false,
               "cleanupIncomplete": false,
@@ -3713,7 +3713,7 @@
                 "reason": "explicit-danger-full-access",
                 "writableRoots": []
               },
-              "logPath": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/previous/node/node-BOTD27/output.log",
+              "logPath": "${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/previous/node/node-BOTD27/output.log",
               "logBytes": 1347,
               "logTruncated": false,
               "launched": true
@@ -3754,7 +3754,7 @@
                 "reason": "explicit-danger-full-access",
                 "writableRoots": []
               },
-              "logPath": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/standard/node/node-HeQwJN/output.log",
+              "logPath": "${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/standard/node/node-HeQwJN/output.log",
               "logBytes": 14,
               "logTruncated": false,
               "launched": true
@@ -3785,7 +3785,7 @@
                 "reason": "explicit-danger-full-access",
                 "writableRoots": []
               },
-              "logPath": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/standard/node/node-cVTMzP/output.log",
+              "logPath": "${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/standard/node/node-cVTMzP/output.log",
               "logBytes": 14,
               "logTruncated": false,
               "launched": true
@@ -3816,7 +3816,7 @@
                 "reason": "explicit-danger-full-access",
                 "writableRoots": []
               },
-              "logPath": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/standard/node/node-sOd3nd/output.log",
+              "logPath": "${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/native-tools-20261004/import-probe/standard/node/node-sOd3nd/output.log",
               "logBytes": 14,
               "logTruncated": false,
               "launched": true

@@ -87,6 +87,10 @@ try {
   ]) {
     await copyFile(path.join(fixtureDirectory, file), path.join(consumerDirectory, file))
   }
+  await copyFile(
+    path.join(root, 'scripts/security/dependency-probes.mjs'),
+    path.join(consumerDirectory, 'dependency-probes.mjs')
+  )
   await runGuardedCommand({
     command: 'bun',
     args: ['install', '--ignore-scripts'],

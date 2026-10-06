@@ -2,9 +2,12 @@ import assert from 'node:assert/strict'
 import { mkdtemp, realpath, rm, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
+import { assertInstalledDependencyRepairs } from './dependency-probes.mjs'
 import { createRuntime } from '@velaros-ai/velaros'
 import { createMemoryStore, memoryOperations } from '@velaros-ai/velaros/memory'
 import { createProjectKernel, createProjectCodeQuery, createExternalLanguageService, languageQueries, typeScriptProjects } from '@velaros-ai/velaros/project'
+
+assertInstalledDependencyRepairs([new URL('./package.json', import.meta.url)])
 
 // 已发布产物要能完成真实脚本、状态持久化、模型循环、取消和重新打开。
 async function probeRuntime(){

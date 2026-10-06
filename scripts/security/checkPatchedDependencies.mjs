@@ -5,6 +5,8 @@ import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { assertInstalledDependencyRepairs } from './dependency-probes.mjs'
+
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 // exceljs 这些办公文档依赖装在 velaros 名下（office 单元整包并进来的）。
 const requireFromVelar = createRequire(join(repositoryRoot, 'packages/velaros/package.json'))
@@ -103,5 +105,36 @@ function assertExcelJsUsesOnlyUuidV4() {
 
 assertVendoredPptxGenJs()
 assertExcelJsUsesOnlyUuidV4()
+
+const rootManifest = JSON.parse(readFileSync(join(repositoryRoot, 'package.json'), 'utf8'))
+const patchPath = rootManifest.patchedDependencies?.['braces@3.0.3']
+assert(patchPath === 'patches/braces@3.0.3.patch', 'braces 的安装补丁登记缺失')
+assert(
+  sha256(readFileSync(join(repositoryRoot, patchPath))) ===
+    '1354fca06429517b2641dec82fb23c71114e2ffe0c720526db9205f869964b40',
+  'braces 补丁内容变化，需要重新审查'
+)
+for (const [name, bundled] of [
+  ['script', 'globby'],
+  ['velaros', 'mammoth'],
+]) {
+  const manifest = JSON.parse(
+    readFileSync(join(repositoryRoot, 'packages', name, 'package.json'), 'utf8')
+  )
+  assert(
+    manifest.bundledDependencies?.includes(bundled),
+    `${name} 必须随包交付已修复的 ${bundled} 依赖闭包`
+  )
+}
+const manifests = [
+  join(repositoryRoot, 'package.json'),
+  ...readdirSync(join(repositoryRoot, 'packages')).map((name) =>
+    join(repositoryRoot, 'packages', name, 'package.json')
+  ),
+]
+const copies = assertInstalledDependencyRepairs(manifests)
+console.log(
+  `Verified ${copies} patched braces copies for GHSA-vfj7-8cjw-p6xm; the upstream version advisory is handled only after these probes pass.`
+)
 
 console.log('Dependency security probes passed.')

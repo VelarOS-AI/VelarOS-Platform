@@ -26,7 +26,7 @@
           }
         },
         "files": {
-          "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/run.mjs": {
+          "${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/run.mjs": {
             "originalSha256": "86b26284bd696ff2e827d305d335a8e98820da9edae47f9905017bc838faa7b2",
             "sha256": "e0578d9f1814ba249994bbef239b4bd2fdbe3ac4c1f0f4b214a45a5530fc412c"
           }
@@ -76,27 +76,27 @@
             "errors": 0,
             "summary": "21 failed, 37 passed in 0.18s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[bar]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-text]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-nested]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[status]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[traceback]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-19]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[spinner]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_reusable_objects_do_not_leak_mode",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[bar]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-text]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-nested]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[status]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[traceback]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-19]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[spinner]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_reusable_objects_do_not_leak_mode",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
             ]
           },
           "regression": {
@@ -184,7 +184,7 @@
             "errors": 0,
             "summary": "1 failed, 57 passed in 0.14s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
             ]
           },
           "regression": {
@@ -205,7 +205,7 @@
             "rootThreadId": "01a10738-9705-7c32-9ba9-9ec691911a32",
             "compactions": 7,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/04/rollout-2026-10-04T22-01-51-01a10738-9705-7c32-9ba9-9ec691911a32.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/04/rollout-2026-10-04T22-01-51-01a10738-9705-7c32-9ba9-9ec691911a32.jsonl"
           },
           "changeAccounting": {
             "baseline": "691dddb7079bc80db536b9073f772945b3980273",
@@ -268,25 +268,25 @@
             "errors": 0,
             "summary": "19 failed, 39 passed in 0.16s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[bar]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-text]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-nested]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[status]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-19]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[spinner]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_reusable_objects_do_not_leak_mode",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[bar]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-text]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-nested]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[status]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-19]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[spinner]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_reusable_objects_do_not_leak_mode",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-02/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
             ]
           },
           "regression": {
@@ -381,16 +381,16 @@
             "errors": 0,
             "summary": "10 failed, 48 passed in 0.21s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[traceback]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[traceback]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-03/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
             ]
           },
           "regression": {
@@ -489,16 +489,16 @@
             "errors": 0,
             "summary": "10 failed, 48 passed in 0.15s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[traceback]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[traceback]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-04/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
             ]
           },
           "regression": {
@@ -589,7 +589,7 @@
             "errors": 0,
             "summary": "1 failed, 57 passed in 0.19s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-05/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-05/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
             ]
           },
           "regression": {
@@ -679,7 +679,7 @@
             "errors": 0,
             "summary": "1 failed, 57 passed in 0.13s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-05/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-05/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
             ]
           },
           "regression": {
@@ -700,7 +700,7 @@
             "rootThreadId": "01a107bb-785e-7352-85c0-8861639d70ed",
             "compactions": 4,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T00-24-49-01a107bb-785e-7352-85c0-8861639d70ed.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T00-24-49-01a107bb-785e-7352-85c0-8861639d70ed.jsonl"
           },
           "changeAccounting": {
             "baseline": "d123057dc723c21e1579e57ac73153b443991195",
@@ -761,64 +761,64 @@
             "errors": 0,
             "summary": "58 failed in 0.26s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[None-utf-8]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[None-utf-16]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[None-ascii]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[None-cp1252]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[True-utf-8]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[True-utf-16]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[True-ascii]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[True-cp1252]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[False-utf-8]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[False-utf-16]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[False-ascii]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[False-cp1252]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_local_option_copy",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[table]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[panel]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-title]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[tree]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[progress-partial]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[progress-complete]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[progress-pulse]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[bar]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-text]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-nested]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[status]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[traceback]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[pretty]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[layout]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-19]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-19]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[progress-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[progress-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[progress-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[progress-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[progress-19]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[ASCII]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[SQUARE]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[ROUNDED]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[HEAVY]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[DOUBLE]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[HORIZONTALS]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[table]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[markdown]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[spinner]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[traceback]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_reusable_objects_do_not_leak_mode",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[None-utf-8]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[None-utf-16]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[None-ascii]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[None-cp1252]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[True-utf-8]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[True-utf-16]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[True-ascii]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[True-cp1252]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[False-utf-8]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[False-utf-16]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[False-ascii]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[False-cp1252]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_local_option_copy",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[table]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[panel]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-title]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[tree]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[progress-partial]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[progress-complete]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[progress-pulse]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[bar]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-text]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-nested]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[status]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[traceback]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[pretty]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[layout]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-19]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-19]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[progress-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[progress-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[progress-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[progress-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[progress-19]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[ASCII]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[SQUARE]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[ROUNDED]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[HEAVY]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[DOUBLE]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_standard_boxes[HORIZONTALS]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[table]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[markdown]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[spinner]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[traceback]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_reusable_objects_do_not_leak_mode",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-06/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
             ]
           },
           "regression": {
@@ -907,7 +907,7 @@
             "errors": 0,
             "summary": "1 failed, 57 passed in 0.15s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-07/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-07/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
             ]
           },
           "regression": {
@@ -1013,11 +1013,11 @@
             "errors": 0,
             "summary": "5 failed, 54 passed in 0.12s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[footnotes-doc-]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[footnotes-_reader2-]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[hilite-fallback-doc-]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[hilite-fallback-_reader2-]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_explicit_classes_raw_html_and_literals_keep_their_spelling"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[footnotes-doc-]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[footnotes-_reader2-]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[hilite-fallback-doc-]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[hilite-fallback-_reader2-]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_explicit_classes_raw_html_and_literals_keep_their_spelling"
             ]
           },
           "regression": {
@@ -1104,9 +1104,9 @@
             "errors": 0,
             "summary": "3 failed, 56 passed in 0.11s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[hilite-fallback-doc-]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[hilite-fallback-_reader2-]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_explicit_classes_raw_html_and_literals_keep_their_spelling"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[hilite-fallback-doc-]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_generated_classes_and_link_identity[hilite-fallback-_reader2-]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/markdown-04/harness/agent/long-tasks/test_markdown_class_prefix_acceptance.py::test_explicit_classes_raw_html_and_literals_keep_their_spelling"
             ]
           },
           "regression": {
@@ -1127,7 +1127,7 @@
             "rootThreadId": "01a107e9-5517-7751-8503-446728d1caeb",
             "compactions": 3,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T01-14-54-01a107e9-5517-7751-8503-446728d1caeb.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T01-14-54-01a107e9-5517-7751-8503-446728d1caeb.jsonl"
           },
           "correctedAcceptance": {
             "passed": 59,
@@ -1198,7 +1198,7 @@
           "scriptact/trajectory.json": "ec749a59d3cdbb3a38d409dd938395b868ec643ee587baca68d6a21de7dc2868"
         },
         "preservedExecutionEnvironment": "/private/tmp/vlr-UDeg7T/python-scriptact-completed",
-        "dependencyRestoredFrom": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/python",
+        "dependencyRestoredFrom": "${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/python",
         "restoredDependencySha256": "0d44cb8d7e2a9eeb28e0fe01a775c5b579141f046fed3d0dc62519bf23e519d2",
         "modelRerun": false
       },
@@ -1241,10 +1241,10 @@
             "errors": 0,
             "summary": "4 failed, 54 passed in 0.17s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[traceback]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[traceback]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
             ]
           },
           "regression": {
@@ -1326,7 +1326,7 @@
             "errors": 0,
             "summary": "1 failed, 57 passed in 0.14s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-08/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
             ]
           },
           "regression": {
@@ -1347,7 +1347,7 @@
             "rootThreadId": "01a107fc-9f65-7b31-bb51-77edef81df49",
             "compactions": 3,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T01-35-58-01a107fc-9f65-7b31-bb51-77edef81df49.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T01-35-58-01a107fc-9f65-7b31-bb51-77edef81df49.jsonl"
           },
           "changeAccounting": {
             "baseline": "b7e40cd9dd4b4c9b9b26d3af118342900699e49e",
@@ -1545,7 +1545,7 @@
             "rootThreadId": "01a10828-39fc-7a03-8bb9-807fa3d0733e",
             "compactions": 5,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T02-23-36-01a10828-39fc-7a03-8bb9-807fa3d0733e.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T02-23-36-01a10828-39fc-7a03-8bb9-807fa3d0733e.jsonl"
           },
           "changeAccounting": {
             "baseline": "bf34588667ba3ae837ca17baef2c9c156a731ec9",
@@ -1663,7 +1663,7 @@
             "errors": 0,
             "summary": "1 failed, 100 passed in 0.35s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/networkx-01/harness/agent/long-tasks/test_networkx_attribute_filter_acceptance.py::test_public_signatures_keep_the_new_option_keyword_only"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/networkx-01/harness/agent/long-tasks/test_networkx_attribute_filter_acceptance.py::test_public_signatures_keep_the_new_option_keyword_only"
             ]
           },
           "regression": {
@@ -1776,7 +1776,7 @@
             "rootThreadId": "01a10843-f618-78b2-adf1-a4ec44cbe7a4",
             "compactions": 4,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T02-53-54-01a10843-f618-78b2-adf1-a4ec44cbe7a4.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T02-53-54-01a10843-f618-78b2-adf1-a4ec44cbe7a4.jsonl"
           },
           "changeAccounting": {
             "baseline": "2022975a331ce47edb596059ddea76b1f18c6b3e",
@@ -1951,30 +1951,30 @@
             "errors": 0,
             "summary": "24 failed, 35 passed in 0.60s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[False]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[True]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[0]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[value4]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[value5]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[/tmp/inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[C:\\\\inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[C:inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[../inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/../inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[./inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/./inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x//inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x\\\\inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[bad\\x00name.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[bad\\nname.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[missing]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[added]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[path]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[size]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[digest]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[False]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[True]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[0]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[value4]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[value5]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[/tmp/inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[C:\\\\inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[C:inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[../inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/../inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[./inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/./inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x//inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x\\\\inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[bad\\x00name.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[bad\\nname.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[missing]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[added]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[path]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[size]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[digest]"
             ]
           },
           "regression": {
@@ -2020,11 +2020,11 @@
             "errors": 0,
             "summary": "5 failed, 54 passed in 0.50s",
             "failures": [
-              "FAILED ../../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/grading-correction-01/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[missing]",
-              "FAILED ../../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/grading-correction-01/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[added]",
-              "FAILED ../../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/grading-correction-01/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[path]",
-              "FAILED ../../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/grading-correction-01/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[size]",
-              "FAILED ../../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/grading-correction-01/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[digest]"
+              "FAILED ../../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/grading-correction-01/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[missing]",
+              "FAILED ../../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/grading-correction-01/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[added]",
+              "FAILED ../../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/grading-correction-01/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[path]",
+              "FAILED ../../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/grading-correction-01/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[size]",
+              "FAILED ../../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/grading-correction-01/test_mkdocs_build_manifest_acceptance.py::test_invalid_hook_result_fails_without_replacing_prior_manifest[digest]"
             ],
             "evidence": "mkdocs-01/grading-correction-01/scriptact.acceptance.json"
           },
@@ -2090,25 +2090,25 @@
             "errors": 0,
             "summary": "19 failed, 40 passed in 0.56s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[False]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[True]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[0]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[value4]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[value5]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[/tmp/inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[C:\\\\inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[C:inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[../inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/../inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[./inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/./inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x//inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x\\\\inventory.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[bad\\x00name.json]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[bad\\nname.json]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[False]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[True]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[0]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[value4]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[value5]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[/tmp/inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[C:\\\\inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[C:inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[../inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/../inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[./inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/./inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x//inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x/]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[x\\\\inventory.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[bad\\x00name.json]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/mkdocs-01/harness/agent/long-tasks/test_mkdocs_build_manifest_acceptance.py::test_invalid_configuration_is_a_normal_validation_error[bad\\nname.json]"
             ]
           },
           "regression": {
@@ -2148,7 +2148,7 @@
             "rootThreadId": "01a10862-b1b4-77b0-add1-6b54cddf009c",
             "compactions": 15,
             "childAgentDispatches": 0,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T03-27-28-01a10862-b1b4-77b0-add1-6b54cddf009c.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T03-27-28-01a10862-b1b4-77b0-add1-6b54cddf009c.jsonl"
           },
           "correctedAcceptance": {
             "exitCode": 0,
@@ -2359,15 +2359,15 @@
             "errors": 0,
             "summary": "9 failed, 79 passed in 0.59s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[get-async]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[head-async]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[options-async]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[post-async]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[put-async]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[patch-async]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[delete-async]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_build_request_send_precedence_and_caller_extensions[async]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_already_buffered_transport_is_checked_before_stream_send_returns[async]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[get-async]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[head-async]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[options-async]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[post-async]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[put-async]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[patch-async]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_convenience_override_none_and_per_request_isolation[delete-async]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_build_request_send_precedence_and_caller_extensions[async]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-05/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_already_buffered_transport_is_checked_before_stream_send_returns[async]"
             ]
           },
           "regression": {
@@ -2594,14 +2594,14 @@
             "errors": 0,
             "summary": "8 failed, 50 passed in 0.21s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[None-utf-16]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_mode_precedence[None-utf-16]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-09/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
             ]
           },
           "regression": {
@@ -2815,7 +2815,7 @@
             "rootThreadId": "01a108df-7826-7a53-b05f-0c1a84a2ed72",
             "compactions": 8,
             "childAgentDispatches": 0,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T05-43-45-01a108df-7826-7a53-b05f-0c1a84a2ed72.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T05-43-45-01a108df-7826-7a53-b05f-0c1a84a2ed72.jsonl"
           },
           "changeAccounting": {
             "baseline": "10b179d3e4f4265301495953c7b44ccb308c66c5",
@@ -2884,14 +2884,14 @@
             "errors": 0,
             "summary": "8 failed, 50 passed in 0.19s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-10/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
             ]
           },
           "regression": {
@@ -2993,10 +2993,10 @@
             "errors": 0,
             "summary": "4 failed, 54 passed in 0.18s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-11/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-11/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-11/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-11/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-11/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-11/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-11/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-11/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
             ]
           },
           "regression": {
@@ -3108,12 +3108,12 @@
             "errors": 0,
             "summary": "6 failed, 52 passed in 0.19s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-12/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
             ]
           },
           "regression": {
@@ -3237,25 +3237,25 @@
             "errors": 0,
             "summary": "19 failed, 39 passed in 0.20s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[bar]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-text]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-nested]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[status]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-19]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[spinner]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_reusable_objects_do_not_leak_mode",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[bar]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-text]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[spinner-nested]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[status]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[bar-19]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_unicode_content_preserved[spinner]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_reusable_objects_do_not_leak_mode",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
             ]
           },
           "regression": {
@@ -3358,7 +3358,7 @@
             "errors": 0,
             "summary": "1 failed, 57 passed in 0.18s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-13/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
             ]
           },
           "regression": {
@@ -3386,7 +3386,7 @@
             "rootThreadId": "01a1093b-de76-77f0-8e1d-3d742b356d12",
             "compactions": 11,
             "childAgentDispatches": 0,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T07-24-40-01a1093b-de76-77f0-8e1d-3d742b356d12.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T07-24-40-01a1093b-de76-77f0-8e1d-3d742b356d12.jsonl"
           },
           "changeAccounting": {
             "baseline": "31f158ad81233783050c940eeac9832acb4cf95d",
@@ -3455,13 +3455,13 @@
             "errors": 0,
             "summary": "7 failed, 51 passed in 0.21s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
             ]
           },
           "regression": {
@@ -3550,7 +3550,7 @@
             "errors": 0,
             "summary": "1 failed, 57 passed in 0.18s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-14/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
             ]
           },
           "regression": {
@@ -3578,7 +3578,7 @@
             "rootThreadId": "01a1095c-bf0b-7561-87d7-e29cef892223",
             "compactions": 6,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T08-00-35-01a1095c-bf0b-7561-87d7-e29cef892223.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T08-00-35-01a1095c-bf0b-7561-87d7-e29cef892223.jsonl"
           },
           "changeAccounting": {
             "baseline": "8d77025ec43230dad4ca6f2a15ea247a4046ee35",
@@ -3651,9 +3651,9 @@
             "errors": 0,
             "summary": "3 failed, 85 passed in 0.25s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-07/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_public_api_and_exception[sync]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-07/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_public_api_and_exception[async]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-07/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_top_level_convenience_passes_limit[delete]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-07/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_public_api_and_exception[sync]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-07/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_public_api_and_exception[async]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/httpx-07/harness/agent/long-tasks/test_httpx_response_limit_acceptance.py::test_top_level_convenience_passes_limit[delete]"
             ]
           },
           "regression": {
@@ -3788,7 +3788,7 @@
             "rootThreadId": "01a10984-c7c2-7430-b80c-3f3d8cbb4011",
             "compactions": 2,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T08-44-19-01a10984-c7c2-7430-b80c-3f3d8cbb4011.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T08-44-19-01a10984-c7c2-7430-b80c-3f3d8cbb4011.jsonl"
           }
         }
       }
@@ -3849,8 +3849,8 @@
             "errors": 0,
             "summary": "2 failed, 56 passed in 0.18s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-15/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-15/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-15/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-15/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
             ]
           },
           "regression": {
@@ -3958,7 +3958,7 @@
             "errors": 0,
             "summary": "1 failed, 57 passed in 0.18s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-15/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-15/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
             ]
           },
           "regression": {
@@ -3995,7 +3995,7 @@
             "rootThreadId": "01a109a3-50b9-74d2-9eb9-dc2be179c316",
             "compactions": 6,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T09-17-40-01a109a3-50b9-74d2-9eb9-dc2be179c316.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T09-17-40-01a109a3-50b9-74d2-9eb9-dc2be179c316.jsonl"
           }
         }
       }
@@ -4056,10 +4056,10 @@
             "errors": 0,
             "summary": "4 failed, 54 passed in 0.18s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-16/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-16/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-16/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-16/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-16/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-16/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-16/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-16/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
             ]
           },
           "regression": {
@@ -4150,7 +4150,7 @@
             "errors": 0,
             "summary": "1 failed, 57 passed in 0.17s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-16/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-16/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
             ]
           },
           "regression": {
@@ -4187,7 +4187,7 @@
             "rootThreadId": "01a109c4-ce56-7613-8efb-29a36fe6318e",
             "compactions": 5,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T09-54-15-01a109c4-ce56-7613-8efb-29a36fe6318e.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T09-54-15-01a109c4-ce56-7613-8efb-29a36fe6318e.jsonl"
           }
         }
       }
@@ -4373,7 +4373,7 @@
             "rootThreadId": "01a109dd-e54f-7d11-b87a-1ff87aeb0b1a",
             "compactions": 4,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T10-21-39-01a109dd-e54f-7d11-b87a-1ff87aeb0b1a.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T10-21-39-01a109dd-e54f-7d11-b87a-1ff87aeb0b1a.jsonl"
           }
         }
       }
@@ -4434,13 +4434,13 @@
             "errors": 0,
             "summary": "7 failed, 51 passed in 0.19s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-17/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
             ]
           },
           "regression": {
@@ -4673,7 +4673,7 @@
             "rootThreadId": "01a10a0c-9c70-7671-a03f-15252535c2cf",
             "compactions": 8,
             "childAgentDispatches": 0,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T11-12-41-01a10a0c-9c70-7671-a03f-15252535c2cf.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T11-12-41-01a10a0c-9c70-7671-a03f-15252535c2cf.jsonl"
           }
         }
       }
@@ -4735,11 +4735,11 @@
             "errors": 0,
             "summary": "5 failed, 53 passed in 0.18s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[rule-empty]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-3]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-18/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]"
             ]
           },
           "regression": {
@@ -4858,9 +4858,9 @@
             "errors": 0,
             "summary": "3 failed, 55 passed in 0.17s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-19/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-19/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-19/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-19/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[syntax-error]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-19/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-19/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
             ]
           },
           "regression": {
@@ -4986,7 +4986,7 @@
             "rootThreadId": "01a10a44-b922-7820-897e-0d4b42cedf1b",
             "compactions": 8,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T12-13-58-01a10a44-b922-7820-897e-0d4b42cedf1b.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T12-13-58-01a10a44-b922-7820-897e-0d4b42cedf1b.jsonl"
           }
         }
       }
@@ -5048,9 +5048,9 @@
             "errors": 0,
             "summary": "3 failed, 55 passed in 0.18s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-20/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-20/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-20/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-20/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_built_in_ascii_decorations[markdown]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-20/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_narrow_widths[rule-7]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/rich-20/harness/agent/long-tasks/test_rich_ascii_acceptance.py::test_nested_progress_and_inspect"
             ]
           },
           "regression": {
@@ -5164,9 +5164,9 @@
             "errors": 0,
             "summary": "3 failed, 58 passed in 0.07s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_help_uses_context_templates_and_preserves_application_text[A]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_help_uses_context_templates_and_preserves_application_text[\\u8bed\\u8a00]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_version_decorator_is_deferred_and_keeps_custom_templates[False]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_help_uses_context_templates_and_preserves_application_text[A]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_help_uses_context_templates_and_preserves_application_text[\\u8bed\\u8a00]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_version_decorator_is_deferred_and_keeps_custom_templates[False]"
             ]
           },
           "regression": {
@@ -5255,8 +5255,8 @@
             "errors": 0,
             "summary": "2 failed, 59 passed in 0.07s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_completion_setup_uses_current_context[3.2.0]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_completion_setup_uses_current_context[unknown]"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_completion_setup_uses_current_context[3.2.0]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-01/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_completion_setup_uses_current_context[unknown]"
             ]
           },
           "regression": {
@@ -5297,7 +5297,7 @@
             "rootThreadId": "01a10a70-2fdb-7281-b673-64b0332a73e8",
             "compactions": 8,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T13-01-26-01a10a70-2fdb-7281-b673-64b0332a73e8.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T13-01-26-01a10a70-2fdb-7281-b673-64b0332a73e8.jsonl"
           }
         }
       },
@@ -5359,37 +5359,37 @@
             "errors": 0,
             "summary": "31 failed, 30 passed in 0.21s",
             "failures": [
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_context_settings_and_nested_command_inheritance",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type0-bad-{value!r} is not a valid {number_type}.]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type1-bad-{value!r} is not a valid {number_type}.]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type2-bad-{value!r} is not a valid boolean.]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type3-bad-{value!r} is not a valid UUID.]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type4-9-{value} is not in the range {range}.]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type5-9-{value} is not in the range {range}.]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type6-bad-None]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type7-bad-None]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type8-bad-None]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type9-bad-None]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type10-value10-None]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_file_errors_translate_before_filename_interpolation[path]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_file_errors_translate_before_filename_interpolation[file]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_suggestions_use_explicit_context_and_plural_count[1]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_suggestions_use_explicit_context_and_plural_count[2]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_exception_wrappers_keep_creation_context_after_scope_exit[click]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_exception_wrappers_keep_creation_context_after_scope_exit[usage]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_exception_wrappers_keep_creation_context_after_scope_exit[bad]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_exception_wrappers_keep_creation_context_after_scope_exit[missing]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_exception_wrappers_keep_creation_context_after_scope_exit[file]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parser_diagnostics_are_translated[args0-No such option:]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parser_diagnostics_are_translated[args1-Option '--flag' does not take a value.]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parser_diagnostics_are_translated[args2-Option '--pair' requires 2 arguments.]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parser_diagnostics_are_translated[args3-Option '--number' requires an argument.]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parser_diagnostics_are_translated[args4-Got unexpected extra argument]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_version_decorator_is_deferred_and_keeps_custom_templates[False]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_editor_errors_keep_context_through_late_display[False]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_editor_errors_keep_context_through_late_display[True]",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_nested_contexts_restore_the_previous_language",
-              "FAILED ../../../../Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parallel_contexts_do_not_change_process_translations"
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_context_settings_and_nested_command_inheritance",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type0-bad-{value!r} is not a valid {number_type}.]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type1-bad-{value!r} is not a valid {number_type}.]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type2-bad-{value!r} is not a valid boolean.]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type3-bad-{value!r} is not a valid UUID.]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type4-9-{value} is not in the range {range}.]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type5-9-{value} is not in the range {range}.]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type6-bad-None]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type7-bad-None]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type8-bad-None]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type9-bad-None]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_type_errors_use_explicit_context_outside_scope[parameter_type10-value10-None]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_file_errors_translate_before_filename_interpolation[path]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_file_errors_translate_before_filename_interpolation[file]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_suggestions_use_explicit_context_and_plural_count[1]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_suggestions_use_explicit_context_and_plural_count[2]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_exception_wrappers_keep_creation_context_after_scope_exit[click]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_exception_wrappers_keep_creation_context_after_scope_exit[usage]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_exception_wrappers_keep_creation_context_after_scope_exit[bad]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_exception_wrappers_keep_creation_context_after_scope_exit[missing]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_exception_wrappers_keep_creation_context_after_scope_exit[file]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parser_diagnostics_are_translated[args0-No such option:]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parser_diagnostics_are_translated[args1-Option '--flag' does not take a value.]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parser_diagnostics_are_translated[args2-Option '--pair' requires 2 arguments.]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parser_diagnostics_are_translated[args3-Option '--number' requires an argument.]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parser_diagnostics_are_translated[args4-Got unexpected extra argument]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_version_decorator_is_deferred_and_keeps_custom_templates[False]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_editor_errors_keep_context_through_late_display[False]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_editor_errors_keep_context_through_late_display[True]",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_nested_contexts_restore_the_previous_language",
+              "FAILED ../../../..${USER_HOME}/Desktop/VelarOS/projects/VelarOS-Platform/.velaros-workspace/bench/long-runtime-20261004/click-02/harness/agent/long-tasks/test_click_context_translation_acceptance.py::test_parallel_contexts_do_not_change_process_translations"
             ]
           },
           "regression": {
@@ -5638,7 +5638,7 @@
             "rootThreadId": "01a10aab-1b31-7ec0-a9b0-1205527b6ad5",
             "compactions": 4,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T14-05-48-01a10aab-1b31-7ec0-a9b0-1205527b6ad5.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T14-05-48-01a10aab-1b31-7ec0-a9b0-1205527b6ad5.jsonl"
           }
         }
       }
@@ -6119,7 +6119,7 @@
             "rootThreadId": "01a10af1-72c6-7d80-a1ba-c612cbebe697",
             "compactions": 8,
             "childAgentDispatches": 0,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T15-22-38-01a10af1-72c6-7d80-a1ba-c612cbebe697.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T15-22-38-01a10af1-72c6-7d80-a1ba-c612cbebe697.jsonl"
           }
         }
       }
@@ -6438,7 +6438,7 @@
             "rootThreadId": "01a10b66-05b7-7783-8712-42ae694fd680",
             "compactions": 13,
             "childAgentDispatches": 0,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T17-29-57-01a10b66-05b7-7783-8712-42ae694fd680.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T17-29-57-01a10b66-05b7-7783-8712-42ae694fd680.jsonl"
           }
         }
       }
@@ -6780,7 +6780,7 @@
             "rootThreadId": "01a10bc0-c8f5-7fa3-92ea-f105bc57e094",
             "compactions": 11,
             "childAgentDispatches": 0,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T19-09-06-01a10bc0-c8f5-7fa3-92ea-f105bc57e094.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T19-09-06-01a10bc0-c8f5-7fa3-92ea-f105bc57e094.jsonl"
           }
         }
       },
@@ -7294,7 +7294,7 @@
             "rootThreadId": "01a10c1a-1942-7423-bddf-2f88716585d3",
             "compactions": 3,
             "childAgentDispatches": 0,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T20-46-39-01a10c1a-1942-7423-bddf-2f88716585d3.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T20-46-39-01a10c1a-1942-7423-bddf-2f88716585d3.jsonl"
           }
         }
       },
@@ -7842,7 +7842,7 @@
             "rootThreadId": "01a10c69-9c10-7523-8eeb-04ee9ddcc20f",
             "compactions": 6,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/05/rollout-2026-10-05T22-13-30-01a10c69-9c10-7523-8eeb-04ee9ddcc20f.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/05/rollout-2026-10-05T22-13-30-01a10c69-9c10-7523-8eeb-04ee9ddcc20f.jsonl"
           }
         }
       },
@@ -11286,7 +11286,7 @@
             "rootThreadId": "01a10d1d-b3d0-7b32-b936-1cf558bb511a",
             "compactions": 12,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/06/rollout-2026-10-06T01-30-12-01a10d1d-b3d0-7b32-b936-1cf558bb511a.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/06/rollout-2026-10-06T01-30-12-01a10d1d-b3d0-7b32-b936-1cf558bb511a.jsonl"
           },
           "deliveryReview": {
             "at": "2026-10-05T18:05:45.468Z",
@@ -12726,7 +12726,7 @@
             "rootThreadId": "01a10d96-8009-7b70-bfa7-658feb9c99af",
             "compactions": 14,
             "childAgentDispatches": 0,
-            "source": "/Users/mac/.codex/sessions/2026/10/06/rollout-2026-10-06T03-42-09-01a10d96-8009-7b70-bfa7-658feb9c99af.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/06/rollout-2026-10-06T03-42-09-01a10d96-8009-7b70-bfa7-658feb9c99af.jsonl"
           },
           "deliveryReview": {
             "at": "2026-10-05T20:15:32.899Z",
@@ -13532,7 +13532,7 @@
             "rootThreadId": "01a10dcc-07df-79d3-a6b1-2aed9dff6747",
             "compactions": 7,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/06/rollout-2026-10-06T04-40-37-01a10dcc-07df-79d3-a6b1-2aed9dff6747.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/06/rollout-2026-10-06T04-40-37-01a10dcc-07df-79d3-a6b1-2aed9dff6747.jsonl"
           },
           "deliveryReview": {
             "at": "2026-10-05T21:04:41.566Z",
@@ -16406,7 +16406,7 @@
             "rootThreadId": "01a10e5d-6d72-77d2-bc18-671ac2cb1f19",
             "compactions": 5,
             "childAgentDispatches": 3,
-            "source": "/Users/mac/.codex/sessions/2026/10/06/rollout-2026-10-06T07-19-26-01a10e5d-6d72-77d2-bc18-671ac2cb1f19.jsonl"
+            "source": "${USER_HOME}/.codex/sessions/2026/10/06/rollout-2026-10-06T07-19-26-01a10e5d-6d72-77d2-bc18-671ac2cb1f19.jsonl"
           },
           "deliveryReview": {
             "at": "2026-10-05T23:47:04.567Z",

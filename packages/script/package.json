@@ -35,7 +35,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "node_modules"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -61,5 +62,8 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://npm.pkg.github.com"
-  }
+  },
+  "bundledDependencies": [
+    "globby"
+  ]
 }

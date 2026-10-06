@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
+import { stageBundledPackage } from './bundled-dependencies.mjs'
+
 const terminationGraceMs = 2_000
 const killConfirmationMs = 1_000
 const processPollMs = 25
@@ -538,27 +540,32 @@ export async function safePackPackage({
     packageDirectory,
     'packageDirectory'
   )
-  await readLeafPackageManifest(resolvedPackageDirectory)
+  const manifest = await readLeafPackageManifest(resolvedPackageDirectory)
   const outputTarget = await validateOutputTarget({
     destination,
     filename,
     packageDirectory: resolvedPackageDirectory,
   })
 
-  return await runGuardedCommand({
-    args: [
-      ...bunArguments,
-      'pm',
-      'pack',
-      outputTarget.option,
-      outputTarget.value,
-      '--ignore-scripts',
-      '--quiet',
-    ],
-    command: bunCommand,
-    cwd: resolvedPackageDirectory,
-    operation: `Bun package pack for ${resolvedPackageDirectory}`,
-    stdio,
-    timeoutMs,
-  })
+  const staged = await stageBundledPackage(resolvedPackageDirectory, manifest)
+  try {
+    return await runGuardedCommand({
+      args: [
+        ...bunArguments,
+        'pm',
+        'pack',
+        outputTarget.option,
+        outputTarget.value,
+        '--ignore-scripts',
+        '--quiet',
+      ],
+      command: bunCommand,
+      cwd: staged?.packageDirectory ?? resolvedPackageDirectory,
+      operation: `Bun package pack for ${resolvedPackageDirectory}`,
+      stdio,
+      timeoutMs,
+    })
+  } finally {
+    await staged?.cleanup()
+  }
 }

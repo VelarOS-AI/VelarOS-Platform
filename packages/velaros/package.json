@@ -167,7 +167,8 @@
     "computer/runtime",
     "execution/native",
     "office/vendor",
-    "browser/vendor"
+    "browser/vendor",
+    "node_modules"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -224,5 +225,8 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://npm.pkg.github.com"
-  }
+  },
+  "bundledDependencies": [
+    "mammoth"
+  ]
 }

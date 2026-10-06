@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import {
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -218,6 +228,74 @@ test('requires a publishable package identity', async (t) => {
   await assert.rejects(
     safePackPackage({ packageDirectory, destination }),
     /package\.json must declare a non-empty name/u
+  )
+})
+
+test('packs the actual linked bundle closure and resolves workspace ranges without altering sources', async (t) => {
+  const manifest = {
+    name: 'leaf-package',
+    version: '1.0.0',
+    main: 'index.cjs',
+    files: ['index.cjs', 'node_modules'],
+    dependencies: { bundled: '^1.0.0', unbundled: 'workspace:^' },
+    bundledDependencies: ['bundled'],
+  }
+  const { destination, fixtureRoot, packageDirectory } = await createFixture(t, manifest)
+  await writeFile(
+    path.join(fixtureRoot, 'package.json'),
+    JSON.stringify({ private: true, workspaces: ['package', 'unbundled'] })
+  )
+  const modules = path.join(fixtureRoot, 'node_modules')
+  await mkdir(modules)
+  for (const [name, version, dependencies, source] of [
+    [
+      'bundled',
+      '1.0.0',
+      { string_decoder: '^1.0.0' },
+      "module.exports = require('string_decoder/')",
+    ],
+    ['string_decoder', '2.0.0', { bundled: '^1.0.0' }, "module.exports = 'patched bytes'"],
+    ['unbundled', '3.2.1', {}, "module.exports = 'unbundled'"],
+  ]) {
+    const directory = path.join(fixtureRoot, name)
+    await mkdir(directory)
+    await writeFile(
+      path.join(directory, 'package.json'),
+      JSON.stringify({ name, version, dependencies, main: 'index.cjs' })
+    )
+    await writeFile(path.join(directory, 'index.cjs'), source)
+    await symlink(
+      directory,
+      path.join(modules, name),
+      process.platform === 'win32' ? 'junction' : 'dir'
+    )
+  }
+  await writeFile(path.join(packageDirectory, 'index.cjs'), "module.exports = require('bundled')")
+  const filename = path.join(destination, 'bundle.tgz')
+  await safePackPackage({ packageDirectory, filename })
+  const extraction = await mkdtemp(path.join(tmpdir(), 'velaros-packed-consumer-'))
+  t.after(() => rm(extraction, { recursive: true, force: true }))
+  execFileSync('tar', ['-xzf', filename, '-C', extraction])
+  const packed = path.join(extraction, 'package')
+  const packedManifest = JSON.parse(await readFile(path.join(packed, 'package.json'), 'utf8'))
+  assert.equal(packedManifest.dependencies.unbundled, '^3.2.1')
+  assert.equal(
+    execFileSync(process.execPath, ['-p', `require(${JSON.stringify(packed)})`], {
+      encoding: 'utf8',
+    }).trim(),
+    'patched bytes'
+  )
+  const entries = execFileSync('tar', ['-tzf', filename], { encoding: 'utf8' })
+  assert.match(entries, /node_modules\/string_decoder\/index.cjs/u)
+  assert.doesNotMatch(entries, /node_modules\/unbundled\//u)
+  assert.deepEqual(
+    JSON.parse(await readFile(path.join(packageDirectory, 'package.json'), 'utf8')),
+    manifest
+  )
+  assert((await lstat(path.join(modules, 'string_decoder'))).isSymbolicLink())
+  assert.equal(
+    await readFile(path.join(fixtureRoot, 'string_decoder/index.cjs'), 'utf8'),
+    "module.exports = 'patched bytes'"
   )
 })
 

@@ -80,7 +80,7 @@
     "check:project-arch": "node scripts/velaros/check-project-architecture.mjs",
     "check:agent-lab-package": "bun run --cwd packages/agent-lab check",
     "check:dependency-licenses": "node scripts/quality/check-dependency-licenses.mjs",
-    "check:dependency-security": "node scripts/security/checkPatchedDependencies.mjs && bun audit --ignore GHSA-w3rx-r6r6-pgpr --ignore GHSA-w5hq-g745-h8pq",
+    "check:dependency-security": "node --test scripts/security/dependency-probes.test.mjs && node scripts/security/checkPatchedDependencies.mjs && bun audit --ignore GHSA-w5hq-g745-h8pq --ignore GHSA-vfj7-8cjw-p6xm",
     "check:devtools-performance-engine": "bun scripts/browser/buildDevtoolsPerformanceEngine.mjs --check",
     "check:readme-examples": "node scripts/ownership/check-readme-examples.mjs",
     "check:error-construction": "node scripts/quality/check-error-construction.mjs",
@@ -108,9 +108,9 @@
     "@typescript-eslint/parser": "^8.67.0",
     "@velaros-ai/arch-guard": "github:VelarOS-AI/VelarOS-Arch-Guard#ce2b221d99c1b93736568f281a180ad3593f086f",
     "@velaros-ai/velaros": "workspace:*",
-    "brace-expansion": "1.1.18",
+    "brace-expansion": "1.1.21",
     "chrome-devtools-frontend": "1.0.1652307",
-    "electron": "^41.10.5",
+    "electron": "^41.10.7",
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-eslint-comments": "^3.2.0",
@@ -126,12 +126,16 @@
   },
   "overrides": {
     "@xmldom/xmldom": "0.8.15",
+    "argparse": "2.0.1",
     "dompurify": "3.4.13",
-    "fast-uri": "3.1.7",
+    "fast-uri": "3.1.8",
     "hono": "4.13.7",
+    "ip-address": "10.7.3",
     "js-yaml": "4.3.2",
     "mermaid": "11.16.1",
-    "qs": "6.16.0"
+    "proxy-addr": "2.0.8",
+    "qs": "6.16.0",
+    "undici": "7.30.0"
   },
   "dependencies": {
     "@velaros-ai/agent-lab": "workspace:*",
@@ -143,5 +147,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/VelarOS-AI/VelarOS-Platform.git"
+  },
+  "patchedDependencies": {
+    "braces@3.0.3": "patches/braces@3.0.3.patch"
   }
 }

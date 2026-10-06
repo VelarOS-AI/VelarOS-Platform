@@ -1,2 +1,4 @@
 # Preserve reviewed third-party distribution bytes exactly; its header contains mixed line endings.
 packages/velaros/office/vendor/pptxgenjs/pptxgen.es.js binary
+# Unified diff context lines retain their required single-space prefix.
+patches/*.patch text eol=lf whitespace=-blank-at-eol
